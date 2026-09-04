@@ -5,7 +5,8 @@ import { scopedDb } from '@/lib/db-scope'
 import { resolveActor } from '@/lib/auth/actor'
 import { checkPermission, checkPermissionDetail } from '@/lib/auth/check-permission'
 import { maskLeadPiiFields } from '@/lib/lead/pii'
-import { leadSharedOrClause, leadSharingEnabled } from '@/lib/lead/sharing'
+import { leadSharingEnabled } from '@/lib/lead/sharing'
+import { leadOwnershipWhere } from '@/lib/lead/ownership'
 import { splitLeadNote } from '@/lib/lead/note-view'
 import { canViewLeadPii } from '@/lib/auth/check-permission'
 import { LeadsTable } from './_components/leads-table'
@@ -18,7 +19,7 @@ import { ALL_LEAD_STATUSES } from '@/lib/leads/status'
 import type { LeadStatus, Prisma } from '@prisma/client'
 import { phoneSearchTerm } from '@/lib/phone'
 import { getNonEnrollableCenterIds } from '@/lib/enrollment-flow'
-import { docSoDong } from '@/lib/ui/phan-trang'
+import { docSoDong, docSoTheMoiCot } from '@/lib/ui/phan-trang'
 
 const KANBAN_LIMIT = 500
 
@@ -113,27 +114,13 @@ export default async function LeadsPage({
     // SHARE T1 — sale view-own thấy lead của mình HOẶC lead team đã bật "dùng chung".
     // Gói trong AND để không đè key OR của search q bên dưới (2 OR sống chung).
     // Cách ly cơ sở vẫn do scopedDb inject centerId — share không xuyên cơ sở.
-    ...(scopeToSelf
-      ? {
-          AND: [
-            {
-              // Đợt E (22/08) — lead ĐỘC QUYỀN: mệnh đề "dùng chung" nay RỖNG
-              // theo mặc định. Đường quay lui: env LEAD_SHARING_ENABLED="true".
-              //
-              // 23/08 — thêm `createdById`: "của tôi" có HAI nghĩa và cả hai đều
-              // đúng. Sale cơ sở = phiếu được GIAO cho mình; Sale Hội sở = phiếu
-              // mình NHẬP (phiếu đó tự chia về cơ sở nên họ không bao giờ là
-              // assignee — thiếu vế này thì danh sách của họ rỗng trắng).
-              // Không nới cho ai khác: người có `leads:view-all` không đi nhánh này.
-              OR: [
-                { assignedToId: session.user.id },
-                { createdById: session.user.id },
-                ...leadSharedOrClause(),
-              ],
-            },
-          ],
-        }
-      : {}),
+    // S-8 (27/08) — mệnh đề "của tôi" KHÔNG còn gõ tay ở đây. Trang này, ô tìm
+    // toàn hệ thống và site Sale đều hỏi cùng `leadOwnershipWhere()`; ba bản
+    // chép tay trước đó đã trôi lệch thật (ô tìm thiếu hẳn vế "mình nhập" suốt
+    // 4 ngày, không ai thấy). Ai muốn đổi nghĩa "của tôi" thì sửa
+    // `lib/lead/ownership.ts` một lần, cả ba màn đổi theo.
+    // Không nới cho ai khác: người có `leads:view-all` không đi nhánh này.
+    ...(scopeToSelf ? { AND: [leadOwnershipWhere(session.user.id)] } : {}),
     ...(filterAssignedTo && canViewAll
       ? { assignedToId: filterAssignedTo }
       : {}),
@@ -276,6 +263,8 @@ export default async function LeadsPage({
         />
         <LeadsKanban
           leads={kanbanLeads}
+          // Cùng tham số `?size=` với bảng, chỉ khác giá trị mặc định (10 thẻ/cột).
+          soTheMoiCot={docSoTheMoiCot(params.size)}
           canUpdate={canUpdate}
           canCloseDeal={canCloseDeal}
           canAssign={canAssign}

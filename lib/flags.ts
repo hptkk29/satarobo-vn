@@ -288,3 +288,25 @@ export function isLeadSharingEnabled(): boolean {
 export function isElearningEnabled(): boolean {
   return process.env.ELEARNING_ENABLED === "true"; // mặc định OFF
 }
+
+/**
+ * OMICALL — trục gọi điện + ghi âm (webhook CDR, nghe lại ghi âm, trang thử SDK).
+ *
+ * Mặc định OFF, và ở đây "OFF" nghĩa là **endpoint trả 404 như thể không tồn tại**,
+ * không phải "chạy nhưng rỗng". Lý do: tính năng này còn chờ HAI thứ ngoài tầm code —
+ * văn bản nhà cung cấp (cổng CH-3: endpoint production, hạn mức/đơn giá ASR, cước
+ * viễn thông, chính sách lưu trữ ghi âm, cơ chế ký webhook) và kết luận bài thử SDK
+ * trên React 19 (cổng CH-4). Bật cờ trước khi hai cổng đó mở là mời dữ liệu thật đi
+ * qua một đường chưa ai xác nhận.
+ *
+ * Dùng `=== "true"` (không phải `!== "false"`) để cờ sinh ra ở trạng thái TẮT ngay
+ * khi merge — cùng khuôn `isElearningEnabled()`, ngược khuôn site giáo viên vốn đã
+ * qua kỳ flip.
+ *
+ * ⚠️ Đây là cờ 2-phase bật/tắt CẢ tính năng. Công tắc VẬN HÀNH (gọi API thật hay
+ * mô phỏng) là `SystemSetting calls.live` — §2.3: thứ cần tắt gấp không được nằm
+ * trong env vì tắt env phải deploy lại.
+ */
+export function isOmicallEnabled(): boolean {
+  return process.env.OMICALL_ENABLED === "true"; // mặc định OFF
+}

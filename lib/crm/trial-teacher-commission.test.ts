@@ -10,14 +10,18 @@ import {
 } from "./trial-teacher-commission";
 import { COMMISSION_TIERS, MAX_TOTAL_RATE, DEFAULT_RATES } from "./commission";
 
-describe("tầng TRIAL_TEACHER nằm NGOÀI pool 8% của 4 tầng Sale", () => {
-  it("không được lọt vào COMMISSION_TIERS — lọt là validateRates ném RATE_EXCEEDS_CAP", () => {
+describe("tầng TRIAL_TEACHER — tính riêng, nhưng NẰM TRONG trần tổng", () => {
+  it("không được lọt vào COMMISSION_TIERS — pool 4 tầng Sale tính trên doanh thu kỳ, tầng GV tính trên từng ghi danh", () => {
     expect(COMMISSION_TIERS).not.toContain(TRIAL_TEACHER_TIER as never);
   });
 
-  it("4 tầng Sale vẫn đúng bằng trần 8% (bằng chứng vì sao không nhét tầng thứ 5 vào)", () => {
-    const total = Object.values(DEFAULT_RATES).reduce((a, b) => a + b, 0);
-    expect(total).toBeCloseTo(MAX_TOTAL_RATE, 10);
+  // 27/08/2026 — trần nới 8% → 9% và thôi hardcode (`crm.commissionMaxTotalRate`).
+  // Bất biến MỚI thay cho "Σ 4 tầng đúng bằng trần": Σ 4 tầng Sale CỘNG tầng GV phải
+  // vừa khít trần mặc định. Đây là lý do con số 9% được chọn, không phải số tròn tuỳ ý.
+  it("Σ 4 tầng Sale + tầng GV dạy Trial = trần mặc định 9%", () => {
+    const tongSale = Object.values(DEFAULT_RATES).reduce((a, b) => a + b, 0);
+    expect(tongSale).toBeCloseTo(0.08, 10);
+    expect(tongSale + TRIAL_TEACHER_RATE).toBeCloseTo(MAX_TOTAL_RATE, 10);
   });
 
   it("tỉ lệ là 1%", () => {

@@ -29,9 +29,14 @@ const SRC = readFileSync(
  * luôn xanh dù cổng bị đổi sai, tức là không kiểm gì cả.
  */
 const CONG_QUYEN: Record<string, Action> = {
-  saveTrialConfigLopTrialAction: "trials:config",
   createLopTrialClassAction: "trials:manage",
   addLopTrialSessionAction: "trials:manage",
+  // 28/08 — sửa / huỷ MỘT buổi. Cùng cổng `trials:manage` với thêm buổi: ba thao tác
+  // này là một việc (xếp lịch lớp), tách cổng chỉ đẻ ra ma trận không ai nhớ nổi.
+  // KHÔNG dùng `trials:attendance`: điểm danh là việc của Sale, còn đổi lịch/huỷ buổi
+  // đụng tới lịch dạy của giáo viên.
+  updateLopTrialSessionAction: "trials:manage",
+  cancelLopTrialSessionAction: "trials:manage",
   enrollLeadChildLopTrialAction: "trials:manage",
   searchLopTrialCandidatesAction: "trials:manage",
   unenrollLeadChildLopTrialAction: "trials:manage",
@@ -42,11 +47,6 @@ const CONG_QUYEN: Record<string, Action> = {
   // viên (`trials:feedback`). Dùng chung một khoá là đảo ngược quy trình đã chốt.
   markLopTrialAttendanceAction: "trials:attendance",
   completeLopTrialSessionAction: "trials:attendance",
-  updateBookingLopTrialAction: "trials:manage",
-  deleteBookingLopTrialAction: "trials:manage",
-  rescheduleLopTrialAction: "trials:manage",
-  proposeLopTrialTeacherAction: "trials:manage",
-  assignLopTrialCaseTeacherAction: "trials:assign-teacher",
 };
 
 /** Tên mọi hàm `export async function` trong file action. */

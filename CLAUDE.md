@@ -116,8 +116,23 @@ prisma/
    component, hay query. Vi phạm lint `no-inline-authz` = build fail.
 2. Trước P4, `can()` fallback về logic centerId hiện hành. Không được xoá
    đường cũ, không được đổi hành vi đường cũ.
-3. Mọi bảng mới có dữ liệu theo đơn vị BẮT BUỘC có cột `orgUnitId`
-   (không thêm `centerId` mới). Bảng cũ: ghi kép cả hai cột cho tới P4.
+3. Mọi bảng mới có dữ liệu theo đơn vị BẮT BUỘC có cột `orgUnitId`.
+   **ĐÍNH CHÍNH 27/08/2026 — bỏ vế "không thêm `centerId` mới":** vế đó nói ngược
+   với hệ thống đang chạy. Cách ly cơ sở (`scopedDb` + `SCOPED_MODELS`) **vẫn đo
+   bằng `centerId`** cho tới P4, nên bảng chỉ có `orgUnitId` **không được cách ly
+   tự động** — người viết phải tự bịt bằng tay ở từng nơi gọi, và quên một chỗ là
+   rò dữ liệu giữa các cơ sở. Ba đợt trong ba ngày đã vấp đúng chỗ này và mỗi đợt
+   gỡ một kiểu (bảng kho ảnh 26/08 giữ cả hai cột; trục gọi điện 27/08 dùng cột
+   cho phép trống + hàng đợi chờ gán; hộp thư đa kênh 27/08 bịt ba lớp bằng tay).
+   **Luật nay:** bảng mới mang dữ liệu theo cơ sở thì **giữ CẢ HAI cột** —
+   `centerId` là cột cơ chế cách ly đang thật sự đọc, `orgUnitId` là hướng đích —
+   và phải khai đủ **ba** chỗ: `SCOPED_MODELS`, `getModelPrefixes()`
+   (`lib/db-scope.ts`), và `BACKFILL_SPECS` (`lib/org/center-bridge.ts`). Khai
+   thiếu `getModelPrefixes()` là tầm nhìn rơi về diện rộng — đúng lỗi từng mắc với
+   bảng điểm danh. Bảng KHÔNG mang dữ liệu theo cơ sở thì chỉ `orgUnitId`, không
+   cần gì thêm.
+   Chuyển cơ chế cách ly sang đọc `orgUnitId` là **một đợt riêng**, chưa lên lịch.
+   Chừng nào chưa làm xong đợt đó thì luật này giữ nguyên.
 4. Không tự ý sinh migration đổi/bỏ cột trên bảng đang có dữ liệu PROD.
    Migration chỉ nằm trong story được giao, có dry-run, và Dev chạy tay trên PROD.
 5. Test AUTO-CI của story (xem 04-TestScenarios) viết TRƯỚC phần hiện thực.
@@ -149,7 +164,7 @@ prisma/
 - ❌ KHÔNG để side-effect "dính chùm" inline trong action (target: side-effect không-atomic đi qua DomainEvent; tiền/enrollment đi transaction).
 - ❌ KHÔNG đưa lại scope đã LOẠI (Doc 15 §0): AI camera/sinh trắc/định vị học sinh · Web3/NFT/blockchain · marketplace · student login riêng · online video LMS · AI learning path/prediction. Nhu cầu "dự báo/khuyến nghị" làm **rule-based**. (Riêng "teacher domain riêng": **ĐÃ ĐẢO 04/07/2026** — phiếu BGĐ câu 7 duyệt site GV riêng `giaovien.satarobo.vn` → route group `app/(teacher)/teacher/`, 2-phase flag `TEACHER_SITE_ENABLED`.)
 - ❌ KHÔNG lưu giấy tờ tùy thân học viên; media phải tag + tôn trọng `StudentConsent`; KHÔNG lộ `studentId` trên URL portal.
-- ❌ **KHÔNG thêm tier nào vào `COMMISSION_TIERS`** (`lib/crm/commission.ts`). `MAX_TOTAL_RATE = 0.08` và Σ 4 tầng Sale ĐÚNG BẰNG 8,00% ⇒ thêm tầng thứ 5 là `validateRates()` ném `RATE_EXCEEDS_CAP` ở MỌI lần gọi `computeCommission()`, chết luôn hoa hồng Sale. Tầng `TRIAL_TEACHER` (+1% GV dạy Trial, 25/08) cố ý nằm NGOÀI pool — xem `lib/crm/trial-teacher-commission.ts`. Nâng trần là quyết định chính sách tiền của BGĐ.
+- ⚠️ **`COMMISSION_TIERS` — trần nay là CẤU HÌNH, không phải hằng số [CẬP NHẬT 27/08/2026].** ~~KHÔNG thêm tier nào vào `COMMISSION_TIERS`; `MAX_TOTAL_RATE = 0.08` đã bão hoà~~ **[ĐẢO]** chủ dự án chốt **nới 8% → 9%** và đưa trần vào tham số vận hành `crm.commissionMaxTotalRate` (quản trị hệ thống sửa ở màn Cấu hình vận hành). Hằng `MAX_TOTAL_RATE = 0.09` trong `lib/crm/commission.ts` chỉ còn là mặc định cho code THUẦN; **đường nào chạm DB được thì phải `getSetting("crm.commissionMaxTotalRate")` rồi truyền vào `validateRates`/`computeCommission`** — không thì người vận hành sửa trần mà đường ghi vẫn chặn theo số cũ. Tầng `TRIAL_TEACHER` (+1% GV dạy Trial) **vẫn tính riêng** (`lib/crm/trial-teacher-commission.ts`: tính trên từng ghi danh, không phải doanh thu kỳ) nhưng **nay ĐƯỢC CỘNG vào khi kiểm trần** ở `setCommissionRate` — 8% Sale + 1% GV = đúng 9%. Thêm tier vào pool vẫn phải cân lại trần trước, và hạ trần KHÔNG xoá dòng hoa hồng đã sinh.
 - ❌ KHÔNG gõ tay tên bài vào `Lesson` để "sửa tên dự án". Nguồn tên buổi/dự án là 2 file marketing (`components/legacy-laptrinhrobot/_data/roadmap-5-years.ts` + `exam-roadmap.ts`) → `lib/lms/curriculum-sata.ts` → `prisma/seed-curriculum-sata.ts`; lần seed sau ghi đè. Nhãn buổi/tên gửi PH đi qua `deriveSessionLabel`/`deriveSessionProjectName`, đừng tự ghép chuỗi.
 
 ## Workflow

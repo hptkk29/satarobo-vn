@@ -38,6 +38,20 @@ export const financeModule: ModuleDecl = {
       description:
         "Đặt/sửa mục tiêu doanh thu theo tháng × cơ sở. TÁCH khỏi payments:manage (mở/huỷ/hoàn tiền) để Quản lý cơ sở dùng được mà không chạm sổ tiền.",
     },
+    {
+      key: "commission-assignee:manage",
+      action: "manage",
+      description:
+        "Khai QC / quản lý phụ trách từng cơ sở (nguồn người hưởng hoa hồng QC 1% + Quản lý TT 2%). TÁCH khỏi payments:manage: người trả tiền không nên đồng thời chỉ định người nhận.",
+    },
+
+    // --- Kỳ hoa hồng (27/08/2026) ---
+    {
+      key: "commission_periods:manage",
+      action: "manage",
+      description:
+        "CHỐT / DUYỆT / MỞ LẠI kỳ hoa hồng. TÁCH khỏi payments:manage vì bảng kê là bảng KỲ toàn hệ thống (period @unique, không có centerId) — đường ghi không cắt được theo cơ sở, mà payments:manage thì kế toán cơ sở cũng giữ ở scope GLOBAL. Chỉ Super Admin + kế toán Hội sở.",
+    },
 
     // --- Installments / Discounts ---
     {

@@ -6,7 +6,6 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { LEAD_STATUS_LABEL, LEAD_STATUS_BADGE } from "@/lib/leads/status";
-import { TRIAL_STATUS_LABEL, TRIAL_STATUS_BADGE } from "@/lib/trials/status";
 import type { LeadStatus } from "@prisma/client";
 import { LeadActivityPanel } from "./_components/lead-activity-panel";
 import { ReassignButton } from "./_components/reassign-button";
@@ -559,6 +558,9 @@ export default async function LeadDetailPage({ params }: Props) {
                 fullName: canViewPii ? c.fullName : maskPersonName(c.fullName),
                 currentTrial: enr?.trialClass
                   ? {
+                      // 28/08 — cần `classId` để ô chọn lớp mở ra đã hiện SẴN lớp con
+                      // đang học, thay vì "— chọn lớp —" như thể chưa xếp gì.
+                      classId: enr.trialClass.id,
                       className: enr.trialClass.name,
                       session: sess
                         ? {
@@ -615,51 +617,10 @@ export default async function LeadDetailPage({ params }: Props) {
         </div>
       )}
 
-      {/* Học thử (Phase T1.4) */}
-      {lead.trialClasses.length > 0 && (
-        <div className="mb-6 rounded-xl border border-border bg-card p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-foreground">Buổi học thử</h2>
-            <Link href="/lop-trial/lich-hen" className="text-xs font-medium text-primary hover:underline">
-              Quản lý ở mục Lớp Trial →
-            </Link>
-          </div>
-          <ul className="space-y-2">
-            {lead.trialClasses.map((t) => (
-              <li
-                key={t.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted px-3 py-2 text-sm"
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-xs font-semibold ${TRIAL_STATUS_BADGE[t.status]}`}
-                  >
-                    {TRIAL_STATUS_LABEL[t.status]}
-                  </span>
-                  <span className="text-foreground">
-                    {t.scheduledAt.toLocaleString("vi-VN", {
-                      day: "2-digit",
-                      month: "2-digit",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </span>
-                  {t.teacher?.name && (
-                    <span className="text-muted-foreground">· GV: {t.teacher.name}</span>
-                  )}
-                </div>
-                {t.feedback ? (
-                  <span className="text-xs font-medium text-state-info-ink">
-                    Đã có nhận xét
-                  </span>
-                ) : (
-                  <span className="text-xs text-muted-foreground">Chưa nhận xét</span>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {/* 28/08 — GỠ khối "Buổi học thử" (hệ V1, `TrialClass`).
+          Tính năng lịch hẹn học thử đã bị gỡ khỏi hệ thống: không còn màn nào quản lý
+          nó, nên in một danh sách chỉ-đọc ở đây là chỉ đường tới một cánh cửa đã khoá.
+          Bảng `TrialClass` giữ trong DB theo nếp 2 pha, chưa drop. */}
 
       {/* C-07 — "Mốc trạng thái": ai đổi · lúc nào · TỪ trạng thái nào. Đặt TRƯỚC
           mục "Lịch sử thay đổi" vì đây là thứ QLCS mở trang để soi; mục kia trộn

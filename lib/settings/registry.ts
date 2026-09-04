@@ -36,6 +36,8 @@ export type SettingGroup =
   | "dashboard"
   | "makeup"
   | "chat"
+  // Hộp thư đa kênh (site Sale) — công tắc GỬI THẬT của từng kênh ngoài.
+  | "inbox"
   | "system";
 
 export interface SettingDef<T = unknown> {
@@ -355,6 +357,31 @@ export const SETTINGS = {
   //
   // Dữ liệu cũ vượt trần KHÔNG bị đụng: trần chỉ kiểm lúc GHI MỚI. Siết rồi mà đi sửa
   // ngược dữ liệu đang chạy là đổi nghiệp vụ sau lưng người dùng.
+  // ── Trần tổng hoa hồng ──────────────────────────────────────────────────────
+  //
+  // 27/08/2026 — chủ dự án chốt NỚI 8% → 9% **và** thôi hardcode: quản trị hệ thống tự
+  // sửa ở màn Cấu hình vận hành, không phải sửa code rồi chờ deploy.
+  //
+  // Trần này phủ Σ 4 tầng Sale (QC · Sale Admin · Sale · QL TT) — đang đúng 8,00% — CỘNG
+  // tầng `TRIAL_TEACHER` (+1% GV dạy Trial). Trước 27/08 tầng GV chạy NGOÀI mọi ràng
+  // buộc vì trần cũ đã bão hoà; nay cả hai nằm dưới một con số đo được.
+  //
+  // ⚠️ KHÔNG `centerOverridable`: đây là chính sách tiền của toàn hệ thống. Cho cơ sở tự
+  // nới trần là mỗi cơ sở một mức chi hoa hồng, và kế toán không còn một con số để đối.
+  //
+  // ⚠️ Hạ trần xuống DƯỚI tổng tỉ lệ đang hiệu lực KHÔNG xoá dòng hoa hồng đã sinh —
+  // nó chỉ chặn lần lưu cấu hình tỉ lệ tiếp theo. Muốn giảm chi thật thì phải hạ tỉ lệ
+  // từng tầng, không phải hạ trần.
+  "crm.commissionMaxTotalRate": def({
+    key: "crm.commissionMaxTotalRate",
+    group: "crm",
+    label: "Trần tổng tỉ lệ hoa hồng (gồm cả tầng GV dạy Trial)",
+    // Chặn dưới 8% = tổng 4 tầng Sale hiện hành: đặt thấp hơn là mọi lần lưu cấu hình
+    // tỉ lệ đều ném RATE_EXCEEDS_CAP, tức khoá luôn màn cấu hình hoa hồng.
+    schema: z.number().min(0.08).max(0.2),
+    default: 0.09,
+    centerOverridable: false,
+  }),
   "crm.trialMaxSessions": def({
     key: "crm.trialMaxSessions",
     group: "crm",
@@ -546,6 +573,18 @@ export const SETTINGS = {
     default: false,
     centerOverridable: false,
   }),
+  // S-2b (27/08/2026) — công tắc gửi tin Messenger ra khách. Ở registry chứ không ở
+  // env để tắt gấp được mà không cần deploy (spec §2.3). TẮT mặc định: bật lên là mọi
+  // lượt "Trả lời" đi THẬT tới phụ huynh. Tắt ⇒ tin vẫn ghi sổ nhưng mang trạng thái
+  // `SIMULATED` và giao diện nói thẳng "khách KHÔNG nhận" — không bao giờ báo suông.
+  "messenger.sendLive": def({
+    key: "messenger.sendLive",
+    group: "crm",
+    label: "Gửi tin Messenger THẬT ra khách (tắt = mô phỏng, không gọi Meta)",
+    schema: z.boolean(),
+    default: false,
+    centerOverridable: false,
+  }),
   "zalo.znsLive": def({
     key: "zalo.znsLive",
     group: "otp",
@@ -622,6 +661,33 @@ export const SETTINGS = {
     label: "Trần số ZNS gửi trong một lượt cron (chống hoá đơn bất ngờ)",
     schema: z.number().int().min(1).max(500),
     default: 100,
+    centerOverridable: false,
+  }),
+  // ─── Hộp thư đa kênh: công tắc GỬI THẬT của từng kênh ───────────────────────
+  // Vì sao ở đây chứ không ở env (spec §2.3): công tắc vận hành phải tắt được GẤP
+  // mà không cần deploy. Env chỉ giữ SECRET (luật cứng #9) và cờ 2-phase bật/tắt
+  // cả tính năng (`INBOX_ENABLED` trong lib/flags.ts).
+  //
+  // TẮT mặc định, và "tắt" ở đây KHÔNG có nghĩa là hỏng: adapter chạy chế độ MÔ
+  // PHỎNG — tin vẫn vào hội thoại, mang trạng thái SIMULATED, và giao diện nói
+  // thẳng là khách chưa nhận được gì.
+  //
+  // ⚠️ Cache setting có TTL 300s và `safeUpdateTag` nuốt lỗi ngoài Server Action ⇒
+  // đổi công tắc từ cron/route handler KHÔNG xoá cache. Đừng hứa "tắt trong 5 giây".
+  "inbox.zaloOaLive": def({
+    key: "inbox.zaloOaLive",
+    group: "inbox",
+    label: "Zalo OA: gửi tin THẬT (tắt = mô phỏng, khách không nhận gì)",
+    schema: z.boolean(),
+    default: false,
+    centerOverridable: false,
+  }),
+  "inbox.messengerLive": def({
+    key: "inbox.messengerLive",
+    group: "inbox",
+    label: "Messenger: gửi tin THẬT (tắt = mô phỏng, khách không nhận gì)",
+    schema: z.boolean(),
+    default: false,
     centerOverridable: false,
   }),
   "teacher.overloadHoursPerWeek": def({
@@ -828,6 +894,129 @@ export const SETTINGS = {
     label: "Cam kết với phụ huynh",
     schema: commitmentsSchema,
     default: commitments,
+    centerOverridable: false,
+  }),
+
+  // ─── TRẦN CHI PHÍ THÁNG cho lời gọi ra ngoài (chốt 27/08/2026) ────────────
+  // Zalo 2tr · cước gọi 3tr · chấm điểm AI 1tr = 6tr/tháng. Chạm trần là DỪNG CỨNG
+  // (`lib/ngan-sach-goi-ra/`), cảnh báo ở mốc 80%.
+  //
+  // Ba con số nằm ở ĐÂY chứ không ở env vì đó là cả yêu cầu: "phải có một con số
+  // trước khi bật lời gọi ra ngoài", và con số đó tháng sau phải điều chỉnh được theo
+  // thực tế mà không triển khai lại. Env đổi là phải deploy; ô này đổi có hiệu lực
+  // trong ≤300s (TTL cache cấu hình) và có audit + lý do bắt buộc.
+  //
+  // KHÔNG có ô "tổng 6 triệu": tổng SUY RA từ ba trục (`tongTran()`). Khai tổng riêng
+  // bên cạnh các phần là công thức tạo hai nguồn sự thật rồi để chúng trôi khỏi nhau —
+  // đúng cái bẫy `COMMISSION_TIERS` đã dựng sẵn trong kho này.
+  //
+  // TRẦN = 0 nghĩa là TẮT trục đó (không phải "không giới hạn").
+  "outbound.zaloMonthlyCapVnd": def({
+    key: "outbound.zaloMonthlyCapVnd",
+    group: "finance",
+    label: "Trần chi phí tin nhắn Zalo mỗi tháng (đ) — 0 = tắt gửi Zalo",
+    schema: z.number().int().min(0).max(500_000_000),
+    default: 2_000_000,
+    // Trần là chính sách tiền của công ty, không phải tham số vận hành của từng cơ sở.
+    centerOverridable: false,
+  }),
+  "outbound.callMonthlyCapVnd": def({
+    key: "outbound.callMonthlyCapVnd",
+    group: "finance",
+    label: "Trần cước gọi điện mỗi tháng (đ) — 0 = tắt gọi ra",
+    schema: z.number().int().min(0).max(500_000_000),
+    default: 3_000_000,
+    centerOverridable: false,
+  }),
+  "outbound.aiGradingMonthlyCapVnd": def({
+    key: "outbound.aiGradingMonthlyCapVnd",
+    group: "finance",
+    label: "Trần chi phí chấm điểm AI mỗi tháng (đ) — 0 = tắt chấm điểm AI",
+    schema: z.number().int().min(0).max(500_000_000),
+    default: 1_000_000,
+    centerOverridable: false,
+  }),
+  "outbound.warnAtPercent": def({
+    key: "outbound.warnAtPercent",
+    group: "finance",
+    label: "Cảnh báo khi ngân sách một trục dùng tới (%) — mặc định 80",
+    // Chặn dưới 50%: đặt quá thấp thì cảnh báo kêu suốt và sẽ bị bỏ qua. Chặn trên
+    // 99%: cảnh báo ở 100% là báo tang, không phải cảnh báo.
+    schema: z.number().int().min(50).max(99),
+    default: 80,
+    centerOverridable: false,
+  }),
+  "outbound.znsUnitCostVnd": def({
+    key: "outbound.znsUnitCostVnd",
+    group: "finance",
+    label: "Đơn giá ƯỚC TÍNH một tin ZNS (đ) — dùng để trừ vào trần Zalo",
+    // ⚠️ ĐÂY LÀ ƯỚC TÍNH, KHÔNG PHẢI HOÁ ĐƠN. Giá thật khác nhau theo mẫu và theo
+    // cách gửi (đo trên chính kho này: học phí 616258 = 700đ/SĐT · 490đ/UID; xác thực
+    // 616128 và tài khoản 616899 = 400đ/280đ; `lib/observability/slo.ts` lại đang
+    // dùng 300đ). Zalo KHÔNG trả về giá theo từng tin, nên không có cách nào biết
+    // đúng ngoài đối chiếu hoá đơn cuối tháng.
+    // 400đ = mẫu hay dùng nhất. Cách vận hành đúng: cuối tháng lấy hoá đơn Zalo chia
+    // cho `chargeCount` của kỳ (bảng OutboundSpendCounter) rồi chỉnh ô này.
+    schema: z.number().int().min(0).max(100_000),
+    default: 400,
+    centerOverridable: false,
+  }),
+  // ─── Trục gọi điện + ghi âm (OmiCall) ────────────────────────────────────
+  // §2.3: thứ cần TẮT GẤP không được nằm trong env (tắt env phải deploy lại).
+  // ⚠️ `revalidate` thật của cache setting là 300s — đừng hứa "tắt trong 5 giây".
+  "calls.live": def({
+    key: "calls.live",
+    group: "crm",
+    label: "Gọi API tổng đài THẬT (tắt = mô phỏng, không gọi nhà cung cấp)",
+    schema: z.boolean(),
+    // TẮT mặc định. Bật lên là chạm nhà cung cấp thật, tức chạm tiền cước và chạm
+    // dữ liệu khách. Trạng thái an toàn luôn là "không gọi".
+    default: false,
+    centerOverridable: false,
+  }),
+  "calls.recordingAnnouncement": def({
+    key: "calls.recordingAnnouncement",
+    group: "crm",
+    label: 'Lời thông báo ghi âm đầu cuộc gọi (rỗng "" = KHÔNG được ghi âm)',
+    schema: z.string(),
+    // PL-2 (Luật 91/2025 + NĐ 15/2020): tổng đài tự động ghi âm PHẢI thông báo rõ
+    // ràng trước khi ghi. Để ở đây vì câu chữ là việc của pháp chế/vận hành, đổi
+    // không cần deploy. RỖNG là trạng thái an toàn: chưa có lời thông báo thì
+    // `quyetDinhGhiAm()` trả `NOT_ANNOUNCED` và không ghi âm.
+    default:
+      "Cuộc gọi này có thể được ghi âm nhằm nâng cao chất lượng phục vụ. " +
+      "Nếu quý khách không đồng ý, vui lòng báo với nhân viên để chúng tôi tắt ghi âm.",
+    centerOverridable: false,
+  }),
+  "calls.recordingRetentionMonths": def({
+    key: "calls.recordingRetentionMonths",
+    group: "crm",
+    label: "Số tháng giữ tệp ghi âm trước khi xoá (0 = không đặt hạn)",
+    schema: z.number().int().min(0).max(60),
+    // OC-20 đề xuất 12 tháng — ❓ CHỜ CHỐT. Câu hỏi LS-3 (giọng nói có phải dữ liệu
+    // sinh trắc học theo NĐ 356/2025 không) chưa có lời đáp; nếu CÓ thì con số này
+    // phải xét lại cùng cả hồ sơ DPIA.
+    default: 12,
+    centerOverridable: false,
+  }),
+  "calls.minTalkSecondsForContacted": def({
+    key: "calls.minTalkSecondsForContacted",
+    group: "crm",
+    label: 'Số giây đàm thoại tối thiểu để tính là "đã liên hệ"',
+    schema: z.number().int().min(0).max(600),
+    // QT-37 — chống bấm gọi rồi cúp ngay để tắt cảnh báo SLA. Mặc định 10 giây
+    // theo đề xuất của BA.
+    default: 10,
+    centerOverridable: false,
+  }),
+  "calls.listenUrlTtlSeconds": def({
+    key: "calls.listenUrlTtlSeconds",
+    group: "crm",
+    label: "Số giây sống của liên kết nghe ghi âm",
+    schema: z.number().int().min(30).max(3600),
+    // OC-17 — chuẩn hiện hành của repo là 600s. Ngắn hơn thì người nghe hết hạn
+    // giữa chừng; dài hơn thì một liên kết bị chuyển tiếp sống quá lâu.
+    default: 600,
     centerOverridable: false,
   }),
 } as const;

@@ -15,8 +15,16 @@ const NAV = path.join(ROOT, "components/sale/sale-nav.tsx");
 const LAYOUT = path.join(ROOT, "app/(sale)/sale/layout.tsx");
 
 const doc = (p: string) => fs.readFileSync(p, "utf8");
+// Bỏ chú thích. Thứ tự DÒNG trước, KHỐI sau — và đây không phải chuyện gu.
+//
+// `app/(sale)/sale/layout.tsx` có một dòng `//` nhắc tới glob "app/(sale)/**",
+// và dấu sao-kép trong đó trông y hệt chỗ MỞ một chú thích khối. Bỏ khối trước
+// thì regex nuốt từ đó tới chỗ ĐÓNG khối gần nhất; ngày ai đó thêm một chú thích
+// JSX xuống dưới là cả cụm `import` biến mất khỏi bản quét ⇒ test báo "layout
+// không import sale.css" trong khi nó có. Đã xảy ra đúng một lần. Bỏ dòng trước
+// là hết chuyện.
 const boChuThich = (s: string) =>
-  s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  s.replace(/^\s*\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
 
 describe("[site Sale] thanh điều hướng ≡ cổng trang", () => {
   it("mọi mục có quyền đều lấy `perm` TỪ PAGE_GATES, không gõ action rời", () => {
@@ -87,5 +95,92 @@ describe("[site Sale] thanh điều hướng ≡ cổng trang", () => {
     // khi cờ RBAC đổi — bài học 10/07 của site admin.
     const src = boChuThich(doc(LAYOUT));
     expect(src).toContain("grantedMenuActions");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// S-10 (27/08/2026) — bản sắc site Sale: tím thương hiệu + điều hướng 8 NHÓM.
+//
+// Hai chốt của chủ dự án, và cả hai đều có một cái bẫy giống nhau: chúng dễ được
+// "làm cho xong" bằng cách gõ giá trị vào chỗ nào đó rồi tin là đúng.
+//
+//   · Màu: `.sale-root` đã được gắn vào layout từ 23/08 nhưng KHÔNG file CSS nào
+//     định nghĩa nó — một class chết. Site Sale suốt thời gian đó mượn cam
+//     `:root` của trang public, tức trông y hệt… không giống ai. Test dưới đây
+//     đòi đúng ba mảnh phải khớp nhau: file CSS tồn tại, layout import nó, và
+//     token `--primary` mang đúng mã tím đã chốt.
+//   · 8 nhóm: tên nhóm phải LẤY TỪ tài liệu yêu cầu (§5 của
+//     `Document/0-yeucau/2-ba-phan-tich/09-ui-ux-site-sale-tuyensinh.md`), không
+//     phải do người viết code tự đặt cho gọn. Nên test đọc thẳng tài liệu đó và
+//     so từng chữ — tài liệu đổi thì nav đỏ, và ngược lại.
+// ─────────────────────────────────────────────────────────────────────────────
+const CSS = path.join(ROOT, "app/(sale)/sale/sale.css");
+const YEU_CAU = path.join(
+  ROOT,
+  "Document/0-yeucau/2-ba-phan-tich/09-ui-ux-site-sale-tuyensinh.md",
+);
+
+/** 8 tên nhóm, đọc thẳng từ §5 của tài liệu yêu cầu FINAL 16/07. */
+function nhomTheoTaiLieu(): string[] {
+  return [...doc(YEU_CAU).matchAll(/^\*\*(\d)\.\s+(.+?)\*\*\s*$/gm)].map((m) => m[2].trim());
+}
+
+describe("[S-10] site Sale mang màu tím thương hiệu, không mượn màu nơi khác", () => {
+  it("có file token riêng và layout import nó", () => {
+    // Thiếu một trong hai thì `.sale-root` là class chết và site âm thầm dùng
+    // token của `:root` — không hỏng gì, chỉ là sai nhận diện, nên không ai báo.
+    expect(fs.existsSync(CSS), "thiếu app/(sale)/sale/sale.css").toBe(true);
+    expect(boChuThich(doc(LAYOUT))).toContain('import "./sale.css"');
+  });
+
+  it("token đặt dưới `.sale-root`, KHÔNG đụng `:root` toàn cục", () => {
+    // Đụng `:root` là đổi màu cả trang public, portal và khu quản trị.
+    const css = doc(CSS);
+    expect(css).toContain(".sale-root");
+    expect(css).not.toMatch(/^\s*:root\s*\{/m);
+  });
+
+  it("`--primary` đúng mã tím đã chốt (#7C3AED)", () => {
+    const css = doc(CSS).toLowerCase();
+    expect(css).toMatch(/--primary:\s*#7c3aed/);
+  });
+
+  it("tím KHÔNG trùng tím của khu quản trị — hai nơi làm việc phải phân biệt được", () => {
+    // Khu quản trị dùng #610B8A (tím rất sẫm). Site GV cố ý lấy cam. Nếu site
+    // Sale lấy đúng mã của admin thì cả việc đổi màu này thành vô nghĩa.
+    const admin = doc(path.join(ROOT, "app/globals.css")).toLowerCase();
+    expect(admin).toContain("--primary: #610b8a");
+    // So phần KHAI BÁO, không so chú thích: đầu `sale.css` có nhắc mã của admin
+    // để giải thích vì sao ba site ba màu — nhắc tới không phải là dùng.
+    const khaiBao = doc(CSS).replace(/\/\*[\s\S]*?\*\//g, "").toLowerCase();
+    expect(khaiBao).not.toContain("#610b8a");
+  });
+});
+
+describe("[S-10] điều hướng gom thành 8 nhóm theo tài liệu yêu cầu", () => {
+  it("tài liệu §5 vẫn khai đúng 8 nhóm (nếu đổi, nav phải đổi theo)", () => {
+    expect(nhomTheoTaiLieu()).toHaveLength(8);
+  });
+
+  it("nav khai đủ 8 nhóm, ĐÚNG TÊN và ĐÚNG THỨ TỰ của tài liệu", () => {
+    const src = boChuThich(doc(NAV));
+    const nhomTrongNav = [...src.matchAll(/nhom:\s*"([^"]+)"/g)].map((m) => m[1]);
+    expect(nhomTrongNav).toEqual(nhomTheoTaiLieu());
+  });
+
+  it("mọi mục đều thuộc về một nhóm — không mục nào lơ lửng", () => {
+    const src = boChuThich(doc(NAV));
+    const soMuc = [...src.matchAll(/href:\s*"/g)].length;
+    const soMucCoNhom = [...src.matchAll(/muc:\s*\[/g)].length;
+    expect(soMuc).toBeGreaterThan(0);
+    expect(soMucCoNhom).toBe(8);
+  });
+
+  it("nhóm rỗng KHÔNG được vẽ ra — nhãn nhóm không có mục nào là rác trên màn hình", () => {
+    // 21/28 tab của tài liệu chưa dựng. Khai trước cho đúng bản đồ là được,
+    // nhưng vẽ một nhãn "Ghi danh & Thu phí" rồi bên dưới trống không thì người
+    // dùng tưởng mình thiếu quyền.
+    const src = boChuThich(doc(NAV));
+    expect(src).toMatch(/muc\.length\s*>\s*0/);
   });
 });

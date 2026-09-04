@@ -10,7 +10,6 @@ import {
   createClassSchema,
   addSessionSchema,
   updateBookingSchema,
-  configSchema,
   attendanceSchema,
 } from "./schemas";
 
@@ -52,46 +51,48 @@ describe("[LT-U-04] chuỗi giờ VN đi và về", () => {
 });
 
 describe("[LT-U-05] zod tạo lớp", () => {
-  const hopLe = {
-    name: "Trial tối T3",
-    centerId: "cs1",
-    sessionCount: 8,
-    startTime: "18:00",
-    endTime: "19:30",
-    capacity: 8,
-  };
+  // 28/08 — form tạo lớp RÚT còn CƠ SỞ + KHOÁ. Bộ cũ khoá sĩ số / giờ / số buổi / tên;
+  // bốn thứ đó nay không còn đi qua đây nữa:
+  //   · tên  → server tự sinh (`tenLopTrial`), client gửi lên cũng bị bỏ qua;
+  //   · giờ  → thuộc tính của TỪNG BUỔI (`addSessionSchema` vẫn khoá, xem describe dưới);
+  //   · sĩ số → bỏ hẳn, `capacity = null` nghĩa là không giới hạn;
+  //   · số buổi → nay là số buổi ĐÃ THÊM, không phải con số khai trước.
+  const hopLe = { centerId: "cs1" };
 
-  it("dữ liệu hợp lệ thì qua", () => {
+  it("chỉ cần cơ sở là qua", () => {
     expect(createClassSchema.safeParse(hopLe).success).toBe(true);
   });
 
-  it("sĩ số 0 bị chặn — lớp không sĩ số là lớp không xếp được ai", () => {
-    expect(createClassSchema.safeParse({ ...hopLe, capacity: 0 }).success).toBe(false);
+  it("khoá trải nghiệm là tuỳ chọn", () => {
+    expect(createClassSchema.safeParse({ ...hopLe, courseId: "kh1" }).success).toBe(true);
+    expect(createClassSchema.safeParse({ ...hopLe, courseId: null }).success).toBe(true);
   });
 
-  it("sĩ số 101 bị chặn", () => {
-    expect(createClassSchema.safeParse({ ...hopLe, capacity: 101 }).success).toBe(false);
+  it("thiếu hẳn trường cơ sở thì bị chặn", () => {
+    expect(createClassSchema.safeParse({}).success).toBe(false);
   });
 
-  it("giờ kết thúc không sau giờ bắt đầu thì báo đúng thông điệp", () => {
-    const r = createClassSchema.safeParse({ ...hopLe, endTime: "18:00" });
+  it("cơ sở là chuỗi rỗng bị chặn, kèm thông điệp người đọc hiểu", () => {
+    // Lớp không cơ sở là lớp KHÔNG AI THẤY: `scopedDb` lọc theo `centerId`, nên nó tàng
+    // hình với mọi tài khoản cấp cơ sở mà chẳng có thông báo nào.
+    const r = createClassSchema.safeParse({ centerId: "   " });
     expect(r.success).toBe(false);
-    if (!r.success) {
-      expect(r.error.issues[0]?.message).toBe("Giờ kết thúc phải sau giờ bắt đầu");
-    }
+    if (!r.success) expect(r.error.issues[0]?.message).toBe("Chọn cơ sở");
   });
 
-  it("số buổi 21 bị chặn (trần của lớp là 20)", () => {
-    expect(createClassSchema.safeParse({ ...hopLe, sessionCount: 21 }).success).toBe(false);
-  });
-
-  it("tên 161 ký tự bị chặn", () => {
-    expect(createClassSchema.safeParse({ ...hopLe, name: "x".repeat(161) }).success).toBe(false);
-  });
-
-  it("giờ sai định dạng bị chặn", () => {
-    expect(createClassSchema.safeParse({ ...hopLe, startTime: "25:00" }).success).toBe(false);
-    expect(createClassSchema.safeParse({ ...hopLe, startTime: "8:00" }).success).toBe(false);
+  it("trường cũ gửi kèm KHÔNG làm hỏng: zod bỏ qua khoá lạ", () => {
+    // Bản client cũ còn nằm trong tab đang mở của ai đó vẫn POST đủ 6 trường. Chặn ở
+    // đây là họ nhận lỗi khó hiểu; bỏ qua là lớp vẫn tạo đúng theo luật mới.
+    const r = createClassSchema.safeParse({
+      ...hopLe,
+      name: "Tên gõ tay",
+      capacity: 8,
+      startTime: "18:00",
+      endTime: "19:30",
+      sessionCount: 8,
+    });
+    expect(r.success).toBe(true);
+    if (r.success) expect("name" in r.data).toBe(false);
   });
 });
 
@@ -152,14 +153,10 @@ describe("zod cập nhật buổi hẹn", () => {
   });
 });
 
-describe("zod cấu hình và điểm danh", () => {
-  it("cấu hình: số buổi phải nguyên trong 1..60", () => {
-    expect(configSchema.safeParse({ name: "Chuẩn", sessionCount: 4 }).success).toBe(true);
-    expect(configSchema.safeParse({ name: "Chuẩn", sessionCount: 0 }).success).toBe(false);
-    expect(configSchema.safeParse({ name: "Chuẩn", sessionCount: 61 }).success).toBe(false);
-    expect(configSchema.safeParse({ name: "", sessionCount: 4 }).success).toBe(false);
-  });
-
+// 28/08/2026 — bỏ ca kiểm `configSchema`: khối "Cấu hình số buổi (mặc định)" đã gỡ khỏi
+// màn Lớp Trial, schema theo đó cũng gỡ. Trần số buổi nay nằm ở tham số vận hành
+// `crm.trialMaxSessions`, không phải ở một bản ghi cấu hình.
+describe("zod điểm danh", () => {
   it("điểm danh: danh sách rỗng bị chặn", () => {
     const r = attendanceSchema.safeParse({ trialSessionId: "b1", records: [] });
     expect(r.success).toBe(false);

@@ -8,6 +8,7 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { notifyStaff } from "@/lib/notifications/notify";
+import { tenLopTrial } from "@/lib/trial/lop-moi";
 import { teacherCenterAssignmentError } from "@/lib/teachers/center-filter";
 import { nextSeq, yy } from "@/lib/codegen";
 import { publishEvent } from "@/lib/events/publish";
@@ -45,8 +46,19 @@ export function buildTrialSessionDates(startDate: Date, count: number, holidays:
   return out;
 }
 
-/** Quyết định vượt sĩ số (PURE): tại/quá sức chứa + KHÔNG override. */
-export function isOverCapacity(activeCount: number, capacity: number, allowOverride: boolean): boolean {
+/**
+ * Quyết định vượt sĩ số (PURE): tại/quá sức chứa + KHÔNG override.
+ *
+ * `capacity === null` = lớp KHÔNG giới hạn sĩ số (mặc định từ 28/08, khi trường sĩ số
+ * rời khỏi form tạo lớp). Coi null là 0 thì lớp mới tạo chặn ngay học viên đầu tiên và
+ * báo "Vượt sĩ số" — người dùng không có cách nào đoán ra nguyên nhân.
+ */
+export function isOverCapacity(
+  activeCount: number,
+  capacity: number | null,
+  allowOverride: boolean,
+): boolean {
+  if (capacity === null) return false;
   return !allowOverride && activeCount >= capacity;
 }
 
@@ -67,24 +79,6 @@ function sanitizeCenter(code: string): string {
   return code.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8) || "CS";
 }
 
-/** Mở rộng các khoảng Holiday (date..endDate) thành Date[] (1 phần tử / ngày). */
-function expandHolidayDates(rows: { date: Date; endDate: Date | null }[]): Date[] {
-  const out: Date[] = [];
-  for (const h of rows) {
-    const start = new Date(h.date.getFullYear(), h.date.getMonth(), h.date.getDate());
-    const end = h.endDate
-      ? new Date(h.endDate.getFullYear(), h.endDate.getMonth(), h.endDate.getDate())
-      : start;
-    const cur = new Date(start);
-    let guard = 0;
-    while (cur <= end && guard < 400) {
-      guard++;
-      out.push(new Date(cur));
-      cur.setDate(cur.getDate() + 1);
-    }
-  }
-  return out;
-}
 
 async function actorName(actorId: string | null | undefined, client: DbClient = db): Promise<string> {
   if (!actorId) return "system";
@@ -94,102 +88,33 @@ async function actorName(actorId: string | null | undefined, client: DbClient = 
 
 // ─── Config ────────────────────────────────────────────────────────────────────
 
-/** Cấu hình lớp trải nghiệm đang ÁP DỤNG (active). */
-export async function getActiveTrialConfig(): Promise<{ id: string; sessionCount: number } | null> {
-  const cfg = await db.trialProgramConfig.findFirst({
-    where: { active: true },
-    orderBy: { updatedAt: "desc" },
-    select: { id: true, sessionCount: true },
-  });
-  return cfg;
-}
+// 28/08/2026 — GỠ `getActiveTrialConfig` + `setTrialProgramConfig`.
+//
+// Khối "Cấu hình số buổi (mặc định)" ở màn Lớp Trial đã bỏ theo chốt của chủ dự án: form
+// tạo lớp nhập thẳng số buổi nào cũng được, nên một con số mặc định cấp hệ thống chỉ còn
+// là ô người dùng phải đọc rồi bỏ qua. Hai hàm này không còn ai gọi.
+//
+// ⚠️ Bảng `TrialProgramConfig` và cột `TrialClassV2.configId` GIỮ NGUYÊN — bỏ cột trên
+// bảng đang có dữ liệu prod là việc của một đợt drop riêng (luật cứng #4, nếp 2 pha).
+// `createTrialClass` vẫn nhận `configId`, màn tạo lớp truyền `null`.
 
-/** Tạo/cập nhật + kích hoạt cấu hình (deactivate các config khác) + audit. */
-export async function setTrialProgramConfig(params: {
-  name: string;
-  sessionCount: number;
-  actorId: string;
-}): Promise<{ ok: boolean; error?: string }> {
-  const name = params.name?.trim();
-  if (!name) return { ok: false, error: "Tên cấu hình là bắt buộc" };
-  if (!Number.isInteger(params.sessionCount) || params.sessionCount < 1) {
-    return { ok: false, error: "Số buổi phải là số nguyên ≥ 1" };
-  }
-
-  try {
-    const aName = await actorName(params.actorId);
-    await db.$transaction(async (tx) => {
-      const existing = await tx.trialProgramConfig.findFirst({ where: { name } });
-      // tắt mọi config khác (chỉ 1 active tại 1 thời điểm)
-      await tx.trialProgramConfig.updateMany({
-        where: existing ? { id: { not: existing.id } } : {},
-        data: { active: false },
-      });
-      const saved = existing
-        ? await tx.trialProgramConfig.update({
-            where: { id: existing.id },
-            data: { sessionCount: params.sessionCount, active: true, updatedById: params.actorId },
-          })
-        : await tx.trialProgramConfig.create({
-            data: { name, sessionCount: params.sessionCount, active: true, updatedById: params.actorId },
-          });
-      await writeAudit({
-        actor: { id: params.actorId, name: aName },
-        module: "trial",
-        entityType: "TrialProgramConfig",
-        entityId: saved.id,
-        action: existing ? "UPDATE" : "CREATE",
-        oldValues: existing ? { sessionCount: existing.sessionCount, active: existing.active } : null,
-        newValues: { name, sessionCount: params.sessionCount, active: true },
-        tx,
-      });
-    });
-    return { ok: true };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Lỗi lưu cấu hình" };
-  }
-}
-
-// ─── Lớp ─────────────────────────────────────────────────────────────────────
-
+/**
+ * Tạo lớp trải nghiệm. 28/08 — chỉ còn CƠ SỞ + KHOÁ; tên tự sinh, giờ/phòng/GV/sĩ số
+ * chuyển xuống từng buổi.
+ */
 export async function createTrialClass(params: {
-  name: string;
   centerId: string;
-  roomId?: string | null;
+  /** Khoá trải nghiệm (= khoá quan tâm của khách). */
+  courseId?: string | null;
   // FL-R2 (QĐ-R2-1): slot tái sử dụng — startDate tuỳ chọn (null = không gắn ngày cố định).
   startDate?: Date | null;
-  startTime: string;
-  endTime: string;
-  capacity: number;
-  teacherId?: string | null;
-  // Số buổi nhập trực tiếp khi tạo (không phụ thuộc TrialProgramConfig ngoài).
-  sessionCount: number;
   configId?: string | null;
   actorId: string;
 }): Promise<{ ok: boolean; error?: string; trialClassId?: string }> {
-  if (!params.name?.trim()) return { ok: false, error: "Tên lớp là bắt buộc" };
-  if (!Number.isInteger(params.capacity) || params.capacity < 1) {
-    return { ok: false, error: "Sĩ số phải là số nguyên ≥ 1" };
-  }
-  if (!Number.isInteger(params.sessionCount) || params.sessionCount < 1) {
-    return { ok: false, error: "Số buổi phải là số nguyên ≥ 1" };
-  }
-
-  // R2-RBAC-3 — GV (nếu gán) phải CÙNG cơ sở lớp trải nghiệm (cách ly CS1↔CS2;
-  // backstop server cho lọc client ở form). teacher centerId NULL/khác → chặn.
-  if (params.teacherId) {
-    const t = await db.user.findUnique({
-      where: { id: params.teacherId },
-      select: { centerId: true },
-    });
-    const err = teacherCenterAssignmentError(params.centerId, [
-      { id: params.teacherId, centerId: t?.centerId },
-    ]);
-    if (err) return { ok: false, error: err };
-  }
-
   try {
-    const sessionCount = params.sessionCount;
+    // Số buổi khai trước KHÔNG còn ý nghĩa: buổi thêm tay từng cái ở màn chi tiết, và
+    // cột hiển thị nay đếm buổi CÓ THẬT. Giữ 0 để cột cũ không nói dối.
+    const sessionCount = 0;
     const trialClassId = await db.$transaction(async (tx) => {
       // mã cơ sở cho code.
       const center = await tx.center.findUnique({
@@ -204,43 +129,30 @@ export async function createTrialClass(params: {
       const trialClass = await tx.trialClassV2.create({
         data: {
           code,
-          name: params.name.trim(),
+          // Tên theo quy ước `Cơ sở_Lớp trial số`, dùng CHÍNH số thứ tự đã cấp cho
+          // `code` — hai thứ đi cùng một bộ đếm nên không bao giờ lệch nhau.
+          name: tenLopTrial(cc, seq),
           centerId: params.centerId,
-          roomId: params.roomId ?? null,
+          courseId: params.courseId ?? null,
           startDate: params.startDate ?? null,
-          startTime: params.startTime,
-          endTime: params.endTime,
-          capacity: params.capacity,
-          teacherId: params.teacherId ?? null,
+          // 28/08 — giờ/sĩ số/GV/phòng để null: chúng là thuộc tính của TỪNG BUỔI.
+          startTime: null,
+          endTime: null,
+          capacity: null,
+          teacherId: null,
+          roomId: null,
           configId: params.configId ?? null,
           sessionCount,
         },
         select: { id: true },
       });
 
-      // FL-R2 (QĐ-R2-1): slot tái sử dụng — KHÔNG auto-gen buổi cohort. Chỉ sinh buổi theo
-      // lịch khi CÓ ngày bắt đầu cố định (giữ tương thích đường gọi cũ/lớp có lịch).
-      if (params.startDate) {
-        const holidayRows = await tx.holiday.findMany({
-          where: { OR: [{ centerId: params.centerId }, { centerId: null }] },
-          select: { date: true, endDate: true },
-        });
-        const holidays = expandHolidayDates(holidayRows);
-        const dates = buildTrialSessionDates(params.startDate, sessionCount, holidays);
-        if (dates.length > 0) {
-          await tx.trialClassSession.createMany({
-            data: dates.map((d, idx) => ({
-              trialClassId: trialClass.id,
-              seq: idx + 1,
-              date: d,
-              startTime: params.startTime,
-              endTime: params.endTime,
-              roomId: params.roomId ?? null,
-              teacherId: params.teacherId ?? null,
-            })),
-          });
-        }
-      }
+      // 28/08 — GỠ nhánh tự sinh buổi theo `startDate`.
+      //
+      // Nhánh đó cần giờ/phòng/GV ở CẤP LỚP để rót xuống từng buổi, mà ba thứ ấy nay
+      // không còn tồn tại ở cấp lớp. Giữ lại thì buổi sinh ra trắng giờ — tệ hơn là
+      // không sinh, vì một buổi không giờ vẫn hiện trên lịch giáo viên.
+      // Lớp trải nghiệm vốn là slot tái sử dụng: buổi thêm tay ở màn chi tiết.
       return trialClass.id;
     });
     return { ok: true, trialClassId };
@@ -399,8 +311,19 @@ export async function enrollLeadChild(params: {
         return { ok: false, overCapacity: true, error: "Vượt sĩ số" };
       }
 
-      // #2 — chốt buổi cho ghi danh NGAY khi tạo (GV chỉ thấy HV qua scheduledSessionId).
-      let scheduledSessionId: string | null = params.sessionId ?? null;
+      // Buổi của ghi danh. `null` = học TOÀN BỘ buổi của lớp — đây là MẶC ĐỊNH từ
+      // 28/08 (chủ dự án: "add vào là add toàn bộ buổi của lớp trải nghiệm đó").
+      //
+      // ⚠️ ĐẢO nếp #2. Bản cũ AUTO-GÁN buổi gần nhất khi không truyền `sessionId`, với
+      // lý do ghi rõ: "GV chỉ thấy HV qua scheduledSessionId — enroll không buổi = HV
+      // tàng hình". Lý do đó nay KHÔNG còn đúng: roster giáo viên đã xếp ghi danh
+      // `scheduledSessionId = null` vào MỌI buổi của lớp (xem `lib/lms/teacher-schedule.ts`),
+      // và bảng điểm danh vốn đã hiểu null là "hiện ở mọi buổi". Gỡ auto-gán mà KHÔNG
+      // sửa roster trước là dựng lại đúng lỗi tàng hình đó — hai thay đổi đi cùng một
+      // commit là có chủ đích.
+      //
+      // Xếp riêng một buổi vẫn làm được: truyền `sessionId` (màn chi tiết lớp, dời lịch).
+      const scheduledSessionId: string | null = params.sessionId ?? null;
       if (scheduledSessionId) {
         // Buổi truyền vào phải thuộc đúng lớp đang xếp (chống chọn buổi lớp khác).
         const ses = await tx.trialClassSession.findUnique({
@@ -409,29 +332,6 @@ export async function enrollLeadChild(params: {
         });
         if (!ses || ses.trialClassId !== params.trialClassId) {
           return { ok: false, error: "Buổi học không thuộc lớp đã chọn" };
-        }
-      } else {
-        // Auto-gán buổi SCHEDULED gần nhất: ưu tiên buổi SẮP TỚI (ngày ≥ hôm nay VN),
-        // hết buổi tương lai → buổi SCHEDULED mới nhất. Không có buổi nào → lỗi rõ.
-        const today = vnTodayUtc();
-        const upcoming = await tx.trialClassSession.findFirst({
-          where: { trialClassId: params.trialClassId, status: "SCHEDULED", date: { gte: today } },
-          orderBy: [{ date: "asc" }, { seq: "asc" }],
-          select: { id: true },
-        });
-        const fallback = upcoming
-          ? null
-          : await tx.trialClassSession.findFirst({
-              where: { trialClassId: params.trialClassId, status: "SCHEDULED" },
-              orderBy: [{ date: "desc" }, { seq: "desc" }],
-              select: { id: true },
-            });
-        scheduledSessionId = upcoming?.id ?? fallback?.id ?? null;
-        if (!scheduledSessionId) {
-          return {
-            ok: false,
-            error: "Lớp trải nghiệm chưa có buổi học — thêm buổi trước khi xếp học viên",
-          };
         }
       }
 
@@ -489,7 +389,9 @@ export async function enrollLeadChild(params: {
         { tx, dedupeKey: `trial.assigned:${enrollment.id}` },
       );
       // AC4 — ghi audit khi override sĩ số (xếp vượt capacity bằng quyền override).
-      if (allowOverride && activeCount >= cls.capacity) {
+      // `capacity === null` = lớp không giới hạn ⇒ KHÔNG có gì để "vượt", nên cũng
+      // không ghi audit override. Ghi bừa là đẻ ra vết vi phạm cho một luật không tồn tại.
+      if (allowOverride && cls.capacity !== null && activeCount >= cls.capacity) {
         await writeAudit({
           actor: { id: params.addedById, name: await actorName(params.addedById, tx) },
           module: "trial",

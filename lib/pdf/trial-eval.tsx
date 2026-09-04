@@ -104,17 +104,30 @@ const s = StyleSheet.create({
   },
   pillText: { fontSize: 10, fontWeight: "bold", color: "#FFFFFF" },
 
-  sectionTitle: {
-    fontSize: 11,
+  // Dau muc co SO: hai muc lon cua phieu phai trong cung mot he, va so thu tu phai la
+  // mot vat the chu khong phai ky tu lan vao tieu de.
+  secHead: { flexDirection: "row", alignItems: "center", marginTop: 9, marginBottom: 4 },
+  secNum: {
+    width: 15,
+    height: 15,
+    borderRadius: 7.5,
+    backgroundColor: BRAND.purple,
+    color: "#FFFFFF",
+    fontSize: 8.5,
+    fontWeight: "bold",
+    textAlign: "center",
+    paddingTop: 2.6,
+    marginRight: 6,
+  },
+  secTitle: {
+    flex: 1,
+    fontSize: 10.5,
     fontWeight: "bold",
     color: BRAND.purple,
     textTransform: "uppercase",
-    borderBottomWidth: 2,
-    borderBottomColor: BRAND.lineSoft,
-    paddingBottom: 4,
-    marginTop: 8,
-    marginBottom: 5,
+    letterSpacing: 0.3,
   },
+  secRule: { height: 2, backgroundColor: BRAND.lineSoft, marginBottom: 6 },
 
   evalGrid: {
     borderWidth: 1,
@@ -123,55 +136,139 @@ const s = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: "#FFFFFF",
   },
+  // Hang tieu de bang: noi thang hai cot la gi. Khong co no thi cot trai trong nhu mot
+  // nhan trang tri chu khong phai "nhom nang luc".
+  evalHeadRow: {
+    flexDirection: "row",
+    backgroundColor: BRAND.box,
+    borderBottomWidth: 1,
+    borderBottomColor: BRAND.line,
+  },
+  evalHeadLeft: {
+    width: "24%",
+    paddingVertical: 4,
+    paddingHorizontal: 9,
+    borderRightWidth: 1,
+    borderRightColor: BRAND.line,
+  },
+  evalHeadRight: { width: "76%", paddingVertical: 4, paddingHorizontal: 9 },
+  evalHeadText: {
+    fontSize: 6.8,
+    fontWeight: "bold",
+    color: BRAND.purple,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+
   evalRow: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: BRAND.lineSoft },
   evalRowLast: { borderBottomWidth: 0 },
   evalGroupCell: {
-    width: "23%",
+    width: "24%",
     backgroundColor: BRAND.cell,
     borderRightWidth: 1,
     borderRightColor: BRAND.lineSoft,
+    borderLeftWidth: 3,
+    borderLeftColor: BRAND.orange,
     paddingVertical: 8,
-    paddingHorizontal: 9,
+    paddingHorizontal: 8,
     justifyContent: "center",
   },
-  evalGroupNum: { fontSize: 7, color: BRAND.textMuted, marginBottom: 2 },
-  evalGroupText: { fontSize: 9.5, fontWeight: "bold", color: BRAND.orange },
-  evalContent: { width: "77%", paddingVertical: 5, paddingHorizontal: 9 },
+  evalGroupNum: {
+    fontSize: 6.5,
+    color: BRAND.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    marginBottom: 2,
+  },
+  evalGroupText: { fontSize: 9.5, fontWeight: "bold", color: BRAND.purple, lineHeight: 1.25 },
+  evalGroupPts: { fontSize: 7, color: BRAND.orange, fontWeight: "bold", marginTop: 3 },
+  evalContent: { width: "76%", paddingVertical: 6, paddingHorizontal: 9 },
 
-  crit: { marginBottom: 4 },
+  crit: { marginBottom: 6 },
   critLast: { marginBottom: 0 },
-  critHead: { flexDirection: "row", alignItems: "center", marginBottom: 2 },
+  critHead: { flexDirection: "row", alignItems: "center", marginBottom: 3 },
   critLabel: { flex: 1, fontSize: 9, fontWeight: "bold", color: BRAND.textStrong },
-  critPts: { fontSize: 9, fontWeight: "bold", color: BRAND.orange },
-  optRow: { flexDirection: "row", gap: 6 },
-  opt: { flexDirection: "row", width: "31.5%" },
-  circle: { width: 8, height: 8, borderRadius: 4, borderWidth: 1.2, marginRight: 4, marginTop: 1.2 },
-  optBody: { flex: 1 },
-  optText: { fontSize: 7.8, lineHeight: 1.2 },
-  critDesc: { fontSize: 7.2, color: BRAND.textMuted, marginTop: 1.5, lineHeight: 1.2 },
+  // Diem nam trong VIEN, khong phai chu roi: sau dong diem xep thanh mot cot thang o
+  // mep phai, mat quet mot luot la thay em manh/yeu o dau.
+  critPill: {
+    backgroundColor: BRAND.box,
+    borderRadius: 8,
+    paddingVertical: 1.5,
+    paddingHorizontal: 6,
+  },
+  critPillText: { fontSize: 8, fontWeight: "bold", color: BRAND.orange },
 
-  recBox: {
+  optRow: { flexDirection: "row", gap: 5 },
+  // Muc DUOC CHON la mot the co nen + vien cam; muc khong chon de tran. Ban truoc chi
+  // khac nhau o mot cham tron 8px va chu dam - in den trang la gan nhu khong phan biet
+  // duoc, ma phieu nay phu huynh hay photo lai.
+  opt: {
+    flexDirection: "row",
+    width: "31.8%",
+    borderRadius: 4,
+    borderWidth: 1,
+    paddingVertical: 3,
+    paddingHorizontal: 4,
+  },
+  optOn: { borderColor: BRAND.orange, backgroundColor: BRAND.box },
+  optOff: { borderColor: BRAND.lineSoft, backgroundColor: "#FFFFFF" },
+  circle: { width: 7, height: 7, borderRadius: 3.5, borderWidth: 1.2, marginRight: 4, marginTop: 1 },
+  optBody: { flex: 1 },
+  optText: { fontSize: 7.6, lineHeight: 1.25 },
+  critDesc: { fontSize: 7, color: BRAND.textMuted, marginTop: 1.5, lineHeight: 1.2 },
+
+  // Muc 2: hai khoi con, moi khoi mot thanh mau ben trai. Ban truoc la mot hop trang
+  // voi hai nhan cung mau - doc thanh mot khoi dai, khong thay dau la nhan xet dau la
+  // viec can lam tiep.
+  recWrap: { flexDirection: "column", gap: 6 },
+  recCard: {
     borderWidth: 1,
     borderColor: BRAND.line,
     backgroundColor: "#FFFFFF",
     borderRadius: 8,
-    padding: 9,
+    borderLeftWidth: 3,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
   },
-  recLabel: { fontSize: 9, fontWeight: "bold", color: BRAND.purple, marginBottom: 3 },
-  recPara: { fontSize: 9.5, lineHeight: 1.4 },
-  recDivider: { marginTop: 6 },
-  bulletRow: { flexDirection: "row", marginTop: 2 },
-  bulletDot: { width: 10, fontSize: 9.5, color: BRAND.orange },
-  bulletText: { flex: 1, fontSize: 9.5, lineHeight: 1.4 },
+  recCardComment: { borderLeftColor: BRAND.purple },
+  recCardPath: { borderLeftColor: BRAND.orange },
+  recLabel: {
+    fontSize: 7,
+    fontWeight: "bold",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 3,
+  },
+  recPara: { fontSize: 9.5, lineHeight: 1.45, color: BRAND.text },
+  bulletRow: { flexDirection: "row", marginTop: 3, alignItems: "flex-start" },
+  // Dau dau dong la hinh vuong nho, khong phai ky tu "bullet": ky tu do le thuoc font
+  // va da co tien le roi mat khi @react-pdf doi bo chu.
+  bulletDot: {
+    width: 3.5,
+    height: 3.5,
+    backgroundColor: BRAND.orange,
+    marginTop: 4.5,
+    marginRight: 6,
+  },
+  bulletText: { flex: 1, fontSize: 9.5, lineHeight: 1.45, color: BRAND.text },
 
-  foot: { marginTop: 8, textAlign: "right", fontSize: 8.5, color: BRAND.textMuted },
-  footName: { fontWeight: "bold", color: BRAND.purple },
+  foot: {
+    marginTop: 10,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: BRAND.lineSoft,
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "baseline",
+  },
+  footLabel: { fontSize: 8.5, color: BRAND.textMuted },
+  footName: { fontSize: 10, fontWeight: "bold", color: BRAND.purple, marginLeft: 5 },
 });
 
 export interface TrialEvalPdfData {
   studentName: string;
-  courseName: string | null;
-  trialClassName: string;
+  // `courseName` / `trialClassName` ĐÃ GỠ 27/08 — phiếu không in hai ô đó nữa. Giữ lại
+  // trong kiểu này là mời người sau truyền vào rồi tưởng nó hiện lên.
   scores: Record<string, number>;
   totalScore: number;
   rank: string;
@@ -198,6 +295,19 @@ function GradientBg() {
       </Defs>
       <Rect x="0" y="0" width="100" height="100" fill="url(#trialBand)" />
     </Svg>
+  );
+}
+
+/** Đầu mục có số thứ tự — dùng chung cho cả hai mục lớn để chúng cùng một hệ. */
+function SectionHead({ num, title }: { num: number; title: string }) {
+  return (
+    <View>
+      <View style={s.secHead}>
+        <Text style={s.secNum}>{num}</Text>
+        <Text style={s.secTitle}>{title}</Text>
+      </View>
+      <View style={s.secRule} />
+    </View>
   );
 }
 
@@ -234,10 +344,10 @@ export function TrialEvalPdf({ data }: { data: TrialEvalPdfData }) {
           <Text style={s.titleSub}>Kết quả buổi học trải nghiệm</Text>
         </View>
 
+        {/* 27/08 — chủ dự án chốt bỏ "Khoá học quan tâm" và "Lớp trải nghiệm";
+            phiếu chỉ còn TÊN học sinh và NGÀY đánh giá. */}
         <View style={s.infoGrid}>
           <InfoCell label="Họ và tên học sinh" value={data.studentName} />
-          <InfoCell label="Khoá học quan tâm" value={data.courseName ?? "—"} />
-          <InfoCell label="Lớp trải nghiệm" value={data.trialClassName} />
           <InfoCell label="Ngày đánh giá" value={data.dateLabel} />
         </View>
 
@@ -254,8 +364,16 @@ export function TrialEvalPdf({ data }: { data: TrialEvalPdfData }) {
           </View>
         </View>
 
-        <Text style={s.sectionTitle}>1. Đánh giá năng lực chi tiết</Text>
+        <SectionHead num={1} title="Đánh giá năng lực chi tiết" />
         <View style={s.evalGrid}>
+          <View style={s.evalHeadRow}>
+            <View style={s.evalHeadLeft}>
+              <Text style={s.evalHeadText}>Nhóm năng lực</Text>
+            </View>
+            <View style={s.evalHeadRight}>
+              <Text style={s.evalHeadText}>Tiêu chí · mức đạt được</Text>
+            </View>
+          </View>
           {RUBRIC.map((sec, secIdx) => (
             <View
               key={sec.num}
@@ -265,6 +383,16 @@ export function TrialEvalPdf({ data }: { data: TrialEvalPdfData }) {
               <View style={s.evalGroupCell}>
                 <Text style={s.evalGroupNum}>Nhóm {sec.num}</Text>
                 <Text style={s.evalGroupText}>{sec.title}</Text>
+                {/* Điểm CỘNG CỦA NHÓM: người đọc muốn biết em mạnh ở mảng nào, mà
+                    cộng nhẩm hai dòng lẻ 0.5 trên giấy thì không ai làm. */}
+                <Text style={s.evalGroupPts}>
+                  {fmtScore(
+                    sec.criteria.reduce((t, c) => t + (data.scores[c.id] ?? 0), 0),
+                  )}
+                  {" / "}
+                  {fmtScore(sec.criteria.reduce((t, c) => t + (c.levels[0]?.points ?? 0), 0))}
+                  {" đ"}
+                </Text>
               </View>
               <View style={s.evalContent}>
                 {sec.criteria.map((c, critIdx) => {
@@ -278,13 +406,17 @@ export function TrialEvalPdf({ data }: { data: TrialEvalPdfData }) {
                     >
                       <View style={s.critHead}>
                         <Text style={s.critLabel}>{c.label}</Text>
-                        <Text style={s.critPts}>{fmtScore(pts)} đ</Text>
+                        <View style={s.critPill}>
+                          <Text style={s.critPillText}>
+                            {fmtScore(pts)}/{fmtScore(c.levels[0]?.points ?? 0)} đ
+                          </Text>
+                        </View>
                       </View>
                       <View style={s.optRow}>
                         {c.levels.map((l) => {
                           const on = l === picked;
                           return (
-                            <View key={l.title} style={s.opt}>
+                            <View key={l.title} style={[s.opt, on ? s.optOn : s.optOff]}>
                               <View
                                 style={[
                                   s.circle,
@@ -322,33 +454,38 @@ export function TrialEvalPdf({ data }: { data: TrialEvalPdfData }) {
           ))}
         </View>
 
-        <Text style={s.sectionTitle}>2. Nhận xét &amp; lộ trình đề xuất từ trung tâm</Text>
-        <View style={s.recBox}>
+        <SectionHead num={2} title="Nhận xét &amp; lộ trình đề xuất từ trung tâm" />
+        <View style={s.recWrap}>
           {data.generalComment ? (
-            <View>
-              <Text style={s.recLabel}>Nhận xét chung</Text>
+            <View style={[s.recCard, s.recCardComment]} wrap={false}>
+              <Text style={[s.recLabel, { color: BRAND.purple }]}>Nhận xét chung</Text>
               <Text style={s.recPara}>{data.generalComment}</Text>
             </View>
           ) : null}
           {orientationLines.length > 0 ? (
-            <View style={data.generalComment ? s.recDivider : undefined}>
-              <Text style={s.recLabel}>Định hướng</Text>
+            <View style={[s.recCard, s.recCardPath]} wrap={false}>
+              <Text style={[s.recLabel, { color: BRAND.orange }]}>
+                Lộ trình đề xuất
+              </Text>
               {orientationLines.map((line, i) => (
                 <View key={i} style={s.bulletRow}>
-                  <Text style={s.bulletDot}>•</Text>
+                  <View style={s.bulletDot} />
                   <Text style={s.bulletText}>{line}</Text>
                 </View>
               ))}
             </View>
           ) : null}
           {!data.generalComment && orientationLines.length === 0 ? (
-            <Text style={s.recPara}>—</Text>
+            <View style={[s.recCard, s.recCardComment]}>
+              <Text style={s.recPara}>Chưa có nhận xét.</Text>
+            </View>
           ) : null}
         </View>
 
-        <Text style={s.foot}>
-          Người đánh giá: <Text style={s.footName}>{data.evaluatedByName ?? "—"}</Text>
-        </Text>
+        <View style={s.foot}>
+          <Text style={s.footLabel}>Giáo viên đánh giá:</Text>
+          <Text style={s.footName}>{data.evaluatedByName ?? "—"}</Text>
+        </View>
       </Page>
     </Document>
   );

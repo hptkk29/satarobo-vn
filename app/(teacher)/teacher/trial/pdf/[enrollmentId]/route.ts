@@ -51,8 +51,6 @@ export async function GET(
 
   return trialEvalPdfResponse({
     studentName: ctx.studentName,
-    courseName: ctx.courseName,
-    trialClassName: ctx.trialClassName,
     existing: ctx.existing,
     filenameSuffix: seq != null ? `-Buoi${seq}` : undefined,
   });

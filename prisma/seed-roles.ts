@@ -42,15 +42,35 @@ export const ROLE_SEED: RoleSeed[] = [
       // 27/08/2026 — đổi trạng thái lead nay là quyền RIÊNG, chỉ Sale. SUPER_ADMIN đã
       // bypass toàn bộ quyền trong can() v2 nên dòng này KHÔNG đổi hành vi; khai để ma
       // trận nói được ai đẩy được lead trên phễu, và để v1 (local/dev) khớp v2.
+      // Hộp thư đa kênh. SUPER_ADMIN đã bypass toàn bộ quyền trong can() v2 nên ba
+      // dòng này KHÔNG đổi hành vi; khai để ma trận nói được ai trực được hộp thư,
+      // và để v1 (local/dev) khớp v2.
+      { action: "inbox:view", scopeType: "GLOBAL" },
+      { action: "inbox:reply", scopeType: "GLOBAL" },
+      { action: "inbox:assign", scopeType: "GLOBAL" },
       { action: "leads:change-status", scopeType: "GLOBAL" },
       // C-01 — chỉ tiêu lead theo tháng × cơ sở. SUPER_ADMIN đã bypass toàn bộ quyền
       // trong can() v2 nên dòng này KHÔNG đổi hành vi; khai cho khớp v1 + rõ ý, và để
       // ma trận nói được "ai đặt được chỉ tiêu toàn hệ thống" mà không phải suy từ bypass.
       { action: "lead_targets:manage", scopeType: "GLOBAL" },
+      // Trục gọi điện (OmiCall). SUPER_ADMIN đã bypass toàn bộ quyền trong can() v2
+      // nên 6 dòng này KHÔNG đổi hành vi; khai để ma trận nói được ai nghe được ghi
+      // âm và ai gán được cuộc gọi mồ côi, mà không phải suy từ bypass.
+      { action: "calls:make", scopeType: "GLOBAL" },
+      { action: "calls:view-own", scopeType: "GLOBAL" },
+      { action: "calls:view-all", scopeType: "GLOBAL" },
+      { action: "calls:listen-recording", scopeType: "GLOBAL" },
+      { action: "calls:export", scopeType: "GLOBAL" },
+      { action: "calls:assign", scopeType: "GLOBAL" },
       // D-02 — chỉ tiêu ngân sách quảng cáo theo tháng × cơ sở. Cùng lý do dòng trên:
       // SUPER_ADMIN đã bypass trong can() v2 nên dòng này KHÔNG đổi hành vi, khai để
       // ma trận nói được "ai đặt được chỉ tiêu toàn hệ thống" mà không phải suy từ bypass.
       { action: "ads_budget_targets:manage", scopeType: "GLOBAL" },
+      // 27/08/2026 — chốt/duyệt/mở lại kỳ hoa hồng nay là quyền RIÊNG (trước đi nhờ
+      // `payments:manage`, mà key đó kế toán CƠ SỞ cũng có ở GLOBAL ⇒ chốt được kỳ của
+      // cả công ty). SUPER_ADMIN đã bypass toàn bộ quyền trong can() v2 nên dòng này
+      // KHÔNG đổi hành vi; khai để ma trận nói được ai chốt được kỳ, và để v1 khớp v2.
+      { action: "commission_periods:manage", scopeType: "GLOBAL" },
       // S-5 — XEM sổ lượt chia lead. SUPER_ADMIN đã bypass toàn bộ quyền trong can() v2
       // nên dòng này KHÔNG đổi hành vi; khai để ma trận nói được ai mở được màn kiểm
       // chứng mà không phải suy từ bypass.
@@ -107,6 +127,10 @@ export const ROLE_SEED: RoleSeed[] = [
       // B-01 — trước đây đặt mục tiêu doanh thu đi nhờ `payments:manage`. Tách key
       // riêng để mở cho Quản lý cơ sở; khai lại ở đây để vai này KHÔNG mất việc đang làm.
       { action: "revenue_targets:manage", scopeType: "GLOBAL" },
+      // 27/08/2026 — chốt/duyệt/mở lại kỳ hoa hồng tách thành key riêng. Khai lại ở
+      // đây để kế toán HỘI SỞ KHÔNG mất việc đang làm; `CENTER_ACCOUNTANT` cố ý KHÔNG
+      // có (đó chính là chỗ được siết). GLOBAL vì ba Server Action gọi trần.
+      { action: "commission_periods:manage", scopeType: "GLOBAL" },
       { action: "orders:manage", scopeType: "GLOBAL" },
       // G-A (21/08/2026) — cổng tạo đơn nay kiểm `orders:create`; ai có
       // `orders:manage` phải có kèm để không mất chức năng đang dùng.
@@ -509,14 +533,29 @@ export const ROLE_SEED: RoleSeed[] = [
       // target với scope CENTER ⇒ seed CENTER là khoá cửa chính của chính vai này trên
       // prod trong khi local (v1) vẫn xanh. Cách ly cơ sở nằm ở `resolveScopeFilters()`.
       { action: "dashboard:view", scopeType: "GLOBAL" },
-      // ── Lead ──
-      { action: "leads:view-all", scopeType: "GLOBAL" },
-      // ⚠️ Đợt E (22/08/2026) — `leads:view-pii` ĐÃ GỠ khỏi vai này theo Q9 chủ dự
-      // án chốt 21/08: Quản lý cơ sở KHÔNG thấy SĐT lead. Đảo #11 T2 (Kiệt ký
-      // 10/07) từng cấp quyền này. Giữ nguyên leads:view-all — QL vẫn điều hành
-      // được, chỉ không đọc được số. Khoá bằng lib/auth/lead-pii-policy.test.ts.
+      // ── Trục gọi điện (OmiCall) ──
+      // Tất cả GLOBAL theo đúng luật R1 đầu file: cách ly cơ sở đến từ `scopedDb`
+      // (`CallLog` ∈ SCOPED_MODELS), KHÔNG từ scopeType. Đặt CENTER ở đây là khoá
+      // cửa của chính vai này trên prod mỗi khi call-site gọi trần.
       // ⚠️ Đổi ở đây CHƯA có hiệu lực trên prod: phải chạy workflow seed-prod-roles.yml
       // sau khi merge vào main, nếu không prod vẫn giữ quyền cũ trong DB.
+      { action: "calls:make", scopeType: "GLOBAL" },
+      { action: "calls:view-own", scopeType: "GLOBAL" },
+      { action: "calls:view-all", scopeType: "GLOBAL" },
+      // 🔴 BM-2 — nghe lại ghi âm là key RIÊNG, mỗi lượt nghe ghi audit (QT-36).
+      { action: "calls:listen-recording", scopeType: "GLOBAL" },
+      { action: "calls:export", scopeType: "GLOBAL" },
+      { action: "calls:assign", scopeType: "GLOBAL" },
+      // ── Lead ──
+      { action: "leads:view-all", scopeType: "GLOBAL" },
+      // `leads:view-pii` — ĐẢO LẦN HAI, chủ dự án chốt (bản trên `main` từ 30/08/2026):
+      //   · 10/07 (#11 T2, Q9) — CENTER_MANAGER CÓ quyền;
+      //   · 22/08 (Đợt E, Q9)  — GỠ: "Quản lý cơ sở KHÔNG thấy SĐT lead";
+      //   · 30/08              — TRẢ LẠI. Quyết định ký SAU thắng.
+      // Hai bộ quyền v1/v2 phải khai giống nhau — xem ghi chú dài ở lib/auth/permissions.ts.
+      // ⚠️ Đổi ở đây CHƯA có hiệu lực trên prod: phải chạy workflow seed-prod-roles.yml
+      // sau khi merge vào main, nếu không prod vẫn giữ quyền cũ trong DB.
+      { action: "leads:view-pii", scopeType: "GLOBAL" },
       { action: "leads:create", scopeType: "GLOBAL" },
       { action: "leads:edit", scopeType: "GLOBAL" },
       { action: "leads:assign", scopeType: "GLOBAL" },
@@ -574,6 +613,13 @@ export const ROLE_SEED: RoleSeed[] = [
       // Sale hoặc giáo viên vắng. Vai chuyên trách mới là người làm thường ngày.
       { action: "trials:attendance", scopeType: "GLOBAL" },
       { action: "trials:override-capacity", scopeType: "GLOBAL" },
+      // ── Hộp thư đa kênh: QL cơ sở theo dõi + giao việc, và trả lời khi cần ──
+      // GLOBAL bắt buộc (cổng trang gọi trần). Cách ly cơ sở do
+      // `inboxOrgScopeWhere` lo, KHÔNG do scope quyền và KHÔNG do `scopedDb`
+      // (ba bảng Inbox* mang `orgUnitId`, `scopedDb` chỉ lọc `centerId`).
+      { action: "inbox:view", scopeType: "GLOBAL" },
+      { action: "inbox:reply", scopeType: "GLOBAL" },
+      { action: "inbox:assign", scopeType: "GLOBAL" },
       { action: "parent-requests:manage", scopeType: "GLOBAL" },
       { action: "parent-feedback:view", scopeType: "GLOBAL" },
       { action: "media:view", scopeType: "GLOBAL" },
@@ -747,6 +793,14 @@ export const ROLE_SEED: RoleSeed[] = [
     // dùng chung trong team — xem mapping-proposal.md §3, không khớp 6 scopeType.
     code: "CENTER_SALES_CSM", name: "Tư vấn & CSKH cơ sở",
     perms: [
+      // ── Trục gọi điện (OmiCall) ── ĐÚNG HAI key.
+      // 🔴 KHÔNG có `calls:listen-recording` (BM-2 · ma trận BA `:1380` ghi ❌ cho
+      // Sale). Nghe lại ghi âm là quyền của người quản lý, không phải quyền mặc định
+      // của người bán. Và đừng "chặn" bằng grant DENY: `can()` v2 là ALLOW-wins
+      // thuần, nhánh DENY KHÔNG TỒN TẠI nên grant đó bị bỏ qua IM LẶNG.
+      // KHÔNG có `calls:view-all` — Sale xem cuộc gọi của mình (lọc ở truy vấn).
+      { action: "calls:make", scopeType: "GLOBAL" },
+      { action: "calls:view-own", scopeType: "GLOBAL" },
       { action: "leads:view-own", scopeType: "GLOBAL" },
       // #11 T2 — như CENTER_MANAGER: Sale trực tiếp gọi khách phải thấy SĐT.
       { action: "leads:view-pii", scopeType: "GLOBAL" },
@@ -794,6 +848,19 @@ export const ROLE_SEED: RoleSeed[] = [
       // ở mọi ô nhóm lớp). Với OWN thì `openDmTargetOf`/`sendTargetOf` gán
       // `createdById = actor.userId` nên chỉ khớp khi Sale là THÀNH VIÊN hội thoại; chốt
       // chặn thật là quan hệ phân công (`Enrollment.saleId`) kiểm trong handler.
+      // ── Hộp thư đa kênh (Zalo OA / Messenger) ─────────────────────────────
+      // GLOBAL là BẮT BUỘC, không phải nới tay: `inbox:view` là cổng trang
+      // `/sale/hop-thu`, mà cổng trang gọi `checkAnyPermission` KHÔNG có target ⇒
+      // seed CENTER/OWN sẽ trả FALSE trên prod (RBAC v2) trong khi local (v1
+      // tĩnh) vẫn xanh. Đúng bẫy "chạy máy tôi thì được".
+      // Cách ly cơ sở KHÔNG do scope của quyền lo, và cũng KHÔNG do `scopedDb`
+      // lo (ba bảng Inbox* mang `orgUnitId`, `scopedDb` chỉ lọc `centerId`) —
+      // nó do `inboxOrgScopeWhere` trong `lib/inbox/scope.ts`.
+      // ⚠️ Sửa ở đây CHƯA có hiệu lực trên prod cho tới khi chạy workflow
+      // `seed-prod-roles.yml`; dev/test chạy tay `pnpm db:seed:roles`.
+      { action: "inbox:view", scopeType: "GLOBAL" },
+      { action: "inbox:reply", scopeType: "GLOBAL" },
+      { action: "inbox:assign", scopeType: "GLOBAL" },
       { action: "chat:read", scopeType: "OWN" },
       { action: "chat:send", scopeType: "OWN" },
       { action: "parent-requests:manage", scopeType: "GLOBAL" },

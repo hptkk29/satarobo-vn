@@ -564,8 +564,13 @@ describe("[C-07] chốt chặn nguồn — không còn đường đổi trạng 
   const DUONG_DOI_TRANG_THAI = [
     "app/(admin)/admin/leads/actions.ts", // đổi tay + đánh dấu rớt theo con (C-06)
     // "app/(admin)/admin/trials/actions.ts" — GỠ 26/08: màn học thử cũ đã bị xoá ở
-    // GĐ6a, thay bằng "Lớp Trial". Đường tương đương nay là `lop-trial/_actions.ts`.
-    "app/(admin)/admin/lop-trial/_actions.ts",
+    // GĐ6a, thay bằng "Lớp Trial".
+    // "app/(admin)/admin/lop-trial/_actions.ts" — GỠ 28/08: tệp này KHÔNG còn đổi
+    // trạng thái lead nữa. Lượt đổi duy nhất của nó nằm trong `updateBookingLopTrialAction`
+    // (buổi hẹn học thử V1), mà tính năng lịch hẹn đã bị gỡ khỏi hệ thống. Đường điểm
+    // danh → "Đang học thử" vẫn còn và vẫn được canh — nó nằm ở `lib/trial/service.ts`
+    // ngay dưới. Giữ tệp trong danh sách này khi nó không còn đổi trạng thái là bắt nó
+    // phải nhắc tên một hàm không dùng, tức biến bài canh thành nghi thức.
     "lib/finance/payment.ts", // ghi nhận tiền → Đã đăng ký
     "lib/trial/service.ts", // điểm danh học thử → Đang học thử / Chờ quyết định
     "lib/lead/assign.ts", // ĐƯỜNG TỰ CHIA (1)

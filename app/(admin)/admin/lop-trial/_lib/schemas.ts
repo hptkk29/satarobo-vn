@@ -44,39 +44,21 @@ export function parseVnInput(value: string): Date | null {
 
 // ─── Mặt phẳng V2 ────────────────────────────────────────────────────────────
 
-export const configSchema = z.object({
-  name: z.string().trim().min(1, "Tên cấu hình bắt buộc").max(120),
-  sessionCount: z.coerce
-    .number()
-    .int("Số buổi phải là số nguyên")
-    .min(1, "Số buổi phải ≥ 1")
-    .max(60, "Số buổi quá lớn"),
+/**
+ * Tạo lớp trải nghiệm — 28/08: chỉ còn CƠ SỞ + KHOÁ TRẢI NGHIỆM.
+ *
+ * Tên lớp KHÔNG nhận từ client: server tự sinh theo quy ước `Cơ sở_Lớp trial số`
+ * (`tenLopTrial` trong `lib/trial/lop-moi.ts`). Cho client gửi tên là mời hai lớp trùng
+ * tên và mời người sửa tay lệch khỏi quy ước.
+ *
+ * Giờ / phòng / giáo viên / sĩ số ĐÃ RỜI khỏi đây — chúng là thuộc tính của TỪNG BUỔI.
+ * `sessionCount` cũng bỏ: số buổi nay là số buổi ĐÃ THÊM, không phải một con số khai
+ * trước rồi không ai đối chiếu.
+ */
+export const createClassSchema = z.object({
+  centerId: z.string().trim().min(1, "Chọn cơ sở"),
+  courseId: z.string().trim().min(1).nullable().optional(),
 });
-
-export const createClassSchema = z
-  .object({
-    name: z.string().trim().min(1, "Tên lớp bắt buộc").max(160),
-    centerId: z.string().trim().min(1, "Chọn cơ sở"),
-    roomId: z.string().trim().min(1).nullable().optional(),
-    teacherId: z.string().trim().min(1).nullable().optional(),
-    // QĐ-R2-1: lớp là slot tái sử dụng → KHÔNG có ngày khai giảng, số buổi nhập thẳng.
-    sessionCount: z.coerce
-      .number()
-      .int("Số buổi phải là số nguyên")
-      .min(1, "Số buổi phải ≥ 1")
-      .max(20, "Số buổi quá lớn"),
-    startTime: z.string().regex(HHMM, "Giờ bắt đầu không hợp lệ"),
-    endTime: z.string().regex(HHMM, "Giờ kết thúc không hợp lệ"),
-    capacity: z.coerce
-      .number()
-      .int("Sĩ số phải là số nguyên")
-      .min(1, "Sĩ số phải ≥ 1")
-      .max(100, "Sĩ số quá lớn"),
-  })
-  .refine((d) => d.endTime > d.startTime, {
-    message: "Giờ kết thúc phải sau giờ bắt đầu",
-    path: ["endTime"],
-  });
 
 export const addSessionSchema = z
   .object({
@@ -134,3 +116,32 @@ export const updateBookingSchema = z.object({
 });
 
 export type UpdateBookingInput = z.infer<typeof updateBookingSchema>;
+
+/**
+ * SỬA một buổi đã tạo (28/08/2026): ngày · giờ · phòng · giáo viên.
+ *
+ * `reason` BẮT BUỘC — chủ dự án: "nếu sửa lịch học của buổi thì cần xác nhận và ghi
+ * chú là dời lịch". Lý do không phải để lưu trữ cho đẹp: nó là NỘI DUNG thông báo đẩy
+ * sang giáo viên. Cho phép bỏ trống thì giáo viên nhận một tin "buổi đã đổi" trống
+ * rỗng và phải đi hỏi lại từng người.
+ */
+export const updateSessionSchema = z
+  .object({
+    sessionId: z.string().trim().min(1, "Thiếu buổi học"),
+    date: z.string().regex(YMD, "Ngày buổi học không hợp lệ"),
+    startTime: z.string().regex(HHMM, "Giờ bắt đầu không hợp lệ"),
+    endTime: z.string().regex(HHMM, "Giờ kết thúc không hợp lệ"),
+    roomId: z.string().trim().min(1).nullable().optional(),
+    teacherId: z.string().trim().min(1).nullable().optional(),
+    reason: z.string().trim().min(3, "Ghi rõ lý do dời lịch (ít nhất 3 ký tự)").max(500),
+  })
+  .refine((d) => d.endTime > d.startTime, {
+    message: "Giờ kết thúc phải sau giờ bắt đầu",
+    path: ["endTime"],
+  });
+
+/** HUỶ một buổi. Lý do bắt buộc, và đi thẳng vào thông báo gửi giáo viên. */
+export const cancelSessionSchema = z.object({
+  sessionId: z.string().trim().min(1, "Thiếu buổi học"),
+  reason: z.string().trim().min(3, "Ghi rõ lý do huỷ buổi (ít nhất 3 ký tự)").max(500),
+});

@@ -25,9 +25,11 @@ export type ClassRow = {
   code: string;
   name: string;
   status: TrialClassStatusV2;
-  startTime: string;
-  endTime: string;
-  capacity: number;
+  /** 28/08 — giờ ở CẤP LỚP đã thôi dùng; giờ thật nằm ở từng buổi. `null` = lớp mới. */
+  startTime: string | null;
+  endTime: string | null;
+  /** `null` = KHÔNG giới hạn sĩ số (mặc định từ 28/08). */
+  capacity: number | null;
   /** Số ghi danh còn ACTIVE — mẫu số hiển thị "n/capacity". */
   activeUsed: number;
   sessionCount: number;
@@ -40,13 +42,6 @@ export type ClassRow = {
   nextSessionDate: string | null;
 };
 
-/** Cấu hình số buổi đang hiệu lực. */
-export type ProgramConfig = {
-  id: string;
-  name: string;
-  sessionCount: number;
-} | null;
-
 /** Một buổi của lớp, kèm bản đồ điểm danh đã lưu. */
 export type SessionRow = {
   id: string;
@@ -56,8 +51,20 @@ export type SessionRow = {
   startTime: string;
   endTime: string;
   status: TrialSessionStatusV2;
+  /** 28/08 — giáo viên dạy BUỔI NÀY. Lớp không còn cột giáo viên; đây là nguồn duy nhất. */
+  teacherId: string | null;
+  /** Phòng của BUỔI NÀY. */
+  roomId: string | null;
   /** trialEnrollmentId → điểm danh đã lưu. Không có khoá = chưa điểm danh em đó. */
   attendance: Record<string, { status: TrialAttendanceMark; note: string | null }>;
+  /**
+   * trialEnrollmentId → giáo viên ĐÃ chấm phiếu rubric cho em đó Ở BUỔI NÀY.
+   * Không có khoá = chưa chấm.
+   *
+   * Theo TỪNG BUỔI chứ không theo ca: GĐ4 khoá phiếu bằng cặp (ca, buổi) nên một ca có
+   * nhiều phiếu. Gộp về mức ca là dòng buổi 1 sáng nút "Xuất PDF" nhờ phiếu của buổi 2.
+   */
+  danhGia: Record<string, true>;
 };
 
 /** Một học viên trong lớp trải nghiệm (một "ca" trải nghiệm). */

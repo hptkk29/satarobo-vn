@@ -1,14 +1,28 @@
 // R2-06 — computeDebt + paidOf (THUẦN). Pure.
 // R7-04 — computeEnrollmentDebt + overdueBucket + reminder-day decision (THUẦN).
+// HT (27/08/2026) — computeEnrollmentDebt nay đi qua ĐÚNG công thức thực thu
+// (`lib/finance/thuc-thu.ts`) thay vì tự cộng `Σ amount` của mảng truyền vào.
 import { describe, it, expect } from "vitest";
 import {
   computeDebt,
   paidOf,
   computeEnrollmentDebt,
+  TRANG_THAI_ROI_LOP,
   overdueBucket,
   effectiveReminderDays,
   isReminderDue,
 } from "@/lib/finance/debt";
+import type { ThucThuButToan } from "@/lib/finance/thuc-thu";
+
+/** Dựng 1 bút toán Payment phẳng cho test. */
+function bt(
+  id: string,
+  amount: number,
+  accountantStatus: string,
+  adjustmentOfId: string | null = null,
+): ThucThuButToan {
+  return { id, amount, accountantStatus, adjustmentOfId };
+}
 
 describe("[R2-06] debt calc (C6.1)", () => {
   it("công nợ = total - paid (không âm)", () => {
@@ -24,18 +38,104 @@ describe("[R2-06] debt calc (C6.1)", () => {
 });
 
 describe("[R7-04] computeEnrollmentDebt (AC6)", () => {
-  it("finalPrice - Σ confirmed", () => {
-    expect(computeEnrollmentDebt(9_000_000, [{ amount: 5_000_000 }])).toBe(4_000_000);
+  it("finalPrice - Σ đã xác nhận", () => {
+    expect(computeEnrollmentDebt(9_000_000, [bt("p1", 5_000_000, "CONFIRMED")], "STUDYING")).toBe(
+      4_000_000,
+    );
     expect(
-      computeEnrollmentDebt(9_000_000, [{ amount: 5_000_000 }, { amount: 4_000_000 }]),
+      computeEnrollmentDebt(
+        9_000_000,
+        [bt("p1", 5_000_000, "CONFIRMED"), bt("p2", 4_000_000, "CONFIRMED")],
+        "STUDYING",
+      ),
     ).toBe(0);
   });
   it("đóng thừa → ÂM (trả raw, không clamp)", () => {
-    expect(computeEnrollmentDebt(9_000_000, [{ amount: 10_000_000 }])).toBe(-1_000_000);
+    expect(computeEnrollmentDebt(9_000_000, [bt("p1", 10_000_000, "CONFIRMED")], "STUDYING")).toBe(
+      -1_000_000,
+    );
   });
   it("finalPrice null → 0; không có khoản → finalPrice", () => {
-    expect(computeEnrollmentDebt(null, [{ amount: 1_000 }])).toBe(-1_000);
-    expect(computeEnrollmentDebt(9_000_000, [])).toBe(9_000_000);
+    expect(computeEnrollmentDebt(null, [bt("p1", 1_000, "CONFIRMED")], "STUDYING")).toBe(-1_000);
+    expect(computeEnrollmentDebt(9_000_000, [], "STUDYING")).toBe(9_000_000);
+  });
+  it("khoản PENDING/REJECTED không giảm công nợ", () => {
+    expect(
+      computeEnrollmentDebt(
+        9_000_000,
+        [bt("p1", 5_000_000, "PENDING"), bt("p2", 1_000_000, "REJECTED")],
+        "STUDYING",
+      ),
+    ).toBe(9_000_000);
+  });
+});
+
+describe("[HT-10] computeEnrollmentDebt — hoàn tiền & điều chỉnh (vá 27/08/2026)", () => {
+  it("ghi danh CÒN HỌC + hoàn một phần → công nợ tăng lại đúng phần đã trả cho PH", () => {
+    // Khoản đã trả lại thì học viên còn học vẫn phải đóng — công nợ phải quay lên.
+    const rows = [bt("p1", 5_000_000, "CONFIRMED"), bt("r1", -2_000_000, "REFUNDED", "p1")];
+    expect(computeEnrollmentDebt(9_000_000, rows, "STUDYING")).toBe(6_000_000);
+  });
+
+  it("bản ĐIỀU CHỈNH thay bản gốc — không cộng đôi, không giữ số cũ", () => {
+    const rows = [bt("p1", 5_000_000, "CONFIRMED"), bt("a1", 3_000_000, "ADJUSTED", "p1")];
+    expect(computeEnrollmentDebt(9_000_000, rows, "STUDYING")).toBe(6_000_000); // 9tr − 3tr
+  });
+
+  it("điều chỉnh rồi hoàn nốt trên bản điều chỉnh", () => {
+    const rows = [
+      bt("p1", 5_000_000, "CONFIRMED"),
+      bt("a1", 3_000_000, "ADJUSTED", "p1"),
+      bt("r1", -1_000_000, "REFUNDED", "a1"),
+    ];
+    expect(computeEnrollmentDebt(9_000_000, rows, "STUDYING")).toBe(7_000_000); // 9tr − 2tr
+  });
+});
+
+describe("[HT-11] computeEnrollmentDebt — ghi danh ĐÃ RỜI LỚP không đẻ nợ ma", () => {
+  // ⚠️ Đây là tác dụng phụ đắt nhất của việc chuyển sang thực thu ròng, và nó KHÔNG
+  // hiển nhiên: `getDebtRows` lọc `deletedAt: null` nhưng KHÔNG lọc status
+  // (`lib/students/remove-from-classes.ts` ghi rõ điều đó), nên ghi danh của học viên
+  // nghỉ học vẫn nằm trong bảng công nợ. Trước khi vá, em nghỉ-học-hoàn-đủ có công nợ 0
+  // (vì bút toán âm bị bỏ qua). Nếu lấy thẳng thực thu ròng, em đó bỗng "nợ" nguyên học
+  // phí và bị hệ thống đi đòi — đổi một lỗi im lặng thành một lỗi ồn ào hơn.
+  it("WITHDREW + hoàn toàn bộ → công nợ GIỮ NGUYÊN như trước khi vá", () => {
+    const rows = [bt("p1", 5_000_000, "CONFIRMED"), bt("r1", -5_000_000, "REFUNDED", "p1")];
+    expect(computeEnrollmentDebt(9_000_000, rows, "WITHDREW")).toBe(4_000_000);
+  });
+
+  it("TRANSFERRED / CANCELLED cùng luật", () => {
+    const rows = [bt("p1", 5_000_000, "CONFIRMED"), bt("r1", -5_000_000, "REFUNDED", "p1")];
+    expect(computeEnrollmentDebt(9_000_000, rows, "TRANSFERRED")).toBe(4_000_000);
+    expect(computeEnrollmentDebt(9_000_000, rows, "CANCELLED")).toBe(4_000_000);
+  });
+
+  it("đã rời lớp nhưng CHƯA đóng đồng nào → vẫn còn nợ (không được xoá khoản phải thu)", () => {
+    expect(computeEnrollmentDebt(9_000_000, [], "WITHDREW")).toBe(9_000_000);
+  });
+
+  it("đã rời lớp, KHÔNG hoàn → công nợ y hệt ghi danh còn học", () => {
+    const rows = [bt("p1", 5_000_000, "CONFIRMED")];
+    expect(computeEnrollmentDebt(9_000_000, rows, "WITHDREW")).toBe(
+      computeEnrollmentDebt(9_000_000, rows, "STUDYING"),
+    );
+  });
+
+  it("đã rời lớp + có điều chỉnh giảm → bản điều chỉnh VẪN thay bản gốc", () => {
+    // Miễn trừ chỉ áp cho bút toán HOÀN, không phải cho điều chỉnh.
+    const rows = [bt("p1", 5_000_000, "CONFIRMED"), bt("a1", 3_000_000, "ADJUSTED", "p1")];
+    expect(computeEnrollmentDebt(9_000_000, rows, "WITHDREW")).toBe(6_000_000);
+  });
+
+  it("COMPLETED KHÔNG nằm trong nhóm rời lớp — học xong thì học phí vẫn phải đủ", () => {
+    expect([...TRANG_THAI_ROI_LOP].sort()).toEqual(["CANCELLED", "TRANSFERRED", "WITHDREW"]);
+    const rows = [bt("p1", 5_000_000, "CONFIRMED"), bt("r1", -2_000_000, "REFUNDED", "p1")];
+    expect(computeEnrollmentDebt(9_000_000, rows, "COMPLETED")).toBe(6_000_000);
+  });
+
+  it("status null (dữ liệu cũ) → xử như còn học, fail-closed về phía CÒN NỢ", () => {
+    const rows = [bt("p1", 5_000_000, "CONFIRMED"), bt("r1", -2_000_000, "REFUNDED", "p1")];
+    expect(computeEnrollmentDebt(9_000_000, rows, null)).toBe(6_000_000);
   });
 });
 

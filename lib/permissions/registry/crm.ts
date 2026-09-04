@@ -46,6 +46,27 @@ export const crmModule: ModuleDecl = {
       description:
         "Sửa phiếu do chính mình nhập, chỉ các ô có trong biểu mẫu nhập khách hàng.",
     },
+    // ── Hộp thư đa kênh (Zalo OA / Messenger) ────────────────────────────────
+    // Prefix `inbox:` khai ĐÚNG ở module này (luật index.ts: mỗi prefix nằm trong
+    // đúng một module). Xếp vào CRM chứ không tách module riêng vì nó là hội thoại
+    // với KHÁCH — cùng họ dữ liệu với lead, và Sale là người dùng chính.
+    {
+      key: "inbox:view",
+      action: "view",
+      description:
+        "Mở hộp thư đa kênh: xem hội thoại của khách trên Zalo OA / Messenger.",
+    },
+    {
+      key: "inbox:reply",
+      action: "reply",
+      description: "Soạn và gửi tin trả lời khách trong hộp thư đa kênh.",
+    },
+    {
+      key: "inbox:assign",
+      action: "assign",
+      description:
+        "Nhận/giao hội thoại cho người phụ trách và nối hội thoại mồ côi vào phiếu khách.",
+    },
     { key: "leads:assign", action: "assign" },
     {
       key: "leads:assign-config",
@@ -117,6 +138,43 @@ export const crmModule: ModuleDecl = {
       key: "trials:config",
       action: "config",
       description: "Cấu hình số buổi của lớp trải nghiệm.",
+    },
+
+    // --- Trục gọi điện + ghi âm (OmiCall) ---
+    {
+      key: "calls:make",
+      action: "make",
+      description:
+        "Bấm gọi ra từ hệ thống. ⚠️ Kèm nghĩa vụ QT-33: phải chọn mục đích cuộc gọi " +
+        "(chăm sóc/xử lý yêu cầu vs chào bán/quảng cáo) TRƯỚC khi quay số.",
+    },
+    { key: "calls:view-own", action: "view-own", description: "Xem cuộc gọi của chính mình." },
+    {
+      key: "calls:view-all",
+      action: "view-all",
+      description: "Xem mọi cuộc gọi trong phạm vi cơ sở.",
+    },
+    {
+      key: "calls:listen-recording",
+      action: "listen-recording",
+      // Ghi âm chứa giọng phụ huynh (và có thể cả trẻ). Đây là dữ liệu nhạy cảm
+      // nhất của module, nên tách hẳn key và KHÔNG mặc định cho Sale (BM-2).
+      sensitiveFields: ["recordingKey"],
+      description:
+        "Nghe lại ghi âm cuộc gọi. Key RIÊNG, KHÔNG mặc định cho Sale (BM-2). Mỗi lượt " +
+        "nghe ghi một dòng AuditLog TRƯỚC khi cấp liên kết (QT-36); liên kết là URL ký " +
+        "hạn ngắn của bucket R2 riêng, không bao giờ là link thô của nhà cung cấp.",
+    },
+    {
+      key: "calls:export",
+      action: "export",
+      sensitiveFields: ["peerPhone", "fromNumber", "toNumber"],
+      description: "Xuất dữ liệu cuộc gọi (kèm SĐT) — phải đóng dấu người tải + audit (BM-5).",
+    },
+    {
+      key: "calls:assign",
+      action: "assign",
+      description: 'Gán chủ cho cuộc gọi mồ côi (chưa đối khớp được Lead/cơ sở) — OC-12.',
     },
 
     // --- Thông báo + yêu cầu/phản hồi phụ huynh ---

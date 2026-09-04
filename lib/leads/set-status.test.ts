@@ -19,7 +19,8 @@ type LeadRow = {
   orgUnitId: string | null;
   statusChangedAt: Date | null;
   droppedAtStage: LeadStatus | null;
-  dropReason: string | null;
+  lostNote: string | null;
+  lostAt: Date | null;
 };
 
 type HistoryRow = {
@@ -65,7 +66,8 @@ function leadMau(over: Partial<LeadRow> = {}): LeadRow {
     orgUnitId: "ou-cs1",
     statusChangedAt: null,
     droppedAtStage: null,
-    dropReason: null,
+    lostNote: null,
+    lostAt: null,
     ...over,
   };
 }
@@ -145,7 +147,33 @@ describe("setLeadStatus — cửa duy nhất đổi trạng thái", () => {
       reason: "Phụ huynh chọn trung tâm khác",
     });
     expect(lead.droppedAtStage).toBe("DA_HOC_THU");
-    expect(lead.dropReason).toBe("Phụ huynh chọn trung tâm khác");
+    expect(lead.lostNote).toBe("Phụ huynh chọn trung tâm khác");
+    expect(lead.lostAt).toBeInstanceOf(Date);
+  });
+
+  // 27/08 — chốt gộp hai cột lý do rớt về `Lead.lostNote`, bỏ `Lead.dropReason`.
+  //
+  // Đây là ràng buộc SINH RA TỪ việc gộp, không có ở bản `dropReason`: `lostNote` còn
+  // là nơi `markLeadChildLostAction` ghi lý do rớt của TỪNG CON. Bản cũ ghi
+  // `dropReason: params.reason ?? null` — cột đó không ai khác dùng nên gán null vô
+  // hại. Bê nguyên nếp đó sang `lostNote` là mỗi lượt đổi trạng thái phiếu KHÔNG kèm
+  // lý do sẽ xoá trắng lý do rớt của những đứa con đã đánh dấu trước đó.
+  it("rơi mà KHÔNG kèm lý do thì KHÔNG được xoá lý do rớt sẵn có của con", async () => {
+    const cu = new Date("2026-08-01T00:00:00Z");
+    const lead = leadMau({
+      status: "DA_LIEN_HE",
+      lostNote: "Bé thứ hai: nhà chuyển đi tỉnh khác",
+      lostAt: cu,
+    });
+    await setLeadStatus({
+      tx: fakeTx(lead, []),
+      leadId: "l1",
+      to: "DA_MAT",
+      source: "trial",
+    });
+    expect(lead.droppedAtStage).toBe("DA_LIEN_HE");
+    expect(lead.lostNote).toBe("Bé thứ hai: nhà chuyển đi tỉnh khác");
+    expect(lead.lostAt).toBe(cu);
   });
 
   it("nuôi dưỡng cũng tính là rơi", async () => {
@@ -184,9 +212,9 @@ describe("setLeadStatus — cửa duy nhất đổi trạng thái", () => {
 
 describe("LEAD_DROP_STATUSES là MỘT nguồn cho cả cửa ghi lẫn giao diện", () => {
   // Tầng giao diện (`updateLeadStatus` ở màn lead) ép nhập lý do đúng theo tập này,
-  // còn cửa ghi dùng chính nó để quyết định có ghi `droppedAtStage`/`dropReason` hay
+  // còn cửa ghi dùng chính nó để quyết định có ghi `droppedAtStage`/`lostNote` hay
   // không. Hai bên lệch nhau nghĩa là: có bậc ghi `droppedAtStage` mà không ai hỏi lý
-  // do (cột lý do NULL vĩnh viễn), hoặc hỏi lý do rồi vứt đi.
+  // do (`lostNote` NULL vĩnh viễn), hoặc hỏi lý do rồi vứt đi.
   for (const to of ALL_LEAD_STATUSES) {
     if (to === "MOI") continue; // trạng thái xuất phát của lead mẫu, không đổi được
     it(`${to}: ghi droppedAtStage ⟺ nằm trong LEAD_DROP_STATUSES`, async () => {
@@ -200,14 +228,14 @@ describe("LEAD_DROP_STATUSES là MỘT nguồn cho cả cửa ghi lẫn giao di�
       });
       const laBacRoi = LEAD_DROP_STATUSES.includes(to);
       expect(lead.droppedAtStage).toBe(laBacRoi ? "MOI" : null);
-      expect(lead.dropReason).toBe(laBacRoi ? "lý do kiểm thử" : null);
+      expect(lead.lostNote).toBe(laBacRoi ? "lý do kiểm thử" : null);
     });
   }
 
   it("màn lead ép nhập lý do theo ĐÚNG tập này, không chép tay danh sách khác", () => {
     // Không gọi được action thật ở lane unit (auth + Postgres), nên quét nguồn.
-    // Bắt đúng lớp lỗi đã xảy ra: cột `dropReason` tồn tại từ GĐ1 mà tới 26/08 vẫn
-    // NULL 100% vì không đường người-bấm nào truyền `reason`.
+    // Bắt đúng lớp lỗi đã xảy ra: cột lý do rớt tồn tại từ GĐ1 mà tới 26/08 vẫn NULL
+    // 100% vì không đường người-bấm nào truyền `reason`.
     const src = fs.readFileSync("app/(admin)/admin/leads/actions.ts", "utf8");
     expect(src, "actions.ts không dùng LEAD_DROP_STATUSES để ép lý do").toMatch(
       /LEAD_DROP_STATUSES\.includes\(/,

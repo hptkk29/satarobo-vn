@@ -5,11 +5,10 @@ import { Plus } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
-import { layCauHinh, layDanhSachLop } from "./_lib/queries";
+import { layDanhSachLop } from "./_lib/queries";
 import { ClassFilterChips } from "./_components/class-filter-chips";
 import { SearchForm } from "./_components/search-form";
 import { ClassTable } from "./_components/class-table";
-import { ConfigSection } from "./_components/config-section";
 
 export const dynamic = "force-dynamic";
 
@@ -23,21 +22,18 @@ export default async function LopTrialPage({
   if (!(await checkPermission("trials:view"))) redirect("/dashboard");
 
   const { status, q } = await searchParams;
-  const [canManage, canConfig] = await Promise.all([
-    checkPermission("trials:manage"),
-    checkPermission("trials:config"),
-  ]);
+  const canManage = await checkPermission("trials:manage");
 
   const actor = await resolveActor(session.user.id);
-  const [rows, config] = await Promise.all([
-    layDanhSachLop(actor, status, q),
-    layCauHinh(actor),
-  ]);
+  const rows = await layDanhSachLop(actor, status, q);
 
   return (
     <div className="space-y-4">
-      <ConfigSection config={config} canEdit={canConfig} />
-
+      {/* 28/08/2026 — GỠ khối "Cấu hình số buổi (mặc định)".
+          Chủ dự án: form tạo lớp nhập thẳng số buổi nào cũng được, nên một "số buổi
+          mặc định" cấp hệ thống chỉ còn là ô người dùng phải đọc rồi bỏ qua. Bảng
+          `TrialProgramConfig` và cột `TrialClassV2.configId` GIỮ NGUYÊN (2 pha —
+          bỏ cột trên bảng có dữ liệu prod là việc của đợt drop riêng, luật cứng #4). */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <ClassFilterChips current={status} q={q} />
         {canManage && (
