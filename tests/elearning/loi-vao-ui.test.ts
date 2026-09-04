@@ -292,3 +292,63 @@ describe("🔴 EL-16 — ba lỗ tự rà ra, mỗi lỗ một chốt", () => {
     expect(m).not.toContain("verifiedAt: new Date()");
   });
 });
+
+describe("🔴 EL-17 — yêu cầu đào tạo và ma trận phải CÓ CỬA", () => {
+  it("khoá `requirement:manage` KHÔNG còn mồ côi", () => {
+    // Trước EL-17: khoá quyền có từ EL-02, `trnRequirementCreateSchema` viết xong ở
+    // EL-03, và không action nào gọi — tức mẫu số của toàn bộ North Star Metric chỉ
+    // khai được bằng seed hoặc SQL tay.
+    expect(chiMa(doc("lib/elearning/requirement-authoring.ts"))).toContain(
+      '"elearning:requirement:manage"',
+    );
+    expect(
+      chiMa(doc("app/(elearning)/elearning/yeu-cau/_components/requirement-form.tsx")),
+    ).toContain("khaiYeuCauAction");
+  });
+
+  it("hai màn tồn tại và nối vào thanh điều hướng", () => {
+    expect(co("app/(elearning)/elearning/yeu-cau/page.tsx")).toBe(true);
+    expect(co("app/(elearning)/elearning/ma-tran/page.tsx")).toBe(true);
+    const layout = chiMa(doc("app/(elearning)/elearning/layout.tsx"));
+    expect(layout).toContain('"/elearning/yeu-cau"');
+    expect(layout).toContain('"/elearning/ma-tran"');
+  });
+
+  it("🔴 biểu mẫu KHÔNG mời chọn phạm vi `POSITION`", () => {
+    // Bảng `Position` rỗng trên prod ⇒ yêu cầu khai theo vị trí áp cho 0 người và
+    // KHÔNG báo lỗi: ma trận chỉ hiện một hàng ô lạ, người khai tưởng đã xong việc.
+    // Kế hoạch chốt "lựa chọn POSITION bị vô hiệu hoá CÓ LÝ DO" (EL-03 AC14).
+    const form = chiMa(
+      doc("app/(elearning)/elearning/yeu-cau/_components/requirement-form.tsx"),
+    );
+    expect(form).not.toContain('ma: "POSITION"');
+    // Và phải NÓI vì sao không có — người đi tìm nó sẽ báo là hệ thống thiếu chức năng.
+    expect(form).toContain("theo vị trí");
+  });
+
+  it("ma trận vẽ ĐỦ BỐN trạng thái, không gộp xám với 'chưa đối chiếu được'", () => {
+    // Ô xám là một CÂU TRẢ LỜI (yêu cầu không phải của người này); ô "chưa đối chiếu
+    // được" thì ngược lại. Vẽ cùng màu là biến khoảng trống dữ liệu thành kết luận
+    // về một con người.
+    const mt = chiMa(doc("app/(elearning)/elearning/ma-tran/page.tsx"));
+    for (const k of ["DAT", "CHUA_DAT", "KHONG_AP_DUNG", "CHUA_DOI_CHIEU_DUOC"]) {
+      expect(mt, k).toContain(k);
+    }
+  });
+
+  it("ma trận in ngưỡng bằng NGƯỜI, không bằng phần trăm", () => {
+    // Ở mẫu số 15, mỗi người là 6,7 điểm phần trăm — ngưỡng viết bằng phần trăm chỉ
+    // tạo ảo giác chính xác.
+    const mt = chiMa(doc("app/(elearning)/elearning/ma-tran/page.tsx"));
+    expect(mt).toContain("12/15 người");
+    expect(mt).toContain("nsmNguoi.cau");
+  });
+
+  it("chứng cứ 'đã đạt' lọc theo `validUntil`, KHÔNG theo cột `status`", () => {
+    // Cột `status` là bộ nhớ đệm do cron cập nhật mỗi ngày; đọc nó là để ma trận vẽ
+    // ĐẠT cho một chứng nhận đã hết hạn từ sáng nay.
+    const q = chiMa(doc("lib/elearning/matrix-query.ts"));
+    expect(q).toContain("validUntil: { gt: now }");
+    expect(q).not.toContain('status: "VALID"');
+  });
+});

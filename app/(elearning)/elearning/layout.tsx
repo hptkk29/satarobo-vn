@@ -107,6 +107,7 @@ export default async function ElearningLayout({
   const cham = can(actor, "elearning:exam:grade");
   const giao = can(actor, "elearning:assignment:create");
   const baoCao = can(actor, "elearning:progress:view-all");
+  const quanLyYeuCau = can(actor, "elearning:requirement:manage");
 
   const muc: { href: string; nhan: string }[] = [
     { href: "/elearning", nhan: "Khoá của tôi" },
@@ -117,6 +118,15 @@ export default async function ElearningLayout({
     // gì thì cũng xem được ai đã có chứng nhận gì. Nút THU HỒI bên trong màn đó mới
     // gác bằng `certificate:revoke`.
     ...(baoCao ? [{ href: "/elearning/chung-nhan", nhan: "Chứng nhận" }] : []),
+    // EL-17 — ma trận và yêu cầu. Mục "Yêu cầu" hiện cho CẢ người chỉ xem được: họ
+    // cần biết nghĩa vụ nào đang áp cho người của mình, kể cả khi không ra được
+    // nghĩa vụ mới. Nút khai bên trong màn mới gác bằng `requirement:manage`.
+    ...(baoCao || quanLyYeuCau
+      ? [{ href: "/elearning/ma-tran", nhan: "Ma trận" }]
+      : []),
+    ...(baoCao || quanLyYeuCau
+      ? [{ href: "/elearning/yeu-cau", nhan: "Yêu cầu" }]
+      : []),
     ...(baoCao ? [{ href: "/elearning/bao-cao", nhan: "Báo cáo" }] : []),
   ];
 

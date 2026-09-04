@@ -173,7 +173,12 @@ export async function dungVongHoc(): Promise<BoDuLieu> {
   ]) {
     const nv = await db.employee.upsert({
       where: { employeeCode: ma },
-      update: { isActive: true, status: "ACTIVE" },
+      update: {
+        isActive: true,
+        status: "ACTIVE",
+        centerId: cs1.centerId,
+        orgUnitId: cs1.id,
+      },
       create: {
         employeeCode: ma,
         fullName: `E2E ${ma}`,
@@ -181,6 +186,14 @@ export async function dungVongHoc(): Promise<BoDuLieu> {
         department: "DAO_TAO",
         isActive: true,
         status: "ACTIVE",
+        // ⚠️ PHẢI gắn cơ sở. `Employee` nằm trong `SCOPED_MODELS` và KHÔNG phải
+        // `NULL_IS_GLOBAL`, nên hồ sơ `centerId = null` TÀNG HÌNH với mọi người xem
+        // cấp cơ sở — ma trận đào tạo render đẹp nhưng thiếu hẳn người, không lỗi nào.
+        //
+        // (Trên prod `centerId = null` là nhân sự Hội sở, thiết kế đúng — nhưng bộ
+        // e2e này dựng người của CS1, nên để null là mô tả sai việc thật.)
+        centerId: cs1.centerId,
+        orgUnitId: cs1.id,
       },
       select: { id: true },
     });

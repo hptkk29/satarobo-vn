@@ -13,6 +13,10 @@ import { isLessonDone } from "@/lib/elearning/reading";
 import { cauHinhThuHoiChungNhan } from "@/lib/elearning/certificate-revoke";
 import { cauHinhCapChungNhanTay } from "@/lib/elearning/certificate-issue-manual";
 import {
+  cauHinhKhaiYeuCau,
+  cauHinhDongYeuCau,
+} from "@/lib/elearning/requirement-authoring";
+import {
   cauHinhKhieuNaiCo,
   cauHinhQuyetCo,
 } from "@/lib/elearning/watch-flag-appeal";
@@ -190,3 +194,13 @@ export const thuHoiChungNhanAction = defineAction(cauHinhThuHoiChungNhan);
  * cấp tự động.
  */
 export const capChungNhanTayAction = defineAction(cauHinhCapChungNhanTay);
+
+/**
+ * EL-17 — khai / đóng YÊU CẦU ĐÀO TẠO.
+ *
+ * Mở cửa cho `elearning:requirement:manage` — khoá quyền có từ EL-02 mà trước đó
+ * không mã nào gọi, tức mẫu số của toàn bộ North Star Metric chỉ khai được bằng seed
+ * hoặc SQL tay.
+ */
+export const khaiYeuCauAction = defineAction(cauHinhKhaiYeuCau);
+export const dongYeuCauAction = defineAction(cauHinhDongYeuCau);

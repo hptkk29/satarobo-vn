@@ -413,3 +413,49 @@ test.describe("[EL-16] nút THU HỒI gác bằng khoá quyền riêng", () => {
     await expect(page.getByText("Không có quyền xem")).toBeVisible();
   });
 });
+
+test.describe("[EL-17] yêu cầu đào tạo và ma trận R3", () => {
+  test("🔴 người Đào tạo KHAI được yêu cầu — cổng `requirement:manage` có cửa", async ({
+    page,
+  }) => {
+    // Khoá quyền này có từ EL-02 và tới trước PR này không mã nào gọi: mẫu số của
+    // toàn bộ North Star Metric chỉ khai được bằng seed hoặc SQL tay.
+    await vaoKhu(page, d.daoTaoEmail);
+    await page.goto("/elearning/yeu-cau");
+    await expect(page.getByRole("heading", { name: "Yêu cầu đào tạo" })).toBeVisible();
+
+    await page.getByRole("button", { name: "Khai yêu cầu đào tạo" }).click();
+    await page.getByRole("combobox").first().selectOption({ index: 1 });
+    await page
+      .getByPlaceholder("vd: theo quy định ATLĐ")
+      .fill("Bắt buộc theo quy định an toàn lao động nội bộ");
+
+    await page.getByRole("button", { name: "Khai yêu cầu" }).click();
+    await expect(page.getByText("Chưa có yêu cầu nào")).toHaveCount(0);
+    await expect(page.getByText("ALL_STAFF").first()).toBeVisible();
+  });
+
+  test("🔴 ma trận vẽ ô, và ô XÁM khác ô 'chưa đối chiếu được'", async ({ page }) => {
+    await vaoKhu(page, d.daoTaoEmail);
+    await page.goto("/elearning/ma-tran");
+    await expect(page.getByRole("heading", { name: "Ma trận đào tạo" })).toBeVisible();
+
+    // Chú giải phải có ĐỦ BỐN nhãn — gộp hai cái cuối là biến một khoảng trống dữ
+    // liệu thành kết luận về một con người.
+    for (const nhan of ["Đạt", "Chưa đạt", "Không áp dụng", "Chưa đối chiếu được"]) {
+      await expect(page.getByText(nhan, { exact: true }).first()).toBeVisible();
+    }
+
+    // Người học e2e phải có mặt trong ma trận (yêu cầu ALL_STAFF vừa khai áp cho họ).
+    await expect(page.getByText("E2E_EL_HV")).toBeVisible();
+
+    // Ngưỡng in bằng NGƯỜI, không bằng phần trăm.
+    await expect(page.getByText("12/15 người")).toBeVisible();
+  });
+
+  test("người học thuần KHÔNG vào được ma trận", async ({ page }) => {
+    await vaoKhu(page, d.hocVienEmail);
+    await page.goto("/elearning/ma-tran");
+    await expect(page.getByText("Không có quyền xem")).toBeVisible();
+  });
+});
