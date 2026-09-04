@@ -15,6 +15,8 @@ const ITLI_HO = { id: "cmtf6vpwa0004", name: "ITLI_Hội sở", code: "ITLI_HO" 
 
 const TAT_CA = [CS1, CS2, HO, ITLI_A, ITLI_HO];
 const DAY_HOC = [CS1.id, CS2.id];
+// Chỉ dòng "Hội sở" là đơn vị HO thật; ITLI_Hội sở là bản ghi rác, KHÔNG phải HO.
+const HO_IDS = [HO.id];
 
 const quanTriHeThong = { isSuperAdmin: true, isHoLevel: false, visibleCenterIds: [] };
 const nguoiHoiSo = { isSuperAdmin: false, isHoLevel: true, visibleCenterIds: [] };
@@ -26,7 +28,7 @@ describe("ô lọc cơ sở — màn GIẢNG DẠY", () => {
   it("bỏ Hội sở kể cả với quản trị hệ thống", () => {
     // Hội sở không dạy học: 0 lớp, 0 học viên. Bày ra là một lựa chọn không bao
     // giờ đúng, và người dùng đọc bảng rỗng thành "mất dữ liệu".
-    expect(ten(locDanhSachCoSo(TAT_CA, DAY_HOC, quanTriHeThong, "teaching")))
+    expect(ten(locDanhSachCoSo(TAT_CA, DAY_HOC, quanTriHeThong, "teaching", HO_IDS)))
       .toEqual(["Trụ sở chính - Nguyễn Hữu Thọ", "Cơ sở Hoàng Diệu"]);
   });
 
@@ -34,17 +36,17 @@ describe("ô lọc cơ sở — màn GIẢNG DẠY", () => {
     // 3 dòng ITLI_* là cặn của bộ test còn sót trong DB. Luật là "không có OrgUnit
     // type=CENTER trỏ tới thì không phải cơ sở", nên chúng rụng mà không cần
     // hardcode chữ "ITLI" ở bất kỳ đâu — thêm CS3 cũng không phải sửa code.
-    const ra = locDanhSachCoSo(TAT_CA, DAY_HOC, quanTriHeThong, "teaching");
+    const ra = locDanhSachCoSo(TAT_CA, DAY_HOC, quanTriHeThong, "teaching", HO_IDS);
     expect(ra.some((c) => c.name.startsWith("ITLI"))).toBe(false);
   });
 
   it("người cấp cơ sở chỉ thấy cơ sở của mình", () => {
-    expect(ten(locDanhSachCoSo(TAT_CA, DAY_HOC, saleCS1, "teaching")))
+    expect(ten(locDanhSachCoSo(TAT_CA, DAY_HOC, saleCS1, "teaching", HO_IDS)))
       .toEqual(["Trụ sở chính - Nguyễn Hữu Thọ"]);
   });
 
   it("người cấp Hội sở thấy mọi CƠ SỞ DẠY HỌC, nhưng vẫn không thấy Hội sở", () => {
-    expect(ten(locDanhSachCoSo(TAT_CA, DAY_HOC, nguoiHoiSo, "teaching")))
+    expect(ten(locDanhSachCoSo(TAT_CA, DAY_HOC, nguoiHoiSo, "teaching", HO_IDS)))
       .toEqual(["Trụ sở chính - Nguyễn Hữu Thọ", "Cơ sở Hoàng Diệu"]);
   });
 });
@@ -52,26 +54,44 @@ describe("ô lọc cơ sở — màn GIẢNG DẠY", () => {
 describe("ô lọc cơ sở — màn TỔ CHỨC (nhân sự, kho, thông báo…)", () => {
   it("CHỈ quản trị hệ thống thấy Hội sở", () => {
     // Chủ dự án chốt 03/09: "ngoại trừ role admin thì các role khác không có lọc HO".
-    expect(ten(locDanhSachCoSo(TAT_CA, DAY_HOC, quanTriHeThong, "org"))).toContain("Hội sở");
+    expect(ten(locDanhSachCoSo(TAT_CA, DAY_HOC, quanTriHeThong, "org", HO_IDS))).toContain("Hội sở");
   });
 
   it("người cấp Hội sở KHÔNG phải quản trị hệ thống ⇒ vẫn không thấy Hội sở", () => {
     // `isHoLevel` chỉ nói "thấy mọi cơ sở", không đồng nghĩa với vai quản trị.
     // Nhầm hai thứ này là nới quyền ở đúng chỗ nguy hiểm nhất.
-    expect(ten(locDanhSachCoSo(TAT_CA, DAY_HOC, nguoiHoiSo, "org"))).not.toContain("Hội sở");
+    expect(ten(locDanhSachCoSo(TAT_CA, DAY_HOC, nguoiHoiSo, "org", HO_IDS))).not.toContain("Hội sở");
   });
 
   it("người cấp cơ sở không thấy Hội sở", () => {
-    expect(ten(locDanhSachCoSo(TAT_CA, DAY_HOC, saleCS1, "org"))).toEqual([
+    expect(ten(locDanhSachCoSo(TAT_CA, DAY_HOC, saleCS1, "org", HO_IDS))).toEqual([
       "Trụ sở chính - Nguyễn Hữu Thọ",
     ]);
   });
 
   it("dòng mồ côi KHÔNG lọt kể cả ở màn tổ chức của quản trị hệ thống", () => {
-    // "org" mở cửa cho Hội sở, KHÔNG phải mở cửa cho mọi thứ không-phải-cơ-sở.
-    // Nếu ngày nào đó lại có dòng rác trong Center, nó không được đi kèm.
+    // "org" mở cửa cho ĐÚNG Hội sở, KHÔNG phải cho mọi thứ không-phải-cơ-sở.
+    //
+    // ⚠️ Ca này TỪNG XANH GIẢ: tên và chú thích nói "KHÔNG lọt" nhưng khẳng định
+    // lại là `toBe(true)` — nó khoá đúng cái hành vi sai. Bắt được khi soi màn
+    // Duyệt ca: ô chọn vẫn bày đủ 6 dòng gồm cả ITLI. Một test xanh mà khẳng
+    // định ngược với tên nó còn tệ hơn không có test.
+    const ra = locDanhSachCoSo(TAT_CA, DAY_HOC, quanTriHeThong, "org", HO_IDS);
+    expect(ra.some((c) => c.name.startsWith("ITLI"))).toBe(false);
+    expect(ra.map((c) => c.name)).toEqual([
+      "Trụ sở chính - Nguyễn Hữu Thọ",
+      "Cơ sở Hoàng Diệu",
+      "Hội sở",
+    ]);
+  });
+
+  it("KHÔNG khai hoCenterIds → không dòng nào ngoài cơ sở dạy học lọt", () => {
+    // Mặc định `[]`: nơi gọi quên truyền thì fail-closed, không phải mở toang.
     const ra = locDanhSachCoSo(TAT_CA, DAY_HOC, quanTriHeThong, "org");
-    expect(ra.some((c) => c.name.startsWith("ITLI"))).toBe(true);
+    expect(ra.map((c) => c.name)).toEqual([
+      "Trụ sở chính - Nguyễn Hữu Thọ",
+      "Cơ sở Hoàng Diệu",
+    ]);
   });
 });
 

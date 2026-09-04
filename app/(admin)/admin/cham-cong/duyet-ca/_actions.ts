@@ -55,13 +55,32 @@ export async function importApprovedShifts(input: unknown): Promise<Result> {
     return { success: 0, errors: [{ row: 0, error: "Không có quyền duyệt ca" }] };
   }
 
+  // ── CỔNG CƠ SỞ CHO ĐƯỜNG GHI (03/09/2026) ─────────────────────────────────
+  //
+  // Hành động này XOÁ TRẮNG lịch ca cả tháng của cơ sở được chọn rồi ghi lại
+  // theo file. Ô chọn ở giao diện nay đã cắt theo tầm nhìn actor, NHƯNG ô chọn
+  // không phải cổng: Server Action là endpoint riêng, gửi thẳng `centerId` là bỏ
+  // qua nó.
+  //
+  // `scopedDb` cũng KHÔNG che được: nó chỉ tự lọc phần ĐỌC, mọi `deleteMany`/
+  // `create` phải tự gác (luật cứng #5 CLAUDE.md). Đây đúng là ca mà luật đó nói
+  // tới, và là ca đắt nhất — sai một lần là mất lịch ca một tháng của cả một cơ sở.
+  const actorScope = await resolveActor(session.user.id);
+  const thayMoiCoSo = actorScope.isSuperAdmin || actorScope.isHoLevel;
+  if (!thayMoiCoSo && !actorScope.visibleCenterIds.includes(centerId)) {
+    return {
+      success: 0,
+      errors: [{ row: 0, error: "Cơ sở này ngoài phạm vi quản lý của bạn" }],
+    };
+  }
+
   const year = Number(month.slice(0, 4));
   const monthIdx = Number(month.slice(5, 7)) - 1;
   const monthStart = new Date(year, monthIdx, 1);
   const monthEnd = new Date(year, monthIdx + 1, 1);
 
   // Cách ly cơ sở (A0-04): ShiftRegistration ∈ SCOPED_MODELS → đọc/ghi qua scopedDb.
-  const sdb = scopedDb(await resolveActor(session.user.id));
+  const sdb = scopedDb(actorScope);
 
   // Nhân viên thuộc cơ sở (để validate "mã NV tồn tại + thuộc cơ sở").
   const staff = await sdb.user.findMany({

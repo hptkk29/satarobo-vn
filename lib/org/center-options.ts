@@ -63,8 +63,19 @@ export function locDanhSachCoSo(
   teachingCenterIds: readonly string[],
   actor: Pick<Actor, "isSuperAdmin" | "isHoLevel" | "visibleCenterIds">,
   purpose: "teaching" | "org",
+  /**
+   * Id của (các) dòng `Center` ứng với đơn vị HỘI SỞ. Truyền TƯỜNG MINH thay vì
+   * suy "không phải cơ sở dạy học thì là Hội sở".
+   *
+   * ⚠️ VÁ 03/09/2026 — bản đầu suy đúng kiểu đó và SAI: `purpose:"org"` cho lọt
+   * MỌI dòng không-phải-cơ-sở, tức cả bản ghi mồ côi (`ITLI_*` — cặn bộ test).
+   * Đo được ở màn Duyệt ca, nơi chọn nhầm cơ sở là XOÁ lịch ca cả tháng: ô chọn
+   * vẫn bày đủ 6 dòng. "Hội sở" là MỘT đơn vị cụ thể, không phải "phần còn lại".
+   */
+  hoCenterIds: readonly string[] = [],
 ): CenterOption[] {
   const laCoSoDayHoc = new Set(teachingCenterIds);
+  const laHoiSo = new Set(hoCenterIds);
   // Quản trị hệ thống và người cấp Hội sở thấy mọi cơ sở — đúng cách `scopedDb`
   // quyết định cho dữ liệu (`lib/db-scope.ts:328,333`). Giữ hai đường khớp nhau,
   // kẻo ô lọc bày ra thứ mà bảng bên dưới không bao giờ trả về.
@@ -73,8 +84,9 @@ export function locDanhSachCoSo(
 
   return centers.filter((c) => {
     if (!laCoSoDayHoc.has(c.id)) {
-      // Không phải cơ sở dạy học ⇒ Hội sở hoặc bản ghi mồ côi.
-      // Chỉ lọt khi màn xin "org" VÀ người dùng là quản trị hệ thống.
+      // Không phải cơ sở dạy học. Chỉ lọt khi ĐÚNG là Hội sở, màn xin "org", VÀ
+      // người dùng là quản trị hệ thống. Bản ghi mồ côi KHÔNG BAO GIỜ lọt.
+      if (!laHoiSo.has(c.id)) return false;
       if (purpose !== "org" || !actor.isSuperAdmin) return false;
     }
     return thayMoiCoSo || trongTamNhin.has(c.id);
@@ -87,7 +99,7 @@ export async function getCenterOptions(
 ): Promise<CenterOption[]> {
   const { purpose = "teaching", includeInactive = false } = opts;
 
-  const [centers, teachingIds] = await Promise.all([
+  const [centers, teachingIds, hoUnits] = await Promise.all([
     db.center.findMany({
       where: includeInactive ? {} : { isActive: true },
       // Tie-break `code` TRƯỚC `name`: đo trên DB thật 03/09/2026 thì **mọi** dòng
@@ -100,9 +112,21 @@ export async function getCenterOptions(
       select: { id: true, name: true, code: true },
     }),
     getTeachingCenterIds(),
+    // Đơn vị HỘI SỞ trong cây tổ chức. Nối sang dòng `Center` bằng `code` — đúng
+    // cây cầu mà `ORG_UNIT_FOR_CENTER_SQL` (lib/org/center-bridge.ts) đã dựng và
+    // ghi rõ lý do: `Center("hoi-so")` KHÔNG được OrgUnit nào trỏ tới vì luật V7
+    // cấm đơn vị HO mang `centerId`. Không có cầu này thì không cách nào phân
+    // biệt "Hội sở" với một bản ghi rác mà không hardcode mã "HO".
+    db.orgUnit.findMany({
+      where: { type: "HO", deletedAt: null },
+      select: { code: true },
+    }),
   ]);
 
-  return locDanhSachCoSo(centers, teachingIds, actor, purpose);
+  const maHo = new Set(hoUnits.map((u) => u.code));
+  const hoCenterIds = centers.filter((c) => c.code && maHo.has(c.code)).map((c) => c.id);
+
+  return locDanhSachCoSo(centers, teachingIds, actor, purpose, hoCenterIds);
 }
 
 /**
