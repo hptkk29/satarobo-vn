@@ -392,23 +392,48 @@ export async function enrollLeadChild(params: {
       // nào vào ca của tôi chưa" không có tin nào trả lời, giáo viên phải tự mở
       // /teacher/trial mà xem.
       //
-      // Người nhận lấy từ BUỔI trước, lớp sau: buổi có thể đã đổi sang người khác dạy
-      // (`assignTeacher` chỉ lan xuống buổi SCHEDULED, buổi đã xong giữ GV cũ).
-      const buoi = await tx.trialClassSession.findUnique({
-        where: { id: scheduledSessionId },
-        select: { teacherId: true, date: true, startTime: true, endTime: true },
-      });
+      // Người nhận lấy từ BUỔI, không phải từ lớp: từ 28/08 giờ/sĩ số/giáo viên nằm ở
+      // TỪNG BUỔI (`TrialClassSession`), `TrialClassV2.teacherId` chỉ còn là mặc định cũ.
+      //
+      // ⚠️ HAI KIỂU GHI DANH — `scheduledSessionId` null KHÔNG còn nghĩa là "chưa xếp buổi":
+      //   · null  = học TOÀN BỘ buổi của lớp (MẶC ĐỊNH từ 28/08, chủ dự án chốt);
+      //   · có giá trị = ghim vào đúng một buổi (màn chi tiết lớp, dời lịch).
+      // Bản đầu của khối này (03/09) viết khi auto-gán còn sống nên đọc thẳng
+      // `findUnique({ id: scheduledSessionId })` — sau khi nhập với 28/08 thì đường thường
+      // gặp nhất lại là null. Kiểu dữ liệu bắt được chỗ này; đừng gỡ bớt.
+      //
+      // Học toàn bộ buổi thì báo cho người dạy BUỔI SẮP TỚI — người gặp bé đầu tiên.
+      // Các buổi sau có thể khác người, nhưng bắn tin cho mọi giáo viên của lớp là biến
+      // một việc thành một đợt thông báo; ai dạy buổi sau vẫn thấy bé ở /teacher/trial.
+      const buoi = scheduledSessionId
+        ? await tx.trialClassSession.findUnique({
+            where: { id: scheduledSessionId },
+            select: { teacherId: true, date: true, startTime: true, endTime: true },
+          })
+        : await tx.trialClassSession.findFirst({
+            where: {
+              trialClassId: params.trialClassId,
+              status: "SCHEDULED",
+              date: { gte: vnTodayUtc() },
+            },
+            orderBy: [{ date: "asc" }, { seq: "asc" }],
+            select: { teacherId: true, date: true, startTime: true, endTime: true },
+          });
       const gvId = buoi?.teacherId ?? cls.teacherId ?? null;
       // Không tự báo mình: giáo viên vừa tự xếp con vào ca của chính mình thì biết rồi.
+      // Lớp chưa có buổi nào sắp tới và cũng không có GV mặc định ⇒ không có ai để báo.
       const tin: TinBaoGvCaMoi | undefined =
-        gvId && gvId !== params.addedById && buoi
+        gvId && gvId !== params.addedById
           ? {
               teacherId: gvId,
               childName: child.fullName,
               className: cls.name,
               enrollmentId: enrollment.id,
               // `date` là @db.Date (nửa đêm UTC của ngày VN) ⇒ format PHẢI ép timeZone UTC.
-              moTaBuoi: `${buoi.date.toLocaleDateString("vi-VN", { timeZone: "UTC" })} ${buoi.startTime}–${buoi.endTime}`,
+              // Không ghim buổi thì nói rõ là học cả lớp, kèm buổi gặp đầu tiên nếu có.
+              moTaBuoi: buoi
+                ? `${scheduledSessionId ? "" : "toàn bộ buổi, bắt đầu "}${buoi.date.toLocaleDateString("vi-VN", { timeZone: "UTC" })} ${buoi.startTime}–${buoi.endTime}`
+                : "toàn bộ buổi của lớp",
             }
           : undefined;
       // FL-R2 (item 6) — mở/ghi lịch sử học thử per-lead (giữ kể cả khi rời pipeline).
