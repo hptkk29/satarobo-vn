@@ -1,6 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
+import { idsDaDoc } from "@/lib/portal/feed-read";
 import { getStudentFeedback, type FeedbackItem } from "@/lib/portal/feedback";
 import { getStudentMakeup, type StudentMakeup } from "@/lib/portal/makeup";
 import { getStudentBilling, type StudentBilling } from "@/lib/portal/billing-student";
@@ -206,6 +207,15 @@ export const getParentNotificationFeed = cache(async (
 
   items.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
 
+  // TRẠNG THÁI ĐỌC THẬT đè lên suy đoán theo thời gian ở trên (04/09/2026).
+  //
+  // Phép HOẶC chứ không thay thế: bỏ hẳn `READ_AFTER_MS` thì lần triển khai đầu tiên
+  // mọi mục cũ chưa từng được đánh dấu sẽ dồn hết vào badge — phụ huynh mở portal
+  // ra thấy "9+" cho những thứ họ đã xem từ lâu. Suy đoán cũ làm trạng thái BAN ĐẦU,
+  // dấu đọc thật chỉ thêm vào.
+  const daDoc = await idsDaDoc(parentUserId);
+  for (const it of items) if (daDoc.has(it.id)) it.read = true;
+
   const unreadByCategory = {
     NHAN_XET: 0, LICH_HOC: 0, HOC_BU: 0, HOC_PHI: 0, HOC_BA: 0, KHAO_SAT: 0, THONG_BAO: 0,
   } as Record<FeedCategory, number>;
@@ -222,11 +232,19 @@ export const getParentNotificationFeed = cache(async (
 // CÙNG nguồn số với trang Thông báo (cùng getParentNotificationFeed, chỉ thêm
 // cache) — cache miss trên /portal/thong-bao vẫn chỉ fan-out 1 lần nhờ React
 // cache dedupe giữa callback này và page.
+/** Thẻ cache theo từng phụ huynh — để xóa đúng bản của họ khi vừa đọc xong. */
+export function theBadgeThongBao(parentUserId: string): string {
+  return `portal-badge-thong-bao:${parentUserId}`;
+}
+
 const badgeCached = unstable_cache(
   async (parentUserId: string): Promise<number> =>
     (await getParentNotificationFeed(parentUserId)).unreadTotal,
   ["portal-v2-notification-badge"],
-  { revalidate: 60 },
+  // TTL 60s vẫn giữ (layout dựng trên MỌI page view), nhưng thêm THẺ để
+  // `revalidateTag` xóa được ngay khi phụ huynh vừa đọc — không thì badge đứng
+  // nguyên tới một phút sau khi họ đã xem, đúng triệu chứng vé này định chữa.
+  { revalidate: 60, tags: ["portal-badge-thong-bao"] },
 );
 
 /** Số chưa đọc cho badge chuông topbar v2 (cache 60s/parent). */

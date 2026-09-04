@@ -25,7 +25,15 @@ export default async function ThongBaoPage() {
     // Feed tự query children bên trong (React cache) — cùng request với layout
     // chỉ fan-out 1 lần.
     const feed = await getParentNotificationFeed(ctx.parentUserId);
-    return <ThongBaoPageV2 feed={feed} />;
+    return (
+      <>
+        {/* BẢN PROD ĐANG CHẠY (PORTAL_V2_ENABLED=true). Mục bảng tin v2 có id TỔNG HỢP
+            (`nt-…`, `mk-need-…`) chứ không phải `Notification.id` — vì vậy bảng đọc
+            khoá theo id MỤC, xem `lib/portal/feed-read.ts`. */}
+        <DanhDauDaDoc ids={feed.items.map((i) => i.id)} />
+        <ThongBaoPageV2 feed={feed} />
+      </>
+    );
   }
 
   const session = await auth();

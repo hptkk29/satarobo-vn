@@ -5,10 +5,10 @@
 // ra xem xong con số (1) vẫn nằm đó. Xem `lib/portal/notifications.ts`.
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { refresh, revalidatePath, updateTag } from "next/cache";
 
 import { getPortalContext } from "@/lib/portal/session";
-import { markParentNotificationsRead } from "@/lib/portal/notifications";
+import { danhDauDaDoc } from "@/lib/portal/feed-read";
 
 /**
  * Đánh dấu các thông báo ĐANG HIỆN trên trang là đã đọc.
@@ -37,14 +37,23 @@ export async function danhDauDaDocAction(
     .slice(0, 100);
   if (sach.length === 0) return { ok: true, soMoi: 0 };
 
-  // KHÔNG kiểm "tin này có thuộc phạm vi phụ huynh không": đánh dấu nhầm một id lạ
+  // KHÔNG kiểm "mục này có thuộc phạm vi phụ huynh không": đánh dấu nhầm một id lạ
   // chỉ tạo một dòng vô hại cho chính họ, trong khi kiểm lại tốn một vòng truy vấn
-  // trên đường chạy mỗi lần mở trang. Badge vẫn lọc theo audience nên không rò gì.
-  const soMoi = await markParentNotificationsRead(ctx.parentUserId, sach);
+  // trên đường chạy mỗi lần mở trang. Bảng tin vẫn lọc theo phạm vi nên không rò gì.
+  const soMoi = await danhDauDaDoc(ctx.parentUserId, sach);
+  if (soMoi === 0) return { ok: true, soMoi: 0 };
 
-  // Badge chuông nằm ở LAYOUT, không phải ở trang này ⇒ `router.refresh()` bên client
-  // một mình KHÔNG đủ: đo 04/09, ghi xong 10 dòng mà badge vẫn đứng ở số 2. Phải
-  // báo Next bỏ bản đã dựng của cả nhánh layout `/portal`.
-  if (soMoi > 0) revalidatePath("/portal", "layout");
+  // Badge chuông nằm ở LAYOUT chứ không ở trang này ⇒ `router.refresh()` bên client
+  // một mình KHÔNG đủ (đo 04/09: ghi xong 10 dòng mà badge vẫn đứng ở số 2).
+  revalidatePath("/portal", "layout");
+  // Badge của portal v2 — BẢN PROD ĐANG CHẠY — còn nằm sau `unstable_cache` TTL 60s;
+  // không xóa thẻ thì nó đứng nguyên tới một phút sau khi phụ huynh đã đọc.
+  // `updateTag` chứ không `revalidateTag`: Next 16 khắng định hàm này chỉ gọi được
+  // trong Server Action và cho nghĩa "đọc lại được thứ mình vừa ghi" — đúng thứ cần ở
+  // đây, trong khi `revalidateTag` chỉ đánh dấu hết hạn cho lượt sau.
+  updateTag("portal-badge-thong-bao");
+  // Làm mới luôn bản cache PHÍA CLIENT — badge nằm ở layout, mà layout thuộc phần
+  // client router cache mà `revalidatePath` một mình không đụng tới.
+  refresh();
   return { ok: true, soMoi };
 }

@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { SU_KIEN_DA_DOC_THONG_BAO } from "@/lib/portal/su-kien-thong-bao";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
@@ -162,6 +164,16 @@ export function PortalV2Shell({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  // Badge "Thông báo" đếm từ server, nhưng phải trừ được NGAY khi phụ huynh vừa đọc
+  // xong: ở bản v2 con số này còn nằm sau `unstable_cache` TTL 60s, nên chờ server
+  // là phụ huynh nhìn badge cũ thêm cả phút. Lượt tải sau server vẫn là nguồn đúng.
+  const [soChuaDoc, setSoChuaDoc] = useState(notifCount);
+  useEffect(() => setSoChuaDoc(notifCount), [notifCount]);
+  useEffect(() => {
+    const xong = () => setSoChuaDoc(0);
+    window.addEventListener(SU_KIEN_DA_DOC_THONG_BAO, xong);
+    return () => window.removeEventListener(SU_KIEN_DA_DOC_THONG_BAO, xong);
+  }, []);
 
   // MỘT hook cho cả shell: sidebar desktop, bottom-nav mobile, menu "Thêm" và chấm tổng
   // hợp đều đọc cùng con số qua `badgeFor` ⇒ không có chỗ nào lệch nhau.
@@ -189,7 +201,7 @@ export function PortalV2Shell({
   // Badge số chưa đọc theo mục nav (Thông báo = chuông, Tin nhắn = hội thoại).
   const badgeFor = (href: string): number =>
     href.endsWith("/thong-bao")
-      ? notifCount
+      ? soChuaDoc
       : href === "/portal/tin-nhan"
         ? liveMsgCount
         : 0;
@@ -268,9 +280,9 @@ export function PortalV2Shell({
               className="relative grid size-10 place-items-center rounded-xl text-foreground transition-colors hover:bg-muted"
             >
               <Bell className="size-5" />
-              {notifCount > 0 && (
+              {soChuaDoc > 0 && (
                 <span className="absolute right-1 top-1 grid size-5 place-items-center rounded-full bg-destructive text-[10px] font-bold text-white">
-                  {notifCount > 9 ? "9+" : notifCount}
+                  {soChuaDoc > 9 ? "9+" : soChuaDoc}
                 </span>
               )}
             </Link>

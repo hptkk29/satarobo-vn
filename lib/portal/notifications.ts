@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { idsDaDoc } from "@/lib/portal/feed-read";
 import { getChildren } from "@/lib/portal/session";
 
 // =============================================================================
@@ -130,38 +131,13 @@ export const getParentNotificationCount = cache(async (parentUserId: string): Pr
         { OR: [{ publishedAt: null }, { publishedAt: { lte: now } }] },
         // Mốc 7 ngày theo publishedAt ?? createdAt — khớp filter JS trước đây.
         { OR: [{ publishedAt: { gte: since } }, { publishedAt: null, createdAt: { gte: since } }] },
-        // Chưa có dấu đã đọc của CHÍNH phụ huynh này. Dùng subquery `notIn` thay vì
-        // quan hệ: `NotificationRead` cố ý không khai FK (cùng khuôn `AnnouncementRead`).
-        { id: { notIn: await idsDaDoc(parentUserId) } },
+        // Chưa có dấu đã đọc của CHÍNH phụ huynh này. Bảng đọc dùng CHUNG với portal v2
+        // (`lib/portal/feed-read.ts`) — v2 khoá theo id mục bảng tin, v1 khoá theo
+        // `Notification.id`; cả hai đều là chuỗi nên dùng chung một bảng được.
+        { id: { notIn: [...(await idsDaDoc(parentUserId))] } },
       ],
     },
   });
 });
 
-/** Id các thông báo phụ huynh này đã đọc. Cache theo request. */
-const idsDaDoc = cache(async (parentUserId: string): Promise<string[]> => {
-  const rows = await db.notificationRead.findMany({
-    where: { userId: parentUserId },
-    select: { notificationId: true },
-  });
-  return rows.map((r) => r.notificationId);
-});
 
-/**
- * Đánh dấu đã đọc. Trả số dòng MỚI thêm — nơi gọi dùng nó để biết có cần làm
- * mới badge hay không; lần mở thứ hai trả 0 nên không đẻn vòng làm mới vô tận.
- *
- * `skipDuplicates` chứ không upsert: `readAt` là lần ĐẦU tiên đọc, mở lại không
- * được dỏi mốc đó đi.
- */
-export async function markParentNotificationsRead(
-  parentUserId: string,
-  notificationIds: string[],
-): Promise<number> {
-  if (notificationIds.length === 0) return 0;
-  const res = await db.notificationRead.createMany({
-    data: notificationIds.map((id) => ({ notificationId: id, userId: parentUserId })),
-    skipDuplicates: true,
-  });
-  return res.count;
-}

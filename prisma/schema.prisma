@@ -6998,21 +6998,22 @@ model MessageAttachment {
 }
 
 // Chỉ dùng cho ANNOUNCEMENT — GV cần biết PH nào đã đọc thông báo lịch học
-// Phụ huynh ĐÃ ĐỌC một thông báo (badge chuông portal).
+// Phụ huynh ĐÃ ĐỌC một mục trên bảng tin portal.
 //
-// Trước 04/09 `Notification` KHÔNG có trạng thái đã đọc nào: badge v1 đếm "số tin
-// trong 7 ngày qua", badge v2 coi là đã đọc sau 2 ngày TRÔI QUA — cả hai đều là hàm
-// của thời gian, nên phụ huynh mở tin ra đọc xong con số (1) vẫn nằm đó.
+// `itemId` là id của MỤC BẢNG TIN, không phải khoá ngoại tới `Notification`:
+// bảng tin portal v2 (`lib/portal/notification-feed.ts` — bản PROD đang chạy) tổng hợp
+// 7 nhóm, phần lớn KHÔNG phải dòng `Notification` (nhận xét buổi, học bù, học phí,
+// học bạ, khảo sát) và mang id tổng hợp dạng `nt-<id>` / `mk-need-<id>`. Khoá theo
+// item mới phủ được cả bảng tin; khoá theo `Notification.id` chỉ vá được một nhóm.
 //
-// Cùng hình dạng với `AnnouncementRead` ngay dưới (khoá kép, không quan hệ) — bảng
-// đọc thì không cần FK cascade, và giữ hai bảng giống nhau để ai đọc một cái là hiểu
-// cái kia.
-model NotificationRead {
-  notificationId String
-  userId         String
-  readAt         DateTime @default(now()) @db.Timestamptz(6)
+// Cùng hình dạng với `AnnouncementRead` ngay dưới (khoá kép, không FK) — bảng đọc thì
+// không cần cascade, và giữ hai bảng giống nhau để ai đọc một cái là hiểu cái kia.
+model PortalFeedRead {
+  itemId String
+  userId String
+  readAt DateTime @default(now()) @db.Timestamptz(6)
 
-  @@id([notificationId, userId])
+  @@id([itemId, userId])
   @@index([userId])
 }
 
