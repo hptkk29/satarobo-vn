@@ -102,11 +102,11 @@ export default async function MyShiftsPage({ searchParams }: Props) {
           <CalendarDays className="h-6 w-6 text-primary" /> Lịch ca của tôi
         </h1>
         <div className="flex items-center gap-2">
-          <Link href={`/cham-cong/lich-ca?month=${ymd(prev).slice(0, 7)}`} className="rounded-lg border border-border p-1.5 hover:bg-muted">
+          <Link href={`/cham-cong/lich-ca?month=${ymd(prev).slice(0, 7)}`} scroll={false} className="rounded-lg border border-border p-1.5 hover:bg-muted">
             <ChevronLeft className="h-4 w-4" />
           </Link>
           <span className="text-sm font-semibold text-foreground">{monthLabel}</span>
-          <Link href={`/cham-cong/lich-ca?month=${ymd(next).slice(0, 7)}`} className="rounded-lg border border-border p-1.5 hover:bg-muted">
+          <Link href={`/cham-cong/lich-ca?month=${ymd(next).slice(0, 7)}`} scroll={false} className="rounded-lg border border-border p-1.5 hover:bg-muted">
             <ChevronRight className="h-4 w-4" />
           </Link>
         </div>

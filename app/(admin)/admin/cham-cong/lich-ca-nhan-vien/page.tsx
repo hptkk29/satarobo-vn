@@ -181,13 +181,13 @@ export default async function ManagerShiftsPage({ searchParams }: Props) {
               <button type="submit" className="rounded-lg bg-gray-800 px-2 py-1.5 text-xs font-medium text-white">Lọc</button>
             </form>
           )}
-          <Link href={linkBase(prev)} className="rounded-lg border border-border p-1.5 hover:bg-muted">
+          <Link href={linkBase(prev)} scroll={false} className="rounded-lg border border-border p-1.5 hover:bg-muted">
             <ChevronLeft className="h-4 w-4" />
           </Link>
           <span className="text-sm font-semibold text-foreground">
             Tuần {weekDates[0]} → {weekDates[6]}
           </span>
-          <Link href={linkBase(next)} className="rounded-lg border border-border p-1.5 hover:bg-muted">
+          <Link href={linkBase(next)} scroll={false} className="rounded-lg border border-border p-1.5 hover:bg-muted">
             <ChevronRight className="h-4 w-4" />
           </Link>
         </div>

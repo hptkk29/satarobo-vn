@@ -507,6 +507,7 @@ function ListView({
         // rơi về view Tháng, không còn đúng nghĩa "toàn bộ danh sách".
         <Link
           href="?view=ds"
+          scroll={false}
           className="inline-flex items-center gap-1.5 rounded-sm text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
         >
           ← Toàn bộ lịch dạy
@@ -717,7 +718,9 @@ function MonthView({
               const shown = items.slice(0, 2);
               const overflow = items.length - shown.length;
               return (
-                // Click ô → danh sách đúng ngày đó (href CHỈ-query).
+                // Click ô → danh sách đúng ngày đó (href CHỈ-query). CỐ Ý KHÔNG
+                // `scroll={false}`: đây là bấm XEM CHI TIẾT một ngày — cả thân trang
+                // đổi từ lưới lịch sang danh sách, phải cuộn lên đầu mới thấy ngày vừa chọn.
                 <Link
                   key={c.key}
                   href={`?view=ds&moc=${c.key}`}
@@ -856,6 +859,8 @@ function WeekView({
                   shift && !holiday && "bg-primary-soft dark:bg-primary-soft", // nền nhẹ: ngày có ca làm
                 )}
               >
+                {/* Click đầu cột → danh sách đúng ngày đó. CỐ Ý KHÔNG `scroll={false}`:
+                    bấm XEM CHI TIẾT một ngày, cả thân trang đổi sang danh sách — cuộn lên đầu mới đúng. */}
                 <Link
                   href={`?view=ds&moc=${d.key}`}
                   className={cn(
@@ -988,7 +993,9 @@ function WeekView({
 
 /* ─────────────────────────────── UI phụ trợ (server) ─────────────────────────────── */
 
-/** Nút chuyển view — Link chỉ-query (giữ path, chạy đúng trên host giaovien lẫn localhost). */
+/** Nút chuyển view — Link chỉ-query (giữ path, chạy đúng trên host giaovien lẫn localhost).
+ *  `scroll={false}`: đổi view là ĐỔI THAM SỐ của CHÍNH trang này, không phải sang trang
+ *  khác — để mặc định thì App Router cuộn vọt lên đầu, mất chỗ đang xem. */
 function ToggleLink({
   active,
   href,
@@ -1003,6 +1010,7 @@ function ToggleLink({
   return (
     <Link
       href={href}
+      scroll={false}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-semibold transition-colors",
         active
@@ -1016,7 +1024,8 @@ function ToggleLink({
   );
 }
 
-/** Thanh điều hướng prev/next tháng-tuần — toàn Link chỉ-query. */
+/** Thanh điều hướng prev/next tháng-tuần — toàn Link chỉ-query.
+ *  `scroll={false}` ở cả 3 nút: lùi/tiến tháng-tuần chỉ đổi ?moc= của CHÍNH trang này. */
 function CalNav({
   label,
   count,
@@ -1037,6 +1046,7 @@ function CalNav({
       <div className="flex items-center gap-2">
         <Link
           href={prevHref}
+          scroll={false}
           aria-label="Trước"
           className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:bg-muted/50"
         >
@@ -1044,6 +1054,7 @@ function CalNav({
         </Link>
         <Link
           href={nextHref}
+          scroll={false}
           aria-label="Sau"
           className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:bg-muted/50"
         >
@@ -1051,6 +1062,7 @@ function CalNav({
         </Link>
         <Link
           href={todayHref}
+          scroll={false}
           className="ml-1 inline-flex h-9 items-center rounded-lg border border-border bg-card px-3 text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted/50"
         >
           {todayLabel}
