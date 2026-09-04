@@ -24,11 +24,11 @@ import { can } from "../../lib/auth/can";
 import { scopedDb } from "../../lib/db-scope";
 import { childPath } from "../../lib/org/path";
 
-const DB_URL = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL ?? "";
-const HAS_LOCAL_DB =
-  /(@|\/\/)(localhost|127\.0\.0\.1)[:/]/.test(DB_URL) || /satarobo_test|ci_test/.test(DB_URL);
-const ALLOW_REMOTE = DB_URL !== "" && process.env.CHAT_DB_TEST_ALLOW_REMOTE === "1";
-const RUN = HAS_LOCAL_DB || ALLOW_REMOTE;
+import { RUN_DB_TESTS as RUN_DB_TESTS_CHUNG } from "../_helpers/db-gate";
+// CỔNG CHẠY dùng chung — xem `tests/_helpers/db-gate.ts`. Từ 04/09/2026 cổng này
+// ĐÒI THÊM `ALLOW_DB_RESET=1`: `pnpm test:unit` trần gọi tới đây sẽ SKIP thay vì
+// TRUNCATE sạch DB đang làm việc. Chạy thật bằng `pnpm test:chat-db` / `test:nen-db`.
+const RUN = RUN_DB_TESTS_CHUNG;
 
 const CASE_TIMEOUT = 60_000;
 const HOOK_TIMEOUT = 180_000;

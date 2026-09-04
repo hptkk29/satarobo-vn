@@ -62,6 +62,24 @@ export function assertTestDb(): void {
  */
 export async function resetDb(): Promise<void> {
   assertTestDb();
+  // CỔNG THỨ HAI (04/09/2026) — địa chỉ ĐÚNG vẫn chưa đủ, phải đúng LÚC.
+  //
+  // `assertTestDb()` chỉ hỏi "URL có trỏ localhost / satarobo_test không" — mà DB làm
+  // việc hằng ngày ở máy dev ĐÚNG LÀ `127.0.0.1/satarobo_test`. Hệ quả: `pnpm test:unit`
+  // (gồm cả tests/chat, tests/nen, tests/lead-intake…) xoá sạch dữ liệu đang xem — 250
+  // học viên, 100 lớp, 609 buổi, 12 tài khoản `uat.*` bay hết, đăng nhập báo "sai tài
+  // khoản mật khẩu". Đã xảy ra thật.
+  //
+  // Chốt của chủ dự án: `pnpm test` KHÔNG được gọi resetDb, không được truncate.
+  // Xoá DB nay phải là lựa chọn có chủ đích: `pnpm test:chat-db` / `test:nen-db` /
+  // `test:lead-intake` / `test:elearning-db` / `test:inbox-db` (qua `vitest.db.config.ts`).
+  if (process.env.ALLOW_DB_RESET !== "1") {
+    throw new Error(
+      "[resetDb] Từ chối TRUNCATE: thiếu ALLOW_DB_RESET=1. " +
+        "Chạy `pnpm test:chat-db` (hoặc test:nen-db / test:lead-intake / test:elearning-db / " +
+        "test:inbox-db) thay vì `pnpm test:unit`. Xem tests/_helpers/db-gate.ts.",
+    );
+  }
   const tables = await db.$queryRaw<Array<{ tablename: string }>>`
     SELECT tablename FROM pg_tables
     WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'

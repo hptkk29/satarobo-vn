@@ -133,3 +133,34 @@ Khi đổi schema dạng "thay đổi nguồn data":
 - ❌ Edit migration đã apply.
 - ❌ Reset prod DB (`prisma migrate reset` không có marker local → hook block). Reset chỉ được phép trên DB test local (xem mục "Reset DB").
 - ❌ Trỏ test (`resetDb`/seed test) vào Supabase — test luôn dùng Postgres local Docker.
+
+## `pnpm test:unit` KHÔNG được đụng DB (chốt 04/09/2026)
+
+`resetDb()` **TRUNCATE mọi bảng** trong `public` với CASCADE. Cổng cũ chỉ hỏi "URL có
+trỏ localhost / có tên `satarobo_test` không" — mà DB làm việc hằng ngày ở máy dev
+ĐÚNG LÀ `127.0.0.1/satarobo_test`. Hệ quả: mỗi lần `pnpm test:unit` là xoá sạch dữ
+liệu đang xem. Đã xảy ra thật: 250 học viên · 100 lớp · 609 buổi · 12 tài khoản
+`uat.*` bay hết, đăng nhập báo "sai tài khoản mật khẩu".
+
+**Nay xoá DB phải có chủ đích — hai cổng, bỏ cái nào cũng mở lại một đường mất dữ liệu:**
+
+| Cổng | Chặn gì |
+|---|---|
+| `assertTestDb()` (địa chỉ) | trỏ nhầm Supabase prod/dev |
+| `ALLOW_DB_RESET=1` (chủ đích) | đúng địa chỉ nhưng SAI LÚC |
+
+- `pnpm test:unit` → không có cờ → bộ chạm DB **SKIP**, `resetDb()` **ném lỗi**.
+- Chạy thật: `pnpm test:chat-db` · `test:nen-db` · `test:lead-intake` ·
+  `test:elearning-db` · `test:inbox-db` — chúng dùng `vitest.db.config.ts`, nơi DUY
+  NHẤT bật cờ. CI gọi đúng các script này nên không đổi gì.
+- Cổng chạy dùng chung ở `tests/_helpers/db-gate.ts` (trước đó chép tay ở 8 file).
+- Cờ đặt trong file cấu hình chứ không phải `VAR=1 lệnh` trong `package.json`: repo
+  không có `cross-env`, cú pháp đó không chạy trên cmd.exe của Windows.
+
+**DB nháp cho test:** `satarobo_vitest` (đã tạo + `prisma migrate deploy`). Muốn chạy
+bộ DB mà không đụng dữ liệu đang xem:
+
+```bash
+DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:5432/satarobo_vitest' \
+DIRECT_URL="$DATABASE_URL" pnpm test:chat-db
+```

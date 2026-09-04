@@ -68,10 +68,15 @@ import { sendChatMessageAsActor } from "../../lib/chat/messages";
 import { recallOwnMessageAsActor } from "../../lib/chat/moderation";
 import { getMessagesPage } from "../../lib/chat/queries";
 
-const DB_URL = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL ?? "";
-const HAS_LOCAL_DB =
-  /(@|\/\/)(localhost|127\.0\.0\.1)[:/]/.test(DB_URL) ||
-  /satarobo_test|ci_test/.test(DB_URL);
+import {
+  DB_URL_CHE,
+  LY_DO_BO_QUA,
+  RUN_DB_TESTS as RUN_DB_TESTS_CHUNG,
+} from "../_helpers/db-gate";
+// CỔNG CHẠY dùng chung — xem `tests/_helpers/db-gate.ts`. Từ 04/09/2026 cổng này
+// ĐÒI THÊM `ALLOW_DB_RESET=1`: `pnpm test:unit` trần gọi tới đây sẽ SKIP thay vì
+// TRUNCATE sạch DB đang làm việc. Chạy thật bằng `pnpm test:chat-db`.
+const HAS_LOCAL_DB = RUN_DB_TESTS_CHUNG;
 
 /** Trần thời gian mỗi case — hook seed dựng ~30 bản ghi nên rộng tay hơn 5s mặc định. */
 const CASE_TIMEOUT = 60_000;
@@ -415,7 +420,7 @@ async function sendAs(userId: string, conversationId: string, body: string) {
 
 if (!HAS_LOCAL_DB) {
   describe("US-13 · 1-1 GV↔PH (DB)", () => {
-    it.skip(`SKIP — cần Postgres local (DATABASE_URL hiện tại: "${DB_URL || "trống"}")`, () => {});
+    it.skip(`SKIP — ${LY_DO_BO_QUA} (DB=${DB_URL_CHE})`, () => {});
   });
 }
 
