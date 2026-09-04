@@ -2,6 +2,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { getChildren } from "@/lib/portal/session";
 import { getStudentAttendanceSummaries } from "@/lib/portal/learning";
+import { attendanceRatePercent } from "@/lib/lms/report-card-core";
 import { getParentNotificationCount } from "@/lib/portal/notifications";
 import { computeEnrollmentDebt } from "@/lib/finance/debt";
 import type { AttendanceSummary } from "@/lib/attendance/summary";
@@ -16,6 +17,7 @@ import type { AttendanceSummary } from "@/lib/attendance/summary";
 
 const ZERO_SUMMARY: AttendanceSummary = {
   total: 0,
+  daDienRa: 0,
   attended: 0,
   absent: 0,
   needMakeup: 0,
@@ -118,6 +120,7 @@ export async function getStudentDashboard(studentId: string): Promise<StudentDas
   const attendance = summaries.reduce<AttendanceSummary>(
     (acc, s) => ({
       total: acc.total + s.total,
+      daDienRa: acc.daDienRa + s.daDienRa,
       attended: acc.attended + s.attended,
       absent: acc.absent + s.absent,
       needMakeup: acc.needMakeup + s.needMakeup,
@@ -146,7 +149,7 @@ export type ParentChildOverview = {
   /** Khoá + lớp đang học (hiển thị dưới tên con, giống SataUI). */
   courseName: string | null;
   className: string | null;
-  /** % chuyên cần (attended / total), 0 nếu chưa có buổi. */
+  /** % chuyên cần = có mặt / buổi ĐÃ DIỄN RA (xem `attendanceRatePercent`). */
   attendanceRate: number;
   attended: number;
   totalSessions: number;
@@ -213,6 +216,7 @@ export async function getParentChildrenOverview(
       const att = summaries.reduce<AttendanceSummary>(
         (acc, s) => ({
           total: acc.total + s.total,
+          daDienRa: acc.daDienRa + s.daDienRa,
           attended: acc.attended + s.attended,
           absent: acc.absent + s.absent,
           needMakeup: acc.needMakeup + s.needMakeup,
@@ -238,7 +242,8 @@ export async function getParentChildrenOverview(
         studentCode: c.studentCode,
         courseName: activeEnr?.course?.name ?? null,
         className: activeEnr?.class?.classCode ?? null,
-        attendanceRate: att.total > 0 ? Math.round((att.attended / att.total) * 100) : 0,
+        // CÙNG công thức với học bạ và site GV — không chép lại phép chia ở đây nữa.
+        attendanceRate: attendanceRatePercent(att),
         attended: att.attended,
         totalSessions: att.total,
         needMakeup: att.needMakeup,

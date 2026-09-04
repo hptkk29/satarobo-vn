@@ -124,7 +124,7 @@ export async function getStudentAttendanceSummaries(
   });
   // Gộp thay vì gọi attendanceSummary từng ghi danh (~6 truy vấn/lần — xem summary.ts).
   const summaries = await attendanceSummaryForEnrollments(enrollments.map((e) => e.id));
-  const EMPTY = { total: 0, attended: 0, absent: 0, needMakeup: 0, madeUp: 0 };
+  const EMPTY = { total: 0, daDienRa: 0, attended: 0, absent: 0, needMakeup: 0, madeUp: 0 };
   return enrollments.map((e) => ({
     classId: e.class.id,
     className: e.class.name,
