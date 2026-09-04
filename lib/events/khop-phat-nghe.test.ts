@@ -61,6 +61,15 @@ const PHAT_KHONG_AI_NGHE: ReadonlyArray<[type: string, lyDo: string]> = [
  */
 const NGHE_KHONG_AI_PHAT: ReadonlyArray<[type: string, lyDo: string]> = [
   [
+    "trial.schedule_changed",
+    "⚠️ LỖI THẬT, KHÔNG PHẢI NGOẠI LỆ THIẾT KẾ — cổng này tự bắt được 04/09/2026. " +
+      "`rescheduleTrialEnrollment` (lib/trial/service.ts) đổi buổi, ghi TrialReschedule và audit " +
+      "nhưng KHÔNG phát sự kiện nào ⇒ Sale phụ trách không nhận được tin 'Đổi lịch học thử'. " +
+      "Nhánh `test` CÓ dòng publishEvent này (dedupeKey kèm mốc dời để tránh P2002 trong " +
+      "transaction); main thì không. Để lại đây có chủ đích: vá cần thêm 3 biến (leadId, buổi " +
+      "cũ, mốc dời) và một lượt nghiệm thu riêng, không thuộc phạm vi PR này.",
+  ],
+  [
     "lead.trialAttended",
     "Tên NGHIỆP VỤ đúng cho mốc 'đã học thử xong'. Giữ để DomainEvent cũ trong DB " +
       "(nếu có) vẫn chạy được, và để producer mới có tên đúng mà dùng. Đường thật " +

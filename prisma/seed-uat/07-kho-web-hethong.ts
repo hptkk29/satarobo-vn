@@ -161,14 +161,23 @@ export async function seedKhoWebHeThong(coSo: CoSo[], uat: Uat) {
   for (const [i, c] of conLead.entries()) {
     const lop = lopThu.find((l) => l.centerId === c.lead.centerId);
     if (!lop) continue;
-    // Ghi danh PHẢI trỏ vào buổi: site giáo viên (chủ dự án 26/08) chỉ bày ghi danh đã
-    // xếp buổi, và `getTeacherTrialTable` lọc thẳng theo `scheduledSessionId`.
     const buoi = buoiThu.find((b) => b.trialClassId === String(lop.id));
     if (!buoi) continue;
+    // HAI DẠNG GHI DANH — seed phải sinh cả hai, và dạng MẶC ĐỊNH phải chiếm đa số.
+    //
+    // ⚠️ BẢN SEED 03/09 GÁN CỨNG `scheduledSessionId` cho MỌI ghi danh — để màn Trial
+    // của site GV thôi rỗng khi nghiệm thu. Đó là chữa TRIỆU CHỨNG: từ 28/08 (gỡ
+    // auto-gán buổi) MỌI ghi danh tạo qua giao diện admin đều mang **null** — và chính
+    // `in: [...]` không khớp null mới là gốc làm bảng rỗng (vá ở `8b3fdad3`).
+    //
+    // Seed gán cứng thì dữ liệu UAT KHÔNG CÒN GIỐNG PROD, và đúng cái lỗi vừa vá sẽ
+    // vô hình ở lượt nghiệm thu sau. Nay: ~1/5 ghim một buổi (đường dời lịch),
+    // còn lại null = học toàn bộ buổi — đúng tỉ lệ thực tế.
+    const ghimBuoi = chance(rng, 0.2);
     ghiDanhThu.push({
       id: uid("gdthu", i),
       trialClassId: String(lop.id),
-      scheduledSessionId: String(buoi.id),
+      scheduledSessionId: ghimBuoi ? String(buoi.id) : null,
       leadChildId: c.id,
       status: chance(rng, 0.6) ? "COMPLETED" : chance(rng, 0.8) ? "ACTIVE" : "WITHDRAWN",
       summaryNote: pick(rng, ["Con hào hứng, phụ huynh muốn đăng ký.", "Con còn rụt rè, cần thêm buổi.", "Phụ huynh cân nhắc thêm."]),
