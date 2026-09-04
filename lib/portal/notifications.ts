@@ -103,7 +103,18 @@ export const getParentNotifications = cache(async (
   }));
 });
 
-/** Số thông báo GẦN ĐÂY (7 ngày) cho badge chuông portal — React cache/request. */
+/**
+ * Số thông báo GẦN ĐÂY (7 ngày) **CHƯA ĐỌC** — badge chuông portal (React cache/request).
+ *
+ * ⚠️ 04/09/2026 — trước bản này badge là HÀM CỦA THỬI GIAN, không phải của việc
+ * đọc: ở đây đếm "tin trong 7 ngày qua", còn badge v2
+ * (`lib/portal/notification-feed.ts`) coi là đã đọc sau 2 ngày TRÔI QUA. Cả hai đều
+ * khiến phụ huynh mở tin ra đọc xong con số (1) vẫn nằm đó — `Notification` không hề
+ * có cột trạng thái đã đọc nào để mà trừ.
+ *
+ * GIỮ nguyên cửa sổ 7 ngày, chỉ thêm điều kiện chưa đọc: đổi cả hai cùng lúc thì lần
+ * triển khai đầu tiên mọi tin cũ chưa đọc sẽ dồn hết vào badge.
+ */
 export const getParentNotificationCount = cache(async (parentUserId: string): Promise<number> => {
   const since = new Date();
   since.setDate(since.getDate() - 7);
@@ -119,7 +130,38 @@ export const getParentNotificationCount = cache(async (parentUserId: string): Pr
         { OR: [{ publishedAt: null }, { publishedAt: { lte: now } }] },
         // Mốc 7 ngày theo publishedAt ?? createdAt — khớp filter JS trước đây.
         { OR: [{ publishedAt: { gte: since } }, { publishedAt: null, createdAt: { gte: since } }] },
+        // Chưa có dấu đã đọc của CHÍNH phụ huynh này. Dùng subquery `notIn` thay vì
+        // quan hệ: `NotificationRead` cố ý không khai FK (cùng khuôn `AnnouncementRead`).
+        { id: { notIn: await idsDaDoc(parentUserId) } },
       ],
     },
   });
 });
+
+/** Id các thông báo phụ huynh này đã đọc. Cache theo request. */
+const idsDaDoc = cache(async (parentUserId: string): Promise<string[]> => {
+  const rows = await db.notificationRead.findMany({
+    where: { userId: parentUserId },
+    select: { notificationId: true },
+  });
+  return rows.map((r) => r.notificationId);
+});
+
+/**
+ * Đánh dấu đã đọc. Trả số dòng MỚI thêm — nơi gọi dùng nó để biết có cần làm
+ * mới badge hay không; lần mở thứ hai trả 0 nên không đẻn vòng làm mới vô tận.
+ *
+ * `skipDuplicates` chứ không upsert: `readAt` là lần ĐẦU tiên đọc, mở lại không
+ * được dỏi mốc đó đi.
+ */
+export async function markParentNotificationsRead(
+  parentUserId: string,
+  notificationIds: string[],
+): Promise<number> {
+  if (notificationIds.length === 0) return 0;
+  const res = await db.notificationRead.createMany({
+    data: notificationIds.map((id) => ({ notificationId: id, userId: parentUserId })),
+    skipDuplicates: true,
+  });
+  return res.count;
+}

@@ -6,6 +6,7 @@ import { isPortalV2Enabled } from "@/lib/flags";
 import { getPortalContext } from "@/lib/portal/session";
 import { getParentNotificationFeed } from "@/lib/portal/notification-feed";
 import { ThongBaoPageV2 } from "@/components/portal/thong-bao-page";
+import { DanhDauDaDoc } from "./_components/danh-dau-da-doc";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -33,6 +34,9 @@ export default async function ThongBaoPage() {
 
   return (
     <div className="space-y-5">
+      {/* Mở trang này = đã đọc những tin đang hiện ⇒ badge chuông hết số (1).
+          Không render gì; ghi qua Server Action sau khi trang đã hiện. */}
+      <DanhDauDaDoc ids={notifications.map((n) => n.id)} />
       <h1 className="flex items-center gap-2 text-xl font-bold text-neutral-900">
         <Bell className="h-5 w-5 text-[#7C3AED]" /> Thông báo
       </h1>

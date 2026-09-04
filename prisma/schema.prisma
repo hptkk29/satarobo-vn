@@ -6998,6 +6998,24 @@ model MessageAttachment {
 }
 
 // Chỉ dùng cho ANNOUNCEMENT — GV cần biết PH nào đã đọc thông báo lịch học
+// Phụ huynh ĐÃ ĐỌC một thông báo (badge chuông portal).
+//
+// Trước 04/09 `Notification` KHÔNG có trạng thái đã đọc nào: badge v1 đếm "số tin
+// trong 7 ngày qua", badge v2 coi là đã đọc sau 2 ngày TRÔI QUA — cả hai đều là hàm
+// của thời gian, nên phụ huynh mở tin ra đọc xong con số (1) vẫn nằm đó.
+//
+// Cùng hình dạng với `AnnouncementRead` ngay dưới (khoá kép, không quan hệ) — bảng
+// đọc thì không cần FK cascade, và giữ hai bảng giống nhau để ai đọc một cái là hiểu
+// cái kia.
+model NotificationRead {
+  notificationId String
+  userId         String
+  readAt         DateTime @default(now()) @db.Timestamptz(6)
+
+  @@id([notificationId, userId])
+  @@index([userId])
+}
+
 model AnnouncementRead {
   messageId String
   userId    String
