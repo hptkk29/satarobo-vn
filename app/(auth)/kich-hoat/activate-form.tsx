@@ -17,7 +17,10 @@ export function ActivateForm() {
   // không có cách nào nhìn lại đã gõ gì: phụ huynh gõ sai một ký tự là kích hoạt xong
   // với mật khẩu mình không biết, phải đi đặt lại — mà mã OTP thì đã tiêu.
   const [password2, setPassword2] = useState("");
-  const [hienMk, setHienMk] = useState(false);
+  // Mỗi ô MỘT con mắt riêng, bật/tắt độc lập (chủ dự án 04/09): mở ô trên để đọc
+  // lại chuỗi vừa đặt trong khi ô dưới vẫn che, hoặc ngược lại.
+  const [hienMk1, setHienMk1] = useState(false);
+  const [hienMk2, setHienMk2] = useState(false);
   const [cooldown, setCooldown] = useState(0);
 
   // Đếm ngược cooldown gửi lại.
@@ -140,36 +143,23 @@ export function ActivateForm() {
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-gray-500">Đặt mật khẩu (≥ 8 ký tự)</span>
-            <div className="relative">
-              <input
-                type={hienMk ? "text" : "password"}
-                autoComplete="new-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className={`${inputCls} pr-10`}
-              />
-              {/* MỘT nút cho CẢ HAI ô: người dùng muốn đối chiếu hai chuỗi, mở từng ô
-                  riêng thì vẫn phải bấm hai lần mà chẳng che giấu được gì thêm. */}
-              <button
-                type="button"
-                onClick={() => setHienMk((v) => !v)}
-                aria-label={hienMk ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
-                aria-pressed={hienMk}
-                className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-gray-400 hover:text-gray-600 focus-visible:outline-2 focus-visible:outline-orange-400"
-              >
-                {hienMk ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
+            <OMatKhau
+              value={password}
+              onChange={setPassword}
+              hien={hienMk1}
+              onToggle={() => setHienMk1((v) => !v)}
+              inputCls={inputCls}
+            />
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-gray-500">Nhập lại mật khẩu</span>
-            <input
-              type={hienMk ? "text" : "password"}
-              autoComplete="new-password"
+            <OMatKhau
               value={password2}
-              onChange={(e) => setPassword2(e.target.value)}
-              aria-invalid={lechMk || undefined}
-              className={`${inputCls} ${lechMk ? "border-red-400" : ""}`}
+              onChange={setPassword2}
+              hien={hienMk2}
+              onToggle={() => setHienMk2((v) => !v)}
+              inputCls={`${inputCls} ${lechMk ? "border-red-400" : ""}`}
+              invalid={lechMk}
             />
             {lechMk && (
               <span className="mt-1 block text-xs text-red-600">
@@ -195,6 +185,51 @@ export function ActivateForm() {
           </button>
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * Ô mật khẩu kèm con mắt riêng của nó.
+ *
+ * Tách ra vì hai ô giống hệt nhau trừ trạng thái ẩn/hiện — chép hai lần thì lần sửa
+ * sau chỉ đụng một bản, đúng kiểu lệch mà người dùng không bao giờ báo vì nó chỉ
+ * là "ô kia không bấm được".
+ */
+function OMatKhau({
+  value,
+  onChange,
+  hien,
+  onToggle,
+  inputCls,
+  invalid,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  hien: boolean;
+  onToggle: () => void;
+  inputCls: string;
+  invalid?: boolean;
+}) {
+  return (
+    <div className="relative">
+      <input
+        type={hien ? "text" : "password"}
+        autoComplete="new-password"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        aria-invalid={invalid || undefined}
+        className={`${inputCls} pr-10`}
+      />
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-label={hien ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+        aria-pressed={hien}
+        className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-gray-400 hover:text-gray-600 focus-visible:outline-2 focus-visible:outline-orange-400"
+      >
+        {hien ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+      </button>
     </div>
   );
 }
