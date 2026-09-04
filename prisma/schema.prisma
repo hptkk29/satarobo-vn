@@ -9547,3 +9547,58 @@ model TrnLearningPathStep {
   @@unique([pathId, courseId])
   @@index([pathId, orderIndex])
 }
+
+/// EL-20 — ẢNH CHỤP CHỈ SỐ theo kỳ.
+///
+/// ⚠️ Vì sao phải CHỤP thay vì tính lại mỗi lần mở báo cáo: mọi mốc NSM viết dạng tỉ
+/// lệ có mẫu số, mà mẫu số đổi theo thời gian (người vào, người nghỉ, yêu cầu mới).
+/// Tính lại là con số của tháng 3 đổi vì một việc xảy ra tháng 9 — và người đã đọc
+/// báo cáo tháng 3 rồi ra quyết định dựa trên nó.
+model TrnMetricSnapshot {
+  id String @id @default(cuid())
+
+  /// Mã chỉ số: `NSM`, `M2`, `M6`… Đặt tên ở `lib/elearning/metrics/constants.ts`.
+  metricKey String
+
+  periodStart DateTime @db.Timestamptz(6)
+  periodEnd   DateTime @db.Timestamptz(6)
+
+  /// Chiều tách nhóm: `{ "phongBan": "..." }` hoặc `{ "chucDanh": "..." }`.
+  ///
+  /// ⚠️ Chiều "theo vị trí" ĐỔI thành "theo CHỨC DANH" và đọc `snapJobTitle`, vì bảng
+  /// `Position` rỗng trên prod — tách theo vị trí sẽ cho ra đúng một nhóm rỗng.
+  dimensionJson Json @default("{}")
+
+  /// Tử số / mẫu số giữ NGUYÊN, không chỉ lưu tỉ lệ.
+  ///
+  /// ⚠️ Lưu mỗi tỉ lệ là mất khả năng cộng dồn và mất luôn cỡ mẫu: "80%" trên 5 người
+  /// và "80%" trên 500 người là hai câu hoàn toàn khác nhau.
+  numerator   Int
+  denominator Int
+
+  /// Số người trong nhóm — hiện thực của luật ngưỡng n tối thiểu Ở TẦNG DỮ LIỆU.
+  groupN Int
+
+  /// `true` ⇒ nhóm dưới ngưỡng, KHÔNG được công bố tách riêng.
+  ///
+  /// ⚠️ Đặt ở tầng dữ liệu chứ không tầng hiển thị là có chủ đích: một cờ ở tầng hiển
+  /// thị thì lần xuất Excel tiếp theo, hay một màn mới, hay một truy vấn tay sẽ bỏ
+  /// qua nó. Ở đây thì mọi đường đọc đều thấy.
+  suppressed Boolean @default(false)
+
+  centerId  String?
+  orgUnitId String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  /// Bản phẳng của `dimensionJson` để đưa được vào khoá `@@unique` — Postgres không
+  /// cho unique trên cột JSON. Dựng bằng `dimensionKeyCua()` ở một chỗ duy nhất.
+  dimensionKey String @default("")
+
+  /// Một kỳ × một chỉ số × một chiều = MỘT dòng. Chạy lại việc chốt ảnh chụp không
+  /// sinh bản thứ hai cho cùng kỳ.
+  @@unique([metricKey, periodStart, periodEnd, dimensionKey])
+  @@index([metricKey, periodEnd])
+  @@index([centerId])
+  @@index([orgUnitId])
+}

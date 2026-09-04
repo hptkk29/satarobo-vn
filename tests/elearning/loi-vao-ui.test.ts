@@ -485,3 +485,46 @@ describe("🔴 EL-18 — cỗ máy tự động hoá phải NỐI ĐỦ, không 
     expect(h).toContain('outcome: "FAILED"');
   });
 });
+
+describe("🔴 EL-20 — R7 và ảnh chụp chỉ số", () => {
+  it("màn R7 tồn tại và nối vào thanh điều hướng", () => {
+    expect(co("app/(elearning)/elearning/bao-cao-r7/page.tsx")).toBe(true);
+    expect(chiMa(doc("app/(elearning)/elearning/layout.tsx"))).toContain(
+      '"/elearning/bao-cao-r7"',
+    );
+  });
+
+  it("việc chốt ảnh chụp nằm trong khe cron ĐÃ CÓ", () => {
+    // Ngân sách module là đúng 2 khe; `vercel.json` không được thêm tuyến nào.
+    expect(chiMa(doc("lib/elearning/cron-dem.ts"))).toContain("chotAnhChup");
+  });
+
+  it("🔴 chạy lại KHÔNG ghi đè ảnh chụp cũ", () => {
+    // Ảnh chụp là bất biến: số liệu quá khứ đổi (một lượt được gia hạn, một người
+    // nghỉ) cũng không viết lại bản đã chụp. Ghi đè là đúng cái cả bảng này sinh ra
+    // để tránh.
+    const r = chiMa(doc("lib/elearning/metrics/snapshot-run.ts"));
+    expect(r).toContain('"P2002"');
+    expect(r).not.toContain("upsert");
+  });
+
+  it("R7 in DÒNG CHỮ khi chưa khai ngân sách, không in số 0", () => {
+    expect(doc("app/(elearning)/elearning/bao-cao-r7/page.tsx")).toContain(
+      "Chưa khai ngân sách",
+    );
+  });
+
+  it("R7 có đủ HAI dòng chú thích chi phí bắt buộc", () => {
+    expect(chiMa(doc("app/(elearning)/elearning/bao-cao-r7/page.tsx"))).toContain(
+      "CHU_THICH_CHI_PHI",
+    );
+  });
+
+  it("chiều tách nhóm dùng CHỨC DANH, không dùng vị trí", () => {
+    // `Position` rỗng trên prod — tách theo vị trí cho ra đúng một nhóm rỗng và một
+    // báo cáo trông như hỏng.
+    const r = chiMa(doc("lib/elearning/metrics/snapshot-run.ts"));
+    expect(r).toContain("snapJobTitle");
+    expect(r).not.toContain("snapPositionId");
+  });
+});

@@ -3,6 +3,10 @@ import {
   quetNhanSuMoi,
   type KetQuaNhanSuMoi,
 } from "@/lib/elearning/cron-nhan-su-moi";
+import {
+  chotAnhChup,
+  type KetQuaChot,
+} from "@/lib/elearning/metrics/snapshot-run";
 import { chotCoHetHan } from "@/lib/elearning/watch-flag-close";
 import { quetMoCo } from "@/lib/elearning/watch-flag-scan";
 import { publishEvent } from "@/lib/events/publish";
@@ -65,6 +69,8 @@ export type KetQuaDem = {
   chotCo: { daChot: number; boQua: number };
   /** EL-18 — quét nhân sự mới để cỗ máy luật giao khoá nhập môn. */
   nhanSuMoi: KetQuaNhanSuMoi;
+  /** EL-20 — chốt ảnh chụp chỉ số của kỳ. */
+  anhChup: KetQuaChot;
   loi: { viec: string; message: string }[];
 };
 
@@ -91,6 +97,14 @@ export async function runElearningDem(now = new Date()): Promise<KetQuaDem> {
     chotCo: { daChot: 0, boQua: 0 },
     taiDo: { daHuy: 0, conGiu: 0 },
     nhanSuMoi: { daXet: 0, daPhat: 0, thieuNgayVaoLam: 0, loi: [] },
+    anhChup: {
+      kyBatDau: now,
+      kyKetThuc: now,
+      daGhi: 0,
+      daCo: 0,
+      biChan: 0,
+      loi: [],
+    },
     loi: [],
   };
 
@@ -350,6 +364,19 @@ export async function runElearningDem(now = new Date()): Promise<KetQuaDem> {
     ket.nhanSuMoi = await quetNhanSuMoi(now);
   } catch (e) {
     ket.loi.push({ viec: "nhan-su-moi", message: (e as Error).message });
+  }
+
+  // ── Việc 9 (EL-20): CHỐT ẢNH CHỤP CHỈ SỐ ────────────────────────────────────
+  //
+  // ⚠️ Cũng nằm trong khe cron NÀY — ngân sách module là đúng 2 khe.
+  //
+  // ⚠️ Chạy mỗi đêm là CỐ Ý, dù ảnh chụp theo THÁNG: `@@unique` chặn bản thứ hai, nên
+  // 30 đêm đầu tháng chỉ có đêm đầu tiên ghi được. Đổi lại, một đêm cron hỏng không
+  // làm mất ảnh chụp của cả tháng — đêm sau chụp bù.
+  try {
+    ket.anhChup = await chotAnhChup(now);
+  } catch (e) {
+    ket.loi.push({ viec: "anh-chup", message: (e as Error).message });
   }
 
   return ket;

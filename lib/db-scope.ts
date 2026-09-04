@@ -121,6 +121,11 @@ export const SCOPED_MODELS = new Set<string>([
   // công ty, nhưng dòng nhật ký "đã giao khoá X cho người Y" thuộc về cơ sở của
   // người Y — đọc chéo cơ sở ở đây là đọc hồ sơ đào tạo của người cơ sở khác.
   "TrnAutomationLog",
+  // EL-20 — ảnh chụp chỉ số. ⚠️ KHÔNG vào NULL_IS_GLOBAL_MODELS: một dòng ảnh chụp
+  // luôn thuộc về một phạm vi đo cụ thể, nên `centerId = null` ở đây là "chưa gán",
+  // không phải "ai cũng thấy". Dòng TỔNG toàn công ty được nhận ra bằng
+  // `dimensionKey = "TONG"`, không bằng một cột đơn vị rỗng.
+  "TrnMetricSnapshot",
 ]);
 
 /**
@@ -366,6 +371,7 @@ export function getModelPrefixes(model: string): string[] {
     case "TrnAutomationRule":
     case "TrnAutomationLog":
     case "TrnLearningPath":
+    case "TrnMetricSnapshot":
       return ["elearning:"];
     // MEDIA-REVIEW (26/08) — ảnh buổi học + kết luận duyệt. Thiếu nhánh này thì
     // `getModelPrefixes` trả rỗng và tầm nhìn rơi về `isHoLevel` DIỆN RỘNG: bất kỳ ai

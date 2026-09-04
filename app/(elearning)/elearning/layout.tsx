@@ -144,6 +144,8 @@ export default async function ElearningLayout({
     // được bằng cách gõ tay địa chỉ.
     ...(baoCao ? [{ href: "/elearning/bao-cao-r4", nhan: "Theo phòng ban" }] : []),
     ...(baoCao ? [{ href: "/elearning/bao-cao-r5", nhan: "Kết quả thi" }] : []),
+    // EL-20 — R7 hiệu quả đào tạo (Kirkpatrick + ảnh chụp chỉ số).
+    ...(baoCao ? [{ href: "/elearning/bao-cao-r7", nhan: "Hiệu quả" }] : []),
   ];
 
   return (
