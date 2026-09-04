@@ -352,3 +352,35 @@ describe("🔴 EL-17 — yêu cầu đào tạo và ma trận phải CÓ CỬA",
     expect(q).not.toContain('status: "VALID"');
   });
 });
+
+describe("🔴 EL-17 R4/R5 — hai báo cáo phải có lối vào", () => {
+  it("hai màn tồn tại và nối vào thanh điều hướng", () => {
+    // Không nối vào nav thì chúng chỉ tới được bằng cách gõ tay địa chỉ.
+    expect(co("app/(elearning)/elearning/bao-cao-r4/page.tsx")).toBe(true);
+    expect(co("app/(elearning)/elearning/bao-cao-r5/page.tsx")).toBe(true);
+    const layout = chiMa(doc("app/(elearning)/elearning/layout.tsx"));
+    expect(layout).toContain('"/elearning/bao-cao-r4"');
+    expect(layout).toContain('"/elearning/bao-cao-r5"');
+  });
+
+  it("R4 gộp nhóm nhỏ, và NÓI vì sao gộp", () => {
+    // Phép gộp nằm ở tầng đọc dữ liệu, không ở màn hình — màn chỉ vẽ.
+    expect(chiMa(doc("lib/elearning/report-r45-query.ts"))).toContain("gopNhomNho");
+    const r4 = doc("app/(elearning)/elearning/bao-cao-r4/page.tsx");
+    // Không giải thích thì người đọc tưởng báo cáo thiếu phòng.
+    expect(r4).toContain("Khối hỗ trợ");
+  });
+
+  it("R4 nói thẳng M5 là số XẤP XỈ", () => {
+    // Một con số chính xác giả còn tệ hơn một con số kèm chú thích — người đọc sẽ ra
+    // quyết định dựa trên nó.
+    expect(doc("app/(elearning)/elearning/bao-cao-r4/page.tsx")).toContain("XẤP XỈ");
+  });
+
+  it("R5 tách 'chưa đủ dữ liệu' khỏi 'không có vấn đề'", () => {
+    // Gộp hai cái là để người soạn đề tin rằng những câu chưa ai làm đã được kiểm.
+    const r5 = doc("app/(elearning)/elearning/bao-cao-r5/page.tsx");
+    expect(chiMa(r5)).toContain("canRaLai === null");
+    expect(r5).toContain("chỉ là chưa đo được");
+  });
+});

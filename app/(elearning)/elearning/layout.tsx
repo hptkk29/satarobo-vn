@@ -128,6 +128,11 @@ export default async function ElearningLayout({
       ? [{ href: "/elearning/yeu-cau", nhan: "Yêu cầu" }]
       : []),
     ...(baoCao ? [{ href: "/elearning/bao-cao", nhan: "Báo cáo" }] : []),
+    // EL-17 — R4 (theo phòng ban/cơ sở) và R5 (kết quả kiểm tra + phân tích câu hỏi).
+    // Hai báo cáo này KHÔNG có lối vào nào khác: không nối vào đây thì chúng chỉ tới
+    // được bằng cách gõ tay địa chỉ.
+    ...(baoCao ? [{ href: "/elearning/bao-cao-r4", nhan: "Theo phòng ban" }] : []),
+    ...(baoCao ? [{ href: "/elearning/bao-cao-r5", nhan: "Kết quả thi" }] : []),
   ];
 
   return (

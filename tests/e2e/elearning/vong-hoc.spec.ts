@@ -76,8 +76,26 @@ async function vaoKhu(page: Page, email: string) {
   if (!ck) throw new Error(`chưa có phiên cho ${email}`);
   await page.context().clearCookies();
   await page.context().addCookies(ck);
-  await page.goto("/elearning");
-  await expect(page).toHaveURL(/\/elearning/);
+
+  // ⚠️ Chờ tới khi trang THẬT SỰ dựng bằng phiên mới, không chỉ tới khi URL đúng.
+  //
+  // Đây là nguồn của một ca RUNG đã bắt được: đổi cookie xong, `goto` trả về một
+  // trang còn dựng bằng phiên CŨ (bộ nhớ đệm router/RSC của Next), nên bước sau mở
+  // màn soạn bài bằng tư cách người học và nhận "Không có quyền soạn bài" — một lỗi
+  // đọc ra như lỗi phân quyền trong khi thật ra là test lấy nhầm phiên.
+  //
+  // Mốc nhận dạng là mục "Chương trình" trên thanh điều hướng: chỉ người soạn nội
+  // dung mới thấy. Canh nó vừa khử rung, vừa bắt được đúng lỗi lẫn phiên nếu có thật.
+  const laDaoTao = email === d.daoTaoEmail;
+  const nav = page.locator("nav").first();
+  await expect(async () => {
+    await page.goto("/elearning");
+    await expect(page).toHaveURL(/\/elearning/);
+    await expect(nav.getByRole("link", { name: "Chương trình" })).toHaveCount(
+      laDaoTao ? 1 : 0,
+      { timeout: 3_000 },
+    );
+  }).toPass({ timeout: 30_000 });
 }
 
 /**
