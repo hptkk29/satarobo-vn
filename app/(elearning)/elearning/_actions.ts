@@ -16,6 +16,7 @@ import {
   cauHinhKhaiYeuCau,
   cauHinhDongYeuCau,
 } from "@/lib/elearning/requirement-authoring";
+import { cauHinhDatMucGanDanhGia } from "@/lib/elearning/eval-link";
 import {
   cauHinhKhieuNaiCo,
   cauHinhQuyetCo,
@@ -204,3 +205,11 @@ export const capChungNhanTayAction = defineAction(cauHinhCapChungNhanTay);
  */
 export const khaiYeuCauAction = defineAction(cauHinhKhaiYeuCau);
 export const dongYeuCauAction = defineAction(cauHinhDongYeuCau);
+
+/**
+ * EL-21 — đặt MỨC GẮN ĐÁNH GIÁ cho một chương trình (QĐ-CDA-06b).
+ *
+ * Đi bằng `elearning:program:manage`, KHÔNG mở khoá quyền thứ 18 — kiểm soát nằm ở
+ * hai chữ ký trong chính bản ghi (Nhân sự + Đào tạo), không ở một khoá mới.
+ */
+export const datMucGanDanhGiaAction = defineAction(cauHinhDatMucGanDanhGia);

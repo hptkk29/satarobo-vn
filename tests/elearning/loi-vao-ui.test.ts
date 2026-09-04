@@ -384,3 +384,40 @@ describe("🔴 EL-17 R4/R5 — hai báo cáo phải có lối vào", () => {
     expect(r5).toContain("chỉ là chưa đo được");
   });
 });
+
+describe("🔴 EL-21 — mức gắn đánh giá có cửa, và KHÔNG mở khoá thứ 18", () => {
+  it("màn tồn tại, gọi action, và nối vào thanh điều hướng", () => {
+    expect(co("app/(elearning)/elearning/muc-danh-gia/page.tsx")).toBe(true);
+    expect(
+      chiMa(doc("app/(elearning)/elearning/muc-danh-gia/_components/eval-link-form.tsx")),
+    ).toContain("datMucGanDanhGiaAction");
+    expect(chiMa(doc("app/(elearning)/elearning/layout.tsx"))).toContain(
+      '"/elearning/muc-danh-gia"',
+    );
+  });
+
+  it("dùng `program:manage`, KHÔNG khai khoá quyền mới", () => {
+    // Bộ khoá `elearning:*` giữ đúng 17. Guard `registry/elearning.test.ts` bắt số
+    // này, nhưng ca ở đây nói rõ Ý ĐỊNH — kiểm soát nằm ở hai chữ ký trong bản ghi.
+    const el = chiMa(doc("lib/elearning/eval-link.ts"));
+    expect(el).toContain('"elearning:program:manage"');
+    expect(el).not.toContain("elearning:eval");
+  });
+
+  it("biểu mẫu liệt kê SÁU điều kiện TRƯỚC khi bấm, không giấu trong lỗi", () => {
+    // Người bấm cần biết mình đang thiếu gì trước khi bấm, thay vì bấm rồi bị từ
+    // chối và đoán.
+    const form = chiMa(
+      doc("app/(elearning)/elearning/muc-danh-gia/_components/eval-link-form.tsx"),
+    );
+    expect(form).toContain("Còn thiếu:");
+    expect(form).toContain("tổng trọng số phải bằng 100");
+  });
+
+  it("màn nói rõ 'chỉ báo cáo' KHÔNG có nghĩa là im lặng", () => {
+    // Người vận hành hay hiểu nhầm rằng bật chế độ này là tắt luôn nhắc nhở.
+    const p = doc("app/(elearning)/elearning/muc-danh-gia/page.tsx");
+    expect(p).toContain("vẫn");
+    expect(p).toContain("không leo thang kỷ luật");
+  });
+});

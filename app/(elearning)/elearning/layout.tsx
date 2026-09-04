@@ -108,10 +108,15 @@ export default async function ElearningLayout({
   const giao = can(actor, "elearning:assignment:create");
   const baoCao = can(actor, "elearning:progress:view-all");
   const quanLyYeuCau = can(actor, "elearning:requirement:manage");
+  const quanLyChuongTrinh = can(actor, "elearning:program:manage");
 
   const muc: { href: string; nhan: string }[] = [
     { href: "/elearning", nhan: "Khoá của tôi" },
     ...(soan ? [{ href: "/elearning/chuong-trinh", nhan: "Chương trình" }] : []),
+    // EL-21 — mức gắn đánh giá. Gác bằng `program:manage` (không mở khoá thứ 18).
+    ...(quanLyChuongTrinh
+      ? [{ href: "/elearning/muc-danh-gia", nhan: "Mức đánh giá" }]
+      : []),
     ...(giao ? [{ href: "/elearning/giao-bai", nhan: "Giao bài" }] : []),
     ...(cham ? [{ href: "/elearning/cham-bai-tap", nhan: "Chấm bài" }] : []),
     // EL-16 — dùng CHUNG khoá xem tiến độ toàn hệ với báo cáo: ai xem được ai đã học
