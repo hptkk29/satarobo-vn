@@ -30,7 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { MOI_PHAM_VI, NHAN_PHAM_VI, type PhamVi } from "@/lib/sale/du-lieu-buoi-hoc";
+import { MOI_PHAM_VI, NHAN_PHAM_VI, type PhamVi } from "@/lib/sale/pham-vi-buoi-hoc";
 
 /** `<Select>` của kho không nhận giá trị rỗng làm một lựa chọn. */
 const MOI_LOP = "__moi_lop__";

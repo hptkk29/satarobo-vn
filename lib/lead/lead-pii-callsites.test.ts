@@ -278,25 +278,10 @@ describe("[S-1] searchLopTrialCandidatesAction — ô tìm ứng viên", () => {
 // phải đi qua tầng che. Thêm màn mới mà quên che ⇒ đỏ ngay, không cần ai nhớ.
 describe("[S-1] site Sale: mọi đường đọc SĐT lead đều đi qua tầng che", () => {
   /** Lý do miễn trừ phải viết ra — miễn trừ không lời giải thích là một lỗ ngủ. */
-  const MIEN_TRU: Record<string, string> = {
-    // 04/09/2026 — `phone: true` ở đây là `Center.phone`: SỐ ĐIỆN THOẠI CỦA CƠ SỞ
-    // (211 Nguyễn Hữu Thọ / 114 Hoàng Diệu), thứ đang in công khai trên
-    // satarobo.vn và trên mọi phiếu thu. Không phải SĐT phụ huynh, không phải SĐT
-    // lead — không có gì để che, và `maskPhone` một số hotline công khai chỉ làm
-    // người dùng tưởng mình thiếu quyền.
-    //
-    // Phép dò ở đây soi CHUỖI `phone: true` nên không phân biệt được nguồn; khối
-    // dữ liệu duy nhất của màn này là hồ sơ CHÍNH NGƯỜI ĐANG ĐĂNG NHẬP (tên,
-    // email, vai trò) + danh sách cơ sở cho super admin. Không có đường nào chạm
-    // tới lead.
-    //
-    // ⚠️ ĐÂY LÀ MỘT CHỖ MÙ, không phải một chỗ được phép rò: thêm bất cứ truy vấn
-    //    lead/học viên nào vào tệp đó thì bài kiểm này KHÔNG bắt được nữa. Nếu màn
-    //    "Hồ sơ của tôi" lớn ra tới mức đọc dữ liệu khách, hãy tách phần ấy sang
-    //    tệp riêng rồi XOÁ dòng miễn trừ này.
-    "app/(sale)/sale/ho-so/page.tsx":
-      "Center.phone (SĐT cơ sở, công khai) chứ không phải SĐT lead/phụ huynh; màn chỉ đọc hồ sơ của chính người đăng nhập",
-  };
+  /** Lý do miễn trừ phải viết ra — miễn trừ không lời giải thích là một lỗ ngủ.
+   *  RỖNG có chủ đích: phép dò đã phân biệt được `Center.phone` với SĐT phụ huynh
+   *  (xem chú thích ở `doc` bên dưới), nên không tệp nào cần xin miễn. */
+  const MIEN_TRU: Record<string, string> = {};
 
   function quetTep(thuMuc: string): string[] {
     const ra: string[] = [];
@@ -318,7 +303,22 @@ describe("[S-1] site Sale: mọi đường đọc SĐT lead đều đi qua tần
   it("🔴 tệp nào ĐỌC SĐT từ CSDL cũng phải nhắc tới tầng che", () => {
     // Dấu hiệu ĐỌC: `phone: true` / `parentPhone: true` trong khối `select`, hoặc
     // đọc `phone` ra khỏi bản ghi lead. KHÔNG tính chuỗi trong chú thích (đã bỏ).
-    const doc = /\b(parentPhone|phone)\s*:\s*true\b/;
+    // ⚠️ SIẾT 04/09 — phép dò cũ `/(parentPhone|phone): true/` bắt MỌI cột tên
+    //    `phone` của mọi bảng, nên nó báo cả `Center.phone` (hotline cơ sở, đang
+    //    in công khai trên satarobo.vn). Dương tính giả trong một bài kiểm an ninh
+    //    còn tệ hơn là không có: người ta học cách khai miễn trừ cho qua, và lần
+    //    thứ ba thì khai cho một tệp rò thật.
+    //
+    //    Nên: `parentPhone` luôn tính (chỉ lead/PH mới có cột đó), còn `phone`
+    //    trần chỉ tính khi tệp CÓ chạm tới lead/học viên. Đo trên kho hôm nay:
+    //    5 tệp đọc SĐT phụ huynh đều nhắc lead/student 4–38 lần; tệp hồ sơ cá
+    //    nhân nhắc 0 lần. Ranh giới rõ, không phải chỉnh cho vừa.
+    const docParent = /\bparentPhone\s*:\s*true\b/;
+    const docPhone = /\bphone\s*:\s*true\b/;
+    const chamLead = /\blead|\bstudent/i;
+    const doc = {
+      test: (s: string) => docParent.test(s) || (docPhone.test(s) && chamLead.test(s)),
+    };
     // Dấu hiệu CHE: đi qua đúng một trong các cửa đã có, không tự chế mặt nạ.
     const che = /maskLeadPiiFields|maskPhone|canViewLeadPii|canViewPii/;
 

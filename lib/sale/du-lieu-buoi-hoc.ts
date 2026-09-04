@@ -52,15 +52,13 @@ import type { Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 
 /** Ba phạm vi thời gian của bộ lọc — khớp từng chuỗi với hợp đồng URL bản admin. */
-export const MOI_PHAM_VI = ["upcoming", "past", "all"] as const;
-export type PhamVi = (typeof MOI_PHAM_VI)[number];
-
-/** Nhãn hiện trên bộ lọc VÀ trong câu "Đang xem: …" — một nguồn, không gõ hai lần. */
-export const NHAN_PHAM_VI: Record<PhamVi, string> = {
-  upcoming: "Sắp tới",
-  past: "Đã diễn ra",
-  all: "Tất cả",
-};
+// Hằng phạm vi ĐÃ DỜI sang `lib/sale/pham-vi-buoi-hoc.ts` (04/09) — thanh lọc chạy
+// trên trình duyệt cần chúng, mà tệp này chạm Prisma. Xem lý do đầy đủ ở tệp đó.
+import { MOI_PHAM_VI, NHAN_PHAM_VI, type PhamVi } from "@/lib/sale/pham-vi-buoi-hoc";
+// Tái xuất để các tệp CHỈ CHẠY TRÊN MÁY CHỦ (page.tsx) nhập một chỗ như trước.
+// Phải `import` TRƯỚC rồi mới `export` — `export … from` tái xuất mà KHÔNG đưa
+// tên vào phạm vi tệp này, nên `docPhamVi(): PhamVi` bên dưới sẽ mất kiểu.
+export { MOI_PHAM_VI, NHAN_PHAM_VI, type PhamVi };
 
 /** Trần số dòng đọc về — giữ nguyên 200 của bản admin (câu "hiển thị 200 mới nhất"). */
 export const TRAN_BUOI = 200;
