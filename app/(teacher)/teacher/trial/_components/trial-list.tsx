@@ -29,7 +29,15 @@ import { khopBatKy } from "@/lib/ui/tim-kiem";
 /** 1 dòng bảng — server đã format sẵn ngày giờ. */
 export type TrialRowView = {
   enrollmentId: string;
-  /** "CN, 05/07" | "" (chưa xếp buổi). */
+  /**
+   * Buổi dòng này trỏ tới. BẮT BUỘC có trên link mở phiếu: thiếu nó thì cổng sở hữu
+   * của phiếu mất hai nhánh cuối và giáo viên bấm vào ra "Buổi Trial không thuộc bạn
+   * phụ trách" — kể cả khi qua được thì lúc LƯU vẫn bị chặn vì chưa chọn buổi.
+   */
+  sessionId: string;
+  /** Em học CẢ LỚP (không chốt riêng buổi nào) — ngày dưới đây là buổi GẦN NHẤT. */
+  hocCaLop: boolean;
+  /** "CN, 05/07". Luôn có: dòng không suy được buổi thì server đã bỏ. */
   dateLabel: string;
   /** "09:00–10:30" | "". */
   timeLabel: string;
@@ -111,7 +119,14 @@ function TrialTable({ rows }: { rows: TrialRowView[] }) {
               >
                 <td className="px-5 py-3.5 whitespace-nowrap">
                   <p className="font-semibold text-foreground">
-                    {r.dateLabel || "Chưa xếp buổi"}
+                    {r.dateLabel}
+                    {/* Nói rõ đây là em học CẢ LỚP, không phải cam kết đúng một buổi —
+                        thiếu chú thích này giáo viên đọc một ngày duy nhất như lịch chốt. */}
+                    {r.hocCaLop && (
+                      <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                        · học cả lớp
+                      </span>
+                    )}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {[r.timeLabel, r.trialClassName].filter(Boolean).join(" · ")}
@@ -128,7 +143,7 @@ function TrialTable({ rows }: { rows: TrialRowView[] }) {
                 </td>
                 <td className="px-5 py-3.5">
                   <Link
-                    href={`?enrollmentId=${r.enrollmentId}`}
+                    href={`?enrollmentId=${r.enrollmentId}&sessionId=${r.sessionId}`}
                     className={
                       r.evaluated
                         ? "inline-flex whitespace-nowrap rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted"
