@@ -19,6 +19,7 @@
 // kiểu đã dùng ở `lib/lead/sale-leads.test.ts`.
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
+import path from "node:path";
 import { PERMISSIONS } from "@/lib/auth/permissions";
 import { ROLE_SEED } from "../../prisma/seed-roles";
 import { maskLeadPiiFields } from "@/lib/lead/pii";
@@ -261,5 +262,68 @@ describe("[S-1] searchLopTrialCandidatesAction — ô tìm ứng viên", () => {
     const s = nguon("app/(admin)/admin/lop-trial/_actions.ts");
     expect(s).toMatch(/canViewLeadPii|canSearchPhone/);
     expect(s).not.toMatch(/^\s*\{ phone: \{ contains: qPhone \} \},\s*$/m);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 4) SITE SALE — QUÉT, KHÔNG GHIM DANH SÁCH
+// ─────────────────────────────────────────────────────────────────────────────
+// Vì sao khối này ra đời (04/09/2026): khối (2) ở trên ghim một DANH SÁCH TỆP
+// `app/(admin)/**` gõ tay. Từ 04/09 site Sale tách bản riêng và có đường đọc PII
+// lead của CHÍNH NÓ (`lib/sale/*.ts`) — bài kiểm cũ mù hoàn toàn với chúng. Một
+// danh sách gõ tay chỉ canh được những tệp người viết nhớ thêm vào; tệp thứ mười
+// thì không ai nhớ.
+//
+// Nên khối này QUÉT: bất kỳ tệp nào của site Sale ĐỌC số điện thoại từ CSDL đều
+// phải đi qua tầng che. Thêm màn mới mà quên che ⇒ đỏ ngay, không cần ai nhớ.
+describe("[S-1] site Sale: mọi đường đọc SĐT lead đều đi qua tầng che", () => {
+  /** Lý do miễn trừ phải viết ra — miễn trừ không lời giải thích là một lỗ ngủ. */
+  const MIEN_TRU: Record<string, string> = {};
+
+  function quetTep(thuMuc: string): string[] {
+    const ra: string[] = [];
+    if (!fs.existsSync(thuMuc)) return ra;
+    for (const ten of fs.readdirSync(thuMuc)) {
+      const d = path.join(thuMuc, ten);
+      if (fs.statSync(d).isDirectory()) ra.push(...quetTep(d));
+      else if (/\.tsx?$/.test(ten) && !ten.includes(".test.")) ra.push(d);
+    }
+    return ra;
+  }
+
+  const TEP_SALE = [...quetTep("lib/sale"), ...quetTep("app/(sale)")];
+
+  it("có tệp để soi (0 tệp thì bài kiểm này đang tự lừa mình)", () => {
+    expect(TEP_SALE.length).toBeGreaterThan(10);
+  });
+
+  it("🔴 tệp nào ĐỌC SĐT từ CSDL cũng phải nhắc tới tầng che", () => {
+    // Dấu hiệu ĐỌC: `phone: true` / `parentPhone: true` trong khối `select`, hoặc
+    // đọc `phone` ra khỏi bản ghi lead. KHÔNG tính chuỗi trong chú thích (đã bỏ).
+    const doc = /\b(parentPhone|phone)\s*:\s*true\b/;
+    // Dấu hiệu CHE: đi qua đúng một trong các cửa đã có, không tự chế mặt nạ.
+    const che = /maskLeadPiiFields|maskPhone|canViewLeadPii|canViewPii/;
+
+    const pham = TEP_SALE.filter((t) => {
+      if (t.split(path.sep).join("/") in MIEN_TRU) return false;
+      const s = nguon(t);
+      return doc.test(s) && !che.test(s);
+    }).map((t) => t.split(path.sep).join("/"));
+
+    expect(
+      pham,
+      `Đọc SĐT lead mà không qua tầng che (dùng maskLeadPiiFields + canViewLeadPii):\n  - ${pham.join("\n  - ")}\n`,
+    ).toEqual([]);
+  });
+
+  it("🔴 không tệp nào tự chế mặt nạ SĐT", () => {
+    // Mặt nạ tự chế từng lộ 4 số đầu, nhiều hơn mặt nạ chuẩn — lỗi đã bắt được ở
+    // dashboard admin. Một site có hai mặt nạ là có hai mức lộ.
+    const pham = TEP_SALE.filter((t) => /phone[A-Za-z]*\.replace\(/.test(nguon(t))).map((t) =>
+      t.split(path.sep).join("/"),
+    );
+    expect(pham, `Dùng maskPhone dùng chung, đừng tự chế:\n  - ${pham.join("\n  - ")}\n`).toEqual(
+      [],
+    );
   });
 });
