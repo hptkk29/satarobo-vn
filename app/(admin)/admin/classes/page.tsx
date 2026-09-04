@@ -90,7 +90,11 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
   const canCreate = await checkPermission('classes:create')
   const canUpdate = await checkPermission('classes:edit')
   const canDelete = await checkPermission('classes:delete')
-  const canManage = canUpdate || canDelete
+  // "Chi tiết" hiện cho MỌI người xem được danh sách: cổng của trang danh sách
+  // (classes:view-all | view-own | session-feedback:view-all) là TẬP CON của cổng
+  // trang chi tiết, nên ai vào được đây thì chắc chắn mở được /classes/<id>.
+  // Trước 04/09 cả cột Hành động treo sau canUpdate || canDelete, nên Sale và Quản
+  // lý lớp học không thấy nút nào — phải dán tay URL mới vào xem lớp được.
 
   const params = await searchParams
   const q = params.q?.trim() || undefined
@@ -264,18 +268,16 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Trạng thái
                 </th>
-                {canManage && (
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Hành động
-                  </th>
-                )}
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Hành động
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {classes.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={canManage ? 9 : 8}
+                    colSpan={9}
                     className="px-4 py-12 text-center text-sm text-muted-foreground"
                   >
                     Chưa có lớp nào
@@ -330,34 +332,32 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
                           {statusInfo.label}
                         </span>
                       </td>
-                      {canManage && (
-                        <td className="px-4 py-3 text-right">
-                          <div className="flex items-center justify-end gap-2">
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Link
+                            href={`/classes/${cls.id}`}
+                            className="rounded-md border border-primary-soft px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary-soft"
+                          >
+                            Chi tiết
+                          </Link>
+                          {canUpdate && (
                             <Link
-                              href={`/classes/${cls.id}`}
-                              className="rounded-md border border-primary-soft px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary-soft"
+                              href={`/classes/${cls.id}/edit`}
+                              className="rounded-md border border-border px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted"
                             >
-                              Chi tiết
+                              Sửa
                             </Link>
-                            {canUpdate && (
-                              <Link
-                                href={`/classes/${cls.id}/edit`}
-                                className="rounded-md border border-border px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted"
-                              >
-                                Sửa
-                              </Link>
-                            )}
-                            {canDelete && (
-                              <ClassDeleteButton
-                                classId={cls.id}
-                                name={cls.name}
-                                enrollmentCount={cls._count.enrollments}
-                                sessionCount={cls._count.sessions}
-                              />
-                            )}
-                          </div>
-                        </td>
-                      )}
+                          )}
+                          {canDelete && (
+                            <ClassDeleteButton
+                              classId={cls.id}
+                              name={cls.name}
+                              enrollmentCount={cls._count.enrollments}
+                              sessionCount={cls._count.sessions}
+                            />
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   )
                 })
