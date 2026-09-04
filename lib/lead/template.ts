@@ -1,4 +1,5 @@
 import JSZip from "jszip";
+import { LEAD_IMPORT_SALE_HEADER } from "./import";
 
 // =============================================================================
 // File mẫu import LEAD — GIỮ NGUYÊN file soạn tay `public/templates/mau-lead-v2.xlsx`
@@ -265,6 +266,11 @@ export async function buildLeadImportTemplate(input: LeadTemplateInput): Promise
   const styles = patchStylesXml(await stylesFile.async("string"));
   let sheet = await sheetFile.async("string");
   const lastRow = readLastRow(sheet);
+
+  // 04/09/2026 — cột "Sale phụ trách" (TUỲ CHỌN). Ghi thêm vào J1 thay vì sửa
+  // file mẫu soạn tay: file đó giữ nguyên 9 cột A–I với định dạng + dropdown neo
+  // theo chữ cái cột, nên THÊM ở cuối là thao tác duy nhất không dời gì cả.
+  sheet = setInlineCell(sheet, "J1", LEAD_IMPORT_SALE_HEADER);
 
   sheet = injectCourseList(sheet, input.courseNames);
   sheet = patchPhoneAndAgeColumns(sheet, {
