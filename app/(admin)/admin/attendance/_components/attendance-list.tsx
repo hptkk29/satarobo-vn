@@ -190,12 +190,18 @@ export function AttendanceList({
   classId,
   className,
   canComplete,
+  canFeedback,
 }: {
   rows: AttendanceListRow[];
   classId: string;
   className: string;
   /** `sessions:edit` — không có thì ẩn nút chốt buổi (server vẫn chặn). */
   canComplete: boolean;
+  /**
+   * Có được mở phiếu nhận xét buổi không. Sale / Quản lý lớp học = `false`:
+   * `/sessions/[id]` redirect họ ra, nên hiện nút là chỉ đường tới ngõ cụt.
+   */
+  canFeedback: boolean;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -381,12 +387,14 @@ export function AttendanceList({
                             Điểm danh
                           </Link>
                         </Button>
-                        <Button size="sm" variant="outline" asChild>
-                          <Link href={`/sessions/${r.id}`}>
-                            <MessageSquare className="h-3.5 w-3.5" aria-hidden />
-                            Nhận xét
-                          </Link>
-                        </Button>
+                        {canFeedback && (
+                          <Button size="sm" variant="outline" asChild>
+                            <Link href={`/sessions/${r.id}`}>
+                              <MessageSquare className="h-3.5 w-3.5" aria-hidden />
+                              Nhận xét
+                            </Link>
+                          </Button>
+                        )}
                         <UploadPhotoDialog
                           classId={classId}
                           initialSessionId={r.id}

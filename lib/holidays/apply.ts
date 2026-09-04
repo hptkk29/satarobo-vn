@@ -31,6 +31,36 @@ function expandRange(start: Date, end: Date | null): Set<string> {
   return set;
 }
 
+/**
+ * THỨ NÀO LỚP CÓ HỌC — dùng để tìm ngày dời khi buổi rơi vào ngày nghỉ.
+ *
+ * Tách thuần để test được: đây là chỗ lỗi prod 04/09/2026 nằm, và nó chỉ phụ
+ * thuộc ba mẩu dữ liệu, không cần DB.
+ *
+ * Thứ tự ưu tiên:
+ *   1. `scheduleDays` — bản sao phẳng trên `Class`, khi có thì tin.
+ *   2. **Thứ của chính các buổi lớp đang có** — lớp học T3/T5 thì buổi của nó
+ *      rơi vào T3/T5. Đây là vế MỚI, và là vế cứu cả tính năng: đo trên dữ liệu
+ *      thật, 100/100 lớp không có `scheduleDays` lẫn `schedulePhases`, nên bản cũ
+ *      `continue` im lặng ở mọi lớp và không buổi nào từng được dời.
+ *   3. Cùng thứ với buổi đang dời — lớp mới tinh chỉ có đúng một buổi thì "tuần
+ *      sau, cùng thứ" là phỏng đoán ít sai nhất, và vẫn hơn hẳn việc bỏ mặc buổi
+ *      nằm trên ngày nghỉ.
+ *
+ * (Kế hoạch nhiều giai đoạn `schedulePhases` được xử RIÊNG ở nhánh `usePhases`
+ * vì nó quyết định cả GIỜ, không chỉ thứ.)
+ */
+export function suyThuHopLe(
+  scheduleDays: number[] | null | undefined,
+  thuCuaCacBuoi: readonly number[],
+  thuCuaBuoiDangDoi: number,
+): number[] {
+  if (scheduleDays && scheduleDays.length > 0) return scheduleDays;
+  const tuBuoi = [...new Set(thuCuaCacBuoi)];
+  if (tuBuoi.length > 0) return tuBuoi;
+  return [thuCuaBuoiDangDoi];
+}
+
 export async function applyHolidayShift(holiday: {
   date: Date;
   endDate: Date | null;
@@ -110,7 +140,6 @@ export async function applyHolidayShift(holiday: {
     const usePhases = phases.length > 0;
 
     const days = s.class.scheduleDays;
-    if (!usePhases && (!days || days.length === 0)) continue; // không rõ lịch → bỏ qua
 
     // Ngày nghỉ áp dụng cho lớp này = holiday toàn hệ thống + holiday cùng cơ sở.
     const holSet = new Set<string>();
@@ -120,8 +149,35 @@ export async function applyHolidayShift(holiday: {
       }
     }
     // Các buổi đã có của lớp (tránh trùng ngày).
-    const taken = new Set(
-      (await db.classSession.findMany({ where: { classId: s.classId }, select: { date: true } })).map((x) => ymdVN(x.date)),
+    const buoiCuaLop = await db.classSession.findMany({
+      where: { classId: s.classId },
+      select: { date: true },
+    });
+    const taken = new Set(buoiCuaLop.map((x) => ymdVN(x.date)));
+
+    // ── LỊCH SUY TỪ CHÍNH CÁC BUỔI CỦA LỚP ────────────────────────────────
+    //
+    // ⚠️ VÁ 04/09/2026 — đây là lý do THẬT khiến "thêm ngày nghỉ mà buổi học
+    // không dời đi" trên prod.
+    //
+    // Bản cũ có dòng:
+    //     if (!usePhases && (!days || days.length === 0)) continue;  // không rõ lịch
+    // Dựng lại được trên dữ liệu thật: 9/9 buổi rơi đúng ngày nghỉ lọt qua MỌI
+    // bộ lọc rồi chết ở đúng dòng đó, `applyHolidayShift` trả `shifted: 0`, và
+    // vì nó `continue` IM LẶNG nên không log, không lỗi, không ai biết. Đo tiếp:
+    // **100/100 lớp** không có `schedulePhases` LẪN `scheduleDays` — tức nhánh
+    // "không rõ lịch" không phải ca hiếm, nó là ca DUY NHẤT.
+    //
+    // Nhưng lớp KHÔNG hề "không rõ lịch": dãy buổi của nó chính là lịch. Lớp học
+    // thứ 3 và thứ 5 thì các buổi của nó rơi vào thứ 3 và thứ 5. Suy từ đó vừa
+    // đúng hơn giả định, vừa không cần dữ liệu mới.
+    //
+    // Thứ tự ưu tiên giữ nguyên tinh thần cũ: kế hoạch nhiều giai đoạn (nguồn sự
+    // thật) → `scheduleDays` (bản sao phẳng) → dãy buổi thật → cùng thứ tuần sau.
+    const thuHopLe = suyThuHopLe(
+      days,
+      buoiCuaLop.map((x) => vnWeekday(x.date)),
+      vnWeekday(s.date),
     );
 
     // Tìm ngày học hợp lệ kế tiếp sau ngày nghỉ (thứ tính theo lịch VN).
@@ -142,12 +198,20 @@ export async function applyHolidayShift(holiday: {
         found = vnDateAt(p.year, p.month, p.day, h, m);
         break;
       }
-      if (days.includes(vnWeekday(cursor))) {
+      if (thuHopLe.includes(vnWeekday(cursor))) {
         found = new Date(cursor);
         break;
       }
     }
-    if (!found) continue;
+    if (!found) {
+      // Không im lặng: 200 ngày liên tiếp không có ngày học hợp lệ nào là bất
+      // thường (lịch nghỉ dày đặc, hoặc lớp chỉ có đúng một buổi). Buổi đó nằm
+      // lại trên ngày nghỉ, và người vận hành cần biết để xử tay.
+      console.warn(
+        `[holiday-shift] KHÔNG tìm được ngày dời cho buổi ${s.id} (lớp "${s.class.name}", ${ymdVN(s.date)}) — buổi nằm lại trên ngày nghỉ.`,
+      );
+      continue;
+    }
 
     await db.classSession.update({ where: { id: s.id }, data: { date: found } });
     shifted++;

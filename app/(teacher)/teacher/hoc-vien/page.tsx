@@ -389,6 +389,9 @@ function ProfileTabBar({
             <Link
               key={t.key}
               href={`?s=${studentId}&ptab=${t.key}`}
+              // Đổi tab = đổi tham số truy vấn trên CÙNG trang hồ sơ (không rời màn)
+              // → giữ nguyên vị trí cuộn thay vì bị kéo về đầu trang.
+              scroll={false}
               aria-current={on ? "page" : undefined}
               className={cn(
                 "inline-flex shrink-0 items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",

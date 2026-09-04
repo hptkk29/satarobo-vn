@@ -41,12 +41,14 @@ export default async function StudentCalendarPage({
       <div className="flex justify-end gap-1">
         <Link
           href={`/portal/hoc-sinh/lich?y=${prev.year}&m=${prev.month0}`}
+          scroll={false}
           className="grid size-7 place-items-center rounded-lg border border-border text-muted-foreground hover:bg-muted"
         >
           ‹
         </Link>
         <Link
           href={`/portal/hoc-sinh/lich?y=${next.year}&m=${next.month0}`}
+          scroll={false}
           className="grid size-7 place-items-center rounded-lg border border-border text-muted-foreground hover:bg-muted"
         >
           ›

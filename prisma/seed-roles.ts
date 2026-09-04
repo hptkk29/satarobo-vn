@@ -726,6 +726,16 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "chat:read", scopeType: "OWN" },
       { action: "chat:send", scopeType: "OWN" },
       { action: "parent-requests:manage", scopeType: "GLOBAL" },
+      // 04/09/2026 (chủ dự án chốt) — Sale vào xem chi tiết lớp thì CHỈ XEM, trừ hai
+      // việc: ĐIỂM DANH và ÚP ẢNH. `attendance:edit` đã có sẵn; hai dòng này bổ nốt
+      // vế ảnh. Cùng bộ đôi mà Giáo vụ (CENTER_CLASS_MANAGER) đang giữ và cùng lý do:
+      // góp ảnh vào KHO của lớp, còn GV mới là người chọn ảnh gửi phụ huynh.
+      //
+      // KHÔNG cấp `media:upload` (gửi thẳng cho phụ huynh) và KHÔNG cấp
+      // `media:approve` (duyệt). Cách ly cơ sở do scopedDb/passesScope lo ở tầng
+      // query — xem `canStageToClass` trong app/(admin)/admin/media/actions.ts.
+      { action: "media:view", scopeType: "GLOBAL" },
+      { action: "media:upload-draft", scopeType: "GLOBAL" },
       { action: "hr_attendance:checkin", scopeType: "GLOBAL" },
       { action: "blog:view", scopeType: "CENTER" },
       { action: "course-packages:view", scopeType: "CENTER" },

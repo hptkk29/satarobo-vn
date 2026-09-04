@@ -338,6 +338,7 @@ function FilterTab({ href, label, active }: { href: string; label: string; activ
   return (
     <Link
       href={href}
+      scroll={false}
       className={`rounded-lg px-3 py-1.5 font-medium ${ active ? "bg-primary-dark text-white" : "border border-border text-foreground hover:bg-muted" }`}
     >
       {label}

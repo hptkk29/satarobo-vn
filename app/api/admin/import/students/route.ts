@@ -286,6 +286,19 @@ export async function POST(req: NextRequest) {
           ward: r.data.ward,
           district: r.data.district,
           city: r.data.city,
+          // ⚠️ VÁ 04/09/2026 — phải set CẢ `centerId`, không chỉ `preferredCenterId`.
+          //
+          // `Student` ∈ `SCOPED_MODELS` và `scopedDb` lọc theo `centerId`. Bản cũ
+          // chỉ ghi `preferredCenterId` ⇒ học viên nhập bằng Excel có
+          // `centerId = NULL` và bị cách ly cơ sở GIẤU khỏi mọi vai cấp cơ sở —
+          // kể cả chính người vừa bấm nút import. Họ thấy "nhập thành công N dòng"
+          // rồi mở danh sách ra trống trơn.
+          //
+          // Đây là mặt ngược của lỗi ở `/admin/students`: màn đó LỌC theo
+          // `preferredCenterId` trong khi luồng chốt lead chỉ ghi `centerId`. Hai
+          // đường ghi mỗi bên điền một nửa, nên nửa nào cũng có ca hỏng.
+          centerId: r.preferredCenterId,
+          orgUnitId: r.preferredOrgUnitId,
           preferredCenterId: r.preferredCenterId,
           preferredOrgUnitId: r.preferredOrgUnitId, // dual-write 2-phase
           enrollmentDate: r.data.enrollmentDate,

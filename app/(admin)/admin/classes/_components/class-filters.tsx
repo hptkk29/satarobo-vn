@@ -53,7 +53,8 @@ export function ClassFilters({
     if (teacherId) params.set("teacherId", teacherId);
     const qs = params.toString();
     startTransition(() => {
-      router.push(qs ? `/classes?${qs}` : "/classes");
+      // scroll: false — đổi bộ lọc là GIỮ NGUYÊN TRANG, không cuộn về đầu.
+      router.push(qs ? `/classes?${qs}` : "/classes", { scroll: false });
     });
   }
 

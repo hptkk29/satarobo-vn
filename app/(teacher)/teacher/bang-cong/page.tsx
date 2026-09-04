@@ -326,6 +326,7 @@ export default async function TeacherTimesheetPage({
           </NavLink>
           <Link
             href="?"
+            scroll={false}
             className="ml-1 inline-flex h-9 items-center rounded-lg border border-border bg-card px-3 text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted/50"
           >
             Tháng này
@@ -516,6 +517,8 @@ export default async function TeacherTimesheetPage({
   );
 }
 
+/** Nút lùi/tiến tháng — `scroll={false}`: đổi tháng chỉ đổi ?thang= của CHÍNH trang này,
+ *  để mặc định thì App Router cuộn vọt lên đầu, mất chỗ đang xem trong bảng chi tiết ca. */
 function NavLink({
   href,
   aria,
@@ -528,6 +531,7 @@ function NavLink({
   return (
     <Link
       href={href}
+      scroll={false}
       aria-label={aria}
       className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:bg-muted/50"
     >

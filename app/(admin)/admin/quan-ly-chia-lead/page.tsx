@@ -136,6 +136,9 @@ export default async function QuanLyChiaLeadPage({ searchParams }: { searchParam
           <Link
             key={t.key}
             href={qs({ tab: t.key })}
+            // Đổi tab = đổi `?tab=` của CHÍNH trang này. Không có `scroll={false}`
+            // thì App Router cuốn về đầu trang sau mỗi lần bấm.
+            scroll={false}
             className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium ${
               tab === t.key
                 ? "border-primary text-foreground"

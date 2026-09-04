@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
-import { scopedDb } from "@/lib/db-scope";
+import { getCenterOptions } from "@/lib/org/center-options";
 import { isManagerImportWindowOpen, lastDayOfMonth } from "@/lib/shifts";
 import { ShiftApproval } from "./_components/shift-approval";
 import { PageHelp } from "@/components/admin/ui/page-help";
@@ -29,12 +29,22 @@ export default async function DuyetCaPage() {
     redirect("/dashboard");
   }
 
-  const sdb = scopedDb(await resolveActor(session.user.id));
-  const centers = await sdb.center.findMany({
-    where: { isActive: true, ...(fixedCenterId ? { id: fixedCenterId } : {}) },
-    orderBy: { displayOrder: "asc" },
-    select: { id: true, name: true },
-  });
+  // 03/09/2026 — ô chọn cơ sở qua helper chung.
+  //
+  // Đây là màn NGUY HIỂM NHẤT trong nhóm chấm công: import một file là XOÁ TRẮNG
+  // lịch ca cả tháng của cơ sở được chọn rồi ghi lại theo file. Bản cũ dùng
+  // `sdb.center.findMany` — mà `Center` thuộc `SCOPE_EXEMPT` nên `sdb` không lọc
+  // gì — nên ô chọn bày cả Hội sở lẫn bản ghi mồ côi của bộ test. Một cú chọn
+  // nhầm ở đây không phải "xem sai dữ liệu", nó là mất lịch ca một tháng.
+  //
+  // `purpose: "org"` vì chấm công là việc TỔ CHỨC, không phải giảng dạy: người
+  // Hội sở cũng có lịch ca. Helper vẫn cắt theo tầm nhìn actor và chỉ cho quản
+  // trị hệ thống thấy Hội sở.
+  const actor = await resolveActor(session.user.id);
+  const tatCa = await getCenterOptions(actor, { purpose: "org" });
+  const centers = fixedCenterId
+    ? tatCa.filter((c) => c.id === fixedCenterId)
+    : tatCa;
 
   const now = new Date();
   const importOpen = isManagerImportWindowOpen(now);

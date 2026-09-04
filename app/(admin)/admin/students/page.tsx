@@ -349,6 +349,10 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
                   centerId,
                   grade: grade != null ? String(grade) : "",
                 })}
+                // Đổi tab lọc = vẫn ở /students, chỉ đổi tham số truy vấn. Không có
+                // `scroll={false}` thì ScrollAndFocusHandler của App Router kéo về đầu
+                // trang sau mỗi lần đổi tab, mất chỗ đang xem trong bảng.
+                scroll={false}
                 className={
                   "whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium " +
                   (active

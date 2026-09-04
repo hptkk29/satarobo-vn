@@ -108,6 +108,10 @@ export default async function TeacherTrialPage({
                   <Link
                     key={s.id}
                     href={`?enrollmentId=${ctx.enrollmentId}&sessionId=${s.id}`}
+                    // Chọn buổi = đổi tham số truy vấn TRÊN CHÍNH màn phiếu này, không
+                    // phải sang trang khác → giữ nguyên vị trí cuộn (App Router mặc
+                    // định kéo về đầu sau mỗi lần cập nhật router state).
+                    scroll={false}
                     aria-current={active ? "true" : undefined}
                     className={cn(
                       "rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors",
