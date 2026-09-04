@@ -2,7 +2,10 @@ import "server-only";
 import { db } from "@/lib/db";
 import { getChildren } from "@/lib/portal/session";
 import { getStudentAttendanceSummaries } from "@/lib/portal/learning";
-import { attendanceRatePercent } from "@/lib/lms/report-card-core";
+import {
+  attendanceRatePercent,
+  courseProgressPercent,
+} from "@/lib/lms/report-card-core";
 import { getParentNotificationCount } from "@/lib/portal/notifications";
 import { computeEnrollmentDebt } from "@/lib/finance/debt";
 import type { AttendanceSummary } from "@/lib/attendance/summary";
@@ -151,7 +154,11 @@ export type ParentChildOverview = {
   className: string | null;
   /** % chuyên cần = có mặt / buổi ĐÃ DIỄN RA (xem `attendanceRatePercent`). */
   attendanceRate: number;
+  /** % tiến độ khoá = buổi đã dạy / tổng buổi khoá. CÂU HỎI KHÁC với chuyên cần. */
+  courseProgressRate: number;
   attended: number;
+  /** Số buổi đã dạy — tử số của tiến độ, MẪU SỐ của chuyên cần. */
+  daDienRa: number;
   totalSessions: number;
   needMakeup: number;
   /** Bài tập/bài kiểm tra chưa nộp (ASSIGNED/MISSED). */
@@ -244,7 +251,9 @@ export async function getParentChildrenOverview(
         className: activeEnr?.class?.classCode ?? null,
         // CÙNG công thức với học bạ và site GV — không chép lại phép chia ở đây nữa.
         attendanceRate: attendanceRatePercent(att),
+        courseProgressRate: courseProgressPercent(att),
         attended: att.attended,
+        daDienRa: att.daDienRa,
         totalSessions: att.total,
         needMakeup: att.needMakeup,
         pendingHomework,

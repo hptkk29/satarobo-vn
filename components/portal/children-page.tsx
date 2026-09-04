@@ -88,10 +88,13 @@ export function ChildrenPageV2({ kids }: { kids: ParentChildOverview[] }) {
                     Tiến độ khóa học
                   </span>
                   <span className="shrink-0 tabular-nums text-primary">
-                    {c.attendanceRate}% · {c.attended}/{c.totalSessions}
+                    {c.courseProgressRate}% · {c.daDienRa}/{c.totalSessions}
                   </span>
                 </div>
-                <Progress value={c.attendanceRate} className="h-1.5" />
+                {/* Thanh vẽ theo TIẾN ĐỘ KHOÁ — cùng số với phần trăm in bên cạnh. Trước
+                      04/09 cả hai lấy `attendanceRate` nên dòng "Tiến độ khoá học" in
+                      "82% · 9/20" — 9/20 là 45%, hai số cãi nhau ngay trên một dòng. */}
+                  <Progress value={c.courseProgressRate} className="h-1.5" />
               </div>
 
               <div className="grid grid-cols-2 gap-2">
