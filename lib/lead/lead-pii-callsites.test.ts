@@ -278,7 +278,25 @@ describe("[S-1] searchLopTrialCandidatesAction — ô tìm ứng viên", () => {
 // phải đi qua tầng che. Thêm màn mới mà quên che ⇒ đỏ ngay, không cần ai nhớ.
 describe("[S-1] site Sale: mọi đường đọc SĐT lead đều đi qua tầng che", () => {
   /** Lý do miễn trừ phải viết ra — miễn trừ không lời giải thích là một lỗ ngủ. */
-  const MIEN_TRU: Record<string, string> = {};
+  const MIEN_TRU: Record<string, string> = {
+    // 04/09/2026 — `phone: true` ở đây là `Center.phone`: SỐ ĐIỆN THOẠI CỦA CƠ SỞ
+    // (211 Nguyễn Hữu Thọ / 114 Hoàng Diệu), thứ đang in công khai trên
+    // satarobo.vn và trên mọi phiếu thu. Không phải SĐT phụ huynh, không phải SĐT
+    // lead — không có gì để che, và `maskPhone` một số hotline công khai chỉ làm
+    // người dùng tưởng mình thiếu quyền.
+    //
+    // Phép dò ở đây soi CHUỖI `phone: true` nên không phân biệt được nguồn; khối
+    // dữ liệu duy nhất của màn này là hồ sơ CHÍNH NGƯỜI ĐANG ĐĂNG NHẬP (tên,
+    // email, vai trò) + danh sách cơ sở cho super admin. Không có đường nào chạm
+    // tới lead.
+    //
+    // ⚠️ ĐÂY LÀ MỘT CHỖ MÙ, không phải một chỗ được phép rò: thêm bất cứ truy vấn
+    //    lead/học viên nào vào tệp đó thì bài kiểm này KHÔNG bắt được nữa. Nếu màn
+    //    "Hồ sơ của tôi" lớn ra tới mức đọc dữ liệu khách, hãy tách phần ấy sang
+    //    tệp riêng rồi XOÁ dòng miễn trừ này.
+    "app/(sale)/sale/ho-so/page.tsx":
+      "Center.phone (SĐT cơ sở, công khai) chứ không phải SĐT lead/phụ huynh; màn chỉ đọc hồ sơ của chính người đăng nhập",
+  };
 
   function quetTep(thuMuc: string): string[] {
     const ra: string[] = [];
