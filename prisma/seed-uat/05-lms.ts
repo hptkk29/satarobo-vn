@@ -70,10 +70,16 @@ export async function seedLms(_coSo: CoSo[], uat: Uat) {
       const aid = uid("bt", lop.id.replace("uat-lop-", ""), b);
       // Hạn nộp: phần lớn đã qua (để có bài nộp/chấm), một phần còn hạn.
       const hanLech = chance(rng, 0.7) ? -int(rng, 1, 40) : int(rng, 2, 14);
+      // MỘT đề cho cả tiêu đề lẫn mô tả, và KHÔNG cắt.
+      // Bản cũ vừa `.slice(0, 45)` vừa bốc `description` bằng một lượt pick KHÁC, nên
+      // tiêu đề cụt giữa từ ("…khi lắp bánh dẫn độn") trong khi mô tả lại đầy đủ và
+      // nói chuyện khác. QA đo được đúng 45 ký tự và kết luận cột `title` bị giới hạn ở
+      // tầng dữ liệu (BUG-009) — thực ra chỉ là dòng này.
+      const de = pick(rng, DE_BAI);
       baiTap.push({
         id: aid,
-        title: `Bài ${b} — ${pick(rng, DE_BAI).slice(0, 45)}`,
-        description: pick(rng, DE_BAI),
+        title: `Bài ${b} — ${de}`,
+        description: de,
         classId: lop.id,
         totalPoints: 10,
         assignedAt: ngay(hanLech - 7),

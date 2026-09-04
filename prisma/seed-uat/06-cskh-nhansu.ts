@@ -38,6 +38,16 @@ const THONG_BAO = [
   ["Bảo trì phòng học", "Phòng 3 tạm nghỉ để bảo trì, lớp chuyển sang phòng 5."],
 ];
 
+/** Loại đơn đi kèm lý do HỢP với nó — xem chú thích ở chỗ dùng. */
+const LOAI_DON = [
+  { kind: "LEAVE", lyDo: ["Việc gia đình", "Khám sức khoẻ định kỳ", "Con ốm"] },
+  { kind: "OT", lyDo: ["Dạy bù cuối tuần", "Chuẩn bị hội thi robot", "Trực sự kiện mở lớp"] },
+  { kind: "LATE_EARLY", lyDo: ["Kẹt xe", "Đưa con đi khám", "Về sớm có việc gia đình"] },
+  { kind: "SUB_TEACH", lyDo: ["Dạy thay đồng nghiệp", "Nhận lớp giúp giáo viên nghỉ ốm"] },
+  { kind: "SHIFT_SWAP", lyDo: ["Đổi ca với đồng nghiệp", "Hoán ca để đi học nghiệp vụ"] },
+  { kind: "TIMESHEET_FIX", lyDo: ["Quên chấm công ra", "Máy chấm công lỗi", "Quên chấm công vào"] },
+] as const satisfies readonly { kind: Prisma.WorkRequestCreateManyInput["kind"]; lyDo: readonly string[] }[];
+
 export async function seedCskhNhanSu(coSo: CoSo[], uat: Uat) {
   const rng = makeRng(6006);
 
@@ -289,19 +299,39 @@ export async function seedCskhNhanSu(coSo: CoSo[], uat: Uat) {
     // ~40% CHỜ DUYỆT → quản lý cơ sở và nhân sự có việc.
     const st: Prisma.WorkRequestCreateManyInput["status"] =
       chance(rng, 0.4) ? "PENDING" : chance(rng, 0.75) ? "APPROVED" : "REJECTED";
+    // Loại đơn đi CÙNG lý do và cùng khoảng ngày hợp lệ của nó.
+    //
+    // Bản cũ bốc `kind` và `reason` bằng hai lượt pick ĐỘC LẬP, và `toDate` là một số
+    // ngẫu nhiên riêng nên có thể rơi TRƯỚC `fromDate`. Trên UAT ra những dòng vô nghĩa
+    // như "Đi muộn / Về sớm — Dạy thay đồng nghiệp — 26/07 → 22/08" (27 ngày đi muộn).
+    // QA thấy form tạo đơn lại làm đúng nên xếp vào diện cần xác nhận (NV-005) — đúng,
+    // dữ liệu đó không tạo được từ giao diện.
+    const loai = pick(rng, LOAI_DON);
+    // Bốn loại dưới gắn với MỘT ca làm việc ⇒ đúng một ngày. Nghỉ phép và tăng ca mới
+    // có khoảng.
+    const soNgay = ["LEAVE", "OT"].includes(loai.kind) ? int(rng, 0, 2) : 0;
+    const tuNgay = -int(rng, 1, 30);
     don.push({
       id: uid("dontu", i),
       requesterId: nv.id,
       centerId: nv.centerId ?? coSo[0]!.centerId,
-      kind: pick(rng, ["LEAVE", "OT", "LATE_EARLY", "SUB_TEACH", "SHIFT_SWAP", "TIMESHEET_FIX"] as const),
+      kind: loai.kind,
       status: st,
-      fromDate: ngay(-int(rng, 1, 30)),
-      toDate: ngay(-int(rng, 0, 1)),
-      reason: pick(rng, ["Việc gia đình", "Khám sức khoẻ định kỳ", "Dạy thay đồng nghiệp", "Quên chấm công ra", "Đổi ca với đồng nghiệp"]),
+      fromDate: ngay(tuNgay),
+      toDate: ngay(tuNgay + soNgay),
+      reason: pick(rng, loai.lyDo),
       reviewedById: st === "PENDING" ? null : uat.giamdoc.id,
       reviewedByName: st === "PENDING" ? null : (uat.giamdoc.name ?? "Quản lý cơ sở"),
       reviewedAt: st === "PENDING" ? null : ngay(-int(rng, 1, 10)),
-      createdAt: ngay(-int(rng, 2, 40)),
+      // Đơn phải được GỬI TRƯỚC ngày xin — TỐI THIỂU 1 ngày, không phải 0.
+      //
+      // ⚠️ `fromDate`/`toDate` là cột `@db.Date` còn `createdAt` là `timestamptz`.
+      // `ngay()` trả 00:00 giờ VN = 17:00 UTC hôm trước, nên Prisma ghi vào cột Date
+      // lấy phần ngày THEO UTC và ra sớm hơn ngày VN một ngày. Để lệch 0 ngày thì
+      // `createdAt` (giữ mốc VN) đọc ra muộn hơn `fromDate` (đã lùi) đúng một ngày —
+      // và bảng đơn từ hiện "ngày gửi sau ngày bắt đầu". Đo được 8/60 dòng sau lượt
+      // seed đầu tiên ngày 03/09.
+      createdAt: ngay(tuNgay - int(rng, 1, 7)),
     });
   }
   const nDon = await taoThieu(

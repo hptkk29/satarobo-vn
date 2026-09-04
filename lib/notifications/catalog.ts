@@ -238,6 +238,13 @@ const BY_PREFIX: Readonly<Record<string, NotiDef>> = {
     // luận loại này gãy trên site giáo viên rồi đi sửa nhầm chỗ.
     recipients: "Tư vấn viên phụ trách lead (không có thì admin lead)", target: "/leads/<leadId>",
   },
+  // 03/09 — giáo viên chấm xong phiếu rubric ⇒ Sale có căn cứ chốt với phụ huynh.
+  // Việc MỚI rơi xuống chứ không phải tin để biết, nên xếp "new_task" như trial.assigned.
+  "trial.evaluated:": {
+    group: "new_task", priority: 2, entity: "trial",
+    // Là SALE, không phải giáo viên: người chấm chính là giáo viên nên báo lại là vô nghĩa.
+    recipients: "Tư vấn viên phụ trách lead (không có thì admin lead)", target: "/lop-trial/<trialClassId>",
+  },
   "trial.schedule_changed:": {
     group: "system", priority: 2, entity: "trial",
     // Cũng là SALE (lib/_handlers/trial-schedule-notif.ts), không phải giáo viên.
@@ -250,6 +257,13 @@ const BY_PREFIX: Readonly<Record<string, NotiDef>> = {
   "trial-class.assigned:": {
     group: "new_task", priority: 2, entity: "trial",
     recipients: "Giáo viên được phân lớp học thử", target: "/lop-trial",
+  },
+  // 03/09 — có EM vừa được xếp vào ca của GV (enrollLeadChild). Khác ba loại "assigned"
+  // còn lại: chúng báo việc được giao LỚP/BUỔI/CA, loại này báo SIĨ SỐ của ca đổi.
+  // Lớp trải nghiệm là slot tái sử dụng nên hai việc cách nhau hàng tuần.
+  "trial-enroll.assigned:": {
+    group: "new_task", priority: 2, entity: "trial",
+    recipients: "Giáo viên dạy buổi (không có thì GV chính của lớp)", target: "/lop-trial",
   },
   // Buổi ad-hoc thêm tay vào lớp trải nghiệm (addTrialSession) — GV được gán buổi đó.
   // Cùng mức với hai loại trên: là ca dạy vừa rơi vào lịch của mình, không phải tin để biết.

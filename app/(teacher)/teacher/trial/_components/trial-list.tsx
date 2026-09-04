@@ -81,7 +81,8 @@ function TrialTable({ rows }: { rows: TrialRowView[] }) {
     <div className="t-card overflow-hidden">
       {/* Thanh phân trang nằm NGOÀI vùng cuộn ngang: để trong thì cuộn sang phải là
           nút chuyển trang trôi mất khỏi màn. */}
-      <PhanTrangBang cuonNgang tenDonVi="suất Trial">
+      <PhanTrangBang cuonNgang tenDonVi="suất Trial"
+          khoaGhiNho="gv-trial">
         <table className="w-full min-w-[820px] border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
@@ -111,18 +112,23 @@ function TrialTable({ rows }: { rows: TrialRowView[] }) {
                 key={r.enrollmentId}
                 className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
               >
-                <td className="px-5 py-3.5 whitespace-nowrap">
-                  <p className="font-semibold text-foreground">
+                {/* nowrap chỉ cho DÒNG NGÀY (chuỗi ngắn, cố định). Dòng dưới ghép tên
+                    lớp trải nghiệm — text tự do — nên để nguyên nowrap ở <td> làm cột
+                    này nở tới 426px, đẩy cột Học viên xuống 74px khiến "Tô Duy Trí -
+                    2019" xuống 3 dòng, và bảng tràn 962px trong khung 883px
+                    (QA vòng 1, BUG-036). */}
+                <td className="min-w-[11rem] px-5 py-3.5">
+                  <p className="font-semibold whitespace-nowrap text-foreground">
                     {r.dateLabel || "Chưa xếp buổi"}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {[r.timeLabel, r.trialClassName].filter(Boolean).join(" · ")}
                   </p>
                 </td>
-                <td className="px-5 py-3.5 font-medium text-foreground">
+                <td className="min-w-[9rem] px-5 py-3.5 font-medium text-foreground">
                   {r.studentLabel}
                 </td>
-                <td className="px-5 py-3.5 text-foreground">
+                <td className="min-w-[8rem] px-5 py-3.5 text-foreground">
                   {r.parentName ?? "—"}
                 </td>
                 <td className="px-5 py-3.5 text-foreground">

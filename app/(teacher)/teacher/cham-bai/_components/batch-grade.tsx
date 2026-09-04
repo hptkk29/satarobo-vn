@@ -110,7 +110,8 @@ export function BatchGrade({
           <div className="max-h-[55vh] overflow-auto rounded-lg border border-border">
             {/* KHÔNG đặt min-w ở đây: bảng chỉ 2 cột (tên + ô điểm) và hộp thoại
                 rộng 512px — ép bề rộng tối thiểu là tự sinh thanh cuộn thừa. */}
-            <PhanTrangBang>
+            <PhanTrangBang
+          khoaGhiNho="gv-cham-hang-loat">
               <table className="w-full border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">

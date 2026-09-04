@@ -21,6 +21,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
+import { ONgay } from "../../_components/ui/o-ngay";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { createAdjustmentRequest } from "@/app/(admin)/admin/cham-cong/chinh-cong/_actions";
@@ -32,14 +34,23 @@ export function AdjustRequestDialog({ defaultDate }: { defaultDate: string }) {
   const [date, setDate] = useState(defaultDate);
   const [requested, setRequested] = useState("");
   const [reason, setReason] = useState("");
+  // Lỗi hiện NGAY TẠI Ô, không chỉ toast: toast trôi mất sau vài giây và không nói
+  // được ô nào sai, còn trình đọc màn hình thì không nối được nó với ô nhập
+  // (QA vòng 1, BUG-039).
+  const [loiNgay, setLoiNgay] = useState<string | null>(null);
+  const [loiLyDo, setLoiLyDo] = useState<string | null>(null);
 
   function submit() {
-    if (!date) {
-      toast.error("Chọn ngày công cần chỉnh");
-      return;
-    }
-    if (reason.trim().length < 5) {
-      toast.error("Nêu lý do chi tiết hơn (tối thiểu 5 ký tự)");
+    const thieuNgay = !date ? "Chọn ngày công cần chỉnh." : null;
+    const thieuLyDo =
+      reason.trim().length < 5
+        ? "Nêu lý do chi tiết hơn — tối thiểu 5 ký tự."
+        : null;
+    setLoiNgay(thieuNgay);
+    setLoiLyDo(thieuLyDo);
+    if (thieuNgay || thieuLyDo) {
+      // Vẫn giữ toast cho người đang nhìn chỗ khác, nhưng nó không còn là kênh DUY NHẤT.
+      toast.error(thieuNgay ?? thieuLyDo!);
       return;
     }
     startTransition(async () => {
@@ -48,6 +59,8 @@ export function AdjustRequestDialog({ defaultDate }: { defaultDate: string }) {
         toast.success("Đã gửi yêu cầu chỉnh công — chờ quản lý duyệt");
         setRequested("");
         setReason("");
+        setLoiNgay(null);
+        setLoiLyDo(null);
         setOpen(false);
         router.refresh();
       } else {
@@ -73,16 +86,18 @@ export function AdjustRequestDialog({ defaultDate }: { defaultDate: string }) {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="adjust-date">Ngày công cần chỉnh</Label>
-              <Input
-                id="adjust-date"
-                type="date"
-                value={date}
-                disabled={pending}
-                onChange={(e) => setDate(e.target.value)}
-              />
-            </div>
+            <ONgay
+              id="adjust-date"
+              label="Ngày công cần chỉnh"
+              value={date}
+              required
+              disabled={pending}
+              error={loiNgay}
+              onChange={(v) => {
+                setDate(v);
+                setLoiNgay(null);
+              }}
+            />
             <div className="space-y-1.5">
               <Label htmlFor="adjust-requested">Đề nghị (không bắt buộc)</Label>
               <Input
@@ -96,7 +111,12 @@ export function AdjustRequestDialog({ defaultDate }: { defaultDate: string }) {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="adjust-reason">Lý do / giải trình</Label>
+              <Label htmlFor="adjust-reason">
+                Lý do / giải trình
+                <span className="ml-0.5 text-state-danger-ink" aria-hidden>
+                  *
+                </span>
+              </Label>
               <Textarea
                 id="adjust-reason"
                 rows={3}
@@ -104,11 +124,36 @@ export function AdjustRequestDialog({ defaultDate }: { defaultDate: string }) {
                 value={reason}
                 disabled={pending}
                 maxLength={2000}
-                onChange={(e) => setReason(e.target.value)}
+                required
+                aria-required
+                aria-invalid={loiLyDo ? true : undefined}
+                aria-describedby={loiLyDo ? "adjust-reason-loi" : undefined}
+                className={cn(loiLyDo && "border-state-danger-ink")}
+                onChange={(e) => {
+                  setReason(e.target.value);
+                  setLoiLyDo(null);
+                }}
               />
+              {loiLyDo && (
+                <p
+                  id="adjust-reason-loi"
+                  className="text-xs font-medium text-state-danger-ink"
+                >
+                  {loiLyDo}
+                </p>
+              )}
             </div>
           </div>
           <DialogFooter>
+            {/* Nút Huỷ tường minh: trước đó chỉ có dấu X ở góc, mà đó là thứ người
+                dùng phải ĐOÁN ra (QA vòng 1, BUG-039). */}
+            <Button
+              variant="ghost"
+              disabled={pending}
+              onClick={() => setOpen(false)}
+            >
+              Huỷ
+            </Button>
             <Button onClick={submit} disabled={pending}>
               {pending ? "Đang gửi…" : "Gửi yêu cầu"}
             </Button>

@@ -183,7 +183,7 @@ State machine: `DRAFT → PENDING_REVIEW → PUBLISHED` (và `RECALLED → PENDI
 
 ## 13. Thông báo + Báo cáo + Event
 
-**14 handler đăng ký** (`lib/events/register.ts` → `ensureHandlersRegistered`), phủ **17/17 trigger thông báo** SRS, gồm: `lead.converted`, `payment.confirmed/rejected`, `class.session_changed`, `lead.trialAttended`, `enrollment.assigned`, `session.taught` (×2: notif GV + auto-giao bài), `reportcard.published`, `trial.assigned`, `makeup.requested/confirmed`, `eval.opened`, `scorm.uploaded`, `trial.schedule_changed`, `account.activated`, `comment.added`. Publish qua `publishEvent(type, payload, {tx?, dedupeKey?})` — idempotent.
+**14 handler đăng ký** (`lib/events/register.ts` → `ensureHandlersRegistered`), phủ **17/17 trigger thông báo** SRS, gồm: `lead.converted`, `payment.confirmed/rejected`, `class.session_changed`, `lead.awaitingDecision` (→ handler `onLeadTrialAttended`; **tên `lead.trialAttended` KHÔNG có producer** — vá 03/09/2026), `enrollment.assigned`, `session.taught` (×2: notif GV + auto-giao bài), `reportcard.published`, `trial.assigned`, `makeup.requested/confirmed`, `eval.opened`, `scorm.uploaded`, `trial.schedule_changed`, `account.activated`, `comment.added`. Publish qua `publishEvent(type, payload, {tx?, dedupeKey?})` — idempotent.
 Model thông báo: `Notification` (audience STUDENT/CLASS/center/global) + `StaffNotification` (inbox staff).
 
 **4 module báo cáo** (pure formula + Vitest) + trang `/admin/bao-cao/*`:
