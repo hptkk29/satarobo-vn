@@ -73,11 +73,16 @@ export async function resetDb(): Promise<void> {
   // Chốt của chủ dự án: `pnpm test` KHÔNG được gọi resetDb, không được truncate.
   // Xoá DB nay phải là lựa chọn có chủ đích: `pnpm test:chat-db` / `test:nen-db` /
   // `test:lead-intake` / `test:elearning-db` / `test:inbox-db` (qua `vitest.db.config.ts`).
-  if (process.env.ALLOW_DB_RESET !== "1") {
+  // CHẶN ĐÚNG CHỖ: chỉ khi chạy dưới VITEST. Playwright E2E là bộ gá dùng-rồi-bỏ,
+  // mọi spec của nó đều mở đầu bằng resetDb() và CI dựng Postgres riêng cho nó —
+  // chặn ở đó là giết 7 job E2E mà không cứu thêm được gì (đo ở PR #220: 7 job đỏ
+  // vì chính dòng này). Thứ cần chặn là `pnpm test:unit`, và đó là Vitest.
+  const duoiVitest = process.env.VITEST === "true";
+  if (duoiVitest && process.env.ALLOW_DB_RESET !== "1") {
     throw new Error(
       "[resetDb] Từ chối TRUNCATE: thiếu ALLOW_DB_RESET=1. " +
-        "Chạy `pnpm test:chat-db` (hoặc test:nen-db / test:lead-intake / test:elearning-db / " +
-        "test:inbox-db) thay vì `pnpm test:unit`. Xem tests/_helpers/db-gate.ts.",
+        "Chạy `pnpm test:chat-db` (hoặc test:nen-db / test:lead-intake / test:elearning-db) " +
+        "thay vì `pnpm test:unit`. Xem tests/_helpers/db-gate.ts.",
     );
   }
   const tables = await db.$queryRaw<Array<{ tablename: string }>>`

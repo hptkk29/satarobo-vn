@@ -38,7 +38,11 @@ export const HAS_LOCAL_DB =
  * Người chạy ĐÃ nói rõ "được phép xoá DB này". Chỉ `vitest.db.config.ts` bật.
  * Không có cờ ⇒ mọi bộ chạm DB skip, và `resetDb()` từ chối chạy.
  */
-export const DB_RESET_ALLOWED = process.env.ALLOW_DB_RESET === "1";
+export const DB_RESET_ALLOWED =
+  process.env.ALLOW_DB_RESET === "1" ||
+  // Ngoài Vitest (Playwright E2E) giữ nguyên hành vi cũ — bộ gá đó dùng-rồi-bỏ,
+  // CI dựng Postgres riêng cho nó. Cờ này sinh ra để chặn `pnpm test:unit`.
+  process.env.VITEST !== "true";
 
 /** Cửa hậu nghiệm thu tay trên DB từ xa — giữ nguyên hành vi cũ. */
 export const ALLOW_REMOTE =
