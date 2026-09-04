@@ -381,6 +381,20 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
     })).map((e) => e.row);
 
     const canComplete = await checkPermission("sessions:edit");
+    // 04/09/2026 — NÚT "NHẬN XÉT" phải theo quyền (chủ dự án chốt).
+    //
+    // Trang đích `/sessions/[id]` cho vào khi `canManageSessionClass` (SUPER_ADMIN /
+    // quản lý ĐÚNG cơ sở / GV được phân lớp) HOẶC có `session-feedback:view-all`.
+    // Sale và Quản lý lớp học không thoả vế nào ⇒ server ĐÃ redirect họ ra. Nhưng nút
+    // vẫn hiện, nên họ bấm vào rồi bị đá về — một ngõ cụt, và trông như hệ thống lỗi.
+    //
+    // Cặp quyền dưới đây khớp đúng nhóm được vào: GV và quản lý cơ sở đều có CẢ HAI
+    // (seed-roles), SUPER_ADMIN đi đường bypass. Cố ý KHÔNG gác bằng
+    // `canManageSessionClass`: hàm đó xét theo VAI + lớp cụ thể, dùng ở đây sẽ chặt
+    // hơn server và giấu nút khỏi chính giáo viên đứng lớp.
+    const canFeedback =
+      (await checkPermission("sessions:edit")) ||
+      (await checkPermission("session-feedback:view-all"));
 
     return (
       <div>
@@ -416,6 +430,7 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
             classId={cls.id}
             className={cls.name}
             canComplete={canComplete}
+            canFeedback={canFeedback}
           />
         )}
       </div>
