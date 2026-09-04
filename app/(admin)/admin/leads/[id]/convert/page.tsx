@@ -46,6 +46,9 @@ export default async function ConvertV2Page({ params }: Props) {
       centerId: true,
       assignedToId: true,
       childName: true,
+      // Khoá quan tâm ở CẤP LEAD — dùng làm mặc định cho em chưa tự khai (xem
+      // `khoaCuaEm` bên dưới).
+      courseId: true,
       children: {
         orderBy: { createdAt: 'asc' },
         select: { id: true, fullName: true, dob: true, interestedCourseId: true },
@@ -98,8 +101,14 @@ export default async function ConvertV2Page({ params }: Props) {
   // Không lấy tên từ `classOptions` được: đúng ca cần nói tên nhất là ca khoá đó
   // KHÔNG có lớp nào đang mở — lúc ấy `classOptions` rỗng khoá đó và câu báo sẽ
   // trống chỗ tên khoá.
+  // Gồm CẢ khoá cấp lead: nó là mặc định cho em chưa tự khai, và câu báo "cơ sở
+  // chưa mở lớp nào thuộc khoá X" cần đúng tên khoá đó.
   const khoaQuanTamIds = [
-    ...new Set(lead.children.map((c) => c.interestedCourseId).filter(Boolean) as string[]),
+    ...new Set(
+      [...lead.children.map((c) => c.interestedCourseId), lead.courseId].filter(
+        Boolean,
+      ) as string[],
+    ),
   ]
   const tenKhoaById = new Map(
     khoaQuanTamIds.length
@@ -112,23 +121,42 @@ export default async function ConvertV2Page({ params }: Props) {
       : [],
   )
 
+  /**
+   * KHOÁ QUAN TÂM DÙNG ĐỂ LỌC LỚP của một em (chủ dự án chốt 03/09/2026).
+   *
+   * Ưu tiên khoá của CHÍNH EM (`LeadChild.interestedCourseId`) — hai em cùng phụ
+   * huynh thường hỏi hai khoá khác nhau theo tuổi. Em chưa tự khai thì rơi về
+   * khoá của LEAD (`Lead.courseId`).
+   *
+   * Vì sao cần vế rơi về: phần lớn lead thật chưa có khoá ở cấp con. Lead từ web
+   * mang khoá ở cấp lead (suy từ slug trang khách vào), lead nhập tay trước
+   * 03/09 cũng vậy. Không có vế này thì ô "Lớp đăng ký" của những em đó rơi về
+   * "hiện đủ mọi lớp" — tức bộ lọc vừa làm gần như không bao giờ chạy, và người
+   * chốt lại phải tự dò đúng lớp trong danh sách 33 lớp.
+   */
+  const khoaCuaEm = (interestedCourseId: string | null) =>
+    interestedCourseId ?? lead.courseId ?? ''
+
   const prefillStudents = (lead.children.length > 0
-    ? lead.children.map((c) => ({
-        leadChildId: c.id,
-        name: c.fullName,
-        dob: c.dob ? c.dob.toISOString().slice(0, 10) : '',
-        courseId: c.interestedCourseId ?? '',
-        courseName: c.interestedCourseId
-          ? (tenKhoaById.get(c.interestedCourseId) ?? '(khoá đã xoá)')
-          : '',
-      }))
+    ? lead.children.map((c) => {
+        const khoa = khoaCuaEm(c.interestedCourseId)
+        return {
+          leadChildId: c.id,
+          name: c.fullName,
+          dob: c.dob ? c.dob.toISOString().slice(0, 10) : '',
+          courseId: khoa,
+          courseName: khoa ? (tenKhoaById.get(khoa) ?? '(khoá đã xoá)') : '',
+        }
+      })
     : [
         {
           leadChildId: null,
           name: lead.childName ?? '',
           dob: '',
-          courseId: '',
-          courseName: '',
+          courseId: khoaCuaEm(null),
+          courseName: lead.courseId
+            ? (tenKhoaById.get(lead.courseId) ?? '(khoá đã xoá)')
+            : '',
         },
       ]
   )
