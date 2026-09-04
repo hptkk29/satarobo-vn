@@ -45,6 +45,20 @@ const DOI_NGUYEN_DUONG: Record<string, string> = {
 const CHI_TIET_LEAD = /^\/leads\/([^/?#]+)$/;
 
 /**
+ * ⚠️ CHỈ DÙNG CHO DANH SÁCH VIỆC CỦA CHÍNH NGƯỜI ĐANG XEM.
+ *
+ * Hai luồng làm việc độc lập vấp cùng chỗ này ngày 04/09, nên ghi ra cho rõ:
+ * `/leads/{id}` được ánh xạ sang `/sale/khach-cua-toi/{id}`, mà màn đó đọc bằng
+ * `getMyLeadDetail` — lead KHÔNG phải của người xem thì trả `null` ⇒ `notFound()`.
+ *
+ * Nên hàm này ĐÚNG ở "Cần xử lý", "Bảng việc hôm nay", "Khách của tôi" (mọi dòng
+ * đều là khách của chính người đó), và SAI ở "Leads", "Chốt hàng loạt", "Báo cáo
+ * chuyển lead" (liệt kê lead của cả đội). Ở nhóm sau, dùng hàm này biến một liên
+ * kết 404 thành một liên kết "không tìm thấy" — khó lần ra hơn, không dễ hơn.
+ *
+ * Muốn một đích đúng cho MỌI lead thì phải dựng `/sale/leads/{id}` đọc theo quyền
+ * `leads:view-all`. Chưa có, và đó là việc thêm màn chứ không phải sửa hàm này.
+ *
  * @param href đường do một module dùng chung sinh ra, viết theo host quản trị.
  * @returns đường dùng được trên host Sale, hoặc chính nó nếu chưa có bản Sale.
  */

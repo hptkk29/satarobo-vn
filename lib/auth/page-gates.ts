@@ -196,7 +196,15 @@ export const PAGE_GATES = {
   //    không phải mở cho mọi người. Hỏng theo hướng an toàn và thấy được ngay.
   // ═══════════════════════════════════════════════════════════════════════════
   "/sale/dashboard": ["leads:view-own"],
-  "/sale/crm": ["leads:view-all", "leads:view-own"],
+  // ⚠️ THU CỔNG 04/09 — bỏ `leads:view-own`. Màn CRM tổng hợp lead của CẢ ĐỘI, và
+  //    bản admin đòi đúng `leads:view-all` (`admin/crm/page.tsx:29`). Cổng cũ khai
+  //    thêm `view-own` và chấm bằng phép HOẶC ⇒ người chỉ có `view-own` **qua được
+  //    cổng** rồi rơi vào `redirect("/dashboard")` bên trong màn — mà `/dashboard`
+  //    là 404 trắng trên host Sale. Tức cổng rộng hơn màn: vừa hứa hão, vừa dẫn
+  //    người dùng vào ngõ cụt.
+  //    KHÔNG nới theo chiều ngược lại (cho `view-own` xem thật) — đó là mở dữ liệu
+  //    cả đội cho người chỉ được xem khách của mình.
+  "/sale/crm": ["leads:view-all"],
   "/sale/leads": ["leads:view-all"],
   "/sale/chot-hang-loat": ["leads:view-all", "leads:import"],
   "/sale/ban-giao-lead": ["leads:assign"],
