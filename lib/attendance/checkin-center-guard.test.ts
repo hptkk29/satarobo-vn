@@ -5,9 +5,10 @@ import { decideCheckinCenter } from "./checkin-center-guard";
 // fail-open (không suy được cơ sở) phải có test riêng để ai siết lại thì thấy ngay.
 describe("decideCheckinCenter — chấm chéo cơ sở", () => {
   it("nhân sự CS1 quét mã CS2 → chặn, ghi tên cơ sở trong lỗi", () => {
-    const d = decideCheckinCenter({ isHoLevel: false, visibleCenterIds: ["cs1"] }, "cs2", "CS2 Hoàng Diệu");
+    const d = decideCheckinCenter({ isHoLevel: false, visibleCenterIds: ["cs1"] }, "cs2", "Cơ sở Hoàng Diệu");
     expect(d.ok).toBe(false);
-    if (!d.ok) expect(d.error).toContain("CS2 Hoàng Diệu");
+    // Tên DB đã có "Cơ sở" — không được ghép thành "cơ sở Cơ sở Hoàng Diệu" (nghiệm thu 05/09).
+    if (!d.ok) expect(d.error).toContain("của Cơ sở Hoàng Diệu.");
   });
 
   it("nhân sự CS1 quét mã CS1 → cho qua", () => {
