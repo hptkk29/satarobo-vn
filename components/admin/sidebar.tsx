@@ -257,7 +257,8 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Yêu cầu chỉnh công", href: "/cham-cong/yeu-cau-cong", icon: ClipboardEdit, perm: ["hr_attendance:checkin"] },
       { label: "Duyệt chỉnh công", href: "/cham-cong/chinh-cong", icon: ClipboardEdit, perm: ["hr_attendance:adjust"] },
       // BGĐ 31/07 — duyệt đơn GV (nghỉ dạy / dạy thay) — duyệt là cập nhật lịch thật.
-      { label: "Đơn từ giáo viên", href: "/don-tu", icon: ClipboardList, perm: ["hr_attendance:adjust"] },
+      { label: "Duyệt đơn từ", href: "/don-tu", icon: ClipboardList, perm: ["hr_attendance:approve"] },
+      { label: "Đơn của tôi", href: "/don-tu/cua-toi", icon: ClipboardEdit, perm: ["hr_attendance:checkin"] },
       // FL W0-NAV-2 hygiene: Tổng hợp công ca = view tổng hợp (quản lý/HR), ẩn khỏi Sale/KT (BA #07 3.C).
       { label: "Tổng hợp công ca", href: "/cham-cong/lich-ca-nhan-vien", icon: Users, perm: ["hr_attendance:view"] },
       { label: "Duyệt ca (Excel)", href: "/cham-cong/duyet-ca", icon: CalendarCheck, perm: ["hr_attendance:view"] },

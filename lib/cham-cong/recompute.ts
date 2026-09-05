@@ -11,7 +11,6 @@
 //  - Ngày công tính theo giờ VN (`lib/time/vn.ts`); `workDate` là DATE-only UTC-midnight.
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { db } from "@/lib/db";
-import { publishEvent } from "@/lib/events/publish";
 import { getSetting } from "@/lib/settings/service";
 import { vnDateAt, vnParts, vnWeekday, vnYmd } from "@/lib/time/vn";
 import { computeDay, type EngineAssignment, type EngineInput, type EngineLog, type EngineRules } from "./engine";
@@ -192,13 +191,11 @@ export async function markAttendanceDayDirty(
   workDate: Date,
   opts: { tx?: Prisma.TransactionClient; reason?: string } = {},
 ): Promise<void> {
-  const ymd = workDate.toISOString().slice(0, 10);
-  const bucket = Math.floor(Date.now() / 60_000);
-  await publishEvent(
-    ATTENDANCE_DAY_DIRTY,
-    { userId, workDate: ymd, reason: opts.reason ?? null },
-    { tx: opts.tx, dedupeKey: `attday:${userId}:${ymd}:${bucket}` },
-  );
+  // KHÔNG dùng publishEvent ở đây: nó bắt P2002 rồi findUnique, nhưng TRONG một transaction
+  // Postgres thì INSERT vỡ unique đã làm hỏng cả tx (25P02) — duyệt đơn đổi ca + chỉnh công
+  // cùng phút cho cùng người là đổ (bắt được ở tests/cham-cong/requests.spec.ts, 06/09).
+  // createMany + skipDuplicates = ON CONFLICT DO NOTHING, an toàn cả trong lẫn ngoài tx.
+  await markAttendanceDaysDirtyMany([{ userId, workDate }], opts);
 }
 
 /** Xếp hàng nhiều ngày một lượt (import lưới, duyệt đơn nhiều ngày) — 1 INSERT, trùng thì bỏ. */
