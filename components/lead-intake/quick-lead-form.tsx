@@ -34,9 +34,24 @@ const EMPTY = {
  * Thiết kế theo đúng việc thật: gõ xong một phiếu thì **ở lại trang**, ô trống,
  * con trỏ nhảy về ô đầu để gõ phiếu kế tiếp. Danh sách phiếu vừa nhập hiện ngay
  * bên cạnh để đối chiếu, kèm liên kết mở khách vừa tạo.
+ *
+ * `initial` — giá trị ĐIỀN SẴN cho lượt gõ ĐẦU TIÊN (chốt 9.13/9.5 đợt ZaloCRM:
+ * từ khung chat bấm "Tạo khách" thì nhảy sang `/nhap-khach-hang?phone=…&name=…`).
+ * Hai trang gọi đều lấy giá trị này từ `docPrefillTuQuery()`
+ * (`lib/lead/intake/prefill.ts`) — đừng dựng tay, kẻo một trang lọc SĐT còn trang
+ * kia thì không.
  */
-export function QuickLeadForm({ centers }: { centers: CenterOption[] }) {
-  const [form, setForm] = useState(EMPTY);
+export function QuickLeadForm({
+  centers,
+  initial,
+}: {
+  centers: CenterOption[];
+  initial?: Partial<typeof EMPTY>;
+}) {
+  // Chỉ là GIÁ TRỊ KHỞI TẠO: `useState` đọc đối số đúng một lần, ở lượt dựng đầu.
+  // Đó là điều mong muốn — người nhập sửa ô rồi mà prop đổi (điều hướng nội bộ
+  // sang cùng trang với query khác) thì cũng không được giật chữ dưới tay họ.
+  const [form, setForm] = useState({ ...EMPTY, ...initial });
   const [entered, setEntered] = useState<Entered[]>([]);
   const [pending, startTransition] = useTransition();
   const firstRef = useRef<HTMLInputElement>(null);
@@ -94,6 +109,12 @@ export function QuickLeadForm({ centers }: { centers: CenterOption[] }) {
         },
         ...prev,
       ]);
+      // GIỮ NGUYÊN hành vi cũ: reset về `EMPTY`, **không** về `initial`.
+      // Luồng của trang là "nhập tiếp" — lưu xong là gõ phiếu KHÁC. Giá trị điền
+      // sẵn đến từ đúng một cuộc trò chuyện và đã dùng xong ở phiếu vừa lưu; đổ
+      // lại nó vào ô trống là mời người nhập bấm Lưu lần hai cho cùng một số
+      // (đường nhận lead sẽ báo trùng, nhưng đó là một cú bấm phí và một dòng
+      // `LeadDuplicate` không có lý do tồn tại).
       setForm(EMPTY);
       firstRef.current?.focus();
     });

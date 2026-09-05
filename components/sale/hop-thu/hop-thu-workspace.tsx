@@ -11,7 +11,7 @@
 //
 // UI: shadcn THUẦN (ESLint chặn Magic UI / Motion / Recharts ở `components/sale/**`).
 // Mobile-first 375px — Sale làm việc trên điện thoại.
-import { useMemo, useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { AlertTriangle, Link2, MessageSquare, Send, UserCheck } from "lucide-react";
@@ -21,18 +21,16 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import type { HoiThoaiView, TinNhanView } from "@/lib/inbox/view";
+// Danh mục kênh gom về MỘT nguồn (`lib/integrations/zalocrm/kenh.ts`): nhãn ở đây và
+// whitelist bộ lọc ở `app/(sale)/sale/hop-thu/page.tsx` là hai đầu của cùng một danh
+// sách, lệch nhau nghĩa là có nút bấm được nhưng server vứt giá trị đi.
+import { NHAN_KENH } from "@/lib/integrations/zalocrm/kenh";
+import { taoKhoaLuotGui, nonceLuotGui } from "@/components/sale/hop-thu/khoa-luot-gui";
 import {
   guiTraLoiAction,
   ganNguoiPhuTrachAction,
   doiTrangThaiAction,
 } from "@/app/(sale)/sale/hop-thu/actions";
-
-const NHAN_KENH: Record<InboxChannel, string> = {
-  ZALO_OA: "Zalo OA",
-  MESSENGER: "Messenger",
-  LIVECHAT: "Website",
-  MANUAL: "Nhập tay",
-};
 
 export type TinhTrangKenh = {
   channel: InboxChannel;
@@ -462,12 +460,16 @@ function OSoanTraLoi({
   const router = useRouter();
   const [noiDung, setNoiDung] = useState("");
   const [pending, start] = useTransition();
-  // Một khoá cho một nội dung: bấm đúp / hai tab cùng gửi sẽ va vào UNIQUE ở DB
-  // thay vì gửi hai tin cho khách. Đổi khoá khi nội dung đổi.
-  const outboundKey = useMemo(
-    () => `${conversationId}:${hashNhanh(noiDung)}`,
-    [conversationId, noiDung],
-  );
+  // Một khoá cho một LƯỢT SOẠN: bấm đúp / hai tab cùng gửi sẽ va vào UNIQUE ở DB
+  // (`@@unique([conversationId, outboundKey])`) thay vì gửi hai tin cho khách.
+  //
+  // 🔴 NỘI DUNG KHÔNG ĐƯỢC THAM GIA VÀO KHOÁ. Bản đầu băm nội dung vào đây, và hệ quả
+  // là khoá trở thành "một câu chỉ được gửi MỘT LẦN trong đời hội thoại này": Sale gõ
+  // lại "Dạ em nghe ạ" / "Vâng ạ" / một emoji thì bị báo trùng lượt gửi cho một tin
+  // hoàn toàn hợp lệ, và cách duy nhất họ đoán ra là thêm một dấu chấm.
+  // `useRef` chứ không `useState`: đổi nonce KHÔNG được vẽ lại ô soạn.
+  const nonce = useRef(nonceLuotGui());
+  const outboundKey = taoKhoaLuotGui(conversationId, nonce.current);
 
   function gui() {
     const noi = noiDung.trim();
@@ -482,6 +484,9 @@ function OSoanTraLoi({
       // mà đợt trước phải đi dẹp.
       if (res.daGui) toast.success(res.thongBao);
       else toast.warning(res.thongBao, { duration: 8000 });
+      // Lượt soạn này đã có chỗ trong sổ ⇒ mở lượt mới. Đổi nonce SAU khi server nhận
+      // (kể cả nhánh `daGui = false`: dòng tin vẫn được ghi, khoá vẫn bị tiêu).
+      nonce.current = nonceLuotGui();
       setNoiDung("");
       router.refresh();
     });
@@ -526,11 +531,4 @@ function gioNgan(iso: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-/** Băm rẻ tiền cho khoá chống bấm đúp — không cần chống va chạm mật mã. */
-function hashNhanh(s: string): string {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
-  return String(h >>> 0);
 }

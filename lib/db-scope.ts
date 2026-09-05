@@ -187,6 +187,23 @@ export const SCOPE_EXEMPT = new Set<string>([
   // nhánh nên không gán được cuộc gọi cho ai. Cách ly nằm ở dữ liệu (`CallLog`),
   // không ở bảng tra cứu.
   "CallExtension",
+  // ZaloCRM (09/2026) — HAI BẢNG ÁNH XẠ HẠ TẦNG, cùng loại FacebookPageMapping và
+  // CallExtension ở trên: chúng trả lời "nick này của ai, ở cơ sở nào" và "hội thoại
+  // này thuộc phiếu nào", chứ không chứa hội thoại hay tin nào (nội dung sống ở Inbox*).
+  //
+  // Vì sao MIỄN scope, cùng lý do CallExtension: đây là bảng TRA CỨU. Người trực đối
+  // soát ở CS1 vẫn phải tra nổi chủ của một nick CS2 thì mới gán được hội thoại cho
+  // đúng người; cách ly nằm ở DỮ LIỆU (Inbox*, Lead), không ở bảng tra cứu. Thêm nữa
+  // `centerId` ở đây NULL được (orgCode chưa ánh xạ cơ sở) nên inject `centerId IN (…)`
+  // trần sẽ ẩn đúng nhóm cần người xử lý khỏi chính người phải xử lý nó.
+  //
+  // 🔴 ĐỔI LẠI: `scopedDb` KHÔNG che gì cho hai bảng này — `injectScope` thoát ngay ở
+  // dòng đầu. AI GÁC THAY: `lib/integrations/zalocrm/nick-admin.ts` lọc TAY theo
+  // `actor.visibleCenterIds`, cho CẢ đường đọc lẫn đường ghi (SCOPE_EXEMPT nghĩa là
+  // cả `passesScope` cũng trả true, không có lưới nào ở tầng query).
+  // Đọc "đã khai vào db-scope" thành "đã được cách ly" là đúng cái bẫy dòng này chặn.
+  "ZaloCrmNick",
+  "ZaloCrmThread",
   "WorkShiftConfig", // R6-B2 — cấu hình ca per-center, centerId null = mặc định toàn hệ thống
   // LMS-16 — RevenueTarget là config mục tiêu KPI; centerId null = mục tiêu toàn hệ
   // thống; scope tay qua getRevenueTargets. (Trước đây khai báo lặp 2 lần — đã dọn.)

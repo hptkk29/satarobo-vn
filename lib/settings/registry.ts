@@ -38,6 +38,9 @@ export type SettingGroup =
   | "chat"
   // Hộp thư đa kênh (site Sale) — công tắc GỬI THẬT của từng kênh ngoài.
   | "inbox"
+  // Trục ZaloCRM (máy chủ fork): ánh xạ tổ chức + ngưỡng cảnh báo. TÁCH khỏi
+  // "inbox" vì đây là cấu hình của một hệ ngoài, không phải của hộp thư.
+  | "zalocrm"
   | "system";
 
 export interface SettingDef<T = unknown> {
@@ -666,7 +669,9 @@ export const SETTINGS = {
   // ─── Hộp thư đa kênh: công tắc GỬI THẬT của từng kênh ───────────────────────
   // Vì sao ở đây chứ không ở env (spec §2.3): công tắc vận hành phải tắt được GẤP
   // mà không cần deploy. Env chỉ giữ SECRET (luật cứng #9) và cờ 2-phase bật/tắt
-  // cả tính năng (`INBOX_ENABLED` trong lib/flags.ts).
+  // cả tính năng (`INBOX_ENABLED` — `isInboxEnabled()` trong lib/flags.ts; hàm đó
+  // sinh ra 06/09/2026, trước đó dòng chú thích này nhắc tới một biến env KHÔNG
+  // có dòng code nào đọc).
   //
   // TẮT mặc định, và "tắt" ở đây KHÔNG có nghĩa là hỏng: adapter chạy chế độ MÔ
   // PHỎNG — tin vẫn vào hội thoại, mang trạng thái SIMULATED, và giao diện nói
@@ -688,6 +693,70 @@ export const SETTINGS = {
     label: "Messenger: gửi tin THẬT (tắt = mô phỏng, khách không nhận gì)",
     schema: z.boolean(),
     default: false,
+    centerOverridable: false,
+  }),
+  // Kênh ZALO_CA_NHAN đi qua máy chủ ZaloCRM (fork) chứ không qua API Zalo chính
+  // thức — nghĩa là tin gửi ra mượn NICK CÁ NHÂN của nhân viên. Sai một nhịp ở đây
+  // không chỉ là "khách không nhận được": nó là tin nhắn gửi nhầm từ tài khoản
+  // riêng của một con người. Vì vậy công tắc này giữ nguyên khuôn 2 kênh trên —
+  // mặc định TẮT, và TẮT = adapter chạy MÔ PHỎNG (ghi SIMULATED), không phải hỏng.
+  "inbox.zaloCaNhanLive": def({
+    key: "inbox.zaloCaNhanLive",
+    group: "inbox",
+    label: "Zalo cá nhân (ZaloCRM): gửi tin THẬT (tắt = mô phỏng, khách không nhận gì)",
+    // z.boolean() CHẶT, không nhận chuỗi: `resolveSendMode` (lib/integrations/
+    // fail-safe.ts) kiểm `typeof raw !== "boolean"` rồi trả SETTING_UNREADABLE.
+    // Ghi chuỗi "true" vào đây ⇒ màn cấu hình trông như ĐANG BẬT mà adapter vẫn
+    // mô phỏng, và không ai báo lỗi. Chặn tại schema là chặn đúng chỗ.
+    schema: z.boolean(),
+    default: false,
+    centerOverridable: false,
+  }),
+  // ─── Trục ZaloCRM (đợt tích hợp 06/09/2026) ────────────────────────────────
+  // Nhóm riêng `"zalocrm"` chứ không nhét vào `"inbox"`: hai key dưới đây không
+  // nói về hộp thư mà nói về MÁY CHỦ ZaloCRM (fork) — ánh xạ tổ chức và ngưỡng
+  // cảnh báo của nó. Công tắc kênh thì vẫn ở `inbox.*` ngay trên, đúng chỗ nó
+  // thuộc về.
+  "zalocrm.orgCodes": def({
+    key: "zalocrm.orgCodes",
+    group: "zalocrm",
+    label: "ZaloCRM: ánh xạ mã cơ sở → orgCode trên máy chủ ZaloCRM (vd {\"CS1\":\"cs1\"})",
+    // CHIỀU CỦA ÁNH XẠ LÀ MỘT HỢP ĐỒNG, đừng đảo: khoá = `Center.code` (thứ người
+    // vận hành gõ được và nhớ được), giá trị = `orgCode` bên ZaloCRM. Không dùng
+    // `centerId` làm khoá vì nó là cuid — không ai gõ đúng một cuid vào ô JSON.
+    // Tra ngược (orgCode → cơ sở, đường webhook cần) là một vòng lặp, chấp nhận
+    // được với 2–3 cơ sở; đảo chiều để "tiện tra ngược" thì mất tính gõ-được.
+    //
+    // RỖNG mặc định = chưa ánh xạ cơ sở nào. Cố ý không đoán bừa "CS1"→"cs1":
+    // đoán sai thì webhook của cơ sở đó im lặng 404 và không ai biết vì sao.
+    schema: z.record(
+      z.string().min(1),
+      // orgCode đi thẳng vào đường dẫn `/api/webhooks/zalocrm/<org>` và bị chặn ở
+      // đó bằng đúng khuôn này trước khi tra DB. Khai sai khuôn tại đây ⇒ webhook
+      // 404 câm; chặn ngay ở ô cấu hình thì người khai biết mình vừa gõ sai.
+      z
+        .string()
+        .regex(/^[a-z0-9-]{1,32}$/, "orgCode chỉ gồm chữ thường, số và dấu gạch ngang (≤32 ký tự)"),
+    ),
+    default: {},
+    // GLOBAL: đây là bảng ánh xạ của TOÀN hệ thống. Cho từng cơ sở tự sửa bảng
+    // này là để cơ sở A đổi được orgCode của cơ sở B.
+    centerOverridable: false,
+  }),
+  "zalocrm.idleAlertHours": def({
+    key: "zalocrm.idleAlertHours",
+    group: "zalocrm",
+    label: "ZaloCRM: hội thoại chờ trả lời quá bao nhiêu GIỜ thì cảnh báo",
+    // Trần 72h (3 ngày) chứ không để mở: ngưỡng lớn hơn thế thì cảnh báo tới nơi
+    // đã quá muộn để cứu một phiếu — bật cảnh báo kiểu đó chỉ tạo cảm giác an toàn.
+    // Sàn 1h: 0 giờ = mọi hội thoại vừa nhận đã kêu ⇒ người trực tắt mắt với chuông,
+    // đúng bài học ngưỡng lead treo (`crm.staleLeadWarnDays`).
+    schema: z.number().int().min(1).max(72),
+    default: 2, // kế hoạch tích hợp §Env mới — "mặc định 2"
+    // Để GLOBAL cho tới khi có người đọc thật: `getSetting` chỉ xét override khi
+    // NƠI GỌI truyền `orgUnitId`. Mở `centerOverridable` sớm là mời người ta khai
+    // override rồi ngồi chờ một cảnh báo không bao giờ đổi. Nới ra sau chỉ là sửa
+    // một trường, không cần migration; siết lại thì phá `CenterSetting` đã ghi.
     centerOverridable: false,
   }),
   "teacher.overloadHoursPerWeek": def({
