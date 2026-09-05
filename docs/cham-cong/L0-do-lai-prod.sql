@@ -28,3 +28,10 @@ SELECT r.code, rp.action, rp."scopeType"
 FROM "RolePermission" rp JOIN "RoleDef" r ON r.id = rp."roleId"
 WHERE rp.action = 'hr_attendance:checkin'
 ORDER BY r.code;
+
+-- (Bổ sung 05/09 sau khi đo: User.phone trống 0/21) — SĐT nhân sự nằm ở Employee?
+SELECT
+  count(*) FILTER (WHERE e.status = 'ACTIVE')                                            AS employee_active,
+  count(*) FILTER (WHERE e.status = 'ACTIVE' AND e.phone ~ '^0[0-9]{9}$')                AS co_sdt_10_so,
+  count(*) FILTER (WHERE e.status = 'ACTIVE' AND u.id IS NOT NULL)                       AS da_lien_ket_user
+FROM "Employee" e LEFT JOIN "User" u ON u."employeeId" = e.id;
