@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Monitor, AlertTriangle, MapPinOff } from "lucide-react";
+import { Monitor, AlertTriangle, MapPinOff, FileSpreadsheet } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
@@ -129,12 +129,21 @@ export default async function ChamCongPage({ searchParams }: Props) {
             {SHIFT_ORDER.map((s) => `${SHIFT_DEFS[s].label} ${SHIFT_DEFS[s].start}–${SHIFT_DEFS[s].end}`).join(" · ")}.
           </p>
         </div>
-        <Link
-          href="/cham-cong/man-hinh"
-          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark"
-        >
-          <Monitor className="h-4 w-4" /> Mở màn hình QR
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          {/* L1 chấm công v3 (06/09/2026) — import lịch phân ca từ Sheet; gate quyền `assign` ở trang đích. */}
+          <Link
+            href="/cham-cong/phan-ca/import"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted"
+          >
+            <FileSpreadsheet className="h-4 w-4" /> Import lịch phân ca
+          </Link>
+          <Link
+            href="/cham-cong/man-hinh"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark"
+          >
+            <Monitor className="h-4 w-4" /> Mở màn hình QR
+          </Link>
+        </div>
       </div>
 
       <div className="mb-4 flex items-center gap-3">
