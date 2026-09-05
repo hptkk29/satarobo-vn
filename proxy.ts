@@ -9,6 +9,7 @@ import {
   isLegacyAdminPrefixed,
   isElearningPath,
   isTeacherPath,
+  isTeacherCleanUrl,
   sanitizeCallbackUrl,
   type HostKind,
   type RouteDecision,
@@ -253,6 +254,18 @@ export default auth((req: NextAuthRequest) => {
       return redirectTo(req, "/portal");
     }
     if (isTeacherOnly) {
+      // L0 chấm công (05/09/2026) — ĐỐI XỨNG với nhánh admin host của decideRoute: site GV
+      // có màn này thì GIỮ path + query (mã QR chấm công `/cham-cong/checkin?c=&t=`), không
+      // thì về trang chủ GV như cũ. Nhánh này chạy cho localhost VÀ test.satarobo.vn
+      // (host "unknown") — thiếu nó thì trên test GV thuần quét QR vẫn rơi trang chủ,
+      // và bản vá trong decideRoute không nghiệm thu được ở đâu ngoài prod.
+      if (isTeacherCleanUrl(pathname)) {
+        return redirectTo(
+          req,
+          "/teacher" + pathname,
+          Object.fromEntries(req.nextUrl.searchParams.entries()),
+        );
+      }
       return redirectTo(req, "/teacher");
     }
     return rewriteTo(req, "/admin" + pathname);
