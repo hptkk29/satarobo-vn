@@ -351,6 +351,17 @@ const BY_PREFIX: Readonly<Record<string, NotiDef>> = {
     group: "due_date", priority: 3, entity: "timesheet",
     recipients: "Mọi nhân sự có trong lưới phân ca", target: "/cham-cong/lich-ca",
   },
+  // L5 — đơn từ (ca/nghỉ/chỉnh công/lớp) dùng chung mọi nhân sự.
+  // Đơn mới tới cơ sở nhận đơn: báo người có quyền duyệt ở cơ sở đó. dedupeKey = request.submitted:<requestId>
+  "request.submitted:": {
+    group: "new_task", priority: 2, entity: "timesheet",
+    recipients: "Người giữ quyền duyệt đơn (hr_attendance:approve) tại cơ sở nhận đơn", target: "/don-tu",
+  },
+  // Đơn của tôi được duyệt / từ chối. dedupeKey = request.decided:<requestId>:<userId>
+  "request.decided:": {
+    group: "new_task", priority: 2, entity: "timesheet",
+    recipients: "Người nộp đơn (và người nhận ca/làm thay nếu có)", target: "/don-tu/cua-toi",
+  },
 };
 
 /** Danh sách tiền tố đã sắp DÀI TRƯỚC — khớp tiền tố dài nhất, tính sẵn một lần. */

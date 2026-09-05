@@ -3,18 +3,12 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { reviewWorkRequest } from "@/app/(teacher)/teacher/don-tu/_actions";
+import { decideRequestAction } from "@/lib/cham-cong/request-actions";
 
-// BGĐ 31/07 — nút duyệt/từ chối đơn GV. Duyệt đơn nghỉ dạy / dạy thay sẽ cập nhật
-// luôn buổi học (server trả `note` mô tả việc đã áp lên lịch hay cần làm tay).
-export function WorkRequestReview({
-  requestId,
-  appliesToSchedule,
-}: {
-  requestId: string;
-  /** Loại đơn có tác động lên lịch (CLASS_OFF / SUB_TEACH) — hiện cảnh báo trước khi duyệt. */
-  appliesToSchedule: boolean;
-}) {
+// L5 — nút duyệt/từ chối đơn (mọi loại). Duyệt = áp hệ quả trong CÙNG quyết định (T-05):
+// đổi ca/nghỉ/chỉnh công ghi trong một transaction; huỷ buổi/dạy thay áp thất bại thì đơn
+// trả về Chờ duyệt kèm lý do — không bao giờ có đơn "đã duyệt" mà lịch chưa đổi.
+export function WorkRequestReview({ requestId, effectHint }: { requestId: string; effectHint: string | null }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [rejecting, setRejecting] = useState(false);
@@ -26,29 +20,22 @@ export function WorkRequestReview({
       return;
     }
     start(async () => {
-      const res = await reviewWorkRequest({ id: requestId, decision, note: note.trim() || null });
+      const res = await decideRequestAction({ id: requestId, decision, note: note.trim() || null });
       if (res.ok) {
-        toast.success(
-          decision === "APPROVED"
-            ? (res.note ?? "Đã duyệt đơn")
-            : "Đã từ chối đơn",
-        );
+        toast.success(decision === "APPROVED" ? (res.note ? `Đã duyệt — ${res.note}` : "Đã duyệt đơn") : "Đã từ chối đơn");
         setRejecting(false);
         setNote("");
         router.refresh();
       } else {
         toast.error(res.error);
+        router.refresh();
       }
     });
   }
 
   return (
     <div className="mt-3 space-y-2 border-t border-border pt-3">
-      {appliesToSchedule && (
-        <p className="text-xs text-state-warning-ink">
-          Duyệt đơn này sẽ cập nhật buổi học tương ứng (huỷ buổi hoặc gán GV dạy thay).
-        </p>
-      )}
+      {effectHint && <p className="text-xs text-state-warning-ink">Duyệt đơn này sẽ: {effectHint}.</p>}
       <input
         value={note}
         onChange={(e) => setNote(e.target.value)}
@@ -57,31 +44,14 @@ export function WorkRequestReview({
         className="w-full rounded-lg border border-border px-3 py-1.5 text-sm outline-none focus:border-primary"
       />
       <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => decide("APPROVED")}
-          disabled={pending}
-          className="rounded-lg bg-state-success-ink px-3 py-1.5 text-sm font-semibold text-white hover:bg-state-success-ink-hover disabled:opacity-50"
-        >
+        <button type="button" onClick={() => decide("APPROVED")} disabled={pending} className="rounded-lg bg-state-success-ink px-3 py-1.5 text-sm font-semibold text-white hover:bg-state-success-ink-hover disabled:opacity-50">
           {pending ? "Đang xử lý…" : "Duyệt"}
         </button>
-        <button
-          type="button"
-          onClick={() => (rejecting ? decide("REJECTED") : setRejecting(true))}
-          disabled={pending}
-          className="rounded-lg border border-border px-3 py-1.5 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50"
-        >
+        <button type="button" onClick={() => (rejecting ? decide("REJECTED") : setRejecting(true))} disabled={pending} className="rounded-lg border border-border px-3 py-1.5 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50">
           {rejecting ? "Xác nhận từ chối" : "Từ chối"}
         </button>
         {rejecting && (
-          <button
-            type="button"
-            onClick={() => setRejecting(false)}
-            disabled={pending}
-            className="text-sm text-muted-foreground hover:text-foreground"
-          >
-            Huỷ
-          </button>
+          <button type="button" onClick={() => setRejecting(false)} disabled={pending} className="text-sm text-muted-foreground hover:text-foreground">Huỷ</button>
         )}
       </div>
     </div>
