@@ -30,6 +30,8 @@ const MIEN_TRU: Record<string, string> = {
   "app/(public)/hoc-cu/page.tsx": "bảng so sánh gói học cụ — nội dung cố định",
   "app/(admin)/admin/quan-ly-chia-lead/lich-su/page.tsx":
     "ĐÃ có phân trang, nhưng PHÍA SERVER (skip/take + link Trước/Sau) — nhật ký pool chỉ có thêm không bao giờ bớt, cắt trang trong trình duyệt là phải tải cả sổ về trước",
+  "app/(admin)/admin/cham-cong/diem-cham/_components/location-form.tsx":
+    "một dòng cho MỖI cơ sở vận hành (hôm nay 2, mở cơ sở mới thêm 1) — bảng cấu hình phải nhìn hết một lượt",
   "app/(admin)/admin/cham-cong/danh-muc-ca/_components/template-editor.tsx":
     "bảng ĐOẠN CA bên trong form sửa một mã (tối đa 6 dòng, là ô nhập chứ không phải danh sách) — phân trang một form là vô nghĩa",
   "app/(admin)/admin/cham-cong/phan-ca/import/_components/import-wizard.tsx":

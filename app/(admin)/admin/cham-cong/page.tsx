@@ -1,218 +1,181 @@
+// app/(admin)/admin/cham-cong/page.tsx — BẢNG CÔNG NGÀY (L4, chấm công v3): đọc StaffAttendanceDay +
+// StaffTimeLog thay cho EmployeeCheckin/ShiftRegistration cũ. Mỗi dòng = một người trong ngày: ca,
+// vào/ra đầu-cuối, giờ, công, cờ hậu kiểm. ?date=YYYY-MM-DD&coSo=<centerId|hoi-so>.
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Monitor, AlertTriangle, MapPinOff, FileSpreadsheet } from "lucide-react";
+import { Monitor, AlertTriangle, FileSpreadsheet, CalendarDays } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
-import { ymdVN } from "@/lib/classes/schedule";
+import { HO_CENTER_ID, loadCenterMap } from "@/lib/cham-cong/home-center";
+import { vnYmd, parseVnYmd, vnDateOnly } from "@/lib/time/vn";
 import { DateNavInput } from "./_components/date-nav-input";
-import type { WorkShift } from "@prisma/client";
-import {
-  computeShiftAttendance,
-  formatVNTime,
-  formatRegisteredShifts,
-  type AttendanceTag,
-} from "@/lib/work-schedule";
-import { SHIFT_DEFS, SHIFT_ORDER } from "@/lib/shifts";
-import { getSetting } from "@/lib/settings/service";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Chấm công | Admin" };
 export const dynamic = "force-dynamic";
 
 interface Props {
-  searchParams: Promise<{ date?: string }>;
+  searchParams: Promise<{ date?: string; coSo?: string }>;
 }
 
-const TAG_TONE: Record<AttendanceTag["tone"], string> = {
-  ok: "bg-state-success-soft text-state-success-ink",
+const FLAG_LABEL: Record<string, { text: string; tone: "warn" | "danger" | "info" }> = {
+  KHONG_CO_LUOT: { text: "Không có lượt", tone: "danger" },
+  THIEU_LUOT_RA: { text: "Thiếu lượt ra", tone: "warn" },
+  RA_KHONG_CO_VAO: { text: "Ra không có vào", tone: "warn" },
+  THIEU_BUOI_SANG: { text: "Thiếu buổi sáng", tone: "warn" },
+  THIEU_BUOI_CHIEU: { text: "Thiếu buổi chiều", tone: "warn" },
+  DI_MUON: { text: "Đi muộn", tone: "warn" },
+  VE_SOM: { text: "Về sớm", tone: "warn" },
+  THIEU_GIO: { text: "Thiếu giờ", tone: "warn" },
+  DEN_SAT_GIO: { text: "Đến sát giờ", tone: "info" },
+  NGOAI_VUNG: { text: "Ngoài vùng", tone: "danger" },
+  THIEU_GPS: { text: "Thiếu GPS", tone: "info" },
+  CHUA_TOA_DO: { text: "Chưa toạ độ", tone: "info" },
+  SAI_NOI_LAM: { text: "Sai nơi làm", tone: "danger" },
+  CHAM_NGOAI_LICH: { text: "Chấm ngoài lịch", tone: "warn" },
+  TRUNG_2_PHUT: { text: "Bấm trùng", tone: "info" },
+  VUOT_TRAN: { text: "Vượt trần lượt", tone: "warn" },
+  LAM_NGAY_LE: { text: "Làm ngày lễ", tone: "info" },
+  GPS_KEM_CHINH_XAC: { text: "GPS kém", tone: "info" },
+};
+const TONE: Record<"warn" | "danger" | "info", string> = {
   warn: "bg-state-warning-soft text-state-warning-ink",
   danger: "bg-state-danger-soft text-state-danger-ink",
+  info: "bg-muted text-muted-foreground",
 };
+
+function hhmm(d: Date | null | undefined): string {
+  if (!d) return "—";
+  const p = new Date(d.getTime() + 7 * 3_600_000);
+  return `${String(p.getUTCHours()).padStart(2, "0")}:${String(p.getUTCMinutes()).padStart(2, "0")}`;
+}
+function fmtMin(m: number): string {
+  return m ? `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}` : "—";
+}
 
 export default async function ChamCongPage({ searchParams }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
+  const sp = await searchParams;
+  const map = await loadCenterMap();
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const centers = await sdb.center.findMany({ where: { isActive: true, code: { in: Object.keys(map.byCode) } }, select: { id: true, code: true, name: true }, orderBy: { displayOrder: "asc" } });
+  const blocks = [...centers.map((c) => ({ id: c.id, label: `${c.code} · ${c.name}` })), { id: HO_CENTER_ID, label: "Hội sở" }];
+  const visible: typeof blocks = [];
+  for (const b of blocks) if (await checkPermission("hr_attendance:view", { centerId: b.id })) visible.push(b);
+  if (visible.length === 0) redirect("/dashboard");
+  const coSo = visible.find((b) => b.id === sp.coSo)?.id ?? visible[0].id;
 
-  // Phạm vi cơ sở: CENTER_MANAGER chỉ xem cơ sở mình.
-  const centerScope = hasRole(session.user, "CENTER_MANAGER") ? session.user.centerId : null;
-  if (!(await checkPermission("hr_attendance:view", { centerId: centerScope ?? session.user.centerId ?? null }))) {
-    redirect("/dashboard");
-  }
+  const day = (sp.date && parseVnYmd(sp.date)) || new Date();
+  const workDate = vnDateOnly(day);
+  const dateStr = workDate.toISOString().slice(0, 10);
+  const prev = new Date(workDate.getTime() - 86_400_000).toISOString().slice(0, 10);
+  const next = new Date(workDate.getTime() + 86_400_000).toISOString().slice(0, 10);
 
-  const { date } = await searchParams;
-  const base = date ? new Date(date) : new Date();
-  const start = new Date(base);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-  // `start` là NỬA ĐÊM GIỜ ĐỊA PHƯƠNG → đọc lại nhãn theo ngày ĐỊA PHƯƠNG (ymdVN),
-  // KHÔNG qua toISOString() (UTC) — trên máy +7 sẽ lệch -1 ngày (18/7 thay vì 19/7)
-  // và ngày người dùng tự chọn cũng bị hiển thị lùi 1 ngày.
-  const dateStr = ymdVN(start);
-
-  // Cách ly cơ sở (A0-04): EmployeeCheckin/ShiftRegistration ∈ SCOPED_MODELS → scopedDb.
-  const sdb = scopedDb(await resolveActor(session.user.id));
-
-  const [rows, regs] = await Promise.all([
-    sdb.employeeCheckin.findMany({
-      where: { checkedAt: { gte: start, lt: end }, ...(centerScope ? { centerId: centerScope } : {}) },
-      orderBy: { checkedAt: "asc" },
-    }),
-    sdb.shiftRegistration.findMany({
-      // Chỉ lịch CHÍNH THỨC (APPROVED) mới dùng tính công (PHẦN 2).
-      where: { date: { gte: start, lt: end }, status: "APPROVED", ...(centerScope ? { centerId: centerScope } : {}) },
-      select: { userId: true, shifts: true, user: { select: { name: true, centerId: true } } },
-    }),
+  const [days, logs, assignments] = await Promise.all([
+    sdb.staffAttendanceDay.findMany({ where: { workDate, centerId: coSo } }),
+    sdb.staffTimeLog.findMany({ where: { workDate, centerId: coSo, result: "ACCEPTED" }, orderBy: { loggedAt: "asc" }, select: { userId: true, direction: true, loggedAt: true, flags: true } }),
+    sdb.shiftAssignment.findMany({ where: { workDate, centerId: coSo, status: "ACTIVE" }, select: { userId: true, templateCode: true } }),
   ]);
-
-  type Agg = {
-    userId: string;
-    userName: string;
-    checkIn: Date | null;
-    checkOut: Date | null;
-    centerId: string | null;
-    geofenceFlag: boolean;
-    registeredShifts: WorkShift[];
-  };
-  const byUser = new Map<string, Agg>();
-  const ensure = (userId: string, name: string, centerId: string | null): Agg => {
-    let a = byUser.get(userId);
-    if (!a) {
-      a = { userId, userName: name, checkIn: null, checkOut: null, centerId, geofenceFlag: false, registeredShifts: [] };
-      byUser.set(userId, a);
-    }
-    return a;
-  };
-  for (const r of rows) {
-    const a = ensure(r.userId, r.userName ?? "(không tên)", r.centerId);
-    if (r.type === "CHECK_IN") a.checkIn = r.checkedAt;
-    else a.checkOut = r.checkedAt;
-    if (!r.withinGeofence) a.geofenceFlag = true;
-  }
-  // Nhân viên có ĐĂNG KÝ ca ngày đó (kể cả chưa quét → để hiện "Thiếu ca").
-  for (const reg of regs) {
-    const a = ensure(reg.userId, reg.user.name ?? "(không tên)", reg.user.centerId);
-    a.registeredShifts = reg.shifts;
-  }
-
-  const shiftTolerance = await getSetting("shift.toleranceMinutes");
-  const list = [...byUser.values()]
-    .sort((x, y) => x.userName.localeCompare(y.userName))
-    .map((a) => ({
-      ...a,
-      status: computeShiftAttendance(
-        {
-          checkIn: a.checkIn,
-          checkOut: a.checkOut,
-          geofenceFlag: a.geofenceFlag,
-          registeredShifts: a.registeredShifts,
-        },
-        shiftTolerance,
-      ),
-    }));
-
-  const centers = await sdb.center.findMany({ select: { id: true, name: true } });
-  const centerName = new Map(centers.map((c) => [c.id, c.name]));
-
-  const missingOut = list.filter((a) => a.checkIn && !a.checkOut).length;
+  const userIds = [...new Set([...days.map((d) => d.userId), ...logs.map((l) => l.userId), ...assignments.map((a) => a.userId)])];
+  const users = await sdb.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true, email: true } });
+  const nameOf = new Map(users.map((u) => [u.id, u.name ?? u.email ?? u.id]));
+  const rows = userIds
+    .map((userId) => {
+      const d = days.find((x) => x.userId === userId) ?? null;
+      const my = logs.filter((l) => l.userId === userId);
+      const firstIn = my.find((l) => l.direction === "CHECK_IN")?.loggedAt ?? null;
+      const lastOut = [...my].reverse().find((l) => l.direction === "CHECK_OUT")?.loggedAt ?? null;
+      return {
+        userId,
+        name: nameOf.get(userId) ?? userId,
+        code: d?.templateCode ?? assignments.find((a) => a.userId === userId)?.templateCode ?? null,
+        firstIn,
+        lastOut,
+        taps: my.length,
+        worked: d?.workedMinutes ?? 0,
+        expected: d?.expectedMinutes ?? 0,
+        credit: d ? (d.overrideUnits ?? d.dayCreditEarned) : null,
+        override: d?.overrideUnits != null,
+        flags: d ? d.flags : [...new Set(my.flatMap((l) => l.flags))],
+        computed: !!d,
+        dayType: d?.dayType ?? null,
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const withFlags = rows.filter((r) => r.flags.some((f) => FLAG_LABEL[f]?.tone !== "info")).length;
+  const notComputed = rows.filter((r) => !r.computed).length;
 
   return (
-    <div className="max-w-5xl p-6">
+    <div className="max-w-6xl p-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Chấm công nhân viên</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Tính công theo ca đăng ký (GMT+7):{" "}
-            {SHIFT_ORDER.map((s) => `${SHIFT_DEFS[s].label} ${SHIFT_DEFS[s].start}–${SHIFT_DEFS[s].end}`).join(" · ")}.
-          </p>
+          <h1 className="text-2xl font-bold text-foreground">Bảng công ngày</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Công đếm theo lịch đã xếp; lượt quét chỉ sinh cờ để Quản lý rà (T-01). Giờ tính giao giữa cặp vào/ra và ca.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {/* L1 chấm công v3 (06/09/2026) — import lịch phân ca từ Sheet; gate quyền `assign` ở trang đích. */}
-          <Link
-            href="/cham-cong/phan-ca/import"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted"
-          >
-            <FileSpreadsheet className="h-4 w-4" /> Import lịch phân ca
-          </Link>
-          <Link
-            href="/cham-cong/man-hinh"
-            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark"
-          >
-            <Monitor className="h-4 w-4" /> Mở màn hình QR
-          </Link>
+          <Link href="/cham-cong/phan-ca/import" className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground hover:bg-muted"><FileSpreadsheet className="h-4 w-4" /> Import lịch</Link>
+          <Link href={`/cham-cong/phan-ca?ky=${dateStr.slice(0, 7)}&coSo=${coSo}`} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground hover:bg-muted"><CalendarDays className="h-4 w-4" /> Lưới phân ca</Link>
+          <Link href={`/cham-cong/man-hinh?centerId=${coSo}`} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-dark"><Monitor className="h-4 w-4" /> Màn hình QR</Link>
         </div>
       </div>
 
-      <div className="mb-4 flex items-center gap-3">
+      <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
+        <Link className="rounded-md border border-border px-2 py-1" href={`/cham-cong?date=${prev}&coSo=${coSo}`}>‹</Link>
         <DateNavInput value={dateStr} />
-        {missingOut > 0 && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-state-warning-soft px-3 py-1 text-xs font-semibold text-state-warning-ink">
-            <AlertTriangle className="h-3.5 w-3.5" /> {missingOut} người chưa check-out
-          </span>
-        )}
+        <Link className="rounded-md border border-border px-2 py-1" href={`/cham-cong?date=${next}&coSo=${coSo}`}>›</Link>
+        {visible.map((b) => (
+          <Link key={b.id} className={`rounded-md border px-2 py-1 ${b.id === coSo ? "border-primary bg-primary text-white" : "border-border"}`} href={`/cham-cong?date=${dateStr}&coSo=${b.id}`}>{b.label}</Link>
+        ))}
+        {withFlags > 0 && <span className="inline-flex items-center gap-1 rounded-full bg-state-warning-soft px-3 py-1 text-xs font-semibold text-state-warning-ink"><AlertTriangle className="h-3.5 w-3.5" /> {withFlags} người có cờ cần rà</span>}
+        {notComputed > 0 && <span className="text-xs text-muted-foreground">{notComputed} dòng đang chờ tính (vài phút)</span>}
       </div>
 
-      {list.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-          Chưa có chấm công ngày {dateStr}.
-        </p>
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-border bg-card">
-          <PhanTrangBang>
-            <table className="min-w-full divide-y divide-border text-sm">
-              <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-3 font-semibold">Nhân viên</th>
-                  <th className="px-4 py-3 font-semibold">Cơ sở</th>
-                  <th className="px-4 py-3 font-semibold">Ca đăng ký</th>
-                  <th className="px-4 py-3 text-center font-semibold">Check-in</th>
-                  <th className="px-4 py-3 text-center font-semibold">Check-out</th>
-                  <th className="px-4 py-3 text-center font-semibold">Giờ công</th>
-                  <th className="px-4 py-3 text-center font-semibold">Tình trạng</th>
+      <PhanTrangBang cuonNgang>
+        <table className="w-full text-sm">
+          <thead className="border-b border-border bg-muted text-left text-xs uppercase tracking-wider text-muted-foreground">
+            <tr>
+              <th className="px-3 py-2">Nhân sự</th>
+              <th className="px-3 py-2">Ca</th>
+              <th className="px-3 py-2">Vào</th>
+              <th className="px-3 py-2">Ra</th>
+              <th className="px-3 py-2 text-right">Lượt</th>
+              <th className="px-3 py-2 text-right">Giờ / KH</th>
+              <th className="px-3 py-2 text-right">Công</th>
+              <th className="px-3 py-2">Cờ</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr><td colSpan={8} className="p-10 text-center text-muted-foreground">Chưa có ca hay lượt chấm nào cho ngày {dateStr} ở khối này.</td></tr>
+            ) : (
+              rows.map((r) => (
+                <tr key={r.userId} className="border-b border-border hover:bg-muted/40">
+                  <td className="px-3 py-2 font-medium">{r.name}</td>
+                  <td className="px-3 py-2 font-mono">{r.code ?? <span className="text-muted-foreground">—</span>}</td>
+                  <td className="px-3 py-2">{hhmm(r.firstIn)}</td>
+                  <td className="px-3 py-2">{hhmm(r.lastOut)}</td>
+                  <td className="px-3 py-2 text-right">{r.taps || "—"}</td>
+                  <td className="px-3 py-2 text-right">{fmtMin(r.worked)} / {fmtMin(r.expected)}</td>
+                  <td className="px-3 py-2 text-right font-semibold">{r.credit ?? "…"}{r.override && <span title="Quản lý đã ghi đè" className="ml-1 text-xs text-amber-600">*</span>}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex flex-wrap gap-1">
+                      {r.flags.map((f) => {
+                        const l = FLAG_LABEL[f] ?? { text: f, tone: "info" as const };
+                        return <span key={f} className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${TONE[l.tone]}`}>{l.text}</span>;
+                      })}
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {list.map((a, i) => (
-                  <tr key={i} className="hover:bg-muted/60">
-                    <td className="px-4 py-2.5 font-medium text-foreground">{a.userName}</td>
-                    <td className="px-4 py-2.5 text-muted-foreground">
-                      {a.centerId ? centerName.get(a.centerId) ?? "—" : "—"}
-                    </td>
-                    <td className="px-4 py-2.5 text-foreground">
-                      {formatRegisteredShifts(a.registeredShifts)}
-                    </td>
-                    <td className="px-4 py-2.5 text-center tabular-nums text-foreground">
-                      {formatVNTime(a.checkIn)}
-                    </td>
-                    <td className="px-4 py-2.5 text-center tabular-nums text-foreground">
-                      {formatVNTime(a.checkOut)}
-                    </td>
-                    <td className="px-4 py-2.5 text-center tabular-nums font-medium text-foreground">
-                      {a.checkIn && a.checkOut ? `${a.status.workedHours}h` : "—"}
-                    </td>
-                    <td className="px-4 py-2.5 text-center">
-                      <div className="flex flex-wrap items-center justify-center gap-1">
-                        {a.status.tags.map((t, j) => (
-                          <span
-                            key={j}
-                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${TAG_TONE[t.tone]}`}
-                          >
-                            {t.label === "Ngoài vùng" && <MapPinOff className="h-3 w-3" />}
-                            {t.label}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </PhanTrangBang>
-        </div>
-      )}
+              ))
+            )}
+          </tbody>
+        </table>
+      </PhanTrangBang>
+      <p className="mt-3 text-xs text-muted-foreground">Ngày công theo giờ Việt Nam. Hôm nay: {vnYmd(new Date())}.</p>
     </div>
   );
 }

@@ -239,6 +239,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Import lịch phân ca", href: "/cham-cong/phan-ca/import", icon: CalendarDays, perm: ["hr_attendance:assign"] },
       { label: "Ghi chú lịch", href: "/cham-cong/ghi-chu", icon: ClipboardList, perm: ["hr_attendance:assign", "hr_attendance:view"] },
       { label: "Danh mục mã ca", href: "/cham-cong/danh-muc-ca", icon: ClipboardEdit, perm: ["hr_attendance:config"] },
+      { label: "Điểm chấm công", href: "/cham-cong/diem-cham", icon: Clock, perm: ["hr_attendance:config"] },
       { label: "Điểm danh vào ca", href: "/cham-cong/checkin", icon: Clock, perm: ["hr_attendance:checkin"] },
       { label: "Lịch ca của tôi", href: "/cham-cong/lich-ca", icon: CalendarDays, perm: ["hr_attendance:checkin"] },
       { label: "Yêu cầu chỉnh công", href: "/cham-cong/yeu-cau-cong", icon: ClipboardEdit, perm: ["hr_attendance:checkin"] },
