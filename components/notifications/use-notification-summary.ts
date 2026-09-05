@@ -22,7 +22,7 @@ const DEBOUNCE_MS = 600;
 /** Trần tần suất hỏi lại. */
 const MIN_INTERVAL_MS = 3_000;
 /** Lưới cuối khi realtime chết câm. Thưa hơn nhịp 60s cũ vì `/summary` nay là đường đọc rẻ. */
-const POLL_MS = 90_000;
+const POLL_MS = 300_000;
 /** Quay lại tab mà số liệu cũ hơn ngần này thì hỏi lại ngay (PRD §7.10). */
 const STALE_MS = 30_000;
 
