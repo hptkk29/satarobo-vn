@@ -429,6 +429,7 @@ export const ROLE_SEED: RoleSeed[] = [
     // giao việc, chuyển cơ sở, thêm con…). Đó là lý do có key hẹp riêng.
     code: "HO_SALE", name: "Sale Hội sở (phiếu mình nhập)",
     perms: [
+      { action: "hr_attendance:checkin", scopeType: "GLOBAL" }, // L0 0.2 (05/09/2026) — Q-12: self-action chấm công cho mọi nhân sự
       { action: "leads:create", scopeType: "GLOBAL" },
       // GLOBAL chứ KHÔNG "OWN" — luật R1 đầu file: action bị gọi TRẦN (không kèm
       // target) thì scope OWN luôn trả false và người ta bị đá khỏi trang.
@@ -633,6 +634,7 @@ export const ROLE_SEED: RoleSeed[] = [
     // (markAttendance). CHƯA gán UserOrgRole cho ai — để trống cho tương lai.
     code: "CENTER_CLASS_MANAGER", name: "Quản lý lớp học",
     perms: [
+      { action: "hr_attendance:checkin", scopeType: "GLOBAL" }, // L0 0.2 (05/09/2026) — Q-12: self-action chấm công cho mọi nhân sự
       { action: "attendance:edit", scopeType: "CENTER" },
       { action: "attendance:view", scopeType: "CENTER" },
       { action: "classes:view-all", scopeType: "GLOBAL" },
@@ -838,6 +840,7 @@ export const ROLE_SEED: RoleSeed[] = [
   {
     code: "ASSISTANT_TEACHER", name: "Trợ giảng",
     perms: [
+      { action: "hr_attendance:checkin", scopeType: "GLOBAL" }, // L0 0.2 (05/09/2026) — Q-12: self-action chấm công cho mọi nhân sự
       { action: "attendance:view", scopeType: "ASSIGNED" },
       // US-05 chat (08/08) — trợ giảng là participant nhóm lớp được gán, cùng bộ với
       // TEACHER (assignedClassIds đã gồm Class.assistantId — lib/auth/actor.ts).
@@ -861,6 +864,7 @@ export const ROLE_SEED: RoleSeed[] = [
     // HO_ACCOUNTANT — đây là chức năng quản lý tập trung, không phải thu tiền quầy.
     code: "CENTER_ACCOUNTANT", name: "Kế toán cơ sở",
     perms: [
+      { action: "hr_attendance:checkin", scopeType: "GLOBAL" }, // L0 0.2 (05/09/2026) — Q-12: self-action chấm công cho mọi nhân sự
       { action: "payments:manage", scopeType: "GLOBAL" },
       { action: "payments:view", scopeType: "GLOBAL" },
       { action: "payments:record", scopeType: "GLOBAL" },
