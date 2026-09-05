@@ -21,6 +21,14 @@ import { lapLichNhac, lyDoHuy, type Moc } from "@/lib/elearning/reminder-schedul
  * "còn 2 giờ để hoàn thành" trong đúng nhịp này.
  */
 
+import { nhacNguoiCham } from "@/lib/elearning/grader-reminder";
+import { chayVongDoiChungNhan, type KetQuaHetHan } from "@/lib/elearning/cron-cert-expiry";
+import { notifyStaff } from "@/lib/notifications/notify";
+import {
+  noiDungTheoMoc,
+  khoaChongTrung,
+} from "@/lib/elearning/reminder-send";
+
 const LO = 200;
 const TRAN_MS = 2 * 60 * 1000;
 
@@ -29,6 +37,15 @@ export type KetQuaNhac = {
   huy: number;
   daGui: number;
   boQua: number;
+  /**
+   * EL-15d việc (4) — nhắc NGƯỜI CHẤM khi hàng đợi vỡ cam kết.
+   *
+   * `thieuNguoiNhan` nói ra khi không có ai để nhắc, thay vì im lặng coi như xong:
+   * một hàng đợi tắc mà không ai nhận được nhắc là đúng cái hỏng khó thấy nhất.
+   */
+  nhacCham: { quaHan: number; daGui: number; thieuNguoiNhan: string | null };
+  /** EL-16 việc (5) — nhắc T-30/T-7, chốt hết hạn, giao lại vòng tái chứng nhận. */
+  chungNhan: KetQuaHetHan;
   loi: string[];
 };
 
@@ -43,7 +60,15 @@ type DongEnroll = {
 export async function runElearningReminders(now = new Date()): Promise<KetQuaNhac> {
   const batDau = Date.now();
   const conGio = () => Date.now() - batDau < TRAN_MS;
-  const ket: KetQuaNhac = { lapLich: 0, huy: 0, daGui: 0, boQua: 0, loi: [] };
+  const ket: KetQuaNhac = {
+    lapLich: 0,
+    huy: 0,
+    daGui: 0,
+    boQua: 0,
+    nhacCham: { quaHan: 0, daGui: 0, thieuNguoiNhan: null },
+    chungNhan: { daNhac: 0, chotHetHan: 0, giaoLai: 0, khongGiaoLaiDuoc: 0, loi: [] },
+    loi: [],
+  };
 
   // ── 1. Lập lịch cho lượt ghi danh chưa có dòng nhắc nào ───────────────────
   try {
@@ -112,16 +137,41 @@ export async function runElearningReminders(now = new Date()): Promise<KetQuaNha
         select: {
           id: true,
           milestone: true,
-          enrollment: { select: { id: true, userId: true, status: true, courseId: true } },
+          enrollment: {
+            select: {
+              id: true,
+              userId: true,
+              status: true,
+              courseId: true,
+              // ⚠️ Cần cho CÂU CHỮ. Thiếu thì thông báo chỉ nói "bạn có khoá cần
+              // hoàn thành" — người nhận không phân biệt được mốc nào.
+              dueAt: true,
+            },
+          },
         },
         orderBy: { scheduledAt: "asc" },
         take: LO,
       })) as {
         id: string;
         milestone: Moc;
-        enrollment: { id: string; userId: string; status: string; courseId: string };
+        enrollment: {
+          id: string;
+          userId: string;
+          status: string;
+          courseId: string;
+          dueAt: Date | null;
+        };
       }[];
       if (!den.length) break;
+
+      // Tên khoá nạp theo LÔ, không tra từng dòng: một lô 200 mốc mà tra 200 lần là
+      // 200 lượt đi vòng, và cron có trần 2 phút.
+      const khoaIds = [...new Set(den.map((x) => x.enrollment.courseId))];
+      const dsKhoa = await db.trnCourse.findMany({
+        where: { id: { in: khoaIds } },
+        select: { id: true, title: true },
+      });
+      const tenKhoaCua = new Map(dsKhoa.map((c) => [c.id, c.title]));
 
       for (const r of den) {
         // Người đã xong mà mốc vẫn còn `PENDING` (vừa xong giữa hai nhịp) ⇒ bỏ
@@ -138,10 +188,36 @@ export async function runElearningReminders(now = new Date()): Promise<KetQuaNha
           continue;
         }
 
-        // Gửi thật đi qua hàng sự kiện, không gọi thẳng nhà cung cấp: kênh và
-        // câu chữ là việc của handler, cron chỉ chịu trách nhiệm ĐÚNG LÚC.
-        await ghiNhanDaGui(r.id, now);
-        ket.daGui += 1;
+        // ⚠️ GỬI THẬT — bản trước CHỈ ghi sổ `SENT` rồi return, không gửi gì.
+        //
+        // Chú thích cũ viết "gửi thật đi qua hàng sự kiện", nhưng không sự kiện nào
+        // được phát và không handler nào lắng nghe. Cách hỏng của nó im lặng và
+        // KHÔNG TỰ SỬA: sổ đã `SENT` nên lần quét sau bỏ qua — người học không nhận
+        // một lời nhắc nào cho cả bảy mốc, còn báo cáo vận hành thấy "đã gửi" đủ.
+        const tenKhoa = tenKhoaCua.get(r.enrollment.courseId) ?? "khoá được giao";
+        const noiDung = noiDungTheoMoc({
+          moc: r.milestone,
+          tenKhoa,
+          han: r.enrollment.dueAt,
+        });
+        const soNguoi = await notifyStaff({
+          userIds: [r.enrollment.userId],
+          dedupeKey: khoaChongTrung(r.enrollment.id, r.milestone),
+          title: noiDung.title,
+          body: noiDung.body,
+          href: `/elearning/hoc/${r.enrollment.id}`,
+          entityId: r.enrollment.id,
+          reopen: noiDung.keoVeChuaDoc,
+        });
+
+        // ⚠️ Ghi ĐÚNG kênh đã gửi, không ghi sẵn `["IN_APP","EMAIL"]`.
+        //
+        // Bản trước khai cả EMAIL trong khi không gửi email nào — một dòng sổ nói
+        // dối về việc đã làm, và nó là thứ người vận hành dựa vào khi người học báo
+        // "tôi không nhận được gì".
+        await ghiNhanDaGui(r.id, now, soNguoi > 0 ? ["IN_APP"] : []);
+        ket.daGui += soNguoi > 0 ? 1 : 0;
+        if (soNguoi === 0) ket.boQua += 1;
       }
 
       if (den.length < LO) break;
@@ -150,18 +226,52 @@ export async function runElearningReminders(now = new Date()): Promise<KetQuaNha
     ket.loi.push(`gui: ${String(e)}`);
   }
 
+  // ── Việc 4: nhắc NGƯỜI CHẤM khi hàng đợi vỡ cam kết ───────────────────────
+  //
+  // ⚠️ Chạy trong khe cron ĐÃ CÓ. Ngân sách module là đúng 2 khe và đã dùng hết —
+  // không xin khe thứ ba (QĐ-CDA-14 điểm 2).
+  //
+  // ⚠️ Nhắc rơi vào người CHẤM, không vào người nộp. Người nộp đã làm xong phần của
+  // mình, và hạn của họ đang được cron đêm tự nới.
+  try {
+    ket.nhacCham = await nhacNguoiCham(now);
+  } catch (e) {
+    ket.loi.push(`nhacCham: ${(e as Error).message}`);
+  }
+
+  // ── Việc 5: vòng đời HẾT HIỆU LỰC của chứng nhận (EL-16) ──────────────────
+  //
+  // ⚠️ Cũng nằm trong khe cron NÀY. Ngân sách module là đúng 2 khe; đây là việc thứ
+  // năm chia nhau một khe, không phải khe thứ ba.
+  //
+  // ⚠️ Đặt CUỐI cùng và bọc try riêng: ba việc trên phục vụ người đang học và có
+  // mốc T-2 GIỜ — chúng không được chết theo một lỗi của việc chạy hằng ngày này.
+  try {
+    ket.chungNhan = await chayVongDoiChungNhan(now);
+  } catch (e) {
+    ket.loi.push(`chungNhan: ${(e as Error).message}`);
+  }
+
   return ket;
 }
 
-async function ghiNhanDaGui(reminderId: string, now: Date) {
+/**
+ * Ghi sổ một mốc ĐÃ GỬI.
+ *
+ * ⚠️ `kenh` là danh sách kênh THẬT SỰ đã gửi, do chỗ gọi truyền vào. Ghi cứng
+ * `["IN_APP","EMAIL"]` như bản trước là để lại một dòng sổ nói dối về việc đã làm —
+ * và đó chính là dòng người vận hành mở ra khi người học báo "tôi không nhận được
+ * gì". KHÔNG có ZNS (QĐ-CDA-08).
+ */
+async function ghiNhanDaGui(reminderId: string, now: Date, kenh: string[]) {
   await db.trnReminder.update({
     where: { id: reminderId },
     data: {
-      status: "SENT",
-      sentAt: now,
-      // ⚠️ Hai kênh, KHÔNG có ZNS (QĐ-CDA-08). Kênh thứ ba đã bị chặn từ tầng
-      // nhập của lượt giao; ghi ở đây là bản ghi việc đã làm.
-      sentChannels: ["IN_APP", "EMAIL"],
+      // Không gửi được cho ai thì KHÔNG đánh `SENT`: để `PENDING` cho nhịp sau thử
+      // lại, thay vì đóng sổ một việc chưa xảy ra.
+      status: kenh.length > 0 ? "SENT" : "PENDING",
+      ...(kenh.length > 0 ? { sentAt: now } : {}),
+      sentChannels: kenh,
     },
   });
 }

@@ -31,14 +31,41 @@ export const metadata = {
 };
 
 /** Màn từ chối dùng chung — cùng một hình dạng cho mọi lý do. */
-function TuChoi({ title, detail }: { title: string; detail: string }) {
+/**
+ * Màn từ chối — và khi lời từ chối CHỈ ĐƯỜNG thì phải kèm luôn đường đó.
+ *
+ * ⚠️ `di` không phải phần trang trí. Bản trước viết "Vào mục Dữ liệu của tôi để…
+ * rồi xác nhận" mà trang chỉ có đúng một nút về trang chủ: người học mới được giao
+ * khoá bị chặn ở MỌI bài, đọc một câu bảo đi đâu đó, và tự đi tìm. Thanh điều hướng
+ * của người học thuần cũng không có mục ấy.
+ *
+ * E2E `vong-hoc.spec.ts` chết ngay ca đầu vì chuyện này — không một test đơn vị nào
+ * trong 6009 test thấy, vì chúng kiểm hàm chứ không đi hết một vòng.
+ */
+function TuChoi({
+  title,
+  detail,
+  di,
+}: {
+  title: string;
+  detail: string;
+  di?: { href: string; nhan: string };
+}) {
   return (
     <div className="mx-auto max-w-lg px-4 py-16 text-center">
       <h1 className="text-xl font-bold">{title}</h1>
       <p className="mt-3 text-sm text-muted-foreground">{detail}</p>
+      {di ? (
+        <Link
+          href={di.href}
+          className="mt-6 inline-block rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground"
+        >
+          {di.nhan}
+        </Link>
+      ) : null}
       <Link
         href="/"
-        className="mt-6 inline-block rounded-lg border border-border px-4 py-2 text-sm"
+        className="mt-6 ml-2 inline-block rounded-lg border border-border px-4 py-2 text-sm"
       >
         Về trang chủ khu đào tạo
       </Link>
@@ -158,7 +185,11 @@ export default async function Page({
     return (
       <TuChoi
         title="Cần xác nhận trước khi bắt đầu"
-        detail="Vào mục Dữ liệu của tôi để xem hệ thống ghi nhận những gì trong lúc bạn học, rồi xác nhận."
+        detail="Xem hệ thống ghi nhận những gì trong lúc bạn học, rồi xác nhận. Xong là quay lại học ngay được."
+        di={{
+          href: "/elearning/du-lieu-cua-toi",
+          nhan: "Xem và xác nhận",
+        }}
       />
     );
   }
@@ -268,7 +299,11 @@ export default async function Page({
     return (
       <TuChoi
         title="Buổi học trực tiếp"
-        detail="Bài này ghi nhận bằng điểm danh của giảng viên, không có nội dung để xem ở đây."
+        detail="Bài này ghi nhận bằng điểm danh của giảng viên, không có nội dung để xem ở đây. Đề cương khoá hiện bạn đã được điểm danh hay chưa."
+        di={{
+          href: `/elearning/hoc/${enrollmentId}`,
+          nhan: "Về đề cương khoá",
+        }}
       />
     );
   }

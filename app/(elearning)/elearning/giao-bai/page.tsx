@@ -5,6 +5,7 @@ import { can } from "@/lib/auth/can";
 import { scopedDb } from "@/lib/db-scope";
 import { ROLE_LABELS } from "@/lib/labels";
 import { AssignWizard } from "./_components/assign-wizard";
+import { AssignmentList } from "./_components/assignment-list";
 
 /**
  * EL-05 — TRÌNH GIAO BÀI 4 BƯỚC (BA §10.3).
@@ -95,6 +96,43 @@ export default async function Page() {
     ).values(),
   ].sort((a, b) => a.localeCompare(b, "vi-VN"));
 
+  // Lượt giao đã tạo, kèm số người và số người đang quá hạn — hai con số quyết định
+  // người vận hành có cần bấm gì không.
+  const luotGiao = await db.trnAssignment.findMany({
+    // `TrnAssignment` mang `title` của CHÍNH lượt giao (không phải tên khoá) và
+    // KHÔNG có quan hệ ngược tới `TrnEnrollment` — nên đếm người bằng `groupBy`
+    // riêng, không `_count`.
+    select: { id: true, title: true, dueAt: true, status: true },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+  });
+  const ids = luotGiao.map((x) => x.id);
+  const [tongTheoLuot, quaHanTheoLuot] = await Promise.all([
+    db.trnEnrollment.groupBy({
+      by: ["assignmentId"],
+      where: { assignmentId: { in: ids } },
+      _count: { _all: true },
+    }),
+    db.trnEnrollment.groupBy({
+      by: ["assignmentId"],
+      where: { assignmentId: { in: ids }, status: "OVERDUE" },
+      _count: { _all: true },
+    }),
+  ]);
+  const demCua = (
+    g: { assignmentId: string | null; _count: { _all: number } }[],
+  ) => new Map(g.map((x) => [x.assignmentId ?? "", x._count._all]));
+  const tongCua = demCua(tongTheoLuot);
+  const quaHanCua = demCua(quaHanTheoLuot);
+  const dsLuotGiao = luotGiao.map((x) => ({
+    assignmentId: x.id,
+    tenKhoa: x.title,
+    soNguoi: tongCua.get(x.id) ?? 0,
+    soQuaHan: quaHanCua.get(x.id) ?? 0,
+    hanChung: x.dueAt,
+    dong: x.status !== "ACTIVE",
+  }));
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
       <h1 className="text-2xl font-bold">Giao bài</h1>
@@ -121,6 +159,23 @@ export default async function Page() {
           }),
         )}
       />
+
+      {/* ── Lượt giao đã tạo + ba việc vận hành ────────────────────────────
+          ⚠️ Khối này tồn tại vì `giaHanLuotGiao` · `thuHoiLuotGiao` ·
+          `ghiNhanSuCo` là ba action MỒ CÔI: khai từ EL-05, 0 màn nào gọi. Người
+          vận hành không có nút gia hạn, không có nút thu hồi, và không có nút "sự
+          cố hệ thống" — mà nút cuối là công cụ DUY NHẤT của vai trực hỗ trợ theo
+          QĐ-CDA-15. */}
+      <section className="mt-8">
+        <h2 className="text-lg font-semibold">Lượt giao đã tạo</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Gia hạn, ghi nhận sự cố hệ thống, hoặc thu hồi. Mọi thao tác đều bắt buộc
+          lý do và đi vào nhật ký kiểm toán.
+        </p>
+        <div className="mt-3">
+          <AssignmentList ds={dsLuotGiao} />
+        </div>
+      </section>
     </div>
   );
 }

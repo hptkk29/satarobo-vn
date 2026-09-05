@@ -104,6 +104,14 @@ export const SCOPED_MODELS = new Set<string>([
   // lớp học và ghi âm hội thoại phụ huynh (§13.3) — nên coi "chưa biết cơ sở" là
   // "ai cũng thấy" ở đây là rò rỉ, không phải tiện lợi.
   "TrnSubmission",
+  // EL-16 — chứng nhận. ⚠️ KHÔNG vào NULL_IS_GLOBAL_MODELS: một chứng nhận luôn
+  // thuộc cơ sở của người được cấp. NULL ở đây = chưa backfill.
+  //
+  // Và cách ly cơ sở ở bảng này KHÔNG che trang xác minh công khai — trang đó cố ý
+  // đọc ngoài `scopedDb` (không có actor để scope), chỉ trả 5 trường và tra theo
+  // `verifyToken` ngẫu nhiên. Hai đường khác nhau, đừng lẫn: siết bảng không làm
+  // trang kia an toàn hơn, và mở trang kia không nới bảng này.
+  "TrnCertificate",
   // MEDIA-REVIEW (26/08) — ảnh/video buổi học + kết luận duyệt của từng buổi.
   // Cả hai `BAT_BUOC` mang centerId: một tấm ảnh / một kết luận LUÔN thuộc đúng một cơ
   // sở. KHÔNG vào NULL_IS_GLOBAL_MODELS — coi "chưa biết cơ sở" là "ai cũng thấy" ở đây
@@ -112,6 +120,20 @@ export const SCOPED_MODELS = new Set<string>([
   // hình với chính QLCS cơ sở đó (tức ảnh không bao giờ được duyệt).
   "MediaAsset",
   "SessionMediaReview",
+  // EL-18 — cỗ máy tự động hoá. `TrnAutomationRule` và `TrnLearningPath` mang cột
+  // đơn vị; bảng con `TrnLearningPathStep` thì không, cách ly của nó đến từ bảng cha.
+  "TrnAutomationRule",
+  "TrnLearningPath",
+  // ⚠️ `TrnAutomationLog` mang cột đơn vị dù là bảng con, và đó là chủ đích: nó ghi
+  // việc hệ thống đã làm với MỘT CON NGƯỜI cụ thể. Luật có thể là luật chung toàn
+  // công ty, nhưng dòng nhật ký "đã giao khoá X cho người Y" thuộc về cơ sở của
+  // người Y — đọc chéo cơ sở ở đây là đọc hồ sơ đào tạo của người cơ sở khác.
+  "TrnAutomationLog",
+  // EL-20 — ảnh chụp chỉ số. ⚠️ KHÔNG vào NULL_IS_GLOBAL_MODELS: một dòng ảnh chụp
+  // luôn thuộc về một phạm vi đo cụ thể, nên `centerId = null` ở đây là "chưa gán",
+  // không phải "ai cũng thấy". Dòng TỔNG toàn công ty được nhận ra bằng
+  // `dimensionKey = "TONG"`, không bằng một cột đơn vị rỗng.
+  "TrnMetricSnapshot",
   // 27/08 — sổ "ai phụ trách cơ sở nào" cho hoa hồng QC 1% + Quản lý TT 2%.
   // `centerId` NOT NULL: một phân công LUÔN thuộc đúng một cơ sở ⇒ KHÔNG vào
   // NULL_IS_GLOBAL_MODELS. Đây là dữ liệu ai-nhận-tiền, coi "chưa biết cơ sở" thành
@@ -168,6 +190,15 @@ export const NULL_IS_GLOBAL_MODELS = new Set<string>([
   // viên, khung quy trình tư vấn). Quên dòng này thì khung chung TÀNG HÌNH với mọi
   // người dùng cấp cơ sở, và không gì báo lỗi — họ chỉ thấy danh sách rỗng.
   "TrnRubric",
+  // EL-18 — luật tự động hoá và lộ trình DÙNG CHUNG toàn công ty là chuyện thường
+  // (lộ trình nhập môn cho nhân sự mới; luật giao lại khoá khi chứng nhận hết hạn).
+  // Quên dòng này thì luật chung TÀNG HÌNH với mọi người dùng cấp cơ sở, và không gì
+  // báo lỗi — họ chỉ thấy danh sách rỗng.
+  //
+  // ⚠️ `TrnAutomationLog` KHÔNG vào đây: một dòng nhật ký luôn nói về một con người
+  // cụ thể, nên `centerId = null` ở đó là "chưa backfill", không phải "ai cũng thấy".
+  "TrnAutomationRule",
+  "TrnLearningPath",
 ]);
 
 // FIX-C3 (B1) — soft-delete đã chuyển lên TẦNG base `db` (lib/soft-delete.ts + lib/db.ts)
@@ -372,6 +403,11 @@ export function getModelPrefixes(model: string): string[] {
     case "TrnExamAttempt":
     case "TrnRubric":
     case "TrnSubmission":
+    case "TrnCertificate":
+    case "TrnAutomationRule":
+    case "TrnAutomationLog":
+    case "TrnLearningPath":
+    case "TrnMetricSnapshot":
       return ["elearning:"];
     // MEDIA-REVIEW (26/08) — ảnh buổi học + kết luận duyệt. Thiếu nhánh này thì
     // `getModelPrefixes` trả rỗng và tầm nhìn rơi về `isHoLevel` DIỆN RỘNG: bất kỳ ai

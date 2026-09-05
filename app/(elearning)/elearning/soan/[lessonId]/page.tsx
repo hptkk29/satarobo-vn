@@ -8,6 +8,7 @@ import { VideoUploader } from "../_components/video-uploader";
 import { CueEditor } from "../_components/cue-editor";
 import { QuizLessonEditor } from "../_components/quiz-lesson-editor";
 import { TaskLessonEditor } from "../_components/task-lesson-editor";
+import { AttendancePanel } from "../_components/attendance-panel";
 import { cueInlineSchema } from "@/lib/elearning/lesson-cue";
 
 /**
@@ -77,7 +78,14 @@ export default async function Page({
       },
       _count: { select: { progress: true } },
       durationSec: true,
-      module: { select: { title: true, course: { select: { title: true } } } },
+      module: {
+        select: {
+          title: true,
+          // Cần cho nhánh `LIVE_SESSION`: danh sách người được giao khoá này.
+          courseId: true,
+          course: { select: { title: true } },
+        },
+      },
     },
   });
 
@@ -203,6 +211,56 @@ export default async function Page({
               totalPoints: k.totalPoints,
               passPoints: k.passPoints,
             }))}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (lesson.kind === "LIVE_SESSION") {
+    // Danh sách người được giao khoá này + trạng thái điểm danh của từng người.
+    const ghiDanh = await db.trnEnrollment.findMany({
+      where: { courseId: lesson.module.courseId, status: { not: "REVOKED" } },
+      select: { id: true, userId: true },
+      take: 300,
+    });
+    const [nguoi, tienDo] = await Promise.all([
+      db.user.findMany({
+        where: { id: { in: [...new Set(ghiDanh.map((g) => g.userId))] } },
+        select: { id: true, name: true, email: true },
+      }),
+      db.trnLessonProgress.findMany({
+        where: {
+          lessonId: lesson.id,
+          enrollmentId: { in: ghiDanh.map((g) => g.id) },
+        },
+        select: { enrollmentId: true, status: true, attendanceMarkedByUserId: true },
+      }),
+    ]);
+    const tenCua = new Map(nguoi.map((u) => [u.id, u.name ?? u.email ?? u.id]));
+    const tdCua = new Map(tienDo.map((t) => [t.enrollmentId, t]));
+    const tenNguoiTick = new Map(nguoi.map((u) => [u.id, u.name ?? u.email ?? u.id]));
+
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-6">
+        <nav className="mb-3 text-xs text-muted-foreground">
+          {lesson.module.course.title} · {lesson.module.title}
+        </nav>
+        <h1 className="text-xl font-bold">{lesson.title}</h1>
+        <div className="mt-4">
+          <AttendancePanel
+            lessonId={lesson.id}
+            dsHoc={ghiDanh.map((g) => {
+              const td = tdCua.get(g.id);
+              return {
+                enrollmentId: g.id,
+                tenNguoiHoc: tenCua.get(g.userId) ?? g.userId,
+                daDu: td?.status === "DONE",
+                nguoiTick: td?.attendanceMarkedByUserId
+                  ? (tenNguoiTick.get(td.attendanceMarkedByUserId) ?? null)
+                  : null,
+              };
+            })}
           />
         </div>
       </div>

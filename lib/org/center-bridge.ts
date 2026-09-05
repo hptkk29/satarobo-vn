@@ -410,6 +410,36 @@ export const BACKFILL_SPECS: readonly BackfillSpec[] = [
     vi: "lượt nộp bài tập — luôn thuộc cơ sở của người nộp; NULL = chưa backfill",
   },
   {
+    model: "TrnMetricSnapshot",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "ảnh chụp chỉ số — luôn thuộc một phạm vi đo; NULL = chưa gán",
+  },
+  {
+    model: "TrnAutomationRule",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: true,
+    vi: "luật tự động hoá — NULL = luật dùng chung toàn công ty",
+  },
+  {
+    model: "TrnLearningPath",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: true,
+    vi: "lộ trình học — NULL = lộ trình dùng chung toàn công ty",
+  },
+  {
+    model: "TrnAutomationLog",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "nhật ký thi hành — luôn thuộc cơ sở của người bị tác động; NULL = chưa backfill",
+  },
+  {
+    model: "TrnCertificate",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "chứng nhận hoàn thành — luôn thuộc cơ sở của người được cấp; NULL = chưa backfill",
+  },
+  {
     model: "TrnWatchFlag",
     nullMeaning: "BAT_BUOC",
     scoped: true,

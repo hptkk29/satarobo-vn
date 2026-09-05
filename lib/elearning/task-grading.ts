@@ -3,7 +3,7 @@ import type { ActionConfig } from "@/lib/actions/factory";
 import { ActionError } from "@/lib/actions/factory";
 import { dsMucSchema, tinhDiemBaiNop } from "@/lib/elearning/rubric-shape";
 import { ghiXongBai } from "@/lib/elearning/lesson-done";
-import { tinhBuSla, hanSauKhiBu } from "@/lib/elearning/sla-bu";
+import { mienTruDungCuaLuotHoc, hanSauKhiBu } from "@/lib/elearning/sla-bu";
 
 /**
  * EL-15c — CHẤM BÀI TẬP theo khung.
@@ -256,30 +256,33 @@ export const cauHinhChamBaiTap: ActionConfig<ChamBaiTapInput, KetQuaChamBaiTap> 
     let buLoi = false;
     if (lan.enrollmentId) {
       try {
-        const { themNgayLam, tongDangLe } = tinhBuSla({
-          dueGradeAt: lan.dueGradeAt,
-          gradedAt: now,
-          now,
-          so: { daBuNgayLam: lan.slaBuNgayLam },
+        const gd = await db.trnEnrollment.findFirst({
+          where: { id: lan.enrollmentId },
+          select: { id: true, dueAt: true, slaGraceDays: true, status: true },
         });
-        if (themNgayLam > 0) {
-          const gd = await db.trnEnrollment.findFirst({
-            where: { id: lan.enrollmentId },
-            select: { id: true, dueAt: true, slaGraceDays: true, status: true },
+        if (gd && gd.status !== "REVOKED") {
+          // ⚠️ Đo HỢP các khoảng chờ của CẢ lượt ghi danh, không cộng riêng lượt
+          // này. Hai bài tập cùng trễ 4 ngày phải bù 4, không phải 8 — hai khoảng
+          // chờ chồng nhau, và cộng dồn là nới luôn phép so đúng-hạn.
+          const moiLuot = await db.trnSubmission.findMany({
+            where: { enrollmentId: lan.enrollmentId, dueGradeAt: { not: null } },
+            select: { dueGradeAt: true, gradedAt: true },
           });
-          if (gd && gd.status !== "REVOKED") {
+          const dangLe = mienTruDungCuaLuotHoc({ luotNop: moiLuot, now });
+          const themNgayLam = Math.max(0, dangLe - gd.slaGraceDays);
+          if (themNgayLam > 0) {
             await db.$transaction(async (t) => {
               await t.trnEnrollment.update({
                 where: { id: gd.id },
                 data: {
                   dueAt: hanSauKhiBu(gd.dueAt, themNgayLam),
-                  slaGraceDays: gd.slaGraceDays + themNgayLam,
+                  slaGraceDays: dangLe,
                   ...(gd.status === "OVERDUE" ? { status: "IN_PROGRESS" } : {}),
                 },
               });
               await t.trnSubmission.update({
                 where: { id: lan.id },
-                data: { slaBuNgayLam: tongDangLe },
+                data: { slaBuNgayLam: dangLe },
               });
             });
           }

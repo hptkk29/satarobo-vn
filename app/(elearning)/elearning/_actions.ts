@@ -10,6 +10,18 @@ import {
   ELEARNING_POLICY_KEY,
 } from "@/lib/elearning/policy-acceptance";
 import { isLessonDone } from "@/lib/elearning/reading";
+import { cauHinhThuHoiChungNhan } from "@/lib/elearning/certificate-revoke";
+import { cauHinhCapChungNhanTay } from "@/lib/elearning/certificate-issue-manual";
+import {
+  cauHinhKhaiYeuCau,
+  cauHinhDongYeuCau,
+} from "@/lib/elearning/requirement-authoring";
+import { cauHinhDatMucGanDanhGia } from "@/lib/elearning/eval-link";
+import {
+  cauHinhKhaiLuat,
+  cauHinhBatTatLuat,
+  cauHinhSoanLoTrinh,
+} from "@/lib/elearning/automation-authoring";
 import {
   cauHinhKhieuNaiCo,
   cauHinhQuyetCo,
@@ -171,3 +183,48 @@ export const acceptPolicyAction = defineAction({
  */
 export const khieuNaiCoAction = defineAction(cauHinhKhieuNaiCo);
 export const quyetCoAction = defineAction(cauHinhQuyetCo);
+
+/**
+ * EL-16 — thu hồi chứng nhận (BR-007).
+ *
+ * Quyền hẹp `elearning:certificate:revoke` (SUPER_ADMIN + HO_HR) và lý do bắt buộc.
+ * Cấu hình nằm ở `lib/elearning/certificate-revoke.ts` theo quy ước 10.
+ */
+export const thuHoiChungNhanAction = defineAction(cauHinhThuHoiChungNhan);
+
+/**
+ * EL-16 — cấp chứng nhận BẰNG TAY cho lượt đã hoàn thành mà chưa có.
+ *
+ * Đường cho lượt hoàn thành TRƯỚC khi EL-16 lên chạy (sự kiện của chúng đã chạy
+ * xong, `verifiedAt` còn NULL). Không bỏ qua điều kiện nào — chỉ chạy lại đúng phép
+ * cấp tự động.
+ */
+export const capChungNhanTayAction = defineAction(cauHinhCapChungNhanTay);
+
+/**
+ * EL-17 — khai / đóng YÊU CẦU ĐÀO TẠO.
+ *
+ * Mở cửa cho `elearning:requirement:manage` — khoá quyền có từ EL-02 mà trước đó
+ * không mã nào gọi, tức mẫu số của toàn bộ North Star Metric chỉ khai được bằng seed
+ * hoặc SQL tay.
+ */
+export const khaiYeuCauAction = defineAction(cauHinhKhaiYeuCau);
+export const dongYeuCauAction = defineAction(cauHinhDongYeuCau);
+
+/**
+ * EL-21 — đặt MỨC GẮN ĐÁNH GIÁ cho một chương trình (QĐ-CDA-06b).
+ *
+ * Đi bằng `elearning:program:manage`, KHÔNG mở khoá quyền thứ 18 — kiểm soát nằm ở
+ * hai chữ ký trong chính bản ghi (Nhân sự + Đào tạo), không ở một khoá mới.
+ */
+export const datMucGanDanhGiaAction = defineAction(cauHinhDatMucGanDanhGia);
+
+/**
+ * EL-18 — cỗ máy tự động hoá: khai luật, bật/tắt, và soạn lộ trình.
+ *
+ * Luật LUÔN khai ra ở trạng thái TẮT: bật là hành động riêng có lý do riêng, không để
+ * một luật vừa gõ xong đã bắt đầu giao việc cho cả công ty ngay trong request tạo nó.
+ */
+export const khaiLuatAction = defineAction(cauHinhKhaiLuat);
+export const batTatLuatAction = defineAction(cauHinhBatTatLuat);
+export const soanLoTrinhAction = defineAction(cauHinhSoanLoTrinh);

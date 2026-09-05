@@ -1541,6 +1541,74 @@ describe("EL-01 · AC10. Bất biến cấu trúc khu e-learning", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// EL-16 — trang XÁC MINH CHỨNG NHẬN: công khai, không đăng nhập, không đá ai đi đâu.
+//
+// Đây là lý do tồn tại của tấm chứng nhận: người NGOÀI công ty quét QR bằng điện
+// thoại của họ và đọc được câu trả lời. Cổng này mở, nên nó phải có test — luật
+// "cổng và cửa cùng PR" áp cả chiều ngược lại.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("EL-16. /xac-thuc trên e-learning host", () => {
+  const ON = { elearningEnabled: true } as const;
+  const TOKEN = "/xac-thuc/abcdefghijklmnopqrstuvwxyz012345";
+
+  it("khách CHƯA đăng nhập vào thẳng, KHÔNG bị đẩy về /login", () => {
+    // Đẩy về login là biến chứng nhận thành thứ chỉ nội bộ tự xem nhau — mất đúng
+    // phần khiến nó là chứng từ.
+    expect(
+      decideRoute({
+        hostKind: "elearning",
+        pathname: TOKEN,
+        role: null,
+        sessionValid: false,
+        ...ON,
+      }),
+    ).toEqual<RouteDecision>({ type: "next" });
+  });
+
+  it.each(STAFF_ROLES)("%s đang đăng nhập cũng xem được, không bị ném về trang chủ", (role) => {
+    // ⚠️ Khác ba nhánh OTP ngay phía trên: chúng đá người đã đăng nhập về khu của
+    // họ. Đúng với màn kích hoạt, SAI ở đây — nhân viên quét QR trên máy mình là
+    // người đi tra cứu hợp lệ.
+    expect(
+      decideRoute({ hostKind: "elearning", pathname: TOKEN, ...authed(role), ...ON }),
+    ).toEqual<RouteDecision>({ type: "next" });
+  });
+
+  it("PHỤ HUYNH quét QR cũng xem được, KHÔNG bị đẩy sang portal", () => {
+    expect(
+      decideRoute({ hostKind: "elearning", pathname: TOKEN, ...authed("PARENT"), ...ON }),
+    ).toEqual<RouteDecision>({ type: "next" });
+  });
+
+  it("KHÔNG rewrite sang /elearning/* — chỗ đó có layout gác đăng nhập", () => {
+    // Rewrite vào `/elearning/...` là dựng một trang công khai rồi khoá nó lại: mọi
+    // thứ dưới segment đó đi qua layout đòi `auth()` + hồ sơ nhân sự. Ca này canh
+    // đúng cái bẫy ấy, vì nó là lựa chọn "tự nhiên" khi đọc các nhánh xung quanh.
+    const r = decideRoute({
+      hostKind: "elearning",
+      pathname: TOKEN,
+      role: null,
+      sessionValid: false,
+      ...ON,
+    });
+    expect(r.type).not.toBe("rewrite");
+  });
+
+  it("cờ e-learning TẮT thì trang này cũng không phục vụ", () => {
+    // Cờ OFF nghĩa là 0 byte HTML của khu — chứng nhận chưa cấp thì cũng chưa có gì
+    // để tra.
+    const r = decideRoute({
+      hostKind: "elearning",
+      pathname: TOKEN,
+      role: null,
+      sessionValid: false,
+      elearningEnabled: false,
+    });
+    expect(r.type).toBe("redirectHost");
+  });
+});
+
 // Đợt B — CHIỀU RA của site Sale (27/08/2026)
 // ─────────────────────────────────────────────────────────────────────────────
 // Chiều VÀO (`hostKind: "sale"`) đã có từ trước. Thiếu chiều RA thì bật cờ xong site

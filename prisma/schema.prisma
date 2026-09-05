@@ -254,22 +254,22 @@ model VerificationToken {
 // ─── Core Business ───────────────────────────────────────────────────────────
 
 model Center {
-  id           String  @id @default(cuid())
-  code         String? @unique // Phase T0.2 — mã cơ sở "CS1", "CS2" cho codegen
-  name         String
-  slug         String  @unique
-  address      String
-  ward         String?
-  district     String?
-  city         String  @default("")
-  phone        String?
-  email        String?
-  googleMapUrl String? @db.Text
-  workingHours String?
+  id            String  @id @default(cuid())
+  code          String? @unique // Phase T0.2 — mã cơ sở "CS1", "CS2" cho codegen
+  name          String
+  slug          String  @unique
+  address       String
+  ward          String?
+  district      String?
+  city          String  @default("")
+  phone         String?
+  email         String?
+  googleMapUrl  String? @db.Text
+  workingHours  String?
   /// CHUỖI TÊN — chỉ để HIỂN THỊ (trang liên hệ, danh sách cơ sở). GIỮ NGUYÊN theo nếp
   /// hai pha: thêm `managerUserId` trước, bỏ cột này sau khi ổn định. ĐỪNG dùng nó để
   /// suy ra người hưởng hoa hồng — nó không nối được tới tài khoản nào.
-  managerName  String?
+  managerName   String?
   /// 27/08/2026 — LIÊN KẾT TÀI KHOẢN quản lý cơ sở. Bắt buộc khi TẠO cơ sở mới (ép ở
   /// tầng validator, không phải ở DB: cơ sở cũ chưa khai nên cột phải nullable).
   ///
@@ -838,14 +838,14 @@ model MessengerConversation {
 }
 
 model MessengerMessage {
-  id              String                @id @default(cuid())
+  id              String   @id @default(cuid())
   conversationId  String
   direction       String // IN | OUT
-  text            String?               @db.Text
+  text            String?  @db.Text
   attachments     Json?
-  externalEventId String?               @unique // idempotency webhook (R1-02 C2.4)
-  sentAt          DateTime              @db.Timestamptz(6)
-  createdAt       DateTime              @default(now()) @db.Timestamptz(6)
+  externalEventId String?  @unique // idempotency webhook (R1-02 C2.4)
+  sentAt          DateTime @db.Timestamptz(6)
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
 
   // ── S-2b (27/08/2026) — SỔ ĐỐI SOÁT LƯỢT GỬI RA META. Chỉ THÊM cột, nullable,
   // không đụng cột cũ: tin ĐẾN và mọi tin cũ trước đợt này để NULL, đọc ra đúng nghĩa
@@ -853,17 +853,17 @@ model MessengerMessage {
   /// PENDING | SENT | SIMULATED | FAILED (lib/crm/messenger-send.ts). NULL = tin ĐẾN / tin cũ.
   /// PENDING nằm lại = tiến trình chết giữa chừng, KHÔNG rõ tin có tới khách không.
   /// SIMULATED = đã ghi sổ nhưng KHÔNG gọi Meta ⇒ KHÁCH KHÔNG NHẬN GÌ (tiền lệ ZNS).
-  sendStatus      String?
+  sendStatus        String?
   /// `mid` Meta trả về khi gửi thật — bằng chứng duy nhất tin đã đi.
   providerMessageId String?
   /// Mã lỗi Meta dạng `code` hoặc `code/subcode` (vd `10/2018278` = ngoài cửa sổ 24h).
-  errorCode       String?
+  errorCode         String?
   /// Nguyên văn lời Meta, ĐÃ lọc secret (lib/crm/meta-messenger-provider.ts).
-  errorMessage    String?               @db.Text
+  errorMessage      String? @db.Text
   /// Người thật bấm gửi (User.id, ref phẳng). Nguồn attribution duy nhất cho tin OUT.
-  sentByUserId    String?
+  sentByUserId      String?
 
-  conversation    MessengerConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversation MessengerConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   @@index([conversationId, sentAt])
   /// Đối soát: "còn lượt gửi nào kẹt PENDING / hỏng FAILED không".
@@ -939,8 +939,8 @@ model CenterCommissionAssignee {
   id String @id @default(cuid())
 
   /// Cơ sở được phụ trách. NOT NULL — một phân công luôn thuộc đúng một cơ sở.
-  centerId String
-  center   Center @relation("CenterCommissionAssignees", fields: [centerId], references: [id], onDelete: Cascade)
+  centerId  String
+  center    Center  @relation("CenterCommissionAssignees", fields: [centerId], references: [id], onDelete: Cascade)
   /// P1 · US-07 — cột SONG SONG với centerId (ghi kép qua lib/org/dual-write.ts).
   orgUnitId String?
 
@@ -8323,6 +8323,10 @@ model TrnEnrollment {
   /// EL-04 — tiến độ từng bài của lượt ghi danh này.
   lessonProgress TrnLessonProgress[]
   reminders      TrnReminder[]
+  /// ⚠️ `onDelete: Restrict` ở phía chứng nhận: xoá một lượt ghi danh đã sinh chứng
+  /// nhận là làm mồ côi một chứng từ đã phát ra tay người ta và đã có người ngoài
+  /// quét QR để kiểm. Chặn cứng ở DB, không trông vào việc mã gọi nhớ kiểm.
+  certificate    TrnCertificate?
 
   @@unique([courseId, userId, cycle])
   @@index([userId, status])
@@ -9258,6 +9262,117 @@ model TrnRubricScore {
   @@index([submissionId])
 }
 
+/// EL-16 — CHỨNG NHẬN hoàn thành khoá đào tạo.
+///
+/// Đây là CHỨNG TỪ, không phải huy hiệu trên màn hình: nó phải kiểm chứng được từ
+/// bên ngoài, bởi một người không có tài khoản, bằng điện thoại của họ. Mọi thiết kế
+/// dưới đây bám vào một câu đó.
+enum TrnCertStatus {
+  /// Còn hiệu lực (hoặc vô thời hạn).
+  VALID
+  /// Quá `validUntil`. Trạng thái này do lượt quét/cron suy ra, KHÔNG phải người đặt.
+  EXPIRED
+  /// Bị thu hồi — bắt buộc có lý do và người thu hồi (BR-007).
+  REVOKED
+}
+
+model TrnCertificate {
+  id String @id @default(cuid())
+
+  /// `SR.CN.YYYY.NNNNN` — mã in trên bản PDF, người đọc bằng mắt.
+  certCode String @unique
+
+  /// ⚠️ Chuỗi ngẫu nhiên nhúng trong QR — KHÔNG dùng `id`.
+  ///
+  /// `id` là cuid: đoán được thì thôi, nhưng LIỆT KÊ được. Trang xác minh là trang
+  /// CÔNG KHAI không đăng nhập, nên một id đoán ra là một hồ sơ nhân sự đọc được.
+  /// Đó là IDOR, và nó nằm trên đúng cái trang được thiết kế để ai cũng mở.
+  verifyToken String @unique
+
+  userId String
+
+  /// Trỏ cả khoá LẪN phiên bản khoá.
+  ///
+  /// `courseVersionId` là phần giữ BR-013 đứng: sửa nội dung khoá sau này không được
+  /// làm sai chứng nhận đã phát. Bản PDF nói người này đạt NỘI DUNG NÀO, và "nội dung
+  /// nào" chỉ có nghĩa khi trỏ vào một phiên bản đã chốt.
+  courseId        String
+  courseVersionId String
+  programId       String?
+
+  /// Lượt ghi danh sinh ra chứng nhận này. Một lượt cấp tối đa một chứng nhận
+  /// (`@@unique`), nên vòng tái chứng nhận phải sinh lượt MỚI với `cycle` tăng —
+  /// không được cấp đè lên lượt cũ.
+  enrollmentId String        @unique
+  enrollment   TrnEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
+
+  issuedAt DateTime @default(now()) @db.Timestamptz(6)
+
+  /// Hạn hiệu lực — `NULL` nghĩa là VÔ THỜI HẠN, không phải "chưa tính".
+  ///
+  /// Suy 3 bước (HỢP ĐỒNG V2 §Z3): (1) lượt thuộc một `TrnRequirement` có chu kỳ ⇒
+  /// `issuedAt + TrnRequirement.validityMonths`; (2) không thuộc yêu cầu nào ⇒
+  /// `TrnProgram.validityMonths`; (3) cả hai NULL ⇒ NULL.
+  validUntil DateTime? @db.Timestamptz(6)
+
+  status TrnCertStatus @default(VALID)
+
+  revokedAt       DateTime? @db.Timestamptz(6)
+  revokedByUserId String?
+  revokeReason    String?
+
+  /// Khoá R2 của bản PDF đã render. NULL = chưa render lần nào.
+  /// Mốc ĐÃ XỬ LÝ xong khâu tái chứng nhận cho bản này.
+  ///
+  /// ⚠️ Cột này tồn tại để CỬA SỔ QUÉT CỦA CRON DRAIN ĐƯỢC, và đó không phải chuyện
+  /// lý thuyết — đúng lỗi này đã xảy ra một lần ở EL-15d.
+  ///
+  /// Không có nó thì nhánh "giao lại vòng mới" quét `status = EXPIRED` với
+  /// `take: 200` sắp theo hạn cũ nhất. Chứng nhận hết hạn thì `EXPIRED` VĨNH VIỄN,
+  /// nên sau khi tích đủ 200 bản đã xử lý xong, chúng chiếm trọn mỗi lượt quét và
+  /// bản vừa hết hạn KHÔNG BAO GIỜ tới lượt. Im lặng: cron vẫn chạy, vẫn báo 0 lỗi,
+  /// chỉ là không ai được giao lại khoá nữa.
+  ///
+  /// Đặt cả khi KHÔNG giao lại (đã có lượt vòng sau, hoặc thiếu cột đơn vị) — mục
+  /// đích là "đã xét xong", không phải "đã tạo lượt".
+  recertAssignedAt DateTime? @db.Timestamptz(6)
+
+  pdfKey String?
+
+  /// ⚠️ ẢNH CHỤP tên và mã nhân viên TẠI NGÀY CẤP.
+  ///
+  /// Đổi tên sau (kết hôn, sửa dấu, đổi mã nhân viên) KHÔNG được làm sai bản PDF đã
+  /// phát ra tay người ta. Join sống sang `User`/`Employee` là hồi tố lặng lẽ trên
+  /// một chứng từ — đúng loại lỗi không ai phát hiện cho tới khi có tranh chấp.
+  snapFullName     String
+  snapEmployeeCode String
+
+  centerId  String?
+  orgUnitId String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  /// ⚠️ CỐ Ý KHÔNG CÓ `deletedAt`, khác mọi bảng `Trn*` còn lại.
+  ///
+  /// Chứng nhận là chứng từ đã phát ra tay người ta và đã có người ngoài quét QR để
+  /// kiểm. Nó không được biến mất — kể cả biến mất mềm. Đường gỡ hiệu lực DUY NHẤT
+  /// là THU HỒI: có người thu hồi, có lý do, có ngày, và trang xác minh công khai
+  /// vẫn trả lời (nói "đã thu hồi" thay vì im lặng 404).
+  ///
+  /// Có cột xoá mềm ở đây là mở một đường làm tấm chứng nhận biến thành 404 mà không
+  /// ai chịu trách nhiệm — trong khi bản PDF trong tay người ta thì vẫn còn.
+
+  @@index([userId, status])
+  /// Cron nhắc T-30/T-7 quét theo cột này (§13.4).
+  @@index([validUntil])
+  /// Cửa sổ quét của nhánh giao lại — lọc thẳng trên cột, không quét rồi bỏ.
+  @@index([status, recertAssignedAt])
+  @@index([courseId, status])
+  @@index([centerId])
+  @@index([orgUnitId])
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // MEDIA-REVIEW (BA 26/08/2026) — ảnh/video buổi học + cổng duyệt của QLCS.
 //
@@ -9379,6 +9494,226 @@ model SessionMediaReview {
   @@index([orgUnitId])
 }
 
+/// EL-18 — KÍCH HOẠT của một luật tự động hoá.
+///
+/// ⚠️ Danh sách ĐÓNG và viết thẳng ra, không có "điều kiện tuỳ ý bằng biểu thức".
+/// Một cỗ máy luật cho phép viết biểu thức tự do là một ngôn ngữ lập trình thứ hai
+/// nằm trong DB: không ai review được, không test được, và nó chạy với quyền của hệ
+/// thống trên hồ sơ đào tạo của người thật.
+enum TrnAutoTrigger {
+  /// Nhân sự mới — đo bằng `Employee.joinedAt` trong N ngày.
+  NHAN_SU_MOI
+  /// Một lượt ghi danh vừa hoàn thành có kiểm chứng.
+  KHOA_HOAN_THANH
+  /// Một chứng nhận vừa hết hiệu lực.
+  CHUNG_NHAN_HET_HAN
+  /// Một yêu cầu đào tạo mới được khai và áp cho người này.
+  YEU_CAU_MOI_AP_DUNG
+}
+
+/// EL-18 — HÀNH ĐỘNG của một luật.
+///
+/// ⚠️ CỐ Ý KHÔNG CÓ hành động mang tính chế tài — không "gắn cờ hồ sơ nhân sự",
+/// không "trừ điểm đánh giá", không "báo kỷ luật". QĐ-CDA-06 chốt module chạy chế độ
+/// CHỈ BÁO CÁO, và câu chốt là "không leo thang kỷ luật, KHÔNG cờ đỏ hồ sơ nhân sự ở
+/// BẤT KỲ giá trị cấu hình nào".
+///
+/// Đó là lý do enum này thiếu chúng chứ không phải là chúng bị tắt bằng một cờ: một
+/// cờ tắt được thì cũng bật được, còn một giá trị không tồn tại trong enum thì phải
+/// đi qua migration + review mới có.
+enum TrnAutoAction {
+  /// Giao một khoá.
+  GIAO_KHOA
+  /// Giao trọn một lộ trình (nhiều khoá, có thứ tự).
+  GIAO_LO_TRINH
+  /// Gửi nhắc — không tạo nghĩa vụ mới.
+  GUI_NHAC
+}
+
+enum TrnAutoOutcome {
+  /// Đã thi hành.
+  APPLIED
+  /// Điều kiện không khớp, hoặc đã làm rồi — không phải lỗi.
+  SKIPPED
+  /// Có lỗi khi thi hành. Ghi lại để người vận hành lần ra.
+  FAILED
+}
+
+/// EL-18 — LUẬT TỰ ĐỘNG HOÁ: kích hoạt → điều kiện → hành động.
+model TrnAutomationRule {
+  id    String @id @default(cuid())
+  code  String @unique
+  title String
+
+  trigger TrnAutoTrigger
+  action  TrnAutoAction
+
+  /// Điều kiện, dạng có CẤU TRÚC (không phải biểu thức tự do).
+  /// Khoá được phép do `lib/elearning/automation.ts` định nghĩa và kiểm bằng zod.
+  conditionJson Json @default("{}")
+
+  /// Tham số của hành động: `courseId` cho GIAO_KHOA, `pathId` cho GIAO_LO_TRINH…
+  actionJson Json @default("{}")
+
+  /// Tắt/bật. ⚠️ Tắt KHÔNG xoá nhật ký đã ghi — lịch sử thi hành phải còn.
+  enabled Boolean @default(false)
+
+  /// Số ngày kể từ khi kích hoạt tới hạn của khoá được giao.
+  dueDays Int @default(30)
+
+  centerId  String?
+  orgUnitId String?
+
+  createdById String?
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt   DateTime? @db.Timestamptz(6)
+
+  logs TrnAutomationLog[]
+
+  @@index([trigger, enabled])
+  @@index([centerId])
+  @@index([orgUnitId])
+}
+
+/// EL-18 — NHẬT KÝ THI HÀNH.
+///
+/// ⚠️ `dedupeKey @unique` là cơ chế chống chạy hai lần, KHÔNG phải một phép kiểm
+/// trong mã. Cỗ máy chạy trên DomainEvent, mà hàng đợi chạy lại sự kiện khi handler
+/// ném lỗi giữa chừng — chống trùng bằng "tra rồi mới ghi" thì hai lượt song song
+/// cùng vượt qua được, và người ta bị giao cùng một khoá hai lần.
+model TrnAutomationLog {
+  id     String @id @default(cuid())
+  ruleId String
+
+  /// Người bị/được luật này tác động.
+  subjectUserId String
+
+  /// Khoá chống trùng: `<ruleId>:<subjectUserId>:<mốc nghiệp vụ>`.
+  dedupeKey String @unique
+
+  outcome TrnAutoOutcome
+
+  /// Câu tiếng Việt nói cụ thể đã làm gì hoặc vì sao bỏ qua — người vận hành đọc.
+  detail String @db.Text
+
+  centerId  String?
+  orgUnitId String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  rule TrnAutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@index([ruleId, createdAt])
+  @@index([subjectUserId])
+  @@index([outcome, createdAt])
+  @@index([centerId])
+  @@index([orgUnitId])
+}
+
+/// EL-18 — LỘ TRÌNH HỌC: nhiều khoá, có thứ tự.
+model TrnLearningPath {
+  id    String @id @default(cuid())
+  code  String @unique
+  title String
+
+  /// Mô tả cho người học: vì sao lộ trình này tồn tại.
+  description String? @db.Text
+
+  /// Bước sau chỉ mở khi bước trước xong. `false` ⇒ giao hết một lượt.
+  sequential Boolean @default(true)
+
+  status String @default("DRAFT")
+
+  centerId  String?
+  orgUnitId String?
+
+  createdById String?
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt   DateTime? @db.Timestamptz(6)
+
+  steps TrnLearningPathStep[]
+
+  @@index([status])
+  @@index([centerId])
+  @@index([orgUnitId])
+}
+
+/// EL-18 — một BƯỚC của lộ trình. Bảng con ⇒ không mang cột đơn vị (scope theo cha).
+model TrnLearningPathStep {
+  id       String @id @default(cuid())
+  pathId   String
+  courseId String
+
+  orderIndex Int @default(0)
+
+  /// Số ngày cho bước này, kể từ khi bước được mở.
+  dueDays Int @default(30)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  path TrnLearningPath @relation(fields: [pathId], references: [id], onDelete: Cascade)
+
+  @@unique([pathId, courseId])
+  @@index([pathId, orderIndex])
+}
+
+/// EL-20 — ẢNH CHỤP CHỈ SỐ theo kỳ.
+///
+/// ⚠️ Vì sao phải CHỤP thay vì tính lại mỗi lần mở báo cáo: mọi mốc NSM viết dạng tỉ
+/// lệ có mẫu số, mà mẫu số đổi theo thời gian (người vào, người nghỉ, yêu cầu mới).
+/// Tính lại là con số của tháng 3 đổi vì một việc xảy ra tháng 9 — và người đã đọc
+/// báo cáo tháng 3 rồi ra quyết định dựa trên nó.
+model TrnMetricSnapshot {
+  id String @id @default(cuid())
+
+  /// Mã chỉ số: `NSM`, `M2`, `M6`… Đặt tên ở `lib/elearning/metrics/constants.ts`.
+  metricKey String
+
+  periodStart DateTime @db.Timestamptz(6)
+  periodEnd   DateTime @db.Timestamptz(6)
+
+  /// Chiều tách nhóm: `{ "phongBan": "..." }` hoặc `{ "chucDanh": "..." }`.
+  ///
+  /// ⚠️ Chiều "theo vị trí" ĐỔI thành "theo CHỨC DANH" và đọc `snapJobTitle`, vì bảng
+  /// `Position` rỗng trên prod — tách theo vị trí sẽ cho ra đúng một nhóm rỗng.
+  dimensionJson Json @default("{}")
+
+  /// Tử số / mẫu số giữ NGUYÊN, không chỉ lưu tỉ lệ.
+  ///
+  /// ⚠️ Lưu mỗi tỉ lệ là mất khả năng cộng dồn và mất luôn cỡ mẫu: "80%" trên 5 người
+  /// và "80%" trên 500 người là hai câu hoàn toàn khác nhau.
+  numerator   Int
+  denominator Int
+
+  /// Số người trong nhóm — hiện thực của luật ngưỡng n tối thiểu Ở TẦNG DỮ LIỆU.
+  groupN Int
+
+  /// `true` ⇒ nhóm dưới ngưỡng, KHÔNG được công bố tách riêng.
+  ///
+  /// ⚠️ Đặt ở tầng dữ liệu chứ không tầng hiển thị là có chủ đích: một cờ ở tầng hiển
+  /// thị thì lần xuất Excel tiếp theo, hay một màn mới, hay một truy vấn tay sẽ bỏ
+  /// qua nó. Ở đây thì mọi đường đọc đều thấy.
+  suppressed Boolean @default(false)
+
+  centerId  String?
+  orgUnitId String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  /// Bản phẳng của `dimensionJson` để đưa được vào khoá `@@unique` — Postgres không
+  /// cho unique trên cột JSON. Dựng bằng `dimensionKeyCua()` ở một chỗ duy nhất.
+  dimensionKey String @default("")
+
+  /// Một kỳ × một chỉ số × một chiều = MỘT dòng. Chạy lại việc chốt ảnh chụp không
+  /// sinh bản thứ hai cho cùng kỳ.
+  @@unique([metricKey, periodStart, periodEnd, dimensionKey])
+  @@index([metricKey, periodEnd])
+  @@index([centerId])
+  @@index([orgUnitId])
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // TRẦN CHI PHÍ THÁNG cho lời gọi ra ngoài (chốt 27/08/2026).
 // Zalo 2tr · cước gọi 3tr · chấm điểm AI 1tr. Luật + câu lệnh: lib/ngan-sach-goi-ra/.
@@ -9420,6 +9755,7 @@ model OutboundSpendCounter {
   @@id([period, axis])
   @@index([period])
 }
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // HỘP THƯ ĐA KÊNH (Site Sale) — hội thoại với NGƯỜI NGOÀI hệ thống.
 // Spec: satarobo-sale/plan/20-SPEC-TICH-HOP-ZALO-OMICALL-AI.md §3.4 (Q-KT-2).
@@ -9663,6 +9999,7 @@ model InboxMessage {
   @@index([deliveryStatus, createdAt])
   @@index([orgUnitId])
 }
+
 // ═══════════════════════════════════════════════════════════════════════════
 // TRỤC GỌI ĐIỆN + GHI ÂM (OmiCall) — spec `plan/20-SPEC-TICH-HOP-...` §5.3
 //

@@ -1,4 +1,8 @@
 import Link from "next/link";
+import {
+  napBangChiSo,
+  kyThangNay,
+} from "@/lib/elearning/metrics/grading-queue-query";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { can } from "@/lib/auth/can";
@@ -74,6 +78,11 @@ export default async function Page({
   const ds = chon ? await traDongBaoCao(db, chon) : [];
   const tong = tongHopTuanThu(ds);
   const now = new Date();
+  // ⚠️ Chỉ số hàng đợi chấm nằm ở ĐÂY, không ở một trang riêng: nó là DẤU HIỆU SỚM
+  // của quá tải phòng Đào tạo (QĐ-CDA-15) và phải được nhìn HÀNG THÁNG. Một trang
+  // riêng là một trang không ai mở, và tín hiệu xuất hiện trước khi hệ thống có vẻ
+  // hỏng thì chờ người kêu là đã muộn một quý.
+  const chiSo = await napBangChiSo(db, { ky: kyThangNay(now), bayGio: now });
   const duocXuat = can(actor, "elearning:report:export");
 
   return (
@@ -91,6 +100,74 @@ export default async function Page({
           Xem chi tiết xem video và cờ nghi ngờ →
         </Link>
       ) : null}
+
+      {/* ── Chỉ số hàng đợi chấm tay (M9 · M10) ─────────────────────────── */}
+      <section className="mt-5 rounded-md border p-4">
+        <h2 className="text-sm font-semibold">Hàng đợi chấm tay</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Cam kết: có điểm trong <strong>{chiSo.slaNgayLam} ngày làm việc</strong> kể
+          từ lúc người học nộp. Quá hạn thì hệ thống tự nới hạn của họ — nên con số ở
+          đây là việc của người chấm, không phải của người học.
+        </p>
+
+        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-md border p-3">
+            <p className="text-xs text-muted-foreground">Đang chờ chấm</p>
+            <p className="text-2xl font-bold">{chiSo.m10.dangCho}</p>
+          </div>
+          <div className="rounded-md border p-3">
+            <p className="text-xs text-muted-foreground">Quá hạn chấm</p>
+            <p
+              className={`text-2xl font-bold ${
+                chiSo.m10.quaHan > 0 ? "text-red-600" : ""
+              }`}
+            >
+              {chiSo.m10.quaHan}
+            </p>
+            {chiSo.m10.quaHan > 0 ? (
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                trung vị {chiSo.m10.trungViQuaHan} ngày · lâu nhất{" "}
+                {chiSo.m10.tuoiLonNhat} ngày làm việc
+              </p>
+            ) : null}
+          </div>
+          <div className="rounded-md border p-3">
+            <p className="text-xs text-muted-foreground">Chấm đúng hạn tháng này</p>
+            <p
+              className={`text-2xl font-bold ${chiSo.m9.canhBao ? "text-red-600" : ""}`}
+            >
+              {/* Chưa có bài nào thì nói "chưa có", KHÔNG hiện 0% — một phòng chưa
+                  nhận bài mà bảng báo 0% tuân thủ là lời buộc tội sai. */}
+              {chiSo.m9.tiLe == null
+                ? "—"
+                : `${Math.round(chiSo.m9.tiLe * 100)}%`}
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {chiSo.m9.tiLe == null
+                ? "chưa chấm bài nào trong tháng"
+                : `${chiSo.m9.dungHan}/${chiSo.m9.tong} bài`}
+            </p>
+          </div>
+        </div>
+
+        {chiSo.m10.canhBao || chiSo.m9.canhBao ? (
+          // ⚠️ Nói thẳng đây là dấu hiệu QUÁ TẢI, không phải lỗi thao tác. Người đọc
+          // cần biết việc phải làm là chia lại việc, không phải bấm nhanh hơn.
+          <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            Hàng đợi chấm đang vỡ cam kết. Đây là một trong hai dấu hiệu sớm của quá
+            tải ở phòng Đào tạo — cân nhắc chia lại người chấm, đừng chỉ giục.
+          </p>
+        ) : null}
+
+        {chiSo.m10.dangCho > 0 ? (
+          <Link
+            href="/elearning/cham-bai-tap"
+            className="mt-3 inline-block text-sm text-primary underline"
+          >
+            Mở hàng đợi chấm bài tập →
+          </Link>
+        ) : null}
+      </section>
 
       {cacLuot.length === 0 ? (
         <p className="mt-4 text-sm text-muted-foreground">

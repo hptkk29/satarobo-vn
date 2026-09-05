@@ -50,6 +50,37 @@ export const LOAI_BAI_DA_MO = [
 export type LoaiBaiDaMo = (typeof LOAI_BAI_DA_MO)[number];
 
 /**
+ * Loại bài có MÀN HÌNH CHO NGƯỜI HỌC mở ra.
+ *
+ * ⚠️ KHÁC `LOAI_BAI_DA_MO`, và sự khác nhau đó là một lỗi thật đã lọt: đề cương
+ * dựng link theo `laLoaiBaiDaMo()`, nghĩa là "module có xử lý loại này". Nhưng
+ * `LIVE_SESSION` được xử lý ở phía GIẢNG VIÊN — họ điểm danh — còn người học mở ra
+ * chỉ nhận một màn nói "không có nội dung để xem ở đây".
+ *
+ * Tức là đúng cái vòng vô ích mà dòng bình luận ngay chỗ dựng link nói là để tránh.
+ * E2E bắt được (`vong-hoc.spec.ts`), 6009 test đơn vị thì không: chúng kiểm hàm,
+ * không kiểm việc bấm vào rồi tới đâu.
+ *
+ * Thêm loại bài mới thì phải khai vào ĐÂY nữa — test `lesson-kind.test.ts` bắt
+ * lệch, để không ai vô tình dựng thêm một link dẫn vào ngõ cụt.
+ */
+export const LOAI_BAI_CO_MAN_NGUOI_HOC = [
+  "READ",
+  "VIDEO",
+  "QUIZ",
+  "TASK",
+] as const;
+
+/** Vì sao một loại đã mở lại không có màn cho người học — câu hiện ngay trên đề cương. */
+export const VI_SAO_KHONG_CO_MAN: Record<string, string> = {
+  LIVE_SESSION: "giảng viên điểm danh, bạn không cần mở",
+};
+
+export function coManChoNguoiHoc(kind: string): boolean {
+  return (LOAI_BAI_CO_MAN_NGUOI_HOC as readonly string[]).includes(kind);
+}
+
+/**
  * Loại CHƯA mở, và ticket nào mở nó.
  *
  * Ghi tên ticket chứ không ghi "sắp có": người đọc cần biết chờ ai, và khi ticket

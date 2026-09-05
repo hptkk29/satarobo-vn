@@ -261,6 +261,25 @@ export function isPublicOtpPath(p: string): boolean {
   return PUBLIC_OTP_PATHS.has(p);
 }
 
+/**
+ * EL-16 — trang XÁC MINH CHỨNG NHẬN, công khai và KHÔNG đăng nhập.
+ *
+ * Đây là lý do tồn tại của cả tấm chứng nhận: người ngoài công ty — một khách hàng,
+ * một đoàn kiểm tra, một nhà tuyển dụng — quét QR bằng điện thoại của họ và đọc được
+ * câu trả lời. Bắt đăng nhập ở đây là biến chứng nhận thành thứ chỉ nội bộ tự xem
+ * nhau, tức mất đúng phần khiến nó là chứng từ.
+ *
+ * ⚠️ Cổng mở này chỉ an toàn nhờ HAI thứ đi kèm, và cả hai nằm ngoài tệp này:
+ *   · địa chỉ đi bằng `verifyToken` ngẫu nhiên 32 ký tự, KHÔNG bằng `id` (id liệt kê
+ *     được ⇒ IDOR trên chính trang ai cũng mở);
+ *   · trang chỉ trả 5 trường — họ tên · mã NV · tên khoá · ngày cấp · trạng thái.
+ *     Không phòng ban, không điểm, không lịch sử học.
+ * Nới một trong hai là biến trang tra cứu thành trang tra HỒ SƠ NHÂN SỰ.
+ */
+export function isXacThucPath(p: string): boolean {
+  return p === "/xac-thuc" || p.startsWith("/xac-thuc/");
+}
+
 export function isInfraPath(p: string): boolean {
   return (
     p.startsWith("/_next/") ||
@@ -582,6 +601,21 @@ export function decideRoute(input: RouteInput): RouteDecision {
       }
       return { type: "next" };
     }
+
+    // EL-16 — xác minh chứng nhận: công khai, KHÔNG đăng nhập, và không đá ai đi
+    // đâu cả.
+    //
+    // ⚠️ Đặt TRƯỚC mọi nhánh phân loại người dùng, và cố ý KHÔNG hỏi `isStaff` /
+    // `isParent`. Ba nhánh OTP ở trên đá người đã đăng nhập về khu của họ — đúng
+    // với màn kích hoạt, SAI ở đây: nhân viên quét QR trên máy mình sẽ bị ném về
+    // trang chủ thay vì thấy kết quả, và phụ huynh quét QR bị đẩy sang portal. Cả
+    // hai đều là người đi tra cứu hợp lệ.
+    //
+    // ⚠️ `next`, KHÔNG `rewrite` sang `/elearning/...`: mọi thứ dưới segment
+    // `elearning/` nằm trong layout gác `auth()` + hồ sơ nhân sự, nên rewrite vào đó
+    // là dựng một trang công khai rồi khoá nó lại. Tệp trang cố ý nằm ở
+    // `app/(elearning)/xac-thuc/` — cùng nhóm route, NGOÀI layout gác.
+    if (isXacThucPath(pathname)) return { type: "next" };
 
     // Trang đổi mật khẩu bắt buộc — phục vụ tại chỗ, KHÔNG rewrite.
     if (pathname === "/doi-mat-khau") {

@@ -13,12 +13,14 @@
 //
 // UI: shadcn thuần — KHÔNG Magic UI / Framer Motion / Recharts (ESLint chặn theo
 // khối glob `app/(elearning)/**` thêm ở EL-07).
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { hasStaffRole } from "@/lib/auth/permissions";
 import { isElearningEnabled } from "@/lib/flags";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { can } from "@/lib/auth/can";
 
 export const dynamic = "force-dynamic";
 
@@ -91,5 +93,77 @@ export default async function ElearningLayout({
     );
   }
 
-  return <>{children}</>;
+  // ⚠️ THANH ĐIỀU HƯỚNG — khu này TỪNG KHÔNG CÓ CÁI NÀO.
+  //
+  // Hệ quả đo được: mọi màn hình đã dựng (chương trình · kho câu hỏi · đề thi ·
+  // khung chấm · hai hàng đợi chấm · báo cáo) chỉ tới được bằng cách gõ tay địa chỉ,
+  // hoặc qua vài link chéo giữa chính các màn con của chúng. Một module gần đủ mã mà
+  // chưa ai đi hết được một vòng nào.
+  //
+  // ⚠️ Gác theo QUYỀN, không hiện hết cho mọi người: một người học thuần thấy mục
+  // "Chấm bài" là thấy một cánh cửa họ mở ra sẽ bị từ chối — và họ sẽ nghĩ mình mất
+  // quyền chứ không nghĩ mục đó không dành cho mình.
+  const soan = can(actor, "elearning:content:author");
+  const cham = can(actor, "elearning:exam:grade");
+  const giao = can(actor, "elearning:assignment:create");
+  const baoCao = can(actor, "elearning:progress:view-all");
+  const quanLyYeuCau = can(actor, "elearning:requirement:manage");
+  const quanLyChuongTrinh = can(actor, "elearning:program:manage");
+
+  const muc: { href: string; nhan: string }[] = [
+    { href: "/elearning", nhan: "Khoá của tôi" },
+    ...(soan ? [{ href: "/elearning/chuong-trinh", nhan: "Chương trình" }] : []),
+    // EL-21 — mức gắn đánh giá. Gác bằng `program:manage` (không mở khoá thứ 18).
+    ...(quanLyChuongTrinh
+      ? [{ href: "/elearning/muc-danh-gia", nhan: "Mức đánh giá" }]
+      : []),
+    // EL-18 — cỗ máy tự động hoá. Hiện cho cả người chỉ xem báo cáo: nhật ký thi hành
+    // là chỗ trả lời "vì sao người này được giao khoá đó", và người đọc báo cáo cần
+    // tới được nó. Nút bật/tắt bên trong mới gác bằng `program:manage`.
+    ...(quanLyChuongTrinh || baoCao
+      ? [{ href: "/elearning/tu-dong-hoa", nhan: "Tự động hoá" }]
+      : []),
+    ...(giao ? [{ href: "/elearning/giao-bai", nhan: "Giao bài" }] : []),
+    ...(cham ? [{ href: "/elearning/cham-bai-tap", nhan: "Chấm bài" }] : []),
+    // EL-16 — dùng CHUNG khoá xem tiến độ toàn hệ với báo cáo: ai xem được ai đã học
+    // gì thì cũng xem được ai đã có chứng nhận gì. Nút THU HỒI bên trong màn đó mới
+    // gác bằng `certificate:revoke`.
+    ...(baoCao ? [{ href: "/elearning/chung-nhan", nhan: "Chứng nhận" }] : []),
+    // EL-17 — ma trận và yêu cầu. Mục "Yêu cầu" hiện cho CẢ người chỉ xem được: họ
+    // cần biết nghĩa vụ nào đang áp cho người của mình, kể cả khi không ra được
+    // nghĩa vụ mới. Nút khai bên trong màn mới gác bằng `requirement:manage`.
+    ...(baoCao || quanLyYeuCau
+      ? [{ href: "/elearning/ma-tran", nhan: "Ma trận" }]
+      : []),
+    ...(baoCao || quanLyYeuCau
+      ? [{ href: "/elearning/yeu-cau", nhan: "Yêu cầu" }]
+      : []),
+    ...(baoCao ? [{ href: "/elearning/bao-cao", nhan: "Báo cáo" }] : []),
+    // EL-17 — R4 (theo phòng ban/cơ sở) và R5 (kết quả kiểm tra + phân tích câu hỏi).
+    // Hai báo cáo này KHÔNG có lối vào nào khác: không nối vào đây thì chúng chỉ tới
+    // được bằng cách gõ tay địa chỉ.
+    ...(baoCao ? [{ href: "/elearning/bao-cao-r4", nhan: "Theo phòng ban" }] : []),
+    ...(baoCao ? [{ href: "/elearning/bao-cao-r5", nhan: "Kết quả thi" }] : []),
+    // EL-20 — R7 hiệu quả đào tạo (Kirkpatrick + ảnh chụp chỉ số).
+    ...(baoCao ? [{ href: "/elearning/bao-cao-r7", nhan: "Hiệu quả" }] : []),
+  ];
+
+  return (
+    <>
+      <nav className="border-b bg-background">
+        <div className="mx-auto flex max-w-6xl flex-wrap gap-x-4 gap-y-1 px-4 py-2 text-sm">
+          {muc.map((m) => (
+            <Link
+              key={m.href}
+              href={m.href}
+              className="text-muted-foreground hover:text-foreground hover:underline"
+            >
+              {m.nhan}
+            </Link>
+          ))}
+        </div>
+      </nav>
+      {children}
+    </>
+  );
 }
