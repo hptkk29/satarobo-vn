@@ -286,6 +286,9 @@ model Center {
   // phương thức dùng chung, không thuộc cơ sở nào).
   paymentMethods PaymentMethod[]
 
+  // Module chấm công v3 (L1 · 06/09/2026) — điểm chấm công của cơ sở vận hành.
+  workLocations WorkLocation[]
+
   @@index([isActive])
   @@index([displayOrder])
 }
@@ -1047,17 +1050,23 @@ enum HolidayType {
 }
 
 model Holiday {
-  id        String      @id @default(cuid())
-  name      String
-  date      DateTime    @db.Date
-  endDate   DateTime?   @db.Date
-  centerId  String?
-  orgUnitId String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
-  center    Center?     @relation(fields: [centerId], references: [id], onDelete: Cascade)
-  type      HolidayType @default(HOLIDAY)
-  note      String?     @db.Text
-  createdAt DateTime    @default(now()) @db.Timestamptz(6)
-  updatedAt DateTime    @updatedAt @db.Timestamptz(6)
+  id               String                   @id @default(cuid())
+  name             String
+  date             DateTime                 @db.Date
+  endDate          DateTime?                @db.Date
+  centerId         String?
+  orgUnitId        String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
+  center           Center?                  @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  type             HolidayType              @default(HOLIDAY)
+  note             String?                  @db.Text
+  // ── Module chấm công v3 (L1 · 06/09/2026) — T-04: lễ là CỘT RIÊNG, hệ số Kế toán tự set.
+  // Cột nullable/additive — KHÔNG đổi nghĩa dòng đang có (mọi reader Holiday dời buổi học).
+  attendanceEffect HolidayAttendanceEffect?
+  coefficient      Float                    @default(1) // holidayPaidUnits = dayCreditExpected × coefficient
+  briefMode        ShiftBriefMode? // tin 19:00: SUPPRESS = không gửi, REPLACE = thay toàn bộ
+  briefText        String?                  @db.Text
+  createdAt        DateTime                 @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime                 @updatedAt @db.Timestamptz(6)
 
   @@index([date])
   @@index([centerId, date])
@@ -2623,7 +2632,11 @@ model Employee {
   subordinates Employee[] @relation("EmployeeManager")
 
   // CEO flag (chỉ 1 employee được isCEO=true tại 1 thời điểm)
-  isCEO Boolean @default(false)
+  isCEO           Boolean @default(false)
+  // Module chấm công v3 (T-02, 05/09/2026): miễn tính công (Mr Phúc). Cờ theo NGƯỜI, chỉ
+  // SUPER_ADMIN set (khuôn SEC-M15 của isCEO) — KHÔNG tái dùng isCEO (cờ vinh danh công khai).
+  // Engine: EXEMPT thì không sinh StaffAttendanceDay, không vào summary kỳ.
+  timesheetExempt Boolean @default(false)
 
   // Meta
   createdAt   DateTime @default(now()) @db.Timestamptz(6)
@@ -5023,25 +5036,35 @@ model WorkRequest {
   // từng bảng: xem BACKFILL_SPECS trong lib/org/center-bridge.ts.
   orgUnitId   String?
 
-  kind           WorkRequestKind
-  status         WorkRequestStatus @default(PENDING)
-  fromDate       DateTime?         @db.Date // ngày / từ ngày (đơn theo ngày)
-  toDate         DateTime?         @db.Date // đến ngày (đơn khoảng)
-  startTime      String? // "HH:mm"
-  endTime        String? // "HH:mm"
-  hours          Float? // OT tự tính / chỉnh công
-  className      String? // tên lớp (snapshot, đơn liên quan lớp)
-  classId        String? // link lớp (tuỳ chọn)
-  targetUserId   String? // người dạy thay / nhận ca
-  targetShiftId  String? // ca muốn đổi (ShiftRegistration id)
-  detail         String? // meta phụ (nơi đến, hình thức muộn/sớm, người nhận…)
-  reason         String            @db.Text // lý do (bắt buộc)
-  reviewedById   String?
-  reviewedByName String?
-  reviewedAt     DateTime?         @db.Timestamptz(6)
-  reviewNote     String?           @db.Text
-  createdAt      DateTime          @default(now()) @db.Timestamptz(6)
-  updatedAt      DateTime          @updatedAt @db.Timestamptz(6)
+  kind                   WorkRequestKind
+  status                 WorkRequestStatus @default(PENDING)
+  fromDate               DateTime?         @db.Date // ngày / từ ngày (đơn theo ngày)
+  toDate                 DateTime?         @db.Date // đến ngày (đơn khoảng)
+  startTime              String? // "HH:mm"
+  endTime                String? // "HH:mm"
+  hours                  Float? // OT tự tính / chỉnh công
+  className              String? // tên lớp (snapshot, đơn liên quan lớp)
+  classId                String? // link lớp (tuỳ chọn)
+  targetUserId           String? // người dạy thay / nhận ca
+  targetShiftId          String? // ca muốn đổi (ShiftRegistration id) — cũ, không ai đọc; thay bằng assignmentId
+  // ── Module chấm công v3 (L1 · 06/09/2026) — kế hoạch §3.2 ───────────────────
+  assignmentId           String? // ShiftAssignment của ngày áp dụng
+  requesterNewTemplateId String? // "Mã ca mới" (SHIFT_SWAP / LEAVE có người thay)
+  targetNewTemplateId    String? // "Mã ca của người nhận thay"
+  leaveTypeId            String? // LeaveType (LEAVE)
+  submittedLate          Boolean           @default(false) // nộp < 2 ngày trước ngày áp dụng (snapshot lúc nộp)
+  requestedInAt          String? // TIMESHEET_FIX: giờ vào đề nghị "HH:mm"
+  requestedOutAt         String? // TIMESHEET_FIX: giờ ra đề nghị "HH:mm"
+  appliedAt              DateTime?         @db.Timestamptz(6) // đã áp hệ quả (đổi lịch) lúc nào
+  applyError             String? // lỗi áp hệ quả — ghi SAU rollback (T-05)
+  detail                 String? // meta phụ (nơi đến, hình thức muộn/sớm, người nhận…)
+  reason                 String            @db.Text // lý do (bắt buộc)
+  reviewedById           String?
+  reviewedByName         String?
+  reviewedAt             DateTime?         @db.Timestamptz(6)
+  reviewNote             String?           @db.Text
+  createdAt              DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt              DateTime          @updatedAt @db.Timestamptz(6)
 
   @@index([requesterId, status])
   @@index([centerId, status, createdAt])
@@ -8561,4 +8584,413 @@ model SessionMediaReview {
   @@index([centerId, sessionDate, status])
   @@index([status, deadlineAt])
   @@index([orgUnitId])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MODULE CHẤM CÔNG v3 (L1 · 06/09/2026) — docs/cham-cong/KE-HOACH-CHAM-CONG-v3.md §3
+//
+// Thay 5 bảng cũ (EmployeeCheckin · ShiftRegistration · TimesheetAdjustmentRequest ·
+// TimesheetEditLog · WorkShiftConfig — 0 dòng prod, giữ tới Pha B). Mọi bảng theo đơn vị
+// mang CẢ `centerId` (scopedDb hôm nay khoá theo cột này) lẫn `orgUnitId` (ghi kép qua
+// lib/org/dual-write.ts, khai ở BACKFILL_SPECS). Số công dùng Float: giá trị chỉ là bội
+// của 0,5 và hệ số lễ 1–3, không phải tiền.
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum ShiftTemplateKind {
+  TIMED // có giờ (S, C, HC, CG…)
+  LOCATION_ONLY // chỉ nơi làm, không giờ (D1, D2)
+  FLEXIBLE // linh động (LD)
+  OFF // nghỉ (X)
+  LEAVE // nghỉ phép (P)
+}
+
+enum ShiftAttendanceMode {
+  REQUIRED // phải quét QR
+  OPTIONAL // quét thì ghi giờ, không quét vẫn 1 công (LD, NG)
+  NONE // không chấm (X, P)
+}
+
+enum ShiftPayMode {
+  SHIFT // công theo ca (1 công/ngày có mã)
+  ADMIN_HOURS // giờ hành chính (HC) — vẫn 1 công/ngày, kèm giờ
+  NONE
+}
+
+enum ShiftPlaceMode {
+  AT_UNITS // phải ở một trong allowedOrgUnitIds
+  ANY_CENTER // HO: chấm ở cơ sở nào cũng được
+  OFFSITE // công tác ngoài (NG)
+  ANYWHERE // linh động (LD)
+}
+
+enum ShiftAssignmentSource {
+  PATTERN // sinh từ khung ca tuần
+  IMPORT // import lưới tháng từ Excel
+  MANUAL // sửa tay trên lưới
+  SWAP // đơn đổi ca được duyệt
+  LEAVE // đơn nghỉ được duyệt
+  HOLIDAY // ngày lễ
+}
+
+enum ShiftAssignmentStatus {
+  ACTIVE
+  CANCELLED
+}
+
+enum ShiftPatternSection {
+  KINH_DOANH
+  GIAO_VIEN
+  VAN_PHONG
+}
+
+enum StaffTimeLogSource {
+  TICKET // quét QR có vé
+  LEGACY_CHECKIN // chuyển từ EmployeeCheckin cũ
+  MANUAL_ADJUST // TIMESHEET_FIX được duyệt
+  KIOSK
+}
+
+enum StaffTimeLogResult {
+  ACCEPTED
+  REJECTED
+}
+
+enum TimeLogReviewStatus {
+  PENDING
+  CONFIRMED
+  DISMISSED
+}
+
+enum AttendanceDayType {
+  WORK
+  WEEKLY_OFF
+  LEAVE
+  HOLIDAY
+  UNSCHEDULED
+}
+
+enum AttendanceDayStatus {
+  COMPUTED
+  ADJUSTED
+  LOCKED
+}
+
+enum AttendanceComputedBy {
+  ENGINE
+  MANUAL
+  LEGACY
+}
+
+enum AttendancePeriodStatus {
+  OPEN
+  CLOSING
+  LOCKED
+  REOPENED
+}
+
+enum ShiftBriefAudience {
+  ALL
+  KINH_DOANH
+  GIAO_VIEN
+}
+
+enum ShiftBriefMode {
+  APPEND
+  SUPPRESS
+  REPLACE
+}
+
+enum HolidayAttendanceEffect {
+  PAID_LEAVE
+  UNPAID_OFF
+  INFO_ONLY
+}
+
+/// Danh mục mã ca — tab DANH MỤC CA của Sheet. segments = [{start,end,kind:"WORK"|"PAID_BREAK",place?}].
+/// centerId = NULL là mã dùng chung mọi cơ sở (SCOPED + NULL_IS_GLOBAL, khuôn PaymentMethod).
+model ShiftTemplate {
+  id             String              @id @default(cuid())
+  code           String // "S", "CG", "D1"… chuỗi Sheet, KHÔNG enum — thêm mã mới không cần dev
+  name           String
+  kind           ShiftTemplateKind   @default(TIMED)
+  segments       Json // [{start:"07:45",end:"11:30",kind:"WORK",place?:"HOME"|"CENTER:CS1"|…}]
+  defaultPlace   String              @default("HOME") // HOME | CENTER:<code> | ANY_CENTER | ASSIGNED | OFFSITE | ANYWHERE
+  attendanceMode ShiftAttendanceMode @default(REQUIRED)
+  dayCredit      Float               @default(1) // K-01 theo Sheet: mọi mã làm việc = 1; X/P = 0
+  isLeave        Boolean             @default(false)
+  nominalMinutes Int? // giờ kế hoạch khi không có segment (NG = 450); LD = null
+  payMode        ShiftPayMode        @default(SHIFT)
+  scopeUserIds   String[]            @default([]) // Q-15: mã đặc thù của vài người — chỉ cảnh báo
+  effectiveFrom  DateTime            @default(dbgenerated("'2000-01-01'::date")) @db.Date
+  effectiveTo    DateTime?           @db.Date
+  // Cột hiển thị cho màn danh mục (không dùng để tính — tính từ segments)
+  amStart        String?
+  amEnd          String?
+  pmStart        String?
+  pmEnd          String?
+  pmBreakStart   String?
+  pmBreakEnd     String?
+  note           String?             @db.Text
+  displayOrder   Int                 @default(0)
+  isActive       Boolean             @default(true)
+  centerId       String?
+  orgUnitId      String?
+  createdAt      DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime            @updatedAt @db.Timestamptz(6)
+
+  patterns    ShiftWeeklyPattern[]
+  assignments ShiftAssignment[]
+
+  @@unique([code, effectiveFrom])
+  @@index([centerId])
+  @@index([orgUnitId])
+  @@index([isActive, displayOrder])
+}
+
+/// Khung ca cố định hằng tuần — tab KHUNG CA CỐ ĐỊNH. Một người có thể có 2 bộ dòng (Mr Phúc: CS1 + CS2).
+model ShiftWeeklyPattern {
+  id            String              @id @default(cuid())
+  userId        String
+  centerId      String // khối trên Sheet: CS1 | CS2 | "hoi-so"
+  orgUnitId     String?
+  weekday       Int // 0=CN … 6=T7 (khớp vnWeekday)
+  templateId    String
+  templateCode  String
+  placeOverride String?
+  sheetName     String? // "Mr Phúc" — tên hiển thị trên Sheet, để export ngược
+  section       ShiftPatternSection @default(KINH_DOANH)
+  jobLabel      String? // "Quản lý" / "Tư vấn" / "Giáo viên"
+  displayOrder  Int                 @default(0)
+  effectiveFrom DateTime            @default(dbgenerated("'2000-01-01'::date")) @db.Date
+  effectiveTo   DateTime?           @db.Date
+  createdAt     DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime            @updatedAt @db.Timestamptz(6)
+  template      ShiftTemplate       @relation(fields: [templateId], references: [id])
+
+  @@unique([userId, centerId, weekday, effectiveFrom])
+  @@index([centerId])
+  @@index([orgUnitId])
+}
+
+/// Một ô lưới tháng (đã gộp D1/D2 vào ô đích). Đổi ca = CANCELLED + dòng mới.
+/// Partial unique (userId, workDate) WHERE status='ACTIVE' tạo bằng SQL trong migration.
+model ShiftAssignment {
+  id                String                @id @default(cuid())
+  userId            String
+  employeeId        String?
+  centerId          String // cơ sở LÀM / chịu công hôm đó (khác User.centerId là bình thường)
+  orgUnitId         String?
+  workDate          DateTime              @db.Date
+  templateId        String
+  templateCode      String
+  segments          Json // bản resolve: place → orgUnitIds[]
+  placeMode         ShiftPlaceMode        @default(AT_UNITS)
+  allowedOrgUnitIds String[]              @default([])
+  attendanceMode    ShiftAttendanceMode   @default(REQUIRED)
+  dayCredit         Float                 @default(1)
+  isLeave           Boolean               @default(false)
+  nominalMinutes    Int?
+  sourceCells       Json? // {"CS1":"D2","CS2":"CG"} — export ngược đúng ô
+  source            ShiftAssignmentSource @default(PATTERN)
+  sourceRequestId   String?
+  status            ShiftAssignmentStatus @default(ACTIVE)
+  note              String?
+  createdById       String?
+  createdAt         DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime              @updatedAt @db.Timestamptz(6)
+  template          ShiftTemplate         @relation(fields: [templateId], references: [id])
+
+  @@index([userId, workDate])
+  @@index([centerId, workDate])
+  @@index([orgUnitId])
+  @@index([workDate, status])
+}
+
+/// Điểm chấm công — chỉ cơ sở vận hành (CS1/CS2), KHÔNG có dòng cho "hoi-so".
+model WorkLocation {
+  id              String   @id @default(cuid())
+  code            String   @unique // "CS1"
+  name            String
+  centerId        String
+  orgUnitId       String?
+  latitude        Float?
+  longitude       Float?
+  radiusMeters    Int      @default(100)
+  geofenceEnabled Boolean  @default(false) // bật từng cơ sở sau khi đo toạ độ
+  ipAllowlist     String[] @default([])
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
+  center          Center   @relation(fields: [centerId], references: [id], onDelete: Cascade)
+
+  timeLogs StaffTimeLog[]
+  tickets  AttendanceTicket[]
+
+  @@index([centerId])
+  @@index([orgUnitId])
+}
+
+/// Sổ quét — mọi lượt kể cả bị từ chối. Không unique nghiệp vụ (nhiều lượt/ngày).
+/// Mọi câu tính công lọc result='ACCEPTED' qua helper acceptedLogsOfDay (có test).
+model StaffTimeLog {
+  id              String              @id @default(cuid())
+  userId          String
+  centerId        String // nơi chấm; không WorkLocation thì assignment.centerId, rồi home, rồi "hoi-so"
+  orgUnitId       String?
+  workLocationId  String?
+  direction       CheckinType
+  loggedAt        DateTime            @default(now()) @db.Timestamptz(6)
+  workDate        DateTime            @db.Date // vnDateOnly lúc ghi
+  source          StaffTimeLogSource  @default(TICKET)
+  result          StaffTimeLogResult  @default(ACCEPTED)
+  rejectReason    String? // TICKET_INVALID | TICKET_EXPIRED | TICKET_REUSED | NO_WORKLOCATION | OVER_DAILY_CAP
+  flags           String[]            @default([]) // NGOAI_VUNG | THIEU_GPS | CHUA_TOA_DO | TRUNG_2_PHUT | GPS_KEM_CHINH_XAC | SAI_NOI_LAM
+  reviewStatus    TimeLogReviewStatus @default(PENDING)
+  reviewedById    String?
+  reviewedAt      DateTime?           @db.Timestamptz(6)
+  reviewNote      String?
+  latitude        Float?
+  longitude       Float?
+  accuracyMeters  Float?
+  distanceMeters  Int?
+  withinGeofence  Boolean?
+  ticketId        String?
+  ip              String?
+  userAgent       String?
+  verifyMethod    String? // chỗ cắm đợt 2
+  verifyRefId     String?
+  verifyScore     Float?
+  adjustRequestId String?
+  createdAt       DateTime            @default(now()) @db.Timestamptz(6)
+  workLocation    WorkLocation?       @relation(fields: [workLocationId], references: [id], onDelete: SetNull)
+
+  @@index([userId, workDate])
+  @@index([centerId, workDate])
+  @@index([orgUnitId])
+  @@index([reviewStatus, workDate])
+}
+
+/// Bảng công NGÀY — bảng quan trọng nhất. Ghi CHỈ qua recomputeAttendanceDay (upsert), LOCKED thì bỏ qua.
+model StaffAttendanceDay {
+  id                 String               @id @default(cuid())
+  userId             String
+  centerId           String
+  orgUnitId          String?
+  workDate           DateTime             @db.Date
+  assignmentId       String?
+  templateCode       String?
+  placeMode          ShiftPlaceMode?
+  dayType            AttendanceDayType    @default(UNSCHEDULED)
+  expectedMinutes    Int                  @default(0)
+  workedMinutes      Int                  @default(0)
+  paidBreakMinutes   Int                  @default(0)
+  rawPairedMinutes   Int                  @default(0)
+  amExpected         Int                  @default(0)
+  amWorked           Int                  @default(0)
+  pmExpected         Int                  @default(0)
+  pmWorked           Int                  @default(0)
+  lateMinutes        Int                  @default(0)
+  earlyLeaveMinutes  Int                  @default(0)
+  missedEarlyArrival Boolean              @default(false)
+  dayCreditExpected  Float                @default(0)
+  dayCreditEarned    Float                @default(0)
+  hourCredit         Float                @default(0)
+  leaveUnits         Float                @default(0)
+  holidayPaidUnits   Float                @default(0)
+  overrideUnits      Float?
+  overrideById       String?
+  overrideAt         DateTime?            @db.Timestamptz(6)
+  overrideNote       String?              @db.Text
+  pairs              Json?
+  flags              String[]             @default([])
+  status             AttendanceDayStatus  @default(COMPUTED)
+  ruleSnapshot       Json?
+  computedBy         AttendanceComputedBy @default(ENGINE)
+  computedAt         DateTime             @default(now()) @db.Timestamptz(6)
+  periodId           String?
+  createdAt          DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime             @updatedAt @db.Timestamptz(6)
+
+  @@unique([userId, workDate])
+  @@index([centerId, workDate])
+  @@index([orgUnitId])
+  @@index([periodId])
+  @@index([status, workDate])
+}
+
+/// Kỳ công / chốt sổ theo cơ sở (kỳ HO = centerId "hoi-so").
+model AttendancePeriod {
+  id                String                 @id @default(cuid())
+  centerId          String
+  orgUnitId         String?
+  periodKey         String // "YYYY-MM"
+  status            AttendancePeriodStatus @default(OPEN)
+  standardUnits     Float? // công chuẩn — sinh tự động, Kế toán sửa được trước khoá (K-04)
+  standardUnitsNote String?
+  lockedById        String?
+  lockedAt          DateTime?              @db.Timestamptz(6)
+  lockReason        String?
+  reopenedById      String?
+  reopenedAt        DateTime?              @db.Timestamptz(6)
+  reopenReason      String?
+  summaryJson       Json? // nguồn export duy nhất sau khoá
+  exportCount       Int                    @default(0)
+  lastExportedAt    DateTime?              @db.Timestamptz(6)
+  createdAt         DateTime               @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime               @updatedAt @db.Timestamptz(6)
+
+  @@unique([centerId, periodKey])
+  @@index([orgUnitId])
+  @@index([periodKey])
+}
+
+/// Vé quét 120s. NGOẠI LỆ CÓ CHỦ ĐÍCH: không cột đơn vị — vé sống 2 phút, gắn với
+/// WorkLocation (đã có cơ sở) và tiêu nguyên tử; scope làm ở WorkLocation, không ở vé.
+model AttendanceTicket {
+  id             String       @id @default(cuid())
+  userId         String
+  deviceId       String?
+  workLocationId String
+  nonceHash      String       @unique
+  expiresAt      DateTime     @db.Timestamptz(6)
+  consumedAt     DateTime?    @db.Timestamptz(6)
+  ip             String?
+  createdAt      DateTime     @default(now()) @db.Timestamptz(6)
+  workLocation   WorkLocation @relation(fields: [workLocationId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+}
+
+/// VIỆC CỐ ĐỊNH (theo thứ) + GHI CHÚ & GHI ĐÈ (theo ngày) — chỉ phục vụ tin 19:00 và màn lịch.
+model ShiftBriefNote {
+  id        String             @id @default(cuid())
+  centerId  String
+  orgUnitId String?
+  weekday   Int? // xor date
+  date      DateTime?          @db.Date
+  audience  ShiftBriefAudience @default(ALL)
+  mode      ShiftBriefMode     @default(APPEND)
+  text      String             @db.Text
+  isActive  Boolean            @default(true)
+  createdAt DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime           @updatedAt @db.Timestamptz(6)
+
+  @@index([centerId, weekday])
+  @@index([centerId, date])
+  @@index([orgUnitId])
+}
+
+/// Danh mục loại nghỉ (K-06 theo MISA) — màn CRUD, seed 8 dòng 1 lần.
+model LeaveType {
+  id             String   @id @default(cuid())
+  code           String   @unique
+  name           String
+  paidRatio      Float    @default(1) // 1 = hưởng 100% · 0 = không lương
+  maxDaysPerYear Int?
+  countsAsWorked Boolean  @default(false)
+  isActive       Boolean  @default(true)
+  displayOrder   Int      @default(0)
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(6)
 }

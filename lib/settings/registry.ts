@@ -452,6 +452,88 @@ export const SETTINGS = {
     default: 2, // lib/attendance/adjust.ts MANAGER_EDIT_WINDOW_DAYS
     centerOverridable: true,
   }),
+  // ── Module chấm công v3 (L1 · 06/09/2026) — PHẦN 6b "tự vận hành": không tham số nào
+  // của module sống trong code. Mọi key đè được theo cơ sở. Đọc qua getSetting(key,{orgUnitId}).
+  "shift.weeklyOffDays": def({
+    key: "shift.weeklyOffDays",
+    group: "shift",
+    label: "Ngày nghỉ tuần (0=CN … 6=T7)",
+    schema: z.array(z.number().int().min(0).max(6)).max(7),
+    default: [1], // Thứ Hai toàn Trung tâm nghỉ (Sheet 29/08) — công chuẩn = ngày trong kỳ − nghỉ tuần − lễ
+    centerOverridable: true,
+  }),
+  "shift.lateGraceMinutes": def({
+    key: "shift.lateGraceMinutes",
+    group: "shift",
+    label: "Dung sai đi muộn theo ca (phút) — quá mức này mới gắn cờ DI_MUON",
+    schema: z.number().int().min(0).max(180),
+    default: 30, // T-12
+    centerOverridable: true,
+  }),
+  "shift.earlyArrivalMinutes": def({
+    key: "shift.earlyArrivalMinutes",
+    group: "shift",
+    label: "Có mặt trước ca (phút) — chỉ nhắc, không phạt",
+    schema: z.number().int().min(0).max(60),
+    default: 10, // quy định Sheet: có mặt trước ca 10 phút
+    centerOverridable: true,
+  }),
+  "shift.maxLogsPerDay": def({
+    key: "shift.maxLogsPerDay",
+    group: "shift",
+    label: "Trần lượt quét mỗi người mỗi ngày (vượt vẫn ghi + cờ VUOT_TRAN)",
+    schema: z.number().int().min(2).max(50),
+    default: 10,
+    centerOverridable: true,
+  }),
+  "shift.pairingMaxGapMinutes": def({
+    key: "shift.pairingMaxGapMinutes",
+    group: "shift",
+    label: "Cửa sổ nhận diện buổi khi ghép cặp vào/ra (± phút quanh mốc ca)",
+    schema: z.number().int().min(15).max(240),
+    default: 60,
+    centerOverridable: true,
+  }),
+  "shift.duplicateTapMinutes": def({
+    key: "shift.duplicateTapMinutes",
+    group: "shift",
+    label: "Hai lượt quét cách nhau dưới mức này (phút) coi là bấm trùng",
+    schema: z.number().int().min(0).max(30),
+    default: 2,
+    centerOverridable: true,
+  }),
+  "shift.briefNoteHourVN": def({
+    key: "shift.briefNoteHourVN",
+    group: "shift",
+    label: "Giờ gửi tin nhắc lịch ngày mai (giờ VN, 0–23)",
+    schema: z.number().int().min(0).max(23),
+    default: 19,
+    centerOverridable: true,
+  }),
+  "shift.requestNoticeDays": def({
+    key: "shift.requestNoticeDays",
+    group: "shift",
+    label: "Báo nghỉ / đổi ca trước ít nhất (ngày) — nộp sát hơn bị đánh dấu Nộp muộn",
+    schema: z.number().int().min(0).max(30),
+    default: 2, // quy định Sheet
+    centerOverridable: true,
+  }),
+  "shift.leaveAccrualPerMonth": def({
+    key: "shift.leaveAccrualPerMonth",
+    group: "shift",
+    label: "Phép năm cộng dồn mỗi tháng (ngày) — quỹ phép đợt 2",
+    schema: z.number().min(0).max(5),
+    default: 1, // K-06 theo MISA
+    centerOverridable: false,
+  }),
+  "shift.leaveDaysPerYear": def({
+    key: "shift.leaveDaysPerYear",
+    group: "shift",
+    label: "Phép năm tối đa (ngày/năm, nhân sự chính thức) — quỹ phép đợt 2",
+    schema: z.number().int().min(0).max(60),
+    default: 12, // K-06 theo MISA
+    centerOverridable: false,
+  }),
   "otp.ttlMinutes": def({
     key: "otp.ttlMinutes",
     group: "otp",
