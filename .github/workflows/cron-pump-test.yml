@@ -38,7 +38,9 @@ jobs:
           # bằng dedupeKey `trial.reminder:<mốc>:<ca>:<buổi>`, gọi lại chỉ chạm bản ghi cũ
           # chứ không kêu chuông lần hai. Nhắc là chuông nội bộ cho Sale — KHÔNG gửi gì
           # cho phụ huynh, nên bơm dày cũng không có tin thật nào bay ra ngoài.
-          for p in dispatch-events email-queue chat-zns-notify trial-reminder; do
+          # shift-brief (chấm công v3): tin nhắc lịch ngày mai — route tự so giờ VN với setting,
+          # dedupeKey shift.brief:<người>:<ngày> nên bơm 5′/lần vẫn chỉ một tin.
+          for p in dispatch-events email-queue chat-zns-notify trial-reminder shift-brief; do
             code=$(curl -s -o /dev/null -w "%{http_code}" \
               -H "Authorization: Bearer ${{ secrets.TEST_CRON_SECRET }}" \
               "https://test.satarobo.vn/api/cron/$p")

@@ -104,6 +104,10 @@
     {
       "path": "/api/cron/elearning-dem",
       "schedule": "47 17 * * *"
+    },
+    {
+      "path": "/api/cron/shift-brief",
+      "schedule": "0 * * * *"
     }
   ]
 }

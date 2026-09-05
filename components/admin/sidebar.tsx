@@ -233,6 +233,12 @@ const NAV_GROUPS: NavGroup[] = [
       // công việc thật: xem nhân sự → xếp vị trí → phân công.
       { label: "Vị trí công việc", href: "/nhan-su/vi-tri", icon: Briefcase, perm: [...PAGE_GATES["/nhan-su/vi-tri"]] },
       { label: "Chấm công", href: "/cham-cong", icon: Clock, perm: ["hr_attendance:view"] },
+      // Module chấm công v3 (L1–L3, 09/2026) — lịch phân ca là DỮ LIỆU người vận hành tự quản (PHẦN 6b).
+      { label: "Lưới phân ca", href: "/cham-cong/phan-ca", icon: CalendarDays, perm: ["hr_attendance:assign", "hr_attendance:view"] },
+      { label: "Khung ca tuần", href: "/cham-cong/khung-ca", icon: CalendarCheck, perm: ["hr_attendance:assign", "hr_attendance:view"] },
+      { label: "Import lịch phân ca", href: "/cham-cong/phan-ca/import", icon: CalendarDays, perm: ["hr_attendance:assign"] },
+      { label: "Ghi chú lịch", href: "/cham-cong/ghi-chu", icon: ClipboardList, perm: ["hr_attendance:assign", "hr_attendance:view"] },
+      { label: "Danh mục mã ca", href: "/cham-cong/danh-muc-ca", icon: ClipboardEdit, perm: ["hr_attendance:config"] },
       { label: "Điểm danh vào ca", href: "/cham-cong/checkin", icon: Clock, perm: ["hr_attendance:checkin"] },
       { label: "Lịch ca của tôi", href: "/cham-cong/lich-ca", icon: CalendarDays, perm: ["hr_attendance:checkin"] },
       { label: "Yêu cầu chỉnh công", href: "/cham-cong/yeu-cau-cong", icon: ClipboardEdit, perm: ["hr_attendance:checkin"] },
