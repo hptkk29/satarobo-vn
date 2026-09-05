@@ -43,12 +43,35 @@ export interface NotifyStaffParams {
   reopen?: boolean;
 }
 
-/** Ghi thông báo cho nhiều người + bắn tín hiệu realtime. Trả về số người thật sự được ghi. */
-export async function notifyStaff(params: NotifyStaffParams): Promise<number> {
-  const nguoiNhan = [...new Set(params.userIds.filter((id) => !!id))];
-  if (nguoiNhan.length === 0) return 0;
+/** Kết quả của một lượt ghi — ai vừa được ghi MỚI hoặc MỞ LẠI là người cần rung chuông. */
+export interface GhiThongBaoKetQua {
+  /** Số người trong danh sách nhận (sau khi lọc trùng/rỗng). */
+  soNguoi: number;
+  /** Người có bản ghi mới tạo hoặc vừa kéo về CHƯA ĐỌC — chỉ những người này cần `notification.bumped`. */
+  canRung: string[];
+}
 
-  const canhBao = kiemPii(`${params.title}\n${params.body}`);
+/** Các cột nội dung được so để biết bản ghi có thực sự đổi hay không. */
+const COT_NOI_DUNG = ["title", "body", "href", "groupKey", "priority", "entityType", "entityId"] as const;
+
+/**
+ * Ghi thông báo cho nhiều người, KHÔNG bắn realtime. Dùng cho cron quét hàng loạt (vd `sla-check`)
+ * để gom mọi tín hiệu của một lượt chạy thành MỘT lần `broadcastNotificationBump` ở cuối.
+ *
+ * ⚠️ Vì sao phải so trước rồi mới ghi (sự cố egress 05/09/2026): bản cũ upsert vô điều kiện rồi
+ * bắn `notification.bumped` cho MỌI người nhận ở MỌI lượt gọi. Cron `sla-check` (mỗi 15 phút) đi qua đây
+ * ~1.800 vi phạm/lượt ⇒ 1,34 triệu INSERT cho một bảng chỉ có ~2.000 dòng, và ~170.000 POST
+ * broadcast/ngày làm Realtime cạn pool (`DBConnection.ConnectionError`), rồi mỗi bump lại kéo mọi
+ * tab admin gọi `/api/notifications/summary`. Kết quả: prod vượt trần egress 5 GB dù DB chỉ 57 MB.
+ * Nay: bản ghi đã có và nội dung không đổi ⇒ KHÔNG ghi, KHÔNG rung. Chỉ rung khi tạo mới hoặc
+ * khi `reopen` kéo một bản đã đọc về chưa đọc — đúng nghĩa của dedupeKey.
+ */
+export async function ghiThongBaoNhanSu(params: NotifyStaffParams): Promise<GhiThongBaoKetQua> {
+  const nguoiNhan = [...new Set(params.userIds.filter((id) => !!id))];
+  if (nguoiNhan.length === 0) return { soNguoi: 0, canRung: [] };
+
+  const canhBao = kiemPii(`${params.title}
+${params.body}`);
   if (canhBao.coSdt || canhBao.coTien) {
     // Không chặn — chặn ở đây là nuốt mất một thông báo nghiệp vụ thật. Nhưng phải để lại vết:
     // loại nào lọt SĐT/học phí ra panel là loại cần sửa mẫu câu, không phải sửa chỗ này.
@@ -78,26 +101,75 @@ export async function notifyStaff(params: NotifyStaffParams): Promise<number> {
 
   const category = params.category ?? params.dedupeKey.split(":")[0] ?? "system";
 
+  // Một câu đọc cho cả danh sách người nhận — thay cho N upsert mù.
+  const daCo = await db.staffNotification.findMany({
+    where: { dedupeKey: params.dedupeKey, userId: { in: nguoiNhan } },
+    select: {
+      userId: true,
+      readAt: true,
+      title: true,
+      body: true,
+      href: true,
+      groupKey: true,
+      priority: true,
+      entityType: true,
+      entityId: true,
+      expiresAt: true,
+    },
+  });
+  const theoUser = new Map(daCo.map((r) => [r.userId, r]));
+
+  const canRung: string[] = [];
   for (const userId of nguoiNhan) {
-    await db.staffNotification.upsert({
+    const cu = theoUser.get(userId);
+    if (!cu) {
+      // Chưa có ⇒ tạo. Vẫn dùng upsert để hai lượt cron chồng nhau không đẻ P2002.
+      await db.staffNotification.upsert({
+        where: { userId_dedupeKey: { userId, dedupeKey: params.dedupeKey } },
+        create: { userId, dedupeKey: params.dedupeKey, category, ...noiDung },
+        update: noiDung,
+      });
+      canRung.push(userId);
+      continue;
+    }
+
+    const noiDungDoi =
+      COT_NOI_DUNG.some((k) => cu[k] !== noiDung[k]) ||
+      (cu.expiresAt?.getTime() ?? null) !== (noiDung.expiresAt?.getTime() ?? null);
+    const moLai = !!params.reopen && cu.readAt !== null;
+    if (!noiDungDoi && !moLai) continue; // Y nguyên ⇒ không ghi, không rung.
+
+    // Ghi lại nội dung là CÓ CHỦ ĐÍCH: đường duy nhất chữa được bản ghi sinh trước khi
+    // href/nhóm/mức được sửa. Trạng thái đọc giữ nguyên trừ khi nơi gọi xin `reopen`.
+    await db.staffNotification.update({
       where: { userId_dedupeKey: { userId, dedupeKey: params.dedupeKey } },
-      create: { userId, dedupeKey: params.dedupeKey, category, ...noiDung },
-      // Ghi lại nội dung ở nhánh update là CÓ CHỦ ĐÍCH: nó là đường duy nhất chữa được những
-      // bản ghi sinh ra trước khi href/nhóm/mức được sửa. Trạng thái đọc giữ nguyên trừ khi
-      // nơi gọi xin `reopen`.
-      update: { ...noiDung, ...(params.reopen ? { readAt: null } : {}) },
+      data: { ...noiDung, ...(moLai ? { readAt: null } : {}) },
     });
+    // Nội dung đổi nhưng vẫn đang chưa đọc ⇒ badge không đổi số, không cần rung.
+    if (moLai) canRung.push(userId);
   }
 
-  // Fail-and-forget: `broadcastMessages` cam kết không throw, nhưng vẫn bọc — thông báo ĐÃ nằm
-  // trong Postgres, mất tín hiệu realtime chỉ có nghĩa là badge nhảy ở nhịp poll kế tiếp.
+  return { soNguoi: nguoiNhan.length, canRung };
+}
+
+/**
+ * Bắn `notification.bumped` cho danh sách người. Fail-and-forget: `broadcastMessages` cam kết
+ * không throw, nhưng vẫn bọc — thông báo ĐÃ nằm trong Postgres, mất tín hiệu realtime chỉ có
+ * nghĩa là badge nhảy ở nhịp poll kế tiếp. Người gọi hàng loạt gom một danh sách rồi gọi MỘT lần.
+ */
+export async function broadcastNotificationBump(userIds: readonly string[]): Promise<void> {
+  const ds = [...new Set(userIds.filter((id) => !!id))];
+  if (ds.length === 0) return;
   try {
-    await broadcastMessages(
-      notificationBumpBroadcasts(nguoiNhan, { at: new Date().toISOString() }),
-    );
+    await broadcastMessages(notificationBumpBroadcasts(ds, { at: new Date().toISOString() }));
   } catch (err) {
     console.warn("[notifications] bắn tín hiệu realtime lỗi — thông báo vẫn đã lưu:", err);
   }
+}
 
-  return nguoiNhan.length;
+/** Ghi thông báo cho nhiều người + bắn tín hiệu realtime cho ai cần. Trả về số người nhận. */
+export async function notifyStaff(params: NotifyStaffParams): Promise<number> {
+  const kq = await ghiThongBaoNhanSu(params);
+  await broadcastNotificationBump(kq.canRung);
+  return kq.soNguoi;
 }
