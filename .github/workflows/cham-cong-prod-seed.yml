@@ -1,0 +1,57 @@
+# Chạy TAY (workflow_dispatch) — SEED NỀN module chấm công v3 lên PROD (L1, 06/09/2026).
+#
+# Ghi 3 thứ, đều idempotent (upsert theo `code`, KHÔNG đè cột người dùng đã sửa trừ khi
+# bật `force`): 21 mã ca `ShiftTemplate` · 8 loại nghỉ `LeaveType` (K-06 theo MISA) ·
+# `WorkLocation` cho từng cơ sở vận hành (Hội sở không có — Q-04; toạ độ trống ⇒ geofence
+# tắt — Q-02, khai sau ở /cham-cong/diem-cham).
+#
+# Vì sao bấm tay trên prod (cùng luật với seed-prod-roles.yml): đây là danh mục vận hành —
+# sau lần seed đầu, NGUỒN SỰ THẬT là DB và người vận hành sửa trên màn Danh mục mã ca /
+# Loại nghỉ (PHẦN 6b kế hoạch). Chạy lại với `force` là ĐÈ tên/giờ 21 mã về bản trong code.
+#
+# ⚠️ Trước khi bấm: (1) migration `20260906090000_cham_cong_v3_l1` đã lên prod qua deploy.yml;
+# (2) đã bấm seed-prod-roles.yml (5 key hr_attendance:* mới + adjust hạ CENTER).
+name: Chấm công v3 — seed nền (prod)
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Đè lại tên/giờ 21 mã ca theo danh mục trong code (mất chỉnh sửa tay trên màn Danh mục mã ca)"
+        required: false
+        type: boolean
+        default: false
+      confirm:
+        description: 'Gõ đúng "GHI THAT VAO PROD"'
+        required: true
+        default: ""
+concurrency:
+  group: cham-cong-prod-seed
+  cancel-in-progress: false
+jobs:
+  seed:
+    name: Seed ShiftTemplate + LeaveType + WorkLocation (Supabase prod)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Kiểm tra secrets + chuỗi xác nhận
+        run: |
+          missing=0
+          [ "${{ inputs.confirm }}" = "GHI THAT VAO PROD" ] || { echo "::error::Chuỗi xác nhận sai — dừng, không ghi gì."; missing=1; }
+          [ -n "${{ secrets.PROD_DATABASE_URL }}" ] || { echo "::error::Thiếu secret PROD_DATABASE_URL"; missing=1; }
+          [ -n "${{ secrets.PROD_DIRECT_URL }}" ]   || { echo "::error::Thiếu secret PROD_DIRECT_URL"; missing=1; }
+          exit $missing
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+      - name: Seed nền chấm công (prod) — kỳ vọng "ShiftTemplate: +21 tạo … LeaveType: 8 · WorkLocation: +2"
+        run: pnpm exec tsx prisma/seed-cham-cong.ts ${{ inputs.force && '-- --force' || '' }}
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
