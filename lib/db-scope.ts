@@ -120,6 +120,19 @@ export const SCOPED_MODELS = new Set<string>([
   // chốt kỳ là việc TOÀN HỆ (`CommissionStatement.period` @unique, không có centerId),
   // lọc theo tầm nhìn của người bấm nút sẽ đẻ ra bảng kê thiếu dòng cho cơ sở khác.
   "CenterCommissionAssignee",
+  // ── Module chấm công v3 (L1 · 06/09/2026) — kế hoạch §3.5 ─────────────────
+  // `ShiftTemplate` NULL = mã ca dùng chung (khai kèm NULL_IS_GLOBAL). Các bảng còn lại
+  // centerId BẮT BUỘC: NULL = lỗi đường ghi, không phải "ai cũng thấy". `AttendanceTicket`
+  // cố ý KHÔNG có cột đơn vị (xem model). `WorkRequest` giữ SCOPE_EXEMPT (own-rows).
+  // ⚠️ scopedDb KHÔNG che WRITE: mọi `create` phải tự set `centerId`.
+  "ShiftTemplate",
+  "ShiftWeeklyPattern",
+  "ShiftAssignment",
+  "WorkLocation",
+  "StaffTimeLog",
+  "StaffAttendanceDay",
+  "AttendancePeriod",
+  "ShiftBriefNote",
 ]);
 
 /**
@@ -133,6 +146,8 @@ export const SCOPED_MODELS = new Set<string>([
  * PHẢI bị chặn, không được biến thành "ai cũng thấy".
  */
 export const NULL_IS_GLOBAL_MODELS = new Set<string>([
+  // Module chấm công v3 (L1 · 06/09/2026) — mã ca không gắn cơ sở = dùng chung (S, C, HC…).
+  "ShiftTemplate",
   "Survey", // khảo sát chung (không gắn cơ sở)
   "SurveyResponse", // phản hồi của khảo sát chung
   "EvaluationRound", // vòng đánh giá scope SYSTEM / TEACHER_EVAL
@@ -340,6 +355,26 @@ export function getModelPrefixes(model: string): string[] {
       return ["hr_attendance:"];
     case "CenterDayChecklist":
       return ["centers:", "hr_attendance:"];
+    // Module chấm công v3 (L1 · 06/09/2026) — kế hoạch §3.5. Prefix là FULL KEY (so bằng
+    // `startsWith`, nên "hr_attendance:" trần sẽ kéo cả `checkin` — key mà MỌI vai nhân sự
+    // có GLOBAL — vào và biến ai cũng thành HO-level với bảng công). Cố ý KHÔNG có `checkin`.
+    case "ShiftTemplate":
+      return ["hr_attendance:config", "hr_attendance:assign", "hr_attendance:view"];
+    case "WorkLocation":
+      return ["hr_attendance:config", "hr_attendance:view", "centers:"];
+    case "ShiftWeeklyPattern":
+    case "ShiftAssignment":
+    case "StaffTimeLog":
+    case "StaffAttendanceDay":
+    case "AttendancePeriod":
+    case "ShiftBriefNote":
+      return [
+        "hr_attendance:view",
+        "hr_attendance:assign",
+        "hr_attendance:approve",
+        "hr_attendance:close-period",
+        "hr_attendance:export",
+      ];
     case "Notification":
       return ["notifications:"];
     case "SataCoinTransaction":

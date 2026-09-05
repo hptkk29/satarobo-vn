@@ -140,6 +140,13 @@ export type Action =
   | "hr_attendance:checkin"
   | "hr_attendance:view"
   | "hr_attendance:adjust"
+  // Module chấm công v3 (L1 · 06/09/2026) — kế hoạch §5. Khai đồng thời 4 nơi:
+  // union này + ma trận PERMISSIONS + lib/permissions/registry/hr.ts + prisma/seed-roles.ts.
+  | "hr_attendance:assign"
+  | "hr_attendance:approve"
+  | "hr_attendance:close-period"
+  | "hr_attendance:export"
+  | "hr_attendance:config"
 
   // --- Blog / News (existing + expanded) ---
   | "blog:view"
@@ -546,9 +553,16 @@ export const PERMISSIONS: Record<Action, Role[]> = {
     "SUPER_ADMIN", "CENTER_MANAGER", "HR", "SALES_CSM", "TEACHER", "MARKETING", "ACCOUNTANT",
     "TRAINING",
   ],
-  "hr_attendance:view": ["SUPER_ADMIN", "CENTER_MANAGER", "HR"],
+  "hr_attendance:view": ["SUPER_ADMIN", "CENTER_MANAGER", "HR", "ACCOUNTANT"],
   // Chỉnh bản ghi công + duyệt yêu cầu chỉnh công (giới hạn thời gian áp ở action).
   "hr_attendance:adjust": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  // Module chấm công v3 (L1 · 06/09/2026) — kế hoạch §5. v1 là ma trận tĩnh chạy ở
+  // local/dev; scope CENTER/GLOBAL thật nằm ở seed-roles (v2, prod).
+  "hr_attendance:assign": ["SUPER_ADMIN", "CENTER_MANAGER", "HR"], // khung ca, lưới, import
+  "hr_attendance:approve": ["SUPER_ADMIN", "CENTER_MANAGER"], // duyệt đơn (Q-11, T-06)
+  "hr_attendance:close-period": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"], // chốt kỳ (Q-10)
+  "hr_attendance:export": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
+  "hr_attendance:config": ["SUPER_ADMIN", "CENTER_MANAGER", "HR", "ACCOUNTANT"], // danh mục ca, lễ + hệ số (T-04)
 
   // --- Blog / News ---
   "blog:view": [
