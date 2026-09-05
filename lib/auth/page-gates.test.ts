@@ -31,15 +31,26 @@ const SIDEBAR = path.join(ROOT, "components/admin/sidebar.tsx");
  */
 const PAGE_DIR_OVERRIDE: Record<string, string> = {
   // Site Sale nằm ở route group riêng `app/(sale)/`, không phải `(admin)`.
-  // Khai tường minh từng route thay vì nới `pageFile` thành "tìm khắp app/":
-  // quét mù sẽ nuốt luôn ca trang bị xoá mà gate còn nằm lại trong bảng.
-  "/sale/trial": "app/(sale)",
-  "/sale/khach-cua-toi": "app/(sale)",
-  "/sale/tra-cuu": "app/(sale)",
-  "/sale/hop-thu": "app/(sale)",
-
-  "/sale/nhap-khach-hang": "app/(sale)",
+  //
+  // ⚠️ 28/08/2026 — chuyển từ danh sách gõ tay sang QUY TẮC TIỀN TỐ (xem `thuMuc()`).
+  // Bản cũ khai tường minh 5 route, với lý do "khai tay thay vì tìm khắp app/: quét
+  // mù sẽ nuốt luôn ca trang bị xoá mà gate còn nằm lại trong bảng". Lý do đó vẫn
+  // đúng — và quy tắc tiền tố KHÔNG vi phạm nó: nó chỉ nói `/sale/*` sống ở
+  // `app/(sale)`, còn `existsSync` vẫn phải thấy đúng tệp. Trang bị xoá mà gate còn
+  // nằm lại thì vẫn đỏ y như trước.
+  // Đổi vì đợt 28/08 đưa 31 màn về site Sale: danh sách gõ tay 36 dòng là thứ người
+  // thêm route thứ 37 sẽ quên, và quên thì test báo "thiếu tệp ở app/(admin)/admin/sale/…"
+  // — một câu chỉ sai hướng hoàn toàn.
+  //
+  // Bảng này giữ lại cho các ca LẺ không suy được từ tiền tố.
 };
+
+/** Thư mục gốc chứa trang của một route. Quy tắc tiền tố trước, bảng lẻ sau. */
+function thuMuc(href: string): string {
+  if (PAGE_DIR_OVERRIDE[href]) return PAGE_DIR_OVERRIDE[href];
+  if (href === "/sale" || href.startsWith("/sale/")) return "app/(sale)";
+  return "app/(admin)/admin";
+}
 
 /**
  * Route mà trang của nó là ROUTE ĐỘNG, nên không có `<href>/page.tsx`.
@@ -57,7 +68,7 @@ const PAGE_FILE_OVERRIDE: Record<string, string> = {
 const pageFile = (href: string) =>
   PAGE_FILE_OVERRIDE[href]
     ? path.join(ROOT, PAGE_FILE_OVERRIDE[href])
-    : path.join(ROOT, PAGE_DIR_OVERRIDE[href] ?? "app/(admin)/admin", href, "page.tsx");
+    : path.join(ROOT, thuMuc(href), href, "page.tsx");
 
 /** Bỏ comment để chuỗi trong `// ...` không bị đếm là action thật. */
 function stripComments(src: string): string {
@@ -116,9 +127,28 @@ describe("PAGE_GATES — bảng gate là nguồn duy nhất", () => {
       const f = pageFile(href);
       expect(fs.existsSync(f), `thiếu ${f}`).toBe(true);
       const src = stripComments(fs.readFileSync(f, "utf8"));
+      // Hai DẠNG hợp lệ, và cả hai đều thoả đúng một bất biến: cổng của trang lấy
+      // từ BẢNG, không phải action gõ tay.
+      //   1. `PAGE_GATES["/x"]` — trang tự đọc bảng (dạng gốc).
+      //   2. `chanNeuThieuQuyen("/x", …)` — trang mount lại từ khu quản trị, gọi
+      //      cổng dùng chung ở `lib/sale/cong-trang.tsx`, và hàm đó tra `PAGE_GATES`
+      //      theo đúng khoá này. Gián tiếp một tầng nhưng CHẶT HƠN dạng 1: nó không
+      //      thể "đọc bảng rồi bỏ qua kết quả", và nó fail-closed khi khoá chưa khai.
+      // Thêm dạng 3 thì phải hỏi: nó có thể lách bằng cách nào? Nếu có, đừng thêm.
+      // So trên bản ĐÃ BÓP HẾT KHOẢNG TRẮNG: prettier ngắt lời gọi dài xuống nhiều
+      // dòng (`chanNeuThieuQuyen(\n  "/sale/x",\n  "Tên",\n)`), nên so chuỗi liền
+      // sẽ trượt vì lý do định dạng chứ không phải vì trang gác sai. Đã dính đúng
+      // một lần khi thêm khuôn mount, ở đúng một tệp — tức kiểu lỗi chỉ lộ ra khi
+      // tên route đủ dài, loại bẫy tệ nhất để lại trong một bài kiểm bất biến.
+      const gon = src.replace(/\s+/g, "");
+      const gacBangBang =
+        gon.includes(`PAGE_GATES["${href}"]`) ||
+        gon.includes(`PAGE_GATES['${href}']`) ||
+        gon.includes(`chanNeuThieuQuyen("${href}"`) ||
+        gon.includes(`chanNeuThieuQuyen('${href}'`);
       expect(
-        src.includes(`PAGE_GATES["${href}"]`) || src.includes(`PAGE_GATES['${href}']`),
-        `${href}/page.tsx phải gác bằng PAGE_GATES["${href}"], không khai action rời`,
+        gacBangBang,
+        `${href}/page.tsx phải gác bằng PAGE_GATES["${href}"] hoặc chanNeuThieuQuyen("${href}", …), không khai action rời`,
       ).toBe(true);
     }
   });

@@ -162,18 +162,45 @@ describe("[S-10] điều hướng gom thành 8 nhóm theo tài liệu yêu cầu
     expect(nhomTheoTaiLieu()).toHaveLength(8);
   });
 
-  it("nav khai đủ 8 nhóm, ĐÚNG TÊN và ĐÚNG THỨ TỰ của tài liệu", () => {
+  /**
+   * ⚠️ NỚI CÓ CHỦ ĐÍCH 28/08/2026 — ghi rõ nới cái gì và giữ lại cái gì.
+   *
+   * Bản trước đòi nav khai ĐÚNG 8 nhóm của tài liệu, không hơn không kém
+   * (`toEqual`). Chủ dự án 28/08 yêu cầu đưa 32 mục về site Sale và chốt:
+   * *"thêm các mục tôi nói nhưng không cần cập nhật tài liệu"*. Tám nhóm gốc
+   * không chứa nổi tám mục học viên/lớp và năm mục chấm công, nên nav có thêm
+   * hai nhóm mà tài liệu không có.
+   *
+   * VẪN GIỮ, và đây mới là phần đáng giá của bài kiểm: **cả 8 nhóm của tài liệu
+   * phải có mặt, đúng tên từng chữ, và đúng THỨ TỰ TƯƠNG ĐỐI với nhau.** Đổi tên
+   * một nhóm trong tài liệu, hay đảo thứ tự chúng trong nav, vẫn đỏ.
+   * NỚI: cho phép nhóm lạ chen vào giữa.
+   *
+   * Nếu sau này tài liệu được cập nhật cho khớp thì siết `toEqual` trở lại.
+   */
+  it("8 nhóm của tài liệu đều có mặt, đúng tên và đúng thứ tự tương đối", () => {
     const src = boChuThich(doc(NAV));
     const nhomTrongNav = [...src.matchAll(/nhom:\s*"([^"]+)"/g)].map((m) => m[1]);
-    expect(nhomTrongNav).toEqual(nhomTheoTaiLieu());
+    const cuaTaiLieu = nhomTheoTaiLieu();
+
+    for (const n of cuaTaiLieu) {
+      expect(nhomTrongNav, `nav thiếu nhóm "${n}" của tài liệu`).toContain(n);
+    }
+    // Lọc bỏ nhóm mới rồi so thứ tự — nhóm tài liệu không được đảo chỗ nhau.
+    const chiNhomTaiLieu = nhomTrongNav.filter((n) => cuaTaiLieu.includes(n));
+    expect(chiNhomTaiLieu).toEqual(cuaTaiLieu);
   });
 
   it("mọi mục đều thuộc về một nhóm — không mục nào lơ lửng", () => {
     const src = boChuThich(doc(NAV));
     const soMuc = [...src.matchAll(/href:\s*"/g)].length;
-    const soMucCoNhom = [...src.matchAll(/muc:\s*\[/g)].length;
+    const soNhom = [...src.matchAll(/nhom:\s*"/g)].length;
+    const soMangMuc = [...src.matchAll(/muc:\s*\[/g)].length;
     expect(soMuc).toBeGreaterThan(0);
-    expect(soMucCoNhom).toBe(8);
+    // Mỗi nhóm phải có đúng một mảng `muc` — thiếu là có nhóm khai hụt, thừa là
+    // có mảng mục nằm ngoài nhóm nào.
+    expect(soMangMuc).toBe(soNhom);
+    expect(soNhom).toBeGreaterThanOrEqual(nhomTheoTaiLieu().length);
   });
 
   it("nhóm rỗng KHÔNG được vẽ ra — nhãn nhóm không có mục nào là rác trên màn hình", () => {

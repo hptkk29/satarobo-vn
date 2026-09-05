@@ -15,6 +15,7 @@ import {
   canViewLeadPii,
   checkPermissionDetail,
 } from "@/lib/auth/check-permission";
+import { KhungDuLieu } from "@/components/sale/ui/khung-du-lieu";
 import { PAGE_GATES } from "@/lib/auth/page-gates";
 import { resolveActor } from "@/lib/auth/actor";
 import { getMyLeads } from "@/lib/lead/sale-leads";
@@ -88,40 +89,47 @@ export default async function KhachCuaToiPage({
   });
 
   return (
-    <div>
-      <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Khách của tôi</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {gomDaDong
-              ? "Gồm cả khách đã ghi danh / đã mất."
-              : "Khách đang trong quá trình tư vấn. Xếp theo lần chạm gần nhất — cuối danh sách là người lâu chưa được liên hệ."}
-          </p>
-        </div>
-        <Link
-          href="/sale/nhap-khach-hang"
-          className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
-        >
-          + Nhập khách mới
-        </Link>
-      </div>
-
-      <LeadListFilters
-        status={status ?? ""}
-        q={q}
-        gomDaDong={gomDaDong}
-        timDuocSdt={canSearchPhone}
+    // Bề rộng theo NỘI DUNG, không theo trần của trang. Bảng này có bốn cột;
+    // kéo nó ra hết 88rem tạo một khoảng trống ~600px giữa "Việc sắp tới" và cột
+    // ngày — mắt phải nhảy qua một vùng trắng để nối hai đầu của cùng một dòng.
+    // Trần của trang vẫn rộng cho những màn thật sự cần (hộp thư, tra cứu).
+    <KhungDuLieu className="max-w-[76rem]">
+      <KhungDuLieu.Dau
+        ten="Khách của tôi"
+        mo={
+          gomDaDong
+            ? "Gồm cả khách đã ghi danh / đã mất."
+            : "Khách đang trong quá trình tư vấn. Xếp theo lần chạm gần nhất — cuối danh sách là người lâu chưa được liên hệ."
+        }
+        hanhDong={
+          <Link
+            href="/sale/nhap-khach-hang"
+            className="inline-flex h-9 items-center rounded-lg bg-[color:var(--primary)] px-4 text-sm font-medium text-[color:var(--primary-foreground)] transition-colors hover:bg-[color:var(--primary-dark)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--primary)]/40 focus-visible:ring-offset-2"
+          >
+            Nhập khách mới
+          </Link>
+        }
       />
 
-      {view.length === 0 ? (
-        <p className="mt-6 rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-          {q || status
-            ? "Không có khách nào khớp bộ lọc."
-            : "Bạn chưa có khách nào. Khách được chia tự động khi có lead mới về cơ sở của bạn, hoặc bấm “Nhập khách mới”."}
-        </p>
+      <KhungDuLieu.Loc>
+        <LeadListFilters
+          status={status ?? ""}
+          q={q}
+          gomDaDong={gomDaDong}
+          timDuocSdt={canSearchPhone}
+        />
+      </KhungDuLieu.Loc>
+
+      {view.length === 0 && !q && !status ? (
+        // Sổ trống thật khác với "lọc không ra gì" — hai câu khác nhau, và câu
+        // này phải DẠY cách khách chảy vào sổ chứ không chỉ nói là trống.
+        <KhungDuLieu.Rong
+          ten="Bạn chưa có khách nào"
+          mo="Khách được chia tự động khi có lead mới về cơ sở của bạn. Cần thêm tay thì bấm Nhập khách mới."
+        />
       ) : (
         <MyLeadTable rows={view} canhBaoCat={canhBaoCat} />
       )}
-    </div>
+    </KhungDuLieu>
   );
 }

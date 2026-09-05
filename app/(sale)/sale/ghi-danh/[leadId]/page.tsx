@@ -90,7 +90,7 @@ export default async function SaleGhiDanhPage({
         <ChevronLeft className="h-4 w-4" /> Quay lại khách
       </Link>
 
-      <h1 className="text-2xl font-bold text-foreground">Ghi danh</h1>
+      <h1 className="text-xl font-semibold tracking-tight text-foreground">Ghi danh</h1>
       <p className="mt-1 text-sm text-muted-foreground">
         {lead.parentName || "(chưa có tên)"}
         {lead.phone ? ` · ${lead.phone}` : ""}
@@ -100,8 +100,8 @@ export default async function SaleGhiDanhPage({
           chối. Server vẫn là nơi quyết định (mã PAYMENT_REQUIRED) — đây chỉ để
           không ai gõ mười ô rồi mới biết thiếu tiền. */}
       {daGhiNhan <= 0 ? (
-        <div className="mt-4 rounded-xl border border-amber-500/40 bg-card p-4 text-sm">
-          <p className="font-semibold text-amber-600 dark:text-amber-500">
+        <div className="mt-4 rounded-xl border border-[color:var(--state-warning)]/35 bg-card p-4 text-sm shadow-[var(--bong-the)]">
+          <p className="font-semibold text-[color:var(--state-warning)]">
             Chưa ghi nhận khoản thu nào
           </p>
           <p className="mt-1 text-muted-foreground">

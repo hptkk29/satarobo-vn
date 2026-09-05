@@ -24,7 +24,7 @@ import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { grantedMenuActions } from "@/lib/auth/menu-permissions";
 import { isRbacV2Enabled } from "@/lib/flags";
-import { SaleNav } from "@/components/sale/sale-nav";
+import { SaleShell } from "@/components/sale/shell/sale-shell";
 // S-10 (27/08/2026) — token màu riêng của site Sale (tím #7C3AED, QĐ-2). Class
 // `sale-root` dưới đây được gắn từ 23/08 nhưng KHÔNG file nào định nghĩa nó, nên
 // site âm thầm mượn cam `:root` của trang public suốt bốn ngày. Thiếu dòng import
@@ -56,12 +56,44 @@ export default async function SaleLayout({
   if (!session?.user) redirect("/login");
 
   // 2 pha: cờ OFF → site Sale chưa mở. Mọi người tiếp tục làm việc như hôm nay.
+  //
+  // ⚠️ ĐÍCH LÀ `/admin/dashboard`, KHÔNG PHẢI `/dashboard` (sửa 28/08/2026).
+  //    `/dashboard` chỉ có nghĩa TRÊN TÊN MIỀN ADMIN, nơi proxy viết lại nó thành
+  //    `/admin/dashboard`. `redirect()` ở đây giữ nguyên host đang đứng, nên trên
+  //    host Sale — và trên MỌI host "không xác định" như `localhost` hay
+  //    `test.satarobo.vn`, nơi cả bốn khu dùng chung một tên miền — người dùng
+  //    rơi vào **404 trắng trơn** và tưởng cả site hỏng.
+  //    `/admin/dashboard` chạy được ở cả hai: host lạ thì khớp thẳng route, host
+  //    admin thì `decideRoute` cắt tiền tố rồi đưa về đúng `STAFF_HOME`.
   if (!isSaleSiteEnabled()) {
-    redirect(hasStaffRole(session.user) ? "/dashboard" : "/portal");
+    redirect(hasStaffRole(session.user) ? "/admin/dashboard" : "/portal");
   }
 
+  // Có tài khoản nhưng site này không dành cho họ. KHÔNG đá đi im lặng: đá đi là
+  // người dùng chỉ thấy mình bật ra khỏi một đường dẫn vừa bấm mà không hiểu vì
+  // sao, và nếu đích đá không tồn tại trên host đó thì thành 404.
+  // PRODUCT.md: "không có quyền" là trạng thái màn hình HẠNG NHẤT của hệ này —
+  // phân quyền theo module × cơ sở nên người dùng gặp nó hằng ngày.
   if (!isSaleOnly(session.user)) {
-    redirect(hasStaffRole(session.user) ? "/dashboard" : "/portal");
+    return (
+      <div className="sale-root flex min-h-screen items-center justify-center bg-background px-6 text-foreground">
+        <div className="max-w-md text-center">
+          <h1 className="text-xl font-semibold tracking-tight">
+            Khu tư vấn tuyển sinh không dành cho tài khoản này
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Khu này chỉ mở cho tài khoản chuyên trách tư vấn tuyển sinh. Tài khoản của
+            bạn vẫn làm việc bình thường ở khu quản trị.
+          </p>
+          <a
+            href={hasStaffRole(session.user) ? "/admin/dashboard" : "/portal"}
+            className="mt-5 inline-flex h-9 items-center rounded-lg bg-[color:var(--primary)] px-4 text-sm font-medium text-[color:var(--primary-foreground)] transition-colors hover:bg-[color:var(--primary-dark)]"
+          >
+            Về nơi làm việc của tôi
+          </a>
+        </div>
+      </div>
+    );
   }
 
   // Liveness (phòng thủ nhiều lớp như admin/teacher layout): vô hiệu hoá tài
@@ -105,17 +137,18 @@ export default async function SaleLayout({
   });
 
   return (
-    <div className="sale-root min-h-screen bg-background text-foreground">
-      {/* S-10 — điều hướng nay là SIDEBAR DỌC 8 nhóm (tài liệu yêu cầu §5):
-          cố định trái từ md trở lên, ngăn kéo ở màn hẹp. `md:pl-64` chừa đúng
-          bề rộng thanh bên; dưới md thanh bên trượt ra ngoài nên không chừa. */}
-      <SaleNav
+    // 28/08 — khung site nay theo hình dáng site giáo viên: thanh bên cố định +
+    // THANH ĐẦU TRANG dính đỉnh. Trước đó site Sale không có thanh đầu trang nào
+    // trên desktop, nên không có chỗ nào đặt menu người dùng và tên người đăng
+    // nhập phải nhét xuống chân thanh bên.
+    // Bố cục, trần bề rộng và các bậc đệm nằm trọn trong `<SaleShell>`.
+    <div className="sale-root flex min-h-screen bg-background text-foreground">
+      <SaleShell
         granted={granted}
         userLabel={session.user.name ?? session.user.email ?? ""}
-      />
-      <main className="md:pl-64">
-        <div className="mx-auto max-w-5xl px-6 py-8">{children}</div>
-      </main>
+      >
+        {children}
+      </SaleShell>
     </div>
   );
 }

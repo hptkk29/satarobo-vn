@@ -72,7 +72,7 @@ export default async function SaleLeadDetailPage({
       </Link>
 
       <div className="mb-4 flex flex-wrap items-baseline gap-3">
-        <h1 className="text-2xl font-bold text-foreground">
+        <h1 className="text-xl font-semibold tracking-tight text-foreground">
           {lead.parentName || "(chưa có tên)"}
         </h1>
         <Badge variant="outline">{LEAD_STATUS_LABEL[lead.status] ?? lead.status}</Badge>

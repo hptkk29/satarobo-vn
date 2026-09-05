@@ -178,6 +178,78 @@ export const PAGE_GATES = {
    *  trong chính action — gate trang chỉ chặn sớm cho đỡ phí một vòng gọi. */
   "/sale/chot-don": ["orders:create"],
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 28/08/2026 — 32 MỤC CHỦ DỰ ÁN YÊU CẦU ĐƯA VỀ SITE SALE.
+  //
+  // Mọi màn dưới đây đã có sẵn bên `app/(admin)/admin/**`; site Sale mount lại
+  // component đó qua `lib/sale/cong-trang.tsx`. Cổng ở đây LẶP LẠI ĐÚNG action
+  // mà chính trang admin đang đòi — không nới, không siết.
+  //
+  // ⚠️ ĐỢT NÀY KHÔNG CẤP QUYỀN CHO AI. Chủ dự án chốt 28/08: *"cấp quyền là đúng
+  //    nhưng admin sẽ cấp chứ không phải dùng code"*. Nên `lib/auth/permissions.ts`
+  //    và `prisma/seed-roles.ts` KHÔNG bị đợt này đụng tới. Hệ quả cần biết trước
+  //    khi nghiệm thu: hôm nay vai Sale mới có quyền với 6/32 mục, nên menu chỉ
+  //    hiện 6 — đúng phút quản trị viên cấp quyền trong giao diện là các mục còn
+  //    lại tự hiện, không phải triển khai lại.
+  //
+  // ⚠️ Đường mount mà QUÊN khai ở đây thì `chanNeuThieuQuyen` CHẶN (fail-closed),
+  //    không phải mở cho mọi người. Hỏng theo hướng an toàn và thấy được ngay.
+  // ═══════════════════════════════════════════════════════════════════════════
+  "/sale/dashboard": ["leads:view-own"],
+  // ⚠️ THU CỔNG 04/09 — bỏ `leads:view-own`. Màn CRM tổng hợp lead của CẢ ĐỘI, và
+  //    bản admin đòi đúng `leads:view-all` (`admin/crm/page.tsx:29`). Cổng cũ khai
+  //    thêm `view-own` và chấm bằng phép HOẶC ⇒ người chỉ có `view-own` **qua được
+  //    cổng** rồi rơi vào `redirect("/dashboard")` bên trong màn — mà `/dashboard`
+  //    là 404 trắng trên host Sale. Tức cổng rộng hơn màn: vừa hứa hão, vừa dẫn
+  //    người dùng vào ngõ cụt.
+  //    KHÔNG nới theo chiều ngược lại (cho `view-own` xem thật) — đó là mở dữ liệu
+  //    cả đội cho người chỉ được xem khách của mình.
+  "/sale/crm": ["leads:view-all"],
+  "/sale/leads": ["leads:view-all"],
+  "/sale/chot-hang-loat": ["leads:view-all", "leads:import"],
+  "/sale/ban-giao-lead": ["leads:assign"],
+  "/sale/chuyen-lead-lien-cs": ["leads:view-all"],
+  "/sale/messenger": ["leads:view-all", "leads:view-own"],
+  "/sale/hoc-vien": ["students:view-all"],
+  "/sale/tai-khoan-ph": ["students:edit"],
+  "/sale/dang-ky-hoc": ["enrollments:view-all"],
+  "/sale/chuyen-lop": ["enrollments:create"],
+  "/sale/sap-het-khoa": ["enrollments:view-all"],
+  // Học bạ — Ban giám đốc chốt 10/07 rằng Sale KHÔNG xem (xem `/hoc-ba` ở trên).
+  // Chủ dự án 28/08 yêu cầu đưa mục này về site Sale, nên đường mount có mặt;
+  // nhưng cổng giữ NGUYÊN hai action của quyết định cũ. Muốn Sale vào được thì
+  // phải cấp một trong hai quyền đó trong giao diện phân quyền — tức là một lần
+  // đảo quyết định CÓ DẤU VẾT, chứ không phải một dòng mã lặng lẽ.
+  "/sale/hoc-ba": ["curriculum:view", "students:view-own-class"],
+  "/sale/lop-hoc": ["classes:view-all", "classes:view-own"],
+  // Lịch tổng — khớp `checkAnyPermission` của bản admin. Ba action đều GLOBAL ở
+  // mọi RoleDef giữ chúng (bất biến gọi-trần của `page-gates.test.ts`).
+  "/sale/lich": ["sessions:view", "classes:view-all", "classes:view-own"],
+  "/sale/buoi-hoc": ["sessions:view"],
+  "/sale/anh-lop-hoc": ["media:view", "media:upload"],
+  "/sale/hoc-bu": ["parent-requests:manage"],
+  "/sale/tin-nhan": ["parent-requests:manage"],
+  "/sale/cham-soc-hv": ["parent-requests:manage"],
+  "/sale/sinh-nhat": ["students:view-all"],
+  // ⚠️ NĂM MÀN CHẤM CÔNG GÁC BẰNG `:checkin`, KHÔNG PHẢI `:view` — đừng "sửa cho
+  //    đúng nghĩa". `hr_attendance:view` seed ở scope **CENTER** cho CENTER_HR và
+  //    CENTER_MANAGER; mà cổng cấp trang gọi `checkAnyPermission` KHÔNG có target,
+  //    nên `scopeMatches` trả FALSE và hai vai đó bị khoá ngoài cửa **trên prod**
+  //    trong khi máy dev (v1 tĩnh) vẫn xanh. Đúng bẫy "chạy máy tôi thì được" mà
+  //    `page-gates.test.ts` sinh ra để bắt — và nó đã bắt tôi ở đúng chỗ này.
+  //    `:checkin` là GLOBAL ở MỌI RoleDef giữ nó, và cũng là quyền Sale thật sự có.
+  //    Phép lọc chính xác theo cơ sở vẫn nằm trong chính trang admin
+  //    (`view(cơ-sở-đang-xem) ∨ checkin(cơ-sở-của-mình)`, có target) — cổng này chỉ
+  //    là cửa vào rẻ tiền, không phải phép kiểm cuối cùng.
+  "/sale/cham-cong": ["hr_attendance:checkin"],
+  "/sale/cham-cong/checkin": ["hr_attendance:checkin"],
+  "/sale/cham-cong/lich-ca": ["hr_attendance:checkin"],
+  "/sale/cham-cong/yeu-cau-cong": ["hr_attendance:checkin"],
+  "/sale/cham-cong/tong-hop": ["hr_attendance:checkin"],
+  "/sale/don-hang": ["orders:view"],
+  "/sale/thanh-toan": ["payments:manage", "payments:record"],
+  "/sale/hoa-hong": ["payments:manage"],
+
   /** Khách của tôi — danh sách + chi tiết + ghi hoạt động + việc follow-up.
    *  `leads:view-own` là quyền Sale vốn đã có. KHÔNG dùng `leads:view-all`: đó
    *  là quyền của quản lý, và trang này cố ý chỉ trả lời "khách nào của tôi". */

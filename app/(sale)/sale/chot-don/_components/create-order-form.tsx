@@ -269,7 +269,7 @@ export function CreateOrderForm({
           </label>
         </div>
         {thieuLyDo ? (
-          <p className="mt-2 text-sm text-amber-600 dark:text-amber-500">
+          <p className="mt-2 text-sm text-[color:var(--state-warning)]">
             Mọi khoản giảm đều phải có giải trình — đây là chốt của Ban giám đốc, không
             phải ô cho vui.
           </p>
