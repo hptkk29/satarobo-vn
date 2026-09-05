@@ -268,6 +268,28 @@ export const PAGE_GATES = {
    * không prod hiện MÀN TRẮNG không kèm lỗi và không tái hiện được ở local (local v1).
    */
   "/dashboard-qlcs": ["dashboard:view"],
+
+  /**
+   * S1 (tích hợp ZaloCRM 06/09/2026) — màn Zalo CRM nhúng: giao diện chat của fork
+   * ZaloCRM chạy trong iframe, đăng nhập một lần bằng vé SSO 60 giây do Sata ký.
+   *
+   * Gác bằng MỘT key riêng `zalocrm:use` chứ không mượn key sẵn có:
+   *  • `inbox:view` — ứng viên gần nhất — là quyền đọc HỘP THƯ CỦA SATA. Hai thứ khác
+   *    nhau về bản chất trách nhiệm: mở màn này là mở một ỨNG DỤNG NGOÀI dưới danh nghĩa
+   *    tài khoản của mình, và ai được làm thế là câu hỏi BGĐ phải trả lời riêng.
+   *  • `chat:*` seed scope CENTER/ASSIGNED ⇒ gate cấp trang (gọi `checkAnyPermission`
+   *    KHÔNG target) luôn FALSE trên prod, xanh ở local — đúng bẫy đã suýt khoá /tin-nhan.
+   *
+   * `zalocrm:use` seed **GLOBAL** ở mọi RoleDef giữ nó (bắt buộc, ca "mọi action trong
+   * bảng phải là GLOBAL" ngay trên canh). Cách ly cơ sở KHÔNG đến từ `scopeType` mà từ
+   * chỗ khác: vé SSO chỉ ký cho org của cơ sở người dùng nhìn thấy được
+   * (`app/(admin)/admin/zalo-crm/_lib/co-so.ts`, giao với `actor.visibleCenterIds`).
+   *
+   * ⚠️ Key MỚI ⇒ sau khi merge `test` → `main` phải chạy `seed-prod-roles.yml`, nếu không
+   * người mở màn trên prod bị đá về /dashboard KHÔNG kèm lỗi và không tái hiện được ở
+   * local (local chạy RBAC v1 tĩnh).
+   */
+  "/zalo-crm": ["zalocrm:use"],
 } as const satisfies Record<string, readonly Action[]>;
 
 export type GatedHref = keyof typeof PAGE_GATES;

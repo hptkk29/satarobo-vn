@@ -42,6 +42,7 @@ import {
   MapPin,
   MessageCircle,
   MessageSquarePlus,
+  MessageSquareText,
   MessagesSquare,
   Megaphone,
   Network,
@@ -87,8 +88,12 @@ type NavItem = {
    *
    * ⚠️ "classGroup" là cờ GỠ, không phải cờ mở: mặc định TẮT nên mục biến mất,
    * env `CLASS_GROUP_ENABLED="true"` mới hiện lại. Xem lib/flags.ts.
+   *
+   * "zalocrm" (S1, 06/09/2026) là cờ MỞ 2 pha: mặc định TẮT cho tới khi máy chủ ZaloCRM
+   * chạy thật. Cùng cờ đó cũng làm trang `/zalo-crm` trả 404, nên menu và trang bật/tắt
+   * đồng bộ — không có cảnh bấm menu ra 404.
    */
-  flag?: "eval" | "scorm" | "classGroup";
+  flag?: "eval" | "scorm" | "classGroup" | "zalocrm";
   /**
    * R3: nhãn cụm con (sub-section) trong 1 NavGroup. Các item liền kề cùng `cluster`
    * được gom dưới 1 nhãn nhỏ — render trước item ĐẦU TIÊN hiển thị của cụm (robust với
@@ -216,6 +221,10 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       // FL W0-NAV-2 hygiene: Tin nhắn (CSKH) gate CSKH+GV — ẩn khỏi KT (BA #07 3.C) + MKT/HR/Training.
       { label: "Tin nhắn", href: "/tin-nhan", icon: MessageCircle, perm: [...PAGE_GATES["/tin-nhan"]], badge: "chat" },
+      // S1 (tích hợp ZaloCRM) — nhắn khách bằng nick Zalo CÁ NHÂN, qua giao diện fork
+      // ZaloCRM nhúng iframe. Đặt cạnh "Tin nhắn" vì cùng một việc dưới mắt Sale: trả lời
+      // khách. Cờ `zalocrm` mặc định TẮT ⇒ mục ẩn cho tới khi máy chủ ZaloCRM chạy thật.
+      { label: "Zalo CRM", href: "/zalo-crm", icon: MessageSquareText, perm: [...PAGE_GATES["/zalo-crm"]], flag: "zalocrm" },
       // US-15 — tra cứu có lý do + khoá hội thoại. `chat:admin` CHỈ SUPER_ADMIN có
       // (AC5: QLCS không vào được), và nó seed scope GLOBAL nên dùng làm gate cấp trang
       // được — khác chat:read/chat:send (CENTER/ASSIGNED), xem lib/auth/page-gates.ts.
@@ -393,6 +402,7 @@ export function Sidebar({
   evalV2Enabled = false,
   scormEnabled = false,
   classGroupEnabled = false,
+  zalocrmEnabled = false,
 }: {
   granted: string[];
   /** `User.id` — topic realtime `user:{id}` để badge "Tin nhắn" tự nhảy. */
@@ -403,6 +413,8 @@ export function Sidebar({
   scormEnabled?: boolean;
   /** Cờ GỠ — mặc định false ⇒ mục "Nhóm lớp" ẩn. */
   classGroupEnabled?: boolean;
+  /** S1 — mặc định false ⇒ mục "Zalo CRM" ẩn (cùng cờ với trang, xem lib/flags.ts). */
+  zalocrmEnabled?: boolean;
 }) {
   const pathname = usePathname();
 
@@ -421,11 +433,12 @@ export function Sidebar({
           (!it.flag ||
             (it.flag === "eval" && evalV2Enabled) ||
             (it.flag === "scorm" && scormEnabled) ||
-            (it.flag === "classGroup" && classGroupEnabled)) &&
+            (it.flag === "classGroup" && classGroupEnabled) ||
+            (it.flag === "zalocrm" && zalocrmEnabled)) &&
           (!it.perm || it.perm.some((p) => grantedSet.has(p))),
       ),
     })).filter((g) => g.items.length > 0);
-  }, [grantedSet, evalV2Enabled, scormEnabled, classGroupEnabled]);
+  }, [grantedSet, evalV2Enabled, scormEnabled, classGroupEnabled, zalocrmEnabled]);
 
   // Nhóm đang chứa trang hiện tại (deterministic SSR + client → không hydration mismatch).
   const activeGroupLabel = useMemo(() => {
