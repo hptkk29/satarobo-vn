@@ -33,7 +33,9 @@ export function decideCheckinCenter(
   if (actor.isHoLevel) return { ok: true, reason: "HO_LEVEL" };
   if (actor.visibleCenterIds.length === 0) return { ok: true, reason: "UNKNOWN_SCOPE" };
   if (actor.visibleCenterIds.includes(qrCenterId)) return { ok: true, reason: "VISIBLE" };
-  const name = qrCenterName?.trim() ? `cơ sở ${qrCenterName.trim()}` : "cơ sở khác";
+  // Tên cơ sở trên DB đã tự mang chữ "Cơ sở …"/"Trụ sở …" (nghiệm thu test 05/09 ra
+  // "cơ sở Cơ sở Hoàng Diệu") — dùng nguyên tên, không ghép thêm tiền tố.
+  const name = qrCenterName?.trim() || "cơ sở khác";
   return {
     ok: false,
     error: `Mã QR này của ${name}. Bạn chỉ chấm công được tại cơ sở của mình — nếu đang làm việc ở đây theo phân công, báo Quản lý cơ sở xác nhận công.`,
