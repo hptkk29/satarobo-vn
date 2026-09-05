@@ -30,6 +30,8 @@ const MIEN_TRU: Record<string, string> = {
   "app/(public)/hoc-cu/page.tsx": "bảng so sánh gói học cụ — nội dung cố định",
   "app/(admin)/admin/quan-ly-chia-lead/lich-su/page.tsx":
     "ĐÃ có phân trang, nhưng PHÍA SERVER (skip/take + link Trước/Sau) — nhật ký pool chỉ có thêm không bao giờ bớt, cắt trang trong trình duyệt là phải tải cả sổ về trước",
+  "app/(admin)/admin/cham-cong/phan-ca/import/_components/import-wizard.tsx":
+    "bảng ánh xạ tên = số người trên Sheet (19–20 dòng, phải nhìn HẾT để xác nhận từng người một lần) và bảng đối chiếu 15 con số (một hàng Sheet, một hàng hệ thống) — cắt trang là giấu mất người chưa ánh xạ",
   "app/(admin)/admin/quan-ly-chia-lead/_components/pool-table.tsx":
     "một bảng = MỘT cơ sở, số dòng = số sale của cơ sở đó (thực tế 2–5). Phân trang ở đây là thêm thanh điều khiển vô nghĩa, mà đây lại đúng là bảng cần nhìn HẾT một lượt để tin là công bằng — cắt trang là giấu mất người đang bị tắt",
   "app/(admin)/admin/quan-ly-chia-lead/_components/so-chia.tsx":
