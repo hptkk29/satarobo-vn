@@ -30,6 +30,8 @@ const MIEN_TRU: Record<string, string> = {
   "app/(public)/hoc-cu/page.tsx": "bảng so sánh gói học cụ — nội dung cố định",
   "app/(admin)/admin/leads/so-luot/page.tsx":
     "một bảng = MỘT cơ sở, số dòng = số tư vấn viên từng nhận lead ở cơ sở đó (thực tế 2). Phân trang một bảng 2 dòng là thêm thanh điều khiển vô nghĩa, mà đây lại đúng là bảng cần nhìn HẾT một lượt để tin là công bằng",
+  "app/(admin)/admin/cham-cong/diem-cham/_components/location-form.tsx":
+    "một dòng cho MỖI cơ sở vận hành (hôm nay 2, mở cơ sở mới thêm 1) — bảng cấu hình phải nhìn hết một lượt",
   "app/(admin)/admin/cham-cong/danh-muc-ca/_components/template-editor.tsx":
     "bảng ĐOẠN CA bên trong form sửa một mã (tối đa 6 dòng, là ô nhập chứ không phải danh sách) — phân trang một form là vô nghĩa",
   "app/(admin)/admin/cham-cong/phan-ca/import/_components/import-wizard.tsx":
