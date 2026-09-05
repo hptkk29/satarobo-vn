@@ -551,7 +551,7 @@ export const ROLE_SEED: RoleSeed[] = [
       // Shadow prod 10/07 (25+2 lệch): adjust bị pending-tasks cfg.can() gọi TRẦN → GLOBAL
       // (đúng R1); checkin call-site truyền {centerId} nhưng OWN đòi createdById → GLOBAL
       // (action tự ghi userId từ session, permission chỉ gate "là nhân viên").
-      { action: "hr_attendance:adjust", scopeType: "GLOBAL" }, // L1 chấm công v3: GIỮ GLOBAL tới L5 — 1 call-site cũ (chinh-cong) gọi trần, hạ CENTER là QLCS tự khoá trang mình (rbac-scope R1)
+      { action: "hr_attendance:adjust", scopeType: "CENTER" }, // L5 chấm công v3 (06/09/2026): hạ GLOBAL → CENTER — call-site trần cũ (chinh-cong, pending-tasks) đã gỡ; nay chỉ ghi đè công ngày tại cơ sở (/cham-cong/_actions.ts)
       { action: "hr_attendance:checkin", scopeType: "GLOBAL" },
       // ── Thu tiền tại quầy · xuất kit (user chốt 09/07 câu 4: "có, có") ──
       { action: "payments:record", scopeType: "GLOBAL" },

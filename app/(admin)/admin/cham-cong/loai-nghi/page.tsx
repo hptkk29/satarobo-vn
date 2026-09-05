@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
-import { HO_CENTER_ID } from "@/lib/cham-cong/home-center";
+import { HO_CENTER_ID, loadCenterMap } from "@/lib/cham-cong/home-center";
 import { LeaveTypeList } from "./_components/leave-type-list";
 
 export const metadata = { title: "Loại nghỉ | Admin", robots: { index: false } };
@@ -14,7 +14,12 @@ export const dynamic = "force-dynamic";
 export default async function LoaiNghiPage() {
   const session = await auth();
   if (!session?.user) redirect("/login?callbackUrl=%2Fcham-cong%2Floai-nghi");
-  const [canView, canEdit] = await Promise.all([checkPermission("hr_attendance:view"), checkPermission("hr_attendance:config", { centerId: HO_CENTER_ID })]);
+  const map = await loadCenterMap();
+  let canView = false;
+  for (const id of [...Object.values(map.byCode).map((c) => c.centerId), HO_CENTER_ID]) {
+    if (await checkPermission("hr_attendance:view", { centerId: id })) { canView = true; break; }
+  }
+  const canEdit = await checkPermission("hr_attendance:config", { centerId: HO_CENTER_ID });
   if (!canView && !canEdit) redirect("/cham-cong");
   const sdb = scopedDb(await resolveActor(session.user.id));
   const rows = await sdb.leaveType.findMany({ orderBy: [{ displayOrder: "asc" }, { code: "asc" }] });
