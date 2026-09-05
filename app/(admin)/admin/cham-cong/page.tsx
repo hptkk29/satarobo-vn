@@ -11,6 +11,7 @@ import { scopedDb } from "@/lib/db-scope";
 import { HO_CENTER_ID, loadCenterMap } from "@/lib/cham-cong/home-center";
 import { vnYmd, parseVnYmd, vnDateOnly } from "@/lib/time/vn";
 import { DateNavInput } from "./_components/date-nav-input";
+import { OverrideCell } from "./_components/override-cell";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Chấm công | Admin" };
@@ -68,6 +69,7 @@ export default async function ChamCongPage({ searchParams }: Props) {
   for (const b of blocks) if (await checkPermission("hr_attendance:view", { centerId: b.id })) visible.push(b);
   if (visible.length === 0) redirect("/dashboard");
   const coSo = visible.find((b) => b.id === sp.coSo)?.id ?? visible[0].id;
+  const canAdjust = await checkPermission("hr_attendance:adjust", { centerId: coSo });
 
   const day = (sp.date && parseVnYmd(sp.date)) || new Date();
   const workDate = vnDateOnly(day);
@@ -99,7 +101,10 @@ export default async function ChamCongPage({ searchParams }: Props) {
         worked: d?.workedMinutes ?? 0,
         expected: d?.expectedMinutes ?? 0,
         credit: d ? (d.overrideUnits ?? d.dayCreditEarned) : null,
+        engineCredit: d?.dayCreditEarned ?? null,
         override: d?.overrideUnits != null,
+        overrideNote: d?.overrideNote ?? null,
+        locked: d?.status === "LOCKED",
         flags: d ? d.flags : [...new Set(my.flatMap((l) => l.flags))],
         computed: !!d,
         dayType: d?.dayType ?? null,
@@ -118,6 +123,7 @@ export default async function ChamCongPage({ searchParams }: Props) {
         </div>
         <div className="flex flex-wrap gap-2">
           <Link href="/cham-cong/phan-ca/import" className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground hover:bg-muted"><FileSpreadsheet className="h-4 w-4" /> Import lịch</Link>
+          <Link href={`/cham-cong/ky-cong?ky=${dateStr.slice(0, 7)}&coSo=${coSo}`} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground hover:bg-muted"><CalendarDays className="h-4 w-4" /> Kỳ công</Link>
           <Link href={`/cham-cong/phan-ca?ky=${dateStr.slice(0, 7)}&coSo=${coSo}`} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground hover:bg-muted"><CalendarDays className="h-4 w-4" /> Lưới phân ca</Link>
           <Link href={`/cham-cong/man-hinh?centerId=${coSo}`} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-dark"><Monitor className="h-4 w-4" /> Màn hình QR</Link>
         </div>
@@ -160,7 +166,7 @@ export default async function ChamCongPage({ searchParams }: Props) {
                   <td className="px-3 py-2">{hhmm(r.lastOut)}</td>
                   <td className="px-3 py-2 text-right">{r.taps || "—"}</td>
                   <td className="px-3 py-2 text-right">{fmtMin(r.worked)} / {fmtMin(r.expected)}</td>
-                  <td className="px-3 py-2 text-right font-semibold">{r.credit ?? "…"}{r.override && <span title="Quản lý đã ghi đè" className="ml-1 text-xs text-amber-600">*</span>}</td>
+                  <td className="px-3 py-2 text-right"><OverrideCell userId={r.userId} workDate={dateStr} credit={r.credit} engineCredit={r.engineCredit} override={r.override} note={r.overrideNote} canAdjust={canAdjust} locked={r.locked} /></td>
                   <td className="px-3 py-2">
                     <div className="flex flex-wrap gap-1">
                       {r.flags.map((f) => {
