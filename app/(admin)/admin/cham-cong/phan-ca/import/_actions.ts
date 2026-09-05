@@ -15,6 +15,7 @@ import { scopedDb } from "@/lib/db-scope";
 import { parseWorkbook } from "@/lib/cham-cong/sheet-parse";
 import { applyImport, buildImportPreview, toCandidates, type ApplyResult, type ImportDb, type ImportPreview } from "@/lib/cham-cong/import-core";
 import { loadCenterMap } from "@/lib/cham-cong/home-center";
+import { markAttendanceDaysDirtyMany } from "@/lib/cham-cong/recompute";
 import { writeAudit } from "@/lib/audit/audit-log";
 
 const MAX_BYTES = 2 * 1024 * 1024;
@@ -127,6 +128,9 @@ export async function applyImportAction(formData: FormData): Promise<Res<ApplyRe
     actorUserId: session.user.id,
     importKhungCa: input.importKhungCa,
   });
+
+  // L2: ngày có ca đổi → xếp hàng tính lại bảng công (DomainEvent, không chờ ở đây).
+  await markAttendanceDaysDirtyMany(result.changedDays, { reason: "import" });
 
   await writeAudit({
     actor: { id: session.user.id, name: session.user.name ?? session.user.email ?? "" },
