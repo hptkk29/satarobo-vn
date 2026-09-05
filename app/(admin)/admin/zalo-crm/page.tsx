@@ -30,6 +30,7 @@ import {
   duongDanNhungZaloCrm,
   mintSsoToken,
 } from "@/lib/integrations/zalocrm/sso";
+import { datTruocLuongZalo } from "@/lib/integrations/zalocrm/dat-truoc";
 import { maVaiCuaNguoiDung, vaiZaloCrm } from "@/lib/integrations/zalocrm/vai-tro";
 import { cn } from "@/lib/utils";
 import { chonCoSoZaloCrm } from "./_lib/co-so";
@@ -92,6 +93,32 @@ export default async function ZaloCrmPage({
     visibleCenterIds: actor.visibleCenterIds,
     chon: sp.org,
   });
+
+  // ── S2 chiều GHI — dòng "ĐẶT TRƯỚC" cho `(orgCode của tab, SĐT trên ?compose=)` ──
+  // Tin ĐẦU TIÊN khách gửi qua Zalo cá nhân KHÔNG kèm số điện thoại. Nếu Sata không
+  // ghi trước "số này là phiếu nào" thì hội thoại rơi vào nhóm mồ côi và phải nối tay
+  // từng cái. `?lead=` mà nút "Nhắn Zalo" trên phiếu gửi sang chính là mẩu tin ấy —
+  // ba đợt trước nó được KHAI trong kiểu `searchParams` nhưng chưa ai ĐỌC.
+  //
+  // VÌ SAO GHI NGAY TRONG LÚC DỰNG TRANG (tác dụng phụ trên đường GET — chọn có chủ
+  // đích, không phải tiện tay):
+  //  · trang đã `force-dynamic` (vé SSO sống 60 giây) nên không có bản cache nào để
+  //    hỏng, và Next không dựng sẵn trang động khi trình duyệt prefetch thẻ `<Link>`;
+  //  · làm bằng Server Action gọi từ client thì phải thêm một component client + một
+  //    vòng request, mà thứ tự vẫn không chắc hơn — khách hoàn toàn có thể nhắn trước
+  //    khi vòng ấy chạy xong;
+  //  · phép ghi IDEMPOTENT và chỉ chạy khi có ĐỦ `?compose=` + `?lead=`, nên lối vào
+  //    thường ngày (mở màn từ sidebar) không chạm DB một lượt nào.
+  // Đổi lại là điều kiện cứng: `datTruocLuongZalo` KHÔNG BAO GIỜ ném — nó nuốt lỗi và
+  // trả một mã. Bảng ánh xạ hỏng không được chắn ngang việc Sale nhắn khách.
+  if (dangChon) {
+    await datTruocLuongZalo({
+      actor,
+      coSo: { centerId: dangChon.centerId, orgCode: dangChon.orgCode },
+      compose: sp.compose,
+      lead: sp.lead,
+    });
+  }
 
   // Vai bên ZaloCRM suy từ CẢ HAI hệ mã vai (phiên v1 + Actor v2) — bảng tra thuần ở
   // `lib/integrations/zalocrm/vai-tro.ts`, không so vai tại chỗ (luật cứng #1).

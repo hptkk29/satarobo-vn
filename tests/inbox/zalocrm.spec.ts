@@ -912,3 +912,229 @@ describe.skipIf(!CO_BANG)("L7 — chuỗi xử lý webhook ZaloCRM", () => {
     expect(hoi.identity.leadId).toBe(lead.id);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// L12 — DÒNG "ĐẶT TRƯỚC" do nút "Nhắn Zalo" ghi, và phép NỐI HAI ĐẦU.
+//
+// Bộ L7 ở trên chứng minh đường ĐỌC: có dòng `(orgCode, phone) → leadId` thì webhook
+// đầu tiên nối đúng phiếu. Nhưng dòng đó ở đấy là do TEST tự tạo bằng tay — trong mã
+// thật KHÔNG AI GHI NÓ (trang `/admin/zalo-crm` khai `lead?: string` mà không đọc).
+// Bộ này khoá vế còn lại: Sale bấm nút ⇒ dòng có thật ⇒ tin ĐẦU TIÊN của khách (tin
+// KHÔNG kèm số điện thoại) rơi đúng phiếu, không phải vào nhóm mồ côi nối tay.
+//
+// Vì sao phải chạm DB thật: luật ghi đã có bộ thuần riêng
+// (`lib/integrations/zalocrm/dat-truoc.test.ts`); thứ CHỈ tầng DB nói được là
+// `@@unique([orgCode, phone])` có thật sự chặn dòng thứ hai không, `scopedDb` có thật
+// sự giấu phiếu cơ sở khác không, và hai đầu có khớp nhau không.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Cơ sở THẬT (bảng `Center`) — `scopedDb` lọc `Lead` theo `centerId`, không theo chuỗi bịa. */
+const SLUG_L12 = "zcrm-l12-";
+
+async function purgeL12() {
+  await purgeL7();
+  // Xoá cơ sở SAU lead (khoá ngoại `Lead.centerId → Center.id`).
+  await db.center.deleteMany({ where: { slug: { startsWith: SLUG_L12 } } });
+}
+
+async function dungHaiCoSo() {
+  const cs1 = await db.center.create({
+    data: {
+      name: `${P}CS1`,
+      slug: `${SLUG_L12}cs1`,
+      address: "211 Nguyễn Hữu Thọ",
+      code: `${P}CS1`,
+    },
+  });
+  const cs2 = await db.center.create({
+    data: {
+      name: `${P}CS2`,
+      slug: `${SLUG_L12}cs2`,
+      address: "114 Hoàng Diệu",
+      code: `${P}CS2`,
+    },
+  });
+  return { cs1, cs2 };
+}
+
+/** Actor cấp cơ sở — chỉ đủ field mà `scopedDb` và cổng gác của đường ghi đọc. */
+function actorCuaCoSo(centerId: string) {
+  return {
+    userId: "u-l12",
+    isSuperAdmin: false,
+    isHoLevel: false,
+    orgRoles: [],
+    permissions: [],
+    visibleCenterIds: [centerId],
+    visibleOrgUnitIds: [CS1],
+    grantsAllow: new Set<string>(),
+    assignedClassIds: new Set<string>(),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any;
+}
+
+const SO_KHACH = "84912345678";
+
+describe.skipIf(!CO_BANG)("L12 — dòng ĐẶT TRƯỚC khi Sale bấm nút Nhắn Zalo", () => {
+  beforeAll(purgeL12);
+  afterAll(purgeL12);
+  beforeEach(purgeL12);
+
+  async function datTruoc(o: {
+    centerId: string;
+    leadId: string;
+    compose?: string;
+    actorCenterId?: string;
+  }) {
+    const { datTruocLuongZalo } = await import("@/lib/integrations/zalocrm/dat-truoc");
+    return datTruocLuongZalo({
+      actor: actorCuaCoSo(o.actorCenterId ?? o.centerId),
+      coSo: { centerId: o.centerId, orgCode: ORG },
+      compose: o.compose ?? SO_KHACH,
+      lead: o.leadId,
+    });
+  }
+
+  it("[ZC-L12-01] chưa có gì ⇒ tạo đúng một dòng `(orgCode, phone) → leadId`", async () => {
+    const { cs1 } = await dungHaiCoSo();
+    const lead = await db.lead.create({
+      data: { parentName: `${P}Mẹ mới`, phone: SO_KHACH, centerId: cs1.id },
+    });
+
+    expect(await datTruoc({ centerId: cs1.id, leadId: lead.id })).toMatchObject({ ma: "DA_TAO" });
+
+    const dong = await db.zaloCrmThread.findFirstOrThrow({ where: { orgCode: ORG } });
+    expect(dong.phone, "phải là canonical 84… — đúng dạng nap-su-kien tra").toBe(SO_KHACH);
+    expect(dong.leadId).toBe(lead.id);
+    expect(dong.centerId).toBe(cs1.id);
+    expect(
+      dong.zcrmConversationId,
+      "hội thoại chưa tồn tại — đó chính là ý nghĩa của 'đặt trước'",
+    ).toBeNull();
+  });
+
+  it("[ZC-L12-02] bấm hai lần / F5 / hai tab ⇒ vẫn ĐÚNG MỘT dòng, không lỗi", async () => {
+    const { cs1 } = await dungHaiCoSo();
+    const lead = await db.lead.create({
+      data: { parentName: `${P}Mẹ bấm hai lần`, phone: SO_KHACH, centerId: cs1.id },
+    });
+
+    expect(await datTruoc({ centerId: cs1.id, leadId: lead.id })).toMatchObject({ ma: "DA_TAO" });
+    expect(await datTruoc({ centerId: cs1.id, leadId: lead.id })).toMatchObject({ ma: "DA_DUNG" });
+    expect(await db.zaloCrmThread.count({ where: { orgCode: ORG } })).toBe(1);
+  });
+
+  it("[ZC-L12-03] 🔴 dòng đã nối hội thoại THẬT của phiếu khác ⇒ không đè gì cả", async () => {
+    const { cs1 } = await dungHaiCoSo();
+    const leadCu = await db.lead.create({
+      data: { parentName: `${P}Mẹ phiếu cũ`, phone: SO_KHACH, centerId: cs1.id },
+    });
+    const leadMoi = await db.lead.create({
+      data: { parentName: `${P}Mẹ phiếu trùng số`, phone: SO_KHACH, centerId: cs1.id },
+    });
+    await db.zaloCrmThread.create({
+      data: {
+        orgCode: ORG,
+        phone: SO_KHACH,
+        leadId: leadCu.id,
+        zcrmConversationId: `${P}conv-CU`,
+        centerId: cs1.id,
+      },
+    });
+
+    expect(await datTruoc({ centerId: cs1.id, leadId: leadMoi.id })).toMatchObject({
+      ma: "GIU_ANH_XA_CU",
+    });
+
+    const dong = await db.zaloCrmThread.findFirstOrThrow({ where: { orgCode: ORG } });
+    expect(dong.leadId, "lịch sử chat của khách không được chuyển sang phiếu khác").toBe(leadCu.id);
+    expect(dong.zcrmConversationId).toBe(`${P}conv-CU`);
+    expect(await db.zaloCrmThread.count({ where: { orgCode: ORG } })).toBe(1);
+  });
+
+  it("[ZC-L12-03b] dòng đã có hội thoại nhưng CHƯA có phiếu ⇒ điền phiếu, giữ hội thoại", async () => {
+    const { cs1 } = await dungHaiCoSo();
+    const lead = await db.lead.create({
+      data: { parentName: `${P}Mẹ nối tay`, phone: SO_KHACH, centerId: cs1.id },
+    });
+    await db.zaloCrmThread.create({
+      data: { orgCode: ORG, phone: SO_KHACH, zcrmConversationId: `${P}conv-MC`, centerId: cs1.id },
+    });
+
+    expect(await datTruoc({ centerId: cs1.id, leadId: lead.id })).toMatchObject({
+      ma: "DA_CAP_NHAT",
+    });
+    const dong = await db.zaloCrmThread.findFirstOrThrow({ where: { orgCode: ORG } });
+    expect(dong.leadId).toBe(lead.id);
+    expect(dong.zcrmConversationId).toBe(`${P}conv-MC`);
+  });
+
+  it("[ZC-L12-04] số sai dạng / lệch số của phiếu ⇒ KHÔNG ghi dòng nào", async () => {
+    const { cs1 } = await dungHaiCoSo();
+    const lead = await db.lead.create({
+      data: { parentName: `${P}Mẹ số lệch`, phone: SO_KHACH, centerId: cs1.id },
+    });
+
+    // Số cố định: `canonicalPhone` trả null ⇒ dòng ghi ra sẽ không bao giờ tra tới.
+    expect(
+      await datTruoc({ centerId: cs1.id, leadId: lead.id, compose: "02363123456" }),
+    ).toMatchObject({ ma: "SO_KHONG_HOP_LE" });
+
+    // Cặp (số, phiếu) lệch chỉ đến từ URL sửa tay — ghi được là hội thoại của người
+    // này nằm trong hồ sơ người kia ngay từ tin đầu tiên.
+    expect(
+      await datTruoc({ centerId: cs1.id, leadId: lead.id, compose: "84905000111" }),
+    ).toMatchObject({ ma: "SO_LECH_PHIEU" });
+
+    expect(await db.zaloCrmThread.count({ where: { orgCode: ORG } })).toBe(0);
+  });
+
+  it("[ZC-L12-05] 🔴 phiếu NGOÀI tầm nhìn (cơ sở khác) ⇒ không ghi, kể cả khi gõ tay id", async () => {
+    const { cs1, cs2 } = await dungHaiCoSo();
+    const leadCs2 = await db.lead.create({
+      data: { parentName: `${P}Mẹ CS2`, phone: SO_KHACH, centerId: cs2.id },
+    });
+
+    // Người CS1 gõ tay `?lead=<id phiếu CS2>`: `scopedDb` không thấy phiếu ⇒ dừng.
+    expect(
+      await datTruoc({ centerId: cs1.id, leadId: leadCs2.id, actorCenterId: cs1.id }),
+    ).toMatchObject({ ma: "KHONG_DOC_DUOC_PHIEU" });
+
+    // Và người CS1 cũng không đặt trước được vào ORG của CS2 (bảng ở SCOPE_EXEMPT nên
+    // `scopedDb` KHÔNG che — cổng phải nằm trong chính đường ghi).
+    expect(
+      await datTruoc({ centerId: cs2.id, leadId: leadCs2.id, actorCenterId: cs1.id }),
+    ).toMatchObject({ ma: "NGOAI_TAM_NHIN" });
+
+    expect(await db.zaloCrmThread.count({ where: { orgCode: ORG } })).toBe(0);
+  });
+
+  it("[ZC-L12-06] 🔴 NỐI HAI ĐẦU: đặt trước xong, tin ĐẦU TIÊN của khách vào đúng phiếu", async () => {
+    // Đây là lý do tồn tại của cả lô. Tin đầu tiên KHÔNG kèm số điện thoại, nên nếu
+    // không có dòng đặt trước thì hội thoại nằm nhóm mồ côi và phải nối tay.
+    const { cs1 } = await dungHaiCoSo();
+    const lead = await db.lead.create({
+      data: { parentName: `${P}Mẹ hai đầu`, phone: SO_KHACH, centerId: cs1.id, orgUnitId: CS1 },
+    });
+
+    expect(await datTruoc({ centerId: cs1.id, leadId: lead.id })).toMatchObject({ ma: "DA_TAO" });
+
+    const kq = await chay(payloadTin("haidau", { conv: "L1" }));
+    if (!kq.ok) throw new Error("phải ok");
+
+    const hoi = await db.inboxConversation.findUniqueOrThrow({
+      where: { id: kq.conversationId! },
+      include: { identity: true },
+    });
+    expect(hoi.identity.leadId, "ý định tường minh của con người thắng mọi phép suy đoán").toBe(
+      lead.id,
+    );
+    expect(hoi.identity.linkSource).toBe("EXTERNAL_TAG");
+
+    const dong = await db.zaloCrmThread.findFirstOrThrow({ where: { orgCode: ORG } });
+    expect(dong.zcrmConversationId, "webhook điền nốt id hội thoại vào dòng đặt trước").toBe(
+      `${P}conv-L1`,
+    );
+    expect(await db.zaloCrmThread.count({ where: { orgCode: ORG } })).toBe(1);
+  });
+});

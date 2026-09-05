@@ -124,4 +124,54 @@ describe("ghiNhatKyZalocrm", () => {
     expect(ghi).not.toContain("0912345678");
     expect(ghi).not.toContain("Chị Lan");
   });
+
+  // ── L9: nhật ký của nút "Đồng bộ nick" trên màn Tích hợp ───────────────────
+
+  it("[ZC-LG-02] direction PUSH khai được — đồng bộ nick là MÌNH gọi ra, không phải tin đi vào", async () => {
+    // Mặc định `PULL` đúng cho webhook. Nếu lượt đồng bộ cũng nằm ở `PULL` thì cột
+    // `direction` mất hết ý nghĩa và không lọc nổi "chuyện gì đến từ đâu" khi đối soát.
+    await ghiNhatKyZalocrm({
+      orgCode: "cs1",
+      action: "SYNC_NICKS",
+      status: "SUCCESS",
+      direction: "PUSH",
+    });
+    expect(cuoi().direction).toBe("PUSH");
+  });
+
+  it("[ZC-LG-03] tên hiển thị của nick bị đục — bảng này KHÔNG cách ly cơ sở", async () => {
+    // `displayName` là tên hồ sơ Zalo của NHÂN VIÊN. `IntegrationLog` không thuộc
+    // `SCOPED_MODELS` lẫn `SCOPE_EXEMPT` ⇒ mọi người có `settings:view` đọc được nhật
+    // ký của mọi cơ sở. Danh sách nhân sự cơ sở khác không có việc gì ở đó.
+    await ghiNhatKyZalocrm({
+      orgCode: "cs1",
+      action: "SYNC_NICKS",
+      status: "SUCCESS",
+      direction: "PUSH",
+      responsePayload: { accounts: [{ id: "acc-1", displayName: "Zalo Chị Lan" }] },
+    });
+    const ghi = JSON.stringify(cuoi().responsePayload);
+    expect(ghi).not.toContain("Chị Lan");
+    // …nhưng định danh MÁY MÓC phải còn, nếu không nhật ký hết tác dụng đối soát.
+    expect(ghi).toContain("acc-1");
+  });
+
+  it("[ZC-LG-04] các con SỐ đếm được giữ nguyên — đó là toàn bộ giá trị của dòng SYNC_NICKS", async () => {
+    // `ducPayload` chỉ đục chuỗi/khoá PII; số phải đi qua nguyên vẹn. Nếu một ngày nào
+    // đó nó đục cả số thì dòng nhật ký này còn lại đúng một cái nhãn rỗng, và người vận
+    // hành mất cách trả lời "lần bấm vừa rồi có kéo về được nick nào không".
+    await ghiNhatKyZalocrm({
+      orgCode: "cs2",
+      action: "SYNC_NICKS",
+      status: "SUCCESS",
+      direction: "PUSH",
+      responsePayload: { soNickNhan: 3, soTao: 1, soCapNhat: 2, soBoQua: 0 },
+    });
+    expect(cuoi().responsePayload).toMatchObject({
+      soNickNhan: 3,
+      soTao: 1,
+      soCapNhat: 2,
+      soBoQua: 0,
+    });
+  });
 });

@@ -10,9 +10,12 @@ import { getPaymentConfigExact } from "@/lib/payments/vietqr";
 import { MisaControls } from "./_components/misa-controls";
 import { VietQrConfig, type VietQrCenterRow } from "./_components/vietqr-config";
 import { ZnsTest } from "./_components/zns-test";
+import { ZalocrmSection } from "./_components/zalocrm-section";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 import { docTinhHinhNganSach } from "@/lib/ngan-sach-goi-ra/so-chi";
 import { dinhDangVnd, kyThangDeDoc } from "@/lib/ngan-sach-goi-ra/chinh-sach";
+import { isZalocrmEnabled } from "@/lib/flags";
+import { docTongQuanNick, whereNhatKyZalocrm } from "@/lib/integrations/zalocrm/nick-admin";
 
 export const metadata = { title: "Tích hợp | Admin" };
 export const dynamic = "force-dynamic";
@@ -25,6 +28,17 @@ const STATUS_CLS: Record<string, string> = {
   PENDING: "bg-state-info-soft text-state-info-ink",
 };
 
+/**
+ * Định dạng mốc thời gian cho các bảng ở màn này.
+ *
+ * Cùng công thức đang dùng inline ở bảng ZNS/MISA (`toISOString`) — cố ý KHÔNG dùng
+ * `toLocaleString`: mục ZaloCRM truyền chuỗi xuống một client component, mà giờ địa
+ * phương tính ở hai phía sẽ lệch nhau và sinh cảnh báo hydrate.
+ */
+function dinhDangLuc(d: Date): string {
+  return d.toISOString().slice(0, 16).replace("T", " ");
+}
+
 export default async function IntegrationsPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
@@ -35,7 +49,10 @@ export default async function IntegrationsPage() {
   const zaloLive = znsProvider.isLive();
 
   // ZaloMessageLog/IntegrationLog là log tích hợp global (∉ SCOPED_MODELS) → pass-through.
-  const sdb = scopedDb(await resolveActor(session.user.id));
+  // ⚠️ Vì là pass-through nên `sdb` KHÔNG cách ly cơ sở ở hai bảng đó: mục ZaloCRM bên
+  // dưới phải tự dựng `where` theo actor (`whereNhatKyZalocrm`) — giữ `actor` lại để dùng.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
   const [zaloLogs, misaCfg, misaLogs] = await Promise.all([
     sdb.zaloMessageLog.findMany({
       orderBy: { createdAt: "desc" },
@@ -62,6 +79,30 @@ export default async function IntegrationsPage() {
     orderBy: { name: "asc" },
     select: { id: true, name: true },
   });
+  // ─── Mục ZaloCRM (S7) ─────────────────────────────────────────────────────
+  // Cờ TẮT ⇒ không nạp gì: mục vẫn hiện (để người vận hành biết trạng thái đường lùi)
+  // nhưng không tốn ba lượt truy vấn cho một tính năng chưa bật.
+  const zalocrmBat = isZalocrmEnabled();
+  const zalocrm = zalocrmBat ? await docTongQuanNick(actor) : null;
+  const zalocrmLogs = zalocrm
+    ? await sdb.integrationLog.findMany({
+        // LUÔN có `where.provider` — chỉ mục duy nhất của bảng là
+        // [provider, status, createdAt]. Và đây cũng chính là lưới cách ly cơ sở:
+        // `IntegrationLog` ∉ SCOPED_MODELS nên `sdb` không lọc giúp dòng nào.
+        where: whereNhatKyZalocrm(actor, zalocrm.orgCodes),
+        orderBy: { createdAt: "desc" },
+        take: 30,
+        select: {
+          id: true,
+          provider: true,
+          action: true,
+          status: true,
+          errorMessage: true,
+          createdAt: true,
+        },
+      })
+    : [];
+
   const vietqrRows: VietQrCenterRow[] = await Promise.all([
     getPaymentConfigExact(null).then((current) => ({
       centerId: null,
@@ -219,6 +260,33 @@ export default async function IntegrationsPage() {
           </PhanTrangBang>
         </div>
       </section>
+
+      {/* S7 — sức khoẻ trục Zalo cá nhân. Đặt ngay dưới Zalo OA/ZNS: hai mục cùng nói
+          về Zalo, và người đi tìm "vì sao khách nhắn mà không thấy" sẽ nhìn quanh đây. */}
+      <ZalocrmSection
+        enabled={zalocrmBat}
+        canEdit={canEdit}
+        rows={(zalocrm?.rows ?? []).map((n) => ({
+          zcrmAccountId: n.zcrmAccountId,
+          orgCode: n.orgCode,
+          centerName: n.centerName,
+          displayName: n.displayName,
+          sataUserName: n.sataUserName,
+          status: n.status,
+          lastEventAt: n.lastEventAt ? dinhDangLuc(n.lastEventAt) : null,
+        }))}
+        canhBao={zalocrm?.canhBao ?? []}
+        nguongGio={zalocrm?.nguongGio ?? 0}
+        orgCodes={zalocrm?.orgCodes ?? []}
+        logs={zalocrmLogs.map((l) => ({
+          id: l.id,
+          provider: l.provider,
+          action: l.action,
+          status: l.status,
+          errorMessage: l.errorMessage,
+          createdAt: dinhDangLuc(l.createdAt),
+        }))}
+      />
 
       <section className="rounded-xl border border-border bg-card p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
