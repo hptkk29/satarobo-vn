@@ -340,6 +340,18 @@ const BY_PREFIX: Readonly<Record<string, NotiDef>> = {
     group: "system", priority: 3, entity: "student",
     recipients: "CSKH + giáo viên lớp", target: "/sinh-nhat",
   },
+  // ── Module chấm công v3 (L3, 06/09/2026) ────────────────────────────────────
+  // Ca của tôi bị đổi (sửa tay trên lưới / đơn được duyệt) — T-07: "duyệt ⇒ đổi lịch ⇒ báo".
+  "shift.changed:": {
+    group: "new_task", priority: 2, entity: "timesheet",
+    recipients: "Chính người có ca", target: "/cham-cong/lich-ca",
+  },
+  // Tin nhắc lịch NGÀY MAI (thay tin Zalo 19:00 của Sheet). dedupeKey = shift.brief:<userId>:<ymd>
+  // ⇒ cron bơm dày (test 5′/lần) không kêu chuông lần hai.
+  "shift.brief:": {
+    group: "due_date", priority: 3, entity: "timesheet",
+    recipients: "Mọi nhân sự có trong lưới phân ca", target: "/cham-cong/lich-ca",
+  },
 };
 
 /** Danh sách tiền tố đã sắp DÀI TRƯỚC — khớp tiền tố dài nhất, tính sẵn một lần. */

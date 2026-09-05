@@ -47,7 +47,9 @@ jobs:
           # `notifyStaff` với dedupeKey `sla:<rule>:<leadId>` và KHÔNG dùng `reopen`, nên
           # lượt sau chỉ chạm lại bản ghi cũ chứ không dội chuông lần hai. Cảnh báo SLA là
           # chuông NỘI BỘ cho Sale — không có email/ZNS nào bay ra ngoài.
-          for p in dispatch-events email-queue chat-zns-notify trial-reminder sla-check; do
+          # shift-brief (chấm công v3): tin nhắc lịch ngày mai — route tự so giờ VN với setting,
+          # dedupeKey shift.brief:<người>:<ngày> nên bơm 5′/lần vẫn chỉ một tin.
+          for p in dispatch-events email-queue chat-zns-notify trial-reminder sla-check shift-brief; do
             code=$(curl -s -o /dev/null -w "%{http_code}" \
               -H "Authorization: Bearer ${{ secrets.TEST_CRON_SECRET }}" \
               "https://test.satarobo.vn/api/cron/$p")
