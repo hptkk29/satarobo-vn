@@ -111,6 +111,8 @@ export const employeeCreateSchema = z.object({
   certifications: z.array(z.string().trim().min(1)).default([]),
 
   isCEO: z.coerce.boolean().default(false),
+  // Module chấm công v3 (T-02): miễn tính công — chỉ SUPER_ADMIN đặt được (action gác).
+  timesheetExempt: z.coerce.boolean().default(false),
 });
 
 export type EmployeeCreateInput = z.infer<typeof employeeCreateSchema>;

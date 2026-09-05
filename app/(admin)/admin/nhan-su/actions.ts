@@ -228,6 +228,8 @@ export async function createEmployeeAction(
   // SEC-M15: chống mass-assignment khi CREATE (write path song song với update:265-270).
   // Non-SUPER_ADMIN không được tự đặt cờ CEO; CENTER_MANAGER thuần không được đặt bậc/mức lương.
   if (!canSetPrivileged) createData.isCEO = false;
+  // Module chấm công v3 (T-02): cờ miễn tính công cùng luật với isCEO — chỉ SUPER_ADMIN.
+  if (!canSetPrivileged) createData.timesheetExempt = false;
   // SEC-H04: strip field ngoài quyền (khớp update + redact-khi-đọc). Bao trùm strip
   // salary CM cũ + chặn set nhóm personal/contact ngoài quyền lúc tạo.
   stripHiddenEmployeeFields(createData, getEmployeeFieldVisibility(session.user.role));
@@ -328,6 +330,11 @@ export async function updateEmployeeAction(
   // client gửi null do đã redact + chặn set field ngoài quyền. Bao trùm strip salary CM cũ.
   const data = { ...parsed.data };
   stripHiddenEmployeeFields(data, getEmployeeFieldVisibility(session.user.role));
+  // Module chấm công v3 (T-02): cờ miễn tính công chỉ SUPER_ADMIN đặt/gỡ được (khuôn SEC-M15
+  // của isCEO). Vai khác gửi lên thì bỏ qua — không đổi giá trị đang có.
+  if (data.timesheetExempt !== undefined && !hasRole(session.user, "SUPER_ADMIN")) {
+    delete data.timesheetExempt;
+  }
   // ĐƠN VỊ LÀM VIỆC → CƠ SỞ (xem `lib/hr/employee-unit.ts`). Ba trạng thái của
   // `orgUnitId` tách bạch: undefined = không đụng tới đơn vị ⇒ giữ nguyên cơ sở;
   // null = chủ ý xoá; có giá trị = suy cơ sở từ khoá ngoại của đơn vị.
