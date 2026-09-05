@@ -102,6 +102,8 @@ export type ApplyResult = {
   };
   /** 15 con số: đếm trên Sheet vs đếm ACTIVE trong DB sau import (chỉ người đã ánh xạ). */
   counts: { periodKey: string; sheet: Record<string, number>; db: Record<string, number> }[];
+  /** Ngày công có ca đổi (tạo/huỷ) — action xếp hàng tính lại (hr.attendance_day_dirty). */
+  changedDays: { userId: string; workDate: Date }[];
   warnings: string[];
 };
 
@@ -166,6 +168,7 @@ export async function applyImport(
     patterns: { upserted: 0, deleted: 0, skippedNoMapping: 0, skippedNoPermission: 0, unknownCode: 0 },
     assignments: { created: 0, cancelled: 0, unchanged: 0, keptManual: 0, skippedNoMapping: 0, skippedNoPermission: 0, unknownCode: 0 },
     counts: [],
+    changedDays: [],
     warnings,
   };
 
@@ -253,6 +256,7 @@ export async function applyImport(
             }
             await opts.db.shiftAssignment.updateMany({ where: { id: existing.id }, data: { status: "CANCELLED" } });
             result.assignments.cancelled += 1;
+            result.changedDays.push({ userId, workDate });
           }
           continue;
         }
@@ -302,6 +306,7 @@ export async function applyImport(
           },
         });
         result.assignments.created += 1;
+        result.changedDays.push({ userId, workDate });
         touched = true;
         mappedUserIds.add(userId);
       }

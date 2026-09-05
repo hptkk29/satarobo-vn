@@ -18,6 +18,7 @@ import { registerCommentNotifHandlers } from "@/lib/_handlers/comment-notif";
 import { registerConversationNotifHandlers } from "@/lib/_handlers/conversation-notif";
 import { registerParentRequestHandlers } from "@/lib/events/handlers/parent-request";
 import { registerChatParticipantRemovedHandlers } from "@/lib/chat/_handlers/participant-removed";
+import { registerAttendanceDayHandlers } from "@/lib/cham-cong/_handlers/attendance-day";
 
 let registered = false;
 
@@ -42,4 +43,5 @@ export function ensureHandlersRegistered(): void {
   registerParentRequestHandlers(); // #08 — parent_request.created → báo Sale + Quản lý cơ sở
   registerChatParticipantRemovedHandlers(); // US-07/F-KICK — chat.participant_removed → đá client ra khỏi kênh realtime
   registerElearningNotifyHandlers(); // EL-06 — giao bài / quá hạn / hoàn thành → in-app + email (KHÔNG ZNS)
+  registerAttendanceDayHandlers(); // Chấm công v3 L2 — hr.attendance_day_dirty → recomputeAttendanceDay (không xin khe cron)
 }
