@@ -274,7 +274,8 @@ export type GatedHref = keyof typeof PAGE_GATES;
 
 /**
  * CHƯA đưa vào bảng — gate và menu vẫn lệch, có chủ đích. Rỗng từ L5 chấm công v3 (06/09/2026):
- * `/cham-cong/lich-ca-nhan-vien` đã bị gỡ cùng 4 màn ShiftRegistration cũ; còn lại `/sale/ghi-danh` (lý do bên dưới).
+ * `/cham-cong/lich-ca-nhan-vien` đã bị gỡ cùng 4 màn ShiftRegistration cũ;
+ * còn lại `/sale/ghi-danh` (lý do bên dưới).
  * Thêm route mới vào đây phải kèm lý do, không được im lặng.
  */
 export const GATE_MISMATCH_ALLOWLIST: readonly string[] = [

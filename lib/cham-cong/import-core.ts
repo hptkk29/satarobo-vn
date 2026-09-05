@@ -333,7 +333,7 @@ export async function applyImport(
 
 const WEEKDAY_LABEL = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
 
-function groupRowsByName(grid: MonthGrid): Map<string, MonthGrid["rows"]> {
+export function groupRowsByName(grid: MonthGrid): Map<string, MonthGrid["rows"]> {
   const m = new Map<string, MonthGrid["rows"]>();
   for (const r of grid.rows) {
     const list = m.get(r.name) ?? [];
