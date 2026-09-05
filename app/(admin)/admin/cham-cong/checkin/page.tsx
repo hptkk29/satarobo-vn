@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { CheckinClient } from "./_components/checkin-client";
+// L0 (05/09/2026): client + action dùng chung với site GV — xem components/cham-cong.
+import { CheckinClient } from "@/components/cham-cong/checkin-client";
 
 export const metadata = { title: "Chấm công | Admin", robots: { index: false } };
 export const dynamic = "force-dynamic";
