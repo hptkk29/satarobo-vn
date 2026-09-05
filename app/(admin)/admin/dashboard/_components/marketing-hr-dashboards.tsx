@@ -91,14 +91,16 @@ async function getHrStats(actor: Actor) {
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekEnd.getDate() + 7);
 
-  // FL0 — cách ly cơ sở: Employee/ShiftRegistration ∈ SCOPED_MODELS → scopedDb lọc
+  // FL0 — cách ly cơ sở: Employee/ShiftAssignment ∈ SCOPED_MODELS → scopedDb lọc
   // theo tầm nhìn cơ sở. JobPosting không scoped → đi qua nguyên vẹn.
+  // L5 chấm công v3 (06/09/2026): ShiftRegistration đã đóng băng → đếm ca trên lưới mới
+  // (ShiftAssignment) và đơn từ đang chờ duyệt (WorkRequest) thay cho "xin nghỉ khẩn".
   const sdb = scopedDb(actor);
   const [activeStaff, openJobs, shiftRegsWeek, leaveReqs] = await Promise.all([
     sdb.employee.count({ where: { status: "ACTIVE" } }),
     sdb.jobPosting.count({ where: { status: "OPEN" } }),
-    sdb.shiftRegistration.count({ where: { date: { gte: weekStart, lt: weekEnd } } }),
-    sdb.shiftRegistration.count({ where: { status: "LEAVE_REQUESTED", date: { gte: weekStart } } }),
+    sdb.shiftAssignment.count({ where: { status: "ACTIVE", workDate: { gte: weekStart, lt: weekEnd } } }),
+    sdb.workRequest.count({ where: { status: "PENDING" } }),
   ]);
   return { activeStaff, openJobs, shiftRegsWeek, leaveReqs };
 }
@@ -118,8 +120,8 @@ export async function HrDashboard({ name, actor, embedded = false }: { name: str
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Stat label="Nhân viên đang làm" value={activeStaff} href="/nhan-su" icon={<Users className="h-5 w-5" />} />
         <Stat label="Tuyển dụng đang mở" value={openJobs} href="/jobs" icon={<Briefcase className="h-5 w-5" />} />
-        <Stat label="Đăng ký ca tuần này" value={shiftRegsWeek} href="/cham-cong/lich-ca-nhan-vien" icon={<CalendarClock className="h-5 w-5" />} />
-        <Stat label="Xin nghỉ khẩn" value={leaveReqs} href="/cham-cong/lich-ca-nhan-vien" tone={leaveReqs > 0 ? "danger" : "ok"} icon={<CalendarClock className="h-5 w-5" />} />
+        <Stat label="Ca xếp tuần này" value={shiftRegsWeek} href="/cham-cong/phan-ca" icon={<CalendarClock className="h-5 w-5" />} />
+        <Stat label="Đơn từ chờ duyệt" value={leaveReqs} href="/don-tu" tone={leaveReqs > 0 ? "danger" : "ok"} icon={<CalendarClock className="h-5 w-5" />} />
       </div>
     </div>
   );

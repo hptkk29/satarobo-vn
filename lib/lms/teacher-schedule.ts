@@ -17,10 +17,8 @@
 // ⚠️ @db.Date: tham số from/to là mốc UTC 00:00 của NGÀY VN, khoảng nửa mở [from, to).
 import "server-only";
 import type {
-  ShiftRegStatus,
   TrialSessionStatus,
   TrialEnrollmentStatus,
-  WorkShift,
   HolidayType,
 } from "@prisma/client";
 import { db } from "@/lib/db";
@@ -79,27 +77,8 @@ export async function getTeacherTrialSessions(
   }));
 }
 
-/** Ca làm việc CỦA CHÍNH GV trong [from, to). Enum ShiftRegStatus (REGISTERED /
- * LEAVE_REQUESTED / APPROVED) không có trạng thái hủy → lấy đủ cả 3, caller tự
- * đánh dấu LEAVE_REQUESTED (xin nghỉ khẩn) nếu cần. */
-export type TeacherShiftRow = {
-  date: Date; // @db.Date → UTC 00:00 của ngày
-  shifts: WorkShift[];
-  status: ShiftRegStatus;
-};
-
-export async function getOwnShiftRegistrations(
-  userId: string,
-  from: Date,
-  to: Date,
-): Promise<TeacherShiftRow[]> {
-  return db.shiftRegistration.findMany({
-    where: { userId, date: { gte: from, lt: to } },
-    select: { date: true, shifts: true, status: true },
-    orderBy: { date: "asc" },
-    take: 100, // 1 record/ngày (unique userId+date) — 100 phủ dư lưới tháng 42 ô
-  });
-}
+// Ca làm của GV: từ L5 chấm công v3 đọc ở `lib/cham-cong/my-schedule.getMyAssignments`
+// (lưới ShiftAssignment), không còn ShiftRegistration.
 
 /** Ngày nghỉ hiển thị cho GV: TOÀN HỆ THỐNG (centerId null) HOẶC thuộc scope Holiday
  * của actor. Range-overlap với [from, to): holiday [date, endDate ?? date] giao khoảng. */

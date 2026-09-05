@@ -39,9 +39,8 @@ import { resolveActor } from "@/lib/auth/actor";
 import { withMakeupException } from "@/lib/db-scope";
 import { isSessionLifecycleV2Enabled } from "@/lib/flags";
 import { sessionTimeRange } from "@/lib/classes/slots";
-import { SHIFT_ORDER, shiftLabel } from "@/lib/shifts";
+import { getMyAssignments } from "@/lib/cham-cong/my-schedule";
 import {
-  getOwnShiftRegistrations,
   getTeacherTrialSessions,
   getVisibleHolidays,
   type TeacherTrialSessionRow,
@@ -172,7 +171,7 @@ type DayAgg = {
   classes: ClassSessionRow[];
   trials: TeacherTrialSessionRow[];
 };
-/** Ca làm trong ngày: nhãn VI đã sort theo SHIFT_ORDER + cờ xin nghỉ khẩn. */
+/** Ca làm trong ngày: mã ca + khung giờ từ lưới phân ca; `leave` = ô nghỉ đã duyệt. */
 type DayShift = { labels: string[]; leave: boolean };
 type DayHoliday = { name: string; typeLabel: string };
 
@@ -313,7 +312,7 @@ export default async function TeacherSchedulePage({
       take: 500,
     }),
     getTeacherTrialSessions(session.user.id, fromDay, toDay),
-    getOwnShiftRegistrations(session.user.id, fromDay, toDay),
+    getMyAssignments(session.user.id, fromDay, toDay),
     // Vá 24/07 — getVisibleHolidays nhận actor, tự tính per-model scope Holiday.
     getVisibleHolidays(actor, fromDay, toDay),
   ]);
@@ -361,11 +360,12 @@ export default async function TeacherSchedulePage({
   // @db.Date trả UTC 00:00 = 07:00 VN cùng ngày lịch → isoKey khớp khóa VN.
   for (const t of fTrials) dayAgg(isoKey(t.date), t.date).trials.push(t);
 
+  // L5 chấm công v3: ca làm đọc từ lưới ShiftAssignment (Quản lý xếp), không còn tự đăng ký.
   const shiftsByDay = new Map<string, DayShift>();
   for (const r of shiftRows) {
     shiftsByDay.set(isoKey(r.date), {
-      labels: SHIFT_ORDER.filter((c) => r.shifts.includes(c)).map(shiftLabel),
-      leave: r.status === "LEAVE_REQUESTED", // xin nghỉ khẩn — vẫn hiện, kèm nhãn
+      labels: [r.timeLabel ? `${r.code} ${r.timeLabel}` : `${r.code} · ${r.name}`],
+      leave: r.isLeave, // ô nghỉ đã duyệt (P/X) — vẫn hiện, kèm nhãn
     });
   }
 

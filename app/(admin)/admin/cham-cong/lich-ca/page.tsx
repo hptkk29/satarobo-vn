@@ -1,131 +1,79 @@
+// app/(admin)/admin/cham-cong/lich-ca/page.tsx — LỊCH CA CỦA TÔI (L5, chấm công v3): đọc lưới
+// ShiftAssignment tháng + công ngày của chính mình. Thay màn "đề xuất ca" cũ (ShiftRegistration —
+// đóng băng L5): nhân viên KHÔNG tự đăng ký ca nữa, Quản lý xếp lịch; muốn đổi thì nộp đơn.
+// Giữ đường dẫn vì thông báo shift.changed / shift.brief trỏ tới đây.
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { resolveActor } from "@/lib/auth/actor";
-import { scopedDb } from "@/lib/db-scope";
-import { isNextMonthWindowOpen, isWeekendEditWindow, EMERGENCY_MONTHLY_LIMIT } from "@/lib/shifts";
-import { getSetting } from "@/lib/settings/service";
-import { checkPermission } from "@/lib/auth/check-permission";
-import { MyShiftsCalendar } from "./_components/my-shifts-calendar";
+import { getMyAssignments, getMyAttendanceDays } from "@/lib/cham-cong/my-schedule";
+import { currentPeriodKey, parsePeriodKey, periodRange } from "@/lib/cham-cong/period";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Lịch ca của tôi | Admin" };
 export const dynamic = "force-dynamic";
 
-interface Props {
-  searchParams: Promise<{ month?: string }>;
-}
+const WD = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
+const fmtMin = (m: number) => (m ? `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}` : "—");
 
-function ymd(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-export default async function MyShiftsPage({ searchParams }: Props) {
+export default async function MyShiftsPage({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!(await checkPermission("hr_attendance:checkin", { centerId: session.user.centerId }))) redirect("/dashboard");
-
   const { month } = await searchParams;
-  const now = new Date();
-  const m = month && /^\d{4}-\d{2}$/.test(month) ? month : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const year = Number(m.slice(0, 4));
-  const monthIdx = Number(m.slice(5, 7)) - 1;
-  const monthStart = new Date(year, monthIdx, 1);
-  const monthEnd = new Date(year, monthIdx + 1, 1);
-
-  // Cách ly cơ sở (A0-04): ShiftRegistration/ClassSession ∈ SCOPED_MODELS → scopedDb.
-  const sdb = scopedDb(await resolveActor(session.user.id));
-
-  const [regs, teachingSessions] = await Promise.all([
-    sdb.shiftRegistration.findMany({
-      where: { userId: session.user.id, date: { gte: monthStart, lt: monthEnd } },
-      select: { date: true, shifts: true, status: true, note: true },
-    }),
-    // PHẦN 3 — buổi dạy của GV (lớp GV phụ trách chính/trợ giảng) trong tháng.
-    sdb.classSession.findMany({
-      where: {
-        date: { gte: monthStart, lt: monthEnd },
-        class: { OR: [{ teacherId: session.user.id }, { assistantId: session.user.id }] },
-      },
-      select: {
-        date: true,
-        class: { select: { name: true, classCode: true, startTime: true, endTime: true } },
-      },
-      orderBy: { date: "asc" },
-    }),
-  ]);
-  const byDate = new Map(
-    regs.map((r) => [ymd(new Date(r.date)), { shifts: r.shifts, status: r.status, note: r.note ?? "" }]),
-  );
-
-  // PHẦN 6 — số lần khẩn cấp đã dùng trong tháng đang xem.
-  const emergencyUsed = await sdb.shiftRegistration.count({
-    where: { userId: session.user.id, status: "LEAVE_REQUESTED", date: { gte: monthStart, lt: monthEnd } },
+  const ky = month && parsePeriodKey(month) ? month : currentPeriodKey();
+  const { from, to, days } = periodRange(ky);
+  const toExclusive = new Date(to.getTime() + 86_400_000);
+  const [shifts, dayRows] = await Promise.all([getMyAssignments(session.user.id, from, toExclusive), getMyAttendanceDays(session.user.id, from, toExclusive)]);
+  const shiftOf = new Map(shifts.map((s) => [s.date.toISOString().slice(0, 10), s]));
+  const dayOf = new Map(dayRows.map((d) => [d.date.toISOString().slice(0, 10), d]));
+  const p = parsePeriodKey(ky)!;
+  const prev = `${new Date(Date.UTC(p.y, p.m - 2, 1)).toISOString().slice(0, 7)}`;
+  const next = `${new Date(Date.UTC(p.y, p.m, 1)).toISOString().slice(0, 7)}`;
+  const totalUnits = Math.round(dayRows.reduce((s, d) => s + d.units, 0) * 100) / 100;
+  const rows = Array.from({ length: days }, (_, i) => {
+    const d = new Date(from.getTime() + i * 86_400_000);
+    const key = d.toISOString().slice(0, 10);
+    return { key, wd: WD[d.getUTCDay()], label: `${String(d.getUTCDate()).padStart(2, "0")}/${String(p.m).padStart(2, "0")}`, shift: shiftOf.get(key) ?? null, day: dayOf.get(key) ?? null };
   });
-
-  // teachingByDate: ngày → danh sách tiết dạy {start,end,label}.
-  const teachingByDate: Record<string, { start: string; end: string; label: string }[]> = {};
-  for (const s of teachingSessions) {
-    const ds = ymd(new Date(s.date));
-    const start = s.class.startTime ?? "00:00";
-    const end = s.class.endTime ?? start;
-    const label = s.class.classCode ? `${s.class.classCode} · ${s.class.name}` : s.class.name;
-    (teachingByDate[ds] ??= []).push({ start, end, label });
-  }
-
-  // Lưới: padding đầu tuần (CN=0).
-  const firstWeekday = monthStart.getDay();
-  const daysInMonth = new Date(year, monthIdx + 1, 0).getDate();
-  const cells: { dateStr: string | null; day: number | null }[] = [];
-  for (let i = 0; i < firstWeekday; i++) cells.push({ dateStr: null, day: null });
-  for (let d = 1; d <= daysInMonth; d++) {
-    cells.push({ dateStr: ymd(new Date(year, monthIdx, d)), day: d });
-  }
-
-  const prev = new Date(year, monthIdx - 1, 1);
-  const next = new Date(year, monthIdx + 1, 1);
-  const monthLabel = `Tháng ${monthIdx + 1}/${year}`;
-  const todayStr = ymd(now);
-
-  const proposalWindow = await getSetting("shift.proposalWindow");
-  const winLabel = `${proposalWindow.fromDay}–${proposalWindow.toDay}`;
-  const windowHint = isNextMonthWindowOpen(now, proposalWindow)
-    ? `Đang trong cửa sổ ĐỀ XUẤT ca THÁNG SAU (ngày ${winLabel}). Lịch bạn chọn là ĐỀ XUẤT — quản lý duyệt (import Excel) để chốt chính thức.`
-    : isWeekendEditWindow(now)
-      ? "Cuối tuần — được phép sửa đề xuất ca trong tháng."
-      : `Ngoài cửa sổ đề xuất chuẩn (${winLabel} cho tháng sau / cuối tuần để sửa). Vẫn lưu được, lịch là ĐỀ XUẤT chờ quản lý duyệt.`;
 
   return (
     <div className="max-w-4xl p-6">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
-          <CalendarDays className="h-6 w-6 text-primary" /> Lịch ca của tôi
-        </h1>
-        <div className="flex items-center gap-2">
-          <Link href={`/cham-cong/lich-ca?month=${ymd(prev).slice(0, 7)}`} className="rounded-lg border border-border p-1.5 hover:bg-muted">
-            <ChevronLeft className="h-4 w-4" />
-          </Link>
-          <span className="text-sm font-semibold text-foreground">{monthLabel}</span>
-          <Link href={`/cham-cong/lich-ca?month=${ymd(next).slice(0, 7)}`} className="rounded-lg border border-border p-1.5 hover:bg-muted">
-            <ChevronRight className="h-4 w-4" />
-          </Link>
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Lịch ca của tôi</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Ca do Quản lý xếp trên lưới phân ca. Muốn đổi ca / nghỉ / quên quét thì nộp đơn — duyệt xong lịch đổi ngay và có thông báo.</p>
+        </div>
+        <div className="flex gap-2">
+          <Link href="/don-tu/cua-toi" className="rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-dark">Nộp đơn</Link>
+          <Link href="/cham-cong/checkin" className="rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold hover:bg-muted">Chấm công</Link>
         </div>
       </div>
-
-      <p className="mb-2 rounded-lg bg-state-info-soft px-3 py-2 text-xs text-state-info-ink">{windowHint}</p>
-      <p
-        className={`mb-4 rounded-lg px-3 py-2 text-xs ${ emergencyUsed >= EMERGENCY_MONTHLY_LIMIT ? "bg-state-danger-soft text-state-danger-ink" : "bg-muted text-muted-foreground" }`}
-      >
-        Khẩn cấp (đổi/nghỉ gấp) tháng này: <b>{emergencyUsed}/{EMERGENCY_MONTHLY_LIMIT}</b>
-        {emergencyUsed >= EMERGENCY_MONTHLY_LIMIT && " — đã hết lượt, liên hệ quản lý."}
-      </p>
-
-      <MyShiftsCalendar
-        cells={cells}
-        byDate={Object.fromEntries(byDate)}
-        teachingByDate={teachingByDate}
-        todayStr={todayStr}
-      />
+      <div className="mb-4 flex items-center gap-2 text-sm">
+        <Link className="rounded-md border border-border px-2 py-1" href={`/cham-cong/lich-ca?month=${prev}`}>‹</Link>
+        <span className="font-mono font-semibold">{ky}</span>
+        <Link className="rounded-md border border-border px-2 py-1" href={`/cham-cong/lich-ca?month=${next}`}>›</Link>
+        <span className="ml-auto text-muted-foreground">Tổng công tạm tính: <strong className="text-foreground">{totalUnits}</strong> · {shifts.filter((s) => !s.isLeave).length} ca</span>
+      </div>
+      <PhanTrangBang cuonNgang>
+        <table className="w-full text-sm">
+          <thead className="border-b border-border bg-muted text-left text-xs uppercase tracking-wider text-muted-foreground">
+            <tr><th className="px-3 py-2">Ngày</th><th className="px-3 py-2">Ca</th><th className="px-3 py-2">Giờ</th><th className="px-3 py-2">Nơi</th><th className="px-3 py-2 text-right">Giờ làm</th><th className="px-3 py-2 text-right">Công</th><th className="px-3 py-2">Cờ</th></tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.key} className={`border-b border-border ${r.shift ? "" : "text-muted-foreground"}`}>
+                <td className="px-3 py-1.5 whitespace-nowrap"><span className="mr-1 text-xs text-muted-foreground">{r.wd}</span>{r.label}</td>
+                <td className="px-3 py-1.5">{r.shift ? <><span className="font-mono font-semibold">{r.shift.code}</span> <span className="text-xs text-muted-foreground">{r.shift.name}</span></> : "—"}</td>
+                <td className="px-3 py-1.5 text-xs">{r.shift?.timeLabel || (r.shift ? "theo nơi làm" : "")}</td>
+                <td className="px-3 py-1.5 text-xs">{r.shift?.centerLabel ?? ""}</td>
+                <td className="px-3 py-1.5 text-right">{r.day ? fmtMin(r.day.worked) : ""}</td>
+                <td className="px-3 py-1.5 text-right font-semibold">{r.day ? <>{r.day.units}{r.day.override && <span className="text-xs text-amber-600">*</span>}{r.day.locked && <span title="Kỳ đã chốt" className="ml-1 text-xs">🔒</span>}</> : ""}</td>
+                <td className="px-3 py-1.5 text-xs">{r.day?.flags.filter((f) => f !== "KHONG_CO_LUOT" || r.shift).join(", ")}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </PhanTrangBang>
+      <p className="mt-3 text-xs text-muted-foreground">Công ngày cập nhật vài phút sau mỗi lượt quét/đổi ca. * = Quản lý ghi đè. Thắc mắc số công: nộp đơn chỉnh công kèm giờ vào/ra đề nghị.</p>
     </div>
   );
 }
