@@ -132,7 +132,7 @@ const BY_PREFIX: Readonly<Record<string, NotiDef>> = {
   },
   "timesheet_adjust:": {
     group: "action_required", priority: 2, entity: "timesheet",
-    recipients: "Quản lý chấm công", target: "/cham-cong/chinh-cong",
+    recipients: "Quản lý chấm công", target: "/don-tu", // L5: màn chỉnh công cũ đã gỡ, đơn chỉnh công nay ở Duyệt đơn từ
   },
   "parent_request:": {
     group: "action_required", priority: 1, entity: "parent_request",

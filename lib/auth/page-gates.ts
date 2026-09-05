@@ -273,18 +273,11 @@ export const PAGE_GATES = {
 export type GatedHref = keyof typeof PAGE_GATES;
 
 /**
- * CHƯA đưa vào bảng — gate và menu vẫn lệch, có chủ đích, chờ BGĐ chốt:
- *
- *   /cham-cong/lich-ca-nhan-vien
- *     menu: hr_attendance:view   ·   gate: view(cơ-sở-đang-xem) ∨ checkin(cơ-sở-của-mình)
- *     Gate có TARGET (centerId) nên không quy về so-sánh-tập-hợp: nhân viên thường xem
- *     được bảng ca của chính cơ sở mình, đó là thiết kế. Giữ nguyên, không coi là lệch.
- *
- * `page-gates.test.ts` giữ danh sách này làm ngoại lệ tường minh — thêm route mới vào
- * đây phải kèm lý do, không được im lặng.
+ * CHƯA đưa vào bảng — gate và menu vẫn lệch, có chủ đích. Rỗng từ L5 chấm công v3 (06/09/2026):
+ * `/cham-cong/lich-ca-nhan-vien` đã bị gỡ cùng 4 màn ShiftRegistration cũ; còn lại `/sale/ghi-danh` (lý do bên dưới).
+ * Thêm route mới vào đây phải kèm lý do, không được im lặng.
  */
 export const GATE_MISMATCH_ALLOWLIST: readonly string[] = [
-  "/cham-cong/lich-ca-nhan-vien",
   // Ghi danh trên site Sale (`app/(sale)/sale/ghi-danh/[leadId]`).
   //
   // Bảng trên dùng phép HOẶC (`checkAnyPermission`), mà chốt lead đòi CẢ HAI

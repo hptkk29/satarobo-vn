@@ -5,13 +5,13 @@
 // (TrialClassSession) · Ca làm (ShiftRegistration). Mỗi CA: giờ + trạng thái
 // (Đã làm/Sắp tới theo ngày). Chọn tháng qua ?thang=YYYY-MM.
 //
-// ⚠️ CHỐT với chủ nhiệm: hệ thống KHÔNG chấm công OT/đi-muộn/đúng-giờ cho GV →
-// ẨN 3 stat đó (mock bịa). Ca làm chỉ có ngày + mã ca (Ca sáng/chiều/tối), KHÔNG
-// giờ công thực → cột giờ công của ca làm để "—", không cộng vào Tổng giờ công.
+// L5 chấm công v3 (06/09/2026): ca làm đọc từ lưới ShiftAssignment (Quản lý xếp), công
+// ngày từ StaffAttendanceDay (engine tính theo ca — T-01), đơn từ là WorkRequest nộp ở
+// /teacher/don-tu. Giờ dạy/trải nghiệm vẫn là ước tính từ khung giờ (không phải công).
 //
-// Nguồn (own-rows): getOwnShiftRegistrations · getTeacherTrialSessions ·
-// getVisibleHolidays (lib/lms/teacher-schedule); buổi dạy qua withMakeupException
-// (dạy thay/bù liên cơ sở). ⚠️ Câu 46: chỉ tên lớp/cơ sở + giờ — không HV/PH.
+// Nguồn (own-rows): getMyAssignments/getMyAttendanceDays (lib/cham-cong/my-schedule) ·
+// getTeacherTrialSessions · getVisibleHolidays (lib/lms/teacher-schedule); buổi dạy qua
+// withMakeupException (dạy thay/bù liên cơ sở). ⚠️ Câu 46: chỉ tên lớp/cơ sở + giờ — không HV/PH.
 import Link from "next/link";
 import {
   CalendarOff,
@@ -23,23 +23,22 @@ import {
   GraduationCap,
   Layers,
 } from "lucide-react";
-import type { AdjustStatus, SessionStatus, WorkShift } from "@prisma/client";
+import type { SessionStatus } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { withMakeupException } from "@/lib/db-scope";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { SHIFT_ORDER, SHIFT_DEFS } from "@/lib/shifts";
 import {
-  getOwnShiftRegistrations,
   getTeacherTrialSessions,
   getVisibleHolidays,
 } from "@/lib/lms/teacher-schedule";
-import { getOwnAdjustmentRequests } from "@/lib/attendance/own-adjustments";
+import { getMyAssignments, getMyAttendanceDays } from "@/lib/cham-cong/my-schedule";
+import { scopedDb } from "@/lib/db-scope";
+import { WR_KIND_LABEL, WR_STATUS_LABEL, type WorkRequestKindV, type WorkRequestStatusV } from "@/lib/work-request";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "../_components/ui/page-header";
 import { StatCard } from "../_components/ui/stat-card";
 import { EmptyState } from "../_components/ui/empty-state";
-import { AdjustRequestDialog } from "./_components/adjust-request-dialog";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Bảng công | Giáo viên Sata Robo" };
@@ -123,19 +122,10 @@ const dateFmt = new Intl.DateTimeFormat("vi-VN", {
   timeZone: "UTC",
 });
 
-const ADJUST_STATUS: Record<AdjustStatus, { label: string; cls: string }> = {
-  PENDING: {
-    label: "Chờ duyệt",
-    cls: "bg-state-warning-soft text-state-warning-ink",
-  },
-  APPROVED: {
-    label: "Đã duyệt",
-    cls: "bg-state-success-soft text-state-success-ink",
-  },
-  REJECTED: {
-    label: "Từ chối",
-    cls: "bg-state-danger-soft text-state-danger-ink",
-  },
+const REQ_STATUS_CLS: Record<WorkRequestStatusV, string> = {
+  PENDING: "bg-state-warning-soft text-state-warning-ink",
+  APPROVED: "bg-state-success-soft text-state-success-ink",
+  REJECTED: "bg-state-danger-soft text-state-danger-ink",
 };
 
 type CaType = "Dạy" | "Trải nghiệm" | "Ca làm";
@@ -180,11 +170,14 @@ export default async function TeacherTimesheetPage({
   const xdb = withMakeupException(actor);
   const classIds = [...actor.assignedClassIds];
 
+  // L5 chấm công v3: ca làm đọc từ lưới ShiftAssignment; công ngày từ StaffAttendanceDay;
+  // đơn từ (chỉnh công, đổi ca, nghỉ…) là WorkRequest — nộp ở /teacher/don-tu.
   const canRequestAdjust = await checkPermission("hr_attendance:checkin", {
-    centerId: session.user.centerId,
+    centerId: session.user.centerId ?? "hoi-so",
   });
+  const sdb = scopedDb(actor);
 
-  const [sessions, trials, shiftRows, holidays, adjustRequests] =
+  const [sessions, trials, shiftRows, holidays, myDays, myRequests] =
     await Promise.all([
       // Buổi lớp trong tháng (mọi trạng thái trừ hủy) — lớp mình / thực dạy.
       xdb.classSession.findMany({
@@ -213,11 +206,18 @@ export default async function TeacherTimesheetPage({
         take: 500,
       }),
       getTeacherTrialSessions(session.user.id, monthStart, nextMonth),
-      getOwnShiftRegistrations(session.user.id, monthStart, nextMonth),
+      getMyAssignments(session.user.id, monthStart, nextMonth),
       // Vá 24/07 — getVisibleHolidays nhận actor, tự tính per-model scope Holiday.
       getVisibleHolidays(actor, monthStart, nextMonth),
-      getOwnAdjustmentRequests(session.user.id, monthStart, nextMonth),
+      getMyAttendanceDays(session.user.id, monthStart, nextMonth),
+      sdb.workRequest.findMany({
+        where: { requesterId: session.user.id, fromDate: { gte: monthStart, lt: nextMonth } },
+        select: { id: true, kind: true, status: true, fromDate: true, requestedInAt: true, requestedOutAt: true, reason: true, reviewNote: true, applyError: true },
+        orderBy: { createdAt: "desc" },
+        take: 50,
+      }),
     ]);
+  const unitsTotal = Math.round(myDays.reduce((n, d) => n + d.units, 0) * 100) / 100;
 
   // ── Chuẩn hoá về CA rows ──────────────────────────────────────────────────────
   const rows: CaRow[] = [];
@@ -258,21 +258,19 @@ export default async function TeacherTimesheetPage({
   }
 
   for (const r of shiftRows) {
+    if (r.isLeave) continue;
     const dk = isoKey(r.date);
-    for (const code of SHIFT_ORDER.filter((c) => r.shifts.includes(c))) {
-      const def = SHIFT_DEFS[code as WorkShift];
-      rows.push({
-        key: `s-${dk}-${code}`,
-        name: def.label,
-        subtitle: null,
-        type: "Ca làm",
-        dateLabel: dk,
-        timeLabel: `${def.start}–${def.end}`,
-        // Ca làm: chỉ đăng ký ngày+mã ca, KHÔNG giờ công thực → "—", không cộng tổng.
-        hours: null,
-        done: dk < todayKey,
-      });
-    }
+    rows.push({
+      key: `s-${dk}-${r.code}`,
+      name: `${r.code} · ${r.name}`,
+      subtitle: r.centerLabel,
+      type: "Ca làm",
+      dateLabel: dk,
+      timeLabel: r.timeLabel || "theo nơi làm",
+      // Ca làm: công tính theo ca (engine) — cột giờ ở đây chỉ là khung giờ, không cộng tổng.
+      hours: null,
+      done: dk < todayKey,
+    });
   }
 
   rows.sort(
@@ -302,12 +300,15 @@ export default async function TeacherTimesheetPage({
     <div>
       <PageHeader
         title="Bảng công"
-        subtitle="Số ca và giờ công theo tháng — giờ dạy/trải nghiệm ước tính từ khung giờ, không phải công chính thức."
+        subtitle="Số ca và giờ công theo tháng — giờ dạy/trải nghiệm ước tính từ khung giờ; công chính thức là số Công (tính theo ca đã xếp)."
         actions={
           canRequestAdjust ? (
-            <AdjustRequestDialog
-              defaultDate={todayUtc.toISOString().slice(0, 10)}
-            />
+            <Link
+              href="/teacher/don-tu?type=TIMESHEET_FIX"
+              className="inline-flex h-9 items-center rounded-lg bg-primary px-3 text-sm font-semibold text-white hover:bg-primary-dark"
+            >
+              Đơn chỉnh công
+            </Link>
           ) : null
         }
       />
@@ -356,8 +357,8 @@ export default async function TeacherTimesheetPage({
           />
           <StatCard
             icon={Clock}
-            value={`${fmtHours(totalHours)}h`}
-            label="Tổng giờ công"
+            value={`${unitsTotal} công · ${fmtHours(totalHours)}h`}
+            label="Công tạm tính · giờ dạy"
             tone="blue"
           />
           <StatCard
@@ -466,36 +467,37 @@ export default async function TeacherTimesheetPage({
           )}
         </section>
 
-        {/* Yêu cầu chỉnh công của mình trong tháng */}
+        {/* Đơn từ của mình trong tháng (chấm công v3 — WorkRequest) */}
         <section className="space-y-3">
           <h2 className="text-sm font-bold tracking-wide text-muted-foreground uppercase">
-            Yêu cầu chỉnh công trong tháng ({adjustRequests.length})
+            Đơn từ trong tháng ({myRequests.length})
           </h2>
-          {adjustRequests.length === 0 ? (
+          {myRequests.length === 0 ? (
             <EmptyState
               icon={ClipboardList}
-              title="Chưa có yêu cầu chỉnh công nào cho tháng này."
+              title="Chưa có đơn nào cho tháng này."
             />
           ) : (
             <ul className="space-y-2">
-              {adjustRequests.map((r) => (
+              {myRequests.map((r) => (
                 <li key={r.id} className="t-card p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="font-semibold text-foreground">
-                      {dateFmt.format(r.date)}
+                      {WR_KIND_LABEL[r.kind as WorkRequestKindV] ?? r.kind}
+                      {r.fromDate ? ` · ${dateFmt.format(r.fromDate)}` : ""}
                     </span>
                     <span
                       className={cn(
                         "rounded-full px-2.5 py-0.5 text-xs font-semibold",
-                        ADJUST_STATUS[r.status].cls,
+                        REQ_STATUS_CLS[r.status as WorkRequestStatusV],
                       )}
                     >
-                      {ADJUST_STATUS[r.status].label}
+                      {WR_STATUS_LABEL[r.status as WorkRequestStatusV]}
                     </span>
                   </div>
-                  {r.requested && (
+                  {(r.requestedInAt || r.requestedOutAt) && (
                     <p className="mt-1 text-sm text-foreground">
-                      Đề nghị: {r.requested}
+                      Đề nghị: vào {r.requestedInAt ?? "—"} · ra {r.requestedOutAt ?? "—"}
                     </p>
                   )}
                   <p className="mt-1 text-sm whitespace-pre-wrap text-muted-foreground">
@@ -504,6 +506,11 @@ export default async function TeacherTimesheetPage({
                   {r.reviewNote && (
                     <p className="mt-2 rounded-lg bg-muted/50 p-2 text-sm text-muted-foreground">
                       Phản hồi: {r.reviewNote}
+                    </p>
+                  )}
+                  {r.status === "PENDING" && r.applyError && (
+                    <p className="mt-2 text-xs text-state-danger-ink">
+                      Lần duyệt gần nhất không áp được: {r.applyError}
                     </p>
                   )}
                 </li>
