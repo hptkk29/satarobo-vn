@@ -60,6 +60,10 @@ export default async function EditHolidayPage({ params }: Props) {
           orgUnitId: holiday.orgUnitId,
           type: holiday.type,
           note: holiday.note,
+          attendanceEffect: holiday.attendanceEffect,
+          coefficient: holiday.coefficient,
+          briefMode: holiday.briefMode,
+          briefText: holiday.briefText,
         }}
         orgUnits={orgUnits.map((o) => ({ id: o.orgUnitId, name: o.name }))}
       />

@@ -1,7 +1,8 @@
 "use server";
 
 import { auth } from "@/lib/auth";
-import { hasAnyRole } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
+import { HO_CENTER_ID, loadCenterMap } from "@/lib/cham-cong/home-center";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
@@ -73,6 +74,18 @@ const holidaySchema = z
         const t = s.trim();
         return t.length > 0 ? t : null;
       }),
+    // ── Module chấm công v3 (L3, T-04) ─────────────────────────────────────
+    attendanceEffect: z.enum(["PAID_LEAVE", "UNPAID_OFF", "INFO_ONLY"]).nullable().default(null),
+    coefficient: z.coerce.number().min(0, "Hệ số ≥ 0").max(5, "Hệ số ≤ 5").default(1),
+    briefMode: z.enum(["APPEND", "SUPPRESS", "REPLACE"]).nullable().default(null),
+    briefText: z
+      .string()
+      .optional()
+      .transform((s) => {
+        if (!s) return null;
+        const t = s.trim();
+        return t.length > 0 ? t : null;
+      }),
   })
   .refine(
     (d) => d.endDate === null || d.endDate.getTime() >= d.date.getTime(),
@@ -85,12 +98,23 @@ function emptyToUndefined(value: FormDataEntryValue | null): string | undefined 
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+// L3 chấm công v3 (T-04): lễ + HỆ SỐ CÔNG do Kế toán tự set ⇒ cổng = `holidays:edit` HOẶC
+// `hr_attendance:config`, xét theo TỪNG cơ sở (kể cả "hoi-so"): có quyền ở ít nhất một nơi
+// thì vào được; phạm vi từng dòng vẫn do passesScope ở create/update quyết.
+// Trước đây gác cứng hasAnyRole(SUPER_ADMIN, CENTER_MANAGER) ⇒ Kế toán bị đá trước validator.
 async function requireAdmin() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!hasAnyRole(session.user, ["SUPER_ADMIN", "CENTER_MANAGER"])) {
-    redirect("/dashboard?error=unauthorized");
+  const map = await loadCenterMap();
+  const ids = [...Object.values(map.byCode).map((c) => c.centerId), HO_CENTER_ID];
+  let ok = false;
+  for (const centerId of ids) {
+    if ((await checkPermission("holidays:edit", { centerId })) || (await checkPermission("hr_attendance:config", { centerId }))) {
+      ok = true;
+      break;
+    }
   }
+  if (!ok) redirect("/dashboard?error=unauthorized");
   return session.user;
 }
 
@@ -106,6 +130,10 @@ function readForm(formData: FormData) {
       | "EVENT"
       | "OTHER",
     note: emptyToUndefined(formData.get("note")),
+    attendanceEffect: (emptyToUndefined(formData.get("attendanceEffect")) ?? null) as "PAID_LEAVE" | "UNPAID_OFF" | "INFO_ONLY" | null,
+    coefficient: emptyToUndefined(formData.get("coefficient")) ?? "1",
+    briefMode: (emptyToUndefined(formData.get("briefMode")) ?? null) as "APPEND" | "SUPPRESS" | "REPLACE" | null,
+    briefText: emptyToUndefined(formData.get("briefText")),
   };
 }
 
@@ -121,6 +149,10 @@ function toCreate(
     endDate: c.endDate,
     type: c.type,
     note: c.note,
+    attendanceEffect: c.attendanceEffect,
+    coefficient: c.coefficient,
+    briefMode: c.briefMode,
+    briefText: c.briefText,
     orgUnitId: c.orgUnitId,
     center: centerId ? { connect: { id: centerId } } : undefined,
   };
@@ -136,6 +168,10 @@ function toUpdate(
     endDate: c.endDate,
     type: c.type,
     note: c.note,
+    attendanceEffect: c.attendanceEffect,
+    coefficient: c.coefficient,
+    briefMode: c.briefMode,
+    briefText: c.briefText,
     orgUnitId: c.orgUnitId,
     center: centerId ? { connect: { id: centerId } } : { disconnect: true },
   };
