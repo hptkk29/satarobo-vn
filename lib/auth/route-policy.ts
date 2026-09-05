@@ -310,6 +310,11 @@ export const TEACHER_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
   "anh-lop",
   "bang-cong",
   "cham-bai",
+  // L0 chấm công (05/09/2026) — trang check-in QR trên site GV. Mã QR tại quầy trỏ
+  // `admin.satarobo.vn/cham-cong/checkin?c=&t=`; GV thuần bị đá sang host này và
+  // phải mở được ĐÚNG màn đó (xem nhánh admin host: giữ path khi đá). Thiếu dòng này
+  // là GV thuần KHÔNG chấm công được từ 10/07/2026 (ngày bật TEACHER_SITE_ENABLED).
+  "cham-cong",
   "diem-danh",
   "don-tu",
   "hoan-thanh",
@@ -827,7 +832,17 @@ export function decideRoute(input: RouteInput): RouteDecision {
     // Flag OFF → KHÔNG đụng (GV vẫn làm việc trên admin — 2-phase). GV kiêm vai trò
     // admin (CM...) KHÔNG bị đá (isTeacherOnly=false). infra path đã `next` ở trên.
     if (teacherSiteOn && isTeacherOnly) {
-      return { type: "redirectHost", host: "teacher", path: "/", status: 307 };
+      // L0 chấm công (05/09/2026): GIỮ path nếu site GV có màn đó. Mã QR chấm công in
+      // sẵn host admin (`/cham-cong/checkin?c=&t=`); đá về "/" là GV quét xong rơi
+      // vào trang chủ, không chấm được — đúng lỗi chảy máu từ 10/07. proxy giữ
+      // nguyên query khi đổi host (clone nextUrl, chỉ đổi pathname). Path admin
+      // không có trên site GV (/leads, /dashboard…) vẫn về "/" như cũ.
+      return {
+        type: "redirectHost",
+        host: "teacher",
+        path: isTeacherCleanUrl(pathname) ? pathname : "/",
+        status: 307,
+      };
     }
 
     // Đợt B — CHIỀU RA của site Sale, soi chiếu luật GV ngay trên.

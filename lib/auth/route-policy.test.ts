@@ -677,7 +677,7 @@ describe("L5. teacher host × role — flag ON", () => {
   // Sự cố 19/08/2026: 6 segment tồn tại ở CẢ hai site. Nhánh "chuẩn hoá path lạc khu" chạy
   // trước nên clean URL của đúng những màn này bị ném về trang chủ GV — im lặng, không lỗi.
   // Năm cái đầu hỏng từ trước bản vá; `lich` suýt hỏng thêm khi vá link chết "Lịch tổng" bên admin.
-  it.each(["don-tu", "hoc-ba", "huong-dan", "scorm", "tin-nhan", "lich"])(
+  it.each(["don-tu", "hoc-ba", "huong-dan", "scorm", "tin-nhan", "lich", "cham-cong"])(
     "clean URL /%s trùng tên segment admin nhưng vẫn phải mở màn GV",
     (seg) => {
       expect(
@@ -835,6 +835,54 @@ describe("L5/L6. TEACHER × host × flag TEACHER_SITE_ENABLED (2-phase, ĐÃ wir
     expect(
       decideRoute({ hostKind: "admin", pathname: "/login", ...authed("TEACHER"), teacherSiteEnabled: true }),
     ).toEqual<RouteDecision>({ type: "redirectHost", host: "teacher", path: "/", status: 307 });
+  });
+
+  // L0 chấm công (05/09/2026) — sự cố từ 10/07: mã QR tại quầy in host admin
+  // (`/cham-cong/checkin?c=&t=`). GV thuần quét → admin host đá sang giaovien nhưng
+  // path bị ép về "/" ⇒ rơi trang chủ, không chấm công được. Nay: path nào site GV có
+  // thì GIỮ; query do proxy giữ (clone nextUrl). Path admin-only vẫn về "/".
+  it("flag=true: GV thuần quét QR chấm công trên admin host → sang giaovien GIỮ path", () => {
+    expect(
+      decideRoute({
+        hostKind: "admin",
+        pathname: "/cham-cong/checkin",
+        ...authed("TEACHER"),
+        teacherSiteEnabled: true,
+      }),
+    ).toEqual<RouteDecision>({
+      type: "redirectHost",
+      host: "teacher",
+      path: "/cham-cong/checkin",
+      status: 307,
+    });
+  });
+  it("flag=true: path admin-only (/leads/123) vẫn đá về trang chủ GV, không mang path sang", () => {
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/leads/123", ...authed("TEACHER"), teacherSiteEnabled: true }),
+    ).toEqual<RouteDecision>({ type: "redirectHost", host: "teacher", path: "/", status: 307 });
+  });
+  it("teacher host: /cham-cong/checkin rewrite vào màn check-in của site GV", () => {
+    expect(
+      decideRoute({
+        hostKind: "teacher",
+        pathname: "/cham-cong/checkin",
+        ...authed("TEACHER"),
+        teacherSiteEnabled: true,
+      }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/teacher/cham-cong/checkin" });
+  });
+  // GV kiêm vai admin KHÔNG bị đá: vẫn chấm trên admin host như cũ.
+  it("flag=true: GV kiêm CENTER_MANAGER quét QR → rewrite admin, không đổi host", () => {
+    expect(
+      decideRoute({
+        hostKind: "admin",
+        pathname: "/cham-cong/checkin",
+        role: "TEACHER",
+        roles: ["TEACHER", "CENTER_MANAGER"],
+        sessionValid: true,
+        teacherSiteEnabled: true,
+      }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/admin/cham-cong/checkin" });
   });
 
   // flag ON: GV KIÊM vai trò admin (CENTER_MANAGER) → KHÔNG auto-bounce, vẫn dùng admin.

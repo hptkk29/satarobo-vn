@@ -9,6 +9,7 @@ import {
   GraduationCap,
   LayoutDashboard,
   MessageCircle,
+  QrCode,
   Sparkles,
   Users,
   type LucideIcon,
@@ -96,6 +97,9 @@ export const navGroups: NavGroup[] = [
   {
     label: "Ca & Chấm công",
     items: [
+      // L0 chấm công (05/09/2026) — trang hướng dẫn quét QR; đích thật của mã QR là
+      // /teacher/cham-cong/checkin (segment `cham-cong` khai ở TEACHER_ROUTE_SEGMENTS).
+      { label: "Chấm công", href: "/teacher/cham-cong", icon: QrCode },
       { label: "Bảng công", href: "/teacher/bang-cong", icon: Clock },
       { label: "Đơn từ", href: "/teacher/don-tu", icon: FileText },
     ],
