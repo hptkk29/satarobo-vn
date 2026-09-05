@@ -516,3 +516,399 @@ function actorCoSo(orgUnitId: string) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// L7 — CHUỖI XỬ LÝ WEBHOOK ĐẦY ĐỦ (`napSuKienZalocrm`), tầng DB thật.
+//
+// Bộ ở trên kiểm từng mảnh rời của lõi hộp thư. Bộ này kiểm CHUỖI: dịch payload →
+// nick → ingest → gắn cơ sở → nối phiếu → dòng thời gian. Đó là chỗ các bước hay bị
+// bỏ quên nhất, và mọi thiếu sót ở đây đều hỏng CÂM:
+//   · quên `ganDonViTheoNick` ⇒ hội thoại ở lại nhóm mồ côi ⇒ MỌI cơ sở đọc được;
+//   · quên tiền tố org ở `channelMessageId` ⇒ tin của org sau bị nuốt im lặng;
+//   · ghi mốc cho tin ĐẾN ⇒ bump `lastActivityAt` và che mất "khách nhắn mà Sale im";
+//   · đè `zcrmConversationId` đang khác NULL ⇒ cướp ánh xạ của hội thoại thứ nhất.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** orgCode riêng của bộ này — phải hợp khuôn `/^[a-z0-9-]{1,32}$/`. */
+const ORG = "zcrm-test";
+const NICK = `${P}acc-01`;
+/** Cấu hình org giả — HMAC/env đã kiểm ở `lib/integrations/zalocrm/webhook.test.ts`. */
+const CAU_HINH = { orgCode: ORG, secret: "khong-dung-o-day", centerId: null, orgUnitId: CS1 };
+
+async function purgeL7() {
+  const leads = await db.lead.findMany({
+    where: { parentName: { startsWith: P } },
+    select: { id: true },
+  });
+  if (leads.length) {
+    await db.leadActivity.deleteMany({ where: { leadId: { in: leads.map((l) => l.id) } } });
+  }
+  await db.zaloCrmThread.deleteMany({ where: { orgCode: { startsWith: ORG } } });
+  await db.zaloCrmNick.deleteMany({ where: { orgCode: { startsWith: ORG } } });
+  await purge();
+}
+
+/** Payload webhook như bản FORK sẽ gửi (đủ `zaloAccountId`/`threadId`/`contact.phone`). */
+function payloadTin(
+  khoa: string,
+  o?: {
+    huong?: "DEN" | "DI";
+    phone?: string | null;
+    conv?: string;
+    noiDung?: string;
+    sentByExternalId?: string;
+    nick?: string;
+  },
+): Record<string, unknown> {
+  const huong = o?.huong ?? "DEN";
+  const uidKhach = `${P}uid-${o?.conv ?? khoa}`;
+  return {
+    event: huong === "DEN" ? "message.received" : "message.sent",
+    data: {
+      messageId: `m-${khoa}`,
+      conversationId: `${P}conv-${o?.conv ?? khoa}`,
+      zaloAccountId: o?.nick ?? NICK,
+      threadId: uidKhach,
+      threadType: "user",
+      senderUid: huong === "DEN" ? uidKhach : `${P}uid-nick`,
+      ...(o?.phone === null
+        ? {}
+        : { contact: { id: `${P}ct-1`, phone: o?.phone ?? "0912345678" } }),
+      ...(o?.sentByExternalId ? { sentByExternalId: o.sentByExternalId } : {}),
+      content: o?.noiDung ?? "cho hỏi học phí",
+      contentType: "text",
+      sentAt: LUC.toISOString(),
+    },
+  };
+}
+
+/** Dịch rồi nạp — đúng chuỗi mà `webhook.ts` chạy sau khi qua chữ ký. */
+async function chay(payload: unknown, orgCode = ORG) {
+  const { dichPayloadZalocrm } = await import("@/lib/integrations/zalocrm/dich-payload");
+  const { napSuKienZalocrm } = await import("@/lib/integrations/zalocrm/nap-su-kien");
+  const dich = dichPayloadZalocrm({ payload, orgCode });
+  if (!dich.ok) throw new Error(`dịch hỏng: ${dich.ma}`);
+  return napSuKienZalocrm({ viec: dich.viec, cauHinh: { ...CAU_HINH, orgCode } });
+}
+
+describe.skipIf(!CO_BANG)("L7 — chuỗi xử lý webhook ZaloCRM", () => {
+  beforeAll(purgeL7);
+  afterAll(purgeL7);
+  beforeEach(purgeL7);
+
+  it("[ZC-01] tin TRÙNG channelMessageId ⇒ không dòng thứ hai, KHÔNG cộng chưa đọc", async () => {
+    // Outbox của fork retry khi thấy non-2xx, và cron đối soát (GĐ3) đổ vào cùng bảng.
+    // Cộng bộ đếm trước rồi mới phát hiện trùng là mỗi lần retry lại +1 vào huy hiệu,
+    // và không ai truy ra vì sao.
+    const p = payloadTin("trung");
+    const lan1 = await chay(p);
+    const lan2 = await chay(p);
+
+    expect(lan1).toMatchObject({ ok: true, trung: false });
+    expect(lan2).toMatchObject({ ok: true, trung: true });
+    if (!lan1.ok) throw new Error("lượt đầu phải ok");
+
+    const hoi = await db.inboxConversation.findUniqueOrThrow({
+      where: { id: lan1.conversationId! },
+    });
+    expect(hoi.unreadCount).toBe(1);
+    const tin = await db.inboxMessage.findMany({ where: { conversationId: hoi.id } });
+    expect(tin.length).toBe(1);
+    expect(tin[0].channelMessageId).toBe(`${ORG}:m-trung`);
+  });
+
+  it("[ZC-L7-01] tin đầu tiên đã có CƠ SỞ của nick — không nằm nhóm 'ai cũng đọc'", async () => {
+    const kq = await chay(payloadTin("gancoso", { phone: null }));
+    if (!kq.ok) throw new Error("phải ok");
+
+    const hoi = await db.inboxConversation.findUniqueOrThrow({
+      where: { id: kq.conversationId! },
+      include: { identity: true },
+    });
+    expect(hoi.orgUnitId).toBe(CS1);
+    expect(hoi.identity.orgUnitId).toBe(CS1);
+    expect(hoi.identity.leadId, "chưa nối phiếu — hai chuyện khác nhau").toBeNull();
+
+    const { listInboxConversations } = await import("@/lib/inbox/queries");
+    const cs2 = await listInboxConversations({ actor: actorCoSo(CS2), canViewPii: true });
+    expect(cs2.rows.map((x) => x.id)).not.toContain(hoi.id);
+  });
+
+  it("[ZC-L7-02] nick được TẠO tự động + cập nhật `lastEventAt` (không chờ đồng bộ tay)", async () => {
+    await chay(payloadTin("nickmoi"));
+    const nick = await db.zaloCrmNick.findUniqueOrThrow({ where: { zcrmAccountId: NICK } });
+    expect(nick.orgCode).toBe(ORG);
+    expect(nick.orgUnitId).toBe(CS1);
+    expect(nick.lastEventAt?.toISOString()).toBe(LUC.toISOString());
+  });
+
+  it("[ZC-L7-03] dòng ĐẶT TRƯỚC `(orgCode, phone)` ⇒ nối đúng phiếu Sale đã bấm", async () => {
+    // Chiều lead → chat: Sale bấm "Nhắn Zalo" TRƯỚC khi hội thoại tồn tại, nên dòng
+    // đặt trước chỉ có `(orgCode, phone)` + `leadId`, `zcrmConversationId` còn NULL.
+    const lead = await db.lead.create({
+      data: { parentName: `${P}Mẹ đặt trước`, phone: "84912345678", orgUnitId: CS1 },
+    });
+    await db.zaloCrmThread.create({
+      data: { orgCode: ORG, phone: "84912345678", leadId: lead.id, orgUnitId: CS1 },
+    });
+
+    const kq = await chay(payloadTin("dattruoc", { conv: "A" }));
+    if (!kq.ok) throw new Error("phải ok");
+
+    const hoi = await db.inboxConversation.findUniqueOrThrow({
+      where: { id: kq.conversationId! },
+      include: { identity: true },
+    });
+    expect(hoi.identity.leadId).toBe(lead.id);
+    // `EXTERNAL_TAG`, KHÔNG phải `WEBHOOK_PROFILE`: giá trị kia là bằng chứng ĐỒNG Ý
+    // (khách tự bấm "Chia sẻ thông tin") — ghi phép nối máy-với-máy vào đó là hỏng vết.
+    expect(hoi.identity.linkSource).toBe("EXTERNAL_TAG");
+
+    const thread = await db.zaloCrmThread.findFirstOrThrow({ where: { orgCode: ORG } });
+    expect(thread.zcrmConversationId, "webhook đầu tiên điền nốt id hội thoại").toBe(
+      `${P}conv-A`,
+    );
+  });
+
+  it("[ZC-L7-04] KHÔNG đè `zcrmConversationId` đang khác NULL (khách nhắn hai nick)", async () => {
+    // `@@unique([orgCode, phone])` chỉ giữ được MỘT ánh xạ cho một số. Cướp ánh xạ của
+    // hội thoại thứ nhất là chuyển lịch sử của khách sang nhầm chỗ, im lặng.
+    const lead = await db.lead.create({
+      data: { parentName: `${P}Mẹ hai nick`, phone: "84912345678", orgUnitId: CS1 },
+    });
+    await db.zaloCrmThread.create({
+      data: {
+        orgCode: ORG,
+        phone: "84912345678",
+        leadId: lead.id,
+        zcrmConversationId: `${P}conv-CU`,
+        orgUnitId: CS1,
+      },
+    });
+
+    await chay(payloadTin("hainick", { conv: "MOI" }));
+
+    const thread = await db.zaloCrmThread.findFirstOrThrow({ where: { orgCode: ORG } });
+    expect(thread.zcrmConversationId).toBe(`${P}conv-CU`);
+    expect(
+      await db.zaloCrmThread.count({ where: { orgCode: ORG } }),
+      "không đẻ dòng ánh xạ thứ hai cho cùng một số",
+    ).toBe(1);
+  });
+
+  it("[ZC-L7-05] không có dòng đặt trước ⇒ nối theo SĐT, và ghi ngược vào ánh xạ", async () => {
+    const cungCoSo = await db.lead.create({
+      data: { parentName: `${P}Mẹ CS1`, phone: "84912345678", orgUnitId: CS1 },
+    });
+    const kq = await chay(payloadTin("theosdt", { conv: "S1" }));
+    if (!kq.ok) throw new Error("phải ok");
+
+    const hoi = await db.inboxConversation.findUniqueOrThrow({
+      where: { id: kq.conversationId! },
+      include: { identity: true },
+    });
+    expect(hoi.identity.leadId).toBe(cungCoSo.id);
+    expect(hoi.identity.linkSource).toBe("PHONE_MATCH");
+    const thread = await db.zaloCrmThread.findFirstOrThrow({ where: { orgCode: ORG } });
+    expect(thread.leadId).toBe(cungCoSo.id);
+  });
+
+  it("[ZC-L7-06] phiếu ở CƠ SỞ KHÁC trùng số ⇒ KHÔNG nối, và KHÔNG tự tạo lead", async () => {
+    await db.lead.create({
+      data: { parentName: `${P}Mẹ CS2 trùng số`, phone: "84912345678", orgUnitId: CS2 },
+    });
+    const truoc = await db.lead.count({ where: { parentName: { startsWith: P } } });
+
+    const kq = await chay(payloadTin("cheocoso", { conv: "X1" }));
+    if (!kq.ok) throw new Error("phải ok");
+    const hoi = await db.inboxConversation.findUniqueOrThrow({
+      where: { id: kq.conversationId! },
+      include: { identity: true },
+    });
+    expect(hoi.identity.leadId, "thà mồ côi còn hơn nối nhầm hồ sơ").toBeNull();
+
+    // 🔴 Chốt 9.3/9.5: KHÔNG tự tạo lead. Một người nhắn "alo" không phải một phiếu
+    // khách — tạo tự động là bơm rác vào phễu và vào cả số liệu chuyển đổi.
+    expect(await db.lead.count({ where: { parentName: { startsWith: P } } })).toBe(truoc);
+  });
+
+  it("[ZC-L7-07] TIN ĐẾN không ghi dòng thời gian nào (đừng che 'khách nhắn mà Sale im')", async () => {
+    const lead = await db.lead.create({
+      data: { parentName: `${P}Mẹ tin đến`, phone: "84912345678", orgUnitId: CS1 },
+    });
+    await chay(payloadTin("tinden", { conv: "D1" }));
+    expect(await db.leadActivity.count({ where: { leadId: lead.id } })).toBe(0);
+    const sau = await db.lead.findUniqueOrThrow({ where: { id: lead.id } });
+    expect(sau.firstContactAt, "SLA-3 phải còn kêu").toBeNull();
+  });
+
+  it("[ZC-L7-08] TIN ĐI của chủ phiếu ⇒ một dòng MESSAGE mang dấu nguồn zalocrm", async () => {
+    const sale = await db.user.create({ data: { name: `${P}Sale CS1`, orgUnitId: CS1 } });
+    const lead = await db.lead.create({
+      data: {
+        parentName: `${P}Mẹ tin đi`,
+        phone: "84912345678",
+        orgUnitId: CS1,
+        assignedToId: sale.id,
+      },
+    });
+
+    await chay(
+      payloadTin("tindi", {
+        huong: "DI",
+        conv: "E1",
+        noiDung: "Dạ bên em có lớp thứ 7 ạ",
+        sentByExternalId: sale.id,
+      }),
+    );
+
+    const dong = await db.leadActivity.findMany({ where: { leadId: lead.id } });
+    expect(dong.length).toBe(1);
+    expect(dong[0].type).toBe("MESSAGE");
+    expect(dong[0].actorId).toBe(sale.id);
+    expect(dong[0].content).toBe("[Zalo] Dạ bên em có lớp thứ 7 ạ");
+    expect((dong[0].metadata as Record<string, unknown>).via).toBe("zalocrm");
+
+    const sau = await db.lead.findUniqueOrThrow({ where: { id: lead.id } });
+    expect(sau.lastActivityAt, "người gửi LÀ chủ phiếu ⇒ đồng hồ được làm mới").not.toBeNull();
+  });
+
+  it("[ZC-L7-09] tin ĐI của phiếu CHƯA GIAO ⇒ NOTE máy, không khoá tự chia", async () => {
+    // Ghi `MESSAGE` cho phiếu chưa giao là khoá luôn cơ chế tự chia
+    // (`hasSaleInteraction`): phiếu nằm im, không ai được giao, không gì đỏ lên.
+    const sale = await db.user.create({ data: { name: `${P}Sale lẻ`, orgUnitId: CS1 } });
+    const lead = await db.lead.create({
+      data: { parentName: `${P}Mẹ chưa giao`, phone: "84912345678", orgUnitId: CS1 },
+    });
+
+    await chay(payloadTin("chuagiao", { huong: "DI", conv: "F1", sentByExternalId: sale.id }));
+
+    const dong = await db.leadActivity.findMany({ where: { leadId: lead.id } });
+    expect(dong.length).toBe(1);
+    expect(dong[0].type).toBe("NOTE");
+    expect((dong[0].metadata as Record<string, unknown>).system).toBe(true);
+    const sau = await db.lead.findUniqueOrThrow({ where: { id: lead.id } });
+    expect(sau.firstContactAt, "NOTE máy KHÔNG đóng dấu liên hệ lần đầu").toBeNull();
+  });
+
+  it("[ZC-L7-10] tin ĐI và tin ĐẾN của cùng khách rơi vào MỘT hội thoại", async () => {
+    // Chiều ĐI, `senderUid` là UID NICK CỦA MÌNH — lấy nhầm nó làm `externalUserId` là
+    // đẻ ra một danh tính mang danh nhân viên và tách hội thoại của khách làm đôi.
+    const den = await chay(payloadTin("gop1", { conv: "G1" }));
+    const di = await chay(payloadTin("gop2", { huong: "DI", conv: "G1" }));
+    if (!den.ok || !di.ok) throw new Error("phải ok");
+    expect(di.conversationId).toBe(den.conversationId);
+
+    const tin = await db.inboxMessage.findMany({
+      where: { conversationId: den.conversationId! },
+      orderBy: { direction: "asc" },
+    });
+    expect(tin.length).toBe(2);
+    expect(tin.map((t) => t.direction).sort()).toEqual(["IN", "OUT"]);
+    expect(tin.find((t) => t.direction === "OUT")?.sentOutsideSystem).toBe(true);
+  });
+
+  it("[ZC-L7-11] `zalo.connected` lặp lại là IDEMPOTENT (mỗi lần restart là một loạt)", async () => {
+    const nap = async (ev: string, ts: string) =>
+      chay({ event: ev, timestamp: ts, data: { accountId: NICK } });
+
+    await nap("zalo.connected", "2026-09-06T02:00:00.000Z");
+    await nap("zalo.connected", "2026-09-06T03:00:00.000Z");
+    expect(await db.zaloCrmNick.count({ where: { orgCode: ORG } })).toBe(1);
+    let nick = await db.zaloCrmNick.findUniqueOrThrow({ where: { zcrmAccountId: NICK } });
+    expect(nick.status).toBe("CONNECTED");
+    expect(nick.lastEventAt?.toISOString()).toBe("2026-09-06T03:00:00.000Z");
+
+    // Sự kiện tới LỆCH THỨ TỰ không được kéo lùi mốc — cảnh báo "connected mà im quá
+    // N giờ" đọc chính cột này.
+    await nap("zalo.connected", "2026-09-06T01:00:00.000Z");
+    nick = await db.zaloCrmNick.findUniqueOrThrow({ where: { zcrmAccountId: NICK } });
+    expect(nick.lastEventAt?.toISOString()).toBe("2026-09-06T03:00:00.000Z");
+
+    await nap("zalo.disconnected", "2026-09-06T04:00:00.000Z");
+    nick = await db.zaloCrmNick.findUniqueOrThrow({ where: { zcrmAccountId: NICK } });
+    expect(nick.status).toBe("DISCONNECTED");
+  });
+
+  it("[ZC-L7-12] nick ĐÃ GỠ (xoá mềm) không được hồi sinh, nhưng tin vẫn không rơi", async () => {
+    await db.zaloCrmNick.create({
+      data: {
+        zcrmAccountId: NICK,
+        orgCode: ORG,
+        orgUnitId: CS1,
+        deletedAt: new Date("2026-09-01T00:00:00.000Z"),
+      },
+    });
+
+    const kq = await chay(payloadTin("nickgo", { conv: "H1", phone: null }));
+    if (!kq.ok) throw new Error("tin không được rơi vì một quyết định vận hành");
+
+    const nick = await db.zaloCrmNick.findUniqueOrThrow({ where: { zcrmAccountId: NICK } });
+    expect(nick.deletedAt, "máy không lật lại quyết định của người").not.toBeNull();
+    // Vẫn gắn được cơ sở, vì cấu hình cấp org biết nick này thuộc đâu.
+    const hoi = await db.inboxConversation.findUniqueOrThrow({
+      where: { id: kq.conversationId! },
+    });
+    expect(hoi.orgUnitId).toBe(CS1);
+  });
+
+  it("[ZC-L7-13] hội thoại NHÓM không ingest gì cả (chốt 9.6)", async () => {
+    const p = payloadTin("nhom", { conv: "I1" });
+    (p.data as Record<string, unknown>).threadType = "group";
+    expect(await chay(p)).toMatchObject({ ok: true, trung: false, ghiChu: "HOI_THOAI_NHOM" });
+    expect(await db.inboxConversation.count({ where: { accountId: NICK } })).toBe(0);
+  });
+
+  it("[ZC-L7-14] hai org khác nhau, CÙNG messageId ⇒ HAI tin (không nuốt im lặng)", async () => {
+    // `@@unique([channel, channelMessageId])` KHÔNG kèm accountId. Không có tiền tố
+    // org thì tin của org thứ hai bị `ingest*` trả `duplicate:true` — không lỗi, không
+    // log, tin biến mất.
+    const a = await chay(payloadTin("dungid", { conv: "J1" }), ORG);
+    const b = await chay(
+      payloadTin("dungid", { conv: "J1", nick: `${NICK}-2` }),
+      `${ORG}-2`,
+    );
+    expect(a).toMatchObject({ ok: true, trung: false });
+    expect(b).toMatchObject({ ok: true, trung: false });
+
+    const ids = await db.inboxMessage.findMany({
+      where: { channelMessageId: { endsWith: ":m-dungid" } },
+      select: { channelMessageId: true },
+    });
+    expect(ids.map((x) => x.channelMessageId).sort()).toEqual([
+      `${ORG}-2:m-dungid`,
+      `${ORG}:m-dungid`,
+    ]);
+  });
+
+  it("[ZC-L7-15] `contact.updated` mang SĐT ⇒ ghi ánh xạ để lượt tin SAU nối được", async () => {
+    const lead = await db.lead.create({
+      data: { parentName: `${P}Mẹ khai số sau`, phone: "84912345678", orgUnitId: CS1 },
+    });
+
+    const kqLienHe = await chay({
+      event: "contact.updated",
+      data: {
+        contactId: `${P}ct-1`,
+        changes: { phone: { from: null, to: "0912345678" } },
+        contact: { id: `${P}ct-1`, phone: "0912345678" },
+      },
+    });
+    expect(kqLienHe).toMatchObject({ ok: true });
+
+    const thread = await db.zaloCrmThread.findFirstOrThrow({ where: { orgCode: ORG } });
+    expect(thread.phone).toBe("84912345678");
+    expect(thread.zcrmContactId).toBe(`${P}ct-1`);
+
+    // ⚠️ Nối phiếu xảy ra ở LƯỢT TIN KẾ TIẾP: sự kiện này chỉ mang `contactId`, không
+    // mang `conversationId`, mà đường tra "hội thoại nào ứng với luồng ZaloCRM nào"
+    // nằm trong `lib/inbox/`. Trễ đúng một tin — hành vi ĐÃ BIẾT, không phải sót.
+    const kq = await chay(payloadTin("saukhaiso", { conv: "K1" }));
+    if (!kq.ok) throw new Error("phải ok");
+    const hoi = await db.inboxConversation.findUniqueOrThrow({
+      where: { id: kq.conversationId! },
+      include: { identity: true },
+    });
+    expect(hoi.identity.leadId).toBe(lead.id);
+  });
+});

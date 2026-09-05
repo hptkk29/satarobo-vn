@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, MessageSquareText } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
@@ -35,6 +35,8 @@ import {
 } from "@/lib/lead/audit-history";
 import { LeadAuditHistory } from "./_components/lead-audit-history";
 import { LeadStatusTrail } from "./_components/lead-status-trail";
+import { isZalocrmEnabled } from "@/lib/flags";
+import { duongDanNhanZalo } from "@/lib/integrations/zalocrm/compose-url";
 
 /** G-01 — nhãn tiếng Việt cho `Gender`. Khoá "" để phiếu chưa khai trả về null. */
 const GIOI_TINH_PH_NHAN: Record<string, string> = {
@@ -155,6 +157,23 @@ export default async function LeadDetailPage({ params }: Props) {
   // Tách trên chuỗi THÔ rồi mới mask, để phần người gõ vẫn được che đúng luật PII.
   const noteView = splitLeadNote(lead.note);
   const humanNote = canViewPii ? noteView.human : maskFreeText(noteView.human);
+
+  // S2 — nút "Nhắn Zalo" cạnh SĐT. BA cổng, mỗi cổng đóng một cách hỏng khác nhau:
+  //  1. `isZalocrmEnabled()` — cờ TẮT thì `/zalo-crm` gọi `notFound()`, nút sẽ là một
+  //     link dẫn thẳng vào trang 404. Đặt cờ ĐẦU TIÊN để mặc định (OFF) không tốn thêm
+  //     một lượt chấm quyền cho mọi phiếu lead của mọi người.
+  //  2. `zalocrm:use` — quyền mở màn ZaloCRM, hỏi bằng ĐÚNG key mà `PAGE_GATES` gác và
+  //     KHÔNG truyền target (seed GLOBAL, y như cổng trang). Thiếu nhánh này thì Sale
+  //     Hội sở và Marketing — hai vai CÓ `leads:view-pii` nhưng KHÔNG có `zalocrm:use` —
+  //     thấy nút rồi bấm vào là bị đá về `/dashboard?error=unauthorized`.
+  //  3. `canViewPii` — SĐT là PII và ở đây nó đi vào QUERY STRING (nằm lại trong lịch sử
+  //     trình duyệt, Referer, log proxy). Số đưa đi lấy từ `lead.phone` THÔ chứ không
+  //     phải `piiLead.phone`: bản che `090xxxx456` không chuẩn hoá được nên chỉ làm hộp
+  //     soạn tin mở trống — an toàn vì nằm gọn trong nhánh này.
+  // `duongDanNhanZalo` trả `null` khi SĐT rỗng/không hợp lệ ⇒ KHÔNG render nút (lead
+  // quảng cáo Facebook chỉ có link FB: mỗi cú bấm là một lượt tra số đốt hạn mức Zalo).
+  const duocMoZaloCrm = isZalocrmEnabled() && (await checkPermission("zalocrm:use"));
+  const urlNhanZalo = canViewPii && duocMoZaloCrm ? duongDanNhanZalo(lead.phone, lead.id) : null;
 
   const canAssign = (await checkPermission("leads:assign", { centerId: lead.centerId }));
   const canCloseDeal =
@@ -316,9 +335,24 @@ export default async function LeadDetailPage({ params }: Props) {
           <div className="mt-1 text-sm text-muted-foreground">
             {/* #11 T2 — non-holder: hiện SĐT mask + BỎ link tel: (href sẽ lộ số thật) */}
             {canViewPii ? (
-              <a href={`tel:${lead.phone}`} className="font-medium text-primary">
-                {piiLead.phone}
-              </a>
+              <span className="inline-flex flex-wrap items-center gap-2">
+                <a href={`tel:${lead.phone}`} className="font-medium text-primary">
+                  {piiLead.phone}
+                </a>
+                {/* S2 — nút "Nhắn Zalo": chỉ là điều hướng nên dùng <Link> thuần, không
+                    cần client component. `urlNhanZalo` đã gộp sẵn cả ba cổng (cờ, quyền
+                    `zalocrm:use`, PII) lẫn phép chuẩn hoá SĐT — ở đây KHÔNG so vai, không
+                    so centerId (ESLint no-inline-authz). */}
+                {urlNhanZalo && (
+                  <Link
+                    href={urlNhanZalo}
+                    className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-medium text-foreground hover:bg-muted"
+                    title="Mở Zalo CRM và soạn tin cho số này"
+                  >
+                    <MessageSquareText className="h-3.5 w-3.5" /> Nhắn Zalo
+                  </Link>
+                )}
+              </span>
             ) : (
               <span className="font-medium text-primary">{piiLead.phone}</span>
             )}
