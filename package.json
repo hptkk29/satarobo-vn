@@ -23,6 +23,7 @@
     "db:seed:departments": "tsx prisma/seed-departments.ts",
     "db:seed:working-hours": "tsx prisma/seed-working-hours.ts",
     "db:seed:roles": "tsx prisma/seed-roles.ts",
+    "db:seed:cham-cong": "tsx prisma/seed-cham-cong.ts",
     "db:seed:elearning": "tsx prisma/seed-elearning.ts",
     "db:seed:permissions": "tsx prisma/seed-permission-registry.ts",
     "db:seed:uat": "tsx prisma/seed-uat/index.ts",
