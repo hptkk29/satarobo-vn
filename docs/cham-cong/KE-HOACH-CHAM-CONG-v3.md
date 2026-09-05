@@ -50,6 +50,7 @@
 | **S-33** | (S-26) Công chuẩn đè theo người | **K-04 "theo MISA":** một con số cho **mọi người trong kỳ × cơ sở**, không đè theo người ⇒ **bỏ `Employee.standardUnitsOverride`**. Số này **sinh** từ setting nghỉ tuần (`shift.weeklyOffDays`, theo cơ sở) + `Holiday`, và Kế toán **được sửa trên kỳ** trước khi khoá (audit + lý do) — đúng cách MISA cho sửa "Số công chuẩn" | K-04 |
 | **S-34** | `teachingSessions` chưa có luật | **K-05:** đếm `ClassSession` **COMPLETED** mà người đó là GV **thực dạy** (`actualTeacherId` ?? `substituteTeacherId` ?? `teacherId`); **không** đếm buổi Trial (đã có hoa hồng 1% `TRIAL_TEACHER` khi chốt); **không** đếm buổi huỷ; **đơn giá buổi gõ tay** (thuộc module lương, không vào bảng công) | K-05 |
 | **S-35** | Loại nghỉ / quỹ phép / lịch sử T7 | **K-06 "theo MISA":** 8 loại nghỉ + tỷ lệ lương của MISA (bỏ "Thứ 2"), nghỉ không lương trần 10 ngày/năm, quỹ phép +1/tháng, 12/năm, không chuyển năm — **đều là danh mục sửa được trên UI** (S-36). **K-07:** không import T7; 2 file xuất lưu làm hồ sơ. **K-08/K-09 bỏ** | K-06..09 |
+| **S-37** | Ghép Sheet ↔ User bằng `User.phone` (M5) | **Đo prod 05/09: 0/21 nhân sự có `User.phone`** — cột chỉ phục vụ OTP phụ huynh. Ghép ở **màn import** (gợi ý theo `Employee.phone`/tên, người vận hành xác nhận 1 lần, lưu ánh xạ) — vừa đúng dữ liệu vừa đúng PHẦN 6b | ĐO PROD |
 | **S-36** | Kế hoạch còn "script dry-run chạy tay" ở L1 + Pha A | **Chủ dự án đặt nguyên tắc: hệ thống tự vận hành, không qua dev, chỉnh linh hoạt theo phân quyền như MISA** ⇒ PHẦN 6b mới. Hệ quả: mọi tham số vào nhóm setting `shift.*` (**đã có 5 key**, `centerOverridable`, màn `/admin/cau-hinh-van-hanh`); nhập khung ca/lưới tháng **qua màn import có diff** ngay từ L1, không script; danh mục ca/loại nghỉ/lễ/địa điểm là **màn CRUD có quyền**; cấp quyền qua **vai** (`UserOrgRole`) trên màn nhân sự — dev chỉ còn làm seed nền 1 lần (`seed-roles`) | chủ dự án 05/09 |
 
 ---
@@ -116,12 +117,14 @@ Quy định kèm: **có mặt trước ca 10 phút** · **Thứ Hai toàn Trung 
 | Gì | Số | Nguồn |
 |---|---|---|
 | Nhân sự trong Sheet | **19 người** (20 dòng) | KHUNG CA |
-| Nhân sự trên prod | User 23 · Employee 15 | [ĐO PROD] |
-| `EmployeeCheckin` / `ShiftRegistration` / `WorkRequest` / `TimesheetAdjustmentRequest` / `TimesheetEditLog` / `WorkShiftConfig` | **0 / 0 / 0 / 0 / 0 / 0** | [ĐO PROD] |
-| `Holiday` | 0 | [ĐO PROD] — lễ 01–02/09, 24/11 **chưa vào hệ thống** |
-| Center có toạ độ | **0/3** (`hoi-so` lat/lng NULL, CS1/CS2 NULL) | [ĐO PROD] + Q-02 |
+| Nhân sự trên prod | **21 User nhân sự đang hoạt động** (dump 01/08: User 23 · Employee 15) | **ĐO PROD 05/09** (SQL Editor) |
+| `EmployeeCheckin` / `ShiftRegistration` / `WorkRequest` / `TimesheetAdjustmentRequest` / `TimesheetEditLog` / `WorkShiftConfig` | **0 / 0 / 0 / 0 / 0 / 0** | **ĐO PROD 05/09** — khớp dump; đóng băng không cần backfill |
+| `Holiday` | **1 dòng**: "Nghỉ LỄ QUỐC KHÁNH" 01–02/09 (global, `type=HOLIDAY`) · 24/11 **chưa** | **ĐO PROD 05/09** (U-01) |
+| Center có toạ độ | **0/3** (CS1 · CS2 · HO đều NULL, bán kính mặc định 100) | **ĐO PROD 05/09** + Q-02 |
+| **`User.phone` của nhân sự** | **0/21 có SĐT** — cột trống toàn bộ (staff đăng nhập bằng email; SĐT chỉ là kênh OTP của phụ huynh) | **ĐO PROD 05/09** — **M5 đảo**: KHÔNG ghép Sheet ↔ User bằng `User.phone` được |
+| Vai v2 có `hr_attendance:checkin` trên prod | 8 vai: CENTER_HR · CENTER_MANAGER · CENTER_SALES_CSM · HO_ACCOUNTANT · HO_HR · HO_MARKETING · TEACHER · TRAINING — **thiếu 4** (0.2), SUPER_ADMIN bypass ở `can.ts:53` | **ĐO PROD 05/09** |
 
-**Còn phải đo hôm nay (dump đã 5 tuần):** M1/M2 (5 bảng cũ), M5 (bao nhiêu trong 19 người có `User.phone` hợp lệ để ghép Sheet ↔ User), và **đo toạ độ thực địa CS1/CS2** (không có toạ độ thì không bật được geofence ở bất kỳ lô nào).
+**Hệ quả M5 (S-37):** ghép Sheet ↔ tài khoản làm ở **màn import** (L1): hệ thống gợi ý theo `Employee.phone`/`Employee.fullName` (Employee có cột `phone`, User không), người vận hành **xác nhận từng dòng một lần**, lưu ánh xạ vào `ShiftAssignment.userId`/`employeeId` để lần sau tự khớp. Không cần U-03 dưới dạng "danh sách SĐT để dev ghép tay" — đúng PHẦN 6b. Còn phải đo: **`Employee.phone` trên prod có bao nhiêu dòng** (SQL bổ sung trong `L0-do-lai-prod.sql`), và **toạ độ thực địa CS1/CS2**.
 
 ### 1.4 Nguồn sự thật thứ hai — MISA AMIS (khảo sát 04/09/2026)
 
@@ -362,7 +365,7 @@ Kế hoạch **không đánh giá** căn cứ trên là đủ hay không cho lo�
 |---|---|---|
 | ~~U-01~~ | **Chốt 05/09:** 1/9–2/9 **đã có** trên prod; **24/11 chưa** → nhập ở L0 qua màn lễ (không SQL) | L0 |
 | ~~U-02~~ | **Chốt 05/09: đã có** `UserOrgRole` SUPER_ADMIN neo HO cho Kiệt + Phúc | — |
-| U-03 | SĐT 19 người — chủ dự án **sẽ cung cấp sau**; chỉ cần trước bước import lưới T09 (L1) | L1 |
+| U-03 | SĐT 19 người — chủ dự án sẽ cung cấp sau. **Đo prod 05/09: `User.phone` trống 0/21** ⇒ SĐT không dùng để ghép tự động nữa; màn import L1 cho người vận hành xác nhận ánh xạ Sheet ↔ tài khoản một lần (S-37). SĐT vẫn hữu ích để điền `Employee.phone` cho gợi ý | L1 |
 | ~~U-04~~ | ~~File mẫu MISA~~ → gộp vào K-03 | — |
 
 ### 8.3 Câu sinh ra từ khảo sát MISA — **đã chốt 05/09/2026**
