@@ -56,17 +56,19 @@
 
 ## PHẦN 0 — BA VIỆC ĐANG CHẢY MÁU TRÊN PROD (không đổi)
 
-### 0.1 🔴 Giáo viên thuần không chấm công được — từ 10/07/2026
+### 0.1 🔴 Giáo viên thuần không chấm công được — từ 10/07/2026 → **ĐÃ VÁ 05/09**
 
-QR mã hoá `admin.satarobo.vn/cham-cong/checkin?c=…&t=…` (`api/admin/cham-cong/qr-token/route.ts:26`) → `decideRoute` đá GV thuần khỏi host admin **vô điều kiện** (`lib/auth/route-policy.ts`: `teacherSiteOn && isTeacherOnly → 307 sang giaovien.satarobo.vn`) → site GV **không có** `cham-cong` trong `TEACHER_ROUTE_SEGMENTS`. Quyền thì đủ. **Vá:** thêm segment + mount `app/(teacher)/teacher/cham-cong/`.
+QR mã hoá `admin.satarobo.vn/cham-cong/checkin?c=…&t=…` (`api/admin/cham-cong/qr-token/route.ts:26`) → `decideRoute` đá GV thuần khỏi host admin **vô điều kiện** (`lib/auth/route-policy.ts`: `teacherSiteOn && isTeacherOnly → 307 sang giaovien.satarobo.vn`) → site GV **không có** `cham-cong` trong `TEACHER_ROUTE_SEGMENTS`. Quyền thì đủ.
+**Vá:** (1) `decideRoute` nhánh admin **giữ path** khi đá GV thuần nếu site GV có màn đó (`isTeacherCleanUrl`), query do proxy tự giữ (clone `nextUrl`) — path admin-only vẫn về `/`; (2) thêm `cham-cong` vào `TEACHER_ROUTE_SEGMENTS`; (3) mount `app/(teacher)/teacher/cham-cong/checkin/` + trang hướng dẫn `cham-cong/` + mục menu; (4) client + action **dùng chung** dời sang `components/cham-cong/checkin-client.tsx` + `lib/attendance/checkin-action.ts` (tiền lệ `lead-intake`), xoá bản trong admin. 4 test mới trong `route-policy.test.ts`. **Biết trước:** localhost (`proxy.ts` nhánh 3) vẫn đá GV thuần về `/teacher` mất path — chỉ ảnh hưởng máy dev, `proxy.ts` là file khoá.
 
-### 0.2 🔴 5 vai RBAC v2 thiếu `hr_attendance:checkin` — Q-12: **cần cấp**
+### 0.2 🔴 5 vai RBAC v2 thiếu `hr_attendance:checkin` — Q-12: **cần cấp** → **ĐÃ VÁ 05/09 cho 4 vai**
 
-`CENTER_CLASS_MANAGER`, `ASSISTANT_TEACHER`, `CENTER_ACCOUNTANT`, `HO_SALE`, `AUDITOR`. Sửa `prisma/seed-roles.ts` + bấm tay `seed-prod-roles.yml`.
+`CENTER_CLASS_MANAGER`, `ASSISTANT_TEACHER`, `CENTER_ACCOUNTANT`, `HO_SALE` — đã thêm vào `prisma/seed-roles.ts`. **`AUDITOR` cố ý KHÔNG cấp:** vai này có bất biến "không quyền ghi nào" ghi ngay trong seed (EL-02, QĐ-7) và test khoá `tests/elearning/permissions.test.ts:113` ("đúng 5 quyền, 0 quyền khác"); người giữ AUDITOR là BGĐ, luôn kiêm vai khác nên chấm công qua vai kia. Chủ dự án muốn AUDITOR chấm công thì phải đảo QĐ-7 trước. **Còn phải làm tay:** bấm `seed-prod-roles.yml` sau khi merge (seed vai không tự chạy theo deploy).
 
-### 0.3 🔴 Chấm chéo cơ sở đang mở toang
+### 0.3 🔴 Chấm chéo cơ sở đang mở toang → **ĐÃ VÁ TẠM 05/09**
 
 `can()` với `GLOBAL` bỏ qua target (`lib/auth/can.ts:15`) · `Center ∈ SCOPE_EXEMPT` (`db-scope.ts:159`) · geofence fail-open hai tầng (`geofence.ts:24`, `actions.ts:63`) · **prod: 0/3 Center có toạ độ** [ĐO PROD] ⇒ hôm nay **không có kiểm vị trí nào cả**.
+**Vá tạm (L0):** `lib/attendance/checkin-center-guard.ts` (thuần, 5 test) — HO-level chấm mọi nơi (Q-04); không suy được cơ sở (không `UserOrgRole`) thì **không chặn** (fail-open có chủ đích, tránh tái diễn 07/08); còn lại mã QR phải thuộc `visibleCenterIds`. **Giới hạn biết trước:** GV dạy thay ở cơ sở khác mà vai chỉ neo cơ sở nhà thì bị chặn — gỡ ở L4 khi có cờ `SAI_NOI_LAM` (ghi + cờ thay vì từ chối, Q-07). Cùng lượt: ngày của lượt chấm đổi sang **giờ VN** (`vnStartOfDay`/`vnYmd`) — bản cũ tính theo giờ máy chủ UTC nên 06:30 sáng VN bị coi là hôm qua.
 
 ---
 
