@@ -50,7 +50,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Generate Prisma client
         run: pnpm exec prisma generate
-      - name: Seed nền chấm công (prod) — kỳ vọng "ShiftTemplate: +21 tạo … LeaveType: 8 · WorkLocation: +2"
+      - name: "Seed nền chấm công (prod) — kỳ vọng: ShiftTemplate +21 tạo · LeaveType 8 · WorkLocation +2"
         run: pnpm exec tsx prisma/seed-cham-cong.ts ${{ inputs.force && '-- --force' || '' }}
         env:
           DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
