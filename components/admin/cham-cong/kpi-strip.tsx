@@ -34,6 +34,10 @@ export function KpiStrip({ items, cols = 4 }: { items: KpiItem[]; cols?: 4 | 5 }
             label={it.label}
             tone={it.tone}
             hint={it.hint}
+            // Lưới này xuống 2 cột ở mobile ⇒ thẻ còn ~150px, trừ ô biểu tượng 40px thì nhãn chỉ
+            // còn ~80px. Đo ở 375px: "Cờ cần rà" thành "Cờ cần …", "0 người trong ngày" thành
+            // "0 người t…". Cho nhãn xuống dòng; SỐ vẫn cắt như cũ.
+            wrapLabel
           />
         );
         return it.href ? (
