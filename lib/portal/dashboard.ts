@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { GHI_DANH_DANG_HOC } from "@/lib/portal/trang-thai-ghi-danh";
 import { getChildren } from "@/lib/portal/session";
 import { getStudentAttendanceSummaries } from "@/lib/portal/learning";
 import {
@@ -202,7 +203,7 @@ export async function getParentChildrenOverview(
           },
         }),
         db.enrollment.findFirst({
-          where: { studentId: c.id, status: { in: ["CONFIRMED", "STUDYING", "ACTIVE"] }, deletedAt: null }, // FIX-C3
+          where: { studentId: c.id, status: { in: [...GHI_DANH_DANG_HOC] }, deletedAt: null }, // FIX-C3
           orderBy: { createdAt: "desc" },
           select: {
             class: { select: { classCode: true } },
@@ -211,7 +212,7 @@ export async function getParentChildrenOverview(
         }),
         db.classSession.findFirst({
           where: {
-            class: { enrollments: { some: { studentId: c.id, status: { in: ["CONFIRMED", "STUDYING", "ACTIVE"] }, deletedAt: null } } }, // FIX-C3
+            class: { enrollments: { some: { studentId: c.id, status: { in: [...GHI_DANH_DANG_HOC] }, deletedAt: null } } }, // FIX-C3
             date: { gte: new Date() },
             status: { not: "CANCELLED" },
           },

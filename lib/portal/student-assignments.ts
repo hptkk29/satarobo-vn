@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { GHI_DANH_DANG_HOC } from "@/lib/portal/trang-thai-ghi-danh";
 import { assignmentWindow, realDueAt } from "@/lib/lms/assignment-window";
 import { napBuoiCuaLop } from "@/lib/portal/buoi-hoc";
 import { getStudentSchedule } from "@/lib/portal/schedule";
@@ -12,7 +13,7 @@ import { vnParts } from "@/lib/time/vn";
 // lớp chưa ghim giáo trình ra lộ trình RỖNG, còn lớp có buổi bù thì mất đúng buổi bù
 // (buổi bù mang cùng lessonId với buổi đã huỷ — xem lib/portal/buoi-hoc.ts).
 
-const ACTIVE = ["CONFIRMED", "STUDYING", "ACTIVE", "PAUSED"] as const;
+const ACTIVE = GHI_DANH_DANG_HOC; // lib/portal/trang-thai-ghi-danh.ts
 const DONE = new Set(["SUBMITTED", "GRADED"]);
 
 export type TrackAssignment = {

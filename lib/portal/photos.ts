@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { GHI_DANH_CO_LICH_SU } from "@/lib/portal/trang-thai-ghi-danh";
 import { hasMediaConsent } from "@/lib/lms/media-consent";
 import { resolveMediaUrl } from "@/lib/storage/signed-url";
 import { napBuoiCuaLop } from "@/lib/portal/buoi-hoc";
@@ -14,7 +15,10 @@ import { napBuoiCuaLop } from "@/lib/portal/buoi-hoc";
 // (components/portal/hinh-anh-page.tsx), và sau một lần huỷ-buổi-xếp-bù thì hai nhóm
 // ảnh khác nhau cùng đề "Buổi 5" rồi nằm cạnh nhau vì được xếp theo chính con số đó.
 
-const ACTIVE = ["CONFIRMED", "STUDYING", "ACTIVE"] as const;
+// 06/09 — ảnh lớp là màn LỊCH SỬ: con học xong khoá rồi phụ huynh vẫn phải xem lại
+// được ảnh những buổi đã học. Danh sách cũ thiếu cả "PAUSED" lẫn "COMPLETED" nên 32/131
+// học viên có tài khoản phụ huynh mở trang Hình ảnh ra là trống.
+const ACTIVE = GHI_DANH_CO_LICH_SU;
 
 export type PhotoItem = { id: string; caption: string | null; url: string };
 export type PhotoGroup = {

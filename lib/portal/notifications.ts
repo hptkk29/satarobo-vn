@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { GHI_DANH_DANG_HOC } from "@/lib/portal/trang-thai-ghi-danh";
 import { idsDaDoc } from "@/lib/portal/feed-read";
 import { getChildren } from "@/lib/portal/session";
 
@@ -11,7 +12,9 @@ import { getChildren } from "@/lib/portal/session";
 // hoặc CLASS khớp lớp con đang học. Chỉ bản đã publish.
 // =============================================================================
 
-const ACTIVE_ENROLLMENT = ["CONFIRMED", "STUDYING", "ACTIVE"] as const;
+// 06/09 — danh sách hợp nhất (lib/portal/trang-thai-ghi-danh.ts). Thêm "PAUSED":
+// con tạm nghỉ vẫn thuộc lớp nên vẫn phải nhận thông báo của lớp.
+const ACTIVE_ENROLLMENT = GHI_DANH_DANG_HOC;
 
 export type NotificationRow = {
   id: string;

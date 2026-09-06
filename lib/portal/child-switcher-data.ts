@@ -1,11 +1,12 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { GHI_DANH_DANG_HOC } from "@/lib/portal/trang-thai-ghi-danh";
 
 // Portal v2 — dữ liệu switcher "Chế độ Phụ huynh / các con" ở topbar.
 // Nhẹ: chỉ id + name + tên khóa học đang học (để hiện subtitle) — KHÔNG kéo
 // attendance/debt như getParentChildrenOverview (chạy ở mọi page qua layout).
 
-const ACTIVE = ["CONFIRMED", "STUDYING", "ACTIVE", "PAUSED"] as const;
+const ACTIVE = GHI_DANH_DANG_HOC; // lib/portal/trang-thai-ghi-danh.ts
 
 export type SwitcherChild = {
   id: string;

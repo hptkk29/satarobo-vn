@@ -3,6 +3,7 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import type { RubricCriterion, RubricLevel } from "@prisma/client";
 import { db } from "@/lib/db";
+import { GHI_DANH_DANG_HOC } from "@/lib/portal/trang-thai-ghi-danh";
 import { sessionTimeRange } from "@/lib/classes/slots";
 import { getSetting } from "@/lib/settings/service";
 import { getStudentClassProgress } from "@/lib/students/progress";
@@ -18,7 +19,9 @@ import {
 // chỉ trả data của các lớp HS đang theo học.
 // =============================================================================
 
-const ACTIVE_ENROLLMENT = ["CONFIRMED", "STUDYING", "ACTIVE"] as const;
+// 06/09 — danh sách hợp nhất, xem lib/portal/trang-thai-ghi-danh.ts. Bản cũ ở đây
+// THIẾU "PAUSED" nên con đang tạm nghỉ mở cổng ra là trống trơn.
+const ACTIVE_ENROLLMENT = GHI_DANH_DANG_HOC;
 
 export type StudentClass = {
   id: string;
