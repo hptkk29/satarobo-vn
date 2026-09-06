@@ -59,6 +59,10 @@ on:
         type: boolean
         required: false
         default: true
+      ky_cham_cong:
+        description: 'Chỉ nạp MỘT kỳ chấm công, dạng YYYY-MM (vd 2026-08). Để trống = 2 kỳ gần nhất. Dùng khi muốn chia nhỏ cho chắc ăn.'
+        required: false
+        default: ''
       chi_cham_cong:
         description: 'CHỈ nạp dữ liệu chấm công, BỎ QUA mọi bước nền. Dùng khi DB test đang có người nghiệm thu — xem ghi chú "Vì sao cần lối đi này" trong file.'
         type: boolean
@@ -78,7 +82,11 @@ jobs:
   seed:
     name: Seed dữ liệu vào DB test
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 50 chứ không 30: seed chấm công nói chuyện với Supabase, mỗi phép tính công là vài lượt
+    # đi–về (~2 giây/ngày-người) nên nó bị cắt giữa chừng ở lượt 06/09. Đây là workflow bấm tay
+    # để nạp dữ liệu, kéo dài ngân sách không hại ai; bị CẮT giữa chừng mới hại — dữ liệu vào
+    # một nửa và người bấm phải tự đoán nửa nào.
+    timeout-minutes: 50
     steps:
       - name: Xác nhận chủ ý
         run: |
@@ -196,7 +204,7 @@ jobs:
 
       - name: Seed dữ liệu nghiệm thu chấm công (2 kỳ gần nhất)
         if: ${{ inputs.du_lieu_cham_cong && !inputs.chi_lich_hen }}
-        run: pnpm exec tsx prisma/seed-cham-cong-demo.ts --nguoi=10
+        run: pnpm exec tsx prisma/seed-cham-cong-demo.ts --nguoi=10 ${{ inputs.ky_cham_cong && format('--ky={0}', inputs.ky_cham_cong) || '' }}
         env: { DATABASE_URL: "${{ secrets.TEST_DIRECT_URL }}", DIRECT_URL: "${{ secrets.TEST_DIRECT_URL }}" }
 
       - name: Tóm tắt
