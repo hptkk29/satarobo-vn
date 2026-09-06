@@ -204,6 +204,27 @@ export default async function ChamCongPage({ searchParams }: Props) {
       ...assignments.map((a) => a.userId),
     ]),
   ];
+
+  // Lượt quét ĐẦY ĐỦ của những người đã lọt danh sách — CỐ Ý không lọc theo cơ sở đang xem.
+  //
+  // Truy vấn `logs` ở trên lọc `centerId: coSo` và chỉ dùng để TÌM RA ai cần hiện (người quét ở
+  // đây mà không được xếp ca ở đây vẫn phải hiện). Nhưng nếu lấy luôn nó để vẽ cột "Quét" thì
+  // sai: công ngày (`StaffAttendanceDay`) được tính trên TOÀN BỘ lượt của người đó trong ngày,
+  // không lọc cơ sở (`recompute.ts:24`), còn cơ sở chịu công thì lấy theo CA ĐƯỢC XẾP
+  // (`recompute.ts:88`). Hai cái đó lệch nhau đúng ở tình huống đáng quan tâm nhất: người được
+  // xếp ca CS1 nhưng quét ở CS2. Khi đó dòng hiện "Quét —" như thể chưa từng quét, mà cột Giờ
+  // vẫn có số — người duyệt đọc ra "máy hỏng" thay vì "quét nhầm cơ sở".
+  // (Bắt được khi nghiệm thu trên test 07/09.)
+  //
+  // `scopedDb` vẫn gác: quản lý cấp cơ sở không thấy lượt của cơ sở khác — đó là cách ly đúng,
+  // không phải lỗi; họ thấy dòng "quét ở nơi khác" mà không thấy giờ giấc chi tiết.
+  const logsDay = userIds.length
+    ? await sdb.staffTimeLog.findMany({
+        where: { userId: { in: userIds }, workDate, result: "ACCEPTED" },
+        orderBy: { loggedAt: "asc" },
+        select: { userId: true, direction: true, loggedAt: true, flags: true, centerId: true },
+      })
+    : [];
   const users = await sdb.user.findMany({
     where: { id: { in: userIds } },
     select: { id: true, name: true, email: true },
@@ -228,7 +249,7 @@ export default async function ChamCongPage({ searchParams }: Props) {
   const rows: Row[] = userIds
     .map((userId) => {
       const d = days.find((x) => x.userId === userId) ?? null;
-      const my = logs.filter((l) => l.userId === userId);
+      const my = logsDay.filter((l) => l.userId === userId);
       const firstIn = my.find((l) => l.direction === "CHECK_IN")?.loggedAt ?? null;
       const lastOut = [...my].reverse().find((l) => l.direction === "CHECK_OUT")?.loggedAt ?? null;
       const asg = assignments.find((a) => a.userId === userId) ?? null;
@@ -248,7 +269,12 @@ export default async function ChamCongPage({ searchParams }: Props) {
       return {
         name,
         taps: my.length,
-        quet: my.length ? `${hhmm(firstIn)} → ${hhmm(lastOut)} ·${my.length}` : "—",
+        quet: my.length
+          ? `${hhmm(firstIn)} → ${hhmm(lastOut)} ·${my.length}` +
+            // Quét ở cơ sở khác với cơ sở chịu công: nói ra ngay trên dòng, vì đây chính là
+            // câu hỏi "người này có đi đúng cơ sở đã xếp ca không".
+            (my.some((l) => l.centerId !== coSo) ? " · quét nơi khác" : "")
+          : "—",
         gio: `${fmtMin(worked)} / ${fmtMin(expected)}`,
         credit,
         override: d?.overrideUnits != null,
