@@ -6,6 +6,7 @@ import {
   getSessionMediaForStudent,
   type RenderedAnswer,
 } from "@/lib/eval/session-eval-portal";
+import { ngayVN } from "@/lib/format/date";
 import { isPortalV2Enabled } from "@/lib/flags";
 import {
   getSessionNumberMapForClasses,
@@ -54,13 +55,35 @@ export default async function NhanXetPage() {
     // 06/09 — truyền LIMIT rõ ràng. Mặc định của hàm là 20 (đủ cho 3 thẻ ở bảng tin),
     // nhưng trang Nhận xét là nơi phụ huynh xem lại cả khoá: bản v1 nạp 100, bản v2 lặng
     // lẽ cắt còn 20 nên nhận xét các buổi đầu khoá biến mất mà không có nút "xem thêm".
-    const items = await getStudentFeedback(studentId, 100);
+    const [items, evals] = await Promise.all([
+      getStudentFeedback(studentId, 100),
+      // Parity với bản v1: phiếu SESSION_EVAL của module Đánh giá. Bản v2 trước đây bỏ
+      // hẳn nhóm này, nên trung tâm nào chấm buổi bằng module đó thì phụ huynh mất sạch
+      // phần ấy kể từ ngày prod bật cờ v2.
+      getStudentSessionEvals(studentId).catch(() => []),
+    ]);
     return (
       <NhanXetPageV2
         kids={ctx.children.map((c) => ({ id: c.id, name: c.name }))}
         activeId={ctx.activeStudent?.id ?? null}
         studentName={ctx.activeStudent?.name ?? "con"}
         items={items}
+        phieuDanhGia={evals.map((ev) => ({
+          responseId: ev.responseId,
+          tieuDe: [ev.classCode, ev.className ?? ev.roundName].filter(Boolean).join(" · "),
+          // Ngày tính sẵn ở server theo lịch VN — component là client, thiết bị phụ
+          // huynh có thể ở múi giờ khác.
+          nhanNgay: ev.sessionDate ? ngayVN(ev.sessionDate) : "—",
+          teacherName: ev.teacherName,
+          sessionTopic: ev.sessionTopic,
+          answers: ev.answers.map((a) => ({
+            questionId: a.questionId,
+            label: a.label,
+            stars: a.stars,
+            options: a.options,
+            text: a.text,
+          })),
+        }))}
       />
     );
   }
