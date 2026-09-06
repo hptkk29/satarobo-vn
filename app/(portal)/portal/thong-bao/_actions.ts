@@ -7,6 +7,7 @@
 
 import { refresh, revalidatePath, updateTag } from "next/cache";
 
+import { theBadgeThongBao } from "@/lib/portal/notification-feed";
 import { getPortalContext } from "@/lib/portal/session";
 import { danhDauDaDoc } from "@/lib/portal/feed-read";
 
@@ -51,7 +52,8 @@ export async function danhDauDaDocAction(
   // `updateTag` chứ không `revalidateTag`: Next 16 khắng định hàm này chỉ gọi được
   // trong Server Action và cho nghĩa "đọc lại được thứ mình vừa ghi" — đúng thứ cần ở
   // đây, trong khi `revalidateTag` chỉ đánh dấu hết hạn cho lượt sau.
-  updateTag("portal-badge-thong-bao");
+  // Thẻ THEO TỪNG phụ huynh — xoá đúng bản của họ, không đụng cache của người khác.
+  updateTag(theBadgeThongBao(ctx.parentUserId));
   // Làm mới luôn bản cache PHÍA CLIENT — badge nằm ở layout, mà layout thuộc phần
   // client router cache mà `revalidatePath` một mình không đụng tới.
   refresh();

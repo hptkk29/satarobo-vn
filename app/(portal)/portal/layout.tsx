@@ -70,6 +70,7 @@ export default async function PortalLayout({
         notifCount={notifCount}
         msgCount={msgCount}
         switcherChildren={switcherChildren}
+        evalV2Enabled={isEvalV2Enabled()}
       >
         {children_.length === 0 ? (
           // Chưa liên kết học viên: KHÔNG render page (page gọi

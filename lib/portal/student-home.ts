@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { GHI_DANH_DANG_HOC } from "@/lib/portal/trang-thai-ghi-danh";
 import { getStudentSchedule } from "@/lib/portal/schedule";
 import { vnParts } from "@/lib/time/vn";
 import { getStudentSessionsView } from "@/lib/portal/student-sessions";
@@ -94,7 +95,14 @@ export async function getStudentHome(studentId: string): Promise<StudentHome> {
     getStudentAssignmentResults(studentId).catch(() => []),
     db.studentSkillAssessment.findMany({ where: { studentId }, orderBy: { assessedAt: "desc" }, select: { skill: true, level: true } }),
     db.student.findUnique({ where: { id: studentId }, select: { name: true } }),
-    db.enrollment.findFirst({ where: { studentId }, orderBy: { enrolledAt: "desc" }, select: { class: { select: { teacher: { select: { name: true } } } } } }),
+    // 06/09 — LỌC ghi danh còn hiệu lực. Bản cũ lấy ghi danh mới nhất bất kể trạng
+    // thái: con rút khỏi lớp B (WITHDREW / xoá mềm) rồi vào lớp A thì cổng học sinh in
+    // tên giáo viên của LỚP B đã nghỉ.
+    db.enrollment.findFirst({
+      where: { studentId, status: { in: [...GHI_DANH_DANG_HOC] }, deletedAt: null },
+      orderBy: { enrolledAt: "desc" },
+      select: { class: { select: { teacher: { select: { name: true } } } } },
+    }),
   ]);
 
   const total = view.total;

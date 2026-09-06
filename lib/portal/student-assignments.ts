@@ -82,8 +82,11 @@ export async function getStudentAssignmentTrack(studentId: string): Promise<Assi
       select: { classId: true },
     }),
     getStudentSchedule(studentId),
+    // 06/09 — LỌC ghi danh còn hiệu lực. Bản cũ lấy ghi danh mới nhất bất kể trạng thái:
+    // con rút khỏi lớp B (WITHDREW / xoá mềm) rồi vào lớp A thì trang Bài tập in tên
+    // giáo viên của LỚP B đã nghỉ. Cùng lỗi với `lib/portal/student-home.ts`.
     db.enrollment.findFirst({
-      where: { studentId },
+      where: { studentId, status: { in: [...GHI_DANH_DANG_HOC] }, deletedAt: null },
       orderBy: { enrolledAt: "desc" },
       select: { class: { select: { teacher: { select: { name: true } } } } },
     }),

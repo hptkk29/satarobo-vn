@@ -241,15 +241,25 @@ export function theBadgeThongBao(parentUserId: string): string {
   return `portal-badge-thong-bao:${parentUserId}`;
 }
 
-const badgeCached = unstable_cache(
-  async (parentUserId: string): Promise<number> =>
-    (await getParentNotificationFeed(parentUserId)).unreadTotal,
-  ["portal-v2-notification-badge"],
-  // TTL 60s vẫn giữ (layout dựng trên MỌI page view), nhưng thêm THẺ để
-  // `revalidateTag` xóa được ngay khi phụ huynh vừa đọc — không thì badge đứng
-  // nguyên tới một phút sau khi họ đã xem, đúng triệu chứng vé này định chữa.
-  { revalidate: 60, tags: ["portal-badge-thong-bao"] },
-);
+// 06/09 — THẺ THEO TỪNG PHỤ HUYNH. Bản cũ gắn một thẻ hằng `"portal-badge-thong-bao"`
+// cho MỌI phụ huynh, nên một người bấm vào trang Thông báo là xoá cache badge của toàn
+// bộ phụ huynh đang online — cả hệ thống cùng lúc tính lại một fan-out khá nặng chỉ để
+// ra một con số. Hàm `theBadgeThongBao()` viết ra đúng cho việc này nhưng chưa nơi nào
+// gọi. `unstable_cache` chốt thẻ lúc ĐỊNH NGHĨA, nên phải dựng hàm theo từng lượt gọi.
+//
+// (Khoá cache vốn đã tách theo người: `unstable_cache` gộp cả THAM SỐ vào khoá, nên
+// không có chuyện phụ huynh này đọc được con số của phụ huynh kia. Đây thuần là chuyện
+// xoá cache quá tay.)
+const badgeCached = (parentUserId: string): Promise<number> =>
+  unstable_cache(
+    async (): Promise<number> =>
+      (await getParentNotificationFeed(parentUserId)).unreadTotal,
+    ["portal-v2-notification-badge", parentUserId],
+    // TTL 60s vẫn giữ (layout dựng trên MỌI page view), nhưng thêm THẺ để
+    // `updateTag` xóa được ngay khi phụ huynh vừa đọc — không thì badge đứng nguyên
+    // tới một phút sau khi họ đã xem, đúng triệu chứng vé này định chữa.
+    { revalidate: 60, tags: [theBadgeThongBao(parentUserId)] },
+  )();
 
 /** Số chưa đọc cho badge chuông topbar v2 (cache 60s/parent). */
 export const getParentNotificationBadge = cache(

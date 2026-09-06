@@ -27,7 +27,11 @@ export async function getSwitcherChildren(
 ): Promise<SwitcherChild[]> {
   const students = await db.student.findMany({
     where: { parentUserId, deletedAt: null },
-    orderBy: { createdAt: "asc" },
+    // 06/09 — CÙNG thứ tự với `getChildren` (lib/portal/session.ts sắp theo `name asc`).
+    // Con MẶC ĐỊNH là `children[0]` của danh sách đó, nên hai nguồn sắp khác nhau thì
+    // con được chọn sẵn lại không phải con đứng đầu trong bộ chuyển — trông như hệ
+    // thống chọn nhầm con.
+    orderBy: { name: "asc" },
     select: {
       id: true,
       name: true,

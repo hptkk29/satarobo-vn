@@ -71,6 +71,53 @@ function tepNguon(): string[] {
 const boChuThich = (s: string) =>
   s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 
+/**
+ * Tệp NGOÀI `lib/portal/` cũng đọc ghi danh cho cổng phụ huynh — phải canh cùng luật.
+ * `lib/lms/calendar-data.ts` từng lọt đúng vì nó không nằm trong thư mục portal: truy vấn
+ * ở đó không có `status` lẫn `deletedAt` nên lịch tháng vẫn chấm buổi của lớp con đã rút.
+ */
+const TEP_NGOAI = [path.join("lib", "lms", "calendar-data.ts")];
+
+/**
+ * Truy vấn CỐ Ý không lọc `status`.
+ *
+ * Tiền là ngoại lệ có lý: công nợ phải phủ MỌI ghi danh chưa xoá sổ, kể cả ghi danh đã
+ * rút giữa chừng mà còn nợ học phí. `Enrollment.deletedAt` mới là sổ sách ở đây, không
+ * phải `status`.
+ */
+const KHONG_CAN_STATUS: ReadonlyArray<[tep: string, lyDo: string]> = [
+  [
+    "billing-student.ts",
+    "Trang Học phí phải liệt kê mọi ghi danh chưa xoá sổ — kể cả ghi danh đã rút mà còn " +
+      "nợ. Lọc theo status là giấu mất khoản nợ khỏi chính người phải trả nó.",
+  ],
+  [
+    "dashboard.ts",
+    "Ô công nợ trên trang chủ dùng CÙNG tập ghi danh với trang Học phí; lọc lệch nhau " +
+      "thì hai màn cạnh nhau in hai con số nợ khác nhau.",
+  ],
+];
+
+/** `db.enrollment.findMany({...})` — trả nguyên phần đối số để soi bộ lọc. */
+function truyVanGhiDanh(src: string): string[] {
+  const ra: string[] = [];
+  const re = /enrollment\.(?:findMany|findFirst|findUnique|count|groupBy)\(/g;
+  for (const m of src.matchAll(re)) {
+    const dau = m.index + m[0].length - 1;
+    let sau = 0;
+    let i = dau;
+    for (; i < src.length; i++) {
+      if (src[i] === "(") sau++;
+      else if (src[i] === ")") {
+        sau--;
+        if (sau === 0) break;
+      }
+    }
+    ra.push(src.slice(dau, i + 1));
+  }
+  return ra;
+}
+
 describe("Trạng thái ghi danh của cổng phụ huynh", () => {
   it("hằng hợp nhất có đủ 4 trạng thái đang phục vụ, KHÔNG lẫn trạng thái đã nghỉ", () => {
     expect([...GHI_DANH_DANG_HOC].sort()).toEqual(
@@ -119,6 +166,56 @@ describe("Trạng thái ghi danh của cổng phụ huynh", () => {
         con,
         `${ten} đã khai ngoại lệ nhưng không còn danh sách viết tay — bỏ khỏi NGOAI_LE`,
       ).toBe(true);
+      expect(lyDo.length, `${ten} phải có lý do thật`).toBeGreaterThan(40);
+    }
+  });
+
+  it("mọi truy vấn ghi danh đều lọc deletedAt, và lọc status trừ khi khai ngoại lệ", () => {
+    // Cổng ở trên chỉ bắt mảng status VIẾT TAY. Truy vấn KHÔNG có bộ lọc nào thì lọt qua
+    // trong im lặng — đúng cách `lib/lms/calendar-data.ts` và `lib/portal/student-home.ts`
+    // từng lọt: lịch tháng chấm buổi của lớp con đã rút, và cổng học sinh in tên giáo
+    // viên của lớp cũ.
+    const miemStatus = new Set(KHONG_CAN_STATUS.map(([t]) => t));
+    const thieu: string[] = [];
+    let soTruyVan = 0;
+    const tep = [...tepNguon().map((t) => path.join(THU_MUC, t)), ...TEP_NGOAI];
+    for (const duongDan of tep) {
+      if (!fs.existsSync(duongDan)) continue;
+      const ten = path.basename(duongDan);
+      const src = boChuThich(fs.readFileSync(duongDan, "utf8"));
+      for (const q of truyVanGhiDanh(src)) {
+        soTruyVan++;
+        // Tra theo KHOÁ CHÍNH thì lọc không còn nghĩa: đang lấy đúng một dòng đã biết id
+        // (vd ghi danh ghi trong học bạ đã phát hành).
+        if (/where:\s*\{\s*id:/.test(q)) continue;
+        const co: string[] = [];
+        if (!q.includes("deletedAt")) co.push("deletedAt");
+        if (!q.includes("status") && !miemStatus.has(ten)) co.push("status");
+        if (co.length > 0) {
+          co.forEach(() => undefined);
+          thieu.push(`${ten}: thiếu ${co.join(" + ")}`);
+        }
+      }
+    }
+    // Chốt chặn chống XANH GIẢ: quét hỏng thì `thieu` rỗng và ca này xanh vô nghĩa.
+    expect(
+      soTruyVan,
+      "không quét được truy vấn ghi danh nào — regex hỏng?",
+    ).toBeGreaterThan(5);
+    expect(
+      thieu,
+      "Truy vấn ghi danh thiếu bộ lọc: " +
+        thieu.join(" · ") +
+        " → Ghi danh đã RÚT / đã XOÁ MỀM vẫn bị coi là lớp của con: lịch chấm buổi lớp" +
+        " cũ, hero in tên giáo viên lớp cũ. Thêm" +
+        " `status: { in: [...GHI_DANH_DANG_HOC] }, deletedAt: null`," +
+        " hoặc khai vào KHONG_CAN_STATUS kèm lý do.",
+    ).toEqual([]);
+  });
+
+  it("danh sách miễn status không để lại rác", () => {
+    for (const [ten, lyDo] of KHONG_CAN_STATUS) {
+      expect(fs.existsSync(path.join(THU_MUC, ten)), `${ten} không còn tồn tại`).toBe(true);
       expect(lyDo.length, `${ten} phải có lý do thật`).toBeGreaterThan(40);
     }
   });
