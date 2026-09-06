@@ -18,7 +18,6 @@ import {
   Cake,
   CalendarCheck,
   CalendarDays,
-  CalendarOff,
   CheckCheck,
   ChevronDown,
   ClipboardCheck,
@@ -191,7 +190,9 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Học bù", href: "/hoc-bu", icon: RefreshCw, perm: ["parent-requests:manage"] },
       { label: "Cơ sở", href: "/centers", icon: MapPin, perm: ["centers:view"] },
       { label: "Phòng học", href: "/rooms", icon: DoorOpen, perm: ["rooms:view"] },
-      { label: "Lịch nghỉ", href: "/holidays", icon: CalendarOff, perm: ["holidays:view"] },
+      // "Lịch nghỉ" (/holidays) gỡ khỏi đây 06/09: nó đã là tab "Ngày lễ" trong ConfigTabs của
+      // Chấm công (components/admin/cham-cong/config-tabs.tsx), và ngày lễ chỉ được khai để
+      // tính công chuẩn — không phải việc hằng ngày của người xếp lớp.
     ],
   },
   {
@@ -251,9 +252,10 @@ const NAV_GROUPS: NavGroup[] = [
       // ModuleNav / ConfigTabs / MeNav trong components/admin/cham-cong/* và nút ở màn cha.
       // DỄ VỠ: nav-coverage.test.ts đòi mọi route tĩnh phải có literal đường dẫn ở đâu đó; gỡ
       // thêm mục ở đây mà không còn nơi trỏ tới là CI đỏ. Route không đổi (href nằm trong DB).
+      // 06/09 (đợt 2, chủ dự án): rút tiếp 5 → 3. "Lịch phân ca" và "Kỳ công" đã là hai tab
+      // ĐẦU của ModuleNav ngay trong màn Chấm công, nên để ở sidebar là bày cùng một cửa hai
+      // lần — người dùng phải đoán hai đường đó khác nhau chỗ nào (thật ra không khác).
       { label: "Chấm công", href: "/cham-cong", icon: Clock, perm: ["hr_attendance:view"] },
-      { label: "Lịch phân ca", href: "/cham-cong/phan-ca", icon: CalendarDays, perm: ["hr_attendance:assign", "hr_attendance:view"] },
-      { label: "Kỳ công", href: "/cham-cong/ky-cong", icon: CalendarCheck, perm: ["hr_attendance:view"] },
       // BGĐ 31/07 — duyệt đơn GV (nghỉ dạy / dạy thay) — duyệt là cập nhật lịch thật.
       { label: "Duyệt đơn từ", href: "/don-tu", icon: ClipboardList, perm: ["hr_attendance:approve"] },
       // Cụm "Của tôi" của nhân viên: vào lịch ca rồi rẽ sang Đơn của tôi / Chấm công bằng MeNav.

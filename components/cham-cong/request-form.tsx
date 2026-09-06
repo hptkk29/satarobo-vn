@@ -155,7 +155,12 @@ export function RequestForm({
   }
 
   return (
-    <div className={cn("rounded-xl border border-border bg-card p-5", className)}>
+    // `@container`: form này sống trong panel bên phải (Sheet) ở admin lẫn site GV, mà bề ngang
+    // panel KHÔNG liên quan gì tới bề ngang cửa sổ. Dùng `sm:` ở đây là đo nhầm thước — cửa sổ
+    // rộng nên `sm:` luôn bật, lưới cứ chia 14rem + phần còn lại kể cả khi panel chỉ có 384px,
+    // và cột phải teo tới mức không bấm nổi (chủ dự án báo 06/09, đã dựng lại được trên test).
+    // Từ đây mọi ngưỡng bên trong đo theo CHÍNH KHỐI NÀY: @md ≈ 448px, @lg ≈ 512px.
+    <div className={cn("@container rounded-xl border border-border bg-card p-5", className)}>
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">Tạo đơn mới</h3>
         <button
@@ -174,7 +179,7 @@ export function RequestForm({
         </p>
       )}
 
-      <div className="grid gap-6 sm:grid-cols-[14rem_1fr]">
+      <div className="grid gap-6 @md:grid-cols-[13rem_1fr]">
         {/* Cột trái: chọn loại đơn. `radiogroup` chứ không phải một mớ nút rời — trình đọc màn
             hình phải nghe được "đang chọn 1 trong N", và bàn phím đi được giữa các lựa chọn. */}
         <div role="radiogroup" aria-label="Loại đơn" className="space-y-3">
@@ -243,7 +248,7 @@ export function RequestForm({
           )}
 
           {isClass ? (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 @lg:grid-cols-2">
               <Field id={idOf("classId")} label="Lớp" required error={errors.classId}>
                 <select
                   id={idOf("classId")}
@@ -291,7 +296,7 @@ export function RequestForm({
               )}
             </div>
           ) : kind === "SHIFT_SWAP" ? (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 @lg:grid-cols-2">
               <Field id={idOf("fromDate")} label="Ngày đổi ca" required error={errors.fromDate}>
                 <input
                   id={idOf("fromDate")}
@@ -354,7 +359,7 @@ export function RequestForm({
               )}
             </div>
           ) : single ? (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 @lg:grid-cols-2">
               <Field id={idOf("fromDate")} label="Ngày" required error={errors.fromDate}>
                 <input
                   id={idOf("fromDate")}
@@ -441,7 +446,7 @@ export function RequestForm({
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 @lg:grid-cols-2">
               <Field id={idOf("fromDate")} label="Từ ngày" required error={errors.fromDate}>
                 <input
                   id={idOf("fromDate")}
