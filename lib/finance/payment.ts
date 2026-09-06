@@ -98,10 +98,40 @@ export async function ensureOrderPaymentRecorded(
   }
   if (!centerId) centerId = params.actor.centerId ?? null;
 
+  // ⚠️ GẮN GHI DANH cho khoản thu tự động (06/09/2026).
+  //
+  // Cổng phụ huynh cộng tiền theo QUAN HỆ `Enrollment.payments` (lib/portal/billing.ts,
+  // billing-student.ts, dashboard.ts). Khoản nào `enrollmentId = null` thì dù kế toán đã
+  // xác nhận vẫn KHÔNG trừ vào công nợ của bất kỳ ghi danh nào — phụ huynh đóng đợt 2
+  // xong mở portal ra vẫn thấy nợ nguyên.
+  //
+  // `linkRecordedPaymentsToEnrollments` chỉ chạy MỘT LẦN, trong `convert-lead-v2`. Mọi
+  // khoản sinh SAU đó (đợt 2 qua markInstallmentPaid, xác nhận đơn offline, webhook
+  // SePay) đều đi qua đúng hàm này và trước đây rơi vào khoảng trống ấy.
+  //
+  // Chỉ gắn khi KHÔNG MƠ HỒ — học viên của đơn có ĐÚNG MỘT ghi danh còn hiệu lực. Đơn
+  // nhiều ghi danh phải chia theo `finalPrice` (đúng phép chia của
+  // `linkRecordedPaymentsToEnrollments`), việc đó không làm lén ở đây; để null như cũ,
+  // không tệ hơn hiện trạng và không bao giờ gắn nhầm sổ.
+  const donHang = await tx.order.findUnique({
+    where: { id: orderId },
+    select: { studentId: true },
+  });
+  let enrollmentId: string | null = null;
+  if (donHang?.studentId) {
+    const ghiDanh = await tx.enrollment.findMany({
+      where: { studentId: donHang.studentId, deletedAt: null },
+      select: { id: true },
+      take: 2,
+    });
+    if (ghiDanh.length === 1) enrollmentId = ghiDanh[0]!.id;
+  }
+
   const now = new Date();
   const payment = await tx.payment.create({
     data: {
       orderId,
+      enrollmentId,
       amount: Math.round(amount),
       method: AUTO_PAYMENT_METHOD,
       paidDate: now,
@@ -516,6 +546,31 @@ export async function rejectPayment(params: {
 /**
  * Điều chỉnh 1 khoản: KHÔNG mutate bản gốc — tạo bản ghi MỚI accountantStatus=ADJUSTED
  * trỏ adjustmentOfId=gốc. reason BẮT BUỘC. `amount` mới (mặc định = amount gốc).
+ *
+ * ⚠️ LỖ HỔNG ĐÃ BIẾT, CHƯA VÁ — CẦN QUYẾT ĐỊNH NGHIỆP VỤ (ghi nhận 06/09/2026)
+ *
+ * Không nơi nào ĐỌC bút toán `ADJUSTED`. Cổng phụ huynh cộng tiền theo đúng một điều
+ * kiện `accountantStatus === "CONFIRMED"` (lib/portal/billing.ts:152 · billing-student.ts:72
+ * · dashboard.ts qua computeEnrollmentDebt). Sau một lần điều chỉnh:
+ *   · bản GỐC vẫn CONFIRMED với số tiền CŨ  → vẫn được cộng;
+ *   · bản MỚI mang ADJUSTED với số tiền ĐÚNG → không được cộng.
+ * ⇒ số tiền đã sửa KHÔNG BAO GIỜ tới phụ huynh; công nợ giữ nguyên con số cũ. Cũng
+ * không có nút nào xác nhận bản ADJUSTED: `confirmPayment` từ chối trạng thái đó.
+ *
+ * Vì sao chưa vá ở đợt này: đây là câu hỏi CHÍNH SÁCH SỔ SÁCH, không phải lỗi hiển thị —
+ * "điều chỉnh" là THAY THẾ bản gốc hay là một bút toán CỘNG THÊM? Hai cách đọc ra hai
+ * con số khác nhau, và phép cộng tiền còn nằm ở cả phía kế toán (đối soát sao kê) chứ
+ * không riêng cổng phụ huynh; sửa một bên là hai bên lệch nhau.
+ *
+ * Đo trên DB làm việc 06/09: **0 bút toán ADJUSTED, 0 REFUNDED** — lỗi đang ở dạng TIỀM
+ * ẨN, chưa gây thiệt hại. Nhưng lần đầu kế toán bấm "Điều chỉnh" trên PROD là nó nổ.
+ *
+ * Hai đường vá khả dĩ, chọn xong mới làm:
+ *   (a) Đường ĐỌC: "khoản hiệu lực" = bản CONFIRMED chưa bị bút toán ADJUSTED/REFUNDED
+ *       nào trỏ tới, CỘNG các bản ADJUSTED. Gói vào MỘT helper dùng chung cho cả cổng
+ *       phụ huynh lẫn màn kế toán, kèm test bảng biên.
+ *   (b) Đường GHI: `adjustPayment` đặt bản gốc sang REJECTED/ADJUSTED và bản mới sang
+ *       PENDING để kế toán xác nhận tiếp (hoặc CONFIRMED thẳng khi gốc đã CONFIRMED).
  */
 export async function adjustPayment(params: {
   paymentId: string;
