@@ -117,3 +117,86 @@ describe("Mọi bảng dữ liệu đều có phân trang", () => {
     }
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────────────
+// Ba luật về VỎ của bảng — thêm 06/09/2026 sau khi chủ dự án báo "một số bảng bị mất một
+// góc bên phải".
+//
+// Triệu chứng đó không đến từ cái bảng mà từ CÁI VỎ mỗi chỗ gọi tự dựng, và có đúng hai
+// tổ hợp sinh ra nó:
+//
+//   1. Vùng cuộn TRÙNG với thẻ bo góc (`overflow-x-auto` cùng phần tử với `rounded-*`).
+//      Viền vẽ theo border-box và không cuộn, còn nội dung bị cắt theo padding-box đã bo,
+//      nên kéo ngang là dải nền `<thead>` bị vạt chéo ở góc. Đúng khuôn phải đẩy việc cuộn
+//      xuống div con — `PhanTrangBang cuonNgang` làm sẵn việc đó.
+//   2. `<table>` có `min-w-[Npx]` mà THIẾU `w-full`. Bảng co theo nội dung, nên khi thẻ
+//      rộng hơn N thì bảng dừng ở N và chừa một dải nền trống bên phải: dải header và
+//      đường kẻ hàng không chạm viền — nhìn đúng như mất một góc.
+//
+// Hai lỗi này im lặng tuyệt đối: không cảnh báo, không lỗi thời gian chạy, chỉ xấu. Vá
+// từng chỗ thì lần thêm bảng thứ mười một lại tái phát, nên khoá bằng luật tĩnh.
+describe("Vỏ bảng — không sinh ra 'mất góc bên phải'", () => {
+  /** Dòng chứa `<PhanTrangBang`, kèm 3 dòng ngay trước để soi thẻ bọc. */
+  function khoiPhanTrang(src: string): { truoc: string; dong: string; sau: string }[] {
+    const dong = src.split("\n");
+    const ra: { truoc: string; dong: string; sau: string }[] = [];
+    for (let i = 0; i < dong.length; i++) {
+      if (!/<PhanTrangBang[\s>]/.test(dong[i])) continue;
+      ra.push({
+        truoc: dong.slice(Math.max(0, i - 3), i).join("\n"),
+        dong: dong[i],
+        sau: dong.slice(i, Math.min(dong.length, i + 6)).join("\n"),
+      });
+    }
+    return ra;
+  }
+
+  it("vùng cuộn không được trùng với thẻ bo góc", () => {
+    const xau: string[] = [];
+    for (const ten of fileCoBang()) {
+      const src = boChuThich(fs.readFileSync(path.join(ROOT, ten), "utf8"));
+      for (const k of khoiPhanTrang(src)) {
+        // Bắt cả `overflow-auto`, không riêng `overflow-x-auto`: đổi sang tên khác mà vẫn đặt
+        // vùng cuộn lên thẻ bo góc thì bệnh y nguyên, chỉ là test thôi nhìn thấy.
+        //
+        // NGOẠI LỆ CÓ NGUYÊN TẮC: thẻ đặt `max-h-*` là một HỘP CUỘN DỌC (xem trước file nhập,
+        // danh sách chấm bài…), thường kèm `<thead sticky top-0>`. Ở đó vùng cuộn BẮT BUỘC nằm
+        // trên chính thẻ giới hạn chiều cao — đẩy xuống div con là mất hàng tiêu đề dính. Bệnh
+        // "mất góc phải" chỉ nói về bảng RỘNG cuộn ngang trong thẻ bo góc không giới hạn cao.
+        const thePhamLoi = k.truoc
+          .split("\n")
+          .find(
+            (d) => /overflow-(?:x-)?auto/.test(d) && /rounded-/.test(d) && !/max-h-/.test(d),
+          );
+        if (thePhamLoi) xau.push(`${ten} — ${thePhamLoi.trim()}`);
+      }
+    }
+    expect(
+      xau,
+      "Thẻ bọc bảng vừa `overflow-x-auto` vừa `rounded-*` ⇒ nội dung bị vạt góc khi kéo ngang.\n" +
+        "Đổi thẻ sang `overflow-hidden` và cho `PhanTrangBang` prop `cuonNgang`:\n  - " +
+        xau.join("\n  - ") +
+        "\n",
+    ).toEqual([]);
+  });
+
+  it("bảng cuộn ngang phải có w-full bên cạnh min-w", () => {
+    const xau: string[] = [];
+    for (const ten of fileCoBang()) {
+      const src = boChuThich(fs.readFileSync(path.join(ROOT, ten), "utf8"));
+      for (const k of khoiPhanTrang(src)) {
+        if (!/cuonNgang/.test(k.dong)) continue;
+        const the = k.sau.match(/<table className="([^"]*)"/);
+        if (!the) continue;
+        const cls = the[1];
+        if (/min-w-\[/.test(cls) && !/\bw-full\b/.test(cls)) xau.push(`${ten} — <table className="${cls}">`);
+      }
+    }
+    expect(
+      xau,
+      "Bảng có `min-w-[…]` mà thiếu `w-full` ⇒ chừa dải trống bên phải khi thẻ rộng hơn:\n  - " +
+        xau.join("\n  - ") +
+        "\n",
+    ).toEqual([]);
+  });
+});

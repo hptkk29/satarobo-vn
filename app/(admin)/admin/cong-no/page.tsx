@@ -184,8 +184,8 @@ export default async function CongNoPage({
 
       <DebtFilterBar groupBy={groupBy} search={search} />
 
-      <div className="overflow-x-auto rounded-lg border border-border">
-        <PhanTrangBang>
+      <div className="overflow-hidden rounded-lg border border-border">
+        <PhanTrangBang cuonNgang>
           <Table>
             <TableHeader>
               <TableRow>

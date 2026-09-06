@@ -347,7 +347,12 @@ export function ExcelImporter<T>({
               )}
             </AlertDescription>
           </Alert>
-          <div className="border rounded-lg overflow-x-auto max-h-[400px]">
+          {/* HỘP CUỘN DỌC, không phải bảng dữ liệu: `max-h-*` + `<thead sticky top-0>`. Ở dạng
+              này vùng cuộn BẮT BUỘC nằm trên chính thẻ giới hạn chiều cao — đẩy xuống div con
+              là mất hàng tiêu đề dính. `bang-coverage.test.ts` tha đúng theo dấu hiệu `max-h-`,
+              nên đây là ngoại lệ có nguyên tắc chứ không phải đặc cách riêng file này.
+              Dùng `overflow-auto` để cuộn được cả hai chiều. */}
+          <div className="border rounded-lg overflow-auto max-h-[400px]">
             <PhanTrangBang>
               <table className="w-full text-sm">
                 <thead className="bg-muted sticky top-0">

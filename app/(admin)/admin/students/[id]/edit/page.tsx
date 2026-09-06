@@ -425,8 +425,8 @@ export default async function EditStudentPage({ params }: Props) {
           <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-foreground">
             <LineChart className="h-5 w-5 text-primary" /> Lịch sử học tập
           </h2>
-          <div className="overflow-x-auto rounded-xl border border-border bg-card">
-            <PhanTrangBang>
+          <div className="overflow-hidden rounded-xl border border-border bg-card">
+            <PhanTrangBang cuonNgang>
               <table className="w-full text-sm">
                 <thead className="border-b border-border bg-muted text-left text-xs uppercase tracking-wider text-muted-foreground">
                   <tr>

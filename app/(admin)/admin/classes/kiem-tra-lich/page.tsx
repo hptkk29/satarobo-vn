@@ -92,8 +92,8 @@ export default async function ClassScheduleAuditPage() {
           Mọi lớp đang khớp lịch — không có buổi nào lệch ngày khai giảng.
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-border bg-card">
-          <PhanTrangBang>
+        <div className="overflow-hidden rounded-xl border border-border bg-card">
+          <PhanTrangBang cuonNgang>
             <table className="w-full text-sm">
               <thead className="border-b border-border bg-muted text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 <tr>

@@ -63,8 +63,8 @@ export function SepayLogClient({ items }: { items: Item[] }) {
         className="w-full max-w-md rounded-md border border-border px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
       />
 
-      <div className="overflow-x-auto rounded-lg border border-border">
-        <PhanTrangBang>
+      <div className="overflow-hidden rounded-lg border border-border">
+        <PhanTrangBang cuonNgang>
           <table className="w-full min-w-[980px] text-sm">
             <thead className="bg-muted text-left text-xs font-medium uppercase text-muted-foreground">
               <tr>

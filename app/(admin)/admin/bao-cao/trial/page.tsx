@@ -215,8 +215,8 @@ export default async function TrialReportPage({
       </section>
 
       {/* Bảng chi tiết theo cơ sở */}
-      <section className="overflow-x-auto rounded-xl border border-border bg-card">
-        <PhanTrangBang>
+      <section className="overflow-hidden rounded-xl border border-border bg-card">
+        <PhanTrangBang cuonNgang>
           <table className="w-full text-sm">
             <thead className="text-left text-xs text-muted-foreground">
               <tr>

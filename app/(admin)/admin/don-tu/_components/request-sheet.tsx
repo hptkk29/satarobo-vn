@@ -67,7 +67,10 @@ export function RequestSheet({ row, onClose }: { row: QueueRow | null; onClose: 
                 )}
               </div>
 
-              <dl className="grid grid-cols-[8rem_1fr] items-baseline gap-x-3 gap-y-2">
+              {/* `[&>dd]:min-w-0`: ô giá trị là ô lưới, mặc định `min-width:auto` nên chuỗi
+                  dài không ngắt (nhãn ngày đầy đủ, giờ dạng mono) đẩy cả lưới tràn khỏi panel
+                  — mà panel chỉ có `overflow-y-auto`, không có đường lùi ngang. */}
+              <dl className="grid grid-cols-[8rem_1fr] items-baseline gap-x-3 gap-y-2 [&>dd]:min-w-0">
                 <Row label="Áp dụng">
                   <span className="tabular-nums">{row.applyTitle}</span>
                   {row.dueLabel && <span className="ml-2 text-muted-foreground">· {row.dueLabel}</span>}

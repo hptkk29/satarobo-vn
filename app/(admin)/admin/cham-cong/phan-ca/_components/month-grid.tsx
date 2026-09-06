@@ -117,7 +117,11 @@ export function MonthGrid({
     // khung bo góc của lúc chờ hiện ra rồi BIẾN MẤT khi dữ liệu về.
     <div className="overflow-hidden rounded-xl border border-border bg-card">
       <PhanTrangBang cuonNgang tenDonVi="người" khoaGhiNho="phan-ca" soDongMacDinh={50}>
-        <table className="min-w-[1200px] text-xs">
+        {/* `w-full` KHÔNG thừa bên cạnh `min-w`: <table> co theo nội dung, nên khi thẻ rộng
+            hơn 1200px bảng dừng ở 1200 và chừa một dải `bg-card` trống bên phải — dải nền
+            header và đường kẻ hàng không chạm viền, đúng cảm giác "mất một góc bên phải".
+            Mọi bảng khác của module đều có cặp `w-full min-w-[…]`; đây là bảng duy nhất thiếu. */}
+        <table className="w-full min-w-[1200px] text-xs">
           <thead className="border-b border-border bg-muted/40">
             <tr>
               <th scope="col" className={cn(adminTh, "sticky left-0 z-10 bg-muted px-3 py-2")}>
