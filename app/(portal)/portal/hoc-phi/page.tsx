@@ -45,7 +45,10 @@ export default async function HocPhiPage() {
   if (!session?.user || session.user.role !== "PARENT") redirect("/login");
 
   // Bảng nhãn phương thức: danh mục DB đè bảng cứng. Cần cho CẢ HAI đường vẽ (v1 và
-  // v2) — cờ PORTAL_V2_ENABLED mặc định OFF nên v1 vẫn là thứ phụ huynh đang thấy.
+  // v2).
+  // ⚠️ ĐÍNH CHÍNH 06/09: ghi chú cũ viết "cờ PORTAL_V2_ENABLED mặc định OFF nên v1 vẫn là
+  // thứ phụ huynh đang thấy". Mặc định trong `lib/flags.ts` đúng là OFF, nhưng Vercel
+  // **Production đặt `PORTAL_V2_ENABLED="true"`** ⇒ khách hàng thật đang xem BẢN V2.
   const methodLabels = await getPaymentMethodLabels();
 
   // Portal v2 — trang Học phí & công nợ giống SataUI (per-child).

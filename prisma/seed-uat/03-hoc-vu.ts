@@ -313,9 +313,29 @@ export async function seedHocVu(
   type BuoiInfo = { id: string; lop: LopInfo; lech: number; quaKhu: boolean; seq: number };
   const buoiInfo: BuoiInfo[] = [];
 
+  // ── Dữ liệu BẨN có chủ đích (06/09/2026) ──────────────────────────────────
+  // Seed cũ sinh ra một thế giới quá sạch: đo trên `satarobo_test` được 609/609 buổi có
+  // `lessonId`, 0 buổi huỷ, 0 lớp có bài trùng, và `Lesson.order` khớp hạng-theo-ngày ở
+  // CẢ 609 buổi. Nghĩa là cả ba nhóm lỗi hiển thị của cổng phụ huynh (số buổi lấy từ
+  // `Lesson.order`, khử trùng theo bài, bỏ buổi chưa gắn giáo án — xem
+  // lib/portal/buoi-hoc.ts) đều KHÔNG THỂ tái hiện khi nghiệm thu tay. Seed che đúng
+  // những lỗi mà prod gặp.
+  //
+  // Nay cố ý gieo ba hình dạng CÓ THẬT trên prod:
+  //   · lớp chưa ghim giáo trình  → mọi buổi `lessonId = null`;
+  //   · huỷ buổi rồi xếp bù       → hai buổi cùng `lessonId`, buổi trước CANCELLED
+  //                                 (đúng thứ `cancelSession` tạo ra);
+  //   · giáo viên quên chấm       → buổi quá khứ không có dòng điểm danh nào.
+  // Tỷ lệ nhỏ nên các màn khác vẫn còn nhiều lớp "đẹp" để nghiệm thu bình thường.
+  const lopKhongGiaoTrinh = new Set<string>();
+  const lopCoBuoiBu = new Set<string>();
+  const buoiQuenCham = new Set<string>();
+
   for (const lop of lopInfo) {
     if (!["ACTIVE", "COMPLETED"].includes(lop.status)) continue;
-    const lessons = nen.lessonIds[lop.courseId] ?? [];
+    if (chance(rng, 0.12)) lopKhongGiaoTrinh.add(lop.id);
+    else if (chance(rng, 0.18)) lopCoBuoiBu.add(lop.id);
+    const lessons = lopKhongGiaoTrinh.has(lop.id) ? [] : nen.lessonIds[lop.courseId] ?? [];
     // Rải buổi ĐÚNG THỨ của lớp. Bản cũ cộng cứng 7 ngày một và bỏ qua `slot.days`,
     // trong khi TÊN lớp lại ghép từ `slot.label` — nên lớp "T7 sáng" có 14 buổi rơi
     // vào thứ Tư và 0 buổi vào thứ Bảy (QA vòng 1, BUG-033).
@@ -324,6 +344,10 @@ export async function seedHocVu(
       const lech = ngayBuoi[s] ?? lop.batDau + s * 7;
       const quaKhu = lech < 0;
       const id = uid("buoi", lop.cs.code, lop.id.slice(-3), s + 1);
+      // Buổi bị huỷ: chọn buổi thứ 3 của lớp được đánh dấu, và chỉ khi nó đã qua —
+      // huỷ một buổi tương lai thì không tạo được ca "hai buổi cùng bài, buổi trước
+      // đã huỷ" mà trang học viên hay nuốt.
+      const biHuy = lopCoBuoiBu.has(lop.id) && s === 2 && quaKhu;
       buois.push({
         id,
         classId: lop.id,
@@ -331,13 +355,36 @@ export async function seedHocVu(
         lessonId: lessons[s] ?? null,
         topic: `Buổi ${s + 1}`,
         centerId: lop.cs.centerId,
-        status: quaKhu ? "COMPLETED" : "SCHEDULED",
-        completedAt: quaKhu ? ngayGio(lech, 20) : null,
-        ckAttendance: quaKhu,
-        ckLessonConfirmed: quaKhu,
-        ckFeedback: quaKhu && chance(rng, 0.7),
-        ckMedia: quaKhu && chance(rng, 0.5),
+        status: biHuy ? "CANCELLED" : quaKhu ? "COMPLETED" : "SCHEDULED",
+        completedAt: !biHuy && quaKhu ? ngayGio(lech, 20) : null,
+        ckAttendance: !biHuy && quaKhu,
+        ckLessonConfirmed: !biHuy && quaKhu,
+        ckFeedback: !biHuy && quaKhu && chance(rng, 0.7),
+        ckMedia: !biHuy && quaKhu && chance(rng, 0.5),
       });
+      if (biHuy) {
+        // Buổi BÙ — y hệt `cancelSession` (lib/classes/adjust.ts) tạo ra: cùng
+        // `lessonId`, cùng `topic`, xếp SAU buổi cuối của lớp.
+        const lechBu = (ngayBuoi[lop.soBuoi - 1] ?? lop.batDau + lop.soBuoi * 7) + 7;
+        const idBu = uid("buoi", lop.cs.code, lop.id.slice(-3), "bu", s + 1);
+        buois.push({
+          id: idBu,
+          classId: lop.id,
+          date: ngayGio(lechBu, Number(lop.slot.gio.slice(0, 2)), Number(lop.slot.gio.slice(3))),
+          lessonId: lessons[s] ?? null,
+          topic: `Buổi ${s + 1}`,
+          centerId: lop.cs.centerId,
+          status: lechBu < 0 ? "COMPLETED" : "SCHEDULED",
+          completedAt: lechBu < 0 ? ngayGio(lechBu, 20) : null,
+          ckAttendance: lechBu < 0,
+          ckLessonConfirmed: lechBu < 0,
+        });
+        buoiInfo.push({ id: idBu, lop, lech: lechBu, quaKhu: lechBu < 0, seq: lop.soBuoi + 1 });
+        continue; // buổi đã huỷ KHÔNG vào buoiInfo: không điểm danh, không nhận xét
+      }
+      // Giáo viên quên chấm điểm danh — có thật, và là lý do phải có trạng thái
+      // "Chưa điểm danh" riêng thay vì mặc định coi như có mặt.
+      if (quaKhu && chance(rng, 0.05)) buoiQuenCham.add(id);
       buoiInfo.push({ id, lop, lech, quaKhu, seq: s + 1 });
     }
   }
@@ -355,6 +402,7 @@ export async function seedHocVu(
 
   for (const b of buoiInfo) {
     if (!b.quaKhu) continue;
+    if (buoiQuenCham.has(b.id)) continue; // buổi giáo viên quên chấm — cố ý để trống
     // ⚠️ ĐỪNG chép tay danh sách status ở đây. Bản cũ là
     //     ["STUDYING", "ACTIVE", "COMPLETED", "PAUSED"]
     // — THIẾU "CONFIRMED", mà chính vòng sinh ghi danh phía trên lại tạo CONFIRMED ở

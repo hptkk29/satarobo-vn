@@ -106,8 +106,13 @@ export default async function NhanXetPage() {
   // R1 21/08 — SỐ BUỔI cho phụ huynh, tính trên TOÀN BỘ buổi của các lớp có phiếu
   // (lib/lms/session-order), để phụ huynh và giáo viên gọi một buổi bằng cùng một số.
   // ⚠️ Bản V2 (components/portal/nhan-xet-page) lấy số qua lib/portal/feedback — file
-  // ĐÓ KHÔNG phục vụ trang này. Cờ PORTAL_V2_ENABLED mặc định OFF nên V1 mới là bản
-  // phụ huynh đang thấy: sửa một bên là "sửa xong mà không thấy đổi".
+  // ĐÓ KHÔNG phục vụ trang này — hai bản có hai đường lấy số buổi riêng, sửa một bên là
+  // "sửa xong mà không thấy đổi".
+  // ⚠️ ĐÍNH CHÍNH 06/09: bản ghi chú cũ ở đây viết "cờ PORTAL_V2_ENABLED mặc định OFF nên
+  // V1 mới là bản phụ huynh đang thấy". SAI với thực tế đang chạy — `lib/flags.ts` mặc
+  // định OFF, nhưng Vercel **Production đặt `PORTAL_V2_ENABLED="true"`**, nên KHÁCH HÀNG
+  // THẬT ĐANG XEM BẢN V2. Câu đó đã dẫn người sửa vào đúng nhánh không ai dùng một lần
+  // rồi (04/09). Sửa lỗi hiển thị của phụ huynh thì V2 là bản phải sửa TRƯỚC.
   const fbClassIds = [
     ...new Set(
       feedbacks.map((f) => f.classSession?.classId).filter((x): x is string => !!x),
