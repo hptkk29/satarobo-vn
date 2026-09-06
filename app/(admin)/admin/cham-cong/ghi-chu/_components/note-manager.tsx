@@ -109,8 +109,12 @@ export function NoteManager({
 
   return (
     <>
+      {/* `min-w-0` trên CẢ HAI ô lưới, không phải trang trí: ô lưới mặc định `min-width:auto`, mà ô
+          trái chứa bảng `min-w-[820px]` ⇒ nó từ chối co xuống dưới 820px, `overflow-x` của
+          PhanTrangBang không bao giờ kích hoạt, và toàn bộ phần thiếu bị lấy từ ô phải — cột
+          "Ghi đè theo ngày" teo còn ~60px, chữ rơi mỗi dòng một từ (đo trên test 06/09). */}
       <div className="grid gap-4 lg:grid-cols-[3fr_2fr]">
-        <SectionCard title="Việc cố định theo thứ" icon={CalendarDays}>
+        <SectionCard title="Việc cố định theo thứ" icon={CalendarDays} className="min-w-0">
           <PhanTrangBang cuonNgang tenDonVi="khối" khoaGhiNho="ghi-chu-thu">
             <table className="w-full min-w-[820px] text-sm">
               <thead className="border-b border-border bg-muted/40">
@@ -197,6 +201,7 @@ export function NoteManager({
         </SectionCard>
 
         <SectionCard
+          className="min-w-0"
           title="Ghi đè theo ngày"
           icon={CalendarClock}
           actions={
