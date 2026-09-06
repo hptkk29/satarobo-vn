@@ -273,3 +273,39 @@ describe("[S-1] searchLopTrialCandidatesAction — ô tìm ứng viên", () => {
     expect(s).not.toMatch(/^\s*\{ phone: \{ contains: qPhone \} \},\s*$/m);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 5) S2 — nút "Nhắn Zalo" trên phiếu lead: SỐ THẬT đi vào URL, và chỉ khi được xem
+// ─────────────────────────────────────────────────────────────────────────────
+// Trang chi tiết lead KHÔNG nằm trong `MAN_ADMIN` ở trên (nó vốn đã che đúng), nên
+// phần thêm mới ở đó không có lưới nào. Nút này đưa SĐT vào QUERY STRING — thứ nằm
+// lại trong lịch sử trình duyệt, trong Referer, và trong log của mọi proxy ở giữa —
+// nên đáng một chốt chặn riêng, đúng hai chiều:
+//   • lấy nhầm bản CHE (`piiLead.phone`) ⇒ ZaloCRM tra ra rỗng, hỏng CÂM;
+//   • lấy số thật mà QUÊN rẽ nhánh `canViewPii` ⇒ rò SĐT cho vai không được xem.
+const TRANG_PHIEU_LEAD = "app/(admin)/admin/leads/[id]/page.tsx";
+
+describe("[S-1b] nút Nhắn Zalo — số thật, và chỉ trong nhánh được xem SĐT", () => {
+  it("dựng URL qua hàm thuần duongDanNhanZalo, không tự ghép chuỗi ?compose=", () => {
+    const s = nguon(TRANG_PHIEU_LEAD);
+    expect(s).toContain("duongDanNhanZalo");
+    // Tự ghép tại chỗ là mất phần chuẩn hoá `84…`; ZaloCRM lọc `/^84\d{8,10}$/` và
+    // BỎ HẲN tham số sai khuôn ⇒ hộp soạn tin mở trống mà không báo lỗi.
+    expect(s).not.toMatch(/\?compose=/);
+  });
+
+  it("KHÔNG truyền bản đã che vào URL", () => {
+    const s = nguon(TRANG_PHIEU_LEAD);
+    const dong = s.split("\n").filter((l) => l.includes("duongDanNhanZalo("));
+    expect(dong.length).toBeGreaterThan(0);
+    for (const l of dong) expect(l, l.trim()).not.toMatch(/piiLead|masked/);
+  });
+
+  it("chỉ dựng URL trong nhánh canViewPii — SĐT là PII, và nó nằm trên query string", () => {
+    const s = nguon(TRANG_PHIEU_LEAD);
+    const dong = s.split("\n").filter((l) => l.includes("duongDanNhanZalo("));
+    // Không có dòng nào thì mọi `for` dưới đây xanh giả — chốt lại số lượng trước.
+    expect(dong.length).toBeGreaterThan(0);
+    for (const l of dong) expect(l, l.trim()).toMatch(/canViewPii/);
+  });
+});

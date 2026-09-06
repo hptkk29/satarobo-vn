@@ -5,6 +5,8 @@ import {
   isAuthPhoneProvisioningEnabled,
   isPaymentLedgerV2Enabled,
   isSaleSiteEnabled,
+  isZalocrmEnabled,
+  isInboxEnabled,
 } from "./flags";
 
 // AUTH-SĐT P5 — cờ ngắt đường TỰ ĐỘNG cấp tài khoản phụ huynh theo SĐT.
@@ -116,6 +118,73 @@ describe("isSaleSiteEnabled", () => {
     for (const v of ["TRUE", "True", "1", "yes", "on", " true ", "", "false"]) {
       process.env[SALE_KEY] = v;
       expect(isSaleSiteEnabled(), `giá trị ${JSON.stringify(v)}`).toBe(false);
+    }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ZaloCRM (đợt tích hợp 06/09/2026) — hai cờ 2-phase: `ZALOCRM_ENABLED` (S1) và
+// `INBOX_ENABLED` (S9-B4).
+//
+// Vì sao khoá ngữ nghĩa bằng test chứ không tin JSDoc: `lib/settings/registry.ts`
+// đã nhắc tới `INBOX_ENABLED` "trong lib/flags.ts" suốt từ đợt hộp thư trong khi
+// KHÔNG có dòng code nào đọc nó — y hệt vết `AUTH_PHONE_PROVISIONING` (đường lùi
+// chỉ tồn tại trên giấy). Bộ test này bắt cả hai điều kiện: hàm CÓ THẬT, và
+// `.env.example` CÓ khai để người dựng môi trường mới nhìn thấy.
+// ─────────────────────────────────────────────────────────────────────────────
+const ZALOCRM_KEY = "ZALOCRM_ENABLED";
+const INBOX_KEY = "INBOX_ENABLED";
+
+describe("isZalocrmEnabled", () => {
+  afterEach(() => {
+    delete process.env[ZALOCRM_KEY];
+  });
+
+  it("`.env.example` có khai cờ — người dựng môi trường mới nhìn thấy nó", () => {
+    expect(
+      new RegExp(`^${ZALOCRM_KEY}=`, "m").test(ENV_EXAMPLE),
+      "thiếu dòng ZALOCRM_ENABLED trong .env.example",
+    ).toBe(true);
+  });
+
+  it("mặc định OFF khi env vắng — merge lô nền không mở gì cho người dùng", () => {
+    delete process.env[ZALOCRM_KEY];
+    expect(isZalocrmEnabled()).toBe(false);
+  });
+
+  it('chỉ chuỗi "true" mới bật — "True"/"1"/"yes" vẫn OFF', () => {
+    process.env[ZALOCRM_KEY] = "true";
+    expect(isZalocrmEnabled()).toBe(true);
+    for (const v of ["True", "TRUE", "1", "yes", "on", " true ", "", "false"]) {
+      process.env[ZALOCRM_KEY] = v;
+      expect(isZalocrmEnabled(), `giá trị ${JSON.stringify(v)}`).toBe(false);
+    }
+  });
+});
+
+describe("isInboxEnabled", () => {
+  afterEach(() => {
+    delete process.env[INBOX_KEY];
+  });
+
+  it("`.env.example` có khai cờ — hết cảnh cờ chỉ tồn tại trong chú thích", () => {
+    expect(
+      new RegExp(`^${INBOX_KEY}=`, "m").test(ENV_EXAMPLE),
+      "thiếu dòng INBOX_ENABLED trong .env.example",
+    ).toBe(true);
+  });
+
+  it("mặc định OFF khi env vắng", () => {
+    delete process.env[INBOX_KEY];
+    expect(isInboxEnabled()).toBe(false);
+  });
+
+  it('isInboxEnabled cùng khuôn === "true" — gõ gần đúng là VẪN TẮT', () => {
+    process.env[INBOX_KEY] = "true";
+    expect(isInboxEnabled()).toBe(true);
+    for (const v of ["True", "TRUE", "1", "yes", "on", " true ", "", "false"]) {
+      process.env[INBOX_KEY] = v;
+      expect(isInboxEnabled(), `giá trị ${JSON.stringify(v)}`).toBe(false);
     }
   });
 });

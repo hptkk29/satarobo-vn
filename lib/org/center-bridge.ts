@@ -61,6 +61,30 @@ export const BACKFILL_SPECS: readonly BackfillSpec[] = [
     scoped: false,
     vi: "ánh xạ máy nhánh → nhân viên → cơ sở; một máy nhánh luôn thuộc một cơ sở",
   },
+  // ── ZALOCRM (09/2026): sinh ra đã có CẢ HAI cột, bảng RỖNG ⇒ không cần backfill ──
+  {
+    model: "ZaloCrmNick",
+    // NULL = orgCode của ZaloCRM CHƯA ánh xạ được cơ sở (thiếu mục trong setting
+    // `zalocrm.orgCodes`). KHÔNG phải "áp dụng toàn hệ thống": chốt kiến trúc là một
+    // Organization ZaloCRM = một nick = ĐÚNG MỘT cơ sở, nên không tồn tại nick dùng
+    // chung. Cũng KHÔNG phải BAT_BUOC: lúc đồng bộ nick về, thiếu ánh xạ là chuyện
+    // thường và phải giữ dòng lại để người vận hành gán, chứ không được vứt.
+    nullMeaning: "NULL_CHUA_KHOP",
+    // Bảng ÁNH XẠ hạ tầng ⇒ nằm ở SCOPE_EXEMPT, không ở SCOPED_MODELS (lý do dài ở
+    // lib/db-scope.ts). Vẫn phải khai ở đây vì nó mang CẢ HAI cột.
+    scoped: false,
+    vi: "nick Zalo cá nhân do ZaloCRM cầm — suy từ orgCode qua setting zalocrm.orgCodes",
+  },
+  {
+    model: "ZaloCrmThread",
+    // NULL = chưa biết hội thoại thuộc cơ sở nào. Dòng "đặt trước" (tạo lúc Sale bấm
+    // "Nhắn Zalo", trước khi hội thoại tồn tại) ra đời đã có centerId của người bấm;
+    // dòng do webhook tạo thì chép từ nick, và nick chưa ánh xạ ⇒ NULL. Giữ NULL, đếm
+    // riêng để nhìn thấy tồn đọng.
+    nullMeaning: "NULL_CHUA_KHOP",
+    scoped: false,
+    vi: "ánh xạ hội thoại ZaloCRM ↔ phiếu lead — chép centerId từ ZaloCrmNick của org",
+  },
   // ── Module chấm công v3 (L1 · 06/09): sinh ra đã có CẢ HAI cột, không backfill ─
   {
     model: "ShiftTemplate",
@@ -108,8 +132,7 @@ export const BACKFILL_SPECS: readonly BackfillSpec[] = [
     model: "ShiftBriefNote",
     nullMeaning: "BAT_BUOC",
     scoped: true,
-    vi: "việc cố định / ghi đè tin 19:00 — theo đơn vị, luôn có",
-  },
+    vi: "việc cố định / ghi đè tin 19:00 — theo đơn vị, luôn có",  },
   // ── MEDIA-REVIEW (26/08): sinh ra đã có CẢ HAI cột, không cần backfill ──────
   {
     model: "MediaAsset",

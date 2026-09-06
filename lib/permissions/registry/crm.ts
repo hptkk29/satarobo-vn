@@ -67,6 +67,23 @@ export const crmModule: ModuleDecl = {
       description:
         "Nhận/giao hội thoại cho người phụ trách và nối hội thoại mồ côi vào phiếu khách.",
     },
+    // ── Tích hợp ZaloCRM (nick Zalo cá nhân) ─────────────────────────────────
+    // Prefix `zalocrm:` khai ĐÚNG ở module này (luật index.ts: mỗi prefix nằm trong
+    // đúng một module). Xếp vào CRM cùng họ với `inbox:` và `leads:` vì nó cũng là
+    // hội thoại với KHÁCH, và Sale là người dùng chính — không tách module riêng cho
+    // một quyền duy nhất.
+    //
+    // `scopable: false` là ĐÚNG CHỦ ĐÍCH, không phải bỏ sót: quyền này chỉ trả lời
+    // "được mở màn nhúng hay không". Phạm vi dữ liệu nằm ngoài repo — mỗi cơ sở là
+    // một `orgCode` trong ZaloCRM, quyết bởi claim của token SSO do server ký. Khai
+    // `scopable: true` là hứa một lớp gác theo cơ sở mà tầng này không thi hành được.
+    {
+      key: "zalocrm:use",
+      action: "use",
+      scopable: false,
+      description:
+        "Mở màn Zalo CRM nhúng (SSO iframe) và nhắn khách qua nick Zalo cá nhân.",
+    },
     { key: "leads:assign", action: "assign" },
     {
       key: "leads:assign-config",

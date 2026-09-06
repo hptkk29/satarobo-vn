@@ -110,6 +110,12 @@ export async function sendInboxReply(input: {
     : khongCoAdapter(hoi.channel);
 
   // ── 3. GHI KẾT QUẢ ────────────────────────────────────────────────────────
+  // 🔴 HAI LỆNH RỜI, CÓ CHỦ ĐÍCH (lỗi B6). Bản cũ ghi cả `channelMessageId` trong
+  // cùng một `update` nằm NGOÀI try/catch. Khi echo của chính tin này về TRƯỚC (Meta
+  // vẫn gửi echo trong lúc mình còn đang ghi sổ), dòng echo đã giữ mất cặp
+  // `[channel, channelMessageId]` ⇒ lệnh này va UNIQUE và ném P2002 thẳng ra Server
+  // Action. Người trực đọc "lỗi hệ thống" rồi bấm gửi lại — trong khi tin ĐÃ tới
+  // khách. Tức lỗi làm ra đúng cái nó tưởng đang ngăn: tin gửi đôi.
   const so = ketQuaGuiToSoGhi(outcome);
   await db.inboxMessage.update({
     where: { id: tinId },
@@ -117,13 +123,31 @@ export async function sendInboxReply(input: {
       deliveryStatus: so.deliveryStatus,
       providerMessageId: so.providerMessageId,
       errorCode: so.errorCode,
-      // Ghi luôn vào `channelMessageId` để ECHO của chính tin này (Meta gửi lại
-      // tin mình vừa gửi) va vào `@@unique([channel, channelMessageId])` và bị
-      // nhận ra là trùng — spec §4.3 MS-3. Không làm thì mỗi tin gửi đi hiện hai
-      // lần trên màn hình.
-      channelMessageId: so.providerMessageId,
     },
   });
+
+  // Lệnh thứ hai: GIÀNH `channelMessageId` để echo của chính tin này va khoá chống
+  // trùng và bị nhận ra (spec §4.3 MS-3) — không làm thì mỗi tin gửi đi hiện hai lần.
+  // Nhưng nó chỉ là VIỆC DỌN, không phải kết quả gửi, nên không được làm hỏng lượt gửi:
+  //   • `updateMany` + `channelMessageId: null` — không giẫm lên id đã có (retry/đua);
+  //   • `try/catch` — echo về trước thì P2002 là chuyện BÌNH THƯỜNG, ghi log rồi thôi.
+  //     Kết quả gửi đã ghi xong ở lệnh trên, không mất gì.
+  if (so.providerMessageId) {
+    try {
+      await db.inboxMessage.updateMany({
+        where: { id: tinId, channelMessageId: null },
+        data: { channelMessageId: so.providerMessageId },
+      });
+    } catch (err) {
+      // Không ném: khách đã nhận được tin. Log để còn truy được khi màn hình hiện
+      // đôi. `errorCode` của dòng tin KHÔNG đụng tới — nó là mã của lượt GỬI.
+      console.warn(
+        `[inbox] không giành được channelMessageId cho tin ${tinId} ` +
+          "(nhiều khả năng echo đã về trước):",
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+  }
 
   if (so.daTraLoiKhach) {
     await db.inboxConversation.update({

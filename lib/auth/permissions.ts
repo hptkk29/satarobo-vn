@@ -387,7 +387,24 @@ export type Action =
   // đúng cái bẫy đã suýt khoá cửa /tin-nhan của cả GV lẫn QLCS trên prod.
   | "inbox:view"
   | "inbox:reply"
-  | "inbox:assign";
+  | "inbox:assign"
+
+  // --- Tích hợp ZaloCRM (nick Zalo CÁ NHÂN, màn nhúng qua SSO) ---
+  // ⚠️ CỐ Ý KHÔNG mượn `inbox:*`. Ba thứ dễ lẫn nhau, tách rạch ròi mới đúng:
+  //   • `chat:*`    — chat NỘI BỘ giữa người CÓ TÀI KHOẢN (GV ↔ PH).
+  //   • `inbox:*`   — hộp thư đa kênh của CHÍNH repo này (Zalo OA / Messenger),
+  //                   dữ liệu nằm ở ba bảng `Inbox*`, người trực là Sale.
+  //   • `zalocrm:*` — màn của một ỨNG DỤNG NGOÀI nhúng bằng iframe + SSO, nói chuyện
+  //                   qua nick Zalo cá nhân của nhân viên. Không phải Zalo OA, không
+  //                   chung hạn mức, không chung dữ liệu, và có thể tắt/bật độc lập
+  //                   bằng cờ `ZALOCRM_ENABLED` mà hộp thư vẫn chạy.
+  // Gộp vào `inbox:view` thì không còn cách nào cho một cơ sở dùng hộp thư mà không
+  // dùng ZaloCRM — mà đó đúng là trạng thái lúc bật dần từng cơ sở.
+  //
+  // MỘT quyền cho cả "mở màn" lẫn "nhắn khách": bên trong iframe là app ngoài, repo
+  // này không chặn được từng thao tác, nên tách `view`/`reply` sẽ là quyền GIẢ —
+  // hứa một lớp gác không tồn tại.
+  | "zalocrm:use";
 
 // =============================================================================
 // MATRIX — Mỗi action liệt kê rõ những role được phép.
@@ -871,6 +888,26 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // một quyền vì cả hai đều là "phân loại việc", và tách ra thì màn hàng đợi mồ
   // côi có người mở được mà không xử lý được gì.
   "inbox:assign": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
+
+  // --- Tích hợp ZaloCRM (S6) ---
+  // Cùng bộ vai với hộp thư: Sale là người trực, Quản lý cơ sở theo dõi + trực thay.
+  // Vai thứ tư là Giáo vụ (`CENTER_CLASS_MANAGER`) — KHÔNG BIỂU DIỄN ĐƯỢC ở đây vì
+  // enum `Role` của Prisma chỉ có 9 giá trị và không có nó; Giáo vụ chỉ tồn tại ở
+  // RoleDef v2 (`prisma/seed-roles.ts`). Hệ quả phải nhớ: ở local/dev/CI (chạy v1)
+  // Giáo vụ KHÔNG vào được /zalo-crm dù prod (chạy v2) vào được — KHÔNG phải bug,
+  // đừng "vá" bằng cách mượn một vai v1 khác.
+  //
+  // MARKETING và HO_SALE cố ý KHÔNG có: Marketing chạy chiến dịch chứ không trực
+  // khách, còn Sale Hội sở bị loại theo chốt 9.7 (nick Zalo cá nhân thuộc về người
+  // trực TẠI cơ sở, Hội sở không dùng).
+  //
+  // Khai ở đây KHÔNG phải vì bảng này là nguồn sự thật (nguồn là `RoleDef` +
+  // `RolePermission` trong DB, v2 đang enforce trên prod) mà vì hai lý do kỹ thuật:
+  // `ALL_ACTIONS = Object.keys(PERMISSIONS)` nên bỏ qua đây là local/dev/CI luôn
+  // deny — không ai test được tính năng; và `buildActor()` LỌC grant theo đúng tập
+  // đó nên mọi `UserPermissionGrant` mang key này bị vứt IM LẶNG, không lỗi.
+  "zalocrm:use": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
+
   // --- Trục gọi điện + ghi âm (OmiCall) ---
   // Ma trận nguồn: `docs/ba-crm-hien-trang-va-misa.md:1380`. Vai v1 tương ứng:
   // SA→SUPER_ADMIN · QLCS→CENTER_MANAGER · Sale→SALES_CSM.

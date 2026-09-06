@@ -16,6 +16,12 @@ import {
 import { PAGE_GATES } from "@/lib/auth/page-gates";
 import { resolveActor } from "@/lib/auth/actor";
 import { tinhTrangKenh } from "@/lib/integrations/registry";
+// Whitelist kênh gom về MỘT nguồn cùng với nhãn hiện trên nút lọc. Trước đây mảng này
+// nằm ngay dưới đây và nhãn nằm trong `hop-thu-workspace.tsx`: hai đầu của cùng một
+// danh sách ở hai file, không kiểu nào buộc chúng khớp. Đây là MẢNG nên typecheck
+// KHÔNG bắt hộ — thiếu một giá trị enum thì `?kenh=…` rơi về `null`, Sale bấm lọc mà
+// không lọc được và không có lỗi nào hiện ra. Lưới thay thế: ca [ZC-DB-04].
+import { KENH_HOP_LE } from "@/lib/integrations/zalocrm/kenh";
 import { listInboxConversations, getInboxThread, demHopThu } from "@/lib/inbox/queries";
 import type { BoLocHopThu } from "@/lib/inbox/queries";
 import { HopThuWorkspace } from "@/components/sale/hop-thu/hop-thu-workspace";
@@ -27,8 +33,6 @@ export const metadata = {
   title: "Hộp thư | Sata Robo",
   robots: { index: false, follow: false },
 };
-
-const KENH_HOP_LE: InboxChannel[] = ["ZALO_OA", "MESSENGER", "LIVECHAT", "MANUAL"];
 
 export default async function HopThuPage({
   searchParams,

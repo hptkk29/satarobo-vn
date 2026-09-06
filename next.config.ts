@@ -15,7 +15,17 @@ const CSP_REPORT_ONLY = [
   "img-src 'self' data: blob: https://cdn.satarobo.vn https://*.r2.cloudflarestorage.com https://images.unsplash.com https://img.youtube.com https://www.google-analytics.com https://www.facebook.com",
   "font-src 'self' data:",
   "connect-src 'self' https://www.google-analytics.com https://region1.google-analytics.com https://www.facebook.com",
-  "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com",
+  // S1 (tích hợp ZaloCRM 06/09/2026) — `https://zalo.satarobo.vn` là giao diện fork
+  // ZaloCRM nhúng ở màn /zalo-crm.
+  //
+  // ⚠️ Khai dòng này KHÔNG làm iframe chạy được, và bỏ nó cũng không làm iframe chết:
+  // header dưới đây đang gửi dưới tên `Content-Security-Policy-Report-Only` nên nó KHÔNG
+  // chặn gì. Thứ chặn thật là header của CHÍNH ZaloCRM (`frame-ancestors 'none'` +
+  // `X-Frame-Options: DENY`) — nới nó là việc F3 bên repo fork. Sửa ở đây là để hồ sơ
+  // đúng và để màn không chết vào ngày bật enforce (đợt S2).
+  // ⚠️ Host này cố ý KHÔNG được thêm vào `connect-src`: trình duyệt không gọi thẳng API
+  // ZaloCRM: mọi lượt gọi đi server→server qua `ZALOCRM_BASE_URL`.
+  "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://zalo.satarobo.vn",
   // EL-07 (C21) — video đào tạo nội bộ phát qua `https://*.r2.cloudflarestorage.com`
   // (đường ký, private). Host đó ĐÃ nằm trong danh sách nên GĐ2 không phải sửa dòng này.
   //
