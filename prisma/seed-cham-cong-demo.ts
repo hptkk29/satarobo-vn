@@ -312,12 +312,34 @@ async function main() {
   const cap = new Map<string, { userId: string; workDate: Date }>();
   for (const o of [...oTinh, ...luot]) cap.set(`${o.userId}|${vnYmd(o.workDate)}`, { userId: o.userId, workDate: o.workDate });
 
+  // CHẠY SONG SONG THEO LÔ. Mỗi `recomputeAttendanceDay` là ~6-8 truy vấn nối tiếp, và trên
+  // runner GitHub nói chuyện với Supabase thì gần như TOÀN BỘ thời gian là chờ mạng, không phải
+  // tính toán. Đo lượt 06/09: 306 ngày-người chạy tuần tự hết 46 phút rồi vẫn bị cắt (~9 giây
+  // mỗi phép). Từng phép độc lập nhau — khác (người, ngày) là khác dòng, không tranh chấp — nên
+  // xếp 8 phép cùng lúc là cắt thời gian chờ xuống gần 8 lần.
+  //
+  // 8 chứ không nhiều hơn: pooler của Supabase có trần kết nối, và mục tiêu ở đây là seed chứ
+  // không phải vắt kiệt DB mà người khác đang dùng.
+  const LO = 8;
+  const dsCap = [...cap.values()];
   let daTinh = 0;
   let boQua = 0;
-  for (const c of cap.values()) {
-    const r = await recomputeAttendanceDay(c.userId, c.workDate);
-    if (r.skipped === "LOCKED") boQua += 1;
-    else daTinh += 1;
+  const t0 = Date.now();
+  for (let i = 0; i < dsCap.length; i += LO) {
+    const ketQua = await Promise.all(
+      dsCap.slice(i, i + LO).map((c) => recomputeAttendanceDay(c.userId, c.workDate)),
+    );
+    for (const r of ketQua) {
+      if (r.skipped === "LOCKED") boQua += 1;
+      else daTinh += 1;
+    }
+    // In tiến độ: lượt trước chạy 46 phút mà log im lặng hoàn toàn, nên không ai biết nó đang
+    // ở đâu hay có treo không cho tới lúc job bị cắt.
+    const xong = Math.min(i + LO, dsCap.length);
+    if (xong % 80 === 0 || xong === dsCap.length) {
+      const giay = Math.round((Date.now() - t0) / 1000);
+      console.log(`[demo]   … ${xong}/${dsCap.length} ngày-người · ${giay}s`);
+    }
   }
   console.log(`[demo] tính công: ${daTinh} ngày-người${boQua ? ` · ${boQua} bỏ qua vì kỳ đã chốt` : ""}`);
 
