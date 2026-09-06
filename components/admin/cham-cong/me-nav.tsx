@@ -27,7 +27,11 @@ export function MeNav({ active, month }: { active: MeNavKey; month?: string | nu
 
   return (
     <div className="mb-4 flex items-end justify-between gap-3 border-b border-border">
-      <nav aria-label="Điều hướng cá nhân" className="-mb-px flex gap-1 overflow-x-auto">
+      {/* `min-w-0`: ô flex mặc định `min-width:auto` nên hàng tab từ chối co xuống dưới bề rộng
+          nội dung, `overflow-x-auto` không kích hoạt, và nút "Chấm công" (`shrink-0`) bị đẩy ra
+          ngoài — ở 375px nó ĐÈ LÊN tab "Đơn của tôi" (đo trên test 06/09). Cùng một bệnh với
+          lưới hai cột ở màn Ghi chú lịch. */}
+      <nav aria-label="Điều hướng cá nhân" className="-mb-px flex min-w-0 flex-1 gap-1 overflow-x-auto">
         {tabs.map((t) => {
           const isActive = t.key === active;
           return (
