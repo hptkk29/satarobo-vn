@@ -193,7 +193,11 @@ export const getParentNotificationFeed = cache(async (
   // không gán cứng LICH_HOC). audience=STUDENT (gửi riêng 1 con) → gắn badge tên
   // con để phụ huynh nhiều con biết thông báo thuộc con nào (parity scope v1).
   const childNameById = new Map(children.map((c) => [c.id, c.name]));
-  for (const n of notifs.slice(0, 10)) {
+  // 06/09 — THÔI cắt còn 10. Nguồn `getParentNotifications` đã `take: 100`, mà bảng tin
+  // v2 lại slice xuống 10 và không có phân trang: thông báo trung tâm gửi tuần trước bị
+  // vài tin hệ thống đẩy văng khỏi cổng phụ huynh, không đường nào xem lại. Bản v1 hiện
+  // đủ 100.
+  for (const n of notifs) {
     items.push({
       id: `nt-${n.id}`,
       category: "THONG_BAO",

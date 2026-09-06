@@ -109,6 +109,27 @@ export function HocPhiPageV2({
           <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
             Khoản cần thanh toán
           </h2>
+          {/* 06/09 — ghi danh CHƯA CHỐT HỌC PHÍ hiện thành một dòng nói rõ, thay vì bị
+              lọc mất (trước đây trang báo "Đã thanh toán đủ" ngay trên phiếu thu thật)
+              hoặc in "0 đ" (đọc như khoá miễn phí). */}
+          {data.rows
+            .filter((r) => r.chuaChotGia)
+            .map((r) => (
+              <div
+                key={r.enrollmentId}
+                className="rounded-2xl border border-dashed border-caution bg-caution/5 p-4"
+              >
+                <p className="text-sm font-bold text-foreground">
+                  {r.courseName ?? "Khoá học"}
+                  {r.className ? ` · ${r.className}` : ""}
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Trung tâm chưa chốt học phí cho khoá này. Vui lòng liên hệ để được báo
+                  giá — số tiền bên dưới chưa bao gồm khoá này.
+                </p>
+              </div>
+            ))}
+
           {data.outstanding > 0 ? (
             <div className="space-y-3">
               {data.rows

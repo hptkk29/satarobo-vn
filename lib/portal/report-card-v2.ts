@@ -164,13 +164,21 @@ export async function getStudentReportCard(studentId: string): Promise<ReportCar
     (a) => a.makeupStatus === "MADE_UP" || a.status === "PRESENT" || a.status === "LATE",
   ).length;
 
+  // ⚠️ MẪU SỐ của chuyên cần là SỐ BUỔI ĐÃ DIỄN RA, không phải số DÒNG điểm danh
+  // (06/09). Hai số đó khác nhau đúng ở những buổi giáo viên chưa chấm: chia cho số
+  // dòng thì buổi chưa chấm biến mất khỏi mẫu số và % vọt lên, lệch hẳn với thẻ ở
+  // trang chủ phụ huynh và với site giáo viên — cùng một đứa trẻ, hai con số.
+  // Đây đúng là phép chia đã được thống nhất ở lib/attendance/summary.ts hôm 04/09.
+  // Truy vấn `sessions` phía trên đã loại buổi CANCELLED rồi.
+  const daDienRa = sessions.filter((s) => s.date < now).length;
+
   return {
     ...base,
     className: cls.name,
     courseName: cls.course?.name ?? null,
     teacher: cls.teacher?.name ?? null,
     total: sessions.length,
-    done: sessions.filter((s) => s.date < now).length,
-    rate: attendance.length > 0 ? Math.round((present / attendance.length) * 100) : 0,
+    done: daDienRa,
+    rate: daDienRa > 0 ? Math.round((present / daDienRa) * 100) : 0,
   };
 }

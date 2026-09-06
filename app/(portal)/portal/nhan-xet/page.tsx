@@ -51,7 +51,10 @@ export default async function NhanXetPage() {
 
   // Portal v2 — trang Nhận xét giống SataUI (master-detail).
   if (isPortalV2Enabled()) {
-    const items = await getStudentFeedback(studentId);
+    // 06/09 — truyền LIMIT rõ ràng. Mặc định của hàm là 20 (đủ cho 3 thẻ ở bảng tin),
+    // nhưng trang Nhận xét là nơi phụ huynh xem lại cả khoá: bản v1 nạp 100, bản v2 lặng
+    // lẽ cắt còn 20 nên nhận xét các buổi đầu khoá biến mất mà không có nút "xem thêm".
+    const items = await getStudentFeedback(studentId, 100);
     return (
       <NhanXetPageV2
         kids={ctx.children.map((c) => ({ id: c.id, name: c.name }))}

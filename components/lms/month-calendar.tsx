@@ -1,4 +1,5 @@
 import { monthGrid, WEEKDAY_LABELS } from "@/lib/lms/calendar";
+import { vnYmd } from "@/lib/time/vn";
 import { DayCellEvents } from "@/components/lms/day-cell-events";
 
 // Kiểu chuyển sang `lib/lms/cal-event.ts` — xuất lại ở đây để 5 nơi đang import từ
@@ -26,10 +27,9 @@ export function MonthCalendar({
     if (list) list.push(e);
     else byDay.set(e.iso, [e]);
   }
-  const todayIso = (() => {
-    const n = new Date();
-    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
-  })();
+  // 06/09 — "hôm nay" theo LỊCH VN. Đây là Server Component và Vercel chạy UTC, nên
+  // trong khoảng 00:00–07:00 giờ VN ô được tô cam là ngày HÔM QUA.
+  const todayIso = vnYmd(new Date());
 
   return (
     <div>

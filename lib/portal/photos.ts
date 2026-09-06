@@ -55,7 +55,10 @@ export async function getStudentPhotos(studentId: string): Promise<StudentPhotos
         { isClassWide: true }, // ảnh chung cả lớp
       ],
     },
-    orderBy: { takenAt: "asc" },
+    // 06/09 — lấy ảnh MỚI NHẤT khi vượt trần. `asc` + `take: 200` cắt mất đúng phần
+    // phụ huynh quan tâm: lớp qua 200 ảnh thì ảnh của những buổi gần đây biến mất, chỉ
+    // còn ảnh đầu khoá. Bản v1 vốn lấy mới-nhất-trước.
+    orderBy: [{ takenAt: "desc" }, { createdAt: "desc" }],
     select: { id: true, caption: true, fileUrl: true, classSessionId: true, takenAt: true },
     take: 200,
   });

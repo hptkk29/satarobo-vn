@@ -125,19 +125,21 @@ export async function getStudentSessionsView(studentId: string): Promise<Student
       where: { studentId, status: "COMPLETED" },
       select: { missedSessionId: true },
     }),
+    // ⚠️ KHÔNG lọc `lessonId: { not: null }` (06/09). Đo trên DB làm việc: 176/176 bài
+    // tập có `lessonId = NULL` — đề giáo viên tự soạn ở Kho bài tập không có ô chọn bài
+    // giáo trình, nên bài vừa giao xong không bao giờ hiện ở khối "Bài tập của buổi".
     db.assignment.findMany({
-      where: {
-        classId: { in: classIds },
-        lessonId: { not: null },
-        status: { in: ["PUBLISHED", "CLOSED"] },
-      },
+      where: { classId: { in: classIds }, status: { in: ["PUBLISHED", "CLOSED"] } },
       select: {
         id: true,
         lessonId: true,
+        // Đường nối CHÍNH XÁC nhất: giáo viên chọn buổi lúc giao (site GV 18/08).
+        classSessionId: true,
         title: true,
         dueAt: true,
         submissions: { where: { studentId }, select: { status: true }, take: 1 },
       },
+      orderBy: { assignedAt: "asc" },
     }),
     getStudentAttendanceSummaries(studentId),
   ]);
@@ -148,11 +150,17 @@ export async function getStudentSessionsView(studentId: string): Promise<Student
   const lopCua = new Map(lopDangHoc.map((c) => [c.id, c]));
   const nhieuLop = classIds.length > 1;
 
-  // Bài tập tra theo bài học của buổi. Nhiều buổi cùng một bài (buổi bù) thì cùng trỏ về
-  // một bài tập — đúng: đó vẫn là bài tập của bài đó.
-  const baiTapCua = new Map<string, (typeof assignments)[number]>();
+  // Hai đường nối bài ↔ buổi. `classSessionId` là đích danh nên thắng; `lessonId` là
+  // đường phụ (nhiều buổi cùng một bài — buổi bù — thì cùng trỏ về một bài tập, đúng).
+  type BaiRow = (typeof assignments)[number];
+  const baiTheoBuoi = new Map<string, BaiRow>();
+  const baiTheoLesson = new Map<string, BaiRow>();
   for (const a of assignments) {
-    if (a.lessonId && !baiTapCua.has(a.lessonId)) baiTapCua.set(a.lessonId, a);
+    if (a.classSessionId) {
+      if (!baiTheoBuoi.has(a.classSessionId)) baiTheoBuoi.set(a.classSessionId, a);
+    } else if (a.lessonId && !baiTheoLesson.has(a.lessonId)) {
+      baiTheoLesson.set(a.lessonId, a);
+    }
   }
 
   const sessions: StudentSessionItem[] = buoiList.map((b) => {
@@ -170,7 +178,8 @@ export async function getStudentSessionsView(studentId: string): Promise<Student
     // "PRESENT" cho ca này và làm số "đã học" nói dối.
     else attendance = "UNMARKED";
 
-    const a = ct?.lessonId ? baiTapCua.get(ct.lessonId) : undefined;
+    const a =
+      baiTheoBuoi.get(b.id) ?? (ct?.lessonId ? baiTheoLesson.get(ct.lessonId) : undefined);
     const cls = lopCua.get(b.classId);
 
     return {

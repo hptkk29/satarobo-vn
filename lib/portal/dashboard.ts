@@ -2,7 +2,11 @@ import "server-only";
 import { db } from "@/lib/db";
 import { GHI_DANH_DANG_HOC } from "@/lib/portal/trang-thai-ghi-danh";
 import { getChildren } from "@/lib/portal/session";
-import { getStudentAttendanceSummaries } from "@/lib/portal/learning";
+import {
+  getStudentAttendanceSummaries,
+  getStudentClasses,
+} from "@/lib/portal/learning";
+import { assignmentWindow } from "@/lib/lms/assignment-window";
 import {
   attendanceRatePercent,
   courseProgressPercent,
@@ -113,12 +117,18 @@ export type StudentDashboard = {
  * x/y đọc HomeworkAssignment theo studentId (read-only).
  */
 export async function getStudentDashboard(studentId: string): Promise<StudentDashboard> {
-  const [summaries, homework] = await Promise.all([
+  const [summaries, homework, baiLop] = await Promise.all([
     getStudentAttendanceSummaries(studentId),
     db.homeworkAssignment.findMany({
       where: { studentId },
       select: { status: true },
     }),
+    // ⚠️ HAI BẢNG KHÁC NHAU, phải cộng cả hai (06/09).
+    // `HomeworkAssignment` là BÀI KIỂM TRA (`examId`) giao về nhà theo buổi.
+    // `Assignment` là bài tập giáo viên giao cho LỚP — thứ mà /portal/bai-tap liệt kê.
+    // Đo trên DB làm việc: 0 dòng HomeworkAssignment và 176 Assignment ⇒ thẻ "Bài tập"
+    // ở trang chủ luôn báo 0/0 trong khi con có bài phải nộp.
+    demBaiTapLop(studentId),
   ]);
 
   const attendance = summaries.reduce<AttendanceSummary>(
@@ -133,15 +143,15 @@ export async function getStudentDashboard(studentId: string): Promise<StudentDas
     { ...ZERO_SUMMARY },
   );
 
-  const homeworkDone = homework.filter(
-    (h) => h.status === "SUBMITTED" || h.status === "GRADED",
-  ).length;
+  const homeworkDone =
+    homework.filter((h) => h.status === "SUBMITTED" || h.status === "GRADED").length +
+    baiLop.daNop;
 
   return {
     attendance,
     classCount: summaries.length,
     homeworkDone,
-    homeworkTotal: homework.length,
+    homeworkTotal: homework.length + baiLop.tong,
   };
 }
 
@@ -185,12 +195,13 @@ export async function getParentChildrenOverview(
 
   return Promise.all(
     children.map(async (c) => {
-      const [summaries, homework, enrollments, activeEnr, nextSession] = await Promise.all([
+      const [summaries, homework, baiLop, enrollments, activeEnr, nextSession] = await Promise.all([
         getStudentAttendanceSummaries(c.id),
         db.homeworkAssignment.findMany({
           where: { studentId: c.id },
           select: { status: true },
         }),
+        demBaiTapLop(c.id),
         db.enrollment.findMany({
           where: { studentId: c.id, deletedAt: null }, // FIX-C3 — chống "nợ ma" từ ghi danh xóa mềm
           select: {
@@ -233,9 +244,10 @@ export async function getParentChildrenOverview(
         { ...ZERO_SUMMARY },
       );
 
-      const pendingHomework = homework.filter(
-        (h) => h.status !== "SUBMITTED" && h.status !== "GRADED",
-      ).length;
+      // Cộng CẢ HAI nguồn — xem chú thích ở `getStudentDashboard`.
+      const pendingHomework =
+        homework.filter((h) => h.status !== "SUBMITTED" && h.status !== "GRADED").length +
+        baiLop.chuaNop;
 
       const debt = enrollments.reduce((sum, e) => {
         const finalPrice = e.finalPrice ?? e.tuition ?? null;
@@ -263,4 +275,39 @@ export async function getParentChildrenOverview(
       };
     }),
   );
+}
+
+/**
+ * Bài tập giáo viên giao cho LỚP mà con đang theo — đếm theo đúng luật cửa nộp của
+ * `lib/lms/assignment-window.ts`, cùng luật mà cổng nộp bài và site giáo viên dùng.
+ *
+ * Bài đã ĐÓNG CỬA mà chưa nộp thì không đếm là "chờ nộp" nữa: nhắc phụ huynh làm một
+ * việc họ không còn làm được là nhắc sai.
+ */
+async function demBaiTapLop(
+  studentId: string,
+): Promise<{ tong: number; daNop: number; chuaNop: number }> {
+  const lop = await getStudentClasses(studentId);
+  if (lop.length === 0) return { tong: 0, daNop: 0, chuaNop: 0 };
+  const rows = await db.assignment.findMany({
+    where: {
+      classId: { in: lop.map((c) => c.id) },
+      status: { in: ["PUBLISHED", "CLOSED"] },
+    },
+    select: {
+      status: true,
+      dueAt: true,
+      lateUntil: true,
+      submissions: { where: { studentId }, select: { status: true }, take: 1 },
+    },
+  });
+  const now = new Date();
+  let daNop = 0;
+  let chuaNop = 0;
+  for (const a of rows) {
+    const st = a.submissions[0]?.status ?? "";
+    if (st === "SUBMITTED" || st === "GRADED") daNop++;
+    else if (assignmentWindow(a, now).acceptsSubmission) chuaNop++;
+  }
+  return { tong: rows.length, daNop, chuaNop };
 }

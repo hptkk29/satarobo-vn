@@ -184,6 +184,16 @@ export function YeuCauPageV2({
                         {m.centerName ? ` · ${m.centerName}` : ""} ·{" "}
                         {dmy(m.missedDate)}
                       </p>
+                      {/* 06/09 — NGÀY BÙ. Trước đây portal chỉ hiện trạng thái "Đã xếp
+                          lịch" mà không nói bù ngày nào, lớp nào, nên phụ huynh vẫn
+                          phải gọi điện hỏi trung tâm. `MakeupNeed.makeupSessionId` vốn
+                          đã có sẵn dữ liệu, chỉ là chưa ai đọc. */}
+                      {m.buoiBu && (
+                        <p className="mt-1 inline-flex flex-wrap items-center gap-1.5 rounded-lg bg-success/10 px-2 py-1 text-xs font-semibold text-success">
+                          Học bù: {m.buoiBu.nhanNgay}
+                          {m.buoiBu.className ? ` · Lớp ${m.buoiBu.className}` : ""}
+                        </p>
+                      )}
                     </div>
                     <Badge status={m.status} />
                   </div>
