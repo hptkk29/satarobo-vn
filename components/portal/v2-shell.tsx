@@ -58,6 +58,11 @@ const parentNav: NavItem[] = [
   { label: "Các con", href: "/portal/ho-so-con", icon: Users },
   { label: "Lịch học", href: "/portal/lich", icon: CalendarDays },
   { label: "Nhận xét", href: "/portal/nhan-xet", icon: MessageSquareText },
+  // 06/09 — BỔ SUNG. Sidebar v2 (bản prod đang chạy) không có mục này, nên phụ huynh
+  // KHÔNG có đường nào vào `/portal/bai-tap` để xem bài giáo viên giao: trang tồn tại
+  // và chạy đúng, chỉ là không ai tới được. Lối tắt duy nhất trên trang chủ lại đếm
+  // bảng `HomeworkAssignment` (bài thi giao theo giáo án), không phải `Assignment`.
+  { label: "Bài tập", href: "/portal/bai-tap", icon: ClipboardList },
   { label: "Hình ảnh lớp", href: "/portal/hinh-anh", icon: ImageIcon },
   { label: "Học bạ", href: "/portal/hoc-ba", icon: Award },
   {

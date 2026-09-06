@@ -359,10 +359,40 @@ export async function recordPaymentAction(input: unknown) {
   // Lấy order để (a) chống IDOR liên cơ sở, (b) suy centerId cho Payment, (c) auto-advance lead.
   const order = await sdb.order.findUnique({
     where: { id: data.orderId },
-    select: { id: true, centerId: true, leadId: true },
+    select: { id: true, centerId: true, leadId: true, studentId: true },
   });
   if (!order || !passesScope("Order", order, actor)) {
     return { ok: false as const, error: "Không tìm thấy đơn hàng" };
+  }
+
+  // ⚠️ CỔNG SERVER cho ô "Enrollment ID" (06/09/2026).
+  //
+  // Ô đó là TEXT TỰ DO trên form, và `recordPayment` ghi thẳng giá trị nhận được vào
+  // `Payment.enrollmentId` — không nơi nào kiểm ghi danh ấy có thuộc đúng học viên của
+  // đơn này không. Gõ nhầm/dán nhầm một id là khoản thu về sổ của bé khác: công nợ bé A
+  // tụt xuống trên cổng phụ huynh dù nhà A chưa đóng đồng nào, còn nhà B đóng rồi vẫn
+  // thấy nợ. Tiền thật, hai gia đình, không có dấu vết nào ở giao diện.
+  //
+  // Ba điều kiện, cái nào hỏng cũng từ chối: ghi danh có thật · nằm trong tầm nhìn cơ sở
+  // của người ghi · thuộc ĐÚNG học viên của đơn hàng.
+  const enrollmentId = trimOrNull(data.enrollmentId);
+  if (enrollmentId) {
+    // Qua `sdb` (không phải db trần): ghi danh ngoài tầm nhìn cơ sở trả null ⇒ TỪ CHỐI.
+    // Ở đây "không thấy" phải dẫn tới CHẶN, nên hướng fail của scope là an toàn — khác
+    // hẳn cổng `lookupMethodCenterByCode` ngay dưới, nơi scope làm cổng mở toang.
+    const enr = await sdb.enrollment.findFirst({
+      where: { id: enrollmentId },
+      select: { id: true, centerId: true, studentId: true, deletedAt: true },
+    });
+    if (!enr || enr.deletedAt || !passesScope("Enrollment", enr, actor)) {
+      return { ok: false as const, error: "Không tìm thấy ghi danh tương ứng" };
+    }
+    if (order.studentId && enr.studentId !== order.studentId) {
+      return {
+        ok: false as const,
+        error: "Ghi danh này thuộc học viên khác — khoản thu sẽ vào sai sổ. Kiểm tra lại mã ghi danh.",
+      };
+    }
   }
 
   // ⚠️ CỔNG SERVER cho luật "cơ sở nào dùng phương thức của cơ sở đó" ở màn ghi nhận
@@ -385,7 +415,7 @@ export async function recordPaymentAction(input: unknown) {
 
   const res = await recordPayment({
     orderId: data.orderId,
-    enrollmentId: trimOrNull(data.enrollmentId),
+    enrollmentId,
     amount: data.amount,
     method: data.method,
     paidDate: new Date(data.paidDate),

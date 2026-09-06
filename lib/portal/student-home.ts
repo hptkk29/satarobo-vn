@@ -12,7 +12,15 @@ import { getStudentExams, getStudentAssignmentResults } from "@/lib/portal/learn
 
 const DONE_EXAM = new Set(["SUBMITTED", "GRADED"]);
 
-export type JourneyDot = { idx: number; status: "done" | "today" | "makeup" | "absent" | "future"; title: string | null };
+export type JourneyDot = {
+  idx: number;
+  /** Khoá React — số buổi TRÙNG NHAU khi con học 2 lớp, nên không dùng `idx` làm khoá. */
+  id: string;
+  status: "done" | "today" | "makeup" | "absent" | "future" | "chua-cham" | "da-huy";
+  title: string | null;
+  /** Lớp nào — chỉ khác null khi con học nhiều lớp. */
+  className: string | null;
+};
 export type StudentTodo = { id: string; kind: "BÀI TẬP" | "KIỂM TRA"; title: string; meta: string; overdue: boolean; href: string };
 export type SkillBar = { label: string; pct: number };
 export type ResultRow = { title: string; score: number; total: number };
@@ -95,14 +103,20 @@ export async function getStudentHome(studentId: string): Promise<StudentHome> {
   const progressPct = total > 0 ? Math.round((done / total) * 100) : 0;
 
   // Hành trình: trạng thái từng buổi.
+  //
+  // ⚠️ Thứ tự nhánh có ý nghĩa. Buổi ĐÃ HUỶ phải xét TRƯỚC `s.today`: buổi huỷ rơi trúng
+  // hôm nay mà để nhánh "today" thắng thì portal khẳng định "hôm nay có buổi" ở đúng lớp
+  // vừa báo nghỉ.
   const journey: JourneyDot[] = view.sessions.map((s) => {
     let status: JourneyDot["status"];
-    if (s.today) status = "today";
+    if (s.attendance === "CANCELLED") status = "da-huy";
+    else if (s.attendance === "UNMARKED") status = "chua-cham";
+    else if (s.today) status = "today";
     else if (s.attendance === "MAKEUP") status = "makeup";
     else if (s.attendance === "ABSENT" || s.attendance === "EXCUSED") status = "absent";
     else if (s.past) status = "done";
     else status = "future";
-    return { idx: s.order, status, title: s.title };
+    return { idx: s.order, id: s.id, status, title: s.title, className: s.className };
   });
 
   // Việc cần làm: bài tập chưa nộp + bài kiểm tra chưa làm.
@@ -168,7 +182,10 @@ export async function getStudentHome(studentId: string): Promise<StudentHome> {
     ? Math.round((graded.reduce((s, r) => s + ((r.score as number) / r.totalPoints) * 10, 0) / graded.length) * 10) / 10
     : null;
 
-  const next = view.sessions.find((s) => !s.past);
+  // Buổi tiếp theo: KHÔNG được chọn buổi đã huỷ. `!s.past` đúng với mọi buổi huỷ (kể cả
+  // buổi huỷ trong quá khứ — `daDienRa` của buổi huỷ luôn false), nên bản cũ trỏ phụ
+  // huynh tới một NGÀY ĐÃ QUA, chọi với thẻ "Lớp học tiếp theo" ngay bên dưới.
+  const next = view.sessions.find((s) => !s.past && s.attendance !== "CANCELLED");
   const nextIsToday = next?.today ?? false;
   const nextLabel = next ? (next.today ? "Hôm nay" : dmy(next.date)) : null;
 
