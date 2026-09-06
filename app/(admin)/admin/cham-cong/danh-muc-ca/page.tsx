@@ -1,32 +1,78 @@
-// app/(admin)/admin/cham-cong/danh-muc-ca/page.tsx — L3: danh mục mã ca (PHẦN 6b — tự vận hành).
-import Link from "next/link";
+// app/(admin)/admin/cham-cong/danh-muc-ca/page.tsx — MÃ CA: bảng chữ cái của cả module chấm công.
+//
+// Vì sao màn này tồn tại: giờ ca, số công, nơi làm, chế độ chấm là DỮ LIỆU người vận hành sửa
+// được — không phải hằng số trong mã. Mọi ô trên lưới phân ca, mọi dòng import từ Sheet đều tra
+// về đây; mã lạ ở import bị chặn cũng chỉ vì chưa khai ở màn này.
+//
+// Điều dễ vỡ:
+//  · Quyền có HAI tầng: mã "Dùng chung" (centerId = null) chỉ người có config tại HỘI SỞ mới sửa
+//    được, mã riêng cơ sở thì cần config tại chính cơ sở đó. Bảng vẫn HIỆN mã dùng chung cho mọi
+//    người (ShiftTemplate ∈ NULL_IS_GLOBAL_MODELS) nên phải tự ẩn nút sửa, đừng để bấm rồi mới báo.
+//  · Sửa mã ca KHÔNG hồi tố: ô lịch đã xếp giữ segments cũ (snapshot).
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { HO_CENTER_ID, loadCenterMap } from "@/lib/cham-cong/home-center";
+import { ASK_WHO, loadModuleScope } from "@/lib/cham-cong/module-scope";
 import type { ShiftSegment } from "@/lib/cham-cong/catalog";
+import { PageHeader } from "@/components/admin/ui/page-header";
+import { PageHelp } from "@/components/admin/ui/page-help";
+import { NoPermission } from "@/components/admin/ui/states";
+import { ModuleNav } from "@/components/admin/cham-cong/module-nav";
+import { ConfigTabs } from "@/components/admin/cham-cong/config-tabs";
 import { TemplateTable, type TemplateRow } from "./_components/template-table";
 
 export const metadata = { title: "Danh mục mã ca | Admin", robots: { index: false } };
 export const dynamic = "force-dynamic";
 
-export default async function DanhMucCaPage() {
+export default async function DanhMucCaPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ ky?: string; coSo?: string }>;
+}) {
   const session = await auth();
   if (!session?.user) redirect("/login?callbackUrl=%2Fcham-cong%2Fdanh-muc-ca");
-  const map = await loadCenterMap();
-  const canGlobal = await checkPermission("hr_attendance:config", { centerId: HO_CENTER_ID });
-  const centerIds = Object.values(map.byCode).map((c) => c.centerId);
-  let anyCenter = canGlobal;
-  for (const id of centerIds) if (!anyCenter && (await checkPermission("hr_attendance:config", { centerId: id }))) anyCenter = true;
-  if (!anyCenter) redirect("/cham-cong");
+  const sp = await searchParams;
+  // Màn này KHÔNG lọc theo khối — `ky`/`coSo` chỉ đi ngang qua để tab giữ ngữ cảnh người dùng.
+  const ctx = { ky: sp.ky ?? null, coSo: sp.coSo ?? null };
+  const scope = await loadModuleScope(session.user.id);
+  const canGlobal = scope.has("hr_attendance:config", HO_CENTER_ID);
 
-  const actor = await resolveActor(session.user.id);
-  const sdb = scopedDb(actor);
+  const head = (
+    <>
+      <PageHeader
+        title="Mã ca"
+        subtitle="Mỗi mã là một kiểu ngày làm: giờ, số công, nơi làm, có phải quét QR không."
+      />
+      <ModuleNav active="cauhinh" scope={scope} ctx={ctx} />
+    </>
+  );
+
+  // Vào được nếu có config ở Hội sở HOẶC ở ít nhất một cơ sở. Không quyền thì nói thiếu quyền gì
+  // và hỏi ai — không đá về màn khác (người dùng không hiểu vì sao mình bị đẩy đi).
+  if (!scope.any("hr_attendance:config")) {
+    return (
+      <div className="max-w-6xl">
+        {head}
+        <NoPermission
+          permission="hr_attendance:config"
+          what="danh mục mã ca"
+          askWho={ASK_WHO["hr_attendance:config"]}
+        />
+      </div>
+    );
+  }
+
+  const map = await loadCenterMap();
+  const sdb = scopedDb(await resolveActor(session.user.id));
   const [templates, centers] = await Promise.all([
     sdb.shiftTemplate.findMany({ orderBy: [{ displayOrder: "asc" }, { code: "asc" }] }),
-    sdb.center.findMany({ where: { isActive: true, code: { in: Object.keys(map.byCode) } }, select: { id: true, code: true, name: true }, orderBy: { displayOrder: "asc" } }),
+    sdb.center.findMany({
+      where: { isActive: true, code: { in: Object.keys(map.byCode) } },
+      select: { id: true, code: true, name: true },
+      orderBy: { displayOrder: "asc" },
+    }),
   ]);
   const centerName = new Map(centers.map((c) => [c.id, c.name]));
   const rows: TemplateRow[] = templates.map((t) => ({
@@ -34,7 +80,12 @@ export default async function DanhMucCaPage() {
     code: t.code,
     name: t.name,
     kind: t.kind,
-    segments: ((t.segments as ShiftSegment[] | null) ?? []).map((s) => ({ start: s.start, end: s.end, kind: s.kind, place: s.place })),
+    segments: ((t.segments as ShiftSegment[] | null) ?? []).map((s) => ({
+      start: s.start,
+      end: s.end,
+      kind: s.kind,
+      place: s.place,
+    })),
     defaultPlace: t.defaultPlace,
     attendanceMode: t.attendanceMode,
     dayCredit: t.dayCredit,
@@ -48,16 +99,29 @@ export default async function DanhMucCaPage() {
   }));
 
   return (
-    <div className="mx-auto max-w-6xl p-6">
-      <div className="mb-6">
-        <Link href="/cham-cong" className="text-sm text-muted-foreground hover:underline">← Chấm công</Link>
-        <h1 className="mt-1 text-2xl font-bold text-foreground">Danh mục mã ca</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Giờ ca, số công, nơi làm, chế độ chấm là dữ liệu — sửa ở đây, không cần dev. Ca đã xếp giữ giờ cũ (snapshot); ô xếp sau khi sửa mới dùng giờ mới.
-          Mọi mã làm việc = 1 công/ngày (K-01 theo Sheet); X/P = 0.
+    <div className="max-w-6xl">
+      {head}
+      <ConfigTabs active="danh-muc-ca" scope={scope} ctx={ctx} />
+      <PageHelp guideSlug="08-nhan-su-giao-vien">
+        <p>
+          Mỗi mã làm việc = 1 công/ngày theo Sheet (K-01); mã nghỉ (X, P) = 0 công. Ca gãy khai
+          nhiều đoạn; nghỉ giữa giờ có tính công thì kẹp một đoạn &ldquo;nghỉ giữa giờ&rdquo; giữa
+          hai đoạn làm việc.
         </p>
-      </div>
-      <TemplateTable rows={rows} centers={centers.map((c) => ({ id: c.id, code: c.code ?? "", name: c.name }))} canGlobal={canGlobal} />
+        <p className="mt-2">
+          Sửa một mã KHÔNG làm đổi lịch đã xếp: ô cũ giữ giờ cũ, chỉ ô xếp sau khi sửa mới dùng giờ
+          mới. Muốn đổi giờ cho cả tháng đang chạy thì tạo mã mới rồi xếp lại, đừng sửa mã cũ.
+        </p>
+        <p className="mt-2">
+          Mã &ldquo;Dùng chung&rdquo; áp cho mọi cơ sở nên chỉ Hội sở sửa được. Mã riêng cơ sở chỉ
+          hiện với người của cơ sở đó.
+        </p>
+      </PageHelp>
+      <TemplateTable
+        rows={rows}
+        centers={centers.map((c) => ({ id: c.id, code: c.code ?? "", name: c.name }))}
+        canGlobal={canGlobal}
+      />
     </div>
   );
 }

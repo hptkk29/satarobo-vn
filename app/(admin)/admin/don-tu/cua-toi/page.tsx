@@ -1,22 +1,45 @@
-// app/(admin)/admin/don-tu/cua-toi/page.tsx — L5: ĐƠN CỦA TÔI trên site admin (tư vấn, giáo vụ,
-// kế toán, người Hội sở…). Cùng form với site GV (`components/cham-cong/request-form.tsx`).
-import Link from "next/link";
+// app/(admin)/admin/don-tu/cua-toi/page.tsx — ĐƠN CỦA TÔI trên site admin (tư vấn, giáo vụ, kế
+// toán, người Hội sở…). Cùng FORM với site giáo viên (`components/cham-cong/request-form.tsx`).
+//
+// Vì sao màn này tồn tại: đơn từ là việc của CHÍNH người đăng nhập — nộp ở đây, xem ở đây, và biết
+// đơn đang chờ ai. Nó nằm ngoài segment `cham-cong/` nên KHÔNG dùng chung layout với 11 màn kia;
+// hàng tab cụm "Của tôi" phải tự render (MeNav).
+//
+// DỄ VỠ:
+// 1. ĐƯỜNG DẪN LÀ HREF TRONG DB — thông báo `request.decided` trỏ về đây
+//    (`lib/cham-cong/requests.ts:245`). Đổi route là làm chết thông báo đã gửi.
+// 2. Không gate quyền: đọc đơn của chính mình. Thêm `checkPermission` là khoá màn của nhân viên.
+// 3. `?type=` mở sẵn form theo loại (site GV dùng cùng hợp đồng query); `?date=` điền sẵn ngày —
+//    hai tham số này do màn "Lịch ca của tôi" phát ra, đừng đổi tên.
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { loadRequestFormOptions } from "@/lib/cham-cong/request-form-data";
 import { HO_CENTER_ID } from "@/lib/cham-cong/home-center";
-import { WORK_REQUEST_KINDS, type WorkRequestKindV, type WorkRequestStatusV } from "@/lib/work-request";
+import {
+  WORK_REQUEST_KINDS,
+  WORK_REQUEST_STATUSES,
+  type WorkRequestKindV,
+  type WorkRequestStatusV,
+} from "@/lib/work-request";
 import { MyRequests, type MyRequestRow } from "@/components/cham-cong/my-requests";
+import { PageHeader } from "@/components/admin/ui/page-header";
+import { PageHelp } from "@/components/admin/ui/page-help";
+import { MeNav } from "@/components/admin/cham-cong/me-nav";
 
 export const metadata = { title: "Đơn của tôi | Admin", robots: { index: false } };
 export const dynamic = "force-dynamic";
 
 const dateFmt = new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Asia/Ho_Chi_Minh" });
 const dtFmt = new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Ho_Chi_Minh" });
+const YMD = /^\d{4}-\d{2}-\d{2}$/;
 
-export default async function DonCuaToiPage({ searchParams }: { searchParams: Promise<{ type?: string }> }) {
+export default async function DonCuaToiPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ type?: string; date?: string; status?: string }>;
+}) {
   const session = await auth();
   if (!session?.user) redirect("/login?callbackUrl=%2Fdon-tu%2Fcua-toi");
   const sp = await searchParams;
@@ -43,15 +66,38 @@ export default async function DonCuaToiPage({ searchParams }: { searchParams: Pr
     reviewedByName: r.reviewedByName,
     createdAtLabel: dtFmt.format(r.createdAt),
   }));
+
   const preset = (WORK_REQUEST_KINDS as readonly string[]).includes(sp.type ?? "") ? (sp.type as WorkRequestKindV) : null;
+  const presetDate = sp.date && YMD.test(sp.date) ? sp.date : null;
+  const presetStatus = (WORK_REQUEST_STATUSES as readonly string[]).includes(sp.status ?? "")
+    ? (sp.status as WorkRequestStatusV)
+    : null;
+
   return (
-    <div className="mx-auto max-w-5xl p-6">
-      <div className="mb-4">
-        <Link href="/cham-cong" className="text-sm text-muted-foreground hover:underline">← Chấm công</Link>
-        <h1 className="mt-1 text-2xl font-bold text-foreground">Đơn của tôi</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Đổi ca, nghỉ phép, chỉnh công (quên quét), tăng ca, đi muộn/về sớm, công tác. Đơn gửi tới Quản lý của cơ sở chịu công ngày đó; duyệt xong lịch/ công đổi ngay.</p>
-      </div>
-      <MyRequests rows={rows} options={options} presetKind={preset} />
+    <div className="max-w-6xl">
+      <PageHeader
+        title="Đơn của tôi"
+        subtitle="Đổi ca, nghỉ phép, chỉnh công (quên quét), tăng ca, đi muộn/về sớm, công tác."
+      />
+      <MeNav active="cua-toi" />
+      <PageHelp guideSlug="08-nhan-su-giao-vien">
+        <p>
+          Đơn gửi tới Quản lý của cơ sở chịu công ngày đó (người Hội sở phải tự chọn cơ sở nhận đơn). Duyệt xong thì
+          lịch ca và công ngày đổi ngay, và bạn nhận thông báo.
+        </p>
+        <p className="mt-2">
+          Nộp trước hạn báo trước; nộp muộn vẫn gửi được nhưng đơn mang cờ <em>Nộp muộn</em>. Đơn đã duyệt mà cột
+          &ldquo;Phản hồi&rdquo; báo <em>không áp được</em> nghĩa là hệ thống không ghi được thay đổi (ca đã đổi, kỳ đã
+          chốt…) — báo Quản lý để duyệt lại.
+        </p>
+      </PageHelp>
+      <MyRequests
+        rows={rows}
+        options={options}
+        presetKind={preset}
+        presetDate={presetDate}
+        presetStatus={presetStatus}
+      />
     </div>
   );
 }

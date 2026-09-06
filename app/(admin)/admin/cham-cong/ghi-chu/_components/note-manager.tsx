@@ -1,99 +1,354 @@
 "use client";
 
+// Hai bảng của màn Ghi chú lịch: ma trận Khối × thứ (việc lặp hằng tuần) và danh sách ghi đè theo
+// ngày. Hai thứ này khác nhau về ngữ nghĩa (ngày THẮNG thứ) nên phải nhìn thấy tách bạch — bản cũ
+// trộn chung một bảng phẳng, cột "Khi nào" lúc in "Thứ Ba" lúc in "2026-09-09".
+//
+// Hai điều dễ vỡ:
+//  · Xoá là XOÁ CỨNG và hiện chưa ghi audit ⇒ hai bước xác nhận, có `aria-label` nói rõ xoá cái gì.
+//    Bản cũ để thùng rác một cú bấm ngay cạnh nút Sửa.
+//  · "Tạm tắt" phải hiện thành CHỮ. Làm mờ dòng (opacity) thì người dùng tưởng màn đang tải, còn
+//    cron thì bỏ qua hẳn dòng đó (`isActive: false`) — hai cách hiểu ngược nhau.
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { CalendarClock, CalendarDays, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
-import { deleteBriefNoteAction, saveBriefNoteAction } from "../_actions";
+import { adminTd, adminTh, adminTr } from "@/components/admin/ui/table";
+import { EmptyState } from "@/components/admin/ui/states";
+import { BTN_DANGER, BTN_OUTLINE, PILL } from "@/components/admin/cham-cong/classes";
+import { SectionCard } from "@/components/admin/cham-cong/section-card";
+import { NoteForm } from "./note-form";
+import { deleteBriefNoteAction } from "../_actions";
 
-export type NoteRow = { id: string; centerId: string; centerLabel: string; weekday: number | null; date: string | null; audience: "ALL" | "KINH_DOANH" | "GIAO_VIEN"; mode: "APPEND" | "SUPPRESS" | "REPLACE"; text: string; isActive: boolean };
-type Draft = Omit<NoteRow, "id" | "centerLabel"> & { id?: string; kind: "weekday" | "date" };
+export type NoteRow = {
+  id: string;
+  centerId: string;
+  centerLabel: string;
+  /** 0 = CN … 6 = T7; có giá trị khi là việc cố định theo thứ. */
+  weekday: number | null;
+  /** "YYYY-MM-DD"; có giá trị khi là ghi đè theo ngày. Đúng MỘT trong hai có giá trị. */
+  date: string | null;
+  audience: "ALL" | "KINH_DOANH" | "GIAO_VIEN";
+  mode: "APPEND" | "SUPPRESS" | "REPLACE";
+  text: string;
+  isActive: boolean;
+};
 
-const WD = ["Chủ Nhật", "Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy"];
-const AUD: Record<NoteRow["audience"], string> = { ALL: "Cả khối", KINH_DOANH: "Kinh doanh", GIAO_VIEN: "Giáo viên" };
-const MODE: Record<NoteRow["mode"], string> = { APPEND: "Gửi kèm", SUPPRESS: "Không gửi tin", REPLACE: "Thay toàn bộ" };
+export type NoteBlock = { id: string; label: string; canAssign: boolean };
 
-export function NoteManager({ rows, blocks }: { rows: NoteRow[]; blocks: { id: string; label: string; canAssign: boolean }[] }) {
+/** Thứ Hai đứng đầu, Chủ Nhật cuối (khớp cột Sheet và khung ca tuần). */
+export const WD = [1, 2, 3, 4, 5, 6, 0];
+export const WD_LABEL: Record<number, string> = { 1: "T2", 2: "T3", 3: "T4", 4: "T5", 5: "T6", 6: "T7", 0: "CN" };
+export const WD_FULL: Record<number, string> = {
+  1: "Thứ Hai",
+  2: "Thứ Ba",
+  3: "Thứ Tư",
+  4: "Thứ Năm",
+  5: "Thứ Sáu",
+  6: "Thứ Bảy",
+  0: "Chủ Nhật",
+};
+
+export const AUD_LABEL: Record<NoteRow["audience"], string> = {
+  ALL: "Cả khối",
+  KINH_DOANH: "Kinh doanh",
+  GIAO_VIEN: "Giáo viên",
+};
+/** Nhãn ngắn cho ô ma trận — ô chỉ rộng ~7rem. */
+const AUD_SHORT: Record<NoteRow["audience"], string> = { ALL: "", KINH_DOANH: "KD", GIAO_VIEN: "GV" };
+
+export const MODE_LABEL: Record<NoteRow["mode"], string> = {
+  APPEND: "Gửi kèm",
+  SUPPRESS: "Không gửi tin",
+  REPLACE: "Thay toàn bộ",
+};
+const MODE_TONE: Record<NoteRow["mode"], string> = {
+  APPEND: "bg-state-info-soft text-state-info-ink",
+  SUPPRESS: "bg-state-danger-soft text-state-danger-ink",
+  REPLACE: "bg-state-warning-soft text-state-warning-ink",
+};
+
+/** "2026-09-09" → "09/09/2026". Cắt chuỗi, KHÔNG dựng `new Date` (bẫy lệch một ngày theo múi giờ). */
+function ngayVN(d: string): string {
+  return `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}`;
+}
+
+export function NoteManager({
+  rows,
+  blocks,
+  gioGui,
+}: {
+  rows: NoteRow[];
+  blocks: NoteBlock[];
+  /** "19:00" — giờ gửi tin của khối đang xem, để câu chữ khớp cấu hình thật. */
+  gioGui: string;
+}) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const editable = blocks.filter((b) => b.canAssign);
-  const [draft, setDraft] = useState<Draft | null>(null);
-  const field = "rounded-md border border-border bg-background px-2 py-1 text-sm";
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<NoteRow | null>(null);
+  const [preset, setPreset] = useState<{ centerId: string; weekday: number | null } | null>(null);
+  // Đếm số lần mở form: dùng làm `key` để mỗi lần mở là một form MỚI. Không có nó, mở lại đúng ô
+  // cũ sẽ thấy chữ của lần trước (form giữ state trong `useState`, `key` không đổi ⇒ không remount).
+  const [lanMo, setLanMo] = useState(0);
 
-  function save() {
-    if (!draft) return;
+  const editable = blocks.filter((b) => b.canAssign);
+  const theoThu = rows.filter((r) => r.date === null);
+  const theoNgay = rows.filter((r) => r.date !== null);
+
+  function moThem(centerId: string, weekday: number | null) {
+    setEditing(null);
+    setPreset({ centerId, weekday });
+    setLanMo((n) => n + 1);
+    setOpen(true);
+  }
+  function moSua(row: NoteRow) {
+    setPreset(null);
+    setEditing(row);
+    setLanMo((n) => n + 1);
+    setOpen(true);
+  }
+  function xoa(row: NoteRow) {
     start(async () => {
-      const r = await saveBriefNoteAction({ ...draft, weekday: draft.kind === "weekday" ? draft.weekday : null, date: draft.kind === "date" ? draft.date : null });
+      const r = await deleteBriefNoteAction(row.id);
+      setConfirmId(null);
       if (!r.ok) {
         toast.error(r.error);
         return;
       }
-      toast.success("Đã lưu");
-      setDraft(null);
-      router.refresh();
-    });
-  }
-  function del(id: string) {
-    start(async () => {
-      const r = await deleteBriefNoteAction(id);
-      if (!r.ok) toast.error(r.error);
+      toast.success("Đã xoá ghi chú");
       router.refresh();
     });
   }
 
-  return (
-    <div className="space-y-4">
-      {draft ? (
-        <div className="grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-3">
-          <label className="text-sm">Khối<select className={`${field} w-full`} value={draft.centerId} onChange={(e) => setDraft({ ...draft, centerId: e.target.value })}>{editable.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}</select></label>
-          <label className="text-sm">Lặp theo
-            <select className={`${field} w-full`} value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value as Draft["kind"] })}>
-              <option value="weekday">Thứ trong tuần (việc cố định)</option>
-              <option value="date">Một ngày cụ thể (ghi đè)</option>
-            </select>
-          </label>
-          {draft.kind === "weekday" ? (
-            <label className="text-sm">Thứ<select className={`${field} w-full`} value={draft.weekday ?? 1} onChange={(e) => setDraft({ ...draft, weekday: Number(e.target.value) })}>{[1, 2, 3, 4, 5, 6, 0].map((w) => <option key={w} value={w}>{WD[w]}</option>)}</select></label>
-          ) : (
-            <label className="text-sm">Ngày<input type="date" className={`${field} w-full`} value={draft.date ?? ""} onChange={(e) => setDraft({ ...draft, date: e.target.value || null })} /></label>
-          )}
-          <label className="text-sm">Gửi cho<select className={`${field} w-full`} value={draft.audience} onChange={(e) => setDraft({ ...draft, audience: e.target.value as NoteRow["audience"] })}>{(Object.keys(AUD) as NoteRow["audience"][]).map((a) => <option key={a} value={a}>{AUD[a]}</option>)}</select></label>
-          <label className="text-sm">Cách gửi<select className={`${field} w-full`} value={draft.mode} onChange={(e) => setDraft({ ...draft, mode: e.target.value as NoteRow["mode"] })}>{(Object.keys(MODE) as NoteRow["mode"][]).map((m) => <option key={m} value={m}>{MODE[m]}</option>)}</select></label>
-          <label className="text-sm sm:col-span-3">Nội dung<input className={`${field} w-full`} value={draft.text} onChange={(e) => setDraft({ ...draft, text: e.target.value })} placeholder="VD: 15:00–16:00 HỌP TỔNG KẾT TUẦN (60 phút) — có mặt đầy đủ" /></label>
-          <div className="flex gap-2 sm:col-span-3">
-            <Button type="button" onClick={save} disabled={pending}>{pending && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}Lưu</Button>
-            <Button type="button" variant="outline" onClick={() => setDraft(null)}>Huỷ</Button>
-          </div>
-        </div>
-      ) : (
-        editable.length > 0 && (
-          <Button type="button" onClick={() => setDraft({ centerId: editable[0].id, kind: "weekday", weekday: 1, date: null, audience: "ALL", mode: "APPEND", text: "", isActive: true })}><Plus className="mr-1 h-4 w-4" /> Thêm ghi chú</Button>
-        )
+  /** Chuỗi mô tả một ghi chú, dùng cho `title` và `aria-label` của nút xoá. */
+  const moTa = (r: NoteRow) =>
+    `${r.date ? `ngày ${ngayVN(r.date)}` : WD_FULL[r.weekday ?? 0]} · ${r.centerLabel} · ${MODE_LABEL[r.mode]}`;
+
+  const nhan = (r: NoteRow) => (
+    <>
+      {AUD_SHORT[r.audience] && (
+        <span className={cn(PILL, "bg-muted text-muted-foreground")}>{AUD_SHORT[r.audience]}</span>
       )}
-      <PhanTrangBang cuonNgang>
-        <table className="w-full text-sm">
-          <thead className="border-b border-border bg-muted text-left text-xs uppercase tracking-wider text-muted-foreground">
-            <tr><th className="px-3 py-2">Khối</th><th className="px-3 py-2">Khi nào</th><th className="px-3 py-2">Gửi cho</th><th className="px-3 py-2">Cách gửi</th><th className="px-3 py-2">Nội dung</th><th className="px-3 py-2" /></tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.id} className={`border-b border-border ${r.isActive ? "" : "opacity-50"}`}>
-                <td className="px-3 py-2">{r.centerLabel}</td>
-                <td className="px-3 py-2">{r.date ?? (r.weekday !== null ? WD[r.weekday] : "")}</td>
-                <td className="px-3 py-2 text-xs">{AUD[r.audience]}</td>
-                <td className="px-3 py-2 text-xs">{MODE[r.mode]}</td>
-                <td className="px-3 py-2">{r.text}</td>
-                <td className="px-3 py-2 text-right whitespace-nowrap">
-                  <button type="button" className="mr-2 text-xs text-primary underline" onClick={() => setDraft({ ...r, kind: r.date ? "date" : "weekday" })}>Sửa</button>
-                  <button type="button" className="text-destructive" title="Xoá" disabled={pending} onClick={() => del(r.id)}><Trash2 className="h-4 w-4" /></button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </PhanTrangBang>
-    </div>
+      {r.mode !== "APPEND" && <span className={cn(PILL, MODE_TONE[r.mode])}>{MODE_LABEL[r.mode]}</span>}
+      {!r.isActive && <span className={cn(PILL, "bg-muted text-muted-foreground")}>Tạm tắt</span>}
+    </>
+  );
+
+  return (
+    <>
+      <div className="grid gap-4 lg:grid-cols-[3fr_2fr]">
+        <SectionCard title="Việc cố định theo thứ" icon={CalendarDays}>
+          <PhanTrangBang cuonNgang tenDonVi="khối" khoaGhiNho="ghi-chu-thu">
+            <table className="w-full min-w-[820px] text-sm">
+              <thead className="border-b border-border bg-muted/40">
+                <tr>
+                  <th scope="col" className={cn(adminTh, "px-3 py-2")}>
+                    Khối
+                  </th>
+                  {WD.map((w) => (
+                    <th key={w} scope="col" className={cn(adminTh, "px-1 py-2 text-center")} title={WD_FULL[w]}>
+                      {WD_LABEL[w]}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {blocks.map((b) => (
+                  <tr key={b.id} className={adminTr}>
+                    <td className={cn(adminTd, "max-w-[12rem] truncate px-3 py-2 align-top font-medium")} title={b.label}>
+                      {b.label}
+                      {!b.canAssign && (
+                        <span className={cn(PILL, "ml-1.5 bg-muted text-muted-foreground")}>Chỉ xem</span>
+                      )}
+                    </td>
+                    {WD.map((w) => {
+                      const cells = theoThu.filter((r) => r.centerId === b.id && r.weekday === w);
+                      return (
+                        <td key={w} className="min-w-[7rem] px-1 py-1.5 align-top">
+                          {cells.map((r) =>
+                            b.canAssign ? (
+                              <button
+                                key={r.id}
+                                type="button"
+                                onClick={() => moSua(r)}
+                                title={`${moTa(r)} — bấm để sửa`}
+                                className="mb-1 block w-full rounded-md border border-border bg-card px-1.5 py-1 text-left text-xs transition-colors hover:bg-muted"
+                              >
+                                <span className="line-clamp-2 text-foreground">
+                                  {r.mode === "SUPPRESS" && !r.text ? "Không gửi tin hôm đó" : r.text}
+                                </span>
+                                <span className="mt-1 flex flex-wrap gap-1">{nhan(r)}</span>
+                              </button>
+                            ) : (
+                              <div
+                                key={r.id}
+                                title={moTa(r)}
+                                className="mb-1 rounded-md border border-border bg-card px-1.5 py-1 text-xs"
+                              >
+                                <span className="line-clamp-2 text-foreground">
+                                  {r.mode === "SUPPRESS" && !r.text ? "Không gửi tin hôm đó" : r.text}
+                                </span>
+                                <span className="mt-1 flex flex-wrap gap-1">{nhan(r)}</span>
+                              </div>
+                            ),
+                          )}
+                          {b.canAssign && (
+                            <button
+                              type="button"
+                              onClick={() => moThem(b.id, w)}
+                              aria-label={`Thêm việc ${WD_FULL[w]} cho ${b.label}`}
+                              title={`Thêm việc ${WD_FULL[w]} cho ${b.label}`}
+                              className="flex h-8 w-8 items-center justify-center rounded-md border border-dashed border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                            >
+                              <Plus aria-hidden className="h-4 w-4" />
+                            </button>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </PhanTrangBang>
+          {theoThu.length === 0 && (
+            <p className="mt-3 text-xs text-muted-foreground">
+              Chưa có việc cố định nào — tin nhắc lúc <span className="tabular-nums">{gioGui}</span> chỉ gồm lịch ca.
+            </p>
+          )}
+        </SectionCard>
+
+        <SectionCard
+          title="Ghi đè theo ngày"
+          icon={CalendarClock}
+          actions={
+            editable.length > 0 ? (
+              <button type="button" className={BTN_OUTLINE} onClick={() => moThem(editable[0].id, null)}>
+                <Plus aria-hidden className="h-4 w-4" />
+                Thêm ghi đè
+              </button>
+            ) : null
+          }
+        >
+          {theoNgay.length === 0 ? (
+            <EmptyState
+              title="Chưa có ghi đè theo ngày"
+              description="Ghi đè dùng cho ngày họp đột xuất, nghỉ bù, hoặc ngày không gửi tin. Nội dung theo ngày được ưu tiên hơn việc cố định của thứ đó."
+            />
+          ) : (
+            <PhanTrangBang cuonNgang tenDonVi="ghi chú" khoaGhiNho="ghi-chu-ngay">
+              <table className="w-full min-w-[720px] text-sm">
+                <thead className="border-b border-border bg-muted/40">
+                  <tr>
+                    <th scope="col" className={cn(adminTh, "px-3 py-2")}>
+                      Ngày
+                    </th>
+                    <th scope="col" className={cn(adminTh, "px-3 py-2")}>
+                      Khối
+                    </th>
+                    <th scope="col" className={cn(adminTh, "px-3 py-2")}>
+                      Cách gửi
+                    </th>
+                    <th scope="col" className={cn(adminTh, "px-3 py-2")}>
+                      Gửi cho
+                    </th>
+                    <th scope="col" className={cn(adminTh, "px-3 py-2")}>
+                      Nội dung
+                    </th>
+                    <th scope="col" className={cn(adminTh, "px-3 py-2 text-right")}>
+                      Hành động
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {theoNgay.map((r) => {
+                    const block = blocks.find((b) => b.id === r.centerId);
+                    return (
+                      <tr key={r.id} className={adminTr}>
+                        <td className={cn(adminTd, "px-3 py-2 font-medium tabular-nums")}>{ngayVN(r.date!)}</td>
+                        <td className={cn(adminTd, "max-w-[10rem] truncate px-3 py-2")} title={r.centerLabel}>
+                          {r.centerLabel}
+                        </td>
+                        <td className={cn(adminTd, "px-3 py-2")}>
+                          <span className={cn(PILL, MODE_TONE[r.mode])}>{MODE_LABEL[r.mode]}</span>
+                          {!r.isActive && (
+                            <span className={cn(PILL, "ml-1.5 bg-muted text-muted-foreground")}>Tạm tắt</span>
+                          )}
+                        </td>
+                        <td className={cn(adminTd, "px-3 py-2 text-muted-foreground")}>{AUD_LABEL[r.audience]}</td>
+                        <td className={cn(adminTd, "max-w-[20rem] truncate px-3 py-2")} title={r.text}>
+                          {r.text || <span className="text-muted-foreground">(không có nội dung)</span>}
+                        </td>
+                        <td className={cn(adminTd, "px-3 py-2 text-right")}>
+                          {block?.canAssign ? (
+                            <span className="inline-flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                className={cn(BTN_OUTLINE, "h-8 px-3")}
+                                onClick={() => moSua(r)}
+                                aria-label={`Sửa ghi chú ${moTa(r)}`}
+                              >
+                                Sửa
+                              </button>
+                              {confirmId === r.id ? (
+                                <button
+                                  type="button"
+                                  className={cn(BTN_DANGER, "h-8 px-3")}
+                                  disabled={pending}
+                                  onClick={() => xoa(r)}
+                                  aria-label={`Xác nhận xoá vĩnh viễn ghi chú ${moTa(r)}`}
+                                >
+                                  Xoá hẳn?
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className={cn(BTN_OUTLINE, "h-8 px-3")}
+                                  disabled={pending}
+                                  onClick={() => setConfirmId(r.id)}
+                                  aria-label={`Xoá ghi chú ${moTa(r)}`}
+                                >
+                                  <Trash2 aria-hidden className="h-4 w-4" />
+                                  Xoá
+                                </button>
+                              )}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">Chỉ xem</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </PhanTrangBang>
+          )}
+        </SectionCard>
+      </div>
+
+      {editable.length > 0 && (
+        <NoteForm
+          key={`${lanMo}:${editing?.id ?? "moi"}`}
+          open={open}
+          onOpenChange={(v) => {
+            setOpen(v);
+            if (!v) setConfirmId(null);
+          }}
+          blocks={editable}
+          value={editing}
+          preset={preset}
+          gioGui={gioGui}
+          onSaved={() => {
+            setOpen(false);
+            router.refresh();
+          }}
+        />
+      )}
+    </>
   );
 }
