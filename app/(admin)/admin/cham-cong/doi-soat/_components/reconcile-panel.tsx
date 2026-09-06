@@ -10,12 +10,12 @@
 // Dễ vỡ: `reconcileAction` CHỈ ĐỌC — chạy lại bao nhiêu lần cũng không đụng dữ liệu; `periodKey`
 // gửi kèm chính là tháng trên ScopeBar, nên file không có tab tháng đó sẽ báo lỗi — lúc ấy còn
 // đường lùi "So mọi kỳ trong file" thay vì bắt người dùng đoán.
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { CalendarX2, Loader2, Sigma, TriangleAlert, Upload, UserRoundMinus, UserRoundX } from "lucide-react";
+import { CalendarX2, Loader2, Upload } from "lucide-react";
 import { SheetFilePicker } from "@/components/cham-cong/ui/sheet-file-picker";
 import { SectionCard } from "@/components/admin/cham-cong/section-card";
-import { KpiStrip } from "@/components/admin/cham-cong/kpi-strip";
 import { StatCard } from "@/components/admin/ui/stat-card";
 import { EmptyState, ErrorState } from "@/components/admin/ui/states";
 import { TableSkeleton } from "@/components/admin/cham-cong/skeletons";
@@ -27,7 +27,9 @@ import { reconcileAction } from "../_actions";
 import { DiffTable } from "./diff-table";
 import { WeekCalendar } from "./week-calendar";
 
-/** Cổng ra L6 (kế hoạch §7): 10 ngày làm việc liên tiếp không lệch thì mới bỏ Sheet. */
+// Cổng ra của kỳ chạy song song (kế hoạch §7, mốc nội bộ L6): 10 ngày làm việc liên tiếp không
+// lệch thì mới bỏ Sheet. Mã mốc chỉ sống trong comment — nhãn trên màn nói bằng tiếng người, vì
+// kế toán cơ sở không tra được "L6" là gì.
 const GATE_DAYS = 10;
 
 function kyLabel(ky: string): string {
@@ -109,7 +111,7 @@ export function ReconcilePanel({ ky, coSo }: { ky: string; coSo: string | null }
             <StatCard
               icon={CalendarX2}
               value={`${gate.cleanStreak}/${GATE_DAYS}`}
-              label="Cổng ra L6: ngày sạch liên tiếp"
+              label="Ngày sạch liên tiếp"
               tone={gate.cleanStreak >= GATE_DAYS ? "success" : "warning"}
               hint={`Kỳ ${kyLabel(gate.periodKey)} · đủ ${GATE_DAYS} ngày mới bỏ Sheet`}
             />
@@ -163,7 +165,7 @@ export function ReconcilePanel({ ky, coSo }: { ky: string; coSo: string | null }
             }
           />
         ) : pending && !reports ? (
-          <TableSkeleton cols={7} />
+          <TableSkeleton cols={8} />
         ) : !reports ? (
           <EmptyState
             title="Chưa chạy đối soát"
@@ -189,40 +191,60 @@ export function ReconcilePanel({ ky, coSo }: { ky: string; coSo: string | null }
                     />
                   </div>
 
-                  <KpiStrip
-                    items={[
+                  {/* Bốn con số của kỳ này nằm TRONG thẻ nên đi dạng hàng số liệu phẳng, không
+                      dùng `KpiStrip` — `StatCard` tự mang vỏ `rounded-xl border bg-card`, lồng vào
+                      `SectionCard` (cũng có vỏ) là hai tầng thẻ chồng nhau. */}
+                  <dl className="mb-4 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
+                    {[
                       {
-                        icon: TriangleAlert,
-                        value: r.cellDiffs.length,
                         label: "Ô lệch",
-                        tone: r.cellDiffs.length > 0 ? "danger" : "success",
+                        value: r.cellDiffs.length,
+                        ink: r.cellDiffs.length > 0 ? "text-state-danger-ink" : "text-state-success-ink",
+                        note: null as string | null,
+                        href: undefined as string | undefined,
                       },
                       {
-                        icon: Sigma,
-                        value: r.totalDiffs.length,
                         label: "Lệch tổng tháng",
-                        tone: r.totalDiffs.length > 0 ? "warning" : "success",
-                        hint: "Chỉ so khi đã hết tháng",
+                        value: r.totalDiffs.length,
+                        ink: r.totalDiffs.length > 0 ? "text-state-warning-ink" : "text-state-success-ink",
+                        note: "Chỉ so khi đã hết tháng",
+                        href: undefined,
                       },
                       {
-                        icon: UserRoundX,
-                        value: r.unmapped.length,
                         label: "Chưa ánh xạ",
-                        tone: r.unmapped.length > 0 ? "warning" : "success",
-                        hint: r.unmapped.length > 0 ? "Ánh xạ ở màn Import lịch" : undefined,
+                        value: r.unmapped.length,
+                        ink: r.unmapped.length > 0 ? "text-state-warning-ink" : "text-state-success-ink",
+                        note: r.unmapped.length > 0 ? "Ánh xạ ở màn Import lịch" : null,
                         href:
                           r.unmapped.length > 0
                             ? hrefWith("/cham-cong/phan-ca/import", { ky: r.periodKey, coSo })
                             : undefined,
                       },
                       {
-                        icon: UserRoundMinus,
-                        value: r.exempt.length,
                         label: "Miễn chấm công (bỏ qua)",
-                        tone: "info",
+                        value: r.exempt.length,
+                        ink: "text-muted-foreground",
+                        note: null,
+                        href: undefined,
                       },
-                    ]}
-                  />
+                    ].map((o) => (
+                      <div key={o.label} className="min-w-0">
+                        <dt className="truncate text-xs text-muted-foreground">{o.label}</dt>
+                        <dd className={cn("mt-0.5 text-xl font-bold tabular-nums", o.ink)}>
+                          {o.href ? (
+                            <Link href={o.href} className="hover:underline">
+                              {o.value}
+                            </Link>
+                          ) : (
+                            o.value
+                          )}
+                        </dd>
+                        {o.note && (
+                          <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{o.note}</p>
+                        )}
+                      </div>
+                    ))}
+                  </dl>
 
                   {r.unmapped.length > 0 && (
                     <p className="mb-3 text-xs text-muted-foreground">
@@ -238,16 +260,24 @@ export function ReconcilePanel({ ky, coSo }: { ky: string; coSo: string | null }
                     </p>
                   )}
 
+                  {/* Rỗng bên TRONG `SectionCard` nói bằng đoạn văn, không bằng `EmptyState`:
+                      EmptyState tự mang vỏ `rounded-xl border bg-card`, lồng vào thẻ cũng có vỏ
+                      thì đọc ra hai tầng thẻ chồng nhau. */}
                   {r.cellDiffs.length === 0 ? (
-                    <EmptyState
-                      title="Không lệch ô nào tới hôm qua"
-                      description={`Chuỗi ngày sạch ${r.cleanStreak}/${GATE_DAYS}. Đủ ${GATE_DAYS} ngày liên tiếp thì bỏ được Sheet.`}
-                    />
+                    <div className="py-8 text-center">
+                      <p className="text-sm font-semibold text-foreground">Không lệch ô nào tới hôm qua</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Chuỗi ngày sạch {r.cleanStreak}/{GATE_DAYS}. Đủ {GATE_DAYS} ngày liên tiếp thì bỏ được
+                        Sheet.
+                      </p>
+                    </div>
                   ) : rows.length === 0 ? (
-                    <EmptyState
-                      title={`Ngày ${day} không lệch ô nào`}
-                      description="Bấm lại ô ngày đó trên lịch để bỏ lọc và xem toàn kỳ."
-                    />
+                    <div className="py-8 text-center">
+                      <p className="text-sm font-semibold text-foreground">Ngày {day} không lệch ô nào</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Bấm lại ô ngày đó trên lịch để bỏ lọc và xem toàn kỳ.
+                      </p>
+                    </div>
                   ) : (
                     <DiffTable rows={rows} periodKey={r.periodKey} coSo={coSo} />
                   )}

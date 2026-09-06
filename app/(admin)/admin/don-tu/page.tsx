@@ -45,7 +45,7 @@ import { ScopeBar } from "@/components/admin/cham-cong/scope-bar";
 import { BTN_OUTLINE, CHIP, CHIP_ACTIVE, CHIP_IDLE } from "@/components/admin/cham-cong/classes";
 import { RequestQueueTable, type QueueRow } from "./_components/request-queue-table";
 
-export const metadata = { title: "Duyệt đơn từ | Admin" };
+export const metadata = { title: "Duyệt đơn từ | Admin", robots: { index: false } };
 export const dynamic = "force-dynamic";
 
 /** Trần cũ, giữ nguyên: đọc hết đơn của mọi cơ sở là truy vấn không có đáy. */
@@ -90,7 +90,7 @@ export default async function WorkRequestsAdminPage({
   searchParams: Promise<{ status?: string; coSo?: string; id?: string }>;
 }) {
   const session = await auth();
-  if (!session?.user) redirect("/login");
+  if (!session?.user) redirect("/login?callbackUrl=%2Fdon-tu");
 
   const scope = await loadModuleScope(session.user.id);
   const approvable = scope.blocksWith("hr_attendance:approve");
@@ -107,6 +107,10 @@ export default async function WorkRequestsAdminPage({
           title="Duyệt đơn từ"
           subtitle="Đơn đổi ca, nghỉ phép, chỉnh công của nhân sự gửi tới cơ sở chịu công."
         />
+        {/* Hàng tab PHẢI còn ở nhánh không quyền: `/don-tu` là đích của thông báo đã ghi trong DB,
+            nên người chỉ có `view` vẫn bị đẩy tới đây. Không có ModuleNav thì đây là trang cụt —
+            không lối nào về Bảng công ngày hay Kỳ công. */}
+        <ModuleNav active="don" scope={scope} ctx={{ coSo: null }} />
         <NoPermission
           permission="hr_attendance:approve"
           what="duyệt đơn từ"
@@ -284,12 +288,14 @@ export default async function WorkRequestsAdminPage({
       <ModuleNav active="don" scope={scope} ctx={{ coSo }} />
 
       {/* Một khối thì không có gì để LỌC — chip lúc đó chỉ để nói "bạn đang xem cơ sở nào",
-          nên bỏ chip "Tất cả" và tô sáng chính khối đó (URL vẫn không mang ?coSo=). */}
+          nên bỏ chip "Tất cả" và tô sáng chính khối đó (URL vẫn không mang ?coSo=).
+          Chip gom dùng chữ "khối" như /khung-ca và /ghi-chu: danh sách ở đây CÓ cả Hội sở
+          (người duyệt neo tại HO), nên "Tất cả cơ sở" vừa lệch tên vừa sai nghĩa. */}
       <ScopeBar
         basePath="/don-tu"
         blocks={approvable.map((b) => ({ id: b.id, label: b.label }))}
         coSo={approvable.length > 1 ? coSo : approvable[0].id}
-        allLabel={approvable.length > 1 ? "Tất cả cơ sở" : undefined}
+        allLabel={approvable.length > 1 ? "Tất cả khối" : undefined}
         keep={{ status: statusFilter }}
       />
 

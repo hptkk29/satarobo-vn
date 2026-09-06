@@ -63,7 +63,9 @@ export function WeekCalendar({
               )}
             >
               <span className="font-semibold">{d.day}</span>
-              <span className="text-[11px]">{bad ? d.diffs : "—"}</span>
+              {/* Số ô lệch là NỘI DUNG chính của lịch, không phải chú thích: giữ `text-xs`
+                  (ô đã cao 48px nên vẫn dư chỗ), đừng hạ xuống dưới 12px. */}
+              <span className="text-xs">{bad ? d.diffs : "—"}</span>
             </button>
           );
         })}

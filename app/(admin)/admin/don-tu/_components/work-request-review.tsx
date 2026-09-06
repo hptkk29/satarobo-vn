@@ -13,6 +13,12 @@
 //
 // Điều dễ vỡ: chặn "từ chối thiếu lý do" ở đây CHỈ là lớp thứ hai cho êm tay — server vẫn chặn
 // (`decideRequestAction` trả "Nhập lý do từ chối"). Đừng bỏ lớp server để đỡ một lần gọi.
+//
+// TÊN TRỢ NĂNG CỦA HAI Ô CHỮ: `FieldLabel` dựng `<span>` (nó thay chỗ 40 nhãn cũ trong repo), KHÔNG
+// phải `<label htmlFor>` — nên nó vẽ được chữ nhưng KHÔNG đặt tên cho ô. Thiếu tên thì trình đọc màn
+// hình đọc "vùng nhập văn bản, trống" ngay tại thao tác nặng nhất của màn, mà ô "Lý do từ chối" lại
+// là ô bắt buộc. Vì vậy mỗi textarea tự mang `id` + `aria-label`; `id` phải kèm `requestId` vì Sheet
+// có thể dựng lại cho đơn khác.
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -112,6 +118,8 @@ export function WorkRequestReview({
           <div>
             <FieldLabel label="Ghi chú duyệt (tuỳ chọn)" />
             <textarea
+              id={`approve-note-${requestId}`}
+              aria-label="Ghi chú duyệt (tuỳ chọn)"
               value={approveNote}
               onChange={(e) => setApproveNote(e.target.value)}
               maxLength={1000}
@@ -135,6 +143,9 @@ export function WorkRequestReview({
           <div>
             <FieldLabel label="Lý do từ chối" required />
             <textarea
+              id={`reject-reason-${requestId}`}
+              aria-label="Lý do từ chối (bắt buộc)"
+              aria-required
               value={rejectReason}
               onChange={(e) => {
                 setRejectReason(e.target.value);

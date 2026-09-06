@@ -74,7 +74,7 @@ export default async function DiemChamPage({
     <div className="max-w-6xl">
       {head}
       <ConfigTabs active="diem-cham" scope={scope} ctx={ctx} />
-      <PageHelp guideSlug="08-nhan-su-giao-vien">
+      <PageHelp guideSlug="nhan-su-giao-vien">
         <p>
           Lấy toạ độ: mở Google Maps, nhấn giữ đúng vị trí quầy, chép hai số (vĩ độ, kinh độ) vào ô
           tương ứng. Bán kính 100m là đủ cho một toà nhà.

@@ -2,8 +2,10 @@
 // ngày mai (tab VIỆC CỐ ĐỊNH + GHI CHÚ & GHI ĐÈ của Sheet). Không tham gia tính công.
 //
 // Ba điều dễ vỡ:
-//  1. Ghi chú theo NGÀY thắng việc cố định theo THỨ, và "Không gửi tin" tắt hẳn tin của khối hôm đó
-//     — nhãn trên màn phải nói đúng thứ tự đó, vì cron `runShiftBrief` xử lý theo đúng luật này.
+//  1. Ghi chú theo NGÀY **không** che việc cố định theo THỨ. Cron `runShiftBrief` đọc HỢP của hai
+//     loại (`brief-db.ts:39`) rồi để `mode` quyết định (`brief.ts`): APPEND nối thêm, REPLACE thay
+//     toàn bộ, SUPPRESS tắt tin. Nhãn trên màn phải nói đúng thế — bản cũ ghi "ngày thắng thứ" nên
+//     người vận hành tạo ghi chú ngày mode APPEND để "thay" việc cố định và tin gửi đi có cả hai dòng.
 //  2. Xoá là XOÁ CỨNG và hiện chưa ghi audit ⇒ phải hỏi lại hai bước, không đặt thùng rác một cú bấm
 //     cạnh nút Sửa như bản cũ.
 //  3. `?coSo` chỉ THU HẸP về một khối. Không truyền = mọi khối xem được, y như trước.
@@ -110,14 +112,15 @@ export default async function GhiChuPage({ searchParams }: Props) {
         keep={ky ? { ky } : undefined}
       />
 
-      <PageHelp guideSlug="08-nhan-su-giao-vien">
+      <PageHelp guideSlug="nhan-su-giao-vien">
         <p>
           Mỗi tối lúc <b className="tabular-nums">{gioGui}</b>, hệ thống gửi cho nhân sự tin nhắc lịch
           ca ngày mai. Nội dung khai ở đây được ghép thêm vào tin đó — nó không ảnh hưởng tới công.
         </p>
         <p className="mt-2">
-          <b>Việc cố định theo thứ</b> lặp lại hằng tuần. <b>Ghi đè theo ngày</b> chỉ áp một ngày và{" "}
-          <b>được ưu tiên hơn</b> việc cố định của thứ đó.
+          <b>Việc cố định theo thứ</b> lặp lại hằng tuần, <b>ghi đè theo ngày</b> chỉ áp một ngày —
+          và cả hai đều được gửi. Muốn THAY nội dung của hôm đó thì chọn cách gửi{" "}
+          <b>Thay toàn bộ</b>; muốn TẮT hẳn tin thì chọn <b>Không gửi tin</b>.
         </p>
         <p className="mt-2">
           Cách gửi: <b>Gửi kèm</b> thêm một dòng vào tin · <b>Thay toàn bộ</b> thay hết nội dung tin ·{" "}

@@ -13,6 +13,15 @@
 //    phân trang IM LẶNG (fail-safe của PhanTrangBang không kêu).
 //  · Cả dòng bấm được, nhưng vẫn phải có `<button>` thật ở cột cuối — dòng `<tr onClick>` không
 //    dùng được bằng bàn phím.
+//  · Dòng 44px = `cn(adminTr, "h-11")` + `py-0` trên từng `<td>`, giống hàng chờ ở `/cham-cong`.
+//    Để `adminTd` nguyên (py-3.5) là dòng ~48px, và hai hàng chờ cạnh nhau trong cùng ModuleNav
+//    lại có mật độ khác nhau.
+//  · Ô chữ dài cắt bằng `<span className="block max-w-[…] truncate">` BÊN TRONG `<td>`, không đắp
+//    `max-w` thẳng lên `<td>`: bảng này là `table-layout: auto` ⇒ trình duyệt bỏ qua `max-width`
+//    trên ô bảng, mà `adminTd` đã có `whitespace-nowrap` nên ô không cắt, nó nở ra kéo cả cột.
+//  · Trạng thái RỖNG thuộc về page (`don-tu/page.tsx` dựng `<EmptyState>` khi `rows.length === 0`),
+//    nên ở đây không có nhánh rỗng — một dòng `<td colSpan>` trần vừa không nói vì sao rỗng vừa
+//    không cho đường đi tiếp.
 import { useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
@@ -108,76 +117,70 @@ export function RequestQueueTable({
               </tr>
             </thead>
             <tbody>
-              {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-5 py-10 text-center text-sm text-muted-foreground">
-                    Không có đơn nào trong phạm vi đang xem.
+              {rows.map((r) => (
+                <tr
+                  key={r.id}
+                  onClick={() => setOpenId(r.id)}
+                  className={cn(adminTr, "h-11 cursor-pointer", openId === r.id && "bg-muted/50")}
+                >
+                  <td className={cn(adminTd, "py-0 font-medium")} title={r.requesterName}>
+                    <span className="block max-w-[12rem] truncate">{r.requesterName}</span>
+                  </td>
+                  <td className={cn(adminTd, "py-0")}>
+                    {r.kindLabel}
+                    {r.submittedLate && (
+                      <span className={cn(PILL, "ml-2 bg-state-warning-soft text-state-warning-ink")}>
+                        Nộp muộn
+                      </span>
+                    )}
+                  </td>
+                  <td className={cn(adminTd, "py-0")} title={r.applyTitle}>
+                    <span className="tabular-nums">{r.applyLabel}</span>
+                    {r.timeLabel && (
+                      <span className="ml-1.5 font-mono text-xs text-muted-foreground">{r.timeLabel}</span>
+                    )}
+                    {r.dueLabel && (
+                      <span className={cn("ml-1.5 text-xs", DUE_CLS[r.dueTone])}>· {r.dueLabel}</span>
+                    )}
+                  </td>
+                  <td
+                    className={cn(adminTd, "py-0", r.effectMuted && "text-muted-foreground")}
+                    title={r.effectText}
+                  >
+                    <span className="block max-w-[18rem] truncate">{r.effectText}</span>
+                  </td>
+                  <td className={cn(adminTd, "py-0 text-muted-foreground")} title={r.centerLabel}>
+                    {r.centerCode}
+                  </td>
+                  <td
+                    className={cn(
+                      adminTd,
+                      "py-0 tabular-nums",
+                      r.stale && "font-semibold text-state-danger-ink",
+                    )}
+                  >
+                    {r.ageLabel}
+                  </td>
+                  <td className={cn(adminTd, "py-0")}>
+                    <span className={cn(PILL, STATUS_CLS[r.status])}>{r.statusLabel}</span>
+                    {r.applyError && (
+                      <span className={cn(PILL, "ml-1.5 bg-state-danger-soft text-state-danger-ink")}>
+                        Áp thất bại
+                      </span>
+                    )}
+                  </td>
+                  <td className={cn(adminTd, "w-10 py-0 text-right")}>
+                    <button
+                      type="button"
+                      onClick={() => setOpenId(r.id)}
+                      aria-label={`Mở đơn ${r.kindLabel} của ${r.requesterName}`}
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <ChevronRight aria-hidden className="h-4 w-4" />
+                    </button>
                   </td>
                 </tr>
-              ) : (
-                rows.map((r) => (
-                  <tr
-                    key={r.id}
-                    onClick={() => setOpenId(r.id)}
-                    className={cn(adminTr, "cursor-pointer", openId === r.id && "bg-muted/50")}
-                  >
-                    <td className={cn(adminTd, "max-w-[12rem] truncate font-medium")} title={r.requesterName}>
-                      {r.requesterName}
-                    </td>
-                    <td className={adminTd}>
-                      {r.kindLabel}
-                      {r.submittedLate && (
-                        <span className={cn(PILL, "ml-2 bg-state-warning-soft text-state-warning-ink")}>
-                          Nộp muộn
-                        </span>
-                      )}
-                    </td>
-                    <td className={adminTd} title={r.applyTitle}>
-                      <span className="tabular-nums">{r.applyLabel}</span>
-                      {r.timeLabel && (
-                        <span className="ml-1.5 font-mono text-xs text-muted-foreground">{r.timeLabel}</span>
-                      )}
-                      {r.dueLabel && (
-                        <span className={cn("ml-1.5 text-xs", DUE_CLS[r.dueTone])}>· {r.dueLabel}</span>
-                      )}
-                    </td>
-                    <td
-                      className={cn(
-                        adminTd,
-                        "max-w-[18rem] truncate",
-                        r.effectMuted && "text-muted-foreground",
-                      )}
-                      title={r.effectText}
-                    >
-                      {r.effectText}
-                    </td>
-                    <td className={cn(adminTd, "text-muted-foreground")} title={r.centerLabel}>
-                      {r.centerCode}
-                    </td>
-                    <td className={cn(adminTd, "tabular-nums", r.stale && "font-semibold text-state-danger-ink")}>
-                      {r.ageLabel}
-                    </td>
-                    <td className={adminTd}>
-                      <span className={cn(PILL, STATUS_CLS[r.status])}>{r.statusLabel}</span>
-                      {r.applyError && (
-                        <span className={cn(PILL, "ml-1.5 bg-state-danger-soft text-state-danger-ink")}>
-                          Áp thất bại
-                        </span>
-                      )}
-                    </td>
-                    <td className={cn(adminTd, "w-10 text-right")}>
-                      <button
-                        type="button"
-                        onClick={() => setOpenId(r.id)}
-                        aria-label={`Mở đơn ${r.kindLabel} của ${r.requesterName}`}
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        <ChevronRight aria-hidden className="h-4 w-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
+              ))}
             </tbody>
           </table>
         </PhanTrangBang>

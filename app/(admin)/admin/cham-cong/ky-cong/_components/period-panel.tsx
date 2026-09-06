@@ -3,11 +3,16 @@
 // app/(admin)/admin/cham-cong/ky-cong/_components/period-panel.tsx — công chuẩn + trạng thái kỳ + 4 thao tác.
 //
 // Vì sao file này tồn tại: mọi thứ "làm gì được với kỳ này" gom về một chỗ, thay vì rải nút khắp
-// đầu trang. Ba tư cách người dùng phải PHÂN BIỆT ĐƯỢC, vì bản cũ cho cả ba cùng một ô nhập xám:
-//   1. có `close-period`, kỳ đang mở  → sửa được công chuẩn, tính lại, chốt.
-//   2. có `close-period`, kỳ đã chốt  → chỉ đọc, và nói rõ "mở lại trước đã".
-//   3. chỉ có `view`                  → chỉ đọc, và nói rõ THIẾU QUYỀN GÌ, hỏi ai.
-// Ô xám không nói được ba chuyện đó, nên kế toán cơ sở tưởng hệ thống hỏng.
+// đầu trang. Bốn tư cách người dùng phải PHÂN BIỆT ĐƯỢC, vì bản cũ cho cả bốn cùng một ô nhập xám:
+//   1. có `close-period`, kỳ đang mở            → sửa được công chuẩn, tính lại, chốt.
+//   2. có `close-period` tại Hội sở, kỳ đã chốt → chỉ đọc, và nói rõ "mở lại trước đã" (nút Mở lại có).
+//   3. có `close-period` tại CƠ SỞ, kỳ đã chốt  → chỉ đọc, và nói rõ mở lại cần quyền ở Hội sở, hỏi ai.
+//   4. chỉ có `view`                            → chỉ đọc, và nói rõ THIẾU QUYỀN GÌ, hỏi ai.
+// Ô xám không nói được bốn chuyện đó, nên kế toán cơ sở tưởng hệ thống hỏng.
+//
+// Ca 3 là ca dễ rơi nhất: `canReopen` đo tại HO (`ky-cong/page.tsx`), nên QLCS / Kế toán cơ sở —
+// những người CÓ quyền chốt — lại KHÔNG mở lại được. Bảo họ "mở lại trước đã" rồi giấu nút là
+// nói một việc rồi không cho làm; phải nêu key + hỏi ai, đúng khuôn nhánh `!canClose`.
 //
 // Dễ vỡ: giữ nguyên chữ ký `setStandardUnitsAction` / `recomputePeriodAction`; để trống ô công
 // chuẩn rồi Lưu = server tự tính lại từ nghỉ tuần + lễ (đừng "sửa" thành gửi 0).
@@ -41,6 +46,7 @@ export function PeriodPanel({
   standardUnits,
   standardUnitsNote,
   canClose,
+  canReopen,
   askWho,
 }: {
   centerId: string;
@@ -50,6 +56,8 @@ export function PeriodPanel({
   standardUnits: number | null;
   standardUnitsNote: string | null;
   canClose: boolean;
+  /** `close-period` tại HỘI SỞ — chỉ người này mới mở lại được kỳ đã chốt. */
+  canReopen: boolean;
   /** Ai cấp được `hr_attendance:close-period` — `ASK_WHO` của module. */
   askWho: string;
 }) {
@@ -80,7 +88,7 @@ export function PeriodPanel({
 
         {readOnly ? (
           <>
-            <Field label="Công chuẩn (K-04)">
+            <Field label="Công chuẩn">
               <span className="text-base font-semibold tabular-nums">
                 {standardUnits != null ? standardUnits.toLocaleString("vi-VN") : "Chưa đặt"}
               </span>
@@ -96,7 +104,7 @@ export function PeriodPanel({
         ) : (
           <div className="sm:col-span-2">
             <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Công chuẩn (K-04)
+              Công chuẩn
             </dt>
             <dd className="mt-1">
               <div className="flex flex-wrap items-center gap-2">
@@ -150,9 +158,16 @@ export function PeriodPanel({
         )}
       </dl>
 
-      {locked && canClose && (
+      {locked && canClose && canReopen && (
         <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
-          Kỳ đã chốt — mở lại trước khi sửa công chuẩn hoặc tính lại.
+          Kỳ đã chốt — bấm “Mở lại kỳ” ở đầu trang trước khi sửa công chuẩn hoặc tính lại.
+        </p>
+      )}
+      {locked && canClose && !canReopen && (
+        <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+          Kỳ đã chốt — số không sửa được nữa. Mở lại cần quyền{" "}
+          <code className="font-mono text-[11px] text-foreground">hr_attendance:close-period</code> tại Hội sở —
+          liên hệ {askWho}.
         </p>
       )}
       {!canClose && (

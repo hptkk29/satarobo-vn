@@ -48,7 +48,7 @@ function hhmm(d: Date): string {
 
 export default async function ManHinhPage({ searchParams }: Props) {
   const session = await auth();
-  if (!session?.user) redirect("/login");
+  if (!session?.user) redirect("/login?callbackUrl=%2Fcham-cong%2Fman-hinh");
 
   const { centerId } = await searchParams;
   const scope = await loadModuleScope(session.user.id);
@@ -83,7 +83,7 @@ export default async function ManHinhPage({ searchParams }: Props) {
   );
 
   const help = (
-    <PageHelp guideSlug="08-nhan-su-giao-vien">
+    <PageHelp guideSlug="nhan-su-giao-vien">
       <p>
         Chọn cơ sở rồi bấm <b>Trình chiếu</b> để đưa mã lên TV ở quầy: màn hình phủ kín, không còn
         menu quản trị và không hiện tên ai. Bấm <b>Esc</b> hoặc nút <b>Thoát</b> để quay lại.

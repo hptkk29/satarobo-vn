@@ -12,6 +12,7 @@
 //   ra một con số khác với con số đã trả lương.
 // - Quyền lấy MỘT lần từ `loadModuleScope` (target luôn thật). Không quyền ⇒ `NoPermission` chứ
 //   không `redirect` câm: bản cũ đá về `/cham-cong` rồi màn đó đá tiếp về `/dashboard`.
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { CalendarCheck, Flag, GraduationCap, Sigma, TriangleAlert, Users, Wallet } from "lucide-react";
 import { auth } from "@/lib/auth";
@@ -32,11 +33,12 @@ import {
 import { vnYmd } from "@/lib/time/vn";
 import { PageHeader } from "@/components/admin/ui/page-header";
 import { PageHelp } from "@/components/admin/ui/page-help";
-import { NoPermission } from "@/components/admin/ui/states";
+import { EmptyState, NoPermission } from "@/components/admin/ui/states";
 import { ModuleNav } from "@/components/admin/cham-cong/module-nav";
 import { ScopeBar } from "@/components/admin/cham-cong/scope-bar";
 import { KpiStrip } from "@/components/admin/cham-cong/kpi-strip";
 import { SectionCard } from "@/components/admin/cham-cong/section-card";
+import { BTN_OUTLINE } from "@/components/admin/cham-cong/classes";
 import { PeriodActions, PeriodPanel } from "./_components/period-panel";
 import { UnfinishedList, type UnfinishedItem } from "./_components/unfinished-list";
 import { PeriodTable, type PeriodTableRow } from "./_components/period-table";
@@ -128,20 +130,25 @@ export default async function KyCongPage({
   const todayYmd = vnYmd(new Date());
 
   // Cờ theo NGÀY: dùng cho dải "việc còn dang dở" + đích của ô Cờ/Ghi đè trên bảng.
+  // `overrideUnits` đi kèm vì ô Ghi đè có ĐÍCH RIÊNG (`loc=ghide` + ngày người ĐÓ bị ghi đè):
+  // dùng chung đích với ô Cờ thì người chỉ có ghi đè mà không có cờ bị đẩy sang ngày của người
+  // khác, lọc `q=<tên>` không khớp ai, và màn đích in "Không ai khớp bộ lọc".
   const dayRows = await sdb.staffAttendanceDay.findMany({
     where: { centerId: coSo, workDate: { gte: from, lte: to } },
-    select: { userId: true, workDate: true, flags: true, dayType: true },
+    select: { userId: true, workDate: true, flags: true, dayType: true, overrideUnits: true },
     orderBy: { workDate: "asc" },
   });
   const ngayCoCo = new Set<string>();
   const ngayKhongLuot = new Set<string>();
   const coDauTienCua = new Map<string, string>();
+  const ghiDeDauTienCua = new Map<string, string>();
   for (const d of dayRows) {
     const ymd = d.workDate.toISOString().slice(0, 10);
     if (d.flags.some(countsAsIssue)) {
       ngayCoCo.add(ymd);
       if (!coDauTienCua.has(d.userId)) coDauTienCua.set(d.userId, ymd);
     }
+    if (d.overrideUnits != null && !ghiDeDauTienCua.has(d.userId)) ghiDeDauTienCua.set(d.userId, ymd);
     if (d.dayType === "WORK" && d.flags.includes("KHONG_CO_LUOT")) ngayKhongLuot.add(ymd);
   }
   const ngayCoCoDauTien = [...ngayCoCo].sort()[0] ?? null;
@@ -195,8 +202,11 @@ export default async function KyCongPage({
   }
 
   const standardUnits = period?.standardUnits ?? summary.standardUnits;
-  const drillBase = (name: string, ymd: string | null) =>
-    ymd ? hrefWith("/cham-cong", { coSo, date: ymd, loc: "co", q: name }) : null;
+  // Đích của một ô = ngày của CHÍNH người đó (không mượn ngày của người khác) + đúng bộ lọc sinh
+  // ra con số trong ô. Không có ngày ⇒ trả `null` để ô in số trần, thà không bấm được còn hơn dẫn
+  // tới một trang rỗng.
+  const drillBase = (name: string, ymd: string | undefined, loc: "co" | "ghide") =>
+    ymd ? hrefWith("/cham-cong", { coSo, date: ymd, loc, q: name }) : null;
   const rows: PeriodTableRow[] = summary.rows.map((r) => ({
     userId: r.userId,
     name: r.name,
@@ -214,7 +224,8 @@ export default async function KyCongPage({
     overrideDays: r.overrideDays,
     flaggedDays: r.flaggedDays,
     teachingSessions: r.teachingSessions,
-    drillHref: drillBase(r.name, coDauTienCua.get(r.userId) ?? ngayCoCoDauTien),
+    drillHref: drillBase(r.name, coDauTienCua.get(r.userId), "co"),
+    overrideHref: drillBase(r.name, ghiDeDauTienCua.get(r.userId), "ghide"),
   }));
 
   return (
@@ -257,13 +268,13 @@ export default async function KyCongPage({
         keep={{ ky }}
       />
 
-      <PageHelp guideSlug="08-nhan-su-giao-vien">
+      <PageHelp guideSlug="nhan-su-giao-vien">
         <p>
           Chốt kỳ đóng băng công của cả khối trong tháng: sau khi chốt, lượt quét và ô lưới không đổi được số
           nữa, và chỉ cấp Hội sở mở lại được. Rà hết dải “việc còn dang dở” rồi bấm “Tính lại” trước khi chốt.
         </p>
         <p className="mt-2">
-          Công chuẩn (K-04) là số ngày công chuẩn của tháng, mặc định = số ngày trong tháng trừ ngày nghỉ tuần
+          Công chuẩn là số ngày công chuẩn của tháng, mặc định = số ngày trong tháng trừ ngày nghỉ tuần
           và ngày lễ. Sửa tay khi khối có lịch riêng; để trống rồi Lưu là trả về cách tính tự động.
         </p>
       </PageHelp>
@@ -274,7 +285,7 @@ export default async function KyCongPage({
           {
             icon: CalendarCheck,
             value: standardUnits != null ? standardUnits.toLocaleString("vi-VN") : "—",
-            label: "Công chuẩn (K-04)",
+            label: "Công chuẩn",
             hint:
               standardUnits != null
                 ? `${soNgayTrongKy} ngày − ${(soNgayTrongKy - standardUnits).toLocaleString("vi-VN")} ngày nghỉ tuần/lễ`
@@ -327,11 +338,24 @@ export default async function KyCongPage({
           standardUnits={standardUnits}
           standardUnitsNote={period?.standardUnitsNote ?? null}
           canClose={canClose}
+          canReopen={canReopen}
           askWho={ASK_WHO[CLOSE]}
         />
       </SectionCard>
 
-      <PeriodTable rows={rows} totals={summary.totals} emptyHref={hrefWith("/cham-cong/phan-ca", ctx)} />
+      {rows.length === 0 ? (
+        <EmptyState
+          title="Chưa có ca hay ngày công nào trong kỳ này"
+          description="Chưa xếp lịch cho khối, hoặc cả khối nghỉ nguyên kỳ."
+          action={
+            <Link href={hrefWith("/cham-cong/phan-ca", ctx)} className={BTN_OUTLINE}>
+              Xem lưới phân ca
+            </Link>
+          }
+        />
+      ) : (
+        <PeriodTable rows={rows} totals={summary.totals} />
+      )}
 
       <p className="mt-3 text-xs text-muted-foreground">
         {locked && period?.lockedAt

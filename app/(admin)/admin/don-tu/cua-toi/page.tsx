@@ -11,6 +11,9 @@
 // 2. Không gate quyền: đọc đơn của chính mình. Thêm `checkPermission` là khoá màn của nhân viên.
 // 3. `?type=` mở sẵn form theo loại (site GV dùng cùng hợp đồng query); `?date=` điền sẵn ngày —
 //    hai tham số này do màn "Lịch ca của tôi" phát ra, đừng đổi tên.
+// 4. `?month=` màn này KHÔNG dùng để đọc dữ liệu (đơn của tôi không chia theo tháng) — nó chỉ đi
+//    NHỜ qua đây để tab "Lịch ca" trả người dùng về đúng tháng họ đang xem. Bỏ nó là bấm sang
+//    "Đơn của tôi" rồi bấm về là rơi từ tháng 08 xuống tháng hiện tại.
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
@@ -34,11 +37,14 @@ export const dynamic = "force-dynamic";
 const dateFmt = new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Asia/Ho_Chi_Minh" });
 const dtFmt = new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Ho_Chi_Minh" });
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
+/** "YYYY-MM" tháng 01–12. Kiểm tại chỗ thay vì nhập `parsePeriodKey` — file đó kéo cả `@/lib/db`
+ *  vào chỉ để so một chuỗi, mà màn này không đọc dữ liệu theo tháng. */
+const KY = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 export default async function DonCuaToiPage({
   searchParams,
 }: {
-  searchParams: Promise<{ type?: string; date?: string; status?: string }>;
+  searchParams: Promise<{ type?: string; date?: string; status?: string; month?: string }>;
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login?callbackUrl=%2Fdon-tu%2Fcua-toi");
@@ -72,6 +78,7 @@ export default async function DonCuaToiPage({
   const presetStatus = (WORK_REQUEST_STATUSES as readonly string[]).includes(sp.status ?? "")
     ? (sp.status as WorkRequestStatusV)
     : null;
+  const month = sp.month && KY.test(sp.month) ? sp.month : null;
 
   return (
     <div className="max-w-6xl">
@@ -79,16 +86,17 @@ export default async function DonCuaToiPage({
         title="Đơn của tôi"
         subtitle="Đổi ca, nghỉ phép, chỉnh công (quên quét), tăng ca, đi muộn/về sớm, công tác."
       />
-      <MeNav active="cua-toi" />
-      <PageHelp guideSlug="08-nhan-su-giao-vien">
+      <MeNav active="cua-toi" month={month} />
+      <PageHelp guideSlug="nhan-su-giao-vien">
         <p>
           Đơn gửi tới Quản lý của cơ sở chịu công ngày đó (người Hội sở phải tự chọn cơ sở nhận đơn). Duyệt xong thì
           lịch ca và công ngày đổi ngay, và bạn nhận thông báo.
         </p>
         <p className="mt-2">
-          Nộp trước hạn báo trước; nộp muộn vẫn gửi được nhưng đơn mang cờ <em>Nộp muộn</em>. Đơn đã duyệt mà cột
-          &ldquo;Phản hồi&rdquo; báo <em>không áp được</em> nghĩa là hệ thống không ghi được thay đổi (ca đã đổi, kỳ đã
-          chốt…) — báo Quản lý để duyệt lại.
+          Nộp trước hạn báo trước; nộp muộn vẫn gửi được nhưng đơn mang cờ <em>Nộp muộn</em>. Đơn đang
+          <b> Chờ duyệt</b> mà cột &ldquo;Phản hồi&rdquo; báo <em>không áp được</em> nghĩa là lần duyệt trước hệ
+          thống không ghi được thay đổi (ca đã đổi, kỳ công đã chốt…) nên đơn tự quay lại hàng chờ — báo Quản lý
+          duyệt lại. Không bao giờ có đơn &ldquo;đã duyệt&rdquo; mà lịch chưa đổi.
         </p>
       </PageHelp>
       <MyRequests

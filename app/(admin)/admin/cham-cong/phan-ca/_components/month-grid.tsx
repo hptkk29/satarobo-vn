@@ -113,107 +113,116 @@ export function MonthGrid({
     cn(d.off && "bg-muted", d.holiday && "text-state-danger-ink", d.today && "border-x border-primary");
 
   return (
-    <PhanTrangBang cuonNgang tenDonVi="người" khoaGhiNho="phan-ca" soDongMacDinh={50}>
-      <table className="min-w-[1200px] text-xs">
-        <thead className="border-b border-border bg-muted/40">
-          <tr>
-            <th scope="col" className={cn(adminTh, "sticky left-0 z-10 bg-muted px-3 py-2")}>
-              Nhân sự
-            </th>
-            {days.map((d) => (
-              <th
-                key={d.day}
-                scope="col"
-                className={cn(adminTh, "px-1 py-2 text-center tabular-nums", dayTone(d))}
-                title={d.holiday ? "Ngày lễ" : d.off ? "Ngày nghỉ tuần" : undefined}
-              >
-                <div className="text-sm font-bold text-foreground">{d.day}</div>
-                <div className="font-normal normal-case">{WD_LABEL[d.wd]}</div>
+    // Vỏ thẻ giống period-table/request-queue-table — và giống `GridSkeleton`, nếu không thì
+    // khung bo góc của lúc chờ hiện ra rồi BIẾN MẤT khi dữ liệu về.
+    <div className="overflow-hidden rounded-xl border border-border bg-card">
+      <PhanTrangBang cuonNgang tenDonVi="người" khoaGhiNho="phan-ca" soDongMacDinh={50}>
+        <table className="min-w-[1200px] text-xs">
+          <thead className="border-b border-border bg-muted/40">
+            <tr>
+              <th scope="col" className={cn(adminTh, "sticky left-0 z-10 bg-muted px-3 py-2")}>
+                Nhân sự
               </th>
-            ))}
-            <th scope="col" className={cn(adminTh, "px-3 py-2 text-right")}>
-              Công
-            </th>
-            <th scope="col" className={cn(adminTh, "px-3 py-2 text-right")}>
-              Nghỉ
-            </th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {rows.map((row) => {
-            const { cong, nghi } = tongCua(row);
-            return (
-              <tr key={row.userId} className={adminTr}>
-                <td
-                  className={cn(adminTd, "sticky left-0 z-10 max-w-[13rem] truncate bg-card px-3 py-1 font-medium")}
-                  title={row.jobLabel ? `${row.name} · ${row.jobLabel}` : row.name}
+              {days.map((d) => (
+                <th
+                  key={d.day}
+                  scope="col"
+                  className={cn(adminTh, "px-1 py-2 text-center tabular-nums", dayTone(d))}
+                  title={d.holiday ? "Ngày lễ" : d.off ? "Ngày nghỉ tuần" : undefined}
                 >
-                  {row.name}
-                  {row.jobLabel && (
-                    <span className="ml-1 text-xs font-normal text-muted-foreground">· {row.jobLabel}</span>
-                  )}
-                </td>
+                  <div className="text-sm font-bold text-foreground">{d.day}</div>
+                  <div className="font-normal normal-case">{WD_LABEL[d.wd]}</div>
+                </th>
+              ))}
+              <th scope="col" className={cn(adminTh, "px-3 py-2 text-right")}>
+                Công
+              </th>
+              <th scope="col" className={cn(adminTh, "px-3 py-2 text-right")}>
+                Nghỉ
+              </th>
+            </tr>
+          </thead>
 
-                {days.map((d) => {
-                  const c = row.cells[d.day] ?? null;
-                  const key = `${row.userId}:${d.ymd}`;
-                  const nhan = `${row.name} · ${WD_LABEL[d.wd]} ${d.label}`;
-                  return (
-                    <td key={d.day} className={cn("px-0.5 py-1.5 text-center", dayTone(d))}>
-                      {c?.foreignUnit ? (
-                        <span
-                          className={CELL_BOX}
-                          title={`${nhan}: ca chịu công tại ${c.foreignUnit} — đổi khối để sửa`}
-                        >
-                          <ShiftCodeChip code={c.code} foreignUnit={c.foreignUnit} size="sm" />
-                        </span>
-                      ) : canEdit ? (
-                        <ShiftCellPicker
-                          value={c?.code ?? null}
-                          source={c?.source}
-                          codes={codes}
-                          busy={pending && busy === key}
-                          triggerLabel={`Chọn ca cho ${nhan}`}
-                          menuTitle={nhan}
-                          onPick={(code, note) => doiO(row, d, code, note)}
-                        />
-                      ) : (
-                        <span className={CELL_BOX} title={`${nhan}: chỉ xem`}>
-                          <ShiftCodeChip code={c?.code ?? null} source={c?.source} size="sm" />
-                        </span>
+          <tbody>
+            {rows.map((row) => {
+              const { cong, nghi } = tongCua(row);
+              return (
+                <tr key={row.userId} className={adminTr}>
+                  <td
+                    className={cn(adminTd, "sticky left-0 z-10 bg-card px-3 py-1 font-medium")}
+                    title={row.jobLabel ? `${row.name} · ${row.jobLabel}` : row.name}
+                  >
+                    {/* `max-w` + `truncate` phải ở SPAN: bảng auto-layout bỏ qua max-width trên
+                        `<td>`, còn `adminTd` có sẵn `whitespace-nowrap` ⇒ ô không cắt chữ mà nở
+                        ra, đẩy cả cột sticky rộng thêm. */}
+                    <span className="block max-w-[13rem] truncate">
+                      {row.name}
+                      {row.jobLabel && (
+                        <span className="ml-1 text-xs font-normal text-muted-foreground">· {row.jobLabel}</span>
                       )}
-                    </td>
-                  );
-                })}
+                    </span>
+                  </td>
 
-                <td className={cn(adminTd, "px-3 py-1 text-right font-semibold tabular-nums")}>{cong}</td>
-                <td className={cn(adminTd, "px-3 py-1 text-right tabular-nums text-muted-foreground")}>{nghi}</td>
-              </tr>
-            );
-          })}
-        </tbody>
+                  {days.map((d) => {
+                    const c = row.cells[d.day] ?? null;
+                    const key = `${row.userId}:${d.ymd}`;
+                    const nhan = `${row.name} · ${WD_LABEL[d.wd]} ${d.label}`;
+                    return (
+                      <td key={d.day} className={cn("px-0.5 py-1.5 text-center", dayTone(d))}>
+                        {c?.foreignUnit ? (
+                          <span
+                            className={CELL_BOX}
+                            title={`${nhan}: ca chịu công tại ${c.foreignUnit} — đổi khối để sửa`}
+                          >
+                            <ShiftCodeChip code={c.code} foreignUnit={c.foreignUnit} size="sm" />
+                          </span>
+                        ) : canEdit ? (
+                          <ShiftCellPicker
+                            value={c?.code ?? null}
+                            source={c?.source}
+                            codes={codes}
+                            busy={pending && busy === key}
+                            triggerLabel={`Chọn ca cho ${nhan}`}
+                            menuTitle={nhan}
+                            onPick={(code, note) => doiO(row, d, code, note)}
+                          />
+                        ) : (
+                          <span className={CELL_BOX} title={`${nhan}: chỉ xem`}>
+                            <ShiftCodeChip code={c?.code ?? null} source={c?.source} size="sm" />
+                          </span>
+                        )}
+                      </td>
+                    );
+                  })}
 
-        <tfoot className="border-t border-border bg-muted/40">
-          <tr>
-            <th scope="row" className={cn(adminTh, "sticky left-0 z-10 bg-muted px-3 py-2")}>
-              Có ca
-            </th>
-            {days.map((d, i) => (
-              <td
-                key={d.day}
-                className={cn("px-1 py-2 text-center text-xs font-semibold tabular-nums", dayTone(d))}
-              >
-                {coCaTheoNgay[i]}
+                  <td className={cn(adminTd, "px-3 py-1 text-right font-semibold tabular-nums")}>{cong}</td>
+                  <td className={cn(adminTd, "px-3 py-1 text-right tabular-nums text-muted-foreground")}>{nghi}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+
+          <tfoot className="border-t border-border bg-muted/40">
+            <tr>
+              <th scope="row" className={cn(adminTh, "sticky left-0 z-10 bg-muted px-3 py-2")}>
+                Có ca
+              </th>
+              {days.map((d, i) => (
+                <td
+                  key={d.day}
+                  className={cn("px-1 py-2 text-center text-xs font-semibold tabular-nums", dayTone(d))}
+                >
+                  {coCaTheoNgay[i]}
+                </td>
+              ))}
+              <td className={cn(adminTd, "px-3 py-2 text-right text-xs text-muted-foreground")}>
+                {blockLabel}
               </td>
-            ))}
-            <td className={cn(adminTd, "px-3 py-2 text-right text-xs text-muted-foreground")}>
-              {blockLabel}
-            </td>
-            <td className={cn(adminTd, "px-3 py-2")} />
-          </tr>
-        </tfoot>
-      </table>
-    </PhanTrangBang>
+              <td className={cn(adminTd, "px-3 py-2")} />
+            </tr>
+          </tfoot>
+        </table>
+      </PhanTrangBang>
+    </div>
   );
 }

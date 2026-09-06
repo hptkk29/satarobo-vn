@@ -21,7 +21,7 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { ArrowRight, ClipboardCheck, LayoutGrid, Loader2, RotateCcw, TriangleAlert, Upload } from "lucide-react";
 import { toast } from "sonner";
-import { EmptyState, ErrorState } from "@/components/admin/ui/states";
+import { ErrorState } from "@/components/admin/ui/states";
 import { StatusPill } from "@/components/admin/ui/status-pill";
 import { SectionCard } from "@/components/admin/cham-cong/section-card";
 import { BTN_OUTLINE, BTN_PRIMARY } from "@/components/admin/cham-cong/classes";
@@ -284,7 +284,7 @@ export function ImportWizard({
           <SectionCard title="Bước 2 — Ánh xạ tên trên Sheet ↔ nhân sự">
             <fieldset disabled={pending} aria-busy={pending} className="min-w-0 space-y-3">
               <p className="text-sm text-muted-foreground">
-                Hệ thống chỉ gợi ý — anh/chị xác nhận một lần, lần sau tự nhớ. Bạn được phân ca ở:{" "}
+                Hệ thống chỉ gợi ý — bạn xác nhận một lần, lần sau tự nhớ. Bạn được phân ca ở:{" "}
                 <b>{preview.centers.join(", ") || "—"}</b>.
               </p>
               {preview.unknownCodes.length > 0 && (
@@ -315,7 +315,7 @@ export function ImportWizard({
             </fieldset>
           </SectionCard>
 
-          <SectionCard title="Bước 2 — Phần cần áp">
+          <SectionCard title="Phần cần áp">
             <fieldset disabled={pending} aria-busy={pending} className="min-w-0 space-y-3">
               <label className="flex items-center gap-2 text-sm">
                 <input
@@ -328,10 +328,12 @@ export function ImportWizard({
               </label>
 
               {preview.months.length === 0 ? (
-                <EmptyState
-                  title="File chỉ có tab KHUNG CA"
-                  description="Không có tab LỊCH Tmm-yyyy nào, nên lượt này chỉ áp được mẫu tuần. Muốn áp lưới tháng thì tải lại file Sheet có tab lịch tháng."
-                />
+                // Đang ở TRONG SectionCard ⇒ không dùng `EmptyState` (nó tự mang vỏ thẻ, lồng vào
+                // đây thành hai lớp viền trên cùng một nền).
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  File chỉ có tab KHUNG CA — không có tab LỊCH Tmm-yyyy nào, nên lượt này chỉ áp được
+                  mẫu tuần. Muốn áp lưới tháng thì tải lại file Sheet có tab lịch tháng.
+                </p>
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {preview.months.map((m) => {
@@ -389,9 +391,13 @@ export function ImportWizard({
           tone={soLech === 0 ? "success" : "warning"}
           actions={
             soLech === 0 ? (
-              <StatusPill tone="success">Khớp toàn bộ với Sheet</StatusPill>
+              <StatusPill tone="success" className="text-state-success-ink">
+                Khớp toàn bộ với Sheet
+              </StatusPill>
             ) : (
-              <StatusPill tone="danger">{soLech} mã lệch</StatusPill>
+              <StatusPill tone="danger" className="text-state-danger-ink">
+                {soLech} mã lệch
+              </StatusPill>
             )
           }
         >

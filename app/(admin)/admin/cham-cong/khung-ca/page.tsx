@@ -195,7 +195,7 @@ export default async function KhungCaPage({ searchParams }: Props) {
         keep={ky ? { ky } : undefined}
       />
 
-      <PageHelp guideSlug="08-nhan-su-giao-vien">
+      <PageHelp guideSlug="nhan-su-giao-vien">
         <p>
           Mỗi dòng là lịch tuần cố định của một người trong một khối. Chọn mã ca cho từng thứ, để
           trống nghĩa là thứ đó không xếp ca. Người làm ở cả hai cơ sở có hai dòng — một dòng ở mỗi

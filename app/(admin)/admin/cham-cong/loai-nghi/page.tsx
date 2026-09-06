@@ -67,7 +67,7 @@ export default async function LoaiNghiPage({
     <div className="max-w-6xl">
       {head}
       <ConfigTabs active="loai-nghi" scope={scope} ctx={ctx} />
-      <PageHelp guideSlug="08-nhan-su-giao-vien">
+      <PageHelp guideSlug="nhan-su-giao-vien">
         <p>
           Duyệt đơn nghỉ xong, hệ thống ghi mã lên lưới phân ca theo tỷ lệ lương: tỷ lệ &gt; 0 ghi{" "}
           <span className="font-mono">P</span> (nghỉ có lương), tỷ lệ = 0 ghi{" "}

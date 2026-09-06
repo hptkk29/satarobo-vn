@@ -31,7 +31,7 @@ import { scopedDb } from "@/lib/db-scope";
 import { getSetting } from "@/lib/settings/service";
 import { loadCenterMap } from "@/lib/cham-cong/home-center";
 import { ASK_WHO, loadModuleScope, periodStatusOf, type ModuleAction } from "@/lib/cham-cong/module-scope";
-import { hrefWith, monthStepDate } from "@/lib/cham-cong/scope-href";
+import { hrefWith, monthStepDate, scopeHref } from "@/lib/cham-cong/scope-href";
 import { countsAsIssue, flagInfo } from "@/lib/cham-cong/flag-labels";
 import { parseVnYmd, vnDateAt, vnDateOnly, vnWeekday, vnYmd } from "@/lib/time/vn";
 import { cn } from "@/lib/utils";
@@ -57,12 +57,16 @@ import { ShiftCodeChip, type ShiftSource } from "@/components/cham-cong/ui/shift
 import { DayTypePill, type DayType } from "@/components/cham-cong/ui/day-type-pill";
 import { DayDetailSheet, type DayRow, type DayTap } from "./_components/day-detail-sheet";
 
-export const metadata = { title: "Bảng công ngày | Admin" };
+export const metadata = { title: "Bảng công ngày | Admin", robots: { index: false } };
 export const dynamic = "force-dynamic";
 
 const VIEW: ModuleAction = "hr_attendance:view";
 const ASSIGN: ModuleAction = "hr_attendance:assign";
 const ADJUST: ModuleAction = "hr_attendance:adjust";
+
+/** MỘT chuỗi cho cả hai nhánh (có quyền / không quyền) — hai câu khác nhau cho cùng một màn là
+ *  thứ người dùng đọc thành "hai màn khác nhau". */
+const SUBTITLE = "Công đếm theo lịch đã xếp; lượt quét chỉ sinh cờ để quản lý rà.";
 
 /** Bộ lọc nhanh trên toolbar. Giá trị lạ ⇒ coi như không lọc. */
 type Loc = "co" | "chuaquet" | "ghide" | null;
@@ -107,7 +111,7 @@ function rowRank(flags: string[]): number {
 
 export default async function ChamCongPage({ searchParams }: Props) {
   const session = await auth();
-  if (!session?.user) redirect("/login");
+  if (!session?.user) redirect("/login?callbackUrl=%2Fcham-cong");
 
   const sp = await searchParams;
   const scope = await loadModuleScope(session.user.id);
@@ -117,7 +121,7 @@ export default async function ChamCongPage({ searchParams }: Props) {
   if (!block) {
     return (
       <div className="max-w-6xl">
-        <PageHeader title="Bảng công ngày" subtitle="Công, giờ và cờ hậu kiểm của một ngày." />
+        <PageHeader title="Bảng công ngày" subtitle={SUBTITLE} />
         <ModuleNav active="ngay" scope={scope} ctx={ctxNoBlock} />
         <NoPermission
           permission={VIEW}
@@ -328,14 +332,16 @@ export default async function ChamCongPage({ searchParams }: Props) {
     <div className="max-w-6xl">
       <PageHeader
         title="Bảng công ngày"
-        subtitle="Công đếm theo lịch đã xếp; lượt quét chỉ sinh cờ để quản lý rà."
+        subtitle={SUBTITLE}
         actions={
           <>
             <Link href={`/cham-cong/man-hinh?centerId=${coSo}`} className={BTN_OUTLINE}>
               <Monitor aria-hidden className="h-4 w-4" /> Màn hình QR
             </Link>
             {canAssign && (
-              <Link href="/cham-cong/phan-ca/import" className={BTN_OUTLINE}>
+              // `scopeHref` chứ không href trần: màn import ĐỌC cả `ky` lẫn `coSo`, đi tay là
+              // người đang soát CS2 tháng 08 bấm sang rơi về tháng hiện tại của khối đầu tiên.
+              <Link href={scopeHref("/cham-cong/phan-ca/import", { ky, coSo })} className={BTN_OUTLINE}>
                 <FileSpreadsheet aria-hidden className="h-4 w-4" /> Import lịch
               </Link>
             )}
@@ -358,7 +364,7 @@ export default async function ChamCongPage({ searchParams }: Props) {
         keep={{ date: dateStr, ...(loc ? { loc } : {}), ...(q ? { q } : {}) }}
       />
 
-      <PageHelp guideSlug="08-nhan-su-giao-vien">
+      <PageHelp guideSlug="nhan-su-giao-vien">
         <p>
           Mỗi dòng là một người trong ngày đang chọn. Công được tính theo ca đã xếp trong lưới phân
           ca — lượt quét vào/ra chỉ dùng để gắn cờ (đi muộn, thiếu lượt, ngoài vùng…) cho quản lý rà
@@ -375,25 +381,33 @@ export default async function ChamCongPage({ searchParams }: Props) {
       <KpiStrip
         cols={5}
         items={[
-          { icon: Users, value: kpiShift, label: "Có ca", tone: "brand", hint: `${rows.length} người trong ngày` },
-          { icon: ClipboardCheck, value: kpiScanned, label: "Đã quét", tone: "info" },
+          // `KpiStrip` không tự format (xem hợp đồng ở kpi-strip.tsx) — số phải được định dạng
+          // vi-VN tại đây, kẻo một khối vượt 1.000 là hàng KPI có ô "1.234" cạnh ô "1234".
+          {
+            icon: Users,
+            value: kpiShift.toLocaleString("vi-VN"),
+            label: "Có ca",
+            tone: "brand",
+            hint: `${rows.length.toLocaleString("vi-VN")} người trong ngày`,
+          },
+          { icon: ClipboardCheck, value: kpiScanned.toLocaleString("vi-VN"), label: "Đã quét", tone: "info" },
           {
             icon: Flag,
-            value: kpiIssues,
+            value: kpiIssues.toLocaleString("vi-VN"),
             label: "Cờ cần rà",
             tone: "danger",
             href: here({ loc: "co" }),
           },
           {
             icon: CalendarClock,
-            value: kpiPending,
+            value: kpiPending.toLocaleString("vi-VN"),
             label: "Chờ tính",
             tone: "warning",
             hint: kpiPending > 0 ? "Máy tính lại sau vài phút" : undefined,
           },
           {
             icon: PencilLine,
-            value: kpiOverride,
+            value: kpiOverride.toLocaleString("vi-VN"),
             label: "Đã ghi đè",
             tone: "warning",
             href: here({ loc: "ghide" }),
@@ -452,11 +466,27 @@ export default async function ChamCongPage({ searchParams }: Props) {
       {rows.length === 0 ? (
         <EmptyState
           title={`Chưa có ca hay lượt chấm ngày ${dateStr.slice(8, 10)}/${dateStr.slice(5, 7)} ở ${block.label}`}
-          description="Có thể lịch tháng này chưa được import, hoặc cả khối nghỉ ngày này."
+          description={
+            <>
+              Có thể lịch tháng này chưa được import, hoặc cả khối nghỉ ngày này.
+              {/* Quyền MỘT PHẦN phải nói thành lời: kế toán cơ sở có `view` mà không có `assign`
+                  chỉ thấy nút Import biến mất, không biết vì sao và hỏi ai. */}
+              {!canAssign && (
+                <>
+                  {" "}
+                  Import lịch cần quyền{" "}
+                  <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">
+                    hr_attendance:assign
+                  </code>{" "}
+                  tại {block.label} — xin cấp ở {ASK_WHO[ASSIGN]}.
+                </>
+              )}
+            </>
+          }
           action={
             <div className="flex flex-wrap items-center justify-center gap-2">
               {canAssign && (
-                <Link href="/cham-cong/phan-ca/import" className={BTN_OUTLINE}>
+                <Link href={scopeHref("/cham-cong/phan-ca/import", { ky, coSo })} className={BTN_OUTLINE}>
                   <FileSpreadsheet aria-hidden className="h-4 w-4" /> Import lịch
                 </Link>
               )}
@@ -477,90 +507,96 @@ export default async function ChamCongPage({ searchParams }: Props) {
           }
         />
       ) : (
-        <PhanTrangBang cuonNgang tenDonVi="người" khoaGhiNho="cham-cong-ngay">
-          <table className="w-full">
-            <thead className="border-b border-border bg-muted/40">
-              <tr>
-                <th scope="col" className={adminTh}>
-                  Nhân sự
-                </th>
-                <th scope="col" className={adminTh}>
-                  Ca
-                </th>
-                <th scope="col" className={adminTh}>
-                  Quét
-                </th>
-                <th scope="col" className={cn(adminTh, "text-right")}>
-                  Giờ / KH
-                </th>
-                <th scope="col" className={cn(adminTh, "text-right")}>
-                  Công
-                </th>
-                <th scope="col" className={adminTh}>
-                  Cờ
-                </th>
-                <th scope="col" className={adminTh}>
-                  <span className="sr-only">Chi tiết</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map((r) => (
-                <tr key={r.detail.userId} className={cn(adminTr, "h-11")}>
-                  <td className={cn(adminTd, "py-0")}>
-                    <DayDetailSheet
-                      row={r.detail}
-                      canAdjust={canAdjust}
-                      locked={r.locked || locked}
-                      kyHref={kyHref}
-                    />
-                  </td>
-                  <td className={cn(adminTd, "py-0")}>
-                    <span className="flex items-center gap-1.5">
-                      <ShiftCodeChip code={r.detail.code} source={r.detail.source} size="sm" />
-                      <DayTypePill type={r.detail.dayType} />
-                    </span>
-                  </td>
-                  <td className={cn(adminTd, "py-0 font-mono tabular-nums")}>{r.quet}</td>
-                  <td className={cn(adminTd, "py-0 text-right tabular-nums")}>{r.gio}</td>
-                  <td className={cn(adminTd, "py-0 text-right")}>
-                    <span className="inline-flex items-center justify-end gap-1.5">
-                      {r.credit != null ? (
-                        <span className="font-semibold tabular-nums">{r.credit}</span>
-                      ) : (
-                        <span className={cn(PILL, "bg-muted text-muted-foreground")}>Chờ tính</span>
-                      )}
-                      {r.override && (
-                        <span
-                          className={cn(PILL, "bg-state-warning-soft text-state-warning-ink")}
-                          title={r.overrideNote ?? "Quản lý đã ghi đè"}
-                        >
-                          ghi đè
-                        </span>
-                      )}
-                      {r.locked && (
-                        <Lock
-                          aria-label="Ngày đã chốt"
-                          className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-                        />
-                      )}
-                    </span>
-                  </td>
-                  <td className={cn(adminTd, "py-0 whitespace-normal")}>
-                    <FlagList codes={r.flags} max={2} />
-                  </td>
-                  <td className={cn(adminTd, "py-0 text-right")}>
-                    <ChevronRight aria-hidden className="ml-auto h-4 w-4 text-muted-foreground" />
-                  </td>
+        // Vỏ thẻ giống period-table/request-queue-table — và giống `TableSkeleton`, nếu không
+        // thì khung bo góc của lúc chờ hiện ra rồi BIẾN MẤT khi dữ liệu về.
+        <div className="overflow-hidden rounded-xl border border-border bg-card">
+          <PhanTrangBang cuonNgang tenDonVi="người" khoaGhiNho="cham-cong-ngay">
+            <table className="w-full">
+              <thead className="border-b border-border bg-muted/40">
+                <tr>
+                  <th scope="col" className={adminTh}>
+                    Nhân sự
+                  </th>
+                  <th scope="col" className={adminTh}>
+                    Ca
+                  </th>
+                  <th scope="col" className={adminTh}>
+                    Quét
+                  </th>
+                  <th scope="col" className={cn(adminTh, "text-right")}>
+                    Giờ / KH
+                  </th>
+                  <th scope="col" className={cn(adminTh, "text-right")}>
+                    Công
+                  </th>
+                  <th scope="col" className={adminTh}>
+                    Cờ
+                  </th>
+                  <th scope="col" className={adminTh}>
+                    <span className="sr-only">Chi tiết</span>
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </PhanTrangBang>
+              </thead>
+              <tbody>
+                {visible.map((r) => (
+                  <tr key={r.detail.userId} className={cn(adminTr, "h-11")}>
+                    <td className={cn(adminTd, "py-0")}>
+                      <DayDetailSheet
+                        row={r.detail}
+                        canAdjust={canAdjust}
+                        locked={r.locked || locked}
+                        kyHref={kyHref}
+                      />
+                    </td>
+                    <td className={cn(adminTd, "py-0")}>
+                      <span className="flex items-center gap-1.5">
+                        <ShiftCodeChip code={r.detail.code} source={r.detail.source} size="sm" />
+                        <DayTypePill type={r.detail.dayType} />
+                      </span>
+                    </td>
+                    <td className={cn(adminTd, "py-0 font-mono tabular-nums")}>{r.quet}</td>
+                    <td className={cn(adminTd, "py-0 text-right tabular-nums")}>{r.gio}</td>
+                    <td className={cn(adminTd, "py-0 text-right")}>
+                      <span className="inline-flex items-center justify-end gap-1.5">
+                        {r.credit != null ? (
+                          <span className="font-semibold tabular-nums">{r.credit}</span>
+                        ) : (
+                          <span className={cn(PILL, "bg-muted text-muted-foreground")}>Chờ tính</span>
+                        )}
+                        {r.override && (
+                          <span
+                            className={cn(PILL, "bg-state-warning-soft text-state-warning-ink")}
+                            title={r.overrideNote ?? "Quản lý đã ghi đè"}
+                          >
+                            ghi đè
+                          </span>
+                        )}
+                        {r.locked && (
+                          <Lock
+                            aria-label="Ngày đã chốt"
+                            className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                          />
+                        )}
+                      </span>
+                    </td>
+                    <td className={cn(adminTd, "py-0 whitespace-normal")}>
+                      <FlagList codes={r.flags} max={2} />
+                    </td>
+                    <td className={cn(adminTd, "py-0 text-right")}>
+                      <ChevronRight aria-hidden className="ml-auto h-4 w-4 text-muted-foreground" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </PhanTrangBang>
+        </div>
       )}
 
       <p className="mt-3 text-xs text-muted-foreground">
-        Ngày công tính theo giờ Việt Nam. Hôm nay: {today}.
+        {/* dd/MM/yyyy chứ không phải chuỗi ISO máy đọc — cả module in ngày theo kiểu Việt. */}
+        Ngày công tính theo giờ Việt Nam. Hôm nay:{" "}
+        {`${today.slice(8, 10)}/${today.slice(5, 7)}/${today.slice(0, 4)}`}.
       </p>
     </div>
   );

@@ -244,7 +244,7 @@ export function LeaveTypeList({ rows, canEdit }: { rows: LeaveTypeRow[]; canEdit
       {rows.length === 0 && !draft ? (
         <EmptyState
           title="Chưa có loại nghỉ"
-          description="Danh mục rỗng thì màn nộp đơn không có gì để chọn. Chạy seed nền chấm công (K-06 — 8 loại theo MISA) hoặc thêm tay từng loại."
+          description="Danh mục rỗng thì màn nộp đơn không có gì để chọn. Thêm loại đầu tiên (nghỉ phép năm, nghỉ ốm, nghỉ không lương…) rồi đặt tỷ lệ lương cho từng loại."
           action={
             canEdit ? (
               <button type="button" className={BTN_PRIMARY} onClick={() => setDraft(EMPTY)}>
@@ -254,8 +254,11 @@ export function LeaveTypeList({ rows, canEdit }: { rows: LeaveTypeRow[]; canEdit
           }
         />
       ) : (
-        <PhanTrangBang tenDonVi="loại nghỉ" khoaGhiNho="cham-cong-loai-nghi" cuonNgang>
-          <table className="w-full text-sm">
+        // Vỏ thẻ chuẩn của bảng danh sách trong module (giống `period-table` và
+        // `request-queue-table`): `TableSkeleton` lúc chờ cũng vẽ đúng vỏ này.
+        <div className="overflow-hidden rounded-xl border border-border bg-card">
+          <PhanTrangBang tenDonVi="loại nghỉ" khoaGhiNho="cham-cong-loai-nghi" cuonNgang>
+            <table className="w-full text-sm">
             <thead className="border-b border-border bg-muted/40">
               <tr>
                 <th scope="col" className={adminTh}>Mã</th>
@@ -323,8 +326,9 @@ export function LeaveTypeList({ rows, canEdit }: { rows: LeaveTypeRow[]; canEdit
                 ),
               )}
             </tbody>
-          </table>
-        </PhanTrangBang>
+            </table>
+          </PhanTrangBang>
+        </div>
       )}
 
       {!canEdit && (
