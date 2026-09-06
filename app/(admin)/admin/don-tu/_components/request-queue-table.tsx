@@ -29,49 +29,12 @@ import { adminTd, adminTh, adminTr } from "@/components/admin/ui/table";
 import { PILL } from "@/components/admin/cham-cong/classes";
 import { cn } from "@/lib/utils";
 import type { WorkRequestStatusV } from "@/lib/work-request";
+import type { QueueRow } from "./types";
+
+export type { QueueRow };
 import { RequestSheet } from "./request-sheet";
 
 /** Một dòng đơn — TOÀN chuỗi đã format, để component chạy được ở client mà không đụng múi giờ. */
-export type QueueRow = {
-  id: string;
-  status: WorkRequestStatusV;
-  statusLabel: string;
-  kindLabel: string;
-  requesterName: string;
-  centerCode: string;
-  centerLabel: string;
-  /** "09/09" hoặc "09/09 → 12/09". */
-  applyLabel: string;
-  /** Ngày đầy đủ cho `title` (bảng chỉ đủ chỗ cho dd/MM). */
-  applyTitle: string;
-  timeLabel: string | null;
-  dueLabel: string | null;
-  dueTone: "danger" | "warning" | "muted";
-  effectText: string;
-  effectMuted: boolean;
-  effectCode: string | null;
-  effectHint: string | null;
-  ageLabel: string;
-  stale: boolean;
-  submittedLate: boolean;
-  applyError: string | null;
-  applied: boolean;
-  /** "Nguyễn A ngày 09/09" — câu xác nhận trước khi duyệt. */
-  subject: string;
-  reason: string;
-  detail: string | null;
-  className: string | null;
-  requestedLabel: string | null;
-  newShiftCode: string | null;
-  leaveName: string | null;
-  targetName: string | null;
-  targetShiftCode: string | null;
-  reviewedByName: string | null;
-  reviewedAtLabel: string | null;
-  reviewNote: string | null;
-  createdAtLabel: string;
-};
-
 const STATUS_CLS: Record<WorkRequestStatusV, string> = {
   PENDING: "bg-state-warning-soft text-state-warning-ink",
   APPROVED: "bg-state-success-soft text-state-success-ink",

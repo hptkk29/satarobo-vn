@@ -18,7 +18,7 @@ import {
 import { PILL } from "@/components/admin/cham-cong/classes";
 import { cn } from "@/lib/utils";
 import type { WorkRequestStatusV } from "@/lib/work-request";
-import type { QueueRow } from "./request-queue-table";
+import type { QueueRow } from "./types";
 import { WorkRequestReview } from "./work-request-review";
 
 const STATUS_CLS: Record<WorkRequestStatusV, string> = {
