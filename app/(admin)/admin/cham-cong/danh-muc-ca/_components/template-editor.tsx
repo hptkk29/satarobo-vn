@@ -259,8 +259,11 @@ export function TemplateEditor({
                 Không qua đêm, giờ tăng dần, tối đa 6 đoạn. Nghỉ giữa giờ CÓ tính công phải nằm kẹp
                 giữa hai đoạn làm việc.
               </p>
-              {/* ≤6 dòng, cố ý không phân trang — xem mục miễn trừ ở đầu file. */}
-              <table className="w-full text-sm">
+              {/* ≤6 dòng, cố ý không phân trang — xem mục miễn trừ ở đầu file.
+                  Nhưng VẪN cần vùng cuộn: bảng 5 cột này nằm trong panel bên phải, panel hẹp
+                  thì không có đường lùi nào, các ô giờ bị bóp thay vì cho kéo ngang. */}
+              <div className="relative overflow-x-auto">
+              <table className="w-full min-w-[26rem] text-sm">
                 <thead className="text-left text-xs text-muted-foreground">
                   <tr>
                     <th scope="col" className="py-1 pr-2 font-medium">Bắt đầu</th>
@@ -333,6 +336,7 @@ export function TemplateEditor({
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           ) : (
             !isRest && (

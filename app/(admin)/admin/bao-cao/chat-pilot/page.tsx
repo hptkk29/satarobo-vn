@@ -171,8 +171,8 @@ export default async function ChatPilotReportPage({
         />
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-border bg-card">
-        <PhanTrangBang>
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
+        <PhanTrangBang cuonNgang>
           <Table>
             <TableHeader>
               <TableRow>

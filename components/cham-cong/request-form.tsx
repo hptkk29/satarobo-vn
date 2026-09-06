@@ -214,8 +214,15 @@ export function RequestForm({
           ))}
         </div>
 
-        {/* Cột phải: chỉ những ô của loại đang chọn. */}
-        <div className="space-y-4">
+        {/* Cột phải: chỉ những ô của loại đang chọn.
+            `@container` ĐẶT Ở ĐÂY chứ không chỉ ở vỏ ngoài: các lưới hai cột bên dưới phải đo
+            CHÍNH CỘT NÀY. Đo vỏ ngoài là lặp lại đúng cái sai vừa vá, chỉ đổi thước — vỏ 534px
+            thì `@lg` bật, trong khi cột phải chỉ còn 534 − 208 (rail) − 24 (gap) ≈ 302px, mỗi ô
+            date/select rơi xuống ~140px.
+            `min-w-0`: ô lưới mặc định `min-width:auto` nên cột này không chịu co, rail bị đẩy.
+            Ngưỡng dưới là `@md` (448px) chứ không `@lg` (512px): ở panel rộng nhất (3xl = 768px)
+            cột phải chỉ còn ≈ 496px, đặt `@lg` là hai cột KHÔNG BAO GIỜ bật. */}
+        <div className="@container min-w-0 space-y-4">
           {needsCenterPick ? (
             <Field
               id={idOf("centerId")}
@@ -248,7 +255,7 @@ export function RequestForm({
           )}
 
           {isClass ? (
-            <div className="grid grid-cols-1 gap-4 @lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 @md:grid-cols-2">
               <Field id={idOf("classId")} label="Lớp" required error={errors.classId}>
                 <select
                   id={idOf("classId")}
@@ -296,7 +303,7 @@ export function RequestForm({
               )}
             </div>
           ) : kind === "SHIFT_SWAP" ? (
-            <div className="grid grid-cols-1 gap-4 @lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 @md:grid-cols-2">
               <Field id={idOf("fromDate")} label="Ngày đổi ca" required error={errors.fromDate}>
                 <input
                   id={idOf("fromDate")}
@@ -359,7 +366,7 @@ export function RequestForm({
               )}
             </div>
           ) : single ? (
-            <div className="grid grid-cols-1 gap-4 @lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 @md:grid-cols-2">
               <Field id={idOf("fromDate")} label="Ngày" required error={errors.fromDate}>
                 <input
                   id={idOf("fromDate")}
@@ -446,7 +453,7 @@ export function RequestForm({
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-4 @lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 @md:grid-cols-2">
               <Field id={idOf("fromDate")} label="Từ ngày" required error={errors.fromDate}>
                 <input
                   id={idOf("fromDate")}

@@ -147,8 +147,8 @@ export function ParentAccountsClient({
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-border">
-        <PhanTrangBang>
+      <div className="overflow-hidden rounded-lg border border-border">
+        <PhanTrangBang cuonNgang>
           <table className="w-full min-w-[980px] text-sm">
             <thead className="bg-muted text-left text-xs font-medium uppercase text-muted-foreground">
               <tr>
