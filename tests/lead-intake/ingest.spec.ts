@@ -56,6 +56,7 @@ const PHONE = {
   dupWarnings: "0900000111",
   closedLead: "0900000112",
   quatang: "0900000113",
+  webhookCuGiuChu: "0900000114",
 } as const;
 const ALL_PHONES = Object.values(PHONE);
 /** Cùng SĐT nhưng ghi dạng canonical — dùng cho ca "nhận ra trùng dù khác dạng". */
@@ -397,6 +398,102 @@ describe.skipIf(!RUN)("Lead intake · tầng DB thật", () => {
     expect(row?.assignedAt).not.toBeNull();
     // Không chọn cơ sở trên phiếu ⇒ lấy cơ sở của chính nhân viên nhập.
     expect(row?.centerId).toBe(centerAId);
+  }, 60_000);
+
+  it("webhook CŨ + mã NV có thật ⇒ GIỮ chủ theo mã, KHÔNG bị vòng chia đè", async () => {
+    // HỒI QUY 05/09/2026 — mã giới thiệu trên link bị ghi đè im lặng.
+    //
+    // Bốn webhook công khai (facebook · google-form · quatang · zalo) đi `ingestLead`
+    // với `legacyWebhook: true`. Khi ĐÃ biết cơ sở, khối tạo lead gán sẵn chủ theo mã NV
+    // rồi `autoAssignLead` rút một người khác từ vòng chia và ĐÈ LÊN — không lỗi nào nổ.
+    // `autoAssignNewLead` không dính vì nó tự thoát khi lead đã có chủ
+    // (`lib/lead/auto-assign.ts:174`); chênh lệch giữa hai hàm chính là gốc của bug.
+    //
+    // ⚠️ CA NÀY PHẢI TỰ DỰNG ĐỦ BỐI CẢNH, và mỗi mảnh đều là một cách nó từng XANH GIẢ:
+    //   1. OrgUnit cho cơ sở — thiếu thì `autoAssignLead` thoát ngay ở "Lead chưa thuộc
+    //      cơ sở nào" và chẳng đè gì cả.
+    //   2. HAI sale — một người thì vòng chia rút lại đúng người cũ, việc đè vô hình.
+    //   3. Sổ lượt ĐẶT SẴN lệch hẳn — không thì kết quả phụ thuộc vòng đang ở bước nào,
+    //      và ca đỏ/xanh theo thứ tự chạy. Đo tay đã thấy: cùng một chủ, lead thứ nhất
+    //      không đổi tay còn lead thứ hai thì đổi.
+    const hau = `${P}WH${Date.now().toString(36).slice(-5)}`;
+    const coSo = await db.center.create({
+      data: { code: hau, name: `Cơ sở ${hau}`, slug: hau.toLowerCase(), address: "x" },
+      select: { id: true },
+    });
+    const donVi = await db.orgUnit.create({
+      data: { code: `OU_${hau}`, name: `Đơn vị ${hau}`, type: "CENTER", centerId: coSo.id },
+      select: { id: true },
+    });
+    const nhanVien = await db.employee.create({
+      data: {
+        employeeCode: `${hau}_NV`,
+        fullName: `${P}NV mang mã`,
+        jobTitle: "Tư vấn tuyển sinh",
+        department: "TUYEN_SINH",
+        centerId: coSo.id,
+        isActive: true,
+      },
+      select: { id: true },
+    });
+    const chuTheoMa = await db.user.create({
+      data: {
+        email: `${hau}_chu@example.test`,
+        name: `${P}Chủ theo mã`,
+        role: "SALES_CSM",
+        roles: ["SALES_CSM"],
+        centerId: coSo.id,
+        employeeId: nhanVien.id,
+        isActive: true,
+      },
+      select: { id: true },
+    });
+    const nguoiVongChia = await db.user.create({
+      data: {
+        email: `${hau}_vong@example.test`,
+        name: `${P}Người vòng chia`,
+        role: "SALES_CSM",
+        roles: ["SALES_CSM"],
+        centerId: coSo.id,
+        isActive: true,
+      },
+      select: { id: true },
+    });
+    // Ép vòng chia CHẮC CHẮN rút `nguoiVongChia`: người kia nhiều lượt hơn hẳn.
+    await db.leadRotationTurn.createMany({
+      data: [
+        { orgUnitId: donVi.id, userId: chuTheoMa.id, turns: 99, seedTurns: 0, lastTurnAt: new Date() },
+        { orgUnitId: donVi.id, userId: nguoiVongChia.id, turns: 0, seedTurns: 0, lastTurnAt: null },
+      ],
+    });
+
+    try {
+      const r = await ingestIntakeLead(
+        lead({
+          phone: PHONE.webhookCuGiuChu,
+          employeeCode: `${hau}_NV`,
+          centerHint: { kind: "code", value: hau },
+        }),
+        { source: "quatang", legacyWebhook: true },
+      );
+
+      const row = await db.lead.findUnique({
+        where: { id: r.leadId! },
+        select: { centerId: true, assignedToId: true, assignedAt: true },
+      });
+      expect(row?.centerId).toBe(coSo.id);
+      expect(row?.assignedAt).not.toBeNull();
+      // Chủ phải là người MANG MÃ NV — không phải người vòng chia rút ra.
+      expect(row?.assignedToId).toBe(chuTheoMa.id);
+      expect(row?.assignedToId).not.toBe(nguoiVongChia.id);
+    } finally {
+      await db.lead.deleteMany({ where: { centerId: coSo.id } });
+      await db.leadRotationTurn.deleteMany({ where: { orgUnitId: donVi.id } });
+      await db.orgUnit.delete({ where: { id: donVi.id } });
+      await db.user.deleteMany({ where: { id: { in: [chuTheoMa.id, nguoiVongChia.id] } } });
+      await db.employee.delete({ where: { id: nhanVien.id } });
+      await db.center.delete({ where: { id: coSo.id } });
+    }
   }, 60_000);
 
   it("mã NV không tồn tại ⇒ VẪN tạo lead, ghi cảnh báo vào note (không nuốt im lặng)", async () => {
