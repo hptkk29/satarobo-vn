@@ -58,11 +58,19 @@ export function StudentBuoiHocPage({ data }: { data: StudentSessionsView }) {
               </p>
             </div>
           </div>
+          {/* 06/09 — nhãn nói rõ MẪU SỐ của từng con số. Trước đây ô đầu ghi "Đã học
+              10/12" trong khi ô cạnh ghi "Có mặt 6": hai con số cùng chữ "học" mà khác
+              nghĩa (10 = buổi lớp ĐÃ DẠY, 6 = buổi con CÓ MẶT), nên phụ huynh đọc ra là
+              hệ thống mâu thuẫn. Ô "Chưa chấm" bù đúng phần chênh còn lại. */}
           <div className="grid grid-cols-4 gap-2">
-            <Metric value={`${data.done}/${data.total}`} label="Đã học" />
-            <Metric value={String(data.present)} label="Có mặt" />
+            <Metric value={`${data.done}/${data.total}`} label="Buổi đã dạy" />
+            <Metric value={String(data.present)} label="Con có mặt" />
             <Metric value={String(data.absent)} label="Vắng" />
-            <Metric value={String(data.makeup)} label="Đã học bù" />
+            {data.chuaCham > 0 ? (
+              <Metric value={String(data.chuaCham)} label="Chưa chấm" />
+            ) : (
+              <Metric value={String(data.makeup)} label="Đã học bù" />
+            )}
           </div>
         </div>
       </div>

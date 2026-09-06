@@ -43,7 +43,9 @@ export function SchedulePageV2({
         metric={
           <div className="flex gap-2">
             <HeroStat value={`${s.rate}%`} label="Chuyên cần" />
-            <HeroStat value={`${s.done}/${s.total}`} label="Đã học" />
+            {/* "Đã học" cũ mập mờ: 10/12 là số buổi LỚP ĐÃ DẠY, không phải số buổi con
+                có mặt (đó là % Chuyên cần bên trái). */}
+            <HeroStat value={`${s.done}/${s.total}`} label="Buổi đã dạy" />
             <HeroStat value={`${s.remaining}`} label="Còn lại" />
           </div>
         }

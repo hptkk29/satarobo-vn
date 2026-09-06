@@ -75,6 +75,13 @@ export type StudentSessionsView = {
   present: number;
   absent: number;
   makeup: number;
+  /**
+   * Buổi ĐÃ DIỄN RA mà giáo viên chưa chấm điểm danh.
+   *
+   * Phải bày ra, không được giấu: thiếu nó thì "Đã diễn ra 10" và "Có mặt 6 · Vắng 1"
+   * cộng không khớp, phụ huynh đọc ra "con vắng 3 buổi mà không ai báo".
+   */
+  chuaCham: number;
   sessions: StudentSessionItem[];
 };
 
@@ -92,6 +99,7 @@ export async function getStudentSessionsView(studentId: string): Promise<Student
     present: 0,
     absent: 0,
     makeup: 0,
+    chuaCham: 0,
     sessions: [],
   };
   if (classIds.length === 0) return empty;
@@ -209,6 +217,7 @@ export async function getStudentSessionsView(studentId: string): Promise<Student
     present: tong.attended,
     absent: tong.absent,
     makeup: tong.madeUp,
+    chuaCham: sessions.filter((s) => s.attendance === "UNMARKED").length,
     sessions,
   };
 }
