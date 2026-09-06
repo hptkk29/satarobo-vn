@@ -132,7 +132,7 @@ const BY_PREFIX: Readonly<Record<string, NotiDef>> = {
   },
   "timesheet_adjust:": {
     group: "action_required", priority: 2, entity: "timesheet",
-    recipients: "Quản lý chấm công", target: "/cham-cong/chinh-cong",
+    recipients: "Quản lý chấm công", target: "/don-tu", // L5: màn chỉnh công cũ đã gỡ, đơn chỉnh công nay ở Duyệt đơn từ
   },
   "parent_request:": {
     group: "action_required", priority: 1, entity: "parent_request",
@@ -339,6 +339,29 @@ const BY_PREFIX: Readonly<Record<string, NotiDef>> = {
   "birthday:": {
     group: "system", priority: 3, entity: "student",
     recipients: "CSKH + giáo viên lớp", target: "/sinh-nhat",
+  },
+  // ── Module chấm công v3 (L3, 06/09/2026) ────────────────────────────────────
+  // Ca của tôi bị đổi (sửa tay trên lưới / đơn được duyệt) — T-07: "duyệt ⇒ đổi lịch ⇒ báo".
+  "shift.changed:": {
+    group: "new_task", priority: 2, entity: "timesheet",
+    recipients: "Chính người có ca", target: "/cham-cong/lich-ca",
+  },
+  // Tin nhắc lịch NGÀY MAI (thay tin Zalo 19:00 của Sheet). dedupeKey = shift.brief:<userId>:<ymd>
+  // ⇒ cron bơm dày (test 5′/lần) không kêu chuông lần hai.
+  "shift.brief:": {
+    group: "due_date", priority: 3, entity: "timesheet",
+    recipients: "Mọi nhân sự có trong lưới phân ca", target: "/cham-cong/lich-ca",
+  },
+  // L5 — đơn từ (ca/nghỉ/chỉnh công/lớp) dùng chung mọi nhân sự.
+  // Đơn mới tới cơ sở nhận đơn: báo người có quyền duyệt ở cơ sở đó. dedupeKey = request.submitted:<requestId>
+  "request.submitted:": {
+    group: "new_task", priority: 2, entity: "timesheet",
+    recipients: "Người giữ quyền duyệt đơn (hr_attendance:approve) tại cơ sở nhận đơn", target: "/don-tu",
+  },
+  // Đơn của tôi được duyệt / từ chối. dedupeKey = request.decided:<requestId>:<userId>
+  "request.decided:": {
+    group: "new_task", priority: 2, entity: "timesheet",
+    recipients: "Người nộp đơn (và người nhận ca/làm thay nếu có)", target: "/don-tu/cua-toi",
   },
 };
 

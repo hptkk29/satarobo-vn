@@ -13,18 +13,24 @@ export function QrScreen({ centerId, centerName }: { centerId: string; centerNam
         `/api/admin/cham-cong/qr-token?centerId=${encodeURIComponent(centerId)}`,
         { cache: "no-store" },
       );
-      if (!res.ok) throw new Error("Không tải được mã");
+      if (!res.ok) {
+        const j = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(j?.error ?? "Không tải được mã");
+      }
       const data = (await res.json()) as { qrDataUrl: string };
       setQr(data.qrDataUrl);
       setError(null);
-    } catch {
-      setError("Lỗi tải mã QR — kiểm tra kết nối");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Lỗi tải mã QR — kiểm tra kết nối");
     }
   }, [centerId]);
 
   // QR CỐ ĐỊNH — tải 1 lần (mã không hết hạn). Có thể in/dán tại quầy.
+  // L4: mã XOAY mỗi 60s — làm mới mỗi 30s để màn hình luôn hiện mã còn hạn.
   useEffect(() => {
     void fetchToken();
+    const id = setInterval(() => void fetchToken(), 30_000);
+    return () => clearInterval(id);
   }, [fetchToken]);
 
   return (
@@ -53,7 +59,7 @@ export function QrScreen({ centerId, centerName }: { centerId: string; centerNam
           Quét mã bằng điện thoại để chấm công
         </p>
         <p className="mt-1 text-sm text-muted-foreground">
-          Mã cố định của cơ sở · cần bật định vị (GPS) trong bán kính 100m
+          Mã đổi mỗi phút · bật định vị (GPS) khi được hỏi
         </p>
       </div>
     </div>

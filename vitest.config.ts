@@ -35,6 +35,9 @@ export default defineConfig({
       // trên: `include` là bộ lọc CỨNG, nên `vitest run tests/goi-dien` sẽ báo
       // "No test files found" và job CI vẫn XANH dù test viết đúng.
       "tests/goi-dien/**/*.{test,spec}.ts",
+      // Module chấm công v3 (06/09) — test tích hợp import/engine trên Postgres local, tự skip
+      // khi không có DB. Cùng lý do phải khai ở đây: `include` là bộ lọc CỨNG.
+      "tests/cham-cong/**/*.{test,spec}.ts",
     ],
     coverage: {
       reporter: ["text", "json", "html"],

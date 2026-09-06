@@ -31,6 +31,9 @@ const ALLOWLIST: Record<string, string> = {
     "không, TRƯỚC khi cam kết bất kỳ mốc lịch nào cho trục gọi điện. CỐ Ý không có mục " +
     "menu: nó không phải tính năng, chỉ người chạy spike mở bằng URL. PHẢI XOÁ cả thư " +
     "mục app/(admin)/admin/_spike/ lẫn dòng này sau khi có kết luận (spec §5.2).",
+  "/cham-cong/man-hinh":
+    "màn hình QR để MỞ TRÊN TV tại quầy — vào từ nút \"Màn hình QR\" trên Bảng công ngày, href kèm " +
+    "centerId động nên máy quét không thấy; không đặt mục sidebar vì đây không phải màn làm việc hằng ngày.",
   "/charts-test": "màn thử wrapper Recharts, chỉ dev dùng",
   "/design-system-preview": "bảng màu/typography, chỉ dev dùng",
   "/design-system-preview-v2": "bảng màu/typography bản 2, chỉ dev dùng",

@@ -59,7 +59,9 @@ jobs:
           # ⚠️ Nhớ: DB của environment `test` chính là DB dev — nên lượt đầu sẽ dọn cả
           # dấu vết webhook cũ đang nằm ở đó. Đó là việc đúng của cron này, nhưng là
           # thứ phải biết trước chứ không phải phát hiện sau.
-          for p in dispatch-events email-queue chat-zns-notify trial-reminder sla-check webhook-retention; do
+          # shift-brief (chấm công v3): tin nhắc lịch ngày mai — route tự so giờ VN với setting,
+          # dedupeKey shift.brief:<người>:<ngày> nên bơm 5′/lần vẫn chỉ một tin.
+          for p in dispatch-events email-queue chat-zns-notify trial-reminder sla-check webhook-retention shift-brief; do
             code=$(curl -s -o /dev/null -w "%{http_code}" \
               -H "Authorization: Bearer ${{ secrets.TEST_CRON_SECRET }}" \
               "https://test.satarobo.vn/api/cron/$p")

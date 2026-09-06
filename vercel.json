@@ -108,6 +108,10 @@
     {
       "path": "/api/cron/webhook-retention",
       "schedule": "0 18 * * *"
+    },
+    {
+      "path": "/api/cron/shift-brief",
+      "schedule": "0 * * * *"
     }
   ]
 }

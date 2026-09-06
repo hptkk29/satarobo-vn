@@ -160,6 +160,9 @@ export default async function HolidaysAdminPage({ searchParams }: SearchParams) 
                 <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground">
                   Loại
                 </th>
+                <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground" title="Hệ số công ngày lễ (T-04) — Kế toán tự đặt">
+                  Hệ số công
+                </th>
                 <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">
                   Ghi chú
                 </th>
@@ -171,7 +174,7 @@ export default async function HolidaysAdminPage({ searchParams }: SearchParams) 
             <tbody>
               {holidays.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-12 text-center text-muted-foreground">
+                  <td colSpan={7} className="p-12 text-center text-muted-foreground">
                     {centerFilter || typeFilter ? (
                       <>Không có ngày nghỉ nào khớp bộ lọc cho năm {year}.</>
                     ) : (
@@ -196,6 +199,15 @@ export default async function HolidaysAdminPage({ searchParams }: SearchParams) 
                     </td>
                     <td className="p-4 text-center">
                       <TypeBadge type={h.type} />
+                    </td>
+                    <td className="p-4 text-center text-sm">
+                      {h.attendanceEffect === "UNPAID_OFF" ? (
+                        <span className="text-muted-foreground">không công</span>
+                      ) : h.attendanceEffect === "INFO_ONLY" ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : (
+                        <span className="font-semibold">×{h.coefficient}</span>
+                      )}
                     </td>
                     <td className="p-4 text-xs text-muted-foreground">
                       {h.note ? (

@@ -85,6 +85,54 @@ export const BACKFILL_SPECS: readonly BackfillSpec[] = [
     scoped: false,
     vi: "ánh xạ hội thoại ZaloCRM ↔ phiếu lead — chép centerId từ ZaloCrmNick của org",
   },
+  // ── Module chấm công v3 (L1 · 06/09): sinh ra đã có CẢ HAI cột, không backfill ─
+  {
+    model: "ShiftTemplate",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: true,
+    vi: "danh mục mã ca — NULL = mã dùng chung mọi cơ sở (S, C, HC…)",
+  },
+  {
+    model: "ShiftWeeklyPattern",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "khung ca tuần — centerId = khối trên Sheet (CS1/CS2/hoi-so), luôn có",
+  },
+  {
+    model: "ShiftAssignment",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "ô lưới tháng — centerId = cơ sở làm/chịu công hôm đó, luôn có",
+  },
+  {
+    model: "WorkLocation",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "điểm chấm công — FK Center, chỉ cơ sở vận hành",
+  },
+  {
+    model: "StaffTimeLog",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "lượt quét — centerId = nơi chấm (WorkLocation → assignment → home → hoi-so)",
+  },
+  {
+    model: "StaffAttendanceDay",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "bảng công ngày — centerId = cơ sở chịu công",
+  },
+  {
+    model: "AttendancePeriod",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "kỳ công — centerId CS1/CS2 hoặc \"hoi-so\" (kỳ HO), luôn có",
+  },
+  {
+    model: "ShiftBriefNote",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "việc cố định / ghi đè tin 19:00 — theo đơn vị, luôn có",  },
   // ── MEDIA-REVIEW (26/08): sinh ra đã có CẢ HAI cột, không cần backfill ──────
   {
     model: "MediaAsset",

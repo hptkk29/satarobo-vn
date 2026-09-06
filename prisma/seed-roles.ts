@@ -174,6 +174,10 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "elearning:portal:access", scopeType: "GLOBAL" },
       { action: "elearning:lesson:learn", scopeType: "GLOBAL" },
       { action: "elearning:progress:view-own", scopeType: "GLOBAL" },
+      { action: "hr_attendance:view", scopeType: "GLOBAL" }, // L1 chấm công v3 (06/09/2026) — kế hoạch §5
+      { action: "hr_attendance:close-period", scopeType: "GLOBAL" }, // L1 chấm công v3 (06/09/2026) — kế hoạch §5
+      { action: "hr_attendance:export", scopeType: "GLOBAL" }, // L1 chấm công v3 (06/09/2026) — kế hoạch §5
+      { action: "hr_attendance:config", scopeType: "GLOBAL" }, // L1 chấm công v3 (06/09/2026) — kế hoạch §5
     ],
   },
   {
@@ -231,6 +235,8 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "elearning:certificate:issue", scopeType: "GLOBAL" },
       { action: "elearning:certificate:revoke", scopeType: "GLOBAL" },
       { action: "elearning:report:export", scopeType: "GLOBAL" },
+      { action: "hr_attendance:assign", scopeType: "GLOBAL" }, // L1 chấm công v3 (06/09/2026) — kế hoạch §5
+      { action: "hr_attendance:config", scopeType: "GLOBAL" }, // L1 chấm công v3 (06/09/2026) — kế hoạch §5
     ],
   },
   {
@@ -269,6 +275,8 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "elearning:portal:access", scopeType: "GLOBAL" },
       { action: "elearning:lesson:learn", scopeType: "GLOBAL" },
       { action: "elearning:progress:view-own", scopeType: "GLOBAL" },
+      { action: "hr_attendance:assign", scopeType: "CENTER" }, // L1 chấm công v3 (06/09/2026) — v1 HR ↔ CENTER_HR (parity #09)
+      { action: "hr_attendance:config", scopeType: "CENTER" }, // L1 chấm công v3 (06/09/2026) — v1 HR ↔ CENTER_HR (parity #09)
     ],
   },
   {
@@ -655,7 +663,7 @@ export const ROLE_SEED: RoleSeed[] = [
       // Shadow prod 10/07 (25+2 lệch): adjust bị pending-tasks cfg.can() gọi TRẦN → GLOBAL
       // (đúng R1); checkin call-site truyền {centerId} nhưng OWN đòi createdById → GLOBAL
       // (action tự ghi userId từ session, permission chỉ gate "là nhân viên").
-      { action: "hr_attendance:adjust", scopeType: "GLOBAL" },
+      { action: "hr_attendance:adjust", scopeType: "CENTER" }, // L5 chấm công v3 (06/09/2026): hạ GLOBAL → CENTER — call-site trần cũ (chinh-cong, pending-tasks) đã gỡ; nay chỉ ghi đè công ngày tại cơ sở (/cham-cong/_actions.ts)
       { action: "hr_attendance:checkin", scopeType: "GLOBAL" },
       // ── Thu tiền tại quầy · xuất kit (user chốt 09/07 câu 4: "có, có") ──
       { action: "payments:record", scopeType: "GLOBAL" },
@@ -742,6 +750,11 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "elearning:progress:view-team", scopeType: "GLOBAL" },
       { action: "elearning:video-analytics:view", scopeType: "GLOBAL" },
       { action: "elearning:report:export", scopeType: "GLOBAL" },
+      { action: "hr_attendance:assign", scopeType: "CENTER" }, // L1 chấm công v3 (06/09/2026) — kế hoạch §5
+      { action: "hr_attendance:approve", scopeType: "CENTER" }, // L1 chấm công v3 (06/09/2026) — kế hoạch §5
+      { action: "hr_attendance:close-period", scopeType: "CENTER" }, // L1 chấm công v3 (06/09/2026) — kế hoạch §5
+      { action: "hr_attendance:export", scopeType: "CENTER" }, // L1 chấm công v3 (06/09/2026) — kế hoạch §5
+      { action: "hr_attendance:config", scopeType: "CENTER" }, // L1 chấm công v3 (06/09/2026) — kế hoạch §5
     ],
   },
   {
@@ -1053,6 +1066,10 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "elearning:portal:access", scopeType: "GLOBAL" },
       { action: "elearning:lesson:learn", scopeType: "GLOBAL" },
       { action: "elearning:progress:view-own", scopeType: "GLOBAL" },
+      { action: "hr_attendance:view", scopeType: "CENTER" }, // L1 chấm công v3 (06/09/2026) — kế hoạch §5
+      { action: "hr_attendance:close-period", scopeType: "CENTER" }, // L1 chấm công v3 (06/09/2026) — kế hoạch §5
+      { action: "hr_attendance:export", scopeType: "CENTER" }, // L1 chấm công v3 (06/09/2026) — kế hoạch §5
+      { action: "hr_attendance:config", scopeType: "CENTER" }, // L1 chấm công v3 (06/09/2026) — kế hoạch §5
     ],
   },
   {
