@@ -45,6 +45,11 @@ on:
         type: boolean
         required: false
         default: true
+      du_lieu_cham_cong:
+        description: 'Nạp dữ liệu nghiệm thu CHẤM CÔNG (khung ca tuần → lưới phân ca → lượt quét → công ngày)? Cần bộ UAT đã có nhân sự.'
+        type: boolean
+        required: false
+        default: true
       chi_lich_hen:
         description: 'CHỈ nạp lịch hẹn học thử, bỏ qua mọi bước khác. Dùng khi DB đã có dữ liệu và không muốn seed đè lên thao tác của người đang nghiệm thu.'
         type: boolean
@@ -160,6 +165,26 @@ jobs:
       # PHẢI chạy SAU `db:seed:uat`: script bám vào lead ĐÃ CÓ CƠ SỞ, không tự tạo lead.
       # DB chưa có lead nào thì nó in "chưa có lead" rồi thoát 0 — không đỏ, nhưng cũng
       # không nạp được gì.
+      # ── Chấm công v3 ─────────────────────────────────────────────────────────
+      # `seed-cham-cong.ts` CỐ Ý chỉ nạp DANH MỤC (21 mã ca · 8 loại nghỉ · điểm chấm
+      # công) vì trên prod lưới ca đến từ import Sheet thật. Trên test thì không ai
+      # import Sheet, nên nếu dừng ở đây thì Bảng công ngày / Lưới phân ca / Kỳ công
+      # mở ra RỖNG ở mọi tháng — đúng ba màn nặng nhất của module lại không nghiệm thu
+      # được. `seed-cham-cong-demo.ts` lấp chỗ đó bằng cách đi qua chính các hàm thật
+      # (sinh lưới từ khung, ghi lượt quét, tính công), nên cờ và số liệu ra là do
+      # engine sinh chứ không phải số bịa sẵn.
+      #
+      # PHẢI chạy SAU `db:seed:uat`: nó bám vào nhân sự ĐÃ CÓ, không tự tạo người.
+      - name: Seed danh mục chấm công (21 mã ca + 8 loại nghỉ + điểm chấm công)
+        if: ${{ inputs.du_lieu_cham_cong && !inputs.chi_lich_hen }}
+        run: pnpm db:seed:cham-cong
+        env: { DATABASE_URL: "${{ secrets.TEST_DIRECT_URL }}", DIRECT_URL: "${{ secrets.TEST_DIRECT_URL }}" }
+
+      - name: Seed dữ liệu nghiệm thu chấm công (2 kỳ gần nhất)
+        if: ${{ inputs.du_lieu_cham_cong && !inputs.chi_lich_hen }}
+        run: pnpm exec tsx prisma/seed-cham-cong-demo.ts --nguoi=10
+        env: { DATABASE_URL: "${{ secrets.TEST_DIRECT_URL }}", DIRECT_URL: "${{ secrets.TEST_DIRECT_URL }}" }
+
       - name: Tóm tắt
         run: |
           echo "### Đã nạp dữ liệu vào DB test" >> $GITHUB_STEP_SUMMARY
