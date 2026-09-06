@@ -1,7 +1,16 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { GHI_DANH_DANG_HOC } from "@/lib/portal/trang-thai-ghi-danh";
 import { getChildren } from "@/lib/portal/session";
-import { getStudentAttendanceSummaries } from "@/lib/portal/learning";
+import {
+  getStudentAttendanceSummaries,
+  getStudentClasses,
+} from "@/lib/portal/learning";
+import { assignmentWindow } from "@/lib/lms/assignment-window";
+import {
+  attendanceRatePercent,
+  courseProgressPercent,
+} from "@/lib/lms/report-card-core";
 import { getParentNotificationCount } from "@/lib/portal/notifications";
 import { computeEnrollmentDebt } from "@/lib/finance/debt";
 import type { AttendanceSummary } from "@/lib/attendance/summary";
@@ -16,6 +25,7 @@ import type { AttendanceSummary } from "@/lib/attendance/summary";
 
 const ZERO_SUMMARY: AttendanceSummary = {
   total: 0,
+  daDienRa: 0,
   attended: 0,
   absent: 0,
   needMakeup: 0,
@@ -107,17 +117,24 @@ export type StudentDashboard = {
  * x/y đọc HomeworkAssignment theo studentId (read-only).
  */
 export async function getStudentDashboard(studentId: string): Promise<StudentDashboard> {
-  const [summaries, homework] = await Promise.all([
+  const [summaries, homework, baiLop] = await Promise.all([
     getStudentAttendanceSummaries(studentId),
     db.homeworkAssignment.findMany({
       where: { studentId },
       select: { status: true },
     }),
+    // ⚠️ HAI BẢNG KHÁC NHAU, phải cộng cả hai (06/09).
+    // `HomeworkAssignment` là BÀI KIỂM TRA (`examId`) giao về nhà theo buổi.
+    // `Assignment` là bài tập giáo viên giao cho LỚP — thứ mà /portal/bai-tap liệt kê.
+    // Đo trên DB làm việc: 0 dòng HomeworkAssignment và 176 Assignment ⇒ thẻ "Bài tập"
+    // ở trang chủ luôn báo 0/0 trong khi con có bài phải nộp.
+    demBaiTapLop(studentId),
   ]);
 
   const attendance = summaries.reduce<AttendanceSummary>(
     (acc, s) => ({
       total: acc.total + s.total,
+      daDienRa: acc.daDienRa + s.daDienRa,
       attended: acc.attended + s.attended,
       absent: acc.absent + s.absent,
       needMakeup: acc.needMakeup + s.needMakeup,
@@ -126,15 +143,15 @@ export async function getStudentDashboard(studentId: string): Promise<StudentDas
     { ...ZERO_SUMMARY },
   );
 
-  const homeworkDone = homework.filter(
-    (h) => h.status === "SUBMITTED" || h.status === "GRADED",
-  ).length;
+  const homeworkDone =
+    homework.filter((h) => h.status === "SUBMITTED" || h.status === "GRADED").length +
+    baiLop.daNop;
 
   return {
     attendance,
     classCount: summaries.length,
     homeworkDone,
-    homeworkTotal: homework.length,
+    homeworkTotal: homework.length + baiLop.tong,
   };
 }
 
@@ -146,9 +163,13 @@ export type ParentChildOverview = {
   /** Khoá + lớp đang học (hiển thị dưới tên con, giống SataUI). */
   courseName: string | null;
   className: string | null;
-  /** % chuyên cần (attended / total), 0 nếu chưa có buổi. */
+  /** % chuyên cần = có mặt / buổi ĐÃ DIỄN RA (xem `attendanceRatePercent`). */
   attendanceRate: number;
+  /** % tiến độ khoá = buổi đã dạy / tổng buổi khoá. CÂU HỎI KHÁC với chuyên cần. */
+  courseProgressRate: number;
   attended: number;
+  /** Số buổi đã dạy — tử số của tiến độ, MẪU SỐ của chuyên cần. */
+  daDienRa: number;
   totalSessions: number;
   needMakeup: number;
   /** Bài tập/bài kiểm tra chưa nộp (ASSIGNED/MISSED). */
@@ -174,12 +195,13 @@ export async function getParentChildrenOverview(
 
   return Promise.all(
     children.map(async (c) => {
-      const [summaries, homework, enrollments, activeEnr, nextSession] = await Promise.all([
+      const [summaries, homework, baiLop, enrollments, activeEnr, nextSession] = await Promise.all([
         getStudentAttendanceSummaries(c.id),
         db.homeworkAssignment.findMany({
           where: { studentId: c.id },
           select: { status: true },
         }),
+        demBaiTapLop(c.id),
         db.enrollment.findMany({
           where: { studentId: c.id, deletedAt: null }, // FIX-C3 — chống "nợ ma" từ ghi danh xóa mềm
           select: {
@@ -192,7 +214,7 @@ export async function getParentChildrenOverview(
           },
         }),
         db.enrollment.findFirst({
-          where: { studentId: c.id, status: { in: ["CONFIRMED", "STUDYING", "ACTIVE"] }, deletedAt: null }, // FIX-C3
+          where: { studentId: c.id, status: { in: [...GHI_DANH_DANG_HOC] }, deletedAt: null }, // FIX-C3
           orderBy: { createdAt: "desc" },
           select: {
             class: { select: { classCode: true } },
@@ -201,7 +223,7 @@ export async function getParentChildrenOverview(
         }),
         db.classSession.findFirst({
           where: {
-            class: { enrollments: { some: { studentId: c.id, status: { in: ["CONFIRMED", "STUDYING", "ACTIVE"] }, deletedAt: null } } }, // FIX-C3
+            class: { enrollments: { some: { studentId: c.id, status: { in: [...GHI_DANH_DANG_HOC] }, deletedAt: null } } }, // FIX-C3
             date: { gte: new Date() },
             status: { not: "CANCELLED" },
           },
@@ -213,6 +235,7 @@ export async function getParentChildrenOverview(
       const att = summaries.reduce<AttendanceSummary>(
         (acc, s) => ({
           total: acc.total + s.total,
+          daDienRa: acc.daDienRa + s.daDienRa,
           attended: acc.attended + s.attended,
           absent: acc.absent + s.absent,
           needMakeup: acc.needMakeup + s.needMakeup,
@@ -221,9 +244,10 @@ export async function getParentChildrenOverview(
         { ...ZERO_SUMMARY },
       );
 
-      const pendingHomework = homework.filter(
-        (h) => h.status !== "SUBMITTED" && h.status !== "GRADED",
-      ).length;
+      // Cộng CẢ HAI nguồn — xem chú thích ở `getStudentDashboard`.
+      const pendingHomework =
+        homework.filter((h) => h.status !== "SUBMITTED" && h.status !== "GRADED").length +
+        baiLop.chuaNop;
 
       const debt = enrollments.reduce((sum, e) => {
         const finalPrice = e.finalPrice ?? e.tuition ?? null;
@@ -238,8 +262,11 @@ export async function getParentChildrenOverview(
         studentCode: c.studentCode,
         courseName: activeEnr?.course?.name ?? null,
         className: activeEnr?.class?.classCode ?? null,
-        attendanceRate: att.total > 0 ? Math.round((att.attended / att.total) * 100) : 0,
+        // CÙNG công thức với học bạ và site GV — không chép lại phép chia ở đây nữa.
+        attendanceRate: attendanceRatePercent(att),
+        courseProgressRate: courseProgressPercent(att),
         attended: att.attended,
+        daDienRa: att.daDienRa,
         totalSessions: att.total,
         needMakeup: att.needMakeup,
         pendingHomework,
@@ -248,4 +275,39 @@ export async function getParentChildrenOverview(
       };
     }),
   );
+}
+
+/**
+ * Bài tập giáo viên giao cho LỚP mà con đang theo — đếm theo đúng luật cửa nộp của
+ * `lib/lms/assignment-window.ts`, cùng luật mà cổng nộp bài và site giáo viên dùng.
+ *
+ * Bài đã ĐÓNG CỬA mà chưa nộp thì không đếm là "chờ nộp" nữa: nhắc phụ huynh làm một
+ * việc họ không còn làm được là nhắc sai.
+ */
+async function demBaiTapLop(
+  studentId: string,
+): Promise<{ tong: number; daNop: number; chuaNop: number }> {
+  const lop = await getStudentClasses(studentId);
+  if (lop.length === 0) return { tong: 0, daNop: 0, chuaNop: 0 };
+  const rows = await db.assignment.findMany({
+    where: {
+      classId: { in: lop.map((c) => c.id) },
+      status: { in: ["PUBLISHED", "CLOSED"] },
+    },
+    select: {
+      status: true,
+      dueAt: true,
+      lateUntil: true,
+      submissions: { where: { studentId }, select: { status: true }, take: 1 },
+    },
+  });
+  const now = new Date();
+  let daNop = 0;
+  let chuaNop = 0;
+  for (const a of rows) {
+    const st = a.submissions[0]?.status ?? "";
+    if (st === "SUBMITTED" || st === "GRADED") daNop++;
+    else if (assignmentWindow(a, now).acceptsSubmission) chuaNop++;
+  }
+  return { tong: rows.length, daNop, chuaNop };
 }

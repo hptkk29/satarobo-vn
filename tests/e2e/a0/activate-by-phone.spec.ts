@@ -74,6 +74,9 @@ test.describe("[P5] Kích hoạt tài khoản bằng SĐT", () => {
 
     await page.getByLabel("Mã OTP (6 số gửi qua Zalo hoặc email)").fill(FIXED_CODE);
     await page.getByLabel("Đặt mật khẩu (≥ 8 ký tự)").fill(NEW_PASSWORD);
+    // ĐẶT MẬT KHẨU 2 BƯỚC (chủ dự án 04/09): nút khoá tới khi hai ô khớp nhau.
+    // Thiếu dòng này thì bấm không ăn và test đứt ở bước sau, không phải ở đây.
+    await page.getByLabel("Nhập lại mật khẩu").fill(NEW_PASSWORD);
     await page.getByRole("button", { name: "Kích hoạt & đặt mật khẩu" }).click();
 
     await expect(page.getByRole("button", { name: "Đến trang đăng nhập" })).toBeVisible({
@@ -150,6 +153,9 @@ test.describe("[P5] Kích hoạt tài khoản bằng SĐT", () => {
 
     await page.getByLabel("Mã OTP (6 số gửi qua Zalo hoặc email)").fill(FIXED_CODE);
     await page.getByLabel("Đặt mật khẩu (≥ 8 ký tự)").fill(NEW_PASSWORD);
+    // ĐẶT MẬT KHẨU 2 BƯỚC (chủ dự án 04/09): nút khoá tới khi hai ô khớp nhau.
+    // Thiếu dòng này thì bấm không ăn và test đứt ở bước sau, không phải ở đây.
+    await page.getByLabel("Nhập lại mật khẩu").fill(NEW_PASSWORD);
     await page.getByRole("button", { name: "Kích hoạt & đặt mật khẩu" }).click();
 
     await expect(page.getByRole("button", { name: "Đến trang đăng nhập" })).toBeVisible({

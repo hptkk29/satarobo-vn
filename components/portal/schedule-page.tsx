@@ -5,24 +5,11 @@ import { PageHero } from "@/components/portal/page-header";
 
 // Portal v2 — trang Lịch học (giống SataUI): hero + buổi kế tiếp + tuần này + sắp tới + lịch tháng.
 
-const DOW = ["CN", "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7"];
-function dmy(iso: string): string {
-  const d = new Date(iso);
-  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
-}
-function dm(iso: string): string {
-  const d = new Date(iso);
-  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-function isToday(iso: string): boolean {
-  const d = new Date(iso);
-  const n = new Date();
-  return (
-    d.getFullYear() === n.getFullYear() &&
-    d.getMonth() === n.getMonth() &&
-    d.getDate() === n.getDate()
-  );
-}
+// 06/09 — KHÔNG format ngày ở đây nữa. Đây là Server Component và Vercel chạy UTC:
+// `getDate()/getDay()` trả lời theo giờ UTC, nên trong khoảng 00:00–07:00 giờ VN (phụ
+// huynh xem lịch trước khi đưa con đi học) buổi CHIỀU NAY bị in sai ngày và mất nhãn
+// "Hôm nay". Nhãn ngày/thứ nay tính sẵn ở server theo lịch VN — xem
+// `BuoiHoc.nhanNgay/nhanThu/homNay` trong lib/portal/buoi-hoc.ts.
 
 function HeroStat({ value, label }: { value: string; label: string }) {
   return (
@@ -56,7 +43,9 @@ export function SchedulePageV2({
         metric={
           <div className="flex gap-2">
             <HeroStat value={`${s.rate}%`} label="Chuyên cần" />
-            <HeroStat value={`${s.done}/${s.total}`} label="Đã học" />
+            {/* "Đã học" cũ mập mờ: 10/12 là số buổi LỚP ĐÃ DẠY, không phải số buổi con
+                có mặt (đó là % Chuyên cần bên trái). */}
+            <HeroStat value={`${s.done}/${s.total}`} label="Buổi đã dạy" />
             <HeroStat value={`${s.remaining}`} label="Còn lại" />
           </div>
         }
@@ -74,15 +63,15 @@ export function SchedulePageV2({
               <div className="rounded-2xl border border-border bg-card p-4">
                 <div className="flex items-start justify-between gap-2">
                   <p className="text-base font-bold text-foreground">
-                    {s.next.title}
+                    {s.next.nhan}
                   </p>
-                  {isToday(s.next.dateISO) ? (
+                  {s.next.homNay ? (
                     <span className="shrink-0 rounded-md bg-primary px-2 py-0.5 text-xs font-bold text-primary-foreground">
                       Hôm nay
                     </span>
                   ) : (
                     <span className="shrink-0 rounded-md bg-muted px-2 py-0.5 text-xs font-bold text-muted-foreground">
-                      {dm(s.next.dateISO)}
+                      {s.next.nhanNgayNgan}
                     </span>
                   )}
                 </div>
@@ -92,10 +81,14 @@ export function SchedulePageV2({
                       <Clock className="size-4 text-primary" /> {s.next.time}
                     </span>
                   )}
-                  {(s.next.room || s.next.teacher) && (
+                  {(s.next.room || s.next.teacher || s.next.className) && (
                     <span className="inline-flex items-center gap-1.5">
                       <MapPin className="size-4 text-primary" />{" "}
-                      {[s.next.room, s.next.teacher && `GV ${s.next.teacher}`]
+                      {[
+                        s.next.className && `Lớp ${s.next.className}`,
+                        s.next.room,
+                        s.next.teacher && `GV ${s.next.teacher}`,
+                      ]
                         .filter(Boolean)
                         .join(" · ")}
                     </span>
@@ -155,13 +148,18 @@ export function SchedulePageV2({
                       <p className="truncate text-sm font-bold text-foreground">
                         {it.title}
                       </p>
-                      <p className="mt-0.5 text-xs font-medium text-muted-foreground">
-                        Dự kiến: {dmy(it.dateISO)}
+                      <p className="mt-0.5 truncate text-xs font-medium text-muted-foreground">
+                        {[
+                          `Dự kiến: ${it.nhanThu}, ${it.nhanNgay}`,
+                          it.className && `Lớp ${it.className}`,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
                       </p>
                     </div>
                     {i === 0 && (
                       <span className="shrink-0 rounded-md bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">
-                        Đang học
+                        {it.homNay ? "Hôm nay" : "Kế tiếp"}
                       </span>
                     )}
                   </div>
@@ -186,8 +184,9 @@ export function SchedulePageV2({
 }
 
 function WeekRow({ it }: { it: ScheduleSession }) {
-  const d = new Date(it.dateISO);
-  const today = isToday(it.dateISO);
+  const today = it.homNay;
+  // Buổi bị huỷ VẪN hiện trong tuần, gắn nhãn rõ — giấu đi thì phụ huynh vẫn đưa con tới.
+  const daHuy = it.status === "CANCELLED";
   return (
     <div className="flex items-start gap-3 p-3">
       <div className="w-12 shrink-0 text-center">
@@ -197,16 +196,28 @@ function WeekRow({ it }: { it: ScheduleSession }) {
             today ? "text-primary" : "text-foreground",
           )}
         >
-          {DOW[d.getDay()]}
+          {it.nhanThu}
         </p>
         <p className="text-xs font-medium text-muted-foreground">
-          {dm(it.dateISO)}
+          {it.nhanNgayNgan}
         </p>
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-bold text-foreground">{it.title}</p>
+        <p
+          className={cn(
+            "truncate text-sm font-bold text-foreground",
+            daHuy && "line-through opacity-60",
+          )}
+        >
+          {it.title}
+        </p>
         <p className="mt-0.5 truncate text-xs font-medium text-muted-foreground">
-          {[it.time, it.room, it.teacher && `GV ${it.teacher}`]
+          {[
+            it.time,
+            it.className && `Lớp ${it.className}`,
+            it.room,
+            it.teacher && `GV ${it.teacher}`,
+          ]
             .filter(Boolean)
             .join(" · ")}
         </p>
@@ -214,12 +225,14 @@ function WeekRow({ it }: { it: ScheduleSession }) {
       <span
         className={cn(
           "shrink-0 rounded-md px-2 py-0.5 text-xs font-bold",
-          today
-            ? "bg-primary text-primary-foreground"
-            : "bg-muted text-muted-foreground",
+          daHuy
+            ? "bg-destructive/10 text-destructive"
+            : today
+              ? "bg-primary text-primary-foreground"
+              : "bg-muted text-muted-foreground",
         )}
       >
-        {today ? "Hôm nay" : "Sắp tới"}
+        {daHuy ? "Đã huỷ" : today ? "Hôm nay" : "Sắp tới"}
       </span>
     </div>
   );

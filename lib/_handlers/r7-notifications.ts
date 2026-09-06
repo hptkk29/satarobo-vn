@@ -166,7 +166,27 @@ export async function onClassCancelled(event: DomainEventLite): Promise<void> {
   }
 }
 
-// ─── lead.trialAttended → Sale phụ trách follow-up (R7-02) ─────────────────────
+// ─── "con đã học thử xong" → Sale phụ trách follow-up (R7-02) ────────────────
+//
+// ⚠️ 03/09/2026 — handler này từng là HANDLER CHẾT. Nó nghe `lead.trialAttended`,
+// nhưng KHÔNG MỘT CHỖ NÀO trong repo phát sự kiện tên đó. Đường điểm danh thật
+// (`syncTrialProgress` → `lib/trial/service.ts`) phát **`lead.awaitingDecision`** khi
+// MỌI con của lead đủ buổi ⇒ hai đầu lệch TÊN, và Sale không bao giờ nhận được tin
+// "đã học thử xong, liên hệ chốt". Hai tài liệu đều ghi nhầm là luồng này đang chạy
+// (`Document/0-yeucau/0-tai-lieu-goc/luong-LMS.md` §13 "17/17 trigger" và
+// `docs/audit/LMS_R7_FE_BE_DB_EVENT_AUDIT.md` "đã có handler + emit").
+//
+// VÁ BẰNG CÁCH ĐĂNG KÝ THÊM TÊN ĐANG ĐƯỢC PHÁT, không phải thêm một `publishEvent`
+// vào `syncTrialProgress`: hàm đó chạy TRONG transaction điểm danh, mà `dedupeKey` của
+// `DomainEvent` là @unique — trùng khóa là P2002 nổ giữa transaction và Postgres huỷ cả
+// lượt điểm danh (đúng landmine đã ghi ở `lib/trial/service.ts` đầu
+// `rescheduleTrialEnrollment`). Thêm một dòng `on(...)` thì không đụng gì tới đường ghi.
+//
+// GIỮ `lead.trialAttended`: DomainEvent cũ trong DB vẫn mang tên đó (nếu có), và tên
+// này là tên ĐÚNG về nghiệp vụ cho người viết producer mới.
+//
+// `dedupeKey` của THÔNG BÁO vẫn là `lead.trialAttended:<leadId>` dù vào từ đường nào —
+// một lead chỉ đáng nhận đúng một tin "đã học thử xong", dù hai sự kiện cùng tới.────
 export async function onLeadTrialAttended(event: DomainEventLite): Promise<void> {
   const leadId = str(event.payload.leadId);
   if (!leadId) return;
@@ -194,4 +214,6 @@ export function registerR7NotificationHandlers(): void {
   on("class.session_changed", onClassSessionChanged);
   on("class.cancelled", onClassCancelled);
   on("lead.trialAttended", onLeadTrialAttended);
+  // Tên THẬT đang được phát bởi `syncTrialProgress` — xem khối chú thích trên.
+  on("lead.awaitingDecision", onLeadTrialAttended);
 }

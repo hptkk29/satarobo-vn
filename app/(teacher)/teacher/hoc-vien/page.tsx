@@ -30,10 +30,16 @@ import type { AttendanceStatus } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { rosterWhere } from "@/lib/enrollment-scope";
+import { REPORT_CARD_STATUS_LABEL } from "@/lib/lms/report-card-core";
 import { attendanceSummaryForEnrollments } from "@/lib/attendance/summary";
 import { getCourseCriteria } from "@/lib/lms/report-card";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
-import { ENROLLMENT_STATUS } from "@/lib/labels/registry";
+import { ENROLLMENT_STATUS, SUBMISSION_STATUS } from "@/lib/labels/registry";
+import {
+  profileTabHref,
+  resolveProfileScope,
+} from "@/lib/teacher/profile-scope";
 import {
   EVAL_OVERALL_LABEL,
   evalNotesProse,
@@ -42,9 +48,16 @@ import {
 import { feedbackHasContent } from "@/lib/lms/feedback-content";
 import {
   buildSessionNumberMap,
-  sessionNumberLabel,
 } from "@/lib/lms/session-order";
-import { resolveDisplayProjectName } from "@/lib/lms/session-project-name";
+import {
+  deriveSessionLabel,
+  resolveDisplayProjectName,
+} from "@/lib/lms/session-project-name";
+import {
+  STUDENT_ATTENDANCE_CELL_LABEL,
+  studentAttendanceCell,
+} from "@/lib/lms/student-attendance-cell";
+import { vnEndOfDay } from "@/lib/time/vn";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -78,19 +91,33 @@ const LEVEL_LABEL: Record<number, string> = {
   4: "4 · Tốt",
 };
 
+// CHỮ lấy từ bảng dùng chung, chỉ MÀU giữ riêng ở đây.
+//
+// Bản chép tay cũ gọi `PUBLISHED` là "Đã duyệt" trong khi /teacher/hoc-ba gọi cùng
+// trạng thái đó là "Đã phát hành" — hai màn, hai chữ, một trạng thái. QA vòng 1 đọc ra
+// thành nghi vấn NV-003: tưởng badge "Đã duyệt" trên thẻ Học bạ nói về việc duyệt
+// HOÀN THÀNH KHOÁ (một quy trình khác hẳn), rồi báo hai module không đồng bộ trạng
+// thái. Thực ra chỉ là chép tay lệch chữ. `DRAFT` và `RECALLED` cũng lệch y vậy.
+const REPORT_STATUS_CLS: Record<string, string> = {
+  DRAFT: "bg-muted text-muted-foreground",
+  PENDING_REVIEW: "bg-state-warning-soft text-state-warning-ink",
+  PUBLISHED: "bg-state-success-soft text-state-success-ink",
+  RECALLED: "bg-state-danger-soft text-state-danger-ink",
+};
+
 const REPORT_STATUS: Record<string, { label: string; cls: string }> = {
-  DRAFT: { label: "Học bạ nháp", cls: "bg-muted text-muted-foreground" },
+  DRAFT: { label: REPORT_CARD_STATUS_LABEL.DRAFT, cls: REPORT_STATUS_CLS.DRAFT! },
   PENDING_REVIEW: {
-    label: "Chờ duyệt",
-    cls: "bg-state-warning-soft text-state-warning-ink",
+    label: REPORT_CARD_STATUS_LABEL.PENDING_REVIEW,
+    cls: REPORT_STATUS_CLS.PENDING_REVIEW!,
   },
   PUBLISHED: {
-    label: "Đã duyệt",
-    cls: "bg-state-success-soft text-state-success-ink",
+    label: REPORT_CARD_STATUS_LABEL.PUBLISHED,
+    cls: REPORT_STATUS_CLS.PUBLISHED!,
   },
   RECALLED: {
-    label: "Thu hồi",
-    cls: "bg-state-danger-soft text-state-danger-ink",
+    label: REPORT_CARD_STATUS_LABEL.RECALLED,
+    cls: REPORT_STATUS_CLS.RECALLED!,
   },
 };
 
@@ -135,12 +162,12 @@ function parseProfileTab(raw: string | undefined): ProfileTab {
 export default async function TeacherStudentProfilePage({
   searchParams,
 }: {
-  searchParams: Promise<{ s?: string; ptab?: string }>;
+  searchParams: Promise<{ s?: string; ptab?: string; classId?: string }>;
 }) {
   const session = await auth();
   if (!session?.user) return null; // layout đã gate — guard cho type-narrow
 
-  const { s: studentId, ptab } = await searchParams;
+  const { s: studentId, ptab, classId: rawClassId } = await searchParams;
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
   const classIds = [...actor.assignedClassIds];
@@ -157,8 +184,13 @@ export default async function TeacherStudentProfilePage({
             id: true,
             name: true,
             course: { select: { name: true } },
+            // HỒ SƠ dùng "lich-su": người dùng cần thấy cả lớp em đã hoàn thành và
+            // đã nghỉ. Nhưng vẫn loại PENDING/CANCELLED/TRANSFERRED và HV đã xoá mềm —
+            // trước đây chỉ lọc deletedAt của ghi danh nên ghi danh "Chờ xác nhận" vẫn
+            // hiện thẻ lớp kèm "0/11 buổi" ở tab Học bạ trong khi tab Điểm danh không
+            // có dòng nào (QA vòng 1, BUG-014).
             enrollments: {
-              where: { studentId, deletedAt: null },
+              where: { studentId, ...rosterWhere("lich-su") },
               select: {
                 id: true,
                 courseId: true,
@@ -196,8 +228,24 @@ export default async function TeacherStudentProfilePage({
 
     const student = enrollments[0].student;
     const enrolledClassIds = [...new Set(enrollments.map((e) => e.classId))];
+    // Trạng thái ghi danh theo TỪNG lớp — ô điểm danh cần nó để phân biệt "giáo viên
+    // còn nợ chấm" với "em không còn học lớp này lúc đó" (BUG-001).
+    const enrollmentStatusByClass = new Map(
+      enrollments.map((e) => [e.classId, e.status]),
+    );
     const multiClass = enrolledClassIds.length > 1;
     const activeTab = parseProfileTab(ptab);
+    // BUG-003 — hồ sơ phải biết đang xem lớp nào. `rawClassId` đến từ URL nên đi qua
+    // resolveProfileScope: lớp lạ bị HẠ CẤP về "xem tất cả", không bao giờ dùng thẳng.
+    const scope = resolveProfileScope(
+      enrollments.map((e) => ({
+        classId: e.classId,
+        className: e.class.name,
+        courseName: e.course.name,
+      })),
+      rawClassId,
+    );
+    const tabClassIds = scope.classIds;
     const birthYear = student.dateOfBirth
       ? student.dateOfBirth.getUTCFullYear()
       : null;
@@ -224,9 +272,17 @@ export default async function TeacherStudentProfilePage({
               <h1 className="text-2xl font-bold text-foreground">
                 {student.name}
               </h1>
-              <Badge variant="outline">
-                {ENROLLMENT_STATUS.label(enrollments[0].status)}
-              </Badge>
+              {/* MỌI trạng thái ghi danh, không phải mỗi cái đầu tiên.
+                  Bản cũ in `enrollments[0].status` từ một truy vấn KHÔNG `orderBy`,
+                  nên em có 5 ghi danh ở 5 trạng thái khác nhau chỉ hiện đúng một badge,
+                  và badge nào thì tuỳ thứ tự Postgres trả về (QA vòng 1, BUG-018).
+                  Khi đang lọc theo một lớp thì chỉ còn trạng thái của lớp đó — đúng
+                  ngữ cảnh người dùng vừa bấm vào. */}
+              {[...new Set(enrollments.map((e) => e.status))].map((st) => (
+                <Badge key={st} variant="outline">
+                  {ENROLLMENT_STATUS.label(st)}
+                </Badge>
+              ))}
             </div>
             <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
               <span>
@@ -251,29 +307,74 @@ export default async function TeacherStudentProfilePage({
           </div>
         </div>
 
-        <ProfileTabBar studentId={studentId} active={activeTab} />
+        <ProfileTabBar
+          studentId={studentId}
+          active={activeTab}
+          activeClassId={scope.activeClassId}
+        />
+
+        {/* Chip chọn lớp — chỉ hiện khi em học nhiều hơn một lớp của giáo viên này.
+            Một lớp thì không có gì để chọn, thêm chip chỉ tốn một hàng ở 375px. */}
+        {scope.chips.length > 1 && (
+          <div className="flex flex-wrap gap-2 py-3">
+            <Link
+              href={profileTabHref({
+                studentId,
+                tab: activeTab,
+                activeClassId: null,
+              })}
+              className={cn(
+                "rounded-full border px-3 py-1 text-xs font-semibold transition-colors",
+                scope.activeClassId === null
+                  ? "border-primary bg-primary-soft text-primary-ink"
+                  : "border-border text-muted-foreground hover:text-foreground",
+              )}
+            >
+              Tất cả lớp
+            </Link>
+            {scope.chips.map((c) => (
+              <Link
+                key={c.classId}
+                href={profileTabHref({
+                  studentId,
+                  tab: activeTab,
+                  activeClassId: c.classId,
+                })}
+                className={cn(
+                  "rounded-full border px-3 py-1 text-xs font-semibold transition-colors",
+                  scope.activeClassId === c.classId
+                    ? "border-primary bg-primary-soft text-primary-ink"
+                    : "border-border text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {c.courseName} · {c.className}
+              </Link>
+            ))}
+          </div>
+        )}
 
         {activeTab === "diem-danh" && (
           <AttendanceTab
             sdb={sdb}
             studentId={studentId}
-            classIds={enrolledClassIds}
-            multiClass={multiClass}
+            classIds={tabClassIds}
+            multiClass={multiClass && scope.activeClassId === null}
+            enrollmentStatusByClass={enrollmentStatusByClass}
           />
         )}
         {activeTab === "nhan-xet" && (
           <ReviewsTab
             sdb={sdb}
             studentId={studentId}
-            classIds={enrolledClassIds}
-            multiClass={multiClass}
+            classIds={tabClassIds}
+            multiClass={multiClass && scope.activeClassId === null}
           />
         )}
         {activeTab === "bai-tap" && (
           <AssignmentsTab
             sdb={sdb}
             studentId={studentId}
-            classIds={enrolledClassIds}
+            classIds={tabClassIds}
           />
         )}
         {activeTab === "hoc-ba" && (
@@ -300,8 +401,12 @@ export default async function TeacherStudentProfilePage({
         select: {
           id: true,
           name: true,
+          // DANH SÁCH đọc "lich-su" rồi để client lọc theo ô "Trạng thái" (mặc định
+          // Đang học). Trước đây chỉ có `deletedAt: null` nên trang đếm 103 em còn
+          // Tổng quan đếm 81 — cùng tập lớp, hai con số (QA vòng 1, BUG-024). Thêm
+          // student.deletedAt: HV đã xoá khỏi hệ thống không được hiện tên.
           enrollments: {
-            where: { deletedAt: null },
+            where: rosterWhere("lich-su"),
             // Câu 46: CHỈ tên + mã HV — KHÔNG contact PH.
             select: {
               status: true,
@@ -372,9 +477,11 @@ type Sdb = ReturnType<typeof scopedDb>;
 function ProfileTabBar({
   studentId,
   active,
+  activeClassId,
 }: {
   studentId: string;
   active: ProfileTab;
+  activeClassId: string | null;
 }) {
   return (
     <div className="overflow-x-auto">
@@ -388,7 +495,13 @@ function ProfileTabBar({
           return (
             <Link
               key={t.key}
-              href={`?s=${studentId}&ptab=${t.key}`}
+              // href chỉ-query: mọi tham số ngữ cảnh phải ghép LẠI ở đây, nếu không
+              // đổi tab là mất lớp đang lọc.
+              href={profileTabHref({
+                studentId,
+                tab: t.key,
+                activeClassId,
+              })}
               // Đổi tab = đổi tham số truy vấn trên CÙNG trang hồ sơ (không rời màn)
               // → giữ nguyên vị trí cuộn thay vì bị kéo về đầu trang.
               scroll={false}
@@ -416,24 +529,39 @@ async function AttendanceTab({
   studentId,
   classIds,
   multiClass,
+  enrollmentStatusByClass,
 }: {
   sdb: Sdb;
   studentId: string;
   classIds: string[];
   multiClass: boolean;
+  enrollmentStatusByClass: Map<string, string>;
 }) {
   const sessions = await sdb.classSession.findMany({
     where: { classId: { in: classIds } },
     select: {
       id: true,
+      classId: true,
       date: true,
       topic: true,
       status: true,
+      // Nguồn NHÃN BUỔI — thiếu hai quan hệ này thì deriveSessionLabel chỉ còn `topic`
+      // thô và in ra "Buổi 10" trần.
+      plan: { select: { customTitle: true } },
+      lesson: { select: { order: true, title: true, moduleCode: true } },
       class: { select: { name: true } },
       attendances: { where: { studentId }, select: { status: true } },
     },
     orderBy: { date: "asc" },
   });
+  // `vnEndOfDay` (23:59:59.999 hôm nay, giờ VN) — KHÔNG tự dựng Date: Vercel chạy UTC
+  // còn máy dev +07. Repo còn 4 bản `vnTodayEnd` viết tay ở nơi khác trả 00:00 NGÀY
+  // MAI; gộp chúng lại là ticket riêng vì lệch đúng một mili giây ở mốc biên và một
+  // trong bốn chỗ là cổng GHI ở server.
+  const todayEndMs = vnEndOfDay(new Date()).getTime();
+  const sessionNo = buildSessionNumberMap(
+    sessions.map((s) => ({ id: s.id, classId: s.classId, date: s.date })),
+  );
   if (sessions.length === 0) {
     return (
       <EmptyState icon={CalendarCheck} title="Lớp chưa có buổi học nào." />
@@ -444,6 +572,13 @@ async function AttendanceTab({
       <ul className="divide-y divide-border">
         {sessions.map((s) => {
           const att = s.attendances[0]?.status as AttendanceStatus | undefined;
+          const cell = studentAttendanceCell({
+            attendanceStatus: att ?? null,
+            sessionStatus: s.status,
+            sessionDateMs: s.date.getTime(),
+            todayEndMs,
+            enrollmentStatus: enrollmentStatusByClass.get(s.classId) ?? null,
+          });
           return (
             <li key={s.id} className="flex items-center gap-4 px-5 py-3.5">
               <div className="w-24 shrink-0 text-sm font-semibold text-muted-foreground">
@@ -451,7 +586,17 @@ async function AttendanceTab({
               </div>
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium text-foreground">
-                  {s.topic ?? "Buổi học"}
+                  {/* deriveSessionLabel ghép "Buổi N - HP1 - Tên bài" và tự BỎ QUA
+                      `topic` khi nó chỉ là ô trống "Buổi N" — đừng ghép chuỗi tay,
+                      đó là nguồn của "Buổi 10 · Buổi 10". */}
+                  {deriveSessionLabel({
+                    sessionNumber: sessionNo.get(s.id) ?? null,
+                    planTitle: s.plan?.customTitle,
+                    lessonTitle: s.lesson?.title,
+                    lessonOrder: s.lesson?.order,
+                    moduleCode: s.lesson?.moduleCode,
+                    topic: s.topic,
+                  }) || "Buổi học"}
                 </p>
                 {multiClass && (
                   <p className="truncate text-xs text-muted-foreground">
@@ -459,22 +604,27 @@ async function AttendanceTab({
                   </p>
                 )}
               </div>
-              {att ? (
+              {cell.kind === "MARKED" ? (
                 <span
                   className={cn(
                     "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
-                    ATT_BADGE[att].cls,
+                    ATT_BADGE[cell.status].cls,
                   )}
                 >
-                  {ATT_BADGE[att].label}
-                </span>
-              ) : s.status === "CANCELLED" ? (
-                <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground">
-                  Đã huỷ
+                  {ATT_BADGE[cell.status].label}
                 </span>
               ) : (
-                <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground">
-                  Chưa diễn ra
+                <span
+                  className={cn(
+                    "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
+                    // "Chưa điểm danh" là VIỆC CÒN NỢ nên tô hổ phách để nhìn ra ngay;
+                    // ba ca còn lại là thông tin trung tính.
+                    cell.kind === "NOT_MARKED"
+                      ? "bg-state-warning-soft text-state-warning-ink"
+                      : "bg-muted text-muted-foreground",
+                  )}
+                >
+                  {STUDENT_ATTENDANCE_CELL_LABEL[cell.kind]}
                 </span>
               )}
             </li>
@@ -555,10 +705,19 @@ async function ReviewsTab({
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
                 <p className="font-semibold text-foreground">
-                  {sessionNumberOf.has(f.classSession.id)
-                    ? `${sessionNumberLabel(sessionNumberOf.get(f.classSession.id))} · `
-                    : ""}
-                  {f.classSession.topic ?? "Buổi học"}
+                  {/* Trước đây ghép TAY `sessionNumberLabel(...)` + `topic` thô. Với
+                      giáo trình Sata, `topic` chính là chuỗi "Buổi 10" ⇒ 16/16 thẻ in
+                      "Buổi 10 · Buổi 10" (QA vòng 1, BUG-008). deriveSessionLabel đã
+                      xử đúng: nó in số buổi MỘT lần và bỏ qua `topic` khi topic chỉ là
+                      ô trống "Buổi N" (meaningfulSessionTitle). */}
+                  {deriveSessionLabel({
+                    sessionNumber: sessionNumberOf.get(f.classSession.id) ?? null,
+                    planTitle: f.classSession.plan?.customTitle,
+                    lessonTitle: f.classSession.lesson?.title,
+                    lessonOrder: f.classSession.lesson?.order,
+                    moduleCode: f.classSession.lesson?.moduleCode,
+                    topic: f.classSession.topic,
+                  }) || "Buổi học"}
                 </p>
                 <p className="text-sm text-muted-foreground">
                   {dayFmt.format(f.classSession.date)}
@@ -642,13 +801,18 @@ async function AssignmentsTab({
   const subs = await sdb.assignmentSubmission.findMany({
     where: { studentId, assignment: { classId: { in: classIds } } },
     select: {
+      id: true,
       status: true,
       score: true,
       assignment: {
         select: {
+          id: true,
           title: true,
           dueAt: true,
           totalPoints: true,
+          // Hai dòng cùng tên bài ở hai lớp khác nhau trước đây không phân biệt được
+          // (QA vòng 1, BUG-010).
+          class: { select: { name: true } },
           _count: { select: { questions: true } },
         },
       },
@@ -666,12 +830,16 @@ async function AssignmentsTab({
   }
   return (
     <div className="t-card overflow-hidden">
-      <PhanTrangBang cuonNgang>
+      <PhanTrangBang cuonNgang
+          khoaGhiNho="gv-ho-so-bai-tap">
         <table className="min-w-[660px] w-full border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
               <th scope="col" className="px-5 py-3">
                 Nội dung
+              </th>
+              <th scope="col" className="px-5 py-3">
+                Lớp
               </th>
               <th scope="col" className="px-5 py-3">
                 Hình thức
@@ -684,6 +852,9 @@ async function AssignmentsTab({
               </th>
               <th scope="col" className="px-5 py-3">
                 Điểm
+              </th>
+              <th scope="col" className="px-5 py-3 text-right">
+                Thao tác
               </th>
             </tr>
           </thead>
@@ -700,8 +871,11 @@ async function AssignmentsTab({
                   key={i}
                   className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
                 >
-                  <td className="px-5 py-3.5 font-semibold text-foreground">
+                  <td className="min-w-[14rem] px-5 py-3.5 font-semibold text-foreground">
                     {s.assignment.title}
+                  </td>
+                  <td className="min-w-[9rem] px-5 py-3.5 text-muted-foreground">
+                    {s.assignment.class.name}
                   </td>
                   <td className="px-5 py-3.5">
                     <Badge
@@ -719,18 +893,43 @@ async function AssignmentsTab({
                     {due}
                   </td>
                   <td className="px-5 py-3.5 whitespace-nowrap">
-                    {submitted ? (
-                      <span className="inline-flex items-center gap-1.5 font-medium text-state-success-ink">
-                        <CircleCheck className="h-4 w-4" aria-hidden /> Đã nộp
-                      </span>
-                    ) : (
-                      <span className="text-state-warning-ink">Chưa nộp</span>
-                    )}
+                    {/* Nhãn đi qua registry dùng chung: bản chép tay cũ chỉ có hai
+                        nhãn nên "Nộp muộn" đọc ra y hệt nộp đúng hạn, và "Đã chấm"
+                        không phân biệt được với đang chờ chấm. */}
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1.5 font-medium",
+                        s.status === "GRADED"
+                          ? "text-state-success-ink"
+                          : s.status === "NOT_SUBMITTED"
+                            ? "text-state-warning-ink"
+                            : "text-foreground",
+                      )}
+                    >
+                      {s.status === "GRADED" && (
+                        <CircleCheck className="h-4 w-4" aria-hidden />
+                      )}
+                      {SUBMISSION_STATUS.label(s.status)}
+                    </span>
                   </td>
                   <td className="px-5 py-3.5 whitespace-nowrap font-semibold text-foreground">
                     {s.score != null
                       ? `${s.score}/${s.assignment.totalPoints}`
                       : "—"}
+                  </td>
+                  <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                    {/* Trước đây 0/6 dòng có link — từ hồ sơ học viên không có đường
+                        nào mở bài em đã làm, dù luồng đó chạy đúng ở cấp lớp. */}
+                    {submitted ? (
+                      <Link
+                        href={`/teacher/cham-bai?submissionId=${s.id}`}
+                        className="rounded-sm text-sm font-semibold text-primary-ink outline-none hover:text-primary-ink-hover hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        Xem bài đã làm
+                      </Link>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">—</span>
+                    )}
                   </td>
                 </tr>
               );

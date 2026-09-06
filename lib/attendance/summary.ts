@@ -2,6 +2,15 @@
 //
 // { total, attended (gồm đã-bù), absent, needMakeup, madeUp }.
 //  - total          = số buổi CHUẨN của khoá (KHÔNG cộng buổi bù — buổi bù không tăng total).
+//  - daDienRa       = số buổi của lớp ĐÃ DIỄN RA tính tới hôm nay (bỏ buổi CANCELLED).
+//
+// ⚠️ HAI MẪU SỐ, HAI CÂU HỎI KHÁC NHAU — đừng gọi chung là "buổi" (chủ dự án 04/09):
+//    Chuyên cần   = attended / daDienRa   — "con đi học đủ không"
+//    Tiến độ khoá = daDienRa / total     — "khoá đi được tới đâu"
+//
+// Vì sao phải tách: trước 04/09 site phụ huynh chia cho `total` (tổng buổi khoá) còn
+// giáo viên/admin chia cho số buổi đã diễn ra (`lib/progress.ts`) ⇒ cùng một đứa trẻ,
+// cùng một lúc, phụ huynh đọc 7/12 còn giáo viên đọc 7/11. Đo được trên dữ liệu thật.
 //  - attended       = có mặt/đi muộn + buổi vắng đã học bù xong (MADE_UP).
 //  - madeUp         = buổi vắng đã bù (tập con của attended, báo cáo riêng).
 //  - needMakeup     = buổi vắng đang CHỜ bù (NEEDS_MAKEUP).
@@ -21,6 +30,8 @@ import type {
 
 export interface AttendanceSummary {
   total: number;
+  /** Số buổi ĐÃ DIỄN RA — MẪU SỐ của chuyên cần (xem khối chú thích đầu file). */
+  daDienRa: number;
   attended: number;
   absent: number;
   needMakeup: number;
@@ -35,6 +46,12 @@ export interface AttendanceSummaryItem {
 
 export interface ComputeSummaryInput {
   totalLessons: number;
+  /**
+   * Số buổi của lớp đã diễn ra. Bỏ trống → rơi về số DÒNG điểm danh (hành vi cũ của
+   * nơi gọi chưa kịp truyền) chứ KHÔNG rơi về `totalLessons`: chia cho tổng buổi khoá
+   * là đúng cái lệch vừa vá.
+   */
+  sessionsHeld?: number;
   attendances: AttendanceSummaryItem[];
 }
 
@@ -72,7 +89,12 @@ export function computeAttendanceSummary(input: ComputeSummaryInput): Attendance
     }
   }
 
-  return { total, attended, absent, needMakeup, madeUp };
+  // Buổi CANCELLED đã bị bỏ ở vòng trên nên số dòng còn lại là đường lui hợp lý nhất
+  // khi nơi gọi chưa truyền `sessionsHeld`.
+  const soDongHopLe = input.attendances.filter((a) => a.sessionStatus !== "CANCELLED").length;
+  const daDienRa = Math.max(0, input.sessionsHeld ?? soDongHopLe);
+
+  return { total, daDienRa, attended, absent, needMakeup, madeUp };
 }
 
 /**
@@ -85,18 +107,27 @@ export async function attendanceSummary(enrollmentId: string): Promise<Attendanc
     where: { id: enrollmentId },
     select: { studentId: true, classId: true },
   });
-  if (!enr) return { total: 0, attended: 0, absent: 0, needMakeup: 0, madeUp: 0 };
+  if (!enr)
+    return { total: 0, daDienRa: 0, attended: 0, absent: 0, needMakeup: 0, madeUp: 0 };
 
-  const [{ total }, attendances] = await Promise.all([
+  const [{ total }, attendances, daDienRa] = await Promise.all([
     getStudentClassProgress(enr.studentId, enr.classId),
     db.attendance.findMany({
       where: { studentId: enr.studentId, session: { classId: enr.classId } },
       select: { status: true, makeupStatus: true, session: { select: { status: true } } },
     }),
+    db.classSession.count({
+      where: {
+        classId: enr.classId,
+        status: { not: "CANCELLED" },
+        date: { lte: new Date() },
+      },
+    }),
   ]);
 
   return computeAttendanceSummary({
     totalLessons: total,
+    sessionsHeld: daDienRa,
     attendances: attendances.map((a) => ({
       status: a.status as AttendanceStatusValue,
       makeupStatus: a.makeupStatus as MakeupStatusValue,
@@ -132,7 +163,7 @@ export async function attendanceSummaryForEnrollments(
   const classIds = [...new Set(enrollments.map((e) => e.classId))];
   const studentIds = [...new Set(enrollments.map((e) => e.studentId))];
 
-  const [classes, attendances] = await Promise.all([
+  const [classes, attendances, buoiDaDienRa] = await Promise.all([
     db.class.findMany({
       where: { id: { in: classIds } },
       select: { id: true, course: { select: { id: true, totalSessions: true } } },
@@ -146,7 +177,22 @@ export async function attendanceSummaryForEnrollments(
         session: { select: { classId: true, status: true } },
       },
     }),
+    // Buổi ĐÃ DIỄN RA theo từng lớp — MỘT truy vấn gom cho mọi lớp, giữ đúng lời hứa
+    // "số truy vấn CỐ ĐỊNH" của hàm này (xem chú thích trên: bản theo từng ghi danh
+    // từng bắn ~700 truy vấn đồng thời ở trang học bạ site GV).
+    db.classSession.groupBy({
+      by: ["classId"],
+      where: {
+        classId: { in: classIds },
+        status: { not: "CANCELLED" },
+        date: { lte: new Date() },
+      },
+      _count: { _all: true },
+    }),
   ]);
+  const daDienRaByClass = new Map(
+    buoiDaDienRa.map((r) => [r.classId, r._count._all]),
+  );
 
   // Tổng buổi chuẩn của khoá: ưu tiên Course.totalSessions, thiếu thì đếm lesson của
   // curriculum ACTIVE version cao nhất — cùng luật với getTotalLessons (1 HV/1 lớp).
@@ -193,6 +239,7 @@ export async function attendanceSummaryForEnrollments(
       e.id,
       computeAttendanceSummary({
         totalLessons: totalByClass.get(e.classId) ?? 0,
+        sessionsHeld: daDienRaByClass.get(e.classId) ?? 0,
         attendances: byPair.get(`${e.studentId}:${e.classId}`) ?? [],
       }),
     );

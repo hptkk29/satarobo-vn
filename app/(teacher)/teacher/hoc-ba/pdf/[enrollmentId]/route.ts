@@ -8,6 +8,7 @@ import { renderToBuffer, type DocumentProps } from "@react-pdf/renderer";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { rosterWhere } from "@/lib/enrollment-scope";
 import { getPublishedReportCardForStudent } from "@/lib/lms/report-card";
 import { withFreshFonts } from "@/lib/pdf/brand";
 import { ReportCardPdf } from "@/lib/pdf/report-card";
@@ -42,8 +43,10 @@ export async function GET(
     ? await sdb.class.findMany({
         where: { id: { in: classIds } },
         select: {
+          // Guard cũ chỉ hỏi "ghi danh này có thuộc lớp mình không" — ghi danh đã gỡ
+          // mềm hoặc HV đã xoá khỏi hệ thống vẫn xuất được PDF học bạ mang tên em.
           enrollments: {
-            where: { id: enrollmentId },
+            where: { id: enrollmentId, ...rosterWhere("lich-su") },
             select: { studentId: true },
           },
         },
@@ -52,8 +55,20 @@ export async function GET(
   const studentId =
     clsWithEnr.flatMap((c) => c.enrollments)[0]?.studentId ?? null;
   if (!studentId) {
+    // Hai ca rất khác nhau nhưng trước đây in CÙNG một câu, nên sự cố thiếu
+    // UserOrgRole (prod 07/08) đọc ra y hệt lỗi IDOR và dev đi soi nhầm hướng:
+    //   • classIds rỗng   → tài khoản chưa được phân lớp nào, HOẶC actor tự mâu
+    //     thuẫn (có lớp nhưng visibleCenterIds rỗng ⇒ scopedDb lọc sạch). Xem
+    //     cảnh báo "[actor] Phạm vi tự mâu thuẫn" trong log.
+    //   • có lớp nhưng không khớp ghi danh → đúng nghĩa "không phải lớp của bạn".
+    const noClasses = classIds.length === 0;
     return NextResponse.json(
-      { error: "Học bạ không thuộc lớp bạn phụ trách" },
+      {
+        error: noClasses
+          ? "Tài khoản của bạn chưa được phân lớp nào — liên hệ quản lý cơ sở để được gán lớp."
+          : "Học bạ không thuộc lớp bạn phụ trách",
+        code: noClasses ? "NO_ASSIGNED_CLASS" : "NOT_YOUR_CLASS",
+      },
       { status: 404 },
     );
   }

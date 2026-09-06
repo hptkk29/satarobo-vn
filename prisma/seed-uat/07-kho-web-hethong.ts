@@ -89,10 +89,13 @@ export async function seedKhoWebHeThong(coSo: CoSo[], uat: Uat) {
   // ── Lớp trải nghiệm ────────────────────────────────────────────────────────
   buoc("Lớp trải nghiệm + học viên thử");
   const lopThu: CoId<Prisma.TrialClassV2CreateManyInput>[] = [];
+  /** id lớp → ngày khai giảng (lệch so với mốc), để sinh buổi bên dưới. */
+  const lechTheoLop = new Map<string, number>();
   for (const cs of coSo) {
     // 50 lớp trải nghiệm mỗi cơ sở — đủ cho màn Lớp trải nghiệm và báo cáo học thử.
     for (let i = 1; i <= MOI_CO_SO; i++) {
       const lech = i <= Math.round(MOI_CO_SO * 0.6) ? -int(rng, 1, 45) : int(rng, 2, 25);
+      lechTheoLop.set(uid("lopthu", cs.code, i), lech);
       lopThu.push({
         id: uid("lopthu", cs.code, i),
         code: `TRIAL-${cs.code}-${String(i).padStart(3, "0")}`,
@@ -115,6 +118,37 @@ export async function seedKhoWebHeThong(coSo: CoSo[], uat: Uat) {
     (data) => db.trialClassV2.createMany({ data, skipDuplicates: true }),
   );
 
+  // BUỔI của lớp trải nghiệm.
+  //
+  // Thiếu bảng này thì màn "Học viên Trial" của giáo viên LUÔN RỖNG, dù lớp và ghi danh
+  // đã có: đường đọc (getTeacherTrialTable) tìm `TrialClassSession` theo teacherId rồi
+  // mới lấy `TrialEnrollment` có `scheduledSessionId` trỏ vào đó. Bộ seed trước 03/09
+  // không sinh buổi nào và cũng không set `scheduledSessionId`, nên QA vòng 1 không
+  // nghiệm thu được vé BUG-036 — trang chỉ ra "Chưa có suất Trial nào".
+  //
+  // `sessionCount: 1` nên mỗi lớp đúng MỘT buổi, rơi vào ngày khai giảng của lớp.
+  const buoiThu: CoId<Prisma.TrialClassSessionCreateManyInput>[] = [];
+  for (const lop of lopThu) {
+    const lech = lechTheoLop.get(String(lop.id)) ?? 0;
+    buoiThu.push({
+      id: uid("buoithu", String(lop.id).replace("uat-lopthu-", "")),
+      trialClassId: String(lop.id),
+      seq: 1,
+      date: ngay(lech),
+      startTime: String(lop.startTime),
+      endTime: String(lop.endTime),
+      // Giữ cùng giáo viên với lớp: đường đọc chấp nhận CẢ HAI (buổi hoặc lớp), khai ở
+      // đây cho khớp thực tế là người dạy buổi trải nghiệm chính là người phụ trách lớp.
+      teacherId: lop.teacherId ?? null,
+      status: lech < 0 ? "COMPLETED" : "SCHEDULED",
+    });
+  }
+  const nBt = await taoThieu(
+    buoiThu,
+    (ids) => db.trialClassSession.findMany({ where: { id: { in: ids } }, select: { id: true } }),
+    (data) => db.trialClassSession.createMany({ data, skipDuplicates: true }),
+  );
+
   // Ghi danh học thử: lấy con của lead đang ở nhánh học thử của phễu.
   const conLead = await db.leadChild.findMany({
     // Nhánh học thử của phễu. DANG_HOC_THU (TRIAL_IN_PROGRESS cũ) không có ở đây vì
@@ -127,9 +161,23 @@ export async function seedKhoWebHeThong(coSo: CoSo[], uat: Uat) {
   for (const [i, c] of conLead.entries()) {
     const lop = lopThu.find((l) => l.centerId === c.lead.centerId);
     if (!lop) continue;
+    const buoi = buoiThu.find((b) => b.trialClassId === String(lop.id));
+    if (!buoi) continue;
+    // HAI DẠNG GHI DANH — seed phải sinh cả hai, và dạng MẶC ĐỊNH phải chiếm đa số.
+    //
+    // ⚠️ BẢN SEED 03/09 GÁN CỨNG `scheduledSessionId` cho MỌI ghi danh — để màn Trial
+    // của site GV thôi rỗng khi nghiệm thu. Đó là chữa TRIỆU CHỨNG: từ 28/08 (gỡ
+    // auto-gán buổi) MỌI ghi danh tạo qua giao diện admin đều mang **null** — và chính
+    // `in: [...]` không khớp null mới là gốc làm bảng rỗng (vá ở `8b3fdad3`).
+    //
+    // Seed gán cứng thì dữ liệu UAT KHÔNG CÒN GIỐNG PROD, và đúng cái lỗi vừa vá sẽ
+    // vô hình ở lượt nghiệm thu sau. Nay: ~1/5 ghim một buổi (đường dời lịch),
+    // còn lại null = học toàn bộ buổi — đúng tỉ lệ thực tế.
+    const ghimBuoi = chance(rng, 0.2);
     ghiDanhThu.push({
       id: uid("gdthu", i),
       trialClassId: String(lop.id),
+      scheduledSessionId: ghimBuoi ? String(buoi.id) : null,
       leadChildId: c.id,
       status: chance(rng, 0.6) ? "COMPLETED" : chance(rng, 0.8) ? "ACTIVE" : "WITHDRAWN",
       summaryNote: pick(rng, ["Con hào hứng, phụ huynh muốn đăng ký.", "Con còn rụt rè, cần thêm buổi.", "Phụ huynh cân nhắc thêm."]),
@@ -141,7 +189,7 @@ export async function seedKhoWebHeThong(coSo: CoSo[], uat: Uat) {
     (ids) => db.trialEnrollment.findMany({ where: { id: { in: ids } }, select: { id: true } }),
     (data) => db.trialEnrollment.createMany({ data, skipDuplicates: true }),
   );
-  xong("Học thử", { lớp: nLt, ghi_danh: nGdt });
+  xong("Học thử", { lớp: nLt, buổi: nBt, ghi_danh: nGdt });
 
   // ── Yêu cầu chuyển lớp / cơ sở ─────────────────────────────────────────────
   buoc("Yêu cầu chuyển lớp");

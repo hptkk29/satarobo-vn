@@ -33,6 +33,10 @@ import {
 import { notifyAttendanceForSession } from "@/lib/notify/attendance";
 import { evaluateAbsenceRisk } from "@/lib/risk/service";
 import { mapWithConcurrency } from "@/lib/util/concurrency";
+import { completeSession } from "@/lib/lms/session-lifecycle";
+import { quyetDinhTuHoanTat } from "@/lib/lms/tu-hoan-tat-buoi";
+import { rosterWhere } from "@/lib/enrollment-scope";
+import { vnDateOnly } from "@/lib/time/vn";
 
 const MAKEUP_STATUSES = ["NONE", "NEEDS_MAKEUP", "MADE_UP"] as const;
 
@@ -116,6 +120,8 @@ export async function saveClassAttendanceAction(
       classId: true,
       centerId: true,
       date: true,
+      // `status`: quyết định tự-hoàn-tất ở cuối hàm (xem khối #TU-HOAN-TAT).
+      status: true,
       substituteTeacherId: true,
       actualTeacherId: true,
       class: { select: { centerId: true } },
@@ -333,6 +339,46 @@ export async function saveClassAttendanceAction(
     });
   } catch (err) {
     console.error("[saveClassAttendanceAction] audit:", err);
+  }
+
+  // #TU-HOAN-TAT (04/09/2026) — ĐIỂM DANH ĐỦ LÀ BUỔI XONG, không còn nút riêng.
+  //
+  // Chủ dự án: "mở khoá hoàn thành buổi: chỉ cần điểm danh". Cổng của
+  // `completeSession` vốn đã không chặn (thiếu điểm danh chỉ cảnh báo) — cái thiếu là
+  // KHÔNG AI BẤM. Đo 04/09 trên DB test: 524 buổi đã qua ngày mà chỉ 486 buổi
+  // COMPLETED, nên mọi màn đếm theo `status` đọc hụt so với màn đếm theo ngày.
+  //
+  // Best-effort: điểm danh ĐÃ lưu rồi, đóng buổi hỏng không được biến thành
+  // "không lưu được điểm danh" trước mắt giáo viên.
+  try {
+    const [siSo, daDanhDau] = await Promise.all([
+      xdb.enrollment.count({
+        where: { classId: sess.classId, ...rosterWhere("dang-hoc") },
+      }),
+      xdb.attendance.count({ where: { sessionId: data.sessionId } }),
+    ]);
+    const qd = quyetDinhTuHoanTat({
+      trangThaiBuoi: sess.status,
+      ngayBuoi: sess.date,
+      homNayUtcMs: vnDateOnly(new Date()).getTime(),
+      siSo,
+      daDanhDau,
+    });
+    if (qd.tuHoanTat) {
+      // Đi qua `completeSession` chứ KHÔNG `update({status})` trần: hàm đó còn ghi
+      // audit, ghi người/giờ thực dạy và phát `session.taught` (R7-14 nghe để tự giao
+      // bài). Bỏ qua chúng là buổi đóng mà bài tập không bao giờ được giao.
+      await completeSession({
+        sessionId: data.sessionId,
+        // Điểm danh vừa lưu xong nên cảnh báo "chưa điểm danh" không thể xảy ra;
+        // cờ này chỉ để khỏi phải đi một vòng hỏi-đáp không ai trả lời được.
+        confirmNoAttendance: true,
+        actorId,
+        actorName,
+      });
+    }
+  } catch (err) {
+    console.error("[saveClassAttendanceAction] tu hoan tat:", err);
   }
 
   // Thông báo điểm danh cho phụ huynh (email; Zalo khi cấu hình) — best-effort.

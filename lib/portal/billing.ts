@@ -76,6 +76,14 @@ export const PAYMENT_METHOD_LABEL: Record<string, string> = {
   TINGEE: "Tingee",
   COD: "COD",
   auto: "Tự động",
+  // 06/09 — mã do HỆ THỐNG tự sinh, không có trong danh mục `PaymentMethod` nên trước
+  // đây rơi thẳng ra giao diện dưới dạng mã trần. Phụ huynh đọc được chữ "backfill"
+  // trong lịch sử đóng tiền của con mình.
+  //
+  // `backfill` = khoản đã thu TRƯỚC khi lên hệ thống, nhập bù lúc chuyển dữ liệu
+  // (lib/crm/backfill-order.ts:112). Không phải một cách thanh toán, nên nhãn phải nói
+  // đúng bản chất chứ đừng bịa ra "Chuyển khoản".
+  backfill: "Đã thu trước khi lên hệ thống",
 };
 
 /**

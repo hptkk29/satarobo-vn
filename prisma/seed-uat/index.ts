@@ -38,7 +38,7 @@ async function main() {
   const t0 = Date.now();
   // Bước nền LUÔN chạy: các bước sau cần danh sách khoá + bài học nó trả về.
   const nen = await seedNen(coSo);
-  if (chay("crm")) await seedCrm(coSo, uat);
+  if (chay("crm")) await seedCrm(coSo, uat, nen.courses);
   if (chay("hocvu")) await seedHocVu(coSo, uat, nen);
   if (chay("taichinh")) await seedTaiChinh(coSo, uat);
   if (chay("lms")) await seedLms(coSo, uat);

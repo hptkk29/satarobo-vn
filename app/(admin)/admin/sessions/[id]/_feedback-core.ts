@@ -17,15 +17,18 @@
 //      trước khi ghi) — re-save không spam phụ huynh.
 //   #5 createdById chỉ set khi CREATE — re-save không cướp tác giả phiếu.
 //
-// ⚠️ NỢ ĐÃ BIẾT (có từ trước 21/08, 21/08 làm nó DỄ VẤP HƠN):
-// Hai đường ghi vào cùng bảng nhưng KHÁC cột — `saveSessionEvalCore` ghi `notes`
-// (+ mirror sang `comment`), còn `saveSessionFeedbackCore` chỉ ghi `comment`. Mọi chỗ
-// HIỂN THỊ lại ưu tiên `notes` (evalNotesProse). Hệ quả: phiếu đã có `notes` mà bị sửa
+// ✅ ĐÃ VÁ 06/09/2026 — nợ "hai đường ghi, hai cột" nêu bên dưới nay đã đóng.
+//
+// Nợ cũ: `saveSessionEvalCore` ghi `notes` (+ mirror sang `comment`), còn
+// `saveSessionFeedbackCore` chỉ ghi `comment`; mọi chỗ HIỂN THỊ lại ưu tiên `notes`
+// (`evalNotesProse`). Hệ quả với người dùng thật: phiếu đã có `notes` mà giáo viên sửa
 // qua "nhận xét nhanh" (/teacher/nhan-xet, editor ở /admin/sessions/[id]) thì phụ huynh
-// nhận EMAIL bản mới nhưng portal/PDF/thẻ admin vẫn in bản CŨ, và lần lưu phiếu sau còn
-// ghi đè ngược lại. Trước 21/08 hai ô trông khác nhau (4 ô có nhãn vs 1 ô trần) nên ít
-// ai nhầm; nay cả hai đều là MỘT ô văn xuôi. Vá đúng = cho đường nhận xét nhanh ghi vào
-// `notes.overall` luôn — việc riêng, KHÔNG làm lén trong story này.
+// nhận EMAIL bản MỚI nhưng mở portal/PDF ra vẫn đọc bản CŨ — và lần lưu phiếu đầy đủ kế
+// tiếp còn ghi đè ngược lại lời vừa sửa.
+//
+// Vá: nhánh nhận xét nhanh nay ghi ĐỒNG THỜI `comment` và `notes.overall` khi phiếu đã
+// có `notes` (xem `capNhatNotesOverall` dưới). Phiếu chưa từng có `notes` vẫn chỉ ghi
+// `comment` như cũ — không tự sinh cấu trúc `notes` cho phiếu thuần văn xuôi.
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { resolveActor } from "@/lib/auth/actor";
@@ -142,6 +145,23 @@ const SESSION_GATE_SELECT = {
  * LMS-2 — lưu hàng loạt nhận xét nhanh (comment + sao) từng HS cho 1 buổi.
  * Core thuần (không auth()) — xem đầu file về caller hợp lệ.
  */
+/**
+ * Mảnh `data` để đồng bộ `notes.overall` với văn xuôi vừa gõ ở ô "nhận xét nhanh".
+ *
+ * Trả `{}` (không đụng cột `notes`) khi phiếu CHƯA có `notes` — phiếu thuần văn xuôi
+ * không cần cấu trúc rubric, và tự sinh ra nó sẽ làm mọi chỗ đọc chuyển sang nhánh
+ * "phiếu mở rộng" một cách bất ngờ (`hasExtended` ngay trong file này chẳng hạn).
+ */
+function capNhatNotesOverall(
+  notesCu: Prisma.JsonValue | null | undefined,
+  vanXuoi: string,
+): { notes?: Prisma.InputJsonValue } {
+  if (notesCu === null || notesCu === undefined) return {};
+  const notes = normalizeEvalNotes(notesCu);
+  if (notes.overall === vanXuoi) return {};
+  return { notes: { ...notes, overall: vanXuoi } };
+}
+
 export async function saveSessionFeedbackCore(
   user: SessionGateUser,
   input: unknown,
@@ -238,7 +258,15 @@ export async function saveSessionFeedbackCore(
         // FIX #5 — update KHÔNG ghi đè createdById (giữ tác giả phiếu gốc cho PDF/portal).
         // `comment || null`: phiếu chỉ-có-sao lưu comment NULL chứ không phải chuỗi rỗng —
         // mọi chỗ đọc đều coi null là "chưa có văn xuôi" (portal, PDF, session-eval-card).
-        update: { comment: comment || null, rating },
+        //
+        // 06/09 — ĐỒNG BỘ `notes.overall`: phiếu đã có `notes` thì mọi màn hiển thị đọc
+        // `notes` chứ không đọc `comment`, nên chỉ ghi `comment` là phụ huynh nhận email
+        // bản mới mà vẫn đọc bản cũ. Xem khối chú thích đầu file.
+        update: {
+          comment: comment || null,
+          rating,
+          ...capNhatNotesOverall(old?.notes, comment),
+        },
         create: {
           classSessionId: sessionId,
           studentId: it.studentId,

@@ -1,6 +1,7 @@
 import { Users, ArrowRight } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
+import { ngayThangVN } from "@/lib/format/date";
 import type { ParentChildOverview } from "@/lib/portal/dashboard";
 import { PageHero, HeroMetric } from "@/components/portal/page-header";
 import { ChildDetailLink } from "@/components/portal/child-detail-link";
@@ -26,16 +27,26 @@ function initials(name: string): string {
     "?"
   ).toUpperCase();
 }
+/**
+ * `Hôm nay` / `Ngày mai` / `dd/MM` cho buổi kế tiếp của từng con.
+ *
+ * 06/09 — so ngày theo LỊCH VN. Bản cũ dựng `new Date(y, m, d)` từ `getFullYear()` v.v.,
+ * tức theo TZ của TIẾN TRÌNH; đây là Server Component và Vercel chạy UTC, nên trong
+ * khoảng 00:00–07:00 giờ VN buổi CHIỀU NAY hiện "Ngày mai". Đúng khung giờ phụ huynh
+ * mở portal trước khi đưa con đi học.
+ */
 function nextLabel(iso: string | null): string {
   if (!iso) return "Chưa có";
   const d = new Date(iso);
-  const dd = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const n = new Date();
-  const t0 = new Date(n.getFullYear(), n.getMonth(), n.getDate());
-  const diff = Math.round((dd.getTime() - t0.getTime()) / 86400000);
+  const diff = ngayVnSo(d) - ngayVnSo(new Date());
   if (diff === 0) return "Hôm nay";
   if (diff === 1) return "Ngày mai";
-  return d.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" });
+  return ngayThangVN(d);
+}
+
+/** Số thứ tự ngày (epoch days) theo lịch Asia/Ho_Chi_Minh — cùng cách hoc-phi-page làm. */
+function ngayVnSo(d: Date): number {
+  return Math.floor((d.getTime() + 7 * 3_600_000) / 86_400_000);
 }
 
 export function ChildrenPageV2({ kids }: { kids: ParentChildOverview[] }) {
@@ -88,10 +99,13 @@ export function ChildrenPageV2({ kids }: { kids: ParentChildOverview[] }) {
                     Tiến độ khóa học
                   </span>
                   <span className="shrink-0 tabular-nums text-primary">
-                    {c.attendanceRate}% · {c.attended}/{c.totalSessions}
+                    {c.courseProgressRate}% · {c.daDienRa}/{c.totalSessions}
                   </span>
                 </div>
-                <Progress value={c.attendanceRate} className="h-1.5" />
+                {/* Thanh vẽ theo TIẾN ĐỘ KHOÁ — cùng số với phần trăm in bên cạnh. Trước
+                      04/09 cả hai lấy `attendanceRate` nên dòng "Tiến độ khoá học" in
+                      "82% · 9/20" — 9/20 là 45%, hai số cãi nhau ngay trên một dòng. */}
+                  <Progress value={c.courseProgressRate} className="h-1.5" />
               </div>
 
               <div className="grid grid-cols-2 gap-2">
