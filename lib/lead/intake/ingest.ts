@@ -585,12 +585,29 @@ export async function ingestIntakeLead(
         aff,
       }).catch((err) => console.error(`[intake:${ctx.source}] chia lead:`, err));
     } else {
-      const assign = ctx.legacyWebhook
-        ? autoAssignLead(lead.id, { actorId: null, actorName })
-        : autoAssignNewLead(lead.id, { actorId: null, actorName });
-      await assign.catch((err) =>
-        console.error(`[intake:${ctx.source}] auto-assign error:`, err),
-      );
+      // ⚠️ 05/09/2026 — MÃ GIỚI THIỆU TRÊN LINK TỪNG BỊ GHI ĐÈ IM LẶNG.
+      //
+      // Khối tạo lead ở trên đã gán `assignedToId` theo mã NV trên phiếu (nhánh
+      // `legacyWebhook` của biểu thức ở ~dòng 504). Rồi `autoAssignLead` rút một
+      // người khác từ vòng chia và ĐÈ LÊN — nên người phát link cờ vua / quà tặng
+      // không bao giờ nhận được lead của mình, mà cũng không có lỗi nào nổ.
+      //
+      // Vì sao chặn Ở ĐÂY chứ không thêm chốt vào `autoAssignLead`: hàm đó còn phục
+      // vụ nút "Chia tự động" của quản lý (`autoAssignLeadAction`), nơi rút lại
+      // người mới chính là CHỦ ĐÍCH. Thêm chốt vào trong là giết đúng nút đó — lặp
+      // lại y hệt lỗi "bấm chia lại mà lead không đổi tay" đã phải vá hồi 03/09.
+      //
+      // `autoAssignNewLead` KHÔNG cần nhánh này: nó tự thoát sớm khi lead đã có chủ
+      // (`lib/lead/auto-assign.ts:174`). Chênh lệch giữa hai hàm chính là gốc của bug.
+      const daCoChuTuMaGioiThieu = !!ctx.legacyWebhook && !!assignedToId;
+      if (!daCoChuTuMaGioiThieu) {
+        const assign = ctx.legacyWebhook
+          ? autoAssignLead(lead.id, { actorId: null, actorName })
+          : autoAssignNewLead(lead.id, { actorId: null, actorName });
+        await assign.catch((err) =>
+          console.error(`[intake:${ctx.source}] auto-assign error:`, err),
+        );
+      }
     }
 
     return { ok: true, leadId: lead.id, duplicate: false, warnings };
