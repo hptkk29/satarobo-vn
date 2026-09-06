@@ -215,7 +215,11 @@ export function MyRequests({
           đẩy bảng xuống dưới màn hình. `showCloseButton={false}` vì RequestForm đã có nút Đóng
           riêng — hai chữ X chồng nhau ở một góc là mời bấm nhầm. */}
       <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent side="right" showCloseButton={false} className="w-full overflow-y-auto sm:max-w-xl">
+        {/* 3xl chứ không xl: đây là mặt NHẬP LIỆU chính của module — một rail chọn loại đơn
+            13rem cộng lưới hai cột ngày/giờ/mã ca. Ở 576px thì mỗi ô còn ~190px, ngày và mã ca
+            chen nhau; 768px cho mỗi ô ~236px. Vẫn bị `w-3/4` chặn trên nên máy nhỏ không bị
+            panel chiếm hết màn. */}
+        <SheetContent side="right" showCloseButton={false} className="w-full overflow-y-auto sm:max-w-3xl">
           <SheetTitle className="sr-only">Tạo đơn mới</SheetTitle>
           <RequestForm
             options={options}
