@@ -6,6 +6,7 @@
 //
 // Mọi trường ở đây đã được FORMAT SẴN Ở SERVER (nhãn ngày, giờ, tuổi đơn): component là client,
 // mà `toLocaleString` trên máy người dùng thì lệch múi giờ — xem landmine TZ của repo.
+import type { EffectTone } from "@/lib/cham-cong/request-effect";
 import type { WorkRequestStatusV } from "@/lib/work-request";
 
 export type QueueRow = {
@@ -24,7 +25,8 @@ export type QueueRow = {
   dueLabel: string | null;
   dueTone: "danger" | "warning" | "muted";
   effectText: string;
-  effectMuted: boolean;
+  /** `warning` = đơn khuyết dữ liệu, bấm Duyệt sẽ báo lỗi — cột và panel đều tô cảnh báo. */
+  effectTone: EffectTone;
   effectCode: string | null;
   effectHint: string | null;
   ageLabel: string;

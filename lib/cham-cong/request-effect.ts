@@ -15,6 +15,14 @@ import { WORK_REQUEST_KINDS } from "@/lib/work-request";
 /** Chỗ thiếu dữ liệu in dấu hỏi chứ không in "—": người duyệt phải thấy là CHƯA BIẾT. */
 const UNKNOWN = "?";
 
+/** Ô lưới còn trống. KHÁC "chưa biết": đây là trạng thái BÌNH THƯỜNG — duyệt vẫn ghi được ca
+ *  vào ô trống. In "?" cho nó là nói dối theo hướng xấu: cả cột hoá `? → ?` và người duyệt
+ *  đọc ra "trang hỏng" thay vì "người này chưa có ca ngày đó". */
+const NO_SHIFT = "chưa xếp";
+
+/** Lượt quét chưa có trong ngày. Cũng là trạng thái thật, không phải lỗi đọc. */
+const NO_TAP = "chưa quét";
+
 /** Số ngày của đơn khoảng (bao gồm cả hai đầu). Thiếu mốc ⇒ 1 ngày. */
 export function leaveDayCount(fromDate: Date | null, toDate: Date | null): number {
   if (!fromDate || !toDate) return 1;
@@ -50,7 +58,10 @@ export function effectHint(r: EffectHintRow): string | null {
 
 // ─── Tầng 2: cột "Thay đổi" ──────────────────────────────────────────────────────────
 
-export type EffectTone = "default" | "muted";
+/** `warning` = đơn KHUYẾT tới mức bấm Duyệt sẽ ném lỗi (`lib/cham-cong/requests.ts` chặn ở
+ *  transaction). Nói trước ở cột "Thay đổi" rẻ hơn nhiều so với để người duyệt bấm rồi ăn
+ *  một hộp lỗi đỏ và không hiểu vì sao. */
+export type EffectTone = "default" | "muted" | "warning";
 
 /** `code` = mã ghi lên lưới nếu duyệt — hộp xác nhận in "Ghi {code} cho …". Không phải
  *  loại đơn nào cũng ghi một mã (chỉnh công ghi mốc giờ) nên nó tuỳ chọn. */
@@ -83,7 +94,7 @@ export type EffectInput = {
 };
 
 function hhmm(d: Date | null): string {
-  if (!d) return UNKNOWN;
+  if (!d) return NO_TAP;
   const p = vnParts(d);
   return `${String(p.hour).padStart(2, "0")}:${String(p.minute).padStart(2, "0")}`;
 }
@@ -101,32 +112,39 @@ function trimmed(v: string | null): string | null {
 export function describeEffect(input: EffectInput): EffectSummary | null {
   switch (input.kind) {
     case "SHIFT_SWAP": {
-      const from = trimmed(input.currentCode) ?? UNKNOWN;
-      const to = trimmed(input.requesterNewCode) ?? UNKNOWN;
-      let text = `${from} → ${to}`;
+      const from = trimmed(input.currentCode) ?? NO_SHIFT;
+      const newCode = trimmed(input.requesterNewCode);
+      // Không có mã ca mới thì `templateCode()` trả null và `decide()` ném "Mã ca mới không
+      // còn trong danh mục" — đơn này KHÔNG duyệt được, nói thẳng thay vì vẽ "? → ?".
+      if (!newCode) return { text: "Thiếu mã ca mới — duyệt sẽ báo lỗi", tone: "warning" };
+      let text = `${from} → ${newCode}`;
       const who = trimmed(input.targetUserName);
       if (who) {
-        const tFrom = trimmed(input.targetCurrentCode) ?? UNKNOWN;
+        const tFrom = trimmed(input.targetCurrentCode) ?? NO_SHIFT;
         // Không khai ca riêng cho người nhận = đổi thẳng: họ nhận đúng ca người nộp đang giữ.
-        const tTo = trimmed(input.targetNewCode) ?? trimmed(input.currentCode) ?? UNKNOWN;
+        const tTo = trimmed(input.targetNewCode) ?? trimmed(input.currentCode) ?? NO_SHIFT;
         text += ` · ${who}: ${tFrom} → ${tTo}`;
       }
-      return { text, code: trimmed(input.requesterNewCode) ?? undefined, tone: "default" };
+      return { text, code: newCode, tone: "default" };
     }
     case "LEAVE": {
-      const from = trimmed(input.currentCode) ?? UNKNOWN;
-      const to = trimmed(input.leaveCode) ?? UNKNOWN;
+      const from = trimmed(input.currentCode) ?? NO_SHIFT;
+      const leave = trimmed(input.leaveCode);
       const days = leaveDayCount(input.fromDate, input.toDate);
-      return {
-        text: `${from} → ${to} · ${days} ngày`,
-        code: trimmed(input.leaveCode) ?? undefined,
-        tone: "default",
-      };
+      // Nghỉ KHÔNG chọn loại vẫn duyệt được — `decide()` ghi mã "X" (không lương). Nó không
+      // ném lỗi, nhưng rơi vào nhánh bất lợi cho người nộp mà không ai bấm chọn ⇒ cảnh báo.
+      // CỐ Ý không đoán "P"/"X" ở đây: luật trả lương nằm ở `requests.ts`, chép sang lớp
+      // hiển thị là hai nơi cùng giữ một luật rồi trôi ra khỏi nhau.
+      if (!leave) return { text: `Thiếu loại nghỉ · ${days} ngày`, tone: "warning" };
+      return { text: `${from} → ${leave} · ${days} ngày`, code: leave, tone: "default" };
     }
     case "TIMESHEET_FIX": {
+      const reqIn = trimmed(input.requestedIn);
+      const reqOut = trimmed(input.requestedOut);
+      // Không có giờ nào để ghi ⇒ `decide()` ném "Đơn không có giờ vào/ra để ghi".
+      if (!reqIn && !reqOut) return { text: "Thiếu giờ vào/ra — duyệt sẽ báo lỗi", tone: "warning" };
       const cur = `${hhmm(input.currentIn)}→${hhmm(input.currentOut)}`;
-      const req = `${trimmed(input.requestedIn) ?? UNKNOWN}→${trimmed(input.requestedOut) ?? UNKNOWN}`;
-      return { text: `${cur} ⇒ ${req}`, tone: "default" };
+      return { text: `${cur} ⇒ ${reqIn ?? UNKNOWN}→${reqOut ?? UNKNOWN}`, tone: "default" };
     }
     case "CLASS_OFF": {
       const cls = trimmed(input.className);

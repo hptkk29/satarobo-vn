@@ -15,7 +15,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { PILL } from "@/components/admin/cham-cong/classes";
+import { EFFECT_CLS, PILL } from "@/components/admin/cham-cong/classes";
 import { cn } from "@/lib/utils";
 import type { WorkRequestStatusV } from "@/lib/work-request";
 import type { QueueRow } from "./types";
@@ -83,9 +83,7 @@ export function RequestSheet({ row, onClose }: { row: QueueRow | null; onClose: 
                   </Row>
                 )}
                 <Row label="Thay đổi">
-                  <span className={row.effectMuted ? "text-muted-foreground" : undefined}>
-                    {row.effectText}
-                  </span>
+                  <span className={EFFECT_CLS[row.effectTone]}>{row.effectText}</span>
                 </Row>
                 {row.className && <Row label="Lớp">{row.className}</Row>}
                 {row.newShiftCode && (

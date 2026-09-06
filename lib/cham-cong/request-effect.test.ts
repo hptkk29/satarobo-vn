@@ -113,7 +113,7 @@ describe("describeEffect — 5 loại có hệ quả trên lịch", () => {
         requestedOut: "17:30",
       }),
     );
-    expect(r).toEqual({ text: "07:52→? ⇒ 07:30→17:30", tone: "default" });
+    expect(r).toEqual({ text: "07:52→chưa quét ⇒ 07:30→17:30", tone: "default" });
   });
 
   it("CLASS_OFF / SUB_TEACH: nêu lớp và người", () => {
@@ -136,25 +136,49 @@ describe("describeEffect — 5 loại có hệ quả trên lịch", () => {
   });
 });
 
-describe("describeEffect — thiếu dữ liệu vẫn in được, đánh dấu chỗ chưa biết", () => {
-  it("thiếu mã ca / mã nghỉ / mốc giờ ⇒ dấu hỏi chứ không vỡ", () => {
-    expect(describeEffect(input({ kind: "SHIFT_SWAP" }))).toEqual({ text: "? → ?", tone: "default" });
-    expect(describeEffect(input({ kind: "LEAVE" }))?.text).toBe("? → ? · 1 ngày");
-    expect(describeEffect(input({ kind: "TIMESHEET_FIX" }))?.text).toBe("?→? ⇒ ?→?");
-    expect(describeEffect(input({ kind: "CLASS_OFF" }))?.text).toBe("Huỷ buổi dạy");
-    expect(describeEffect(input({ kind: "SUB_TEACH" }))?.text).toBe("Dạy thay");
-  });
-
-  it("chuỗi rỗng/toàn khoảng trắng coi như thiếu", () => {
-    expect(describeEffect(input({ currentCode: "  ", requesterNewCode: "" }))?.text).toBe("? → ?");
-    expect(describeEffect(input({ currentCode: "S", requesterNewCode: "CG" }))?.code).toBe("CG");
+describe("describeEffect — phân biệt CHƯA CÓ (bình thường) với KHUYẾT (duyệt sẽ lỗi)", () => {
+  // Ranh giới này là toàn bộ lý do khối test tồn tại. Ô lưới trống và lượt quét chưa có là
+  // chuyện thường ngày — duyệt vẫn chạy. Còn thiếu mã ca mới / thiếu giờ đề nghị thì
+  // `decide()` NÉM LỖI, nên cột phải cảnh báo trước khi người ta bấm Duyệt.
+  it("thiếu mã ca mới ⇒ cảnh báo, không vẽ mũi tên rỗng", () => {
+    expect(describeEffect(input({ kind: "SHIFT_SWAP" }))).toEqual({
+      text: "Thiếu mã ca mới — duyệt sẽ báo lỗi",
+      tone: "warning",
+    });
+    // Chuỗi rỗng / toàn khoảng trắng cũng là thiếu.
+    expect(describeEffect(input({ currentCode: "  ", requesterNewCode: "" }))?.tone).toBe("warning");
     expect(describeEffect(input({ currentCode: "S", requesterNewCode: " " }))?.code).toBeUndefined();
   });
 
-  it("người nhận có tên nhưng chưa xếp ca ⇒ nhận đúng ca người nộp đang giữ", () => {
+  it("thiếu loại nghỉ ⇒ cảnh báo (duyệt được nhưng rơi vào nhánh không lương)", () => {
+    expect(describeEffect(input({ kind: "LEAVE" }))).toEqual({
+      text: "Thiếu loại nghỉ · 1 ngày",
+      tone: "warning",
+    });
+  });
+
+  it("thiếu CẢ giờ vào và giờ ra ⇒ cảnh báo; còn một giờ thì vẫn ghi được", () => {
+    expect(describeEffect(input({ kind: "TIMESHEET_FIX" }))).toEqual({
+      text: "Thiếu giờ vào/ra — duyệt sẽ báo lỗi",
+      tone: "warning",
+    });
+    expect(describeEffect(input({ kind: "TIMESHEET_FIX", requestedIn: "07:30" }))).toEqual({
+      text: "chưa quét→chưa quét ⇒ 07:30→?",
+      tone: "default",
+    });
+  });
+
+  it("ô lưới trống nói bằng chữ, KHÔNG dùng dấu hỏi", () => {
+    expect(describeEffect(input({ requesterNewCode: "CG" }))?.text).toBe("chưa xếp → CG");
+    expect(describeEffect(input({ kind: "LEAVE", leaveCode: "P" }))?.text).toBe("chưa xếp → P · 1 ngày");
     expect(describeEffect(input({ currentCode: "S", requesterNewCode: "CG", targetUserName: "Trần B" }))?.text).toBe(
-      "S → CG · Trần B: ? → S",
+      "S → CG · Trần B: chưa xếp → S",
     );
+  });
+
+  it("loại không đụng lưới thì thiếu dữ liệu cũng in được", () => {
+    expect(describeEffect(input({ kind: "CLASS_OFF" }))?.text).toBe("Huỷ buổi dạy");
+    expect(describeEffect(input({ kind: "SUB_TEACH" }))?.text).toBe("Dạy thay");
   });
 });
 
@@ -279,7 +303,7 @@ describe("effectSummaries", () => {
     });
     expect(map.get("r1")?.text).toBe("S → CG · Trần B: CG → S");
     expect(map.get("r1")?.code).toBe("CG");
-    expect(map.get("r2")?.text).toBe("07:52→? ⇒ 07:30→17:30");
+    expect(map.get("r2")?.text).toBe("07:52→chưa quét ⇒ 07:30→17:30");
     // Loại lạ bị bỏ khỏi map — chỗ gọi in "—".
     expect(map.has("r3")).toBe(false);
   });
@@ -292,7 +316,8 @@ describe("effectSummaries", () => {
       shiftCodeByUserDay: new Map(),
       tapsByUserDay: new Map(),
     });
-    expect(map.get("r1")?.text).toBe("? → ?");
-    expect(map.get("r2")?.text).toBe("?→? ⇒ 07:30→17:30");
+    // r1 mất mã ca mới ⇒ cảnh báo; r2 vẫn có giờ đề nghị nên duyệt được, chỉ là chưa quét.
+    expect(map.get("r1")).toEqual({ text: "Thiếu mã ca mới — duyệt sẽ báo lỗi", tone: "warning" });
+    expect(map.get("r2")?.text).toBe("chưa quét→chưa quét ⇒ 07:30→17:30");
   });
 });

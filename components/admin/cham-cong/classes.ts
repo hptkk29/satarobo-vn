@@ -9,6 +9,7 @@
 // border/foreground/ring. Không hex rời, không màu chữ cứng, không thang màu Tailwind gốc.
 // Thư mục này là ADMIN-ONLY ⇒ được dùng `primary-soft`/`primary-ink` (chỉ có trong `.admin-scope`);
 // atom dùng chung với site giáo viên nằm ở `components/cham-cong/ui/**` và KHÔNG được nhập file này.
+import type { EffectTone } from "@/lib/cham-cong/request-effect";
 
 /** Nút hành động chính (Chốt kỳ, Áp vào hệ thống, Lưu…). Một màn chỉ nên có một nút loại này. */
 export const BTN_PRIMARY =
@@ -49,3 +50,14 @@ export const TAB_IDLE =
  */
 export const PILL =
   "inline-flex shrink-0 items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold";
+
+/**
+ * Tông của cột "Thay đổi" ở hàng chờ duyệt đơn (`/don-tu`).
+ * Đặt ở đây vì BẢNG và PANEL chi tiết là hai file khác nhau cùng vẽ một giá trị — mỗi bên tự
+ * gán màu là hai bản sao rồi trôi ra khỏi nhau (đơn hiện cảnh báo ở bảng, hết cảnh báo khi mở).
+ */
+export const EFFECT_CLS: Record<EffectTone, string> = {
+  default: "",
+  muted: "text-muted-foreground",
+  warning: "text-state-warning-ink",
+};
