@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/sheet";
 import { BTN_DANGER, BTN_OUTLINE, BTN_PRIMARY, FIELD } from "@/components/admin/cham-cong/classes";
 import { deleteBriefNoteAction, saveBriefNoteAction } from "../_actions";
-import { AUD_LABEL, MODE_LABEL, WD, WD_FULL, type NoteBlock, type NoteRow } from "./note-manager";
+import { AUD_LABEL, MODE_LABEL, WD, WD_FULL, type NoteBlock, type NoteRow } from "./shared";
 
 const LABEL = "mb-1 block text-sm font-semibold text-foreground";
 

@@ -22,51 +22,17 @@ import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 import { adminTd, adminTh, adminTr } from "@/components/admin/ui/table";
 import { BTN_DANGER, BTN_OUTLINE, PILL } from "@/components/admin/cham-cong/classes";
 import { SectionCard } from "@/components/admin/cham-cong/section-card";
+import { AUD_LABEL, MODE_LABEL, WD, WD_FULL, WD_LABEL, type NoteBlock, type NoteRow } from "./shared";
 import { NoteForm } from "./note-form";
+
+export { AUD_LABEL, MODE_LABEL, WD, WD_FULL, WD_LABEL };
+export type { NoteBlock, NoteRow };
 import { deleteBriefNoteAction } from "../_actions";
 
-export type NoteRow = {
-  id: string;
-  centerId: string;
-  centerLabel: string;
-  /** 0 = CN … 6 = T7; có giá trị khi là việc cố định theo thứ. */
-  weekday: number | null;
-  /** "YYYY-MM-DD"; có giá trị khi là ghi đè theo ngày. Đúng MỘT trong hai có giá trị. */
-  date: string | null;
-  audience: "ALL" | "KINH_DOANH" | "GIAO_VIEN";
-  mode: "APPEND" | "SUPPRESS" | "REPLACE";
-  text: string;
-  isActive: boolean;
-};
 
-export type NoteBlock = { id: string; label: string; canAssign: boolean };
-
-/** Thứ Hai đứng đầu, Chủ Nhật cuối (khớp cột Sheet và khung ca tuần). */
-export const WD = [1, 2, 3, 4, 5, 6, 0];
-export const WD_LABEL: Record<number, string> = { 1: "T2", 2: "T3", 3: "T4", 4: "T5", 5: "T6", 6: "T7", 0: "CN" };
-export const WD_FULL: Record<number, string> = {
-  1: "Thứ Hai",
-  2: "Thứ Ba",
-  3: "Thứ Tư",
-  4: "Thứ Năm",
-  5: "Thứ Sáu",
-  6: "Thứ Bảy",
-  0: "Chủ Nhật",
-};
-
-export const AUD_LABEL: Record<NoteRow["audience"], string> = {
-  ALL: "Cả khối",
-  KINH_DOANH: "Kinh doanh",
-  GIAO_VIEN: "Giáo viên",
-};
 /** Nhãn ngắn cho ô ma trận — ô chỉ rộng ~7rem. */
 const AUD_SHORT: Record<NoteRow["audience"], string> = { ALL: "", KINH_DOANH: "KD", GIAO_VIEN: "GV" };
 
-export const MODE_LABEL: Record<NoteRow["mode"], string> = {
-  APPEND: "Gửi kèm",
-  SUPPRESS: "Không gửi tin",
-  REPLACE: "Thay toàn bộ",
-};
 const MODE_TONE: Record<NoteRow["mode"], string> = {
   APPEND: "bg-state-info-soft text-state-info-ink",
   SUPPRESS: "bg-state-danger-soft text-state-danger-ink",
