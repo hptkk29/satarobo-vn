@@ -40,6 +40,7 @@ const FLAG_LABEL: Record<string, { text: string; tone: "warn" | "danger" | "info
   VUOT_TRAN: { text: "Vượt trần lượt", tone: "warn" },
   LAM_NGAY_LE: { text: "Làm ngày lễ", tone: "info" },
   GPS_KEM_CHINH_XAC: { text: "GPS kém", tone: "info" },
+  CHINH_TAY: { text: "Chỉnh tay (đơn duyệt)", tone: "info" },
 };
 const TONE: Record<"warn" | "danger" | "info", string> = {
   warn: "bg-state-warning-soft text-state-warning-ink",
