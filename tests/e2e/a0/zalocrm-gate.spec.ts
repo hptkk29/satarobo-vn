@@ -18,9 +18,16 @@
  * khác và ở GĐ0 chưa tồn tại — khung TRẮNG là kết quả ĐÚNG. Ca [ZC-E2E-03] chỉ soi có
  * đúng một thẻ `<iframe>` trỏ đúng origin, không hơn.
  *
- * ⚠️ CHƯA CHẠY ĐƯỢC LẦN NÀO ở lô này: bật cờ đòi dựng Next trên cổng 3100 + `resetDb()`
- * trên DB dùng chung với hai lô đang chạy song song. Ba ca chế độ BẬT sẽ chạy lần đầu ở
- * CI hoặc ở GĐ1 — chuẩn bị tinh thần sửa vặt (nhãn nút, thời gian chờ).
+ * ✅ ĐÃ CHẠY THẬT cả HAI chế độ (06/09/2026): tắt cờ 1/1 xanh, bật cờ 3/3 xanh.
+ * Lần chạy đầu tiên đỏ 2 chỗ và cả hai đều là lỗi CỦA TEST, không phải của mã sản phẩm:
+ *   · khoá mã HTTP 404 — `notFound()` chạy đúng, chỉ là Next đã chốt phần đầu phản hồi
+ *     nên mã vẫn 200 (xem chú thích trong [ZC-E2E-00]);
+ *   · soi mục sidebar khi nhóm accordion còn ĐÓNG — mục con chưa vào DOM, làm ca khẳng
+ *     định HIỆN thì đỏ, còn hai ca khẳng định VẮNG thì xanh GIẢ. Vá bằng `moNhomSidebar`.
+ *
+ * ⚠️ Muốn chạy ở máy mình thì `.env.test` phải có `NEXTAUTH_URL=http://localhost:3100`
+ * (đúng cổng của `playwright.a0.config.ts`). Trỏ nhầm cổng thì đăng nhập không dính
+ * phiên và MỌI ca ở đây rơi về trang /login — triệu chứng trông y hệt "hỏng quyền".
  */
 import { test, expect } from "@playwright/test";
 import { db } from "../../../lib/db";
@@ -34,13 +41,36 @@ const CO_CAU_HINH_DAY_DU = CO_BAT && Boolean(APP_URL) && Boolean(process.env.ZAL
 
 /** Mục sidebar — dùng nhãn chính xác như khai trong `components/admin/sidebar.tsx`. */
 const MUC_SIDEBAR = "Zalo CRM";
+/** Nhóm chứa mục, cũng lấy nguyên văn từ `components/admin/sidebar.tsx`. */
+const NHOM_SIDEBAR = "CSKH & Phụ huynh";
+
+/**
+ * Mở nhóm sidebar chứa "Zalo CRM" rồi mới soi mục.
+ *
+ * 🔴 BẮT BUỘC GỌI TRƯỚC MỌI KHẲNG ĐỊNH VỀ MỤC — kể cả khẳng định PHỦ ĐỊNH.
+ * Sidebar dựng nhóm dạng accordion và mặc định ĐÓNG: lúc đóng, mục con KHÔNG nằm
+ * trong DOM. Nghĩa là `expect(muc).toHaveCount(0)` sẽ XANH ngay cả khi quyền hở toang
+ * — nó chỉ đang đo "nhóm đang đóng", không đo "không có quyền". Ca [ZC-E2E-01] đỏ thật
+ * lần chạy đầu tiên chính vì nhóm đóng, và nhờ đó lộ ra hai ca phủ định kia đang xanh
+ * giả.
+ *
+ * Nhóm không tồn tại (vai không có mục nào trong nhóm) thì thôi — mục con lại càng
+ * không thể có, và đó cũng là một kết quả đúng cho ca phủ định.
+ */
+async function moNhomSidebar(page: import("@playwright/test").Page): Promise<void> {
+  const nut = page.getByRole("button", { name: NHOM_SIDEBAR });
+  if ((await nut.count()) === 0) return;
+  if ((await nut.getAttribute("aria-expanded")) === "true") return;
+  await nut.click();
+  await expect(nut).toHaveAttribute("aria-expanded", "true");
+}
 
 test.describe("[S1] Cổng vào màn Zalo CRM", () => {
   test.beforeEach(async () => {
     await resetDb();
   });
 
-  test("[ZC-E2E-00] cờ TẮT ⇒ màn không tồn tại (404) và mục sidebar ẩn — kể cả SUPER_ADMIN", async ({
+  test("[ZC-E2E-00] cờ TẮT ⇒ màn không dựng được (ra màn 404) và mục sidebar ẩn — kể cả SUPER_ADMIN", async ({
     page,
   }) => {
     test.skip(CO_BAT, "Chế độ này chỉ đúng khi ZALOCRM_ENABLED chưa bật");
@@ -52,10 +82,29 @@ test.describe("[S1] Cổng vào màn Zalo CRM", () => {
     });
 
     // "Tắt" nghĩa là KHÔNG TỒN TẠI, không phải "vào được rồi báo chưa bật".
-    const res = await page.goto("/admin/zalo-crm");
-    expect(res?.status(), "cờ tắt phải trả 404, không phải 200 kèm lời nhắn").toBe(404);
+    //
+    // ⚠️ KIỂM THEO THỨ NGƯỜI DÙNG THẤY, KHÔNG THEO MÃ HTTP — có lý do, đừng "sửa lại
+    // cho chặt". Bản đầu của ca này khẳng định `res.status() === 404` và ĐỎ ở CI với
+    // 200. Đo lại thì `notFound()` CHẠY ĐÚNG (trang trả về đúng màn 404 của
+    // `app/not-found.tsx`, không rò một mẩu nội dung Zalo CRM nào), chỉ có mã HTTP là
+    // 200 vì Next đã chốt phần đầu phản hồi trước khi `notFound()` ném — hành vi của
+    // khung, không phải của cổng quyền. Toàn repo cũng không có ca nào khác khoá mã
+    // 404, nên khoá ở đây là tự đặt ra một quy ước riêng rồi tự vấp.
+    //
+    // Thứ THẬT SỰ phải đúng: người mở được là màn KHÔNG hiện, và màn 404 hiện thay.
+    await page.goto("/admin/zalo-crm");
+    await expect(
+      page.getByRole("heading", { name: "Không tìm thấy trang" }),
+      "cờ tắt phải ra màn 404, không phải màn Zalo CRM",
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Zalo CRM" }),
+      "cờ tắt mà vẫn dựng được màn = cổng cờ hỏng",
+    ).toHaveCount(0);
+    await expect(page.locator("iframe"), "cờ tắt thì không được có khung nhúng nào").toHaveCount(0);
 
     await page.goto("/admin/dashboard");
+    await moNhomSidebar(page);
     await expect(page.getByRole("link", { name: MUC_SIDEBAR })).toHaveCount(0);
   });
 
@@ -71,12 +120,25 @@ test.describe("[S1] Cổng vào màn Zalo CRM", () => {
 
     // Menu và cổng trang đọc CÙNG một bảng `PAGE_GATES["/zalo-crm"]`, nên hai assert
     // dưới đây phải cùng đúng — lệch một chiều là dead-link, lệch chiều kia là hở quyền.
+    await moNhomSidebar(page);
     const muc = page.getByRole("link", { name: MUC_SIDEBAR });
     await expect(muc).toBeVisible();
 
     await page.goto("/admin/zalo-crm");
     await expect(page).not.toHaveURL(/error=unauthorized/);
-    await expect(page.getByRole("heading", { name: MUC_SIDEBAR })).toBeVisible();
+    // `exact: true` là BẮT BUỘC, không phải cho gọn: khi người dùng chưa có cơ sở nào
+    // trong tầm nhìn, màn dựng thêm khối hướng dẫn có tiêu đề "Chưa mở được Zalo CRM"
+    // — chuỗi đó CHỨA "Zalo CRM" nên locator lỏng khớp 2 phần tử và Playwright ném
+    // strict mode violation. Ca này chỉ hỏi "vào được màn hay bị đá", tức tiêu đề H1.
+    await expect(page.getByRole("heading", { name: MUC_SIDEBAR, exact: true })).toBeVisible();
+
+    // Sale seed ở ca này CỐ Ý không có `UserOrgRole` ⇒ `actor.visibleCenterIds` rỗng ⇒
+    // không tab nào, và màn hiện hướng dẫn thay vì khung nhúng. Đó là FAIL-CLOSED đúng
+    // thiết kế (tầm nhìn cơ sở chỉ đến từ `UserOrgRole`, không suy từ `User.centerId`),
+    // nên khẳng định luôn để người sau không "sửa" nó thành ra nới quyền.
+    // Ca [ZC-E2E-03] mới là ca dựng đủ org + UserOrgRole và đòi có khung nhúng thật.
+    await expect(page.getByRole("heading", { name: "Chưa mở được Zalo CRM" })).toBeVisible();
+    await expect(page.locator("iframe")).toHaveCount(0);
   });
 
   test("[ZC-E2E-02] Kế toán KHÔNG thấy mục và gõ thẳng URL thì bị đá về /dashboard", async ({
@@ -93,6 +155,7 @@ test.describe("[S1] Cổng vào màn Zalo CRM", () => {
       callbackUrl: "/admin/dashboard",
     });
     await page.goto("/admin/dashboard");
+    await moNhomSidebar(page);
     await expect(page.getByRole("link", { name: MUC_SIDEBAR })).toHaveCount(0);
 
     // Giấu menu là chưa đủ — cổng phải đứng ở chính trang.
