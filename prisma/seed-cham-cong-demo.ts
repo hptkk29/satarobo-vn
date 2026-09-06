@@ -34,7 +34,7 @@
 import { db } from "@/lib/db";
 import { HO_CENTER_ID, loadCenterMap } from "@/lib/cham-cong/home-center";
 import { generateMonthAssignments } from "@/lib/cham-cong/generate-db";
-import { recomputeRange } from "@/lib/cham-cong/recompute";
+import { recomputeAttendanceDay } from "@/lib/cham-cong/recompute";
 import { getOrCreatePeriod } from "@/lib/cham-cong/period";
 import { toMinutes } from "@/lib/cham-cong/catalog";
 import { vnDateAt, vnDateOnly, vnParts, vnYmd } from "@/lib/time/vn";
@@ -296,9 +296,30 @@ async function main() {
   console.log(`[demo] lượt quét: +${luot.length} (bỏ qua ${daCo.size} ngày đã có lượt)`);
 
   // ── 5. Tính công + mở kỳ ───────────────────────────────────────────────────────────
+  // KHÔNG dùng `recomputeRange(moiUserId, tu, den)`: nó duyệt đủ tích (người × ngày), tức
+  // 30 người × 61 ngày ≈ 1.800 lượt, mà mỗi lượt là vài vòng đi–về mạng. Trên Postgres local
+  // là 5 giây; trên runner GitHub nói chuyện với Supabase thì hàng chục phút, và job chỉ có
+  // `timeout-minutes: 30`. Phần lớn số đó là công cốc: ngày nghỉ tuần không có ca, ngày tương
+  // lai chưa có gì để tính.
+  //
+  // Chỉ tính đúng những cặp CÓ THẬT: có ô lưới, hoặc có lượt quét. Ngày tương lai loại hẳn —
+  // tính chúng chỉ đẻ ra cờ "chưa quét" cho ngày chưa tới, tức dữ liệu nghiệm thu sai.
   const den = new Date(Math.min(denKy.getTime(), homNay.getTime()));
-  const rc = await recomputeRange(moiUserId, tu, den);
-  console.log(`[demo] tính công: ${rc.days} ngày-người${rc.locked ? ` · ${rc.locked} bỏ qua vì kỳ đã chốt` : ""}`);
+  const oTinh = await db.shiftAssignment.findMany({
+    where: { userId: { in: moiUserId }, status: "ACTIVE", workDate: { gte: tu, lte: den } },
+    select: { userId: true, workDate: true },
+  });
+  const cap = new Map<string, { userId: string; workDate: Date }>();
+  for (const o of [...oTinh, ...luot]) cap.set(`${o.userId}|${vnYmd(o.workDate)}`, { userId: o.userId, workDate: o.workDate });
+
+  let daTinh = 0;
+  let boQua = 0;
+  for (const c of cap.values()) {
+    const r = await recomputeAttendanceDay(c.userId, c.workDate);
+    if (r.skipped === "LOCKED") boQua += 1;
+    else daTinh += 1;
+  }
+  console.log(`[demo] tính công: ${daTinh} ngày-người${boQua ? ` · ${boQua} bỏ qua vì kỳ đã chốt` : ""}`);
 
   for (const ky of cacKy) {
     for (const khoi of [...theoKhoi.keys()]) {
