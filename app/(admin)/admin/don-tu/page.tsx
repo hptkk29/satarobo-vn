@@ -238,7 +238,7 @@ export default async function WorkRequestsAdminPage({
       dueLabel: due?.label ?? null,
       dueTone: due?.tone ?? "muted",
       effectText: eff?.text ?? "—",
-      effectMuted: (eff?.tone ?? "muted") === "muted",
+      effectTone: eff?.tone ?? "muted",
       effectCode: eff?.code ?? null,
       effectHint: effectHint(r),
       ageLabel: ageOf(r.createdAt, now),

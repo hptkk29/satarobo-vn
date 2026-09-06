@@ -26,7 +26,7 @@ import { useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 import { adminTd, adminTh, adminTr } from "@/components/admin/ui/table";
-import { PILL } from "@/components/admin/cham-cong/classes";
+import { EFFECT_CLS, PILL } from "@/components/admin/cham-cong/classes";
 import { cn } from "@/lib/utils";
 import type { WorkRequestStatusV } from "@/lib/work-request";
 import type { QueueRow } from "./types";
@@ -106,10 +106,7 @@ export function RequestQueueTable({
                       <span className={cn("ml-1.5 text-xs", DUE_CLS[r.dueTone])}>· {r.dueLabel}</span>
                     )}
                   </td>
-                  <td
-                    className={cn(adminTd, "py-0", r.effectMuted && "text-muted-foreground")}
-                    title={r.effectText}
-                  >
+                  <td className={cn(adminTd, "py-0", EFFECT_CLS[r.effectTone])} title={r.effectText}>
                     <span className="block max-w-[18rem] truncate">{r.effectText}</span>
                   </td>
                   <td className={cn(adminTd, "py-0 text-muted-foreground")} title={r.centerLabel}>
