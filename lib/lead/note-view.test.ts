@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { buildNote } from "@/lib/lead/intake/normalize";
-import { hasSystemLines, mergeLeadNote, splitLeadNote } from "@/lib/lead/note-view";
+import {
+  boDongMaNguoiNhap,
+  hasSystemLines,
+  mergeLeadNote,
+  splitLeadNote,
+} from "@/lib/lead/note-view";
 
 // Chuỗi THẬT chủ dự án chụp lại 24/08/2026 trên phiếu prod — giữ nguyên từng ký
 // tự để test này còn bắt được nếu ai đổi câu chữ ở `ingest.ts` mà quên nơi đây.
@@ -108,5 +113,36 @@ describe("mergeLeadNote — chống xoá mất dấu vết khi Sale sửa ghi ch
   it("khớp bố cục buildNote(): dấu vết → người → cảnh báo", () => {
     const built = buildNote(["Nhân viên nhập: NV1", "người gõ"], ["Cảnh báo X"]);
     expect(mergeLeadNote("người gõ", built)).toBe(built);
+  });
+});
+
+describe("boDongMaNguoiNhap — mã NV phải tra theo quan hệ, không đọc từ note", () => {
+  it("bỏ dòng ảnh chụp khỏi phần hiển thị, nhưng KHÔNG làm mất chữ", () => {
+    // Ảnh chụp lúc nhập: đổi mã nhân viên (SR.NV.02 → SR.NV.06) thì dòng này đứng
+    // yên mãi mãi. Nơi gọi in mã SỐNG tra từ `Lead.createdById`, nên phải bỏ dòng
+    // cũ đi — không thì màn hình hiện hai mã khác nhau của cùng một người.
+    const view = splitLeadNote(
+      ["Nhân viên nhập: SR.NV.02", "Tỉnh/TP: Đà Nẵng", "con 6 tuổi"].join("\n"),
+    );
+    const ra = boDongMaNguoiNhap(view);
+    expect(ra.info).toEqual(["Tỉnh/TP: Đà Nẵng"]);
+    // Về `hidden` chứ không bốc hơi: `mergeLeadNote` gắn lại khi người dùng sửa ghi
+    // chú, nên lọc lúc ĐỌC không được hoá thành xoá lúc GHI.
+    expect(ra.hidden).toContain("Nhân viên nhập: SR.NV.02");
+    expect(ra.human).toBe("con 6 tuổi");
+  });
+
+  it("không có dòng đó ⇒ trả NGUYÊN đối tượng cũ (không dựng lại vô ích)", () => {
+    const view = splitLeadNote("Tỉnh/TP: Đà Nẵng\nchữ của người");
+    expect(boDongMaNguoiNhap(view)).toBe(view);
+  });
+
+  it("giữ nguyên cảnh báo và chữ người gõ", () => {
+    const view = splitLeadNote(
+      ["Nhân viên nhập: SR.NV.02", "muốn học thử", "⚠️ Trùng SĐT với phiếu cũ"].join("\n"),
+    );
+    const ra = boDongMaNguoiNhap(view);
+    expect(ra.warnings).toEqual(["⚠️ Trùng SĐT với phiếu cũ"]);
+    expect(ra.human).toBe("muốn học thử");
   });
 });

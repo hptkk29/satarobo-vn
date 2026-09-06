@@ -1,4 +1,5 @@
 import { ingestIntakeLead } from "./intake/ingest";
+import { laNguonDuongCu } from "./nguon-duong-cu";
 
 // =============================================================================
 // LEAD INGEST — lớp bọc tương thích cho 3 nguồn webhook có từ Phase T1.4
@@ -74,7 +75,8 @@ export async function ingestLead(input: IngestLeadInput): Promise<IngestResult> 
       eventId: input.eventId ?? null,
       utmSource: input.utmSource ?? null,
       utmCampaign: input.utmCampaign ?? null,
-      legacyWebhook: true,
+      // Đặt cứng `true` ở đây từng là cái bẫy — xem `lib/lead/nguon-duong-cu.ts`.
+      legacyWebhook: laNguonDuongCu(input.source),
     },
   );
 
