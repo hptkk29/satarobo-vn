@@ -26,6 +26,15 @@ name: Seed dữ liệu TEST (nạp lại từ đầu)
 # DB chưa có bảng thì workflow này đỏ ngay bước đầu.
 #
 # ── An toàn ───────────────────────────────────────────────────────────────────
+# ── Vì sao cần lối đi `chi_cham_cong` (06/09/2026) ────────────────────────────
+# ⚠️ Lời hứa "mọi bước seed đều CHỈ THÊM/CẬP NHẬT" ở ngay dưới KHÔNG đúng với bước
+# nền `db:seed`: `prisma/seed.ts:162` gọi `db.course.deleteMany()` cho mọi khoá học
+# không nằm trong danh sách trong mã, và bước cơ sở in "removed N cơ sở cũ". Ngày
+# 06/09 chạy thử đã đỏ ngay ở đó — `Class_courseId_fkey` chặn lại nên KHÔNG mất gì,
+# nhưng trên DB mà khoá học chưa có lớp tham chiếu thì nó xoá thật.
+# Vì vậy: khi DB test đang có người nghiệm thu, dùng `chi_cham_cong` để đi thẳng vào
+# hai bước chấm công (cả hai chỉ upsert/insert, đã đo idempotent) và không đụng nền.
+#
 #   · dispatch-only + phải gõ đúng chuỗi xác nhận
 #   · chặn `TEST_DIRECT_URL` trùng `PROD_DIRECT_URL` (cùng lưới với migrate-test)
 #   · mọi bước seed đều CHỈ THÊM/CẬP NHẬT (upsert), không có câu xoá nào
@@ -50,6 +59,11 @@ on:
         type: boolean
         required: false
         default: true
+      chi_cham_cong:
+        description: 'CHỈ nạp dữ liệu chấm công, BỎ QUA mọi bước nền. Dùng khi DB test đang có người nghiệm thu — xem ghi chú "Vì sao cần lối đi này" trong file.'
+        type: boolean
+        required: false
+        default: false
       chi_lich_hen:
         description: 'CHỈ nạp lịch hẹn học thử, bỏ qua mọi bước khác. Dùng khi DB đã có dữ liệu và không muốn seed đè lên thao tác của người đang nghiệm thu.'
         type: boolean
@@ -104,23 +118,23 @@ jobs:
       # THỨ TỰ BẮT BUỘC. `seed-uat` gọi `layCoSo()` và ném ngay nếu chưa có CS1/CS2,
       # còn `seed.ts` cần phòng ban để dựng hồ sơ nhân sự.
       - name: Seed cây đơn vị (HO → REGION → CS1/CS2)
-        if: ${{ !inputs.chi_lich_hen }}
+        if: ${{ !inputs.chi_lich_hen && !inputs.chi_cham_cong }}
         run: pnpm db:seed:orgunit
         env: { DATABASE_URL: "${{ secrets.TEST_DIRECT_URL }}", DIRECT_URL: "${{ secrets.TEST_DIRECT_URL }}" }
 
       - name: Seed phòng ban
-        if: ${{ !inputs.chi_lich_hen }}
+        if: ${{ !inputs.chi_lich_hen && !inputs.chi_cham_cong }}
         run: pnpm db:seed:departments
         env: { DATABASE_URL: "${{ secrets.TEST_DIRECT_URL }}", DIRECT_URL: "${{ secrets.TEST_DIRECT_URL }}" }
 
       - name: Seed dữ liệu gốc (khoá học, nội dung web, tài khoản CEO)
-        if: ${{ !inputs.chi_lich_hen }}
+        if: ${{ !inputs.chi_lich_hen && !inputs.chi_cham_cong }}
         run: pnpm db:seed
         env: { DATABASE_URL: "${{ secrets.TEST_DIRECT_URL }}", DIRECT_URL: "${{ secrets.TEST_DIRECT_URL }}" }
 
       # ── Bộ UAT: 12 tài khoản uat.* + dữ liệu nghiệp vụ ──────────────────────
       - name: Seed bộ UAT (12 tài khoản + lead/học viên/lớp)
-        if: ${{ inputs.bo_du_lieu_uat && !inputs.chi_lich_hen }}
+        if: ${{ inputs.bo_du_lieu_uat && !inputs.chi_lich_hen && !inputs.chi_cham_cong }}
         run: pnpm db:seed:uat
         env:
           UAT_SEED: "1"
@@ -128,7 +142,7 @@ jobs:
           DIRECT_URL: "${{ secrets.TEST_DIRECT_URL }}"
 
       - name: Seed ảnh chờ duyệt
-        if: ${{ inputs.bo_du_lieu_uat && !inputs.chi_lich_hen }}
+        if: ${{ inputs.bo_du_lieu_uat && !inputs.chi_lich_hen && !inputs.chi_cham_cong }}
         run: pnpm exec tsx prisma/seed-uat-media-review.ts
         env:
           UAT_SEED: "1"
@@ -136,7 +150,7 @@ jobs:
           DIRECT_URL: "${{ secrets.TEST_DIRECT_URL }}"
 
       - name: Backfill kho ảnh (MediaAsset)
-        if: ${{ inputs.bo_du_lieu_uat && !inputs.chi_lich_hen }}
+        if: ${{ inputs.bo_du_lieu_uat && !inputs.chi_lich_hen && !inputs.chi_cham_cong }}
         run: pnpm exec tsx scripts/backfill-media-assets.ts
         env: { DATABASE_URL: "${{ secrets.TEST_DIRECT_URL }}", DIRECT_URL: "${{ secrets.TEST_DIRECT_URL }}" }
 
@@ -144,7 +158,7 @@ jobs:
       # thì màn Lớp Trial mở ra có danh sách lớp nhưng bên trong rỗng — không bấm
       # được gì để nghiệm thu.
       - name: Seed dữ liệu lớp trial
-        if: ${{ inputs.bo_du_lieu_uat && !inputs.chi_lich_hen }}
+        if: ${{ inputs.bo_du_lieu_uat && !inputs.chi_lich_hen && !inputs.chi_cham_cong }}
         run: pnpm exec tsx prisma/seed-uat-trial.ts
         env:
           UAT_SEED: "1"
@@ -154,7 +168,7 @@ jobs:
       # PHẢI chạy SAU seed trial: nó phân loại ca theo người đưa vào lớp, mà ca thì
       # bước trên vừa tạo. Chạy trước là không có gì để phân loại.
       - name: Backfill giáo viên học thử (phương án B)
-        if: ${{ inputs.bo_du_lieu_uat && !inputs.chi_lich_hen }}
+        if: ${{ inputs.bo_du_lieu_uat && !inputs.chi_lich_hen && !inputs.chi_cham_cong }}
         run: pnpm exec tsx scripts/backfill-gv-trial-phuong-an-b.ts
         env: { DATABASE_URL: "${{ secrets.TEST_DIRECT_URL }}", DIRECT_URL: "${{ secrets.TEST_DIRECT_URL }}" }
 
