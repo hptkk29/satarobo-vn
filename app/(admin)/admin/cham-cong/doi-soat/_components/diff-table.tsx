@@ -6,11 +6,16 @@
 // có ĐƯỜNG ĐI tới đúng nơi sửa (`/cham-cong?date=…&coSo=…`) — không có nó thì bảng chỉ tố cáo
 // mà không giúp được gì.
 //
-// Dễ vỡ: `PhanTrangBang` chỉ phân trang khi thấy ĐÚNG MỘT `<tbody>` — đừng thêm tbody thứ hai.
+// Dễ vỡ:
+// - `PhanTrangBang` chỉ phân trang khi thấy ĐÚNG MỘT `<tbody>` — đừng thêm tbody thứ hai.
+// - `max-w`+`truncate` phải nằm trên một `<span className="block …">` BÊN TRONG ô, không phải trên
+//   `<td>`: bảng này `table-layout: auto`, trình duyệt bỏ qua `max-width` của ô, mà `adminTd` lại
+//   có sẵn `whitespace-nowrap` ⇒ tên dài không cắt mà nở ra kéo cả cột đi ngang.
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { adminTd, adminTh, adminTr } from "@/components/admin/ui/table";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
+import { ShiftCodeChip } from "@/components/cham-cong/ui/shift-code-chip";
 import { PILL } from "@/components/admin/cham-cong/classes";
 import { hrefWith } from "@/lib/cham-cong/scope-href";
 import { cn } from "@/lib/utils";
@@ -57,21 +62,27 @@ export function DiffTable({
             const date = `${periodKey}-${String(d.day).padStart(2, "0")}`;
             const kind = KIND[d.kind];
             return (
-              <tr key={`${d.sheetName}-${d.day}-${d.kind}`} className={adminTr}>
-                <td className={`${adminTd} max-w-[12rem] truncate font-medium`} title={d.sheetName}>
-                  {d.sheetName}
+              <tr key={`${d.sheetName}-${d.day}-${d.kind}`} className={cn(adminTr, "h-11")}>
+                <td className={cn(adminTd, "py-0 font-medium")}>
+                  <span className="block max-w-[12rem] truncate" title={d.sheetName}>
+                    {d.sheetName}
+                  </span>
                 </td>
-                <td className={`${adminTd} tabular-nums`}>{d.day}</td>
-                <td className={`${adminTd} font-mono`}>{d.sheetCode ?? "—"}</td>
-                <td className={`${adminTd} font-mono`}>{d.sysCode ?? "—"}</td>
-                <td className={`${adminTd} text-right tabular-nums`}>{d.sheetUnits}</td>
-                <td className={`${adminTd} text-right tabular-nums`}>
+                <td className={cn(adminTd, "py-0 tabular-nums")}>{d.day}</td>
+                <td className={cn(adminTd, "py-0")}>
+                  <ShiftCodeChip code={d.sheetCode ?? null} size="sm" />
+                </td>
+                <td className={cn(adminTd, "py-0")}>
+                  <ShiftCodeChip code={d.sysCode ?? null} size="sm" />
+                </td>
+                <td className={cn(adminTd, "py-0 text-right tabular-nums")}>{d.sheetUnits}</td>
+                <td className={cn(adminTd, "py-0 text-right tabular-nums")}>
                   {d.sysUnits ?? <span className="text-muted-foreground">chưa tính</span>}
                 </td>
-                <td className={adminTd}>
+                <td className={cn(adminTd, "py-0")}>
                   <span className={cn(PILL, kind.cls)}>{kind.text}</span>
                 </td>
-                <td className={adminTd}>
+                <td className={cn(adminTd, "py-0")}>
                   <Link
                     href={hrefWith("/cham-cong", { coSo, date })}
                     aria-label={`Mở bảng công ngày ${d.day} của ${d.sheetName}`}

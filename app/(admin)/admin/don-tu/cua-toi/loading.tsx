@@ -11,11 +11,13 @@ export default function Loading() {
         <Skeleton className="mt-2 h-4 w-96 max-w-full" />
       </div>
       <MeNav active="cua-toi" />
-      <div aria-busy aria-label="Đang tải…" className="mb-4 flex items-center gap-2 border-b border-border pb-2">
-        <Skeleton className="h-8 w-24" />
-        <Skeleton className="h-8 w-28" />
-        <Skeleton className="h-8 w-28" />
-        <Skeleton className="h-8 w-24" />
+      {/* Bộ lọc trạng thái ở màn này là CHIP (không phải tab gạch chân) — khung chờ phải cùng
+          hình, nếu không nội dung nhảy một nhịp khi dữ liệu về. */}
+      <div aria-busy aria-label="Đang tải…" className="mb-4 flex flex-wrap items-center gap-2">
+        <Skeleton className="h-9 w-28 rounded-xl" />
+        <Skeleton className="h-9 w-32 rounded-xl" />
+        <Skeleton className="h-9 w-28 rounded-xl" />
+        <Skeleton className="h-9 w-24 rounded-xl" />
         <Skeleton className="ml-auto h-9 w-28 rounded-lg" />
       </div>
       <TableSkeleton cols={7} rows={8} />

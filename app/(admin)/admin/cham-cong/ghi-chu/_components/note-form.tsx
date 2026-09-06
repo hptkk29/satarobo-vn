@@ -122,7 +122,8 @@ export function NoteForm({
           <SheetTitle>{value?.id ? "Sửa ghi chú lịch" : "Thêm ghi chú lịch"}</SheetTitle>
           <SheetDescription>
             Nội dung ghép vào tin nhắc lịch gửi lúc <span className="tabular-nums">{gioGui}</span> hôm
-            trước. Ghi chú theo ngày được ưu tiên hơn việc cố định theo thứ.
+            trước. Ghi chú theo ngày được gửi CÙNG việc cố định của thứ đó — muốn thay hẳn nội dung
+            thì chọn cách gửi “Thay toàn bộ”.
           </SheetDescription>
         </SheetHeader>
 

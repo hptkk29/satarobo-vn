@@ -84,7 +84,7 @@ export default async function DoiSoatPage({
         }}
         period={{ ...period, href: hrefWith("/cham-cong/ky-cong", { ky, coSo }) }}
       />
-      <PageHelp guideSlug="08-nhan-su-giao-vien">
+      <PageHelp guideSlug="nhan-su-giao-vien">
         <p>
           Mỗi ngày tải file Sheet lịch đang dùng lên đây để xem ô nào lệch với hệ thống. Máy chỉ
           đọc file — không ghi gì vào hệ thống, chạy bao nhiêu lần cũng được.

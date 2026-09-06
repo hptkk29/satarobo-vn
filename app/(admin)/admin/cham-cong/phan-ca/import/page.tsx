@@ -109,7 +109,7 @@ export default async function ImportPhanCaPage({
     <div className="max-w-6xl">
       {header}
       <ModuleNav active="luoi" scope={scope} ctx={ctx} />
-      <PageHelp guideSlug="08-nhan-su-giao-vien">
+      <PageHelp guideSlug="nhan-su-giao-vien">
         <p>
           Mỗi tháng chỉ cần làm một lần: tải file lịch phân ca trên Google Sheet về dạng Excel, đọc file, xác nhận
           tên ai là ai (lần sau hệ thống tự nhớ), rồi áp. Ca do đơn đã duyệt hoặc do quản lý sửa tay trên lưới

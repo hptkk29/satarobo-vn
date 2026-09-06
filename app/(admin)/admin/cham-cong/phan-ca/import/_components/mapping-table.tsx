@@ -20,6 +20,17 @@ import type { PreviewPerson } from "@/lib/cham-cong/import-core";
 
 export type MappingCandidate = { userId: string; label: string; centerCode: string | null };
 
+/** `tone` của StatusPill dùng màu SÁNG (`--state-*`) làm màu CHỮ — trượt AA cho chữ 12px đậm — nên
+ *  luôn đè `text-state-*-ink`, đúng như ghi chú trong `status-pill.tsx` và `period-status-pill.tsx`. */
+const INK: Record<PillTone, string> = {
+  success: "text-state-success-ink",
+  warning: "text-state-warning-ink",
+  danger: "text-state-danger-ink",
+  info: "text-state-info-ink",
+  brand: "text-primary-ink",
+  muted: "",
+};
+
 /** Nhãn + tone của cột TRẠNG THÁI. Tính từ LỰA CHỌN HIỆN TẠI, không phải từ gợi ý ban đầu:
  *  người dùng đổi tay xong mà pill vẫn ghi "Đã nhớ" là nói dối họ. */
 function trangThai(p: PreviewPerson, chon: string): { text: string; tone: PillTone } {
@@ -70,9 +81,14 @@ export function MappingTable({
   return (
     // Không phân trang, nhưng VẪN phải có vùng cuộn RIÊNG: ô `<select>` rộng 16rem × 4 cột vượt
     // 375px, không có `overflow-x-auto` thì cả trang trượt ngang thay vì mình cái bảng.
-    <div className="overflow-hidden rounded-xl border border-border bg-card">
-      <div className="relative overflow-x-auto">
-        <table className="w-full border-collapse text-left">
+    //
+    // KHÔNG dựng vỏ thẻ (`rounded-xl border bg-card`) ở đây: người gọi duy nhất là SectionCard
+    // "Ánh xạ tên…" của import-wizard, vốn đã có viền + nền — thêm một lớp nữa đọc thành thẻ lồng thẻ.
+    //
+    // `relative` KHÔNG thừa: `sr-only` là `position:absolute`, vùng cuộn không định vị thì nó neo
+    // vào khối chứa của TRANG và kéo `<body>` trượt ngang.
+    <div className="relative overflow-x-auto">
+      <table className="w-full border-collapse text-left">
         <thead>
           <tr className="border-b border-border bg-muted/40">
             <th scope="col" className={adminTh}>
@@ -125,11 +141,11 @@ export function MappingTable({
                         </span>
                       )}
                     </td>
-                    <td className={cn(adminTd, "max-w-[10rem] truncate text-muted-foreground")} title={p.role}>
-                      {p.role || "—"}
+                    <td className={cn(adminTd, "text-muted-foreground")} title={p.role}>
+                      <span className="block max-w-[10rem] truncate">{p.role || "—"}</span>
                     </td>
                     <td className={adminTd}>
-                      <StatusPill tone={st.tone}>{st.text}</StatusPill>
+                      <StatusPill tone={st.tone} className={INK[st.tone]}>{st.text}</StatusPill>
                       {!chon && goiY && (
                         <span className="mt-1 block max-w-[16rem] truncate text-xs text-muted-foreground" title={goiY}>
                           Gợi ý: {goiY}
@@ -160,8 +176,7 @@ export function MappingTable({
             ];
           })}
         </tbody>
-        </table>
-      </div>
+      </table>
     </div>
   );
 }

@@ -10,6 +10,11 @@
 //
 // DỄ VỠ: file nằm trong `components/cham-cong/**` — thư mục dùng chung với site giáo viên ⇒ KHÔNG
 // import `components/admin/**` và CHỈ dùng token `:root` (không `primary-soft`/`primary-ink`).
+//
+// BỘ LỌC LÀ CHIP, KHÔNG PHẢI TAB. Bản trước vẽ bộ lọc trạng thái bằng đúng vỏ tab gạch chân của
+// MeNav, nên `/don-tu/cua-toi` có HAI hàng gạch chân giống hệt xếp chồng — hàng trên là điều hướng,
+// hàng dưới là bộ lọc — đọc như hai cấp điều hướng. Chip là idiom LỌC của cả module (`/don-tu`,
+// `/cham-cong`, `/danh-muc-ca`); gạch chân dành riêng cho điều hướng.
 import { useMemo, useState } from "react";
 import { Inbox, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -45,7 +50,16 @@ const PILL = "inline-flex shrink-0 items-center whitespace-nowrap rounded-full p
 const TH = "whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground";
 const TD = "px-5 py-3.5 text-sm text-foreground";
 const TR = "border-b border-border/60 align-top transition-colors last:border-0 hover:bg-muted/50";
-const TAB = "whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring";
+
+/** Chip lọc. Bản sao CÓ CHỦ ĐÍCH của `CHIP` trong `components/admin/cham-cong/classes.ts` — thư mục
+ *  dùng chung không được nhập file admin. Khác một điểm và CHỈ một điểm: chip đang chọn dùng
+ *  `border/ring/text-primary` thay cho `bg-primary-soft text-primary-ink`, vì hai token đó chỉ tồn
+ *  tại trong `.admin-scope` (site GV mount file này thì chúng rơi về trong suốt). Chọn `ring-1` chứ
+ *  không `font-semibold`: đổi độ đậm là chip đổi bề ngang, hàng lọc nhảy mỗi lần bấm. */
+const CHIP =
+  "inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-xl border px-3 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring";
+const CHIP_ACTIVE = "border-primary bg-card text-primary ring-1 ring-primary";
+const CHIP_IDLE = "border-border bg-card text-muted-foreground hover:bg-muted";
 
 const STATUS_CLS: Record<WorkRequestStatusV, string> = {
   PENDING: "bg-state-warning-soft text-state-warning-ink",
@@ -90,8 +104,8 @@ export function MyRequests({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border">
-        <nav aria-label="Lọc theo trạng thái đơn" className="-mb-px flex gap-1 overflow-x-auto">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <nav aria-label="Lọc theo trạng thái đơn" className="flex flex-wrap gap-2">
           {tabs.map((t) => {
             const on = filter === t.key;
             return (
@@ -100,14 +114,10 @@ export function MyRequests({
                 type="button"
                 aria-pressed={on}
                 onClick={() => setFilter(t.key)}
-                className={cn(
-                  TAB,
-                  on
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:border-border hover:text-foreground",
-                )}
+                className={cn(CHIP, on ? CHIP_ACTIVE : CHIP_IDLE)}
               >
-                {t.label} <span className="tabular-nums">{t.count}</span>
+                {t.label}
+                <b className="tabular-nums text-foreground">{t.count}</b>
               </button>
             );
           })}
@@ -115,7 +125,7 @@ export function MyRequests({
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="mb-2 inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
         >
           <Plus className="h-4 w-4" aria-hidden /> Tạo đơn
         </button>
@@ -127,7 +137,9 @@ export function MyRequests({
             <Inbox className="h-5 w-5" aria-hidden />
           </span>
           <p className="text-sm font-semibold text-foreground">
-            {rows.length === 0 ? "Bạn chưa nộp đơn nào" : `Không có đơn nào ở mục “${tabs.find((t) => t.key === filter)?.label}”`}
+            {rows.length === 0
+              ? "Bạn chưa nộp đơn nào"
+              : `Không có đơn nào ở bộ lọc “${tabs.find((t) => t.key === filter)?.label}”`}
           </p>
           <p className="mt-1 max-w-md text-sm text-muted-foreground">
             {rows.length === 0
@@ -136,63 +148,67 @@ export function MyRequests({
           </p>
         </div>
       ) : (
-        <PhanTrangBang cuonNgang tenDonVi="đơn" khoaGhiNho="cua-toi">
-          <table className="w-full min-w-[900px] text-sm">
-            <thead className="border-b border-border bg-muted/40">
-              <tr>
-                <th scope="col" className={TH}>Loại</th>
-                <th scope="col" className={TH}>Ngày / giờ</th>
-                <th scope="col" className={TH}>Cơ sở nhận</th>
-                <th scope="col" className={TH}>Lý do</th>
-                <th scope="col" className={TH}>Trạng thái</th>
-                <th scope="col" className={TH}>Phản hồi</th>
-                <th scope="col" className={TH}>Gửi lúc</th>
-              </tr>
-            </thead>
-            <tbody>
-              {shown.map((r) => (
-                <tr key={r.id} className={TR}>
-                  <td className={cn(TD, "font-medium")}>
-                    {WR_KIND_LABEL[r.kind]}
-                    {r.detail && <div className="text-xs font-normal text-muted-foreground">{r.detail}</div>}
-                  </td>
-                  <td className={cn(TD, "whitespace-nowrap tabular-nums")}>
-                    {r.fromLabel ?? "—"}
-                    {r.toLabel && r.toLabel !== r.fromLabel ? ` → ${r.toLabel}` : ""}
-                    {r.time ? <div className="font-mono text-xs text-muted-foreground">{r.time}</div> : null}
-                  </td>
-                  <td className={cn(TD, "whitespace-nowrap")}>{r.centerLabel}</td>
-                  <td className={cn(TD, "max-w-[20rem] whitespace-pre-wrap")}>{r.reason}</td>
-                  <td className={cn(TD, "whitespace-normal")}>
-                    <span className={cn(PILL, STATUS_CLS[r.status])}>{WR_STATUS_LABEL[r.status]}</span>
-                    {r.submittedLate && <span className={cn(PILL, STATUS_CLS.PENDING, "ml-1")}>Nộp muộn</span>}
-                    {r.status === "PENDING" && r.applyError && (
-                      <span className={cn(PILL, STATUS_CLS.REJECTED, "ml-1")} title={r.applyError}>
-                        không áp được
-                      </span>
-                    )}
-                  </td>
-                  <td className={cn(TD, "max-w-[16rem] whitespace-pre-wrap text-muted-foreground")}>
-                    {r.reviewNote ? (
-                      <>
-                        {r.reviewedByName ? <span className="font-medium text-foreground">{r.reviewedByName}: </span> : null}
-                        {r.reviewNote}
-                      </>
-                    ) : (
-                      "—"
-                    )}
-                    {r.status === "PENDING" && r.applyError && (
-                      <div className="mt-1 text-xs text-state-danger-ink">
-                        Lần duyệt gần nhất không áp được: {r.applyError}
-                      </div>
-                    )}
-                  </td>
-                  <td className={cn(TD, "whitespace-nowrap text-xs text-muted-foreground")}>{r.createdAtLabel}</td>
+        // Vỏ thẻ bọc ngoài bảng: `TableSkeleton` của khung chờ luôn vẽ vỏ này, nên bảng trần là
+        // người dùng thấy một khung bo góc hiện ra rồi BIẾN MẤT lúc dữ liệu về.
+        <div className="overflow-hidden rounded-xl border border-border bg-card">
+          <PhanTrangBang cuonNgang tenDonVi="đơn" khoaGhiNho="cua-toi">
+            <table className="w-full min-w-[900px] text-sm">
+              <thead className="border-b border-border bg-muted/40">
+                <tr>
+                  <th scope="col" className={TH}>Loại</th>
+                  <th scope="col" className={TH}>Ngày / giờ</th>
+                  <th scope="col" className={TH}>Cơ sở nhận</th>
+                  <th scope="col" className={TH}>Lý do</th>
+                  <th scope="col" className={TH}>Trạng thái</th>
+                  <th scope="col" className={TH}>Phản hồi</th>
+                  <th scope="col" className={TH}>Gửi lúc</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </PhanTrangBang>
+              </thead>
+              <tbody>
+                {shown.map((r) => (
+                  <tr key={r.id} className={TR}>
+                    <td className={cn(TD, "font-medium")}>
+                      {WR_KIND_LABEL[r.kind]}
+                      {r.detail && <div className="text-xs font-normal text-muted-foreground">{r.detail}</div>}
+                    </td>
+                    <td className={cn(TD, "whitespace-nowrap tabular-nums")}>
+                      {r.fromLabel ?? "—"}
+                      {r.toLabel && r.toLabel !== r.fromLabel ? ` → ${r.toLabel}` : ""}
+                      {r.time ? <div className="font-mono text-xs text-muted-foreground">{r.time}</div> : null}
+                    </td>
+                    <td className={cn(TD, "whitespace-nowrap")}>{r.centerLabel}</td>
+                    <td className={cn(TD, "max-w-[20rem] whitespace-pre-wrap")}>{r.reason}</td>
+                    <td className={cn(TD, "whitespace-normal")}>
+                      <span className={cn(PILL, STATUS_CLS[r.status])}>{WR_STATUS_LABEL[r.status]}</span>
+                      {r.submittedLate && <span className={cn(PILL, STATUS_CLS.PENDING, "ml-1")}>Nộp muộn</span>}
+                      {r.status === "PENDING" && r.applyError && (
+                        <span className={cn(PILL, STATUS_CLS.REJECTED, "ml-1")} title={r.applyError}>
+                          không áp được
+                        </span>
+                      )}
+                    </td>
+                    <td className={cn(TD, "max-w-[16rem] whitespace-pre-wrap text-muted-foreground")}>
+                      {r.reviewNote ? (
+                        <>
+                          {r.reviewedByName ? <span className="font-medium text-foreground">{r.reviewedByName}: </span> : null}
+                          {r.reviewNote}
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                      {r.status === "PENDING" && r.applyError && (
+                        <div className="mt-1 text-xs text-state-danger-ink">
+                          Lần duyệt gần nhất không áp được: {r.applyError}
+                        </div>
+                      )}
+                    </td>
+                    <td className={cn(TD, "whitespace-nowrap text-xs text-muted-foreground")}>{r.createdAtLabel}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </PhanTrangBang>
+        </div>
       )}
 
       {/* Form nằm trong Sheet phải: bảng đơn cũ vẫn đọc được trong lúc điền, và form dài không

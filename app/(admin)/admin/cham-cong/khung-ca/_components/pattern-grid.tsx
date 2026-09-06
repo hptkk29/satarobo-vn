@@ -4,15 +4,17 @@
 //
 // Vì sao viết lại: bản cũ xếp chồng bảng của mọi khối, mỗi ô là `<select>` cao 24px chỉ hiện mã
 // trần, và một mã đã ngưng trong danh mục làm ô vẽ TRỐNG — người xếp lịch nhìn thấy "chưa xếp"
-// rồi xếp đè lên lịch đang chạy. Nay mỗi khối là một thẻ riêng, ô cao 36px, và mã đã ngưng vẫn
-// hiện kèm chữ "(đã ngưng)" thay vì biến mất.
+// rồi xếp đè lên lịch đang chạy. Nay mỗi khối là một thẻ riêng, ô là `ShiftCellPicker` (đúng
+// menu của lưới phân ca tháng), và mã đã ngưng vẫn hiện kèm chữ "đã ngưng" thay vì biến mất.
 //
-// Hai điều dễ vỡ:
+// Ba điều dễ vỡ:
 //  · Thứ nghỉ (`offDays`) do PAGE đọc từ cấu hình rồi truyền xuống dạng cờ — đừng viết `w === 1`
 //    ở đây, ngày nghỉ tuần là tham số vận hành chứ không phải hằng số.
 //  · `savePatternCellAction` ghi từng ô một, KHÔNG có hoàn tác: mỗi lần chọn là một vòng server
 //    rồi `router.refresh()`. Ô đang chờ bị khoá để không bấm hai lần vào cùng một thứ.
-import { useState, useTransition } from "react";
+//  · Picker phải bật `hideReason`: `savePatternCellAction` KHÔNG nhận `note` (zod bỏ im lặng),
+//    nên nhánh "Chọn kèm lý do…" ở đây là hứa suông.
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarRange, UserPlus } from "lucide-react";
 import { toast } from "sonner";
@@ -22,6 +24,7 @@ import { adminTd, adminTh, adminTr } from "@/components/admin/ui/table";
 import { EmptyState } from "@/components/admin/ui/states";
 import { BTN_OUTLINE, FIELD, PILL } from "@/components/admin/cham-cong/classes";
 import { SectionCard } from "@/components/admin/cham-cong/section-card";
+import { ShiftCellPicker, type ShiftCellCode } from "@/components/admin/cham-cong/shift-cell-picker";
 import { ShiftCodeChip } from "@/components/cham-cong/ui/shift-code-chip";
 import { addPersonToBlockAction, savePatternCellAction } from "../_actions";
 
@@ -80,6 +83,14 @@ export function PatternGrid({
   const [pending, start] = useTransition();
   const [busy, setBusy] = useState<string | null>(null);
   const [addUser, setAddUser] = useState<Record<string, string>>({});
+
+  // Danh mục cho menu ô — cùng khuôn với lưới phân ca tháng. `place` để trống có chủ đích:
+  // khung ca là mẫu tuần của MỘT khối nên "nơi làm" không thêm thông tin, và `PatternCode`
+  // (đặc tả §3.4) không mang trường đó.
+  const cellCodes: ShiftCellCode[] = useMemo(
+    () => codes.map((c) => ({ code: c.code, name: c.name, timeLabel: c.timeLabel, place: "", isLeave: c.isLeave })),
+    [codes],
+  );
 
   function doiO(block: PatternBlock, person: PatternPerson, weekday: number, code: string) {
     const key = `${block.centerId}-${person.userId}-${weekday}`;
@@ -237,63 +248,59 @@ export function PatternGrid({
                     {b.people.map((p) => (
                       <tr key={p.userId} className={adminTr}>
                         <td
-                          className={cn(adminTd, "max-w-[15rem] truncate px-3 py-1.5 font-medium")}
+                          className={cn(adminTd, "px-3 py-1.5 font-medium")}
                           title={[p.name, p.sheetName && p.sheetName !== p.name ? `Sheet: ${p.sheetName}` : null, p.jobLabel]
                             .filter(Boolean)
                             .join(" · ")}
                         >
-                          {p.name}
-                          {p.jobLabel && (
-                            <span className="ml-1 text-xs font-normal text-muted-foreground">· {p.jobLabel}</span>
-                          )}
+                          {/* `max-w` + `truncate` phải ở SPAN: bảng auto-layout bỏ qua max-width
+                              trên `<td>`, còn `adminTd` có sẵn `whitespace-nowrap` ⇒ ô không cắt
+                              chữ mà nở ra kéo cả cột. */}
+                          <span className="block max-w-[15rem] truncate">
+                            {p.name}
+                            {p.jobLabel && (
+                              <span className="ml-1 text-xs font-normal text-muted-foreground">· {p.jobLabel}</span>
+                            )}
+                          </span>
                         </td>
 
                         {WD.map((w) => {
                           const cur = p.byWeekday[w] ?? "";
-                          // `id`/`htmlFor` không mang dấu hai chấm: id hợp lệ nhưng làm vỡ mọi
-                          // selector CSS/test viết tay sau này.
                           const key = `${b.centerId}-${p.userId}-${w}`;
-                          const nhan = `Ca ${WD_FULL[w]} của ${p.name}`;
+                          const nhan = `${p.name} · ${WD_FULL[w]}`;
                           // Mã đã ngưng trong danh mục vẫn phải hiện: bỏ nó khỏi danh sách là ô
                           // vẽ trống và người xếp lịch tưởng thứ đó chưa có ca.
                           const laMaNgung = !!cur && !codes.some((c) => c.code === cur);
+                          const dsMa = laMaNgung
+                            ? [...cellCodes, { code: cur, name: "Mã đã ngưng", timeLabel: "", place: "" }]
+                            : cellCodes;
                           return (
                             <td
                               key={w}
-                              className={cn("px-1 py-1.5 text-center", off.has(w) && "bg-muted")}
+                              className={cn("px-1 py-1.5", off.has(w) && "bg-muted")}
                             >
-                              {b.canAssign ? (
-                                <>
-                                  <label htmlFor={key} className="sr-only">
-                                    {nhan}
-                                  </label>
-                                  <select
-                                    id={key}
-                                    className={cn(FIELD, "w-[4.5rem] px-2 text-center font-mono")}
-                                    value={cur}
-                                    disabled={pending && busy === key}
-                                    aria-busy={pending && busy === key ? true : undefined}
-                                    title={
-                                      cur
-                                        ? `${nhan}: ${cur}${laMaNgung ? " (mã đã ngưng)" : ""}`
-                                        : `${nhan}: chưa xếp`
-                                    }
-                                    onChange={(e) => doiO(b, p, w, e.target.value)}
+                              {/* Nút của picker là khối `w-12`; cột thứ rộng hơn thế nên phải
+                                  canh giữa bằng flex, `text-center` không với tới nó. */}
+                              <span className="flex justify-center">
+                                {b.canAssign ? (
+                                  <ShiftCellPicker
+                                    value={cur || null}
+                                    codes={dsMa}
+                                    hideReason
+                                    busy={pending && busy === key}
+                                    triggerLabel={`Chọn ca cho ${nhan}`}
+                                    menuTitle={nhan}
+                                    onPick={(code) => doiO(b, p, w, code ?? "")}
+                                  />
+                                ) : (
+                                  <span
+                                    className="inline-flex h-8 w-12 items-center justify-center"
+                                    title={`${nhan}: chỉ xem`}
                                   >
-                                    <option value="">—</option>
-                                    {laMaNgung && <option value={cur}>{cur} (đã ngưng)</option>}
-                                    {codes.map((c) => (
-                                      <option key={c.code} value={c.code}>
-                                        {c.code}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </>
-                              ) : (
-                                <span className="inline-flex h-9 items-center justify-center" title={`${nhan}: chỉ xem`}>
-                                  <ShiftCodeChip code={cur || null} size="sm" />
-                                </span>
-                              )}
+                                    <ShiftCodeChip code={cur || null} size="sm" />
+                                  </span>
+                                )}
+                              </span>
                             </td>
                           );
                         })}

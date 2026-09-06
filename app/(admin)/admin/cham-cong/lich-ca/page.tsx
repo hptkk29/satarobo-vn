@@ -33,7 +33,7 @@ import { BTN_PRIMARY, PILL } from "@/components/admin/cham-cong/classes";
 import { FlagList } from "@/components/cham-cong/ui/flag-chip";
 import { ShiftCodeChip, type ShiftSource } from "@/components/cham-cong/ui/shift-code-chip";
 
-export const metadata = { title: "Lịch ca của tôi | Admin" };
+export const metadata = { title: "Lịch ca của tôi | Admin", robots: { index: false } };
 export const dynamic = "force-dynamic";
 
 const WD = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
@@ -128,7 +128,7 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
         </span>
       </div>
 
-      <PageHelp guideSlug="08-nhan-su-giao-vien">
+      <PageHelp guideSlug="nhan-su-giao-vien">
         <p>
           Công ngày được máy tính lại vài phút sau mỗi lượt quét hoặc mỗi lần đổi ca, nên số ở đây là
           <strong> tạm tính</strong> cho tới khi kế toán chốt kỳ.
@@ -146,8 +146,12 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
           description="Người Hội sở và người thuộc diện miễn chấm công không có lịch ca — đây không phải lỗi. Nếu bạn có ca mà chưa thấy, hỏi Quản lý cơ sở đã sinh lưới tháng này chưa."
         />
       ) : (
-        <PhanTrangBang cuonNgang tenDonVi="dòng" khoaGhiNho="lich-ca" soDongMacDinh={50}>
-          <table className="w-full min-w-[900px] text-sm">
+        // Vỏ thẻ chuẩn của bảng danh sách trong module (giống `period-table` và
+        // `request-queue-table`) — `TableSkeleton` ở `loading.tsx` cũng vẽ đúng vỏ này, thiếu nó là
+        // khung bo góc hiện ra rồi biến mất mỗi lần đổi tháng.
+        <div className="overflow-hidden rounded-xl border border-border bg-card">
+          <PhanTrangBang cuonNgang tenDonVi="dòng" khoaGhiNho="lich-ca" soDongMacDinh={50}>
+            <table className="w-full min-w-[900px] text-sm">
             <thead className="border-b border-border bg-muted/40">
               <tr>
                 <th scope="col" className={adminTh}>Ngày</th>
@@ -248,8 +252,9 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
                 ];
               })}
             </tbody>
-          </table>
-        </PhanTrangBang>
+            </table>
+          </PhanTrangBang>
+        </div>
       )}
     </div>
   );

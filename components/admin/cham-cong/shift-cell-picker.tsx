@@ -60,6 +60,7 @@ export function ShiftCellPicker({
   disabled,
   disabledReason = "Chỉ xem — bạn không có quyền xếp ca ở khối này",
   busy,
+  hideReason,
   triggerLabel,
   menuTitle,
   onPick,
@@ -72,6 +73,12 @@ export function ShiftCellPicker({
   disabledReason?: string;
   /** Đang chờ action trả về — khoá ô để không bấm hai lần vào cùng một ngày. */
   busy?: boolean;
+  /**
+   * Ẩn nhánh "Chọn kèm lý do…" (mặc định HIỆN — lưới phân ca tháng vẫn cần nó).
+   * Bật ở lưới khung ca tuần: `savePatternCellAction` KHÔNG nhận `note` (zod bỏ im lặng),
+   * nên bày ô nhập lý do ở đó là hứa một thứ không được lưu.
+   */
+  hideReason?: boolean;
   /** `aria-label` của nút, vd "Chọn ca cho Nguyễn A ngày T4 09/09". */
   triggerLabel: string;
   /** Tiêu đề trong menu, vd "Nguyễn A · T4 09/09". Không truyền thì lấy `triggerLabel`. */
@@ -154,13 +161,15 @@ export function ShiftCellPicker({
             <Trash2 aria-hidden className="h-4 w-4" />
             Xoá ca
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setReasonOpen(true)} className="h-9 text-sm">
-            Chọn kèm lý do…
-          </DropdownMenuItem>
+          {!hideReason && (
+            <DropdownMenuItem onClick={() => setReasonOpen(true)} className="h-9 text-sm">
+              Chọn kèm lý do…
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <Dialog open={reasonOpen} onOpenChange={setReasonOpen}>
+      <Dialog open={reasonOpen && !hideReason} onOpenChange={setReasonOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>Chọn ca kèm lý do</DialogTitle>

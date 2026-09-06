@@ -1,8 +1,12 @@
 "use client";
 
 // Hai bảng của màn Ghi chú lịch: ma trận Khối × thứ (việc lặp hằng tuần) và danh sách ghi đè theo
-// ngày. Hai thứ này khác nhau về ngữ nghĩa (ngày THẮNG thứ) nên phải nhìn thấy tách bạch — bản cũ
-// trộn chung một bảng phẳng, cột "Khi nào" lúc in "Thứ Ba" lúc in "2026-09-09".
+// ngày. Hai thứ này khác nhau về PHẠM VI (lặp hằng tuần vs đúng một ngày) nên phải nhìn thấy tách
+// bạch — bản cũ trộn chung một bảng phẳng, cột "Khi nào" lúc in "Thứ Ba" lúc in "2026-09-09".
+//
+// ⚠️ Ghi chú theo NGÀY **không** che ghi chú theo THỨ: cron `runShiftBrief` đọc HỢP của hai loại
+// rồi để `mode` quyết định (`lib/cham-cong/brief.ts` — APPEND nối thêm, REPLACE thay toàn bộ,
+// SUPPRESS tắt tin). Đừng viết lại thành "ngày thắng thứ" ở bất kỳ câu chữ nào trên màn.
 //
 // Hai điều dễ vỡ:
 //  · Xoá là XOÁ CỨNG và hiện chưa ghi audit ⇒ hai bước xác nhận, có `aria-label` nói rõ xoá cái gì.
@@ -16,7 +20,6 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 import { adminTd, adminTh, adminTr } from "@/components/admin/ui/table";
-import { EmptyState } from "@/components/admin/ui/states";
 import { BTN_DANGER, BTN_OUTLINE, PILL } from "@/components/admin/cham-cong/classes";
 import { SectionCard } from "@/components/admin/cham-cong/section-card";
 import { NoteForm } from "./note-form";
@@ -159,11 +162,16 @@ export function NoteManager({
               <tbody>
                 {blocks.map((b) => (
                   <tr key={b.id} className={adminTr}>
-                    <td className={cn(adminTd, "max-w-[12rem] truncate px-3 py-2 align-top font-medium")} title={b.label}>
-                      {b.label}
-                      {!b.canAssign && (
-                        <span className={cn(PILL, "ml-1.5 bg-muted text-muted-foreground")}>Chỉ xem</span>
-                      )}
+                    {/* `max-w` + `truncate` phải nằm trên phần tử BÊN TRONG ô: bảng auto-layout bỏ
+                        qua max-width trên `<td>`, mà `adminTd` lại có `whitespace-nowrap` ⇒ ô nở ra
+                        kéo trượt cả bảng thay vì cắt chữ. */}
+                    <td className={cn(adminTd, "px-3 py-2 align-top font-medium")} title={b.label}>
+                      <span className="flex max-w-[12rem] items-center gap-1.5">
+                        <span className="truncate">{b.label}</span>
+                        {!b.canAssign && (
+                          <span className={cn(PILL, "bg-muted text-muted-foreground")}>Chỉ xem</span>
+                        )}
+                      </span>
                     </td>
                     {WD.map((w) => {
                       const cells = theoThu.filter((r) => r.centerId === b.id && r.weekday === w);
@@ -227,7 +235,7 @@ export function NoteManager({
           icon={CalendarClock}
           actions={
             editable.length > 0 ? (
-              <button type="button" className={BTN_OUTLINE} onClick={() => moThem(editable[0].id, null)}>
+              <button type="button" className={cn(BTN_OUTLINE, "h-8 px-3 text-xs")} onClick={() => moThem(editable[0].id, null)}>
                 <Plus aria-hidden className="h-4 w-4" />
                 Thêm ghi đè
               </button>
@@ -235,31 +243,36 @@ export function NoteManager({
           }
         >
           {theoNgay.length === 0 ? (
-            <EmptyState
-              title="Chưa có ghi đè theo ngày"
-              description="Ghi đè dùng cho ngày họp đột xuất, nghỉ bù, hoặc ngày không gửi tin. Nội dung theo ngày được ưu tiên hơn việc cố định của thứ đó."
-            />
+            // Trạng thái rỗng NẰM TRONG SectionCard ⇒ không dùng `EmptyState` (nó tự mang vỏ thẻ,
+            // lồng vào đây thành hai lớp viền trên cùng một nền).
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              Chưa có ghi đè theo ngày. Ghi đè dùng cho ngày họp đột xuất, nghỉ bù, hoặc ngày không gửi
+              tin — nó được gửi CÙNG việc cố định của thứ đó, trừ khi chọn cách gửi “Thay toàn bộ”.
+            </p>
           ) : (
             <PhanTrangBang cuonNgang tenDonVi="ghi chú" khoaGhiNho="ghi-chu-ngay">
               <table className="w-full min-w-[720px] text-sm">
                 <thead className="border-b border-border bg-muted/40">
+                  {/* Bảng DANH SÁCH bình thường ⇒ giữ mật độ chuẩn của `adminTh`/`adminTd`, đừng đè
+                      `px-3 py-2` như lưới Khối × thứ ở trên (bảng này nằm cùng ConfigTabs với 5 bảng
+                      danh sách khác, đặc hơn là nhìn thấy ngay khi lật tab). */}
                   <tr>
-                    <th scope="col" className={cn(adminTh, "px-3 py-2")}>
+                    <th scope="col" className={adminTh}>
                       Ngày
                     </th>
-                    <th scope="col" className={cn(adminTh, "px-3 py-2")}>
+                    <th scope="col" className={adminTh}>
                       Khối
                     </th>
-                    <th scope="col" className={cn(adminTh, "px-3 py-2")}>
+                    <th scope="col" className={adminTh}>
                       Cách gửi
                     </th>
-                    <th scope="col" className={cn(adminTh, "px-3 py-2")}>
+                    <th scope="col" className={adminTh}>
                       Gửi cho
                     </th>
-                    <th scope="col" className={cn(adminTh, "px-3 py-2")}>
+                    <th scope="col" className={adminTh}>
                       Nội dung
                     </th>
-                    <th scope="col" className={cn(adminTh, "px-3 py-2 text-right")}>
+                    <th scope="col" className={cn(adminTh, "text-right")}>
                       Hành động
                     </th>
                   </tr>
@@ -269,26 +282,28 @@ export function NoteManager({
                     const block = blocks.find((b) => b.id === r.centerId);
                     return (
                       <tr key={r.id} className={adminTr}>
-                        <td className={cn(adminTd, "px-3 py-2 font-medium tabular-nums")}>{ngayVN(r.date!)}</td>
-                        <td className={cn(adminTd, "max-w-[10rem] truncate px-3 py-2")} title={r.centerLabel}>
-                          {r.centerLabel}
+                        <td className={cn(adminTd, "font-medium tabular-nums")}>{ngayVN(r.date!)}</td>
+                        <td className={adminTd} title={r.centerLabel}>
+                          <span className="block max-w-[10rem] truncate">{r.centerLabel}</span>
                         </td>
-                        <td className={cn(adminTd, "px-3 py-2")}>
+                        <td className={adminTd}>
                           <span className={cn(PILL, MODE_TONE[r.mode])}>{MODE_LABEL[r.mode]}</span>
                           {!r.isActive && (
                             <span className={cn(PILL, "ml-1.5 bg-muted text-muted-foreground")}>Tạm tắt</span>
                           )}
                         </td>
-                        <td className={cn(adminTd, "px-3 py-2 text-muted-foreground")}>{AUD_LABEL[r.audience]}</td>
-                        <td className={cn(adminTd, "max-w-[20rem] truncate px-3 py-2")} title={r.text}>
-                          {r.text || <span className="text-muted-foreground">(không có nội dung)</span>}
+                        <td className={cn(adminTd, "text-muted-foreground")}>{AUD_LABEL[r.audience]}</td>
+                        <td className={adminTd} title={r.text}>
+                          <span className="block max-w-[20rem] truncate">
+                            {r.text || <span className="text-muted-foreground">(không có nội dung)</span>}
+                          </span>
                         </td>
-                        <td className={cn(adminTd, "px-3 py-2 text-right")}>
+                        <td className={cn(adminTd, "text-right")}>
                           {block?.canAssign ? (
                             <span className="inline-flex items-center justify-end gap-1.5">
                               <button
                                 type="button"
-                                className={cn(BTN_OUTLINE, "h-8 px-3")}
+                                className={cn(BTN_OUTLINE, "h-8 px-3 text-xs")}
                                 onClick={() => moSua(r)}
                                 aria-label={`Sửa ghi chú ${moTa(r)}`}
                               >
@@ -297,7 +312,7 @@ export function NoteManager({
                               {confirmId === r.id ? (
                                 <button
                                   type="button"
-                                  className={cn(BTN_DANGER, "h-8 px-3")}
+                                  className={cn(BTN_DANGER, "h-8 px-3 text-xs")}
                                   disabled={pending}
                                   onClick={() => xoa(r)}
                                   aria-label={`Xác nhận xoá vĩnh viễn ghi chú ${moTa(r)}`}
@@ -307,7 +322,7 @@ export function NoteManager({
                               ) : (
                                 <button
                                   type="button"
-                                  className={cn(BTN_OUTLINE, "h-8 px-3")}
+                                  className={cn(BTN_OUTLINE, "h-8 px-3 text-xs")}
                                   disabled={pending}
                                   onClick={() => setConfirmId(r.id)}
                                   aria-label={`Xoá ghi chú ${moTa(r)}`}

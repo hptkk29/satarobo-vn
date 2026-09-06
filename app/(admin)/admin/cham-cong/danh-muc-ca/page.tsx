@@ -102,9 +102,9 @@ export default async function DanhMucCaPage({
     <div className="max-w-6xl">
       {head}
       <ConfigTabs active="danh-muc-ca" scope={scope} ctx={ctx} />
-      <PageHelp guideSlug="08-nhan-su-giao-vien">
+      <PageHelp guideSlug="nhan-su-giao-vien">
         <p>
-          Mỗi mã làm việc = 1 công/ngày theo Sheet (K-01); mã nghỉ (X, P) = 0 công. Ca gãy khai
+          Mỗi mã làm việc = 1 công/ngày, đúng như cách đếm trên Sheet; mã nghỉ (X, P) = 0 công. Ca gãy khai
           nhiều đoạn; nghỉ giữa giờ có tính công thì kẹp một đoạn &ldquo;nghỉ giữa giờ&rdquo; giữa
           hai đoạn làm việc.
         </p>

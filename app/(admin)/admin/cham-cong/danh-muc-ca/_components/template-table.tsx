@@ -179,8 +179,12 @@ export function TemplateTable({
           }
         />
       ) : (
-        <PhanTrangBang cuonNgang tenDonVi="mã ca" khoaGhiNho="cham-cong-danh-muc-ca">
-          <table className="w-full text-sm">
+        // Vỏ thẻ chuẩn của bảng danh sách trong module (giống `period-table` và
+        // `request-queue-table`): `TableSkeleton` lúc chờ cũng vẽ đúng vỏ này, thiếu nó là khung bo
+        // góc hiện ra rồi biến mất khi dữ liệu về.
+        <div className="overflow-hidden rounded-xl border border-border bg-card">
+          <PhanTrangBang cuonNgang tenDonVi="mã ca" khoaGhiNho="cham-cong-danh-muc-ca">
+            <table className="w-full text-sm">
             <thead className="border-b border-border bg-muted/40">
               <tr>
                 <th scope="col" className={adminTh}>Mã</th>
@@ -256,10 +260,12 @@ export function TemplateTable({
                     <td className={cn(adminTd, "text-right")}>
                       {canEdit ? (
                         <span className="inline-flex items-center justify-end gap-2">
+                          {/* Nút trên HÀNG dùng cùng cỡ ở cả 4 màn danh mục (mã ca · loại nghỉ ·
+                              điểm chấm · ghi chú): `h-8 px-3 text-xs`, bản icon là `h-8 w-8 px-0`. */}
                           <button
                             type="button"
                             aria-label={`Sửa mã ca ${r.code}`}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-card text-foreground transition-colors hover:bg-muted"
+                            className={cn(BTN_OUTLINE, "h-8 w-8 justify-center px-0")}
                             onClick={() => openEdit(r)}
                           >
                             <Pencil className="h-4 w-4" aria-hidden />
@@ -269,7 +275,7 @@ export function TemplateTable({
                             disabled={pending}
                             className={cn(
                               confirmId === r.id ? BTN_DANGER : BTN_OUTLINE,
-                              "h-8 px-2.5 text-xs",
+                              "h-8 px-3 text-xs",
                             )}
                             onClick={() => toggle(r)}
                             onBlur={() => setConfirmId((id) => (id === r.id ? null : id))}
@@ -290,8 +296,9 @@ export function TemplateTable({
                 );
               })}
             </tbody>
-          </table>
-        </PhanTrangBang>
+            </table>
+          </PhanTrangBang>
+        </div>
       )}
 
       <TemplateSheet

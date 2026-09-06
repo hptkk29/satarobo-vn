@@ -34,6 +34,8 @@ export default function Loading() {
       </div>
 
       <ScopeBarSkeleton />
+      {/* Thanh PageHelp (`<details>` ~44px) — có trên trang thật, phải chừa chỗ. */}
+      <Skeleton className="mb-4 h-11 w-full rounded-xl" />
       <KpiSkeleton n={5} />
 
       <div className="mb-4 rounded-xl border border-border bg-card p-5">

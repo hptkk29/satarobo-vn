@@ -5,7 +5,12 @@
 // không có ScopeBar. Tách hẳn hàng tab riêng để nhân viên không lạc vào màn quản lý và ngược lại.
 //
 // `?month=` phải được mang theo: người đang xem tháng 08 mà bấm "Đơn của tôi" rồi quay lại thì
-// tháng phải còn nguyên. Href là chuỗi literal — nav-coverage đếm ở đây (2 route này đã rời sidebar).
+// tháng phải còn nguyên. CẢ HAI tab đi qua `hrefWith` — gắn `month` cho riêng tab Lịch ca là
+// vẫn rơi tham số, vì chuyến đi làm mất tháng là chuyến SANG "Đơn của tôi" rồi quay lại.
+//
+// Href là chuỗi literal NẰM NGAY SAU `href:` — `components/admin/nav-coverage.test.ts` quét đúng
+// chuỗi ở vị trí đó để biết route còn lối vào (2 route này đã rời sidebar). Nên `hrefWith` gọi ở
+// chỗ render, KHÔNG gói literal vào trong lời gọi hàm hay vào một hằng đặt tên khác.
 import Link from "next/link";
 import { Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -16,7 +21,7 @@ export type MeNavKey = "lich-ca" | "cua-toi";
 
 export function MeNav({ active, month }: { active: MeNavKey; month?: string | null }) {
   const tabs: { key: MeNavKey; label: string; href: string }[] = [
-    { key: "lich-ca", label: "Lịch ca", href: hrefWith("/cham-cong/lich-ca", { month }) },
+    { key: "lich-ca", label: "Lịch ca", href: "/cham-cong/lich-ca" },
     { key: "cua-toi", label: "Đơn của tôi", href: "/don-tu/cua-toi" },
   ];
 
@@ -28,7 +33,7 @@ export function MeNav({ active, month }: { active: MeNavKey; month?: string | nu
           return (
             <Link
               key={t.key}
-              href={t.href}
+              href={hrefWith(t.href, { month })}
               aria-current={isActive ? "page" : undefined}
               className={cn(TAB, isActive ? TAB_ACTIVE : TAB_IDLE)}
             >

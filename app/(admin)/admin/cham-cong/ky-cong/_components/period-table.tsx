@@ -10,6 +10,8 @@
 // - `PhanTrangBang` chỉ cắt trang khi thấy ĐÚNG MỘT `<tbody>` — `<tfoot>` Tổng phải nằm NGOÀI
 //   tbody (đúng chuẩn HTML) chứ không được nhét thành một `<tr>` cuối cùng.
 // - Cột Nhân sự `sticky left-0` phải tự tô `bg-card`, nếu không chữ các cột sau trượt xuyên qua.
+// - Trạng thái RỖNG thuộc về page (`<EmptyState>`), không phải một `<td colSpan>` trong bảng:
+//   13 cột tiêu đề trống rồi một dòng chữ là hình thức riêng của mỗi màn này trong cả module.
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -35,8 +37,10 @@ export type PeriodTableRow = {
   overrideDays: number;
   flaggedDays: number;
   teachingSessions: number;
-  /** Ngày đầu tiên có cờ của người này — làm đích cho ô Cờ/Ghi đè. Không có ⇒ ô không bấm được. */
+  /** Ngày đầu tiên CÓ CỜ của người này (`?loc=co`) — đích ô Cờ. Không có ⇒ ô không bấm được. */
   drillHref: string | null;
+  /** Ngày đầu tiên bị GHI ĐÈ của người này (`?loc=ghide`) — đích riêng của ô Ghi đè. */
+  overrideHref: string | null;
 };
 
 export type PeriodTableTotals = {
@@ -61,17 +65,17 @@ function gio(minutes: number): string {
 }
 
 const TH_NUM = "text-right";
-const TD_NUM = "px-3 text-right tabular-nums";
+// `py-0` + `h-11` trên `<tr>` = dòng đúng 44px (`adminTd` mặc định `py-3.5` cho ~48px). Cùng
+// chuẩn với bảng công ngày, để hai bảng đọc cạnh nhau không lệch mật độ.
+const TD_NUM = "px-3 py-0 text-right tabular-nums";
 
 export function PeriodTable({
   rows,
   totals,
-  emptyHref,
 }: {
+  /** Luôn ≥ 1 dòng — page dựng `<EmptyState>` thay cho bảng khi kỳ chưa có ai. */
   rows: PeriodTableRow[];
   totals: PeriodTableTotals;
-  /** Link "Xem lưới phân ca" của trạng thái rỗng. */
-  emptyHref: string;
 }) {
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card">
@@ -121,78 +125,70 @@ export function PeriodTable({
           </tr>
         </thead>
         <tbody>
-          {rows.length === 0 ? (
-            <tr>
-              <td colSpan={13} className="px-5 py-12 text-center text-sm text-muted-foreground">
-                <p className="font-medium text-foreground">Chưa có ca hay ngày công nào trong kỳ này</p>
-                <p className="mt-1">Chưa xếp lịch cho khối, hoặc cả khối nghỉ nguyên kỳ.</p>
-                <Link href={emptyHref} className="mt-3 inline-block font-semibold text-primary-ink hover:underline">
-                  Xem lưới phân ca
-                </Link>
-              </td>
-            </tr>
-          ) : (
-            rows.map((r) => (
-              <tr key={r.userId} className={adminTr}>
-                <td className={cn(adminTd, "sticky left-0 z-10 bg-card")}>
-                  <span className="inline-block max-w-[11rem] truncate align-middle font-medium" title={r.name}>
-                    {r.name}
+          {rows.map((r) => (
+            <tr key={r.userId} className={cn(adminTr, "h-11")}>
+              <td className={cn(adminTd, "sticky left-0 z-10 bg-card py-0")}>
+                <span className="inline-block max-w-[11rem] truncate align-middle font-medium" title={r.name}>
+                  {r.name}
+                </span>
+                {r.employeeCode && (
+                  <span className="ml-2 align-middle font-mono text-[11px] text-muted-foreground">
+                    {r.employeeCode}
                   </span>
-                  {r.employeeCode && (
-                    <span className="ml-2 align-middle font-mono text-[11px] text-muted-foreground">
-                      {r.employeeCode}
-                    </span>
-                  )}
-                </td>
-                <td className={cn(adminTd, TD_NUM, "font-semibold")}>{so(r.units)}</td>
-                <td className={cn(adminTd, TD_NUM, "text-muted-foreground")}>
-                  {r.expectedUnits === 0 ? (
-                    <span className={cn(PILL, "bg-muted text-muted-foreground")}>Chưa có ca</span>
-                  ) : (
-                    so(r.expectedUnits)
-                  )}
-                </td>
-                <td className={cn(adminTd, TD_NUM)}>{soHoacGach(r.leaveUnits)}</td>
-                <td className={cn(adminTd, TD_NUM)}>{soHoacGach(r.holidayPaidUnits)}</td>
-                <td className={cn(adminTd, TD_NUM)}>{soHoacGach(r.hourCredit)}</td>
-                <td className={cn(adminTd, TD_NUM)}>
-                  {gio(r.workedMinutes)}
-                  <span className="text-xs text-muted-foreground"> / {gio(r.expectedMinutes)}</span>
-                </td>
-                <td className={cn(adminTd, TD_NUM)}>{soHoacGach(r.lateCount)}</td>
-                <td className={cn(adminTd, TD_NUM)}>{soHoacGach(r.earlyLeaveCount)}</td>
-                <td className={cn(adminTd, TD_NUM)}>{soHoacGach(r.missingTapDays)}</td>
-                <td className={cn(adminTd, TD_NUM)}>
-                  {r.overrideDays && r.drillHref ? (
-                    <Link href={r.drillHref} className="font-semibold text-primary-ink hover:underline">
-                      {so(r.overrideDays)}
+                )}
+              </td>
+              <td className={cn(adminTd, TD_NUM, "font-semibold")}>{so(r.units)}</td>
+              <td className={cn(adminTd, TD_NUM, "text-muted-foreground")}>
+                {r.expectedUnits === 0 ? (
+                  <span className={cn(PILL, "bg-muted text-muted-foreground")}>Chưa có ca</span>
+                ) : (
+                  so(r.expectedUnits)
+                )}
+              </td>
+              <td className={cn(adminTd, TD_NUM)}>{soHoacGach(r.leaveUnits)}</td>
+              <td className={cn(adminTd, TD_NUM)}>{soHoacGach(r.holidayPaidUnits)}</td>
+              <td className={cn(adminTd, TD_NUM)}>{soHoacGach(r.hourCredit)}</td>
+              <td className={cn(adminTd, TD_NUM)}>
+                {gio(r.workedMinutes)}
+                <span className="text-xs text-muted-foreground"> / {gio(r.expectedMinutes)}</span>
+              </td>
+              <td className={cn(adminTd, TD_NUM)}>{soHoacGach(r.lateCount)}</td>
+              <td className={cn(adminTd, TD_NUM)}>{soHoacGach(r.earlyLeaveCount)}</td>
+              <td className={cn(adminTd, TD_NUM)}>{soHoacGach(r.missingTapDays)}</td>
+              <td className={cn(adminTd, TD_NUM)}>
+                {r.overrideDays && r.overrideHref ? (
+                  <Link
+                    href={r.overrideHref}
+                    title={`Xem ngày bị ghi đè của ${r.name}`}
+                    className="font-semibold text-primary-ink hover:underline"
+                  >
+                    {so(r.overrideDays)}
+                  </Link>
+                ) : (
+                  soHoacGach(r.overrideDays)
+                )}
+              </td>
+              <td className={cn(adminTd, TD_NUM)}>
+                {r.flaggedDays ? (
+                  r.drillHref ? (
+                    <Link
+                      href={r.drillHref}
+                      title={`Xem ngày có cờ của ${r.name}`}
+                      className={cn(PILL, "bg-state-warning-soft text-state-warning-ink hover:bg-state-warning-soft-hover")}
+                    >
+                      {so(r.flaggedDays)}
+                      <ChevronRight className="ml-0.5 h-3 w-3" aria-hidden />
                     </Link>
                   ) : (
-                    soHoacGach(r.overrideDays)
-                  )}
-                </td>
-                <td className={cn(adminTd, TD_NUM)}>
-                  {r.flaggedDays ? (
-                    r.drillHref ? (
-                      <Link
-                        href={r.drillHref}
-                        title={`Xem ngày có cờ của ${r.name}`}
-                        className={cn(PILL, "bg-state-warning-soft text-state-warning-ink hover:bg-state-warning-soft-hover")}
-                      >
-                        {so(r.flaggedDays)}
-                        <ChevronRight className="ml-0.5 h-3 w-3" aria-hidden />
-                      </Link>
-                    ) : (
-                      <span className={cn(PILL, "bg-state-warning-soft text-state-warning-ink")}>{so(r.flaggedDays)}</span>
-                    )
-                  ) : (
-                    "—"
-                  )}
-                </td>
-                <td className={cn(adminTd, TD_NUM, "font-semibold")}>{soHoacGach(r.teachingSessions)}</td>
-              </tr>
-            ))
-          )}
+                    <span className={cn(PILL, "bg-state-warning-soft text-state-warning-ink")}>{so(r.flaggedDays)}</span>
+                  )
+                ) : (
+                  "—"
+                )}
+              </td>
+              <td className={cn(adminTd, TD_NUM, "font-semibold")}>{soHoacGach(r.teachingSessions)}</td>
+            </tr>
+          ))}
         </tbody>
         {rows.length > 0 && (
           <tfoot>

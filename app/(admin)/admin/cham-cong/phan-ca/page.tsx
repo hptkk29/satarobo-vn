@@ -296,7 +296,7 @@ export default async function PhanCaPage({ searchParams }: Props) {
         keep={{ ky }}
       />
 
-      <PageHelp guideSlug="08-nhan-su-giao-vien">
+      <PageHelp guideSlug="nhan-su-giao-vien">
         <p>
           Mỗi ô là ca của một người trong một ngày. Bấm vào ô để đổi mã ca, xoá ca, hoặc chọn kèm lý do —
           người đó nhận thông báo ngay.
