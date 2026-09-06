@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { napBuoiCuaLop } from "@/lib/portal/buoi-hoc";
 
 // Portal v2 — dữ liệu "Yêu cầu học bù" cho con đang chọn (per-child).
 // Nguồn: MakeupNeed (buổi lỡ cần bù). PENDING = cần bù · SCHEDULED = đã xếp/chờ ·
@@ -44,6 +45,7 @@ export async function getStudentMakeup(studentId: string): Promise<StudentMakeup
       missedSessionId: true,
       note: true,
       completedAt: true,
+      classId: true,
       class: { select: { name: true, center: { select: { name: true } } } },
     },
   });
@@ -52,17 +54,19 @@ export async function getStudentMakeup(studentId: string): Promise<StudentMakeup
   }
 
   const sessionIds = needs.map((n) => n.missedSessionId).filter(Boolean);
-  const [sessions, attendances] = await Promise.all([
-    db.classSession.findMany({
-      where: { id: { in: sessionIds } },
-      select: { id: true, date: true, topic: true, lesson: { select: { title: true } } },
-    }),
+  // 06/09 — nhãn buổi lấy từ nguồn CHUNG (lib/portal/buoi-hoc.ts) thay vì in
+  // `lesson.title` thô: cùng một buổi, trang Học bù và trang Nhận xét phải gọi bằng
+  // cùng một tên. Bản cũ in cả ô trống `"Buổi 7"` của giáo trình lẫn tên bài mang sẵn
+  // tiền tố `"Buổi 7 — "`.
+  const classIds = [...new Set(needs.map((n) => n.classId).filter((x): x is string => !!x))];
+  const [buoiList, attendances] = await Promise.all([
+    napBuoiCuaLop(classIds, new Date()),
     db.attendance.findMany({
       where: { studentId, sessionId: { in: sessionIds } },
       select: { sessionId: true, status: true, absenceReason: true },
     }),
   ]);
-  const sMap = new Map(sessions.map((s) => [s.id, s]));
+  const sMap = new Map(buoiList.map((b) => [b.id, b]));
   const aMap = new Map(attendances.map((a) => [a.sessionId, a]));
 
   const items: MakeupItem[] = needs.map((n) => {
@@ -70,8 +74,8 @@ export async function getStudentMakeup(studentId: string): Promise<StudentMakeup
     const a = aMap.get(n.missedSessionId);
     return {
       id: n.id,
-      lessonTitle: s?.lesson?.title ?? s?.topic ?? "Buổi học",
-      missedDate: s?.date?.toISOString() ?? null,
+      lessonTitle: s?.nhanDayDu || "Buổi học",
+      missedDate: s?.ngayISO ?? null,
       className: n.class?.name ?? "—",
       centerName: n.class?.center?.name ?? null,
       reason: reasonOf(a?.status, n.note ?? a?.absenceReason),
