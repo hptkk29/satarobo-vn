@@ -144,23 +144,26 @@ describe("describeEffect — phân biệt CHƯA CÓ (bình thường) với KHUY
     expect(describeEffect(input({ kind: "SHIFT_SWAP" }))).toEqual({
       text: "Thiếu mã ca mới — duyệt sẽ báo lỗi",
       tone: "warning",
+      blocked: "đơn không ghi mã ca mới, nên không có gì để ghi lên lưới",
     });
     // Chuỗi rỗng / toàn khoảng trắng cũng là thiếu.
     expect(describeEffect(input({ currentCode: "  ", requesterNewCode: "" }))?.tone).toBe("warning");
     expect(describeEffect(input({ currentCode: "S", requesterNewCode: " " }))?.code).toBeUndefined();
   });
 
-  it("thiếu loại nghỉ ⇒ cảnh báo (duyệt được nhưng rơi vào nhánh không lương)", () => {
-    expect(describeEffect(input({ kind: "LEAVE" }))).toEqual({
-      text: "Thiếu loại nghỉ · 1 ngày",
-      tone: "warning",
-    });
+  it("thiếu loại nghỉ ⇒ cảnh báo NHƯNG không chặn (duyệt được, ghi mã không lương)", () => {
+    // Ranh giới `warning` vs `blocked`: nghỉ thiếu loại vẫn áp được nên KHÔNG có `blocked` —
+    // đặt nhầm là panel bảo "duyệt sẽ báo lỗi" cho một đơn duyệt bình thường.
+    const r = describeEffect(input({ kind: "LEAVE" }));
+    expect(r).toEqual({ text: "Thiếu loại nghỉ · 1 ngày", tone: "warning" });
+    expect(r?.blocked).toBeUndefined();
   });
 
   it("thiếu CẢ giờ vào và giờ ra ⇒ cảnh báo; còn một giờ thì vẫn ghi được", () => {
     expect(describeEffect(input({ kind: "TIMESHEET_FIX" }))).toEqual({
       text: "Thiếu giờ vào/ra — duyệt sẽ báo lỗi",
       tone: "warning",
+      blocked: "đơn không ghi giờ vào lẫn giờ ra, nên không có mốc giờ nào để ghi",
     });
     expect(describeEffect(input({ kind: "TIMESHEET_FIX", requestedIn: "07:30" }))).toEqual({
       text: "chưa quét→chưa quét ⇒ 07:30→?",
@@ -317,7 +320,11 @@ describe("effectSummaries", () => {
       tapsByUserDay: new Map(),
     });
     // r1 mất mã ca mới ⇒ cảnh báo; r2 vẫn có giờ đề nghị nên duyệt được, chỉ là chưa quét.
-    expect(map.get("r1")).toEqual({ text: "Thiếu mã ca mới — duyệt sẽ báo lỗi", tone: "warning" });
+    expect(map.get("r1")).toEqual({
+      text: "Thiếu mã ca mới — duyệt sẽ báo lỗi",
+      tone: "warning",
+      blocked: "đơn không ghi mã ca mới, nên không có gì để ghi lên lưới",
+    });
     expect(map.get("r2")?.text).toBe("chưa quét→chưa quét ⇒ 07:30→17:30");
   });
 });

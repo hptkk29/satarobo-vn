@@ -65,7 +65,20 @@ export type EffectTone = "default" | "muted" | "warning";
 
 /** `code` = mã ghi lên lưới nếu duyệt — hộp xác nhận in "Ghi {code} cho …". Không phải
  *  loại đơn nào cũng ghi một mã (chỉnh công ghi mốc giờ) nên nó tuỳ chọn. */
-export type EffectSummary = { text: string; code?: string; tone: EffectTone };
+export type EffectSummary = {
+  text: string;
+  code?: string;
+  tone: EffectTone;
+  /**
+   * Lý do bấm Duyệt sẽ NÉM LỖI (`decide()` chặn trong transaction). Chỉ đặt cho đơn chắc chắn
+   * hỏng, KHÔNG đặt cho đơn chỉ đáng ngờ: nghỉ thiếu loại nghỉ vẫn áp được (ghi mã không lương),
+   * nên nó mang tone `warning` mà `blocked` rỗng.
+   *
+   * Panel chi tiết dùng nó để thay câu "Duyệt đơn này sẽ: …" — không có nó thì màn vừa cảnh báo
+   * "duyệt sẽ báo lỗi" vừa hứa việc duyệt sẽ làm, ngay cạnh một nút Duyệt đậm mời bấm.
+   */
+  blocked?: string;
+};
 
 /** Dữ liệu đã nạp sẵn cho MỘT đơn. Mọi trường nullable: đơn cũ/dữ liệu khuyết vẫn phải in được. */
 export type EffectInput = {
@@ -116,7 +129,13 @@ export function describeEffect(input: EffectInput): EffectSummary | null {
       const newCode = trimmed(input.requesterNewCode);
       // Không có mã ca mới thì `templateCode()` trả null và `decide()` ném "Mã ca mới không
       // còn trong danh mục" — đơn này KHÔNG duyệt được, nói thẳng thay vì vẽ "? → ?".
-      if (!newCode) return { text: "Thiếu mã ca mới — duyệt sẽ báo lỗi", tone: "warning" };
+      if (!newCode) {
+        return {
+          text: "Thiếu mã ca mới — duyệt sẽ báo lỗi",
+          tone: "warning",
+          blocked: "đơn không ghi mã ca mới, nên không có gì để ghi lên lưới",
+        };
+      }
       let text = `${from} → ${newCode}`;
       const who = trimmed(input.targetUserName);
       if (who) {
@@ -142,7 +161,13 @@ export function describeEffect(input: EffectInput): EffectSummary | null {
       const reqIn = trimmed(input.requestedIn);
       const reqOut = trimmed(input.requestedOut);
       // Không có giờ nào để ghi ⇒ `decide()` ném "Đơn không có giờ vào/ra để ghi".
-      if (!reqIn && !reqOut) return { text: "Thiếu giờ vào/ra — duyệt sẽ báo lỗi", tone: "warning" };
+      if (!reqIn && !reqOut) {
+        return {
+          text: "Thiếu giờ vào/ra — duyệt sẽ báo lỗi",
+          tone: "warning",
+          blocked: "đơn không ghi giờ vào lẫn giờ ra, nên không có mốc giờ nào để ghi",
+        };
+      }
       const cur = `${hhmm(input.currentIn)}→${hhmm(input.currentOut)}`;
       return { text: `${cur} ⇒ ${reqIn ?? UNKNOWN}→${reqOut ?? UNKNOWN}`, tone: "default" };
     }

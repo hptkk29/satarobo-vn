@@ -146,6 +146,7 @@ export function RequestSheet({ row, onClose }: { row: QueueRow | null; onClose: 
                   requestId={row.id}
                   effectHint={row.effectHint}
                   effectCode={row.effectCode}
+                  effectBlocked={row.effectBlocked}
                   subject={row.subject}
                   onDone={onClose}
                 />

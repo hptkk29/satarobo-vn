@@ -28,6 +28,8 @@ export type QueueRow = {
   /** `warning` = đơn khuyết dữ liệu, bấm Duyệt sẽ báo lỗi — cột và panel đều tô cảnh báo. */
   effectTone: EffectTone;
   effectCode: string | null;
+  /** Lý do duyệt sẽ hỏng — có giá trị thì panel bỏ câu hứa và hạ nút Duyệt xuống viền. */
+  effectBlocked: string | null;
   effectHint: string | null;
   ageLabel: string;
   stale: boolean;

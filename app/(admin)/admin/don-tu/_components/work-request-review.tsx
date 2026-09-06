@@ -35,6 +35,7 @@ export function WorkRequestReview({
   requestId,
   effectHint,
   effectCode,
+  effectBlocked,
   subject,
   onDone,
 }: {
@@ -43,6 +44,8 @@ export function WorkRequestReview({
   effectHint: string | null;
   /** Mã sẽ ghi lên lưới nếu duyệt (CG, P…). Không phải đơn nào cũng ghi một mã. */
   effectCode?: string | null;
+  /** Lý do `decide()` sẽ ném lỗi (đơn khuyết trường bắt buộc). Xem `EffectSummary.blocked`. */
+  effectBlocked?: string | null;
   /** "Nguyễn A ngày 09/09" — ai, ngày nào, in trong khối xác nhận. */
   subject?: string | null;
   onDone?: () => void;
@@ -87,13 +90,28 @@ export function WorkRequestReview({
 
   return (
     <div className="space-y-3 border-t border-border pt-4">
-      {effectHint && (
-        <p className="text-sm text-state-warning-ink">Duyệt đơn này sẽ: {effectHint}.</p>
+      {/* Đơn KHUYẾT thì nói thẳng, đừng in cả hai câu. Bản trước hiện "duyệt sẽ báo lỗi" ở cột
+          Thay đổi rồi ngay dưới vẫn hứa "Duyệt đơn này sẽ: ghi mốc giờ chỉnh tay…" — người duyệt
+          đọc được lời hứa, bấm, rồi ăn hộp lỗi đỏ. */}
+      {effectBlocked ? (
+        <p className="text-sm text-state-danger-ink">
+          Duyệt đơn này sẽ BÁO LỖI: {effectBlocked}. Từ chối và nhờ người nộp bổ sung rồi nộp lại.
+        </p>
+      ) : (
+        effectHint && <p className="text-sm text-state-warning-ink">Duyệt đơn này sẽ: {effectHint}.</p>
       )}
 
       {mode === "idle" && (
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => setMode("approve")} disabled={pending} className={BTN_PRIMARY}>
+          {/* Nút Duyệt KHÔNG bị khoá kể cả khi biết sẽ hỏng: server mới là nơi quyết, và dữ liệu
+              có thể đã được sửa ở tab khác kể từ lúc trang này dựng. Chỉ hạ nó xuống viền để
+              "Từ chối" thành đường dễ đi hơn. */}
+          <button
+            type="button"
+            onClick={() => setMode("approve")}
+            disabled={pending}
+            className={effectBlocked ? BTN_OUTLINE : BTN_PRIMARY}
+          >
             Duyệt
           </button>
           <button

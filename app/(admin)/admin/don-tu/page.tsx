@@ -240,6 +240,7 @@ export default async function WorkRequestsAdminPage({
       effectText: eff?.text ?? "—",
       effectTone: eff?.tone ?? "muted",
       effectCode: eff?.code ?? null,
+      effectBlocked: eff?.blocked ?? null,
       effectHint: effectHint(r),
       ageLabel: ageOf(r.createdAt, now),
       stale: r.status === "PENDING" && r.createdAt < staleBefore,
