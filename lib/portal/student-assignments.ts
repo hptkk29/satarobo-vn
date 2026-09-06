@@ -1,9 +1,16 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { assignmentWindow, realDueAt } from "@/lib/lms/assignment-window";
+import { napBuoiCuaLop } from "@/lib/portal/buoi-hoc";
 import { getStudentSchedule } from "@/lib/portal/schedule";
+import { vnParts } from "@/lib/time/vn";
 
 // Portal v2 — Cổng học sinh "Bài tập": lộ trình từng buổi + trạng thái bài tập của con.
+//
+// 06/09 — lộ trình đi theo BUỔI HỌC, không theo bài giáo trình. Bản cũ lọc
+// `lessonId: { not: null }` rồi khử trùng theo `lesson.id` và xếp theo `Lesson.order`:
+// lớp chưa ghim giáo trình ra lộ trình RỖNG, còn lớp có buổi bù thì mất đúng buổi bù
+// (buổi bù mang cùng lessonId với buổi đã huỷ — xem lib/portal/buoi-hoc.ts).
 
 const ACTIVE = ["CONFIRMED", "STUDYING", "ACTIVE", "PAUSED"] as const;
 const DONE = new Set(["SUBMITTED", "GRADED"]);
@@ -28,11 +35,19 @@ export type TrackAssignment = {
    * HỀ TỒN TẠI — mà ô "Hạn" ngay cạnh thì đang để trống.
    */
   overdue: boolean;
+  /** `12/09/2026` theo lịch VN, tính sẵn ở server; `""` khi bài không đặt hạn. */
+  nhanHan: string;
 };
 export type TrackItem = {
   key: string;
+  /** Buổi thứ mấy của lớp — khớp site giáo viên/admin. */
   order: number;
+  /** Tên bài TRẦN. */
   title: string;
+  /** Nhãn đầy đủ `Buổi 5 - HP2 - Họa Sĩ Robot`. */
+  nhan: string;
+  /** `dd/MM/yyyy` theo lịch VN, tính sẵn ở server. */
+  nhanNgay: string;
   sessionDate: string | null;
   taught: boolean;
   assignment: TrackAssignment | null;
@@ -63,15 +78,12 @@ export async function getStudentAssignmentTrack(studentId: string): Promise<Assi
   const classIds = enrollments.map((e) => e.classId);
 
   const now = new Date();
-  const nowMs = now.getTime();
   const items: TrackItem[] = [];
   if (classIds.length > 0) {
-    const [sessions, assignments] = await Promise.all([
-      db.classSession.findMany({
-        where: { classId: { in: classIds }, lessonId: { not: null } },
-        select: { id: true, date: true, lesson: { select: { id: true, order: true, title: true } } },
-        orderBy: { date: "asc" },
-      }),
+    const [buoiList, assignments] = await Promise.all([
+      // TOÀN BỘ buổi (kể cả buổi chưa gắn giáo án và buổi đã huỷ) — điều kiện để
+      // `buildSessionNumberMap` đánh đúng số buổi. Buổi huỷ lọc bỏ lúc dựng danh sách.
+      napBuoiCuaLop(classIds, now),
       db.assignment.findMany({
         where: { classId: { in: classIds }, lessonId: { not: null }, status: { in: ["PUBLISHED", "CLOSED"] } },
         select: {
@@ -90,13 +102,21 @@ export async function getStudentAssignmentTrack(studentId: string): Promise<Assi
     const byLesson = new Map<string, (typeof assignments)[number]>();
     for (const a of assignments) if (a.lessonId && !byLesson.has(a.lessonId)) byLesson.set(a.lessonId, a);
 
-    // 1 buổi / lesson (buổi sớm nhất của lesson đó).
-    const seen = new Set<string>();
-    for (const s of sessions) {
-      const l = s.lesson;
-      if (!l || seen.has(l.id)) continue;
-      seen.add(l.id);
-      const a = byLesson.get(l.id);
+    // Bài giáo trình của TỪNG buổi — nạp riêng để truy vấn buổi không phải lọc
+    // `lessonId != null` (chính cái lọc làm lộ trình rỗng ở lớp chưa ghim giáo trình).
+    const lessonCuaBuoi = new Map(
+      (
+        await db.classSession.findMany({
+          where: { classId: { in: classIds } },
+          select: { id: true, lessonId: true },
+        })
+      ).map((r) => [r.id, r.lessonId]),
+    );
+
+    for (const b of buoiList) {
+      if (b.daHuy) continue; // buổi huỷ không có bài tập để làm
+      const lessonId = lessonCuaBuoi.get(b.id) ?? null;
+      const a = lessonId ? byLesson.get(lessonId) : undefined;
       let assignment: TrackAssignment | null = null;
       if (a) {
         const done = DONE.has(a.submissions[0]?.status ?? "");
@@ -108,18 +128,28 @@ export async function getStudentAssignmentTrack(studentId: string): Promise<Assi
         // "Hạn 01/01/1970" và cờ dưới đây cũng sẽ nói bài quá hạn 56 năm.
         const due = realDueAt(a.dueAt);
         const overdue = closed && due != null && now.getTime() > due.getTime();
-        assignment = { id: a.id, title: a.title, dueAt: due?.toISOString() ?? null, done, closed, overdue };
+        assignment = {
+          id: a.id,
+          title: a.title,
+          dueAt: due?.toISOString() ?? null,
+          nhanHan: due ? nhanNgayVn(due) : "",
+          done,
+          closed,
+          overdue,
+        };
       }
       items.push({
-        key: l.id,
-        order: l.order,
-        title: l.title,
-        sessionDate: s.date.toISOString(),
-        taught: s.date.getTime() < nowMs,
+        // Khoá theo BUỔI, không theo bài: hai buổi cùng bài (buổi bù) là hai dòng khác nhau.
+        key: b.id,
+        order: b.soBuoi,
+        title: b.tieuDe || "Buổi học",
+        nhan: b.nhanDayDu || "Buổi học",
+        nhanNgay: b.nhanNgay,
+        sessionDate: b.ngayISO,
+        taught: b.daDienRa,
         assignment,
       });
     }
-    items.sort((x, y) => x.order - y.order);
   }
 
   return {
@@ -131,4 +161,10 @@ export async function getStudentAssignmentTrack(studentId: string): Promise<Assi
     progressPct: sched?.total ? Math.round(((sched?.done ?? 0) / sched.total) * 100) : 0,
     items,
   };
+}
+
+/** `dd/MM/yyyy` theo lịch VN — Server Component chạy UTC trên Vercel, đừng format ở đó. */
+function nhanNgayVn(d: Date): string {
+  const p = vnParts(d);
+  return `${String(p.day).padStart(2, "0")}/${String(p.month + 1).padStart(2, "0")}/${p.year}`;
 }

@@ -2,17 +2,32 @@ import "server-only";
 import { db } from "@/lib/db";
 import { hasMediaConsent } from "@/lib/lms/media-consent";
 import { resolveMediaUrl } from "@/lib/storage/signed-url";
-import { meaningfulSessionTitle } from "@/lib/lms/session-project-name";
+import { napBuoiCuaLop } from "@/lib/portal/buoi-hoc";
 
 // Portal v2 — ảnh lớp theo buổi của con đang chọn. Cùng luật với bản v1 (C6.2):
 // ảnh APPROVED và (được GẮN THẺ con HOẶC đánh dấu "Ảnh chung cả lớp").
 // Gate theo StudentConsent CLASS_MEDIA (privacy C3/C6). URL đi qua
 // resolveMediaUrl → signed URL khi bật MEDIA_SIGNED_URL (OFF → fileUrl trần).
+//
+// 06/09 — số buổi và tên bài lấy từ `lib/portal/buoi-hoc.ts` (hạng theo ngày), không
+// còn `Lesson.order`. Trước đó: lớp chưa ghim giáo trình thì huy hiệu buổi in dấu "•"
+// (components/portal/hinh-anh-page.tsx), và sau một lần huỷ-buổi-xếp-bù thì hai nhóm
+// ảnh khác nhau cùng đề "Buổi 5" rồi nằm cạnh nhau vì được xếp theo chính con số đó.
 
 const ACTIVE = ["CONFIRMED", "STUDYING", "ACTIVE"] as const;
 
 export type PhotoItem = { id: string; caption: string | null; url: string };
-export type PhotoGroup = { sessionId: string; order: number | null; title: string; dateISO: string; photos: PhotoItem[] };
+export type PhotoGroup = {
+  sessionId: string;
+  /** Buổi thứ mấy của lớp — khớp site giáo viên/admin; null với ảnh không gắn buổi. */
+  order: number | null;
+  /** Nhãn đầy đủ `Buổi 5 - HP2 - Họa Sĩ Robot`. */
+  title: string;
+  dateISO: string;
+  /** `dd/MM/yyyy` theo lịch VN, tính sẵn ở server. */
+  nhanNgay: string;
+  photos: PhotoItem[];
+};
 export type StudentPhotos = { consentGranted: boolean; className: string | null; total: number; groups: PhotoGroup[] };
 
 export async function getStudentPhotos(studentId: string): Promise<StudentPhotos> {
@@ -44,34 +59,29 @@ export async function getStudentPhotos(studentId: string): Promise<StudentPhotos
   // Signed URL khi bật MEDIA_SIGNED_URL — cùng helper với bản v1.
   const urls = await Promise.all(media.map((m) => resolveMediaUrl(m.fileUrl)));
 
-  const sessionIds = [...new Set(media.map((m) => m.classSessionId).filter((x): x is string => !!x))];
-  const sessions = sessionIds.length
-    ? await db.classSession.findMany({
-        where: { id: { in: sessionIds } },
-        select: { id: true, date: true, lesson: { select: { order: true, title: true } } },
-      })
-    : [];
-  const smap = new Map(sessions.map((s) => [s.id, s]));
+  // TOÀN BỘ buổi của lớp — điều kiện để `buildSessionNumberMap` đánh đúng số buổi.
+  const buoiCua = new Map((await napBuoiCuaLop(classIds, new Date())).map((b) => [b.id, b]));
 
   const byS = new Map<string, PhotoGroup>();
   media.forEach((m, i) => {
     const key = m.classSessionId ?? "khac";
     if (!byS.has(key)) {
-      const ses = m.classSessionId ? smap.get(m.classSessionId) : undefined;
-      const les = ses?.lesson;
-      const lesTitle = meaningfulSessionTitle(les?.title);
+      const b = m.classSessionId ? buoiCua.get(m.classSessionId) : undefined;
       byS.set(key, {
         sessionId: key,
-        order: les?.order ?? null,
-        // 26/08 — cắt tiền tố "Buổi N —" thừa của tên bài trước khi ghép (xem
-        // lib/lms/session-project-name.ts), kẻo ra "Buổi 7: Buổi 7 — …".
-        title: lesTitle ? `Buổi ${les?.order}: ${lesTitle}` : "Buổi học",
-        dateISO: (ses?.date ?? m.takenAt)?.toISOString() ?? "",
+        order: b && b.soBuoi > 0 ? b.soBuoi : null,
+        title: b?.nhanDayDu || "Buổi học",
+        dateISO: b?.ngayISO ?? m.takenAt?.toISOString() ?? "",
+        nhanNgay: b?.nhanNgay ?? "",
         photos: [],
       });
     }
     byS.get(key)!.photos.push({ id: m.id, caption: m.caption, url: urls[i] ?? m.fileUrl });
   });
-  const groups = [...byS.values()].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  // Xếp theo NGÀY buổi (mới nhất trước), không theo con số: ảnh không gắn buổi có
+  // `order = null` và trước đây bị đẩy lên đầu vì `null ?? 0`.
+  const groups = [...byS.values()].sort(
+    (a, b) => (Date.parse(b.dateISO) || 0) - (Date.parse(a.dateISO) || 0),
+  );
   return { consentGranted: true, className, total: media.length, groups };
 }

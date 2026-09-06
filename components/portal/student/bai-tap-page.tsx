@@ -4,11 +4,9 @@ import type {
   TrackItem,
 } from "@/lib/portal/student-assignments";
 
-function dmy(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
-}
+// 06/09 — nhãn ngày do SERVER tính theo lịch VN (`it.nhanNgay`, `a.nhanHan`). Đây là
+// Server Component; `getDate()` trong này chạy theo UTC trên Vercel và lệch một ngày
+// trong khoảng 00:00–07:00 giờ VN.
 
 export function StudentBaiTapPage({ data }: { data: AssignmentTrack }) {
   return (
@@ -93,16 +91,19 @@ function Row({ it }: { it: TrackItem }) {
         )}
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-bold text-foreground">
-          Buổi {it.order}: {it.title}
-        </p>
+        <p className="text-sm font-bold text-foreground">{it.nhan}</p>
         <p className="mt-0.5 text-xs font-medium text-muted-foreground">
-          Ngày học: {dmy(it.sessionDate)}
+          Ngày học: {it.nhanNgay || "—"}
         </p>
         {a && (
           <p className="mt-0.5 text-xs font-medium text-muted-foreground">
-            BT: {a.title} · Hạn:{" "}
-            <b className="text-foreground">{dmy(a.dueAt)}</b>
+            BT: {a.title}
+            {a.nhanHan && (
+              <>
+                {" · Hạn: "}
+                <b className="text-foreground">{a.nhanHan}</b>
+              </>
+            )}
           </p>
         )}
       </div>
