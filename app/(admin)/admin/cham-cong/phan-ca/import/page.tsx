@@ -16,7 +16,6 @@ import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { loadModuleScope, ASK_WHO } from "@/lib/cham-cong/module-scope";
 import { currentPeriodKey, parsePeriodKey } from "@/lib/cham-cong/period";
-import { formatDateTimeVNZoned } from "@/lib/format/date";
 import { PageHeader } from "@/components/admin/ui/page-header";
 import { PageHelp } from "@/components/admin/ui/page-help";
 import { NoPermission } from "@/components/admin/ui/states";
@@ -37,6 +36,29 @@ function so(o: unknown, ...duong: string[]): number {
     cur = (cur as Record<string, unknown>)[k];
   }
   return typeof cur === "number" ? cur : 0;
+}
+
+/**
+ * Giờ + ngày của một lượt import, GHIM múi giờ VN.
+ *
+ * Không mượn helper dùng chung: nhánh `test` và `main` đang có hai bộ hàm khác nhau
+ * (`formatDateTimeVN` bên test dùng `toLocaleString("vi-VN")` KHÔNG ghim múi ⇒ Vercel chạy
+ * UTC sẽ in lệch 7 tiếng, đúng landmine TZ của repo). Format tại chỗ thì cùng một mã chạy
+ * đúng trên cả hai nhánh.
+ */
+function gioNgayVN(input: Date): string {
+  const gio = input.toLocaleTimeString("vi-VN", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const ngay = input.toLocaleDateString("vi-VN", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+  return `${gio} ${ngay}`;
 }
 
 export default async function ImportPhanCaPage({
@@ -94,7 +116,7 @@ export default async function ImportPhanCaPage({
     const v = l.newValues as unknown;
     return {
       id: l.id,
-      at: formatDateTimeVNZoned(l.createdAt),
+      at: gioNgayVN(l.createdAt),
       actorName: l.actorName,
       scopeLabel: l.entityId && l.entityId !== "khung-ca" ? `Kỳ ${l.entityId}` : "Khung ca tuần",
       countLabel: `${so(v, "assignments", "created")} ô mới · ${so(v, "assignments", "cancelled")} huỷ · ${so(v, "assignments", "keptManual")} giữ tay · ${so(v, "patterns", "upserted")} ô khung ca`,
