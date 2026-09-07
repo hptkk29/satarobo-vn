@@ -9,6 +9,15 @@
 // Để cấp cơ sở sửa được là mỗi nơi một cách phân loại, rồi tổng công dạy toàn hệ thống không ai
 // giải thích nổi.
 //
+// ⚠️ `countsTowardQuota` KHÔNG NHẬN TỪ ĐẦU VÀO (chốt chủ dự án 07/09 — phương án (b)).
+// Cột vẫn còn, dữ liệu đã có vẫn còn, nhưng KHÔNG có đường ghi giá trị mới cho tới khi bộ đếm
+// định mức thật sự chạy. Lý do chặn không phải công sức mà là LỖ QUYỀN: bộ đếm 50/30/20 phải đọc
+// `Employee.contractType`, vốn thuộc nhóm trường chỉ SUPER_ADMIN/HR xem được — bày con số định mức
+// cho Quản lý cơ sở là kênh để họ suy ngược ra loại hợp đồng của đồng nghiệp.
+//
+// GỠ KHỎI SCHEMA ĐẦU VÀO chứ không chỉ ẩn ô trên giao diện: Server Action là endpoint HTTP riêng,
+// ẩn ô mà vẫn nhận trường thì ai gọi thẳng vẫn ghi được. Đây đúng cách đã vá `Payment.method`.
+//
 // KHÔNG CÓ XOÁ — chỉ tắt. Một phân loại đã bị buổi cũ trỏ tới thì xoá đi là mất dấu vì sao buổi
 // đó từng có hệ số riêng; và `TeachingCreditType.categoryId` để `onDelete: Restrict` nên xoá còn
 // vỡ ngay ở tầng DB. Tắt thì buổi cũ rơi về dòng mặc định, có đường lùi.
@@ -32,7 +41,6 @@ const schema = z.object({
     .regex(/^[A-Z0-9_]+$/, "Mã chỉ gồm chữ hoa/số/_")
     .transform((s) => s.toUpperCase()),
   name: z.string().trim().min(1, "Thiếu tên").max(80),
-  countsTowardQuota: z.coerce.boolean().default(false),
   isDefault: z.coerce.boolean().default(false),
   isActive: z.coerce.boolean().default(true),
 });
@@ -62,7 +70,7 @@ export async function saveSessionCategoryAction(id: string | null, input: unknow
   const old = id
     ? await sdb.sessionCategory.findUnique({
         where: { id },
-        select: { code: true, name: true, isDefault: true, isActive: true, countsTowardQuota: true },
+        select: { code: true, name: true, isDefault: true, isActive: true },
       })
     : null;
   if (id && !old) return { ok: false, error: "Không tìm thấy phân loại buổi" };

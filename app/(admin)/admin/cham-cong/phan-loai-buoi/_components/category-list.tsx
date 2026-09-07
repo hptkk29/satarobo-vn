@@ -4,6 +4,11 @@
 //
 // Không có nút Xoá: một phân loại đã bị buổi cũ trỏ tới mà xoá đi là mất dấu vì sao buổi đó từng
 // có hệ số riêng. Tắt thì buổi cũ rơi về dòng mặc định và vẫn lần lại được.
+//
+// Cột "Buổi trách nhiệm" CHỈ ĐỌC (chốt chủ dự án 07/09 — phương án (b)): bộ đếm định mức 50/30/20
+// chưa chạy, và thiết kế hiện tại của nó có lỗ quyền (phải đọc `contractType`, vốn chỉ SUPER_ADMIN
+// và HR xem được). Ô nhập gỡ khỏi cả giao diện LẪN schema đầu vào của action; dữ liệu đã khai vẫn
+// hiện nguyên để không mất thông tin người vận hành đã bỏ công nhập.
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -41,7 +46,13 @@ export function CategoryList({ rows, canEdit }: { rows: CategoryRow[]; canEdit: 
               <tr>
                 <th scope="col" className={adminTh}>Phân loại buổi</th>
                 <th scope="col" className={adminTh}>Mã</th>
-                <th scope="col" className={adminTh}>Buổi trách nhiệm</th>
+                <th
+                  scope="col"
+                  title="Chưa có hiệu lực — bộ đếm định mức 50/30/20 chưa chạy. Ô nhập tạm ẩn, dữ liệu đã khai vẫn giữ."
+                  className={adminTh}
+                >
+                  Buổi trách nhiệm
+                </th>
                 <th scope="col" className={adminTh}>Mặc định</th>
                 <th scope="col" className={adminTh}>Đang dùng</th>
                 <th scope="col" className={cn(adminTh, "text-right")}>Buổi đã gán</th>
@@ -73,18 +84,13 @@ function Dong({ row, canEdit }: { row: CategoryRow; canEdit: boolean }) {
   const [pending, start] = useTransition();
   const [d, setD] = useState(row);
 
-  const doi =
-    d.name !== row.name ||
-    d.countsTowardQuota !== row.countsTowardQuota ||
-    d.isDefault !== row.isDefault ||
-    d.isActive !== row.isActive;
+  const doi = d.name !== row.name || d.isDefault !== row.isDefault || d.isActive !== row.isActive;
 
   const luu = () =>
     start(async () => {
       const r = await saveSessionCategoryAction(row.id, {
         code: row.code,
         name: d.name,
-        countsTowardQuota: d.countsTowardQuota,
         isDefault: d.isDefault,
         isActive: d.isActive,
       });
@@ -114,13 +120,12 @@ function Dong({ row, canEdit }: { row: CategoryRow; canEdit: boolean }) {
       </td>
       <td className={cn(adminTd, "py-0 font-mono text-[11px] text-muted-foreground")}>{row.code}</td>
       <td className={cn(adminTd, "py-0")}>
-        <O
-          canEdit={canEdit}
-          checked={d.countsTowardQuota}
-          onChange={(v) => setD({ ...d, countsTowardQuota: v })}
-          nhan="Trách nhiệm"
-          batNhan="Buổi trách nhiệm"
-        />
+        {/* CHỈ ĐỌC — xem chú thích đầu file. Không dùng <O> vì `canEdit` ở đây luôn là false. */}
+        {row.countsTowardQuota ? (
+          <span className={cn(PILL, "bg-muted text-muted-foreground")}>Buổi trách nhiệm</span>
+        ) : (
+          <span className="text-xs text-muted-foreground">–</span>
+        )}
       </td>
       <td className={cn(adminTd, "py-0")}>
         {row.isDefault ? (
@@ -175,17 +180,10 @@ function DongMoi({ onXong }: { onXong: () => void }) {
   const [pending, start] = useTransition();
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
-  const [quota, setQuota] = useState(false);
 
   const luu = () =>
     start(async () => {
-      const r = await saveSessionCategoryAction(null, {
-        code,
-        name,
-        countsTowardQuota: quota,
-        isDefault: false,
-        isActive: true,
-      });
+      const r = await saveSessionCategoryAction(null, { code, name, isDefault: false, isActive: true });
       if (!r.ok) {
         toast.error(r.error);
         return;
@@ -218,18 +216,7 @@ function DongMoi({ onXong }: { onXong: () => void }) {
           onChange={(e) => setCode(e.target.value.toUpperCase())}
         />
       </td>
-      <td className={cn(adminTd, "py-0")}>
-        <label className="flex items-center gap-2 text-xs">
-          <input
-            type="checkbox"
-            className="h-4 w-4 accent-primary"
-            checked={quota}
-            onChange={(e) => setQuota(e.target.checked)}
-          />
-          Trách nhiệm
-        </label>
-      </td>
-      <td className={cn(adminTd, "py-0 text-xs text-muted-foreground")} colSpan={4}>
+      <td className={cn(adminTd, "py-0 text-xs text-muted-foreground")} colSpan={5}>
         Dòng mới luôn bật, chưa phải mặc định.
       </td>
       <td className={cn(adminTd, "py-0 text-right")}>

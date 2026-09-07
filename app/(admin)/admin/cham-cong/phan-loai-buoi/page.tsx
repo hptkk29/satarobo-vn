@@ -83,11 +83,11 @@ export default async function PhanLoaiBuoiPage({
           mặc định; đặt mặc định cho dòng khác thì dòng cũ tự nhả.
         </p>
         <p className="mt-2 rounded-lg bg-state-warning-soft p-2.5 text-state-warning-ink">
-          <b>Cột &ldquo;Buổi trách nhiệm&rdquo; chưa có hiệu lực.</b> Theo SR.QD.230 PL04 §A.1.b,
+          <b>Cột &ldquo;Buổi trách nhiệm&rdquo; đang KHOÁ — chỉ đọc.</b> Theo SR.QD.230 PL04 §A.1.b,
           buổi bù/vượt/hỗ trợ của giáo viên cơ hữu nằm trong lương cơ bản và chỉ phần vượt định mức
-          (50 buổi Fulltime · 30 hoặc 20 buổi Parttime) mới được 80.000đ/buổi. Hệ thống hiện{" "}
-          <b>lưu</b> cột này nhưng chưa có bộ đếm định mức nào đọc — phần đó là tính tiền, mà tiền
-          thì chưa chốt. Cứ khai đúng chính sách; đừng coi là hệ thống đang tự chấp hành.
+          (50 buổi Fulltime · 30 hoặc 20 buổi Parttime) mới được 80.000đ/buổi. Bộ đếm định mức đó{" "}
+          <b>chưa chạy</b>, nên ô nhập đã tạm ẩn — khai vào một ô không ai đọc là mời người sau tin
+          rằng hệ thống đang chấp hành. Giá trị đã khai vẫn giữ nguyên, không mất.
         </p>
         <p className="mt-2">
           Không có nút xoá. Một phân loại đã bị buổi cũ trỏ tới mà xoá đi là mất dấu vì sao buổi đó
