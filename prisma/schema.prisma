@@ -2093,6 +2093,24 @@ model ClassSession {
   // phân loại ⇒ tính như dòng `SessionCategory.isDefault`. Cố ý NULLABLE: ~toàn bộ buổi cũ không
   // ai đi gán lại được, và ép NOT NULL là chặn mọi đường tạo buổi đang có.
   sessionCategoryId String?
+
+  // ── SNAPSHOT SĨ SỐ BIÊN CHẾ (chốt chủ dự án 07/09/2026) ────────────────────────────────
+  // "Sĩ số thực tế" ở SR.QD.230 PL04 là sĩ số BIÊN CHẾ, không phải điểm danh — và phải GHI CỨNG
+  // tại thời điểm buổi diễn ra, KHÔNG join động từ danh sách lớp hôm nay.
+  //
+  // Vì sao không join động: học viên vào lớp tháng 10 mà làm đổi số buổi tháng 8 là đổi cả kỳ
+  // lương đã chốt. Cùng loại lỗi với bút toán điều chỉnh bên thanh toán.
+  //
+  // Vì sao không dùng điểm danh: số tính tiền phải biết TRƯỚC khi buổi diễn ra; lấy điểm danh thì
+  // lương giáo viên dao động theo học viên nghỉ ốm, và tạo động cơ ngược.
+  /// Số học viên BIÊN CHẾ của lớp tại thời điểm chốt. null = chưa có số (buổi chưa hoàn tất, hoặc
+  /// buổi cũ chưa backfill).
+  rosterSize   Int?
+  /// Số ở trên đến từ đâu. SNAPSHOT = đo tại lúc hoàn tất buổi (tin được); các giá trị còn lại là
+  /// SUY ĐOÁN khi backfill dữ liệu cũ — không được trộn lẫn hai loại khi tính tiền.
+  rosterSource ClassRosterSource?
+  /// Thời điểm chốt con số. Có nó mới phân biệt được "chốt lúc dạy" với "backfill tháng sau".
+  rosterAt     DateTime? @db.Timestamptz(6)
   // FL3-02 — centerId denormalized từ class. ĐÃ flip vào SCOPED_MODELS (db-scope.ts);
   // mọi write set centerId + backfill migration 20260624010000. scopedDb cách ly theo cơ sở.
   centerId    String?
@@ -9027,6 +9045,25 @@ enum TeachingRole {
   MAIN
   SUBSTITUTE
   ASSISTANT
+}
+
+/// Nguồn của `ClassSession.rosterSize` — thứ phân biệt SỐ ĐO với SỐ SUY ĐOÁN.
+///
+/// Bắt buộc phải có, vì backfill dữ liệu cũ KHÔNG có nguồn nào đúng cho mọi dòng (đo 07/09/2026):
+/// đếm ghi danh thì THỪA người một chiều (`Enrollment.deletedAt` gần như không bao giờ được set
+/// khi học viên rời lớp — có luật cứng cấm dùng nó cho việc đó), còn đếm dòng điểm danh thì THIẾU
+/// người một chiều với mọi buổi trước 07/08/2026 (lưới cũ chỉ gửi những em đã sửa).
+///
+/// Trộn hai loại vào một cột không nhãn là để người mở báo cáo tin số suy đoán như số đo.
+enum ClassRosterSource {
+  /// Đo tại thời điểm hoàn tất buổi, từ danh sách ghi danh của lớp. Đây là số TIN ĐƯỢC.
+  SNAPSHOT
+  /// Backfill: đếm số dòng điểm danh của buổi (trừ khách học bù). Sát nhưng vẫn là suy đoán.
+  FROM_ATTENDANCE
+  /// Backfill: đếm ghi danh theo cửa sổ thời gian. Lệch THỪA người, càng cũ càng thừa.
+  FROM_ENROLLMENT
+  /// Backfill: không suy được. Cố ý ghi ra thay vì để null lẫn với "chưa chạy backfill".
+  UNKNOWN
 }
 
 /// Danh mục PHÂN LOẠI BUỔI — buổi này là học chính thức, lớp Coach, bù, vượt, workshop hay sự kiện.

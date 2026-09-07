@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { publishEvent } from "@/lib/events/publish";
 import { canCompleteSession } from "@/lib/sessions/status";
+import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 
 // =============================================================================
 // R7-07 (PR2) — State machine buổi học "Hoàn tất buổi".
@@ -105,11 +106,39 @@ export async function completeSession(opts: {
       ? "Hoàn tất buổi đã qua ngày diễn ra."
       : undefined;
 
+  // ── SNAPSHOT SĨ SỐ BIÊN CHẾ (chốt chủ dự án 07/09/2026) ────────────────────────────────
+  //
+  // Đo NGAY ĐÂY vì đây là mốc "buổi đã diễn ra" duy nhất mà hệ thống biết chắc, và vì con số này
+  // về sau sẽ tính ra tiền (SR.QD.230 PL04 §A.1 phân bậc đơn giá theo sĩ số 1-4 / 5-8 / 9-12 /
+  // ≥13). Ghi cứng chứ KHÔNG join động: học viên vào lớp tháng 10 mà làm đổi số buổi tháng 8 là
+  // đổi cả kỳ lương đã chốt.
+  //
+  // BIÊN CHẾ, không phải điểm danh — đếm ghi danh của lớp, nên:
+  //  · khách HỌC BÙ ngồi trong phòng KHÔNG được tính (họ thuộc lớp khác);
+  //  · học viên nghỉ ốm hôm đó VẪN được tính (số tính tiền phải biết trước khi buổi diễn ra).
+  //
+  // Dùng `ENROLLMENT_ACTIVE_STATUS_LIST` — nguồn chân lý DUY NHẤT cho "học viên đang thuộc lớp",
+  // gồm cả PAUSED (bảo lưu nhưng vẫn thuộc lớp). ĐỪNG chép tay một danh sách status thứ hai:
+  // repo có 7 bộ status song song và chép tay là nguồn của bug 21/08/2026.
+  //
+  // `deletedAt: null` viết TƯỜNG MINH: extension soft-delete chỉ tự chèn ở truy vấn top-level của
+  // client gốc, và ở đây đang chạy trong `tx` — thà thừa một điều kiện còn hơn đếm cả dòng đã xoá.
+  const rosterSize = await db.enrollment.count({
+    where: {
+      classId: session.classId,
+      deletedAt: null,
+      status: { in: ENROLLMENT_ACTIVE_STATUS_LIST },
+    },
+  });
+
   await db.$transaction(async (tx) => {
     await tx.classSession.update({
       where: { id: session.id },
       data: {
         status: "COMPLETED",
+        rosterSize,
+        rosterSource: "SNAPSHOT",
+        rosterAt: now,
         completedAt: now,
         completedById: opts.actorId,
         // Dữ liệu thực tế: không nhập override thì lấy NGƯỜI DẠY THAY trước, rồi mới tới GV

@@ -165,6 +165,68 @@ test.describe("[R7-07] Assign students + session lifecycle", () => {
     expect(events).toBe(1); // dedupeKey theo sessionId
   });
 
+  // ── SNAPSHOT SĨ SỐ BIÊN CHẾ (07/09/2026) ─────────────────────────────────
+  test("[CD-01] hoàn tất buổi ⇒ chốt cứng sĩ số BIÊN CHẾ, không đếm khách học bù", async () => {
+    const { cls, course } = await seedClassWithCourse({ slug: "roster1", centerId: "CS1" });
+    const khac = await seedClassWithCourse({ slug: "roster1b", centerId: "CS1" });
+
+    // 3 em thuộc lớp: 1 ACTIVE, 1 CONFIRMED, 1 PAUSED. Cả ba đều là BIÊN CHẾ — PAUSED là bảo lưu
+    // nhưng vẫn thuộc lớp (`ENROLLMENT_ACTIVE_STATUSES`), và đó là nguồn chân lý duy nhất.
+    for (const [ten, st] of [["A", "ACTIVE"], ["B", "CONFIRMED"], ["C", "PAUSED"]] as const) {
+      const hs = await db.student.create({ data: { name: ten, centerId: "CS1" }, select: { id: true } });
+      await db.enrollment.create({ data: { studentId: hs.id, classId: cls.id, courseId: course.id, status: st } });
+    }
+    // 1 em ĐÃ RỜI lớp (WITHDREW) — không còn biên chế.
+    const roi = await db.student.create({ data: { name: "D", centerId: "CS1" }, select: { id: true } });
+    await db.enrollment.create({ data: { studentId: roi.id, classId: cls.id, courseId: course.id, status: "WITHDREW" } });
+    // 1 em của LỚP KHÁC sang học bù — ngồi trong phòng nhưng KHÔNG thuộc biên chế lớp này.
+    const bu = await db.student.create({ data: { name: "E bù", centerId: "CS1" }, select: { id: true } });
+    await db.enrollment.create({ data: { studentId: bu.id, classId: khac.cls.id, courseId: khac.course.id, status: "ACTIVE" } });
+
+    const s = await db.classSession.create({
+      data: { classId: cls.id, date: new Date(), status: "SCHEDULED" },
+      select: { id: true },
+    });
+    // Khách bù CÓ dòng điểm danh ở buổi này — đây đúng là chỗ "đếm điểm danh" cho số sai.
+    await db.attendance.create({ data: { sessionId: s.id, studentId: bu.id, status: "PRESENT" } });
+
+    const r = await completeSession({ sessionId: s.id, actorId: "gv", actorName: "GV" });
+    expect(r.ok).toBe(true);
+
+    const sau = await db.classSession.findUniqueOrThrow({
+      where: { id: s.id },
+      select: { rosterSize: true, rosterSource: true, rosterAt: true },
+    });
+    expect(sau.rosterSize).toBe(3); // A + B + C; KHÔNG có D (đã rời) và KHÔNG có E (học bù)
+    expect(sau.rosterSource).toBe("SNAPSHOT");
+    expect(sau.rosterAt).not.toBeNull();
+  });
+
+  test("[CD-02] số đã chốt KHÔNG đổi khi lớp nhận thêm học viên về sau", async () => {
+    // Đây là toàn bộ lý do cột này tồn tại: học viên vào lớp tháng 10 mà làm đổi số buổi tháng 8
+    // là đổi cả kỳ lương đã chốt.
+    const { cls, course } = await seedClassWithCourse({ slug: "roster2", centerId: "CS1" });
+    const hs1 = await db.student.create({ data: { name: "A", centerId: "CS1" }, select: { id: true } });
+    await db.enrollment.create({ data: { studentId: hs1.id, classId: cls.id, courseId: course.id, status: "ACTIVE" } });
+
+    const s = await db.classSession.create({
+      data: { classId: cls.id, date: new Date(), status: "SCHEDULED" },
+      select: { id: true },
+    });
+    await db.attendance.create({ data: { sessionId: s.id, studentId: hs1.id, status: "PRESENT" } });
+    await completeSession({ sessionId: s.id, actorId: "gv", actorName: "GV" });
+
+    for (const ten of ["B", "C", "D"]) {
+      const hs = await db.student.create({ data: { name: ten, centerId: "CS1" }, select: { id: true } });
+      await db.enrollment.create({ data: { studentId: hs.id, classId: cls.id, courseId: course.id, status: "ACTIVE" } });
+    }
+    // Gọi lại completeSession: idempotent, KHÔNG được ghi đè số cũ bằng sĩ số hôm nay.
+    await completeSession({ sessionId: s.id, actorId: "gv", actorName: "GV" });
+
+    const sau = await db.classSession.findUniqueOrThrow({ where: { id: s.id }, select: { rosterSize: true } });
+    expect(sau.rosterSize).toBe(1);
+  });
+
   // ── AC4/C5 — thiếu điểm danh → cảnh báo bắt confirm ──────────────────────
   test("[R7-07-C5] thiếu điểm danh → needsConfirm; confirm → hoàn tất", async () => {
     const { cls } = await seedClassWithCourse({ slug: "ses5", centerId: "CS1" });
