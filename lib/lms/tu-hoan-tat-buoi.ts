@@ -11,6 +11,8 @@
 // Cổng của `completeSession` VỐN đã không chặn — thiếu điểm danh chỉ cảnh báo. Nên
 // việc cần làm không phải nới cổng mà là BỎ HẲN thao tác thừa: điểm danh xong là xong.
 //
+import { vnDateOnly } from "@/lib/time/vn";
+
 // THUẦN để test được; nơi gọi (`app/(teacher)/teacher/lop/_actions.ts`) lo phần DB.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -28,7 +30,13 @@ export type QuyetDinhHoanTat =
 export interface HoanTatInput {
   /** Trạng thái buổi hiện tại. */
   trangThaiBuoi: string;
-  /** Ngày của buổi (`@db.Date` — nửa đêm UTC của ngày VN). */
+  /**
+   * Thời điểm buổi học — `ClassSession.date`, kiểu `@db.Timestamptz(6)`.
+   *
+   * ⚠️ NÓ MANG GIỜ THẬT, không phải nửa đêm. Chú thích cũ ở đây khai "`@db.Date` —
+   * nửa đêm UTC" và ĐÓ LÀ GỐC CỦA BUG 07/09/2026 (xem `quyetDinhTuHoanTat`). Đo trên
+   * dữ liệu thật: 609/609 buổi mang giờ 08:00–18:00, KHÔNG buổi nào nửa đêm.
+   */
   ngayBuoi: Date;
   /** Mốc nửa đêm UTC của NGÀY hôm nay theo giờ VN. */
   homNayUtcMs: number;
@@ -53,10 +61,18 @@ export interface HoanTatInput {
  *    chưa có học viên nào thì chẳng có buổi nào để mà dạy xong.
  */
 export function quyetDinhTuHoanTat(input: HoanTatInput): QuyetDinhHoanTat {
-  if (input.trangThaiBuoi !== "SCHEDULED" && input.trangThaiBuoi !== "IN_PROGRESS") {
+  if (
+    input.trangThaiBuoi !== "SCHEDULED" &&
+    input.trangThaiBuoi !== "IN_PROGRESS"
+  ) {
     return { tuHoanTat: false, lyDo: "DA_XONG" };
   }
-  if (input.ngayBuoi.getTime() > input.homNayUtcMs) {
+  // So NGÀY với NGÀY. `homNayUtcMs` là NỬA ĐÊM, còn `ngayBuoi` mang giờ thật, nên so
+  // thẳng hai mốc là buổi của CHÍNH HÔM NAY luôn "lớn hơn nửa đêm hôm nay" ⇒ rơi vào
+  // CHUA_TOI_NGAY. Mà giáo viên điểm danh trong/ngay sau giờ dạy — tức LUÔN rơi vào
+  // nhánh chết. Đó là lý do cơ chế tự đóng buổi live từ 04/09 mà prod 07/09 chỉ có
+  // 2 buổi COMPLETED / 287 SCHEDULED.
+  if (vnDateOnly(input.ngayBuoi).getTime() > input.homNayUtcMs) {
     return { tuHoanTat: false, lyDo: "CHUA_TOI_NGAY" };
   }
   if (input.siSo <= 0) return { tuHoanTat: false, lyDo: "SI_SO_RONG" };
