@@ -292,10 +292,17 @@ export default async function LeadsPage({
   // backfill = `createdAt`, nhưng lead tạo bằng đường SQL thô thì vẫn null. Không khai
   // thì Postgres xếp NULL lên đầu ở chiều `desc` — đúng nhóm cũ nhất lại nằm trên cùng.
   const sapXep = params.sort === 'nhap_lai' ? 'nhap_lai' : 'moi_nhat'
-  const thuTuLead: Prisma.LeadOrderByWithRelationInput =
-    sapXep === 'nhap_lai'
-      ? { lastInboundAt: { sort: 'desc', nulls: 'last' } }
-      : { createdAt: 'desc' }
+  // ⚠️ 07/09/2026 — MẶC ĐỊNH cũng sắp theo lần nhập gần nhất.
+  //
+  // Từ nay cột "Ngày nhận lead" IN ngày nhận hiệu lực (xem `leads-table.tsx`). Sắp
+  // theo `createdAt` trong khi in `lastInboundAt` là để phiếu hiện ngày hôm nay nằm
+  // ở vị trí của ba tháng trước — mũi tên sắp xếp ngay trên đầu cột nói dối. Hai thứ
+  // này phải đổi CÙNG NHAU.
+  //
+  // `nhap_lai` giữ lại cho đường dẫn ai đó đã lưu; nay nó cho ra CÙNG thứ tự.
+  const thuTuLead: Prisma.LeadOrderByWithRelationInput = {
+    lastInboundAt: { sort: 'desc', nulls: 'last' },
+  }
 
   const [rawLeads, total] = await Promise.all([
     sdb.lead.findMany({
@@ -343,6 +350,7 @@ export default async function LeadsPage({
       consentMarketing: lead.consentMarketing,
       createdAt: lead.createdAt.toISOString(),
       lastInboundAt: lead.lastInboundAt?.toISOString() ?? null,
+      inboundCount: lead.inboundCount,
       center: lead.center,
       courseName: lead.course?.name ?? null,
       assignedTo: lead.assignedTo,
