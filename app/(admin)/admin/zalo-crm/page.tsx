@@ -15,9 +15,8 @@
 // ⚠️ Ở GĐ0 fork CHƯA TỒN TẠI: khung nhúng sẽ trắng. Đó là KẾT QUẢ ĐÚNG, không phải lỗi —
 // thứ chặn hiển thị là header của chính ZaloCRM (`frame-ancestors`, việc F3 bên fork),
 // không phải CSP của Sata (đang là `Content-Security-Policy-Report-Only`).
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { AlertTriangle, MessageSquareText } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { checkAnyPermission } from "@/lib/auth/check-permission";
@@ -32,9 +31,9 @@ import {
 } from "@/lib/integrations/zalocrm/sso";
 import { datTruocLuongZalo } from "@/lib/integrations/zalocrm/dat-truoc";
 import { maVaiCuaNguoiDung, vaiZaloCrm } from "@/lib/integrations/zalocrm/vai-tro";
-import { cn } from "@/lib/utils";
 import { chonCoSoZaloCrm } from "./_lib/co-so";
 import { chuanHoaNguonGoc } from "./_lib/thong-diep";
+import { ChonCoSo } from "./_components/chon-co-so";
 import { ZaloCrmFrame } from "./_components/zalocrm-frame";
 
 export const metadata = { title: "Zalo CRM | Admin" };
@@ -169,50 +168,27 @@ export default async function ZaloCrmPage({
   }
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] min-h-[32rem] flex-col gap-4">
-      <header className="flex shrink-0 flex-wrap items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-soft">
-            <MessageSquareText className="h-5 w-5 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold">Zalo CRM</h1>
-            <p className="text-sm text-muted-foreground">
-              Nhắn khách bằng nick Zalo cá nhân của công ty. Mọi tin nhắn vẫn được ghi mốc
-              lên dòng thời gian của phiếu khách trên Sata.
+    <div className="flex h-[calc(100vh-8rem)] min-h-[32rem] flex-col gap-3">
+      {/* KHÔNG có tiêu đề/mô tả ở đây (chốt 07/09/2026): khung nhúng bên dưới đã mang
+          nguyên thanh điều hướng của Zalo CRM, nên một cái tiêu đề nữa vừa lặp vừa ăn
+          mất chiều cao của màn chat — thứ duy nhất người dùng thật sự nhìn.
+
+          Thanh này chỉ hiện khi CÓ việc để làm: chọn cơ sở (≥2 cơ sở) hoặc báo đã đổi
+          cơ sở. Người chỉ thuộc một cơ sở thấy khung chiếm trọn màn. */}
+      {(danhSach.length > 1 || chonKhongHopLe) && (
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
+          {chonKhongHopLe ? (
+            <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm text-amber-900">
+              Cơ sở trên đường dẫn không thuộc phạm vi của bạn — đã mở cơ sở{" "}
+              <strong>{dangChon?.ten}</strong>.
             </p>
-          </div>
+          ) : (
+            <span />
+          )}
+          {danhSach.length > 1 && dangChon && (
+            <ChonCoSo danhSach={danhSach} dangChon={dangChon.orgCode} />
+          )}
         </div>
-
-        {/* Tab cơ sở — chốt 9.7: mỗi tab là MỘT phiên SSO vào tổ chức tương ứng, nên đổi
-            tab là tải lại trang để ký vé mới (không dùng tab phía client). Chỉ hiện khi
-            người này thấy từ hai cơ sở trở lên. */}
-        {danhSach.length > 1 && (
-          <nav aria-label="Chọn cơ sở" className="flex flex-wrap gap-1 rounded-lg bg-muted p-1">
-            {danhSach.map((c) => (
-              <Link
-                key={c.orgCode}
-                href={`/zalo-crm?org=${c.orgCode}`}
-                aria-current={c.orgCode === dangChon?.orgCode ? "page" : undefined}
-                className={cn(
-                  "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                  c.orgCode === dangChon?.orgCode
-                    ? "bg-background text-foreground shadow-xs"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {c.ten}
-              </Link>
-            ))}
-          </nav>
-        )}
-      </header>
-
-      {chonKhongHopLe && (
-        <p className="shrink-0 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          Cơ sở trên đường dẫn không thuộc phạm vi của bạn — đã mở cơ sở{" "}
-          <strong>{dangChon?.ten}</strong>.
-        </p>
       )}
 
       {src && nguonGoc ? (

@@ -97,8 +97,12 @@ test.describe("[S1] Cổng vào màn Zalo CRM", () => {
       page.getByRole("heading", { name: "Không tìm thấy trang" }),
       "cờ tắt phải ra màn 404, không phải màn Zalo CRM",
     ).toBeVisible();
+    // Màn KHÔNG còn tiêu đề H1 (bỏ 07/09/2026 — khung nhúng đã mang thanh điều hướng
+    // riêng), nên soi H1 ở đây là assert rỗng, luôn xanh kể cả khi cổng cờ hỏng. Soi
+    // CHỮ trên trang: cờ tắt thì không một mẩu "Zalo CRM" nào được lọt ra, kể cả khối
+    // hướng dẫn lẫn mục sidebar.
     await expect(
-      page.getByRole("heading", { name: "Zalo CRM" }),
+      page.getByText(/Zalo CRM/),
       "cờ tắt mà vẫn dựng được màn = cổng cờ hỏng",
     ).toHaveCount(0);
     await expect(page.locator("iframe"), "cờ tắt thì không được có khung nhúng nào").toHaveCount(0);
@@ -126,11 +130,10 @@ test.describe("[S1] Cổng vào màn Zalo CRM", () => {
 
     await page.goto("/admin/zalo-crm");
     await expect(page).not.toHaveURL(/error=unauthorized/);
-    // `exact: true` là BẮT BUỘC, không phải cho gọn: khi người dùng chưa có cơ sở nào
-    // trong tầm nhìn, màn dựng thêm khối hướng dẫn có tiêu đề "Chưa mở được Zalo CRM"
-    // — chuỗi đó CHỨA "Zalo CRM" nên locator lỏng khớp 2 phần tử và Playwright ném
-    // strict mode violation. Ca này chỉ hỏi "vào được màn hay bị đá", tức tiêu đề H1.
-    await expect(page.getByRole("heading", { name: MUC_SIDEBAR, exact: true })).toBeVisible();
+    // Ca này chỉ hỏi "vào được màn hay bị đá". Trước 07/09/2026 nó soi tiêu đề H1
+    // "Zalo CRM"; H1 ấy đã bỏ (khung nhúng tự có thanh điều hướng), nên bằng chứng
+    // "đã vào được" nay là ĐỊA CHỈ đứng yên tại màn + khối hướng dẫn dựng ra bên dưới.
+    await expect(page).toHaveURL(/\/admin\/zalo-crm(\?|$)/);
 
     // Sale seed ở ca này CỐ Ý không có `UserOrgRole` ⇒ `actor.visibleCenterIds` rỗng ⇒
     // không tab nào, và màn hiện hướng dẫn thay vì khung nhúng. Đó là FAIL-CLOSED đúng

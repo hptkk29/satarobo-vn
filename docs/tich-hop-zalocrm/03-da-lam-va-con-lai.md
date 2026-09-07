@@ -70,6 +70,32 @@
   màn Tích hợp hiện đúng nick vừa sinh và đúng 5 dòng nhật ký lỗi của bài smoke.
   Khung nhúng **trắng** — đúng như thiết kế, vì `zalo.satarobo.vn` chưa tồn tại.
 
+### 3.1 Chạy thật đầu-cuối với fork dựng trên máy lẻ (07/09/2026)
+
+Fork chạy bằng Docker ở `E:/zalocrm/app` (6 dịch vụ), `ZALOCRM_APP_URL=http://localhost:3080`,
+tổ chức `cs1`. Kết quả: **Sale mở `/zalo-crm` là vào thẳng giao diện chat, không phải đăng
+nhập lần hai** — khung dựng đủ thanh điều hướng, danh sách hội thoại, ô soạn tin.
+
+Đo được, không phải nhìn:
+
+- mỗi lần mở màn ⇒ **đúng MỘT** dòng `login_success` `via=sata-sso` trong nhật ký của fork;
+- đổi cơ sở trên dropdown ⇒ URL sang `?org=cs2`, **ký vé cho tổ chức khác**, fork trả đúng
+  "Tổ chức chưa được khai mã" (máy này mới dựng org `cs1`) — tức mỗi cơ sở là một phiên riêng,
+  không dùng chung;
+- `chonCoSoZaloCrm` (ca ZC-ORG-01…09) phủ luật cách ly: `?org=` lạ rơi về cơ sở đầu, không
+  nhìn thấy cơ sở nào thì danh sách RỖNG.
+
+**Bốn lỗi phía fork lộ ra ở lượt chạy này** — tất cả đều cho ra cùng một triệu chứng "khung
+trắng, không lỗi", và đều đã vá (chi tiết ở `THAY-DOI-BAN-PHAI-SINH.md` của repo fork):
+tài khoản SSO bị nhốt ở màn đổi mật khẩu lần đầu · `/auth/sso` không được kể là endpoint
+xác thực nên 401 ở đó **xoá token của phiên vừa mở** · `/sso` thiếu trong danh sách trang
+công khai nên vé hỏng đá về /login trước khi kịp hiện lỗi · `SsoView` đổi vé hai lượt.
+
+⚠️ **Một bẫy khi tự kiểm bằng công cụ tự động:** thao tác chụp màn hình của trình duyệt
+làm **tải lại khung nhúng**, mà `src` thì vẫn mang vé cũ ⇒ hiện "Vé đăng nhập đã được dùng".
+Đó là hiện vật của công cụ đo, không phải lỗi sản phẩm: mở màn rồi để yên 30 giây, nhật ký
+chỉ có đúng một lần đổi vé. (Nay fork cũng tự chữa: vé đã dùng mà phiên còn sống thì đi tiếp.)
+
 ---
 
 ## 4. Còn lại — và ai làm
