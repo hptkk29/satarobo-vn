@@ -10,14 +10,23 @@
 # và Vercel che `DATABASE_URL` là Sensitive nên `vercel env pull` vô dụng). Mọi số đo trên dữ liệu
 # thật đều phải đi qua đây.
 #
-# ⚠️ WORKFLOW NÀY KHÔNG CÓ CHẾ ĐỘ GHI, có chủ đích. Không có input `--ghi`, không có chuỗi xác
-# nhận "GHI THAT VAO PROD" — vì nó không ghi gì cả. Script được gọi ở chế độ mặc định (chỉ đo).
-# Muốn chạy backfill thật thì phải là một workflow RIÊNG, có chuỗi xác nhận, và chỉ sau khi chủ
-# dự án duyệt cách suy (xem `docs/cham-cong/KE-HOACH-BACKFILL-SI-SO.md` §5).
+# ── BA LỚP KHOÁ, ĐỘC LẬP NHAU ───────────────────────────────────────────────────────────
+# 1. KHÔNG CÓ CHẾ ĐỘ GHI. Không input `--ghi`, không chuỗi xác nhận "GHI THAT VAO PROD" — vì
+#    không có gì để xác nhận. Cả hai script chạy ở chế độ mặc định (chỉ đo).
+# 2. KẾT NỐI BẰNG USER CHỈ-ĐỌC. File này CỐ Ý KHÔNG đọc `PROD_DATABASE_URL` /`PROD_DIRECT_URL`
+#    (hai secret đầy quyền). Nó chỉ biết `PROD_DATABASE_URL_RO`. Có gõ nhầm một dòng `run` thành
+#    lệnh ghi thì Postgres vẫn từ chối. Cách tạo user: `docs/cham-cong/USER-CHI-DOC-PROD.md`.
+# 3. SCRIPT TỰ KHAI. Dòng đầu log in `user=… · chỉ đọc / CÓ QUYỀN GHI` (`scripts/_kiem-quyen.ts`,
+#    thuần SELECT). Secret bị đặt nhầm sang chuỗi đầy quyền thì hiện ra ngay dòng đầu — GitHub
+#    không cho đọc lại secret để đối chiếu, nên đây là cách duy nhất thấy được.
 #
-# Dùng `PROD_DIRECT_URL` (session pooler :5432) chứ không `PROD_DATABASE_URL` (:6543): pgbouncer
-# không giữ prepared statement giữa các câu lệnh, và script chạy hàng trăm truy vấn liên tiếp thì
-# dính `prepared statement "sN" does not exist`. Đã ăn thật hai lần — xem `scripts/_script-db.ts`.
+# KHÔNG có bước nào chạy migration, seed, hay ghi vào DB. `prisma generate` chỉ sinh mã client
+# vào `node_modules` của runner — không chạm DB (và cũng không chạm được, user chỉ có SELECT).
+# Kết quả in ra LOG, không ghi file, không commit ngược lại repo.
+#
+# Dùng chuỗi SESSION POOLER (:5432), không phải transaction pooler (:6543): pgbouncer không giữ
+# prepared statement giữa các câu lệnh, mà script chạy hàng trăm truy vấn liên tiếp thì dính
+# `prepared statement "sN" does not exist`. Đã ăn thật hai lần — xem `scripts/_script-db.ts`.
 name: Chấm công · PROD · ĐO (chỉ đọc — không ghi gì)
 on:
   workflow_dispatch:
@@ -40,9 +49,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Kiểm tra secrets
+      - name: Kiểm secret chỉ-đọc
         run: |
-          [ -n "${{ secrets.PROD_DIRECT_URL }}" ] || { echo "::error::Thiếu secret PROD_DIRECT_URL"; exit 1; }
+          if [ -z "${{ secrets.PROD_DATABASE_URL_RO }}" ]; then
+            echo "::error::Thiếu secret PROD_DATABASE_URL_RO (chuỗi session pooler của user chỉ-đọc)."
+            echo "::error::Cách tạo user + lấy chuỗi: docs/cham-cong/USER-CHI-DOC-PROD.md"
+            echo "::error::KHÔNG đặt PROD_DATABASE_URL / PROD_DIRECT_URL vào đây — chúng đầy quyền."
+            exit 1
+          fi
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v3
         with: { version: 11 }
@@ -51,17 +65,17 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Generate Prisma client
+      - name: Sinh Prisma client (không chạm DB)
         run: pnpm exec prisma generate
 
       # Số cần nhìn nhất ở bước này: CHÊNH LỆCH giữa hai nguồn ở những buổi tính được CẢ HAI.
       # Nó đo trực tiếp độ thừa của cách "đếm ghi danh" trên dữ liệu thật, thay vì để ta suy luận.
-      - name: "Đo sĩ số biên chế của buổi cũ (chỉ đọc — KHÔNG có --ghi)"
+      - name: "Đo sĩ số biên chế của buổi cũ (chỉ đọc)"
         if: inputs.viec == 'si-so' || inputs.viec == 'tat-ca'
         run: pnpm exec tsx scripts/backfill-si-so-buoi.ts
         env:
-          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
-          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
 
       # Ba chỗ đếm "buổi dạy" nghi sai + LỖI THƯỢNG NGUỒN quan trọng hơn cả ba.
       # Đọc `docs/cham-cong/GHI-CHU-BA-CHO-DEM-BUOI-DAY.md` §2 để biết đọc số theo thứ tự nào —
@@ -70,8 +84,10 @@ jobs:
         if: inputs.viec == 'buoi-day' || inputs.viec == 'tat-ca'
         run: pnpm exec tsx scripts/do-lech-buoi-day.ts
         env:
-          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
-          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
 
-      - name: Nhắc lại là không ghi gì
-        run: echo "Workflow này chỉ ĐỌC. Không có bước nào ghi vào DB prod."
+      - name: Nhắc lại
+        run: |
+          echo "Workflow này chỉ ĐỌC, bằng user chỉ-đọc. Không bước nào ghi vào DB prod."
+          echo "Nếu số đo ra 0 bất thường: xem docs/cham-cong/USER-CHI-DOC-PROD.md mục 'Nếu số đo ra 0'."

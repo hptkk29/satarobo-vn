@@ -5,7 +5,7 @@
 | **Ngày** | 07/09/2026 |
 | **Trạng thái** | 📋 **KHÔNG SỬA trong phạm vi đợt này.** Ghi lại để không trôi |
 | **Script đo** | `scripts/do-lech-buoi-day.ts` — chỉ đọc, không có chế độ ghi |
-| **Chạy trên prod** | Workflow `Chấm công — ĐO trên prod (chỉ đọc)`, chọn `viec = buoi-day` |
+| **Chạy trên prod** | Workflow `Chấm công · PROD · ĐO (chỉ đọc — không ghi gì)`, chọn `viec = buoi-day`. Chạy bằng user **chỉ-đọc** — xem `USER-CHI-DOC-PROD.md` |
 
 **Chuẩn so sánh (K-05):** chuỗi ưu tiên người đứng lớp của module chấm công —
 `actualTeacherId ?? substituteTeacherId ?? class.teacherId`
@@ -98,7 +98,7 @@ pnpm tsx scripts/do-lech-buoi-day.ts                 # 4 tháng gần nhất
 pnpm tsx scripts/do-lech-buoi-day.ts 2026-06 2026-10 # khoảng chỉ định
 ```
 
-Trên **prod**: bấm workflow `Chấm công — ĐO trên prod (chỉ đọc)`, chọn `viec = buoi-day`.
+Trên **prod**: bấm workflow `Chấm công · PROD · ĐO (chỉ đọc — không ghi gì)`, chọn `viec = buoi-day`. Dòng đầu log phải là `[quyen] user=satarobo_readonly · chỉ đọc` — thấy `CÓ QUYỀN GHI` là secret trỏ nhầm, dừng lại.
 
 **Đọc số theo thứ tự này:**
 

@@ -24,6 +24,7 @@
 // `_load-env` phải chạy TRƯỚC `_script-db` — Prisma đọc DATABASE_URL ngay lúc khởi tạo module.
 import { currentDbHost } from "./_load-env";
 import { scriptDb } from "./_script-db";
+import { inQuyen, kiemQuyen } from "./_kiem-quyen";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "../lib/enrollment-status";
 
 const GHI = process.argv.includes("--ghi");
@@ -61,6 +62,7 @@ async function main() {
   // In host TRƯỚC mọi thứ: script này có chế độ ghi, và chạy nhầm DB là chuyện đã xảy ra trong
   // repo này. Thấy host lạ thì Ctrl-C.
   console.log(`[backfill-si-so] DB: ${currentDbHost()} · chế độ: ${GHI ? "GHI THẬT" : "chỉ ĐO"}`);
+  inQuyen(await kiemQuyen(db), GHI);
 
   const buoi = await db.classSession.findMany({
     where: { status: "COMPLETED", rosterSize: null },
@@ -70,6 +72,17 @@ async function main() {
 
   console.log(`[backfill-si-so] ${buoi.length} buổi COMPLETED chưa có sĩ số.`);
   if (buoi.length === 0) {
+    // 0 có thể là sự thật, mà cũng có thể là user chỉ-đọc đang bị RLS lọc sạch. Phân biệt bằng
+    // tổng số buổi — nếu CẢ BẢNG cũng ra 0 trên prod thì đó không phải sự thật.
+    const tongMoiBuoi = await db.classSession.count();
+    if (tongMoiBuoi === 0) {
+      console.log(
+        "[backfill-si-so] ⚠️ Bảng ClassSession đọc ra 0 dòng. Trên prod đó KHÔNG phải sự thật —\n" +
+          "        nhiều khả năng user chỉ-đọc đang bị Row Level Security lọc sạch.\n" +
+          '        Xem docs/cham-cong/USER-CHI-DOC-PROD.md mục "Nếu số đo ra 0".',
+      );
+      return;
+    }
     console.log("[backfill-si-so] Không có gì để làm.");
     return;
   }

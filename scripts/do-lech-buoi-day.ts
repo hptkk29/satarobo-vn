@@ -16,6 +16,7 @@
 // `_load-env` phải chạy TRƯỚC `_script-db` — Prisma đọc DATABASE_URL ngay lúc khởi tạo module.
 import { currentDbHost } from "./_load-env";
 import { scriptDb } from "./_script-db";
+import { inQuyen, kiemQuyen } from "./_kiem-quyen";
 
 const db = scriptDb();
 
@@ -39,6 +40,7 @@ async function main() {
   const to = mocThang(process.argv[3], macTo);
 
   console.log(`[do-lech] DB: ${currentDbHost()} · CHỈ ĐỌC`);
+  inQuyen(await kiemQuyen(db), false);
   console.log(`[do-lech] Khoảng: ${from.toISOString().slice(0, 10)} → ${to.toISOString().slice(0, 10)} (nửa mở)\n`);
 
   // ══ 0. LỖI THƯỢNG NGUỒN — đo TRƯỚC, vì nó quyết định ba số dưới có nghĩa hay không ══
@@ -60,6 +62,15 @@ async function main() {
     },
   });
   const xong = buoi.filter((b) => b.status === "COMPLETED");
+
+  // 0 dòng trên prod KHÔNG phải sự thật — nhiều khả năng RLS đang lọc sạch với user chỉ-đọc.
+  if (buoi.length === 0) {
+    console.log(
+      "\n⚠️ Không đọc được buổi nào trong khoảng. Nếu đây là prod thì con số 0 này KHÔNG phải sự\n" +
+        '   thật — xem docs/cham-cong/USER-CHI-DOC-PROD.md mục "Nếu số đo ra 0".',
+    );
+    return;
+  }
 
   const daBiNuot = xong.filter(
     (b) =>

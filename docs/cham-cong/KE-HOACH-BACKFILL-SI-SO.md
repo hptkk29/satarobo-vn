@@ -130,7 +130,7 @@ Bản đo in ra:
 | Buổi 0 ghi danh / bẫy dòng lẻ | phần rơi xuống `UNKNOWN` |
 | Phân bố sĩ số ra được theo bậc 1-4 / 5-8 / 9-12 / ≥13 | vì đây là bậc quyết định đơn giá PL04 — lệch một bậc là lệch tiền |
 
-**Trên PROD:** bấm tay workflow **`Chấm công — ĐO trên prod (chỉ đọc)`** (`cham-cong-do-prod.yml`),
+**Trên PROD:** bấm tay workflow **`Chấm công · PROD · ĐO (chỉ đọc — không ghi gì)`** (`cham-cong-prod-do-chi-doc.yml`),
 chọn `viec = si-so`. Workflow đó **không có chế độ ghi** — không input `--ghi`, không chuỗi xác
 nhận, vì nó không ghi gì cả. Chạy backfill thật sẽ là một workflow RIÊNG, có chuỗi xác nhận, và
 chỉ dựng sau khi §5 dưới đây có trả lời.
