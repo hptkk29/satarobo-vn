@@ -84,7 +84,7 @@ const adjustSchema = z.object({
   // Nó là một ô GHI MỞ mà không giao diện nào dùng: `payments-client.tsx:747` chỉ gửi
   // paymentId/amount/reason/expectedUpdatedAt. Nhưng Server Action là endpoint HTTP
   // riêng — ai gọi thẳng vẫn đặt được `method: "BANK_CS2"` và `adjustPayment` ghi
-  // nguyên chuỗi đó vào bút toán ADJUSTED mới (lib/finance/payment.ts:558
+  // nguyên chuỗi đó vào bút toán điều chỉnh mới (lib/finance/payment.ts
   // `method: params.method ?? original.method`), KHÔNG qua cổng cơ sở nào. Tức đây là
   // đường ghi `Payment.method` thứ hai, và nó lách trọn cổng vừa dựng ở
   // `recordPaymentAction`. Bỏ hẳn rẻ hơn và chặt hơn dựng cổng thứ hai: bút toán điều

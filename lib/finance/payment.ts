@@ -547,30 +547,17 @@ export async function rejectPayment(params: {
  * Điều chỉnh 1 khoản: KHÔNG mutate bản gốc — tạo bản ghi MỚI accountantStatus=ADJUSTED
  * trỏ adjustmentOfId=gốc. reason BẮT BUỘC. `amount` mới (mặc định = amount gốc).
  *
- * ⚠️ LỖ HỔNG ĐÃ BIẾT, CHƯA VÁ — CẦN QUYẾT ĐỊNH NGHIỆP VỤ (ghi nhận 06/09/2026)
+ * ⚠️ ĐANG VIẾT LẠI — hàm này hiện KHÔNG gọi tới được (07/09/2026).
  *
- * Không nơi nào ĐỌC bút toán `ADJUSTED`. Cổng phụ huynh cộng tiền theo đúng một điều
- * kiện `accountantStatus === "CONFIRMED"` (lib/portal/billing.ts:152 · billing-student.ts:72
- * · dashboard.ts qua computeEnrollmentDebt). Sau một lần điều chỉnh:
- *   · bản GỐC vẫn CONFIRMED với số tiền CŨ  → vẫn được cộng;
- *   · bản MỚI mang ADJUSTED với số tiền ĐÚNG → không được cộng.
- * ⇒ số tiền đã sửa KHÔNG BAO GIỜ tới phụ huynh; công nợ giữ nguyên con số cũ. Cũng
- * không có nút nào xác nhận bản ADJUSTED: `confirmPayment` từ chối trạng thái đó.
+ * Cầu dao `ADJUST_PAYMENT_DISABLED` (lib/finance/cau-dao-dieu-chinh.ts) chặn ở dòng đầu
+ * `adjustPaymentAction`, nên đường từ giao diện đã đóng. Thân hàm dưới đây vẫn là MÔ
+ * HÌNH CŨ: ghi `amount` là SỐ TUYỆT ĐỐI. Bước 3 thay bằng mô hình delta —
+ * `delta = correctAmount − (amount gốc + Σ các ADJUSTMENT đang trỏ vào nó)`, dòng mới
+ * mang `accountantStatus = CONFIRMED` và `amount` được phép ÂM.
  *
- * Vì sao chưa vá ở đợt này: đây là câu hỏi CHÍNH SÁCH SỔ SÁCH, không phải lỗi hiển thị —
- * "điều chỉnh" là THAY THẾ bản gốc hay là một bút toán CỘNG THÊM? Hai cách đọc ra hai
- * con số khác nhau, và phép cộng tiền còn nằm ở cả phía kế toán (đối soát sao kê) chứ
- * không riêng cổng phụ huynh; sửa một bên là hai bên lệch nhau.
- *
- * Đo trên DB làm việc 06/09: **0 bút toán ADJUSTED, 0 REFUNDED** — lỗi đang ở dạng TIỀM
- * ẨN, chưa gây thiệt hại. Nhưng lần đầu kế toán bấm "Điều chỉnh" trên PROD là nó nổ.
- *
- * Hai đường vá khả dĩ, chọn xong mới làm:
- *   (a) Đường ĐỌC: "khoản hiệu lực" = bản CONFIRMED chưa bị bút toán ADJUSTED/REFUNDED
- *       nào trỏ tới, CỘNG các bản ADJUSTED. Gói vào MỘT helper dùng chung cho cả cổng
- *       phụ huynh lẫn màn kế toán, kèm test bảng biên.
- *   (b) Đường GHI: `adjustPayment` đặt bản gốc sang REJECTED/ADJUSTED và bản mới sang
- *       PENDING để kế toán xác nhận tiếp (hoặc CONFIRMED thẳng khi gốc đã CONFIRMED).
+ * Đã làm ở Bước 2 (migration 20260907090000): loại bút toán chuyển sang cột riêng
+ * `paymentType`, `accountantStatus` thôi mang giá trị `ADJUSTED`. Dòng sinh ra tạm để
+ * `PENDING` để KHÔNG đổi con số nào trước khi logic delta có mặt.
  */
 export async function adjustPayment(params: {
   paymentId: string;
@@ -614,7 +601,15 @@ export async function adjustPayment(params: {
         paidDate: original.paidDate,
         note: params.note ?? original.note,
         saleStatus: original.saleStatus,
-        accountantStatus: "ADJUSTED",
+        // 07/09 — LOẠI bút toán nay ở cột riêng; `accountantStatus` chỉ còn là trạng
+        // thái. Xem migration 20260907090000.
+        paymentType: "ADJUSTMENT",
+        // ⚠️ TẠM để PENDING, KHÔNG phải CONFIRMED. `amount` ở đây vẫn đang là SỐ TUYỆT
+        // ĐỐI của mô hình cũ; để CONFIRMED là trục A cộng cả dòng gốc lẫn dòng này ⇒
+        // nhân đôi tiền. PENDING giữ nguyên hành vi cũ (ADJUSTED cũng không được trục A
+        // cộng), nên bước này KHÔNG đổi một con số nào. Bước 3 viết lại theo delta rồi
+        // mới chuyển sang CONFIRMED.
+        accountantStatus: "PENDING",
         recordedById: original.recordedById,
         confirmedById: params.confirmedById,
         confirmedAt: now,
@@ -629,7 +624,8 @@ export async function adjustPayment(params: {
       entityId: adj.id,
       action: "CREATE",
       newValues: {
-        accountantStatus: "ADJUSTED",
+        paymentType: "ADJUSTMENT",
+        accountantStatus: "PENDING",
         adjustmentOfId: original.id,
         amount,
       },

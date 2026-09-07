@@ -48,8 +48,9 @@ test → phải tự dựng fixture, xem Bước 6.
 - [x] **Bước 1b** — vá 3 chỗ cộng tiền quên `deletedAt` (đang sai 0 đ, tiềm ẩn);
       `take: 5000` cắt câm → trần 50.000 + cảnh báo đầu trang.
 - [x] **Bước 1c** — cầu dao `ADJUST_PAYMENT_DISABLED` (chặn cả SUPER_ADMIN).
-- [ ] **Bước 2** — thêm `paymentType: PAYMENT | ADJUSTMENT`; bỏ `ADJUSTED` khỏi enum
-      `accountantStatus`; backfill `paymentType = PAYMENT`.
+- [x] **Bước 2** — thêm `paymentType: PAYMENT | ADJUSTMENT`; bỏ `ADJUSTED` khỏi enum
+      `accountantStatus`; backfill `paymentType = PAYMENT`
+      (migration `20260907090000`, có `down.sql` chạy tay).
 - [ ] **Bước 3** — viết lại `adjustPayment` theo delta + tách `updatePendingPayment`.
 - [ ] **Bước 3b** — UI: nói rõ "số đúng của DÒNG NÀY", hiện delta trước khi lưu.
 - [ ] **Bước 4** — một predicate dùng chung; `computeEnrollmentDebt` là nhà duy nhất.
@@ -82,6 +83,10 @@ test → phải tự dựng fixture, xem Bước 6.
   `lib/finance/payment.ts:262`) **SỬA `amount` của dòng gốc**. Chỉ đúng khi dòng còn
   PENDING/RECORDED ("PENDING là nháp"). Bước 3 phải thêm assertion chặn cứng nếu nó chạy
   trúng dòng CONFIRMED.
+- **Ràng buộc DB trên `Payment.amount`:** chỉ có `payment_amount_nonzero: CHECK (amount <> 0)`
+  (`migrations/20260617040000_check_constraints`). Cột là `integer` CÓ DẤU — **không có gì
+  chặn số âm**, nên `amount = delta` âm lưu được. Ràng buộc này còn CỘNG HƯỞNG với luật
+  "delta = 0 thì không tạo bản ghi": DB tự chặn nếu code quên.
 - **Mọi dòng CONFIRMED đều có `enrollmentId`** — `confirmPayment:400` từ chối xác nhận
   khoản chưa gắn ghi danh. Nên `sumConfirmed(enrollmentId)` không thể sót tiền đã xác nhận.
   Trục B thì `enrollmentId` có thể null (`payos-ingest.ts:1044` không bao giờ set) ⇒

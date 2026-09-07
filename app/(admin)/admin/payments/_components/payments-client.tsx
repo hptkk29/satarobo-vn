@@ -98,14 +98,12 @@ const ACC_LABEL: Record<string, string> = {
   CONFIRMED: "Đã xác nhận",
   REJECTED: "Từ chối",
   REFUNDED: "Đã hoàn",
-  ADJUSTED: "Điều chỉnh",
 };
 const ACC_BADGE: Record<string, string> = {
   PENDING: "bg-state-warning-soft text-state-warning-ink hover:bg-state-warning-soft",
   CONFIRMED: "bg-state-success-soft text-state-success-ink hover:bg-state-success-soft",
   REJECTED: "bg-state-danger-soft text-state-danger-ink hover:bg-state-danger-soft",
   REFUNDED: "bg-primary-soft text-primary hover:bg-primary-soft",
-  ADJUSTED: "bg-primary-soft text-primary hover:bg-primary-soft",
 };
 
 // ⚠️ 30/08/2026 — đây KHÔNG còn là danh sách để CHỌN. Danh sách chọn nay đọc từ DB
