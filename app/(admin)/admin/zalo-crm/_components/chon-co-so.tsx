@@ -51,7 +51,9 @@ export function ChonCoSo({
     >
       <SelectTrigger
         aria-label="Chọn cơ sở"
-        className="h-9 w-full min-w-0 sm:w-[260px]"
+        // `max-w-full` chứ không `w-full`: ở màn 375px thanh này nằm cùng hàng với dòng
+        // cảnh báo, để `w-full` là nó chiếm trọn hàng và đẩy cảnh báo xuống một dòng trống.
+        className="h-9 w-[240px] max-w-full"
       >
         <span className="flex min-w-0 items-center gap-2">
           <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
