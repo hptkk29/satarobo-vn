@@ -289,25 +289,29 @@ export async function saveClassAttendanceAction(
   try {
     // Song song CÓ TRẦN — mỗi HV một lượt độc lập; nối đuôi thì GV bấm Lưu phải chờ hết
     // 20 vòng truy vấn mới thấy phản hồi.
-    await mapWithConcurrency(plans, 5, async ({ r, makeupStatus, absenceReason }) => {
-      if (makeupStatus === "NEEDS_MAKEUP") {
-        await createMakeupNeed({
-          studentId: r.studentId,
-          missedSessionId: data.sessionId,
-          createdById: actorId,
-          note: absenceReason,
-          // Chuyển trạng thái THẬT: trước lần lưu này HV chưa ở diện cần bù. Lưu lại một
-          // buổi vốn đã NEEDS_MAKEUP thì không dựng dậy nhu cầu mà quản lý vừa huỷ tay.
-          reviveCancelled:
-            existingBy.get(r.studentId)?.makeupStatus !== "NEEDS_MAKEUP",
-        });
-      } else if (!isAbsent(r.status)) {
-        await cancelPendingMakeupNeed({
-          studentId: r.studentId,
-          missedSessionId: data.sessionId,
-        });
-      }
-    });
+    await mapWithConcurrency(
+      plans,
+      5,
+      async ({ r, makeupStatus, absenceReason }) => {
+        if (makeupStatus === "NEEDS_MAKEUP") {
+          await createMakeupNeed({
+            studentId: r.studentId,
+            missedSessionId: data.sessionId,
+            createdById: actorId,
+            note: absenceReason,
+            // Chuyển trạng thái THẬT: trước lần lưu này HV chưa ở diện cần bù. Lưu lại một
+            // buổi vốn đã NEEDS_MAKEUP thì không dựng dậy nhu cầu mà quản lý vừa huỷ tay.
+            reviveCancelled:
+              existingBy.get(r.studentId)?.makeupStatus !== "NEEDS_MAKEUP",
+          });
+        } else if (!isAbsent(r.status)) {
+          await cancelPendingMakeupNeed({
+            studentId: r.studentId,
+            missedSessionId: data.sessionId,
+          });
+        }
+      },
+    );
   } catch (err) {
     console.error("[saveClassAttendanceAction] makeup:", err);
   }
@@ -352,18 +356,25 @@ export async function saveClassAttendanceAction(
   // Best-effort: điểm danh ĐÃ lưu rồi, đóng buổi hỏng không được biến thành
   // "không lưu được điểm danh" trước mắt giáo viên.
   try {
-    const [siSo, daDanhDau] = await Promise.all([
-      xdb.enrollment.count({
+    // Lấy DANH SÁCH studentId, không phải số đếm (08/09/2026). Học viên HỌC BÙ từ lớp
+    // khác cũng sinh dòng `Attendance` cho buổi này, nên đếm thô sẽ bù chỗ cho một em
+    // trong sĩ số chưa được đánh dấu — xem `quyetDinhTuHoanTat`.
+    const [siSoRows, daDanhDauRows] = await Promise.all([
+      xdb.enrollment.findMany({
         where: { classId: sess.classId, ...rosterWhere("dang-hoc") },
+        select: { studentId: true },
       }),
-      xdb.attendance.count({ where: { sessionId: data.sessionId } }),
+      xdb.attendance.findMany({
+        where: { sessionId: data.sessionId },
+        select: { studentId: true },
+      }),
     ]);
     const qd = quyetDinhTuHoanTat({
       trangThaiBuoi: sess.status,
       ngayBuoi: sess.date,
       homNayUtcMs: vnDateOnly(new Date()).getTime(),
-      siSo,
-      daDanhDau,
+      siSoStudentIds: siSoRows.map((r) => r.studentId),
+      daDanhDauStudentIds: daDanhDauRows.map((r) => r.studentId),
     });
     if (qd.tuHoanTat) {
       // Đi qua `completeSession` chứ KHÔNG `update({status})` trần: hàm đó còn ghi
@@ -432,12 +443,19 @@ export async function saveClassAttendanceAction(
 //
 // Luật nằm ở `lib/lms/chot-buoi.ts` — dùng CHUNG với admin. Ở đây chỉ còn xác thực
 // + revalidate đúng đường của site GV.
-export async function chotBuoiAction(sessionId: string): Promise<ChotBuoiKetQua> {
+export async function chotBuoiAction(
+  sessionId: string,
+): Promise<ChotBuoiKetQua> {
   const session = await auth();
   if (!session?.user?.id) return { ok: false, error: "Chưa đăng nhập" };
 
   const { actorId, actorName } = getAuditActor(session);
-  const res = await chotBuoi({ sessionId, actorUserId: session.user.id, actorId, actorName });
+  const res = await chotBuoi({
+    sessionId,
+    actorUserId: session.user.id,
+    actorId,
+    actorName,
+  });
   if (!res.ok) return res;
 
   revalidatePath("/teacher/lop");
