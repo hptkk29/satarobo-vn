@@ -132,7 +132,7 @@ function KioskStage({ onExit, ...props }: KioskStageProps & { onExit: () => void
                 className="aspect-square w-full max-w-[min(70vh,720px)] rounded-2xl"
               />
             ) : (
-              // `<img>` thuần: nguồn là data URL đổi mỗi phút, không có gì để tối ưu.
+              // `<img>` thuần: nguồn là data URL sinh tại chỗ, không có gì để tối ưu.
               <img
                 src={qr.snap.qrDataUrl}
                 alt="Mã QR chấm công"

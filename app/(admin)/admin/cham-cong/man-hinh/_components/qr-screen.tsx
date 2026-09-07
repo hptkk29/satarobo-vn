@@ -284,7 +284,7 @@ export function QrScreen(props: KioskFailProps) {
       {qr.status === "loading" || !qr.snap ? (
         <Skeleton aria-busy aria-label="Đang tải mã QR…" className="aspect-square w-60 rounded-xl" />
       ) : (
-        // `<img>` thuần, KHÔNG `next/image`: nguồn là data URL đổi mỗi phút — tối ưu ảnh vô nghĩa.
+        // `<img>` thuần, KHÔNG `next/image`: nguồn là data URL sinh tại chỗ — tối ưu ảnh vô nghĩa.
         <img
           src={qr.snap.qrDataUrl}
           alt="Mã QR chấm công"
