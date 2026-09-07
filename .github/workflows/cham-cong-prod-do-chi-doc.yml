@@ -39,6 +39,7 @@ on:
         options:
           - si-so
           - buoi-day
+          - backlog
           - tat-ca
 concurrency:
   group: cham-cong-prod-do-chi-doc
@@ -116,6 +117,17 @@ jobs:
       - name: "Đo chênh lệch ba chỗ đếm buổi dạy (chỉ đọc)"
         if: ${{ !cancelled() && (inputs.viec == 'buoi-day' || inputs.viec == 'tat-ca') }}
         run: pnpm exec tsx scripts/do-lech-buoi-day.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+
+      # Backlog buổi đã qua ngày mà chưa chốt: bao nhiêu buổi THOẢ cổng tự đóng ĐÃ SỬA
+      # (4df347b4 so ngày · a94e5aa7 giao tập studentId). Số này quyết định có nên viết
+      # script đóng hàng loạt hay không — phần lớn KHÔNG thoả thì đóng chúng là bịa dữ liệu.
+      # Script dùng CHÍNH `quyetDinhTuHoanTat`, không chép lại luật.
+      - name: "Đo backlog buổi chưa chốt (chỉ đọc)"
+        if: ${{ !cancelled() && (inputs.viec == 'backlog' || inputs.viec == 'tat-ca') }}
+        run: pnpm exec tsx scripts/do-backlog-buoi-chua-chot.ts
         env:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
           DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
