@@ -106,3 +106,55 @@ Cách xác minh rẻ nhất, theo thứ tự:
 3. chạy chính hàm đó với **một giá trị thật lấy từ DB**, in ra quyết định.
 
 Bước 3 là bước biến "tôi nghĩ" thành "tôi đo".
+
+---
+
+## Luật 4 — fixture phải mang HÌNH DẠNG của dữ liệu thật
+
+> **Dữ liệu tròn trịa trong test là dữ liệu không kiểm được gì.**
+
+Nửa đêm đúng chằn, sĩ số 10, số tiền 100.000, chuỗi `"abc"` — chúng làm test dễ đọc và
+làm test **mù đúng chỗ nguy hiểm nhất**. Hình dạng phải lấy từ phép đo, và **chú thích
+kèm phép đo đó** để người sau không "dọn cho gọn".
+
+> **Sự cố sinh ra luật (07/09/2026).** Ca `"buổi HÔM NAY cũng đóng được"` truyền
+> `Date.UTC(2026,8,4)` — **đúng nửa đêm**. Trên DB không có buổi nào như vậy: đo
+> `satarobo_local`, **0/609 buổi nửa đêm**, dải thật **01:00–11:00 UTC** (VN 08:00–18:00).
+> Cổng `ngayBuoi > vnDateOnly(now)` vì thế xanh trong test và **luôn sai trên prod**.
+> Cơ chế tự đóng buổi sống 3 ngày, đóng được đúng 1 buổi.
+
+**Cách làm, theo thứ tự:**
+
+1. đo hình dạng bằng một câu `psql` (`count(*) FILTER`, `min`, `max`) — **đừng lấy mẫu
+   một dòng**, một dòng không nói lên phân bố;
+2. dựng helper fixture theo dải đo được, **kèm số đo trong chú thích**;
+3. thêm ít nhất một ca **RANH GIỚI** của dải đó (buổi muộn nhất trong ngày vs buổi sớm
+   nhất ngày kế), vì lỗi lệch-một-bậc chỉ lộ ở rìa.
+
+### Bẫy cụ thể của repo này: `date` KHÔNG cùng kiểu giữa các bảng
+
+**9 model** có cột `date` kiểu `@db.Date` (nửa đêm là ĐÚNG):
+`Holiday` · `ShiftBriefNote` · `ShiftRegistration` · `TimesheetAdjustmentRequest` ·
+`TimesheetEditLog` · `TrialClassSession` · `CenterDayChecklist` · `AdsInsightDaily`.
+
+**Đúng MỘT model** có `date` là `@db.Timestamptz(6)` — và nó là cái bận rộn nhất:
+
+```prisma
+model ClassSession {
+  date  DateTime @db.Timestamptz(6)   // MANG GIỜ THẬT
+}
+```
+
+Khớp theo TÊN CỘT là sai. Đáng chú ý hơn: `TrialClassSession.date` là date-only còn
+`ClassSession.date` thì không — **hai loại buổi học, hai hình dạng ngày**.
+
+Cùng họ: `workDate` (chấm công), `dob`, `fromDate`/`toDate` (đơn từ), `effectiveFrom`/
+`effectiveTo` đều là `@db.Date` ⇒ nửa đêm ở đó là đúng, đừng "sửa" chúng theo luật này.
+
+### Kết quả rà 08/09/2026
+
+| Trạng thái | Chỗ |
+|---|---|
+| ❌ **Sai hình dạng — đã vá** | `lib/classes/adjust.test.ts` — `new Date(\`${s}T00:00:00\`)`: nửa đêm **và** thiếu `Z` (⇒ đọc theo múi giờ MÁY, dev +07 vs CI UTC ra hai thời điểm) |
+| ✅ Đã đúng | `lib/lms/session-order.test.ts` (`T01:00:00Z`) · `lib/classes/default-session.test.ts` (`T11:00:00Z`) · `lib/portal/buoi-hoc.test.ts` · `lib/portal/feedback.test.ts` · `lib/classes/phases.test.ts` (qua `vnDateAt`) |
+| ✅ Nửa đêm ĐÚNG (cột `@db.Date`) | `lib/cham-cong/generate.test.ts` · `tests/cham-cong/*.spec.ts` (`workDate`) · `lib/classes/schedule.test.ts` (`Holiday.date`) · `lib/lms/trial-row-status.test.ts` (`TrialClassSession.date`) · `lib/media-review/deadline.test.ts` · `lib/students/birthday-dates.test.ts` (`dob`) |
