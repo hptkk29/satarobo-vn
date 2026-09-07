@@ -514,6 +514,17 @@ export async function rejectPaymentAction(
 // ─── ADJUST (Kế toán điều chỉnh — bút toán mới trỏ adjustmentOfId) ───────
 export async function adjustPaymentAction(input: unknown) {
   const session = await requireAccountant();
+  // ⚠️ KHOÁ TẠM 07/09/2026 — `payments:adjust` hiện KHÔNG cấp cho vai nào
+  // (lib/auth/permissions.ts). Server Action là endpoint HTTP riêng: ẩn nút ở giao diện
+  // là chưa đủ, phải chặn ở đây. Xem lý do đầy đủ tại chỗ khai quyền.
+  if (!(await checkPermission("payments:adjust"))) {
+    return {
+      ok: false as const,
+      error:
+        "Chức năng Điều chỉnh đang tạm khoá để sửa lỗi bút toán. Cần sửa số thì từ chối " +
+        "khoản này rồi ghi nhận lại khoản mới.",
+    };
+  }
   const parsed = adjustSchema.safeParse(input);
   if (!parsed.success) {
     return {

@@ -140,6 +140,7 @@ export function PaymentsClient({
   orders,
   methods,
   canConfirm,
+  canAdjust,
   canRecord,
   canViewPii,
 }: {
@@ -148,6 +149,8 @@ export function PaymentsClient({
   /** Danh mục phương thức đọc từ DB, đã lọc theo tầm nhìn cơ sở của người xem. */
   methods: MethodOption[];
   canConfirm: boolean;
+  /** 07/09 — nút "Điều chỉnh" đang khoá; xem chú thích ở lib/auth/permissions.ts. */
+  canAdjust: boolean;
   canRecord: boolean;
   canViewPii: boolean;
 }) {
@@ -344,7 +347,11 @@ export function PaymentsClient({
                     <TableCell className="text-right">
                       {p.accountantStatus === "PENDING" ? (
                         p.enrollmentId ? (
-                          <RowActions paymentId={p.id} updatedAt={p.updatedAt} />
+                          <RowActions
+                            paymentId={p.id}
+                            updatedAt={p.updatedAt}
+                            canAdjust={canAdjust}
+                          />
                         ) : (
                           // Đơn chưa convert → chưa gắn ghi danh → confirm sẽ lỗi. Chờ convert.
                           // Lời giải thích trước đây nằm ở `title=""` của trình duyệt:
@@ -718,9 +725,11 @@ function handleStale(): void {
 function RowActions({
   paymentId,
   updatedAt,
+  canAdjust,
 }: {
   paymentId: string;
   updatedAt: string;
+  canAdjust: boolean;
 }) {
   const [mode, setMode] = useState<null | "reject" | "adjust">(null);
   const [reason, setReason] = useState("");
@@ -832,14 +841,18 @@ function RowActions({
           <Check className="h-3.5 w-3.5" />
         )}
       </Button>
-      <Button
-        size="sm"
-        variant="outline"
-        onClick={() => setMode("adjust")}
-        title="Điều chỉnh"
-      >
-        <Pencil className="h-3.5 w-3.5" />
-      </Button>
+      {/* 07/09 — ẩn khi thiếu `payments:adjust` (hiện KHÔNG vai nào có). Server Action
+          cũng tự chặn: ẩn nút chỉ là lớp ngoài, endpoint vẫn gọi thẳng được. */}
+      {canAdjust && (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setMode("adjust")}
+          title="Điều chỉnh"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </Button>
+      )}
       <Button
         size="sm"
         variant="destructive"

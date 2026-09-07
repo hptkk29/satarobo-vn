@@ -23,6 +23,15 @@ export const financeModule: ModuleDecl = {
       description: "Kế toán xác nhận khoản thu (tách nhiệm vụ với record).",
     },
     {
+      key: "payments:adjust",
+      action: "adjust",
+      description:
+        "Điều chỉnh khoản thu đã xác nhận. ĐANG KHOÁ 07/09/2026 — chưa cấp cho vai nào " +
+        "(xem chú thích ở lib/auth/permissions.ts): bút toán điều chỉnh hiện ghi số tuyệt " +
+        "đối nên rơi khỏi trục kế toán và bị cộng đôi ở trục ghi nhận. Chỉ mở lại sau khi " +
+        "viết lại theo mô hình delta và bộ test xanh.",
+    },
+    {
       key: "payments:view-pii",
       action: "view-pii",
       // Field thật đang mask: Student.parentNationalId + Student.address

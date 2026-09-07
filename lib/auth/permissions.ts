@@ -279,6 +279,7 @@ export type Action =
   | "payments:view" // 03/08 — chỉ XEM đối soát (Công nợ, Biến động số dư); không thao tác
   | "payments:record" // R7-04 — Sale ghi nhận khoản
   | "payments:confirm" // R7-04 — Kế toán xác nhận (tách nhiệm vụ)
+  | "payments:adjust" // 07/09 — ĐIỀU CHỈNH khoản thu. ĐANG KHOÁ: không vai nào có (xem PERMISSIONS)
   | "payments:view-pii" // #15 (câu 32) — break-glass xem đầy đủ CCCD PH + địa chỉ (reason + audit)
   | "installments:approve" // FIX lead→payment→enroll (C4) — duyệt kế hoạch trả góp 2 đợt
   | "discounts:approve" // BGĐ 31/07 — duyệt giảm giá nhập tay (kèm giải trình)
@@ -672,6 +673,35 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "payments:view": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
   "payments:record": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT"],
   "payments:confirm": ["SUPER_ADMIN", "ACCOUNTANT"],
+  // ⚠️ 07/09/2026 — DANH SÁCH RỖNG LÀ CỐ Ý. Đây là KHOÁ TẠM cho nút "Điều chỉnh".
+  //
+  // Bút toán điều chỉnh hiện ghi SỐ TUYỆT ĐỐI vào một dòng Payment mới mang
+  // `accountantStatus = ADJUSTED` (lib/finance/payment.ts:612), mà không phép cộng tiền
+  // nào trong hệ đọc trạng thái đó ⇒ số kế toán vừa sửa không tới được phụ huynh; còn
+  // trục `saleStatus = RECORDED` (QR · webhook SePay · ZNS · cổng chốt lead) thì lại cộng
+  // CẢ dòng gốc lẫn dòng điều chỉnh ⇒ nhân đôi tiền. Đo 07/09: 0 bút toán ADJUSTED ở cả
+  // ba môi trường (local · dev/test · prod) — lỗi TIỀM ẨN, nổ lần đầu có người bấm nút.
+  //
+  // Khoá ở đây để đóng băng hiện trạng trong lúc viết lại theo mô hình delta. Mở lại =
+  // điền vai vào danh sách này (và cấp key tương ứng trong RBAC v2) SAU KHI bộ test của
+  // Bước 6 xanh.
+  //
+  // ⚠️ CHỈ SUPER_ADMIN — và đó là CỐ Ý, không phải sót.
+  //
+  // Bản đầu của khoá này để danh sách RỖNG. Nhưng repo có một bất biến: mọi action phải
+  // cấp cho SUPER_ADMIN, canh bằng `permissions.test.ts` ("SUPER_ADMIN phủ toàn bộ
+  // action (khớp bypass v2)"). Lý do ghi ngay tại đó: `can()` v2 (lib/auth/can.ts:52)
+  // trả true VÔ ĐIỀU KIỆN cho SUPER_ADMIN, nên v1 thiếu SUPER_ADMIN là mỗi lượt admin
+  // chạm call-site đẻ một dòng `RbacShadowDiff` (v1=false, v2=true) và cổng
+  // `isSafeToEnableRbacV2` không bao giờ về 0. Ngoại lệ duy nhất đang có (`chat:send`)
+  // đòi một quyết định cấp US-15 AC4 và ghi rõ "KHÔNG được phình ra".
+  //
+  // Nên khoá ở đây chặn ĐÚNG những vai thật sự dùng chức năng (ACCOUNTANT, và mọi vai
+  // khác). SUPER_ADMIN vẫn qua được — trên prod thì qua ở tầng v2 dù matrix này có ghi
+  // gì đi nữa. Muốn khoá kín cả SUPER_ADMIN thì phải chọn một trong hai đường, cả hai
+  // đều cần quyết định của chủ dự án: (a) thêm vào `NGOAI_LE_CHI_DOC` như `chat:send`,
+  // hoặc (b) chặn cứng trong `adjustPaymentAction` bằng một hằng, không qua ma trận.
+  "payments:adjust": ["SUPER_ADMIN"],
   // #15 (câu 32) — CCCD PH + địa chỉ mask mặc định; break-glass "Xem đầy đủ" (reason
   // ≥10 ký tự + audit) chỉ cho kế toán + admin. v2: HO_ACCOUNTANT GLOBAL,
   // CENTER_ACCOUNTANT CENTER (prisma/seed-roles.ts). KHÔNG mở cho CENTER_MANAGER.
