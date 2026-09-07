@@ -310,3 +310,32 @@ export const TEACHING_CREDIT_CATALOG: {
   { code: "TN_THAY", name: "Trải nghiệm — dạy thay", source: "TRIAL", role: "SUBSTITUTE", basis: "PER_SESSION", factor: 1, countsInPeriod: false },
   { code: "TN_TRO_GIANG", name: "Trải nghiệm — trợ giảng", source: "TRIAL", role: "ASSISTANT", basis: "PER_SESSION", factor: 0.5, countsInPeriod: false },
 ];
+
+/**
+ * PHÂN LOẠI BUỔI — SR.QD.230 PL03 §4 (hệ số 100% / 75% / 120% theo loại buổi).
+ *
+ * Đây là danh mục MỞ: người vận hành thêm/sửa trên màn `/cham-cong/phan-loai-buoi`. Bảy dòng dưới
+ * đây chỉ là điểm khởi hành để BLĐ không phải gõ từ số không.
+ *
+ * `TRIAL` CỐ Ý KHÔNG có trong danh sách: buổi trải nghiệm là model riêng (`TrialClassSession`),
+ * đã được `TeachingCreditSource.TRIAL` phân biệt. Thêm một dòng TRIAL ở đây nữa là hai đường
+ * cùng nói một chuyện, và sớm muộn hai đường lệch nhau.
+ *
+ * `countsTowardQuota` = buổi TRÁCH NHIỆM của GV cơ hữu (PL04 §A.1.b: Trial/Bù/Vượt/Hỗ trợ ĐT&VH
+ * nằm trong lương cơ bản, chỉ phần VƯỢT định mức 50/30/20 mới được 80.000đ/buổi). ⚠️ Cột này
+ * hiện chỉ LƯU — chưa có bộ đếm định mức nào đọc nó, vì đó là phần TIỀN và tiền chưa chốt.
+ */
+export const SESSION_CATEGORY_CATALOG: {
+  code: string;
+  name: string;
+  isDefault: boolean;
+  countsTowardQuota: boolean;
+}[] = [
+  { code: "CHINH_THUC", name: "Học chính thức", isDefault: true, countsTowardQuota: false },
+  { code: "COACH", name: "Lớp Coach (1-1, 1-2, 1-4)", isDefault: false, countsTowardQuota: false },
+  { code: "BU", name: "Học bù", isDefault: false, countsTowardQuota: true },
+  { code: "VUOT", name: "Học vượt", isDefault: false, countsTowardQuota: true },
+  { code: "WORKSHOP", name: "Workshop", isDefault: false, countsTowardQuota: false },
+  { code: "SU_KIEN", name: "Sự kiện", isDefault: false, countsTowardQuota: false },
+  { code: "HO_TRO_DT_VH", name: "Hỗ trợ Đào tạo & Vận hành", isDefault: false, countsTowardQuota: true },
+];

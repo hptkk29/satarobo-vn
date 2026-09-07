@@ -81,6 +81,10 @@ const sessionSchema = z.object({
   notes: z.string().trim().optional(),
   lessonId: z.string().trim().optional(),
   lessonNotes: z.string().trim().optional(),
+  // 07/09 — PHÂN LOẠI BUỔI. Rỗng = chưa phân loại ⇒ công dạy tính theo dòng mặc định
+  // (`SessionCategory.isDefault`). Cố ý KHÔNG bắt buộc: form này đang được dùng hằng ngày, ép
+  // một trường mới là chặn mọi đường sửa buổi cho tới khi ai đó gán đủ.
+  sessionCategoryId: z.string().trim().optional(),
 });
 
 function emptyToUndefined(value: FormDataEntryValue | null): string | undefined {
@@ -118,6 +122,7 @@ function readForm(formData: FormData) {
     notes: emptyToUndefined(formData.get("notes")),
     lessonId: emptyToUndefined(formData.get("lessonId")),
     lessonNotes: emptyToUndefined(formData.get("lessonNotes")),
+    sessionCategoryId: emptyToUndefined(formData.get("sessionCategoryId")),
   };
 }
 
@@ -154,6 +159,7 @@ export async function createSession(formData: FormData): Promise<ActionResult> {
     notes: emptyToNull(s.notes),
     lessonNotes: emptyToNull(s.lessonNotes),
     ...(s.lessonId ? { lesson: { connect: { id: s.lessonId } } } : {}),
+    ...(s.sessionCategoryId ? { sessionCategory: { connect: { id: s.sessionCategoryId } } } : {}),
   };
 
   try {
@@ -196,6 +202,9 @@ export async function updateSession(id: string, formData: FormData): Promise<Act
     lessonNotes: emptyToNull(s.lessonNotes),
     lesson: s.lessonId
       ? { connect: { id: s.lessonId } }
+      : { disconnect: true },
+    sessionCategory: s.sessionCategoryId
+      ? { connect: { id: s.sessionCategoryId } }
       : { disconnect: true },
   };
 

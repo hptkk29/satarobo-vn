@@ -34,7 +34,7 @@ import { ModuleNav } from "@/components/admin/cham-cong/module-nav";
 import { ScopeBar } from "@/components/admin/cham-cong/scope-bar";
 import { KpiStrip } from "@/components/admin/cham-cong/kpi-strip";
 import { SectionCard } from "@/components/admin/cham-cong/section-card";
-import { LoaiCongDayTable, type LoaiRow } from "./_components/loai-cong-day";
+import { LoaiCongDayTable, type LoaiRow, type PhanLoaiChon } from "./_components/loai-cong-day";
 import { CongDayTable, type CongDayRow } from "./_components/cong-day-table";
 
 export const metadata = { title: "Công dạy | Admin", robots: { index: false } };
@@ -113,7 +113,7 @@ export default async function CongDayPage({
     ]),
   ];
 
-  const [danhMuc, buoi, users, canConfig] = await Promise.all([
+  const [danhMuc, buoi, users, canConfig, phanLoai] = await Promise.all([
     loadLoaiCongDay(),
     loadBuoiDay(userIds, from, to),
     userIds.length
@@ -123,6 +123,13 @@ export default async function CongDayPage({
         })
       : Promise.resolve([]),
     checkPermission("hr_attendance:config", { centerId: HO_CENTER_ID }),
+    // Chỉ phân loại ĐANG DÙNG mới vào ô chọn khi thêm dòng — thêm dòng trỏ vào phân loại đã tắt
+    // là tạo ra một dòng không bao giờ nhận được buổi nào.
+    sdb.sessionCategory.findMany({
+      where: { isActive: true },
+      orderBy: [{ displayOrder: "asc" }, { code: "asc" }],
+      select: { code: true, name: true },
+    }),
   ]);
   const tenCua = new Map(users.map((u) => [u.id, { ten: u.name ?? u.email ?? u.id, ma: u.employee?.employeeCode ?? null }]));
 
@@ -161,15 +168,23 @@ export default async function CongDayPage({
   const buoiTheoLoai = new Map<string, number>();
   for (const r of rows) for (const d of r.dong) buoiTheoLoai.set(d.code, (buoiTheoLoai.get(d.code) ?? 0) + d.buoi);
 
+  const tenPhanLoai = new Map(phanLoai.map((c) => [c.code, c.name]));
   const loaiRows: LoaiRow[] = danhMuc.map((l) => ({
     code: l.code,
     name: l.name,
+    source: l.source,
+    role: l.role,
     basis: l.basis,
     factor: l.factor,
     countsInPeriod: l.countsInPeriod,
     isActive: l.isActive,
+    categoryCode: l.categoryCode,
+    // Phân loại đã TẮT không có trong `phanLoai` — vẫn phải in ra mã để dòng không hiện "mọi
+    // phân loại", vì nó KHÔNG phải dòng bao sân.
+    categoryName: l.categoryCode ? (tenPhanLoai.get(l.categoryCode) ?? l.categoryCode) : null,
     buoiTrongKy: buoiTheoLoai.get(l.code) ?? 0,
   }));
+  const phanLoaiChon: PhanLoaiChon[] = phanLoai.map((c) => ({ code: c.code, name: c.name }));
 
   const tongCong = rows.reduce((s, r) => s + r.tongCong, 0);
   const tongBuoi = rows.reduce((s, r) => s + r.tongBuoi, 0);
@@ -251,7 +266,7 @@ export default async function CongDayPage({
               ? "Sửa hệ số hoặc bỏ “Cộng vào kỳ” là số ở bảng trên đổi theo ngay. Tắt “Đang dùng” thì cả nhóm buổi đó rơi khỏi bảng."
               : "Sửa hệ số cần quyền cấu hình tại Hội sở — danh mục này dùng chung mọi cơ sở."}
           </p>
-          <LoaiCongDayTable rows={loaiRows} canEdit={canConfig} />
+          <LoaiCongDayTable rows={loaiRows} phanLoai={phanLoaiChon} canEdit={canConfig} />
         </SectionCard>
       </div>
     </div>

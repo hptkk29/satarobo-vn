@@ -1,6 +1,7 @@
 // components/admin/cham-cong/config-tabs.tsx — hàng 2 của tab Cấu hình.
 //
-// Vì sao file này tồn tại: 5 màn danh mục (mã ca, khung ca, loại nghỉ, điểm chấm, ghi chú) rời
+// Vì sao file này tồn tại: 6 màn danh mục (mã ca, khung ca, loại nghỉ, phân loại buổi, điểm chấm,
+// ghi chú) rời
 // sidebar khi rút 15 mục xuống 5. Sau đó ĐÂY LÀ LỐI VÀO DUY NHẤT của chúng — cả với người dùng
 // lẫn với `components/admin/nav-coverage.test.ts`, vốn đếm chuỗi literal sau `href:` để biết route
 // còn ai trỏ tới. Xoá một dòng ở dưới là route đó thành mồ côi và test đỏ.
@@ -18,6 +19,7 @@ export type ConfigTabKey =
   | "danh-muc-ca"
   | "khung-ca"
   | "loai-nghi"
+  | "phan-loai-buoi"
   | "diem-cham"
   | "ghi-chu"
   | "holidays";
@@ -58,6 +60,12 @@ export async function ConfigTabs({
       key: "loai-nghi",
       label: "Loại nghỉ",
       href: "/cham-cong/loai-nghi",
+      show: scope.any("hr_attendance:view") || canConfig,
+    },
+    {
+      key: "phan-loai-buoi",
+      label: "Phân loại buổi",
+      href: "/cham-cong/phan-loai-buoi",
       show: scope.any("hr_attendance:view") || canConfig,
     },
     { key: "diem-cham", label: "Điểm chấm công", href: "/cham-cong/diem-cham", show: canDiemCham },

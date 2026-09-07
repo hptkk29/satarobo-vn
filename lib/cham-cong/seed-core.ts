@@ -1,8 +1,16 @@
 // lib/cham-cong/seed-core.ts — logic seed nền (dùng chung cho prisma/seed-cham-cong.ts và test).
 import type { PrismaClient } from "@prisma/client";
-import { LEAVE_TYPE_CATALOG, SHIFT_CATALOG, TEACHING_CREDIT_CATALOG } from "./catalog";
+import {
+  LEAVE_TYPE_CATALOG,
+  SESSION_CATEGORY_CATALOG,
+  SHIFT_CATALOG,
+  TEACHING_CREDIT_CATALOG,
+} from "./catalog";
 
-type Db = Pick<PrismaClient, "shiftTemplate" | "leaveType" | "center" | "workLocation" | "teachingCreditType">;
+type Db = Pick<
+  PrismaClient,
+  "shiftTemplate" | "leaveType" | "center" | "workLocation" | "teachingCreditType" | "sessionCategory"
+>;
 
 export async function seedShiftTemplates(db: Db, opts: { force?: boolean } = {}): Promise<{ created: number; updated: number }> {
   let created = 0;
@@ -48,6 +56,35 @@ export async function seedLeaveTypes(db: Db, opts: { force?: boolean } = {}): Pr
       where: { code: l.code },
       create: { ...l, displayOrder: i + 1 },
       update: { ...l, displayOrder: i + 1 },
+    });
+    n += 1;
+  }
+  return n;
+}
+
+/**
+ * Danh mục PHÂN LOẠI BUỔI (SR.QD.230 PL03 §4).
+ *
+ * Chạy TRƯỚC `seedTeachingCreditTypes`: một dòng công dạy có thể trỏ tới phân loại, và FK để
+ * `onDelete: Restrict` — thứ tự ngược lại sẽ hỏng ngay khi BLĐ thêm dòng riêng cho Workshop.
+ */
+export async function seedSessionCategories(db: Db, opts: { force?: boolean } = {}): Promise<number> {
+  let n = 0;
+  for (const [i, c] of SESSION_CATEGORY_CATALOG.entries()) {
+    const existing = await db.sessionCategory.findUnique({ where: { code: c.code }, select: { id: true } });
+    if (existing && !opts.force) continue;
+    // Partial unique index chỉ cho ĐÚNG MỘT dòng mặc định. Dọn trước khi đặt — seed lại trên DB
+    // mà người vận hành đã đổi dòng mặc định thì vỡ bằng một lỗi trùng khoá không ai đọc ra.
+    if (c.isDefault) {
+      await db.sessionCategory.updateMany({
+        where: { isDefault: true, code: { not: c.code } },
+        data: { isDefault: false },
+      });
+    }
+    await db.sessionCategory.upsert({
+      where: { code: c.code },
+      create: { ...c, displayOrder: i + 1 },
+      update: { ...c, displayOrder: i + 1 },
     });
     n += 1;
   }

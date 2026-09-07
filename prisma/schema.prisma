@@ -2089,6 +2089,10 @@ model ClassSession {
   planId      String?
   // W2-4b — phòng học theo TỪNG BUỔI (để soát trùng phòng per-session); khác actualRoomId (ghi sau-thực-tế).
   roomId      String?
+  // 07/09 — PHÂN LOẠI BUỔI (chính thức / Coach / bù / vượt / workshop / sự kiện). null = chưa
+  // phân loại ⇒ tính như dòng `SessionCategory.isDefault`. Cố ý NULLABLE: ~toàn bộ buổi cũ không
+  // ai đi gán lại được, và ép NOT NULL là chặn mọi đường tạo buổi đang có.
+  sessionCategoryId String?
   // FL3-02 — centerId denormalized từ class. ĐÃ flip vào SCOPED_MODELS (db-scope.ts);
   // mọi write set centerId + backfill migration 20260624010000. scopedDb cách ly theo cơ sở.
   centerId    String?
@@ -2128,6 +2132,7 @@ model ClassSession {
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   class            Class                    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  sessionCategory  SessionCategory?         @relation(fields: [sessionCategoryId], references: [id], onDelete: SetNull)
   lesson           Lesson?                  @relation(fields: [lessonId], references: [id], onDelete: SetNull)
   plan             ClassSessionPlan?        @relation(fields: [planId], references: [id], onDelete: SetNull)
   room             Room?                    @relation(fields: [roomId], references: [id], onDelete: SetNull)
@@ -2138,6 +2143,7 @@ model ClassSession {
 
   @@index([classId])
   @@index([date])
+  @@index([sessionCategoryId])
   @@index([lessonId])
   @@index([planId])
   @@index([roomId])
@@ -9023,16 +9029,52 @@ enum TeachingRole {
   ASSISTANT
 }
 
-/// Danh mục LOẠI CÔNG DẠY — người vận hành tự bật/tắt và chỉnh hệ số, KHÔNG cần lập trình viên.
+/// Danh mục PHÂN LOẠI BUỔI — buổi này là học chính thức, lớp Coach, bù, vượt, workshop hay sự kiện.
 ///
-/// Vì sao khoá `@@unique([source, role])`: sáu tổ hợp (lớp/trải nghiệm × chính/thay/trợ giảng) là
-/// TOÀN BỘ những gì hệ thống tự nhận ra được từ dữ liệu buổi hiện có. Khoá lại thì mỗi buổi ứng
-/// đúng một loại — không cần thứ tự ưu tiên, không cần ngôn ngữ điều kiện, và không bao giờ có
-/// chuyện một buổi được đếm hai lần.
+/// Vì sao là BẢNG chứ không phải enum: chủ dự án đặt luật "tự tạo tự add được qua hệ thống chứ
+/// không cần code" (chốt 05/09, nhắc lại 06/09). Enum thì thêm "Sự kiện hè 2027" phải deploy.
 ///
-/// ⚠️ "Dạy bù" và "vượt giờ" CHƯA có ở đây vì dữ liệu chưa phân biệt được: không cột nào đánh dấu
-/// một `ClassSession` là buổi bù, và `actualStartAt/actualEndAt` gần như luôn rỗng nên không biết
-/// buổi nào vượt giờ. Thêm hai loại đó là thêm một ô luôn bằng 0 — cần chốt cách ghi nhận trước.
+/// Đây là CHIỀU THỨ BA của danh mục công dạy, và là thứ gỡ trần 6 dòng — xem `TeachingCreditType`.
+model SessionCategory {
+  id                String   @id @default(cuid())
+  code              String   @unique
+  name              String
+  /// Dòng nhận những buổi CHƯA phân loại (`ClassSession.sessionCategoryId = null`). Đúng một
+  /// dòng được bật — ép bằng partial unique index, không phải bằng lời hứa ở tầng action.
+  isDefault         Boolean  @default(false)
+  /// Buổi TRÁCH NHIỆM của GV cơ hữu (Trial/Bù/Vượt/Hỗ trợ ĐT&VH — SR.QD.230 PL04 §A.1.b).
+  /// ⚠️ Hiện chỉ LƯU. Chưa nơi nào trừ định mức 50/30/20 buổi — bộ đếm đó là việc của đợt tính
+  /// TIỀN, và tiền thì chưa chốt (BA-CC-CD-001 §13 Q2/Q3 chưa có trả lời).
+  countsTowardQuota Boolean  @default(false)
+  isActive          Boolean  @default(true)
+  displayOrder      Int      @default(0)
+  createdAt         DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(6)
+
+  sessions    ClassSession[]
+  creditTypes TeachingCreditType[]
+}
+
+/// Danh mục LOẠI CÔNG DẠY — người vận hành tự bật/tắt, chỉnh hệ số và THÊM DÒNG, không cần dev.
+///
+/// ── Vì sao khoá có ba cột, và vì sao trước đó chỉ có hai ────────────────────────────────────
+/// Bản 06/09 khoá `@@unique([source, role])`: sáu tổ hợp (lớp/trải nghiệm × chính/thay/trợ giảng)
+/// là TOÀN BỘ những gì hệ thống tự nhận ra được từ dữ liệu buổi lúc đó. Hệ quả không lường trước:
+/// đó là TRẦN CỨNG 6 DÒNG, nên BLĐ chỉ sửa được hệ số chứ không bao giờ THÊM được loại nào —
+/// trong khi SR.QD.230 PL03 §4 đòi đúng những dòng không có chỗ: Coach, bù, vượt, Workshop 120%,
+/// Sự kiện. `categoryId` là chiều thứ ba mở trần đó ra.
+///
+/// ── Cách khớp một buổi với một dòng (`loaiCua` trong lib/cham-cong/cong-day.ts) ─────────────
+/// Khớp ĐÚNG `(source, role, categoryId)` trước; không có thì rơi về dòng `categoryId = null`.
+/// Dòng null là dòng BAO SÂN — sáu dòng seed cũ đều mang null nên hành vi hôm nay không đổi một
+/// con số nào, và BLĐ thêm dòng riêng cho Workshop là nó tự thắng dòng bao sân.
+///
+/// Hai dòng bao sân cùng `(source, role)` thì `loaiCua` sẽ khớp dòng nào cũng được ⇒ số công đổi
+/// theo thứ tự đọc. `@@unique` của Postgres KHÔNG chặn được (NULL coi là khác nhau), nên chặn
+/// bằng partial unique index viết tay trong migration.
+///
+/// ⚠️ Thêm được DÒNG không có nghĩa là số tự chạy: một loại chỉ nhận được buổi khi buổi đó đã
+/// được gán `sessionCategoryId`. Gán ở form sửa buổi.
 model TeachingCreditType {
   id             String               @id @default(cuid())
   code           String               @unique
@@ -9046,10 +9088,15 @@ model TeachingCreditType {
   countsInPeriod Boolean              @default(true)
   isActive       Boolean              @default(true)
   displayOrder   Int                  @default(0)
+  /// null = dòng BAO SÂN cho mọi phân loại chưa có dòng riêng. Xem chú thích khớp ở trên.
+  categoryId     String?
   createdAt      DateTime             @default(now()) @db.Timestamptz(6)
   updatedAt      DateTime             @updatedAt @db.Timestamptz(6)
 
-  @@unique([source, role])
+  category SessionCategory? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  @@unique([source, role, categoryId])
+  @@index([categoryId])
 }
 
 model LeaveType {

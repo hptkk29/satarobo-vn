@@ -14,6 +14,7 @@ export type SessionFormValue = {
   notes: string | null;
   lessonId: string | null;
   lessonNotes: string | null;
+  sessionCategoryId: string | null;
 };
 
 export interface ClassOption {
@@ -22,6 +23,13 @@ export interface ClassOption {
   courseId: string;
   courseName: string;
   centerName: string | null;
+}
+
+/** Phân loại buổi đang dùng — nguồn ở `SessionCategory`, khai tại /cham-cong/phan-loai-buoi. */
+export interface SessionCategoryOption {
+  id: string;
+  name: string;
+  isDefault: boolean;
 }
 
 export interface LessonOption {
@@ -36,6 +44,7 @@ interface Props {
   session?: SessionFormValue;
   classes: ClassOption[];
   lessons?: LessonOption[];
+  categories?: SessionCategoryOption[];
   defaultClassId?: string;
   /** QA 20/07 Vấn đề C — URL quay về sau khi lưu/huỷ (giữ bộ lọc trang danh sách). */
   returnTo?: string;
@@ -63,6 +72,7 @@ export function SessionForm({
   session,
   classes,
   lessons = [],
+  categories = [],
   defaultClassId,
   returnTo,
 }: Props) {
@@ -75,6 +85,8 @@ export function SessionForm({
     session?.classId ?? defaultClassId ?? "",
   );
   const [lessonId, setLessonId] = useState<string>(session?.lessonId ?? "");
+
+  const macDinh = categories.find((c) => c.isDefault) ?? null;
 
   const selectedCourseId = useMemo(() => {
     const cls = classes.find((c) => c.id === classId);
@@ -170,6 +182,30 @@ export function SessionForm({
             className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
         </label>
+
+        {categories.length > 0 && (
+          <label className="block">
+            <span className="mb-1 block text-sm font-semibold text-foreground">Phân loại buổi</span>
+            <select
+              name="sessionCategoryId"
+              defaultValue={session?.sessionCategoryId ?? ""}
+              className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+            >
+              <option value="">
+                — Chưa phân loại{macDinh ? ` (tính như ${macDinh.name})` : ""} —
+              </option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Quyết định buổi này ăn hệ số công dạy nào (SR.QD.230 PL03 §4 — Workshop và Sự kiện
+              120%, lớp Coach 100%). Không chọn thì tính như buổi học chính thức.
+            </p>
+          </label>
+        )}
 
         <label className="block">
           <span className="mb-1 block text-sm font-semibold text-foreground">

@@ -56,7 +56,7 @@ Thân: `loadCenterMap()` → `scopedDb(actor).center.findMany({ isActive, code �
 
 Props `{ active; scope; ctx }`; tham số theo `scopeHref()` (§2.1); không `usePathname`; mỗi page tự render.
 
-**ConfigTabs** (`config-tabs.tsx`, RSC, hàng 2 `text-xs`, CHỈ ở 6 màn cấu hình; href literal = lối vào duy nhất của 4 route rời sidebar): Mã ca `"/cham-cong/danh-muc-ca"` [config@HO ∨ config@CS] · Khung ca tuần `"/cham-cong/khung-ca"` [assign ∨ view] · Loại nghỉ `"/cham-cong/loai-nghi"` [view ∨ config@HO] · Điểm chấm công `"/cham-cong/diem-cham"` [config@CS, không HO] · Ghi chú lịch `"/cham-cong/ghi-chu"` [assign ∨ view] · Ngày lễ `"/holidays"` [`checkPermission("holidays:view", { centerId: coSo })`].
+**ConfigTabs** (`config-tabs.tsx`, RSC, hàng 2 `text-xs`, CHỈ ở 7 màn cấu hình; href literal = lối vào duy nhất của 5 route rời sidebar): Mã ca `"/cham-cong/danh-muc-ca"` [config@HO ∨ config@CS] · Khung ca tuần `"/cham-cong/khung-ca"` [assign ∨ view] · Loại nghỉ `"/cham-cong/loai-nghi"` [view ∨ config@HO] · **Phân loại buổi** `"/cham-cong/phan-loai-buoi"` [view ∨ config@HO] · Điểm chấm công `"/cham-cong/diem-cham"` [config@CS, không HO] · Ghi chú lịch `"/cham-cong/ghi-chu"` [assign ∨ view] · Ngày lễ `"/holidays"` [`checkPermission("holidays:view", { centerId: coSo })`].
 
 ## 1.4 ScopeBar — thứ tự cố định **PageHeader → ModuleNav → ScopeBar** → (PageHelp) → nội dung. Đủ 3 khối ở `/cham-cong` (tháng đổi `date`), `/phan-ca`, `/ky-cong`, `/doi-soat`; không tháng ở `/don-tu` (+ "Tất cả"), `/khung-ca`, `/ghi-chu`, `/man-hinh` (param `centerId`). Chip khối = `scope.blocksWith(actionCủaMàn)` · ‹ Tháng 09/2026 › · `PeriodStatusPill` (Link → `/cham-cong/ky-cong?ky&coSo`) · "Công chuẩn 22" (`periodStatusOf`; null ⇒ ẩn).
 
@@ -228,7 +228,7 @@ Bảng 44px NGƯỜI NỘP | LOẠI | ÁP DỤNG | THAY ĐỔI | CƠ SỞ | TU�
 | `khung-ca/` | ConfigTabs + 2 TableSkeleton(8,5) | "khung ca tuần" / `/cham-cong` |
 | `ky-cong/` | ScopeBar + Kpi(5) + 2 card + Table(13) | "kỳ công — số đã chốt không mất" / `/cham-cong` |
 | `doi-soat/` | card `h-48` + card `h-24` + Table(7) | "đối soát" / `/cham-cong/ky-cong` |
-| `danh-muc-ca/ loai-nghi/ diem-cham/ ghi-chu/` | ConfigTabs + TableSkeleton(10/7/8/6) | "danh mục" / `/cham-cong` |
+| `danh-muc-ca/ loai-nghi/ phan-loai-buoi/ diem-cham/ ghi-chu/` | ConfigTabs + TableSkeleton(10/7/8/8/6) | "danh mục" / `/cham-cong` |
 | `lich-ca/` | MeNav + bar + TableSkeleton(8, 12) | "lịch ca của bạn" / `/dashboard` |
 | `checkin/` | thẻ `max-w-sm` + 2 nút `h-14` | "trang chấm công — quét lại mã" / `/cham-cong/lich-ca` (KHÔNG nút Dashboard) |
 | `man-hinh/` | ScopeBar + `aspect-square w-60` | "màn hình QR" / `/cham-cong` |

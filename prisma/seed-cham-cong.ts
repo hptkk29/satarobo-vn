@@ -1,13 +1,19 @@
 // prisma/seed-cham-cong.ts — SEED NỀN module chấm công v3 (chạy 1 lần, idempotent).
 //
-//   pnpm db:seed:cham-cong            # 21 mã ca + 8 loại nghỉ + WorkLocation cho CS1/CS2
+//   pnpm db:seed:cham-cong            # 21 mã ca + 8 loại nghỉ + WorkLocation CS1/CS2 + danh mục công dạy
 //   pnpm db:seed:cham-cong -- --force # cập nhật lại tên/giờ của 21 mã theo danh mục code
 //
 // Sau lần này, nguồn sự thật là DB và người vận hành sửa trên màn danh mục (PHẦN 6b): không
 // có --force thì KHÔNG đè cột người dùng đã sửa. Không tạo WorkLocation cho Hội sở (Q-04).
 // Toạ độ để trống → geofence tắt (Q-02). Trên PROD chạy qua workflow GitHub.
 import { PrismaClient } from "@prisma/client";
-import { seedLeaveTypes, seedShiftTemplates, seedTeachingCreditTypes, seedWorkLocations } from "../lib/cham-cong/seed-core";
+import {
+  seedLeaveTypes,
+  seedSessionCategories,
+  seedShiftTemplates,
+  seedTeachingCreditTypes,
+  seedWorkLocations,
+} from "../lib/cham-cong/seed-core";
 
 const force = process.argv.includes("--force");
 const db = new PrismaClient({ datasourceUrl: process.env.DIRECT_URL ?? process.env.DATABASE_URL });
@@ -16,9 +22,11 @@ async function main() {
   const t = await seedShiftTemplates(db, { force });
   const l = await seedLeaveTypes(db, { force });
   const w = await seedWorkLocations(db);
+  // Phân loại buổi TRƯỚC danh mục công dạy — FK là Restrict, xem chú thích ở seed-core.
+  const pl = await seedSessionCategories(db, { force });
   const c = await seedTeachingCreditTypes(db, { force });
   console.log(
-    `[seed-cham-cong] ShiftTemplate: +${t.created} tạo, ${t.updated} cập nhật${force ? " (--force)" : ""} · LeaveType: ${l} · WorkLocation: +${w} · TeachingCreditType: ${c}`,
+    `[seed-cham-cong] ShiftTemplate: +${t.created} tạo, ${t.updated} cập nhật${force ? " (--force)" : ""} · LeaveType: ${l} · WorkLocation: +${w} · SessionCategory: ${pl} · TeachingCreditType: ${c}`,
   );
 }
 
