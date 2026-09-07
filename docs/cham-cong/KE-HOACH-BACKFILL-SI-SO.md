@@ -130,8 +130,10 @@ Bản đo in ra:
 | Buổi 0 ghi danh / bẫy dòng lẻ | phần rơi xuống `UNKNOWN` |
 | Phân bố sĩ số ra được theo bậc 1-4 / 5-8 / 9-12 / ≥13 | vì đây là bậc quyết định đơn giá PL04 — lệch một bậc là lệch tiền |
 
-**Luật vận hành:** prod chỉ chạm được qua workflow GitHub. Chạy ĐO trên prod trước, đọc số, rồi mới
-quyết có `--ghi` hay không.
+**Trên PROD:** bấm tay workflow **`Chấm công — ĐO trên prod (chỉ đọc)`** (`cham-cong-do-prod.yml`),
+chọn `viec = si-so`. Workflow đó **không có chế độ ghi** — không input `--ghi`, không chuỗi xác
+nhận, vì nó không ghi gì cả. Chạy backfill thật sẽ là một workflow RIÊNG, có chuỗi xác nhận, và
+chỉ dựng sau khi §5 dưới đây có trả lời.
 
 ---
 
@@ -142,7 +144,7 @@ quyết có `--ghi` hay không.
 | **B1** | Học viên **BẢO LƯU (`PAUSED`)** có tính vào sĩ số biên chế không? Mã đang mâu thuẫn: roster/điểm danh coi PAUSED là **vẫn thuộc lớp**, còn kiểm sức chứa thì **loại** PAUSED. | **CÓ tính.** "Biên chế" là danh sách lớp, và `lib/enrollment-status.ts` tự khai là nguồn chân lý duy nhất cho việc này. Đã dùng định nghĩa đó cho snapshot mới. |
 | **B2** | Buổi **trước 07/08/2026**: ghi số suy đoán (thừa người), hay để `UNKNOWN`? | **Ghi, kèm nguồn `FROM_ENROLLMENT`** — nhưng chỉ sau khi xem số ở §4. Nếu chênh lệch tầng 1 ↔ tầng 2 lớn thì để `UNKNOWN` trung thực hơn. |
 | **B3** | Nhóm ghi danh **đã bị đổi `classId`** không có đường phục dựng. Chấp nhận sai ở nhóm này, hay đo trước xem có bao nhiêu dòng khả nghi? | **Đo trước.** Đếm được bằng: ghi danh có `extraData.sourceClassId`, và ghi danh có dòng `Attendance` ở buổi của lớp KHÁC `classId` hiện tại. |
-| **B4** | Khi lương tính về sau gặp dòng **không phải `SNAPSHOT`** thì làm gì — vẫn tính, hay bắt người duyệt xác nhận từng dòng? | **Bắt xác nhận.** Cùng tinh thần với tab "Cần xử lý" của BA gốc: số suy đoán không được lặng lẽ biến thành tiền. |
+| **B4** | ~~Khi lương tính về sau gặp dòng không phải `SNAPSHOT` thì làm gì?~~ | ✅ **ĐÃ CHỐT 07/09.** Tầng tiền **TỪ CHỐI**, không phải "bỏ qua": chỉ dòng `rosterSource = SNAPSHOT` mới vào được công thức lương, dòng khác **ném lỗi** nêu rõ buổi nào. Ép bằng mã, không bằng quy ước — `lib/payroll/roster-guard.ts` (14 test). Buổi cũ đã trả lương xong rồi, không ai tính lại; backfill chỉ phục vụ **báo cáo và đối chiếu**. |
 
 ---
 

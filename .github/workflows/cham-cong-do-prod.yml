@@ -1,0 +1,59 @@
+# Chạy TAY (workflow_dispatch) — ĐO trên PROD, CHỈ ĐỌC, KHÔNG GHI GÌ.
+#
+# Vì sao có workflow này: prod chỉ chạm được qua GitHub Actions (`.env` trên máy dev trỏ DB DEV,
+# và Vercel che `DATABASE_URL` là Sensitive nên `vercel env pull` vô dụng). Mọi số đo trên dữ liệu
+# thật đều phải đi qua đây.
+#
+# ⚠️ WORKFLOW NÀY KHÔNG CÓ CHẾ ĐỘ GHI, có chủ đích. Không có input `--ghi`, không có chuỗi xác
+# nhận "GHI THAT VAO PROD" — vì nó không ghi gì cả. Script được gọi ở chế độ mặc định (chỉ đo).
+# Muốn chạy backfill thật thì phải là một workflow RIÊNG, có chuỗi xác nhận, và chỉ sau khi chủ
+# dự án duyệt cách suy (xem `docs/cham-cong/KE-HOACH-BACKFILL-SI-SO.md` §5).
+#
+# Dùng `PROD_DIRECT_URL` (session pooler :5432) chứ không `PROD_DATABASE_URL` (:6543): pgbouncer
+# không giữ prepared statement giữa các câu lệnh, và script chạy hàng trăm truy vấn liên tiếp thì
+# dính `prepared statement "sN" does not exist`. Đã ăn thật hai lần — xem `scripts/_script-db.ts`.
+name: Chấm công — ĐO trên prod (chỉ đọc)
+on:
+  workflow_dispatch:
+    inputs:
+      viec:
+        description: "Đo cái gì"
+        required: true
+        type: choice
+        default: si-so
+        options:
+          - si-so
+concurrency:
+  group: cham-cong-do-prod
+  cancel-in-progress: false
+jobs:
+  do:
+    name: Đo (không ghi)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Kiểm tra secrets
+        run: |
+          [ -n "${{ secrets.PROD_DIRECT_URL }}" ] || { echo "::error::Thiếu secret PROD_DIRECT_URL"; exit 1; }
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      # Số cần nhìn nhất ở bước này: CHÊNH LỆCH giữa hai nguồn ở những buổi tính được CẢ HAI.
+      # Nó đo trực tiếp độ thừa của cách "đếm ghi danh" trên dữ liệu thật, thay vì để ta suy luận.
+      - name: "Đo sĩ số biên chế của buổi cũ (chỉ đọc — KHÔNG có --ghi)"
+        if: inputs.viec == 'si-so'
+        run: pnpm exec tsx scripts/backfill-si-so-buoi.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+
+      - name: Nhắc lại là không ghi gì
+        run: echo "Workflow này chỉ ĐỌC. Không có bước nào ghi vào DB prod."
