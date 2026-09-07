@@ -191,6 +191,19 @@ jobs:
       - name: Run lead-intake DB tests
         run: pnpm test:lead-intake
 
+      # CHẤM CÔNG — thêm 07/09/2026. Cùng lý do ba bước trên, nhưng ca này đã ĐỎ THẬT MÀ KHÔNG AI
+      # THẤY: `tests/cham-cong/timelog.spec.ts` kỳ vọng 3 lượt ACCEPTED trong khi luật chặn định vị
+      # (06/09) chỉ cho qua 1. Bộ này nằm trong `include` của Vitest nên `pnpm test:unit` có GOM
+      # file, nhưng 5/6 file tự `describe.skip` khi thiếu Postgres — mà job `unit-tests` không có
+      # Postgres. Kết quả: CI xanh trong lúc bộ test vé kiosk / kỳ công / tính lại / ma trận duyệt
+      # đơn (~52KB spec) không chạy một dòng nào.
+      #
+      # Đây đúng loại lỗi module này đang dọn cả tuần: thứ có thật mà không ai đọc.
+      # Kế hoạch chấm công v3 đã chốt bước này từ đầu (KE-HOACH-CHAM-CONG-v3.md:414) — chỉ là chưa
+      # ai thêm vào đây.
+      - name: Run chấm-công DB tests
+        run: pnpm test:cham-cong-db
+
   e2e:
     name: E2E smoke (Playwright)
     runs-on: ubuntu-latest
