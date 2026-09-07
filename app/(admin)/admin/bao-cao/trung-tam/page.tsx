@@ -86,7 +86,7 @@ export default async function CenterReportPage({
 
   // REQ-05: cache số liệu (finance/trend/byCenter/satisfaction/retention) theo scope + bộ lọc.
   // TTL 120s. Tất cả PRIMITIVE nên serialize an toàn.
-  const { finance, trend, byCenter, satisfaction, retention } = await safeCache(
+  const { finance, trend, byCenter, satisfaction, retention, biCatBotSoLieu } = await safeCache(
     () => computeTrungTamReport(actor, fc.filters),
     [
       "trung-tam-report",
@@ -123,6 +123,16 @@ export default async function CenterReportPage({
           Tài chính, hài lòng và tái tục theo cơ sở
         </p>
       </div>
+
+      {/* 07/09 — vượt trần thì NÓI RA. Trước đây `take: 5000` cắt lặng lẽ: báo cáo vẫn
+          ra một con số trông bình thường mà không dấu hiệu nào cho biết nó thiếu. */}
+      {biCatBotSoLieu && (
+        <p className="rounded-lg border border-state-warning-soft bg-state-warning-soft px-4 py-3 text-sm text-state-warning-ink">
+          Kỳ lọc này có nhiều hơn {TRAN_KHOAN_BAO_CAO.toLocaleString("vi-VN")} khoản thu
+          nên số liệu bên dưới <b>chưa đủ</b>. Thu hẹp khoảng ngày hoặc lọc theo một cơ sở
+          để có con số chính xác.
+        </p>
+      )}
 
       <PageHelp>
         <p>
@@ -318,6 +328,14 @@ export default async function CenterReportPage({
 }
 
 // REQ-05: tính số liệu báo cáo trung tâm (fetch scoped + reduce thuần → PRIMITIVE).
+/**
+ * Trần số dòng Payment nạp về cho báo cáo.
+ *
+ * Nâng từ 5.000 lên 50.000 và — quan trọng hơn — vượt trần nay được BÁO RA thay vì cắt
+ * lặng lẽ. Hệ hiện có ~400 khoản; 50.000 đủ nhiều năm mà vẫn chặn được truy vấn chạy loạn.
+ */
+const TRAN_KHOAN_BAO_CAO = 50_000;
+
 async function computeTrungTamReport(actor: Actor, filters: ReportFilters) {
   const sdb = scopedDb(actor); // Payment + Class auto-scoped theo cơ sở (HO/SUPER_ADMIN bypass).
   const bypass = actor.isSuperAdmin || actor.isHoLevel;
@@ -328,6 +346,9 @@ async function computeTrungTamReport(actor: Actor, filters: ReportFilters) {
   // 1. Khoản thanh toán trong phạm vi cơ sở (Payment ∈ SCOPED_MODELS → auto-scope).
   const paymentRows = await sdb.payment.findMany({
     where: {
+      // ⚠️ 07/09 — BỔ SUNG `deletedAt: null`. Thiếu nó thì khoản đã xoá sổ vẫn vào
+      // doanh thu theo tháng và theo cơ sở.
+      deletedAt: null,
       ...(filters.centerId ? { centerId: filters.centerId } : {}),
       ...(dateWhere ? { paidDate: dateWhere } : {}),
     },
@@ -337,8 +358,18 @@ async function computeTrungTamReport(actor: Actor, filters: ReportFilters) {
       accountantStatus: true,
       paidDate: true,
     },
-    take: 5000,
+    // Lấy DƯ 1 dòng để BIẾT là có bị cắt hay không — xem `TRAN_KHOAN_BAO_CAO`.
+    take: TRAN_KHOAN_BAO_CAO + 1,
   });
+  // ⚠️ 07/09 — thôi CẮT CÂM. `take: 5000` cũ lặng lẽ bỏ phần dư: báo cáo vẫn ra một
+  // con số trông bình thường, không dấu hiệu nào cho biết nó thiếu. Nay vượt trần thì
+  // nói ra ở đầu trang (`biCatBotSoLieu`).
+  //
+  // Không đổi sang `aggregate` vì ba phép gộp (`financeSummary`, `revenueByMonth`,
+  // `revenueByCenter` — lib/reports/trung-tam.ts) là hàm THUẦN chạy trên cả mảng; đổi
+  // sang gộp ở SQL là viết lại cả ba, ngoài phạm vi vé này.
+  const biCatBotSoLieu = paymentRows.length > TRAN_KHOAN_BAO_CAO;
+  if (biCatBotSoLieu) paymentRows.length = TRAN_KHOAN_BAO_CAO;
   const payments: PaymentRecord[] = paymentRows.map((p) => ({
     centerId: p.centerId,
     amount: p.amount,
@@ -416,5 +447,5 @@ async function computeTrungTamReport(actor: Actor, filters: ReportFilters) {
   const satisfaction = summarizeSatisfaction(ratings);
   const retention = summarizeRetention(enrollments);
 
-  return { finance, trend, byCenter, satisfaction, retention };
+  return { finance, trend, byCenter, satisfaction, retention, biCatBotSoLieu };
 }

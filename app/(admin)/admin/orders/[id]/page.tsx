@@ -110,7 +110,14 @@ export default async function OrderDetailPage({ params }: Props) {
       // (b) PA-A 22/07 — trạng thái sổ kế toán (Payment.accountantStatus) hiển thị
       // read-only cạnh kế hoạch đợt: installment PAID = "Sale đã thu", tiền chỉ
       // "xong" khi kế toán CONFIRMED bên /payments.
+      // ⚠️ 07/09/2026 — PHẢI có `deletedAt: null`. Trước đó include này KHÔNG có
+      // `where` nào cả, mà bộ lọc duy nhất ở dưới (dòng ~355) chỉ soi
+      // `accountantStatus === "CONFIRMED"` ⇒ khoản đã XOÁ MỀM vẫn được cộng vào ô
+      // "Đã xác nhận" của màn chi tiết đơn. Tiền đã huỷ sổ vẫn hiện là tiền đã thu.
+      // (Đo 07/09: 0 dòng `deletedAt != null` ở local và dev/test ⇒ đang sai 0 đ,
+      // nhưng `softDeletePayment` là đường ghi có thật.)
       payments: {
+        where: { deletedAt: null },
         select: { amount: true, accountantStatus: true },
       },
     },

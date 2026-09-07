@@ -145,8 +145,10 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
     computeEnrollmentPrice({ listPrice: s.listPrice, discount: s.discount ?? null }),
   );
   const totalFinalPrice = prices.reduce((sum, p) => sum + p.finalPrice, 0);
+  // 07/09 — thêm `deletedAt: null` cho khớp `lib/crm/bulk-convert.ts:191` (vốn đã có).
+  // Thiếu nó thì một khoản đã xoá sổ vẫn mở được cổng chốt ghi danh.
   const recordedCount = await db.payment.count({
-    where: { saleStatus: "RECORDED", order: { leadId: lead.id } },
+    where: { saleStatus: "RECORDED", deletedAt: null, order: { leadId: lead.id } },
   });
   const guard = evaluatePaymentGuard({
     // backfillPayment sẽ tạo khoản RECORDED trong chính transaction bên dưới → coi như đã có.
