@@ -8,6 +8,7 @@ import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { writeAudit } from "@/lib/audit/audit-log";
 import { HO_CENTER_ID, loadCenterMap } from "@/lib/cham-cong/home-center";
 
 type Res = { ok: true } | { ok: false; error: string };
@@ -55,10 +56,33 @@ export async function deleteBriefNoteAction(id: string): Promise<Res> {
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
-  const existing = await sdb.shiftBriefNote.findUnique({ where: { id }, select: { centerId: true } });
+  // Đọc ĐỦ nội dung trước khi xoá, không chỉ `centerId`: đây là XOÁ CỨNG (`ShiftBriefNote` không
+  // có `deletedAt`), nên nếu không chép lại vào nhật ký thì dữ liệu mất là mất hẳn — không tra
+  // được ai xoá, xoá cái gì, lúc nào. Hai bước xác nhận ở UI chỉ giảm bấm nhầm, không thay được
+  // dấu vết.
+  const existing = await sdb.shiftBriefNote.findUnique({
+    where: { id },
+    select: { centerId: true, weekday: true, date: true, audience: true, mode: true, text: true, isActive: true },
+  });
   if (!existing) return { ok: false, error: "Không tìm thấy ghi chú" };
   if (!(await checkPermission("hr_attendance:assign", { centerId: existing.centerId }))) return { ok: false, error: "Không có quyền" };
   await sdb.shiftBriefNote.delete({ where: { id } });
+  await writeAudit({
+    actor: { id: session.user.id, name: session.user.name ?? "" },
+    module: "hr_attendance",
+    entityType: "ShiftBriefNote",
+    entityId: id,
+    action: "DELETE",
+    oldValues: {
+      centerId: existing.centerId,
+      weekday: existing.weekday,
+      date: existing.date,
+      audience: existing.audience,
+      mode: existing.mode,
+      text: existing.text,
+      isActive: existing.isActive,
+    },
+  });
   revalidatePath("/cham-cong/ghi-chu");
   return { ok: true };
 }
