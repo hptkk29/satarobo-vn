@@ -158,3 +158,89 @@ export async function bulkCompleteByClass(input: unknown): Promise<BulkCompleteR
   revalidatePath("/admin/hoan-thanh-khoa");
   return { ok: true, created, skipped, errors };
 }
+
+// ── Duyệt đề xuất hoàn thành khoá do GIÁO VIÊN gửi ───────────────────────────
+//
+// Nửa còn thiếu của vòng làm việc (QA site GV vòng 1, BUG-028). Giáo viên bấm "Đề xuất
+// hoàn thành" ở /teacher/hoan-thanh sinh một CourseCompletionRequest PENDING, nhưng
+// hàm duyệt trước đây nằm trong route group của GIÁO VIÊN và KHÔNG CÓ CALLER NÀO trong
+// toàn repo — không ai duyệt được, giáo viên cũng không rút lại được (enum chỉ có
+// PENDING/APPROVED/REJECTED). Dời về đây cho đúng chủ: đây là hành động của trung tâm.
+//
+// Logic giữ NGUYÊN như bản cũ, chỉ thêm revalidate cho màn admin.
+const reviewSchema = z.object({
+  id: z.string().min(1),
+  decision: z.enum(["APPROVED", "REJECTED"]),
+  note: z.string().max(1000).optional().nullable(),
+});
+
+/** CENTER_MANAGER duyệt đề xuất hoàn thành cùng cơ sở → tạo CourseCompletion. */
+export async function reviewCourseCompletion(
+  input: unknown,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  // Bản cũ (khi hàm còn nằm ở route group giáo viên) kiểm quyền bằng
+  // hasRole(SUPER_ADMIN | CENTER_MANAGER) — vi phạm luật cứng #1 của Nền Hệ thống
+  // (mọi kiểm quyền đi qua MỘT cửa) và là lý do file đó phải nằm trong
+  // INLINE_AUTHZ_ALLOWLIST. Chuyển sang đúng quyền của hành động, khớp với gate của
+  // trang: cùng một `completions:manage`, nên menu, cổng trang và cổng ghi không lệch.
+  if (!(await checkPermission("completions:manage"))) {
+    return { ok: false, error: "Không có quyền duyệt" };
+  }
+  const parsed = reviewSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ",
+    };
+  }
+  const { id, decision, note } = parsed.data;
+
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const req = await sdb.courseCompletionRequest.findUnique({
+    where: { id },
+    select: { status: true, centerId: true, studentId: true, courseId: true },
+  });
+  // Cách ly cơ sở do chính lượt đọc này lo: `CourseCompletionRequest` có `centerId`
+  // nên thuộc SCOPED_MODELS ⇒ scopedDb chèn bộ lọc cơ sở vào findUnique, đề xuất của
+  // cơ sở khác trả về null và dừng ngay tại đây. Bản cũ so `req.centerId` với
+  // `session.user.centerId` — vừa thừa, vừa đọc cơ sở từ JWT (nguồn quyền là DB, luật
+  // cứng #6), vừa sai với người giữ vai ở nhiều cơ sở.
+  if (!req) return { ok: false, error: "Không tìm thấy đề xuất" };
+  if (req.status !== "PENDING")
+    return { ok: false, error: "Đề xuất đã được xử lý" };
+
+  if (decision === "APPROVED") {
+    const res = await completeCourse({
+      studentId: req.studentId,
+      courseId: req.courseId,
+      createdById: session.user.id,
+    });
+    if (!res.ok)
+      return { ok: false, error: res.error ?? "Lỗi xác nhận hoàn thành" };
+  }
+
+  try {
+    await sdb.courseCompletionRequest.update({
+      where: { id },
+      data: {
+        status: decision,
+        reviewedById: session.user.id,
+        reviewedByName: session.user.name ?? null,
+        reviewedAt: new Date(),
+        reviewNote: note?.trim() || null,
+      },
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      error: `Lỗi duyệt: ${err instanceof Error ? err.message : "Unknown"}`,
+    };
+  }
+  // Cả hai màn: bảng chờ duyệt ở đây, và badge "Chờ duyệt" bên site giáo viên.
+  revalidatePath("/hoan-thanh-khoa");
+  revalidatePath("/teacher/hoan-thanh");
+  return { ok: true };
+}

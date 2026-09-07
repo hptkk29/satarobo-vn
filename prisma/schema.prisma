@@ -5996,7 +5996,19 @@ enum PaymentAccountantStatus {
   CONFIRMED // kế toán xác nhận (giảm công nợ, sinh Receipt)
   REJECTED // kế toán từ chối (bắt buộc reason)
   REFUNDED // hoàn (bút toán âm, không xóa gốc)
-  ADJUSTED // bản điều chỉnh (trỏ adjustmentOfId)
+  // ⚠️ 07/09/2026 — ĐÃ BỎ `ADJUSTED`. Nó là LOẠI bút toán, không phải trạng thái kế
+  // toán: nhét vào đây thì mọi truy vấn lọc `accountantStatus = CONFIRMED` đều bỏ qua
+  // bút toán điều chỉnh, nên số kế toán vừa sửa không bao giờ tới phụ huynh. Loại bút
+  // toán nay nằm ở cột riêng `Payment.paymentType`.
+}
+
+/// Loại bút toán trong sổ thu (07/09/2026 — tách khỏi `accountantStatus`).
+///
+/// KHÔNG có `REFUND`: hoàn tiền đã có `accountantStatus = REFUNDED`, thêm ở đây nữa là
+/// hai cách diễn đạt cùng một sự kiện và sớm muộn hai chỗ sẽ lệch nhau.
+enum PaymentType {
+  PAYMENT // khoản thu bình thường
+  ADJUSTMENT // bút toán điều chỉnh — lưu DELTA, trỏ `adjustmentOfId` về phiếu thu gốc
 }
 
 enum ReceiptStatus {
@@ -6019,6 +6031,8 @@ model Payment {
 
   saleStatus       PaymentSaleStatus       @default(RECORDED)
   accountantStatus PaymentAccountantStatus @default(PENDING)
+  /// LOẠI bút toán. Mặc định PAYMENT — mọi dòng cũ backfill về đây.
+  paymentType      PaymentType             @default(PAYMENT)
   recordedById     String?
   confirmedById    String?
   confirmedAt      DateTime?               @db.Timestamptz(6)
@@ -6998,6 +7012,25 @@ model MessageAttachment {
 }
 
 // Chỉ dùng cho ANNOUNCEMENT — GV cần biết PH nào đã đọc thông báo lịch học
+// Phụ huynh ĐÃ ĐỌC một mục trên bảng tin portal.
+//
+// `itemId` là id của MỤC BẢNG TIN, không phải khoá ngoại tới `Notification`:
+// bảng tin portal v2 (`lib/portal/notification-feed.ts` — bản PROD đang chạy) tổng hợp
+// 7 nhóm, phần lớn KHÔNG phải dòng `Notification` (nhận xét buổi, học bù, học phí,
+// học bạ, khảo sát) và mang id tổng hợp dạng `nt-<id>` / `mk-need-<id>`. Khoá theo
+// item mới phủ được cả bảng tin; khoá theo `Notification.id` chỉ vá được một nhóm.
+//
+// Cùng hình dạng với `AnnouncementRead` ngay dưới (khoá kép, không FK) — bảng đọc thì
+// không cần cascade, và giữ hai bảng giống nhau để ai đọc một cái là hiểu cái kia.
+model PortalFeedRead {
+  itemId String
+  userId String
+  readAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@id([itemId, userId])
+  @@index([userId])
+}
+
 model AnnouncementRead {
   messageId String
   userId    String

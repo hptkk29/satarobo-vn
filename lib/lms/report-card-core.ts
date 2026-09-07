@@ -43,8 +43,26 @@ export interface ReportCardMetrics {
 /** Tỉ lệ chuyên cần % (THUẦN — test). */
 // Trả về PHẦN TRĂM 0–100 (khác computeAttendanceRate ở attendance-rate.ts trả PHÂN SỐ 0–1).
 // Rename để không nhầm 100× — LIB-03.
+/**
+ * % CHUYÊN CẦN = có mặt / số buổi ĐÃ DIỄN RA.
+ *
+ * ⚠️ 04/09/2026 — trước đây mẫu số là `att.total` (TỔNG buổi của KHOÁ), nên site phụ
+ * huynh đọc 7/12 còn giáo viên/admin đọc 7/11 cho cùng một đứa trẻ cùng một lúc
+ * (`lib/progress.ts` vốn đã chia cho buổi đã diễn ra). Tỉ lệ theo tổng buổi khoá còn
+ * bị THẤP GIẢ suốt đầu khoá: con đi đủ buổi 1 vẫn hiện 1/12 = 8%.
+ *
+ * "Khoá đi được tới đâu" là câu hỏi KHÁC — dùng `courseProgressPercent`.
+ */
 export function attendanceRatePercent(att: AttendanceSummary): number {
-  return att.total > 0 ? Math.round((att.attended / att.total) * 100) : 0;
+  return att.daDienRa > 0 ? Math.round((att.attended / att.daDienRa) * 100) : 0;
+}
+
+/** % TIẾN ĐỘ KHOÁ = số buổi đã dạy / tổng buổi chuẩn của khoá. */
+export function courseProgressPercent(att: AttendanceSummary): number {
+  if (att.total <= 0) return 0;
+  // Kẹp trần 100: lớp dạy bù / thêm buổi có thể vượt số buổi chuẩn của khoá, mà
+  // "tiến độ 103%" thì phụ huynh đọc ra là hệ thống sai.
+  return Math.min(100, Math.round((att.daDienRa / att.total) * 100));
 }
 
 export interface ExamAttemptLite {

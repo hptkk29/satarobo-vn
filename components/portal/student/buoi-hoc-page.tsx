@@ -20,12 +20,14 @@ const ATT: Record<SessionAttendance, { label: string; cls: string }> = {
   ABSENT: { label: "Vắng", cls: "bg-destructive/10 text-destructive" },
   MAKEUP: { label: "Học bù", cls: "bg-info/10 text-info" },
   FUTURE: { label: "Chưa diễn ra", cls: "bg-muted text-muted-foreground" },
+  // Buổi đã qua mà giáo viên chưa chấm — nói thật, đừng in "Có mặt" (bản cũ làm vậy).
+  UNMARKED: { label: "Chưa điểm danh", cls: "bg-muted text-muted-foreground" },
+  CANCELLED: { label: "Đã huỷ", cls: "bg-destructive/10 text-destructive" },
 };
 
-function dmy(iso: string): string {
-  const d = new Date(iso);
-  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
-}
+// 06/09 — nhãn ngày do SERVER tính theo lịch VN (`item.nhanNgay`); component không tự
+// `new Date(...).getDate()` nữa. Thiết bị của phụ huynh có thể ở múi giờ khác, và ô
+// "Hạn" của bài tập không đặt hạn từng in ra "NaN/NaN/NaN" vì `new Date("")`.
 
 export function StudentBuoiHocPage({ data }: { data: StudentSessionsView }) {
   const initial =
@@ -56,11 +58,19 @@ export function StudentBuoiHocPage({ data }: { data: StudentSessionsView }) {
               </p>
             </div>
           </div>
+          {/* 06/09 — nhãn nói rõ MẪU SỐ của từng con số. Trước đây ô đầu ghi "Đã học
+              10/12" trong khi ô cạnh ghi "Có mặt 6": hai con số cùng chữ "học" mà khác
+              nghĩa (10 = buổi lớp ĐÃ DẠY, 6 = buổi con CÓ MẶT), nên phụ huynh đọc ra là
+              hệ thống mâu thuẫn. Ô "Chưa chấm" bù đúng phần chênh còn lại. */}
           <div className="grid grid-cols-4 gap-2">
-            <Metric value={`${data.done}/${data.total}`} label="Đã học" />
-            <Metric value={String(data.present)} label="Có mặt" />
+            <Metric value={`${data.done}/${data.total}`} label="Buổi đã dạy" />
+            <Metric value={String(data.present)} label="Con có mặt" />
             <Metric value={String(data.absent)} label="Vắng" />
-            <Metric value={String(data.makeup)} label="Đã học bù" />
+            {data.chuaCham > 0 ? (
+              <Metric value={String(data.chuaCham)} label="Chưa chấm" />
+            ) : (
+              <Metric value={String(data.makeup)} label="Đã học bù" />
+            )}
           </div>
         </div>
       </div>
@@ -85,14 +95,20 @@ export function StudentBuoiHocPage({ data }: { data: StudentSessionsView }) {
                   <span
                     className={`grid size-8 shrink-0 place-items-center rounded-lg text-xs font-bold ${s.past ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"}`}
                   >
-                    {s.past ? <CircleCheck className="size-4" /> : s.order}
+                    {s.past && s.attendance !== "CANCELLED" ? (
+                      <CircleCheck className="size-4" />
+                    ) : (
+                      s.order
+                    )}
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-bold text-foreground">
-                      Buổi {s.order}: {s.title}
+                      {s.nhan}
                     </span>
-                    <span className="block text-xs text-muted-foreground">
-                      {dmy(s.date)}
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {[s.nhanNgay, s.className && `Lớp ${s.className}`]
+                        .filter(Boolean)
+                        .join(" · ")}
                     </span>
                   </span>
                   <span
@@ -119,11 +135,11 @@ function Detail({ s }: { s: StudentSessionItem }) {
     <div className="space-y-5 rounded-2xl border border-border bg-card p-5">
       <div className="flex flex-wrap items-start justify-between gap-2 border-b border-border pb-4">
         <div>
-          <h2 className="text-lg font-bold text-foreground">
-            Buổi {s.order} · {s.title}
-          </h2>
+          <h2 className="text-lg font-bold text-foreground">{s.nhan}</h2>
           <p className="mt-0.5 text-xs font-medium text-muted-foreground">
-            📅 {dmy(s.date)}
+            📅 {[s.nhanNgay, s.className && `Lớp ${s.className}`]
+              .filter(Boolean)
+              .join(" · ")}
           </p>
         </div>
         <span
@@ -167,9 +183,11 @@ function Detail({ s }: { s: StudentSessionItem }) {
               <p className="text-sm font-bold text-foreground">
                 {s.assignment.title}
               </p>
-              <p className="text-xs text-muted-foreground">
-                Hạn: {dmy(s.assignment.dueAt ?? "")}
-              </p>
+              {s.assignment.nhanHan && (
+                <p className="text-xs text-muted-foreground">
+                  Hạn: {s.assignment.nhanHan}
+                </p>
+              )}
             </div>
             {s.assignment.done ? (
               <a

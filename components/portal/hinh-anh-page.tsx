@@ -4,11 +4,8 @@ import type { StudentPhotos } from "@/lib/portal/photos";
 import { PageHero } from "@/components/portal/page-header";
 import { ChildSwitcher } from "@/components/portal/child-switcher";
 
-function fmt(iso: string): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
-}
+// 06/09 — nhãn ngày do SERVER tính theo lịch VN (`g.nhanNgay`). Server Component chạy
+// UTC trên Vercel; `getDate()` ở đây lệch một ngày trong khoảng 00:00–07:00 giờ VN.
 
 export function HinhAnhPageV2({
   kids,
@@ -65,7 +62,8 @@ export function HinhAnhPageV2({
                     {g.title}
                   </h2>
                   <p className="text-xs font-medium text-muted-foreground">
-                    Ngày chụp: {fmt(g.dateISO)} · {g.photos.length} ảnh
+                    {g.nhanNgay ? `Ngày chụp: ${g.nhanNgay} · ` : ""}
+                    {g.photos.length} ảnh
                   </p>
                 </div>
               </div>

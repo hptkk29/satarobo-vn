@@ -15,6 +15,7 @@ import {
   diffHours,
   isClassKind,
   isRangeKind,
+  kiemKhoangNgayDon,
 } from "@/lib/work-request";
 import { applyApprovedWorkRequest } from "@/lib/work-request-apply";
 
@@ -57,6 +58,11 @@ export async function submitWorkRequest(input: unknown): Promise<Result> {
       ? new Date(d.toDate)
       : from
     : from;
+  // Kiểm ở SERVER, không tin form: form đã chặn đúng, nhưng Server Action là một
+  // endpoint riêng và gọi thẳng vào nó thì bỏ qua mọi thứ form làm.
+  const loiNgay = kiemKhoangNgayDon(d.kind, from, to);
+  if (loiNgay) return { ok: false, error: loiNgay };
+
   const hours =
     d.kind === "OT"
       ? diffHours(d.startTime, d.endTime)

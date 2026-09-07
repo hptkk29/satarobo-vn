@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  parseVnDateTimeLocal,
   parseVnYmd,
   vnAddDays,
   vnDateAt,
@@ -66,5 +67,54 @@ describe("vnDateOnly / parseVnYmd", () => {
     expect(vnYmd(parseVnYmd("2026-06-20")!)).toBe("2026-06-20");
     expect(parseVnYmd("20/06/2026")).toBeNull();
     expect(parseVnYmd("")).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+describe("parseVnDateTimeLocal — chuỗi <input type=\"datetime-local\">", () => {
+  it("chuỗi trần được hiểu là GIỜ VN, không phải giờ tiến trình", () => {
+    // 17:30 giờ VN = 10:30 UTC. Bản cũ (`new Date(value)`) chạy trên Vercel (UTC) ra
+    // 17:30Z = 00:30 hôm sau giờ VN — lệch đúng 7 tiếng và nhảy sang ngày kế.
+    expect(parseVnDateTimeLocal("2026-09-12T17:30")?.toISOString()).toBe(
+      "2026-09-12T10:30:00.000Z",
+    );
+  });
+
+  it("hạn nộp 23:59 KHÔNG được trôi sang ngày hôm sau", () => {
+    expect(parseVnDateTimeLocal("2026-09-12T23:59")?.toISOString()).toBe(
+      "2026-09-12T16:59:00.000Z",
+    );
+  });
+
+  it("nhận cả dạng có giây", () => {
+    expect(parseVnDateTimeLocal("2026-09-12T17:30:45")?.toISOString()).toBe(
+      "2026-09-12T10:30:45.000Z",
+    );
+  });
+
+  it("chuỗi ĐÃ có múi giờ giữ nguyên, không cộng thêm lần nữa", () => {
+    expect(parseVnDateTimeLocal("2026-09-12T10:30:00Z")?.toISOString()).toBe(
+      "2026-09-12T10:30:00.000Z",
+    );
+    expect(parseVnDateTimeLocal("2026-09-12T17:30:00+07:00")?.toISOString()).toBe(
+      "2026-09-12T10:30:00.000Z",
+    );
+  });
+
+  it("rỗng / null / rác → null (không ném, không ra Invalid Date)", () => {
+    expect(parseVnDateTimeLocal("")).toBeNull();
+    expect(parseVnDateTimeLocal("   ")).toBeNull();
+    expect(parseVnDateTimeLocal(null)).toBeNull();
+    expect(parseVnDateTimeLocal(undefined)).toBeNull();
+    expect(parseVnDateTimeLocal("không phải ngày")).toBeNull();
+  });
+
+  it("lưu rồi nạp lại KHÔNG trôi thêm lần nữa (idempotent qua vòng chỉnh sửa)", () => {
+    // Kịch bản thật: giáo vụ mở buổi ra sửa rồi bấm lưu mà không đổi giờ. Bản cũ cộng
+    // thêm 7 tiếng MỖI LẦN lưu, nên buổi trôi dần mỗi lượt chỉnh.
+    const lan1 = parseVnDateTimeLocal("2026-09-12T17:30")!;
+    const p = vnParts(lan1);
+    const chuoiLai = `${p.year}-${String(p.month + 1).padStart(2, "0")}-${String(p.day).padStart(2, "0")}T${String(p.hour).padStart(2, "0")}:${String(p.minute).padStart(2, "0")}`;
+    expect(parseVnDateTimeLocal(chuoiLai)?.toISOString()).toBe(lan1.toISOString());
   });
 });

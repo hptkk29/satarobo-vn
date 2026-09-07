@@ -73,6 +73,18 @@ export function trialRowStatus(input: TrialRowStatusInput): TrialRowStatus {
   return input.rescheduled ? "rescheduled" : "upcoming";
 }
 
+/**
+ * Đếm suất ĐANG NỢ PHIẾU — số in trên ô "Trial chờ đánh giá" của trang chủ site GV.
+ *
+ * Để ở đây (THUẦN, cùng file với định nghĩa trạng thái) chứ không viết
+ * `rows.filter(r => r.status === "awaiting-eval").length` ngay tại trang: ô đếm và
+ * bảng /teacher/trial phải đọc CÙNG MỘT định nghĩa "còn nợ phiếu", không thì chúnng
+ * nói ngược nhau như cặp ô "Buổi chưa điểm danh" đã từng (QA vòng 1, BUG-029).
+ */
+export function demChoDanhGia(rows: ReadonlyArray<{ status: TrialRowStatus }>): number {
+  return rows.filter((r) => r.status === "awaiting-eval").length;
+}
+
 /** Suất đã xong việc với GV → rơi xuống bảng "Đã Trial" dù buổi còn ở tương lai. */
 export function isSettledTrialRow(status: TrialRowStatus): boolean {
   return status === "enrolled" || status === "lost" || status === "withdrawn";

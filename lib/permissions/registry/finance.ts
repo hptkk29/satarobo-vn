@@ -23,6 +23,14 @@ export const financeModule: ModuleDecl = {
       description: "Kế toán xác nhận khoản thu (tách nhiệm vụ với record).",
     },
     {
+      key: "payments:adjust",
+      action: "adjust",
+      description:
+        "Điều chỉnh khoản thu ĐÃ XÁC NHẬN — sinh bút toán delta, dòng gốc bất biến. " +
+        "Cấp cho kế toán Hội sở + kế toán cơ sở ở RBAC v2 (prisma/seed-roles.ts). " +
+        "Ma trận v1 cố ý chỉ có SUPER_ADMIN.",
+    },
+    {
       key: "payments:view-pii",
       action: "view-pii",
       // Field thật đang mask: Student.parentNationalId + Student.address

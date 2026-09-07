@@ -206,7 +206,12 @@ export function SessionEvalPdf({ data }: { data: SessionEvalPdfData }) {
   const legacyComment = (data.comment ?? "").trim();
 
   return (
-    <Document>
+    // `title` ghi vào /Title của PDF. Không có nó, Chrome lấy đoạn cuối URL làm tiêu
+    // đề tab — với route này đoạn cuối là `studentId` nên tab hiện id thô kiểu
+    // "uat-hv-CS1-29" (QA vòng 1, NV-004).
+    <Document
+      title={`Phiếu nhận xét — ${data.studentName} — ${data.sessionTopic}`}
+    >
       <Page size="A4" style={s.page}>
         <View style={s.header}>
           <View>

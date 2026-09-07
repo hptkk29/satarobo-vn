@@ -1,12 +1,13 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { GHI_DANH_DANG_HOC } from "@/lib/portal/trang-thai-ghi-danh";
 import { hasMediaConsent } from "@/lib/lms/media-consent";
 
 // Portal v2 — dữ liệu trang "Hồ sơ gia đình" (giống SataUI): phụ huynh đại diện +
 // phụ huynh thứ hai + học sinh liên kết (kèm trạng thái đồng ý hình ảnh).
 // PH name/email/address lấy từ User; phone/PH thứ hai denormalized trên Student.
 
-const ACTIVE = ["CONFIRMED", "STUDYING", "ACTIVE", "PAUSED"] as const;
+const ACTIVE = GHI_DANH_DANG_HOC; // lib/portal/trang-thai-ghi-danh.ts
 
 export type ProfileChild = {
   id: string;

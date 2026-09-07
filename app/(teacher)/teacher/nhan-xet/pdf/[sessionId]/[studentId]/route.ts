@@ -16,7 +16,10 @@ import {
 import { withFreshFonts } from "@/lib/pdf/brand";
 import { SessionEvalPdf } from "@/lib/pdf/session-eval";
 import { buildSessionNumberMap } from "@/lib/lms/session-order";
-import { resolveDisplayProjectName } from "@/lib/lms/session-project-name";
+import {
+  deriveSessionLabel,
+  resolveDisplayProjectName,
+} from "@/lib/lms/session-project-name";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -141,6 +144,19 @@ export async function GET(
         select: { id: true, date: true },
       }),
     ).get(sess.id) ?? null;
+  // NHÃN BUỔI cho phiếu GỬI PHỤ HUYNH. `sess.topic` thô với giáo trình Sata chính là
+  // chuỗi "Buổi học"/"Buổi 10", nên bản cũ (`sess.topic ?? "Buổi học"`) in ra
+  // "Buổi học: Buổi học" trên tài liệu ra ngoài — đây là bản in trên PROD, không phải
+  // chuyện của UAT (QA vòng 1, BUG-008).
+  const nhanBuoi =
+    deriveSessionLabel({
+      sessionNumber: sessionNo,
+      planTitle: sess.plan?.customTitle,
+      lessonTitle: sess.lesson?.title,
+      lessonOrder: sess.lesson?.order,
+      moduleCode: sess.lesson?.moduleCode,
+      topic: sess.topic,
+    }) || "Buổi học";
   const duAn = resolveDisplayProjectName(
     {
       sessionNumber: sessionNo,
@@ -162,7 +178,7 @@ export async function GET(
             studentName: student.name,
             courseName: sess.class.course.name,
             className: sess.class.name,
-            sessionTopic: sess.topic ?? "Buổi học",
+            sessionTopic: nhanBuoi,
             dateLabel,
             projectName: duAn,
             notes: normalizeEvalNotes(fb.notes),
@@ -182,7 +198,17 @@ export async function GET(
     );
   }
 
-  const filename = `PhieuNhanXet-${safeFilename(student.name)}.pdf`;
+  // Tên tệp mang đủ ngữ cảnh: phụ huynh và giáo viên đều lưu nhiều phiếu vào một thư
+  // mục, `PhieuNhanXet-Dang_Cong_Tri.pdf` của 10 buổi khác nhau thì đè lên nhau.
+  const filename = `${[
+    "NhanXet",
+    safeFilename(student.name),
+    safeFilename(sess.class.name),
+    sessionNo ? `Buoi${sessionNo}` : null,
+    safeFilename(dateLabel),
+  ]
+    .filter(Boolean)
+    .join("_")}.pdf`;
   return new NextResponse(new Uint8Array(pdf), {
     status: 200,
     headers: {

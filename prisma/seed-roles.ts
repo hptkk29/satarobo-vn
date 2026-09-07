@@ -95,6 +95,15 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "payroll:edit", scopeType: "GLOBAL" },
       { action: "payments:record", scopeType: "GLOBAL" },
       { action: "payments:confirm", scopeType: "GLOBAL" },
+      // 07/09/2026 — ĐIỀU CHỈNH khoản thu đã xác nhận (bút toán delta, dòng gốc bất
+      // biến). Quyền RIÊNG, không gộp vào `payments:confirm`: xác nhận là chấp nhận
+      // một con số, điều chỉnh là sửa một con số đã vào sổ và đã đối soát sao kê.
+      // ⚠️ Ma trận v1 (`lib/auth/permissions.ts`) cố ý CHỈ có SUPER_ADMIN — vai nghiệp
+      // vụ nhận quyền này DUY NHẤT ở đây (v2/DB). Prod bật RBAC_V2 nên kế toán dùng
+      // được; máy dev chạy v1 nên phải đăng nhập SUPER_ADMIN mới thấy nút.
+      // ⚠️ Seed vai KHÔNG tự chạy theo deploy — phải bấm workflow seed trên prod,
+      // nếu không thì nút "Điều chỉnh" vẫn ẩn với kế toán dù mã đã lên.
+      { action: "payments:adjust", scopeType: "GLOBAL" },
       // #15 (câu 32) — break-glass xem đầy đủ CCCD PH + địa chỉ ở màn thanh toán.
       { action: "payments:view-pii", scopeType: "GLOBAL" },
       { action: "orders:view", scopeType: "GLOBAL" },
@@ -875,6 +884,10 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "payments:view", scopeType: "GLOBAL" },
       { action: "payments:record", scopeType: "GLOBAL" },
       { action: "payments:confirm", scopeType: "GLOBAL" },
+      // 07/09/2026 — điều chỉnh khoản thu đã xác nhận. Kế toán cơ sở là người ngồi
+      // đối soát sao kê hằng ngày, tức đúng người phát hiện số sai. Cách ly cơ sở
+      // vẫn do `loadScopedPayment` trong Server Action lo, không do scopeType.
+      { action: "payments:adjust", scopeType: "GLOBAL" },
       // #15 (câu 32) — break-glass xem đầy đủ CCCD PH + địa chỉ (chỉ cơ sở mình).
       { action: "payments:view-pii", scopeType: "GLOBAL" },
       { action: "students:view-all", scopeType: "GLOBAL" },

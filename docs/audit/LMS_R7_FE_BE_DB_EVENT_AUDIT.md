@@ -66,7 +66,7 @@ Hệ thống R7 **đã wired FE↔BE↔DB↔Event ở phần lớn module** — 
 
 ## 3. Notification R7-17 — coverage
 
-**Đã có handler + emit (idempotent dedupeKey):** `payment.confirmed`, `enrollment.assigned`, `session.taught` (+ homework “Bài tập mới”), `trial.assigned`, `makeup.requested`, `makeup.confirmed`, `eval.opened`, `reportcard.published`, `lead.trialAttended`, `class.session_changed`. Cron đọc-trực-tiếp (không event): `assignment-due-soon`, `debt-reminder`.
+**Đã có handler + emit (idempotent dedupeKey):** `payment.confirmed`, `enrollment.assigned`, `session.taught` (+ homework “Bài tập mới”), `trial.assigned`, `makeup.requested`, `makeup.confirmed`, `eval.opened`, `reportcard.published`, `class.session_changed`. ⚠️ **`lead.trialAttended` chỉ có HANDLER, không có emit** — đường thật phát `lead.awaitingDecision`; dòng này sai từ R7-17 tới 03/09/2026, xem `lib/events/khop-phat-nghe.test.ts`. Cron đọc-trực-tiếp (không event): `assignment-due-soon`, `debt-reminder`.
 
 **Thiếu (ban đầu) → ĐÃ FIX:** `payment.rejected` (P0), `account.activated` (emit ở `activateAccount`), `comment.added` (emit ở `saveSessionFeedback` cho StudentSessionFeedback per-HV), `trial.schedule_changed` (emit ở `updateTrialAction`). **Coverage hiện: 17/17 trigger.** Cron nhắc trả góp (`remindOverdueInstallments`) cũng đã wire.
 

@@ -20,12 +20,11 @@
 // đọc qua sdb pass-through; own-class đã gác bằng assignedClassIds + courseId suy từ lớp
 // (không tin client) — giống admin hoan-thanh-khoa/_actions.ts.
 // ⚠️ Câu 46: payload chỉ TÊN học viên — KHÔNG SĐT/email/tên phụ huynh.
-import Link from "next/link";
 import { GraduationCap, Lock, Users } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
-import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
+import { rosterWhere } from "@/lib/enrollment-scope";
 import {
   computeAttendanceSummary,
   type AttendanceSummaryItem,
@@ -35,7 +34,7 @@ import type {
   MakeupStatusValue,
   SessionStatusValue,
 } from "@/lib/labels";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "../_components/ui/empty-state";
 import { PageHeader } from "../_components/ui/page-header";
 import {
@@ -43,6 +42,7 @@ import {
   type CompletionTableRow,
 } from "./_components/completion-table";
 import { BackLink } from "../_components/ui/back-link";
+import { CompletionClassGrid } from "./_components/completion-class-grid";
 
 export const metadata = { title: "Hoàn thành khoá | Giáo viên Sata Robo" };
 
@@ -72,12 +72,13 @@ function tallySessions(rows: { status: string; _count: { _all: number } }[]) {
 export default async function TeacherCompletionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ classId?: string }>;
+  // `q` / `trangThai`: bộ lọc lưới lớp, đọc Ở SERVER (xem use-loc-tren-url.ts).
+  searchParams: Promise<{ classId?: string; q?: string; trangThai?: string }>;
 }) {
   const session = await auth();
   if (!session?.user) return null; // layout đã gate — guard cho type-narrow
 
-  const { classId } = await searchParams;
+  const { classId, q: spQ, trangThai: spTrangThai } = await searchParams;
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
   const classIds = [...actor.assignedClassIds];
@@ -112,11 +113,12 @@ export default async function TeacherCompletionsPage({
         .findUnique({
           where: { id: classId },
           select: {
+            // "ket-khoa" — module này SINH RA để quản lý em đã kết khoá, mà lọc
+            // "đang học" lại loại đúng nhóm đó: 11 lớp đã kết thúc trên UAT đều hiện
+            // "0 học viên" kèm "Lớp chưa có học viên đang học", trong khi trang Học
+            // viên liệt kê 10 em (QA vòng 1, BUG-021).
             enrollments: {
-              where: {
-                deletedAt: null,
-                status: { in: ENROLLMENT_ACTIVE_STATUS_LIST },
-              },
+              where: rosterWhere("ket-khoa"),
               select: {
                 id: true,
                 studentId: true,
@@ -235,10 +237,18 @@ export default async function TeacherCompletionsPage({
           </CardContent>
         </Card>
 
+        {/* Chủ dự án chốt 03/09 (quyết định #1): mẫu số chuyên cần là TỔNG BUỔI CỦA
+            KHOÁ, giữ nguyên như học bạ và cổng phụ huynh. Màn này trước đó dùng "số
+            buổi đã COMPLETED" nên cùng một em ra "7/7" ở đây và "7/11" ở học bạ
+            (QA vòng 1, BUG-023). `heldSessions` chỉ dùng để CẢNH BÁO lúc đề xuất. */}
         {enrollments.length === 0 ? (
-          <EmptyState icon={Users} title="Lớp chưa có học viên đang học." />
+          <EmptyState icon={Users} title="Lớp chưa có học viên nào." />
         ) : (
-          <CompletionTable rows={rows} completedSessions={progress.completed} />
+          <CompletionTable
+            rows={rows}
+            completedSessions={progress.total}
+            heldSessions={progress.completed}
+          />
         )}
       </div>
     );
@@ -248,7 +258,12 @@ export default async function TeacherCompletionsPage({
   const classes = classIds.length
     ? await sdb.class.findMany({
         where: { id: { in: classIds } },
-        select: { id: true, name: true, course: { select: { name: true } } },
+        select: {
+          id: true,
+          name: true,
+          status: true, // để lọc bỏ lớp đã huỷ / chưa khai giảng khỏi lưới
+          course: { select: { name: true } },
+        },
         orderBy: { name: "asc" },
       })
     : [];
@@ -266,16 +281,9 @@ export default async function TeacherCompletionsPage({
         where: { id: { in: classIds } },
         select: {
           id: true,
-          _count: {
-            select: {
-              enrollments: {
-                where: {
-                  deletedAt: null,
-                  status: { in: ENROLLMENT_ACTIVE_STATUS_LIST },
-                },
-              },
-            },
-          },
+          // Cùng phạm vi với bảng chi tiết — nếu không thì thẻ lớp ghi "0 học viên"
+          // còn bấm vào lại ra 10 dòng.
+          _count: { select: { enrollments: { where: rosterWhere("ket-khoa") } } },
         },
       })
     : [];
@@ -297,7 +305,7 @@ export default async function TeacherCompletionsPage({
     <div>
       <PageHeader
         title="Hoàn thành khoá"
-        subtitle="Tiến độ khoá học và trạng thái hoàn thành của học viên các lớp bạn phụ trách — chỉ xem; xác nhận hoàn thành do trung tâm thao tác trên trang quản trị."
+        subtitle="Tiến độ khoá học của các lớp bạn phụ trách. Bạn ĐỀ XUẤT hoàn thành cho từng học viên; trung tâm duyệt và cấp chứng chỉ trên trang quản trị."
       />
 
       {classes.length === 0 ? (
@@ -306,37 +314,21 @@ export default async function TeacherCompletionsPage({
           title="Bạn chưa được phân công lớp nào."
         />
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {classes.map((c) => {
+        <CompletionClassGrid
+          banDauLoc={{ q: spQ, trangThai: spTrangThai }}
+          rows={classes.map((c) => {
             const p = tallySessions(sessionsByClass.get(c.id) ?? []);
-            return (
-              // href CHỈ-query (giữ path hiện tại): chạy đúng cả trên host giaovien
-              // (clean URL /hoan-thanh) LẪN localhost/preview (path /teacher/hoan-thanh).
-              <Link key={c.id} href={`?classId=${c.id}`} className="block">
-                <Card className="t-card-hover h-full">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base">{c.name}</CardTitle>
-                    <p className="text-xs text-muted-foreground">
-                      {c.course.name}
-                    </p>
-                  </CardHeader>
-                  <CardContent className="space-y-2 pt-0">
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>
-                        {p.completed}/{p.total} buổi ·{" "}
-                        {studentCountByClass.get(c.id) ?? 0} học viên
-                      </span>
-                      <span className="font-medium text-foreground">
-                        {p.pct}%
-                      </span>
-                    </div>
-                    <ProgressBar pct={p.pct} />
-                  </CardContent>
-                </Card>
-              </Link>
-            );
+            return {
+              id: c.id,
+              name: c.name,
+              courseName: c.course.name,
+              status: c.status,
+              completedSessions: p.completed,
+              totalSessions: p.total,
+              studentCount: studentCountByClass.get(c.id) ?? 0,
+            };
           })}
-        </div>
+        />
       )}
     </div>
   );

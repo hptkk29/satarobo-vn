@@ -1,6 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
+import { idsDaDoc } from "@/lib/portal/feed-read";
 import { getStudentFeedback, type FeedbackItem } from "@/lib/portal/feedback";
 import { getStudentMakeup, type StudentMakeup } from "@/lib/portal/makeup";
 import { getStudentBilling, type StudentBilling } from "@/lib/portal/billing-student";
@@ -192,7 +193,11 @@ export const getParentNotificationFeed = cache(async (
   // không gán cứng LICH_HOC). audience=STUDENT (gửi riêng 1 con) → gắn badge tên
   // con để phụ huynh nhiều con biết thông báo thuộc con nào (parity scope v1).
   const childNameById = new Map(children.map((c) => [c.id, c.name]));
-  for (const n of notifs.slice(0, 10)) {
+  // 06/09 — THÔI cắt còn 10. Nguồn `getParentNotifications` đã `take: 100`, mà bảng tin
+  // v2 lại slice xuống 10 và không có phân trang: thông báo trung tâm gửi tuần trước bị
+  // vài tin hệ thống đẩy văng khỏi cổng phụ huynh, không đường nào xem lại. Bản v1 hiện
+  // đủ 100.
+  for (const n of notifs) {
     items.push({
       id: `nt-${n.id}`,
       category: "THONG_BAO",
@@ -205,6 +210,15 @@ export const getParentNotificationFeed = cache(async (
   }
 
   items.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+
+  // TRẠNG THÁI ĐỌC THẬT đè lên suy đoán theo thời gian ở trên (04/09/2026).
+  //
+  // Phép HOẶC chứ không thay thế: bỏ hẳn `READ_AFTER_MS` thì lần triển khai đầu tiên
+  // mọi mục cũ chưa từng được đánh dấu sẽ dồn hết vào badge — phụ huynh mở portal
+  // ra thấy "9+" cho những thứ họ đã xem từ lâu. Suy đoán cũ làm trạng thái BAN ĐẦU,
+  // dấu đọc thật chỉ thêm vào.
+  const daDoc = await idsDaDoc(parentUserId);
+  for (const it of items) if (daDoc.has(it.id)) it.read = true;
 
   const unreadByCategory = {
     NHAN_XET: 0, LICH_HOC: 0, HOC_BU: 0, HOC_PHI: 0, HOC_BA: 0, KHAO_SAT: 0, THONG_BAO: 0,
@@ -222,12 +236,30 @@ export const getParentNotificationFeed = cache(async (
 // CÙNG nguồn số với trang Thông báo (cùng getParentNotificationFeed, chỉ thêm
 // cache) — cache miss trên /portal/thong-bao vẫn chỉ fan-out 1 lần nhờ React
 // cache dedupe giữa callback này và page.
-const badgeCached = unstable_cache(
-  async (parentUserId: string): Promise<number> =>
-    (await getParentNotificationFeed(parentUserId)).unreadTotal,
-  ["portal-v2-notification-badge"],
-  { revalidate: 60 },
-);
+/** Thẻ cache theo từng phụ huynh — để xóa đúng bản của họ khi vừa đọc xong. */
+export function theBadgeThongBao(parentUserId: string): string {
+  return `portal-badge-thong-bao:${parentUserId}`;
+}
+
+// 06/09 — THẺ THEO TỪNG PHỤ HUYNH. Bản cũ gắn một thẻ hằng `"portal-badge-thong-bao"`
+// cho MỌI phụ huynh, nên một người bấm vào trang Thông báo là xoá cache badge của toàn
+// bộ phụ huynh đang online — cả hệ thống cùng lúc tính lại một fan-out khá nặng chỉ để
+// ra một con số. Hàm `theBadgeThongBao()` viết ra đúng cho việc này nhưng chưa nơi nào
+// gọi. `unstable_cache` chốt thẻ lúc ĐỊNH NGHĨA, nên phải dựng hàm theo từng lượt gọi.
+//
+// (Khoá cache vốn đã tách theo người: `unstable_cache` gộp cả THAM SỐ vào khoá, nên
+// không có chuyện phụ huynh này đọc được con số của phụ huynh kia. Đây thuần là chuyện
+// xoá cache quá tay.)
+const badgeCached = (parentUserId: string): Promise<number> =>
+  unstable_cache(
+    async (): Promise<number> =>
+      (await getParentNotificationFeed(parentUserId)).unreadTotal,
+    ["portal-v2-notification-badge", parentUserId],
+    // TTL 60s vẫn giữ (layout dựng trên MỌI page view), nhưng thêm THẺ để
+    // `updateTag` xóa được ngay khi phụ huynh vừa đọc — không thì badge đứng nguyên
+    // tới một phút sau khi họ đã xem, đúng triệu chứng vé này định chữa.
+    { revalidate: 60, tags: [theBadgeThongBao(parentUserId)] },
+  )();
 
 /** Số chưa đọc cho badge chuông topbar v2 (cache 60s/parent). */
 export const getParentNotificationBadge = cache(

@@ -286,3 +286,31 @@
     #e2600f 100%
   );
 }
+
+/* Con trỏ bàn tay cho nút — QA site GV vòng 1 (BUG-011).
+ *
+ * Tailwind v4 đã BỎ `cursor: pointer` mặc định cho `button` khỏi preflight (v3 vẫn
+ * còn). Hệ quả đo được: 100% thẻ <button> trong site trả về `cursor: default` —
+ * sidebar, bộ lọc, dropdown, tab, nút điểm danh, nút chấm bài, phân trang — trong khi
+ * mọi <a> vẫn đúng. Không phải lỗi của từng màn, nên vá một lần ở đây.
+ *
+ * ⚠️ BẮT BUỘC bọc `@layer base`. Phần còn lại của file này KHÔNG phân tầng (0 chữ
+ * @layer) nên nó thắng mọi utility Tailwind; để rule cursor ngoài lớp thì một
+ * `cursor-not-allowed` hay `cursor-grab` viết trong markup sẽ bị đè câm.
+ *
+ * ⚠️ Chỉ trong `.teacher-root`. Admin/portal/public cũng thiếu y hệt, nhưng sửa ở
+ * app/globals.css là chạm 3 site nằm ngoài đợt QA này và phải nghiệm thu lại cả ba.
+ * Việc đó tách ticket riêng.
+ *
+ * `[role="button"]` để phủ các primitive base-ui/Radix render ra <div> có vai nút.
+ * Không đụng phần tử không có hành vi — không quét <div>, <span> trần.
+ */
+@layer base {
+  .teacher-root :is(button, [role="button"]):not(:disabled):not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+
+  .teacher-root :is(button, [role="button"]):is(:disabled, [aria-disabled="true"]) {
+    cursor: not-allowed;
+  }
+}

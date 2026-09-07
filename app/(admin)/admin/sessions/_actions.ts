@@ -3,6 +3,7 @@
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { parseVnDateTimeLocal } from "@/lib/time/vn";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { checkPermission } from "@/lib/auth/check-permission";
@@ -93,11 +94,24 @@ function emptyToNull(value: string | undefined): string | null {
   return value ?? null;
 }
 
+/**
+ * `<input type="datetime-local">` → `Date`, đọc theo GIỜ VIỆT NAM.
+ *
+ * ⚠️ 06/09/2026 — bản cũ là `new Date(value)` trần. Chuỗi `"YYYY-MM-DDTHH:mm"` KHÔNG có
+ * hậu tố múi giờ nên theo chuẩn nó được hiểu là giờ ĐỊA PHƯƠNG CỦA TIẾN TRÌNH. Máy dev
+ * chạy +07 nên nhìn như đúng; **Vercel chạy UTC**, nên mỗi lần giáo vụ lưu một buổi ở
+ * `/admin/sessions`, mốc bị đẩy đi 7 tiếng: nhập 17:30 ngày 12/09 thì DB ghi
+ * `2026-09-12T17:30:00Z` = **00:30 ngày 13/09 giờ VN**.
+ *
+ * Hậu quả dây chuyền: cổng phụ huynh in giờ học nửa đêm, buổi nhảy sang hôm sau và lệch
+ * thứ, còn "đã diễn ra"/"buổi hôm nay" tính sai theo. Sửa mỗi lần lưu lại đẩy thêm 7 giờ
+ * nữa nếu vẫn dùng hàm cũ.
+ *
+ * Cùng quy ước với `combineVNDateTime` (lib/attendance/adjust.ts) và màn giao bài của
+ * site giáo viên: nối cứng hậu tố `+07:00`. Việt Nam không có giờ mùa hè nên offset cố định.
+ */
 function parseDateTimeLocal(value: FormDataEntryValue | null): Date | null {
-  if (typeof value !== "string" || value.trim() === "") return null;
-  // datetime-local returns "YYYY-MM-DDTHH:mm" in local time
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? null : d;
+  return typeof value === "string" ? parseVnDateTimeLocal(value) : null;
 }
 
 async function requireTeacherOrAdmin() {

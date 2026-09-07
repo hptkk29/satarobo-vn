@@ -1,5 +1,6 @@
 import { Coins } from "lucide-react";
 import { requireActiveStudent } from "@/lib/portal/session";
+import { ngayVN } from "@/lib/format/date";
 import { getBalance, listTransactions } from "@/lib/satacoin/service";
 
 export const dynamic = "force-dynamic";
@@ -56,8 +57,9 @@ export default async function PortalSataCoinPage() {
                     {TYPE_LABEL[t.type] ?? t.type}
                   </div>
                   <div className="text-xs text-neutral-600">
-                    {t.note ?? t.reason} ·{" "}
-                    {t.createdAt.toISOString().slice(0, 10)}
+                    {/* 06/09 — ngày theo LỊCH VN. `toISOString().slice(0,10)` cắt ra
+                        ngày UTC: coin thưởng lúc 20h ngày 06 hiện thành ngày 05. */}
+                    {t.note ?? t.reason} · {ngayVN(t.createdAt)}
                   </div>
                 </div>
                 <span

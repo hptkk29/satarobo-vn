@@ -25,13 +25,11 @@ export const metadata = {
 // Báo vắng: chỉ chọn buổi SẮP TỚI (chưa diễn ra) và CHƯA bị huỷ (R7-06) —
 // đã lọc + LIMIT ngay ở query (getStudentUpcomingSessions).
 function toUpcomingOptions(sessions: UpcomingSessionRow[]) {
+  // Nhãn ngày + nhãn buổi tính sẵn ở server theo lịch VN (`lib/portal/buoi-hoc.ts`).
+  // `toLocaleDateString` trần ở đây chạy theo giờ tiến trình — Vercel là UTC.
   return sessions.map((s) => ({
     id: s.id,
-    label: `${new Date(s.date).toLocaleDateString("vi-VN", {
-      weekday: "short",
-      day: "2-digit",
-      month: "2-digit",
-    })} · ${s.className}${s.lessonTitle ? ` — ${s.lessonTitle}` : ""}`,
+    label: `${s.nhanNgay} · ${s.className} — ${s.nhan}`,
   }));
 }
 

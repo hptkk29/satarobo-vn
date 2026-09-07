@@ -16,7 +16,8 @@ const schema = z.object({
   school: z.string().trim().max(160).optional().default(""),
   healthNotes: z.string().trim().max(1000).optional().default(""),
   allergies: z.array(z.string().trim()).optional().default([]),
-  notes: z.string().trim().max(1000).optional().default(""),
+  // `notes` (Student.notes) CỐ Ý không nhận từ portal — xem khối chú thích đầu
+  // lib/portal/child-detail.ts. Zod mặc định bỏ khoá lạ nên client cũ gửi kèm cũng vô hại.
 });
 
 export async function updateChildProfile(
@@ -49,7 +50,6 @@ export async function updateChildProfile(
     school: nz(d.school),
     healthNotes: nz(d.healthNotes),
     allergies: d.allergies.filter((a) => a.length > 0),
-    notes: nz(d.notes),
   });
 
   revalidatePath("/portal/ho-so-con/chi-tiet");

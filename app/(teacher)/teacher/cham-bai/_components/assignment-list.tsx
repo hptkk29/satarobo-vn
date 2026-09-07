@@ -185,7 +185,14 @@ export function AssignmentList({
                 key={r.id}
                 className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
               >
-                <td className="max-w-sm px-5 py-3.5">
+                {/* min-w trên <td> thì trình duyệt tôn trọng, còn max-w thì KHÔNG:
+                    CSS 2.1 §17.5.2 để `max-width` trên ô bảng là undefined và
+                    Chrome/Firefox bỏ qua ở table-layout:auto. `max-w-sm` cũ ở đây vì
+                    thế vô tác dụng — trần phải đặt trên khối BÊN TRONG ô (xem div
+                    dưới), còn sàn thì đặt ngay trên ô. Không có sàn thì cột nội dung
+                    bị bóp còn 92px và mỗi dòng cao 350px (QA vòng 1, BUG-026). */}
+                <td className="min-w-[16rem] px-5 py-3.5">
+                  <div className="max-w-[30rem]">
                   <Link
                     href={`?assignmentId=${r.id}`}
                     className="rounded-sm font-medium text-foreground outline-none hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring"
@@ -213,8 +220,13 @@ export function AssignmentList({
                       </>
                     )}
                   </span>
+                  </div>
                 </td>
-                <td className="px-5 py-3.5 whitespace-nowrap">
+                {/* KHÔNG whitespace-nowrap: tên lớp là text tự do ("Luyện thi Robosim
+                    — T7 sáng"), nowrap làm min-content của cột BẰNG max-content nên
+                    cột này nở tới 397px và bóp cột nội dung xuống 92px. Cùng bệnh và
+                    cùng bản vá với class-list.tsx. */}
+                <td className="min-w-[9rem] px-5 py-3.5">
                   <Link
                     href={`/teacher/lop?classId=${r.classId}`}
                     className="rounded-sm font-medium text-primary-ink outline-none hover:text-primary-ink-hover hover:underline focus-visible:ring-2 focus-visible:ring-ring"

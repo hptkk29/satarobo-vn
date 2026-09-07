@@ -63,6 +63,19 @@ export function summarizeFinance(
   let pendingRevenue = 0;
   let refundedAmount = 0;
   let confirmedCount = 0;
+  // ⚠️ KHÔNG có nhánh riêng cho bút toán ĐIỀU CHỈNH — và đó là ĐÚNG, không phải sót.
+  //
+  // Trước 07/09/2026 bút toán điều chỉnh mang `accountantStatus = 'ADJUSTED'`, tức rơi
+  // hết xuống nhánh `else` và biến mất khỏi doanh thu. Sau khi tách `paymentType`
+  // (migration 20260907090000), dòng ADJUSTMENT mang `accountantStatus = 'CONFIRMED'` và
+  // `amount` là DELTA (âm khi điều chỉnh giảm) ⇒ cộng thẳng vào `confirmedRevenue` là ra
+  // đúng doanh thu sau điều chỉnh.
+  //
+  // ⛔ ĐỪNG thêm bộ lọc `paymentType === 'PAYMENT'` ở đây: làm vậy là ném điều chỉnh đi
+  // lần nữa, đúng cái lỗi cả đợt này sinh ra để sửa.
+  //
+  // `confirmedCount` thì có đếm cả bút toán điều chỉnh — chấp nhận: nó là "số dòng sổ đã
+  // xác nhận", không phải "số lần khách đóng tiền".
   for (const p of payments) {
     if (p.accountantStatus === "CONFIRMED") {
       confirmedRevenue += p.amount;
