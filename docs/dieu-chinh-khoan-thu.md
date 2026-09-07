@@ -63,7 +63,9 @@ test → phải tự dựng fixture, xem Bước 6.
       (4 chỗ Σ tiền + 2 chỗ đếm idempotent + 3 chỗ cổng chốt lead). Khoá giữ nguyên
       theo từng chỗ: đơn · lead · `enrollmentId: null` — hằng chỉ khai *cái gì được
       tính là tiền đã ghi nhận*, không khai khoá. Cổng `ghi-nhan.test.ts` chặn mọc lại.
-- [ ] **Bước 5** — hiển thị phía phụ huynh.
+- [x] **Bước 5** — hiển thị phía phụ huynh: dòng gốc GIỮ số cũ + nhãn "Đã điều chỉnh";
+      bút toán điều chỉnh là dòng riêng (số có dấu + lý do); "Tổng đã xác nhận" ở cuối.
+      Logic xếp thuần ở `lib/portal/phieu-thu.ts`; vẽ ở CẢ HAI đường (v1 + v2).
 - [ ] **Bước 6** — test (xem dưới).
 
 ## Bước 6 — checklist bắt buộc trước khi mở lại
@@ -90,6 +92,9 @@ test → phải tự dựng fixture, xem Bước 6.
 - **Nhánh tách khoản lúc convert** (`linkRecordedPaymentsToEnrollments`) **SỬA `amount`
   của dòng gốc**. Chỉ đúng khi dòng còn PENDING/RECORDED ("PENDING là nháp"). ✅ Bước 3 đã
   thêm chốt chặn cứng: gặp dòng CONFIRMED thì `throw`, không sửa im lặng.
+- **KHÔNG đổ `Payment.note` của phiếu thu thường ra cổng phụ huynh** — nó chứa ghi chú
+  nội bộ + marker máy sinh (`[auto:order-confirm]`). Chỉ dòng ADJUSTMENT mới lộ `note`,
+  vì `note` của nó chính là lý do do người nhập gõ.
 - **`reason` của bút toán điều chỉnh lưu ở `Payment.note`.** Bảng không có cột `reason`
   riêng, mà Bước 5 phải in lý do ngay cạnh con số cho phụ huynh. AuditLog vẫn giữ bản sao.
 - **Khoá lạc quan đổi cách làm.** Mẹo cũ ghi đè `updatedAt` của dòng gốc để chốt lock —

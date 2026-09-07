@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { KHOAN_DA_XAC_NHAN, laKhoanDaXacNhan, tongDaXacNhan } from "@/lib/finance/debt";
+import { xepPhieuThuVaDieuChinh } from "@/lib/portal/phieu-thu";
 
 // =============================================================================
 // PORTAL BILLING — Phase NHÓM 3
@@ -121,6 +122,21 @@ export type ConfirmedPaymentRow = {
   paidDate: string;
   confirmedAt: string | null;
   receiptCode: string | null;
+  /** `PAYMENT` = phiếu thu · `ADJUSTMENT` = bút toán điều chỉnh (mang DELTA, có thể âm). */
+  paymentType: string;
+  /** Với dòng ADJUSTMENT: id phiếu thu gốc mà nó đang sửa. */
+  adjustmentOfId: string | null;
+  /**
+   * Lý do điều chỉnh — CHỈ có ở dòng ADJUSTMENT.
+   *
+   * ⚠️ `Payment.note` của phiếu thu THƯỜNG chứa ghi chú nội bộ và marker máy sinh
+   * (`[auto:order-confirm]`, `[auto:order-installment:dot2]`…). Không bao giờ đổ nguyên
+   * `note` ra cổng phụ huynh; chỉ dòng điều chỉnh mới có `note` do người nhập, và nội
+   * dung của nó chính là lý do phải in cho phụ huynh đọc.
+   */
+  lyDoDieuChinh: string | null;
+  /** Phiếu gốc đã bị điều chỉnh ≥1 lần → gắn nhãn; số tiền GIỮ NGUYÊN. */
+  daBiDieuChinh: boolean;
 };
 
 /** Resolve childIds: nhận sẵn mảng studentIds, hoặc tra theo parentUserId. */
@@ -161,6 +177,9 @@ export async function getParentConfirmedPayments(
       paidDate: true,
       confirmedAt: true,
       enrollmentId: true,
+      paymentType: true,
+      adjustmentOfId: true,
+      note: true,
       order: { select: { code: true } },
       enrollment: { select: { student: { select: { name: true } } } },
       receipts: {
@@ -175,18 +194,26 @@ export async function getParentConfirmedPayments(
     take: 200,
   });
 
-  return payments.map((p) => ({
-    id: p.id,
-    orderId: p.orderId,
-    orderCode: p.order?.code ?? null,
-    enrollmentId: p.enrollmentId,
-    studentName: p.enrollment?.student?.name ?? null,
-    amount: p.amount,
-    method: p.method,
-    paidDate: p.paidDate.toISOString(),
-    confirmedAt: p.confirmedAt?.toISOString() ?? null,
-    receiptCode: p.receipts[0]?.code ?? null,
-  }));
+  // Xếp bút toán điều chỉnh ngay dưới phiếu thu gốc + gắn nhãn cho phiếu gốc.
+  // KHÔNG đụng `amount` của bất kỳ dòng nào — xem lib/portal/phieu-thu.ts.
+  return xepPhieuThuVaDieuChinh(
+    payments.map((p) => ({
+      id: p.id,
+      orderId: p.orderId,
+      orderCode: p.order?.code ?? null,
+      enrollmentId: p.enrollmentId,
+      studentName: p.enrollment?.student?.name ?? null,
+      amount: p.amount,
+      method: p.method,
+      paidDate: p.paidDate.toISOString(),
+      confirmedAt: p.confirmedAt?.toISOString() ?? null,
+      receiptCode: p.receipts[0]?.code ?? null,
+      paymentType: p.paymentType,
+      adjustmentOfId: p.adjustmentOfId,
+      lyDoDieuChinh: p.paymentType === "ADJUSTMENT" ? (p.note?.trim() || null) : null,
+      daBiDieuChinh: false, // hàm xếp sẽ đặt lại
+    })),
+  );
 }
 
 // =============================================================================

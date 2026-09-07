@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getParentBilling, getPaymentMethodLabels } from "@/lib/portal/billing";
+import { soTienCoDau, tongPhieuThuHienThi } from "@/lib/portal/phieu-thu";
 import { hotlinesInline } from "@/lib/locations";
 import { isPortalV2Enabled } from "@/lib/flags";
 import { requireActiveStudent } from "@/lib/portal/session";
@@ -203,26 +204,68 @@ export default async function HocPhiPage() {
           </p>
         ) : (
           <ul className="space-y-2">
-            {receipts.map((r) => (
-              <li
-                key={r.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-neutral-200 bg-white p-4 text-sm"
-              >
-                <div className="min-w-0">
-                  <p className="font-semibold text-neutral-900">
-                    {r.receiptCode ?? "Biên lai"}
+            {receipts.map((r) =>
+              r.paymentType === "ADJUSTMENT" ? (
+                // Bút toán ĐIỀU CHỈNH — dòng riêng, in phần chênh lệch kèm dấu + lý do.
+                <li
+                  key={r.id}
+                  className="ml-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed border-neutral-300 bg-neutral-50 p-4 text-sm"
+                >
+                  <div className="min-w-0">
+                    <p className="font-semibold text-neutral-900">
+                      Điều chỉnh phiếu thu
+                    </p>
+                    {r.lyDoDieuChinh && (
+                      <p className="text-xs text-neutral-600">
+                        Lý do: {r.lyDoDieuChinh}
+                      </p>
+                    )}
+                    <p className="text-xs text-neutral-600">
+                      {fmtDate(r.confirmedAt ?? r.paidDate)}
+                    </p>
+                  </div>
+                  <p
+                    className={`font-bold ${
+                      r.amount < 0 ? "text-red-700" : "text-emerald-700"
+                    }`}
+                  >
+                    {soTienCoDau(r.amount)}
                   </p>
-                  <p className="text-xs text-neutral-600">
-                    {r.studentName ? `${r.studentName} · ` : ""}
-                    {methodLabels[r.method] ?? r.method} ·{" "}
-                    {r.confirmedAt
-                      ? fmtDate(r.confirmedAt)
-                      : fmtDate(r.paidDate)}
-                  </p>
-                </div>
-                <p className="font-bold text-emerald-700">{vnd(r.amount)}</p>
-              </li>
-            ))}
+                </li>
+              ) : (
+                <li
+                  key={r.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-neutral-200 bg-white p-4 text-sm"
+                >
+                  <div className="min-w-0">
+                    <p className="font-semibold text-neutral-900">
+                      {r.receiptCode ?? "Biên lai"}
+                      {r.daBiDieuChinh && (
+                        <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                          Đã điều chỉnh
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-xs text-neutral-600">
+                      {r.studentName ? `${r.studentName} · ` : ""}
+                      {methodLabels[r.method] ?? r.method} ·{" "}
+                      {r.confirmedAt
+                        ? fmtDate(r.confirmedAt)
+                        : fmtDate(r.paidDate)}
+                    </p>
+                  </div>
+                  {/* Số của phiếu gốc GIỮ NGUYÊN — khớp biên lai phụ huynh đang cầm. */}
+                  <p className="font-bold text-emerald-700">{vnd(r.amount)}</p>
+                </li>
+              ),
+            )}
+            {/* Tổng ở CUỐI: cộng cả dòng gốc lẫn dòng điều chỉnh mới ra số đúng. */}
+            <li className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-neutral-300 bg-neutral-100 p-4 text-sm">
+              <p className="font-semibold text-neutral-900">Tổng đã xác nhận</p>
+              <p className="font-bold text-neutral-900">
+                {vnd(tongPhieuThuHienThi(receipts))}
+              </p>
+            </li>
           </ul>
         )}
       </section>
