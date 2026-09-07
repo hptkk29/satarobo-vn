@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
+import { laKhoanDaXacNhan, tongDaXacNhan } from "@/lib/finance/debt";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
@@ -348,9 +349,9 @@ export default async function OrderDetailPage({ params }: Props) {
         installmentPlanApproved={order.installmentApprovalStatus === "APPROVED"}
         paymentMethods={paymentMethods}
         accounting={{
-          confirmed: order.payments
-            .filter((p) => p.accountantStatus === "CONFIRMED")
-            .reduce((s, p) => s + p.amount, 0),
+          // Trục A — dùng chung định nghĩa "khoản đã xác nhận" với công nợ và cổng
+          // phụ huynh (lib/finance/debt.ts). Bút toán ADJUSTMENT nằm trong đó.
+          confirmed: tongDaXacNhan(order.payments.filter(laKhoanDaXacNhan)),
           pending: order.payments
             .filter((p) => p.accountantStatus === "PENDING")
             .reduce((s, p) => s + p.amount, 0),

@@ -12,7 +12,7 @@ import {
   courseProgressPercent,
 } from "@/lib/lms/report-card-core";
 import { getParentNotificationCount } from "@/lib/portal/notifications";
-import { computeEnrollmentDebt } from "@/lib/finance/debt";
+import { computeEnrollmentDebt, KHOAN_DA_XAC_NHAN } from "@/lib/finance/debt";
 import type { AttendanceSummary } from "@/lib/attendance/summary";
 
 // =============================================================================
@@ -65,7 +65,7 @@ export async function getParentDashboard(parentUserId: string): Promise<ParentDa
           finalPrice: true,
           tuition: true,
           payments: {
-            where: { accountantStatus: "CONFIRMED", deletedAt: null }, // FIX-C3
+            where: KHOAN_DA_XAC_NHAN, // FIX-C3
             select: { amount: true },
           },
         },
@@ -208,7 +208,7 @@ export async function getParentChildrenOverview(
             finalPrice: true,
             tuition: true,
             payments: {
-              where: { accountantStatus: "CONFIRMED", deletedAt: null }, // FIX-C3
+              where: KHOAN_DA_XAC_NHAN, // FIX-C3
               select: { amount: true },
             },
           },

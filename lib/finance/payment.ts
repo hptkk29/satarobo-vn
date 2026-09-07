@@ -7,6 +7,7 @@ import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
 import { publishEvent } from "@/lib/events/publish";
 import { issueReceipt } from "@/lib/finance/receipt";
 import { allocateByWeight } from "@/lib/finance/allocate";
+import { KHOAN_DA_XAC_NHAN } from "@/lib/finance/debt";
 import { recordLeadStatusChange } from "@/lib/leads/set-status";
 
 type Tx = Prisma.TransactionClient;
@@ -681,7 +682,7 @@ export async function adjustPayment(params: {
     });
     const tran = ghiDanh?.finalPrice ?? ghiDanh?.tuition ?? null;
     const daThu = await tx.payment.aggregate({
-      where: { enrollmentId, accountantStatus: "CONFIRMED", deletedAt: null },
+      where: { enrollmentId, ...KHOAN_DA_XAC_NHAN },
       _sum: { amount: true },
     });
     const tongSau = (daThu._sum.amount ?? 0) + delta;

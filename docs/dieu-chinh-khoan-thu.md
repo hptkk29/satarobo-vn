@@ -55,7 +55,9 @@ test → phải tự dựng fixture, xem Bước 6.
       + chốt chặn cứng ở nhánh tách khoản. Đã smoke-test 19/19 trên DB thật.
 - [x] **Bước 3b** — UI: tách hai nhóm nút theo trạng thái, nhãn nói rõ "số đúng của
       PHIẾU THU NÀY", hiện delta kèm dấu trước khi lưu.
-- [ ] **Bước 4** — một predicate dùng chung; `computeEnrollmentDebt` là nhà duy nhất.
+- [x] **Bước 4** — `KHOAN_DA_XAC_NHAN` (where) + `laKhoanDaXacNhan` (JS) +
+      `tongDaXacNhan` + `sumConfirmed` trong `lib/finance/debt.ts` là NHÀ DUY NHẤT.
+      Xoá 3 bản chép tay; rà đủ 15 chỗ trục A.
 - [ ] **Bước 4b** — trục B giữ khoá riêng (đơn/QR), không ép `enrollmentId`.
 - [ ] **Bước 5** — hiển thị phía phụ huynh.
 - [ ] **Bước 6** — test (xem dưới).

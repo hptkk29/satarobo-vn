@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { KHOAN_DA_XAC_NHAN, laKhoanDaXacNhan, tongDaXacNhan } from "@/lib/finance/debt";
 
 // =============================================================================
 // PORTAL BILLING — Phase NHÓM 3
@@ -149,8 +150,7 @@ export async function getParentConfirmedPayments(
 
   const payments = await client.payment.findMany({
     where: {
-      accountantStatus: "CONFIRMED",
-      deletedAt: null, // FIX-C3
+      ...KHOAN_DA_XAC_NHAN,
       enrollment: { studentId: { in: childIds }, deletedAt: null },
     },
     select: {
@@ -256,9 +256,7 @@ export async function getParentBilling(parentUserId: string): Promise<ParentBill
 
   const rows: EnrollmentBillingRow[] = enrollments.map((e) => {
     const finalPrice = e.finalPrice ?? e.tuition ?? 0;
-    const confirmedPaid = e.payments
-      .filter((p) => p.accountantStatus === "CONFIRMED")
-      .reduce((s, p) => s + p.amount, 0);
+    const confirmedPaid = tongDaXacNhan(e.payments.filter(laKhoanDaXacNhan));
     const pendingCount = e.payments.filter((p) => p.accountantStatus === "PENDING").length;
     const rejectedCount = e.payments.filter((p) => p.accountantStatus === "REJECTED").length;
     return {
