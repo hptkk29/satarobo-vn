@@ -10328,6 +10328,13 @@ model LeaveType {
   name           String
   paidRatio      Float    @default(1) // 1 = hưởng 100% · 0 = không lương
   maxDaysPerYear Int?
+  /// Số ngày phải báo trước cho loại nghỉ NÀY. null = không đòi báo trước.
+  ///
+  /// Vì sao theo LOẠI chứ không một số chung: ma chay, ốm (BHXH), thai sản về bản chất không
+  /// báo trước được. Một ngưỡng chung cho tất cả thì hoặc là vô hiệu với phép năm, hoặc là
+  /// biến ba loại kia thành "luôn vi phạm". Nộp muộn hơn ngưỡng KHÔNG bị chặn — nhưng phải
+  /// chỉ định người làm thay, đúng mục đích "để quản lý bố trí nhân sự hỗ trợ".
+  noticeDays     Int?
   countsAsWorked Boolean  @default(false)
   isActive       Boolean  @default(true)
   displayOrder   Int      @default(0)

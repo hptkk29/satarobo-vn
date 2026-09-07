@@ -78,6 +78,11 @@ export default async function LoaiNghiPage({
           tác). Trần ngày/năm để trống là không giới hạn.
         </p>
         <p className="mt-2">
+          <b>Báo trước</b> là số ngày phải nộp đơn trước ngày nghỉ. Nộp sát hơn <em>không</em> bị chặn —
+          nhưng bắt buộc chọn người làm thay, để Quản lý còn kịp bố trí. Để trống với việc đột xuất
+          (ma chay, ốm, thai sản): không ai hẹn trước được ngày, ép hạn là biến chúng thành luôn vi phạm.
+        </p>
+        <p className="mt-2">
           Mã loại nghỉ là mã đối chiếu với Sheet/MISA nên không sửa được sau khi tạo. Không dùng nữa
           thì bỏ &ldquo;Đang dùng&rdquo;, đừng tạo mã trùng nghĩa.
         </p>
@@ -89,6 +94,7 @@ export default async function LoaiNghiPage({
           name: r.name,
           paidRatio: r.paidRatio,
           maxDaysPerYear: r.maxDaysPerYear,
+          noticeDays: r.noticeDays,
           countsAsWorked: r.countsAsWorked,
           isActive: r.isActive,
         }))}
