@@ -18,6 +18,27 @@
 // vùng ở điểm đã khai toạ độ. Điểm chưa khai toạ độ ⇒ mã in ra không có lớp chặn nào; màn Điểm
 // chấm công nói thẳng điều đó trước khi ai đi dán.
 //
+// ── ĐÃ CÂN NHẮC VÀ LOẠI: mã theo KHỐI KHU VỰC (chốt chủ dự án 07/09/2026) ───────────────
+// Có đề xuất đưa mã lên cấp khu vực — cả khối Đà Nẵng dùng chung một mã, Hà Nội một mã khác.
+// ĐÃ ĐO VÀ LOẠI. Ba lý do, xếp theo trọng lượng:
+//
+//  1. `recordTimeLog` suy CƠ SỞ của một lượt quét từ ĐÚNG MỘT NGUỒN: `WorkLocation.centerId` tra
+//     theo id nằm TRONG mã QR. `StaffTimeLog.centerId` là NOT NULL và đường ghi ACCEPTED không có
+//     nhánh dự phòng nào. Mã cấp vùng cắt đứt nguồn đó.
+//  2. Chặn định vị chỉ chạy khi biết toạ độ CỦA ĐIỂM nào. Mã cấp vùng không nói được đo với toạ độ
+//     nào ⇒ mất nốt lớp bảo vệ CUỐI CÙNG, vốn vừa trở thành lớp duy nhất sau khi bỏ cửa sổ 60s.
+//  3. Dữ liệu thật hiện chỉ có MỘT region (`DANANG`, cả CS1 lẫn CS2 nằm dưới) ⇒ "một mã mỗi khu
+//     vực" hôm nay nghĩa là ĐÚNG MỘT MÃ cho toàn công ty.
+//
+// Hai phương án thay thế cũng đã loại: chọn cơ sở theo GPS gần nhất (biến định vị thành BẮT BUỘC
+// cho mọi người — máy từ chối quyền hoặc sóng kém là không chấm công được, không chấp nhận được cho
+// hệ mọi người phải dùng mỗi ngày); và để người quét tự chọn cơ sở (họ tự khai chỗ mình đứng ⇒ mất
+// luôn khả năng đối soát).
+//
+// Điều thật sự cần là "mã tĩnh in ra dán tường, admin thu hồi được" — mã theo TỪNG ĐIỂM CHẤM đạt
+// đủ. Đà Nẵng có hai tờ thay vì một là cái giá rẻ nhất trong ba lựa chọn. Khi mở khu vực mới, mỗi
+// cơ sở vẫn có tờ riêng, nên yêu cầu "mỗi khối một mã khác nhau" vẫn đúng — chỉ chi tiết hơn.
+//
 // ── Thu hồi ─────────────────────────────────────────────────────────────────────────────
 // `keyVersion` là cách DUY NHẤT giết một tờ mã đã in mà không phải đổi `NEXTAUTH_SECRET` — khoá
 // đó dùng chung cho session, vé SCORM, cookie portal, OTP; đổi nó là đá sập cả hệ thống. Mất tờ

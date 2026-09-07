@@ -118,7 +118,7 @@ export function useKioskQr(centerId: string): KioskQr {
     }
   }, [centerId]);
 
-  // Đồng hồ 1 giây: vừa để in giờ trên TV, vừa để đếm ngược mã và để hạn dùng tự hết.
+  // Đồng hồ 1 giây: nay CHỈ để in giờ trên TV. Mã tĩnh không hết hạn nên không còn gì đếm ngược.
   useEffect(() => {
     setNowMs(Date.now());
     const id = setInterval(() => setNowMs(Date.now()), 1_000);
