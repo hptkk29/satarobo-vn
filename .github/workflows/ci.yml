@@ -191,6 +191,14 @@ jobs:
       - name: Run lead-intake DB tests
         run: pnpm test:lead-intake
 
+      # Bước 6 — bút toán ĐIỀU CHỈNH khoản thu. Cùng lý do như 3 bước trên: bộ này có
+      # `describe.skipIf(!RUN_DB_TESTS)` nên ở job `unit-tests` (không Postgres, không
+      # ALLOW_DB_RESET) nó SKIP SẠCH. Thiếu bước này thì bản sửa "điều chỉnh lưu DELTA,
+      # dòng gốc bất biến, trần học phí không tự cắt số" KHÔNG có gì canh — mà đó là
+      # đường ghi TIỀN THẬT đã đối soát sao kê.
+      - name: Run finance (điều chỉnh khoản thu) DB tests
+        run: pnpm test:finance-db
+
   e2e:
     name: E2E smoke (Playwright)
     runs-on: ubuntu-latest

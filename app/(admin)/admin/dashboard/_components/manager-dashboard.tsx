@@ -15,7 +15,7 @@ import { LEAD_STATUS_LABEL, LEAD_STATUS_VARIANT } from "@/lib/leads/status";
 import type { LeadStatus } from "@prisma/client";
 import { buildRevenueTargetReport, computeAchievement } from "@/lib/reports/revenue-target";
 import { getRevenueTargets } from "@/lib/reports/revenue-target-data";
-import { getDebtRows } from "@/lib/finance/debt";
+import { getDebtRows, KHOAN_DA_XAC_NHAN } from "@/lib/finance/debt";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 const vnd = (n: number) => `${n.toLocaleString("vi-VN")}đ`;
@@ -86,7 +86,7 @@ async function getManagerStats(actor: Actor) {
     sdb.lead.findMany({ where: { ...ACTIVE_LEAD, createdAt: { gte: eightWeeksAgo } }, select: { createdAt: true, status: true } }),
     // Doanh thu THỰC = Σ Payment(accountantStatus=CONFIRMED) — 6 tháng gần nhất.
     sdb.payment.findMany({
-      where: { accountantStatus: "CONFIRMED", deletedAt: null, paidDate: { gte: sixMonthsAgo } },
+      where: { ...KHOAN_DA_XAC_NHAN, paidDate: { gte: sixMonthsAgo } },
       select: { amount: true, centerId: true, paidDate: true },
       take: 50_000,
     }),

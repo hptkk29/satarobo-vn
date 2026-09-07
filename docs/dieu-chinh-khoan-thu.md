@@ -66,23 +66,40 @@ test → phải tự dựng fixture, xem Bước 6.
 - [x] **Bước 5** — hiển thị phía phụ huynh: dòng gốc GIỮ số cũ + nhãn "Đã điều chỉnh";
       bút toán điều chỉnh là dòng riêng (số có dấu + lý do); "Tổng đã xác nhận" ở cuối.
       Logic xếp thuần ở `lib/portal/phieu-thu.ts`; vẽ ở CẢ HAI đường (v1 + v2).
-- [ ] **Bước 6** — test (xem dưới).
+- [x] **Bước 6** — test: 19 ca thuần (CI luôn chạy) + 24 ca chạm Postgres thật.
+- [ ] **Bước 7** — gỡ cầu dao, mở lại cho vai nghiệp vụ.
 
 ## Bước 6 — checklist bắt buộc trước khi mở lại
 
-- [ ] Điều chỉnh **tăng**, **giảm** (delta âm), **nhiều lần chồng** trên MỘT phiếu thu.
-- [ ] Trả góp: 2 phiếu CONFIRMED cùng ghi danh → điều chỉnh đúng phiếu đợt 1, phiếu đợt 2
+- [x] Điều chỉnh **tăng**, **giảm** (delta âm), **nhiều lần chồng** trên MỘT phiếu thu.
+- [x] Trả góp: 2 phiếu CONFIRMED cùng ghi danh → điều chỉnh đúng phiếu đợt 1, phiếu đợt 2
       không đổi, `sumConfirmed` đúng.
-- [ ] `adjustPayment` trên phiếu PENDING → **reject**.
-- [ ] `updatePendingPayment` trên phiếu CONFIRMED → **reject**.
-- [ ] Dòng gốc **không đổi một field nào** sau điều chỉnh (so sánh toàn bộ).
-- [ ] Chạm trần trên (`finalPrice ?? tuition`) và chạm 0 → **reject**, không tự cắt số.
-- [ ] Khoản `deletedAt != null` không được cộng ở cả 15 chỗ trục A.
-- [ ] **Chênh lệch trục A / trục B được bảo toàn** — dùng fixture riêng
+- [x] `adjustPayment` trên phiếu PENDING → **reject**.
+- [x] `updatePendingPayment` trên phiếu CONFIRMED → **reject**.
+- [x] Dòng gốc **không đổi một field nào** sau điều chỉnh (so sánh toàn bộ).
+- [x] Chạm trần trên (`finalPrice ?? tuition`) và chạm 0 → **reject**, không tự cắt số.
+      Biên chính xác: **đúng bằng** trần → cho qua · **vượt** trần → từ chối; tổng **đúng
+      0** → cho qua · tổng **âm** → từ chối. Cả hai ca từ chối đều kiểm thêm "không đẻ
+      bản ghi nào" — cắt âm thầm còn tệ hơn từ chối.
+- [x] Khoản `deletedAt != null` không được cộng ở cả 15 chỗ trục A — nay chứng minh bằng
+      CỔNG mã nguồn (`lib/finance/truc-a.test.ts`) chứ không đếm tay: mọi nơi ĐỌC phải đi
+      qua `KHOAN_DA_XAC_NHAN`, nên `deletedAt: null` không còn là thứ phải nhớ.
+- [x] **Chênh lệch trục A / trục B được bảo toàn** — dùng fixture riêng
       (`tests/fixtures/hai-truc-tien.ts`), KHÔNG dựa vào seed.
 - [ ] **XOÁ CẦU DAO** — cả `lib/finance/cau-dao-dieu-chinh.ts` lẫn chỗ gọi trong
       `app/(admin)/admin/payments/_actions.ts`, và mở lại `payments:adjust` cho vai
       nghiệp vụ (hiện chỉ `SUPER_ADMIN`).
+
+### Bộ test ở đâu
+
+| Bộ | Chạy bằng | CI |
+|---|---|---|
+| `lib/portal/phieu-thu.test.ts` (11 ca) · `lib/finance/truc-a.test.ts` (8) · `lib/finance/ghi-nhan.test.ts` (6) · `lib/finance/cau-dao-dieu-chinh.test.ts` (6) | `pnpm test:unit` | job **Unit tests** (bắt buộc để merge) |
+| `tests/finance/dieu-chinh.test.ts` (24 ca, Postgres thật) | `pnpm test:finance-db` | job **db-tests** (đã thêm bước) |
+
+⚠️ Bộ chạm DB **tự SKIP** khi chạy `pnpm test:unit` trần (thiếu `ALLOW_DB_RESET=1`) — đó
+là chủ đích của `tests/_helpers/db-gate.ts` sau sự cố mất DB 04/09. Skip ≠ xanh: muốn
+nghiệm thu thì phải chạy đúng script `test:finance-db`.
 
 ## Ghi chú kỹ thuật cần nhớ
 

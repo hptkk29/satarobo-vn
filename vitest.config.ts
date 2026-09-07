@@ -32,6 +32,11 @@ export default defineConfig({
       // `vitest run prisma/seed-uat` báo "No test files found" và CI vẫn XANH dù
       // test viết đúng — hỏng câm đúng loại nguy hiểm nhất.
       "prisma/seed-uat/**/*.{test,spec}.ts",
+      // Bước 6 — bút toán điều chỉnh khoản thu, tầng DB thật (tự skip khi vắng Postgres
+      // local / vắng ALLOW_DB_RESET). Cùng lý do phải khai ở đây như các dòng trên:
+      // `include` là bộ lọc CỨNG, không khai thì `vitest run tests/finance` báo
+      // "No test files found" và CI vẫn XANH dù test viết đúng.
+      "tests/finance/**/*.{test,spec}.ts",
     ],
     coverage: {
       reporter: ["text", "json", "html"],
