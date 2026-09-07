@@ -1,17 +1,39 @@
-# Chạy TAY (workflow_dispatch) — SEED NỀN module chấm công v3 lên PROD (L1, 06/09/2026).
+# Chạy TAY (workflow_dispatch) — SEED NỀN module chấm công lên PROD. ĐÂY LÀ NÚT GHI THẬT.
 #
-# Ghi 3 thứ, đều idempotent (upsert theo `code`, KHÔNG đè cột người dùng đã sửa trừ khi
-# bật `force`): 21 mã ca `ShiftTemplate` · 8 loại nghỉ `LeaveType` (K-06 theo MISA) ·
-# `WorkLocation` cho từng cơ sở vận hành (Hội sở không có — Q-04; toạ độ trống ⇒ geofence
-# tắt — Q-02, khai sau ở /cham-cong/diem-cham).
+# ⚠️ TÊN ĐẶT ĐỂ KHÔNG BẤM NHẦM. Hai nút chạm PROD của module này dùng chung tiền tố và khác nhau
+# đúng MỘT từ viết hoa, để nằm cạnh nhau trong danh sách mà không lẫn được:
+#     Chấm công · PROD · ĐO  (chỉ đọc — không ghi gì)   ← cham-cong-prod-do-chi-doc.yml
+#     Chấm công · PROD · GHI (seed danh mục nền)        ← file này
 #
-# Vì sao bấm tay trên prod (cùng luật với seed-prod-roles.yml): đây là danh mục vận hành —
-# sau lần seed đầu, NGUỒN SỰ THẬT là DB và người vận hành sửa trên màn Danh mục mã ca /
-# Loại nghỉ (PHẦN 6b kế hoạch). Chạy lại với `force` là ĐÈ tên/giờ 21 mã về bản trong code.
+# ── PHẠM VI GHI — 5 NHÓM (cập nhật 07/09/2026) ─────────────────────────────────────────
+#   | # | Nhóm                                | Kỳ vọng lần seed đầu   |
+#   |---|-------------------------------------|------------------------|
+#   | 1 | ShiftTemplate (mã ca dùng chung)    | +21 tạo                |
+#   | 2 | LeaveType (loại nghỉ, K-06 theo MISA)| 8                     |
+#   | 3 | WorkLocation (điểm chấm công)       | +2 (CS1, CS2)          |
+#   | 4 | SessionCategory (phân loại buổi)    | 7  ← THÊM 07/09        |
+#   | 5 | TeachingCreditType (loại công dạy)  | 6  ← THÊM 07/09        |
 #
-# ⚠️ Trước khi bấm: (1) migration `20260906090000_cham_cong_v3_l1` đã lên prod qua deploy.yml;
-# (2) đã bấm seed-prod-roles.yml (5 key hr_attendance:* mới + adjust hạ CENTER).
-name: Chấm công v3 — seed nền (prod)
+# ⚠️ BẢN 06/09 CỦA HEADER NÀY GHI "3 THỨ" TRONG KHI SCRIPT ĐÃ GHI 5. Hai nhóm cuối được thêm vào
+# `prisma/seed-cham-cong.ts` ở hai commit khác (`2b9ade32`, `0a67b8d7`) mà mô tả ở đây không đổi
+# theo — người bấm nút đọc mô tả, còn thứ chạy là script. Từ nay có luật bắt cập nhật cùng commit:
+# `docs/luat-mo-ta-workflow-prod.md`.
+#
+# Script còn TỰ IN phạm vi thật (bảng "đang có / sẽ tạo / sẽ đè" theo từng nhóm) TRƯỚC khi ghi
+# dòng đầu tiên — đọc bảng đó, đừng tin bảng ở trên nếu hai bên lệch nhau.
+#
+# ── Idempotent, và ranh giới của `force` ───────────────────────────────────────────────
+# Không có `force`: chỉ TẠO dòng còn thiếu, KHÔNG đè dòng người vận hành đã sửa, và KHÔNG nhả cờ
+# "mặc định" của phân loại buổi mà họ đã tự chọn (script sẽ báo "đã nhường" trong log).
+# Có `force`: ĐÈ toàn bộ dòng danh mục về bản trong mã nguồn — mất mọi chỉnh sửa tay.
+#
+# Vì sao bấm tay trên prod (cùng luật với seed-prod-roles.yml): đây là danh mục vận hành — sau lần
+# seed đầu, NGUỒN SỰ THẬT là DB và người vận hành sửa trên màn danh mục (PHẦN 6b kế hoạch).
+#
+# ⚠️ Trước khi bấm: (1) mọi migration của module đã lên prod qua deploy.yml — tính đến 07/09 là
+# `20260906090000_cham_cong_v3_l1` … `20260907050000_snapshot_si_so_buoi`; (2) đã bấm
+# seed-prod-roles.yml (5 key hr_attendance:* mới + adjust hạ CENTER).
+name: Chấm công · PROD · GHI (seed danh mục nền)
 on:
   workflow_dispatch:
     inputs:
@@ -29,7 +51,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   seed:
-    name: Seed ShiftTemplate + LeaveType + WorkLocation (Supabase prod)
+    name: Seed 5 danh mục nền vào Supabase prod (GHI THẬT)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -50,7 +72,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Generate Prisma client
         run: pnpm exec prisma generate
-      - name: "Seed nền chấm công (prod) — kỳ vọng: ShiftTemplate +21 tạo · LeaveType 8 · WorkLocation +2"
+      - name: "Seed nền chấm công (prod) — script tự in phạm vi trước khi ghi"
         run: pnpm exec tsx prisma/seed-cham-cong.ts ${{ inputs.force && '-- --force' || '' }}
         env:
           DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
