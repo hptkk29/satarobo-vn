@@ -90,9 +90,11 @@ const adjustSchema = z.object({
   // `recordPaymentAction`. Bỏ hẳn rẻ hơn và chặt hơn dựng cổng thứ hai: bút toán điều
   // chỉnh nay luôn KẾ THỪA phương thức của khoản gốc (`params.method` = undefined →
   // `?? original.method`), đúng hành vi mà giao diện vẫn đang có.
-  note: z.string().max(1000).optional().nullable(),
+  // `note` ĐÃ GỠ 07/09: bút toán điều chỉnh nay lưu chính LÝ DO vào `Payment.note` để
+  // cổng phụ huynh in được lý do cạnh con số, nên không còn chỗ cho một ghi chú thứ hai.
   reason: z.string().trim().min(5, "Lý do tối thiểu 5 ký tự"),
-  // FIX-H9 — optimistic lock: Payment.updatedAt (ISO) client đã thấy.
+  // Optimistic lock: Payment.updatedAt (ISO) client đã thấy. So sánh KHÔNG ghi đè —
+  // dòng gốc phải bất biến.
   expectedUpdatedAt: z.string().optional().nullable(),
 });
 
@@ -560,18 +562,16 @@ export async function adjustPaymentAction(input: unknown) {
 
   const res = await adjustPayment({
     paymentId: data.paymentId,
-    confirmedById: scope.uid,
-    amount: data.amount,
-    // `method` cố ý KHÔNG truyền — xem ghi chú ở adjustSchema. adjustPayment sẽ giữ
-    // nguyên phương thức của khoản gốc.
-    note: trimOrNull(data.note),
+    // Ô nhập gửi SỐ ĐÚNG CUỐI CÙNG của dòng này; backend tự tính delta.
+    correctAmount: data.amount,
     reason: data.reason.trim(),
+    actorId: scope.uid,
     expectedUpdatedAt: data.expectedUpdatedAt || undefined,
   });
   if (!res.ok) return { ok: false as const, error: res.error };
   revalidatePath("/payments");
   revalidatePath("/cong-no");
-  return { ok: true as const, adjustmentId: res.adjustmentId };
+  return { ok: true as const, adjustmentId: res.adjustmentId, delta: res.delta };
 }
 
 // ─── REFUND (Kế toán hoàn — bút toán âm, không xoá gốc) ─────────────────

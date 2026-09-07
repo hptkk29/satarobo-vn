@@ -51,7 +51,8 @@ test → phải tự dựng fixture, xem Bước 6.
 - [x] **Bước 2** — thêm `paymentType: PAYMENT | ADJUSTMENT`; bỏ `ADJUSTED` khỏi enum
       `accountantStatus`; backfill `paymentType = PAYMENT`
       (migration `20260907090000`, có `down.sql` chạy tay).
-- [ ] **Bước 3** — viết lại `adjustPayment` theo delta + tách `updatePendingPayment`.
+- [x] **Bước 3** — viết lại `adjustPayment` theo delta + tách `updatePendingPayment`
+      + chốt chặn cứng ở nhánh tách khoản. Đã smoke-test 19/19 trên DB thật.
 - [ ] **Bước 3b** — UI: nói rõ "số đúng của DÒNG NÀY", hiện delta trước khi lưu.
 - [ ] **Bước 4** — một predicate dùng chung; `computeEnrollmentDebt` là nhà duy nhất.
 - [ ] **Bước 4b** — trục B giữ khoá riêng (đơn/QR), không ép `enrollmentId`.
@@ -79,10 +80,14 @@ test → phải tự dựng fixture, xem Bước 6.
 - **Không khoá được SUPER_ADMIN bằng quyền.** `can()` v2 (`lib/auth/can.ts:52`) trả `true`
   vô điều kiện cho SUPER_ADMIN; repo lại có bất biến bắt v1 khớp v2 (`permissions.test.ts`)
   và cấm phình danh sách ngoại lệ. Đó là lý do phải có cầu dao ở tầng tính năng.
-- **Nhánh tách khoản lúc convert** (`linkRecordedPaymentsToEnrollments`,
-  `lib/finance/payment.ts:262`) **SỬA `amount` của dòng gốc**. Chỉ đúng khi dòng còn
-  PENDING/RECORDED ("PENDING là nháp"). Bước 3 phải thêm assertion chặn cứng nếu nó chạy
-  trúng dòng CONFIRMED.
+- **Nhánh tách khoản lúc convert** (`linkRecordedPaymentsToEnrollments`) **SỬA `amount`
+  của dòng gốc**. Chỉ đúng khi dòng còn PENDING/RECORDED ("PENDING là nháp"). ✅ Bước 3 đã
+  thêm chốt chặn cứng: gặp dòng CONFIRMED thì `throw`, không sửa im lặng.
+- **`reason` của bút toán điều chỉnh lưu ở `Payment.note`.** Bảng không có cột `reason`
+  riêng, mà Bước 5 phải in lý do ngay cạnh con số cho phụ huynh. AuditLog vẫn giữ bản sao.
+- **Khoá lạc quan đổi cách làm.** Mẹo cũ ghi đè `updatedAt` của dòng gốc để chốt lock —
+  đó là một UPDATE lên dòng gốc, đúng thứ mô hình cấm. Nay `expectedUpdatedAt` chỉ SO
+  SÁNH, còn tuần tự hoá dùng `SELECT … FOR UPDATE` (khoá hàng, không đổi cột nào).
 - **Ràng buộc DB trên `Payment.amount`:** chỉ có `payment_amount_nonzero: CHECK (amount <> 0)`
   (`migrations/20260617040000_check_constraints`). Cột là `integer` CÓ DẤU — **không có gì
   chặn số âm**, nên `amount = delta` âm lưu được. Ràng buộc này còn CỘNG HƯỞNG với luật
