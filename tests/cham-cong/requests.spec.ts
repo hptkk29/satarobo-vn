@@ -126,6 +126,46 @@ d("requests — DB thật", () => {
     expect(b.ok).toBe(false);
   });
 
+  it("hạn báo trước theo LOẠI: nộp sát ngày phải có người làm thay; loại đột xuất thì không đòi", async () => {
+    // Yêu cầu chủ dự án 06/09: "phải xin nghỉ trước 1 ngày để quản lý bố trí nhân sự hỗ trợ".
+    // Thực hiện bằng cách ĐÒI NGƯỜI LÀM THAY chứ không chặn cửa — chặn không làm mất buổi nghỉ,
+    // chỉ làm mất dấu vết (quản lý sẽ sửa thẳng ô trên lưới và hệ thống thôi biết đó là ốm hay
+    // tang chế).
+    const phep = await db.leaveType.findUnique({ where: { code: "NGHI_PHEP" }, select: { id: true } });
+    const maChay = await db.leaveType.findUnique({ where: { code: "MA_CHAY" }, select: { id: true } });
+    await db.leaveType.update({ where: { code: "NGHI_PHEP" }, data: { noticeDays: 1 } });
+    await db.leaveType.update({ where: { code: "MA_CHAY" }, data: { noticeDays: null } });
+
+    // 09/09 lúc 10:00 VN, xin nghỉ phép cho CHÍNH HÔM NAY ⇒ không báo trước ngày nào.
+    // (Nộp hôm nay cho NGÀY MAI là vừa đủ hạn 1 ngày — đó là đúng luật, không phải vi phạm.)
+    const now = new Date("2026-09-09T03:00:00Z");
+    const thieuNguoiThay = await requests.submitAttendanceRequest({
+      ...base, requesterId: gv, kind: "LEAVE", fromDate: d9, toDate: d9, leaveTypeId: phep!.id, now,
+    });
+    expect(thieuNguoiThay.ok).toBe(false);
+    if (!thieuNguoiThay.ok) expect(thieuNguoiThay.error).toContain("NGƯỜI LÀM THAY");
+
+    // Cùng ngày đó nhưng CÓ người làm thay ⇒ nhận đơn.
+    const coNguoiThay = await requests.submitAttendanceRequest({
+      ...base, requesterId: gv, kind: "LEAVE", fromDate: d9, toDate: d9, leaveTypeId: phep!.id, targetUserId: tv, now,
+    });
+    expect(coNguoiThay.ok).toBe(true);
+
+    // Nộp hôm nay cho NGÀY MAI: vừa đủ hạn 1 ngày ⇒ KHÔNG đòi người thay. Khoá luôn ranh giới
+    // này lại, kẻo lần sau ai đó siết nhầm thành "phải trước 2 ngày".
+    const dungHan = await requests.submitAttendanceRequest({
+      ...base, requesterId: gv, kind: "LEAVE", fromDate: d10, toDate: d10, leaveTypeId: phep!.id, now,
+    });
+    expect(dungHan.ok).toBe(true);
+
+    // Ma chay KHÔNG đặt hạn ⇒ nộp sát ngày vẫn nhận, không đòi người thay. Đây là lý do ngưỡng
+    // phải đi theo LOẠI: một con số chung biến ba loại đột xuất thành "luôn vi phạm".
+    const dotXuat = await requests.submitAttendanceRequest({
+      ...base, requesterId: tv, kind: "LEAVE", fromDate: d9, toDate: d9, leaveTypeId: maChay!.id, now,
+    });
+    expect(dotXuat.ok).toBe(true);
+  });
+
   it("SHIFT_SWAP duyệt: đổi ca CẢ HAI người trên lưới trong một tx, nguồn SWAP, notify 2 người", async () => {
     const s = await requests.submitAttendanceRequest({ ...base, requesterId: gv, kind: "SHIFT_SWAP", fromDate: d9, toDate: null, requesterNewTemplateId: tplD1, targetUserId: tv, targetNewTemplateId: tplS });
     expect(s.ok).toBe(true);

@@ -268,13 +268,18 @@ export const LEAVE_TYPE_CATALOG: readonly {
   paidRatio: number;
   maxDaysPerYear: number | null;
   countsAsWorked: boolean;
+  /** Ngày phải báo trước. null = không đòi (việc đột xuất, không ai hẹn trước được). */
+  noticeDays: number | null;
 }[] = [
-  { code: "NGHI_PHEP", name: "Nghỉ phép năm", paidRatio: 1, maxDaysPerYear: null, countsAsWorked: false },
-  { code: "KHONG_LUONG", name: "Nghỉ không lương", paidRatio: 0, maxDaysPerYear: 10, countsAsWorked: false },
-  { code: "KET_HON", name: "Nghỉ kết hôn", paidRatio: 1, maxDaysPerYear: 7, countsAsWorked: false },
-  { code: "CON_KET_HON", name: "Nghỉ con kết hôn", paidRatio: 1, maxDaysPerYear: 3, countsAsWorked: false },
-  { code: "MA_CHAY", name: "Nghỉ ma chay", paidRatio: 1, maxDaysPerYear: 3, countsAsWorked: false },
-  { code: "BHXH", name: "Nghỉ hưởng BHXH (ốm)", paidRatio: 0, maxDaysPerYear: null, countsAsWorked: false },
-  { code: "THAI_SAN", name: "Nghỉ thai sản", paidRatio: 0, maxDaysPerYear: 180, countsAsWorked: false },
-  { code: "NGHI_BU", name: "Nghỉ bù", paidRatio: 1, maxDaysPerYear: null, countsAsWorked: true },
+  // `noticeDays` mặc định 1 ngày theo yêu cầu chủ dự án 06/09 ("phải xin nghỉ trước 1 ngày"),
+  // TRỪ ba loại về bản chất không báo trước được. Người vận hành sửa từng dòng ở màn Loại nghỉ.
+  { code: "NGHI_PHEP", name: "Nghỉ phép năm", paidRatio: 1, maxDaysPerYear: null, countsAsWorked: false, noticeDays: 1 },
+  { code: "KHONG_LUONG", name: "Nghỉ không lương", paidRatio: 0, maxDaysPerYear: 10, countsAsWorked: false, noticeDays: 1 },
+  { code: "KET_HON", name: "Nghỉ kết hôn", paidRatio: 1, maxDaysPerYear: 7, countsAsWorked: false, noticeDays: 7 },
+  { code: "CON_KET_HON", name: "Nghỉ con kết hôn", paidRatio: 1, maxDaysPerYear: 3, countsAsWorked: false, noticeDays: 7 },
+  // Ba loại dưới đây KHÔNG đặt hạn báo trước — người ta không hẹn trước được ngày mất, ngày ốm.
+  { code: "MA_CHAY", name: "Nghỉ ma chay", paidRatio: 1, maxDaysPerYear: 3, countsAsWorked: false, noticeDays: null },
+  { code: "BHXH", name: "Nghỉ hưởng BHXH (ốm)", paidRatio: 0, maxDaysPerYear: null, countsAsWorked: false, noticeDays: null },
+  { code: "THAI_SAN", name: "Nghỉ thai sản", paidRatio: 0, maxDaysPerYear: 180, countsAsWorked: false, noticeDays: null },
+  { code: "NGHI_BU", name: "Nghỉ bù", paidRatio: 1, maxDaysPerYear: null, countsAsWorked: true, noticeDays: 1 },
 ];

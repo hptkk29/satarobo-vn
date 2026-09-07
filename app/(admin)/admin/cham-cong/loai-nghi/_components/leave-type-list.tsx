@@ -28,6 +28,7 @@ export type LeaveTypeRow = {
   name: string;
   paidRatio: number;
   maxDaysPerYear: number | null;
+  noticeDays: number | null;
   countsAsWorked: boolean;
   isActive: boolean;
 };
@@ -39,6 +40,7 @@ type Draft = {
   name: string;
   paidPct: number;
   maxDaysPerYear: number | null;
+  noticeDays: number | null;
   countsAsWorked: boolean;
   isActive: boolean;
 };
@@ -49,6 +51,7 @@ const EMPTY: Draft = {
   name: "",
   paidPct: 100,
   maxDaysPerYear: null,
+  noticeDays: null,
   countsAsWorked: false,
   isActive: true,
 };
@@ -62,6 +65,7 @@ function draftOf(r: LeaveTypeRow): Draft {
     name: r.name,
     paidPct: Math.round(r.paidRatio * 100),
     maxDaysPerYear: r.maxDaysPerYear,
+    noticeDays: r.noticeDays,
     countsAsWorked: r.countsAsWorked,
     isActive: r.isActive,
   };
@@ -98,6 +102,7 @@ export function LeaveTypeList({ rows, canEdit }: { rows: LeaveTypeRow[]; canEdit
         name: draft.name,
         paidRatio: draft.paidPct / 100,
         maxDaysPerYear: draft.maxDaysPerYear,
+        noticeDays: draft.noticeDays,
         countsAsWorked: draft.countsAsWorked,
         isActive: draft.isActive,
       });
@@ -172,6 +177,23 @@ export function LeaveTypeList({ rows, canEdit }: { rows: LeaveTypeRow[]; canEdit
             value={draft.maxDaysPerYear ?? ""}
             onChange={(e) =>
               setDraft({ ...draft, maxDaysPerYear: e.target.value === "" ? null : Number(e.target.value) })
+            }
+            onKeyDown={(e) => e.key === "Enter" && canSave && save()}
+          />
+        </td>
+        <td className={cn(adminTd, "text-right")}>
+          {/* Hạn báo trước THEO LOẠI. Để trống = không đòi — dành cho việc đột xuất (ma chay,
+              ốm, thai sản). Nộp muộn hơn hạn KHÔNG bị chặn, nhưng phải chỉ định người làm thay. */}
+          <input
+            type="number"
+            min={0}
+            max={60}
+            aria-label="Ngày phải báo trước"
+            placeholder="—"
+            className={cn(FIELD, CELL_FIELD, "w-20 text-right tabular-nums")}
+            value={draft.noticeDays ?? ""}
+            onChange={(e) =>
+              setDraft({ ...draft, noticeDays: e.target.value === "" ? null : Number(e.target.value) })
             }
             onKeyDown={(e) => e.key === "Enter" && canSave && save()}
           />
@@ -265,6 +287,9 @@ export function LeaveTypeList({ rows, canEdit }: { rows: LeaveTypeRow[]; canEdit
                 <th scope="col" className={adminTh}>Tên</th>
                 <th scope="col" className={cn(adminTh, "text-right")}>Tỷ lệ lương</th>
                 <th scope="col" className={cn(adminTh, "text-right")}>Trần ngày/năm</th>
+                <th scope="col" className={cn(adminTh, "text-right")} title="Để trống = không đòi báo trước (việc đột xuất)">
+                  Báo trước
+                </th>
                 <th scope="col" className={adminTh}>Tính như đi làm</th>
                 <th scope="col" className={adminTh}>Trạng thái</th>
                 <th scope="col" className={cn(adminTh, "text-right")}>
@@ -288,6 +313,20 @@ export function LeaveTypeList({ rows, canEdit }: { rows: LeaveTypeRow[]; canEdit
                     </td>
                     <td className={cn(adminTd, "text-right tabular-nums")}>
                       {r.maxDaysPerYear ?? <span className="text-muted-foreground">Không giới hạn</span>}
+                    </td>
+                    <td className={cn(adminTd, "text-right tabular-nums")}>
+                      {r.noticeDays == null ? (
+                        <span
+                          className="text-xs text-muted-foreground"
+                          title="Việc đột xuất — không ai hẹn trước được, nên không đòi báo trước"
+                        >
+                          Không đòi
+                        </span>
+                      ) : (
+                        <>
+                          {r.noticeDays} <span className="text-xs text-muted-foreground">ngày</span>
+                        </>
+                      )}
                     </td>
                     <td className={adminTd}>
                       {r.countsAsWorked ? (
