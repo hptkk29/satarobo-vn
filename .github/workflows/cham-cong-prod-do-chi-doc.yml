@@ -1,5 +1,11 @@
 # Chạy TAY (workflow_dispatch) — ĐO trên PROD, CHỈ ĐỌC, KHÔNG GHI GÌ.
 #
+# ⚠️ TÊN ĐẶT ĐỂ KHÔNG BẤM NHẦM. Danh sách workflow trên GitHub Actions xếp theo tên, nên hai nút
+# chạm PROD của module này cố ý dùng chung tiền tố và khác nhau đúng MỘT từ viết hoa:
+#     Chấm công · PROD · ĐO  (chỉ đọc — không ghi gì)   ← file này
+#     Chấm công · PROD · GHI (seed danh mục nền)        ← cham-cong-prod-seed.yml
+# Hai nút nằm cạnh nhau, và từ phân biệt là thứ đọc trước tiên.
+#
 # Vì sao có workflow này: prod chỉ chạm được qua GitHub Actions (`.env` trên máy dev trỏ DB DEV,
 # và Vercel che `DATABASE_URL` là Sensitive nên `vercel env pull` vô dụng). Mọi số đo trên dữ liệu
 # thật đều phải đi qua đây.
@@ -12,7 +18,7 @@
 # Dùng `PROD_DIRECT_URL` (session pooler :5432) chứ không `PROD_DATABASE_URL` (:6543): pgbouncer
 # không giữ prepared statement giữa các câu lệnh, và script chạy hàng trăm truy vấn liên tiếp thì
 # dính `prepared statement "sN" does not exist`. Đã ăn thật hai lần — xem `scripts/_script-db.ts`.
-name: Chấm công — ĐO trên prod (chỉ đọc)
+name: Chấm công · PROD · ĐO (chỉ đọc — không ghi gì)
 on:
   workflow_dispatch:
     inputs:
@@ -26,7 +32,7 @@ on:
           - buoi-day
           - tat-ca
 concurrency:
-  group: cham-cong-do-prod
+  group: cham-cong-prod-do-chi-doc
   cancel-in-progress: false
 jobs:
   do:
