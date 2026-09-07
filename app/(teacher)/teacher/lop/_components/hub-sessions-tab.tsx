@@ -9,6 +9,8 @@
 // 21/08 — thứ tự hiển thị KHÔNG còn là "ngày mới nhất trước": buổi đã xong cả ba việc
 // (điểm danh + nhận xét đủ HV + có ảnh) lùi xuống DƯỚI, phần còn nợ việc và các buổi
 // sắp tới nằm trên, xếp theo số buổi tăng dần (lib/lms/session-order).
+// 07/09 (D0) — cột TRẠNG THÁI đọc `ClassSession.status`, KHÔNG suy từ ba việc nữa. Ba
+// việc chỉ còn quyết định THỨ TỰ và mức sẵn-sàng-chốt. Xem `nhanTrangThaiBuoi`.
 // Có mặt = PRESENT + LATE (khớp FEEDBACK_ATTENDED_STATUSES). "canMark" = buổi đã tới
 // ngày (≤ hết hôm nay giờ VN) → buổi tương lai khoá "Chưa tới giờ".
 //
@@ -31,11 +33,12 @@ import {
   SESSION_MEDIA_SELECT,
   isSessionSettled,
   isSessionWorkComplete,
+  nhanTrangThaiBuoi,
   sortSessionsForWork,
 } from "@/lib/lms/session-order";
 import { deriveSessionLabel } from "@/lib/lms/session-project-name";
 import { EmptyState } from "../../_components/ui/empty-state";
-import { SessionStatusPill } from "../../_components/ui/session-status-pill";
+import { BuoiPill } from "../../_components/ui/session-status-pill";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 // 21/08 — CÓ `year` (xem ghi chú cùng nội dung ở hub-reviews-tab).
@@ -216,8 +219,8 @@ export async function HubSessionsTab({
       return {
         s,
         no: numberOf.get(s.id) ?? null,
-        // Nhãn "Hoàn tất" chỉ bật khi THỰC SỰ xong ba việc — khác `complete` bên dưới,
-        // vốn còn gộp cả buổi đã huỷ và lớp không còn ai học (không có việc để làm).
+        // Đủ ba việc = SẴN SÀNG CHỐT, không phải "đã chốt" (D0). Khác `complete` bên
+        // dưới, vốn còn gộp buổi đã huỷ và lớp không còn ai học (không có việc để làm).
         workDone: isSessionWorkComplete(work),
         complete: isSessionSettled({
           cancelled: s.status === "CANCELLED",
@@ -308,14 +311,15 @@ export async function HubSessionsTab({
                     )}
                   </td>
                   <td className="px-5 py-3.5 whitespace-nowrap">
-                    {workDone ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-state-success-soft px-2.5 py-1 text-xs font-semibold text-state-success-ink">
-                        <CircleCheck className="h-3.5 w-3.5" aria-hidden />
-                        Hoàn tất
-                      </span>
-                    ) : (
-                      <SessionStatusPill status={s.status} />
-                    )}
+                    {/* D0 — nhãn ĐỌC TỪ `s.status`, không suy từ ba việc. Xem
+                        `nhanTrangThaiBuoi` để biết vì sao (2 COMPLETED / 287 SCHEDULED). */}
+                    <BuoiPill
+                      nhan={nhanTrangThaiBuoi({
+                        status: s.status,
+                        daQuaNgay: s.date.getTime() <= todayEnd,
+                        workDone,
+                      })}
+                    />
                   </td>
                   <td className="px-5 py-3.5 text-right whitespace-nowrap">
                     {!canMark ? (

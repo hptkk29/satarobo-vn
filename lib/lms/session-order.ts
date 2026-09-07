@@ -194,6 +194,49 @@ export function isSessionSettled(input: {
   return Boolean(input.cancelled) || Boolean(input.rosterEmpty) || isSessionWorkComplete(input.work);
 }
 
+/**
+ * Nhãn trạng thái của MỘT buổi, đọc từ `ClassSession.status` — không suy ra.
+ *
+ * ── Vì sao có hàm này (D0, 07/09/2026) ──────────────────────────────────────
+ *
+ * Tab "Điểm danh" của Class Hub trước đây in nhãn xanh "Hoàn tất" ngay khi
+ * `isSessionWorkComplete` trả true, và CHE luôn pill trạng thái thật ở đúng ca đó.
+ * Nhưng làm xong ba việc KHÔNG đặt `status = COMPLETED` — chỉ nút chốt buổi mới đặt.
+ *
+ * Hậu quả đo trên prod ngày 07/09/2026: 2 buổi COMPLETED / 287 SCHEDULED trong 4
+ * tháng. Giáo viên KHÔNG quên bấm — màn hình đã nói với họ là xong. Suốt một tháng
+ * ai nhìn cũng tưởng buổi đã đóng, trong khi kỳ công, công dạy, học bạ và đề xuất
+ * hoàn tiền đều đọc `status` nên đều đọc ra 0.
+ *
+ * Luật từ đây: nguồn duy nhất của nhãn là `status`. Ba việc chỉ được nói tới như
+ * mức độ SẴN SÀNG chốt (`sanSangChot`), không bao giờ được đóng vai trạng thái.
+ *
+ * `daQuaNgay` tách "chưa tới giờ" khỏi "đã dạy nhưng chưa chốt": buổi tương lai còn
+ * SCHEDULED là bình thường, buổi đã qua ngày mà còn SCHEDULED mới là việc còn nợ.
+ */
+export type NhanTrangThaiBuoi =
+  /** status = COMPLETED. Đây là ca DUY NHẤT được hiện là đã xong. */
+  | { loai: "da-day" }
+  /** status = CANCELLED. */
+  | { loai: "da-huy" }
+  /** Buổi tương lai, chưa tới lượt làm gì. */
+  | { loai: "chua-toi-gio" }
+  /** Đã qua ngày, status vẫn chưa COMPLETED. `sanSangChot` = đủ ba việc, chỉ còn bấm chốt. */
+  | { loai: "chua-chot"; sanSangChot: boolean };
+
+export function nhanTrangThaiBuoi(input: {
+  status: string;
+  /** Buổi đã tới/qua ngày (≤ hết hôm nay giờ VN). */
+  daQuaNgay: boolean;
+  /** Đủ cả ba việc (isSessionWorkComplete). */
+  workDone: boolean;
+}): NhanTrangThaiBuoi {
+  if (input.status === "COMPLETED") return { loai: "da-day" };
+  if (input.status === "CANCELLED") return { loai: "da-huy" };
+  if (!input.daQuaNgay) return { loai: "chua-toi-gio" };
+  return { loai: "chua-chot", sanSangChot: input.workDone };
+}
+
 export type SessionOrderRow = {
   /** Số buổi (buildSessionNumberMap). Không tra được → xếp cuối nhóm. */
   number: number | null | undefined;
