@@ -3,6 +3,7 @@
 // BẮT BUỘC reason. Hàm THUẦN role-logic (can() do tầng action lo) — chỉ xử lý nghiệp vụ.
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { KHOAN_DA_GHI_NHAN } from "@/lib/finance/ghi-nhan";
 import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
 import { publishEvent } from "@/lib/events/publish";
 import { issueReceipt } from "@/lib/finance/receipt";
@@ -231,7 +232,7 @@ export async function linkRecordedPaymentsToEnrollments(
   if (enrollmentIds.length === 0) return { linked: 0, splitCreated: 0 };
 
   const recorded = await tx.payment.findMany({
-    where: { saleStatus: "RECORDED", enrollmentId: null, deletedAt: null, order: { leadId } },
+    where: { ...KHOAN_DA_GHI_NHAN, enrollmentId: null, order: { leadId } },
     select: {
       id: true, amount: true, orderId: true, method: true, paidDate: true,
       note: true, evidenceUrl: true, recordedById: true, centerId: true,

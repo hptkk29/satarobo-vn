@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { KHOAN_DA_GHI_NHAN } from "@/lib/finance/ghi-nhan";
 import { redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
@@ -66,8 +67,7 @@ export default async function BulkConvertPage() {
   const recorded = leadIds.length
     ? await sdb.payment.findMany({
         where: {
-          saleStatus: "RECORDED",
-          deletedAt: null,
+          ...KHOAN_DA_GHI_NHAN,
           order: { leadId: { in: leadIds } },
         },
         select: { order: { select: { leadId: true } } },

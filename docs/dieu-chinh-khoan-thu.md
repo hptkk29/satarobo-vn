@@ -58,7 +58,11 @@ test → phải tự dựng fixture, xem Bước 6.
 - [x] **Bước 4** — `KHOAN_DA_XAC_NHAN` (where) + `laKhoanDaXacNhan` (JS) +
       `tongDaXacNhan` + `sumConfirmed` trong `lib/finance/debt.ts` là NHÀ DUY NHẤT.
       Xoá 3 bản chép tay; rà đủ 15 chỗ trục A.
-- [ ] **Bước 4b** — trục B giữ khoá riêng (đơn/QR), không ép `enrollmentId`.
+- [x] **Bước 4b** — `KHOAN_DA_GHI_NHAN` + `sumRecorded(orderId)` trong
+      `lib/finance/ghi-nhan.ts` là NHÀ DUY NHẤT của trục B. Gom 9 bản chép tay
+      (4 chỗ Σ tiền + 2 chỗ đếm idempotent + 3 chỗ cổng chốt lead). Khoá giữ nguyên
+      theo từng chỗ: đơn · lead · `enrollmentId: null` — hằng chỉ khai *cái gì được
+      tính là tiền đã ghi nhận*, không khai khoá. Cổng `ghi-nhan.test.ts` chặn mọc lại.
 - [ ] **Bước 5** — hiển thị phía phụ huynh.
 - [ ] **Bước 6** — test (xem dưới).
 

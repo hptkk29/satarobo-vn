@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { KHOAN_DA_GHI_NHAN } from "@/lib/finance/ghi-nhan";
 import { notFound, redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
@@ -172,7 +173,7 @@ export default async function OrderDetailPage({ params }: Props) {
   // con số, lệch là QR in một đằng máy đối khớp một nẻo (khách trả đúng vẫn bị
   // xếp vào "trả thiếu → xử lý tay").
   const paidSoFar = await sdb.payment.aggregate({
-    where: { orderId: order.id, saleStatus: "RECORDED", deletedAt: null },
+    where: { orderId: order.id, ...KHOAN_DA_GHI_NHAN },
     _sum: { amount: true },
   });
   const dueNow = computeDueNow({
