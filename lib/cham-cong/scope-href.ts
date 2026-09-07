@@ -49,6 +49,7 @@ const TAB_MODE: Record<string, ScopeMode> = {
   "/cham-cong/phan-ca/import": "ky+coSo",
   "/cham-cong/ky-cong": "ky+coSo",
   "/cham-cong/thong-ke": "ky+coSo",
+  "/cham-cong/cong-day": "ky+coSo",
   "/cham-cong/doi-soat": "ky+coSo",
   "/cham-cong/danh-muc-ca": "ky+coSo",
   "/cham-cong/loai-nghi": "ky+coSo",

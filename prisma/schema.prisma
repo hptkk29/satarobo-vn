@@ -10322,6 +10322,54 @@ model ShiftBriefNote {
 }
 
 /// Danh mục loại nghỉ (K-06 theo MISA) — màn CRUD, seed 8 dòng 1 lần.
+/// Cách quy một buổi dạy ra công: theo BUỔI hay theo GIỜ thực dạy.
+enum TeachingCreditBasis {
+  PER_SESSION
+  PER_HOUR
+}
+
+/// Buổi đến từ đâu. Lớp chính thức hay buổi trải nghiệm — hai model khác hẳn nhau.
+enum TeachingCreditSource {
+  CLASS
+  TRIAL
+}
+
+/// Vai của người trong buổi đó.
+enum TeachingRole {
+  MAIN
+  SUBSTITUTE
+  ASSISTANT
+}
+
+/// Danh mục LOẠI CÔNG DẠY — người vận hành tự bật/tắt và chỉnh hệ số, KHÔNG cần lập trình viên.
+///
+/// Vì sao khoá `@@unique([source, role])`: sáu tổ hợp (lớp/trải nghiệm × chính/thay/trợ giảng) là
+/// TOÀN BỘ những gì hệ thống tự nhận ra được từ dữ liệu buổi hiện có. Khoá lại thì mỗi buổi ứng
+/// đúng một loại — không cần thứ tự ưu tiên, không cần ngôn ngữ điều kiện, và không bao giờ có
+/// chuyện một buổi được đếm hai lần.
+///
+/// ⚠️ "Dạy bù" và "vượt giờ" CHƯA có ở đây vì dữ liệu chưa phân biệt được: không cột nào đánh dấu
+/// một `ClassSession` là buổi bù, và `actualStartAt/actualEndAt` gần như luôn rỗng nên không biết
+/// buổi nào vượt giờ. Thêm hai loại đó là thêm một ô luôn bằng 0 — cần chốt cách ghi nhận trước.
+model TeachingCreditType {
+  id             String               @id @default(cuid())
+  code           String               @unique
+  name           String
+  source         TeachingCreditSource
+  role           TeachingRole
+  basis          TeachingCreditBasis  @default(PER_SESSION)
+  /// Hệ số quy đổi. 1 = một buổi tính một công dạy; 0,5 = nửa; theo giờ thì nhân với số giờ.
+  factor         Float                @default(1)
+  /// Tắt = vẫn liệt kê để theo dõi nhưng KHÔNG cộng vào tổng công dạy của kỳ.
+  countsInPeriod Boolean              @default(true)
+  isActive       Boolean              @default(true)
+  displayOrder   Int                  @default(0)
+  createdAt      DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime             @updatedAt @db.Timestamptz(6)
+
+  @@unique([source, role])
+}
+
 model LeaveType {
   id             String   @id @default(cuid())
   code           String   @unique

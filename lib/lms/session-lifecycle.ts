@@ -64,6 +64,7 @@ export async function completeSession(opts: {
       classId: true,
       date: true,
       status: true,
+      substituteTeacherId: true,
       class: {
         select: { teacherId: true, roomId: true, startTime: true, endTime: true },
       },
@@ -111,8 +112,15 @@ export async function completeSession(opts: {
         status: "COMPLETED",
         completedAt: now,
         completedById: opts.actorId,
-        // Dữ liệu thực tế: mặc định lấy theo lớp nếu GV không nhập override.
-        actualTeacherId: opts.actualTeacherId ?? session.class?.teacherId ?? null,
+        // Dữ liệu thực tế: không nhập override thì lấy NGƯỜI DẠY THAY trước, rồi mới tới GV
+        // chính của lớp.
+        //
+        // Trước 07/09 dòng này bỏ qua `substituteTeacherId` và rơi thẳng về `class.teacherId`.
+        // Ô chọn GV ở form hoàn tất buổi là TUỲ CHỌN, nên bỏ trống là ghi đè người dạy thay —
+        // mà `substituteTeacherId` chính là thứ `adjust.ts` vừa gán khi duyệt đơn dạy thay.
+        // Hậu quả: buổi dạy thay bị quy về GV chính ở mọi bảng đếm buổi dạy, và người thật sự
+        // đứng lớp mất công. Bắt được khi dựng phần công dạy giáo viên.
+        actualTeacherId: opts.actualTeacherId ?? session.substituteTeacherId ?? session.class?.teacherId ?? null,
         actualRoomId: opts.actualRoomId ?? session.class?.roomId ?? null,
         actualStartAt: opts.actualStartAt ?? null,
         actualEndAt: opts.actualEndAt ?? null,
