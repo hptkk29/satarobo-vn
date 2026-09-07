@@ -57,17 +57,52 @@ d("vé + ghi lượt + tính lại", () => {
     expect(await mod.consumeTicket({ ticketId: t2.ticketId, nonce: t2.nonce, userId })).toEqual({ ok: false, reason: "TICKET_EXPIRED" });
   });
 
-  it("ghi lượt: trong vùng không cờ; ngoài vùng NGOAI_VUNG vẫn ghi; thiếu GPS THIEU_GPS; không ca CHAM_NGOAI_LICH; trùng 2′ TRUNG_2_PHUT", async () => {
+  it("điểm ĐÃ bật định vị: trong vùng ghi được; ngoài vùng và thiếu GPS bị CHẶN, không ghi dòng nào", async () => {
+    // Đây là chỗ luật đảo chiều so với Q-07 cũ ("ghi luôn + gắn cờ"), và đảo vì QR đổi thiết kế:
+    // mã tĩnh dán ở quầy thì ai chụp ảnh cũng quét được, nên định vị là lớp bảo vệ CÒN LẠI duy
+    // nhất — gắn cờ thôi thì mã tĩnh + cờ = không chặn gì cả.
     const r1 = await mod.recordTimeLog({ userId, workLocationId: wlId, direction: "CHECK_IN", latitude: 16.0472, longitude: 108.2063 });
     expect(r1.ok).toBe(true);
     if (r1.ok) expect(r1.flags).toEqual(["CHAM_NGOAI_LICH"]); // chưa xếp ca hôm nay
+
     const r2 = await mod.recordTimeLog({ userId, workLocationId: wlId, direction: "CHECK_IN", latitude: 16.06, longitude: 108.22 });
-    if (r2.ok) expect(r2.flags).toEqual(["CHAM_NGOAI_LICH", "NGOAI_VUNG", "TRUNG_2_PHUT"]);
+    expect(r2.ok).toBe(false);
+    if (!r2.ok) expect(r2.rejectReason).toBe("OUTSIDE_GEOFENCE");
+
     const r3 = await mod.recordTimeLog({ userId, workLocationId: wlId, direction: "CHECK_OUT" });
-    if (r3.ok) expect(r3.flags).toContain("THIEU_GPS");
+    expect(r3.ok).toBe(false);
+    if (!r3.ok) expect(r3.rejectReason).toBe("NO_GPS");
+
+    // Trùng 2′ vẫn là CỜ chứ không phải chặn — người bấm nhầm hai lần không bị mất lượt.
+    const r4 = await mod.recordTimeLog({ userId, workLocationId: wlId, direction: "CHECK_IN", latitude: 16.0472, longitude: 108.2063 });
+    expect(r4.ok).toBe(true);
+    if (r4.ok) expect(r4.flags).toContain("TRUNG_2_PHUT");
+
     const rows = await db.staffTimeLog.findMany({ where: { userId, result: "ACCEPTED" } });
-    expect(rows).toHaveLength(3);
+    expect(rows).toHaveLength(2); // r1 + r4; hai lượt bị chặn KHÔNG để lại dòng nào
     expect(rows.every((x) => x.centerId === centerId)).toBe(true);
+  });
+
+  it("điểm CHƯA khai toạ độ: chạy như cũ — ghi + gắn cờ, không chặn ai", async () => {
+    // Chặn vô điều kiện là khoá cửa cả công ty: `geofenceEnabled` mặc định false và toạ độ mặc
+    // định null, nên điểm chưa đo thực địa sẽ từ chối mọi người. Khoá hành vi đó lại ở đây.
+    const c2 = await db.center.upsert({ where: { slug: `${TAG}-cs3` }, update: {}, create: { slug: `${TAG}-cs3`, name: "CS3 timelog", address: "x", code: `${TAG}-CS3` }, select: { id: true } });
+    const wl2 = await db.workLocation.upsert({
+      where: { code: `${TAG}-CS3` },
+      update: { latitude: null, longitude: null, geofenceEnabled: false, isActive: true },
+      create: { code: `${TAG}-CS3`, name: "Quầy CS3", centerId: c2.id, geofenceEnabled: false },
+      select: { id: true },
+    });
+    const u2 = await db.user.create({ data: { email: `nv2@${TAG}.test`, name: "NV chưa toạ độ", role: "SALES_CSM", roles: ["SALES_CSM"], password: "x", centerId: c2.id }, select: { id: true } });
+    try {
+      const r = await mod.recordTimeLog({ userId: u2.id, workLocationId: wl2.id, direction: "CHECK_IN" });
+      expect(r.ok).toBe(true);
+      if (r.ok) expect(r.flags).toContain("CHUA_TOA_DO");
+    } finally {
+      await db.staffAttendanceDay.deleteMany({ where: { userId: u2.id } });
+      await db.staffTimeLog.deleteMany({ where: { userId: u2.id } });
+      await db.user.deleteMany({ where: { id: u2.id } });
+    }
   });
 
   it("có ca S tại cơ sở khác → SAI_NOI_LAM; tính lại ngày ra dòng có cờ chuyển tiếp", async () => {

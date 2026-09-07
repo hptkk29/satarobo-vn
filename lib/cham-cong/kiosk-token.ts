@@ -1,72 +1,43 @@
-// lib/cham-cong/kiosk-token.ts — mã QR XOAY trên màn hình quầy (L4). THUẦN (chỉ crypto).
+// lib/cham-cong/kiosk-token.ts — mã QR TĨNH dán ở quầy chấm công. THUẦN (chỉ crypto).
 //
-// Token = <workLocationId>.<cửa sổ 60s>.<HMAC>. Màn hình quầy làm mới mỗi 30s; máy chủ nhận
-// cửa sổ hiện tại + 2 cửa sổ trước (≤ 3 phút) để người quét xong còn kịp bấm. Thay cho mã CỐ
-// ĐỊNH không hết hạn của bản cũ (chụp ảnh QR là chấm được từ nhà). Sau khi qua cửa này, mỗi lượt
-// còn phải có VÉ riêng (AttendanceTicket, 120s, tiêu nguyên tử) — xem timelog.ts.
+// Token = `<workLocationId>.v<keyVersion>.<HMAC>`. Không có chỉ số thời gian, KHÔNG HẾT HẠN.
+//
+// ── Vì sao không còn mã xoay 60s (chốt chủ dự án 07/09/2026) ────────────────────────────
+// Bản trước có thêm một họ mã XOAY (`<workLocationId>.<cửa sổ 60s>.<HMAC>`) mà màn TV chiếu và
+// làm mới mỗi 30s. Chủ dự án chốt bỏ hẳn: *"bỏ chức năng vòng đời mã 60s đi, mã có hiệu lực vĩnh
+// viễn cho đến khi admin ngắt hiệu lực để đổi mã khác nếu muốn"*.
+//
+// Giữ hai họ mã song song là giữ HAI CỬA VÀO cho cùng một việc — và cửa thứ hai không ai đi:
+// trước khi gỡ, cả màn TV lẫn nút In đều đã gọi `?tinh=1`, tức nhánh xoay không còn caller sản
+// xuất nào. Một cửa không ai đi nhưng vẫn mở là thứ phải bảo trì mãi và là chỗ để lọt.
+//
+// ── Mã tĩnh mất gì, và cái gì bù vào ────────────────────────────────────────────────────
+// Mất đúng một lớp: cửa sổ 60s. Rủi ro cụ thể là chụp ảnh tờ mã ở quầy rồi gửi nhau, chấm từ nhà.
+// Vé một lần (`AttendanceTicket`, 120s) KHÔNG cứu được — người ở xa mở URL là có vé mới; vé chỉ
+// chặn bấm lại cùng một lượt. Lớp bù duy nhất còn lại là ĐỊNH VỊ, nên `timelog.ts` CHẶN khi ngoài
+// vùng ở điểm đã khai toạ độ. Điểm chưa khai toạ độ ⇒ mã in ra không có lớp chặn nào; màn Điểm
+// chấm công nói thẳng điều đó trước khi ai đi dán.
+//
+// ── Thu hồi ─────────────────────────────────────────────────────────────────────────────
+// `keyVersion` là cách DUY NHẤT giết một tờ mã đã in mà không phải đổi `NEXTAUTH_SECRET` — khoá
+// đó dùng chung cho session, vé SCORM, cookie portal, OTP; đổi nó là đá sập cả hệ thống. Mất tờ
+// giấy / người nghỉ còn giữ ảnh chụp ⇒ tăng `WorkLocation.qrKeyVersion`, in lại, ảnh cũ chết ngay.
 import { createHmac, timingSafeEqual } from "crypto";
-
-export const KIOSK_WINDOW_SECONDS = 60;
-export const KIOSK_ALLOW_PREVIOUS_WINDOWS = 2;
-
-export function kioskWindowIndex(now: Date, windowSeconds = KIOSK_WINDOW_SECONDS): number {
-  return Math.floor(now.getTime() / 1000 / windowSeconds);
-}
-
-function sign(workLocationId: string, windowIndex: number, secret: string): string {
-  return createHmac("sha256", secret).update(`kiosk:${workLocationId}:${windowIndex}`).digest("base64url").slice(0, 24);
-}
-
-export function makeKioskToken(workLocationId: string, secret: string, now: Date = new Date()): string {
-  const w = kioskWindowIndex(now);
-  return `${workLocationId}.${w}.${sign(workLocationId, w, secret)}`;
-}
-
-export type KioskVerify = { ok: true; workLocationId: string; ageWindows: number } | { ok: false; reason: "FORMAT" | "EXPIRED" | "SIGNATURE" };
-
-export function verifyKioskToken(token: string, secret: string, now: Date = new Date()): KioskVerify {
-  const parts = token.split(".");
-  if (parts.length !== 3) return { ok: false, reason: "FORMAT" };
-  const [workLocationId, wStr, sig] = parts;
-  const w = Number(wStr);
-  if (!workLocationId || !Number.isInteger(w) || !sig) return { ok: false, reason: "FORMAT" };
-  const current = kioskWindowIndex(now);
-  const age = current - w;
-  if (age < 0 || age > KIOSK_ALLOW_PREVIOUS_WINDOWS) return { ok: false, reason: "EXPIRED" };
-  const a = Buffer.from(sig);
-  const b = Buffer.from(sign(workLocationId, w, secret));
-  if (a.length !== b.length || !timingSafeEqual(a, b)) return { ok: false, reason: "SIGNATURE" };
-  return { ok: true, workLocationId, ageWindows: age };
-}
-
-// ── Mã TĨNH in ra dán ở quầy (đợt 2, chốt 07/09/2026) ───────────────────────────────────
-//
-// Chủ dự án chốt: "chỉ dùng 1 QR để chấm công, QR tĩnh không thay đổi nữa, in ra đặt tại các
-// trung tâm".
-//
-// Mã tĩnh MẤT ĐÚNG MỘT LỚP so với mã xoay: cửa sổ 60s. Rủi ro cụ thể là chụp ảnh mã dán ở quầy
-// rồi gửi cho nhau, chấm từ nhà. Vé một lần (`AttendanceTicket`, 120s) KHÔNG cứu được — người ở
-// xa mở URL là có vé mới; vé chỉ chặn bấm lại cùng một lượt. Lớp bù duy nhất còn lại là ĐỊNH VỊ,
-// nên `timelog.ts` nay CHẶN khi ngoài vùng ở điểm đã khai toạ độ (chốt của chủ dự án).
-//
-// `keyVersion` là cách DUY NHẤT thu hồi một tờ mã đã in mà không phải đổi `NEXTAUTH_SECRET` —
-// khoá đó dùng chung cho session, vé SCORM, cookie portal, OTP, đổi nó là đá sập cả hệ thống.
-// Mất tờ giấy / nhân viên nghỉ mang theo ảnh chụp ⇒ tăng `WorkLocation.qrKeyVersion` lên 1, in
-// lại, mọi ảnh chụp cũ chết ngay.
-//
-// GIỮ NGUYÊN cặp hàm xoay ở trên: mã đang chiếu trên màn TV không được chết giữa chừng lúc
-// deploy, và hai dạng cùng đi qua một cổng.
-
-/** Token tĩnh: `<workLocationId>.v<keyVersion>.<HMAC>` — không có chỉ số cửa sổ, không hết hạn. */
-export function makeStaticKioskToken(workLocationId: string, keyVersion: number, secret: string): string {
-  return `${workLocationId}.v${keyVersion}.${signStatic(workLocationId, keyVersion, secret)}`;
-}
 
 function signStatic(workLocationId: string, keyVersion: number, secret: string): string {
   return createHmac("sha256", secret)
     .update(`kiosk-static:${workLocationId}:${keyVersion}`)
     .digest("base64url")
     .slice(0, 24);
+}
+
+/** Token tĩnh: `<workLocationId>.v<keyVersion>.<HMAC>` — không có chỉ số cửa sổ, không hết hạn. */
+export function makeStaticKioskToken(
+  workLocationId: string,
+  keyVersion: number,
+  secret: string,
+): string {
+  return `${workLocationId}.v${keyVersion}.${signStatic(workLocationId, keyVersion, secret)}`;
 }
 
 export type StaticVerify =
@@ -90,8 +61,14 @@ export function verifyStaticKioskToken(token: string, secret: string): StaticVer
   return { ok: true, workLocationId, keyVersion };
 }
 
-/** Mã tĩnh hay mã xoay — phân biệt bằng chỉ số cửa sổ có tiền tố `v` hay không. */
-export function laMaTinh(token: string): boolean {
+/**
+ * Mã ĐỜI CŨ (họ xoay) — phần giữa là số cửa sổ, không có tiền tố `v`.
+ *
+ * Giữ hàm này SAU KHI đã gỡ đường xác minh mã xoay, để `checkin-gate.ts` phân biệt được "mã đời
+ * cũ đã ngừng dùng" với "mã rác". Người cầm ảnh chụp màn TV cũ cần được bảo đi quét tờ mới, chứ
+ * "Mã QR không hợp lệ" thì họ sẽ đứng bấm lại.
+ */
+export function laMaXoayDoiCu(token: string): boolean {
   const parts = token.split(".");
-  return parts.length === 3 && parts[1].startsWith("v");
+  return parts.length === 3 && parts[1].length > 0 && Number.isInteger(Number(parts[1]));
 }

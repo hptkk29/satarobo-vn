@@ -3,13 +3,16 @@
 // qr-screen.tsx — nguồn dữ liệu QR của màn quầy (dùng chung cho cả hai chế độ) + thẻ xem trước
 // ở chế độ điều khiển. Chế độ trình chiếu nằm ở `kiosk-stage.tsx` và cũng đọc `useKioskQr`.
 //
-// ĐIỀU DỄ VỠ: bản cũ để MỘT lần poll rớt mạng là xoá luôn ảnh QR đang hiện và in chữ đỏ — trong
-// khi mã vừa lấy còn dùng được tới ~3 phút (máy chủ nhận cửa sổ hiện tại + 2 cửa sổ trước). Ở
-// quầy, "không có QR" nghĩa là cả ca không ai chấm công được. Nên ở đây: giữ ảnh cuối cùng KÈM
-// hạn dùng của nó; lỗi mà mã còn hạn ⇒ chỉ treo dải cảnh báo; hết hạn mới chịu báo lỗi.
+// ĐIỀU DỄ VỠ: bản cũ để MỘT lần poll rớt mạng là xoá luôn ảnh QR đang hiện và in chữ đỏ. Ở quầy,
+// "không có QR" nghĩa là cả ca không ai chấm công được. Nên ở đây: giữ ảnh cuối cùng, poll hỏng
+// thì chỉ treo dải cảnh báo.
 //
-// KHÔNG import `lib/cham-cong/kiosk-token.ts` (file đó dùng `node:crypto`, không chạy ở trình
-// duyệt) và KHÔNG sửa `/api/admin/cham-cong/qr-token` — số cửa sổ khai lại bên dưới.
+// Từ 07/09/2026 mã là TĨNH — không hết hạn, và chính là tờ mã đang dán ở quầy. Nên toàn bộ bộ
+// đếm ngược "mã mới sau Ns" và khái niệm `validUntil` đã gỡ: mã trên màn không bao giờ cũ đi, và
+// một dòng đếm ngược sai là bảo người đứng ở quầy đứng đợi một cái không bao giờ tới. Vòng poll
+// giữ lại CHỈ để tự hồi phục sau khi rớt mạng và để đổi ảnh sau khi admin thu hồi mã.
+//
+// KHÔNG import `lib/cham-cong/kiosk-token.ts` — file đó dùng `node:crypto`, không chạy ở trình duyệt.
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { QrCode, WifiOff } from "lucide-react";
@@ -19,11 +22,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState, NoPermission } from "@/components/admin/ui/states";
 import { BTN_OUTLINE, BTN_PRIMARY } from "@/components/admin/cham-cong/classes";
 
-/** Máy chủ nhận cửa sổ hiện tại + 2 cửa sổ trước ⇒ một mã sống trọn 3 cửa sổ. */
-export const KIOSK_VALID_WINDOWS = 3;
-/** Phải < 60s (một cửa sổ) để màn hình không bao giờ treo mã đã hết hạn. */
+/** Nhịp tự hồi phục sau rớt mạng, và để mã mới hiện lên sau khi admin thu hồi. */
 const POLL_MS = 30_000;
-const DEFAULT_WINDOW_SECONDS = 60;
 
 const QR_ENDPOINT = "/api/admin/cham-cong/qr-token";
 
@@ -33,10 +33,7 @@ export type KioskSnapshot = {
   qrDataUrl: string;
   locationName: string;
   geofenceEnabled: boolean;
-  windowSeconds: number;
   fetchedAt: number;
-  /** Thời điểm mã hết hiệu lực với máy chủ (cuối cửa sổ thứ 3 tính từ lúc phát). */
-  validUntil: number;
 };
 
 export type KioskFail = { kind: KioskFailKind; message: string; at: number };
@@ -48,16 +45,12 @@ export type KioskQr = {
   fail: KioskFail | null;
   /** Đồng hồ (ms). 0 = chưa mount — cố ý, để render máy chủ và trình duyệt không lệch nhau. */
   nowMs: number;
-  /** Còn bao nhiêu giây nữa máy chủ đổi mã (bám mốc cửa sổ, không phải nhịp poll). */
-  secondsToNewCode: number;
   retry: () => void;
 };
 
 type QrTokenResponse = {
   qrDataUrl?: string;
-  windowSeconds?: number;
-  /** Đáp ứng của chế độ mã TĨNH — không có vòng đời, không đếm ngược. */
-  tinh?: boolean;
+  qrKeyVersion?: number;
   workLocation?: { name?: string; geofenceEnabled?: boolean } | null;
 };
 
@@ -84,13 +77,6 @@ function messageOf(kind: KioskFailKind, serverText?: string): string {
   }
 }
 
-/** Cuối cửa sổ thứ `KIOSK_VALID_WINDOWS` tính từ cửa sổ phát mã — KHÔNG phải "lúc lấy + 180s",
- *  vì mã được phát giữa chừng một cửa sổ thì nó chết sớm hơn đúng phần đã trôi qua. */
-function windowEnd(fetchedAt: number, windowSeconds: number): number {
-  const w = Math.floor(fetchedAt / 1000 / windowSeconds);
-  return (w + KIOSK_VALID_WINDOWS) * windowSeconds * 1000;
-}
-
 /** "14:03" theo đồng hồ VN — không phụ thuộc timezone của máy đang mở TV. */
 export function vnHhMm(ms: number): string {
   const p = vnParts(new Date(ms));
@@ -104,10 +90,9 @@ export function useKioskQr(centerId: string): KioskQr {
 
   const load = useCallback(async () => {
     try {
-      // `tinh=1`: chiếu CHÍNH mã tĩnh đang dán ở quầy. Chủ dự án chốt "chỉ dùng 1 QR" — màn TV
-      // chiếu một mã khác với tờ giấy là hai mã, và người quét phải đoán cái nào còn dùng được.
-      // Mã không đổi nên vòng poll bên dưới nay chỉ còn để tự hồi phục khi rớt mạng.
-      const res = await fetch(`${QR_ENDPOINT}?centerId=${encodeURIComponent(centerId)}&tinh=1`, {
+      // Màn TV chiếu CHÍNH tờ mã đang dán ở quầy. Chủ dự án chốt "chỉ dùng 1 QR" — chiếu một mã
+      // khác với tờ giấy là hai mã, và người quét phải đoán cái nào còn dùng được.
+      const res = await fetch(`${QR_ENDPOINT}?centerId=${encodeURIComponent(centerId)}`, {
         cache: "no-store",
       });
       if (!res.ok) {
@@ -121,20 +106,11 @@ export function useKioskQr(centerId: string): KioskQr {
         setFail({ kind: "SERVER", message: messageOf("SERVER"), at: Date.now() });
         return;
       }
-      const fetchedAt = Date.now();
-      // Mã TĨNH không có `windowSeconds` trong đáp ứng. Rơi về mặc định 60s là màn tự tính ra
-      // `validUntil` rồi coi mã đã hết hạn sau ~3 phút và THAY ẢNH QR bằng màn báo lỗi — ở quầy,
-      // mất QR là cả ca không ai chấm được, đúng thứ file này sinh ra để tránh.
-      const maTinh = data.tinh === true;
-      const windowSeconds =
-        data.windowSeconds && data.windowSeconds > 0 ? data.windowSeconds : DEFAULT_WINDOW_SECONDS;
       setSnap({
         qrDataUrl: data.qrDataUrl,
         locationName: data.workLocation?.name ?? "",
         geofenceEnabled: data.workLocation?.geofenceEnabled ?? false,
-        windowSeconds,
-        fetchedAt,
-        validUntil: maTinh ? Number.POSITIVE_INFINITY : windowEnd(fetchedAt, windowSeconds),
+        fetchedAt: Date.now(),
       });
       setFail(null);
     } catch {
@@ -156,32 +132,22 @@ export function useKioskQr(centerId: string): KioskQr {
     return () => clearInterval(id);
   }, [load]);
 
-  const windowSeconds = snap?.windowSeconds ?? DEFAULT_WINDOW_SECONDS;
-  const expired = !snap || (nowMs > 0 && nowMs >= snap.validUntil);
-
+  // Mã tĩnh không hết hạn ⇒ có ảnh là còn dùng được, bất kể poll đang hỏng bao lâu. Chỉ rơi vào
+  // `error` khi CHƯA BAO GIỜ lấy được ảnh nào — lúc đó ở quầy thật sự không có gì để quét.
   let status: KioskQr["status"];
   if (nowMs === 0 || (!snap && !fail)) status = "loading";
-  else if (snap && !expired) status = fail ? "stale" : "live";
+  else if (snap) status = fail ? "stale" : "live";
   else status = "error";
 
-  return {
-    status,
-    snap,
-    fail,
-    nowMs,
-    secondsToNewCode: nowMs === 0 ? windowSeconds : windowSeconds - (Math.floor(nowMs / 1000) % windowSeconds),
-    retry: () => void load(),
-  };
+  return { status, snap, fail, nowMs, retry: () => void load() };
 }
 
-/** Dải "mã còn dùng được tới …" — chỉ hiện khi poll đang hỏng mà mã cũ chưa hết hạn. */
+/** Dải cảnh báo mất kết nối. Mã tĩnh vẫn quét được bình thường — nói rõ để không ai hoảng. */
 export function StaleBanner({
   fail,
-  validUntil,
   className,
 }: {
   fail: KioskFail;
-  validUntil: number;
   className?: string;
 }) {
   return (
@@ -193,7 +159,7 @@ export function StaleBanner({
       )}
     >
       <WifiOff aria-hidden className="h-4 w-4 shrink-0" />
-      Mất kết nối {vnHhMm(fail.at)} — mã còn dùng được tới {vnHhMm(validUntil)}
+      Mất kết nối {vnHhMm(fail.at)} — mã vẫn quét được bình thường
     </p>
   );
 }
@@ -292,12 +258,12 @@ export function QrScreen(props: KioskFailProps) {
         />
       )}
 
-      {qr.status === "stale" && qr.fail && qr.snap ? (
-        <StaleBanner fail={qr.fail} validUntil={qr.snap.validUntil} className="w-full text-xs" />
+      {qr.status === "stale" && qr.fail ? (
+        <StaleBanner fail={qr.fail} className="w-full text-xs" />
       ) : (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <QrCode aria-hidden className="h-3.5 w-3.5" />
-          Mã mới sau <span className="tabular-nums font-semibold text-foreground">{qr.secondsToNewCode}s</span>
+          Mã cố định — cùng mã với tờ dán tại quầy
         </p>
       )}
     </div>
