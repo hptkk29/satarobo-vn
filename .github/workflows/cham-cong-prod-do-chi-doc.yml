@@ -1,0 +1,93 @@
+# Chạy TAY (workflow_dispatch) — ĐO trên PROD, CHỈ ĐỌC, KHÔNG GHI GÌ.
+#
+# ⚠️ TÊN ĐẶT ĐỂ KHÔNG BẤM NHẦM. Danh sách workflow trên GitHub Actions xếp theo tên, nên hai nút
+# chạm PROD của module này cố ý dùng chung tiền tố và khác nhau đúng MỘT từ viết hoa:
+#     Chấm công · PROD · ĐO  (chỉ đọc — không ghi gì)   ← file này
+#     Chấm công · PROD · GHI (seed danh mục nền)        ← cham-cong-prod-seed.yml
+# Hai nút nằm cạnh nhau, và từ phân biệt là thứ đọc trước tiên.
+#
+# Vì sao có workflow này: prod chỉ chạm được qua GitHub Actions (`.env` trên máy dev trỏ DB DEV,
+# và Vercel che `DATABASE_URL` là Sensitive nên `vercel env pull` vô dụng). Mọi số đo trên dữ liệu
+# thật đều phải đi qua đây.
+#
+# ── BA LỚP KHOÁ, ĐỘC LẬP NHAU ───────────────────────────────────────────────────────────
+# 1. KHÔNG CÓ CHẾ ĐỘ GHI. Không input `--ghi`, không chuỗi xác nhận "GHI THAT VAO PROD" — vì
+#    không có gì để xác nhận. Cả hai script chạy ở chế độ mặc định (chỉ đo).
+# 2. KẾT NỐI BẰNG USER CHỈ-ĐỌC. File này CỐ Ý KHÔNG đọc `PROD_DATABASE_URL` /`PROD_DIRECT_URL`
+#    (hai secret đầy quyền). Nó chỉ biết `PROD_DATABASE_URL_RO`. Có gõ nhầm một dòng `run` thành
+#    lệnh ghi thì Postgres vẫn từ chối. Cách tạo user: `docs/cham-cong/USER-CHI-DOC-PROD.md`.
+# 3. SCRIPT TỰ KHAI. Dòng đầu log in `user=… · chỉ đọc / CÓ QUYỀN GHI` (`scripts/_kiem-quyen.ts`,
+#    thuần SELECT). Secret bị đặt nhầm sang chuỗi đầy quyền thì hiện ra ngay dòng đầu — GitHub
+#    không cho đọc lại secret để đối chiếu, nên đây là cách duy nhất thấy được.
+#
+# KHÔNG có bước nào chạy migration, seed, hay ghi vào DB. `prisma generate` chỉ sinh mã client
+# vào `node_modules` của runner — không chạm DB (và cũng không chạm được, user chỉ có SELECT).
+# Kết quả in ra LOG, không ghi file, không commit ngược lại repo.
+#
+# Dùng chuỗi SESSION POOLER (:5432), không phải transaction pooler (:6543): pgbouncer không giữ
+# prepared statement giữa các câu lệnh, mà script chạy hàng trăm truy vấn liên tiếp thì dính
+# `prepared statement "sN" does not exist`. Đã ăn thật hai lần — xem `scripts/_script-db.ts`.
+name: Chấm công · PROD · ĐO (chỉ đọc — không ghi gì)
+on:
+  workflow_dispatch:
+    inputs:
+      viec:
+        description: "Đo cái gì"
+        required: true
+        type: choice
+        default: si-so
+        options:
+          - si-so
+          - buoi-day
+          - tat-ca
+concurrency:
+  group: cham-cong-prod-do-chi-doc
+  cancel-in-progress: false
+jobs:
+  do:
+    name: Đo (không ghi)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Kiểm secret chỉ-đọc
+        run: |
+          if [ -z "${{ secrets.PROD_DATABASE_URL_RO }}" ]; then
+            echo "::error::Thiếu secret PROD_DATABASE_URL_RO (chuỗi session pooler của user chỉ-đọc)."
+            echo "::error::Cách tạo user + lấy chuỗi: docs/cham-cong/USER-CHI-DOC-PROD.md"
+            echo "::error::KHÔNG đặt PROD_DATABASE_URL / PROD_DIRECT_URL vào đây — chúng đầy quyền."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Sinh Prisma client (không chạm DB)
+        run: pnpm exec prisma generate
+
+      # Số cần nhìn nhất ở bước này: CHÊNH LỆCH giữa hai nguồn ở những buổi tính được CẢ HAI.
+      # Nó đo trực tiếp độ thừa của cách "đếm ghi danh" trên dữ liệu thật, thay vì để ta suy luận.
+      - name: "Đo sĩ số biên chế của buổi cũ (chỉ đọc)"
+        if: inputs.viec == 'si-so' || inputs.viec == 'tat-ca'
+        run: pnpm exec tsx scripts/backfill-si-so-buoi.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+
+      # Ba chỗ đếm "buổi dạy" nghi sai + LỖI THƯỢNG NGUỒN quan trọng hơn cả ba.
+      # Đọc `docs/cham-cong/GHI-CHU-BA-CHO-DEM-BUOI-DAY.md` §2 để biết đọc số theo thứ tự nào —
+      # con số đầu tiên quyết định ba con số sau có nghĩa hay không.
+      - name: "Đo chênh lệch ba chỗ đếm buổi dạy (chỉ đọc)"
+        if: inputs.viec == 'buoi-day' || inputs.viec == 'tat-ca'
+        run: pnpm exec tsx scripts/do-lech-buoi-day.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+
+      - name: Nhắc lại
+        run: |
+          echo "Workflow này chỉ ĐỌC, bằng user chỉ-đọc. Không bước nào ghi vào DB prod."
+          echo "Nếu số đo ra 0 bất thường: xem docs/cham-cong/USER-CHI-DOC-PROD.md mục 'Nếu số đo ra 0'."
