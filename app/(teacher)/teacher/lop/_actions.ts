@@ -379,7 +379,31 @@ export async function saveClassAttendanceAction(
       });
     }
   } catch (err) {
+    // ── HỎNG PHẢI ĐỂ LẠI DẤU (07/09/2026) ────────────────────────────────────────
+    //
+    // Giữ best-effort: điểm danh ĐÃ lưu rồi, đóng buổi hỏng không được biến thành
+    // "không lưu được điểm danh" trước mắt giáo viên.
+    //
+    // NHƯNG từ chốt 07/09 ("một luật, không hai") đây là ĐƯỜNG ĐÓNG BUỔI CHÍNH, nên
+    // nuốt lỗi vào `console.error` là mất hẳn dấu vết: log của Vercel xoay vòng và
+    // không ai tra được "tháng này đóng buổi hỏng bao nhiêu lần". Ghi thêm một dòng
+    // AuditLog để câu hỏi đó trả lời được bằng SQL.
+    //
+    // Bản thân việc ghi audit cũng best-effort — hỏng ở đây tuyệt đối không được làm
+    // hỏng lượt lưu điểm danh.
     console.error("[saveClassAttendanceAction] tu hoan tat:", err);
+    try {
+      await writeAudit({
+        actor: { id: actorId, name: actorName },
+        module: "attendance",
+        entityType: "ClassSession",
+        entityId: data.sessionId,
+        action: "session.auto-complete.failed",
+        newValues: { error: err instanceof Error ? err.message : String(err) },
+      });
+    } catch (err2) {
+      console.error("[saveClassAttendanceAction] audit tu hoan tat:", err2);
+    }
   }
 
   // Thông báo điểm danh cho phụ huynh (email; Zalo khi cấu hình) — best-effort.
