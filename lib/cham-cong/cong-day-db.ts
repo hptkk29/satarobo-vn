@@ -81,7 +81,13 @@ export async function loadBuoiDay(userIds: string[], from: Date, to: Date): Prom
     if (nguoiDay && quanTam.has(nguoiDay)) {
       // Vai: là người dạy thay khi họ KHÔNG phải giáo viên chính của lớp. So với `class.teacherId`
       // chứ không so với `substituteTeacherId` — vì `actualTeacherId` đã nuốt cả hai đường.
-      const laChinh = s.class?.teacherId != null && nguoiDay === s.class.teacherId;
+      //
+      // `Class.teacherId` NULLABLE: lớp chưa gán giáo viên chính (thỉnh giảng, gán theo từng
+      // buổi) thì không có gì để so. Coi là MAIN trừ khi buổi đó thật sự có người dạy thay —
+      // mặc định "dạy thay" cho cả lớp là sai người, và hôm nay vô hại chỉ vì hai loại đang
+      // cùng hệ số 1; BLĐ hạ hệ số dạy thay xuống là số của những lớp đó sai ngay.
+      const laChinh =
+        s.class?.teacherId == null ? s.substituteTeacherId !== nguoiDay : nguoiDay === s.class.teacherId;
       ra.push({
         id: s.id,
         source: "CLASS",

@@ -14,6 +14,7 @@ function ngay(p: Partial<NgayCong> = {}): NgayCong {
     pairs: capDong,
     flags: [],
     absenceStatus: null,
+    templateCode: "S",
     ...p,
   };
 }
@@ -111,6 +112,40 @@ describe("thongKeNguoi — chốt của chủ dự án 06/09", () => {
     expect(t.caQuyDinh).toBe(1);
     expect(t.caThucTe).toBe(1);
     expect(t.ngayChoKetLuan).toBe(0);
+  });
+
+  it("ca KHÔNG ĐÒI QUÉT (LD/NG/D1/D2) không vào mẫu số", () => {
+    // Người đi công tác ngoài cả tháng: engine cố ý không gắn cờ thiếu lượt cho mã NG, nên nếu
+    // đưa vào mẫu số thì ra "0 / 22 · 0%" mà cột "chờ kết luận" cũng bằng 0 — một con số tệ mà
+    // không ai giải thích được và không ai chữa được.
+    const congTac = thongKeNguoi(
+      [ngay({ templateCode: "NG", pairs: [] }), ngay({ templateCode: "LD", pairs: [] })],
+      NOI_QUY_MAC_DINH,
+    );
+    expect(congTac.caQuyDinh).toBe(0);
+    expect(nhanCa(congTac)).toBe("—");
+    expect(congTac.ngayChoKetLuan).toBe(0);
+
+    // Ca thường vẫn vào mẫu số như cũ.
+    expect(thongKeNguoi([ngay({ templateCode: "CG" })], NOI_QUY_MAC_DINH).caQuyDinh).toBe(1);
+  });
+
+  it("vắng nguyên nửa ngày ⇒ KHÔNG tính đủ ca, dù có cặp quét đóng", () => {
+    // Ca gãy sáng+chiều, người chỉ quét buổi chiều: có cặp đóng nên `coDuVaoRa` đúng, nhưng để
+    // vậy thì bỏ cả buổi sáng vẫn đủ ca — trong khi người làm trọn ngày mà quên quét ra thì mất
+    // trọn ca. Lệch đúng ngược chiều chốt của chủ dự án.
+    const t = thongKeNguoi([ngay({ flags: ["THIEU_BUOI_SANG"] })], NOI_QUY_MAC_DINH);
+    expect(t.caQuyDinh).toBe(1);
+    expect(t.caThucTe).toBe(0);
+  });
+
+  it("EXCUSED vẫn tính ca nếu ngày đó ĐÃ quét đủ", () => {
+    // Quản lý kết luận "có lý do", sau đó đơn chỉnh công được duyệt và sinh mốc giờ. Bỏ qua
+    // thẳng thì tỷ lệ của người vừa được minh oan lại giảm.
+    const t = thongKeNguoi([ngay({ absenceStatus: "EXCUSED" })], NOI_QUY_MAC_DINH);
+    expect(t.caQuyDinh).toBe(1);
+    expect(t.caThucTe).toBe(1);
+    expect(t.phanTramTru).toBe(0);
   });
 
   it("người chưa có ca nào: không chia cho 0", () => {

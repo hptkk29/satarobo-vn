@@ -82,14 +82,36 @@ export default async function CongDayPage({
   const { from, to } = periodRange(ky);
 
   const sdb = scopedDb(await resolveActor(session.user.id));
-  // Người của khối này trong kỳ = người có ô lưới. Lấy từ lưới (không phải từ bảng công ngày)
-  // vì ngày tương lai chưa có dòng công nào, mà lịch dạy thì đã xếp.
-  const nguoi = await sdb.shiftAssignment.findMany({
-    where: { centerId: coSo, workDate: { gte: from, lte: to }, status: "ACTIVE" },
-    select: { userId: true },
-    distinct: ["userId"],
-  });
-  const userIds = nguoi.map((n) => n.userId);
+  // Người của khối này trong kỳ = HỢP của hai tập, không phải chỉ một:
+  //
+  //  (a) người có ô lưới ở khối này — lấy từ lưới chứ không từ bảng công ngày, vì ngày tương lai
+  //      chưa có dòng công nào mà lịch dạy thì đã xếp;
+  //  (b) người THỰC DẠY buổi của lớp thuộc cơ sở này trong kỳ.
+  //
+  // Thiếu (b) là lặp lại đúng lỗi màn này sinh ra để vá: giáo viên dạy thật nhưng chưa được xếp
+  // lưới tháng đó (thỉnh giảng, mới vào, quên xếp) không có dòng nào ở BẤT KỲ cơ sở nào ⇒ buổi
+  // biến mất — trong khi phần trợ giúp ngay dưới đang hứa "buổi luôn về đúng người, dù dạy ở đâu".
+  const [oLuoi, buoiCuaCoSo] = await Promise.all([
+    sdb.shiftAssignment.findMany({
+      where: { centerId: coSo, workDate: { gte: from, lte: to }, status: "ACTIVE" },
+      select: { userId: true },
+      distinct: ["userId"],
+    }),
+    sdb.classSession.findMany({
+      where: { status: "COMPLETED", date: { gte: from, lt: new Date(to.getTime() + 86_400_000) }, class: { centerId: coSo } },
+      select: { actualTeacherId: true, substituteTeacherId: true, class: { select: { teacherId: true, assistantId: true } } },
+    }),
+  ]);
+  const userIds = [
+    ...new Set([
+      ...oLuoi.map((n) => n.userId),
+      ...buoiCuaCoSo.flatMap((s) =>
+        [s.actualTeacherId, s.substituteTeacherId, s.class?.teacherId, s.class?.assistantId].filter(
+          (x): x is string => typeof x === "string",
+        ),
+      ),
+    ]),
+  ];
 
   const [danhMuc, buoi, users, canConfig] = await Promise.all([
     loadLoaiCongDay(),

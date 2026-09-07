@@ -56,6 +56,8 @@ export type KioskQr = {
 type QrTokenResponse = {
   qrDataUrl?: string;
   windowSeconds?: number;
+  /** Đáp ứng của chế độ mã TĨNH — không có vòng đời, không đếm ngược. */
+  tinh?: boolean;
   workLocation?: { name?: string; geofenceEnabled?: boolean } | null;
 };
 
@@ -120,6 +122,10 @@ export function useKioskQr(centerId: string): KioskQr {
         return;
       }
       const fetchedAt = Date.now();
+      // Mã TĨNH không có `windowSeconds` trong đáp ứng. Rơi về mặc định 60s là màn tự tính ra
+      // `validUntil` rồi coi mã đã hết hạn sau ~3 phút và THAY ẢNH QR bằng màn báo lỗi — ở quầy,
+      // mất QR là cả ca không ai chấm được, đúng thứ file này sinh ra để tránh.
+      const maTinh = data.tinh === true;
       const windowSeconds =
         data.windowSeconds && data.windowSeconds > 0 ? data.windowSeconds : DEFAULT_WINDOW_SECONDS;
       setSnap({
@@ -128,7 +134,7 @@ export function useKioskQr(centerId: string): KioskQr {
         geofenceEnabled: data.workLocation?.geofenceEnabled ?? false,
         windowSeconds,
         fetchedAt,
-        validUntil: windowEnd(fetchedAt, windowSeconds),
+        validUntil: maTinh ? Number.POSITIVE_INFINITY : windowEnd(fetchedAt, windowSeconds),
       });
       setFail(null);
     } catch {

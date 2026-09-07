@@ -81,9 +81,15 @@ export async function setDayAbsenceAction(input: unknown): Promise<Res> {
   const sdb = scopedDb(await resolveActor(session.user.id));
   const row = await sdb.staffAttendanceDay.findUnique({
     where: { userId_workDate: { userId: p.data.userId, workDate } },
-    select: { centerId: true, status: true, absenceStatus: true },
+    select: { centerId: true, status: true, absenceStatus: true, dayType: true, dayCreditExpected: true },
   });
   if (!row) return { ok: false, error: "Ngày này chưa được tính" };
+  // Hộp chi tiết ngày đã che nút này cho ngày không phải ngày công, nhưng Server Action là
+  // ENDPOINT RIÊNG — gọi thẳng vẫn tới. Không chặn thì kết luận "không phép" cho một ngày nghỉ
+  // tuần cũng trừ 2%, vì `noi-quy.ts` cộng `ngayKhongPhep` bất kể ngày đó có phải ngày công.
+  if (p.data.status === "UNAUTHORISED" && (row.dayType !== "WORK" || row.dayCreditExpected <= 0)) {
+    return { ok: false, error: "Ngày này không phải ngày công — không kết luận nghỉ không phép được" };
+  }
   // `scopedDb` KHÔNG che đường ghi — phải tự gác bằng target thật.
   if (!(await checkPermission("hr_attendance:adjust", { centerId: row.centerId }))) {
     return { ok: false, error: "Không có quyền kết luận ngày vắng ở cơ sở này" };

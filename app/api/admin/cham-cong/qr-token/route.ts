@@ -20,8 +20,13 @@ export const dynamic = "force-dynamic";
 // `workLocationId` để chọn ĐÚNG điểm khi một cơ sở có nhiều quầy — trước đây `findFirst` lấy
 // bừa điểm đầu tiên, nên cơ sở hai quầy thì quầy thứ hai không bao giờ in được mã của mình.
 //
-// Chỉ staff có quyền view chấm công tại cơ sở đó. Mã TĨNH thì đòi quyền cấu hình: in mã là việc
-// một lần của người quản trị điểm, không phải việc ai mở màn cũng làm được.
+// Cả hai chế độ chỉ đòi quyền VIEW tại cơ sở đó.
+//
+// Bản đầu tôi gác mã tĩnh ở `hr_attendance:config` với lý lẽ "in mã là việc của người quản trị".
+// Sai hai đường: (a) màn TV nay chiếu chính mã tĩnh, nên gác ở config là nhân viên cơ sở KHÔNG
+// MỞ NỔI MÀN TV — mà mở TV là việc hằng ngày; (b) nó không mua được gì về bảo mật: tờ mã dán
+// công khai ở quầy, ai đứng đó cũng chụp được. Gác chặt một thứ vốn không phải bí mật thì chỉ
+// đổi lấy phiền toái. Thứ thật sự chặn người ở xa là ĐỊNH VỊ, không phải quyền xem mã.
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user) {
@@ -34,8 +39,7 @@ export async function GET(req: NextRequest) {
   if (!centerId) {
     return NextResponse.json({ error: "Thiếu centerId" }, { status: 400 });
   }
-  const quyen = tinh ? "hr_attendance:config" : "hr_attendance:view";
-  if (!(await checkPermission(quyen, { centerId }))) {
+  if (!(await checkPermission("hr_attendance:view", { centerId }))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   const sdb = scopedDb(await resolveActor(session.user.id));

@@ -148,7 +148,7 @@ export default async function ManHinhPage({ searchParams }: Props) {
   const canConfig = scope.has(CONFIG, active.id);
   const wl = await sdb.workLocation.findFirst({
     where: { centerId: active.id, isActive: true },
-    select: { id: true, code: true, name: true, geofenceEnabled: true, radiusMeters: true },
+    select: { id: true, code: true, name: true, geofenceEnabled: true, radiusMeters: true, qrKeyVersion: true },
   });
 
   const backHref = hrefWith("/cham-cong", { coSo: active.id });
@@ -245,8 +245,12 @@ export default async function ManHinhPage({ searchParams }: Props) {
               {wl.geofenceEnabled ? `Bật · bán kính ${wl.radiusMeters}m` : "Tắt"}
             </dd>
 
-            <dt className="text-muted-foreground">Vòng đời mã</dt>
-            <dd className="text-foreground tabular-nums">Đổi mỗi 60 giây</dd>
+            {/* Mã TĨNH (07/09): không còn vòng đời. Thứ người vận hành cần biết ở đây là ĐỜI
+                KHOÁ — tăng nó lên là mọi tờ đã in và mọi ảnh chụp cũ chết ngay. */}
+            <dt className="text-muted-foreground">Mã QR</dt>
+            <dd className="text-foreground">
+              Cố định · đời khoá <span className="tabular-nums">{wl.qrKeyVersion}</span>
+            </dd>
           </dl>
           {canConfig && (
             <Link
