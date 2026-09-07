@@ -13,6 +13,11 @@ import {
   methodServesCenter,
 } from "@/lib/payments/method-scope";
 import { lookupMethodCenterByCode } from "@/lib/payments/method-lookup";
+import {
+  ADJUST_PAYMENT_DISABLED,
+  ADJUST_PAYMENT_DISABLED_MESSAGE,
+  ghiNhanChamCauDao,
+} from "@/lib/finance/cau-dao-dieu-chinh";
 import { maskNationalId, maskAddress } from "@/lib/finance/pii-mask";
 import { breakGlassSchema } from "@/lib/validators/audit";
 import { writeAudit } from "@/lib/audit/audit-log";
@@ -513,16 +518,33 @@ export async function rejectPaymentAction(
 
 // ─── ADJUST (Kế toán điều chỉnh — bút toán mới trỏ adjustmentOfId) ───────
 export async function adjustPaymentAction(input: unknown) {
+  // ⚠️ CẦU DAO — TRƯỚC MỌI VIỆC KHÁC, kể cả trước gate quyền.
+  //
+  // Đặt trên cùng là có chủ đích: ma trận quyền KHÔNG khoá được SUPER_ADMIN trên prod
+  // (can() v2 bypass vô điều kiện), nên nếu để cầu dao nằm sau `requireAccountant()` thì
+  // admin vẫn đi lọt. Xem lib/finance/cau-dao-dieu-chinh.ts — cả file là TẠM, xoá khi
+  // Bước 6 xanh.
+  if (ADJUST_PAYMENT_DISABLED) {
+    // Danh tính chỉ để GHI LOG, không phải để quyết định — quyết định đã xong ở dòng trên.
+    const phien = await auth();
+    await ghiNhanChamCauDao({
+      actorId: phien?.user?.id ?? null,
+      actorName: phien?.user?.name ?? phien?.user?.email ?? "(chưa đăng nhập)",
+      paymentId:
+        typeof input === "object" && input !== null && "paymentId" in input
+          ? String((input as { paymentId: unknown }).paymentId)
+          : null,
+    });
+    return { ok: false as const, error: ADJUST_PAYMENT_DISABLED_MESSAGE };
+  }
+
   const session = await requireAccountant();
-  // ⚠️ KHOÁ TẠM 07/09/2026 — `payments:adjust` hiện KHÔNG cấp cho vai nào
-  // (lib/auth/permissions.ts). Server Action là endpoint HTTP riêng: ẩn nút ở giao diện
-  // là chưa đủ, phải chặn ở đây. Xem lý do đầy đủ tại chỗ khai quyền.
+  // Lớp quyền (Bước 1) — vẫn giữ nguyên, nằm DƯỚI cầu dao. Server Action là endpoint
+  // HTTP riêng nên ẩn nút ở giao diện là chưa đủ.
   if (!(await checkPermission("payments:adjust"))) {
     return {
       ok: false as const,
-      error:
-        "Chức năng Điều chỉnh đang tạm khoá để sửa lỗi bút toán. Cần sửa số thì từ chối " +
-        "khoản này rồi ghi nhận lại khoản mới.",
+      error: "Bạn không có quyền điều chỉnh khoản thu.",
     };
   }
   const parsed = adjustSchema.safeParse(input);
