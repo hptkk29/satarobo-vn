@@ -80,7 +80,16 @@ d("requests — DB thật", () => {
     actor.id = (await mk("ql", "QL req", cs1)).id;
     tplS = (await db.shiftTemplate.findFirstOrThrow({ where: { code: "S", centerId: null }, select: { id: true } })).id;
     tplD1 = (await db.shiftTemplate.findFirstOrThrow({ where: { code: "CG", centerId: null }, select: { id: true } })).id;
-    leaveId = (await db.leaveType.findFirstOrThrow({ where: { paidRatio: { gt: 0 } }, select: { id: true } })).id;
+    // Lấy ĐÍCH DANH `NGHI_PHEP`, KHÔNG `findFirst({ paidRatio: { gt: 0 } })`.
+    //
+    // Bản cũ dùng findFirst không `orderBy` ⇒ Postgres trả dòng theo thứ tự vật lý, và sau vài
+    // lượt xoá/seed lại nó vớ phải `KET_HON` — loại đòi báo trước 7 ngày. Đơn trong test nộp cho
+    // ngày 11/09 nên bị từ chối, và bộ test đỏ theo THỨ TỰ CHẠY chứ không theo mã nguồn.
+    //
+    // Chỉ lộ ra sau khi `LeaveType.noticeDays` ra đời (07/09) — trước đó không loại nào đòi báo
+    // trước nên vớ nhầm dòng cũng không sao. Đây đúng kiểu bẫy mà `findFirst` không `orderBy` gài
+    // sẵn: nó im lặng cho tới ngày có một cột làm các dòng khác nhau về hành vi.
+    leaveId = (await db.leaveType.findFirstOrThrow({ where: { code: "NGHI_PHEP" }, select: { id: true } })).id;
     // GV có ca S ở CS2 ngày 08 (GV nhà CS1 xuống CS2 làm) — cơ sở nhận đơn phải là CS2.
     const seg = [{ start: "07:45", end: "11:30", kind: "WORK", orgUnitIds: [] }];
     await db.shiftAssignment.createMany({
