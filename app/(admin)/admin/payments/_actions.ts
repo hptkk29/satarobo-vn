@@ -13,11 +13,6 @@ import {
   methodServesCenter,
 } from "@/lib/payments/method-scope";
 import { lookupMethodCenterByCode } from "@/lib/payments/method-lookup";
-import {
-  ADJUST_PAYMENT_DISABLED,
-  ADJUST_PAYMENT_DISABLED_MESSAGE,
-  ghiNhanChamCauDao,
-} from "@/lib/finance/cau-dao-dieu-chinh";
 import { maskNationalId, maskAddress } from "@/lib/finance/pii-mask";
 import { breakGlassSchema } from "@/lib/validators/audit";
 import { writeAudit } from "@/lib/audit/audit-log";
@@ -567,8 +562,8 @@ export async function rejectPaymentAction(
  * Khoản chưa qua kế toán là BẢN NHÁP: sửa thẳng. Khác hẳn "Điều chỉnh" — xem
  * `updatePendingPayment` trong lib/finance/payment.ts.
  *
- * KHÔNG bị cầu dao chặn: cầu dao chỉ đóng đường điều chỉnh (mô hình delta đang viết
- * lại), còn sửa nháp vốn không dính bút toán nào.
+ * Hai động từ khác nhau nên là hai đường khác nhau: sửa nháp KHÔNG sinh bút toán, còn
+ * "Điều chỉnh" thì luôn sinh, và không bao giờ đụng vào dòng đã xác nhận.
  */
 export async function updatePendingPaymentAction(input: unknown) {
   const session = await requireAccountant();
@@ -598,29 +593,10 @@ export async function updatePendingPaymentAction(input: unknown) {
 
 // ─── ADJUST (Kế toán điều chỉnh — bút toán mới trỏ adjustmentOfId) ───────
 export async function adjustPaymentAction(input: unknown) {
-  // ⚠️ CẦU DAO — TRƯỚC MỌI VIỆC KHÁC, kể cả trước gate quyền.
-  //
-  // Đặt trên cùng là có chủ đích: ma trận quyền KHÔNG khoá được SUPER_ADMIN trên prod
-  // (can() v2 bypass vô điều kiện), nên nếu để cầu dao nằm sau `requireAccountant()` thì
-  // admin vẫn đi lọt. Xem lib/finance/cau-dao-dieu-chinh.ts — cả file là TẠM, xoá khi
-  // Bước 6 xanh.
-  if (ADJUST_PAYMENT_DISABLED) {
-    // Danh tính chỉ để GHI LOG, không phải để quyết định — quyết định đã xong ở dòng trên.
-    const phien = await auth();
-    await ghiNhanChamCauDao({
-      actorId: phien?.user?.id ?? null,
-      actorName: phien?.user?.name ?? phien?.user?.email ?? "(chưa đăng nhập)",
-      paymentId:
-        typeof input === "object" && input !== null && "paymentId" in input
-          ? String((input as { paymentId: unknown }).paymentId)
-          : null,
-    });
-    return { ok: false as const, error: ADJUST_PAYMENT_DISABLED_MESSAGE };
-  }
-
+  // Cầu dao `ADJUST_PAYMENT_DISABLED` đã GỠ 07/09/2026 (Bước 7) sau khi bộ test Bước 6
+  // xanh: 24 ca trên Postgres thật + 25 ca thuần. Không còn `lib/finance/cau-dao-dieu-chinh.ts`.
   const session = await requireAccountant();
-  // Lớp quyền (Bước 1) — vẫn giữ nguyên, nằm DƯỚI cầu dao. Server Action là endpoint
-  // HTTP riêng nên ẩn nút ở giao diện là chưa đủ.
+  // Server Action là endpoint HTTP riêng — ẩn nút ở giao diện KHÔNG phải là cổng.
   if (!(await checkPermission("payments:adjust"))) {
     return {
       ok: false as const,

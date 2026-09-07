@@ -944,9 +944,8 @@ function RowActions({
   if (daXacNhan) {
     return (
       <div className="flex justify-end gap-1.5">
-        {/* 07/09 — ẩn khi thiếu `payments:adjust` (hiện KHÔNG vai nghiệp vụ nào có).
-            Server Action cũng tự chặn, và cầu dao chặn trước cả quyền: ẩn nút chỉ là
-            lớp ngoài, endpoint vẫn gọi thẳng được. */}
+        {/* Ẩn khi thiếu `payments:adjust` (v2: kế toán HO + kế toán cơ sở). Đây chỉ
+            là lớp ngoài — Server Action tự kiểm lại, vì endpoint gọi thẳng được. */}
         {canAdjust ? (
           <Button
             size="sm"
@@ -973,7 +972,7 @@ function RowActions({
         )}
       </Button>
       {/* Khoản chưa xác nhận là BẢN NHÁP → sửa thẳng, không sinh bút toán. Đây là
-          động từ khác với "Điều chỉnh", nên là nút khác và không dính cầu dao. */}
+          động từ khác với "Điều chỉnh", nên là nút khác. */}
       <Button
         size="sm"
         variant="outline"

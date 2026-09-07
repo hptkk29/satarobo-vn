@@ -26,10 +26,9 @@ export const financeModule: ModuleDecl = {
       key: "payments:adjust",
       action: "adjust",
       description:
-        "Điều chỉnh khoản thu đã xác nhận. ĐANG KHOÁ 07/09/2026 — chưa cấp cho vai nào " +
-        "(xem chú thích ở lib/auth/permissions.ts): bút toán điều chỉnh hiện ghi số tuyệt " +
-        "đối nên rơi khỏi trục kế toán và bị cộng đôi ở trục ghi nhận. Chỉ mở lại sau khi " +
-        "viết lại theo mô hình delta và bộ test xanh.",
+        "Điều chỉnh khoản thu ĐÃ XÁC NHẬN — sinh bút toán delta, dòng gốc bất biến. " +
+        "Cấp cho kế toán Hội sở + kế toán cơ sở ở RBAC v2 (prisma/seed-roles.ts). " +
+        "Ma trận v1 cố ý chỉ có SUPER_ADMIN.",
     },
     {
       key: "payments:view-pii",

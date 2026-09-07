@@ -47,7 +47,7 @@ test → phải tự dựng fixture, xem Bước 6.
 - [x] **Bước 1** — khoá nút bằng quyền `payments:adjust` (3 lớp: quyền · Server Action · UI).
 - [x] **Bước 1b** — vá 3 chỗ cộng tiền quên `deletedAt` (đang sai 0 đ, tiềm ẩn);
       `take: 5000` cắt câm → trần 50.000 + cảnh báo đầu trang.
-- [x] **Bước 1c** — cầu dao `ADJUST_PAYMENT_DISABLED` (chặn cả SUPER_ADMIN).
+- [x] **Bước 1c** — cầu dao `ADJUST_PAYMENT_DISABLED` (chặn cả SUPER_ADMIN). **ĐÃ GỠ ở Bước 7.**
 - [x] **Bước 2** — thêm `paymentType: PAYMENT | ADJUSTMENT`; bỏ `ADJUSTED` khỏi enum
       `accountantStatus`; backfill `paymentType = PAYMENT`
       (migration `20260907090000`, có `down.sql` chạy tay).
@@ -67,7 +67,7 @@ test → phải tự dựng fixture, xem Bước 6.
       bút toán điều chỉnh là dòng riêng (số có dấu + lý do); "Tổng đã xác nhận" ở cuối.
       Logic xếp thuần ở `lib/portal/phieu-thu.ts`; vẽ ở CẢ HAI đường (v1 + v2).
 - [x] **Bước 6** — test: 19 ca thuần (CI luôn chạy) + 24 ca chạm Postgres thật.
-- [ ] **Bước 7** — gỡ cầu dao, mở lại cho vai nghiệp vụ.
+- [x] **Bước 7** — gỡ cầu dao; cấp `payments:adjust` cho kế toán ở RBAC v2.
 
 ## Bước 6 — checklist bắt buộc trước khi mở lại
 
@@ -86,15 +86,14 @@ test → phải tự dựng fixture, xem Bước 6.
       qua `KHOAN_DA_XAC_NHAN`, nên `deletedAt: null` không còn là thứ phải nhớ.
 - [x] **Chênh lệch trục A / trục B được bảo toàn** — dùng fixture riêng
       (`tests/fixtures/hai-truc-tien.ts`), KHÔNG dựa vào seed.
-- [ ] **XOÁ CẦU DAO** — cả `lib/finance/cau-dao-dieu-chinh.ts` lẫn chỗ gọi trong
-      `app/(admin)/admin/payments/_actions.ts`, và mở lại `payments:adjust` cho vai
-      nghiệp vụ (hiện chỉ `SUPER_ADMIN`).
+- [x] **XOÁ CẦU DAO** — đã xoá `lib/finance/cau-dao-dieu-chinh.ts` + test của nó + chỗ
+      gọi trong `app/(admin)/admin/payments/_actions.ts`.
 
 ### Bộ test ở đâu
 
 | Bộ | Chạy bằng | CI |
 |---|---|---|
-| `lib/portal/phieu-thu.test.ts` (11 ca) · `lib/finance/truc-a.test.ts` (8) · `lib/finance/ghi-nhan.test.ts` (6) · `lib/finance/cau-dao-dieu-chinh.test.ts` (6) | `pnpm test:unit` | job **Unit tests** (bắt buộc để merge) |
+| `lib/portal/phieu-thu.test.ts` (11 ca) · `lib/finance/truc-a.test.ts` (8) · `lib/finance/ghi-nhan.test.ts` (6) · `lib/auth/payments-adjust-quyen.test.ts` (6) | `pnpm test:unit` | job **Unit tests** (bắt buộc để merge) |
 | `tests/finance/dieu-chinh.test.ts` (24 ca, Postgres thật) | `pnpm test:finance-db` | job **db-tests** (đã thêm bước) |
 
 ⚠️ Bộ chạm DB **tự SKIP** khi chạy `pnpm test:unit` trần (thiếu `ALLOW_DB_RESET=1`) — đó
@@ -105,7 +104,12 @@ nghiệm thu thì phải chạy đúng script `test:finance-db`.
 
 - **Không khoá được SUPER_ADMIN bằng quyền.** `can()` v2 (`lib/auth/can.ts:52`) trả `true`
   vô điều kiện cho SUPER_ADMIN; repo lại có bất biến bắt v1 khớp v2 (`permissions.test.ts`)
-  và cấm phình danh sách ngoại lệ. Đó là lý do phải có cầu dao ở tầng tính năng.
+  và cấm phình danh sách ngoại lệ. Đó là lý do Bước 1c phải dựng cầu dao ở tầng tính năng
+  thay vì tưởng rằng ma trận khoá được.
+- **`payments:adjust` KHÔNG đối xứng giữa hai tầng RBAC — cố ý.** v1 chỉ `SUPER_ADMIN`;
+  kế toán nhận quyền ở v2 (`prisma/seed-roles.ts`). Hệ quả phải nhớ: **trên máy dev/CI
+  (chạy v1) nút "Điều chỉnh" ẨN với kế toán**, trên prod (v2 đang bật) thì hiện. Đừng
+  "sửa cho khớp" bằng cách thêm `ACCOUNTANT` vào ma trận v1 mà không hỏi.
 - **Nhánh tách khoản lúc convert** (`linkRecordedPaymentsToEnrollments`) **SỬA `amount`
   của dòng gốc**. Chỉ đúng khi dòng còn PENDING/RECORDED ("PENDING là nháp"). ✅ Bước 3 đã
   thêm chốt chặn cứng: gặp dòng CONFIRMED thì `throw`, không sửa im lặng.
@@ -125,3 +129,17 @@ nghiệm thu thì phải chạy đúng script `test:finance-db`.
   khoản chưa gắn ghi danh. Nên `sumConfirmed(enrollmentId)` không thể sót tiền đã xác nhận.
   Trục B thì `enrollmentId` có thể null (`payos-ingest.ts:1044` không bao giờ set) ⇒
   **không** được ép khoá `enrollmentId` cho trục B.
+
+## Việc phải làm TAY sau khi lên prod
+
+1. **Migration** — `20260907090000_payment_type_tach_khoi_status` chạy TỰ ĐỘNG qua
+   `deploy.yml` (`prisma migrate deploy`) khi merge vào `main`. Đo prod 07/09: đúng **1**
+   bản ghi `Payment` (CONFIRMED, 3.686.000 đ), **0** ADJUSTED, **0** xoá mềm ⇒ bước đổi
+   enum không đụng dữ liệu. `down.sql` có sẵn, chạy tay nếu phải lùi.
+2. **⚠️ SEED VAI — PHẢI BẤM TAY.** Seed vai không chạy theo deploy. Chưa chạy thì
+   `RolePermission` trên prod không có dòng `payments:adjust` ⇒ **kế toán vẫn không thấy
+   nút** dù mã đã lên, và nhìn y hệt "tính năng không hoạt động". Bấm workflow seed vai
+   (`prisma/seed-roles.ts`) sau khi deploy xong.
+3. **Nghiệm thu 1 phiếu thật**: điều chỉnh một khoản ở CS1, rồi mở cổng phụ huynh của
+   chính học viên đó — phải thấy **hai dòng** (phiếu gốc số cũ + dòng điều chỉnh có dấu
+   và lý do) và "Tổng đã xác nhận" bằng số đúng.
