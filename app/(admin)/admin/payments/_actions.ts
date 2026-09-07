@@ -35,6 +35,7 @@ import {
   confirmPayment,
   rejectPayment,
   adjustPayment,
+  updatePendingPayment,
   refundPayment,
 } from "@/lib/finance/payment";
 
@@ -98,6 +99,14 @@ const adjustSchema = z.object({
   expectedUpdatedAt: z.string().optional().nullable(),
 });
 
+// Sửa khoản CÒN CHỜ DUYỆT — động từ khác hẳn "điều chỉnh", nên schema riêng.
+const updatePendingSchema = z.object({
+  paymentId: z.string().min(1),
+  amount: z.coerce.number().int().positive("Số tiền phải > 0"),
+  reason: z.string().trim().max(1000).optional().nullable(),
+  expectedUpdatedAt: z.string().optional().nullable(),
+});
+
 function trimOrNull(v: string | null | undefined): string | null {
   const t = (v ?? "").trim();
   return t.length ? t : null;
@@ -121,6 +130,18 @@ export type PaymentListRow = {
   updatedAt: string; // ISO
   saleStatus: string;
   accountantStatus: string;
+  /** LOẠI bút toán — phân biệt phiếu thu với dòng điều chỉnh. */
+  paymentType: string;
+  /**
+   * Giá trị HIỆN TẠI của phiếu thu = `amount` + Σ các bút toán điều chỉnh trỏ vào nó.
+   *
+   * Giao diện cần con số này để tính trước `delta` cho kế toán xem — nếu để client tự
+   * lấy `amount` thì sau lần điều chỉnh đầu tiên nó đã sai (amount là số GỐC, không phải
+   * số đang có hiệu lực).
+   */
+  hienTai: number;
+  /** Số bút toán điều chỉnh đã có trên phiếu này. */
+  soLanDieuChinh: number;
   orderCode: string | null;
   customerName: string | null;
   studentName: string | null; // tên bé
@@ -202,6 +223,25 @@ async function fetchPaymentRows(
     : [];
   const nameById = new Map(collectors.map((u) => [u.id, u.name]));
 
+  // Σ điều chỉnh theo TỪNG phiếu của trang — MỘT truy vấn gộp, không phải mỗi dòng một
+  // lượt. Dùng để tính "giá trị hiện tại" gửi xuống giao diện.
+  const dieuChinhTheoPhieu = await sdb.payment.groupBy({
+    by: ["adjustmentOfId"],
+    where: {
+      adjustmentOfId: { in: rows.map((r) => r.id) },
+      paymentType: "ADJUSTMENT",
+      deletedAt: null,
+    },
+    _sum: { amount: true },
+    _count: { _all: true },
+  });
+  const dieuChinhCua = new Map(
+    dieuChinhTheoPhieu.map((g) => [
+      g.adjustmentOfId as string,
+      { tong: g._sum.amount ?? 0, soLan: g._count._all },
+    ]),
+  );
+
   // Defense in depth: chỉ unmask khi caller THẬT SỰ có quyền. Không đủ quyền → im lặng
   // trả bản MASK (an toàn). wantUnmask chỉ true khi đã qua break-glass ở revealPaymentsPii.
   const unmask = wantUnmask && (await checkPermission("payments:view-pii"));
@@ -210,6 +250,7 @@ async function fetchPaymentRows(
     const activeReceipt = p.receipts.find((r) => r.status === "ACTIVE");
     const rawCccd = p.order?.student?.parentNationalId ?? null;
     const rawAddress = p.order?.student?.address ?? null;
+    const dc = dieuChinhCua.get(p.id);
     return {
       id: p.id,
       amount: p.amount,
@@ -218,6 +259,9 @@ async function fetchPaymentRows(
       updatedAt: p.updatedAt.toISOString(),
       saleStatus: p.saleStatus,
       accountantStatus: p.accountantStatus,
+      paymentType: p.paymentType,
+      hienTai: p.amount + (dc?.tong ?? 0),
+      soLanDieuChinh: dc?.soLan ?? 0,
       orderCode: p.order?.code ?? null,
       customerName: p.order?.customerName ?? null,
       studentName: p.order?.student?.name ?? null,
@@ -511,6 +555,40 @@ export async function rejectPaymentAction(
     confirmedById: scope.uid,
     reason: reason.trim(),
     expectedUpdatedAt: expectedUpdatedAt || undefined,
+  });
+  if (!res.ok) return { ok: false as const, error: res.error };
+  revalidatePath("/payments");
+  revalidatePath("/cong-no");
+  return { ok: true as const };
+}
+
+// ─── SỬA KHOẢN CHỜ DUYỆT (sửa tại chỗ, KHÔNG sinh bút toán) ─────────────
+/**
+ * Khoản chưa qua kế toán là BẢN NHÁP: sửa thẳng. Khác hẳn "Điều chỉnh" — xem
+ * `updatePendingPayment` trong lib/finance/payment.ts.
+ *
+ * KHÔNG bị cầu dao chặn: cầu dao chỉ đóng đường điều chỉnh (mô hình delta đang viết
+ * lại), còn sửa nháp vốn không dính bút toán nào.
+ */
+export async function updatePendingPaymentAction(input: unknown) {
+  const session = await requireAccountant();
+  const parsed = updatePendingSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false as const,
+      error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ",
+    };
+  }
+  const data = parsed.data;
+  const scope = await loadScopedPayment(session.user.id, data.paymentId);
+  if (!scope.ok) return { ok: false as const, error: scope.error };
+
+  const res = await updatePendingPayment({
+    paymentId: data.paymentId,
+    actorId: scope.uid,
+    amount: data.amount,
+    reason: trimOrNull(data.reason) ?? undefined,
+    expectedUpdatedAt: data.expectedUpdatedAt || undefined,
   });
   if (!res.ok) return { ok: false as const, error: res.error };
   revalidatePath("/payments");

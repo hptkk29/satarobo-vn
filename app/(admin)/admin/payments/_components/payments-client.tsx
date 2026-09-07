@@ -54,6 +54,7 @@ import {
   confirmPaymentAction,
   rejectPaymentAction,
   adjustPaymentAction,
+  updatePendingPaymentAction,
   revealPaymentsPii,
   type PaymentRow,
 } from "../_actions";
@@ -343,12 +344,33 @@ export function PaymentsClient({
                   </TableCell>
                   {canConfirm && (
                     <TableCell className="text-right">
-                      {p.accountantStatus === "PENDING" ? (
+                      {/* 07/09 — hai ĐỘNG TỪ, hai nhóm dòng khác nhau:
+                          · PENDING  → xác nhận / từ chối / SỬA tại chỗ (bản nháp);
+                          · CONFIRMED → ĐIỀU CHỈNH (sinh bút toán delta).
+                          Trước đây cụm nút chỉ hiện với PENDING, tức nút "Điều chỉnh"
+                          nằm đúng chỗ nó KHÔNG chạy được (adjustPayment đòi CONFIRMED).
+                          Dòng ADJUSTMENT không có thao tác nào: điều chỉnh luôn trỏ về
+                          phiếu thu gốc. */}
+                      {p.paymentType === "ADJUSTMENT" ? (
+                        <span className="text-xs text-muted-foreground">
+                          bút toán điều chỉnh
+                        </span>
+                      ) : p.accountantStatus === "CONFIRMED" ? (
+                        <RowActions
+                          paymentId={p.id}
+                          updatedAt={p.updatedAt}
+                          canAdjust={canAdjust}
+                          daXacNhan
+                          hienTai={p.hienTai}
+                        />
+                      ) : p.accountantStatus === "PENDING" ? (
                         p.enrollmentId ? (
                           <RowActions
                             paymentId={p.id}
                             updatedAt={p.updatedAt}
                             canAdjust={canAdjust}
+                            daXacNhan={false}
+                            hienTai={p.hienTai}
                           />
                         ) : (
                           // Đơn chưa convert → chưa gắn ghi danh → confirm sẽ lỗi. Chờ convert.
@@ -724,12 +746,18 @@ function RowActions({
   paymentId,
   updatedAt,
   canAdjust,
+  daXacNhan,
+  hienTai,
 }: {
   paymentId: string;
   updatedAt: string;
   canAdjust: boolean;
+  /** Khoản đã CONFIRMED → chỉ ĐIỀU CHỈNH. Chưa → xác nhận / từ chối / sửa nháp. */
+  daXacNhan: boolean;
+  /** Giá trị hiện tại của phiếu (gốc + các điều chỉnh) — nền để tính delta. */
+  hienTai: number;
 }) {
-  const [mode, setMode] = useState<null | "reject" | "adjust">(null);
+  const [mode, setMode] = useState<null | "reject" | "adjust" | "sua">(null);
   const [reason, setReason] = useState("");
   const [amount, setAmount] = useState("");
   const [pending, start] = useTransition();
@@ -759,6 +787,23 @@ function RowActions({
     });
   }
 
+  function doSuaNhap() {
+    start(async () => {
+      const res = await updatePendingPaymentAction({
+        paymentId,
+        amount: Number(amount),
+        reason,
+        expectedUpdatedAt: updatedAt,
+      });
+      if (res.ok) {
+        toast.success("Đã sửa khoản");
+        setMode(null);
+      } else if (res.error === STALE_WRITE) {
+        handleStale();
+      } else toast.error(res.error ?? "Lỗi");
+    });
+  }
+
   function doAdjust() {
     start(async () => {
       const res = await adjustPaymentAction({
@@ -768,7 +813,9 @@ function RowActions({
         expectedUpdatedAt: updatedAt,
       });
       if (res.ok) {
-        toast.success("Đã điều chỉnh khoản");
+        toast.success(
+          `Đã điều chỉnh — bút toán ${res.delta > 0 ? "+" : ""}${res.delta.toLocaleString("vi-VN")} đ`,
+        );
         setMode(null);
       } else if (res.error === STALE_WRITE) {
         handleStale();
@@ -799,17 +846,76 @@ function RowActions({
     );
   }
 
-  if (mode === "adjust") {
+  if (mode === "sua") {
+    // Khoản CHƯA xác nhận = bản nháp → sửa thẳng, không sinh bút toán nào.
     return (
       <div className="flex flex-col items-end gap-1.5">
+        <MoneyInput
+          name="suaAmount"
+          min={0}
+          value={amount}
+          onValueChange={(v) => setAmount(v === null ? "" : String(v))}
+          placeholder="Số tiền đúng"
+          className="w-56"
+        />
+        <Textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          rows={2}
+          placeholder="Lý do sửa (không bắt buộc)"
+          className="w-56"
+        />
+        <p className="w-56 text-right text-[11px] text-muted-foreground">
+          Khoản chưa xác nhận — sửa trực tiếp, không sinh bút toán điều chỉnh.
+        </p>
+        <div className="flex gap-1.5">
+          <Button size="sm" variant="outline" onClick={() => setMode(null)}>
+            Huỷ
+          </Button>
+          <Button size="sm" onClick={doSuaNhap} disabled={pending}>
+            {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            Lưu
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (mode === "adjust") {
+    // Ô nhập là SỐ TUYỆT ĐỐI (số đúng của DÒNG NÀY), backend tự tính delta. Hiện trước
+    // delta để kế toán xác nhận: gõ "3.500.000" mà không thấy nó nghĩa là "−500.000" thì
+    // rất dễ nhầm số đúng của phiếu với tổng của cả ghi danh.
+    const soDung = amount === "" ? null : Number(amount);
+    const delta = soDung === null ? null : soDung - hienTai;
+    return (
+      <div className="flex flex-col items-end gap-1.5">
+        <p className="w-56 text-right text-[11px] text-muted-foreground">
+          Số đúng <b className="text-foreground">của phiếu thu này</b> (không phải tổng
+          của ghi danh). Hiện đang là <b className="text-foreground">{vnd(hienTai)}</b>.
+        </p>
         <MoneyInput
           name="adjustAmount"
           min={0}
           value={amount}
           onValueChange={(v) => setAmount(v === null ? "" : String(v))}
-          placeholder="Số tiền mới"
+          placeholder="Số tiền đúng của phiếu này"
           className="w-56"
         />
+        {delta !== null && (
+          <p
+            className={`w-56 text-right text-xs font-semibold ${
+              delta === 0
+                ? "text-muted-foreground"
+                : delta > 0
+                  ? "text-state-success-ink"
+                  : "text-state-danger-ink"
+            }`}
+          >
+            {delta === 0
+              ? "Bằng số hiện tại — không có gì để điều chỉnh"
+              : `Sẽ sinh bút toán ${delta > 0 ? "+" : "−"}${Math.abs(delta).toLocaleString("vi-VN")} đ`}
+          </p>
+        )}
         <Textarea
           value={reason}
           onChange={(e) => setReason(e.target.value)}
@@ -821,11 +927,38 @@ function RowActions({
           <Button size="sm" variant="outline" onClick={() => setMode(null)}>
             Huỷ
           </Button>
-          <Button size="sm" onClick={doAdjust} disabled={pending}>
+          <Button
+            size="sm"
+            onClick={doAdjust}
+            disabled={pending || delta === null || delta === 0}
+          >
             {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             Lưu
           </Button>
         </div>
+      </div>
+    );
+  }
+
+  // Khoản ĐÃ XÁC NHẬN: chỉ còn một đường — điều chỉnh bằng bút toán delta.
+  if (daXacNhan) {
+    return (
+      <div className="flex justify-end gap-1.5">
+        {/* 07/09 — ẩn khi thiếu `payments:adjust` (hiện KHÔNG vai nghiệp vụ nào có).
+            Server Action cũng tự chặn, và cầu dao chặn trước cả quyền: ẩn nút chỉ là
+            lớp ngoài, endpoint vẫn gọi thẳng được. */}
+        {canAdjust ? (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setMode("adjust")}
+            title="Điều chỉnh"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        )}
       </div>
     );
   }
@@ -839,18 +972,16 @@ function RowActions({
           <Check className="h-3.5 w-3.5" />
         )}
       </Button>
-      {/* 07/09 — ẩn khi thiếu `payments:adjust` (hiện KHÔNG vai nào có). Server Action
-          cũng tự chặn: ẩn nút chỉ là lớp ngoài, endpoint vẫn gọi thẳng được. */}
-      {canAdjust && (
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => setMode("adjust")}
-          title="Điều chỉnh"
-        >
-          <Pencil className="h-3.5 w-3.5" />
-        </Button>
-      )}
+      {/* Khoản chưa xác nhận là BẢN NHÁP → sửa thẳng, không sinh bút toán. Đây là
+          động từ khác với "Điều chỉnh", nên là nút khác và không dính cầu dao. */}
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => setMode("sua")}
+        title="Sửa khoản chờ duyệt"
+      >
+        <Pencil className="h-3.5 w-3.5" />
+      </Button>
       <Button
         size="sm"
         variant="destructive"

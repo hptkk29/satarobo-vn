@@ -53,7 +53,8 @@ test → phải tự dựng fixture, xem Bước 6.
       (migration `20260907090000`, có `down.sql` chạy tay).
 - [x] **Bước 3** — viết lại `adjustPayment` theo delta + tách `updatePendingPayment`
       + chốt chặn cứng ở nhánh tách khoản. Đã smoke-test 19/19 trên DB thật.
-- [ ] **Bước 3b** — UI: nói rõ "số đúng của DÒNG NÀY", hiện delta trước khi lưu.
+- [x] **Bước 3b** — UI: tách hai nhóm nút theo trạng thái, nhãn nói rõ "số đúng của
+      PHIẾU THU NÀY", hiện delta kèm dấu trước khi lưu.
 - [ ] **Bước 4** — một predicate dùng chung; `computeEnrollmentDebt` là nhà duy nhất.
 - [ ] **Bước 4b** — trục B giữ khoá riêng (đơn/QR), không ép `enrollmentId`.
 - [ ] **Bước 5** — hiển thị phía phụ huynh.
