@@ -152,10 +152,11 @@ function KioskStage({ onExit, ...props }: KioskStageProps & { onExit: () => void
             {qr.status === "stale" && qr.fail && qr.snap ? (
               <StaleBanner fail={qr.fail} validUntil={qr.snap.validUntil} className="text-2xl" />
             ) : (
+              // Mã TĨNH (07/09): không đếm ngược nữa. Đếm ngược một con số không bao giờ đổi
+              // thứ gì là nói dối người đứng ở quầy — họ sẽ đợi "mã mới" mãi không thấy.
               <p className="flex items-center gap-3 text-3xl text-muted-foreground">
                 <QrCode aria-hidden className="h-7 w-7" />
-                Mã mới sau{" "}
-                <span className="tabular-nums font-semibold text-foreground">{qr.secondsToNewCode}s</span>
+                Quét mã để chấm công
               </p>
             )}
 

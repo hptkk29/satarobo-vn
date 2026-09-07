@@ -105,8 +105,13 @@ export default async function ThongKePage({
     getSetting("shift.penaltyAbsentPercent", { orgUnitId }),
   ]);
 
+  // Kỳ CHỐT TRƯỚC 07/09 có `summaryJson` đóng băng theo hình CŨ — không có `noiQuy`. Đọc thẳng
+  // `r.noiQuy` là TypeError và cả màn rơi vào error boundary, tức kỳ đó không xem được nữa.
+  // Không dựng lại số từ dữ liệu sống: kỳ đã chốt phải giữ nguyên con số đã dùng để trả lương.
+  const RONG = { caQuyDinh: 0, caThucTe: 0, soLanTre: 0, ngayKhongPhep: 0, ngayChoKetLuan: 0, phanTramTru: 0 };
+  const thieuNoiQuy = summary.rows.some((r) => !r.noiQuy);
   const rows: NoiQuyRow[] = summary.rows.map((r) => {
-    const t = r.noiQuy;
+    const t = r.noiQuy ?? RONG;
     const tyLe = tyLeDat(t);
     return {
       userId: r.userId,
@@ -132,8 +137,8 @@ export default async function ThongKePage({
   const tongKhongPhep = rows.reduce((s, r) => s + r.ngayKhongPhep, 0);
   const tongCho = rows.reduce((s, r) => s + r.ngayChoKetLuan, 0);
   const nguoiBiTru = rows.filter((r) => r.truCoSo).length;
-  const tongCaThucTe = summary.rows.reduce((s, r) => s + r.noiQuy.caThucTe, 0);
-  const tongCaQuyDinh = summary.rows.reduce((s, r) => s + r.noiQuy.caQuyDinh, 0);
+  const tongCaThucTe = summary.rows.reduce((s, r) => s + (r.noiQuy?.caThucTe ?? 0), 0);
+  const tongCaQuyDinh = summary.rows.reduce((s, r) => s + (r.noiQuy?.caQuyDinh ?? 0), 0);
 
   return (
     <div className="max-w-6xl">
@@ -212,6 +217,13 @@ export default async function ThongKePage({
         />
       ) : (
         <NoiQuyTable rows={rows} />
+      )}
+
+      {thieuNoiQuy && (
+        <p className="mt-3 rounded-lg bg-state-warning-soft px-3 py-2 text-sm text-state-warning-ink">
+          Kỳ này được chốt trước khi có thống kê nội quy, nên bản đóng băng không mang các số ở đây —
+          bảng trên hiện 0. Số công của kỳ vẫn nguyên vẹn ở màn Kỳ công.
+        </p>
       )}
 
       <p className="mt-3 text-xs text-muted-foreground">

@@ -5,7 +5,8 @@
 // về con số; nhờ vậy luật đếm test được mà không cần Postgres, và chỉ có MỘT nơi giữ luật.
 //
 // ── Bốn chốt của chủ dự án (06/09/2026) ─────────────────────────────────────────────────
-//  1. "Số ca thực tế" = ngày công có ĐỦ CẢ mốc vào LẪN mốc ra. Thiếu một mốc là không tính
+//  1. "Số ca thực tế" = ngày công có ĐỦ CẢ mốc vào LẪN mốc ra, VÀ không vắng nguyên nửa ngày.
+//     Thiếu một mốc là không tính
 //     ca đó, dù người ta có đi làm thật. Đây là lựa chọn siết kỷ luật quét, và hệ quả đã
 //     được báo trước: ~7% ngày hiện chỉ có mốc vào sẽ rơi ra, kéo theo đơn chỉnh công.
 //  2. "1 lần trễ" tính từ phút thứ 15 (`shift.latePenaltyGraceMinutes`).
@@ -48,7 +49,32 @@ export type NgayCong = {
   pairs: unknown;
   flags: string[];
   absenceStatus: AttendanceAbsenceStatus | null;
+  /**
+   * Mã ca của ngày. Dùng để loại ngày KHÔNG ĐÒI QUÉT ra khỏi mẫu số — xem `doiQuet`.
+   * null = không xếp ca (ngày đó không vào mẫu số nữa vì `dayCreditExpected` = 0).
+   */
+  templateCode: string | null;
 };
+
+/**
+ * Mã ca KHÔNG đòi quét — không được đưa vào mẫu số "ca thực tế".
+ *
+ * `LD` (Linh động — "không nhất thiết đến Trung tâm"), `NG` (Công tác ngoài), `D1`/`D2` (chỉ khai
+ * nơi làm, quét tuỳ chọn) đều mang `attendanceMode` khác REQUIRED trong danh mục. Engine cố ý
+ * KHÔNG gắn cờ thiếu lượt cho chúng (`engine.ts` bọc cả khối trong `if REQUIRED`).
+ *
+ * Không loại ra thì hỏng cả hai đầu: người đi công tác cả tháng ra "0 / 22 · 0%", mà cột "chờ kết
+ * luận" cũng bằng 0 nên không có nút nào để sửa cho khác đi — một con số tệ mà không ai giải
+ * thích được và không ai chữa được.
+ *
+ * Đặt tại đây theo MÃ chứ không đọc `attendanceMode` từ DB: hàm này phải ở thuần. Người vận hành
+ * thêm mã mới không đòi quét thì khai vào đây — hiếm, và đáng để thấy trong mã.
+ */
+const MA_KHONG_DOI_QUET = new Set(["LD", "NG", "D1", "D2"]);
+
+function doiQuet(d: NgayCong): boolean {
+  return d.templateCode == null || !MA_KHONG_DOI_QUET.has(d.templateCode);
+}
 
 export type ThongKeNguoi = {
   /** Ca kế hoạch cả kỳ — mẫu số. */
@@ -89,6 +115,21 @@ function laNgayLamViec(d: NgayCong): boolean {
   return d.dayType === "WORK" && d.dayCreditExpected > 0;
 }
 
+/** Ngày vào MẪU SỐ của "ca thực tế": là ngày công VÀ ca đó có đòi quét. */
+function vaoMauSo(d: NgayCong): boolean {
+  return laNgayLamViec(d) && doiQuet(d);
+}
+
+/**
+ * Thiếu hẳn một buổi của ca gãy — có quét, có cặp đóng, nhưng vắng nguyên nửa ngày.
+ *
+ * Không xét thì hỏng theo hướng ngược với chốt của chủ dự án: người bỏ cả buổi sáng chỉ cần quét
+ * buổi chiều là ĐỦ ca thực tế, trong khi người làm trọn ngày mà quên quét ra thì MẤT trọn ca.
+ */
+function thieuNuaNgay(d: NgayCong): boolean {
+  return d.flags.includes("THIEU_BUOI_SANG") || d.flags.includes("THIEU_BUOI_CHIEU");
+}
+
 export function thongKeNguoi(days: readonly NgayCong[], rules: NoiQuyRules): ThongKeNguoi {
   let caQuyDinh = 0;
   let caThucTe = 0;
@@ -100,18 +141,25 @@ export function thongKeNguoi(days: readonly NgayCong[], rules: NoiQuyRules): Tho
     // Ngày quản lý đã kết luận "có lý do" thì ra khỏi mọi phép đếm phạt, kể cả khi không có
     // mốc quét nào — đó chính là ý nghĩa của việc xác nhận.
     if (d.absenceStatus === "EXCUSED") {
-      if (laNgayLamViec(d)) caQuyDinh += d.dayCreditExpected;
+      // Vẫn tính ca thực tế nếu ngày đó CÓ quét đủ. Ca thật: quản lý kết luận "có lý do" cho một
+      // ngày vắng, sau đó đơn chỉnh công được duyệt và sinh mốc giờ ⇒ ngày đã có cặp đóng. Bỏ
+      // qua thẳng thì tỷ lệ đạt của người vừa được minh oan lại GIẢM — phạt ngược đúng người
+      // vừa chứng minh mình đi làm.
+      if (vaoMauSo(d)) {
+        caQuyDinh += d.dayCreditExpected;
+        if (coDuVaoRa(d.pairs) && !thieuNuaNgay(d)) caThucTe += d.dayCreditExpected;
+      }
       continue;
     }
     if (d.absenceStatus === "UNAUTHORISED") {
-      if (laNgayLamViec(d)) caQuyDinh += d.dayCreditExpected;
+      if (vaoMauSo(d)) caQuyDinh += d.dayCreditExpected;
       ngayKhongPhep += 1;
       continue;
     }
-    if (!laNgayLamViec(d)) continue;
+    if (!vaoMauSo(d)) continue;
 
     caQuyDinh += d.dayCreditExpected;
-    if (coDuVaoRa(d.pairs)) {
+    if (coDuVaoRa(d.pairs) && !thieuNuaNgay(d)) {
       caThucTe += d.dayCreditExpected;
       if (d.arrivalDeltaMinutes > rules.latePenaltyGraceMinutes) soLanTre += 1;
     } else {
