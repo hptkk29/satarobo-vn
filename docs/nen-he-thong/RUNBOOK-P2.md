@@ -23,6 +23,8 @@ ai đọc lại được), nên máy dev **không chạm tới prod**. Chạy qu
 
 > **Nền P2 — backfill nhân sự → Vị trí + Phân công (prod)**
 > (`.github/workflows/nen-p2-position.yml`, `workflow_dispatch`)
+> ⚠️ Workflow này **đã XOÁ 07/09/2026** sau khi chạy xong 12/08. Script
+> `scripts/nen-p2-*.ts` còn trong repo; cách lấy lại vỏ: `.github/workflows/README.md`.
 
 | Input | Mặc định | Ghi chú |
 |---|---|---|
