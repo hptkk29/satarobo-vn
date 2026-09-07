@@ -12,15 +12,13 @@
 // Thứ tự + phân bậc tính SẴN Ở SERVER (lib/lms/attendance-queue). Ở đây chỉ lọc và vẽ —
 // lọc không được đảo thứ tự.
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
 import {
   Camera,
   CheckCircle2,
   ClipboardCheck,
-  Loader2,
   MessageSquare,
   Search,
 } from "lucide-react";
@@ -47,6 +45,7 @@ import {
 // còn kho, không còn "đăng ngay 1 ảnh"). Nút theo dòng đã truyền sẵn buổi của dòng đó.
 import { UploadPhotoDialog } from "@/app/(teacher)/teacher/anh-lop/_components/upload-photo-dialog";
 import { completeAttendanceSessionAction } from "../_actions";
+import { ChotBuoiButton } from "@/components/lms/chot-buoi-button";
 import { cn } from "@/lib/utils";
 
 export interface AttendanceListRow {
@@ -129,7 +128,14 @@ function WorkChip({
   );
 }
 
-/** Nút "Hoàn tất buổi" — chỉ sáng khi đủ ba việc; server vẫn kiểm lại lần nữa. */
+/**
+ * Nút chốt buổi — chỉ sáng khi đủ ba việc; server vẫn kiểm lại lần nữa.
+ *
+ * 07/09 (D1): thân nút dời sang `components/lms/chot-buoi-button.tsx` để site giáo
+ * viên dùng CHUNG. Ở đây chỉ còn nhánh "đã chốt" (nhãn riêng của màn này) và câu báo
+ * thiếu việc — bản admin nói KÈM SỐ ("ảnh/video (0/9 em)") vì màn này có sẵn hai con
+ * số đó, còn site GV thì không.
+ */
 function CompleteButton({
   row,
   onDone,
@@ -137,9 +143,6 @@ function CompleteButton({
   row: AttendanceListRow;
   onDone: () => void;
 }) {
-  const [pending, startTransition] = useTransition();
-  const ready = row.attendanceDone && row.feedbackDone && row.photoDone;
-
   // Nhãn KHÁC chữ với bậc "Đã hoàn tất" ở cột Tình trạng — hai thứ khác nhau: bậc nói
   // ba việc đã xong, nhãn này nói TRẠNG THÁI BUỔI đã được người có quyền chốt.
   if (row.completed) {
@@ -150,38 +153,19 @@ function CompleteButton({
     );
   }
 
-  const missing = [
-    row.attendanceDone ? null : "điểm danh đủ lớp",
-    row.feedbackDone ? null : "nhận xét",
-    row.photoDone ? null : `ảnh/video (${row.photoCovered}/${row.attended} em)`,
-  ].filter(Boolean);
-
   return (
-    <Button
-      size="sm"
-      disabled={!ready || pending}
-      title={ready ? "Chốt buổi này là đã xong" : `Còn thiếu: ${missing.join(", ")}`}
-      onClick={() => {
-        startTransition(async () => {
-          const res = await completeAttendanceSessionAction(row.id);
-          if (!res.ok) {
-            toast.error(res.error ?? "Hoàn tất buổi thất bại");
-            return;
-          }
-          toast.success(
-            res.alreadyCompleted ? "Buổi này đã hoàn tất từ trước" : "Đã hoàn tất buổi",
-          );
-          onDone();
-        });
-      }}
-    >
-      {pending ? (
-        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-      ) : (
-        <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
-      )}
-      Hoàn tất
-    </Button>
+    <ChotBuoiButton
+      sessionId={row.id}
+      daChot={false}
+      sanSang={row.attendanceDone && row.feedbackDone && row.photoDone}
+      thieu={[
+        row.attendanceDone ? null : "điểm danh đủ lớp",
+        row.feedbackDone ? null : "nhận xét",
+        row.photoDone ? null : `ảnh/video (${row.photoCovered}/${row.attended} em)`,
+      ].filter((x): x is string => x !== null)}
+      chot={completeAttendanceSessionAction}
+      onXong={onDone}
+    />
   );
 }
 

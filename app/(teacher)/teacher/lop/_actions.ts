@@ -24,6 +24,7 @@ import {
   getSessionRosterStudentIds,
 } from "@/lib/attendance/roster";
 import { isSessionOwnedByTeacher } from "@/lib/lms/session-ownership";
+import { chotBuoi, type ChotBuoiKetQua } from "@/lib/lms/chot-buoi";
 import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
 import {
@@ -391,4 +392,32 @@ export async function saveClassAttendanceAction(
   revalidatePath("/lop");
   revalidatePath("/teacher/lop");
   return { ok: true, saved: data.records.length };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// D1 (07/09/2026) — CHỐT BUỔI từ site giáo viên.
+//
+// Trước hôm nay chỉ màn admin `/attendance` có nút này, mà `decideRoute` đá giáo
+// viên thuần khỏi host admin và `attendance` không nằm trong TEACHER_ROUTE_SEGMENTS
+// ⇒ người thực sự dạy buổi không có đường nào bấm. Prod 07/09: 2 COMPLETED / 287
+// SCHEDULED trong 4 tháng.
+//
+// KHÔNG khoét route-policy và KHÔNG nới permission: nút mọc ở trang GV VỐN ĐÃ VÀO
+// ĐƯỢC (`/teacher/lop`, tab Điểm danh), và cổng sở hữu của `chotBuoi` vốn đã cho
+// phép "GV phụ trách đúng lớp" từ ngày viết ra.
+//
+// Luật nằm ở `lib/lms/chot-buoi.ts` — dùng CHUNG với admin. Ở đây chỉ còn xác thực
+// + revalidate đúng đường của site GV.
+export async function chotBuoiAction(sessionId: string): Promise<ChotBuoiKetQua> {
+  const session = await auth();
+  if (!session?.user?.id) return { ok: false, error: "Chưa đăng nhập" };
+
+  const { actorId, actorName } = getAuditActor(session);
+  const res = await chotBuoi({ sessionId, actorUserId: session.user.id, actorId, actorName });
+  if (!res.ok) return res;
+
+  revalidatePath("/teacher/lop");
+  revalidatePath("/teacher/lich");
+  revalidatePath("/teacher");
+  return res;
 }

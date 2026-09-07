@@ -35,7 +35,9 @@ function timeOf(d: Date | string | number): number {
  * Bảng tra `sessionId → số buổi` (1-based), xếp theo ngày tăng dần trong từng lớp.
  * Tie-break theo `id` để hai buổi trùng ngày luôn ra cùng một số ở mọi lần render.
  */
-export function buildSessionNumberMap(rows: SessionRankRow[]): Map<string, number> {
+export function buildSessionNumberMap(
+  rows: SessionRankRow[],
+): Map<string, number> {
   const byClass = new Map<string, SessionRankRow[]>();
   for (const r of rows) {
     const key = r.classId ?? "";
@@ -107,7 +109,10 @@ export function attendanceCoversRoster(
   markedStudentIds: Iterable<string>,
   rosterStudentIds: Iterable<string>,
 ): boolean {
-  const marked = markedStudentIds instanceof Set ? markedStudentIds : new Set(markedStudentIds);
+  const marked =
+    markedStudentIds instanceof Set
+      ? markedStudentIds
+      : new Set(markedStudentIds);
   const roster = [...rosterStudentIds];
   return roster.length > 0 && roster.every((id) => marked.has(id));
 }
@@ -133,7 +138,10 @@ export function buildSessionMediaCoverage(
   const out = new Map<string, SessionMediaCoverage>();
   for (const m of rows) {
     if (!m.classSessionId) continue; // ảnh không gắn buổi — không quy được về buổi nào
-    const cur = out.get(m.classSessionId) ?? { classWide: false, tagged: new Set<string>() };
+    const cur = out.get(m.classSessionId) ?? {
+      classWide: false,
+      tagged: new Set<string>(),
+    };
     if (m.isClassWide) cur.classWide = true;
     for (const t of m.tags) cur.tagged.add(t.studentId);
     out.set(m.classSessionId, cur);
@@ -186,12 +194,42 @@ export function mediaCoversAttendees(input: {
  *     lớp mới chưa xếp học viên) — sĩ số rỗng thì `attendanceCoversRoster` trả false cho
  *     MỌI buổi, và ở bảng gộp nhiều lớp cả lớp đã xong khoá sẽ nổi lên trên lớp đang chạy.
  */
+/**
+ * Các việc còn thiếu, dạng danh sách. Tách khỏi câu chữ để nút trên giao diện và câu
+ * server trả về nói CÙNG một thứ tiếng — trước D1 hai bên tự ghép chuỗi riêng và đã
+ * lệch chữ ("nhận xét" vs "nhận xét đủ học viên đi học").
+ */
+export function thieuDanhSach(work: {
+  attendanceDone: boolean;
+  feedbackDone: boolean;
+  photoDone: boolean;
+}): string[] {
+  return [
+    work.attendanceDone ? null : "điểm danh đủ lớp",
+    work.feedbackDone ? null : "nhận xét đủ học viên đi học",
+    work.photoDone ? null : "ảnh/video cho mọi học viên đi học",
+  ].filter((x): x is string => x !== null);
+}
+
+/** Câu báo thiếu việc mà server trả về. */
+export function thieuGi(work: {
+  attendanceDone: boolean;
+  feedbackDone: boolean;
+  photoDone: boolean;
+}): string {
+  return `Chưa hoàn tất: còn thiếu ${thieuDanhSach(work).join(", ")}.`;
+}
+
 export function isSessionSettled(input: {
   cancelled?: boolean;
   rosterEmpty?: boolean;
   work: SessionWorkState;
 }): boolean {
-  return Boolean(input.cancelled) || Boolean(input.rosterEmpty) || isSessionWorkComplete(input.work);
+  return (
+    Boolean(input.cancelled) ||
+    Boolean(input.rosterEmpty) ||
+    isSessionWorkComplete(input.work)
+  );
 }
 
 /**
@@ -249,7 +287,10 @@ export type SessionOrderRow = {
  *   • buổi CHƯA hoàn thành (gồm cả buổi sắp tới, chưa tới) lên TRƯỚC;
  *   • trong mỗi nhóm: SỐ BUỔI tăng dần.
  */
-export function compareSessionWorkOrder(a: SessionOrderRow, b: SessionOrderRow): number {
+export function compareSessionWorkOrder(
+  a: SessionOrderRow,
+  b: SessionOrderRow,
+): number {
   if (a.complete !== b.complete) return a.complete ? 1 : -1;
   const an = a.number ?? Number.MAX_SAFE_INTEGER;
   const bn = b.number ?? Number.MAX_SAFE_INTEGER;
