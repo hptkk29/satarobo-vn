@@ -300,6 +300,8 @@ export default async function ChamCongPage({ searchParams }: Props) {
           workDate: dateStr,
           dateLabel,
           blockLabel: block.label,
+          absenceStatus: d?.absenceStatus ?? null,
+          absenceNote: d?.absenceNote ?? null,
         },
       };
     })

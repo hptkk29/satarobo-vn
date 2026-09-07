@@ -80,6 +80,8 @@ export type DayResult = {
   pmExpected: number;
   pmWorked: number;
   lateMinutes: number;
+  /** Phút đến muộn THÔ ở đoạn đầu ca (0 = đúng giờ hoặc sớm). Không chịu dung sai. */
+  arrivalDeltaMinutes: number;
   earlyLeaveMinutes: number;
   missedEarlyArrival: boolean;
   dayCreditExpected: number;
@@ -178,6 +180,7 @@ export function computeDay(input: EngineInput): DayResult {
     pmExpected: 0,
     pmWorked: 0,
     lateMinutes: 0,
+    arrivalDeltaMinutes: 0,
     earlyLeaveMinutes: 0,
     missedEarlyArrival: false,
     dayCreditExpected: 0,
@@ -277,6 +280,7 @@ export function computeDay(input: EngineInput): DayResult {
 
   // Muộn / sớm / thiếu buổi theo từng đoạn WORK (cửa sổ ± pairingMaxGap)
   let lateMinutes = 0;
+  let arrivalDeltaMinutes = 0;
   let earlyLeaveMinutes = 0;
   let missedEarlyArrival = false;
   const ins = kept.filter((l) => l.direction === "CHECK_IN").map((l) => l.minute);
@@ -294,6 +298,13 @@ export function computeDay(input: EngineInput): DayResult {
         continue;
       }
       if (firstIn !== undefined) {
+        // Độ trễ THÔ của đoạn ĐẦU ca — ghi bất kể dung sai. `lateMinutes` bên dưới chỉ cộng
+        // khi đã vượt `lateGraceMinutes` (mặc định 30′), nên tự nó không trả lời được câu
+        // "trễ quá 15 phút mấy lần" mà nội quy hỏi. Chỉ tính đoạn đầu: về trễ sau nghỉ trưa
+        // là chuyện khác, gộp vào là đổi nghĩa của "đi trễ".
+        if (blk === planned[0] && firstIn > blk.start) {
+          arrivalDeltaMinutes = firstIn - blk.start;
+        }
         if (firstIn > blk.start + rules.lateGraceMinutes) {
           flags.add("DI_MUON");
           lateMinutes += firstIn - blk.start;
@@ -332,6 +343,7 @@ export function computeDay(input: EngineInput): DayResult {
     pmExpected,
     pmWorked,
     lateMinutes,
+    arrivalDeltaMinutes,
     earlyLeaveMinutes,
     missedEarlyArrival,
     dayCreditExpected,

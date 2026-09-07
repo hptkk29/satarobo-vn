@@ -37,7 +37,7 @@ describe("period — thuần", () => {
       watermark: "wm",
       summary: {
         centerId: "c", periodKey: "2026-09", standardUnits: 25, builtAt: "x", days: ["2026-09-01", "2026-09-02"],
-        rows: [{ userId: "u", name: "A", employeeCode: "0012", jobTitle: "GV", units: 1.5, expectedUnits: 2, leaveUnits: 0, holidayPaidUnits: 0, hourCredit: 0, workedMinutes: 300, expectedMinutes: 450, lateCount: 1, earlyLeaveCount: 0, missingTapDays: 0, overrideDays: 1, flaggedDays: 1, teachingSessions: 3, grid: { "2026-09-01": "S", "2026-09-02": "P" }, unitsByDay: { "2026-09-01": 1, "2026-09-02": 0.5 } }],
+        rows: [{ userId: "u", name: "A", employeeCode: "0012", jobTitle: "GV", units: 1.5, expectedUnits: 2, leaveUnits: 0, holidayPaidUnits: 0, hourCredit: 0, workedMinutes: 300, expectedMinutes: 450, lateCount: 1, earlyLeaveCount: 0, missingTapDays: 0, overrideDays: 1, flaggedDays: 1, teachingSessions: 3, noiQuy: { caQuyDinh: 2, caThucTe: 1, soLanTre: 1, ngayKhongPhep: 0, ngayChoKetLuan: 0, phanTramTru: 0.5 }, grid: { "2026-09-01": "S", "2026-09-02": "P" }, unitsByDay: { "2026-09-01": 1, "2026-09-02": 0.5 } }],
         totals: { people: 1, units: 1.5, teachingSessions: 3, flaggedDays: 1 },
       },
     });

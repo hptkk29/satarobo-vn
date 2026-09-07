@@ -29,9 +29,9 @@ import {
 import { FlagList } from "@/components/cham-cong/ui/flag-chip";
 import { ShiftCodeChip, type ShiftSource } from "@/components/cham-cong/ui/shift-code-chip";
 import { DayTypePill, type DayType } from "@/components/cham-cong/ui/day-type-pill";
-import { BTN_OUTLINE, BTN_PRIMARY, FIELD } from "@/components/admin/cham-cong/classes";
+import { BTN_DANGER, BTN_OUTLINE, BTN_PRIMARY, FIELD } from "@/components/admin/cham-cong/classes";
 import { cn } from "@/lib/utils";
-import { setDayOverrideAction } from "../_actions";
+import { setDayAbsenceAction, setDayOverrideAction } from "../_actions";
 
 export type DayTap = {
   /** "08:02" — giờ VN, đã format ở server. */
@@ -62,6 +62,9 @@ export type DayRow = {
   dateLabel: string;
   /** Tên khối chịu công ngày đó — in trong câu thiếu quyền. */
   blockLabel: string;
+  /** Kết luận của quản lý về ngày vắng. null = chưa ai xem tới. */
+  absenceStatus: "UNAUTHORISED" | "EXCUSED" | null;
+  absenceNote: string | null;
 };
 
 export function DayDetailSheet({
@@ -81,6 +84,34 @@ export function DayDetailSheet({
   const [pending, start] = useTransition();
   const [units, setUnits] = useState(row.credit != null ? String(row.credit) : "");
   const [reason, setReason] = useState(row.overrideNote ?? "");
+  const [absenceNote, setAbsenceNote] = useState(row.absenceNote ?? "");
+
+  const ketLuan = (status: "UNAUTHORISED" | "EXCUSED" | null) =>
+    start(async () => {
+      const r = await setDayAbsenceAction({
+        userId: row.userId,
+        workDate: row.workDate,
+        status,
+        note: status ? absenceNote.trim() || null : null,
+      });
+      if (!r.ok) {
+        toast.error(r.error);
+        return;
+      }
+      toast.success(
+        status === "UNAUTHORISED"
+          ? "Đã ghi nhận nghỉ không phép"
+          : status === "EXCUSED"
+            ? "Đã ghi nhận có lý do"
+            : "Đã gỡ kết luận",
+      );
+      router.refresh();
+    });
+
+  // Chỉ hỏi khi ĐÁNG hỏi: ngày công thật, không một lượt quét nào — hoặc ngày đã có kết luận
+  // (để còn sửa/gỡ). Bày ô này lên mọi ngày là mời người ta bấm nhầm vào ngày bình thường.
+  const hoiKetLuan =
+    row.dayType === "WORK" && (row.taps.length === 0 || row.absenceStatus !== null);
 
   const save = (value: number | null) =>
     start(async () => {
@@ -170,6 +201,88 @@ export function DayDetailSheet({
               )}
             </dl>
           </section>
+
+          {hoiKetLuan && (
+            <section>
+              <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Kết luận ngày vắng
+              </h3>
+              {/* Vì sao cần bước này: không có lượt quét nào KHÔNG đồng nghĩa nghỉ không phép —
+                  còn do quên quét, quầy hỏng, đi công tác, làm ngoài trung tâm. Chủ dự án chốt
+                  không tự trừ 2% từ cờ; chỉ ngày được kết luận ở đây mới vào cột trừ nội quy. */}
+              {locked ? (
+                <p className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">
+                  Kỳ đã chốt — mở lại kỳ nếu cần đổi kết luận.
+                </p>
+              ) : !canAdjust ? (
+                <p className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">
+                  Kết luận ngày vắng cần quyền{" "}
+                  <code className="rounded bg-card px-1 py-0.5 font-mono text-xs">hr_attendance:adjust</code> tại{" "}
+                  {row.blockLabel}.
+                </p>
+              ) : row.absenceStatus ? (
+                <div className="rounded-lg border border-border p-3 text-sm">
+                  <p className="font-semibold text-foreground">
+                    {row.absenceStatus === "UNAUTHORISED" ? "Nghỉ không phép" : "Vắng có lý do"}
+                  </p>
+                  {row.absenceNote && <p className="mt-1 text-muted-foreground">{row.absenceNote}</p>}
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => ketLuan(null)}
+                    className={cn(BTN_OUTLINE, "mt-3 h-8 px-3 text-xs")}
+                  >
+                    Gỡ kết luận
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    Ngày này có ca nhưng không có lượt quét nào. Chưa kết luận thì{" "}
+                    <b>không trừ đồng nào</b> — nó chỉ nằm ở cột “chờ kết luận”.
+                  </p>
+                  <div>
+                    <label
+                      htmlFor={`absence-${row.userId}`}
+                      className="mb-1 block text-sm font-semibold text-foreground"
+                    >
+                      Căn cứ
+                    </label>
+                    <textarea
+                      id={`absence-${row.userId}`}
+                      value={absenceNote}
+                      onChange={(e) => setAbsenceNote(e.target.value)}
+                      rows={2}
+                      maxLength={300}
+                      placeholder="vd: không báo, gọi không nghe / quầy hỏng, đã xác minh qua camera"
+                      className={cn(FIELD, "w-full resize-y py-2 leading-snug")}
+                    />
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Bắt buộc khi kết luận không phép — đây là căn cứ trừ % nội quy.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={pending || !absenceNote.trim()}
+                      onClick={() => ketLuan("UNAUTHORISED")}
+                      className={cn(BTN_DANGER, "h-9 px-3 text-sm")}
+                    >
+                      Nghỉ không phép
+                    </button>
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() => ketLuan("EXCUSED")}
+                      className={cn(BTN_OUTLINE, "h-9 px-3 text-sm")}
+                    >
+                      Có lý do — không trừ
+                    </button>
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
 
           <section>
             <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">

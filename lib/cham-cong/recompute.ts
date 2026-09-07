@@ -156,6 +156,7 @@ export async function recomputeAttendanceDay(
     pmExpected: r.pmExpected,
     pmWorked: r.pmWorked,
     lateMinutes: r.lateMinutes,
+    arrivalDeltaMinutes: r.arrivalDeltaMinutes,
     earlyLeaveMinutes: r.earlyLeaveMinutes,
     missedEarlyArrival: r.missedEarlyArrival,
     dayCreditExpected: r.dayCreditExpected,
