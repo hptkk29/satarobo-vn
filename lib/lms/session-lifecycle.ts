@@ -106,6 +106,22 @@ export async function completeSession(opts: {
       ? "Hoàn tất buổi đã qua ngày diễn ra."
       : undefined;
 
+  // Người ĐỨNG LỚP và phòng THỰC TẾ — tính MỘT LẦN, dùng cho cả dòng ghi DB lẫn dòng nhật ký.
+  //
+  // Trước đây hai chỗ có hai bản sao của cùng chuỗi ưu tiên, và chúng ĐÃ LỆCH: bản vá 07/09 thêm
+  // `substituteTeacherId` vào dòng ghi DB nhưng bỏ quên dòng nhật ký ⇒ nhật ký ghi tên GV CHÍNH
+  // trong khi bản ghi thật mang tên người DẠY THAY. Không sai con số nào, nhưng người đi soát sau
+  // này đọc nhật ký sẽ tin nhầm — đúng lúc họ cần nhật ký nhất.
+  //
+  // Chuỗi ưu tiên này còn ít nhất 8 bản sao rải khắp repo (period.ts, cong-day-db.ts,
+  // session-teacher-notify.ts, media-review/tree.ts, …), trong đó HAI bản đảo thứ tự
+  // (`substituteTeacherId ?? actualTeacherId ?? …` ở schedule-conflict.ts và birthday-notify.ts) nên
+  // cho kết quả KHÁC ở buổi có cả hai cột. Gom về một helper dùng chung là việc riêng, chưa làm ở
+  // đây — nhưng trong PHẠM VI một hàm thì không được để hai bản.
+  const nguoiDungLop =
+    opts.actualTeacherId ?? session.substituteTeacherId ?? session.class?.teacherId ?? null;
+  const phongThucTe = opts.actualRoomId ?? session.class?.roomId ?? null;
+
   // ── SNAPSHOT SĨ SỐ BIÊN CHẾ (chốt chủ dự án 07/09/2026) ────────────────────────────────
   //
   // Đo NGAY ĐÂY vì đây là mốc "buổi đã diễn ra" duy nhất mà hệ thống biết chắc, và vì con số này
@@ -149,8 +165,8 @@ export async function completeSession(opts: {
         // mà `substituteTeacherId` chính là thứ `adjust.ts` vừa gán khi duyệt đơn dạy thay.
         // Hậu quả: buổi dạy thay bị quy về GV chính ở mọi bảng đếm buổi dạy, và người thật sự
         // đứng lớp mất công. Bắt được khi dựng phần công dạy giáo viên.
-        actualTeacherId: opts.actualTeacherId ?? session.substituteTeacherId ?? session.class?.teacherId ?? null,
-        actualRoomId: opts.actualRoomId ?? session.class?.roomId ?? null,
+        actualTeacherId: nguoiDungLop,
+        actualRoomId: phongThucTe,
         actualStartAt: opts.actualStartAt ?? null,
         actualEndAt: opts.actualEndAt ?? null,
         classComment: opts.classComment?.trim() ? opts.classComment.trim() : null,
@@ -166,8 +182,8 @@ export async function completeSession(opts: {
       oldValues: { status: session.status },
       newValues: {
         status: "COMPLETED",
-        actualTeacherId: opts.actualTeacherId ?? session.class?.teacherId ?? null,
-        actualRoomId: opts.actualRoomId ?? session.class?.roomId ?? null,
+        actualTeacherId: nguoiDungLop,
+        actualRoomId: phongThucTe,
       },
       tx,
     });
