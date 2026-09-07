@@ -1,8 +1,8 @@
 // lib/cham-cong/seed-core.ts — logic seed nền (dùng chung cho prisma/seed-cham-cong.ts và test).
 import type { PrismaClient } from "@prisma/client";
-import { LEAVE_TYPE_CATALOG, SHIFT_CATALOG } from "./catalog";
+import { LEAVE_TYPE_CATALOG, SHIFT_CATALOG, TEACHING_CREDIT_CATALOG } from "./catalog";
 
-type Db = Pick<PrismaClient, "shiftTemplate" | "leaveType" | "center" | "workLocation">;
+type Db = Pick<PrismaClient, "shiftTemplate" | "leaveType" | "center" | "workLocation" | "teachingCreditType">;
 
 export async function seedShiftTemplates(db: Db, opts: { force?: boolean } = {}): Promise<{ created: number; updated: number }> {
   let created = 0;
@@ -48,6 +48,27 @@ export async function seedLeaveTypes(db: Db, opts: { force?: boolean } = {}): Pr
       where: { code: l.code },
       create: { ...l, displayOrder: i + 1 },
       update: { ...l, displayOrder: i + 1 },
+    });
+    n += 1;
+  }
+  return n;
+}
+
+/**
+ * 6 loại công dạy (lớp/trải nghiệm × chính/thay/trợ giảng).
+ *
+ * Mặc định giữ ĐÚNG hành vi đang chạy — chỉ lớp chính + dạy thay cộng vào kỳ — để bật tính
+ * năng không làm đổi số công dạy của ai. Bật thêm loại nào là quyết định của BLĐ, làm trên màn.
+ */
+export async function seedTeachingCreditTypes(db: Db, opts: { force?: boolean } = {}): Promise<number> {
+  let n = 0;
+  for (const [i, t] of TEACHING_CREDIT_CATALOG.entries()) {
+    const existing = await db.teachingCreditType.findUnique({ where: { code: t.code }, select: { id: true } });
+    if (existing && !opts.force) continue;
+    await db.teachingCreditType.upsert({
+      where: { code: t.code },
+      create: { ...t, displayOrder: i + 1 },
+      update: { ...t, displayOrder: i + 1 },
     });
     n += 1;
   }

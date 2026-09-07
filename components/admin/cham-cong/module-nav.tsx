@@ -18,7 +18,7 @@ import { scopeHref, type ScopeCtx } from "@/lib/cham-cong/scope-href";
 import type { ModuleAction, ModuleScope } from "@/lib/cham-cong/module-scope";
 import { TAB, TAB_ACTIVE, TAB_IDLE } from "./classes";
 
-export type ModuleNavKey = "ngay" | "luoi" | "ky" | "thongke" | "don" | "doisoat" | "cauhinh";
+export type ModuleNavKey = "ngay" | "luoi" | "ky" | "thongke" | "congday" | "don" | "doisoat" | "cauhinh";
 
 /** Màn Cấu hình khi người dùng KHÔNG có `hr_attendance:config`: rơi về Loại nghỉ (chỉ cần view). */
 const CAU_HINH_KHONG_CONFIG = "/cham-cong/loai-nghi";
@@ -67,6 +67,15 @@ const TABS: Tab[] = [
     key: "thongke",
     label: "Nội quy & thống kê",
     href: "/cham-cong/thong-ke",
+    show: (s) => s.any(VIEW),
+    ok: (s, c) => s.has(VIEW, c),
+  },
+  {
+    // Sau "Nội quy & thống kê": cả hai đều là số cuối tháng, chỉ khác chỗ một cái nói về kỷ
+    // luật quét, một cái nói về buổi đứng lớp.
+    key: "congday",
+    label: "Công dạy",
+    href: "/cham-cong/cong-day",
     show: (s) => s.any(VIEW),
     ok: (s, c) => s.has(VIEW, c),
   },
