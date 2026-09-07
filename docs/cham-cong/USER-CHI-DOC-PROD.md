@@ -83,8 +83,19 @@ Sửa **hai chỗ**, giữ nguyên phần còn lại:
 
 | Sửa gì | Từ | Thành |
 |---|---|---|
-| Tên user (giữ nguyên `.` + mã dự án) | `postgres.abcdefghijklmnop` | `satarobo_readonly.abcdefghijklmnop` |
+| **CHỈ chữ `postgres`**, giữ nguyên dấu chấm và mã dự án sau nó | `postgres`.abcdefghijklmnop | `satarobo_readonly`.abcdefghijklmnop |
 | Mật khẩu | `[YOUR-PASSWORD]` | mật khẩu ở Bước 1 |
+
+🔴 **Lỗi đã xảy ra thật ở lần chạy đầu (07/09):** thay **cả cụm** `postgres.abcdefghijklmnop`
+thành `satarobo_readonly` ⇒ mất mã dự án ⇒
+`Authentication failed … credentials for 'satarobo_readonly' are not valid`.
+
+Nhìn vào chuỗi đã sửa: **phải còn đúng một dấu chấm giữa tên role và mã dự án.**
+
+```
+postgresql://satarobo_readonly.abcdefghijklmnop:MatKhau@aws-0-….pooler.supabase.com:5432/postgres
+                             ↑ dấu chấm này KHÔNG được mất
+```
 
 Kết quả:
 
@@ -99,6 +110,13 @@ xem `scripts/_script-db.ts`.
 
 ⚠️ **Phần `.abcdefghijklmnop` sau tên user là bắt buộc** — Supavisor định tuyến theo mã dự án nằm
 trong username. Bỏ nó đi là không kết nối được.
+
+⚠️ **Mật khẩu không được chứa `@ / : ? # [ ]`** — chúng làm vỡ cú pháp URL. Dùng mật khẩu chỉ gồm
+chữ và số. Lỡ đặt rồi thì đổi: `ALTER ROLE satarobo_readonly WITH PASSWORD 'ChuVaSoThoi32KyTu';`
+
+✅ Từ 07/09, workflow đo **tự kiểm hình dạng chuỗi trước khi chạm DB** và fail trong ~1 giây với
+câu chỉ đúng chỗ sai (thiếu mã dự án · sai cổng · mật khẩu có ký tự lạ), thay vì tốn 40 giây cài
+đặt rồi mới chết ở Prisma. Nó **không in giá trị secret** ra log.
 
 ---
 

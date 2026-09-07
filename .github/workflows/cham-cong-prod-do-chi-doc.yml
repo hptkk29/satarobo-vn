@@ -49,14 +49,45 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      # Kiểm HÌNH DẠNG chuỗi trước khi tốn 40 giây cài đặt rồi mới chết ở Prisma.
+      # KHÔNG in giá trị secret ra log — chỉ nói chỗ nào sai.
       - name: Kiểm secret chỉ-đọc
+        env:
+          U: ${{ secrets.PROD_DATABASE_URL_RO }}
         run: |
-          if [ -z "${{ secrets.PROD_DATABASE_URL_RO }}" ]; then
+          if [ -z "$U" ]; then
             echo "::error::Thiếu secret PROD_DATABASE_URL_RO (chuỗi session pooler của user chỉ-đọc)."
             echo "::error::Cách tạo user + lấy chuỗi: docs/cham-cong/USER-CHI-DOC-PROD.md"
             echo "::error::KHÔNG đặt PROD_DATABASE_URL / PROD_DIRECT_URL vào đây — chúng đầy quyền."
             exit 1
           fi
+          proto="${U%%://*}"
+          rest="${U#*://}"
+          userinfo="${rest%@*}"          # tới dấu @ CUỐI CÙNG — mật khẩu có thể chứa @
+          user="${userinfo%%:*}"
+          pass="${userinfo#*:}"
+          hostport="${rest##*@}"
+          port="${hostport##*:}"; port="${port%%/*}"
+          ok=1
+          case "$proto" in
+            postgresql|postgres) ;;
+            *) echo "::error::Chuỗi phải bắt đầu bằng postgresql:// — đang là '$proto://'"; ok=0 ;;
+          esac
+          case "$user" in
+            *.*) ;;
+            *) echo "::error::Tên user THIẾU hậu tố '.<mã dự án>'. Supavisor định tuyến theo mã dự án nằm TRONG tên user, nên phải là 'satarobo_readonly.<mã dự án>' chứ không phải 'satarobo_readonly'. Lấy mã đó từ chuỗi gốc Supabase đưa (phần ngay sau 'postgres.') — chỉ đổi chữ 'postgres', GIỮ NGUYÊN dấu chấm và phần sau nó."; ok=0 ;;
+          esac
+          if [ "$port" != "5432" ]; then
+            echo "::error::Cổng đang là '$port' — phải là 5432 (tab 'Session pooler'). Cổng 6543 là Transaction pooler: nó không giữ prepared statement nên script chạy vài trăm truy vấn sẽ chết giữa chừng."
+            ok=0
+          fi
+          case "$pass" in
+            *[@/?#]*|*'['*|*']'*)
+              echo "::error::Mật khẩu chứa ký tự làm vỡ URL (@ / ? # [ ]). Đổi sang mật khẩu chỉ gồm chữ và số: ALTER ROLE satarobo_readonly WITH PASSWORD '...';"
+              ok=0 ;;
+          esac
+          [ $ok -eq 1 ] || { echo "::error::Sửa secret PROD_DATABASE_URL_RO rồi chạy lại. Không có bước nào chạm DB."; exit 1; }
+          echo "Chuỗi đúng hình dạng: giao thức postgresql, user có hậu tố mã dự án, cổng 5432."
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v3
         with: { version: 11 }

@@ -36,8 +36,16 @@ export async function kiemQuyen(db: PrismaClient): Promise<ThongTinKetNoi> {
     const row = r[0];
     if (!row) return { nguoiDung: "(không đọc được)", ghiDuoc: null, docDuoc: null };
     return { nguoiDung: row.nguoi_dung, ghiDuoc: row.ghi_duoc, docDuoc: row.doc_duoc };
-  } catch {
+  } catch (e) {
     // Không kiểm được thì nói KHÔNG BIẾT, đừng báo "an toàn".
+    //
+    // Nhưng phân biệt KHÔNG KẾT NỐI ĐƯỢC với KHÔNG ĐỌC ĐƯỢC: lần chạy prod đầu tiên (07/09) in ra
+    // "(không đọc được) · không rõ" rồi 3 giây sau mới lòi lỗi thật là sai mật khẩu — dòng tự khai
+    // lẽ ra phải nói ngay. Nó là dòng ĐẦU TIÊN của log, nên nó phải là dòng hữu ích nhất.
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/authentication failed|password|credentials|Can't reach|ECONNREFUSED|ENOTFOUND/i.test(msg)) {
+      return { nguoiDung: "(KHÔNG KẾT NỐI ĐƯỢC — sai chuỗi hoặc mật khẩu)", ghiDuoc: null, docDuoc: null };
+    }
     return { nguoiDung: "(không đọc được)", ghiDuoc: null, docDuoc: null };
   }
 }
