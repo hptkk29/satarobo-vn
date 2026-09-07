@@ -18,7 +18,7 @@ import { scopeHref, type ScopeCtx } from "@/lib/cham-cong/scope-href";
 import type { ModuleAction, ModuleScope } from "@/lib/cham-cong/module-scope";
 import { TAB, TAB_ACTIVE, TAB_IDLE } from "./classes";
 
-export type ModuleNavKey = "ngay" | "luoi" | "ky" | "don" | "doisoat" | "cauhinh";
+export type ModuleNavKey = "ngay" | "luoi" | "ky" | "thongke" | "don" | "doisoat" | "cauhinh";
 
 /** Màn Cấu hình khi người dùng KHÔNG có `hr_attendance:config`: rơi về Loại nghỉ (chỉ cần view). */
 const CAU_HINH_KHONG_CONFIG = "/cham-cong/loai-nghi";
@@ -57,6 +57,16 @@ const TABS: Tab[] = [
     key: "ky",
     label: "Kỳ công & chốt",
     href: "/cham-cong/ky-cong",
+    show: (s) => s.any(VIEW),
+    ok: (s, c) => s.has(VIEW, c),
+  },
+  {
+    // Đặt NGAY SAU "Kỳ công": cùng một câu hỏi cuối tháng, chỉ khác chỗ kỳ công trả lời "bao
+    // nhiêu công để trả lương" còn màn này trả lời "kỷ luật quét thế nào". Tách ra vì bảng kỳ
+    // công đã 13 cột / 1100px — nhồi thêm ba cột nữa là hỏng cả hai.
+    key: "thongke",
+    label: "Nội quy & thống kê",
+    href: "/cham-cong/thong-ke",
     show: (s) => s.any(VIEW),
     ok: (s, c) => s.has(VIEW, c),
   },

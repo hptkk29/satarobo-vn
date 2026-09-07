@@ -502,6 +502,34 @@ export const SETTINGS = {
     default: 30, // T-12
     centerOverridable: true,
   }),
+  // ── Nội quy: đếm lần trễ và mức trừ (chốt 07/09/2026) ────────────────────────────────
+  // Tách RIÊNG khỏi `shift.lateGraceMinutes` có chủ đích. Dung sai 30′ ở trên là để GẮN CỜ
+  // cho quản lý rà; lấy luôn nó làm căn cứ phạt thì người vào muộn 25′ không bị tính lần
+  // nào — tức nội quy có cũng như không.
+  "shift.latePenaltyGraceMinutes": def({
+    key: "shift.latePenaltyGraceMinutes",
+    group: "shift",
+    label: "Trễ quá bao nhiêu phút thì tính 1 lần trễ (dùng để trừ % nội quy)",
+    schema: z.number().int().min(0).max(120),
+    default: 15, // chủ dự án chốt 06/09
+    centerOverridable: true,
+  }),
+  "shift.penaltyLatePercent": def({
+    key: "shift.penaltyLatePercent",
+    group: "shift",
+    label: "Trừ bao nhiêu % nội quy cho MỖI lần đi trễ",
+    schema: z.number().min(0).max(100),
+    default: 0.5,
+    centerOverridable: true,
+  }),
+  "shift.penaltyAbsentPercent": def({
+    key: "shift.penaltyAbsentPercent",
+    group: "shift",
+    label: "Trừ bao nhiêu % nội quy cho MỖI ngày nghỉ không phép (quản lý đã xác nhận)",
+    schema: z.number().min(0).max(100),
+    default: 2,
+    centerOverridable: true,
+  }),
   "shift.earlyArrivalMinutes": def({
     key: "shift.earlyArrivalMinutes",
     group: "shift",

@@ -10193,45 +10193,63 @@ model StaffTimeLog {
 }
 
 /// Bảng công NGÀY — bảng quan trọng nhất. Ghi CHỈ qua recomputeAttendanceDay (upsert), LOCKED thì bỏ qua.
+/// Kết luận của QUẢN LÝ về một ngày vắng mặt. Thiếu (null) = chưa ai xem tới.
+enum AttendanceAbsenceStatus {
+  UNAUTHORISED // nghỉ không phép — vào diện trừ % nội quy
+  EXCUSED // có lý do chính đáng (quên quét, quầy hỏng, đi công tác) — KHÔNG trừ
+}
+
 model StaffAttendanceDay {
-  id                 String               @id @default(cuid())
-  userId             String
-  centerId           String
-  orgUnitId          String?
-  workDate           DateTime             @db.Date
-  assignmentId       String?
-  templateCode       String?
-  placeMode          ShiftPlaceMode?
-  dayType            AttendanceDayType    @default(UNSCHEDULED)
-  expectedMinutes    Int                  @default(0)
-  workedMinutes      Int                  @default(0)
-  paidBreakMinutes   Int                  @default(0)
-  rawPairedMinutes   Int                  @default(0)
-  amExpected         Int                  @default(0)
-  amWorked           Int                  @default(0)
-  pmExpected         Int                  @default(0)
-  pmWorked           Int                  @default(0)
-  lateMinutes        Int                  @default(0)
-  earlyLeaveMinutes  Int                  @default(0)
-  missedEarlyArrival Boolean              @default(false)
-  dayCreditExpected  Float                @default(0)
-  dayCreditEarned    Float                @default(0)
-  hourCredit         Float                @default(0)
-  leaveUnits         Float                @default(0)
-  holidayPaidUnits   Float                @default(0)
-  overrideUnits      Float?
-  overrideById       String?
-  overrideAt         DateTime?            @db.Timestamptz(6)
-  overrideNote       String?              @db.Text
-  pairs              Json?
-  flags              String[]             @default([])
-  status             AttendanceDayStatus  @default(COMPUTED)
-  ruleSnapshot       Json?
-  computedBy         AttendanceComputedBy @default(ENGINE)
-  computedAt         DateTime             @default(now()) @db.Timestamptz(6)
-  periodId           String?
-  createdAt          DateTime             @default(now()) @db.Timestamptz(6)
-  updatedAt          DateTime             @updatedAt @db.Timestamptz(6)
+  id                  String                   @id @default(cuid())
+  userId              String
+  centerId            String
+  orgUnitId           String?
+  workDate            DateTime                 @db.Date
+  assignmentId        String?
+  templateCode        String?
+  placeMode           ShiftPlaceMode?
+  dayType             AttendanceDayType        @default(UNSCHEDULED)
+  expectedMinutes     Int                      @default(0)
+  workedMinutes       Int                      @default(0)
+  paidBreakMinutes    Int                      @default(0)
+  rawPairedMinutes    Int                      @default(0)
+  amExpected          Int                      @default(0)
+  amWorked            Int                      @default(0)
+  pmExpected          Int                      @default(0)
+  pmWorked            Int                      @default(0)
+  lateMinutes         Int                      @default(0)
+  /// Số phút đến muộn so với giờ bắt đầu ĐOẠN ĐẦU của ca, ghi THÔ — khác `lateMinutes`
+  /// vốn chỉ cộng khi đã vượt dung sai `shift.lateGraceMinutes` (mặc định 30′). Không có
+  /// cột này thì người trễ 20′ lưu thành 0 và không đếm được theo bất kỳ ngưỡng nào < 30′.
+  arrivalDeltaMinutes Int                      @default(0)
+  earlyLeaveMinutes   Int                      @default(0)
+  missedEarlyArrival  Boolean                  @default(false)
+  dayCreditExpected   Float                    @default(0)
+  dayCreditEarned     Float                    @default(0)
+  hourCredit          Float                    @default(0)
+  leaveUnits          Float                    @default(0)
+  holidayPaidUnits    Float                    @default(0)
+  overrideUnits       Float?
+  overrideById        String?
+  overrideAt          DateTime?                @db.Timestamptz(6)
+  overrideNote        String?                  @db.Text
+  /// Quản lý XÁC NHẬN ngày này là nghỉ không phép / có lý do. Chủ dự án chốt 06/09: không
+  /// tự động trừ từ cờ `KHONG_CO_LUOT`, vì cờ đó còn do quên quét, quầy hỏng, đi công tác.
+  /// Bốn cột này do NGƯỜI ghi, không do engine — `recomputeAttendanceDay` liệt kê tường minh
+  /// các cột nó ghi nên chúng sống sót qua mỗi lần tính lại, y như cặp `override*` ở trên.
+  absenceStatus       AttendanceAbsenceStatus?
+  absenceById         String?
+  absenceAt           DateTime?                @db.Timestamptz(6)
+  absenceNote         String?                  @db.Text
+  pairs               Json?
+  flags               String[]                 @default([])
+  status              AttendanceDayStatus      @default(COMPUTED)
+  ruleSnapshot        Json?
+  computedBy          AttendanceComputedBy     @default(ENGINE)
+  computedAt          DateTime                 @default(now()) @db.Timestamptz(6)
+  periodId            String?
+  createdAt           DateTime                 @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime                 @updatedAt @db.Timestamptz(6)
 
   @@unique([userId, workDate])
   @@index([centerId, workDate])
