@@ -15,6 +15,7 @@ import { CalendarClock, Grid2x2Check, Inbox, PenLine, TriangleAlert, Users } fro
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { holidayYmdSet, loadHolidayRanges } from "@/lib/cham-cong/holidays";
 import { getSetting } from "@/lib/settings/service";
 import { vnYmd } from "@/lib/time/vn";
 import { daysOfMonth } from "@/lib/cham-cong/generate";
@@ -151,28 +152,14 @@ export default async function PhanCaPage({ searchParams }: Props) {
       select: { code: true, name: true, segments: true, defaultPlace: true, isLeave: true },
       orderBy: { displayOrder: "asc" },
     }),
-    sdb.holiday.findMany({
-      where: {
-        date: { lte: to },
-        OR: [
-          { endDate: null, date: { gte: from } },
-          { endDate: { gte: from } },
-        ],
-        AND: [{ OR: [{ centerId: null }, { centerId: coSo }] }],
-      },
-      select: { date: true, endDate: true },
-    }),
+    // KHÔNG qua `sdb`: `Holiday` bị `scopedDb` cắt mất dòng `centerId = null`, tức mọi ngày lễ
+    // TOÀN HỆ THỐNG (Tết, 30/4, 2/9) tàng hình với người cấp cơ sở — và tập này là nguồn DUY
+    // NHẤT tô ngày lễ trên lưới, nên Quản lý cơ sở sẽ xếp ca đè lên Tết mà không thấy gì.
+    // Xem `lib/cham-cong/holidays.ts` để biết vì sao không vá bằng `NULL_IS_GLOBAL_MODELS`.
+    loadHolidayRanges(coSo, from, to),
   ]);
 
-  const holidays = new Set(
-    holidayRows.flatMap((h) => {
-      const out: string[] = [];
-      for (let d = new Date(h.date); d <= (h.endDate ?? h.date); d = new Date(d.getTime() + 86_400_000)) {
-        out.push(d.toISOString().slice(0, 10));
-      }
-      return out;
-    }),
-  );
+  const holidays = holidayYmdSet(holidayRows);
 
   const offSet = new Set(weeklyOff);
   const days: GridDay[] = daysOfMonth(y, m).map((d) => {
