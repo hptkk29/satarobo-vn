@@ -102,7 +102,10 @@ export function useKioskQr(centerId: string): KioskQr {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch(`${QR_ENDPOINT}?centerId=${encodeURIComponent(centerId)}`, {
+      // `tinh=1`: chiếu CHÍNH mã tĩnh đang dán ở quầy. Chủ dự án chốt "chỉ dùng 1 QR" — màn TV
+      // chiếu một mã khác với tờ giấy là hai mã, và người quét phải đoán cái nào còn dùng được.
+      // Mã không đổi nên vòng poll bên dưới nay chỉ còn để tự hồi phục khi rớt mạng.
+      const res = await fetch(`${QR_ENDPOINT}?centerId=${encodeURIComponent(centerId)}&tinh=1`, {
         cache: "no-store",
       });
       if (!res.ok) {

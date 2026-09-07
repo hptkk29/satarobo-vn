@@ -37,7 +37,7 @@ interface Props {
 
 const VIEW = "hr_attendance:view" as const;
 const CONFIG = "hr_attendance:config" as const;
-const SUBTITLE = "Mở trên TV tại quầy — mã đổi mỗi phút";
+const SUBTITLE = "Mở trên TV tại quầy — cùng mã với tờ QR dán ở quầy";
 const SHELL = "max-w-3xl";
 
 /** "14:03" theo đồng hồ VN — máy chủ Vercel chạy UTC nên không dùng `getHours()`. */
@@ -89,9 +89,10 @@ export default async function ManHinhPage({ searchParams }: Props) {
         menu quản trị và không hiện tên ai. Bấm <b>Esc</b> hoặc nút <b>Thoát</b> để quay lại.
       </p>
       <p className="mt-2">
-        Mã đổi mỗi phút và chỉ dùng được khoảng ba phút, nên ảnh chụp lại mã sẽ không chấm công
-        được. Nếu TV rớt mạng, màn hình vẫn giữ mã cuối cùng và ghi rõ mã còn dùng tới mấy giờ —
-        cứ để nguyên, mạng về là tự chạy lại.
+        Mã này KHÔNG đổi — nó chính là mã in dán ở quầy. Nên ảnh chụp lại vẫn quét được, và thứ
+        chặn người ở xa là ĐỊNH VỊ: điểm chấm công đã khai toạ độ thì quét ngoài phạm vi bị từ
+        chối thẳng. Điểm chưa khai toạ độ thì chưa chặn được ai — vào Điểm chấm công để nhập.
+        Nếu TV rớt mạng, màn hình vẫn giữ mã cuối cùng; mạng về là tự chạy lại.
       </p>
     </PageHelp>
   );

@@ -67,7 +67,19 @@ export async function recordCheckin(input: RecordCheckinInput): Promise<RecordCh
     ip,
     userAgent,
   });
-  if (!r.ok) return { ok: false, error: r.error };
+  if (!r.ok) {
+    // Ghi lại lượt BỊ TỪ CHỐI. Với mã QR tĩnh in ra, việc ai đó quét nhiều lần từ ngoài vùng là
+    // dấu hiệu đáng xem — không lưu thì lần bị chặn không để lại vết nào, và quản lý chỉ nghe
+    // kể lại. `result: REJECTED` nên nó KHÔNG vào phép tính công (`recompute` chỉ đọc ACCEPTED).
+    await recordRejectedLog({
+      userId: session.user.id,
+      workLocationId: c.workLocationId,
+      direction: d.type,
+      reason: r.rejectReason,
+      ip,
+    });
+    return { ok: false, error: r.error };
+  }
   revalidatePath("/cham-cong");
   const warn = r.flags.filter((f) => f !== "CHUA_TOA_DO").map((f) => FLAG_TEXT[f] ?? f);
   return { ok: true, flags: r.flags, warning: warn.length ? `Đã ghi, Quản lý sẽ rà: ${warn.join(", ")}.` : undefined };

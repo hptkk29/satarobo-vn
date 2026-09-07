@@ -103,7 +103,7 @@ export default async function CheckinPage({ searchParams }: Props) {
     return shell(
       <EmptyState
         title="Cần quét mã QR tại quầy"
-        description="Mã đổi mỗi phút — mở từ menu thì không chấm được. Dùng camera điện thoại quét mã trên màn hình chấm công ở quầy cơ sở."
+        description="Mở từ menu thì không chấm được — phải quét mã. Dùng camera điện thoại quét mã QR dán tại quầy (hoặc chiếu trên màn hình quầy) của cơ sở."
         action={backToSchedule}
       />,
     );

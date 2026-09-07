@@ -8817,6 +8817,10 @@ model WorkLocation {
   longitude       Float?
   radiusMeters    Int      @default(100)
   geofenceEnabled Boolean  @default(false) // bật từng cơ sở sau khi đo toạ độ
+  /// Đời khoá của mã QR TĨNH in ra. Tăng lên 1 là mọi tờ đã in / mọi ảnh chụp cũ chết ngay.
+  /// Đây là cách DUY NHẤT thu hồi mã đã in mà không phải đổi `NEXTAUTH_SECRET` — khoá đó dùng
+  /// chung cho session, vé SCORM, cookie portal, OTP, đổi nó là đá sập cả hệ thống.
+  qrKeyVersion    Int      @default(1)
   ipAllowlist     String[] @default([])
   isActive        Boolean  @default(true)
   createdAt       DateTime @default(now()) @db.Timestamptz(6)
