@@ -56,9 +56,10 @@ async function main() {
     select: {
       id: true,
       status: true,
+      date: true,
       actualTeacherId: true,
       substituteTeacherId: true,
-      class: { select: { teacherId: true, assistantId: true } },
+      class: { select: { teacherId: true, assistantId: true, deletedAt: true } },
     },
   });
   const xong = buoi.filter((b) => b.status === "COMPLETED");
@@ -108,7 +109,14 @@ async function main() {
 
   console.log("\n══ 1. /admin/bao-cao/hieu-suat-gv — QUY SAI NGƯỜI (không chạm tiền) ══");
   dong("Số giáo viên có số lệch", lech.length);
-  dong("Tổng buổi bị quy sai người", lech.reduce((s, r) => s + Math.abs(r.hienThi - r.dung), 0) / 2);
+  // Đếm THẲNG số buổi quy sai. Bản cũ dùng `Σ|hiện − đúng| / 2` — đó là LƯU LƯỢNG RÒNG, nên giáo
+  // viên vừa nhận nhầm buổi vừa bị mất buổi sẽ triệt tiêu và bị đếm THIẾU.
+  const soBuoiQuySai = xong.filter(
+    (b) =>
+      (b.actualTeacherId ?? b.class.teacherId) !==
+      (b.actualTeacherId ?? b.substituteTeacherId ?? b.class.teacherId),
+  ).length;
+  dong("Số buổi bị quy sai người", soBuoiQuySai);
   for (const r of lech.slice(0, 10)) {
     console.log(`    ${r.id}  màn hiện ${r.hienThi}  ·  đúng ${r.dung}`);
   }
@@ -134,7 +142,8 @@ async function main() {
   console.log("\n══ 2. /teacher/bang-cong — ô \"Buổi dạy\" đếm cả buổi chưa hoàn tất ══");
   for (const [k, v] of [...theoTrangThai].sort()) dong(`  trạng thái ${k}`, v);
   dong("PHỒNG do buổi chưa hoàn tất", chuaXong);
-  dong("PHỒNG do lớp mình chỉ làm trợ giảng", laTroGiang);
+  dong("Buổi thừa trên bảng của TRỢ GIẢNG", laTroGiang);
+  console.log("  (hai dòng trên CHỒNG LẤN nhau — đừng cộng)");
   console.log(
     "  (xem GIỮA THÁNG thì phần lớn buổi còn SCHEDULED ⇒ chênh có thể xấp xỉ 100%.\n" +
       "   Đây là màn LỊCH — nhiều khả năng đổi NHÃN chứ không đổi bộ lọc.)",
@@ -142,18 +151,28 @@ async function main() {
 
   // ══ 3. /admin/teachers/[id] — KHÔNG lọc status ⇒ tính cả buổi đã HUỶ ══
   //
-  // Đây là chỗ duy nhất không có bất kỳ điều kiện `status` nào, nên chênh lệch bằng ĐÚNG tổng
-  // dòng CANCELLED + SCHEDULED + IN_PROGRESS đã qua ngày. Số đo trực tiếp, không phải suy luận.
-  const daQua = buoi.filter((b) => b.status !== "COMPLETED");
+  // ⚠️ BẢN TRƯỚC NÓI QUÁ CON SỐ, và đây là bản vá (07/09/2026).
+  //
+  // Màn thật lọc `{ gte: monthStart, lt: monthEnd, lte: now }` và chỉ lấy lớp GV CHÍNH còn sống.
+  // Bản trước bỏ cả ba vế — tệ hơn, nó không `select` cột `date` nên KHÔNG THỂ cắt ở hiện tại,
+  // mà nhãn vẫn in "đã qua ngày". Trên prod, khoảng đo kéo tới 01/10 trong khi hôm nay là 07/09,
+  // nên con số in ra gồm cả buổi TƯƠNG LAI — chúng không lên màn này, không phải "phồng".
+  const bay = new Date();
+  const trenHoSoGv = buoi.filter((b) => b.class.deletedAt == null && b.class.teacherId != null);
+  const daQua = trenHoSoGv.filter((b) => b.status !== "COMPLETED" && b.date <= bay);
+  const tuongLai = trenHoSoGv.filter((b) => b.status !== "COMPLETED" && b.date > bay);
   const theoTrangThaiDaQua = new Map<string, number>();
   for (const b of daQua) theoTrangThaiDaQua.set(b.status, (theoTrangThaiDaQua.get(b.status) ?? 0) + 1);
 
-  console.log("\n══ 3. /admin/teachers/[id] — \"Đã dạy N buổi\" tính cả buổi ĐÃ HUỶ ══");
-  for (const [k, v] of [...theoTrangThaiDaQua].sort()) dong(`  trạng thái ${k}`, v);
-  dong("PHỒNG (mọi buổi không COMPLETED, đã qua ngày)", daQua.length);
+  console.log("\n══ 3. /admin/teachers/[id] — \"Đã dạy N buổi\" không lọc trạng thái ══");
+  for (const [k, v] of [...theoTrangThaiDaQua].sort()) dong(`  đã qua ngày · ${k}`, v);
+  dong("PHỒNG THẬT (chưa COMPLETED · đã qua ngày · lớp có GV chính)", daQua.length);
+  dong("(tham khảo) buổi tương lai — KHÔNG lên màn này", tuongLai.length);
+  dong("(tham khảo) buổi bị loại: lớp đã xoá / chưa có GV chính", buoi.length - trenHoSoGv.length);
+  const huy = theoTrangThaiDaQua.get("CANCELLED") ?? 0;
   console.log(
-    "  Hai hạng nặng đều mang dấu DƯƠNG: buổi ĐÃ HUỶ, và buổi giáo viên quên bấm \"Hoàn tất\".\n" +
-      "  Trung tâm nào hay quên đóng buổi thì con số này phồng gấp nhiều lần.",
+    `  Trong đó: buổi ĐÃ HUỶ ${huy} · buổi quên bấm "Hoàn tất" ${daQua.length - huy}.\n` +
+      "  Hạng nào bằng 0 thì đừng kể nó là nguyên nhân.",
   );
 
   console.log("\n[do-lech] Xong. Không ghi gì.");
