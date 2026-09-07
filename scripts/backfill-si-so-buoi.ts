@@ -24,7 +24,7 @@
 // `_load-env` phải chạy TRƯỚC `_script-db` — Prisma đọc DATABASE_URL ngay lúc khởi tạo module.
 import { currentDbHost } from "./_load-env";
 import { scriptDb } from "./_script-db";
-import { inQuyen, kiemQuyen } from "./_kiem-quyen";
+import { coCot, inQuyen, kiemQuyen } from "./_kiem-quyen";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "../lib/enrollment-status";
 
 const GHI = process.argv.includes("--ghi");
@@ -64,13 +64,39 @@ async function main() {
   console.log(`[backfill-si-so] DB: ${currentDbHost()} · chế độ: ${GHI ? "GHI THẬT" : "chỉ ĐO"}`);
   inQuyen(await kiemQuyen(db), GHI);
 
+  // ── DB CHƯA MIGRATE VẪN ĐO ĐƯỢC ────────────────────────────────────────────────────────
+  //
+  // Trên PROD, migration `20260907050000` (ba cột roster*) chưa lên. Bản đầu lọc thẳng
+  // `rosterSize: null` nên Prisma sinh SQL tham chiếu cột chưa tồn tại ⇒ P2022, chết cả phép đo.
+  //
+  // Đó là lỗi thiết kế: phép ĐO trả lời "nếu backfill thì ra số gì", và câu đó suy hoàn toàn từ
+  // dữ liệu CŨ. Nó không được phép phụ thuộc vào migration của chính tính năng đang cân nhắc.
+  const coCotRoster = await coCot(db, "ClassSession", "rosterSize");
+  if (!coCotRoster) {
+    console.log(
+      "[backfill-si-so] ℹ️ DB này CHƯA có cột `rosterSize` (migration 20260907050000 chưa lên).\n" +
+        "        Vẫn đo được — coi như MỌI buổi COMPLETED đều chưa có sĩ số, đúng thực tế.",
+    );
+    if (GHI) {
+      console.error(
+        "[backfill-si-so] ✖ Không GHI được: cột `rosterSize` chưa tồn tại. Đưa migration\n" +
+          "        20260907050000_snapshot_si_so_buoi lên DB này trước.",
+      );
+      process.exit(1);
+    }
+  }
+
   const buoi = await db.classSession.findMany({
-    where: { status: "COMPLETED", rosterSize: null },
+    // Chưa có cột ⇒ không lọc theo nó. Có cột ⇒ chỉ lấy buổi chưa chốt số, để chạy lại không đè
+    // số `SNAPSHOT` đã đo lúc dạy.
+    where: { status: "COMPLETED", ...(coCotRoster ? { rosterSize: null } : {}) },
     select: { id: true, classId: true, date: true },
     orderBy: { date: "asc" },
   });
 
-  console.log(`[backfill-si-so] ${buoi.length} buổi COMPLETED chưa có sĩ số.`);
+  console.log(
+    `[backfill-si-so] ${buoi.length} buổi COMPLETED ${coCotRoster ? "chưa có sĩ số" : "(toàn bộ)"}.`,
+  );
   if (buoi.length === 0) {
     // 0 có thể là sự thật, mà cũng có thể là user chỉ-đọc đang bị RLS lọc sạch. Phân biệt bằng
     // tổng số buổi — nếu CẢ BẢNG cũng ra 0 trên prod thì đó không phải sự thật.

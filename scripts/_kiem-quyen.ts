@@ -67,3 +67,30 @@ export function inQuyen(t: ThongTinKetNoi, chieuGhi: boolean): void {
     );
   }
 }
+
+/**
+ * Cột `bang.cot` có tồn tại trên DB đang kết nối không.
+ *
+ * Vì sao cần: script đo chạy trên PROD, nơi migration của nhánh feature CHƯA lên. Đo mà đòi cột
+ * chưa có thì Prisma ném `P2022` và cả phép đo chết — đúng lỗi gặp ngày 07/09 với
+ * `ClassSession.rosterSize`.
+ *
+ * Phép đo lẽ ra KHÔNG phụ thuộc migration: nó tính "nếu backfill thì ra số gì", mà cái đó suy
+ * hoàn toàn từ dữ liệu cũ. Hàm này để script tự nhận ra mình đang chạy trên DB chưa migrate và
+ * đi nhánh không cần cột.
+ *
+ * `information_schema` đọc được bằng user chỉ-đọc. Không đọc được thì trả `false` — thà đi nhánh
+ * an toàn còn hơn ném lỗi giữa chừng.
+ */
+export async function coCot(db: PrismaClient, bang: string, cot: string): Promise<boolean> {
+  try {
+    const r = await db.$queryRaw<{ n: bigint }[]>`
+      SELECT count(*)::bigint AS n
+      FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = ${bang} AND column_name = ${cot}
+    `;
+    return Number(r[0]?.n ?? 0) > 0;
+  } catch {
+    return false;
+  }
+}

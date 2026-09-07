@@ -14,10 +14,22 @@
 
 ## Bước 1 — Đặt mật khẩu
 
-Sinh một mật khẩu mạnh (≥ 32 ký tự, không dấu, không khoảng trắng) và **giữ ở nơi an toàn** — sau
-bước 3 sẽ không đọc lại được nữa. Đừng dán mật khẩu vào chat, vào commit, hay vào mô tả issue.
+**SINH NGẪU NHIÊN.** Đừng nghĩ ra, và tuyệt đối **đừng dùng bất kỳ chuỗi ví dụ nào trong tài liệu
+này** — chúng nằm trong repo, ai đọc cũng thấy.
 
-Trong SQL dưới đây, thay `DAT_MAT_KHAU_O_DAY` bằng mật khẩu đó.
+```bash
+# một trong hai, đều được
+openssl rand -base64 36 | tr -d '/+=' | cut -c1-40
+python -c "import secrets,string; print(''.join(secrets.choice(string.ascii_letters+string.digits) for _ in range(40)))"
+```
+
+Chỉ chữ và số, ≥32 ký tự. **Giữ ở nơi an toàn** — sau bước 3 sẽ không đọc lại được.
+
+🔴 **Đừng dán mật khẩu hay chuỗi kết nối vào chat, commit, hay mô tả issue.** Đã xảy ra thật ngày
+07/09: chuỗi kết nối đầy đủ bị dán vào chat, và mật khẩu trong đó chính là chuỗi ví dụ chép từ tài
+liệu này. Phải xoay lại.
+
+Trong SQL dưới đây, thay `DAT_MAT_KHAU_O_DAY` bằng mật khẩu vừa sinh.
 
 ---
 
@@ -93,7 +105,7 @@ thành `satarobo_readonly` ⇒ mất mã dự án ⇒
 Nhìn vào chuỗi đã sửa: **phải còn đúng một dấu chấm giữa tên role và mã dự án.**
 
 ```
-postgresql://satarobo_readonly.abcdefghijklmnop:MatKhau@aws-0-….pooler.supabase.com:5432/postgres
+postgresql://satarobo_readonly.abcdefghijklmnop:<MẬT_KHẨU>@aws-0-….pooler.supabase.com:5432/postgres
                              ↑ dấu chấm này KHÔNG được mất
 ```
 
@@ -112,7 +124,8 @@ xem `scripts/_script-db.ts`.
 trong username. Bỏ nó đi là không kết nối được.
 
 ⚠️ **Mật khẩu không được chứa `@ / : ? # [ ]`** — chúng làm vỡ cú pháp URL. Dùng mật khẩu chỉ gồm
-chữ và số. Lỡ đặt rồi thì đổi: `ALTER ROLE satarobo_readonly WITH PASSWORD 'ChuVaSoThoi32KyTu';`
+chữ và số. Lỡ đặt rồi thì đổi:
+`ALTER ROLE satarobo_readonly WITH PASSWORD '<chuỗi ngẫu nhiên sinh ở Bước 1>';`
 
 ✅ Từ 07/09, workflow đo **tự kiểm hình dạng chuỗi trước khi chạm DB** và fail trong ~1 giây với
 câu chỉ đúng chỗ sai (thiếu mã dự án · sai cổng · mật khẩu có ký tự lạ), thay vì tốn 40 giây cài

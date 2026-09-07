@@ -111,14 +111,17 @@ jobs:
       # Ba chỗ đếm "buổi dạy" nghi sai + LỖI THƯỢNG NGUỒN quan trọng hơn cả ba.
       # Đọc `docs/cham-cong/GHI-CHU-BA-CHO-DEM-BUOI-DAY.md` §2 để biết đọc số theo thứ tự nào —
       # con số đầu tiên quyết định ba con số sau có nghĩa hay không.
+      # `!cancelled()` để phép đo này VẪN CHẠY khi bước trên hỏng. Hai phép đo độc lập nhau, và
+      # chúng chỉ ĐỌC — mất cả hai vì một cái lỗi là bắt người bấm chạy lại thêm một lượt vô ích.
       - name: "Đo chênh lệch ba chỗ đếm buổi dạy (chỉ đọc)"
-        if: inputs.viec == 'buoi-day' || inputs.viec == 'tat-ca'
+        if: ${{ !cancelled() && (inputs.viec == 'buoi-day' || inputs.viec == 'tat-ca') }}
         run: pnpm exec tsx scripts/do-lech-buoi-day.ts
         env:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
           DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
 
       - name: Nhắc lại
+        if: ${{ !cancelled() }}
         run: |
           echo "Workflow này chỉ ĐỌC, bằng user chỉ-đọc. Không bước nào ghi vào DB prod."
           echo "Nếu số đo ra 0 bất thường: xem docs/cham-cong/USER-CHI-DOC-PROD.md mục 'Nếu số đo ra 0'."
