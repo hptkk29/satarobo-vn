@@ -218,14 +218,15 @@ export default async function CongDayPage({
           ngay theo số mới.
         </p>
         <p className="mt-2">
-          Số ở đây có thể <em>khác</em> cột “Dạy” bên màn Kỳ công. Cột đó đếm buổi theo <b>cơ sở của lớp</b>,
-          nên giáo viên của cơ sở này đi dạy lớp cơ sở khác thì buổi đó không vào đâu cả. Màn này hỏi theo
-          <b> người</b> nên buổi luôn về đúng người, dù dạy ở đâu.
+          Số ở đây <em>khác</em> cột <b>Buổi ở cơ sở</b> bên màn Kỳ công, và khác là <b>ĐÚNG</b>. Cột
+          đó đếm buổi của những lớp <b>thuộc cơ sở đang xem</b>; màn này hỏi theo <b>người</b> nên
+          buổi luôn về đúng người, dù họ dạy ở cơ sở nào. Giáo viên dạy chéo cơ sở là chỗ hai số tách
+          nhau — đừng sửa cho khớp.
         </p>
         <p className="mt-2">
-          <b>Chưa làm được:</b> “dạy bù” và “vượt giờ”. Dữ liệu hiện không có cột nào đánh dấu một buổi là
-          buổi bù, và giờ dạy thực tế gần như luôn để trống nên không biết buổi nào vượt. Thêm hai loại đó
-          bây giờ là thêm hai ô luôn bằng 0 — cần chốt cách ghi nhận trước.
+          <b>Dạy bù và vượt giờ:</b> nay khai được ở tab <b>Cấu hình → Phân loại buổi</b>, nhưng chỉ
+          ra số khi buổi đã <em>được gán</em> phân loại ở form sửa buổi. Riêng “vượt giờ” vẫn chưa đo
+          được: giờ dạy thực tế gần như luôn để trống nên không biết buổi nào vượt.
         </p>
       </PageHelp>
 
@@ -233,7 +234,12 @@ export default async function CongDayPage({
         cols={4}
         items={[
           { icon: GraduationCap, label: "Tổng công dạy", value: so(tongCong), hint: "đã nhân hệ số" },
-          { icon: Layers, label: "Tổng buổi đã dạy", value: tongBuoi },
+          {
+            icon: Layers,
+            label: "Tổng buổi của người",
+            value: tongBuoi,
+            hint: "kể cả dạy chéo cơ sở",
+          },
           { icon: Users, label: "Người có buổi dạy", value: rows.length },
           {
             icon: Hourglass,

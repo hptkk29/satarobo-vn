@@ -274,6 +274,12 @@ export default async function KyCongPage({
           nữa, và chỉ cấp Hội sở mở lại được. Rà hết dải “việc còn dang dở” rồi bấm “Tính lại” trước khi chốt.
         </p>
         <p className="mt-2">
+          Cột <b>Buổi ở cơ sở</b> đếm buổi của những lớp <b>thuộc cơ sở này</b>. Màn{" "}
+          <b>Công dạy</b> có một con số khác, đếm theo <b>người</b> — giáo viên cơ sở này đi dạy lớp
+          cơ sở khác thì buổi đó nằm ở màn Công dạy chứ không nằm ở đây. <b>Hai số lệch nhau ở ca dạy
+          chéo là ĐÚNG</b>; đừng sửa cho khớp.
+        </p>
+        <p className="mt-2">
           Công chuẩn là số ngày công chuẩn của tháng, mặc định = số ngày trong tháng trừ ngày nghỉ tuần
           và ngày lễ. Sửa tay khi khối có lịch riêng; để trống rồi Lưu là trả về cách tính tự động.
         </p>
@@ -308,7 +314,8 @@ export default async function KyCongPage({
           {
             icon: GraduationCap,
             value: summary.totals.teachingSessions.toLocaleString("vi-VN"),
-            label: "Buổi dạy trong kỳ",
+            label: "Buổi dạy ở cơ sở này",
+            hint: "lớp thuộc cơ sở này",
           },
           {
             icon: Users,

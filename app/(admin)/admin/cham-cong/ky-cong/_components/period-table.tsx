@@ -106,8 +106,16 @@ export function PeriodTable({
             <th colSpan={5} scope="colgroup" className={cn(adminTh, "px-3 text-center text-[11px]")}>
               Hậu kiểm
             </th>
-            <th rowSpan={2} scope="col" className={cn(adminTh, "px-3 align-bottom", TH_NUM)}>
-              Dạy
+            {/* KHÔNG để tên trần "Dạy": màn Công dạy có một con số buổi dạy KHÁC, đếm theo NGƯỜI
+                thay vì theo cơ sở của lớp. Hai số gần giống nhau mà không nhãn thì sẽ có người
+                sửa cho khớp, và sửa nhầm cái đang đúng. */}
+            <th
+              rowSpan={2}
+              scope="col"
+              title="Buổi của những lớp THUỘC CƠ SỞ NÀY. Giáo viên cơ sở này đi dạy lớp cơ sở khác thì buổi đó không nằm ở đây — xem màn Công dạy."
+              className={cn(adminTh, "px-3 align-bottom", TH_NUM)}
+            >
+              Buổi ở cơ sở
             </th>
           </tr>
           <tr>
