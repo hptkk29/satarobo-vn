@@ -73,6 +73,8 @@ export function CheckinClient({
 }) {
   const [pending, startTransition] = useTransition();
   const [done, setDone] = useState<{ label: string; timeLabel: string; warning?: string } | null>(null);
+  /** Vé đã bị tiêu ở một lượt gửi hỏng — không bấm lại được, phải quét mã mới. */
+  const [veChet, setVeChet] = useState(false);
   const [left, setLeft] = useState(() => Math.max(0, Math.round((new Date(expiresAt).getTime() - Date.now()) / 1000)));
 
   useEffect(() => {
@@ -112,6 +114,11 @@ export function CheckinClient({
         else toast.success(`${label} thành công lúc ${new Date().toLocaleTimeString("vi-VN")}`);
       } else {
         toast.error(res.error);
+        // VÉ ĐÃ BỊ TIÊU trước khi máy chủ kiểm vị trí — mọi lỗi ở bước này đều làm vé chết. Không
+        // khoá nút thì người bị chặn (đứng ngoài phạm vi) bấm lại và nhận thông báo SAI: "vé này
+        // đã dùng, quét lại mã QR", trong khi lý do thật là vị trí. Khoá nút và nói đúng việc
+        // cần làm.
+        setVeChet(true);
       }
     });
   }
@@ -144,7 +151,7 @@ export function CheckinClient({
     );
   }
 
-  const expired = left <= 0;
+  const expired = left <= 0 || veChet;
   return (
     <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Hôm nay</p>
@@ -190,7 +197,9 @@ export function CheckinClient({
 
       {expired && (
         <p role="alert" className="mt-2 rounded-lg bg-state-danger-soft p-2.5 text-sm text-state-danger-ink">
-          Vé hết hạn — quét lại mã trên màn hình quầy.
+          {veChet
+            ? "Lượt vừa rồi không ghi được (xem thông báo ở trên). Vé đã dùng — quét lại mã QR tại quầy để thử lần nữa."
+            : "Vé hết hạn — quét lại mã trên màn hình quầy."}
         </p>
       )}
 
