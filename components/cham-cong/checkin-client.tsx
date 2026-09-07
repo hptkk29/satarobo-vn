@@ -12,7 +12,10 @@
 //    `:root` (`.teacher-root` không có `--primary-soft`, `--primary-ink` ở `:root` là màu cam).
 // 2. Vé dùng MỘT LẦN: bấm xong không quay lại được màn có nút — nên sau khi ghi phải nói giờ đã ghi
 //    và chỉ đường đi tiếp, đừng để người ta bấm lại rồi nhận lỗi "vé đã dùng".
-// 3. GPS KHÔNG chặn: không có định vị vẫn ghi được, chỉ gắn cờ để Quản lý rà. Đừng thêm nhánh chặn.
+// 3. GPS CHẶN ở điểm đã khai toạ độ và đã bật định vị (đổi 07/09, đi cùng QR TĨNH: mã in ra ai
+//    chụp cũng quét được, nên định vị là lớp bảo vệ còn lại duy nhất). Điểm CHƯA khai toạ độ vẫn
+//    theo luật cũ — ghi nhận rồi gắn cờ. Việc chặn nằm ở MÁY CHỦ (`lib/cham-cong/timelog.ts`),
+//    đừng chặn ở client: client chỉ hiển thị lỗi máy chủ trả về.
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { ArrowRight, CircleCheck, Loader2, LogIn, LogOut, MapPin } from "lucide-react";
@@ -214,7 +217,7 @@ export function CheckinClient({
 
       <p className="mt-4 text-xs text-muted-foreground">
         {geofenceEnabled
-          ? "Bật định vị (GPS) khi được hỏi. Ở ngoài vùng vẫn ghi được — hệ thống gắn cờ để Quản lý rà, bạn không bị chặn."
+          ? "Bật định vị (GPS) khi được hỏi — cơ sở này KIỂM VỊ TRÍ: đứng ngoài phạm vi sẽ không chấm được. Máy định vị sai thì nộp đơn chỉnh công."
           : "Bật định vị (GPS) nếu được hỏi. Mỗi vé chỉ ghi được một lượt."}
       </p>
     </div>

@@ -1,7 +1,8 @@
 // app/(admin)/admin/cham-cong/checkin/page.tsx — CHẤM CÔNG: đích của mã QR xoay tại quầy.
 //
 // Vì sao màn này khác mọi màn admin: nó mở trên ĐIỆN THOẠI, người dùng đang đứng ở quầy, và mã QR
-// chỉ sống 60 giây (vé 120 giây). Mọi thứ phải vừa một cột 375px và nói rõ vì sao bấm không được.
+// là mã TĨNH dán ở quầy, còn VÉ thì sống 120 giây. Mọi thứ phải vừa một cột 375px và nói rõ vì
+// sao bấm không được.
 //
 // DỄ VỠ:
 // 1. `?w=<workLocationId>&t=<token>` là URL SỐNG in trong mã QR (`app/api/admin/cham-cong/qr-token`).
@@ -10,7 +11,8 @@
 //    từ menu (không có w/t) phải ra màn "chưa quét mã", KHÔNG được gọi hàm cấp vé rồi in lỗi đỏ.
 // 3. Thiếu quyền thì hiện NoPermission tại chỗ, KHÔNG `redirect("/dashboard")`: người đang đứng ở
 //    quầy quét mã mà bị ném về bảng điều khiển desktop thì không hiểu chuyện gì vừa xảy ra.
-// 4. GPS không chặn — ngoài vùng vẫn ghi, chỉ gắn cờ để Quản lý rà.
+// 4. GPS CHẶN ở điểm đã khai toạ độ + đã bật định vị (đổi 07/09 cùng QR tĩnh). Điểm chưa khai
+//    toạ độ vẫn theo luật cũ: ghi nhận rồi gắn cờ.
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";

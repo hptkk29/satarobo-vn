@@ -20,8 +20,9 @@ import {
   type LocationCenter,
   type LocationValue,
 } from "./location-form";
+import { QrIn } from "./qr-in";
 
-export type LocationRow = LocationValue & { id: string };
+export type LocationRow = LocationValue & { id: string; qrKeyVersion: number };
 
 function CoordLine({ row }: { row: LocationRow }) {
   if (row.latitude == null || row.longitude == null) {
@@ -41,9 +42,12 @@ function CoordLine({ row }: { row: LocationRow }) {
 export function LocationList({
   rows,
   centers,
+  canConfig,
 }: {
   rows: LocationRow[];
   centers: LocationCenter[];
+  /** Thu hồi mã đã in là hành động một chiều với người đang đứng ở quầy — chỉ người cấu hình. */
+  canConfig: boolean;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState<LocationValue | null>(null);
@@ -139,11 +143,20 @@ export function LocationList({
                               ? "bg-state-info-soft text-state-info-ink"
                               : "bg-muted text-muted-foreground",
                           )}
-                          title="Định vị chỉ gắn cờ, không chặn lượt quét"
+                          title="Bật + đã khai toạ độ ⇒ quét ngoài phạm vi bị TỪ CHỐI (từ 07/09, đi cùng QR tĩnh)"
                         >
                           Định vị {r.geofenceEnabled ? "bật" : "tắt"}
                         </span>
                       </p>
+                      <QrIn
+                        workLocationId={r.id}
+                        centerId={r.centerId}
+                        tenDiem={r.name}
+                        maCoSo={r.code}
+                        qrKeyVersion={r.qrKeyVersion}
+                        coToaDo={r.latitude != null && r.longitude != null}
+                        canConfig={canConfig}
+                      />
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       {r.latitude != null && r.longitude != null && (

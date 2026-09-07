@@ -80,15 +80,22 @@ export default async function DiemChamPage({
           tương ứng. Bán kính 100m là đủ cho một toà nhà.
         </p>
         <p className="mt-2">
-          Định vị chỉ để GẮN CỜ: quét ngoài bán kính vẫn ghi nhận lượt, chỉ kèm cờ &ldquo;Ngoài
-          vùng&rdquo; cho quản lý rà. Chưa nhập toạ độ thì lượt quét kèm cờ &ldquo;Chưa toạ
-          độ&rdquo;. Nên bật định vị sau khi đã quét thử vài lượt và thấy khoảng cách hợp lý.
+          <b>Từ 07/09, định vị CHẶN chứ không chỉ gắn cờ.</b> Điểm đã khai toạ độ và đã bật định vị
+          thì quét ngoài bán kính bị từ chối thẳng — vì mã QR nay là mã tĩnh in ra, ai chụp cũng
+          quét được, nên định vị là lớp bảo vệ còn lại duy nhất. Điểm CHƯA khai toạ độ vẫn ghi nhận
+          kèm cờ như cũ, tức chưa chặn được ai. Nên quét thử vài lượt xem khoảng cách hợp lý rồi
+          mới bật.
+        </p>
+        <p className="mt-2">
+          Người bị chặn nhầm (máy định vị sai) không kẹt: nộp <b>đơn chỉnh công</b>, quản lý duyệt
+          là mốc giờ vào đúng chỗ.
         </p>
         <p className="mt-2">
           Hội sở không có điểm chấm công: người Hội sở quét ở quầy của bất kỳ cơ sở nào.
         </p>
       </PageHelp>
       <LocationList
+        canConfig
         centers={editable}
         rows={rows.map((r) => ({
           id: r.id,
@@ -98,6 +105,7 @@ export default async function DiemChamPage({
           latitude: r.latitude,
           longitude: r.longitude,
           radiusMeters: r.radiusMeters,
+          qrKeyVersion: r.qrKeyVersion,
           geofenceEnabled: r.geofenceEnabled,
           isActive: r.isActive,
         }))}
