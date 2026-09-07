@@ -73,9 +73,27 @@ export default async function LoaiNghiPage({
           <span className="font-mono">P</span> (nghỉ có lương), tỷ lệ = 0 ghi{" "}
           <span className="font-mono">X</span> (nghỉ không lương).
         </p>
+        <p className="mt-2 rounded-lg bg-state-warning-soft p-2.5 text-state-warning-ink">
+          <b>Ba cột dưới đây chưa có hiệu lực đầy đủ — đừng dựa vào chúng để tính lương.</b>
+        </p>
+        <ul className="mt-2 list-disc space-y-1 pl-5">
+          <li>
+            <b>Tỷ lệ lương</b> hiện chỉ phân biệt <em>có</em> hay <em>không</em>: trên 0% ghi mã{" "}
+            <b>P</b> lên lưới, đúng 0% ghi mã <b>X</b>. Các mức ở giữa (50%, 75%) chưa được phân biệt
+            ở khâu tính công.
+          </li>
+          <li>
+            <b>Tính như đi làm</b> chưa nơi nào đọc — đặt cho &ldquo;Nghỉ bù&rdquo; thì ngày đó vẫn
+            không được cộng công.
+          </li>
+          <li>
+            <b>Trần ngày/năm</b> chưa nơi nào chặn — hệ thống chưa theo dõi quỹ phép của từng người,
+            nên nộp quá trần vẫn duyệt được.
+          </li>
+        </ul>
         <p className="mt-2">
-          &ldquo;Tính như đi làm&rdquo; = ngày nghỉ đó vẫn được cộng công trong kỳ (vd nghỉ lễ, công
-          tác). Trần ngày/năm để trống là không giới hạn.
+          Cứ khai đúng chính sách công ty: số ở đây là <em>nguồn sự thật</em> cho lần nối dây tiếp
+          theo, và là căn cứ khi đối chiếu tay. Chỉ đừng coi là hệ thống đang tự chấp hành.
         </p>
         <p className="mt-2">
           <b>Báo trước</b> là số ngày phải nộp đơn trước ngày nghỉ. Nộp sát hơn <em>không</em> bị chặn —
