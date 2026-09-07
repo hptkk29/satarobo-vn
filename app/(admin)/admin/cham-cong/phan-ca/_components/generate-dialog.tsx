@@ -39,7 +39,8 @@ type GenKetQua = {
   skippedNoPermission: number;
   unknownCode: number;
   people: number;
-  restWarnings: { userId: string; from: string; to: string }[];
+  /** `name` do `generateMonthAction` làm giàu sau khi lib trả về — lib không tra được tên. */
+  restWarnings: { userId: string; from: string; to: string; name?: string | null }[];
   warnings: string[];
 };
 
@@ -180,8 +181,12 @@ export function GenerateDialog({
                   </p>
                   <ul className="mt-1 list-disc space-y-0.5 pl-5 text-xs text-state-warning-ink">
                     {ketQua.restWarnings.slice(0, 8).map((w, i) => (
-                      <li key={`${w.userId}-${w.from}-${i}`} className="tabular-nums">
-                        {ngayVi(w.from)} → {ngayVi(w.to)}
+                      <li key={`${w.userId}-${w.from}-${i}`}>
+                        {w.name && <span className="font-semibold">{w.name}</span>}
+                        <span className="tabular-nums">
+                          {w.name ? " · " : ""}
+                          {ngayVi(w.from)} → {ngayVi(w.to)}
+                        </span>
                       </li>
                     ))}
                     {ketQua.restWarnings.length > 8 && (
@@ -189,7 +194,7 @@ export function GenerateDialog({
                     )}
                   </ul>
                   <p className="mt-1 text-xs text-state-warning-ink">
-                    Xem lưới bên dưới để biết là ai, rồi chèn một ngày X hoặc P.
+                    Chèn một ngày X hoặc P vào giữa đợt cho những người trên.
                   </p>
                 </div>
               )}
