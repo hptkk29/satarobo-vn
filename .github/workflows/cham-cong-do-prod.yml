@@ -23,6 +23,8 @@ on:
         default: si-so
         options:
           - si-so
+          - buoi-day
+          - tat-ca
 concurrency:
   group: cham-cong-do-prod
   cancel-in-progress: false
@@ -49,8 +51,18 @@ jobs:
       # Số cần nhìn nhất ở bước này: CHÊNH LỆCH giữa hai nguồn ở những buổi tính được CẢ HAI.
       # Nó đo trực tiếp độ thừa của cách "đếm ghi danh" trên dữ liệu thật, thay vì để ta suy luận.
       - name: "Đo sĩ số biên chế của buổi cũ (chỉ đọc — KHÔNG có --ghi)"
-        if: inputs.viec == 'si-so'
+        if: inputs.viec == 'si-so' || inputs.viec == 'tat-ca'
         run: pnpm exec tsx scripts/backfill-si-so-buoi.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+
+      # Ba chỗ đếm "buổi dạy" nghi sai + LỖI THƯỢNG NGUỒN quan trọng hơn cả ba.
+      # Đọc `docs/cham-cong/GHI-CHU-BA-CHO-DEM-BUOI-DAY.md` §2 để biết đọc số theo thứ tự nào —
+      # con số đầu tiên quyết định ba con số sau có nghĩa hay không.
+      - name: "Đo chênh lệch ba chỗ đếm buổi dạy (chỉ đọc)"
+        if: inputs.viec == 'buoi-day' || inputs.viec == 'tat-ca'
+        run: pnpm exec tsx scripts/do-lech-buoi-day.ts
         env:
           DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
           DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
