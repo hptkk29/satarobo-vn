@@ -35,7 +35,8 @@ export function SessionFilters({
     if (c) params.set("classId", c);
     const qs = params.toString();
     startTransition(() => {
-      router.push(qs ? `/sessions?${qs}` : "/sessions");
+      // scroll: false — đổi bộ lọc là GIỮ NGUYÊN TRANG, không cuộn về đầu.
+      router.push(qs ? `/sessions?${qs}` : "/sessions", { scroll: false });
     });
   }
 

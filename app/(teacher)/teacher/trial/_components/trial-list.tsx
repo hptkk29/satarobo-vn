@@ -29,7 +29,15 @@ import { khopBatKy } from "@/lib/ui/tim-kiem";
 /** 1 dòng bảng — server đã format sẵn ngày giờ. */
 export type TrialRowView = {
   enrollmentId: string;
-  /** "CN, 05/07" | "" (chưa xếp buổi). */
+  /**
+   * Buổi dòng này trỏ tới. BẮT BUỘC có trên link mở phiếu: thiếu nó thì cổng sở hữu
+   * của phiếu mất hai nhánh cuối và giáo viên bấm vào ra "Buổi Trial không thuộc bạn
+   * phụ trách" — kể cả khi qua được thì lúc LƯU vẫn bị chặn vì chưa chọn buổi.
+   */
+  sessionId: string;
+  /** Em học CẢ LỚP (không chốt riêng buổi nào) — ngày dưới đây là buổi GẦN NHẤT. */
+  hocCaLop: boolean;
+  /** "CN, 05/07". Luôn có: dòng không suy được buổi thì server đã bỏ. */
   dateLabel: string;
   /** "09:00–10:30" | "". */
   timeLabel: string;
@@ -79,7 +87,8 @@ function TrialTable({ rows }: { rows: TrialRowView[] }) {
     <div className="t-card overflow-hidden">
       {/* Thanh phân trang nằm NGOÀI vùng cuộn ngang: để trong thì cuộn sang phải là
           nút chuyển trang trôi mất khỏi màn. */}
-      <PhanTrangBang cuonNgang tenDonVi="suất Trial">
+      <PhanTrangBang cuonNgang tenDonVi="suất Trial"
+          khoaGhiNho="gv-trial">
         <table className="w-full min-w-[820px] border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
@@ -109,18 +118,30 @@ function TrialTable({ rows }: { rows: TrialRowView[] }) {
                 key={r.enrollmentId}
                 className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
               >
-                <td className="px-5 py-3.5 whitespace-nowrap">
-                  <p className="font-semibold text-foreground">
+                {/* nowrap chỉ cho DÒNG NGÀY (chuỗi ngắn, cố định). Dòng dưới ghép tên
+                    lớp trải nghiệm — text tự do — nên để nguyên nowrap ở <td> làm cột
+                    này nở tới 426px, đẩy cột Học viên xuống 74px khiến "Tô Duy Trí -
+                    2019" xuống 3 dòng, và bảng tràn 962px trong khung 883px
+                    (QA vòng 1, BUG-036). */}
+                <td className="min-w-[11rem] px-5 py-3.5">
+                  <p className="font-semibold whitespace-nowrap text-foreground">
                     {r.dateLabel || "Chưa xếp buổi"}
+                    {/* Nói rõ đây là em học CẢ LỚP, không phải cam kết đúng một buổi —
+                        thiếu chú thích này giáo viên đọc một ngày duy nhất như lịch chốt. */}
+                    {r.hocCaLop && (
+                      <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                        · học cả lớp
+                      </span>
+                    )}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {[r.timeLabel, r.trialClassName].filter(Boolean).join(" · ")}
                   </p>
                 </td>
-                <td className="px-5 py-3.5 font-medium text-foreground">
+                <td className="min-w-[9rem] px-5 py-3.5 font-medium text-foreground">
                   {r.studentLabel}
                 </td>
-                <td className="px-5 py-3.5 text-foreground">
+                <td className="min-w-[8rem] px-5 py-3.5 text-foreground">
                   {r.parentName ?? "—"}
                 </td>
                 <td className="px-5 py-3.5 text-foreground">
@@ -128,7 +149,7 @@ function TrialTable({ rows }: { rows: TrialRowView[] }) {
                 </td>
                 <td className="px-5 py-3.5">
                   <Link
-                    href={`?enrollmentId=${r.enrollmentId}`}
+                    href={`?enrollmentId=${r.enrollmentId}&sessionId=${r.sessionId}`}
                     className={
                       r.evaluated
                         ? "inline-flex whitespace-nowrap rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted"

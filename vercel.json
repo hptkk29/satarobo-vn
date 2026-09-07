@@ -31,7 +31,7 @@
     },
     {
       "path": "/api/cron/sla-check",
-      "schedule": "*/15 * * * *"
+      "schedule": "20 * * * *"
     },
     {
       "path": "/api/cron/marketing-alerts",

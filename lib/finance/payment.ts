@@ -3,10 +3,12 @@
 // BẮT BUỘC reason. Hàm THUẦN role-logic (can() do tầng action lo) — chỉ xử lý nghiệp vụ.
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { KHOAN_DA_GHI_NHAN } from "@/lib/finance/ghi-nhan";
 import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
 import { publishEvent } from "@/lib/events/publish";
 import { issueReceipt } from "@/lib/finance/receipt";
 import { allocateByWeight } from "@/lib/finance/allocate";
+import { KHOAN_DA_XAC_NHAN } from "@/lib/finance/debt";
 import { recordLeadStatusChange } from "@/lib/leads/set-status";
 
 type Tx = Prisma.TransactionClient;
@@ -98,10 +100,40 @@ export async function ensureOrderPaymentRecorded(
   }
   if (!centerId) centerId = params.actor.centerId ?? null;
 
+  // ⚠️ GẮN GHI DANH cho khoản thu tự động (06/09/2026).
+  //
+  // Cổng phụ huynh cộng tiền theo QUAN HỆ `Enrollment.payments` (lib/portal/billing.ts,
+  // billing-student.ts, dashboard.ts). Khoản nào `enrollmentId = null` thì dù kế toán đã
+  // xác nhận vẫn KHÔNG trừ vào công nợ của bất kỳ ghi danh nào — phụ huynh đóng đợt 2
+  // xong mở portal ra vẫn thấy nợ nguyên.
+  //
+  // `linkRecordedPaymentsToEnrollments` chỉ chạy MỘT LẦN, trong `convert-lead-v2`. Mọi
+  // khoản sinh SAU đó (đợt 2 qua markInstallmentPaid, xác nhận đơn offline, webhook
+  // SePay) đều đi qua đúng hàm này và trước đây rơi vào khoảng trống ấy.
+  //
+  // Chỉ gắn khi KHÔNG MƠ HỒ — học viên của đơn có ĐÚNG MỘT ghi danh còn hiệu lực. Đơn
+  // nhiều ghi danh phải chia theo `finalPrice` (đúng phép chia của
+  // `linkRecordedPaymentsToEnrollments`), việc đó không làm lén ở đây; để null như cũ,
+  // không tệ hơn hiện trạng và không bao giờ gắn nhầm sổ.
+  const donHang = await tx.order.findUnique({
+    where: { id: orderId },
+    select: { studentId: true },
+  });
+  let enrollmentId: string | null = null;
+  if (donHang?.studentId) {
+    const ghiDanh = await tx.enrollment.findMany({
+      where: { studentId: donHang.studentId, deletedAt: null },
+      select: { id: true },
+      take: 2,
+    });
+    if (ghiDanh.length === 1) enrollmentId = ghiDanh[0]!.id;
+  }
+
   const now = new Date();
   const payment = await tx.payment.create({
     data: {
       orderId,
+      enrollmentId,
       amount: Math.round(amount),
       method: AUTO_PAYMENT_METHOD,
       paidDate: now,
@@ -200,13 +232,33 @@ export async function linkRecordedPaymentsToEnrollments(
   if (enrollmentIds.length === 0) return { linked: 0, splitCreated: 0 };
 
   const recorded = await tx.payment.findMany({
-    where: { saleStatus: "RECORDED", enrollmentId: null, deletedAt: null, order: { leadId } },
+    where: { ...KHOAN_DA_GHI_NHAN, enrollmentId: null, order: { leadId } },
     select: {
       id: true, amount: true, orderId: true, method: true, paidDate: true,
       note: true, evidenceUrl: true, recordedById: true, centerId: true,
+      accountantStatus: true,
     },
   });
   if (recorded.length === 0) return { linked: 0, splitCreated: 0 };
+
+  // ⚠️ CHỐT CHẶN CỨNG (07/09/2026) — nhánh tách dưới đây SỬA `amount` của dòng gốc
+  // (dòng 268: `tx.payment.update({ data: { amount: part } })`). Điều đó chỉ đúng khi
+  // dòng còn là BẢN NHÁP: chưa qua kế toán, chưa đối soát sao kê, chưa vào bất kỳ tổng
+  // nào của trục A. Đúng cùng một luận điểm với `updatePendingPayment`.
+  //
+  // Nếu một ngày nào đó dòng CONFIRMED lọt được vào đây thì việc sửa `amount` là làm sai
+  // lệch tiền đã đối soát — âm thầm, giữa một transaction convert. Thà nổ ngay còn hơn.
+  // Truy vấn trên vốn đã lọc `enrollmentId: null`, mà `confirmPayment` từ chối xác nhận
+  // khoản chưa gắn ghi danh, nên về lý thuyết không thể xảy ra — chốt này canh đúng cái
+  // "về lý thuyết" đó.
+  const daXacNhan = recorded.filter((p) => p.accountantStatus === "CONFIRMED");
+  if (daXacNhan.length > 0) {
+    throw new Error(
+      `linkRecordedPaymentsToEnrollments: gặp ${daXacNhan.length} khoản ĐÃ XÁC NHẬN ` +
+        `(${daXacNhan.map((p) => p.id).join(", ")}). Nhánh tách sửa \`amount\` của dòng gốc ` +
+        "nên TUYỆT ĐỐI không được chạm khoản đã đối soát — dùng adjustPayment.",
+    );
+  }
 
   // 1 ghi danh → gắn nguyên khoản (không tách).
   if (enrollmentIds.length === 1) {
@@ -512,61 +564,163 @@ export async function rejectPayment(params: {
   return { ok: true, voidedReceiptIds: result.voided };
 }
 
-// ─── AC3 — Điều chỉnh (không sửa bản gốc CONFIRMED) ───────────────────────────
+// ─── Điều chỉnh — BÚT TOÁN CỘNG THÊM, lưu DELTA (viết lại 07/09/2026) ─────────
 /**
- * Điều chỉnh 1 khoản: KHÔNG mutate bản gốc — tạo bản ghi MỚI accountantStatus=ADJUSTED
- * trỏ adjustmentOfId=gốc. reason BẮT BUỘC. `amount` mới (mặc định = amount gốc).
+ * Điều chỉnh MỘT phiếu thu đã xác nhận.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Mô hình: CỘNG THÊM, không sửa đè
+ *
+ * Dòng `CONFIRMED` là tiền thật đã đối soát với sao kê ngân hàng ⇒ **bất biến**. Sửa số
+ * của nó là sửa một sự kiện đã xảy ra. Nên điều chỉnh sinh một dòng MỚI mang phần
+ * CHÊNH LỆCH, trỏ `adjustmentOfId` về phiếu gốc:
+ *
+ *     delta = correctAmount − (amount gốc + Σ amount các ADJUSTMENT đang trỏ vào nó)
+ *
+ * Cộng dồn các lần điều chỉnh trước vào công thức là có chủ đích: lần hai phải tính trên
+ * kết quả của lần một, nếu không lần hai sẽ huỷ lần một một cách âm thầm.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Vì sao khoá theo `paymentId` chứ không phải `enrollmentId`
+ *
+ * Kế toán đang nhìn MỘT dòng phiếu thu và nói "dòng này phải là 3.500.000". Đó là thao
+ * tác cấp phiếu thu. Một ghi danh trả góp có nhiều phiếu CONFIRMED (đợt 1, đợt 2), nên
+ * nhận `enrollmentId` thì hàm phải TỰ ĐOÁN sửa phiếu nào — đoán sai ở đây là sai âm
+ * thầm. Giao diện bắt buộc truyền id của đúng dòng đang sửa.
+ *
+ * `sumConfirmed(enrollmentId)` tự đúng theo, vì ADJUSTMENT là bút toán cộng thêm nằm
+ * cùng ghi danh.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Vài điểm dễ vấp
+ *
+ * · `amount` của dòng ADJUSTMENT **được phép ÂM** — đó là cả điểm của delta. Ràng buộc
+ *   DB duy nhất là `payment_amount_nonzero: CHECK (amount <> 0)`; cột là `integer` CÓ
+ *   DẤU nên số âm lưu bình thường. Ràng buộc đó còn cộng hưởng với luật "delta = 0 thì
+ *   không tạo bản ghi": code quên thì DB chặn.
+ * · KHÔNG dùng lại mẹo khoá lạc quan cũ (ghi đè `updatedAt` của dòng gốc để chốt lock):
+ *   nó là một UPDATE lên dòng gốc, đúng thứ mô hình này cấm. Thay bằng `SELECT … FOR
+ *   UPDATE` — khoá HÀNG mà không đổi một cột nào, vẫn ngăn hai người điều chỉnh song
+ *   song cùng tính delta trên một nền cũ.
+ * · `reason` lưu vào `note` của chính dòng điều chỉnh: bảng `Payment` không có cột
+ *   `reason` riêng, mà cổng phụ huynh (Bước 5) phải in được lý do ngay cạnh con số.
+ *   AuditLog vẫn giữ bản sao ở trường `reason` của nó.
  */
 export async function adjustPayment(params: {
   paymentId: string;
-  confirmedById: string;
+  /** SỐ ĐÚNG CUỐI CÙNG của DÒNG NÀY — không phải tổng của ghi danh, không phải delta. */
+  correctAmount: number;
   reason: string;
-  amount?: number;
-  method?: string;
-  note?: string | null;
-  /** FIX-H9 — optimistic lock trên bản gốc: Payment.updatedAt client đã thấy. */
+  actorId: string;
+  /** Optimistic lock: `Payment.updatedAt` client đã thấy. Lệch → STALE_WRITE. */
   expectedUpdatedAt?: Date | string;
-}): Promise<Ok<{ adjustmentId: string }> | Fail> {
-  if (!params.reason?.trim()) return fail("Lý do điều chỉnh là bắt buộc");
+}): Promise<Ok<{ adjustmentId: string; delta: number }> | Fail> {
+  const reason = params.reason?.trim() ?? "";
+  if (!reason) return fail("Lý do điều chỉnh là bắt buộc");
+
+  const correctAmount = params.correctAmount;
+  if (!Number.isInteger(correctAmount)) return fail("Số tiền đúng không hợp lệ");
+  if (correctAmount < 0) return fail("Số tiền đúng không được âm");
 
   const original = await db.payment.findUnique({ where: { id: params.paymentId } });
   if (!original) return fail("Không tìm thấy khoản thanh toán");
+  if (original.deletedAt) return fail("Khoản này đã bị xoá — không điều chỉnh được");
 
-  const amount = params.amount ?? original.amount;
-  if (!Number.isFinite(amount)) return fail("Số tiền điều chỉnh không hợp lệ");
-  if (amount <= 0) return fail("Số tiền điều chỉnh phải lớn hơn 0");
+  // Chỉ điều chỉnh tiền ĐÃ ĐỐI SOÁT. Khoản còn PENDING là bản nháp: sửa thẳng bằng
+  // `updatePendingPayment`, ép nó qua đường delta chỉ đẻ rác sổ.
+  if (original.accountantStatus !== "CONFIRMED") {
+    return fail(
+      "Chỉ điều chỉnh được khoản ĐÃ XÁC NHẬN. Khoản đang chờ duyệt thì sửa trực tiếp.",
+    );
+  }
+  // Không điều chỉnh chồng lên một bút toán điều chỉnh — mọi delta luôn trỏ về phiếu thu
+  // gốc, nếu không chuỗi `adjustmentOfId` thành cây nhiều tầng và không ai cộng nổi.
+  if (original.paymentType === "ADJUSTMENT") {
+    return fail(
+      "Đây là bút toán điều chỉnh, không phải phiếu thu. Điều chỉnh trên phiếu thu gốc.",
+    );
+  }
+  if (!original.enrollmentId) {
+    return fail("Khoản chưa gắn ghi danh — không kiểm được trần học phí");
+  }
+  const enrollmentId = original.enrollmentId;
 
-  const actor = await auditActor(params.confirmedById);
+  if (params.expectedUpdatedAt) {
+    // So sánh KHÔNG ghi: dòng gốc phải bất biến, kể cả `updatedAt`.
+    const expected = new Date(params.expectedUpdatedAt).getTime();
+    if (original.updatedAt.getTime() !== expected) return fail(STALE_WRITE);
+  }
+
+  const actor = await auditActor(params.actorId);
   const now = new Date();
-  const expectedAt = params.expectedUpdatedAt ? new Date(params.expectedUpdatedAt) : null;
 
   const result = await db.$transaction(async (tx) => {
-    // FIX-H9 — "touch" bản gốc có điều kiện updatedAt để chốt lock (bản gốc không đổi
-    // nội dung nhưng updatedAt bump → chặn 2 người điều chỉnh trên cùng snapshot cũ).
-    if (expectedAt) {
-      const lock = await tx.payment.updateMany({
-        where: { id: original.id, updatedAt: expectedAt },
-        data: { updatedAt: now },
-      });
-      if (lock.count === 0) return { stale: true as const };
+    // Khoá HÀNG gốc mà không sửa nó. Hai người cùng bấm điều chỉnh trên một phiếu sẽ nối
+    // đuôi nhau, người sau tính delta trên kết quả của người trước.
+    await tx.$queryRaw`SELECT id FROM "Payment" WHERE id = ${original.id} FOR UPDATE`;
+
+    // Giá trị HIỆN TẠI của phiếu = số gốc + mọi điều chỉnh đã có.
+    const daDieuChinh = await tx.payment.aggregate({
+      where: { adjustmentOfId: original.id, paymentType: "ADJUSTMENT", deletedAt: null },
+      _sum: { amount: true },
+    });
+    const hienTai = original.amount + (daDieuChinh._sum.amount ?? 0);
+    const delta = correctAmount - hienTai;
+    if (delta === 0) {
+      return {
+        loi:
+          `Số tiền đúng đã bằng số hiện tại (${hienTai.toLocaleString("vi-VN")} đ) — ` +
+          "không có gì để điều chỉnh.",
+      };
     }
+
+    // ── Trần: Σ CONFIRMED của GHI DANH sau điều chỉnh ────────────────────────
+    // Điều chỉnh là thao tác cấp phiếu thu, nhưng trần là cấp ghi danh: một ghi danh
+    // không thể thu quá học phí của nó, cũng không thể âm tiền.
+    const ghiDanh = await tx.enrollment.findUnique({
+      where: { id: enrollmentId },
+      select: { finalPrice: true, tuition: true },
+    });
+    const tran = ghiDanh?.finalPrice ?? ghiDanh?.tuition ?? null;
+    const daThu = await tx.payment.aggregate({
+      where: { enrollmentId, ...KHOAN_DA_XAC_NHAN },
+      _sum: { amount: true },
+    });
+    const tongSau = (daThu._sum.amount ?? 0) + delta;
+    if (tongSau < 0) {
+      return { loi: "Điều chỉnh làm tổng đã thu của ghi danh thành số âm." };
+    }
+    if (tran != null && tongSau > tran) {
+      return {
+        loi:
+          `Điều chỉnh làm tổng đã thu (${tongSau.toLocaleString("vi-VN")} đ) vượt học phí ` +
+          `của ghi danh (${tran.toLocaleString("vi-VN")} đ).`,
+      };
+    }
+
     const adj = await tx.payment.create({
       data: {
         orderId: original.orderId,
-        enrollmentId: original.enrollmentId,
-        amount,
-        method: params.method ?? original.method,
+        enrollmentId,
+        // DELTA — âm khi điều chỉnh giảm.
+        amount: delta,
+        method: original.method,
         paidDate: original.paidDate,
-        note: params.note ?? original.note,
+        // Lý do đi cùng bút toán để cổng phụ huynh in được ngay cạnh con số.
+        note: reason,
         saleStatus: original.saleStatus,
-        accountantStatus: "ADJUSTED",
-        recordedById: original.recordedById,
-        confirmedById: params.confirmedById,
+        paymentType: "ADJUSTMENT",
+        // Bút toán điều chỉnh do kế toán tạo ra, không qua vòng chờ duyệt thứ hai.
+        accountantStatus: "CONFIRMED",
+        recordedById: params.actorId,
+        confirmedById: params.actorId,
         confirmedAt: now,
         adjustmentOfId: original.id,
         centerId: original.centerId,
       },
+      select: { id: true },
     });
+
     await writeAudit({
       actor,
       module: "finance",
@@ -574,19 +728,110 @@ export async function adjustPayment(params: {
       entityId: adj.id,
       action: "CREATE",
       newValues: {
-        accountantStatus: "ADJUSTED",
+        paymentType: "ADJUSTMENT",
+        accountantStatus: "CONFIRMED",
         adjustmentOfId: original.id,
-        amount,
+        soCu: hienTai,
+        soDung: correctAmount,
+        delta,
       },
-      reason: params.reason.trim(),
+      reason,
       orgUnitId: original.centerId,
       tx,
     });
-    return { stale: false as const, adjustmentId: adj.id };
+
+    return { adjustmentId: adj.id, delta };
+  });
+
+  if ("loi" in result) return fail(result.loi as string);
+  return {
+    ok: true,
+    adjustmentId: result.adjustmentId as string,
+    delta: result.delta as number,
+  };
+}
+
+// ─── Sửa khoản CÒN CHỜ DUYỆT — sửa tại chỗ, KHÔNG sinh bút toán ──────────────
+/**
+ * Sửa một khoản thu đang `PENDING`.
+ *
+ * Khoản chưa qua kế toán là BẢN NHÁP, chưa phải bút toán: sửa nháp không phải "điều
+ * chỉnh". Ép nó đi đường delta sẽ đẻ ra một cặp dòng (số sai + dòng bù) cho một con số
+ * chưa từng vào sổ — rác sổ, và bắt mọi báo cáo phải giải thích thêm một khái niệm.
+ *
+ * Ngược lại, KHÔNG cho hàm này chạm khoản đã `CONFIRMED`: đó là tiền đã đối soát với sao
+ * kê, sửa tại chỗ là làm sai lệch một sự kiện đã xảy ra. Đường đúng là `adjustPayment`.
+ */
+export async function updatePendingPayment(params: {
+  paymentId: string;
+  actorId: string;
+  amount?: number;
+  method?: string;
+  paidDate?: Date | string;
+  note?: string | null;
+  reason?: string;
+  /** Optimistic lock: `Payment.updatedAt` client đã thấy. Lệch → STALE_WRITE. */
+  expectedUpdatedAt?: Date | string;
+}): Promise<Ok<{ paymentId: string }> | Fail> {
+  const original = await db.payment.findUnique({ where: { id: params.paymentId } });
+  if (!original) return fail("Không tìm thấy khoản thanh toán");
+  if (original.deletedAt) return fail("Khoản này đã bị xoá");
+  if (original.accountantStatus !== "PENDING") {
+    return fail(
+      "Chỉ sửa trực tiếp được khoản ĐANG CHỜ DUYỆT. Khoản đã xác nhận thì dùng Điều chỉnh.",
+    );
+  }
+  if (params.amount !== undefined) {
+    if (!Number.isInteger(params.amount)) return fail("Số tiền không hợp lệ");
+    if (params.amount <= 0) return fail("Số tiền phải lớn hơn 0");
+  }
+
+  const actor = await auditActor(params.actorId);
+  const expectedAt = params.expectedUpdatedAt ? new Date(params.expectedUpdatedAt) : null;
+
+  const data: Prisma.PaymentUpdateManyMutationInput = {};
+  if (params.amount !== undefined) data.amount = params.amount;
+  if (params.method !== undefined) data.method = params.method;
+  if (params.paidDate !== undefined) data.paidDate = new Date(params.paidDate);
+  if (params.note !== undefined) data.note = params.note;
+  if (Object.keys(data).length === 0) return fail("Không có gì để sửa.");
+
+  const result = await db.$transaction(async (tx) => {
+    // Khoản PENDING thì sửa đè là hợp lệ, nên vẫn dùng khoá lạc quan cũ: ghi có điều
+    // kiện `updatedAt` + `accountantStatus`, 0 dòng ⇒ người khác vừa động vào (sửa hoặc
+    // xác nhận) kể từ lúc client đọc.
+    const upd = await tx.payment.updateMany({
+      where: {
+        id: original.id,
+        accountantStatus: "PENDING",
+        ...(expectedAt ? { updatedAt: expectedAt } : {}),
+      },
+      data,
+    });
+    if (upd.count === 0) return { stale: true };
+
+    await writeAudit({
+      actor,
+      module: "finance",
+      entityType: "Payment",
+      entityId: original.id,
+      action: "UPDATE",
+      oldValues: {
+        amount: original.amount,
+        method: original.method,
+        paidDate: original.paidDate,
+        note: original.note,
+      },
+      newValues: data as Record<string, unknown>,
+      reason: params.reason?.trim() || "Sửa khoản chờ duyệt",
+      orgUnitId: original.centerId,
+      tx,
+    });
+    return { stale: false };
   });
 
   if (result.stale) return fail(STALE_WRITE);
-  return { ok: true, adjustmentId: result.adjustmentId };
+  return { ok: true, paymentId: original.id };
 }
 
 // ─── AC3 — Hoàn tiền (bút toán âm, không xóa gốc) ─────────────────────────────

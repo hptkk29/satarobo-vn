@@ -36,7 +36,8 @@ export function DebtFilterBar({
       if (v === null || v === "" || v === "ALL") params.delete(k);
       else params.set(k, v);
     }
-    router.push(`/cong-no?${params.toString()}`);
+    // scroll: false — đổi nhóm/tìm kiếm là GIỮ NGUYÊN TRANG, không cuộn về đầu.
+    router.push(`/cong-no?${params.toString()}`, { scroll: false });
   }
 
   return (

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft, Clock } from "lucide-react";
+import { ngayGioVN } from "@/lib/format/date";
 import { requireActiveStudent } from "@/lib/portal/session";
 import { getStudentHomeworkDetail } from "@/lib/portal/learning";
 import { StartExamButton } from "../../../bai-thi/_components/start-exam-button";
@@ -40,9 +41,9 @@ export default async function LamBaiPage({ params }: Props) {
           <span className="inline-flex items-center gap-1">
             <Clock className="h-3.5 w-3.5" /> {hw.durationMinutes} phút
           </span>
-          {hw.dueAt && (
-            <span>Hạn {new Date(hw.dueAt).toLocaleString("vi-VN")}</span>
-          )}
+          {/* 06/09 — GHIM giờ VN. `toLocaleString("vi-VN")` trần lấy giờ tiến trình:
+              Vercel chạy UTC nên hạn 23:59 giờ VN in ra "16:59" cho phụ huynh. */}
+          {hw.dueAt && <span>Hạn {ngayGioVN(hw.dueAt)}</span>}
         </p>
       </div>
 

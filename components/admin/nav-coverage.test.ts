@@ -21,6 +21,12 @@ const ADMIN_DIR = path.join(ROOT, "app", "(admin)", "admin");
 
 /** Route được phép không có mục menu — mỗi dòng phải nêu lý do. */
 const ALLOWLIST: Record<string, string> = {
+  "/leads/new":
+    "03/09 — stub chuyển hướng sang /nhap-khach-hang (chủ dự án chốt: nút \"+ Thêm lead\" " +
+    "nay trỏ thẳng sang đó). Biểu mẫu cũ tạo lead bằng `db.lead.create` trần, không qua " +
+    "`ingestIntakeLead` nên thiếu chống trùng SĐT và tự chia. Giữ route vì /leads/[id] là " +
+    "route động bên cạnh: xoá hẳn thì \"new\" rơi vào [id] và được hiểu là một id lead — " +
+    "trang trả 200 rỗng thay vì 404. Cùng lý do với /leads/so-luot.",
   "/leads/so-luot":
     "30/08 — stub chuyển hướng sang /quan-ly-chia-lead. Giữ route vì /leads/[id] là " +
     "route động bên cạnh: xoá hẳn thì đường dẫn cũ rơi vào [id] và đi tra một lead " +

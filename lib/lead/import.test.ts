@@ -86,6 +86,47 @@ describe("lead import helpers", () => {
   it("cột chuẩn đúng thứ tự", () => {
     expect(LEAD_IMPORT_COLUMNS[0]).toBe("Tên phụ huynh");
     expect(LEAD_IMPORT_COLUMNS[1]).toBe("SĐT");
-    expect(LEAD_IMPORT_COLUMNS.length).toBe(9);
+    // 04/09/2026 — thêm cột "Sale phụ trách" (tuỳ chọn) ở CUỐI.
+    expect(LEAD_IMPORT_COLUMNS.length).toBe(10);
+    expect(LEAD_IMPORT_COLUMNS[9]).toContain("Sale phụ trách");
+  });
+});
+
+describe("cột 'Sale phụ trách' — TUỲ CHỌN (chủ dự án chốt 04/09/2026)", () => {
+  const dongCoBan = {
+    "Tên phụ huynh": "Chị An",
+    "SĐT": "0905123456",
+  };
+
+  it("để trống → saleRaw null ⇒ tầng chia hiểu là MÁY CHIA", () => {
+    const r = parseLeadImportRow(dongCoBan);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.data.saleRaw).toBeNull();
+  });
+
+  it("khoảng trắng cũng tính là để trống", () => {
+    const r = parseLeadImportRow({ ...dongCoBan, [LEAD_IMPORT_COLUMNS[9]]: "   " });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.data.saleRaw).toBeNull();
+  });
+
+  it("nhận EMAIL", () => {
+    const r = parseLeadImportRow({ ...dongCoBan, [LEAD_IMPORT_COLUMNS[9]]: "sale1@satarobo.vn" });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.data.saleRaw).toBe("sale1@satarobo.vn");
+  });
+
+  it("nhận MÃ NHÂN VIÊN — người nhập cầm bảng nào gõ bảng đó", () => {
+    const r = parseLeadImportRow({ ...dongCoBan, [LEAD_IMPORT_COLUMNS[9]]: "NV-012" });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.data.saleRaw).toBe("NV-012");
+  });
+
+  it("gõ SAI vẫn NHẬN DÒNG — không bỏ lead vì một ô tuỳ chọn", () => {
+    // Tầng thuần này không biết ai là sale; tra người + kiểm vai/cơ sở làm ở tầng
+    // DB, và ở đó sai thì CẢNH BÁO rồi để máy chia. Mất một lead thật vì gõ sai
+    // một ô tuỳ chọn là đổi hỏng lấy hỏng.
+    const r = parseLeadImportRow({ ...dongCoBan, [LEAD_IMPORT_COLUMNS[9]]: "không-có-ai-tên-vậy" });
+    expect(r.ok).toBe(true);
   });
 });

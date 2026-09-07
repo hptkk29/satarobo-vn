@@ -55,10 +55,11 @@ import {
 } from "../../lib/chat/admin";
 import { seedChatFixture, type ChatFixture } from "./_helpers/seed-chat";
 
-const DB_URL = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL ?? "";
-const HAS_LOCAL_DB =
-  /(@|\/\/)(localhost|127\.0\.0\.1)[:/]/.test(DB_URL) ||
-  /satarobo_test|ci_test/.test(DB_URL);
+import { RUN_DB_TESTS as RUN_DB_TESTS_CHUNG } from "../_helpers/db-gate";
+// CỔNG CHẠY dùng chung — xem `tests/_helpers/db-gate.ts`. Từ 04/09/2026 cổng này
+// ĐÒI THÊM `ALLOW_DB_RESET=1`: `pnpm test:unit` trần gọi tới đây sẽ SKIP thay vì
+// TRUNCATE sạch DB đang làm việc. Chạy thật bằng `pnpm test:chat-db`.
+const HAS_LOCAL_DB = RUN_DB_TESTS_CHUNG;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Seed chuẩn TestScenarios — phần CHẠY THẬT ngay từ US-05 (khi có DB local).

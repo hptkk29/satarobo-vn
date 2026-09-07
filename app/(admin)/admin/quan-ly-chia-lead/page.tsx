@@ -86,9 +86,15 @@ export default async function QuanLyChiaLeadPage({ searchParams }: { searchParam
     })
   ).filter((u) => !trongBang.has(u.id));
 
-  const orgUnitIds = (
-    await Promise.all(centers.map((c) => orgUnitIdCuaCoSo(c.id)))
-  ).filter(Boolean) as string[];
+  // 03/09 — SỔ CHIA LỌC THEO ĐÚNG CƠ SỞ ĐANG CHỌN (chủ dự án chốt).
+  //
+  // Bản cũ map qua `centers` — tức MỌI cơ sở người dùng thấy — nên `?co_so=` chỉ
+  // đổi được tab "Pool" (dùng `layBangPool(centerId)`), còn tab "Sổ chia" vẫn liệt
+  // kê lượt chia của tất cả cơ sở. Hai tab cùng một ô lọc mà nghe theo hai thứ
+  // khác nhau là chỗ dễ đọc nhầm nhất: người dùng tưởng cơ sở mình đang xem có
+  // ngần ấy lượt chia.
+  const orgUnitIdChon = await orgUnitIdCuaCoSo(centerId);
+  const orgUnitIds = orgUnitIdChon ? [orgUnitIdChon] : [];
 
   const qs = (p: Record<string, string>) => {
     const u = new URLSearchParams({ co_so: centerId, ...p });
@@ -130,6 +136,9 @@ export default async function QuanLyChiaLeadPage({ searchParams }: { searchParam
           <Link
             key={t.key}
             href={qs({ tab: t.key })}
+            // Đổi tab = đổi `?tab=` của CHÍNH trang này. Không có `scroll={false}`
+            // thì App Router cuốn về đầu trang sau mỗi lần bấm.
+            scroll={false}
             className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium ${
               tab === t.key
                 ? "border-primary text-foreground"

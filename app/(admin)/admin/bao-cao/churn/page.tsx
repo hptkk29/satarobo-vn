@@ -65,7 +65,24 @@ async function computeChurnReport(actor: Actor, filters: ReportFilters) {
           where: {
             classId: { in: classIds },
             deletedAt: null,
-            ...(dateWhere ? { startedAt: dateWhere } : {}),
+            // ⚠️ VÁ 04/09/2026 — điều kiện lọc phải PHẢN CHIẾU ĐÚNG mốc mà phần
+            // tính dùng: `startedAt ?? enrolledAt` (xem dòng dựng `startedAt`
+            // bên dưới).
+            //
+            // Bản cũ lọc thuần `startedAt`, nên ghi danh chưa có ngày bắt đầu bị
+            // loại NGAY Ở TRUY VẤN dù báo cáo sẵn sàng dùng `enrolledAt` của
+            // chúng. Đo trên dữ liệu thật: 109/522 ghi danh (**20,9%**) không có
+            // `startedAt` — và cả 109 đều có `enrolledAt`. Tức cứ đặt khoảng ngày
+            // là mất một phần năm dữ liệu, cho ra tỉ lệ churn cao/thấp giả mà
+            // không có dấu hiệu nào.
+            ...(dateWhere
+              ? {
+                  OR: [
+                    { startedAt: dateWhere },
+                    { startedAt: null, enrolledAt: dateWhere },
+                  ],
+                }
+              : {}),
           },
           select: {
             status: true,

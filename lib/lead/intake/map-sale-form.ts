@@ -140,13 +140,15 @@ export function mapSaleForm(payload: Record<string, string>): MapResult {
       phone,
       email,
       centerHint: centerHintFromIndex(get(SALE_FORM_FIELDS.centerIndex)),
-      child: childName
-        ? {
-            fullName: childName,
-            schoolName: get(SALE_FORM_FIELDS.schoolName),
-            gradeLevel: get(SALE_FORM_FIELDS.gradeLevel),
-          }
-        : null,
+      children: childName
+        ? [
+            {
+              fullName: childName,
+              schoolName: get(SALE_FORM_FIELDS.schoolName),
+              gradeLevel: get(SALE_FORM_FIELDS.gradeLevel),
+            },
+          ]
+        : [],
       employeeCode,
       noteLines,
       // Phiếu do NHÂN VIÊN nhập hộ khi tư vấn trực tiếp — không có ô tick đồng

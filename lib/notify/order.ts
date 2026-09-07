@@ -1,4 +1,5 @@
 import "server-only";
+import { sumRecorded } from "@/lib/finance/ghi-nhan";
 import { db } from "@/lib/db";
 import { sendZaloNotification } from "@/lib/zalo/service";
 import { buildTuitionZnsParams } from "@/lib/zalo/templates";
@@ -51,12 +52,7 @@ export async function sendTuitionZnsForOrder(orderId: string, phone: string): Pr
 
   // "Đã đóng" = tổng phiếu thu còn hiệu lực của đơn, KHÔNG phải tổng đơn: đơn
   // trả góp lúc mới tạo là 0đ, xác nhận đợt 1 thì mới bằng số đã thu thật.
-  const paid = await db.payment
-    .aggregate({
-      where: { orderId, saleStatus: "RECORDED", deletedAt: null },
-      _sum: { amount: true },
-    })
-    .catch(() => null);
+  const paid = await sumRecorded(orderId).catch(() => 0);
 
   await sendZaloNotification({
     toPhone: phone,
@@ -66,7 +62,7 @@ export async function sendTuitionZnsForOrder(orderId: string, phone: string): Pr
       phone,
       courseName: order.items[0]?.itemName ?? null,
       totalFee: order.totalAmount,
-      paidFee: paid?._sum.amount ?? 0,
+      paidFee: paid,
       studentName: order.student?.name ?? order.customerName,
     }),
     fallbackEmail: null, // không có email — đó chính là lý do vào đường này

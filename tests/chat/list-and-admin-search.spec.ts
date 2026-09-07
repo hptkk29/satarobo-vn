@@ -49,10 +49,15 @@ import {
 import { listAdminConversations } from "../../lib/chat/admin";
 import { seedChatFixture, type ChatFixture } from "./_helpers/seed-chat";
 
-const DB_URL = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL ?? "";
-const HAS_LOCAL_DB =
-  /(@|\/\/)(localhost|127\.0\.0\.1)[:/]/.test(DB_URL) ||
-  /satarobo_test|ci_test/.test(DB_URL);
+import {
+  DB_URL_CHE,
+  LY_DO_BO_QUA,
+  RUN_DB_TESTS as RUN_DB_TESTS_CHUNG,
+} from "../_helpers/db-gate";
+// CỔNG CHẠY dùng chung — xem `tests/_helpers/db-gate.ts`. Từ 04/09/2026 cổng này
+// ĐÒI THÊM `ALLOW_DB_RESET=1`: `pnpm test:unit` trần gọi tới đây sẽ SKIP thay vì
+// TRUNCATE sạch DB đang làm việc. Chạy thật bằng `pnpm test:chat-db`.
+const HAS_LOCAL_DB = RUN_DB_TESTS_CHUNG;
 
 const CASE_TIMEOUT = 60_000;
 const HOOK_TIMEOUT = 180_000;
@@ -72,7 +77,7 @@ async function withName<T>(userId: string, name: string, fn: () => Promise<T>): 
 
 if (!HAS_LOCAL_DB) {
   describe("Chat · danh sách + tra cứu admin (DB)", () => {
-    it.skip(`SKIP — cần Postgres local (DATABASE_URL hiện tại: "${DB_URL || "trống"}")`, () => {});
+    it.skip(`SKIP — ${LY_DO_BO_QUA} (DB=${DB_URL_CHE})`, () => {});
   });
 }
 

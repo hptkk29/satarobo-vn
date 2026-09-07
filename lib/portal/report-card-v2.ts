@@ -31,6 +31,18 @@ export type ReportCardV2 = {
    */
   absent: number | null;
   /**
+   * Ba khối CHỈ CÓ ở bản ĐÃ PHÁT HÀNH — bổ sung 06/09/2026.
+   *
+   * Bản v1 (`components/report-card/report-card-view.tsx`) render đủ chúng; bản v2 —
+   * thứ prod đang chạy — không mang chúng trong kiểu dữ liệu, nên từ ngày bật cờ
+   * `PORTAL_V2_ENABLED` phụ huynh mở học bạ đã phát hành ra là mất sạch phần "Đánh giá
+   * năng lực" theo tiêu chí, "Nhận xét theo giai đoạn" và dòng "Kết quả". Đây là phần
+   * NỘI DUNG của học bạ, không phải trang trí.
+   */
+  scores: { criterionId: string; name: string; level: number; note: string | null }[];
+  periodComments: { period: string; comment: string }[];
+  completionStatus: string | null;
+  /**
    * Các bản ĐÃ PHÁT HÀNH cũ hơn (portal v1 render tất cả — v2 phải giữ đường
    * xem/tải học bạ các khoá trước, không chỉ bản mới nhất).
    */
@@ -87,6 +99,9 @@ export async function getStudentReportCard(studentId: string): Promise<ReportCar
       isOfficial: true,
       reportCardId: official.id,
       finalComment: official.finalComment,
+      scores: official.scores,
+      periodComments: official.periodComments,
+      completionStatus: official.completionStatus,
       total: attSnap.total,
       done: attSnap.attended,
       absent: typeof attSnap.absent === "number" ? attSnap.absent : null,
@@ -128,6 +143,10 @@ export async function getStudentReportCard(studentId: string): Promise<ReportCar
   const base: ReportCardV2 = {
     studentName: student.name,
     studentCode: student.studentCode,
+    // Bản TẠM TÍNH chưa có snapshot nên chưa có ba khối của bản phát hành.
+    scores: [],
+    periodComments: [],
+    completionStatus: null,
     className: null,
     courseName: null,
     teacher: null,
@@ -164,13 +183,21 @@ export async function getStudentReportCard(studentId: string): Promise<ReportCar
     (a) => a.makeupStatus === "MADE_UP" || a.status === "PRESENT" || a.status === "LATE",
   ).length;
 
+  // ⚠️ MẪU SỐ của chuyên cần là SỐ BUỔI ĐÃ DIỄN RA, không phải số DÒNG điểm danh
+  // (06/09). Hai số đó khác nhau đúng ở những buổi giáo viên chưa chấm: chia cho số
+  // dòng thì buổi chưa chấm biến mất khỏi mẫu số và % vọt lên, lệch hẳn với thẻ ở
+  // trang chủ phụ huynh và với site giáo viên — cùng một đứa trẻ, hai con số.
+  // Đây đúng là phép chia đã được thống nhất ở lib/attendance/summary.ts hôm 04/09.
+  // Truy vấn `sessions` phía trên đã loại buổi CANCELLED rồi.
+  const daDienRa = sessions.filter((s) => s.date < now).length;
+
   return {
     ...base,
     className: cls.name,
     courseName: cls.course?.name ?? null,
     teacher: cls.teacher?.name ?? null,
     total: sessions.length,
-    done: sessions.filter((s) => s.date < now).length,
-    rate: attendance.length > 0 ? Math.round((present / attendance.length) * 100) : 0,
+    done: daDienRa,
+    rate: daDienRa > 0 ? Math.round((present / daDienRa) * 100) : 0,
   };
 }

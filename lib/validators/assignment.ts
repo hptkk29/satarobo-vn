@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parseVnDateTimeLocal } from "@/lib/time/vn";
 
 export const AssignmentStatusEnum = z.enum([
   "DRAFT",
@@ -23,10 +24,22 @@ const nullableStr = z
     return s.length > 0 ? s : null;
   });
 
+/**
+ * Mốc ngày-giờ từ `<input type="datetime-local">`.
+ *
+ * ⚠️ 06/09 — KHÔNG dùng `z.coerce.date()` cho ô này. `coerce.date` gọi `new Date(value)`,
+ * mà chuỗi `"YYYY-MM-DDTHH:mm"` không có múi giờ thì được hiểu theo giờ TIẾN TRÌNH:
+ * Vercel chạy UTC nên hạn nộp 23:59 ngày 12/09 bị ghi thành 06:59 ngày 13/09 giờ VN —
+ * phụ huynh đọc sai ngày, và cửa nộp bài mở thêm 7 tiếng ngoài ý giáo viên.
+ */
 const nullableDate = z
-  .union([z.null(), z.literal(""), z.coerce.date()])
+  .union([z.null(), z.literal(""), z.string(), z.date()])
   .optional()
-  .transform((v) => (v === "" || v === undefined || v === null ? null : v));
+  .transform((v) => {
+    if (v === "" || v === undefined || v === null) return null;
+    if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : v;
+    return parseVnDateTimeLocal(v);
+  });
 
 export const assignmentSchema = z
   .object({

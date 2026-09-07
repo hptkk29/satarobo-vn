@@ -129,13 +129,26 @@ export default async function CongNoPage({
 
   // ── Gom nhóm theo dimension ──
   const totalDebt = rows.reduce((s, r) => s + r.debt, 0);
+  // 03/09/2026 — GOM NHÓM THEO ID, HIỂN THỊ THEO TÊN.
+  //
+  // Bản cũ dùng chính chuỗi hiển thị (`groupLabel`) làm KHOÁ của Map. Hai học
+  // viên TRÙNG TÊN — chuyện rất thường ở dữ liệu thật — bị gộp thành một dòng và
+  // nợ CỘNG LẠI. Đây là chỗ duy nhất trong màn này cho ra SỐ TIỀN SAI: người xem
+  // thấy "Nguyễn Minh Khoa nợ 12.000.000đ" trong khi đó là nợ của hai em khác
+  // nhau, và không có gì để lần ra.
+  //
+  // Nhãn vẫn lấy từ dòng ĐẦU TIÊN của nhóm (mọi dòng cùng id đều cùng tên).
   const groups = new Map<string, { label: string; debt: number; count: number }>();
   for (const r of rows) {
-    const label = groupLabel(r, groupBy, centerNames);
-    const g = groups.get(label) ?? { label, debt: 0, count: 0 };
+    const key = groupKey(r, groupBy);
+    const g = groups.get(key) ?? {
+      label: groupLabel(r, groupBy, centerNames),
+      debt: 0,
+      count: 0,
+    };
     g.debt += r.debt;
     g.count += 1;
-    groups.set(label, g);
+    groups.set(key, g);
   }
   const groupList = [...groups.values()].sort((a, b) => b.debt - a.debt);
 
@@ -224,6 +237,30 @@ export default async function CongNoPage({
       </p>
     </div>
   );
+}
+
+/**
+ * KHOÁ gom nhóm — luôn là một ID BỀN, không bao giờ là tên.
+ *
+ * Tách khỏi `groupLabel` (chuỗi cho người đọc) vì hai thứ đó có yêu cầu ngược
+ * nhau: nhãn phải dễ đọc và có thể trùng nhau; khoá phải phân biệt được và không
+ * bao giờ trùng khi thực thể khác nhau. Gộp làm một là cộng nợ của hai người
+ * trùng tên vào một dòng.
+ *
+ * Thiếu id thì rơi về một khoá RIÊNG cho từng dòng (`enrollmentId`) chứ không
+ * gộp hết vào một rổ "(không rõ)" — thà thấy nhiều dòng lẻ còn hơn một con số
+ * tổng không ai kiểm được.
+ */
+function groupKey(row: DebtRow, key: GroupKey): string {
+  switch (key) {
+    case "student":
+      return row.studentId ?? `enrollment:${row.enrollmentId}`;
+    case "center":
+      return row.centerId ?? "center:(khong-ro)";
+    case "enrollment":
+    default:
+      return row.enrollmentId;
+  }
 }
 
 function groupLabel(

@@ -25,7 +25,7 @@ import { canSeeLead, leadSharingEnabled } from "@/lib/lead/sharing";
 import { canViewLeadPii } from "@/lib/auth/check-permission";
 import { ShareToggle } from "./_components/share-toggle";
 import { formatDateTimeVNZoned } from "@/lib/format/date";
-import { hasSystemLines, splitLeadNote } from "@/lib/lead/note-view";
+import { boDongMaNguoiNhap, hasSystemLines, splitLeadNote } from "@/lib/lead/note-view";
 
 export const metadata = { title: "Chi tiết Lead | Admin" };
 export const dynamic = "force-dynamic";
@@ -130,7 +130,25 @@ export default async function LeadDetailPage({ params }: Props) {
   // này — xem prisma/seed-roles.ts — nên đúng là thứ phân biệt cần tìm, và không
   // phải đẻ thêm permission key mới rồi seed lại 2 môi trường).
   // Tách trên chuỗi THÔ rồi mới mask, để phần người gõ vẫn được che đúng luật PII.
-  const noteView = splitLeadNote(lead.note);
+  // ⚠️ 05/09/2026 — MÃ NHÂN VIÊN PHẢI TRA THEO QUAN HỆ, KHÔNG ĐỌC TỪ `note`.
+  // Dòng "Nhân viên nhập: SR.NV.02" trong `note` là ẢNH CHỤP lúc nhập phiếu: đổi mã
+  // nhân viên thì mọi lead cũ vẫn in mã cũ mãi mãi (chủ dự án báo). `createdById`
+  // (có từ 23/08) mới là danh tính thật — tra ra mã hiện hành thì đổi mã là mọi
+  // phiếu cũ theo ngay, không cần đụng tới dữ liệu.
+  //
+  // Phiếu CŨ hoặc phiếu vào từ webhook có `createdById = null`: lúc đó dòng chữ là
+  // dấu vết DUY NHẤT, nên GIỮ nguyên nó thay vì xoá trắng thông tin.
+  const nguoiNhap = lead.createdById
+    ? await sdb.user.findFirst({
+        where: { id: lead.createdById },
+        select: { name: true, employee: { select: { employeeCode: true } } },
+      })
+    : null;
+  const maNguoiNhap = nguoiNhap?.employee?.employeeCode ?? null;
+  const noteThoView = splitLeadNote(lead.note);
+  // Bỏ dòng ảnh chụp CHỈ khi đã có nguồn sống để thay — không thì màn hình hiện hai
+  // mã khác nhau của cùng một người.
+  const noteView = maNguoiNhap ? boDongMaNguoiNhap(noteThoView) : noteThoView;
   const humanNote = canViewPii ? noteView.human : maskFreeText(noteView.human);
 
   const canAssign = (await checkPermission("leads:assign", { centerId: lead.centerId }));
@@ -447,6 +465,13 @@ export default async function LeadDetailPage({ params }: Props) {
         <div className="@xl:col-span-2">
           <Info label="Ghi chú" value={humanNote} />
         </div>
+        {/* Người nhập phiếu — mã tra theo QUAN HỆ nên đổi mã nhân viên là đổi theo. */}
+        {canViewAll && nguoiNhap && (
+          <Info
+            label="Nhân viên nhập"
+            value={[nguoiNhap.name, maNguoiNhap].filter(Boolean).join(" · ") || null}
+          />
+        )}
         {/* Dấu vết máy ghi — chỉ quản lý/quản trị (`leads:view-all`) đọc. */}
         {canViewAll && hasSystemLines(noteView) && (
           <div className="@xl:col-span-2">

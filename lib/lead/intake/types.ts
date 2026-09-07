@@ -12,6 +12,14 @@ export type IntakeChild = {
   fullName: string;
   schoolName?: string | null;
   gradeLevel?: string | null;
+  /**
+   * KHOÁ QUAN TÂM của riêng em này (`LeadChild.interestedCourseId`), 03/09/2026.
+   *
+   * Đặt ở TỪNG CON, không đặt ở phiếu: hai em cùng một phụ huynh thường hỏi hai
+   * khoá khác nhau theo tuổi. Và đây là trường mà màn Chuyển đổi dùng để lọc ô
+   * "Lớp đăng ký" — để trống thì ô đó rơi về "hiện đủ mọi lớp".
+   */
+  interestedCourseId?: string | null;
 };
 
 /**
@@ -51,8 +59,18 @@ export type MappedLead = {
    */
   leadSource?: string | null;
   centerHint?: CenterHint | null;
-  /** Con được tạo thành bản ghi `LeadChild` thật. */
-  child?: IntakeChild | null;
+  /**
+   * Các con được tạo thành bản ghi `LeadChild` thật.
+   *
+   * 03/09/2026 — đổi từ `child?: IntakeChild | null` (MỘT con) sang mảng. Phiếu
+   * thật hay có 2 em: trước đó biểu mẫu nội bộ chỉ nhận được một, em thứ hai
+   * phải gõ thành phiếu riêng rồi bị chính cơ chế chống trùng SĐT gộp lại —
+   * tức là mất.
+   *
+   * Rỗng/vắng ⇒ KHÔNG tạo `LeadChild` nào (giữ hành vi cũ của `child: null`,
+   * để không đẻ bản ghi rác từ 3 webhook cũ chỉ moi được tên từ text tự do).
+   */
+  children?: IntakeChild[] | null;
   /**
    * Tên con khi nguồn CHỈ có chuỗi tên, không đủ tin để đẻ `LeadChild`
    * (3 webhook cũ moi tên từ text tự do). Chỉ set `Lead.childName`.

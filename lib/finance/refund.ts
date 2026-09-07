@@ -5,6 +5,7 @@
 // không phụ thuộc thay đổi sau. approve/reject ghi AuditLog hợp nhất.
 import type { Prisma, PrismaClient, RefundRequest, RefundTrigger } from "@prisma/client";
 import { db } from "@/lib/db";
+import { KHOAN_DA_XAC_NHAN } from "@/lib/finance/debt";
 import { writeAudit } from "@/lib/audit/audit-log";
 import type { ScopedDb } from "@/lib/actions/factory";
 
@@ -78,7 +79,7 @@ export async function createRefundRequest(input: {
 
   // Σ Payment đã xác nhận (CONFIRMED) — loại soft-deleted.
   const agg = await client.payment.aggregate({
-    where: { enrollmentId, accountantStatus: "CONFIRMED", deletedAt: null },
+    where: { enrollmentId, ...KHOAN_DA_XAC_NHAN },
     _sum: { amount: true },
   });
   const paidConfirmed = agg._sum.amount ?? 0;

@@ -20,7 +20,8 @@ import { CalendarX2, ClipboardCheck, CircleCheck, Clock } from "lucide-react";
 import type { AttendanceStatus } from "@prisma/client";
 import type { Actor } from "@/lib/auth/actor";
 import { withMakeupException } from "@/lib/db-scope";
-import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
+import { rosterWhere } from "@/lib/enrollment-scope";
+import { sessionAttendanceState } from "@/lib/lms/attendance-pending";
 import { summarizeSessionFeedback } from "@/lib/lms/session-feedback-roster";
 import {
   attendanceCoversRoster,
@@ -98,23 +99,15 @@ export async function HubSessionsTab({
     xdb.class.findUnique({
       where: { id: classId },
       select: {
-        _count: {
-          select: {
-            enrollments: {
-              where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
-            },
-          },
-        },
-        // Danh sách studentId của sĩ số — dùng cho "điểm danh xong chưa"
-        // (attendanceCoversRoster). Lọc deletedAt ở CẢ enrollment lẫn student: `_count`
-        // ngay trên không lọc, giữ nguyên vì nó là mẫu số hiển thị "Có mặt X/Y" đã có
-        // từ trước, đổi là đổi con số người dùng đang quen.
+        // `_count` và danh sách bên dưới nay dùng CHUNG rosterWhere. Đây chính là hai
+        // truy vấn cách nhau 9 dòng trong CÙNG một file mà lại lọc khác nhau — mẫu số
+        // hiển thị "Đi học X/Y" và mẫu số của attendanceCoversRoster đếm hai tập khác
+        // nhau, nên một buổi có thể vừa in "12/12" vừa không bao giờ được coi là điểm
+        // danh xong. Chủ dự án chốt 03/09: đổi cả con số cho khớp.
+        _count: { select: { enrollments: { where: rosterWhere("dang-hoc") } } },
+        // Danh sách studentId của sĩ số — dùng cho "điểm danh xong chưa".
         enrollments: {
-          where: {
-            status: { in: ENROLLMENT_ACTIVE_STATUS_LIST },
-            deletedAt: null,
-            student: { deletedAt: null },
-          },
+          where: rosterWhere("dang-hoc"),
           select: { studentId: true },
         },
       },
@@ -149,18 +142,43 @@ export async function HubSessionsTab({
         }),
       ])
     : [[], [], []];
-  const doneSet = new Set<string>();
   const presentBy = new Map<string, number>();
   const attBySession = new Map<string, { studentId: string; status: string }[]>();
+  const markedBySession = new Map<string, Set<string>>();
   for (const a of att) {
-    doneSet.add(a.sessionId);
-    if (ATTENDED.includes(a.status)) {
-      presentBy.set(a.sessionId, (presentBy.get(a.sessionId) ?? 0) + 1);
-    }
+    const marked = markedBySession.get(a.sessionId) ?? new Set<string>();
+    marked.add(a.studentId);
+    markedBySession.set(a.sessionId, marked);
     const list = attBySession.get(a.sessionId) ?? [];
     list.push({ studentId: a.studentId, status: a.status });
     attBySession.set(a.sessionId, list);
   }
+  const rosterIdSet = new Set(rosterIds);
+  // Tử số "Đi học X/Y" chỉ đếm em trong sĩ số — học viên HỌC BÙ từ lớp khác cũng sinh
+  // bản ghi nên trước đây X vượt được quá Y.
+  for (const [sessionId, rowsOfSession] of attBySession) {
+    presentBy.set(
+      sessionId,
+      rowsOfSession.filter(
+        (r) =>
+          ATTENDED.includes(r.status as AttendanceStatus) &&
+          rosterIdSet.has(r.studentId),
+      ).length,
+    );
+  }
+  // "Xong" = điểm danh PHỦ ĐỦ sĩ số. Trước đây chỉ cần một bản ghi bất kỳ — buổi có
+  // đúng một phiếu xin nghỉ đã duyệt liền hiện pill xanh kèm "Đi học 0/12".
+  const doneSet = new Set(
+    sessions
+      .filter(
+        (s) =>
+          sessionAttendanceState({
+            markedStudentIds: markedBySession.get(s.id) ?? new Set<string>(),
+            rosterStudentIds: rosterIds,
+          }) === "DU",
+      )
+      .map((s) => s.id),
+  );
   const fbBySession = new Map<string, string[]>();
   for (const f of fbRows) {
     const list = fbBySession.get(f.classSessionId) ?? [];
@@ -213,7 +231,8 @@ export async function HubSessionsTab({
 
   return (
     <div className="t-card overflow-hidden">
-      <PhanTrangBang cuonNgang>
+      <PhanTrangBang cuonNgang
+          khoaGhiNho="gv-lop-buoi-hoc">
         <table className="min-w-[720px] w-full border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
@@ -275,7 +294,8 @@ export async function HubSessionsTab({
                     {done ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-state-success-soft px-2.5 py-1 text-xs font-semibold text-state-success-ink">
                         <CircleCheck className="h-3.5 w-3.5" aria-hidden />
-                        Có mặt {present}/{rosterCount}
+                        {/* "Đi học": tử số gồm cả Đi muộn — xem BUG-017. */}
+                        Đi học {present}/{rosterCount}
                       </span>
                     ) : !canMark ? (
                       <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground">

@@ -15,7 +15,7 @@ import type { SubmissionStatus } from "@prisma/client";
 import type { Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
+import { rosterWhere } from "@/lib/enrollment-scope";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "../../_components/ui/empty-state";
 import { GradeForm } from "../../cham-bai/_components/grade-form";
@@ -196,8 +196,10 @@ export async function HubAssignmentsTab({
         totalPoints: true,
         class: {
           select: {
+            // "ket-khoa" — khớp /teacher/cham-bai. Đây là bản sao THỨ HAI của cùng
+            // bảng bài tập; để lệch scope là hai màn in hai mẫu số cho cùng một bài.
             enrollments: {
-              where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
+              where: rosterWhere("ket-khoa"),
               select: { student: { select: { id: true, name: true } } }, // câu 46: chỉ tên
               orderBy: { student: { name: "asc" } },
             },
@@ -348,9 +350,7 @@ export async function HubAssignmentsTab({
       select: {
         _count: {
           select: {
-            enrollments: {
-              where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
-            },
+            enrollments: { where: rosterWhere("ket-khoa") },
           },
         },
       },

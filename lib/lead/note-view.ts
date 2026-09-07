@@ -115,6 +115,36 @@ export function splitLeadNote(note: string | null | undefined): LeadNoteView {
   };
 }
 
+/** Nhãn của dòng ẢNH CHỤP mã nhân viên nhập — thứ đứng yên khi mã được đổi. */
+const NHAN_MA_NGUOI_NHAP = "Nhân viên nhập:";
+
+/**
+ * Bỏ dòng "Nhân viên nhập: <mã>" khỏi phần hiển thị.
+ *
+ * VÌ SAO (chủ dự án báo 05/09/2026): dòng đó là ẢNH CHỤP lúc nhập phiếu. Đổi mã
+ * nhân viên (SR.NV.02 → SR.NV.06) thì mọi lead cũ vẫn in mã cũ mãi mãi, vì nó là
+ * chuỗi nằm trong `Lead.note` chứ không phải quan hệ.
+ *
+ * Danh tính THẬT của người nhập là `Lead.createdById` (có từ 23/08/2026). Khi có
+ * cột đó, nơi gọi in mã SỐNG tra từ quan hệ — và phải bỏ dòng ảnh chụp đi, không
+ * thì màn hình hiện hai mã khác nhau của cùng một người.
+ *
+ * Phiếu CŨ (`createdById = null`) thì dòng chữ là dấu vết DUY NHẤT — cứ giữ, đừng
+ * gọi hàm này. Và như mọi thứ trong file: lọc lúc ĐỌC, KHÔNG đụng dao kéo vào
+ * `Lead.note` trên prod (`mergeLeadNote` vẫn ráp lại nguyên vẹn khi ghi).
+ */
+export function boDongMaNguoiNhap(view: LeadNoteView): LeadNoteView {
+  const con = view.info.filter((l) => !l.trim().startsWith(NHAN_MA_NGUOI_NHAP));
+  if (con.length === view.info.length) return view;
+  return {
+    ...view,
+    info: con,
+    // Về `hidden` chứ không biến mất: `mergeLeadNote` gắn lại khi người dùng sửa
+    // ghi chú, nên lọc lúc đọc không được hoá thành xoá lúc ghi.
+    hidden: [...view.hidden, ...view.info.filter((l) => l.trim().startsWith(NHAN_MA_NGUOI_NHAP))],
+  };
+}
+
 /** Phiếu này có gì để khoe với quản lý không (dùng để ẩn hẳn khối rỗng). */
 export function hasSystemLines(view: LeadNoteView): boolean {
   return view.info.length > 0 || view.warnings.length > 0;

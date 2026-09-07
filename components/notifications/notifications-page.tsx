@@ -81,7 +81,10 @@ export function NotificationsPage({
       const next = new URLSearchParams(sp.toString());
       if (value) next.set(key, value);
       else next.delete(key);
-      router.push(`${pathname}?${next}`);
+      // GIỮ NGUYÊN TRANG — chỉ đổi tham số truy vấn của chính `pathname` này. Thiếu
+      // `scroll: false` thì ScrollAndFocusHandler của App Router cuộn về đầu sau mỗi
+      // lần bấm nhóm/trạng thái/khoảng thời gian, đang đọc giữa danh sách thì mất chỗ.
+      router.push(`${pathname}?${next}`, { scroll: false });
     },
     [router, pathname, sp],
   );

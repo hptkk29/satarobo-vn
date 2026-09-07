@@ -2,7 +2,12 @@
 // suất có thể vừa "đã đánh giá" vừa "đã nhập học" vừa "bị dời lịch" cùng lúc, và bảng
 // chỉ in được một nhãn.
 import { describe, it, expect } from "vitest";
-import { isSettledTrialRow, trialRowStatus } from "./trial-row-status";
+import {
+  demChoDanhGia,
+  isSettledTrialRow,
+  trialRowStatus,
+  type TrialRowStatus,
+} from "./trial-row-status";
 
 /** Mốc UTC 00:00 ngày 15/08/2026 (giờ VN) — trùng quy ước @db.Date của Trial. */
 const TODAY = Date.UTC(2026, 7, 15);
@@ -99,5 +104,39 @@ describe("isSettledTrialRow — suất nào rơi xuống bảng 'Đã Trial'", (
     expect(isSettledTrialRow("awaiting-eval")).toBe(false);
     // Đã đánh giá nhưng chưa biết nhập học hay không → vẫn chờ kết cục.
     expect(isSettledTrialRow("evaluated")).toBe(false);
+  });
+});
+
+describe("demChoDanhGia — số in trên ô 'Trial chờ đánh giá' của trang chủ GV", () => {
+  const r = (status: TrialRowStatus) => ({ status });
+
+  it("chỉ đếm suất ĐÃ DẠY mà chưa có phiếu", () => {
+    expect(
+      demChoDanhGia([
+        r("awaiting-eval"),
+        r("awaiting-eval"),
+        r("upcoming"),
+        r("evaluated"),
+      ]),
+    ).toBe(2);
+  });
+
+  it("không đếm suất đã xong việc hay chưa tới — ô này là VIỆC CẦN LÀM", () => {
+    // Ba trạng thái "xong việc" và hai trạng thái "chưa tới lượt" đều phải bị loại:
+    // đếm nhầm là ô báo nợ vĩnh viễn, giáo viên mở ra không thấy gì để làm.
+    expect(
+      demChoDanhGia([
+        r("enrolled"),
+        r("lost"),
+        r("withdrawn"),
+        r("upcoming"),
+        r("rescheduled"),
+        r("evaluated"),
+      ]),
+    ).toBe(0);
+  });
+
+  it("danh sách rỗng → 0", () => {
+    expect(demChoDanhGia([])).toBe(0);
   });
 });

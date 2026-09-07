@@ -31,6 +31,11 @@ export type InternalFormInput = {
   /** Đã chuẩn hoá `84…` bởi `phoneVnNullable`; `null` = người nhập bỏ trống. */
   phone?: string | null;
   childName?: string | null;
+  /**
+   * NHIỀU CON, mỗi em một khoá quan tâm (03/09/2026). Dòng không có tên bị bỏ
+   * ngay trong mapper.
+   */
+  children?: { fullName?: string | null; courseId?: string | null }[] | null;
   /** Ô "Nguồn" gõ tự do → `Lead.source`. */
   source?: string | null;
   facebookUrl?: string | null;
@@ -61,7 +66,27 @@ export function mapInternalForm(
     warnings.push(`Số điện thoại "${input.phone}" không đọc được — chưa lưu.`);
   }
 
-  const childName = str(input.childName);
+  // ── Danh sách con ───────────────────────────────────────────────────────
+  // Bỏ dòng KHÔNG có tên: người dùng bấm "Thêm con" rồi để trống là chuyện
+  // thường, và một `LeadChild` không tên thì không tra được, không gọi được,
+  // chỉ làm bẩn hồ sơ.
+  //
+  // Khử trùng tên NGAY Ở ĐÂY (không phân biệt hoa/thường, gộp khoảng trắng):
+  // gõ hai dòng cùng tên là đẻ hai bản ghi cho một đứa trẻ, và mọi màn đếm số
+  // con sau đó đều sai. Tầng ingest cũng khử lần nữa cho nhánh trùng SĐT.
+  const children: { fullName: string; interestedCourseId: string | null }[] = [];
+  for (const c of input.children ?? []) {
+    const ten = str(c.fullName);
+    if (!ten) continue;
+    const khoaGon = (x: string) => x.trim().replace(/\s+/g, " ").toLowerCase();
+    if (children.some((x) => khoaGon(x.fullName) === khoaGon(ten))) continue;
+    children.push({ fullName: ten, interestedCourseId: str(c.courseId) });
+  }
+
+  // Cột phẳng cũ: ưu tiên ô `childName` nếu nguồn còn gửi, không thì lấy em đầu.
+  // `parentNameFallback` bên dưới cần nó để suy tên phụ huynh khi phiếu chỉ có
+  // tên con.
+  const childName = str(input.childName) ?? children[0]?.fullName ?? null;
   let parentName = str(input.parentName) ?? "";
   if (!parentName) {
     parentName = parentNameFallback(childName);
@@ -113,8 +138,14 @@ export function mapInternalForm(
       facebookUrl: fb.url,
       leadSource: str(input.source),
       centerHint: centerHintFromCode(input.centerCode),
-      // Bộ ô mới không hỏi trường/lớp nữa ⇒ `LeadChild` chỉ mang tên bé.
-      child: childName ? { fullName: childName } : null,
+      // Bộ ô mới không hỏi trường/lớp ⇒ `LeadChild` mang tên bé + khoá quan tâm.
+      // Nguồn nào chỉ gửi `childName` (không gửi mảng) vẫn ra đúng một con.
+      children:
+        children.length > 0
+          ? children
+          : childName
+            ? [{ fullName: childName, interestedCourseId: null }]
+            : [],
       // ⭐ Danh tính đến từ phiên, không từ ô nhập.
       employeeCode: staff.employeeCode,
       noteLines,

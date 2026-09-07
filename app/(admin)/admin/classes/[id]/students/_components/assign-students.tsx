@@ -45,6 +45,7 @@ export function AssignStudents({
   canTransfer = false,
   canRemove = false,
   canDeleteStudent = false,
+  canAssign = false,
   targetClasses = [],
 }: {
   classId: string;
@@ -59,6 +60,13 @@ export function AssignStudents({
   canTransfer?: boolean;
   canRemove?: boolean;
   canDeleteStudent?: boolean;
+  /**
+   * `classes:edit` — được GÁN/GỠ em khỏi lớp. Sale và Quản lý lớp học KHÔNG có,
+   * họ chỉ xem. Mặc định false để quên truyền là khoá chứ không phải mở.
+   * Server vẫn gác độc lập: cả 4 action gán/gộp/đổi sale đều đi qua `gate()`
+   * đòi `classes:edit` (xem `../_actions.ts`), ẩn nút chỉ là lớp thứ hai.
+   */
+  canAssign?: boolean;
   /** Lớp đích cùng khoá + cùng cơ sở cho nút "Chuyển lớp". */
   targetClasses?: TargetClassOption[];
 }) {
@@ -198,7 +206,7 @@ export function AssignStudents({
             <Users className="h-4 w-4" /> Học sinh trong lớp ({activeCount}/{maxStudents})
           </h2>
           {/* (a) PA-B — nút gộp: chỉ hiện khi lớp còn em "Đã xếp" */}
-          {confirmedRows.length > 0 && (
+          {canAssign && confirmedRows.length > 0 && (
             <button
               type="button"
               onClick={promote}
@@ -223,7 +231,7 @@ export function AssignStudents({
               >
                 <span className="flex items-center gap-3 font-medium text-foreground">
                   {/* tick chọn chỉ cho em "Đã xếp" — em khác giữ nguyên hàng tĩnh */}
-                  {s.status === "CONFIRMED" ? (
+                  {canAssign && s.status === "CONFIRMED" ? (
                     <input
                       type="checkbox"
                       checked={!promoteOff.has(s.id)}
@@ -243,6 +251,7 @@ export function AssignStudents({
                 </span>
                 <span className="flex items-center gap-3">
                   {/* T3.2 — Sale phụ trách (vị trí như cột CSKH). */}
+                  {canAssign ? (
                   <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <span className="hidden sm:inline">Sale phụ trách</span>
                     <select
@@ -262,6 +271,14 @@ export function AssignStudents({
                       ))}
                     </select>
                   </label>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">
+                      Sale phụ trách:{" "}
+                      <span className="font-medium text-foreground">
+                        {sales.find((o) => o.id === s.saleId)?.name ?? "— Chưa gán —"}
+                      </span>
+                    </span>
+                  )}
                   <span
                     className={
                       "rounded-full px-2.5 py-0.5 text-xs font-semibold " +
@@ -301,91 +318,94 @@ export function AssignStudents({
         />
       )}
 
-      {/* Gán học viên đủ điều kiện */}
-      <section className="rounded-xl border border-border bg-card p-5">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-muted-foreground">
-            <UserPlus className="h-4 w-4" /> Học viên đủ điều kiện ({assignable.length})
-          </h2>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => assignSelected(false)}
-              disabled={pending || selected.size === 0}
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
-            >
-              {pending ? "Đang gán…" : `Thêm đã chọn (${selected.size})`}
-            </button>
-            <button
-              type="button"
-              onClick={() => assignAll(false)}
-              disabled={pending || assignable.length === 0}
-              className="rounded-lg border border-primary px-4 py-2 text-sm font-semibold text-primary hover:bg-primary-soft disabled:opacity-50"
-            >
-              Thêm toàn bộ
-            </button>
-          </div>
-        </div>
-
-        {pendingOverride && (
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-state-warning-soft bg-state-warning-soft p-3">
-            <p className="flex items-center gap-2 text-sm font-medium text-state-warning-ink">
-              <AlertTriangle className="h-4 w-4" /> Vượt sức chứa lớp. Xác nhận
-              override để vẫn thêm (ghi audit)?
-            </p>
-            <div className="flex gap-2">
+      {/* Khối GÁN — chỉ người có `classes:edit`. Người chỉ xem (Sale, Quản lý lớp
+          học) không thấy khối này; server cũng chặn độc lập ở `gate()`. */}
+      {canAssign && (
+        <section className="rounded-xl border border-border bg-card p-5">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-muted-foreground">
+              <UserPlus className="h-4 w-4" /> Học viên đủ điều kiện ({assignable.length})
+            </h2>
+            <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={confirmOverride}
-                disabled={pending}
-                className="rounded-lg bg-state-warning-ink px-3 py-1.5 text-sm font-semibold text-white hover:bg-state-warning-ink-hover disabled:opacity-50"
+                onClick={() => assignSelected(false)}
+                disabled={pending || selected.size === 0}
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
               >
-                Xác nhận override
+                {pending ? "Đang gán…" : `Thêm đã chọn (${selected.size})`}
               </button>
               <button
                 type="button"
-                onClick={() => setPendingOverride(null)}
-                className="rounded-lg border border-border px-3 py-1.5 text-sm font-semibold text-foreground hover:bg-muted"
+                onClick={() => assignAll(false)}
+                disabled={pending || assignable.length === 0}
+                className="rounded-lg border border-primary px-4 py-2 text-sm font-semibold text-primary hover:bg-primary-soft disabled:opacity-50"
               >
-                Huỷ
+                Thêm toàn bộ
               </button>
             </div>
           </div>
-        )}
 
-        {assignable.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Không có học viên nào đủ điều kiện (đúng khóa + đúng cơ sở + chưa xếp
-            lớp active).
-          </p>
-        ) : (
-          <ul className="divide-y divide-border">
-            {assignable.map((s) => (
-              <li key={s.id} className="py-2">
-                <label className="flex cursor-pointer items-center gap-3 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={selected.has(s.id)}
-                    onChange={() => toggle(s.id)}
-                    className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
-                  />
-                  <span className="font-medium text-foreground">
-                    {s.name}
-                    {s.studentCode ? (
-                      <span className="ml-2 text-xs text-muted-foreground">
-                        {s.studentCode}
-                      </span>
-                    ) : null}
-                  </span>
-                  <span className="ml-auto rounded-full bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
-                    {s.statusLabel}
-                  </span>
-                </label>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+          {pendingOverride && (
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-state-warning-soft bg-state-warning-soft p-3">
+              <p className="flex items-center gap-2 text-sm font-medium text-state-warning-ink">
+                <AlertTriangle className="h-4 w-4" /> Vượt sức chứa lớp. Xác nhận
+                override để vẫn thêm (ghi audit)?
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={confirmOverride}
+                  disabled={pending}
+                  className="rounded-lg bg-state-warning-ink px-3 py-1.5 text-sm font-semibold text-white hover:bg-state-warning-ink-hover disabled:opacity-50"
+                >
+                  Xác nhận override
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPendingOverride(null)}
+                  className="rounded-lg border border-border px-3 py-1.5 text-sm font-semibold text-foreground hover:bg-muted"
+                >
+                  Huỷ
+                </button>
+              </div>
+            </div>
+          )}
+
+          {assignable.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Không có học viên nào đủ điều kiện (đúng khóa + đúng cơ sở + chưa xếp
+              lớp active).
+            </p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {assignable.map((s) => (
+                <li key={s.id} className="py-2">
+                  <label className="flex cursor-pointer items-center gap-3 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(s.id)}
+                      onChange={() => toggle(s.id)}
+                      className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                    />
+                    <span className="font-medium text-foreground">
+                      {s.name}
+                      {s.studentCode ? (
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          {s.studentCode}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="ml-auto rounded-full bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
+                      {s.statusLabel}
+                    </span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
     </div>
   );
 }

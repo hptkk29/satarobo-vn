@@ -143,9 +143,12 @@ export default async function TransferReportPage({ searchParams }: Props) {
           </p>
         </div>
         <div className="flex items-center gap-2 text-sm">
-          <Link href={`/leads/bao-cao-chuyen?month=${mStr(prevM)}`} className="rounded-lg border border-border px-2 py-1.5 hover:bg-muted">←</Link>
+          {/* `scroll={false}`: lùi/tiến tháng chỉ đổi `?month=` của chính trang này —
+              để Next cuộn lên đầu thì mỗi lần đổi tháng người xem lại phải cuộn xuống
+              đúng chỗ bảng vừa nhìn. */}
+          <Link href={`/leads/bao-cao-chuyen?month=${mStr(prevM)}`} scroll={false} className="rounded-lg border border-border px-2 py-1.5 hover:bg-muted">←</Link>
           <span className="font-semibold text-foreground">{month}</span>
-          <Link href={`/leads/bao-cao-chuyen?month=${mStr(nextM)}`} className="rounded-lg border border-border px-2 py-1.5 hover:bg-muted">→</Link>
+          <Link href={`/leads/bao-cao-chuyen?month=${mStr(nextM)}`} scroll={false} className="rounded-lg border border-border px-2 py-1.5 hover:bg-muted">→</Link>
         </div>
       </div>
 

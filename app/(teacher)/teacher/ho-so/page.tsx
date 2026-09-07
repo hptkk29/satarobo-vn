@@ -29,6 +29,7 @@ import {
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb, withMakeupException } from "@/lib/db-scope";
+import { rosterWhere } from "@/lib/enrollment-scope";
 import { roleLabel } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -131,7 +132,10 @@ export default async function TeacherProfilePage() {
             maxStudents: true,
             course: { select: { name: true } },
             center: { select: { name: true } },
-            _count: { select: { enrollments: true } },
+            // Trước đây `enrollments: true` trần — đếm CẢ ghi danh đã gỡ mềm, đã
+            // nghỉ, đã huỷ và cả "chờ xác nhận", nên sĩ số ở hồ sơ GV luôn cao hơn
+            // mọi màn khác. Đây là hình dạng thứ năm của cùng một truy vấn.
+            _count: { select: { enrollments: { where: rosterWhere("dang-hoc") } } },
           },
           orderBy: { name: "asc" },
         })

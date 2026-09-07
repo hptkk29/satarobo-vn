@@ -16,7 +16,7 @@ import { ALL_LEAD_STATUSES } from '@/lib/leads/status'
 import type { LeadStatus, Prisma } from '@prisma/client'
 import { phoneSearchTerm } from '@/lib/phone'
 import { getNonEnrollableCenterIds } from '@/lib/enrollment-flow'
-import { docSoDong } from '@/lib/ui/phan-trang'
+import { docSoDong, docSoTheMoiCot } from '@/lib/ui/phan-trang'
 
 const KANBAN_LIMIT = 500
 
@@ -270,6 +270,8 @@ export default async function LeadsPage({
         />
         <LeadsKanban
           leads={kanbanLeads}
+          // Cùng tham số `?size=` với bảng, chỉ khác giá trị mặc định (5 thẻ/cột).
+          soTheMoiCot={docSoTheMoiCot(params.size)}
           canUpdate={canUpdate}
           canCloseDeal={canCloseDeal}
           canAssign={canAssign}
@@ -426,14 +428,18 @@ function Header({
           chỗ là màn Bảng mọc hai nút giống hệt nhau. */}
       {view === 'kanban' && <LeadsRefreshButton />}
       <div className="inline-flex overflow-hidden rounded-lg border border-border">
+        {/* `scroll={false}`: đổi khung nhìn là ĐỔI THAM SỐ của chính trang này, không
+            phải sang trang khác — để Next tự cuộn lên đầu là người dùng mất chỗ đang xem. */}
         <Link
           href={qs('table')}
+          scroll={false}
           className={`px-3 py-1.5 text-sm font-medium ${ view === 'table' ? 'bg-primary text-white' : 'bg-card text-muted-foreground hover:bg-muted' }`}
         >
           Bảng
         </Link>
         <Link
           href={qs('kanban')}
+          scroll={false}
           className={`px-3 py-1.5 text-sm font-medium ${ view === 'kanban' ? 'bg-primary text-white' : 'bg-card text-muted-foreground hover:bg-muted' }`}
         >
           Kanban
@@ -462,8 +468,15 @@ function Header({
               Chốt hàng loạt
             </Link>
           )}
+          {/* 03/09/2026 — trỏ sang "Nhập khách hàng" thay vì `/leads/new` (chủ dự án chốt).
+              Không chỉ là đổi chỗ: `/nhap-khach-hang` đi qua đường nhận lead chung
+              (`ingestIntakeLead`) nên có sẵn CHỐNG TRÙNG SĐT và TỰ CHIA cho sale theo
+              vòng — hai thứ `/leads/new` không có, nên lead gõ tay ở đó nằm im không ai
+              nhận, và gõ trùng số thì đẻ phiếu thứ hai.
+              Cùng một quyền `leads:create` gác cả nút này lẫn trang đích
+              (`PAGE_GATES["/nhap-khach-hang"]`) ⇒ ai thấy nút là mở được trang. */}
           <Link
-            href="/leads/new"
+            href="/nhap-khach-hang"
             className="rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90"
           >
             + Thêm lead
@@ -508,10 +521,11 @@ function StatusTabs({
 
   return (
     <div className="mb-3 flex flex-wrap gap-2">
-      <Link href={qs(undefined)} className={tabCls(view === 'table' && !params.status)}>
+      {/* `scroll={false}`: tab preset chỉ đổi `?status=` của chính trang này. */}
+      <Link href={qs(undefined)} scroll={false} className={tabCls(view === 'table' && !params.status)}>
         Tất cả
       </Link>
-      <Link href={qs('DA_DANG_KY')} className={tabCls(isRegistered)}>
+      <Link href={qs('DA_DANG_KY')} scroll={false} className={tabCls(isRegistered)}>
         Đã đăng ký{' '}
         <span
           className={`ml-1 rounded-full px-1.5 py-0.5 text-xs font-semibold ${ isRegistered ? 'bg-white/20' : 'bg-primary-soft text-primary' }`}
@@ -630,8 +644,10 @@ function FilterBar({
       <button className="rounded bg-gray-800 px-3 py-1.5 text-sm font-medium text-white">
         Lọc
       </button>
+      {/* `scroll={false}`: xoá lọc = quay về chính trang này không tham số. */}
       <Link
         href={`/leads?view=${view}`}
+        scroll={false}
         className="rounded border border-border bg-card px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted"
       >
         Xoá lọc

@@ -286,6 +286,7 @@ export type Action =
   | "payments:view" // 03/08 — chỉ XEM đối soát (Công nợ, Biến động số dư); không thao tác
   | "payments:record" // R7-04 — Sale ghi nhận khoản
   | "payments:confirm" // R7-04 — Kế toán xác nhận (tách nhiệm vụ)
+  | "payments:adjust" // 07/09 — ĐIỀU CHỈNH khoản thu (bút toán delta). Vai nghiệp vụ nhận ở v2
   | "payments:view-pii" // #15 (câu 32) — break-glass xem đầy đủ CCCD PH + địa chỉ (reason + audit)
   | "installments:approve" // FIX lead→payment→enroll (C4) — duyệt kế hoạch trả góp 2 đợt
   | "discounts:approve" // BGĐ 31/07 — duyệt giảm giá nhập tay (kèm giải trình)
@@ -686,6 +687,25 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "payments:view": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
   "payments:record": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT"],
   "payments:confirm": ["SUPER_ADMIN", "ACCOUNTANT"],
+  // ⚠️ 07/09/2026 — CHỈ SUPER_ADMIN Ở ĐÂY LÀ CỐ Ý, KHÔNG PHẢI SÓT.
+  //
+  // Vai nghiệp vụ (kế toán Hội sở + kế toán cơ sở) nhận `payments:adjust` DUY NHẤT ở
+  // RBAC v2 — `prisma/seed-roles.ts`. Prod đang bật `RBAC_V2_ENABLED` nên kế toán dùng
+  // được thật; máy dev/CI chạy v1 nên ở đó chỉ SUPER_ADMIN thấy nút. Chênh lệch đó là
+  // ĐÃ BIẾT, không phải bug: đừng "sửa cho khớp" bằng cách thêm ACCOUNTANT vào đây mà
+  // không hỏi — chủ dự án chốt giữ ma trận v1 nguyên trạng.
+  //
+  // Vì sao danh sách không được RỖNG: repo có bất biến "mọi action phải cấp cho
+  // SUPER_ADMIN", canh bằng `permissions.test.ts` ("SUPER_ADMIN phủ toàn bộ action
+  // (khớp bypass v2)"). `can()` v2 (lib/auth/can.ts:52) trả true VÔ ĐIỀU KIỆN cho
+  // SUPER_ADMIN, nên v1 thiếu SUPER_ADMIN là mỗi lượt admin chạm call-site đẻ một dòng
+  // `RbacShadowDiff` (v1=false, v2=true) và cổng `isSafeToEnableRbacV2` không bao giờ
+  // về 0.
+  //
+  // Lịch sử: từ 07/09 đến khi Bước 6 xanh, ô này còn kèm một CẦU DAO ở tầng tính năng
+  // (`lib/finance/cau-dao-dieu-chinh.ts`) chặn cả SUPER_ADMIN, vì ma trận không khoá
+  // được admin. Cầu dao đã gỡ ở Bước 7 — xem docs/dieu-chinh-khoan-thu.md.
+  "payments:adjust": ["SUPER_ADMIN"],
   // #15 (câu 32) — CCCD PH + địa chỉ mask mặc định; break-glass "Xem đầy đủ" (reason
   // ≥10 ký tự + audit) chỉ cho kế toán + admin. v2: HO_ACCOUNTANT GLOBAL,
   // CENTER_ACCOUNTANT CENTER (prisma/seed-roles.ts). KHÔNG mở cho CENTER_MANAGER.

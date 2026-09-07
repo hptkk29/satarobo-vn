@@ -168,13 +168,15 @@ export function mapQuatang(payload: unknown): MapResult {
       phone,
       email,
       centerHint: centerHintFromText(get(QUATANG_FIELDS.center)),
-      child: childName
-        ? {
-            fullName: childName,
-            schoolName: get(QUATANG_FIELDS.schoolName),
-            gradeLevel: get(QUATANG_FIELDS.gradeLevel),
-          }
-        : null,
+      children: childName
+        ? [
+            {
+              fullName: childName,
+              schoolName: get(QUATANG_FIELDS.schoolName),
+              gradeLevel: get(QUATANG_FIELDS.gradeLevel),
+            },
+          ]
+        : [],
       employeeCode: get(QUATANG_FIELDS.affEmployeeCode),
       noteLines,
       externalId: quatangExternalId(payload),

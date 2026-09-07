@@ -108,6 +108,10 @@ export default async function TeacherTrialPage({
                   <Link
                     key={s.id}
                     href={`?enrollmentId=${ctx.enrollmentId}&sessionId=${s.id}`}
+                    // Chọn buổi = đổi tham số truy vấn TRÊN CHÍNH màn phiếu này, không
+                    // phải sang trang khác → giữ nguyên vị trí cuộn (App Router mặc
+                    // định kéo về đầu sau mỗi lần cập nhật router state).
+                    scroll={false}
                     aria-current={active ? "true" : undefined}
                     className={cn(
                       "rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors",
@@ -168,8 +172,10 @@ export default async function TeacherTrialPage({
   function toView(r: TrialTableRow): TrialRowView {
     return {
       enrollmentId: r.enrollmentId,
-      dateLabel: r.date ? capitalize(dateShortFmt.format(r.date)) : "",
-      timeLabel: r.startTime && r.endTime ? `${r.startTime}–${r.endTime}` : "",
+      sessionId: r.sessionId,
+      hocCaLop: r.hocCaLop,
+      dateLabel: capitalize(dateShortFmt.format(r.date)),
+      timeLabel: `${r.startTime}–${r.endTime}`,
       trialClassName: r.trialClassName,
       studentLabel: r.birthYear ? `${r.studentName} - ${r.birthYear}` : r.studentName,
       parentName: r.parentName,
@@ -179,9 +185,9 @@ export default async function TeacherTrialPage({
     };
   }
 
-  // HV chưa gắn buổi không có ngày để xếp, nên KHÔNG trộn vào bảng "sắp Trial" (bảng đó
-  // sắp theo ngày). Dồn xuống "Đã Trial" cũng sai — việc chưa xảy ra. Giữ nguyên khối
-  // riêng như trước để không ai tàng hình.
+  // 04/09 — mọi dòng nay ĐỀU có ngày giờ: ghi danh "học cả lớp" được suy buổi đại diện ở
+  // server (`chonBuoiDaiDien`), suy không ra thì bỏ hẳn. Nên không còn khối "chưa xếp
+  // buổi" nào, và cũng không còn dòng nào rơi nhầm xuống "Đã Trial" chỉ vì thiếu ngày.
   const upcoming = table.upcoming.map(toView);
   const done = table.done.map(toView);
 

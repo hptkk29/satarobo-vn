@@ -168,6 +168,9 @@ function ThSap({
   return (
     <Link
       href={`/leads?${u.toString()}`}
+      // Đổi sắp xếp = đổi tham số của CHÍNH trang này. Không có `scroll={false}` thì
+      // Next cuộn lên đầu, người dùng đang soi dòng giữa bảng bị mất chỗ.
+      scroll={false}
       className={`inline-flex items-center gap-1 hover:text-foreground ${dang ? 'text-foreground' : ''}`}
       title={dang ? 'Đang sắp theo cột này' : `Sắp theo ${nhan.toLowerCase()}`}
     >
@@ -436,13 +439,16 @@ export function LeadsTable({
       }
     })
     params.delete('page')
-    router.push(`/leads?${params.toString()}`)
+    // `scroll: false` — đổi bộ lọc là ở LẠI trang này, chỉ khác tham số truy vấn.
+    router.push(`/leads?${params.toString()}`, { scroll: false })
   }
 
   const goPage = (p: number) => {
     const params = new URLSearchParams(searchParams.toString())
     params.set('page', String(p))
-    router.push(`/leads?${params.toString()}`)
+    // `scroll: false` — sang trang khác của cùng bảng thì giữ nguyên vị trí đang xem,
+    // đừng để Next kéo về đầu tài liệu.
+    router.push(`/leads?${params.toString()}`, { scroll: false })
   }
 
   return (

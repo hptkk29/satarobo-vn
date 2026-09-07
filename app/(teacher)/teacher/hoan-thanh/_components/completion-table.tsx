@@ -9,6 +9,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { CANH_BAO_LABEL, canhBaoDeXuat } from "@/lib/completion/de-xuat";
 import { CheckCircle2, Send } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,9 +40,12 @@ export type CompletionTableRow = {
 export function CompletionTable({
   rows,
   completedSessions,
+  heldSessions,
 }: {
   rows: CompletionTableRow[];
   completedSessions: number;
+  /** Số buổi ĐÃ DẠY — chỉ dùng để cảnh báo khi đề xuất, không hiển thị. */
+  heldSessions: number;
 }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<"all" | "pending" | "done" | "open">(
@@ -80,7 +84,8 @@ export function CompletionTable({
       />
 
       <section className="t-card overflow-hidden">
-        <PhanTrangBang cuonNgang>
+        <PhanTrangBang cuonNgang
+          khoaGhiNho="gv-hoan-thanh">
           <table className="min-w-[660px] w-full text-left text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/50 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -90,12 +95,10 @@ export function CompletionTable({
                 <th scope="col" className="px-4 py-3">
                   Chuyên cần
                 </th>
-                <th scope="col" className="px-4 py-3">
-                  Chuyển sang
-                </th>
-                <th scope="col" className="px-4 py-3">
-                  Kết quả
-                </th>
+                {/* Hai cột "Chuyển sang" và "Kết quả" đã GỠ (quyết định #5, 03/09).
+                    `Course.nextCourseId` là cột CHẾT — 0 đường ghi trong toàn repo kể
+                    cả scripts và tests, nên cột luôn in "—" ở 7/7 dòng và chỉ làm bảng
+                    rộng thêm. Mở lại khi có nguồn dữ liệu thật. */}
                 <th scope="col" className="px-4 py-3">
                   Hoàn thành khoá
                 </th>
@@ -148,29 +151,12 @@ export function CompletionTable({
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-foreground">
-                      {r.nextCourseName ?? (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {r.finalGrade ? (
-                        <span className="font-semibold text-foreground">
-                          {r.finalGrade}
-                        </span>
-                      ) : r.passed ? (
-                        <Badge
-                          variant="outline"
-                          className="w-fit border-state-success-soft bg-state-success-soft text-state-success-ink dark:border-state-success"
-                        >
-                          Đạt
-                        </Badge>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </td>
                     <td className="px-4 py-3">
-                      <CompletionCell row={r} />
+                      <CompletionCell
+                        row={r}
+                        heldSessions={heldSessions}
+                        totalSessions={completedSessions}
+                      />
                     </td>
                   </tr>
                 ))
@@ -183,9 +169,18 @@ export function CompletionTable({
   );
 }
 
-function CompletionCell({ row: r }: { row: CompletionTableRow }) {
+function CompletionCell({
+  row: r,
+  heldSessions,
+  totalSessions,
+}: {
+  row: CompletionTableRow;
+  heldSessions: number;
+  totalSessions: number;
+}) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  const [confirming, setConfirming] = useState(false);
 
   if (r.passed) {
     return (
@@ -226,10 +221,53 @@ function CompletionCell({ row: r }: { row: CompletionTableRow }) {
       }
     });
   }
+
+  // Xác nhận HAI BƯỚC (mẫu 2-click của repo) thay vì gửi thẳng: đề xuất là hành động
+  // ghi, gửi lên trung tâm, và giáo viên KHÔNG tự rút lại được — trung tâm phải từ
+  // chối hộ. Bấm nhầm một cái là một vòng làm việc của người khác (QA vòng 1,
+  // BUG-028).
+  const canhBao = canhBaoDeXuat({
+    attended: r.attended,
+    heldSessions,
+    totalSessions,
+  });
+
+  if (!confirming) {
+    return (
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={pending}
+        onClick={() => setConfirming(true)}
+      >
+        <Send className="mr-1 h-3.5 w-3.5" aria-hidden />
+        Đề xuất hoàn thành
+      </Button>
+    );
+  }
+
   return (
-    <Button size="sm" variant="outline" disabled={pending} onClick={propose}>
-      <Send className="mr-1 h-3.5 w-3.5" aria-hidden />
-      {pending ? "Đang gửi…" : "Đề xuất hoàn thành"}
-    </Button>
+    <div className="flex flex-col gap-1.5">
+      {canhBao.length > 0 && (
+        <ul className="text-xs text-state-warning-ink">
+          {canhBao.map((c) => (
+            <li key={c}>• {CANH_BAO_LABEL[c]}</li>
+          ))}
+        </ul>
+      )}
+      <div className="flex gap-1.5">
+        <Button size="sm" disabled={pending} onClick={propose}>
+          {pending ? "Đang gửi…" : "Xác nhận gửi"}
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={pending}
+          onClick={() => setConfirming(false)}
+        >
+          Huỷ
+        </Button>
+      </div>
+    </div>
   );
 }

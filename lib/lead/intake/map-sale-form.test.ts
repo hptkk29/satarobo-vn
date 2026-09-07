@@ -37,11 +37,13 @@ describe("mapSaleForm — phiếu hợp lệ", () => {
 
   it("LastName là TÊN CON chứ không phải tên phụ huynh", () => {
     const lead = ok(form());
-    expect(lead.child).toEqual({
-      fullName: "Nguyễn Minh Khoa",
-      schoolName: "TH Phù Đổng",
-      gradeLevel: "Lớp 4",
-    });
+    expect(lead.children).toEqual([
+      {
+        fullName: "Nguyễn Minh Khoa",
+        schoolName: "TH Phù Đổng",
+        gradeLevel: "Lớp 4",
+      },
+    ]);
     expect(lead.parentName).not.toBe("Nguyễn Minh Khoa");
   });
 
@@ -101,7 +103,7 @@ describe("mapSaleForm — phiếu thiếu thông tin", () => {
       }),
     );
     expect(lead.parentName).toBe("Phụ huynh (chưa rõ tên)");
-    expect(lead.child).toBeNull();
+    expect(lead.children).toEqual([]);
   });
 
   it("không chọn cơ sở ⇒ centerHint null (rơi về auto-chia)", () => {

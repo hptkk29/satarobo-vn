@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { getModelVisibleCenterIds, scopedDb } from "@/lib/db-scope";
+import { getCenterOptions } from "@/lib/org/center-options";
 import { listForms } from "@/lib/eval/forms";
 import { listRounds } from "@/lib/eval/rounds";
 import type { EvalScopeValue } from "@/lib/eval/schema";
@@ -27,22 +28,28 @@ export default async function EvaluationsPage() {
   const roundScope = getModelVisibleCenterIds("EvaluationRound", actor);
   const centerScope = roundScope === "ALL" ? null : roundScope;
 
-  const [forms, rounds, centers, courses] = await Promise.all([
-    listForms(),
-    listRounds({ centerIds: centerScope }),
-    sdb.center.findMany({
-      where: { isActive: true },
-      orderBy: { displayOrder: "asc" },
-      select: { id: true, name: true },
-    }),
-    sdb.course.findMany({
-      where: { isActive: true },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true },
-    }),
-  ]);
+  const [forms, rounds, centerLookup, courses, centerOptions] =
+    await Promise.all([
+      listForms(),
+      listRounds({ centerIds: centerScope }),
+      // Bảng tra TÊN cho các đợt đã tạo — phải giữ đủ mọi cơ sở (kể cả Hội sở),
+      // không dùng danh sách đã lọc kẻo đợt cũ mất tên hiển thị.
+      sdb.center.findMany({
+        where: { isActive: true },
+        orderBy: { displayOrder: "asc" },
+        select: { id: true, name: true },
+      }),
+      sdb.course.findMany({
+        where: { isActive: true },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true },
+      }),
+      // Ô chọn cơ sở khi tạo đợt: bản cũ bày cả Hội sở, dòng mồ côi (ITLI_*) và
+      // không cắt theo tầm nhìn người dùng.
+      getCenterOptions(actor),
+    ]);
 
-  const centerName = new Map(centers.map((c) => [c.id, c.name]));
+  const centerName = new Map(centerLookup.map((c) => [c.id, c.name]));
 
   return (
     <div className="max-w-4xl space-y-6 p-6">
@@ -92,7 +99,7 @@ export default async function EvaluationsPage() {
             title: f.title,
             scope: f.scope as EvalScopeValue,
           }))}
-        centers={centers}
+        centers={centerOptions}
         courses={courses}
       />
     </div>

@@ -107,6 +107,7 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
       <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card px-3 py-2">
         <Link
           href={prevHref}
+          scroll={false}
           aria-label="Tháng trước"
           className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-card transition-colors hover:bg-muted"
         >
@@ -117,6 +118,7 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
         </span>
         <Link
           href={nextHref}
+          scroll={false}
           aria-label="Tháng sau"
           className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-card transition-colors hover:bg-muted"
         >

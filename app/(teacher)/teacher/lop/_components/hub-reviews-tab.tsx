@@ -22,7 +22,7 @@ import {
 import type { AttendanceStatus } from "@prisma/client";
 import type { Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
-import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
+import { rosterWhere } from "@/lib/enrollment-scope";
 import { summarizeSessionFeedback } from "@/lib/lms/session-feedback-roster";
 import {
   attendanceCoversRoster,
@@ -183,7 +183,7 @@ export async function HubReviewsTab({
         where: { id: classId },
         select: {
           enrollments: {
-            where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
+            where: rosterWhere("dang-hoc"),
             select: {
               student: {
                 select: {
@@ -307,7 +307,8 @@ export async function HubReviewsTab({
           />
         ) : (
           <div className="t-card overflow-hidden">
-            <PhanTrangBang cuonNgang>
+            <PhanTrangBang cuonNgang
+          khoaGhiNho="gv-lop-nhan-xet-buoi">
               <table className="min-w-[560px] w-full border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
@@ -459,21 +460,20 @@ export async function HubReviewsTab({
       endTime: true,
       _count: {
         select: {
-          enrollments: {
-            where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
-          },
+          enrollments: { where: rosterWhere("dang-hoc") },
         },
       },
       // Danh sách studentId của sĩ số — dùng cho "điểm danh xong chưa"
-      // (attendanceCoversRoster). Lọc deletedAt ở CẢ enrollment lẫn student; `_count`
-      // ngay trên KHÔNG lọc và giữ nguyên vì nó là mẫu số của cột "Đi học X/Y" đã có
-      // từ trước.
+      // (attendanceCoversRoster).
+      //
+      // `_count` ngay trên nay dùng CHUNG rosterWhere với chỗ này. Trước đây hai truy
+      // vấn cách nhau 9 dòng trong CÙNG file lại lọc khác nhau (`_count` chỉ lọc
+      // status, chỗ này lọc đủ ba tầng) ⇒ mẫu số "Đi học X/Y" và mẫu số của
+      // attendanceCoversRoster đếm hai tập khác nhau, và một buổi có thể vừa hiện
+      // "12/12" vừa không bao giờ được coi là điểm danh xong. Chủ dự án chốt 03/09:
+      // đổi cả con số cho khớp, không chỉ đổi chữ.
       enrollments: {
-        where: {
-          status: { in: ENROLLMENT_ACTIVE_STATUS_LIST },
-          deletedAt: null,
-          student: { deletedAt: null },
-        },
+        where: rosterWhere("dang-hoc"),
         select: { studentId: true },
       },
     },
@@ -606,8 +606,11 @@ export async function HubReviewsTab({
 
   return (
     <div className="t-card overflow-hidden">
-      <PhanTrangBang cuonNgang>
-        <table className="min-w-[720px] w-full border-collapse text-left text-sm">
+      <PhanTrangBang cuonNgang
+          khoaGhiNho="gv-lop-nhan-xet-hocvien">
+        {/* 820 chứ không phải 720: tách cột Nhận xét thành Tiến độ + Trạng thái là
+            thêm một cột, giữ min-w cũ thì các cột text bị bóp lại — đúng lỗi Đ2. */}
+        <table className="min-w-[820px] w-full border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
               <th scope="col" className="px-5 py-3">
@@ -619,8 +622,15 @@ export async function HubReviewsTab({
               <th scope="col" className="px-5 py-3">
                 Đi học
               </th>
+              {/* TÁCH đôi: cột cũ trộn ba loại giá trị khác nghĩa nhau trong một ô —
+                  tiến độ ("4/6 HV"), trạng thái hoàn tất ("Đã nhận xét"), và trạng thái
+                  CHẶN ("Chưa điểm danh"). Người đọc không sắp xếp hay quét được một cột
+                  như thế (QA vòng 1, BUG-030). */}
               <th scope="col" className="px-5 py-3">
-                Nhận xét
+                Tiến độ
+              </th>
+              <th scope="col" className="px-5 py-3">
+                Trạng thái
               </th>
               <th scope="col" className="px-5 py-3 text-right">
                 <span className="sr-only">Thao tác</span>
@@ -665,6 +675,16 @@ export async function HubReviewsTab({
                       ? `${stat.attended}/${rosterCount}`
                       : "—"}
                   </td>
+                  {/* Cột TIẾN ĐỘ: luôn là một tỉ lệ, kể cả khi đã xong — quét dọc cột
+                      là thấy ngay còn nợ bao nhiêu em, không phải đọc badge. */}
+                  <td className="px-5 py-3.5 whitespace-nowrap font-semibold text-foreground">
+                    {stat.attendanceTaken ? (
+                      `${stat.reviewed}/${stat.attended} HV`
+                    ) : (
+                      <span className="font-normal text-muted-foreground">—</span>
+                    )}
+                  </td>
+                  {/* Cột TRẠNG THÁI: chỉ nói buổi đang ở đâu trong quy trình. */}
                   <td className="px-5 py-3.5 whitespace-nowrap">
                     {!stat.attendanceTaken ? (
                       <Badge
@@ -685,7 +705,7 @@ export async function HubReviewsTab({
                         variant="outline"
                         className="border-state-warning-soft bg-state-warning-soft text-state-warning-ink dark:border-state-warning"
                       >
-                        {stat.reviewed}/{stat.attended} HV
+                        Còn thiếu
                       </Badge>
                     )}
                   </td>

@@ -2,6 +2,8 @@ import "server-only";
 import { cache } from "react";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { GHI_DANH_DANG_HOC } from "@/lib/portal/trang-thai-ghi-danh";
+import { idsDaDoc } from "@/lib/portal/feed-read";
 import { getChildren } from "@/lib/portal/session";
 
 // =============================================================================
@@ -10,7 +12,9 @@ import { getChildren } from "@/lib/portal/session";
 // hoặc CLASS khớp lớp con đang học. Chỉ bản đã publish.
 // =============================================================================
 
-const ACTIVE_ENROLLMENT = ["CONFIRMED", "STUDYING", "ACTIVE"] as const;
+// 06/09 — danh sách hợp nhất (lib/portal/trang-thai-ghi-danh.ts). Thêm "PAUSED":
+// con tạm nghỉ vẫn thuộc lớp nên vẫn phải nhận thông báo của lớp.
+const ACTIVE_ENROLLMENT = GHI_DANH_DANG_HOC;
 
 export type NotificationRow = {
   id: string;
@@ -103,7 +107,18 @@ export const getParentNotifications = cache(async (
   }));
 });
 
-/** Số thông báo GẦN ĐÂY (7 ngày) cho badge chuông portal — React cache/request. */
+/**
+ * Số thông báo GẦN ĐÂY (7 ngày) **CHƯA ĐỌC** — badge chuông portal (React cache/request).
+ *
+ * ⚠️ 04/09/2026 — trước bản này badge là HÀM CỦA THỬI GIAN, không phải của việc
+ * đọc: ở đây đếm "tin trong 7 ngày qua", còn badge v2
+ * (`lib/portal/notification-feed.ts`) coi là đã đọc sau 2 ngày TRÔI QUA. Cả hai đều
+ * khiến phụ huynh mở tin ra đọc xong con số (1) vẫn nằm đó — `Notification` không hề
+ * có cột trạng thái đã đọc nào để mà trừ.
+ *
+ * GIỮ nguyên cửa sổ 7 ngày, chỉ thêm điều kiện chưa đọc: đổi cả hai cùng lúc thì lần
+ * triển khai đầu tiên mọi tin cũ chưa đọc sẽ dồn hết vào badge.
+ */
 export const getParentNotificationCount = cache(async (parentUserId: string): Promise<number> => {
   const since = new Date();
   since.setDate(since.getDate() - 7);
@@ -119,7 +134,13 @@ export const getParentNotificationCount = cache(async (parentUserId: string): Pr
         { OR: [{ publishedAt: null }, { publishedAt: { lte: now } }] },
         // Mốc 7 ngày theo publishedAt ?? createdAt — khớp filter JS trước đây.
         { OR: [{ publishedAt: { gte: since } }, { publishedAt: null, createdAt: { gte: since } }] },
+        // Chưa có dấu đã đọc của CHÍNH phụ huynh này. Bảng đọc dùng CHUNG với portal v2
+        // (`lib/portal/feed-read.ts`) — v2 khoá theo id mục bảng tin, v1 khoá theo
+        // `Notification.id`; cả hai đều là chuỗi nên dùng chung một bảng được.
+        { id: { notIn: [...(await idsDaDoc(parentUserId))] } },
       ],
     },
   });
 });
+
+

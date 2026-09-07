@@ -6,6 +6,7 @@ import {
   getSessionMediaForStudent,
   type RenderedAnswer,
 } from "@/lib/eval/session-eval-portal";
+import { ngayVN } from "@/lib/format/date";
 import { isPortalV2Enabled } from "@/lib/flags";
 import {
   getSessionNumberMapForClasses,
@@ -51,13 +52,38 @@ export default async function NhanXetPage() {
 
   // Portal v2 — trang Nhận xét giống SataUI (master-detail).
   if (isPortalV2Enabled()) {
-    const items = await getStudentFeedback(studentId);
+    // 06/09 — truyền LIMIT rõ ràng. Mặc định của hàm là 20 (đủ cho 3 thẻ ở bảng tin),
+    // nhưng trang Nhận xét là nơi phụ huynh xem lại cả khoá: bản v1 nạp 100, bản v2 lặng
+    // lẽ cắt còn 20 nên nhận xét các buổi đầu khoá biến mất mà không có nút "xem thêm".
+    const [items, evals] = await Promise.all([
+      getStudentFeedback(studentId, 100),
+      // Parity với bản v1: phiếu SESSION_EVAL của module Đánh giá. Bản v2 trước đây bỏ
+      // hẳn nhóm này, nên trung tâm nào chấm buổi bằng module đó thì phụ huynh mất sạch
+      // phần ấy kể từ ngày prod bật cờ v2.
+      getStudentSessionEvals(studentId).catch(() => []),
+    ]);
     return (
       <NhanXetPageV2
         kids={ctx.children.map((c) => ({ id: c.id, name: c.name }))}
         activeId={ctx.activeStudent?.id ?? null}
         studentName={ctx.activeStudent?.name ?? "con"}
         items={items}
+        phieuDanhGia={evals.map((ev) => ({
+          responseId: ev.responseId,
+          tieuDe: [ev.classCode, ev.className ?? ev.roundName].filter(Boolean).join(" · "),
+          // Ngày tính sẵn ở server theo lịch VN — component là client, thiết bị phụ
+          // huynh có thể ở múi giờ khác.
+          nhanNgay: ev.sessionDate ? ngayVN(ev.sessionDate) : "—",
+          teacherName: ev.teacherName,
+          sessionTopic: ev.sessionTopic,
+          answers: ev.answers.map((a) => ({
+            questionId: a.questionId,
+            label: a.label,
+            stars: a.stars,
+            options: a.options,
+            text: a.text,
+          })),
+        }))}
       />
     );
   }
@@ -106,8 +132,13 @@ export default async function NhanXetPage() {
   // R1 21/08 — SỐ BUỔI cho phụ huynh, tính trên TOÀN BỘ buổi của các lớp có phiếu
   // (lib/lms/session-order), để phụ huynh và giáo viên gọi một buổi bằng cùng một số.
   // ⚠️ Bản V2 (components/portal/nhan-xet-page) lấy số qua lib/portal/feedback — file
-  // ĐÓ KHÔNG phục vụ trang này. Cờ PORTAL_V2_ENABLED mặc định OFF nên V1 mới là bản
-  // phụ huynh đang thấy: sửa một bên là "sửa xong mà không thấy đổi".
+  // ĐÓ KHÔNG phục vụ trang này — hai bản có hai đường lấy số buổi riêng, sửa một bên là
+  // "sửa xong mà không thấy đổi".
+  // ⚠️ ĐÍNH CHÍNH 06/09: bản ghi chú cũ ở đây viết "cờ PORTAL_V2_ENABLED mặc định OFF nên
+  // V1 mới là bản phụ huynh đang thấy". SAI với thực tế đang chạy — `lib/flags.ts` mặc
+  // định OFF, nhưng Vercel **Production đặt `PORTAL_V2_ENABLED="true"`**, nên KHÁCH HÀNG
+  // THẬT ĐANG XEM BẢN V2. Câu đó đã dẫn người sửa vào đúng nhánh không ai dùng một lần
+  // rồi (04/09). Sửa lỗi hiển thị của phụ huynh thì V2 là bản phải sửa TRƯỚC.
   const fbClassIds = [
     ...new Set(
       feedbacks.map((f) => f.classSession?.classId).filter((x): x is string => !!x),

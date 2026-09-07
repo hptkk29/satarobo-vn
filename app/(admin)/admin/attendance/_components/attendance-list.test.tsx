@@ -96,13 +96,14 @@ const ROWS: AttendanceListRow[] = [
   }),
 ];
 
-function mount(rows: AttendanceListRow[], canComplete = true) {
+function mount(rows: AttendanceListRow[], canComplete = true, canFeedback = true) {
   return render(
     <AttendanceList
       rows={rows}
       classId="c1"
       className="Sata 3 - CS1"
       canComplete={canComplete}
+      canFeedback={canFeedback}
     />,
   );
 }
@@ -253,5 +254,21 @@ describe("AttendanceList", () => {
       target: { value: "zzz-không-có" },
     });
     expect(screen.getByText("Không có buổi học nào khớp bộ lọc")).toBeInTheDocument();
+  });
+});
+
+describe("nút Nhận xét theo quyền (chủ dự án chốt 04/09/2026)", () => {
+  it("KHÔNG có quyền → nút biến mất, các nút còn lại giữ nguyên", () => {
+    // Sale / Quản lý lớp học: `/sessions/[id]` redirect họ ra, nên hiện nút là chỉ
+    // đường tới ngõ cụt — bấm vào bị đá về, trông như hệ thống lỗi.
+    // Điểm danh và Tải ảnh vẫn phải còn: đó đúng là hai việc họ ĐƯỢC làm.
+    mount([row({ id: "s-nx-1" })], true, false);
+    expect(screen.queryByRole("link", { name: /Nhận xét/ })).toBeNull();
+    expect(screen.getByRole("link", { name: /Điểm danh/ })).toBeTruthy();
+  });
+
+  it("CÓ quyền → nút hiện như cũ", () => {
+    mount([row({ id: "s-nx-2" })], true, true);
+    expect(screen.getByRole("link", { name: /Nhận xét/ })).toBeTruthy();
   });
 });

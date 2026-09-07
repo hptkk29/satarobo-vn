@@ -26,9 +26,14 @@ export default defineConfig({
   // cắt ở đúng 1500s** — tức không có ca nào hỏng, chỉ hết giờ, và cái ✘ duy nhất in
   // ra là ca đang chạy dở lúc bị cắt (đọc nhầm thành lỗi thật rất dễ).
   //
-  // Vẫn để dưới trần job 30 phút. Nếu còn chạm trần nữa thì cắt bộ R7 làm hai job chứ
-  // ĐỪNG nới tiếp: nới mãi là mất luôn tín hiệu "bộ test đang chậm dần".
-  globalTimeout: 28 * 60_000,
+  // 03/09/2026 — ĐÃ CẮT LÀM HAI SHARD (`--shard=N/2` trong ci.yml), nên trần này áp
+  // cho MỘT NỬA bộ. Hạ 28 → 20 phút: nửa bộ mà vẫn chạy quá 20 phút thì đó là tín
+  // hiệu thật sự cần nhìn, không phải chuyện nới thêm cho qua.
+  //
+  // Lần chạm trần thứ hai (lượt 100568411670) đo được 277 xanh / 0 đỏ rồi bị cắt ở
+  // đúng 28,0 phút — "1 interrupted, 83 did not run". Cái ✘ duy nhất in ra là ca
+  // đang chạy dở lúc bị cắt; đọc nhầm thành lỗi thật rất dễ, đã mất một vòng.
+  globalTimeout: 20 * 60_000,
   // `list` CẢ Ở CI. Reporter cũ (html + github) không in gì trong lúc chạy, nên một lần
   // chạy XANH cũng im lặng 12 phút — và im lặng đó bị đọc nhầm thành "job treo", tốn
   // một vòng điều tra. Có `list` thì nhìn log biết đang ở test nào.

@@ -184,14 +184,15 @@ export default async function LichSuPoolPage({
         </span>
         <div className="flex gap-2">
           {trang > 1 ? (
-            <Link href={link(trang - 1)} className="rounded-lg border border-border px-3 py-1.5 hover:bg-muted">
+            // Phân trang chỉ đổi `?trang=` của chính trang này — giữ nguyên chỗ đang đọc.
+            <Link href={link(trang - 1)} scroll={false} className="rounded-lg border border-border px-3 py-1.5 hover:bg-muted">
               ← Trước
             </Link>
           ) : (
             <span className="rounded-lg border border-border px-3 py-1.5 opacity-40">← Trước</span>
           )}
           {trang * MOI_TRANG < tong ? (
-            <Link href={link(trang + 1)} className="rounded-lg border border-border px-3 py-1.5 hover:bg-muted">
+            <Link href={link(trang + 1)} scroll={false} className="rounded-lg border border-border px-3 py-1.5 hover:bg-muted">
               Sau →
             </Link>
           ) : (

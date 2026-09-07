@@ -2,6 +2,7 @@
 // Tóm tắt thanh toán của 1 lead cho trang chi tiết lead + trang chốt đơn:
 // đã nộp / tổng phải thu / còn thiếu + điều kiện chốt (khớp guard convertLeadV2).
 import { scopedDb } from "@/lib/db-scope";
+import { KHOAN_DA_GHI_NHAN } from "@/lib/finance/ghi-nhan";
 
 export type LeadPaymentSummary = {
   /** Đã nộp = Σ Payment.amount (saleStatus=RECORDED) trên các đơn của lead. */
@@ -40,7 +41,7 @@ export async function getLeadPaymentSummary(
     select: {
       totalAmount: true,
       payments: {
-        where: { saleStatus: "RECORDED", deletedAt: null },
+        where: KHOAN_DA_GHI_NHAN,
         select: { amount: true },
       },
     },
