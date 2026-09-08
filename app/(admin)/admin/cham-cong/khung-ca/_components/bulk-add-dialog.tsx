@@ -149,12 +149,28 @@ export function BulkAddDialog({
       // "Đã thêm N người" là thao tác không kiểm lại được.
       const cau = [
         themMoi.length > 0 ? `thêm mới ${themMoi.length}` : null,
-        hoiSinh.length > 0
-          ? `mở lại ${hoiSinh.length} người từng bị gỡ (giữ nguyên lịch tuần cũ)`
-          : null,
+        hoiSinh.length > 0 ? `mở lại ${hoiSinh.length} người từng bị gỡ` : null,
         boQua.length > 0 ? `bỏ qua ${boQua.length} người đã có sẵn` : null,
       ].filter(Boolean);
-      toast.success(`${blockLabel}: ${cau.join(" · ")}`);
+
+      // ⚠️ HỒI SINH PHẢN TRỰC GIÁC — nói THẲNG, đừng nhét vào ngoặc.
+      //
+      // Người quản lý thường gỡ ai đó ra CHÍNH VÌ lịch của họ đổi, rồi thêm lại và tưởng
+      // mình bắt đầu từ trắng. Thực tế lịch tuần cũ quay lại NGUYÊN XI — đúng theo mô
+      // hình gỡ mềm, nhưng ngược với thứ họ đang nghĩ, và đây là chỗ duy nhất họ đọc.
+      //
+      // Bản trước viết "mở lại 1 người từng bị gỡ (giữ nguyên lịch tuần cũ)" — nhét cảnh
+      // báo vào trong ngoặc giữa một câu ghép là GIẤU nó. Tách xuống dòng mô tả riêng và
+      // kéo dài thời gian hiện.
+      toast.success(
+        `${blockLabel}: ${cau.join(" · ")}`,
+        hoiSinh.length > 0
+          ? {
+              description: `${hoiSinh.length} người từng bị gỡ quay lại với ĐÚNG lịch tuần cũ của họ, không phải lịch trắng. Cần lịch khác thì sửa từng ô trên bảng.`,
+              duration: 10_000,
+            }
+          : undefined,
+      );
       dongLai();
       router.refresh();
     });
@@ -319,8 +335,10 @@ export function BulkAddDialog({
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Chọn lại người <b>từng bị gỡ</b> khỏi khối thì lịch tuần cũ của họ
-            sống lại nguyên vẹn — hệ thống mở lại dòng cũ chứ không dựng mới.
+            Chọn lại người <b>từng bị gỡ</b> khỏi khối thì họ quay lại với{" "}
+            <b>đúng lịch tuần cũ</b>, không phải lịch trắng — hệ thống mở lại
+            dòng cũ chứ không dựng mới. Cần lịch khác thì sửa từng ô sau khi
+            thêm.
           </p>
 
           <DialogFooter>
