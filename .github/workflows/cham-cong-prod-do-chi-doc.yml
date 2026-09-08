@@ -40,6 +40,7 @@ on:
           - si-so
           - buoi-day
           - backlog
+          - khung-ca-diem-cham
           - tat-ca
 concurrency:
   group: cham-cong-prod-do-chi-doc
@@ -128,6 +129,15 @@ jobs:
       - name: "Đo backlog buổi chưa chốt (chỉ đọc)"
         if: ${{ !cancelled() && (inputs.viec == 'backlog' || inputs.viec == 'tat-ca') }}
         run: pnpm exec tsx scripts/do-backlog-buoi-chua-chot.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+
+      # Đo cho hai câu hỏi 08/09: màn khung ca (gỡ người / thêm hàng loạt / thứ tự) và
+      # điểm chấm (Hội sở chấm cho CS1/CS2 được không). CHỈ ĐỌC.
+      - name: "Đo khung ca + điểm chấm (chỉ đọc)"
+        if: ${{ !cancelled() && (inputs.viec == 'khung-ca-diem-cham' || inputs.viec == 'tat-ca') }}
+        run: pnpm exec tsx scripts/do-khung-ca-diem-cham.ts
         env:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
           DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
