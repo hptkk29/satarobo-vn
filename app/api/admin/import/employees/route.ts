@@ -12,7 +12,8 @@ import {
 } from "@/lib/validators/employee";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
-import { dungPatchNhanSu } from "@/lib/hr/import-patch";
+import { ANH_XA_COT, dungPatchNhanSu } from "@/lib/hr/import-patch";
+import { writeAudit } from "@/lib/audit/audit-log";
 
 // Excel date parser — reused pattern from B3 holidays / B2 rooms.
 function parseExcelDate(v: unknown): Date | null {
@@ -305,21 +306,33 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: 0, errors });
   }
 
+  // Trường được phép xuất hiện trong AuditLog của lượt nhập — đúng tập trường mà
+  // `dungPatchNhanSu` có thể ghi. KHÔNG thêm trường nhạy cảm ngoài tập này.
+  const IMPORT_AUDIT_SELECT = Object.fromEntries(
+    [...new Set(Object.values(ANH_XA_COT).flat())].map((t) => [t, true]),
+  ) as Record<string, true>;
+
   // Stage 3: TẠO MỚI hoặc VÁ, theo employeeCode.
   //
   // Không dùng `upsert` nữa: `create` và `update` nay có luật khác nhau (tạo mới đòi đủ
   // 3 trường + mặc định ACTIVE; cập nhật chỉ đụng cột có trong file), nên phải biết hồ
   // sơ đã tồn tại hay chưa TRƯỚC khi ghi.
-  const daCo = new Set(
+  //
+  // Đọc TRỌN hồ sơ cũ (không chỉ mã) để có ảnh BEFORE cho AuditLog — endpoint này ghi
+  // hàng loạt, và trước 08/09/2026 nó KHÔNG ghi audit dòng nào, trong khi đường sửa
+  // từng người ghi 9 chỗ. Hệ quả: câu "prod sạch" chỉ là "không thấy dấu", không phải
+  // "không xảy ra". Đọc một lượt, không N+1.
+  const hoSoCu = new Map<string, Record<string, unknown>>(
     (
       await sdb.employee.findMany({
         where: {
           employeeCode: { in: validRows.map((r) => r.data.employeeCode) },
         },
-        select: { employeeCode: true },
+        select: { ...IMPORT_AUDIT_SELECT, id: true, employeeCode: true },
       })
-    ).map((e) => e.employeeCode),
+    ).map((e) => [e.employeeCode, e as unknown as Record<string, unknown>]),
   );
+  const daCo = new Set(hoSoCu.keys());
   let success = 0;
   try {
     await sdb.$transaction(async (tx) => {
@@ -358,10 +371,40 @@ export async function POST(req: NextRequest) {
           if (daCo.has(r.data.employeeCode)) {
             // Hồ sơ ĐÃ CÓ → chỉ VÁ. Không cột nào trong file thì không ghi gì.
             if (Object.keys(patch).length > 0) {
-              await tx.employee.update({
-                where: { employeeCode: r.data.employeeCode },
-                data: patch,
-              });
+              const truoc = hoSoCu.get(r.data.employeeCode) ?? {};
+              // Chỉ giữ những trường THỰC SỰ ĐỔI — một lượt nhập lại cùng file không
+              // được đẻ ra audit rỗng, nếu không sổ audit thành nhiễu và mất tác dụng
+              // truy vết.
+              const cu: Record<string, unknown> = {};
+              const moi: Record<string, unknown> = {};
+              for (const [k, v] of Object.entries(patch)) {
+                const a = truoc[k];
+                if (JSON.stringify(a ?? null) === JSON.stringify(v ?? null))
+                  continue;
+                cu[k] = a ?? null;
+                moi[k] = v ?? null;
+              }
+              if (Object.keys(moi).length > 0) {
+                await tx.employee.update({
+                  where: { employeeCode: r.data.employeeCode },
+                  data: patch,
+                });
+                await writeAudit({
+                  actor: { id: session.user.id, name: session.user.name ?? "" },
+                  module: "hr",
+                  entityType: "Employee",
+                  entityId: String(truoc.id ?? r.data.employeeCode),
+                  action: "IMPORT_UPDATE",
+                  oldValues: cu,
+                  newValues: moi,
+                  changedFields: Object.keys(moi),
+                  reason: `Nhập hàng loạt từ file — cột có trong file: ${[...r.coMat].sort().join(", ")}`,
+                  // `sdb.$transaction` trả client MỞ RỘNG: cùng API runtime, khác kiểu
+                  // generic (như `generateMonthAction` cũng phải ép). Audit phải nằm
+                  // TRONG cùng transaction — ghi ngoài là audit sống sót khi ghi hỏng.
+                  tx: tx as unknown as Parameters<typeof writeAudit>[0]["tx"],
+                });
+              }
             }
           } else {
             // TẠO MỚI → đòi đủ ba trường, và mặc định ACTIVE đặt ở ĐÂY (không phải ở schema).
@@ -377,7 +420,7 @@ export async function POST(req: NextRequest) {
               });
               continue;
             }
-            await tx.employee.create({
+            const tao = await tx.employee.create({
               data: {
                 ...base,
                 employeeCode: r.data.employeeCode,
@@ -387,6 +430,17 @@ export async function POST(req: NextRequest) {
                 status: base.status ?? "ACTIVE",
                 isActive: (base.status ?? "ACTIVE") === "ACTIVE",
               },
+              select: { id: true },
+            });
+            await writeAudit({
+              actor: { id: session.user.id, name: session.user.name ?? "" },
+              module: "hr",
+              entityType: "Employee",
+              entityId: tao.id,
+              action: "IMPORT_CREATE",
+              newValues: { employeeCode: r.data.employeeCode, ...patch },
+              reason: `Nhập hàng loạt từ file — tạo mới`,
+              tx: tx as unknown as Parameters<typeof writeAudit>[0]["tx"],
             });
           }
           success++;

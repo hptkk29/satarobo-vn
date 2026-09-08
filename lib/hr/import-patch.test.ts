@@ -138,3 +138,42 @@ describe("route nhập nhân sự cắm đúng luật", () => {
       expect(src).toContain(`base.${k}`);
   });
 });
+
+// ── Việc 8 (08/09/2026): lượt nhập phải để lại DẤU ────────────────────────────
+//
+// Kết quả đo tự nói ra vấn đề lớn hơn bản vá: một endpoint ghi HÀNG LOẠT mà không có
+// dòng audit nào, trong khi đường sửa từng người ghi 9 chỗ. Nên câu "prod sạch" chỉ là
+// "không thấy dấu", không phải "không xảy ra".
+describe("nhập nhân sự ghi AuditLog", () => {
+  const F = "app/api/admin/import/employees/route.ts";
+
+  it("có audit cho CẢ cập nhật lẫn tạo mới", () => {
+    const src = doc(F);
+    expect(src).toContain("IMPORT_UPDATE");
+    expect(src).toContain("IMPORT_CREATE");
+  });
+
+  it("audit nằm TRONG transaction — ghi ngoài là audit sống sót khi ghi hỏng", () => {
+    expect(doc(F)).toContain(
+      "tx: tx as unknown as Parameters<typeof writeAudit>[0]",
+    );
+  });
+
+  it("KHÔNG ghi audit cho hồ sơ không đổi gì", () => {
+    const src = doc(F);
+    // Hai cổng: patch rỗng thì không vào nhánh ghi; và trong nhánh ghi, chỉ ghi khi có
+    // trường THỰC SỰ đổi. Nhập lại cùng một file không được đẻ audit rỗng.
+    expect(src).toContain("Object.keys(patch).length > 0");
+    expect(src).toContain("Object.keys(moi).length > 0");
+  });
+
+  it("audit chỉ mang đúng tập trường mà import được phép ghi", () => {
+    // Ảnh before đọc theo `IMPORT_AUDIT_SELECT` dựng TỪ `ANH_XA_COT`, nên không có
+    // đường nào để một trường ngoài tập đó lọt vào sổ audit.
+    expect(doc(F)).toContain("Object.values(ANH_XA_COT).flat()");
+  });
+
+  it("ghi rõ cột nào có trong file — để đọc lại biết vì sao trường khác không đổi", () => {
+    expect(doc(F)).toContain("cột có trong file");
+  });
+});
