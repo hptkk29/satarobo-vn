@@ -2,6 +2,7 @@
 import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { seedShiftTemplates } from "../../lib/cham-cong/seed-core";
+import { vnDateOnly } from "../../lib/time/vn";
 
 const DB_URL = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL ?? "";
 const isLocal = /(@|\/\/)(localhost|127\.0\.0\.1)[:/]/.test(DB_URL) && /satarobo_test|ci_test/.test(DB_URL);
@@ -177,7 +178,12 @@ d("vé + ghi lượt + tính lại", () => {
 
     it("ca AT_UNITS ở Hội sở, quét tại CS1 → SAI_NOI_LAM (hành vi ĐÚNG, khoá lại)", async () => {
       const now = ngay();
-      const workDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+      // ⚠️ NGÀY VN, không phải ngày UTC. `recordTimeLog` chốt ngày làm việc bằng
+      // `vnDateOnly(now)` (lib/cham-cong/timelog.ts:82); test dựng theo UTC thì hai bên
+      // lệch một ngày mỗi khi UTC ≥ 17:00 (VN đã sang ngày mới) — ca xếp cho hôm qua,
+      // lượt quét rơi vào hôm nay, và cờ CHAM_NGOAI_LICH bật đúng theo luật.
+      // Đo 08/09: CI xanh ở run 14:17Z, đỏ ở 15:49Z và 15:58Z — `now + 90'` vượt 17:00Z.
+      const workDate = vnDateOnly(now);
       await xepCa("AT_UNITS", workDate);
       const r = await mod.recordTimeLog({
         userId: hoUserId,
@@ -212,7 +218,12 @@ d("vé + ghi lượt + tính lại", () => {
     // chấm không thuộc đơn vị cho phép (xem ca ngay trên).
     it("ca ANY_CENTER ở Hội sở, quét tại CS1 → KHÔNG cờ nào (ĐÚNG: nơi quét là dữ liệu, không phải cờ)", async () => {
       const now = new Date(Date.now() + 90 * 60_000);
-      const workDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+      // ⚠️ NGÀY VN, không phải ngày UTC. `recordTimeLog` chốt ngày làm việc bằng
+      // `vnDateOnly(now)` (lib/cham-cong/timelog.ts:82); test dựng theo UTC thì hai bên
+      // lệch một ngày mỗi khi UTC ≥ 17:00 (VN đã sang ngày mới) — ca xếp cho hôm qua,
+      // lượt quét rơi vào hôm nay, và cờ CHAM_NGOAI_LICH bật đúng theo luật.
+      // Đo 08/09: CI xanh ở run 14:17Z, đỏ ở 15:49Z và 15:58Z — `now + 90'` vượt 17:00Z.
+      const workDate = vnDateOnly(now);
       await xepCa("ANY_CENTER", workDate);
       const r = await mod.recordTimeLog({
         userId: hoUserId,
