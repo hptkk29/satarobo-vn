@@ -184,6 +184,25 @@ describe("[1b] deriveSessionLabel — ĐẢO ưu tiên: số LỘ TRÌNH thắng
     );
   });
 
+  it("tên bài gõ THỪA DẤU CÁCH → gộp lại, không lọt ra tới phụ huynh", async () => {
+    const { deriveSessionLabel, deriveSessionTitle } = await import("./session-project-name");
+    // Hình dạng THẬT đo trên prod 08/09 — `Lesson.title` của giáo trình đang chạy.
+    expect(
+      deriveSessionLabel({ sessionNumber: 1, lessonOrder: 4, lessonTitle: "HP1 -   Chiến Xa Tốc Độ" }),
+    ).toBe("Buổi 4 - HP1 - Chiến Xa Tốc Độ");
+    expect(deriveSessionTitle({ lessonTitle: "HP1 -  Ôn tập kiến thức" })).toBe("Ôn tập kiến thức");
+    // Xuống dòng / tab cũng là khoảng trắng — gộp luôn, đừng để rơi vào nhãn.
+    expect(deriveSessionTitle({ lessonTitle: "  Robot\tXin\n\nChào  " })).toBe("Robot Xin Chào");
+  });
+
+  it("hai tên chỉ khác số dấu cách phải được coi là MỘT", async () => {
+    const { meaningfulSessionTitle } = await import("./session-project-name");
+    // Quan trọng cho việc ĐẾM lệch: chúng in ra giống hệt nhau, coi là khác là đếm nhầm.
+    expect(meaningfulSessionTitle("HP1 -   Chiến Xa Tốc Độ")).toBe(
+      meaningfulSessionTitle("HP1 - Chiến Xa Tốc Độ"),
+    );
+  });
+
   it("nhãn ghép KHÔNG kèm '(theo lịch)' — sẽ làm vỡ stripSessionNumberPrefix", async () => {
     const { deriveSessionLabel, meaningfulSessionTitle } = await import(
       "./session-project-name"

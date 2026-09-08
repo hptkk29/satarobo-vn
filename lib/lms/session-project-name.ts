@@ -40,8 +40,22 @@ export type SessionProjectSource = {
   moduleCode?: string | null;
 };
 
+/**
+ * Chuẩn hoá chuỗi trước MỌI phép so sánh và mọi lần in: cắt hai đầu, và **gộp mọi cụm
+ * khoảng trắng thành một dấu cách**.
+ *
+ * ⚠️ Vế gộp thêm 08/09/2026. Đo prod cùng ngày: `Lesson.title` đang có tên gõ thừa dấu
+ * cách — `"HP1 -   Chiến Xa Tốc Độ"` (3 dấu cách), `"HP1 -  Ôn tập kiến thức"` (2).
+ * Sau khi bỏ bản sao đông cứng `customTitle`, đây là chuỗi đi thẳng tới phụ huynh.
+ *
+ * Vá ở ĐÂY chứ không sửa 3 dòng trong DB: sửa dữ liệu chỉ chữa đúng 3 tên đang bẩn, còn
+ * lần sau Đào tạo gõ thừa dấu cách là hỏng lại. Một chỗ chặn cho cả tên cũ lẫn tên mới.
+ *
+ * Gộp trước khi so cũng khiến `"A  B"` và `"A B"` được coi là một — đúng ý: chúng in ra
+ * giống hệt nhau nên coi là khác là đếm nhầm.
+ */
 function clean(s: string | null | undefined): string {
-  return (s ?? "").trim();
+  return (s ?? "").replace(/\s+/g, " ").trim();
 }
 
 /**
