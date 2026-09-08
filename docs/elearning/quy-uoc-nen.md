@@ -51,12 +51,29 @@ mà không có. Đường dẫn truyền ở dòng lệnh chỉ lọc **tiếp**
 > 🔴 **Đã vấp lần hai (EL-05, 23/08).** Guard đăng ký cron viết ở `tests/cron/` — thư mục
 > KHÔNG có trong `include` — nên nó im lặng không chạy, đúng loại lỗi mà chính nó sinh ra để
 > bắt. Đã chuyển sang `lib/cron/`. **Các thư mục test đang được phủ:** `lib/**`,
-> `components/**`, `app/**`, `tests/chat/**`, `tests/elearning/**`. Viết test ngoài bốn chỗ
-> đó thì phải khai thêm vào `include`, không có ngoại lệ.
+> `components/**`, `app/**`, `tests/chat/**`, `tests/elearning/**`. Viết test ngoài các chỗ
+> đã khai thì phải khai thêm vào `include`, không có ngoại lệ.
+>
+> ⚠️ **Sửa 08/09/2026:** dòng này từng viết "bốn chỗ". `vitest.config.ts:11-22` nay có
+> **10 mục** (thêm `tests/nen`, `tests/lead-intake`, `tests/cham-cong`, `tests/finance`,
+> `prisma/seed-uat`). Đếm cứng trong văn bản thì mỗi lần thêm bộ là tài liệu sai thêm —
+> đọc thẳng `vitest.config.ts`, đừng tin con số ở đây.
 
 ### 4. Job CI có tên
 
-Test tầng DB chạy trong job **`chat-db-tests`** (⛔ **không đổi tên job đó** — đang là required check).
+Test tầng DB chạy trong job **`chat-db-tests`** (⛔ **không đổi tên job đó**).
+
+> ⚠️ **Sửa 08/09/2026 — lý do cũ của dấu ⛔ là SAI.** Dòng này từng ghi job đó
+> *"đang là required check"*. Đo thật:
+> `gh api repos/hptkk29/satarobo-vn/branches/main/protection` trả
+> `contexts = ["Quality (typecheck + lint + build)", "Unit tests (Vitest)"]` —
+> **`chat-db-tests` KHÔNG có trong đó.** Nó chạy đầy đủ và báo đỏ đúng, nhưng không
+> chặn được ai merge (luật 10).
+>
+> Dấu ⛔ vẫn giữ, nhưng vì lý do khác và có thật: đổi tên job thì **mọi tài liệu
+> DoD trỏ tới nó thành sai**, và nếu sau này job được đưa vào `contexts` thì đổi tên
+> là **âm thầm gỡ nó khỏi cổng** — GitHub khớp required check theo TÊN, một tên
+> không tồn tại thì vĩnh viễn "pending" hoặc bị bỏ qua tuỳ cấu hình.
 Test browser chạy trong job **`e2e-elearning`** với `playwright.elearning.config.ts`, cổng 3141.
 
 **Dòng DoD chuẩn của mọi story sau, không được viết lại:**

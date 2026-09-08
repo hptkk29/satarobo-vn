@@ -337,6 +337,64 @@ chính bộ test. Một test không bao giờ đỏ được là một cổng lu
 
 ---
 
+## Luật 10 — một ca đỏ mà không ai bị chặn thì bằng không có ca
+
+> **Trước khi tin một bộ test đang bảo vệ thứ gì, kiểm nó có nằm trong required check
+> không.** "Bộ test có canh chuyện đó" và "bộ test chặn được người merge chuyện đó" là
+> hai câu khác nhau, và chỉ câu thứ hai mới bảo vệ được gì.
+
+**Hai lần trong hai ngày, cùng một họ:**
+
+| Ngày | Ca đỏ | Nằm ở đâu | Hậu quả |
+|---|---|---|---|
+| 06–07/09 | `tests/cham-cong/timelog.spec.ts` | trong `include` của Vitest, nhưng 5/6 file tự `describe.skip` vì job `unit-tests` **không có Postgres** | đỏ thật từ 06/09, CI xanh suốt; bộ vé kiosk / kỳ công / tính lại / ma trận duyệt đơn không chạy một dòng |
+| 08/09 | `tests/e2e/r7/withdraw-student-legacy-active.spec.ts` `[W5]` | job `e2e-r7` chạy đầy đủ và **báo đỏ đúng**, nhưng job đó **không phải required check** | cầu dao hoàn tiền `fb7f8422` merge lên main rồi lên PROD với ca đỏ; main đỏ liên tục từ `c78d0ae0` tới `2bfea6eb` |
+
+Hai kiểu hỏng khác nhau — một cái **không chạy**, một cái **chạy mà không ai bị chặn** —
+nhưng người đọc thấy y hệt nhau: một dấu tích xanh trên PR.
+
+### Cách đo (đừng hỏi, đo)
+
+Tài liệu từng ghi *"job nào là required check thì không đọc được từ repo"*. **Sai.** Đọc
+được, một lệnh:
+
+```bash
+gh api repos/<owner>/<repo>/branches/main/protection \
+  -q '.required_status_checks.contexts, .required_status_checks.strict, .enforce_admins.enabled'
+```
+
+Câu "không đọc được" là lý do câu hỏi này bị treo từ 07/09 sang 08/09 — **một tiền đề sai
+về công cụ đã hoãn một phép đo mất 5 giây.** Cùng họ với tiền đề "file có 2 cột" trong sổ
+sự cố ngay dưới.
+
+### Số đo 08/09/2026 (nhánh `main`)
+
+| | |
+|---|---|
+| Required | `Quality (typecheck + lint + build)` · `Unit tests (Vitest)` — **hết** |
+| Chạy trên PR | 11 job, **6 384 ca** |
+| Được cổng bảo vệ | **5 718 ca (89,6%)** |
+| Ngoài cổng | **666 ca (10,4%)** — gồm 370 ca R7 và 198 ca tầng DB thật |
+| Chưa từng chạy ở CI | thêm ~147 ca (`r1`–`r6`, `manual`, `acceptance`) |
+| `enforce_admins` | `false` — **admin merge đè được cả hai cổng đang có** |
+| `strict` | `false` — PR xanh trên base cũ vẫn merge được vào main đã đổi |
+
+Hai cờ cuối đáng nhớ ngang danh sách `contexts`: **một cổng bỏ qua được không phải cổng**,
+và `strict=false` chính là cơ chế đã để một nhánh tụt sau main mà vẫn xanh.
+
+### Liên hệ với luật 8 và 9
+
+Ba luật là ba câu hỏi nối tiếp về **cùng một bộ test**, hỏi thiếu câu nào cũng ra một dấu
+tích xanh vô nghĩa:
+
+| | Câu hỏi | Hỏng nếu bỏ qua |
+|---|---|---|
+| **Luật 8** | ca này **đỏ được không**? | test không bao giờ đỏ — cổng luôn cho qua |
+| **Luật 9** | nó đỏ ở **đúng chỗ bug nằm** không? | đỏ ở tầng mình tự gõ đầu vào, không phải tầng có bug |
+| **Luật 10** | ai đó **bị chặn** khi nó đỏ không? | đỏ đúng chỗ, và merge lên prod bình thường |
+
+---
+
 ## Sổ sự cố
 
 ### 08/09/2026 — nhập nhân sự xoá trắng ba cột ngày trên 9 hồ sơ PROD
