@@ -17,7 +17,11 @@ import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { getSetting } from "@/lib/settings/service";
 import { HO_CENTER_ID, loadCenterMap } from "@/lib/cham-cong/home-center";
-import { ASK_WHO, loadModuleScope, type ModuleAction } from "@/lib/cham-cong/module-scope";
+import {
+  ASK_WHO,
+  loadModuleScope,
+  type ModuleAction,
+} from "@/lib/cham-cong/module-scope";
 import { scopeHref } from "@/lib/cham-cong/scope-href";
 import type { ShiftSegment } from "@/lib/cham-cong/catalog";
 import { PageHeader } from "@/components/admin/ui/page-header";
@@ -27,9 +31,17 @@ import { BTN_OUTLINE } from "@/components/admin/cham-cong/classes";
 import { ModuleNav } from "@/components/admin/cham-cong/module-nav";
 import { ConfigTabs } from "@/components/admin/cham-cong/config-tabs";
 import { ScopeBar } from "@/components/admin/cham-cong/scope-bar";
-import { PatternGrid, type Candidate, type PatternBlock, type PatternCode } from "./_components/pattern-grid";
+import {
+  PatternGrid,
+  type Candidate,
+  type PatternBlock,
+  type PatternCode,
+} from "./_components/pattern-grid";
 
-export const metadata = { title: "Khung ca tuần | Admin", robots: { index: false } };
+export const metadata = {
+  title: "Khung ca tuần | Admin",
+  robots: { index: false },
+};
 export const dynamic = "force-dynamic";
 
 const BASE = "/cham-cong/khung-ca";
@@ -57,8 +69,12 @@ export default async function KhungCaPage({ searchParams }: Props) {
   const scope = await loadModuleScope(session.user.id);
   // Xếp ca được thì đương nhiên xem được; kế toán chỉ có `view` vào đọc để đối chiếu.
   const visible = scope.blocks.filter((b) => b.perms[ASSIGN] || b.perms[VIEW]);
-  const ky = /^\d{4}-(0[1-9]|1[0-2])$/.test(sp.ky ?? "") ? (sp.ky as string) : null;
-  const coSo = visible.some((b) => b.id === sp.coSo) ? (sp.coSo as string) : null;
+  const ky = /^\d{4}-(0[1-9]|1[0-2])$/.test(sp.ky ?? "")
+    ? (sp.ky as string)
+    : null;
+  const coSo = visible.some((b) => b.id === sp.coSo)
+    ? (sp.coSo as string)
+    : null;
   const ctx = { ky, coSo };
 
   const head = (
@@ -86,7 +102,11 @@ export default async function KhungCaPage({ searchParams }: Props) {
     return (
       <div className="max-w-6xl">
         {head}
-        <NoPermission permission={VIEW} what="khung ca tuần" askWho={ASK_WHO[VIEW]} />
+        <NoPermission
+          permission={VIEW}
+          what="khung ca tuần"
+          askWho={ASK_WHO[VIEW]}
+        />
       </div>
     );
   }
@@ -117,18 +137,29 @@ export default async function KhungCaPage({ searchParams }: Props) {
 
   // Khối chỉ-xem mà chưa ai có khung ca thì không bày bảng rỗng (luật cũ); nhưng khi người dùng
   // CHỌN đúng khối đó bằng chip thì phải hiện, kèm lời giải thích vì sao trống.
-  const shown = coSo ? pool : pool.filter((b) => b.perms[ASSIGN] || patterns.some((p) => p.centerId === b.id));
+  const shown = coSo
+    ? pool
+    : pool.filter(
+        (b) => b.perms[ASSIGN] || patterns.some((p) => p.centerId === b.id),
+      );
 
   const userIds = [...new Set(patterns.map((p) => p.userId))];
   const canAssignAnyShown = shown.some((b) => b.perms[ASSIGN]);
   const [users, employees, offPairs] = await Promise.all([
     userIds.length
-      ? sdb.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true, email: true } })
+      ? sdb.user.findMany({
+          where: { id: { in: userIds } },
+          select: { id: true, name: true, email: true },
+        })
       : Promise.resolve([]),
     canAssignAnyShown
       ? sdb.employee.findMany({
           where: { status: "ACTIVE", userAccount: { isNot: null } },
-          select: { fullName: true, employeeCode: true, userAccount: { select: { id: true } } },
+          select: {
+            fullName: true,
+            employeeCode: true,
+            userAccount: { select: { id: true } },
+          },
           orderBy: { fullName: "asc" },
         })
       : Promise.resolve([]),
@@ -137,15 +168,21 @@ export default async function KhungCaPage({ searchParams }: Props) {
         const orgUnitId =
           b.id === HO_CENTER_ID
             ? null
-            : (Object.values(map.byCode).find((c) => c.centerId === b.id)?.orgUnitId ?? null);
-        return [b.id, await getSetting("shift.weeklyOffDays", { orgUnitId })] as const;
+            : (Object.values(map.byCode).find((c) => c.centerId === b.id)
+                ?.orgUnitId ?? null);
+        return [
+          b.id,
+          await getSetting("shift.weeklyOffDays", { orgUnitId }),
+        ] as const;
       }),
     ),
   ]);
 
   const offOf = new Map(offPairs);
   const nameOf = new Map(users.map((u) => [u.id, u.name ?? u.email ?? u.id]));
-  for (const e of employees) if (!nameOf.has(e.userAccount!.id)) nameOf.set(e.userAccount!.id, e.fullName);
+  for (const e of employees)
+    if (!nameOf.has(e.userAccount!.id))
+      nameOf.set(e.userAccount!.id, e.fullName);
   const candidates: Candidate[] = employees.map((e) => ({
     userId: e.userAccount!.id,
     label: `${e.fullName} · ${e.employeeCode}`,
@@ -197,18 +234,27 @@ export default async function KhungCaPage({ searchParams }: Props) {
 
       <PageHelp guideSlug="nhan-su-giao-vien">
         <p>
-          Mỗi dòng là lịch tuần cố định của một người trong một khối. Chọn mã ca cho từng thứ, để
-          trống nghĩa là thứ đó không xếp ca. Người làm ở cả hai cơ sở có hai dòng — một dòng ở mỗi
-          khối.
+          Mỗi dòng là lịch tuần cố định của một người trong một khối. Chọn mã ca
+          cho từng thứ, để trống nghĩa là thứ đó không xếp ca. Người làm ở cả
+          hai cơ sở có hai dòng — một dòng ở mỗi khối.
         </p>
         <p className="mt-2">
-          Khung ca không tự sinh lịch. Xếp xong thì sang <b>Lưới phân ca</b> và bấm &ldquo;Sinh lưới
-          từ khung&rdquo; cho tháng cần: ô đã sửa tay, ô từ đơn đã duyệt và ô từ file import đều được
-          giữ nguyên.
+          Khung ca không tự sinh lịch. Xếp xong thì sang <b>Lưới phân ca</b> và
+          bấm &ldquo;Sinh lưới từ khung&rdquo; cho tháng cần: ô đã sửa tay, ô từ
+          đơn đã duyệt và ô từ file import đều được giữ nguyên.
         </p>
         <p className="mt-2">
-          Cột nền xám là ngày nghỉ tuần theo cấu hình của khối đó. Cột <b>Công/tuần</b> đếm số thứ có
-          mã, trừ <span className="font-mono">X</span> và <span className="font-mono">P</span>.
+          Cột nền xám là ngày nghỉ tuần theo cấu hình của khối đó. Cột{" "}
+          <b>Công/tuần</b> đếm số thứ có mã, trừ{" "}
+          <span className="font-mono">X</span> và{" "}
+          <span className="font-mono">P</span>.
+        </p>
+        <p className="mt-2">
+          <b>Gỡ khỏi khối</b> chỉ gỡ người đó khỏi{" "}
+          <i>khung ca tuần của khối này</i>: <b>không xoá hồ sơ nhân sự</b>,
+          không xoá tài khoản, và lưới phân ca đã sinh của những ngày trước vẫn
+          giữ nguyên — từ hôm sau mới thôi xếp. Thêm lại người đó thì lịch tuần
+          cũ sống lại. Muốn cho nghỉ việc thì làm ở màn <b>Nhân sự</b>.
         </p>
       </PageHelp>
 
@@ -217,7 +263,10 @@ export default async function KhungCaPage({ searchParams }: Props) {
           title="Chưa khối nào có khung ca tuần"
           description="Khối bạn xem được chưa ai có lịch tuần cố định, và bạn không có quyền xếp ca ở khối nào. Người xếp lịch của cơ sở sẽ thêm nhân sự vào khung ca."
           action={
-            <Link href={scopeHref("/cham-cong/phan-ca", ctx)} className={BTN_OUTLINE}>
+            <Link
+              href={scopeHref("/cham-cong/phan-ca", ctx)}
+              className={BTN_OUTLINE}
+            >
               Xem lưới phân ca tháng
             </Link>
           }

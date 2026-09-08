@@ -16,9 +16,13 @@ import {
   type GenerateResult,
 } from "@/lib/cham-cong/generate-db";
 import { chanSuaKyDaChot } from "@/lib/cham-cong/ky-gac";
+import { KHUNG_CA_EFFECTIVE_FROM } from "@/lib/cham-cong/khung-ca";
+import { vnDateOnly } from "@/lib/time/vn";
 
 type Res<T = null> = { ok: true; data: T } | { ok: false; error: string };
-const DEFAULT_EFFECTIVE_FROM = new Date(Date.UTC(2000, 0, 1));
+
+/** Mốc hiệu lực duy nhất của màn này — luật + lý do: `lib/cham-cong/khung-ca.ts`. */
+const DEFAULT_EFFECTIVE_FROM = KHUNG_CA_EFFECTIVE_FROM;
 
 const cellSchema = z.object({
   userId: z.string().min(1),
@@ -99,6 +103,12 @@ export async function savePatternCellAction(input: unknown): Promise<Res> {
         templateId: tpl.id,
         templateCode: tpl.code,
         orgUnitId,
+        // ⚠️ HỒI SINH — bắt buộc, không phải cho đẹp. Gỡ người khỏi khối là gỡ MỀM
+        // (`effectiveTo`), mà khoá duy nhất `(userId, centerId, weekday, effectiveFrom)`
+        // KHÔNG đổi khi gỡ. Nên `upsert` một ô của người đã gỡ rơi vào đúng nhánh này và
+        // sửa dòng đã đóng; thiếu dòng dưới thì ghi xong ô vẫn tàng hình (màn lọc
+        // `effectiveTo: null`) và người dùng thấy "bấm mà không có gì xảy ra".
+        effectiveTo: null,
         ...(p.data.sheetName ? { sheetName: p.data.sheetName } : {}),
         ...(p.data.jobLabel ? { jobLabel: p.data.jobLabel } : {}),
       },
@@ -116,6 +126,69 @@ export async function addPersonToBlockAction(input: {
   jobLabel?: string;
 }): Promise<Res> {
   return savePatternCellAction({ ...input, weekday: 1, code: "X" });
+}
+
+const goSchema = z.object({
+  userId: z.string().min(1),
+  centerId: z.string().min(1),
+});
+
+/**
+ * Gỡ một người khỏi KHUNG CA của khối — **mềm**, đóng cả cụm 7 dòng bằng `effectiveTo`.
+ *
+ * Đây KHÔNG phải xoá nhân sự và KHÔNG phải xoá lịch đã xếp. Ba lý do chọn gỡ mềm (đầy đủ
+ * ở `lib/cham-cong/khung-ca.ts`), tóm tắt:
+ *
+ *  · `generate.ts:77-78` bỏ dòng khi `effectiveTo < ngày` ⇒ đóng bằng NGÀY HÔM NAY nghĩa
+ *    là "từ mai không xếp nữa", còn ô đã sinh của những ngày trước GIỮ NGUYÊN. Xoá cứng
+ *    thì lần sinh lại kế tiếp làm rỗng cả quá khứ;
+ *  · dòng khung ca mang `sheetName` — cầu nối tên trên file Sheet với `userId`
+ *    (`reconcile-db.ts:23`). Xoá cứng là mất ánh xạ, lần đối chiếu file sau người ấy
+ *    thành "không khớp ai";
+ *  · gỡ nhầm hoàn tác được — thêm lại người đó là dòng cũ tự sống lại (nhánh `update`
+ *    của `savePatternCellAction` xoá `effectiveTo`).
+ */
+export async function removePersonFromBlockAction(
+  input: unknown,
+): Promise<Res<{ soDong: number }>> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  const p = goSchema.safeParse(input);
+  if (!p.success) return { ok: false, error: "Dữ liệu không hợp lệ" };
+  const { userId, centerId } = p.data;
+  // `scopedDb` KHÔNG che WRITE — cổng quyền phải tự đứng ở đây, y như `savePatternCellAction`.
+  if (!(await checkPermission("hr_attendance:assign", { centerId })))
+    return { ok: false, error: "Không có quyền xếp khung ca ở khối này" };
+
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const denHet = vnDateOnly(new Date());
+
+  const { count } = await sdb.shiftWeeklyPattern.updateMany({
+    // `effectiveTo: null` trong điều kiện: gỡ hai lần không được lùi ngày của lần gỡ đầu.
+    where: {
+      userId,
+      centerId,
+      effectiveFrom: DEFAULT_EFFECTIVE_FROM,
+      effectiveTo: null,
+    },
+    data: { effectiveTo: denHet },
+  });
+  if (count === 0)
+    return { ok: false, error: "Người này không còn trong khung ca của khối" };
+
+  await writeAudit({
+    actor: { id: session.user.id, name: session.user.name ?? "" },
+    module: "hr_attendance",
+    entityType: "ShiftWeeklyPattern",
+    entityId: `${centerId}:${userId}`,
+    action: "PATTERN_REMOVE",
+    newValues: { userId, centerId, effectiveTo: denHet, soDong: count },
+    reason: "Gỡ khỏi khung ca tuần của khối (gỡ mềm, không xoá nhân sự)",
+  });
+
+  revalidatePath("/cham-cong/khung-ca");
+  return { ok: true, data: { soDong: count } };
 }
 
 const genSchema = z.object({
