@@ -576,10 +576,41 @@ async function main() {
     for (const [f, n] of [...dem].sort((x, y) => y[1] - x[1])) {
       console.log(`    ${f.padEnd(20)} ${String(n).padStart(3)} hồ sơ`);
     }
-    const mau = auditImport[0];
-    console.log(`  Ví dụ một hồ sơ (${mau?.entityId ?? "?"}):`);
-    console.log(`    cũ : ${JSON.stringify(mau?.oldValues)}`);
-    console.log(`    mới: ${JSON.stringify(mau?.newValues)}`);
+    // Gom theo LƯỢT NHẬP (cùng `reason` = cùng file) — 18 dòng nghĩa là >1 lượt,
+    // và mỗi lượt có tập cột riêng.
+    const theoLuot = new Map<string, typeof auditImport>();
+    for (const a of auditImport) {
+      const k = a.reason ?? "(trống)";
+      const arr = theoLuot.get(k);
+      if (arr) arr.push(a);
+      else theoLuot.set(k, [a]);
+    }
+    for (const [reason, rows] of theoLuot) {
+      console.log("");
+      console.log(`  ── LƯỢT: ${reason}`);
+      console.log(
+        `     lúc ${rows[0]?.createdAt.toISOString()} · ${rows.length} hồ sơ`,
+      );
+      const d2 = new Map<string, number>();
+      for (const a of rows)
+        for (const f of (a.changedFields as string[] | null) ?? [])
+          d2.set(f, (d2.get(f) ?? 0) + 1);
+      console.log(
+        `     cột đổi: ${[...d2].map(([f, n]) => `${f}(${n})`).join(", ")}`,
+      );
+      // MẤT DỮ LIỆU = có giá trị cũ, giá trị mới là null.
+      for (const a of rows) {
+        const cu = (a.oldValues ?? {}) as Record<string, unknown>;
+        const moi = (a.newValues ?? {}) as Record<string, unknown>;
+        const mat = Object.keys(moi).filter(
+          (k) => moi[k] === null && cu[k] !== null && cu[k] !== undefined,
+        );
+        if (mat.length > 0)
+          console.log(
+            `     ⚠️ ${a.entityId} MẤT: ${mat.map((k) => `${k}=${JSON.stringify(cu[k])}`).join(" · ")}`,
+          );
+      }
+    }
   } else {
     console.log(
       "  ⚠️ KHÔNG có dòng audit nào — nghĩa là lượt import chạy bằng mã CŨ",
