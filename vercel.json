@@ -70,10 +70,6 @@
       "schedule": "0 0 * * *"
     },
     {
-      "path": "/api/cron/session-close-reminder",
-      "schedule": "0 13 * * *"
-    },
-    {
       "path": "/api/cron/otp-cleanup",
       "schedule": "0 8 * * *"
     },
