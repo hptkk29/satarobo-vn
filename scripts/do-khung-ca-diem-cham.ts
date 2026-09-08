@@ -538,6 +538,72 @@ async function main() {
     );
   }
 
+  // ── V8 — BA CHỖ ĐẾM BUỔI DẠY BỎ SÓT `substituteTeacherId` ─────────────────
+  //
+  // Ba chỗ đếm "buổi dạy" cùng bỏ sót MỘT cột. Tiền lệ đã sửa đúng nằm ngay cạnh:
+  // `cham-cong/cong-day/page.tsx:109` gom cả bốn nguồn
+  // (`actualTeacherId`, `substituteTeacherId`, `class.teacherId`, `class.assistantId`).
+  //
+  //  (1) `bao-cao/hieu-suat-gv/page.tsx:283,302` — `actualTeacherId ?? class.teacherId`
+  //  (2) `dashboard/_components/manager-dashboard.tsx:132` — y hệt
+  //  (3) `teacher/bang-cong/page.tsx:188-190` — `OR[classId ∈ assignedClassIds,
+  //      actualTeacherId = tôi]`, KHÔNG có nhánh dạy thay
+  //
+  // ĐO TRƯỚC, SỬA SAU. Con số cần: buổi có `substituteTeacherId`, và trong đó bao nhiêu
+  // buổi mà người dạy thay KHÁC người sẽ được ba chỗ trên quy công cho.
+  const tongBuoi = await db.classSession.count({
+    where: { status: { not: "CANCELLED" } },
+  });
+  const buoiCoDayThay = await db.classSession.findMany({
+    where: { substituteTeacherId: { not: null }, status: { not: "CANCELLED" } },
+    select: {
+      id: true,
+      status: true,
+      actualTeacherId: true,
+      substituteTeacherId: true,
+      class: { select: { teacherId: true, assistantId: true } },
+    },
+  });
+  tieuDe("══ V8 — buổi có GV DẠY THAY (ba chỗ đếm đang bỏ sót) ══");
+  dong("Buổi (khác CANCELLED)", tongBuoi);
+  dong("… có substituteTeacherId", buoiCoDayThay.length);
+  if (buoiCoDayThay.length > 0) {
+    // Quy công theo CÔNG THỨC của (1) và (2): actualTeacherId ?? class.teacherId.
+    const quyNhamNguoi = buoiCoDayThay.filter(
+      (b) =>
+        (b.actualTeacherId ?? b.class?.teacherId ?? null) !==
+        b.substituteTeacherId,
+    );
+    dong("🔴 … quy công cho NGƯỜI KHÁC người dạy thay", quyNhamNguoi.length);
+    const khongAi = buoiCoDayThay.filter(
+      (b) => (b.actualTeacherId ?? b.class?.teacherId ?? null) === null,
+    );
+    dong("🔴 … không quy được cho ai (rơi khỏi báo cáo)", khongAi.length);
+    // Chỗ (3): người dạy thay có nằm trong assignedClassIds của lớp đó không? Xấp xỉ
+    // bằng "dạy thay KHÁC cả GV chính lẫn trợ giảng của lớp" — khi đó buổi ấy không
+    // lọt nhánh nào của `bang-cong`.
+    const ngoaiBangCong = buoiCoDayThay.filter(
+      (b) =>
+        b.substituteTeacherId !== b.class?.teacherId &&
+        b.substituteTeacherId !== b.class?.assistantId &&
+        b.substituteTeacherId !== b.actualTeacherId,
+    );
+    dong(
+      "🔴 … KHÔNG hiện trên bảng công của người dạy thay",
+      ngoaiBangCong.length,
+    );
+    const theoTrangThai = new Map<string, number>();
+    for (const b of buoiCoDayThay)
+      theoTrangThai.set(b.status, (theoTrangThai.get(b.status) ?? 0) + 1);
+    console.log(
+      `  theo trạng thái: ${[...theoTrangThai].map(([k, v]) => `${k}=${v}`).join(" · ")}`,
+    );
+  } else {
+    console.log(
+      "  (0 buổi — luật 1: đường ghi vẫn hở, xem `complete-session.tsx`)",
+    );
+  }
+
   // ── V7 — LƯỢT IMPORT HỎNG 08/09: audit nói chính xác cột nào bị đổi ───────
   //
   // Sự cố: file 2 cột (employeeCode + centerSlug) cho 9 người đã XOÁ TRẮNG dateOfBirth,
