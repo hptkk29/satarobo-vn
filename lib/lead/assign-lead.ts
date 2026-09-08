@@ -275,8 +275,16 @@ export async function chiaChoLead(
  *
  * Gửi NGOÀI transaction và nuốt lỗi: chuông hỏng thì lead vẫn phải được chia. Ngược
  * lại — để lỗi mạng của một cái chuông cuốn theo cả lượt chia — mới là hỏng nặng.
+ *
+ * ⚠️ EXPORT (08/09/2026): nay là CỬA DÙNG CHUNG cho mọi đường đổi chủ lead, không riêng
+ * `chiaChoLead`. Đường gán tay (`manualAssignLead`) gọi nó sau khi transaction của mình đã
+ * commit. Thêm đường mới thì gọi hàm NÀY, đừng tự dựng lời gọi `notifyStaff` thứ hai —
+ * `dedupeKey` phải giữ nguyên byte `lead.moi:<leadId>` vì `lib/notifications/catalog.ts:155`
+ * phân loại theo tiền tố đó, và khoá lệch là thông báo rơi xuống nhóm "Hệ thống/P3".
+ *
+ * ⚠️ Gọi SAU COMMIT, không truyền `tx`: `notifyStaff` cố ý không nhận `tx` (notify.ts:18).
  */
-async function baoSaleCoLeadMoi(params: {
+export async function baoSaleCoLeadMoi(params: {
   ownerId: string;
   leadId: string;
   parentName: string;

@@ -239,9 +239,32 @@ bật `ALLOW_DB_RESET`, nên mọi test chạm DB **skip im lặng** — tưởn
 
 ## 9. Nợ đã biết — chấp nhận có ý thức
 
-- **`manualAssignLead` không gọi `notifyStaff`** (`lib/lead/auto-assign.ts:333`) ⇒ gán tay đã không
-  có chuông và sẽ không có push. **Lỗ chặn giá trị, phải vá trước khi tuyên bố kênh chạy** — kẻo
-  nhân viên tin vào push rồi bỏ lỡ đúng loại lead mà Sale tự nhập tay.
+- ~~**`manualAssignLead` không gọi `notifyStaff`**~~ — **ĐÃ VÁ 08/09/2026**, commit riêng.
+  `baoSaleCoLeadMoi` nay được export và là cửa dùng chung cho mọi đường đổi chủ; gán tay gọi nó
+  sau khi transaction commit. Test hồi quy: `lib/lead/manual-assign-notify.test.ts` (9 ca, đã
+  chứng minh 4 ca đỏ khi gỡ lời gọi).
+- ⚠️ **NHƯNG chỉ mới vá 1 trong 11 đường đổi chủ.** Đo 08/09: repo có **11 đường làm lead đổi/nhận
+  chủ**, và trước hôm nay **đúng 1 đường có chuông** (`chiaChoLead`). Sau bản vá là 2/11. **Ba
+  đường người-bấm-nút vẫn CÂM**: `transferLead` (chuyển lead giữa 2 sale,
+  `app/(admin)/admin/leads/actions.ts:1045`), `bulkReassignLeads` (bàn giao hàng loạt,
+  `lib/lead-handover/service.ts:70`), `autoAssignNewLead` (tạo lead thủ công ở `/admin/leads/new`,
+  `lib/lead/auto-assign.ts:168`). Cộng `autoAssignLead` (nút "Chia tự động" trên kanban) và
+  `reassignOpenLeads` (chia lại lead của sale nghỉ việc). **Đừng báo cáo "đã vá xong lead không có
+  chuông"** — chưa. Hai đường còn lại không phải one-liner: `transferLead` có ca `toSaleId = null`
+  (đổi cơ sở mà cơ sở đích không có sale) cần báo quản lý kiểu `baoPoolRong`; `bulkReassignLeads`
+  cần một thông báo GỘP ("bạn vừa nhận N lead bàn giao") chứ không phải N chuông — tức khoá
+  `dedupeKey` mới + một dòng catalog mới. Chờ quyết định.
+- ⚠️ **Bản vá LÀM TĂNG số chuông mồ côi.** Repo không có cơ chế thu hồi thông báo
+  (`lib/notifications/` không có hàm xoá; `entityId` khai với ý "để SAU NÀY thu hồi", chưa làm).
+  Đổi chủ A→B: B nhận chuông mới, còn A **giữ nguyên** bản ghi `lead.moi:<leadId>` với tiêu đề
+  "Bạn có lead mới" và href `/leads/<id>`. Nếu là đổi chủ xuyên cơ sở thì A bấm vào sẽ mở một lead
+  `scopedDb` đã lọc mất ⇒ trang báo không tồn tại. Trước bản vá gán tay không đẻ chuông nào nên
+  không có ca này; nay có. Chấp nhận có ý thức — thu hồi thông báo là việc riêng.
+- ⚠️ **Quản lý tự gán lead cho CHÍNH MÌNH vẫn nhận chuông.** `baoSaleCoLeadMoi` chỉ thoát sớm khi
+  `source === "SELF"` (sale tự gõ phiếu), còn gán tay truyền `MANAGER`. Ca này hiếm — đòi một tài
+  khoản mang cả `CENTER_MANAGER` (để có `leads:assign`) lẫn `SALES_CSM` (để nhận). Chọn **luôn
+  rung** thay vì thêm `saleId !== actor.actorId`: một chuông thừa thì người dùng thấy và báo lại,
+  một chuông thiếu thì không ai biết. Đảo lại là một dòng ở `lib/lead/auto-assign.ts`.
 - **Công tắc `push.webPushEnabled` hiện ngay trên `/admin/cau-hinh-van-hanh` nhưng KHÔNG có đường
   đọc.** Màn đó map toàn bộ `SETTING_KEYS` ra giao diện, không lọc. `label` mang hậu tố
   *"CHƯA HOẠT ĐỘNG, có hiệu lực từ Đợt 4"* để người vận hành không tưởng đã bật được kênh — **gỡ

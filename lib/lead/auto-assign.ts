@@ -11,6 +11,7 @@ import {
 } from "@/lib/lead/assign-strategy";
 import { congMotLuot, takeRotationTurn } from "@/lib/lead/rotation";
 import { canManualAssign } from "@/lib/lead/assign-guard";
+import { baoSaleCoLeadMoi } from "@/lib/lead/assign-lead";
 import { assignmentWrite } from "@/lib/lead/assignment";
 import { LEAD_CLOSED_STATUSES } from "@/lib/leads/status";
 
@@ -339,7 +340,9 @@ export async function manualAssignLead(
   const [lead, sale] = await Promise.all([
     db.lead.findUnique({
       where: { id: leadId },
-      select: { id: true, assignedToId: true, status: true, centerId: true },
+      // `parentName` chỉ để dựng nội dung chuông ở cuối hàm — thêm vào select đang có
+      // thay vì mở một câu tra thứ hai.
+      select: { id: true, assignedToId: true, status: true, centerId: true, parentName: true },
     }),
     db.user.findFirst({
       where: { id: saleId, roles: { has: "SALES_CSM" } },
@@ -418,6 +421,28 @@ export async function manualAssignLead(
         metadata: SYSTEM_META,
       },
     });
+  });
+
+  // BÁO CHO SALE VỪA ĐƯỢC GIAO LEAD (vá 08/09/2026).
+  //
+  // Trước bản vá này, gán tay là đường CÂM: quản lý bấm giao lead, sổ ghi đủ ba vết
+  // (LeadAssignmentLog + audit ASSIGN + LeadActivity), nhưng sale không nhận gì. Họ chỉ biết
+  // khi tự mở danh sách — hoặc khi cron SLA kêu vì họ ĐÃ trễ, tức thông báo đầu tiên đến tay
+  // luôn là một lời trách. Đúng loại lead nóng nhất (quản lý giao tận tay) lại là loại im nhất.
+  //
+  // ⚠️ NGOÀI transaction, sau dấu đóng ở trên: `notifyStaff` cố ý không nhận `tx` vì broadcast
+  // phải chạy SAU commit (`lib/notifications/notify.ts:18`). Đừng kéo dòng này vào trong tx.
+  //
+  // `source: "MANAGER"` khớp đúng giá trị vừa ghi vào sổ chia ở trên — không đẻ giá trị enum mới.
+  // `baoSaleCoLeadMoi` tự nuốt lỗi nên chuông hỏng không kéo theo lượt gán; không cần bọc thêm.
+  //
+  // Gán tay cho ĐÚNG người đang giữ lead không đẻ chuông thứ hai: khoá `(userId, dedupeKey)` đã
+  // tồn tại và nội dung không đổi ⇒ `ghiThongBaoNhanSu` không ghi, không rung.
+  await baoSaleCoLeadMoi({
+    ownerId: saleId,
+    leadId,
+    parentName: lead.parentName,
+    source: "MANAGER",
   });
 
   return { ok: true };
