@@ -170,7 +170,7 @@ export default async function TeacherClassPhotosPage({
           date: true,
           topic: true,
           status: true,
-          plan: { select: { customTitle: true } },
+          plan: { select: { customTitle: true, order: true } },
           lesson: { select: { order: true, title: true, moduleCode: true } },
         },
         orderBy: { date: "desc" },
@@ -185,6 +185,7 @@ export default async function TeacherClassPhotosPage({
         deriveSessionLabel({
           sessionNumber: sessionNo.get(s.id) ?? null,
           planTitle: s.plan?.customTitle,
+          planOrder: s.plan?.order,
           lessonTitle: s.lesson?.title,
           lessonOrder: s.lesson?.order,
           moduleCode: s.lesson?.moduleCode,

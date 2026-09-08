@@ -96,7 +96,7 @@ export default async function TeacherFeedbackPage({
         topic: true,
         status: true,
         // 25/08 — nguồn NHÃN BUỔI cho tiêu đề màn chi tiết.
-        plan: { select: { customTitle: true } },
+        plan: { select: { customTitle: true, order: true } },
         lesson: { select: { order: true, title: true, moduleCode: true } },
         class: { select: { name: true } },
       },
@@ -175,6 +175,7 @@ export default async function TeacherFeedbackPage({
             deriveSessionLabel({
               sessionNumber: sessionNo,
               planTitle: sess.plan?.customTitle,
+              planOrder: sess.plan?.order,
               lessonTitle: sess.lesson?.title,
               lessonOrder: sess.lesson?.order,
               moduleCode: sess.lesson?.moduleCode,
@@ -225,7 +226,7 @@ export default async function TeacherFeedbackPage({
           topic: true,
           status: true,
           // 25/08 — nguồn NHÃN BUỔI "Buổi 1 - HP1 - Bàn Tay Ma Thuật".
-          plan: { select: { customTitle: true } },
+          plan: { select: { customTitle: true, order: true } },
           lesson: { select: { order: true, title: true, moduleCode: true } },
         },
         orderBy: { date: "desc" },
@@ -359,6 +360,7 @@ export default async function TeacherFeedbackPage({
                       {deriveSessionLabel({
                         sessionNumber: no,
                         planTitle: s.plan?.customTitle,
+                        planOrder: s.plan?.order,
                         lessonTitle: s.lesson?.title,
                         lessonOrder: s.lesson?.order,
                         moduleCode: s.lesson?.moduleCode,

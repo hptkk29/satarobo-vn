@@ -110,7 +110,7 @@ export async function loadClassSessionFeedback(
         date: true,
         topic: true,
         status: true,
-        plan: { select: { customTitle: true } },
+        plan: { select: { customTitle: true, order: true } },
         lesson: { select: { order: true, title: true, moduleCode: true } },
       },
     }),
@@ -261,6 +261,7 @@ export async function loadClassSessionFeedback(
       {
         sessionNumber: sessionNumberOf.get(s.id) ?? null,
         planTitle: s.plan?.customTitle,
+        planOrder: s.plan?.order,
         lessonTitle: s.lesson?.title,
         lessonOrder: s.lesson?.order,
         moduleCode: s.lesson?.moduleCode,

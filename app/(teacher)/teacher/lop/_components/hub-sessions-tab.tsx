@@ -96,7 +96,7 @@ export async function HubSessionsTab({
         room: { select: { code: true, name: true } },
         // 25/08 — nguồn NHÃN BUỔI "Buổi 1 - HP1 - Bàn Tay Ma Thuật"
         // (lib/lms/session-project-name · deriveSessionLabel).
-        plan: { select: { customTitle: true } },
+        plan: { select: { customTitle: true, order: true } },
         lesson: { select: { order: true, title: true, moduleCode: true } },
       },
       // ⚠️ GIỮ `desc` + `take: 60` — cửa sổ "buổi gần đây". Thứ tự HIỂN THỊ do
@@ -286,6 +286,7 @@ export async function HubSessionsTab({
                       {deriveSessionLabel({
                         sessionNumber: no,
                         planTitle: s.plan?.customTitle,
+                        planOrder: s.plan?.order,
                         lessonTitle: s.lesson?.title,
                         lessonOrder: s.lesson?.order,
                         moduleCode: s.lesson?.moduleCode,
