@@ -484,6 +484,60 @@ async function main() {
     );
   }
 
+  // ── V6 — mốc UNIX 1970 trong joinedAt/endDate: đang hại ở đâu ─────────────
+  //
+  // `joinedAt = 1970-01-01` là NULL bị ghi thành 0. Phép trừ ngày với 1970 không ném
+  // lỗi, chỉ ra số sai — cùng họ với bug so nửa đêm.
+  //
+  // Nơi ĐAU nhất tìm được khi rà mã: `lib/honors/honor-view.ts:11` tính "số năm gắn bó"
+  // bằng `(now - joinedAt) / 30 ngày / 12`, và giá trị đó lên TRANG CÔNG KHAI
+  // `/vinh-danh`. Với 1970 thì ra ~57. Chuỗi ưu tiên là
+  // `yearsAtTime ?? computeYears(employee.joinedAt) ?? yearsAtCompany`, nên chỉ bản ghi
+  // KHÔNG có `yearsAtTime` mới rơi vào nhánh tính.
+  const EPOCH = new Date("1970-01-02T00:00:00Z");
+  const [epochJoin, epochEnd, honorAll] = await Promise.all([
+    db.employee.count({ where: { joinedAt: { lt: EPOCH } } }),
+    db.employee.count({ where: { endDate: { lt: EPOCH } } }),
+    db.honor.findMany({
+      select: {
+        id: true,
+        yearsAtTime: true,
+        employee: {
+          select: { employeeCode: true, fullName: true, joinedAt: true },
+        },
+      },
+    }),
+  ]);
+  const honorHong = honorAll.filter(
+    (h) =>
+      h.yearsAtTime == null &&
+      h.employee?.joinedAt != null &&
+      h.employee.joinedAt < EPOCH,
+  );
+  tieuDe("══ V6 — mốc 1970 (NULL bị ghi thành 0) ══");
+  dong("Employee có joinedAt = 1970", epochJoin);
+  dong("Employee có endDate = 1970", epochEnd);
+  dong("Tổng bản ghi Vinh danh", honorAll.length);
+  dong("🔴 Vinh danh sẽ hiện SỐ NĂM SAI trên web công khai", honorHong.length);
+  for (const h of honorHong) {
+    const nam = Math.floor(
+      (Date.now() - (h.employee?.joinedAt?.getTime() ?? 0)) /
+        (1000 * 60 * 60 * 24 * 30) /
+        12,
+    );
+    console.log(
+      `    ${(h.employee?.employeeCode ?? "-").padEnd(12)} sẽ hiện "${nam} năm gắn bó"  ${h.employee?.fullName ?? ""}`,
+    );
+  }
+  if (honorHong.length === 0) {
+    console.log(
+      "  (không bản ghi nào rơi vào nhánh tính — hoặc đã có yearsAtTime, hoặc",
+    );
+    console.log(
+      "   chưa vinh danh ai trong nhóm 1970. Đường ghi vẫn hở: luật 1.)",
+    );
+  }
+
   // ── V2.4 — lượt quét thật: nơi quét vs nơi trực thuộc ──
   const logs = await db.staffTimeLog.findMany({
     select: { centerId: true, result: true, flags: true, userId: true },
