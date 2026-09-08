@@ -31,7 +31,12 @@ import { vnDateOnly, vnYmd } from "../lib/time/vn";
 
 const db = scriptDb();
 
-type LyDo = "THOA" | "DIEM_DANH_THIEU" | "SI_SO_RONG" | "CHUA_TOI_NGAY" | "DA_XONG";
+type LyDo =
+  | "THOA"
+  | "DIEM_DANH_THIEU"
+  | "SI_SO_RONG"
+  | "CHUA_TOI_NGAY"
+  | "DA_XONG";
 
 function dong(nhan: string, n: number | string) {
   console.log(`  ${nhan.padEnd(46)} ${String(n).padStart(8)}`);
@@ -50,7 +55,14 @@ async function main() {
       status: { in: ["SCHEDULED", "IN_PROGRESS"] },
       class: { deletedAt: null },
     },
-    select: { id: true, classId: true, status: true, date: true },
+    select: {
+      id: true,
+      classId: true,
+      status: true,
+      date: true,
+      lessonId: true,
+      plan: { select: { lessonId: true } },
+    },
     orderBy: { date: "asc" },
   });
   const daQua = buoi.filter((b) => vnDateOnly(b.date).getTime() <= homNayUtcMs);
@@ -63,7 +75,9 @@ async function main() {
     return;
   }
 
-  console.log(`[backlog] ${buoi.length} buổi chưa chốt · ${daQua.length} buổi ĐÃ QUA NGÀY\n`);
+  console.log(
+    `[backlog] ${buoi.length} buổi chưa chốt · ${daQua.length} buổi ĐÃ QUA NGÀY\n`,
+  );
   if (daQua.length === 0) return;
 
   // Ba truy vấn gộp, không N+1.
@@ -114,7 +128,13 @@ async function main() {
     themVao(vnYmd(b.date).slice(0, 7), qd.tuHoanTat ? "THOA" : qd.lyDo);
   }
 
-  const COT: LyDo[] = ["THOA", "DIEM_DANH_THIEU", "SI_SO_RONG", "CHUA_TOI_NGAY", "DA_XONG"];
+  const COT: LyDo[] = [
+    "THOA",
+    "DIEM_DANH_THIEU",
+    "SI_SO_RONG",
+    "CHUA_TOI_NGAY",
+    "DA_XONG",
+  ];
 
   console.log("══ THOẢ CỔNG ĐÃ SỬA hay không, theo tháng (giờ VN) ══");
   console.log(
@@ -131,8 +151,67 @@ async function main() {
   console.log("\n══ TỔNG ══");
   for (const c of COT) dong(c, tong.get(c) ?? 0);
 
+  // ── BÁN KÍNH ẢNH HƯỞNG nếu backfill để `assignMode` rơi về mặc định "NOW" ──────
+  //
+  // `completeSession` đặt `assignMode: opts.assignMode ?? "NOW"` vào payload
+  // `session.taught`. Handler R7-14 khi đó GIAO BÀI TẬP cho mọi học viên đang học, và
+  // R7-17 bắn thông báo "Bài tập mới" tới học viên/phụ huynh — cho một buổi tháng 4.
+  //
+  // Điều kiện thật để sinh bài (lib/lms/assignment.ts:125-137): buổi có `lessonId`
+  // (hoặc qua `plan`), VÀ bài đó có ≥1 `Exam` PUBLISHED dùng chung hoặc của đúng lớp.
+  // Đo số đó để biết chặn `assignMode` là bắt buộc hay chỉ cho chắc.
+  const thoaBuoi = daQua.filter((b) => {
+    const qd = quyetDinhTuHoanTat({
+      trangThaiBuoi: b.status,
+      ngayBuoi: b.date,
+      homNayUtcMs,
+      siSoStudentIds: siSoTheoLop.get(b.classId) ?? [],
+      daDanhDauStudentIds: dauTheoBuoi.get(b.id) ?? [],
+    });
+    return qd.tuHoanTat;
+  });
+  const coBai = new Set<string>();
+  const capLesson = thoaBuoi
+    .map((b) => ({
+      id: b.id,
+      classId: b.classId,
+      lessonId: b.lessonId ?? b.plan?.lessonId ?? null,
+    }))
+    .filter(
+      (x): x is { id: string; classId: string; lessonId: string } =>
+        x.lessonId != null,
+    );
+  if (capLesson.length > 0) {
+    const exams = await db.exam.findMany({
+      where: {
+        lessonId: { in: [...new Set(capLesson.map((x) => x.lessonId))] },
+        status: "PUBLISHED",
+      },
+      select: { lessonId: true, classId: true },
+    });
+    for (const x of capLesson) {
+      const hop = exams.some(
+        (e) =>
+          e.lessonId === x.lessonId &&
+          (e.classId == null || e.classId === x.classId),
+      );
+      if (hop) coBai.add(x.id);
+    }
+  }
+
+  console.log("");
+  console.log("══ NẾU backfill KHÔNG chặn assignMode (rơi về mặc định NOW) ══");
+  dong("Buổi THOẢ có gắn bài học", capLesson.length);
+  dong("→ trong đó SẼ SINH BÀI TẬP hồi tố", coBai.size);
+  console.log(
+    coBai.size > 0
+      ? "  🔴 Phải chặn: backfill sẽ giao bài + bắn 'Bài tập mới' cho buổi đã qua nhiều tháng."
+      : "  Không buổi nào sinh bài — nhưng VẪN chặn: đây là số đo của HÔM NAY; thêm một Exam PUBLISHED trước lúc chạy là con số đổi.",
+  );
+
   const thoa = tong.get("THOA") ?? 0;
-  const pct = daQua.length > 0 ? ((thoa / daQua.length) * 100).toFixed(1) : "0.0";
+  const pct =
+    daQua.length > 0 ? ((thoa / daQua.length) * 100).toFixed(1) : "0.0";
   console.log(
     `\n  ${thoa}/${daQua.length} buổi (${pct}%) sẽ đóng được nếu chạy lại cổng đã sửa.`,
   );

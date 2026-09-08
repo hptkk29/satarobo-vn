@@ -385,6 +385,12 @@ export async function saveClassAttendanceAction(
         // Điểm danh vừa lưu xong nên cảnh báo "chưa điểm danh" không thể xảy ra;
         // cờ này chỉ để khỏi phải đi một vòng hỏi-đáp không ai trả lời được.
         confirmNoAttendance: true,
+        // DEFER — khớp nút chốt tay (`lib/lms/chot-buoi.ts`). Đóng buổi ở đây là chốt
+        // điểm danh, KHÔNG phải giao bài: để "NOW" thì lượt lưu điểm danh im lặng biến
+        // thành đường giao bài tập + gửi tin "Bài tập mới" cho phụ huynh. Trước 08/09
+        // chỗ này KHÔNG truyền gì và rơi về mặc định "NOW" — xem chú thích ở chữ ký
+        // `completeSession`.
+        assignMode: "DEFER",
         actorId,
         actorName,
       });

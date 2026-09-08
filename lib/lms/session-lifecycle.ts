@@ -47,10 +47,24 @@ export async function completeSession(opts: {
   classComment?: string | null;
   /** true → bỏ qua cảnh báo thiếu điểm danh (người dùng đã xác nhận). */
   confirmNoAttendance?: boolean;
-  // R7-14 — GV chọn cách giao bài kèm khi hoàn tất buổi:
-  //   NOW (mặc định) = giao ngay, hạn = Exam.defaultDueDays;
-  //   DEFER = chưa giao (bấm "Giao bài" sau); CUSTOM_DUE = giao với hạn assignDueAt.
-  assignMode?: "NOW" | "DEFER" | "CUSTOM_DUE";
+  /**
+   * R7-14 — cách giao bài kèm khi hoàn tất buổi. **BẮT BUỘC, cố ý không có mặc định.**
+   *
+   *   NOW       = giao ngay, hạn = Exam.defaultDueDays, VÀ bắn "Bài tập mới" tới
+   *               học viên/phụ huynh;
+   *   DEFER     = chưa giao (bấm "Giao bài" sau);
+   *   CUSTOM_DUE= giao với hạn `assignDueAt`.
+   *
+   * ⚠️ 08/09/2026 — TRƯỚC ĐÂY LÀ TUỲ CHỌN với mặc định `?? "NOW"`, và đó là lỗi:
+   * nghĩa thật của mặc định đó là "giao bài + gửi tin cho phụ huynh", nên MỌI đường
+   * quên truyền đều sai theo hướng nguy hiểm nhất. Đường tự đóng buổi
+   * (`teacher/lop/_actions.ts`) quên truyền suốt từ 04/09; nó không nổ chỉ vì cổng so
+   * ngày hỏng làm cả cơ chế không chạy — vá cổng ngày (`4df347b4`) là đánh thức nó.
+   *
+   * Bắt buộc thì trình biên dịch chỉ ra ĐỦ call site, kể cả đường đang chết sau cờ.
+   * ĐỪNG thêm lại mặc định "cho gọn".
+   */
+  assignMode: "NOW" | "DEFER" | "CUSTOM_DUE";
   assignDueAt?: Date | null;
   actorId: string | null;
   actorName: string;
@@ -67,7 +81,12 @@ export async function completeSession(opts: {
       status: true,
       substituteTeacherId: true,
       class: {
-        select: { teacherId: true, roomId: true, startTime: true, endTime: true },
+        select: {
+          teacherId: true,
+          roomId: true,
+          startTime: true,
+          endTime: true,
+        },
       },
     },
   });
@@ -90,7 +109,9 @@ export async function completeSession(opts: {
 
   // Yêu cầu điểm danh đã lưu — thiếu thì cảnh báo bắt confirm (AC4/C5).
   if (!opts.confirmNoAttendance) {
-    const attCount = await db.attendance.count({ where: { sessionId: session.id } });
+    const attCount = await db.attendance.count({
+      where: { sessionId: session.id },
+    });
     if (attCount === 0) {
       return {
         ok: false,
@@ -119,7 +140,10 @@ export async function completeSession(opts: {
   // cho kết quả KHÁC ở buổi có cả hai cột. Gom về một helper dùng chung là việc riêng, chưa làm ở
   // đây — nhưng trong PHẠM VI một hàm thì không được để hai bản.
   const nguoiDungLop =
-    opts.actualTeacherId ?? session.substituteTeacherId ?? session.class?.teacherId ?? null;
+    opts.actualTeacherId ??
+    session.substituteTeacherId ??
+    session.class?.teacherId ??
+    null;
   const phongThucTe = opts.actualRoomId ?? session.class?.roomId ?? null;
 
   // ── SNAPSHOT SĨ SỐ BIÊN CHẾ (chốt chủ dự án 07/09/2026) ────────────────────────────────
@@ -169,7 +193,9 @@ export async function completeSession(opts: {
         actualRoomId: phongThucTe,
         actualStartAt: opts.actualStartAt ?? null,
         actualEndAt: opts.actualEndAt ?? null,
-        classComment: opts.classComment?.trim() ? opts.classComment.trim() : null,
+        classComment: opts.classComment?.trim()
+          ? opts.classComment.trim()
+          : null,
       },
     });
 
@@ -194,7 +220,8 @@ export async function completeSession(opts: {
         sessionId: session.id,
         classId: session.classId,
         // R7-14 — handler homework-assign đọc các field này để quyết cách giao bài.
-        assignMode: opts.assignMode ?? "NOW",
+        // Không `??` — tham số bắt buộc, xem chú thích ở chữ ký.
+        assignMode: opts.assignMode,
         dueAt: opts.assignDueAt ? opts.assignDueAt.toISOString() : null,
         assignedById: opts.actorId,
       },

@@ -189,6 +189,148 @@ chú thích tại chỗ nói rõ **không được** lọc thêm `paymentType`, 
 hỏi KHÁC với khoá KHÁC (đơn, không phải ghi danh). Tập được tái sử dụng **có kiểm lại
 định nghĩa**, và định nghĩa đó được viết ra ngay cạnh nó.
 
+**Minh hoạ ngược — TÁCH hạng để định nghĩa lộ ra (08/09/2026).** Script đo in gộp
+*"buổi bị loại: lớp đã xoá / chưa có GV chính: 27"*. Một con số, hai nghĩa trái ngược:
+lớp đã xoá là dọn dẹp bình thường, lớp còn sống thiếu GV chính là lỗi dữ liệu chặn cả
+việc chốt buổi. Tách ra rồi đo lại trên prod: **27 / 0** — toàn bộ là lớp đã xoá, KHÔNG
+có lớp nào thiếu giáo viên. Số gộp trông đáng lo suốt hai ngày; tách hạng vừa đóng được
+vấn đề vừa chứng minh nó chưa từng tồn tại.
+
 **Dấu hiệu nhận biết khi đọc mã:** một tập tên theo *chủ thể* (`assignedClassIds`,
 `visibleCenterIds`) đang được dùng làm mẫu số của một *phép đo* (số buổi, số giờ, số
 tiền). Quyền và thước đo gần như không bao giờ cùng một tập.
+
+---
+
+## Luật 6 — không đặt lệnh kiểm sau dấu ống
+
+> **`pnpm test | grep` trả mã thoát của `grep`, không phải của `pnpm test`.**
+> Hạ tầng chết cũng thành "xanh".
+
+Rộng hơn: **một cổng kiểm im lặng khi hạ tầng hỏng thì TỆ HƠN không có cổng** — không
+có cổng thì người ta còn tự kiểm; có cổng xanh giả thì người ta thôi kiểm. Nó cấp sự
+tin tưởng sai.
+
+> **Sự cố sinh ra luật (08/09/2026).** Lệnh kiểm trước khi commit là
+> `pnpm test:finance-db 2>&1 | grep -E "Tests "`, nối trong một chuỗi `&&`. Postgres
+> local vừa chết (`Can't reach database server`), bộ test ĐỎ — nhưng `grep` tìm thấy
+> dòng nên trả 0, chuỗi `&&` đi tiếp, và commit được tạo trên một lượt kiểm đỏ. Phát
+> hiện sau đó bằng mắt, không phải bằng cổng.
+
+**Cùng họ với hai lỗi tuần này** — cổng luôn cho qua vì điều kiện không bao giờ đúng:
+
+- `photoDone` không bao giờ `true` (ảnh tải lên không mang thẻ học viên) ⇒ điều kiện
+  chặn hoá ra là cái khoá chết;
+- nhãn "Hoàn tất" suy từ ba việc thay vì đọc `ClassSession.status` ⇒ màn hình báo xong
+  cho một buổi chưa hề đóng.
+
+### Cách làm
+
+```bash
+pnpm test:finance-db                      # để mã thoát đi thẳng
+pnpm test:finance-db > out.log 2>&1; rc=$?; tail -5 out.log; [ $rc -eq 0 ]
+set -o pipefail                           # trong shell script / run-block CI
+```
+
+Trong GitHub Actions, shell mặc định là `bash -e` — **KHÔNG có `-o pipefail`**. Mỗi
+`run:` block có ống phải tự bật.
+
+### Kết quả rà 08/09/2026
+
+| Chỗ | Trạng thái |
+|---|---|
+| `patch-rbac-staff.yml` (ghi PROD) · `shadow-report.yml` | ✅ đã có `set -euo pipefail`; `shadow-report.yml` còn chú thích đúng lý do |
+| `package.json` scripts | ✅ không script nào có ống |
+| `scripts/*.sh`, `.claude/hooks/*.sh` | ✅ không có ống quanh lệnh kiểm |
+| `backup-prod-db.yml` — dọn bản cũ trên R2 | ❌ **đã vá**: `aws s3 ls \| while` — `ls` hỏng thì vòng lặp không chạy lần nào, ống trả 0, bước XANH mà không xoá bản nào |
+| `backup-prod-db.yml` — 3 ống còn lại | ✅ an toàn CÓ LÝ DO, đừng "vá" thêm: `pg_dump --version \| grep -q` có `\|\|` xử lỗi; hai chỗ kia nằm trong `$( )` của `echo` (chỉ hiển thị), và cổng toàn vẹn thật là dòng `pg_restore --list > /dev/null` **không có ống** ngay phía trên |
+
+Chỗ hở duy nhất tìm được nằm ở CI. Chỗ hở thật sự gây ra sự cố nằm ở **thói quen gõ
+lệnh của agent** — nên luật này áp cho cả hai.
+
+---
+
+## Luật 7 — tham số có mặc định NGUY HIỂM thì bỏ mặc định
+
+> **Bỏ mặc định, để trình biên dịch liệt kê call site.**
+> Rà bằng mắt rồi tin là đã hết là cách bỏ sót có hệ thống.
+
+Một mặc định chỉ vô hại khi giá trị của nó là **lựa chọn an toàn**. Khi giá trị mặc
+định gây **tác dụng phụ ra ngoài** — gửi tin, ghi tiền, giao bài, xoá, hay **mở rộng
+phạm vi nhìn thấy** — thì mọi đường quên truyền đều sai theo hướng nguy hiểm nhất, và
+"quên truyền" là chuyện chắc chắn xảy ra.
+
+> **Sự cố sinh ra luật (08/09/2026).** `completeSession` có
+> `assignMode: opts.assignMode ?? "NOW"`, mà "NOW" nghĩa thật là *giao bài tập cho cả
+> lớp + bắn tin "Bài tập mới" tới phụ huynh*. Đọc mã bằng mắt tôi thấy **2** call site
+> quên truyền. Bỏ mặc định, trình biên dịch chỉ ra **6** — gồm hai đường đang chết sau
+> cờ mà mắt bỏ qua vì "đằng nào cũng không chạy", và hai file test.
+
+**Cách làm:** đổi `x?: T` thành `x: T`, xoá `?? <mặc định>`, rồi để `tsc` liệt kê. Sửa
+từng call site **kèm lý do chọn giá trị đó ngay tại chỗ** — nếu không, lần đọc sau
+không phân biệt được "chọn NOW" với "chép của dòng trên".
+
+### Kết quả rà 08/09/2026
+
+**🔴 Cùng lớp, chưa sửa — `lib/lms/assignment.ts:105`**
+```ts
+const assignMode: AssignMode = opts.assignMode ?? "NOW";
+```
+`assignHomeworkForSession` lặp lại đúng mặc định vừa gỡ ở `completeSession`, **một tầng
+dưới**. Hai caller hiện đều truyền tường minh nên chưa nổ — nhưng cái bẫy còn nguyên,
+và nó ở đúng nơi thực sự tạo `HomeworkAssignment`.
+
+**⚠️ Nguy hiểm hơn về chất — `lib/lead-handover/service.ts:89`**
+```ts
+resolveWhere(params.fromUserId, params.filters, params.visibleCenterIds ?? "ALL")
+```
+Mặc định của một tham số **PHẠM VI NHÌN THẤY** là `"ALL"` — tức **fail-open**. Quên
+truyền là bàn giao lead trên **mọi cơ sở**. Mặc định của scope phải luôn là tập RỖNG
+(fail-closed), không bao giờ là "tất cả".
+
+**✅ Mặc định ĐÚNG HƯỚNG — giữ nguyên, đừng "chuẩn hoá" theo luật này:**
+
+| Chỗ | Mặc định | Vì sao an toàn |
+|---|---|---|
+| `audit/audit-log.ts:368` | `unmask ?? false` | quên truyền ⇒ **che** PII |
+| `audit/legacy-log.ts:69` | `canViewPii ?? false` | quên ⇒ không xem được PII |
+| `lead/auto-assign.ts:358` | `actorIsHoLevel ?? false` | quên ⇒ **ít quyền hơn** |
+| `trial/service.ts:316` | `allowOverride ?? false` | quên ⇒ không ghi đè |
+| `classes/generate.ts:33` | `onlyIfEmpty ?? true` | quên ⇒ **không** ghi đè lịch đã có |
+
+Khác biệt nằm ở **hướng của giá trị mặc định**, không ở việc có mặc định hay không.
+
+---
+
+## Luật 8 — test canh lỗi chỉ được tin sau khi CẤY LẠI lỗi và thấy nó ĐỎ
+
+> **Test xanh không chứng minh gì.**
+> Xanh có thể nghĩa là "lỗi không còn", cũng có thể nghĩa là "test không chạm tới lỗi".
+> Hai thứ đó nhìn từ ngoài giống hệt nhau.
+
+Quy trình bắt buộc cho MỌI test viết ra để canh một lỗi cụ thể:
+
+1. viết test, chạy → **xanh**;
+2. **cấy lại chính lỗi đó** vào mã (một dòng, `cp` file ra `/tmp` trước);
+3. chạy lại → **phải ĐỎ, và đỏ ĐÚNG ca mình nhắm**;
+4. khôi phục, chạy lại → xanh;
+5. **ghi cả bốn bước vào commit** — người sau không chạy lại được bước 2.
+
+Đỏ ở ca khác cũng là tín hiệu: test đang canh thứ khác với thứ mình nghĩ.
+
+> **Sự cố sinh ra luật (08/09/2026).** Bộ test DB viết để canh lỗi
+> `update: base` (nhập nhân sự ghi đè trọn hồ sơ) chạy **xanh 15/15 trong khi lỗi vẫn
+> nằm nguyên trong mã**. Fixture dựng `giaTri` từ CHÍNH hàng cũ (`{ ...truoc }`), nên
+> "ghi đè trọn hồ sơ" ghi lại đúng giá trị cũ — không có gì đổi để mà phát hiện.
+> Chỉ bước 2 lộ ra điều đó. Sửa fixture theo hình dạng thật (luật 4) rồi cấy lại lỗi →
+> đỏ đúng ca.
+
+### Vì sao không dựa vào việc nhớ
+
+Cùng ngày, quy trình này bắt được hai thứ ở hai chỗ khác nhau — cầu dao hoàn tiền và ca
+trên — và **bỏ sót một lần** cho tới khi chạy bước 2. Một quy trình chỉ chạy khi người
+làm nhớ ra thì nó không phải quy trình.
+
+**Liên hệ với các luật khác:** đây là luật 6 (*cổng im lặng tệ hơn không có cổng*) áp cho
+chính bộ test. Một test không bao giờ đỏ được là một cổng luôn cho qua — cùng họ với
+`photoDone` không bao giờ true, và nhãn "Hoàn tất" suy ra.

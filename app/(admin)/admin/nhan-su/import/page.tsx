@@ -4,7 +4,10 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { precheckUpsert } from "@/components/admin/import-precheck";
-import { ExcelImporter, type ImportResult } from "@/components/admin/ExcelImporter";
+import {
+  ExcelImporter,
+  type ImportResult,
+} from "@/components/admin/ExcelImporter";
 
 interface EmployeeImportRow {
   employeeCode: string;
@@ -51,7 +54,12 @@ const VALID_CONTRACT_TYPES = new Set([
   "CHINH_THUC_XAC_DINH",
   "CHINH_THUC_KHONG_XAC_DINH",
 ]);
-const VALID_STATUSES = new Set(["ACTIVE", "ON_LEAVE", "RESIGNED", "TERMINATED"]);
+const VALID_STATUSES = new Set([
+  "ACTIVE",
+  "ON_LEAVE",
+  "RESIGNED",
+  "TERMINATED",
+]);
 const VALID_GENDERS = new Set(["MALE", "FEMALE", "OTHER"]);
 
 function asString(v: unknown): string | undefined {
@@ -87,8 +95,8 @@ export default function ImportEmployeesPage() {
         </Link>
         <h1 className="text-2xl font-bold">Import Nhân viên từ Excel</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Mã nhân viên (<code>employeeCode</code>) là khoá upsert — trùng mã sẽ UPDATE,
-          mã mới sẽ CREATE.
+          Mã nhân viên (<code>employeeCode</code>) là khoá upsert — trùng mã sẽ
+          UPDATE, mã mới sẽ CREATE.
         </p>
       </div>
 
@@ -135,7 +143,8 @@ export default function ImportEmployeesPage() {
           const jobTitle = asString(row.jobTitle);
           const department = asString(row.department);
 
-          if (!employeeCode) return { error: "Thiếu mã nhân viên (employeeCode)" };
+          if (!employeeCode)
+            return { error: "Thiếu mã nhân viên (employeeCode)" };
           if (!/^[A-Za-z0-9.-]+$/.test(employeeCode)) {
             return { error: "Mã NV chỉ chứa chữ, số, dấu chấm/gạch" };
           }
@@ -205,7 +214,9 @@ export default function ImportEmployeesPage() {
             body: JSON.stringify({ rows }),
           });
           if (!res.ok) {
-            const err = (await res.json().catch(() => ({ error: "Unknown" }))) as {
+            const err = (await res
+              .json()
+              .catch(() => ({ error: "Unknown" }))) as {
               error?: string;
             };
             throw new Error(err.error || "Import thất bại");
@@ -216,31 +227,57 @@ export default function ImportEmployeesPage() {
         }}
       />
 
+      {/* Việc 9 (08/09/2026) — cảnh báo phải nằm NGAY TRÊN MÀN, không chỉ trong docs.
+          Docs không đến được tay người dán file Excel. Quy ước "ô trống = giữ nguyên"
+          là chiều AN TOÀN (nhập nhầm không xoá được dữ liệu) nhưng PHẢN TRỰC GIÁC:
+          người dùng sẽ để trống một ô mong xoá dữ liệu, và không có gì xảy ra. */}
+      <div className="mt-4 rounded-xl border border-state-warning-ink/30 bg-state-warning-soft p-4 text-sm text-state-warning-ink">
+        <p className="font-semibold">
+          Ô để trống nghĩa là GIỮ NGUYÊN, không phải xoá.
+        </p>
+        <p className="mt-1">
+          File chỉ cần những cột bạn muốn sửa. Cột không có trong file — hoặc ô
+          để trống — sẽ <strong>không bị đụng tới</strong>. Muốn{" "}
+          <strong>xoá</strong> một trường thì sửa ở màn hồ sơ nhân sự, không qua
+          nhập file.
+        </p>
+        <p className="mt-1">
+          Riêng <code>status</code>: thiếu cột này thì trạng thái hiện tại giữ
+          nguyên — người đã nghỉ không bị cho đi làm lại.
+        </p>
+      </div>
+
       <div className="text-sm text-muted-foreground mt-4 space-y-1 rounded-xl border border-border bg-muted p-4">
         <p className="font-semibold text-foreground">Lưu ý:</p>
         <ul className="list-disc list-inside space-y-0.5">
           <li>
-            <code>employeeCode</code> bắt buộc, là khoá upsert. Trùng = UPDATE; mới = CREATE.
+            <code>employeeCode</code> bắt buộc, là khoá. Trùng = CẬP NHẬT (chỉ
+            những cột có trong file); mới = TẠO MỚI (cần đủ{" "}
+            <code>fullName</code>, <code>jobTitle</code>,{" "}
+            <code>department</code>).
           </li>
           <li>
-            <code>department</code> bắt buộc — một trong các enum: BAN_GIAM_DOC / DAO_TAO /
-            MARKETING / KINH_DOANH / IT / HANH_CHANH_NHAN_SU / KE_TOAN / TUYEN_SINH / GIAO_VU /
-            GIANG_DAY.
+            <code>department</code> bắt buộc KHI TẠO MỚI — một trong các enum:
+            BAN_GIAM_DOC / DAO_TAO / MARKETING / KINH_DOANH / IT /
+            HANH_CHANH_NHAN_SU / KE_TOAN / TUYEN_SINH / GIAO_VU / GIANG_DAY.
           </li>
           <li>
-            <code>contractType</code> nếu có: FULLTIME / PARTTIME / INTERN / FREELANCE /
-            THU_VIEC / CHINH_THUC_XAC_DINH / CHINH_THUC_KHONG_XAC_DINH.
+            <code>contractType</code> nếu có: FULLTIME / PARTTIME / INTERN /
+            FREELANCE / THU_VIEC / CHINH_THUC_XAC_DINH /
+            CHINH_THUC_KHONG_XAC_DINH.
           </li>
           <li>
-            <code>centerSlug</code> rỗng = nhân viên không gắn cơ sở cụ thể. Sai slug → row bị bỏ qua.
+            <code>centerSlug</code>: THIẾU CỘT = giữ nguyên cơ sở hiện tại. Sai
+            slug → row bị bỏ qua.
           </li>
           <li>
-            <code>managerCode</code> là <code>employeeCode</code> của người quản lý trực tiếp.
-            Phải đã tồn tại trong DB (có thể import từ file khác trước).
+            <code>managerCode</code> là <code>employeeCode</code> của người quản
+            lý trực tiếp. Phải đã tồn tại trong DB (có thể import từ file khác
+            trước).
           </li>
           <li>
-            <code>subjects</code> / <code>certifications</code>: phân tách bằng dấu phẩy. VD:{" "}
-            <code>Robotics, RoboSim</code>.
+            <code>subjects</code> / <code>certifications</code>: phân tách bằng
+            dấu phẩy. VD: <code>Robotics, RoboSim</code>.
           </li>
           <li>Avatar KHÔNG import — upload qua admin form sau.</li>
         </ul>
