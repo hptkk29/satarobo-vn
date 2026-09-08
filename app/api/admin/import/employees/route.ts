@@ -12,19 +12,24 @@ import {
 } from "@/lib/validators/employee";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
+import { dungPatchNhanSu } from "@/lib/hr/import-patch";
 
 // Excel date parser — reused pattern from B3 holidays / B2 rooms.
 function parseExcelDate(v: unknown): Date | null {
   if (v === null || v === undefined || v === "") return null;
   if (v instanceof Date) {
-    return new Date(Date.UTC(v.getUTCFullYear(), v.getUTCMonth(), v.getUTCDate()));
+    return new Date(
+      Date.UTC(v.getUTCFullYear(), v.getUTCMonth(), v.getUTCDate()),
+    );
   }
   if (typeof v === "number") {
     if (!Number.isFinite(v)) return null;
     const epoch = Date.UTC(1899, 11, 30);
     const ms = epoch + v * 86400000;
     const d = new Date(ms);
-    return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+    return new Date(
+      Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()),
+    );
   }
   if (typeof v === "string") {
     const s = v.trim();
@@ -36,7 +41,9 @@ function parseExcelDate(v: unknown): Date | null {
     const t = Date.parse(s);
     if (Number.isNaN(t)) return null;
     const d = new Date(t);
-    return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+    return new Date(
+      Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()),
+    );
   }
   return null;
 }
@@ -82,13 +89,23 @@ const EmployeeImportSchema = z.object({
     (s) => /^[A-Za-z0-9.-]+$/.test(s),
     "Mã NV chỉ chứa chữ, số, dấu chấm/gạch",
   ),
-  fullName: requiredString,
-  jobTitle: requiredString,
-  department: DepartmentEnum,
-  status: EmploymentStatusEnum.default("ACTIVE"),
+  // ⚠️ BA TRƯỜNG DƯỚI ĐÂY BẮT BUỘC Ở ĐƯỜNG TẠO MỚI, KHÔNG bắt buộc ở đường cập nhật
+  // (08/09/2026). Bắt buộc ở tầng schema thì một file "chỉ sửa một cột" bị từ chối,
+  // buộc người dùng phải chép lại toàn bộ hồ sơ vào file — mà chép lại chính là cách
+  // dữ liệu bị ghi đè nhầm. Cổng bắt buộc chuyển xuống Stage 3, nơi biết hồ sơ đã tồn
+  // tại hay chưa.
+  fullName: requiredString.optional(),
+  jobTitle: requiredString.optional(),
+  department: DepartmentEnum.optional(),
+  // KHÔNG `.default("ACTIVE")` nữa: trên đường CẬP NHẬT nó có nghĩa "im lặng cho người
+  // này đi làm lại". Mặc định ACTIVE nay đặt ở đúng chỗ — nhánh tạo mới ở Stage 3.
+  status: EmploymentStatusEnum.optional(),
   phone: optionalString,
   email: optionalEmail,
-  dateOfBirth: z.unknown().optional().transform((v) => parseExcelDate(v)),
+  dateOfBirth: z
+    .unknown()
+    .optional()
+    .transform((v) => parseExcelDate(v)),
   gender: z
     .union([GenderEnum, z.literal(""), z.null()])
     .optional()
@@ -100,8 +117,14 @@ const EmployeeImportSchema = z.object({
     .transform((v) => (v === "" || v === null || v === undefined ? null : v)),
   centerSlug: optionalString,
   managerCode: optionalString,
-  joinedAt: z.unknown().optional().transform((v) => parseExcelDate(v)),
-  endDate: z.unknown().optional().transform((v) => parseExcelDate(v)),
+  joinedAt: z
+    .unknown()
+    .optional()
+    .transform((v) => parseExcelDate(v)),
+  endDate: z
+    .unknown()
+    .optional()
+    .transform((v) => parseExcelDate(v)),
   address: optionalString,
   subjects: arrayFromCsv,
   certifications: arrayFromCsv,
@@ -139,13 +162,27 @@ export async function POST(req: NextRequest) {
   // Stage 1: schema parse each row
   type Parsed = z.infer<typeof EmployeeImportSchema>;
   const stageOne: (
-    | { ok: true; data: Parsed }
+    | { ok: true; data: Parsed; coMat: Set<string> }
     | { ok: false; row: number; error: string }
   )[] = [];
   for (let i = 0; i < rows.length; i++) {
     const r = EmployeeImportSchema.safeParse(rows[i]);
     if (r.success) {
-      stageOne.push({ ok: true, data: r.data });
+      // ── CỘT NÀO THỰC SỰ CÓ TRONG FILE (08/09/2026) ────────────────────────
+      //
+      // Phải bắt TRƯỚC Zod: schema biến `undefined` thành `null` (và `status` rơi về
+      // `.default("ACTIVE")`), nên sau khi parse thì "không có cột" và "cột rỗng"
+      // không phân biệt được nữa.
+      //
+      // ⚠️ Client dựng object đủ khoá rồi `JSON.stringify` — khoá `undefined` bị bỏ.
+      // Nên Ô TRỐNG và CỘT THIẾU tới đây giống hệt nhau, và cả hai đều nghĩa là
+      // KHÔNG ĐỤNG TỚI. Muốn XOÁ một trường thì sửa ở màn hồ sơ, không qua import —
+      // đây là chiều an toàn, chọn có chủ đích.
+      stageOne.push({
+        ok: true,
+        data: r.data,
+        coMat: new Set(Object.keys((rows[i] ?? {}) as Record<string, unknown>)),
+      });
     } else {
       stageOne.push({
         ok: false,
@@ -158,12 +195,16 @@ export async function POST(req: NextRequest) {
   // Stage 2: resolve centerSlug → centerId + managerCode → managerId
   const slugs = [
     ...new Set(
-      stageOne.flatMap((r) => (r.ok && r.data.centerSlug ? [r.data.centerSlug] : [])),
+      stageOne.flatMap((r) =>
+        r.ok && r.data.centerSlug ? [r.data.centerSlug] : [],
+      ),
     ),
   ];
   const managerCodes = [
     ...new Set(
-      stageOne.flatMap((r) => (r.ok && r.data.managerCode ? [r.data.managerCode] : [])),
+      stageOne.flatMap((r) =>
+        r.ok && r.data.managerCode ? [r.data.managerCode] : [],
+      ),
     ),
   ];
 
@@ -200,6 +241,7 @@ export async function POST(req: NextRequest) {
   const validRows: {
     data: Parsed;
     centerId: string | null;
+    coMat: Set<string>;
     orgUnitId: string | null;
     managerId: string | null;
   }[] = [];
@@ -250,14 +292,34 @@ export async function POST(req: NextRequest) {
     const orgUnitId = centerId
       ? (centerIdToOrgUnitId.get(centerId) ?? null)
       : null;
-    validRows.push({ data: entry.data, centerId, orgUnitId, managerId });
+    validRows.push({
+      data: entry.data,
+      centerId,
+      orgUnitId,
+      managerId,
+      coMat: entry.coMat,
+    });
   }
 
   if (validRows.length === 0) {
     return NextResponse.json({ success: 0, errors });
   }
 
-  // Stage 3: upsert by employeeCode in a transaction.
+  // Stage 3: TẠO MỚI hoặc VÁ, theo employeeCode.
+  //
+  // Không dùng `upsert` nữa: `create` và `update` nay có luật khác nhau (tạo mới đòi đủ
+  // 3 trường + mặc định ACTIVE; cập nhật chỉ đụng cột có trong file), nên phải biết hồ
+  // sơ đã tồn tại hay chưa TRƯỚC khi ghi.
+  const daCo = new Set(
+    (
+      await sdb.employee.findMany({
+        where: {
+          employeeCode: { in: validRows.map((r) => r.data.employeeCode) },
+        },
+        select: { employeeCode: true },
+      })
+    ).map((e) => e.employeeCode),
+  );
   let success = 0;
   try {
     await sdb.$transaction(async (tx) => {
@@ -288,12 +350,45 @@ export async function POST(req: NextRequest) {
           // Sync legacy isActive flag with new status field
           isActive: r.data.status === "ACTIVE",
         };
+        // Đường CẬP NHẬT là VÁ — chỉ đụng cột thực sự có trong file.
+        // Luật + lý do: `lib/hr/import-patch.ts`.
+        const patch = dungPatchNhanSu(base as Record<string, unknown>, r.coMat);
+
         try {
-          await tx.employee.upsert({
-            where: { employeeCode: r.data.employeeCode },
-            create: { ...base, employeeCode: r.data.employeeCode },
-            update: base,
-          });
+          if (daCo.has(r.data.employeeCode)) {
+            // Hồ sơ ĐÃ CÓ → chỉ VÁ. Không cột nào trong file thì không ghi gì.
+            if (Object.keys(patch).length > 0) {
+              await tx.employee.update({
+                where: { employeeCode: r.data.employeeCode },
+                data: patch,
+              });
+            }
+          } else {
+            // TẠO MỚI → đòi đủ ba trường, và mặc định ACTIVE đặt ở ĐÂY (không phải ở schema).
+            if (!base.fullName || !base.jobTitle || !base.department) {
+              const thieu = [
+                base.fullName ? null : "fullName",
+                base.jobTitle ? null : "jobTitle",
+                base.department ? null : "department",
+              ].filter(Boolean);
+              errors.push({
+                row: i + 2,
+                error: `Tạo mới nhân sự "${r.data.employeeCode}" cần đủ: ${thieu.join(", ")}`,
+              });
+              continue;
+            }
+            await tx.employee.create({
+              data: {
+                ...base,
+                employeeCode: r.data.employeeCode,
+                fullName: base.fullName,
+                jobTitle: base.jobTitle,
+                department: base.department,
+                status: base.status ?? "ACTIVE",
+                isActive: (base.status ?? "ACTIVE") === "ACTIVE",
+              },
+            });
+          }
           success++;
         } catch (err) {
           // Most likely cause: email unique-constraint conflict with a row not
