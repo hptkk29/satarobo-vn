@@ -314,6 +314,34 @@ export const SETTINGS = {
     default: false,
     centerOverridable: false, // quyền không được lệch nhau giữa các cơ sở
   }),
+  // Web Push Đợt 1 (08/09/2026) — CÔNG TẮC của kênh thông báo đẩy cho NHÂN VIÊN.
+  //
+  // Ở SystemSetting chứ không phải env, đúng nếp của MỌI kênh gửi ra ngoài trong repo này
+  // (`chat.znsNotifyEnabled`, `zalo.znsLive`): tắt kênh phải có hiệu lực trong ≤5 phút mà
+  // không cần deploy. Env chỉ giữ khoá bí mật (`VAPID_PRIVATE_KEY`).
+  //
+  // ⚠️ ĐỢT 1 CHƯA CÓ ĐƯỜNG ĐỌC — bật/tắt hiện KHÔNG có tác dụng gì. Màn
+  // /admin/cau-hinh-van-hanh map toàn bộ SETTING_KEYS ra giao diện, không lọc, nên công tắc
+  // này hiện ngay khi merge; hậu tố trong `label` là để người vận hành không tưởng đã bật được
+  // kênh. Gỡ hậu tố khi engine gửi (Đợt 4) thật sự đọc key này.
+  //
+  // TẮT mặc định. DB trống ở mọi môi trường sẽ rơi về `default` (lib/settings/resolve.ts) nên
+  // `true` ở đây nghĩa là tự bật ở cả những nơi chưa ai cấu hình gì.
+  //
+  // Đặt tạm ở nhóm `system` chứ không mở nhóm `push` riêng: hiện chỉ có MỘT key, và thêm
+  // nhóm phải sửa union `SettingGroup` + nhãn ở `settings-editor.tsx`. Khoá cấu hình lưu
+  // theo `key` chứ không theo nhóm, nên chuyển sang nhóm riêng về sau là đổi code thuần,
+  // không migration. Chuyển khi có ≥3 key push (allowlist tiền tố, trần/ngày…).
+  "push.webPushEnabled": def({
+    key: "push.webPushEnabled",
+    group: "system",
+    label: "Bật thông báo đẩy (Web Push) cho nhân viên — CHƯA HOẠT ĐỘNG, có hiệu lực từ Đợt 4",
+    schema: z.boolean(),
+    default: false,
+    // Kênh bật/tắt toàn hệ: một cơ sở tự tắt thì nhân viên cơ sở đó im lặng mà không ai
+    // ở Hội sở biết — đúng loại lỗi câm mà module này sinh ra để tránh.
+    centerOverridable: false,
+  }),
   "student.birthdayZnsEnabled": def({
     key: "student.birthdayZnsEnabled",
     group: "student",

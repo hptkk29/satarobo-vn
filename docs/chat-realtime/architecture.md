@@ -18,7 +18,7 @@ Module chat realtime bên trong satarobo.vn: nhóm lớp (PH + GV + QLCS) và 1-
 | Realtime | Supabase Realtime **Broadcast**, private channel — KHÔNG dùng Postgres Changes |
 | Storage | Supabase Storage, bucket private `chat-attachments` |
 | Jobs | Vercel Cron (job đối soát đêm) |
-| Push | Web Push / FCM (chốt khi làm US-14) |
+| Push | US-14 (báo tin cho PH) đi **ZNS Zalo**, chốt 09/08/2026. Web Push là hạng mục riêng **US-14b, chỉ cho nhân viên** — xem `docs/web-push/` |
 
 ## Luồng auth & claims
 
