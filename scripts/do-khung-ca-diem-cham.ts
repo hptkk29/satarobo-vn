@@ -178,7 +178,9 @@ async function main() {
       },
       orderBy: { code: "asc" },
     }),
-    db.center.findMany({ select: { id: true, code: true, name: true } }),
+    db.center.findMany({
+      select: { id: true, code: true, name: true, slug: true },
+    }),
   ]);
   const tenCoSo = new Map(centers.map((c) => [c.id, c.code ?? c.name]));
 
@@ -214,6 +216,48 @@ async function main() {
       ? (tenCoSo.get(n.centerId) ?? n.centerId)
       : "(NULL — chưa gán cơ sở)";
     dong(String(ten), n._count);
+  }
+
+  // ── V2.3b — DANH SÁCH người chưa gán cơ sở, để mang đi hỏi Nhân sự ──
+  //
+  // Chỉ dữ liệu NHÂN SỰ NỘI BỘ cần cho việc gán: mã, họ tên, chức danh, bộ phận, ngày
+  // vào làm. KHÔNG in điện thoại / email / CCCD / lương — log Actions đọc được, và
+  // những trường đó không giúp trả lời "người này thuộc cơ sở nào".
+  const chuaGan = await db.employee.findMany({
+    where: { status: "ACTIVE", centerId: null },
+    select: {
+      employeeCode: true,
+      fullName: true,
+      jobTitle: true,
+      department: true,
+      joinedAt: true,
+    },
+    orderBy: [{ department: "asc" }, { fullName: "asc" }],
+  });
+  tieuDe(`══ V2.3b — ${chuaGan.length} nhân sự ACTIVE CHƯA gán cơ sở ══`);
+  if (chuaGan.length > 0) {
+    console.log(
+      `    ${"MÃ NV".padEnd(12)} ${"BỘ PHẬN".padEnd(16)} ${"VÀO LÀM".padEnd(12)} ${"CHỨC DANH".padEnd(26)} HỌ TÊN`,
+    );
+    for (const e of chuaGan) {
+      const vao = e.joinedAt
+        ? e.joinedAt.toISOString().slice(0, 10)
+        : "(chưa có)";
+      console.log(
+        `    ${e.employeeCode.padEnd(12)} ${String(e.department).padEnd(16)} ${vao.padEnd(12)} ${e.jobTitle.padEnd(26)} ${e.fullName}`,
+      );
+    }
+    console.log("");
+    console.log(
+      "  Gán HÀNG LOẠT được: /admin/nhan-su/import nhận cột `centerSlug`, và",
+    );
+    console.log(
+      "  `employeeCode` là khoá upsert (trùng mã = UPDATE). Giá trị hợp lệ của",
+    );
+    console.log("  `centerSlug`:");
+    for (const c of centers) {
+      console.log(`    ${(c.code ?? "-").padEnd(12)} slug=${c.slug}`);
+    }
   }
 
   // ── V2.4 — lượt quét thật: nơi quét vs nơi trực thuộc ──
