@@ -154,3 +154,43 @@ describe("[KHÔNG PLAN] lớp chưa ghim giáo trình — fallback phải chạy
     expect(nhan).toBe("Buổi 2 (theo lịch)");
   });
 });
+
+describe("[1b] deriveSessionLabel — ĐẢO ưu tiên: số LỘ TRÌNH thắng hạng-theo-ngày", () => {
+  it("buổi Sata6 ngày 25/06 in 'Buổi 43', KHÔNG phải 'Buổi 2'", async () => {
+    const { deriveSessionLabel } = await import("./session-project-name");
+    // Đây chính là ca chủ dự án báo: hạng theo ngày = 2, nhưng bài là 43.
+    expect(
+      deriveSessionLabel({
+        sessionNumber: 2, // hạng theo NGÀY
+        planOrder: 42, // plan.order 0-based ⇒ bài 43
+        lessonTitle: "HP4 - Chạy tổng hợp nhiệm vụ",
+        lessonOrder: 43,
+        moduleCode: "HP4",
+      }),
+    ).toBe("Buổi 43 - HP4 - Chạy tổng hợp nhiệm vụ");
+  });
+
+  it("không có plan → lùi về Lesson.order, vẫn thắng hạng-theo-ngày", async () => {
+    const { deriveSessionLabel } = await import("./session-project-name");
+    expect(
+      deriveSessionLabel({ sessionNumber: 2, lessonOrder: 43, lessonTitle: "Bài X" }),
+    ).toBe("Buổi 43 - Bài X");
+  });
+
+  it("KHÔNG có nguồn lộ trình nào → mới dùng hạng-theo-ngày", async () => {
+    const { deriveSessionLabel } = await import("./session-project-name");
+    expect(deriveSessionLabel({ sessionNumber: 2, topic: "Chủ đề tự nhập" })).toBe(
+      "Buổi 2 - Chủ đề tự nhập",
+    );
+  });
+
+  it("nhãn ghép KHÔNG kèm '(theo lịch)' — sẽ làm vỡ stripSessionNumberPrefix", async () => {
+    const { deriveSessionLabel, meaningfulSessionTitle } = await import(
+      "./session-project-name"
+    );
+    const nhan = deriveSessionLabel({ sessionNumber: 7, lessonTitle: "Bài Y" });
+    expect(nhan).not.toContain("theo lịch");
+    // Và tiền tố vẫn cắt được — đây là điều kiện của cổng phụ huynh.
+    expect(meaningfulSessionTitle("Buổi 7 - Bài Y")).toBe("Bài Y");
+  });
+});
