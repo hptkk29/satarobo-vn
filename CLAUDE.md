@@ -232,7 +232,13 @@ feature → PR → merge `test`  → test.satarobo.vn tự deploy → nghiệm t
   là "lỗi không còn" hoặc "test không chạm tới lỗi"; ghi cả bốn bước vào commit.
   **Cổng phải được cho ăn bằng thứ đường THẬT cho nó ăn** (luật 9, sự cố nhập nhân sự
   08/09): ca test gõ tay đầu vào của cổng thì nó kiểm cổng, không kiểm hệ thống — nếu đầu
-  vào ấy do tầng khác tính ra thì **tầng đó là chỗ bug nằm**. Sổ sự cố cùng file; điều
+  vào ấy do tầng khác tính ra thì **tầng đó là chỗ bug nằm**.
+  **Test grep mã nguồn là loại MONG MANH NHẤT** (luật 11): ưu tiên khẳng định HÀNH VI;
+  buộc phải canh bằng văn bản mã thì neo chuỗi hẹp nhất, **không dùng cờ `/s`**, khẳng
+  định cả SỐ LẦN khớp (chú thích giải thích bản vá thường chứa đúng chuỗi đang cấm), và
+  **chưa cấy thử thì coi như vô dụng**. Ba ca soi nhầm chỗ trong một ngày 08/09.
+  Luật 7 có điểm cộng ngoài dự kiến: trường BẮT BUỘC không chỉ liệt kê call site, nó còn
+  biến **"quên `select` cột nguồn"** từ lỗi câm thành lỗi biên dịch. Sổ sự cố cùng file; điều
   đáng nhớ nhất: **quy trình chụp trước/sau là thứ duy nhất hoạt động** — bộ test xanh,
   bản vá vừa merge, và 9 hồ sơ prod vẫn bị xoá trắng ba cột ngày. Đừng bỏ nó kể cả khi
   test đã xanh.

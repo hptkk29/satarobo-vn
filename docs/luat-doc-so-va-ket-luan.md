@@ -300,6 +300,26 @@ truyền là bàn giao lead trên **mọi cơ sở**. Mặc định của scope 
 
 Khác biệt nằm ở **hướng của giá trị mặc định**, không ở việc có mặc định hay không.
 
+### Điểm cộng ngoài dự kiến: nó còn kéo theo chỗ QUÊN SELECT
+
+Ghi 08/09/2026, khi vá ba chỗ đếm buổi dạy (`giaoVienDuocQuyCong`).
+
+Hàm mới nhận `substituteTeacherId` là trường **bắt buộc** trong tham số. Hệ quả không chỉ
+là "mỗi call site phải nói ý định" — `tsc` còn bắt luôn
+`dashboard/_components/manager-dashboard.tsx` **thiếu cột đó trong `select` của Prisma**:
+
+```
+error TS2345: Property 'substituteTeacherId' is missing in type
+'{ class: { teacherId: string | null; }; actualTeacherId: string | null; }'
+```
+
+Đây đúng là hình dạng bug nguy hiểm nhất của lớp này: hàm quy công thì đúng, nhưng dữ
+liệu nuôi nó thiếu một cột ⇒ nó nhận `undefined` và **rơi về nhánh cũ, im lặng**. Không
+exception, không cảnh báo, chỉ là một con số sai.
+
+Trường tuỳ chọn thì `tsc` cho qua. **Trường bắt buộc biến "quên select" từ lỗi câm thành
+lỗi biên dịch.** Đó là lý do thứ hai để bỏ mặc định, ngoài lý do liệt kê call site.
+
 ---
 
 ## Luật 8 — test canh lỗi chỉ được tin sau khi CẤY LẠI lỗi và thấy nó ĐỎ
@@ -334,6 +354,24 @@ làm nhớ ra thì nó không phải quy trình.
 **Liên hệ với các luật khác:** đây là luật 6 (*cổng im lặng tệ hơn không có cổng*) áp cho
 chính bộ test. Một test không bao giờ đỏ được là một cổng luôn cho qua — cùng họ với
 `photoDone` không bao giờ true, và nhãn "Hoàn tất" suy ra.
+
+---
+
+## Luật 9 — cổng phải được cho ăn bằng thứ đường THẬT cho nó ăn
+
+> Một ca test **tự dựng đầu vào cho cổng** thì nó kiểm cổng, không kiểm hệ thống. Nếu đầu
+> vào ấy do một tầng khác tính ra, **tầng đó là chỗ bug sẽ nằm** — và ca test phải gọi
+> nó, hoặc ít nhất mang đúng hình dạng thứ nó phát ra.
+
+Sinh ra từ sự cố nhập nhân sự 08/09/2026 — chi tiết đầy đủ ở mục **Sổ sự cố** cuối file.
+Tóm tắt: ca test cũ gọi
+`dungPatchNhanSu(DAY_DU, new Set(["employeeCode", "centerSlug"]))`, tức **gõ tay `coMat`**
+— đúng cái biến chứa lỗi. Test xanh, và nó xanh CHÍNH XÁC: nó đo hàm dựng patch, không đo
+đường dẫn dữ liệu tới hàm đó. Ba cột ngày vẫn bị xoá trắng trên 9 hồ sơ prod.
+
+**Câu hỏi để tự kiểm:** *đầu vào của cổng này do AI tính ra, và tôi có gọi kẻ đó không?*
+
+Luật 11 ngay dưới là luật này ở quy mô một dòng `expect`.
 
 ---
 
@@ -382,16 +420,92 @@ sự cố ngay dưới.
 Hai cờ cuối đáng nhớ ngang danh sách `contexts`: **một cổng bỏ qua được không phải cổng**,
 và `strict=false` chính là cơ chế đã để một nhánh tụt sau main mà vẫn xanh.
 
-### Liên hệ với luật 8 và 9
+### Liên hệ với luật 8, 9 và 11
 
-Ba luật là ba câu hỏi nối tiếp về **cùng một bộ test**, hỏi thiếu câu nào cũng ra một dấu
-tích xanh vô nghĩa:
+Bốn luật là bốn câu hỏi nối tiếp về **cùng một bộ test**, hỏi thiếu câu nào cũng ra một
+dấu tích xanh vô nghĩa:
 
 | | Câu hỏi | Hỏng nếu bỏ qua |
 |---|---|---|
 | **Luật 8** | ca này **đỏ được không**? | test không bao giờ đỏ — cổng luôn cho qua |
 | **Luật 9** | nó đỏ ở **đúng chỗ bug nằm** không? | đỏ ở tầng mình tự gõ đầu vào, không phải tầng có bug |
+| **Luật 11** | nó **soi đúng chuỗi** không? | với test grep: khớp nhầm chú thích, nhầm hàm khác, hoặc nuốt cả file vì cờ `/s` |
 | **Luật 10** | ai đó **bị chặn** khi nó đỏ không? | đỏ đúng chỗ, và merge lên prod bình thường |
+
+Thứ tự hỏi không quan trọng; **hỏi thiếu** mới quan trọng. Ngày 08/09/2026 đủ bốn ca:
+luật 9 (nhập nhân sự xoá 3 cột ngày), luật 10 (cầu dao hoàn tiền merge với ca đỏ), luật
+11 (ba ca grep soi nhầm chỗ), và luật 8 là thứ duy nhất phát hiện ra cả ba.
+
+---
+
+## Luật 11 — test grep mã nguồn là loại MONG MANH NHẤT
+
+> **Ưu tiên khẳng định HÀNH VI.** Khi buộc phải canh bằng văn bản mã — chống một dấu `?`
+> quay lại, chống một chuỗi bị chép sang chỗ khác — thì:
+>
+> · **neo vào chuỗi hẹp nhất có thể, KHÔNG dùng cờ `/s`;**
+> · **khẳng định cả SỐ LẦN khớp, không chỉ có/không** — chú thích giải thích bản vá
+>   thường chứa đúng chuỗi mà ta đang cấm;
+> · **bắt buộc cấy lại lỗi (luật 8).** Một ca grep chưa cấy thử thì mặc định coi là **vô
+>   dụng**, không phải "chắc là ổn".
+
+### Ba lần trong MỘT ngày — 08/09/2026
+
+Ba ca test khác nhau, ba cách soi nhầm chỗ, cùng một loại:
+
+| Ca | Viết gì | Vì sao vô dụng |
+|---|---|---|
+| Q-04, khối Hội sở trên màn điểm chấm | `toMatch(/Hội sở.*Q-04/s)` | Cờ `s` cho `.` khớp cả xuống dòng ⇒ nó khớp **bất kỳ cặp nào trong cả file**. Xoá đúng lời giải thích vẫn XANH |
+| `assignMode` bắt buộc | `not.toContain('?? "NOW"')` | Bắt trúng **chính chú thích giải thích bản vá** — chú thích nhắc lại chuỗi đang cấm ⇒ ĐỎ ngay lần chạy đầu, mà lỗi là của test |
+| `assignMode` bắt buộc | `indexOf("assignMode: AssignMode;")` | Bắt trúng chữ ký của **`computeHomeworkDueAt` ở trên**, không phải chỗ vừa vá |
+
+Hai ca đầu **suýt thành test xanh vĩnh viễn**. Cả ba chỉ lộ ra khi cấy lại lỗi.
+
+### Vì sao đây là luật 9 ở quy mô nhỏ
+
+Luật 9 nói *cổng phải được cho ăn bằng thứ đường thật cho nó ăn*. Một ca grep tự chọn
+chuỗi để soi cũng đang tự dựng đầu vào cho chính nó — và nếu chọn nhầm chuỗi thì **xanh
+hay đỏ đều không nói lên gì**. Khác biệt duy nhất là quy mô: luật 9 nói về một tầng của hệ
+thống, luật 11 nói về một dòng `expect`.
+
+### Cách viết cho đỡ mong manh
+
+```ts
+// ❌ khớp bất kỳ đâu trong file, và cờ `s` nuốt cả xuống dòng
+expect(src).toMatch(/Hội sở.*Q-04/s);
+
+// ✅ chỉ soi vùng NGAY CẠNH thứ đang canh
+const i = src.indexOf("b.id !== HO_CENTER_ID");
+expect(i).toBeGreaterThan(-1);
+expect(src.slice(Math.max(0, i - 300), i)).toContain("Q-04");
+```
+
+```ts
+// ❌ chú thích giải thích bản vá cũng chứa chuỗi này
+expect(src).not.toContain('?? "NOW"');
+
+// ✅ soi MÃ, không soi văn xuôi
+expect(src).not.toContain('opts.assignMode ?? "NOW"');
+expect(src).toContain("const assignMode: AssignMode = opts.assignMode;");
+```
+
+```ts
+// ✅ đếm SỐ LẦN, không chỉ có/không — `dungPatchNhanSu` phải được gọi ĐÚNG một lần
+expect(src.split("dungPatchNhanSu(").length - 1).toBe(1);
+```
+
+### Khi nào thì grep mã nguồn là ĐÚNG lựa chọn
+
+Không phải lúc nào cũng sai. Nó đúng khi thứ cần canh **là hợp đồng chứ không phải hành
+vi**, và hành vi sau khi vá **không đổi**:
+
+· `assignMode` thành bắt buộc — mọi call site vốn đã truyền đủ, `tsc` xanh ngay lần đầu.
+  Thứ đã đổi là **chữ ký**, và chữ ký chỉ đọc được ở văn bản;
+· một bộ lọc bảo vệ một quyết định (`b.id !== HO_CENTER_ID`) — gỡ nó không làm test hành
+  vi nào đỏ, vì hành vi đúng của nó là *không có gì xảy ra*;
+· một luật "chỉ được gọi ở một chỗ" — không có cách nào quan sát bằng hành vi.
+
+Trong cả ba ca đó, ba gạch đầu dòng ở đầu mục này là bắt buộc, không phải khuyến nghị.
 
 ---
 
