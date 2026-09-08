@@ -311,6 +311,62 @@ async function main() {
     );
   }
 
+  // ── V4 — ENDPOINT IMPORT NHÂN SỰ đã từng chạy chưa, có xoá trắng ai không ──
+  //
+  // `app/api/admin/import/employees/route.ts` dùng `update: base` với TOÀN BỘ trường:
+  // cột thiếu trong file → Zod biến `undefined` thành `null` → GHI ĐÈ NULL. Riêng
+  // `status` có `.default("ACTIVE")` nên thiếu cột là lật hồ sơ đã nghỉ về đang làm.
+  //
+  // ⚠️ Endpoint này KHÔNG ghi AuditLog dòng nào (đường sửa từng người thì ghi 9 chỗ).
+  // Nên không truy được trực tiếp; phải suy bằng DẤU VẾT:
+  //   hồ sơ ĐÃ TỪNG SỬA (`updatedAt > createdAt`) mà KHÔNG có AuditLog nào
+  //   ⇒ sửa bởi một đường KHÔNG audit — importer là đường chính thuộc loại đó.
+  const nhanSuAll = await db.employee.findMany({
+    select: {
+      id: true,
+      employeeCode: true,
+      fullName: true,
+      createdAt: true,
+      updatedAt: true,
+      phone: true,
+      email: true,
+      joinedAt: true,
+      subjects: true,
+    },
+  });
+  const auditNs = await db.auditLog.findMany({
+    where: { entityType: "Employee" },
+    select: { entityId: true },
+  });
+  const coAudit = new Set(auditNs.map((a) => a.entityId));
+  // 2 giây đệm: `createdAt`/`updatedAt` của cùng lượt tạo có thể lệch vài ms.
+  const daSua = nhanSuAll.filter(
+    (e) => e.updatedAt.getTime() - e.createdAt.getTime() > 2000,
+  );
+  const daSuaKhongAudit = daSua.filter((e) => !coAudit.has(e.id));
+
+  tieuDe("══ V4 — dấu vết đường ghi KHÔNG audit (nghi importer) ══");
+  dong("Tổng hồ sơ nhân sự", nhanSuAll.length);
+  dong("AuditLog entityType=Employee", auditNs.length);
+  dong("Hồ sơ ĐÃ TỪNG SỬA (updatedAt > createdAt)", daSua.length);
+  dong("🔴 … mà KHÔNG có AuditLog nào", daSuaKhongAudit.length);
+  for (const e of daSuaKhongAudit) {
+    const trong = [
+      e.phone ? null : "phone",
+      e.email ? null : "email",
+      e.joinedAt ? null : "joinedAt",
+      (e.subjects as unknown[])?.length ? null : "subjects",
+    ].filter(Boolean);
+    console.log(
+      `    ${e.employeeCode.padEnd(12)} sửa=${e.updatedAt.toISOString().slice(0, 10)} trống: ${trong.join(", ") || "(không)"}  ${e.fullName}`,
+    );
+  }
+  if (daSuaKhongAudit.length === 0) {
+    console.log(
+      "  (không hồ sơ nào bị sửa ngoài đường có audit — chưa thấy dấu importer chạy)",
+    );
+  }
+
   // ── V2.4 — lượt quét thật: nơi quét vs nơi trực thuộc ──
   const logs = await db.staffTimeLog.findMany({
     select: { centerId: true, result: true, flags: true, userId: true },
