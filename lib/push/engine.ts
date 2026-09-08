@@ -39,6 +39,7 @@ import { dungGoiTin } from "./payload";
 import { endpointConAnToan } from "./subscription";
 import {
   chuanHoaVapidSubject,
+  khoaCongKhaiTuKhoaRieng,
   laKhoaCongKhaiVapidHopLe,
   laKhoaRiengVapidHopLe,
 } from "./vapid";
@@ -174,6 +175,26 @@ function docCauHinhVapid(): CauHinhVapid | null {
     console.error("[push] VAPID_SUBJECT phải là mailto: hoặc https: — bỏ cả lượt");
     return null;
   }
+
+  // HAI NỬA CÓ KHỚP NHAU KHÔNG — cổng quan trọng nhất trong hàm này.
+  //
+  // `VAPID_PRIVATE_KEY` là biến RUNTIME; `NEXT_PUBLIC_VAPID_PUBLIC_KEY` thì bị Next thay bằng
+  // CHUỖI LITERAL lúc BUILD, cho cả bundle server. Người vận hành sửa cả hai biến trên Vercel
+  // rồi KHÔNG deploy lại — thao tác trông hoàn toàn hợp lý — sẽ có khoá riêng MỚI ghép khoá
+  // công khai CŨ. Push service trả 403 `VapidPkHashMismatch` cho MỌI thiết bị, mà 403 là CHẾT
+  // ngay lượt đầu ⇒ cả hàng đợi chuyển `DEAD` trong vài phút và triệu chứng duy nhất là im lặng.
+  //
+  // Suy khoá công khai từ khoá riêng rồi so — biến ca đó thành một dòng lỗi nói thẳng.
+  const suyRa = khoaCongKhaiTuKhoaRieng(privateKey);
+  if (suyRa !== publicKey) {
+    console.error(
+      "[push] VAPID_PRIVATE_KEY và NEXT_PUBLIC_VAPID_PUBLIC_KEY KHÔNG phải một cặp — bỏ cả lượt. " +
+        "Thường gặp nhất: vừa xoay khoá trên Vercel mà chưa deploy lại (biến NEXT_PUBLIC_ được " +
+        "nhúng lúc BUILD, không đọc lúc chạy). Deploy lại rồi thử.",
+    );
+    return null;
+  }
+
   return { subject, publicKey, privateKey };
 }
 
@@ -244,7 +265,13 @@ export async function chayLuotGuiPush(opts?: {
   //
   // ⚠️ Cache của `getSetting` là `revalidate: 300` ⇒ gạt TẮT trên màn cấu hình có hiệu lực
   // trong ≤5 PHÚT, không phải tức thì (nhánh invalidate theo tag chỉ ăn trong Server Action).
-  const bat = await getSetting("push.webPushEnabled").catch(() => false);
+  // `.catch` fail-closed là đúng, nhưng KHÔNG được nuốt im lặng: một lỗi đọc cấu hình (pooler
+  // Supabase chập, P1001) sẽ báo ra y hệt "công tắc đang tắt", và người trực không có cách nào
+  // phân biệt "kênh đang tắt theo ý muốn" với "kênh chết vì không đọc nổi cấu hình".
+  const bat = await getSetting("push.webPushEnabled").catch((err: unknown) => {
+    console.error("[push] không đọc được công tắc push.webPushEnabled — coi như TẮT:", err);
+    return false;
+  });
   if (!bat) return { ...LUOT_RONG, skipped: true, reason: "DISABLED" };
 
   // ── Cổng 2: khoá VAPID.
@@ -518,6 +545,29 @@ async function xuLyMotDong(params: {
     hauQua.push({ id: tb.id, loai, code });
   }
 
+  // ── GHI SỔ NGAY, TRƯỚC MỌI VIỆC KHÁC.
+  //
+  // Lá chắn DUY NHẤT chống bắn lại vào máy đã nhận là `soCu[bam]?.loai === "THANH_CONG"`, đọc
+  // từ `resultJson`. Nếu sổ chỉ được ghi ở câu update chốt cuối hàm thì cửa sổ hở kéo dài suốt
+  // `capNhatThietBi` (N câu UPDATE tuần tự) cộng phần chốt — và bất cứ thứ gì giết tiến trình
+  // trong khoảng đó (lambda chạm `maxDuration`, pooler Supabase chớp) sẽ XOÁ BẰNG CHỨNG rằng
+  // điện thoại VỪA RUNG: dòng nằm lại `SENDING`, 5 phút sau reaper kéo về `PENDING`, lượt kế
+  // đọc `resultJson = null` và POST lại vào đúng máy đó.
+  //
+  // Ghi ở đây là mốc SỚM NHẤT có thể — ngay khi biết kết quả, trước cả khi cập nhật thiết bị.
+  // Cửa sổ còn lại (giữa lúc push service nhận và lúc câu này commit) là bất khả kháng của mọi
+  // hệ at-least-once; phần thu hẹp được thì phải thu.
+  //
+  // Cái giá: một câu UPDATE thêm cho mỗi dòng có gửi. Rẻ so với thứ nó mua — cái giá của gửi
+  // trùng đã ghi vào schema: người dùng tắt quyền thông báo ở CẤP TRÌNH DUYỆT, mất kênh vĩnh
+  // viễn, code không xin lại được.
+  if (luotGui.length > 0) {
+    await db.webPushOutbox.update({
+      where: { id: dong.id },
+      data: { resultJson: soMoi as unknown as Prisma.InputJsonValue },
+    });
+  }
+
   await capNhatThietBi(hauQua, now);
 
   // Chốt số phận dựa trên TOÀN BỘ sổ (kể cả thành công của lượt trước): một người có hai máy,
@@ -541,6 +591,11 @@ async function xuLyMotDong(params: {
     now,
   });
 
+  // Lỗi ghi vào sổ LUÔN là lỗi của lượt này, không phải mã cũ vài phút trước — nhờ chính bộ
+  // lọc ở trên chứ không cần thêm cơ chế: một dòng KHÔNG thành công chỉ ở lại `tatCa` khi thiết
+  // bị của nó còn `ACTIVE`, mà thiết bị còn `ACTIVE` và chưa thành công thì lượt này CHẮC CHẮN
+  // đã gửi lại cho nó ⇒ dòng đó vừa bị ghi đè bằng kết quả mới. Đổi bộ lọc là mất luôn tính
+  // chất này, nên đừng đổi một mình.
   const hong = tatCa.map(([, d]) => d).find((d) => d.loai !== "THANH_CONG");
   await db.webPushOutbox.update({
     where: { id: dong.id },

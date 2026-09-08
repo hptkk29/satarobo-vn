@@ -14,6 +14,8 @@ const h = vi.hoisted(() => {
   const goiUpdateMany: { where: Record<string, unknown>; data: Record<string, unknown> }[] = [];
   const goiOutboxUpdate: { where: { id: string }; data: Record<string, unknown> }[] = [];
   const goiSubUpdate: { where: { id: string }; data: Record<string, unknown> }[] = [];
+  /** Thứ tự các câu ghi, để khẳng định được "ghi sổ TRƯỚC khi cập nhật thiết bị". */
+  const thuTu: string[] = [];
 
   const trangThai = {
     reapCount: 0,
@@ -46,6 +48,7 @@ const h = vi.hoisted(() => {
   );
   const outboxUpdate = vi.fn(async (a: { where: { id: string }; data: Record<string, unknown> }) => {
     goiOutboxUpdate.push(a);
+    thuTu.push("status" in a.data ? "outbox:chot" : "outbox:so");
     return {};
   });
   const outboxDeleteMany = vi.fn(async (_a: unknown) => ({ count: trangThai.purgeCount }));
@@ -53,6 +56,7 @@ const h = vi.hoisted(() => {
   const subFindMany = vi.fn(async (_a: unknown) => trangThai.thietBi);
   const subUpdate = vi.fn(async (a: { where: { id: string }; data: Record<string, unknown> }) => {
     goiSubUpdate.push(a);
+    thuTu.push("sub");
     return {};
   });
 
@@ -63,6 +67,7 @@ const h = vi.hoisted(() => {
     goiUpdateMany,
     goiOutboxUpdate,
     goiSubUpdate,
+    thuTu,
     outboxFindMany,
     outboxUpdateMany,
     outboxUpdate,
@@ -92,6 +97,8 @@ import { chayLuotGuiPush, type HamGui } from "./engine";
 import { taoCapKhoaVapid } from "./vapid";
 
 const CAP = taoCapKhoaVapid();
+/** Cặp khoá THỨ HAI — để dựng ca "khoá riêng mới ghép khoá công khai cũ". */
+const CAP_KHAC = taoCapKhoaVapid();
 const NOW = new Date("2026-09-08T10:00:00.000Z");
 const EP1 = "https://fcm.googleapis.com/wp/may-dien-thoai-cua-sale";
 const EP2 = "https://updates.push.services.mozilla.com/wp/may-ban-cua-sale";
@@ -152,8 +159,8 @@ function guiGia(theo: Record<string, number | Error>): HamGui & { soLan: () => n
   return Object.assign(f, { soLan: () => dem });
 }
 
-function chay(gui: HamGui, opts: { now?: Date } = {}) {
-  return chayLuotGuiPush({ now: opts.now ?? NOW, gui });
+function chay(gui: HamGui, opts: { now?: Date; nganSachMs?: number } = {}) {
+  return chayLuotGuiPush({ now: opts.now ?? NOW, gui, nganSachMs: opts.nganSachMs });
 }
 
 /** Bản ghi `update` cuối cùng lên dòng outbox. */
@@ -168,6 +175,7 @@ beforeEach(() => {
   h.goiUpdateMany.length = 0;
   h.goiOutboxUpdate.length = 0;
   h.goiSubUpdate.length = 0;
+  h.thuTu.length = 0;
   h.trangThai.reapCount = 0;
   h.trangThai.claimCount = 1;
   h.trangThai.purgeCount = 0;
@@ -673,6 +681,94 @@ describe("[PUSH-D4-T22] reaper đo theo claimedAt", () => {
     await chay(guiGia({ [EP1]: 201 }));
     const reap = h.goiUpdateMany.find((g) => g.where.status === "SENDING");
     expect(JSON.stringify(reap?.where)).toContain('"claimedAt":null');
+  });
+});
+
+describe("[PUSH-D4-T24] câu quét ứng viên", () => {
+  it("quét ĐÚNG PENDING + FAILED, tới hạn, cũ nhất trước, có trần lô", async () => {
+    // Lăng kính đo được: trước ca này KHÔNG assertion nào chạm tham số của `findMany`, nên hạ
+    // nó thành `{ in: ["PENDING"] }` vẫn xanh cả bộ — mà hậu quả là mọi dòng `FAILED` (tức mọi
+    // dòng đã lỡ một lần thử) thành XÁC SỐNG vĩnh viễn: không ai quét, không ai chốt, và badge
+    // vận hành nói mọi thứ bình thường.
+    await chay(guiGia({ [EP1]: 201 }));
+    const q = h.outboxFindMany.mock.calls[0]?.[0] as {
+      where: { status: { in: string[] }; nextAttemptAt: { lte: Date } };
+      orderBy: Record<string, string>;
+      take: number;
+    };
+    expect(q.where.status.in.slice().sort()).toEqual(["FAILED", "PENDING"]);
+    expect(q.where.nextAttemptAt.lte).toEqual(NOW);
+    expect(q.orderBy).toEqual({ nextAttemptAt: "asc" });
+    expect(q.take).toBeGreaterThan(0);
+  });
+});
+
+describe("[PUSH-D4-T25] ngân sách thời gian của một lượt", () => {
+  it("hết giờ ⇒ dừng TRƯỚC khi giành, dòng chưa xử còn nguyên PENDING", async () => {
+    // Cổng này chưa từng chạy trong bộ test cũ. Bỏ nó thì lô 25 dòng × tối đa 10s/dòng vượt xa
+    // `maxDuration = 60`, lambda bị giết GIỮA `xuLyMotDong` — và đó chính là ca làm mất
+    // `resultJson` rồi bắn trùng vào máy đã nhận.
+    h.trangThai.rows = [dongOutbox({ id: "ob_1" }), dongOutbox({ id: "ob_2" })];
+    const g = guiGia({ [EP1]: 201 });
+    const kq = await chay(g, { nganSachMs: -1 });
+    expect(kq.hetGio).toBe(true);
+    expect(kq.claimed).toBe(0);
+    expect(g.soLan()).toBe(0);
+    // Dừng TRƯỚC câu giành ⇒ không dòng nào bị tiêu attempt.
+    expect(h.goiUpdateMany.filter((x) => "id" in x.where)).toHaveLength(0);
+  });
+
+  it("còn giờ ⇒ xử hết lô — đối chứng dương", async () => {
+    h.trangThai.rows = [dongOutbox({ id: "ob_1" }), dongOutbox({ id: "ob_2" })];
+    const kq = await chay(guiGia({ [EP1]: 201 }));
+    expect(kq.hetGio).toBe(false);
+    expect(kq.claimed).toBe(2);
+  });
+});
+
+describe("[PUSH-D4-T26] ghi sổ kết quả SỚM, không đợi tới câu chốt", () => {
+  it("resultJson được ghi ngay sau khi gửi, TRƯỚC khi cập nhật thiết bị", async () => {
+    // Lá chắn duy nhất chống bắn lại vào máy đã nhận nằm trong `resultJson`. Nếu nó chỉ được
+    // ghi ở câu chốt cuối hàm thì cửa sổ hở kéo dài suốt `capNhatThietBi` (N câu UPDATE tuần
+    // tự) — lambda chạm `maxDuration` trong khoảng đó là XOÁ BẰNG CHỨNG điện thoại vừa rung,
+    // reaper kéo dòng về PENDING và lượt sau POST lại vào đúng máy đó.
+    await chay(guiGia({ [EP1]: 201 }));
+    const dau = h.goiOutboxUpdate[0];
+    expect(dau?.data).toHaveProperty("resultJson");
+    expect(dau?.data).not.toHaveProperty("status"); // đây là câu GHI SỔ, không phải câu chốt
+    expect(h.goiOutboxUpdate).toHaveLength(2); // ghi sổ + chốt
+    expect(h.thuTu.indexOf("outbox:so")).toBeLessThan(h.thuTu.indexOf("sub"));
+  });
+
+  it("không gửi cú nào (đã bỏ qua ở cổng) ⇒ KHÔNG tốn câu ghi sổ thừa", async () => {
+    h.trangThai.chuong = chuongThat({ state: "REVOKED" });
+    await chay(guiGia({}));
+    expect(h.goiOutboxUpdate).toHaveLength(1);
+  });
+});
+
+describe("[PUSH-D4-T27] hai nửa cặp khoá VAPID phải KHỚP nhau", () => {
+  it("khoá riêng mới ghép khoá công khai cũ ⇒ bỏ cả lượt, không đụng dòng nào", async () => {
+    // `VAPID_PRIVATE_KEY` là biến RUNTIME; `NEXT_PUBLIC_VAPID_PUBLIC_KEY` bị Next thay bằng
+    // CHUỖI LITERAL lúc BUILD (cho cả bundle server). Người vận hành xoay khoá trên Vercel rồi
+    // KHÔNG deploy lại — thao tác trông hợp lý — sẽ có đúng cặp lệch này. Push service trả 403
+    // cho MỌI thiết bị, mà 403 là CHẾT ngay lượt đầu ⇒ cả hàng đợi thành DEAD trong vài phút,
+    // im lặng. Không có cổng này thì không gì phân biệt nổi ca đó với "kênh hoạt động bình thường".
+    vi.stubEnv("VAPID_PRIVATE_KEY", CAP_KHAC.privateKey);
+    const g = guiGia({});
+    const kq = await chay(g);
+    expect(kq.skipped).toBe(true);
+    expect(kq.reason).toBe("NO_VAPID");
+    expect(h.outboxUpdateMany).not.toHaveBeenCalled();
+    expect(g.soLan()).toBe(0);
+  });
+
+  it("đúng cặp thì chạy bình thường — đối chứng dương", async () => {
+    // Thiếu ca này thì một phép so viết sai (vd luôn trả false) sẽ chặn MỌI lượt, kênh im lặng
+    // hoàn toàn, mà ca âm ở trên vẫn xanh.
+    const kq = await chay(guiGia({ [EP1]: 201 }));
+    expect(kq.skipped).toBe(false);
+    expect(kq.sent).toBe(1);
   });
 });
 

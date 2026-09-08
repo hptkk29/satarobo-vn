@@ -14,8 +14,12 @@ không Firebase, không dịch vụ bên thứ ba, không fallback.
 > 2. ba biến `NEXT_PUBLIC_VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` **chưa khai**
 >    ở môi trường nào — engine trả `reason: "NO_VAPID"` và không đụng dòng nào.
 >
-> **Migration hai bảng push vẫn CHƯA CHẠY ở đâu** (dev/test/prod). Đường ghi chịu được điều đó:
-> `ghiOutboxPush` nuốt lỗi P2021 và chỉ log — thông báo trong ứng dụng không hề bị ảnh hưởng.
+> **Migration hai bảng push chưa chạy ở đâu tính tới lúc viết** — nhưng ĐỪNG hiểu thành "phải
+> chạy tay": `.github/workflows/migrate-test.yml` chạy `prisma migrate deploy` trên MỌI push vào
+> `test`, và `.github/workflows/deploy.yml` làm y hệt với `main`. Nghĩa là **ngay lần merge đầu
+> tiên, hai bảng tự được tạo**. Trong khoảng giữa (nhánh đã merge, migration chưa kịp chạy) đường
+> ghi vẫn an toàn: `ghiOutboxPush` nuốt lỗi P2021 và chỉ log — thông báo trong ứng dụng không hề
+> bị ảnh hưởng.
 
 ---
 
@@ -519,9 +523,17 @@ Ba điều kiện của chỗ móc này, mỗi cái có một ca test canh:
 
 **Loại ngoài allowlist VẪN ghi một dòng, thẳng `SKIPPED`.** Đây là sổ trả lời câu "vì sao tôi
 không nhận được thông báo X": không có dòng nào thì người hỏi không phân biệt được "loại này cố ý
-không đẩy" với "kênh hỏng", và cách duy nhất tìm ra là đọc mã nguồn. Ước lượng 50–150 dòng
-`SKIPPED`/ngày (nguồn lớn nhất: `shift.brief:`, 1 dòng/người-có-ca/ngày) ⇒ đó là lý do engine có
-bước dọn (§13.5).
+không đẩy" với "kênh hỏng", và cách duy nhất tìm ra là đọc mã nguồn.
+
+Số dòng `SKIPPED` sinh ra bám theo lưu lượng CHAT chứ không phải theo số nhân sự — bản đầu của
+trang này ước lượng sai nguồn. Ba khoá không có trần tần suất nào:
+`conversation.message_posted:<messageId>` (`lib/_handlers/conversation-notif.ts`) mang MESSAGE ID
+⇒ **mỗi tin nhắn phụ huynh gửi vào nhóm lớp là một khoá mới**, nhân với số người nhận (GV chính +
+trợ giảng) ⇒ 1–2 dòng mỗi tin; `lead.nhap_lai:<leadId>:<mốc ms>` và `shift.changed:<...>:<mốc ms>`
+nhét `Date.now()` vào khoá ⇒ mỗi thao tác một dòng. Cộng các nguồn nhịp-ngày (`shift.brief:` ~1
+dòng/người-có-ca) thì bậc thật là **hàng trăm dòng/ngày ở mức chat hiện tại, và tăng tuyến tính
+theo lưu lượng chat** — không phải 50–150 như bản đầu viết. Đó là lý do engine có bước dọn
+(§13.5), và cũng là lý do bước dọn KHÔNG chạy khi công tắc tắt là một nợ có thật (§13.8).
 
 ### 13.4 Engine — ba lỗi của tiền lệ, cố ý không kế thừa
 
@@ -570,6 +582,15 @@ lại** (tra `resultJson` theo băm endpoint). Chốt cuối: còn máy đáng t
 cái log. Băm vẫn tất định nên vẫn tra lại được "máy này đã nhận chưa"; kèm nhãn cắt (`host/…6 ký
 tự cuối`) để người trực còn lần ra được là máy nào.
 
+**Cổng cấu hình có BA lớp, không phải hai** (lớp thứ ba thêm sau vòng lăng kính): hình dạng
+khoá công khai → hình dạng khoá riêng → `VAPID_SUBJECT` → **và hai nửa có phải MỘT CẶP không**.
+Lớp cuối cần vì `VAPID_PRIVATE_KEY` là biến RUNTIME còn `NEXT_PUBLIC_VAPID_PUBLIC_KEY` bị Next
+thay bằng CHUỖI LITERAL lúc BUILD — cho cả bundle server, không riêng client. Người vận hành xoay
+khoá trên Vercel rồi không deploy lại (thao tác trông hoàn toàn hợp lý) sẽ có khoá riêng MỚI ghép
+khoá công khai CŨ; push service trả 403 cho MỌI thiết bị, mà 403 là `DEAD` ngay lượt đầu ⇒ cả
+hàng đợi chết trong vài phút, triệu chứng duy nhất là im lặng. `khoaCongKhaiTuKhoaRieng` suy nửa
+kia từ khoá riêng (`createECDH`) rồi so — biến ca đó thành một dòng lỗi nói thẳng.
+
 **Hai điều engine KHÔNG làm, có chủ đích:**
 - **Không dùng `setVapidDetails`.** Hàm đó ghi vào biến module-scope của gói; lambda Vercel dùng
   lại tiến trình ấm nên thứ tự nạp module thành một điều kiện ngầm, và trong test nó rò trạng thái
@@ -606,11 +627,11 @@ có thể gửi thêm trong tối đa 5 phút.
 ### 13.7 Đã kiểm những gì
 
 - `pnpm typecheck` **exit=0** · `pnpm lint` **exit=0** (2 cảnh báo có sẵn từ trước, 0 lỗi) ·
-  `pnpm test:unit` **exit=0** — **5977 ca qua**, +112 ca mới · `pnpm build` **exit=0**, route
-  `/api/cron/push-outbox` có mặt và `web-push` bundle sạch.
+  `pnpm test:unit` **exit=0** — **5994 ca qua** (432 tệp), +129 ca mới · `pnpm build` **exit=0**,
+  route `/api/cron/push-outbox` có mặt và `web-push` bundle sạch.
   (Bắt mã thoát tường minh, không đặt lệnh kiểm sau dấu ống.)
-- **CẤY LẠI LỖI — 8/8 ca đỏ đúng chỗ**, mỗi ca đều grep xác minh phép thay thật sự đã đổi file
-  trước khi chạy test:
+- **CẤY LẠI LỖI — 14/14 ca đỏ đúng chỗ**, mỗi ca đều grep xác minh phép thay thật sự đã đổi file
+  trước khi chạy test, và đối chiếu byte sau khi khôi phục:
 
   | Cấy | Số ca đỏ |
   |---|---|
@@ -622,6 +643,22 @@ có thể gửi thêm trong tối đa 5 phút.
   | gộp 403 vào `HET_HAN` | 2 |
   | điểm móc bám `userIds` thay `canRung` | 2 |
   | `createMany` bỏ `skipDuplicates` | 1 |
+  | gỡ bộ lọc "thiết bị còn sống" khỏi quyết định | 1 |
+  | trả phần dựng gói tin ra ngoài `try` **và** gỡ nhánh `rejected` | 1 |
+  | câu giành chỗ bỏ `nextAttemptAt` | 1 |
+  | gỡ ghi sổ `resultJson` sớm | 1 |
+  | gỡ cổng so khớp cặp khoá VAPID | 1 |
+  | kẹp `Retry-After` về trần backoff | 2 |
+  | câu quét bỏ `FAILED` | 1 |
+  | nới cổng ngân sách thời gian | 1 |
+
+  ⚠️ Hai ca trong bảng chỉ đỏ khi cấy **CẢ HAI** nửa của bản vá (dựng-gói-tin-trong-`try` và
+  nhánh `rejected`): chúng là hai lưới chồng nhau, gỡ một nửa thì nửa kia đỡ. Ghi ra đây vì lần
+  đầu tôi cấy một nửa, thấy xanh, và suýt kết luận nhầm rằng test không canh gì.
+
+- **Một ca KHÔNG có test**: dòng `console.error` khi `getSetting` ném. Nó chỉ ảnh hưởng thứ
+  người trực đọc trong log, không đổi hành vi (cả hai nhánh đều fail-closed về `DISABLED`).
+  Ghi ra thay vì dựng một ca test giả vờ canh nó.
 
 ### 13.8 Nợ của Đợt 4 — chấp nhận có ý thức
 
@@ -655,10 +692,42 @@ có thể gửi thêm trong tối đa 5 phút.
 - **`notifyStaff` trả `soNguoi` (số người NHẬN), không phải số push đã đẩy.** 4 nơi đang cộng dồn
   nó vào biến tên `notified`. Đừng dùng con số đó để báo cáo về push.
 
+### 13.8b HAI LỖ CỦA MÁY DÙNG CHUNG — nằm ở code Đợt 3, CẦN CHỦ DỰ ÁN QUYẾT
+
+Lăng kính phản biện của Đợt 4 tìm ra hai lỗ này. Cả hai nằm ngoài phạm vi "engine + cron" và cả
+hai đều đổi HÀNH VI đã chốt của Đợt 3, nên đợt này **cố ý không tự sửa** — ghi lại để quyết riêng.
+
+**(a) Đăng xuất KHÔNG thu hồi đăng ký push.** Service worker khoá theo ORIGIN, không theo phiên
+đăng nhập. Máy lễ tân dùng chung ở cơ sở, một hồ sơ Chrome: Sale A đăng nhập, bấm "Bật thông
+báo" ⇒ dòng `(endpoint E, userId = A, ACTIVE)`. A đăng xuất, Sale B đăng nhập trên đúng hồ sơ đó.
+Đăng ký E vẫn sống và vẫn mang `userId = A`, nên **mọi lead chia cho A từ nay nổ trên màn hình
+khoá của máy B đang cầm** — kèm tên phụ huynh. B không có lý do nào để bấm "Bật thông báo" (nút
+vẫn hiện, nhưng đó là thao tác tự nguyện), nên không có gì tự chữa.
+Ba đường xử, đều là quyết định chứ không phải dọn code: (i) đường đăng xuất gọi luôn
+`huyThietBiTheoEndpointAction` + `unsubscribe()`; (ii) engine so `userId` của đăng ký với phiên
+gần nhất trên máy đó — cần cột mới; (iii) chấp nhận và ghi vào quy chế "không bật thông báo trên
+máy dùng chung". Đường (i) rẻ nhất nhưng đụng `app/(auth)/dang-xuat` và `lib/auth/logout-client.ts`.
+
+**(b) `upsert` theo `endpoint` không có vế `userId` ⇒ cướp được đăng ký.**
+`dangKyThietBiAction` nhận `subscription.endpoint` nguyên văn từ client rồi upsert theo cột
+`endpoint` (`@unique` toàn cục), nhánh `update` ghi đè `userId` thành người đang gọi. Không vế nào
+kiểm người gọi thật sự sở hữu endpoint đó. Nhân viên B biết endpoint của A — đọc được ngay trên
+trang `/settings` của A, vì `lib/push/thiet-bi.ts` trả **endpoint ĐẦY ĐỦ** xuống HTML — thì gọi
+action với chuỗi ấy là chiếm luôn: từ đó A mất push im lặng (dòng của họ đã đổi chủ), còn B nhận
+thông báo của A.
+Đây KHÔNG phải sơ suất mà là hệ quả của một chốt có chủ đích ("máy dùng chung: ai bật sau thì
+máy thuộc về người đó" — chú thích trong chính action). Sửa thì phải đổi chốt đó, và `upsert`
+theo khoá `@unique` không nhận thêm điều kiện, nên phải viết lại thành đọc-rồi-ghi có kiểm.
+Việc rẻ và độc lập nên làm trước dù chọn đường nào: **`lib/push/thiet-bi.ts` đừng trả endpoint đầy
+đủ xuống client** — giao diện chỉ cần nhãn cắt, đúng thứ `nhanEndpoint` đã có.
+
 ### 13.9 Việc người vận hành phải làm — theo đúng thứ tự
 
-1. **Chạy migration** `20260908000000_web_push_ha_tang` (dev → test → prod). Chưa chạy thì mọi
-   `ghiOutboxPush` nuốt P2021 và kênh im lặng hoàn toàn — không hỏng gì khác.
+1. **Migration: KHÔNG phải việc chạy tay.** `20260908000000_web_push_ha_tang` tự apply khi
+   nhánh merge vào `test` (`migrate-test.yml`) và vào `main` (`deploy.yml`). Việc của người vận
+   hành chỉ là **kiểm hai workflow đó XANH** sau merge. Chúng đỏ mà cứ đi tiếp thì mọi
+   `ghiOutboxPush` nuốt P2021 và kênh im lặng hoàn toàn — không hỏng gì khác, nhưng cũng không
+   có gì chạy.
 2. **Sinh cặp khoá VAPID**: `pnpm tsx scripts/tao-khoa-vapid.ts` (in ra stdout, **không ghi file nào**).
 3. **Dán vào Vercel**: `NEXT_PUBLIC_VAPID_PUBLIC_KEY` **Non-sensitive** (biến Sensitive không tồn
    tại lúc build ⇒ trình duyệt nhận `undefined`, không ai đăng ký được, và server không thấy lỗi

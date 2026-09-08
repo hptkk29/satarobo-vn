@@ -46,8 +46,25 @@ export function phanLoaiMa(code: number | null | undefined): LoaiKetCuc {
   return "CHET";
 }
 
-/** Trần chờ giữa hai lần thử — 30 phút. */
+/** Trần của BACKOFF tự sinh — 30 phút. KHÔNG áp cho `Retry-After` (xem hằng dưới). */
 export const TRAN_CHO_MS = 30 * 60_000;
+
+/**
+ * Trần của `Retry-After` — 6 giờ, bằng đúng hạn sống mặc định của dòng outbox.
+ *
+ * ⚠️ CỐ Ý KHÁC `TRAN_CHO_MS`, và đây là chỗ dễ gộp nhầm nhất trong file.
+ *
+ * Kẹp `Retry-After` xuống 30 phút nghe như "an toàn" nhưng nó PHÁ đúng cam kết của cổng này:
+ * push service trả `Retry-After: 3600` nghĩa là "đừng gọi lại trong 1 giờ". Gọi lại sau 30 phút
+ * là vẫn nằm trong cửa sổ họ vừa xin ⇒ ăn thêm một 429 ⇒ lại kẹp 30 phút ⇒ lặp cho tới khi cạn
+ * `maxAttempts` rồi `DEAD`. Kết quả: đúng lúc bị bóp, hệ thống tự đốt hết lượt thử và MẤT push
+ * IM LẶNG — trong khi chỉ cần chờ đủ là gửi được.
+ *
+ * Vẫn phải có trần: `Retry-After: 86400` mà tôn trọng nguyên xi sẽ đẩy `nextAttemptAt` ra xa hơn
+ * `expiresAt` và dòng thành xác sống. 6 giờ là mốc mà quá nó thì dòng cũng hết hạn — lúc đó cổng
+ * quá-hạn chốt `SKIPPED`, một câu trả lời TRUNG THỰC, khác hẳn với `DEAD` sau 5 lần gõ cửa sớm.
+ */
+export const TRAN_RETRY_AFTER_MS = 6 * 60 * 60_000;
 /** Khoảng chờ cơ sở — 1 phút, đúng nhịp cron. */
 export const CHO_CO_SO_MS = 60_000;
 
@@ -86,13 +103,13 @@ export function docRetryAfterMs(
   if (/^\d+$/.test(v)) {
     const giay = Number(v);
     if (!Number.isFinite(giay)) return null;
-    return Math.min(Math.max(giay, 0) * 1000, TRAN_CHO_MS);
+    return Math.min(Math.max(giay, 0) * 1000, TRAN_RETRY_AFTER_MS);
   }
 
   const moc = Date.parse(v);
   if (Number.isNaN(moc)) return null;
   // Mốc trong quá khứ ⇒ 0, không phải số âm.
-  return Math.min(Math.max(moc - now.getTime(), 0), TRAN_CHO_MS);
+  return Math.min(Math.max(moc - now.getTime(), 0), TRAN_RETRY_AFTER_MS);
 }
 
 // ── Sổ kết quả theo từng thiết bị ────────────────────────────────────────────────────────

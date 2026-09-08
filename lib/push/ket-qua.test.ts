@@ -14,6 +14,7 @@ import {
   nhanEndpoint,
   phanLoaiMa,
   TRAN_CHO_MS,
+  TRAN_RETRY_AFTER_MS,
 } from "./ket-qua";
 
 const NOW = new Date("2026-09-08T10:00:00.000Z");
@@ -99,10 +100,18 @@ describe("[PUSH-D4-T02] đọc Retry-After", () => {
     expect(docRetryAfterMs({ "retry-after": cu }, NOW)).toBe(0);
   });
 
-  it("Retry-After khổng lồ bị kẹp trần — không cho một dòng thành xác sống", () => {
-    // `Retry-After: 86400` mà tôn trọng nguyên xi thì `nextAttemptAt` vượt quá `expiresAt`,
-    // dòng không bao giờ tới lượt và cũng không bao giờ chết.
-    expect(docRetryAfterMs({ "retry-after": "86400" }, NOW)).toBe(TRAN_CHO_MS);
+  it("Retry-After 1 GIỜ được tôn trọng nguyên vẹn, KHÔNG bị kẹp xuống trần backoff", () => {
+    // Ca này là cả một lỗi từng có: kẹp `Retry-After` xuống 30 phút nghĩa là gọi lại khi vẫn
+    // còn trong cửa sổ push service vừa xin ⇒ ăn thêm 429 ⇒ lặp tới khi cạn lượt rồi DEAD.
+    // Đúng lúc bị bóp, hệ thống tự đốt hết lượt thử và mất push im lặng.
+    expect(docRetryAfterMs({ "retry-after": "3600" }, NOW)).toBe(3_600_000);
+    expect(3_600_000).toBeGreaterThan(TRAN_CHO_MS);
+  });
+
+  it("Retry-After khổng lồ vẫn bị kẹp — không cho một dòng thành xác sống", () => {
+    // `Retry-After: 86400` (24h) mà tôn trọng nguyên xi thì `nextAttemptAt` vượt xa `expiresAt`
+    // (6 giờ), dòng không bao giờ tới lượt và cũng không bao giờ chết.
+    expect(docRetryAfterMs({ "retry-after": "86400" }, NOW)).toBe(TRAN_RETRY_AFTER_MS);
   });
 });
 

@@ -6,6 +6,7 @@ import {
   laKhoaRiengVapidHopLe,
   chuanHoaVapidSubject,
   vapidKeyIdTuKhoa,
+  khoaCongKhaiTuKhoaRieng,
   DO_DAI_KHOA_CONG_KHAI_BYTE,
   DO_DAI_KHOA_RIENG_BYTE,
 } from "./vapid";
@@ -121,5 +122,39 @@ describe("[PUSH-D1-T03] VAPID_SUBJECT", () => {
     for (const xau of ["it@satarobo.vn", "http://satarobo.vn", "mailto:", "https://", ""]) {
       expect(chuanHoaVapidSubject(xau)).toBeNull();
     }
+  });
+});
+
+describe("[PUSH-D1-T05] suy khoá công khai từ khoá riêng", () => {
+  it("suy ra ĐÚNG nửa còn lại của chính cặp khoá đó", () => {
+    for (let i = 0; i < 5; i++) {
+      const cap = taoCapKhoaVapid();
+      expect(khoaCongKhaiTuKhoaRieng(cap.privateKey)).toBe(cap.publicKey);
+    }
+  });
+
+  it("khoá riêng của cặp KHÁC ra khoá công khai KHÁC — đó là điều cổng cấu hình dựa vào", () => {
+    // Đây là thứ biến "xoay khoá mà quên deploy" từ một sự cố im lặng (403 cho MỌI thiết bị,
+    // cả hàng đợi thành DEAD trong vài phút) thành một dòng lỗi đọc được: `VAPID_PRIVATE_KEY`
+    // là biến RUNTIME còn `NEXT_PUBLIC_VAPID_PUBLIC_KEY` bị nhúng lúc BUILD, nên hai nửa có
+    // hai vòng đời khác nhau và LỆCH ĐƯỢC.
+    const a = taoCapKhoaVapid();
+    const b = taoCapKhoaVapid();
+    expect(khoaCongKhaiTuKhoaRieng(a.privateKey)).not.toBe(b.publicKey);
+  });
+
+  it("khoá riêng rác / sai độ dài / rỗng ⇒ null, không ném", () => {
+    expect(khoaCongKhaiTuKhoaRieng("")).toBeNull();
+    expect(khoaCongKhaiTuKhoaRieng("khong-phai-base64url!!!")).toBeNull();
+    expect(khoaCongKhaiTuKhoaRieng(Buffer.alloc(16).toString("base64url"))).toBeNull();
+    // Đúng 32 byte nhưng toàn số 0 — nằm ngoài miền hợp lệ của P-256, `setPrivateKey` ném.
+    expect(khoaCongKhaiTuKhoaRieng(Buffer.alloc(32).toString("base64url"))).toBeNull();
+  });
+
+  it("khoá suy ra luôn là điểm KHÔNG NÉN 65 byte — đúng khuôn Web Push", () => {
+    const cap = taoCapKhoaVapid();
+    const suy = khoaCongKhaiTuKhoaRieng(cap.privateKey);
+    expect(suy).not.toBeNull();
+    expect(laKhoaCongKhaiVapidHopLe(suy as string)).toBe(true);
   });
 });

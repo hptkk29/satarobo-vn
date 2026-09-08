@@ -17,7 +17,7 @@
 // lockfile lấy không gì cả. Việc ký JWT VAPID lúc GỬI là chuyện của đợt sau, quyết riêng
 // ở đó (repo đã có sẵn `jose`).
 
-import { createHash, generateKeyPairSync } from "node:crypto";
+import { createECDH, createHash, generateKeyPairSync } from "node:crypto";
 
 /** Khoá công khai P-256 dạng điểm không nén: 1 byte tiền tố + 32 byte X + 32 byte Y. */
 export const DO_DAI_KHOA_CONG_KHAI_BYTE = 65;
@@ -91,6 +91,41 @@ export function laKhoaCongKhaiVapidHopLe(s: string): boolean {
 export function laKhoaRiengVapidHopLe(s: string): boolean {
   const buf = giaiBase64Url(s);
   return buf !== null && buf.length === DO_DAI_KHOA_RIENG_BYTE;
+}
+
+/**
+ * Suy khoá CÔNG KHAI từ khoá RIÊNG. Trả null nếu khoá riêng không hợp lệ.
+ *
+ * ── VÌ SAO CẦN, VÀ VÌ SAO NÓ KHÔNG THỪA ───────────────────────────────────────────────
+ * Hai nửa của cặp khoá VAPID có HAI VÒNG ĐỜI KHÁC NHAU, và đó không phải lựa chọn của ta:
+ *  · `VAPID_PRIVATE_KEY` là biến RUNTIME — đổi trên Vercel là lượt gọi kế đã thấy giá trị mới;
+ *  · `NEXT_PUBLIC_VAPID_PUBLIC_KEY` bị Next thay bằng CHUỖI LITERAL lúc BUILD, cho cả bundle
+ *    server chứ không riêng client (`define-env.js` spread `nextPublicEnv` không phân biệt
+ *    client/node-server). Đổi biến này mà không deploy lại thì server vẫn ký bằng giá trị cũ.
+ *
+ * Hệ quả: người vận hành xoay khoá bằng cách sửa hai biến rồi KHÔNG deploy — thao tác trông
+ * hoàn toàn hợp lý — sẽ có khoá riêng MỚI ghép với khoá công khai CŨ. Push service kiểm đúng
+ * cặp đó và trả 403 `VapidPkHashMismatch` cho MỌI thiết bị. Với luật của engine, 403 là CHẾT
+ * ngay lượt đầu ⇒ toàn bộ hàng đợi chuyển `DEAD` trong vài phút, không một thông báo nào tới
+ * ai, và triệu chứng duy nhất là im lặng.
+ *
+ * So khoá suy ra với khoá đã khai biến ca đó từ "im lặng" thành một dòng lỗi nói thẳng.
+ *
+ * Dùng `createECDH` chứ không import JWK: Node đòi đủ `x`,`y`,`d` mới nhập được khoá riêng EC
+ * theo JWK, tức phải đã biết khoá công khai — đúng thứ đang cần suy ra.
+ */
+export function khoaCongKhaiTuKhoaRieng(privateKey: string): string | null {
+  const d = giaiBase64Url(privateKey);
+  if (!d || d.length !== DO_DAI_KHOA_RIENG_BYTE) return null;
+  try {
+    const ecdh = createECDH("prime256v1");
+    ecdh.setPrivateKey(d);
+    // Mặc định của `getPublicKey()` là điểm KHÔNG NÉN (tiền tố 0x04) — đúng khuôn Web Push.
+    return ecdh.getPublicKey().toString("base64url");
+  } catch {
+    // Khoá riêng đúng độ dài nhưng nằm ngoài miền hợp lệ của đường cong.
+    return null;
+  }
 }
 
 /**
