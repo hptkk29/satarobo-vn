@@ -196,16 +196,21 @@ d("vé + ghi lượt + tính lại", () => {
       expect(r.centerId).toBe(centerId);
     });
 
-    // ⚠️ TRẠNG THÁI BIẾT LÀ THIẾU — KHÔNG phải hành vi mong muốn.
+    // ✅ KHÔNG CỜ NÀO LÀ HÀNH VI ĐÚNG — chốt vận hành 08/09/2026.
     //
-    // Ca không phải AT_UNITS thì khối kiểm nơi làm bị bỏ hẳn (`timelog.ts:135`), nên
-    // người Hội sở quét ở CS1 KHÔNG nhận cờ nào, dù `StaffTimeLog.centerId` ghi CS1.
-    // Sự thật "quét ở cơ sở khác nơi trực thuộc" hiện KHÔNG cờ nào diễn đạt.
+    // Từng có đề xuất thêm cờ `KHAC_CO_SO_TRUC_THUOC` cho ca "quét ở cơ sở khác nơi
+    // trực thuộc". ĐÃ BỎ, vì thực tế vận hành làm nó thành nhiễu chứ không phải tín hiệu:
     //
-    // Cờ đúng cho việc đó là `KHAC_CO_SO_TRUC_THUOC` (thiết kế duyệt 08/09, chưa làm —
-    // chặn bởi 11 nhân sự `centerId = NULL` trên prod). Khi làm xong, ĐỔI ca test này
-    // thành khẳng định cờ mới, đừng xoá nó.
-    it("ca ANY_CENTER ở Hội sở, quét tại CS1 → KHÔNG cờ nào (thiếu, chờ KHAC_CO_SO_TRUC_THUOC)", async () => {
+    //   · văn phòng Hội sở đang đặt NGAY TẠI CS1, và có thể dời bất cứ lúc nào;
+    //   · hầu hết nhân sự làm ở NHIỀU cơ sở — trưởng phòng ở HO vẫn dạy lớp ở CS1/CS2,
+    //     giáo viên trực CS1 vẫn có buổi ở CS2.
+    //
+    // ⇒ "quét ở cơ sở khác nơi trực thuộc" là chuyện BÌNH THƯỜNG; gắn cờ là bật gần như
+    // mọi lượt quét. Nơi quét được ghi như DỮ LIỆU (`StaffTimeLog.centerId`), không gắn cờ.
+    //
+    // Cờ chỉ dành cho việc BẤT THƯỜNG: `SAI_NOI_LAM` khi ca nói rõ `AT_UNITS` mà điểm
+    // chấm không thuộc đơn vị cho phép (xem ca ngay trên).
+    it("ca ANY_CENTER ở Hội sở, quét tại CS1 → KHÔNG cờ nào (ĐÚNG: nơi quét là dữ liệu, không phải cờ)", async () => {
       const now = new Date(Date.now() + 90 * 60_000);
       const workDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
       await xepCa("ANY_CENTER", workDate);
