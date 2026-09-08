@@ -115,6 +115,10 @@ ${params.body}`);
       entityType: true,
       entityId: true,
       expiresAt: true,
+      // BẮT BUỘC (vá 08/09/2026): thiếu cột này thì `REVOKED` thành ngõ cụt MỘT CHIỀU —
+      // nội dung y hệt ⇒ vòng dưới `continue` ⇒ dòng nằm REVOKED vĩnh viễn và người đó
+      // KHÔNG BAO GIỜ được báo lại cho cùng một việc. Ca thật: lead A→B→A.
+      state: true,
     },
   });
   const theoUser = new Map(daCo.map((r) => [r.userId, r]));
@@ -136,20 +140,61 @@ ${params.body}`);
     const noiDungDoi =
       COT_NOI_DUNG.some((k) => cu[k] !== noiDung[k]) ||
       (cu.expiresAt?.getTime() ?? null) !== (noiDung.expiresAt?.getTime() ?? null);
-    const moLai = !!params.reopen && cu.readAt !== null;
+    // Bản ghi đã bị THU HỒI (hoặc hết hạn) mà việc đó phát sinh LẠI ⇒ đây là một lần mới,
+    // không phải bản trùng. Không có vế này thì `thuHoiThongBao` là cửa một chiều: đóng rồi
+    // là đóng vĩnh viễn cặp (người, khoá) đó. Module cũ đã gặp đúng bẫy này và phải dựng khối
+    // "MỞ LẠI" riêng — xem `lib/staff-notifications.ts` (EXPIRED → ACTIVE + reset mốc đọc).
+    const daThuHoi = cu.state !== "ACTIVE";
+    const moLai = (!!params.reopen && cu.readAt !== null) || daThuHoi;
     if (!noiDungDoi && !moLai) continue; // Y nguyên ⇒ không ghi, không rung.
 
     // Ghi lại nội dung là CÓ CHỦ ĐÍCH: đường duy nhất chữa được bản ghi sinh trước khi
-    // href/nhóm/mức được sửa. Trạng thái đọc giữ nguyên trừ khi nơi gọi xin `reopen`.
+    // href/nhóm/mức được sửa. Trạng thái đọc giữ nguyên trừ khi nơi gọi xin `reopen`,
+    // hoặc bản ghi đang bị thu hồi và nay sống lại.
     await db.staffNotification.update({
       where: { userId_dedupeKey: { userId, dedupeKey: params.dedupeKey } },
-      data: { ...noiDung, ...(moLai ? { readAt: null } : {}) },
+      data: {
+        ...noiDung,
+        ...(moLai ? { readAt: null } : {}),
+        ...(daThuHoi ? { state: "ACTIVE" } : {}),
+      },
     });
     // Nội dung đổi nhưng vẫn đang chưa đọc ⇒ badge không đổi số, không cần rung.
     if (moLai) canRung.push(userId);
   }
 
   return { soNguoi: nguoiNhan.length, canRung };
+}
+
+/**
+ * THU HỒI thông báo: đưa các bản ghi còn hiệu lực về trạng thái `REVOKED`.
+ *
+ * Vì sao cần (vá 08/09/2026): chuông của repo chưa từng có đường thu hồi — `entityId` được khai
+ * với ý "để SAU NÀY thu hồi khi đối tượng bị xoá" nhưng chưa ai làm. Hệ quả cụ thể ở module lead:
+ * lead chuyển từ A sang B thì B nhận chuông mới, còn A **giữ nguyên** dòng "Bạn có lead mới" trỏ
+ * tới `/leads/<id>` — một lead họ không còn giữ. Nếu là chuyển XUYÊN CƠ SỞ thì tệ hơn: `Lead` nằm
+ * trong `SCOPED_MODELS` nên `scopedDb` lọc mất, A bấm chuông ra trang "không tồn tại".
+ *
+ * `REVOKED` chứ không xoá: `conHieuLuc` (`service.ts`) chỉ đếm `state = "ACTIVE"`, nên đổi trạng
+ * thái là đủ để mục biến khỏi badge lẫn panel — mà vẫn giữ được vết "đã từng báo cho ai" cho
+ * việc đối soát. Xoá cứng là mất luôn dữ liệu đó.
+ *
+ * KHÔNG bắn realtime: badge chỉ có thể GIẢM, và người dùng không cần bị đánh động vì một mục vừa
+ * biến mất. Nhịp poll kế tiếp sẽ đồng bộ. (Bắn ở đây là mời lại đúng bão broadcast của 05/09.)
+ *
+ * Chỉ đụng dòng đang `ACTIVE` — `updateMany` nên không ném khi không có gì để thu hồi.
+ */
+export async function thuHoiThongBao(params: {
+  userIds: readonly string[];
+  dedupeKey: string;
+}): Promise<number> {
+  const ds = [...new Set(params.userIds.filter((id) => !!id))];
+  if (ds.length === 0 || !params.dedupeKey) return 0;
+  const kq = await db.staffNotification.updateMany({
+    where: { userId: { in: ds }, dedupeKey: params.dedupeKey, state: "ACTIVE" },
+    data: { state: "REVOKED" },
+  });
+  return kq.count;
 }
 
 /**

@@ -243,23 +243,31 @@ bật `ALLOW_DB_RESET`, nên mọi test chạm DB **skip im lặng** — tưởn
   `baoSaleCoLeadMoi` nay được export và là cửa dùng chung cho mọi đường đổi chủ; gán tay gọi nó
   sau khi transaction commit. Test hồi quy: `lib/lead/manual-assign-notify.test.ts` (9 ca, đã
   chứng minh 4 ca đỏ khi gỡ lời gọi).
-- ⚠️ **NHƯNG chỉ mới vá 1 trong 11 đường đổi chủ.** Đo 08/09: repo có **11 đường làm lead đổi/nhận
-  chủ**, và trước hôm nay **đúng 1 đường có chuông** (`chiaChoLead`). Sau bản vá là 2/11. **Ba
-  đường người-bấm-nút vẫn CÂM**: `transferLead` (chuyển lead giữa 2 sale,
-  `app/(admin)/admin/leads/actions.ts:1045`), `bulkReassignLeads` (bàn giao hàng loạt,
-  `lib/lead-handover/service.ts:70`), `autoAssignNewLead` (tạo lead thủ công ở `/admin/leads/new`,
-  `lib/lead/auto-assign.ts:168`). Cộng `autoAssignLead` (nút "Chia tự động" trên kanban) và
-  `reassignOpenLeads` (chia lại lead của sale nghỉ việc). **Đừng báo cáo "đã vá xong lead không có
-  chuông"** — chưa. Hai đường còn lại không phải one-liner: `transferLead` có ca `toSaleId = null`
-  (đổi cơ sở mà cơ sở đích không có sale) cần báo quản lý kiểu `baoPoolRong`; `bulkReassignLeads`
-  cần một thông báo GỘP ("bạn vừa nhận N lead bàn giao") chứ không phải N chuông — tức khoá
-  `dedupeKey` mới + một dòng catalog mới. Chờ quyết định.
-- ⚠️ **Bản vá LÀM TĂNG số chuông mồ côi.** Repo không có cơ chế thu hồi thông báo
-  (`lib/notifications/` không có hàm xoá; `entityId` khai với ý "để SAU NÀY thu hồi", chưa làm).
-  Đổi chủ A→B: B nhận chuông mới, còn A **giữ nguyên** bản ghi `lead.moi:<leadId>` với tiêu đề
-  "Bạn có lead mới" và href `/leads/<id>`. Nếu là đổi chủ xuyên cơ sở thì A bấm vào sẽ mở một lead
-  `scopedDb` đã lọc mất ⇒ trang báo không tồn tại. Trước bản vá gán tay không đẻ chuông nào nên
-  không có ca này; nay có. Chấp nhận có ý thức — thu hồi thông báo là việc riêng.
+- ✅ **`transferLead` ĐÃ VÁ 08/09/2026** (commit riêng): người nhận có chuông
+  `lead.moi:<leadId>`; ca `toSaleId = null` (đổi cơ sở mà cơ sở đích không còn ai nhận lead)
+  báo quản lý cơ sở đích theo khuôn `baoPoolRong` thay vì im lặng. Test hồi quy
+  `lib/lead/transfer-notify.test.ts` — đã chứng minh: gỡ chuông ra thì 3/9 đỏ, gỡ thu hồi ra thì 1/9 đỏ.
+- ✅ **THU HỒI chuông của chủ cũ — đã có, áp cho MỌI đường đổi chủ có chuông.**
+  `thuHoiThongBao` (`lib/notifications/notify.ts`) đưa bản ghi ACTIVE về `REVOKED`;
+  `thuHoiChuongLeadCu` (`lib/lead/assign-lead.ts`) là cửa dùng chung, đã cắm vào
+  `chiaChoLead` · `manualAssignLead` · `transferLead`. REVOKED chứ không xoá: `conHieuLuc`
+  chỉ đếm ACTIVE nên mục biến khỏi badge lẫn panel, mà vẫn giữ vết "đã từng báo cho ai".
+  Chỉ thu hồi khi quyền sở hữu THẬT SỰ sang người khác — ca pool rỗng cố ý không thu hồi.
+- ⏸️ **`bulkReassignLeads` (bàn giao hàng loạt) — HOÃN theo chốt chủ dự án 08/09.** Nó cần một
+  `dedupeKey` GỘP mới ("bạn vừa nhận N lead bàn giao") chứ không phải N chuông, tức thêm một
+  dòng catalog và một quy ước khoá mới. Không gộp vào đợt này.
+- ⚠️ **Vẫn còn 3 đường câm** sau hai bản vá: `autoAssignNewLead` (tạo lead thủ công ở
+  `/admin/leads/new`, và là NHÁNH LÙI của cả form web lẫn quatang khi `centerId` không giải
+  được), `autoAssignLead` (nút "Chia tự động" trên kanban), `reassignOpenLeads` (chia lại lead
+  của sale nghỉ việc). Chờ quyết định.
+- ⚠️ **Sau hai bản vá: 3/11 đường đổi chủ có chuông.** Đo 08/09: repo có **11 đường làm lead
+  đổi/nhận chủ**, trước hôm nay **đúng 1** có chuông (`chiaChoLead`); nay thêm `manualAssignLead`
+  và `transferLead`. **Đừng báo cáo "đã vá xong lead không có chuông"** — chưa.
+- ✅ ~~Bản vá làm tăng số chuông mồ côi~~ — **ĐÃ XỬ**: thu hồi chuông chủ cũ (xem gạch đầu dòng
+  trên). Nợ còn lại của cùng họ: chuông `lead.pool_rong:<leadId>` gửi quản lý cơ sở **không bao
+  giờ được thu hồi** — lead sau đó được giao tay thì dòng "Lead chưa được phân công" vẫn nằm trong
+  badge của quản lý. Dùng lại đúng `thuHoiThongBao` với danh sách người nhận của `baoPoolRong` là
+  đủ; chưa làm vì ngoài phạm vi hai bản vá này.
 - ⚠️ **Quản lý tự gán lead cho CHÍNH MÌNH vẫn nhận chuông.** `baoSaleCoLeadMoi` chỉ thoát sớm khi
   `source === "SELF"` (sale tự gõ phiếu), còn gán tay truyền `MANAGER`. Ca này hiếm — đòi một tài
   khoản mang cả `CENTER_MANAGER` (để có `leads:assign`) lẫn `SALES_CSM` (để nhận). Chọn **luôn

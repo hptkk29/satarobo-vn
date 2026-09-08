@@ -49,6 +49,10 @@ function dongCu(userId: string, extra: Partial<Record<string, unknown>> = {}) {
     entityType: PHAN_LOAI.entityType,
     entityId: "lead1",
     expiresAt: null,
+    // Cột NOT NULL có `@default("ACTIVE")` trên DB thật — fixture thiếu nó thì
+    // `cu.state` là undefined và code coi mọi dòng như đã bị thu hồi. Bẫy đúng loại
+    // "fixture không mang hình dạng dữ liệu thật".
+    state: "ACTIVE",
     ...extra,
   };
 }

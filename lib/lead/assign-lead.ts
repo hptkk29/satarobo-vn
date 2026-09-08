@@ -31,7 +31,11 @@ import { resolveAssignment, type LeadEntryPoint, type AffiliateActor } from "./a
 import type { LeadAssignSource } from "@prisma/client";
 import { layPoolDangBat, anhChupPool, orgUnitIdCuaCoSo } from "./pool";
 import { takeRotationTurnsTx } from "./rotation";
-import { notifyStaff } from "@/lib/notifications/notify";
+import {
+  notifyStaff,
+  thuHoiThongBao,
+  broadcastNotificationBump,
+} from "@/lib/notifications/notify";
 
 export type AssignLeadInput = {
   /** Cơ sở KHÁCH chọn. Đích của mọi quyết định — không phải cơ sở người nhập. */
@@ -67,11 +71,15 @@ export type AssignLeadResult = {
  * Lead "Chưa phân công" nằm im không ai hay chính là kiểu hỏng đắt nhất của cả
  * module này — có lead, có khách chờ, mà không ai được giao.
  */
-async function baoPoolRong(
+export async function baoPoolRong(
   centerId: string,
   leadId: string | null,
   parentName: string,
 ): Promise<void> {
+  // Bọc CẢ thân hàm, không chỉ `notifyStaff`: từ 08/09 hàm này nằm trên đường SAU COMMIT của
+  // `transferLead`, nên một lỗi DB ở câu đọc dưới đây sẽ ném ngược lên và báo "chuyển lead thất
+  // bại" trong khi lead ĐÃ chuyển xong. Chuông hỏng không được cuốn theo lượt nghiệp vụ.
+  try {
   const nguoi = await db.user.findMany({
     where: {
       isActive: true,
@@ -94,6 +102,9 @@ async function baoPoolRong(
     href: leadId ? `/leads/${leadId}` : "/quan-ly-chia-lead",
     entityId: leadId,
   }).catch((err) => console.error("[assign-lead] không gửi được thông báo pool rỗng:", err));
+  } catch (err) {
+    console.error("[assign-lead] lỗi khi báo pool rỗng:", err);
+  }
 }
 
 /** Đầu vào của việc chia — dùng chung cho lead mới tạo lẫn lead đã có. */
@@ -154,6 +165,10 @@ export async function chiaChoLead(
     // tests/lead-intake — nó đỏ ngay lượt chạy đầu.)
     const quyet = await quyetDinhChuLead(db, input);
     if (quyet.kind === "OWNER") {
+      // Chủ TRƯỚC lượt ghi này — chỉ dùng để thu hồi chuông cũ. Đọc sát trước khi ghi.
+      const chuCu =
+        (await db.lead.findUnique({ where: { id: leadId }, select: { assignedToId: true } }))
+          ?.assignedToId ?? null;
       await db.lead.update({
         where: { id: leadId },
         data: {
@@ -170,6 +185,7 @@ export async function chiaChoLead(
         parentName: l?.parentName ?? "(không tên)",
         source: quyet.source,
       });
+      await thuHoiChuongLeadCu({ chuCuId: chuCu, chuMoiId: quyet.ownerId, leadId });
       return { ok: true, assignedToId: quyet.ownerId, consumedTurn: false };
     }
     console.warn(
@@ -217,6 +233,13 @@ export async function chiaChoLead(
         }
       }
 
+      // Chủ TRƯỚC lượt ghi — đọc TRONG transaction, tức DƯỚI advisory lock. Đọc ngoài thì hai
+      // lượt chia song song (bấm "Chia lại" hai lần, hoặc lô import chạy cùng lúc) cùng thấy
+      // chủ A đã lỗi thời, và lượt sau sẽ thu hồi chuông của người ĐANG giữ lead.
+      const chuCu =
+        (await tx.lead.findUnique({ where: { id: leadId }, select: { assignedToId: true } }))
+          ?.assignedToId ?? null;
+
       await tx.lead.update({
         where: { id: leadId },
         data: {
@@ -242,7 +265,7 @@ export async function chiaChoLead(
         },
       });
 
-      return { ownerId, consumedTurn, poolRong, source: quyet.source };
+      return { ownerId, consumedTurn, poolRong, source: quyet.source, chuCu };
     },
     { maxWait: 5_000, timeout: 15_000 },
   );
@@ -250,6 +273,10 @@ export async function chiaChoLead(
   if (ketQua.poolRong) {
     const l = await db.lead.findUnique({ where: { id: leadId }, select: { parentName: true } });
     await baoPoolRong(input.targetCenterId, leadId, l?.parentName ?? "(không tên)");
+    // Pool rỗng KHÔNG có nghĩa là chủ cũ giữ nguyên lead: transaction ở trên ghi
+    // `assignedToId: ownerId` VÔ ĐIỀU KIỆN, mà ở ca này `ownerId` là null ⇒ chủ cũ MẤT lead
+    // ngay lập tức. Không thu hồi ở đây là để lại đúng cái chuông mồ côi mà bản vá này dẹp.
+    await thuHoiChuongLeadCu({ chuCuId: ketQua.chuCu, chuMoiId: null, leadId });
   } else if (ketQua.ownerId) {
     const l = await db.lead.findUnique({ where: { id: leadId }, select: { parentName: true } });
     await baoSaleCoLeadMoi({
@@ -258,6 +285,7 @@ export async function chiaChoLead(
       parentName: l?.parentName ?? "(không tên)",
       source: ketQua.source,
     });
+    await thuHoiChuongLeadCu({ chuCuId: ketQua.chuCu, chuMoiId: ketQua.ownerId, leadId });
   }
 
   return { ok: true, assignedToId: ketQua.ownerId, consumedTurn: ketQua.consumedTurn };
@@ -303,6 +331,45 @@ export async function baoSaleCoLeadMoi(params: {
     href: `/leads/${params.leadId}`,
     entityId: params.leadId,
   }).catch((err) => console.error("[assign-lead] không gửi được thông báo lead mới:", err));
+}
+
+/**
+ * THU HỒI chuông "Bạn có lead mới" của CHỦ CŨ khi lead đổi tay.
+ *
+ * Vì sao cần: repo không có cơ chế thu hồi thông báo nào, nên trước bản vá này mỗi lượt đổi chủ
+ * để lại ở người cũ một dòng "Bạn có lead mới" trỏ tới lead họ KHÔNG còn giữ. Chưa đọc thì nó
+ * còn đếm vào badge. Và nếu là đổi chủ XUYÊN CƠ SỞ thì tệ hơn: `Lead` nằm trong
+ * `SCOPED_MODELS` nên `scopedDb` lọc mất, người cũ bấm chuông ra trang "không tồn tại".
+ *
+ * Gọi từ MỌI đường đổi chủ có chuông — `chiaChoLead`, `manualAssignLead`, `transferLead`.
+ *
+ * Điều kiện là "quyền sở hữu RỜI KHỎI chủ cũ", KHÔNG phải "có chủ mới". `chuMoiId = null` VẪN
+ * thu hồi — vì mọi đường gọi tới đây đều đã ghi `Lead.assignedToId` trước đó, kể cả ca pool rỗng
+ * (transaction ghi `assignedToId: ownerId` vô điều kiện, mà `ownerId` là null) và ca chuyển sang
+ * cơ sở không còn ai nhận. Chỉ thoát khi KHÔNG có chủ cũ, hoặc chủ cũ chính là chủ mới.
+ *
+ * Bắn `notification.bumped` CHỈ KHI thật sự có dòng bị thu hồi: badge của người cũ đang treo một
+ * số ma, mà vòng poll của chuông là 5 PHÚT. Thu hồi là sự kiện hiếm (mỗi lượt đổi chủ một lần) nên
+ * không có nguy cơ lặp lại bão broadcast 05/09.
+ *
+ * Nuốt lỗi như `baoSaleCoLeadMoi`: thu hồi hỏng thì lượt chia vẫn phải thành công.
+ */
+export async function thuHoiChuongLeadCu(params: {
+  chuCuId: string | null | undefined;
+  chuMoiId: string | null | undefined;
+  leadId: string;
+}): Promise<void> {
+  const { chuCuId, chuMoiId, leadId } = params;
+  if (!chuCuId || chuCuId === chuMoiId) return;
+  try {
+    const soDong = await thuHoiThongBao({
+      userIds: [chuCuId],
+      dedupeKey: `lead.moi:${leadId}`,
+    });
+    if (soDong > 0) await broadcastNotificationBump([chuCuId]);
+  } catch (err) {
+    console.error("[assign-lead] không thu hồi được chuông của chủ cũ:", err);
+  }
 }
 
 /**

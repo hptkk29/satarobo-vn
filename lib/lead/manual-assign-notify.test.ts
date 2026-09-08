@@ -24,6 +24,10 @@ const h = vi.hoisted(() => {
     thuTu.push("notifyStaff");
     return 1;
   });
+  const thuHoiThongBao = vi.fn(async (_p: Record<string, unknown>) => {
+    thuTu.push("thuHoi");
+    return 1;
+  });
   const transaction = vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => {
     thuTu.push("tx:mo");
     const r = await cb({
@@ -41,6 +45,7 @@ const h = vi.hoisted(() => {
     leadUpdate,
     leadActivityCreate,
     notifyStaff,
+    thuHoiThongBao,
     transaction,
     mockDb: {
       lead: { findUnique: leadFindUnique },
@@ -51,7 +56,10 @@ const h = vi.hoisted(() => {
 });
 
 vi.mock("@/lib/db", () => ({ db: h.mockDb }));
-vi.mock("@/lib/notifications/notify", () => ({ notifyStaff: h.notifyStaff }));
+vi.mock("@/lib/notifications/notify", () => ({
+  notifyStaff: h.notifyStaff,
+  thuHoiThongBao: h.thuHoiThongBao,
+}));
 vi.mock("@/lib/audit/log", () => ({ logLeadAudit: vi.fn(async () => undefined) }));
 // Cơ sở chưa gắn cây tổ chức ⇒ không ghi sổ lượt. Giữ nhánh đơn giản: bản vá nằm ngoài
 // transaction nên không phụ thuộc nhánh này (có một ca riêng ở dưới kiểm điều đó).
@@ -89,6 +97,7 @@ beforeEach(() => {
   h.leadUpdate.mockClear();
   h.leadActivityCreate.mockClear();
   h.notifyStaff.mockClear();
+  h.thuHoiThongBao.mockClear();
   h.transaction.mockClear();
 });
 
@@ -157,6 +166,29 @@ describe("[LEAD-GANTAY-T03] không phát chuông khi lượt gán KHÔNG xảy r
     const kq = await manualAssignLead("lead_1", "usr_sale", ACTOR);
     expect(kq.ok).toBe(false);
     expect(h.notifyStaff).not.toHaveBeenCalled();
+  });
+});
+
+describe("[LEAD-GANTAY-T05] thu hồi chuông của CHỦ CŨ", () => {
+  it("gán tay từ A sang B → chuông của A bị thu hồi, đúng khoá", async () => {
+    h.leadFindUnique.mockResolvedValue({ ...LEAD_OK, assignedToId: "usr_saleA" });
+    await manualAssignLead("lead_1", "usr_sale", ACTOR);
+    expect(h.thuHoiThongBao).toHaveBeenCalledTimes(1);
+    expect(h.thuHoiThongBao.mock.calls[0]?.[0]).toEqual({
+      userIds: ["usr_saleA"],
+      dedupeKey: "lead.moi:lead_1",
+    });
+  });
+
+  it("gán lại cho ĐÚNG người đang giữ → không tự thu hồi chuông của chính họ", async () => {
+    h.leadFindUnique.mockResolvedValue({ ...LEAD_OK, assignedToId: "usr_sale" });
+    await manualAssignLead("lead_1", "usr_sale", ACTOR);
+    expect(h.thuHoiThongBao).not.toHaveBeenCalled();
+  });
+
+  it("lead chưa có chủ → không có gì để thu hồi", async () => {
+    await manualAssignLead("lead_1", "usr_sale", ACTOR);
+    expect(h.thuHoiThongBao).not.toHaveBeenCalled();
   });
 });
 

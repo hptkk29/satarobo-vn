@@ -11,7 +11,7 @@ import {
 } from "@/lib/lead/assign-strategy";
 import { congMotLuot, takeRotationTurn } from "@/lib/lead/rotation";
 import { canManualAssign } from "@/lib/lead/assign-guard";
-import { baoSaleCoLeadMoi } from "@/lib/lead/assign-lead";
+import { baoSaleCoLeadMoi, thuHoiChuongLeadCu } from "@/lib/lead/assign-lead";
 import { assignmentWrite } from "@/lib/lead/assignment";
 import { LEAD_CLOSED_STATUSES } from "@/lib/leads/status";
 
@@ -444,6 +444,9 @@ export async function manualAssignLead(
     parentName: lead.parentName,
     source: "MANAGER",
   });
+
+  // Chuông của CHỦ CŨ trỏ tới một lead họ không còn giữ ⇒ thu hồi trong cùng lượt.
+  await thuHoiChuongLeadCu({ chuCuId: lead.assignedToId, chuMoiId: saleId, leadId });
 
   return { ok: true };
 }

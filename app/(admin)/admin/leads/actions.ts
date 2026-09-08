@@ -18,7 +18,12 @@ import { autoAssignLead, reassignOpenLeads } from '@/lib/lead/assign'
 import { leadSharingEnabled } from '@/lib/lead/sharing'
 import { validateTransferTarget } from '@/lib/crm/transfer-validate'
 import { autoAssignNewLead, manualAssignLead, reassignForCenter } from '@/lib/lead/auto-assign'
-import { chiaChoLead } from '@/lib/lead/assign-lead'
+import {
+  chiaChoLead,
+  baoSaleCoLeadMoi,
+  baoPoolRong,
+  thuHoiChuongLeadCu,
+} from '@/lib/lead/assign-lead'
 import { assignmentWrite } from '@/lib/lead/assignment'
 import { centerIdForOrgUnit } from '@/lib/org/org-service'
 import { rejectHeadOffice } from '@/lib/enrollment-flow'
@@ -1057,7 +1062,9 @@ export async function transferLead(
 
   const lead = await db.lead.findFirst({
     where: { id: d.leadId, deletedAt: null },
-    select: { id: true, assignedToId: true, centerId: true, status: true },
+    // `parentName` chỉ để dựng nội dung chuông ở cuối hàm — thêm vào select đang có
+    // thay vì mở một câu tra thứ hai.
+    select: { id: true, assignedToId: true, centerId: true, status: true, parentName: true },
   })
   if (!lead) return { ok: false, error: 'Lead không tồn tại' }
 
@@ -1175,6 +1182,32 @@ export async function transferLead(
       tx,
     })
   })
+
+  // BÁO CHO NGƯỜI NHẬN — vá 08/09/2026.
+  //
+  // Trước bản vá này chuyển lead là đường CÂM: sổ ghi đủ (LeadActivity HANDOVER, LeadTransfer,
+  // audit) nhưng sale nhận KHÔNG biết gì. Tên người nhận thậm chí đã được tra rồi vứt đi bằng
+  // `void toSale` ngay dòng này.
+  //
+  // NGOÀI transaction, sau dấu đóng ở trên: `notifyStaff` cố ý không nhận `tx`.
+  // Dùng ĐÚNG khoá `lead.moi:<leadId>` sẵn có — `catalog.ts` phân loại theo tiền tố đó.
+  if (toSaleId) {
+    await baoSaleCoLeadMoi({
+      ownerId: toSaleId,
+      leadId: lead.id,
+      parentName: lead.parentName,
+      source: 'MANAGER',
+    })
+  } else if (toCenterId) {
+    // `reassignForCenter` trả null khi cơ sở ĐÍCH không còn ai nhận lead. Lead vừa bị chuyển
+    // sang đó và nay KHÔNG có chủ — im lặng ở đây là đúng kiểu hỏng đắt nhất của module này:
+    // có khách đang chờ mà không ai được giao. Báo quản lý cơ sở đích, đúng khuôn pool rỗng.
+    await baoPoolRong(toCenterId, lead.id, lead.parentName)
+  }
+
+  // Chuông của CHỦ CŨ trỏ tới lead họ không còn giữ — và chuyển XUYÊN CƠ SỞ thì scopedDb còn
+  // lọc mất, bấm vào ra trang "không tồn tại". Thu hồi trong cùng lượt.
+  await thuHoiChuongLeadCu({ chuCuId: lead.assignedToId, chuMoiId: toSaleId, leadId: lead.id })
 
   void toSale
   void fromCenter
