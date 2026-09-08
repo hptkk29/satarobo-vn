@@ -217,8 +217,8 @@ export function PaymentsClient({
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-lg border border-border">
-        <PhanTrangBang>
+      <div className="overflow-hidden rounded-lg border border-border">
+        <PhanTrangBang cuonNgang>
           <Table>
             <TableHeader>
               <TableRow>

@@ -24,6 +24,7 @@ import {
   getSessionRosterStudentIds,
 } from "@/lib/attendance/roster";
 import { isSessionOwnedByTeacher } from "@/lib/lms/session-ownership";
+import { chotBuoi, type ChotBuoiKetQua } from "@/lib/lms/chot-buoi";
 import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
 import {
@@ -288,25 +289,29 @@ export async function saveClassAttendanceAction(
   try {
     // Song song CÓ TRẦN — mỗi HV một lượt độc lập; nối đuôi thì GV bấm Lưu phải chờ hết
     // 20 vòng truy vấn mới thấy phản hồi.
-    await mapWithConcurrency(plans, 5, async ({ r, makeupStatus, absenceReason }) => {
-      if (makeupStatus === "NEEDS_MAKEUP") {
-        await createMakeupNeed({
-          studentId: r.studentId,
-          missedSessionId: data.sessionId,
-          createdById: actorId,
-          note: absenceReason,
-          // Chuyển trạng thái THẬT: trước lần lưu này HV chưa ở diện cần bù. Lưu lại một
-          // buổi vốn đã NEEDS_MAKEUP thì không dựng dậy nhu cầu mà quản lý vừa huỷ tay.
-          reviveCancelled:
-            existingBy.get(r.studentId)?.makeupStatus !== "NEEDS_MAKEUP",
-        });
-      } else if (!isAbsent(r.status)) {
-        await cancelPendingMakeupNeed({
-          studentId: r.studentId,
-          missedSessionId: data.sessionId,
-        });
-      }
-    });
+    await mapWithConcurrency(
+      plans,
+      5,
+      async ({ r, makeupStatus, absenceReason }) => {
+        if (makeupStatus === "NEEDS_MAKEUP") {
+          await createMakeupNeed({
+            studentId: r.studentId,
+            missedSessionId: data.sessionId,
+            createdById: actorId,
+            note: absenceReason,
+            // Chuyển trạng thái THẬT: trước lần lưu này HV chưa ở diện cần bù. Lưu lại một
+            // buổi vốn đã NEEDS_MAKEUP thì không dựng dậy nhu cầu mà quản lý vừa huỷ tay.
+            reviveCancelled:
+              existingBy.get(r.studentId)?.makeupStatus !== "NEEDS_MAKEUP",
+          });
+        } else if (!isAbsent(r.status)) {
+          await cancelPendingMakeupNeed({
+            studentId: r.studentId,
+            missedSessionId: data.sessionId,
+          });
+        }
+      },
+    );
   } catch (err) {
     console.error("[saveClassAttendanceAction] makeup:", err);
   }
@@ -351,18 +356,25 @@ export async function saveClassAttendanceAction(
   // Best-effort: điểm danh ĐÃ lưu rồi, đóng buổi hỏng không được biến thành
   // "không lưu được điểm danh" trước mắt giáo viên.
   try {
-    const [siSo, daDanhDau] = await Promise.all([
-      xdb.enrollment.count({
+    // Lấy DANH SÁCH studentId, không phải số đếm (08/09/2026). Học viên HỌC BÙ từ lớp
+    // khác cũng sinh dòng `Attendance` cho buổi này, nên đếm thô sẽ bù chỗ cho một em
+    // trong sĩ số chưa được đánh dấu — xem `quyetDinhTuHoanTat`.
+    const [siSoRows, daDanhDauRows] = await Promise.all([
+      xdb.enrollment.findMany({
         where: { classId: sess.classId, ...rosterWhere("dang-hoc") },
+        select: { studentId: true },
       }),
-      xdb.attendance.count({ where: { sessionId: data.sessionId } }),
+      xdb.attendance.findMany({
+        where: { sessionId: data.sessionId },
+        select: { studentId: true },
+      }),
     ]);
     const qd = quyetDinhTuHoanTat({
       trangThaiBuoi: sess.status,
       ngayBuoi: sess.date,
       homNayUtcMs: vnDateOnly(new Date()).getTime(),
-      siSo,
-      daDanhDau,
+      siSoStudentIds: siSoRows.map((r) => r.studentId),
+      daDanhDauStudentIds: daDanhDauRows.map((r) => r.studentId),
     });
     if (qd.tuHoanTat) {
       // Đi qua `completeSession` chứ KHÔNG `update({status})` trần: hàm đó còn ghi
@@ -378,7 +390,31 @@ export async function saveClassAttendanceAction(
       });
     }
   } catch (err) {
+    // ── HỎNG PHẢI ĐỂ LẠI DẤU (07/09/2026) ────────────────────────────────────────
+    //
+    // Giữ best-effort: điểm danh ĐÃ lưu rồi, đóng buổi hỏng không được biến thành
+    // "không lưu được điểm danh" trước mắt giáo viên.
+    //
+    // NHƯNG từ chốt 07/09 ("một luật, không hai") đây là ĐƯỜNG ĐÓNG BUỔI CHÍNH, nên
+    // nuốt lỗi vào `console.error` là mất hẳn dấu vết: log của Vercel xoay vòng và
+    // không ai tra được "tháng này đóng buổi hỏng bao nhiêu lần". Ghi thêm một dòng
+    // AuditLog để câu hỏi đó trả lời được bằng SQL.
+    //
+    // Bản thân việc ghi audit cũng best-effort — hỏng ở đây tuyệt đối không được làm
+    // hỏng lượt lưu điểm danh.
     console.error("[saveClassAttendanceAction] tu hoan tat:", err);
+    try {
+      await writeAudit({
+        actor: { id: actorId, name: actorName },
+        module: "attendance",
+        entityType: "ClassSession",
+        entityId: data.sessionId,
+        action: "session.auto-complete.failed",
+        newValues: { error: err instanceof Error ? err.message : String(err) },
+      });
+    } catch (err2) {
+      console.error("[saveClassAttendanceAction] audit tu hoan tat:", err2);
+    }
   }
 
   // Thông báo điểm danh cho phụ huynh (email; Zalo khi cấu hình) — best-effort.
@@ -391,4 +427,39 @@ export async function saveClassAttendanceAction(
   revalidatePath("/lop");
   revalidatePath("/teacher/lop");
   return { ok: true, saved: data.records.length };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// D1 (07/09/2026) — CHỐT BUỔI từ site giáo viên.
+//
+// Trước hôm nay chỉ màn admin `/attendance` có nút này, mà `decideRoute` đá giáo
+// viên thuần khỏi host admin và `attendance` không nằm trong TEACHER_ROUTE_SEGMENTS
+// ⇒ người thực sự dạy buổi không có đường nào bấm. Prod 07/09: 2 COMPLETED / 287
+// SCHEDULED trong 4 tháng.
+//
+// KHÔNG khoét route-policy và KHÔNG nới permission: nút mọc ở trang GV VỐN ĐÃ VÀO
+// ĐƯỢC (`/teacher/lop`, tab Điểm danh), và cổng sở hữu của `chotBuoi` vốn đã cho
+// phép "GV phụ trách đúng lớp" từ ngày viết ra.
+//
+// Luật nằm ở `lib/lms/chot-buoi.ts` — dùng CHUNG với admin. Ở đây chỉ còn xác thực
+// + revalidate đúng đường của site GV.
+export async function chotBuoiAction(
+  sessionId: string,
+): Promise<ChotBuoiKetQua> {
+  const session = await auth();
+  if (!session?.user?.id) return { ok: false, error: "Chưa đăng nhập" };
+
+  const { actorId, actorName } = getAuditActor(session);
+  const res = await chotBuoi({
+    sessionId,
+    actorUserId: session.user.id,
+    actorId,
+    actorName,
+  });
+  if (!res.ok) return res;
+
+  revalidatePath("/teacher/lop");
+  revalidatePath("/teacher/lich");
+  revalidatePath("/teacher");
+  return res;
 }

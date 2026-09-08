@@ -212,6 +212,19 @@ feature → PR → merge `test`  → test.satarobo.vn tự deploy → nghiệm t
 
 ## Detailed rules (load on-demand)
 
+- [docs/luat-doc-so-va-ket-luan.md](docs/luat-doc-so-va-ket-luan.md) — **Luật đọc số + luật kết luận (07/09/2026).**
+  "0 dòng trên prod" KHÔNG hạ được mức nghiêm trọng — phân loại theo đường ghi còn sống hay chết;
+  mọi con số báo ra phải kèm PHÉP TÍNH sinh ra nó (đo ≠ suy). Kết luận "hệ thống không có cơ chế X"
+  phải kiểm trên `origin/main`, KHÔNG phải nhánh đang đứng — nhánh tụt 87 commit đã làm hỏng một
+  chẩn đoán 07/09. Chú thích không phải bằng chứng: hình dạng dữ liệu xác minh bằng schema + `psql`.
+  **Fixture phải mang hình dạng dữ liệu thật** — dữ liệu tròn trịa trong test là dữ liệu không kiểm
+  được gì. Bẫy sẵn của repo: 9 model có `date` là `@db.Date` (nửa đêm ĐÚNG) nhưng `ClassSession.date`
+  là `@db.Timestamptz(6)` MANG GIỜ THẬT — khớp theo tên cột là sai.
+  **Tập dựng cho mục đích A không dùng cho mục đích B khi chưa kiểm lại định nghĩa** —
+  `assignedClassIds` đúng cho QUYỀN, sai cho THƯỚC ĐO CÔNG (76 buổi của trợ giảng, prod 08/09).
+
+- [docs/cham-cong/DESIGN-CHAM-CONG-ADMIN.md](docs/cham-cong/DESIGN-CHAM-CONG-ADMIN.md) — **Giao diện module chấm công (admin), chốt 06/09/2026.** Đọc TRƯỚC khi sửa bất kỳ màn nào dưới `app/(admin)/admin/cham-cong/**` hoặc `/don-tu**`. Luận đề "Sổ kỳ công": mọi màn vận hành chia sẻ khung KỲ (tháng × khối) — `PageHeader → ModuleNav → ScopeBar → nội dung`. **Sidebar chỉ còn 5 mục**; 9 màn còn lại vào bằng `components/admin/cham-cong/{module-nav,config-tabs,me-nav}.tsx` — 3 file này là LỐI VÀO DUY NHẤT nên `href` phải là chuỗi literal (test `nav-coverage` quét literal, xoá là màn thành mồ côi). Quyền hỏi MỘT lần bằng `loadModuleScope(userId)` (`lib/cham-cong/module-scope.ts`) — đừng rải `checkPermission` (action là biến nên rbac-scope R1 không đếm, nhưng target thì luôn phải thật). `components/cham-cong/ui/**` dùng chung với site GV ⇒ CHỈ token `:root`, **cấm `primary-soft`/`primary-ink`/`primary-dark`** (site GV không có `.admin-scope`, `--primary-ink` ở `:root` là CAM).
+
 - [docs/site-giao-vien-2508.md](docs/site-giao-vien-2508.md) — **Site GV đợt 25/08**: giáo trình Sata thật (`Lesson.moduleCode` + seed) · gộp cột "Buổi học" · ảnh lớp bỏ kho nháp (up → PENDING) · bảng Trial 2 bảng phẳng + dời lịch + `LeadTrialHistory.outcome` + hoa hồng `TRIAL_TEACHER` · bài tập quá hạn tự đóng + gia hạn · `PhanTrangBang cuonNgang`. **Có việc phải chạy TAY sau merge** (migrate + seed giáo trình).
 - [docs/chat-realtime/00-dieu-chinh-cho-repo.md](docs/chat-realtime/00-dieu-chinh-cho-repo.md) — **Module Chat Realtime (đang xây)**: đọc file này + `docs/chat-realtime/architecture.md` trước MỌI task chat. Backlog: `docs/chat-realtime/backlog/`. Luật cứng không thương lượng: (1) client CHỈ ĐỌC realtime, mọi ghi qua Server Action, không bao giờ tạo policy INSERT trên `realtime.messages`; (2) Postgres là nguồn sự thật — broadcast fail → log, không rollback; (3) mọi xoá là SOFT DELETE; (4) không hard-code classId vào Message; (5) đổi phân công/học viên phải gọi `syncConversationMembership` TRONG CÙNG transaction; (6) SĐT/email PH không bao giờ vào payload trả cho PH khác; (7) test ma trận quyền phải xanh trước khi coi story xong; (8) `permissions.md` là nguồn sự thật — code lệch ma trận là bug.
 - [.claude/rules/client-site.md](.claude/rules/client-site.md) — animations, SEO, performance

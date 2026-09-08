@@ -7,7 +7,7 @@
  *      `useMemo` và thế là mọi công sắp bậc ở server bị đảo ngay khi gõ vào ô tìm.
  *   2. Buổi CHƯA TỚI GIỜ không bày 3 chip việc — chip xám ở một buổi tuần sau đọc
  *      như "đang thiếu", trong khi chưa tới lượt làm.
- *   3. Nút "Hoàn tất" chỉ sáng khi đủ CẢ BA việc. Nó là nút đổi trạng thái thật, bật
+ *   3. Nút "Chốt buổi" chỉ sáng khi đủ CẢ BA việc. Nó là nút đổi trạng thái thật, bật
  *      sớm là chốt nhầm một buổi còn dở.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -209,9 +209,9 @@ describe("AttendanceList", () => {
     expect(screen.getByRole("button", { name: "Tải ảnh s-today" })).toBeInTheDocument();
   });
 
-  it("thiếu việc thì nút Hoàn tất bị khoá và nói rõ còn thiếu gì", () => {
+  it("thiếu việc thì nút Chốt buổi bị khoá và nói rõ còn thiếu gì", () => {
     mount([ROWS[0]]);
-    const btn = screen.getByRole("button", { name: /Hoàn tất/ });
+    const btn = screen.getByRole("button", { name: /Chốt buổi/ });
     expect(btn).toBeDisabled();
     expect(btn).toHaveAttribute("title", "Còn thiếu: ảnh/video (0/9 em)");
   });
@@ -219,16 +219,16 @@ describe("AttendanceList", () => {
   it("đủ ba việc thì bấm được, gọi action rồi làm mới trang", async () => {
     complete.mockResolvedValue({ ok: true });
     mount([row({ ...ROWS[3], completed: false })]);
-    fireEvent.click(screen.getByRole("button", { name: /Hoàn tất/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Chốt buổi/ }));
     await waitFor(() => expect(complete).toHaveBeenCalledWith("s-done"));
     await waitFor(() => expect(refresh).toHaveBeenCalled());
-    expect(toastSuccess).toHaveBeenCalledWith("Đã hoàn tất buổi");
+    expect(toastSuccess).toHaveBeenCalledWith("Đã chốt buổi");
   });
 
   it("action từ chối thì báo lỗi và KHÔNG làm mới trang", async () => {
     complete.mockResolvedValue({ ok: false, error: "Chưa hoàn tất: còn thiếu ảnh" });
     mount([row({ ...ROWS[3], completed: false })]);
-    fireEvent.click(screen.getByRole("button", { name: /Hoàn tất/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Chốt buổi/ }));
     await waitFor(() =>
       expect(toastError).toHaveBeenCalledWith("Chưa hoàn tất: còn thiếu ảnh"),
     );

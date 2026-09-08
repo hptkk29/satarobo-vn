@@ -103,9 +103,14 @@ export default async function ChecklistOverviewPage() {
         <span className="font-semibold text-state-danger-ink"> ○</span> chưa làm. Di chuột để xem ngày.
       </p>
 
-      <div className="overflow-x-auto rounded-xl border border-border bg-card">
-        <PhanTrangBang>
-          <table className="min-w-full text-sm">
+      {/* `overflow-hidden` chứ KHÔNG `overflow-x-auto`: để vùng cuộn trùng với thẻ bo góc là
+          viền vẽ theo border-box và không cuộn, còn nội dung cuộn bên dưới bị cắt theo
+          padding-box đã bo ⇒ kéo sang phải thì dải nền header bị vạt chéo ở góc. Đẩy việc
+          cuộn xuống div con bằng `cuonNgang`, giống 10 bảng còn lại của module — và nhờ vậy
+          thanh phân trang cũng thôi trôi khỏi màn khi kéo ngang. */}
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
+        <PhanTrangBang cuonNgang tenDonVi="cơ sở" khoaGhiNho="checklist-tong-quan">
+          <table className="w-full min-w-[900px] text-sm">
             <thead className="bg-muted text-left text-xs text-muted-foreground">
               <tr>
                 <th className="px-3 py-2">Cơ sở</th>

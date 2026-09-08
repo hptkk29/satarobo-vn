@@ -1,201 +1,617 @@
+// app/(admin)/admin/cham-cong/page.tsx — BẢNG CÔNG NGÀY: hàng chờ RÀ CỜ của quản lý cơ sở.
+//
+// Vì sao màn này tồn tại: công đếm theo LỊCH ĐÃ XẾP, lượt quét chỉ sinh cờ (T-01) — nên việc thật
+// mỗi ngày là "ai có cờ, cờ gì, có phải sửa công không", chứ không phải đọc bảng giờ. Dải ngày
+// mang số cờ cả tháng để chọn đúng ngày cần mở; bảng xếp cờ nặng lên đầu; bấm TÊN mở panel chi tiết
+// (lượt quét + ghi đè) thay vì nhét ô nhập vào một ô bảng 90px như bản cũ.
+//
+// Điều dễ vỡ:
+//  · MỌI đường dẫn trong màn phải mang theo `date` VÀ `coSo`. Bản cũ push `/cham-cong?date=` làm
+//    rơi `coSo`, nên người Hội sở đang xem CS2 đổi ngày là bị ném về CS1 mà không hay. Vì thế thanh
+//    lọc là `<form method="GET">` có hidden `coSo`/`loc`, không phải input tự điều hướng.
+//  · Giờ in ra là giờ VN (+07) tính ở SERVER. Truyền `Date` xuống client là giờ đổi theo máy người xem.
+//  · Quyền hỏi MỘT lần qua `loadModuleScope` (action là biến, target luôn thật); không `redirect` câm.
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Monitor, AlertTriangle, MapPinOff } from "lucide-react";
+import {
+  CalendarClock,
+  ChevronRight,
+  ClipboardCheck,
+  FileSpreadsheet,
+  Flag,
+  Lock,
+  Monitor,
+  PencilLine,
+  Search,
+  Users,
+} from "lucide-react";
 import { auth } from "@/lib/auth";
-import { hasRole } from "@/lib/auth/permissions";
-import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
-import { ymdVN } from "@/lib/classes/schedule";
-import { DateNavInput } from "./_components/date-nav-input";
-import type { WorkShift } from "@prisma/client";
-import {
-  computeShiftAttendance,
-  formatVNTime,
-  formatRegisteredShifts,
-  type AttendanceTag,
-} from "@/lib/work-schedule";
-import { SHIFT_DEFS, SHIFT_ORDER } from "@/lib/shifts";
 import { getSetting } from "@/lib/settings/service";
+import { loadCenterMap } from "@/lib/cham-cong/home-center";
+import { ASK_WHO, loadModuleScope, periodStatusOf, type ModuleAction } from "@/lib/cham-cong/module-scope";
+import { hrefWith, monthStepDate, scopeHref } from "@/lib/cham-cong/scope-href";
+import { countsAsIssue, flagInfo } from "@/lib/cham-cong/flag-labels";
+import { parseVnYmd, vnDateAt, vnDateOnly, vnWeekday, vnYmd } from "@/lib/time/vn";
+import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/admin/ui/page-header";
+import { PageHelp } from "@/components/admin/ui/page-help";
+import { EmptyState, NoPermission } from "@/components/admin/ui/states";
+import { adminTd, adminTh, adminTr } from "@/components/admin/ui/table";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
+import { ModuleNav } from "@/components/admin/cham-cong/module-nav";
+import { ScopeBar } from "@/components/admin/cham-cong/scope-bar";
+import { DayStrip, type DayStripDay } from "@/components/admin/cham-cong/day-strip";
+import { KpiStrip } from "@/components/admin/cham-cong/kpi-strip";
+import {
+  BTN_OUTLINE,
+  CHIP,
+  CHIP_ACTIVE,
+  CHIP_IDLE,
+  FIELD,
+  PILL,
+} from "@/components/admin/cham-cong/classes";
+import { FlagList } from "@/components/cham-cong/ui/flag-chip";
+import { ShiftCodeChip, type ShiftSource } from "@/components/cham-cong/ui/shift-code-chip";
+import { DayTypePill, type DayType } from "@/components/cham-cong/ui/day-type-pill";
+import { DayDetailSheet, type DayRow, type DayTap } from "./_components/day-detail-sheet";
 
-export const metadata = { title: "Chấm công | Admin" };
+export const metadata = { title: "Bảng công ngày | Admin", robots: { index: false } };
 export const dynamic = "force-dynamic";
 
+const VIEW: ModuleAction = "hr_attendance:view";
+const ASSIGN: ModuleAction = "hr_attendance:assign";
+const ADJUST: ModuleAction = "hr_attendance:adjust";
+
+/** MỘT chuỗi cho cả hai nhánh (có quyền / không quyền) — hai câu khác nhau cho cùng một màn là
+ *  thứ người dùng đọc thành "hai màn khác nhau". */
+const SUBTITLE = "Công đếm theo lịch đã xếp; lượt quét chỉ sinh cờ để quản lý rà.";
+
+/** Bộ lọc nhanh trên toolbar. Giá trị lạ ⇒ coi như không lọc. */
+type Loc = "co" | "chuaquet" | "ghide" | null;
+const LOC_CHIPS: { value: Loc; label: string }[] = [
+  { value: null, label: "Tất cả" },
+  { value: "co", label: "Chỉ có cờ" },
+  { value: "chuaquet", label: "Chưa quét" },
+  { value: "ghide", label: "Đã ghi đè" },
+];
+
 interface Props {
-  searchParams: Promise<{ date?: string }>;
+  searchParams: Promise<{ date?: string; coSo?: string; loc?: string; q?: string }>;
 }
 
-const TAG_TONE: Record<AttendanceTag["tone"], string> = {
-  ok: "bg-state-success-soft text-state-success-ink",
-  warn: "bg-state-warning-soft text-state-warning-ink",
-  danger: "bg-state-danger-soft text-state-danger-ink",
-};
+const WD = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
+
+/** Giờ VN của một mốc thời gian. Cộng tay +07 thay vì `toLocaleTimeString`: Vercel chạy UTC. */
+function hhmm(d: Date | null | undefined): string {
+  if (!d) return "—";
+  const p = new Date(d.getTime() + 7 * 3_600_000);
+  return `${String(p.getUTCHours()).padStart(2, "0")}:${String(p.getUTCMinutes()).padStart(2, "0")}`;
+}
+
+function fmtMin(m: number): string {
+  return m ? `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}` : "—";
+}
+
+/** Cờ nặng lên trước, để `FlagList max={2}` luôn hiện đúng thứ cần rà. */
+function flagRank(code: string): number {
+  const tone = flagInfo(code).tone;
+  if (tone === "danger") return 0;
+  if (tone === "warn") return 1;
+  // Mã lạ mang tông `info` nhưng VẪN là việc cần rà (`countsAsIssue`) — xếp trước ghi chú thường.
+  return countsAsIssue(code) ? 2 : 3;
+}
+
+/** Thứ hạng của cả DÒNG: danger → warn/mã lạ → còn lại. */
+function rowRank(flags: string[]): number {
+  if (flags.length === 0) return 3;
+  return Math.min(...flags.map((f) => Math.min(flagRank(f), 2)));
+}
 
 export default async function ChamCongPage({ searchParams }: Props) {
   const session = await auth();
-  if (!session?.user) redirect("/login");
+  if (!session?.user) redirect("/login?callbackUrl=%2Fcham-cong");
 
-  // Phạm vi cơ sở: CENTER_MANAGER chỉ xem cơ sở mình.
-  const centerScope = hasRole(session.user, "CENTER_MANAGER") ? session.user.centerId : null;
-  if (!(await checkPermission("hr_attendance:view", { centerId: centerScope ?? session.user.centerId ?? null }))) {
-    redirect("/dashboard");
+  const sp = await searchParams;
+  const scope = await loadModuleScope(session.user.id);
+  const block = scope.pick(sp.coSo, VIEW);
+  const ctxNoBlock = { coSo: null, date: null };
+
+  if (!block) {
+    return (
+      <div className="max-w-6xl">
+        <PageHeader title="Bảng công ngày" subtitle={SUBTITLE} />
+        <ModuleNav active="ngay" scope={scope} ctx={ctxNoBlock} />
+        <NoPermission
+          permission={VIEW}
+          what="bảng công"
+          askWho={ASK_WHO[VIEW]}
+        />
+      </div>
+    );
   }
 
-  const { date } = await searchParams;
-  const base = date ? new Date(date) : new Date();
-  const start = new Date(base);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-  // `start` là NỬA ĐÊM GIỜ ĐỊA PHƯƠNG → đọc lại nhãn theo ngày ĐỊA PHƯƠNG (ymdVN),
-  // KHÔNG qua toISOString() (UTC) — trên máy +7 sẽ lệch -1 ngày (18/7 thay vì 19/7)
-  // và ngày người dùng tự chọn cũng bị hiển thị lùi 1 ngày.
-  const dateStr = ymdVN(start);
+  const coSo = block.id;
+  const canAdjust = scope.has(ADJUST, coSo);
+  const canAssign = scope.has(ASSIGN, coSo);
 
-  // Cách ly cơ sở (A0-04): EmployeeCheckin/ShiftRegistration ∈ SCOPED_MODELS → scopedDb.
+  // ── Ngày đang xem (giữ nguyên hợp đồng `?date=` + fallback "hôm nay") ─────────────────
+  const day = (sp.date && parseVnYmd(sp.date)) || new Date();
+  const workDate = vnDateOnly(day);
+  const dateStr = workDate.toISOString().slice(0, 10);
+  const ky = dateStr.slice(0, 7);
+  const today = vnYmd(new Date());
+  const year = Number(dateStr.slice(0, 4));
+  const month = Number(dateStr.slice(5, 7));
+  const monthFrom = new Date(Date.UTC(year, month - 1, 1));
+  const monthTo = new Date(Date.UTC(year, month, 0));
+  const daysInMonth = monthTo.getUTCDate();
+  const dateLabel = `${WD[vnWeekday(vnDateAt(year, month - 1, Number(dateStr.slice(8, 10)), 12))]} ${dateStr.slice(8, 10)}/${dateStr.slice(5, 7)}/${year}`;
+
+  const loc: Loc =
+    sp.loc === "co" || sp.loc === "chuaquet" || sp.loc === "ghide" ? sp.loc : null;
+  const q = (sp.q ?? "").trim();
+  /** Mọi link trong màn đi qua đây — quên một tham số là rơi ngữ cảnh (bug `coSo` của bản cũ). */
+  const here = (over: { date?: string; loc?: Loc }) =>
+    hrefWith("/cham-cong", {
+      coSo,
+      date: over.date ?? dateStr,
+      loc: over.loc === undefined ? loc : over.loc,
+      q,
+    });
+  const kyHref = hrefWith("/cham-cong/ky-cong", { ky, coSo });
+
   const sdb = scopedDb(await resolveActor(session.user.id));
+  const centerMap = await loadCenterMap();
+  const orgUnitId =
+    Object.values(centerMap.byCode).find((c) => c.centerId === coSo)?.orgUnitId ?? null;
 
-  const [rows, regs] = await Promise.all([
-    sdb.employeeCheckin.findMany({
-      where: { checkedAt: { gte: start, lt: end }, ...(centerScope ? { centerId: centerScope } : {}) },
-      orderBy: { checkedAt: "asc" },
+  const [days, logs, assignments, monthRows, holidays, weeklyOff, period] = await Promise.all([
+    sdb.staffAttendanceDay.findMany({ where: { workDate, centerId: coSo } }),
+    sdb.staffTimeLog.findMany({
+      where: { workDate, centerId: coSo, result: "ACCEPTED" },
+      orderBy: { loggedAt: "asc" },
+      select: { userId: true, direction: true, loggedAt: true, flags: true },
     }),
-    sdb.shiftRegistration.findMany({
-      // Chỉ lịch CHÍNH THỨC (APPROVED) mới dùng tính công (PHẦN 2).
-      where: { date: { gte: start, lt: end }, status: "APPROVED", ...(centerScope ? { centerId: centerScope } : {}) },
-      select: { userId: true, shifts: true, user: { select: { name: true, centerId: true } } },
+    sdb.shiftAssignment.findMany({
+      where: { workDate, centerId: coSo, status: "ACTIVE" },
+      select: { userId: true, templateCode: true, source: true },
     }),
+    sdb.staffAttendanceDay.findMany({
+      where: { centerId: coSo, workDate: { gte: monthFrom, lte: monthTo } },
+      select: { workDate: true, flags: true, dayType: true },
+    }),
+    sdb.holiday.findMany({
+      where: {
+        type: "HOLIDAY",
+        date: { lte: monthTo },
+        AND: [
+          { OR: [{ endDate: null, date: { gte: monthFrom } }, { endDate: { gte: monthFrom } }] },
+          { OR: [{ centerId: null }, { centerId: coSo }] },
+        ],
+      },
+      select: { date: true, endDate: true, attendanceEffect: true },
+    }),
+    getSetting("shift.weeklyOffDays", { orgUnitId }),
+    periodStatusOf(sdb, coSo, ky),
   ]);
 
-  type Agg = {
-    userId: string;
-    userName: string;
-    checkIn: Date | null;
-    checkOut: Date | null;
-    centerId: string | null;
-    geofenceFlag: boolean;
-    registeredShifts: WorkShift[];
-  };
-  const byUser = new Map<string, Agg>();
-  const ensure = (userId: string, name: string, centerId: string | null): Agg => {
-    let a = byUser.get(userId);
-    if (!a) {
-      a = { userId, userName: name, checkIn: null, checkOut: null, centerId, geofenceFlag: false, registeredShifts: [] };
-      byUser.set(userId, a);
-    }
-    return a;
-  };
-  for (const r of rows) {
-    const a = ensure(r.userId, r.userName ?? "(không tên)", r.centerId);
-    if (r.type === "CHECK_IN") a.checkIn = r.checkedAt;
-    else a.checkOut = r.checkedAt;
-    if (!r.withinGeofence) a.geofenceFlag = true;
-  }
-  // Nhân viên có ĐĂNG KÝ ca ngày đó (kể cả chưa quét → để hiện "Thiếu ca").
-  for (const reg of regs) {
-    const a = ensure(reg.userId, reg.user.name ?? "(không tên)", reg.user.centerId);
-    a.registeredShifts = reg.shifts;
-  }
+  const userIds = [
+    ...new Set([
+      ...days.map((d) => d.userId),
+      ...logs.map((l) => l.userId),
+      ...assignments.map((a) => a.userId),
+    ]),
+  ];
 
-  const shiftTolerance = await getSetting("shift.toleranceMinutes");
-  const list = [...byUser.values()]
-    .sort((x, y) => x.userName.localeCompare(y.userName))
-    .map((a) => ({
-      ...a,
-      status: computeShiftAttendance(
-        {
-          checkIn: a.checkIn,
-          checkOut: a.checkOut,
-          geofenceFlag: a.geofenceFlag,
-          registeredShifts: a.registeredShifts,
+  // Lượt quét ĐẦY ĐỦ của những người đã lọt danh sách — CỐ Ý không lọc theo cơ sở đang xem.
+  //
+  // Truy vấn `logs` ở trên lọc `centerId: coSo` và chỉ dùng để TÌM RA ai cần hiện (người quét ở
+  // đây mà không được xếp ca ở đây vẫn phải hiện). Nhưng nếu lấy luôn nó để vẽ cột "Quét" thì
+  // sai: công ngày (`StaffAttendanceDay`) được tính trên TOÀN BỘ lượt của người đó trong ngày,
+  // không lọc cơ sở (`recompute.ts:24`), còn cơ sở chịu công thì lấy theo CA ĐƯỢC XẾP
+  // (`recompute.ts:88`). Hai cái đó lệch nhau đúng ở tình huống đáng quan tâm nhất: người được
+  // xếp ca CS1 nhưng quét ở CS2. Khi đó dòng hiện "Quét —" như thể chưa từng quét, mà cột Giờ
+  // vẫn có số — người duyệt đọc ra "máy hỏng" thay vì "quét nhầm cơ sở".
+  // (Bắt được khi nghiệm thu trên test 07/09.)
+  //
+  // `scopedDb` vẫn gác: quản lý cấp cơ sở không thấy lượt của cơ sở khác — đó là cách ly đúng,
+  // không phải lỗi; họ thấy dòng "quét ở nơi khác" mà không thấy giờ giấc chi tiết.
+  const logsDay = userIds.length
+    ? await sdb.staffTimeLog.findMany({
+        where: { userId: { in: userIds }, workDate, result: "ACCEPTED" },
+        orderBy: { loggedAt: "asc" },
+        select: { userId: true, direction: true, loggedAt: true, flags: true, centerId: true },
+      })
+    : [];
+  const users = await sdb.user.findMany({
+    where: { id: { in: userIds } },
+    select: { id: true, name: true, email: true },
+  });
+  const nameOf = new Map(users.map((u) => [u.id, u.name ?? u.email ?? u.id]));
+
+  // ── Một dòng = một người trong ngày (công thức GIỮ NGUYÊN từ bản cũ) ────────────────
+  type Row = {
+    detail: DayRow;
+    taps: number;
+    quet: string;
+    gio: string;
+    credit: number | null;
+    override: boolean;
+    overrideNote: string | null;
+    locked: boolean;
+    computed: boolean;
+    flags: string[];
+    name: string;
+  };
+
+  const rows: Row[] = userIds
+    .map((userId) => {
+      const d = days.find((x) => x.userId === userId) ?? null;
+      const my = logsDay.filter((l) => l.userId === userId);
+      const firstIn = my.find((l) => l.direction === "CHECK_IN")?.loggedAt ?? null;
+      const lastOut = [...my].reverse().find((l) => l.direction === "CHECK_OUT")?.loggedAt ?? null;
+      const asg = assignments.find((a) => a.userId === userId) ?? null;
+      const name = nameOf.get(userId) ?? userId;
+      const worked = d?.workedMinutes ?? 0;
+      const expected = d?.expectedMinutes ?? 0;
+      const credit = d ? (d.overrideUnits ?? d.dayCreditEarned) : null;
+      const flags = (d ? d.flags : [...new Set(my.flatMap((l) => l.flags))])
+        .slice()
+        .sort((a, b) => flagRank(a) - flagRank(b));
+      const taps: DayTap[] = my.map((l) => ({
+        time: hhmm(l.loggedAt),
+        dir: l.direction === "CHECK_IN" ? "IN" : "OUT",
+        flags: l.flags.slice().sort((a, b) => flagRank(a) - flagRank(b)),
+      }));
+
+      return {
+        name,
+        taps: my.length,
+        quet: my.length
+          ? `${hhmm(firstIn)} → ${hhmm(lastOut)} ·${my.length}` +
+            // Quét ở cơ sở khác với cơ sở chịu công: nói ra ngay trên dòng, vì đây chính là
+            // câu hỏi "người này có đi đúng cơ sở đã xếp ca không".
+            (my.some((l) => l.centerId !== coSo) ? " · quét nơi khác" : "")
+          : "—",
+        gio: `${fmtMin(worked)} / ${fmtMin(expected)}`,
+        credit,
+        override: d?.overrideUnits != null,
+        overrideNote: d?.overrideNote ?? null,
+        locked: d?.status === "LOCKED",
+        computed: !!d,
+        flags,
+        detail: {
+          userId,
+          name,
+          code: d?.templateCode ?? asg?.templateCode ?? null,
+          source: (asg?.source as ShiftSource | undefined) ?? undefined,
+          dayType: (d?.dayType as DayType | undefined) ?? null,
+          taps,
+          worked: fmtMin(worked),
+          expected: fmtMin(expected),
+          credit,
+          engineCredit: d?.dayCreditEarned ?? null,
+          override: d?.overrideUnits != null,
+          overrideNote: d?.overrideNote ?? null,
+          computed: !!d,
+          flags,
+          workDate: dateStr,
+          dateLabel,
+          blockLabel: block.label,
+          absenceStatus: d?.absenceStatus ?? null,
+          absenceNote: d?.absenceNote ?? null,
         },
-        shiftTolerance,
-      ),
-    }));
+      };
+    })
+    .sort(
+      (a, b) =>
+        rowRank(a.flags) - rowRank(b.flags) || a.name.localeCompare(b.name, "vi-VN"),
+    );
 
-  const centers = await sdb.center.findMany({ select: { id: true, name: true } });
-  const centerName = new Map(centers.map((c) => [c.id, c.name]));
+  const kpiIssues = rows.filter((r) => r.flags.some(countsAsIssue)).length;
+  const kpiScanned = rows.filter((r) => r.taps > 0).length;
+  const kpiShift = rows.filter((r) => r.detail.code).length;
+  const kpiPending = rows.filter((r) => !r.computed).length;
+  const kpiOverride = rows.filter((r) => r.override).length;
 
-  const missingOut = list.filter((a) => a.checkIn && !a.checkOut).length;
+  const qLower = q.toLowerCase();
+  const visible = rows.filter((r) => {
+    if (loc === "co" && !r.flags.some(countsAsIssue)) return false;
+    if (loc === "chuaquet" && r.taps > 0) return false;
+    if (loc === "ghide" && !r.override) return false;
+    if (qLower && !r.name.toLowerCase().includes(qLower)) return false;
+    return true;
+  });
+
+  // ── Dải ngày của tháng ────────────────────────────────────────────────────────────
+  const flagByDay = new Map<string, number>();
+  const holidayDays = new Set<string>();
+  for (const r of monthRows) {
+    const ymd = r.workDate.toISOString().slice(0, 10);
+    if (r.flags.some(countsAsIssue)) flagByDay.set(ymd, (flagByDay.get(ymd) ?? 0) + 1);
+    if (r.dayType === "HOLIDAY") holidayDays.add(ymd);
+  }
+  for (const h of holidays) {
+    if (h.attendanceEffect === "INFO_ONLY") continue;
+    const end = h.endDate ?? h.date;
+    for (let d = new Date(h.date); d <= end; d = new Date(d.getTime() + 86_400_000)) {
+      holidayDays.add(d.toISOString().slice(0, 10));
+    }
+  }
+  const stripDays: DayStripDay[] = [];
+  for (let i = 1; i <= daysInMonth; i++) {
+    const ymd = `${ky}-${String(i).padStart(2, "0")}`;
+    const wd = vnWeekday(vnDateAt(year, month - 1, i, 12));
+    stripDays.push({
+      ymd,
+      day: i,
+      wd,
+      flagCount: flagByDay.get(ymd) ?? 0,
+      type: holidayDays.has(ymd) ? "HOLIDAY" : weeklyOff.includes(wd) ? "WEEKLY_OFF" : "WORK",
+      href: here({ date: ymd }),
+    });
+  }
+
+  const locked = period.status === "LOCKED";
 
   return (
-    <div className="max-w-5xl p-6">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Chấm công nhân viên</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Tính công theo ca đăng ký (GMT+7):{" "}
-            {SHIFT_ORDER.map((s) => `${SHIFT_DEFS[s].label} ${SHIFT_DEFS[s].start}–${SHIFT_DEFS[s].end}`).join(" · ")}.
-          </p>
-        </div>
-        <Link
-          href="/cham-cong/man-hinh"
-          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark"
-        >
-          <Monitor className="h-4 w-4" /> Mở màn hình QR
-        </Link>
-      </div>
+    <div className="max-w-6xl">
+      <PageHeader
+        title="Bảng công ngày"
+        subtitle={SUBTITLE}
+        actions={
+          <>
+            <Link href={`/cham-cong/man-hinh?centerId=${coSo}`} className={BTN_OUTLINE}>
+              <Monitor aria-hidden className="h-4 w-4" /> Màn hình QR
+            </Link>
+            {canAssign && (
+              // `scopeHref` chứ không href trần: màn import ĐỌC cả `ky` lẫn `coSo`, đi tay là
+              // người đang soát CS2 tháng 08 bấm sang rơi về tháng hiện tại của khối đầu tiên.
+              <Link href={scopeHref("/cham-cong/phan-ca/import", { ky, coSo })} className={BTN_OUTLINE}>
+                <FileSpreadsheet aria-hidden className="h-4 w-4" /> Import lịch
+              </Link>
+            )}
+          </>
+        }
+      />
 
-      <div className="mb-4 flex items-center gap-3">
-        <DateNavInput value={dateStr} />
-        {missingOut > 0 && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-state-warning-soft px-3 py-1 text-xs font-semibold text-state-warning-ink">
-            <AlertTriangle className="h-3.5 w-3.5" /> {missingOut} người chưa check-out
-          </span>
-        )}
-      </div>
+      <ModuleNav active="ngay" scope={scope} ctx={{ ky, coSo, date: dateStr }} />
 
-      {list.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-          Chưa có chấm công ngày {dateStr}.
+      <ScopeBar
+        basePath="/cham-cong"
+        blocks={scope.blocksWith(VIEW).map((b) => ({ id: b.id, label: b.label }))}
+        coSo={coSo}
+        month={{
+          ky,
+          prevHref: here({ date: monthStepDate(dateStr, -1) }),
+          nextHref: here({ date: monthStepDate(dateStr, 1) }),
+        }}
+        period={{ status: period.status, standardUnits: period.standardUnits, href: kyHref }}
+        keep={{ date: dateStr, ...(loc ? { loc } : {}), ...(q ? { q } : {}) }}
+      />
+
+      <PageHelp guideSlug="nhan-su-giao-vien">
+        <p>
+          Mỗi dòng là một người trong ngày đang chọn. Công được tính theo ca đã xếp trong lưới phân
+          ca — lượt quét vào/ra chỉ dùng để gắn cờ (đi muộn, thiếu lượt, ngoài vùng…) cho quản lý rà
+          lại, không tự trừ công.
         </p>
+        <p className="mt-2">
+          Số đỏ trên dải ngày là số người có cờ cần rà của ngày đó. Bấm tên một người để xem từng
+          lượt quét và ghi đè công (phải ghi lý do; mọi lần ghi đè đều được lưu vết).
+        </p>
+      </PageHelp>
+
+      <DayStrip days={stripDays} selected={dateStr} today={today} />
+
+      <KpiStrip
+        cols={5}
+        items={[
+          // `KpiStrip` không tự format (xem hợp đồng ở kpi-strip.tsx) — số phải được định dạng
+          // vi-VN tại đây, kẻo một khối vượt 1.000 là hàng KPI có ô "1.234" cạnh ô "1234".
+          {
+            icon: Users,
+            value: kpiShift.toLocaleString("vi-VN"),
+            label: "Có ca",
+            tone: "brand",
+            hint: `${rows.length.toLocaleString("vi-VN")} người trong ngày`,
+          },
+          { icon: ClipboardCheck, value: kpiScanned.toLocaleString("vi-VN"), label: "Đã quét", tone: "info" },
+          {
+            icon: Flag,
+            value: kpiIssues.toLocaleString("vi-VN"),
+            label: "Cờ cần rà",
+            tone: "danger",
+            href: here({ loc: "co" }),
+          },
+          {
+            icon: CalendarClock,
+            value: kpiPending.toLocaleString("vi-VN"),
+            label: "Chờ tính",
+            tone: "warning",
+            hint: kpiPending > 0 ? "Máy tính lại sau vài phút" : undefined,
+          },
+          {
+            icon: PencilLine,
+            value: kpiOverride.toLocaleString("vi-VN"),
+            label: "Đã ghi đè",
+            tone: "warning",
+            href: here({ loc: "ghide" }),
+          },
+        ]}
+      />
+
+      {locked && (
+        <p className="mb-4 flex flex-wrap items-center gap-2 rounded-xl bg-muted px-4 py-3 text-sm text-muted-foreground">
+          <Lock aria-hidden className="h-4 w-4 shrink-0" />
+          Kỳ {ky.slice(5)}/{ky.slice(0, 4)} đã chốt — công ngày chỉ đổi qua đơn chỉnh công.
+          <Link href={kyHref} className="font-medium text-primary hover:underline">
+            Sang màn Kỳ công
+          </Link>
+        </p>
+      )}
+
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {LOC_CHIPS.map((c) => (
+            <Link
+              key={c.label}
+              href={here({ loc: c.value })}
+              aria-current={c.value === loc ? "page" : undefined}
+              className={cn(CHIP, c.value === loc ? CHIP_ACTIVE : CHIP_IDLE)}
+            >
+              {c.label}
+            </Link>
+          ))}
+        </div>
+
+        {/* GET form, KHÔNG input tự push: hidden `coSo` là thứ giữ khối khi đổi ngày. */}
+        <form method="GET" action="/cham-cong" className="flex flex-wrap items-center gap-2">
+          <input type="hidden" name="coSo" value={coSo} />
+          {loc && <input type="hidden" name="loc" value={loc} />}
+          <label htmlFor="cc-q" className="sr-only">
+            Tìm theo tên nhân sự
+          </label>
+          <input
+            id="cc-q"
+            name="q"
+            defaultValue={q}
+            placeholder="Tìm tên nhân sự…"
+            className={cn(FIELD, "w-44")}
+          />
+          <label htmlFor="cc-date" className="sr-only">
+            Ngày công
+          </label>
+          <input id="cc-date" type="date" name="date" defaultValue={dateStr} className={FIELD} />
+          <button type="submit" className={BTN_OUTLINE}>
+            <Search aria-hidden className="h-4 w-4" /> Xem
+          </button>
+        </form>
+      </div>
+
+      {rows.length === 0 ? (
+        <EmptyState
+          title={`Chưa có ca hay lượt chấm ngày ${dateStr.slice(8, 10)}/${dateStr.slice(5, 7)} ở ${block.label}`}
+          description={
+            <>
+              Có thể lịch tháng này chưa được import, hoặc cả khối nghỉ ngày này.
+              {/* Quyền MỘT PHẦN phải nói thành lời: kế toán cơ sở có `view` mà không có `assign`
+                  chỉ thấy nút Import biến mất, không biết vì sao và hỏi ai. */}
+              {!canAssign && (
+                <>
+                  {" "}
+                  Import lịch cần quyền{" "}
+                  <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">
+                    hr_attendance:assign
+                  </code>{" "}
+                  tại {block.label} — xin cấp ở {ASK_WHO[ASSIGN]}.
+                </>
+              )}
+            </>
+          }
+          action={
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              {canAssign && (
+                <Link href={scopeHref("/cham-cong/phan-ca/import", { ky, coSo })} className={BTN_OUTLINE}>
+                  <FileSpreadsheet aria-hidden className="h-4 w-4" /> Import lịch
+                </Link>
+              )}
+              <Link href={hrefWith("/cham-cong/phan-ca", { ky, coSo })} className={BTN_OUTLINE}>
+                Xem lưới phân ca
+              </Link>
+            </div>
+          }
+        />
+      ) : visible.length === 0 ? (
+        <EmptyState
+          title="Không ai khớp bộ lọc"
+          description={`Ngày ${dateStr.slice(8, 10)}/${dateStr.slice(5, 7)} có ${rows.length} người, nhưng không ai khớp bộ lọc đang bật.`}
+          action={
+            <Link href={hrefWith("/cham-cong", { coSo, date: dateStr })} className={BTN_OUTLINE}>
+              Bỏ lọc
+            </Link>
+          }
+        />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-border bg-card">
-          <PhanTrangBang>
-            <table className="min-w-full divide-y divide-border text-sm">
-              <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
+        // Vỏ thẻ giống period-table/request-queue-table — và giống `TableSkeleton`, nếu không
+        // thì khung bo góc của lúc chờ hiện ra rồi BIẾN MẤT khi dữ liệu về.
+        <div className="overflow-hidden rounded-xl border border-border bg-card">
+          <PhanTrangBang cuonNgang tenDonVi="người" khoaGhiNho="cham-cong-ngay">
+            <table className="w-full">
+              <thead className="border-b border-border bg-muted/40">
                 <tr>
-                  <th className="px-4 py-3 font-semibold">Nhân viên</th>
-                  <th className="px-4 py-3 font-semibold">Cơ sở</th>
-                  <th className="px-4 py-3 font-semibold">Ca đăng ký</th>
-                  <th className="px-4 py-3 text-center font-semibold">Check-in</th>
-                  <th className="px-4 py-3 text-center font-semibold">Check-out</th>
-                  <th className="px-4 py-3 text-center font-semibold">Giờ công</th>
-                  <th className="px-4 py-3 text-center font-semibold">Tình trạng</th>
+                  <th scope="col" className={adminTh}>
+                    Nhân sự
+                  </th>
+                  <th scope="col" className={adminTh}>
+                    Ca
+                  </th>
+                  <th scope="col" className={adminTh}>
+                    Quét
+                  </th>
+                  <th scope="col" className={cn(adminTh, "text-right")}>
+                    Giờ / KH
+                  </th>
+                  <th scope="col" className={cn(adminTh, "text-right")}>
+                    Công
+                  </th>
+                  <th scope="col" className={adminTh}>
+                    Cờ
+                  </th>
+                  <th scope="col" className={adminTh}>
+                    <span className="sr-only">Chi tiết</span>
+                  </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
-                {list.map((a, i) => (
-                  <tr key={i} className="hover:bg-muted/60">
-                    <td className="px-4 py-2.5 font-medium text-foreground">{a.userName}</td>
-                    <td className="px-4 py-2.5 text-muted-foreground">
-                      {a.centerId ? centerName.get(a.centerId) ?? "—" : "—"}
+              <tbody>
+                {visible.map((r) => (
+                  <tr key={r.detail.userId} className={cn(adminTr, "h-11")}>
+                    <td className={cn(adminTd, "py-0")}>
+                      <DayDetailSheet
+                        row={r.detail}
+                        canAdjust={canAdjust}
+                        locked={r.locked || locked}
+                        kyHref={kyHref}
+                      />
                     </td>
-                    <td className="px-4 py-2.5 text-foreground">
-                      {formatRegisteredShifts(a.registeredShifts)}
+                    <td className={cn(adminTd, "py-0")}>
+                      <span className="flex items-center gap-1.5">
+                        <ShiftCodeChip code={r.detail.code} source={r.detail.source} size="sm" />
+                        <DayTypePill type={r.detail.dayType} />
+                      </span>
                     </td>
-                    <td className="px-4 py-2.5 text-center tabular-nums text-foreground">
-                      {formatVNTime(a.checkIn)}
-                    </td>
-                    <td className="px-4 py-2.5 text-center tabular-nums text-foreground">
-                      {formatVNTime(a.checkOut)}
-                    </td>
-                    <td className="px-4 py-2.5 text-center tabular-nums font-medium text-foreground">
-                      {a.checkIn && a.checkOut ? `${a.status.workedHours}h` : "—"}
-                    </td>
-                    <td className="px-4 py-2.5 text-center">
-                      <div className="flex flex-wrap items-center justify-center gap-1">
-                        {a.status.tags.map((t, j) => (
+                    <td className={cn(adminTd, "py-0 font-mono tabular-nums")}>{r.quet}</td>
+                    <td className={cn(adminTd, "py-0 text-right tabular-nums")}>{r.gio}</td>
+                    <td className={cn(adminTd, "py-0 text-right")}>
+                      <span className="inline-flex items-center justify-end gap-1.5">
+                        {r.credit != null ? (
+                          <span className="font-semibold tabular-nums">{r.credit}</span>
+                        ) : (
+                          <span className={cn(PILL, "bg-muted text-muted-foreground")}>Chờ tính</span>
+                        )}
+                        {r.override && (
                           <span
-                            key={j}
-                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${TAG_TONE[t.tone]}`}
+                            className={cn(PILL, "bg-state-warning-soft text-state-warning-ink")}
+                            title={r.overrideNote ?? "Quản lý đã ghi đè"}
                           >
-                            {t.label === "Ngoài vùng" && <MapPinOff className="h-3 w-3" />}
-                            {t.label}
+                            ghi đè
                           </span>
-                        ))}
-                      </div>
+                        )}
+                        {r.locked && (
+                          <Lock
+                            aria-label="Ngày đã chốt"
+                            className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                          />
+                        )}
+                      </span>
+                    </td>
+                    <td className={cn(adminTd, "py-0 whitespace-normal")}>
+                      <FlagList codes={r.flags} max={2} />
+                    </td>
+                    <td className={cn(adminTd, "py-0 text-right")}>
+                      <ChevronRight aria-hidden className="ml-auto h-4 w-4 text-muted-foreground" />
                     </td>
                   </tr>
                 ))}
@@ -204,6 +620,12 @@ export default async function ChamCongPage({ searchParams }: Props) {
           </PhanTrangBang>
         </div>
       )}
+
+      <p className="mt-3 text-xs text-muted-foreground">
+        {/* dd/MM/yyyy chứ không phải chuỗi ISO máy đọc — cả module in ngày theo kiểu Việt. */}
+        Ngày công tính theo giờ Việt Nam. Hôm nay:{" "}
+        {`${today.slice(8, 10)}/${today.slice(5, 7)}/${today.slice(0, 4)}`}.
+      </p>
     </div>
   );
 }

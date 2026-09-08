@@ -26,6 +26,15 @@ name: Seed dữ liệu TEST (nạp lại từ đầu)
 # DB chưa có bảng thì workflow này đỏ ngay bước đầu.
 #
 # ── An toàn ───────────────────────────────────────────────────────────────────
+# ── Vì sao cần lối đi `chi_cham_cong` (06/09/2026) ────────────────────────────
+# ⚠️ Lời hứa "mọi bước seed đều CHỈ THÊM/CẬP NHẬT" ở ngay dưới KHÔNG đúng với bước
+# nền `db:seed`: `prisma/seed.ts:162` gọi `db.course.deleteMany()` cho mọi khoá học
+# không nằm trong danh sách trong mã, và bước cơ sở in "removed N cơ sở cũ". Ngày
+# 06/09 chạy thử đã đỏ ngay ở đó — `Class_courseId_fkey` chặn lại nên KHÔNG mất gì,
+# nhưng trên DB mà khoá học chưa có lớp tham chiếu thì nó xoá thật.
+# Vì vậy: khi DB test đang có người nghiệm thu, dùng `chi_cham_cong` để đi thẳng vào
+# hai bước chấm công (cả hai chỉ upsert/insert, đã đo idempotent) và không đụng nền.
+#
 #   · dispatch-only + phải gõ đúng chuỗi xác nhận
 #   · chặn `TEST_DIRECT_URL` trùng `PROD_DIRECT_URL` (cùng lưới với migrate-test)
 #   · mọi bước seed đều CHỈ THÊM/CẬP NHẬT (upsert), không có câu xoá nào
@@ -45,6 +54,20 @@ on:
         type: boolean
         required: false
         default: true
+      du_lieu_cham_cong:
+        description: 'Nạp dữ liệu nghiệm thu CHẤM CÔNG (khung ca tuần → lưới phân ca → lượt quét → công ngày)? Cần bộ UAT đã có nhân sự.'
+        type: boolean
+        required: false
+        default: true
+      ky_cham_cong:
+        description: 'Chỉ nạp MỘT kỳ chấm công, dạng YYYY-MM (vd 2026-08). Để trống = 2 kỳ gần nhất. Dùng khi muốn chia nhỏ cho chắc ăn.'
+        required: false
+        default: ''
+      chi_cham_cong:
+        description: 'CHỈ nạp dữ liệu chấm công, BỎ QUA mọi bước nền. Dùng khi DB test đang có người nghiệm thu — xem ghi chú "Vì sao cần lối đi này" trong file.'
+        type: boolean
+        required: false
+        default: false
       chi_lich_hen:
         description: 'CHỈ nạp lịch hẹn học thử, bỏ qua mọi bước khác. Dùng khi DB đã có dữ liệu và không muốn seed đè lên thao tác của người đang nghiệm thu.'
         type: boolean
@@ -59,7 +82,11 @@ jobs:
   seed:
     name: Seed dữ liệu vào DB test
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 50 chứ không 30: seed chấm công nói chuyện với Supabase, mỗi phép tính công là vài lượt
+    # đi–về (~2 giây/ngày-người) nên nó bị cắt giữa chừng ở lượt 06/09. Đây là workflow bấm tay
+    # để nạp dữ liệu, kéo dài ngân sách không hại ai; bị CẮT giữa chừng mới hại — dữ liệu vào
+    # một nửa và người bấm phải tự đoán nửa nào.
+    timeout-minutes: 50
     steps:
       - name: Xác nhận chủ ý
         run: |
@@ -99,23 +126,23 @@ jobs:
       # THỨ TỰ BẮT BUỘC. `seed-uat` gọi `layCoSo()` và ném ngay nếu chưa có CS1/CS2,
       # còn `seed.ts` cần phòng ban để dựng hồ sơ nhân sự.
       - name: Seed cây đơn vị (HO → REGION → CS1/CS2)
-        if: ${{ !inputs.chi_lich_hen }}
+        if: ${{ !inputs.chi_lich_hen && !inputs.chi_cham_cong }}
         run: pnpm db:seed:orgunit
         env: { DATABASE_URL: "${{ secrets.TEST_DIRECT_URL }}", DIRECT_URL: "${{ secrets.TEST_DIRECT_URL }}" }
 
       - name: Seed phòng ban
-        if: ${{ !inputs.chi_lich_hen }}
+        if: ${{ !inputs.chi_lich_hen && !inputs.chi_cham_cong }}
         run: pnpm db:seed:departments
         env: { DATABASE_URL: "${{ secrets.TEST_DIRECT_URL }}", DIRECT_URL: "${{ secrets.TEST_DIRECT_URL }}" }
 
       - name: Seed dữ liệu gốc (khoá học, nội dung web, tài khoản CEO)
-        if: ${{ !inputs.chi_lich_hen }}
+        if: ${{ !inputs.chi_lich_hen && !inputs.chi_cham_cong }}
         run: pnpm db:seed
         env: { DATABASE_URL: "${{ secrets.TEST_DIRECT_URL }}", DIRECT_URL: "${{ secrets.TEST_DIRECT_URL }}" }
 
       # ── Bộ UAT: 12 tài khoản uat.* + dữ liệu nghiệp vụ ──────────────────────
       - name: Seed bộ UAT (12 tài khoản + lead/học viên/lớp)
-        if: ${{ inputs.bo_du_lieu_uat && !inputs.chi_lich_hen }}
+        if: ${{ inputs.bo_du_lieu_uat && !inputs.chi_lich_hen && !inputs.chi_cham_cong }}
         run: pnpm db:seed:uat
         env:
           UAT_SEED: "1"
@@ -123,7 +150,7 @@ jobs:
           DIRECT_URL: "${{ secrets.TEST_DIRECT_URL }}"
 
       - name: Seed ảnh chờ duyệt
-        if: ${{ inputs.bo_du_lieu_uat && !inputs.chi_lich_hen }}
+        if: ${{ inputs.bo_du_lieu_uat && !inputs.chi_lich_hen && !inputs.chi_cham_cong }}
         run: pnpm exec tsx prisma/seed-uat-media-review.ts
         env:
           UAT_SEED: "1"
@@ -131,7 +158,7 @@ jobs:
           DIRECT_URL: "${{ secrets.TEST_DIRECT_URL }}"
 
       - name: Backfill kho ảnh (MediaAsset)
-        if: ${{ inputs.bo_du_lieu_uat && !inputs.chi_lich_hen }}
+        if: ${{ inputs.bo_du_lieu_uat && !inputs.chi_lich_hen && !inputs.chi_cham_cong }}
         run: pnpm exec tsx scripts/backfill-media-assets.ts
         env: { DATABASE_URL: "${{ secrets.TEST_DIRECT_URL }}", DIRECT_URL: "${{ secrets.TEST_DIRECT_URL }}" }
 
@@ -139,7 +166,7 @@ jobs:
       # thì màn Lớp Trial mở ra có danh sách lớp nhưng bên trong rỗng — không bấm
       # được gì để nghiệm thu.
       - name: Seed dữ liệu lớp trial
-        if: ${{ inputs.bo_du_lieu_uat && !inputs.chi_lich_hen }}
+        if: ${{ inputs.bo_du_lieu_uat && !inputs.chi_lich_hen && !inputs.chi_cham_cong }}
         run: pnpm exec tsx prisma/seed-uat-trial.ts
         env:
           UAT_SEED: "1"
@@ -149,7 +176,7 @@ jobs:
       # PHẢI chạy SAU seed trial: nó phân loại ca theo người đưa vào lớp, mà ca thì
       # bước trên vừa tạo. Chạy trước là không có gì để phân loại.
       - name: Backfill giáo viên học thử (phương án B)
-        if: ${{ inputs.bo_du_lieu_uat && !inputs.chi_lich_hen }}
+        if: ${{ inputs.bo_du_lieu_uat && !inputs.chi_lich_hen && !inputs.chi_cham_cong }}
         run: pnpm exec tsx scripts/backfill-gv-trial-phuong-an-b.ts
         env: { DATABASE_URL: "${{ secrets.TEST_DIRECT_URL }}", DIRECT_URL: "${{ secrets.TEST_DIRECT_URL }}" }
 
@@ -160,6 +187,26 @@ jobs:
       # PHẢI chạy SAU `db:seed:uat`: script bám vào lead ĐÃ CÓ CƠ SỞ, không tự tạo lead.
       # DB chưa có lead nào thì nó in "chưa có lead" rồi thoát 0 — không đỏ, nhưng cũng
       # không nạp được gì.
+      # ── Chấm công v3 ─────────────────────────────────────────────────────────
+      # `seed-cham-cong.ts` CỐ Ý chỉ nạp DANH MỤC (21 mã ca · 8 loại nghỉ · điểm chấm
+      # công) vì trên prod lưới ca đến từ import Sheet thật. Trên test thì không ai
+      # import Sheet, nên nếu dừng ở đây thì Bảng công ngày / Lưới phân ca / Kỳ công
+      # mở ra RỖNG ở mọi tháng — đúng ba màn nặng nhất của module lại không nghiệm thu
+      # được. `seed-cham-cong-demo.ts` lấp chỗ đó bằng cách đi qua chính các hàm thật
+      # (sinh lưới từ khung, ghi lượt quét, tính công), nên cờ và số liệu ra là do
+      # engine sinh chứ không phải số bịa sẵn.
+      #
+      # PHẢI chạy SAU `db:seed:uat`: nó bám vào nhân sự ĐÃ CÓ, không tự tạo người.
+      - name: Seed danh mục chấm công (21 mã ca + 8 loại nghỉ + điểm chấm công)
+        if: ${{ inputs.du_lieu_cham_cong && !inputs.chi_lich_hen }}
+        run: pnpm db:seed:cham-cong
+        env: { DATABASE_URL: "${{ secrets.TEST_DIRECT_URL }}", DIRECT_URL: "${{ secrets.TEST_DIRECT_URL }}" }
+
+      - name: Seed dữ liệu nghiệm thu chấm công (2 kỳ gần nhất)
+        if: ${{ inputs.du_lieu_cham_cong && !inputs.chi_lich_hen }}
+        run: pnpm exec tsx prisma/seed-cham-cong-demo.ts --nguoi=10 ${{ inputs.ky_cham_cong && format('--ky={0}', inputs.ky_cham_cong) || '' }}
+        env: { DATABASE_URL: "${{ secrets.TEST_DIRECT_URL }}", DIRECT_URL: "${{ secrets.TEST_DIRECT_URL }}" }
+
       - name: Tóm tắt
         run: |
           echo "### Đã nạp dữ liệu vào DB test" >> $GITHUB_STEP_SUMMARY

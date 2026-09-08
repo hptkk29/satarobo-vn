@@ -15,6 +15,11 @@ export type HolidayFormValue = {
   orgUnitId: string | null; // PR-C: đơn vị (OrgUnit) — nguồn chính; centerId suy ra ở action
   type: "HOLIDAY" | "MAINTENANCE" | "EVENT" | "OTHER";
   note: string | null;
+  // Module chấm công v3 (L3, T-04)
+  attendanceEffect?: "PAID_LEAVE" | "UNPAID_OFF" | "INFO_ONLY" | null;
+  coefficient?: number;
+  briefMode?: "APPEND" | "SUPPRESS" | "REPLACE" | null;
+  briefText?: string | null;
 };
 
 export type OrgUnitOption = {
@@ -108,6 +113,49 @@ export function HolidayForm({
               }),
             )}
             required
+          />
+        </Grid>
+      </Section>
+
+      <Section title="Chấm công (T-04 — Kế toán tự đặt)">
+        <Grid cols={2}>
+          <SelectField
+            label="Ảnh hưởng tới công"
+            name="attendanceEffect"
+            defaultValue={holiday?.attendanceEffect ?? ""}
+            options={[
+              { value: "", label: "Mặc định (lễ = nghỉ hưởng công)" },
+              { value: "PAID_LEAVE", label: "Nghỉ hưởng công (cột lễ riêng × hệ số)" },
+              { value: "UNPAID_OFF", label: "Nghỉ không tính công" },
+              { value: "INFO_ONLY", label: "Chỉ thông tin — vẫn tính như ngày thường" },
+            ]}
+          />
+          <Field
+            label="Hệ số công ngày lễ (0–5)"
+            name="coefficient"
+            type="text"
+            defaultValue={String(holiday?.coefficient ?? 1)}
+            placeholder="1"
+          />
+        </Grid>
+        <Grid cols={2}>
+          <SelectField
+            label="Tin nhắc 19:00"
+            name="briefMode"
+            defaultValue={holiday?.briefMode ?? ""}
+            options={[
+              { value: "", label: "Gửi bình thường" },
+              { value: "SUPPRESS", label: "Không gửi tin" },
+              { value: "REPLACE", label: "Thay toàn bộ bằng nội dung dưới" },
+              { value: "APPEND", label: "Gửi kèm nội dung dưới" },
+            ]}
+          />
+          <Field
+            label="Nội dung tin (nếu có)"
+            name="briefText"
+            type="text"
+            defaultValue={holiday?.briefText ?? undefined}
+            placeholder="VD: NGHỈ LỄ — Quốc khánh 02/9"
           />
         </Grid>
       </Section>

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Plus, CalendarOff, FileSpreadsheet, Pencil } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { scopedDb } from "@/lib/db-scope";
+import { loadGlobalHolidays } from "@/lib/cham-cong/holidays";
 import { resolveActor } from "@/lib/auth/actor";
 import { getTeachingCenterIds } from "@/lib/org/org-service";
 import type { Prisma, HolidayType } from "@prisma/client";
@@ -41,18 +42,24 @@ export default async function HolidaysAdminPage({ searchParams }: SearchParams) 
   const where: Prisma.HolidayWhereInput = {
     date: { gte: startOfYear, lt: endOfYear },
   };
-  if (centerFilter === "ALL") where.centerId = null;
-  else if (centerFilter) where.centerId = centerFilter;
+  // "ALL" = chỉ lễ TOÀN HỆ THỐNG. Không đặt `where.centerId = null` rồi đi qua `sdb`: `Holiday`
+  // bị scopedDb AND thêm `centerId IN [...]` nên nhánh đó LUÔN RỖNG với người cấp cơ sở — vai
+  // CENTER_HR không bao giờ thấy ngày lễ quốc gia. Đọc riêng bằng `loadGlobalHolidays`.
+  const chiLeChung = centerFilter === "ALL";
+  if (centerFilter && !chiLeChung) where.centerId = centerFilter;
   if (typeFilter && VALID_TYPES.has(typeFilter as HolidayType)) {
     where.type = typeFilter as HolidayType;
   }
 
+  const loaiLoc = typeFilter && VALID_TYPES.has(typeFilter as HolidayType) ? (typeFilter as HolidayType) : undefined;
   const [holidays, centers] = await Promise.all([
-    sdb.holiday.findMany({
-      where,
-      orderBy: { date: "asc" },
-      include: { center: { select: { id: true, name: true } } },
-    }),
+    chiLeChung
+      ? loadGlobalHolidays({ from: startOfYear, to: endOfYear, type: loaiLoc })
+      : sdb.holiday.findMany({
+          where,
+          orderBy: { date: "asc" },
+          include: { center: { select: { id: true, name: true } } },
+        }),
     // Chỉ cơ sở vận hành — loại HO/"Hội sở" mồ côi khỏi bộ lọc lịch nghỉ.
     getTeachingCenterIds().then((ids) =>
       sdb.center.findMany({
@@ -160,6 +167,9 @@ export default async function HolidaysAdminPage({ searchParams }: SearchParams) 
                 <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground">
                   Loại
                 </th>
+                <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground" title="Hệ số công ngày lễ (T-04) — Kế toán tự đặt">
+                  Hệ số công
+                </th>
                 <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">
                   Ghi chú
                 </th>
@@ -171,7 +181,7 @@ export default async function HolidaysAdminPage({ searchParams }: SearchParams) 
             <tbody>
               {holidays.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-12 text-center text-muted-foreground">
+                  <td colSpan={7} className="p-12 text-center text-muted-foreground">
                     {centerFilter || typeFilter ? (
                       <>Không có ngày nghỉ nào khớp bộ lọc cho năm {year}.</>
                     ) : (
@@ -196,6 +206,15 @@ export default async function HolidaysAdminPage({ searchParams }: SearchParams) 
                     </td>
                     <td className="p-4 text-center">
                       <TypeBadge type={h.type} />
+                    </td>
+                    <td className="p-4 text-center text-sm">
+                      {h.attendanceEffect === "UNPAID_OFF" ? (
+                        <span className="text-muted-foreground">không công</span>
+                      ) : h.attendanceEffect === "INFO_ONLY" ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : (
+                        <span className="font-semibold">×{h.coefficient}</span>
+                      )}
                     </td>
                     <td className="p-4 text-xs text-muted-foreground">
                       {h.note ? (

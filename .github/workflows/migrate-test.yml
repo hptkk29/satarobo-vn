@@ -125,6 +125,17 @@ jobs:
           DATABASE_URL: ${{ secrets.TEST_DIRECT_URL }}
           DIRECT_URL: ${{ secrets.TEST_DIRECT_URL }}
 
+      # 06/09/2026 — SEED NỀN CHẤM CÔNG v3 (21 mã ca + 8 loại nghỉ + WorkLocation CS1/CS2).
+      # Cùng bản chất với seed vai ở trên: CẤU HÌNH, không phải dữ liệu nghiệp vụ; idempotent
+      # (upsert theo code, không đè cột người vận hành đã sửa vì không có --force). Thiếu nó
+      # thì Danh mục mã ca / form đơn nghỉ / màn QR trên test trống trơn và người nghiệm thu
+      # kết luận "màn hỏng". PROD: bấm tay `cham-cong-prod-seed.yml`.
+      - name: Seed nền chấm công v3 (ShiftTemplate + LeaveType + WorkLocation)
+        run: pnpm db:seed:cham-cong
+        env:
+          DATABASE_URL: ${{ secrets.TEST_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.TEST_DIRECT_URL }}
+
       # ── Hai việc DỮ LIỆU, chỉ chạy khi bấm tay và tick ô ───────────────────
       #
       # KHÔNG chạy theo push. Cả hai đều idempotent, nhưng chúng ghi DỮ LIỆU NGHIỆP VỤ

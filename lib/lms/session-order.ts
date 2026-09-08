@@ -35,7 +35,9 @@ function timeOf(d: Date | string | number): number {
  * Bảng tra `sessionId → số buổi` (1-based), xếp theo ngày tăng dần trong từng lớp.
  * Tie-break theo `id` để hai buổi trùng ngày luôn ra cùng một số ở mọi lần render.
  */
-export function buildSessionNumberMap(rows: SessionRankRow[]): Map<string, number> {
+export function buildSessionNumberMap(
+  rows: SessionRankRow[],
+): Map<string, number> {
   const byClass = new Map<string, SessionRankRow[]>();
   for (const r of rows) {
     const key = r.classId ?? "";
@@ -107,7 +109,10 @@ export function attendanceCoversRoster(
   markedStudentIds: Iterable<string>,
   rosterStudentIds: Iterable<string>,
 ): boolean {
-  const marked = markedStudentIds instanceof Set ? markedStudentIds : new Set(markedStudentIds);
+  const marked =
+    markedStudentIds instanceof Set
+      ? markedStudentIds
+      : new Set(markedStudentIds);
   const roster = [...rosterStudentIds];
   return roster.length > 0 && roster.every((id) => marked.has(id));
 }
@@ -133,7 +138,10 @@ export function buildSessionMediaCoverage(
   const out = new Map<string, SessionMediaCoverage>();
   for (const m of rows) {
     if (!m.classSessionId) continue; // ảnh không gắn buổi — không quy được về buổi nào
-    const cur = out.get(m.classSessionId) ?? { classWide: false, tagged: new Set<string>() };
+    const cur = out.get(m.classSessionId) ?? {
+      classWide: false,
+      tagged: new Set<string>(),
+    };
     if (m.isClassWide) cur.classWide = true;
     for (const t of m.tags) cur.tagged.add(t.studentId);
     out.set(m.classSessionId, cur);
@@ -186,12 +194,85 @@ export function mediaCoversAttendees(input: {
  *     lớp mới chưa xếp học viên) — sĩ số rỗng thì `attendanceCoversRoster` trả false cho
  *     MỌI buổi, và ở bảng gộp nhiều lớp cả lớp đã xong khoá sẽ nổi lên trên lớp đang chạy.
  */
+/**
+ * Các việc còn thiếu, dạng danh sách. Tách khỏi câu chữ để nút trên giao diện và câu
+ * server trả về nói CÙNG một thứ tiếng — trước D1 hai bên tự ghép chuỗi riêng và đã
+ * lệch chữ ("nhận xét" vs "nhận xét đủ học viên đi học").
+ */
+export function thieuDanhSach(work: {
+  attendanceDone: boolean;
+  feedbackDone: boolean;
+  photoDone: boolean;
+}): string[] {
+  return [
+    work.attendanceDone ? null : "điểm danh đủ lớp",
+    work.feedbackDone ? null : "nhận xét đủ học viên đi học",
+    work.photoDone ? null : "ảnh/video cho mọi học viên đi học",
+  ].filter((x): x is string => x !== null);
+}
+
+/** Câu báo thiếu việc mà server trả về. */
+export function thieuGi(work: {
+  attendanceDone: boolean;
+  feedbackDone: boolean;
+  photoDone: boolean;
+}): string {
+  return `Chưa hoàn tất: còn thiếu ${thieuDanhSach(work).join(", ")}.`;
+}
+
 export function isSessionSettled(input: {
   cancelled?: boolean;
   rosterEmpty?: boolean;
   work: SessionWorkState;
 }): boolean {
-  return Boolean(input.cancelled) || Boolean(input.rosterEmpty) || isSessionWorkComplete(input.work);
+  return (
+    Boolean(input.cancelled) ||
+    Boolean(input.rosterEmpty) ||
+    isSessionWorkComplete(input.work)
+  );
+}
+
+/**
+ * Nhãn trạng thái của MỘT buổi, đọc từ `ClassSession.status` — không suy ra.
+ *
+ * ── Vì sao có hàm này (D0, 07/09/2026) ──────────────────────────────────────
+ *
+ * Tab "Điểm danh" của Class Hub trước đây in nhãn xanh "Hoàn tất" ngay khi
+ * `isSessionWorkComplete` trả true, và CHE luôn pill trạng thái thật ở đúng ca đó.
+ * Nhưng làm xong ba việc KHÔNG đặt `status = COMPLETED` — chỉ nút chốt buổi mới đặt.
+ *
+ * Hậu quả đo trên prod ngày 07/09/2026: 2 buổi COMPLETED / 287 SCHEDULED trong 4
+ * tháng. Giáo viên KHÔNG quên bấm — màn hình đã nói với họ là xong. Suốt một tháng
+ * ai nhìn cũng tưởng buổi đã đóng, trong khi kỳ công, công dạy, học bạ và đề xuất
+ * hoàn tiền đều đọc `status` nên đều đọc ra 0.
+ *
+ * Luật từ đây: nguồn duy nhất của nhãn là `status`. Ba việc chỉ được nói tới như
+ * mức độ SẴN SÀNG chốt (`sanSangChot`), không bao giờ được đóng vai trạng thái.
+ *
+ * `daQuaNgay` tách "chưa tới giờ" khỏi "đã dạy nhưng chưa chốt": buổi tương lai còn
+ * SCHEDULED là bình thường, buổi đã qua ngày mà còn SCHEDULED mới là việc còn nợ.
+ */
+export type NhanTrangThaiBuoi =
+  /** status = COMPLETED. Đây là ca DUY NHẤT được hiện là đã xong. */
+  | { loai: "da-day" }
+  /** status = CANCELLED. */
+  | { loai: "da-huy" }
+  /** Buổi tương lai, chưa tới lượt làm gì. */
+  | { loai: "chua-toi-gio" }
+  /** Đã qua ngày, status vẫn chưa COMPLETED. `sanSangChot` = đủ ba việc, chỉ còn bấm chốt. */
+  | { loai: "chua-chot"; sanSangChot: boolean };
+
+export function nhanTrangThaiBuoi(input: {
+  status: string;
+  /** Buổi đã tới/qua ngày (≤ hết hôm nay giờ VN). */
+  daQuaNgay: boolean;
+  /** Đủ cả ba việc (isSessionWorkComplete). */
+  workDone: boolean;
+}): NhanTrangThaiBuoi {
+  if (input.status === "COMPLETED") return { loai: "da-day" };
+  if (input.status === "CANCELLED") return { loai: "da-huy" };
+  if (!input.daQuaNgay) return { loai: "chua-toi-gio" };
+  return { loai: "chua-chot", sanSangChot: input.workDone };
 }
 
 export type SessionOrderRow = {
@@ -206,7 +287,10 @@ export type SessionOrderRow = {
  *   • buổi CHƯA hoàn thành (gồm cả buổi sắp tới, chưa tới) lên TRƯỚC;
  *   • trong mỗi nhóm: SỐ BUỔI tăng dần.
  */
-export function compareSessionWorkOrder(a: SessionOrderRow, b: SessionOrderRow): number {
+export function compareSessionWorkOrder(
+  a: SessionOrderRow,
+  b: SessionOrderRow,
+): number {
   if (a.complete !== b.complete) return a.complete ? 1 : -1;
   const an = a.number ?? Number.MAX_SAFE_INTEGER;
   const bn = b.number ?? Number.MAX_SAFE_INTEGER;

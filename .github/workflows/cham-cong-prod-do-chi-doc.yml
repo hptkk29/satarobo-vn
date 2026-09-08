@@ -39,6 +39,7 @@ on:
         options:
           - si-so
           - buoi-day
+          - backlog
           - tat-ca
 concurrency:
   group: cham-cong-prod-do-chi-doc
@@ -49,14 +50,45 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      # Kiểm HÌNH DẠNG chuỗi trước khi tốn 40 giây cài đặt rồi mới chết ở Prisma.
+      # KHÔNG in giá trị secret ra log — chỉ nói chỗ nào sai.
       - name: Kiểm secret chỉ-đọc
+        env:
+          U: ${{ secrets.PROD_DATABASE_URL_RO }}
         run: |
-          if [ -z "${{ secrets.PROD_DATABASE_URL_RO }}" ]; then
+          if [ -z "$U" ]; then
             echo "::error::Thiếu secret PROD_DATABASE_URL_RO (chuỗi session pooler của user chỉ-đọc)."
             echo "::error::Cách tạo user + lấy chuỗi: docs/cham-cong/USER-CHI-DOC-PROD.md"
             echo "::error::KHÔNG đặt PROD_DATABASE_URL / PROD_DIRECT_URL vào đây — chúng đầy quyền."
             exit 1
           fi
+          proto="${U%%://*}"
+          rest="${U#*://}"
+          userinfo="${rest%@*}"          # tới dấu @ CUỐI CÙNG — mật khẩu có thể chứa @
+          user="${userinfo%%:*}"
+          pass="${userinfo#*:}"
+          hostport="${rest##*@}"
+          port="${hostport##*:}"; port="${port%%/*}"
+          ok=1
+          case "$proto" in
+            postgresql|postgres) ;;
+            *) echo "::error::Chuỗi phải bắt đầu bằng postgresql:// — đang là '$proto://'"; ok=0 ;;
+          esac
+          case "$user" in
+            *.*) ;;
+            *) echo "::error::Tên user THIẾU hậu tố '.<mã dự án>'. Supavisor định tuyến theo mã dự án nằm TRONG tên user, nên phải là 'satarobo_readonly.<mã dự án>' chứ không phải 'satarobo_readonly'. Lấy mã đó từ chuỗi gốc Supabase đưa (phần ngay sau 'postgres.') — chỉ đổi chữ 'postgres', GIỮ NGUYÊN dấu chấm và phần sau nó."; ok=0 ;;
+          esac
+          if [ "$port" != "5432" ]; then
+            echo "::error::Cổng đang là '$port' — phải là 5432 (tab 'Session pooler'). Cổng 6543 là Transaction pooler: nó không giữ prepared statement nên script chạy vài trăm truy vấn sẽ chết giữa chừng."
+            ok=0
+          fi
+          case "$pass" in
+            *[@/?#]*|*'['*|*']'*)
+              echo "::error::Mật khẩu chứa ký tự làm vỡ URL (@ / ? # [ ]). Đổi sang mật khẩu chỉ gồm chữ và số: ALTER ROLE satarobo_readonly WITH PASSWORD '...';"
+              ok=0 ;;
+          esac
+          [ $ok -eq 1 ] || { echo "::error::Sửa secret PROD_DATABASE_URL_RO rồi chạy lại. Không có bước nào chạm DB."; exit 1; }
+          echo "Chuỗi đúng hình dạng: giao thức postgresql, user có hậu tố mã dự án, cổng 5432."
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v3
         with: { version: 11 }
@@ -80,14 +112,28 @@ jobs:
       # Ba chỗ đếm "buổi dạy" nghi sai + LỖI THƯỢNG NGUỒN quan trọng hơn cả ba.
       # Đọc `docs/cham-cong/GHI-CHU-BA-CHO-DEM-BUOI-DAY.md` §2 để biết đọc số theo thứ tự nào —
       # con số đầu tiên quyết định ba con số sau có nghĩa hay không.
+      # `!cancelled()` để phép đo này VẪN CHẠY khi bước trên hỏng. Hai phép đo độc lập nhau, và
+      # chúng chỉ ĐỌC — mất cả hai vì một cái lỗi là bắt người bấm chạy lại thêm một lượt vô ích.
       - name: "Đo chênh lệch ba chỗ đếm buổi dạy (chỉ đọc)"
-        if: inputs.viec == 'buoi-day' || inputs.viec == 'tat-ca'
+        if: ${{ !cancelled() && (inputs.viec == 'buoi-day' || inputs.viec == 'tat-ca') }}
         run: pnpm exec tsx scripts/do-lech-buoi-day.ts
         env:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
           DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
 
+      # Backlog buổi đã qua ngày mà chưa chốt: bao nhiêu buổi THOẢ cổng tự đóng ĐÃ SỬA
+      # (4df347b4 so ngày · a94e5aa7 giao tập studentId). Số này quyết định có nên viết
+      # script đóng hàng loạt hay không — phần lớn KHÔNG thoả thì đóng chúng là bịa dữ liệu.
+      # Script dùng CHÍNH `quyetDinhTuHoanTat`, không chép lại luật.
+      - name: "Đo backlog buổi chưa chốt (chỉ đọc)"
+        if: ${{ !cancelled() && (inputs.viec == 'backlog' || inputs.viec == 'tat-ca') }}
+        run: pnpm exec tsx scripts/do-backlog-buoi-chua-chot.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+
       - name: Nhắc lại
+        if: ${{ !cancelled() }}
         run: |
           echo "Workflow này chỉ ĐỌC, bằng user chỉ-đọc. Không bước nào ghi vào DB prod."
           echo "Nếu số đo ra 0 bất thường: xem docs/cham-cong/USER-CHI-DOC-PROD.md mục 'Nếu số đo ra 0'."

@@ -9,6 +9,8 @@
 // 21/08 — thứ tự hiển thị KHÔNG còn là "ngày mới nhất trước": buổi đã xong cả ba việc
 // (điểm danh + nhận xét đủ HV + có ảnh) lùi xuống DƯỚI, phần còn nợ việc và các buổi
 // sắp tới nằm trên, xếp theo số buổi tăng dần (lib/lms/session-order).
+// 07/09 (D0) — cột TRẠNG THÁI đọc `ClassSession.status`, KHÔNG suy từ ba việc nữa. Ba
+// việc chỉ còn quyết định THỨ TỰ và mức sẵn-sàng-chốt. Xem `nhanTrangThaiBuoi`.
 // Có mặt = PRESENT + LATE (khớp FEEDBACK_ATTENDED_STATUSES). "canMark" = buổi đã tới
 // ngày (≤ hết hôm nay giờ VN) → buổi tương lai khoá "Chưa tới giờ".
 //
@@ -31,11 +33,14 @@ import {
   SESSION_MEDIA_SELECT,
   isSessionSettled,
   isSessionWorkComplete,
+  nhanTrangThaiBuoi,
   sortSessionsForWork,
+  thieuDanhSach,
 } from "@/lib/lms/session-order";
 import { deriveSessionLabel } from "@/lib/lms/session-project-name";
 import { EmptyState } from "../../_components/ui/empty-state";
-import { SessionStatusPill } from "../../_components/ui/session-status-pill";
+import { BuoiPill } from "../../_components/ui/session-status-pill";
+import { ChotBuoiGV } from "./chot-buoi-gv";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 // 21/08 — CÓ `year` (xem ghi chú cùng nội dung ở hub-reviews-tab).
@@ -61,10 +66,13 @@ function vnTodayEndMs(now = new Date()): number {
 const ATTENDED: AttendanceStatus[] = ["PRESENT", "LATE"];
 
 /** studentId của học viên ĐI HỌC (PRESENT/LATE) trong một buổi — em vắng không tính. */
-function attendedIdsOf(rows: { studentId: string; status: string }[]): string[] {
-  return rows.filter((a) => ATTENDED.includes(a.status as AttendanceStatus)).map((a) => a.studentId);
+function attendedIdsOf(
+  rows: { studentId: string; status: string }[],
+): string[] {
+  return rows
+    .filter((a) => ATTENDED.includes(a.status as AttendanceStatus))
+    .map((a) => a.studentId);
 }
-
 
 export async function HubSessionsTab({
   actor,
@@ -143,7 +151,10 @@ export async function HubSessionsTab({
       ])
     : [[], [], []];
   const presentBy = new Map<string, number>();
-  const attBySession = new Map<string, { studentId: string; status: string }[]>();
+  const attBySession = new Map<
+    string,
+    { studentId: string; status: string }[]
+  >();
   const markedBySession = new Map<string, Set<string>>();
   for (const a of att) {
     const marked = markedBySession.get(a.sessionId) ?? new Set<string>();
@@ -216,9 +227,12 @@ export async function HubSessionsTab({
       return {
         s,
         no: numberOf.get(s.id) ?? null,
-        // Nhãn "Hoàn tất" chỉ bật khi THỰC SỰ xong ba việc — khác `complete` bên dưới,
-        // vốn còn gộp cả buổi đã huỷ và lớp không còn ai học (không có việc để làm).
+        // Đủ ba việc = SẴN SÀNG CHỐT, không phải "đã chốt" (D0). Khác `complete` bên
+        // dưới, vốn còn gộp buổi đã huỷ và lớp không còn ai học (không có việc để làm).
         workDone: isSessionWorkComplete(work),
+        // D1 — danh sách việc còn thiếu, để tooltip nút "Chốt buổi" nói đúng thứ tiếng
+        // với câu server trả về (cùng nguồn `thieuDanhSach`).
+        thieu: thieuDanhSach(work),
         complete: isSessionSettled({
           cancelled: s.status === "CANCELLED",
           rosterEmpty: rosterIds.length === 0,
@@ -231,8 +245,7 @@ export async function HubSessionsTab({
 
   return (
     <div className="t-card overflow-hidden">
-      <PhanTrangBang cuonNgang
-          khoaGhiNho="gv-lop-buoi-hoc">
+      <PhanTrangBang cuonNgang khoaGhiNho="gv-lop-buoi-hoc">
         <table className="min-w-[720px] w-full border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
@@ -254,7 +267,7 @@ export async function HubSessionsTab({
             </tr>
           </thead>
           <tbody>
-            {rows.map(({ s, no, workDone }) => {
+            {rows.map(({ s, no, workDone, thieu }) => {
               const canMark =
                 s.date.getTime() <= todayEnd && s.status !== "CANCELLED";
               const done = doneSet.has(s.id);
@@ -308,14 +321,15 @@ export async function HubSessionsTab({
                     )}
                   </td>
                   <td className="px-5 py-3.5 whitespace-nowrap">
-                    {workDone ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-state-success-soft px-2.5 py-1 text-xs font-semibold text-state-success-ink">
-                        <CircleCheck className="h-3.5 w-3.5" aria-hidden />
-                        Hoàn tất
-                      </span>
-                    ) : (
-                      <SessionStatusPill status={s.status} />
-                    )}
+                    {/* D0 — nhãn ĐỌC TỪ `s.status`, không suy từ ba việc. Xem
+                        `nhanTrangThaiBuoi` để biết vì sao (2 COMPLETED / 287 SCHEDULED). */}
+                    <BuoiPill
+                      nhan={nhanTrangThaiBuoi({
+                        status: s.status,
+                        daQuaNgay: s.date.getTime() <= todayEnd,
+                        workDone,
+                      })}
+                    />
                   </td>
                   <td className="px-5 py-3.5 text-right whitespace-nowrap">
                     {!canMark ? (
@@ -324,17 +338,31 @@ export async function HubSessionsTab({
                         giờ
                       </span>
                     ) : (
-                      <Link
-                        href={`?classId=${classId}&sessionId=${s.id}`}
-                        className={
-                          done
-                            ? "inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
-                            : "inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white outline-none transition-colors hover:bg-primary-darker focus-visible:ring-2 focus-visible:ring-ring"
-                        }
-                      >
-                        <ClipboardCheck className="h-3.5 w-3.5" aria-hidden />
-                        {done ? "Xem buổi" : "Điểm danh"}
-                      </Link>
+                      <div className="inline-flex items-center justify-end gap-2">
+                        {/* D1 — nút chốt buổi ngay tại đây. Trước 07/09 nút này CHỈ có ở
+                            màn admin, mà giáo viên thuần bị đá khỏi host admin ⇒ không ai
+                            bấm được (prod: 2 COMPLETED / 287 SCHEDULED). Buổi đã chốt thì
+                            component tự ẩn. */}
+                        {s.status !== "COMPLETED" &&
+                          s.status !== "CANCELLED" && (
+                            <ChotBuoiGV
+                              sessionId={s.id}
+                              sanSang={workDone}
+                              thieu={thieu}
+                            />
+                          )}
+                        <Link
+                          href={`?classId=${classId}&sessionId=${s.id}`}
+                          className={
+                            done
+                              ? "inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+                              : "inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white outline-none transition-colors hover:bg-primary-darker focus-visible:ring-2 focus-visible:ring-ring"
+                          }
+                        >
+                          <ClipboardCheck className="h-3.5 w-3.5" aria-hidden />
+                          {done ? "Xem buổi" : "Điểm danh"}
+                        </Link>
+                      </div>
                     )}
                   </td>
                 </tr>
