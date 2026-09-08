@@ -247,3 +247,55 @@ Trong GitHub Actions, shell mặc định là `bash -e` — **KHÔNG có `-o pip
 
 Chỗ hở duy nhất tìm được nằm ở CI. Chỗ hở thật sự gây ra sự cố nằm ở **thói quen gõ
 lệnh của agent** — nên luật này áp cho cả hai.
+
+---
+
+## Luật 7 — tham số có mặc định NGUY HIỂM thì bỏ mặc định
+
+> **Bỏ mặc định, để trình biên dịch liệt kê call site.**
+> Rà bằng mắt rồi tin là đã hết là cách bỏ sót có hệ thống.
+
+Một mặc định chỉ vô hại khi giá trị của nó là **lựa chọn an toàn**. Khi giá trị mặc
+định gây **tác dụng phụ ra ngoài** — gửi tin, ghi tiền, giao bài, xoá, hay **mở rộng
+phạm vi nhìn thấy** — thì mọi đường quên truyền đều sai theo hướng nguy hiểm nhất, và
+"quên truyền" là chuyện chắc chắn xảy ra.
+
+> **Sự cố sinh ra luật (08/09/2026).** `completeSession` có
+> `assignMode: opts.assignMode ?? "NOW"`, mà "NOW" nghĩa thật là *giao bài tập cho cả
+> lớp + bắn tin "Bài tập mới" tới phụ huynh*. Đọc mã bằng mắt tôi thấy **2** call site
+> quên truyền. Bỏ mặc định, trình biên dịch chỉ ra **6** — gồm hai đường đang chết sau
+> cờ mà mắt bỏ qua vì "đằng nào cũng không chạy", và hai file test.
+
+**Cách làm:** đổi `x?: T` thành `x: T`, xoá `?? <mặc định>`, rồi để `tsc` liệt kê. Sửa
+từng call site **kèm lý do chọn giá trị đó ngay tại chỗ** — nếu không, lần đọc sau
+không phân biệt được "chọn NOW" với "chép của dòng trên".
+
+### Kết quả rà 08/09/2026
+
+**🔴 Cùng lớp, chưa sửa — `lib/lms/assignment.ts:105`**
+```ts
+const assignMode: AssignMode = opts.assignMode ?? "NOW";
+```
+`assignHomeworkForSession` lặp lại đúng mặc định vừa gỡ ở `completeSession`, **một tầng
+dưới**. Hai caller hiện đều truyền tường minh nên chưa nổ — nhưng cái bẫy còn nguyên,
+và nó ở đúng nơi thực sự tạo `HomeworkAssignment`.
+
+**⚠️ Nguy hiểm hơn về chất — `lib/lead-handover/service.ts:89`**
+```ts
+resolveWhere(params.fromUserId, params.filters, params.visibleCenterIds ?? "ALL")
+```
+Mặc định của một tham số **PHẠM VI NHÌN THẤY** là `"ALL"` — tức **fail-open**. Quên
+truyền là bàn giao lead trên **mọi cơ sở**. Mặc định của scope phải luôn là tập RỖNG
+(fail-closed), không bao giờ là "tất cả".
+
+**✅ Mặc định ĐÚNG HƯỚNG — giữ nguyên, đừng "chuẩn hoá" theo luật này:**
+
+| Chỗ | Mặc định | Vì sao an toàn |
+|---|---|---|
+| `audit/audit-log.ts:368` | `unmask ?? false` | quên truyền ⇒ **che** PII |
+| `audit/legacy-log.ts:69` | `canViewPii ?? false` | quên ⇒ không xem được PII |
+| `lead/auto-assign.ts:358` | `actorIsHoLevel ?? false` | quên ⇒ **ít quyền hơn** |
+| `trial/service.ts:316` | `allowOverride ?? false` | quên ⇒ không ghi đè |
+| `classes/generate.ts:33` | `onlyIfEmpty ?? true` | quên ⇒ **không** ghi đè lịch đã có |
+
+Khác biệt nằm ở **hướng của giá trị mặc định**, không ở việc có mặc định hay không.

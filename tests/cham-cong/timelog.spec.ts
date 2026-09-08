@@ -120,4 +120,110 @@ d("vé + ghi lượt + tính lại", () => {
     const ev = await db.domainEvent.count({ where: { type: "hr.attendance_day_dirty", payloadJson: { path: ["userId"], equals: userId } } });
     expect(ev).toBeGreaterThan(0);
   });
+  // ── HỘI SỞ quét ở CS1 (08/09/2026) — KHOÁ LẠI LÝ DO cờ đang đúng ────────────────
+  //
+  // Hôm nay người Hội sở quét ở CS1 nhận cờ `CHAM_NGOAI_LICH`. Đó là TÌNH CỜ, không
+  // phải thiết kế: prod có 0 `ShiftAssignment` nên ai quét cũng "ngoài lịch". Cờ đó nói
+  // về LỊCH ("hôm nay không có ca nào"), không nói gì về NƠI CHỐN.
+  //
+  // Hai ca dưới dựng ca làm THẬT cho người Hội sở để hành vi không lặng lẽ đổi nghĩa
+  // vào ngày Hội sở có ca đầu tiên.
+  describe("người Hội sở quét ở cơ sở khác", () => {
+    let hoUserId = "";
+    let hoCenterId = "";
+    const ngay = () => new Date(Date.now() + 30 * 60_000);
+
+    beforeAll(async () => {
+      const ho = await db.center.upsert({
+        where: { slug: `${TAG}-ho` },
+        update: {},
+        create: { slug: `${TAG}-ho`, name: "Hội sở timelog", address: "x", code: `${TAG}-HO` },
+        select: { id: true },
+      });
+      hoCenterId = ho.id;
+      hoUserId = (
+        await db.user.create({
+          data: { email: `ho@${TAG}.test`, name: "NV Hội sở", role: "HR", roles: ["HR"], password: "x", centerId: hoCenterId },
+          select: { id: true },
+        })
+      ).id;
+    });
+
+    afterAll(async () => {
+      await db.staffAttendanceDay.deleteMany({ where: { userId: hoUserId } });
+      await db.staffTimeLog.deleteMany({ where: { userId: hoUserId } });
+      await db.shiftAssignment.deleteMany({ where: { userId: hoUserId } });
+      await db.user.deleteMany({ where: { id: hoUserId } });
+    });
+
+    async function xepCa(placeMode: "AT_UNITS" | "ANY_CENTER", workDate: Date) {
+      const tpl = await db.shiftTemplate.findFirstOrThrow({ where: { code: "S", centerId: null }, select: { id: true } });
+      await db.shiftAssignment.deleteMany({ where: { userId: hoUserId } });
+      await db.shiftAssignment.create({
+        data: {
+          userId: hoUserId,
+          centerId: hoCenterId, // ca ở HỘI SỞ
+          workDate,
+          templateId: tpl.id,
+          templateCode: "S",
+          segments: [{ start: "07:45", end: "11:30", kind: "WORK", orgUnitIds: [] }],
+          placeMode,
+          attendanceMode: "REQUIRED",
+          dayCredit: 1,
+          source: "MANUAL",
+        },
+      });
+    }
+
+    it("ca AT_UNITS ở Hội sở, quét tại CS1 → SAI_NOI_LAM (hành vi ĐÚNG, khoá lại)", async () => {
+      const now = ngay();
+      const workDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+      await xepCa("AT_UNITS", workDate);
+      const r = await mod.recordTimeLog({
+        userId: hoUserId,
+        workLocationId: wlId,
+        direction: "CHECK_IN",
+        latitude: 16.0471,
+        longitude: 108.2062,
+        now,
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.flags).toContain("SAI_NOI_LAM");
+      // CÓ ca ⇒ KHÔNG phải "ngoài lịch". Hai cờ nói hai chuyện khác nhau.
+      expect(r.flags).not.toContain("CHAM_NGOAI_LICH");
+      // Log ghi NƠI QUÉT, không phải nơi trực thuộc.
+      expect(r.centerId).toBe(centerId);
+    });
+
+    // ⚠️ TRẠNG THÁI BIẾT LÀ THIẾU — KHÔNG phải hành vi mong muốn.
+    //
+    // Ca không phải AT_UNITS thì khối kiểm nơi làm bị bỏ hẳn (`timelog.ts:135`), nên
+    // người Hội sở quét ở CS1 KHÔNG nhận cờ nào, dù `StaffTimeLog.centerId` ghi CS1.
+    // Sự thật "quét ở cơ sở khác nơi trực thuộc" hiện KHÔNG cờ nào diễn đạt.
+    //
+    // Cờ đúng cho việc đó là `KHAC_CO_SO_TRUC_THUOC` (thiết kế duyệt 08/09, chưa làm —
+    // chặn bởi 11 nhân sự `centerId = NULL` trên prod). Khi làm xong, ĐỔI ca test này
+    // thành khẳng định cờ mới, đừng xoá nó.
+    it("ca ANY_CENTER ở Hội sở, quét tại CS1 → KHÔNG cờ nào (thiếu, chờ KHAC_CO_SO_TRUC_THUOC)", async () => {
+      const now = new Date(Date.now() + 90 * 60_000);
+      const workDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+      await xepCa("ANY_CENTER", workDate);
+      const r = await mod.recordTimeLog({
+        userId: hoUserId,
+        workLocationId: wlId,
+        direction: "CHECK_IN",
+        latitude: 16.0471,
+        longitude: 108.2062,
+        now,
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.flags).not.toContain("SAI_NOI_LAM");
+      expect(r.flags).not.toContain("CHAM_NGOAI_LICH");
+      // Ghi được, và gán về NƠI QUÉT — đây là nửa đúng của cặp "nơi quét vs nơi trực thuộc".
+      expect(r.centerId).toBe(centerId);
+      expect(r.centerId).not.toBe(hoCenterId);
+    });
+  });
 });
