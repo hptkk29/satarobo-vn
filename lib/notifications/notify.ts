@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { broadcastMessages, notificationBumpBroadcasts } from "@/lib/chat/broadcast";
 import { classifyNotification } from "./catalog";
 import { cheSdt, kiemPii } from "./pii";
+import { ghiOutboxPush } from "@/lib/push/outbox";
 
 // =============================================================================
 // ĐƯỜNG GHI DUY NHẤT của thông báo nhân sự.
@@ -216,5 +217,31 @@ export async function broadcastNotificationBump(userIds: readonly string[]): Pro
 export async function notifyStaff(params: NotifyStaffParams): Promise<number> {
   const kq = await ghiThongBaoNhanSu(params);
   await broadcastNotificationBump(kq.canRung);
+  // Dòng thứ ba: ghi việc-cần-đẩy Web Push (US-14b Đợt 4). Ba điều kiện của chỗ móc này:
+  //
+  //  1. Bám `kq.canRung`, TUYỆT ĐỐI không `params.userIds`. `canRung` là "ai vừa có mục MỚI hoặc
+  //     vừa được mở lại"; `userIds` là toàn bộ danh sách nhận, kể cả người đã có y nguyên mục đó
+  //     từ lượt trước. Bám nhầm là đẻ lại đúng bão 05/09 mà khối chú thích ở
+  //     `ghiThongBaoNhanSu` vừa vá — với hệ quả nặng hơn, vì lần này mỗi dòng là một lần rung
+  //     điện thoại chứ không chỉ một POST realtime.
+  //
+  //  2. Ở `notifyStaff`, KHÔNG ở `ghiThongBaoNhanSu`. Ranh giới giữa hai hàm là cố ý: hàm dưới
+  //     dành cho cron quét hàng loạt (`lib/crm/sla.ts`, ~1.800 vi phạm mỗi lượt) và nó đi cửa đó
+  //     CHÍNH VÌ không muốn rung. Push đi theo realtime, không đi theo lượt quét.
+  //
+  //  3. Ngoài mọi transaction, sau khi chuông đã ghi xong. Hàm này vốn không nhận `tx` (xem đầu
+  //     file). Hệ quả chấp nhận có ý thức: tiến trình chết ĐÚNG giữa hai dòng thì có chuông mà
+  //     không có push, và lượt gọi lại thấy nội dung y hệt ⇒ `canRung` rỗng ⇒ không ghi bù.
+  //     Mất một push, giữ được thông báo — đúng thứ tự ưu tiên; đảo lại (ghi outbox trước) là
+  //     đẩy push cho một mục chưa chắc tồn tại.
+  //
+  // `ghiOutboxPush` cam kết KHÔNG NÉM (migration hai bảng push chưa chạy ở môi trường nào), nên
+  // không cần bọc thêm ở đây — nhưng cũng không được bỏ `await`: `void` trong Server Action là
+  // mất ngẫu nhiên theo tải trên Vercel.
+  await ghiOutboxPush({
+    userIds: kq.canRung,
+    dedupeKey: params.dedupeKey,
+    expiresAt: params.expiresAt ?? null,
+  });
   return kq.soNguoi;
 }
