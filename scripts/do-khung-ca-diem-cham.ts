@@ -538,6 +538,57 @@ async function main() {
     );
   }
 
+  // ── V7 — LƯỢT IMPORT HỎNG 08/09: audit nói chính xác cột nào bị đổi ───────
+  //
+  // Sự cố: file 2 cột (employeeCode + centerSlug) cho 9 người đã XOÁ TRẮNG dateOfBirth,
+  // joinedAt, endDate. `centerId` gán đúng cả 9.
+  //
+  // Việc 8 (audit importer) lên prod cùng #229, nên lượt hỏng ĐÃ tự ghi lại
+  // `changedFields` + old/new. Đây là bằng chứng trực tiếp thay cho suy luận.
+  const auditImport = await db.auditLog.findMany({
+    where: { action: { in: ["IMPORT_UPDATE", "IMPORT_CREATE"] } },
+    select: {
+      action: true,
+      entityId: true,
+      changedFields: true,
+      oldValues: true,
+      newValues: true,
+      reason: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+  });
+  tieuDe("══ V7 — audit của lượt IMPORT (bằng chứng trực tiếp) ══");
+  dong("Số dòng audit IMPORT_*", auditImport.length);
+  if (auditImport.length > 0) {
+    // `reason` ghi DANH SÁCH CỘT có trong file — thứ quyết định patch gồm gì.
+    console.log(
+      `  reason (cột có trong file): ${auditImport[0]?.reason ?? "(trống)"}`,
+    );
+    const dem = new Map<string, number>();
+    for (const a of auditImport) {
+      for (const f of (a.changedFields as string[] | null) ?? []) {
+        dem.set(f, (dem.get(f) ?? 0) + 1);
+      }
+    }
+    console.log("  Cột bị đổi, và bao nhiêu hồ sơ:");
+    for (const [f, n] of [...dem].sort((x, y) => y[1] - x[1])) {
+      console.log(`    ${f.padEnd(20)} ${String(n).padStart(3)} hồ sơ`);
+    }
+    const mau = auditImport[0];
+    console.log(`  Ví dụ một hồ sơ (${mau?.entityId ?? "?"}):`);
+    console.log(`    cũ : ${JSON.stringify(mau?.oldValues)}`);
+    console.log(`    mới: ${JSON.stringify(mau?.newValues)}`);
+  } else {
+    console.log(
+      "  ⚠️ KHÔNG có dòng audit nào — nghĩa là lượt import chạy bằng mã CŨ",
+    );
+    console.log(
+      "     (bản vá chưa kịp deploy khi bấm nhập), chứ không phải patch sai.",
+    );
+  }
+
   // ── V2.4 — lượt quét thật: nơi quét vs nơi trực thuộc ──
   const logs = await db.staffTimeLog.findMany({
     select: { centerId: true, result: true, flags: true, userId: true },
