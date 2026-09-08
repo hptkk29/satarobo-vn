@@ -169,7 +169,8 @@ export type AutoAssignResult = {
 export async function autoAssignNewLead(leadId: string, actor: Actor): Promise<AutoAssignResult> {
   const lead = await db.lead.findUnique({
     where: { id: leadId },
-    select: { id: true, centerId: true, status: true, assignedToId: true },
+    // `parentName` chỉ để dựng nội dung chuông ở cuối hàm — thêm vào select đang có.
+    select: { id: true, centerId: true, status: true, assignedToId: true, parentName: true },
   });
   if (!lead) return { ok: false, error: "Lead không tồn tại" };
   if (lead.assignedToId) return { ok: true, skipped: true, assignedToId: lead.assignedToId };
@@ -283,6 +284,27 @@ export async function autoAssignNewLead(leadId: string, actor: Actor): Promise<A
         metadata: SYSTEM_META,
       },
     });
+  });
+
+  // BÁO CHO SALE VỪA ĐƯỢC CHIA (vá 08/09/2026).
+  //
+  // Đây là NHÁNH LÙI của cả hai nguồn lead lớn nhất: `POST /api/leads` (form web) và
+  // `ingestIntakeLead` (quatang, form Sale) đều rơi vào đây khi `centerId` không giải được —
+  // khách bỏ trống ô cơ sở, hoặc chuỗi cơ sở trên phiếu không khớp cơ sở nào. Đường chính
+  // (`chiaChoLead`) có chuông từ 30/08; đường lùi thì câm, nên đúng những phiếu KHÓ NHẤT —
+  // phiếu mà hệ thống phải tự đoán cơ sở — lại là phiếu không ai được báo.
+  //
+  // ⚠️ NGOÀI transaction, sau dấu đóng ở trên: `notifyStaff` cố ý không nhận `tx`.
+  //
+  // `source: "AUTO"` — máy chia, không phải người giao tay.
+  //
+  // KHÔNG thu hồi chuông chủ cũ ở đây: hàm đã thoát sớm ở đầu khi `lead.assignedToId` có giá
+  // trị, nên tới được dòng này thì lead chắc chắn CHƯA có chủ — không có gì để thu hồi.
+  await baoSaleCoLeadMoi({
+    ownerId: target,
+    leadId,
+    parentName: lead.parentName,
+    source: "AUTO",
   });
 
   return { ok: true, assignedToId: target, centerId, mode };
