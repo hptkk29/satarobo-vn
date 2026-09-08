@@ -189,6 +189,61 @@ chú thích tại chỗ nói rõ **không được** lọc thêm `paymentType`, 
 hỏi KHÁC với khoá KHÁC (đơn, không phải ghi danh). Tập được tái sử dụng **có kiểm lại
 định nghĩa**, và định nghĩa đó được viết ra ngay cạnh nó.
 
+**Minh hoạ ngược — TÁCH hạng để định nghĩa lộ ra (08/09/2026).** Script đo in gộp
+*"buổi bị loại: lớp đã xoá / chưa có GV chính: 27"*. Một con số, hai nghĩa trái ngược:
+lớp đã xoá là dọn dẹp bình thường, lớp còn sống thiếu GV chính là lỗi dữ liệu chặn cả
+việc chốt buổi. Tách ra rồi đo lại trên prod: **27 / 0** — toàn bộ là lớp đã xoá, KHÔNG
+có lớp nào thiếu giáo viên. Số gộp trông đáng lo suốt hai ngày; tách hạng vừa đóng được
+vấn đề vừa chứng minh nó chưa từng tồn tại.
+
 **Dấu hiệu nhận biết khi đọc mã:** một tập tên theo *chủ thể* (`assignedClassIds`,
 `visibleCenterIds`) đang được dùng làm mẫu số của một *phép đo* (số buổi, số giờ, số
 tiền). Quyền và thước đo gần như không bao giờ cùng một tập.
+
+---
+
+## Luật 6 — không đặt lệnh kiểm sau dấu ống
+
+> **`pnpm test | grep` trả mã thoát của `grep`, không phải của `pnpm test`.**
+> Hạ tầng chết cũng thành "xanh".
+
+Rộng hơn: **một cổng kiểm im lặng khi hạ tầng hỏng thì TỆ HƠN không có cổng** — không
+có cổng thì người ta còn tự kiểm; có cổng xanh giả thì người ta thôi kiểm. Nó cấp sự
+tin tưởng sai.
+
+> **Sự cố sinh ra luật (08/09/2026).** Lệnh kiểm trước khi commit là
+> `pnpm test:finance-db 2>&1 | grep -E "Tests "`, nối trong một chuỗi `&&`. Postgres
+> local vừa chết (`Can't reach database server`), bộ test ĐỎ — nhưng `grep` tìm thấy
+> dòng nên trả 0, chuỗi `&&` đi tiếp, và commit được tạo trên một lượt kiểm đỏ. Phát
+> hiện sau đó bằng mắt, không phải bằng cổng.
+
+**Cùng họ với hai lỗi tuần này** — cổng luôn cho qua vì điều kiện không bao giờ đúng:
+
+- `photoDone` không bao giờ `true` (ảnh tải lên không mang thẻ học viên) ⇒ điều kiện
+  chặn hoá ra là cái khoá chết;
+- nhãn "Hoàn tất" suy từ ba việc thay vì đọc `ClassSession.status` ⇒ màn hình báo xong
+  cho một buổi chưa hề đóng.
+
+### Cách làm
+
+```bash
+pnpm test:finance-db                      # để mã thoát đi thẳng
+pnpm test:finance-db > out.log 2>&1; rc=$?; tail -5 out.log; [ $rc -eq 0 ]
+set -o pipefail                           # trong shell script / run-block CI
+```
+
+Trong GitHub Actions, shell mặc định là `bash -e` — **KHÔNG có `-o pipefail`**. Mỗi
+`run:` block có ống phải tự bật.
+
+### Kết quả rà 08/09/2026
+
+| Chỗ | Trạng thái |
+|---|---|
+| `patch-rbac-staff.yml` (ghi PROD) · `shadow-report.yml` | ✅ đã có `set -euo pipefail`; `shadow-report.yml` còn chú thích đúng lý do |
+| `package.json` scripts | ✅ không script nào có ống |
+| `scripts/*.sh`, `.claude/hooks/*.sh` | ✅ không có ống quanh lệnh kiểm |
+| `backup-prod-db.yml` — dọn bản cũ trên R2 | ❌ **đã vá**: `aws s3 ls \| while` — `ls` hỏng thì vòng lặp không chạy lần nào, ống trả 0, bước XANH mà không xoá bản nào |
+| `backup-prod-db.yml` — 3 ống còn lại | ✅ an toàn CÓ LÝ DO, đừng "vá" thêm: `pg_dump --version \| grep -q` có `\|\|` xử lỗi; hai chỗ kia nằm trong `$( )` của `echo` (chỉ hiển thị), và cổng toàn vẹn thật là dòng `pg_restore --list > /dev/null` **không có ống** ngay phía trên |
+
+Chỗ hở duy nhất tìm được nằm ở CI. Chỗ hở thật sự gây ra sự cố nằm ở **thói quen gõ
+lệnh của agent** — nên luật này áp cho cả hai.

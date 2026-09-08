@@ -222,6 +222,9 @@ feature → PR → merge `test`  → test.satarobo.vn tự deploy → nghiệm t
   là `@db.Timestamptz(6)` MANG GIỜ THẬT — khớp theo tên cột là sai.
   **Tập dựng cho mục đích A không dùng cho mục đích B khi chưa kiểm lại định nghĩa** —
   `assignedClassIds` đúng cho QUYỀN, sai cho THƯỚC ĐO CÔNG (76 buổi của trợ giảng, prod 08/09).
+  **Không đặt lệnh kiểm sau dấu ống** — `pnpm test | grep` trả mã thoát của `grep`, nên hạ tầng
+  chết cũng thành "xanh"; cổng im lặng khi hạ tầng hỏng tệ hơn không có cổng. CI mặc định là
+  `bash -e`, KHÔNG có `-o pipefail`.
 
 - [docs/cham-cong/DESIGN-CHAM-CONG-ADMIN.md](docs/cham-cong/DESIGN-CHAM-CONG-ADMIN.md) — **Giao diện module chấm công (admin), chốt 06/09/2026.** Đọc TRƯỚC khi sửa bất kỳ màn nào dưới `app/(admin)/admin/cham-cong/**` hoặc `/don-tu**`. Luận đề "Sổ kỳ công": mọi màn vận hành chia sẻ khung KỲ (tháng × khối) — `PageHeader → ModuleNav → ScopeBar → nội dung`. **Sidebar chỉ còn 5 mục**; 9 màn còn lại vào bằng `components/admin/cham-cong/{module-nav,config-tabs,me-nav}.tsx` — 3 file này là LỐI VÀO DUY NHẤT nên `href` phải là chuỗi literal (test `nav-coverage` quét literal, xoá là màn thành mồ côi). Quyền hỏi MỘT lần bằng `loadModuleScope(userId)` (`lib/cham-cong/module-scope.ts`) — đừng rải `checkPermission` (action là biến nên rbac-scope R1 không đếm, nhưng target thì luôn phải thật). `components/cham-cong/ui/**` dùng chung với site GV ⇒ CHỈ token `:root`, **cấm `primary-soft`/`primary-ink`/`primary-dark`** (site GV không có `.admin-scope`, `--primary-ink` ở `:root` là CAM).
 
