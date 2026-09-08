@@ -245,6 +245,8 @@ export default async function TeacherAttendanceOverviewPage() {
           present: presentBy.get(s.id) ?? 0,
           roster,
         } satisfies AttendanceRow,
+        // 08/09 — khoá SẮP XẾP. Xem ghi chú ở `compareSessionWorkOrder`.
+        thoiGian: s.date.getTime(),
         no,
         complete: isSessionSettled({
           cancelled: s.status === "CANCELLED",
@@ -269,8 +271,8 @@ export default async function TeacherAttendanceOverviewPage() {
         ) ||
         a.row.className.localeCompare(b.row.className, "vi") ||
         compareSessionWorkOrder(
-          { number: a.no, complete: false },
-          { number: b.no, complete: false },
+          { thoiGian: a.thoiGian, complete: false },
+          { thoiGian: b.thoiGian, complete: false },
         ),
     )
     .map((r) => r.row);

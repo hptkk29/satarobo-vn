@@ -341,7 +341,10 @@ export default async function TeacherFeedbackPage({
                   }),
                 };
               }),
-              (r) => ({ number: r.no, complete: r.complete }),
+        // 08/09 — SẮP THEO NGÀY, không theo số buổi. Nhãn nay là số LỘ TRÌNH
+        // (`soBuoiTheoLoTrinh`), sắp theo nó thì buổi 25/06 mang nhãn "Buổi 43" rơi
+        // xuống sau buổi 12/09 "Buổi 19". Xem `lib/lms/session-order.ts`.
+              (r) => ({ thoiGian: new Date(r.s.date).getTime(), complete: r.complete }),
             ).map(({ s, stat, no }) => {
               return (
                 // href CHỈ-query (giữ path hiện tại): chạy đúng cả trên host giaovien
