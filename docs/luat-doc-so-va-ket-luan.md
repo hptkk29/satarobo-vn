@@ -334,3 +334,26 @@ làm nhớ ra thì nó không phải quy trình.
 **Liên hệ với các luật khác:** đây là luật 6 (*cổng im lặng tệ hơn không có cổng*) áp cho
 chính bộ test. Một test không bao giờ đỏ được là một cổng luôn cho qua — cùng họ với
 `photoDone` không bao giờ true, và nhãn "Hoàn tất" suy ra.
+
+---
+
+## Sổ quan sát chưa giải thích được
+
+Chỗ ghi những lần đỏ/lạ **không tái hiện được**. Ghi chứ không đoán: một lần là quan
+sát, hai lần mới là tín hiệu. Có mục ở đây thì lần sau người khác không phải bắt đầu lại
+từ con số không.
+
+### 08/09/2026 — `tests/nen/position-permission.spec.ts` đỏ một lần
+
+| | |
+|---|---|
+| **Bộ** | `pnpm test:nen-db` (Postgres local `ci_test`, đã `migrate deploy` + `seed-roles`) |
+| **Ca** | `TS-08 · quyền theo Position (Postgres thật) > [AC3] người KẾ NHIỆM nhận cùng vị trí ⇒ có đúng bộ quyền đó, vị trí không phải cấu hình lại` |
+| **Thông điệp** | `AssertionError: expected false to be true // Object.is equality` |
+| **Điều kiện quan sát** | **lượt 2** của phép chạy hai lượt trên cùng DB (không dọn giữa hai lượt); máy đang tải nặng — thư mục `.next` 603MB còn sót, Postgres vừa khởi động lại. Cùng lượt đó, 4 test quét-cây khác timeout ở ngưỡng 5s |
+| **Tái hiện** | **KHÔNG** — 3 lượt chạy ngay sau đó đều xanh 15/15 |
+| **Đã loại trừ** | không phải timeout (là assertion); spec này nhánh chấm công **không đụng tới**; nó gọi `disconnectDb()` trong `afterAll` **đúng khuôn** hai spec còn lại trong bộ |
+| **Chưa loại trừ** | rò trạng thái giữa hai lượt trên cùng DB; đua giữa `disconnectDb()` của file chạy trước và file chạy sau (`fileParallelism: false` nên chúng nối tiếp, nhưng cùng tiến trình) |
+
+**Nếu đỏ lần thứ hai:** chạy riêng `vitest run tests/nen/position-permission.spec.ts` hai
+lượt liên tiếp trên DB **không dọn** để tách "rò trạng thái" khỏi "tải máy".
