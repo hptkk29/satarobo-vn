@@ -373,13 +373,25 @@ export const ROLE_SEED: RoleSeed[] = [
       //     đổi lịch/phòng/tên lớp, sinh & xếp lại buổi, và HUỶ LỚP (cancelClassAction).
       //     KHÔNG kèm: tạo lớp, xoá lớp (perm riêng), duyệt/từ chối lớp (chặn bằng
       //     APPROVE_ROLES chứ không bằng permission — xem requireApprover).
-      //   · trials:view + trials:assign-teacher — đủ để mở màn Trial và gán GV. CỐ Ý
-      //     KHÔNG cấp trials:manage (thêm/bớt học viên, tạo lớp trải nghiệm) và
-      //     trials:config: quản lý toàn bộ GV ≠ điều hành tuyển sinh lớp thử.
+      //   · trials:view + trials:assign-teacher — đủ để mở màn Trial và gán GV.
+      //     ~~CỐ Ý KHÔNG cấp trials:manage (thêm/bớt học viên, tạo lớp trải nghiệm)
+      //     và trials:config: quản lý toàn bộ GV ≠ điều hành tuyển sinh lớp thử.~~
+      //     **[ĐẢO 08/09/2026 — chủ dự án: "Đào tạo được sử dụng FULL quyền trong màn
+      //     Lớp Trial"]** xem 3 dòng thêm ngay dưới.
       { action: "classes:view-all", scopeType: "GLOBAL" },
       { action: "classes:edit", scopeType: "GLOBAL" },
       { action: "trials:view", scopeType: "GLOBAL" },
       { action: "trials:assign-teacher", scopeType: "GLOBAL" },
+      // 08/09/2026 — FULL quyền màn `/admin/lop-trial`. Ba khoá này là ĐÚNG BỘ mà màn
+      // đó gác (đo bằng `grep checkPermission` trên `lop-trial/**`), không hơn:
+      //   · trials:manage           tạo lớp · thêm/sửa/huỷ buổi · xếp & gỡ học viên · huỷ lớp
+      //   · trials:attendance       điểm danh + hoàn tất buổi
+      //   · trials:override-capacity xếp vượt sĩ số (cờ `allowOverride` có cổng RIÊNG)
+      // KHÔNG kèm `trials:config` (cấu hình số buổi — màn khác, QLCS giữ theo QĐ-T3b)
+      // và KHÔNG kèm `trials:feedback` (chấm phiếu nằm trọn ở site giáo viên).
+      { action: "trials:manage", scopeType: "GLOBAL" },
+      { action: "trials:attendance", scopeType: "GLOBAL" },
+      { action: "trials:override-capacity", scopeType: "GLOBAL" },
       // 03/08 — checkin là self-action của mọi nhân viên; sót từ khi thêm TRAINING
       // (FL W0) nên tài khoản chỉ-Đào-tạo không mở được trang chấm công nào.
       { action: "hr_attendance:checkin", scopeType: "GLOBAL" },

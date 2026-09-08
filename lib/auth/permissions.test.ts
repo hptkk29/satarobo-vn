@@ -75,11 +75,34 @@ describe("permissions matrix — FL W0 TRAINING role", () => {
     expect(can("TRAINING", "classes:edit")).toBe(true);
     expect(can("TRAINING", "trials:view")).toBe(true);
     expect(can("TRAINING", "trials:assign-teacher")).toBe(true);
-    // Ranh giới CỐ Ý: xếp người đi dạy ≠ điều hành tuyển sinh/lớp học.
+    // Ranh giới còn lại của LỚP CHÍNH: xếp người đi dạy ≠ mở/đóng lớp.
     expect(can("TRAINING", "classes:create")).toBe(false);
     expect(can("TRAINING", "classes:delete")).toBe(false);
-    expect(can("TRAINING", "trials:manage")).toBe(false);
+    // ⚠️ `trials:manage` từng là false ở đây (ranh giới 23/08) — xem bài kế tiếp,
+    // chủ dự án ĐẢO 08/09. Bỏ dòng cũ chứ không sửa thành true tại chỗ, để bài mới
+    // là nơi DUY NHẤT phát biểu ranh giới hiện hành.
     expect(can("TRAINING", "trials:config")).toBe(false);
+  });
+
+  it("08/09 — ĐẢO: Đào tạo FULL quyền trong màn Lớp Trial", () => {
+    // Chủ dự án 08/09/2026: "chỉnh cho role đào tạo được sử dụng full quyền trong màn
+    // lớp trial". Quyết định này ra SAU ranh giới 23/08 nên thắng (luật CLAUDE.md:
+    // quyết định ký sau thắng bản trước).
+    //
+    // "FULL quyền màn lớp trial" = ĐÚNG BỘ khoá mà `/admin/lop-trial/**` gác, đo bằng
+    // grep `checkPermission` trên chính thư mục đó — không suy rộng ra khoá lân cận.
+    expect(can("TRAINING", "trials:view")).toBe(true); // 3 trang đều gác bằng khoá này
+    expect(can("TRAINING", "trials:manage")).toBe(true); // 8/11 action + trang /moi
+    expect(can("TRAINING", "trials:attendance")).toBe(true); // điểm danh + hoàn tất buổi
+    expect(can("TRAINING", "trials:override-capacity")).toBe(true); // xếp vượt sĩ số
+    expect(can("TRAINING", "trials:assign-teacher")).toBe(true); // đã có từ 23/08
+
+    // HAI khoá CỐ Ý không kèm — chúng KHÔNG thuộc màn này:
+    //   · trials:config   — cấu hình số buổi, màn khác; QLCS giữ theo QĐ-T3b.
+    //   · trials:feedback — chấm phiếu nằm trọn ở site giáo viên. Màn lop-trial chỉ ĐỌC
+    //     phiếu đã chấm, và quyền đọc là `trials:view` (lop-trial/[id]/page.tsx:60-61).
+    expect(can("TRAINING", "trials:config")).toBe(false);
+    expect(can("TRAINING", "trials:feedback")).toBe(false);
   });
 });
 

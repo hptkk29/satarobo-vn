@@ -419,17 +419,27 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // Đào tạo bị đá về /dashboard trước khi thấy được nút phân công. Seed v2 đã có, đây
   // là bản v1 — mà local/dev/CI chạy v1 (lib/flags.ts:8 mặc định OFF).
   "trials:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "TEACHER", "TRAINING"],
-  "trials:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
+  // ⚠️ 08/09/2026 — ĐẢO ranh giới chốt 23/08. Chủ dự án: "Đào tạo được sử dụng FULL
+  // quyền trong màn Lớp Trial."
+  //   ~~CỐ Ý KHÔNG cấp `trials:manage` cho TRAINING: quản lý toàn bộ GV ≠ điều hành
+  //     tuyển sinh lớp thử~~ **[ĐẢO 08/09]** — nay Đào tạo làm được MỌI việc trong màn
+  //     `/admin/lop-trial`: tạo lớp, thêm/bớt buổi, xếp & gỡ học viên, huỷ lớp.
+  // Ba khoá thêm cho TRAINING là ĐÚNG BỘ mà màn đó gác: `trials:manage` ·
+  // `trials:attendance` · `trials:override-capacity` (view + assign-teacher đã có).
+  // KHÔNG kèm `trials:config` (cấu hình số buổi — màn khác, vẫn của QLCS theo QĐ-T3b)
+  // và KHÔNG kèm `trials:feedback` (chấm phiếu nằm trọn ở site giáo viên; màn này chỉ
+  // ĐỌC phiếu và quyền đọc là `trials:view` — xem chú thích lop-trial/[id]/page.tsx:60).
+  "trials:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "TRAINING"],
   // GĐ4 (25/08/2026) — tách đôi theo ma trận đặc tả §8.2. Trước GĐ4 cả điểm danh lẫn
   // nộp phiếu đều dùng chung `trials:feedback`, nên Sale KHÔNG điểm danh được còn
   // giáo viên thì điểm danh được — ngược hẳn quy trình đã chốt.
   "trials:feedback": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
-  "trials:attendance": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
+  "trials:attendance": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "TRAINING"],
   // R7-02 — gán GV + override sĩ số chỉ quản lý cơ sở; cấu hình số buổi = Đào tạo/Admin.
   // GĐ3 (chủ dự án chốt câu 2, 25/08/2026): CHỐT giáo viên là việc của Đào tạo.
   // Sale chỉ ĐỀ XUẤT; Quản lý cơ sở giữ mọi việc trial còn lại.
   "trials:assign-teacher": ["SUPER_ADMIN", "TRAINING"],
-  "trials:override-capacity": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  "trials:override-capacity": ["SUPER_ADMIN", "CENTER_MANAGER", "TRAINING"],
   // FL W0 (QĐ-T1): cấu hình đào tạo/LMS = TRAINING (Đào tạo). CENTER_MANAGER chỉ xem nội dung LMS.
   "training:manage": ["SUPER_ADMIN", "TRAINING"],
   // 10/07 — BGĐ: "báo cáo của chức năng nào thì role chức năng đó xem". Ba báo cáo đào
