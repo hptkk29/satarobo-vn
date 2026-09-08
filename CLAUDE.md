@@ -238,7 +238,14 @@ feature → PR → merge `test`  → test.satarobo.vn tự deploy → nghiệm t
   định cả SỐ LẦN khớp (chú thích giải thích bản vá thường chứa đúng chuỗi đang cấm), và
   **chưa cấy thử thì coi như vô dụng**. Ba ca soi nhầm chỗ trong một ngày 08/09.
   Luật 7 có điểm cộng ngoài dự kiến: trường BẮT BUỘC không chỉ liệt kê call site, nó còn
-  biến **"quên `select` cột nguồn"** từ lỗi câm thành lỗi biên dịch. Sổ sự cố cùng file; điều
+  biến **"quên `select` cột nguồn"** từ lỗi câm thành lỗi biên dịch.
+  **Affordance phải NÓI THẬT** (luật 12): con trỏ · mũi tên · nhãn trạng thái · nút đều là
+  LỜI HỨA, và lời hứa suông không ném lỗi, không làm test đỏ, console vẫn sạch — chỉ người
+  dùng bấm mới biết. Ba ca một tuần: nhãn "Hoàn tất" suy ra · `photoDone` không bao giờ
+  true · chevron `/cham-cong` chưa từng được nối. Vá bằng cách **mở rộng vùng bấm**
+  (`<tr relative cursor-pointer>` + trigger `after:inset-0`), đừng gỡ mũi tên. Cổng canh:
+  `components/ui/affordance-coverage.test.ts` — nó phải viết lại BA lần mới bite, cả ba
+  lần vì chú thích giải thích bản vá chứa đúng chuỗi bộ so khớp đang tìm. Sổ sự cố cùng file; điều
   đáng nhớ nhất: **quy trình chụp trước/sau là thứ duy nhất hoạt động** — bộ test xanh,
   bản vá vừa merge, và 9 hồ sơ prod vẫn bị xoá trắng ba cột ngày. Đừng bỏ nó kể cả khi
   test đã xanh.

@@ -509,6 +509,85 @@ Trong cả ba ca đó, ba gạch đầu dòng ở đầu mục này là bắt bu
 
 ---
 
+## Luật 12 — affordance phải NÓI THẬT
+
+> **Một phần tử giao diện gợi ý điều gì thì phải làm được điều đó.** Con trỏ, mũi tên,
+> nhãn trạng thái, nút — tất cả đều là **lời hứa**. Lời hứa suông **không ném lỗi, không
+> làm test đỏ, và người dùng sẽ tin nó**.
+
+### Ba lần trong một tuần, cùng một họ
+
+| Lời hứa | Sự thật | Người dùng thấy |
+|---|---|---|
+| Nhãn **"Hoàn tất"** trên site GV, suy ra từ ba điều kiện | `ClassSession.status` vẫn `SCHEDULED` | Buổi đã xong — trong khi hệ thống coi là chưa |
+| **`photoDone`** đứng làm điều kiện chặn | Không bao giờ `true` được | Một cổng không bao giờ mở |
+| **Chevron `>`** cuối mỗi dòng `/cham-cong` | `<svg aria-hidden>` trần, chưa từng được nối | Bấm mãi không có gì xảy ra |
+
+Cả ba **không ném lỗi**, **không test nào đỏ**, và **console sạch**. Ca thứ ba đo tận nơi
+trên prod 09/09/2026: 0 lỗi JS, 0 message, DOM xác nhận chevron không nằm trong
+`button`/`a` nào. Không có gì *hỏng* — đơn giản là nó chưa bao giờ được nối.
+
+Đó là lý do lớp bug này sống lâu: **mọi công cụ đều báo bình thường.** Thứ duy nhất phát
+hiện được là một người dùng thật bấm vào và thấy im lặng.
+
+### Cách kiểm
+
+Với mỗi thứ trông-như-tương-tác, hỏi đúng một câu: **"cái này hứa gì, và nó làm được
+không?"**
+
+· mũi tên / chevron cuối dòng → có nằm trong `<button>`/`<a>`/trigger không? nếu không,
+  cả hàng có phải vùng bấm không?
+· `cursor-pointer` → thứ dưới con trỏ có bấm được thật không? **con trỏ một mình là lời
+  hứa, không phải cơ chế**;
+· nhãn trạng thái → nó đọc từ CỘT thật, hay suy ra từ mấy điều kiện? (xem luật 3)
+· nút bị vô hiệu → có nói vì sao không? "không bấm được và không biết tại sao" cũng là
+  một lời hứa gãy.
+
+### Cách vá đúng: mở rộng vùng bấm, đừng gỡ mũi tên
+
+Gỡ mũi tên đi là **mất một chỉ dẫn đúng**. Người dùng đã đọc đúng ý đồ; cái sai là hệ
+thống chưa nối. Ở `/cham-cong` vá bằng cách cho **cả hàng** thành vùng bấm:
+
+```tsx
+<tr className="relative h-11 cursor-pointer group">      // neo + con trỏ nói thật
+  <SheetTrigger className="… after:absolute after:inset-0 after:content-['']">
+```
+
+`after:inset-0` kéo vùng bấm của chính nút đó phủ kín hàng. **Không** bọc `<tr>` trong
+`<button>` (HTML không cho) và **không** gắn `onClick` lên `<tr>` (hàng không nhận được
+focus bàn phím). Mũi tên giữ `aria-hidden` — điều khiển có nhãn là `SheetTrigger` với
+`aria-label="Chi tiết <tên>"`; đọc thêm "chevron right" chỉ là nhiễu.
+
+⚠️ Chỉ an toàn khi hàng **không có phần tử tương tác nào khác** — lớp phủ sẽ nuốt chúng.
+Đã rà trước khi vá: `ShiftCodeChip`, `DayTypePill`, `FlagList` đều 0 nút / 0 link.
+
+### Cổng canh — và bài học cay nhất của ngày 09/09
+
+`components/ui/affordance-coverage.test.ts` quét toàn repo: icon chỉ hướng trong `<td>`
+phải nằm trong phần tử tương tác, hoặc hàng phải là vùng bấm (đủ **hai** mảnh
+`cursor-pointer` + `after:inset-0`).
+
+**Bản đầu của cổng này VÔ DỤNG, và phải viết lại BA lần** — mỗi lần chỉ lộ ra vì cấy lại
+lỗi (luật 8):
+
+| Lần | Vì sao vô dụng |
+|---|---|
+| 1 | Dò `<td` trong cửa sổ 12 dòng phía trên icon. Prettier tách dòng, khối chú thích đẩy `<td` ra xa hơn ⇒ **bỏ qua luôn** cái icon |
+| 2 | `TUONG_TAC` khớp chữ trần `Trigger`, mà **chú thích của bản vá** có nhắc `SheetTrigger` ⇒ ô bị coi là có tương tác |
+| 3 | `hangLaVungBam()` chạy trên cả file **kể cả chú thích**, mà chú thích ở `page.tsx:678` nhắc `` `after:inset-0` `` ⇒ file được miễn trừ **vĩnh viễn** |
+
+Ba lần, cùng một cơ chế: **văn xuôi giải thích bản vá chứa đúng chuỗi mà bộ so khớp đang
+tìm.** Đó là gạch đầu dòng thứ hai của luật 11, và nó cắn ngay chính cái cổng viết ra để
+canh luật này. Bản dùng được phải `boChuThich()` **trước** mọi phép so, và tách
+`iconTranTrongNguon` thành hàm THUẦN để anti-vacuity kiểm bằng đầu vào giả.
+
+> **Nếu một cổng grep cần viết lại ba lần mới bite, hãy cân nhắc rằng công cụ đúng là một
+> test HÀNH VI.** Ở đây hành vi thật ("bấm vào hàng có mở panel không") chỉ đo được bằng
+> trình duyệt — `tests/e2e/a0` là chỗ của nó. Cổng grep hiện tại canh CẤU TRÚC, và nó chỉ
+> đáng tin vì đã bị cấy lỗi bốn lần và đỏ đúng chỗ.
+
+---
+
 ## Sổ sự cố
 
 ### 08/09/2026 — nhập nhân sự xoá trắng ba cột ngày trên 9 hồ sơ PROD

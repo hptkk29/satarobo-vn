@@ -30,10 +30,21 @@ import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { getSetting } from "@/lib/settings/service";
 import { loadCenterMap } from "@/lib/cham-cong/home-center";
-import { ASK_WHO, loadModuleScope, periodStatusOf, type ModuleAction } from "@/lib/cham-cong/module-scope";
+import {
+  ASK_WHO,
+  loadModuleScope,
+  periodStatusOf,
+  type ModuleAction,
+} from "@/lib/cham-cong/module-scope";
 import { hrefWith, monthStepDate, scopeHref } from "@/lib/cham-cong/scope-href";
 import { countsAsIssue, flagInfo } from "@/lib/cham-cong/flag-labels";
-import { parseVnYmd, vnDateAt, vnDateOnly, vnWeekday, vnYmd } from "@/lib/time/vn";
+import {
+  parseVnYmd,
+  vnDateAt,
+  vnDateOnly,
+  vnWeekday,
+  vnYmd,
+} from "@/lib/time/vn";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/admin/ui/page-header";
 import { PageHelp } from "@/components/admin/ui/page-help";
@@ -42,7 +53,10 @@ import { adminTd, adminTh, adminTr } from "@/components/admin/ui/table";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 import { ModuleNav } from "@/components/admin/cham-cong/module-nav";
 import { ScopeBar } from "@/components/admin/cham-cong/scope-bar";
-import { DayStrip, type DayStripDay } from "@/components/admin/cham-cong/day-strip";
+import {
+  DayStrip,
+  type DayStripDay,
+} from "@/components/admin/cham-cong/day-strip";
 import { KpiStrip } from "@/components/admin/cham-cong/kpi-strip";
 import {
   BTN_OUTLINE,
@@ -53,11 +67,24 @@ import {
   PILL,
 } from "@/components/admin/cham-cong/classes";
 import { FlagList } from "@/components/cham-cong/ui/flag-chip";
-import { ShiftCodeChip, type ShiftSource } from "@/components/cham-cong/ui/shift-code-chip";
-import { DayTypePill, type DayType } from "@/components/cham-cong/ui/day-type-pill";
-import { DayDetailSheet, type DayRow, type DayTap } from "./_components/day-detail-sheet";
+import {
+  ShiftCodeChip,
+  type ShiftSource,
+} from "@/components/cham-cong/ui/shift-code-chip";
+import {
+  DayTypePill,
+  type DayType,
+} from "@/components/cham-cong/ui/day-type-pill";
+import {
+  DayDetailSheet,
+  type DayRow,
+  type DayTap,
+} from "./_components/day-detail-sheet";
 
-export const metadata = { title: "Bảng công ngày | Admin", robots: { index: false } };
+export const metadata = {
+  title: "Bảng công ngày | Admin",
+  robots: { index: false },
+};
 export const dynamic = "force-dynamic";
 
 const VIEW: ModuleAction = "hr_attendance:view";
@@ -66,7 +93,8 @@ const ADJUST: ModuleAction = "hr_attendance:adjust";
 
 /** MỘT chuỗi cho cả hai nhánh (có quyền / không quyền) — hai câu khác nhau cho cùng một màn là
  *  thứ người dùng đọc thành "hai màn khác nhau". */
-const SUBTITLE = "Công đếm theo lịch đã xếp; lượt quét chỉ sinh cờ để quản lý rà.";
+const SUBTITLE =
+  "Công đếm theo lịch đã xếp; lượt quét chỉ sinh cờ để quản lý rà.";
 
 /** Bộ lọc nhanh trên toolbar. Giá trị lạ ⇒ coi như không lọc. */
 type Loc = "co" | "chuaquet" | "ghide" | null;
@@ -78,7 +106,12 @@ const LOC_CHIPS: { value: Loc; label: string }[] = [
 ];
 
 interface Props {
-  searchParams: Promise<{ date?: string; coSo?: string; loc?: string; q?: string }>;
+  searchParams: Promise<{
+    date?: string;
+    coSo?: string;
+    loc?: string;
+    q?: string;
+  }>;
 }
 
 const WD = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
@@ -150,7 +183,9 @@ export default async function ChamCongPage({ searchParams }: Props) {
   const dateLabel = `${WD[vnWeekday(vnDateAt(year, month - 1, Number(dateStr.slice(8, 10)), 12))]} ${dateStr.slice(8, 10)}/${dateStr.slice(5, 7)}/${year}`;
 
   const loc: Loc =
-    sp.loc === "co" || sp.loc === "chuaquet" || sp.loc === "ghide" ? sp.loc : null;
+    sp.loc === "co" || sp.loc === "chuaquet" || sp.loc === "ghide"
+      ? sp.loc
+      : null;
   const q = (sp.q ?? "").trim();
   /** Mọi link trong màn đi qua đây — quên một tham số là rơi ngữ cảnh (bug `coSo` của bản cũ). */
   const here = (over: { date?: string; loc?: Loc }) =>
@@ -165,37 +200,44 @@ export default async function ChamCongPage({ searchParams }: Props) {
   const sdb = scopedDb(await resolveActor(session.user.id));
   const centerMap = await loadCenterMap();
   const orgUnitId =
-    Object.values(centerMap.byCode).find((c) => c.centerId === coSo)?.orgUnitId ?? null;
+    Object.values(centerMap.byCode).find((c) => c.centerId === coSo)
+      ?.orgUnitId ?? null;
 
-  const [days, logs, assignments, monthRows, holidays, weeklyOff, period] = await Promise.all([
-    sdb.staffAttendanceDay.findMany({ where: { workDate, centerId: coSo } }),
-    sdb.staffTimeLog.findMany({
-      where: { workDate, centerId: coSo, result: "ACCEPTED" },
-      orderBy: { loggedAt: "asc" },
-      select: { userId: true, direction: true, loggedAt: true, flags: true },
-    }),
-    sdb.shiftAssignment.findMany({
-      where: { workDate, centerId: coSo, status: "ACTIVE" },
-      select: { userId: true, templateCode: true, source: true },
-    }),
-    sdb.staffAttendanceDay.findMany({
-      where: { centerId: coSo, workDate: { gte: monthFrom, lte: monthTo } },
-      select: { workDate: true, flags: true, dayType: true },
-    }),
-    sdb.holiday.findMany({
-      where: {
-        type: "HOLIDAY",
-        date: { lte: monthTo },
-        AND: [
-          { OR: [{ endDate: null, date: { gte: monthFrom } }, { endDate: { gte: monthFrom } }] },
-          { OR: [{ centerId: null }, { centerId: coSo }] },
-        ],
-      },
-      select: { date: true, endDate: true, attendanceEffect: true },
-    }),
-    getSetting("shift.weeklyOffDays", { orgUnitId }),
-    periodStatusOf(sdb, coSo, ky),
-  ]);
+  const [days, logs, assignments, monthRows, holidays, weeklyOff, period] =
+    await Promise.all([
+      sdb.staffAttendanceDay.findMany({ where: { workDate, centerId: coSo } }),
+      sdb.staffTimeLog.findMany({
+        where: { workDate, centerId: coSo, result: "ACCEPTED" },
+        orderBy: { loggedAt: "asc" },
+        select: { userId: true, direction: true, loggedAt: true, flags: true },
+      }),
+      sdb.shiftAssignment.findMany({
+        where: { workDate, centerId: coSo, status: "ACTIVE" },
+        select: { userId: true, templateCode: true, source: true },
+      }),
+      sdb.staffAttendanceDay.findMany({
+        where: { centerId: coSo, workDate: { gte: monthFrom, lte: monthTo } },
+        select: { workDate: true, flags: true, dayType: true },
+      }),
+      sdb.holiday.findMany({
+        where: {
+          type: "HOLIDAY",
+          date: { lte: monthTo },
+          AND: [
+            {
+              OR: [
+                { endDate: null, date: { gte: monthFrom } },
+                { endDate: { gte: monthFrom } },
+              ],
+            },
+            { OR: [{ centerId: null }, { centerId: coSo }] },
+          ],
+        },
+        select: { date: true, endDate: true, attendanceEffect: true },
+      }),
+      getSetting("shift.weeklyOffDays", { orgUnitId }),
+      periodStatusOf(sdb, coSo, ky),
+    ]);
 
   const userIds = [
     ...new Set([
@@ -222,7 +264,13 @@ export default async function ChamCongPage({ searchParams }: Props) {
     ? await sdb.staffTimeLog.findMany({
         where: { userId: { in: userIds }, workDate, result: "ACCEPTED" },
         orderBy: { loggedAt: "asc" },
-        select: { userId: true, direction: true, loggedAt: true, flags: true, centerId: true },
+        select: {
+          userId: true,
+          direction: true,
+          loggedAt: true,
+          flags: true,
+          centerId: true,
+        },
       })
     : [];
   const users = await sdb.user.findMany({
@@ -250,8 +298,11 @@ export default async function ChamCongPage({ searchParams }: Props) {
     .map((userId) => {
       const d = days.find((x) => x.userId === userId) ?? null;
       const my = logsDay.filter((l) => l.userId === userId);
-      const firstIn = my.find((l) => l.direction === "CHECK_IN")?.loggedAt ?? null;
-      const lastOut = [...my].reverse().find((l) => l.direction === "CHECK_OUT")?.loggedAt ?? null;
+      const firstIn =
+        my.find((l) => l.direction === "CHECK_IN")?.loggedAt ?? null;
+      const lastOut =
+        [...my].reverse().find((l) => l.direction === "CHECK_OUT")?.loggedAt ??
+        null;
       const asg = assignments.find((a) => a.userId === userId) ?? null;
       const name = nameOf.get(userId) ?? userId;
       const worked = d?.workedMinutes ?? 0;
@@ -307,7 +358,8 @@ export default async function ChamCongPage({ searchParams }: Props) {
     })
     .sort(
       (a, b) =>
-        rowRank(a.flags) - rowRank(b.flags) || a.name.localeCompare(b.name, "vi-VN"),
+        rowRank(a.flags) - rowRank(b.flags) ||
+        a.name.localeCompare(b.name, "vi-VN"),
     );
 
   const kpiIssues = rows.filter((r) => r.flags.some(countsAsIssue)).length;
@@ -330,13 +382,18 @@ export default async function ChamCongPage({ searchParams }: Props) {
   const holidayDays = new Set<string>();
   for (const r of monthRows) {
     const ymd = r.workDate.toISOString().slice(0, 10);
-    if (r.flags.some(countsAsIssue)) flagByDay.set(ymd, (flagByDay.get(ymd) ?? 0) + 1);
+    if (r.flags.some(countsAsIssue))
+      flagByDay.set(ymd, (flagByDay.get(ymd) ?? 0) + 1);
     if (r.dayType === "HOLIDAY") holidayDays.add(ymd);
   }
   for (const h of holidays) {
     if (h.attendanceEffect === "INFO_ONLY") continue;
     const end = h.endDate ?? h.date;
-    for (let d = new Date(h.date); d <= end; d = new Date(d.getTime() + 86_400_000)) {
+    for (
+      let d = new Date(h.date);
+      d <= end;
+      d = new Date(d.getTime() + 86_400_000)
+    ) {
       holidayDays.add(d.toISOString().slice(0, 10));
     }
   }
@@ -349,7 +406,11 @@ export default async function ChamCongPage({ searchParams }: Props) {
       day: i,
       wd,
       flagCount: flagByDay.get(ymd) ?? 0,
-      type: holidayDays.has(ymd) ? "HOLIDAY" : weeklyOff.includes(wd) ? "WEEKLY_OFF" : "WORK",
+      type: holidayDays.has(ymd)
+        ? "HOLIDAY"
+        : weeklyOff.includes(wd)
+          ? "WEEKLY_OFF"
+          : "WORK",
       href: here({ date: ymd }),
     });
   }
@@ -363,13 +424,19 @@ export default async function ChamCongPage({ searchParams }: Props) {
         subtitle={SUBTITLE}
         actions={
           <>
-            <Link href={`/cham-cong/man-hinh?centerId=${coSo}`} className={BTN_OUTLINE}>
+            <Link
+              href={`/cham-cong/man-hinh?centerId=${coSo}`}
+              className={BTN_OUTLINE}
+            >
               <Monitor aria-hidden className="h-4 w-4" /> Màn hình QR
             </Link>
             {canAssign && (
               // `scopeHref` chứ không href trần: màn import ĐỌC cả `ky` lẫn `coSo`, đi tay là
               // người đang soát CS2 tháng 08 bấm sang rơi về tháng hiện tại của khối đầu tiên.
-              <Link href={scopeHref("/cham-cong/phan-ca/import", { ky, coSo })} className={BTN_OUTLINE}>
+              <Link
+                href={scopeHref("/cham-cong/phan-ca/import", { ky, coSo })}
+                className={BTN_OUTLINE}
+              >
                 <FileSpreadsheet aria-hidden className="h-4 w-4" /> Import lịch
               </Link>
             )}
@@ -377,30 +444,41 @@ export default async function ChamCongPage({ searchParams }: Props) {
         }
       />
 
-      <ModuleNav active="ngay" scope={scope} ctx={{ ky, coSo, date: dateStr }} />
+      <ModuleNav
+        active="ngay"
+        scope={scope}
+        ctx={{ ky, coSo, date: dateStr }}
+      />
 
       <ScopeBar
         basePath="/cham-cong"
-        blocks={scope.blocksWith(VIEW).map((b) => ({ id: b.id, label: b.label }))}
+        blocks={scope
+          .blocksWith(VIEW)
+          .map((b) => ({ id: b.id, label: b.label }))}
         coSo={coSo}
         month={{
           ky,
           prevHref: here({ date: monthStepDate(dateStr, -1) }),
           nextHref: here({ date: monthStepDate(dateStr, 1) }),
         }}
-        period={{ status: period.status, standardUnits: period.standardUnits, href: kyHref }}
+        period={{
+          status: period.status,
+          standardUnits: period.standardUnits,
+          href: kyHref,
+        }}
         keep={{ date: dateStr, ...(loc ? { loc } : {}), ...(q ? { q } : {}) }}
       />
 
       <PageHelp guideSlug="nhan-su-giao-vien">
         <p>
-          Mỗi dòng là một người trong ngày đang chọn. Công được tính theo ca đã xếp trong lưới phân
-          ca — lượt quét vào/ra chỉ dùng để gắn cờ (đi muộn, thiếu lượt, ngoài vùng…) cho quản lý rà
-          lại, không tự trừ công.
+          Mỗi dòng là một người trong ngày đang chọn. Công được tính theo ca đã
+          xếp trong lưới phân ca — lượt quét vào/ra chỉ dùng để gắn cờ (đi muộn,
+          thiếu lượt, ngoài vùng…) cho quản lý rà lại, không tự trừ công.
         </p>
         <p className="mt-2">
-          Số đỏ trên dải ngày là số người có cờ cần rà của ngày đó. Bấm tên một người để xem từng
-          lượt quét và ghi đè công (phải ghi lý do; mọi lần ghi đè đều được lưu vết).
+          Số đỏ trên dải ngày là số người có cờ cần rà của ngày đó. Bấm tên một
+          người để xem từng lượt quét và ghi đè công (phải ghi lý do; mọi lần
+          ghi đè đều được lưu vết).
         </p>
       </PageHelp>
 
@@ -418,7 +496,12 @@ export default async function ChamCongPage({ searchParams }: Props) {
             tone: "brand",
             hint: `${rows.length.toLocaleString("vi-VN")} người trong ngày`,
           },
-          { icon: ClipboardCheck, value: kpiScanned.toLocaleString("vi-VN"), label: "Đã quét", tone: "info" },
+          {
+            icon: ClipboardCheck,
+            value: kpiScanned.toLocaleString("vi-VN"),
+            label: "Đã quét",
+            tone: "info",
+          },
           {
             icon: Flag,
             value: kpiIssues.toLocaleString("vi-VN"),
@@ -446,8 +529,12 @@ export default async function ChamCongPage({ searchParams }: Props) {
       {locked && (
         <p className="mb-4 flex flex-wrap items-center gap-2 rounded-xl bg-muted px-4 py-3 text-sm text-muted-foreground">
           <Lock aria-hidden className="h-4 w-4 shrink-0" />
-          Kỳ {ky.slice(5)}/{ky.slice(0, 4)} đã chốt — công ngày chỉ đổi qua đơn chỉnh công.
-          <Link href={kyHref} className="font-medium text-primary hover:underline">
+          Kỳ {ky.slice(5)}/{ky.slice(0, 4)} đã chốt — công ngày chỉ đổi qua đơn
+          chỉnh công.
+          <Link
+            href={kyHref}
+            className="font-medium text-primary hover:underline"
+          >
             Sang màn Kỳ công
           </Link>
         </p>
@@ -468,7 +555,11 @@ export default async function ChamCongPage({ searchParams }: Props) {
         </div>
 
         {/* GET form, KHÔNG input tự push: hidden `coSo` là thứ giữ khối khi đổi ngày. */}
-        <form method="GET" action="/cham-cong" className="flex flex-wrap items-center gap-2">
+        <form
+          method="GET"
+          action="/cham-cong"
+          className="flex flex-wrap items-center gap-2"
+        >
           <input type="hidden" name="coSo" value={coSo} />
           {loc && <input type="hidden" name="loc" value={loc} />}
           <label htmlFor="cc-q" className="sr-only">
@@ -484,7 +575,13 @@ export default async function ChamCongPage({ searchParams }: Props) {
           <label htmlFor="cc-date" className="sr-only">
             Ngày công
           </label>
-          <input id="cc-date" type="date" name="date" defaultValue={dateStr} className={FIELD} />
+          <input
+            id="cc-date"
+            type="date"
+            name="date"
+            defaultValue={dateStr}
+            className={FIELD}
+          />
           <button type="submit" className={BTN_OUTLINE}>
             <Search aria-hidden className="h-4 w-4" /> Xem
           </button>
@@ -496,7 +593,8 @@ export default async function ChamCongPage({ searchParams }: Props) {
           title={`Chưa có ca hay lượt chấm ngày ${dateStr.slice(8, 10)}/${dateStr.slice(5, 7)} ở ${block.label}`}
           description={
             <>
-              Có thể lịch tháng này chưa được import, hoặc cả khối nghỉ ngày này.
+              Có thể lịch tháng này chưa được import, hoặc cả khối nghỉ ngày
+              này.
               {/* Quyền MỘT PHẦN phải nói thành lời: kế toán cơ sở có `view` mà không có `assign`
                   chỉ thấy nút Import biến mất, không biết vì sao và hỏi ai. */}
               {!canAssign && (
@@ -514,11 +612,18 @@ export default async function ChamCongPage({ searchParams }: Props) {
           action={
             <div className="flex flex-wrap items-center justify-center gap-2">
               {canAssign && (
-                <Link href={scopeHref("/cham-cong/phan-ca/import", { ky, coSo })} className={BTN_OUTLINE}>
-                  <FileSpreadsheet aria-hidden className="h-4 w-4" /> Import lịch
+                <Link
+                  href={scopeHref("/cham-cong/phan-ca/import", { ky, coSo })}
+                  className={BTN_OUTLINE}
+                >
+                  <FileSpreadsheet aria-hidden className="h-4 w-4" /> Import
+                  lịch
                 </Link>
               )}
-              <Link href={hrefWith("/cham-cong/phan-ca", { ky, coSo })} className={BTN_OUTLINE}>
+              <Link
+                href={hrefWith("/cham-cong/phan-ca", { ky, coSo })}
+                className={BTN_OUTLINE}
+              >
                 Xem lưới phân ca
               </Link>
             </div>
@@ -529,7 +634,10 @@ export default async function ChamCongPage({ searchParams }: Props) {
           title="Không ai khớp bộ lọc"
           description={`Ngày ${dateStr.slice(8, 10)}/${dateStr.slice(5, 7)} có ${rows.length} người, nhưng không ai khớp bộ lọc đang bật.`}
           action={
-            <Link href={hrefWith("/cham-cong", { coSo, date: dateStr })} className={BTN_OUTLINE}>
+            <Link
+              href={hrefWith("/cham-cong", { coSo, date: dateStr })}
+              className={BTN_OUTLINE}
+            >
               Bỏ lọc
             </Link>
           }
@@ -567,7 +675,16 @@ export default async function ChamCongPage({ searchParams }: Props) {
               </thead>
               <tbody>
                 {visible.map((r) => (
-                  <tr key={r.detail.userId} className={cn(adminTr, "h-11")}>
+                  // `relative` là NEO của lớp phủ trong `DayDetailSheet` (`after:inset-0`);
+                  // `group` để mũi tên cuối dòng đổi màu theo hover của cả hàng;
+                  // `cursor-pointer` để con trỏ nói đúng sự thật — cả dòng bấm được.
+                  <tr
+                    key={r.detail.userId}
+                    className={cn(
+                      adminTr,
+                      "relative h-11 cursor-pointer group",
+                    )}
+                  >
                     <td className={cn(adminTd, "py-0")}>
                       <DayDetailSheet
                         row={r.detail}
@@ -578,22 +695,42 @@ export default async function ChamCongPage({ searchParams }: Props) {
                     </td>
                     <td className={cn(adminTd, "py-0")}>
                       <span className="flex items-center gap-1.5">
-                        <ShiftCodeChip code={r.detail.code} source={r.detail.source} size="sm" />
+                        <ShiftCodeChip
+                          code={r.detail.code}
+                          source={r.detail.source}
+                          size="sm"
+                        />
                         <DayTypePill type={r.detail.dayType} />
                       </span>
                     </td>
-                    <td className={cn(adminTd, "py-0 font-mono tabular-nums")}>{r.quet}</td>
-                    <td className={cn(adminTd, "py-0 text-right tabular-nums")}>{r.gio}</td>
+                    <td className={cn(adminTd, "py-0 font-mono tabular-nums")}>
+                      {r.quet}
+                    </td>
+                    <td className={cn(adminTd, "py-0 text-right tabular-nums")}>
+                      {r.gio}
+                    </td>
                     <td className={cn(adminTd, "py-0 text-right")}>
                       <span className="inline-flex items-center justify-end gap-1.5">
                         {r.credit != null ? (
-                          <span className="font-semibold tabular-nums">{r.credit}</span>
+                          <span className="font-semibold tabular-nums">
+                            {r.credit}
+                          </span>
                         ) : (
-                          <span className={cn(PILL, "bg-muted text-muted-foreground")}>Chờ tính</span>
+                          <span
+                            className={cn(
+                              PILL,
+                              "bg-muted text-muted-foreground",
+                            )}
+                          >
+                            Chờ tính
+                          </span>
                         )}
                         {r.override && (
                           <span
-                            className={cn(PILL, "bg-state-warning-soft text-state-warning-ink")}
+                            className={cn(
+                              PILL,
+                              "bg-state-warning-soft text-state-warning-ink",
+                            )}
                             title={r.overrideNote ?? "Quản lý đã ghi đè"}
                           >
                             ghi đè
@@ -611,7 +748,16 @@ export default async function ChamCongPage({ searchParams }: Props) {
                       <FlagList codes={r.flags} max={2} />
                     </td>
                     <td className={cn(adminTd, "py-0 text-right")}>
-                      <ChevronRight aria-hidden className="ml-auto h-4 w-4 text-muted-foreground" />
+                      {/* Mũi tên GIỮ `aria-hidden`: nó nằm TRONG vùng bấm (lớp phủ của
+                          `SheetTrigger` phủ kín hàng) nhưng không phải nút riêng — điều
+                          khiển có nhãn là chính `SheetTrigger` với `aria-label="Chi tiết
+                          <tên>"`. Đọc thêm "chevron right" chỉ là nhiễu cho người dùng
+                          trình đọc màn hình. Nó nay ĐỔI MÀU theo hover của hàng, nên nó
+                          không còn là hình vẽ chết. */}
+                      <ChevronRight
+                        aria-hidden
+                        className="ml-auto h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground"
+                      />
                     </td>
                   </tr>
                 ))}

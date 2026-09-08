@@ -27,9 +27,20 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { FlagList } from "@/components/cham-cong/ui/flag-chip";
-import { ShiftCodeChip, type ShiftSource } from "@/components/cham-cong/ui/shift-code-chip";
-import { DayTypePill, type DayType } from "@/components/cham-cong/ui/day-type-pill";
-import { BTN_DANGER, BTN_OUTLINE, BTN_PRIMARY, FIELD } from "@/components/admin/cham-cong/classes";
+import {
+  ShiftCodeChip,
+  type ShiftSource,
+} from "@/components/cham-cong/ui/shift-code-chip";
+import {
+  DayTypePill,
+  type DayType,
+} from "@/components/cham-cong/ui/day-type-pill";
+import {
+  BTN_DANGER,
+  BTN_OUTLINE,
+  BTN_PRIMARY,
+  FIELD,
+} from "@/components/admin/cham-cong/classes";
 import { cn } from "@/lib/utils";
 import { setDayAbsenceAction, setDayOverrideAction } from "../_actions";
 
@@ -82,7 +93,9 @@ export function DayDetailSheet({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
-  const [units, setUnits] = useState(row.credit != null ? String(row.credit) : "");
+  const [units, setUnits] = useState(
+    row.credit != null ? String(row.credit) : "",
+  );
   const [reason, setReason] = useState(row.overrideNote ?? "");
   const [absenceNote, setAbsenceNote] = useState(row.absenceNote ?? "");
 
@@ -111,7 +124,8 @@ export function DayDetailSheet({
   // Chỉ hỏi khi ĐÁNG hỏi: ngày công thật, không một lượt quét nào — hoặc ngày đã có kết luận
   // (để còn sửa/gỡ). Bày ô này lên mọi ngày là mời người ta bấm nhầm vào ngày bình thường.
   const hoiKetLuan =
-    row.dayType === "WORK" && (row.taps.length === 0 || row.absenceStatus !== null);
+    row.dayType === "WORK" &&
+    (row.taps.length === 0 || row.absenceStatus !== null);
 
   const save = (value: number | null) =>
     start(async () => {
@@ -132,9 +146,22 @@ export function DayDetailSheet({
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
+      {/* VÙNG BẤM = CẢ DÒNG, không chỉ chữ tên (08/09/2026).
+          Trước đó cửa mở sheet chỉ là mấy chữ tên ở cột đầu, trong khi cuối dòng có một
+          `ChevronRight` TRƠ — đúng vị trí quy ước "bấm để mở" mà chưa từng được nối. Người
+          dùng bấm mũi tên và không có gì xảy ra (luật 12: affordance phải nói thật).
+
+          Cách làm: `after:absolute after:inset-0` kéo vùng bấm của chính nút này phủ kín
+          `<tr>` (hàng đã có `relative`). KHÔNG bọc `<tr>` trong `<button>` — HTML không cho,
+          và cũng KHÔNG gắn `onClick` lên `<tr>`: hàng không nhận được focus bàn phím, còn
+          nút này thì có, kèm `aria-label` rõ tên người.
+
+          An toàn vì hàng không có phần tử tương tác nào khác (đã rà: `ShiftCodeChip`,
+          `DayTypePill`, `FlagList` đều 0 nút/0 link). Thêm cái thứ hai vào hàng thì phải
+          xem lại lớp phủ này, kẻo nó nuốt mất. */}
       <SheetTrigger
         aria-label={`Chi tiết ${row.name}`}
-        className="block max-w-[15rem] truncate text-left font-medium text-foreground transition-colors hover:underline"
+        className="block max-w-[15rem] truncate text-left font-medium text-foreground transition-colors after:absolute after:inset-0 after:content-[''] hover:underline"
         title={row.name}
       >
         {row.name}
@@ -160,15 +187,22 @@ export function DayDetailSheet({
             </h3>
             {row.taps.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                Không có lượt quét nào được nhận. Công vẫn đếm theo ca đã xếp — lượt quét chỉ sinh
-                cờ để quản lý rà.
+                Không có lượt quét nào được nhận. Công vẫn đếm theo ca đã xếp —
+                lượt quét chỉ sinh cờ để quản lý rà.
               </p>
             ) : (
               <ol className="space-y-1.5">
                 {row.taps.map((t, i) => (
-                  <li key={`${t.time}-${t.dir}-${i}`} className="flex flex-wrap items-center gap-2 text-sm">
-                    <span className="font-mono tabular-nums text-foreground">{t.time}</span>
-                    <span className="text-muted-foreground">{t.dir === "IN" ? "Vào" : "Ra"}</span>
+                  <li
+                    key={`${t.time}-${t.dir}-${i}`}
+                    className="flex flex-wrap items-center gap-2 text-sm"
+                  >
+                    <span className="font-mono tabular-nums text-foreground">
+                      {t.time}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {t.dir === "IN" ? "Vào" : "Ra"}
+                    </span>
                     <FlagList codes={t.flags} max={2} />
                   </li>
                 ))}
@@ -196,7 +230,9 @@ export function DayDetailSheet({
               {row.override && (
                 <>
                   <dt className="text-muted-foreground">Lý do ghi đè</dt>
-                  <dd className="text-right text-foreground">{row.overrideNote ?? "—"}</dd>
+                  <dd className="text-right text-foreground">
+                    {row.overrideNote ?? "—"}
+                  </dd>
                 </>
               )}
             </dl>
@@ -217,15 +253,23 @@ export function DayDetailSheet({
               ) : !canAdjust ? (
                 <p className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">
                   Kết luận ngày vắng cần quyền{" "}
-                  <code className="rounded bg-card px-1 py-0.5 font-mono text-xs">hr_attendance:adjust</code> tại{" "}
-                  {row.blockLabel}.
+                  <code className="rounded bg-card px-1 py-0.5 font-mono text-xs">
+                    hr_attendance:adjust
+                  </code>{" "}
+                  tại {row.blockLabel}.
                 </p>
               ) : row.absenceStatus ? (
                 <div className="rounded-lg border border-border p-3 text-sm">
                   <p className="font-semibold text-foreground">
-                    {row.absenceStatus === "UNAUTHORISED" ? "Nghỉ không phép" : "Vắng có lý do"}
+                    {row.absenceStatus === "UNAUTHORISED"
+                      ? "Nghỉ không phép"
+                      : "Vắng có lý do"}
                   </p>
-                  {row.absenceNote && <p className="mt-1 text-muted-foreground">{row.absenceNote}</p>}
+                  {row.absenceNote && (
+                    <p className="mt-1 text-muted-foreground">
+                      {row.absenceNote}
+                    </p>
+                  )}
                   <button
                     type="button"
                     disabled={pending}
@@ -238,8 +282,9 @@ export function DayDetailSheet({
               ) : (
                 <div className="space-y-3">
                   <p className="text-sm text-muted-foreground">
-                    Ngày này có ca nhưng không có lượt quét nào. Chưa kết luận thì{" "}
-                    <b>không trừ đồng nào</b> — nó chỉ nằm ở cột “chờ kết luận”.
+                    Ngày này có ca nhưng không có lượt quét nào. Chưa kết luận
+                    thì <b>không trừ đồng nào</b> — nó chỉ nằm ở cột “chờ kết
+                    luận”.
                   </p>
                   <div>
                     <label
@@ -258,7 +303,8 @@ export function DayDetailSheet({
                       className={cn(FIELD, "w-full resize-y py-2 leading-snug")}
                     />
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Bắt buộc khi kết luận không phép — đây là căn cứ trừ % nội quy.
+                      Bắt buộc khi kết luận không phép — đây là căn cứ trừ % nội
+                      quy.
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -295,19 +341,25 @@ export function DayDetailSheet({
                   <Lock aria-hidden className="mt-0.5 h-4 w-4 shrink-0" />
                   Kỳ đã chốt — chỉ đổi qua đơn chỉnh công hoặc mở lại kỳ.
                 </p>
-                <Link href={kyHref} className="mt-2 inline-block font-medium text-primary hover:underline">
+                <Link
+                  href={kyHref}
+                  className="mt-2 inline-block font-medium text-primary hover:underline"
+                >
                   Sang màn Kỳ công
                 </Link>
               </div>
             ) : !canAdjust ? (
               <p className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">
-                Ghi đè cần quyền <code className="rounded bg-card px-1 py-0.5 font-mono text-xs">hr_attendance:adjust</code>{" "}
+                Ghi đè cần quyền{" "}
+                <code className="rounded bg-card px-1 py-0.5 font-mono text-xs">
+                  hr_attendance:adjust
+                </code>{" "}
                 tại {row.blockLabel}.
               </p>
             ) : !row.computed || row.credit == null ? (
               <p className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">
-                Máy chưa tính ngày này. Chờ vài phút rồi tải lại — chưa có số máy tính thì không có
-                gì để ghi đè.
+                Máy chưa tính ngày này. Chờ vài phút rồi tải lại — chưa có số
+                máy tính thì không có gì để ghi đè.
               </p>
             ) : (
               <form
@@ -319,7 +371,10 @@ export function DayDetailSheet({
                 }}
               >
                 <div>
-                  <label htmlFor={`units-${row.userId}`} className="mb-1 block text-sm font-semibold text-foreground">
+                  <label
+                    htmlFor={`units-${row.userId}`}
+                    className="mb-1 block text-sm font-semibold text-foreground"
+                  >
                     Công ghi nhận
                   </label>
                   <input
@@ -338,7 +393,10 @@ export function DayDetailSheet({
                   </p>
                 </div>
                 <div>
-                  <label htmlFor={`reason-${row.userId}`} className="mb-1 block text-sm font-semibold text-foreground">
+                  <label
+                    htmlFor={`reason-${row.userId}`}
+                    className="mb-1 block text-sm font-semibold text-foreground"
+                  >
                     Lý do <span className="text-state-danger-ink">*</span>
                   </label>
                   <input
