@@ -44,3 +44,58 @@ export const KHUNG_CA_EFFECTIVE_FROM = new Date(Date.UTC(2000, 0, 1));
 export function conTrongKhoi(dong: { effectiveTo: Date | null }): boolean {
   return dong.effectiveTo === null;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// (b) THÊM HÀNG LOẠT — idempotent
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface KetQuaThemHangLoat {
+  /** Chưa có dòng nào trong khối ⇒ tạo mới. */
+  themMoi: string[];
+  /** Có dòng nhưng đã đóng (`effectiveTo`) ⇒ mở lại, KHÔNG tạo dòng thứ hai. */
+  hoiSinh: string[];
+  /** Đang ở trong khối ⇒ bỏ qua, không lỗi. */
+  boQua: string[];
+}
+
+/**
+ * Chia danh sách người được chọn thành ba nhóm trước khi ghi.
+ *
+ * "Người đã có trong khối thì bỏ qua, không lỗi, không nhân đôi" — nhưng **đã có** có HAI
+ * nghĩa, và gộp chúng lại là sinh bug:
+ *
+ *   · đang ở trong khối  → bỏ qua thật;
+ *   · từng ở, đã bị gỡ   → **phải mở lại cụm cũ**. Khoá duy nhất
+ *     `(userId, centerId, weekday, effectiveFrom)` không đổi khi gỡ mềm, nên "tạo mới"
+ *     cho người này sẽ đâm khoá; và nếu đường ghi dùng `upsert` thì nó lặng lẽ rơi vào
+ *     nhánh `update` — đúng chỗ phải nhớ xoá `effectiveTo`, nếu không thì thêm xong người
+ *     ấy vẫn tàng hình.
+ *
+ * Vì sao tách thành hàm thuần thay vì viết thẳng trong action: ba nhóm này là thứ MÀN
+ * HÌNH phải báo lại ("thêm 3, mở lại 1, bỏ qua 2"), và một lượt thêm hàng loạt không nói
+ * rõ nó đã làm gì với từng người là đúng loại thao tác vừa xoá trắng 9 hồ sơ prod.
+ *
+ * @param daCo Mọi dòng hiện có CỦA KHỐI ĐÓ — chỉ cần `userId` + `effectiveTo`.
+ *             ⚠️ Truyền dòng của khối khác vào là báo "bỏ qua" cho người chưa hề có mặt.
+ */
+export function chiaLoThem(
+  chon: readonly string[],
+  daCo: readonly { userId: string; effectiveTo: Date | null }[],
+): KetQuaThemHangLoat {
+  const dangTrong = new Set<string>();
+  const daDong = new Set<string>();
+  for (const d of daCo) {
+    if (conTrongKhoi(d)) dangTrong.add(d.userId);
+    else daDong.add(d.userId);
+  }
+  const kq: KetQuaThemHangLoat = { themMoi: [], hoiSinh: [], boQua: [] };
+  // `new Set(chon)`: chọn trùng trong CÙNG một lượt cũng không được đẻ hai dòng.
+  // ⚠️ Thứ tự kiểm quan trọng — một người có thể vừa có dòng đang mở (thứ Hai) vừa có
+  // dòng đã đóng (thứ Ba) nếu ai đó sửa tay; khi đó họ ĐANG trong khối, phải bỏ qua.
+  for (const u of new Set(chon)) {
+    if (dangTrong.has(u)) kq.boQua.push(u);
+    else if (daDong.has(u)) kq.hoiSinh.push(u);
+    else kq.themMoi.push(u);
+  }
+  return kq;
+}

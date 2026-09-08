@@ -155,9 +155,17 @@ export default async function KhungCaPage({ searchParams }: Props) {
     canAssignAnyShown
       ? sdb.employee.findMany({
           where: { status: "ACTIVE", userAccount: { isNot: null } },
+          // `department` / `jobTitle` / cơ sở trực thuộc là ba bộ lọc của hộp thêm hàng loạt.
+          // ⚠️ `center` ở đây là cơ sở TRỰC THUỘC của nhân sự, KHÁC khối đang xếp ca —
+          // người của CS1 làm ca ở CS2 là bình thường, nên nó là bộ LỌC chứ không phải
+          // điều kiện.
           select: {
             fullName: true,
             employeeCode: true,
+            department: true,
+            departmentRef: { select: { name: true } },
+            jobTitle: true,
+            center: { select: { name: true } },
             userAccount: { select: { id: true } },
           },
           orderBy: { fullName: "asc" },
@@ -185,7 +193,15 @@ export default async function KhungCaPage({ searchParams }: Props) {
       nameOf.set(e.userAccount!.id, e.fullName);
   const candidates: Candidate[] = employees.map((e) => ({
     userId: e.userAccount!.id,
-    label: `${e.fullName} · ${e.employeeCode}`,
+    name: e.fullName,
+    employeeCode: e.employeeCode,
+    department: e.department ?? null,
+    // Nhãn đọc từ `DepartmentDef` (BẢNG), không chép tay: phòng ban là DỮ LIỆU —
+    // SUPER_ADMIN/HR thêm phòng ban mà không cần deploy. Rơi về mã enum khi hồ sơ chưa
+    // được nối sang bảng (2-phase, dual-write còn dở) — in mã còn hơn in "Chưa gán" sai.
+    departmentLabel: e.departmentRef?.name ?? e.department ?? "Chưa gán",
+    jobTitle: e.jobTitle ?? null,
+    centerLabel: e.center?.name ?? "Chưa gán cơ sở",
   }));
 
   const blocks: PatternBlock[] = shown.map((b) => {

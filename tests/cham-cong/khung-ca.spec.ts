@@ -8,7 +8,10 @@
 import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { KHUNG_CA_EFFECTIVE_FROM, conTrongKhoi } from "../../lib/cham-cong/khung-ca";
+import {
+  KHUNG_CA_EFFECTIVE_FROM,
+  conTrongKhoi,
+} from "../../lib/cham-cong/khung-ca";
 import { seedShiftTemplates } from "../../lib/cham-cong/seed-core";
 
 const DB_URL = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL ?? "";
@@ -94,7 +97,12 @@ d("khung ca tuần — gỡ mềm bằng effectiveTo", () => {
         select: { id: true },
       })
     ).id;
-    tplX = (await db.shiftTemplate.findFirstOrThrow({ where: { code: "X" }, select: { id: true } })).id;
+    tplX = (
+      await db.shiftTemplate.findFirstOrThrow({
+        where: { code: "X" },
+        select: { id: true },
+      })
+    ).id;
 
     await dungCum(cs1);
     await dungCum(cs2);
@@ -130,7 +138,9 @@ d("khung ca tuần — gỡ mềm bằng effectiveTo", () => {
     const a = await cum(cs1);
     // Dòng vẫn còn — đây là điểm khác biệt duy nhất giữa gỡ mềm và xoá cứng.
     expect(a).toHaveLength(7);
-    expect(a.every((r) => r.effectiveTo?.getTime() === HOM_NAY.getTime())).toBe(true);
+    expect(a.every((r) => r.effectiveTo?.getTime() === HOM_NAY.getTime())).toBe(
+      true,
+    );
     // `sheetName` phải sống sót: nó là cầu nối tên trên file Sheet với userId
     // (`reconcile-db.ts` đọc `distinct sheetName`). Xoá cứng là mất ánh xạ đó.
     expect(a.every((r) => r.sheetName === "Người thử")).toBe(true);
@@ -153,7 +163,11 @@ d("khung ca tuần — gỡ mềm bằng effectiveTo", () => {
       data: { effectiveTo: new Date(Date.UTC(2026, 8, 30)) },
     });
     expect(count).toBe(0);
-    expect((await cum(cs1)).every((r) => r.effectiveTo?.getTime() === HOM_NAY.getTime())).toBe(true);
+    expect(
+      (await cum(cs1)).every(
+        (r) => r.effectiveTo?.getTime() === HOM_NAY.getTime(),
+      ),
+    ).toBe(true);
   });
 
   // ⚠️ CA SINH RA DÒNG `effectiveTo: null` TRONG NHÁNH `update`.
@@ -164,7 +178,10 @@ d("khung ca tuần — gỡ mềm bằng effectiveTo", () => {
 
     const a = await cum(cs1);
     expect(a).toHaveLength(7); // vẫn 7, không nhân đôi thành 14
-    expect(a.every(conTrongKhoi), "gỡ rồi thêm lại phải sống lại, không tàng hình").toBe(true);
+    expect(
+      a.every(conTrongKhoi),
+      "gỡ rồi thêm lại phải sống lại, không tàng hình",
+    ).toBe(true);
   });
 
   it("màn khung ca lọc `effectiveTo: null` — người đã gỡ biến khỏi bảng, người kia còn", async () => {
@@ -178,5 +195,47 @@ d("khung ca tuần — gỡ mềm bằng effectiveTo", () => {
       select: { centerId: true },
     });
     expect(new Set(hien.map((r) => r.centerId))).toEqual(new Set([cs2]));
+  });
+
+  // ── (b) THÊM HÀNG LOẠT — hồi sinh không được đâm khoá duy nhất ─────────────
+  //
+  // Đây là nửa CSDL của `chiaLoThem`. Luật chia nhóm test thuần ở
+  // `lib/cham-cong/khung-ca.test.ts`; ca dưới đây kiểm chính thứ hàm thuần không nhìn
+  // thấy: câu `updateMany` mở lại cụm chạy được trên bảng thật, và mở đúng một khối.
+  it("mở lại cụm đã gỡ bằng MỘT câu updateMany — 7 dòng, không đụng khối kia", async () => {
+    // Nền: cs1 đã bị đóng ở ca trước; cs2 vẫn mở.
+    expect((await cum(cs1)).every((r) => r.effectiveTo !== null)).toBe(true);
+
+    const { count } = await db.shiftWeeklyPattern.updateMany({
+      where: {
+        centerId: cs1,
+        userId: { in: [userId] },
+        effectiveFrom: KHUNG_CA_EFFECTIVE_FROM,
+        effectiveTo: { not: null },
+      },
+      data: { effectiveTo: null },
+    });
+    expect(count).toBe(7);
+
+    const a = await cum(cs1);
+    expect(a).toHaveLength(7); // vẫn 7 — mở lại, không dựng thêm
+    expect(a.every(conTrongKhoi)).toBe(true);
+    // Lịch tuần cũ còn nguyên: đó là lý do mở lại thay vì tạo mới.
+    expect(a.every((r) => r.sheetName === "Người thử")).toBe(true);
+  });
+
+  it("mở lại lần hai KHÔNG đụng dòng nào (đã mở rồi)", async () => {
+    // `effectiveTo: { not: null }` trong điều kiện chính vì ca này — chạy lại một lượt
+    // thêm hàng loạt không được sinh việc ghi vô nghĩa.
+    const { count } = await db.shiftWeeklyPattern.updateMany({
+      where: {
+        centerId: cs1,
+        userId: { in: [userId] },
+        effectiveFrom: KHUNG_CA_EFFECTIVE_FROM,
+        effectiveTo: { not: null },
+      },
+      data: { effectiveTo: null },
+    });
+    expect(count).toBe(0);
   });
 });

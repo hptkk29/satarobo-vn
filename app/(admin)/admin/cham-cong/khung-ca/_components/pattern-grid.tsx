@@ -16,13 +16,13 @@
 //    nên nhánh "Chọn kèm lý do…" ở đây là hứa suông.
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarRange, UserMinus, UserPlus } from "lucide-react";
+import { CalendarRange, UserMinus } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 import { adminTd, adminTh, adminTr } from "@/components/admin/ui/table";
 import { EmptyState } from "@/components/admin/ui/states";
-import { BTN_OUTLINE, FIELD, PILL } from "@/components/admin/cham-cong/classes";
+import { BTN_OUTLINE, PILL } from "@/components/admin/cham-cong/classes";
 import { SectionCard } from "@/components/admin/cham-cong/section-card";
 import {
   ShiftCellPicker,
@@ -30,10 +30,10 @@ import {
 } from "@/components/admin/cham-cong/shift-cell-picker";
 import { ShiftCodeChip } from "@/components/cham-cong/ui/shift-code-chip";
 import {
-  addPersonToBlockAction,
   removePersonFromBlockAction,
   savePatternCellAction,
 } from "../_actions";
+import { BulkAddDialog, type Candidate } from "./bulk-add-dialog";
 
 /** Mã ca dùng được cho ô. `isLeave` chỉ để in nhóm trong chú giải — tổng Công/tuần vẫn theo K-01. */
 export type PatternCode = {
@@ -61,7 +61,10 @@ export type PatternBlock = {
   people: PatternPerson[];
 };
 
-export type Candidate = { userId: string; label: string };
+// `Candidate` khai ở HỘP THOẠI (nơi dùng nó) rồi tái xuất ở đây, để `page.tsx` vẫn nhập
+// một chỗ như cũ — một khai báo, hai nơi đọc. Phải `import type` chứ không chỉ
+// `export type ... from`: file này cũng dùng tên đó trong props.
+export type { Candidate };
 
 /** Thứ Hai đứng đầu tuần làm việc; 0 = Chủ Nhật đứng cuối (khớp `vnWeekday` và cột Sheet). */
 const WD = [1, 2, 3, 4, 5, 6, 0];
@@ -103,7 +106,6 @@ export function PatternGrid({
   const router = useRouter();
   const [pending, start] = useTransition();
   const [busy, setBusy] = useState<string | null>(null);
-  const [addUser, setAddUser] = useState<Record<string, string>>({});
   // Xác nhận 2 bước cho việc GỠ — khoá theo `${centerId}|${userId}`, đúng khuôn
   // confirm-delete của admin. Không dùng `confirm()`: hộp thoại trình duyệt chặn mọi
   // sự kiện và không nói được câu dài mà thao tác này BẮT BUỘC phải nói.
@@ -181,29 +183,6 @@ export function PatternGrid({
     });
   }
 
-  function themNguoi(block: PatternBlock) {
-    const userId = addUser[block.centerId];
-    if (!userId) return;
-    setBusy(`add:${block.centerId}`);
-    start(async () => {
-      const r = await addPersonToBlockAction({
-        userId,
-        centerId: block.centerId,
-      });
-      setBusy(null);
-      if (!r.ok) {
-        toast.error(r.error);
-        return;
-      }
-      // Hàng chỉ xuất hiện khi có ít nhất một ô — action đặt sẵn Thứ Hai = X (nghỉ).
-      toast.success(
-        "Đã thêm vào khối — mặc định Thứ Hai nghỉ (X), chọn mã cho từng thứ",
-      );
-      setAddUser((m) => ({ ...m, [block.centerId]: "" }));
-      router.refresh();
-    });
-  }
-
   return (
     <div className="space-y-4">
       {codes.length > 0 ? (
@@ -240,43 +219,12 @@ export function PatternGrid({
             icon={CalendarRange}
             actions={
               b.canAssign ? (
-                <>
-                  <label htmlFor={`them-${b.centerId}`} className="sr-only">
-                    Chọn nhân sự để thêm vào {b.label}
-                  </label>
-                  <select
-                    id={`them-${b.centerId}`}
-                    className={cn(FIELD, "max-w-[15rem]")}
-                    value={addUser[b.centerId] ?? ""}
-                    disabled={pending || dsThem.length === 0}
-                    onChange={(e) =>
-                      setAddUser((m) => ({
-                        ...m,
-                        [b.centerId]: e.target.value,
-                      }))
-                    }
-                  >
-                    <option value="">
-                      {dsThem.length === 0
-                        ? "Đã có đủ nhân sự"
-                        : "Thêm nhân sự vào khối…"}
-                    </option>
-                    {dsThem.map((c) => (
-                      <option key={c.userId} value={c.userId}>
-                        {c.label}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    className={BTN_OUTLINE}
-                    disabled={!addUser[b.centerId] || pending}
-                    onClick={() => themNguoi(b)}
-                  >
-                    <UserPlus aria-hidden className="h-4 w-4" />
-                    Thêm
-                  </button>
-                </>
+                <BulkAddDialog
+                  centerId={b.centerId}
+                  blockLabel={b.label}
+                  candidates={dsThem}
+                  disabled={pending}
+                />
               ) : (
                 <span
                   className={cn(PILL, "bg-muted text-muted-foreground")}
@@ -292,7 +240,7 @@ export function PatternGrid({
                 title={`${b.label} chưa có ai trong khung ca`}
                 description={
                   b.canAssign
-                    ? "Chọn nhân sự ở ô phía trên rồi bấm Thêm — sau đó chọn mã ca cho từng thứ."
+                    ? "Bấm Thêm nhân sự ở góc trên để chọn nhiều người một lượt — sau đó chọn mã ca cho từng thứ."
                     : "Khối này chưa có lịch tuần cố định. Người xếp lịch của khối sẽ thêm nhân sự vào đây."
                 }
               />

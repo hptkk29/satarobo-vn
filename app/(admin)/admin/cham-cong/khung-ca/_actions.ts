@@ -16,7 +16,11 @@ import {
   type GenerateResult,
 } from "@/lib/cham-cong/generate-db";
 import { chanSuaKyDaChot } from "@/lib/cham-cong/ky-gac";
-import { KHUNG_CA_EFFECTIVE_FROM } from "@/lib/cham-cong/khung-ca";
+import {
+  KHUNG_CA_EFFECTIVE_FROM,
+  chiaLoThem,
+  type KetQuaThemHangLoat,
+} from "@/lib/cham-cong/khung-ca";
 import { vnDateOnly } from "@/lib/time/vn";
 
 type Res<T = null> = { ok: true; data: T } | { ok: false; error: string };
@@ -118,14 +122,104 @@ export async function savePatternCellAction(input: unknown): Promise<Res> {
   return { ok: true, data: null };
 }
 
-/** Thêm một người vào khối (7 ô trống) — chỉ ghi khi người dùng chọn mã; ở đây tạo dòng Thứ Hai = X để hàng xuất hiện. */
-export async function addPersonToBlockAction(input: {
-  userId: string;
-  centerId: string;
-  sheetName?: string;
-  jobLabel?: string;
-}): Promise<Res> {
-  return savePatternCellAction({ ...input, weekday: 1, code: "X" });
+const loSchema = z.object({
+  centerId: z.string().min(1),
+  userIds: z.array(z.string().min(1)).min(1).max(200),
+});
+
+/**
+ * Thêm NHIỀU người vào khung ca của một khối trong một lượt. **Idempotent**.
+ *
+ * Trước đây chỉ thêm được từng người, mỗi lần một vòng server — dựng khung ca cho một cơ
+ * sở 20 người là 20 lượt bấm, và không có gì ngăn bấm trùng.
+ *
+ * Ba nhóm (luật + lý do ở `lib/cham-cong/khung-ca.ts`):
+ *   · đang trong khối → BỎ QUA, không lỗi, không nhân đôi;
+ *   · từng ở, đã gỡ   → MỞ LẠI cụm cũ (xoá `effectiveTo`), giữ nguyên lịch tuần và
+ *     `sheetName` — không dựng lại từ đầu;
+ *   · chưa có          → tạo dòng Thứ Hai = X để hàng xuất hiện, y như thêm từng người.
+ *
+ * ⚠️ Trả về ĐỦ ba nhóm chứ không chỉ số đếm: một thao tác hàng loạt không nói rõ nó đã
+ * làm gì với TỪNG người là đúng loại thao tác vừa xoá trắng 9 hồ sơ prod hôm nay.
+ */
+export async function addPeopleToBlockAction(
+  input: unknown,
+): Promise<Res<KetQuaThemHangLoat>> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  const p = loSchema.safeParse(input);
+  if (!p.success) return { ok: false, error: "Danh sách không hợp lệ" };
+  const { centerId, userIds } = p.data;
+  // `scopedDb` KHÔNG che WRITE — cổng quyền tự đứng ở đây.
+  if (!(await checkPermission("hr_attendance:assign", { centerId })))
+    return { ok: false, error: "Không có quyền xếp khung ca ở khối này" };
+
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
+  // Đọc TRỌN cụm của khối (mọi thứ, cả dòng đã đóng) — `chiaLoThem` cần phân biệt
+  // "đang trong khối" với "từng ở, đã gỡ", và hai thứ đó chỉ khác nhau ở `effectiveTo`.
+  const daCo = await sdb.shiftWeeklyPattern.findMany({
+    where: {
+      centerId,
+      userId: { in: userIds },
+      effectiveFrom: DEFAULT_EFFECTIVE_FROM,
+    },
+    select: { userId: true, effectiveTo: true },
+  });
+  const lo = chiaLoThem(userIds, daCo);
+
+  // Mở lại cụm đã gỡ: một câu, không vòng lặp. Giữ nguyên mã ca của từng thứ.
+  if (lo.hoiSinh.length > 0) {
+    await sdb.shiftWeeklyPattern.updateMany({
+      where: {
+        centerId,
+        userId: { in: lo.hoiSinh },
+        effectiveFrom: DEFAULT_EFFECTIVE_FROM,
+        effectiveTo: { not: null },
+      },
+      data: { effectiveTo: null },
+    });
+  }
+
+  // Người mới: đi qua `savePatternCellAction` để dùng lại NGUYÊN cổng của nó — tra mã ca
+  // hợp lệ theo khối, suy `orgUnitId`, ghi kép. Chép lại đoạn đó ở đây là hai bộ luật
+  // lệch nhau ngay lần sửa sau.
+  const hong: string[] = [];
+  for (const userId of lo.themMoi) {
+    const r = await savePatternCellAction({
+      userId,
+      centerId,
+      weekday: 1,
+      code: "X",
+    });
+    if (!r.ok) hong.push(userId);
+  }
+  if (hong.length > 0) {
+    // Không nuốt: nếu mã "X" không có trong danh mục thì cả lượt vô nghĩa, phải nói ra.
+    return {
+      ok: false,
+      error: `Không thêm được ${hong.length} người — kiểm tra mã "X" (nghỉ) có trong danh mục mã ca chưa`,
+    };
+  }
+
+  await writeAudit({
+    actor: { id: session.user.id, name: session.user.name ?? "" },
+    module: "hr_attendance",
+    entityType: "ShiftWeeklyPattern",
+    entityId: centerId,
+    action: "PATTERN_ADD_BULK",
+    newValues: {
+      centerId,
+      themMoi: lo.themMoi,
+      hoiSinh: lo.hoiSinh,
+      boQua: lo.boQua,
+    },
+    reason: "Thêm hàng loạt vào khung ca tuần của khối",
+  });
+
+  revalidatePath("/cham-cong/khung-ca");
+  return { ok: true, data: lo };
 }
 
 const goSchema = z.object({
