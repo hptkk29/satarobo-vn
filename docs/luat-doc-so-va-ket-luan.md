@@ -158,3 +158,37 @@ Cùng họ: `workDate` (chấm công), `dob`, `fromDate`/`toDate` (đơn từ), 
 | ❌ **Sai hình dạng — đã vá** | `lib/classes/adjust.test.ts` — `new Date(\`${s}T00:00:00\`)`: nửa đêm **và** thiếu `Z` (⇒ đọc theo múi giờ MÁY, dev +07 vs CI UTC ra hai thời điểm) |
 | ✅ Đã đúng | `lib/lms/session-order.test.ts` (`T01:00:00Z`) · `lib/classes/default-session.test.ts` (`T11:00:00Z`) · `lib/portal/buoi-hoc.test.ts` · `lib/portal/feedback.test.ts` · `lib/classes/phases.test.ts` (qua `vnDateAt`) |
 | ✅ Nửa đêm ĐÚNG (cột `@db.Date`) | `lib/cham-cong/generate.test.ts` · `tests/cham-cong/*.spec.ts` (`workDate`) · `lib/classes/schedule.test.ts` (`Holiday.date`) · `lib/lms/trial-row-status.test.ts` (`TrialClassSession.date`) · `lib/media-review/deadline.test.ts` · `lib/students/birthday-dates.test.ts` (`dob`) |
+
+---
+
+## Luật 5 — tập dựng cho mục đích A không được dùng cho mục đích B khi chưa kiểm lại định nghĩa
+
+> **Trước khi tái sử dụng một tập/khoá có sẵn: viết ra ĐỊNH NGHĨA của nó, rồi đối chiếu
+> với việc mới.** Tên gọi hợp lý không phải bằng chứng.
+
+Đây là lỗi khó thấy nhất trong bốn luật trên, vì **không có dòng mã nào sai**. Tập được
+dựng đúng, dùng đúng cú pháp, test của nó xanh. Chỉ có CÂU HỎI là khác.
+
+> **Sự cố sinh ra luật (08/09/2026).** `actor.assignedClassIds` dựng bằng
+> `OR: [{ teacherId }, { assistantId }]` (`lib/auth/actor.ts:453`) — **đúng cho QUYỀN**:
+> trợ giảng phải mở được lớp mình phụ giảng. Nhưng `/teacher/bang-cong` lấy chính tập đó
+> làm mẫu cho ô **"Buổi dạy"**, nên trợ giảng nhận về mình TOÀN BỘ buổi của lớp. Đo trên
+> prod: **76 buổi**. Không dòng nào sai; tập chỉ đang trả lời câu "lớp nào tôi được vào"
+> trong khi màn hình hỏi "buổi nào tôi đã dạy".
+
+Cùng hình dạng, hai ví dụ khác trong repo:
+
+- `attendance.count({ sessionId })` dựng để hỏi *"buổi này có bản ghi điểm danh nào chưa"*,
+  bị dùng làm *"điểm danh đã phủ đủ sĩ số chưa"*. Học viên **học bù từ lớp khác** cũng
+  sinh dòng ⇒ tử số phồng và bù chỗ cho em chưa được đánh dấu (vá `a94e5aa7`).
+- Khoá quyền `sessions:*` mang hai nghĩa ở nhánh module Hệ thống.
+
+**Ví dụ làm ĐÚNG, để đối chiếu:** `KHOAN_DA_XAC_NHAN` / `laKhoanDaXacNhan`
+(`lib/finance/debt.ts`) — một predicate dùng chung cho MỌI phép cộng tiền trục A, kèm
+chú thích tại chỗ nói rõ **không được** lọc thêm `paymentType`, và nói rõ trục B là câu
+hỏi KHÁC với khoá KHÁC (đơn, không phải ghi danh). Tập được tái sử dụng **có kiểm lại
+định nghĩa**, và định nghĩa đó được viết ra ngay cạnh nó.
+
+**Dấu hiệu nhận biết khi đọc mã:** một tập tên theo *chủ thể* (`assignedClassIds`,
+`visibleCenterIds`) đang được dùng làm mẫu số của một *phép đo* (số buổi, số giờ, số
+tiền). Quyền và thước đo gần như không bao giờ cùng một tập.
