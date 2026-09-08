@@ -476,16 +476,28 @@ export async function POST(req: NextRequest) {
               });
               continue;
             }
+            // Dựng MỘT LẦN rồi vừa ghi vừa audit CÙNG object.
+            //
+            // ⚠️ Trước 08/09/2026 chỗ này ghi `base` nhưng audit `patch`. `patch` chỉ
+            // gồm cột CÓ TRONG FILE, còn tạo mới thì ghi TRỌN `base` — nên sổ audit của
+            // một lượt tạo mới BÁO THIẾU đúng những trường được điền bằng mặc định
+            // (`status`/`isActive` khi file không có cột `status`, mảng rỗng của
+            // `subjects`/`certifications`).
+            //
+            // Vì sao đáng sửa dù nhỏ: chính sổ audit là thứ đã đo ra gốc của sự cố xoá
+            // trắng ba cột ngày cùng ngày. Một công cụ chẩn đoán nói thiếu là công cụ
+            // sẽ dẫn lạc đúng lúc cần nó nhất.
+            const duLieuTao = {
+              ...base,
+              employeeCode: r.data.employeeCode,
+              fullName: base.fullName,
+              jobTitle: base.jobTitle,
+              department: base.department,
+              status: base.status ?? "ACTIVE",
+              isActive: (base.status ?? "ACTIVE") === "ACTIVE",
+            };
             const tao = await tx.employee.create({
-              data: {
-                ...base,
-                employeeCode: r.data.employeeCode,
-                fullName: base.fullName,
-                jobTitle: base.jobTitle,
-                department: base.department,
-                status: base.status ?? "ACTIVE",
-                isActive: (base.status ?? "ACTIVE") === "ACTIVE",
-              },
+              data: duLieuTao,
               select: { id: true },
             });
             await writeAudit({
@@ -494,8 +506,10 @@ export async function POST(req: NextRequest) {
               entityType: "Employee",
               entityId: tao.id,
               action: "IMPORT_CREATE",
-              newValues: { employeeCode: r.data.employeeCode, ...patch },
-              reason: `Nhập hàng loạt từ file — tạo mới`,
+              // ĐÚNG object vừa ghi — không phải một bản tóm tắt của nó.
+              newValues: duLieuTao,
+              changedFields: Object.keys(duLieuTao),
+              reason: `Nhập hàng loạt từ file — tạo mới; cột có trong file: ${[...r.coMat].sort().join(", ")}`,
               tx: tx as unknown as Parameters<typeof writeAudit>[0]["tx"],
             });
           }

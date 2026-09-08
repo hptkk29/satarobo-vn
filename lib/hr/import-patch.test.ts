@@ -409,3 +409,41 @@ describe("importer có CHẠY THỬ", () => {
     expect(doc(UI)).toContain("MẤT DỮ LIỆU");
   });
 });
+
+// ── Sổ audit phải nói THẬT, kể cả ở nhánh TẠO MỚI (08/09/2026) ───────────────
+//
+// Nhánh tạo mới ghi TRỌN `base` nhưng trước đây audit `patch` — mà `patch` chỉ gồm cột
+// CÓ TRONG FILE. Sổ audit của một lượt tạo mới vì thế báo thiếu đúng những trường được
+// điền bằng mặc định: `status`/`isActive` khi file không có cột `status`, và mảng rỗng
+// của `subjects`/`certifications`.
+//
+// Đáng sửa dù nhỏ: chính sổ audit là thứ đã đo ra gốc sự cố xoá trắng ba cột ngày cùng
+// ngày. Công cụ chẩn đoán nói thiếu sẽ dẫn lạc đúng lúc cần nó nhất.
+describe("audit của lượt TẠO MỚI khớp đúng thứ đã ghi", () => {
+  const R = "app/api/admin/import/employees/route.ts";
+
+  it("ghi và audit CÙNG một object — không dựng lại, không tóm tắt", () => {
+    const src = doc(R);
+    expect(src).toContain("const duLieuTao = {");
+    expect(src).toContain("data: duLieuTao,");
+    expect(src).toContain("newValues: duLieuTao,");
+  });
+
+  it("KHÔNG còn audit `patch` ở nhánh tạo mới", () => {
+    // `patch` là tập cột CÓ TRONG FILE; tạo mới ghi nhiều hơn thế.
+    expect(doc(R)).not.toContain(
+      "newValues: { employeeCode: r.data.employeeCode, ...patch }",
+    );
+  });
+
+  it("có changedFields — sổ audit không để trống cột 'đổi gì'", () => {
+    expect(doc(R)).toContain("changedFields: Object.keys(duLieuTao)");
+  });
+
+  it("lượt tạo mới cũng ghi rõ cột nào có trong file", () => {
+    // Cùng thông tin với nhánh cập nhật: đọc lại mới biết vì sao trường kia mang mặc định.
+    const src = doc(R);
+    // Dem CHUOI NOI SUY, khong dem van ban tran — binh luan cung chua cum tu do.
+    expect(src.split("cột có trong file: ${[...r.coMat]").length - 1).toBe(2);
+  });
+});
