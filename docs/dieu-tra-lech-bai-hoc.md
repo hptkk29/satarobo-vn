@@ -1416,3 +1416,149 @@ này vì nó đổi kiểu dữ liệu truyền xuống 4 component — rủi ro
 3. **Dọn tên biến `seq`** ở `admin/classes/[id]/page.tsx` + `edit/page.tsx`: chữ "seq" ở đó là
    hạng-theo-ngày, trong khi cột `order` ngay cạnh là thứ tự lộ trình.
 4. **Vá gốc đường #1** — `createSessionPlansForClass` thôi chép `customTitle`.
+
+---
+
+# Bước 5 — quét lớp lỗi TZ trong test, và bộ nghiệm thu đợt dọn
+
+## 5.1 Bug TZ: quét toàn repo, KHÔNG phải lớp lỗi rộng
+
+Ca đỏ ở `tests/cham-cong/timelog.spec.ts` (08/09) đặt câu hỏi: còn bao nhiêu test dựng ngày
+theo UTC trong khi mã sản phẩm chốt ngày theo VN? Quét bốn góc:
+
+| Góc quét | Mẫu | Số chỗ |
+|---|---|---|
+| A | `Date.UTC(… getUTC*)` trong test | 3 |
+| B | `new Date("YYYY-MM-DD")` trong test | 110 |
+| C | `getDay/getDate/getMonth/getFullYear` (giờ MÁY) trong test | 4 |
+| D | chép tay phép đổi múi giờ (`7 * 60 * 60 * 1000`, `VN_OFFSET`) | 1 file |
+
+**110 chỗ ở góc B loại ngay:** chúng là **hằng cố định** (`new Date("2026-06-08T00:00:00Z")`),
+không đọc giờ chạy, nên không thể sinh cửa sổ đỏ. Lớp nguy hiểm chỉ gồm test **lấy giờ hiện
+tại rồi cắt ngày** — lọc lại còn 6 file, xét từng cái:
+
+| Nơi | Chẩn đoán | Đã đỏ bao giờ chưa | Cửa sổ giờ gây đỏ |
+|---|---|---|---|
+| `tests/cham-cong/timelog.spec.ts:180,215` | **LỖI THẬT** — `Date.UTC(now.getUTC*)` vs `vnDateOnly(now)` của `timelog.ts:82` | **CÓ** — 15:49Z và 15:58Z ngày 08/09 | **15:30Z → 24:00Z mỗi ngày** (22:30–07:00 VN). Đã vá ở #235 |
+| `tests/e2e/fl/dashboard-scope.spec.ts:50` | **TRỘN HAI HỆ** — `dayStart` theo giờ MÁY, nhưng `period = monthKeyVN(now)` theo VN | **CHƯA** — job `E2E Phase FL` xanh ở 12 run gần nhất, gồm 15:42Z và 16:46Z | Hẹp: **ngày cuối tháng, 17:00Z→24:00Z** (~7 giờ/tháng), khi VN đã sang tháng mới mà giờ máy chưa |
+| `tests/e2e/r7/attendance-fixes.spec.ts:36-40` | **BẢN SAO** — tự chép `VN_OFFSET_MS = 7*60*60*1000` thay vì dùng `lib/time/vn.ts`; chú thích `:395` nói rõ *"phải TRÙNG công thức của server"* | **CHƯA** — `E2E Phase R7 1/2` xanh 12/12 | Không có cửa sổ giờ. Rủi ro là **phân kỳ** nếu `lib/time/vn.ts` đổi — nợ kỹ thuật, không phải bom hẹn giờ |
+| `tests/e2e/r1/marketing-alerts.spec.ts:19-20` | An toàn — mốc là **ngày 10 / ngày 3 của THÁNG SAU**, cách `effectiveFrom` ≥ 10 ngày. VN luôn đi trước UTC nên lệch một ngày không kéo mốc xuống dưới | CHƯA | không có |
+| `lib/trial/service.test.ts:8` | An toàn — dựng (`new Date(2026,5,1)`) và đọc (`ymd`) **cùng một múi**, round-trip luôn khớp | CHƯA | không có |
+| `lib/lms/lms-r3-rest.test.ts:38` | An toàn — đầu vào là hằng `Z` cố định | CHƯA | không có |
+| `lib/chat/policy.test.ts:37` | An toàn — `Date.UTC(2026,7,10,…)` hằng cố định | CHƯA | không có |
+
+**Kết luận: một lỗi thật (đã vá), một rủi ro hẹp, một nợ kỹ thuật.** Không cần chia lô lớn.
+
+### Đề xuất lưới chặn — CHƯA làm, chờ quyết
+
+| Cách | Được | Mất |
+|---|---|---|
+| **Ép TZ cố định cho bộ test** (`process.env.TZ = "Asia/Ho_Chi_Minh"` trong `tests/setup.ts`) | Test giờ-máy hết lệch giữa dev và CI; một dòng | ⚠️ **Che mất lỗi thật**: prod chạy UTC, ép test sang VN là làm test dễ hơn prod. Và ghi chép dự án đã cấm đặt TZ toàn cục — nó làm vỡ cột `@db.Date`. **Tôi khuyên KHÔNG** |
+| **Ép TZ = UTC cho bộ test** | Máy dev chạy đúng như prod; bắt sớm mọi lệch VN/UTC ngay ở local | Máy dev đang +07; đổi sẽ làm một số test hiện đang xanh chuyển đỏ — phải dọn trước. Sạch hơn cách trên |
+| **Ca canary chạy 17:30Z** | Bắt đúng cửa sổ, không đụng test nào | Thêm một lịch chạy; chỉ báo sau khi lỗi đã có |
+| **Lint chặn `getUTCDate()` trong `tests/`** khi file cũng nhắc `workDate` | Chặn ngay lúc viết | Quy tắc hẹp, dễ lách |
+
+Nghiêng về **ép `TZ=UTC` cho bộ test** (khớp prod, không che lỗi) cộng **một canary 17:30Z**
+trong lúc chuyển tiếp. Cần dọn trước những test hiện dựa vào giờ máy +07.
+
+## 5.2 Kiểm câu lệnh `--apply` trước khi gõ trên prod
+
+Nghi vấn: cổng chặn ghi vào `docs/` có bắn vào cờ `--csv-nguoi-go` không, và có thể chết
+**sau** khi đã ghi DB không?
+
+**Đọc mã — thứ tự thực thi:**
+
+```
+:263  ghi CSV người-gõ        ← cờ --csv-nguoi-go
+:267  if (!APPLY) return
+:272  CỔNG chặn đường DUMP    ← chỉ kiểm --dump, KHÔNG kiểm --csv-nguoi-go
+:285  ghi file dump
+:313  updateMany              ← ghi DB, sau CÙNG
+```
+
+Mọi cổng nằm **trước** `updateMany`, nên không có ca "chết sau khi đã ghi DB". Cổng cũng
+không bắn vào `--csv-nguoi-go` — cố ý: CSV bàn giao chỉ 2 dòng đã rà tay, khác dump là bản
+sao nội dung khách hàng.
+
+**Chạy thử trọn vòng trên DB nháp `satarobo_vitest`, ĐÚNG câu lệnh sẽ dùng trên prod
+(chỉ đổi chuỗi kết nối)** — 4 plan, trong đó 1 dòng giả lập người-gõ (`updatedAt` lệch 48h):
+
+```
+SẼ DỌN: 3 · GIỮ NGUYÊN: 1  (THU.009 order 3 | "NGUOI GO" | +48h)
+Đã xuất bàn giao nhóm người-gõ: …/docs/ban-giao/customtitle-nguoi-sua-can-xac-nhan.csv
+Đã dump giá trị cũ: …/var/customtitle/dump-truoc-khi-don.json
+Đã dọn 3 dòng.
+EXIT=0
+```
+
+DB sau đó: 3 dòng NULL, dòng người-gõ **còn nguyên**. Dump chứa cả `giuNguyen` lẫn 3 dòng
+`daDon` kèm giá trị cũ. **Chạy hết từ đầu tới cuối, không chết giữa chừng.**
+
+⇒ **Câu lệnh dùng được nguyên văn, không phải đổi đích CSV:**
+
+```bash
+DATABASE_URL='<prod, quyền ghi>' pnpm exec tsx scripts/don-customtitle-may-chep.ts \
+  --tat-ca --csv-nguoi-go=docs/ban-giao/customtitle-nguoi-sua-can-xac-nhan.csv --apply
+```
+
+Dòng thứ hai script in ra là `Đích: <user>@<host>:<port>/<db>` — đối chiếu nó ra
+`…pooler.supabase.com` với user **có quyền ghi** trước khi để chạy tiếp.
+
+## 5.3 Bộ nghiệm thu sau `--apply`
+
+`scripts/nghiem-thu-don-customtitle.ts` — chỉ đọc, một lệnh ra ba kết quả, mã thoát 1 nếu có
+phép trượt (dùng được trong runbook).
+
+```bash
+PROD_READONLY_URL='postgresql://…:5432/postgres' \
+  pnpm exec tsx scripts/nghiem-thu-don-customtitle.ts
+```
+
+| Phép | Kỳ vọng |
+|---|---|
+| 1. Không còn gì để dọn | `SẼ DỌN 0` · `GIỮ 2` |
+| 2. Ba lớp mẫu — không buổi nào còn hiện tên giáo trình cũ | `0 buổi` |
+| 3. Toàn hệ thống chỉ còn 2 plan mang customTitle | `2/960` |
+
+Phép 2 **cố ý không** đo bằng "số buổi đổi nhãn" của `doi-chieu-nhan-truoc-sau.ts`: script đó
+đếm cả buổi đổi vì **SỐ** (lộ trình thay hạng-theo-ngày) — việc đó là chủ đích và vẫn đúng
+sau khi dọn. Ở đây chỉ hỏi một câu: `customTitle` còn che `Lesson.title` ở buổi nào nữa không.
+
+**Đã chạy TRƯỚC khi dọn để chứng minh nó thật sự đo được** — cả ba TRƯỢT, số khớp với các
+phép đo độc lập trước đó:
+
+```
+✘ 1. SẼ DỌN 958 (kỳ vọng 0) · GIỮ 2 (kỳ vọng 2)
+✘ 2. 32 buổi (kỳ vọng 0)
+✘ 3. 960/960 plan (kỳ vọng 2)
+mã thoát = 1
+```
+
+Trượt thì in sẵn câu quay lui.
+
+## 5.4 Flake `lib/finance/*` — đo dứt điểm, và một lần suýt gán nhầm
+
+Ticket "test hạ tầng chạm timeout khi chạy song song" nay có số đo đầy đủ. Ca:
+`lib/finance/truc-a.test.ts > [BUOC-6] … accountantStatus: CONFIRMED` (và ca song sinh ở
+`ghi-nhan.test.ts`), `Error: Test timed out in 5000ms`.
+
+**Chạy RIÊNG hai bộ đó: 825 ms và 669 ms** — cách ngưỡng 5000 ms rất xa. Chúng chỉ vượt khi
+chạy trong bộ đầy đủ (400+ file song song, mỗi bộ `readdirSync` + `readFileSync` toàn bộ
+`app/ lib/ components/ scripts/`).
+
+**Đo cân bằng trên cùng máy, cùng buổi:**
+
+| Nhánh | Lượt | Kết quả |
+|---|---|---|
+| nhánh việc | 1, 2, 3 | ĐỎ |
+| `origin/main` sạch | 1 | xanh |
+| `origin/main` sạch | 2 | **ĐỎ** |
+| nhánh việc | 4, 5 | **xanh** |
+
+⇒ **Flake thuần, không phụ thuộc nhánh.** Ghi lại vì suýt kết luận sai hai lần: lần đầu ba
+lượt đỏ liên tiếp trên nhánh cộng một lượt xanh trên main trông y hệt hồi quy do nhánh — chỉ
+tới khi chạy thêm hai lượt mỗi bên mới lộ ra là ngẫu nhiên. **Ba lượt đỏ liên tiếp chưa đủ để
+quy trách nhiệm cho một thay đổi; phải chạy đối chứng ở CẢ HAI phía.**
+
+CI xanh (`Unit tests (Vitest)` pass ở #235) nên đây là đặc thù máy dev — nhưng ngưỡng 5000 ms
+cho một phép quét toàn cây là quá sát, và cây đang lớn dần. Việc dọn thuộc ticket riêng.
