@@ -20,7 +20,18 @@ Brand hub + admin CMS + portal phụ huynh + site giáo viên cho Sata Robo (Đ�
 4. **Imports** — `@/lib/auth` (Auth.js), `@/lib/utils` (cn helper), `@/components/blog/markdown-renderer` (NOT `<Markdown>`). ⚠️ **Cổng DB ĐÃ ĐÓNG** (không còn là "target"): import `@/lib/db` trần trong `app/(admin|portal|teacher|sale)/** + components/lead-intake/**` = ESLint **error**. Đi qua `scopedDb(actor)` (admin/teacher) hoặc `portalDb` (portal). Allowlist còn đúng 3 file exception (`lib/eslint/db-import-allowlist.mjs`) — code mới KHÔNG xin thêm vào.
 5. **Auth gate** — admin/portal layout đã redirect `/login`. Server Actions/API route VẪN phải `auth()` + `assertCan(...)` ngay đầu function (layout gate là chưa đủ). Portal actions thêm ownership check `assertOwnsStudent`. **RBAC 2 tầng:** quyền action = `can()` v2 động từ DB (`@/lib/auth/can`) — **đang enforce trên prod** vì `RBAC_V2_ENABLED="true"` trên Vercel Production (xác minh 29/07/2026); v1 matrix tĩnh (`@/lib/auth/permissions`) chỉ còn chạy song song để so lệch, và là thứ chạy ở local/dev (mặc định trong code vẫn OFF — `lib/flags.ts:8`).
    ⚠️ **`scopedDb` KHÔNG che write** — chỉ auto-scope 7 method đọc. Mọi `update/delete` phải tự `passesScope()`; mọi `create` trên model thuộc `SCOPED_MODELS` phải set `centerId` (quên = record vô hình với actor cấp cơ sở).
-6. **Prisma migrations** — KHÔNG raw SQL trừ khi cần. Mỗi schema change: `pnpm db:migrate` + tên rõ nghĩa. Sau migration: restart dev server (Prisma Client cache stale trong memory).
+6. **Prisma migrations** — ⛔ **CẤM `prisma migrate dev` (= `pnpm db:migrate`) trên repo này cho tới khi drift được đóng [08/09/2026].** Viết SQL tay vào `prisma/migrations/<yyyyMMddHHmmss>_<ten_snake_case>/migration.sql` + sửa `schema.prisma` cho khớp + `prisma migrate deploy`. Sau migration: `prisma generate` và restart dev server (Prisma Client cache stale trong memory).
+   **Vì sao cấm:** đo 08/09/2026 — repo đang **lệch sẵn giữa `prisma/migrations` và `schema.prisma` ở 14 bảng** (`Timestamptz` vs `Timestamp(3)` trên ClassSessionMedia · CoinRuleConfig · EvalForm · EvalResponse · EvaluationRound · HomeworkAssignment · Lesson · LessonChangeRequest · ReportCard · ReportCardCriterion · ScormAccessLog · ScormPackage; `ScopeShadowDiff.dataScope` thừa; thiếu `OrgUnit_path_idx`). `migrate dev` sẽ **tự sinh một migration "sửa kiểu cột"** cho 14 bảng đó và nó trông vô hại trong diff — merge vào là ALTER hàng loạt trên bảng có dữ liệu PROD, vi phạm luật cứng #4. **Không cổng nào canh**: không workflow nào so schema với migrations (`prod-db-status.yml:50` chỉ hạ xuống `::warning`).
+   **Kiểm drift AN TOÀN** (không reset gì — chỉ `--from-url`, TUYỆT ĐỐI không `--from-migrations --shadow-database-url` vì lệnh đó RESET DB đích, đã xoá sạch DB dev/test 26/08):
+   ```bash
+   DB=drift_check; createdb -U postgres -h 127.0.0.1 "$DB"
+   URL="postgresql://postgres:postgres@127.0.0.1:5432/$DB"
+   DATABASE_URL="$URL" DIRECT_URL="$URL" pnpm exec prisma migrate deploy
+   DATABASE_URL="$URL" DIRECT_URL="$URL" pnpm exec prisma migrate diff \
+     --from-url "$URL" --to-schema-datamodel prisma/schema.prisma --script
+   dropdb -U postgres -h 127.0.0.1 "$DB"
+   ```
+   Diff **rỗng là không thể** cho tới khi drift đóng — điều cần đạt là **0 dòng nhắc bảng mình vừa thêm**. Đóng drift phải quyết **từng bảng một** là schema đúng hay migration đúng ⇒ ticket riêng, đừng nhét vào việc đang làm.
 7. **UI library split** (Phase 4.X.1): admin = shadcn/ui + Recharts; client = shadcn/ui + Magic UI + Framer Motion. ESLint chặn cross-import — đừng workaround.
 8. **Security (ENFORCED by hooks):**
    - NEVER `git add .env*` files (only `.env.example` allowed) — hook block.

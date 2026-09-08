@@ -90,15 +90,34 @@ pnpm exec prisma migrate deploy && pnpm db:seed && pnpm db:seed:orgunit   && pnp
 
 ## Migrations
 
-- **Tên rõ nghĩa**: `pnpm db:migrate` (Prisma sẽ prompt name).
+> ⛔ **CẤM `prisma migrate dev` (= `pnpm db:migrate`) cho tới khi drift 14 bảng được đóng
+> [chốt 08/09/2026].** Xem CLAUDE.md mục "Prisma migrations" — repo đang lệch sẵn giữa
+> `prisma/migrations` và `schema.prisma`, nên `migrate dev` sẽ tự sinh một migration "sửa kiểu
+> cột" cho 14 bảng, trông vô hại trong diff, và merge vào là ALTER hàng loạt trên bảng có dữ
+> liệu PROD. Không cổng CI nào canh việc này.
+
+- **Đường DUY NHẤT hiện nay**: viết SQL tay + `prisma migrate deploy` (non-interactive).
+  186/242 migration của repo vốn đã là SQL gõ tay (timestamp kết thúc `0000`) — đây là nếp thật,
+  không phải đường vòng.
+- **Tên thư mục**: `yyyyMMddHHmmss_ten_snake_case`, dấu thời gian phải LỚN HƠN migration cuối cùng
+  đang có, kẻo `prisma migrate deploy` ở bước CI sập. Kiểm cả `origin/main` và `origin/test` trước
+  khi chốt tên — 8 worktree song song đã từng đẻ migration trùng ngày ở nhánh khác.
+- **Bảng MỚI phải tự bật RLS**: `ALTER TABLE "X" ENABLE ROW LEVEL SECURITY;` ở cuối file. Chỉ
+  ENABLE, không FORCE, không policy. Khuôn đúng: `20260825120000_lead_status_history`.
+  Đừng chép `20260826180000_media_review` — mẫu đó **quên** RLS.
+- **Tên index/constraint phải khớp quy ước Prisma** (`Bang_pkey`, `Bang_cot_key`, `Bang_cot_idx`).
+  CI **không** bắt sai; lệch chỉ lộ ra ở lần ai đó chạy `migrate dev` sau này.
 - **Migration đã apply → NEVER edit**. Tạo migration mới để sửa.
-- **Tool**: `prisma migrate dev` (interactive) hoặc viết SQL tay + `prisma migrate deploy` (non-interactive).
 - **EPERM trên Windows DLL** sau migrate generate: dev server đang lock file. Tắt dev → retry hoặc dùng `pnpm build` đè.
 
 ## After schema change
 
-1. `pnpm db:migrate --name <descriptive_name>` apply.
-2. Dev server **PHẢI RESTART** — Prisma Client trong memory cache cũ, không có model mới (`db.newModel` → undefined error).
+1. Viết `prisma/migrations/<ten>/migration.sql` + sửa `schema.prisma` cho khớp.
+2. **Kiểm SQL có khớp schema không** — bắt buộc, vì không CI nào canh (công thức DB nháp ở
+   CLAUDE.md mục "Prisma migrations"; chỉ `--from-url`, KHÔNG BAO GIỜ `--from-migrations
+   --shadow-database-url`, lệnh đó RESET DB đích).
+3. `prisma migrate deploy` lên môi trường đích, rồi `prisma generate`.
+4. Dev server **PHẢI RESTART** — Prisma Client trong memory cache cũ, không có model mới (`db.newModel` → undefined error).
 3. Update `prisma/seed*.ts` nếu cần seed data mới.
 
 ## 2-phase migration pattern (giảm risk drop column)
