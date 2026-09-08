@@ -230,6 +230,12 @@ feature → PR → merge `test`  → test.satarobo.vn tự deploy → nghiệm t
   Mặc định của SCOPE phải fail-closed, không bao giờ là `"ALL"`.
   **Test canh lỗi chỉ được tin sau khi CẤY LẠI lỗi và thấy nó ĐỎ** — test xanh có thể nghĩa
   là "lỗi không còn" hoặc "test không chạm tới lỗi"; ghi cả bốn bước vào commit.
+  **Cổng phải được cho ăn bằng thứ đường THẬT cho nó ăn** (luật 9, sự cố nhập nhân sự
+  08/09): ca test gõ tay đầu vào của cổng thì nó kiểm cổng, không kiểm hệ thống — nếu đầu
+  vào ấy do tầng khác tính ra thì **tầng đó là chỗ bug nằm**. Sổ sự cố cùng file; điều
+  đáng nhớ nhất: **quy trình chụp trước/sau là thứ duy nhất hoạt động** — bộ test xanh,
+  bản vá vừa merge, và 9 hồ sơ prod vẫn bị xoá trắng ba cột ngày. Đừng bỏ nó kể cả khi
+  test đã xanh.
 
 - [docs/cham-cong/DESIGN-CHAM-CONG-ADMIN.md](docs/cham-cong/DESIGN-CHAM-CONG-ADMIN.md) — **Giao diện module chấm công (admin), chốt 06/09/2026.** Đọc TRƯỚC khi sửa bất kỳ màn nào dưới `app/(admin)/admin/cham-cong/**` hoặc `/don-tu**`. Luận đề "Sổ kỳ công": mọi màn vận hành chia sẻ khung KỲ (tháng × khối) — `PageHeader → ModuleNav → ScopeBar → nội dung`. **Sidebar chỉ còn 5 mục**; 9 màn còn lại vào bằng `components/admin/cham-cong/{module-nav,config-tabs,me-nav}.tsx` — 3 file này là LỐI VÀO DUY NHẤT nên `href` phải là chuỗi literal (test `nav-coverage` quét literal, xoá là màn thành mồ côi). Quyền hỏi MỘT lần bằng `loadModuleScope(userId)` (`lib/cham-cong/module-scope.ts`) — đừng rải `checkPermission` (action là biến nên rbac-scope R1 không đếm, nhưng target thì luôn phải thật). `components/cham-cong/ui/**` dùng chung với site GV ⇒ CHỈ token `:root`, **cấm `primary-soft`/`primary-ink`/`primary-dark`** (site GV không có `.admin-scope`, `--primary-ink` ở `:root` là CAM).
 

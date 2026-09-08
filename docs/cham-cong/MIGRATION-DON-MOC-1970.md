@@ -22,12 +22,20 @@ khoá bảng lâu, không đụng cột nào khác.
 
 | | |
 |---|---|
-| `Employee` có `joinedAt` = 1970 | **13** |
-| `Employee` có `endDate` = 1970 | **14** |
+| `Employee` có `joinedAt` = 1970 | ~~13~~ → **5** |
+| `Employee` có `endDate` = 1970 | ~~14~~ → **5** |
 | Bản ghi `Honor` sẽ hiện số năm sai | **0** (bảng Vinh danh đang rỗng) |
 
-Con số 13/14 lớn hơn 10 người trong danh sách chưa-gán-cơ-sở vì nó tính cả hồ sơ đã có
-cơ sở và hồ sơ đã nghỉ.
+⚠️ **ĐO LẠI 08/09/2026, sau sự cố nhập nhân sự.** Lượt nhập hỏng — xoá trắng ba cột ngày
+trên 9 hồ sơ, xem `docs/luat-doc-so-va-ket-luan.md` mục *Sổ sự cố* — vô tình dọn 8 trong
+số đó: **13/14 → 5/5**.
+
+Migration vì thế **thu nhỏ, nhưng KHÔNG bỏ**: 5 dòng vẫn là 5 dòng sai. Và cổng chặn ghi
+`boMocUnix()` giữ nguyên bất kể còn bao nhiêu dòng — luật 1: *"0 dòng trên prod" không hạ
+được mức nghiêm trọng khi đường ghi còn sống*.
+
+Con số 13/14 ban đầu lớn hơn 10 người trong danh sách chưa-gán-cơ-sở vì nó tính cả hồ sơ
+đã có cơ sở và hồ sơ đã nghỉ.
 
 ## 3. SQL đề xuất
 

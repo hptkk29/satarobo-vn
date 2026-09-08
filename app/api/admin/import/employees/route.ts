@@ -12,7 +12,7 @@ import {
 } from "@/lib/validators/employee";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
-import { ANH_XA_COT, dungPatchNhanSu } from "@/lib/hr/import-patch";
+import { ANH_XA_COT, cotCoMat, dungPatchNhanSu } from "@/lib/hr/import-patch";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { boMocUnix } from "@/lib/hr/ngay-vao-lam";
 
@@ -157,6 +157,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
+  // CHẠY THỬ: mặc định của MÀN là chạy thử; ghi thật là bước xác nhận thứ hai.
+  // Ở endpoint thì mặc định phải là GHI THẬT — nếu không, một client cũ (hoặc một
+  // script) gọi endpoint sẽ im lặng không ghi gì và báo thành công.
+  const dryRun = (body as { dryRun?: unknown })?.dryRun === true;
+
   const rows = (body as { rows?: unknown[] })?.rows;
   if (!Array.isArray(rows) || rows.length === 0) {
     return NextResponse.json({ error: "Không có dữ liệu" }, { status: 400 });
@@ -187,7 +192,7 @@ export async function POST(req: NextRequest) {
       stageOne.push({
         ok: true,
         data: r.data,
-        coMat: new Set(Object.keys((rows[i] ?? {}) as Record<string, unknown>)),
+        coMat: cotCoMat((rows[i] ?? {}) as Record<string, unknown>),
       });
     } else {
       stageOne.push({
@@ -308,7 +313,11 @@ export async function POST(req: NextRequest) {
   }
 
   if (validRows.length === 0) {
-    return NextResponse.json({ success: 0, errors });
+    return NextResponse.json({
+      success: 0,
+      errors,
+      ...(dryRun ? { dryRun: true, thayDoi: [], cotCoTrongFile: [] } : {}),
+    });
   }
 
   // Trường được phép xuất hiện trong AuditLog của lượt nhập — đúng tập trường mà
@@ -338,57 +347,99 @@ export async function POST(req: NextRequest) {
     ).map((e) => [e.employeeCode, e as unknown as Record<string, unknown>]),
   );
   const daCo = new Set(hoSoCu.keys());
+
+  // ── KẾ HOẠCH GHI — tính MỘT LẦN, dùng chung cho CHẠY THỬ lẫn ghi thật ───────
+  //
+  // Tính hai đường thì bản xem trước không còn là bằng chứng: nó sẽ trả lời "cái tôi
+  // TƯỞNG sẽ ghi" chứ không phải "cái sẽ ghi". Sự cố 08/09/2026 chính là một khoảng
+  // lệch kiểu đó, ở tầng khác (test gõ tay `coMat` thay vì để route dựng).
+  const keHoach = validRows.map((r, i) => {
+    const base = {
+      fullName: r.data.fullName,
+      jobTitle: r.data.jobTitle,
+      department: r.data.department,
+      status: r.data.status,
+      phone: r.data.phone,
+      email: r.data.email,
+      dateOfBirth: r.data.dateOfBirth,
+      gender: r.data.gender,
+      nationalId: r.data.nationalId,
+      contractType: r.data.contractType,
+      centerId: r.centerId,
+      orgUnitId: r.orgUnitId, // dual-write 2-phase
+      managerId: r.managerId,
+      joinedAt: r.data.joinedAt,
+      endDate: r.data.endDate,
+      address: r.data.address,
+      subjects: r.data.subjects ?? [],
+      certifications: r.data.certifications ?? [],
+      bio: r.data.bio,
+      emergencyContact: r.data.emergencyContact,
+      notes: r.data.notes,
+      // Sync legacy isActive flag with new status field
+      isActive: r.data.status === "ACTIVE",
+    };
+    // Đường CẬP NHẬT là VÁ — chỉ đụng cột thực sự có trong file.
+    // Luật + lý do: `lib/hr/import-patch.ts`.
+    const patch = dungPatchNhanSu(base as Record<string, unknown>, r.coMat);
+    const laTaoMoi = !daCo.has(r.data.employeeCode);
+    const truoc = hoSoCu.get(r.data.employeeCode) ?? {};
+    // Chỉ giữ những trường THỰC SỰ ĐỔI — một lượt nhập lại cùng file không được đẻ ra
+    // audit rỗng, nếu không sổ audit thành nhiễu và mất tác dụng truy vết.
+    const cu: Record<string, unknown> = {};
+    const moi: Record<string, unknown> = {};
+    if (!laTaoMoi) {
+      for (const [k, v] of Object.entries(patch)) {
+        const a = truoc[k];
+        if (JSON.stringify(a ?? null) === JSON.stringify(v ?? null)) continue;
+        cu[k] = a ?? null;
+        moi[k] = v ?? null;
+      }
+    }
+    return { r, i, base, patch, truoc, cu, moi, laTaoMoi };
+  });
+
+  // ── CHẠY THỬ (08/09/2026) — in ra sẽ đổi gì, KHÔNG ghi gì ──────────────────
+  //
+  // Vì sao có: bản vá "ô trống = giữ nguyên" đã một lần được tuyên bố kín rồi vẫn xoá
+  // trắng ba cột ngày trên 9 hồ sơ PROD. Thứ DUY NHẤT phát hiện ra là ảnh chụp trước/sau
+  // của người vận hành. Chạy thử là biến việc chụp đó thành một bước của chính công cụ.
+  //
+  // Trả về TRƯỚC → sau cho từng người, từng cột. Không mở transaction, không ghi audit.
+  if (dryRun) {
+    return NextResponse.json({
+      dryRun: true,
+      success: 0,
+      errors,
+      cotCoTrongFile: [
+        ...new Set(keHoach.flatMap((k) => [...k.r.coMat])),
+      ].sort(),
+      thayDoi: keHoach.map((k) => ({
+        row: k.i + 2,
+        employeeCode: k.r.data.employeeCode,
+        loai: k.laTaoMoi ? ("TAO_MOI" as const) : ("CAP_NHAT" as const),
+        // Tạo mới: mọi trường đều là "sẽ ghi"; cập nhật: chỉ trường THỰC SỰ đổi.
+        cot: k.laTaoMoi
+          ? Object.entries(k.base)
+              .filter(([, v]) => v !== null && v !== undefined)
+              .map(([ten, sau]) => ({ ten, truoc: null, sau }))
+          : Object.keys(k.moi).map((ten) => ({
+              ten,
+              truoc: k.cu[ten] ?? null,
+              sau: k.moi[ten] ?? null,
+            })),
+      })),
+    });
+  }
+
   let success = 0;
   try {
     await sdb.$transaction(async (tx) => {
-      for (let i = 0; i < validRows.length; i++) {
-        const r = validRows[i];
-        const base = {
-          fullName: r.data.fullName,
-          jobTitle: r.data.jobTitle,
-          department: r.data.department,
-          status: r.data.status,
-          phone: r.data.phone,
-          email: r.data.email,
-          dateOfBirth: r.data.dateOfBirth,
-          gender: r.data.gender,
-          nationalId: r.data.nationalId,
-          contractType: r.data.contractType,
-          centerId: r.centerId,
-          orgUnitId: r.orgUnitId, // dual-write 2-phase
-          managerId: r.managerId,
-          joinedAt: r.data.joinedAt,
-          endDate: r.data.endDate,
-          address: r.data.address,
-          subjects: r.data.subjects ?? [],
-          certifications: r.data.certifications ?? [],
-          bio: r.data.bio,
-          emergencyContact: r.data.emergencyContact,
-          notes: r.data.notes,
-          // Sync legacy isActive flag with new status field
-          isActive: r.data.status === "ACTIVE",
-        };
-        // Đường CẬP NHẬT là VÁ — chỉ đụng cột thực sự có trong file.
-        // Luật + lý do: `lib/hr/import-patch.ts`.
-        const patch = dungPatchNhanSu(base as Record<string, unknown>, r.coMat);
-
+      for (const { r, i, base, patch, truoc, cu, moi, laTaoMoi } of keHoach) {
         try {
-          if (daCo.has(r.data.employeeCode)) {
+          if (!laTaoMoi) {
             // Hồ sơ ĐÃ CÓ → chỉ VÁ. Không cột nào trong file thì không ghi gì.
             if (Object.keys(patch).length > 0) {
-              const truoc = hoSoCu.get(r.data.employeeCode) ?? {};
-              // Chỉ giữ những trường THỰC SỰ ĐỔI — một lượt nhập lại cùng file không
-              // được đẻ ra audit rỗng, nếu không sổ audit thành nhiễu và mất tác dụng
-              // truy vết.
-              const cu: Record<string, unknown> = {};
-              const moi: Record<string, unknown> = {};
-              for (const [k, v] of Object.entries(patch)) {
-                const a = truoc[k];
-                if (JSON.stringify(a ?? null) === JSON.stringify(v ?? null))
-                  continue;
-                cu[k] = a ?? null;
-                moi[k] = v ?? null;
-              }
               if (Object.keys(moi).length > 0) {
                 await tx.employee.update({
                   where: { employeeCode: r.data.employeeCode },
