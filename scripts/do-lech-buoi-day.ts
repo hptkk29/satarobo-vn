@@ -34,14 +34,20 @@ function dong(nhan: string, n: number | string) {
 
 async function main() {
   const nay = new Date();
-  const macTo = new Date(Date.UTC(nay.getUTCFullYear(), nay.getUTCMonth() + 1, 1));
-  const macFrom = new Date(Date.UTC(nay.getUTCFullYear(), nay.getUTCMonth() - 3, 1));
+  const macTo = new Date(
+    Date.UTC(nay.getUTCFullYear(), nay.getUTCMonth() + 1, 1),
+  );
+  const macFrom = new Date(
+    Date.UTC(nay.getUTCFullYear(), nay.getUTCMonth() - 3, 1),
+  );
   const from = mocThang(process.argv[2], macFrom);
   const to = mocThang(process.argv[3], macTo);
 
   console.log(`[do-lech] DB: ${currentDbHost()} · CHỈ ĐỌC`);
   inQuyen(await kiemQuyen(db), false);
-  console.log(`[do-lech] Khoảng: ${from.toISOString().slice(0, 10)} → ${to.toISOString().slice(0, 10)} (nửa mở)\n`);
+  console.log(
+    `[do-lech] Khoảng: ${from.toISOString().slice(0, 10)} → ${to.toISOString().slice(0, 10)} (nửa mở)\n`,
+  );
 
   // ══ 0. LỖI THƯỢNG NGUỒN — đo TRƯỚC, vì nó quyết định ba số dưới có nghĩa hay không ══
   //
@@ -55,11 +61,14 @@ async function main() {
     where: { date: { gte: from, lt: to } },
     select: {
       id: true,
+      classId: true,
       status: true,
       date: true,
       actualTeacherId: true,
       substituteTeacherId: true,
-      class: { select: { teacherId: true, assistantId: true, deletedAt: true } },
+      class: {
+        select: { teacherId: true, assistantId: true, deletedAt: true },
+      },
     },
   });
   const xong = buoi.filter((b) => b.status === "COMPLETED");
@@ -80,10 +89,15 @@ async function main() {
       b.actualTeacherId === b.class.teacherId,
   ).length;
   const conCuuDuoc = xong.filter(
-    (b) => b.actualTeacherId == null && b.substituteTeacherId && b.substituteTeacherId !== b.class.teacherId,
+    (b) =>
+      b.actualTeacherId == null &&
+      b.substituteTeacherId &&
+      b.substituteTeacherId !== b.class.teacherId,
   ).length;
 
-  console.log("══ 0. LỖI THƯỢNG NGUỒN (session-lifecycle.ts) — đọc số này TRƯỚC ══");
+  console.log(
+    "══ 0. LỖI THƯỢNG NGUỒN (session-lifecycle.ts) — đọc số này TRƯỚC ══",
+  );
   dong("Buổi COMPLETED trong khoảng", xong.length);
   dong("ĐÃ BỊ NUỐT người dạy thay lúc hoàn tất", daBiNuot);
   dong("Còn cứu được (actualTeacherId chưa bị ghi đè)", conCuuDuoc);
@@ -104,10 +118,16 @@ async function main() {
     if (k) dung.set(k, (dung.get(k) ?? 0) + 1);
   }
   const lech = [...new Set([...hienThi.keys(), ...dung.keys()])]
-    .map((id) => ({ id, hienThi: hienThi.get(id) ?? 0, dung: dung.get(id) ?? 0 }))
+    .map((id) => ({
+      id,
+      hienThi: hienThi.get(id) ?? 0,
+      dung: dung.get(id) ?? 0,
+    }))
     .filter((r) => r.hienThi !== r.dung);
 
-  console.log("\n══ 1. /admin/bao-cao/hieu-suat-gv — QUY SAI NGƯỜI (không chạm tiền) ══");
+  console.log(
+    "\n══ 1. /admin/bao-cao/hieu-suat-gv — QUY SAI NGƯỜI (không chạm tiền) ══",
+  );
   dong("Số giáo viên có số lệch", lech.length);
   // Đếm THẲNG số buổi quy sai. Bản cũ dùng `Σ|hiện − đúng| / 2` — đó là LƯU LƯỢNG RÒNG, nên giáo
   // viên vừa nhận nhầm buổi vừa bị mất buổi sẽ triệt tiêu và bị đếm THIẾU.
@@ -120,7 +140,8 @@ async function main() {
   for (const r of lech.slice(0, 10)) {
     console.log(`    ${r.id}  màn hiện ${r.hienThi}  ·  đúng ${r.dung}`);
   }
-  if (lech.length > 10) console.log(`    … và ${lech.length - 10} giáo viên nữa`);
+  if (lech.length > 10)
+    console.log(`    … và ${lech.length - 10} giáo viên nữa`);
 
   // ══ 2. /teacher/bang-cong — đếm cả buổi CHƯA hoàn tất ══
   //
@@ -136,10 +157,15 @@ async function main() {
     .filter(([k]) => k !== "COMPLETED")
     .reduce((s, [, v]) => s + v, 0);
   const laTroGiang = buoi.filter(
-    (b) => b.status !== "CANCELLED" && b.class.assistantId && b.class.assistantId !== b.class.teacherId,
+    (b) =>
+      b.status !== "CANCELLED" &&
+      b.class.assistantId &&
+      b.class.assistantId !== b.class.teacherId,
   ).length;
 
-  console.log("\n══ 2. /teacher/bang-cong — ô \"Buổi dạy\" đếm cả buổi chưa hoàn tất ══");
+  console.log(
+    '\n══ 2. /teacher/bang-cong — ô "Buổi dạy" đếm cả buổi chưa hoàn tất ══',
+  );
   for (const [k, v] of [...theoTrangThai].sort()) dong(`  trạng thái ${k}`, v);
   dong("PHỒNG do buổi chưa hoàn tất", chuaXong);
   dong("Buổi thừa trên bảng của TRỢ GIẢNG", laTroGiang);
@@ -158,17 +184,57 @@ async function main() {
   // mà nhãn vẫn in "đã qua ngày". Trên prod, khoảng đo kéo tới 01/10 trong khi hôm nay là 07/09,
   // nên con số in ra gồm cả buổi TƯƠNG LAI — chúng không lên màn này, không phải "phồng".
   const bay = new Date();
-  const trenHoSoGv = buoi.filter((b) => b.class.deletedAt == null && b.class.teacherId != null);
-  const daQua = trenHoSoGv.filter((b) => b.status !== "COMPLETED" && b.date <= bay);
-  const tuongLai = trenHoSoGv.filter((b) => b.status !== "COMPLETED" && b.date > bay);
+  const trenHoSoGv = buoi.filter(
+    (b) => b.class.deletedAt == null && b.class.teacherId != null,
+  );
+  const daQua = trenHoSoGv.filter(
+    (b) => b.status !== "COMPLETED" && b.date <= bay,
+  );
+  const tuongLai = trenHoSoGv.filter(
+    (b) => b.status !== "COMPLETED" && b.date > bay,
+  );
   const theoTrangThaiDaQua = new Map<string, number>();
-  for (const b of daQua) theoTrangThaiDaQua.set(b.status, (theoTrangThaiDaQua.get(b.status) ?? 0) + 1);
+  for (const b of daQua)
+    theoTrangThaiDaQua.set(
+      b.status,
+      (theoTrangThaiDaQua.get(b.status) ?? 0) + 1,
+    );
 
-  console.log("\n══ 3. /admin/teachers/[id] — \"Đã dạy N buổi\" không lọc trạng thái ══");
-  for (const [k, v] of [...theoTrangThaiDaQua].sort()) dong(`  đã qua ngày · ${k}`, v);
-  dong("PHỒNG THẬT (chưa COMPLETED · đã qua ngày · lớp có GV chính)", daQua.length);
+  console.log(
+    '\n══ 3. /admin/teachers/[id] — "Đã dạy N buổi" không lọc trạng thái ══',
+  );
+  for (const [k, v] of [...theoTrangThaiDaQua].sort())
+    dong(`  đã qua ngày · ${k}`, v);
+  dong(
+    "PHỒNG THẬT (chưa COMPLETED · đã qua ngày · lớp có GV chính)",
+    daQua.length,
+  );
   dong("(tham khảo) buổi tương lai — KHÔNG lên màn này", tuongLai.length);
-  dong("(tham khảo) buổi bị loại: lớp đã xoá / chưa có GV chính", buoi.length - trenHoSoGv.length);
+  // TÁCH hai hạng bị loại (yêu cầu 08/09): "lớp đã xoá" là dọn dẹp bình thường, còn
+  // "lớp đang chạy mà KHÔNG CÓ GV CHÍNH" là LỖI DỮ LIỆU riêng — gộp chung một số thì
+  // hạng thứ hai không bao giờ lộ ra.
+  const lopDaXoa = buoi.filter((b) => b.class.deletedAt != null).length;
+  const khongGvChinh = buoi.filter(
+    (b) => b.class.deletedAt == null && b.class.teacherId == null,
+  );
+  dong("(tham khảo) buổi bị loại · lớp ĐÃ XOÁ", lopDaXoa);
+  dong(
+    "(tham khảo) buổi bị loại · lớp CÒN SỐNG mà KHÔNG có GV chính",
+    khongGvChinh.length,
+  );
+  if (khongGvChinh.length > 0) {
+    const soLop = new Set(khongGvChinh.map((b) => b.classId)).size;
+    console.log(
+      `  ⚠️ ${khongGvChinh.length} buổi thuộc ${soLop} lớp ĐANG SỐNG mà Class.teacherId = NULL.`,
+    );
+    console.log(
+      "     Đây là LỖI DỮ LIỆU riêng, không phải lỗi đếm: lớp không có giáo viên chính thì",
+    );
+    console.log(
+      "     không màn nào quy được buổi cho ai, và cổng sở hữu của chốt buổi cũng không tìm",
+    );
+    console.log("     ra người phụ trách. Cần gán GV rồi mới bàn tới số buổi.");
+  }
   const huy = theoTrangThaiDaQua.get("CANCELLED") ?? 0;
   console.log(
     `  Trong đó: buổi ĐÃ HUỶ ${huy} · buổi quên bấm "Hoàn tất" ${daQua.length - huy}.\n` +
