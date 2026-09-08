@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { chiaLoThem, conTrongKhoi, doiCho, thuTuTheoNguoi } from "./khung-ca";
+import {
+  chiaLoThem,
+  conTrongKhoi,
+  doiCho,
+  laSection,
+  nguoiLechSection,
+  sectionChoCum,
+  thuTuTheoNguoi,
+} from "./khung-ca";
 
 const MO = { effectiveTo: null };
 const DONG = { effectiveTo: new Date(Date.UTC(2026, 8, 8)) };
@@ -131,5 +139,78 @@ describe("doiCho — lên/xuống một bậc", () => {
     const ra = doiCho(goc, "a", "xuong");
     expect(goc).toEqual(["a", "b"]);
     expect(ra).not.toBe(goc);
+  });
+});
+
+describe("nguoiLechSection — cụm mang nhiều hơn một section", () => {
+  it("cụm đồng nhất ⇒ RỖNG", () => {
+    expect(
+      nguoiLechSection([
+        { userId: "a", section: "GIAO_VIEN" },
+        { userId: "a", section: "GIAO_VIEN" },
+      ]).size,
+    ).toBe(0);
+  });
+
+  // ⚠️ Hình dạng THẬT của bug: thêm một ô qua màn admin cho người đã nhập file với vai
+  // giáo viên. Dòng mới rơi về `@default(KINH_DOANH)` của schema — im lặng, không lỗi.
+  it("một dòng lệch trong bảy ⇒ BẮT được, kèm đủ hai giá trị", () => {
+    const lech = nguoiLechSection([
+      ...Array.from({ length: 6 }, () => ({
+        userId: "a",
+        section: "GIAO_VIEN",
+      })),
+      { userId: "a", section: "KINH_DOANH" },
+    ]);
+    expect([...lech]).toEqual([["a", ["GIAO_VIEN", "KINH_DOANH"]]]);
+  });
+
+  it("chỉ trả người VI PHẠM, không trả người sạch", () => {
+    const lech = nguoiLechSection([
+      { userId: "sach", section: "VAN_PHONG" },
+      { userId: "lech", section: "VAN_PHONG" },
+      { userId: "lech", section: "KINH_DOANH" },
+    ]);
+    expect([...lech.keys()]).toEqual(["lech"]);
+  });
+
+  it("rỗng ⇒ rỗng", () => {
+    expect(nguoiLechSection([]).size).toBe(0);
+  });
+});
+
+describe("sectionChoCum — cụm đã có giá trị thì GIỮ NGUYÊN", () => {
+  it("cụm có sẵn ⇒ giữ, KHÔNG nghe đề xuất", () => {
+    // Để người gọi tự chọn khi cụm đã có giá trị chính là đường đẻ ra cụm lệch.
+    expect(sectionChoCum(["GIAO_VIEN"], "KINH_DOANH")).toBe("GIAO_VIEN");
+  });
+
+  it("cụm trống ⇒ lấy đề xuất", () => {
+    expect(sectionChoCum([], "VAN_PHONG")).toBe("VAN_PHONG");
+  });
+
+  it("cụm trống + đề xuất rác ⇒ mặc định KINH_DOANH (khớp @default của schema)", () => {
+    expect(sectionChoCum([], "KHONG_TON_TAI")).toBe("KINH_DOANH");
+    expect(sectionChoCum([], null)).toBe("KINH_DOANH");
+    expect(sectionChoCum([])).toBe("KINH_DOANH");
+  });
+
+  it("cụm ĐÃ lệch sẵn ⇒ lấy giá trị hợp lệ ĐẦU TIÊN, và HỘI TỤ", () => {
+    // Quyết định tuỳ tiện nhưng ổn định: cùng đầu vào ⇒ cùng kết quả, nên lượt ghi kế
+    // tiếp kéo cả cụm về đúng giá trị đó chứ không dao động.
+    const cum = ["GIAO_VIEN", "KINH_DOANH"];
+    expect(sectionChoCum(cum)).toBe("GIAO_VIEN");
+    expect(sectionChoCum(cum)).toBe(sectionChoCum(cum));
+  });
+
+  it("bỏ qua giá trị RÁC trong cụm thay vì trả về nó", () => {
+    expect(sectionChoCum(["", "linh tinh", "VAN_PHONG"])).toBe("VAN_PHONG");
+  });
+
+  it("laSection chỉ nhận đúng ba giá trị của enum", () => {
+    expect(laSection("GIAO_VIEN")).toBe(true);
+    expect(laSection("giao_vien")).toBe(false);
+    expect(laSection(null)).toBe(false);
+    expect(laSection(0)).toBe(false);
   });
 });

@@ -11,6 +11,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   KHUNG_CA_EFFECTIVE_FROM,
   conTrongKhoi,
+  nguoiLechSection,
+  sectionChoCum,
 } from "../../lib/cham-cong/khung-ca";
 import { seedShiftTemplates } from "../../lib/cham-cong/seed-core";
 
@@ -309,5 +311,89 @@ d("khung ca tuần — gỡ mềm bằng effectiveTo", () => {
     });
     expect(a.filter((r) => r.effectiveTo !== null)).toHaveLength(2); // nền đúng là nửa-nửa
     expect(new Set(a.map((r) => r.displayOrder))).toEqual(new Set([4]));
+  });
+
+  // ── (d) SECTION — một người, một section trong cùng (khối, effectiveFrom) ──
+  //
+  // ⚠️ CA TÁI HIỆN ĐƯỜNG ĐỜI THƯỜNG, không phải tình huống giả định: trước bản vá,
+  // `savePatternCellAction` KHÔNG hề set `section`, nên dòng MỚI rơi về
+  // `@default(KINH_DOANH)` của schema. Thêm một ô cho người đã nhập file với vai giáo
+  // viên là cụm lệch ngay — im lặng, không lỗi.
+  it("thêm một ô KHÔNG khai section ⇒ schema mặc định KINH_DOANH (đây là gốc bug)", async () => {
+    await db.shiftWeeklyPattern.updateMany({
+      where: { userId, centerId: cs2, effectiveFrom: KHUNG_CA_EFFECTIVE_FROM },
+      data: { section: "GIAO_VIEN" },
+    });
+    await db.shiftWeeklyPattern.delete({
+      where: {
+        userId_centerId_weekday_effectiveFrom: {
+          userId,
+          centerId: cs2,
+          weekday: 4,
+          effectiveFrom: KHUNG_CA_EFFECTIVE_FROM,
+        },
+      },
+    });
+    // Tạo lại ô đó KHÔNG truyền `section` — đúng thứ action cũ làm.
+    await db.shiftWeeklyPattern.create({
+      data: {
+        userId,
+        centerId: cs2,
+        weekday: 4,
+        templateId: tplX,
+        templateCode: "X",
+        effectiveFrom: KHUNG_CA_EFFECTIVE_FROM,
+      },
+    });
+
+    const cumCs2 = await db.shiftWeeklyPattern.findMany({
+      where: { userId, centerId: cs2, effectiveFrom: KHUNG_CA_EFFECTIVE_FROM },
+      select: { userId: true, section: true },
+    });
+    // Bằng chứng bug tồn tại thật trên CSDL, không phải suy luận:
+    expect([...nguoiLechSection(cumCs2).values()]).toEqual([
+      ["GIAO_VIEN", "KINH_DOANH"],
+    ]);
+  });
+
+  it("cổng kéo CẢ CỤM về một section, và GIỮ giá trị cũ chứ không lấy mặc định", async () => {
+    const truoc = await db.shiftWeeklyPattern.findMany({
+      where: { userId, centerId: cs2, effectiveFrom: KHUNG_CA_EFFECTIVE_FROM },
+      select: { userId: true, section: true },
+      orderBy: { weekday: "asc" },
+    });
+    // Đúng luật mà `savePatternCellAction` chạy sau bản vá.
+    const section = sectionChoCum(truoc.map((r) => r.section));
+    expect(
+      section,
+      "cụm đã có GIAO_VIEN thì phải GIỮ, không rơi về mặc định KINH_DOANH",
+    ).toBe("GIAO_VIEN");
+
+    await db.shiftWeeklyPattern.updateMany({
+      where: { userId, centerId: cs2, effectiveFrom: KHUNG_CA_EFFECTIVE_FROM },
+      data: { section },
+    });
+
+    const sau = await db.shiftWeeklyPattern.findMany({
+      where: { userId, centerId: cs2, effectiveFrom: KHUNG_CA_EFFECTIVE_FROM },
+      select: { userId: true, section: true },
+    });
+    expect(nguoiLechSection(sau).size).toBe(0);
+    expect(new Set(sau.map((r) => r.section))).toEqual(new Set(["GIAO_VIEN"]));
+  });
+
+  it("`distinct` trả MỘT dòng cho mỗi cụm — vì thế cụm lệch mới là bug thật", async () => {
+    // Không dựng cả `brief-db` ở đây; kiểm đúng tính chất khiến lệch trở nên nguy hiểm:
+    // truy vấn `distinct(["userId","centerId"])` của nó chỉ giữ MỘT section cho mỗi cụm,
+    // nên khi cụm lệch thì "ai nhận thông báo của bộ phận nào" do thứ tự truy vấn quyết.
+    const d1 = await db.shiftWeeklyPattern.findMany({
+      where: { userId, effectiveTo: null },
+      select: { userId: true, centerId: true, section: true },
+      distinct: ["userId", "centerId"],
+    });
+    expect(d1.length).toBeGreaterThan(0);
+    expect(new Set(d1.map((r) => `${r.userId}|${r.centerId}`)).size).toBe(
+      d1.length,
+    );
   });
 });

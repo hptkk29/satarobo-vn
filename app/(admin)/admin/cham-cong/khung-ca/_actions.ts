@@ -19,6 +19,8 @@ import { chanSuaKyDaChot } from "@/lib/cham-cong/ky-gac";
 import {
   KHUNG_CA_EFFECTIVE_FROM,
   chiaLoThem,
+  nguoiLechSection,
+  sectionChoCum,
   thuTuTheoNguoi,
   type KetQuaThemHangLoat,
 } from "@/lib/cham-cong/khung-ca";
@@ -85,6 +87,22 @@ export async function savePatternCellAction(input: unknown): Promise<Res> {
     });
     if (!tpl)
       return { ok: false, error: `Mã "${code}" không có trong danh mục` };
+
+    // ── CỔNG (d): một người chỉ mang MỘT `section` trong cùng (khối, effectiveFrom) ──
+    //
+    // Đây là đường ghi ĐỜI THƯỜNG làm gãy bất biến, không phải giả định: action này
+    // trước nay KHÔNG hề set `section`, nên dòng MỚI rơi về `@default(KINH_DOANH)` của
+    // schema. Thêm một ô cho người đã được nhập file với vai GIÁO_VIÊN là cụm của họ
+    // lập tức mang hai giá trị — im lặng, không lỗi.
+    //
+    // Hậu quả nằm ở `brief-db.ts:45-52`: nó `distinct: ["userId","centerId"]` rồi lọc
+    // thông báo bằng `audience === sectionOfUser.get(u.id)`. `distinct` trả MỘT dòng bất
+    // kỳ trong bảy ⇒ người ấy nhận thông báo của bộ phận nào là do thứ tự truy vấn.
+    const cumHienCo = await sdb.shiftWeeklyPattern.findMany({
+      where: { userId, centerId, effectiveFrom: DEFAULT_EFFECTIVE_FROM },
+      select: { userId: true, section: true },
+    });
+    const section = sectionChoCum(cumHienCo.map((r) => r.section));
     const map = await loadCenterMap();
     const orgUnitId = isHoBlock
       ? null
@@ -102,6 +120,7 @@ export async function savePatternCellAction(input: unknown): Promise<Res> {
         templateCode: tpl.code,
         sheetName: p.data.sheetName ?? null,
         jobLabel: p.data.jobLabel ?? null,
+        section,
         effectiveFrom: DEFAULT_EFFECTIVE_FROM,
       },
       update: {
@@ -118,6 +137,15 @@ export async function savePatternCellAction(input: unknown): Promise<Res> {
         ...(p.data.jobLabel ? { jobLabel: p.data.jobLabel } : {}),
       },
     });
+
+    // Cụm ĐÃ lệch sẵn (dữ liệu cũ, hoặc file nhập phủ nửa vời) thì kéo cả cụm về một
+    // giá trị. Chỉ chạy khi thật sự lệch — mỗi lần lưu một ô không cần thêm một lượt ghi.
+    if (nguoiLechSection(cumHienCo).size > 0) {
+      await sdb.shiftWeeklyPattern.updateMany({
+        where: { userId, centerId, effectiveFrom: DEFAULT_EFFECTIVE_FROM },
+        data: { section },
+      });
+    }
   }
   revalidatePath("/cham-cong/khung-ca");
   return { ok: true, data: null };

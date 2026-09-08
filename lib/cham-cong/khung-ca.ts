@@ -150,3 +150,73 @@ export function doiCho(
   [ra[i], ra[j]] = [ra[j]!, ra[i]!];
   return ra;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// (d) CỔNG: một người chỉ mang MỘT `section` trong cùng (center, effectiveFrom)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// `section` (KINH_DOANH / GIAO_VIEN / VAN_PHONG) cũng là cột trên TỪNG dòng nhưng mang
+// nghĩa "người này thuộc bộ phận nào TRONG KHỐI NÀY". Bảy dòng của một người có thể mang
+// ba giá trị khác nhau và **không có gì trong CSDL ngăn được** — `@@unique` không chứa nó.
+//
+// Vì sao nguy hiểm chứ không chỉ xấu: `brief-db.ts:45-52` đọc
+// `distinct: ["userId","centerId"]` rồi dựng `Map(userId → section)`, và `:66` lọc thông
+// báo bằng `audience === sectionOfUser.get(u.id)`. `distinct` trả MỘT dòng bất kỳ trong
+// bảy — nên khi cụm lệch, "ai nhận thông báo của bộ phận nào" do thứ tự truy vấn quyết
+// định. Sai lặng lẽ, và mỗi lần chạy có thể khác.
+//
+// Đo prod 08/09/2026: **0 ca vi phạm**. Nhưng luật 1 — "0 dòng trên prod không hạ được
+// mức nghiêm trọng khi đường ghi còn sống": `import-core.ts:213,218` suy `section` từ
+// `row.role` của FILE, nên chỉ cần một lần nhập file mà cột vai trò của một người lệch
+// giữa các dòng là bất biến này gãy, im lặng.
+//
+// ⚠️ Đây là bất biến THỨ HAI cùng hình dạng với `displayOrder` ở mục (c). Hai cột, một
+// bệnh: "cột của DÒNG mang nghĩa của NGƯỜI". Thêm cột thứ ba kiểu này thì khai vào đây.
+
+export const SECTIONS = ["KINH_DOANH", "GIAO_VIEN", "VAN_PHONG"] as const;
+export type Section = (typeof SECTIONS)[number];
+
+export function laSection(v: unknown): v is Section {
+  return typeof v === "string" && (SECTIONS as readonly string[]).includes(v);
+}
+
+/**
+ * Người nào trong khối đang mang nhiều hơn một `section`.
+ *
+ * @returns map `userId → danh sách section` (đã sắp), CHỈ gồm người vi phạm. Rỗng = sạch.
+ */
+export function nguoiLechSection(
+  dong: readonly { userId: string; section: string }[],
+): Map<string, string[]> {
+  const theoNguoi = new Map<string, Set<string>>();
+  for (const d of dong) {
+    const s = theoNguoi.get(d.userId) ?? new Set<string>();
+    s.add(d.section);
+    theoNguoi.set(d.userId, s);
+  }
+  const lech = new Map<string, string[]>();
+  for (const [u, s] of theoNguoi) if (s.size > 1) lech.set(u, [...s].sort());
+  return lech;
+}
+
+/**
+ * `section` sẽ ghi cho một người trong cụm.
+ *
+ * Luật: **cụm đã có section nào thì giữ nguyên section đó**; cụm trống thì lấy giá trị đề
+ * xuất; không có gì hợp lệ thì `KINH_DOANH` (khớp `@default` của schema).
+ *
+ * Cố ý KHÔNG để người gọi tự chọn khi cụm đã có giá trị — đó chính là đường đẻ ra cụm
+ * lệch. Muốn đổi bộ phận của một người thì đổi CẢ CỤM, bằng một thao tác riêng và có
+ * chủ đích.
+ *
+ * ⚠️ `sectionDangCo` có thể đã lệch sẵn (dữ liệu cũ). Khi đó hàm lấy giá trị HỢP LỆ ĐẦU
+ * TIÊN — quyết định tuỳ tiện, nhưng nó **hội tụ**: mọi lần ghi sau đều trả cùng kết quả
+ * nếu truyền vào cùng thứ tự, và `nguoiLechSection` là thứ để phát hiện cụm cần dọn.
+ */
+export function sectionChoCum(
+  sectionDangCo: readonly string[],
+  deXuat?: string | null,
+): Section {
+  for (const s of sectionDangCo) if (laSection(s)) return s;
+  return laSection(deXuat) ? deXuat : "KINH_DOANH";
+}
