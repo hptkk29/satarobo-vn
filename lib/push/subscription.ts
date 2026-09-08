@@ -68,6 +68,27 @@ const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/;
  * (`fcm.googleapis.com`, `*.push.services.mozilla.com`, `web.push.apple.com`,
  * `*.notify.windows.com`). Đó mới là cổng chặt nhất; cổng dưới đây là mức sàn.
  */
+/**
+ * Endpoint đã LƯU có còn an toàn để POST vào không — cổng SSRF của ĐƯỜNG GỬI (Đợt 4).
+ *
+ * Vì sao phải kiểm LẠI dù đường ghi đã kiểm: cổng ở `endpointSchema` chỉ chạy lúc ĐĂNG KÝ.
+ * Engine gửi đọc chuỗi từ DB rồi tự POST vào đó **kèm header VAPID thật**, và ghi mã trả về
+ * vào `lastErrorCode` — tức nếu một dòng xấu lọt vào bảng (ghi bằng SQL tay, khôi phục từ bản
+ * sao lưu cũ hơn cổng này, hay một bản vá tương lai nới lỏng schema) thì kẻ đặt nó có cả một
+ * kênh quét cổng nội bộ CÓ PHẢN HỒI. Chú thích ở `endpointSchema` đã nêu trước nguy cơ này.
+ *
+ * Rẻ (một `new URL`), chạy đúng một lần cho mỗi thiết bị mỗi lượt gửi. Đừng tin cột trong DB.
+ */
+export function endpointConAnToan(endpoint: string): boolean {
+  let u: URL;
+  try {
+    u = new URL(endpoint);
+  } catch {
+    return false;
+  }
+  return u.protocol === "https:" && laHostAnToan(u);
+}
+
 function laHostAnToan(u: URL): boolean {
   const host = u.hostname.toLowerCase();
   if (host.length === 0) return false;
