@@ -28,10 +28,52 @@ tàng hình với người cấp cơ sở).
 | `e2e` | `playwright.config.ts` (smoke) | ✅ |
 | `e2e-a0` · `e2e-r7` · `e2e-crm` · `e2e-fl` · `e2e-teacher` · `e2e-elearning` | 6 config tương ứng | ✅ |
 
-⚠️ **Job nào là *required check* thì không đọc được từ repo** — đó là cài đặt branch protection trên
-GitHub. Hai chỗ trong tài liệu còn ghi lệch nhau (`KE-HOACH-CHAM-CONG-v3.md:413` nói required là
-*Quality + Unit tests*; `docs/elearning/quy-uoc-nen.md:59` nói `chat-db-tests` "đang là required")
-⇒ **phải xác nhận trên GitHub**, đừng tin tài liệu.
+### Required check — ĐO ĐƯỢC, đã đo 08/09/2026
+
+⚠️ **Câu cũ ở đây — *"job nào là required check thì không đọc được từ repo"* — là SAI**, và cái sai
+đó đã hoãn phép đo này từ 07/09 sang 08/09. Đọc được, một lệnh:
+
+```bash
+gh api repos/hptkk29/satarobo-vn/branches/main/protection \
+  -q '.required_status_checks.contexts, .required_status_checks.strict, .enforce_admins.enabled'
+```
+
+Kết quả 08/09/2026, **giống hệt nhau trên `main` và `test`**:
+
+| | |
+|---|---|
+| `required_status_checks.contexts` | `Quality (typecheck + lint + build)` · `Unit tests (Vitest)` — **hết** |
+| `strict` | `false` — PR xanh trên base cũ vẫn merge được vào nhánh đã đổi |
+| `enforce_admins` | `false` — **admin merge đè được cả hai cổng** |
+| `required_pull_request_reviews` | **không có** |
+
+⇒ Trong hai chỗ tài liệu ghi lệch nhau: `KE-HOACH-CHAM-CONG-v3.md:413` **ĐÚNG**;
+`docs/elearning/quy-uoc-nen.md:59` (*`chat-db-tests` "đang là required"*) **SAI** — đã sửa 08/09.
+
+### Bao nhiêu ca thực sự được cổng bảo vệ
+
+Số dưới đây đo từ log lượt CI xanh `34210965196` (PR #230), không phải ước lượng.
+
+| Job | Chạy bộ nào | Số ca | Required |
+|---|---|---|---|
+| `quality` | typecheck · lint · lint:boundaries · build | **0 ca test** | ✅ |
+| `unit-tests` | `pnpm test:unit` | **400 file / 5 718 ca** (+191 skip) | ✅ |
+| `chat-db-tests` | chat 6f/94 · nen 3f/15 · lead-intake 2f/28 · cham-cong 6f/37 · finance 1f/24 | **18 file / 198 ca** | ❌ |
+| `e2e-a0` | `playwright.a0.config.ts` | **153 ca** | ❌ |
+| `e2e-r7` (2 shard) | `playwright.r7.config.ts` | **370 ca** (+2 skip) | ❌ |
+| `e2e-fl` | `playwright.fl.config.ts` | **54 ca** (+17 skip) | ❌ |
+| `e2e-crm` | `playwright.crm.config.ts` | **32 ca** | ❌ |
+| `e2e` | `playwright.config.ts` (smoke) | **26 ca** | ❌ |
+| `e2e-elearning` | `playwright.elearning.config.ts` | **3 ca** (+2 skip) | ❌ |
+| `e2e-teacher` | `playwright.teacher.config.ts` | **2 ca** | ❌ |
+
+**Tổng chạy trên PR: 6 384 ca. Được cổng bảo vệ: 5 718 (89,6%). Ngoài cổng: 666 (10,4%)** — trong đó
+**370 ca R7** (gỡ học viên · hoàn tiền · ghi danh) và **198 ca tầng DB thật** (bút toán điều chỉnh ·
+nhập nhân sự).
+
+⚠️ **Đây không phải lý thuyết.** Ca `[W5]` trong `e2e-r7` đỏ thật từ `fb7f8422` (PR #228, cầu dao
+hoàn tiền) và **main đỏ liên tục** từ `c78d0ae0` tới `2bfea6eb` — merge lên prod bình thường, vì
+`e2e-r7` không phải required. Xem luật 10 trong `docs/luat-doc-so-va-ket-luan.md`.
 
 ---
 

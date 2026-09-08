@@ -412,6 +412,14 @@ Kế hoạch **không đánh giá** căn cứ trên là đủ hay không cho lo�
 
 - Branch protection `main`/`test` chỉ bắt buộc **Quality + Unit tests (Vitest)**; CI **không chạy r1..r6** (2 bộ test chấm công cũ chưa từng chạy); `include` của `vitest.config.ts:13-30` là bộ lọc **cứng**; R7 đang bão hoà (1680s).
 - **Quyết định:** test lõi → `tests/cham-cong/**` (Vitest) + khai `include` + bước trong job `chat-db-tests`; **chủ dự án thêm required check** cho job đó. Spec browser → `tests/e2e/a0`. Mock GPS: repo **chưa có ví dụ** — xây mới. Không viết AC "e2e chứng minh chặn fake GPS".
+- 🔴 **CÒN NỢ — đo lại 08/09/2026: việc "thêm required check" CHƯA LÀM.**
+  `gh api repos/hptkk29/satarobo-vn/branches/main/protection` trả `contexts` đúng hai mục
+  *Quality* + *Unit tests (Vitest)*; `chat-db-tests` **không có trong đó** trên cả `main`
+  lẫn `test`. Nghĩa là `tests/cham-cong/**` chạy đầy đủ 37 ca và báo đỏ đúng, nhưng
+  **không chặn được ai merge** — đúng luật 10.
+  Kèm hai cờ cũng chưa bật: `enforce_admins = false` (admin merge đè được cả hai cổng
+  đang có) và `strict = false` (PR xanh trên base cũ vẫn merge được). Chỉ chủ dự án đặt
+  được, ở GitHub Settings.
 - `grep workRequest tests/` = **0 hit** — ma trận duyệt (đúng/sai cơ sở, HO, đua duyệt, nộp muộn) phải có test đỏ **trước** khi sửa action (luật cứng #5).
 
 ---
