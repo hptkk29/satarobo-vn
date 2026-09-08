@@ -3,10 +3,19 @@
 // computeRefund THUẦN (test được không cần DB). createRefundRequest snapshot số liệu
 // tại thời điểm tạo (paidConfirmed/sessionsTotal/sessionsLearned/unitPrice) để minh bạch,
 // không phụ thuộc thay đổi sau. approve/reject ghi AuditLog hợp nhất.
-import type { Prisma, PrismaClient, RefundRequest, RefundTrigger } from "@prisma/client";
+import type {
+  Prisma,
+  PrismaClient,
+  RefundRequest,
+  RefundTrigger,
+} from "@prisma/client";
 import { db } from "@/lib/db";
 import { KHOAN_DA_XAC_NHAN } from "@/lib/finance/debt";
 import { writeAudit } from "@/lib/audit/audit-log";
+import {
+  REFUND_REQUEST_DISABLED,
+  ghiNhanChamCauDaoHoanTien,
+} from "@/lib/finance/cau-dao-hoan-tien";
 import type { ScopedDb } from "@/lib/actions/factory";
 
 type DbClient = PrismaClient | Prisma.TransactionClient;
@@ -24,8 +33,12 @@ export function computeRefund(input: {
   sessionsLearned: number;
 }): { unitPrice: number; proposedAmount: number } {
   const { paidConfirmed, finalPrice, sessionsTotal, sessionsLearned } = input;
-  const unitPrice = sessionsTotal > 0 ? Math.round(finalPrice / sessionsTotal) : 0;
-  const proposedAmount = Math.max(0, paidConfirmed - sessionsLearned * unitPrice);
+  const unitPrice =
+    sessionsTotal > 0 ? Math.round(finalPrice / sessionsTotal) : 0;
+  const proposedAmount = Math.max(
+    0,
+    paidConfirmed - sessionsLearned * unitPrice,
+  );
   return { unitPrice, proposedAmount };
 }
 
@@ -56,7 +69,36 @@ export async function createRefundRequest(input: {
   actorName?: string;
   tx?: DbClient;
 }): Promise<RefundRequest | null> {
-  const { enrollmentId, trigger, reason, requestedById = null, actorName = "Hệ thống", tx } = input;
+  const {
+    enrollmentId,
+    trigger,
+    reason,
+    requestedById = null,
+    actorName = "Hệ thống",
+    tx,
+  } = input;
+
+  // ── CẦU DAO TÍNH NĂNG (08/09/2026) ─────────────────────────────────────────
+  //
+  // Đặt TRƯỚC mọi truy vấn: cầu dao là câu hỏi "tính năng có đang bật không", trả lời
+  // được mà không cần đọc gì.
+  //
+  // Trả `null` chứ KHÔNG ném: hàm này chạy TRONG transaction gỡ học viên khỏi lớp /
+  // huỷ lớp; ném ở đây là cuộn ngược cả việc gỡ — biến "không đề xuất được tiền" thành
+  // "không gỡ được học viên". `null` vốn đã nằm trong hợp đồng của hàm (chưa thu đồng
+  // nào, ghi danh không tồn tại), nên caller đã xử sẵn.
+  //
+  // Lý do tắt + 4 điều kiện gỡ: `lib/finance/cau-dao-hoan-tien.ts`.
+  if (REFUND_REQUEST_DISABLED) {
+    await ghiNhanChamCauDaoHoanTien({
+      actorId: requestedById,
+      actorName,
+      enrollmentId,
+      trigger: String(trigger),
+    });
+    return null;
+  }
+
   const client: DbClient = tx ?? db;
 
   const enrollment = await client.enrollment.findFirst({
@@ -151,12 +193,18 @@ export async function approveRefund(
   actorName = "Quản lý",
 ): Promise<RefundRequest> {
   const rr = await db.refundRequest.findUnique({ where: { id } });
-  if (!rr) throw new RefundError("NOT_FOUND", "Không tìm thấy yêu cầu hoàn tiền");
+  if (!rr)
+    throw new RefundError("NOT_FOUND", "Không tìm thấy yêu cầu hoàn tiền");
   if (rr.status !== "PENDING") {
-    throw new RefundError("INVALID_STATE", `Yêu cầu đang ${rr.status} — không thể duyệt`);
+    throw new RefundError(
+      "INVALID_STATE",
+      `Yêu cầu đang ${rr.status} — không thể duyệt`,
+    );
   }
   const finalAmount =
-    approvedAmount != null && approvedAmount >= 0 ? Math.round(approvedAmount) : rr.proposedAmount;
+    approvedAmount != null && approvedAmount >= 0
+      ? Math.round(approvedAmount)
+      : rr.proposedAmount;
 
   const updated = await db.refundRequest.update({
     where: { id },
@@ -196,14 +244,23 @@ export async function rejectRefund(
     throw new RefundError("VALIDATION", "Nhập lý do từ chối (≥5 ký tự)");
   }
   const rr = await db.refundRequest.findUnique({ where: { id } });
-  if (!rr) throw new RefundError("NOT_FOUND", "Không tìm thấy yêu cầu hoàn tiền");
+  if (!rr)
+    throw new RefundError("NOT_FOUND", "Không tìm thấy yêu cầu hoàn tiền");
   if (rr.status !== "PENDING") {
-    throw new RefundError("INVALID_STATE", `Yêu cầu đang ${rr.status} — không thể từ chối`);
+    throw new RefundError(
+      "INVALID_STATE",
+      `Yêu cầu đang ${rr.status} — không thể từ chối`,
+    );
   }
 
   const updated = await db.refundRequest.update({
     where: { id },
-    data: { status: "REJECTED", approvedById, approvedAt: new Date(), note: trimmed },
+    data: {
+      status: "REJECTED",
+      approvedById,
+      approvedAt: new Date(),
+      note: trimmed,
+    },
   });
 
   await writeAudit({
@@ -250,7 +307,9 @@ export async function listRefundRequests(
   filter?: { status?: RefundRequest["status"] },
 ): Promise<RefundRow[]> {
   // Class là SCOPED_MODEL → findMany tự inject centerId của actor.
-  const scopedClasses = await scopedDbClient.class.findMany({ select: { id: true } });
+  const scopedClasses = await scopedDbClient.class.findMany({
+    select: { id: true },
+  });
   const classIds = scopedClasses.map((c) => c.id);
   if (classIds.length === 0) return [];
 

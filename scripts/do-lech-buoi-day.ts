@@ -67,7 +67,14 @@ async function main() {
       actualTeacherId: true,
       substituteTeacherId: true,
       class: {
-        select: { teacherId: true, assistantId: true, deletedAt: true },
+        select: {
+          name: true,
+          classCode: true,
+          status: true,
+          teacherId: true,
+          assistantId: true,
+          deletedAt: true,
+        },
       },
     },
   });
@@ -234,6 +241,35 @@ async function main() {
       "     không màn nào quy được buổi cho ai, và cổng sở hữu của chốt buổi cũng không tìm",
     );
     console.log("     ra người phụ trách. Cần gán GV rồi mới bàn tới số buổi.");
+    // In THẲNG danh sách lớp: một con số không mang đi hỏi Đào tạo được.
+    // Chỉ tên/mã/trạng thái lớp — KHÔNG có dữ liệu học viên hay phụ huynh.
+    const theoLop = new Map<
+      string,
+      { ten: string; ma: string; tt: string; soBuoi: number }
+    >();
+    for (const b of khongGvChinh) {
+      const cu = theoLop.get(b.classId);
+      if (cu) cu.soBuoi += 1;
+      else
+        theoLop.set(b.classId, {
+          ten: b.class.name,
+          ma: b.class.classCode ?? "-",
+          tt: String(b.class.status),
+          soBuoi: 1,
+        });
+    }
+    console.log("");
+    console.log(
+      "     LỚP CÒN SỐNG THIẾU GIÁO VIÊN CHÍNH — mang đi hỏi Đào tạo:",
+    );
+    const xepLop = [...theoLop.entries()].sort(
+      (a, b) => b[1].soBuoi - a[1].soBuoi,
+    );
+    for (const [id, l] of xepLop) {
+      console.log(
+        `       ${String(l.soBuoi).padStart(3)} buổi  ${l.ma.padEnd(14)} ${l.tt.padEnd(11)} ${l.ten}  [${id}]`,
+      );
+    }
   }
   const huy = theoTrangThaiDaQua.get("CANCELLED") ?? 0;
   console.log(
