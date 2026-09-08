@@ -76,7 +76,9 @@ export async function getStudentPhotos(studentId: string): Promise<StudentPhotos
       const b = m.classSessionId ? buoiCua.get(m.classSessionId) : undefined;
       byS.set(key, {
         sessionId: key,
-        order: b && b.soBuoi > 0 ? b.soBuoi : null,
+        // 08/09 — số LỘ TRÌNH, không phải hạng-theo-ngày: `title` bên dưới là
+        // `nhanDayDu` ("Buổi 43 - …"), in huy hiệu "2" cạnh nó là tự mâu thuẫn.
+        order: b?.soBuoiLoTrinh ?? (b && b.soBuoi > 0 ? b.soBuoi : null),
         title: b?.nhanDayDu || "Buổi học",
         dateISO: b?.ngayISO ?? m.takenAt?.toISOString() ?? "",
         nhanNgay: b?.nhanNgay ?? "",
