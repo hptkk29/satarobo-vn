@@ -32,10 +32,19 @@ import {
   getTeacherTrialSessions,
   getVisibleHolidays,
 } from "@/lib/lms/teacher-schedule";
-import { getMyAssignments, getMyAttendanceDays } from "@/lib/cham-cong/my-schedule";
+import {
+  getMyAssignments,
+  getMyAttendanceDays,
+} from "@/lib/cham-cong/my-schedule";
 import { scopedDb } from "@/lib/db-scope";
-import { WR_KIND_LABEL, WR_STATUS_LABEL, type WorkRequestKindV, type WorkRequestStatusV } from "@/lib/work-request";
+import {
+  WR_KIND_LABEL,
+  WR_STATUS_LABEL,
+  type WorkRequestKindV,
+  type WorkRequestStatusV,
+} from "@/lib/work-request";
 import { cn } from "@/lib/utils";
+import { dieuKienBuoiTinhCong } from "@/lib/lms/session-ownership";
 import { PageHeader } from "../_components/ui/page-header";
 import { StatCard } from "../_components/ui/stat-card";
 import { EmptyState } from "../_components/ui/empty-state";
@@ -184,10 +193,11 @@ export default async function TeacherTimesheetPage({
         where: {
           status: { not: "CANCELLED" },
           date: { gte: toVnInstant(monthStart), lt: toVnInstant(nextMonth) },
-          OR: [
-            { classId: { in: classIds } },
-            { actualTeacherId: session.user.id },
-          ],
+          // ⚠️ Trước 08/09/2026 thiếu nhánh `substituteTeacherId`: buổi được xếp dạy
+          // thay KHÔNG hiện trên bảng công của chính người dạy thay. Luật ở MỘT chỗ:
+          // `dieuKienBuoiTinhCong` (`lib/lms/session-ownership.ts`) — và nó cố ý KHÁC
+          // `isSessionOwnedByTeacher`: quyền xem ≠ công đứng lớp.
+          ...dieuKienBuoiTinhCong(session.user.id, classIds),
         },
         select: {
           id: true,
@@ -211,13 +221,27 @@ export default async function TeacherTimesheetPage({
       getVisibleHolidays(actor, monthStart, nextMonth),
       getMyAttendanceDays(session.user.id, monthStart, nextMonth),
       sdb.workRequest.findMany({
-        where: { requesterId: session.user.id, fromDate: { gte: monthStart, lt: nextMonth } },
-        select: { id: true, kind: true, status: true, fromDate: true, requestedInAt: true, requestedOutAt: true, reason: true, reviewNote: true, applyError: true },
+        where: {
+          requesterId: session.user.id,
+          fromDate: { gte: monthStart, lt: nextMonth },
+        },
+        select: {
+          id: true,
+          kind: true,
+          status: true,
+          fromDate: true,
+          requestedInAt: true,
+          requestedOutAt: true,
+          reason: true,
+          reviewNote: true,
+          applyError: true,
+        },
         orderBy: { createdAt: "desc" },
         take: 50,
       }),
     ]);
-  const unitsTotal = Math.round(myDays.reduce((n, d) => n + d.units, 0) * 100) / 100;
+  const unitsTotal =
+    Math.round(myDays.reduce((n, d) => n + d.units, 0) * 100) / 100;
 
   // ── Chuẩn hoá về CA rows ──────────────────────────────────────────────────────
   const rows: CaRow[] = [];
@@ -382,8 +406,7 @@ export default async function TeacherTimesheetPage({
             />
           ) : (
             <div className="t-card overflow-hidden">
-              <PhanTrangBang cuonNgang
-                  khoaGhiNho="gv-bang-cong">
+              <PhanTrangBang cuonNgang khoaGhiNho="gv-bang-cong">
                 <table className="min-w-[770px] w-full border-collapse text-left text-sm">
                   <thead>
                     <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
@@ -499,7 +522,8 @@ export default async function TeacherTimesheetPage({
                   </div>
                   {(r.requestedInAt || r.requestedOutAt) && (
                     <p className="mt-1 text-sm text-foreground">
-                      Đề nghị: vào {r.requestedInAt ?? "—"} · ra {r.requestedOutAt ?? "—"}
+                      Đề nghị: vào {r.requestedInAt ?? "—"} · ra{" "}
+                      {r.requestedOutAt ?? "—"}
                     </p>
                   )}
                   <p className="mt-1 text-sm whitespace-pre-wrap text-muted-foreground">

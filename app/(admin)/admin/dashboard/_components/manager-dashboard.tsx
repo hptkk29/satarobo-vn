@@ -1,6 +1,16 @@
 import Link from "next/link";
 import { safeCache } from "@/lib/cache/safe-cache";
-import { Users, UserPlus, BookOpen, FileText, TrendingUp, Target, FlaskConical, GraduationCap, Wallet } from "lucide-react";
+import {
+  Users,
+  UserPlus,
+  BookOpen,
+  FileText,
+  TrendingUp,
+  Target,
+  FlaskConical,
+  GraduationCap,
+  Wallet,
+} from "lucide-react";
 import { scopedDb } from "@/lib/db-scope";
 import type { Actor } from "@/lib/auth/actor";
 import { CACHE_TAGS } from "@/lib/cache/tags";
@@ -10,12 +20,20 @@ import { StatusBadge } from "@/components/design-system/admin/status-badge";
 import { DataTableShell } from "@/components/design-system/admin/data-table-shell";
 import { LineChart } from "@/components/charts/line-chart";
 import { BarChart } from "@/components/charts/bar-chart";
-import { groupByWeek, monthKeyVN, type LeadReportRecord } from "@/lib/reports/lead";
+import {
+  groupByWeek,
+  monthKeyVN,
+  type LeadReportRecord,
+} from "@/lib/reports/lead";
 import { LEAD_STATUS_LABEL, LEAD_STATUS_VARIANT } from "@/lib/leads/status";
 import type { LeadStatus } from "@prisma/client";
-import { buildRevenueTargetReport, computeAchievement } from "@/lib/reports/revenue-target";
+import {
+  buildRevenueTargetReport,
+  computeAchievement,
+} from "@/lib/reports/revenue-target";
 import { getRevenueTargets } from "@/lib/reports/revenue-target-data";
 import { getDebtRows, KHOAN_DA_XAC_NHAN } from "@/lib/finance/debt";
+import { giaoVienDuocQuyCong } from "@/lib/lms/session-ownership";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 const vnd = (n: number) => `${n.toLocaleString("vi-VN")}đ`;
@@ -40,14 +58,23 @@ function lastNDaysData(leads: { createdAt: Date }[], days = 14) {
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    const key = d.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" });
+    const key = d.toLocaleDateString("vi-VN", {
+      day: "2-digit",
+      month: "2-digit",
+    });
     buckets[key] = 0;
   }
   leads.forEach((l) => {
-    const key = new Date(l.createdAt).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" });
+    const key = new Date(l.createdAt).toLocaleDateString("vi-VN", {
+      day: "2-digit",
+      month: "2-digit",
+    });
     if (key in buckets) buckets[key]++;
   });
-  return Object.entries(buckets).map(([date, count]) => ({ date, leads: count }));
+  return Object.entries(buckets).map(([date, count]) => ({
+    date,
+    leads: count,
+  }));
 }
 
 // REQ-04: số liệu tổng hợp dashboard quản lý (aggregate theo scope, KHÔNG list per-user).
@@ -70,20 +97,45 @@ async function getManagerStats(actor: Actor) {
   // RevenueTarget ∈ SCOPE_EXEMPT → scope TAY qua getRevenueTargets(actor).
   const sdb = scopedDb(actor);
   const [
-    totalLeads, newLeadsThisMonth, newLeadsLastMonth, enrolledLeads, totalStudents,
-    totalPosts, leadsLast14Days, leadsByStatus, leadsForWeekly, revenuePayments,
-    revenueTargets, trialV2Classes, sessionsToday, debtRows,
+    totalLeads,
+    newLeadsThisMonth,
+    newLeadsLastMonth,
+    enrolledLeads,
+    totalStudents,
+    totalPosts,
+    leadsLast14Days,
+    leadsByStatus,
+    leadsForWeekly,
+    revenuePayments,
+    revenueTargets,
+    trialV2Classes,
+    sessionsToday,
+    debtRows,
   ] = await Promise.all([
     sdb.lead.count({ where: ACTIVE_LEAD }),
-    sdb.lead.count({ where: { ...ACTIVE_LEAD, createdAt: { gte: monthStart } } }),
-    sdb.lead.count({ where: { ...ACTIVE_LEAD, createdAt: { gte: lastMonth, lt: monthStart } } }),
+    sdb.lead.count({
+      where: { ...ACTIVE_LEAD, createdAt: { gte: monthStart } },
+    }),
+    sdb.lead.count({
+      where: { ...ACTIVE_LEAD, createdAt: { gte: lastMonth, lt: monthStart } },
+    }),
     sdb.lead.count({ where: { ...ACTIVE_LEAD, status: "DA_DANG_KY" } }),
     sdb.student.count({ where: { deletedAt: null } }),
     sdb.news.count({ where: { isPublished: true } }),
-    sdb.lead.findMany({ where: { ...ACTIVE_LEAD, createdAt: { gte: fourteenDaysAgo } }, select: { createdAt: true } }),
-    sdb.lead.groupBy({ by: ["status"], where: ACTIVE_LEAD, _count: { id: true } }),
+    sdb.lead.findMany({
+      where: { ...ACTIVE_LEAD, createdAt: { gte: fourteenDaysAgo } },
+      select: { createdAt: true },
+    }),
+    sdb.lead.groupBy({
+      by: ["status"],
+      where: ACTIVE_LEAD,
+      _count: { id: true },
+    }),
     // Phễu lead theo TUẦN (8 tuần) — chỉ cần createdAt + status.
-    sdb.lead.findMany({ where: { ...ACTIVE_LEAD, createdAt: { gte: eightWeeksAgo } }, select: { createdAt: true, status: true } }),
+    sdb.lead.findMany({
+      where: { ...ACTIVE_LEAD, createdAt: { gte: eightWeeksAgo } },
+      select: { createdAt: true, status: true },
+    }),
     // Doanh thu THỰC = Σ Payment(accountantStatus=CONFIRMED) — 6 tháng gần nhất.
     sdb.payment.findMany({
       where: { ...KHOAN_DA_XAC_NHAN, paidDate: { gte: sixMonthsAgo } },
@@ -96,46 +148,83 @@ async function getManagerStats(actor: Actor) {
     // (scripts/gop-trial-v1-sang-v2.ts) nên đếm cả hai là đếm ĐÔI cùng một cuộc hẹn.
     // TrialClassSession không scoped → cách ly qua parent TrialClassV2 (SCOPED).
     sdb.trialClassV2.findMany({
-      where: { sessions: { some: { date: { gte: dayStart, lt: dayEnd }, status: "SCHEDULED" } } },
-      select: { sessions: { where: { date: { gte: dayStart, lt: dayEnd }, status: "SCHEDULED" }, select: { id: true } } },
+      where: {
+        sessions: {
+          some: { date: { gte: dayStart, lt: dayEnd }, status: "SCHEDULED" },
+        },
+      },
+      select: {
+        sessions: {
+          where: { date: { gte: dayStart, lt: dayEnd }, status: "SCHEDULED" },
+          select: { id: true },
+        },
+      },
     }),
     // GV đứng lớp HÔM NAY — ClassSession (SCOPED); GV thực = actualTeacherId ?? class.teacherId.
     sdb.classSession.findMany({
       where: { date: { gte: dayStart, lt: dayEnd } },
-      select: { actualTeacherId: true, class: { select: { teacherId: true } } },
+      select: {
+        actualTeacherId: true,
+        // Không select thì `giaoVienDuocQuyCong` nhận thiếu và bug quay lại im lặng —
+        // đây chính là chỗ `tsc` đã bắt được khi tham số thành BẮT BUỘC.
+        substituteTeacherId: true,
+        class: { select: { teacherId: true } },
+      },
     }),
     // Công nợ học phí (Payment 2 tầng) — TÁI DÙNG lib getDebtRows (đã cách ly qua Class).
     getDebtRows(sdb as unknown as Parameters<typeof getDebtRows>[0]),
   ]);
 
-  const monthDelta = newLeadsLastMonth > 0 ? ((newLeadsThisMonth - newLeadsLastMonth) / newLeadsLastMonth) * 100 : 0;
-  const conversionRate = totalLeads > 0 ? ((enrolledLeads / totalLeads) * 100).toFixed(1) : "0";
+  const monthDelta =
+    newLeadsLastMonth > 0
+      ? ((newLeadsThisMonth - newLeadsLastMonth) / newLeadsLastMonth) * 100
+      : 0;
+  const conversionRate =
+    totalLeads > 0 ? ((enrolledLeads / totalLeads) * 100).toFixed(1) : "0";
   const dailyLeadsChart = lastNDaysData(leadsLast14Days);
-  const statusBars = leadsByStatus.map((s) => ({ status: LEAD_STATUS_LABEL[s.status as LeadStatus] ?? s.status, count: s._count.id })).sort((a, b) => b.count - a.count);
+  const statusBars = leadsByStatus
+    .map((s) => ({
+      status: LEAD_STATUS_LABEL[s.status as LeadStatus] ?? s.status,
+      count: s._count.id,
+    }))
+    .sort((a, b) => b.count - a.count);
 
   // câu 16 (a) — doanh thu THỰC vs MỤC TIÊU kỳ hiện tại (ghép qua helper thuần).
   const revenueReport = buildRevenueTargetReport(
-    revenuePayments.map((p) => ({ amount: p.amount, centerId: p.centerId, paidDate: p.paidDate })),
+    revenuePayments.map((p) => ({
+      amount: p.amount,
+      centerId: p.centerId,
+      paidDate: p.paidDate,
+    })),
     revenueTargets,
   );
   const currentRevRow = revenueReport.find((r) => r.period === currentPeriod);
   const revenueActual = currentRevRow?.actual ?? 0;
   const revenueTarget = currentRevRow?.target ?? null;
-  const revenueAchieved = (currentRevRow ?? computeAchievement(revenueActual, revenueTarget)).achievedRate;
+  const revenueAchieved = (
+    currentRevRow ?? computeAchievement(revenueActual, revenueTarget)
+  ).achievedRate;
 
   // câu 16 (c) — buổi trải nghiệm hôm nay. 26/08: chỉ đếm V2 (hệ V1 đã gộp sang V2).
   const trialsToday = trialV2Classes.reduce((s, c) => s + c.sessions.length, 0);
 
   // câu 16 (d) — số GV đứng lớp hôm nay (distinct theo GV thực).
+  //
+  // ⚠️ Trước 08/09/2026 viết `actualTeacherId ?? class.teacherId` — BỎ SÓT
+  // `substituteTeacherId`, nên hôm nào có buổi đổi giáo viên là con số này đếm nhầm
+  // người. Luật quy công ở MỘT chỗ: `lib/lms/session-ownership.ts`.
   const teacherSet = new Set<string>();
   for (const s of sessionsToday) {
-    const tid = s.actualTeacherId ?? s.class?.teacherId ?? null;
+    const tid = giaoVienDuocQuyCong(s);
     if (tid) teacherSet.add(tid);
   }
   const teachersToday = teacherSet.size;
 
   // câu 16 (e) — công nợ học phí còn lại (chỉ debt > 0).
-  const totalDebt = debtRows.reduce((sum, r) => sum + (r.debt > 0 ? r.debt : 0), 0);
+  const totalDebt = debtRows.reduce(
+    (sum, r) => sum + (r.debt > 0 ? r.debt : 0),
+    0,
+  );
   const debtCount = debtRows.filter((r) => r.debt > 0).length;
 
   // Phễu lead theo TUẦN (8 tuần gần nhất) — tổng vs chuyển đổi.
@@ -146,12 +235,29 @@ async function getManagerStats(actor: Actor) {
     commissionSource: null,
     createdAt: l.createdAt,
   }));
-  const weeklyBars = groupByWeek(weeklyRecords, 8, now).map((w) => ({ week: w.label, total: w.total, converted: w.converted }));
+  const weeklyBars = groupByWeek(weeklyRecords, 8, now).map((w) => ({
+    week: w.label,
+    total: w.total,
+    converted: w.converted,
+  }));
 
   return {
-    totalLeads, newLeadsThisMonth, enrolledLeads, totalStudents, totalPosts,
-    monthDelta, conversionRate, dailyLeadsChart, statusBars,
-    revenueActual, revenueAchieved, trialsToday, teachersToday, totalDebt, debtCount, weeklyBars,
+    totalLeads,
+    newLeadsThisMonth,
+    enrolledLeads,
+    totalStudents,
+    totalPosts,
+    monthDelta,
+    conversionRate,
+    dailyLeadsChart,
+    statusBars,
+    revenueActual,
+    revenueAchieved,
+    trialsToday,
+    teachersToday,
+    totalDebt,
+    debtCount,
+    weeklyBars,
   };
 }
 
@@ -167,16 +273,40 @@ export async function ManagerDashboard({
   embedded?: boolean;
 }) {
   const now = new Date();
-  const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+  const endOfToday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    23,
+    59,
+    59,
+  );
 
   // Live (KHÔNG cache): leads mới nhất (hiển thị, có Date) + việc CỦA TÔI hôm nay
   // (theo userId — cache theo scope sẽ lẫn task người khác nên GIỮ live).
   const sdb = scopedDb(actor);
   const [recentLeads, myTasksToday] = await Promise.all([
-    sdb.lead.findMany({ where: ACTIVE_LEAD, take: 8, orderBy: { createdAt: "desc" }, select: { id: true, parentName: true, phone: true, status: true, createdAt: true } }),
+    sdb.lead.findMany({
+      where: ACTIVE_LEAD,
+      take: 8,
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        parentName: true,
+        phone: true,
+        status: true,
+        createdAt: true,
+      },
+    }),
     sdb.leadTask.findMany({
-      where: { assignedToId: userId, status: "OPEN", dueAt: { lte: endOfToday } },
-      include: { lead: { select: { id: true, parentName: true, phone: true } } },
+      where: {
+        assignedToId: userId,
+        status: "OPEN",
+        dueAt: { lte: endOfToday },
+      },
+      include: {
+        lead: { select: { id: true, parentName: true, phone: true } },
+      },
       orderBy: { dueAt: "asc" },
       take: 20,
     }),
@@ -185,9 +315,22 @@ export async function ManagerDashboard({
   // REQ-04: cache số liệu tổng hợp theo scope (KPI + biểu đồ, đều primitive → serialize
   // an toàn). TTL 60s. actorScopeKey chống leak cross-cơ-sở. `now` tính trong hàm cache.
   const {
-    totalLeads, newLeadsThisMonth, enrolledLeads, totalStudents, totalPosts,
-    monthDelta, conversionRate, dailyLeadsChart, statusBars,
-    revenueActual, revenueAchieved, trialsToday, teachersToday, totalDebt, debtCount, weeklyBars,
+    totalLeads,
+    newLeadsThisMonth,
+    enrolledLeads,
+    totalStudents,
+    totalPosts,
+    monthDelta,
+    conversionRate,
+    dailyLeadsChart,
+    statusBars,
+    revenueActual,
+    revenueAchieved,
+    trialsToday,
+    teachersToday,
+    totalDebt,
+    debtCount,
+    weeklyBars,
   } = await safeCache(
     () => getManagerStats(actor),
     ["manager-dashboard-stats", actorScopeKey(actor)],
@@ -198,9 +341,16 @@ export async function ManagerDashboard({
     <div className="space-y-6">
       {!embedded && (
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Xin chào, {name.split(" ").slice(-1)[0] || "Admin"}</h1>
+          <h1 className="text-2xl font-bold text-foreground">
+            Xin chào, {name.split(" ").slice(-1)[0] || "Admin"}
+          </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Tổng quan hệ thống · {now.toLocaleDateString("vi-VN", { weekday: "long", day: "numeric", month: "long" })}
+            Tổng quan hệ thống ·{" "}
+            {now.toLocaleDateString("vi-VN", {
+              weekday: "long",
+              day: "numeric",
+              month: "long",
+            })}
           </p>
         </div>
       )}
@@ -210,21 +360,40 @@ export async function ManagerDashboard({
       {myTasksToday.length > 0 && (
         <div className="rounded-xl border border-primary-soft bg-primary-soft p-4">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-bold text-primary">Việc của tôi hôm nay ({myTasksToday.length})</h2>
-            <Link href="/leads?view=kanban" className="text-xs text-primary hover:underline">Xem pipeline →</Link>
+            <h2 className="text-sm font-bold text-primary">
+              Việc của tôi hôm nay ({myTasksToday.length})
+            </h2>
+            <Link
+              href="/leads?view=kanban"
+              className="text-xs text-primary hover:underline"
+            >
+              Xem pipeline →
+            </Link>
           </div>
           <ul className="space-y-2">
             {myTasksToday.map((t) => {
               const overdue = t.dueAt.getTime() < now.getTime();
               return (
                 <li key={t.id}>
-                  <Link href={`/leads/${t.lead.id}`} className="flex items-center justify-between gap-3 rounded-lg bg-card px-3 py-2 text-sm hover:bg-primary-soft/40">
+                  <Link
+                    href={`/leads/${t.lead.id}`}
+                    className="flex items-center justify-between gap-3 rounded-lg bg-card px-3 py-2 text-sm hover:bg-primary-soft/40"
+                  >
                     <span className="min-w-0 flex-1 truncate">
                       <strong className="text-foreground">{t.title}</strong>
-                      <span className="text-muted-foreground"> · {t.lead.parentName}</span>
+                      <span className="text-muted-foreground">
+                        {" "}
+                        · {t.lead.parentName}
+                      </span>
                     </span>
-                    <span className={`flex-shrink-0 text-xs ${overdue ? "font-bold text-state-danger-ink" : "text-muted-foreground"}`}>
-                      {t.dueAt.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}{overdue ? " · Quá hạn" : ""}
+                    <span
+                      className={`flex-shrink-0 text-xs ${overdue ? "font-bold text-state-danger-ink" : "text-muted-foreground"}`}
+                    >
+                      {t.dueAt.toLocaleTimeString("vi-VN", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                      {overdue ? " · Quá hạn" : ""}
                     </span>
                   </Link>
                 </li>
@@ -242,7 +411,10 @@ export async function ManagerDashboard({
           value={vnd(revenueActual)}
           trend={
             revenueAchieved !== null
-              ? { direction: revenueAchieved >= 1 ? "up" : "down", value: `${(revenueAchieved * 100).toFixed(0)}% mục tiêu` }
+              ? {
+                  direction: revenueAchieved >= 1 ? "up" : "down",
+                  value: `${(revenueAchieved * 100).toFixed(0)}% mục tiêu`,
+                }
               : undefined
           }
           icon={<Target className="w-4 h-4" />}
@@ -251,16 +423,37 @@ export async function ManagerDashboard({
         <StatCardAdmin
           label="Khách hàng mới (tháng)"
           value={newLeadsThisMonth}
-          trend={monthDelta !== 0 ? { direction: monthDelta > 0 ? "up" : "down", value: `${monthDelta > 0 ? "+" : ""}${monthDelta.toFixed(0)}% so với tháng trước` } : undefined}
+          trend={
+            monthDelta !== 0
+              ? {
+                  direction: monthDelta > 0 ? "up" : "down",
+                  value: `${monthDelta > 0 ? "+" : ""}${monthDelta.toFixed(0)}% so với tháng trước`,
+                }
+              : undefined
+          }
           icon={<UserPlus className="w-4 h-4" />}
           iconColor="orange"
         />
-        <StatCardAdmin label="Hẹn học thử hôm nay" value={trialsToday} icon={<FlaskConical className="w-4 h-4" />} iconColor="orange" />
-        <StatCardAdmin label="GV đứng lớp hôm nay" value={teachersToday} icon={<GraduationCap className="w-4 h-4" />} iconColor="purple" />
+        <StatCardAdmin
+          label="Hẹn học thử hôm nay"
+          value={trialsToday}
+          icon={<FlaskConical className="w-4 h-4" />}
+          iconColor="orange"
+        />
+        <StatCardAdmin
+          label="GV đứng lớp hôm nay"
+          value={teachersToday}
+          icon={<GraduationCap className="w-4 h-4" />}
+          iconColor="purple"
+        />
         <StatCardAdmin
           label="Công nợ học phí"
           value={vnd(totalDebt)}
-          trend={debtCount > 0 ? { direction: "down", value: `${debtCount} ghi danh còn nợ` } : undefined}
+          trend={
+            debtCount > 0
+              ? { direction: "down", value: `${debtCount} ghi danh còn nợ` }
+              : undefined
+          }
           icon={<Wallet className="w-4 h-4" />}
           iconColor="orange"
         />
@@ -268,38 +461,78 @@ export async function ManagerDashboard({
 
       {/* (1b) Chỉ số tuyển sinh phụ (giữ từ bản cũ). */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <StatCardAdmin label="Tổng leads" value={totalLeads} icon={<Users className="w-4 h-4" />} iconColor="orange" />
+        <StatCardAdmin
+          label="Tổng leads"
+          value={totalLeads}
+          icon={<Users className="w-4 h-4" />}
+          iconColor="orange"
+        />
         {/* BUG-009: nhãn rõ — đếm bảng Student (khác "Leads ENROLLED" đếm bảng Lead). */}
-        <StatCardAdmin label="Tổng học viên" value={totalStudents} icon={<BookOpen className="w-4 h-4" />} iconColor="purple" />
-        <StatCardAdmin label="Tỉ lệ chuyển đổi (lead)" value={`${conversionRate}%`} icon={<TrendingUp className="w-4 h-4" />} iconColor="orange" />
+        <StatCardAdmin
+          label="Tổng học viên"
+          value={totalStudents}
+          icon={<BookOpen className="w-4 h-4" />}
+          iconColor="purple"
+        />
+        <StatCardAdmin
+          label="Tỉ lệ chuyển đổi (lead)"
+          value={`${conversionRate}%`}
+          icon={<TrendingUp className="w-4 h-4" />}
+          iconColor="orange"
+        />
       </div>
 
       {/* (2) Biểu đồ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="bg-card border border-border rounded-xl p-6">
-          <h2 className="font-semibold text-foreground mb-1">Leads 14 ngày qua</h2>
-          <p className="text-xs text-muted-foreground mb-4">Số lead mới mỗi ngày</p>
+          <h2 className="font-semibold text-foreground mb-1">
+            Leads 14 ngày qua
+          </h2>
+          <p className="text-xs text-muted-foreground mb-4">
+            Số lead mới mỗi ngày
+          </p>
           {dailyLeadsChart.length > 0 ? (
-            <LineChart data={dailyLeadsChart} xKey="date" lines={[{ key: "leads", name: "Leads", color: "#F97316" }]} showLegend={false} height={260} />
+            <LineChart
+              data={dailyLeadsChart}
+              xKey="date"
+              lines={[{ key: "leads", name: "Leads", color: "#F97316" }]}
+              showLegend={false}
+              height={260}
+            />
           ) : (
-            <div className="h-[260px] flex items-center justify-center text-sm text-muted-foreground">Chưa có dữ liệu</div>
+            <div className="h-[260px] flex items-center justify-center text-sm text-muted-foreground">
+              Chưa có dữ liệu
+            </div>
           )}
         </div>
         <div className="bg-card border border-border rounded-xl p-6">
-          <h2 className="font-semibold text-foreground mb-1">Phân bố theo trạng thái</h2>
+          <h2 className="font-semibold text-foreground mb-1">
+            Phân bố theo trạng thái
+          </h2>
           <p className="text-xs text-muted-foreground mb-4">Tất cả leads</p>
           {statusBars.length > 0 ? (
-            <BarChart data={statusBars} xKey="status" bars={[{ key: "count", name: "Số lượng", color: "#F97316" }]} height={260} />
+            <BarChart
+              data={statusBars}
+              xKey="status"
+              bars={[{ key: "count", name: "Số lượng", color: "#F97316" }]}
+              height={260}
+            />
           ) : (
-            <div className="h-[260px] flex items-center justify-center text-sm text-muted-foreground">Chưa có dữ liệu</div>
+            <div className="h-[260px] flex items-center justify-center text-sm text-muted-foreground">
+              Chưa có dữ liệu
+            </div>
           )}
         </div>
       </div>
 
       {/* (2b) Phễu lead theo TUẦN — tổng vs chuyển đổi (REGISTERED/ENROLLED), 8 tuần gần nhất. */}
       <div className="bg-card border border-border rounded-xl p-6">
-        <h2 className="font-semibold text-foreground mb-1">Phễu lead theo tuần</h2>
-        <p className="text-xs text-muted-foreground mb-4">Lead mới vs đã chuyển đổi mỗi tuần (8 tuần gần nhất)</p>
+        <h2 className="font-semibold text-foreground mb-1">
+          Phễu lead theo tuần
+        </h2>
+        <p className="text-xs text-muted-foreground mb-4">
+          Lead mới vs đã chuyển đổi mỗi tuần (8 tuần gần nhất)
+        </p>
         <BarChart
           data={weeklyBars}
           xKey="week"
@@ -315,7 +548,12 @@ export async function ManagerDashboard({
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-semibold text-foreground">Leads mới nhất</h2>
-          <Link href="/leads" className="text-sm font-semibold text-primary hover:underline">Xem tất cả →</Link>
+          <Link
+            href="/leads"
+            className="text-sm font-semibold text-primary hover:underline"
+          >
+            Xem tất cả →
+          </Link>
         </div>
         <DataTableShell>
           <PhanTrangBang>
@@ -330,19 +568,46 @@ export async function ManagerDashboard({
               </thead>
               <tbody className="divide-y divide-border">
                 {recentLeads.map((lead) => (
-                  <tr key={lead.id} className="hover:bg-muted transition-colors">
-                    <td className="px-4 py-3 font-medium text-foreground">{lead.parentName}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-foreground">{lead.phone.replace(/(\d{4})(\d{3})(\d+)/, "$1xxx$3")}</td>
+                  <tr
+                    key={lead.id}
+                    className="hover:bg-muted transition-colors"
+                  >
+                    <td className="px-4 py-3 font-medium text-foreground">
+                      {lead.parentName}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-xs text-foreground">
+                      {lead.phone.replace(/(\d{4})(\d{3})(\d+)/, "$1xxx$3")}
+                    </td>
                     <td className="px-4 py-3">
-                      <StatusBadge variant={LEAD_STATUS_VARIANT[lead.status as LeadStatus] ?? "neutral"}>{LEAD_STATUS_LABEL[lead.status as LeadStatus] ?? lead.status}</StatusBadge>
+                      <StatusBadge
+                        variant={
+                          LEAD_STATUS_VARIANT[lead.status as LeadStatus] ??
+                          "neutral"
+                        }
+                      >
+                        {LEAD_STATUS_LABEL[lead.status as LeadStatus] ??
+                          lead.status}
+                      </StatusBadge>
                     </td>
                     <td className="px-4 py-3 text-right text-xs text-muted-foreground">
-                      {new Date(lead.createdAt).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                      {new Date(lead.createdAt).toLocaleString("vi-VN", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
                     </td>
                   </tr>
                 ))}
                 {recentLeads.length === 0 && (
-                  <tr><td colSpan={4} className="px-4 py-12 text-center text-muted-foreground">Chưa có lead nào</td></tr>
+                  <tr>
+                    <td
+                      colSpan={4}
+                      className="px-4 py-12 text-center text-muted-foreground"
+                    >
+                      Chưa có lead nào
+                    </td>
+                  </tr>
                 )}
               </tbody>
             </table>
@@ -353,11 +618,19 @@ export async function ManagerDashboard({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
         <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
           <FileText className="w-5 h-5 text-primary shrink-0" />
-          <div><p className="text-muted-foreground">Tin tức đang publish</p><p className="font-semibold text-foreground">{totalPosts} bài</p></div>
+          <div>
+            <p className="text-muted-foreground">Tin tức đang publish</p>
+            <p className="font-semibold text-foreground">{totalPosts} bài</p>
+          </div>
         </div>
         <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
           <Users className="w-5 h-5 text-primary shrink-0" />
-          <div><p className="text-muted-foreground">Leads ENROLLED tất cả</p><p className="font-semibold text-foreground">{enrolledLeads} người</p></div>
+          <div>
+            <p className="text-muted-foreground">Leads ENROLLED tất cả</p>
+            <p className="font-semibold text-foreground">
+              {enrolledLeads} người
+            </p>
+          </div>
         </div>
       </div>
     </div>
