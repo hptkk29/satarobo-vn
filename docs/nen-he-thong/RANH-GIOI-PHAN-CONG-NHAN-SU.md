@@ -84,6 +84,15 @@ phải tự hiện nó, nếu không thì nó rơi vào hư không.
 
 `allocationPercent`: **bỏ trống hết**.
 
+**Chạy bằng gì:** `scripts/4c-gan-phan-cong-nhan-su.ts` (chạy thử mặc định, `--apply` để
+ghi). Trên prod đi qua workflow **"Gán phân công nhân sự — EmployeeOrgAssignment (prod)"**
+— máy dev không có chuỗi kết nối prod, và luật cứng Nền Hệ thống #4 đòi người vận hành
+chạy tay có bước xem trước.
+
+Đã kiểm đầu-cuối trên Postgres local trước khi lên: chạy thử → `--apply` (12 dòng,
+`PRIMARY=5 SECONDARY=3 SHARED=2 SUPPORT=2`, `allocationPercent` rỗng cả 12, 0 người có
+hai `PRIMARY`, 12 dòng `AuditLog`) → `--apply` lần hai (bỏ qua 12, ghi 0).
+
 Sáu người, mười hai dòng. Những người còn lại chưa có dòng nào — đó là trạng thái đúng,
 không phải thiếu sót: chỉ gán khi thực sự làm ở hơn một nơi, hoặc khi là người Hội sở
 (xem §4).
