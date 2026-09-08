@@ -1,11 +1,15 @@
-# Web Push — Đợt 1: tầng dữ liệu & khoá (08/09/2026)
+# Web Push (US-14b) — sổ thi công Đợt 1 → 3
 
 Thông báo đẩy vào điện thoại **nhân viên** khi có lead mới. Kênh **DUY NHẤT**, VAPID thuần —
 không Firebase, không dịch vụ bên thứ ba, không fallback.
 
-> **Đợt 1 chỉ dựng tầng dữ liệu và khoá.** Chưa có service worker, chưa có màn đăng ký thiết bị,
-> chưa có engine gửi. **Chưa dòng push nào được bắn, và chưa có một dòng code nào đọc 3 biến
-> VAPID hay đọc công tắc `push.webPushEnabled`.**
+> **Trạng thái 08/09/2026 — Đợt 1, 2, 3 xong; Đợt 4 (engine gửi) CHƯA làm.**
+> ~~Chưa có service worker, chưa có màn đăng ký thiết bị~~ — cả hai đã có (§11, §12).
+> ~~Chưa có một dòng code nào đọc 3 biến VAPID~~ — `NEXT_PUBLIC_VAPID_PUBLIC_KEY` nay được đọc
+> ở `app/(admin)/admin/settings/_push-actions.ts` và `components/push/bat-thong-bao.tsx`.
+>
+> **VẪN ĐÚNG:** chưa dòng push nào được bắn (`VAPID_PRIVATE_KEY` chưa ai đọc), và công tắc
+> `push.webPushEnabled` vẫn **chưa có đường đọc** — xem nợ ở §12.
 
 ---
 
@@ -377,3 +381,73 @@ bật `ALLOW_DB_RESET`, nên mọi test chạm DB **skip im lặng** — tưởn
 
 **Escalation** (lead "Mới" quá N phút chưa ai mở → báo QLCS) vẫn ngoài phạm vi: đó là tầng nghiệp
 vụ, không phải kênh.
+
+---
+
+## 12. Đợt 3 — màn bật thông báo + đăng ký thiết bị (xong 08/09/2026)
+
+| File | Việc |
+|---|---|
+| `lib/push/client-key.ts` | base64url → `Uint8Array` cho trình duyệt. **KHÔNG dùng `Buffer`** |
+| `lib/push/ui-state.ts` | Quyết định hiển thị + nhận diện iOS + nhãn + 5 bước cài iOS (thuần) |
+| `lib/push/origin.ts` | Suy origin từ `Headers` (thuần) |
+| `lib/push/thiet-bi.ts` | Đọc thiết bị `ACTIVE` của một người |
+| `app/(admin)/admin/settings/_push-actions.ts` | 3 Server Action: đăng ký · gỡ theo id · gỡ theo endpoint |
+| `components/push/bat-thong-bao.tsx` | Giao diện dùng chung hai site |
+| `app/(teacher)/teacher/layout.tsx` | `manifest` + `themeColor` + mount `ServiceWorkerRegister` |
+| `app/(admin)/admin/settings/page.tsx` · `app/(teacher)/teacher/ho-so/page.tsx` | Khối UI |
+
+### Host đã mount worker — và host TUYỆT ĐỐI KHÔNG
+
+| Host | Cổng quyền THẬT ở layout | |
+|---|---|---|
+| `admin.satarobo.vn` | `auth()` + `hasStaffRole` → PARENT bị đá `/portal` | ✅ Đợt 2 |
+| `giaovien.satarobo.vn` | `auth()` + cờ + `hasRole(TEACHER)` + liveness | ✅ **Đợt 3** |
+| `e-learning.satarobo.vn` | 4 tầng, tầng cuối đòi hồ sơ `Employee` đang làm việc | ⏸️ được phép, chưa mount (cờ mặc định OFF, layout chưa có shell) |
+| `sale.satarobo.vn` | `isSaleOnly` | ⏸️ chưa mount (cờ OFF, Sale thuần đang ở lại admin) |
+| `hocvien.satarobo.vn` | layout đá **mọi người CÓ vai nhân viên** đi ⇒ tập còn lại đúng bằng phụ huynh | ❌ |
+| `satarobo.vn` · `(legacy)` | **không có `auth()` nào** | ❌ |
+| **`app/(auth)/layout.tsx`** | `"use client"`, không `auth()`, phục vụ trên **CẢ SÁU host** kể cả `/login` của cổng phụ huynh | ❌ **bẫy nặng nhất** |
+
+Vì sao GV bắt buộc phải có: `TEACHER_SITE_ENABLED` mặc định **ON**, nên `decideRoute` đá GV
+thuần khỏi admin sang `giaovien.satarobo.vn`. Không mount ở đó là đúng nhóm người đó không
+bao giờ đăng ký được thiết bị nào.
+
+Ràng buộc này nay có test canh: `[PUSH-D3-T14]` quét `app/(portal|public|legacy|auth)/**` và
+đòi không tệp nào chứa `components/push/` hay `lib/push/`.
+
+### Lỗi lăng kính phản biện bắt được (sau khi ba cổng đã xanh)
+
+- **File Server Action thoát khỏi cổng `no-inline-authz` chỉ vì TÊN TỆP.** Rule chỉ soi
+  `actions.ts` hoặc `_*actions*.ts`; `push-actions.ts` không khớp cái nào ⇒ 3 hàm ghi
+  (`upsert`/`updateMany`) không bị kiểm một dòng nào, lint vẫn xanh. Chứng minh bằng cách chép
+  nguyên tệp sang một tên khớp glob → **3 lỗi** nổ ra. Đã đổi tên thành `_push-actions.ts` và
+  khai `eslint-disable-next-line` kèm lý do — đúng lối thoát mà chính thông điệp của rule chỉ.
+  ⚠️ Dòng miễn trừ phải nằm **ngay trước `export`**; chèn chú thích xen vào giữa là nó vô hiệu
+  và ESLint chỉ báo "Unused eslint-disable directive" chứ không nói rule kia vẫn đỏ.
+- **Bật/gỡ xong màn hình nói ngược với DB.** Không action nào `revalidatePath`, và `thietBi` là
+  prop đóng băng từ lượt tải trang ⇒ bật thành công xong vẫn hiện nút "Bật thông báo" và
+  "Chưa có thiết bị nào" **ngay cạnh** dòng "Đã bật"; gỡ xong bấm lại lần hai ra chữ đỏ cho
+  một thao tác vừa THÀNH CÔNG. Đã thêm `revalidatePath` (cả hai màn) + `router.refresh()`.
+- **`tatMayNay` huỷ ở trình duyệt TRƯỚC rồi bỏ qua kết quả máy chủ.** `unsubscribe()` không
+  hoàn tác được, nên phiên hết hạn giữa chừng là DB còn một dòng `ACTIVE` trỏ endpoint đã chết.
+  Đã đảo thứ tự (máy chủ trước) + kiểm `kq.ok` + thêm `catch`.
+
+### Nợ của Đợt 3
+
+- ⚠️ **CẦN QUYẾT ĐỊNH: công tắc `push.webPushEnabled` vẫn chưa có đường đọc.** Nút "Bật thông
+  báo" hiện ra kể cả khi công tắc đang TẮT. Câu chữ đã được sửa để không hứa ở thì hiện tại
+  ("sẽ tới ngay khi hệ thống mở kênh gửi"), nhưng vẫn còn hai đường: **(A)** Đợt 3 đọc công tắc
+  và ẩn nút khi TẮT — không tiêu một lượt hỏi quyền không lấy lại được; **(B)** giữ nguyên, để
+  nhân viên đăng ký sẵn rồi Đợt 4 bật là chạy ngay. Chưa chọn.
+- **Một điện thoại có thể sinh HAI dòng** nếu người đó dùng cả admin lẫn site GV (worker khoá
+  theo origin). Giao diện phân biệt bằng nhãn host (`nhanHost`), nhưng **Đợt 4 phải khử trùng
+  trước khi bắn** — nếu không họ nhận hai thông báo cho một sự việc.
+- **`scopedDb` + `resolveActor` trong 3 action không gác gì**: `scopedDb` chỉ cắm 7 method ĐỌC,
+  còn `upsert`/`updateMany` không đi qua nó; `WebPushSubscription` cũng không có cột `centerId`.
+  Giữ vì đó là khuôn của tệp anh em cùng thư mục và là đường hợp lệ để không import `@/lib/db`
+  trần trong `app/(admin)/**`. Cách ly thật nằm ở `userId` của phiên trong mọi câu ghi.
+- **`lib/push/thiet-bi.ts` chưa có test** — nhánh `status: "ACTIVE"` và bước tuần tự hoá `Date`
+  sang ISO không ai canh.
+- **Chưa mount ở `e-learning` và `sale`** (cả hai cờ mặc định OFF). Mount thêm là một dòng mỗi
+  layout khi nào cờ bật.

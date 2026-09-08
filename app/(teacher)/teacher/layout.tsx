@@ -18,6 +18,7 @@ import { adminHomeUrl } from "@/lib/auth/hosts";
 import { elearningEntryUrl } from "@/lib/elearning/entry";
 import { countChatUnreadForUser } from "@/lib/chat/unread";
 import { AppShell } from "./_components/app-shell";
+import { ServiceWorkerRegister } from "@/components/push/service-worker-register";
 import "./teacher.css";
 
 // F2 (Q41) — SSO đa subdomain bật khi env set. Mặc định không → không hiện lối
@@ -29,6 +30,20 @@ export const dynamic = "force-dynamic";
 export const metadata = {
   title: "Giáo viên | Sata Robo",
   robots: { index: false, follow: false },
+  // Web Push Đợt 3 — site GV là host làm việc của GIÁO VIÊN THUẦN: `TEACHER_SITE_ENABLED`
+  // mặc định ON (lib/flags.ts) nên `decideRoute` đá họ khỏi admin sang đây. Không khai
+  // manifest ở đây thì đúng nhóm người đó không cài được web app ⇒ iPhone của họ không bao
+  // giờ nhận được thông báo.
+  //
+  // ⚠️ Trỏ file tĩnh `/manifest.json` — đường đã nằm trong `isInfraPath`. KHÔNG dùng
+  // `app/manifest.ts` (phát ra `/manifest.webmanifest`, không được miễn trừ ⇒ rơi vào luật
+  // host×role và hỏng câm với request nặc danh mà trình duyệt dùng để lấy manifest).
+  manifest: "/manifest.json",
+};
+
+// Cùng màu với site admin: `--primary` thật của app (app/globals.css).
+export const viewport = {
+  themeColor: "#f97316",
 };
 
 export default async function TeacherLayout({
@@ -93,6 +108,7 @@ export default async function TeacherLayout({
   );
 
   return (
+    <>
     <AppShell
       userId={session.user.id}
       userName={session.user.name ?? session.user.email ?? "Giáo viên"}
@@ -102,5 +118,10 @@ export default async function TeacherLayout({
     >
       {children}
     </AppShell>
+      {/* Web Push Đợt 3 — cài service worker cho host giáo viên. Anh em của AppShell chứ
+          không nằm trong nó: AppShell là client component bọc <main>, nhét vào trong là đẩy
+          một component vô hình xuống dưới nội dung không lý do. KHÔNG xin quyền ở đây. */}
+      <ServiceWorkerRegister />
+    </>
   );
 }

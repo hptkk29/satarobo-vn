@@ -7,6 +7,8 @@ import { scopedDb } from '@/lib/db-scope'
 import { isSuperAdmin } from '@/lib/auth/permissions'
 import { roleLabel } from '@/lib/labels'
 import { ChangePasswordForm } from './_components/change-password-form'
+import { BatThongBao } from '@/components/push/bat-thong-bao'
+import { layThietBiCuaToi } from '@/lib/push/thiet-bi'
 
 export default async function SettingsPage() {
   const session = await auth()
@@ -15,6 +17,9 @@ export default async function SettingsPage() {
   const sdb = scopedDb(await resolveActor(session.user.id))
 
   const superAdmin = isSuperAdmin(session.user.role)
+
+  // Web Push Đợt 3 — thiết bị nhận thông báo của CHÍNH người đang đăng nhập.
+  const thietBiPush = await layThietBiCuaToi(session.user.id)
 
   const centers = superAdmin
     ? await sdb.center.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true, address: true, phone: true, email: true, isActive: true } }).catch(() => [])
@@ -51,6 +56,14 @@ export default async function SettingsPage() {
         <h2 className="mb-1 text-base font-bold text-foreground">Đổi mật khẩu</h2>
         <p className="mb-5 text-sm text-muted-foreground">Mật khẩu tối thiểu 8 ký tự, bao gồm chữ hoa và số</p>
         <ChangePasswordForm />
+      </section>
+
+      {/* Thông báo đẩy (Web Push Đợt 3) — đặt cạnh đổi mật khẩu: cùng hạng "tự phục vụ trên
+          chính tài khoản mình". Mọi nhân viên đều tới được /settings qua menu avatar của
+          topbar (lối đó KHÔNG gác quyền), nên nút không bị vai trò giấu mất. */}
+      <section className="rounded-xl border border-border bg-card p-6 shadow-sm">
+        <h2 className="mb-4 text-base font-bold text-foreground">Thông báo đẩy</h2>
+        <BatThongBao thietBi={thietBiPush} />
       </section>
 
       {/* Hướng dẫn sử dụng — lối vào bộ tài liệu hướng dẫn theo khối chức năng */}
