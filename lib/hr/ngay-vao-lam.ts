@@ -32,11 +32,21 @@
  */
 const MOC_UNIX = new Date("1970-01-02T00:00:00Z");
 
-/** Ngày vào làm dùng được, hoặc `null` khi thiếu / là mốc Unix / không hợp lệ. */
-export function ngayVaoLamHopLe(d: Date | null | undefined): Date | null {
+/**
+ * Bỏ mốc Unix khỏi một NGÀY CÔNG VIỆC (vào làm / kết thúc hợp đồng).
+ *
+ * ⚠️ CHỈ dùng cho ngày công việc. KHÔNG dùng cho `dateOfBirth`: sinh ngày 01/01/1970 là
+ * một ngày THẬT và hợp lệ, chặn nó là xoá dữ liệu đúng.
+ */
+export function boMocUnix(d: Date | null | undefined): Date | null {
   if (!d) return null;
   const t = new Date(d);
   if (Number.isNaN(t.getTime())) return null;
   if (t.getTime() < MOC_UNIX.getTime()) return null;
   return t;
+}
+
+/** Ngày vào làm dùng được, hoặc `null` khi thiếu / là mốc Unix / không hợp lệ. */
+export function ngayVaoLamHopLe(d: Date | null | undefined): Date | null {
+  return boMocUnix(d);
 }

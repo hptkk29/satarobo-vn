@@ -14,6 +14,7 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
 import { ANH_XA_COT, dungPatchNhanSu } from "@/lib/hr/import-patch";
 import { writeAudit } from "@/lib/audit/audit-log";
+import { boMocUnix } from "@/lib/hr/ngay-vao-lam";
 
 // Excel date parser — reused pattern from B3 holidays / B2 rooms.
 function parseExcelDate(v: unknown): Date | null {
@@ -118,14 +119,18 @@ const EmployeeImportSchema = z.object({
     .transform((v) => (v === "" || v === null || v === undefined ? null : v)),
   centerSlug: optionalString,
   managerCode: optionalString,
+  // ⚠️ `boMocUnix` loại mốc Unix khỏi NGÀY CÔNG VIỆC — cùng cổng với validator form.
+  // Excel gửi ô trống thành số `0` thì `parseExcelDate` trả 1899-12-30, và một chuỗi
+  // "1970-01-01" chép từ bản xuất cũ sẽ ghi lại đúng cái mốc ta đang dọn.
+  // KHÔNG áp cho `dateOfBirth`: sinh 01/01/1970 là ngày THẬT.
   joinedAt: z
     .unknown()
     .optional()
-    .transform((v) => parseExcelDate(v)),
+    .transform((v) => boMocUnix(parseExcelDate(v))),
   endDate: z
     .unknown()
     .optional()
-    .transform((v) => parseExcelDate(v)),
+    .transform((v) => boMocUnix(parseExcelDate(v))),
   address: optionalString,
   subjects: arrayFromCsv,
   certifications: arrayFromCsv,
