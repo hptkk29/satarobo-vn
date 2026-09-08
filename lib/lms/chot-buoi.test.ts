@@ -113,3 +113,39 @@ describe("D1 — giáo viên phải có đường bấm chốt buổi", () => {
     expect(loi).toContain("assignedClassIds");
   });
 });
+
+// ── 08/09/2026 — `assignMode` là THAM SỐ BẮT BUỘC, không có mặc định ─────────────
+//
+// Mặc định cũ `?? "NOW"` có nghĩa thật là "giao bài tập + gửi tin 'Bài tập mới' cho phụ
+// huynh". Một mặc định như vậy làm MỌI đường quên truyền đều sai theo hướng nguy hiểm
+// nhất — và đường tự đóng buổi đã quên suốt từ 04/09; nó không nổ chỉ vì cổng so ngày
+// hỏng làm cả cơ chế không chạy.
+//
+// Trình biên dịch đã ép phải truyền. Test này khoá thêm hai thứ nó KHÔNG bắt được:
+// mặc định quay lại, và call site chọn "NOW" mà không ai để ý.
+describe("assignMode — bắt buộc, không mặc định", () => {
+  const LIFECYCLE = "lib/lms/session-lifecycle.ts";
+
+  it("chữ ký KHÔNG được để assignMode là tuỳ chọn", () => {
+    expect(doc(LIFECYCLE)).not.toContain("assignMode?:");
+  });
+
+  it('KHÔNG có mặc định `?? "NOW"` khi phát sự kiện', () => {
+    const src = doc(LIFECYCLE);
+    expect(src).not.toContain('assignMode ?? "NOW"');
+    expect(src).not.toContain("assignMode ?? 'NOW'");
+    // Vẫn phải phát trường này — xoá hẳn là handler R7-14 rơi về nhánh mặc định của nó.
+    expect(src).toContain("assignMode: opts.assignMode");
+  });
+
+  it("hai đường chốt buổi ĐANG SỐNG đều chọn DEFER", () => {
+    // Đóng buổi là chốt điểm danh, KHÔNG phải giao bài. Đổi thành NOW ở một trong hai
+    // chỗ là hai luật trên cùng một hành động — đúng thứ chốt 08/09 nói phải bỏ.
+    for (const f of [
+      "lib/lms/chot-buoi.ts",
+      "app/(teacher)/teacher/lop/_actions.ts",
+    ]) {
+      expect(doc(f), `${f} phải chọn DEFER`).toContain('assignMode: "DEFER"');
+    }
+  });
+});
