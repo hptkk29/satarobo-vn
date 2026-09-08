@@ -1043,3 +1043,203 @@ không; nếu **không có đường xoá nào** thì `Restrict` là thay đổi
 - **Đường xoá `ClassSessionPlan`** — chưa đo, cần cho 3.3.3.
 - **Ba lớp Sata3**: ai sửa `customTitle`, sửa thế nào — việc của Đào tạo, cần chủ dự án giao.
 - Tất cả những thứ trên **không chặn Đợt 1**.
+
+---
+
+# Bước 3b — ba việc trước khi merge Đợt 1
+
+## 3b.1 `adoptCurriculumVersion` — đọc mã + đối chiếu dữ liệu
+
+Nguồn: `lib/classes/snapshot.ts:68-175`.
+
+| Câu hỏi | Trả lời (đọc mã) |
+|---|---|
+| **Dựng lại plan cho buổi nào?** | **CHỈ buổi chưa `COMPLETED`.** `:126` xoá mọi plan **không** thuộc buổi COMPLETED; `:131` dựng lại từ `target.lessons.slice(keptCount)`; `:148-155` re-link **chỉ** `futureSessions` (`status !== "COMPLETED"`, sắp theo ngày). |
+| **`customTitle` của plan mới lấy từ đâu?** | `:139` — **`customTitle: l.title`**, chép thẳng tên bài của giáo trình **MỚI**. |
+| **Buổi quá khứ giữ nguyên plan cũ?** | **Đúng.** Plan của buổi COMPLETED nằm trong `keptPlanIds` nên thoát lệnh xoá, và buổi đó không bị re-link. |
+
+### ⚠️ Giả thuyết về ca Sata3 KHÔNG KHỚP MÃ — bác bằng số đo
+
+Giả thuyết: *"buổi 4–14 giữ `customTitle` giáo trình cũ, từ buổi 15 khớp giáo trình mới,
+vì hàm này chỉ chạm buổi tương lai."*
+
+**ĐO — `ClassSessionPlan` của `CS1.SATA3.26.001`, `order` 0..17:**
+
+```
+order | lesson.order | customTitle                  | tên bài HIỆN HÀNH            | completed
+    0 |            1 | Bàn tay ma thuật             | HP1 - Bàn tay ma thuật       | f
+    1 |            2 | Đấu trường con quay          | HP1 - Đấu trường con quay    | f
+    2 |            3 | Siêu xe bứt phá              | HP1 - Siêu xe bứt phá        | f
+    3 |            4 | Lập trình di chuyển          | HP1 - Chiến Xa Tốc Độ        | f
+   …  |            … | …(tên giáo trình CŨ)…        | …(tên MỚI)…                  | f
+   13 |           14 | Tổng kết & trình diễn        | HP2 - Cỗ Máy Xúc Cát         | f
+   14 |           15 | Buổi 15                      | HP2 - Họa Sĩ Robot           | f
+   15 |           16 | Buổi 16                      | HP2 - Chinh Phục Đại Dương   | f
+   16 |           17 | Buổi 17                      | HP2 - Ôn tập kiến thức       | f
+   17 |           18 | Buổi 18                      | HP2 - Chiếc Hộp Giai Điệu    | f
+```
+
+**Ba điều bác giả thuyết:**
+
+1. **`completed = f` ở TOÀN BỘ dải này.** Cả lớp chỉ có **1** buổi `COMPLETED` (ĐO:
+   `count(*) FILTER (WHERE status='COMPLETED')` → `CS1.SATA3.26.001` = 1/47), và nó nằm ở
+   `order` 47, ngoài vùng lệch. ⇒ ranh giới **không phải** "COMPLETED vs tương lai".
+2. **Ranh giới thật nằm ở `order` 13/14**, và bản chất là **"tên thật vs placeholder"**:
+   plan 0–13 mang **tên giáo trình cũ**, plan 14+ mang **`"Buổi 15"`, `"Buổi 16"`…** —
+   placeholder mà `meaningful()` loại, nên chúng vô hình chứ không phải "khớp".
+3. **Buổi 1–3 trông "đúng" chỉ vì trùng tên ngẫu nhiên.** `"Bàn tay ma thuật"` có ở **cả
+   hai** giáo trình. Không có ranh giới nào ở buổi 4 cả.
+
+**Hệ quả quan trọng nhất:** nếu `adoptCurriculumVersion` đã chạy trên lớp này thì plan mới
+**phải mang `customTitle = l.title` của giáo trình MỚI** (`:139`). Chúng **không** mang.
+⇒ **Hàm này CHƯA TỪNG chạy trên `CS1.SATA3.26.001`.**
+
+**Hình dạng thật (SUY từ dữ liệu, chưa có audit log xác nhận):** giáo trình Sata3 cũ có
+**~14 bài** → lớp tạo theo bản đó (plan 0–13 mang tên thật) → mở rộng lên 48 buổi bằng plan
+**placeholder** (14–47) → sau đó `lessonId` được trỏ sang bản 48 bài mới **mà `customTitle`
+để nguyên**. Không đường nào trong 8 đường ghi dọn `customTitle` khi `lessonId` đổi.
+
+⇒ **Đây KHÔNG phải hành vi có chủ đích của `adoptCurriculumVersion`.** Không ghi thành luật;
+ghi thành **vết thương đã đo** như trên.
+
+## 3b.2 `@@unique([classId, order])` — **ĐỪNG THÊM**
+
+**ĐO ngay lúc này:** `SELECT count(*) FROM (… GROUP BY classId, order HAVING count(*)>1)`
+→ **0 cặp trùng**. Về mặt dữ liệu, thêm được.
+
+**Nhưng nó sẽ LÀM VỠ `adoptCurriculumVersion`**, và đây là ca cụ thể có thật:
+
+- Plan của buổi COMPLETED **giữ nguyên `order` GỐC** — hàm **không** đánh số lại chúng.
+- Plan mới đánh từ `keptCount`: `order: keptCount + i` (`:141`).
+- `CS1.SATA3.26.001` có **1** buổi COMPLETED, plan của nó ở **`order` 47**. ⇒ `keptCount = 1`,
+  plan mới nhận `order` **1, 2, …, 47** — **đụng đúng `order` 47 đang tồn tại**.
+
+Trong transaction, plan cũ ở order 47 **không bị xoá** (nó trong `keptPlanIds`) còn plan mới
+lại xin order 47 ⇒ **vi phạm ràng buộc, cả transaction rollback**, và lớp đó **không đổi
+được giáo trình nữa**.
+
+> **Kết luận: KHÔNG thêm `@@unique([classId, order])` ở thời điểm này.** Muốn thêm thì phải
+> sửa `adoptCurriculumVersion` trước — cho nó đánh lại `order` **liên tục từ 0** trên toàn bộ
+> plan còn lại thay vì tiếp nối từ `keptCount`. Đó là việc riêng, có rủi ro riêng.
+
+Cùng lý do đó, `planId onDelete: SetNull` **giữ nguyên**: `snapshot.ts:126` là đường xoá
+plan **duy nhất** trong mã sản phẩm, và chú thích ngay tại đó nói rõ nó **dựa vào** `SetNull`
+(*"buổi future trỏ planId sẽ SetNull"*). Đổi sang `Restrict` là làm vỡ nó.
+
+## 3b.3 Ca test đỏ — kết quả săn
+
+Xem mục cuối tài liệu này (cập nhật sau khi chạy đủ 10 lượt).
+**KẾT QUẢ SĂN (08/09):**
+
+| Đợt | Số lượt | Kết quả |
+|---|---|---|
+| Lượt 1 — **VÔ HIỆU** | 10 | Chạy **đè lên lúc đang sửa file**. Lượt 5–6 đỏ vì `[PARSE_ERROR]` do chính tôi (docblock chứa `*/` trong regex đã đóng comment sớm). Lượt 7–10 đỏ vì bản vá thật (mục dưới). **Không dùng làm bằng chứng flake.** |
+| Lượt 2 — sạch | 10 | 10/10 xanh, 5658 test |
+| Lượt 3 — sạch, sau khi vá cổng phụ huynh | 8 | 8/8 xanh |
+
+**Tổng 18 lượt sạch, 0 đỏ.** Có **1 lượt đỏ lẻ** xen giữa hai đợt (chạy không lưu output nên
+không bắt được tên) — nhắc lại rằng flake còn đó, chỉ là thưa.
+
+**Nhưng lượt VÔ HIỆU vẫn cho 3 tên ca** — chúng đỏ dưới tải nặng (typecheck + soạn thảo chạy
+song song), thời gian đều sát mốc chờ:
+
+| Ca | Lượt đỏ | Thời gian | Liên quan bản vá? |
+|---|---|---|---|
+| `tests/cham-cong/requests.spec.ts > isSubmittedLate` | 7, 9 | 5184 ms · 5013 ms | **KHÔNG** — module chấm công, không đụng buổi/bài |
+| `tests/elearning/trn-training-need-invariants.test.ts > bảng sinh ở ĐÚNG một migration` | 9 | 9114 ms | **KHÔNG** — quét thư mục `prisma/migrations` |
+| `tests/elearning/trn-reminder-incident-invariants.test.ts > không migration nào khác cùng đụng hai bảng này` | 9 | 9462 ms | **KHÔNG** — cùng loại |
+
+Cả ba đều **quá-hạn-chờ dưới tải I/O**, không phải sai kết quả: `isSubmittedLate` là hàm
+thuần (không I/O) mà mất 5,1 giây — đó là tiến trình bị đói CPU chứ không phải logic. Hai ca
+migration đọc cả cây `prisma/migrations` bằng I/O đồng bộ. **Đây là flake hạ tầng, không phải
+flake nghiệp vụ**, và không nơi nào chạm mã của bản vá.
+
+### Ca đỏ THẬT do bản vá — 1 ca, đã xử
+
+`lib/portal/buoi-hoc.test.ts > tên bài mang sẵn tiền tố học phần → tách đúng chỗ, không in lặp`
+— đỏ **liên tục** ở lượt 7–10 (không phải flake). Dựng **một** buổi, `lesson.order = 9`:
+
+```
+Expected: "Buổi 1 - HP2 - Họa Sĩ Robot"   ← hạng theo ngày của buổi duy nhất
+Received: "Buổi 9 - HP2 - Họa Sĩ Robot"   ← số lộ trình
+```
+
+Ca này đang **khoá đúng cái hành vi vừa bị bác bỏ**. Sửa **kỳ vọng**, không sửa mã, và thêm
+khẳng định `soBuoi === 1` để giữ nguyên vế "thứ tự trong danh sách vẫn theo ngày".
+
+---
+
+# Đợt 1b — nối nhãn vào số lộ trình
+
+## 1b.1 Một chỗ sửa gốc
+
+`sessionOrLessonNumber` (`lib/lms/session-project-name.ts`) đảo thứ tự ưu tiên:
+
+```
+TRƯỚC: sessionNumber (hạng theo NGÀY) → lessonOrder → null
+NAY:   plan.order + 1 → Lesson.order  → sessionNumber (hạng theo ngày) → null
+```
+
+Mọi nơi in nhãn đều đi qua `deriveSessionLabel` / `deriveSessionProjectName`, nên đảo ở đây
+chữa cho **tất cả cùng lúc** — không phải sửa 22 lời gọi.
+
+⚠️ **Nấc cuối ở đây in `Buổi N` TRẦN, KHÔNG kèm `(theo lịch)`.** Cố ý: nhãn ghép đi qua
+`stripSessionNumberPrefix` ở cổng phụ huynh, mẫu cắt tiền tố đòi số đứng ngay trước dấu gạch.
+Chèn chữ vào giữa là hỏng việc cắt. Chỗ in số **trần** thì dùng `nhanSoBuoi`
+(`lib/lms/session-order.ts`) — hàm đó có kèm chú thích.
+
+## 1b.2 Bản đồ 22 nơi — làm gì ở mỗi nơi
+
+**Nơi cần số LỘ TRÌNH (11):** `admin/attendance/page.tsx` · `admin/duyet-media/page.tsx` ·
+`admin/media/actions.ts` · `admin/sessions/[id]/page.tsx` · `teacher/anh-lop/page.tsx` ·
+`teacher/hoc-vien/page.tsx` · `teacher/nhan-xet/pdf/[sessionId]/[studentId]/route.ts` (PDF
+gửi phụ huynh) · `lib/media-review/tree.ts` · `lib/portal/buoi-hoc.ts` (cổng phụ huynh) ·
+`lib/portal/feedback.ts` · `app/(portal)/portal/nhan-xet/page.tsx`.
+→ mở rộng `plan: { select: { customTitle: true } }` thêm `order: true`, và đặt `planOrder`
+kèm mỗi dòng `planTitle`.
+
+**Nơi cần CẢ HAI — nhãn theo lộ trình, sắp theo lịch (4):** `teacher/diem-danh/page.tsx` ·
+`teacher/lop/_components/hub-reviews-tab.tsx` · `teacher/lop/_components/hub-sessions-tab.tsx` ·
+`teacher/nhan-xet/page.tsx`.
+→ vế nhãn như trên; vế sắp xếp đã làm ở Đợt 1 (`thoiGian = date.getTime()`).
+
+**Nơi thuần SẮP XẾP (2, xong ở Đợt 1):** `lib/classes/session-feedback-data.ts` ·
+`lib/lms/attendance-queue.ts`.
+
+**TỔNG: 19 `plan.select` mở rộng · 22 nơi truyền `planOrder`.**
+
+## 1b.3 ⚠️ Hai nơi định "tách ticket" hoá ra KHÔNG phải chỉ-chú-thích
+
+Chủ dự án chốt tách riêng `lib/portal/photos.ts`, `lib/portal/student-assignments.ts` và
+"trường `order` chết". **Đo lại thì cả hai vế đều không đúng** — nói thẳng vì để nguyên là
+bản vá tự sinh ra lỗi hiển thị mới:
+
+| Nơi | Trường | Ai đọc | Hậu quả nếu để nguyên |
+|---|---|---|---|
+| `lib/portal/photos.ts:79` | `order: b.soBuoi` | `components/portal/hinh-anh-page.tsx:58` in `{g.order}` | Huy hiệu in **"2"** ngay cạnh tiêu đề `nhanDayDu` = **"Buổi 43 - …"**. Cùng một nhóm ảnh, hai con số chọi nhau. |
+| `lib/portal/student-assignments.ts:163` | `order: b.soBuoi` | `lib/portal/student-home.ts:140-141` in `` `Buổi ${it.order}` `` | Trang chủ portal in **"Buổi 2"** cho buổi mang bài 43. |
+
+Trường **thật sự chết** là `BuoiHoc.nhanSoBuoi` — grep toàn repo: chỉ có nơi khai và nơi gán,
+**0 nơi đọc**. Nó vẫn được vá (chuyển sang `nhanSoBuoi()` có chú thích `(theo lịch)`) vì để
+nguyên là để sẵn bẫy cho người dùng nó lần sau.
+
+**Đã vá trong Đợt 1b:** `BuoiHoc` thêm trường `soBuoiLoTrinh: number | null`; hai nơi trên đọc
+nó, lùi về `soBuoi` khi null. `soBuoi` giữ nguyên nghĩa **hạng theo ngày** và vẫn là thứ dùng
+để sắp xếp — hai con số nay tách bạch cả ở kiểu dữ liệu.
+
+**Còn lại tách ticket riêng:** `admin/classes/[id]/page.tsx` và `admin/classes/[id]/edit/page.tsx`
+(#2, #3). Hai màn này dựng `seq` từ `buildSessionNumberMap` rồi truyền xuống form quản lý lộ
+trình, nơi `plan.order` đã hiển thị **riêng** thành một cột. Chúng không ghép số với tên bài
+nên **không mang lỗi**, nhưng chữ "seq" ở đó nghĩa mập mờ — việc dọn tên, không phải việc sửa lỗi.
+
+## 1b.4 Đối chiếu nhãn trước–sau cho Đào tạo
+
+`scripts/doi-chieu-nhan-truoc-sau.ts` — chỉ đọc, in **những buổi ĐỔI nhãn** của 3 lớp mẫu:
+
+```
+PROD_READONLY_URL='postgresql://…:5432/postgres' \
+  pnpm exec tsx scripts/doi-chieu-nhan-truoc-sau.ts
+```
+
+Truyền mã lớp làm tham số để chạy lớp khác. **CHƯA CHẠY** — chuỗi chỉ-đọc prod chủ dự án cắm
+tay ở phiên trước đã hết khỏi shell; không đưa secret prod vào repo.
