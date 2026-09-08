@@ -1,0 +1,1045 @@
+# Điều tra lệch tên bài học giữa ClassSession và giáo trình
+
+| | |
+|---|---|
+| **Ngày** | 07/09/2026 |
+| **Trạng thái** | Bước 1 xong (đọc mã). Bước 2 xong — **nhưng DB dev không trả lời được**, xem §2.1. Chờ đường đọc PROD. |
+| **Nhánh đọc** | `origin/main` @ `c78d0ae0` — `git rev-list --left-right --count origin/main...HEAD` = `0 0` |
+| **Đã ghi gì vào DB** | **KHÔNG.** Bước 1 chỉ đọc mã. |
+
+> Ký hiệu theo `docs/luat-doc-so-va-ket-luan.md`: **ĐO** = có phép tính kèm theo ·
+> **SUY** = suy luận từ mã, chưa đo · **CHƯA BIẾT** = không kết luận được ở bước này.
+
+---
+
+## 1. Sơ đồ quan hệ hiện tại
+
+```
+Course ──1:N── Curriculum ──1:N── Lesson
+               (version, isActive)   (order, title, moduleCode)
+                                     @@unique([curriculumId, order])
+  │                    ▲
+  │                    │ curriculumId + curriculumVersion  (GHIM lúc tạo lớp, nullable)
+  ▼                    │
+Class ──1:N── ClassSessionPlan ──┐   (seq, order, lessonId, customTitle)
+  │                              │   @@index([classId, order])  ← KHÔNG có unique
+  │                              │
+  └──1:N── ClassSession ─────────┘
+             date        Timestamptz(6)   ← MANG GIỜ THẬT, không phải @db.Date
+             lessonId    FK → Lesson,  onDelete: SetNull
+             planId      FK → ClassSessionPlan, onDelete: SetNull
+             topic       String?            ← chuỗi tự do, là NGUỒN DỰ PHÒNG của tên bài
+             KHÔNG có cột thứ tự nào. KHÔNG có @@unique([classId, …]).
+```
+
+### 1.1 Buổi học trỏ tới bài bằng cách nào
+
+**Bằng CẢ BA, theo thứ tự ưu tiên** — `lib/lms/session-project-name.ts:140-144`:
+
+```ts
+export function deriveSessionTitle(src) {
+  return meaningful(src.planTitle) || meaningful(src.lessonTitle) || meaningful(src.topic);
+}
+```
+
+| Nguồn | Kiểu | Đi theo giáo trình khi giáo trình đổi? |
+|---|---|---|
+| `plan.customTitle` | **chuỗi chép** trên `ClassSessionPlan` | ❌ không |
+| `lesson.title` qua `ClassSession.lessonId` | **FK** | ⚠️ chỉ khi FK trỏ đúng bản giáo trình đang dùng |
+| `ClassSession.topic` | **chuỗi chép** trên chính buổi | ❌ không |
+
+⇒ Câu trả lời cho câu hỏi của anh: **vừa FK vừa chuỗi chép**. FK là nguồn chính, nhưng
+hai nguồn chuỗi đứng **trước và sau** nó trong thứ tự ưu tiên, nên một buổi có thể in
+tên bài mà FK của nó không hề trỏ tới.
+
+### 1.2 "Buổi N" trên UI đến từ đâu
+
+**Tính lúc render, bằng HẠNG THEO NGÀY** — `lib/lms/session-order.ts:38-56`:
+
+```ts
+export function buildSessionNumberMap(rows) {
+  ...
+  const sorted = [...list].sort((a, b) => timeOf(a.date) - timeOf(b.date) || a.id.localeCompare(b.id));
+  sorted.forEach((s, i) => out.set(s.id, i + 1));
+}
+```
+
+Không có cột nào lưu số buổi. Và việc **không** dùng `ClassSessionPlan.seq` / `Lesson.order`
+là **chủ đích, có ghi lý do** — `lib/lms/session-order.ts:12-14`:
+
+> *"Không lấy `ClassSessionPlan.seq` / `Lesson.order` làm nguồn: hai cột đó rỗng ở lớp
+> không ghim giáo trình và bị SetNull khi dời/huỷ buổi, nên số sẽ khuyết đúng ở những lớp
+> cần nhìn nhất."*
+
+### 1.3 ⚠️ Bug này ĐÃ ĐƯỢC BIẾT VÀ GHI LẠI TỪ 25/08
+
+`lib/lms/session-project-name.ts:150-154`, trong docblock của `deriveSessionProjectName`:
+
+> *"số N ở đây là số buổi THEO NGÀY của lớp (`buildSessionNumberMap`), **không phải
+> `Lesson.order`**; chèn buổi bù hay huỷ buổi làm **hai số lệch nhau**, nên `Dự án 8` có
+> thể dán vào bài số 7 của giáo trình. Bỏ tiền tố là hết nguy cơ đó."*
+
+Đợt 25/08 đã nhìn thấy đúng cơ chế lệch này, nhưng **chỉ gỡ TRIỆU CHỨNG** (bỏ tiền tố
+`Dự án N:` khỏi phiếu gửi phụ huynh) chứ không sửa gốc. Nhãn buổi trên site GV
+(`deriveSessionLabel`) **vẫn ghép** `Buổi {hạng theo ngày}` với `{tên bài theo FK}` —
+đúng chỗ anh đang thấy sai.
+
+---
+
+## 2. Bảng: nơi ghi ClassSession → logic gán bài → có reindex không
+
+Quét bằng `grep -rn "classSession\.(create|createMany|update|updateMany|upsert|delete|deleteMany)"`
+trên `app/ lib/ scripts/ prisma/`, bỏ `*.test.*` / `*.spec.*`. **ĐO: 32 lời gọi / 20 file.**
+Dưới đây là các đường **sản xuất** (bỏ seed demo và script dọn dữ liệu test):
+
+| # | Nơi ghi | Gán bài theo logic gì | Reindex? |
+|---|---|---|---|
+| 1 | `lib/classes/generate.ts:145-155` (nhánh có plan) | `dates[i]` ↔ `plans[i].lessonId` — **ghép theo CHỈ SỐ** | ❌ |
+| 2 | `lib/classes/generate.ts:193-199` (nhánh cũ) | `dates[i]` ↔ `lessonIds[i]`, `lessonIds` lấy `orderBy: {order: asc}` của **`curriculum` `isActive` `version desc`** | ❌ |
+| 3 | `lib/classes/adjust.ts:102-108` `cancelSession` | Buổi bù **chép nguyên** `lessonId` + `planId` của buổi bị huỷ, đặt ở **ngày mới cuối lịch** | ❌ |
+| 4 | `lib/classes/snapshot.ts:151-153` `adoptCurriculumVersion` | `classSession.update({ data: { planId, lessonId: remaining[i]?.id } })` — **ghép lại theo CHỈ SỐ** khi lớp đổi bản giáo trình | ❌ |
+| 5 | `lib/classes/session-sync.ts` `resyncClassSessions` | **CHỈ đổi `date`.** Docblock:*"1. CHỈ đổi `date`. KHÔNG tạo, KHÔNG xoá buổi"* | ❌ (và không cần) |
+| 6 | `lib/holidays/apply.ts` | **CHỈ đổi `date`** (dời buổi trùng ngày nghỉ) | ❌ |
+| 7 | `app/(admin)/admin/sessions/_actions.ts:175,217` | `lessonId` do **người dùng chọn tay** trên form | ❌ |
+| 8 | `prisma/seed-curriculum-sata.ts:333-373` | Remap hàng loạt — xem §3.3 | ❌ |
+
+**Không có một đường nào reindex.** Nghĩa là mỗi lần lịch đổi (dời ngày, huỷ buổi, thêm
+buổi bù), quan hệ "buổi thứ N ↔ bài thứ N" trượt thêm một nấc và **không bao giờ được
+kéo lại**.
+
+---
+
+## 3. Nguyên nhân gốc
+
+### 3.1 Gốc chung: HAI THỨ TỰ ĐỘC LẬP, không có ràng buộc nào bắt chúng khớp
+
+| | Số buổi hiển thị | Tên bài |
+|---|---|---|
+| Nguồn | hạng theo `date` | `lessonId` / `planId` / `topic` |
+| Tính khi nào | **mỗi lần render** | **ghi một lần lúc sinh lịch** |
+| Đổi khi dời ngày | **CÓ** | **KHÔNG** |
+
+Chỉ cần một buổi đổi ngày là hai dãy lệch nhau vĩnh viễn. Không có cột nào, không có
+`@@unique` nào, không có test nào ràng chúng lại.
+
+### 3.2 Ca 1 (Sata6 — 42 T7 mang bài 1-42, 6 T5 mang bài 43-48)
+
+**Giả thuyết của anh KHÔNG khớp mã ở phần "sinh trong một lần".**
+`computePhasedSessionDates` (`lib/classes/phases.ts:180-201`) quét **từng ngày một**
+(`cur = vnAddDays(cur, 1)`) và `push` khi ngày đó khớp slot ⇒ mảng `dates` **luôn tăng
+dần**. Một lần gọi `generateClassSessions` **không thể** đẻ ra 42 ngày T7 trước rồi 6
+ngày T5 xen vào giữa.
+
+Nên hình dạng đó chỉ ra được bằng **HAI lần ghi**. Ứng viên, chưa phân định được bằng mã:
+- Lớp sinh lịch lần 1 (42 buổi T7), sau đó **thêm 6 buổi** qua `sessions/_actions.ts` (#7)
+  với `lessonId` chọn tay; hoặc
+- Lớp đổi giai đoạn lịch (`ClassSchedulePhase`) rồi sinh lại một phần.
+
+**CHƯA BIẾT — phải đo ở Bước 2** (so `ClassSession.createdAt` theo nhóm thứ trong tuần).
+
+### 3.3 Ca 2 (Sata4 — hoán vị trong tập bài 1-17) và vai trò của script remap
+
+`prisma/seed-curriculum-sata.ts:333-364` là nơi đáng ngờ nhất vì nó **chạm mọi lớp của
+mọi khoá** — khớp với việc anh thấy *"sai ở TẤT CẢ các khoá"*. Memory ghi script này
+**đã chạy trên prod 26/08**.
+
+```ts
+let slot = 0;
+for (const s of sessions) {                       // orderBy: [{date:asc},{id:asc}]
+  const viaPlan = s.planId !== null ? planTarget.get(s.planId) : undefined;
+  const anchor  = s.lessonId !== null ? (orders.get(s.lessonId) ?? undefined) : undefined;
+
+  if (typeof anchor === "number") {
+    if (anchor > slot) slot = anchor;             // ← chỉ TIẾN, KHÔNG BAO GIỜ LÙI
+  } else {
+    slot += 1;
+  }
+  const target = viaPlan ?? (typeof anchor === "number" ? cur.lessons.get(anchor)
+                                                        : cur.lessons.get(slot));
+```
+
+Ba tính chất, cả ba đều đẩy về phía giữ nguyên/khuếch đại lệch:
+
+1. **`anchor` thắng vị trí trong dãy ngày.** Buổi thứ 5 theo ngày mà đang mang bài có
+   `order = 6` thì được map sang **bài 6 của giáo trình mới**, không phải bài 5. Script
+   **bảo tồn** hoán vị sẵn có thay vì nắn lại. → khớp ca 2.
+2. **`slot` là mốc cao nhất, chỉ tiến.** Một buổi không neo được bài (bù/huỷ) đứng sau
+   một buổi có `anchor` cao sẽ nhảy vọt. → khớp *"bài 18 bị đẩy xuống tận buổi 48"*.
+3. **`viaPlan` thắng tất cả**, mà `planTarget` map theo **vị trí `i+1`** trong
+   `plans` sắp `[{order:asc},{seq:asc}]`. `ClassSessionPlan` **không có
+   `@@unique([classId, seq])`** nên `order`/`seq` trùng hoặc thưa là dãy trượt ngay.
+
+Script tự biết nó đang đoán: nó đếm `hasGuess` và `st.guessedClasses.push(cls.name)`
+(dòng 368) — tức tác giả đã lường trước ca đoán sai, chỉ là báo tên lớp chứ không chặn.
+
+### 3.4 Ca 3 (Sata3 — tên bài không tồn tại trong giáo trình hiện hành)
+
+Hai cơ chế đều đủ để gây ra, **chưa phân định được bằng mã**:
+
+- **(a) FK trỏ bản giáo trình CŨ.** `Curriculum` có `version` và `@@unique([courseId, version])`;
+  `Class.curriculumId` **ghim một bản lúc tạo lớp**. Buổi trỏ `lessonId` của bản cũ vẫn
+  hợp lệ về mặt FK, `lesson.title` vẫn ra tên — chỉ là tên của bản cũ. **Không cần chuỗi
+  chép nào.**
+- **(b) Chuỗi chép.** `plan.customTitle` hoặc `ClassSession.topic` đứng trước/sau
+  `lesson.title` trong `deriveSessionTitle`, nên chúng in được tên mà FK không trỏ tới.
+  Kèm `onDelete: SetNull`: xoá/seed lại Lesson là `lessonId` hoá null, và `topic` trở thành
+  nguồn duy nhất.
+
+**Phân định bằng Bước 2**: nếu các buổi đó có `lessonId` khác null và
+`lesson.curriculumId ≠ class.curriculumId` ⇒ (a). Nếu `lessonId IS NULL` mà `topic`/
+`customTitle` có chữ ⇒ (b).
+
+Còn chi tiết *"chỉ 47 buổi / 48 bài"* thì `generate.ts` có sẵn `shortPlanWarning(dates.length, plans.length)`
+— sinh thiếu ngày là **cảnh báo, không chặn**.
+
+---
+
+## 4. Phát hiện ngoài dự kiến (báo, không tự vá)
+
+1. **`ClassSessionPlan` thiếu `@@unique([classId, seq])`.** Cột `seq` được chú thích là
+   *"số thứ tự buổi gốc theo curriculum"* nhưng không có ràng buộc nào cấm trùng/thưa.
+2. **`ClassSession` không có ràng buộc nào theo lớp.** Không `@@unique([classId, lessonId])`,
+   không cột thứ tự ⇒ hai buổi cùng mang một bài là hợp lệ với DB.
+3. **`onDelete: SetNull` trên `lessonId`.** Seed lại giáo trình (xoá Lesson cũ) làm mọi
+   buổi trỏ tới nó **mất bài trong im lặng**, rồi rơi về `topic`.
+4. **`prisma/seed-curriculum-sata.ts` là đường ghi sản xuất chạy trên prod** dù nằm trong
+   `prisma/`. Memory ghi `--dry-run` của nó **vẫn ghi** (sự cố 26/08).
+
+---
+
+## 5. Bước 2 — chưa chạy
+
+Query rà soát chưa viết. Cần đo trước khi kết luận ca 1 và ca 3.
+
+## 6. Quyết định cần chủ dự án chốt
+
+Chưa mở — sẽ nêu sau khi có số ở Bước 2.
+
+---
+
+# Bước 2 — số đo trên DB dev
+
+| | |
+|---|---|
+| **Script** | `scripts/ra-soat-lech-bai-hoc.ts` |
+| **DB** | `aws-1-ap-northeast-1.pooler.supabase.com:5432/postgres` — chuỗi `DIRECT_URL` trong `.env` của repo chính = **DB dev**. Phải đi **session pooler `:5432`**; qua `:6543` script chết ở `prepared statement "s8" does not exist` (bẫy đã ghi ở `.claude/rules/prisma-db.md`). |
+| **Chạy lúc** | 2026-09-08T06:48Z |
+
+## 2.0 Ba tự kiểm trước khi tin số
+
+### (1) Script có đúng 0 lệnh ghi không?
+
+Pattern: `\.(create|createMany|update|updateMany|upsert|delete|deleteMany)\(|executeRaw|queryRaw`
+
+```
+8: * `$executeRaw`. Chạy được bằng tài khoản chỉ có quyền đọc. Kiểm nhanh:
+9: *     grep -nE "create|update|delete|upsert|executeRaw" scripts/ra-soat-lech-bai-hoc.ts
+→ 2 dòng khớp, CẢ HAI nằm trong khối chú thích đầu file.
+```
+
+**0 dòng MÃ ghi.** Script chỉ gọi `findMany` / `count` / `groupBy`.
+
+### (2) Dùng hàm thật hay chép logic?
+
+**Dùng hàm THẬT — 2 thứ:**
+
+| Đại lượng | Hàm | Ở đâu |
+|---|---|---|
+| Số buổi (hạng theo ngày) | `buildSessionNumberMap` | import ở `scripts/ra-soat-lech-bai-hoc.ts:22` từ `lib/lms/session-order` |
+| Tên bài in ra | `deriveSessionTitle` | import ở `:23` từ `lib/lms/session-project-name` |
+
+Script cũng tuân đúng cảnh báo trong docblock của `buildSessionNumberMap` (*"caller PHẢI nạp đủ buổi của lớp"*): nó nạp **toàn bộ** `ClassSession`, không lọc gì.
+
+**⚠️ BA chỗ CHÉP LẠI, không mô phỏng được 1:1 — phải biết khi đọc số:**
+
+| Chỗ chép | Vì sao không dùng được hàm thật | Rủi ro sai |
+|---|---|---|
+| **Suy "giáo trình hiệu lực" của lớp** — script dùng `class.curriculumId`, không có thì lấy `Curriculum` `isActive` có `version` cao nhất của khoá | `resolveEffectiveCurriculumVersion` (`lib/classes/snapshot.ts:16`) chỉ trả **số version**, không trả id; nhánh fallback thật nằm **inline** trong `lib/classes/generate.ts:170-176`, không export được | Khoá có **2 bản `isActive`** thì script chọn bản version cao, còn `generate.ts` lúc sinh có thể đã gán theo bản khác ⇒ **A đếm nhầm** |
+| **Tên UI in ra** — script gọi `deriveSessionTitle` (chỉ phần TÊN) | Site GV thật in `deriveSessionLabel` = `Buổi N - HP1 - <tên bài>` | Cột "UI đang in" là **tên bài trần**, thiếu tiền tố `Buổi N - HPx`. Phần cần soi là tên nên không đổi kết luận |
+| **Mốc "đã dạy"** — script tự dựng | **Không có hàm thật nào** định nghĩa việc này trong repo | Xem (3) |
+
+### (3) Cột nào làm mốc "đã dạy", và sai ở ca nào?
+
+Một buổi được coi là **ĐÃ DẠY** khi thoả **BẤT KỲ** điều nào (hợp của 5 dấu vết):
+
+```
+status = 'COMPLETED'   ∪   completedAt ≠ null
+∪ có ≥1 Attendance(sessionId)
+∪ có ≥1 StudentSessionFeedback(classSessionId)
+∪ có ≥1 ClassSessionMedia(classSessionId)
+```
+
+Chọn **hợp** (rộng nhất) là cố ý **fail-safe**: thà giữ nguyên nhầm một buổi chưa dạy còn hơn sửa nhầm một buổi đã dạy.
+
+**Bốn ca mốc này SAI:**
+
+1. **Sai an toàn** (báo đã dạy trong khi chưa): ai đó điểm danh sớm, hoặc up nhầm ảnh sang buổi khác. Hậu quả: buổi đó không được re-map — mất cơ hội sửa, không hỏng gì.
+2. **⚠️ SAI NGUY HIỂM** (báo chưa dạy trong khi ĐÃ dạy): buổi dạy thật nhưng **không để lại dấu vết nào** — không điểm danh, không nhận xét, không ảnh. Buổi đó bị coi là "chưa diễn ra" và **được phép re-map**. Đây là chiều duy nhất gây hỏng, và nó **có thật**: prod đo 07/09 chỉ có **2 `COMPLETED` / 287 `SCHEDULED`**, tức `status` gần như vô dụng và toàn bộ sức nặng dồn lên ba dấu vết còn lại.
+3. **`ClassSessionMedia.classSessionId` là NULLABLE** — ảnh không gắn buổi không tính được cho buổi nào.
+4. **Mốc này KHÔNG nhìn thấy học bạ.** `ReportCard` gắn **1-1 với `Enrollment`**, không có cột nào trỏ `ClassSession` (ĐO: `awk '/^model ReportCard/,/^}/' prisma/schema.prisma` → không có `classSessionId`/`sessionId`). Nên một lớp **đã phát hành học bạ** (`publishedAt`, `publishedSnapshot` đóng băng số liệu) vẫn có thể có buổi bị chấm "chưa diễn ra". **Phải chặn ở cấp LỚP, không phải cấp buổi** — chưa làm, xem Q5.
+
+---
+
+## 2.1 Output thật (dán nguyên văn)
+
+```
+# RÀ SOÁT LỆCH BÀI HỌC — chỉ đọc
+DB: aws-1-ap-northeast-1.pooler.supabase.com:5432/postgres
+Lúc: 2026-09-08T06:48:54.130Z
+
+## Tổng
+Lớp (chưa xoá):                 100
+  ... có ít nhất 1 buổi:        54
+  ... LỆCH (bất kỳ A–E):        0
+  ... không suy được giáo trình:0
+Buổi học:                       609
+
+A. buổi trỏ bài KHÁC giáo trình của lớp:  0
+A. buổi lessonId IS NULL (đã SetNull):    0
+B. buổi lệch thứ tự (hạng ngày ≠ order):  0
+C. lớp có số buổi ≠ số bài giáo trình:    0
+D. bài mồ côi (không buổi nào trỏ):       0
+D. bài bị ≥2 buổi cùng trỏ:               0
+E. tên in ra bị plan.customTitle che:     0
+E. tên in ra bị topic che:                0
+F. buổi LỆCH đã dạy (KHÔNG ĐƯỢC ĐỤNG):   0
+F. buổi LỆCH chưa diễn ra (re-map được):  0
+
+## Lớp lệch (0 lớp)
+mã lớp  khoá  buổi  bài  A  null  B  kiểu  Δmax  C  mồcôi  trùng  Eplan  Etopic  lệch-đãdạy  lệch-chưa
+
+## CS2.SATA6.26.001: KHÔNG TÌM THẤY trên DB này
+## CS2.SATA4.26.001: KHÔNG TÌM THẤY trên DB này
+## CS1.SATA3.26.001: KHÔNG TÌM THẤY trên DB này
+```
+
+## 2.2 Bảng tổng A–G
+
+| Phép | Đo được | Ghi chú |
+|---|---|---|
+| **A** bài khác giáo trình | **0** | và `lessonId IS NULL` = **0** |
+| **B** lệch thứ tự | **0** | không có delta nào để phân loại "đều" vs "xáo trộn" |
+| **C** số buổi ≠ số bài | **0** lớp | |
+| **D** bài mồ côi / bài bị ≥2 buổi trỏ | **0 / 0** | |
+| **E** tên bị `customTitle` che / bị `topic` che | **0 / 0** | |
+| **F** buổi lệch đã dạy / chưa diễn ra | **0 / 0** | không có buổi lệch nào để phân tầng |
+| **G** truy vết đợt ghi | **CHƯA ĐO** | lớp Sata6 không có trên DB này |
+
+## 2.3 Bảng theo từng lớp lệch
+
+**RỖNG — 0 lớp lệch.** Đây **không phải** "đã rà, hệ thống lành". Xem §2.4.
+
+## 2.4 ⚠️ Vì sao toàn 0 này KHÔNG trả lời được câu hỏi
+
+**ĐO — chẩn đoán tự kiểm (Prisma `count`, cùng phiên, cùng DB):**
+
+| Số | Giá trị | Nghĩa |
+|---|---|---|
+| Buổi có `lessonId` | **609 / 609** | không buổi nào bị SetNull ⇒ A(null)=0 là thật |
+| Dòng `ClassSessionPlan` | **0** | **nhánh plan của `generate.ts` (đường ghi #1) chưa từng chạy** |
+| Buổi có `planId` | **0** | |
+| Lớp có `curriculumId` ghim | **0 / 100** | **cơ chế ghim bản giáo trình chưa từng dùng** |
+| `Curriculum` / `Lesson` | 7 / 90 | **PHÉP TÍNH: 90 ÷ 7 ≈ 12,9 bài/bản** — sự cố nói giáo trình **48 bài** |
+| 3 lớp mẫu | **cả ba KHÔNG TỒN TẠI** | mã lớp dev dạng khác hẳn: `CS1.SATA-4.001`, `CS1.SATA-1.010`… |
+
+Bốn hệ quả:
+
+1. Giáo trình dev ~13 bài/bản ⇒ **khác bộ dữ liệu** với sự cố (48 bài).
+2. **0 `ClassSessionPlan`** ⇒ đường ghi **#1** và **#4** (`adoptCurriculumVersion`) — hai ứng viên chính của ca Sata4 và Sata3 — **chưa từng chạm dev**.
+3. **0 lớp ghim `curriculumId`** ⇒ cơ chế "FK trỏ bản giáo trình CŨ" (§3.4a) **không thể xảy ra** ở dev: mọi lớp đều rơi về bản `isActive` mới nhất.
+4. `prisma/seed-curriculum-sata.ts` (§3.3) **chưa chạy trên dev** — không có bài Sata thật.
+
+**Phân loại theo Luật 1 (`docs/luat-doc-so-va-ket-luan.md`): "đường ghi SỐNG + 0 dòng".** Cả 8 đường ghi vẫn nằm nguyên trên `origin/main`; chỉ là tập dữ liệu dev chưa đi qua chúng. **Không được dùng số 0 này để hạ mức nghiêm trọng.**
+
+### Bằng chứng phép đo KHÔNG rỗng
+
+`--lop=CS1.SATA-3.013` (lớp thật trên dev, 12 buổi / 12 bài) — bảng dựng đủ bốn cột:
+
+```
+Buổi ngày        thứ UI đang in                 order-FK  đáng lẽ là                    đãdạy  createdAt
+1    2026-07-31  T6  Làm quen bộ học cụ         1         Buổi 1 — Làm quen bộ học cụ   x      2026-08-26T18:15:16
+2    2026-08-07  T6  Khung xe và bánh dẫn động  2         Buổi 2 — Khung xe và bánh…    x      2026-08-26T18:15:16
+...
+12   2026-10-16  T6  Dự án mở rộng              12        Buổi 12 — Dự án mở rộng              2026-08-26T18:15:16
+-- G: 2026-08-26T18:15   12 buổi   thứ={T6}
+```
+
+Khớp 1..12 vì lớp **sinh MỘT lần rồi không ai đụng** (một cụm ghi duy nhất) — đúng hình dạng "chưa lệch" mà §3.1 dự đoán.
+
+## 2.5 Đối chiếu từng buổi cho 3 lớp mẫu Sata3 / Sata4 / Sata6
+
+**CHƯA ĐO — cả ba lớp không tồn tại trên DB dev** (output §2.1 in `KHÔNG TÌM THẤY` cho cả ba). Cơ chế đo đã sẵn sàng: `--lop=<mã>` in bảng từng buổi (Buổi · ngày · thứ · UI đang in · order-FK · đáng lẽ là · đãdạy · createdAt) + cụm ghi G. Chạy được ngay khi có đường đọc prod.
+
+## 2.6 Kết quả G
+
+**CHƯA ĐO.** Câu hỏi treo từ §3.2 (Sata6 sinh mấy đợt ghi) vẫn treo.
+
+---
+
+## 2.7 Việc cần chủ dự án cấp
+
+Máy này chỉ có `.env` trỏ **dev**. Hai đường tới prod:
+
+- **(a)** Cấp chuỗi kết nối **chỉ đọc** (nhớ cổng **5432**, không phải 6543).
+- **(b)** Tôi thêm workflow `workflow_dispatch` **chỉ đọc** dùng secret `PROD_DATABASE_URL` sẵn có (mẫu `seed-prod-roles.yml`), anh bấm chạy và dán kết quả. Chuỗi không rời GitHub.
+
+Chưa làm (b) vì nó thêm file vào repo.
+
+## 2.8 Điều đã chốt được dù chưa có prod
+
+1. **Số buổi và tên bài là hai thứ tự độc lập, không ràng buộc** (§3.1) — lệch là *khi nào*, không phải *có hay không*.
+2. **Không đường ghi nào reindex** (§2) — lệch một lần là lệch vĩnh viễn.
+3. **Bug đã ghi nhận từ 25/08** (`session-project-name.ts:150-154`), chỉ gỡ triệu chứng ở phiếu phụ huynh.
+
+## 2.9 Quyết định cần chốt trước Bước 3
+
+| # | Quyết định | Phương án | Hệ quả |
+|---|---|---|---|
+| Q1 | Đường đọc prod | (a) chuỗi read-only · (b) workflow chỉ đọc | (b) an toàn hơn, chậm một nhịp |
+| Q2 | Mốc "đã dạy" | giữ **hợp 5 dấu vết** như §2.0(3) | Chiều nguy hiểm: buổi dạy thật mà **không có dấu vết nào** — prod chỉ 2/287 `COMPLETED` |
+| Q3 | Buổi **đã dạy** mang tên bài sai | (a) giữ nguyên · (b) giữ + ghi chú "theo giáo trình cũ" · (c) Đào tạo duyệt từng ca | Anh đã chốt (a); học bạ sẽ mãi mang tên không có trong giáo trình — Đào tạo có chấp nhận không? |
+| Q4 | Dọn `topic` / `plan.customTitle` | chúng **che mất FK** ở tầng hiển thị | Không dọn thì vá FK xong vẫn bị che |
+| **Q5** | **Lớp đã PHÁT HÀNH học bạ** | Mốc theo buổi **không thấy** học bạ (§2.0(3) ca 4) | Đề xuất: **loại cả lớp** khỏi re-map nếu `ReportCard.publishedAt ≠ null` — cần anh xác nhận |
+
+
+---
+
+# Bước 2b — SỐ ĐO TRÊN PROD (đã chạy)
+
+| | |
+|---|---|
+| **DB** | `aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres` — biến `PROD_READONLY_URL` |
+| **Chạy lúc** | 2026-09-08T08:05Z |
+| **Đã ghi gì** | **KHÔNG.** Grep lệnh ghi trên script → 0 dòng mã. |
+
+## 2b.A Cổng quyền (thay phép "thử ghi")
+
+```sql
+SELECT current_user, has_table_privilege(current_user,'"ClassSession"','INSERT') …
+```
+```
+role              | ins | upd | del | lesson_upd | plan_upd
+satarobo_readonly |  f  |  f  |  f  |     f      |    f
+```
+**Cả 5 cột `f` ⇒ QUA CỔNG.** Không thử ghi thật — ca xấu nhất của phép thử đó là "đã ghi
+vào prod rồi mới biết không được phép".
+
+## 2b.B Bảng tổng
+
+```
+Lớp (chưa xoá):        21        Buổi học: 687
+  có ít nhất 1 buổi:   16
+  LỆCH (bất kỳ A–E):   16        ← 16/16 lớp có buổi đều lệch
+```
+
+| Phép | Số | Ghi chú |
+|---|---|---|
+| **A** buổi trỏ bài KHÁC giáo trình của lớp | **0** | ⚠️ **Bác giả thuyết §3.4a** — không có FK nào trỏ bản giáo trình cũ |
+| **A** `lessonId IS NULL` | **0** | không buổi nào bị SetNull |
+| **B** buổi lệch thứ tự | **222 / 687** | = **32,3 %** |
+| **C** lớp có số buổi ≠ số bài | **1** | `CS1.SATA3.26.001`: 47 buổi / 48 bài |
+| **D** bài mồ côi | **1** | |
+| **D** bài bị ≥2 buổi trỏ | **0** | |
+| **E** `customTitle` che `lesson.title` | **687** | ⚠️ đếm quá tay — xem 2b.F |
+| **E** `topic` che | **0** | `topic` không phải nguồn của lỗi này |
+| **F** buổi LỆCH **đã dạy** | **47** | KHÔNG ĐƯỢC ĐỤNG |
+| **F** buổi LỆCH **chưa diễn ra** | **175** | re-map được |
+| **G** | xem 2b.E | |
+
+### Phân rã mốc "đã dạy" (mỗi dấu vết đếm độc lập)
+
+```
+status = COMPLETED:         40
+completedAt ≠ null:         40
+có điểm danh:              187      ← gánh gần như toàn bộ
+có nhận xét:                67
+có ảnh:                      4
+HỢP (tính là đã dạy):      187 / 687
+```
+
+**Xác nhận lo ngại ở Q2:** `status` chỉ đỡ được **40/187 = 21 %**. Nếu chỉ dùng `status`
+làm mốc thì **147 buổi đã dạy sẽ bị chấm "chưa diễn ra"** và bị re-map.
+
+### Q2 — mốc nước cao
+
+```
+buổi được CỨU nhờ RIÊNG luật này: 31
+(= không có dấu vết nào, nhưng nằm dưới mốc nước cao của lớp)
+```
+
+**31 buổi.** Không có luật này thì 31 buổi nằm GIỮA hai buổi đã dạy sẽ bị re-map. Luật
+đáng giá. *(Ghi chú kỹ thuật: sắp theo `date` chứ không `(date, startTime)` — `ClassSession`
+KHÔNG có cột `startTime`, giờ nằm trong `date`.)*
+
+### Q4 — chuỗi chép đang che FK
+
+```
+customTitle · trùng tên bài CỦA LỚP:          144
+customTitle · trùng tên bài giáo trình KHÁC:    0
+customTitle · KHÔNG trùng bài nào:            543
+topic · (cả ba nhóm):                           0
+```
+
+### Khoá có ≥2 bản `isActive`
+
+**(không có).** Lớp bị ảnh hưởng: **0** ⇒ phép đo **A không có vùng "không kết luận được"**.
+
+### Q5 — học bạ ở cấp lớp
+
+```
+lớp có ≥1 ReportCard:     0
+lớp ĐÃ PHÁT HÀNH học bạ:  0
+buổi "chưa diễn ra" trong lớp đã phát hành: 0
+```
+
+**PROD CHƯA CÓ HỌC BẠ NÀO.** Theo Luật 1: đây là **"đường ghi SỐNG + 0 dòng"** — cửa phát
+hành học bạ vẫn còn, nên **luật chặn cấp lớp vẫn phải cài**, chỉ là hôm nay nó chưa chặn ai.
+
+## 2b.C Bảng theo từng lớp lệch (16/16 lớp có buổi)
+
+| mã lớp | khoá | buổi | bài | B | kiểu | Δmax | C | mồ côi | Eplan | lệch-đãdạy | lệch-chưa |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| CS1.SATA3.26.003 | Sata3 | 48 | 48 | **48** | xáo trộn | 47 | 0 | 0 | 48 | 2 | 46 |
+| CS2.SATA4.26.002 | Sata4 | 48 | 48 | **47** | xáo trộn | −47 | 0 | 0 | 48 | 17 | 30 |
+| CS2.SATA6.26.001 | Sata6 | 48 | 48 | **47** | xáo trộn | 41 | 0 | 0 | 48 | 17 | 30 |
+| CS2.SATA4.26.001 | Sata4 | 48 | 48 | **39** | xáo trộn | −30 | 0 | 0 | 48 | 8 | 31 |
+| CS2.SATA3.26.001 | Sata3 | 48 | 48 | **29** | xáo trộn | −28 | 0 | 0 | 48 | 0 | 29 |
+| CS1.COMBO.26.002 | Combo | 32 | 32 | **11** | xáo trộn | −10 | 0 | 0 | 32 | 2 | 9 |
+| CS1.SATA3.26.001 | Sata3 | **47** | 48 | 1 | đều (+37) | 37 | **−1** | **1** | 47 | 1 | 0 |
+| CS1.SATA4.26.001 | Sata4 | 48 | 48 | 0 | — | 0 | 0 | 0 | 48 | 0 | 0 |
+| CS1.SATA6.26.001 | Sata6 | 48 | 48 | 0 | — | 0 | 0 | 0 | 48 | 0 | 0 |
+| CS1.COMBO.26.001 | Combo | 32 | 32 | 0 | — | 0 | 0 | 0 | 32 | 0 | 0 |
+| CS1.SATA4.26.002 | Sata4 | 48 | 48 | 0 | — | 0 | 0 | 0 | 48 | 0 | 0 |
+| CS1.SATA3.26.002 | Sata3 | 48 | 48 | 0 | — | 0 | 0 | 0 | 48 | 0 | 0 |
+| CS2.Combo.26.001 | Combo | 32 | 32 | 0 | — | 0 | 0 | 0 | 32 | 0 | 0 |
+| CS1.SATA1.26.001 | Sata1 | 16 | 16 | 0 | — | 0 | 0 | 0 | 16 | 0 | 0 |
+| CS2.SATA3.26.003 | Sata3 | 48 | 48 | 0 | — | 0 | 0 | 0 | 48 | 0 | 0 |
+| CS2.SATA4.26.003 | Sata4 | 48 | 48 | 0 | — | 0 | 0 | 0 | 48 | 0 | 0 |
+
+**9/16 lớp có B = 0** — thứ tự bài khớp thứ tự ngày. Chúng vẫn bị đếm "lệch" chỉ vì cột
+**Eplan**, mà Eplan lại là phép đo đếm quá tay (2b.F). ⇒ **Số lớp lệch THẬT là 7**, không
+phải 16.
+
+## 2b.D Đối chiếu từng buổi — 3 lớp mẫu
+
+### CS2.SATA6.26.001 (48 buổi, ghim giáo trình v1)
+
+| Buổi | ngày | thứ | UI đang in | order-FK | đáng lẽ là |
+|---|---|---|---|---|---|
+| 1 | 20/06 | T7 | Buổi 1 - HP1 - Bước vào thế giới ảo | 1 | ✔ khớp |
+| 2 | 25/06 | **T5** | Buổi 2 - **HP4 - Chạy tổng hợp nhiệm vụ** | **43** | HP1 - Đèn tín hiệu giao thông |
+| 3 | 27/06 | T7 | Buổi 3 - HP1 - Đèn tín hiệu giao thông | 2 | HP1 - Đèn thông minh |
+| 4 | 02/07 | **T5** | Buổi 4 - **HP4 - Tối ưu chương trình** | **44** | HP1 - Lựa chọn ngẫu nhiên |
+| 6 | 09/07 | **T5** | Buổi 6 - **HP4 - Kiểm tra lắp ráp** | **45** | HP1 - Xe robot di chuyển |
+| 8 | 16/07 | **T5** | Buổi 8 - **HP4 - Kiểm tra lập trình** | **46** | HP1 - Cảm biến dò line |
+| 10 | 23/07 | **T5** | Buổi 10 - **HP4 - Demo thi đấu** | **47** | HP1 - Dự án cuối học phần |
+| 12 | 30/07 | **T5** | Buổi 12 - **HP4 - Thi đấu nội bộ** | **48** | HP1 - Báo cáo cuối học phần |
+| 13→48 | T7 | | lệch đều **−6** so với hạng ngày | 7…42 | |
+
+### CS2.SATA4.26.001 (48 buổi) — hoán vị cục bộ, không phải dịch đều
+
+| Buổi | UI đang in | order-FK | đáng lẽ là |
+|---|---|---|---|
+| 5 | HP1 - Tránh chướng ngại vật | **6** | HP1 - Ôn tập kiến thức |
+| 6 | HP1 - Nhận diện màu sắc | **7** | HP1 - Tránh chướng ngại vật |
+| 7 | HP1 - Ôn tập kiến thức | **5** | HP1 - Nhận diện màu sắc |
+| 10 | **HP2 - Thiết kế lắp ráp** | **15** | HP1 - Dự án cuối học phần |
+| 11 | HP1 - Demo cuối học phần | 11 | ✔ khớp |
+| 12 | HP1 - Dự án cuối học phần | **10** | HP1 - Báo cáo cuối học phần |
+
+Cụm ghi G: **một cụm** `2026-08-06T10:25`, `thứ={T4,T2}`.
+
+### CS1.SATA3.26.001 (47 buổi / 48 bài) — ca "tên bài lạ"
+
+| Buổi | UI đang in | order-FK | đáng lẽ là |
+|---|---|---|---|
+| 4 | **Lập trình di chuyển** | 4 | HP1 - Chiến Xa Tốc Độ |
+| 5 | **Cảm biến dò line** | 5 | HP1 - Ôn tập kiến thức |
+| 6 | **Lắp ráp khung gầm** | 6 | HP1 - Vũ Công Robot |
+| 7 | **Lắp ráp khung gầm nâng cao** | 7 | HP1 - Trở Về Tuổi Thơ |
+| 8 | **Cánh tay robot & servo** | 8 | HP1 - Kỹ Sư Làm Mát |
+| 11 | **HP4 - Báo cáo cuối khoá** | **48** | HP1 - Demo cuối học phần |
+| 12 | **Robot tránh vật cản** | 12 | HP1 - Báo cáo cuối học phần |
+| 15→ | HP2 - Họa Sĩ Robot | 15 | ✔ khớp từ đây trở đi |
+
+**⚠️ Chú ý cột `order-FK`: buổi 4→4, 5→5, 6→6, 7→7, 8→8 — FK KHỚP THỨ TỰ.** Tên lạ
+KHÔNG đến từ FK. Nó đến từ `ClassSessionPlan.customTitle` — **chuỗi chép của giáo trình cũ**.
+
+## 2b.E Kết quả G — truy vết đợt ghi
+
+| Lớp | Cụm ghi `createdAt` | Thứ |
+|---|---|---|
+| CS2.SATA6.26.001 | **1 cụm** `2026-08-06T11:41` — 48 buổi | {T7, T5} |
+| CS2.SATA4.26.001 | **1 cụm** `2026-08-06T10:25` — 48 buổi | {T4, T2} |
+| CS1.SATA3.26.001 | **1 cụm** `2026-08-06T17:56` — 47 buổi | {T7} |
+
+**⇒ BÁC BỎ giả thuyết "hai đợt ghi" (§3.2) — của cả anh lẫn của tôi.** Mỗi lớp sinh
+**một lần duy nhất**.
+
+### Lời giải thật cho ca Sata6 (ĐO, không suy)
+
+Bốn phép đo nối nhau:
+
+1. `ClassSessionPlan` của lớp **hoàn toàn sạch**: `plan.order` 0..47 ↔ `lesson.order` 1..48,
+   tuần tự đúng.
+2. `s.lessonId` **luôn khớp** `plan.lessonId` của chính buổi đó
+   (`lech_plan_vs_session = f` toàn bộ) ⇒ **`lessonId` KHÔNG bị ghi đè độc lập**.
+3. Chuỗi plan theo hạng ngày là `0, 42, 1, 43, 2, 44, …` ⇒ **buổi nhận plan nào đã sai
+   ngay từ đầu?** Không — xem (4).
+4. **Lớp KHÔNG có `ClassSchedulePhase` nào, `scheduleDays = {6}` = CHỈ THỨ 7.**
+
+Ghép lại: lúc sinh, `computeSessionDates` chỉ sinh **48 ngày Thứ 7 tăng dần**, ghép
+`dates[i] ↔ plans[i]` ⇒ **đúng răm rắp**. Sáu buổi mang bài 43–48 (cuối lịch) **về sau bị
+DỜI NGÀY** sang các Thứ 5 tháng 6–7. Bộ dời ngày **không đụng `lessonId`** (đường ghi #3/#5/#6
+đều "CHỈ đổi `date`"), còn "Buổi N" thì **tính lại theo ngày mỗi lần render**.
+
+⇒ **Đây chính là §3.1 xảy ra ngoài đời**, không cần script remap, không cần hai đợt ghi.
+Ai dời ngày và vì sao thì **CHƯA ĐO** — cần audit log, để Bước 3.
+
+## 2b.F ⚠️ Tự đính chính: phép đo E đếm QUÁ TAY
+
+`E = 687 = TOÀN BỘ buổi` là **con số không dùng được như đang hiểu**.
+
+Script đếm E khi *"có `customTitle` **và** có `lesson.title`"*. Nhưng hàm thật
+`deriveSessionTitle` gọi `meaningful()`, và `meaningful()` **loại các chuỗi rỗng-hình-dạng**
+— `session-project-name.ts:42`: *"Ô TRỐNG mang hình dạng tiêu đề: `"Buổi 7"` và không gì khác"*.
+
+Đo được ở CS2.SATA6.26.001: `customTitle` là `"Buổi 1"`, `"Buổi 2"`, … ⇒ **bị `meaningful()`
+loại**, nên UI **vẫn in `lesson.title`** — đúng như bảng 2b.D cho thấy. Vậy chúng **không hề
+che** FK.
+
+**Hệ quả cho Q4:** con số `543 "KHÔNG trùng bài nào"` **trộn hai thứ khác hẳn nhau**:
+- placeholder `"Buổi N"` — **rác máy sinh**, xoá vô hại;
+- tên bài giáo trình CŨ (ca Sata3: *"Lắp ráp khung gầm"*, *"Cánh tay robot & servo"*) —
+  **đây mới là thứ đang che FK**.
+
+**CHƯA ĐO: tách 543 thành hai nhóm đó.** Cần chạy lại với `meaningful()` áp đúng. Đừng
+dùng 144/543 để quyết Q4.
+
+## 2b.G Kết luận đo được
+
+1. **16/16 lớp có buổi bị đếm lệch, nhưng lệch THẬT là 7 lớp** (9 lớp còn lại chỉ dính E — phép đo hỏng).
+2. **222/687 buổi (32,3 %) sai thứ tự bài.**
+3. **47 buổi lệch ĐÃ DẠY** — không được đụng. **175 buổi lệch chưa diễn ra** — re-map được.
+4. **A = 0**: không FK nào trỏ giáo trình cũ ⇒ giả thuyết §3.4a **sai**. Tên lạ đến từ
+   `plan.customTitle`, tức §3.4b.
+5. **G bác bỏ "hai đợt ghi"**: mỗi lớp một cụm ghi. Nguyên nhân thật là **dời ngày sau khi
+   sinh**, đúng §3.1.
+6. **`status` chỉ đỡ 21 %** mốc "đã dạy"; **mốc nước cao cứu thêm 31 buổi**.
+7. **Prod chưa có học bạ nào** — luật chặn cấp lớp vẫn phải cài (đường ghi còn sống).
+
+---
+
+# Bước 2c — độ phủ `plan.order` + tách chuỗi chép (prod, CHỈ ĐỌC)
+
+| | |
+|---|---|
+| **Script** | `scripts/ra-soat-plan-order.ts` — 0 dòng mã ghi |
+| **DB** | prod, biến `PROD_READONLY_URL`, role `satarobo_readonly` |
+| **Chạy lúc** | 2026-09-08 |
+
+## 2c.0 Chốt lại nguyên nhân (chủ dự án đóng 08/09)
+
+**KHÔNG có bug ghi dữ liệu.** Thứ tự đúng vẫn nguyên trong DB. Cái sai là **NHÃN HIỂN THỊ**
+ghép `"Buổi N tính theo ngày"` với `"tên bài theo FK"`.
+
+**Kế hoạch cũ HUỶ:** không thêm `sequenceNo`, không migration re-map 175 buổi.
+`ClassSessionPlan.order` **chính là** `sequenceNo` và nó đã có sẵn, sạch.
+
+**Đóng câu hỏi "ai dời ngày 6 buổi Sata6"** — dời ngày là nghiệp vụ hợp lệ (dạy bù), biết
+ai làm cũng không đổi cách vá.
+
+**Hướng vá: SỬA HIỂN THỊ, 0 dòng dữ liệu bị ghi.** Nếu đi hướng này thì:
+- **47 buổi đã dạy tự an toàn** — không ai đụng tới chúng;
+- **Q2 / Q3 / Q5 mất sức nặng** — chúng là câu hỏi của kế hoạch re-map, mà re-map đã huỷ.
+
+## 2c.A Độ phủ `ClassSessionPlan.order` — câu quyết định Bước 3
+
+```
+lớp có buổi:                     16
+  ghim giáo trình:               16 lớp / 687 buổi
+  KHÔNG ghim:                     0 lớp /   0 buổi
+  plan ĐỦ (mọi buổi có plan):    16 lớp
+  plan THIẾU một phần:            0 lớp
+  KHÔNG có dòng plan nào:         0 lớp
+  buổi CÓ planId:                687
+  buổi KHÔNG có planId:            0   ← rơi vào fallback
+  lớp order liên tục 0..N-1:     16
+  lớp order HỔNG:                 0
+  lớp order TRÙNG:                0
+  lớp plan khớp 1-1 lesson.order: 16
+  buổi có lessonId KHÁC plan:      0
+```
+
+**16/16 lớp sạch tuyệt đối.** Từng lớp một đều `liênTục` + `khớp1-1` + `lệchPlan = 0`.
+
+> ### Kết luận cần rút
+> Đổi `"Buổi N"` sang `plan.order + 1` thì **687/687 buổi (100 %) hiển thị ĐÚNG**, và
+> **0 buổi rơi vào fallback**. Không có vùng xám nào trên dữ liệu prod hôm nay.
+
+⚠️ **Nhưng đây là "0 dòng" loại BOM HẸN GIỜ, không phải "cơ chế không tồn tại"** (Luật 1):
+- `lib/classes/generate.ts:169-199` **vẫn còn nhánh fallback** tạo buổi **KHÔNG có plan**
+  cho lớp chưa ghim giáo trình. Hôm nay prod 0 lớp như vậy — mai tạo một lớp là có.
+- `ClassSession.planId` là **`onDelete: SetNull`**: xoá một `ClassSessionPlan` là mọi buổi
+  trỏ nó **mất `planId` trong im lặng**.
+
+⇒ Fallback **bắt buộc phải có**, dù hôm nay nó không chạy cho buổi nào.
+
+## 2c.B Tách chuỗi chép — áp `meaningful()` của HÀM THẬT
+
+`meaningful` là hàm private; script cô lập nó qua
+`deriveSessionTitle({ planTitle: X, lessonTitle: null, topic: null })` ⇒ dùng **luật thật**.
+
+```
+customTitle (687 buổi):
+  trống / null:                        0
+  placeholder (meaningful() LOẠI):   502   ← rác máy sinh, KHÔNG che FK
+  trùng tên bài GIÁO TRÌNH CỦA LỚP:  144
+  trùng tên bài giáo trình KHÁC:       0
+  KHÔNG trùng bài nào:                41
+topic (687 buổi):
+  trống / null:                      687   ← topic KHÔNG đóng vai gì trong lỗi này
+```
+
+`502 + 144 + 41 = 687` ✔
+
+### ⚠️ Nhóm "41 KHÔNG trùng" KHÔNG đọc được là "GV tự đặt"
+
+20 mẫu in ra đều thuộc `CS1.SATA3.26.001` / `.002`:
+
+```
+Bàn tay ma thuật · Đấu trường con quay · Siêu xe bứt phá · Lập trình di chuyển
+Cảm biến dò line · Lắp ráp khung gầm · Lắp ráp khung gầm nâng cao
+Cánh tay robot & servo · Lập trình theo kịch bản · Dự án nhóm: robot phân loại
+Xử lý lỗi & tối ưu · Robot tránh vật cản · Ôn tập & kiểm tra · Tổng kết & trình diễn
+```
+
+`"Bàn tay ma thuật"` bị xếp vào "không trùng" **mặc dù giáo trình hiện hành CÓ bài đó** —
+vì bài tên là `"HP1 - Bàn tay ma thuật"`, lệch đúng tiền tố `HPn - `. Phép so của script là
+khớp-chuỗi-chính-xác sau `trim`+`lowercase`, **không gỡ tiền tố học phần**
+(`stripModulePrefix` trong `session-project-name.ts`).
+
+**⇒ Con số 41 là HỖN HỢP** của (a) tên trùng bài hiện hành nhưng lệch tiền tố, và (b) tên
+giáo trình cũ thật sự. **CHƯA ĐO** tỷ lệ hai nhóm. Không dùng 41 để quyết Q4.
+
+## 2c.C Sửa lại con số "16 lớp lệch" ở Bước 2b
+
+| | Số | |
+|---|---|---|
+| Bước 2b báo | **16 lớp lệch** | ❌ SAI |
+| Lớp có **B > 0** (thứ tự bài ≠ thứ tự ngày) | **7** | |
+| Lớp có ≥1 buổi bị `customTitle` **CÓ NGHĨA** che `lesson.title` | **6** | |
+
+**Vì sao số cũ sai:** phép đo E ở Bước 2b đếm điều kiện *"có `customTitle` **và** có
+`lesson.title`"*. Nhưng `customTitle` của 502/687 buổi là placeholder dạng `"Buổi 1"`,
+`"Buổi 2"` — mà hàm thật `meaningful()` **loại** chúng
+(`session-project-name.ts:42`: *"Ô TRỐNG mang hình dạng tiêu đề: `"Buổi 7"` và không gì
+khác"*). Chúng **không hề che** FK; UI vẫn in `lesson.title`.
+
+Vì E đếm quá tay và **mọi** buổi đều có `customTitle`, E = 687 và **mọi lớp bị đánh dấu
+lệch** — kể cả 9 lớp có B = 0.
+
+## 2c.D Trả lời 3 câu (chưa code)
+
+### (a) Đổi `"Buổi N"` sang `plan.order`, giữ hạng-theo-ngày làm fallback — rủi ro gì?
+
+**Rủi ro 1 — nơi tiêu thụ rất rộng.** `buildSessionNumberMap` được gọi ở **23 file**
+(admin 6, site GV 8, portal 4, lib 5). Đổi ngữ nghĩa của nó là đổi cùng lúc 23 màn.
+
+**Rủi ro 2 — 6 nơi dùng số buổi để SẮP XẾP**, không chỉ để in:
+`sortSessionsForWork` / `compareSessionWorkOrder` (`lib/lms/session-order.ts:…`) được dùng ở
+`teacher/diem-danh`, `teacher/nhan-xet`, `teacher/lop/_components/hub-reviews-tab`,
+`hub-sessions-tab`, `lib/classes/session-feedback-data.ts`. Chúng sắp **tăng dần theo số
+buổi** trong từng nhóm việc.
+⇒ Đổi số buổi sang thứ tự giáo trình là **danh sách việc của giáo viên thôi xếp theo thời
+gian**. Xem (b).
+
+**Rủi ro 3 — lý do gốc của `session-order.ts` vẫn còn hiệu lực cho TƯƠNG LAI.** Docblock
+`:12-14` nói không dùng `plan.seq`/`Lesson.order` vì *"hai cột đó rỗng ở lớp không ghim giáo
+trình và bị SetNull khi dời/huỷ buổi"*. Đo hôm nay: **0 lớp không ghim, 0 buổi mất plan** ⇒
+lý do đó **không còn đúng với dữ liệu hiện tại**, nhưng **vẫn đúng với mã**: nhánh fallback
+của `generate.ts` còn sống, và `planId` vẫn `onDelete: SetNull`.
+
+**Rủi ro 4 — hai buổi cùng số.** DB **không có** `@@unique([classId, seq])` trên
+`ClassSessionPlan`. Hôm nay 0 lớp trùng `order`, nhưng không gì chặn. Hạng-theo-ngày thì
+luôn tự sinh số duy nhất; `plan.order` thì không.
+
+**Chỗ ngầm giả định "Buổi N là thứ tự thời gian":** chính là 6 nơi ở rủi ro 2. Ngoài ra
+**không có màn nào LỌC theo số buổi** (grep `filter|slice|where|<=|>=|take` quanh
+`sessionNumber` → 0 kết quả).
+
+### (b) Nhãn thành "Buổi 43" vào 25/06 — màn nào sắp/lọc theo số buổi sẽ sai?
+
+- **LỌC: không màn nào.** ĐO: không có chỗ nào lọc theo số buổi.
+- **SẮP XẾP: 5 màn + 1 lib** (danh sách ở rủi ro 2). Với Sata6, buổi ngày **25/06** thành
+  **"Buổi 43"** và bị xếp **SAU** buổi ngày **12/09** ("Buổi 19"). Danh sách "việc còn nợ"
+  của giáo viên **thôi theo thứ tự thời gian**.
+
+  Đây là đánh đổi thật, không phải lỗi triển khai: nhãn nói đúng sự thật *(buổi 43 dạy sớm)*
+  nhưng thứ tự làm việc thì giáo viên cần theo **ngày**. **Đề xuất: tách hai khái niệm** —
+  `sortSessionsForWork` sắp theo **ngày**, còn nhãn in theo **plan.order**. Hai thứ vốn là
+  hai câu hỏi khác nhau, `session-order.ts` đang trả lời cả hai bằng một con số.
+
+### (c) Lớp không có plan thì lấy gì làm thứ tự lộ trình?
+
+**Đo trên prod: 0 lớp như vậy.** Nhưng nhánh sinh buổi không-plan còn sống, nên phải trả lời:
+
+1. **Có nguồn:** `lib/classes/generate.ts:193-199` — nhánh fallback **vẫn gán `lessonId`**
+   theo `curriculum.lessons` sắp `order: asc`. Vậy **`Lesson.order` qua `lessonId` là nguồn
+   thứ tự hợp lệ** cho lớp không plan.
+2. **Không có nguồn:** khi `lessonId` **cũng** null (buổi thêm tay không chọn bài, hoặc bị
+   `SetNull`). Lúc đó **KHÔNG CÓ nguồn thứ tự lộ trình nào** — nói thẳng như vậy. Chỉ còn
+   hạng-theo-ngày, và nó **không phải** thứ tự lộ trình, chỉ là thứ tự thời gian.
+
+⇒ Thang fallback đề xuất: `plan.order + 1` → `Lesson.order` → hạng-theo-ngày (và khi rơi
+xuống nấc cuối thì **nhãn phải nói rõ đó là số theo lịch**, đừng để người đọc tưởng là số
+bài).
+
+---
+
+# Bước 3 — THIẾT KẾ BẢN VÁ (chưa code, chưa ghi gì)
+
+Trạng thái: **đề xuất, chờ chủ dự án duyệt.** Không sửa file mã sản phẩm, không migration.
+Mọi số dưới đây **ĐO trên prod** bằng script chỉ-đọc.
+
+## 3.0 Việc 1 — đo lại nhóm 41 sau khi gỡ tiền tố `HPn - `
+
+Dùng **hàm thật** `meaningfulSessionTitle` (export ở `session-project-name.ts:115`) cho
+**cả hai vế** — nó làm đúng việc cần: `clean()` + coi `"Buổi N"` là rỗng + cắt tiền tố
+`"Buổi N —"` + **gỡ `"HPn - "`**.
+
+| | trước (chỉ trim+lower) | **sau (gỡ tiền tố)** |
+|---|---|---|
+| placeholder — `meaningful()` loại | 502 | **502** |
+| trùng bài giáo trình CỦA LỚP | 144 | **153** |
+| trùng bài giáo trình KHÁC | 0 | **3** |
+| KHÔNG trùng bài nào | 41 | **29** |
+
+**29 chuỗi còn sót ⇒ 10 TÊN PHÂN BIỆT**, 9 tên lặp **đúng 3 lần** (một lần / mỗi lớp Sata3),
+1 tên lặp 2 lần. Toàn bộ nằm ở `CS1.SATA3.26.001`, `CS1.SATA3.26.002`, `CS2.SATA3.26.001`.
+
+> ### Kết luận Q4
+> **`customTitle` là 100 % chuỗi MÁY CHÉP. Không có bằng chứng nào cho "giáo viên tự đặt".**
+> Không ai gõ tay trùng khít 10 tên qua 3 lớp. 29 chuỗi này là giáo trình Sata3 **cũ**, mà
+> các `Lesson` của bản cũ đó **không còn trong DB** (nên không khớp được bài nào).
+>
+> ⇒ **Q4 giải quyết trọn ở tầng HIỂN THỊ, không cần ghi một dòng nào.**
+>
+> ⚠️ Đây là "0 bằng chứng", không phải "không thể xảy ra": mai có giáo viên gõ tay một tiêu
+> đề là nhóm này khác ngay. Nên thiết kế vẫn **không được XOÁ** `customTitle`.
+
+### Số thật sự quan trọng: chỉ 32 buổi bị ảnh hưởng
+
+Đếm buổi mà tên hiển thị **thực sự khác** `lesson.title` (sau chuẩn hoá; bỏ placeholder và
+bỏ nhóm trùng-chữ):
+
+```
+buổi hiện tên KHÁC lesson.title:  32   (không phải 687)
+  trong đó ĐÃ DẠY:               26
+  CHƯA DIỄN RA:                   6
+số lớp:                            3   (CS1.SATA3.26.001/.002, CS2.SATA3.26.001)
+```
+
+**153 buổi "trùng bài của lớp" hiển thị ĐÚNG CÙNG CHỮ** với `lesson.title`, nên dù
+`customTitle` thắng thì người dùng **không thấy khác gì**. Vấn đề tên bài **không phải 687
+buổi, mà là 32 buổi ở 3 lớp**.
+
+---
+
+## 3.1 Phản biện đề xuất "đảo ưu tiên theo trạng thái"
+
+Đề xuất của chủ dự án: buổi **đã dạy** → giữ `customTitle`; buổi **chưa diễn ra** →
+`lesson.title` thắng.
+
+**Nó đúng mục tiêu Q3.** Nhưng ba điều nên cân nhắc trước khi làm:
+
+**(1) Tên sẽ ĐỔI DƯỚI CHÂN NGƯỜI DÙNG.** Ngay khi giáo viên điểm danh buổi đó, tên hiển thị
+**lật** từ `lesson.title` sang `customTitle`. Nặng hơn: với luật **mốc nước cao**, điểm danh
+buổi 20 làm **buổi 1..19 cùng lật một lượt**. Một cái tên tự đổi khi ai đó bấm điểm danh là
+thứ khó giải thích với giáo viên, và nó **ngược đúng tinh thần Q3** ("ghi nhận sự thật thì
+phải ổn định").
+
+**(2) Quy mô không xứng với chi phí.** Việc này thêm một nhánh **phụ thuộc trạng thái** vào
+hàm hiển thị đang có **22 nơi tiêu thụ** — để sửa **đúng 6 buổi** (số buổi chưa diễn ra đang
+hiện tên cũ). Sáu buổi, ba lớp, một khoá.
+
+**(3) Tiền đề của Q3 yếu hơn ta tưởng.** Q3 nói *"buổi đã dạy là ghi nhận sự thật"*. Nhưng
+`customTitle` **không phải** ghi nhận của con người — nó là ảnh chụp của một giáo trình cũ do
+máy chép (đo ở 3.0). Không có cột nào lưu "giáo viên thật sự đã dạy bài gì". Nên cả
+`customTitle` lẫn `lesson.title` **đều không phải sự thật lịch sử**; ta đang chọn giữa hai
+phỏng đoán.
+
+### Ba phương án, xếp theo mức tôi khuyến nghị
+
+| | Phương án | Ghi dữ liệu | 26 buổi đã dạy | 6 buổi chưa dạy | Nhận xét |
+|---|---|---|---|---|---|
+| **A ⭐** | **Đợt 1 KHÔNG đụng ưu tiên tên.** Chỉ sửa SỐ BUỔI. Ba lớp Sata3 giao **Đào tạo** sửa `customTitle` bằng màn quản trị (dữ liệu của họ, họ quyết) | 0 | giữ nguyên ✔ | Đào tạo sửa | Ít máy móc nhất; đúng người quyết nội dung; **sửa được cả 26 lẫn 6** nếu Đào tạo muốn |
+| B | Đảo ưu tiên **theo trạng thái** (đề xuất của anh) | 0 | giữ nguyên ✔ | tự đúng | Sửa được 6; đổi tên lúc điểm danh (điểm 1) |
+| C | **Đóng băng lúc chốt buổi**: khi buổi chuyển COMPLETED, chép tên đang hiển thị vào một cột trên `ClassSession`; hiển thị = cột đóng băng → `lesson.title` | **CÓ** (1 ghi/buổi + backfill 47 buổi) | đóng băng thật ✔ | tự đúng | Sạch nhất về khái niệm, nhưng phải ghi dữ liệu ⇒ Đợt 2 |
+
+**Khuyến nghị: A cho Đợt 1** (0 rủi ro, 0 ghi), và nếu sau này muốn "đã dạy = đóng băng" là
+tính chất của hệ thống chứ không phải quy ước hiển thị thì làm **C ở Đợt 2**.
+
+Nếu anh vẫn chọn **B**, tôi làm được — chỉ xin ghi rõ trong mã rằng tên lật khi có dấu vết
+đầu tiên, kèm số đo 6/26 để người sau biết đánh đổi.
+
+---
+
+## 3.2 ĐỢT 1 — thuần hiển thị, **0 dòng dữ liệu bị ghi**
+
+### 3.2.1 Tách hai khái niệm trong `lib/lms/session-order.ts`
+
+Gốc của lỗi: **một con số trả lời hai câu hỏi khác nhau.** Tách làm hai hàm, đặt tên theo lối
+tiếng Việt của repo:
+
+```ts
+/** Thứ tự LỘ TRÌNH — dùng để IN NHÃN. plan.order + 1 → Lesson.order → null. */
+export function soBuoiTheoLoTrinh(row): number | null
+
+/** Thứ tự THỜI GIAN — dùng để SẮP XẾP và làm nấc cuối của nhãn. Hạng theo ngày. */
+export function soBuoiTheoLich(rows): Map<string, number>   // = buildSessionNumberMap, đổi tên
+
+/** Nhãn: có số lộ trình thì in thẳng; không thì in số lịch và NÓI RÕ đó là số theo lịch. */
+export function nhanSoBuoi(loTrinh: number|null, lich: number|null): string
+```
+
+**Thang fallback của nhãn** (chốt ở Bước 2c):
+`plan.order + 1` → `Lesson.order` → hạng-theo-ngày *(và ở nấc này nhãn phải nói rõ là **số
+theo lịch**, đừng để người đọc tưởng là số bài)*.
+
+**Vì sao giữ `buildSessionNumberMap` chứ không xoá:** 22 nơi đang gọi nó. Đổi tên + giữ một
+`export` cũ trỏ sang tên mới trong một đợt, rồi mới dọn — tránh đổi 22 file trong một PR.
+
+### 3.2.2 Bảng ĐỦ 22 nơi tiêu thụ — nơi nào cần số nào
+
+Phân loại bằng cách đếm lời gọi hàm nhãn (`deriveSessionLabel` / `sessionNumberLabel` /
+`deriveSessionProjectName`) và hàm sắp (`sortSessionsForWork` / `compareSessionWorkOrder`).
+
+| # | Nơi | nhãn | sắp | Cần |
+|---|---|---|---|---|
+| 1 | `admin/attendance/page.tsx` | 3 | 0 | **LỘ TRÌNH** |
+| 2 | `admin/classes/[id]/edit/page.tsx` | 0 | 0 | **cần xem tay** — dựng `sessionNumberOf` rồi truyền xuống form |
+| 3 | `admin/classes/[id]/page.tsx` | 0 | 0 | **cần xem tay** — docblock cảnh báo về `take` |
+| 4 | `admin/duyet-media/page.tsx` | 2 | 0 | **LỘ TRÌNH** |
+| 5 | `admin/media/actions.ts` | 3 | 0 | **LỘ TRÌNH** |
+| 6 | `admin/sessions/[id]/page.tsx` | 2 | 0 | **LỘ TRÌNH** |
+| 7 | `teacher/anh-lop/page.tsx` | 3 | 0 | **LỘ TRÌNH** |
+| 8 | `teacher/diem-danh/page.tsx` | 3 | **3** | **CẢ HAI** — nhãn lộ trình, sắp theo lịch |
+| 9 | `teacher/hoc-vien/page.tsx` | 7 | 0 | **LỘ TRÌNH** |
+| 10 | `teacher/lop/page.tsx` | 2 | 0 | **LỘ TRÌNH** |
+| 11 | `teacher/lop/_components/hub-reviews-tab.tsx` | 6 | **3** | **CẢ HAI** |
+| 12 | `teacher/lop/_components/hub-sessions-tab.tsx` | 3 | **3** | **CẢ HAI** |
+| 13 | `teacher/nhan-xet/page.tsx` | 3 | **2** | **CẢ HAI** |
+| 14 | `teacher/nhan-xet/pdf/[sessionId]/[studentId]/route.ts` | 2 | 0 | **LỘ TRÌNH** — PDF gửi phụ huynh |
+| 15 | `lib/classes/session-feedback-data.ts` | 0 | **2** | **LỊCH** (thuần sắp xếp) |
+| 16 | `lib/lms/attendance-queue.ts` | 0 | 0 | **LỊCH** — có `number` + `time` để phá hoà ⇒ đang sắp xếp |
+| 17 | `lib/media-review/tree.ts` | 2 | 0 | **LỘ TRÌNH** |
+| 18 | `lib/portal/buoi-hoc.ts` | 5 | 0 | **LỘ TRÌNH** — cổng phụ huynh |
+| 19 | `lib/portal/feedback.ts` | 0 | 0 | **cần xem tay** — trả thẳng map ra ngoài |
+| 20 | `lib/portal/photos.ts` | 0 | 0 | **cần xem tay** |
+| 21 | `lib/portal/student-assignments.ts` | 0 | 0 | **cần xem tay** |
+| 22 | `lib/lms/session-project-name.ts` | — | — | nơi dựng nhãn: nhận số từ caller |
+
+**Tóm tắt:** 11 nơi cần **lộ trình** · 2 nơi cần **lịch** · 4 nơi cần **cả hai** · **5 nơi
+phải đọc tay** trước khi phân loại (2, 3, 19, 20, 21) — chúng chỉ chuyền map đi tiếp nên
+không suy được từ lời gọi.
+
+⚠️ **Không tự phân loại 5 nơi đó bằng suy đoán.** Đó là việc đầu tiên của đợt code.
+
+### 3.2.3 Sáu nơi SẮP XẾP phải chuyển sang sắp theo NGÀY
+
+`sortSessionsForWork` / `compareSessionWorkOrder` hiện sắp theo **số buổi**. Sau khi tách,
+chúng phải nhận **số theo lịch**, không phải nhãn mới. Nếu quên: với `CS2.SATA6.26.001`,
+buổi **25/06** mang nhãn "Buổi 43" sẽ bị xếp **SAU** buổi **12/09** ("Buổi 19") — danh sách
+việc còn nợ của giáo viên thôi theo thứ tự thời gian.
+
+Nơi phải sửa: `teacher/diem-danh`, `teacher/nhan-xet`, `hub-reviews-tab`, `hub-sessions-tab`,
+`lib/classes/session-feedback-data.ts`, `lib/lms/attendance-queue.ts`.
+
+### 3.2.4 Ưu tiên tên bài
+
+Theo khuyến nghị **A** ở 3.1: **Đợt 1 KHÔNG đụng** `deriveSessionTitle`. Ba lớp Sata3 xử lý
+bằng dữ liệu, do Đào tạo quyết.
+
+*(Nếu chủ dự án chọn B thì thêm tham số trạng thái vào `deriveSessionTitle` — nhưng đó là
+đổi chữ ký của hàm 22 nơi dùng, cân nhắc kỹ.)*
+
+### 3.2.5 Viết lại docblock `session-order.ts:12-14`
+
+Câu hiện tại: *"Không lấy `ClassSessionPlan.seq` / `Lesson.order` làm nguồn: hai cột đó rỗng
+ở lớp không ghim giáo trình và bị SetNull khi dời/huỷ buổi"*.
+
+**Nay sai với DỮ LIỆU, vẫn đúng với MÃ.** Đo prod 08/09: **0 lớp không ghim · 687/687 buổi có
+`planId` · 0 lớp `order` trùng · 0 lớp `order` hổng**. Nhưng nhánh fallback của
+`generate.ts:169-199` còn sống và `planId` vẫn `onDelete: SetNull`.
+
+Viết lại theo hướng: *"`plan.order` là nguồn ĐÚNG cho số lộ trình (đo 08/09: phủ 100 % prod).
+Vẫn phải có fallback vì hai đường vẫn đẻ ra buổi không plan: nhánh không-ghim của
+`generate.ts` và `onDelete: SetNull` của `planId`. Hạng-theo-ngày là số THỜI GIAN, không phải
+số lộ trình — đừng dùng nó làm nhãn khi còn nguồn tốt hơn."*
+
+### 3.2.6 Ba câu bắt buộc cho Đợt 1
+
+| | |
+|---|---|
+| **Ảnh hưởng 47 buổi đã dạy?** | **KHÔNG.** Đợt 1 không ghi một dòng dữ liệu nào; chỉ đổi cách đọc. Tên bài của 26 buổi đã dạy đang hiện tên cũ **giữ nguyên** (phương án A). Nhãn SỐ của chúng có đổi (từ số-theo-ngày sang số-lộ-trình) — **đó chính là bản vá**, và nó là hiển thị chứ không phải ghi nhận. |
+| **Kiểm chứng sau khi vá** | (1) Test thuần cho `soBuoiTheoLoTrinh` + thang fallback (3 nấc + ca không có nguồn nào). (2) Test thuần: `sortSessionsForWork` vẫn sắp theo NGÀY khi nhãn đổi — ca `CS2.SATA6.26.001` (buổi 25/06 nhãn 43) phải đứng TRƯỚC buổi 12/09. (3) Chạy lại `scripts/ra-soat-lech-bai-hoc.ts` trên prod: **B phải về 0** trong khi mọi cột khác không đổi. |
+| **Quay lui** | `git revert` PR. **0 dữ liệu bị đụng nên quay lui là tuyệt đối** — không có bước khôi phục nào. |
+
+---
+
+## 3.3 ĐỢT 2 — chống tái phát (có migration, additive)
+
+### 3.3.1 `@@unique([classId, order])` trên `ClassSessionPlan`
+
+**Xác nhận trước khi viết (ĐO 08/09):** `lớp order TRÙNG: 0` / 16 lớp; `lớp order HỔNG: 0`.
+⇒ **thêm được ngay**, migration không cần dọn dữ liệu.
+
+⚠️ **Phải đo lại NGAY TRƯỚC khi chạy migration** — số này chụp ngày 08/09; giữa lúc duyệt và
+lúc chạy có thể có lớp mới.
+
+| | |
+|---|---|
+| **Ảnh hưởng 47 buổi đã dạy?** | **KHÔNG** — chỉ thêm ràng buộc, không sửa dòng nào. |
+| **Kiểm chứng** | Chạy lại đoạn đo `order TRÙNG` → vẫn 0. Thêm test: tạo 2 plan cùng `(classId, order)` phải bị DB từ chối. |
+| **Quay lui** | `DROP INDEX` — an toàn, không mất dữ liệu. |
+| **Rủi ro** | Đường ghi nào đang tạo plan trùng `order` sẽ **bắt đầu ném lỗi**. Phải rà `createSessionPlansForClass` + `adoptCurriculumVersion` trước. |
+
+### 3.3.2 Nhánh `generate.ts:169-199` tạo buổi KHÔNG có plan
+
+**Đề xuất: BỔ SUNG plan, không chặn.** Lý do: chặn là làm hỏng đường tạo lớp cho khoá chưa
+ghim giáo trình — một nghiệp vụ hợp lệ. Thay vào đó, trước khi sinh buổi thì gọi
+`createSessionPlansForClass` (đã có sẵn, idempotent) để lớp luôn có plan; nhánh không-plan
+chỉ còn là lưới cho lớp **không có giáo trình nào**.
+
+| | |
+|---|---|
+| **Ảnh hưởng 47 buổi đã dạy?** | **KHÔNG** — chỉ áp cho lớp tạo MỚI sau khi vá. |
+| **Kiểm chứng** | Test: tạo lớp không ghim → sinh buổi → mọi buổi phải có `planId`. Đo lại prod: `buổi KHÔNG có planId` vẫn 0. |
+| **Quay lui** | `git revert`; lớp đã có plan thì giữ plan (vô hại). |
+
+### 3.3.3 `planId onDelete: SetNull`
+
+**Rủi ro hiện tại:** xoá một `ClassSessionPlan` là mọi buổi trỏ nó **mất `planId` trong im
+lặng** ⇒ tụt xuống fallback, nhãn đổi mà không ai biết.
+
+**Ba hướng, kèm rủi ro:**
+
+| Hướng | Được | Mất |
+|---|---|---|
+| **Giữ `SetNull`** (không đổi) | không rủi ro triển khai | lỗi vẫn im lặng |
+| **Đổi sang `Restrict`** | không thể xoá plan khi còn buổi trỏ | **có thể chặn một đường xoá đang chạy** — phải rà `adoptCurriculumVersion` (nó `update` planId, có xoá plan cũ không?) trước khi đổi |
+| **Giữ `SetNull` + cảnh báo** | không rủi ro | thêm việc giám sát |
+
+**Đề xuất: chưa đổi vội.** Trước hết **đo** xem có đường nào đang xoá `ClassSessionPlan`
+không; nếu **không có đường xoá nào** thì `Restrict` là thay đổi không rủi ro. **CHƯA ĐO** —
+đây là việc đầu tiên của Đợt 2.
+
+---
+
+## 3.4 Việc CHƯA làm / CHƯA đo
+
+- **5 nơi tiêu thụ chưa phân loại được** (mục 3.2.2: #2, #3, #19, #20, #21) — phải đọc tay.
+- **Đường xoá `ClassSessionPlan`** — chưa đo, cần cho 3.3.3.
+- **Ba lớp Sata3**: ai sửa `customTitle`, sửa thế nào — việc của Đào tạo, cần chủ dự án giao.
+- Tất cả những thứ trên **không chặn Đợt 1**.
