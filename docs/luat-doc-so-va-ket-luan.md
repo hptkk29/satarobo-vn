@@ -299,3 +299,38 @@ truyền là bàn giao lead trên **mọi cơ sở**. Mặc định của scope 
 | `classes/generate.ts:33` | `onlyIfEmpty ?? true` | quên ⇒ **không** ghi đè lịch đã có |
 
 Khác biệt nằm ở **hướng của giá trị mặc định**, không ở việc có mặc định hay không.
+
+---
+
+## Luật 8 — test canh lỗi chỉ được tin sau khi CẤY LẠI lỗi và thấy nó ĐỎ
+
+> **Test xanh không chứng minh gì.**
+> Xanh có thể nghĩa là "lỗi không còn", cũng có thể nghĩa là "test không chạm tới lỗi".
+> Hai thứ đó nhìn từ ngoài giống hệt nhau.
+
+Quy trình bắt buộc cho MỌI test viết ra để canh một lỗi cụ thể:
+
+1. viết test, chạy → **xanh**;
+2. **cấy lại chính lỗi đó** vào mã (một dòng, `cp` file ra `/tmp` trước);
+3. chạy lại → **phải ĐỎ, và đỏ ĐÚNG ca mình nhắm**;
+4. khôi phục, chạy lại → xanh;
+5. **ghi cả bốn bước vào commit** — người sau không chạy lại được bước 2.
+
+Đỏ ở ca khác cũng là tín hiệu: test đang canh thứ khác với thứ mình nghĩ.
+
+> **Sự cố sinh ra luật (08/09/2026).** Bộ test DB viết để canh lỗi
+> `update: base` (nhập nhân sự ghi đè trọn hồ sơ) chạy **xanh 15/15 trong khi lỗi vẫn
+> nằm nguyên trong mã**. Fixture dựng `giaTri` từ CHÍNH hàng cũ (`{ ...truoc }`), nên
+> "ghi đè trọn hồ sơ" ghi lại đúng giá trị cũ — không có gì đổi để mà phát hiện.
+> Chỉ bước 2 lộ ra điều đó. Sửa fixture theo hình dạng thật (luật 4) rồi cấy lại lỗi →
+> đỏ đúng ca.
+
+### Vì sao không dựa vào việc nhớ
+
+Cùng ngày, quy trình này bắt được hai thứ ở hai chỗ khác nhau — cầu dao hoàn tiền và ca
+trên — và **bỏ sót một lần** cho tới khi chạy bước 2. Một quy trình chỉ chạy khi người
+làm nhớ ra thì nó không phải quy trình.
+
+**Liên hệ với các luật khác:** đây là luật 6 (*cổng im lặng tệ hơn không có cổng*) áp cho
+chính bộ test. Một test không bao giờ đỏ được là một cổng luôn cho qua — cùng họ với
+`photoDone` không bao giờ true, và nhãn "Hoàn tất" suy ra.
