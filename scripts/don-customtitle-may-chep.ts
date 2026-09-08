@@ -50,9 +50,28 @@ const maLop = (process.argv.find((a) => a.startsWith("--lop=")) ?? "")
   .map((s) => s.trim())
   .filter(Boolean);
 
+/**
+ * Quét MỌI lớp có plan.
+ *
+ * Vì sao cần: phạm vi "3 lớp Sata3" chỉ chạm 144/960 dòng, tức chỉ nhóm đang HỎNG hôm nay.
+ * 345 dòng ở 7 lớp khác đang "trùng `Lesson.title`" — vô hại đúng tới lúc Đào tạo đổi tên
+ * một bài, rồi lập tức thành tên cũ, đúng ca Sata3 lặp lại. Vá gốc chỉ bảo vệ lớp MỚI.
+ *
+ * ⚠️ Cờ này KHÔNG nới cổng 2 — nó vẫn phải in ra DANH SÁCH LỚP sẽ chạm và vẫn phải có
+ * `--apply` mới ghi. Nó chỉ thay việc gõ 22 mã lớp bằng tay, chứ không thêm chế độ ngầm.
+ */
+const TAT_CA = process.argv.includes("--tat-ca");
+
+/**
+ * Nơi ghi bản sao giá trị cũ. Mặc định nằm dưới `var/` — thư mục đã `.gitignore`.
+ *
+ * ⚠️ Dump là **nội dung thật của khách hàng**, không được lọt vào repo. `docs/` KHÔNG bị
+ * ignore nên script từ chối ghi vào đó (xem `kiemDuongDump`); CSV bàn giao thì được, vì nó
+ * chỉ có 2 dòng đã rà tay.
+ */
 const duongDump =
   (process.argv.find((a) => a.startsWith("--dump=")) ?? "").slice("--dump=".length) ||
-  `docs/ban-giao/dump-customtitle-truoc-khi-don.json`;
+  `var/customtitle/dump-truoc-khi-don.json`;
 
 /** Xuất CSV nhóm người-gõ để bàn giao Đào tạo. Chạy được ở cả dry-run. */
 const duongCsvNguoiGo = (
@@ -66,12 +85,32 @@ const chuoi = APPLY
 const db = new PrismaClient({ datasources: { db: { url: chuoi } } });
 const norm = (s: string | null | undefined) => meaningfulSessionTitle(s).trim().toLowerCase();
 
+/**
+ * Mô tả chuỗi kết nối để người vận hành ĐỐI CHIẾU trước khi gõ `--apply` — **che mật khẩu**.
+ * In ra host + cổng + tên database + user, đủ để phân biệt prod với dev mà không lộ gì.
+ */
+function moTaDich(url: string): string {
+  if (!url) return "(TRỐNG — sẽ lỗi)";
+  try {
+    const u = new URL(url);
+    return `${u.username}@${u.hostname}:${u.port || "5432"}${u.pathname} (mật khẩu đã che)`;
+  } catch {
+    return "(chuỗi không đọc được)";
+  }
+}
+
 async function main() {
-  // ── CỔNG 2: không có danh sách lớp thì dừng hẳn.
-  if (maLop.length === 0) {
+  // ── CỔNG 2: phải nói rõ chạm lớp nào. Không --lop và không --tat-ca thì dừng hẳn.
+  if (maLop.length === 0 && !TAT_CA) {
     console.error(
-      "DỪNG: thiếu --lop=<mã lớp>[,<mã lớp>…]. Script cố ý KHÔNG có chế độ chạy tất cả.",
+      "DỪNG: thiếu --lop=<mã lớp>[,<mã lớp>…] hoặc --tat-ca.\n" +
+        "Script cố ý KHÔNG có phạm vi mặc định — một lần lỡ tay là mất cả bảng.",
     );
+    process.exitCode = 1;
+    return;
+  }
+  if (maLop.length > 0 && TAT_CA) {
+    console.error("DỪNG: truyền CẢ --lop và --tat-ca thì không rõ ý. Chọn một.");
     process.exitCode = 1;
     return;
   }
@@ -81,9 +120,17 @@ async function main() {
     return;
   }
 
+  // `--tat-ca` = mọi lớp CÓ plan, không phải mọi lớp — lớp không plan thì không có gì để dọn.
+  const idCoPlan = TAT_CA
+    ? (await db.classSessionPlan.findMany({ distinct: ["classId"], select: { classId: true } })).map(
+        (r) => r.classId,
+      )
+    : [];
+
   const classes = await db.class.findMany({
-    where: { classCode: { in: maLop } },
-    select: { id: true, classCode: true, name: true },
+    where: TAT_CA ? { id: { in: idCoPlan } } : { classCode: { in: maLop } },
+    orderBy: { classCode: "asc" },
+    select: { id: true, classCode: true, name: true, status: true, deletedAt: true },
   });
   const thieu = maLop.filter((m) => !classes.some((c) => c.classCode === m));
   if (thieu.length) console.error(`⚠️  không thấy lớp: ${thieu.join(", ")}`);
@@ -92,6 +139,17 @@ async function main() {
     return;
   }
   const C = new Map(classes.map((c) => [c.id, c.classCode ?? c.name]));
+
+  // ── CỔNG 2 (vế hai): --tat-ca vẫn phải BÀY RA từng lớp sẽ chạm, không giấu sau một chữ.
+  if (TAT_CA) {
+    console.log(`--tat-ca → ${classes.length} lớp CÓ plan sẽ bị chạm:`);
+    for (const c of classes) {
+      console.log(
+        `   ${(c.classCode ?? c.name).padEnd(30)} ${c.status ?? ""}${c.deletedAt ? "  [ĐÃ XOÁ]" : ""}`,
+      );
+    }
+    console.log("");
+  }
 
   const plans = await db.classSessionPlan.findMany({
     where: { classId: { in: classes.map((c) => c.id) } },
@@ -136,7 +194,8 @@ async function main() {
   }
 
   console.log(`Chế độ            : ${APPLY ? "⚠️  APPLY (SẼ GHI)" : "dry-run (không ghi)"}`);
-  console.log(`Lớp               : ${classes.map((c) => C.get(c.id)).join(", ")}`);
+  console.log(`Đích              : ${moTaDich(chuoi)}`);
+  console.log(`Lớp               : ${classes.length} lớp`);
   console.log(`Plan trong phạm vi: ${plans.length}`);
   console.log(`\nSẼ DỌN (customTitle → NULL): ${canDon.length}`);
   console.log(`   ô trống "Buổi N"      : ${nhom.oTrong}`);
@@ -153,6 +212,29 @@ async function main() {
   if (nhom.tenCu > 0) {
     console.log(`\n— mẫu nhóm "tên giáo trình CŨ" (tối đa 40):`);
     for (const m of mauTenCu) console.log(`   ${m}`);
+  }
+
+  // Bảng theo lớp — để người duyệt thấy phân bố, không chỉ một con số tổng.
+  const theoLop = new Map<string, { oTrong: number; trung: number; tenCu: number; giu: number }>();
+  for (const p of plans) {
+    const k = C.get(p.classId) ?? p.classId;
+    const r = theoLop.get(k) ?? { oTrong: 0, trung: 0, tenCu: 0, giu: 0 };
+    if (idNguoiGo.has(p.id)) r.giu++;
+    else if (p.customTitle !== null) {
+      const a = norm(p.customTitle);
+      const b = norm(p.lessonId ? L.get(p.lessonId) : null);
+      if (!a) r.oTrong++;
+      else if (a === b) r.trung++;
+      else r.tenCu++;
+    }
+    theoLop.set(k, r);
+  }
+  console.log(`\n── theo lớp (ô trống / trùng / tên CŨ / GIỮ):`);
+  for (const [k, r] of [...theoLop.entries()].sort()) {
+    console.log(
+      `   ${k.padEnd(30)} ${String(r.oTrong).padStart(3)} / ${String(r.trung).padStart(3)} / ` +
+        `${String(r.tenCu).padStart(3)} / ${String(r.giu).padStart(2)}`,
+    );
   }
 
   // Bàn giao Đào tạo: nhóm người-gõ, để họ xác nhận trước khi ai đó dọn nốt.
@@ -188,6 +270,16 @@ async function main() {
   }
 
   // ── CỔNG 3: dump TRƯỚC khi ghi. Dump hỏng thì không ghi.
+  // Chặn ghi dữ liệu prod vào chỗ git theo dõi được — `docs/` không nằm trong .gitignore.
+  const tuongDoi = duongDump.replace(/\\/g, "/");
+  if (/^docs\//.test(tuongDoi) || /^(app|lib|components|prisma|scripts|tests)\//.test(tuongDoi)) {
+    console.error(
+      `DỪNG: dump là dữ liệu thật của khách hàng, không ghi vào "${tuongDoi}" — git theo dõi thư mục đó.\n` +
+        `Dùng var/… (đã .gitignore) hoặc một đường tuyệt đối ngoài repo.`,
+    );
+    process.exitCode = 1;
+    return;
+  }
   const duong = resolve(duongDump);
   mkdirSync(dirname(duong), { recursive: true });
   writeFileSync(
