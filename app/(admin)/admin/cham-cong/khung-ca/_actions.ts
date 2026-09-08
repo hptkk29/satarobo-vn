@@ -19,6 +19,7 @@ import { chanSuaKyDaChot } from "@/lib/cham-cong/ky-gac";
 import {
   KHUNG_CA_EFFECTIVE_FROM,
   chiaLoThem,
+  thuTuTheoNguoi,
   type KetQuaThemHangLoat,
 } from "@/lib/cham-cong/khung-ca";
 import { vnDateOnly } from "@/lib/time/vn";
@@ -220,6 +221,67 @@ export async function addPeopleToBlockAction(
 
   revalidatePath("/cham-cong/khung-ca");
   return { ok: true, data: lo };
+}
+
+const thuTuSchema = z.object({
+  centerId: z.string().min(1),
+  /** Thứ tự hiển thị mong muốn của CẢ khối, từ trên xuống. */
+  userIds: z.array(z.string().min(1)).min(1).max(500),
+});
+
+/**
+ * Ghi thứ tự hiển thị của một khối.
+ *
+ * ⚠️ Ghi **cùng một `displayOrder` cho CẢ CỤM 7 dòng** của một người — vì thế là
+ * `updateMany` trên `(userId, centerId, effectiveFrom)`, không phải `update` từng dòng.
+ *
+ * Vì sao nó quan trọng: `khung-ca/page.tsx` sắp theo `displayOrder` **rồi mới** gom theo
+ * `userId`. Cụm có 7 số khác nhau thì vị trí hàng do dòng nào tình cờ đứng trước quyết
+ * định, và có thể đổi giữa hai lần tải trang. Nguồn lệch có thật: `import-core.ts:218`
+ * ghi `displayOrder: row.stt` theo từng DÒNG của file.
+ *
+ * Không đổi hạt bảng, không migration — cột đã có sẵn.
+ */
+export async function reorderBlockAction(
+  input: unknown,
+): Promise<Res<{ soNguoi: number }>> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  const p = thuTuSchema.safeParse(input);
+  if (!p.success) return { ok: false, error: "Thứ tự không hợp lệ" };
+  const { centerId, userIds } = p.data;
+  // `scopedDb` KHÔNG che WRITE — cổng quyền tự đứng ở đây.
+  if (!(await checkPermission("hr_attendance:assign", { centerId })))
+    return { ok: false, error: "Không có quyền xếp khung ca ở khối này" };
+
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const thuTu = thuTuTheoNguoi(userIds);
+
+  await sdb.$transaction(
+    [...thuTu].map(([userId, displayOrder]) =>
+      sdb.shiftWeeklyPattern.updateMany({
+        // KHÔNG lọc `weekday` — cả cụm phải mang cùng một số.
+        // KHÔNG lọc `effectiveTo` — người vừa bị gỡ mà thêm lại phải về đúng chỗ cũ,
+        // và một cụm nửa mở nửa đóng cũng không được để lại hai số.
+        where: { userId, centerId, effectiveFrom: DEFAULT_EFFECTIVE_FROM },
+        data: { displayOrder },
+      }),
+    ),
+  );
+
+  await writeAudit({
+    actor: { id: session.user.id, name: session.user.name ?? "" },
+    module: "hr_attendance",
+    entityType: "ShiftWeeklyPattern",
+    entityId: centerId,
+    action: "PATTERN_REORDER",
+    newValues: { centerId, thuTu: userIds },
+    reason: "Sắp lại thứ tự hiển thị của khung ca tuần",
+  });
+
+  revalidatePath("/cham-cong/khung-ca");
+  return { ok: true, data: { soNguoi: thuTu.size } };
 }
 
 const goSchema = z.object({

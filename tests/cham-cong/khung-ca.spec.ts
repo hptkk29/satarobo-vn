@@ -238,4 +238,76 @@ d("khung ca tuần — gỡ mềm bằng effectiveTo", () => {
     });
     expect(count).toBe(0);
   });
+
+  // ── (c) THỨ TỰ — cả cụm 7 dòng phải mang CÙNG một `displayOrder` ──────────
+  //
+  // Đây là ca KHOÁ bất biến mà CSDL không giữ hộ: `@@unique` không chứa `displayOrder`,
+  // và `import-core.ts:218` ghi `displayOrder: row.stt` theo từng DÒNG của file — nên
+  // một người xuất hiện hai vị trí trong file là hai số khác nhau, im lặng.
+  it("ghi thứ tự = updateMany CẢ CỤM ⇒ 7 dòng cùng một số, mỗi khối một dãy riêng", async () => {
+    // Dựng lệch có chủ đích trước, để ca không xanh sẵn.
+    await db.shiftWeeklyPattern.update({
+      where: {
+        userId_centerId_weekday_effectiveFrom: {
+          userId,
+          centerId: cs1,
+          weekday: 3,
+          effectiveFrom: KHUNG_CA_EFFECTIVE_FROM,
+        },
+      },
+      data: { displayOrder: 99 },
+    });
+    const lechTruoc = await db.shiftWeeklyPattern.findMany({
+      where: { userId, centerId: cs1, effectiveFrom: KHUNG_CA_EFFECTIVE_FROM },
+      select: { displayOrder: true },
+    });
+    expect(new Set(lechTruoc.map((r) => r.displayOrder)).size).toBe(2); // đang lệch thật
+
+    // Đúng câu lệnh mà `reorderBlockAction` chạy: KHÔNG lọc weekday, KHÔNG lọc effectiveTo.
+    const { count } = await db.shiftWeeklyPattern.updateMany({
+      where: { userId, centerId: cs1, effectiveFrom: KHUNG_CA_EFFECTIVE_FROM },
+      data: { displayOrder: 0 },
+    });
+    expect(count).toBe(7);
+
+    const sau = await db.shiftWeeklyPattern.findMany({
+      where: { userId, centerId: cs1, effectiveFrom: KHUNG_CA_EFFECTIVE_FROM },
+      select: { displayOrder: true },
+    });
+    expect(
+      new Set(sau.map((r) => r.displayOrder)),
+      "7 dòng của một người phải mang CÙNG một displayOrder",
+    ).toEqual(new Set([0]));
+  });
+
+  it("sắp thứ tự ở khối này KHÔNG đụng khối kia", async () => {
+    await db.shiftWeeklyPattern.updateMany({
+      where: { userId, centerId: cs2, effectiveFrom: KHUNG_CA_EFFECTIVE_FROM },
+      data: { displayOrder: 5 },
+    });
+    const a = await db.shiftWeeklyPattern.findMany({
+      where: { userId, centerId: cs1, effectiveFrom: KHUNG_CA_EFFECTIVE_FROM },
+      select: { displayOrder: true },
+    });
+    expect(new Set(a.map((r) => r.displayOrder))).toEqual(new Set([0]));
+  });
+
+  it("cụm nửa mở nửa đóng vẫn nhận CÙNG một số — không lọc effectiveTo khi ghi", async () => {
+    // Người vừa bị gỡ mà thêm lại phải về đúng chỗ cũ; lọc `effectiveTo: null` lúc ghi
+    // là để lại hai số trong cùng cụm.
+    await db.shiftWeeklyPattern.updateMany({
+      where: { userId, centerId: cs1, weekday: { in: [2, 3] } },
+      data: { effectiveTo: HOM_NAY },
+    });
+    await db.shiftWeeklyPattern.updateMany({
+      where: { userId, centerId: cs1, effectiveFrom: KHUNG_CA_EFFECTIVE_FROM },
+      data: { displayOrder: 4 },
+    });
+    const a = await db.shiftWeeklyPattern.findMany({
+      where: { userId, centerId: cs1, effectiveFrom: KHUNG_CA_EFFECTIVE_FROM },
+      select: { displayOrder: true, effectiveTo: true },
+    });
+    expect(a.filter((r) => r.effectiveTo !== null)).toHaveLength(2); // nền đúng là nửa-nửa
+    expect(new Set(a.map((r) => r.displayOrder))).toEqual(new Set([4]));
+  });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { chiaLoThem, conTrongKhoi } from "./khung-ca";
+import { chiaLoThem, conTrongKhoi, doiCho, thuTuTheoNguoi } from "./khung-ca";
 
 const MO = { effectiveTo: null };
 const DONG = { effectiveTo: new Date(Date.UTC(2026, 8, 8)) };
@@ -79,5 +79,57 @@ describe("chiaLoThem — thêm hàng loạt phải idempotent", () => {
       hoiSinh: [],
       boQua: [],
     });
+  });
+});
+
+describe("thuTuTheoNguoi — một số cho một NGƯỜI", () => {
+  it("số tăng dần từ 0 theo thứ tự hiển thị", () => {
+    expect([...thuTuTheoNguoi(["a", "b", "c"])]).toEqual([
+      ["a", 0],
+      ["b", 1],
+      ["c", 2],
+    ]);
+  });
+
+  it("người trùng chỉ lấy lần đầu — đầu vào là thứ tự, không phải tập hợp", () => {
+    // Nếu không chặn, "a" nhận hai số và đường ghi `updateMany` chạy hai lần trên cùng
+    // cụm — số cuối cùng thắng, tức thứ tự người dùng thấy không phải thứ tự họ kéo.
+    expect([...thuTuTheoNguoi(["a", "b", "a"])]).toEqual([
+      ["a", 0],
+      ["b", 1],
+    ]);
+  });
+
+  it("rỗng ⇒ map rỗng", () => {
+    expect(thuTuTheoNguoi([]).size).toBe(0);
+  });
+});
+
+describe("doiCho — lên/xuống một bậc", () => {
+  const ds = ["a", "b", "c"];
+
+  it("xuống: đổi chỗ với người ngay sau", () => {
+    expect(doiCho(ds, "a", "xuong")).toEqual(["b", "a", "c"]);
+  });
+
+  it("lên: đổi chỗ với người ngay trước", () => {
+    expect(doiCho(ds, "c", "len")).toEqual(["a", "c", "b"]);
+  });
+
+  it("ở rìa ⇒ trả nguyên thứ tự, KHÔNG ném", () => {
+    // Nút ở rìa đã bị vô hiệu trên màn, nhưng hàm không được phụ thuộc vào điều đó.
+    expect(doiCho(ds, "a", "len")).toEqual(ds);
+    expect(doiCho(ds, "c", "xuong")).toEqual(ds);
+  });
+
+  it("không có trong danh sách ⇒ trả nguyên thứ tự", () => {
+    expect(doiCho(ds, "z", "len")).toEqual(ds);
+  });
+
+  it("trả mảng MỚI, không sửa mảng gốc", () => {
+    const goc = ["a", "b"];
+    const ra = doiCho(goc, "a", "xuong");
+    expect(goc).toEqual(["a", "b"]);
+    expect(ra).not.toBe(goc);
   });
 });

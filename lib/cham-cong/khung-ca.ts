@@ -99,3 +99,54 @@ export function chiaLoThem(
   }
   return kq;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// (c) SẮP THỨ TỰ — `displayOrder` là của NGƯỜI, không phải của DÒNG
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// `displayOrder` nằm trên TỪNG dòng (7 dòng một người) nhưng mang nghĩa "hàng này đứng
+// thứ mấy trong khối". Không có ràng buộc CSDL nào giữ 7 số ấy bằng nhau.
+//
+// Vì sao lệch là hỏng THẬT chứ không chỉ xấu: `khung-ca/page.tsx` sắp `patterns` theo
+// `displayOrder` **rồi mới** gom theo `userId`. Người nào có 7 số khác nhau thì vị trí
+// hàng của họ do dòng nào tình cờ đứng trước quyết định — và thứ tự đó có thể đổi giữa
+// hai lần tải trang. Người xếp lịch kéo thứ tự xong, tải lại, thấy khác.
+//
+// Nguồn lệch có thật: `import-core.ts:218` ghi `displayOrder: row.stt` cho từng dòng theo
+// FILE, nên một người xuất hiện ở hai vị trí trong file là hai số khác nhau.
+//
+// KHÔNG đổi hạt bảng, KHÔNG migration: cột đã có sẵn. Luật là "ghi cùng một giá trị cho
+// cả cụm", và đường ghi phải dùng `updateMany` trên (userId, centerId, effectiveFrom).
+
+/**
+ * Từ thứ tự người → `displayOrder` cho từng người.
+ *
+ * Trả về **một số cho một người**, không phải cho một dòng. Người trùng trong danh sách
+ * chỉ lấy lần xuất hiện đầu — đầu vào là thứ tự hiển thị, không phải tập hợp.
+ */
+export function thuTuTheoNguoi(thuTu: readonly string[]): Map<string, number> {
+  const m = new Map<string, number>();
+  let i = 0;
+  for (const u of thuTu) if (!m.has(u)) m.set(u, i++);
+  return m;
+}
+
+/**
+ * Đổi chỗ một người lên/xuống một bậc.
+ *
+ * Trả về mảng MỚI. Ngoài rìa (đã ở đầu mà bấm lên) thì trả bản sao nguyên vẹn chứ không
+ * ném — nút ở rìa đã bị vô hiệu trên màn, nhưng hàm không được phụ thuộc vào điều đó.
+ */
+export function doiCho(
+  thuTu: readonly string[],
+  userId: string,
+  huong: "len" | "xuong",
+): string[] {
+  const i = thuTu.indexOf(userId);
+  if (i < 0) return [...thuTu];
+  const j = huong === "len" ? i - 1 : i + 1;
+  if (j < 0 || j >= thuTu.length) return [...thuTu];
+  const ra = [...thuTu];
+  [ra[i], ra[j]] = [ra[j]!, ra[i]!];
+  return ra;
+}

@@ -16,10 +16,11 @@
 //    nên nhánh "Chọn kèm lý do…" ở đây là hứa suông.
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarRange, UserMinus } from "lucide-react";
+import { ArrowDown, ArrowUp, CalendarRange, UserMinus } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
+import { doiCho } from "@/lib/cham-cong/khung-ca";
 import { adminTd, adminTh, adminTr } from "@/components/admin/ui/table";
 import { EmptyState } from "@/components/admin/ui/states";
 import { BTN_OUTLINE, PILL } from "@/components/admin/cham-cong/classes";
@@ -31,6 +32,7 @@ import {
 import { ShiftCodeChip } from "@/components/cham-cong/ui/shift-code-chip";
 import {
   removePersonFromBlockAction,
+  reorderBlockAction,
   savePatternCellAction,
 } from "../_actions";
 import { BulkAddDialog, type Candidate } from "./bulk-add-dialog";
@@ -153,6 +155,30 @@ export function PatternGrid({
           ? `${person.name}: ${WD_FULL[weekday]} → ca ${code}`
           : `${person.name}: bỏ ca ${WD_FULL[weekday]}`,
       );
+      router.refresh();
+    });
+  }
+
+  function doiThuTu(
+    block: PatternBlock,
+    person: PatternPerson,
+    huong: "len" | "xuong",
+  ) {
+    const hienTai = block.people.map((x) => x.userId);
+    const moi = doiCho(hienTai, person.userId, huong);
+    // Ngoài rìa: `doiCho` trả bản sao nguyên vẹn. Đừng gửi lượt ghi vô nghĩa.
+    if (moi.join("|") === hienTai.join("|")) return;
+    setBusy(`sap:${block.centerId}`);
+    start(async () => {
+      const r = await reorderBlockAction({
+        centerId: block.centerId,
+        userIds: moi,
+      });
+      setBusy(null);
+      if (!r.ok) {
+        toast.error(r.error);
+        return;
+      }
       router.refresh();
     });
   }
@@ -286,14 +312,16 @@ export function PatternGrid({
                           scope="col"
                           className={cn(adminTh, "px-2 py-2 text-right")}
                         >
-                          <span className="sr-only">Gỡ khỏi khung ca</span>
+                          <span className="sr-only">
+                            Sắp thứ tự và gỡ khỏi khung ca
+                          </span>
                         </th>
                       )}
                     </tr>
                   </thead>
 
                   <tbody>
-                    {b.people.map((p) => (
+                    {b.people.map((p, iNguoi) => (
                       <tr key={p.userId} className={adminTr}>
                         <td
                           className={cn(adminTd, "px-3 py-1.5 font-medium")}
@@ -387,11 +415,36 @@ export function PatternGrid({
 
                         {b.canAssign && (
                           <td className={cn(adminTd, "px-2 py-1.5 text-right")}>
+                            {/* Lên/xuống thay vì kéo–thả: kéo–thả cần thư viện mới (phải
+                                hỏi trước), và trên bảng cuộn ngang thì nó khó dùng hơn
+                                hai nút. Nút ở rìa bị vô hiệu để không sinh lượt ghi rỗng. */}
+                            <button
+                              type="button"
+                              className={cn(BTN_OUTLINE, "px-2")}
+                              disabled={pending || iNguoi === 0}
+                              onClick={() => doiThuTu(b, p, "len")}
+                              title={`Đưa ${p.name} lên một bậc`}
+                            >
+                              <ArrowUp aria-hidden className="h-4 w-4" />
+                              <span className="sr-only">Lên một bậc</span>
+                            </button>
+                            <button
+                              type="button"
+                              className={cn(BTN_OUTLINE, "ml-1 px-2")}
+                              disabled={
+                                pending || iNguoi === b.people.length - 1
+                              }
+                              onClick={() => doiThuTu(b, p, "xuong")}
+                              title={`Đưa ${p.name} xuống một bậc`}
+                            >
+                              <ArrowDown aria-hidden className="h-4 w-4" />
+                              <span className="sr-only">Xuống một bậc</span>
+                            </button>
                             <button
                               type="button"
                               className={cn(
                                 BTN_OUTLINE,
-                                "whitespace-nowrap",
+                                "ml-1 whitespace-nowrap",
                                 xacNhanGo === `${b.centerId}|${p.userId}` &&
                                   "border-state-danger text-state-danger-ink",
                               )}
