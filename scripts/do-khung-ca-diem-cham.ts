@@ -367,6 +367,123 @@ async function main() {
     );
   }
 
+  // ── V5 — XUẤT bảng nhân sự (việc 4b + việc 5) ──────────────────────────────
+  //
+  // Hai mục đích trong MỘT lượt đọc:
+  //   4b — 10 người chưa gán cơ sở, đủ cột importer nhận, để dán vào Excel;
+  //   5  — TOÀN BỘ mã NV để đối chiếu với bảng của Nhân sự.
+  //
+  // ⚠️ CỐ Ý BỎ `nationalId` và `dateOfBirth`: log Actions đọc được, và sau bản vá
+  // 7f9e0348 thì cột VẮNG trong file nhập KHÔNG bị ghi đè — nên bỏ hai cột đó khỏi bản
+  // xuất không mất gì, mà giữ chúng lại là đưa giấy tờ tuỳ thân vào log CI.
+  //
+  // ⚠️ `centerSlug` để TRỐNG cho người chưa gán — đó là cột cần điền. Với người đã có
+  // cơ sở thì in slug thật để bản xuất tự mô tả đúng hiện trạng.
+  const slugTheoId = new Map(centers.map((c) => [c.id, c.slug]));
+  const COT_XUAT = [
+    "employeeCode",
+    "fullName",
+    "jobTitle",
+    "department",
+    "status",
+    "centerSlug",
+    "phone",
+    "email",
+    "contractType",
+    "joinedAt",
+    "endDate",
+    "address",
+    "subjects",
+    "certifications",
+    "bio",
+    "emergencyContact",
+    "notes",
+  ] as const;
+  const nsXuat = await db.employee.findMany({
+    select: {
+      employeeCode: true,
+      fullName: true,
+      jobTitle: true,
+      department: true,
+      status: true,
+      centerId: true,
+      phone: true,
+      email: true,
+      contractType: true,
+      joinedAt: true,
+      endDate: true,
+      address: true,
+      subjects: true,
+      certifications: true,
+      bio: true,
+      emergencyContact: true,
+      notes: true,
+    },
+    orderBy: { employeeCode: "asc" },
+  });
+  /** Dấu phân cách TSV. Viết tường minh — ký tự tab trong chuỗi là thứ vô hình khi đọc. */
+  const TAB = String.fromCharCode(9);
+  const oNgay = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : "");
+  // Ký tự tab / xuống dòng trong dữ liệu sẽ phá cấu trúc TSV — thay bằng khoảng trắng.
+  const KY_TU_PHA_TSV = new RegExp(
+    "[" + String.fromCharCode(9, 13, 10) + "]+",
+    "g",
+  );
+  const oChuoi = (v: unknown) =>
+    v == null
+      ? ""
+      : Array.isArray(v)
+        ? v.join(", ")
+        : String(v).replace(KY_TU_PHA_TSV, " ");
+  const hang = (e: (typeof nsXuat)[number]) =>
+    [
+      e.employeeCode,
+      e.fullName,
+      e.jobTitle,
+      String(e.department),
+      String(e.status),
+      e.centerId ? (slugTheoId.get(e.centerId) ?? "") : "",
+      oChuoi(e.phone),
+      oChuoi(e.email),
+      oChuoi(e.contractType),
+      oNgay(e.joinedAt),
+      oNgay(e.endDate),
+      oChuoi(e.address),
+      oChuoi(e.subjects),
+      oChuoi(e.certifications),
+      oChuoi(e.bio),
+      oChuoi(e.emergencyContact),
+      oChuoi(e.notes),
+    ].join(TAB);
+
+  tieuDe(
+    "══ V5a (việc 4b) — TSV dán thẳng vào Excel: 10 người CHƯA gán cơ sở ══",
+  );
+  console.log(
+    "  (bỏ nationalId + dateOfBirth khỏi bản xuất — cột vắng KHÔNG bị ghi đè)",
+  );
+  console.log("");
+  console.log(COT_XUAT.join(TAB));
+  for (const e of nsXuat.filter(
+    (x) => x.centerId == null && String(x.status) === "ACTIVE",
+  )) {
+    console.log(hang(e));
+  }
+
+  tieuDe("══ V5b (việc 5) — TOÀN BỘ nhân sự để đối chiếu bảng Nhân sự ══");
+  dong("Tổng hồ sơ", nsXuat.length);
+  console.log(
+    `    ${"MÃ NV".padEnd(12)} ${"TRẠNG THÁI".padEnd(11)} ${"CƠ SỞ".padEnd(24)} ${"BỘ PHẬN".padEnd(16)} ${"CHỨC DANH".padEnd(26)} HỌ TÊN`,
+  );
+  for (const e of nsXuat) {
+    const cs = e.centerId
+      ? (slugTheoId.get(e.centerId) ?? e.centerId)
+      : "(chưa gán)";
+    console.log(
+      `    ${e.employeeCode.padEnd(12)} ${String(e.status).padEnd(11)} ${cs.padEnd(24)} ${String(e.department).padEnd(16)} ${e.jobTitle.padEnd(26)} ${e.fullName}`,
+    );
+  }
+
   // ── V2.4 — lượt quét thật: nơi quét vs nơi trực thuộc ──
   const logs = await db.staffTimeLog.findMany({
     select: { centerId: true, result: true, flags: true, userId: true },
