@@ -50,6 +50,56 @@ export const ANH_XA_COT: Readonly<Record<string, readonly string[]>> = {
  * `coMat`. Trả object RỖNG nghĩa là file không có cột nào để ghi ⇒ caller đừng gọi
  * `update`, vì `update` với data rỗng vẫn đụng `updatedAt`.
  */
+/**
+ * Những cột THỰC SỰ có mặt trong file, theo nghĩa của màn nhập:
+ * **ô để trống là GIỮ NGUYÊN, không phải xoá.**
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * CA SINH RA HÀM NÀY — sự cố PROD 08/09/2026
+ *
+ * Một file 9 cột (`centerSlug, dateOfBirth, department, employeeCode, endDate,
+ * fullName, jobTitle, joinedAt, status`) trong đó ba cột ngày ĐỂ TRỐNG đã XOÁ TRẮNG
+ * `dateOfBirth`/`joinedAt`/`endDate` trên 9 hồ sơ. Mất thật: ngày sinh của SR.NV.001 và
+ * SR.NV.010, và `endDate = 2030-12-31` của SR.NV.001.
+ *
+ * Chuỗi ba mắt:
+ *   1. `ExcelImporter` đọc sheet với `{ defval: null }` ⇒ ô trống thành `null`,
+ *      KHÔNG phải vắng mặt;
+ *   2. màn nhập cho ba cột ngày đi thẳng (`row.joinedAt as …`) trong khi mọi cột khác
+ *      qua `asString()` — hàm trả `undefined`, và `JSON.stringify` rụng `undefined`
+ *      nhưng GIỮ `null`;
+ *   3. route dựng `coMat` bằng `Object.keys(row)` — `null` là key có mặt.
+ *
+ * Mắt 2 giải thích vì sao ĐÚNG ba cột ngày chết còn `department`/`status`/`email` để
+ * trống thì không: chúng rụng khỏi payload từ trước. Đối chứng có thật trong audit prod
+ * cùng ngày — một lượt nhập có 6 cột trống kiểu đó chỉ đổi mỗi `phone`.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * VÌ SAO CỔNG ĐẶT Ở ĐÂY, KHÔNG PHẢI Ở MÀN NHẬP
+ *
+ * Vá mắt 2 chỉ chữa một client. Route là nơi GHI, nên nó phải tự định nghĩa "có cột" —
+ * và định nghĩa đó phải trùng câu đang in trên màn: ô trống = giữ nguyên.
+ *
+ * Cổng theo GIÁ TRỊ nên nó kín cho MỌI HỌ CỘT, không riêng ngày: enum (`status`,
+ * `gender`, `contractType`), quan hệ (`centerSlug`, `managerCode`), JSON
+ * (`subjects`, `certifications`), chuỗi. Vá riêng ba cột ngày là để y nguyên cái bẫy
+ * cho cột thứ tư ai đó thêm sau.
+ *
+ * ⚠️ Hệ quả có chủ đích: **không có cách nào XOÁ một trường qua file nhập.** Đó là
+ * chiều an toàn đã chọn, và màn nhập nói thẳng ra — muốn xoá thì sửa ở màn hồ sơ.
+ */
+export function cotCoMat(row: Readonly<Record<string, unknown>>): Set<string> {
+  const co = new Set<string>();
+  for (const [k, v] of Object.entries(row)) {
+    // `null` (ô trống qua `defval: null`) · `undefined` · chuỗi rỗng hoặc chỉ khoảng
+    // trắng ⇒ KHÔNG tính là có cột.
+    if (v === null || v === undefined) continue;
+    if (typeof v === "string" && v.trim() === "") continue;
+    co.add(k);
+  }
+  return co;
+}
+
 export function dungPatchNhanSu(
   giaTri: Readonly<Record<string, unknown>>,
   coMat: ReadonlySet<string>,

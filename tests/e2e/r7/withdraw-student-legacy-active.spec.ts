@@ -25,13 +25,16 @@
  *  W2 — sau khi gỡ, roster buổi học không còn em đó.
  *  W3 — bộ trạng thái dọn được PHỦ ĐÚNG bộ mà roster lớp coi là "đang trong lớp".
  *  W4 — convert lead sinh ra ghi danh ACTIVE (khoá lại giả định nền của bug này).
- *  W5 — ghi danh ACTIVE ĐÃ THU TIỀN vẫn sinh yêu cầu hoàn tiền (hệ quả bị mất lúc hỏng).
+ *  W5 — ghi danh ACTIVE ĐÃ THU TIỀN: việc gỡ khỏi lớp phải XONG, còn phần tiền thì theo
+ *       cầu dao `REFUND_REQUEST_DISABLED` (bám hằng, không chốt cứng — gỡ cầu dao là ca
+ *       tự đổi chiều).
  *  W6 — cùng gốc bệnh: BẢO LƯU cũng phải nhận ghi danh ACTIVE (trước đây báo
  *       "Chỉ có thể bảo lưu lớp đang STUDYING" nên đa số học viên thật không bảo lưu được).
  */
 import { test, expect } from "@playwright/test";
 import type { Prisma } from "@prisma/client";
 import { db } from "../../../lib/db";
+import { REFUND_REQUEST_DISABLED } from "../../../lib/finance/cau-dao-hoan-tien";
 import { resetDb } from "../_helpers/seed";
 import { buildActor } from "../../../lib/auth/actor";
 import { buildSessionAttendanceRows } from "../../../lib/attendance/roster";
@@ -45,13 +48,23 @@ let seq = 0;
 const uniq = () => `${Date.now().toString(36)}-${seq++}`;
 
 const plainActor = () =>
-  buildActor({ userId: `u-${uniq()}`, rows: [], orgNodes: [], assignedClassIds: [] });
+  buildActor({
+    userId: `u-${uniq()}`,
+    rows: [],
+    orgNodes: [],
+    assignedClassIds: [],
+  });
 
 /** Dựng lớp + 1 học viên, ghi danh KHÔNG truyền status → nhận default của schema. */
 async function seedConvertedStudent() {
   const code = `CS-${uniq()}`;
   const center = await db.center.create({
-    data: { code, name: `Cơ sở ${code}`, slug: `cs-${code.toLowerCase()}`, address: "x" },
+    data: {
+      code,
+      name: `Cơ sở ${code}`,
+      slug: `cs-${code.toLowerCase()}`,
+      address: "x",
+    },
   });
   const course = await db.course.create({
     data: { name: `Sata ${uniq()}`, slug: `sata-${uniq()}`, price: 4_000_000 },
@@ -73,7 +86,11 @@ async function seedConvertedStudent() {
     },
   });
   const session = await db.classSession.create({
-    data: { classId: cls.id, date: new Date("2026-08-01"), centerId: center.id },
+    data: {
+      classId: cls.id,
+      date: new Date("2026-08-01"),
+      centerId: center.id,
+    },
   });
   return { center, course, cls, student, enr, session };
 }
@@ -86,7 +103,10 @@ async function seedConvertedStudent() {
 async function withdrawLikeAction(studentId: string, centerId: string | null) {
   return db.$transaction(async (txRaw) => {
     const tx = txRaw as unknown as Prisma.TransactionClient;
-    await tx.student.update({ where: { id: studentId }, data: { status: "INACTIVE" } });
+    await tx.student.update({
+      where: { id: studentId },
+      data: { status: "INACTIVE" },
+    });
     return withdrawStudentFromAllClasses({
       tx,
       studentId,
@@ -118,7 +138,10 @@ test.describe("[BUG-2108] Nghỉ học phải gỡ khỏi lớp — kể cả gh
     const removed = await withdrawLikeAction(student.id, center.id);
 
     expect(removed).toHaveLength(1);
-    expect(removed[0]).toMatchObject({ fromStatus: "ACTIVE", toStatus: "WITHDREW" });
+    expect(removed[0]).toMatchObject({
+      fromStatus: "ACTIVE",
+      toStatus: "WITHDREW",
+    });
 
     const after = await db.enrollment.findUnique({
       where: { id: enr.id },
@@ -129,9 +152,14 @@ test.describe("[BUG-2108] Nghỉ học phải gỡ khỏi lớp — kể cả gh
     expect(after?.deletedAt).toBeNull();
     expect(after?.finalPrice).toBe(4_000_000);
 
-    const audit = await db.enrollmentAuditLog.findMany({ where: { enrollmentId: enr.id } });
+    const audit = await db.enrollmentAuditLog.findMany({
+      where: { enrollmentId: enr.id },
+    });
     expect(audit).toHaveLength(1);
-    expect(audit[0]).toMatchObject({ fromStatus: "ACTIVE", toStatus: "WITHDREW" });
+    expect(audit[0]).toMatchObject({
+      fromStatus: "ACTIVE",
+      toStatus: "WITHDREW",
+    });
   });
 
   test("[W2] sau khi nghỉ học, roster buổi học không còn em đó", async () => {
@@ -146,7 +174,7 @@ test.describe("[BUG-2108] Nghỉ học phải gỡ khỏi lớp — kể cả gh
     expect(after.rows.map((r) => r.studentId)).not.toContain(student.id);
   });
 
-  test("[W5] ghi danh ACTIVE đã thu tiền vẫn sinh yêu cầu hoàn tiền", async () => {
+  test("[W5] ghi danh ACTIVE đã thu tiền: gỡ khỏi lớp XONG, tiền theo cầu dao", async () => {
     const { student, enr, cls, center } = await seedConvertedStudent();
     // Có buổi CHƯA học + khoản đã thu xác nhận → computeRefund ra số dương.
     const order = await db.order.create({
@@ -182,10 +210,57 @@ test.describe("[BUG-2108] Nghỉ học phải gỡ khỏi lớp — kể cả gh
 
     await withdrawLikeAction(student.id, center.id);
 
-    const refunds = await db.refundRequest.findMany({ where: { enrollmentId: enr.id } });
-    expect(refunds).toHaveLength(1);
-    expect(refunds[0]).toMatchObject({ trigger: "WITHDRAW", status: "PENDING" });
-    expect(refunds[0].proposedAmount).toBeGreaterThan(0);
+    const refunds = await db.refundRequest.findMany({
+      where: { enrollmentId: enr.id },
+    });
+
+    // ── Ca này BÁM THEO hằng cầu dao, không chốt cứng một chiều ───────────────
+    //
+    // Từ `fb7f8422` (PR #228) `REFUND_REQUEST_DISABLED = true` chặn TẠO yêu cầu hoàn
+    // tiền cho mọi người, vì `sessionsLearned` đọc theo `ClassSession.status` mà status
+    // đang thiếu 209 buổi đã dạy ⇒ hệ thống đề xuất hoàn tới 100% học phí.
+    //
+    // Ca này khi đó thành ĐỎ và đã đỏ suốt — nhưng R7 không phải cổng bắt buộc nên nó
+    // merge lên main mà không ai bị chặn. Đó là "cổng merge giả": một ca đỏ không ai
+    // đọc thì bằng không có ca.
+    //
+    // Viết bám hằng thay vì chốt cứng, để **gỡ cầu dao là ca tự đổi chiều** — không ai
+    // phải nhớ quay lại sửa test. Hai nhánh dưới đây là HAI hợp đồng khác nhau, và cả
+    // hai đều thật.
+    if (REFUND_REQUEST_DISABLED) {
+      // Hợp đồng khi cầu dao ĐANG TẮT: không đề xuất tiền, NHƯNG việc gỡ vẫn xong.
+      // Đây đúng là lý do `createRefundRequest` trả `null` chứ không ném — ném ở đây là
+      // cuộn ngược cả transaction gỡ học viên, biến "không đề xuất được tiền" thành
+      // "không gỡ được học viên".
+      expect(refunds).toHaveLength(0);
+
+      const conTrongLop = await db.enrollment.findFirst({
+        where: {
+          id: enr.id,
+          status: { in: [...REMOVABLE_ENROLLMENT_STATUSES] },
+          deletedAt: null,
+        },
+      });
+      expect(
+        conTrongLop,
+        "cầu dao KHÔNG được chặn luôn việc gỡ khỏi lớp",
+      ).toBeNull();
+
+      // Và lần chạm phải để lại DẤU — `RefundRequest` đang 0 dòng, nên chính những lần
+      // chạm này là câu trả lời cho "có ai thực sự cần hoàn tiền không".
+      const dauVet = await db.auditLog.findMany({
+        where: { action: "REFUND_REQUEST_BLOCKED", entityId: enr.id },
+      });
+      expect(dauVet.length, "mỗi lần chạm cầu dao phải ghi AuditLog").toBe(1);
+    } else {
+      // Hợp đồng khi cầu dao ĐÃ GỠ — khẳng định gốc của W5, giữ nguyên.
+      expect(refunds).toHaveLength(1);
+      expect(refunds[0]).toMatchObject({
+        trigger: "WITHDRAW",
+        status: "PENDING",
+      });
+      expect(refunds[0].proposedAmount).toBeGreaterThan(0);
+    }
   });
 
   test("[W6] bảo lưu nhận ghi danh ACTIVE, và state machine cho phép ACTIVE→PAUSED", async () => {
@@ -193,7 +268,10 @@ test.describe("[BUG-2108] Nghỉ học phải gỡ khỏi lớp — kể cả gh
     expect(STUDYING_ENROLLMENT_STATUSES).toContain("ACTIVE");
     expect(STUDYING_ENROLLMENT_STATUSES).toContain("STUDYING");
     for (const from of STUDYING_ENROLLMENT_STATUSES) {
-      expect(canTransition(from, "PAUSED"), `${from} → PAUSED phải hợp lệ`).toBe(true);
+      expect(
+        canTransition(from, "PAUSED"),
+        `${from} → PAUSED phải hợp lệ`,
+      ).toBe(true);
     }
 
     // Và ghi danh mặc định (ACTIVE) thật sự lọt bộ lọc "đang học".
@@ -202,7 +280,10 @@ test.describe("[BUG-2108] Nghỉ học phải gỡ khỏi lớp — kể cả gh
       where: { id: enr.id, status: { in: STUDYING_ENROLLMENT_STATUSES } },
       select: { id: true },
     });
-    expect(found, "ghi danh mặc định ACTIVE phải nằm trong bộ đang-học").not.toBeNull();
+    expect(
+      found,
+      "ghi danh mặc định ACTIVE phải nằm trong bộ đang-học",
+    ).not.toBeNull();
   });
 
   test("[W3] bộ trạng thái dọn phủ đúng bộ roster lớp coi là đang trong lớp", async () => {

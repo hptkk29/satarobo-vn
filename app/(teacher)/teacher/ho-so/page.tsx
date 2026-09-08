@@ -37,6 +37,7 @@ import { EmptyState } from "../_components/ui/empty-state";
 import { PageHeader } from "../_components/ui/page-header";
 import { ChangePasswordDialog } from "./_components/change-password-dialog";
 import { initialsOf } from "@/lib/ui/initials";
+import { ngayVaoLamHopLe } from "@/lib/hr/ngay-vao-lam";
 
 export const metadata = { title: "Hồ sơ cá nhân | Giáo viên Sata Robo" };
 
@@ -135,7 +136,9 @@ export default async function TeacherProfilePage() {
             // Trước đây `enrollments: true` trần — đếm CẢ ghi danh đã gỡ mềm, đã
             // nghỉ, đã huỷ và cả "chờ xác nhận", nên sĩ số ở hồ sơ GV luôn cao hơn
             // mọi màn khác. Đây là hình dạng thứ năm của cùng một truy vấn.
-            _count: { select: { enrollments: { where: rosterWhere("dang-hoc") } } },
+            _count: {
+              select: { enrollments: { where: rosterWhere("dang-hoc") } },
+            },
           },
           orderBy: { name: "asc" },
         })
@@ -152,7 +155,11 @@ export default async function TeacherProfilePage() {
   const phone = user.employee?.phone ?? null;
   // Chỉ đổi nhãn "Tham gia hệ thống"→"Ngày vào làm" khi thật sự có joinedAt;
   // nếu chỉ có User.createdAt (chưa có hồ sơ NS) thì giữ nhãn cũ (đừng bịa).
-  const hireDate = user.employee?.joinedAt ?? null;
+  // Cổng `ngayVaoLamHopLe` loại mốc Unix 1970 (NULL bị ghi thành 0 — 13 hồ sơ trên prod
+  // 08/09/2026). Không có cổng thì giáo viên thấy "Ngày vào làm: 01/1970" trong hồ sơ
+  // của chính mình. Rơi về `user.createdAt` với nhãn "Tham gia hệ thống" là câu ĐÚNG:
+  // nó nói thứ hệ thống thật sự biết, thay vì bịa một ngày.
+  const hireDate = ngayVaoLamHopLe(user.employee?.joinedAt);
   const joinLabel = hireDate ? "Ngày vào làm" : "Tham gia hệ thống";
   const joinValue = joinFmt.format(hireDate ?? user.createdAt);
 

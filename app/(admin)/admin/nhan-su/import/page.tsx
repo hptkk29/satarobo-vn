@@ -1,13 +1,41 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { precheckUpsert } from "@/components/admin/import-precheck";
 import {
   ExcelImporter,
   type ImportResult,
 } from "@/components/admin/ExcelImporter";
+
+/** Bản xem trước của một lượt CHẠY THỬ — do route trả về, không tính lại ở client. */
+interface XemTruoc {
+  dryRun: true;
+  errors: { row: number; error: string }[];
+  cotCoTrongFile: string[];
+  thayDoi: {
+    row: number;
+    employeeCode: string;
+    loai: "TAO_MOI" | "CAP_NHAT";
+    cot: { ten: string; truoc: unknown; sau: unknown }[];
+  }[];
+}
+
+/** In một giá trị cho người đọc — `null` là Ô TRỐNG, phải nhìn ra ngay. */
+function inGiaTri(v: unknown): string {
+  if (v === null || v === undefined) return "(trống)";
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  if (typeof v === "string") {
+    // Chuỗi ngày ISO từ JSON — cắt phần giờ cho dễ đọc.
+    if (/^\d{4}-\d{2}-\d{2}T/.test(v)) return v.slice(0, 10);
+    return v === "" ? "(trống)" : v;
+  }
+  if (Array.isArray(v)) return v.length === 0 ? "(rỗng)" : v.join(", ");
+  return String(v);
+}
 
 interface EmployeeImportRow {
   employeeCode: string;
@@ -68,6 +96,24 @@ function asString(v: unknown): string | undefined {
   return undefined;
 }
 
+/**
+ * Ô ngày: giữ nguyên giá trị thật, biến "ô trống" thành `undefined`.
+ *
+ * ⚠️ CA SINH RA HÀM NÀY — sự cố PROD 08/09/2026. Ba cột `dateOfBirth`/`joinedAt`/
+ * `endDate` là ba cột DUY NHẤT trước đây đi thẳng (`row.joinedAt as …`) trong khi mọi
+ * cột khác qua `asString()`. `ExcelImporter` đọc sheet với `{ defval: null }`, và
+ * `JSON.stringify` rụng `undefined` nhưng GIỮ `null` — nên đúng ba cột này lọt vào
+ * payload dưới dạng `null` và bị ghi thành NULL trên 9 hồ sơ thật.
+ *
+ * Cổng CHẶN thật nằm ở `cotCoMat()` phía route (nơi ghi). Hàm này là đối xứng client:
+ * không client nào nên phát ra `null` cho một ô người dùng bỏ trống.
+ */
+function asDate(v: unknown): string | number | Date | undefined {
+  if (v === null || v === undefined) return undefined;
+  if (typeof v === "string" && v.trim() === "") return undefined;
+  return v as string | number | Date;
+}
+
 function looksLikeDate(v: unknown): boolean {
   if (v instanceof Date) return true;
   if (typeof v === "number" && Number.isFinite(v)) return true;
@@ -83,6 +129,51 @@ function looksLikeDate(v: unknown): boolean {
 
 export default function ImportEmployeesPage() {
   const router = useRouter();
+  // ── CHẠY THỬ là mặc định (08/09/2026) ──────────────────────────────────────
+  //
+  // Vì sao: bản vá "ô trống = giữ nguyên" đã một lần được tuyên bố kín rồi vẫn xoá trắng
+  // ba cột ngày trên 9 hồ sơ PROD. Thứ DUY NHẤT phát hiện ra là ảnh chụp trước/sau của
+  // người vận hành. Bước này biến việc chụp đó thành một bước của chính công cụ.
+  const [xemTruoc, setXemTruoc] = useState<XemTruoc | null>(null);
+  const [rowsChoGhi, setRowsChoGhi] = useState<EmployeeImportRow[]>([]);
+  const [dangGhi, setDangGhi] = useState(false);
+  const [ketQuaGhi, setKetQuaGhi] = useState<ImportResult | null>(null);
+  const [loiGhi, setLoiGhi] = useState<string | null>(null);
+
+  const goiApi = async (
+    rows: EmployeeImportRow[],
+    dryRun: boolean,
+  ): Promise<unknown> => {
+    const res = await fetch("/api/admin/import/employees", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(dryRun ? { rows, dryRun: true } : { rows }),
+    });
+    if (!res.ok) {
+      const err = (await res.json().catch(() => ({ error: "Unknown" }))) as {
+        error?: string;
+      };
+      throw new Error(err.error || "Import thất bại");
+    }
+    return res.json();
+  };
+
+  const ghiThat = async () => {
+    setDangGhi(true);
+    setLoiGhi(null);
+    try {
+      // Gửi ĐÚNG mảng rows đã chạy thử — không dựng lại, không lọc thêm. Gửi mảng khác
+      // là bản xem trước không còn nói về lượt ghi này nữa.
+      const kq = (await goiApi(rowsChoGhi, false)) as ImportResult;
+      setKetQuaGhi(kq);
+      setXemTruoc(null);
+      setTimeout(() => router.refresh(), 1000);
+    } catch (err) {
+      setLoiGhi(err instanceof Error ? err.message : "Không rõ lỗi");
+    } finally {
+      setDangGhi(false);
+    }
+  };
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-4">
@@ -191,14 +282,14 @@ export default function ImportEmployeesPage() {
             status,
             phone: asString(row.phone),
             email,
-            dateOfBirth: row.dateOfBirth as string | number | Date | undefined,
+            dateOfBirth: asDate(row.dateOfBirth),
             gender,
             nationalId: asString(row.nationalId),
             contractType,
             centerSlug: asString(row.centerSlug),
             managerCode: asString(row.managerCode),
-            joinedAt: row.joinedAt as string | number | Date | undefined,
-            endDate: row.endDate as string | number | Date | undefined,
+            joinedAt: asDate(row.joinedAt),
+            endDate: asDate(row.endDate),
             address: asString(row.address),
             subjects: asString(row.subjects),
             certifications: asString(row.certifications),
@@ -208,24 +299,153 @@ export default function ImportEmployeesPage() {
           };
         }}
         onImport={async (rows) => {
-          const res = await fetch("/api/admin/import/employees", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ rows }),
-          });
-          if (!res.ok) {
-            const err = (await res
-              .json()
-              .catch(() => ({ error: "Unknown" }))) as {
-              error?: string;
-            };
-            throw new Error(err.error || "Import thất bại");
-          }
-          const result = (await res.json()) as ImportResult;
-          setTimeout(() => router.refresh(), 1000);
-          return result;
+          // Bấm "Import" ở đây KHÔNG ghi — nó chạy thử. Ghi thật là nút riêng bên dưới.
+          const kq = (await goiApi(rows, true)) as XemTruoc;
+          setXemTruoc(kq);
+          setRowsChoGhi(rows);
+          setKetQuaGhi(null);
+          setLoiGhi(null);
+          return {
+            success: 0,
+            // Tiền tố "ℹ️" = thông báo vô hại, không đếm vào ô "Lỗi" (xem `ImportOutcome`).
+            errors: [
+              {
+                row: 0,
+                error:
+                  'ℹ️ Đây là CHẠY THỬ — chưa ghi gì vào hệ thống. Xem bảng "Sẽ thay đổi" bên dưới rồi bấm Ghi thật.',
+              },
+              ...(kq.errors ?? []),
+            ],
+          };
         }}
       />
+
+      {/* ── CHẠY THỬ: sẽ đổi cột nào của ai, trước → sau (08/09/2026) ────────── */}
+      {xemTruoc && (
+        <div className="mt-4 rounded-xl border-2 border-state-warning-ink/40 bg-state-warning-soft/40 p-4">
+          <h3 className="text-base font-semibold text-state-warning-ink">
+            Chạy thử — CHƯA ghi gì
+          </h3>
+          <p className="mt-1 text-sm">
+            Cột có trong file:{" "}
+            {xemTruoc.cotCoTrongFile.length === 0 ? (
+              <em>không cột nào ghi được</em>
+            ) : (
+              <code>{xemTruoc.cotCoTrongFile.join(", ")}</code>
+            )}
+            . Cột KHÔNG có trong danh sách này sẽ không bị đụng tới.
+          </p>
+
+          {xemTruoc.thayDoi.every((t) => t.cot.length === 0) ? (
+            <p className="mt-3 text-sm font-medium">
+              Không hồ sơ nào thay đổi. Ghi thật cũng sẽ không đổi gì.
+            </p>
+          ) : (
+            <div className="mt-3 overflow-x-auto rounded-lg border border-border bg-background">
+              <table className="w-full text-sm">
+                <thead className="bg-muted text-left">
+                  <tr>
+                    <th className="px-3 py-2 font-medium">Dòng</th>
+                    <th className="px-3 py-2 font-medium">Mã NV</th>
+                    <th className="px-3 py-2 font-medium">Cột</th>
+                    <th className="px-3 py-2 font-medium">Trước</th>
+                    <th className="px-3 py-2 font-medium">Sau</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {xemTruoc.thayDoi.flatMap((t) =>
+                    t.cot.map((c, j) => {
+                      // MẤT DỮ LIỆU: đang có giá trị, sau khi ghi thành trống.
+                      const mat =
+                        (c.sau === null || c.sau === undefined) &&
+                        c.truoc !== null &&
+                        c.truoc !== undefined;
+                      return (
+                        <tr
+                          key={`${t.row}-${c.ten}`}
+                          className={
+                            mat
+                              ? "border-t border-border bg-state-danger-soft"
+                              : "border-t border-border"
+                          }
+                        >
+                          <td className="px-3 py-1.5">
+                            {j === 0 ? t.row : ""}
+                          </td>
+                          <td className="px-3 py-1.5">
+                            {j === 0 ? (
+                              <>
+                                {t.employeeCode}
+                                {t.loai === "TAO_MOI" && (
+                                  <span className="ml-1 text-xs text-state-info-ink">
+                                    (tạo mới)
+                                  </span>
+                                )}
+                              </>
+                            ) : (
+                              ""
+                            )}
+                          </td>
+                          <td className="px-3 py-1.5 font-mono text-xs">
+                            {c.ten}
+                          </td>
+                          <td className="px-3 py-1.5">{inGiaTri(c.truoc)}</td>
+                          <td
+                            className={
+                              mat
+                                ? "px-3 py-1.5 font-semibold text-state-danger-ink"
+                                : "px-3 py-1.5"
+                            }
+                          >
+                            {inGiaTri(c.sau)}
+                            {mat && " ← MẤT DỮ LIỆU"}
+                          </td>
+                        </tr>
+                      );
+                    }),
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {loiGhi && (
+            <p className="mt-3 text-sm font-medium text-state-danger-ink">
+              Ghi thất bại: {loiGhi}
+            </p>
+          )}
+
+          <div className="mt-4 flex gap-2">
+            <Button onClick={ghiThat} disabled={dangGhi}>
+              {dangGhi ? "Đang ghi…" : "Ghi thật"}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setXemTruoc(null)}
+              disabled={dangGhi}
+            >
+              Huỷ
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {ketQuaGhi && (
+        <div className="mt-4 rounded-xl border border-state-success-ink/30 bg-state-success-soft p-4 text-sm">
+          <p className="font-semibold text-state-success-ink">
+            Đã ghi {ketQuaGhi.success} hồ sơ.
+          </p>
+          {ketQuaGhi.errors.length > 0 && (
+            <ul className="mt-1 list-inside list-disc">
+              {ketQuaGhi.errors.map((e, i) => (
+                <li key={i}>
+                  Dòng {e.row}: {e.error}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {/* Việc 9 (08/09/2026) — cảnh báo phải nằm NGAY TRÊN MÀN, không chỉ trong docs.
           Docs không đến được tay người dán file Excel. Quy ước "ô trống = giữ nguyên"

@@ -538,6 +538,88 @@ async function main() {
     );
   }
 
+  // ── V7 — LƯỢT IMPORT HỎNG 08/09: audit nói chính xác cột nào bị đổi ───────
+  //
+  // Sự cố: file 2 cột (employeeCode + centerSlug) cho 9 người đã XOÁ TRẮNG dateOfBirth,
+  // joinedAt, endDate. `centerId` gán đúng cả 9.
+  //
+  // Việc 8 (audit importer) lên prod cùng #229, nên lượt hỏng ĐÃ tự ghi lại
+  // `changedFields` + old/new. Đây là bằng chứng trực tiếp thay cho suy luận.
+  const auditImport = await db.auditLog.findMany({
+    where: { action: { in: ["IMPORT_UPDATE", "IMPORT_CREATE"] } },
+    select: {
+      action: true,
+      entityId: true,
+      changedFields: true,
+      oldValues: true,
+      newValues: true,
+      reason: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+  });
+  tieuDe("══ V7 — audit của lượt IMPORT (bằng chứng trực tiếp) ══");
+  dong("Số dòng audit IMPORT_*", auditImport.length);
+  if (auditImport.length > 0) {
+    // `reason` ghi DANH SÁCH CỘT có trong file — thứ quyết định patch gồm gì.
+    console.log(
+      `  reason (cột có trong file): ${auditImport[0]?.reason ?? "(trống)"}`,
+    );
+    const dem = new Map<string, number>();
+    for (const a of auditImport) {
+      for (const f of (a.changedFields as string[] | null) ?? []) {
+        dem.set(f, (dem.get(f) ?? 0) + 1);
+      }
+    }
+    console.log("  Cột bị đổi, và bao nhiêu hồ sơ:");
+    for (const [f, n] of [...dem].sort((x, y) => y[1] - x[1])) {
+      console.log(`    ${f.padEnd(20)} ${String(n).padStart(3)} hồ sơ`);
+    }
+    // Gom theo LƯỢT NHẬP (cùng `reason` = cùng file) — 18 dòng nghĩa là >1 lượt,
+    // và mỗi lượt có tập cột riêng.
+    const theoLuot = new Map<string, typeof auditImport>();
+    for (const a of auditImport) {
+      const k = a.reason ?? "(trống)";
+      const arr = theoLuot.get(k);
+      if (arr) arr.push(a);
+      else theoLuot.set(k, [a]);
+    }
+    for (const [reason, rows] of theoLuot) {
+      console.log("");
+      console.log(`  ── LƯỢT: ${reason}`);
+      console.log(
+        `     lúc ${rows[0]?.createdAt.toISOString()} · ${rows.length} hồ sơ`,
+      );
+      const d2 = new Map<string, number>();
+      for (const a of rows)
+        for (const f of (a.changedFields as string[] | null) ?? [])
+          d2.set(f, (d2.get(f) ?? 0) + 1);
+      console.log(
+        `     cột đổi: ${[...d2].map(([f, n]) => `${f}(${n})`).join(", ")}`,
+      );
+      // MẤT DỮ LIỆU = có giá trị cũ, giá trị mới là null.
+      for (const a of rows) {
+        const cu = (a.oldValues ?? {}) as Record<string, unknown>;
+        const moi = (a.newValues ?? {}) as Record<string, unknown>;
+        const mat = Object.keys(moi).filter(
+          (k) => moi[k] === null && cu[k] !== null && cu[k] !== undefined,
+        );
+        if (mat.length > 0)
+          console.log(
+            `     ⚠️ ${a.entityId} MẤT: ${mat.map((k) => `${k}=${JSON.stringify(cu[k])}`).join(" · ")}`,
+          );
+      }
+    }
+  } else {
+    console.log(
+      "  ⚠️ KHÔNG có dòng audit nào — nghĩa là lượt import chạy bằng mã CŨ",
+    );
+    console.log(
+      "     (bản vá chưa kịp deploy khi bấm nhập), chứ không phải patch sai.",
+    );
+  }
+
   // ── V2.4 — lượt quét thật: nơi quét vs nơi trực thuộc ──
   const logs = await db.staffTimeLog.findMany({
     select: { centerId: true, result: true, flags: true, userId: true },
