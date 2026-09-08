@@ -260,6 +260,57 @@ async function main() {
     }
   }
 
+  // ── V3 — NGHỈ VIỆC mà TÀI KHOẢN CÒN SỐNG (08/09/2026) ──────────────────────
+  //
+  // `updateEmployeeAction` nhận `status` (RESIGNED / TERMINATED) nhưng KHÔNG đụng
+  // `User.isActive` và KHÔNG bump `User.tokenVersion`. Repo bump tokenVersion khi ĐỔI
+  // VAI và khi CẤP QUYỀN — nhưng không khi nghỉ việc.
+  //
+  // Hệ quả: người đã nghỉ vẫn đăng nhập được, và JWT cũ (30 ngày) vẫn sống tới hạn.
+  const nghiViec = await db.employee.findMany({
+    where: { status: { in: ["RESIGNED", "TERMINATED"] } },
+    select: {
+      employeeCode: true,
+      fullName: true,
+      status: true,
+      endDate: true,
+      userAccount: {
+        select: {
+          id: true,
+          email: true,
+          isActive: true,
+          deletedAt: true,
+          tokenVersion: true,
+        },
+      },
+    },
+    orderBy: { employeeCode: "asc" },
+  });
+  const conSong = nghiViec.filter(
+    (e) =>
+      e.userAccount != null &&
+      e.userAccount.isActive &&
+      e.userAccount.deletedAt == null,
+  );
+  tieuDe("══ V3 — Employee ĐÃ NGHỈ mà User CÒN ACTIVE ══");
+  dong("Employee RESIGNED / TERMINATED", nghiViec.length);
+  dong(
+    "… trong đó có tài khoản User",
+    nghiViec.filter((e) => e.userAccount != null).length,
+  );
+  dong("🔴 … tài khoản VẪN ĐANG SỐNG", conSong.length);
+  for (const e of conSong) {
+    const het = e.endDate ? e.endDate.toISOString().slice(0, 10) : "(chưa có)";
+    console.log(
+      `    ${e.employeeCode.padEnd(12)} ${String(e.status).padEnd(11)} nghỉ=${het.padEnd(12)} ${e.fullName}`,
+    );
+  }
+  if (conSong.length === 0) {
+    console.log(
+      "  (không có — nhưng đường ghi vẫn hở: xem chú thích trên, luật 1)",
+    );
+  }
+
   // ── V2.4 — lượt quét thật: nơi quét vs nơi trực thuộc ──
   const logs = await db.staffTimeLog.findMany({
     select: { centerId: true, result: true, flags: true, userId: true },
