@@ -1243,3 +1243,176 @@ PROD_READONLY_URL='postgresql://…:5432/postgres' \
 
 Truyền mã lớp làm tham số để chạy lớp khác. **CHƯA CHẠY** — chuỗi chỉ-đọc prod chủ dự án cắm
 tay ở phiên trước đã hết khỏi shell; không đưa secret prod vào repo.
+
+---
+
+# Bước 4 — đóng ca Sata3, đối chiếu nhãn, đối soát nơi tiêu thụ
+
+## 4.1 MỌI đường ghi `customTitle` — và đường nào đã ghi cho 3 lớp Sata3
+
+Quét toàn repo (`app` · `lib` · `components` · `scripts` · `prisma` · migration SQL), rồi kiểm
+lại trên **`origin/main`** chứ không phải nhánh đang đứng.
+
+| # | Đường | Ghi giá trị gì | Còn sống trên `origin/main`? |
+|---|---|---|---|
+| 1 | `lib/classes/snapshot.ts:56` — `createSessionPlansForClass` | `customTitle: l.title` — chép tên bài của giáo trình **tại thời điểm tạo lớp**, cho **toàn bộ** bài | **CÒN**, gọi từ `createClass` (`admin/classes/_actions.ts:557`) |
+| 2 | `lib/classes/snapshot.ts:140` — `adoptCurriculumVersion` | `customTitle: l.title` của giáo trình **MỚI**, chỉ cho plan của buổi chưa COMPLETED | **CÒN**, gọi từ `adoptCurriculumVersionAction` |
+| 3 | `admin/classes/[id]/_curriculum-actions.ts:69` — `updateSessionPlan` | chuỗi giáo vụ **gõ tay** (rỗng thành `null`) | **CÒN**, dùng ở `class-curriculum.tsx` |
+| 4 | `prisma/seed-curriculum-sata.ts:318` | **`customTitle: null`** — đây là đường **DỌN**, không phải đường ghi | **CÒN** |
+| — | migration `20260615130000` | chỉ `ADD COLUMN "customTitle" TEXT` | — |
+
+**Không có đường thứ năm.** Không đường nào khác chạm cột này.
+
+### Đo prod: đường nào để lại dấu vết trên 3 lớp mẫu
+
+```
+CS2.SATA4.26.001  lớp tạo 2026-08-06T10:21:30  ghim v1
+  plan 48 · cụm createdAt 1: 2026-08-06T10:21:30×48
+  SỬA SAU khi tạo (updatedAt lệch >2s): 0
+  customTitle placeholder "Buổi N": 48 (order 0…47)
+  customTitle TÊN THẬT: 0
+  customTitle === Lesson.title hiện hành: 0/48
+
+CS2.SATA6.26.001  lớp tạo 2026-08-06T10:24:45  ghim v1
+  plan 48 · cụm createdAt 1: 2026-08-06T10:24:45×48
+  SỬA SAU khi tạo: 0
+  customTitle placeholder "Buổi N": 48 (order 0…47)
+  customTitle TÊN THẬT: 0
+  customTitle === Lesson.title hiện hành: 0/48
+
+CS1.SATA3.26.001  lớp tạo 2026-08-06T13:33:25  ghim v1
+  plan 48 · cụm createdAt 1: 2026-08-06T13:33:25×48
+  SỬA SAU khi tạo: 0
+  customTitle placeholder "Buổi N": 34 (order 14…47)
+  customTitle TÊN THẬT: 14 (order 0…13)
+  customTitle === Lesson.title hiện hành: 0/48
+```
+
+**Đọc ra:** cả ba lớp có **đúng MỘT cụm `createdAt`** và **0 plan bị sửa sau khi tạo**
+nên toàn bộ `customTitle` do **một lần `createMany`** duy nhất — **đường #1**. Đường #2 và #3
+**chưa từng chạy** trên ba lớp này: nếu #3 chạy thì `updatedAt` phải lệch; nếu #2 chạy thì
+plan phải mang tên của giáo trình mới.
+
+**Ranh giới order 13/14 KHÔNG do hai lần ghi.** Nó là ảnh chụp của **giáo trình lúc 06/08**:
+sáng 06/08 giáo trình Sata4 và Sata6 chưa được đặt tên bài nào (48/48 vẫn `"Buổi N"`); tới
+13:33 cùng ngày, Đào tạo đã đặt tên **14 bài đầu** của Sata3 và chưa đặt 34 bài sau. Lớp Sata3
+tạo lúc đó chụp lại đúng trạng thái nửa vời ấy.
+
+Vậy **đường ghi là #1**, đã xác định. Không phải gán cho "đường gần đúng nhất": ba dấu vết
+(một cụm `createdAt`, `updatedAt` không lệch, giá trị khớp ảnh chụp giáo trình theo giờ)
+chỉ cùng lúc đúng với #1.
+
+### Câu chốt: đường đó CÒN CHẠY ĐƯỢC — Đào tạo sửa tay là chưa đủ
+
+`createSessionPlansForClass` **còn sống nguyên** và chạy trên **mọi lớp mới**. Nó luôn chép
+`customTitle = Lesson.title` của thời điểm đó. Giáo trình đổi tên bài sau là lệch lại.
+
+**Nay giáo trình đã đủ tên thật** (đo: 0 bài `"Buổi N"` trên cả 9 giáo trình prod), nên lớp
+tạo từ giờ chép đúng — nhưng cơ chế đông cứng vẫn còn, nên đây là **bom hẹn giờ**, không phải
+đã tắt.
+
+**Có đường dọn rẻ hơn sửa tay 32 buổi:** `prisma/seed-curriculum-sata.ts` set
+`customTitle: null` cho plan đã nối đúng `lessonId`. `customTitle = null` thì nhãn rơi về
+`lesson.title`, tức **luôn khớp giáo trình hiện hành**. Đo cho thấy `customTitle === Lesson.title`
+là **0/48 ở cả ba lớp**, nên dọn sạch là đúng chứ không mất thông tin nào của con người:
+14 chuỗi "tên thật" kia là tên **giáo trình cũ**, không phải ghi nhận của giáo viên.
+
+⚠️ **Trước khi chạy phải đọc `--dry-run` cho kỹ**: `seed-curriculum-sata.ts:389` tự khai
+*"--dry-run CHỈ che phần --relink. Curriculum + Lesson vẫn được ghi."* Đây là script đã
+từng ghi nhầm lên prod 26/08.
+
+**Đề xuất (chưa làm — chờ chủ dự án quyết):** vá gốc ở đường #1 — `createSessionPlansForClass`
+để `customTitle: null` thay vì chép `l.title`. Chuỗi ưu tiên tên bài đã có `lesson.title` làm
+nấc kế, nên bỏ bản sao đông cứng không mất gì mà tắt hẳn bom. Việc này **thay đổi hành vi tạo
+lớp**, nên tách khỏi PR này.
+
+## 4.2 Đối chiếu nhãn trước–sau (prod, 08/09)
+
+`scripts/doi-chieu-nhan-truoc-sau.ts` — chỉ in buổi ĐỔI nhãn.
+
+| Lớp | Buổi | Đổi nhãn |
+|---|---|---|
+| `CS2.SATA4.26.001` | 48 | **39** |
+| `CS2.SATA6.26.001` | 48 | **47** |
+| `CS1.SATA3.26.001` | 47 | **1** |
+
+Ca tiêu biểu:
+
+```
+2026-06-25  COMPLETED   Buổi 2  - HP4 - Chạy tổng hợp nhiệm vụ  → Buổi 43   (Sata6)
+2026-07-08  COMPLETED   Buổi 7  - HP1 - Ôn tập kiến thức        → Buổi 5    (Sata4)
+2026-07-20  COMPLETED   Buổi 10 - HP2 - Thiết kế lắp ráp robot  → Buổi 15   (Sata4)
+2027-04-07  SCHEDULED   Buổi 48 - HP2 - Lập trình nhiệm vụ 3    → Buổi 18   (Sata4)
+2026-09-05  COMPLETED   Buổi 11 - HP4 - Báo cáo cuối khoá       → Buổi 48   (Sata3)
+```
+
+Dòng Sata3 nói rõ mức vô lý của bản cũ: **"Buổi 11 — Báo cáo cuối khoá"**. Dòng Sata4 cuối
+cùng cũng vậy: buổi **cuối khoá** in "Buổi 48" nhưng thật ra dạy **bài 18**.
+
+## 4.3 Đối soát nơi tiêu thụ — con số CUỐI CÙNG
+
+Các lượt trước đếm lệch nhau (22 → 20 → 17) vì mỗi lượt đếm một thứ khác: lượt đếm **dòng**
+`planTitle`, lượt đếm **file**, lượt đếm file **đã phân loại được**. Đếm lại một lần, theo
+**file**, ba nhóm:
+
+**A. Gọi hàm NHÃN — 19 file** (`deriveSessionLabel` / `deriveSessionProjectName` / `sessionNumberLabel`):
+
+| Đã cấp số lộ trình (14) | Còn in số TRẦN, CHƯA cấp (5) |
+|---|---|
+| `admin/attendance/page.tsx` | `admin/classes/[id]/_components/class-attendance-panel.tsx` |
+| `admin/duyet-media/page.tsx` | `admin/classes/[id]/_components/class-eval-panel.tsx` |
+| `admin/media/actions.ts` | `admin/classes/[id]/_components/class-feedback-panel.tsx` |
+| `admin/sessions/[id]/page.tsx` | `admin/classes/[id]/_components/class-sessions-manage.tsx` |
+| `portal/nhan-xet/page.tsx` | `teacher/lop/page.tsx` |
+| `teacher/anh-lop/page.tsx` | |
+| `teacher/diem-danh/page.tsx` | |
+| `teacher/hoc-vien/page.tsx` | |
+| `teacher/lop/_components/hub-reviews-tab.tsx` | |
+| `teacher/lop/_components/hub-sessions-tab.tsx` | |
+| `teacher/nhan-xet/page.tsx` | |
+| `teacher/nhan-xet/pdf/[sessionId]/[studentId]/route.ts` | |
+| `lib/media-review/tree.ts` | |
+| `lib/portal/buoi-hoc.ts` | |
+
+**B. Gọi hàm SẮP XẾP — 6 file**, đã vá ở Đợt 1: `teacher/diem-danh/page.tsx` ·
+`hub-reviews-tab.tsx` · `hub-sessions-tab.tsx` · `teacher/nhan-xet/page.tsx` ·
+`lib/classes/session-feedback-data.ts` · `lib/lms/attendance-queue.ts`.
+Bốn file đầu nằm trong **cả A và B** — đó là 4 nơi "cả hai".
+
+**C. TIÊU THỤ số ở cổng phụ huynh — 2 file**, vá ở Đợt 1b: `lib/portal/photos.ts` ·
+`lib/portal/student-assignments.ts` (đọc `soBuoiLoTrinh` mới).
+
+**Tổng file mã sản phẩm đã sửa: 22** = 14 (A đã cấp) + 2 (B không trùng A) + 2 (C) +
+`lib/portal/feedback.ts` (dựng nguồn) + `lib/lms/session-project-name.ts` (gốc) +
+`lib/lms/session-order.ts` (Đợt 1) + `prisma/schema.prisma` (chú thích).
+
+### ⚠️ 5 nơi còn hở — ghi rõ để KHÔNG rơi im lặng
+
+Cả 5 in `sessionNumberLabel(seq)` = `"Buổi N"` **trần**, cạnh **ngày**, **không ghép chung một
+chuỗi với tên bài**. Khác hẳn ca `photos.ts`: ở đó bản vá làm hai vế cạnh nhau chọi số (huy
+hiệu "2" cạnh tiêu đề "Buổi 43 - …"), nên bắt buộc phải vá trong cùng PR. Ở 5 nơi này số
+**vẫn y như trước bản vá** — bản vá không làm chúng xấu đi.
+
+Nhưng chúng vẫn in số theo lịch mà không nói ra:
+
+| Nơi | In gì | Mức |
+|---|---|---|
+| `class-feedback-panel.tsx:93` | cột "Buổi {seq}" cạnh cột `label` = `"Bài {order}: {title}"` | **cao nhất** — hai cột cạnh nhau, hai con số; may là cột `label` tự khai "Bài N" nên còn đọc được |
+| `class-sessions-manage.tsx:176` | `"Buổi N"` cạnh ngày, bảng quản lý buổi | thấp — bảng vốn xếp theo ngày |
+| `class-attendance-panel.tsx:23` · `class-eval-panel.tsx:108` | `"Buổi N · dd/MM"` trong ô chọn buổi | thấp |
+| `teacher/lop/page.tsx:184` | `"Buổi N"` trong danh sách việc còn nợ của giáo viên | trung bình |
+
+**Đề xuất Đợt 1c (chưa làm):** cấp `plan.order` cho 2 page server dựng `seq`
+(`admin/classes/[id]/page.tsx`, `edit/page.tsx`) rồi truyền xuống 4 component; riêng
+`teacher/lop/page.tsx` đổi sang `nhanSoBuoi` để nó tự khai `(theo lịch)`. Không gộp vào PR
+này vì nó đổi kiểu dữ liệu truyền xuống 4 component — rủi ro riêng, cần test riêng.
+
+## 4.4 Ticket tách riêng
+
+1. **Test hạ tầng chạm timeout khi chạy song song** — `cham-cong/requests.spec.ts > isSubmittedLate`
+   (hàm THUẦN mà mất 5,1 giây), `trn-training-need-invariants`, `trn-reminder-incident-invariants`
+   (quét cây `prisma/migrations` bằng I/O đồng bộ). Không liên quan bản vá này.
+2. **Đợt 1c** — 5 nơi in số trần ở bảng trên.
+3. **Dọn tên biến `seq`** ở `admin/classes/[id]/page.tsx` + `edit/page.tsx`: chữ "seq" ở đó là
+   hạng-theo-ngày, trong khi cột `order` ngay cạnh là thứ tự lộ trình.
+4. **Vá gốc đường #1** — `createSessionPlansForClass` thôi chép `customTitle`.

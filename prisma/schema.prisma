@@ -6015,12 +6015,29 @@ model CourseDiscount {
 // ─── R7-06 — Kế hoạch buổi học theo lớp (snapshot từ curriculum pin) ──────────
 /// Kế hoạch từng buổi của 1 lớp, sao từ Lesson của curriculum version pin lúc tạo lớp.
 /// Reorder/ghi chú sửa ở đây — KHÔNG đụng Lesson gốc (AC4).
+/// Kế hoạch buổi đã GHIM cho một lớp — bản sao đông cứng của giáo trình lúc tạo lớp.
+///
+/// ⚠️ ĐỪNG thêm `@@unique([classId, order])`. Đo prod 08/09: 0 cặp trùng, nên nhìn thì
+/// tưởng thêm được — nhưng nó sẽ LÀM VỠ `adoptCurriculumVersion` (`lib/classes/snapshot.ts`).
+/// Hàm đó giữ nguyên `order` GỐC của plan thuộc buổi COMPLETED, rồi đánh số plan mới từ
+/// `keptCount` trở đi. Lớp `CS1.SATA3.26.001` có 1 buổi COMPLETED mà plan của nó nằm ở
+/// `order` 47 ⇒ `keptCount = 1` ⇒ plan mới xin lại đúng `order` 47 đang bị giữ ⇒ vi phạm
+/// ràng buộc ⇒ rollback CẢ transaction, và lớp đó vĩnh viễn không đổi được giáo trình.
+/// Muốn thêm thì phải sửa hàm đó đánh lại `order` liên tục từ 0 trước — việc riêng, rủi ro riêng.
+///
+/// Cùng lý do, quan hệ `ClassSession.planId` giữ `onDelete: SetNull`: `snapshot.ts:126` là
+/// đường xoá plan DUY NHẤT trong mã sản phẩm và nó dựa vào `SetNull` để buổi tương lai
+/// tự nhả plan cũ. Xem `docs/dieu-tra-lech-bai-hoc.md`.
 model ClassSessionPlan {
   id          String   @id @default(cuid())
   classId     String
   class       Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
   seq         Int // số thứ tự buổi gốc theo curriculum
   lessonId    String? // tham chiếu Lesson nguồn (snapshot; không ràng FK cứng)
+  /// Tên buổi ĐÔNG CỨNG, chép từ `Lesson.title` lúc `createSessionPlansForClass` chạy.
+  /// Giáo trình đổi tên bài SAU đó thì cột này KHÔNG đổi theo — đó là gốc của sự cố
+  /// "lệch tên bài" 08/09. `meaningfulSessionTitle` loại giá trị rỗng-nghĩa ("Buổi 7"),
+  /// nên chỉ tên THẬT cũ mới che được tên mới.
   customTitle String?
   note        String?  @db.Text
   order       Int      @default(0) // thứ tự hiển thị (cho phép reorder)
