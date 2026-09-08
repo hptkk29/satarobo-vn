@@ -25,10 +25,20 @@
  *
  * `facebook` · `zalo` · `google-form` là ba nguồn gốc từ Phase T1.4.
  *
- * `quatang` nằm đây vì nó ĐANG là nguồn chạy nhiều nhất — đổi đường chia của nó là
- * đổi hành vi thật trên prod, cần một đợt riêng có nghiệm thu, không gộp vào bản vá
- * "đóng bẫy cho nguồn tương lai". Gỡ tên nó khỏi đây là việc nên làm, không phải
- * việc làm kèm.
+ * ⚠️ `quatang` NẰM ĐÂY NHƯNG KHÔNG CÓ TÁC DỤNG — đo lại 08/09/2026.
+ *
+ * Chú thích cũ viết: "quatang ĐANG là nguồn chạy nhiều nhất — đổi đường chia của nó là đổi
+ * hành vi thật trên prod". Câu đó SAI kể từ 16/08/2026, tức trước cả ngày file này ra đời
+ * (06/09): `app/api/public/webhook/quatang/route.ts` truyền một ADAPTER riêng cho
+ * `processLeadWebhook`, và nhánh `if (adapter)` trong `lib/lead/webhook.ts` RETURN SỚM —
+ * không bao giờ chạm `ingestLead`, tức không bao giờ chạm `laNguonDuongCu`. Lưu lượng quatang
+ * đi thẳng `ingestIntakeLead` với `legacyWebhook` KHÔNG được set, nghĩa là nó đã ở ĐƯỜNG MỚI
+ * (`chiaChoLead`) từ lâu — và vì thế nó ĐÃ có chuông "Bạn có lead mới".
+ *
+ * Giữ tên `quatang` trong danh sách là CÓ CHỦ ĐÍCH, không phải quên dọn: nếu một ngày nào đó
+ * adapter bị gỡ (hoặc một đường replay gọi `ingestLead` với `source: "quatang"`), danh sách
+ * này là thứ giữ cho hành vi không đổi thầm. Nhưng ĐỪNG suy luận về đường đi thật của quatang
+ * từ dòng này — đọc `app/api/public/webhook/quatang/route.ts` mới ra câu trả lời đúng.
  */
 const NGUON_DUONG_CU: ReadonlySet<string> = new Set([
   "facebook",
