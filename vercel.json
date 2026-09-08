@@ -104,6 +104,10 @@
     {
       "path": "/api/cron/shift-brief",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/push-outbox",
+      "schedule": "* * * * *"
     }
   ]
 }

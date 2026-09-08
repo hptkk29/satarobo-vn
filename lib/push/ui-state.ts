@@ -67,9 +67,11 @@ export const NHAN: Record<TrangThaiManHinh, { tieuDe: string; moTa: string }> = 
   },
   DA_BAT: {
     tieuDe: "Máy này đã đăng ký nhận thông báo",
-    // KHÔNG hứa ở thì hiện tại: engine gửi là Đợt 4 và công tắc `push.webPushEnabled` đang
-    // TẮT. Nói "bạn sẽ nhận được" lúc này là một câu SAI mà người dùng chỉ phát hiện bằng
-    // cách chờ mãi không thấy gì.
+    // KHÔNG hứa ở thì hiện tại. Engine gửi đã có từ Đợt 4 (`lib/push/engine.ts`), NHƯNG công
+    // tắc `push.webPushEnabled` vẫn TẮT mặc định và còn cổng thứ hai là ba biến VAPID. Nói
+    // "bạn sẽ nhận được" khi chưa ai bật là một câu SAI mà người dùng chỉ phát hiện bằng cách
+    // chờ mãi không thấy gì. Câu dưới đúng ở CẢ HAI trạng thái nên không phải sửa lại lần nữa
+    // vào ngày mở kênh — và không có test nào canh câu chữ này, nên đừng dựa vào CI để nhớ.
     moTa: "Đăng ký đã lưu. Thông báo lead mới sẽ tới máy này ngay khi hệ thống mở kênh gửi — kể cả lúc bạn đã đóng trình duyệt.",
   },
   CO_THE_BAT: {

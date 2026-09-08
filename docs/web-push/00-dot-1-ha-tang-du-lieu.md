@@ -1,15 +1,21 @@
-# Web Push (US-14b) — sổ thi công Đợt 1 → 3
+# Web Push (US-14b) — sổ thi công Đợt 1 → 4
 
 Thông báo đẩy vào điện thoại **nhân viên** khi có lead mới. Kênh **DUY NHẤT**, VAPID thuần —
 không Firebase, không dịch vụ bên thứ ba, không fallback.
 
-> **Trạng thái 08/09/2026 — Đợt 1, 2, 3 xong; Đợt 4 (engine gửi) CHƯA làm.**
+> **Trạng thái 08/09/2026 — Đợt 1, 2, 3, 4 xong. KÊNH CHƯA MỞ.**
 > ~~Chưa có service worker, chưa có màn đăng ký thiết bị~~ — cả hai đã có (§11, §12).
-> ~~Chưa có một dòng code nào đọc 3 biến VAPID~~ — `NEXT_PUBLIC_VAPID_PUBLIC_KEY` nay được đọc
-> ở `app/(admin)/admin/settings/_push-actions.ts` và `components/push/bat-thong-bao.tsx`.
+> ~~Chưa có một dòng code nào đọc 3 biến VAPID~~ — cả ba nay được đọc (§13).
+> ~~Công tắc `push.webPushEnabled` chưa có đường đọc~~ — engine đọc nó ở dòng đầu mỗi lượt cron.
 >
-> **VẪN ĐÚNG:** chưa dòng push nào được bắn (`VAPID_PRIVATE_KEY` chưa ai đọc), và công tắc
-> `push.webPushEnabled` vẫn **chưa có đường đọc** — xem nợ ở §12.
+> **VẪN ĐÚNG, và là điều quan trọng nhất của trang này: chưa một dòng push nào được bắn.**
+> Hai cổng độc lập đang đóng, và cả hai đều phải mở bằng TAY:
+> 1. `push.webPushEnabled` = **`false`** (mặc định trong registry, không ai bật);
+> 2. ba biến `NEXT_PUBLIC_VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` **chưa khai**
+>    ở môi trường nào — engine trả `reason: "NO_VAPID"` và không đụng dòng nào.
+>
+> **Migration hai bảng push vẫn CHƯA CHẠY ở đâu** (dev/test/prod). Đường ghi chịu được điều đó:
+> `ghiOutboxPush` nuốt lỗi P2021 và chỉ log — thông báo trong ứng dụng không hề bị ảnh hưởng.
 
 ---
 
@@ -312,13 +318,13 @@ bật `ALLOW_DB_RESET`, nên mọi test chạm DB **skip im lặng** — tưởn
 
 ---
 
-## 10. Đợt sau (chưa làm)
+## 10. Đợt sau — ĐÃ ĐÓNG HẾT 08/09/2026
 
 | Đợt | Việc |
 |---|---|
 | ~~2~~ | ✅ **XONG 08/09/2026** — `public/manifest.json` + `public/sw.js` + đăng ký worker. Xem §11 |
-| 3 | Màn bật thông báo + Server Action đăng ký/gỡ. `userId` từ phiên, `origin` từ request — **không bao giờ nhận từ client**. Chỉ ghi từ `parsed.data`, không bao giờ từ input thô (schema là `z.object` STRIP, nó *bỏ* khoá lạ chứ không *từ chối*). Ghi `displayMode` từ `matchMedia("(display-mode: standalone)")` và `vapidKeyId` từ `vapidKeyIdTuKhoa()` |
-| 4 | Engine gửi + cron. Xử 404/410 → `EXPIRED`; 429 → tôn trọng `Retry-After`; 5xx → nhân đôi; 4xx khác → `DEAD`. Reaper đo theo **`claimedAt`**. Cron riêng thì **nhớ khai vào `.github/workflows/cron-pump-test.yml`**, không thì lần chạy thật đầu tiên rơi thẳng vào prod |
+| ~~3~~ | ✅ **XONG 08/09/2026** — xem §12. Màn bật thông báo + Server Action đăng ký/gỡ. `userId` từ phiên, `origin` từ request — **không bao giờ nhận từ client**. Chỉ ghi từ `parsed.data`, không bao giờ từ input thô (schema là `z.object` STRIP, nó *bỏ* khoá lạ chứ không *từ chối*). Ghi `displayMode` từ `matchMedia("(display-mode: standalone)")` và `vapidKeyId` từ `vapidKeyIdTuKhoa()` |
+| ~~4~~ | ✅ **XONG 08/09/2026** — xem §13. Engine gửi + cron. Xử 404/410 → `EXPIRED`; 429 → tôn trọng `Retry-After`; 5xx → nhân đôi; 4xx khác → `DEAD`. Reaper đo theo **`claimedAt`**. Cron riêng thì **nhớ khai vào `.github/workflows/cron-pump-test.yml`**, không thì lần chạy thật đầu tiên rơi thẳng vào prod |
 
 ---
 
@@ -435,14 +441,16 @@ Ràng buộc này nay có test canh: `[PUSH-D3-T14]` quét `app/(portal|public|l
 
 ### Nợ của Đợt 3
 
-- ⚠️ **CẦN QUYẾT ĐỊNH: công tắc `push.webPushEnabled` vẫn chưa có đường đọc.** Nút "Bật thông
-  báo" hiện ra kể cả khi công tắc đang TẮT. Câu chữ đã được sửa để không hứa ở thì hiện tại
-  ("sẽ tới ngay khi hệ thống mở kênh gửi"), nhưng vẫn còn hai đường: **(A)** Đợt 3 đọc công tắc
-  và ẩn nút khi TẮT — không tiêu một lượt hỏi quyền không lấy lại được; **(B)** giữ nguyên, để
-  nhân viên đăng ký sẵn rồi Đợt 4 bật là chạy ngay. Chưa chọn.
+- ~~**CẦN QUYẾT ĐỊNH: công tắc `push.webPushEnabled` chưa có đường đọc**~~ — **ĐÃ CHỐT (B),
+  08/09/2026.** Nút "Bật thông báo" **vẫn hiện** kể cả khi công tắc TẮT, để nhân viên đăng ký sẵn;
+  engine của Đợt 4 mới là chỗ đọc công tắc thật (§13.6). Câu chữ trên màn hình giữ nguyên vì nó
+  đúng ở CẢ HAI trạng thái ("sẽ tới ngay khi hệ thống mở kênh gửi") — không phải sửa lại lần nữa
+  vào ngày mở kênh.
 - **Một điện thoại có thể sinh HAI dòng** nếu người đó dùng cả admin lẫn site GV (worker khoá
-  theo origin). Giao diện phân biệt bằng nhãn host (`nhanHost`), nhưng **Đợt 4 phải khử trùng
-  trước khi bắn** — nếu không họ nhận hai thông báo cho một sự việc.
+  theo origin). Giao diện phân biệt bằng nhãn host (`nhanHost`). ~~Đợt 4 phải khử trùng trước khi
+  bắn~~ — **Đợt 4 đã xét và CỐ Ý KHÔNG khử trùng**: mọi cách đoán "hai dòng này là một máy" đều có
+  thể bỏ sót đúng cái máy còn sống, mà gửi thiếu tệ hơn gửi trùng. Lý lẽ đầy đủ + cách sửa sạch
+  (cần một cột mới ⇒ migration) ở §13.8.
 - **`scopedDb` + `resolveActor` trong 3 action không gác gì**: `scopedDb` chỉ cắm 7 method ĐỌC,
   còn `upsert`/`updateMany` không đi qua nó; `WebPushSubscription` cũng không có cột `centerId`.
   Giữ vì đó là khuôn của tệp anh em cùng thư mục và là đường hợp lệ để không import `@/lib/db`
@@ -451,3 +459,211 @@ Ràng buộc này nay có test canh: `[PUSH-D3-T14]` quét `app/(portal|public|l
   sang ISO không ai canh.
 - **Chưa mount ở `e-learning` và `sale`** (cả hai cờ mặc định OFF). Mount thêm là một dòng mỗi
   layout khi nào cờ bật.
+
+---
+
+## 13. Đợt 4 — engine gửi + cron (xong 08/09/2026)
+
+### 13.1 Bản đồ file
+
+| File | Vai | THUẦN? |
+|---|---|---|
+| `lib/push/allowlist.ts` | tiền tố `dedupeKey` nào được đẩy — đợt này đúng `lead.moi:` | ✅ |
+| `lib/push/payload.ts` | dựng gói tin 4 khoá + cắt về ≤ 3993 byte + đường mở theo host | ✅ |
+| `lib/push/ket-qua.ts` | phân loại mã HTTP · `Retry-After` · backoff · băm endpoint · chốt số phận dòng | ✅ |
+| `lib/push/outbox.ts` | ĐƯỜNG GHI — `createMany` từ `canRung` | ❌ (DB) |
+| `lib/push/engine.ts` | ĐƯỜNG GỬI — công tắc · khoá · reaper · giành chỗ · gửi · dọn | ❌ (DB + `web-push`) |
+| `app/api/cron/push-outbox/route.ts` | vỏ cron, 3 dòng | ❌ |
+
+Ba file THUẦN gánh phần lớn ma trận lỗi: chúng test được không cần Prisma, không cần jsdom, không
+cần giả một push service, và **gọi được từ script `tsx`** (không `import "server-only"`, đúng lý
+do đã ghi ở `vapid.ts`).
+
+### 13.2 Dependency đầu tiên và duy nhất: `web-push@3.6.7`
+
+Tự ký JWT VAPID thì được (repo đã có `jose`), nhưng tự viết mã hoá payload RFC 8291 thì không —
+đó là mã mật mã, sai một byte đệm là push service trả 400 cho **mọi** tin và không ai đọc ra vì sao.
+
+Đã đo, không suy: cây phụ thuộc 5 gói + 5 gói bắc cầu, **toàn JS thuần, không native addon,
+không postinstall**. `pnpm build` xanh, route mới có mặt trong bảng route. Ba việc phải nhớ:
+
+- **Giấy phép MPL-2.0** (khác MIT của repo). Dùng nguyên gói thì không phát sinh nghĩa vụ; **sửa
+  file trong `node_modules/web-push` rồi vendor vào repo thì CÓ**. Cần hành vi khác thì bọc ngoài.
+- **`http_ece` bị ghim CỨNG `1.2.0`** (không có `^`) trong `dependencies` của `web-push`, và đó
+  chính là mã mã hoá payload. Có CVE thì ta không tự nâng được, phải chờ `web-push` phát hành.
+  Ghi sổ rủi ro, không chặn.
+- **`supportedContentEncodings.AES_128_GCM` có kiểu `never`** — `@types/web-push` gõ nhầm
+  `"aws128gcm"` (aws thay vì aes). `never` gán đi đâu cũng được nên **tsc không cảnh báo**, hằng
+  đó chỉ đơn giản vô nghĩa. Đừng đụng, và không cần: `aes128gcm` đã là mặc định của gói.
+
+### 13.3 Điểm móc — dòng thứ ba của `notifyStaff`
+
+```ts
+const kq = await ghiThongBaoNhanSu(params);
+await broadcastNotificationBump(kq.canRung);
+await ghiOutboxPush({ userIds: kq.canRung, dedupeKey, expiresAt });   // ← Đợt 4
+```
+
+Ba điều kiện của chỗ móc này, mỗi cái có một ca test canh:
+
+1. **Bám `kq.canRung`, KHÔNG bám `params.userIds`.** `canRung` = "ai vừa có mục MỚI hoặc vừa được
+   mở lại". Bám nhầm là đẻ lại đúng bão egress 05/09, với hệ quả nặng hơn: mỗi dòng ở đây là một
+   lần rung điện thoại, không chỉ một POST realtime.
+2. **Ở `notifyStaff`, KHÔNG ở `ghiThongBaoNhanSu`.** Ranh giới giữa hai hàm là cố ý: `lib/crm/sla.ts`
+   đi cửa dưới CHÍNH VÌ không muốn rung, và nó chạm ~1.800 vi phạm mỗi lượt — đúng nguồn đã thổi
+   Supabase vượt trần egress. Đo được: **0 dòng outbox** sinh ra từ `sla-check`.
+3. **Ngoài mọi transaction, SAU khi chuông đã ghi xong.** Hệ quả chấp nhận có ý thức: tiến trình
+   chết đúng giữa hai dòng thì có chuông mà không có push, và lượt gọi lại thấy nội dung y hệt ⇒
+   `canRung` rỗng ⇒ **không ghi bù, không để lại vết**. Mất một push, giữ được thông báo — đúng
+   thứ tự ưu tiên. Đảo lại (ghi outbox trước) là đẩy push cho một mục chưa chắc tồn tại.
+
+**Loại ngoài allowlist VẪN ghi một dòng, thẳng `SKIPPED`.** Đây là sổ trả lời câu "vì sao tôi
+không nhận được thông báo X": không có dòng nào thì người hỏi không phân biệt được "loại này cố ý
+không đẩy" với "kênh hỏng", và cách duy nhất tìm ra là đọc mã nguồn. Ước lượng 50–150 dòng
+`SKIPPED`/ngày (nguồn lớn nhất: `shift.brief:`, 1 dòng/người-có-ca/ngày) ⇒ đó là lý do engine có
+bước dọn (§13.5).
+
+### 13.4 Engine — ba lỗi của tiền lệ, cố ý không kế thừa
+
+| Tiền lệ | Lỗi | Ở đây |
+|---|---|---|
+| `lib/events/dispatcher.ts` reaper | lọc theo **`createdAt`** (lúc SINH việc) ⇒ dòng chờ lâu bị kéo về `PENDING` ngay trong lúc đang gửi ⇒ **gửi đôi** | lọc theo **`claimedAt`** (+ vế `claimedAt: null` để dòng ghi tay không kẹt vĩnh viễn) |
+| `lib/events/dispatcher.ts` attempts | tăng ở **cuối** ⇒ chết giữa chừng là dòng độc quay vòng vô hạn | tăng **cùng câu với lúc giành chỗ** |
+| `lib/email/queue.ts` | **không giành chỗ gì cả**, chỉ `findMany` rồi gửi ⇒ hai lượt cron chồng nhau là gửi trùng | `updateMany` nguyên tử có điều kiện trạng thái; `count === 0` ⇒ bỏ qua |
+
+Cái giá của gửi trùng không phải tiền: người dùng tắt quyền thông báo ở **cấp trình duyệt**, mất
+kênh vĩnh viễn, và code không có cách nào xin lại.
+
+**Bốn cổng bỏ qua, theo thứ tự** — mỗi cổng ghi `SKIPPED` chứ không `FAILED` (không phải lỗi hệ
+thống): dòng quá hạn → ngoài allowlist → chuông không còn / không `ACTIVE` / đã hết hạn → không
+còn thiết bị `ACTIVE`.
+
+**Cổng thứ ba là cổng chặn ca THU HỒI**, và đó là ca có thật xảy ra trong vài phút: lead chuyển
+A→B thì `thuHoiChuongLeadCu` đặt chuông của A về `REVOKED`, nhưng dòng outbox của A vẫn nằm đó.
+Không đọc lại lúc gửi thì cron nổ "Bạn có lead mới" trên màn hình khoá của A về một lead họ không
+còn giữ — bấm vào thì `scopedDb` lọc mất, ra trang "không tồn tại". **Push đã nổ thì không thu
+hồi được.**
+
+**Ma trận mã trả về:**
+
+| Mã | Xử lý dòng | Xử lý thiết bị |
+|---|---|---|
+| 2xx (thật là **201**) | thành công cho endpoint đó, không bao giờ bắn lại | `lastSuccessAt`, `failureCount = 0` |
+| 404 · 410 | không thử lại | **`EXPIRED`** — mã DUY NHẤT được đổi `status` |
+| 429 | `FAILED` + `Retry-After` (đọc **cả** số giây lẫn HTTP-date, khoá header **viết thường**) | chỉ đếm lỗi |
+| 5xx · 408 · đứt mạng · socket timeout | `FAILED` + backoff nhân đôi (1→2→4→8→16 phút, trần 30) | chỉ đếm lỗi |
+| 400 · 413 · **403** | `DEAD` ngay lượt đầu | chỉ đếm lỗi — **KHÔNG gỡ** |
+
+**403 không gỡ thiết bị** vì mã đó gần như luôn là `VapidPkHashMismatch`: khoá server vừa xoay,
+máy người dùng vẫn tốt. Gỡ hàng loạt lúc đó là bắt cả công ty bật lại thông báo bằng tay, trong
+khi việc phải làm là dán lại khoá. Cột `vapidKeyId` sinh ra để phân biệt đúng ca này và nó chỉ có
+ích nếu ta không xoá mất bằng chứng.
+
+**Một dòng, nhiều máy:** gửi song song; máy đã thành công ở lượt trước **không bao giờ được bắn
+lại** (tra `resultJson` theo băm endpoint). Chốt cuối: còn máy đáng thử và chưa cạn lượt ⇒
+`FAILED`; hết đường thử ⇒ có ít nhất một máy nhận được thì `SENT`, không máy nào thì `DEAD`.
+
+**`resultJson` khoá theo BĂM endpoint, không theo endpoint trần** — lệch với chú thích schema bản
+đầu, và cố ý. Endpoint là một *khả năng gửi*: ai có chuỗi đó gửi được push rỗng vào máy nhân viên
+(service worker hiện câu mặc định), không cần `p256dh`/`auth`. Luật của việc này là "không log đầy
+đủ endpoint ở bất kỳ đâu — cắt hoặc băm", và một bảng ai đọc được cũng đọc được thì không khác một
+cái log. Băm vẫn tất định nên vẫn tra lại được "máy này đã nhận chưa"; kèm nhãn cắt (`host/…6 ký
+tự cuối`) để người trực còn lần ra được là máy nào.
+
+**Hai điều engine KHÔNG làm, có chủ đích:**
+- **Không dùng `setVapidDetails`.** Hàm đó ghi vào biến module-scope của gói; lambda Vercel dùng
+  lại tiến trình ấm nên thứ tự nạp module thành một điều kiện ngầm, và trong test nó rò trạng thái
+  giữa các ca. Truyền `vapidDetails` mỗi lượt gửi.
+- **Không so `vapidKeyId` của thiết bị với khoá đang chạy trước khi gửi.** Nghe hợp lý (tiết kiệm
+  một cú 403), nhưng cột có `@default("v1")`: một dòng mang `"v1"` sẽ bị coi là lệch và **gỡ oan**
+  một thiết bị tốt. Và không tiết kiệm được bao nhiêu — 403 đã là `DEAD` ngay lượt đầu, không đốt
+  5 attempt.
+
+### 13.5 Cron
+
+`/api/cron/push-outbox` — `* * * * *` (mỗi phút). Đã khai ở **cả hai** nơi bắt buộc:
+`vercel.json` (nay 27 dòng cron; `lib/cron/dang-ky-cron.test.ts` canh cả hai chiều) **và**
+`.github/workflows/cron-pump-test.yml` (Vercel Cron không chạy trên environment `test`, thiếu
+bước bơm thì **lần chạy thật đầu tiên của engine sẽ là trên PROD**, thẳng vào điện thoại nhân viên).
+
+`export const runtime = "nodejs"` **bắt buộc** — `web-push` dùng `node:https` + `node:crypto`,
+rơi vào Edge là chết câm. `maxDuration = 60`, còn engine tự dừng ở 45s để phần chưa xử giữ nguyên
+`PENDING` cho lượt sau.
+
+**Dọn:** mỗi lượt xoá `DEAD`/`SKIPPED` cũ hơn 30 ngày (index `[status, createdAt]` đã dựng sẵn
+đúng cho câu này). Lỗi dọn không làm hỏng lượt gửi.
+
+### 13.6 Kill switch — nói đúng con số
+
+Tắt `push.webPushEnabled` ở `/admin/cau-hinh-van-hanh`. **Hiệu lực trong ≤5 phút, KHÔNG phải ngay:**
+`getSetting` cache `revalidate: 300`, và nhánh xoá cache theo tag chỉ chạy được trong Server Action.
+Màn cấu hình sửa qua Server Action nên thường ăn ngay, nhưng một lượt cron đang giữ bản cache vẫn
+có thể gửi thêm trong tối đa 5 phút.
+
+*(Docstring ở đầu `lib/settings/service.ts` ghi "cache TTL 60s" — con số đó **SAI** so với code
+`revalidate: 300`. Đừng chép lại.)*
+
+### 13.7 Đã kiểm những gì
+
+- `pnpm typecheck` **exit=0** · `pnpm lint` **exit=0** (2 cảnh báo có sẵn từ trước, 0 lỗi) ·
+  `pnpm test:unit` **exit=0** — **5977 ca qua**, +112 ca mới · `pnpm build` **exit=0**, route
+  `/api/cron/push-outbox` có mặt và `web-push` bundle sạch.
+  (Bắt mã thoát tường minh, không đặt lệnh kiểm sau dấu ống.)
+- **CẤY LẠI LỖI — 8/8 ca đỏ đúng chỗ**, mỗi ca đều grep xác minh phép thay thật sự đã đổi file
+  trước khi chạy test:
+
+  | Cấy | Số ca đỏ |
+  |---|---|
+  | reaper đo theo `createdAt` | 2 |
+  | gỡ dòng đọc lại trạng thái chuông lúc gửi | 1 |
+  | gỡ bộ lọc "máy đã nhận ở lượt trước" | 1 |
+  | gỡ đường đọc công tắc | 3 |
+  | `Retry-After` chỉ đọc khoá viết HOA | 8 |
+  | gộp 403 vào `HET_HAN` | 2 |
+  | điểm móc bám `userIds` thay `canRung` | 2 |
+  | `createMany` bỏ `skipDuplicates` | 1 |
+
+### 13.8 Nợ của Đợt 4 — chấp nhận có ý thức
+
+- ⚠️ **MỘT ĐIỆN THOẠI VẪN CÓ THỂ NHẬN HAI THÔNG BÁO.** Người dùng cả admin lẫn site GV có hai dòng
+  `WebPushSubscription` cho cùng một máy (service worker khoá theo origin), và engine gửi cho
+  **mọi** thiết bị `ACTIVE` — đúng như đã chốt ("thiết bị phân giải theo `userId` lúc gửi, chỉ lấy
+  `status = ACTIVE`"). **Cố ý không khử trùng bằng suy đoán:** mọi cách đoán "hai dòng này là một
+  máy" (so `userAgent`, chọn origin khớp `href`) đều có thể **bỏ sót đúng cái máy còn sống**, mà
+  gửi thiếu tệ hơn gửi trùng. Ca này gần như không xảy ra ở đợt đầu — `decideRoute` đá GV thuần
+  khỏi admin và đá người không-phải-GV khỏi giaovien, nên phải là người kiêm **TEACHER +
+  SALES_CSM** và đã bấm "Bật thông báo" ở cả hai host. **Cách sửa sạch cần một cột mới** (id thiết
+  bị do client sinh) ⇒ migration ⇒ ngoài phạm vi đợt này.
+- ⚠️ **Ca A→B→A mất push (không mất chuông).** Lead chuyển từ A sang B rồi quay lại A: chuông của
+  A mở lại được (bản vá 08/09), nhưng dòng outbox `(A, lead.moi:<id>)` đã tồn tại nên
+  `skipDuplicates` nuốt im lặng ⇒ A **có chuông, không có push**. Đây là hệ quả trực tiếp của hai
+  quyết định đã chốt — "reopen gặp dòng đã `SENT`: BỎ QUA" và `createMany({ skipDuplicates })` —
+  nên **không tự chế luật thứ ba để lách**. Muốn đóng thì phải chốt riêng: hồi sinh dòng `SKIPPED`
+  *do chính sách* (`lastErrorCode IS NULL`) trong khi để `DEAD` bất động, hoặc chạy tay một script
+  khi mở allowlist. Cả hai đều là quyết định vận hành, không phải việc dọn code.
+- **Đường mở trên máy đăng ký ở origin giáo viên là `/teacher`**, không phải trang lead:
+  `teacherHref("/leads/…")` trả `null` vì site GV không có màn lead. Xử lý tường minh (không để
+  `undefined` chui vào `data.url` — `JSON.stringify` sẽ NUỐT HẲN khoá đó). Ca này chỉ xảy ra cùng
+  với ca "hai dòng một máy" ở trên.
+- **`lib/push/thiet-bi.ts` vẫn chưa có test** (nợ từ Đợt 3, không đổi).
+- **Bảng vẫn phình khi công tắc TẮT.** Cổng công tắc đứng TRƯỚC mọi thứ (đúng yêu cầu "tắt thì
+  thoát sạch, không đánh dấu gì"), nên bước dọn cũng không chạy. Ở mức 50–150 dòng/ngày thì vài
+  tuần trước ngày mở kênh là không đáng kể; nếu kênh nằm tắt hàng năm thì phải dọn tay.
+- **Lỗi trong engine im lặng với Sentry.** Repo không gọi `captureException` ở đâu (đã grep toàn
+  `app/` + `lib/`), nên người trực chỉ đọc được số liệu ở response của route
+  (`sent`/`failed`/`dead`/`skippedRows`/`reaped`/`purged`).
+- **`notifyStaff` trả `soNguoi` (số người NHẬN), không phải số push đã đẩy.** 4 nơi đang cộng dồn
+  nó vào biến tên `notified`. Đừng dùng con số đó để báo cáo về push.
+
+### 13.9 Việc người vận hành phải làm — theo đúng thứ tự
+
+1. **Chạy migration** `20260908000000_web_push_ha_tang` (dev → test → prod). Chưa chạy thì mọi
+   `ghiOutboxPush` nuốt P2021 và kênh im lặng hoàn toàn — không hỏng gì khác.
+2. **Sinh cặp khoá VAPID**: `pnpm tsx scripts/tao-khoa-vapid.ts` (in ra stdout, **không ghi file nào**).
+3. **Dán vào Vercel**: `NEXT_PUBLIC_VAPID_PUBLIC_KEY` **Non-sensitive** (biến Sensitive không tồn
+   tại lúc build ⇒ trình duyệt nhận `undefined`, không ai đăng ký được, và server không thấy lỗi
+   gì) · `VAPID_PRIVATE_KEY` **Sensitive** · `VAPID_SUBJECT` = `mailto:<hộp thư CÓ NGƯỜI ĐỌC>`.
+4. **Nghiệm thu trên `test`** — bấm "Bật thông báo" trên điện thoại, tạo một lead, chờ ≤1 phút.
+5. **Chỉ sau đó** mới bật `push.webPushEnabled` trên prod.
+
+Bỏ qua bước 4 là để lần chạy thật đầu tiên rơi thẳng vào điện thoại nhân viên.
