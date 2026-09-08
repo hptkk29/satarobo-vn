@@ -294,7 +294,15 @@ export async function chayLuotGuiPush(opts?: {
     // ── GIÀNH CHỖ. Một câu UPDATE nguyên tử có điều kiện trạng thái: hai lượt cron chồng nhau
     // thì đúng một bên thắng, bên kia thấy `count === 0` và bỏ qua.
     const gianh = await db.webPushOutbox.updateMany({
-      where: { id: dong.id, status: { in: ["PENDING", "FAILED"] } },
+      // `nextAttemptAt` PHẢI có mặt ở đây, không chỉ ở câu quét bên trên.
+      //
+      // Danh sách ứng viên là một ẢNH CHỤP: giữa lúc quét và lúc giành, một lượt cron khác có
+      // thể đã xử xong chính dòng này và đẩy `nextAttemptAt` ra tương lai (backoff 5xx, hoặc
+      // `Retry-After` của một cú 429). Nếu điều kiện giành chỉ hỏi `status` thì `FAILED` vẫn
+      // khớp ⇒ lượt chậm giành lại NGAY và bắn tiếp, đúng lúc push service vừa bảo "khoan đã".
+      // Nói cách khác: toàn bộ luật thử-lại ở `ket-qua.ts` sẽ bị vô hiệu mỗi khi hai lượt chồng
+      // nhau — mà chúng CHỒNG ĐƯỢC, vì cron chạy mỗi phút còn một lượt được phép chạy tới 45 giây.
+      where: { id: dong.id, status: { in: ["PENDING", "FAILED"] }, nextAttemptAt: { lte: now } },
       data: { status: "SENDING", claimedAt: now, attempts: { increment: 1 } },
     });
     if (gianh.count === 0) continue;

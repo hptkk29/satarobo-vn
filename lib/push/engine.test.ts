@@ -22,6 +22,8 @@ const h = vi.hoisted(() => {
     rows: [] as Record<string, unknown>[],
     chuong: null as Record<string, unknown> | null,
     thietBi: [] as Record<string, unknown>[],
+    /** Giá trị `nextAttemptAt` THẬT trong DB lúc giành chỗ (khác ảnh chụp lúc quét). */
+    hanThatTrongDb: null as Date | null,
   };
 
   const outboxFindMany = vi.fn(async (_a: unknown) => trangThai.rows);
@@ -30,6 +32,15 @@ const h = vi.hoisted(() => {
       goiUpdateMany.push(a);
       // Reaper và giành-chỗ dùng chung `updateMany`; phân biệt bằng chính điều kiện lọc.
       if (a.where.status === "SENDING") return { count: trangThai.reapCount };
+
+      // Mô phỏng Postgres cho câu GIÀNH CHỖ: dòng trong DB có thể đã đổi kể từ lúc quét (một
+      // lượt cron khác vừa xử xong và đẩy `nextAttemptAt` ra tương lai). `hanThatTrongDb` là
+      // giá trị THẬT ở thời điểm giành; điều kiện `nextAttemptAt: { lte: now }` phải lọc nó ra.
+      const dieuKienHan = a.where.nextAttemptAt as { lte?: Date } | undefined;
+      if (trangThai.hanThatTrongDb) {
+        if (!dieuKienHan?.lte) return { count: trangThai.claimCount }; // câu giành KHÔNG hỏi hạn
+        if (trangThai.hanThatTrongDb.getTime() > dieuKienHan.lte.getTime()) return { count: 0 };
+      }
       return { count: trangThai.claimCount };
     },
   );
@@ -163,6 +174,7 @@ beforeEach(() => {
   h.trangThai.rows = [dongOutbox()];
   h.trangThai.chuong = chuongThat();
   h.trangThai.thietBi = [thietBi("sub_1", EP1)];
+  h.trangThai.hanThatTrongDb = null;
   h.getSetting.mockResolvedValue(true);
   vi.stubEnv("NEXT_PUBLIC_VAPID_PUBLIC_KEY", CAP.publicKey);
   vi.stubEnv("VAPID_PRIVATE_KEY", CAP.privateKey);
@@ -598,6 +610,29 @@ describe("[PUSH-D4-T21] giành chỗ chống gửi đôi", () => {
     expect(kq.claimed).toBe(0);
     expect(g.soLan()).toBe(0);
     expect(h.goiOutboxUpdate).toHaveLength(0);
+  });
+
+  it("lượt CHẬM không giành lại được dòng mà lượt NHANH vừa hẹn giờ", async () => {
+    // Ứng viên là một ẢNH CHỤP. Hai lượt cron chồng nhau (chồng được: cron mỗi phút, một lượt
+    // chạy tới 45 giây) cùng thấy dòng này ở PENDING. Lượt nhanh xử xong, ăn 429 và đẩy
+    // `nextAttemptAt` ra 10 phút nữa. Nếu câu giành chỉ hỏi `status` thì `FAILED` vẫn khớp ⇒
+    // lượt chậm giành lại NGAY và bắn tiếp, đúng lúc push service vừa bảo "khoan đã" — tức
+    // toàn bộ luật thử-lại bị vô hiệu mỗi khi hai lượt chồng nhau.
+    h.trangThai.hanThatTrongDb = new Date(NOW.getTime() + 600_000);
+    const g = guiGia({ [EP1]: 201 });
+    const kq = await chay(g);
+    expect(kq.claimed).toBe(0);
+    expect(g.soLan()).toBe(0);
+    expect(h.goiOutboxUpdate).toHaveLength(0);
+  });
+
+  it("hạn đã tới thì VẪN giành được — bộ lọc không được chặt tay", async () => {
+    // Đối chứng dương: thiếu ca này thì một `nextAttemptAt: { lte: <mốc quá khứ> }` viết sai
+    // sẽ chặn MỌI dòng, kênh im lặng hoàn toàn, và ca âm ở trên vẫn xanh.
+    h.trangThai.hanThatTrongDb = new Date(NOW.getTime() - 60_000);
+    const kq = await chay(guiGia({ [EP1]: 201 }));
+    expect(kq.claimed).toBe(1);
+    expect(kq.sent).toBe(1);
   });
 
   it("câu giành chỗ đặt status + claimedAt + tăng attempts trong CÙNG một câu", async () => {
