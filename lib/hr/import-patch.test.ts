@@ -177,3 +177,32 @@ describe("nhập nhân sự ghi AuditLog", () => {
     expect(doc(F)).toContain("cột có trong file");
   });
 });
+
+// ── Việc 9 (08/09/2026): cảnh báo phải ở NGAY TRÊN MÀN ────────────────────────
+//
+// Quy ước "ô trống = giữ nguyên" là chiều AN TOÀN nhưng PHẢN TRỰC GIÁC: người dùng sẽ
+// để trống một ô mong xoá dữ liệu, và không có gì xảy ra. Docs không đến được tay người
+// dán file Excel.
+describe("màn nhập nhân sự nói rõ quy ước", () => {
+  const UI = "app/(admin)/admin/nhan-su/import/page.tsx";
+
+  it("nói thẳng: ô để trống là GIỮ NGUYÊN, không phải xoá", () => {
+    const src = doc(UI);
+    expect(src).toContain("GIỮ NGUYÊN, không phải xoá");
+    expect(src).toContain("sửa ở màn hồ sơ nhân sự");
+  });
+
+  it("nói riêng về `status` — thiếu cột thì người đã nghỉ không bị cho đi làm lại", () => {
+    expect(doc(UI)).toContain("người đã nghỉ không bị cho đi làm lại");
+  });
+
+  it("mô tả cũ 'centerSlug rỗng = không gắn cơ sở' đã sửa — nó nói ngược quy ước mới", () => {
+    const src = doc(UI);
+    expect(src).not.toContain("rỗng = nhân viên không gắn cơ sở");
+    expect(src).toContain("THIẾU CỘT = giữ nguyên cơ sở hiện tại");
+  });
+
+  it("nói rõ ba trường chỉ bắt buộc KHI TẠO MỚI", () => {
+    expect(doc(UI)).toContain("bắt buộc KHI TẠO MỚI");
+  });
+});
