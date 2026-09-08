@@ -547,7 +547,7 @@ async function AttendanceTab({
       status: true,
       // Nguồn NHÃN BUỔI — thiếu hai quan hệ này thì deriveSessionLabel chỉ còn `topic`
       // thô và in ra "Buổi 10" trần.
-      plan: { select: { customTitle: true } },
+      plan: { select: { customTitle: true, order: true } },
       lesson: { select: { order: true, title: true, moduleCode: true } },
       class: { select: { name: true } },
       attendances: { where: { studentId }, select: { status: true } },
@@ -592,6 +592,7 @@ async function AttendanceTab({
                   {deriveSessionLabel({
                     sessionNumber: sessionNo.get(s.id) ?? null,
                     planTitle: s.plan?.customTitle,
+                    planOrder: s.plan?.order,
                     lessonTitle: s.lesson?.title,
                     lessonOrder: s.lesson?.order,
                     moduleCode: s.lesson?.moduleCode,
@@ -663,7 +664,7 @@ async function ReviewsTab({
           classId: true,
           date: true,
           topic: true,
-          plan: { select: { customTitle: true } },
+          plan: { select: { customTitle: true, order: true } },
           lesson: { select: { order: true, title: true, moduleCode: true } },
           class: { select: { name: true } },
         },
@@ -713,6 +714,7 @@ async function ReviewsTab({
                   {deriveSessionLabel({
                     sessionNumber: sessionNumberOf.get(f.classSession.id) ?? null,
                     planTitle: f.classSession.plan?.customTitle,
+                    planOrder: f.classSession.plan?.order,
                     lessonTitle: f.classSession.lesson?.title,
                     lessonOrder: f.classSession.lesson?.order,
                     moduleCode: f.classSession.lesson?.moduleCode,
@@ -728,6 +730,7 @@ async function ReviewsTab({
                       {
                         sessionNumber: sessionNumberOf.get(f.classSession.id) ?? null,
                         planTitle: f.classSession.plan?.customTitle,
+                        planOrder: f.classSession.plan?.order,
                         lessonTitle: f.classSession.lesson?.title,
                         lessonOrder: f.classSession.lesson?.order,
                         moduleCode: f.classSession.lesson?.moduleCode,

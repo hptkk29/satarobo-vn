@@ -96,7 +96,7 @@ export async function HubSessionsTab({
         room: { select: { code: true, name: true } },
         // 25/08 — nguồn NHÃN BUỔI "Buổi 1 - HP1 - Bàn Tay Ma Thuật"
         // (lib/lms/session-project-name · deriveSessionLabel).
-        plan: { select: { customTitle: true } },
+        plan: { select: { customTitle: true, order: true } },
         lesson: { select: { order: true, title: true, moduleCode: true } },
       },
       // ⚠️ GIỮ `desc` + `take: 60` — cửa sổ "buổi gần đây". Thứ tự HIỂN THỊ do
@@ -240,7 +240,10 @@ export async function HubSessionsTab({
         }),
       };
     }),
-    (r) => ({ number: r.no, complete: r.complete }),
+    // 08/09 — SẮP THEO NGÀY, không theo số buổi. Nhãn nay là số LỘ TRÌNH
+    // (`soBuoiTheoLoTrinh`), sắp theo nó thì buổi 25/06 mang nhãn "Buổi 43" rơi
+    // xuống sau buổi 12/09 "Buổi 19". Xem `lib/lms/session-order.ts`.
+    (r) => ({ thoiGian: new Date(r.s.date).getTime(), complete: r.complete }),
   );
 
   return (
@@ -283,6 +286,7 @@ export async function HubSessionsTab({
                       {deriveSessionLabel({
                         sessionNumber: no,
                         planTitle: s.plan?.customTitle,
+                        planOrder: s.plan?.order,
                         lessonTitle: s.lesson?.title,
                         lessonOrder: s.lesson?.order,
                         moduleCode: s.lesson?.moduleCode,

@@ -53,7 +53,7 @@ export async function GET(
       actualTeacherId: true,
       date: true,
       topic: true,
-      plan: { select: { customTitle: true } },
+      plan: { select: { customTitle: true, order: true } },
       lesson: { select: { order: true, title: true, moduleCode: true } },
       class: {
         select: {
@@ -152,6 +152,7 @@ export async function GET(
     deriveSessionLabel({
       sessionNumber: sessionNo,
       planTitle: sess.plan?.customTitle,
+      planOrder: sess.plan?.order,
       lessonTitle: sess.lesson?.title,
       lessonOrder: sess.lesson?.order,
       moduleCode: sess.lesson?.moduleCode,
@@ -161,6 +162,7 @@ export async function GET(
     {
       sessionNumber: sessionNo,
       planTitle: sess.plan?.customTitle,
+      planOrder: sess.plan?.order,
       lessonTitle: sess.lesson?.title,
       lessonOrder: sess.lesson?.order,
       moduleCode: sess.lesson?.moduleCode,

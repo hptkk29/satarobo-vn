@@ -57,7 +57,11 @@
 import "server-only";
 
 import { db } from "@/lib/db";
-import { buildSessionNumberMap, sessionNumberLabel } from "@/lib/lms/session-order";
+import {
+  buildSessionNumberMap,
+  soBuoiTheoLoTrinh,
+  nhanSoBuoi as nhanSoBuoiTheoNguon,
+} from "@/lib/lms/session-order";
 import { deriveSessionLabel, deriveSessionTitle } from "@/lib/lms/session-project-name";
 import { vnParts, vnYmd } from "@/lib/time/vn";
 
@@ -78,15 +82,25 @@ export type BuoiRow = {
     title?: string | null;
     moduleCode?: string | null;
   } | null;
-  plan?: { customTitle?: string | null } | null;
+  plan?: { customTitle?: string | null; order?: number | null } | null;
 };
 
 export type BuoiHoc = {
   id: string;
   classId: string;
-  /** Buổi thứ mấy của lớp — hạng theo ngày, KHỚP site giáo viên và admin. */
+  /**
+   * Buổi thứ mấy của lớp tính theo NGÀY. Dùng để SẮP XẾP và để trả lời "buổi thứ mấy
+   * đã học" — KHÔNG dùng in nhãn: buổi bị dời ngày có số này khác số bài.
+   */
   soBuoi: number;
-  /** `Buổi 5` — hoặc `—` khi không tra được (chỉ xảy ra nếu caller nạp thiếu buổi). */
+  /**
+   * Bài thứ mấy của LỘ TRÌNH (`plan.order + 1` → `Lesson.order`), `null` khi lớp
+   * không có nguồn nào. ⚠️ Đây mới là con số ĐI CÙNG `nhanDayDu` — nơi nào in số buổi
+   * cạnh tên bài thì phải lấy trường này, không phải `soBuoi`. Xem
+   * `docs/dieu-tra-lech-bai-hoc.md`.
+   */
+  soBuoiLoTrinh: number | null;
+  /** `Buổi 5`, hoặc `Buổi 5 (theo lịch)` khi chỉ tra được số theo ngày, hoặc `—`. */
   nhanSoBuoi: string;
   /** `Buổi 5 - HP2 - Họa Sĩ Robot` — rút gọn dần khi thiếu mảnh. */
   nhanDayDu: string;
@@ -133,9 +147,14 @@ export function dungDanhSachBuoi(rows: BuoiRow[], now: Date): BuoiHoc[] {
   return rows
     .map((r) => {
       const soBuoi = soBuoiCua.get(r.id) ?? 0;
+      const soLoTrinh = soBuoiTheoLoTrinh({
+        planOrder: r.plan?.order ?? null,
+        lessonOrder: r.lesson?.order ?? null,
+      });
       const nguon = {
         sessionNumber: soBuoi > 0 ? soBuoi : null,
         planTitle: r.plan?.customTitle ?? null,
+        planOrder: r.plan?.order ?? null,
         lessonTitle: r.lesson?.title ?? null,
         lessonOrder: r.lesson?.order ?? null,
         topic: r.topic ?? null,
@@ -147,7 +166,11 @@ export function dungDanhSachBuoi(rows: BuoiRow[], now: Date): BuoiHoc[] {
         id: r.id,
         classId: r.classId,
         soBuoi,
-        nhanSoBuoi: sessionNumberLabel(soBuoi),
+        soBuoiLoTrinh: soLoTrinh,
+        nhanSoBuoi: nhanSoBuoiTheoNguon({
+          loTrinh: soLoTrinh,
+          lich: soBuoi > 0 ? soBuoi : null,
+        }),
         nhanDayDu: deriveSessionLabel(nguon),
         tieuDe: deriveSessionTitle(nguon),
         ngayISO: r.date.toISOString(),
@@ -232,7 +255,7 @@ export async function napBuoiCuaLop(classIds: string[], now: Date): Promise<Buoi
       date: true,
       status: true,
       topic: true,
-      plan: { select: { customTitle: true } },
+      plan: { select: { customTitle: true, order: true } },
       lesson: { select: { order: true, title: true, moduleCode: true } },
     },
   });
