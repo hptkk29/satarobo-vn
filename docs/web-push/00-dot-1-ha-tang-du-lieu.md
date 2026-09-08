@@ -304,9 +304,68 @@ bật `ALLOW_DB_RESET`, nên mọi test chạm DB **skip im lặng** — tưởn
 
 | Đợt | Việc |
 |---|---|
-| 2 | `manifest.json` + service worker. ⚠️ Đã đo: `/sw.js` an toàn (matcher `proxy.ts` loại mọi đường `.js`), nhưng `app/manifest.ts` của Next phát ra `/manifest.webmanifest` mà `isInfraPath` chỉ mở đúng chuỗi `/manifest.json` ⇒ trên `admin.satarobo.vn` đường đó **ăn 308 vĩnh viễn** về `satarobo.vn`. Service worker khoá theo **origin**: 4 host = 4 đăng ký rời |
+| ~~2~~ | ✅ **XONG 08/09/2026** — `public/manifest.json` + `public/sw.js` + đăng ký worker. Xem §11 |
 | 3 | Màn bật thông báo + Server Action đăng ký/gỡ. `userId` từ phiên, `origin` từ request — **không bao giờ nhận từ client**. Chỉ ghi từ `parsed.data`, không bao giờ từ input thô (schema là `z.object` STRIP, nó *bỏ* khoá lạ chứ không *từ chối*). Ghi `displayMode` từ `matchMedia("(display-mode: standalone)")` và `vapidKeyId` từ `vapidKeyIdTuKhoa()` |
 | 4 | Engine gửi + cron. Xử 404/410 → `EXPIRED`; 429 → tôn trọng `Retry-After`; 5xx → nhân đôi; 4xx khác → `DEAD`. Reaper đo theo **`claimedAt`**. Cron riêng thì **nhớ khai vào `.github/workflows/cron-pump-test.yml`**, không thì lần chạy thật đầu tiên rơi thẳng vào prod |
+
+---
+
+## 11. Đợt 2 — PWA + service worker (xong 08/09/2026)
+
+| File | Việc |
+|---|---|
+| `public/manifest.json` | `display: standalone` (điều kiện iOS), scope `/`, theme cam `#f97316` |
+| `public/icons/satarobo-500.png` | Bản sao `app/icon.png` (500×500 thật) |
+| `public/sw.js` | Handler `push` + `notificationclick` + vòng đời. **Không có handler `fetch`, không cache gì** |
+| `components/push/service-worker-register.tsx` | Đăng ký worker sau sự kiện `load`, **không xin quyền** |
+| `app/(admin)/admin/layout.tsx` | `metadata.manifest` + `viewport.themeColor` + mount component trên |
+| `lib/push/sw.test.ts` · `lib/push/manifest.test.ts` | 15 + 10 test |
+
+### Đường phục vụ — đo, không đoán
+
+- **`/sw.js` không đi qua middleware.** Matcher của `proxy.ts` loại theo ĐUÔI FILE và `js` nằm
+  trong danh sách. Đây là lý do worker đặt ở `public/` với đuôi `.js` chứ không phải một route
+  handler. Test `[PUSH-MANIFEST-T03]` chạy chính chuỗi regex đó trên `/sw.js` để khoá lại.
+- **Dùng `public/manifest.json`, CỐ Ý không dùng `app/manifest.ts`.** File quy ước của Next phát
+  ra `/manifest.webmanifest`, mà `isInfraPath` (`lib/auth/route-policy.ts:273`) chỉ mở đúng chuỗi
+  `/manifest.json`; matcher **không** loại đuôi `.json` nên request nặc danh mà trình duyệt dùng
+  để lấy manifest sẽ rơi vào luật host×role. Không lỗi, không log — web app chỉ đơn giản không
+  cài được, và cả nhánh iOS chết câm.
+  ⚠️ **Đính chính một khẳng định tôi đưa ra sớm hơn:** cái "308 vĩnh viễn" là của **BRANCH 1**
+  (`*.vercel.app` → host chuẩn, `proxy.ts:119`), KHÔNG phải của host admin thật. Trên
+  `admin.satarobo.vn`, dòng đầu nhánh admin trong `decideRoute` là
+  `if (isInfraPath(pathname)) return { type: "next" }` — nên `/manifest.json` đi thẳng. Kết luận
+  thực hành không đổi; lý do thì đổi.
+
+### Luật của đợt này nằm trong test, không nằm trong lời hứa
+
+- **Mọi push PHẢI hiện thông báo.** `sw.js` không bao giờ ném: payload rỗng, JSON hỏng, JSON đúng
+  nhưng sai kiểu (mảng/số/chuỗi/null), trường rỗng — tất cả rơi về tiêu đề mặc định. Không phải
+  cẩn thận thừa: handler `push` ném lỗi thì Chrome tự chèn *"This site has been updated in the
+  background"* và sau vài lần **thu hồi quyền push**. Một lỗi phân tích JSON có thể giết cả kênh.
+- **Bấm vào thông báo ưu tiên tab đang mở** cùng origin (`focus` + `navigate`), chỉ mở cửa sổ mới
+  khi không có tab nào. Tab của origin KHÁC không bị cướp.
+- **Test chạy CHÍNH `public/sw.js`**, không chép logic sang module khác: file được đọc rồi chạy
+  trong một `self` giả bằng `node:vm`. Chép logic là hai file sẽ lệch nhau đúng lúc không ai nhìn.
+- **Test manifest so với BYTE THẬT:** đọc IHDR của PNG (offset 16) và đối chiếu với trường `sizes`.
+  Khai `512x512` cho một file 500×500 là lời nói dối im lặng — trình duyệt vẫn tải, biểu tượng chỉ
+  bị co méo, không cảnh báo ở đâu.
+
+### Nợ của Đợt 2
+
+- **Bộ icon còn tạm.** Chỉ có MỘT icon 500×500 (bản sao `app/icon.png`), khai đúng kích thước thật.
+  Chrome chấp nhận (yêu cầu hiện tại là ≥144px) và iOS dùng `apple-touch-icon` mà Next đã phát ra
+  từ `app/apple-icon.png`. Nhưng **bộ chuẩn 192 + 512 + một bản `maskable`** là việc của thiết kế —
+  worktree không có thư viện xử lý ảnh và co ảnh bằng tay sẽ ra biểu tượng xấu. Đưa file vào
+  `public/icons/` rồi sửa mảng `icons` là xong, test sẽ tự kiểm kích thước.
+- **`theme_color` = `#f97316`**, lấy đúng `--primary` của app (`app/globals.css:196`). Kế hoạch
+  ban đầu ghi `#610B8A` — chuỗi đó chỉ xuất hiện MỘT lần trong `globals.css:906` như ghi chú
+  tương phản cho portal, không phải màu chính của admin. Đổi là một dòng ở hai chỗ.
+- **Worker chỉ mount ở host admin.** Site giáo viên (`giaovien.satarobo.vn`) chưa đăng ký worker —
+  GV thuần làm việc ở đó sẽ không nhận push cho tới khi mount thêm. Cột `origin` của
+  `WebPushSubscription` đã chịu được "một người nhiều host"; việc còn lại là mount component.
+- **Chưa chạy `pnpm build` được ở worktree này** (không có `.env`, `next build` chết ở prerender).
+  `typecheck` + `lint` + 5708 test đều xanh; khâu build do CI `Quality` canh.
 
 **Escalation** (lead "Mới" quá N phút chưa ai mở → báo QLCS) vẫn ngoài phạm vi: đó là tầng nghiệp
 vụ, không phải kênh.
