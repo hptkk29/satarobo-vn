@@ -18,6 +18,7 @@
  */
 import { currentDbHost } from "./_load-env";
 import { scriptDb } from "./_script-db";
+import { SHIFT_CATALOG } from "../lib/cham-cong/catalog";
 import { inQuyen, kiemQuyen } from "./_kiem-quyen";
 
 const db = scriptDb();
@@ -536,6 +537,91 @@ async function main() {
     console.log(
       "   chưa vinh danh ai trong nhóm 1970. Đường ghi vẫn hở: luật 1.)",
     );
+  }
+
+  // ── V10 — ĐỐI CHIẾU SHIFT_CATALOG (seed) ↔ ShiftTemplate (prod) ───────────
+  //
+  // Câu của chủ dự án rộng hơn `dayCredit`: "còn giá trị nào khác trên prod đang lệch
+  // với seed không?". Đừng soi bằng mắt — so ĐỦ 17 cột mà `seedShiftTemplates` ghi.
+  //
+  // Vì sao đáng lo dù `seedShiftTemplates` chỉ ghi đè khi `--force`: seed không còn mô tả
+  // đúng thực tế, nên bất kỳ ai đọc nó để hiểu hệ thống sẽ hiểu sai — và một lần chạy
+  // `--force` là mất mọi chỉnh tay.
+  {
+    const tren = await db.shiftTemplate.findMany({
+      where: { centerId: null },
+      select: {
+        code: true,
+        name: true,
+        kind: true,
+        segments: true,
+        defaultPlace: true,
+        attendanceMode: true,
+        dayCredit: true,
+        isLeave: true,
+        nominalMinutes: true,
+        payMode: true,
+        amStart: true,
+        amEnd: true,
+        pmStart: true,
+        pmEnd: true,
+        pmBreakStart: true,
+        pmBreakEnd: true,
+        note: true,
+        displayOrder: true,
+      },
+    });
+    const theoMa = new Map(tren.map((t) => [t.code, t]));
+    const chuan = (v: unknown) => JSON.stringify(v ?? null);
+    tieuDe("══ V10 — seed SHIFT_CATALOG vs prod ShiftTemplate ══");
+    dong("Mã trong seed", SHIFT_CATALOG.length);
+    dong("Mã trên prod (dùng chung)", tren.length);
+    const thieuTrenProd = SHIFT_CATALOG.filter((e) => !theoMa.has(e.code)).map(
+      (e) => e.code,
+    );
+    const laTrenProd = tren
+      .filter((t) => !SHIFT_CATALOG.some((e) => e.code === t.code))
+      .map((t) => t.code);
+    if (thieuTrenProd.length)
+      console.log(`  🔴 seed có, prod KHÔNG: ${thieuTrenProd.join(", ")}`);
+    if (laTrenProd.length)
+      console.log(`  🔴 prod có, seed KHÔNG: ${laTrenProd.join(", ")}`);
+
+    let soMaLech = 0;
+    for (const e of SHIFT_CATALOG) {
+      const t = theoMa.get(e.code);
+      if (!t) continue;
+      const cap: [string, unknown, unknown][] = [
+        ["name", e.name, t.name],
+        ["kind", e.kind, t.kind],
+        ["segments", e.segments, t.segments],
+        ["defaultPlace", e.defaultPlace, t.defaultPlace],
+        ["attendanceMode", e.attendanceMode, t.attendanceMode],
+        ["dayCredit", e.dayCredit, t.dayCredit],
+        ["isLeave", e.isLeave, t.isLeave],
+        ["nominalMinutes", e.nominalMinutes, t.nominalMinutes],
+        ["payMode", e.payMode, t.payMode],
+        ["amStart", e.amStart ?? null, t.amStart],
+        ["amEnd", e.amEnd ?? null, t.amEnd],
+        ["pmStart", e.pmStart ?? null, t.pmStart],
+        ["pmEnd", e.pmEnd ?? null, t.pmEnd],
+        ["pmBreakStart", e.pmBreakStart ?? null, t.pmBreakStart],
+        ["pmBreakEnd", e.pmBreakEnd ?? null, t.pmBreakEnd],
+        ["note", e.note ?? null, t.note],
+        ["displayOrder", e.displayOrder, t.displayOrder],
+      ];
+      const lech = cap.filter(([, a, b]) => chuan(a) !== chuan(b));
+      if (lech.length === 0) continue;
+      soMaLech += 1;
+      console.log(`  🔴 ${e.code}`);
+      for (const [ten, a, b] of lech) {
+        console.log(`       ${ten}`);
+        console.log(`         seed: ${chuan(a)}`);
+        console.log(`         prod: ${chuan(b)}`);
+      }
+    }
+    dong("Mã LỆCH", soMaLech);
+    if (soMaLech === 0) console.log("  ✅ seed và prod khớp trên cả 17 cột");
   }
 
   // ── V9 — BÁN KÍNH ĐỔI ĐƠN VỊ CÔNG → CA (khảo sát 09/09/2026) ─────────────
