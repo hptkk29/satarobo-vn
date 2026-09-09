@@ -514,8 +514,6 @@ test.describe("[R7-07] Assign students + session lifecycle", () => {
       data: { classId: cls.id, date: new Date(), status: "SCHEDULED" },
       select: { id: true },
     });
-    await db.domainEvent.deleteMany({ where: { type: "session.taught" } });
-
     const r = await completeSession({
       nguonChot: "BACKFILL",
       assignMode: "DEFER",
@@ -526,9 +524,13 @@ test.describe("[R7-07] Assign students + session lifecycle", () => {
     });
     expect(r.ok).toBe(true);
 
-    // Không có dòng sự kiện nào ⇒ dispatcher không có gì để giao cho consumer nào.
+    // Không có dòng sự kiện nào cho ĐÚNG buổi này ⇒ dispatcher không có gì để giao.
+    //
+    // ⚠️ Lọc theo `dedupeKey` của chính buổi này, KHÔNG đếm cả bảng và KHÔNG `deleteMany`
+    // theo `type`. Bản đầu xoá toàn cục — nó đúng khi chạy một mình và giẫm lên mọi spec
+    // khác đang chạy song song trên cùng Postgres.
     const ev = await db.domainEvent.findMany({
-      where: { type: "session.taught" },
+      where: { dedupeKey: `session.taught:${s.id}` },
       select: { id: true },
     });
     expect(ev, "backfill KHÔNG được phát session.taught").toHaveLength(0);
@@ -579,8 +581,6 @@ test.describe("[R7-07] Assign students + session lifecycle", () => {
       data: { classId: cls.id, date: new Date(), status: "SCHEDULED" },
       select: { id: true },
     });
-    await db.domainEvent.deleteMany({ where: { type: "session.taught" } });
-
     await completeSession({
       nguonChot: "TAY",
       assignMode: "DEFER",
@@ -590,7 +590,7 @@ test.describe("[R7-07] Assign students + session lifecycle", () => {
       actorName: "GV",
     });
     const ev = await db.domainEvent.findMany({
-      where: { type: "session.taught" },
+      where: { dedupeKey: `session.taught:${s.id}` },
       select: { id: true },
     });
     expect(ev, "đường THẬT phải vẫn phát sự kiện").toHaveLength(1);
