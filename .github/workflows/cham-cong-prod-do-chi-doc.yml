@@ -43,6 +43,7 @@ on:
           - khung-ca-diem-cham
           - danh-muc-nen
           - nhap-danh-muc-chay-thu
+          - vai-ke-toan
           - tat-ca
 concurrency:
   group: cham-cong-prod-do-chi-doc
@@ -167,6 +168,16 @@ jobs:
       - name: "Nhập danh mục nền — CHẠY THỬ (chỉ đọc, in bảng TRƯỚC→SAU)"
         if: ${{ !cancelled() && inputs.viec == 'nhap-danh-muc-chay-thu' }}
         run: pnpm exec tsx scripts/nhap-danh-muc-nen.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+
+      # Việc 2 — neo vai kế toán. Chủ dự án yêu cầu BIẾT TRƯỚC khi ghi: ai đang mang
+      # HO_ACCOUNTANT trên prod, và SR.NV.002 hiện mang vai gì. Đo `UserOrgRole` chứ KHÔNG
+      # đọc màn /admin/users/[id]/permissions — màn đó vẽ RBAC v1.
+      - name: "Đo vai kế toán (chỉ đọc)"
+        if: ${{ !cancelled() && (inputs.viec == 'vai-ke-toan' || inputs.viec == 'tat-ca') }}
+        run: pnpm exec tsx scripts/do-vai-ke-toan.ts
         env:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
           DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
