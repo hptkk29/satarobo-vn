@@ -44,6 +44,11 @@ export default defineConfig({
       // CỨNG — không khai ở đây thì `vitest` báo "No test files found" và CI vẫn XANH
       // dù test viết đúng; đúng loại hỏng câm đã giết hai hook suốt nhiều tháng.
       ".claude/hooks/**/*.test.ts",
+      // Cổng `db-gate.ts` — thứ đứng TRƯỚC `resetDb()` (TRUNCATE mọi bảng). Nó KHÔNG có
+      // test nào của chính nó cho tới 09/09/2026 (luật 14). Cùng lý do phải khai ở đây
+      // như mọi dòng trên: `include` là bộ lọc CỨNG — và lần này bẫy đó tái diễn ngay
+      // trước mắt: `vitest run tests/_helpers/db-gate.test.ts` báo "No test files found".
+      "tests/_helpers/**/*.test.ts",
     ],
     coverage: {
       reporter: ["text", "json", "html"],

@@ -886,6 +886,141 @@ rồi" đến từ chỗ **câu chuyện tự nó đã tròn**, không phải t�
 
 ---
 
+## Luật 16 — mọi cổng CHẶN phải có ca khẳng định đường KHÔNG bị chặn vẫn chạy
+
+> **Không có nó thì "chặn nhầm tất cả" cũng XANH, và bộ test sẽ khen một hệ thống đã tắt.**
+
+Một cổng có hai nửa nghĩa vụ:
+
+| Nửa | Ca test | Hỏng mà không có ca này thì sao |
+|---|---|---|
+| CHẶN đúng thứ phải chặn | `PHAI_CHAN` | lỗ mở, dữ liệu hỏng — **ồn ào**, sớm muộn có người thấy |
+| CHO QUA đúng thứ phải cho qua | `PHAI_CHO_QUA` | **hệ thống tắt trong im lặng**, và bộ test báo xanh |
+
+Nửa thứ hai bị bỏ quên thường xuyên hơn vì nó nghe như "test cái không xảy ra". Nhưng nó
+mới là nửa canh cái hỏng ĐẮT hơn: một cổng chặn hụt làm rò một đường; một cổng chặn thừa
+làm chết mọi đường, và không ai biết vì mọi phép kiểm vẫn xanh.
+
+### Ca cụ thể — 09/09/2026, cổng chặn `session.taught` cho lượt backfill
+
+Lượt backfill KHÔNG được phát `session.taught` (ba người nghe: giao bài tập hồi tố · gửi
+tin cho phụ huynh · hệ quả R7). Cổng viết ra, ca `[BACKFILL-1]` xanh.
+
+Nhưng cấy thử `if (true) { return; }` — tức **chặn CẢ lượt đóng thật** — thì
+`[BACKFILL-1]` **vẫn xanh**. Nó chỉ hỏi "backfill có bị chặn không", và câu trả lời vẫn là
+có. Nếu bản vá đó lọt, ta vừa tắt đường giao bài tập của **toàn hệ thống** với một bộ test
+toàn xanh.
+
+Thứ bắt được nó là `[BACKFILL-3]`: *"lượt đóng THẬT vẫn phát sự kiện và vẫn ghi SNAPSHOT"*.
+
+### Cách viết nửa thứ hai cho đúng
+
+1. **Cho ăn thứ GẦN NHẤT với thứ bị chặn**, không phải một đầu vào bất kỳ. Cổng chặn
+   `git commit` khi đỏ thì ca cho-qua phải là **một lượt `git commit` trên cây XANH**, chứ
+   không phải `ls -la` — `ls` chỉ chứng minh cổng không chặn mọi lệnh, nó không chứng minh
+   cổng còn cho commit đi qua.
+2. **Cấy đúng lỗi "chặn nhầm tất cả"** và xem ca đó có đỏ không (luật 8). Ở đây phép cấy
+   là ép điều kiện chặn thành `true`.
+3. Cổng có **đường vượt** thì đường vượt cũng cần cả hai nửa: vượt hợp lệ ⇒ qua; vượt
+   không đủ điều kiện ⇒ vẫn chặn.
+
+### Kết quả rà 09/09/2026 — 11 cổng dựng trong tuần
+
+| Cổng | Nửa CHO QUA | |
+|---|---|---|
+| `block-destructive.sh` | `PHAI_CHO_QUA` 5 ca (lệnh thường · xoá một file · đẩy thường · reset trên DB local · shadow trỏ local) | ✅ |
+| `block-env-add.sh` | `.env.example` · lệnh không phải `git add` | ✅ |
+| `chanSuaKyDaChot` | `OPEN`/`REOPENED`/`CLOSING`/chưa có kỳ ⇒ qua; TỪ CHỐI đơn cũ vẫn làm được | ✅ |
+| `chanChotKyThieuBuoi` | kỳ không có buổi nào ⇒ qua, KHÔNG khoá vĩnh viễn | ✅ |
+| cổng sức khoẻ danh mục | hình dạng lành mạnh ⇒ im lặng; đủ điểm chấm ⇒ im lặng | ✅ |
+| `cotCoMat` (nhập nhân sự) | ô ngày CÓ giá trị thì VẪN ghi | ✅ |
+| `roster-guard` | số đo lúc dạy ⇒ qua; lô sạch không ném | ✅ |
+| `affordance-coverage` | bỏ qua mũi tên trong `<button>`; bỏ qua khi cả hàng là vùng bấm | ✅ |
+| `suaGioQuetTayAction` (4 cổng) | lượt hợp lệ vẫn ghi thêm dòng; đường vượt HO ⇒ qua | ✅ |
+| chặn `session.taught` cho backfill | `[BACKFILL-3]` — đường đóng THẬT vẫn phát sự kiện | ✅ |
+| **`chan-commit-khi-do.sh`** | chỉ có `ls -la` ⇒ qua. **KHÔNG có ca "`git commit` trên cây XANH ⇒ qua"** | 🔴 **THIẾU** |
+
+Và một cổng CHẶN **không có test nào của chính nó** (luật 14, chưa phải luật 16):
+`tests/_helpers/db-gate.ts` — cổng `ALLOW_DB_RESET` chặn `resetDb()` chạy sai lúc. Không
+có file test nào cho nó; nếu nó chặn nhầm luôn cả các bộ `test:*-db` thì triệu chứng là
+"bộ DB đỏ hết", dễ bị đọc thành lỗi khác.
+
+### Liên hệ
+
+- **Luật 14** — lưới an toàn phải có test của chính nó. Luật 16 nói cái test đó phải có
+  MẤY nửa.
+- **Luật 8** — cách chứng minh nửa thứ hai đáng tin: cấy "chặn nhầm tất cả" và xem nó đỏ.
+- **Luật 15** — cùng gốc: một kết quả xanh có nhiều cách để đúng vì lý do sai.
+
+---
+
+## Luật 17 — tài liệu KHÔNG ghi số lượng, ghi TÊN FILE và CÁCH ĐỌC RA con số
+
+> **Số trong docs không có gì giữ cho đúng, và nó sai theo cách thuyết phục** — người đọc
+> dừng lại ở con số thay vì đi mở file. Một câu sai mà nghe chắc chắn tệ hơn không có câu nào.
+
+Phân biệt hai loại số, luật này chỉ nhắm loại thứ nhất:
+
+| Loại | Ví dụ | Luật 17 |
+|---|---|---|
+| **ĐẾM cấu trúc repo** — ai cũng đếm lại được, và nó đổi mỗi lần có người thêm một dòng | "`include` có 4 chỗ" · "27 ca test" · "bảng test 990 dòng" | ❌ **đừng ghi** |
+| **ĐO một thời điểm** — có ngày, có nguồn, không ai kỳ vọng nó còn đúng | "đo prod 09/09: 90 buổi THOẢ" · "666 ca ngoài cổng (08/09)" | ✅ giữ, **bắt buộc kèm ngày + lệnh đo** |
+
+Loại thứ hai là thứ luật 1 và luật 3 ĐÒI phải có. Loại thứ nhất là thứ tự nó mục ruỗng.
+
+### Viết thế nào thay vì ghi số
+
+| Đừng | Viết |
+|---|---|
+| "`include` có 4 chỗ" | "danh sách đầy đủ ở `vitest.config.ts`, mảng `include`" |
+| "hooks.test.ts có 27 ca" | "`.claude/hooks/hooks.test.ts` — chạy `pnpm exec vitest run .claude/hooks` để biết số ca" |
+| "16 role × 245 quyền" | "nguồn là `prisma/seed-roles.ts`; đếm bằng `SELECT count(*) FROM \"RolePermission\"`" |
+| "bảng test 990 dòng" | "bảng test ở `lib/auth/route-policy.test.ts` — file lớn, đọc trước khi sửa" |
+
+Câu thay thế **dài hơn một chút và không bao giờ sai**. Nó cũng làm được việc mà con số
+không làm được: chỉ người đọc tới đúng chỗ.
+
+### Ba lần trong MỘT tuần, cùng hình dạng
+
+| Câu | Thực tế | Hậu quả |
+|---|---|---|
+| `.claude/rules/prisma-db.md`: *"Env riêng cho test: `.env.test`"* rồi liệt kê **2 dòng** | cần **6 biến** | Bộ R7 đầy đủ đỏ giả **9 ca**. Mất một buổi đi tìm hồi quy không có thật |
+| `docs/elearning/quy-uoc-nen.md`: *"include có bốn chỗ"* | **12 mục** (đo 09/09) | Người viết test mới tin là đã được phủ; đúng loại hỏng câm mà chính mục đó sinh ra để chặn |
+| BA: *"16 role × 245 quyền"* | `main` có **188** | Con số đi vào một tài liệu bàn giao và không ai kiểm lại |
+
+Điều đáng chú ý nhất ở ca thứ hai: file đó **đã tự sửa một lần** — có hẳn dòng *"⚠️ Sửa
+08/09/2026: dòng này từng viết 'bốn chỗ', nay có 10 mục"*. Một ngày sau, **10 cũng sai**
+(nay 12). Con số không sống sót nổi một ngày trong một repo đang chạy. Sửa nó không phải
+là giải pháp; **bỏ nó đi** mới là.
+
+### Kết quả rà 09/09/2026 — `CLAUDE.md` + `docs/`
+
+**Đang SAI:**
+
+| Chỗ | Ghi | Đo được |
+|---|---|---|
+| `CLAUDE.md` mục 8 | `hooks.test.ts` "27 ca" | **31** — lệch trong cùng ngày, do chính lượt thêm ca của tôi |
+| `docs/bo-test-ngoai-cong-merge.md` | "CI gọi 7 script" playwright | CI gọi **5** config |
+| `docs/elearning/quy-uoc-nen.md` §3 | "thư mục được phủ: 5 chỗ" / ghi chú sửa "10 mục" | **12** mục |
+| `docs/elearning/quy-uoc-nen.md` §8 | "bảng test 990 dòng" | **1.513** dòng |
+
+**Đang ĐÚNG hôm nay — nhưng vẫn là số lượng, vẫn sẽ trôi:**
+`CLAUDE.md` "3 file allowlist" (=3) · "ba hook `PreToolUse`" (=3) · "9 roles" (=9) ·
+`bo-test-ngoai-cong-merge.md` "15 file `playwright.*.config.ts`" (=15).
+
+⚠️ Ngay cả **phép đếm** cũng mơ hồ: đếm mục `include` bằng hai câu grep khác nhau cho ra
+15 và 17; chỉ khi tách đúng mảng mới ra 12. Nếu người viết docs còn đếm ra ba số khác
+nhau thì con số trong docs lại càng không đáng tin.
+
+### Liên hệ
+
+- **Luật 3** — chú thích không phải bằng chứng. Luật 17 là hệ quả: **con số trong văn xuôi
+  cũng không phải bằng chứng**, kể cả khi nó từng đúng.
+- **Luật 1** — mọi số báo ra phải kèm phép tính sinh ra nó. Trong docs, "phép tính" chính
+  là câu chỉ đường tới file — và nó thay được luôn con số.
+
+---
+
 ## Sổ sự cố
 
 ### 08/09/2026 — nhập nhân sự xoá trắng ba cột ngày trên 9 hồ sơ PROD
