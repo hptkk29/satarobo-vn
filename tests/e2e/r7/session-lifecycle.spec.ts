@@ -22,6 +22,9 @@ import {
   clearHandlers,
   type DomainEventLite,
 } from "../../../lib/events/registry";
+// Nhập TĨNH: `await import()` động không được runner Playwright transpile
+// (SyntaxError: Unexpected token 'export').
+import { loaiVi } from "../../../lib/payroll/roster-guard";
 
 async function seedClassWithCourse(opts: {
   slug: string;
@@ -233,7 +236,7 @@ test.describe("[R7-07] Assign students + session lifecycle", () => {
     });
 
     const r1 = await completeSession({
-          nguonChot: "TAY",
+      nguonChot: "TAY",
       assignMode: "DEFER", // bắt buộc từ 08/09; test này không nói về giao bài
       sessionId: s.id,
       actualStartAt: new Date(),
@@ -242,7 +245,7 @@ test.describe("[R7-07] Assign students + session lifecycle", () => {
     });
     expect(r1.ok).toBe(true);
     const r2 = await completeSession({
-          nguonChot: "TAY",
+      nguonChot: "TAY",
       assignMode: "DEFER", // bắt buộc từ 08/09; test này không nói về giao bài
       sessionId: s.id,
       actorId: "gv",
@@ -325,7 +328,7 @@ test.describe("[R7-07] Assign students + session lifecycle", () => {
     });
 
     const r = await completeSession({
-          nguonChot: "TAY",
+      nguonChot: "TAY",
       assignMode: "DEFER", // bắt buộc từ 08/09; test này không nói về giao bài
       sessionId: s.id,
       actorId: "gv",
@@ -370,7 +373,7 @@ test.describe("[R7-07] Assign students + session lifecycle", () => {
       data: { sessionId: s.id, studentId: hs1.id, status: "PRESENT" },
     });
     await completeSession({
-       nguonChot: "TAY",
+      nguonChot: "TAY",
       assignMode: "DEFER", // bắt buộc từ 08/09; test này không nói về giao bài
       sessionId: s.id,
       actorId: "gv",
@@ -393,7 +396,7 @@ test.describe("[R7-07] Assign students + session lifecycle", () => {
     }
     // Gọi lại completeSession: idempotent, KHÔNG được ghi đè số cũ bằng sĩ số hôm nay.
     await completeSession({
-       nguonChot: "TAY",
+      nguonChot: "TAY",
       assignMode: "DEFER", // bắt buộc từ 08/09; test này không nói về giao bài
       sessionId: s.id,
       actorId: "gv",
@@ -418,7 +421,7 @@ test.describe("[R7-07] Assign students + session lifecycle", () => {
       select: { id: true },
     });
     const warn = await completeSession({
-          nguonChot: "TAY",
+      nguonChot: "TAY",
       assignMode: "DEFER", // bắt buộc từ 08/09; test này không nói về giao bài
       sessionId: s.id,
       actorId: "gv",
@@ -428,7 +431,7 @@ test.describe("[R7-07] Assign students + session lifecycle", () => {
     expect(warn.needsConfirm).toBe(true);
 
     const done = await completeSession({
-          nguonChot: "TAY",
+      nguonChot: "TAY",
       assignMode: "DEFER", // bắt buộc từ 08/09; test này không nói về giao bài
       sessionId: s.id,
       confirmNoAttendance: true,
@@ -449,7 +452,7 @@ test.describe("[R7-07] Assign students + session lifecycle", () => {
       select: { id: true },
     });
     const r = await completeSession({
-          nguonChot: "TAY",
+      nguonChot: "TAY",
       assignMode: "DEFER", // bắt buộc từ 08/09; test này không nói về giao bài
       sessionId: s.id,
       confirmNoAttendance: true,
@@ -476,7 +479,7 @@ test.describe("[R7-07] Assign students + session lifecycle", () => {
       select: { id: true },
     });
     await completeSession({
-       nguonChot: "TAY",
+      nguonChot: "TAY",
       assignMode: "DEFER", // bắt buộc từ 08/09; test này không nói về giao bài
       sessionId: s.id,
       confirmNoAttendance: true,
@@ -496,5 +499,107 @@ test.describe("[R7-07] Assign students + session lifecycle", () => {
     for (const h of getHandlers("session.taught")) await h(lite);
 
     expect(seen).toEqual([s.id]);
+  });
+
+  // ── BACKFILL đóng buổi cũ — BA lời hứa, mỗi cái chặn một đường hỏng khác ─────────────
+  //
+  // Vì sao phải là CSDL thật: cả ba đều là hệ quả ở tầng ghi. Một hàm thuần không nhìn thấy
+  // "có dòng DomainEvent nào được sinh ra không" (luật 9).
+
+  test("[BACKFILL-1] KHÔNG phát session.taught ⇒ cả BA consumer đều không chạy", async () => {
+    // Chặn ở TẦNG PHÁT, không chặn bằng `assignMode`: `r7-lifecycle` KHÔNG đọc `assignMode`,
+    // nên chặn kiểu đó chỉ chặn được hai trong ba mà người viết tin là đã chặn cả ba.
+    const { cls } = await seedClassWithCourse({ slug: "bf1", centerId: "CS1" });
+    const s = await db.classSession.create({
+      data: { classId: cls.id, date: new Date(), status: "SCHEDULED" },
+      select: { id: true },
+    });
+    await db.domainEvent.deleteMany({ where: { type: "session.taught" } });
+
+    const r = await completeSession({
+      nguonChot: "BACKFILL",
+      assignMode: "DEFER",
+      sessionId: s.id,
+      confirmNoAttendance: true,
+      actorId: null,
+      actorName: "Backfill test",
+    });
+    expect(r.ok).toBe(true);
+
+    // Không có dòng sự kiện nào ⇒ dispatcher không có gì để giao cho consumer nào.
+    const ev = await db.domainEvent.findMany({
+      where: { type: "session.taught" },
+      select: { id: true },
+    });
+    expect(ev, "backfill KHÔNG được phát session.taught").toHaveLength(0);
+
+    // Buổi VẪN được đóng — chặn sự kiện không được biến thành "không đóng được buổi".
+    const sau = await db.classSession.findUniqueOrThrow({
+      where: { id: s.id },
+      select: { status: true, completedAt: true, completedById: true },
+    });
+    expect(sau.status).toBe("COMPLETED");
+    expect(sau.completedAt).not.toBeNull();
+    expect(sau.completedById, "backfill: không người nào bấm").toBeNull();
+  });
+
+  test("[BACKFILL-2] rosterSource = BACKFILL_CLOSE, KHÔNG phải SNAPSHOT", async () => {
+    // `completeSession` đếm ghi danh ĐANG CÓ lúc gọi. Với buổi dạy tháng trước, đó là sĩ số
+    // HÔM NAY — số suy đoán. Ghi SNAPSHOT là để cổng lương NHẬN nó vào công thức.
+    const { cls } = await seedClassWithCourse({ slug: "bf2", centerId: "CS1" });
+    const s = await db.classSession.create({
+      data: { classId: cls.id, date: new Date(), status: "SCHEDULED" },
+      select: { id: true },
+    });
+    await completeSession({
+      nguonChot: "BACKFILL",
+      assignMode: "DEFER",
+      sessionId: s.id,
+      confirmNoAttendance: true,
+      actorId: null,
+      actorName: "Backfill test",
+    });
+    const sau = await db.classSession.findUniqueOrThrow({
+      where: { id: s.id },
+      select: { rosterSource: true },
+    });
+    expect(sau.rosterSource).toBe("BACKFILL_CLOSE");
+
+    // Và cổng lương phải TỪ CHỐI số đó — đây mới là điều thật sự cần, nhãn chỉ là phương tiện.
+    expect(loaiVi({ sessionId: s.id, rosterSize: 3, rosterSource: sau.rosterSource })).toBe(
+      "SI_SO_SUY_DOAN",
+    );
+  });
+
+  test("[BACKFILL-3] lượt đóng THẬT vẫn phát sự kiện và vẫn ghi SNAPSHOT", async () => {
+    // Anti-vacuity: hai ca trên chỉ có nghĩa nếu đường THẬT vẫn hoạt động. Chặn nhầm cả hai
+    // đường thì hai ca kia vẫn xanh, và ta vừa tắt đường giao bài tập của toàn hệ thống.
+    const { cls } = await seedClassWithCourse({ slug: "bf3", centerId: "CS1" });
+    const s = await db.classSession.create({
+      data: { classId: cls.id, date: new Date(), status: "SCHEDULED" },
+      select: { id: true },
+    });
+    await db.domainEvent.deleteMany({ where: { type: "session.taught" } });
+
+    await completeSession({
+      nguonChot: "TAY",
+      assignMode: "DEFER",
+      sessionId: s.id,
+      confirmNoAttendance: true,
+      actorId: "gv",
+      actorName: "GV",
+    });
+    const ev = await db.domainEvent.findMany({
+      where: { type: "session.taught" },
+      select: { id: true },
+    });
+    expect(ev, "đường THẬT phải vẫn phát sự kiện").toHaveLength(1);
+
+    const sau = await db.classSession.findUniqueOrThrow({
+      where: { id: s.id },
+      select: { rosterSource: true, completedById: true },
+    });
+    expect(sau.rosterSource).toBe("SNAPSHOT");
+    expect(sau.completedById).toBe("gv");
   });
 });

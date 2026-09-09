@@ -9114,6 +9114,17 @@ enum ClassRosterSource {
   FROM_ENROLLMENT
   /// Backfill: không suy được. Cố ý ghi ra thay vì để null lẫn với "chưa chạy backfill".
   UNKNOWN
+  /// Buổi được ĐÓNG bởi lệnh backfill (`scripts/backfill-dong-buoi-thoa.ts`, 09/09/2026),
+  /// không phải bởi người dạy lúc buổi diễn ra.
+  ///
+  /// Vì sao KHÔNG dùng `SNAPSHOT`: `completeSession` đếm ghi danh ĐANG CÓ tại lúc gọi. Với
+  /// một buổi dạy từ tháng 4 mà đóng vào tháng 9, con số đó là sĩ số HÔM NAY — không phải
+  /// sĩ số lúc dạy. Ghi `SNAPSHOT` là dán nhãn "số đo" lên một số suy đoán, và
+  /// `lib/payroll/roster-guard.ts` sẽ NHẬN nó vào công thức lương.
+  ///
+  /// Vì sao KHÔNG dùng `FROM_ENROLLMENT`: giá trị đó thuộc lệnh backfill SĨ SỐ
+  /// (`backfill-si-so-buoi.ts`), một việc khác. Trộn hai nguồn vào một nhãn là mất dấu vết.
+  BACKFILL_CLOSE
 }
 
 /// Danh mục PHÂN LOẠI BUỔI — buổi này là học chính thức, lớp Coach, bù, vượt, workshop hay sự kiện.

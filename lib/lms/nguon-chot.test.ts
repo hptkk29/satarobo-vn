@@ -46,6 +46,7 @@ function dem(src: string, chuoi: string): number {
 
 const TU_DONG = 'nguonChot: "TU_' + 'DONG"';
 const TAY = 'nguonChot: "TAY"';
+const BACKFILL = 'nguonChot: "BACK' + 'FILL"';
 
 /**
  * HỢP ĐỒNG: bốn đường đóng buổi trong mã sản phẩm, mỗi đường một giá trị.
@@ -90,12 +91,46 @@ describe("nguonChot — mỗi đường khai đúng nguồn của mình", () => 
     expect(tong).toBe(1);
   });
 
+  // ── BACKFILL: giá trị thứ ba, và HAI hệ quả gắn cứng với nó ─────────────────
+  it("lệnh backfill dùng BACKFILL, không mượn TU_DONG cũng không mượn TAY", () => {
+    // Mượn cái nào cũng đội lên một trong hai cột của phép đếm vừa dựng ra để đo cổng
+    // tự đóng — 90 dòng dọn backlog sẽ làm câu trả lời "cổng có nổ không" thành vô nghĩa.
+    const src = doc("scripts/backfill-dong-buoi-thoa.ts");
+    expect(dem(src, BACKFILL), "phải truyền BACKFILL đúng một lần").toBe(1);
+    expect(dem(src, TU_DONG), "KHÔNG được mượn TU_DONG").toBe(0);
+    expect(dem(src, TAY), "KHÔNG được mượn TAY").toBe(0);
+  });
+
+  it("BACKFILL chặn session.taught ở TẦNG PHÁT, không chặn bằng assignMode", () => {
+    // `r7-lifecycle` KHÔNG đọc `assignMode`. Chặn bằng nó là chặn được hai trong ba
+    // consumer trong khi người viết tin là đã chặn cả ba — đúng hình dạng luật 14.
+    // Ca HÀNH VI tương ứng: tests/e2e/r7/session-lifecycle.spec.ts [BACKFILL-1],
+    // đã cấy thử CẢ HAI kiểu chặn sai.
+    const src = doc("lib/lms/session-lifecycle.ts");
+    const iChan = src.indexOf('opts.nguonChot === "BACK' + 'FILL"');
+    const iPhat = src.indexOf("publishEvent(");
+    expect(iChan, "phải có nhánh chặn theo nguonChot").toBeGreaterThan(-1);
+    expect(iPhat, "phải còn lời gọi publishEvent").toBeGreaterThan(-1);
+    expect(iChan, "nhánh chặn phải nằm TRƯỚC publishEvent").toBeLessThan(iPhat);
+  });
+
+  it("BACKFILL ghi rosterSource riêng ⇒ cổng lương vẫn TỪ CHỐI", () => {
+    // `completeSession` đếm ghi danh ĐANG CÓ lúc gọi. Với buổi dạy tháng trước đó là sĩ
+    // số HÔM NAY — số suy đoán. Ghi SNAPSHOT là để roster-guard NHẬN nó vào công thức lương.
+    const src = doc("lib/lms/session-lifecycle.ts");
+    expect(src).toContain('? "BACKFILL_CLOSE"');
+    expect(
+      dem(src, 'rosterSource: "SNAPSHOT"'),
+      "không được ghi SNAPSHOT vô điều kiện",
+    ).toBe(0);
+  });
+
   // ── chữ ký phải BẮT BUỘC ────────────────────────────────────────────────────
   it("`nguonChot` là trường BẮT BUỘC, không `?:`, không giá trị mặc định", () => {
     // Mặc định nào cũng dán nhãn sai cho một trong hai đường, và nhãn sai không nổ lỗi
     // — nó chỉ làm phép đo nói dối (luật 7).
     const src = doc("lib/lms/session-lifecycle.ts");
-    expect(src).toContain('nguonChot: "TU_DONG" | "TAY";');
+    expect(src).toContain('nguonChot: "TU_DONG" | "TAY" | "BACKFILL";');
     expect(src, "không được có `nguonChot?:`").not.toMatch(/nguonChot\?\s*:/);
     expect(src, "không được có `opts.nguonChot ??`").not.toMatch(/opts\.nguonChot\s*\?\?/);
   });
