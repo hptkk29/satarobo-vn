@@ -320,6 +320,51 @@ exception, không cảnh báo, chỉ là một con số sai.
 Trường tuỳ chọn thì `tsc` cho qua. **Trường bắt buộc biến "quên select" từ lỗi câm thành
 lỗi biên dịch.** Đó là lý do thứ hai để bỏ mặc định, ngoài lý do liệt kê call site.
 
+### 09/09/2026 — chính người viết luật 6 vi phạm luật 6, và LUẬT KHÔNG ĐỦ
+
+Commit `a3b833fc` mang **23 test đỏ**. Cách nó lọt:
+
+```bash
+pnpm test:unit 2>&1 | grep -E "Tests " | tail -2 && git commit ...
+```
+
+`grep` thành công ⇒ `&&` chạy tiếp ⇒ commit. Dòng `23 failed` **in ra ngay trước mắt** và
+vẫn lọt. Luật 6 viết 07/09, vi phạm 09/09, bằng đúng cái ống nó cấm.
+
+> **Một luật đã bị chính tác giả vi phạm trong hai ngày thì nó không phải luật — nó là
+> một lời nhắc. Đổi nó thành CƠ CHẾ.**
+
+Cơ chế: `.claude/hooks/chan-commit-khi-do.sh` — hook `PreToolUse` soi chuỗi lệnh, thấy
+`git commit` thì chạy `typecheck` + `vitest related` cho file đã stage, đỏ thì `exit 2`.
+
+Vì sao **không** dùng husky: `husky` là devDependency nhưng **chưa từng khởi tạo** (không
+có `.husky/`, không script `prepare`, `core.hooksPath` chưa đặt). Và quan trọng hơn — cách
+commit đang dùng là `git commit --no-verify`, mà `--no-verify` **bỏ qua mọi git hook**.
+Hook Claude Code chặn ở tầng trên nên `--no-verify` không thoát được.
+
+### 🔴 Phát hiện kèm theo: HAI hook an toàn của repo ĐỀU CHẾT
+
+`block-env-add.sh` **và** `block-destructive.sh` cùng mở đầu bằng:
+
+```bash
+cmd="${CLAUDE_COMMAND:-}"
+```
+
+Biến đó **không tồn tại**. `cmd` rỗng ⇒ không mẫu nào khớp ⇒ hook luôn `exit 0` trong im
+lặng. Trong khi CLAUDE.md ghi **"Security (ENFORCED by hooks)"**.
+
+Nghĩa là suốt nhiều tháng: `git add .env` không bị chặn, `git reset --hard` không bị chặn,
+`DROP TABLE` không bị chặn — và tài liệu nói ngược lại. Đây là **luật 12 áp cho hạ tầng**:
+dòng chữ "ENFORCED by hooks" là một affordance, và nó nói dối.
+
+Cách đúng: PreToolUse nhận **JSON trên STDIN**, đọc `.tool_input.command`.
+
+**Giới hạn của hook mới, nói rõ để không ai tưởng nó chặn mọi thứ:** nó chạy `typecheck`
+toàn repo + `vitest related` cho file đã stage. Test **quét cây thư mục**
+(`bang-coverage`, `affordance-coverage`, `nav-coverage`) không import file nào nên
+`related` **không bắt được** — mà đó đúng là loại test bắt lỗi ở file bạn không sửa. Test
+cần Postgres và test browser cũng ngoài phạm vi. **Hook là lưới, CI vẫn là cổng cuối.**
+
 ---
 
 ## Luật 8 — test canh lỗi chỉ được tin sau khi CẤY LẠI lỗi và thấy nó ĐỎ
