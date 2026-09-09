@@ -184,6 +184,34 @@ describe("chan-commit-khi-do.sh — chặn commit khi đỏ", () => {
     expect(src).toContain("[;&|[:space:]])git[[:space:]]");
   });
 
+  // ⚠️ LỖ ĐO ĐƯỢC 09/09/2026 ở lượt commit THẬT, không ca nào phía trên bắt được nó.
+  //
+  // `PreToolUse` chạy TRƯỚC chuỗi lệnh. Một lượt vừa stage vừa commit thì lúc hook soi,
+  // tệp chưa vào index ⇒ nó kiểm cây SẠCH, cho qua, và commit lọt nguyên. Đo thật: cấy
+  // một lỗi typecheck rồi gọi hai kiểu — gộp thì LỌT, tách hai lượt thì BỊ CHẶN.
+  //
+  // Đây đúng là luật 14 áp cho chính lưới vừa dựng: ca test của nó xanh 27/27 mà cổng
+  // vẫn có một cửa mở, vì mọi ca đều cho hook ăn chuỗi lệnh CHỈ CÓ commit.
+  it("CHẶN lượt vừa stage vừa commit — hook soi cây TRƯỚC khi stage", () => {
+    const r = chay("chan-commit-khi-do.sh", `git add lib/a.ts && git commit -m "x"`);
+    expect(r.ma, "hình dạng gộp phải bị chặn và bảo tách").toBe(CHAN);
+    expect(r.loi).toContain("vừa stage vừa commit");
+  });
+
+  it("hiểu `-a`/`-am`: không stage thì phải so với HEAD, không phải index", () => {
+    // `git commit -am "x"` không stage gì cả. Bản cũ đọc `--cached` ⇒ danh sách RỖNG
+    // ⇒ `exit 0` sớm, bỏ luôn bước test. Chỉ typecheck còn sót lại canh.
+    const src = boChuThich(
+      require("node:fs").readFileSync(
+        join(HOOKS, "chan-commit-khi-do.sh"),
+        "utf8",
+      ) as string,
+    );
+    expect(src, "phải có nhánh so với HEAD cho commit -a").toContain(
+      "--diff-filter=ACMR HEAD",
+    );
+  });
+
   it("KHÔNG có đường vượt bằng biến môi trường", () => {
     // Đường vượt mà chính người bị chặn bật được thì cơ chế lại thành luật.
     const src = boChuThich(

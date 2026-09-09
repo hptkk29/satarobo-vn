@@ -55,6 +55,29 @@ fi
 
 cd "${CLAUDE_PROJECT_DIR:-.}" || exit 0
 
+# ── LỖ 1: gộp `git add` và `git commit` trong CÙNG một lượt gọi ──────────────
+#
+# `PreToolUse` chạy TRƯỚC cả chuỗi lệnh. Nếu một lượt vừa stage vừa commit thì lúc hook
+# soi, tệp còn chưa được stage — nó kiểm một cây SẠCH rồi cho qua, và lệnh sau đó commit
+# đúng cái nó chưa từng nhìn thấy.
+#
+# Đo 09/09/2026: một lượt `git add <tệp lỗi> && git commit` LỌT hoàn toàn, trong khi tách
+# làm hai lượt thì bị chặn ngay. Cổng đúng, hình dạng lệnh sai.
+#
+# ⇒ Chặn hình dạng gộp và bảo tách. Đây KHÔNG phải đường vượt: nó bắt làm thêm một bước,
+#    không bớt phép kiểm nào.
+if printf '%s' "$cmd" | grep -qE '(^|[;&|[:space:]])git[[:space:]]+add([[:space:]]|$)'; then
+  echo "🚫 CHẶN COMMIT — lượt này vừa stage vừa commit." >&2
+  echo "" >&2
+  echo "Hook chạy TRƯỚC khi lệnh chạy, nên lúc này tệp bạn sắp stage chưa có trong index:" >&2
+  echo "cổng sẽ kiểm một cây sạch rồi cho qua, và commit lọt nguyên." >&2
+  echo "" >&2
+  echo "Tách làm hai lượt:" >&2
+  echo "  1) git add <tệp…>   (rồi xem git diff --cached --stat — luật 13)" >&2
+  echo "  2) git commit …     (lúc này cổng mới soi đúng thứ sắp vào lịch sử)" >&2
+  exit 2
+fi
+
 bao_loi() {
   echo "🚫 CHẶN COMMIT — $1 ĐỎ." >&2
   echo "" >&2
@@ -73,7 +96,13 @@ if ! pnpm typecheck >"$tc" 2>&1; then
 fi
 
 # ── 2. test LIÊN QUAN tới file đã stage ──────────────────────────────────────
-mapfile -t staged < <(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(ts|tsx)$' || true)
+# ⚠️ `git commit -a` / `-am` KHÔNG stage trước — `--cached` sẽ RỖNG và hook thoát sớm,
+# bỏ qua bước test. Với hình dạng đó phải so với `HEAD` để thấy cả sửa đổi chưa stage.
+if printf '%s' "$cmd" | grep -qE '(^|[;&[:space:]])git[[:space:]]+commit[[:space:]]+(-[[:alnum:]]*a|--all)'; then
+  mapfile -t staged < <(git diff --name-only --diff-filter=ACMR HEAD | grep -E '\.(ts|tsx)$' || true)
+else
+  mapfile -t staged < <(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(ts|tsx)$' || true)
+fi
 if [ "${#staged[@]}" -eq 0 ]; then
   exit 0
 fi
