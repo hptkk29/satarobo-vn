@@ -92,8 +92,14 @@ hoàn tiền) và **main đỏ liên tục** từ `c78d0ae0` tới `2bfea6eb` �
 | `tests/manual` | 15 | ✅ | ❌ | ❌ | |
 | | **57 spec** | | | | **chưa từng chạy trong cổng merge** |
 
-**9 cấu hình Playwright chết:** `r1` `r2` `r3` `r4` `r5` `r6` `acceptance` `manual` `smoke`
-(repo có 15 file `playwright.*.config.ts`, CI gọi 7 script).
+**Cấu hình Playwright chết** — có file, CI không gọi: `r1` `r2` `r3` `r4` `r5` `r6`
+`acceptance` `manual` `smoke`.
+
+> Đếm lại bất cứ lúc nào, đừng tin con số trong văn bản (luật 17):
+> ```bash
+> ls playwright.*.config.ts                                            # có những file nào
+> grep -oE 'playwright\.[a-z0-9]+\.config' .github/workflows/ci.yml | sort -u   # CI gọi cái nào
+> ```
 
 ---
 
