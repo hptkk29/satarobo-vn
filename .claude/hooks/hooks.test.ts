@@ -58,6 +58,55 @@ function chay(hook: string, command: string): { ma: number; loi: string } {
   }
 }
 
+/**
+ * Dựng một repo git TẠM có `pnpm typecheck` giả, rồi chạy hook trỏ vào đó.
+ *
+ * ⚠️ VÌ SAO KHÔNG chạy hook trên chính repo này: hai ca dưới cần điều khiển kết quả
+ * `typecheck`. Chạy trên repo thật thì kết quả phụ thuộc cây làm việc của người đang chạy
+ * test — ai đó có một lỗi kiểu đang sửa dở là ca "cây XANH ⇒ cho qua" đỏ vì lý do chẳng
+ * liên quan. Đúng loại đỏ-giả mà `.env.test` thiếu biến vừa gây ra tuần này.
+ *
+ * @param maTypecheck mã thoát mà `pnpm typecheck` giả sẽ trả.
+ */
+function repoTam(maTypecheck: number): string {
+  const { mkdtempSync, writeFileSync } = require("node:fs") as typeof import("node:fs");
+  const { tmpdir } = require("node:os") as typeof import("node:os");
+  const thu = mkdtempSync(join(tmpdir(), "hook-cq-"));
+  writeFileSync(
+    join(thu, "package.json"),
+    JSON.stringify({
+      name: "hook-cho-qua",
+      private: true,
+      scripts: { typecheck: `node -e "process.exit(${maTypecheck})"` },
+    }),
+  );
+  const git = (...a: string[]) =>
+    execFileSync("git", a, { cwd: thu, stdio: ["pipe", "pipe", "pipe"] });
+  git("init", "-q");
+  git("config", "user.email", "test@local");
+  git("config", "user.name", "test");
+  // Cần MỘT commit để `git diff --cached` có HEAD mà so.
+  git("commit", "-q", "--allow-empty", "-m", "goc");
+  return thu;
+}
+
+/** Chạy hook với `CLAUDE_PROJECT_DIR` trỏ vào repo tạm. */
+function chayTaiRepo(hook: string, command: string, thu: string): { ma: number; loi: string } {
+  const json = JSON.stringify({ tool_name: "Bash", tool_input: { command } });
+  try {
+    execFileSync("bash", [join(HOOKS, hook)], {
+      input: json,
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"],
+      env: { ...process.env, CLAUDE_PROJECT_DIR: thu },
+    });
+    return { ma: 0, loi: "" };
+  } catch (e) {
+    const err = e as { status?: number; stderr?: string };
+    return { ma: err.status ?? -1, loi: String(err.stderr ?? "") };
+  }
+}
+
 /** 2 = CHẶN theo giao ước PreToolUse của Claude Code. */
 const CHAN = 2;
 
@@ -173,6 +222,29 @@ describe("chan-commit-khi-do.sh — chặn commit khi đỏ", () => {
     const t = Date.now();
     expect(chay("chan-commit-khi-do.sh", "ls -la").ma).toBe(0);
     expect(Date.now() - t, "phải trả về gần như tức thì").toBeLessThan(5_000);
+  });
+
+  // ── NỬA THỨ HAI CỦA CỔNG (luật 16) — thiếu cho tới 09/09/2026 ───────────────
+  //
+  // Trước hai ca này, ca cho-qua DUY NHẤT của hook là `ls -la`. Nó chỉ chứng minh hook
+  // không chặn MỌI lệnh; nó KHÔNG chứng minh hook còn cho `git commit` đi qua.
+  //
+  // Hệ quả: ai đó làm hook `exit 2` vô điều kiện cho lệnh commit thì CẢ 29 ca vẫn xanh —
+  // và mọi commit trong repo chết. Đây là bán kính hỏng lớn nhất trong 11 cổng dựng tuần
+  // này, vì nó chặn đúng cái cửa mà người sửa nó phải đi qua để sửa nó.
+  it("CHO QUA `git commit` khi typecheck XANH và không có gì đã stage", () => {
+    const thu = repoTam(0);
+    const r = chayTaiRepo("chan-commit-khi-do.sh", 'git commit -m "x"', thu);
+    expect(r.ma, `hook phải CHO QUA khi cây xanh; stderr=${r.loi}`).toBe(0);
+  });
+
+  it("CHẶN `git commit` khi typecheck ĐỎ — và câu chặn nói ra typecheck", () => {
+    // Nửa thứ nhất, kiểm bằng HÀNH VI chứ không bằng grep mã nguồn: trước đây nó chỉ được
+    // chứng minh bằng một phép đo tay ngoài bộ test.
+    const thu = repoTam(1);
+    const r = chayTaiRepo("chan-commit-khi-do.sh", 'git commit -m "x"', thu);
+    expect(r.ma, "typecheck đỏ phải chặn").toBe(CHAN);
+    expect(r.loi).toContain("typecheck");
   });
 
   it("nhận ra `git commit` nằm GIỮA một chuỗi lệnh", () => {

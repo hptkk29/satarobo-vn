@@ -954,6 +954,73 @@ có file test nào cho nó; nếu nó chặn nhầm luôn cả các bộ `test:*
 
 ---
 
+## Luật 17 — tài liệu KHÔNG ghi số lượng, ghi TÊN FILE và CÁCH ĐỌC RA con số
+
+> **Số trong docs không có gì giữ cho đúng, và nó sai theo cách thuyết phục** — người đọc
+> dừng lại ở con số thay vì đi mở file. Một câu sai mà nghe chắc chắn tệ hơn không có câu nào.
+
+Phân biệt hai loại số, luật này chỉ nhắm loại thứ nhất:
+
+| Loại | Ví dụ | Luật 17 |
+|---|---|---|
+| **ĐẾM cấu trúc repo** — ai cũng đếm lại được, và nó đổi mỗi lần có người thêm một dòng | "`include` có 4 chỗ" · "27 ca test" · "bảng test 990 dòng" | ❌ **đừng ghi** |
+| **ĐO một thời điểm** — có ngày, có nguồn, không ai kỳ vọng nó còn đúng | "đo prod 09/09: 90 buổi THOẢ" · "666 ca ngoài cổng (08/09)" | ✅ giữ, **bắt buộc kèm ngày + lệnh đo** |
+
+Loại thứ hai là thứ luật 1 và luật 3 ĐÒI phải có. Loại thứ nhất là thứ tự nó mục ruỗng.
+
+### Viết thế nào thay vì ghi số
+
+| Đừng | Viết |
+|---|---|
+| "`include` có 4 chỗ" | "danh sách đầy đủ ở `vitest.config.ts`, mảng `include`" |
+| "hooks.test.ts có 27 ca" | "`.claude/hooks/hooks.test.ts` — chạy `pnpm exec vitest run .claude/hooks` để biết số ca" |
+| "16 role × 245 quyền" | "nguồn là `prisma/seed-roles.ts`; đếm bằng `SELECT count(*) FROM \"RolePermission\"`" |
+| "bảng test 990 dòng" | "bảng test ở `lib/auth/route-policy.test.ts` — file lớn, đọc trước khi sửa" |
+
+Câu thay thế **dài hơn một chút và không bao giờ sai**. Nó cũng làm được việc mà con số
+không làm được: chỉ người đọc tới đúng chỗ.
+
+### Ba lần trong MỘT tuần, cùng hình dạng
+
+| Câu | Thực tế | Hậu quả |
+|---|---|---|
+| `.claude/rules/prisma-db.md`: *"Env riêng cho test: `.env.test`"* rồi liệt kê **2 dòng** | cần **6 biến** | Bộ R7 đầy đủ đỏ giả **9 ca**. Mất một buổi đi tìm hồi quy không có thật |
+| `docs/elearning/quy-uoc-nen.md`: *"include có bốn chỗ"* | **12 mục** (đo 09/09) | Người viết test mới tin là đã được phủ; đúng loại hỏng câm mà chính mục đó sinh ra để chặn |
+| BA: *"16 role × 245 quyền"* | `main` có **188** | Con số đi vào một tài liệu bàn giao và không ai kiểm lại |
+
+Điều đáng chú ý nhất ở ca thứ hai: file đó **đã tự sửa một lần** — có hẳn dòng *"⚠️ Sửa
+08/09/2026: dòng này từng viết 'bốn chỗ', nay có 10 mục"*. Một ngày sau, **10 cũng sai**
+(nay 12). Con số không sống sót nổi một ngày trong một repo đang chạy. Sửa nó không phải
+là giải pháp; **bỏ nó đi** mới là.
+
+### Kết quả rà 09/09/2026 — `CLAUDE.md` + `docs/`
+
+**Đang SAI:**
+
+| Chỗ | Ghi | Đo được |
+|---|---|---|
+| `CLAUDE.md` mục 8 | `hooks.test.ts` "27 ca" | **31** — lệch trong cùng ngày, do chính lượt thêm ca của tôi |
+| `docs/bo-test-ngoai-cong-merge.md` | "CI gọi 7 script" playwright | CI gọi **5** config |
+| `docs/elearning/quy-uoc-nen.md` §3 | "thư mục được phủ: 5 chỗ" / ghi chú sửa "10 mục" | **12** mục |
+| `docs/elearning/quy-uoc-nen.md` §8 | "bảng test 990 dòng" | **1.513** dòng |
+
+**Đang ĐÚNG hôm nay — nhưng vẫn là số lượng, vẫn sẽ trôi:**
+`CLAUDE.md` "3 file allowlist" (=3) · "ba hook `PreToolUse`" (=3) · "9 roles" (=9) ·
+`bo-test-ngoai-cong-merge.md` "15 file `playwright.*.config.ts`" (=15).
+
+⚠️ Ngay cả **phép đếm** cũng mơ hồ: đếm mục `include` bằng hai câu grep khác nhau cho ra
+15 và 17; chỉ khi tách đúng mảng mới ra 12. Nếu người viết docs còn đếm ra ba số khác
+nhau thì con số trong docs lại càng không đáng tin.
+
+### Liên hệ
+
+- **Luật 3** — chú thích không phải bằng chứng. Luật 17 là hệ quả: **con số trong văn xuôi
+  cũng không phải bằng chứng**, kể cả khi nó từng đúng.
+- **Luật 1** — mọi số báo ra phải kèm phép tính sinh ra nó. Trong docs, "phép tính" chính
+  là câu chỉ đường tới file — và nó thay được luôn con số.
+
+---
+
 ## Sổ sự cố
 
 ### 08/09/2026 — nhập nhân sự xoá trắng ba cột ngày trên 9 hồ sơ PROD
