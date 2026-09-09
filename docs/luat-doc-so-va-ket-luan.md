@@ -772,6 +772,64 @@ trên. `bash mot-file.sh` thì nội dung file **không** đi qua hook.
 
 ---
 
+## Luật 15 — một triệu chứng có thể có NHIỀU nguyên nhân ĐỦ
+
+> **Tìm ra một nguyên nhân giải thích được triệu chứng KHÔNG có nghĩa là đã tìm hết.**
+> Mỗi nguyên nhân "đủ" một mình đã tạo ra đúng triệu chứng đó, nên vá một cái thì triệu
+> chứng **vẫn y nguyên** — và phép quan sát sau khi vá sẽ nói dối rằng bản vá không chạy.
+
+Khác với "nguyên nhân góp phần": ở đó vá một cái thì số nhúc nhích, ta biết mình đúng
+hướng. Ở đây số **không nhúc nhích một li**, và đó chính là cái bẫy.
+
+### Sự cố 09/09/2026 — "công dạy = 0" có HAI nguyên nhân đủ
+
+| # | Nguyên nhân | Tình trạng |
+|---|---|---|
+| 1 | Buổi đã qua ngày mà chưa chốt ⇒ không vào phép đếm | **đã vá**, định quan sát 3 ngày để xác nhận |
+| 2 | Bảng `TeachingCreditType` **RỖNG** trên prod | phát hiện 09/09 khi đo danh mục nền |
+
+Nguyên nhân 2 một mình đủ tạo ra số 0. Đường đi:
+
+```
+loadLoaiCongDay()  → []            (bảng rỗng)
+loaiCua(buoi, [])  → null          (không dòng nào khớp)
+congDayCuaNguoi()  → continue      (bỏ MỌI buổi)
+                   → tongCong = 0, tongBuoi = 0
+```
+
+Không exception, không cảnh báo, console sạch.
+
+**Nếu không phát hiện kịp:** ba ngày nữa mở màn Công dạy, thấy vẫn 0, và kết luận *"bản vá
+buổi chưa đóng không chạy"*. Rồi đi đào lại một chỗ vốn đã đúng — trong khi chỗ sai nằm ở
+một bảng không ai nhìn.
+
+### Vì sao dễ dính: ta dừng lại ngay khi câu chuyện KHỚP
+
+Nguyên nhân 1 giải thích được 100% triệu chứng. Nó đúng. Nó đã được đo. Cảm giác "xong
+rồi" đến từ chỗ **câu chuyện tự nó đã tròn**, không phải từ chỗ ta đã quét hết đường đi.
+
+### Việc phải làm
+
+1. **Đi HẾT đường từ triệu chứng ngược về nguồn**, kể cả sau khi đã tìm ra một nguyên
+   nhân đủ. Ở đây đường là: màn → hàm tổng → hàm khớp loại → **danh mục** → DB.
+2. **Ở mỗi mắt xích, hỏi "nếu chỗ này rỗng/null thì triệu chứng có y hệt không?"**
+   Trả lời "có" ⇒ đó là một nguyên nhân đủ nữa, phải đo chứ không được suy.
+3. **Trước khi mở phép quan sát xác nhận bản vá, liệt kê những gì KHÁC có thể giữ số ở 0.**
+   Không làm bước này thì phép quan sát không phân biệt được "vá hỏng" với "còn nguyên
+   nhân khác", và nó sẽ được đọc thành vế thứ nhất.
+
+### Liên hệ
+
+- **Luật 1** — bảng rỗng + đường đọc còn sống = số 0 im lặng. Luật 15 là chuyện gì xảy ra
+  khi số 0 đó đứng cạnh một bug khác đã được vá.
+- **Luật 8** — cấy lại lỗi rồi xem có đỏ không. Ở đây phép "cấy" tương ứng là: **làm rỗng
+  bảng danh mục trên bản sao và xem con số có về 0 không** — đó là cách chứng minh nguyên
+  nhân 2 là đủ, thay vì chỉ đọc mã rồi tin.
+- **Luật 6/14** — cùng một họ: cái hỏng không kêu. Ở luật 14 là cổng chết mà tài liệu bảo
+  đang sống; ở đây là một nguyên nhân còn sống mà câu chuyện bảo đã xong.
+
+---
+
 ## Sổ sự cố
 
 ### 08/09/2026 — nhập nhân sự xoá trắng ba cột ngày trên 9 hồ sơ PROD
