@@ -886,6 +886,74 @@ rồi" đến từ chỗ **câu chuyện tự nó đã tròn**, không phải t�
 
 ---
 
+## Luật 16 — mọi cổng CHẶN phải có ca khẳng định đường KHÔNG bị chặn vẫn chạy
+
+> **Không có nó thì "chặn nhầm tất cả" cũng XANH, và bộ test sẽ khen một hệ thống đã tắt.**
+
+Một cổng có hai nửa nghĩa vụ:
+
+| Nửa | Ca test | Hỏng mà không có ca này thì sao |
+|---|---|---|
+| CHẶN đúng thứ phải chặn | `PHAI_CHAN` | lỗ mở, dữ liệu hỏng — **ồn ào**, sớm muộn có người thấy |
+| CHO QUA đúng thứ phải cho qua | `PHAI_CHO_QUA` | **hệ thống tắt trong im lặng**, và bộ test báo xanh |
+
+Nửa thứ hai bị bỏ quên thường xuyên hơn vì nó nghe như "test cái không xảy ra". Nhưng nó
+mới là nửa canh cái hỏng ĐẮT hơn: một cổng chặn hụt làm rò một đường; một cổng chặn thừa
+làm chết mọi đường, và không ai biết vì mọi phép kiểm vẫn xanh.
+
+### Ca cụ thể — 09/09/2026, cổng chặn `session.taught` cho lượt backfill
+
+Lượt backfill KHÔNG được phát `session.taught` (ba người nghe: giao bài tập hồi tố · gửi
+tin cho phụ huynh · hệ quả R7). Cổng viết ra, ca `[BACKFILL-1]` xanh.
+
+Nhưng cấy thử `if (true) { return; }` — tức **chặn CẢ lượt đóng thật** — thì
+`[BACKFILL-1]` **vẫn xanh**. Nó chỉ hỏi "backfill có bị chặn không", và câu trả lời vẫn là
+có. Nếu bản vá đó lọt, ta vừa tắt đường giao bài tập của **toàn hệ thống** với một bộ test
+toàn xanh.
+
+Thứ bắt được nó là `[BACKFILL-3]`: *"lượt đóng THẬT vẫn phát sự kiện và vẫn ghi SNAPSHOT"*.
+
+### Cách viết nửa thứ hai cho đúng
+
+1. **Cho ăn thứ GẦN NHẤT với thứ bị chặn**, không phải một đầu vào bất kỳ. Cổng chặn
+   `git commit` khi đỏ thì ca cho-qua phải là **một lượt `git commit` trên cây XANH**, chứ
+   không phải `ls -la` — `ls` chỉ chứng minh cổng không chặn mọi lệnh, nó không chứng minh
+   cổng còn cho commit đi qua.
+2. **Cấy đúng lỗi "chặn nhầm tất cả"** và xem ca đó có đỏ không (luật 8). Ở đây phép cấy
+   là ép điều kiện chặn thành `true`.
+3. Cổng có **đường vượt** thì đường vượt cũng cần cả hai nửa: vượt hợp lệ ⇒ qua; vượt
+   không đủ điều kiện ⇒ vẫn chặn.
+
+### Kết quả rà 09/09/2026 — 11 cổng dựng trong tuần
+
+| Cổng | Nửa CHO QUA | |
+|---|---|---|
+| `block-destructive.sh` | `PHAI_CHO_QUA` 5 ca (lệnh thường · xoá một file · đẩy thường · reset trên DB local · shadow trỏ local) | ✅ |
+| `block-env-add.sh` | `.env.example` · lệnh không phải `git add` | ✅ |
+| `chanSuaKyDaChot` | `OPEN`/`REOPENED`/`CLOSING`/chưa có kỳ ⇒ qua; TỪ CHỐI đơn cũ vẫn làm được | ✅ |
+| `chanChotKyThieuBuoi` | kỳ không có buổi nào ⇒ qua, KHÔNG khoá vĩnh viễn | ✅ |
+| cổng sức khoẻ danh mục | hình dạng lành mạnh ⇒ im lặng; đủ điểm chấm ⇒ im lặng | ✅ |
+| `cotCoMat` (nhập nhân sự) | ô ngày CÓ giá trị thì VẪN ghi | ✅ |
+| `roster-guard` | số đo lúc dạy ⇒ qua; lô sạch không ném | ✅ |
+| `affordance-coverage` | bỏ qua mũi tên trong `<button>`; bỏ qua khi cả hàng là vùng bấm | ✅ |
+| `suaGioQuetTayAction` (4 cổng) | lượt hợp lệ vẫn ghi thêm dòng; đường vượt HO ⇒ qua | ✅ |
+| chặn `session.taught` cho backfill | `[BACKFILL-3]` — đường đóng THẬT vẫn phát sự kiện | ✅ |
+| **`chan-commit-khi-do.sh`** | chỉ có `ls -la` ⇒ qua. **KHÔNG có ca "`git commit` trên cây XANH ⇒ qua"** | 🔴 **THIẾU** |
+
+Và một cổng CHẶN **không có test nào của chính nó** (luật 14, chưa phải luật 16):
+`tests/_helpers/db-gate.ts` — cổng `ALLOW_DB_RESET` chặn `resetDb()` chạy sai lúc. Không
+có file test nào cho nó; nếu nó chặn nhầm luôn cả các bộ `test:*-db` thì triệu chứng là
+"bộ DB đỏ hết", dễ bị đọc thành lỗi khác.
+
+### Liên hệ
+
+- **Luật 14** — lưới an toàn phải có test của chính nó. Luật 16 nói cái test đó phải có
+  MẤY nửa.
+- **Luật 8** — cách chứng minh nửa thứ hai đáng tin: cấy "chặn nhầm tất cả" và xem nó đỏ.
+- **Luật 15** — cùng gốc: một kết quả xanh có nhiều cách để đúng vì lý do sai.
+
+---
+
 ## Sổ sự cố
 
 ### 08/09/2026 — nhập nhân sự xoá trắng ba cột ngày trên 9 hồ sơ PROD
