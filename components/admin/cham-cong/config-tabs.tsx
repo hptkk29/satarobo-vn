@@ -13,6 +13,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { scopeHref, type ScopeCtx } from "@/lib/cham-cong/scope-href";
+import { CanhBaoDanhMuc } from "./canh-bao-danh-muc";
 import type { ModuleScope } from "@/lib/cham-cong/module-scope";
 
 export type ConfigTabKey =
@@ -76,8 +77,20 @@ export async function ConfigTabs({
 
   if (items.length === 0) return null;
 
+  // Cơ sở VẬN HÀNH người này cấu hình được — Hội sở bỏ ra (Q-04: HO không có quầy nên
+  // không có điểm chấm). Truyền vào để cảnh báo "thiếu điểm chấm" không nói cho người CS1
+  // biết CS2 đang thiếu gì.
+  const coSoVanHanhIds = scope
+    .blocksWith("hr_attendance:config")
+    .filter((b) => b.code !== HO_CODE)
+    .map((b) => b.id);
+
   return (
-    <nav aria-label="Cấu hình chấm công" className="mb-4 flex flex-wrap gap-1">
+    <>
+      {/* Khối này KHÔNG CHẶN, chỉ nói. Đặt trong ConfigTabs vì đây là lối vào duy nhất của
+          6 màn danh mục — màn thứ bảy thêm sau cũng tự có cảnh báo. Xem canh-bao-danh-muc.tsx */}
+      <CanhBaoDanhMuc coSoVanHanhIds={coSoVanHanhIds} />
+      <nav aria-label="Cấu hình chấm công" className="mb-4 flex flex-wrap gap-1">
       {items.map((i) => {
         const isActive = i.key === active;
         return (
@@ -91,6 +104,7 @@ export async function ConfigTabs({
           </Link>
         );
       })}
-    </nav>
+      </nav>
+    </>
   );
 }
