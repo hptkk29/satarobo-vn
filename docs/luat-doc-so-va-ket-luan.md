@@ -402,6 +402,62 @@ chính bộ test. Một test không bao giờ đỏ được là một cổng lu
 
 ---
 
+### Luật 8 áp cho một CON SỐ, không chỉ cho một ca test
+
+> **Một cột phân loại cũng phải được cấy thử.** Trước khi tin nó, hỏi đúng một câu:
+> **"nếu cả hai nhánh đều rơi vào cùng một giá trị thì cột này in ra cái gì?"**
+> Trả lời được là "vẫn ra hai nhóm" ⇒ cột đó không phân loại gì cả, nó chỉ trông giống thế.
+
+Ca test xanh có thể nghĩa là "lỗi không còn" hoặc "test không chạm tới lỗi". Một con số
+cũng vậy: nó có thể nghĩa là "thực tế đúng như vậy" hoặc **"phép đo không đo trúng thứ
+mình nghĩ"**. Hai vế đó nhìn từ ngoài giống hệt nhau — cùng là một bảng số gọn gàng.
+
+#### Sự cố 09/09/2026 — cột "tự động / người bấm" không phân biệt được gì
+
+Câu hỏi: cổng tự đóng buổi có nổ không. Tôi chia buổi đã chốt thành hai nhóm theo
+`ClassSession.completedById = null`, chạy trên prod, và ra:
+
+```
+  Tổng 40 buổi · tự động 1 · người bấm 39
+```
+
+Bảng gọn, số cụ thể, và **sai hoàn toàn**. Đường tự đóng gọi `completeSession` với
+`actorId` của **chính giáo viên vừa lưu điểm danh**, nên `completedById` có giá trị ở
+**cả hai** nhánh. Đọc thêm: cả hai còn cùng `action: "COMPLETE_SESSION"`, cùng
+`assignMode: "DEFER"` — không trường nào khác nhau.
+
+Suýt đọc *"tự động = 0 kể từ bản vá"* thành *"cổng không nổ"*, rồi đi đào một chỗ vốn đúng.
+
+#### Câu hỏi rẻ đáng lẽ đã chặn được
+
+Trước khi chạy, chỉ cần hỏi: *"đường tự đóng đặt `completedById` bằng gì?"* — mở đúng một
+file là thấy. Phép đo tốn 40 giây chạy trên prod; câu hỏi tốn 10 giây đọc.
+
+Dạng tổng quát, dùng được cho mọi cột phân loại:
+
+| Trước khi tin cột X | |
+|---|---|
+| 1 | Nhánh A ghi gì vào X? **Đọc mã, đừng suy từ tên cột.** |
+| 2 | Nhánh B ghi gì vào X? |
+| 3 | Hai câu trả lời có khác nhau không? |
+| 4 | Nếu không — **cột X chưa tồn tại.** Phải THÊM một dấu, không phải diễn giải khéo hơn. |
+
+Ở đây bước 4 là trường `nguonChot: "TU_DONG" | "TAY"` bắt buộc ở `completeSession`, ghi
+vào `newValues` của AuditLog (`lib/lms/nguon-chot.test.ts`). **Bắt buộc chứ không mặc
+định** — mặc định nào cũng dán nhãn sai cho một trong hai đường, và nhãn sai không nổ lỗi,
+không làm test đỏ; nó chỉ làm mọi phép đo về sau nói dối. Đó là luật 7 gặp luật 8.
+
+#### Liên hệ
+
+- **Luật 15** — ở đó một triệu chứng có nhiều nguyên nhân đủ. Ở đây một phép đo có nhiều
+  cách sai. Cùng một gốc: **câu chuyện tự nó tròn không phải bằng chứng.**
+- **Luật 12** — một cột tên là "tự động" là một LỜI HỨA với người đọc số, y như mũi tên là
+  lời hứa với người dùng. Lời hứa suông không ném lỗi.
+- Xem thêm ghi chú "Một lượt cấy không đỏ phải hỏi 'mình có cấy trúng không'" ở trên: cùng
+  một phản xạ, áp cho hai thứ khác nhau.
+
+---
+
 ## Luật 9 — cổng phải được cho ăn bằng thứ đường THẬT cho nó ăn
 
 > Một ca test **tự dựng đầu vào cho cổng** thì nó kiểm cổng, không kiểm hệ thống. Nếu đầu
