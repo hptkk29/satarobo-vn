@@ -280,7 +280,7 @@ export function LeaveTypeList({ rows, canEdit }: { rows: LeaveTypeRow[]; canEdit
         // `request-queue-table`): `TableSkeleton` lúc chờ cũng vẽ đúng vỏ này.
         <div className="overflow-hidden rounded-xl border border-border bg-card">
           <PhanTrangBang tenDonVi="loại nghỉ" khoaGhiNho="cham-cong-loai-nghi" cuonNgang>
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[820px] text-sm">
             <thead className="border-b border-border bg-muted/40">
               <tr>
                 <th scope="col" className={adminTh}>Mã</th>

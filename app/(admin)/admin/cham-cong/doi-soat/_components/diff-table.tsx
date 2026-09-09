@@ -42,7 +42,7 @@ export function DiffTable({
 }) {
   return (
     <PhanTrangBang cuonNgang tenDonVi="ô" khoaGhiNho="doi-soat-lech">
-      <table className="w-full">
+      <table className="w-full min-w-[760px]">
         <thead className="border-b border-border bg-muted/40">
           <tr>
             <th scope="col" className={adminTh}>Người</th>
