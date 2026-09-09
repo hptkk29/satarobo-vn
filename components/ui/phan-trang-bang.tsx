@@ -120,11 +120,15 @@ export function PhanTrangBang({
     };
     do_();
     el.addEventListener("scroll", do_, { passive: true });
-    const ro = new ResizeObserver(do_);
-    ro.observe(el);
+    // ⚠️ jsdom KHÔNG có `ResizeObserver`. Gọi thẳng là 23 test component của bảng khác
+    // chết bằng `ReferenceError` — đã ăn thật 09/09. Thiếu nó chỉ mất phép đo lại khi
+    // khung đổi kích thước; listener `scroll` vẫn chạy, nên trình duyệt thật không thiệt.
+    const ro =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(do_);
+    ro?.observe(el);
     return () => {
       el.removeEventListener("scroll", do_);
-      ro.disconnect();
+      ro?.disconnect();
     };
   }, [cuonNgang, soDong, trang, children]);
 
