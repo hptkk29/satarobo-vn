@@ -82,7 +82,7 @@ export async function getStudentFeedback(studentId: string, limit = 20): Promise
           classId: true,
           date: true,
           topic: true,
-          plan: { select: { customTitle: true } },
+          plan: { select: { customTitle: true, order: true } },
           lesson: { select: { order: true, title: true, moduleCode: true } },
           class: { select: { classCode: true } },
         },
@@ -135,6 +135,7 @@ export async function getStudentFeedback(studentId: string, limit = 20): Promise
         {
           sessionNumber: no,
           planTitle: r.classSession?.plan?.customTitle,
+          planOrder: r.classSession?.plan?.order,
           lessonTitle: les?.title,
           lessonOrder: les?.order,
           moduleCode: les?.moduleCode,

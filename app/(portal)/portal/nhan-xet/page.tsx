@@ -113,7 +113,7 @@ export default async function NhanXetPage() {
             classId: true,
             date: true,
             topic: true,
-            plan: { select: { customTitle: true } },
+            plan: { select: { customTitle: true, order: true } },
             lesson: { select: { order: true, title: true, moduleCode: true } },
             class: {
               select: {
@@ -293,6 +293,7 @@ export default async function NhanXetPage() {
                         sessionNumber:
                           sessionNumberOf.get(f.classSessionId) ?? null,
                         planTitle: f.classSession?.plan?.customTitle,
+                        planOrder: f.classSession?.plan?.order,
                         lessonTitle: f.classSession?.lesson?.title,
                         lessonOrder: f.classSession?.lesson?.order,
                         moduleCode: f.classSession?.lesson?.moduleCode,

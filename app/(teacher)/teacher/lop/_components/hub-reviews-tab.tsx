@@ -147,7 +147,7 @@ export async function HubReviewsTab({
         status: true,
         // R5 21/08 — nguồn TÊN DỰ ÁN tự điền. Ưu tiên customTitle của lớp (bản sao
         // per-lớp, sửa được ở tab Chương trình) rồi mới tới tên bài của giáo trình.
-        plan: { select: { customTitle: true } },
+        plan: { select: { customTitle: true, order: true } },
         lesson: { select: { order: true, title: true, moduleCode: true } },
         class: { select: { name: true, course: { select: { name: true } } } },
       },
@@ -251,6 +251,7 @@ export async function HubReviewsTab({
       deriveSessionLabel({
         sessionNumber: sessionNo,
         planTitle: sess.plan?.customTitle,
+        planOrder: sess.plan?.order,
         lessonTitle: sess.lesson?.title,
         lessonOrder: sess.lesson?.order,
         moduleCode: sess.lesson?.moduleCode,
@@ -261,6 +262,7 @@ export async function HubReviewsTab({
     const projectName = deriveSessionProjectName({
       sessionNumber: sessionNo,
       planTitle: sess.plan?.customTitle,
+      planOrder: sess.plan?.order,
       lessonTitle: sess.lesson?.title,
       lessonOrder: sess.lesson?.order,
       moduleCode: sess.lesson?.moduleCode,
@@ -498,7 +500,7 @@ export async function HubReviewsTab({
         room: { select: { code: true, name: true } },
         // 25/08 — nguồn NHÃN BUỔI "Buổi 1 - HP1 - Bàn Tay Ma Thuật"
         // (lib/lms/session-project-name · deriveSessionLabel).
-        plan: { select: { customTitle: true } },
+        plan: { select: { customTitle: true, order: true } },
         lesson: { select: { order: true, title: true, moduleCode: true } },
       },
       // ⚠️ orderBy GIỮ `desc` + `take: 100`: đây là cửa sổ "buổi gần nhất". Đổi sang
@@ -601,7 +603,10 @@ export async function HubReviewsTab({
         }),
       };
     }),
-    (r) => ({ number: r.no, complete: r.complete }),
+    // 08/09 — SẮP THEO NGÀY, không theo số buổi. Nhãn nay là số LỘ TRÌNH
+    // (`soBuoiTheoLoTrinh`), sắp theo nó thì buổi 25/06 mang nhãn "Buổi 43" rơi
+    // xuống sau buổi 12/09 "Buổi 19". Xem `lib/lms/session-order.ts`.
+    (r) => ({ thoiGian: new Date(r.s.date).getTime(), complete: r.complete }),
   );
 
   return (
@@ -650,6 +655,7 @@ export async function HubReviewsTab({
                       {deriveSessionLabel({
                         sessionNumber: no,
                         planTitle: s.plan?.customTitle,
+                        planOrder: s.plan?.order,
                         lessonTitle: s.lesson?.title,
                         lessonOrder: s.lesson?.order,
                         moduleCode: s.lesson?.moduleCode,

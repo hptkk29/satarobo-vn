@@ -110,7 +110,12 @@ describe("dungDanhSachBuoi — nhãn buổi", () => {
       new Date("2026-09-02T00:00:00.000Z"),
     );
     expect(ds[0]!.tieuDe).toBe("Họa Sĩ Robot");
-    expect(ds[0]!.nhanDayDu).toBe("Buổi 1 - HP2 - Họa Sĩ Robot");
+    // 08/09 — ĐỔI KỲ VỌNG cùng bản vá "lệch tên bài": số in ra là số LỘ TRÌNH
+    // (`lesson.order = 9`), KHÔNG còn là hạng theo ngày (buổi duy nhất ⇒ hạng 1).
+    // Đúng đây là điều cần: buổi này dạy BÀI 9, in "Buổi 1" là nói sai với phụ huynh.
+    expect(ds[0]!.nhanDayDu).toBe("Buổi 9 - HP2 - Họa Sĩ Robot");
+    // Nhưng SỐ THỨ TỰ trong danh sách vẫn theo ngày — hai con số tách bạch.
+    expect(ds[0]!.soBuoi).toBe(1);
   });
 
   it('ô trống "Buổi N" của ClassSessionPlan không thắng tên bài thật', () => {
