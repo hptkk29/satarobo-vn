@@ -572,7 +572,22 @@ async function main() {
       },
     });
     const theoMa = new Map(tren.map((t) => [t.code, t]));
-    const chuan = (v: unknown) => JSON.stringify(v ?? null);
+    // ⚠️ `JSON.stringify` NHẠY THỨ TỰ KHOÁ, mà Postgres `jsonb` tự sắp lại khoá theo
+    // thứ tự của nó. Bản đầu của bộ so này báo 18/21 mã lệch, trong đó ~9 mã chỉ khác
+    // `{start,end,kind}` ↔ `{end,kind,start}` — giá trị y hệt. Chuẩn hoá bằng cách sắp
+    // khoá trước khi so, kẻo cổng kêu suốt và không ai đọc nữa (luật 11: một bộ so báo
+    // sai thì cũng vô dụng như một bộ so luôn im).
+    const sapKhoa = (v: unknown): unknown =>
+      Array.isArray(v)
+        ? v.map(sapKhoa)
+        : v && typeof v === "object"
+          ? Object.fromEntries(
+              Object.entries(v as Record<string, unknown>)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([k, x]) => [k, sapKhoa(x)]),
+            )
+          : v;
+    const chuan = (v: unknown) => JSON.stringify(sapKhoa(v ?? null));
     tieuDe("══ V10 — seed SHIFT_CATALOG vs prod ShiftTemplate ══");
     dong("Mã trong seed", SHIFT_CATALOG.length);
     dong("Mã trên prod (dùng chung)", tren.length);

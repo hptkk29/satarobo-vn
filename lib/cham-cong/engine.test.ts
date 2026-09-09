@@ -46,7 +46,7 @@ describe("7 ví dụ BA §6.3-bis theo giờ Sheet", () => {
     const r = run("S", [IN("07:43"), OUT("11:32")]);
     expect(r.workedMinutes).toBe(225);
     expect(r.flags).toEqual([]);
-    expect(r.dayCreditEarned).toBe(1);
+    expect(r.dayCreditEarned).toBe(0.5);
   });
   it("VD-2 SC: 2 cặp → 7h30 (lỗ trưa không tính)", () => {
     const r = run("SC", [IN("07:43"), OUT("11:35"), IN("13:40"), OUT("17:33")]);
@@ -74,7 +74,7 @@ describe("7 ví dụ BA §6.3-bis theo giờ Sheet", () => {
     const r = run("S", [IN("07:43")]);
     expect(r.workedMinutes).toBe(0);
     expect(r.flags).toContain("THIEU_LUOT_RA");
-    expect(r.dayCreditEarned).toBe(1);
+    expect(r.dayCreditEarned).toBe(0.5);
   });
   it("VD-7 không ca: VÀO 08:00 · RA 12:00 → 0 giờ trong ca, CHAM_NGOAI_LICH, 0 công", () => {
     const r = run(null, [IN("08:00"), OUT("12:00")]);
@@ -134,10 +134,10 @@ describe("muộn / sớm / thiếu buổi (§4.5)", () => {
     expect(r.flags).toContain("THIEU_GIO");
     expect(r.dayCreditEarned).toBe(1);
   });
-  it("ca REQUIRED không lượt nào → KHONG_CO_LUOT, 1 công theo kế hoạch", () => {
+  it("ca REQUIRED không lượt nào → KHONG_CO_LUOT, VẪN đủ công theo kế hoạch", () => {
     const r = run("T", []);
     expect(r.flags).toEqual(["KHONG_CO_LUOT"]);
-    expect(r.dayCreditEarned).toBe(1);
+    expect(r.dayCreditEarned).toBe(0.5);
     expect(r.workedMinutes).toBe(0);
   });
   it("C/T chồng 15′ trên Sheet: CT vào 17:20 ra 21:00 sau khi đã làm 13:45–17:20 → 1 cụm, không DI_MUON lần hai", () => {

@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 import {
   SHIFT_CATALOG,
@@ -30,9 +33,18 @@ describe("SHIFT_CATALOG — 21 mã theo tab DANH MỤC CA", () => {
     expect(plannedMinutes(catalogByCode(code)!)).toBe(minutes);
   });
 
-  it("K-01 theo Sheet: mọi mã làm việc = 1 công, X/P = 0", () => {
+  // ⚠️ ĐẢO 09/09/2026. Luật cũ (K-01 theo Sheet) là "mọi mã làm việc = 1 công". Chủ dự án
+  // chốt bảng mới: MỘT NGÀY làm việc = 1 công, nhưng buổi LẺ = 0,5 và sáng+chiều+tối =
+  // 1,5. Mẫu số hệ số công giữ nguyên 24 (không đụng SR.QD.231).
+  // Nguồn sự thật: `docs/cham-cong/BANG-MA-CA-CHOT.md`. Ca đối chiếu ở cuối file này.
+  it("bảng chốt 09/09: buổi lẻ 0,5 · ngày 1 · sáng+chiều+tối 1,5 · X/P 0", () => {
+    const chot: Record<string, number> = {
+      S: 0.5, C: 0.5, T: 0.5,
+      SCT: 1.5,
+      X: 0, P: 0,
+    };
     for (const e of SHIFT_CATALOG) {
-      expect(e.dayCredit, e.code).toBe(e.code === "X" || e.code === "P" ? 0 : 1);
+      expect(e.dayCredit, e.code).toBe(chot[e.code] ?? 1);
     }
   });
 
@@ -108,5 +120,50 @@ describe("LEAVE_TYPE_CATALOG — K-06 theo MISA", () => {
     expect(by.THAI_SAN).toMatchObject({ paidRatio: 0, maxDaysPerYear: 180 });
     expect(by.NGHI_BU.countsAsWorked).toBe(true);
     expect(LEAVE_TYPE_CATALOG.some((l) => /thứ 2/i.test(l.name))).toBe(false); // loại giả "Thứ 2" của MISA không mang sang
+  });
+});
+
+// ── ĐỐI CHIẾU VỚI CHÍNH VĂN BẢN CHỐT (09/09/2026) ───────────────────────────
+//
+// Vì sao cần: chủ dự án chỉnh `dayCredit` TAY trên prod (S/C/T → 0,5 · CT → 1 · SCT →
+// 1,5) còn `SHIFT_CATALOG` giữ số cũ. Hai bên lệch mà KHÔNG có gì báo —
+// `seedShiftTemplates` chỉ ghi đè khi `--force`, nên lệch cứ nằm đó cho tới ngày ai đó
+// chạy force và xoá sạch chỉnh tay của cả năm.
+//
+// ⚠️ Ca ở trên đọc số từ hằng gõ NGAY TRONG file này. Sửa cả hai chỗ cùng lúc thì nó vẫn
+// xanh. Ca dưới đây đọc THẲNG bảng markdown — nó là thứ duy nhất bắt được "sửa mã mà quên
+// sửa bảng chốt", và ngược lại (luật 11: đừng để hai nguồn sự thật).
+describe("SHIFT_CATALOG ↔ docs/cham-cong/BANG-MA-CA-CHOT.md", () => {
+  const BANG = readFileSync(
+    join(__dirname, "..", "..", "docs", "cham-cong", "BANG-MA-CA-CHOT.md"),
+    "utf8",
+  );
+
+  it("mọi dayCredit ≠ 1 phải xuất hiện đúng số đó trong bảng chốt", () => {
+    const daKiem: string[] = [];
+    for (const e of SHIFT_CATALOG) {
+      if (e.dayCredit === 1) continue;
+      // Markdown viết số thập phân kiểu Việt: "0,5" · "1,5"
+      const soVi = String(e.dayCredit).replace(".", ",");
+      const dong = BANG.split(String.fromCharCode(10)).find(
+        (l) => l.trim().startsWith("|") && l.includes(`\`${e.code}\``),
+      );
+      expect(dong, `bảng chốt phải có dòng cho mã ${e.code}`).toBeTruthy();
+      expect(dong, `${e.code}: bảng chốt phải ghi ${soVi}`).toContain(soVi);
+      daKiem.push(e.code);
+    }
+    // Anti-vacuity: nếu không mã nào ≠ 1 thì vòng trên rỗng và ca này chẳng kiểm gì.
+    expect(daKiem.sort()).toEqual(["C", "P", "S", "SCT", "T", "X"]);
+  });
+
+  it("bảng chốt nêu rõ luật nền — 1 ngày = 1 công, mẫu số giữ 24", () => {
+    // Câu này biến mất nghĩa là ai đó đảo quyết định mà không ghi lại.
+    expect(BANG).toContain("Một ngày làm việc = 1 công");
+    expect(BANG).toContain("giữ nguyên 24");
+  });
+
+  it("bảng chốt ghi rõ hai thứ CHƯA cắm được — đừng tưởng đã xong", () => {
+    expect(BANG).toContain("UNPAID_BREAK");
+    expect(BANG).toContain("soCapQuetKyVong");
   });
 });

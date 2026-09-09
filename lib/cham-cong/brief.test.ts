@@ -9,11 +9,14 @@ const asg = (code: string, placeLabel = "CS1 - 211 Nguyễn Hữu Thọ") => {
 const base = { dateLabel: "Thứ Ba 08/09", personName: "Thầy Khôi", notes: [], holiday: null, earlyArrivalMinutes: 10 };
 
 describe("buildBrief — tin 19:00 cho ngày mai", () => {
+  // ⚠️ Đổi 09/09/2026: `CT` nay khai 3 đoạn (WORK + PAID_BREAK 16:30–17:30 + WORK) cho
+  // khớp bảng chốt, nên tin nhắn in HAI khoảng thay vì một. Đây là thông tin ĐÚNG HƠN —
+  // người nhận biết có nghỉ giữa giờ; giờ kế hoạch vẫn 435 phút (PAID_BREAK vẫn tính).
   it("ca CT: mã + giờ + nơi + nhắc trước ca 10′", () => {
     const b = buildBrief({ ...base, assignment: asg("CT") });
     expect(b.send).toBe(true);
     expect(b.title).toBe("Lịch ngày mai — Thứ Ba 08/09");
-    expect(b.body).toContain("Ca CT (Ca chiều + tối): 13:45–21:00 · CS1 - 211 Nguyễn Hữu Thọ");
+    expect(b.body).toContain("Ca CT (Ca chiều + tối): 13:45–16:30 & 17:30–21:00 · CS1 - 211 Nguyễn Hữu Thọ");
     expect(b.body).toContain("Có mặt trước ca 10 phút");
   });
   it("X → 'KHÔNG có ca — nghỉ'; P → nghỉ phép; không ca → nghỉ", () => {

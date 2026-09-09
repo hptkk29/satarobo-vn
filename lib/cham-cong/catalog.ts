@@ -85,7 +85,17 @@ function timed(
   };
 }
 
-/** Thứ tự = thứ tự dòng trên tab DANH MỤC CA (thêm mã mới thì thêm cuối, không chèn giữa). */
+/**
+ * Thứ tự = thứ tự dòng trên tab DANH MỤC CA (thêm mã mới thì thêm cuối, không chèn giữa).
+ *
+ * ⚠️ NGUỒN SỰ THẬT của `dayCredit` và giờ/nghỉ là bảng chốt 09/09/2026 ở
+ * `docs/cham-cong/BANG-MA-CA-CHOT.md`. Ca test `catalog.test.ts` đối chiếu file này với
+ * bảng đó — lệch là ĐỎ, không phải đợi ai phát hiện bằng mắt.
+ *
+ * ⚠️ `seedShiftTemplates` chỉ ghi đè khi `--force`. Nên sửa ở đây KHÔNG tự đổi prod; và
+ * ngược lại, chỉnh tay trên prod KHÔNG tự về đây. Đối chiếu định kỳ bằng mục V10 của
+ * `scripts/do-khung-ca-diem-cham.ts`.
+ */
 const RAW_CATALOG: CatalogEntry[] = [
   timed("CG", "Ca gãy", [W("09:00", "11:30"), W("14:00", "17:45")]),
   timed(
@@ -140,13 +150,41 @@ const RAW_CATALOG: CatalogEntry[] = [
   timed("2C", "Cả 2 cơ sở", [W("08:00", "11:30", "ANY_CENTER"), W("13:30", "17:30", "ANY_CENTER")], {
     defaultPlace: "ANY_CENTER",
   }),
-  timed("S", "Ca sáng", [W("07:45", "11:30")]),
-  timed("C", "Ca chiều", [W("13:45", "17:30")]),
-  timed("T", "Ca tối", [W("17:15", "21:00")]),
+  timed("S", "Ca sáng", [W("07:45", "11:30")], { dayCredit: 0.5 }),
+  timed("C", "Ca chiều", [W("13:45", "17:30")], { dayCredit: 0.5 }),
+  timed("T", "Ca tối", [W("17:15", "21:00")], { dayCredit: 0.5 }),
   timed("SC", "Ca sáng + chiều", [W("07:45", "11:30"), W("13:45", "17:30")]),
   timed("ST", "Ca sáng + tối", [W("07:45", "11:30"), W("17:15", "21:00")]),
-  timed("CT", "Ca chiều + tối", [W("13:45", "21:00")], { note: "Liền 13:45–21:00 = 7h15" }),
-  timed("SCT", "Ca sáng + chiều + tối", [W("07:45", "11:30"), W("13:45", "21:00")]),
+  timed(
+    "CT",
+    "Ca chiều + tối",
+    [W("13:45", "16:30"), BREAK("16:30", "17:30"), W("17:30", "21:00")],
+    {
+      pmStart: "13:45",
+      pmEnd: "21:00",
+      pmBreakStart: "16:30",
+      pmBreakEnd: "17:30",
+      note: "Nghỉ giữa giờ 16:30–17:30, TÍNH vào giờ làm",
+    },
+  ),
+  timed(
+    "SCT",
+    "Ca sáng + chiều + tối",
+    [
+      W("07:45", "11:30"),
+      W("13:45", "16:30"),
+      BREAK("16:30", "17:30"),
+      W("17:30", "21:00"),
+    ],
+    {
+      dayCredit: 1.5,
+      pmStart: "13:45",
+      pmEnd: "21:00",
+      pmBreakStart: "16:30",
+      pmBreakEnd: "17:30",
+      note: "Nghỉ giữa giờ 16:30–17:30, TÍNH vào giờ làm",
+    },
+  ),
   {
     code: "LD",
     name: "Linh động",
