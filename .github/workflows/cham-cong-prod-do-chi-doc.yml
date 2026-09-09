@@ -41,6 +41,7 @@ on:
           - buoi-day
           - backlog
           - khung-ca-diem-cham
+          - danh-muc-nen
           - tat-ca
 concurrency:
   group: cham-cong-prod-do-chi-doc
@@ -138,6 +139,20 @@ jobs:
       - name: "Đo khung ca + điểm chấm (chỉ đọc)"
         if: ${{ !cancelled() && (inputs.viec == 'khung-ca-diem-cham' || inputs.viec == 'tat-ca') }}
         run: pnpm exec tsx scripts/do-khung-ca-diem-cham.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+
+      # Đo TOÀN BỘ 5 nhóm danh mục nền mà `prisma/seed-cham-cong.ts` phụ trách, đối chiếu với
+      # danh mục trong mã nguồn, kèm NGUỒN DỮ LIỆU suy từ AuditLog CREATE (có audit = gõ tay qua
+      # màn; không có = nhiều khả năng seed — seed không ghi audit).
+      #
+      # Vì sao cần: 09/09 phát hiện 21 mã ca trên prod đều do gõ tay, prod CHƯA TỪNG được seed
+      # nhóm đó. Câu hỏi phải trả lời trước mọi việc khác là bốn nhóm còn lại thì sao.
+      # `Holiday` đo riêng ở mục 6 — nó KHÔNG thuộc phạm vi seed chấm công.
+      - name: "Đo toàn bộ danh mục nền vs seed (chỉ đọc)"
+        if: ${{ !cancelled() && (inputs.viec == 'danh-muc-nen' || inputs.viec == 'tat-ca') }}
+        run: pnpm exec tsx scripts/do-danh-muc-nen.ts
         env:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
           DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
