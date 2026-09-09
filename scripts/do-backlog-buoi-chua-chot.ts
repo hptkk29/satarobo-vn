@@ -108,6 +108,8 @@ async function main() {
   }
 
   // thang -> lyDo -> số buổi
+  /** ID buổi THOẢ cổng — dùng lại ở mục 'trước/sau bản vá', không tính lại. */
+  const thoaIds: string[] = [];
   const theoThang = new Map<string, Map<LyDo, number>>();
   const tong = new Map<LyDo, number>();
   const themVao = (thang: string, ly: LyDo) => {
@@ -126,6 +128,7 @@ async function main() {
       daDanhDauStudentIds: dauTheoBuoi.get(b.id) ?? [],
     });
     themVao(vnYmd(b.date).slice(0, 7), qd.tuHoanTat ? "THOA" : qd.lyDo);
+    if (qd.tuHoanTat) thoaIds.push(b.id);
   }
 
   const COT: LyDo[] = [
@@ -222,6 +225,109 @@ async function main() {
     "\n  ⚠️ SI_SO_RONG = lớp không còn ai đang học (khoá đã kết thúc / chưa xếp học viên).\n" +
       "     Đây KHÔNG phải buổi 'còn nợ việc' — đừng gộp nó vào nhóm cần xử lý.",
   );
+
+  // ── 90 BUỔI THOẢ: chúng trở nên ĐỦ ĐIỂM DANH trước hay sau BẢN VÁ? ────────────────────
+  //
+  // Câu hỏi: cổng tự đóng có đang nổ không. Nếu nó chạy, thì mọi buổi trở nên đủ điểm danh
+  // SAU khi bản vá lên prod phải đã tự đóng — còn nằm trong danh sách THOẢ là cổng không nổ.
+  //
+  // MỐC: PR #227 lên `main` lúc 2026-09-08T01:30:54Z (08:30:54 +07). Ba commit vá đều nằm
+  // trong đó: `4df347b4` (so ngày với ngày), `a94e5aa7` (so tập studentId), `9635260f`
+  // (hỏng thì để lại dấu). Merge vào `main` = prod đổi ngay (Vercel Git integration).
+  //
+  // ⚠️ VÌ SAO `max(Attendance.createdAt)` LÀ ĐÚNG THƯỚC, không phải một phép xấp xỉ:
+  // cổng hỏi "mọi học viên trong sĩ số ĐÃ CÓ DÒNG điểm danh chưa" — nó đếm SỰ TỒN TẠI của
+  // dòng, không đọc `status`. Nên dòng cuối cùng được tạo CHÍNH LÀ thời điểm buổi trở nên
+  // đủ điều kiện. (`Attendance` không có `updatedAt`, và ở đây không cần.)
+  //
+  // ⚠️ MỘT ĐƯỜNG KHÁC LÀM BUỔI THOẢ MÀ KHÔNG QUA ĐIỂM DANH — phải trừ ra khi đọc:
+  // sĩ số CO LẠI (học viên rời lớp) cũng làm buổi trở nên "đủ" mà không ai lưu điểm danh.
+  // Cổng chỉ chạy TRONG đường lưu điểm danh, nên buổi kiểu đó kẹt vĩnh viễn và đó KHÔNG
+  // phải "cổng không nổ". Script in kèm mốc thay đổi ghi danh mới nhất của lớp để nhận ra.
+  const MOC_VA = new Date("2026-09-08T01:30:54Z");
+  console.log("\n== 90 BUOI THOA: du diem danh TRUOC hay SAU ban va ==");
+  console.log(`  Mốc bản vá lên prod: ${MOC_VA.toISOString()} (PR #227)`);
+  if (thoaIds.length === 0) {
+    console.log("  Không buổi nào THOẢ — không có gì để chia.");
+  } else {
+    const [diemDanhThoa, buoiThoa] = await Promise.all([
+      db.attendance.findMany({
+        where: { sessionId: { in: thoaIds } },
+        select: { sessionId: true, createdAt: true },
+      }),
+      db.classSession.findMany({
+        where: { id: { in: thoaIds } },
+        select: { id: true, classId: true, date: true },
+      }),
+    ]);
+    const lopCua = new Map(buoiThoa.map((b) => [b.id, b.classId]));
+    const ngayBuoi = new Map(buoiThoa.map((b) => [b.id, b.date]));
+    const ghiDanhDoi = await db.enrollment.findMany({
+      where: { classId: { in: [...new Set(buoiThoa.map((b) => b.classId))] } },
+      select: { classId: true, updatedAt: true },
+    });
+    const ghiDanhMoiNhat = new Map<string, Date>();
+    for (const e of ghiDanhDoi) {
+      const cu = ghiDanhMoiNhat.get(e.classId);
+      if (!cu || e.updatedAt > cu) ghiDanhMoiNhat.set(e.classId, e.updatedAt);
+    }
+
+    const cuoiCua = new Map<string, Date>();
+    for (const a of diemDanhThoa) {
+      const cu = cuoiCua.get(a.sessionId);
+      if (!cu || a.createdAt > cu) cuoiCua.set(a.sessionId, a.createdAt);
+    }
+
+    const truoc: string[] = [];
+    const sau: string[] = [];
+    const khongCo: string[] = [];
+    for (const id of thoaIds) {
+      const c = cuoiCua.get(id);
+      if (!c) khongCo.push(id);
+      else if (c < MOC_VA) truoc.push(id);
+      else sau.push(id);
+    }
+
+    dong("THOẢ, lượt điểm danh cuối TRƯỚC bản vá", truoc.length);
+    dong("THOẢ, lượt điểm danh cuối SAU bản vá", sau.length);
+    dong("THOẢ nhưng KHÔNG có dòng điểm danh nào", khongCo.length);
+
+    if (sau.length === 0) {
+      console.log(
+        "\n  ⇒ 0 buổi thuộc nhóm SAU. 90 buổi này là BACKLOG CŨ — chúng đủ điểm danh từ\n" +
+          "    trước khi bản vá lên, và cổng chỉ chạy trong đường lưu điểm danh nên không\n" +
+          "    ai đánh thức chúng. KHÔNG kết luận được là cổng đúng (luật 15) — cần `nguonChot`.",
+      );
+    } else {
+      console.log(
+        `\n  🔴 ${sau.length} buổi đủ điểm danh SAU bản vá mà VẪN chưa đóng.\n` +
+          "    Trừ nhóm 'sĩ số co lại' ở dưới ra; phần còn lại là CỔNG KHÔNG NỔ.",
+      );
+      console.log("\n  Chi tiết (tối đa 15 dòng):");
+      console.log(
+        `    ${"buổi".padEnd(28)}${"ngày buổi".padEnd(13)}${"điểm danh cuối".padEnd(26)}ghi danh đổi gần nhất`,
+      );
+      for (const id of sau.slice(0, 15)) {
+        const c = cuoiCua.get(id)!;
+        const gd = ghiDanhMoiNhat.get(lopCua.get(id) ?? "");
+        // Ghi danh đổi SAU lượt điểm danh cuối ⇒ buổi thoả do sĩ số CO LẠI, không phải do
+        // một lượt lưu điểm danh — cổng không có cơ hội chạy.
+        const nghiSiSo = gd && gd > c ? "  ← sĩ số co lại" : "";
+        console.log(
+          `    ${id.padEnd(28)}${vnYmd(ngayBuoi.get(id)!).padEnd(13)}${c.toISOString().padEnd(26)}${gd ? gd.toISOString() : "—"}${nghiSiSo}`,
+        );
+      }
+      const doSiSo = sau.filter((id) => {
+        const c = cuoiCua.get(id)!;
+        const gd = ghiDanhMoiNhat.get(lopCua.get(id) ?? "");
+        return gd ? gd > c : false;
+      }).length;
+      console.log(
+        `\n    Trong ${sau.length} buổi nhóm SAU: ${doSiSo} buổi có ghi danh đổi SAU lượt điểm danh cuối\n` +
+          `    (nghi do sĩ số co lại — cổng không có cơ hội chạy) · ${sau.length - doSiSo} buổi CÒN LẠI đáng đào.`,
+      );
+    }
+  }
 
   // ── BUỔI MỚI CHỐT, theo ngày ────────────────────────────────────────────────────────
   //
