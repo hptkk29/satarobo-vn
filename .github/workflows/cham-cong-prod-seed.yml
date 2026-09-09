@@ -5,7 +5,21 @@
 #     Chấm công · PROD · ĐO  (chỉ đọc — không ghi gì)   ← cham-cong-prod-do-chi-doc.yml
 #     Chấm công · PROD · GHI (seed danh mục nền)        ← file này
 #
-# ── PHẠM VI GHI — 5 NHÓM (cập nhật 07/09/2026) ─────────────────────────────────────────
+# ── HAI VIỆC, CHỌN BẰNG INPUT `viec` (cập nhật 09/09/2026) ─────────────────────────────
+#
+#   · `seed-nen`          — seed 5 nhóm danh mục nền (mô tả bên dưới). Chỉ TẠO dòng còn thiếu.
+#   · `nhap-danh-muc-nen` — NHẬP NỐT chiều seed → prod: tạo dòng thiếu VÀ vá những TRƯỜNG
+#                           đang trống/mặc-định trên dòng đã có (`scripts/nhap-danh-muc-nen.ts`).
+#
+#   Vì sao cần việc thứ hai: đo prod 09/09 cho thấy prod CHƯA TỪNG được seed — 31/31 dòng đang
+#   có đều do gõ tay qua màn (AuditLog CREATE, 08/09). `seed-nen` bỏ qua mọi dòng đã tồn tại nên
+#   nó KHÔNG vá được 14 trường mã ca + 6 trường loại nghỉ đang lệch. Còn `force` thì đè cả bảng,
+#   kể cả `displayOrder` chưa ai đo — tức xoá thứ tự người vận hành đã sắp.
+#
+#   ⚠️ CHẠY THỬ nằm ở workflow ĐO (`viec = nhap-danh-muc-chay-thu`) — nó dùng user CHỈ-ĐỌC và
+#      in bảng TRƯỚC→SAU từng trường. Đọc bảng đó, và đọc kỹ mục "KHÔNG CHẠM", rồi mới bấm đây.
+#
+# ── PHẠM VI GHI CỦA `seed-nen` — 5 NHÓM (cập nhật 07/09/2026) ──────────────────────────
 #   | # | Nhóm                                | Kỳ vọng lần seed đầu   |
 #   |---|-------------------------------------|------------------------|
 #   | 1 | ShiftTemplate (mã ca dùng chung)    | +21 tạo                |
@@ -37,6 +51,14 @@ name: Chấm công · PROD · GHI (seed danh mục nền)
 on:
   workflow_dispatch:
     inputs:
+      viec:
+        description: "Làm gì"
+        required: true
+        type: choice
+        default: seed-nen
+        options:
+          - seed-nen
+          - nhap-danh-muc-nen
       force:
         description: "Đè lại tên/giờ 21 mã ca theo danh mục trong code (mất chỉnh sửa tay trên màn Danh mục mã ca)"
         required: false
@@ -73,7 +95,23 @@ jobs:
       - name: Generate Prisma client
         run: pnpm exec prisma generate
       - name: "Seed nền chấm công (prod) — script tự in phạm vi trước khi ghi"
+        if: inputs.viec == 'seed-nen'
         run: pnpm exec tsx prisma/seed-cham-cong.ts ${{ inputs.force && '-- --force' || '' }}
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+
+      # NHẬP NỐT danh mục nền — chiều seed → prod, chạm ĐÚNG những trường đã đo và đã chốt.
+      #
+      # Vì sao KHÔNG dùng `seed-nen` + `force` cho việc này: `force` đè TOÀN BỘ mọi trường của
+      # mọi dòng, kể cả `displayOrder` của LeaveType/SessionCategory vốn KHÔNG nằm trong phép
+      # đo 09/09 — tức xoá thứ tự người vận hành đã sắp mà không ai nhìn thấy.
+      #
+      # ⚠️ BẤM CHẠY THỬ TRƯỚC: workflow ĐO → viec = `nhap-danh-muc-chay-thu`. Đọc bảng
+      #    TRƯỚC→SAU và mục "KHÔNG CHẠM" ở đó rồi mới bấm nút này.
+      - name: "Nhập nốt danh mục nền (prod) — GHI THẬT"
+        if: inputs.viec == 'nhap-danh-muc-nen'
+        run: pnpm exec tsx scripts/nhap-danh-muc-nen.ts --apply
         env:
           DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
           DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}

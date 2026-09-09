@@ -42,6 +42,7 @@ on:
           - backlog
           - khung-ca-diem-cham
           - danh-muc-nen
+          - nhap-danh-muc-chay-thu
           - tat-ca
 concurrency:
   group: cham-cong-prod-do-chi-doc
@@ -153,6 +154,19 @@ jobs:
       - name: "Đo toàn bộ danh mục nền vs seed (chỉ đọc)"
         if: ${{ !cancelled() && (inputs.viec == 'danh-muc-nen' || inputs.viec == 'tat-ca') }}
         run: pnpm exec tsx scripts/do-danh-muc-nen.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+
+      # CHẠY THỬ của nút GHI, đặt ở đây CÓ CHỦ ĐÍCH — hai lớp khoá độc lập:
+      #   1. script không có `--apply` ⇒ không câu lệnh ghi nào chạy;
+      #   2. kết nối là user CHỈ-ĐỌC ⇒ có gõ nhầm thành `--apply` thì Postgres vẫn từ chối.
+      # Đọc bảng "TRƯỚC → SAU" của bước này rồi mới sang workflow GHI.
+      # ⚠️ KHÔNG để `tat-ca` chạy bước này: `tat-ca` là để đo định kỳ, còn đây là bước đọc
+      #    trước một lượt ghi — người bấm phải chọn nó có ý thức.
+      - name: "Nhập danh mục nền — CHẠY THỬ (chỉ đọc, in bảng TRƯỚC→SAU)"
+        if: ${{ !cancelled() && inputs.viec == 'nhap-danh-muc-chay-thu' }}
+        run: pnpm exec tsx scripts/nhap-danh-muc-nen.ts
         env:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
           DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
