@@ -223,48 +223,50 @@ async function main() {
       "     Đây KHÔNG phải buổi 'còn nợ việc' — đừng gộp nó vào nhóm cần xử lý.",
   );
 
-  // ── BUỔI MỚI CHỐT, theo ngày — thứ nói bản vá cổng tự đóng CÓ CHẠY hay không ────────
+  // ── BUỔI MỚI CHỐT, theo ngày ────────────────────────────────────────────────────────
   //
-  // Vì sao đo riêng: con số `THOA` ở trên nói còn bao nhiêu buổi ĐÁNG đóng mà chưa đóng.
-  // Nó KHÔNG nói cổng có đang đóng buổi mới hay không — hai câu khác nhau, và chỉ câu thứ
-  // hai trả lời được "bản vá có chạy không".
+  // Vì sao đo riêng: cột `THOA` ở trên nói còn bao nhiêu buổi ĐÁNG đóng mà chưa đóng. Nó
+  // KHÔNG nói cổng có đang đóng buổi mới hay không — hai câu khác nhau.
   //
-  // ⚠️ ĐỌC KÈM LUẬT 15. Con số ở đây đứng yên KHÔNG kết luận được là bản vá hỏng: nó cũng
-  // có thể là "không buổi nào đủ điều kiện trong kỳ". Phải đọc CẠNH cột `THOA` — `THOA` > 0
-  // mà `tự động` = 0 mới là dấu hiệu cổng không nổ.
+  // 🔴 GIỚI HẠN PHẢI ĐỌC TRƯỚC KHI TIN CON SỐ NÀY (đo 09/09/2026)
   //
-  // `completedById = null` ⇒ KHÔNG người nào bấm ⇒ cổng tự đóng đã chạy.
+  // Hiện KHÔNG phân biệt được "buổi tự đóng" với "người bấm chốt". Cả hai đường đều gọi
+  // `completeSession` với CÙNG `actorId` (đường tự đóng truyền id của chính giáo viên vừa
+  // lưu điểm danh — `teacher/lop/_actions.ts`), cùng ghi `action: "COMPLETE_SESSION"`,
+  // cùng `assignMode: "DEFER"`. Không cột nào, không trường audit nào khác nhau.
+  //
+  // Bản đầu của mục này CHIA hai cột theo `completedById = null` và in ra "tự động 1 /
+  // người bấm 39". Con số đó VÔ NGHĨA — `completedById` có giá trị ở cả hai đường. Đã gỡ.
+  //
+  // ⇒ Muốn trả lời "cổng tự đóng có chạy không" thì phải THÊM MỘT DẤU: một trường
+  //   `nguonChot: "TU_DONG" | "TAY"` bắt buộc ở `completeSession`, ghi vào `newValues` của
+  //   audit. Đó là thay đổi ở module LMS, ngoài phạm vi module chấm công — chờ chốt.
   const tuNgay = new Date(Date.now() - 14 * 86_400_000);
   const chotGanDay = await db.classSession.findMany({
     where: { status: "COMPLETED", completedAt: { gte: tuNgay } },
-    select: { completedAt: true, completedById: true },
+    select: { completedAt: true },
     orderBy: { completedAt: "asc" },
   });
   console.log("\n== BUOI MOI CHOT - 14 ngay gan nhat (theo completedAt, gio VN) ==");
   if (chotGanDay.length === 0) {
-    console.log("  0 buổi. Đọc CẠNH cột THOA ở trên trước khi kết luận cổng hỏng (luật 15).");
+    console.log(
+      "  0 buổi. Đọc CẠNH cột THOA ở trên trước khi kết luận cổng hỏng (luật 15):\n" +
+        "  THOA > 0 mà 0 buổi mới chốt trong 14 ngày mới là dấu hiệu đáng đào.",
+    );
   } else {
-    const theoNgay = new Map<string, { n: number; may: number }>();
+    const theoNgay = new Map<string, number>();
     for (const b of chotGanDay) {
       if (!b.completedAt) continue;
       const k = vnYmd(b.completedAt);
-      const o = theoNgay.get(k) ?? { n: 0, may: 0 };
-      o.n += 1;
-      if (!b.completedById) o.may += 1;
-      theoNgay.set(k, o);
+      theoNgay.set(k, (theoNgay.get(k) ?? 0) + 1);
     }
-    console.log(
-      `  ${"ngày".padEnd(14)}${"chốt".padStart(8)}${"tự động".padStart(10)}${"người bấm".padStart(12)}`,
-    );
+    console.log(`  ${"ngày".padEnd(14)}${"buổi chốt".padStart(12)}`);
     for (const k of [...theoNgay.keys()].sort()) {
-      const o = theoNgay.get(k)!;
-      console.log(
-        `  ${k.padEnd(14)}${String(o.n).padStart(8)}${String(o.may).padStart(10)}${String(o.n - o.may).padStart(12)}`,
-      );
+      console.log(`  ${k.padEnd(14)}${String(theoNgay.get(k) ?? 0).padStart(12)}`);
     }
-    const tuDong = chotGanDay.filter((b) => !b.completedById).length;
+    console.log(`\n  Tổng ${chotGanDay.length} buổi chốt trong 14 ngày.`);
     console.log(
-      `\n  Tổng ${chotGanDay.length} buổi · tự động ${tuDong} · người bấm ${chotGanDay.length - tuDong}`,
+      "  ⚠️ KHÔNG tách được tự-đóng / bấm-tay — xem chú thích ở mã nguồn mục này.",
     );
   }
 
