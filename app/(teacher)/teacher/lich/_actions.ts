@@ -137,6 +137,7 @@ export async function completeSessionAction(
     // SESSION_LIFECYCLE_V2, đang TẮT) không hỏi giáo viên về bài tập, nên để mặc định
     // "NOW" cũ là im lặng giao bài + gửi tin cho phụ huynh mà không ai chọn điều đó.
     assignMode: "DEFER",
+    nguonChot: "TAY", // giáo viên bấm hoàn tất trên màn Lịch
     now: new Date(),
   });
 

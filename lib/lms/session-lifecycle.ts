@@ -65,6 +65,23 @@ export async function completeSession(opts: {
    * ĐỪNG thêm lại mặc định "cho gọn".
    */
   assignMode: "NOW" | "DEFER" | "CUSTOM_DUE";
+  /**
+   * Buổi này đóng vì AI — máy hay người. Ghi vào `newValues` của AuditLog.
+   *
+   *   TU_DONG = cổng tự đóng nổ trong đường LƯU ĐIỂM DANH (`teacher/lop/_actions.ts`);
+   *   TAY     = có người bấm nút chốt buổi.
+   *
+   * ⚠️ VÌ SAO BẮT BUỘC, KHÔNG MẶC ĐỊNH (luật 7). Mặc định nào cũng DÁN NHÃN SAI cho một
+   * trong hai đường, và nhãn sai ở đây không nổ ra lỗi — nó chỉ làm mọi phép đo về sau nói
+   * dối. Đã ăn một lần: 09/09/2026 tôi chia hai đường theo `completedById = null` và in ra
+   * "tự động 1 / người bấm 39" trên prod. Con số đó VÔ NGHĨA — đường tự đóng gọi hàm này
+   * với `actorId` của chính giáo viên vừa lưu điểm danh, nên `completedById` có giá trị ở
+   * CẢ HAI đường. Trước đó không trường nào phân biệt được: cùng `action`, cùng `assignMode`.
+   *
+   * Bắt buộc thì `tsc` liệt kê ĐỦ call site và mỗi chỗ phải nói ra ý định của mình.
+   * ĐỪNG thêm mặc định "cho gọn".
+   */
+  nguonChot: "TU_DONG" | "TAY";
   assignDueAt?: Date | null;
   actorId: string | null;
   actorName: string;
@@ -210,6 +227,8 @@ export async function completeSession(opts: {
         status: "COMPLETED",
         actualTeacherId: nguoiDungLop,
         actualRoomId: phongThucTe,
+        // Dấu DUY NHẤT phân biệt máy đóng với người bấm — xem chú thích ở chữ ký.
+        nguonChot: opts.nguonChot,
       },
       tx,
     });

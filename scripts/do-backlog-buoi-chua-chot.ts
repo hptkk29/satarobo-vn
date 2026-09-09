@@ -329,28 +329,22 @@ async function main() {
     }
   }
 
-  // ── BUỔI MỚI CHỐT, theo ngày ────────────────────────────────────────────────────────
+  // ── BUỔI MỚI CHỐT, tách TỰ ĐỘNG với BẤM TAY ─────────────────────────────────────────
   //
-  // Vì sao đo riêng: cột `THOA` ở trên nói còn bao nhiêu buổi ĐÁNG đóng mà chưa đóng. Nó
-  // KHÔNG nói cổng có đang đóng buổi mới hay không — hai câu khác nhau.
+  // Nguồn của phép tách là `AuditLog.newValues.nguonChot` — dấu thêm 09/09/2026, bắt buộc
+  // ở `completeSession` (xem `lib/lms/session-lifecycle.ts` + `lib/lms/nguon-chot.test.ts`).
   //
-  // 🔴 GIỚI HẠN PHẢI ĐỌC TRƯỚC KHI TIN CON SỐ NÀY (đo 09/09/2026)
+  // ⚠️ ĐỪNG tách bằng `ClassSession.completedById`. Nó có giá trị ở CẢ HAI đường: đường tự
+  // đóng gọi `completeSession` với `actorId` của chính giáo viên vừa lưu điểm danh. Bản đầu
+  // của mục này chia theo cột đó và in ra "tự động 1 / người bấm 39" trên prod — con số vô
+  // nghĩa, đã gỡ.
   //
-  // Hiện KHÔNG phân biệt được "buổi tự đóng" với "người bấm chốt". Cả hai đường đều gọi
-  // `completeSession` với CÙNG `actorId` (đường tự đóng truyền id của chính giáo viên vừa
-  // lưu điểm danh — `teacher/lop/_actions.ts`), cùng ghi `action: "COMPLETE_SESSION"`,
-  // cùng `assignMode: "DEFER"`. Không cột nào, không trường audit nào khác nhau.
-  //
-  // Bản đầu của mục này CHIA hai cột theo `completedById = null` và in ra "tự động 1 /
-  // người bấm 39". Con số đó VÔ NGHĨA — `completedById` có giá trị ở cả hai đường. Đã gỡ.
-  //
-  // ⇒ Muốn trả lời "cổng tự đóng có chạy không" thì phải THÊM MỘT DẤU: một trường
-  //   `nguonChot: "TU_DONG" | "TAY"` bắt buộc ở `completeSession`, ghi vào `newValues` của
-  //   audit. Đó là thay đổi ở module LMS, ngoài phạm vi module chấm công — chờ chốt.
+  // ⚠️ Buổi đóng TRƯỚC khi dấu này lên prod không có `nguonChot` ⇒ nhóm "chưa có dấu".
+  //    Số đó tự teo dần; nó KHÔNG phải lỗi.
   const tuNgay = new Date(Date.now() - 14 * 86_400_000);
   const chotGanDay = await db.classSession.findMany({
     where: { status: "COMPLETED", completedAt: { gte: tuNgay } },
-    select: { completedAt: true },
+    select: { id: true, completedAt: true },
     orderBy: { completedAt: "asc" },
   });
   console.log("\n== BUOI MOI CHOT - 14 ngay gan nhat (theo completedAt, gio VN) ==");
@@ -360,20 +354,68 @@ async function main() {
         "  THOA > 0 mà 0 buổi mới chốt trong 14 ngày mới là dấu hiệu đáng đào.",
     );
   } else {
-    const theoNgay = new Map<string, number>();
+    const dau = await db.auditLog.findMany({
+      where: {
+        entityType: "ClassSession",
+        action: "COMPLETE_SESSION",
+        entityId: { in: chotGanDay.map((b) => b.id) },
+      },
+      select: { entityId: true, newValues: true, createdAt: true },
+      orderBy: { createdAt: "desc" },
+    });
+    const nguonCua = new Map<string, string>();
+    for (const a of dau) {
+      if (nguonCua.has(a.entityId)) continue; // giữ bản ghi MỚI NHẤT
+      const v = (a.newValues as Record<string, unknown> | null)?.nguonChot;
+      if (typeof v === "string") nguonCua.set(a.entityId, v);
+    }
+
+    type O = { n: number; tuDong: number; tay: number; chuaCoDau: number };
+    const theoNgay = new Map<string, O>();
     for (const b of chotGanDay) {
       if (!b.completedAt) continue;
       const k = vnYmd(b.completedAt);
-      theoNgay.set(k, (theoNgay.get(k) ?? 0) + 1);
+      const o = theoNgay.get(k) ?? { n: 0, tuDong: 0, tay: 0, chuaCoDau: 0 };
+      o.n += 1;
+      const ng = nguonCua.get(b.id);
+      if (ng === "TU_DONG") o.tuDong += 1;
+      else if (ng === "TAY") o.tay += 1;
+      else o.chuaCoDau += 1;
+      theoNgay.set(k, o);
     }
-    console.log(`  ${"ngày".padEnd(14)}${"buổi chốt".padStart(12)}`);
-    for (const k of [...theoNgay.keys()].sort()) {
-      console.log(`  ${k.padEnd(14)}${String(theoNgay.get(k) ?? 0).padStart(12)}`);
-    }
-    console.log(`\n  Tổng ${chotGanDay.length} buổi chốt trong 14 ngày.`);
     console.log(
-      "  ⚠️ KHÔNG tách được tự-đóng / bấm-tay — xem chú thích ở mã nguồn mục này.",
+      `  ${"ngày".padEnd(13)}${"chốt".padStart(7)}${"tự động".padStart(10)}${"bấm tay".padStart(10)}${"chưa có dấu".padStart(14)}`,
     );
+    let tuDong = 0;
+    let tay = 0;
+    let chuaCoDau = 0;
+    for (const k of [...theoNgay.keys()].sort()) {
+      const o = theoNgay.get(k)!;
+      tuDong += o.tuDong;
+      tay += o.tay;
+      chuaCoDau += o.chuaCoDau;
+      console.log(
+        `  ${k.padEnd(13)}${String(o.n).padStart(7)}${String(o.tuDong).padStart(10)}${String(o.tay).padStart(10)}${String(o.chuaCoDau).padStart(14)}`,
+      );
+    }
+    console.log(
+      `\n  Tổng ${chotGanDay.length} buổi · tự động ${tuDong} · bấm tay ${tay} · chưa có dấu ${chuaCoDau}`,
+    );
+
+    // Ba nhánh kết luận, in sẵn để người đọc không phải nhớ.
+    if (tuDong + tay === 0) {
+      console.log(
+        "\n  ⚠️ Chưa buổi nào mang dấu — dấu `nguonChot` mới lên, chưa ai đi qua đường đóng buổi\n" +
+          "     kể từ lúc đó. Chưa kết luận được gì; đo lại sau vài ngày.",
+      );
+    } else if (tuDong > 0) {
+      console.log("\n  ⇒ Cổng tự đóng CÓ NỔ. Bản vá 08/09 chạy đúng.");
+    } else {
+      console.log(
+        "\n  🔴 tự động = 0 mà bấm tay > 0 ⇒ có người đi qua đường đóng buổi nhưng cổng tự\n" +
+          "     đóng KHÔNG nổ lần nào. Đào tiếp: kiểm `quyetDinhTuHoanTat` trên chính các buổi đó.",
+      );
+    }
   }
 
   console.log("\n[backlog] Xong. Không ghi gì.");

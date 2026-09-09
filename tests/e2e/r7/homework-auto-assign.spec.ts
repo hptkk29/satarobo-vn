@@ -181,7 +181,8 @@ test.describe("[R7-14] Auto-giao bài + phân quyền portal", () => {
     const att = await db.student.create({ data: { name: "att", centerId: CENTER }, select: { id: true } });
     await db.attendance.create({ data: { sessionId: session.id, studentId: att.id, status: "PRESENT" } });
 
-    const done = await completeSession({ sessionId: session.id, assignMode: "NOW", actorId: "gv", actorName: "GV" });
+    const done = await completeSession({
+          nguonChot: "TAY", sessionId: session.id, assignMode: "NOW", actorId: "gv", actorName: "GV" });
     expect(done.ok).toBe(true);
 
     const ev = await db.domainEvent.findFirstOrThrow({ where: { type: "session.taught" } });
