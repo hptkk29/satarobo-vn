@@ -539,6 +539,53 @@ async function main() {
     );
   }
 
+  // ── V11 — AI ĐÃ SỬA ShiftTemplate TRÊN PROD, LÚC NÀO ────────────────────────
+  //
+  // 5 mã HC/12/21/2C/NG mất HẾT `place` trong segments. Hai giả thuyết đã LOẠI:
+  //  · seed đời cũ thiếu `place` — SAI, `place` có trong catalog từ commit đầu (7a57c6c0);
+  //  · form đời cũ thiếu ô `place` — SAI, form + validator cùng sinh 06/09 (`221ad0da`)
+  //    và cả 5 trường (place · defaultPlace · payMode · nominalMinutes · note) có ngay từ
+  //    commit đó.
+  //
+  // Còn đúng một cách biết: đọc AuditLog. `danh-muc-ca/_actions.ts` ghi CREATE/UPDATE/
+  // ACTIVATE/DEACTIVATE với `oldValues.segments`, nên nếu có ai sửa thì có dấu.
+  //
+  // KHÔNG có dòng nào ⇒ chúng chưa từng bị sửa qua màn ⇒ đường làm mất nằm chỗ khác, và
+  // "prod sạch" lại chỉ là "không thấy dấu" (bài học của sự cố nhập nhân sự 08/09).
+  {
+    const auditCa = await db.auditLog.findMany({
+      where: { entityType: "ShiftTemplate" },
+      select: {
+        action: true, entityId: true, createdAt: true, actorName: true,
+        oldValues: true, newValues: true, changedFields: true,
+      },
+      orderBy: { createdAt: "asc" },
+    });
+    tieuDe("══ V11 — AuditLog của ShiftTemplate ══");
+    dong("Tổng dòng audit ShiftTemplate", auditCa.length);
+    if (auditCa.length === 0) {
+      console.log("  🔴 KHÔNG có dòng nào — 21 mã ca chưa từng đi qua màn Danh mục.");
+      console.log("     ⇒ đường làm mất `place` KHÔNG phải màn đó. Chưa biết là đường nào.");
+    } else {
+      const theoMa = new Map<string, number>();
+      for (const a of auditCa) theoMa.set(a.entityId, (theoMa.get(a.entityId) ?? 0) + 1);
+      console.log(`  Số mã từng bị chạm: ${theoMa.size}`);
+      for (const a of auditCa) {
+        const cu = (a.oldValues ?? {}) as Record<string, unknown>;
+        const moi = (a.newValues ?? {}) as Record<string, unknown>;
+        const coPlaceCu = JSON.stringify(cu.segments ?? "").includes('"place"');
+        const coPlaceMoi = JSON.stringify(moi.segments ?? "").includes('"place"');
+        console.log(
+          `    ${a.createdAt.toISOString().slice(0, 16)} · ${a.action.padEnd(10)}` +
+            ` · ${String(moi.code ?? cu.code ?? a.entityId).padEnd(6)}` +
+            ` · ${(a.actorName ?? "?").slice(0, 18).padEnd(19)}` +
+            ` · place cũ=${coPlaceCu ? "CÓ" : "không"} → mới=${coPlaceMoi ? "CÓ" : "không"}` +
+            `${coPlaceCu && !coPlaceMoi ? "  🔴 MẤT Ở ĐÂY" : ""}`,
+        );
+      }
+    }
+  }
+
   // ── V10 — ĐỐI CHIẾU SHIFT_CATALOG (seed) ↔ ShiftTemplate (prod) ───────────
   //
   // Câu của chủ dự án rộng hơn `dayCredit`: "còn giá trị nào khác trên prod đang lệch
