@@ -633,6 +633,145 @@ canh luật này. Bản dùng được phải `boChuThich()` **trước** mọi 
 
 ---
 
+## Luật 13 — trước khi tin một lượt "chỉ thêm", đọc `git diff --stat`
+
+> **`Write` lên một file đang tồn tại là GHI ĐÈ, không phải thêm vào.** Một lượt sửa mà
+> trong đầu là "tôi bổ sung mấy ca test" nhưng trên đĩa là "tôi thay cả file" trông giống
+> hệt nhau ở màn hình — trừ một chỗ: **số dòng bị XOÁ trong `git diff --stat`.**
+
+### Sự cố 09/09/2026 — 90 dòng test biến mất trong một lượt "thêm ca"
+
+Việc đang làm: thêm 3 ca đối chiếu `SHIFT_CATALOG` với bảng chốt trong docs. Công cụ
+dùng: `Write` lên `lib/cham-cong/catalog.test.ts`. File đó **đã có sẵn 26 ca**.
+
+```
+lib/cham-cong/catalog.test.ts | 196 +++++++++++++++++--------------------
+1 file changed, 106 insertions(+), 90 deletions(-)
+```
+
+`90 deletions(-)` trong một lượt tự nhận là "chỉ thêm". Đó là toàn bộ bộ test cũ. Không
+có lỗi nào ném ra, `tsc` xanh, `vitest` xanh — vì 106 dòng mới **tự nó** là một bộ test
+hợp lệ. Thứ duy nhất nói ra sự thật là con số `90`.
+
+Khôi phục bằng `git show HEAD:<file>` rồi gộp tay; diff cuối còn **+106 / −1**.
+
+### Vì sao nó nguy hiểm hơn vẻ ngoài
+
+Cùng cơ chế với sự cố nhập nhân sự 08/09 (Sổ sự cố): **mất dữ liệu im lặng vì "vắng mặt"
+được hiểu thành "cố ý"**. Ở đó là ô trống trong file Excel; ở đây là ca test không có
+trong chuỗi tôi vừa gõ. Cả hai đều không ném lỗi, và cả hai chỉ lộ khi có người **so với
+trạng thái TRƯỚC ĐÓ**.
+
+| Hình dạng | Đọc là |
+|---|---|
+| `N insertions(+), 0 deletions(-)` | đúng là chỉ thêm |
+| `N insertions(+), M deletions(-)` với M lớn | **DỪNG** — đọc `git diff` đầy đủ trước khi commit |
+
+Ba việc phải làm, không phải một:
+
+1. **Ưu tiên `Edit`** (chèn vào chỗ neo) hơn `Write` khi file đã tồn tại. `Edit` không thể
+   xoá thứ mình không nhắc tên.
+2. Buộc phải `Write` thì **đọc file trước** và gộp bằng tay — "tôi nhớ file đó có gì" không
+   phải là đọc.
+3. **`git diff --stat` trước mỗi commit.** Rẻ, và nó là thứ duy nhất phát hiện được ca này.
+
+> Luật 6 chặn commit khi test ĐỎ. Luật 13 chặn commit khi test **BIẾN MẤT** — mà test biến
+> mất thì bộ vẫn XANH, nên luật 6 và cơ chế của nó không thấy gì cả.
+
+---
+
+## Luật 14 — lưới an toàn phải có TEST CỦA CHÍNH NÓ
+
+> **Một hook, một cổng, một cầu dao mà không ai cấy thử thì mặc định coi là ĐÃ CHẾT.** Và
+> tài liệu nói nó đang sống chỉ làm mọi người yên tâm nhầm lâu hơn.
+>
+> Đây là **luật 12 áp cho hạ tầng**: dòng chữ `ENFORCED` cũng là một affordance, và
+> affordance phải nói thật.
+
+### Sự cố 09/09/2026 — hai hook an toàn chết nhiều tháng dưới dòng chữ "ENFORCED"
+
+`.claude/hooks/block-env-add.sh` và `.claude/hooks/block-destructive.sh` **cùng lúc mang
+HAI lỗi**, mỗi lỗi một mình đã đủ giết chúng:
+
+| # | Lỗi | Vì sao câm |
+|---|---|---|
+| 1 | `cmd="${CLAUDE_COMMAND:-}"` | biến đó **không tồn tại**. PreToolUse đưa JSON qua **STDIN**, chuỗi lệnh ở `.tool_input.command`. `cmd` rỗng ⇒ không mẫu nào khớp ⇒ `exit 0` |
+| 2 | chặn bằng `exit 1` | Claude Code chỉ coi **`exit 2`** là CHẶN. `exit 1` là "lỗi không chặn" ⇒ kể cả khi đọc đúng lệnh, nó vẫn cho qua |
+
+Trong khi `CLAUDE.md` mục 8 ghi **"Security (ENFORCED by hooks)"** và `.claude/rules/prisma-db.md`
+ghi *"hook `block-destructive.sh` CHẶN (bảo vệ prod)"*. Cả hai câu đều sai, cả hai đều
+được đọc và tin.
+
+**Vì sao không ai phát hiện:** không có ca test nào **cấy thử một lệnh phải bị chặn**.
+Hook viết đúng ý, chú thích đầy đủ, danh sách mẫu chặn dài — và không chặn nổi thứ gì.
+
+### Điều đáng sợ nhất: lỗi #2 khiến lỗi #1 KHÔNG THỂ bị phát hiện bằng mắt
+
+Giả sử ai đó nghi ngờ và sửa lỗi #1. Hook đọc đúng lệnh, khớp đúng mẫu, **in ra đúng dòng
+`🚫 BLOCKED`** — rồi `exit 1`, và lệnh vẫn chạy. Người sửa thấy chữ BLOCKED hiện lên và
+kết luận "xong rồi". Hai lỗi che nhau.
+
+⇒ **Chỉ MÃ THOÁT mới là bằng chứng.** Không phải dòng chữ hook in ra.
+
+### Hình dạng của ca test đúng
+
+`.claude/hooks/hooks.test.ts` — 27 ca, mỗi ca **chạy thật** cái hook bằng `execFileSync`,
+đưa **JSON thật** trên stdin, và đọc **mã thoát**:
+
+```ts
+const json = JSON.stringify({ tool_name: "Bash", tool_input: { command } });
+execFileSync("bash", [join(HOOKS, hook)], { input: json, ... });
+// bắt lỗi ⇒ err.status; kỳ vọng === 2
+```
+
+Grep nội dung file hook **không chứng minh được gì** (luật 11): bản chết chứa đủ mọi mẫu
+chặn, đủ mọi dòng `BLOCKED`, và vẫn cho qua tất cả.
+
+### Bốn lượt cấy (luật 8) — đo 09/09/2026
+
+| Cấy | Số ca đỏ |
+|---|---|
+| trả `block-env-add` về đọc biến môi trường (lỗi gốc #1) | **3** |
+| hạ mã thoát chặn `2 → 1` ở `block-destructive` (lỗi gốc #2) | **11** |
+| gỡ **một** mẫu khỏi danh sách chặn | **1** |
+| viết hook nhưng **không cắm** vào `settings.json` | **1** |
+| _(gỡ hết cấy)_ | 0 — 27/27 xanh |
+
+Lượt cấy thứ tư quan trọng riêng: **viết ra mà không cắm thì cũng như chết**, và đó là một
+đường chết khác hẳn hai đường trên.
+
+### Ba việc phải làm khi dựng một lưới an toàn mới
+
+1. **Ca test cấy lỗi** — không có thì lưới coi như chưa tồn tại.
+2. **Ca test kiểm nó ĐƯỢC CẮM** — file đúng mà không khai trong `settings.json` /
+   `vitest.config.ts` `include` / required check là câm hoàn toàn.
+3. **Ghi vào tài liệu ĐÚNG hiện trạng, có ngày.** Câu "ENFORCED" không kèm ngày và không
+   kèm ca test là câu không kiểm được.
+
+### Ba đường chết đã gặp, cùng một hình dạng
+
+| Lưới | Chết vì | Ngày |
+|---|---|---|
+| `block-env-add` / `block-destructive` | đọc sai nguồn + mã thoát sai | 09/09 |
+| `tests/cham-cong/**` (2 bộ) | không khai trong `vitest.config.ts` `include` ⇒ *"No test files found"*, CI vẫn xanh | 08/09 |
+| 666 ca R7 + tầng DB | job không phải **required check**, `enforce_admins=false` | 08/09 |
+
+Cả ba đều là **cổng im lặng khi hạ tầng hỏng** — tệ hơn không có cổng, vì nó mua sự yên
+tâm bằng không có gì.
+
+### Bẫy kèm: chính hook mới cắn ngay lượt đầu
+
+Lệnh đo bốn lượt cấy bị `block-destructive` chặn — vì **nhãn `echo` tiếng Việt của nó**
+viết nguyên văn chuỗi đang bị cấm để mô tả việc mình sắp làm. Đây là **lần thứ sáu** trong
+hai ngày cùng một bẫy (luật 11, gạch đầu dòng 2): *văn xuôi giải thích bản vá chứa đúng
+chuỗi mà bộ so khớp đang tìm* — lần này ở hạ tầng chứ không ở test. Cách đi vòng: đưa
+kịch bản ra file rồi `bash <file>`.
+
+⚠️ **Đó cũng là một GIỚI HẠN THẬT của hook, phải nói ra:** nó chỉ soi chuỗi lệnh ở tầng
+trên. `bash mot-file.sh` thì nội dung file **không** đi qua hook.
+
+---
+
 ## Sổ sự cố
 
 ### 08/09/2026 — nhập nhân sự xoá trắng ba cột ngày trên 9 hồ sơ PROD

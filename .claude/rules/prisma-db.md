@@ -77,6 +77,10 @@ pnpm exec prisma migrate deploy && pnpm db:seed && pnpm db:seed:orgunit   && pnp
 ## Reset DB — chỉ cho phép trên DB test (local)
 
 - `pnpm db:reset` / `prisma migrate reset` trần → **hook `block-destructive.sh` CHẶN** (bảo vệ prod).
+  ⚠️ Câu trên **SAI suốt nhiều tháng**: hook đọc lệnh từ một biến môi trường không
+  tồn tại, và chặn bằng mã thoát mà Claude Code không coi là chặn ⇒ nó chưa từng
+  chặn được gì. **Vá 09/09/2026**, nay có `.claude/hooks/hooks.test.ts` cấy thử.
+  Xem luật 14 — `docs/luat-doc-so-va-ket-luan.md`.
 - Chỉ được reset khi command thể hiện rõ target local/test (chứa `localhost` / `127.0.0.1` / `.env.test` / `satarobo_test`). Ví dụ PowerShell:
   ```powershell
   $env:DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:5432/satarobo_test'; pnpm prisma migrate reset --force --skip-seed

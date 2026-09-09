@@ -46,15 +46,7 @@
 # nó quay lại thành luật, không còn là cơ chế.
 set -uo pipefail
 
-json="$(cat)"
-
-cmd="$(printf '%s' "$json" | node -e '
-  let s = ""; process.stdin.on("data", (d) => (s += d));
-  process.stdin.on("end", () => {
-    try { process.stdout.write(String(JSON.parse(s)?.tool_input?.command ?? "")); }
-    catch { process.stdout.write(""); }
-  });
-' 2>/dev/null)"
+source "$(dirname "${BASH_SOURCE[0]}")/_doc-lenh.sh"
 
 # Không phải lệnh commit thì thôi. `git commit` có thể nằm giữa chuỗi `&&`/`;`.
 if ! printf '%s' "$cmd" | grep -qE '(^|[;&|[:space:]])git[[:space:]]+(-[^[:space:]]+[[:space:]]+)*commit([[:space:]]|$)'; then
