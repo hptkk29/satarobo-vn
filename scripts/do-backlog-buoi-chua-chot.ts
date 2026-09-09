@@ -223,6 +223,51 @@ async function main() {
       "     Đây KHÔNG phải buổi 'còn nợ việc' — đừng gộp nó vào nhóm cần xử lý.",
   );
 
+  // ── BUỔI MỚI CHỐT, theo ngày — thứ nói bản vá cổng tự đóng CÓ CHẠY hay không ────────
+  //
+  // Vì sao đo riêng: con số `THOA` ở trên nói còn bao nhiêu buổi ĐÁNG đóng mà chưa đóng.
+  // Nó KHÔNG nói cổng có đang đóng buổi mới hay không — hai câu khác nhau, và chỉ câu thứ
+  // hai trả lời được "bản vá có chạy không".
+  //
+  // ⚠️ ĐỌC KÈM LUẬT 15. Con số ở đây đứng yên KHÔNG kết luận được là bản vá hỏng: nó cũng
+  // có thể là "không buổi nào đủ điều kiện trong kỳ". Phải đọc CẠNH cột `THOA` — `THOA` > 0
+  // mà `tự động` = 0 mới là dấu hiệu cổng không nổ.
+  //
+  // `completedById = null` ⇒ KHÔNG người nào bấm ⇒ cổng tự đóng đã chạy.
+  const tuNgay = new Date(Date.now() - 14 * 86_400_000);
+  const chotGanDay = await db.classSession.findMany({
+    where: { status: "COMPLETED", completedAt: { gte: tuNgay } },
+    select: { completedAt: true, completedById: true },
+    orderBy: { completedAt: "asc" },
+  });
+  console.log("\n== BUOI MOI CHOT - 14 ngay gan nhat (theo completedAt, gio VN) ==");
+  if (chotGanDay.length === 0) {
+    console.log("  0 buổi. Đọc CẠNH cột THOA ở trên trước khi kết luận cổng hỏng (luật 15).");
+  } else {
+    const theoNgay = new Map<string, { n: number; may: number }>();
+    for (const b of chotGanDay) {
+      if (!b.completedAt) continue;
+      const k = vnYmd(b.completedAt);
+      const o = theoNgay.get(k) ?? { n: 0, may: 0 };
+      o.n += 1;
+      if (!b.completedById) o.may += 1;
+      theoNgay.set(k, o);
+    }
+    console.log(
+      `  ${"ngày".padEnd(14)}${"chốt".padStart(8)}${"tự động".padStart(10)}${"người bấm".padStart(12)}`,
+    );
+    for (const k of [...theoNgay.keys()].sort()) {
+      const o = theoNgay.get(k)!;
+      console.log(
+        `  ${k.padEnd(14)}${String(o.n).padStart(8)}${String(o.may).padStart(10)}${String(o.n - o.may).padStart(12)}`,
+      );
+    }
+    const tuDong = chotGanDay.filter((b) => !b.completedById).length;
+    console.log(
+      `\n  Tổng ${chotGanDay.length} buổi · tự động ${tuDong} · người bấm ${chotGanDay.length - tuDong}`,
+    );
+  }
+
   console.log("\n[backlog] Xong. Không ghi gì.");
 }
 
