@@ -538,6 +538,118 @@ async function main() {
     );
   }
 
+  // ── V9 — BÁN KÍNH ĐỔI ĐƠN VỊ CÔNG → CA (khảo sát 09/09/2026) ─────────────
+  //
+  // Ba câu: (a) đường ghi đã có dữ liệu chưa — nếu còn 0 thì đây là cửa sổ đổi mô hình
+  // rẻ nhất; (b) kỳ nào đã CHỐT (số của kỳ chốt phải bất biến); (c) 21 mã ca thật trông
+  // ra sao, mã nào là HAI BUỔI.
+  const [soAssign, soDay, soLog, soVe] = await Promise.all([
+    db.shiftAssignment.count(),
+    db.staffAttendanceDay.count(),
+    db.staffTimeLog.count(),
+    db.attendanceTicket.count(),
+  ]);
+  tieuDe("══ V9.1 — đường ghi chấm công đã có dữ liệu chưa ══");
+  dong("ShiftAssignment (ô lưới tháng)", soAssign);
+  dong("StaffAttendanceDay (công ngày)", soDay);
+  dong("StaffTimeLog (lượt quét)", soLog);
+  dong("AttendanceTicket (vé)", soVe);
+
+  const kyDaChot = await db.attendancePeriod.findMany({
+    where: { status: "LOCKED" },
+    select: {
+      periodKey: true,
+      centerId: true,
+      lockedAt: true,
+      standardUnits: true,
+      summaryJson: true,
+    },
+    orderBy: { periodKey: "asc" },
+  });
+  tieuDe("══ V9.2 — kỳ ĐÃ CHỐT (summaryJson là số đóng băng) ══");
+  dong("Số kỳ LOCKED", kyDaChot.length);
+  for (const k of kyDaChot) {
+    const sj = k.summaryJson as {
+      totals?: { units?: number; people?: number };
+    } | null;
+    console.log(
+      `    ${k.periodKey} · ${k.centerId} · chốt ${k.lockedAt?.toISOString().slice(0, 10) ?? "?"}` +
+        ` · công chuẩn=${k.standardUnits ?? "—"}` +
+        ` · summaryJson: ${sj ? `${sj.totals?.people ?? "?"} người / ${sj.totals?.units ?? "?"} công` : "TRỐNG"}`,
+    );
+  }
+
+  const maCa = await db.shiftTemplate.findMany({
+    select: {
+      code: true,
+      name: true,
+      kind: true,
+      dayCredit: true,
+      isLeave: true,
+      nominalMinutes: true,
+      segments: true,
+      isActive: true,
+      amStart: true,
+      amEnd: true,
+      pmStart: true,
+      pmEnd: true,
+      pmBreakStart: true,
+      pmBreakEnd: true,
+      attendanceMode: true,
+      payMode: true,
+    },
+    orderBy: { code: "asc" },
+  });
+  tieuDe("══ V9.3 — DANH MỤC MÃ CA: mã nào là HAI BUỔI ══");
+  dong("Tổng mã ca", maCa.length);
+  dong("… đang bật", maCa.filter((t) => t.isActive).length);
+  for (const t of maCa) {
+    const segs =
+      (t.segments as { start: string; end: string; kind: string }[] | null) ??
+      [];
+    const lam = segs.filter((x) => x.kind === "WORK");
+    // HAI BUỔI = có ≥2 đoạn WORK, hoặc khai đủ cả am* lẫn pm*.
+    const haiBuoi = lam.length >= 2 || (!!t.amStart && !!t.pmStart);
+    const gio =
+      lam.map((x) => `${x.start}-${x.end}`).join(" + ") || "(không đoạn)";
+    const nghi = segs
+      .filter((x) => x.kind !== "WORK")
+      .map((x) => `${x.kind}:${x.start}-${x.end}`)
+      .join(" ");
+    console.log(
+      `    ${haiBuoi ? "🟦2BUỔI" : "      1"} ${t.code.padEnd(6)} ${t.name.slice(0, 22).padEnd(23)}` +
+        ` ${t.kind.padEnd(6)} công=${t.dayCredit} ${t.isLeave ? "NGHỈ " : "     "}` +
+        `phút=${t.nominalMinutes ?? "—"} | ${gio}${nghi ? ` | nghỉ ${nghi}` : ""}`,
+    );
+    if (t.amStart || t.pmStart)
+      console.log(
+        `             cột hiển thị: am ${t.amStart ?? "—"}-${t.amEnd ?? "—"} · pm ${t.pmStart ?? "—"}-${t.pmEnd ?? "—"} · nghỉ giữa ${t.pmBreakStart ?? "—"}-${t.pmBreakEnd ?? "—"}`,
+      );
+  }
+
+  // Vai KẾ TOÁN: đã có ai được neo chưa (việc 2).
+  const vaiKeToan = await db.userOrgRole.findMany({
+    where: {
+      role: { code: { in: ["HO_ACCOUNTANT", "CENTER_ACCOUNTANT"] } },
+      status: "ACTIVE",
+    },
+    select: { userId: true, orgUnitId: true, role: { select: { code: true } } },
+  });
+  const dsRoleDef = await db.roleDef.findMany({
+    select: { code: true, _count: { select: { permissions: true } } },
+    orderBy: { code: "asc" },
+  });
+  tieuDe("══ V9.4 — vai KẾ TOÁN đã neo cho ai chưa ══");
+  dong("UserOrgRole ACTIVE của 2 vai kế toán", vaiKeToan.length);
+  for (const v of vaiKeToan)
+    console.log(
+      `    ${v.role.code} · user=${v.userId} · orgUnit=${v.orgUnitId}`,
+    );
+  dong("RoleDef trên prod", dsRoleDef.length);
+  console.log(
+    `    ${dsRoleDef.map((r) => `${r.code}(${r._count.permissions})`).join(" · ")}`,
+  );
+
   // ── V8 — BA CHỖ ĐẾM BUỔI DẠY BỎ SÓT `substituteTeacherId` ─────────────────
   //
   // Ba chỗ đếm "buổi dạy" cùng bỏ sót MỘT cột. Tiền lệ đã sửa đúng nằm ngay cạnh:
