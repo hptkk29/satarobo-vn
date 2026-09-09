@@ -233,6 +233,7 @@ test.describe("[R7-07] Assign students + session lifecycle", () => {
     });
 
     const r1 = await completeSession({
+          nguonChot: "TAY",
       assignMode: "DEFER", // bắt buộc từ 08/09; test này không nói về giao bài
       sessionId: s.id,
       actualStartAt: new Date(),
@@ -241,6 +242,7 @@ test.describe("[R7-07] Assign students + session lifecycle", () => {
     });
     expect(r1.ok).toBe(true);
     const r2 = await completeSession({
+          nguonChot: "TAY",
       assignMode: "DEFER", // bắt buộc từ 08/09; test này không nói về giao bài
       sessionId: s.id,
       actorId: "gv",
@@ -323,6 +325,7 @@ test.describe("[R7-07] Assign students + session lifecycle", () => {
     });
 
     const r = await completeSession({
+          nguonChot: "TAY",
       assignMode: "DEFER", // bắt buộc từ 08/09; test này không nói về giao bài
       sessionId: s.id,
       actorId: "gv",
@@ -367,6 +370,7 @@ test.describe("[R7-07] Assign students + session lifecycle", () => {
       data: { sessionId: s.id, studentId: hs1.id, status: "PRESENT" },
     });
     await completeSession({
+       nguonChot: "TAY",
       assignMode: "DEFER", // bắt buộc từ 08/09; test này không nói về giao bài
       sessionId: s.id,
       actorId: "gv",
@@ -389,6 +393,7 @@ test.describe("[R7-07] Assign students + session lifecycle", () => {
     }
     // Gọi lại completeSession: idempotent, KHÔNG được ghi đè số cũ bằng sĩ số hôm nay.
     await completeSession({
+       nguonChot: "TAY",
       assignMode: "DEFER", // bắt buộc từ 08/09; test này không nói về giao bài
       sessionId: s.id,
       actorId: "gv",
@@ -413,6 +418,7 @@ test.describe("[R7-07] Assign students + session lifecycle", () => {
       select: { id: true },
     });
     const warn = await completeSession({
+          nguonChot: "TAY",
       assignMode: "DEFER", // bắt buộc từ 08/09; test này không nói về giao bài
       sessionId: s.id,
       actorId: "gv",
@@ -422,6 +428,7 @@ test.describe("[R7-07] Assign students + session lifecycle", () => {
     expect(warn.needsConfirm).toBe(true);
 
     const done = await completeSession({
+          nguonChot: "TAY",
       assignMode: "DEFER", // bắt buộc từ 08/09; test này không nói về giao bài
       sessionId: s.id,
       confirmNoAttendance: true,
@@ -442,6 +449,7 @@ test.describe("[R7-07] Assign students + session lifecycle", () => {
       select: { id: true },
     });
     const r = await completeSession({
+          nguonChot: "TAY",
       assignMode: "DEFER", // bắt buộc từ 08/09; test này không nói về giao bài
       sessionId: s.id,
       confirmNoAttendance: true,
@@ -468,6 +476,7 @@ test.describe("[R7-07] Assign students + session lifecycle", () => {
       select: { id: true },
     });
     await completeSession({
+       nguonChot: "TAY",
       assignMode: "DEFER", // bắt buộc từ 08/09; test này không nói về giao bài
       sessionId: s.id,
       confirmNoAttendance: true,

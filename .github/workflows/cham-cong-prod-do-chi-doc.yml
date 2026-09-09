@@ -41,6 +41,10 @@ on:
           - buoi-day
           - backlog
           - khung-ca-diem-cham
+          - danh-muc-nen
+          - nhap-danh-muc-chay-thu
+          - vai-ke-toan
+          - cong-day-thuc-te
           - tat-ca
 concurrency:
   group: cham-cong-prod-do-chi-doc
@@ -138,6 +142,54 @@ jobs:
       - name: "Đo khung ca + điểm chấm (chỉ đọc)"
         if: ${{ !cancelled() && (inputs.viec == 'khung-ca-diem-cham' || inputs.viec == 'tat-ca') }}
         run: pnpm exec tsx scripts/do-khung-ca-diem-cham.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+
+      # Đo TOÀN BỘ 5 nhóm danh mục nền mà `prisma/seed-cham-cong.ts` phụ trách, đối chiếu với
+      # danh mục trong mã nguồn, kèm NGUỒN DỮ LIỆU suy từ AuditLog CREATE (có audit = gõ tay qua
+      # màn; không có = nhiều khả năng seed — seed không ghi audit).
+      #
+      # Vì sao cần: 09/09 phát hiện 21 mã ca trên prod đều do gõ tay, prod CHƯA TỪNG được seed
+      # nhóm đó. Câu hỏi phải trả lời trước mọi việc khác là bốn nhóm còn lại thì sao.
+      # `Holiday` đo riêng ở mục 6 — nó KHÔNG thuộc phạm vi seed chấm công.
+      - name: "Đo toàn bộ danh mục nền vs seed (chỉ đọc)"
+        if: ${{ !cancelled() && (inputs.viec == 'danh-muc-nen' || inputs.viec == 'tat-ca') }}
+        run: pnpm exec tsx scripts/do-danh-muc-nen.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+
+      # CHẠY THỬ của nút GHI, đặt ở đây CÓ CHỦ ĐÍCH — hai lớp khoá độc lập:
+      #   1. script không có `--apply` ⇒ không câu lệnh ghi nào chạy;
+      #   2. kết nối là user CHỈ-ĐỌC ⇒ có gõ nhầm thành `--apply` thì Postgres vẫn từ chối.
+      # Đọc bảng "TRƯỚC → SAU" của bước này rồi mới sang workflow GHI.
+      # ⚠️ KHÔNG để `tat-ca` chạy bước này: `tat-ca` là để đo định kỳ, còn đây là bước đọc
+      #    trước một lượt ghi — người bấm phải chọn nó có ý thức.
+      - name: "Nhập danh mục nền — CHẠY THỬ (chỉ đọc, in bảng TRƯỚC→SAU)"
+        if: ${{ !cancelled() && inputs.viec == 'nhap-danh-muc-chay-thu' }}
+        run: pnpm exec tsx scripts/nhap-danh-muc-nen.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+
+      # Việc 2 — neo vai kế toán. Chủ dự án yêu cầu BIẾT TRƯỚC khi ghi: ai đang mang
+      # HO_ACCOUNTANT trên prod, và SR.NV.002 hiện mang vai gì. Đo `UserOrgRole` chứ KHÔNG
+      # đọc màn /admin/users/[id]/permissions — màn đó vẽ RBAC v1.
+      - name: "Đo vai kế toán (chỉ đọc)"
+        if: ${{ !cancelled() && (inputs.viec == 'vai-ke-toan' || inputs.viec == 'tat-ca') }}
+        run: pnpm exec tsx scripts/do-vai-ke-toan.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+
+      # Con số màn Công dạy ĐANG hiển thị, gọi ĐÚNG hàm màn dùng (luật 9) thay vì chép lại
+      # phép tính. Số cần nhìn nhất là "RƠI RA": buổi nạp được nhưng KHÔNG dòng danh mục nào
+      # nhận. Trước 09/09 bảng TeachingCreditType rỗng nên MỌI buổi rơi ra và công dạy = 0
+      # cho tất cả, im lặng — xem luật 15.
+      - name: "Đo con số màn Công dạy (chỉ đọc)"
+        if: ${{ !cancelled() && (inputs.viec == 'cong-day-thuc-te' || inputs.viec == 'tat-ca') }}
+        run: pnpm exec tsx scripts/do-cong-day-thuc-te.ts
         env:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
           DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}

@@ -391,6 +391,10 @@ export async function saveClassAttendanceAction(
         // chỗ này KHÔNG truyền gì và rơi về mặc định "NOW" — xem chú thích ở chữ ký
         // `completeSession`.
         assignMode: "DEFER",
+        // ĐÂY là đường tự đóng: không ai bấm nút, cổng nổ trong lượt lưu điểm danh.
+        // `actorId` dưới đây là GIÁO VIÊN VỪA LƯU ĐIỂM DANH, không phải người bấm chốt —
+        // đó chính là lý do `completedById` không phân biệt được hai đường.
+        nguonChot: "TU_DONG",
         actorId,
         actorName,
       });

@@ -152,6 +152,7 @@ export async function chotBuoi(input: {
     // của lifecycle, nên không cần hỏi lại người dùng.
     confirmNoAttendance: true,
     assignMode: "DEFER", // xem ghi chú (2) ở đầu file
+    nguonChot: "TAY", // nút "Chốt buổi" — có người bấm
     actorId: input.actorId,
     actorName: input.actorName,
   });

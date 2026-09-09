@@ -300,6 +300,71 @@ truyền là bàn giao lead trên **mọi cơ sở**. Mặc định của scope 
 
 Khác biệt nằm ở **hướng của giá trị mặc định**, không ở việc có mặc định hay không.
 
+### Điểm cộng ngoài dự kiến: nó còn kéo theo chỗ QUÊN SELECT
+
+Ghi 08/09/2026, khi vá ba chỗ đếm buổi dạy (`giaoVienDuocQuyCong`).
+
+Hàm mới nhận `substituteTeacherId` là trường **bắt buộc** trong tham số. Hệ quả không chỉ
+là "mỗi call site phải nói ý định" — `tsc` còn bắt luôn
+`dashboard/_components/manager-dashboard.tsx` **thiếu cột đó trong `select` của Prisma**:
+
+```
+error TS2345: Property 'substituteTeacherId' is missing in type
+'{ class: { teacherId: string | null; }; actualTeacherId: string | null; }'
+```
+
+Đây đúng là hình dạng bug nguy hiểm nhất của lớp này: hàm quy công thì đúng, nhưng dữ
+liệu nuôi nó thiếu một cột ⇒ nó nhận `undefined` và **rơi về nhánh cũ, im lặng**. Không
+exception, không cảnh báo, chỉ là một con số sai.
+
+Trường tuỳ chọn thì `tsc` cho qua. **Trường bắt buộc biến "quên select" từ lỗi câm thành
+lỗi biên dịch.** Đó là lý do thứ hai để bỏ mặc định, ngoài lý do liệt kê call site.
+
+### 09/09/2026 — chính người viết luật 6 vi phạm luật 6, và LUẬT KHÔNG ĐỦ
+
+Commit `a3b833fc` mang **23 test đỏ**. Cách nó lọt:
+
+```bash
+pnpm test:unit 2>&1 | grep -E "Tests " | tail -2 && git commit ...
+```
+
+`grep` thành công ⇒ `&&` chạy tiếp ⇒ commit. Dòng `23 failed` **in ra ngay trước mắt** và
+vẫn lọt. Luật 6 viết 07/09, vi phạm 09/09, bằng đúng cái ống nó cấm.
+
+> **Một luật đã bị chính tác giả vi phạm trong hai ngày thì nó không phải luật — nó là
+> một lời nhắc. Đổi nó thành CƠ CHẾ.**
+
+Cơ chế: `.claude/hooks/chan-commit-khi-do.sh` — hook `PreToolUse` soi chuỗi lệnh, thấy
+`git commit` thì chạy `typecheck` + `vitest related` cho file đã stage, đỏ thì `exit 2`.
+
+Vì sao **không** dùng husky: `husky` là devDependency nhưng **chưa từng khởi tạo** (không
+có `.husky/`, không script `prepare`, `core.hooksPath` chưa đặt). Và quan trọng hơn — cách
+commit đang dùng là `git commit --no-verify`, mà `--no-verify` **bỏ qua mọi git hook**.
+Hook Claude Code chặn ở tầng trên nên `--no-verify` không thoát được.
+
+### 🔴 Phát hiện kèm theo: HAI hook an toàn của repo ĐỀU CHẾT
+
+`block-env-add.sh` **và** `block-destructive.sh` cùng mở đầu bằng:
+
+```bash
+cmd="${CLAUDE_COMMAND:-}"
+```
+
+Biến đó **không tồn tại**. `cmd` rỗng ⇒ không mẫu nào khớp ⇒ hook luôn `exit 0` trong im
+lặng. Trong khi CLAUDE.md ghi **"Security (ENFORCED by hooks)"**.
+
+Nghĩa là suốt nhiều tháng: `git add .env` không bị chặn, `git reset --hard` không bị chặn,
+`DROP TABLE` không bị chặn — và tài liệu nói ngược lại. Đây là **luật 12 áp cho hạ tầng**:
+dòng chữ "ENFORCED by hooks" là một affordance, và nó nói dối.
+
+Cách đúng: PreToolUse nhận **JSON trên STDIN**, đọc `.tool_input.command`.
+
+**Giới hạn của hook mới, nói rõ để không ai tưởng nó chặn mọi thứ:** nó chạy `typecheck`
+toàn repo + `vitest related` cho file đã stage. Test **quét cây thư mục**
+(`bang-coverage`, `affordance-coverage`, `nav-coverage`) không import file nào nên
+`related` **không bắt được** — mà đó đúng là loại test bắt lỗi ở file bạn không sửa. Test
+cần Postgres và test browser cũng ngoài phạm vi. **Hook là lưới, CI vẫn là cổng cuối.**
+
 ---
 
 ## Luật 8 — test canh lỗi chỉ được tin sau khi CẤY LẠI lỗi và thấy nó ĐỎ
@@ -334,6 +399,80 @@ làm nhớ ra thì nó không phải quy trình.
 **Liên hệ với các luật khác:** đây là luật 6 (*cổng im lặng tệ hơn không có cổng*) áp cho
 chính bộ test. Một test không bao giờ đỏ được là một cổng luôn cho qua — cùng họ với
 `photoDone` không bao giờ true, và nhãn "Hoàn tất" suy ra.
+
+---
+
+### Luật 8 áp cho một CON SỐ, không chỉ cho một ca test
+
+> **Một cột phân loại cũng phải được cấy thử.** Trước khi tin nó, hỏi đúng một câu:
+> **"nếu cả hai nhánh đều rơi vào cùng một giá trị thì cột này in ra cái gì?"**
+> Trả lời được là "vẫn ra hai nhóm" ⇒ cột đó không phân loại gì cả, nó chỉ trông giống thế.
+
+Ca test xanh có thể nghĩa là "lỗi không còn" hoặc "test không chạm tới lỗi". Một con số
+cũng vậy: nó có thể nghĩa là "thực tế đúng như vậy" hoặc **"phép đo không đo trúng thứ
+mình nghĩ"**. Hai vế đó nhìn từ ngoài giống hệt nhau — cùng là một bảng số gọn gàng.
+
+#### Sự cố 09/09/2026 — cột "tự động / người bấm" không phân biệt được gì
+
+Câu hỏi: cổng tự đóng buổi có nổ không. Tôi chia buổi đã chốt thành hai nhóm theo
+`ClassSession.completedById = null`, chạy trên prod, và ra:
+
+```
+  Tổng 40 buổi · tự động 1 · người bấm 39
+```
+
+Bảng gọn, số cụ thể, và **sai hoàn toàn**. Đường tự đóng gọi `completeSession` với
+`actorId` của **chính giáo viên vừa lưu điểm danh**, nên `completedById` có giá trị ở
+**cả hai** nhánh. Đọc thêm: cả hai còn cùng `action: "COMPLETE_SESSION"`, cùng
+`assignMode: "DEFER"` — không trường nào khác nhau.
+
+Suýt đọc *"tự động = 0 kể từ bản vá"* thành *"cổng không nổ"*, rồi đi đào một chỗ vốn đúng.
+
+#### Câu hỏi rẻ đáng lẽ đã chặn được
+
+Trước khi chạy, chỉ cần hỏi: *"đường tự đóng đặt `completedById` bằng gì?"* — mở đúng một
+file là thấy. Phép đo tốn 40 giây chạy trên prod; câu hỏi tốn 10 giây đọc.
+
+Dạng tổng quát, dùng được cho mọi cột phân loại:
+
+| Trước khi tin cột X | |
+|---|---|
+| 1 | Nhánh A ghi gì vào X? **Đọc mã, đừng suy từ tên cột.** |
+| 2 | Nhánh B ghi gì vào X? |
+| 3 | Hai câu trả lời có khác nhau không? |
+| 4 | Nếu không — **cột X chưa tồn tại.** Phải THÊM một dấu, không phải diễn giải khéo hơn. |
+
+Ở đây bước 4 là trường `nguonChot: "TU_DONG" | "TAY"` bắt buộc ở `completeSession`, ghi
+vào `newValues` của AuditLog (`lib/lms/nguon-chot.test.ts`). **Bắt buộc chứ không mặc
+định** — mặc định nào cũng dán nhãn sai cho một trong hai đường, và nhãn sai không nổ lỗi,
+không làm test đỏ; nó chỉ làm mọi phép đo về sau nói dối. Đó là luật 7 gặp luật 8.
+
+#### Liên hệ
+
+- **Luật 15** — ở đó một triệu chứng có nhiều nguyên nhân đủ. Ở đây một phép đo có nhiều
+  cách sai. Cùng một gốc: **câu chuyện tự nó tròn không phải bằng chứng.**
+- **Luật 12** — một cột tên là "tự động" là một LỜI HỨA với người đọc số, y như mũi tên là
+  lời hứa với người dùng. Lời hứa suông không ném lỗi.
+- Xem thêm ghi chú "Một lượt cấy không đỏ phải hỏi 'mình có cấy trúng không'" ở trên: cùng
+  một phản xạ, áp cho hai thứ khác nhau.
+
+---
+
+## Luật 9 — cổng phải được cho ăn bằng thứ đường THẬT cho nó ăn
+
+> Một ca test **tự dựng đầu vào cho cổng** thì nó kiểm cổng, không kiểm hệ thống. Nếu đầu
+> vào ấy do một tầng khác tính ra, **tầng đó là chỗ bug sẽ nằm** — và ca test phải gọi
+> nó, hoặc ít nhất mang đúng hình dạng thứ nó phát ra.
+
+Sinh ra từ sự cố nhập nhân sự 08/09/2026 — chi tiết đầy đủ ở mục **Sổ sự cố** cuối file.
+Tóm tắt: ca test cũ gọi
+`dungPatchNhanSu(DAY_DU, new Set(["employeeCode", "centerSlug"]))`, tức **gõ tay `coMat`**
+— đúng cái biến chứa lỗi. Test xanh, và nó xanh CHÍNH XÁC: nó đo hàm dựng patch, không đo
+đường dẫn dữ liệu tới hàm đó. Ba cột ngày vẫn bị xoá trắng trên 9 hồ sơ prod.
+
+**Câu hỏi để tự kiểm:** *đầu vào của cổng này do AI tính ra, và tôi có gọi kẻ đó không?*
+
+Luật 11 ngay dưới là luật này ở quy mô một dòng `expect`.
 
 ---
 
@@ -382,16 +521,368 @@ sự cố ngay dưới.
 Hai cờ cuối đáng nhớ ngang danh sách `contexts`: **một cổng bỏ qua được không phải cổng**,
 và `strict=false` chính là cơ chế đã để một nhánh tụt sau main mà vẫn xanh.
 
-### Liên hệ với luật 8 và 9
+### Liên hệ với luật 8, 9 và 11
 
-Ba luật là ba câu hỏi nối tiếp về **cùng một bộ test**, hỏi thiếu câu nào cũng ra một dấu
-tích xanh vô nghĩa:
+Bốn luật là bốn câu hỏi nối tiếp về **cùng một bộ test**, hỏi thiếu câu nào cũng ra một
+dấu tích xanh vô nghĩa:
 
 | | Câu hỏi | Hỏng nếu bỏ qua |
 |---|---|---|
 | **Luật 8** | ca này **đỏ được không**? | test không bao giờ đỏ — cổng luôn cho qua |
 | **Luật 9** | nó đỏ ở **đúng chỗ bug nằm** không? | đỏ ở tầng mình tự gõ đầu vào, không phải tầng có bug |
+| **Luật 11** | nó **soi đúng chuỗi** không? | với test grep: khớp nhầm chú thích, nhầm hàm khác, hoặc nuốt cả file vì cờ `/s` |
 | **Luật 10** | ai đó **bị chặn** khi nó đỏ không? | đỏ đúng chỗ, và merge lên prod bình thường |
+
+Thứ tự hỏi không quan trọng; **hỏi thiếu** mới quan trọng. Ngày 08/09/2026 đủ bốn ca:
+luật 9 (nhập nhân sự xoá 3 cột ngày), luật 10 (cầu dao hoàn tiền merge với ca đỏ), luật
+11 (ba ca grep soi nhầm chỗ), và luật 8 là thứ duy nhất phát hiện ra cả ba.
+
+---
+
+## Luật 11 — test grep mã nguồn là loại MONG MANH NHẤT
+
+> **Ưu tiên khẳng định HÀNH VI.** Khi buộc phải canh bằng văn bản mã — chống một dấu `?`
+> quay lại, chống một chuỗi bị chép sang chỗ khác — thì:
+>
+> · **neo vào chuỗi hẹp nhất có thể, KHÔNG dùng cờ `/s`;**
+> · **khẳng định cả SỐ LẦN khớp, không chỉ có/không** — chú thích giải thích bản vá
+>   thường chứa đúng chuỗi mà ta đang cấm;
+> · **bắt buộc cấy lại lỗi (luật 8).** Một ca grep chưa cấy thử thì mặc định coi là **vô
+>   dụng**, không phải "chắc là ổn".
+
+### Ba lần trong MỘT ngày — 08/09/2026
+
+Ba ca test khác nhau, ba cách soi nhầm chỗ, cùng một loại:
+
+| Ca | Viết gì | Vì sao vô dụng |
+|---|---|---|
+| Q-04, khối Hội sở trên màn điểm chấm | `toMatch(/Hội sở.*Q-04/s)` | Cờ `s` cho `.` khớp cả xuống dòng ⇒ nó khớp **bất kỳ cặp nào trong cả file**. Xoá đúng lời giải thích vẫn XANH |
+| `assignMode` bắt buộc | `not.toContain('?? "NOW"')` | Bắt trúng **chính chú thích giải thích bản vá** — chú thích nhắc lại chuỗi đang cấm ⇒ ĐỎ ngay lần chạy đầu, mà lỗi là của test |
+| `assignMode` bắt buộc | `indexOf("assignMode: AssignMode;")` | Bắt trúng chữ ký của **`computeHomeworkDueAt` ở trên**, không phải chỗ vừa vá |
+
+Hai ca đầu **suýt thành test xanh vĩnh viễn**. Cả ba chỉ lộ ra khi cấy lại lỗi.
+
+### Vì sao đây là luật 9 ở quy mô nhỏ
+
+Luật 9 nói *cổng phải được cho ăn bằng thứ đường thật cho nó ăn*. Một ca grep tự chọn
+chuỗi để soi cũng đang tự dựng đầu vào cho chính nó — và nếu chọn nhầm chuỗi thì **xanh
+hay đỏ đều không nói lên gì**. Khác biệt duy nhất là quy mô: luật 9 nói về một tầng của hệ
+thống, luật 11 nói về một dòng `expect`.
+
+### Cách viết cho đỡ mong manh
+
+```ts
+// ❌ khớp bất kỳ đâu trong file, và cờ `s` nuốt cả xuống dòng
+expect(src).toMatch(/Hội sở.*Q-04/s);
+
+// ✅ chỉ soi vùng NGAY CẠNH thứ đang canh
+const i = src.indexOf("b.id !== HO_CENTER_ID");
+expect(i).toBeGreaterThan(-1);
+expect(src.slice(Math.max(0, i - 300), i)).toContain("Q-04");
+```
+
+```ts
+// ❌ chú thích giải thích bản vá cũng chứa chuỗi này
+expect(src).not.toContain('?? "NOW"');
+
+// ✅ soi MÃ, không soi văn xuôi
+expect(src).not.toContain('opts.assignMode ?? "NOW"');
+expect(src).toContain("const assignMode: AssignMode = opts.assignMode;");
+```
+
+```ts
+// ✅ đếm SỐ LẦN, không chỉ có/không — `dungPatchNhanSu` phải được gọi ĐÚNG một lần
+expect(src.split("dungPatchNhanSu(").length - 1).toBe(1);
+```
+
+### Khi nào thì grep mã nguồn là ĐÚNG lựa chọn
+
+Không phải lúc nào cũng sai. Nó đúng khi thứ cần canh **là hợp đồng chứ không phải hành
+vi**, và hành vi sau khi vá **không đổi**:
+
+· `assignMode` thành bắt buộc — mọi call site vốn đã truyền đủ, `tsc` xanh ngay lần đầu.
+  Thứ đã đổi là **chữ ký**, và chữ ký chỉ đọc được ở văn bản;
+· một bộ lọc bảo vệ một quyết định (`b.id !== HO_CENTER_ID`) — gỡ nó không làm test hành
+  vi nào đỏ, vì hành vi đúng của nó là *không có gì xảy ra*;
+· một luật "chỉ được gọi ở một chỗ" — không có cách nào quan sát bằng hành vi.
+
+Trong cả ba ca đó, ba gạch đầu dòng ở đầu mục này là bắt buộc, không phải khuyến nghị.
+
+---
+
+## Luật 12 — affordance phải NÓI THẬT
+
+> **Một phần tử giao diện gợi ý điều gì thì phải làm được điều đó.** Con trỏ, mũi tên,
+> nhãn trạng thái, nút — tất cả đều là **lời hứa**. Lời hứa suông **không ném lỗi, không
+> làm test đỏ, và người dùng sẽ tin nó**.
+
+### Ba lần trong một tuần, cùng một họ
+
+| Lời hứa | Sự thật | Người dùng thấy |
+|---|---|---|
+| Nhãn **"Hoàn tất"** trên site GV, suy ra từ ba điều kiện | `ClassSession.status` vẫn `SCHEDULED` | Buổi đã xong — trong khi hệ thống coi là chưa |
+| **`photoDone`** đứng làm điều kiện chặn | Không bao giờ `true` được | Một cổng không bao giờ mở |
+| **Chevron `>`** cuối mỗi dòng `/cham-cong` | `<svg aria-hidden>` trần, chưa từng được nối | Bấm mãi không có gì xảy ra |
+
+Cả ba **không ném lỗi**, **không test nào đỏ**, và **console sạch**. Ca thứ ba đo tận nơi
+trên prod 09/09/2026: 0 lỗi JS, 0 message, DOM xác nhận chevron không nằm trong
+`button`/`a` nào. Không có gì *hỏng* — đơn giản là nó chưa bao giờ được nối.
+
+Đó là lý do lớp bug này sống lâu: **mọi công cụ đều báo bình thường.** Thứ duy nhất phát
+hiện được là một người dùng thật bấm vào và thấy im lặng.
+
+### Cách kiểm
+
+Với mỗi thứ trông-như-tương-tác, hỏi đúng một câu: **"cái này hứa gì, và nó làm được
+không?"**
+
+· mũi tên / chevron cuối dòng → có nằm trong `<button>`/`<a>`/trigger không? nếu không,
+  cả hàng có phải vùng bấm không?
+· `cursor-pointer` → thứ dưới con trỏ có bấm được thật không? **con trỏ một mình là lời
+  hứa, không phải cơ chế**;
+· nhãn trạng thái → nó đọc từ CỘT thật, hay suy ra từ mấy điều kiện? (xem luật 3)
+· nút bị vô hiệu → có nói vì sao không? "không bấm được và không biết tại sao" cũng là
+  một lời hứa gãy.
+
+### Cách vá đúng: mở rộng vùng bấm, đừng gỡ mũi tên
+
+Gỡ mũi tên đi là **mất một chỉ dẫn đúng**. Người dùng đã đọc đúng ý đồ; cái sai là hệ
+thống chưa nối. Ở `/cham-cong` vá bằng cách cho **cả hàng** thành vùng bấm:
+
+```tsx
+<tr className="relative h-11 cursor-pointer group">      // neo + con trỏ nói thật
+  <SheetTrigger className="… after:absolute after:inset-0 after:content-['']">
+```
+
+`after:inset-0` kéo vùng bấm của chính nút đó phủ kín hàng. **Không** bọc `<tr>` trong
+`<button>` (HTML không cho) và **không** gắn `onClick` lên `<tr>` (hàng không nhận được
+focus bàn phím). Mũi tên giữ `aria-hidden` — điều khiển có nhãn là `SheetTrigger` với
+`aria-label="Chi tiết <tên>"`; đọc thêm "chevron right" chỉ là nhiễu.
+
+⚠️ Chỉ an toàn khi hàng **không có phần tử tương tác nào khác** — lớp phủ sẽ nuốt chúng.
+Đã rà trước khi vá: `ShiftCodeChip`, `DayTypePill`, `FlagList` đều 0 nút / 0 link.
+
+### Cổng canh — và bài học cay nhất của ngày 09/09
+
+`components/ui/affordance-coverage.test.ts` quét toàn repo: icon chỉ hướng trong `<td>`
+phải nằm trong phần tử tương tác, hoặc hàng phải là vùng bấm (đủ **hai** mảnh
+`cursor-pointer` + `after:inset-0`).
+
+**Bản đầu của cổng này VÔ DỤNG, và phải viết lại BA lần** — mỗi lần chỉ lộ ra vì cấy lại
+lỗi (luật 8):
+
+| Lần | Vì sao vô dụng |
+|---|---|
+| 1 | Dò `<td` trong cửa sổ 12 dòng phía trên icon. Prettier tách dòng, khối chú thích đẩy `<td` ra xa hơn ⇒ **bỏ qua luôn** cái icon |
+| 2 | `TUONG_TAC` khớp chữ trần `Trigger`, mà **chú thích của bản vá** có nhắc `SheetTrigger` ⇒ ô bị coi là có tương tác |
+| 3 | `hangLaVungBam()` chạy trên cả file **kể cả chú thích**, mà chú thích ở `page.tsx:678` nhắc `` `after:inset-0` `` ⇒ file được miễn trừ **vĩnh viễn** |
+
+Ba lần, cùng một cơ chế: **văn xuôi giải thích bản vá chứa đúng chuỗi mà bộ so khớp đang
+tìm.** Đó là gạch đầu dòng thứ hai của luật 11, và nó cắn ngay chính cái cổng viết ra để
+canh luật này. Bản dùng được phải `boChuThich()` **trước** mọi phép so, và tách
+`iconTranTrongNguon` thành hàm THUẦN để anti-vacuity kiểm bằng đầu vào giả.
+
+> **Nếu một cổng grep cần viết lại ba lần mới bite, hãy cân nhắc rằng công cụ đúng là một
+> test HÀNH VI.** Ở đây hành vi thật ("bấm vào hàng có mở panel không") chỉ đo được bằng
+> trình duyệt — `tests/e2e/a0` là chỗ của nó. Cổng grep hiện tại canh CẤU TRÚC, và nó chỉ
+> đáng tin vì đã bị cấy lỗi bốn lần và đỏ đúng chỗ.
+
+---
+
+## Luật 13 — trước khi tin một lượt "chỉ thêm", đọc `git diff --stat`
+
+> **`Write` lên một file đang tồn tại là GHI ĐÈ, không phải thêm vào.** Một lượt sửa mà
+> trong đầu là "tôi bổ sung mấy ca test" nhưng trên đĩa là "tôi thay cả file" trông giống
+> hệt nhau ở màn hình — trừ một chỗ: **số dòng bị XOÁ trong `git diff --stat`.**
+
+### Sự cố 09/09/2026 — 90 dòng test biến mất trong một lượt "thêm ca"
+
+Việc đang làm: thêm 3 ca đối chiếu `SHIFT_CATALOG` với bảng chốt trong docs. Công cụ
+dùng: `Write` lên `lib/cham-cong/catalog.test.ts`. File đó **đã có sẵn 26 ca**.
+
+```
+lib/cham-cong/catalog.test.ts | 196 +++++++++++++++++--------------------
+1 file changed, 106 insertions(+), 90 deletions(-)
+```
+
+`90 deletions(-)` trong một lượt tự nhận là "chỉ thêm". Đó là toàn bộ bộ test cũ. Không
+có lỗi nào ném ra, `tsc` xanh, `vitest` xanh — vì 106 dòng mới **tự nó** là một bộ test
+hợp lệ. Thứ duy nhất nói ra sự thật là con số `90`.
+
+Khôi phục bằng `git show HEAD:<file>` rồi gộp tay; diff cuối còn **+106 / −1**.
+
+### Vì sao nó nguy hiểm hơn vẻ ngoài
+
+Cùng cơ chế với sự cố nhập nhân sự 08/09 (Sổ sự cố): **mất dữ liệu im lặng vì "vắng mặt"
+được hiểu thành "cố ý"**. Ở đó là ô trống trong file Excel; ở đây là ca test không có
+trong chuỗi tôi vừa gõ. Cả hai đều không ném lỗi, và cả hai chỉ lộ khi có người **so với
+trạng thái TRƯỚC ĐÓ**.
+
+| Hình dạng | Đọc là |
+|---|---|
+| `N insertions(+), 0 deletions(-)` | đúng là chỉ thêm |
+| `N insertions(+), M deletions(-)` với M lớn | **DỪNG** — đọc `git diff` đầy đủ trước khi commit |
+
+Ba việc phải làm, không phải một:
+
+1. **Ưu tiên `Edit`** (chèn vào chỗ neo) hơn `Write` khi file đã tồn tại. `Edit` không thể
+   xoá thứ mình không nhắc tên.
+2. Buộc phải `Write` thì **đọc file trước** và gộp bằng tay — "tôi nhớ file đó có gì" không
+   phải là đọc.
+3. **`git diff --stat` trước mỗi commit.** Rẻ, và nó là thứ duy nhất phát hiện được ca này.
+
+> Luật 6 chặn commit khi test ĐỎ. Luật 13 chặn commit khi test **BIẾN MẤT** — mà test biến
+> mất thì bộ vẫn XANH, nên luật 6 và cơ chế của nó không thấy gì cả.
+
+---
+
+## Luật 14 — lưới an toàn phải có TEST CỦA CHÍNH NÓ
+
+> **Một hook, một cổng, một cầu dao mà không ai cấy thử thì mặc định coi là ĐÃ CHẾT.** Và
+> tài liệu nói nó đang sống chỉ làm mọi người yên tâm nhầm lâu hơn.
+>
+> Đây là **luật 12 áp cho hạ tầng**: dòng chữ `ENFORCED` cũng là một affordance, và
+> affordance phải nói thật.
+
+### Sự cố 09/09/2026 — hai hook an toàn chết nhiều tháng dưới dòng chữ "ENFORCED"
+
+`.claude/hooks/block-env-add.sh` và `.claude/hooks/block-destructive.sh` **cùng lúc mang
+HAI lỗi**, mỗi lỗi một mình đã đủ giết chúng:
+
+| # | Lỗi | Vì sao câm |
+|---|---|---|
+| 1 | `cmd="${CLAUDE_COMMAND:-}"` | biến đó **không tồn tại**. PreToolUse đưa JSON qua **STDIN**, chuỗi lệnh ở `.tool_input.command`. `cmd` rỗng ⇒ không mẫu nào khớp ⇒ `exit 0` |
+| 2 | chặn bằng `exit 1` | Claude Code chỉ coi **`exit 2`** là CHẶN. `exit 1` là "lỗi không chặn" ⇒ kể cả khi đọc đúng lệnh, nó vẫn cho qua |
+
+Trong khi `CLAUDE.md` mục 8 ghi **"Security (ENFORCED by hooks)"** và `.claude/rules/prisma-db.md`
+ghi *"hook `block-destructive.sh` CHẶN (bảo vệ prod)"*. Cả hai câu đều sai, cả hai đều
+được đọc và tin.
+
+**Vì sao không ai phát hiện:** không có ca test nào **cấy thử một lệnh phải bị chặn**.
+Hook viết đúng ý, chú thích đầy đủ, danh sách mẫu chặn dài — và không chặn nổi thứ gì.
+
+### Điều đáng sợ nhất: lỗi #2 khiến lỗi #1 KHÔNG THỂ bị phát hiện bằng mắt
+
+Giả sử ai đó nghi ngờ và sửa lỗi #1. Hook đọc đúng lệnh, khớp đúng mẫu, **in ra đúng dòng
+`🚫 BLOCKED`** — rồi `exit 1`, và lệnh vẫn chạy. Người sửa thấy chữ BLOCKED hiện lên và
+kết luận "xong rồi". Hai lỗi che nhau.
+
+⇒ **Chỉ MÃ THOÁT mới là bằng chứng.** Không phải dòng chữ hook in ra.
+
+### Hình dạng của ca test đúng
+
+`.claude/hooks/hooks.test.ts` — 27 ca, mỗi ca **chạy thật** cái hook bằng `execFileSync`,
+đưa **JSON thật** trên stdin, và đọc **mã thoát**:
+
+```ts
+const json = JSON.stringify({ tool_name: "Bash", tool_input: { command } });
+execFileSync("bash", [join(HOOKS, hook)], { input: json, ... });
+// bắt lỗi ⇒ err.status; kỳ vọng === 2
+```
+
+Grep nội dung file hook **không chứng minh được gì** (luật 11): bản chết chứa đủ mọi mẫu
+chặn, đủ mọi dòng `BLOCKED`, và vẫn cho qua tất cả.
+
+### Bốn lượt cấy (luật 8) — đo 09/09/2026
+
+| Cấy | Số ca đỏ |
+|---|---|
+| trả `block-env-add` về đọc biến môi trường (lỗi gốc #1) | **3** |
+| hạ mã thoát chặn `2 → 1` ở `block-destructive` (lỗi gốc #2) | **11** |
+| gỡ **một** mẫu khỏi danh sách chặn | **1** |
+| viết hook nhưng **không cắm** vào `settings.json` | **1** |
+| _(gỡ hết cấy)_ | 0 — 27/27 xanh |
+
+Lượt cấy thứ tư quan trọng riêng: **viết ra mà không cắm thì cũng như chết**, và đó là một
+đường chết khác hẳn hai đường trên.
+
+### Ba việc phải làm khi dựng một lưới an toàn mới
+
+1. **Ca test cấy lỗi** — không có thì lưới coi như chưa tồn tại.
+2. **Ca test kiểm nó ĐƯỢC CẮM** — file đúng mà không khai trong `settings.json` /
+   `vitest.config.ts` `include` / required check là câm hoàn toàn.
+3. **Ghi vào tài liệu ĐÚNG hiện trạng, có ngày.** Câu "ENFORCED" không kèm ngày và không
+   kèm ca test là câu không kiểm được.
+
+### Ba đường chết đã gặp, cùng một hình dạng
+
+| Lưới | Chết vì | Ngày |
+|---|---|---|
+| `block-env-add` / `block-destructive` | đọc sai nguồn + mã thoát sai | 09/09 |
+| `tests/cham-cong/**` (2 bộ) | không khai trong `vitest.config.ts` `include` ⇒ *"No test files found"*, CI vẫn xanh | 08/09 |
+| 666 ca R7 + tầng DB | job không phải **required check**, `enforce_admins=false` | 08/09 |
+
+Cả ba đều là **cổng im lặng khi hạ tầng hỏng** — tệ hơn không có cổng, vì nó mua sự yên
+tâm bằng không có gì.
+
+### Bẫy kèm: chính hook mới cắn ngay lượt đầu
+
+Lệnh đo bốn lượt cấy bị `block-destructive` chặn — vì **nhãn `echo` tiếng Việt của nó**
+viết nguyên văn chuỗi đang bị cấm để mô tả việc mình sắp làm. Đây là **lần thứ sáu** trong
+hai ngày cùng một bẫy (luật 11, gạch đầu dòng 2): *văn xuôi giải thích bản vá chứa đúng
+chuỗi mà bộ so khớp đang tìm* — lần này ở hạ tầng chứ không ở test. Cách đi vòng: đưa
+kịch bản ra file rồi `bash <file>`.
+
+⚠️ **Đó cũng là một GIỚI HẠN THẬT của hook, phải nói ra:** nó chỉ soi chuỗi lệnh ở tầng
+trên. `bash mot-file.sh` thì nội dung file **không** đi qua hook.
+
+---
+
+## Luật 15 — một triệu chứng có thể có NHIỀU nguyên nhân ĐỦ
+
+> **Tìm ra một nguyên nhân giải thích được triệu chứng KHÔNG có nghĩa là đã tìm hết.**
+> Mỗi nguyên nhân "đủ" một mình đã tạo ra đúng triệu chứng đó, nên vá một cái thì triệu
+> chứng **vẫn y nguyên** — và phép quan sát sau khi vá sẽ nói dối rằng bản vá không chạy.
+
+Khác với "nguyên nhân góp phần": ở đó vá một cái thì số nhúc nhích, ta biết mình đúng
+hướng. Ở đây số **không nhúc nhích một li**, và đó chính là cái bẫy.
+
+### Sự cố 09/09/2026 — "công dạy = 0" có HAI nguyên nhân đủ
+
+| # | Nguyên nhân | Tình trạng |
+|---|---|---|
+| 1 | Buổi đã qua ngày mà chưa chốt ⇒ không vào phép đếm | **đã vá**, định quan sát 3 ngày để xác nhận |
+| 2 | Bảng `TeachingCreditType` **RỖNG** trên prod | phát hiện 09/09 khi đo danh mục nền |
+
+Nguyên nhân 2 một mình đủ tạo ra số 0. Đường đi:
+
+```
+loadLoaiCongDay()  → []            (bảng rỗng)
+loaiCua(buoi, [])  → null          (không dòng nào khớp)
+congDayCuaNguoi()  → continue      (bỏ MỌI buổi)
+                   → tongCong = 0, tongBuoi = 0
+```
+
+Không exception, không cảnh báo, console sạch.
+
+**Nếu không phát hiện kịp:** ba ngày nữa mở màn Công dạy, thấy vẫn 0, và kết luận *"bản vá
+buổi chưa đóng không chạy"*. Rồi đi đào lại một chỗ vốn đã đúng — trong khi chỗ sai nằm ở
+một bảng không ai nhìn.
+
+### Vì sao dễ dính: ta dừng lại ngay khi câu chuyện KHỚP
+
+Nguyên nhân 1 giải thích được 100% triệu chứng. Nó đúng. Nó đã được đo. Cảm giác "xong
+rồi" đến từ chỗ **câu chuyện tự nó đã tròn**, không phải từ chỗ ta đã quét hết đường đi.
+
+### Việc phải làm
+
+1. **Đi HẾT đường từ triệu chứng ngược về nguồn**, kể cả sau khi đã tìm ra một nguyên
+   nhân đủ. Ở đây đường là: màn → hàm tổng → hàm khớp loại → **danh mục** → DB.
+2. **Ở mỗi mắt xích, hỏi "nếu chỗ này rỗng/null thì triệu chứng có y hệt không?"**
+   Trả lời "có" ⇒ đó là một nguyên nhân đủ nữa, phải đo chứ không được suy.
+3. **Trước khi mở phép quan sát xác nhận bản vá, liệt kê những gì KHÁC có thể giữ số ở 0.**
+   Không làm bước này thì phép quan sát không phân biệt được "vá hỏng" với "còn nguyên
+   nhân khác", và nó sẽ được đọc thành vế thứ nhất.
+
+### Liên hệ
+
+- **Luật 1** — bảng rỗng + đường đọc còn sống = số 0 im lặng. Luật 15 là chuyện gì xảy ra
+  khi số 0 đó đứng cạnh một bug khác đã được vá.
+- **Luật 8** — cấy lại lỗi rồi xem có đỏ không. Ở đây phép "cấy" tương ứng là: **làm rỗng
+  bảng danh mục trên bản sao và xem con số có về 0 không** — đó là cách chứng minh nguyên
+  nhân 2 là đủ, thay vì chỉ đọc mã rồi tin.
+- **Luật 6/14** — cùng một họ: cái hỏng không kêu. Ở luật 14 là cổng chết mà tài liệu bảo
+  đang sống; ở đây là một nguyên nhân còn sống mà câu chuyện bảo đã xong.
 
 ---
 

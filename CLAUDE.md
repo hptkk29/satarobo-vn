@@ -22,11 +22,44 @@ Brand hub + admin CMS + portal phụ huynh + site giáo viên cho Sata Robo (Đ�
    ⚠️ **`scopedDb` KHÔNG che write** — chỉ auto-scope 7 method đọc. Mọi `update/delete` phải tự `passesScope()`; mọi `create` trên model thuộc `SCOPED_MODELS` phải set `centerId` (quên = record vô hình với actor cấp cơ sở).
 6. **Prisma migrations** — KHÔNG raw SQL trừ khi cần. Mỗi schema change: `pnpm db:migrate` + tên rõ nghĩa. Sau migration: restart dev server (Prisma Client cache stale trong memory).
 7. **UI library split** (Phase 4.X.1): admin = shadcn/ui + Recharts; client = shadcn/ui + Magic UI + Framer Motion. ESLint chặn cross-import — đừng workaround.
-8. **Security (ENFORCED by hooks):**
-   - NEVER `git add .env*` files (only `.env.example` allowed) — hook block.
+8. **Security — ba hook `PreToolUse` ĐANG SỐNG (đo lại 09/09/2026, có test):**
+
+   > ⚠️ **Dòng "ENFORCED by hooks" ở đây đã NÓI DỐI nhiều tháng.** `block-env-add.sh` và
+   > `block-destructive.sh` cùng chết vì HAI lỗi: (1) đọc `cmd="${CLAUDE_COMMAND:-}"` —
+   > biến đó **không tồn tại**; PreToolUse đưa JSON qua **STDIN**, chuỗi lệnh nằm ở
+   > `.tool_input.command`; (2) chặn bằng `exit 1`, mà Claude Code chỉ coi **`exit 2`** là
+   > CHẶN. Hai lỗi che nhau: sửa lỗi (1) mà quên (2) thì hook in ra `BLOCKED` rất thuyết
+   > phục rồi vẫn cho lệnh chạy — **chỉ mã thoát mới là bằng chứng.**
+   > **Vá 09/09/2026**, kèm `.claude/hooks/hooks.test.ts` (27 ca chạy hook thật với JSON
+   > thật, đọc mã thoát; đã cấy lại cả hai lỗi gốc và thấy đỏ). Luật 14 —
+   > `docs/luat-doc-so-va-ket-luan.md`.
+
+   | Hook | Chặn gì | Tình trạng |
+   |---|---|---|
+   | `block-env-add.sh` | `git add .env*` (chỉ `.env.example` được qua) | **vừa cứu 09/09/2026** |
+   | `block-destructive.sh` | 11 mẫu phá dữ liệu (liệt kê dưới) | **vừa cứu 09/09/2026** |
+   | `chan-commit-khi-do.sh` | `git commit` khi `typecheck` hoặc `vitest related` ĐỎ | mới, sống từ 09/09/2026 |
+
+   **11 mẫu `block-destructive.sh` chặn:** `rm -rf` vào `/` · `rm -rf` vào `~` ·
+   `git push --force` nhắm `main` · nhắm `master` · `git reset --hard` · `git clean -fd` · `DROP TABLE` ·
+   `DROP DATABASE` · `TRUNCATE TABLE` · `prisma migrate diff --shadow-database-url` trỏ DB **không**
+   local · `prisma db push --force-reset` thiếu marker local · `prisma migrate reset`
+   thiếu marker local. (Marker local = chuỗi lệnh có `localhost` / `127.0.0.1` /
+   `.env.test` / `satarobo_test` / `ci_test`.)
+
+   ⚠️ **Hai giới hạn phải biết, đừng tin quá:**
+   · Hook chỉ soi **chuỗi lệnh ở tầng trên** — `bash mot-file.sh` thì nội dung file
+     KHÔNG đi qua hook.
+   · Nó khớp cả **văn xuôi**: một câu `echo` mô tả mẫu chặn cũng bị chặn dù chẳng phá gì.
+     Gặp thì đưa kịch bản ra file rồi chạy file, đừng gỡ mẫu.
+
+   - NEVER `git add .env*` files (only `.env.example` allowed) — hook chặn (**đã kiểm**).
    - NEVER commit `*.bak`, `*.backup`, `*.key`, `*.pem` — `.gitignore` block.
+     ⚠️ `.gitignore` **KHÔNG** chặn `vapid-keys.txt` / `vapid.json` — đừng `git add -A`.
    - NEVER hardcode credentials — luôn `process.env.X`.
    - NEVER paste real secrets vào chat — mask `abc1...xyz9`.
+   - **KHÔNG `git commit --no-verify`.** Nó bỏ qua git hook. Hook Claude Code thì không
+     thoát được, nhưng thói quen gõ nó là thói quen đi vòng qua cổng — bỏ hẳn.
    - File nghi ngờ nhạy cảm → ASK user, don't commit.
 9. **Verify trước khi báo PASS** — `pnpm typecheck && pnpm lint && pnpm build` PASS. UI changes: smoke test localhost + mobile viewport 375px.
 
@@ -232,7 +265,20 @@ feature → PR → merge `test`  → test.satarobo.vn tự deploy → nghiệm t
   là "lỗi không còn" hoặc "test không chạm tới lỗi"; ghi cả bốn bước vào commit.
   **Cổng phải được cho ăn bằng thứ đường THẬT cho nó ăn** (luật 9, sự cố nhập nhân sự
   08/09): ca test gõ tay đầu vào của cổng thì nó kiểm cổng, không kiểm hệ thống — nếu đầu
-  vào ấy do tầng khác tính ra thì **tầng đó là chỗ bug nằm**. Sổ sự cố cùng file; điều
+  vào ấy do tầng khác tính ra thì **tầng đó là chỗ bug nằm**.
+  **Test grep mã nguồn là loại MONG MANH NHẤT** (luật 11): ưu tiên khẳng định HÀNH VI;
+  buộc phải canh bằng văn bản mã thì neo chuỗi hẹp nhất, **không dùng cờ `/s`**, khẳng
+  định cả SỐ LẦN khớp (chú thích giải thích bản vá thường chứa đúng chuỗi đang cấm), và
+  **chưa cấy thử thì coi như vô dụng**. Ba ca soi nhầm chỗ trong một ngày 08/09.
+  Luật 7 có điểm cộng ngoài dự kiến: trường BẮT BUỘC không chỉ liệt kê call site, nó còn
+  biến **"quên `select` cột nguồn"** từ lỗi câm thành lỗi biên dịch.
+  **Affordance phải NÓI THẬT** (luật 12): con trỏ · mũi tên · nhãn trạng thái · nút đều là
+  LỜI HỨA, và lời hứa suông không ném lỗi, không làm test đỏ, console vẫn sạch — chỉ người
+  dùng bấm mới biết. Ba ca một tuần: nhãn "Hoàn tất" suy ra · `photoDone` không bao giờ
+  true · chevron `/cham-cong` chưa từng được nối. Vá bằng cách **mở rộng vùng bấm**
+  (`<tr relative cursor-pointer>` + trigger `after:inset-0`), đừng gỡ mũi tên. Cổng canh:
+  `components/ui/affordance-coverage.test.ts` — nó phải viết lại BA lần mới bite, cả ba
+  lần vì chú thích giải thích bản vá chứa đúng chuỗi bộ so khớp đang tìm. Sổ sự cố cùng file; điều
   đáng nhớ nhất: **quy trình chụp trước/sau là thứ duy nhất hoạt động** — bộ test xanh,
   bản vá vừa merge, và 9 hồ sơ prod vẫn bị xoá trắng ba cột ngày. Đừng bỏ nó kể cả khi
   test đã xanh.

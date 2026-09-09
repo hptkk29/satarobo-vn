@@ -25,6 +25,7 @@ import { currentPeriodKey, parsePeriodKey, periodRange } from "@/lib/cham-cong/p
 import { congDayCuaNguoi } from "@/lib/cham-cong/cong-day";
 import { loadBuoiDay, loadLoaiCongDay } from "@/lib/cham-cong/cong-day-db";
 import { HO_CENTER_ID } from "@/lib/cham-cong/home-center";
+import { CanhBaoDanhMuc } from "@/components/admin/cham-cong/canh-bao-danh-muc";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { PageHeader } from "@/components/admin/ui/page-header";
 import { PageHelp } from "@/components/admin/ui/page-help";
@@ -198,6 +199,17 @@ export default async function CongDayPage({
       />
 
       <ModuleNav active="congday" scope={scope} ctx={ctx} />
+
+      {/* Màn này KHÔNG đi qua `ConfigTabs` nên phải render riêng — và nó là màn CẦN cảnh
+          báo nhất: `TeachingCreditType` rỗng thì mọi con số ở đây ra 0 mà không báo gì
+          (đo prod 09/09/2026, luật 15). Đây là chỗ thứ hai và CUỐI CÙNG; thêm nữa thì
+          dùng `ConfigTabs`. */}
+      <CanhBaoDanhMuc
+        coSoVanHanhIds={scope
+          .blocksWith("hr_attendance:config")
+          .filter((b) => b.id !== HO_CENTER_ID)
+          .map((b) => b.id)}
+      />
 
       <ScopeBar
         basePath={BASE}
