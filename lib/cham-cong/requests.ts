@@ -27,6 +27,7 @@ import { setAssignmentCell, type CellDb } from "./cells";
 import { markAttendanceDayDirty } from "./recompute";
 import { applyApprovedWorkRequest } from "@/lib/work-request-apply";
 import { WR_KIND_LABEL, isClassKind, isRangeKind, type WorkRequestKindV } from "@/lib/work-request";
+import { chanSuaKyDaChot } from "./ky-gac";
 
 // ─── Cơ sở nhận đơn ───────────────────────────────────────────────────────────────────
 
@@ -230,6 +231,11 @@ export type DecideInput = {
   actor: { id: string; name: string };
   /** Quyền GHI ca theo cơ sở — action tính sẵn từ `hr_attendance:approve`. */
   canWriteCenter: (centerId: string) => boolean;
+  /**
+   * Đường vượt cổng "kỳ đã chốt sổ" — CHỈ cấp Hội sở, và action phải tự kiểm quyền đó
+   * trước khi truyền `true` vào đây. Cùng khuôn `generateMonthAction`.
+   */
+  boQuaKyDaChot?: boolean;
   now?: Date;
 };
 
@@ -262,6 +268,37 @@ export async function decideRequest(input: DecideInput): Promise<DecideResult> {
   if (!req) return { ok: false, error: "Không tìm thấy đơn" };
   if (req.status !== "PENDING") return { ok: false, error: "Đơn đã được xử lý" };
   if (!req.centerId || !input.canWriteCenter(req.centerId)) return { ok: false, error: "Đơn thuộc cơ sở bạn không có quyền duyệt" };
+
+  // ── CHẶN CỨNG: không DUYỆT đơn vào kỳ ĐÃ CHỐT SỔ (09/09/2026) ──────────────
+  //
+  // `createRequest` đã chặn NỘP đơn vào kỳ đã chốt (xem cổng ở trên trong file này),
+  // nhưng đó là cổng ở đầu vào. Đơn nộp TRƯỚC khi chốt, duyệt SAU khi chốt thì đi lọt:
+  // nhánh TIMESHEET_FIX `createMany` thẳng `StaffTimeLog` rồi `markAttendanceDayDirty`,
+  // tức GHI vào một kỳ đã đóng băng.
+  //
+  // Hậu quả im lặng: `summaryJson` của kỳ đã chốt KHÔNG đổi (nó là ảnh chụp lúc khoá,
+  // `ky-cong/page.tsx` đọc thẳng từ đó), nên sổ đã chốt và dữ liệu sống lệch nhau mà
+  // không có gì báo. Đo prod 09/09: 0 kỳ LOCKED ⇒ chưa ai rơi vào — nhưng đường ghi
+  // còn sống, và nó sẽ cháy đúng lần chốt kỳ ĐẦU TIÊN (luật 1).
+  //
+  // Chỉ chặn khi DUYỆT: từ chối một đơn cũ không ghi gì vào kỳ, để nguyên cho quản lý
+  // dọn hàng chờ.
+  if (input.decision === "APPROVED" && req.fromDate && !isClassKind(req.kind)) {
+    const kyChot = await db.attendancePeriod.findFirst({
+      where: {
+        centerId: req.centerId,
+        status: "LOCKED",
+        periodKey: { in: periodKeysBetween(req.fromDate, req.toDate ?? req.fromDate) },
+      },
+      select: { periodKey: true, status: true },
+    });
+    if (kyChot) {
+      const loi = chanSuaKyDaChot({ status: kyChot.status, periodKey: kyChot.periodKey });
+      // Cơ sở tự vượt cổng của chính mình thì cổng đó không tồn tại — quyền vượt do
+      // ACTION kiểm (cấp Hội sở), ở đây chỉ nhận kết quả.
+      if (!input.boQuaKyDaChot) return { ok: false, error: loi! };
+    }
+  }
 
   const decisionData = {
     status: input.decision,
