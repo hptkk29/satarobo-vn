@@ -45,6 +45,7 @@ on:
           - nhap-danh-muc-chay-thu
           - vai-ke-toan
           - cong-day-thuc-te
+          - backfill-buoi-chay-thu
           - tat-ca
 concurrency:
   group: cham-cong-prod-do-chi-doc
@@ -190,6 +191,16 @@ jobs:
       - name: "Đo con số màn Công dạy (chỉ đọc)"
         if: ${{ !cancelled() && (inputs.viec == 'cong-day-thuc-te' || inputs.viec == 'tat-ca') }}
         run: pnpm exec tsx scripts/do-cong-day-thuc-te.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+
+      # CHẠY THỬ của nút backfill đóng buổi. Hai lớp khoá độc lập, cùng khuôn nút nhập
+      # danh mục: script không có `--apply` ⇒ không câu lệnh ghi nào chạy; và kết nối là
+      # user CHỈ-ĐỌC ⇒ có gõ nhầm thành `--apply` thì Postgres vẫn từ chối.
+      - name: "Backfill đóng buổi thoả — CHẠY THỬ (chỉ đọc, in BẢNG PHẠM VI)"
+        if: ${{ !cancelled() && inputs.viec == 'backfill-buoi-chay-thu' }}
+        run: pnpm exec tsx scripts/backfill-dong-buoi-thoa.ts
         env:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
           DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}

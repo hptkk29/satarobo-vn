@@ -370,37 +370,48 @@ async function main() {
       if (typeof v === "string") nguonCua.set(a.entityId, v);
     }
 
-    type O = { n: number; tuDong: number; tay: number; chuaCoDau: number };
+    type O = { n: number; tuDong: number; tay: number; backfill: number; chuaCoDau: number };
     const theoNgay = new Map<string, O>();
     for (const b of chotGanDay) {
       if (!b.completedAt) continue;
       const k = vnYmd(b.completedAt);
-      const o = theoNgay.get(k) ?? { n: 0, tuDong: 0, tay: 0, chuaCoDau: 0 };
+      const o = theoNgay.get(k) ?? { n: 0, tuDong: 0, tay: 0, backfill: 0, chuaCoDau: 0 };
       o.n += 1;
       const ng = nguonCua.get(b.id);
       if (ng === "TU_DONG") o.tuDong += 1;
       else if (ng === "TAY") o.tay += 1;
+      // Cột RIÊNG cho backfill. Gộp nó vào `tự động` là chính xác cái làm hỏng phép đo
+      // này — 90 dòng dọn backlog sẽ trông như 90 lần cổng nổ.
+      else if (ng === "BACKFILL") o.backfill += 1;
       else o.chuaCoDau += 1;
       theoNgay.set(k, o);
     }
     console.log(
-      `  ${"ngày".padEnd(13)}${"chốt".padStart(7)}${"tự động".padStart(10)}${"bấm tay".padStart(10)}${"chưa có dấu".padStart(14)}`,
+      `  ${"ngày".padEnd(13)}${"chốt".padStart(7)}${"tự động".padStart(10)}${"bấm tay".padStart(10)}${"backfill".padStart(10)}${"chưa có dấu".padStart(14)}`,
     );
     let tuDong = 0;
     let tay = 0;
+    let backfill = 0;
     let chuaCoDau = 0;
     for (const k of [...theoNgay.keys()].sort()) {
       const o = theoNgay.get(k)!;
       tuDong += o.tuDong;
       tay += o.tay;
+      backfill += o.backfill;
       chuaCoDau += o.chuaCoDau;
       console.log(
-        `  ${k.padEnd(13)}${String(o.n).padStart(7)}${String(o.tuDong).padStart(10)}${String(o.tay).padStart(10)}${String(o.chuaCoDau).padStart(14)}`,
+        `  ${k.padEnd(13)}${String(o.n).padStart(7)}${String(o.tuDong).padStart(10)}${String(o.tay).padStart(10)}${String(o.backfill).padStart(10)}${String(o.chuaCoDau).padStart(14)}`,
       );
     }
     console.log(
-      `\n  Tổng ${chotGanDay.length} buổi · tự động ${tuDong} · bấm tay ${tay} · chưa có dấu ${chuaCoDau}`,
+      `\n  Tổng ${chotGanDay.length} buổi · tự động ${tuDong} · bấm tay ${tay} · backfill ${backfill} · chưa có dấu ${chuaCoDau}`,
     );
+    if (backfill > 0) {
+      console.log(
+        "  ⚠️ Cột `backfill` là lệnh DỌN BACKLOG, KHÔNG phải bằng chứng cổng tự đóng chạy.\n" +
+          "     Bằng chứng vẫn chỉ là cột `tự động` sinh SAU ngày dấu lên prod.",
+      );
+    }
 
     // Ba nhánh kết luận, in sẵn để người đọc không phải nhớ.
     if (tuDong + tay === 0) {
