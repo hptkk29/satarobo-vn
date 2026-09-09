@@ -42,18 +42,61 @@ import {
   FIELD,
 } from "@/components/admin/cham-cong/classes";
 import { cn } from "@/lib/utils";
-import { setDayAbsenceAction, setDayOverrideAction } from "../_actions";
+import {
+  setDayAbsenceAction,
+  setDayOverrideAction,
+  suaGioQuetTayAction,
+} from "../_actions";
 
 export type DayTap = {
   /** "08:02" — giờ VN, đã format ở server. */
   time: string;
   dir: "IN" | "OUT";
   flags: string[];
+  /**
+   * Mốc này TỪ ĐÂU RA. Ba thứ khác nhau về căn cứ nên phải hiện khác nhau:
+   *   · QUET    — máy ghi (quét QR / kiosk / dữ liệu cũ);
+   *   · QUA_DON — người ghi, căn cứ là ĐƠN đã duyệt của người lao động;
+   *   · SUA_TAY — người ghi, căn cứ là LÝ DO quản lý viết (không có đơn).
+   */
+  nguon: "QUET" | "QUA_DON" | "SUA_TAY";
+  /** Ai dựng mốc này (chỉ có với QUA_DON / SUA_TAY). */
+  nguoiSua: string | null;
+  /** "10:05" — lúc dựng, đã format ở server. */
+  suaLuc: string | null;
+  ghiChu: string | null;
+};
+
+/** Ca đã xếp hôm đó — để người sửa biết giờ mình đang gõ lệch bao nhiêu so với kế hoạch. */
+export type CaTrongNgay = {
+  code: string;
+  name: string;
+  doan: { start: string; end: string; kind: string; place: string | null }[];
+  /** "16:30–17:30" hoặc null. */
+  nghiGiuaGio: string | null;
+  /** "7h30" hoặc null. */
+  gioChuan: string | null;
+  congChuan: number;
+};
+
+/** Đơn đã duyệt và áp lên ĐÚNG ngày này — để không sửa chồng lên một đơn vừa duyệt. */
+export type DonDaAp = {
+  id: string;
+  kind: string;
+  nguoiDuyet: string | null;
+  luc: string | null;
+  ghiChu: string | null;
+  /** "08:00 → 17:30" với đơn chỉnh công. */
+  gioDeNghi: string | null;
 };
 
 export type DayRow = {
   userId: string;
   name: string;
+  /** Ca đã xếp hôm đó (mẫu ca dùng chung). null = không xếp ca. */
+  ca: CaTrongNgay | null;
+  /** Đơn APPROVED có `fromDate` đúng ngày này. */
+  donDaAp: DonDaAp[];
   code: string | null;
   source?: ShiftSource;
   dayType: DayType | null;
@@ -98,6 +141,42 @@ export function DayDetailSheet({
   );
   const [reason, setReason] = useState(row.overrideNote ?? "");
   const [absenceNote, setAbsenceNote] = useState(row.absenceNote ?? "");
+
+  // ── Sửa giờ quét ngoài luồng đơn ────────────────────────────────────────────
+  // Ô để TRỐNG = không đụng mốc đó. Cố ý không điền sẵn giờ đang có: điền sẵn thì một lượt
+  // "chỉ sửa giờ ra" vô tình ghi lại cả giờ vào, và mỗi lần bấm lại đẻ thêm một cặp dòng.
+  const [moSuaGio, setMoSuaGio] = useState(false);
+  const [gioVao, setGioVao] = useState("");
+  const [gioRa, setGioRa] = useState("");
+  const [lyDoGio, setLyDoGio] = useState("");
+  const [boQuaKhoa, setBoQuaKhoa] = useState(false);
+
+  const suaGio = () =>
+    start(async () => {
+      const r = await suaGioQuetTayAction({
+        userId: row.userId,
+        workDate: row.workDate,
+        gioVao: gioVao.trim() || null,
+        gioRa: gioRa.trim() || null,
+        lyDo: lyDoGio,
+        boQuaKyDaChot: boQuaKhoa,
+      });
+      if (!r.ok) {
+        toast.error(r.error);
+        return;
+      }
+      toast.success(
+        "Đã ghi thêm mốc giờ — lượt quét gốc giữ nguyên, công ngày sẽ được tính lại",
+      );
+      setGioVao("");
+      setGioRa("");
+      setLyDoGio("");
+      setMoSuaGio(false);
+      router.refresh();
+    });
+
+  /** Lượt do người dựng — tách ra để hiện thành "lịch sử sửa" riêng. */
+  const lichSuSua = row.taps.filter((t) => t.nguon !== "QUET");
 
   const ketLuan = (status: "UNAUTHORISED" | "EXCUSED" | null) =>
     start(async () => {
@@ -181,6 +260,38 @@ export function DayDetailSheet({
         </SheetHeader>
 
         <div className="space-y-5 px-4 pb-4">
+          {/* CA HÔM ĐÓ — người sắp sửa giờ phải thấy kế hoạch, không thì họ đang đoán. */}
+          {row.ca && (
+            <section>
+              <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Ca làm việc hôm đó
+              </h3>
+              <p className="text-sm font-medium text-foreground">
+                {row.ca.code} · {row.ca.name}
+              </p>
+              {row.ca.doan.length > 0 && (
+                <ul className="mt-1.5 space-y-1 text-sm">
+                  {row.ca.doan.map((d, i) => (
+                    <li key={`${d.start}-${d.end}-${i}`} className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono tabular-nums text-foreground">
+                        {d.start}–{d.end}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {d.kind === "PAID_BREAK" ? "nghỉ giữa giờ (tính công)" : "làm việc"}
+                        {d.place ? ` · ${d.place}` : ""}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                {row.ca.gioChuan ? `Giờ chuẩn ${row.ca.gioChuan} · ` : ""}
+                {row.ca.congChuan} công
+                {row.ca.nghiGiuaGio ? ` · nghỉ ${row.ca.nghiGiuaGio}` : ""}
+              </p>
+            </section>
+          )}
+
           <section>
             <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
               Lượt quét trong ngày
@@ -203,12 +314,168 @@ export function DayDetailSheet({
                     <span className="text-muted-foreground">
                       {t.dir === "IN" ? "Vào" : "Ra"}
                     </span>
+                    {/* NGUỒN phải hiện: một mốc do người gõ trông y hệt một lượt quét thật,
+                        và người rà tiếp theo sẽ đọc nhầm "máy ghi" thành bằng chứng. */}
+                    <span
+                      className={cn(
+                        "rounded px-1.5 py-0.5 text-[11px] font-medium",
+                        t.nguon === "QUET"
+                          ? "bg-muted text-muted-foreground"
+                          : "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200",
+                      )}
+                    >
+                      {t.nguon === "QUET"
+                        ? "máy quét"
+                        : t.nguon === "QUA_DON"
+                          ? "qua đơn"
+                          : "sửa tay"}
+                    </span>
                     <FlagList codes={t.flags} max={2} />
                   </li>
                 ))}
               </ol>
             )}
           </section>
+
+          {/* ĐƠN ĐÃ ÁP LÊN NGÀY NÀY — để không sửa chồng lên một đơn vừa duyệt. */}
+          {row.donDaAp.length > 0 && (
+            <section>
+              <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Đơn đã duyệt cho ngày này
+              </h3>
+              <ul className="space-y-2 text-sm">
+                {row.donDaAp.map((d) => (
+                  <li key={d.id} className="rounded-md border border-border p-2">
+                    <p className="font-medium text-foreground">
+                      {d.kind}
+                      {d.gioDeNghi ? ` · ${d.gioDeNghi}` : ""}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {d.nguoiDuyet ? `${d.nguoiDuyet} duyệt` : "Đã duyệt"}
+                      {d.luc ? ` lúc ${d.luc}` : ""}
+                      {d.ghiChu ? ` — ${d.ghiChu}` : ""}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {/* LỊCH SỬ SỬA của ngày này — ai đã dựng mốc nào, lúc nào, vì sao. */}
+          {lichSuSua.length > 0 && (
+            <section>
+              <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Lịch sử sửa giờ
+              </h3>
+              <ul className="space-y-2 text-sm">
+                {lichSuSua.map((t, i) => (
+                  <li key={`ls-${t.time}-${t.dir}-${i}`} className="rounded-md border border-border p-2">
+                    <p className="font-medium text-foreground">
+                      <span className="font-mono tabular-nums">{t.time}</span>{" "}
+                      {t.dir === "IN" ? "Vào" : "Ra"} ·{" "}
+                      {t.nguon === "QUA_DON" ? "qua đơn" : "sửa tay"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {t.nguoiSua ?? "—"}
+                      {t.suaLuc ? ` lúc ${t.suaLuc}` : ""}
+                      {t.ghiChu ? ` — ${t.ghiChu}` : ""}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {/* SỬA GIỜ QUÉT — ghi THÊM, không sửa đè. */}
+          {canAdjust && (
+            <section>
+              <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Sửa giờ quét
+              </h3>
+              {!moSuaGio ? (
+                <button
+                  type="button"
+                  className={BTN_OUTLINE}
+                  onClick={() => setMoSuaGio(true)}
+                  disabled={pending}
+                >
+                  Sửa giờ vào / ra
+                </button>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    Ghi <strong>THÊM</strong> một mốc mới — lượt quét gốc giữ nguyên, không bị
+                    xoá. Để trống ô nào thì mốc đó không đổi.
+                  </p>
+                  <div className="flex gap-2">
+                    <label className="flex-1 text-xs text-muted-foreground">
+                      Giờ vào
+                      <input
+                        className={cn(FIELD, "mt-1 w-full")}
+                        placeholder="08:00"
+                        value={gioVao}
+                        onChange={(e) => setGioVao(e.target.value)}
+                        disabled={pending}
+                      />
+                    </label>
+                    <label className="flex-1 text-xs text-muted-foreground">
+                      Giờ ra
+                      <input
+                        className={cn(FIELD, "mt-1 w-full")}
+                        placeholder="17:30"
+                        value={gioRa}
+                        onChange={(e) => setGioRa(e.target.value)}
+                        disabled={pending}
+                      />
+                    </label>
+                  </div>
+                  <label className="block text-xs text-muted-foreground">
+                    Lý do (bắt buộc — đây là căn cứ thay cho đơn)
+                    <input
+                      className={cn(FIELD, "mt-1 w-full")}
+                      placeholder="Quầy hỏng sáng 09/09, có mặt đúng giờ"
+                      value={lyDoGio}
+                      onChange={(e) => setLyDoGio(e.target.value)}
+                      disabled={pending}
+                    />
+                  </label>
+                  {locked && (
+                    <label className="flex items-start gap-2 text-xs text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={boQuaKhoa}
+                        onChange={(e) => setBoQuaKhoa(e.target.checked)}
+                        disabled={pending}
+                      />
+                      <span>
+                        Kỳ đã chốt sổ. Chỉ cấp Hội sở sửa được — tích ô này để vẫn ghi, bảng
+                        công đã ký sẽ lệch so với số cũ.
+                      </span>
+                    </label>
+                  )}
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className={BTN_PRIMARY}
+                      onClick={suaGio}
+                      disabled={pending || lyDoGio.trim().length < 5 || (!gioVao.trim() && !gioRa.trim())}
+                    >
+                      Ghi thêm mốc giờ
+                    </button>
+                    <button
+                      type="button"
+                      className={BTN_OUTLINE}
+                      onClick={() => setMoSuaGio(false)}
+                      disabled={pending}
+                    >
+                      Huỷ
+                    </button>
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
 
           <section>
             <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">

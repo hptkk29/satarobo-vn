@@ -28,6 +28,7 @@ import { markAttendanceDayDirty } from "./recompute";
 import { applyApprovedWorkRequest } from "@/lib/work-request-apply";
 import { WR_KIND_LABEL, isClassKind, isRangeKind, type WorkRequestKindV } from "@/lib/work-request";
 import { chanSuaKyDaChot } from "./ky-gac";
+import { dungDongChinhTay, vnTimeOn } from "./sua-gio-quet";
 
 // ─── Cơ sở nhận đơn ───────────────────────────────────────────────────────────────────
 
@@ -414,14 +415,23 @@ export async function decideRequest(input: DecideInput): Promise<DecideResult> {
         const centerId = a?.centerId ?? req.centerId ?? home.centerId;
         if (!input.canWriteCenter(centerId)) throw new DecideError("Không có quyền chỉnh công ở cơ sở này");
         const orgUnitId = a?.orgUnitId ?? Object.values(map.byCode).find((c) => c.centerId === centerId)?.orgUnitId ?? null;
-        const rows: Prisma.StaffTimeLogCreateManyInput[] = [];
-        for (const [dir, hhmm] of [["CHECK_IN", req.requestedInAt], ["CHECK_OUT", req.requestedOutAt]] as const) {
-          if (!hhmm) continue;
-          const at = vnTimeOn(req.fromDate, hhmm);
-          if (!at) throw new DecideError(`Giờ "${hhmm}" không hợp lệ`);
-          rows.push({ userId: req.requesterId, centerId, orgUnitId, direction: dir, loggedAt: at, workDate: req.fromDate, source: "MANUAL_ADJUST", result: "ACCEPTED", reviewStatus: "CONFIRMED", reviewedById: input.actor.id, reviewedAt: now, reviewNote: input.note?.trim() || null, adjustRequestId: req.id, flags: ["CHINH_TAY"] });
-        }
-        if (rows.length === 0) throw new DecideError("Đơn không có giờ vào/ra để ghi");
+        // Dựng dòng đi qua LÕI DÙNG CHUNG (`sua-gio-quet.ts`) — cùng bản với đường quản lý
+        // sửa giờ ngoài luồng đơn. Khác biệt duy nhất là `canCu`: qua đơn thì
+        // `adjustRequestId = <id đơn>`, sửa tay thì `null`.
+        const dung = dungDongChinhTay({
+          userId: req.requesterId,
+          centerId,
+          orgUnitId,
+          workDate: req.fromDate,
+          gioVao: req.requestedInAt,
+          gioRa: req.requestedOutAt,
+          actorId: input.actor.id,
+          now,
+          lyDo: input.note ?? null,
+          canCu: { kieu: "DON", requestId: req.id },
+        });
+        if (!dung.ok) throw new DecideError(dung.error);
+        const rows = dung.rows;
         await tx.staffTimeLog.createMany({ data: rows });
         await markAttendanceDayDirty(req.requesterId, req.fromDate, { tx, reason: "TIMESHEET_FIX" });
         messages.push(`Đã ghi ${rows.length} mốc giờ chỉnh tay cho ${dateLabel}`);
@@ -478,12 +488,7 @@ async function templateCode(tx: Prisma.TransactionClient, id: string | null): Pr
   return t?.code ?? null;
 }
 
-/** "HH:mm" trên một ngày công (giờ VN) → thời điểm tuyệt đối. */
-export function vnTimeOn(workDate: Date, hhmm: string): Date | null {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm.trim());
-  if (!m) return null;
-  const h = Number(m[1]);
-  const mi = Number(m[2]);
-  if (h > 23 || mi > 59) return null;
-  return new Date(Date.UTC(workDate.getUTCFullYear(), workDate.getUTCMonth(), workDate.getUTCDate(), h - 7, mi));
-}
+// `vnTimeOn` nay ở `sua-gio-quet.ts` cùng phần dựng dòng dùng nó. Tái xuất để giữ nguyên
+// đường nhập cũ (`tests/cham-cong/requests.spec.ts` và mọi chỗ khác không phải sửa) — chứ
+// KHÔNG chép lại thân hàm: hai bản là hai cơ hội để một bản lệch đi.
+export { vnTimeOn };

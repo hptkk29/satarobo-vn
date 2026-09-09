@@ -270,9 +270,80 @@ export default async function ChamCongPage({ searchParams }: Props) {
           loggedAt: true,
           flags: true,
           centerId: true,
+          // ── Panel sửa giờ (09/09/2026) cần biết dòng này TỪ ĐÂU RA ────────────────
+          // Không có `source` thì một mốc do quản lý gõ trông y hệt một lượt quét thật, và
+          // người rà tiếp theo không phân biệt được "máy ghi" với "người ghi".
+          source: true,
+          adjustRequestId: true,
+          reviewedById: true,
+          reviewedAt: true,
+          reviewNote: true,
         },
       })
     : [];
+
+  // ── Dữ liệu để panel NÓI ĐỦ cho người sắp sửa giờ ────────────────────────────────────
+  //
+  // Ba thứ, thiếu cái nào người sửa cũng đang đoán:
+  //   · CA hôm đó (giờ kế hoạch, các đoạn, nghỉ giữa giờ) — để biết giờ đang sửa lệch bao nhiêu;
+  //   · ĐƠN đã áp lên ngày này, ai duyệt lúc nào — để không sửa chồng lên một đơn vừa duyệt;
+  //   · ai đã sửa tay ngày này rồi (suy từ `logsDay`: source MANUAL_ADJUST + adjustRequestId null).
+  const maCaTrongNgay = [
+    ...new Set(
+      [...days.map((d) => d.templateCode), ...assignments.map((a) => a.templateCode)].filter(
+        (x): x is string => typeof x === "string",
+      ),
+    ),
+  ];
+  const [mauCa, donDaAp, nguoiSua] = await Promise.all([
+    maCaTrongNgay.length
+      ? sdb.shiftTemplate.findMany({
+          where: { code: { in: maCaTrongNgay }, centerId: null },
+          select: {
+            code: true,
+            name: true,
+            segments: true,
+            nominalMinutes: true,
+            pmBreakStart: true,
+            pmBreakEnd: true,
+            dayCredit: true,
+          },
+        })
+      : Promise.resolve([]),
+    userIds.length
+      ? sdb.workRequest.findMany({
+          where: { requesterId: { in: userIds }, fromDate: workDate, status: "APPROVED" },
+          select: {
+            id: true,
+            kind: true,
+            requesterId: true,
+            reviewedByName: true,
+            reviewedAt: true,
+            reviewNote: true,
+            requestedInAt: true,
+            requestedOutAt: true,
+          },
+          orderBy: { reviewedAt: "asc" },
+        })
+      : Promise.resolve([]),
+    // Tên người đã sửa tay — `reviewedById` là id trần.
+    (async () => {
+      const ids = [
+        ...new Set(
+          logsDay
+            .map((l) => l.reviewedById)
+            .filter((x): x is string => typeof x === "string"),
+        ),
+      ];
+      if (!ids.length) return new Map<string, string>();
+      const us = await sdb.user.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, name: true, email: true },
+      });
+      return new Map(us.map((u) => [u.id, u.name ?? u.email ?? u.id]));
+    })(),
+  ]);
+  const caTheoMa = new Map(mauCa.map((t) => [t.code, t]));
   const users = await sdb.user.findMany({
     where: { id: { in: userIds } },
     select: { id: true, name: true, email: true },
@@ -315,7 +386,22 @@ export default async function ChamCongPage({ searchParams }: Props) {
         time: hhmm(l.loggedAt),
         dir: l.direction === "CHECK_IN" ? "IN" : "OUT",
         flags: l.flags.slice().sort((a, b) => flagRank(a) - flagRank(b)),
+        // `MANUAL_ADJUST` + có `adjustRequestId` = vào bằng ĐƠN đã duyệt.
+        // `MANUAL_ADJUST` + null = quản lý SỬA TAY ngoài luồng đơn. Hai thứ khác nhau về
+        // căn cứ, nên phải hiện khác nhau (luật 12: nhãn phải nói thật).
+        nguon:
+          l.source !== "MANUAL_ADJUST"
+            ? "QUET"
+            : l.adjustRequestId
+              ? "QUA_DON"
+              : "SUA_TAY",
+        nguoiSua: l.reviewedById ? (nguoiSua.get(l.reviewedById) ?? null) : null,
+        suaLuc: l.reviewedAt ? hhmm(l.reviewedAt) : null,
+        ghiChu: l.reviewNote,
       }));
+
+      const ca = d?.templateCode ?? asg?.templateCode ?? null;
+      const mau = ca ? (caTheoMa.get(ca) ?? null) : null;
 
       return {
         name,
@@ -336,6 +422,48 @@ export default async function ChamCongPage({ searchParams }: Props) {
         detail: {
           userId,
           name,
+          ca: mau
+            ? {
+                code: mau.code,
+                name: mau.name,
+                // `segments` là `Json` — ép về hình dạng panel cần, bỏ dòng hỏng thay vì
+                // để `undefined` lọt xuống client rồi vẽ ra "undefined–undefined".
+                doan: Array.isArray(mau.segments)
+                  ? (mau.segments as unknown[]).flatMap((x) => {
+                      const o = (x ?? {}) as Record<string, unknown>;
+                      return typeof o.start === "string" && typeof o.end === "string"
+                        ? [
+                            {
+                              start: o.start,
+                              end: o.end,
+                              kind: typeof o.kind === "string" ? o.kind : "WORK",
+                              place: typeof o.place === "string" ? o.place : null,
+                            },
+                          ]
+                        : [];
+                    })
+                  : [],
+                nghiGiuaGio:
+                  mau.pmBreakStart && mau.pmBreakEnd
+                    ? `${mau.pmBreakStart}–${mau.pmBreakEnd}`
+                    : null,
+                gioChuan: mau.nominalMinutes != null ? fmtMin(mau.nominalMinutes) : null,
+                congChuan: mau.dayCredit,
+              }
+            : null,
+          donDaAp: donDaAp
+            .filter((r) => r.requesterId === userId)
+            .map((r) => ({
+              id: r.id,
+              kind: r.kind as string,
+              nguoiDuyet: r.reviewedByName,
+              luc: r.reviewedAt ? hhmm(r.reviewedAt) : null,
+              ghiChu: r.reviewNote,
+              gioDeNghi:
+                r.requestedInAt || r.requestedOutAt
+                  ? `${r.requestedInAt ?? "—"} → ${r.requestedOutAt ?? "—"}`
+                  : null,
+            })),
           code: d?.templateCode ?? asg?.templateCode ?? null,
           source: (asg?.source as ShiftSource | undefined) ?? undefined,
           dayType: (d?.dayType as DayType | undefined) ?? null,
