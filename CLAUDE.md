@@ -293,6 +293,15 @@ feature → PR → merge `test`  → test.satarobo.vn tự deploy → nghiệm t
   thuần: `lib/cham-cong/nhan-ca.ts` (nhãn) + `lib/cham-cong/bang-cong-gv.ts` (dòng bảng).
   ⚠️ `isLeave` KHÔNG phân biệt được ngày nghỉ: mã `X` mang `kind: OFF` nhưng
   `isLeave: false`. Thứ phân biệt là `kind`.
+  **Mỗi ca test phải XANH khi chạy MỘT MÌNH** (luật 18): bộ xanh khi chạy đủ chỉ chứng minh
+  thứ tự hiện tại đang cứu nhau. Chữ ký của lớp lỗi này là **cấy vào thì "chạy 1 ca ĐỎ, cả
+  bộ XANH"** — ca đó đang mượn trạng thái ca trước, và nó sẽ nổ vào ngày runner chậm với
+  triệu chứng chỉ vào ca vô tội đứng sau (10/09: một ca timeout → `applyImport` của nó vẫn
+  chạy tiếp vì vitest KHÔNG huỷ được promise → hai lượt chồng nhau → `P2002`). Đo 2 file
+  đầu tiên ra 2 lỗ, cả hai CÓ SẴN không cần runner chậm; danh sách còn phải rà ở
+  `docs/cham-cong/VE-RA-CACH-LY-BO-TEST.md`. Trần thời gian đặt ở config riêng cho từng bộ
+  (`vitest.cham-cong.config.ts`) — phép tính ghi ngay trong file, và nâng trần là vá TRIỆU
+  CHỨNG chứ không phải vá cách ly.
   **Một ca đỏ mà không ai bị chặn thì bằng không có ca** (luật 10, đo 08/09): required
   check trên `main`/`test` CHỈ có `Quality` + `Unit tests (Vitest)` ⇒ **89,6% số ca được
   cổng bảo vệ, 10,4% (666 ca) thì không** — gồm cả 370 ca R7 (gỡ học viên · hoàn tiền)

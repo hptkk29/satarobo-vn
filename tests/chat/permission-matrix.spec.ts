@@ -522,6 +522,22 @@ describe.skipIf(!HAS_LOCAL_DB)("US-15 · Quản trị hội thoại (DB local)",
   });
 
   it("[AC3] mở khoá LopA → ACTIVE, phát locked=false, gv1 gửi lại được, audit ghi lần hai", async () => {
+    // ── ARRANGE của CHÍNH ca này (luật 18) ─────────────────────────────────────
+    // 🔴 Trước 10/09/2026 ca này MƯỢN cái khoá do ca "[AC3 + TS-03.7b] khoá LopA" đặt.
+    // Chạy riêng nó thì ĐỎ: LopA vốn ACTIVE ⇒ `setConversationLock(false)` là no-op,
+    // KHÔNG phát `conversation.locked` nào ⇒ `expected undefined to match object
+    // { locked: false, status: "ACTIVE" }`. Cả bộ vẫn xanh vì thứ tự đang cứu nhau.
+    // Chạy sau ca kia thì lượt khoá này là no-op, trạng thái y hệt.
+    // Ghi THẲNG DB chứ không gọi `setConversationLockAsActor`: arrange không được để lại
+    // dòng AuditLog — ca này khẳng định `orderBy createdAt desc` ra đúng dòng "mở lại",
+    // mà hai dòng rơi cùng một giây thì thứ tự bấp bênh.
+    await db.conversation.update({
+      where: { id: fx.conversations.lopA },
+      data: { status: "LOCKED" },
+    });
+
+    // Xoá SAU khi arrange: sự kiện locked=true của bước trên mà lọt lại thì `.find()`
+    // dưới đây vớ đúng nó và ca test xanh vì lý do sai.
     broadcastLog.length = 0;
     const res = await setConversationLockAsActor(await actorOf(fx.users.admin1), "Admin HO", {
       conversationId: fx.conversations.lopA,
