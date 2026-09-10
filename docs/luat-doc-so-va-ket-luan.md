@@ -689,6 +689,51 @@ canh luật này. Bản dùng được phải `boChuThich()` **trước** mọi 
 
 ---
 
+## Luật 12b — site GV đọc số của admin, không dựng lại
+
+> **Trước khi thêm bất kỳ cột SỐ nào lên site giáo viên, tìm hàm admin đang dùng và GỌI
+> nó.** Hai bản tính cho cùng một con số thì sớm muộn cũng lệch, và người dùng tin bản
+> mình đang nhìn.
+
+Đây là hệ quả trực tiếp của luật 12 — nhãn là lời hứa — nhưng đủ tái phát để đứng riêng.
+
+### Ba lần trong hai tuần
+
+| Lần | Site GV in gì | Admin in gì cho CÙNG ngày/ô | Nguồn của cái sai |
+|---|---|---|---|
+| Nhãn "Hoàn tất" trên màn buổi dạy | "Hoàn tất" suy từ ba điều kiện | `ClassSession.status` vẫn `SCHEDULED` | tự suy thay vì đọc `status` |
+| Bảng công: cột Trạng thái | "Đã làm" cho MỌI dòng quá khứ | `6h51` + cờ `Thiếu lượt ra` | `done = dateKey < todayKey` — so ngày, không đọc dữ liệu |
+| Bảng công: ngày nghỉ | "Ca làm · theo nơi làm" | (mã `X`/`P`, không giờ) | lọc bằng `isLeave`, mà `X` mang `isLeave: false` |
+
+Lần thứ hai đáng nhớ nhất vì **hàm đúng ĐÃ ĐƯỢC GỌI SẴN**: `getMyAttendanceDays` nằm ngay
+trong trang, đọc đúng `StaffAttendanceDay` mà admin đọc — nhưng kết quả chỉ dùng để cộng
+**một con tổng** ở đầu trang, còn từng dòng vẫn tự suy từ ngày. Nghĩa là: *gọi đúng nguồn
+là chưa đủ, phải để nó quyết định thứ hiển thị.*
+
+### Cách làm
+
+1. Tìm màn admin hiển thị cùng con số đó. Ghi ra **tên hàm** và **cột DB** nó đọc.
+2. Nếu site GV không gọi được vì ranh giới thư mục/quyền → **nói rõ ranh giới đó là gì
+   trước** khi đề xuất đường vòng. (10/09/2026: đo ra **không có** ranh giới nào —
+   `lib/cham-cong/my-schedule.ts` đã dùng chung cho cả hai màn từ đầu.)
+3. Phép nối "dữ liệu × hiển thị" **không được nằm inline trong một trang RSC** — ở đó
+   không có chỗ nào cấy lỗi vào để thấy đỏ. Đưa ra hàm thuần
+   (`lib/cham-cong/bang-cong-gv.ts`), trang chỉ chuyển hình dạng rồi in.
+4. Nhãn suy ra từ dữ liệu để ở **một** chỗ (`lib/cham-cong/nhan-ca.ts`), cả hai màn cùng gọi.
+
+### Cổng canh, và giới hạn của nó
+
+| Cổng | Bắt được | KHÔNG bắt được |
+|---|---|---|
+| `lib/cham-cong/bang-cong-gv.test.ts` (hành vi) | mọi lỗi trong phép nối: hardcode trạng thái, bỏ ngày nghỉ, rơi mất ngày không còn ca | chuỗi gõ thẳng trong JSX |
+| `lib/cham-cong/nhan-mot-nguon.test.ts` (grep, hẹp) | `"Đã làm"` / `"theo nơi làm"` gõ thẳng trong màn chấm công | mọi nhãn khác |
+
+Cả hai đã bị **cấy lại lỗi** và đỏ đúng bộ (luật 8). Giới hạn còn lại phải nói ra: một ô
+bảng in `{"Đã làm"}` chỉ bị cổng grep bắt — không có test hành vi nào chạm tới JSX của
+trang RSC nếu không dựng trình duyệt. Đừng đọc "hai bộ xanh" thành "không thể sai".
+
+---
+
 ## Luật 13 — trước khi tin một lượt "chỉ thêm", đọc `git diff --stat`
 
 > **`Write` lên một file đang tồn tại là GHI ĐÈ, không phải thêm vào.** Một lượt sửa mà

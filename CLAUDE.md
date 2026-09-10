@@ -284,6 +284,15 @@ feature → PR → merge `test`  → test.satarobo.vn tự deploy → nghiệm t
   đáng nhớ nhất: **quy trình chụp trước/sau là thứ duy nhất hoạt động** — bộ test xanh,
   bản vá vừa merge, và 9 hồ sơ prod vẫn bị xoá trắng ba cột ngày. Đừng bỏ nó kể cả khi
   test đã xanh.
+  **Site GV đọc số của admin, KHÔNG dựng lại** (luật 12b): ba lần trong hai tuần site GV
+  in một con số/nhãn khác admin cho cùng một ô — và lần thứ ba, hàm đúng
+  (`getMyAttendanceDays`) ĐÃ được gọi sẵn trong trang, chỉ dùng để cộng một con tổng còn
+  từng dòng vẫn tự suy từ ngày. Trước khi thêm bất kỳ cột SỐ nào lên site GV: tìm hàm admin
+  đang dùng và gọi nó; nếu không gọi được thì NÓI RÕ ranh giới trước khi vòng. Phép nối
+  dữ liệu×hiển thị không để inline trong trang RSC (không có chỗ cấy lỗi) — đưa ra hàm
+  thuần: `lib/cham-cong/nhan-ca.ts` (nhãn) + `lib/cham-cong/bang-cong-gv.ts` (dòng bảng).
+  ⚠️ `isLeave` KHÔNG phân biệt được ngày nghỉ: mã `X` mang `kind: OFF` nhưng
+  `isLeave: false`. Thứ phân biệt là `kind`.
   **Một ca đỏ mà không ai bị chặn thì bằng không có ca** (luật 10, đo 08/09): required
   check trên `main`/`test` CHỈ có `Quality` + `Unit tests (Vitest)` ⇒ **89,6% số ca được
   cổng bảo vệ, 10,4% (666 ca) thì không** — gồm cả 370 ca R7 (gỡ học viên · hoàn tiền)
