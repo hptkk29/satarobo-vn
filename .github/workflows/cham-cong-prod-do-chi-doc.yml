@@ -47,6 +47,7 @@ on:
           - cong-day-thuc-te
           - backfill-buoi-chay-thu
           - buoi-ket-theo-lop
+          - noi-quet
           - tat-ca
 concurrency:
   group: cham-cong-prod-do-chi-doc
@@ -212,6 +213,16 @@ jobs:
       - name: "Đo buổi kẹt theo lớp (chỉ đọc)"
         if: ${{ !cancelled() && (inputs.viec == 'buoi-ket-theo-lop' || inputs.viec == 'tat-ca') }}
         run: pnpm exec tsx scripts/do-buoi-ket-theo-lop.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+
+      # D1 — NƠI QUÉT vs NƠI CHỊU CÔNG. Bảng công ngày đang in "quét nơi khác" trong khi
+      # hệ BIẾT chính xác lượt đó ở đâu (`StaffTimeLog.centerId` + `workLocationId`).
+      # Đo kèm: toạ độ đang lưu được bao nhiêu, và số ngày công mã NG (phần A).
+      - name: "Đo nơi quét vs nơi chịu công (chỉ đọc)"
+        if: ${{ !cancelled() && (inputs.viec == 'noi-quet' || inputs.viec == 'tat-ca') }}
+        run: pnpm exec tsx scripts/do-noi-quet.ts
         env:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
           DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
