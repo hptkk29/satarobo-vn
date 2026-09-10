@@ -60,6 +60,15 @@ export type DayTap = {
    *   · SUA_TAY — người ghi, căn cứ là LÝ DO quản lý viết (không có đơn).
    */
   nguon: "QUET" | "QUA_DON" | "SUA_TAY";
+  /**
+   * MÃ CƠ SỞ nơi lượt quét này diễn ra ("CS1", "HO"…). null = không suy được.
+   *
+   * ⚠️ KHÁC với cơ sở chịu công của NGÀY. Người Hội sở quét ở CS1 thì ngày công vẫn thuộc
+   * Hội sở, còn lượt quét mang "CS1". Giữ cả hai, đặt tên khác nhau (D1, 10/09/2026).
+   */
+  noiQuet: string | null;
+  /** Tên ĐIỂM CHẤM cụ thể ("Quầy CS1"). null = lượt không gắn điểm chấm nào. */
+  diemCham: string | null;
   /** Ai dựng mốc này (chỉ có với QUA_DON / SUA_TAY). */
   nguoiSua: string | null;
   /** "10:05" — lúc dựng, đã format ở server. */
@@ -314,6 +323,17 @@ export function DayDetailSheet({
                     <span className="text-muted-foreground">
                       {t.dir === "IN" ? "Vào" : "Ra"}
                     </span>
+                    {/* NƠI QUÉT của CHÍNH lượt này — check in ở CS1 rồi check out ở CS2 là
+                        hợp lệ, nên nhãn phải theo từng mốc chứ không theo cả ngày. */}
+                    {t.noiQuet && (
+                      <span
+                        className="text-muted-foreground"
+                        title={t.diemCham ?? undefined}
+                      >
+                        · {t.noiQuet}
+                        {t.diemCham ? ` (${t.diemCham})` : ""}
+                      </span>
+                    )}
                     {/* NGUỒN phải hiện: một mốc do người gõ trông y hệt một lượt quét thật,
                         và người rà tiếp theo sẽ đọc nhầm "máy ghi" thành bằng chứng. */}
                     <span

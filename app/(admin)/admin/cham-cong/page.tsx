@@ -31,6 +31,10 @@ import { scopedDb } from "@/lib/db-scope";
 import { getSetting } from "@/lib/settings/service";
 import { loadCenterMap } from "@/lib/cham-cong/home-center";
 import {
+  nhanNoiQuet,
+  noiQuetKhacNoiChiuCong,
+} from "@/lib/cham-cong/noi-quet";
+import {
   ASK_WHO,
   loadModuleScope,
   periodStatusOf,
@@ -203,6 +207,14 @@ export default async function ChamCongPage({ searchParams }: Props) {
     Object.values(centerMap.byCode).find((c) => c.centerId === coSo)
       ?.orgUnitId ?? null;
 
+  // ── D1: centerId → MÃ cơ sở, để nhãn lượt quét nói được nơi quét ────────────────────
+  //
+  // Dựng từ `centerMap` đang có sẵn — KHÔNG thêm truy vấn, và KHÔNG đi qua `scopedDb`:
+  // `loadCenterMap()` cố ý không scope vì nó là bản đồ tổ chức, không phải dữ liệu cơ sở.
+  // `byCode` bỏ HO (xem `home-center.ts:51`) nên phải thêm tay từ `hoCenterId`.
+  const maCoSoTheoId = new Map<string, string>([[centerMap.hoCenterId, "HO"]]);
+  for (const [ma, c] of Object.entries(centerMap.byCode)) maCoSoTheoId.set(c.centerId, ma);
+
   const [days, logs, assignments, monthRows, holidays, weeklyOff, period] =
     await Promise.all([
       sdb.staffAttendanceDay.findMany({ where: { workDate, centerId: coSo } }),
@@ -270,6 +282,10 @@ export default async function ChamCongPage({ searchParams }: Props) {
           loggedAt: true,
           flags: true,
           centerId: true,
+          // ── D1 (10/09/2026): NƠI QUÉT phải hiện ra tên, không phải "nơi khác" ─────
+          // `workLocationId` là ĐIỂM CHẤM cụ thể mà QR thuộc về. Có nó thì nhãn nói được
+          // "Quét ở CS1" thay vì một chuỗi cố định vô nghĩa.
+          workLocationId: true,
           // ── Panel sửa giờ (09/09/2026) cần biết dòng này TỪ ĐÂU RA ────────────────
           // Không có `source` thì một mốc do quản lý gõ trông y hệt một lượt quét thật, và
           // người rà tiếp theo không phân biệt được "máy ghi" với "người ghi".
@@ -295,7 +311,12 @@ export default async function ChamCongPage({ searchParams }: Props) {
       ),
     ),
   ];
-  const [mauCa, donDaAp, nguoiSua] = await Promise.all([
+  // Tên điểm chấm của những lượt trong ngày — để panel nói được "Quầy CS1" chứ không chỉ mã
+  // cơ sở. Chỉ tra những điểm THỰC SỰ xuất hiện, không quét cả bảng.
+  const idDiem = [
+    ...new Set(logsDay.map((l) => l.workLocationId).filter((x): x is string => typeof x === "string")),
+  ];
+  const [mauCa, donDaAp, nguoiSua, diemCham] = await Promise.all([
     maCaTrongNgay.length
       ? sdb.shiftTemplate.findMany({
           where: { code: { in: maCaTrongNgay }, centerId: null },
@@ -342,7 +363,14 @@ export default async function ChamCongPage({ searchParams }: Props) {
       });
       return new Map(us.map((u) => [u.id, u.name ?? u.email ?? u.id]));
     })(),
+    idDiem.length
+      ? sdb.workLocation.findMany({
+          where: { id: { in: idDiem } },
+          select: { id: true, code: true, name: true, centerId: true },
+        })
+      : Promise.resolve([]),
   ]);
+  const tenDiem = new Map(diemCham.map((d) => [d.id, d.name]));
   const caTheoMa = new Map(mauCa.map((t) => [t.code, t]));
   const users = await sdb.user.findMany({
     where: { id: { in: userIds } },
@@ -395,6 +423,10 @@ export default async function ChamCongPage({ searchParams }: Props) {
             : l.adjustRequestId
               ? "QUA_DON"
               : "SUA_TAY",
+        // D1: MỖI LƯỢT mang nơi của CHÍNH NÓ — check in ở CS1 và check out ở CS2 là
+        // chuyện hợp lệ, và mỗi mốc phải nói đúng chỗ của mình.
+        noiQuet: maCoSoTheoId.get(l.centerId) ?? null,
+        diemCham: l.workLocationId ? (tenDiem.get(l.workLocationId) ?? null) : null,
         nguoiSua: l.reviewedById ? (nguoiSua.get(l.reviewedById) ?? null) : null,
         suaLuc: l.reviewedAt ? hhmm(l.reviewedAt) : null,
         ghiChu: l.reviewNote,
@@ -408,9 +440,11 @@ export default async function ChamCongPage({ searchParams }: Props) {
         taps: my.length,
         quet: my.length
           ? `${hhmm(firstIn)} → ${hhmm(lastOut)} ·${my.length}` +
-            // Quét ở cơ sở khác với cơ sở chịu công: nói ra ngay trên dòng, vì đây chính là
-            // câu hỏi "người này có đi đúng cơ sở đã xếp ca không".
-            (my.some((l) => l.centerId !== coSo) ? " · quét nơi khác" : "")
+            // ── D1 (10/09/2026): GHI RÕ NƠI QUÉT, bỏ nhãn "quét nơi khác" ───────────
+            //
+            // Luật ở `lib/cham-cong/noi-quet.ts` (THUẦN, có test) — không viết inline ở đây:
+            // nhãn này là thứ người vận hành đọc mỗi ngày, và inline thì không cấy thử được.
+            nhanNoiQuet(noiQuetKhacNoiChiuCong(my, coSo, maCoSoTheoId))
           : "—",
         gio: `${fmtMin(worked)} / ${fmtMin(expected)}`,
         credit,
