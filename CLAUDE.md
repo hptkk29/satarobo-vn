@@ -17,12 +17,13 @@ Brand hub + admin CMS + portal phụ huynh + site giáo viên cho Sata Robo (Đ�
 1. **Server-first** — default Server Component. `'use client'` chỉ khi cần state/effect/handler. Data fetch trong RSC (`async`), mutations qua Server Actions (`'use server'`).
 2. **Strict TS** — không `any` (dùng `unknown` + narrow). Zod schema là source of truth → suy ra type qua `z.infer`.
 3. **Route groups** — public: `app/(public)/...`, legacy: `app/(legacy)/...`, admin: `app/(admin)/admin/...`, portal: `app/(portal)/portal/...`, teacher: `app/(teacher)/teacher/...` (L5 — site GV **ĐÃ LIVE**: flag `TEACHER_SITE_ENABLED` mặc định **ON** từ 10/07/2026 (`lib/flags.ts:86`), host `giaovien.satarobo.vn` **đã wire** trong `proxy.ts:18`; rollback = set env `TEACHER_SITE_ENABLED="false"`), auth: `app/(auth)/login/...`, **nhập khách: `app/(admin)/admin/nhap-khach-hang/`** (23/08/2026 — DỜI VÀO ADMIN, đảo chốt 22/08 vốn để nó ở host public: mục sidebar bấm vào là văng khỏi khung admin. Địa chỉ `admin.satarobo.vn/nhap-khach-hang`; đường public cũ đá 307 về đây. Giao diện + action + loader dùng chung ở `components/lead-intake/` + `lib/lead/intake/` để site Sale sau này mount lại). Không tạo `/admin/*` ngoài route group. Host-based routing qua `proxy.ts` + `lib/auth/route-policy.ts` (sửa rule host×role CHỈ ở `decideRoute()` + test, không sửa proxy.ts).
-4. **Imports** — `@/lib/auth` (Auth.js), `@/lib/utils` (cn helper), `@/components/blog/markdown-renderer` (NOT `<Markdown>`). ⚠️ **Cổng DB ĐÃ ĐÓNG** (không còn là "target"): import `@/lib/db` trần trong `app/(admin|portal|teacher|sale)/** + components/lead-intake/**` = ESLint **error**. Đi qua `scopedDb(actor)` (admin/teacher) hoặc `portalDb` (portal). Allowlist còn đúng 3 file exception (`lib/eslint/db-import-allowlist.mjs`) — code mới KHÔNG xin thêm vào.
+4. **Imports** — `@/lib/auth` (Auth.js), `@/lib/utils` (cn helper), `@/components/blog/markdown-renderer` (NOT `<Markdown>`). ⚠️ **Cổng DB ĐÃ ĐÓNG** (không còn là "target"): import `@/lib/db` trần trong `app/(admin|portal|teacher|sale)/** + components/lead-intake/**` = ESLint **error**. Đi qua `scopedDb(actor)` (admin/teacher) hoặc `portalDb` (portal). Allowlist exception ở `lib/eslint/db-import-allowlist.mjs` — mở file để biết còn những file nào; code mới KHÔNG xin thêm vào.
 5. **Auth gate** — admin/portal layout đã redirect `/login`. Server Actions/API route VẪN phải `auth()` + `assertCan(...)` ngay đầu function (layout gate là chưa đủ). Portal actions thêm ownership check `assertOwnsStudent`. **RBAC 2 tầng:** quyền action = `can()` v2 động từ DB (`@/lib/auth/can`) — **đang enforce trên prod** vì `RBAC_V2_ENABLED="true"` trên Vercel Production (xác minh 29/07/2026); v1 matrix tĩnh (`@/lib/auth/permissions`) chỉ còn chạy song song để so lệch, và là thứ chạy ở local/dev (mặc định trong code vẫn OFF — `lib/flags.ts:8`).
-   ⚠️ **`scopedDb` KHÔNG che write** — chỉ auto-scope 7 method đọc. Mọi `update/delete` phải tự `passesScope()`; mọi `create` trên model thuộc `SCOPED_MODELS` phải set `centerId` (quên = record vô hình với actor cấp cơ sở).
+   ⚠️ **`scopedDb` KHÔNG che write** — chỉ auto-scope các method ĐỌC (danh sách ở `lib/db-scope.ts`). Mọi `update/delete` phải tự `passesScope()`; mọi `create` trên model thuộc `SCOPED_MODELS` phải set `centerId` (quên = record vô hình với actor cấp cơ sở).
 6. **Prisma migrations** — KHÔNG raw SQL trừ khi cần. Mỗi schema change: `pnpm db:migrate` + tên rõ nghĩa. Sau migration: restart dev server (Prisma Client cache stale trong memory).
 7. **UI library split** (Phase 4.X.1): admin = shadcn/ui + Recharts; client = shadcn/ui + Magic UI + Framer Motion. ESLint chặn cross-import — đừng workaround.
-8. **Security — ba hook `PreToolUse` ĐANG SỐNG (đo lại 09/09/2026, có test):**
+8. **Security — hook `PreToolUse` ĐANG SỐNG (đo lại 09/09/2026, có test).**
+   Danh sách cắm thật ở `.claude/settings.json`, khoá `hooks.PreToolUse`:
 
    > ⚠️ **Dòng "ENFORCED by hooks" ở đây đã NÓI DỐI nhiều tháng.** `block-env-add.sh` và
    > `block-destructive.sh` cùng chết vì HAI lỗi: (1) đọc `cmd="${CLAUDE_COMMAND:-}"` —
@@ -30,17 +31,18 @@ Brand hub + admin CMS + portal phụ huynh + site giáo viên cho Sata Robo (Đ�
    > `.tool_input.command`; (2) chặn bằng `exit 1`, mà Claude Code chỉ coi **`exit 2`** là
    > CHẶN. Hai lỗi che nhau: sửa lỗi (1) mà quên (2) thì hook in ra `BLOCKED` rất thuyết
    > phục rồi vẫn cho lệnh chạy — **chỉ mã thoát mới là bằng chứng.**
-   > **Vá 09/09/2026**, kèm `.claude/hooks/hooks.test.ts` (27 ca chạy hook thật với JSON
-   > thật, đọc mã thoát; đã cấy lại cả hai lỗi gốc và thấy đỏ). Luật 14 —
+   > **Vá 09/09/2026**, kèm `.claude/hooks/hooks.test.ts` — chạy hook THẬT với JSON thật
+   > trên stdin và đọc MÃ THOÁT (số ca: `pnpm exec vitest run .claude/hooks`), và đã cấy
+   > lại cả hai lỗi gốc để thấy nó đỏ. Luật 14 —
    > `docs/luat-doc-so-va-ket-luan.md`.
 
    | Hook | Chặn gì | Tình trạng |
    |---|---|---|
    | `block-env-add.sh` | `git add .env*` (chỉ `.env.example` được qua) | **vừa cứu 09/09/2026** |
-   | `block-destructive.sh` | 11 mẫu phá dữ liệu (liệt kê dưới) | **vừa cứu 09/09/2026** |
+   | `block-destructive.sh` | mẫu lệnh phá dữ liệu (liệt kê dưới; nguồn: mảng `patterns` trong chính file) | **vừa cứu 09/09/2026** |
    | `chan-commit-khi-do.sh` | `git commit` khi `typecheck` hoặc `vitest related` ĐỎ | mới, sống từ 09/09/2026 |
 
-   **11 mẫu `block-destructive.sh` chặn:** `rm -rf` vào `/` · `rm -rf` vào `~` ·
+   **`block-destructive.sh` chặn** (nguồn: mảng `patterns` + ba khối `prisma` trong chính file): `rm -rf` vào `/` · `rm -rf` vào `~` ·
    `git push --force` nhắm `main` · nhắm `master` · `git reset --hard` · `git clean -fd` · `DROP TABLE` ·
    `DROP DATABASE` · `TRUNCATE TABLE` · `prisma migrate diff --shadow-database-url` trỏ DB **không**
    local · `prisma db push --force-reset` thiếu marker local · `prisma migrate reset`
@@ -113,7 +115,7 @@ prisma/
 ## Permission & tổ chức
 
 **Hiện trạng (`lib/auth/permissions.ts`):**
-- **9 roles** (enum `Role`): `SUPER_ADMIN`, `CENTER_MANAGER`, `HR`, `SALES_CSM`, `TEACHER`, `TRAINING`, `MARKETING`, `ACCOUNTANT`, `PARENT`. (Đã rename `MANAGER→CENTER_MANAGER`, `SALES→SALES_CSM` — legacy shim trong JWT callback. `TRAINING` thêm ở FL W0 (QĐ-T1) — Đào tạo: quản lý TOÀN BỘ LMS, KHÁC `TEACHER` chỉ lớp được giao.)
+- **Vai** — enum `Role`, nguồn ở `prisma/schema.prisma`: `SUPER_ADMIN`, `CENTER_MANAGER`, `HR`, `SALES_CSM`, `TEACHER`, `TRAINING`, `MARKETING`, `ACCOUNTANT`, `PARENT`. (Đã rename `MANAGER→CENTER_MANAGER`, `SALES→SALES_CSM` — legacy shim trong JWT callback. `TRAINING` thêm ở FL W0 (QĐ-T1) — Đào tạo: quản lý TOÀN BỘ LMS, KHÁC `TEACHER` chỉ lớp được giao.)
 - ⚠️ **RBAC v2 ĐÃ BẬT TRÊN PROD** — `RBAC_V2_ENABLED="true"` trên Vercel Production (xác minh 29/07/2026 bằng `vercel env pull --environment=production`). Prod enforce **v2 động** (`lib/auth/can.ts`); `lib/auth/shadow-compare.ts:27` trả `flagOn ? v2 : v1`. **Mặc định trong code vẫn OFF** (`lib/flags.ts:8`) ⇒ local/dev/CI chạy **v1**, khác prod — đừng kết luận hành vi quyền từ máy local. Rollback: set env `false` + redeploy.
 - ⚠️ **Nợ đi kèm việc flip: `can()` v2 KHÔNG có nhánh DENY.** `lib/auth/can.ts:36-44` là ALLOW-wins thuần, `grantsDeny` không tồn tại ⇒ `UserPermissionGrant` có `grant=DENY` sẽ **bị bỏ qua im lặng**. Đây là 1 trong 3 việc chặn cứng của QĐ-B (`docs/taicautruc/QUYET-DINH.md:52-58`) mà cờ đã bật trước khi làm xong. **Chưa gây thiệt hại:** đo prod 29/07/2026 → bảng `UserPermissionGrant` **rỗng** (0 ALLOW, 0 DENY). **Luật tạm cho tới khi vá:** KHÔNG tạo grant `DENY` — nó không có tác dụng và không báo lỗi. Cần chặn quyền thì gỡ `UserOrgRole` tương ứng.
 - Multi-role: `User.roles[]` (quyền = union). Per-user grant ALLOW/DENY: `UserPermissionGrant` (Sprint 5.3). `User.centerId` scope theo cơ sở.

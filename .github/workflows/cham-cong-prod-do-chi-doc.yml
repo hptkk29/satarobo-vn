@@ -46,6 +46,7 @@ on:
           - vai-ke-toan
           - cong-day-thuc-te
           - backfill-buoi-chay-thu
+          - buoi-ket-theo-lop
           - tat-ca
 concurrency:
   group: cham-cong-prod-do-chi-doc
@@ -201,6 +202,16 @@ jobs:
       - name: "Backfill đóng buổi thoả — CHẠY THỬ (chỉ đọc, in BẢNG PHẠM VI)"
         if: ${{ !cancelled() && inputs.viec == 'backfill-buoi-chay-thu' }}
         run: pnpm exec tsx scripts/backfill-dong-buoi-thoa.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+
+      # Buổi quá hạn KHÔNG đóng được bằng bất cứ đường tự động nào, gom theo LỚP — số mang
+      # đi hỏi Đào tạo. Trả lời bốn câu: thuộc lớp nào · trạng thái lớp · sĩ số đang học ·
+      # có ai từng ghi danh rồi rời đi không. Dùng CHÍNH `quyetDinhTuHoanTat` để phân nhóm.
+      - name: "Đo buổi kẹt theo lớp (chỉ đọc)"
+        if: ${{ !cancelled() && (inputs.viec == 'buoi-ket-theo-lop' || inputs.viec == 'tat-ca') }}
+        run: pnpm exec tsx scripts/do-buoi-ket-theo-lop.ts
         env:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
           DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}

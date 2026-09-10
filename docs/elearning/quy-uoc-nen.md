@@ -50,14 +50,15 @@ mà không có. Đường dẫn truyền ở dòng lệnh chỉ lọc **tiếp**
 
 > 🔴 **Đã vấp lần hai (EL-05, 23/08).** Guard đăng ký cron viết ở `tests/cron/` — thư mục
 > KHÔNG có trong `include` — nên nó im lặng không chạy, đúng loại lỗi mà chính nó sinh ra để
-> bắt. Đã chuyển sang `lib/cron/`. **Các thư mục test đang được phủ:** `lib/**`,
-> `components/**`, `app/**`, `tests/chat/**`, `tests/elearning/**`. Viết test ngoài các chỗ
-> đã khai thì phải khai thêm vào `include`, không có ngoại lệ.
+> bắt. Đã chuyển sang `lib/cron/`. **Danh sách thư mục được phủ nằm ở `vitest.config.ts`,
+> mảng `include` — đọc thẳng ở đó.** Viết test ngoài các chỗ đã khai thì phải khai thêm
+> vào `include`, không có ngoại lệ.
 >
-> ⚠️ **Sửa 08/09/2026:** dòng này từng viết "bốn chỗ". `vitest.config.ts:11-22` nay có
-> **10 mục** (thêm `tests/nen`, `tests/lead-intake`, `tests/cham-cong`, `tests/finance`,
-> `prisma/seed-uat`). Đếm cứng trong văn bản thì mỗi lần thêm bộ là tài liệu sai thêm —
-> đọc thẳng `vitest.config.ts`, đừng tin con số ở đây.
+> ⚠️ **Dòng này từng ghi số, và đã sai HAI LẦN.** Bản đầu viết "bốn chỗ"; bản sửa
+> 08/09/2026 viết "10 mục" — và **một ngày sau, 10 cũng sai**. Sửa con số không phải
+> giải pháp; **bỏ nó đi** mới là. Đây là ca gốc của luật 17
+> (`docs/luat-doc-so-va-ket-luan.md`): tài liệu ghi tên file và cách đọc, không ghi số
+> lượng — số trong docs không có gì giữ cho đúng, và nó sai theo cách thuyết phục.
 
 ### 4. Job CI có tên
 
@@ -121,7 +122,8 @@ Nhánh `test` là **làn nghiệm thu duy nhất** dùng chung cho mọi luồng
 
 **Vì sao đây là ràng buộc kỹ thuật chứ không phải sở thích quy trình:** file này là **chỗ va chạm số
 một** giữa e-learning (thêm host thứ 6) và parity site giáo viên (giữ host thứ 5) — hai luồng sửa
-**cùng một hàm `decideRoute()`** và **cùng một bảng test 990 dòng**. Bó chung vào PR lớn là biến một
+**cùng một hàm `decideRoute()`** và **cùng một bảng test lớn**
+(`lib/auth/route-policy.test.ts` — mở ra xem trước khi sửa). Bó chung vào PR lớn là biến một
 **rebase mười phút** thành một buổi gỡ xung đột. Và xung đột trên `decideRoute()` là loại nguy hiểm
 nhất: git nối hai nửa lại thành một bảng định tuyến **vẫn biên dịch được nhưng sai**.
 
