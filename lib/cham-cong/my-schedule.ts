@@ -4,6 +4,7 @@
 // CHÍNH userId của phiên (dữ liệu của mình).
 import { db } from "@/lib/db";
 import type { ShiftSegment } from "./catalog";
+import type { LoaiMaCa } from "./nhan-ca";
 
 export type MyShiftRow = {
   date: Date; // @db.Date → UTC 00:00
@@ -11,6 +12,12 @@ export type MyShiftRow = {
   name: string;
   centerId: string;
   centerLabel: string;
+  /**
+   * `ShiftTemplate.kind`. ⚠️ ĐỪNG thay bằng `isLeave` khi cần biết "ngày này có nghỉ không":
+   * `X` (Nghỉ) mang `kind: OFF` nhưng `isLeave: FALSE` — nó không phải nghỉ PHÉP. Lọc bằng
+   * `isLeave` là để `X` lọt qua thành ca làm, đúng bug prod 10/09/2026. Nhãn ở `nhan-ca.ts`.
+   */
+  kind: LoaiMaCa;
   isLeave: boolean;
   dayCredit: number;
   /** "07:45–11:30 · 14:00–17:45" hoặc "" (mã không giờ). */
@@ -21,7 +28,7 @@ export type MyShiftRow = {
 export async function getMyAssignments(userId: string, from: Date, to: Date): Promise<MyShiftRow[]> {
   const rows = await db.shiftAssignment.findMany({
     where: { userId, workDate: { gte: from, lt: to }, status: "ACTIVE" },
-    select: { workDate: true, templateCode: true, centerId: true, isLeave: true, dayCredit: true, segments: true, source: true, template: { select: { name: true } } },
+    select: { workDate: true, templateCode: true, centerId: true, isLeave: true, dayCredit: true, segments: true, source: true, template: { select: { name: true, kind: true } } },
     orderBy: { workDate: "asc" },
     take: 100,
   });
@@ -34,6 +41,7 @@ export async function getMyAssignments(userId: string, from: Date, to: Date): Pr
     name: r.template.name,
     centerId: r.centerId,
     centerLabel: labelOf.get(r.centerId) ?? (r.centerId === "hoi-so" ? "HO" : r.centerId),
+    kind: r.template.kind,
     isLeave: r.isLeave,
     dayCredit: r.dayCredit,
     timeLabel: ((r.segments as ShiftSegment[] | null) ?? []).filter((s) => s.kind === "WORK").map((s) => `${s.start}–${s.end}`).join(" · "),

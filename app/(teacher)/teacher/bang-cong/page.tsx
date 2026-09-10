@@ -9,6 +9,13 @@
 // ngày từ StaffAttendanceDay (engine tính theo ca — T-01), đơn từ là WorkRequest nộp ở
 // /teacher/don-tu. Giờ dạy/trải nghiệm vẫn là ước tính từ khung giờ (không phải công).
 //
+// 🔴 Vá 10/09/2026 — LẦN THỨ BA site GV dựng lại con số của admin. Hai bug cùng gốc:
+//   · ngày nghỉ X/P hiện "Ca làm · theo nơi làm" (lọc bằng `isLeave`, mà X mang isLeave=false);
+//   · Trạng thái in "Đã làm" cho MỌI dòng quá khứ vì `done = dateKey < todayKey`.
+// `getMyAttendanceDays` VỐN đã được gọi ở màn này — nhưng chỉ để cộng một con tổng, còn từng
+// dòng thì tự suy từ ngày. Nay mọi ô số/nhãn đi qua `lib/cham-cong/nhan-ca.ts` (dùng chung với
+// admin) và đọc thẳng `StaffAttendanceDay` — KHÔNG có phép tính thứ hai ở đây.
+//
 // Nguồn (own-rows): getMyAssignments/getMyAttendanceDays (lib/cham-cong/my-schedule) ·
 // getTeacherTrialSessions · getVisibleHolidays (lib/lms/teacher-schedule); buổi dạy qua
 // withMakeupException (dạy thay/bù liên cơ sở). ⚠️ Câu 46: chỉ tên lớp/cơ sở + giờ — không HV/PH.
@@ -36,6 +43,16 @@ import {
   getMyAssignments,
   getMyAttendanceDays,
 } from "@/lib/cham-cong/my-schedule";
+import {
+  NHAN_TRANG_THAI,
+  type TrangThaiNgay,
+} from "@/lib/cham-cong/nhan-ca";
+import {
+  demCaLam,
+  dungDongBangCong,
+  type LoaiOCa,
+} from "@/lib/cham-cong/bang-cong-gv";
+import { FlagList } from "@/components/cham-cong/ui/flag-chip";
 import { scopedDb } from "@/lib/db-scope";
 import {
   WR_KIND_LABEL,
@@ -137,27 +154,27 @@ const REQ_STATUS_CLS: Record<WorkRequestStatusV, string> = {
   REJECTED: "bg-state-danger-soft text-state-danger-ink",
 };
 
-type CaType = "Dạy" | "Trải nghiệm" | "Ca làm";
-const TYPE_TONE: Record<CaType, string> = {
+const TYPE_TONE: Record<LoaiOCa, string> = {
   Dạy: "bg-state-info-soft text-state-info-ink",
   "Trải nghiệm": "bg-primary-soft text-primary-ink",
   "Ca làm": "bg-muted text-muted-foreground",
+  Nghỉ: "bg-muted text-muted-foreground",
+  "Nghỉ phép": "bg-state-warning-soft text-state-warning-ink",
 };
 
-/** Một CA trong bảng chi tiết (đã chuẩn hoá từ 3 nguồn). */
-type CaRow = {
-  key: string;
-  name: string;
-  subtitle: string | null;
-  type: CaType;
-  /** Khoá ISO "YYYY-MM-DD" — dùng để GOM NHÓM và SẮP XẾP (so sánh chuỗi ISO là
-      đúng thứ tự thời gian). ĐỪNG đổi sang dd/mm ở đây, hiển thị thì đi qua
-      `viDate()`. */
-  dateLabel: string;
-  timeLabel: string;
-  hours: number | null; // null → "—" (không cộng tổng)
-  done: boolean; // Đã làm vs Sắp tới
+/** Tông của chip Trạng thái. Chỉ "Đã làm" được nhuộm xanh — nhãn khẳng định thì phải có chứng. */
+const TRANG_THAI_TONE: Record<TrangThaiNgay, string> = {
+  DA_LAM: "bg-state-success-soft text-state-success-ink",
+  SAP_TOI: "bg-state-info-soft text-state-info-ink",
+  NGHI: "bg-muted text-muted-foreground",
+  CHUA_CHAM: "bg-state-warning-soft text-state-warning-ink",
+  CHUA_TINH: "bg-muted text-muted-foreground",
+  CHUA_CHOT: "bg-state-warning-soft text-state-warning-ink",
 };
+
+/** 411 phút → "6h51". Giống hệt `fmtMin` của màn admin /cham-cong/lich-ca. */
+const fmtMin = (m: number) =>
+  m ? `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}` : "—";
 
 export default async function TeacherTimesheetPage({
   searchParams,
@@ -244,68 +261,66 @@ export default async function TeacherTimesheetPage({
     Math.round(myDays.reduce((n, d) => n + d.units, 0) * 100) / 100;
 
   // ── Chuẩn hoá về CA rows ──────────────────────────────────────────────────────
-  const rows: CaRow[] = [];
-
-  for (const s of sessions) {
-    const dk = dayKeyFmt.format(s.date);
-    const hrs = hoursBetween(s.class.startTime, s.class.endTime);
-    rows.push({
-      key: `d-${s.id}`,
-      name: `Ca dạy ${shiftOfDay(s.class.startTime)}`.trim(),
-      subtitle:
-        [s.class.name, s.class.center?.name].filter(Boolean).join(" · ") ||
-        null,
-      type: "Dạy",
-      dateLabel: dk,
-      timeLabel:
-        s.class.startTime && s.class.endTime
-          ? `${s.class.startTime}–${s.class.endTime}`
-          : "—",
-      hours: hrs > 0 ? hrs : null,
-      done: (s.status as SessionStatus) === "COMPLETED" || dk < todayKey,
-    });
-  }
-
-  for (const t of trials) {
-    const dk = isoKey(t.date);
-    const hrs = hoursBetween(t.startTime, t.endTime);
-    rows.push({
-      key: `t-${t.id}`,
-      name: t.trialClassName,
-      subtitle: null,
-      type: "Trải nghiệm",
-      dateLabel: dk,
-      timeLabel: `${t.startTime}–${t.endTime}`,
-      hours: hrs > 0 ? hrs : null,
-      done: t.status === "COMPLETED" || dk < todayKey,
-    });
-  }
-
-  for (const r of shiftRows) {
-    if (r.isLeave) continue;
-    const dk = isoKey(r.date);
-    rows.push({
-      key: `s-${dk}-${r.code}`,
-      name: `${r.code} · ${r.name}`,
-      subtitle: r.centerLabel,
-      type: "Ca làm",
-      dateLabel: dk,
-      timeLabel: r.timeLabel || "theo nơi làm",
-      // Ca làm: công tính theo ca (engine) — cột giờ ở đây chỉ là khung giờ, không cộng tổng.
-      hours: null,
-      done: dk < todayKey,
-    });
-  }
-
-  rows.sort(
-    (a, b) =>
-      a.dateLabel.localeCompare(b.dateLabel) ||
-      a.timeLabel.localeCompare(b.timeLabel),
-  );
+  // 🔴 Phép nối "ngày công đã tính × ca đã xếp" nằm ở `lib/cham-cong/bang-cong-gv.ts`, KHÔNG
+  // ở đây. Trang chỉ chuyển dữ liệu về hình dạng của hàm đó rồi in ra. Đây là chỗ đã ba lần
+  // đẻ ra một bản tính thứ hai cho con số admin đã có (luật 12b).
+  const rows = dungDongBangCong({
+    buoi: [
+      ...sessions.map((s) => {
+        const hrs = hoursBetween(s.class.startTime, s.class.endTime);
+        return {
+          key: `d-${s.id}`,
+          ngay: dayKeyFmt.format(s.date),
+          loai: "Dạy" as const,
+          ten: `Ca dạy ${shiftOfDay(s.class.startTime)}`.trim(),
+          phu:
+            [s.class.name, s.class.center?.name].filter(Boolean).join(" · ") || null,
+          gio:
+            s.class.startTime && s.class.endTime
+              ? `${s.class.startTime}–${s.class.endTime}`
+              : "—",
+          soGio: hrs > 0 ? hrs : null,
+          hoanTat: (s.status as SessionStatus) === "COMPLETED",
+        };
+      }),
+      ...trials.map((t) => {
+        const hrs = hoursBetween(t.startTime, t.endTime);
+        return {
+          key: `t-${t.id}`,
+          ngay: isoKey(t.date),
+          loai: "Trải nghiệm" as const,
+          ten: t.trialClassName,
+          phu: null,
+          gio: `${t.startTime}–${t.endTime}`,
+          soGio: hrs > 0 ? hrs : null,
+          hoanTat: t.status === "COMPLETED",
+        };
+      }),
+    ],
+    ca: shiftRows.map((r) => ({
+      ngay: isoKey(r.date),
+      ma: r.code,
+      ten: r.name,
+      kind: r.kind,
+      noi: r.centerLabel,
+      gio: r.timeLabel,
+    })),
+    cong: myDays.map((d) => ({
+      ngay: isoKey(d.date),
+      phutLam: d.worked,
+      cong: d.units,
+      flags: d.flags,
+      ma: d.code,
+    })),
+    homNay: todayKey,
+  });
 
   // ── Tổng hợp (4 stat) ─────────────────────────────────────────────────────────
-  const teachingCount = rows.filter((r) => r.type === "Dạy").length;
-  const totalHours = rows.reduce((n, r) => n + (r.hours ?? 0), 0);
+  const teachingCount = rows.filter((r) => r.loai === "Dạy").length;
+  // Dòng nghỉ nay CÓ trong bảng (trước bị `continue` bỏ qua) — nhưng "Số ca" vẫn phải là số ca
+  // LÀM VIỆC, đúng nghĩa cũ. `demCaLam` đếm bằng `kind`, không bằng `isLeave` (X: isLeave=false).
+  const caCount = demCaLam(rows);
+  const totalHours = rows.reduce((n, r) => n + (r.soGio ?? 0), 0);
   // Ngày nghỉ = số NGÀY (giờ VN) trong tháng rơi vào ngày nghỉ.
   const holidayDays = new Set<string>();
   for (const h of holidays) {
@@ -370,7 +385,7 @@ export default async function TeacherTimesheetPage({
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <StatCard
             icon={Layers}
-            value={rows.length}
+            value={caCount}
             label="Số ca"
             tone="brand"
           />
@@ -407,7 +422,7 @@ export default async function TeacherTimesheetPage({
           ) : (
             <div className="t-card overflow-hidden">
               <PhanTrangBang cuonNgang khoaGhiNho="gv-bang-cong">
-                <table className="min-w-[770px] w-full border-collapse text-left text-sm">
+                <table className="min-w-[1000px] w-full border-collapse text-left text-sm">
                   <thead>
                     <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                       <th scope="col" className="px-4 py-3">
@@ -423,7 +438,16 @@ export default async function TeacherTimesheetPage({
                         Giờ
                       </th>
                       <th scope="col" className="px-4 py-3">
-                        Giờ công
+                        Giờ dạy
+                      </th>
+                      <th scope="col" className="px-4 py-3">
+                        Giờ làm
+                      </th>
+                      <th scope="col" className="px-4 py-3">
+                        Công
+                      </th>
+                      <th scope="col" className="px-4 py-3">
+                        Cờ
                       </th>
                       <th scope="col" className="px-4 py-3">
                         Trạng thái
@@ -438,11 +462,11 @@ export default async function TeacherTimesheetPage({
                       >
                         <td className="px-4 py-3">
                           <p className="font-semibold text-foreground">
-                            {r.name}
+                            {r.ten}
                           </p>
-                          {r.subtitle && (
+                          {r.phu && (
                             <p className="text-xs text-muted-foreground">
-                              {r.subtitle}
+                              {r.phu}
                             </p>
                           )}
                         </td>
@@ -450,37 +474,55 @@ export default async function TeacherTimesheetPage({
                           <span
                             className={cn(
                               "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
-                              TYPE_TONE[r.type],
+                              TYPE_TONE[r.loai],
                             )}
                           >
-                            {r.type}
+                            {r.loai}
                           </span>
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
-                          {viDate(r.dateLabel)}
+                          {viDate(r.ngay)}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-foreground">
-                          {r.timeLabel}
+                          {r.gio}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap font-semibold text-foreground">
-                          {r.hours != null ? (
-                            `${fmtHours(r.hours)}h`
+                          {r.soGio != null ? (
+                            `${fmtHours(r.soGio)}h`
                           ) : (
                             <span className="font-normal text-muted-foreground">
                               —
                             </span>
                           )}
                         </td>
+                        {/* Giờ làm + Công: đọc thẳng StaffAttendanceDay — CÙNG số admin hiện. */}
+                        <td className="px-4 py-3 whitespace-nowrap tabular-nums text-foreground">
+                          {r.phutLam != null ? (
+                            fmtMin(r.phutLam)
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap font-semibold tabular-nums text-foreground">
+                          {r.cong != null ? (
+                            r.cong
+                          ) : (
+                            <span className="font-normal text-muted-foreground">
+                              —
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <FlagList codes={r.flags} />
+                        </td>
                         <td className="px-4 py-3 whitespace-nowrap">
                           <span
                             className={cn(
                               "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
-                              r.done
-                                ? "bg-state-success-soft text-state-success-ink dark:bg-state-success-soft dark:text-state-success-ink"
-                                : "bg-state-info-soft text-state-info-ink",
+                              TRANG_THAI_TONE[r.trangThai],
                             )}
                           >
-                            {r.done ? "Đã làm" : "Sắp tới"}
+                            {NHAN_TRANG_THAI[r.trangThai]}
                           </span>
                         </td>
                       </tr>

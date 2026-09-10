@@ -42,7 +42,7 @@
     "test:elearning-db": "vitest run -c vitest.db.config.ts tests/elearning --reporter=verbose",
     "test:lead-intake": "vitest run -c vitest.db.config.ts tests/lead-intake --reporter=verbose",
     "test:finance-db": "vitest run -c vitest.db.config.ts tests/finance --reporter=verbose",
-    "test:cham-cong-db": "vitest run -c vitest.db.config.ts tests/cham-cong --reporter=verbose",
+    "test:cham-cong-db": "vitest run -c vitest.cham-cong.config.ts tests/cham-cong --reporter=verbose",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:smoke": "playwright test smoke.spec.ts",

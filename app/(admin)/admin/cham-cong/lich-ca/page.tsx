@@ -19,6 +19,7 @@ import { redirect } from "next/navigation";
 import { CalendarClock, ChevronLeft, ChevronRight, Lock } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { getMyAssignments, getMyAttendanceDays } from "@/lib/cham-cong/my-schedule";
+import { laNgayNghi, nhanGioCa } from "@/lib/cham-cong/nhan-ca";
 import { currentPeriodKey, parsePeriodKey, periodRange } from "@/lib/cham-cong/period";
 import { hrefWith, shiftKy } from "@/lib/cham-cong/scope-href";
 import { vnYmd } from "@/lib/time/vn";
@@ -61,7 +62,9 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
   const dayOf = new Map(dayRows.map((d) => [d.date.toISOString().slice(0, 10), d]));
   const p = parsePeriodKey(ky)!;
   const totalUnits = Math.round(dayRows.reduce((s, d) => s + d.units, 0) * 100) / 100;
-  const shiftCount = shifts.filter((s) => !s.isLeave).length;
+  // `!isLeave` KHÔNG đủ: `X` (Nghỉ) mang `isLeave: false` nên vẫn bị đếm là ca làm. Cùng gốc
+  // với bug nhãn 10/09 — thứ phân biệt là `kind`.
+  const shiftCount = shifts.filter((s) => !laNgayNghi(s.kind)).length;
   const todayYmd = vnYmd(new Date());
   const tomorrowYmd = vnYmd(new Date(Date.now() + 86_400_000));
 
@@ -206,7 +209,7 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
                       )}
                     </td>
                     <td className={cn(adminTd, "whitespace-nowrap font-mono text-xs tabular-nums")}>
-                      {r.shift ? r.shift.timeLabel || "theo nơi làm" : ""}
+                      {r.shift ? nhanGioCa(r.shift.kind, r.shift.timeLabel) : ""}
                     </td>
                     <td className={cn(adminTd, "whitespace-nowrap text-xs")}>{r.shift?.centerLabel ?? ""}</td>
                     <td className={cn(adminTd, "whitespace-nowrap tabular-nums")}>{r.day ? fmtMin(r.day.worked) : ""}</td>
