@@ -16,6 +16,26 @@
  *     (`bang-cong-gv.ts` và chính file này là ví dụ sống);
  *   · bộ quét là hàm THUẦN nhận chuỗi, nên vế CHO QUA / vế BẮT ĐƯỢC kiểm được bằng đầu vào
  *     giả, không phải tin nó chạy đúng trên cây thật.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * 🔴 GIỚI HẠN CỦA FILE NÀY — ĐỌC TRƯỚC KHI TIN NÓ (chốt 10/09/2026)
+ *
+ * Đây là **lớp PHỤ**, không phải lớp duy nhất, và nó KHÔNG đo hành vi.
+ *
+ * Lớp CHÍNH là `bang-cong-gv.test.ts` — test hành vi trên hàm thuần dựng dòng. Nó bắt được
+ * mọi lỗi trong phép nối "ngày công × ca xếp". Thứ nó KHÔNG với tới là **một chuỗi gõ thẳng
+ * trong JSX của trang RSC**: `{"Đã làm"}` trong một ô `<td>` không đi qua hàm nào cả, và
+ * không có test hành vi nào chạm được nó nếu không dựng trình duyệt.
+ *
+ * Vì thế file này tồn tại — nhưng theo luật 11 nó là loại yếu nhất, nên:
+ *
+ * ⚠️ **VIỆC CÒN NỢ:** khi có ca browser cho `/teacher/bang-cong` (chỗ của nó là
+ * `tests/e2e/a0`, xem sổ ở luật 12 — cổng grep của affordance cũng kết luận y vậy), hãy bổ
+ * sung **vế HÀNH VI**: dựng một ngày KHÔNG có lượt chấm, mở trang, khẳng định ô Trạng thái
+ * không mang chữ "Đã làm". Lúc đó file này lùi về vai trò cảnh báo sớm, không còn là thứ
+ * duy nhất canh JSX.
+ *
+ * Đừng đọc "hai bộ xanh" thành "không thể sai".
  */
 import fs from "node:fs";
 import path from "node:path";
