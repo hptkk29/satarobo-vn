@@ -158,8 +158,16 @@ async function main(): Promise<void> {
   ]);
 
   // ── 7. R-13 — dashboard kế toán cộng theo trạng thái đơn ───────────────────
-  // Ô "Đã thu" của Dashboard Kế toán cộng nguyên `Order.totalAmount` của đơn
-  // CONFIRMED. So với tiền THẬT đã ghi nhận (Payment RECORDED) để ra mức sai.
+  // Ô "Đã thu (tổng)" của Dashboard Kế toán cộng nguyên `Order.totalAmount` của đơn
+  // CONFIRMED/COMPLETED và KHÔNG chạm bảng `Payment` lần nào.
+  //
+  // ⚠️ HAI SỐ DƯỚI ĐÂY ĐẾM HAI TẬP KHÁC NHAU — đừng đọc hiệu của chúng là "mức sai".
+  // Dashboard cộng trên 19 đơn đã chốt; `Σ Payment` gồm cả khoản trên đơn CHƯA chốt.
+  // Nhãn cũ ở đây là "mức khai KHỐNG", và nó SAI: đo prod 13/09/2026 ra hiệu ÂM
+  // (dashboard 157.900.400đ < Payment 168.733.000đ), tức dashboard đang khai THIẾU,
+  // ngược chiều với giả thuyết ban đầu. Điều số này chứng minh được chỉ là: hai con
+  // số KHÔNG đối chiếu được với nhau, vì dashboard không đọc sổ tiền. Muốn biết mức
+  // sai thật thì phải so THEO TỪNG ĐƠN — đó là việc của `shadow-compare-debt.ts`.
   const donChot = await db.order.aggregate({
     where: { deletedAt: null, status: { in: ["CONFIRMED", "COMPLETED"] } },
     _sum: { totalAmount: true },
@@ -174,10 +182,15 @@ async function main(): Promise<void> {
   const fmt = (n: number) => n.toLocaleString("vi-VN");
   bang("R-13 — ô 'Đã thu' của Dashboard Kế toán", [
     ["Số đơn CONFIRMED/COMPLETED", donChot._count._all],
-    ["Dashboard ĐANG cộng (Σ totalAmount)", `${fmt(tongDon)}đ`],
-    ["Tiền THẬT đã ghi nhận (Σ Payment)", `${fmt(tongThu)}đ`],
-    ["Mức khai KHỐNG", `${fmt(tongDon - tongThu)}đ`],
+    ["Dashboard ĐANG cộng (Σ totalAmount đơn đã chốt)", `${fmt(tongDon)}đ`],
+    ["Σ Payment RECORDED (MỌI đơn)", `${fmt(tongThu)}đ`],
+    ["Hiệu — KHÔNG phải mức sai, xem chú thích", `${fmt(tongDon - tongThu)}đ`],
   ]);
+  console.log(
+    "  ⚠ Hai dòng trên đếm HAI TẬP khác nhau ⇒ hiệu của chúng không phải mức sai.\n" +
+      "    Điều chắc chắn: dashboard không đọc bảng Payment, nên không con số nào của nó\n" +
+      "    đối chiếu được với tiền. Mức sai theo TỪNG ĐƠN xem bảng shadow-compare bên dưới.",
+  );
 
   // ── Kết luận: shadow-compare có đáng đọc theo cột lý do, hay chỉ đang báo "sổ trống"?
   //
