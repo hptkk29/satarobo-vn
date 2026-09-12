@@ -69,6 +69,13 @@ export function noiChiuCongCuaNgay(input: {
  * D1 (10/09, `noi-quet.ts`) in thẳng " · quét ở CS2" lên dòng của người đó **tại cơ sở chịu
  * công của họ**. Thông tin không mất — nó chuyển sang đúng cái sổ có thẩm quyền về ngày đó.
  *
+ * ⚠️ **Cái MẤT, và chỗ nó đi về** — đừng đọc nhầm thành sót: người CS1 quét ở CS2 KHÔNG còn
+ * hiện trên sổ công CS2. Nhu cầu *"ai có mặt ở cơ sở tôi hôm nay"* là THẬT, nhưng nó là một
+ * CÂU HỎI KHÁC với *"ai ăn công ở đây"*, và chốt 07/09 đã dùng câu hỏi này bù cho câu hỏi kia
+ * (luật 5 — tập dựng cho mục đích A đem phục vụ mục đích B). Nó có vé riêng:
+ * `docs/cham-cong/VE-AI-CO-MAT-O-CO-SO.md` — một danh sách LƯỢT QUÉT, đọc thẳng
+ * `StaffTimeLog`, tách hẳn khỏi sổ công.
+ *
  * Giữ thứ tự xuất hiện: ngày công trước, rồi ca xếp. Đảo thứ tự là kể sai câu chuyện của sổ.
  */
 export function nguoiThuocSoCong(input: {
