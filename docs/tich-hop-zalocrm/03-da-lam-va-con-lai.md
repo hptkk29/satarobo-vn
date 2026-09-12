@@ -98,6 +98,40 @@ chỉ có đúng một lần đổi vé. (Nay fork cũng tự chữa: vé đã d
 
 ---
 
+## 3.2 GĐ3 đã làm xong CODE (13/09/2026)
+
+Kế hoạch xếp GĐ3 là **tuỳ chọn**; chủ dự án chốt làm luôn để sẵn sàng khi có nick thật.
+
+**Bên fork — F4** (`public-api-routes.ts`, migration thuần thêm `Contact.externalRef`):
+`GET /conversations` thêm `zaloAccountId` + `contact.externalRef` + bộ lọc `since` ·
+`GET /conversations/:id` mới · `POST /messages/send` đi qua **trần chống khoá nick**
+(bản gốc gửi thẳng, không hỏi trần), **trả `msgId`**, và nhận `idempotencyKey` ·
+`PUT /contacts/:id/external-ref` mới. Đã thử sống bằng khoá API thật: khoá sai 401 · id
+bịa 404 · kiểu sai 400 · gắn 200 · gắn chồng **409 `EXTERNAL_REF_TAKEN`** · gỡ 200.
+
+**Bên Sata:**
+- adapter kênh `ZALO_CA_NHAN` — người trực gửi ngay trong hộp thư Sata;
+- cron **đối soát 5 phút** (`/api/cron/zalocrm-doi-soat`) nạp bù tin webhook làm rơi,
+  đi qua ĐÚNG đường nạp của webhook, chống trùng bằng `channelMessageId`;
+- màn **Phản hồi hộp thư** (`/bao-cao/phan-hoi-hop-thu`, quyền `inbox:view`).
+
+Ba chốt thiết kế đáng nhớ, đừng "sửa" ngược:
+1. **Thiếu `msgId` ⇒ `FAILED`, không bịa id.** `providerMessageId` được ghi làm
+   `channelMessageId` để bản echo về sau bị nhận ra là trùng — bịa id là mỗi tin hiện
+   hai lần trong hội thoại.
+2. **Trần chống khoá nick do FORK gác, Sata không gác lần hai** — hai bên đếm riêng là
+   hai con số lệch nhau. Fork trả 429 ⇒ `FAILED` có mã, người trực đọc được và chờ.
+3. **Báo cáo CỐ Ý không có "thời gian phản hồi trung bình".** Cách tính rẻ tiền
+   (`lastOutboundAt − lastInboundAt`) nói dối theo hướng đẹp: hội thoại bỏ quên ba ngày
+   rồi mới trả lời vẫn ra "2 phút". Thà thiếu một cột còn hơn có một cột làm người đọc
+   yên tâm sai.
+
+⚠️ **Chưa thể nghiệm thu bằng người:** cả ba đều cần một nick Zalo thật (việc 9.16).
+Trước đó cơ sở chưa khai `ZALOCRM_API_KEYS` thì adapter trả `SIMULATED` và cron bỏ qua
+lặng lẽ — không tốn gì, không kêu sai.
+
+---
+
 ## 4. Còn lại — và ai làm
 
 ### 4.1 Chủ dự án (chặn cứng, ngoài code)
@@ -109,9 +143,16 @@ chỉ có đúng một lần đổi vé. (Nay fork cũng tự chữa: vé đã d
 | 9.18 | **Tên sản phẩm mới** cho fork (nghĩa vụ giấy phép L4) |
 | 9.14 | Quyết định mua giấy phép thương mại (gỡ banner) hay giữ banner |
 
-### 4.2 Fork ZaloCRM (F1–F7) — repo khác, làm sau khi có 9.17 + 9.18
-F1 SSO · F2 webhook giàu ngữ cảnh + outbox retry · F3 cho nhúng iframe · F4 Public API (GĐ3) ·
-F5 nút "Tạo lead" trong chat · F6 giấy phép (commit đầu tiên) · F7 tắt cứng AI.
+### 4.2 Fork ZaloCRM (F1–F7) — **ĐÃ XONG CẢ BẢY** (07–13/09/2026)
+Repo công khai <https://github.com/sataroboit-coder/sata-crm>, nhánh `feat/sata-sso`.
+F1 SSO · F2 webhook giàu ngữ cảnh + outbox retry · F3 cho nhúng iframe · **F4 Public API** ·
+F5 nút "Tạo lead" trong chat · F6 giấy phép · F7 tắt cứng AI.
+
+🔴 **Nghĩa vụ AGPL là LIÊN TỤC:** mỗi lần sửa thêm rồi đưa lên máy chủ cho nhân viên
+dùng thì phải đẩy bản công khai TRƯỚC, triển khai SAU.
+
+Vế "Mở lead" của F5 (`sata:open-lead`) nay đã có chỗ dựa (`Contact.externalRef` của F4)
+nhưng CHƯA nối — không có nick thật thì không có liên hệ nào để gắn thử.
 
 🔴 **Hai hợp đồng phải thống nhất bằng văn bản với bên fork TRƯỚC khi họ code** (phần Sata mù hoàn toàn ở đây):
 1. **Đường SSO**: `<appUrl>/sso`, đọc fragment bằng `new URLSearchParams(location.hash.slice(1))`, hai khoá `token` và `next`.
