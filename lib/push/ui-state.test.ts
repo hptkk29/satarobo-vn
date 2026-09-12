@@ -131,11 +131,31 @@ describe("[PUSH-D3-T13] nhãn host trong danh sách thiết bị", () => {
   });
 });
 
+/**
+ * NGOẠI LỆ CÓ CHỮ KÝ cho `lib/push/*` ở bốn nhóm route bị cấm.
+ *
+ * Danh sách này tồn tại vì "nới cổng" đôi khi là hành động ĐÚNG, nhưng nó không được phép im
+ * lặng: một import hợp lệ và một import làm lộ push sang origin phụ huynh trông giống hệt nhau
+ * trong mã. Khai ở đây biến cái thứ nhất thành một quyết định có chữ ký.
+ *
+ * ⚠️ `components/push/*` KHÔNG CÓ NGOẠI LỆ NÀO và đừng thêm — đó mới đúng là thứ nguy hiểm:
+ * `service-worker-register.tsx` cài worker lên origin đang phục vụ, `bat-thong-bao.tsx` xin
+ * quyền thông báo. `lib/push/*` chỉ nguy hiểm khi nó kéo được mã client theo; ca `server-only`
+ * thì không thể (và ca test dưới PIN đúng tính chất đó).
+ */
+const NGOAI_LE_LIB_PUSH: Record<string, { module: string; lyDo: string }> = {
+  "app/(auth)/dang-xuat/route.ts": {
+    module: "@/lib/push/thu-hoi",
+    lyDo:
+      "Đợt 5 (13/09/2026) — NGƯỢC CHIỀU với thứ cổng này canh: nó THU HỒI đăng ký, không tạo. " +
+      "Route chạy phía server và là chỗ DUY NHẤT với tới được ba ca 'tài khoản chết' (bốn layout " +
+      "redirect sang đây kèm ?reason=), vì ở đó client không bao giờ chạy. Module được miễn trừ " +
+      "mang `import \"server-only\"` nên không thể lọt vào bundle client — ca test dưới pin lại.",
+  },
+};
+
 describe("[PUSH-D3-T14] ràng buộc phạm vi: KHÔNG có mã push nào ở host phụ huynh/công khai", () => {
-  it("app/(portal) và app/(public) không import gì từ components/push", async () => {
-    // Đây là ràng buộc cứng nhất của module (push CHỈ cho nhân viên) và trước ca này nó chỉ do
-    // mắt người giữ. `app/(auth)/layout.tsx` là cái bẫy nặng nhất: nó được phục vụ trên CẢ SÁU
-    // host, gồm /login của cổng phụ huynh — mount ở đó là cài service worker lên origin của họ.
+  const quetNhomCam = async (): Promise<{ duong: string; src: string }[]> => {
     const { readdirSync, readFileSync, statSync } = await import("node:fs");
     const { join } = await import("node:path");
     const quet = (thuMuc: string): string[] => {
@@ -143,18 +163,72 @@ describe("[PUSH-D3-T14] ràng buộc phạm vi: KHÔNG có mã push nào ở hos
       for (const t of readdirSync(thuMuc)) {
         const d = join(thuMuc, t);
         if (statSync(d).isDirectory()) ra.push(...quet(d));
-        else if (/\.(ts|tsx)$/.test(t)) ra.push(d);
+        // Bỏ tệp test: nó không bao giờ được phục vụ cho trình duyệt nào, nên một lời nhắc
+        // `lib/push` trong `vi.mock` không phải vi phạm. Giữ nó trong danh sách chỉ đẻ nhiễu.
+        else if (/\.(ts|tsx)$/.test(t) && !/\.test\.(ts|tsx)$/.test(t)) ra.push(d);
       }
       return ra;
     };
     const cam = ["app/(portal)", "app/(public)", "app/(legacy)", "app/(auth)"];
-    const pham: string[] = [];
+    const ra: { duong: string; src: string }[] = [];
     for (const g of cam) {
       for (const f of quet(g)) {
-        const src = readFileSync(f, "utf8");
-        if (src.includes("components/push/") || src.includes("lib/push/")) pham.push(f);
+        ra.push({ duong: f.replace(/\\/g, "/"), src: readFileSync(f, "utf8") });
+      }
+    }
+    return ra;
+  };
+
+  it("bốn nhóm route của phụ huynh/công khai KHÔNG import gì từ components/push", async () => {
+    // Đây là ràng buộc cứng nhất của module (push CHỈ cho nhân viên) và trước ca này nó chỉ do
+    // mắt người giữ. `app/(auth)/layout.tsx` là cái bẫy nặng nhất: nó được phục vụ trên CẢ SÁU
+    // host, gồm /login của cổng phụ huynh — mount ở đó là cài service worker lên origin của họ.
+    // KHÔNG có ngoại lệ nào cho nhánh này.
+    const pham = (await quetNhomCam())
+      .filter((f) => f.src.includes("components/push/"))
+      .map((f) => f.duong);
+    expect(pham).toEqual([]);
+  });
+
+  it("…và chỉ import `lib/push/*` ở những chỗ ĐÃ KHAI ngoại lệ, đúng module đã khai", async () => {
+    const pham: string[] = [];
+    for (const f of await quetNhomCam()) {
+      const nhac = [...f.src.matchAll(/(?:@\/)?lib\/push\/[a-zA-Z0-9._-]+/g)].map((m) => m[0]);
+      if (nhac.length === 0) continue;
+      const duoc = NGOAI_LE_LIB_PUSH[f.duong];
+      // Không khai ngoại lệ ⇒ vi phạm. Khai rồi nhưng import module KHÁC ⇒ cũng vi phạm:
+      // ngoại lệ cấp cho MỘT module cụ thể vì module đó `server-only`, không cấp cho cả thư mục.
+      if (!duoc || nhac.some((x) => x.replace(/^@\//, "") !== duoc.module.replace(/^@\//, ""))) {
+        pham.push(`${f.duong} → ${nhac.join(", ")}`);
       }
     }
     expect(pham).toEqual([]);
+  });
+
+  it("mọi ngoại lệ phải CÒN ĐÚNG: tệp có thật, còn dùng, và module được miễn là `server-only`", async () => {
+    // Chống danh sách mục ruỗng theo cả ba chiều — cùng lý do `KHONG_LICH_CO_CHU_DICH` của
+    // `lib/cron/dang-ky-cron.test.ts` tồn tại. Vế thứ ba là vế QUAN TRỌNG NHẤT: ngoại lệ trên
+    // an toàn CHỈ VÌ module kia không thể vào bundle client. Ngày ai đó gỡ `import "server-only"`
+    // khỏi nó, ngoại lệ này lặng lẽ trở thành một đường đưa mã push sang origin phụ huynh.
+    const { readFileSync, existsSync } = await import("node:fs");
+    const loi: string[] = [];
+    for (const [tep, { module }] of Object.entries(NGOAI_LE_LIB_PUSH)) {
+      if (!existsSync(tep)) {
+        loi.push(`ngoại lệ trỏ tệp không tồn tại: ${tep}`);
+        continue;
+      }
+      if (!readFileSync(tep, "utf8").includes(module)) {
+        loi.push(`ngoại lệ đã hết dùng, XOÁ khỏi danh sách: ${tep} → ${module}`);
+      }
+      const duongModule = `${module.replace(/^@\//, "")}.ts`;
+      if (!existsSync(duongModule)) {
+        loi.push(`module được miễn trừ không tồn tại: ${duongModule}`);
+        continue;
+      }
+      if (!readFileSync(duongModule, "utf8").includes('import "server-only"')) {
+        loi.push(`module được miễn trừ KHÔNG còn server-only: ${duongModule}`);
+      }
+    }
+    expect(loi).toEqual([]);
   });
 });

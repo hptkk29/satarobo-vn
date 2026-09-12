@@ -1,9 +1,9 @@
-# Web Push (US-14b) — sổ thi công Đợt 1 → 4
+# Web Push (US-14b) — sổ thi công Đợt 1 → 5
 
 Thông báo đẩy vào điện thoại **nhân viên** khi có lead mới. Kênh **DUY NHẤT**, VAPID thuần —
 không Firebase, không dịch vụ bên thứ ba, không fallback.
 
-> **Trạng thái 08/09/2026 — Đợt 1, 2, 3, 4 xong. KÊNH CHƯA MỞ.**
+> **Trạng thái 13/09/2026 — Đợt 1→5 xong. KÊNH CHƯA MỞ.**
 > ~~Chưa có service worker, chưa có màn đăng ký thiết bị~~ — cả hai đã có (§11, §12).
 > ~~Chưa có một dòng code nào đọc 3 biến VAPID~~ — cả ba nay được đọc (§13).
 > ~~Công tắc `push.webPushEnabled` chưa có đường đọc~~ — engine đọc nó ở dòng đầu mỗi lượt cron.
@@ -692,10 +692,15 @@ có thể gửi thêm trong tối đa 5 phút.
 - **`notifyStaff` trả `soNguoi` (số người NHẬN), không phải số push đã đẩy.** 4 nơi đang cộng dồn
   nó vào biến tên `notified`. Đừng dùng con số đó để báo cáo về push.
 
-### 13.8b HAI LỖ CỦA MÁY DÙNG CHUNG — nằm ở code Đợt 3, CẦN CHỦ DỰ ÁN QUYẾT
+### 13.8b HAI LỖ CỦA MÁY DÙNG CHUNG — ~~CẦN CHỦ DỰ ÁN QUYẾT~~ **ĐÃ VÁ Ở ĐỢT 5, xem §14**
 
 Lăng kính phản biện của Đợt 4 tìm ra hai lỗ này. Cả hai nằm ngoài phạm vi "engine + cron" và cả
-hai đều đổi HÀNH VI đã chốt của Đợt 3, nên đợt này **cố ý không tự sửa** — ghi lại để quyết riêng.
+hai đều đổi HÀNH VI đã chốt của Đợt 3, nên Đợt 4 **cố ý không tự sửa** — ghi lại để quyết riêng.
+
+> ✅ **ĐÃ VÁ 13/09/2026 (Đợt 5).** Chủ dự án chốt hướng và cả hai lỗ đã đóng: (a) ở §14 (đăng xuất
+> thu hồi đăng ký, hai nửa client + server), (b) ở §15 (chuyển chủ khi endpoint đổi người, và
+> `thiet-bi.ts` thôi trả endpoint đầy đủ xuống HTML). **Giữ nguyên phần mô tả dưới đây** — nó là
+> lời khai bệnh, và §14.4 nói rõ cửa sổ nào VẪN còn hở.
 
 **(a) Đăng xuất KHÔNG thu hồi đăng ký push.** Service worker khoá theo ORIGIN, không theo phiên
 đăng nhập. Máy lễ tân dùng chung ở cơ sở, một hồ sơ Chrome: Sale A đăng nhập, bấm "Bật thông
@@ -736,3 +741,78 @@ Việc rẻ và độc lập nên làm trước dù chọn đường nào: **`li
 5. **Chỉ sau đó** mới bật `push.webPushEnabled` trên prod.
 
 Bỏ qua bước 4 là để lần chạy thật đầu tiên rơi thẳng vào điện thoại nhân viên.
+
+---
+
+## 14. Đợt 5 — vá hai lỗ bảo mật của máy dùng chung (13/09/2026)
+
+Việc **CHẶN**: chủ dự án không merge vào `test` cho tới khi hai lỗ ở §13.8b đóng, và không ai
+được đăng ký thiết bị thật trước đó.
+
+### 14.1 Bản đồ mọi đường đăng xuất — đo trước khi sửa
+
+Bốn nhóm, và điều quan trọng nhất là **nhóm nào client chạy được**:
+
+| Nhóm | Nơi | Client chạy được? |
+|---|---|---|
+| **1. Tự bấm, qua `logoutToGate()`** | `components/admin/topbar.tsx` · `app/(teacher)/teacher/_components/user-menu.tsx` · `app/(portal)/portal/_components/site-switcher.tsx` · `components/portal/v2-shell.tsx` | ✅ |
+| **2. Điều hướng thẳng `/dang-xuat`** | `components/sale/sale-nav.tsx` (`<a href>`) · `app/(portal)/portal/ho-so/_components/profile-form.tsx` (sau đổi mật khẩu) | ❌ |
+| **3. Server đá ra khi phiên chết** | 4 layout: `admin:82,85,88` · `teacher:87,88,90` · `portal:44` · `sale:76,77,79` → `redirect("/dang-xuat?reason=…")` | ❌ |
+| **4. Không có đường nào** | đóng thẳng tab · JWT hết hạn tự nhiên · xoá cookie tay · mất mạng lúc bấm | ❌ |
+
+Hai điều thuận lợi đo được: **chỉ `admin` + `giaovien` mount push** (portal/sale/auth/public đều
+không), và **cả hai nút bấm của hai host đó đi qua đúng một hàm `logoutToGate()`** ⇒ một điểm cắm.
+
+### 14.2 Hai nửa, phạm vi CỐ Ý KHÁC NHAU
+
+Đây là quyết định vận hành, không phải chuyện gọn gàng — gộp một nửa là sai ở đầu còn lại.
+
+**Nửa client — người dùng TỰ bấm ⇒ chỉ gỡ ĐÚNG MÁY ĐANG NGỒI.**
+`lib/auth/logout-client.ts`: đọc `pushManager.getSubscription()` → gọi
+`huyThietBiTheoEndpointAction({ endpoint })` → `sub.unsubscribe()` → rồi mới `signOut`.
+Gỡ hết ở đây mới là quá tay: người ta đăng xuất hằng ngày, và đăng ký của điện thoại riêng
+cùng origin `admin.satarobo.vn` sẽ chết theo mỗi lần họ rời máy công ty.
+
+**Nửa server — server ĐÁ RA vì tài khoản chết ⇒ gỡ TẤT CẢ.**
+`app/(auth)/dang-xuat/route.ts`: có `reason` (`session-invalidated` / `session-disabled` /
+`password-changed`) thì đọc `auth()` rồi `thuHoiMoiThietBiCuaNguoi`. Ở ba ca đó "gỡ hết" là
+ĐÚNG: tài khoản đã chết thì không được nhận push ở đâu cả. Đây cũng là ca **nguy hiểm nhất** mà
+hướng client không với tới — nhân viên vừa rời công ty, client không chạy, và lưới thứ hai
+(chuyển chủ lúc người mới bật thông báo) cũng vô dụng vì chẳng ai bật thông báo trên máy đó nữa.
+
+### 14.3 Ba thứ tự bắt buộc, mỗi thứ tự có một ca test canh
+
+1. **`auth()` TRƯỚC `signOut()`** trong route. Sau `signOut` cookie đã dọn, không còn cách nào
+   biết vừa thu hồi cho ai — và lỗi đó IM LẶNG: không ai bị gỡ, không ai báo gì.
+2. **Máy chủ TRƯỚC `unsubscribe()`** ở client. `unsubscribe` không hoàn tác được, gọi trước là
+   phá mất thứ duy nhất định danh được dòng cần thu hồi (đúng bài học `tatMayNay` ở Đợt 3).
+3. **Dọn push TRƯỚC `signOut`** ở client. Action lấy `userId` từ phiên server; sau `signOut` nó
+   chỉ trả "Chưa đăng nhập".
+
+**Một chỗ CỐ Ý làm NGƯỢC `tatMayNay`:** ở đây `unsubscribe()` **vẫn chạy dù máy chủ hỏng**.
+`tatMayNay` là thao tác SỔ SÁCH (người dùng muốn thấy dòng biến khỏi danh sách) nên huỷ trước rồi
+bỏ qua kết quả máy chủ là nói sai về kết quả. Ở đây mục đích là **BẢO VỆ người ngồi sau**: một
+endpoint đã huỷ là endpoint **không giao được cho AI**, nên cứ huỷ vẫn an toàn hơn để nguyên. Dòng
+DB còn `ACTIVE` sẽ tự chết ở lượt gửi kế (push service trả 410 ⇒ engine đánh `EXPIRED`).
+
+**Trần thời gian chờ 1,5 giây.** Người bấm "Đăng xuất" trên máy dùng chung là đang muốn ĐỨNG LÊN
+ĐI; mạng chậm mà chờ vô hạn thì họ bỏ đi với phiên còn mở — tệ hơn hẳn cái đang cố vá.
+
+### 14.4 ⚠️ CỬA SỔ CÒN HỞ — đừng đọc §14 như thể đã kín
+
+**Nhóm 4 KHÔNG đóng được từ client, và Đợt 5 không đóng nó.** Các ca còn hở:
+
+- **đóng thẳng tab / tắt trình duyệt** — không có sự kiện nào chạy kịp (`beforeunload` không
+  await được một lượt gọi mạng, và `sendBeacon` thì không mang được kết quả để biết đã thu hồi);
+- **JWT hết hạn tự nhiên** — không ai ghé `/dang-xuat`, không `reason` nào sinh ra;
+- **xoá cookie bằng tay / dùng cửa sổ ẩn danh rồi đóng**;
+- **mất mạng đúng lúc bấm đăng xuất** — quá 1,5 giây là bỏ qua, `signOut` vẫn chạy.
+
+Trong mọi ca đó, dòng `(endpoint, userId = người cũ, ACTIVE)` **còn sống**, và **lưới duy nhất là
+§14.5** (người mới bật thông báo trên đúng máy đó thì chuyển chủ). Lưới đó chỉ bật khi có người
+CHỦ ĐỘNG bấm "Bật thông báo" — nếu người ngồi sau không bấm, thông báo của người cũ vẫn nổ trên
+máy đó tới khi push service trả 410.
+
+**Kết luận trung thực: hai lỗ ở §13.8b nay đóng ở mọi đường CÓ MÃ CHẠY, không phải ở mọi đường.**
+Muốn kín hẳn thì cần một cột "thiết bị do client sinh id" để engine so với phiên gần nhất trên
+máy đó ⇒ migration ⇒ phải quyết riêng.
