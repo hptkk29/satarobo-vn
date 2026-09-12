@@ -1,8 +1,15 @@
-name: Shadow-compare công nợ PROD (read-only)
+name: Đo module tiền PROD (read-only)
 
 # =============================================================================
-# So công nợ SỔ MỚI (PaymentRequest ← PaymentAllocation) với công nợ ĐANG HIỂN THỊ
-# (Payment RECORDED) trên Supabase PROD — CHỈ ĐỌC.
+# Hai thước đo CHỈ ĐỌC trên Supabase PROD, chạy trong một lượt:
+#   1. `do-hien-trang-tien.ts`   — quy mô 7 sổ tiền, lượng cờ duyệt đang treo (PHA 2),
+#      phân bố `soDot` (PHA 3), và mức phơi của R-01/R-02/R-04/R-13.
+#   2. `shadow-compare-debt.ts`  — so công nợ SỔ MỚI (PaymentRequest ← PaymentAllocation)
+#      với công nợ ĐANG HIỂN THỊ (Payment RECORDED).
+#
+# Thứ tự đó là cố ý: bước 1 nói "sổ mới đã phủ bao nhiêu % số đơn". Chưa phủ thì con số
+# lệch của bước 2 phần lớn là "chưa backfill", không phải lỗi tính — đọc bảng lệch mà
+# không biết điều đó là kết luận sai ngay từ dòng đầu.
 #
 # VÌ SAO CẦN WORKFLOW NÀY (13/09/2026): `pnpm payments:shadow-compare` chạy được ở
 # máy dev, nhưng `.env` ở máy dev trỏ DB DEV — con số nó in ra KHÔNG nói gì về prod.
@@ -86,6 +93,26 @@ jobs:
 
       - name: Generate Prisma client
         run: pnpm exec prisma generate
+
+      # Chạy TRƯỚC shadow-compare có chủ đích: nó trả lời "sổ mới đã phủ bao nhiêu %
+      # số đơn". Chưa phủ thì con số lệch của bước sau phần lớn là "chưa backfill",
+      # và đọc bảng lệch mà không biết điều đó là kết luận sai ngay từ dòng đầu.
+      - name: Hiện trạng module tiền
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/hien-trang-tien.txt"
+          pnpm exec tsx scripts/do-hien-trang-tien.ts > "$out"
+          cat "$out"
+          {
+            echo '## Hiện trạng module tiền — Supabase PROD'
+            echo
+            echo '```'
+            cat "$out"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
 
       - name: Shadow-compare
         # Ghi ra file rồi mới phát đi 2 đường, để `set -o pipefail` không bị `tee`
