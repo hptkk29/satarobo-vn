@@ -857,26 +857,52 @@ giết đăng ký của người khác**.
 - **mất mạng đúng lúc bấm đăng xuất** — quá 1,5 giây là bỏ qua, `signOut` vẫn chạy (và nay cũng
   không `unsubscribe()`, vì không biết endpoint của ai — xem §14.3);
 - **`/api/auth/signout` của NextAuth** (`app/api/auth/[...nextauth]/route.ts` xuất cả `GET` và
-  `POST`, matcher của `proxy.ts` không loại `/api/*`) — **đường thứ 5**, không đi qua
-  `logoutToGate` cũng không qua `/dang-xuat` nên không nửa nào thu hồi. Không UI nào của repo
-  trỏ tới nó, và POST đòi CSRF token của NextAuth, nên hiện là đường **lý thuyết**; vẫn ghi ra.
+  `POST`, matcher của `proxy.ts` không loại `/api/*`) — **đường thứ 5**. ~~không nửa nào thu
+  hồi~~ **[ĐÃ CÓ LƯỚI TỪ ĐỢT 6]** nửa **POST** nay đi qua `events.signOut` (§18.2). Còn hở:
+  `GET /api/auth/signout` chỉ render trang xác nhận nên **không bắn event**; phiên đã hết cookie
+  (`if (!sessionToken) return` ở `signout.js`); cookie rác làm `jwt.decode` ném (cùng một khối
+  `try` với event); và handler quá **trần 1,5 giây**. Không UI nào của repo trỏ tới nó, và POST
+  đòi CSRF token của NextAuth, nên hiện là đường **lý thuyết**; vẫn ghi ra.
 
-### ⚠️ HỆ QUẢ CHƯA QUYẾT: đăng xuất xong, push TẮT tới khi tự bấm lại
+- **LÚC TÀI KHOẢN CHẾT thì KHÔNG LƯỚI NÀO CHẠY** — cửa sổ hở thứ 7, lăng kính Đợt 6 tìm ra, và
+  là cái hở **lớn nhất còn lại**. Cả ba nửa đều đòi **một lượt đăng xuất**. HR vô hiệu hoá một
+  Sale lúc 17h thứ Sáu; người đó đóng laptop và không bao giờ mở lại trình duyệt công ty ⇒ không
+  lượt đăng xuất nào ⇒ dòng `(endpoint, userId = người đã nghỉ, ACTIVE)` sống mãi, và engine phân
+  giải thiết bị theo `userId` lúc gửi mà **không hỏi `User` còn sống không** ⇒ thông báo tiếp tục
+  nổ trên **điện thoại riêng** của người đã nghỉ, kèm tên phụ huynh. Không có mã 410 để tự chữa
+  vì thiết bị vẫn tồn tại và vẫn nhận.
+  **Hai đường xử, chốt sau (NGOÀI phạm vi Đợt 6):** (a) gọi `thuHoiMoiThietBiCuaNguoi` ngay trong
+  action xoá/vô hiệu hoá nhân sự — rẻ, nhưng phải tìm hết các cửa ghi `isActive`/`deletedAt`;
+  (b) cho câu lấy thiết bị của engine join `user: { isActive: true, deletedAt: null }` — **một
+  câu**, fail-closed, và đóng được cả nhóm 4 ở trên. Hướng (b) rẻ hơn và mạnh hơn.
+
+- **`accountStatus` là cột sống THỨ BA mà cả ba lưới đều bỏ qua.** `authorize` coi
+  `accountStatus !== "ACTIVE"` là chết (chặn đăng nhập), nhưng `thuHoiNeuTaiKhoanChet` chỉ đọc
+  `isActive`/`deletedAt` (và có ca test **pin đúng hai cột đó**). Hôm nay vô hại: không mã sản
+  xuất nào ghi `accountStatus: "DISABLED"`. ⚠️ **Ai làm màn "tạm khoá tài khoản nhân viên" bằng
+  cột đó phải sửa `thuHoiNeuTaiKhoanChet` CÙNG LÚC** — nếu không, người bị khoá không đăng nhập
+  được nữa mà JWT cũ vẫn sống tới hết hạn và push vẫn chảy về máy họ.
+
+### ✅ HỆ QUẢ NÀY ĐÃ QUYẾT VÀ ĐÃ LÀM Ở ĐỢT 6 — xem §18.1
 
 Lăng kính lượt 2 chỉ ra một hệ quả mà §14 bản đầu không ghi: **không có gì bật lại đăng ký sau
-khi đăng nhập.** `ServiceWorkerRegister` chỉ cài worker (grep `getSubscription` trong nó = 0).
-Nên ai đăng xuất buổi tối thì **hôm sau không nhận gì** tới khi tự vào `/settings` bấm "Bật thông
-báo". Trên máy tính để bàn — nơi người ta đăng xuất hằng ngày — điều đó gần như vô hiệu hoá tính
-năng.
+khi đăng nhập.** Nên ai đăng xuất buổi tối thì **hôm sau không nhận gì** tới khi tự vào `/settings`
+bấm "Bật thông báo". Trên máy tính để bàn — nơi người ta đăng xuất hằng ngày — điều đó gần như
+vô hiệu hoá tính năng.
 
 Đây là hệ quả **trực tiếp của hướng đã chốt** ("đăng xuất thu hồi đăng ký"), không phải lỗi cài
 đặt: nó đến từ việc thu hồi **DÒNG**, không phải từ `unsubscribe()`. Bỏ `unsubscribe()` cũng không
 chữa được, vì dòng đã `REVOKED` thì engine không gửi nữa.
 
-**Bản vá rẻ, CHƯA LÀM vì cần chốt:** sau khi đăng nhập, nếu `Notification.permission === "granted"`
-mà `pushManager.getSubscription()` trả `null` thì **tự đăng ký lại** — không xin quyền lần nào
-(quyền đã có), nên không đụng ràng buộc "chỉ xin quyền trong một user gesture". Nhưng nó **tạo một
-đăng ký mà không có cú bấm nào**, đủ gần ràng buộc đó để phải hỏi trước.
+⚠️ **BẢN ĐÃ LÀM (Đợt 6) RỘNG HƠN bản đề xuất ở đây.** Bản đề xuất là "nếu `permission === granted`
+**mà `getSubscription()` trả `null`** thì tự đăng ký lại". Bản đã làm cũng chạy **khi ĐANG CÓ đăng
+ký**: nó ghi lại dòng DB một lần mỗi phiên tab, và **huỷ-rồi-đăng-ký-lại** khi khoá VAPID lệch.
+Chính phần rộng ra đó sinh **hai lỗ** mà lăng kính Đợt 6 phải vá bằng một cổng thứ năm ở server
+(§18.3): tự ghi danh người đăng nhập SAU trên máy dùng chung, và nút "Gỡ từ xa" tự mọc lại.
+
+⚠️ Và **câu "grep `getSubscription` trong `ServiceWorkerRegister` = 0" nay ĐÚNG CHỮ mà SAI NGHĨA**
+— grep vẫn ra 0 vì lời gọi đã dời sang `lib/push/tu-dang-ky-lai.ts`. Đó là một khẳng định dựa vào
+phép grep **sống sót qua đúng thay đổi mà nó sinh ra để phát hiện**; đừng dùng lại phép đo đó.
 
 Trong mọi ca ở trên, dòng `(endpoint, userId = người cũ, ACTIVE)` **còn sống**. Thứ thật sự bảo vệ
 người ngồi sau là **`bat()`**: nó luôn `unsubscribe()` đăng ký cũ trước khi đăng ký mới, nên ngay
@@ -989,8 +1015,8 @@ khẳng định chuỗi endpoint không xuất hiện trong bản ghi audit.
 | `lib/push/thiet-bi.ts` | **trả `endpoint` đầy đủ vào HTML 2 trang** | băm + nhãn cắt ✅ |
 | `lib/push/engine.ts` | đọc `endpoint`+`p256dh`+`auth` để GỬI | giữ nguyên — server-only, và mọi thứ nó **phát ra** (`resultJson`, log, `lastError`) đã băm/cắt từ Đợt 4 ✅ |
 | `components/push/bat-thong-bao.tsx` | so `tb.endpoint === ep` | so băm; hai chỗ còn lại đọc endpoint của **chính trình duyệt** (bắt buộc, để gọi action gỡ) ✅ |
-| `console.*` trong `lib/push/**` | — | 11 lời gọi, **không lời nào chạm endpoint** (chỉ id dòng · `dedupeKey` · lỗi cấu hình) ✅ |
-| Sentry | — | repo **không gọi `captureException`** ở đâu ✅ |
+| `console.*` trong `lib/push/**` | — | **19** lời gọi (Đợt 6: +4 ở `tu-dang-ky-lai`, +2 ở `thu-hoi`), **không lời nào chạm endpoint** — đã đo lại toàn bộ 19, và có ca test `[PUSH-D6-T07]` canh ở tầng hành vi ✅ |
+| Sentry | — | ⚠️ **LÝ LẼ CŨ SAI, kết luận vẫn đúng.** ~~repo không gọi `captureException` ở đâu~~ — không gọi TAY không có nghĩa là không gửi: `instrumentation-client.ts` đặt `replaysOnErrorSampleRate: 1.0` và SDK Next của Sentry **tự bắt lỗi chưa xử lý**. An toàn vì hai lý do KHÁC: (i) `networkDetailAllowUrls` chưa khai ⇒ Replay chỉ ghi URL+method+status+size, **không ghi thân request** (thân POST của `dangKyThietBiAction` mang endpoint + p256dh + auth); (ii) `maskAllText: true`. ⚠️ **Khai `networkDetailAllowUrls` cho một việc chẩn đoán khác là MỞ kênh này** ✅ |
 | `AuditLog` | không có bản ghi push nào | 1 bản ghi mới, **nhãn cắt** ✅ |
 
 **Kết luận: không còn đường nào phát endpoint/khoá ra ngoài server.**
@@ -1089,3 +1115,328 @@ endpoint ra DOM) không ai canh. `client-key.test.ts` chỉ khoá HAI HÀM, khô
   ĐÚNG cặp khoá VAPID của ta; ai có endpoint mà không có khoá riêng thì không gửi được gì. Việc
   che endpoint vẫn đúng, nhưng vì hai lý do khác: nó là **đầu vào duy nhất của đường chiếm đăng
   ký**, và nó là định danh thiết bị. Sửa lại câu chữ ở đợt sau, không đáng một commit riêng.
+
+---
+
+## 18. Đợt 6 — đợt CUỐI trước khi bật (13/09/2026)
+
+Phạm vi ĐÓNG BĂNG, đúng hai việc: **tự đăng ký lại sau đăng nhập** (§18.1) và **lưới thứ ba ở
+`events.signOut`** (§18.2). Mọi thứ lăng kính tìm ra ngoài hai việc đó nằm ở §18.6, KHÔNG vá.
+
+### 18.1 VIỆC 1 — tự đăng ký lại sau đăng nhập, KHÔNG xin quyền lần nào
+
+Vá mục "CHƯA QUYẾT" của §14.4. Đường mới: `lib/push/tu-dang-ky-lai.ts`, gọi từ
+`components/push/service-worker-register.tsx` (đã mount ở admin + site GV, hai layout đều `auth()`
++ `redirect("/login")` nên "sau khi đăng nhập" là điều kiện SẴN CÓ).
+
+**RÀNG BUỘC KHÔNG SỬA ĐƯỢC SAU:** đường này TUYỆT ĐỐI không gọi `Notification.requestPermission()`.
+Gọi xin quyền ngoài một cú bấm là cách chắc chắn để nhân viên bấm "Chặn" theo phản xạ, và trình
+duyệt **không hỏi lại** ⇒ kênh push của máy đó chết vĩnh viễn, code không có đường lấy lại.
+`permission` khác `"granted"` — **kể cả `"default"`** — thì hàm không làm gì.
+
+Điều luật đó được canh ở **hai lớp**, và lớp thứ hai ra đời vì lăng kính chỉ ra lớp thứ nhất không
+đủ: cổng hành vi cũ chỉ nằm trong tệp test của MODULE, nên thêm một lời gọi xin quyền vào CHÍNH
+`service-worker-register.tsx` (đúng chỗ Đợt 6 vừa mở đường) thì cả bộ vẫn xanh — jsdom không có
+`Notification`, nên rào `typeof` của chính kẻ vi phạm che nó đi. Nay:
+`[PUSH-D6-T12]` dựng `Notification` thật với `permission: "default"` (trạng thái nguy hiểm nhất) và
+đếm ở MỌI ca **kèm đối chứng dương**, cộng một **cổng NGUỒN** quét ba tệp của đường tự động
+(`service-worker-register.tsx` · `tu-dang-ky-lai.ts` · `bo-nho-may.ts`) — cố ý KHÔNG quét
+`bat-thong-bao.tsx`, nơi DUY NHẤT được phép xin quyền (`rg requestPermission` toàn repo ⇒ đúng một
+lời gọi, ở đó).
+
+**NĂM CỔNG, theo thứ tự:**
+
+| # | Cổng | Không có nó thì |
+|---|---|---|
+| 1 | `Notification.permission === "granted"` (chỉ ĐỌC) | mất kênh vĩnh viễn ở máy bấm "Chặn" |
+| 2 | chính người này chưa `da-tat-tay` trên máy này | nút "Tắt"/"Gỡ" thành VÔ NGHĨA — lượt tải kế dựng lại |
+| 3 | khoá VAPID của đăng ký cũ KHỚP khoá server | 403 `VapidPkHashMismatch` câm vĩnh viễn (403 cố ý không EXPIRE) |
+| 4 | endpoint chưa được người này đồng bộ trong phiên tab | mỗi lượt tải trang cứng = 1 Server Action + 2 `revalidatePath` + `resolveActor` (≈9 câu DB) |
+| 5 | **ở SERVER** — `tuDong: true` (xem §18.3) | hai lỗ máy-dùng-chung, xem §18.3 |
+
+Cổng 3 có ba nhánh và nhánh thứ ba là nhánh phải nghĩ lâu nhất: **không đọc được**
+`sub.options.applicationServerKey` (Safari cũ) ⇒ **KHÔNG LÀM GÌ CẢ**. Hai đường kia đều tệ hơn —
+tái dùng mù là 403 câm, còn huỷ-rồi-đăng-ký-lại mỗi lượt tải trang là đẻ một endpoint mới + một
+dòng mồ côi **mỗi lần**.
+
+**Hai mẩu trạng thái ở trình duyệt** (`lib/push/bo-nho-may.ts`) fail sang **hai chiều NGƯỢC NHAU**,
+mỗi chiều có lý do riêng và mỗi chiều có ca test khoá:
+
+| Mẩu | Kho | Đọc lỗi ⇒ | Vì sao chiều đó |
+|---|---|---|---|
+| `da-tat-tay` | `localStorage` (sống qua đóng tab) | `true` = "đừng tự bật lại" | đoán sai chiều này chỉ bắt bấm một lần; chiều kia là tự bật lại thứ họ vừa tắt ⇒ người ta đi chặn quyền ở cấp trình duyệt |
+| `da-dong-bo` | `sessionStorage` (CHẾT theo tab) | `false` = "ghi thêm một lượt" | mất mốc chỉ tốn; coi như đã đồng bộ khi không chắc là MẤT đăng ký |
+
+⚠️ **CẢ HAI KHOÁ MANG THEO `nguoiDung` (`session.user.id`), KHÔNG theo origin** — đây là bản vá
+của hai chuỗi hỏng mà lăng kính đo được, cả hai IM LẶNG:
+
+- **mốc `da-dong-bo` theo endpoint đơn ⇒ RÒ DỮ LIỆU.** `sessionStorage` **sống qua đăng xuất trong
+  cùng tab** (redirect về `/login` không xoá nó). Chuỗi tất định: quản trị bump `tokenVersion` (9
+  nơi làm việc đó) ⇒ layout đá A sang `/dang-xuat` ⇒ tài khoản **còn sống** nên không thu hồi gì,
+  và vì là redirect phía server nên **không nửa client nào chạy** ⇒ đăng ký E còn sống ⇒ B đăng
+  nhập **trong cùng tab** ⇒ mốc khớp E ⇒ đường tự động trả "đã đồng bộ" và **không gọi máy chủ** ⇒
+  **không chuyển chủ** ⇒ mọi lead của A nổ trên màn hình khoá máy B đang cầm, **kèm tên phụ
+  huynh**, và B không nhận gì cả ngày. Cổng 4 khi đó chặn đúng lời gọi tạo nên **"lưới thứ hai"**
+  của Đợt 5.
+- **cờ `da-tat-tay` theo origin ⇒ BỊT MIỆNG NGƯỜI KHÁC.** A bấm "Tắt trên máy này" cuối buổi ⇒
+  sáng sau B đăng nhập trên đúng máy lễ tân đó và **không bao giờ** được đăng ký lại, trong khi
+  `NHAN.DA_BAT` vẫn hứa "thông báo sẽ tới máy này" — tức nhân viên đang **được dặn** rằng "chưa
+  nhận gì" là bình thường.
+
+`nguoiDung` **không phải dữ liệu mới trong HTML**: `components/admin/topbar.tsx` và
+`app/(teacher)/teacher/layout.tsx` đã truyền đúng `session.user.id` cho client từ trước (đã đo).
+
+**Dây nối phải là `register() → navigator.serviceWorker.ready → tuDangKyLaiPush(reg, nguoiDung)`:**
+- không dùng registration mà `register()` trả về — worker có thể còn `installing`, và
+  `pushManager.subscribe()` trên registration chưa có `active` worker ném `InvalidStateError`, tức
+  **đúng lượt tải ĐẦU của một máy mới** (lượt duy nhất thật sự cần) sẽ hỏng còn mọi lượt sau lại
+  chạy ⇒ bug không tái hiện được khi đi thử. `[PUSH-D6-T08]` cho `register()` và `ready` trả **hai
+  đối tượng khác nhau** rồi khẳng định hàm nhận đúng bản của `ready`;
+- không tách ra một `useEffect` riêng — việc cài worker bị hoãn tới sự kiện `load`, nên effect độc
+  lập chạy TRƯỚC và không thấy registration nào ở lượt tải đầu.
+
+### 18.2 VIỆC 2 — lưới THỨ BA ở `events.signOut` của Auth.js
+
+`lib/push/thu-hoi.ts → thuHoiKhiAuthSignOut`, cắm ở `lib/auth.ts`. Giữ nguyên hai nửa cũ; đây là
+lưới **thứ ba**, không thay thế.
+
+**Nó phủ THÊM gì:** mọi lượt **POST** tới endpoint signout — đo ở
+`@auth/core/lib/actions/signout.js`. Cụ thể là ai POST thẳng `/api/auth/signout`, gồm trang xác
+nhận đăng xuất mặc định của Auth.js (repo không khai `pages.signOut`, không link nào trỏ tới, nên
+đường đó reachable chứ chưa ai dùng).
+
+**Nó KHÔNG phủ gì** (đọc mã thật, không suy diễn): `if (!sessionToken) return` ở đầu hàm ⇒ phiên
+đã hết cookie thì không bắn · `jwt.decode` ném (cookie rác, khoá lệch) ⇒ không bắn, vì cùng một
+khối `try` · `GET /api/auth/signout` chỉ render trang xác nhận · và **cả trên đường nó phủ, nó chỉ
+phủ NẾU hai truy vấn xong dưới trần 1,5 giây**.
+
+⚠️ **HAI NỬA CŨ ĐI QUA EVENT THEO HAI CÁCH KHÁC NHAU**, và khác biệt đó là lý do không nửa nào
+thay thế được nửa nào (bản đầu của chú thích gộp chúng làm một — lăng kính sửa):
+- nửa **SERVER** (`/dang-xuat` → `signOut()` của `@/lib/auth`) dựng một **POST nội tiến trình** ⇒
+  không thể bị huỷ giữa đường;
+- nửa **CLIENT** (`logoutToGate` → `signOut` của `next-auth/react`) là một **`fetch` từ trình
+  duyệt** ⇒ **HUỶ ĐƯỢC**: mất mạng đúng lúc bấm, bấm Stop, đóng tab giữa lúc chờ thì server **không
+  bao giờ** chạy event. Nên `goDangKyPushCuaMayNay` vẫn là nửa không thay thế được.
+
+**GỌI `thuHoiNeuTaiKhoanChet`, TUYỆT ĐỐI KHÔNG `thuHoiMoiThietBiCuaNguoi`** — đây là cả ngữ nghĩa
+của việc. Event phát ở MỌI lượt đăng xuất, kể cả lượt thường ngày của một tài khoản còn sống. Cắm
+sai hàm là đảo ngược quyết định vận hành ở §14.2: đăng xuất ở máy công ty buổi tối thành **mất push
+trên điện thoại riêng**, im lặng.
+
+**Trần chờ 1,5 giây là BẮT BUỘC, và nó phải ĐỂ LẠI VẾT.** `@auth/core` gọi
+`await events.signOut?.({ token })` **không có timeout nào**. Nhánh "tài khoản đã chết" tốn **hai**
+lượt DB (`findUnique` + `updateMany`) — tức nhánh duy nhất bắt buộc phải xong lại là nhánh **chậm
+gấp đôi**, nên nó dễ vượt trần nhất. Khi vượt, vế thua của `Promise.race` **không bao giờ settle**
+nên `catch` không chạy và `console.warn` của `thuHoiMoiThietBiCuaNguoi` cũng không chạy ⇒ trước bản
+vá này, ca test thực chất đang **PHÊ CHUẨN sự bỏ qua im lặng**. Nay trần thắng thì log một dòng
+tường minh kèm `userId`, và timer được `clearTimeout` ở `finally`. `[PUSH-D6-T10]` còn **chặn trên
+và chặn dưới** giá trị hằng (500 ≤ `CHO_SIGNOUT_MS` ≤ 2000) — không có vế đó thì đổi nó thành
+`120_000` vẫn xanh, mà mỗi lượt đăng xuất có thể treo hai phút khi pooler chập.
+
+⚠️ **`/dang-xuat` nay tính cùng một quyết định HAI LẦN — TRÙNG CÓ CHỦ ĐÍCH, đừng "dọn".** Chi phí
+đo được: 2 lượt đọc + tối đa 2 lượt ghi cho một lượt ghé route (lượt ghi thứ hai lọc
+`status: "ACTIVE"` ra 0 dòng nên **idempotent**, và mốc/lý do của lượt đầu còn nguyên — lăng kính
+phản bác được nỗi lo "ba nửa ghi đè nhau"). Giữ cả hai vì chúng **không cùng tính chất**: lời gọi
+trong route **không có trần**, nên nó là lượt duy nhất **chắc chắn hoàn tất** cho một tài khoản đã
+chết; lưới ở event có trần (đăng xuất không được treo) và bù lại phủ những lượt POST mà repo không
+tự gọi.
+
+**Trần cộng dồn của một cú bấm Đăng xuất nay là 3,0 giây xấu nhất** (1,5s client cho
+`goDangKyPushCuaMayNay` + 1,5s server cho event trước khi dọn cookie). Ghi ra để không ai ngạc
+nhiên lúc nghiệm thu. Thiệt hại là **cảm giác treo**, không phải phiên còn mở: nếu người dùng bỏ
+đi, trình duyệt vẫn hoàn tất POST nên phiên vẫn bị dọn. Hạ `CHO_SIGNOUT_MS` xuống ~800ms là lựa
+chọn có sẵn (nhánh sống chỉ cần 1 lượt đọc) — **chưa làm, cần chủ dự án chốt**.
+
+**`import "server-only"` trong bundle middleware: ĐÃ ĐO, không ném.** `proxy.ts` import `auth`, nên
+`lib/auth.ts` (và qua nó `lib/push/thu-hoi.ts`) vào bundle middleware. `pnpm build` exit=0; chunk
+middleware 720.305 → 721.637 byte (+1,3 KB); `@prisma/client` vẫn external. Lăng kính đo thêm:
+trên đúng chunk đó, chuỗi log của `thu-hoi` có mặt nhưng chuỗi `"cannot be imported from a Client
+Component"` **không** ⇒ `server-only` phân giải ra bản server. Và proxy được biên dịch cho **node**,
+không phải edge (`functions-config-manifest.json` → `"/_middleware": { "runtime": "nodejs" }`).
+
+### 18.3 CỔNG THỨ NĂM ở server — vá HAI LỖ mà VIỆC 1 tự đẻ ra
+
+Lăng kính Đợt 6 tìm ra hai lỗ **NẶNG**, cả hai là hệ quả trực tiếp của việc bản đã làm **rộng hơn**
+bản đề xuất ở §14.4. Cả hai luật dưới đây **phải ở server**: client không có danh tính đáng tin, và
+cái máy cần chặn thì ta **không với tới được** để cắm cờ. Đường tự động gửi `tuDong: true`; đường
+bấm tay **cố ý không gửi** — chính nó là chỗ người dùng tạo tiền sử.
+
+**LUẬT 1 — "người này đã từng ĐỒNG Ý trên trang này".** Quyền thông báo thuộc về **ORIGIN**, không
+thuộc về ai. Máy lễ tân, một hồ sơ Chrome: Sale A bấm "Bật" (quyền origin thành `granted` vĩnh
+viễn) rồi đăng xuất; Sale B đăng nhập và **lượt tải trang đầu tiên tự ghi danh B**. B chưa bao giờ
+được hỏi, mà từ đó mọi lead của B nổ trên màn hình khoá của cái máy **đặt ở sảnh**, kèm tên phụ
+huynh, trong tầm mắt khách đang chờ. Nay `tuDong: true` đòi **ít nhất một dòng** `(userId của
+phiên, origin của header)` — bất kể trạng thái, vì dòng của lần bật cũ đã bị đăng xuất đưa về
+`REVOKED`. Không có tiền sử ⇒ từ chối, **không tạo gì**.
+
+**LUẬT 2 — không hồi sinh một dòng bị thu hồi vì lý do KHÁC "vừa rời ghế".** Nút "Gỡ" một thiết bị
+**Ở XA** (mất điện thoại; hoặc một máy ở cơ sở khác) không thể `unsubscribe()` — ta không với tới
+trình duyệt đó. **Trước Đợt 6, gỡ từ xa là DỨT ĐIỂM.** Với đường tự động, lượt tải trang kế tiếp
+trên đúng máy đó thấy đăng ký cũ còn sống, khoá vẫn khớp, rồi nhánh `update` dọn
+`revokedAt`/`revokedReason`/`failureCount` và đặt lại `ACTIVE` ⇒ **hồi sinh đúng dòng vừa gỡ**, và
+danh sách thiết bị không có gì báo là nó đã quay lại (`createdAt` vẫn là ngày cũ). Nay chỉ **một**
+lý do được hồi sinh: `"Tắt trên máy này"` — lý do mà nút "Tắt" và nửa client của đăng xuất cùng
+dùng, và nút "Tắt" còn cắm cờ `da-tat-tay` nên đường tự động không tới được đó ⇒ phần còn lại đúng
+là đăng xuất. Ba lý do còn lại (tự gỡ · tài khoản chết · chuyển chủ) đều là **một quyết định của
+con người** mà máy không được tự lật lại ⇒ đòi một cú bấm.
+
+Lý do đó là **một hằng dùng chung** (`LY_DO_TAT_MAY_NAY`) giữa câu ghi và cổng đọc. Hằng dùng chung
+**không tự canh** được việc ai đó thay một chỗ bằng chuỗi gõ tay — đã cấy đúng lỗi đó và bộ test
+vẫn xanh — nên `[PUSH-D6-T14]` **đọc chuỗi THẬT** từ câu ghi của đường đăng xuất rồi nạp lại vào
+cổng, kèm một vế đối chứng với một chuỗi khác.
+
+⚠️ Cờ `tuDong` **chỉ SIẾT, không bao giờ nới** — đó là lý do nhận nó từ client vẫn an toàn: kẻ gửi
+`tuDong: false` chỉ nhận đúng đường mà nút bấm tay vốn đã có, không thêm quyền nào. Có ca test pin
+đúng tính chất đó; ngày nào cờ này nới được điều gì thì lập luận này sập.
+
+### 18.4 Một phát hiện MÔI TRƯỜNG phải ghi ra, kẻo bộ test sau xanh giả
+
+Trong bộ test của repo, biến toàn cục **`localStorage` KHÔNG phải `Storage` của jsdom** mà là một
+object rỗng prototype `null` — **Node 25 tự phát ra** một `localStorage` toàn cục (kèm cảnh báo
+`--localstorage-file` không có đường dẫn hợp lệ) và bản đó thắng bản của jsdom ⇒
+`localStorage.getItem` ném `TypeError`. `sessionStorage` thì **vẫn là bản thật** — càng dễ nhầm, vì
+một nửa trông như đang chạy.
+
+Hệ quả nếu không dựng stub: mọi hàm trong `bo-nho-may.ts` đi nhánh `catch`, `daTatTayOMayNay()` luôn
+trả `true` ⇒ đường tự động **luôn thoát ở cổng 2**, và cả bộ test XANH mà không kiểm gì.
+`tests/_helpers/storage-gia.ts` tồn tại vì điều đó và mang cả phép đo trong chú thích. Ca
+`[PUSH-D6-T03]` còn có một vế **chống xanh vô nghĩa**: `expect(new Set(ketCuc).size)
+.toBeGreaterThan(4)` — nếu tám lượt cùng thoát ở một cổng thì phép đếm `requestPermission` xanh một
+cách vô nghĩa, và đó chính là điều xảy ra khi quên cắm storage.
+
+Kèm một thay đổi nhỏ có lý do đo được: dời lời đọc `NEXT_PUBLIC_VAPID_PUBLIC_KEY` từ **module
+scope** vào **trong `bat()`**. Đọc ở module scope thì `vi.stubEnv` **vô tác dụng** (module đã nạp
+trước khi `beforeEach` chạy) — đó là lý do nhánh `bat()` chưa từng có ca test nào, và là lý do dòng
+`stubEnv("…", "x")` trong bộ test cũ không kiểm gì. Trên prod không đổi: `NEXT_PUBLIC_*` nhúng lúc
+build.
+
+### 18.5 Đã kiểm những gì
+
+| Cổng | Kết quả |
+|---|---|
+| `pnpm typecheck` | exit=0 |
+| `pnpm lint` | exit=0 — 2 cảnh báo CÓ SẴN, không đổi |
+| `pnpm test:unit` | exit=0 — **6148 qua**, 440 tệp (trước Đợt 6: 6057 / 437) |
+| `pnpm build` | exit=0 |
+| `pnpm lint:boundaries` | exit=0 — 34 cảnh báo, **không đổi** |
+| Cấy lại lỗi | **46/46 ĐỎ đúng chỗ** (18 VIỆC 1 · 7 VIỆC 2 · 21 bản vá lăng kính). Mỗi ca grep xác minh phép thay đã ăn rồi mới chạy; đối chiếu byte sau khi khôi phục |
+
+**Đo bundle client** (grep `.next/static`, **có đối chứng dương**): ba chuỗi server-only của module
+push → **0 tệp**; đối chứng dương `"Bật thông báo"` → 2 tệp; chuỗi của đường mới → đúng 2 chunk
+client đó. Không dùng được bản đồ chunk→route: build Turbopack **không phát**
+`app-build-manifest.json` (nợ, §18.6).
+
+**Lăng kính phản biện** chạy **tuần tự, chỉ đọc**, bốn góc nhìn (VIỆC 1 · VIỆC 2 · test thật? · bán
+kính nổ). `git status` giữ nguyên suốt và HEAD không đổi; cả bốn agent tự khai `da_ghi_tep = false`
+— yêu cầu cứng sau sự cố Đợt 4. Nó tìm ra **hai lỗ NẶNG** (§18.3), **8 mục VỪA/NHẸ đã vá**, và
+**7 ca test XANH GIẢ** mà bộ cũ không bắt được — đáng kể nhất:
+
+- `[PUSH-D6-T11]` pin `events.signOut` bằng `toContain` trên **văn bản nguồn** ⇒ lách được bằng
+  **đúng một dấu `//`** (chú thích cũng là text; `@typescript-eslint/no-unused-vars` chỉ ở mức
+  `warn` và `pnpm lint` không có `--max-warnings` nên lint exit 0). Nay pin bằng **AST** qua
+  `typescript` (đã có sẵn, **không thêm dependency**): đúng một khoá `events`, không spread nào
+  mang `events`, `signOut` là một **định danh trần** tên `thuHoiKhiAuthSignOut`. Kèm pin
+  `session.strategy === "jwt"` **đặt cạnh** — repo có `adapter: PrismaAdapter(db)` nên mặc định
+  của `@auth/core` là chiến lược *database*; ai "dọn" dòng `strategy` (nó trông như mặc định dư
+  thừa) thì thư viện bắn `({ session })` chứ không `({ token })`, cổng `!("token" in message)`
+  thoát sớm, và **lưới thứ ba tắt im lặng**.
+- vế `expect(src).not.toContain("thuHoiMoiThietBiCuaNguoi")` là **ĐỎ GIẢ**: repo viết chú thích dài
+  giải thích "đừng làm X", nên nêu tên hàm bị cấm trong một lời cảnh báo là đủ làm test đỏ mà hành
+  vi y nguyên. Nay chỉ xét đúng biểu thức được cắm.
+- cổng `huy` **nằm trong chuỗi Promise** (cửa sổ "đang cài, người dùng bấm sang trang khác") chưa
+  có ca nào — ca mang tên đó chỉ chứng minh `removeEventListener` chạy. Nay có ca giữ `ready` để
+  mở đúng cửa sổ đó.
+- không cổng nào canh **"không log endpoint đầy đủ"** trên đường nóng mới, trong khi **Sentry
+  browser đang bật** với `replaysOnErrorSampleRate: 1.0`. Nay `[PUSH-D6-T07]` chạy 5 nhánh lỗi rồi
+  khẳng định log không chứa endpoint / `p256dh` / `auth`, **kèm đối chứng dương** là đã log gì đó.
+- hai nhánh thoát của cổng khoá (`THIEU_KHOA`, `KHOA_KHONG_DOI_CHIEU_DUOC`) **không để lại vết
+  nào**. Ca thật đang chờ sẵn: người vận hành đặt ba biến VAPID trên Vercel rồi **không deploy
+  lại** — `NEXT_PUBLIC_*` nhúng lúc BUILD, nên đường tự động của **cả công ty** chết và triệu chứng
+  duy nhất là "sao tôi không nhận được thông báo". Nay mỗi nhánh log một dòng, và có ca đếm.
+
+**Lăng kính cũng PHẢN BÁC được** (ghi để người sau không đo lại): ba nửa **không** ghi đè
+`revokedAt`/`revokedReason` của nhau (vế `status: "ACTIVE"` trong `where` lo việc đó) · **không**
+đếm sai `soDong` · Đợt 6 thêm **đúng 1–2** lượt DB cho một cú bấm đăng xuất (cú bấm vốn đã ≈10
+lượt, phần lớn do `resolveActor`) · vế thua của `Promise.race` **không thể** gây
+`unhandledRejection` (cả hai lượt DB tự `try/catch`) · `updateMany` là **một câu autocommit** nên
+thực thể bị đóng băng để lại "đã áp dụng" hoặc "chưa", không bao giờ nửa hàng · **không** tìm được
+đường nào gỡ sạch push của một nhân viên **còn sống** · phụ huynh trên môi trường một-origin
+**không thể** gỡ push của nhân viên qua lưới mới (vế `userId` lo) · lưới mới **không** mở đường cho
+kẻ ngoài kích hoạt thu hồi từ xa (POST đòi CSRF token) · **không** module nào khác trong repo xin
+quyền thông báo ⇒ **trên prod, ngày merge và ngày bật công tắc, cổng 1 thoát cho 100% nhân viên**,
+nên VIỆC 1 im lặng hoàn toàn tới lần có người bấm "Bật" đầu tiên (hệ quả dùng được: ba phát hiện
+nặng sẽ lộ ra **trên `test.satarobo.vn` trước**, nơi UAT đã bấm).
+
+### 18.6 Nợ — ghi có ý thức, KHÔNG vá trong đợt này
+
+Phạm vi đóng băng. Mọi mục dưới đây lăng kính tìm ra nhưng **ngoài hai việc**, hoặc thuộc mã của
+đợt khác.
+
+1. **Cổng `[PUSH-D3-T14]` KHÔNG đi theo cây import** — nợ chủ dự án đã chỉ đích danh "ghi sổ, đừng
+   sửa". Nay **đo được** chứ không còn là lý thuyết: `app/(portal)` import từ **sáu** thư mục
+   component dùng chung (`components/{assignments,chat,lms,portal,report-card,transcript,ui}`) mà
+   cổng chỉ quét đúng `components/portal` ⇒ thêm `<ServiceWorkerRegister/>` vào một component
+   `components/chat/**` mà trang portal đang vẽ là cài worker lên `hocvien.satarobo.vn` **mà cổng
+   vẫn xanh**. Hướng đóng: đảo từ blacklist sang **whitelist**, hoặc cho cổng đi theo cây import từ
+   mỗi `page.tsx`/`layout.tsx` của bốn nhóm route.
+2. **LÚC TÀI KHOẢN CHẾT không lưới nào chạy** — xem §14.4 (cửa sổ hở thứ 7). Đây là **việc đáng làm
+   nhất tiếp theo**; hướng (b) là một câu join trong engine.
+3. **`accountStatus` là cột sống thứ ba** — xem §14.4.
+4. **Nhánh `LOI` lặp lại ở mọi lượt tải trang cứng, không có lùi.** Mốc `da-dong-bo` cố ý chỉ đặt
+   khi THÀNH CÔNG (để thử lại), nên một lỗi server dai dẳng ⇒ mỗi lượt tải trang cứng một lượt gọi
+   action. Ca kích hoạt đang chờ: nếu ai bấm "Bật" **trước** khi migration chạy thì quyền thành
+   `granted` vĩnh viễn và `dangKyThietBiAction` ném P2021 mãi. Hai việc rẻ khi làm: một mốc "vừa
+   thử và TRƯỢT" theo phiên tab (~10 phút), và bọc phần DB của action để nó **trả** `ok:false` thay
+   vì ném (ném ở Server Action là một ngoại lệ "server error" vào Sentry cho việc người dùng không
+   yêu cầu).
+5. **Xoay khoá VAPID: dòng cũ vẫn `ACTIVE`.** Đường tự động `unsubscribe()` đăng ký cũ nhưng
+   **không thu hồi dòng cũ** ở máy chủ. Phần lớn tự chữa (endpoint đã huỷ ⇒ push service trả 410 ⇒
+   `EXPIRED`); phần không tự chữa là khi `unsubscribe()` **thất bại** — lúc đó dòng cũ sống, engine
+   gửi bằng khoá mới ⇒ **403 `CHET`** ⇒ `DEAD` ngay lượt đầu, và người dùng thấy một **dòng ma**
+   trong `/settings` không biết gỡ cái nào. `bat()` có **đúng cùng lỗ** ⇒ sửa thì phải sửa cả hai
+   (mã Đợt 3). Đo kèm: **cửa sổ giữa lúc xoay khoá và lượt tải admin kế tiếp là MẤT TIN, không phải
+   hoãn tin** (403 → `DEAD` ngay, không `THU_LAI`).
+6. **`navigator.serviceWorker.ready` có thể không bao giờ resolve** ⇒ chuỗi treo im lặng, `.catch`
+   không chạy, **không một dòng log**. Rẻ khi làm: `Promise.race` với 15s rồi `console.warn`.
+7. **`public/sw.js` không có handler `pushsubscriptionchange`** — sự kiện DUY NHẤT trình duyệt bắn
+   khi chính nó xoay/thu hồi đăng ký. Đợt 6 **giảm** nợ này (lượt tải admin kế tiếp dựng lại) nhưng
+   nó vẫn là đường duy nhất chữa được cho người **không mở tab admin nào** — đúng nhóm mà push sinh
+   ra để phục vụ. Khi làm: service worker **không có Server Action**, phải POST vào một route xác
+   thực bằng cookie ⇒ quyết riêng.
+8. **`layThietBiCuaToi` không `.catch`** ⇒ nếu mã lên **trước** migration thì `/admin/settings` và
+   `/teacher/ho-so` trả trang lỗi cho mọi nhân viên (câu `centers` ngay dưới nó thì CÓ
+   `.catch(() => [])`, nên đây là chỗ sót chứ không phải quyết định). Mã Đợt 3; và thứ tự bật ở
+   §18.7 đã xử lý được ca này.
+9. **Công tắc `push.webPushEnabled` KHÔNG gác VIỆC 1.** Nó chỉ được đọc ở đầu `chayLuotGuiPush`
+   (engine). Đường **đăng ký** thiết bị không đọc nó — cố ý từ Đợt 3, để nghiệm thu được đường ghi
+   trước khi mở kênh. Hệ quả phải nhớ: **cần rollback nhanh của VIỆC 1 là biến env + redeploy,
+   KHÔNG phải công tắc.**
+10. **Cờ `da-tat-tay` theo (người × origin), không theo thiết bị.** Cùng người, hai trình duyệt
+    trên cùng một máy là hai cờ rời — đúng, vì đăng ký cũng rời. Nhưng nhánh `!sub` của
+    `tatMayNay()` (nay cắm cờ) **gần như không tới được từ giao diện** và không có ca test: nút chỉ
+    hiện khi `tt === "DA_BAT"`, mà trạng thái đó đòi `getSubscription()` đã trả một sub ⇒ chỉ tới
+    được trong một cuộc đua. Không phải lỗi; ghi để người sau đừng tưởng nó có lưới.
+11. **Cổng khoá VAPID lệch của đường BẤM TAY chưa từng được ca nào chạy** (`[PUSH-D6-T09]` bấm
+    "Bật" với `endpointHienTai = null`). Đường TỰ ĐỘNG thì có. Mã Đợt 3.
+12. **Không có bản đồ chunk→route** để khẳng định mã push client không được phục vụ trên origin phụ
+    huynh: build Turbopack không phát `app-build-manifest.json`. Phép đo hiện dùng là grep
+    `.next/static` cho chuỗi `server-only` (0 tệp) **kèm đối chứng dương** — nó chứng minh mã
+    server không lọt xuống client, **không** chứng minh mã client tới host nào.
+
+### 18.7 Việc người vận hành phải làm — theo đúng thứ tự
+
+Công tắc `push.webPushEnabled` vẫn **TẮT**. Không migration nào được chạy tay: `migrate-test.yml`
+tự chạy `prisma migrate deploy` khi push `test`.
+
+1. Merge PR vào `test`. Đợi **cả hai** workflow xong: `CI` và `Migrate TEST DB`.
+2. Nạp **ba biến env VAPID** cho môi trường `test`: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`,
+   `NEXT_PUBLIC_VAPID_PUBLIC_KEY`. ⚠️ Cả ba phải là **Non-sensitive**, và
+   `NEXT_PUBLIC_VAPID_PUBLIC_KEY` **nhúng lúc BUILD** ⇒ **phải redeploy** sau khi đặt, nếu không
+   bundle đang chạy vẫn mang `undefined` (nay có một dòng log nói ra ca đó).
+3. Vào `/settings` trên `test.satarobo.vn`, bấm **"Bật thông báo"** một lần. Đây là bước tạo **tiền
+   sử** mà LUẬT 1 của §18.3 đòi; không có nó, đường tự động cố ý không làm gì.
+4. Bật công tắc `push.webPushEnabled` ở màn Cấu hình vận hành.
+5. Tạo một lead mới để sinh một thông báo `lead.moi:` (allowlist đợt này chỉ có đúng tiền tố đó).
+
+Ba phát hiện nặng của §18.3 sẽ lộ ra **trên `test` trước prod** — trên prod chưa ai bấm "Bật" nên
+cổng 1 thoát cho 100% nhân viên.
