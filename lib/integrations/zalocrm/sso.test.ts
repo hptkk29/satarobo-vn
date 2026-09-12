@@ -116,8 +116,17 @@ describe("mintSsoToken — vé SSO 60 giây vào ZaloCRM", () => {
     // Lưới thứ hai, độc lập với bộ khoá: không GIÁ TRỊ CHUỖI nào chứa dãy số dài kiểu
     // số điện thoại. Chỉ soi giá trị chuỗi, vì `iat`/`exp` là mốc unix 10 chữ số —
     // quét cả `JSON.stringify(payload)` thì ca này đỏ vĩnh viễn vì lý do sai.
+    //
+    // ⚠️ `jti` ĐỨNG NGOÀI phép quét này, và không phải để "cho ca xanh": nó là
+    // `randomUUID()`, tức 32 chữ số hex ngẫu nhiên — có xác suất thật rơi vào 9 chữ số
+    // liền nhau. Bản đầu quét cả nó nên ca này ĐỎ CHẬP CHỜN vài phần trăm số lượt: chạy
+    // lẻ thì xanh, chạy cả bộ thì thỉnh thoảng đỏ, và CI đã dính đúng một lần
+    // (`jti = …bfe545568673`). Một ca đỏ ngẫu nhiên còn tệ hơn không có ca: nó dạy cả
+    // đội thói quen chạy lại cho xanh, rồi lần đỏ THẬT cũng bị chạy lại.
+    // Răng của lưới không mất: `jti` do mã này sinh, không nhận gì từ bên gọi, và phép
+    // chốt BỘ KHOÁ ở trên vẫn bắt mọi claim mới xuất hiện.
     for (const [khoa, giaTri] of Object.entries(payload)) {
-      if (typeof giaTri !== "string") continue;
+      if (typeof giaTri !== "string" || khoa === "jti") continue;
       expect(giaTri, `claim "${khoa}" chứa dãy số giống SĐT: ${giaTri}`).not.toMatch(/\d{9,}/);
     }
     // Và không claim nào mang tên gợi ý dữ liệu liên hệ của khách.
