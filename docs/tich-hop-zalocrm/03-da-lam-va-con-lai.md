@@ -142,7 +142,7 @@ Và: hai migration mới là **thuần thêm** (ALTER TYPE + CREATE TABLE), khô
 | # | Nợ | Mức |
 |---|---|---|
 | 1 | `tests/e2e/a0/zalocrm-gate.spec.ts` **chưa chạy lần nào** — bật cờ cho `webServer` của bộ a0 nằm ngoài phạm vi các lô. Ca "cờ TẮT" sẽ chạy thật ở CI ngay lần đầu; ba ca "cờ BẬT" chạy lần đầu ở GĐ1. | TB |
-| 2 | Nút "Nhắn Zalo" **không mang `?org=`** ⇒ người kiêm nhiều cơ sở bấm từ phiếu CS2 sẽ mở tab đầu bảng chữ cái. Người một cơ sở (phần lớn Sale) không dính. | TB |
+| 2 | ~~Nút "Nhắn Zalo" **không mang `?org=`**~~ **ĐÃ VÁ 13/09/2026.** Nút nay mang cơ sở của chính phiếu (`orgCodeCuaCoSo` tra `zalocrm.orgCodes` theo `Center.code`). Trước đó người kiêm nhiều cơ sở bấm từ phiếu CS2 mở nhầm cơ sở đầu bảng chữ cái, và `datTruocLuongZalo` bỏ qua với mã `KHAC_CO_SO` (`dat-truoc.ts:157`) ⇒ hội thoại **không tự nối vào phiếu** — tức mất đúng thứ cái nút sinh ra để làm. Thiếu ánh xạ vẫn ra nút, chỉ là không kèm `?org=` (lối lùi có chủ đích). Ca `ZC-CU-10…15`. | — |
 | 3 | Hình dạng payload `GET /api/v1/zalo-accounts` và `message.*` là **phỏng đoán** — fork chưa có văn bản. Khi có payload thật chỉ sửa bảng ánh xạ + fixture, không sửa nơi khác. | TB |
 | 4 | `ZaloCrmNick`/`ZaloCrmThread` **không** ở `SOFT_DELETE_MODELS` ⇒ mọi truy vấn MỚI chạm hai bảng này phải tự thêm `deletedAt: null`. Không có lint bắt việc quên. | TB |
 | 5 | Không màn nào hiện bảng `ZaloCrmThread` ⇒ ánh xạ số ↔ phiếu sai thì không có lối vào để sửa (chỉ có `console.warn`). Cách xử đúng là gộp phiếu trùng. | Thấp |

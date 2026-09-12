@@ -14,6 +14,7 @@ import { describe, it, expect } from "vitest";
 import {
   KHUON_COMPOSE_ZALOCRM,
   duongDanNhanZalo,
+  orgCodeCuaCoSo,
 } from "@/lib/integrations/zalocrm/compose-url";
 import { canonicalPhone } from "@/lib/phone";
 import { maskPhone } from "@/lib/utils";
@@ -116,5 +117,59 @@ describe("duongDanNhanZalo — dựng địa chỉ soạn tin từ phiếu lead"
     expect(url.startsWith("/zalo-crm?")).toBe(true);
     expect(url).not.toContain("/admin/zalo-crm");
     expect(url).not.toMatch(/^https?:/);
+  });
+});
+
+describe("?org= — nút phải mang CƠ SỞ CỦA PHIẾU, không để màn nhúng đoán", () => {
+  // Nợ #2 của bản bàn giao, vá 13/09/2026. Không có `?org=` thì màn nhúng mở cơ sở đầu
+  // bảng chữ cái ⇒ Sale kiêm CS1+CS2 bấm từ phiếu CS2 sẽ nhắn bằng nick CS1, và dòng
+  // "đặt trước" bị từ chối vì lệch cơ sở ⇒ hội thoại KHÔNG tự nối vào phiếu.
+  const ANH_XA = { CS1: "cs1", CS2: "cs2" };
+
+  it("[ZC-CU-10] có orgCode ⇒ URL mang đủ ba tham số", () => {
+    const url = duongDanNhanZalo("0912345678", LEAD, "cs2") as string;
+    expect(thamSo(url, "compose")).toBe("84912345678");
+    expect(thamSo(url, "lead")).toBe(LEAD);
+    expect(thamSo(url, "org")).toBe("cs2");
+  });
+
+  it("[ZC-CU-11] thiếu orgCode ⇒ vẫn có nút, chỉ là KHÔNG kèm tham số org", () => {
+    // Lối lùi có chủ đích: bảng ánh xạ thiếu một dòng không được làm biến mất cái nút.
+    for (const v of [undefined, null, ""]) {
+      const url = duongDanNhanZalo("0912345678", LEAD, v) as string;
+      expect(url, `orgCode = ${JSON.stringify(v)}`).toBe(
+        `/zalo-crm?compose=84912345678&lead=${LEAD}`,
+      );
+      expect(thamSo(url, "org")).toBeNull();
+    }
+  });
+
+  it("[ZC-CU-12] orgCode sai khuôn ⇒ BỎ tham số, không trả null và không chèn nguyên văn", () => {
+    for (const xau of ["CS2", "cs 2", "cs2&lead=khac", "../cs2", "a".repeat(33)]) {
+      const url = duongDanNhanZalo("0912345678", LEAD, xau) as string;
+      expect(url, `orgCode = ${xau}`).not.toBeNull();
+      expect(thamSo(url, "org"), `orgCode = ${xau}`).toBeNull();
+      expect(thamSo(url, "lead"), `orgCode = ${xau}`).toBe(LEAD);
+    }
+  });
+
+  it("[ZC-CU-13] orgCodeCuaCoSo tra đúng theo Center.code", () => {
+    expect(orgCodeCuaCoSo("CS2", ANH_XA)).toBe("cs2");
+    expect(orgCodeCuaCoSo("CS1", ANH_XA)).toBe("cs1");
+  });
+
+  it("[ZC-CU-14] orgCodeCuaCoSo trả null cho mọi lối hỏng, không ném", () => {
+    expect(orgCodeCuaCoSo(null, ANH_XA), "phiếu chưa gắn cơ sở").toBeNull();
+    expect(orgCodeCuaCoSo(undefined, ANH_XA), "cơ sở chưa đặt Center.code").toBeNull();
+    expect(orgCodeCuaCoSo("", ANH_XA), "mã cơ sở rỗng").toBeNull();
+    expect(orgCodeCuaCoSo("CS9", ANH_XA), "cơ sở chưa ánh xạ").toBeNull();
+    expect(orgCodeCuaCoSo("CS1", null), "chưa khai tham số vận hành").toBeNull();
+    expect(orgCodeCuaCoSo("CS1", {}), "bảng ánh xạ rỗng").toBeNull();
+    expect(orgCodeCuaCoSo("CS1", { CS1: "CS1" }), "giá trị sai khuôn").toBeNull();
+  });
+
+  it("[ZC-CU-15] khớp trọn vòng: tra ánh xạ rồi dựng URL", () => {
+    const url = duongDanNhanZalo("0912345678", LEAD, orgCodeCuaCoSo("CS2", ANH_XA)) as string;
+    expect(thamSo(url, "org")).toBe("cs2");
   });
 });

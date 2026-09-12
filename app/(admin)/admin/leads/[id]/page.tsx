@@ -36,7 +36,8 @@ import {
 import { LeadAuditHistory } from "./_components/lead-audit-history";
 import { LeadStatusTrail } from "./_components/lead-status-trail";
 import { isZalocrmEnabled } from "@/lib/flags";
-import { duongDanNhanZalo } from "@/lib/integrations/zalocrm/compose-url";
+import { duongDanNhanZalo, orgCodeCuaCoSo } from "@/lib/integrations/zalocrm/compose-url";
+import { getSetting } from "@/lib/settings/service";
 
 /** G-01 — nhãn tiếng Việt cho `Gender`. Khoá "" để phiếu chưa khai trả về null. */
 const GIOI_TINH_PH_NHAN: Record<string, string> = {
@@ -69,7 +70,8 @@ export default async function LeadDetailPage({ params }: Props) {
   const lead = await sdb.lead.findFirst({
     where: { id, deletedAt: null },
     include: {
-      center: { select: { name: true } },
+      // `code` để suy ra `?org=` cho nút "Nhắn Zalo" (xem chỗ dựng `urlNhanZalo`).
+      center: { select: { name: true, code: true } },
       course: { select: { name: true } },
       assignedTo: { select: { id: true, name: true } },
       // BGĐ 31/07 — người giới thiệu (affiliate) ra lead này.
@@ -173,7 +175,16 @@ export default async function LeadDetailPage({ params }: Props) {
   // `duongDanNhanZalo` trả `null` khi SĐT rỗng/không hợp lệ ⇒ KHÔNG render nút (lead
   // quảng cáo Facebook chỉ có link FB: mỗi cú bấm là một lượt tra số đốt hạn mức Zalo).
   const duocMoZaloCrm = isZalocrmEnabled() && (await checkPermission("zalocrm:use"));
-  const urlNhanZalo = canViewPii && duocMoZaloCrm ? duongDanNhanZalo(lead.phone, lead.id) : null;
+  // Mang theo CƠ SỞ CỦA CHÍNH PHIẾU NÀY. Không có nó thì màn nhúng mở cơ sở đầu bảng
+  // chữ cái, nên Sale kiêm CS1+CS2 bấm từ phiếu CS2 sẽ nhắn bằng nick CS1 và dòng "đặt
+  // trước" bị từ chối vì lệch cơ sở ⇒ hội thoại không tự nối vào phiếu.
+  // Chỉ đọc tham số khi nút thật sự sắp hiện: lối vào thường ngày (cờ tắt, hoặc người
+  // không được xem PII) không phải chạm DB thêm một lượt vì một cái nút không render.
+  const orgCodesZalo = canViewPii && duocMoZaloCrm ? await getSetting("zalocrm.orgCodes") : null;
+  const urlNhanZalo =
+    canViewPii && duocMoZaloCrm
+      ? duongDanNhanZalo(lead.phone, lead.id, orgCodeCuaCoSo(lead.center?.code, orgCodesZalo))
+      : null;
 
   const canAssign = (await checkPermission("leads:assign", { centerId: lead.centerId }));
   const canCloseDeal =

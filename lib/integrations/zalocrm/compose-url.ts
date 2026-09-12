@@ -39,6 +39,32 @@ export const DUONG_DAN_ZALO_CRM = "/zalo-crm";
 export const KHUON_COMPOSE_ZALOCRM = /^84\d{8,10}$/;
 
 /**
+ * Khuôn `orgCode` — NGUỒN DUY NHẤT cho cả hai chiều: nút này dựng `?org=`, và
+ * `chonCoSoZaloCrm` bên màn nhúng đọc nó. Đặt ở module thuần này để hai bên không trôi
+ * khỏi nhau; bên kia `import` vào chứ không chép lại.
+ */
+export const KHUON_ORG_CODE = /^[a-z0-9-]{1,32}$/;
+
+/**
+ * Tra `orgCode` bên ZaloCRM từ mã cơ sở của phiếu lead.
+ *
+ * Trả `null` khi: phiếu chưa gắn cơ sở · cơ sở chưa đặt `Center.code` · cơ sở chưa được
+ * ánh xạ trong `zalocrm.orgCodes` · giá trị ánh xạ sai khuôn. **`null` không phải lỗi** —
+ * nó chỉ có nghĩa "không nói được cơ sở nào", và nút sẽ mở cơ sở đầu tiên y như trước.
+ * Đó là lối lùi có chủ đích: một bảng ánh xạ thiếu một dòng KHÔNG được làm biến mất cái
+ * nút mà Sale đang dùng hằng ngày.
+ */
+export function orgCodeCuaCoSo(
+  centerCode: string | null | undefined,
+  orgCodes: Readonly<Record<string, string>> | null | undefined,
+): string | null {
+  if (typeof centerCode !== "string" || !centerCode || !orgCodes) return null;
+  const org = orgCodes[centerCode];
+  if (typeof org !== "string" || !KHUON_ORG_CODE.test(org)) return null;
+  return org;
+}
+
+/**
  * Dựng địa chỉ mở hộp soạn tin ZaloCRM cho một phiếu lead, hoặc `null` khi không dựng
  * được — **`null` nghĩa là ĐỪNG RENDER NÚT**, không phải "render nút trỏ vào chỗ trống".
  *
@@ -53,10 +79,18 @@ export const KHUON_COMPOSE_ZALOCRM = /^84\d{8,10}$/;
  *              `null` và nút biến mất, đúng kiểu hỏng lặng mà [S-1] đã bắt ở màn chốt đơn.
  * @param leadId Mã phiếu, đi kèm để ZaloCRM/nhật ký biết tin này thuộc khách nào. Rỗng
  *              thì bỏ hẳn tham số — `&lead=` trống bắt phía nhận phải đoán.
+ * @param orgCode Cơ sở của chính phiếu này (qua `orgCodeCuaCoSo`). **Thiếu nó là lỗi
+ *              THẤY ĐƯỢC với người kiêm nhiều cơ sở:** màn nhúng mở cơ sở đầu bảng chữ
+ *              cái, nên Sale kiêm CS1+CS2 bấm từ phiếu CS2 sẽ nhắn bằng nick CS1 — và
+ *              dòng "đặt trước" (`datTruocLuongZalo`) bị từ chối vì lệch cơ sở, tức hội
+ *              thoại KHÔNG tự nối vào phiếu nữa. Đó là toàn bộ giá trị của cái nút.
+ *              Giá trị lạ vẫn an toàn: màn nhúng coi `?org=` là dữ liệu người dùng và
+ *              chỉ dùng để TRA trong danh sách cơ sở người này nhìn thấy.
  */
 export function duongDanNhanZalo(
   sdt: unknown,
   leadId: string | null | undefined,
+  orgCode?: string | null,
 ): string | null {
   const so = canonicalPhone(sdt);
   if (!so) return null;
@@ -71,6 +105,11 @@ export function duongDanNhanZalo(
   const tham = new URLSearchParams({ compose: so });
   const ma = typeof leadId === "string" ? leadId.trim() : "";
   if (ma) tham.set("lead", ma);
+
+  // Sai khuôn thì BỎ tham số chứ không trả `null`: mất `?org=` chỉ làm mở nhầm cơ sở,
+  // còn trả `null` là mất luôn cái nút — hỏng nặng hơn thứ đang vá.
+  const org = typeof orgCode === "string" ? orgCode.trim() : "";
+  if (org && KHUON_ORG_CODE.test(org)) tham.set("org", org);
 
   return `${DUONG_DAN_ZALO_CRM}?${tham.toString()}`;
 }

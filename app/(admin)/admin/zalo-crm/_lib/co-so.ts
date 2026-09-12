@@ -6,8 +6,10 @@
 // cơ sở ra đúng một tab (khung không hiện thanh tab), quản trị hệ thống ra nhiều tab.
 // Không có `if (isSuperAdmin)` nào — thêm cơ sở là thêm dữ liệu, không sửa mã.
 
-/** Khuôn `orgCode`, giống hệt `zalocrm.orgCodes` và đường webhook. */
-const KHUON_ORG_CODE = /^[a-z0-9-]{1,32}$/;
+// Khuôn `orgCode` lấy từ module thuần dùng chung với nút "Nhắn Zalo" — hai bên PHẢI
+// cùng một khuôn, vì bên kia dựng `?org=` còn bên này đọc nó. Chép lại là mở đường cho
+// hai khuôn trôi khỏi nhau rồi nút sinh ra thứ màn này loại đi mà không ai thấy.
+import { KHUON_ORG_CODE } from "@/lib/integrations/zalocrm/compose-url";
 
 export type CoSoZaloCrm = {
   centerId: string;
