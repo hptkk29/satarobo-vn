@@ -227,7 +227,13 @@ d("requests — DB thật", () => {
   it("LEAVE 2 ngày duyệt ⇒ ghi P cả 2 ngày (nguồn LEAVE); TIMESHEET_FIX ⇒ 2 mốc MANUAL_ADJUST + event tính lại", async () => {
     const d11 = utc(2026, 9, 11);
     const d12 = utc(2026, 9, 12);
-    const l = await requests.submitAttendanceRequest({ ...base, requesterId: tv, kind: "LEAVE", fromDate: d11, toDate: d12, leaveTypeId: leaveId });
+    // ⚠️ PHẢI chốt `now`. Ca trước trong file này đặt `NGHI_PHEP.noticeDays = 1`, nên cổng
+    // `isSubmittedLate` so `fromDate` với HÔM NAY THẬT nếu không truyền `now` — đơn xin nghỉ
+    // cho 11/09 hoá "nộp muộn" kể từ 11/09/2026, và ca xanh suốt 4 ngày rồi đỏ mãi mãi.
+    // Đã nổ thật: xanh mọi lượt tới 10/09, rerun CÙNG commit ngày 13/09 thì đỏ.
+    // Chốt về 09/09 lúc 10:00 VN — trước `d11` đúng 2 ngày, thoả hạn báo trước 1 ngày.
+    const now = new Date("2026-09-09T03:00:00Z");
+    const l = await requests.submitAttendanceRequest({ ...base, now, requesterId: tv, kind: "LEAVE", fromDate: d11, toDate: d12, leaveTypeId: leaveId });
     expect(l.ok).toBe(true);
     if (!l.ok) return;
     const rl = await requests.decideRequest({ requestId: l.id, decision: "APPROVED", note: "ok", actor, canWriteCenter: (c) => c === cs1 });
@@ -236,7 +242,9 @@ d("requests — DB thật", () => {
     expect(cells.map((c) => c.templateCode)).toEqual(["P", "P"]);
     expect(cells.every((c) => c.source === "LEAVE" && c.isLeave)).toBe(true);
 
-    const f = await requests.submitAttendanceRequest({ ...base, requesterId: tv, kind: "TIMESHEET_FIX", fromDate: d9, toDate: null, requestedInAt: "07:40", requestedOutAt: "11:35" });
+    // TIMESHEET_FIX không đi qua cổng báo-trước, nhưng chốt `now` cho cả vế sau để ca này
+    // không còn chỗ nào đọc giờ thật.
+    const f = await requests.submitAttendanceRequest({ ...base, now, requesterId: tv, kind: "TIMESHEET_FIX", fromDate: d9, toDate: null, requestedInAt: "07:40", requestedOutAt: "11:35" });
     expect(f.ok).toBe(true);
     if (!f.ok) return;
     const rf = await requests.decideRequest({ requestId: f.id, decision: "APPROVED", note: null, actor, canWriteCenter: (c) => c === cs1 });
