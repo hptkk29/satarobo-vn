@@ -106,6 +106,10 @@ export async function sendInboxReply(input: {
         accountId: hoi.accountId,
         externalUserId: hoi.identity.externalUserId,
         body: input.body,
+        // Chuyển tiếp ĐÚNG khoá đã giành chỗ ở bước 1. Adapter nào có đường chống trùng
+        // phía nhà cung cấp sẽ dùng nó; ca cần bịt là "đã gọi API xong mới mất phản hồi",
+        // lúc đó khoá UNIQUE bên mình không nói được gì vì dòng vẫn đang PENDING.
+        outboundKey: input.outboundKey,
       })
     : khongCoAdapter(hoi.channel);
 

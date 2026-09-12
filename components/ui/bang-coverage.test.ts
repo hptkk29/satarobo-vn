@@ -36,6 +36,8 @@ const MIEN_TRU: Record<string, string> = {
     "bảng ĐOẠN CA bên trong form sửa một mã (tối đa 6 dòng, là ô nhập chứ không phải danh sách) — phân trang một form là vô nghĩa",
   "app/(admin)/admin/cham-cong/phan-ca/import/_components/import-wizard.tsx":
     "bảng ánh xạ tên = số người trên Sheet (19–20 dòng, phải nhìn HẾT để xác nhận từng người một lần) và bảng đối chiếu 15 con số (một hàng Sheet, một hàng hệ thống) — cắt trang là giấu mất người chưa ánh xạ",
+  "app/(admin)/admin/bao-cao/phan-hoi-hop-thu/page.tsx":
+    "hai bảng GỘP SẴN: một dòng cho mỗi người phụ trách, một dòng cho mỗi đơn vị — số dòng chặn bởi quy mô đội, không theo lượng hội thoại. Đây lại đúng là bảng phải nhìn HẾT một lượt: cắt trang là giấu mất người đang tồn nhiều khách chờ, tức giấu đúng thứ bảng sinh ra để phơi",
   "components/legacy-laptrinhrobot/InternalAwards.tsx":
     "bảng giải thưởng trên landing cũ — danh sách chốt cứng trong code, không đọc từ DB",
   "app/(sale)/sale/trial/_components/trial-list.tsx":

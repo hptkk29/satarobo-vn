@@ -129,20 +129,57 @@ export async function goiZalocrm<T>(input: {
   }
 }
 
-// ── Vài lượt gọi đã biết hình dạng (đọc từ mã ZaloCRM, §4.1) ─────────────────
+// ── Các lượt gọi của Public API ─────────────────────────────────────────────
+//
+// 🔴 HÌNH DẠNG ĐÃ ĐỐI CHIẾU MÃ FORK 13/09/2026 (F4, `public-api-routes.ts`), không
+// còn là phỏng đoán. Bản viết trước đoán sai ngay tên khoá: fork trả
+// `{ conversations: [...] }` và `{ messages: [...] }`, **không phải** `{ data: [...] }`.
+// Đoán sai chỗ này là mọi lượt đối soát đọc ra 0 dòng — im lặng, và trông y hệt
+// "không có gì mới".
 
 export type HoiThoaiZalocrm = {
   id: string;
+  threadType?: string | null;
+  externalThreadId?: string | null;
+  /** Nick đang giữ hội thoại — khoá để suy ra cơ sở. F4 mới thêm. */
+  zaloAccountId?: string | null;
   lastMessageAt?: string | null;
-  contact?: { id: string; fullName?: string | null; phone?: string | null } | null;
+  unreadCount?: number | null;
+  isReplied?: boolean | null;
+  contact?: {
+    id: string;
+    fullName?: string | null;
+    phone?: string | null;
+    /** `Lead.id` bên Sata, nếu đã gắn. F4 mới thêm. */
+    externalRef?: string | null;
+  } | null;
 };
 
-/** `GET /api/public/conversations?limit=…` — không có cursor, không có `since`. */
+/**
+ * `GET /api/public/conversations` — danh sách hội thoại, mới nhất trước.
+ *
+ * `since` lọc theo `lastMessageAt`. Truyền mốc của lượt đối soát trước để chỉ kéo về
+ * phần đổi; không truyền thì mỗi lượt kéo cả trang đầu rồi tự bỏ đi.
+ */
 export function layHoiThoaiZalocrm(
   orgCode: string,
-  limit = 100,
-): Promise<KetQuaGoi<{ data?: HoiThoaiZalocrm[] }>> {
-  return goiZalocrm({ orgCode, duongDan: `/api/public/conversations?limit=${limit}` });
+  tuyChon: { limit?: number; since?: Date | string | null } = {},
+): Promise<KetQuaGoi<{ conversations?: HoiThoaiZalocrm[] }>> {
+  const tham = new URLSearchParams({ limit: String(tuyChon.limit ?? 100) });
+  const moc = tuyChon.since;
+  if (moc) tham.set("since", moc instanceof Date ? moc.toISOString() : String(moc));
+  return goiZalocrm({ orgCode, duongDan: `/api/public/conversations?${tham.toString()}` });
+}
+
+/** `GET /api/public/conversations/:id` — một hội thoại. F4 mới thêm. */
+export function layMotHoiThoaiZalocrm(
+  orgCode: string,
+  conversationId: string,
+): Promise<KetQuaGoi<{ conversation?: HoiThoaiZalocrm }>> {
+  return goiZalocrm({
+    orgCode,
+    duongDan: `/api/public/conversations/${encodeURIComponent(conversationId)}`,
+  });
 }
 
 export type TinZalocrm = {
@@ -159,7 +196,7 @@ export function layTinZalocrm(
   orgCode: string,
   conversationId: string,
   limit = 50,
-): Promise<KetQuaGoi<{ data?: TinZalocrm[] }>> {
+): Promise<KetQuaGoi<{ messages?: TinZalocrm[] }>> {
   return goiZalocrm({
     orgCode,
     duongDan: `/api/public/conversations/${encodeURIComponent(conversationId)}/messages?limit=${limit}`,
@@ -169,17 +206,46 @@ export function layTinZalocrm(
 /**
  * `POST /api/public/messages/send`.
  *
- * ⚠️ HAI CHUYỆN PHẢI BIẾT TRƯỚC KHI DÙNG (đọc từ mã ZaloCRM, §4.1):
- *  · route này gọi thẳng `api.sendMessage` và **BỎ QUA trần chống khoá nội bộ** của
- *    ZaloCRM ⇒ trần phải do Sata tự gác, không có ai gác hộ;
- *  · nó trả `{success:true}` **KHÔNG kèm id tin**. Mà `ChannelSendOutcome.SENT` bắt
- *    buộc có `providerMessageId`, và `sendInboxReply` ghi id đó làm `channelMessageId`
- *    để echo về bị nhận ra là trùng. Không có id ⇒ adapter phải trả `FAILED`/`SKIPPED`,
- *    **TUYỆT ĐỐI không bịa id** — bịa là echo tạo dòng OUT thứ hai, mỗi tin hiện hai lần.
+ * Sau F4 (13/09/2026) route này: đi qua trần chống khoá nick của ZaloCRM · trả `msgId` ·
+ * nhận `idempotencyKey`.
+ *
+ * 🔴 `idempotencyKey` KHÔNG phải tuỳ chọn cho vui. Hàng đợi gửi lại của Sata mà gặp
+ * timeout thì tin có thể ĐÃ tới Zalo; gửi lại là khách nhận hai lần, và tin đã đi thì
+ * không thu hồi được. Truyền `outboundKey` của lượt gửi vào đây.
+ *
+ * 🔴 Thiếu `msgId` trong phản hồi ⇒ nơi gọi phải trả `FAILED`/`SKIPPED`, **TUYỆT ĐỐI
+ * không bịa id**: `providerMessageId` được ghi làm `channelMessageId` để bản echo về
+ * sau bị nhận ra là trùng. Bịa id là echo tạo dòng OUT thứ hai, mỗi tin hiện hai lần.
  */
 export function guiTinZalocrm(
   orgCode: string,
-  than: { zaloAccountId: string; threadId: string; content: string; threadType?: string },
-): Promise<KetQuaGoi<{ success?: boolean }>> {
+  than: {
+    zaloAccountId: string;
+    threadId: string;
+    content: string;
+    threadType?: string;
+    idempotencyKey?: string;
+  },
+): Promise<KetQuaGoi<{ success?: boolean; msgId?: string | null; duplicate?: boolean }>> {
   return goiZalocrm({ orgCode, duongDan: "/api/public/messages/send", method: "POST", than });
+}
+
+/**
+ * `PUT /api/public/contacts/:id/external-ref` — gắn `Lead.id` của Sata vào liên hệ bên
+ * ZaloCRM, để màn chat mở đúng phiếu. `null` là gỡ liên kết.
+ *
+ * Trả 409 `EXTERNAL_REF_TAKEN` khi khoá đã thuộc liên hệ khác — **không đè**, vì dấu
+ * hiệu thật ở đó là hai liên hệ trùng người và việc phải xử là gộp.
+ */
+export function datKhoaPhieuZalocrm(
+  orgCode: string,
+  contactId: string,
+  externalRef: string | null,
+): Promise<KetQuaGoi<{ contact?: { id: string; externalRef: string | null } }>> {
+  return goiZalocrm({
+    orgCode,
+    duongDan: `/api/public/contacts/${encodeURIComponent(contactId)}/external-ref`,
+    method: "PUT",
+    than: { externalRef },
+  });
 }

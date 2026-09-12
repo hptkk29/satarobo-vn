@@ -303,9 +303,19 @@ describe("[S-1b] nút Nhắn Zalo — số thật, và chỉ trong nhánh đư�
 
   it("chỉ dựng URL trong nhánh canViewPii — SĐT là PII, và nó nằm trên query string", () => {
     const s = nguon(TRANG_PHIEU_LEAD);
-    const dong = s.split("\n").filter((l) => l.includes("duongDanNhanZalo("));
+    const tatCa = s.split("\n");
+    const viTri = tatCa
+      .map((l, i) => [l, i] as const)
+      .filter(([l]) => l.includes("duongDanNhanZalo("));
     // Không có dòng nào thì mọi `for` dưới đây xanh giả — chốt lại số lượng trước.
-    expect(dong.length).toBeGreaterThan(0);
-    for (const l of dong) expect(l, l.trim()).toMatch(/canViewPii/);
+    expect(viTri.length).toBeGreaterThan(0);
+    // Soi CÂU LỆNH (dòng gọi + 2 dòng ngay trên) chứ không soi riêng dòng vật lý: từ
+    // 13/09/2026 lời gọi có thêm tham số `?org=` nên nó xuống dòng, còn điều kiện
+    // `canViewPii && …` nằm ở dòng `const` phía trên. Cửa sổ 2 dòng GIỮ NGUYÊN răng của
+    // ca này — gỡ hẳn cổng PII thì không dòng nào trong cửa sổ có `canViewPii`, vẫn đỏ.
+    for (const [l, i] of viTri) {
+      const cuaSo = tatCa.slice(Math.max(0, i - 2), i + 1).join("\n");
+      expect(cuaSo, l.trim()).toMatch(/canViewPii/);
+    }
   });
 });

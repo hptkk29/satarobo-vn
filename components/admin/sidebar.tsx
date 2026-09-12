@@ -43,6 +43,7 @@ import {
   MessageCircle,
   MessageSquarePlus,
   MessageSquareText,
+  Clock3,
   MessagesSquare,
   Megaphone,
   Network,
@@ -392,6 +393,9 @@ const NAV_GROUPS: NavGroup[] = [
       // `chat:admin` khớp ĐÚNG gate của trang (chỉ SUPER_ADMIN) — không mượn PAGE_GATES vì
       // route này cố ý không khai ở đó.
       { label: "Đo pilot chat", href: "/bao-cao/chat-pilot", icon: MessagesSquare, perm: ["chat:admin"] },
+      // GĐ3 tích hợp ZaloCRM — ai đang theo kịp khách, ai không. `inbox:view` khớp ĐÚNG
+      // gate của trang; cách ly cơ sở nằm trong truy vấn nên Sale CS1 chỉ thấy số CS1.
+      { label: "Phản hồi hộp thư", href: "/bao-cao/phan-hoi-hop-thu", icon: Clock3, perm: ["inbox:view"] },
     ],
   },
 ];

@@ -110,6 +110,10 @@
       "schedule": "0 18 * * *"
     },
     {
+      "path": "/api/cron/zalocrm-doi-soat",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/shift-brief",
       "schedule": "0 * * * *"
     }
