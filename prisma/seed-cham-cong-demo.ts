@@ -32,6 +32,7 @@
 // · Ngẫu nhiên có HẠT theo `userId|ngày` ⇒ chạy lại ra đúng bộ cũ, ảnh chụp nghiệm thu
 //   không đổi giữa hai lần seed.
 import { db } from "@/lib/db";
+import { assertLocalDb } from "./seed-lms/_lib";
 import { HO_CENTER_ID, loadCenterMap } from "@/lib/cham-cong/home-center";
 import { generateMonthAssignments } from "@/lib/cham-cong/generate-db";
 import { recomputeAttendanceDay } from "@/lib/cham-cong/recompute";
@@ -40,6 +41,22 @@ import { toMinutes } from "@/lib/cham-cong/catalog";
 import { vnDateAt, vnDateOnly, vnParts, vnYmd } from "@/lib/time/vn";
 
 const DEFAULT_EFFECTIVE_FROM = new Date(Date.UTC(2000, 0, 1));
+
+// ── CỔNG AN TOÀN ─────────────────────────────────────────────────────────────────────
+//
+// 🔴 Chú thích KHÔNG PHẢI CỔNG (luật 12). Đầu file này đã ghi "CHỈ dành cho test/local" từ
+// đầu, mà không có gì giữ: `.env` trên máy dev trỏ DB **DEV** — đúng DB mà `test.satarobo.vn`
+// đang dùng — nên chạy nhầm là dựng 2 kỳ dữ liệu giả lên chỗ người khác đang nghiệm thu.
+//
+// Dùng lại `assertLocalDb` của bộ seed LMS, KHÔNG dựng khuôn thứ ba. Hai cổng, giống
+// `tests/_helpers/db-gate.ts`:
+//   · ĐỊA CHỈ — URL phải trỏ local/test;
+//   · CHỦ ĐÍCH — `SEED_ALLOW_REMOTE=1` cho lượt ghi DB xa.
+//
+// ⚠️ Workflow `seed-test-data.yml` chạy script này lên `TEST_DIRECT_URL` (Supabase, KHÔNG
+// phải localhost) nên nó BẮT BUỘC phải đặt cờ ấy — và workflow có cổng riêng của nó:
+// từ chối khi `TEST_DIRECT_URL` trùng `PROD_DIRECT_URL`.
+assertLocalDb("seed-cham-cong-demo");
 
 // ── Tham số dòng lệnh ────────────────────────────────────────────────────────────────
 const argv = process.argv.slice(2);
