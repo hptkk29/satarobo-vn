@@ -44,7 +44,8 @@ test("render smoke admin pages (no 500/crash)", async ({ page }) => {
   await login(page);
   const bad: string[] = [];
   for (const r of ROUTES) {
-    let status = "ok";
+    // `no-useless-assignment`: mọi nhánh dưới đều gán lại, giá trị mồi là vô dụng.
+    let status: string;
     try {
       const resp = await page.goto(r, { waitUntil: "domcontentloaded", timeout: 120_000 });
       await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => {});

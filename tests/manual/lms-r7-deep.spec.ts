@@ -18,7 +18,8 @@ async function login(page: Page) {
 }
 
 async function visit(page: Page, route: string, ti: TestInfo) {
-  let http = 0, onLogin = false, err = false, body = "";
+  // `body` được gán lại ở mọi nhánh — bỏ giá trị mồi vô dụng.
+  let http = 0, onLogin = false, err = false, body: string;
   try {
     const resp = await page.goto(route, { waitUntil: "domcontentloaded", timeout: 150_000 });
     await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => {});
