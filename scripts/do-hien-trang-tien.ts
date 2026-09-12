@@ -192,6 +192,80 @@ async function main(): Promise<void> {
       "    đối chiếu được với tiền. Mức sai theo TỪNG ĐƠN xem bảng shadow-compare bên dưới.",
   );
 
+  // ── 8. TIỀN THẬT ĐANG NẰM IM vì cổng duyệt giảm giá ────────────────────────
+  //
+  // Câu hỏi của chủ dự án 13/09: trong các đơn treo `discountApprovalStatus =
+  // PENDING_APPROVAL`, bao nhiêu đơn ĐÃ CÓ TIỀN VỀ mà `lib/payments/sepay.ts:109-113`
+  // trả `MANUAL` nên chưa rót vào phiếu nào?
+  //
+  // Ba đường đo, vì mỗi đường bắt một hình dạng khác nhau của "tiền nằm im":
+  //  (a) Đơn treo duyệt mà Ledger-A đã có tiền NHIỀU HƠN số đã rót vào phiếu
+  //      (`recordedPaid > allocated`) — đúng phép đo của `shadow-compare-debt.ts`.
+  //  (b) `BankTransaction` còn UNMATCHED — tiền đã vào tài khoản ngân hàng mà hệ
+  //      thống chưa gắn được vào đơn nào. Đây là hàng chờ đối soát tay.
+  //  (c) `IntegrationLog` `MANUAL_REVIEW`/FAILED — dấu vết webhook TỪ CHỐI tự rót.
+  //      Lọc thêm câu "Giảm giá chưa được duyệt" (chuỗi ở sepay.ts:112) để tách đúng
+  //      ca do cổng duyệt gây ra, khác với ca không khớp mã đơn.
+  const donTreoDuyet = await db.order.findMany({
+    where: { deletedAt: null, discountApprovalStatus: "PENDING_APPROVAL" },
+    select: { id: true, code: true, status: true, totalAmount: true },
+    orderBy: { code: "asc" },
+  });
+  const dongTreo: [string, number | string][] = [];
+  let soDonCoTienNamIm = 0;
+  let tienNamIm = 0;
+  for (const o of donTreoDuyet) {
+    const [tra, rot] = await Promise.all([
+      db.payment.aggregate({
+        where: { orderId: o.id, deletedAt: null, saleStatus: "RECORDED" },
+        _sum: { amount: true },
+      }),
+      db.paymentAllocation.aggregate({
+        where: { paymentRequest: { orderId: o.id } },
+        _sum: { amount: true },
+      }),
+    ]);
+    const daTra = tra._sum.amount ?? 0;
+    const daRot = rot._sum.amount ?? 0;
+    const namIm = Math.max(0, daTra - daRot);
+    if (namIm > 0) {
+      soDonCoTienNamIm += 1;
+      tienNamIm += namIm;
+    }
+    dongTreo.push([
+      `${o.code} (${o.status})`,
+      `${fmt(o.totalAmount)} · đã trả ${fmt(daTra)} · đã rót ${fmt(daRot)}${namIm > 0 ? ` · NẰM IM ${fmt(namIm)}` : ""}`,
+    ]);
+  }
+  bang("(a) Đơn treo duyệt GIẢM GIÁ — tiền đã trả so với đã rót", dongTreo.length > 0 ? dongTreo : [["(không có đơn nào)", 0]]);
+
+  const txChuaKhop = await db.bankTransaction.aggregate({
+    where: { status: "UNMATCHED" },
+    _count: { _all: true },
+    _sum: { amount: true },
+  });
+  const tuChoiTuRot = await db.integrationLog.count({
+    where: { action: "MANUAL_REVIEW", status: "FAILED" },
+  });
+  const tuChoiDoDuyetGia = await db.integrationLog.count({
+    where: {
+      action: "MANUAL_REVIEW",
+      status: "FAILED",
+      errorMessage: { contains: "Giảm giá chưa được duyệt" },
+    },
+  });
+  bang("(b)(c) Hàng chờ đối soát tay", [
+    ["BankTransaction UNMATCHED — số giao dịch", txChuaKhop._count._all],
+    ["BankTransaction UNMATCHED — tổng tiền", `${fmt(txChuaKhop._sum.amount ?? 0)}đ`],
+    ["IntegrationLog MANUAL_REVIEW (mọi lý do)", tuChoiTuRot],
+    ["… trong đó do CỔNG DUYỆT GIẢM GIÁ chặn", tuChoiDoDuyetGia],
+  ]);
+  console.log(
+    soDonCoTienNamIm > 0
+      ? `  ⚠ ${soDonCoTienNamIm} đơn treo duyệt đang giữ ${fmt(tienNamIm)}đ CHƯA RÓT vào phiếu nào.`
+      : `  ✓ Không đơn treo duyệt nào đang giữ tiền chưa rót.`,
+  );
+
   // ── Kết luận: shadow-compare có đáng đọc theo cột lý do, hay chỉ đang báo "sổ trống"?
   //
   // "Nợ sổ mới" = Σ outstanding của `PaymentRequest`. Không có phiếu thì nợ sổ mới = 0
