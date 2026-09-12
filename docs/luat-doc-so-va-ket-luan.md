@@ -1142,6 +1142,78 @@ sách "sạch" chỉ nói lên bộ lọc, không nói lên mã.
 
 ---
 
+## Luật 19 — test KHÔNG được đọc đồng hồ thật
+
+> **Ngày TUYỆT ĐỐI trong fixture + một hàm rơi về `new Date()` = một ca HẸN GIỜ NỔ.**
+> Mã không đổi, tờ lịch đổi, và triệu chứng chỉ tới ngày nó tới.
+>
+> Mọi hàm có luật phụ thuộc thời gian phải nhận `now` **tiêm được** — và **test phải truyền**.
+
+### Hình dạng nhận biết
+
+> **Ca đỏ mà `git log` của file liên quan không có commit nào trong nhiều ngày ⇒ NGHI ĐỒNG HỒ
+> TRƯỚC KHI NGHI MÃ.**
+
+Đó là dấu hiệu rẻ nhất, và nó đúng vì lớp lỗi này **không có diff để soi**. Vài dấu đi kèm:
+
+- cùng một commit: CI hôm trước **xanh**, chạy lại hôm sau **đỏ** (xem sổ dưới);
+- lỗi báo ở một dòng **sớm hơn** dòng mà tên ca gợi ý — điều kiện thời gian chặn ngay từ
+  bước dựng, chưa tới bước khẳng định;
+- ca đỏ nằm cạnh một fixture có ngày cứng gần với hôm nay.
+
+### Sự cố 13/09/2026 — ca `LEAVE` của `tests/cham-cong/requests.spec.ts`
+
+Ca nộp đơn nghỉ cho 11–12/09/2026; `submitAttendanceRequest` mặc định rơi về `new Date()`;
+loại nghỉ `NGHI_PHEP` có `noticeDays: 1`. ⇒ **xanh tới 10/09, đỏ mãi mãi từ 11/09.**
+
+Phép đo dứt điểm — **cùng một commit, hai thời điểm**:
+
+| | |
+|---|---|
+| main `507ff13b`, CI ngày 10/09 | `Chat DB invariants` **XANH** |
+| main `507ff13b`, chạy lại 12/09 | `Chat DB invariants` **ĐỎ** |
+
+Không có diff nào giữa hai lượt. (Vá ở #244.)
+
+⚠️ **Hai chẩn đoán SAI mà phép đo này bác bỏ** — cùng ghi lại vì chúng nghe rất hợp lý:
+
+1. *"Bộ này nằm ngoài required check nên đỏ im lặng"* — **SAI**. Đo bằng
+   `gh api repos/<o>/<r>/branches/main/protection`: `Chat DB invariants` **đang là required**
+   và `enforce_admins` đã bật. Cổng làm đúng việc; lượt CI hôm merge xanh **thật**.
+   👉 Bài học phụ: **required check gác lúc MERGE, không gác trạng thái của `main` về sau.**
+   Một ca phụ thuộc đồng hồ đỏ lên mà không ai đẩy gì cả, và không cổng nào bắt được.
+2. *"Ba hàm kia chỉ dùng `now` cho dấu thời gian audit, không kiểm điều kiện"* — **SAI**.
+   `lockPeriod` có `if (to > now) → "Kỳ chưa kết thúc"`. Lý do `period.spec.ts` chưa nổ là
+   fixture cố ý chọn kỳ **đã qua** (`2026-06`) và kỳ **còn xa** (`2099-01`) — tức **chưa nổ**,
+   không phải **không nổ**.
+
+### Luật 1 áp cho test: bom ĐÃ BIẾT + đường nổ còn sống = vá NGAY
+
+Đừng để lại một ca "chưa nổ". Ai thêm một điều kiện đọc `now` vào hàm ấy là nó nổ, và người
+đó sẽ đi soi sai chỗ — đúng như lượt 13/09 suýt đi soi `isLeave` trong khi lỗi nằm ở dòng
+nộp đơn.
+
+### Cách vá, và cách kiểm bản vá
+
+1. Hàm **đã** nhận `now?: Date` (repo có sẵn nhiều hàm như vậy — luật 7 trả tiền lần nữa):
+   test chỉ việc truyền.
+2. Đóng băng ở **mức khối** khi được (`base.now`, hằng `NOW` của `describe`), để ca người sau
+   thêm vào không phải nhớ lại bài học.
+3. Chọn mốc **có lý do viết ra được**: "trước `d11` đúng 2 ngày, thoả hạn báo trước 1 ngày",
+   "sau ngày cuối `KEY` nên chốt được, và trước `2099-01` nên kỳ tương lai vẫn bị từ chối".
+4. **Cấy lại** (luật 8): dời mốc sang phía sai ⇒ phải ĐỎ. Thêm `now` mà ca vẫn xanh ở mọi
+   mốc nghĩa là hàm chưa thật sự đọc nó.
+
+### Liên hệ
+
+- **Luật 4** — fixture phải mang hình dạng dữ liệu thật. Luật 19 là một mặt khác của nó:
+  fixture cũng không được mang **thời điểm** của máy chạy.
+- **Luật 7** — tham số có mặc định nguy hiểm thì bỏ mặc định. `now?: Date` rơi về
+  `new Date()` đúng là một mặc định nguy hiểm, chỉ là nó nguy hiểm **theo lịch**.
+- **Luật 10** — nhưng đọc kèm đính chính ở trên: lần này cổng KHÔNG thủng.
+
+---
+
 ## Sổ sự cố
 
 ### 08/09/2026 — nhập nhân sự xoá trắng ba cột ngày trên 9 hồ sơ PROD

@@ -106,16 +106,19 @@ d("requests — DB thật", () => {
     await db.$disconnect();
   });
 
-  // 🔴 ĐỒNG HỒ PHẢI ĐÓNG BĂNG — sự cố 13/09/2026.
+  // 🔴 ĐỒNG HỒ ĐÓNG BĂNG CHO CẢ KHỐI — luật 19.
   //
-  // Ngày trong bộ này là TUYỆT ĐỐI (08–12/09/2026), còn `submitAttendanceRequest` mặc định
-  // đọc `new Date()`. Khi lịch thật đi qua 12/09, đơn `LEAVE` cho 11–12/09 thành đơn cho
-  // NGÀY ĐÃ QUA và bị luật "báo trước 1 ngày" từ chối ⇒ ca đỏ mà KHÔNG dòng mã nào đổi.
-  // Nó đã đỏ trên `main` trước cả PR này; không ai thấy vì bộ `tests/cham-cong` không nằm
-  // trong required check (luật 10).
+  // Ngày trong bộ này là TUYỆT ĐỐI (08–12/09/2026), còn nhiều hàm của `requests.ts` mặc định
+  // rơi về `new Date()`. Ca `LEAVE` đã nổ thật vì chuyện đó (vá ở #244, chốt `now` ngay tại
+  // ca ấy). Dòng dưới là hàng rào THỨ HAI: mặc định cho MỌI lời gọi đi qua `base`, để ca tiếp
+  // theo ai đó thêm vào khối này không phải nhớ lại bài học ấy.
   //
-  // Hàm đã có sẵn tham số `now` (luật 7 — đồng hồ tiêm được); bộ test chỉ quên truyền.
-  // Mốc lấy đúng mốc mà khối test THUẦN ở đầu file đang dùng, để hai nửa cùng một hôm.
+  // Không mâu thuẫn với #244: `now` truyền thẳng ở từng ca spread SAU `...base` nên vẫn thắng.
+  //
+  // ⚠️ Đính chính một câu tôi từng viết ở đây và ĐÃ SAI: "bộ này không nằm trong required
+  // check". ĐO bằng `gh api repos/<o>/<r>/branches/main/protection` ngày 13/09:
+  // `Chat DB invariants` ĐANG là required, `enforce_admins` đã bật. Cổng không thủng —
+  // lượt CI trên main hôm merge XANH thật, nó chỉ đỏ khi bị chạy lại 2,5 ngày sau.
   const NOW = new Date("2026-09-10T03:00:00Z"); // 10:00 VN 10/09/2026
 
   const base = {

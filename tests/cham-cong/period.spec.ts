@@ -56,6 +56,17 @@ d("period — DB thật", () => {
   let userId = "";
   let actorId = "";
   let period: typeof import("../../lib/cham-cong/period");
+  // 🔴 ĐỒNG HỒ ĐÓNG BĂNG — luật 19. `lockPeriod` CÓ điều kiện thời gian thật
+  // (`to > now ⇒ "Kỳ chưa kết thúc"`), không chỉ dùng `now` cho dấu thời gian audit.
+  //
+  // Hôm nay bộ này xanh vì fixture cố ý chọn kỳ ĐÃ QUA (`2026-06`) và kỳ CÒN XA (`2099-01`)
+  // — hai mốc mà đồng hồ thật còn lâu mới chạm. Nhưng đó là lý do CHƯA nổ, không phải lý do
+  // KHÔNG nổ: ai thêm một điều kiện đọc `now` vào `lockPeriod`/`reopenPeriod`/`setDayOverride`
+  // là nó nổ, và người đó sẽ đi soi sai chỗ y như ca `LEAVE` hôm 13/09 (#244).
+  //
+  // 01/07/2026 10:00 VN — sau ngày cuối `KEY` (chốt được), và trước `2099-01` rất xa
+  // (kỳ tương lai vẫn phải bị từ chối).
+  const NOW = new Date("2026-07-01T03:00:00Z");
   const KEY = "2026-06"; // kỳ đã qua ⇒ chốt được
   const d1 = utc(2026, 6, 2); // Thứ Ba
   const d2 = utc(2026, 6, 3);
@@ -98,7 +109,7 @@ d("period — DB thật", () => {
   });
 
   it("lockPeriod: tính lại rồi khoá — ngày công LOCKED + periodId, summaryJson có 2 công; khoá lần hai bị từ chối; engine bỏ qua ngày LOCKED", async () => {
-    const r = await period.lockPeriod({ centerId, periodKey: KEY, actorId, reason: "test" });
+    const r = await period.lockPeriod({ now: NOW, centerId, periodKey: KEY, actorId, reason: "test" });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.summary.rows[0].units).toBe(2);
@@ -111,21 +122,21 @@ d("period — DB thật", () => {
     const p = await db.attendancePeriod.findUniqueOrThrow({ where: { centerId_periodKey: { centerId, periodKey: KEY } } });
     expect(p.status).toBe("LOCKED");
     expect((p.summaryJson as { totals: { units: number } }).totals.units).toBe(2);
-    expect((await period.lockPeriod({ centerId, periodKey: KEY, actorId, reason: null })).ok).toBe(false);
+    expect((await period.lockPeriod({ now: NOW, centerId, periodKey: KEY, actorId, reason: null })).ok).toBe(false);
     const { recomputeAttendanceDay } = await import("../../lib/cham-cong/recompute");
     expect((await recomputeAttendanceDay(userId, d1)).skipped).toBe("LOCKED");
     // Ghi đè trên ngày đã khoá bị chặn.
-    expect((await period.setDayOverride({ userId, workDate: d1, units: 0.5, note: "x", actorId })).ok).toBe(false);
+    expect((await period.setDayOverride({ now: NOW, userId, workDate: d1, units: 0.5, note: "x", actorId })).ok).toBe(false);
   });
 
   it("kỳ chưa kết thúc không chốt được; reopen mở băng; setDayOverride sau đó ghi ADJUSTED và summary đọc số ghi đè", async () => {
     const future = "2099-01";
-    expect((await period.lockPeriod({ centerId, periodKey: future, actorId, reason: null })).ok).toBe(false);
-    const ro = await period.reopenPeriod({ centerId, periodKey: KEY, actorId, reason: "sửa công" });
+    expect((await period.lockPeriod({ now: NOW, centerId, periodKey: future, actorId, reason: null })).ok).toBe(false);
+    const ro = await period.reopenPeriod({ now: NOW, centerId, periodKey: KEY, actorId, reason: "sửa công" });
     expect(ro.ok).toBe(true);
     expect((await db.attendancePeriod.findUniqueOrThrow({ where: { centerId_periodKey: { centerId, periodKey: KEY } } })).status).toBe("REOPENED");
     expect((await db.staffAttendanceDay.findMany({ where: { userId } })).every((x) => x.status === "COMPUTED")).toBe(true);
-    const ov = await period.setDayOverride({ userId, workDate: d1, units: 0.5, note: "về sớm có phép", actorId });
+    const ov = await period.setDayOverride({ now: NOW, userId, workDate: d1, units: 0.5, note: "về sớm có phép", actorId });
     expect(ov.ok).toBe(true);
     const row = await db.staffAttendanceDay.findUniqueOrThrow({ where: { userId_workDate: { userId, workDate: d1 } } });
     expect(row).toMatchObject({ overrideUnits: 0.5, status: "ADJUSTED", overrideById: actorId });
@@ -133,8 +144,8 @@ d("period — DB thật", () => {
     expect(s.rows[0].units).toBe(1.5);
     expect(s.rows[0].overrideDays).toBe(1);
     // Không lý do ⇒ chặn; bỏ ghi đè ⇒ về COMPUTED.
-    expect((await period.setDayOverride({ userId, workDate: d2, units: 0, note: "", actorId })).ok).toBe(false);
-    expect((await period.setDayOverride({ userId, workDate: d1, units: null, note: null, actorId })).ok).toBe(true);
+    expect((await period.setDayOverride({ now: NOW, userId, workDate: d2, units: 0, note: "", actorId })).ok).toBe(false);
+    expect((await period.setDayOverride({ now: NOW, userId, workDate: d1, units: null, note: null, actorId })).ok).toBe(true);
     expect((await db.staffAttendanceDay.findUniqueOrThrow({ where: { userId_workDate: { userId, workDate: d1 } } })).status).toBe("COMPUTED");
   });
 });
