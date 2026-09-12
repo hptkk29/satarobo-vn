@@ -11,6 +11,17 @@
 // File THUẦN — không Prisma, không DB, không server-only. Kiểu tham số là `string | null`
 // (không phải enum Prisma) để `due-now.ts` giữ được tính thuần của nó.
 
+// TODO(PHA-2): GỠ HẲN FILE NÀY khi bỏ duyệt đơn QLCS.
+//
+// PHA 2 xoá cơ chế duyệt đơn ⇒ `Order.installmentApprovalStatus` biến mất ⇒ hàm dưới
+// đây chỉ còn một nhánh và LUÔN TRẢ `true`. Lúc đó phải gỡ cả hàm, cả 2 chỗ gọi
+// (`computeDueNow`, `markInstallmentPaid`), cả 2 file test — KHÔNG để lại.
+//
+// Vì sao ghi TODO thay vì để đó: một hàm luôn trả `true` là loại rác khó thấy nhất, vì
+// nó TRÔNG NHƯ một cổng an toàn. Người đọc sau thấy `if (isInstallmentPlanActive(...))`
+// sẽ tin là có kiểm tra, rồi xây thêm lên trên cái không kiểm gì. Đúng cái bẫy mà
+// `isPaymentLedgerV2Enabled` (cờ 0 đường gọi, xem CLAUDE.md) đã mắc.
+
 /**
  * Kế hoạch trả góp của đơn có còn hiệu lực để THU THEO ĐỢT không.
  *
