@@ -358,3 +358,33 @@ describe("[PUSH-D5-T08] KHÔNG phải chuyển chủ thì không thu hồi, khô
     expect(w.where).toEqual({ endpoint: ENDPOINT });
   });
 });
+
+describe("[PUSH-D5-T13] huyThietBiTheoEndpointAction phải TRẢ VỀ số dòng đã thu hồi", () => {
+  // Hợp đồng này KHÔNG có bộ nào khác canh: `lib/auth/logout-client.test.ts` mock chính action
+  // này, nên gỡ `soDong` khỏi giá trị trả về vẫn để bộ đó xanh (đã đo: cấy lỗi ⇒ xanh giả).
+  // Mà mất `soDong` là `logoutToGate` KHÔNG BAO GIỜ `unsubscribe()` nữa — im lặng trở thành
+  // không-làm-gì, đúng loại hỏng câm mà cả Đợt 5 sinh ra để tránh.
+  it("thu hồi được 1 dòng ⇒ { ok: true, soDong: 1 }", async () => {
+    h.updateMany.mockImplementation(async () => {
+      h.thuTu.push("updateMany");
+      return { count: 1 };
+    });
+    expect(await huyThietBiTheoEndpointAction({ endpoint: ENDPOINT })).toEqual({
+      ok: true,
+      soDong: 1,
+    });
+  });
+
+  it("không dòng nào khớp ⇒ VẪN ok:true nhưng soDong: 0 — nơi gọi phải phân biệt được", async () => {
+    // `ok: true` khi 0 dòng là hành vi cố ý có từ Đợt 3 (người dùng vừa tắt máy này, DB không
+    // còn bản ghi là kết quả họ muốn). Chính vì thế `ok` KHÔNG nói được "endpoint này của tôi".
+    h.updateMany.mockImplementation(async () => {
+      h.thuTu.push("updateMany");
+      return { count: 0 };
+    });
+    expect(await huyThietBiTheoEndpointAction({ endpoint: ENDPOINT })).toEqual({
+      ok: true,
+      soDong: 0,
+    });
+  });
+});

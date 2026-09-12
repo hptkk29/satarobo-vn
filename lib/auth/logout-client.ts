@@ -68,34 +68,44 @@ const CHO_GO_PUSH_MS = 1500;
  * Đúng bài học của `tatMayNay` ở Đợt 3: `unsubscribe()` KHÔNG hoàn tác được, nên gọi nó trước
  * là tự phá mất thứ duy nhất định danh được dòng cần thu hồi.
  *
- * ── NHƯNG `unsubscribe()` VẪN CHẠY DÙ MÁY CHỦ HỎNG — và đây là chỗ KHÁC `tatMayNay` ──────
- * `tatMayNay` là thao tác SỔ SÁCH (người dùng muốn thấy dòng biến khỏi danh sách), nên ở đó
- * huỷ trước rồi bỏ qua kết quả máy chủ là nói sai về kết quả. Ở đây mục đích là BẢO VỆ người
- * ngồi máy tiếp theo: một endpoint đã huỷ là endpoint KHÔNG GIAO ĐƯỢC CHO AI, nên cứ huỷ vẫn
- * an toàn hơn để nguyên. Dòng DB còn `ACTIVE` sẽ tự chết ở lượt gửi kế (push service trả 410
- * ⇒ engine đánh `EXPIRED`), và nếu cả hai vế đều hỏng thì lưới thứ hai là chuyển chủ lúc người
- * mới bấm "Bật thông báo" trên đúng máy đó.
+ * ── CHỈ `unsubscribe()` KHI MÁY CHỦ XÁC NHẬN VỪA THU HỒI MỘT DÒNG **CỦA MÌNH** ───────────
+ * ⚠️ Đây là ĐẢO NGƯỢC so với bản đầu của Đợt 5, vì lăng kính phản biện đưa ra một dữ kiện mà
+ * bản đầu không tính tới. Bản đầu huỷ VÔ ĐIỀU KIỆN với lý lẽ "một endpoint đã huỷ thì không
+ * giao được cho ai, nên cứ huỷ vẫn an toàn hơn". Lý lẽ đó SAI ở môi trường MỘT ORIGIN:
+ * `test.satarobo.vn` và `localhost` đi nhánh không-chia-subdomain của `proxy.ts`, nên admin,
+ * portal và teacher DÙNG CHUNG một origin ⇒ CHUNG một service worker. Mà `logoutToGate` được
+ * gọi cả từ portal. Hệ quả đo được: một PHỤ HUYNH bấm Đăng xuất trên `test.satarobo.vn` sẽ
+ * `getSubscription()` ra đăng ký của NHÂN VIÊN, action từ chối ("Không có quyền"), rồi bản đầu
+ * vẫn `unsubscribe()` — giết đăng ký của người khác. Triệu chứng trên UAT là "bật rồi mà không
+ * nhận được gì", và `/settings` vẫn báo thiết bị đang hoạt động.
+ *
+ * Nên: hỏi máy chủ đã thu hồi được BAO NHIÊU dòng. `> 0` nghĩa là endpoint này thật sự thuộc
+ * người đang đăng xuất ⇒ huỷ. `0` hoặc lỗi ⇒ KHÔNG huỷ; lúc đó lưới còn lại là `bat()` (nó
+ * luôn `unsubscribe()` đăng ký cũ trước khi đăng ký mới) và nửa server ở `/dang-xuat`.
  *
  * ⚠️ KHÔNG kín, và đừng viết tài liệu như thể đã kín: đóng thẳng tab · mất mạng · JWT hết hạn
- * tự nhiên · xoá cookie tay đều không chạy hàm này. Ba ca "tài khoản chết" thì đã có nửa server
+ * tự nhiên · xoá cookie tay đều không chạy hàm này. Ca "tài khoản chết" thì đã có nửa server
  * ở `app/(auth)/dang-xuat/route.ts` lo. Phần còn lại nằm trong sổ nợ `docs/web-push §14.4`.
  */
 async function goDangKyPushCuaMayNay(): Promise<void> {
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
 
-  // Portal (phụ huynh) và site sale KHÔNG mount service worker ⇒ `getRegistration()` trả
-  // `undefined` và hàm thoát ở đây, không tốn một lượt gọi máy chủ nào. Đó là lý do đặt cổng
-  // này ở `logoutToGate` dùng chung được mà không phiền bốn nơi gọi.
+  // Nơi chưa ai cài worker ⇒ `getRegistration()` trả `undefined` và hàm thoát ở đây, không tốn
+  // một lượt gọi máy chủ nào. (Trên các host THẬT thì portal/sale không mount worker; trên
+  // localhost và `test.satarobo.vn` thì mọi khu dùng chung một origin nên có thể thấy worker
+  // của khu khác — đó chính là ca mà cổng `soDong > 0` dưới đây chặn.)
   const reg = await navigator.serviceWorker.getRegistration();
   const sub = await reg?.pushManager?.getSubscription();
   if (!sub) return;
 
+  let cuaToi = false;
   try {
-    await huyThietBiTheoEndpointAction({ endpoint: sub.endpoint });
+    const kq = await huyThietBiTheoEndpointAction({ endpoint: sub.endpoint });
+    cuaToi = kq.ok && (kq.soDong ?? 0) > 0;
   } catch {
-    // Máy chủ hỏng/phiên vừa hết — vẫn phải huỷ ở trình duyệt (xem khối chú thích trên).
+    // Máy chủ hỏng/phiên vừa hết ⇒ KHÔNG biết endpoint này của ai ⇒ không huỷ.
   }
-  await sub.unsubscribe();
+  if (cuaToi) await sub.unsubscribe();
 }
 
 export async function logoutToGate(): Promise<void> {

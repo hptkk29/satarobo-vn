@@ -318,7 +318,11 @@ export function BatThongBao({ thietBi }: { thietBi: ThietBiView[] }) {
                     )}
                   </p>
                   <p className="truncate text-xs text-muted-foreground">
-                    <span title={tb.origin}>{nhanHost(tb.origin)}</span> · nhận gần nhất:{" "}
+                    <span title={tb.origin}>{nhanHost(tb.origin)}</span> ·{" "}
+                    {/* Nhãn cắt của endpoint: thứ DUY NHẤT phân biệt được hai trình duyệt trông
+                        giống hệt nhau qua `tenMay` (vd hai máy Chrome/Windows). KHÔNG phải
+                        endpoint đầy đủ — xem `lib/push/thiet-bi.ts`. */}
+                    <span className="font-mono">{tb.nhan}</span> · nhận gần nhất:{" "}
                     {ngayGon(tb.lastSuccessAt)}
                   </p>
                 </div>

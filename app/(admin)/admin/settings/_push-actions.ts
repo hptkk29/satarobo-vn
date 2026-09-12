@@ -33,6 +33,16 @@ import { writeAudit } from "@/lib/audit/audit-log";
 export interface KetQuaThietBi {
   ok: boolean;
   error?: string;
+  /**
+   * Số dòng THẬT SỰ bị thu hồi (chỉ `huyThietBiTheoEndpointAction` đặt).
+   *
+   * Nơi gọi cần phân biệt "đã thu hồi dòng CỦA MÌNH" với "không có dòng nào khớp" — mà `ok`
+   * không nói được điều đó (action cố ý trả `ok: true` khi 0 dòng khớp, xem chú thích ở đó).
+   * Đường đăng xuất dùng con số này để quyết có `unsubscribe()` ở trình duyệt hay không: trên
+   * môi trường MỘT ORIGIN (localhost, `test.satarobo.vn`) một người KHÔNG phải chủ endpoint
+   * cũng chạy qua đó, và huỷ bừa là giết đăng ký của người khác.
+   */
+  soDong?: number;
 }
 
 /**
@@ -270,16 +280,19 @@ export async function huyThietBiTheoEndpointAction(input: unknown): Promise<KetQ
   const parsed = huyTheoEndpointSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Thiếu endpoint" };
 
-  await scopedDb(await resolveActor(ai.userId)).webPushSubscription.updateMany({
+  const kq = await scopedDb(await resolveActor(ai.userId)).webPushSubscription.updateMany({
     where: { endpoint: parsed.data.endpoint, userId: ai.userId, status: "ACTIVE" },
     data: { status: "REVOKED", revokedAt: new Date(), revokedReason: "Tắt trên máy này" },
   });
   // KHÔNG báo lỗi khi không có dòng nào: người dùng vừa tắt ở máy này, và việc DB không còn bản
   // ghi tương ứng là kết quả họ muốn. Bắt họ đọc một thông báo lỗi là nói sai về kết quả.
+  //
+  // NHƯNG phải TRẢ VỀ con số: đường đăng xuất cần phân biệt "vừa thu hồi dòng của mình" với
+  // "không có dòng nào khớp" để quyết có huỷ đăng ký ở trình duyệt hay không (xem `soDong`).
 
   // Hai màn dùng chung component này — phải làm mới CẢ HAI, nếu không người dùng bật xong
   // vẫn thấy "Chưa có thiết bị nào" ngay cạnh dòng chữ "Đã bật".
   revalidatePath("/settings");
   revalidatePath("/teacher/ho-so");
-  return { ok: true };
+  return { ok: true, soDong: kq.count };
 }

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auth, signOut } from "@/lib/auth";
-import { thuHoiMoiThietBiCuaNguoi, type LyDoThuHoiPush } from "@/lib/push/thu-hoi";
+import { checkSessionLiveness } from "@/lib/auth/live-session";
+import { thuHoiMoiThietBiCuaNguoi } from "@/lib/push/thu-hoi";
 
 export const dynamic = "force-dynamic";
 
@@ -30,31 +31,51 @@ export async function GET(req: NextRequest) {
   // không để nó thành chỗ nhét nội dung tuỳ ý.
   const reason = raw && ALLOWED_REASONS.has(raw) ? raw : null;
 
-  // ── THU HỒI ĐĂNG KÝ PUSH — chỉ khi CÓ `reason` (US-14b Đợt 5).
+  // ── THU HỒI ĐĂNG KÝ PUSH KHI TÀI KHOẢN ĐÃ CHẾT (US-14b Đợt 5) ─────────────────────────
   //
-  // Có `reason` nghĩa là KHÔNG PHẢI người dùng tự bấm: một trong bốn layout vừa đọc DB và thấy
-  // tài khoản bị xoá (`deletedAt`), bị vô hiệu hoá (`!isActive`), hoặc `tokenVersion` lệch (đổi
-  // mật khẩu) rồi `redirect` sang đây. Ba ca đó là ba ca mà nửa client KHÔNG BAO GIỜ chạy được
-  // — trang đã điều hướng — nên nếu không thu hồi ở đây thì đăng ký push của một nhân viên vừa
-  // rời công ty còn sống trên MỌI máy của họ, và lưới thứ hai (chuyển chủ khi người mới bấm bật
-  // thông báo) cũng không với tới vì chẳng ai bật thông báo trên máy đó nữa.
+  // Vì sao cần ở ĐÂY: bốn layout (`admin`/`teacher`/`portal`/`sale`) `redirect` sang route này
+  // khi đọc DB và thấy tài khoản bị xoá (`deletedAt`), bị vô hiệu hoá (`!isActive`), hoặc
+  // `tokenVersion` lệch (đổi mật khẩu). Ba ca đó nửa client KHÔNG BAO GIỜ chạy được — trang đã
+  // điều hướng — nên nếu không thu hồi ở đây thì đăng ký push của một nhân viên vừa rời công ty
+  // còn sống trên MỌI máy của họ. Gỡ TẤT CẢ ở ca này là ĐÚNG, không quá tay.
   //
-  // Gỡ TẤT CẢ thiết bị ở đây là ĐÚNG, không quá tay: tài khoản đã chết thì không được nhận push
-  // ở đâu cả. Ca người dùng TỰ bấm đăng xuất đi đường khác (`lib/auth/logout-client.ts`) và chỉ
-  // gỡ đúng máy đang ngồi — gỡ hết ở đó mới là quá tay, vì người ta đăng xuất hằng ngày và sẽ
-  // mất push trên điện thoại riêng.
+  // ⚠️⚠️ TUYỆT ĐỐI KHÔNG TIN `?reason=` LÀM BẰNG CHỨNG — bản đầu của Đợt 5 đã mắc đúng lỗi này
+  // và lăng kính phản biện tìm ra. `reason` là THAM SỐ URL, ai cũng đặt được:
+  //   · cookie phiên khai `sameSite: "lax"` (`lib/auth.ts`), nên một ĐIỀU HƯỚNG TOP-LEVEL — link
+  //     trong tin nhắn, `window.open` — tới `/dang-xuat?reason=session-disabled` là mang cookie
+  //     đi theo. Trước Đợt 5 hậu quả chỉ là "bị đăng xuất" (đăng nhập lại là xong); tin vào
+  //     `reason` biến nó thành PHÁ TRẠNG THÁI LÂU DÀI: mất push trên mọi máy, phải đi bật tay
+  //     từng cái mà không hiểu vì sao.
+  //   · không cần kẻ tấn công: route `force-dynamic`, nên sau khi bị đá ra rồi đăng nhập lại,
+  //     bấm Back hai nhịp là gọi lại GET này với cookie MỚI — tài khoản còn sống nguyên mà vẫn
+  //     bị gỡ sạch thiết bị.
   //
-  // ⚠️ PHẢI đọc `auth()` TRƯỚC `signOut()`. Sau `signOut` thì cookie đã dọn và không còn cách
-  // nào biết vừa thu hồi cho ai. Ở đúng ba ca này JWT vẫn còn hợp lệ (chỉ DB nói phiên đã chết,
-  // mà middleware không đọc DB — xem khối chú thích trên), nên `auth()` vẫn trả về người dùng.
+  // Nên: HỎI DB. `checkSessionLiveness` là chính hàm mà ba trong bốn layout đang dùng, và nó
+  // trả về đúng hai lý do của `LyDoThuHoiPush`. `reason` từ URL nay CHỈ còn dùng để hiện thông
+  // báo ở `/login` (danh sách trắng bên trên), không quyết định gì.
   //
-  // `thuHoiMoiThietBiCuaNguoi` cam kết KHÔNG NÉM: route này tồn tại để CỨU người khỏi vòng lặp
-  // redirect, một lỗi lọt ra ngoài sẽ giam họ lại trong đúng cái vòng lặp đó.
-  if (reason) {
-    const session = await auth();
-    const userId = session?.user?.id;
-    if (userId) {
-      await thuHoiMoiThietBiCuaNguoi({ userId, lyDo: reason as LyDoThuHoiPush });
+  // Cố ý KHÔNG gói trong `if (reason)`: bỏ điều kiện đó thì thêm một câu tra DB cho mỗi lượt ghé
+  // route (route này chỉ được ghé bởi phiên đã chết + nút đăng xuất của site Sale — không phải
+  // đường nóng), mà đóng thêm được đường `components/sale/sale-nav.tsx` vốn trỏ `/dang-xuat`
+  // KHÔNG kèm reason.
+  //
+  // ⚠️ PHẢI đọc `auth()` TRƯỚC `signOut()`. Sau `signOut` cookie đã dọn, không còn cách nào biết
+  // vừa thu hồi cho ai. Ở ba ca trên JWT vẫn hợp lệ (chỉ DB nói phiên đã chết, mà middleware
+  // không đọc DB — xem khối chú thích trên), nên `auth()` vẫn trả về người dùng.
+  //
+  // `thuHoiMoiThietBiCuaNguoi` cam kết KHÔNG NÉM; `checkSessionLiveness` thì CÓ THỂ ném (nó tra
+  // DB), nên bọc — route này tồn tại để CỨU người khỏi vòng lặp redirect, một lỗi lọt ra ngoài
+  // sẽ giam họ lại trong đúng cái vòng lặp đó.
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (userId) {
+    try {
+      const song = await checkSessionLiveness(userId, session?.user?.tokenVersion);
+      if (!song.live) {
+        await thuHoiMoiThietBiCuaNguoi({ userId, lyDo: song.reason });
+      }
+    } catch (err) {
+      console.warn("[push] không kiểm được tình trạng phiên khi đăng xuất — bỏ thu hồi:", err);
     }
   }
 

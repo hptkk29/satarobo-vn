@@ -9,8 +9,10 @@
  * Bất biến pin ở đây:
  *  • MÁY CHỦ TRƯỚC, `unsubscribe()` SAU — `unsubscribe` không hoàn tác được, gọi trước là phá
  *    mất thứ duy nhất định danh được dòng cần thu hồi (đúng bài học `tatMayNay` ở Đợt 3).
- *  • NHƯNG `unsubscribe()` vẫn chạy dù máy chủ hỏng — một endpoint đã huỷ là endpoint không
- *    giao được cho AI, an toàn hơn để nguyên. Đây là chỗ KHÁC `tatMayNay` (thao tác sổ sách).
+ *  • CHỈ `unsubscribe()` khi máy chủ XÁC NHẬN vừa thu hồi một dòng CỦA MÌNH (`soDong > 0`).
+ *    Đảo ngược so với bản đầu của Đợt 5: ở môi trường MỘT ORIGIN (`localhost`,
+ *    `test.satarobo.vn`) admin/portal/teacher dùng chung một service worker, nên huỷ vô điều
+ *    kiện nghĩa là một PHỤ HUYNH đăng xuất giết đăng ký của NHÂN VIÊN.
  *  • Cả hai việc trên chạy TRƯỚC `signOut`: action lấy `userId` từ phiên server, sau `signOut`
  *    nó chỉ trả "Chưa đăng nhập".
  *  • Máy chủ treo KHÔNG được giam người dùng lại — có trần thời gian chờ.
@@ -28,7 +30,7 @@ const h = vi.hoisted(() => {
     }),
     huyAction: vi.fn(async (_i: { endpoint: string }) => {
       thuTu.push("action");
-      return { ok: true as const };
+      return { ok: true as const, soDong: 1 };
     }),
     unsubscribe: vi.fn(async () => {
       thuTu.push("unsubscribe");
@@ -69,7 +71,9 @@ beforeEach(() => {
   });
   h.huyAction.mockClear().mockImplementation(async () => {
     h.thuTu.push("action");
-    return { ok: true as const };
+    // `soDong: 1` = máy chủ XÁC NHẬN vừa thu hồi một dòng CỦA MÌNH. Đây là điều kiện duy nhất
+    // cho phép `unsubscribe()` — xem nhóm ca [PUSH-D5-T05].
+    return { ok: true as const, soDong: 1 };
   });
   h.unsubscribe.mockClear().mockImplementation(async () => {
     h.thuTu.push("unsubscribe");
@@ -109,21 +113,42 @@ describe("[PUSH-D5-T04] gỡ đăng ký push của máy này trước khi đăng
   });
 });
 
-describe("[PUSH-D5-T05] hỏng nửa đường vẫn phải bảo vệ người ngồi sau", () => {
-  it("action NÉM ⇒ VẪN unsubscribe (endpoint đã huỷ không giao được cho ai)", async () => {
-    // Khác `tatMayNay`: ở đây mục đích là BẢO VỆ, không phải sổ sách. Dòng DB còn ACTIVE sẽ tự
-    // chết ở lượt gửi kế (push service trả 410 ⇒ engine đánh EXPIRED).
-    h.huyAction.mockRejectedValue(new Error("mạng hỏng"));
+describe("[PUSH-D5-T05] CHỈ huỷ ở trình duyệt khi máy chủ xác nhận endpoint là CỦA MÌNH", () => {
+  it("máy chủ thu hồi 0 dòng ⇒ KHÔNG unsubscribe (đây là endpoint của NGƯỜI KHÁC)", async () => {
+    // Ca thật ở môi trường MỘT ORIGIN: `test.satarobo.vn` và `localhost` đi nhánh không-chia-
+    // subdomain của `proxy.ts`, nên admin/portal/teacher dùng chung MỘT service worker. Phụ
+    // huynh bấm Đăng xuất trên test ⇒ `getSubscription()` ra đăng ký của NHÂN VIÊN. Bản đầu của
+    // Đợt 5 huỷ vô điều kiện ⇒ giết đăng ký của người khác, triệu chứng trên UAT là "bật rồi mà
+    // không nhận được gì" trong khi /settings vẫn báo thiết bị đang hoạt động.
+    h.huyAction.mockImplementation(async () => {
+      h.thuTu.push("action");
+      return { ok: true as const, soDong: 0 };
+    });
     await logoutToGate();
-    expect(h.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(h.unsubscribe).not.toHaveBeenCalled();
     expect(h.signOut).toHaveBeenCalledTimes(1);
     expect(window.location.href).toBe("/login");
   });
 
-  it("action trả ok:false (phiên vừa hết) ⇒ vẫn unsubscribe", async () => {
-    h.huyAction.mockResolvedValue({ ok: false, error: "Chưa đăng nhập" } as never);
+  it("action trả ok:false (phụ huynh — 'Không có quyền') ⇒ KHÔNG unsubscribe", async () => {
+    h.huyAction.mockImplementation(async () => {
+      h.thuTu.push("action");
+      return { ok: false, error: "Không có quyền" } as never;
+    });
     await logoutToGate();
-    expect(h.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(h.unsubscribe).not.toHaveBeenCalled();
+    expect(h.signOut).toHaveBeenCalledTimes(1);
+  });
+
+  it("action NÉM (mạng hỏng) ⇒ KHÔNG unsubscribe — không biết của ai thì không đụng", async () => {
+    // Đánh đổi có ý thức: mất một lượt dọn (lưới còn lại là `bat()` luôn `unsubscribe()` đăng ký
+    // cũ trước khi đăng ký mới, cộng nửa server ở `/dang-xuat`) để không bao giờ giết đăng ký
+    // của người khác.
+    h.huyAction.mockRejectedValue(new Error("mạng hỏng"));
+    await logoutToGate();
+    expect(h.unsubscribe).not.toHaveBeenCalled();
+    expect(h.signOut).toHaveBeenCalledTimes(1);
+    expect(window.location.href).toBe("/login");
   });
 
   it("unsubscribe NÉM ⇒ vẫn signOut và vẫn điều hướng, không giam người dùng", async () => {

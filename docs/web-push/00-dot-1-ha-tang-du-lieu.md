@@ -772,12 +772,29 @@ không), và **cả hai nút bấm của hai host đó đi qua đúng một hàm
 Gỡ hết ở đây mới là quá tay: người ta đăng xuất hằng ngày, và đăng ký của điện thoại riêng
 cùng origin `admin.satarobo.vn` sẽ chết theo mỗi lần họ rời máy công ty.
 
-**Nửa server — server ĐÁ RA vì tài khoản chết ⇒ gỡ TẤT CẢ.**
-`app/(auth)/dang-xuat/route.ts`: có `reason` (`session-invalidated` / `session-disabled` /
-`password-changed`) thì đọc `auth()` rồi `thuHoiMoiThietBiCuaNguoi`. Ở ba ca đó "gỡ hết" là
-ĐÚNG: tài khoản đã chết thì không được nhận push ở đâu cả. Đây cũng là ca **nguy hiểm nhất** mà
-hướng client không với tới — nhân viên vừa rời công ty, client không chạy, và lưới thứ hai
-(chuyển chủ lúc người mới bật thông báo) cũng vô dụng vì chẳng ai bật thông báo trên máy đó nữa.
+**Nửa server — tài khoản CHẾT (theo DB) ⇒ gỡ TẤT CẢ.**
+`app/(auth)/dang-xuat/route.ts`: đọc `auth()`, **hỏi DB bằng `checkSessionLiveness`**, và chỉ
+`thuHoiMoiThietBiCuaNguoi` khi nó nói `live: false`. Ở ca đó "gỡ hết" là ĐÚNG: tài khoản đã chết
+thì không được nhận push ở đâu cả. Đây cũng là ca **nguy hiểm nhất** mà hướng client không với
+tới — nhân viên vừa rời công ty, client không chạy.
+
+> ⚠️ **`?reason=` KHÔNG PHẢI BẰNG CHỨNG — bản đầu của Đợt 5 tin nó, và đó là một lỗ bảo mật do
+> chính bản vá đẻ ra** (lăng kính phản biện tìm ra sau khi bốn cổng đã xanh). `reason` là tham
+> số URL, ai cũng đặt được, và cookie phiên khai `sameSite: "lax"` nên một **điều hướng
+> top-level** (link trong tin nhắn, `window.open`) tới `/dang-xuat?reason=session-disabled`
+> mang cookie đi theo. Trước Đợt 5 hậu quả chỉ là "bị đăng xuất" — đăng nhập lại là xong; tin
+> vào `reason` biến nó thành **phá trạng thái lâu dài**: mất push trên mọi máy, phải đi bật tay
+> từng cái mà không hiểu vì sao. Không cần kẻ tấn công cũng chạm được: route `force-dynamic`,
+> nên sau khi bị đá ra rồi đăng nhập lại, **bấm Back hai nhịp** là gọi lại GET này với cookie
+> MỚI trên một tài khoản còn sống nguyên.
+>
+> Nay `reason` chỉ còn dùng để hiện thông báo ở `/login`. Lý do GHI VÀO SỔ thu hồi là lý do của
+> **DB**, không phải chuỗi người gọi tự khai.
+
+Cổng liveness chạy cho **mọi** lượt ghé route, không chỉ khi có `reason` — nhờ vậy đóng thêm
+được nút đăng xuất của site Sale (`components/sale/sale-nav.tsx`, `<a href="/dang-xuat">` không
+kèm reason). Cái giá là một câu tra DB cho mỗi lượt ghé, mà route này chỉ được ghé bởi phiên đã
+chết + nút đó — không phải đường nóng.
 
 ### 14.3 Ba thứ tự bắt buộc, mỗi thứ tự có một ca test canh
 
@@ -788,11 +805,26 @@ hướng client không với tới — nhân viên vừa rời công ty, client 
 3. **Dọn push TRƯỚC `signOut`** ở client. Action lấy `userId` từ phiên server; sau `signOut` nó
    chỉ trả "Chưa đăng nhập".
 
-**Một chỗ CỐ Ý làm NGƯỢC `tatMayNay`:** ở đây `unsubscribe()` **vẫn chạy dù máy chủ hỏng**.
-`tatMayNay` là thao tác SỔ SÁCH (người dùng muốn thấy dòng biến khỏi danh sách) nên huỷ trước rồi
-bỏ qua kết quả máy chủ là nói sai về kết quả. Ở đây mục đích là **BẢO VỆ người ngồi sau**: một
-endpoint đã huỷ là endpoint **không giao được cho AI**, nên cứ huỷ vẫn an toàn hơn để nguyên. Dòng
-DB còn `ACTIVE` sẽ tự chết ở lượt gửi kế (push service trả 410 ⇒ engine đánh `EXPIRED`).
+**Chỉ `unsubscribe()` khi máy chủ XÁC NHẬN vừa thu hồi một dòng CỦA MÌNH (`soDong > 0`).**
+
+⚠️ Đây là **đảo ngược** so với bản đầu của Đợt 5, vì lăng kính đưa ra một dữ kiện bản đầu không
+tính tới. Bản đầu huỷ **vô điều kiện** với lý lẽ "một endpoint đã huỷ thì không giao được cho ai,
+nên cứ huỷ vẫn an toàn hơn". Lý lẽ đó **sai ở môi trường MỘT ORIGIN**: `test.satarobo.vn` và
+`localhost` đi nhánh không-chia-subdomain của `proxy.ts`, nên admin/portal/teacher **dùng chung
+một origin ⇒ chung một service worker**. Mà `logoutToGate` được gọi cả từ portal. Hệ quả đo được:
+một **phụ huynh** bấm Đăng xuất trên `test.satarobo.vn` sẽ `getSubscription()` ra đăng ký của
+**nhân viên**, action từ chối ("Không có quyền"), rồi bản đầu vẫn `unsubscribe()` — **giết đăng ký
+của người khác**. Triệu chứng trên UAT: "bật rồi mà không nhận được gì", trong khi `/settings` vẫn
+báo thiết bị đang hoạt động. Đúng môi trường mà việc nghiệm thu sẽ diễn ra.
+
+Nên: `huyThietBiTheoEndpointAction` nay trả về `soDong` (số dòng thật sự thu hồi). `> 0` nghĩa là
+endpoint này thật sự thuộc người đang đăng xuất ⇒ huỷ. `0`, `ok: false`, hoặc action ném ⇒ **không
+huỷ**; lưới còn lại là `bat()` (nó luôn `unsubscribe()` đăng ký cũ trước khi đăng ký mới) và nửa
+server ở `/dang-xuat`. Đánh đổi có ý thức: mất một lượt dọn trong ca mạng hỏng, để **không bao giờ
+giết đăng ký của người khác**.
+
+*(`ok` không dùng được cho việc này: action cố ý trả `ok: true` khi 0 dòng khớp — hành vi có từ
+Đợt 3, vì "người dùng vừa tắt máy này và DB không còn bản ghi" đúng là kết quả họ muốn.)*
 
 **Trần thời gian chờ 1,5 giây.** Người bấm "Đăng xuất" trên máy dùng chung là đang muốn ĐỨNG LÊN
 ĐI; mạng chậm mà chờ vô hạn thì họ bỏ đi với phiên còn mở — tệ hơn hẳn cái đang cố vá.
@@ -803,14 +835,20 @@ DB còn `ACTIVE` sẽ tự chết ở lượt gửi kế (push service trả 410
 
 - **đóng thẳng tab / tắt trình duyệt** — không có sự kiện nào chạy kịp (`beforeunload` không
   await được một lượt gọi mạng, và `sendBeacon` thì không mang được kết quả để biết đã thu hồi);
-- **JWT hết hạn tự nhiên** — không ai ghé `/dang-xuat`, không `reason` nào sinh ra;
+- **JWT hết hạn tự nhiên** — không ai ghé `/dang-xuat`;
 - **xoá cookie bằng tay / dùng cửa sổ ẩn danh rồi đóng**;
-- **mất mạng đúng lúc bấm đăng xuất** — quá 1,5 giây là bỏ qua, `signOut` vẫn chạy.
+- **mất mạng đúng lúc bấm đăng xuất** — quá 1,5 giây là bỏ qua, `signOut` vẫn chạy (và nay cũng
+  không `unsubscribe()`, vì không biết endpoint của ai — xem §14.3);
+- **`/api/auth/signout` của NextAuth** (`app/api/auth/[...nextauth]/route.ts` xuất cả `GET` và
+  `POST`, matcher của `proxy.ts` không loại `/api/*`) — **đường thứ 5**, không đi qua
+  `logoutToGate` cũng không qua `/dang-xuat` nên không nửa nào thu hồi. Không UI nào của repo
+  trỏ tới nó, và POST đòi CSRF token của NextAuth, nên hiện là đường **lý thuyết**; vẫn ghi ra.
 
-Trong mọi ca đó, dòng `(endpoint, userId = người cũ, ACTIVE)` **còn sống**, và **lưới duy nhất là
-§14.5** (người mới bật thông báo trên đúng máy đó thì chuyển chủ). Lưới đó chỉ bật khi có người
-CHỦ ĐỘNG bấm "Bật thông báo" — nếu người ngồi sau không bấm, thông báo của người cũ vẫn nổ trên
-máy đó tới khi push service trả 410.
+Trong mọi ca đó, dòng `(endpoint, userId = người cũ, ACTIVE)` **còn sống**. Thứ thật sự bảo vệ
+người ngồi sau là **`bat()`**: nó luôn `unsubscribe()` đăng ký cũ trước khi đăng ký mới, nên ngay
+khi người mới bấm "Bật thông báo", endpoint của người cũ **chết** (push service trả 410 ⇒ engine
+đánh `EXPIRED`). Nhưng nó chỉ bật khi có người **chủ động** bấm — nếu người ngồi sau không bấm,
+thông báo của người cũ vẫn nổ trên máy đó tới khi có một lượt gửi chạm 410.
 
 **Kết luận trung thực: hai lỗ ở §13.8b nay đóng ở mọi đường CÓ MÃ CHẠY, không phải ở mọi đường.**
 Muốn kín hẳn thì cần một cột "thiết bị do client sinh id" để engine so với phiên gần nhất trên
@@ -831,8 +869,10 @@ push **im lặng** (dòng đã đổi chủ), còn máy của họ từ đó run
 quả hàm đó là **prop của một Client Component**, tức được tuần tự hoá thẳng vào HTML của
 `/settings` và `/teacher/ho-so` — ai mở "xem mã nguồn" là đọc được endpoint của **mọi** thiết bị
 mình có. Chính nó biến lỗ trên từ lý thuyết thành khả thi.
-Nay trả **băm** (`bamEndpoint`, sha256 16 hex) + **nhãn cắt** (`host/…6 ký tự cuối`). Màn hình
-vẫn đánh dấu đúng "máy này" vì client tự băm endpoint của chính nó bằng `bamEndpointOClient`
+Nay trả **băm** (`bamEndpoint`, sha256 16 hex) + **nhãn cắt** (`host/…6 ký tự cuối`, **hiện
+trong danh sách thiết bị** — nó là thứ duy nhất phân biệt được hai trình duyệt trông giống hệt
+nhau qua `tenMay`, vd hai máy Chrome/Windows). Màn hình vẫn đánh dấu đúng "máy này" vì client tự
+băm endpoint của chính nó bằng `bamEndpointOClient`
 (`lib/push/client-key.ts`, `crypto.subtle`) rồi so chuỗi — chính xác tuyệt đối, không lộ gì.
 Hai bản băm **phải khớp từng byte** và có test so hai đầu, đúng khuôn cặp
 `khoaVapidSangBytes` / `giaiBase64Url` đã có từ Đợt 3.
@@ -878,6 +918,22 @@ câu `upsert` ngay sau**. Vết **dài hạn** nằm ở `AuditLog` (`module: "p
 và `resultJson`: endpoint là một **khả năng gửi**, không để nó nguyên ở bất kỳ đâu. Có ca test
 khẳng định chuỗi endpoint không xuất hiện trong bản ghi audit.
 
+> ⚠️ **NHÁNH CHUYỂN CHỦ GẦN NHƯ KHÔNG BAO GIỜ CHẠY TỪ GIAO DIỆN — đừng chờ sổ `TAKEOVER` có
+> dòng.** Lăng kính đo được: `bat()` **luôn `unsubscribe()` đăng ký cũ** trước khi `subscribe()`
+> (mã Đợt 3, để né 403 `VapidPkHashMismatch`), nên push service cấp **endpoint MỚI** ⇒
+> `findUnique({ endpoint })` trả `null` ⇒ `chuyenChu = false`. Nghĩa là thứ thật sự bảo vệ người
+> ngồi sau trên máy dùng chung là **`unsubscribe()` ở `bat()`**, không phải cơ chế chuyển chủ.
+>
+> Nhánh chuyển chủ vẫn cần, cho đúng hai ca: (i) push service cấp **lại cùng một endpoint** sau
+> khi huỷ (không có gì bảo đảm nó không làm vậy), và (ii) có kẻ gọi action với endpoint của người
+> khác — tức ca mà §15.1(1) vừa lấy sạch đầu vào. Cả hai đều hiếm, nên **sổ `TAKEOVER` rỗng là
+> BÌNH THƯỜNG, không phải dấu hiệu bản vá không chạy.**
+>
+> Hệ quả còn lại, ghi rõ: sau khi `bat()` huỷ endpoint cũ, dòng `(E_cũ, người cũ, ACTIVE)` **vẫn
+> nằm đó** cho tới lượt gửi đầu tiên chạm 410. Trong khoảng đó `/settings` của người cũ vẫn liệt
+> nó là "thiết bị đang nhận" — một dòng nói sai, không phải một lỗ bảo mật (endpoint đã chết,
+> không giao được cho ai).
+
 ### 15.3 Kết quả rà soát: còn chỗ nào trả endpoint / p256dh / auth ra ngoài?
 
 Đã quét `app/` + `components/` + `lib/` (grep `endpoint: true` · `p256dh` · `auth` · `.endpoint`):
@@ -909,3 +965,36 @@ lọc đúng `userId` + `ACTIVE`, `Date` → ISO.
 - **Cửa sổ hở của đăng xuất vẫn nguyên như §14.4** — Đợt 5 không đóng nhóm 4.
 - Muốn đóng cả hai hẳn thì cùng một thứ: **một cột "id thiết bị do client sinh"** để engine so với
   phiên gần nhất trên máy đó ⇒ migration ⇒ quyết riêng.
+
+---
+
+## 16. Đợt 5 — ba lỗi lăng kính phản biện tìm ra SAU khi bốn cổng đã xanh
+
+Chạy **tuần tự, một agent mỗi lượt, cấm ghi tệp**, và đối chiếu `git status` giữa mỗi lượt — yêu
+cầu cứng sau sự cố Đợt 4 (agent nền tự cấy lỗi vào `lib/push/` rồi không phục nguyên, làm hai
+lượt chạy test cho kết quả mâu thuẫn trong cùng một trạng thái mã).
+
+| # | Lỗi | Mức | Đã vá ở |
+|---|---|---|---|
+| 1 | **`?reason=` bị tin làm bằng chứng "tài khoản đã chết"** ⇒ gỡ oan MỌI thiết bị của một tài khoản CÒN SỐNG. Chạm được bằng một link (cookie `sameSite: "lax"`), và cả bằng **bấm Back hai nhịp** không cần kẻ tấn công. **Lỗ do chính bản vá Đợt 5 đẻ ra.** | NẶNG | §14.2 |
+| 2 | **Một ORIGIN ⇒ phụ huynh đăng xuất giết đăng ký của nhân viên.** `test.satarobo.vn`/`localhost` không chia subdomain nên chung service worker; bản đầu `unsubscribe()` vô điều kiện. Đúng môi trường sẽ nghiệm thu. | VỪA | §14.3 |
+| 3 | **Nhánh chuyển chủ gần như không bao giờ chạy** (vì `bat()` luôn huỷ đăng ký cũ trước) ⇒ hai câu trong §14.4 và §15.2 nói sai về "lưới thứ hai". | VỪA | §14.4, §15.2 |
+
+Kèm hai mục nhỏ: **đường đăng xuất thứ 5** (`/api/auth/signout` của NextAuth — lý thuyết, ghi vào
+§14.4) và **`ThietBiView.nhan` là dữ liệu chết** (nay hiện trong danh sách thiết bị, §15.1).
+
+**Một lỗ TEST mà chính vòng cấy lỗi lộ ra:** hợp đồng "`huyThietBiTheoEndpointAction` trả về
+`soDong`" không bộ nào canh — `lib/auth/logout-client.test.ts` **mock** chính action đó, nên gỡ
+`soDong: kq.count` khỏi giá trị trả về vẫn để bộ đó xanh. Mà mất `soDong` là `logoutToGate` **không
+bao giờ `unsubscribe()` nữa** — im lặng trở thành không-làm-gì. Đã thêm `[PUSH-D5-T13]` canh đúng
+hợp đồng đó, và cấy lại thấy đỏ.
+
+**Lăng kính cũng phản bác được 6 nghi vấn** (ghi lại để người sau không đi lại): `Promise.race`
+không treo/không rò (`setTimeout` không clear nhưng timer chờ không ngăn promise resolve);
+`getRegistration()` **không** treo vô hạn — thứ treo là `navigator.serviceWorker.ready`, và đường
+đăng xuất không dùng nó; iOS Safari chưa cài PWA vẫn có `'serviceWorker' in navigator` nên
+`getSubscription()` trả `null` và thoát sớm; `tokenVersion` bị bump ở máy khác **không** làm mất
+thu hồi (callback `jwt`/`session` không đọc DB nên `auth()` vẫn trả người dùng); danh sách trắng
+`reason` phủ đủ chiều GỬI (mọi layout đều kèm reason, nguồn động duy nhất là `checkSessionLiveness`
+vốn chỉ trả 2 chuỗi); phụ huynh đổi mật khẩu **không** gỡ oan của ai (`hasStaffRole` chặn nên họ
+có 0 dòng).
