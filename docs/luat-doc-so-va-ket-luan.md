@@ -84,6 +84,32 @@ git merge-tree --write-tree origin/main HEAD   # thoát 1 = có xung đột
 mở từng bản vá của `main` ra đọc trước khi giữ việc xoá — bản vá bảo mật biến mất ở đây
 thì **không để lại dấu vết nào** trong diff cuối.
 
+### Hệ quả — TRƯỚC KHI VÁ một ca đỏ, đọc `git log origin/main` của chính file đó
+
+> **Phiên khác có thể đã vá rồi.** Repo này chạy nhiều phiên / nhiều nhánh song song, và
+> một ca đỏ trên `main` là thứ **ai cũng nhìn thấy cùng lúc**.
+
+```bash
+git fetch origin main -q
+git log --oneline origin/main -5 -- <đường/dẫn/file/đang/đỏ>
+```
+
+Ca 13/09/2026: tôi chẩn đoán ca `LEAVE` của `requests.spec.ts` đỏ vì đồng hồ, vá, commit,
+đẩy — rồi mới thấy **#244 đã vá đúng chuyện đó và merge vào `main` hôm trước**, với cùng
+chẩn đoán và một phép đo mạnh hơn (*"rerun CÙNG commit hôm sau thì đỏ"*).
+
+Cách xử lý đúng khi phát hiện trùng — và nó **không phải** "vứt bản của mình":
+
+1. `git merge origin/main` vào nhánh;
+2. **nhường bản của họ** ở đúng chỗ họ đã vá (đừng ghi đè một bản vá đã qua review);
+3. giữ phần của mình nếu nó phủ RỘNG hơn, ở vai **hàng rào thứ hai**, và nói rõ trong chú
+   thích là nó không mâu thuẫn (ở đây: `base.now` là mặc định cho cả khối, còn `now` truyền
+   thẳng ở từng ca spread **sau** `...base` nên vẫn thắng);
+4. ghi vào commit rằng đã trùng, để người đọc lịch sử không tưởng là hai bug khác nhau.
+
+⚠️ Dấu hiệu sớm nhất của "đang làm trùng": nhánh mình cắt từ một `main` đã cũ. `git rev-list
+--count origin/main ^HEAD` khác 0 là lúc phải đi đọc `git log` trước khi code tiếp.
+
 ---
 
 ## Luật 3 — chú thích không phải bằng chứng, schema mới là
@@ -1056,6 +1082,34 @@ là giải pháp; **bỏ nó đi** mới là.
 ⚠️ Ngay cả **phép đếm** cũng mơ hồ: đếm mục `include` bằng hai câu grep khác nhau cho ra
 15 và 17; chỉ khi tách đúng mảng mới ra 12. Nếu người viết docs còn đếm ra ba số khác
 nhau thì con số trong docs lại càng không đáng tin.
+
+### Hệ quả — CHẨN ĐOÁN CHƯA ĐO thì đừng viết vào chú thích
+
+> **Chú thích sống lâu hơn cuộc trò chuyện, và người sau đọc nó như SỰ THẬT.**
+
+Luật 17 cấm ghi con số chưa có gì giữ. Hệ quả này cấm thứ nguy hiểm hơn: một **câu khẳng
+định về hệ thống** mà mình chưa đo.
+
+Ca 13/09/2026 — tôi viết thẳng vào chú thích của `requests.spec.ts`:
+
+> *"Nó đã đỏ trên `main` trước cả PR này; không ai thấy vì bộ `tests/cham-cong` không nằm
+> trong required check (luật 10)."*
+
+Vế sau **SAI**, và phép đo bác bỏ nó tốn đúng một lệnh:
+
+```
+gh api repos/<o>/<r>/branches/main/protection
+→ required có "Chat DB invariants", enforce_admins: true
+```
+
+Câu ấy nghe hợp lý vì nó khớp một bài học CÓ THẬT (luật 10, đo 08/09) — và đó chính là chỗ
+nguy hiểm: **một chẩn đoán sai mượn uy tín của một bài học đúng.** Nếu không quay lại đo, nó
+nằm trong mã, và người sau sẽ đi đặt lại danh sách required để chữa một bệnh khác hẳn.
+
+**Cách làm:** trước khi viết một câu khẳng định về hệ thống vào chú thích / commit / tài
+liệu, hỏi *"tôi ĐO câu này bằng lệnh nào?"*. Không trả lời được thì viết nó ở **thì nghi
+vấn** ("nghi là…", "chưa đo"), hoặc đừng viết.
+
 
 ### Liên hệ
 
