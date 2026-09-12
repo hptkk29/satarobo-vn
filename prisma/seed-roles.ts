@@ -798,16 +798,14 @@ export const ROLE_SEED: RoleSeed[] = [
       // canStageToClass trong app/(admin)/admin/media/actions.ts.
       { action: "media:view", scopeType: "GLOBAL" },
       { action: "media:upload-draft", scopeType: "GLOBAL" },
-      // Tích hợp ZaloCRM (S6) — vai này CHƯA có quyền `inbox:*` nào, đây là quyền
-      // hộp-thư-ngoài ĐẦU TIÊN của Giáo vụ. Cấp vì Giáo vụ là vai sinh ra để làm CSKH
-      // (xem ghi chú `parent-requests:manage` ở trên): họ nhắn phụ huynh hằng ngày,
-      // ZaloCRM là kênh nhắn ấy. KHÔNG kéo theo `inbox:*` — hộp thư đa kênh là màn
-      // khác, dữ liệu khác, và chưa có quyết định mở cho vai này.
-      //
-      // ⚠️ Ở LOCAL/DEV KHÔNG THỬ ĐƯỢC vai này: `CENTER_CLASS_MANAGER` không tồn tại
-      // trong enum `Role` v1 (`prisma/schema.prisma`), mà local chạy v1. Giáo vụ vào
-      // được /zalo-crm CHỈ trên prod (v2). Đừng coi đó là bug và đừng mượn vai v1 khác.
-      { action: "zalocrm:use", scopeType: "GLOBAL" },
+      // ⛔ ZaloCRM — Giáo vụ KHÔNG dùng (chủ dự án chốt 13/09/2026, đảo quyết định
+      // ngày 06/09). Bản đầu cấp `zalocrm:use` cho vai này và ánh xạ họ sang vai
+      // `admin` bên fork; mà `admin` ở đó BỎ QUA toàn bộ ma trận quyền (`settings` chứa
+      // khoá Public API, `permission_group`, `user`, `zalo_account`, `audit_log`). Một
+      // vai không nhắn khách bằng nick Zalo thì không có lý do cầm chừng ấy quyền.
+      // Gỡ quyền ở đây PHẢI đi kèm gỡ khỏi `VAI_ZALOCRM`
+      // (`lib/integrations/zalocrm/vai-tro.ts`) — còn quyền mà mất ánh xạ thì họ mở màn
+      // ra chỉ để đọc "vai của bạn chưa được ánh xạ".
       // --- Đào tạo nội bộ (EL-02 §3) --- tất cả GLOBAL: không ô nào của ma trận
       // mang scope khác, và cách ly cơ sở của module này đến từ dữ liệu lượt giao chứ
       // không từ scopeType (xem ghi chú R1 đầu file).

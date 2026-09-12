@@ -32,14 +32,35 @@ export type VaiZaloCrm = "admin" | "member";
  * org) do người vận hành tạo tay một lần, không cấp qua SSO.
  */
 export const VAI_ZALOCRM: Readonly<Record<string, VaiZaloCrm>> = {
-  // Quản trị tối cao + quản lý cơ sở + giáo vụ ⇒ đọc mọi hội thoại trong org của mình.
+  // 🔴 CHỈ quản trị tối cao giữ `admin` (sửa 13/09/2026). Lý do không phải "cho gọn":
+  // `userHasGrant` bên fork kết thúc bằng `if (user.role === 'owner' || 'admin') return
+  // true` — tức `admin` BỎ QUA TOÀN BỘ ma trận quyền, gồm `settings` (nơi chứa khoá
+  // Public API), `permission_group`, `user`, `zalo_account` (gỡ nick), `audit_log`.
+  // Bản đầu cấp `admin` cho cả quản lý cơ sở lẫn giáo vụ, tức mở đúng chừng đó cửa cho
+  // hai vai không cần tới.
   SUPER_ADMIN: "admin",
-  CENTER_MANAGER: "admin",
-  CENTER_CLASS_MANAGER: "admin",
-  // Tư vấn viên ⇒ chỉ nick của chính mình.
-  SALES_CSM: "member", // v1
+  // Quản lý cơ sở + tư vấn viên ⇒ `member`. Tầm nhìn rộng của QLCS (đọc mọi nick của cơ
+  // sở mình) KHÔNG đến từ vai nữa mà từ `ZaloAccountAccess`, do
+  // `lib/integrations/zalocrm/cap-quyen-nick.ts` đối soát mỗi 5 phút.
+  CENTER_MANAGER: "member", // v1
   CENTER_SALES_CSM: "member", // v2
+  SALES_CSM: "member", // v1
 };
+
+/**
+ * Vai ĐƯỢC CẤP QUYỀN TRUY CẬP NICK theo chính sách (chốt 13/09/2026):
+ * *mọi tư vấn viên và quản lý của một cơ sở đọc/gửi được trên mọi nick thuộc cơ sở đó*.
+ *
+ * Tách khỏi `VAI_ZALOCRM` vì hai câu hỏi khác nhau: bảng trên trả lời "vào bên kia với
+ * tư cách gì", danh sách này trả lời "được cấp quyền trên nick nào". `SUPER_ADMIN` cố ý
+ * KHÔNG có mặt — họ là `admin` nên `getZaloScope` đã cho thấy toàn org, cấp thêm dòng
+ * `ZaloAccountAccess` chỉ là rác.
+ */
+export const VAI_DUOC_CAP_NICK: readonly string[] = [
+  "CENTER_MANAGER",
+  "CENTER_SALES_CSM",
+  "SALES_CSM",
+];
 
 /** Thứ tự ưu tiên khi một người giữ nhiều vai — vai rộng hơn đứng trước. */
 const UU_TIEN: readonly VaiZaloCrm[] = ["admin", "member"];

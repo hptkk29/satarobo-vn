@@ -249,3 +249,28 @@ export function datKhoaPhieuZalocrm(
     than: { externalRef },
   });
 }
+
+/**
+ * `PUT /api/public/zalo-accounts/:id/access` — ĐẶT danh sách người được dùng một nick.
+ *
+ * 🔴 THAY CẢ TẬP, không phải "thêm một người": ai không có trong `externalIds` sẽ BỊ GỠ
+ * quyền. Đó là chủ đích — vế gỡ (nghỉ việc, chuyển cơ sở, đổi vai) là vế không ai nhớ
+ * làm tay và hỏng thì không có triệu chứng.
+ *
+ * Bên fork chỉ đụng người đến từ Sata (`externalId != null`); tài khoản tạo tay trong
+ * ZaloCRM không bị hệ ngoài thu quyền.
+ *
+ * Mảng RỖNG là hợp lệ và có nghĩa: "không ai bên Sata được dùng nick này nữa".
+ */
+export function datQuyenNickZalocrm(
+  orgCode: string,
+  zcrmAccountId: string,
+  externalIds: readonly string[],
+): Promise<KetQuaGoi<{ granted?: number; revoked?: number; unknown?: number }>> {
+  return goiZalocrm({
+    orgCode,
+    duongDan: `/api/public/zalo-accounts/${encodeURIComponent(zcrmAccountId)}/access`,
+    method: "PUT",
+    than: { externalIds: [...externalIds] },
+  });
+}

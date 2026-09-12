@@ -51,12 +51,19 @@ describe("ZaloCRM · quyền — khai đủ hai tầng (v1 tĩnh + v2 động)",
     expect(viPham).toEqual([]);
   });
 
-  it("[ZC-Q-03] 4 vai CÓ: SUPER_ADMIN, CENTER_MANAGER, CENTER_CLASS_MANAGER, CENTER_SALES_CSM", () => {
-    // Người trực ZaloCRM = Sale cơ sở; QLCS và Giáo vụ theo dõi/trực thay khi Sale vắng.
+  it("[ZC-Q-03] ĐÚNG 3 vai: SUPER_ADMIN, CENTER_MANAGER, CENTER_SALES_CSM", () => {
+    // Người trực ZaloCRM = Sale cơ sở; QLCS theo dõi/trực thay khi Sale vắng.
     // SUPER_ADMIN bắt buộc có ở v2 lẫn v1 (permissions.test.ts khoá cứng chiều v1).
-    const CO = ["SUPER_ADMIN", "CENTER_MANAGER", "CENTER_CLASS_MANAGER", "CENTER_SALES_CSM"];
-    const giu = vaiV2Giu(KEY);
-    for (const vai of CO) expect(giu, `thiếu vai ${vai}`).toContain(vai);
+    //
+    // 🔴 Giáo vụ (`CENTER_CLASS_MANAGER`) ĐÃ BỊ GỠ 13/09/2026, đảo quyết định 06/09.
+    // Lý do không phải "dọn cho gọn": vai đó từng được ánh xạ sang `admin` bên fork, mà
+    // `admin` ở đó BỎ QUA toàn bộ ma trận quyền (`settings` chứa khoá Public API,
+    // `permission_group`, `user`, `zalo_account`, `audit_log`).
+    //
+    // Chốt CỨNG cả tập chứ không chỉ `toContain`: `toContain` không bắt được vai THỪA,
+    // mà thừa mới là hướng nguy hiểm ở đây.
+    const giu = [...vaiV2Giu(KEY)].sort();
+    expect(giu).toEqual(["CENTER_MANAGER", "CENTER_SALES_CSM", "SUPER_ADMIN"]);
   });
 
   it("[ZC-Q-04] vai KHÔNG có: HO_SALE, TEACHER, CENTER_ACCOUNTANT, HO_HR, PARENT, AUDITOR", () => {
@@ -80,10 +87,9 @@ describe("ZaloCRM · quyền — khai đủ hai tầng (v1 tĩnh + v2 động)",
   });
 
   it("[ZC-Q-06] ma trận v1 = SUPER_ADMIN + CENTER_MANAGER + SALES_CSM (đúng 3 vai)", () => {
-    // Ba vai v1 tương ứng bốn RoleDef v2 ở [ZC-Q-03]. `CENTER_CLASS_MANAGER` (Giáo vụ)
-    // KHÔNG BIỂU DIỄN ĐƯỢC ở đây: enum `Role` của Prisma chỉ có 9 giá trị và không có nó.
-    // Nghĩa là ở local/dev (chạy v1) Giáo vụ không vào được /zalo-crm dù prod vào được —
-    // đó KHÔNG phải bug, đừng "vá" bằng cách mượn vai khác.
+    // Từ 13/09/2026 hai tầng KHỚP NHAU: ba vai v1 ở đây ứng đúng ba RoleDef v2 ở
+    // [ZC-Q-03]. Trước đó v2 có thêm Giáo vụ và v1 không biểu diễn được vai ấy, nên
+    // local và prod cho kết quả khác nhau — nay hết lệch.
     const v1 = PERMISSIONS[KEY as (typeof ALL_ACTIONS)[number]];
     expect([...v1].sort()).toEqual(["CENTER_MANAGER", "SALES_CSM", "SUPER_ADMIN"]);
   });

@@ -8,10 +8,32 @@ import { describe, it, expect } from "vitest";
 import { maVaiCuaNguoiDung, vaiZaloCrm, VAI_ZALOCRM } from "./vai-tro";
 
 describe("[ZC-SSO-07] ánh xạ vai Sata → vai ZaloCRM", () => {
-  it("SUPER_ADMIN / CENTER_MANAGER / CENTER_CLASS_MANAGER ⇒ 'admin'", () => {
+  it("[ZC-SSO-07a] CHỈ SUPER_ADMIN ⇒ 'admin' — không ai khác", () => {
+    // 🔴 Ca này là hàng rào an ninh, không phải ca hình thức. `admin` bên fork đi qua
+    // `if (user.role === 'owner' || 'admin') return true` trong `userHasGrant`, tức BỎ
+    // QUA toàn bộ ma trận quyền: `settings` (chứa khoá Public API), `permission_group`,
+    // `user`, `zalo_account` (gỡ nick), `audit_log`. Thêm một vai vào nhánh `admin` là
+    // mở đúng chừng đó cửa, và Sata sẽ KHÔNG báo lỗi gì.
     expect(vaiZaloCrm(["SUPER_ADMIN"])).toBe("admin");
-    expect(vaiZaloCrm(["CENTER_MANAGER"])).toBe("admin");
-    expect(vaiZaloCrm(["CENTER_CLASS_MANAGER"])).toBe("admin");
+
+    const CHI_LA_MEMBER = ["CENTER_MANAGER", "CENTER_SALES_CSM", "SALES_CSM"];
+    for (const ma of CHI_LA_MEMBER) {
+      expect(vaiZaloCrm([ma]), `${ma} phải là member, không được là admin`).toBe("member");
+    }
+    // Chốt cứng danh sách vai được cấp `admin` — thêm một dòng vào bảng là ca này đỏ,
+    // buộc người thêm phải đọc đoạn trên.
+    const vaiAdmin = Object.entries(VAI_ZALOCRM)
+      .filter(([, v]) => v === "admin")
+      .map(([k]) => k);
+    expect(vaiAdmin).toEqual(["SUPER_ADMIN"]);
+  });
+
+  it("[ZC-SSO-07b] Giáo vụ KHÔNG dùng ZaloCRM — không ánh xạ, không ký vé", () => {
+    // Chốt 13/09/2026 (đảo quyết định 06/09). Đi kèm gỡ `zalocrm:use` khỏi
+    // `CENTER_CLASS_MANAGER` trong `prisma/seed-roles.ts`: còn quyền mà mất ánh xạ thì
+    // họ mở màn ra chỉ để đọc "vai của bạn chưa được ánh xạ".
+    expect(vaiZaloCrm(["CENTER_CLASS_MANAGER"])).toBeNull();
+    expect("CENTER_CLASS_MANAGER" in VAI_ZALOCRM).toBe(false);
   });
 
   it("Sale ⇒ 'member' — cả mã v1 (SALES_CSM) lẫn mã v2 (CENTER_SALES_CSM)", () => {
@@ -43,12 +65,17 @@ describe("[ZC-SSO-07] ánh xạ vai Sata → vai ZaloCRM", () => {
     expect(vaiZaloCrm([])).toBeNull();
   });
 
-  it("'admin' THẮNG khi giữ nhiều vai cùng lúc — không phụ thuộc thứ tự mảng", () => {
+  it("vai RỘNG NHẤT thắng khi kiêm nhiệm — không phụ thuộc thứ tự mảng", () => {
     // Kiêm nhiệm là chuyện thật (QLCS kiêm tư vấn). Lấy vai đầu tiên khớp thì kết quả
     // đổi theo thứ tự dòng `UserOrgRole` trong DB — tức cùng một người, hai lần mở
     // trang ra hai quyền khác nhau.
-    expect(vaiZaloCrm(["CENTER_SALES_CSM", "CENTER_MANAGER"])).toBe("admin");
-    expect(vaiZaloCrm(["CENTER_MANAGER", "CENTER_SALES_CSM"])).toBe("admin");
+    //
+    // Sau 13/09/2026 cả hai vai này đều là `member`, nên phép kiểm "không đổi theo thứ
+    // tự" phải dùng cặp có hai mức KHÁC nhau mới còn ý nghĩa.
+    expect(vaiZaloCrm(["CENTER_SALES_CSM", "CENTER_MANAGER"])).toBe("member");
+    expect(vaiZaloCrm(["CENTER_MANAGER", "CENTER_SALES_CSM"])).toBe("member");
+    expect(vaiZaloCrm(["CENTER_SALES_CSM", "SUPER_ADMIN"])).toBe("admin");
+    expect(vaiZaloCrm(["SUPER_ADMIN", "CENTER_SALES_CSM"])).toBe("admin");
   });
 
   it("bảng chỉ có đúng hai giá trị đích — 'owner' của fork KHÔNG bao giờ được cấp", () => {
@@ -80,12 +107,20 @@ describe("[ZC-SSO-08] maVaiCuaNguoiDung — gom mã vai từ CẢ HAI hệ (v1 s
   });
 
   it("người chỉ có vai ở DB (v2) vẫn ra vai ZaloCRM đúng dù session.role là vai khác", () => {
-    // Ca thật: tài khoản gốc mang `role = SALES_CSM` nhưng được nâng lên QLCS bằng
-    // `UserOrgRole`. Đọc mỗi session là cấp nhầm `member` cho một quản lý cơ sở.
+    // Ca thật: tài khoản gốc mang `role = SALES_CSM` nhưng được nâng lên quản trị tối
+    // cao bằng `UserOrgRole`. Đọc mỗi session là cấp nhầm `member`.
     const ma = maVaiCuaNguoiDung({
       role: "SALES_CSM",
-      orgRoles: [{ roleCode: "CENTER_MANAGER" }],
+      orgRoles: [{ roleCode: "SUPER_ADMIN" }],
     });
     expect(vaiZaloCrm(ma)).toBe("admin");
+
+    // Chiều ngược lại cũng phải đúng: vai v2 KHÔNG nằm trong bảng (Giáo vụ) thì không
+    // được mượn vai v1 của session để lọt qua.
+    const maGiaoVu = maVaiCuaNguoiDung({
+      role: "TEACHER",
+      orgRoles: [{ roleCode: "CENTER_CLASS_MANAGER" }],
+    });
+    expect(vaiZaloCrm(maGiaoVu)).toBeNull();
   });
 });
