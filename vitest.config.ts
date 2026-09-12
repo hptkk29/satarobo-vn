@@ -5,6 +5,21 @@ import path from "node:path";
 export default defineConfig({
   plugins: [react()],
   test: {
+    // ⚠️ ĐỒNG HỒ CỦA BỘ TEST = UTC, GIỐNG PROD (13/09/2026).
+    //
+    // Vercel chạy UTC; máy dev ở Asia/Saigon (+07). Mọi chỗ test dùng `getDay()`/
+    // `getDate()`/`new Date(y, m, d)` (giờ MÁY) vì thế hành xử khác nhau ở hai nơi —
+    // đúng loại bug "chạy máy tôi thì được". Ép UTC ở đây làm máy dev khắt khe BẰNG
+    // prod, nên lệch lộ ra ngay tại local thay vì đợi CI hay đợi người dùng.
+    //
+    // Đã ĐO trước khi bật, nên biết nó miễn phí: `TZ=UTC pnpm test:unit` → 5970/5970
+    // xanh; `tests/cham-cong` trên Postgres local → 65/65 xanh. Không ca nào đang dựa
+    // vào máy dev ở +07.
+    //
+    // ⚠️ KHÔNG phải là "đặt TZ toàn cục" mà ghi chép dự án cấm: lệnh cấm đó nhắm việc
+    // đặt `TZ` cho TIẾN TRÌNH ỨNG DỤNG (làm vỡ cách Prisma đọc cột `@db.Date`). Đây chỉ
+    // là tiến trình chạy test, và đặt về ĐÚNG thứ prod dùng — ngược chiều với cái bị cấm.
+    env: { TZ: "UTC" },
     globals: true,
     environment: "jsdom",
     setupFiles: ["./tests/setup.ts"],

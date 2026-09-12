@@ -1632,3 +1632,166 @@ múi giờ. Thêm một lưới thứ hai, hiệu quả hơn cả hai:
 
 Rẻ hơn nữa, và nên làm trước: **lint chặn `submitAttendanceRequest`/`decideRequest`/… gọi
 trong `tests/**` mà thiếu `now:`** — hẹp nhưng đúng chỗ đau, và không cần hạ tầng mới.
+
+---
+
+# Bước 6 — soát 12 file, và hai lưới chặn họ lỗi ngày
+
+## 6.1 Lưới #1 — lint, ĐÃ LÀM
+
+`lib/eslint/require-now-in-tests.mjs` + test riêng. Chặn `submitAttendanceRequest` /
+`decideRequest` gọi trong `tests/**` mà thiếu `now` khai **tường minh**.
+
+### Phát hiện kèm theo: `pnpm lint` KHÔNG quét `tests/`
+
+Script cũ: `eslint app components lib scripts`. **Không có `tests`.** Nghĩa là mọi rule
+nhắm test đều vô hiệu trong CI — kể cả rule vừa viết. Bằng chứng: rule báo **12 lỗi** khi
+gọi `eslint <file>` tay, `pnpm lint` thì **im lặng**. Đúng luật 10: cổng không soi tới nơi
+cần soi thì bằng không có cổng.
+
+Vá: thêm `tests` vào `pnpm lint`, khai globals Node cho `tests/**` (y như khối `scripts/**`
+đã làm ở EL-07 — `Buffer`/`console` thật sự tồn tại khi Vitest chạy), vá 3 lỗi
+`no-useless-assignment` có sẵn trong `tests/manual/**`. Nay **`pnpm lint` = 0 error** với
+phạm vi rộng hơn.
+
+### Rule hẹp có chủ đích — bỏ `recordTimeLog`
+
+Nó cũng có `now ?? new Date()` và cũng đã nổ một lần (#235). Nhưng đo: cả **5 lời gọi** của
+nó trong `timelog.spec.ts` **không truyền ngày nào** — chúng cố ý dựa vào "hôm nay" và
+khẳng định `CHAM_NGOAI_LICH`. Bắt chúng là **5 dương tính giả**, và rule ồn thì bị vô hiệu
+hoá. Ca nguy hiểm của nó mang hình dạng KHÁC (test tự dựng `workDate` bằng `Date.UTC` trong
+khi hàm chốt bằng `vnDateOnly`) — đó là lệch múi giờ, cần rule khác.
+
+### Đã cấy lại HAI lỗi để chứng minh cổng bắt được
+
+| Lỗi cấy vào | Kết quả |
+|---|---|
+| nới rule coi `...spread` là đã chốt `now` | **2 ca ĐỎ** |
+| nới phạm vi rule ra cả mã sản phẩm | **1 ca ĐỎ** |
+| bản đúng | 9/9 xanh |
+
+Và cấy lại bom thật (bỏ `now` khỏi ca LEAVE): **test đỏ** + **lint báo 1 lỗi** — hai lưới
+độc lập cùng bắt.
+
+## 6.2 Soát 12 file — đo TRỰC TIẾP, không suy
+
+Thay vì đọc mã đoán ngày nổ, đẩy đồng hồ hệ thống lên rồi chạy thật (`vi.useFakeTimers`
+chỉ fake `Date`, `shouldAdvanceTime: true` để không treo `setTimeout`).
+
+### An toàn — đo được, xanh tới +400 ngày
+
+| File | +90 ngày | +400 ngày |
+|---|---|---|
+| `lib/portal/buoi-hoc.test.ts` | ✅ | ✅ |
+| `lib/lead/rotation.test.ts` | ✅ | ✅ |
+| `lib/lms/assignment-window.test.ts` | ✅ | ✅ |
+| `lib/crm/marketing-report.test.ts` | ✅ | ✅ |
+| `lib/chat/admin.test.ts` | ✅ | ✅ |
+| `lib/chat/queries.test.ts` | ✅ | ✅ |
+
+**121/121 ca xanh** ở cả hai mốc. Sáu file này dùng ngày cứng làm **dữ liệu**, không đưa
+vào cổng so-với-hôm-nay. Không cần vá.
+
+Thêm: `tests/cham-cong` (toàn bộ, 65 ca) cũng **xanh ở +400 ngày** sau bản vá — bom đã tắt
+thật, không phải tắt tạm.
+
+### Đã nổ và đã vá
+
+| File | Ngày nổ | Vá |
+|---|---|---|
+| `tests/cham-cong/requests.spec.ts` | **11/09/2026** (`d11` hoá hôm nay; xanh tới 10/09) | #244 + 12 lời gọi còn lại ở PR này |
+| `tests/cham-cong/timelog.spec.ts` | không phải ngày — **cửa sổ giờ 15:30Z→24:00Z** | #235 |
+
+### CHƯA ĐO ĐƯỢC — 5 file Playwright + 1 file ngoài `include`
+
+| File | Ngày cứng muộn nhất | Vì sao chưa đo |
+|---|---|---|
+| `tests/e2e/r7/payment-request-lifecycle.spec.ts` | 2026-11-01 | không nằm trong `include` của `vitest.config.ts` ⇒ chạy bằng runner khác |
+| `tests/e2e/r6/reserve-request.spec.ts` | 2026-09-01 | Playwright |
+| `tests/e2e/r6/commission-config.spec.ts` | 2026-06-10 | Playwright |
+| `tests/e2e/r7/bulk-convert.spec.ts` | 2026-09-15 | Playwright |
+| `tests/e2e/r7/class-snapshot.spec.ts` | 2026-07-22 | Playwright |
+| `tests/e2e/r1/messenger-models.spec.ts` | 2026-06-08 | Playwright |
+
+Lưới fake-timer của Vitest **không áp** cho Playwright — nó chạy tiến trình riêng. Ghi
+**"chưa đo"** thay vì đoán ngày nổ (luật 1: đo ≠ suy). Muốn đo thì cần `libfaketime` hoặc
+đặt ngày hệ thống của runner — chính là lưới #2 dưới đây.
+
+Ba file có ngày cứng đã **thuộc quá khứ** (06/2026, 07/2026, 09/2026) mà CI vẫn xanh ⇒ khả
+năng cao chúng dùng ngày làm dữ liệu chứ không qua cổng so-ngày. Nhưng đó là **suy luận**,
+không phải số đo — nên vẫn xếp vào nhóm chưa đo.
+
+## 6.3 Lưới #2 — CI định kỳ đẩy đồng hồ. Đề xuất, chờ duyệt
+
+### Chu kỳ và giờ chạy
+
+**Hằng tuần, Chủ nhật 02:00 giờ VN (19:00Z thứ Bảy).** Lý do từng vế:
+
+- **Hằng tuần**, không phải hằng ngày: bom ngày cứng nổ theo *ngày*, và một tuần là đủ sớm
+  để vá trước khi nó đỏ vào mặt người khác. Hằng ngày thì thành tiếng ồn, mà tiếng ồn là
+  đường dẫn tới chỗ người ta thôi đọc.
+- **Chủ nhật 02:00 VN**: không PR nào đang chạy, không ai đang nghiệm thu. Quan trọng hơn:
+  nó nằm **trong** cửa sổ giờ 15:30Z→24:00Z của họ lỗi TZ, nên **một lượt bắt cả hai họ**.
+- Chạy **hai mốc**: `+90` ngày (sắp nổ) và `+400` ngày (bom xa). Hai job riêng để biết cái
+  nào đỏ.
+
+### Cách báo — phải đọc được là "bom sắp nổ", KHÔNG phải "PR này hỏng"
+
+Đây là điều kiện chủ dự án đặt ra, và nó quyết định thiết kế:
+
+1. **Workflow RIÊNG** (`.github/workflows/bom-hen-gio.yml`), **không** nằm trong `ci.yml`.
+   Nó sẽ không bao giờ xuất hiện trong danh sách check của một PR.
+2. **`on: schedule` + `workflow_dispatch` duy nhất** — không `push`, không `pull_request`.
+   Không có đường nào để nó bám vào một PR.
+3. Tên job nói thẳng nó là gì: **`Bom hẹn giờ (+90 ngày)`** / **`Bom hẹn giờ (+400 ngày)`**.
+   Người đọc thấy tên là biết ngay đây không phải cổng của PR.
+4. **Đỏ thì mở issue**, không chỉ đỏ trong tab Actions: `gh issue create` với nhãn
+   `bom-hen-gio`, tiêu đề `[bom] <tên ca> sẽ đỏ từ <ngày>`, thân bài chứa mốc đã dùng +
+   log ca đỏ. Một lượt đỏ trong tab Actions mà không ai mở tab thì bằng không có lưới.
+5. **Issue trùng thì cập nhật, không mở mới** — tra theo nhãn + tiêu đề trước khi tạo.
+
+### Giới hạn phải biết trước
+
+Lưới này **chỉ phủ bộ Vitest**. Playwright chạy tiến trình riêng nên `vi.useFakeTimers`
+không tới; muốn phủ thì phải đặt ngày hệ thống của runner (`sudo date`) hoặc `libfaketime`,
+và cả hai đều dễ làm vỡ TLS (chứng chỉ hết hạn theo đồng hồ giả). **Đề xuất: giai đoạn 1
+chỉ làm Vitest** — nó phủ `lib/**` + `tests/{chat,nen,lead-intake,cham-cong,elearning}`,
+tức phần lớn logic nghiệp vụ. Playwright để giai đoạn 2, quyết riêng.
+
+## 6.4 Lưới TZ=UTC + canary 17:30Z — ĐÃ QUYẾT, và TZ=UTC ĐÃ LÀM
+
+Chủ dự án hỏi giữ hay bỏ. Quyết từng vế, có số đo:
+
+### Canary 17:30Z — **BỎ**
+
+Lưới #2 ở trên chạy Chủ nhật 19:00Z, tức **nằm trong** cửa sổ 15:30Z→24:00Z của họ lỗi TZ.
+Một lượt bắt cả hai họ. Thêm canary riêng là hai lịch làm cùng một việc, và mỗi lịch thêm
+vào là một thứ nữa để người ta học cách bỏ qua.
+
+### Ép `TZ=UTC` cho bộ test — **GIỮ, và đã làm luôn trong PR này**
+
+Hôm 08/09 tôi đề xuất "đo trước rồi mới quyết". Đã đo:
+
+| Phép đo | Kết quả |
+|---|---|
+| `TZ=UTC pnpm test:unit` | **5970/5970 xanh** |
+| `TZ=UTC` + `tests/cham-cong` trên Postgres local | **65/65 xanh** |
+
+**0 ca đang dựa vào máy dev ở +07** ⇒ nó miễn phí, nên hoãn là vô nghĩa. Đặt
+`env: { TZ: "UTC" }` trong `vitest.config.ts`.
+
+Giá trị mà lưới #2 không thay được: nó bắt họ TZ **ngay ở local**, trước cả CI.
+
+⚠️ **KHÔNG phải "đặt TZ toàn cục" mà ghi chép dự án cấm.** Lệnh cấm đó nhắm việc đặt `TZ`
+cho **tiến trình ỨNG DỤNG** — nó làm vỡ cách Prisma đọc cột `@db.Date`. Đây là tiến trình
+chạy **test**, và đặt về **đúng thứ prod dùng**; ngược chiều với cái bị cấm.
+
+### Và cấu hình này có ca chứng minh của chính nó
+
+`lib/time/tz-bo-test.test.ts`. Vì sao cần: Node đọc `TZ` **lúc khởi tạo tiến trình** — một
+cấu hình đặt muộn hơn thời điểm đó sẽ không có tác dụng gì, **và im lặng**. Repo đã bị đúng
+loại "cổng im lặng" ba lần (hook đọc biến không tồn tại · `pnpm lint` không quét `tests/` ·
+`include` của vitest là bộ lọc cứng).
+
+Đã cấy lại lỗi: **bỏ `env: { TZ }` ⇒ cả 3 ca ĐỎ** (`expected -420 to be +0`, `expected 23
+to be 16`); để lại ⇒ 3/3 xanh.
