@@ -11,6 +11,13 @@
 //   • Có kế hoạch 2 đợt và đợt 1 CHƯA thu  → số tiền đợt 1.
 //   • Không có kế hoạch / đợt 1 đã thu     → phần còn thiếu của cả đơn.
 // THUẦN — không chạm DB, test được trực tiếp.
+//
+// ⚠️ 13/09/2026 — điều kiện "kế hoạch còn hiệu lực" đã DỜI sang
+// `lib/payments/installment-plan.ts` (dùng chung với `markInstallmentPaid`) và đã ĐẢO:
+// `PENDING_APPROVAL` nay CÓ hiệu lực. Lý do đầy đủ nằm trong file đó — đọc trước khi
+// sửa lại, vì đây là chỗ quyết định số tiền in lên QR cho khách.
+
+import { isInstallmentPlanActive } from "@/lib/payments/installment-plan";
 
 export type InstallmentLike = {
   soDot: number;
@@ -23,7 +30,10 @@ export type DueNowInput = {
   /** Tổng đã ghi nhận (Payment RECORDED còn hiệu lực) của đơn. */
   paidAmount: number;
   installments: InstallmentLike[];
-  /** null = không cần duyệt; chỉ APPROVED (hoặc null) mới coi kế hoạch có hiệu lực. */
+  /**
+   * Trạng thái duyệt kế hoạch trả góp. `null` = đơn không cần duyệt.
+   * Chỉ `REJECTED` làm kế hoạch mất hiệu lực — xem `isInstallmentPlanActive`.
+   */
   installmentApprovalStatus?: string | null;
 };
 
@@ -41,8 +51,7 @@ export function computeDueNow(input: DueNowInput): DueNow {
   const paid = Math.max(0, Math.round(input.paidAmount));
   const remaining = Math.max(0, total - paid);
 
-  const planActive =
-    input.installmentApprovalStatus == null || input.installmentApprovalStatus === "APPROVED";
+  const planActive = isInstallmentPlanActive(input.installmentApprovalStatus);
   const plan = planActive
     ? [...input.installments].sort((a, b) => a.soDot - b.soDot)
     : [];
