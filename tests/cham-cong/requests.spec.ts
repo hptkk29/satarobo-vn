@@ -106,10 +106,22 @@ d("requests — DB thật", () => {
     await db.$disconnect();
   });
 
+  // 🔴 ĐỒNG HỒ PHẢI ĐÓNG BĂNG — sự cố 13/09/2026.
+  //
+  // Ngày trong bộ này là TUYỆT ĐỐI (08–12/09/2026), còn `submitAttendanceRequest` mặc định
+  // đọc `new Date()`. Khi lịch thật đi qua 12/09, đơn `LEAVE` cho 11–12/09 thành đơn cho
+  // NGÀY ĐÃ QUA và bị luật "báo trước 1 ngày" từ chối ⇒ ca đỏ mà KHÔNG dòng mã nào đổi.
+  // Nó đã đỏ trên `main` trước cả PR này; không ai thấy vì bộ `tests/cham-cong` không nằm
+  // trong required check (luật 10).
+  //
+  // Hàm đã có sẵn tham số `now` (luật 7 — đồng hồ tiêm được); bộ test chỉ quên truyền.
+  // Mốc lấy đúng mốc mà khối test THUẦN ở đầu file đang dùng, để hai nửa cùng một hôm.
+  const NOW = new Date("2026-09-10T03:00:00Z"); // 10:00 VN 10/09/2026
+
   const base = {
     startTime: null, endTime: null, hours: null, className: null, classId: null, targetUserId: null,
     requesterNewTemplateId: null, targetNewTemplateId: null, leaveTypeId: null, requestedInAt: null, requestedOutAt: null,
-    chosenCenterId: null, detail: null, reason: "test",
+    chosenCenterId: null, detail: null, reason: "test", now: NOW,
   };
 
   it("cơ sở nhận đơn = cơ sở của ca ngày áp dụng (CS2), không phải cơ sở nhà (CS1)", async () => {
