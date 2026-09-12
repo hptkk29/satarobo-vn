@@ -14,6 +14,9 @@ import {
   materializeInstallmentRequests,
   revertInstallmentRequests,
 } from "@/lib/payments/payment-request";
+// Điều kiện "kế hoạch còn hiệu lực" — DÙNG CHUNG với `computeDueNow`. Hai bên lệch
+// nhau là nhận tiền một đằng, ghi sổ một nẻo (xem file đó).
+import { isInstallmentPlanActive } from "@/lib/payments/installment-plan";
 
 // =============================================================================
 // Commit 4 — thanh toán TỐI ĐA 2 ĐỢT cho 1 Order.
@@ -176,10 +179,27 @@ export async function markInstallmentPaid(
 
   await db.$transaction(async (tx) => {
     await tx.orderInstallment.update({ where: { id: installmentId }, data: { status: "PAID", paidAt: new Date(), recordedById: actorId } });
-    // C4 — đợt 2 chỉ ghi Payment khi kế hoạch ĐÃ DUYỆT (APPROVED) hoặc không cần duyệt (null).
-    // PENDING_APPROVAL / REJECTED → đánh dấu PAID ở Ledger-B nhưng CHƯA tính tiền (Ledger-A).
-    const approvalOk =
-      order?.installmentApprovalStatus == null || order.installmentApprovalStatus === "APPROVED";
+    // ⚠️ ĐẢO 13/09/2026 — `PENDING_APPROVAL` nay CŨNG ghi Ledger-A.
+    //
+    // Luật cũ (C4): chỉ `APPROVED`/`null` mới ghi `Payment`; `PENDING_APPROVAL` thì đánh
+    // dấu PAID ở Ledger-B mà KHÔNG tính tiền ở Ledger-A. Luật đó chỉ vô hại khi kế hoạch
+    // chưa duyệt KHÔNG THỂ nhận tiền theo đợt — đúng với bản cũ của `computeDueNow` (nó
+    // loại kế hoạch chờ duyệt nên webhook luôn đi nhánh "thu toàn đơn", `soDot == null`,
+    // và hàm này không được gọi).
+    //
+    // Bản vá QR cùng ngày gỡ cái loại đó (kế hoạch chờ duyệt nay ra QR đúng số tiền đợt 1).
+    // Giữ nguyên luật cũ ở đây thì hệ quả là: khách quét QR đóng đợt 1 → SePay báo về →
+    // `markInstallmentPaid` đánh Ledger-B PAID → **bỏ qua Ledger-A** → công nợ hiển thị
+    // (đọc từ `Payment`, xem `lib/finance/debt.ts`) KHÔNG GIẢM. Tiền thật vào tài khoản
+    // mà khách vẫn còn nguyên nợ trên hệ thống — tệ hơn cả con bug đang vá.
+    //
+    // `REJECTED` vẫn bị loại: lúc đó `revertInstallmentRequests` đã VOID phiếu theo đợt
+    // và dựng lại phiếu "thu toàn đơn", nên khoản thu phải đi đường toàn đơn.
+    //
+    // Phần "ghi bù khi APPROVED" ở `approveInstallmentPlan` GIỮ LẠI, không gỡ: nó vẫn
+    // cần cho ca REJECTED → APPROVED và cho dữ liệu cũ sinh ra dưới luật trước. Nó
+    // idempotent theo marker nên không cộng đôi.
+    const approvalOk = isInstallmentPlanActive(order?.installmentApprovalStatus);
     if (approvalOk) {
       // Khoản ghi ở mức RECORDED (Ledger-A pending). CONFIRMED + Receipt CHỈ sinh SAU convert
       // (Receipt scoped theo Enrollment; đòi CONFIRMED trước convert = deadlock — xem
