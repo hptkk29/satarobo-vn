@@ -272,7 +272,7 @@ describe("locNickImLang", () => {
 
 // ── Đọc phản hồi của fork ───────────────────────────────────────────────────
 describe("docDanhSachNickTraVe", () => {
-  it("[ZC-NA-06] nhận cả `{data:[…]}` lẫn mảng trần — hình dạng thật của fork CHƯA chốt", () => {
+  it("[ZC-NA-06] nhận cả `{data:[…]}` lẫn mảng trần — bên kia đổi hình dạng vẫn đọc được", () => {
     const a = docDanhSachNickTraVe({ data: [{ id: "acc-1" }] });
     const b = docDanhSachNickTraVe([{ accountId: "acc-1" }]);
     expect(a.map((n) => n.zcrmAccountId)).toEqual(["acc-1"]);
@@ -285,11 +285,64 @@ describe("docDanhSachNickTraVe", () => {
     expect(docDanhSachNickTraVe(null)).toEqual([]);
   });
 
+  it("[ZC-NA-06d] HÌNH DẠNG THẬT của fork — chủ nick lấy từ `owner.externalId`", () => {
+    // Chép đúng phản hồi của `GET /api/v1/zalo-accounts` (đối chiếu mã fork 13/09/2026):
+    // mảng TRẦN, và `ownerUserId` ở gốc là id NỘI BỘ của fork — KHÔNG được nhận nhầm nó
+    // làm người dùng Sata, nếu không cột "người sở hữu" rỗng vĩnh viễn mà không báo lỗi.
+    const that = [
+      {
+        id: "acc-1",
+        zaloUid: "79xxxx",
+        displayName: "Nick CS1",
+        avatarUrl: null,
+        phone: "0912345678",
+        status: "connected",
+        ownerUserId: "USER-CUA-FORK",
+        proxyUrl: null,
+        privacyMode: "sub",
+        lastConnectedAt: "2026-09-13T02:00:00.000Z",
+        archivedAt: null,
+        createdAt: "2026-09-01T00:00:00.000Z",
+        owner: {
+          id: "USER-CUA-FORK",
+          fullName: "Sale CS1",
+          email: "sale.cs1@satarobo.vn",
+          externalId: "USER-CUA-SATA",
+        },
+        hasProxy: false,
+        liveStatus: "connected",
+        canManage: true,
+        isOwnedByMe: false,
+      },
+    ];
+    const [n] = docDanhSachNickTraVe(that);
+    expect(n?.zcrmAccountId).toBe("acc-1");
+    expect(n?.displayName).toBe("Nick CS1");
+    expect(n?.status).toBe("CONNECTED");
+    expect(n?.ownerUserId, "phải là id bên SATA, không phải id nội bộ của fork").toBe(
+      "USER-CUA-SATA",
+    );
+  });
+
+  it("[ZC-NA-06e] chưa có chủ / chủ chưa từng đăng nhập SSO ⇒ null, không mượn id fork", () => {
+    const [a] = docDanhSachNickTraVe([
+      { id: "acc-2", ownerUserId: "USER-CUA-FORK", owner: { id: "USER-CUA-FORK", externalId: null } },
+    ]);
+    expect(a?.ownerUserId).toBeNull();
+
+    const [b] = docDanhSachNickTraVe([{ id: "acc-3", ownerUserId: "USER-CUA-FORK" }]);
+    expect(b?.ownerUserId, "không có khối owner ⇒ vẫn null").toBeNull();
+  });
+
   it("[ZC-NA-06c] trạng thái lạ ⇒ UNKNOWN, không ép bừa thành CONNECTED", () => {
     const [n] = docDanhSachNickTraVe({ data: [{ id: "a", status: "đang-nghĩ" }] });
     expect(n?.status).toBe("UNKNOWN");
     const [c] = docDanhSachNickTraVe({ data: [{ id: "a", status: "connected" }] });
     expect(c?.status).toBe("CONNECTED");
+    // `qr_pending` là giá trị THẬT thứ ba của fork (nick chưa quét mã) — phải ra UNKNOWN
+    // chứ không rơi về DISCONNECTED: "chưa quét" khác "đã rớt", và cảnh báo đọc cột này.
+    const [q] = docDanhSachNickTraVe({ data: [{ id: "a", status: "qr_pending" }] });
+    expect(q?.status).toBe("UNKNOWN");
     const [d] = docDanhSachNickTraVe({ data: [{ id: "a", isConnected: false }] });
     expect(d?.status).toBe("DISCONNECTED");
   });
@@ -343,11 +396,24 @@ describe("dongBoNick", () => {
     expect(state.tao[0]).toMatchObject({ sataUserId: null });
   });
 
-  it("[ZC-NA-09b] ownerUserId khớp một User có thật ⇒ gán chủ nick", async () => {
+  it("[ZC-NA-09b] `owner.externalId` khớp một User có thật ⇒ gán chủ nick", async () => {
+    // Hình dạng thật của fork: id Sata nằm ở `owner.externalId`, còn `ownerUserId` ở
+    // gốc là id NỘI BỘ của fork. Ca này trộn cả hai để khoá đúng chỗ hay nhầm.
+    state.users = [{ id: "u-1", name: "Chị Sale" }];
+    state.traLoi = {
+      cs1: { data: [{ id: "acc-1", ownerUserId: "fork-99", owner: { externalId: "u-1" } }] },
+    };
+    await dongBoNick(QLCS1, { orgCode: "cs1" });
+    expect(state.tao[0]).toMatchObject({ sataUserId: "u-1" });
+  });
+
+  it("[ZC-NA-09c] chỉ có `ownerUserId` của fork ⇒ nick KHÔNG có chủ, không gán bừa", async () => {
+    // Trước 13/09 chỗ này đọc thẳng `ownerUserId` — luôn trượt bộ lọc người dùng nên
+    // cột "người sở hữu" rỗng vĩnh viễn mà không ai thấy lỗi. Nay là hành vi CÓ CHỦ ĐÍCH.
     state.users = [{ id: "u-1", name: "Chị Sale" }];
     state.traLoi = { cs1: { data: [{ id: "acc-1", ownerUserId: "u-1" }] } };
     await dongBoNick(QLCS1, { orgCode: "cs1" });
-    expect(state.tao[0]).toMatchObject({ sataUserId: "u-1" });
+    expect(state.tao[0]).toMatchObject({ sataUserId: null });
   });
 
   it("[ZC-NA-10] nick đã XOÁ MỀM không hồi sinh — người đã gỡ nó có chủ đích", async () => {

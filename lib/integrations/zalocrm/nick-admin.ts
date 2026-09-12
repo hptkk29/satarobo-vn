@@ -201,7 +201,14 @@ export type NickTuZalocrm = {
   zcrmAccountId: string;
   displayName: string | null;
   status: TrangThaiNickDb;
-  /** `external_id` bên fork = `User.id` của Sata (xem `sso.ts`). CHƯA kiểm tồn tại. */
+  /**
+   * `User.id` của SATA, đọc từ `owner.externalId` bên fork (đường SSO ghi xuống).
+   * CHƯA kiểm tồn tại — `locNguoiDungHopLe` lọc ở bước sau.
+   *
+   * 🔴 KHÔNG phải `ownerUserId` của fork. Trường đó cũng có trong phản hồi nhưng là id
+   * NỘI BỘ của hệ bên kia: đưa vào đây thì không khớp `User` nào của Sata, bị lọc sạch,
+   * và cột "người sở hữu" ở màn Tích hợp rỗng vĩnh viễn mà không một dòng lỗi nào.
+   */
   ownerUserId: string | null;
 };
 
@@ -211,10 +218,16 @@ const NHAN_ROT = new Set(["disconnected", "offline", "inactive", "error", "logge
 /**
  * Đọc danh sách nick từ thân phản hồi.
  *
- * ⚠️ HÌNH DẠNG THẬT CHƯA CHỐT — `/api/v1/zalo-accounts` là API của fork, chưa có văn
- * bản. Nên hàm này nhận `unknown`, chấp cả `{data:[…]}` lẫn mảng trần, và **không bao
- * giờ ném**: một đổi tên trường bên kia phải thành "0 nick, có ghi nhật ký", không
- * được thành 500 giữa màn Tích hợp. Khi có payload thật thì sửa ĐÚNG hàm này + test.
+ * HÌNH DẠNG THẬT — đã đối chiếu mã fork 13/09/2026 (`backend/src/modules/zalo/zalo-routes.ts`,
+ * `GET /api/v1/zalo-accounts`): trả **MẢNG TRẦN**, mỗi phần tử có `id`, `displayName`,
+ * `phone`, `status` (chuỗi tự do: `connected` · `disconnected` · `qr_pending`),
+ * `ownerUserId` (id NỘI BỘ của fork), `liveStatus`, và `owner: { id, fullName, email,
+ * externalId }` — `owner.externalId` mới là `User.id` bên Sata.
+ *
+ * ⚠️ Vẫn nhận `unknown` và vẫn chấp cả `{data:[…]}` lẫn mảng trần: đối chiếu một lần
+ * không phải là hợp đồng, bên kia nâng cấp là hình dạng đổi. Hàm này **không bao giờ
+ * ném** — một đổi tên trường phải thành "0 nick, có ghi nhật ký", không được thành 500
+ * giữa màn Tích hợp. Khi payload đổi thì sửa ĐÚNG hàm này + test.
  *
  * Dòng thiếu id bị BỎ, không bịa khoá: `zcrmAccountId` là `@unique` và cũng chính là
  * `InboxConversation.accountId` — bịa một khoá ở đây là gộp hội thoại của hai nick.
@@ -232,9 +245,12 @@ export function docDanhSachNickTraVe(raw: unknown): NickTuZalocrm[] {
       displayName:
         chuoi(o.displayName) ?? chuoi(o.display_name) ?? chuoi(o.name) ?? chuoi(o.phoneName),
       status: docTrangThai(o),
+      // CHỈ đọc id BÊN SATA. `o.ownerUserId` của fork CỐ Ý không nằm trong danh sách:
+      // nó là id nội bộ của hệ bên kia, luôn bị `locNguoiDungHopLe` loại, nên nhận nó
+      // vào đây chỉ để lại một niềm tin sai trong mã.
       ownerUserId:
-        chuoi(o.ownerUserId) ??
-        chuoi(o.owner_user_id) ??
+        chuoi(chuTu(o)?.externalId) ??
+        chuoi(chuTu(o)?.external_id) ??
         chuoi(o.ownerExternalId) ??
         chuoi(o.externalId) ??
         chuoi(o.external_id),
@@ -252,6 +268,12 @@ function timMang(raw: unknown): unknown[] {
     }
   }
   return [];
+}
+
+/** Khối `owner` lồng trong mỗi dòng nick — `null` khi fork không kèm (nick chưa có chủ). */
+function chuTu(o: Record<string, unknown>): Record<string, unknown> | null {
+  const v = o.owner;
+  return typeof v === "object" && v !== null ? (v as Record<string, unknown>) : null;
 }
 
 function chuoi(v: unknown): string | null {
