@@ -121,7 +121,7 @@ export default async function TeacherLayout({
       {/* Web Push Đợt 3 — cài service worker cho host giáo viên. Anh em của AppShell chứ
           không nằm trong nó: AppShell là client component bọc <main>, nhét vào trong là đẩy
           một component vô hình xuống dưới nội dung không lý do. KHÔNG xin quyền ở đây. */}
-      <ServiceWorkerRegister />
+      <ServiceWorkerRegister nguoiDung={session.user.id} />
     </>
   );
 }

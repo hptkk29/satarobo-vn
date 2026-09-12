@@ -57,12 +57,32 @@ const displayModeSchema = z.enum([
   "window-controls-overlay",
 ]);
 
+/**
+ * Lý do thu hồi mà đường TỰ ĐỘNG được phép hồi sinh — và là lý do DUY NHẤT.
+ *
+ * ⚠️ Hằng dùng chung với `huyThietBiTheoEndpointAction` bên dưới. So chuỗi giữa hai nơi là thứ
+ * lặng lẽ lệch nhau khi ai đó sửa câu chữ cho đẹp; giữ ĐÚNG MỘT nguồn.
+ *
+ * Vì sao đúng lý do này: nó được đặt bởi hai đường mà cả hai đều nghĩa là "cùng người, cùng máy,
+ * vừa rời ghế" — nút "Tắt trên máy này" và nửa client của đăng xuất (`lib/auth/logout-client.ts`).
+ * Nút "Tắt" còn cắm thêm cờ `da-tat-tay` ở trình duyệt nên đường tự động không tới được đây; phần
+ * còn lại là đăng xuất, đúng ca mà Đợt 6 sinh ra để chữa.
+ */
+const LY_DO_TAT_MAY_NAY = "Tắt trên máy này";
+
 const dangKySchema = z.object({
   subscription: webPushSubscriptionSchema,
   /** Cắt ngắn: một số trình duyệt trả chuỗi rất dài, và cột này chỉ để người trực nhìn. */
   userAgent: z.string().trim().max(500).optional(),
   deviceLabel: z.string().trim().max(100).optional(),
   displayMode: displayModeSchema.optional(),
+  /**
+   * Lượt ghi này đến từ đường TỰ ĐỘNG (`lib/push/tu-dang-ky-lai.ts`), không từ một cú bấm.
+   *
+   * ⚠️ Cờ này CHỈ SIẾT, không bao giờ nới — đó là lý do nhận nó từ client vẫn an toàn: kẻ gửi
+   * `tuDong: false` chỉ nhận được đúng đường mà nút bấm tay vốn đã có, không thêm quyền nào.
+   */
+  tuDong: z.boolean().optional(),
 });
 
 const huyTheoIdSchema = z.object({ id: z.string().min(1) });
@@ -107,7 +127,7 @@ export async function dangKyThietBiAction(input: unknown): Promise<KetQuaThietBi
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
-  const { subscription, userAgent, deviceLabel, displayMode } = parsed.data;
+  const { subscription, userAgent, deviceLabel, displayMode, tuDong } = parsed.data;
 
   const origin = originTuHeaders(await headers());
   if (!origin) return { ok: false, error: "Không xác định được địa chỉ trang — thử tải lại." };
@@ -156,9 +176,56 @@ export async function dangKyThietBiAction(input: unknown): Promise<KetQuaThietBi
   // đổi câu này sang một đường có lọc.
   const dongCu = await sdb.webPushSubscription.findUnique({
     where: { endpoint: subscription.endpoint },
-    select: { userId: true, status: true },
+    select: { userId: true, status: true, revokedReason: true },
   });
   const chuyenChu = !!dongCu && dongCu.userId !== ai.userId;
+
+  // ── CỔNG 5 — HAI LUẬT CHỈ ÁP CHO ĐƯỜNG TỰ ĐỘNG (US-14b Đợt 6, hai lỗ lăng kính tìm ra) ──
+  //
+  // Cả hai luật PHẢI ở server: client không có danh tính đáng tin, và cái máy cần chặn thì ta
+  // không với tới được để cắm cờ.
+  if (tuDong) {
+    // LUẬT 1 — "người này đã từng ĐỒNG Ý trên trang này".
+    //
+    // Lỗ đã đo: quyền thông báo thuộc về ORIGIN, không thuộc về ai. Trên máy lễ tân dùng chung,
+    // Sale A bấm "Bật" (quyền origin thành `granted` vĩnh viễn) rồi đăng xuất; Sale B đăng nhập
+    // và lượt tải trang đầu tiên TỰ ghi danh B — B chưa bao giờ được hỏi, mà từ đó mọi lead của
+    // B nổ trên màn hình khoá của cái máy đặt ở sảnh, kèm tên phụ huynh, trong tầm mắt khách
+    // đang chờ. Cổng này đòi B từng có ÍT NHẤT MỘT dòng trên đúng origin đó — bất kể trạng thái,
+    // vì dòng của một lần bật cũ đã bị đăng xuất đưa về `REVOKED`.
+    //
+    // Không dùng `scopedDb` cho câu tra này thì cũng không sao (bảng không thuộc `SCOPED_MODELS`),
+    // nhưng vẫn đi qua `sdb` cho nhất quán với hai câu còn lại trong hàm.
+    const tienSu = await sdb.webPushSubscription.findFirst({
+      where: { userId: ai.userId, origin },
+      select: { id: true },
+    });
+    if (!tienSu) {
+      return {
+        ok: false,
+        error: "Chưa từng bật thông báo trên trang này — hãy bấm Bật thông báo một lần.",
+      };
+    }
+
+    // LUẬT 2 — KHÔNG hồi sinh một dòng bị thu hồi vì lý do KHÁC "vừa rời ghế".
+    //
+    // Lỗ đã đo: nút "Gỡ" một thiết bị Ở XA (mất điện thoại, hoặc một máy ở cơ sở khác) không thể
+    // `unsubscribe()` — ta không với tới trình duyệt đó. Trước Đợt 6, gỡ từ xa là DỨT ĐIỂM. Với
+    // đường tự động, lượt tải trang kế tiếp trên đúng máy đó thấy đăng ký cũ còn sống, khoá vẫn
+    // khớp, rồi nhánh `update` bên dưới dọn `revokedAt`/`revokedReason`/`failureCount` và đặt lại
+    // `ACTIVE` ⇒ HỒI SINH ĐÚNG DÒNG VỪA GỠ, và danh sách thiết bị không có gì báo là nó đã quay
+    // lại (`createdAt` vẫn là ngày cũ).
+    //
+    // Cũng chặn luôn hai ca cùng hình dạng: tài khoản bị xoá/vô hiệu hoá rồi bật lại, và dòng bị
+    // chuyển chủ. Cả ba đều đòi một cú bấm tay — đúng, vì cả ba đều là một quyết định của con
+    // người mà máy không được tự lật lại.
+    if (dongCu && dongCu.status !== "ACTIVE" && dongCu.revokedReason !== LY_DO_TAT_MAY_NAY) {
+      return {
+        ok: false,
+        error: "Thiết bị này đã bị gỡ — hãy bấm Bật thông báo nếu muốn nhận lại.",
+      };
+    }
+  }
 
   if (chuyenChu) {
     // THU HỒI TRƯỚC, rồi mới ghi chủ mới — hai câu, không phải một.
@@ -286,7 +353,7 @@ export async function huyThietBiTheoEndpointAction(input: unknown): Promise<KetQ
 
   const kq = await scopedDb(await resolveActor(ai.userId)).webPushSubscription.updateMany({
     where: { endpoint: parsed.data.endpoint, userId: ai.userId, status: "ACTIVE" },
-    data: { status: "REVOKED", revokedAt: new Date(), revokedReason: "Tắt trên máy này" },
+    data: { status: "REVOKED", revokedAt: new Date(), revokedReason: LY_DO_TAT_MAY_NAY },
   });
   // KHÔNG báo lỗi khi không có dòng nào: người dùng vừa tắt ở máy này, và việc DB không còn bản
   // ghi tương ứng là kết quả họ muốn. Bắt họ đọc một thông báo lỗi là nói sai về kết quả.

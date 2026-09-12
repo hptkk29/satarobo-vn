@@ -140,8 +140,14 @@ describe("[PUSH-D3-T13] nhãn host trong danh sách thiết bị", () => {
  *
  * ⚠️ `components/push/*` KHÔNG CÓ NGOẠI LỆ NÀO và đừng thêm — đó mới đúng là thứ nguy hiểm:
  * `service-worker-register.tsx` cài worker lên origin đang phục vụ, `bat-thong-bao.tsx` xin
- * quyền thông báo. `lib/push/*` chỉ nguy hiểm khi nó kéo được mã client theo; ca `server-only`
- * thì không thể (và ca test dưới PIN đúng tính chất đó).
+ * quyền thông báo.
+ *
+ * ⚠️ VÀ TỪ ĐỢT 6, CÂU "`lib/push/*` chỉ nguy hiểm khi nó kéo được mã client theo" KHÔNG CÒN
+ * ĐÚNG CHO CẢ THƯ MỤC (lăng kính Đợt 6 sửa chỗ này). `lib/push` nay có HAI module CLIENT tự mình
+ * nguy hiểm: `tu-dang-ky-lai.ts` (TẠO đăng ký push + gọi Server Action ghi DB) và `bo-nho-may.ts`.
+ * Cấp ngoại lệ cho hai tên đó là ngang với cấp cho `components/push/*` — đừng cấp. Lý lẽ
+ * `server-only` chỉ còn đúng cho những module ĐÃ KHAI trong danh sách dưới đây, và ca test thứ ba
+ * pin đúng chừng đó chứ không pin cho phần còn lại của thư mục.
  */
 const NGOAI_LE_LIB_PUSH: Record<string, { module: string; lyDo: string }> = {
   "app/(auth)/dang-xuat/route.ts": {

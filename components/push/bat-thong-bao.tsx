@@ -24,6 +24,7 @@ import {
 import { khoaVapidSangBytes, laKhoaVapidHopLeOClient } from "@/lib/push/client-key";
 import { nhanHost } from "@/lib/push/ui-state";
 import { bamEndpointOClient } from "@/lib/push/client-key";
+import { datDaDongBo, datTatTay, xoaTatTay } from "@/lib/push/bo-nho-may";
 import {
   dangKyThietBiAction,
   huyThietBiAction,
@@ -50,8 +51,6 @@ export interface ThietBiView {
   lastSuccessAt: string | null;
   createdAt: string;
 }
-
-const KHOA_CONG_KHAI = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
 
 /** Tên gọn cho một máy, suy từ user-agent. Chỉ để người dùng nhận ra máy của mình. */
 function tenMay(tb: ThietBiView): string {
@@ -83,7 +82,21 @@ function ngayGon(iso: string | null): string {
   return new Date(iso).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" });
 }
 
-export function BatThongBao({ thietBi }: { thietBi: ThietBiView[] }) {
+/**
+ * `nguoiDung` = `session.user.id`, BẮT BUỘC.
+ *
+ * Cờ "đã tắt tay" và mốc "đã đồng bộ" khoá theo NGƯỜI chứ không theo origin — trên máy dùng
+ * chung, khoá theo origin nghĩa là một người bấm "Tắt" là bịt miệng mọi người còn lại dùng chung
+ * trình duyệt đó, im lặng, trong khi màn hình vẫn hứa "thông báo sẽ tới máy này". Đọc khối đầu
+ * `lib/push/bo-nho-may.ts` trước khi đổi chữ ký.
+ */
+export function BatThongBao({
+  thietBi,
+  nguoiDung,
+}: {
+  thietBi: ThietBiView[];
+  nguoiDung: string;
+}) {
   const [boiCanh, setBoiCanh] = useState<BoiCanhThietBi | null>(null);
   const [dangChay, setDangChay] = useState(false);
   const [loi, setLoi] = useState<string | null>(null);
@@ -149,7 +162,12 @@ export function BatThongBao({ thietBi }: { thietBi: ThietBiView[] }) {
     setXong(null);
     setDangChay(true);
     try {
-      if (!laKhoaVapidHopLeOClient(KHOA_CONG_KHAI)) {
+      // Đọc khoá TRONG hàm, không ở module scope. `NEXT_PUBLIC_*` được nhúng lúc build nên cách
+      // nào cũng chạy trên prod — nhưng đọc ở module scope thì `vi.stubEnv` VÔ TÁC DỤNG (module
+      // đã nạp xong trước khi `beforeEach` chạy), và một cổng không test được là một cổng không
+      // tồn tại. Đây là lý do nhánh này không có ca test nào cho tới Đợt 6.
+      const khoaCongKhai = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+      if (!laKhoaVapidHopLeOClient(khoaCongKhai)) {
         setLoi("Hệ thống chưa cấu hình khoá thông báo. Báo quản trị viên giúp nhé.");
         return;
       }
@@ -180,7 +198,7 @@ export function BatThongBao({ thietBi }: { thietBi: ThietBiView[] }) {
       }
       sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: khoaVapidSangBytes(KHOA_CONG_KHAI!),
+        applicationServerKey: khoaVapidSangBytes(khoaCongKhai!),
       });
 
       const kq = await dangKyThietBiAction({
@@ -194,6 +212,15 @@ export function BatThongBao({ thietBi }: { thietBi: ThietBiView[] }) {
         setLoi(kq.error ?? "Không lưu được thiết bị.");
         return;
       }
+      // Người dùng vừa CHỦ ĐỘNG bật ⇒ xoá cờ "đã tắt tay", để đường tự đăng ký lại của Đợt 6
+      // (`lib/push/tu-dang-ky-lai.ts`) được phép chạy ở những lượt đăng nhập sau. Không xoá thì
+      // họ bật hôm nay, đăng xuất, và mai không nhận gì nữa — đúng triệu chứng mà Đợt 6 vá.
+      xoaTatTay(nguoiDung);
+      // …và đặt luôn mốc "đã đồng bộ trong phiên tab này": hai đường (bấm tay / tự động) dùng
+      // CHUNG một khái niệm, nên nếu không đặt ở đây thì lượt tải trang ngay sau cú bấm lại gọi
+      // Server Action một lần nữa cho đúng cái vừa ghi xong.
+      const bamMoi = await bamEndpointOClient(sub.endpoint);
+      if (bamMoi) datDaDongBo(nguoiDung, bamMoi);
       setXong("Đã bật. Máy này đã được ghi vào danh sách nhận thông báo.");
       router.refresh();
       await doBoiCanh();
@@ -213,7 +240,9 @@ export function BatThongBao({ thietBi }: { thietBi: ThietBiView[] }) {
       const sub = await reg?.pushManager.getSubscription();
       if (!sub) {
         // Trình duyệt vốn đã không có đăng ký nào — không có gì để tắt, và nói "đã tắt" là
-        // khai một việc không xảy ra.
+        // khai một việc không xảy ra. Nhưng Ý MUỐN thì đã rõ, nên vẫn cắm cờ: nếu không, đường
+        // tự đăng ký lại có thể dựng lại đúng thứ họ vừa bấm để tắt.
+        datTatTay(nguoiDung);
         setXong("Máy này vốn chưa bật thông báo.");
         await doBoiCanh();
         return;
@@ -227,6 +256,14 @@ export function BatThongBao({ thietBi }: { thietBi: ThietBiView[] }) {
         return;
       }
       await sub.unsubscribe().catch(() => undefined);
+      // ⚠️ CẮM CỜ, và cắm nó ở ĐÂY là điều kiện để nút này còn nghĩa lý. Đường tự đăng ký lại
+      // của Đợt 6 chạy ở MỌI lượt tải trang khi quyền còn `granted` — mà `unsubscribe()` không
+      // rút quyền. Thiếu cờ thì người dùng bấm "Tắt", tải lại trang, và thiết bị hiện lại.
+      //
+      // Cờ theo ORIGIN (localStorage), không theo người: trên máy dùng chung, người đăng nhập
+      // sau cũng phải bấm "Bật thông báo" một lần. Đó là chiều SAI AN TOÀN đã chọn — tự bật lại
+      // thứ ai đó vừa tắt là kiểu lỗi khiến người ta chặn quyền ở cấp trình duyệt.
+      datTatTay(nguoiDung);
       setXong("Đã tắt thông báo trên máy này.");
       router.refresh();
       await doBoiCanh();
@@ -246,6 +283,13 @@ export function BatThongBao({ thietBi }: { thietBi: ThietBiView[] }) {
       if (!kq.ok) {
         setLoi(kq.error ?? "Không gỡ được thiết bị.");
       } else {
+        // Gỡ ĐÚNG DÒNG CỦA MÁY NÀY thì cũng phải cắm cờ. Nút "Gỡ" chỉ thu hồi dòng trong DB,
+        // không `unsubscribe()` (nó gỡ được cả máy khác, mà ta không với tới trình duyệt của
+        // máy đó). Nên nếu bấm Gỡ trên chính máy đang ngồi mà không cắm cờ thì đường tự đăng ký
+        // lại dựng dòng đó về ngay ở lượt tải kế — nút thành vô nghĩa.
+        if (!!bamMayNay && thietBi.some((t) => t.id === id && t.bam === bamMayNay)) {
+          datTatTay(nguoiDung);
+        }
         setXong("Đã gỡ thiết bị.");
         router.refresh();
       }

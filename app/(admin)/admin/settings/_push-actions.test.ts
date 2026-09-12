@@ -17,8 +17,11 @@ const h = vi.hoisted(() => {
   const updateMany = vi.fn(async (_a: unknown) => ({ count: 1 }));
   /** Dòng đang có cho endpoint được gửi lên — `null` = máy này chưa ai đăng ký. */
   const findUnique = vi.fn(
-    async (_a: unknown) => null as { userId: string; status: string } | null,
+    async (_a: unknown) =>
+      null as { userId: string; status: string; revokedReason: string | null } | null,
   );
+  /** Tiền sử đăng ký của người này trên origin này — cổng 5 luật 1 của đường TỰ ĐỘNG. */
+  const findFirst = vi.fn(async (_a: unknown) => null as { id: string } | null);
   const writeAudit = vi.fn(async (_a: Record<string, unknown>) => ({}) as unknown);
   const thuTu: string[] = [];
   const auth = vi.fn(async () => ({
@@ -32,11 +35,12 @@ const h = vi.hoisted(() => {
     upsert,
     updateMany,
     findUnique,
+    findFirst,
     writeAudit,
     thuTu,
     auth,
     headerMap,
-    mockDb: { webPushSubscription: { upsert, updateMany, findUnique } },
+    mockDb: { webPushSubscription: { upsert, updateMany, findUnique, findFirst } },
   };
 });
 
@@ -85,6 +89,9 @@ beforeEach(() => {
     return { count: 1 };
   });
   h.findUnique.mockClear().mockImplementation(async () => null);
+  // Mặc định: người này ĐÃ có tiền sử trên origin này. Ca nào cần "chưa từng bật" thì tự đặt
+  // `mockImplementation(async () => null)` — bỏ mặc định này là mọi ca `tuDong` đỏ vì cổng 5.
+  h.findFirst.mockClear().mockImplementation(async () => ({ id: "sub_cu" }));
   h.writeAudit.mockClear().mockImplementation(async () => {
     h.thuTu.push("audit");
     return {};
@@ -275,7 +282,7 @@ function goiUpdateMany(): { where: Record<string, unknown>; data: Record<string,
 
 describe("[PUSH-D5-T07] endpoint đang thuộc NGƯỜI KHÁC ⇒ thu hồi rồi mới chuyển chủ", () => {
   beforeEach(() => {
-    h.findUnique.mockImplementation(async () => ({ userId: "usr_nguoi_khac", status: "ACTIVE" }));
+    h.findUnique.mockImplementation(async () => ({ userId: "usr_nguoi_khac", status: "ACTIVE", revokedReason: null }));
   });
 
   it("THU HỒI TRƯỚC, ghi chủ mới SAU — fail-safe đúng chiều", async () => {
@@ -337,7 +344,7 @@ describe("[PUSH-D5-T07] endpoint đang thuộc NGƯỜI KHÁC ⇒ thu hồi rồ
     // trước đăng xuất. Nếu `chuyenChu` bị siết thêm `&& dongCu.status === "ACTIVE"` thì ca này
     // đổi chủ IM LẶNG — không thu hồi, không ghi sổ — và lỗ §13.8b(b) quay lại mà cổng vẫn xanh.
     // (Lăng kính đề xuất đúng phép cấy lỗi đó và bộ test cũ không bắt được.)
-    h.findUnique.mockImplementation(async () => ({ userId: "usr_nguoi_khac", status: "REVOKED" }));
+    h.findUnique.mockImplementation(async () => ({ userId: "usr_nguoi_khac", status: "REVOKED", revokedReason: "Tắt trên máy này" }));
     const kq = await dangKyThietBiAction(dauVao());
     expect(kq.ok).toBe(true);
     expect(h.writeAudit).toHaveBeenCalledTimes(1);
@@ -368,7 +375,7 @@ describe("[PUSH-D5-T08] KHÔNG phải chuyển chủ thì không thu hồi, khô
   it("bật lại trên máy CỦA CHÍNH MÌNH ⇒ không thu hồi, không ghi sổ", async () => {
     // Ca thường gặp nhất (đổi trình duyệt cấp lại cùng endpoint, hoặc bấm bật hai lần). Thu hồi
     // ở đây là tự gỡ thiết bị của mình rồi bật lại — nhiễu sổ, và một nhịp không nhận được gì.
-    h.findUnique.mockImplementation(async () => ({ userId: "usr_toi", status: "REVOKED" }));
+    h.findUnique.mockImplementation(async () => ({ userId: "usr_toi", status: "REVOKED", revokedReason: "Tắt trên máy này" }));
     await dangKyThietBiAction(dauVao());
     expect(h.updateMany).not.toHaveBeenCalled();
     expect(h.writeAudit).not.toHaveBeenCalled();
@@ -412,5 +419,145 @@ describe("[PUSH-D5-T13] huyThietBiTheoEndpointAction phải TRẢ VỀ số dòn
       ok: true,
       soDong: 0,
     });
+  });
+});
+
+describe("[PUSH-D6-T13] CỔNG 5 — hai luật CHỈ áp cho đường TỰ ĐỘNG (`tuDong: true`)", () => {
+  it("đường BẤM TAY (không có cờ) KHÔNG bị hai luật này chặn — đó là nơi tạo tiền sử", async () => {
+    // Quan trọng nhất về hướng: nếu cổng 5 áp cả cho cú bấm thì người dùng MỚI không bao giờ
+    // đăng ký được lần đầu (chưa có tiền sử) — tính năng chết ngay từ đầu.
+    h.findFirst.mockImplementation(async () => null);
+    const kq = await dangKyThietBiAction(dauVao());
+    expect(kq.ok).toBe(true);
+    expect(h.findFirst).not.toHaveBeenCalled();
+    expect(h.upsert).toHaveBeenCalledTimes(1);
+  });
+
+  it("LUẬT 1 — tự động + CHƯA TỪNG bật trên origin này ⇒ TỪ CHỐI, không ghi gì", async () => {
+    // Lỗ đã đo: quyền thông báo thuộc về ORIGIN, không thuộc về ai. Máy lễ tân dùng chung —
+    // Sale A bấm "Bật" (quyền origin thành `granted` vĩnh viễn) rồi đăng xuất; Sale B đăng nhập
+    // và lượt tải trang ĐẦU TIÊN tự ghi danh B. B chưa bao giờ được hỏi, mà từ đó mọi lead của B
+    // nổ trên màn hình khoá của cái máy đặt ở sảnh, kèm tên phụ huynh, trước mắt khách đang chờ.
+    h.findFirst.mockImplementation(async () => null);
+    const kq = await dangKyThietBiAction(dauVao({ tuDong: true }));
+    expect(kq.ok).toBe(false);
+    expect(String(kq.error)).toContain("Chưa từng bật thông báo");
+    expect(h.upsert).not.toHaveBeenCalled();
+    expect(h.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("LUẬT 1 — tra tiền sử theo (userId CỦA PHIÊN, origin CỦA HEADER), không theo input", async () => {
+    await dangKyThietBiAction(dauVao({ tuDong: true, userId: "usr_ke_tan_cong" }));
+    const w = (h.findFirst.mock.calls[0]?.[0] as { where: Record<string, unknown> }).where;
+    expect(w).toEqual({ userId: "usr_toi", origin: "https://admin.satarobo.vn" });
+  });
+
+  it("LUẬT 1 — có tiền sử ⇒ cho ghi (ca chính mà Đợt 6 sinh ra để chữa)", async () => {
+    // Cùng người, cùng máy: bật hôm qua → đăng xuất buổi tối (dòng về REVOKED) → hôm sau đăng
+    // nhập lại. Tiền sử là chính dòng REVOKED đó, nên luật 1 cho qua.
+    const kq = await dangKyThietBiAction(dauVao({ tuDong: true }));
+    expect(kq.ok).toBe(true);
+    expect(h.upsert).toHaveBeenCalledTimes(1);
+  });
+
+  it("LUẬT 2 — tự động KHÔNG hồi sinh dòng bị 'Người dùng tự gỡ' (nút Gỡ từ xa)", async () => {
+    // Lỗ đã đo: nút "Gỡ" một thiết bị Ở XA không thể `unsubscribe()` — ta không với tới trình
+    // duyệt đó. Trước Đợt 6 việc gỡ từ xa là DỨT ĐIỂM; với đường tự động, lượt tải trang kế tiếp
+    // trên đúng máy đó thấy đăng ký cũ còn sống, khoá vẫn khớp, rồi nhánh `update` dọn
+    // `revokedAt`/`revokedReason`/`failureCount` ⇒ HỒI SINH ĐÚNG DÒNG VỪA GỠ, và danh sách thiết
+    // bị không có gì báo là nó đã quay lại (`createdAt` vẫn là ngày cũ).
+    h.findUnique.mockImplementation(async () => ({
+      userId: "usr_toi",
+      status: "REVOKED",
+      revokedReason: "Người dùng tự gỡ",
+    }));
+    const kq = await dangKyThietBiAction(dauVao({ tuDong: true }));
+    expect(kq.ok).toBe(false);
+    expect(String(kq.error)).toContain("đã bị gỡ");
+    expect(h.upsert).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["Tài khoản đã bị xoá"],
+    ["Tài khoản bị vô hiệu hoá"],
+    ["Máy dùng chung — người khác đăng nhập và bật thông báo trên máy này"],
+  ])("LUẬT 2 — cũng KHÔNG hồi sinh dòng thu hồi vì '%s'", async (lyDo) => {
+    // Cả ba đều là một quyết định của CON NGƯỜI (hoặc của lưới bảo vệ), mà máy không được tự lật.
+    h.findUnique.mockImplementation(async () => ({
+      userId: "usr_toi",
+      status: "REVOKED",
+      revokedReason: lyDo,
+    }));
+    expect((await dangKyThietBiAction(dauVao({ tuDong: true }))).ok).toBe(false);
+    expect(h.upsert).not.toHaveBeenCalled();
+  });
+
+  it("LUẬT 2 — CHO hồi sinh dòng thu hồi vì 'Tắt trên máy này' (= vừa đăng xuất)", async () => {
+    // Đây là lý do DUY NHẤT được hồi sinh, và là toàn bộ lý do Đợt 6 tồn tại. Nút "Tắt trên máy
+    // này" cũng dùng lý do đó nhưng nó còn cắm cờ `da-tat-tay` ở trình duyệt, nên đường tự động
+    // không tới được đây — phần còn lại là đăng xuất.
+    h.findUnique.mockImplementation(async () => ({
+      userId: "usr_toi",
+      status: "REVOKED",
+      revokedReason: "Tắt trên máy này",
+    }));
+    const kq = await dangKyThietBiAction(dauVao({ tuDong: true }));
+    expect(kq.ok).toBe(true);
+    expect(h.upsert).toHaveBeenCalledTimes(1);
+  });
+
+  it("LUẬT 2 — dòng đang ACTIVE của CHÍNH MÌNH thì cho ghi bình thường", async () => {
+    h.findUnique.mockImplementation(async () => ({
+      userId: "usr_toi",
+      status: "ACTIVE",
+      revokedReason: null,
+    }));
+    expect((await dangKyThietBiAction(dauVao({ tuDong: true }))).ok).toBe(true);
+  });
+
+  it("⚠️ cờ chỉ SIẾT: `tuDong: false` không mở thêm đường nào so với cú bấm", async () => {
+    // Vì sao nhận cờ này từ client vẫn an toàn. Kẻ gửi `false` chỉ nhận đúng đường mà nút bấm tay
+    // vốn đã có; mọi lưới cũ (`userId` từ phiên, `origin` từ header, ghi sổ khi chuyển chủ) không
+    // đổi. Nếu ngày nào cờ này NỚI được điều gì thì lập luận đó sập.
+    h.findFirst.mockImplementation(async () => null);
+    expect((await dangKyThietBiAction(dauVao({ tuDong: false }))).ok).toBe(true);
+    expect(h.findFirst).not.toHaveBeenCalled();
+  });
+});
+
+describe("[PUSH-D6-T14] KHỚP MỐI: lý do mà đăng xuất GHI phải đúng lý do mà cổng 5 CHO qua", () => {
+  it("lấy chuỗi THẬT từ `huyThietBiTheoEndpointAction` rồi nạp lại vào đường tự động ⇒ ok", async () => {
+    // Ca này canh một mối nối mà không ca nào khác chạm tới, và nếu nó lệch thì VIỆC 1 thôi hoạt
+    // động IM LẶNG: đăng xuất ghi một lý do, cổng 5 LUẬT 2 chờ một lý do khác ⇒ mọi lượt tự đăng
+    // ký lại bị từ chối, và triệu chứng duy nhất là "hôm sau tôi không nhận được gì" — đúng cái
+    // Đợt 6 sinh ra để chữa. Hai nơi đang dùng CHUNG một hằng, nhưng hằng dùng chung không tự
+    // canh được việc ai đó thay một chỗ bằng chuỗi gõ tay (đã cấy lỗi đó và bộ test cũ vẫn xanh).
+    //
+    // Nên: KHÔNG gõ lại chuỗi ở đây. Đọc nó từ đúng câu ghi của đường đăng xuất.
+    await huyThietBiTheoEndpointAction({ endpoint: ENDPOINT });
+    const daGhi = h.updateMany.mock.calls.at(-1)?.[0] as { data: { revokedReason: string } };
+    const lyDoThat = daGhi.data.revokedReason;
+    expect(typeof lyDoThat).toBe("string");
+    expect(lyDoThat.length).toBeGreaterThan(0);
+
+    h.upsert.mockClear();
+    h.findUnique.mockImplementation(async () => ({
+      userId: "usr_toi",
+      status: "REVOKED",
+      revokedReason: lyDoThat,
+    }));
+    const kq = await dangKyThietBiAction(dauVao({ tuDong: true }));
+    expect(kq.ok).toBe(true);
+    expect(h.upsert).toHaveBeenCalledTimes(1);
+  });
+
+  it("một lý do KHÁC (dù chỉ khác một chữ) ⇒ cổng 5 vẫn TỪ CHỐI — vế đối chứng", async () => {
+    // Vế này chứng minh ca trên không xanh vì cổng 5 cho qua mọi thứ.
+    h.findUnique.mockImplementation(async () => ({
+      userId: "usr_toi",
+      status: "REVOKED",
+      revokedReason: "Tắt máy này",
+    }));
+    expect((await dangKyThietBiAction(dauVao({ tuDong: true }))).ok).toBe(false);
   });
 });

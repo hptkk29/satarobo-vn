@@ -63,7 +63,7 @@ export default async function SettingsPage() {
           topbar (lối đó KHÔNG gác quyền), nên nút không bị vai trò giấu mất. */}
       <section className="rounded-xl border border-border bg-card p-6 shadow-sm">
         <h2 className="mb-4 text-base font-bold text-foreground">Thông báo đẩy</h2>
-        <BatThongBao thietBi={thietBiPush} />
+        <BatThongBao thietBi={thietBiPush} nguoiDung={session.user.id} />
       </section>
 
       {/* Hướng dẫn sử dụng — lối vào bộ tài liệu hướng dẫn theo khối chức năng */}

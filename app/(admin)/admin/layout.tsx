@@ -155,7 +155,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
       <Toaster richColors position="top-right" />
       {/* Web Push Đợt 2 — cài service worker, KHÔNG xin quyền (đó là Đợt 3, chỉ trong user gesture). */}
-      <ServiceWorkerRegister />
+      <ServiceWorkerRegister nguoiDung={session.user.id} />
     </div>
   );
 }

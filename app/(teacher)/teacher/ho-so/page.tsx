@@ -326,7 +326,7 @@ export default async function TeacherProfilePage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <BatThongBao thietBi={thietBiPush} />
+            <BatThongBao thietBi={thietBiPush} nguoiDung={session.user.id} />
           </CardContent>
         </Card>
 
