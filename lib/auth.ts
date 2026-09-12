@@ -3,6 +3,7 @@ import Credentials from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
+import { thuHoiKhiAuthSignOut } from "@/lib/push/thu-hoi";
 import { loginSchema } from "@/lib/validators/auth";
 import { rateLimit } from "@/lib/rate-limit";
 import { canonicalPhone } from "@/lib/phone";
@@ -199,6 +200,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
     }),
   ],
+  // US-14b Đợt 6 — LƯỚI THỨ BA thu hồi đăng ký push khi tài khoản đã chết.
+  //
+  // Đây là điểm DUY NHẤT mà mọi lượt POST tới endpoint signout đều đi qua (đo ở
+  // `@auth/core/lib/actions/signout.js`), nên nó phủ cả đường mà repo không tự gọi:
+  // ai POST thẳng `/api/auth/signout`, gồm trang xác nhận đăng xuất mặc định của Auth.js.
+  // Hai nửa đã có (`app/(auth)/dang-xuat/route.ts` + `lib/auth/logout-client.ts`) GIỮ NGUYÊN —
+  // nửa client là thứ duy nhất biết endpoint của MÁY ĐANG NGỒI, mà event này không biết.
+  //
+  // ⚠️ Hàm được nối vào đây chỉ gỡ khi tài khoản THẬT SỰ chết. Nối một hàm "gỡ tất cả" vào đây
+  // là đảo ngược quyết định vận hành ở `lib/push/thu-hoi.ts`: event phát ở MỌI lượt đăng xuất,
+  // nên mỗi lần nhân viên đăng xuất khỏi máy công ty sẽ mất push trên điện thoại riêng.
+  //
+  // ⚠️ Dòng nối dây này có test canh (`lib/push/thu-hoi.test.ts` quét chính tệp này) — gỡ nó là
+  // gỡ lưới thứ ba mà không cổng nào khác biết, đúng loại hỏng câm của bài học `soDong` ở Đợt 5.
+  events: { signOut: thuHoiKhiAuthSignOut },
   callbacks: {
     async jwt({ token, user }) {
       // Khi user mới login (authorize trả user), copy fields vào token.

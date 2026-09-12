@@ -77,6 +77,17 @@ export async function GET(req: NextRequest) {
     // lặp `ERR_TOO_MANY_REDIRECTS`, nên nó không được phụ thuộc vào lời cam kết của module
     // khác. Một `import` hỏng hay một bản vá tương lai làm hàm đó ném là giam người dùng lại
     // trong đúng cái vòng lặp mà route sinh ra để phá.
+    //
+    // ⚠️ TỪ ĐỢT 6, LỜI GỌI NÀY TÍNH LẠI ĐÚNG MỘT QUYẾT ĐỊNH MÀ `events.signOut` CŨNG TÍNH —
+    // TRÙNG CÓ CHỦ ĐÍCH, ĐỪNG "DỌN". `signOut()` ngay dưới dựng một POST nội tiến trình, nên
+    // `lib/auth.ts → events.signOut → thuHoiKhiAuthSignOut` chạy lần thứ hai. Chi phí đo được:
+    // 2 lượt đọc + tối đa 2 lượt ghi cho một lượt ghé route (lượt ghi thứ hai lọc
+    // `status: "ACTIVE"` ra 0 dòng nên idempotent, và mốc/lý do của lượt đầu còn nguyên).
+    //
+    // Giữ CẢ HAI vì chúng KHÔNG cùng tính chất: lời gọi này KHÔNG có trần thời gian, nên nó là
+    // lượt duy nhất CHẮC CHẮN hoàn tất cho một tài khoản đã chết; lưới ở `events.signOut` có
+    // trần 1,5s (đăng xuất không được treo) và bù lại phủ những lượt POST mà repo không tự gọi.
+    // Bỏ vế này là đánh đổi một bảo đảm lấy một chút chi phí trên một đường KHÔNG nóng.
     try {
       await thuHoiNeuTaiKhoanChet({ userId });
     } catch (err) {
