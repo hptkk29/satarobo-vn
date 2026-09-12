@@ -773,10 +773,27 @@ Gỡ hết ở đây mới là quá tay: người ta đăng xuất hằng ngày,
 cùng origin `admin.satarobo.vn` sẽ chết theo mỗi lần họ rời máy công ty.
 
 **Nửa server — tài khoản CHẾT (theo DB) ⇒ gỡ TẤT CẢ.**
-`app/(auth)/dang-xuat/route.ts`: đọc `auth()`, **hỏi DB bằng `checkSessionLiveness`**, và chỉ
-`thuHoiMoiThietBiCuaNguoi` khi nó nói `live: false`. Ở ca đó "gỡ hết" là ĐÚNG: tài khoản đã chết
-thì không được nhận push ở đâu cả. Đây cũng là ca **nguy hiểm nhất** mà hướng client không với
-tới — nhân viên vừa rời công ty, client không chạy.
+`app/(auth)/dang-xuat/route.ts`: đọc `auth()` rồi gọi **`thuHoiNeuTaiKhoanChet`** — hàm này tự
+đọc DB và tự quyết. Ở ca tài khoản chết, "gỡ hết" là ĐÚNG: tài khoản đã chết thì không được nhận
+push ở đâu cả. Đây cũng là ca **nguy hiểm nhất** mà hướng client không với tới — nhân viên vừa rời
+công ty, client không chạy.
+
+> ⚠️⚠️ **"CHẾT" PHẢI ĐO BẰNG `deletedAt`/`isActive`, KHÔNG BẰNG `checkSessionLiveness` — lỗ thứ
+> HAI do chính Đợt 5 đẻ ra** (lăng kính lượt 2 tìm ra, sau khi lượt 1 đã vá lỗ `?reason=`).
+> `checkSessionLiveness` trả **cùng một nhãn** `session-invalidated` cho hai việc khác hẳn nhau:
+> tài khoản bị xoá/vô hiệu hoá (chết thật) **và** `tokenVersion` lệch (chỉ là "buộc đăng nhập
+> lại"). Mà bump `tokenVersion` là thao tác **thường ngày** — đo được **9 nơi**: đổi vai
+> (`nhan-su/actions.ts`, `users/_actions.ts`), cấp/thu quyền per-user
+> (`users/[id]/permissions/_actions.ts`, 3 nơi), force logout (3 nơi), tự đặt lại mật khẩu.
+>
+> Chuỗi hỏng cụ thể: SUPER_ADMIN cấp thêm **một** quyền cho một Sale đã bật thông báo trên điện
+> thoại + máy bàn ⇒ lượt tải trang kế tiếp bị layout đá qua `/dang-xuat?reason=session-invalidated`
+> ⇒ **gỡ sạch push trên cả hai máy**. Không màn nào báo; họ chỉ đơn giản không nhận lead nữa.
+>
+> Cố ý **không** nới `SessionLiveness` thêm lý do thứ ba: kiểu đó do đường auth sở hữu và ba
+> layout đang dùng — đổi hợp đồng của nó để phục vụ một việc của module push là đặt rủi ro ở sai
+> chỗ. `thuHoiNeuTaiKhoanChet` đọc đúng hai cột nói về SỰ SỐNG, và có ca test khẳng định nó
+> **không** đọc `tokenVersion`.
 
 > ⚠️ **`?reason=` KHÔNG PHẢI BẰNG CHỨNG — bản đầu của Đợt 5 tin nó, và đó là một lỗ bảo mật do
 > chính bản vá đẻ ra** (lăng kính phản biện tìm ra sau khi bốn cổng đã xanh). `reason` là tham
@@ -844,7 +861,24 @@ giết đăng ký của người khác**.
   `logoutToGate` cũng không qua `/dang-xuat` nên không nửa nào thu hồi. Không UI nào của repo
   trỏ tới nó, và POST đòi CSRF token của NextAuth, nên hiện là đường **lý thuyết**; vẫn ghi ra.
 
-Trong mọi ca đó, dòng `(endpoint, userId = người cũ, ACTIVE)` **còn sống**. Thứ thật sự bảo vệ
+### ⚠️ HỆ QUẢ CHƯA QUYẾT: đăng xuất xong, push TẮT tới khi tự bấm lại
+
+Lăng kính lượt 2 chỉ ra một hệ quả mà §14 bản đầu không ghi: **không có gì bật lại đăng ký sau
+khi đăng nhập.** `ServiceWorkerRegister` chỉ cài worker (grep `getSubscription` trong nó = 0).
+Nên ai đăng xuất buổi tối thì **hôm sau không nhận gì** tới khi tự vào `/settings` bấm "Bật thông
+báo". Trên máy tính để bàn — nơi người ta đăng xuất hằng ngày — điều đó gần như vô hiệu hoá tính
+năng.
+
+Đây là hệ quả **trực tiếp của hướng đã chốt** ("đăng xuất thu hồi đăng ký"), không phải lỗi cài
+đặt: nó đến từ việc thu hồi **DÒNG**, không phải từ `unsubscribe()`. Bỏ `unsubscribe()` cũng không
+chữa được, vì dòng đã `REVOKED` thì engine không gửi nữa.
+
+**Bản vá rẻ, CHƯA LÀM vì cần chốt:** sau khi đăng nhập, nếu `Notification.permission === "granted"`
+mà `pushManager.getSubscription()` trả `null` thì **tự đăng ký lại** — không xin quyền lần nào
+(quyền đã có), nên không đụng ràng buộc "chỉ xin quyền trong một user gesture". Nhưng nó **tạo một
+đăng ký mà không có cú bấm nào**, đủ gần ràng buộc đó để phải hỏi trước.
+
+Trong mọi ca ở trên, dòng `(endpoint, userId = người cũ, ACTIVE)` **còn sống**. Thứ thật sự bảo vệ
 người ngồi sau là **`bat()`**: nó luôn `unsubscribe()` đăng ký cũ trước khi đăng ký mới, nên ngay
 khi người mới bấm "Bật thông báo", endpoint của người cũ **chết** (push service trả 410 ⇒ engine
 đánh `EXPIRED`). Nhưng nó chỉ bật khi có người **chủ động** bấm — nếu người ngồi sau không bấm,
@@ -911,8 +945,20 @@ của cả đường ghi (lý lẽ đầy đủ ở chú thích model, §2).
 Nên bản vá làm **đúng tinh thần, khác hình thức**: vẫn có bước `REVOKED` với `revokedReason` ghi
 rõ (bước 2 ở trên — và nó có giá trị thật, là chốt fail-safe), nhưng **trạng thái đó chỉ sống tới
 câu `upsert` ngay sau**. Vết **dài hạn** nằm ở `AuditLog` (`module: "push"`,
-`action: "TAKEOVER"`, `oldValues.userId` → `newValues.userId`), là nơi duy nhất trả lời được
-"máy nào đổi từ ai sang ai, lúc nào".
+`action: "TAKEOVER"`, `oldValues.userId` → `newValues.userId`).
+
+⚠️ Gọi nó là **"vết nỗ lực tối đa"**, đừng gọi là "nơi duy nhất và luôn có" — bản đầu của §15.2
+viết quá mạnh. Nó best-effort ở **hai** lớp: (a) bốn câu (`findUnique` → `updateMany` → `upsert`
+→ `writeAudit`) **không nằm trong một transaction**, nên nếu dòng được TẠO trong khe giữa câu 1
+và câu 3 (hai phiên đăng ký song song cùng một endpoint) thì `chuyenChu` đứng ở `false` và `upsert`
+đổi chủ **im lặng**; (b) `writeAudit` bọc `try/catch` để sổ hỏng không chặn một thao tác tự phục vụ
+hợp lệ.
+
+⚠️ Và **dòng `TAKEOVER` VÔ HÌNH ở `/admin/audit-log`** với mọi người có audit scope ≠ ALL:
+`orgUnitId = null` (bảng này không có cột đơn vị), mà `buildUnifiedAuditWhere` lọc
+`orgUnitId: { in: scope }` — `in` không khớp `NULL`, đúng hiện tượng mà `lib/audit/audit-log.ts`
+tự khai. Chỉ SUPER_ADMIN / vai audit neo ở HO đọc được. Muốn người cấp cơ sở thấy thì phải quyết
+riêng.
 
 `AuditLog.entityId` ghi **nhãn cắt**, tuyệt đối không endpoint đầy đủ — cùng luật đã áp cho log
 và `resultJson`: endpoint là một **khả năng gửi**, không để nó nguyên ở bất kỳ đâu. Có ca test
@@ -998,3 +1044,48 @@ thu hồi (callback `jwt`/`session` không đọc DB nên `auth()` vẫn trả n
 `reason` phủ đủ chiều GỬI (mọi layout đều kèm reason, nguồn động duy nhất là `checkSessionLiveness`
 vốn chỉ trả 2 chuỗi); phụ huynh đổi mật khẩu **không** gỡ oan của ai (`hasStaffRole` chặn nên họ
 có 0 dòng).
+
+---
+
+## 17. Đợt 5 — lăng kính lượt 2 (lỗ b + test xanh giả)
+
+Cũng chạy **tuần tự, cấm ghi tệp**; `git status` sạch suốt, `HEAD` không đổi trong lúc agent chạy.
+
+| # | Lỗi | Mức | Đã vá ở |
+|---|---|---|---|
+| 1 | **`tokenVersion` lệch bị coi là "tài khoản đã chết"** ⇒ đổi vai / cấp quyền / force logout **gỡ sạch push trên mọi máy**, im lặng. 9 nơi bump `tokenVersion` và hầu hết không phải chết. **Lỗ thứ hai do chính Đợt 5 đẻ ra** — lần này ở bản vá của lượt lăng kính TRƯỚC. | NẶNG | §14.2 |
+| 2 | **Cổng `[PUSH-D3-T14]` lách được ở hai chỗ ngay cạnh**: `app/layout.tsx` (layout GỐC, phục vụ cả sáu host kể cả cổng phụ huynh) và `components/portal/**` (~20 tệp) đều **ngoài** phạm vi quét. | NẶNG | đã nới `cam` + `tepCam` |
+| 3 | Câu thu hồi lúc chuyển chủ **không lọc `status`** ⇒ ghi đè `revokedAt`/`revokedReason` của lần thu hồi trước — phá đúng bất biến mà `thu-hoi.test.ts` tự pin. | NHẸ | `_push-actions.ts` |
+| 4 | **§15.2 nói quá mạnh** ("AuditLog là nơi duy nhất và luôn có") — vết là *nỗ lực tối đa*, hở ở hai lớp. | NHẸ | §15.2 |
+| 5 | **Dòng `TAKEOVER` vô hình** ở `/admin/audit-log` với audit scope ≠ ALL (`orgUnitId = null`). | NHẸ | §15.2 |
+| 6 | **Đăng xuất xong push TẮT tới khi tự bấm lại** — không gì bật lại sau đăng nhập. Hệ quả trực tiếp của hướng đã chốt. **CHƯA VÁ, cần chốt.** | — | §14.4 |
+
+**Ba lỗ TEST mà lăng kính chứng minh bộ cũ không bắt được** — đã bịt và cấy lại thấy đỏ:
+
+| Phép cấy | Hậu quả thật nếu lọt | Ca nay canh |
+|---|---|---|
+| siết `chuyenChu` thêm `&& status === "ACTIVE"` | chiếm một dòng `REVOKED` của người khác thì **không thu hồi, không ghi sổ** — mà đó là hình dạng phổ biến nhất của dòng cũ (vừa `REVOKED` lúc người trước đăng xuất) ⇒ lỗ §13.8b(b) quay lại, im lặng | `[PUSH-D5-T07]` ca "dòng cũ đang REVOKED của NGƯỜI KHÁC" |
+| gỡ `try/catch` quanh `Promise.race` ở `logoutToGate` | trình duyệt nào `getRegistration()` reject (hồ sơ Chrome hỏng, cửa sổ riêng tư) thì **nút Đăng xuất không làm gì** — trên đúng máy dùng chung mà cả §14 tồn tại vì nó | `[PUSH-D5-T05]` ca "getRegistration() NÉM" |
+| `const bam = ep` (so endpoint trần với băm server) | `daDangKy` vĩnh viễn `false`, không bao giờ có nhãn "máy này" ⇒ người dùng bấm bật lại, **mỗi cú bấm đẻ một dòng `ACTIVE` mồ côi** | **`components/push/bat-thong-bao.test.tsx` — tệp MỚI** |
+
+Mục cuối là lỗ lớn nhất: `components/push/bat-thong-bao.tsx` **chưa có một tệp test nào**, tức
+toàn bộ dây nối nửa client của Đợt 5 (băm ở client, so `t.bam === bam`, nhãn "máy này", không rò
+endpoint ra DOM) không ai canh. `client-key.test.ts` chỉ khoá HAI HÀM, không khoá chỗ GỌI.
+
+### 17.1 Nợ còn lại sau lượt 2
+
+- **Cổng `[PUSH-D3-T14]` không đi theo cây import.** Nó chỉ đọc chuỗi trong chính tệp của các
+  thư mục bị cấm, nên bắc cầu qua `lib/` là vô hình — và **Đợt 5 vừa tạo đúng một cây cầu như
+  vậy**: `app/(portal)/portal/_components/site-switcher.tsx` → `@/lib/auth/logout-client` (tệp
+  `"use client"`) → `@/app/(admin)/admin/settings/_push-actions`. Hôm nay vô hại (import Server
+  Action chỉ thành stub tham chiếu; đã **đo**: grep chuỗi server-only trong `.next/static` = 0 tệp,
+  với đối chứng dương là chuỗi UI push tìm thấy ở 2 chunk). Nhưng thêm **một dòng**
+  `import { bamEndpointOClient } from "@/lib/push/client-key"` vào `logout-client.ts` — việc rất
+  dễ nghĩ tới ở đợt sau — là mã push client vào bundle phụ huynh mà cổng vẫn xanh. Bịt đúng thì
+  phải đi theo cây import (dependency-cruiser), việc lớn hơn một ca test.
+- **Chuỗi import không literal** (`await import(\`@/lib/push/${x}\`)`) không khớp regex của cổng.
+- **Endpoint KHÔNG phải "khả năng gửi" đứng một mình** — chú thích ở `ket-qua.ts`/`thiet-bi.ts`
+  nói quá mạnh. Đăng ký của ta tạo với `applicationServerKey`, nên push service đòi JWT ký bằng
+  ĐÚNG cặp khoá VAPID của ta; ai có endpoint mà không có khoá riêng thì không gửi được gì. Việc
+  che endpoint vẫn đúng, nhưng vì hai lý do khác: nó là **đầu vào duy nhất của đường chiếm đăng
+  ký**, và nó là định danh thiết bị. Sửa lại câu chữ ở đợt sau, không đáng một commit riêng.

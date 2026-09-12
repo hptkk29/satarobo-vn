@@ -171,7 +171,11 @@ export async function dangKyThietBiAction(input: unknown): Promise<KetQuaThietBi
     // trạng thái `REVOKED` dưới đây chỉ sống tới câu `upsert` ngay sau. Vết DÀI HẠN của lần
     // chuyển chủ nằm ở `AuditLog`, không nằm trong bảng này.
     await sdb.webPushSubscription.updateMany({
-      where: { endpoint: subscription.endpoint, userId: { not: ai.userId } },
+      // Lọc `status: "ACTIVE"` để KHÔNG ghi đè `revokedAt`/`revokedReason` của một lần thu hồi
+      // TRƯỚC đó — đúng bất biến mà `lib/push/thu-hoi.test.ts` tự pin. Dòng đã `REVOKED` thì
+      // không có gì để thu hồi nữa; nó vẫn được `upsert` ngay dưới đổi chủ + vẫn được ghi sổ,
+      // vì `chuyenChu` xét THEO CHỦ chứ không theo trạng thái.
+      where: { endpoint: subscription.endpoint, userId: { not: ai.userId }, status: "ACTIVE" },
       data: {
         status: "REVOKED",
         revokedAt: now,

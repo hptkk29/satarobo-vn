@@ -26,13 +26,16 @@ import "server-only";
 
 import { db } from "@/lib/db";
 
-/** Lý do mà route `/dang-xuat` nhận — trùng `ALLOWED_REASONS` của route đó. */
-export type LyDoThuHoiPush = "session-invalidated" | "session-disabled" | "password-changed";
+/**
+ * Hai lý do khiến một tài khoản được coi là ĐÃ CHẾT.
+ *
+ * ⚠️ CỐ Ý KHÔNG có "đổi mật khẩu" / "đổi vai" / "đổi quyền" — xem `thuHoiNeuTaiKhoanChet`.
+ */
+export type LyDoThuHoiPush = "da-xoa" | "bi-vo-hieu-hoa";
 
 const NHAN_LY_DO: Record<LyDoThuHoiPush, string> = {
-  "session-invalidated": "Tài khoản bị xoá hoặc phiên bị vô hiệu hoá",
-  "session-disabled": "Tài khoản bị vô hiệu hoá",
-  "password-changed": "Đổi mật khẩu — mọi phiên bị đá",
+  "da-xoa": "Tài khoản đã bị xoá",
+  "bi-vo-hieu-hoa": "Tài khoản bị vô hiệu hoá",
 };
 
 /**
@@ -73,4 +76,53 @@ export async function thuHoiMoiThietBiCuaNguoi(params: {
     );
     return 0;
   }
+}
+
+/**
+ * Thu hồi MỌI thiết bị NHƯNG CHỈ KHI tài khoản thật sự đã chết.
+ *
+ * ── VÌ SAO KHÔNG DÙNG `checkSessionLiveness` — LỖ DO BẢN VÁ ĐỢT 5 ĐẺ RA, LĂNG KÍNH TÌM RA ──
+ * Bản trước của route `/dang-xuat` gọi `checkSessionLiveness` rồi thu hồi khi `live: false`.
+ * Nhưng hàm đó trả CÙNG MỘT NHÃN `session-invalidated` cho hai việc khác nhau hẳn:
+ *   · tài khoản bị XOÁ / VÔ HIỆU HOÁ  — chết thật, gỡ hết là đúng;
+ *   · `tokenVersion` LỆCH             — chỉ là "buộc đăng nhập lại", tài khoản còn sống nguyên.
+ *
+ * Mà bump `tokenVersion` là thao tác THƯỜNG NGÀY của repo này — đo được 9 nơi: đổi vai
+ * (`nhan-su/actions.ts`, `users/_actions.ts`), cấp/thu quyền per-user
+ * (`users/[id]/permissions/_actions.ts`, 3 nơi), force logout, tự đặt lại mật khẩu. Hệ quả của
+ * bản trước: SUPER_ADMIN cấp thêm một quyền cho một Sale ⇒ lượt tải trang kế tiếp bị layout đá
+ * qua `/dang-xuat?reason=session-invalidated` ⇒ **gỡ sạch push trên MỌI máy của người đó**.
+ * Không màn nào báo; họ chỉ đơn giản không nhận lead nữa — đúng loại hỏng câm mà cả đợt này
+ * sinh ra để tránh.
+ *
+ * Nên hàm này tự đọc DB và tự quyết, chỉ theo hai cột NÓI VỀ SỰ SỐNG của tài khoản. Cố ý KHÔNG
+ * nới `SessionLiveness` thêm lý do thứ ba: kiểu đó do đường auth sở hữu và ba layout đang dùng,
+ * đổi hợp đồng của nó để phục vụ một việc của module push là đặt rủi ro ở sai chỗ.
+ *
+ * @returns `chet` = tài khoản đã chết (đã thu hồi), `soDong` = số thiết bị bị gỡ.
+ *
+ * ⚠️ KHÔNG BAO GIỜ NÉM — cùng lý do như `thuHoiMoiThietBiCuaNguoi`: hàm này nằm trên đường
+ * ĐĂNG XUẤT, mà route `/dang-xuat` tồn tại chính để cứu người khỏi vòng lặp redirect.
+ */
+export async function thuHoiNeuTaiKhoanChet(params: {
+  userId: string;
+  now?: Date;
+}): Promise<{ chet: boolean; soDong: number }> {
+  if (!params.userId) return { chet: false, soDong: 0 };
+  let lyDo: LyDoThuHoiPush | null = null;
+  try {
+    const u = await db.user.findUnique({
+      where: { id: params.userId },
+      select: { isActive: true, deletedAt: true },
+    });
+    // Không tìm thấy cũng là chết: bản ghi đã bị xoá cứng.
+    if (!u || u.deletedAt) lyDo = "da-xoa";
+    else if (!u.isActive) lyDo = "bi-vo-hieu-hoa";
+  } catch (err) {
+    console.warn("[push] không đọc được tình trạng tài khoản khi đăng xuất — bỏ thu hồi:", err);
+    return { chet: false, soDong: 0 };
+  }
+  if (!lyDo) return { chet: false, soDong: 0 };
+  const soDong = await thuHoiMoiThietBiCuaNguoi({ userId: params.userId, lyDo, now: params.now });
+  return { chet: true, soDong };
 }

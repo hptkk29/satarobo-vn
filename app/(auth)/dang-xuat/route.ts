@@ -1,7 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auth, signOut } from "@/lib/auth";
-import { checkSessionLiveness } from "@/lib/auth/live-session";
-import { thuHoiMoiThietBiCuaNguoi } from "@/lib/push/thu-hoi";
+import { thuHoiNeuTaiKhoanChet } from "@/lib/push/thu-hoi";
 
 export const dynamic = "force-dynamic";
 
@@ -50,9 +49,15 @@ export async function GET(req: NextRequest) {
   //     bấm Back hai nhịp là gọi lại GET này với cookie MỚI — tài khoản còn sống nguyên mà vẫn
   //     bị gỡ sạch thiết bị.
   //
-  // Nên: HỎI DB. `checkSessionLiveness` là chính hàm mà ba trong bốn layout đang dùng, và nó
-  // trả về đúng hai lý do của `LyDoThuHoiPush`. `reason` từ URL nay CHỈ còn dùng để hiện thông
-  // báo ở `/login` (danh sách trắng bên trên), không quyết định gì.
+  // Nên: HỎI DB. `reason` từ URL nay CHỈ còn dùng để hiện thông báo ở `/login` (danh sách
+  // trắng bên trên), không quyết định gì.
+  //
+  // ⚠️ VÀ "CHẾT" PHẢI ĐO BẰNG `deletedAt`/`isActive`, KHÔNG BẰNG `checkSessionLiveness` — bản
+  // trước của chính Đợt 5 dùng hàm đó và đẻ ra một lỗ thứ hai (lăng kính lượt 2 tìm ra): nó trả
+  // CÙNG nhãn `session-invalidated` cho "tài khoản bị xoá" và cho "`tokenVersion` lệch", mà
+  // bump `tokenVersion` là thao tác thường ngày (đổi vai, cấp quyền, force logout — 9 nơi trong
+  // repo). Hệ quả: cấp thêm một quyền cho một Sale là gỡ sạch push trên MỌI máy của họ, im lặng.
+  // `thuHoiNeuTaiKhoanChet` tự đọc hai cột nói về SỰ SỐNG và tự quyết.
   //
   // Cố ý KHÔNG gói trong `if (reason)`: bỏ điều kiện đó thì thêm một câu tra DB cho mỗi lượt ghé
   // route (route này chỉ được ghé bởi phiên đã chết + nút đăng xuất của site Sale — không phải
@@ -63,19 +68,19 @@ export async function GET(req: NextRequest) {
   // vừa thu hồi cho ai. Ở ba ca trên JWT vẫn hợp lệ (chỉ DB nói phiên đã chết, mà middleware
   // không đọc DB — xem khối chú thích trên), nên `auth()` vẫn trả về người dùng.
   //
-  // `thuHoiMoiThietBiCuaNguoi` cam kết KHÔNG NÉM; `checkSessionLiveness` thì CÓ THỂ ném (nó tra
-  // DB), nên bọc — route này tồn tại để CỨU người khỏi vòng lặp redirect, một lỗi lọt ra ngoài
-  // sẽ giam họ lại trong đúng cái vòng lặp đó.
+  // `thuHoiNeuTaiKhoanChet` cam kết KHÔNG NÉM — route này tồn tại để CỨU người khỏi vòng lặp
+  // redirect, một lỗi lọt ra ngoài sẽ giam họ lại trong đúng cái vòng lặp đó.
   const session = await auth();
   const userId = session?.user?.id;
   if (userId) {
+    // Bọc `try/catch` DÙ hàm kia cam kết không ném: route này tồn tại để CỨU người khỏi vòng
+    // lặp `ERR_TOO_MANY_REDIRECTS`, nên nó không được phụ thuộc vào lời cam kết của module
+    // khác. Một `import` hỏng hay một bản vá tương lai làm hàm đó ném là giam người dùng lại
+    // trong đúng cái vòng lặp mà route sinh ra để phá.
     try {
-      const song = await checkSessionLiveness(userId, session?.user?.tokenVersion);
-      if (!song.live) {
-        await thuHoiMoiThietBiCuaNguoi({ userId, lyDo: song.reason });
-      }
+      await thuHoiNeuTaiKhoanChet({ userId });
     } catch (err) {
-      console.warn("[push] không kiểm được tình trạng phiên khi đăng xuất — bỏ thu hồi:", err);
+      console.warn("[push] thu hồi thiết bị lúc đăng xuất lỗi — phiên vẫn được dọn:", err);
     }
   }
 

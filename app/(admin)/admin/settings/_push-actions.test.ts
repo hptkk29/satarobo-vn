@@ -324,6 +324,32 @@ describe("[PUSH-D5-T07] endpoint đang thuộc NGƯỜI KHÁC ⇒ thu hồi rồ
     expect(String(a.entityId)).toContain("fcm.googleapis.com");
   });
 
+  it("câu thu hồi lọc `status: \"ACTIVE\"` — không ghi đè bằng chứng lần thu hồi TRƯỚC", async () => {
+    // Bất biến này do `lib/push/thu-hoi.test.ts` pin ở nửa kia của cùng một đợt. Thiếu nó thì
+    // `revokedAt`/`revokedReason` của lần thu hồi trước (vd "Tài khoản bị vô hiệu hoá") bị ghi
+    // đè bằng lý do "máy dùng chung" — sổ nói sai về việc đã xảy ra.
+    await dangKyThietBiAction(dauVao());
+    expect(goiUpdateMany().where.status).toBe("ACTIVE");
+  });
+
+  it("dòng cũ đang REVOKED của NGƯỜI KHÁC ⇒ VẪN chuyển chủ và VẪN ghi sổ", async () => {
+    // Đây là hình dạng PHỔ BIẾN NHẤT của dòng cũ: `logoutToGate` vừa đặt `REVOKED` khi người
+    // trước đăng xuất. Nếu `chuyenChu` bị siết thêm `&& dongCu.status === "ACTIVE"` thì ca này
+    // đổi chủ IM LẶNG — không thu hồi, không ghi sổ — và lỗ §13.8b(b) quay lại mà cổng vẫn xanh.
+    // (Lăng kính đề xuất đúng phép cấy lỗi đó và bộ test cũ không bắt được.)
+    h.findUnique.mockImplementation(async () => ({ userId: "usr_nguoi_khac", status: "REVOKED" }));
+    const kq = await dangKyThietBiAction(dauVao());
+    expect(kq.ok).toBe(true);
+    expect(h.writeAudit).toHaveBeenCalledTimes(1);
+    expect(h.writeAudit.mock.calls[0]?.[0]).toMatchObject({ action: "TAKEOVER" });
+  });
+
+  it("ghi sổ SAU khi đã đổi chủ — sổ không được nói về việc chưa xảy ra", async () => {
+    await dangKyThietBiAction(dauVao());
+    expect(h.thuTu.indexOf("upsert")).toBeGreaterThanOrEqual(0);
+    expect(h.thuTu.indexOf("audit")).toBeGreaterThan(h.thuTu.indexOf("upsert"));
+  });
+
   it("sổ AuditLog hỏng ⇒ thao tác tự phục vụ VẪN thành công", async () => {
     h.writeAudit.mockRejectedValue(new Error("bảng audit đầy"));
     expect((await dangKyThietBiAction(dauVao())).ok).toBe(true);

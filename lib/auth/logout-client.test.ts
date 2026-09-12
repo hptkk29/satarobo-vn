@@ -151,6 +151,27 @@ describe("[PUSH-D5-T05] CHỈ huỷ ở trình duyệt khi máy chủ xác nhậ
     expect(window.location.href).toBe("/login");
   });
 
+  it("getRegistration() NÉM ⇒ vẫn signOut và vẫn điều hướng", async () => {
+    // Hồ sơ Chrome hỏng / cửa sổ riêng tư có thể làm `getRegistration()` reject. Lỗi đó xảy ra
+    // NGOÀI `try/catch` bên trong `goDangKyPushCuaMayNay`, nên chỉ có `try` bọc `Promise.race`
+    // ở `logoutToGate` đỡ. Gỡ lớp bọc đó là NÚT ĐĂNG XUẤT KHÔNG LÀM GÌ — trên đúng máy dùng
+    // chung mà cả §14 tồn tại vì nó. (Lăng kính đề xuất đúng phép cấy lỗi này.)
+    Object.defineProperty(window, "navigator", {
+      value: {
+        serviceWorker: {
+          getRegistration: vi.fn(async () => {
+            throw new Error("hồ sơ trình duyệt hỏng");
+          }),
+        },
+      },
+      configurable: true,
+      writable: true,
+    });
+    await logoutToGate();
+    expect(h.signOut).toHaveBeenCalledTimes(1);
+    expect(window.location.href).toBe("/login");
+  });
+
   it("unsubscribe NÉM ⇒ vẫn signOut và vẫn điều hướng, không giam người dùng", async () => {
     h.unsubscribe.mockRejectedValue(new Error("worker đã chết"));
     await logoutToGate();

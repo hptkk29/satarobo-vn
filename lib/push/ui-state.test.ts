@@ -156,7 +156,7 @@ const NGOAI_LE_LIB_PUSH: Record<string, { module: string; lyDo: string }> = {
 
 describe("[PUSH-D3-T14] ràng buộc phạm vi: KHÔNG có mã push nào ở host phụ huynh/công khai", () => {
   const quetNhomCam = async (): Promise<{ duong: string; src: string }[]> => {
-    const { readdirSync, readFileSync, statSync } = await import("node:fs");
+    const { readdirSync, readFileSync, statSync, existsSync } = await import("node:fs");
     const { join } = await import("node:path");
     const quet = (thuMuc: string): string[] => {
       const ra: string[] = [];
@@ -169,12 +169,27 @@ describe("[PUSH-D3-T14] ràng buộc phạm vi: KHÔNG có mã push nào ở hos
       }
       return ra;
     };
-    const cam = ["app/(portal)", "app/(public)", "app/(legacy)", "app/(auth)"];
+    // ⚠️ Danh sách này TỪNG chỉ có 4 route group, và lăng kính lượt 2 chỉ ra hai đường lách
+    // ngay cạnh: `app/layout.tsx` là layout GỐC — nó phục vụ trên CẢ SÁU host kể cả
+    // `hocvien.satarobo.vn`, nên mount `<ServiceWorkerRegister/>` ở đó là cài worker lên origin
+    // phụ huynh mà cổng vẫn xanh (đúng "cái bẫy nặng nhất" ca test này tự nêu, chỉ ở một tầng
+    // cao hơn). Và `components/portal/**` là vỏ portal thật (~20 tệp) cũng nằm ngoài.
+    const cam = [
+      "app/(portal)",
+      "app/(public)",
+      "app/(legacy)",
+      "app/(auth)",
+      "components/portal",
+    ];
+    const tepCam = ["app/layout.tsx", "app/not-found.tsx"];
     const ra: { duong: string; src: string }[] = [];
     for (const g of cam) {
       for (const f of quet(g)) {
         ra.push({ duong: f.replace(/\\/g, "/"), src: readFileSync(f, "utf8") });
       }
+    }
+    for (const f of tepCam) {
+      if (existsSync(f)) ra.push({ duong: f, src: readFileSync(f, "utf8") });
     }
     return ra;
   };
