@@ -15,6 +15,12 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 const h = vi.hoisted(() => {
   const upsert = vi.fn(async (_a: unknown) => ({}));
   const updateMany = vi.fn(async (_a: unknown) => ({ count: 1 }));
+  /** Dòng đang có cho endpoint được gửi lên — `null` = máy này chưa ai đăng ký. */
+  const findUnique = vi.fn(
+    async (_a: unknown) => null as { userId: string; status: string } | null,
+  );
+  const writeAudit = vi.fn(async (_a: Record<string, unknown>) => ({}) as unknown);
+  const thuTu: string[] = [];
   const auth = vi.fn(async () => ({
     user: { id: "usr_toi", roles: ["SALES_CSM"], role: "SALES_CSM" },
   }) as unknown);
@@ -25,9 +31,12 @@ const h = vi.hoisted(() => {
   return {
     upsert,
     updateMany,
+    findUnique,
+    writeAudit,
+    thuTu,
     auth,
     headerMap,
-    mockDb: { webPushSubscription: { upsert, updateMany } },
+    mockDb: { webPushSubscription: { upsert, updateMany, findUnique } },
   };
 });
 
@@ -38,6 +47,7 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ auth: h.auth }));
 vi.mock("@/lib/auth/actor", () => ({ resolveActor: vi.fn(async () => ({ userId: "usr_toi" })) }));
 vi.mock("@/lib/db-scope", () => ({ scopedDb: vi.fn(() => h.mockDb) }));
+vi.mock("@/lib/audit/audit-log", () => ({ writeAudit: h.writeAudit }));
 
 import {
   dangKyThietBiAction,
@@ -63,8 +73,22 @@ function dauVao(ghiDe: Record<string, unknown> = {}) {
 beforeEach(() => {
   vi.unstubAllEnvs();
   vi.stubEnv("NEXT_PUBLIC_VAPID_PUBLIC_KEY", CAP.publicKey);
-  h.upsert.mockClear();
-  h.updateMany.mockClear().mockResolvedValue({ count: 1 });
+  // KHÔNG dùng `mockResolvedValue` cho những mock có ghi nhật ký thứ tự: nó ĐÈ
+  // implementation, làm `thuTu` rỗng và mọi khẳng định về thứ tự thành `-1 < -1`.
+  h.thuTu.length = 0;
+  h.upsert.mockClear().mockImplementation(async () => {
+    h.thuTu.push("upsert");
+    return {};
+  });
+  h.updateMany.mockClear().mockImplementation(async () => {
+    h.thuTu.push("updateMany");
+    return { count: 1 };
+  });
+  h.findUnique.mockClear().mockImplementation(async () => null);
+  h.writeAudit.mockClear().mockImplementation(async () => {
+    h.thuTu.push("audit");
+    return {};
+  });
   h.auth.mockClear().mockResolvedValue({
     user: { id: "usr_toi", roles: ["SALES_CSM"], role: "SALES_CSM" },
   } as unknown as never);
@@ -233,5 +257,104 @@ describe("[PUSH-D3-T12] gỡ thiết bị — chốt chống IDOR", () => {
     // Bắt họ đọc một thông báo lỗi là nói sai về kết quả.
     h.updateMany.mockResolvedValue({ count: 0 });
     expect((await huyThietBiTheoEndpointAction({ endpoint: ENDPOINT })).ok).toBe(true);
+  });
+});
+
+// ── ĐỢT 5: CHUYỂN CHỦ ĐĂNG KÝ (lỗ §13.8b(b)) ─────────────────────────────────────────────
+//
+// Trước bản vá, `upsert` khoá theo mỗi `endpoint` và nhánh `update` ghi đè `userId` thành người
+// đang gọi, KHÔNG vế nào kiểm người gọi có sở hữu endpoint đó. Ai biết endpoint của người khác
+// là chiếm được: nạn nhân mất push IM LẶNG, còn máy của họ rung cho việc của kẻ chiếm.
+
+/** Tham số của lần `updateMany` gần nhất. */
+function goiUpdateMany(): { where: Record<string, unknown>; data: Record<string, unknown> } {
+  const c = h.updateMany.mock.calls.at(-1)?.[0];
+  if (!c) throw new Error("updateMany chưa được gọi lần nào");
+  return c as { where: Record<string, unknown>; data: Record<string, unknown> };
+}
+
+describe("[PUSH-D5-T07] endpoint đang thuộc NGƯỜI KHÁC ⇒ thu hồi rồi mới chuyển chủ", () => {
+  beforeEach(() => {
+    h.findUnique.mockImplementation(async () => ({ userId: "usr_nguoi_khac", status: "ACTIVE" }));
+  });
+
+  it("THU HỒI TRƯỚC, ghi chủ mới SAU — fail-safe đúng chiều", async () => {
+    // Nếu câu ghi chủ mới hỏng giữa đường (mạng, pooler chập) thì trạng thái còn lại phải là
+    // "người cũ ĐÃ mất quyền", không phải "người cũ vẫn đang nhận".
+    const kq = await dangKyThietBiAction(dauVao());
+    expect(kq.ok).toBe(true);
+    expect(h.thuTu.indexOf("updateMany")).toBeGreaterThanOrEqual(0);
+    expect(h.thuTu.indexOf("updateMany")).toBeLessThan(h.thuTu.indexOf("upsert"));
+  });
+
+  it("câu thu hồi lọc theo endpoint + NGƯỜI KHÁC mình, ghi lý do rõ", async () => {
+    await dangKyThietBiAction(dauVao());
+    const w = goiUpdateMany().where;
+    expect(w.endpoint).toBe(ENDPOINT);
+    // Vế `userId: { not: me }` là chốt: thiếu nó thì câu này cũng thu hồi chính dòng mình vừa
+    // bật ở một tab khác.
+    expect(w.userId).toEqual({ not: "usr_toi" });
+    const d = goiUpdateMany().data;
+    expect(d.status).toBe("REVOKED");
+    expect(d.revokedAt).toBeInstanceOf(Date);
+    expect(String(d.revokedReason)).toContain("dùng chung");
+  });
+
+  it("dòng mới thuộc NGƯỜI ĐANG ĐĂNG NHẬP, lấy từ phiên — không bao giờ từ input", async () => {
+    await dangKyThietBiAction({ ...dauVao(), userId: "usr_ke_chiem" } as never);
+    const u = h.upsert.mock.calls[0]?.[0] as {
+      create: Record<string, unknown>;
+      update: Record<string, unknown>;
+    };
+    expect(u.create.userId).toBe("usr_toi");
+    expect(u.update.userId).toBe("usr_toi");
+  });
+
+  it("ĐỂ LẠI VẾT trong AuditLog: ai → ai, và CHỈ nhãn cắt, KHÔNG endpoint đầy đủ", async () => {
+    // Bảng `WebPushSubscription` không giữ được vết (một dòng cho mỗi endpoint — `@unique` toàn
+    // cục), nên AuditLog là nơi DUY NHẤT trả lời được "máy nào đổi từ ai sang ai, lúc nào".
+    await dangKyThietBiAction(dauVao());
+    expect(h.writeAudit).toHaveBeenCalledTimes(1);
+    const a = h.writeAudit.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(a.action).toBe("TAKEOVER");
+    expect(a.oldValues).toMatchObject({ userId: "usr_nguoi_khac" });
+    expect(a.newValues).toMatchObject({ userId: "usr_toi" });
+    // Endpoint là một KHẢ NĂNG GỬI — không để nguyên ở bất kỳ đâu, kể cả AuditLog.
+    expect(JSON.stringify(a)).not.toContain(ENDPOINT);
+    expect(String(a.entityId)).toContain("fcm.googleapis.com");
+  });
+
+  it("sổ AuditLog hỏng ⇒ thao tác tự phục vụ VẪN thành công", async () => {
+    h.writeAudit.mockRejectedValue(new Error("bảng audit đầy"));
+    expect((await dangKyThietBiAction(dauVao())).ok).toBe(true);
+    expect(h.upsert).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("[PUSH-D5-T08] KHÔNG phải chuyển chủ thì không thu hồi, không ghi sổ", () => {
+  it("máy chưa ai đăng ký ⇒ chỉ upsert", async () => {
+    h.findUnique.mockImplementation(async () => null);
+    await dangKyThietBiAction(dauVao());
+    expect(h.updateMany).not.toHaveBeenCalled();
+    expect(h.writeAudit).not.toHaveBeenCalled();
+  });
+
+  it("bật lại trên máy CỦA CHÍNH MÌNH ⇒ không thu hồi, không ghi sổ", async () => {
+    // Ca thường gặp nhất (đổi trình duyệt cấp lại cùng endpoint, hoặc bấm bật hai lần). Thu hồi
+    // ở đây là tự gỡ thiết bị của mình rồi bật lại — nhiễu sổ, và một nhịp không nhận được gì.
+    h.findUnique.mockImplementation(async () => ({ userId: "usr_toi", status: "REVOKED" }));
+    await dangKyThietBiAction(dauVao());
+    expect(h.updateMany).not.toHaveBeenCalled();
+    expect(h.writeAudit).not.toHaveBeenCalled();
+    expect(h.upsert).toHaveBeenCalledTimes(1);
+  });
+
+  it("câu tra dòng cũ KHÔNG lọc theo userId — lọc là mất đúng dòng cần chặn", async () => {
+    // Bài học `lib/payments/method-lookup.ts`: câu tra dùng để CHẶN mà bị lọc mất đúng dòng cần
+    // chặn thì nó trả null, và cổng đọc null thành "không có gì, cho qua" ⇒ mở toang đúng lúc
+    // phải đóng. Ở đây nghĩa là kẻ chiếm sẽ không bao giờ bị phát hiện là đang chiếm.
+    await dangKyThietBiAction(dauVao());
+    const w = h.findUnique.mock.calls[0]?.[0] as { where: Record<string, unknown> };
+    expect(w.where).toEqual({ endpoint: ENDPOINT });
   });
 });

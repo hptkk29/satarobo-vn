@@ -23,6 +23,7 @@ import {
 } from "@/lib/push/ui-state";
 import { khoaVapidSangBytes, laKhoaVapidHopLeOClient } from "@/lib/push/client-key";
 import { nhanHost } from "@/lib/push/ui-state";
+import { bamEndpointOClient } from "@/lib/push/client-key";
 import {
   dangKyThietBiAction,
   huyThietBiAction,
@@ -31,7 +32,16 @@ import {
 
 export interface ThietBiView {
   id: string;
-  endpoint: string;
+  /**
+   * BĂM endpoint, KHÔNG phải endpoint (siết ở Đợt 5).
+   *
+   * Prop của component này được tuần tự hoá thẳng vào HTML trang, nên trả endpoint đầy đủ là
+   * đặt một KHẢ NĂNG GỬI vào mã nguồn trang — và đó chính là đầu vào duy nhất mà kẻ muốn
+   * chiếm đăng ký của người khác cần. So "máy này" bằng băm cho kết quả y hệt mà không lộ gì.
+   */
+  bam: string;
+  /** Nhãn cắt `host/…6 ký tự cuối` — cho người đọc, không gửi lại được. */
+  nhan: string;
   deviceLabel: string | null;
   userAgent: string | null;
   origin: string;
@@ -78,7 +88,7 @@ export function BatThongBao({ thietBi }: { thietBi: ThietBiView[] }) {
   const [dangChay, setDangChay] = useState(false);
   const [loi, setLoi] = useState<string | null>(null);
   const [xong, setXong] = useState<string | null>(null);
-  const [endpointMayNay, setEndpointMayNay] = useState<string | null>(null);
+  const [bamMayNay, setBamMayNay] = useState<string | null>(null);
   // `thietBi` là prop từ Server Component — nó ĐÓNG BĂNG từ lượt tải trang. Không refresh thì
   // bật xong `daDangKy` vẫn false (danh sách cũ) ⇒ màn hình vẫn hiện nút "Bật thông báo" và
   // "Chưa có thiết bị nào" ngay cạnh dòng "Đã bật", và gỡ xong bấm lại lần hai sẽ ra chữ đỏ
@@ -110,7 +120,9 @@ export function BatThongBao({ thietBi }: { thietBi: ThietBiView[] }) {
         ep = null;
       }
     }
-    setEndpointMayNay(ep);
+    // Băm ở CLIENT rồi so với băm server gửi xuống — server không còn gửi endpoint nào.
+    const bam = ep ? await bamEndpointOClient(ep) : null;
+    setBamMayNay(bam);
     setBoiCanh({
       hoTroPush,
       quyen,
@@ -121,7 +133,10 @@ export function BatThongBao({ thietBi }: { thietBi: ThietBiView[] }) {
       dangStandalone,
       // "Máy này đã đăng ký" = trình duyệt CÓ subscription VÀ máy chủ có dòng tương ứng.
       // Thiếu vế thứ hai thì gỡ ở tab khác xong tab này vẫn báo "đang nhận".
-      daDangKy: !!ep && thietBi.some((t) => t.endpoint === ep),
+      // `bam` null nghĩa là không băm được (không có `crypto.subtle` — chỉ xảy ra ngoài
+      // secure context, mà Web Push vốn đã đòi secure context). Fail sang "chưa đăng ký":
+      // mời bật lại một lần là vô hại, còn báo "đang nhận" khi không chắc là nói sai.
+      daDangKy: !!bam && thietBi.some((t) => t.bam === bam),
     });
   }, [thietBi]);
 
@@ -296,7 +311,7 @@ export function BatThongBao({ thietBi }: { thietBi: ThietBiView[] }) {
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-foreground">
                     {tenMay(tb)}
-                    {tb.endpoint === endpointMayNay && (
+                    {!!bamMayNay && tb.bam === bamMayNay && (
                       <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-xs font-normal text-muted-foreground">
                         máy này
                       </span>

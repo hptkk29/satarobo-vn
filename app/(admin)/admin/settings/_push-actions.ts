@@ -27,6 +27,8 @@ import { hasStaffRole } from "@/lib/auth/permissions";
 import { webPushSubscriptionSchema } from "@/lib/push/subscription";
 import { vapidKeyIdTuKhoa } from "@/lib/push/vapid";
 import { originTuHeaders } from "@/lib/push/origin";
+import { nhanEndpoint } from "@/lib/push/ket-qua";
+import { writeAudit } from "@/lib/audit/audit-log";
 
 export interface KetQuaThietBi {
   ok: boolean;
@@ -58,7 +60,7 @@ const huyTheoEndpointSchema = z.object({ endpoint: z.string().min(1) });
 
 /** Ai được đăng ký thiết bị: nhân viên đã đăng nhập. Phụ huynh KHÔNG — phạm vi đã chốt. */
 async function nhanSuDangNhap(): Promise<
-  { ok: true; userId: string } | { ok: false; error: string }
+  { ok: true; userId: string; ten: string } | { ok: false; error: string }
 > {
   const session = await auth();
   if (!session?.user?.id) return { ok: false, error: "Chưa đăng nhập" };
@@ -66,7 +68,9 @@ async function nhanSuDangNhap(): Promise<
   // hạng với đổi mật khẩu. Thêm key mới sẽ kéo theo sửa 4 nơi + bấm tay `seed-prod-roles.yml`
   // trên prod, đổi lấy một lớp gác không quyết định gì thêm.
   if (!hasStaffRole(session.user)) return { ok: false, error: "Không có quyền" };
-  return { ok: true, userId: session.user.id };
+  // `ten` chỉ để ghi AuditLog cho ca CHUYỂN CHỦ đăng ký — `AuditLog.actorName` là cột chụp
+  // ảnh, cố ý không join lại `User` (tên đổi thì sổ cũ vẫn phải đọc được như lúc ghi).
+  return { ok: true, userId: session.user.id, ten: session.user.name ?? session.user.id };
 }
 
 /**
@@ -121,13 +125,87 @@ export async function dangKyThietBiAction(input: unknown): Promise<KetQuaThietBi
     lastSeenAt: now,
   };
 
+  // ── CHUYỂN CHỦ (US-14b Đợt 5, lỗ §13.8b(b)) ──────────────────────────────────────────
+  //
+  // Trước bản vá này, `upsert` khoá theo MỖI `endpoint` và nhánh `update` ghi đè `userId` thành
+  // người đang gọi, KHÔNG vế nào kiểm người gọi có thật sự sở hữu endpoint đó. Ai biết endpoint
+  // của người khác thì gọi action với chuỗi ấy là chiếm luôn: nạn nhân mất push IM LẶNG (dòng
+  // đã đổi chủ), còn máy của họ từ đó rung cho việc của kẻ chiếm. Và endpoint không khó biết —
+  // `lib/push/thiet-bi.ts` đang trả nó ĐẦY ĐỦ xuống HTML trang /settings (bịt ở cùng commit).
+  //
+  // Không thể gác bằng "chứng minh sở hữu": trình duyệt là thứ duy nhất biết endpoint nào của
+  // nó, và server không có cách nào xác thực điều đó. Nhưng ĐỔI CHỦ VẪN LÀ HÀNH VI ĐÚNG — máy
+  // lễ tân dùng chung, người đang ngồi là chủ hợp pháp của endpoint trình duyệt vừa cấp, và
+  // chính việc đổi chủ mới là thứ bảo vệ họ khỏi nhận thông báo của người trước. Nên chốt là:
+  // cho đổi chủ, nhưng ĐỔI CHỦ KHÔNG ĐƯỢC IM LẶNG.
+  //
+  // ⚠️ Tra KHÔNG-SCOPE là CỐ Ý và là cả một bài học của repo (`lib/payments/method-lookup.ts`):
+  // câu tra dùng để CHẶN mà bị lọc mất đúng dòng cần chặn thì nó trả null, và cổng đọc null
+  // thành "không có gì, cho qua" ⇒ mở toang đúng lúc phải đóng. Ở đây an toàn: bảng không có
+  // cột đơn vị và KHÔNG nằm trong `SCOPED_MODELS`, nên `scopedDb` không lọc gì — nhưng đừng
+  // đổi câu này sang một đường có lọc.
+  const dongCu = await sdb.webPushSubscription.findUnique({
+    where: { endpoint: subscription.endpoint },
+    select: { userId: true, status: true },
+  });
+  const chuyenChu = !!dongCu && dongCu.userId !== ai.userId;
+
+  if (chuyenChu) {
+    // THU HỒI TRƯỚC, rồi mới ghi chủ mới — hai câu, không phải một.
+    //
+    // Vì sao không gộp vào `upsert`: nếu câu ghi chủ mới hỏng giữa đường (mạng, pooler chập)
+    // thì trạng thái còn lại phải là "người cũ ĐÃ mất quyền", không phải "người cũ vẫn đang
+    // nhận". Fail-safe đúng chiều — cùng lắm là người đang ngồi phải bấm lại một lần.
+    //
+    // ⚠️ `endpoint` là `@unique` TOÀN CỤC nên KHÔNG thể giữ dòng REVOKED cũ CẠNH một dòng mới:
+    // trạng thái `REVOKED` dưới đây chỉ sống tới câu `upsert` ngay sau. Vết DÀI HẠN của lần
+    // chuyển chủ nằm ở `AuditLog`, không nằm trong bảng này.
+    await sdb.webPushSubscription.updateMany({
+      where: { endpoint: subscription.endpoint, userId: { not: ai.userId } },
+      data: {
+        status: "REVOKED",
+        revokedAt: now,
+        revokedReason: "Máy dùng chung — người khác đăng nhập và bật thông báo trên máy này",
+      },
+    });
+  }
+
   await sdb.webPushSubscription.upsert({
     where: { endpoint: subscription.endpoint },
     create: { endpoint: subscription.endpoint, ...chung },
     // Hồi sinh một dòng đã REVOKED/EXPIRED: dọn sạch vết hỏng cũ, nếu không thì engine Đợt 4
-    // đọc `failureCount` của lần trước và bỏ qua một thiết bị vừa được bật lại.
+    // đọc `failureCount` của lần trước và bỏ qua một thiết bị vừa được bật lại. Cũng là nhánh
+    // dọn `revokedReason` mà bước chuyển chủ ở trên vừa đặt.
     update: { ...chung, revokedAt: null, revokedReason: null, failureCount: 0, lastErrorCode: null },
   });
+
+  if (chuyenChu && dongCu) {
+    // VẾT DÀI HẠN của lần chuyển chủ. Bảng `WebPushSubscription` không có chỗ giữ nó (một dòng
+    // cho mỗi endpoint), nên `AuditLog` là nơi duy nhất trả lời được "máy nào đổi từ ai sang ai,
+    // lúc nào" sau này.
+    //
+    // ⚠️ Ghi NHÃN CẮT (`host/…6 ký tự cuối`), TUYỆT ĐỐI không endpoint đầy đủ: endpoint là một
+    // KHẢ NĂNG GỬI (ai có nó bắn được push rỗng vào máy nhân viên), và luật của việc này là
+    // không để nó nguyên ở bất kỳ đâu — log, Sentry, hay AuditLog.
+    //
+    // Bọc try/catch: sổ hỏng không được chặn một thao tác tự phục vụ hợp lệ. Nhưng phải log to,
+    // vì mất vết của đúng ca bảo mật này là mất thứ duy nhất còn lại.
+    try {
+      await writeAudit({
+        actor: { id: ai.userId, name: ai.ten },
+        module: "push",
+        entityType: "WebPushSubscription",
+        entityId: nhanEndpoint(subscription.endpoint),
+        action: "TAKEOVER",
+        oldValues: { userId: dongCu.userId, status: dongCu.status },
+        newValues: { userId: ai.userId, status: "ACTIVE" },
+        reason: "Máy dùng chung: người đang ngồi máy bật thông báo trên endpoint của người khác",
+        userAgent: userAgent ?? null,
+      });
+    } catch (err) {
+      console.error("[push] KHÔNG ghi được vết chuyển chủ đăng ký (thao tác vẫn thành công):", err);
+    }
+  }
 
   // Hai màn dùng chung component này — phải làm mới CẢ HAI, nếu không người dùng bật xong
   // vẫn thấy "Chưa có thiết bị nào" ngay cạnh dòng chữ "Đã bật".

@@ -52,3 +52,35 @@ export function laKhoaVapidHopLeOClient(base64Url: string | undefined | null): b
   }
   return bytes.length === DO_DAI_KHOA_BYTE && bytes[0] === TIEN_TO_DIEM_KHONG_NEN;
 }
+
+/**
+ * Băm endpoint Ở TRÌNH DUYỆT — bản song song của `bamEndpoint` trong `lib/push/ket-qua.ts`.
+ *
+ * ── VÌ SAO CẦN ────────────────────────────────────────────────────────────────────────────
+ * Màn "Thiết bị nhận thông báo" phải đánh dấu được dòng nào là MÁY NÀY. Trước Đợt 5 nó so
+ * `tb.endpoint === endpointCuaMayNay`, mà muốn so được thì server phải gửi endpoint ĐẦY ĐỦ
+ * của MỌI thiết bị xuống HTML — và chính việc đó biến lỗ "chiếm đăng ký" từ lý thuyết thành
+ * khả thi (endpoint đọc được ngay trong mã trang). Nay server chỉ gửi BĂM, client tự băm
+ * endpoint của mình rồi so — vẫn chính xác tuyệt đối, mà không có chuỗi nào gửi lại được.
+ *
+ * ⚠️ PHẢI KHỚP TỪNG BYTE với `bamEndpoint` phía Node (sha256, hex, 16 ký tự đầu). Lệch một
+ * byte là màn hình không bao giờ nhận ra máy đang dùng, và triệu chứng ("không thấy nhãn máy
+ * này") trông y hệt "chưa đăng ký" — người dùng sẽ bấm bật lại lần nữa. Có test so hai bản.
+ *
+ * `crypto.subtle` chỉ tồn tại trong secure context (https / localhost) — đúng điều kiện mà
+ * Web Push vốn đã đòi, nên không có ca "trang chạy được mà hàm này không". Vẫn trả `null` thay
+ * vì ném: mất nhãn "máy này" là khuyết điểm hiển thị, không phải lý do làm vỡ cả màn hình.
+ */
+export async function bamEndpointOClient(endpoint: string): Promise<string | null> {
+  if (!endpoint || typeof crypto === "undefined" || !crypto.subtle) return null;
+  try {
+    const bytes = new TextEncoder().encode(endpoint);
+    const bam = await crypto.subtle.digest("SHA-256", bytes);
+    return [...new Uint8Array(bam)]
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("")
+      .slice(0, 16);
+  } catch {
+    return null;
+  }
+}

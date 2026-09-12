@@ -459,8 +459,7 @@ Ràng buộc này nay có test canh: `[PUSH-D3-T14]` quét `app/(portal|public|l
   còn `upsert`/`updateMany` không đi qua nó; `WebPushSubscription` cũng không có cột `centerId`.
   Giữ vì đó là khuôn của tệp anh em cùng thư mục và là đường hợp lệ để không import `@/lib/db`
   trần trong `app/(admin)/**`. Cách ly thật nằm ở `userId` của phiên trong mọi câu ghi.
-- **`lib/push/thiet-bi.ts` chưa có test** — nhánh `status: "ACTIVE"` và bước tuần tự hoá `Date`
-  sang ISO không ai canh.
+- ~~**`lib/push/thiet-bi.ts` chưa có test**~~ — **ĐÃ TRẢ ở Đợt 5** (11 ca, xem §15.4).
 - **Chưa mount ở `e-learning` và `sale`** (cả hai cờ mặc định OFF). Mount thêm là một dòng mỗi
   layout khi nào cờ bật.
 
@@ -682,7 +681,7 @@ có thể gửi thêm trong tối đa 5 phút.
   `teacherHref("/leads/…")` trả `null` vì site GV không có màn lead. Xử lý tường minh (không để
   `undefined` chui vào `data.url` — `JSON.stringify` sẽ NUỐT HẲN khoá đó). Ca này chỉ xảy ra cùng
   với ca "hai dòng một máy" ở trên.
-- **`lib/push/thiet-bi.ts` vẫn chưa có test** (nợ từ Đợt 3, không đổi).
+- ~~**`lib/push/thiet-bi.ts` vẫn chưa có test**~~ — **ĐÃ TRẢ ở Đợt 5** (§15.4).
 - **Bảng vẫn phình khi công tắc TẮT.** Cổng công tắc đứng TRƯỚC mọi thứ (đúng yêu cầu "tắt thì
   thoát sạch, không đánh dấu gì"), nên bước dọn cũng không chạy. Ở mức 50–150 dòng/ngày thì vài
   tuần trước ngày mở kênh là không đáng kể; nếu kênh nằm tắt hàng năm thì phải dọn tay.
@@ -816,3 +815,97 @@ máy đó tới khi push service trả 410.
 **Kết luận trung thực: hai lỗ ở §13.8b nay đóng ở mọi đường CÓ MÃ CHẠY, không phải ở mọi đường.**
 Muốn kín hẳn thì cần một cột "thiết bị do client sinh id" để engine so với phiên gần nhất trên
 máy đó ⇒ migration ⇒ phải quyết riêng.
+
+---
+
+## 15. Đợt 5 — chuyển chủ đăng ký + thôi lộ endpoint (13/09/2026)
+
+Lỗ §13.8b(b). Trước bản vá, `dangKyThietBiAction` `upsert` khoá theo **mỗi `endpoint`** và nhánh
+`update` ghi đè `userId` thành người đang gọi, **không vế nào kiểm người gọi có sở hữu endpoint
+đó**. Ai biết endpoint của người khác thì gọi action với chuỗi ấy là chiếm luôn: nạn nhân mất
+push **im lặng** (dòng đã đổi chủ), còn máy của họ từ đó rung cho việc của kẻ chiếm.
+
+### 15.1 Hai nửa của bản vá
+
+**(1) Bịt đầu vào — `lib/push/thiet-bi.ts` thôi trả endpoint.** Đây là nửa quan trọng hơn: kết
+quả hàm đó là **prop của một Client Component**, tức được tuần tự hoá thẳng vào HTML của
+`/settings` và `/teacher/ho-so` — ai mở "xem mã nguồn" là đọc được endpoint của **mọi** thiết bị
+mình có. Chính nó biến lỗ trên từ lý thuyết thành khả thi.
+Nay trả **băm** (`bamEndpoint`, sha256 16 hex) + **nhãn cắt** (`host/…6 ký tự cuối`). Màn hình
+vẫn đánh dấu đúng "máy này" vì client tự băm endpoint của chính nó bằng `bamEndpointOClient`
+(`lib/push/client-key.ts`, `crypto.subtle`) rồi so chuỗi — chính xác tuyệt đối, không lộ gì.
+Hai bản băm **phải khớp từng byte** và có test so hai đầu, đúng khuôn cặp
+`khoaVapidSangBytes` / `giaiBase64Url` đã có từ Đợt 3.
+`p256dh`/`auth` thì **không còn được đọc lên khỏi DB** ở đường này — không có gì để lộ thì không
+lộ được, mạnh hơn "đọc lên rồi nhớ bỏ đi".
+
+**(2) Chuyển chủ KHÔNG ĐƯỢC IM LẶNG.** Không thể gác bằng "chứng minh sở hữu": trình duyệt là
+thứ duy nhất biết endpoint nào của nó, và server không có cách nào xác thực điều đó. Mà **đổi
+chủ vẫn là hành vi ĐÚNG** — máy lễ tân dùng chung, người đang ngồi là chủ hợp pháp của endpoint
+trình duyệt vừa cấp, và chính việc đổi chủ mới là thứ bảo vệ họ khỏi nhận thông báo của người
+trước. Nên chốt là: **cho đổi chủ, nhưng để lại vết**.
+
+Trình tự khi phát hiện endpoint đang thuộc người khác:
+
+1. `findUnique({ where: { endpoint } })` — **KHÔNG lọc theo `userId`.** Đây là bài học
+   `lib/payments/method-lookup.ts`: câu tra dùng để CHẶN mà bị lọc mất đúng dòng cần chặn thì
+   nó trả `null`, và cổng đọc `null` thành "không có gì, cho qua" ⇒ mở toang đúng lúc phải đóng.
+2. `updateMany({ where: { endpoint, userId: { not: me } } })` → `REVOKED` + `revokedReason` rõ.
+   **Thu hồi TRƯỚC, ghi chủ mới SAU** — hai câu, không gộp: nếu câu ghi chủ mới hỏng giữa đường
+   (mạng, pooler chập) thì trạng thái còn lại phải là "người cũ ĐÃ mất quyền", không phải "người
+   cũ vẫn đang nhận". Fail-safe đúng chiều; cùng lắm người đang ngồi bấm lại một lần.
+3. `upsert` → `ACTIVE` cho người đang đăng nhập, reset `failureCount`/`lastErrorCode`.
+4. `writeAudit({ action: "TAKEOVER", … })` — vết dài hạn.
+
+### 15.2 ⚠️ MỘT CHỖ KHÔNG LÀM ĐƯỢC ĐÚNG CHỮ CỦA YÊU CẦU — ràng buộc schema
+
+Yêu cầu viết: *"thu hồi dòng cũ (status REVOKED, revokedReason ghi rõ) **rồi tạo dòng mới** cho
+người đang đăng nhập"*. **Không làm được đúng như vậy**, và lý do là ràng buộc DB:
+
+`WebPushSubscription.endpoint` là **`@unique` TOÀN CỤC** (`prisma/schema.prisma`). Một endpoint
+chỉ được có **đúng một dòng**, nên không thể giữ dòng `REVOKED` của người cũ **cạnh** một dòng
+`ACTIVE` mới của người mới. Hạ ràng buộc đó xuống `@@unique([endpoint, userId])` là **migration
+trên bảng đã có dữ liệu** — mà đợt này cấm chạy migration, và cột `@unique` ấy còn là khoá UPSERT
+của cả đường ghi (lý lẽ đầy đủ ở chú thích model, §2).
+
+Nên bản vá làm **đúng tinh thần, khác hình thức**: vẫn có bước `REVOKED` với `revokedReason` ghi
+rõ (bước 2 ở trên — và nó có giá trị thật, là chốt fail-safe), nhưng **trạng thái đó chỉ sống tới
+câu `upsert` ngay sau**. Vết **dài hạn** nằm ở `AuditLog` (`module: "push"`,
+`action: "TAKEOVER"`, `oldValues.userId` → `newValues.userId`), là nơi duy nhất trả lời được
+"máy nào đổi từ ai sang ai, lúc nào".
+
+`AuditLog.entityId` ghi **nhãn cắt**, tuyệt đối không endpoint đầy đủ — cùng luật đã áp cho log
+và `resultJson`: endpoint là một **khả năng gửi**, không để nó nguyên ở bất kỳ đâu. Có ca test
+khẳng định chuỗi endpoint không xuất hiện trong bản ghi audit.
+
+### 15.3 Kết quả rà soát: còn chỗ nào trả endpoint / p256dh / auth ra ngoài?
+
+Đã quét `app/` + `components/` + `lib/` (grep `endpoint: true` · `p256dh` · `auth` · `.endpoint`):
+
+| Nơi | Trước Đợt 5 | Nay |
+|---|---|---|
+| `lib/push/thiet-bi.ts` | **trả `endpoint` đầy đủ vào HTML 2 trang** | băm + nhãn cắt ✅ |
+| `lib/push/engine.ts` | đọc `endpoint`+`p256dh`+`auth` để GỬI | giữ nguyên — server-only, và mọi thứ nó **phát ra** (`resultJson`, log, `lastError`) đã băm/cắt từ Đợt 4 ✅ |
+| `components/push/bat-thong-bao.tsx` | so `tb.endpoint === ep` | so băm; hai chỗ còn lại đọc endpoint của **chính trình duyệt** (bắt buộc, để gọi action gỡ) ✅ |
+| `console.*` trong `lib/push/**` | — | 11 lời gọi, **không lời nào chạm endpoint** (chỉ id dòng · `dedupeKey` · lỗi cấu hình) ✅ |
+| Sentry | — | repo **không gọi `captureException`** ở đâu ✅ |
+| `AuditLog` | không có bản ghi push nào | 1 bản ghi mới, **nhãn cắt** ✅ |
+
+**Kết luận: không còn đường nào phát endpoint/khoá ra ngoài server.**
+
+### 15.4 Trả nợ Đợt 3
+
+`lib/push/thiet-bi.ts` **nay có test** (11 ca) — nợ ghi ở §12 từ Đợt 3. Bộ đó pin luôn ràng buộc
+mới: kết quả không chứa endpoint, `select` không đọc `p256dh`/`auth`, băm khớp `bamEndpoint`,
+lọc đúng `userId` + `ACTIVE`, `Date` → ISO.
+
+### 15.5 Nợ còn lại sau Đợt 5
+
+- **Chuyển chủ vẫn CHO PHÉP, chỉ là không im lặng nữa.** Không có cách nào chứng minh quyền sở
+  hữu endpoint ở tầng server. Thiệt hại của một lần chiếm trái phép nay là **gây nhiễu / cắt push
+  của nạn nhân**, không phải đọc trộm nội dung: payload mã hoá bằng `p256dh`/`auth` mà kẻ chiếm
+  gửi lên, nên máy nạn nhân không giải mã được và service worker chỉ hiện câu mặc định. Cộng với
+  §15.1(1) (không còn cách biết endpoint của người khác), ca này còn lại gần như không có đầu vào.
+- **Cửa sổ hở của đăng xuất vẫn nguyên như §14.4** — Đợt 5 không đóng nhóm 4.
+- Muốn đóng cả hai hẳn thì cùng một thứ: **một cột "id thiết bị do client sinh"** để engine so với
+  phiên gần nhất trên máy đó ⇒ migration ⇒ quyết riêng.
