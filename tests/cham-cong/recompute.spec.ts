@@ -3,6 +3,7 @@
 import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { seedShiftTemplates } from "../../lib/cham-cong/seed-core";
+import { HO_CENTER_ID } from "../../lib/cham-cong/home-center";
 
 const DB_URL = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL ?? "";
 const isLocal = /(@|\/\/)(localhost|127\.0\.0\.1)[:/]/.test(DB_URL) && /satarobo_test|ci_test/.test(DB_URL);
@@ -123,5 +124,115 @@ d("recomputeAttendanceDay — DB thật", () => {
     expect(await db.staffAttendanceDay.findUnique({ where: { userId_workDate: { userId, workDate: day } } })).toBeNull();
     await db.user.update({ where: { id: userId }, data: { employeeId: null } });
     await db.employee.delete({ where: { id: emp.id } });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Bug prod 13/09/2026 — công của người Hội sở nhảy vào cơ sở họ vừa quét.
+//
+// ⚠️ `describe` RIÊNG, người RIÊNG, ngày RIÊNG (luật 18): khối trên chain trạng thái giữa các
+// ca, khối này KHÔNG được mượn gì của nó và cũng không để lại gì cho nó.
+// ─────────────────────────────────────────────────────────────────────────────
+const TAG_HO = "cc-noi-chiu-cong";
+
+d("recomputeAttendanceDay — NƠI CHỊU CÔNG là nơi trực thuộc, không phải nơi quét", () => {
+  const db = new PrismaClient({ datasourceUrl: DB_URL });
+  let recompute: typeof import("../../lib/cham-cong/recompute");
+  let cs1 = "";
+  const ngay = new Date(Date.UTC(2026, 8, 12)); // 12/09/2026 — KHÔNG đụng ngày của khối trên
+
+  const donDep = async () => {
+    const u = await db.user.findMany({ where: { email: { endsWith: `@${TAG_HO}.test` } }, select: { id: true } });
+    const ids = u.map((x) => x.id);
+    await db.staffAttendanceDay.deleteMany({ where: { userId: { in: ids } } });
+    await db.staffTimeLog.deleteMany({ where: { userId: { in: ids } } });
+    await db.shiftAssignment.deleteMany({ where: { userId: { in: ids } } });
+    await db.user.deleteMany({ where: { id: { in: ids } } });
+  };
+
+  beforeAll(async () => {
+    recompute = await import("../../lib/cham-cong/recompute");
+    await seedShiftTemplates(db);
+    await donDep();
+    cs1 = (
+      await db.center.upsert({
+        where: { slug: `${TAG_HO}-cs1` },
+        update: {},
+        create: { slug: `${TAG_HO}-cs1`, name: "CS1 nơi quét", address: "x", code: `${TAG_HO}-CS1` },
+        select: { id: true },
+      })
+    ).id;
+  });
+
+  afterAll(async () => {
+    await donDep();
+    await db.$disconnect();
+  });
+
+  /** Người KHÔNG có ca xếp ngày đó, chỉ có lượt quét ở `centerIdQuet`. */
+  async function nguoiQuetONoiKhac(email: string, centerIdNha: string | null, centerIdQuet: string) {
+    const u = await db.user.create({
+      data: { email, name: email, role: "HR", roles: ["HR"], password: "x", centerId: centerIdNha },
+      select: { id: true },
+    });
+    await db.staffTimeLog.createMany({
+      data: [
+        { userId: u.id, centerId: centerIdQuet, direction: "CHECK_IN", loggedAt: vn("2026-09-12", "08:05"), workDate: ngay, source: "TICKET", result: "ACCEPTED" },
+        { userId: u.id, centerId: centerIdQuet, direction: "CHECK_OUT", loggedAt: vn("2026-09-12", "17:20"), workDate: ngay, source: "TICKET", result: "ACCEPTED" },
+      ],
+    });
+    await recompute.recomputeAttendanceDay(u.id, ngay);
+    return u.id;
+  }
+
+  // ── vế CHẶN: đúng bug được báo ─────────────────────────────────────────────
+  it("người HỘI SỞ không có ca, quét ở CS1 ⇒ ngày công thuộc HO, 0 dòng ở CS1", async () => {
+    // `centerId: null` trên User ⇒ `resolveHomeCenter` trả HO (`home-center.ts`).
+    const userId = await nguoiQuetONoiKhac(`ho@${TAG_HO}.test`, null, cs1);
+
+    const row = await db.staffAttendanceDay.findUniqueOrThrow({
+      where: { userId_workDate: { userId, workDate: ngay } },
+    });
+    expect(row.centerId, "ngày công phải thuộc Hội sở").toBe(HO_CENTER_ID);
+    expect(row.centerId).not.toBe(cs1);
+
+    // Sổ công của CS1 lọc theo `StaffAttendanceDay.centerId` ⇒ 0 dòng.
+    const oCS1 = await db.staffAttendanceDay.count({ where: { workDate: ngay, centerId: cs1, userId } });
+    expect(oCS1, "0 dòng công ở CS1").toBe(0);
+
+    // …nhưng LƯỢT QUÉT vẫn mang CS1 — nơi quét không bị xoá đi đâu cả.
+    const luot = await db.staffTimeLog.findMany({ where: { userId, workDate: ngay }, select: { centerId: true } });
+    expect(luot.map((l) => l.centerId)).toEqual([cs1, cs1]);
+  });
+
+  // ── vế CHO QUA (luật 16) ───────────────────────────────────────────────────
+  it("người CS1 quét ở CS1 ⇒ VẪN thuộc CS1", async () => {
+    const userId = await nguoiQuetONoiKhac(`cs1@${TAG_HO}.test`, cs1, cs1);
+    const row = await db.staffAttendanceDay.findUniqueOrThrow({
+      where: { userId_workDate: { userId, workDate: ngay } },
+    });
+    expect(row.centerId).toBe(cs1);
+  });
+
+  it("ca ĐƯỢC XẾP vẫn thắng nơi trực thuộc — người Hội sở được xếp ca ở CS1 thì công thuộc CS1", async () => {
+    // Cố ý: `ShiftAssignment.centerId` là "cơ sở LÀM / chịu công hôm đó". Bản vá KHÔNG được
+    // biến mọi thứ thành "luôn theo nhà" — đó là vá quá tay.
+    const u = await db.user.create({
+      data: { email: `ho-co-ca@${TAG_HO}.test`, name: "HO có ca", role: "HR", roles: ["HR"], password: "x", centerId: null },
+      select: { id: true },
+    });
+    const tpl = await db.shiftTemplate.findFirstOrThrow({ where: { code: "S", centerId: null }, select: { id: true } });
+    await db.shiftAssignment.create({
+      data: {
+        userId: u.id, centerId: cs1, workDate: ngay, templateId: tpl.id, templateCode: "S",
+        segments: [{ start: "07:45", end: "11:30", kind: "WORK", orgUnitIds: [] }],
+        placeMode: "AT_UNITS", attendanceMode: "REQUIRED", dayCredit: 1, source: "MANUAL",
+      },
+    });
+    await recompute.recomputeAttendanceDay(u.id, ngay);
+    const row = await db.staffAttendanceDay.findUniqueOrThrow({
+      where: { userId_workDate: { userId: u.id, workDate: ngay } },
+    });
+    expect(row.centerId).toBe(cs1);
   });
 });

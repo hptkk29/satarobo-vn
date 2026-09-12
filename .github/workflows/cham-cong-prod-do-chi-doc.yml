@@ -46,6 +46,7 @@ on:
           - vai-ke-toan
           - cong-day-thuc-te
           - backfill-buoi-chay-thu
+          - noi-chiu-cong-lech
           - buoi-ket-theo-lop
           - noi-quet
           - tat-ca
@@ -223,6 +224,16 @@ jobs:
       - name: "Đo nơi quét vs nơi chịu công (chỉ đọc)"
         if: ${{ !cancelled() && (inputs.viec == 'noi-quet' || inputs.viec == 'tat-ca') }}
         run: pnpm exec tsx scripts/do-noi-quet.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+
+      # Bug 13/09 — NGÀY CÔNG bị gán sai cơ sở vì `recompute` từng lấy NƠI QUÉT làm nơi chịu
+      # công khi ngày đó không có ca xếp. Mã đã vá, nhưng dòng ĐÃ GHI chỉ đổi khi tính lại —
+      # bước này đếm xem còn bao nhiêu, tách nhóm CÓ CA / KHÔNG CA và kỳ đã chốt.
+      - name: "Đo ngày công bị gán sai cơ sở (chỉ đọc)"
+        if: ${{ !cancelled() && (inputs.viec == 'noi-chiu-cong-lech' || inputs.viec == 'tat-ca') }}
+        run: pnpm exec tsx scripts/do-noi-chiu-cong-lech.ts
         env:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
           DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}

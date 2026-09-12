@@ -34,6 +34,7 @@ import {
   nhanNoiQuet,
   noiQuetKhacNoiChiuCong,
 } from "@/lib/cham-cong/noi-quet";
+import { nguoiThuocSoCong } from "@/lib/cham-cong/noi-chiu-cong";
 import {
   ASK_WHO,
   loadModuleScope,
@@ -215,14 +216,9 @@ export default async function ChamCongPage({ searchParams }: Props) {
   const maCoSoTheoId = new Map<string, string>([[centerMap.hoCenterId, "HO"]]);
   for (const [ma, c] of Object.entries(centerMap.byCode)) maCoSoTheoId.set(c.centerId, ma);
 
-  const [days, logs, assignments, monthRows, holidays, weeklyOff, period] =
+  const [days, assignments, monthRows, holidays, weeklyOff, period] =
     await Promise.all([
       sdb.staffAttendanceDay.findMany({ where: { workDate, centerId: coSo } }),
-      sdb.staffTimeLog.findMany({
-        where: { workDate, centerId: coSo, result: "ACCEPTED" },
-        orderBy: { loggedAt: "asc" },
-        select: { userId: true, direction: true, loggedAt: true, flags: true },
-      }),
       sdb.shiftAssignment.findMany({
         where: { workDate, centerId: coSo, status: "ACTIVE" },
         select: { userId: true, templateCode: true, source: true },
@@ -251,19 +247,28 @@ export default async function ChamCongPage({ searchParams }: Props) {
       periodStatusOf(sdb, coSo, ky),
     ]);
 
-  const userIds = [
-    ...new Set([
-      ...days.map((d) => d.userId),
-      ...logs.map((l) => l.userId),
-      ...assignments.map((a) => a.userId),
-    ]),
-  ];
+  // 🔴 Vá 13/09/2026 — SỔ CÔNG của một cơ sở chỉ gồm người có NGÀY CÔNG hoặc CA XẾP ở đây.
+  //
+  // Bản cũ gộp thêm nguồn thứ ba: `StaffTimeLog where centerId = coSo`, tức ai QUÉT ở đây là
+  // lọt vào sổ, dù ngày công của họ thuộc nơi khác. Hệ quả trên prod: người Hội sở quét QR ở
+  // một cơ sở thì hiện trong sổ công của cơ sở đó LẪN Hội sở.
+  //
+  // 📌 `StaffAttendanceDay` có `@@unique([userId, workDate])` ⇒ một người một ngày ĐÚNG MỘT
+  // dòng. Đây chưa bao giờ là "đẻ thêm dòng công" — là MỘT dòng bị nhiều màn cùng liệt kê.
+  //
+  // Nguồn thứ ba ấy vào ngày 07/09 với lý do "người quét ở đây mà không được xếp ca ở đây vẫn
+  // phải hiện". Lý do đó nay có chỗ phục vụ ĐÚNG HƠN: D1 (10/09) in " · quét ở CS2" lên dòng
+  // của người đó TẠI cơ sở chịu công của họ — thông tin không mất, nó về đúng cái sổ có thẩm
+  // quyền. Luật + ca test: `lib/cham-cong/noi-chiu-cong.ts`.
+  const userIds = nguoiThuocSoCong({
+    coNgayCong: days.map((d) => d.userId),
+    coCaXep: assignments.map((a) => a.userId),
+  });
 
   // Lượt quét ĐẦY ĐỦ của những người đã lọt danh sách — CỐ Ý không lọc theo cơ sở đang xem.
   //
-  // Truy vấn `logs` ở trên lọc `centerId: coSo` và chỉ dùng để TÌM RA ai cần hiện (người quét ở
-  // đây mà không được xếp ca ở đây vẫn phải hiện). Nhưng nếu lấy luôn nó để vẽ cột "Quét" thì
-  // sai: công ngày (`StaffAttendanceDay`) được tính trên TOÀN BỘ lượt của người đó trong ngày,
+  // Đừng lọc theo cơ sở đang xem: công ngày (`StaffAttendanceDay`) được tính trên TOÀN BỘ lượt
+  // của người đó trong ngày,
   // không lọc cơ sở (`recompute.ts:24`), còn cơ sở chịu công thì lấy theo CA ĐƯỢC XẾP
   // (`recompute.ts:88`). Hai cái đó lệch nhau đúng ở tình huống đáng quan tâm nhất: người được
   // xếp ca CS1 nhưng quét ở CS2. Khi đó dòng hiện "Quét —" như thể chưa từng quét, mà cột Giờ
