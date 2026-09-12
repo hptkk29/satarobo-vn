@@ -1562,3 +1562,73 @@ quy trách nhiệm cho một thay đổi; phải chạy đối chứng ở CẢ 
 
 CI xanh (`Unit tests (Vitest)` pass ở #235) nên đây là đặc thù máy dev — nhưng ngưỡng 5000 ms
 cho một phép quét toàn cây là quá sát, và cây đang lớn dần. Việc dọn thuộc ticket riêng.
+
+## 5.5 ⚠️ SỬA LỖ trong §5.1 — "hằng cố định" KHÔNG phải an toàn
+
+§5.1 loại 110 chỗ `new Date("YYYY-MM-DD")` với lý do *"chúng là hằng cố định, không đọc
+giờ chạy, nên không thể sinh cửa sổ đỏ"*. **Câu đó chỉ đúng một nửa và đã trả giá ngay.**
+
+**Đúng với MÚI GIỜ. Sai với THỜI GIAN TRÔI.** Hằng cố định mà mã sản phẩm so nó với
+`new Date()` thì nó hoá quá khứ rồi nổ — và nổ **một chiều**: không có cửa sổ giờ để đợi nó
+tự xanh lại như bug TZ.
+
+### Ca đã nổ — đo trên CÙNG một commit
+
+`tests/cham-cong/requests.spec.ts > LEAVE 2 ngày duyệt ⇒ ghi P cả 2 ngày`:
+
+| Chạy | Kết quả |
+|---|---|
+| `main` 507ff13b, CI ngày **10/09** | xanh |
+| `main` 507ff13b, **rerun ngày 13/09** | **ĐỎ** |
+| `origin/main` sạch, local 13/09 | ĐỎ |
+
+Ca xin nghỉ cho **11–12/09/2026** mà **không truyền `now`** ⇒ `submitAttendanceRequest` rơi
+về `input.now ?? new Date()`. Một ca **trước đó trong cùng file** đặt
+`NGHI_PHEP.noticeDays = 1`, nên cổng `isSubmittedLate` so `11/09` với hôm nay: xanh tới
+10/09, **đỏ mãi** từ 11/09. Vá ở PR #244 (chốt `now`, không đụng mã sản phẩm).
+
+### Tiêu chí quét ĐÚNG — ba điều kiện cùng lúc
+
+1. test dựng ngày **CỨNG** (`utc(2026, …)` / `new Date("2026-…")`), **và**
+2. hàm sản phẩm nó gọi có `now?: Date` mặc định `?? new Date()` — repo có **~30 hàm** như
+   vậy (`lib/cham-cong/{requests,timelog,period,brief-db,reconcile-db,scope-href}` ·
+   `lib/crm/{convert-lead,lead-qualify}` · `lib/finance/debt` · `lib/lead/*` ·
+   `lib/chat/{queries,pilot-stats,attachments}` · `lib/auth/{actor,shadow-report}` · …), **và**
+3. test **KHÔNG** truyền `now`.
+
+Hàm có `now?: Date` là **thiết kế ĐÚNG** — lỗi nằm ở test không dùng nó.
+
+### Danh sách cần soát — chia lô, chưa vá
+
+Xếp theo "nhiều ngày cứng nhất / chốt `now` ít nhất":
+
+| File | ngày cứng | chỗ chốt `now` |
+|---|--:|--:|
+| `tests/cham-cong/requests.spec.ts` | 19 | 3 → **4** (vá #244) |
+| `lib/portal/buoi-hoc.test.ts` | 17 | 1 |
+| `tests/e2e/r6/reserve-request.spec.ts` | 12 | **0** |
+| `tests/e2e/r7/payment-request-lifecycle.spec.ts` | 11 | **0** |
+| `tests/e2e/r6/commission-config.spec.ts` | 8 | **0** |
+| `lib/chat/admin.test.ts` | 8 | **0** |
+| `tests/e2e/r7/bulk-convert.spec.ts` | 7 | **0** |
+| `lib/lead/rotation.test.ts` | 7 | **0** |
+| `tests/e2e/r7/class-snapshot.spec.ts` | 6 | **0** |
+| `tests/e2e/r1/messenger-models.spec.ts` | 6 | **0** |
+| `lib/lms/assignment-window.test.ts` | 6 | **0** |
+| `lib/crm/marketing-report.test.ts` | 6 | **0** |
+
+Cột "0 chỗ chốt `now`" **không** đồng nghĩa có lỗi — phần lớn dùng ngày cứng làm **dữ liệu**
+chứ không so với hôm nay. Phải xét điều kiện (2) cho từng ca. Ghi ra đây để lần sau không
+phải quét lại từ đầu.
+
+### Lưới chặn — cập nhật đề xuất §5.1
+
+Đề xuất cũ (ép `TZ=UTC` + canary 17:30Z) **không bắt được họ lỗi này** — nó không liên quan
+múi giờ. Thêm một lưới thứ hai, hiệu quả hơn cả hai:
+
+> **Một lượt CI định kỳ chạy với đồng hồ đẩy lên +90 ngày** (`libfaketime`, hoặc đơn giản
+> là một job hằng tuần chạy bộ test trên runner có ngày hệ thống đặt trước). Bom hẹn giờ
+> ngày cứng lộ ra ngay, trước khi nó nổ vào mặt người khác.
+
+Rẻ hơn nữa, và nên làm trước: **lint chặn `submitAttendanceRequest`/`decideRequest`/… gọi
+trong `tests/**` mà thiếu `now:`** — hẹp nhưng đúng chỗ đau, và không cần hạ tầng mới.
