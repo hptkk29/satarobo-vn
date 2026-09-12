@@ -122,6 +122,57 @@ async function main() {
   dong("  · nhóm CÓ CA — chuyện KHÁC, phải soi riêng", lech.filter((x) => x.coCa).length);
   dong("  · thuộc kỳ ĐÃ CHỐT (tính lại cũng bị bỏ qua)", lech.filter((x) => x.kyChot).length);
 
+  // ── Câu 4: orgUnitId sai kéo theo THAM SỐ VẬN HÀNH nào? ───────────────────
+  //
+  // `recompute` đọc 6 tham số theo `orgUnitId`: 5 cái trong `loadEngineRules`
+  // (lateGrace · earlyArrival · duplicateTap · maxLogsPerDay · pairingMaxGap) + weeklyOffDays.
+  // Override theo cơ sở nằm ở `CenterSetting (orgUnitId, key)`. KHÔNG có dòng nào thì mọi
+  // orgUnit cùng rơi về giá trị toàn hệ thống ⇒ gán sai `orgUnitId` KHÔNG đổi tham số nào,
+  // và tính lại cũng không làm ngưỡng trễ / ngày nghỉ tuần nhúc nhích.
+  //
+  // Đây là phép đo RẺ NHẤT trả lời được "số đó có đổi sau khi tính lại không" — và nó chạy
+  // BẤT KỂ có dòng lệch hay không, vì câu trả lời "không ai đè" tự nó đã là kết luận.
+  tieu("Câu 4 — tham số vận hành có bị lệch theo không?");
+  const KHOA_SHIFT = [
+    "shift.lateGraceMinutes",
+    "shift.earlyArrivalMinutes",
+    "shift.duplicateTapMinutes",
+    "shift.maxLogsPerDay",
+    "shift.pairingMaxGapMinutes",
+    "shift.weeklyOffDays",
+  ];
+  const override = await db.centerSetting.findMany({
+    where: { key: { in: KHOA_SHIFT } },
+    select: { orgUnitId: true, key: true, valueJson: true },
+  });
+  dong("dòng CenterSetting đè khoá shift.*", override.length);
+  if (override.length === 0) {
+    console.log("");
+    console.log("  ⇒ KHÔNG cơ sở nào đè tham số `shift.*`. Mọi orgUnit cùng rơi về giá trị toàn");
+    console.log("    hệ thống, nên `orgUnitId` bị gán sai KHÔNG đổi tham số nào: ngưỡng trễ và");
+    console.log("    ngày nghỉ tuần của các ngày lệch đã tính bằng ĐÚNG bộ tham số.");
+    console.log("    (Đây là số ĐO, không phải chưa đo.)");
+  } else {
+    const donVi = await db.orgUnit.findMany({
+      where: { id: { in: [...new Set(override.map((o) => o.orgUnitId))] } },
+      select: { id: true, code: true, name: true },
+    });
+    const tenDonVi = new Map(donVi.map((o) => [o.id, o.code ?? o.name]));
+    console.log("");
+    console.log(`  ${"đơn vị".padEnd(22)}${"khoá".padEnd(32)}giá trị đè`);
+    for (const o of override) {
+      console.log(
+        `  ${String(tenDonVi.get(o.orgUnitId) ?? o.orgUnitId).slice(0, 21).padEnd(22)}` +
+          `${o.key.padEnd(32)}${JSON.stringify(o.valueJson)}`,
+      );
+    }
+    console.log("");
+    console.log("  ⚠️ CÓ đè ⇒ phải soi từng ngày lệch: nếu `orgUnitId` nó đã dùng có đè khoá nào ở");
+    console.log("     trên thì ngưỡng trễ / nghỉ tuần của ngày đó ĐÃ tính sai, và tính lại sẽ đổi");
+    console.log("     cả cờ DI_MUON / VE_SOM chứ không chỉ đổi cột cơ sở.");
+  }
+
+
   if (lech.length === 0) {
     console.log("\n  KHÔNG có dòng nào lệch. (Đây là số ĐO, không phải chưa đo.)");
     return;
