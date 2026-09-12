@@ -223,6 +223,10 @@ export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
   // /user-groups trên admin host bounce 308 về public → 404 dù page tồn tại.
   "user-groups",
   "users",
+  // S1 (tích hợp ZaloCRM 06/09/2026) — màn Zalo CRM nhúng bằng iframe + SSO.
+  // Thiếu dòng này thì admin host 308 sang public rồi 404, trong khi localhost chạy
+  // hoàn hảo — và 308 là permanent nên trình duyệt cache vĩnh viễn.
+  "zalo-crm",
 ]);
 
 /** First path segment, e.g. "/leads/123" → "leads". */

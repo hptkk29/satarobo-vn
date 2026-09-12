@@ -13,6 +13,11 @@ import { scopedDb } from "@/lib/db-scope";
 import type { Actor } from "@/lib/auth/actor";
 import type { InboxChannel } from "@prisma/client";
 import { passesInboxScope } from "@/lib/inbox/scope";
+import {
+  donViCuaNguoiDung,
+  lanDonViTuIdentity,
+  quyetDinhGanDonVi,
+} from "@/lib/inbox/don-vi";
 import { noiIdentityVaoLead } from "@/lib/inbox/identity";
 import { sendInboxReply } from "@/lib/inbox/send";
 import { LY_DO_MO_PHONG } from "@/lib/integrations/types";
@@ -85,19 +90,52 @@ export async function guiTraLoi(input: {
   }
 }
 
+/**
+ * Gán / trả người phụ trách — VÀ gắn luôn đơn vị của người được gán.
+ *
+ * 🔴 Vì sao phần đơn vị nằm ở đây (lỗi B2): hội thoại `orgUnitId = null` là hội thoại
+ * MỒ CÔI, mà mồ côi thì MỌI cơ sở đọc được (`scope.ts`). Bản cũ chỉ ghi ba cột
+ * `assignee*` ⇒ hội thoại đã có người nhận vẫn nằm nhóm ai-cũng-đọc: Sale cơ sở khác
+ * mở ra xem được cả nội dung khách nhắn. Không lỗi nào văng ra; nó chỉ lộ khi có
+ * người khiếu nại.
+ *
+ * Ba lựa chọn cố ý, mỗi cái chặn một cách hỏng khác nhau:
+ *  • Chỉ ĐIỀN vào chỗ trống, không đè (`quyetDinhGanDonVi`). Hội thoại đã nối `Lead`
+ *    thì `Lead` quyết cơ sở; đè theo người nhận là kéo hội thoại sang cơ sở khác sau
+ *    lưng người đang xử lý. Điều phối viên (HO) vẫn gán được người ở cơ sở khác —
+ *    chỉ là việc gán không đổi cơ sở của hội thoại.
+ *  • BỎ gán KHÔNG xoá đơn vị. Xoá là đẩy hội thoại về nhóm mồ côi, tức tự tay mở lại
+ *    đúng lỗ vừa bịt. Muốn gỡ đơn vị thì gỡ nối lead (`goNoiIdentity`).
+ *  • Người được gán chưa khai đơn vị ⇒ VẪN gán, hội thoại vẫn mồ côi. Điều phối là
+ *    việc hằng ngày; chặn nó vì thiếu dữ liệu quản trị là chặn nhầm chỗ.
+ */
 export async function ganNguoiPhuTrach(input: {
   conversationId: string;
   assigneeId: string | null;
   boiUserId: string;
 }): Promise<KetQuaThaoTac> {
-  await db.inboxConversation.update({
-    where: { id: input.conversationId },
-    data: {
-      assigneeId: input.assigneeId,
-      assignedAt: input.assigneeId ? new Date() : null,
-      assignedById: input.assigneeId ? input.boiUserId : null,
-    },
+  // Nạp NGOÀI transaction: đọc `User` + `OrgUnit` là hai truy vấn không liên quan gì
+  // tới ba bảng hộp thư, giữ chúng trong transaction chỉ kéo dài thời gian giữ khoá.
+  const donVi = input.assigneeId ? await donViCuaNguoiDung(input.assigneeId) : null;
+
+  await db.$transaction(async (tx) => {
+    const hoi = await tx.inboxConversation.update({
+      where: { id: input.conversationId },
+      data: {
+        assigneeId: input.assigneeId,
+        assignedAt: input.assigneeId ? new Date() : null,
+        assignedById: input.assigneeId ? input.boiUserId : null,
+      },
+      select: { identityId: true, orgUnitId: true },
+    });
+    // Cùng transaction với lượt gán: gán được mà lan hụt là hội thoại có người nhận
+    // nhưng vẫn hiện với mọi cơ sở — đúng trạng thái mà B2 sinh ra để xoá bỏ.
+    const qd = quyetDinhGanDonVi({ donViHienTai: hoi.orgUnitId, donViMoi: donVi });
+    if (qd.gan) {
+      await lanDonViTuIdentity(tx, { identityId: hoi.identityId, orgUnitId: qd.donVi });
+    }
   });
+
   return {
     thongBao: input.assigneeId
       ? "Đã gán người phụ trách."

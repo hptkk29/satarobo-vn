@@ -8,7 +8,7 @@
  * Nên luật ở đây nghiêng hẳn về MỒ CÔI: thà để người bấm tay còn hơn đoán.
  */
 import { describe, it, expect } from "vitest";
-import { quyetDinhNoiTheoSdt } from "@/lib/inbox/identity-rules";
+import { dieuKienDonViLead, quyetDinhNoiTheoSdt } from "@/lib/inbox/identity-rules";
 
 describe("không có SĐT ⇒ mồ côi (đây là ca THƯỜNG GẶP NHẤT)", () => {
   it("webhook Zalo `user_send_text` không kèm SĐT ⇒ KHONG_CO_SDT", () => {
@@ -53,6 +53,29 @@ describe("khớp SĐT", () => {
     expect(
       quyetDinhNoiTheoSdt("0905123456", [{ id: "lead-1" }, { id: "lead-2" }]),
     ).toEqual({ noi: false, lyDo: "NHIEU_LEAD_KHOP" });
+  });
+});
+
+describe("🔴 lọc ứng viên theo ĐƠN VỊ — không nối sang phiếu của cơ sở khác", () => {
+  // Lỗi B2 của bản kiểm: `timLeadTheoSdt` tra `db.lead` KHÔNG giới hạn cơ sở. Một số
+  // điện thoại trùng giữa hai cơ sở (anh em ruột, phụ huynh chuyển cơ sở, số công ty)
+  // là đủ để hội thoại của CS1 chui vào hồ sơ của CS2 — và nó im lặng: hai bên đều
+  // thấy màn hình bình thường, chỉ là dữ liệu của người khác.
+
+  it("chưa biết đơn vị (`undefined`/`null`) ⇒ KHÔNG lọc — thà tra rộng còn hơn không nối được gì", () => {
+    // Webhook tin đầu tiên của người lạ chưa biết cơ sở nào. Lọc bừa ở đây là biến
+    // "chưa biết" thành "không khớp phiếu nào" cho MỌI hội thoại mới.
+    expect(dieuKienDonViLead(undefined)).toEqual({});
+    expect(dieuKienDonViLead(null)).toEqual({});
+    expect(dieuKienDonViLead("   ")).toEqual({});
+  });
+
+  it("biết đơn vị ⇒ chỉ phiếu CÙNG đơn vị, CỘNG phiếu chưa có đơn vị", () => {
+    // Phiếu `orgUnitId = null` là phiếu cũ/chưa gán cơ sở — vẫn phải nối được, nếu
+    // không thì đúng những phiếu tồn đọng lâu nhất là những phiếu không bao giờ khớp.
+    expect(dieuKienDonViLead("ou-cs1")).toEqual({
+      OR: [{ orgUnitId: "ou-cs1" }, { orgUnitId: null }],
+    });
   });
 });
 

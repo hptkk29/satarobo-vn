@@ -21,7 +21,14 @@
 // giấu tồn đọng khỏi chính người phải xử lý nó là cách chắc chắn nhất để nó không
 // bao giờ được xử lý — khách nhắn vào rồi không ai trả lời.
 // Đánh đổi phải nói thẳng: một hội thoại chưa gán đơn vị thì Sale cơ sở khác cũng
-// đọc được. Nó hết mồ côi ngay khi được nối `Lead` hoặc được gán người phụ trách.
+// đọc được. Nên phải rút ngắn quãng mồ côi càng sớm càng tốt — có ĐÚNG BA đường ghi
+// đơn vị, tất cả đi qua một phép lan duy nhất ở `lib/inbox/don-vi.ts`:
+//   1. nối `Lead`            — `noiIdentityVaoLead` (mạnh nhất, hồ sơ khách thật);
+//   2. gắn theo nick/kênh    — `ganDonViTheoNick`, gọi ngay lúc nhận tin đầu tiên;
+//   3. gán người phụ trách   — `ganNguoiPhuTrach` (chỉ điền vào chỗ trống, không đè).
+// ⚠️ Câu này TRƯỚC 09/2026 ghi "hết mồ côi khi được gán người phụ trách" trong khi
+// mã KHÔNG làm thế (lỗi B2) — chú thích đi trước mã ba tháng. Nay đã đúng; ai sửa
+// một trong ba đường trên phải sửa cả dòng này.
 import type { Actor } from "@/lib/auth/actor";
 
 /** Hình dạng `where` gộp được vào truy vấn Prisma của cả ba bảng `Inbox*`. */

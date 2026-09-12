@@ -11,21 +11,42 @@ import "server-only";
 // `scopedDb`.
 import { db } from "@/lib/db";
 import { phoneVariants } from "@/lib/phone";
-import { quyetDinhNoiTheoSdt, type QuyetDinhNoiLead } from "@/lib/inbox/identity-rules";
+import {
+  dieuKienDonViLead,
+  quyetDinhNoiTheoSdt,
+  type QuyetDinhNoiLead,
+} from "@/lib/inbox/identity-rules";
+import { lanDonViTuIdentity } from "@/lib/inbox/don-vi";
 import type { InboxIdentityLinkSource } from "@prisma/client";
 
 /**
- * Tìm lead theo SĐT.
+ * Tìm lead theo SĐT, trong phạm vi đơn vị của hội thoại.
  *
  * ⚠️ BẮT BUỘC `{ in: phoneVariants(x) }`, KHÔNG so bằng: DB còn tồn tại CẢ HAI
  * định dạng (`0…` và `84…` — đo trên DEV 03/08: 99 và 8 bản). So bằng một dạng là
  * bỏ sót đúng nửa dữ liệu mà không có dấu hiệu nào.
+ *
+ * ⚠️ `orgUnitId` là THAM SỐ, không phải `scopedDb`. Hàm này chạy từ webhook — không
+ * actor, không phiên — nên bọc `scopedDb` vào đây là webhook không nối được lead
+ * nào (đúng bài học `lib/payments/method-lookup.ts`: câu tra dùng để CHẶN phải là
+ * câu tra KHÔNG-SCOPE, nếu không thì đúng dòng cần xét bị lọc mất và cổng đọc
+ * "không thấy gì" thành "cho qua").
  */
-export async function timLeadTheoSdt(sdt: unknown): Promise<{ id: string }[]> {
+export async function timLeadTheoSdt(
+  sdt: unknown,
+  orgUnitId?: string | null,
+): Promise<{ id: string }[]> {
   const bienThe = phoneVariants(sdt);
   if (bienThe.length === 0) return [];
   return db.lead.findMany({
-    where: { phone: { in: bienThe }, deletedAt: null },
+    where: {
+      phone: { in: bienThe },
+      deletedAt: null,
+      // Chỉ có ĐÚNG MỘT `OR` trong `where` này — mảnh đơn vị không bị `OR` nào khác
+      // nuốt. Thêm điều kiện `OR` thứ hai vào đây thì phải gộp bằng `AND` (cùng bài
+      // học với `inboxOrgScopeWhere`, `scope.ts`).
+      ...dieuKienDonViLead(orgUnitId),
+    },
     select: { id: true },
     // Trần 2: chỉ cần biết "đúng một" hay "nhiều hơn một" (`quyetDinhNoiTheoSdt`).
     take: 2,
@@ -42,8 +63,13 @@ export async function timLeadTheoSdt(sdt: unknown): Promise<{ id: string }[]> {
 export async function thuNoiTheoSdt(input: {
   identityId: string;
   sdt: unknown;
+  /**
+   * Đơn vị của hội thoại (từ nick / từ người phụ trách). Bỏ trống = chưa biết ⇒ tra
+   * toàn hệ như trước. Truyền vào là chặn nối chéo cơ sở — xem `dieuKienDonViLead`.
+   */
+  orgUnitId?: string | null;
 }): Promise<QuyetDinhNoiLead> {
-  const ungVien = await timLeadTheoSdt(input.sdt);
+  const ungVien = await timLeadTheoSdt(input.sdt, input.orgUnitId);
   const qd = quyetDinhNoiTheoSdt(input.sdt, ungVien);
   if (!qd.noi) return qd;
   await noiIdentityVaoLead({
@@ -60,7 +86,10 @@ export async function thuNoiTheoSdt(input: {
  *
  * Lan `orgUnitId` là phần dễ quên nhất: không lan thì hội thoại vẫn nằm trong nhóm
  * mồ côi (ai cũng thấy) dù đã biết nó thuộc cơ sở nào — tức cách ly cơ sở không
- * bao giờ bật lên.
+ * bao giờ bật lên. Phép lan nằm ở `lib/inbox/don-vi.ts` và CHỈ có một bản.
+ *
+ * `Lead` là nguồn đơn vị MẠNH NHẤT — nó ghi đè cả đơn vị do nick/người phụ trách
+ * gắn trước đó (hồ sơ khách thật thắng phỏng đoán từ kênh).
  */
 export async function noiIdentityVaoLead(input: {
   identityId: string;
@@ -74,32 +103,18 @@ export async function noiIdentityVaoLead(input: {
   });
   if (!lead) return;
 
-  await db.$transaction(async (tx) => {
-    await tx.inboxIdentity.update({
-      where: { id: input.identityId },
-      data: {
+  await db.$transaction((tx) =>
+    lanDonViTuIdentity(tx, {
+      identityId: input.identityId,
+      orgUnitId: lead.orgUnitId,
+      themVaoDanhTinh: {
         leadId: lead.id,
         linkedAt: new Date(),
         linkedById: input.boiUserId,
         linkSource: input.source,
-        orgUnitId: lead.orgUnitId,
       },
-    });
-    const hoi = await tx.inboxConversation.findMany({
-      where: { identityId: input.identityId },
-      select: { id: true },
-    });
-    if (hoi.length === 0) return;
-    const ids = hoi.map((h) => h.id);
-    await tx.inboxConversation.updateMany({
-      where: { id: { in: ids } },
-      data: { orgUnitId: lead.orgUnitId },
-    });
-    await tx.inboxMessage.updateMany({
-      where: { conversationId: { in: ids } },
-      data: { orgUnitId: lead.orgUnitId },
-    });
-  });
+    }),
+  );
 }
 
 /** Gỡ nối — hội thoại quay lại nhóm mồ côi. Dùng khi nối nhầm. */
@@ -107,30 +122,18 @@ export async function goNoiIdentity(input: {
   identityId: string;
   boiUserId: string | null;
 }): Promise<void> {
-  await db.$transaction(async (tx) => {
-    await tx.inboxIdentity.update({
-      where: { id: input.identityId },
-      data: {
+  await db.$transaction((tx) =>
+    lanDonViTuIdentity(tx, {
+      identityId: input.identityId,
+      // Gỡ nối là đường DUY NHẤT được phép ghi `null` xuống đơn vị: người đã xác
+      // nhận nối nhầm, hội thoại phải quay về hàng đợi chung để cơ sở khác nhận.
+      orgUnitId: null,
+      themVaoDanhTinh: {
         leadId: null,
         linkedAt: null,
         linkedById: input.boiUserId,
         linkSource: null,
-        orgUnitId: null,
       },
-    });
-    const hoi = await tx.inboxConversation.findMany({
-      where: { identityId: input.identityId },
-      select: { id: true },
-    });
-    if (hoi.length === 0) return;
-    const ids = hoi.map((h) => h.id);
-    await tx.inboxConversation.updateMany({
-      where: { id: { in: ids } },
-      data: { orgUnitId: null },
-    });
-    await tx.inboxMessage.updateMany({
-      where: { conversationId: { in: ids } },
-      data: { orgUnitId: null },
-    });
-  });
+    }),
+  );
 }

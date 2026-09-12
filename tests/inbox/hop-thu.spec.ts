@@ -316,6 +316,41 @@ describe.skipIf(!CO_BANG)("hộp thư đa kênh — tầng DB", () => {
       expect(so).toBe(1);
     });
 
+    it("[HT-11b] hai LƯỢT SOẠN cùng nội dung trong cùng hội thoại ⇒ vẫn hai dòng", async () => {
+      // Mặt trái của [HT-11]. Lưới chống bấm đúp chỉ đúng khi khoá đại diện cho MỘT
+      // LƯỢT SOẠN. Bản cũ dựng khoá bằng `${conversationId}:${băm(nội dung)}` ⇒ nội dung
+      // nằm trong khoá ⇒ lần thứ hai Sale gõ đúng một câu đã gửi ("Dạ em nghe ạ", "Vâng
+      // ạ", một emoji) bị báo TRÙNG LƯỢT GỬI, cho một tin hoàn toàn hợp lệ.
+      //
+      // Bài kiểm này gọi CHÍNH hàm dựng khoá mà ô soạn dùng — nếu ai đó đưa nội dung
+      // trở lại khoá thì nó đỏ ở đây, không phải chờ Sale khiếu nại.
+      const { ingestInboundMessage } = await import("@/lib/inbox/ingest");
+      const { sendInboxReply } = await import("@/lib/inbox/send");
+      const { taoKhoaLuotGui, nonceLuotGui } = await import(
+        "@/components/sale/hop-thu/khoa-luot-gui"
+      );
+
+      const r = await ingestInboundMessage({
+        channel: "ZALO_OA", accountId: OA, externalUserId: "u-lap",
+        channelMessageId: `${P}m-lap`, body: "?", sentAt: LUC,
+      });
+
+      const CAU = "Dạ em nghe ạ";
+      await sendInboxReply({
+        conversationId: r.conversationId, body: CAU,
+        sentByUserId: "u1", outboundKey: taoKhoaLuotGui(r.conversationId, nonceLuotGui()),
+      });
+      await sendInboxReply({
+        conversationId: r.conversationId, body: CAU,
+        sentByUserId: "u1", outboundKey: taoKhoaLuotGui(r.conversationId, nonceLuotGui()),
+      });
+
+      const so = await db.inboxMessage.count({
+        where: { conversationId: r.conversationId, direction: "OUT" },
+      });
+      expect(so).toBe(2);
+    });
+
     it("[HT-12] tin OA gửi NGOÀI hệ thống vẫn tắt được đồng hồ, và được đánh dấu", async () => {
       // Nhân viên trả lời thẳng trên `oa.zalo.me`: khách THẬT SỰ đã được trả lời
       // (nên phải tắt đồng hồ), nhưng không định danh được ai gõ (nên phải đánh dấu

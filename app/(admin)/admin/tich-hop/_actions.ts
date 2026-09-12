@@ -3,6 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
+import { resolveActor } from "@/lib/auth/actor";
+import { isZalocrmEnabled } from "@/lib/flags";
+import { dongBoNick } from "@/lib/integrations/zalocrm/nick-admin";
 import { setMisaEnabled, getMisaConfig, syncToMisa } from "@/lib/misa/service";
 import { setPaymentConfig } from "@/lib/payments/vietqr";
 import { canonicalPhone, formatPhoneVN } from "@/lib/phone";
@@ -119,4 +122,80 @@ export async function setVietQrConfig(input: unknown): Promise<{ ok: boolean; er
   revalidatePath("/admin/tich-hop");
   revalidatePath("/tich-hop");
   return { ok: true };
+}
+
+// ─── S7 (lô L9) — đồng bộ nick ZaloCRM ──────────────────────────────────────
+
+const dongBoNickSchema = z.object({
+  // Khuôn giống hệt chỗ chặn `[org]` trên đường webhook và ô setting `zalocrm.orgCodes`
+  // — ba nơi phải cùng một khuôn, kẻo khai được ở đây mà webhook 404 câm.
+  orgCode: z
+    .string()
+    .trim()
+    .regex(/^[a-z0-9-]{1,32}$/, "Mã tổ chức chỉ gồm chữ thường, số và dấu gạch ngang")
+    .optional()
+    .nullable(),
+});
+
+/**
+ * Kéo danh sách nick Zalo từ máy chủ ZaloCRM về, cho mọi org trong tầm người bấm.
+ *
+ * Vì sao cần một nút: `ZaloCrmNick` hiện chỉ được điền bởi webhook
+ * (`nap-su-kien.ts`) — tức một nick chỉ xuất hiện SAU KHI đã có khách nhắn qua nó.
+ * Trước đó bảng trống, và "bảng trống" không phân biệt được với "webhook chưa cắm".
+ * Nút này cho người vận hành dựng danh sách trước, để cái im lặng sau đó có nghĩa.
+ *
+ * ⚠️ KHÔNG chạm `lastEventAt` (xem `dongBoNick`): nếu bấm nút mà mốc sự kiện được ghi
+ * mới, thì mỗi lần bấm cho yên tâm là một lần xoá đúng bằng chứng nói nick đã chết.
+ *
+ * Cách ly cơ sở nằm ở `nickCoTheGhi` trong lib, KHÔNG ở đây: `ZaloCrmNick` thuộc
+ * `SCOPE_EXEMPT` nên `scopedDb` không che gì, và mọi đường GHI phải tự gác.
+ */
+export async function dongBoNickZalocrm(
+  input: unknown,
+): Promise<{ ok: boolean; error?: string; tomTat?: string; coLoi?: boolean }> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  if (!(await checkPermission("settings:edit"))) return { ok: false, error: "Không có quyền" };
+  // Gate cờ ĐỨNG SAU gate quyền: người không có quyền không cần biết tính năng nào tồn tại.
+  if (!isZalocrmEnabled()) return { ok: false, error: "Tính năng ZaloCRM đang tắt" };
+
+  const parsed = dongBoNickSchema.safeParse(input ?? {});
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  }
+
+  // Một lần bấm = N lượt HTTP sang một VPS sau Cloudflare Tunnel. Không tốn tiền như
+  // ZNS, nhưng bấm liên tục là tự làm nghẽn máy chủ bên kia (và giữ invocation Vercel).
+  const rl = await rateLimit({
+    key: `zalocrm-sync-nicks:${session.user.id}`,
+    max: 6,
+    windowMs: 300_000,
+  });
+  if (!rl.success) return { ok: false, error: "Đã đồng bộ quá 6 lần trong 5 phút. Thử lại sau." };
+
+  const actor = await resolveActor(session.user.id);
+  const ketQua = await dongBoNick(actor, { orgCode: parsed.data.orgCode ?? null });
+  revalidatePath("/admin/tich-hop");
+
+  if (ketQua.length === 0) {
+    // Hai lý do khác nhau, hai câu khác nhau: nói nhầm ở đây là người vận hành đi sửa
+    // đúng chỗ không hỏng.
+    return {
+      ok: false,
+      error: parsed.data.orgCode
+        ? `Không thấy tổ chức ${parsed.data.orgCode} trong bảng ánh xạ zalocrm.orgCodes.`
+        : "Chưa cơ sở nào được ánh xạ sang orgCode. Khai khoá zalocrm.orgCodes ở màn Cấu hình vận hành trước.",
+    };
+  }
+
+  const tomTat = ketQua
+    .map((r) =>
+      r.ok
+        ? `${r.orgCode}: nhận ${r.soNickNhan}, thêm ${r.soTao}, cập nhật ${r.soCapNhat}` +
+          (r.soBoQua > 0 ? `, bỏ qua ${r.soBoQua}` : "")
+        : `${r.orgCode}: LỖI ${r.ma}`,
+    )
+    .join(" · ");
+  return { ok: true, tomTat, coLoi: ketQua.some((r) => !r.ok) };
 }

@@ -310,3 +310,67 @@ export function isElearningEnabled(): boolean {
 export function isOmicallEnabled(): boolean {
   return process.env.OMICALL_ENABLED === "true"; // mặc định OFF
 }
+
+/**
+ * ZALOCRM (đợt tích hợp 06/09/2026) — trục ZaloCRM nhúng: màn `/admin/zalo-crm`
+ * (iframe SSO sang `zalo.satarobo.vn`), webhook `/api/webhooks/zalocrm/<org>`, và
+ * nút "Nhắn Zalo" trên phiếu lead.
+ *
+ * **OFF nghĩa là gì, cụ thể** — không phải "chạy nhưng rỗng":
+ *  - mục sidebar "Zalo CRM" KHÔNG hiện (layout admin không truyền cờ ⇒ mục bị lọc);
+ *  - `/admin/zalo-crm` trả 404 như thể route không tồn tại (`notFound()`);
+ *  - `/api/webhooks/zalocrm/<org>` trả 404 — ZaloCRM đẩy tin về thì rơi vào outbox
+ *    retry của nó, KHÔNG mất tin, KHÔNG ghi gì vào hộp thư Sata;
+ *  - 0 byte iframe được phục vụ, nên không có SSO token nào được ký.
+ *
+ * **Vì sao `=== "true"` chứ không `!== "false"`** — hai khuôn tồn tại song song
+ * trong file này và chúng KHÔNG thay thế nhau được. `!== "false"` (mặc định BẬT)
+ * chỉ đúng cho cờ đã qua kỳ flip, tức hành vi mặc định của hệ thống hôm nay đã là
+ * BẬT (`isTeacherSiteEnabled` — flip 10/07/2026). ZaloCRM thì ngược lại: máy chủ
+ * fork còn chưa dựng xong, secret webhook/SSO còn chưa phát, ánh xạ cơ sở ↔
+ * `orgCode` còn rỗng. Chép khuôn `!== "false"` sang đây là cờ **tự bật ngay lúc
+ * merge** trên mọi môi trường chưa khai env — ngược hẳn ý định 2 pha. Hệ quả của
+ * so-khớp-đúng-bằng: `"1"` · `"TRUE"` · `"True"` · `"yes"` · `" true "` đều là
+ * **TẮT**. Đây là cố ý (nhất quán toàn file, khoá bằng `lib/flags.test.ts`):
+ * người bật cờ phải gõ chính xác, chứ không phải "gõ gần đúng rồi tưởng đã bật".
+ *
+ * **Rollback** = đặt env `ZALOCRM_ENABLED="false"` (hoặc xoá biến) + redeploy.
+ * KHÔNG revert code, KHÔNG rollback migration: chữ đã nhận nằm ở bảng `Inbox*`
+ * nên tắt trục ZaloCRM không mất lịch sử hội thoại.
+ *
+ * ⚠️ Cờ này là công tắc 2-phase của CẢ tính năng, không phải công tắc VẬN HÀNH.
+ * Thứ cần tắt GẤP mà không kịp deploy là `SystemSetting inbox.zaloCaNhanLive`
+ * (gửi thật hay mô phỏng) — cùng lý lẽ với `calls.live` của OmiCall.
+ */
+export function isZalocrmEnabled(): boolean {
+  return process.env.ZALOCRM_ENABLED === "true"; // mặc định OFF
+}
+
+/**
+ * INBOX (S9-B4) — hộp thư đa kênh (`app/(sale)/sale/hop-thu`, `lib/inbox/*`).
+ *
+ * ⚠️ **Cờ này đã được NHẮC TỚI trước khi tồn tại.** `lib/settings/registry.ts`
+ * ghi "cờ 2-phase bật/tắt cả tính năng (`INBOX_ENABLED` trong lib/flags.ts)" từ
+ * đợt hộp thư, trong khi `grep INBOX_ENABLED` toàn repo chỉ ra đúng dòng chú
+ * thích đó — không một dòng code nào đọc biến này. Đúng vết đã dính với
+ * `AUTH_PHONE_PROVISIONING`: đường lùi chỉ tồn tại trên giấy, tới lúc sự cố mới
+ * biết là kéo cờ không có tác dụng gì. Hàm này đóng khoảng cách đó.
+ *
+ * **Trạng thái hôm nay: cờ MỚI KHAI, CHƯA NỐI vào màn nào** — bật hay tắt lúc
+ * này đều KHÔNG đổi hành vi. Cố ý (khuôn `isPaymentLedgerV2Enabled`): khai cờ
+ * trước, nối sau, để đường lùi nằm trong code từ đầu.
+ *
+ * OFF (mặc định) sẽ nghĩa là: route `/sale/hop-thu` 404, adapter kênh không được
+ * nạp, webhook kênh ngoài không ghi vào `Inbox*`. Dữ liệu đã có giữ nguyên.
+ *
+ * Dùng `=== "true"` cùng lý do như `isZalocrmEnabled` ngay trên.
+ *
+ * 🔴 **Lưu ý cho người NỐI cờ này về sau**: hộp thư hiện phục vụ sau
+ * `SALE_SITE_ENABLED` (cũng mặc định OFF), nên thêm gate ở đây là thêm tầng khoá
+ * thứ hai — nếu tới lúc đó site Sale đã bật trên prod, hãy khai
+ * `INBOX_ENABLED="true"` cho prod TRƯỚC khi merge phần nối, kẻo đóng hộp thư
+ * ngay dưới chân người đang trực chat.
+ */
+export function isInboxEnabled(): boolean {
+  return process.env.INBOX_ENABLED === "true"; // mặc định OFF
+}
