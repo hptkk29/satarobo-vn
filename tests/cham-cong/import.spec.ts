@@ -148,6 +148,46 @@ d("applyImport — lưới T09/2026 từ Sheet thật", () => {
     expect(kept?.templateCode).toBe("SCT");
   });
 
+  it("người ĐÃ GỠ MỀM khỏi khối, nhập lại file ⇒ ô SỐNG LẠI (effectiveTo về null)", async () => {
+    // ── ARRANGE của CHÍNH ca này (luật 18) ─────────────────────────────────────
+    const u = mapping["Thầy Khôi"];
+    await applyImport(parsed, {
+      db, mapping, periodKeys: ["2026-09"], centerMap,
+      canWriteCenter: () => true, actorUserId: userIds[0],
+    });
+
+    // Gỡ MỀM đúng như `removePersonFromBlockAction` làm: chỉ đặt `effectiveTo`,
+    // KHÔNG đổi khoá duy nhất `(userId, centerId, weekday, effectiveFrom)`.
+    const denHet = new Date(Date.UTC(2026, 8, 1));
+    const soDong = await db.shiftWeeklyPattern.updateMany({
+      where: { userId: u, effectiveTo: null },
+      data: { effectiveTo: denHet },
+    });
+    expect(soDong.count, "phải gỡ mềm được ít nhất một ô").toBeGreaterThan(0);
+    expect(await db.shiftWeeklyPattern.count({ where: { userId: u, effectiveTo: null } })).toBe(0);
+
+    // ── ACT: nhập lại chính file đó ────────────────────────────────────────────
+    await applyImport(parsed, {
+      db, mapping, periodKeys: ["2026-09"], centerMap,
+      canWriteCenter: () => true, actorUserId: userIds[0],
+    });
+
+    // ── vế CHẶN: ô phải SỐNG LẠI ───────────────────────────────────────────────
+    // 🔴 Bug 13/09/2026: nhánh `update` của `applyImport` thiếu `effectiveTo: null`, nên
+    // `upsert` sửa ĐÚNG dòng đã đóng mà không mở lại — ghi xong ô vẫn TÀNG HÌNH (màn lọc
+    // `effectiveTo: null`, `generate.ts` bỏ dòng hết hiệu lực). Người dùng thấy "nhập xong
+    // mà người này vẫn không có khung ca". Đường admin đã vá tuần trước; đây là cửa còn lại.
+    const conSong = await db.shiftWeeklyPattern.count({ where: { userId: u, effectiveTo: null } });
+    expect(conSong, "nhập lại file phải mở lại ô đã gỡ mềm").toBeGreaterThan(0);
+
+    // ── vế CHO QUA (luật 16): KHÔNG đụng người khác ────────────────────────────
+    const khac = mapping["Ms Huệ"];
+    expect(
+      await db.shiftWeeklyPattern.count({ where: { userId: khac, effectiveTo: { not: null } } }),
+      "người không bị gỡ thì không được đụng tới",
+    ).toBe(0);
+  });
+
   it("QLCS chỉ có quyền CS1 → hàng CS2 và HO bị bỏ qua, đếm riêng, không im lặng", async () => {
     const cs1 = centerMap.byCode.CS1.centerId;
     const r = await applyImport(parsed, { db, mapping, periodKeys: ["2026-10"], centerMap, canWriteCenter: (c) => c === cs1, actorUserId: userIds[0], importKhungCa: false });
