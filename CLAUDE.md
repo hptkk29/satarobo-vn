@@ -302,12 +302,27 @@ feature → PR → merge `test`  → test.satarobo.vn tự deploy → nghiệm t
   `docs/cham-cong/VE-RA-CACH-LY-BO-TEST.md`. Trần thời gian đặt ở config riêng cho từng bộ
   (`vitest.cham-cong.config.ts`) — phép tính ghi ngay trong file, và nâng trần là vá TRIỆU
   CHỨNG chứ không phải vá cách ly.
-  **Một ca đỏ mà không ai bị chặn thì bằng không có ca** (luật 10, đo 08/09): required
-  check trên `main`/`test` CHỈ có `Quality` + `Unit tests (Vitest)` ⇒ **89,6% số ca được
-  cổng bảo vệ, 10,4% (666 ca) thì không** — gồm cả 370 ca R7 (gỡ học viên · hoàn tiền)
-  và 198 ca tầng DB thật. `enforce_admins=false` nên admin đè được cả hai cổng đang có.
-  Đọc cấu hình thật bằng `gh api repos/<o>/<r>/branches/main/protection` — tài liệu từng
-  ghi "không đọc được từ repo", và câu sai đó đã hoãn phép đo mất 5 giây suốt một ngày.
+  **Test KHÔNG được đọc đồng hồ thật** (luật 19): ngày TUYỆT ĐỐI trong fixture + một hàm rơi
+  về `new Date()` = ca hẹn giờ nổ — mã không đổi, tờ lịch đổi. Đo dứt điểm 13/09: CÙNG commit
+  `507ff13b`, CI ngày 10/09 XANH, chạy lại ngày 12/09 ĐỎ, không diff nào ở giữa. Hình dạng
+  nhận biết: **ca đỏ mà `git log` của file liên quan im nhiều ngày ⇒ nghi ĐỒNG HỒ trước khi
+  nghi MÃ**; và lỗi hay báo ở dòng SỚM HƠN dòng mà tên ca gợi ý. Hàm đã có sẵn `now?: Date`
+  thì test phải TRUYỀN, đóng băng ở mức khối, và cấy lại bằng cách dời mốc sang phía sai.
+  Danh sách còn phải rà: `docs/cham-cong/VE-BOM-HEN-GIO-TRONG-TEST.md`.
+  ⚠️ **Đính chính luật 10 cho ca này:** required check trên `main` nay có `Quality` ·
+  `Unit tests` · `Chat DB invariants` · `E2E Phase R7 1/2` · `2/2`, và `enforce_admins` ĐÃ
+  BẬT (đo `gh api …/branches/main/protection` ngày 13/09). Cổng KHÔNG thủng — nhưng required
+  check chỉ gác lúc MERGE, **không gác trạng thái `main` về sau**, nên một ca phụ thuộc đồng
+  hồ vẫn đỏ lên mà không ai đẩy gì cả.
+  **Một ca đỏ mà không ai bị chặn thì bằng không có ca** (luật 10). ~~Đo 08/09: required
+  check CHỈ có `Quality` + `Unit tests`, `enforce_admins=false`~~ **[ĐÃ SỬA — đo lại 13/09]**
+  danh sách required nay gồm `Quality` · `Unit tests` · `Chat DB invariants` ·
+  `E2E Phase R7 1/2` · `2/2`, và `enforce_admins` ĐÃ BẬT. Bài học của luật 10 vẫn nguyên,
+  chỉ con số là cũ — và đó đúng là luật 17 đang tự chứng minh. **Luôn đọc cấu hình THẬT bằng
+  `gh api repos/<o>/<r>/branches/main/protection`**, đừng trích lại con số trong tài liệu
+  (tài liệu từng ghi "không đọc được từ repo", câu sai đó đã hoãn một phép đo 5 giây suốt
+  một ngày). ⚠️ Giới hạn còn lại, KHÔNG vá được bằng danh sách required: nó gác lúc **MERGE**,
+  không gác trạng thái `main` **về sau** — xem luật 19.
 
 - [docs/cham-cong/DESIGN-CHAM-CONG-ADMIN.md](docs/cham-cong/DESIGN-CHAM-CONG-ADMIN.md) — **Giao diện module chấm công (admin), chốt 06/09/2026.** Đọc TRƯỚC khi sửa bất kỳ màn nào dưới `app/(admin)/admin/cham-cong/**` hoặc `/don-tu**`. Luận đề "Sổ kỳ công": mọi màn vận hành chia sẻ khung KỲ (tháng × khối) — `PageHeader → ModuleNav → ScopeBar → nội dung`. **Sidebar chỉ còn 5 mục**; 9 màn còn lại vào bằng `components/admin/cham-cong/{module-nav,config-tabs,me-nav}.tsx` — 3 file này là LỐI VÀO DUY NHẤT nên `href` phải là chuỗi literal (test `nav-coverage` quét literal, xoá là màn thành mồ côi). Quyền hỏi MỘT lần bằng `loadModuleScope(userId)` (`lib/cham-cong/module-scope.ts`) — đừng rải `checkPermission` (action là biến nên rbac-scope R1 không đếm, nhưng target thì luôn phải thật). `components/cham-cong/ui/**` dùng chung với site GV ⇒ CHỈ token `:root`, **cấm `primary-soft`/`primary-ink`/`primary-dark`** (site GV không có `.admin-scope`, `--primary-ink` ở `:root` là CAM).
 
