@@ -99,10 +99,35 @@ async function datScrollLeft(page: Page, x: number) {
   await page.waitForTimeout(150);
 }
 
+/**
+ * Khung bảng — cha TRỰC TIẾP của vùng cuộn. Hai lớp phủ là con của chính nó
+ * (`components/ui/phan-trang-bang.tsx`: `<div relative><div overflow-x-auto>…</div>` + hai phủ).
+ */
+const khungBang = (page: Page) =>
+  page.locator("div:has(> div.overflow-x-auto)").filter({
+    has: page.locator("table thead th:nth-child(6)"),
+  });
+
+/**
+ * ⚠️ PHẢI GIỚI HẠN TRONG KHUNG BẢNG, KHÔNG QUÉT CẢ TRANG.
+ *
+ * Bản đầu tìm `[class*="inset-y-0"][class*="left-0"][class*="shadow-"]` trên toàn trang. Ngày
+ * 13/09/2026 nó đỏ thật: khung admin mới (`components/admin/admin-shell.tsx`) có ngăn kéo điện
+ * thoại mang đúng `absolute inset-y-0 left-0 w-64 shadow-xl`. Ngăn kéo ấy `md:hidden` nên ở
+ * 1280px nó `display:none` — nhưng `toHaveCount` đếm cả phần tử ẩn, nên ca "chưa cuộn ⇒ KHÔNG
+ * có vệt trái" nhận 1 thay vì 0. Đỏ cả 3 lượt thử lại, không phải flake.
+ *
+ * Đây đúng lớp mong manh mà luật 11 nói: bộ chọn theo HÌNH DẠNG CLASS bắt nhầm bất kỳ thành
+ * phần nào tình cờ dùng chung tổ hợp tiện ích — và Tailwind thì tổ hợp nào cũng có người dùng
+ * lại. Neo vào khung bảng thì nó chỉ còn thấy đúng hai lớp phủ nó sinh ra để canh.
+ *
+ * Phép khẳng định KHÔNG đổi một chữ: vẫn là "còn nội dung bên phải ⇒ có vệt", "chưa cuộn ⇒
+ * không có vệt trái".
+ */
 const phuPhai = (page: Page) =>
-  page.locator('[class*="inset-y-0"][class*="right-0"][class*="shadow-"]');
+  khungBang(page).locator('> [class*="inset-y-0"][class*="right-0"][class*="shadow-"]');
 const phuTrai = (page: Page) =>
-  page.locator('[class*="inset-y-0"][class*="left-0"][class*="shadow-"]');
+  khungBang(page).locator('> [class*="inset-y-0"][class*="left-0"][class*="shadow-"]');
 
 test.describe("bảng rộng: cuộn ngang được VÀ nói cho người dùng biết", () => {
   test.beforeAll(async () => {
@@ -145,8 +170,11 @@ test.describe("bảng rộng: cuộn ngang được VÀ nói cho người dùng 
 
     // ── B5: lớp phủ không nuốt click ──────────────────────────────────────
     const nuot = await page.evaluate(() => {
+      // Cùng cách neo với `phuPhai`: tìm TRONG khung bảng. Đo 13/09 cho thấy mép PHẢI hiện
+      // chưa va với thành phần nào, nhưng bộ chọn vẫn là loại quét cả trang — và mép TRÁI đã
+      // va rồi. Sửa cả hai một lượt thay vì chờ tới lượt nó.
       const p = document.querySelector<HTMLElement>(
-        '[class*="inset-y-0"][class*="right-0"][class*="shadow-"]',
+        'div:has(> div.overflow-x-auto) > [class*="inset-y-0"][class*="right-0"][class*="shadow-"]',
       );
       return p ? getComputedStyle(p).pointerEvents : "khong-thay";
     });
