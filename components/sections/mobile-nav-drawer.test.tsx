@@ -22,6 +22,21 @@ const moDrawer = () => {
   fireEvent.click(screen.getByRole("button", { name: /mở menu|menu/i }));
 };
 
+/**
+ * Dựng ĐÚNG nơi drawer được mount thật: bên trong `<header>` (xem
+ * `components/public/header.tsx` — `<MobileNavDrawer />` nằm trong thẻ header đó).
+ *
+ * Bối cảnh này là thứ làm ca portal có nghĩa: render drawer TRẦN thì một bản vá hỏng kiểu
+ * `portal(…, document.querySelector("header") ?? document.body)` vẫn xanh vì không có header
+ * nào để rơi vào.
+ */
+const renderTrongHeader = () =>
+  render(
+    <header>
+      <MobileNavDrawer />
+    </header>,
+  );
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -40,6 +55,49 @@ describe("[PUBLIC-NAV-T01] drawer mở ra và có mục thật", () => {
     for (const can of ["/", "/ve-chung-toi", "/tin-tuc", "/lien-he"]) {
       expect(href, `drawer phải có mục ${can}`).toContain(can);
     }
+  });
+});
+
+describe("[PUBLIC-NAV-T03] ⚠️ lớp phủ phải PORTAL ra `document.body`", () => {
+  it("panel là con TRỰC TIẾP của <body>, không nằm lồng trong cây của header", () => {
+    // CA NÀY CANH MỘT LỖI HIỂN THỊ THẬT (13/09/2026) mà nhìn mã thì vô hình.
+    //
+    // Drawer được mount BÊN TRONG `components/public/header.tsx`, và header đó mang
+    // `backdrop-blur`. Theo spec Filter Effects, element có `backdrop-filter` khác `none`
+    // trở thành KHỐI CHỨA cho mọi con `position: fixed`. Đo thật trong Chrome trước khi vá:
+    //
+    //     tổ tiên chặn = <header>, backdropFilter = blur(8px), cao = 65px
+    //
+    // ⇒ `inset-0` của nền mờ và `h-full` của panel tính theo hộp 65px đó thay vì theo màn
+    // hình: panel cụt, nền mờ không phủ hết, và `<nav flex-1>` bị bóp còn CHIỀU CAO 0. Bảy
+    // mục menu vẫn nằm nguyên trong DOM — nên triệu chứng nhìn hệt "drawer mở ra mà trống"
+    // và rất dễ đi tìm nhầm ở `NAV_ITEMS`. Ca `[PUBLIC-NAV-T01]` ở trên KHÔNG bắt được: nó
+    // đếm mục trong DOM, mà mục thì vẫn có đủ.
+    //
+    // jsdom không tính bố cục nên không thể khẳng định "panel cao bằng màn hình". Thứ kiểm
+    // được, và cũng là thứ quyết định, là CHỖ ĐỨNG trong cây DOM: portal ra thẳng `<body>`
+    // là bảo đảm không tổ tiên nào lọc/biến hình chen vào giữa.
+    // BỌC TRONG <header> — bắt buộc, không phải trang trí. Ca này từng XANH GIẢ khi render
+    // drawer trần: cấy lỗi `portal(…, document.querySelector('header') ?? document.body)` vẫn
+    // qua, vì không có header nào nên nó rơi về body. Dựng đúng nơi mount thật thì phép
+    // khẳng định mới phân biệt được "ra body" với "ở lại trong header".
+    renderTrongHeader();
+    moDrawer();
+    const panel = document.querySelector('aside[role="dialog"]');
+    expect(panel, "không tìm thấy panel của drawer").not.toBeNull();
+    expect(panel!.parentElement).toBe(document.body);
+    expect(panel!.closest("header")).toBeNull();
+  });
+
+  it("nền mờ cũng ra `document.body` — nếu không, nó chỉ phủ được vùng header", () => {
+    renderTrongHeader();
+    moDrawer();
+    const nen = [...document.querySelectorAll("div")].find((d) =>
+      d.className.toString().includes("bg-black/60"),
+    );
+    expect(nen?.closest("header"), "nền mờ không được nằm trong header").toBeFalsy();
+    expect(nen, "không tìm thấy nền mờ").not.toBeUndefined();
+    expect(nen!.parentElement).toBe(document.body);
   });
 });
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -47,7 +48,13 @@ const NAV_ITEMS: NavItem[] = [
 export function MobileNavDrawer() {
   const [isOpen, setIsOpen] = useState(false);
   const [expandedItem, setExpandedItem] = useState<string | null>(null);
+  /** `createPortal` cần `document` — server không có. Xem khối chú thích ở chỗ dùng. */
+  const [mounted, setMounted] = useState(false);
   const pathname = usePathname();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     setIsOpen(false);
@@ -82,7 +89,30 @@ export function MobileNavDrawer() {
         <Menu className="h-5 w-5" />
       </button>
 
-      <AnimatePresence>
+      {/*
+        ⚠️ LỚP PHỦ PHẢI ĐI QUA PORTAL RA `document.body` — ĐỪNG BỎ, ĐÂY LÀ BẢN VÁ CỦA MỘT LỖI
+        HIỂN THỊ THẬT (13/09/2026), và nhìn mã thì nó vô hình.
+
+        Drawer này được mount BÊN TRONG `components/public/header.tsx`, mà header đó mang
+        `backdrop-blur`. Theo spec Filter Effects, một element có `backdrop-filter` khác `none`
+        trở thành KHỐI CHỨA cho mọi con `position: fixed`. Đo thật trong trình duyệt:
+
+            tổ tiên chặn = <header>, backdropFilter = blur(8px), cao = 65px
+
+        Hệ quả: `inset-0` của nền mờ và `h-full` của panel tính theo hộp 65px của header thay vì
+        theo màn hình ⇒ panel cụt giữa chừng, nền mờ không phủ hết trang, và `<nav flex-1>` bị
+        bóp còn CHIỀU CAO 0 — 7 mục menu vẫn nằm nguyên trong DOM nhưng không ai thấy. Triệu
+        chứng nhìn hệt như "drawer mở ra mà trống", nên rất dễ đi tìm nhầm ở `NAV_ITEMS`.
+
+        Portal đưa lớp phủ ra thẳng `<body>`, nên nó thoát khỏi mọi tổ tiên bị lọc/biến hình.
+        Cách này giữ nguyên thiết kế kính mờ của header — gỡ `backdrop-blur` cũng chữa được
+        nhưng đó là đổi nhận diện của cả site public để vá một lỗi bố cục.
+
+        `mounted` là để `createPortal` chỉ chạy sau khi gắn: trên server không có `document`.
+      */}
+      {mounted &&
+        createPortal(
+          <AnimatePresence>
         {isOpen && (
           <>
             <motion.div
@@ -242,7 +272,9 @@ export function MobileNavDrawer() {
             </motion.aside>
           </>
         )}
-      </AnimatePresence>
+          </AnimatePresence>,
+          document.body,
+        )}
     </>
   );
 }
