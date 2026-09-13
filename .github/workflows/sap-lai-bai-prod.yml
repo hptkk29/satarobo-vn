@@ -1,0 +1,101 @@
+# Chạy TAY — gán lại BÀI cho từng buổi theo thứ tự NGÀY, trên PROD.
+#
+# ⚠️ ĐÂY LÀ NÚT GHI, và nó chạm nhiều dòng hơn nút dọn customTitle: 290 buổi / 8 lớp
+# (đo prod 13/09). Đọc `scripts/sap-lai-bai-theo-ngay.ts` trước khi bấm.
+#
+# Vì sao cần: đợt vá trước (#233/#234/#249) chỉ sửa phần HIỂN THỊ — nhãn buổi nay in số lộ
+# trình thay vì hạng-theo-ngày. Nhưng dữ liệu bên dưới vẫn hỏng: lớp `CS2.SATA6.26.001` gán
+# bài theo thứ tự ngày là `1, 43, 2, 44, 3, 45…` — sáu buổi Thứ 5 xen giữa được gán các bài
+# CUỐI khoá trong khi lớp đang học HP1. Nhãn nói thật về một dữ liệu vô lý.
+#
+# Một lượt bấm làm hai việc:
+#     1. xem trước (dry-run)  → in TRƯỚC/SAU của từng lớp, KHÔNG ghi gì
+#     2. sắp lại (--apply)    → chỉ chạy khi chuỗi xác nhận đúng
+#
+# ── BỐN CỔNG AN TOÀN (trong chính script) ──────────────────────────────────────────────
+#   · `--dry-run` mặc định; chỉ `--apply` mới ghi.
+#   · Phạm vi phải khai tường minh (`--tat-ca` in đủ danh sách trước khi hỏi).
+#   · Dump `(sessionId → planId, lessonId)` cũ ra JSON TRƯỚC khi ghi.
+#   · BỎ QUA lớp hình dạng lạ (buổi > plan · plan không gắn bài) — dừng tay, không đoán.
+#
+# Script chỉ HOÁN VỊ: giữ nguyên tập bài của lớp, sắp lại theo ngày. Nó KHÔNG gán lại
+# `1..N` — lớp có buổi huỷ cũ thì tập bài khuyết số, gán `1..N` sẽ kéo bài khuyết vào và
+# đổi nội dung hàng chục buổi mà không ai yêu cầu.
+#
+# Dump đi lên **artifact**, KHÔNG commit — nó là bản sao nội dung thật của khách hàng, và là
+# thứ duy nhất để quay lui.
+
+name: Sắp lại bài theo ngày · PROD · GHI
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Gõ đúng "SAP LAI THAT VAO PROD" để chạy bước ghi. Để trống = chỉ xem trước.'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  sap:
+    name: Sắp lại bài theo ngày (PROD)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      # Session pooler (5432). CỐ Ý không đặt `PROD_READONLY_URL`: chuỗi này ĐẦY QUYỀN, gán
+      # vào biến tên "readonly" là đặt tên nói dối. Script rơi về `DATABASE_URL`.
+      DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+      DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prisma generate
+
+      - name: Kiểm secret có mặt
+        run: |
+          [ -n "${{ secrets.PROD_DIRECT_URL }}" ] || { echo "::error::Thiếu secret PROD_DIRECT_URL."; exit 1; }
+
+      # Script tự in `Đích: <user>@<host>:<port>/<db>` (che mật khẩu) — cách DUY NHẤT đối
+      # chiếu, vì GitHub không cho đọc lại secret.
+      - name: 1) Xem trước — KHÔNG ghi gì
+        run: pnpm exec tsx scripts/sap-lai-bai-theo-ngay.ts --tat-ca
+
+      - name: 2) Sắp lại THẬT
+        if: inputs.confirm == 'SAP LAI THAT VAO PROD'
+        run: pnpm exec tsx scripts/sap-lai-bai-theo-ngay.ts --tat-ca --apply
+
+      - name: 2b) Bỏ qua bước ghi (không gõ chuỗi xác nhận)
+        if: inputs.confirm != 'SAP LAI THAT VAO PROD'
+        run: |
+          echo "::notice::Chỉ chạy XEM TRƯỚC. Muốn ghi thật thì chạy lại và gõ: SAP LAI THAT VAO PROD"
+
+      # Chạy lại dry-run sau khi ghi: nó phải in "TỔNG: 0 lớp · 0 buổi đổi bài".
+      - name: 3) Nghiệm thu — chạy lại xem trước, phải ra 0
+        if: inputs.confirm == 'SAP LAI THAT VAO PROD'
+        run: |
+          pnpm exec tsx scripts/sap-lai-bai-theo-ngay.ts --tat-ca | tee /tmp/sau.txt
+          grep -q "TỔNG: 0 lớp · 0 buổi đổi bài" /tmp/sau.txt \
+            || { echo "::error::Vẫn còn buổi lệch thứ tự sau khi sắp — xem log."; exit 1; }
+          echo "✔ Không còn buổi nào lệch thứ tự."
+
+      - name: Giữ dump để quay lui
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sap-lai-bai-${{ github.run_id }}
+          path: var/sap-lai-bai/dump-truoc-khi-sap.json
+          if-no-files-found: warn
+          retention-days: 30
