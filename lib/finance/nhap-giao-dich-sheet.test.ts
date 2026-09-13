@@ -25,6 +25,7 @@ import { describe, it, expect } from "vitest";
 import {
   chuanMaHV,
   chuanSdtSheet,
+  chuanTenSoSanh,
   laDongTong,
   docDongGiaoDich,
   gopTheoHocVien,
@@ -50,23 +51,44 @@ describe("[NGD-01] chuẩn hoá mã học viên", () => {
   });
 });
 
-describe("[NGD-02] chuẩn hoá số điện thoại", () => {
+describe("[NGD-02] chuẩn hoá số điện thoại — RA DẠNG DB ĐANG LƯU", () => {
+  // ⚠️ ĐO 14/09/2026: DB lưu `84905167198`, KHÔNG phải `0905167198`
+  // (select "parentPhone" from "Student" → 84930000007…). Một hàm trả `0…` sẽ khớp
+  // ĐÚNG 0 DÒNG và không báo lỗi gì — chỉ là "không tìm thấy học viên nào".
   it("số có dấu cách vẫn ra đúng (ca thật: '078 3264020')", () => {
-    expect(chuanSdtSheet("078 3264020")).toBe("0783264020");
+    expect(chuanSdtSheet("078 3264020")).toBe("84783264020");
   });
 
-  it("KHÔNG làm mất số 0 đầu — bài học đã trả giá ở lượt nhập lead", () => {
-    expect(chuanSdtSheet("0905499860")).toBe("0905499860");
-    expect(chuanSdtSheet(905499860)).toBe("0905499860");
+  it("KHÔNG làm mất số 0 đầu — kể cả khi Excel trả về dạng SỐ", () => {
+    expect(chuanSdtSheet("0905499860")).toBe("84905499860");
+    // Ô định dạng NUMBER nuốt số 0 đầu: 905499860. Không đệm lại là sai cả dãy.
+    expect(chuanSdtSheet(905499860)).toBe("84905499860");
+    expect(chuanSdtSheet("905499860.0")).toBe("84905499860");
   });
 
-  it("dạng 84… quy về 0…", () => {
-    expect(chuanSdtSheet("84905499860")).toBe("0905499860");
+  it("đã ở dạng 84… thì giữ nguyên", () => {
+    expect(chuanSdtSheet("84905499860")).toBe("84905499860");
   });
 
-  it("ô trống → null", () => {
+  it("ô trống / rác → null", () => {
     expect(chuanSdtSheet(null)).toBeNull();
     expect(chuanSdtSheet("—")).toBeNull();
+    expect(chuanSdtSheet("123")).toBeNull();
+  });
+});
+
+describe("[NGD-02b] chuẩn hoá tên để SO SÁNH", () => {
+  it("bỏ dấu + viết hoa + gọn khoảng trắng", () => {
+    expect(chuanTenSoSanh("Nguyễn Công  Hoàng Khải")).toBe("NGUYEN CONG HOANG KHAI");
+    expect(chuanTenSoSanh("NGUYỄN CÔNG HOÀNG KHẢI")).toBe("NGUYEN CONG HOANG KHAI");
+  });
+
+  it("đ/Đ ra d/D", () => {
+    expect(chuanTenSoSanh("Đặng Hoàng Kim Trúc")).toBe("DANG HOANG KIM TRUC");
+  });
+
+  it("ô trống → chuỗi rỗng, không ném", () => {
+    expect(chuanTenSoSanh(null)).toBe("");
   });
 });
 
@@ -121,7 +143,7 @@ describe("[NGD-04] đọc một dòng", () => {
     expect(g).not.toBeNull();
     expect(g!.maHV).toBe("CS1.HV.0043");
     expect(g!.hocPhi).toBe(3_320_000);
-    expect(g!.sdt).toBe("0932014686");
+    expect(g!.sdt).toBe("84932014686"); // dạng DB lưu, KHÔNG phải dạng sheet gõ
     expect(g!.sheet).toBe("Tháng 82026 CS1");
     expect(g!.dong).toBe(2);
   });
@@ -142,42 +164,53 @@ describe("[NGD-04] đọc một dòng", () => {
 });
 
 describe("[NGD-05] phát hiện sheet chứa trọn sheet khác", () => {
+  const d = (sdt: string, hoTen: string, hocPhi: number) => ({ sdt, hoTen, hocPhi });
   const t5 = [
-    { maHV: "CS2.HV.0001", hocPhi: 3_986_000 },
-    { maHV: "CS2.HV.0002", hocPhi: 8_640_000 },
-    { maHV: "CS1.HV.0001", hocPhi: 3_808_000 },
+    d("84905499860", "LÊ NGUYỄN TUẤN KIỆT", 3_986_000),
+    d("84905063529", "PHẠM PHƯỚC TÂN", 8_640_000),
+    d("84905000001", "THÁI THIÊN KHÁNH", 3_808_000),
   ];
 
   it("T6 chứa trọn T5 → báo trùng, kèm SỐ TIỀN sẽ cộng đôi (ca thật)", () => {
-    const t6 = [...t5, { maHV: "CS1.HV.0009", hocPhi: 5_000_000 }];
+    const t6 = [...t5, d("84905000009", "AI ĐÓ", 5_000_000)];
     const r = sheetChuaTronSheet(t5, t6);
     expect(r.chuaTron).toBe(true);
     expect(r.soDongTrung).toBe(3);
     expect(r.tienCongDoi).toBe(16_434_000);
   });
 
-  it("chỉ trùng một phần → KHÔNG coi là chứa trọn (phải để người xem quyết)", () => {
-    const t6 = [{ maHV: "CS2.HV.0001", hocPhi: 3_986_000 }];
-    const r = sheetChuaTronSheet(t5, t6);
+  it("tên gõ khác dấu vẫn nhận ra là trùng", () => {
+    const t6 = [d("84905499860", "le nguyen tuan kiet", 3_986_000)];
+    expect(sheetChuaTronSheet([t5[0]!], t6).chuaTron).toBe(true);
+  });
+
+  it("chỉ trùng một phần → KHÔNG coi là chứa trọn (để người xem quyết)", () => {
+    const r = sheetChuaTronSheet(t5, [t5[0]!]);
     expect(r.chuaTron).toBe(false);
     expect(r.soDongTrung).toBe(1);
   });
 
-  it("cùng mã nhưng KHÁC tiền → không phải trùng, là đợt đóng khác", () => {
-    // `CS1.HV.0043` đóng 3.320.000 rồi 4.320.000 — hai giao dịch thật, không được gộp.
-    const a = [{ maHV: "CS1.HV.0043", hocPhi: 3_320_000 }];
-    const b = [{ maHV: "CS1.HV.0043", hocPhi: 4_320_000 }];
+  it("cùng người nhưng KHÁC tiền → không phải trùng, là đợt đóng khác", () => {
+    const a = [d("84932014686", "NGUYỄN CÔNG HOÀNG KHẢI", 3_320_000)];
+    const b = [d("84932014686", "NGUYỄN CÔNG HOÀNG KHẢI", 4_320_000)];
     expect(sheetChuaTronSheet(a, b).soDongTrung).toBe(0);
   });
 });
 
-describe("[NGD-06] gộp theo học viên — CỘNG DỒN, không ghi đè", () => {
-  const gd = (maHV: string, hocPhi: number, ghiChu = "") => ({
+describe("[NGD-06] gộp theo học viên — khoá là SĐT PHỤ HUYNH + HỌ TÊN", () => {
+  // ⚠️ CHỦ DỰ ÁN CHỐT 14/09/2026: "mã học viên ở sheet KHÁC HOÀN TOÀN mã trên hệ thống,
+  // nên nếu lấy đúng thì lấy ở SĐT của phụ huynh, và họ tên."
+  // Mã trong file vẫn đọc và giữ lại để soi ngược về dòng gốc, nhưng KHÔNG dùng để khớp.
+  //
+  // Đo trên file thật: 102 SĐT riêng biệt, trong đó 9 SĐT dùng cho 2 em (anh chị em thật:
+  // HOANG VINH KHANG + HOANG BAO THANH cùng 0905167198). ⇒ SĐT MỘT MÌNH KHÔNG ĐỦ.
+  // Và 0 ca tên trùng nhau mà khác SĐT ⇒ cặp (SĐT, tên) đủ phân biệt: ra đúng 115 em.
+  const gd = (sdt: string | null, hoTen: string, hocPhi: number, ghiChu = "") => ({
     sheet: "x",
     dong: 1,
-    maHV,
-    hoTen: "AI ĐÓ",
-    sdt: "0900000000",
+    maHV: "CS9.HV.9999", // mã của sheet — cố ý KHÁC hệ thống, không được dùng làm khoá
+    hoTen,
+    sdt,
     hocPhi,
     ngay: null,
     khoa: null,
@@ -186,11 +219,11 @@ describe("[NGD-06] gộp theo học viên — CỘNG DỒN, không ghi đè", ()
     ghiChu,
   });
 
-  it("ba đợt của một em cộng lại, giữ nguyên từng đợt để soi lại", () => {
+  it("ba đợt của MỘT em cộng lại, giữ nguyên từng đợt để soi lại", () => {
     const r = gopTheoHocVien([
-      gd("CS1.HV.0043", 3_320_000, "Học phí đợt 1"),
-      gd("CS1.HV.0043", 4_320_000, "Học phí đợt 2"),
-      gd("CS1.HV.0043", 1_000_000, "bù"),
+      gd("84932014686", "Nguyễn Công Hoàng Khải", 3_320_000, "Học phí đợt 1"),
+      gd("84932014686", "NGUYỄN CÔNG HOÀNG KHẢI", 4_320_000, "Học phí đợt 2"),
+      gd("84932014686", "nguyen cong hoang khai", 1_000_000, "bù"),
     ]);
     expect(r).toHaveLength(1);
     expect(r[0]!.tongTien).toBe(8_640_000);
@@ -198,28 +231,40 @@ describe("[NGD-06] gộp theo học viên — CỘNG DỒN, không ghi đè", ()
     expect(r[0]!.giaoDich).toHaveLength(3);
   });
 
-  it("hai em khác nhau không lẫn vào nhau", () => {
-    const r = gopTheoHocVien([gd("CS1.HV.0001", 1_000), gd("CS1.HV.0002", 2_000)]);
+  it("HAI ANH EM cùng SĐT phụ huynh KHÔNG được gộp (ca thật: 0905167198)", () => {
+    // Gộp nhầm là dồn học phí hai em vào một, em kia vẫn hiện nợ nguyên.
+    const r = gopTheoHocVien([
+      gd("84905167198", "HOÀNG VĨNH KHANG", 4_788_000),
+      gd("84905167198", "HOÀNG BẢO THẠNH", 4_788_000),
+    ]);
     expect(r).toHaveLength(2);
-    expect(r.map((x) => x.tongTien).sort((a, b) => a - b)).toEqual([1_000, 2_000]);
+    expect(r.map((x) => x.tongTien)).toEqual([4_788_000, 4_788_000]);
   });
 
-  it("em KHÔNG có mã gộp theo SĐT + tên, và được đánh dấu là cần người xem", () => {
-    const khongMa = { ...gd("", 5_000_000), maHV: null };
-    const r = gopTheoHocVien([khongMa, khongMa]);
+  it("cùng tên mà khác SĐT → hai em khác nhau", () => {
+    const r = gopTheoHocVien([
+      gd("84905000001", "TRẦN GIA BẢO", 1_000),
+      gd("84905000002", "TRẦN GIA BẢO", 2_000),
+    ]);
+    expect(r).toHaveLength(2);
+  });
+
+  it("em THIẾU SĐT vẫn giữ lại, gộp theo tên, và đánh dấu cần người xem", () => {
+    // Đo thật: 4/136 giao dịch không có SĐT. Bỏ chúng đi là bỏ tiền của một em.
+    const r = gopTheoHocVien([gd(null, "AI ĐÓ", 5_000_000), gd(null, "ai đó", 1_000_000)]);
     expect(r).toHaveLength(1);
-    expect(r[0]!.maHV).toBeNull();
+    expect(r[0]!.sdt).toBeNull();
     expect(r[0]!.canNguoiXem).toBe(true);
-    expect(r[0]!.tongTien).toBe(10_000_000);
+    expect(r[0]!.tongTien).toBe(6_000_000);
   });
 
-  it("em có mã thì KHÔNG cần người xem", () => {
-    expect(gopTheoHocVien([gd("CS1.HV.0001", 1_000)])[0]!.canNguoiXem).toBe(false);
+  it("em có ĐỦ SĐT + tên thì KHÔNG cần người xem", () => {
+    expect(gopTheoHocVien([gd("84905000001", "A B", 1_000)])[0]!.canNguoiXem).toBe(false);
   });
 
   it("thứ tự đầu vào không đổi kết quả (ổn định)", () => {
-    const a = gopTheoHocVien([gd("CS1.HV.0002", 2), gd("CS1.HV.0001", 1)]);
-    const b = gopTheoHocVien([gd("CS1.HV.0001", 1), gd("CS1.HV.0002", 2)]);
-    expect(a.map((x) => x.maHV)).toEqual(b.map((x) => x.maHV));
+    const a = gopTheoHocVien([gd("84905000002", "B", 2), gd("84905000001", "A", 1)]);
+    const b = gopTheoHocVien([gd("84905000001", "A", 1), gd("84905000002", "B", 2)]);
+    expect(a.map((x) => x.hoTen)).toEqual(b.map((x) => x.hoTen));
   });
 });

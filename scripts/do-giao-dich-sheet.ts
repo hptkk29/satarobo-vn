@@ -106,7 +106,21 @@ function main() {
   console.log(`  giao dịch : ${tatCa.length}`);
   console.log(`  tổng tiền : ${vnd(tatCa.reduce((s, g) => s + g.hocPhi, 0))}`);
   console.log(`  học viên  : ${gop.length}`);
-  console.log(`  thiếu mã HV (phải có người chỉ đúng em): ${gop.filter((g) => g.canNguoiXem).length}`);
+  console.log(`  thiếu SĐT (phải có người chỉ đúng em): ${gop.filter((g) => g.canNguoiXem).length}`);
+
+  // Khoá khớp là (SĐT phụ huynh, họ tên) theo chốt 14/09. Một SĐT có thể là của HAI em
+  // (anh chị em) — con số này phải nói ra, vì nó là lý do không được gộp theo SĐT.
+  const theoSdt = new Map<string, Set<string>>();
+  for (const g of gop) {
+    if (!g.sdt) continue;
+    if (!theoSdt.has(g.sdt)) theoSdt.set(g.sdt, new Set());
+    theoSdt.get(g.sdt)!.add(g.hoTen ?? "");
+  }
+  const nhieuCon = [...theoSdt.entries()].filter(([, v]) => v.size > 1);
+  console.log(`  SĐT riêng biệt: ${theoSdt.size}   trong đó DÙNG CHO >1 EM: ${nhieuCon.length}`);
+  for (const [sdt, ten] of nhieuCon.slice(0, 5)) {
+    console.log(`     ${sdt} → ${[...ten].join(" | ")}`);
+  }
 
   const phanBo = new Map<number, number>();
   for (const g of gop) phanBo.set(g.soDot, (phanBo.get(g.soDot) ?? 0) + 1);

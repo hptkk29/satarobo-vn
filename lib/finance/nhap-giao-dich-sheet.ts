@@ -28,6 +28,8 @@
 //      là xoá mất đợt trước.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { canonicalPhone } from "@/lib/phone";
+
 /** Một dòng thô từ XLSX — khoá là nhãn cột trong file. */
 export type DongSheet = Record<string, unknown>;
 
@@ -62,16 +64,41 @@ export function chuanMaHV(v: unknown): string | null {
   return `${m[1]}.HV.${String(Number(m[2])).padStart(4, "0")}`;
 }
 
-/** `'078 3264020'` → `'0783264020'`. Số 0 đầu KHÔNG được mất. */
+/**
+ * SĐT từ sheet → dạng CHUẨN CỦA HỆ THỐNG.
+ *
+ * ⚠️ ĐO ĐƯỢC 14/09/2026: DB lưu `84905167198`, KHÔNG phải `0905167198`
+ * (`select "parentPhone" from "Student"` → `84930000007`…). Bản đầu của file này tự viết
+ * một hàm trả `0…` và nó sẽ khớp ĐÚNG 0 DÒNG — sai lặng lẽ, không lỗi, chỉ là "không tìm
+ * thấy học viên nào".
+ *
+ * Nên đây chỉ là lớp mỏng bọc `canonicalPhone` của repo: một định nghĩa SĐT cho cả hệ,
+ * không đẻ thêm định nghĩa thứ hai ở tầng nhập liệu.
+ */
 export function chuanSdtSheet(v: unknown): string | null {
   if (v == null) return null;
   let s = String(v).trim();
+  // Excel hay trả số điện thoại thành số thực: 905499860 hoặc "905499860.0".
   if (s.endsWith(".0")) s = s.slice(0, -2);
-  s = s.replace(/\D/g, "");
-  if (!s) return null;
-  if (s.startsWith("84") && s.length >= 11) s = "0" + s.slice(2);
-  if (s.length === 9 && !s.startsWith("0")) s = "0" + s;
-  return s.length >= 9 ? s : null;
+  if (/^\d{9}$/.test(s)) s = "0" + s; // mất số 0 đầu do ô định dạng NUMBER
+  return canonicalPhone(s);
+}
+
+/**
+ * Tên học viên → dạng SO SÁNH: bỏ dấu, bỏ khoảng trắng thừa, viết hoa.
+ *
+ * Bỏ dấu vì hai bên gõ khác nhau ("Nguyễn Công Hoàng Khải" ở sheet vs bản ghi hệ thống),
+ * và một dấu sai là một em không khớp — trong khi hậu quả của khớp lỏng ở đây bị chặn
+ * bằng việc PHẢI khớp CẢ SĐT.
+ */
+export function chuanTenSoSanh(v: unknown): string {
+  if (v == null) return "";
+  const s = String(v)
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D");
+  return s.replace(/\s+/g, " ").trim().toUpperCase();
 }
 
 function chuoi(v: unknown): string {
@@ -166,42 +193,61 @@ export type KetQuaTrungSheet = {
 /**
  * Sheet `nho` có nằm trọn trong sheet `lon` không.
  *
- * Khoá so là (mã, số tiền) — KHÔNG có ngày, vì sheet "Tháng 52026" không điền ngày trong
- * khi "Tháng 62026" có. So thêm ngày là bỏ sót đúng cặp cần bắt.
+ * Khoá so là (SĐT, tên, số tiền) — KHÔNG có ngày, vì "Tháng 52026" bỏ trống ngày trong
+ * khi "Tháng 62026" có; so thêm ngày là bỏ sót đúng cặp cần bắt. Và KHÔNG dùng mã sheet:
+ * mã trong file có dòng để trống, còn SĐT+tên là khoá đang dùng ở mọi chỗ khác.
  *
- * Cùng mã mà KHÁC tiền thì không phải trùng — đó là hai đợt đóng khác nhau của cùng một
- * em, và gộp chúng lại là xoá mất một đợt.
+ * Cùng người mà KHÁC tiền thì không phải trùng — đó là hai đợt đóng khác nhau, gộp lại
+ * là xoá mất một đợt.
  */
 export function sheetChuaTronSheet(
-  nho: Array<{ maHV: string | null; hocPhi: number }>,
-  lon: Array<{ maHV: string | null; hocPhi: number }>,
+  nho: Array<{ sdt: string | null; hoTen: string | null; hocPhi: number }>,
+  lon: Array<{ sdt: string | null; hoTen: string | null; hocPhi: number }>,
 ): KetQuaTrungSheet {
-  const coMa = nho.filter((x) => x.maHV);
-  if (coMa.length === 0) return { chuaTron: false, soDongTrung: 0, tienCongDoi: 0 };
+  const khoa = (x: { sdt: string | null; hoTen: string | null; hocPhi: number }) =>
+    `${x.sdt ?? ""}|${chuanTenSoSanh(x.hoTen)}|${x.hocPhi}`;
 
-  const khoaLon = new Set(lon.filter((x) => x.maHV).map((x) => `${x.maHV}|${x.hocPhi}`));
-  const trung = coMa.filter((x) => khoaLon.has(`${x.maHV}|${x.hocPhi}`));
+  const coKhoa = nho.filter((x) => x.sdt || x.hoTen);
+  if (coKhoa.length === 0) return { chuaTron: false, soDongTrung: 0, tienCongDoi: 0 };
+
+  const khoaLon = new Set(lon.filter((x) => x.sdt || x.hoTen).map(khoa));
+  const trung = coKhoa.filter((x) => khoaLon.has(khoa(x)));
 
   return {
-    chuaTron: trung.length === coMa.length,
+    chuaTron: trung.length === coKhoa.length,
     soDongTrung: trung.length,
     tienCongDoi: trung.reduce((s, x) => s + x.hocPhi, 0),
   };
 }
 
 export type HocVienGop = {
+  /** Mã trong SHEET — giữ để soi ngược về dòng gốc. KHÔNG dùng để khớp với hệ thống. */
   maHV: string | null;
   hoTen: string | null;
+  /** Dạng chuẩn `84…` — khớp thẳng với `Student.parentPhone`. */
   sdt: string | null;
   tongTien: number;
   soDot: number;
-  /** Không có mã ⇒ không khớp tự động được, phải có người chỉ đúng học viên. */
+  /** Thiếu SĐT ⇒ không khớp tự động được, phải có người chỉ đúng em. */
   canNguoiXem: boolean;
   giaoDich: GiaoDichSheet[];
 };
 
 /**
- * Gộp giao dịch theo học viên — CỘNG DỒN.
+ * Gộp giao dịch theo HỌC VIÊN — khoá là (SĐT phụ huynh, họ tên). CỘNG DỒN.
+ *
+ * ⚠️ CHỦ DỰ ÁN CHỐT 14/09/2026: "mã học viên ở sheet KHÁC HOÀN TOÀN mã trên hệ thống, nên
+ * nếu lấy đúng thì lấy ở SĐT của phụ huynh, và họ tên." Mã trong sheet vẫn được đọc và
+ * giữ lại để soi ngược dòng gốc, nhưng KHÔNG còn là khoá khớp.
+ *
+ * ⚠️ SĐT MỘT MÌNH KHÔNG ĐỦ. Đo trên file thật: 102 SĐT riêng biệt nhưng 9 SĐT dùng cho
+ * HAI em — anh chị em ruột (HOANG VINH KHANG + HOANG BAO THANH cùng `0905167198`, cùng
+ * phụ huynh). Gộp theo SĐT là dồn học phí hai em vào một, và em còn lại vẫn hiện nợ
+ * nguyên ở cổng phụ huynh — đúng cái bệnh đang đi chữa.
+ *
+ * Tên so ở dạng BỎ DẤU (`chuanTenSoSanh`) vì hai bên gõ khác nhau. Khớp lỏng ở tên không
+ * nguy hiểm vì nó luôn đi kèm SĐT; đo thật: 0 ca tên trùng nhau mà khác SĐT, và cặp
+ * (SĐT, tên) ra đúng 115 em — khớp con số đếm bằng mã.
  *
  * Giữ nguyên từng giao dịch trong `giaoDich` để màn xem thử chỉ ra được dòng nào ở sheet
  * nào; một con tổng không giải trình được thì không ai dám bấm.
@@ -210,16 +256,18 @@ export function gopTheoHocVien(gd: GiaoDichSheet[]): HocVienGop[] {
   const map = new Map<string, HocVienGop>();
 
   for (const g of gd) {
-    // Không mã thì gộp theo SĐT + tên. Đây là phương án LÙI, và nó được đánh dấu
-    // `canNguoiXem` chứ không im lặng coi như đã khớp.
-    const khoa = g.maHV ?? `SDT:${g.sdt ?? ""}|${g.hoTen ?? ""}`;
+    const ten = chuanTenSoSanh(g.hoTen);
+    // Thiếu SĐT thì lùi về gộp theo TÊN — và đánh dấu `canNguoiXem` chứ không im lặng
+    // coi như đã khớp. Đo thật: 4/136 giao dịch không có SĐT; bỏ chúng là bỏ tiền của
+    // một em.
+    const khoa = g.sdt ? `${g.sdt}|${ten}` : `NOSDT|${ten}`;
     const cu = map.get(khoa);
     if (cu) {
       cu.tongTien += g.hocPhi;
       cu.soDot += 1;
       cu.giaoDich.push(g);
       cu.hoTen = cu.hoTen ?? g.hoTen;
-      cu.sdt = cu.sdt ?? g.sdt;
+      cu.maHV = cu.maHV ?? g.maHV;
     } else {
       map.set(khoa, {
         maHV: g.maHV,
@@ -227,7 +275,7 @@ export function gopTheoHocVien(gd: GiaoDichSheet[]): HocVienGop[] {
         sdt: g.sdt,
         tongTien: g.hocPhi,
         soDot: 1,
-        canNguoiXem: g.maHV == null,
+        canNguoiXem: g.sdt == null,
         giaoDich: [g],
       });
     }
