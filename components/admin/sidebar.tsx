@@ -276,6 +276,9 @@ const NAV_GROUPS: NavGroup[] = [
       // app/(admin)/admin/payments/page.tsx. Đừng thu lại còn mỗi payments:manage.
       { label: "Thanh toán", href: "/payments", icon: CreditCard, perm: ["payments:manage", "payments:record"] },
       { label: "Công nợ", href: "/cong-no", icon: Wallet, perm: ["payments:manage", "payments:view"] },
+      // Nhóm HV chốt hàng loạt mà chưa nhập tiền: có ghi danh nhưng KHÔNG có đơn/khoản thu
+      // (nhánh allowNoPayment của bulk-convert). Không màn nào khác nhìn thấy nhóm này.
+      { label: "Thiếu học phí", href: "/thieu-hoc-phi", icon: Wallet, perm: ["payments:view", "payments:manage"] },
       // Đối soát tiền về từ SePay — nơi kiểm "máy đã tự xác nhận đúng chưa".
       { label: "Biến động số dư", href: "/bien-dong-so-du", icon: Wallet, perm: ["payments:manage", "payments:view"] },
       { label: "Hoàn tiền", href: "/hoan-tien", icon: Undo2, perm: ["payments:manage"] },

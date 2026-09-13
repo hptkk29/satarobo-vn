@@ -135,6 +135,8 @@ function fmtDate(d: string | Date): string {
   }).format(new Date(d));
 }
 
+import { BulkBackfillConfirm } from "./bulk-backfill-confirm";
+
 export function PaymentsClient({
   initialRows,
   orders,
@@ -180,6 +182,9 @@ export function PaymentsClient({
 
   return (
     <div className="space-y-6">
+      {/* Xác nhận hàng loạt khoản nhập liệu ban đầu — chỉ hiện cho người có quyền xác
+          nhận (cùng cổng `payments:confirm` với nút xác nhận từng khoản). */}
+      {canConfirm && <BulkBackfillConfirm />}
       {canRecord && (
         <div>
           <Button
