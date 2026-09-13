@@ -35,7 +35,13 @@ import { goiZalocrm } from "./client";
 import { ghiNhatKyZalocrm, providerLogKey } from "./log";
 
 /** Đường dẫn API danh sách nick trên máy chủ ZaloCRM (fork). */
-export const DUONG_DAN_DANH_SACH_NICK = "/api/v1/zalo-accounts";
+// 🔴 ĐƯỜNG `/api/public/*`, KHÔNG PHẢI `/api/v1/*` (sửa 13/09/2026). Bản đầu trỏ vào
+// `/api/v1/zalo-accounts`, mà đường đó gác bằng JWT của người dùng còn Sata chỉ cầm khoá
+// API ⇒ mọi lượt đồng bộ nick trả **401** và màn Tích hợp chỉ hiện bảng rỗng. Hỏng câm:
+// `dongBoNick` nuốt lỗi gọi thành một dòng nhật ký, không ai thấy gì trên màn.
+// Đợt đối chiếu 06/09 chỉ soi HÌNH DẠNG payload của endpoint kia mà không thử XÁC THỰC —
+// đó là chỗ lọt. Endpoint public tương ứng do bản phái sinh thêm vào, trả cùng hình dạng.
+export const DUONG_DAN_DANH_SACH_NICK = "/api/public/zalo-accounts";
 
 /** Trần số dòng đọc lên màn. Ba cơ sở × vài nick — 200 là rộng rãi, và có trần. */
 const TRAN_DONG_BANG = 200;
