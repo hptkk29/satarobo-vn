@@ -167,6 +167,36 @@ prisma/
 - ⚠️ **Cờ `PAYMENT_LEDGER_V2` là cờ CHẾT — đừng lấy nó làm cổng quyết định [đo 13/09/2026].** `isPaymentLedgerV2Enabled()` có **0 đường gọi** trong mã chạy thật (`lib/flags.ts:168` là định nghĩa duy nhất, còn lại chỉ `lib/flags.test.ts`), và biến env **không tồn tại** trong 40 biến Production. Bật nó KHÔNG đổi hành vi gì — muốn cutover thì phải viết phần "nối cờ" (chuyển `lib/finance/debt.ts` + `lib/portal/billing-student.ts` + `lib/portal/dashboard.ts` + màn `/orders/[id]`, `/cong-no` sang đọc `PaymentRequest`) trước, đó là dự án riêng. Đo prod bằng workflow chỉ-đọc `shadow-compare-cong-no.yml` (`payments:shadow-compare` chạy ở máy dev là đo DB DEV, **không nói gì về prod**).
 - ❌ KHÔNG gõ tay tên bài vào `Lesson` để "sửa tên dự án". Nguồn tên buổi/dự án là 2 file marketing (`components/legacy-laptrinhrobot/_data/roadmap-5-years.ts` + `exam-roadmap.ts`) → `lib/lms/curriculum-sata.ts` → `prisma/seed-curriculum-sata.ts`; lần seed sau ghi đè. Nhãn buổi/tên gửi PH đi qua `deriveSessionLabel`/`deriveSessionProjectName`, đừng tự ghép chuỗi.
 
+## Mẫu test: LƯỚI GHIM MÃ NGUỒN [13/09/2026]
+
+Dùng khi luật cần khoá có dạng **"lời gọi này phải truyền tham số kia"** — loại luật mà
+test thuần KHÔNG chứng minh được, vì thứ cần kiểm là một lời gọi Prisma/hàm nội bộ chứ
+không phải giá trị trả về.
+
+Ca sinh ra mẫu này (`[DS-01b]`, `lib/payments/dung-sai-lam-tron.test.ts`): `deriveStatus`
+là hàm thuần và test nó bao nhiêu cũng xanh, trong khi con bug nằm ở chỗ
+`recomputeRequestStatuses` gọi nó với **hằng `0`** cho tham số `waived`. Test thuần viết
+kiểu nào cũng thành tautology.
+
+**Cách làm — bốn bước, đừng bỏ bước 3:**
+1. `readFileSync(resolve(process.cwd(), "<đường dẫn file>"))` — đọc chính mã nguồn.
+   (⚠️ `import.meta.url` trong cấu hình vitest của repo này **không** phải URL `file://`
+   nên `fileURLToPath` ném — dùng `process.cwd()`.)
+2. Assert bằng regex/parse trên chuỗi đó, kèm chú thích ghi rõ **mã TRƯỚC bản vá** trông
+   thế nào, để người đọc sau biết lưới đang chặn cái gì.
+3. **HOÀN NGUYÊN mã về bản cũ, chạy lại, chứng minh lưới ĐỎ** — rồi mới khôi phục bản vá.
+   Bỏ bước này thì không biết lưới có bắt được gì không; một regex viết sai vẫn xanh vĩnh
+   viễn và trông y hệt một lưới đang làm việc.
+4. Dán output đỏ vào commit message.
+
+Repo đã dùng lối "test đọc mã/chạy lint thật" ở `lib/eslint/*.test.ts` — đây là cùng họ,
+chỉ khác là không cần viết hẳn một ESLint rule cho một luật dùng đúng một chỗ.
+
+**Kèm mẫu GHIM BUG bằng `it.fails`:** bug đã đo được nhưng chưa tới lượt vá thì viết test
+mô tả hành vi ĐÚNG rồi đánh `it.fails`. Hôm nay nó xanh (thân test ném ⇒ CI không đỏ,
+không chặn merge của người khác); vá xong nó **đỏ**, buộc người vá gỡ ghim. `pnpm test:unit`
+đếm chúng ở dòng "expected fail". Đừng dùng `it.skip` — skip là quên, `it.fails` là hẹn.
+
 ## Workflow
 
 1. **Hiểu trước, code sau** — đọc CLAUDE.md + file liên quan; nếu unclear, ASK trước khi code.
