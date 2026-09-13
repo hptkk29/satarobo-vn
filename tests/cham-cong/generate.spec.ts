@@ -88,6 +88,10 @@ d("generateMonthAssignments — DB thật", () => {
   beforeEach(async () => {
     await db.staffTimeLog.deleteMany({ where: { userId } });
     await db.shiftAssignment.deleteMany({ where: { userId } });
+    // `DomainEvent` cũng phải dọn: ca "xem trước không xếp hàng tính lại" đếm bảng này, và
+    // 15 sự kiện do ca TRƯỚC để lại trông y hệt một lượt rò. (Đo thật: ca ấy đỏ với
+    // "expected 15 to be +0" trước khi thêm dòng dưới — luật 18, ngay trong file của chính mình.)
+    await db.domainEvent.deleteMany({ where: { dedupeKey: { contains: userId } } });
   });
 
   afterAll(async () => {
@@ -111,7 +115,7 @@ d("generateMonthAssignments — DB thật", () => {
     });
   }
 
-  const chay = () =>
+  const goi = (ghiThat: boolean) =>
     generate.generateMonthAssignments({
       db: db as unknown as Parameters<typeof generate.generateMonthAssignments>[0]["db"],
       periodKey: KY,
@@ -120,7 +124,11 @@ d("generateMonthAssignments — DB thật", () => {
       actorUserId: actorId,
       onlyUserIds: [userId],
       homNay: HOM_NAY,
+      ghiThat,
     });
+
+  const chay = () => goi(true);
+  const xemTruoc = () => goi(false);
 
   // ── vế CHẶN: ngày hôm qua và HÔM NAY không đổi MỘT FIELD NÀO ────────────────────────
   it("ngày HÔM QUA (14/9) và HÔM NAY (15/9): không một field nào đổi, không dòng nào thêm", async () => {
@@ -201,5 +209,55 @@ d("generateMonthAssignments — DB thật", () => {
 
     const sau = await db.shiftAssignment.findUniqueOrThrow({ where: { id: donNghi.id } });
     expect(sau).toEqual(donNghi);
+  });
+
+  // ── XEM TRƯỚC: đếm đủ, KHÔNG ghi gì ────────────────────────────────────────────────
+  describe("ghiThat: false — xem trước", () => {
+    it("KHÔNG ghi một dòng nào, nhưng đếm ĐÚNG BẰNG lượt ghi thật", async () => {
+      await dungOCu(14); // ngày QUÁ KHỨ  → nhánh SKIP_QUA_KHU
+      // ⚠️ PHẢI có cả ô ở ngày TƯƠNG LAI: đó là ô duy nhất đi vào nhánh REPLACE, tức nhánh
+      // có câu `updateMany … status: CANCELLED`. Bản đầu của ca này chỉ dựng ngày 14, nên
+      // phép cấy "bỏ chặn `updateMany` của nhánh REPLACE" vẫn XANH — ca test không chạm tới
+      // câu lệnh ghi mà nó tưởng đang canh. (Luật 8: lượt cấy không đỏ phải hỏi có cấy trúng
+      // không — ở đây là ca test sai, không phải phép cấy sai.)
+      await dungOCu(20); // ngày TƯƠNG LAI → nhánh REPLACE
+      const truoc = await db.shiftAssignment.findMany({ where: { userId }, orderBy: { workDate: "asc" } });
+
+      const xem = await xemTruoc();
+
+      // 1. Không dấu vết nào trên bảng ô ca.
+      const sau = await db.shiftAssignment.findMany({ where: { userId }, orderBy: { workDate: "asc" } });
+      expect(sau, "xem trước KHÔNG được đổi một dòng nào").toEqual(truoc);
+
+      // 2. …cũng không để lại việc cho cron: `markAttendanceDaysDirtyMany` phải im.
+      //    Một dòng DomainEvent lọt ra là cron nhặt lên rồi tính lại một thứ chưa đổi.
+      expect(
+        await db.domainEvent.count({
+          where: { type: "hr.attendance_day_dirty", dedupeKey: { contains: userId } },
+        }),
+        "xem trước không được xếp hàng tính lại",
+      ).toBe(0);
+
+      // 3. Con số phải TRÙNG KHỚP lượt ghi thật ngay sau đó — nếu lệch thì bảng xem trước
+      //    đang hứa một chuyện và hệ thống làm một chuyện khác (luật 12).
+      const that = await chay();
+      expect(
+        { created: that.created, replaced: that.replaced, cleared: that.cleared, skippedPast: that.skippedPast, skippedProtected: that.skippedProtected },
+        "xem trước và ghi thật phải ra cùng bảy con số",
+      ).toEqual(
+        { created: xem.created, replaced: xem.replaced, cleared: xem.cleared, skippedPast: xem.skippedPast, skippedProtected: xem.skippedProtected },
+      );
+    });
+
+    it("`chiTiet` nói được ngày nào TẠO / BỎ QUA VÌ QUÁ KHỨ / BỎ QUA VÌ PROTECTED", async () => {
+      await dungOCu(14);
+      const xem = await xemTruoc();
+      const theoNgay = new Map(xem.chiTiet.map((c) => [c.ngay, c]));
+
+      expect(theoNgay.get("2026-09-14")).toMatchObject({ action: "SKIP_QUA_KHU", maCu: "CG", maMoi: "" });
+      expect(theoNgay.get("2026-09-16")).toMatchObject({ action: "CREATE", maCu: "", maMoi: "S" });
+      // Ngày quá khứ KHÔNG có ô thì không có dòng nào — không bày ra thứ chẳng xảy ra.
+      expect(theoNgay.has("2026-09-01")).toBe(false);
+    });
   });
 });

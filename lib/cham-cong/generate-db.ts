@@ -2,7 +2,7 @@
 // lập kế hoạch (generate.ts, thuần), ghi ShiftAssignment, xếp hàng tính lại. Không "use server".
 import type { Prisma, PrismaClient } from "@prisma/client";
 import type { PlaceToken, ShiftSegment } from "./catalog";
-import { planMonthFromPatterns, warnNoWeeklyRest, type ExistingCell, type PatternRow } from "./generate";
+import { planMonthFromPatterns, warnNoWeeklyRest, type ExistingCell, type PatternRow, type PlannedCell } from "./generate";
 import { resolvePlace, type CenterMap } from "./place";
 import { markAttendanceDaysDirtyMany } from "./recompute";
 
@@ -19,6 +19,8 @@ export type GenerateResult = {
   people: number;
   /** Ngày ≤ HÔM NAY bị chừa lại — lượt sinh lưới không chạm quá khứ và hôm nay. */
   skippedPast: number;
+  /** Từng ô một, để màn XEM TRƯỚC bày ra bảng. Cùng dữ liệu ở cả hai chế độ. */
+  chiTiet: DongKeHoach[];
   restWarnings: { userId: string; from: string; to: string }[];
   warnings: string[];
 };
@@ -27,6 +29,18 @@ function unitOfCenter(centerId: string, map: CenterMap): string {
   if (centerId === map.hoCenterId) return "HO";
   return Object.entries(map.byCode).find(([, c]) => c.centerId === centerId)?.[0] ?? "HO";
 }
+
+/** Một ô trong kế hoạch, đã rút gọn cho màn hình. */
+export type DongKeHoach = {
+  userId: string;
+  /** "YYYY-MM-DD". */
+  ngay: string;
+  action: PlannedCell["action"];
+  /** Mã đang có trên lưới (rỗng = chưa có ô nào). */
+  maCu: string;
+  /** Mã theo khung ca tuần (rỗng = khung không xếp gì ngày đó). */
+  maMoi: string;
+};
 
 export async function generateMonthAssignments(opts: {
   db: GenerateDb;
@@ -43,6 +57,21 @@ export async function generateMonthAssignments(opts: {
    * thứ không test được. Nơi gọi quyết định, và test truyền mốc cố định.
    */
   homNay: Date;
+  /**
+   * 🔴 GHI THẬT hay chỉ LẬP KẾ HOẠCH. BẮT BUỘC, không mặc định — luật 7.
+   *
+   * `false` ⇒ hàm đọc DB, dựng kế hoạch, đếm đủ bảy con số và trả `chiTiet`, nhưng **KHÔNG
+   * chạy một câu lệnh ghi nào**. Đó là chế độ màn XEM TRƯỚC dùng.
+   *
+   * Vì sao phải có: hàm này `CANCELLED` rồi tạo lại ô ca cho cả tháng, và trước 13/09/2026
+   * bảy con số kết quả **chỉ hiện SAU KHI ĐÃ GHI DB** — đúng hình dạng đã làm mất dữ liệu ở
+   * đường nhập file. Cùng khuôn với `previewImportAction`/`applyImportAction` và với
+   * `scripts/nhap-danh-muc-nen.ts` (`--apply`); KHÔNG dựng khuôn thứ ba.
+   *
+   * ⚠️ Đếm bằng CHÍNH vòng lặp ghi, chỉ chặn ở câu lệnh cuối — nếu xem trước có vòng đếm
+   * riêng thì sớm muộn hai bản lệch nhau, và người dùng tin bản mình đang nhìn (luật 12b).
+   */
+  ghiThat: boolean;
 }): Promise<GenerateResult> {
   const m = /^(\d{4})-(\d{2})$/.exec(opts.periodKey);
   if (!m) throw new Error(`periodKey không hợp lệ: ${opts.periodKey}`);
@@ -87,12 +116,22 @@ export async function generateMonthAssignments(opts: {
   const tpl = new Map(templates.map((t) => [t.code, t]));
 
   const plan = planMonthFromPatterns({ year, month1, patterns, existing, onlyUserIds: opts.onlyUserIds, homNay: opts.homNay });
-  const result: GenerateResult = { created: 0, replaced: 0, kept: 0, cleared: 0, skippedProtected: 0, skippedPast: 0, skippedNoPermission: 0, unknownCode: 0, people: userIds.length, restWarnings: [], warnings: [] };
+  const result: GenerateResult = { created: 0, replaced: 0, kept: 0, cleared: 0, skippedProtected: 0, skippedPast: 0, skippedNoPermission: 0, unknownCode: 0, people: userIds.length, chiTiet: [], restWarnings: [], warnings: [] };
+  const ghi = opts.ghiThat;
   const changed: { userId: string; workDate: Date }[] = [];
 
   for (const cell of plan) {
     const key = `${cell.userId}|${cell.workDate.toISOString().slice(0, 10)}`;
     const ex = existingId.get(key);
+    // Ghi `chiTiet` ở ĐÂY, đầu vòng lặp, cho MỌI ô và MỌI chế độ — một chỗ duy nhất, nên
+    // bảng xem trước và kết quả ghi thật không bao giờ kể hai câu chuyện khác nhau.
+    result.chiTiet.push({
+      userId: cell.userId,
+      ngay: key.split("|")[1],
+      action: cell.action,
+      maCu: ex?.templateCode ?? "",
+      maMoi: cell.action === "SKIP_QUA_KHU" || cell.action === "SKIP_PROTECTED" || cell.action === "CLEAR" ? "" : cell.code,
+    });
     if (cell.action === "SKIP_PROTECTED") {
       result.skippedProtected += 1;
       continue;
@@ -109,7 +148,7 @@ export async function generateMonthAssignments(opts: {
     }
     if (cell.action === "CLEAR") {
       if (ex && opts.canWriteCenter(ex.centerId)) {
-        await opts.db.shiftAssignment.updateMany({ where: { id: ex.id }, data: { status: "CANCELLED" } });
+        if (ghi) await opts.db.shiftAssignment.updateMany({ where: { id: ex.id }, data: { status: "CANCELLED" } });
         result.cleared += 1;
         changed.push({ userId: cell.userId, workDate: cell.workDate });
       } else if (ex) result.skippedNoPermission += 1;
@@ -131,10 +170,10 @@ export async function generateMonthAssignments(opts: {
         result.skippedNoPermission += 1;
         continue;
       }
-      await opts.db.shiftAssignment.updateMany({ where: { id: ex.id }, data: { status: "CANCELLED" } });
+      if (ghi) await opts.db.shiftAssignment.updateMany({ where: { id: ex.id }, data: { status: "CANCELLED" } });
     }
     const orgUnitId = place.centerId === opts.centerMap.hoCenterId ? null : (Object.values(opts.centerMap.byCode).find((c) => c.centerId === place.centerId)?.orgUnitId ?? null);
-    await opts.db.shiftAssignment.create({
+    if (ghi) await opts.db.shiftAssignment.create({
       data: {
         userId: cell.userId,
         centerId: place.centerId,
@@ -159,6 +198,8 @@ export async function generateMonthAssignments(opts: {
     changed.push({ userId: cell.userId, workDate: cell.workDate });
   }
   result.restWarnings = warnNoWeeklyRest(plan);
-  await markAttendanceDaysDirtyMany(changed, { reason: "generate" });
+  // Xếp hàng tính lại chỉ khi ĐÃ GHI. Chế độ xem trước không được để lại dấu vết nào —
+  // kể cả một dòng `DomainEvent`, vì cron sẽ nhặt nó lên và tính lại một thứ chưa đổi.
+  if (ghi) await markAttendanceDaysDirtyMany(changed, { reason: "generate" });
   return result;
 }

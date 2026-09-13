@@ -237,6 +237,7 @@ async function main() {
       // kỳ trước, và màn nghiệm thu lại về EmptyState — đúng cái file này sinh ra để chữa.
       // Cổng "chỉ áp từ ngày mai" là luật cho NGƯỜI BẤM NÚT, không phải cho máy dựng dữ liệu.
       homNay: new Date(0),
+      ghiThat: true,
     });
     console.log(
       `[demo] lưới ${ky}: +${r.created} tạo · ${r.replaced} thay · ${r.kept} giữ · ${r.skippedProtected} chừa (ô do đơn/sửa tay)`,

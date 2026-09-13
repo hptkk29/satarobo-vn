@@ -384,8 +384,19 @@ const genSchema = z.object({
 });
 
 /** Sinh lưới tháng từ khung ca cho các khối được chọn. Không đè ô đã sửa tay / đơn / file. */
-export async function generateMonthAction(
+/**
+ * 🔴 LÕI DÙNG CHUNG cho XEM TRƯỚC và GHI THẬT — một thân hàm, hai cửa.
+ *
+ * Vì sao KHÔNG chép thành hai action: cổng quyền + cổng kỳ ĐÃ CHỐT nằm trong đây. Một bản
+ * xem trước thiếu cổng sẽ hứa một kết quả mà lượt ghi thật từ chối — tức là lại một affordance
+ * nói dối (luật 12). Xem trước phải dự đoán ĐÚNG thứ sắp xảy ra, nên nó đi qua ĐÚNG các cổng.
+ *
+ * Chỉ ba thứ khác nhau giữa hai chế độ, và đều nằm ở CUỐI: câu lệnh ghi (chặn trong
+ * `generateMonthAssignments` bằng `ghiThat`), dòng audit, và `revalidatePath`.
+ */
+async function chayGenerate(
   input: unknown,
+  ghiThat: boolean,
 ): Promise<Res<GenerateResult>> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
@@ -455,8 +466,11 @@ export async function generateMonthAction(
     centerIds: [...allowed],
     canWriteCenter: (c) => allowed.has(c),
     actorUserId: session.user.id,
+    ghiThat,
   });
-  await writeAudit({
+  // Audit CHỈ khi ghi thật — một lượt xem trước không đổi gì thì không có gì để ghi vào sổ,
+  // và nhét nó vào là làm loãng đúng cái sổ người ta mở ra để tìm "ai đã đổi lưới".
+  if (ghiThat) await writeAudit({
     actor: { id: session.user.id, name: session.user.name ?? "" },
     module: "hr_attendance",
     entityType: "ShiftAssignment",
@@ -489,7 +503,7 @@ export async function generateMonthAction(
       )
     : new Map<string, string>();
 
-  revalidatePath("/cham-cong/phan-ca");
+  if (ghiThat) revalidatePath("/cham-cong/phan-ca");
   return {
     ok: true,
     data: {
@@ -500,4 +514,20 @@ export async function generateMonthAction(
       })),
     },
   };
+}
+
+/**
+ * XEM TRƯỚC — đọc DB, dựng kế hoạch, trả đủ bảy con số + `chiTiet` từng ô. **KHÔNG ghi gì.**
+ *
+ * Đây là MẶC ĐỊNH của nút "Sinh lưới từ khung": `generateMonthAssignments` huỷ rồi tạo lại ô
+ * ca cho cả tháng, và trước 13/09/2026 bảy con số ấy chỉ hiện SAU KHI ĐÃ GHI — đúng hình dạng
+ * đã làm mất dữ liệu ở đường nhập file. Cùng khuôn `previewImportAction`/`applyImportAction`.
+ */
+export async function xemTruocSinhLuoiAction(input: unknown): Promise<Res<GenerateResult>> {
+  return chayGenerate(input, false);
+}
+
+/** GHI THẬT — bước xác nhận THỨ HAI, sau khi người dùng đã đọc bảng xem trước. */
+export async function generateMonthAction(input: unknown): Promise<Res<GenerateResult>> {
+  return chayGenerate(input, true);
 }
