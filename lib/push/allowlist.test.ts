@@ -2,7 +2,7 @@
 //
 // 13/09/2026 — danh sách chuyển từ HẰNG SỐ sang tham số vận hành (`push.tienToDuocDay`), nên
 // bộ này đổi vai: nó không còn chốt "đang bật loại nào" (câu đó nay do người vận hành trả lời
-// ở `/admin/cau-hinh-thong-bao-day`), mà chốt LUẬT KHỚP — thứ vẫn nằm trong mã và vẫn phải
+// ở `/admin/cau-hinh-van-hanh`), mà chốt LUẬT KHỚP — thứ vẫn nằm trong mã và vẫn phải
 // đúng dù danh sách có đổi thế nào. Phần kiểm giá trị mặc định vẫn giữ, xem ca đầu.
 
 import { describe, expect, it } from "vitest";

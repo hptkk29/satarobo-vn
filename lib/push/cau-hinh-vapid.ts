@@ -3,7 +3,7 @@ import "server-only";
 // lib/push/cau-hinh-vapid.ts — đọc + gác cấu hình VAPID từ biến môi trường.
 //
 // ── VÌ SAO TÁCH RA KHỎI `engine.ts` (13/09/2026) ────────────────────────────────────────
-// Màn `/admin/cau-hinh-thong-bao-day` phải trả lời được câu "chọn xong rồi thì có ai nhận
+// Màn `/admin/cau-hinh-van-hanh` phải trả lời được câu "chọn xong rồi thì có ai nhận
 // không". Câu đó có BA vế: công tắc tổng, khoá VAPID, và danh sách loại. Nếu màn hình tự kiểm
 // khoá bằng cách gọi lại ba hàm validate rời rạc thì nó sẽ nói "khoá đã khai ✓" đúng vào ca
 // nguy hiểm nhất — hai nửa khoá KHÔNG khớp nhau — vì phép so cặp chỉ nằm trong engine.

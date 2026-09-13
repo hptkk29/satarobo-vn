@@ -357,7 +357,7 @@ export const SETTINGS = {
   //
   // Trước 13/09/2026 danh sách này là HẰNG SỐ trong `lib/push/allowlist.ts`, nên "đổi loại
   // nào được rung máy" là một lần sửa mã + deploy. Nay nó là tham số vận hành: sửa ở
-  // `/admin/cau-hinh-thong-bao-day`, có lý do, có nhật ký kiểm toán, không cần deploy.
+  // `/admin/cau-hinh-van-hanh`, có lý do, có nhật ký kiểm toán, không cần deploy.
   //
   // ⚠️ VẪN LÀ DANH SÁCH TRẮNG — rỗng nghĩa là KHÔNG đẩy gì, không phải "đẩy tất". Toàn bộ lập
   // luận vì sao trắng-chứ-không-đen nằm ở đầu `lib/push/allowlist.ts`; đừng đảo ở đây.

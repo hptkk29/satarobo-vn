@@ -25,7 +25,7 @@
 // ── 13/09/2026 — DANH SÁCH CHUYỂN TỪ HẰNG SỐ SANG THAM SỐ VẬN HÀNH ────────────────────
 // Trước đây danh sách là `const` ở ngay file này, nên mỗi lần đổi ý là một lần sửa mã + chờ
 // deploy — và chẳng ai ngoài dev đổi được. Nay nó nằm ở `push.tienToDuocDay` (SystemSetting),
-// sửa trên `/admin/cau-hinh-thong-bao-day` có lý do + nhật ký kiểm toán.
+// sửa trên `/admin/cau-hinh-van-hanh` có lý do + nhật ký kiểm toán.
 //
 // Hằng dưới đây KHÔNG còn là "danh sách đang chạy" — nó là GIÁ TRỊ MẶC ĐỊNH khi chưa ai cấu
 // hình gì (registry `default`). Đừng đọc nó để trả lời câu "hiện đang đẩy loại nào".
