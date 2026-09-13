@@ -161,6 +161,9 @@ export default async function CenterReportPage({
         />
         <Stat
           label="Đã hoàn"
+          // R-13 — `refundedAmount` nay là ĐỘ LỚN (dương). Trước 13/09/2026 nó cộng dồn
+          // `amount` ÂM của dòng REFUNDED, nên `> 0` KHÔNG BAO GIỜ đúng ⇒ cảnh báo chết
+          // vĩnh viễn và ô này hiện số âm.
           value={vnd(finance.refundedAmount)}
           tone={finance.refundedAmount > 0 ? "warn" : "neutral"}
         />
@@ -336,14 +339,20 @@ async function computeTrungTamReport(actor: Actor, filters: ReportFilters) {
       amount: true,
       accountantStatus: true,
       paidDate: true,
+      // R-13 (13/09/2026) — BẮT BUỘC: thiếu `id`/`adjustmentOfId` thì không biết một
+      // khoản CONFIRMED đã bị dòng ĐIỀU CHỈNH thay hay chưa, và bản gốc bị đếm bằng số CŨ.
+      id: true,
+      adjustmentOfId: true,
     },
     take: 5000,
   });
   const payments: PaymentRecord[] = paymentRows.map((p) => ({
+    id: p.id,
     centerId: p.centerId,
     amount: p.amount,
     accountantStatus: p.accountantStatus,
     paidDate: p.paidDate,
+    adjustmentOfId: p.adjustmentOfId,
   }));
 
   // 2. Lớp trong phạm vi → map classId→centerId. Enrollment KHÔNG có centerId nên

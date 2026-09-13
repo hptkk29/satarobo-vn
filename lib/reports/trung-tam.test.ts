@@ -29,12 +29,21 @@ describe("[R7-17] receivableOf", () => {
   });
 });
 
+let _seq = 0;
 const pay = (
   centerId: string | null,
   amount: number,
   accountantStatus: string,
   paidDate: string,
-): PaymentRecord => ({ centerId, amount, accountantStatus, paidDate: new Date(paidDate) });
+  adjustmentOfId: string | null = null,
+): PaymentRecord => ({
+  id: `p${++_seq}`,
+  centerId,
+  amount,
+  accountantStatus,
+  paidDate: new Date(paidDate),
+  adjustmentOfId,
+});
 
 const enr = (
   studentId: string,
@@ -55,17 +64,20 @@ describe("[R7-17] summarizeFinance", () => {
       pay("c1", 5_000_000, "CONFIRMED", "2026-01-05T02:00:00Z"),
       pay("c1", 3_000_000, "CONFIRMED", "2026-02-05T02:00:00Z"),
       pay("c1", 2_000_000, "PENDING", "2026-02-06T02:00:00Z"),
-      pay("c1", 1_000_000, "REFUNDED", "2026-02-07T02:00:00Z"),
+      // ⚠️ 13/09/2026 — fixture cũ để REFUNDED = +1.000.000 (SỐ DƯƠNG), KHÔNG khớp mã
+      // thật: `refundPayment` ghi `amount: -refundAbs`. Chính fixture sai này là lý do
+      // R-13 sống được lâu — test xanh trên một hình dạng dữ liệu không tồn tại.
+      pay("c1", -1_000_000, "REFUNDED", "2026-02-07T02:00:00Z"),
       pay("c1", 9_999, "REJECTED", "2026-02-08T02:00:00Z"),
     ];
     const enrollments = [enr("s1", "c1", 7_000_000), enr("s2", "c1", 6_000_000)];
     const f = summarizeFinance(payments, enrollments);
-    expect(f.confirmedRevenue).toBe(8_000_000);
+    expect(f.confirmedRevenue).toBe(7_000_000); // 5tr + 3tr − 1tr hoàn
     expect(f.pendingRevenue).toBe(2_000_000);
-    expect(f.refundedAmount).toBe(1_000_000);
+    expect(f.refundedAmount).toBe(1_000_000); // độ lớn, không phải số âm
     expect(f.confirmedCount).toBe(2);
     expect(f.totalReceivable).toBe(13_000_000);
-    expect(f.debt).toBe(5_000_000); // 13tr - 8tr
+    expect(f.debt).toBe(6_000_000); // 13tr − 7tr
   });
 
   it("kỳ rỗng → tất cả 0 (không lỗi)", () => {
@@ -175,5 +187,94 @@ describe("[R7-17] summarizeRetention", () => {
       totalEnrollments: 0,
       retentionRate: 0,
     });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// R-13 — `summarizeFinance` MÙ với 2/5 trạng thái kế toán, trong đó có HOÀN TIỀN.
+//
+// Đo mã thật 13/09/2026:
+//  · `refundPayment` (lib/finance/payment.ts) tạo dòng MỚI `amount: -refundAbs` +
+//    `accountantStatus: "REFUNDED"` + `adjustmentOfId: <gốc>`. Bản gốc GIỮ NGUYÊN CONFIRMED.
+//  · `adjustPayment` tạo dòng MỚI với số ĐÚNG + `accountantStatus: "ADJUSTED"` +
+//    `adjustmentOfId: <gốc>`. Bản gốc cũng GIỮ NGUYÊN CONFIRMED.
+//
+// Hệ quả trước bản vá:
+//  (1) `confirmedRevenue` KHÔNG trừ hoàn tiền ⇒ ô "Đã thu" không bao giờ giảm dù hoàn
+//      bao nhiêu lần.
+//  (2) `refundedAmount` cộng dồn số ÂM ⇒ ô "Đã hoàn" hiện số âm, và `page.tsx` gác
+//      `refundedAmount > 0` nên CẢNH BÁO KHÔNG BAO GIỜ BẬT.
+//  (3) `ADJUSTED` bị bỏ qua hoàn toàn ⇒ bản gốc vẫn được đếm bằng số CŨ sau khi sửa.
+//
+// ⚠️ Test cũ `[R7-17] summarizeFinance` dùng REFUNDED = +1.000.000 (số DƯƠNG) — fixture
+// đó không khớp mã thật, và đó là lý do lỗi sống được lâu.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe("[R13-01] summarizeFinance — hoàn tiền phải TRỪ khỏi 'đã thu'", () => {
+  it("hoàn đủ một khoản → đã thu về 0, đã hoàn là số DƯƠNG", () => {
+    const goc = pay("c1", 9_000_000, "CONFIRMED", "2026-01-05T02:00:00Z");
+    const hoan = pay("c1", -9_000_000, "REFUNDED", "2026-02-01T02:00:00Z", goc.id);
+    const f = summarizeFinance([goc, hoan], [enr("s1", "c1", 9_000_000)]);
+    expect(f.confirmedRevenue).toBe(0);
+    expect(f.refundedAmount).toBe(9_000_000); // độ lớn, không phải số âm
+    expect(f.debt).toBe(9_000_000); // hoàn rồi thì lại thành nợ
+  });
+
+  it("hoàn một PHẦN → đã thu còn phần giữ lại", () => {
+    const goc = pay("c1", 9_000_000, "CONFIRMED", "2026-01-05T02:00:00Z");
+    const hoan = pay("c1", -2_000_000, "REFUNDED", "2026-02-01T02:00:00Z", goc.id);
+    const f = summarizeFinance([goc, hoan], [enr("s1", "c1", 9_000_000)]);
+    expect(f.confirmedRevenue).toBe(7_000_000);
+    expect(f.refundedAmount).toBe(2_000_000);
+  });
+
+  it("ô 'Đã hoàn' phải > 0 để cảnh báo trên màn bật được", () => {
+    // page.tsx gác `refundedAmount > 0`. Trả số âm là cảnh báo chết vĩnh viễn.
+    const goc = pay("c1", 1_000_000, "CONFIRMED", "2026-01-05T02:00:00Z");
+    const f = summarizeFinance([goc, pay("c1", -1_000_000, "REFUNDED", "2026-02-01T02:00:00Z", goc.id)], []);
+    expect(f.refundedAmount).toBeGreaterThan(0);
+  });
+});
+
+describe("[R13-02] summarizeFinance — ĐIỀU CHỈNH phải thay số, không cộng thêm", () => {
+  it("gõ sai 100tr rồi điều chỉnh về 10tr → đã thu là 10tr, KHÔNG phải 110tr hay 100tr", () => {
+    const goc = pay("c1", 100_000_000, "CONFIRMED", "2026-01-05T02:00:00Z");
+    const sua = pay("c1", 10_000_000, "ADJUSTED", "2026-01-06T02:00:00Z", goc.id);
+    const f = summarizeFinance([goc, sua], [enr("s1", "c1", 10_000_000)]);
+    expect(f.confirmedRevenue).toBe(10_000_000);
+    expect(f.debt).toBe(0);
+  });
+
+  it("khoản CONFIRMED không bị điều chỉnh thì vẫn đếm bình thường", () => {
+    const a = pay("c1", 5_000_000, "CONFIRMED", "2026-01-05T02:00:00Z");
+    const b = pay("c1", 3_000_000, "CONFIRMED", "2026-01-06T02:00:00Z");
+    const sua = pay("c1", 1_000_000, "ADJUSTED", "2026-01-07T02:00:00Z", b.id);
+    const f = summarizeFinance([a, b, sua], []);
+    expect(f.confirmedRevenue).toBe(6_000_000); // 5tr + 1tr (b bị thay)
+  });
+
+  it("REJECTED vẫn không được đếm vào đâu cả", () => {
+    const f = summarizeFinance([pay("c1", 9_999, "REJECTED", "2026-02-08T02:00:00Z")], []);
+    expect(f.confirmedRevenue).toBe(0);
+    expect(f.pendingRevenue).toBe(0);
+    expect(f.refundedAmount).toBe(0);
+  });
+});
+
+describe("[R13-03] revenueByCenter — cùng luật, không lệch với bảng tổng", () => {
+  it("hoàn tiền + điều chỉnh phản ánh đúng theo từng cơ sở", () => {
+    const g1 = pay("c1", 9_000_000, "CONFIRMED", "2026-01-05T02:00:00Z");
+    const h1 = pay("c1", -9_000_000, "REFUNDED", "2026-02-01T02:00:00Z", g1.id);
+    const g2 = pay("c2", 100_000_000, "CONFIRMED", "2026-01-05T02:00:00Z");
+    const s2 = pay("c2", 8_000_000, "ADJUSTED", "2026-01-06T02:00:00Z", g2.id);
+    const rows = revenueByCenter([g1, h1, g2, s2], [enr("s1", "c1", 9_000_000), enr("s2", "c2", 8_000_000)]);
+    const c1 = rows.find((r) => r.centerId === "c1");
+    expect(c1?.confirmed).toBe(0);
+    const c2 = rows.find((r) => r.centerId === "c2");
+    expect(c2?.confirmed).toBe(8_000_000);
+
+    // Bất biến: tổng theo cơ sở phải bằng bảng tổng — hai bên cùng một luật.
+    const tong = summarizeFinance([g1, h1, g2, s2], []);
+    expect(rows.reduce((s, r) => s + r.confirmed, 0)).toBe(tong.confirmedRevenue);
   });
 });
