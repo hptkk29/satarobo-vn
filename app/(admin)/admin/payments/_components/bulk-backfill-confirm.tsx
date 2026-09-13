@@ -208,25 +208,43 @@ export function BulkBackfillConfirm() {
               <p className="mt-1 text-xs leading-relaxed text-state-info-ink">
                 Khối này chỉ xác nhận khoản ĐÃ nhập. Nhập học phí cũ bằng một trong hai đường:
               </p>
-              <ul className="mt-2 space-y-1 text-xs leading-relaxed text-state-info-ink">
+              <ol className="mt-2 space-y-1 text-xs leading-relaxed text-state-info-ink">
+                {/* Đường nhập tiền cũ là HAI BƯỚC, và bước ghi tiền là bước 2. Bản đầu
+                    của khối này chỉ tay sang /leads/import/registered — màn đó nhập
+                    DANH SÁCH lead, KHÔNG có ô tiền nào (đo: grep amount/paid trong
+                    leads/import/registered/page.tsx ra 0 dòng) — nên người làm theo
+                    sẽ nhập xong danh sách rồi quay lại đây thấy vẫn 0 khoản. */}
                 <li>
-                  •{" "}
+                  <b className="font-semibold">1.</b>{" "}
                   <a
                     href="/leads/import/registered"
                     className="font-semibold underline underline-offset-2"
                   >
-                    Nhập từ file Excel
+                    Nhập danh sách từ file Excel
                   </a>{" "}
-                  — cả sheet nhiều tháng, có bước xem thử từng dòng.
+                  — cả sheet nhiều tháng, có bước xem thử từng dòng. Bước này CHƯA ghi
+                  tiền.
                 </li>
                 <li>
-                  •{" "}
+                  <b className="font-semibold">2.</b>{" "}
+                  <a
+                    href="/leads/bulk-convert"
+                    className="font-semibold underline underline-offset-2"
+                  >
+                    Chốt hàng loạt
+                  </a>{" "}
+                  — điền ô <b>&quot;Đã đóng (đ) · ngày&quot;</b> cho từng phụ huynh (có
+                  nút điền sẵn theo số trong file Excel). ĐÂY là bước sinh khoản thu để
+                  xác nhận ở màn này.
+                </li>
+                <li>
+                  <b className="font-semibold">Hoặc:</b>{" "}
                   <a href="/thieu-hoc-phi" className="font-semibold underline underline-offset-2">
                     Thiếu học phí
                   </a>{" "}
-                  — từng phụ huynh một, nhập được cả giảm giá và phần còn nợ.
+                  — từng phụ huynh một, nhập được cả loại đơn, giảm giá và phần còn nợ.
                 </li>
-              </ul>
+              </ol>
             </div>
           ) : xemThu.soNhan === 0 ? (
             <div className="rounded-xl border border-state-warning bg-state-warning-soft px-4 py-3">
