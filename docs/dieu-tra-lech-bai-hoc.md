@@ -1939,3 +1939,10 @@ và đó là cách duy nhất thử đường trích dữ liệu trước khi ti
 
 Chỉ phủ bộ Vitest. Playwright chạy tiến trình riêng nên `vi.useFakeTimers` không tới — nhưng
 khoảng hở đó **không bỏ ngỏ**, lưới #1 phủ bằng hình dạng lời gọi (xem §7.1).
+
+> **13/09 — `--apply` CHƯA chạy được: máy này không có chuỗi prod quyền GHI.** Kho biến môi
+> trường local chỉ có hai chuỗi dùng được: một trỏ **dev** (`mqvojwccdhqbagfnjhfo`) và một trỏ
+> **prod CHỈ-ĐỌC** (`satarobo_readonly@pbwvcljbbvrmcxaupdey`). Chạy với chuỗi dev là dọn nhầm
+> DB dev — vốn dùng chung với `test.satarobo.vn`; chạy với chuỗi chỉ-đọc thì `updateMany` bị
+> từ chối **sau khi** đã ghi dump và CSV. Cổng "đối chiếu dòng `Đích`" trong runbook chính là
+> thứ chặn lại ở đây. Chờ chủ dự án cấp chuỗi ghi, hoặc tự chạy lệnh.
