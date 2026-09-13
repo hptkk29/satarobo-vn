@@ -17,6 +17,7 @@ import { getSetting } from "@/lib/settings/service";
 import { vnDateAt, vnWeekday } from "@/lib/time/vn";
 import { HO_CENTER_ID, loadCenterMap } from "./home-center";
 import { recomputeRange } from "./recompute";
+import { gopNgayCong } from "./tong-hop-cong";
 import { thongKeNguoi, type NoiQuyRules, type ThongKeNguoi } from "./noi-quy";
 import { chanChotKyThieuBuoi } from "./ky-gac";
 
@@ -146,7 +147,15 @@ export type PeriodPersonRow = {
   workedMinutes: number;
   expectedMinutes: number;
   lateCount: number;
+  /** Σ phút đến muộn. Có VÌ phạt (mục 3) tính được theo lần HOẶC theo phút — bày một vế là
+   *  ép người đọc suy vế kia, và 2 lần × 3′ khác hẳn 2 lần × 90′. */
+  lateMinutes: number;
   earlyLeaveCount: number;
+  earlyLeaveMinutes: number;
+  /** Số NGÀY có phút làm > 0. KHÁC `noiQuy.caThucTe` — cái kia đo bằng ĐƠN VỊ CÔNG. */
+  workedDays: number;
+  /** Số NGÀY được xếp ca làm việc. KHÁC `noiQuy.caQuyDinh` — cùng lý do. */
+  scheduledDays: number;
   missingTapDays: number;
   overrideDays: number;
   flaggedDays: number;
@@ -180,20 +189,6 @@ export type PeriodSummary = {
   };
 };
 
-const WARN_FLAGS = new Set([
-  "KHONG_CO_LUOT",
-  "THIEU_LUOT_RA",
-  "RA_KHONG_CO_VAO",
-  "THIEU_BUOI_SANG",
-  "THIEU_BUOI_CHIEU",
-  "NGOAI_VUNG",
-  "SAI_NOI_LAM",
-  "THIEU_GIO",
-  "DI_MUON",
-  "VE_SOM",
-  "CHAM_NGOAI_LICH",
-  "VUOT_TRAN",
-]);
 
 export async function buildPeriodSummary(
   centerId: string,
@@ -295,7 +290,11 @@ export async function buildPeriodSummary(
         workedMinutes: 0,
         expectedMinutes: 0,
         lateCount: 0,
+        lateMinutes: 0,
         earlyLeaveCount: 0,
+        earlyLeaveMinutes: 0,
+        workedDays: 0,
+        scheduledDays: 0,
         missingTapDays: 0,
         overrideDays: 0,
         flaggedDays: 0,
@@ -304,30 +303,31 @@ export async function buildPeriodSummary(
         grid,
         unitsByDay,
       };
+      // Phép GỘP nay nằm ở `tong-hop-cong.ts` (thuần) để site giáo viên gọi được đúng phép
+      // tính này cho MỘT người — trước đó nó inline ở đây, nên site GV không gọi được và đã
+      // ba lần tự cộng lại rồi lệch (luật 12b). Vòng lặp còn lại chỉ dựng LƯỚI, không cộng số.
+      const gop = gopNgayCong(mine);
       for (const d of mine) {
         const ymd = d.workDate.toISOString().slice(0, 10);
-        const units = d.overrideUnits ?? d.dayCreditEarned;
-        unitsByDay[ymd] = units;
         if (!grid[ymd] && d.templateCode) grid[ymd] = d.templateCode;
-        row.units += units;
-        row.expectedUnits += d.dayCreditExpected;
-        row.leaveUnits += d.leaveUnits;
-        row.holidayPaidUnits += d.holidayPaidUnits;
-        row.hourCredit += d.hourCredit;
-        row.workedMinutes += d.workedMinutes;
-        row.expectedMinutes += d.expectedMinutes;
-        if (d.lateMinutes > 0) row.lateCount += 1;
-        if (d.earlyLeaveMinutes > 0) row.earlyLeaveCount += 1;
-        if (d.flags.includes("KHONG_CO_LUOT") && d.dayType === "WORK")
-          row.missingTapDays += 1;
-        if (d.overrideUnits != null) row.overrideDays += 1;
-        if (d.flags.some((f) => WARN_FLAGS.has(f))) row.flaggedDays += 1;
       }
-      row.units = round2(row.units);
-      row.leaveUnits = round2(row.leaveUnits);
-      row.holidayPaidUnits = round2(row.holidayPaidUnits);
-      row.hourCredit = round2(row.hourCredit);
-      row.expectedUnits = round2(row.expectedUnits);
+      Object.assign(unitsByDay, gop.unitsByDay);
+      row.units = gop.units;
+      row.expectedUnits = gop.expectedUnits;
+      row.leaveUnits = gop.leaveUnits;
+      row.holidayPaidUnits = gop.holidayPaidUnits;
+      row.hourCredit = gop.hourCredit;
+      row.workedMinutes = gop.workedMinutes;
+      row.expectedMinutes = gop.expectedMinutes;
+      row.lateCount = gop.lateCount;
+      row.lateMinutes = gop.latePhut;
+      row.earlyLeaveCount = gop.earlyLeaveCount;
+      row.earlyLeaveMinutes = gop.earlyLeavePhut;
+      row.missingTapDays = gop.missingTapDays;
+      row.overrideDays = gop.overrideDays;
+      row.flaggedDays = gop.flaggedDays;
+      row.workedDays = gop.ngayDaLam;
+      row.scheduledDays = gop.ngayCoCa;
       return row;
     })
     .sort((a, b) => a.name.localeCompare(b.name, "vi"));
