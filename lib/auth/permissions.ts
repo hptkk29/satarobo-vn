@@ -124,6 +124,13 @@ export type Action =
   | "hr_attendance:checkin"
   | "hr_attendance:view"
   | "hr_attendance:adjust"
+  // Module chấm công v3 (L1 · 06/09/2026) — kế hoạch §5. Khai đồng thời 4 nơi:
+  // union này + ma trận PERMISSIONS + lib/permissions/registry/hr.ts + prisma/seed-roles.ts.
+  | "hr_attendance:assign"
+  | "hr_attendance:approve"
+  | "hr_attendance:close-period"
+  | "hr_attendance:export"
+  | "hr_attendance:config"
 
   // --- Blog / News (existing + expanded) ---
   | "blog:view"
@@ -279,6 +286,7 @@ export type Action =
   | "payments:view" // 03/08 — chỉ XEM đối soát (Công nợ, Biến động số dư); không thao tác
   | "payments:record" // R7-04 — Sale ghi nhận khoản
   | "payments:confirm" // R7-04 — Kế toán xác nhận (tách nhiệm vụ)
+  | "payments:adjust" // 07/09 — ĐIỀU CHỈNH khoản thu (bút toán delta). Vai nghiệp vụ nhận ở v2
   | "payments:view-pii" // #15 (câu 32) — break-glass xem đầy đủ CCCD PH + địa chỉ (reason + audit)
   | "installments:approve" // FIX lead→payment→enroll (C4) — duyệt kế hoạch trả góp 2 đợt
   | "discounts:approve" // BGĐ 31/07 — duyệt giảm giá nhập tay (kèm giải trình)
@@ -411,17 +419,27 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // Đào tạo bị đá về /dashboard trước khi thấy được nút phân công. Seed v2 đã có, đây
   // là bản v1 — mà local/dev/CI chạy v1 (lib/flags.ts:8 mặc định OFF).
   "trials:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "TEACHER", "TRAINING"],
-  "trials:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
+  // ⚠️ 08/09/2026 — ĐẢO ranh giới chốt 23/08. Chủ dự án: "Đào tạo được sử dụng FULL
+  // quyền trong màn Lớp Trial."
+  //   ~~CỐ Ý KHÔNG cấp `trials:manage` cho TRAINING: quản lý toàn bộ GV ≠ điều hành
+  //     tuyển sinh lớp thử~~ **[ĐẢO 08/09]** — nay Đào tạo làm được MỌI việc trong màn
+  //     `/admin/lop-trial`: tạo lớp, thêm/bớt buổi, xếp & gỡ học viên, huỷ lớp.
+  // Ba khoá thêm cho TRAINING là ĐÚNG BỘ mà màn đó gác: `trials:manage` ·
+  // `trials:attendance` · `trials:override-capacity` (view + assign-teacher đã có).
+  // KHÔNG kèm `trials:config` (cấu hình số buổi — màn khác, vẫn của QLCS theo QĐ-T3b)
+  // và KHÔNG kèm `trials:feedback` (chấm phiếu nằm trọn ở site giáo viên; màn này chỉ
+  // ĐỌC phiếu và quyền đọc là `trials:view` — xem chú thích lop-trial/[id]/page.tsx:60).
+  "trials:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "TRAINING"],
   // GĐ4 (25/08/2026) — tách đôi theo ma trận đặc tả §8.2. Trước GĐ4 cả điểm danh lẫn
   // nộp phiếu đều dùng chung `trials:feedback`, nên Sale KHÔNG điểm danh được còn
   // giáo viên thì điểm danh được — ngược hẳn quy trình đã chốt.
   "trials:feedback": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
-  "trials:attendance": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
+  "trials:attendance": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "TRAINING"],
   // R7-02 — gán GV + override sĩ số chỉ quản lý cơ sở; cấu hình số buổi = Đào tạo/Admin.
   // GĐ3 (chủ dự án chốt câu 2, 25/08/2026): CHỐT giáo viên là việc của Đào tạo.
   // Sale chỉ ĐỀ XUẤT; Quản lý cơ sở giữ mọi việc trial còn lại.
   "trials:assign-teacher": ["SUPER_ADMIN", "TRAINING"],
-  "trials:override-capacity": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  "trials:override-capacity": ["SUPER_ADMIN", "CENTER_MANAGER", "TRAINING"],
   // FL W0 (QĐ-T1): cấu hình đào tạo/LMS = TRAINING (Đào tạo). CENTER_MANAGER chỉ xem nội dung LMS.
   "training:manage": ["SUPER_ADMIN", "TRAINING"],
   // 10/07 — BGĐ: "báo cáo của chức năng nào thì role chức năng đó xem". Ba báo cáo đào
@@ -466,9 +484,16 @@ export const PERMISSIONS: Record<Action, Role[]> = {
     "SUPER_ADMIN", "CENTER_MANAGER", "HR", "SALES_CSM", "TEACHER", "MARKETING", "ACCOUNTANT",
     "TRAINING",
   ],
-  "hr_attendance:view": ["SUPER_ADMIN", "CENTER_MANAGER", "HR"],
+  "hr_attendance:view": ["SUPER_ADMIN", "CENTER_MANAGER", "HR", "ACCOUNTANT"],
   // Chỉnh bản ghi công + duyệt yêu cầu chỉnh công (giới hạn thời gian áp ở action).
   "hr_attendance:adjust": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  // Module chấm công v3 (L1 · 06/09/2026) — kế hoạch §5. v1 là ma trận tĩnh chạy ở
+  // local/dev; scope CENTER/GLOBAL thật nằm ở seed-roles (v2, prod).
+  "hr_attendance:assign": ["SUPER_ADMIN", "CENTER_MANAGER", "HR"], // khung ca, lưới, import
+  "hr_attendance:approve": ["SUPER_ADMIN", "CENTER_MANAGER"], // duyệt đơn (Q-11, T-06)
+  "hr_attendance:close-period": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"], // chốt kỳ (Q-10)
+  "hr_attendance:export": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
+  "hr_attendance:config": ["SUPER_ADMIN", "CENTER_MANAGER", "HR", "ACCOUNTANT"], // danh mục ca, lễ + hệ số (T-04)
 
   // --- Blog / News ---
   "blog:view": [
@@ -672,6 +697,25 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "payments:view": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
   "payments:record": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT"],
   "payments:confirm": ["SUPER_ADMIN", "ACCOUNTANT"],
+  // ⚠️ 07/09/2026 — CHỈ SUPER_ADMIN Ở ĐÂY LÀ CỐ Ý, KHÔNG PHẢI SÓT.
+  //
+  // Vai nghiệp vụ (kế toán Hội sở + kế toán cơ sở) nhận `payments:adjust` DUY NHẤT ở
+  // RBAC v2 — `prisma/seed-roles.ts`. Prod đang bật `RBAC_V2_ENABLED` nên kế toán dùng
+  // được thật; máy dev/CI chạy v1 nên ở đó chỉ SUPER_ADMIN thấy nút. Chênh lệch đó là
+  // ĐÃ BIẾT, không phải bug: đừng "sửa cho khớp" bằng cách thêm ACCOUNTANT vào đây mà
+  // không hỏi — chủ dự án chốt giữ ma trận v1 nguyên trạng.
+  //
+  // Vì sao danh sách không được RỖNG: repo có bất biến "mọi action phải cấp cho
+  // SUPER_ADMIN", canh bằng `permissions.test.ts` ("SUPER_ADMIN phủ toàn bộ action
+  // (khớp bypass v2)"). `can()` v2 (lib/auth/can.ts:52) trả true VÔ ĐIỀU KIỆN cho
+  // SUPER_ADMIN, nên v1 thiếu SUPER_ADMIN là mỗi lượt admin chạm call-site đẻ một dòng
+  // `RbacShadowDiff` (v1=false, v2=true) và cổng `isSafeToEnableRbacV2` không bao giờ
+  // về 0.
+  //
+  // Lịch sử: từ 07/09 đến khi Bước 6 xanh, ô này còn kèm một CẦU DAO ở tầng tính năng
+  // (`lib/finance/cau-dao-dieu-chinh.ts`) chặn cả SUPER_ADMIN, vì ma trận không khoá
+  // được admin. Cầu dao đã gỡ ở Bước 7 — xem docs/dieu-chinh-khoan-thu.md.
+  "payments:adjust": ["SUPER_ADMIN"],
   // #15 (câu 32) — CCCD PH + địa chỉ mask mặc định; break-glass "Xem đầy đủ" (reason
   // ≥10 ký tự + audit) chỉ cho kế toán + admin. v2: HO_ACCOUNTANT GLOBAL,
   // CENTER_ACCOUNTANT CENTER (prisma/seed-roles.ts). KHÔNG mở cho CENTER_MANAGER.

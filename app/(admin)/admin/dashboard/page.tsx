@@ -16,6 +16,7 @@ import { SalesDashboard } from "./_components/sales-dashboard";
 import { AccountantDashboard } from "./_components/accountant-dashboard";
 import { MarketingDashboard, HrDashboard } from "./_components/marketing-hr-dashboards";
 import { PendingTasksSection } from "./_components/pending-tasks-section";
+import { NghiSapToi } from "./_components/nghi-sap-toi";
 
 // Đợt 3B/3C — Dashboard GỘP (union): hiển thị panel của TẤT CẢ vai trò user giữ.
 // Thứ tự: Quản lý → Giáo viên → Tư vấn → Kế toán → Marketing → Nhân sự.
@@ -120,6 +121,11 @@ export default async function DashboardPage() {
 
       {/* Module nhắc việc — khu "Cần xử lý" gom mọi nguồn theo quyền + cơ sở. */}
       <PendingTasksSection user={session.user} />
+
+      {/* Nghỉ sắp tới — THÔNG TIN, đặt NGOÀI khối "Cần xử lý" ngay trên. Nghỉ đã duyệt không
+          phải việc phải làm; nhét vào đó là thổi badge mỗi ngày và làm loãng đúng cái khối
+          tồn tại để nói "còn N việc chưa xong". Tự ẩn với người không duyệt đơn ở đâu cả. */}
+      <NghiSapToi userId={session.user.id} />
 
       {visiblePanels.map((p) => (
         <section key={p.key} className="space-y-4">

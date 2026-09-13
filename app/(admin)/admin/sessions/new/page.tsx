@@ -19,7 +19,7 @@ export default async function NewSessionPage({ searchParams }: Props) {
   const sdb = scopedDb(actor);
 
   const sp = await searchParams;
-  const [classes, lessons] = await Promise.all([
+  const [classes, lessons, categories] = await Promise.all([
     sdb.class.findMany({
       where: { deletedAt: null, isActive: true },
       orderBy: { name: "asc" },
@@ -43,6 +43,12 @@ export default async function NewSessionPage({ searchParams }: Props) {
       },
       take: 1000,
     }),
+    // Phân loại buổi đang dùng — danh mục dùng chung, KHÔNG scope theo cơ sở.
+    sdb.sessionCategory.findMany({
+      where: { isActive: true },
+      orderBy: [{ displayOrder: "asc" }, { code: "asc" }],
+      select: { id: true, name: true, isDefault: true },
+    }),
   ]);
 
   return (
@@ -64,6 +70,7 @@ export default async function NewSessionPage({ searchParams }: Props) {
           curriculumName: l.curriculum.name,
           courseId: l.curriculum.courseId,
         }))}
+        categories={categories}
       />
     </div>
   );

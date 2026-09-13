@@ -35,11 +35,50 @@ Direct connection `db.<ref>.supabase.co:5432` chỉ có **IPv6 AAAA record** —
   # dừng: & "$bin\bin\pg_ctl" -D "$bin\data" stop
   ```
   `trust` auth → password trong URL bị bỏ qua nhưng vẫn kết nối OK. Cùng port/DB nên `.env.test` không đổi.
-- **Env riêng cho test:** `.env.test` (đã `.gitignore`, KHÔNG commit):
-  ```
-  DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/satarobo_test"
-  DIRECT_URL="postgresql://postgres:postgres@127.0.0.1:5432/satarobo_test"
-  ```
+- **Env riêng cho test:** `.env.test` (đã `.gitignore`, KHÔNG commit).
+  ⚠️ **KHÔNG PHẢI chỉ hai dòng DB.** Chính câu đó ở đây đã làm bộ R7 đầy đủ đỏ giả 9 ca
+  suốt một thời gian — xem bảng đầy đủ ngay dưới, mục "Biến môi trường cho test ở local".
+
+### Biến môi trường cho test ở local — ĐỐI CHIẾU VỚI `ci.yml`, không chỉ hai dòng DB
+
+> 🔴 **Sự cố 09/09/2026.** `.env.test` chỉ có `DATABASE_URL` + `DIRECT_URL`. Chạy bộ R7
+> ĐẦY ĐỦ ở local ra **364 xanh / 9 đỏ**; đặt thêm `NEXTAUTH_SECRET` ⇒ **373 xanh / 0 đỏ**.
+> 364 + 9 = 373, khớp chính xác — cả 9 ca đỏ là do THIẾU BIẾN, không phải mã hỏng.
+>
+> Vì sao nguy hiểm hơn vẻ ngoài: **một bộ test đỏ vì môi trường thì người ta học cách bỏ
+> qua nó** — rồi bỏ qua luôn lần nó đỏ THẬT. Đó chính là đường dẫn tới commit trên lượt đỏ
+> hôm 09/09 (luật 6). Bộ test đỏ giả ăn mòn cổng nhanh hơn bộ test không có.
+
+`.env.test` nằm trong `.gitignore` nên máy mới **luôn bắt đầu từ số không**. Bảng dưới là
+thứ chép sang, đối chiếu từ `.github/workflows/ci.yml`:
+
+| Biến | Đặt trong `.env.test`? | Vì sao |
+|---|---|---|
+| `DATABASE_URL`, `DIRECT_URL` | **CÓ** | Postgres local |
+| `NEXTAUTH_SECRET` | **CÓ** | `lib/security/signing-key.ts` **NÉM LỖI** nếu thiếu hoặc <32 ký tự. Đây là biến đã gây 9 ca đỏ |
+| `AUTH_SECRET` | **CÓ** | `signing-key.ts` đọc `NEXTAUTH_SECRET ?? AUTH_SECRET`; đặt cả hai cho khớp mọi đường |
+| `NEXTAUTH_URL`, `NEXT_PUBLIC_APP_URL` | **CÓ** (cổng 3100) | cần cho bộ CÓ dựng Next: a0 · smoke · site GV · e-learning |
+| `BASE_URL` | **KHÔNG** | mỗi bộ một cổng (smoke 3000, a0/r7 3100) và mọi config đã có mặc định. Đặt chung là bẻ bộ còn lại |
+| `*_SKIP_WEBSERVER` (A0/R1–R7/CRM/FL/ELEARNING/TEACHER) | **KHÔNG** | cờ TĂNG TỐC bật theo từng lượt. Đặt cứng ⇒ bộ cần trình duyệt mất webserver và đỏ vì lý do chẳng liên quan |
+| `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | **KHÔNG** | cấu hình container của CI, không phải biến ứng dụng |
+| `CI_DATABASE_URL` | **KHÔNG** | bí danh chỉ dùng trong `ci.yml` |
+
+Giá trị mẫu cho hai khoá ký — **chuỗi TEST, vô hại**, cố ý trùng giá trị CI dùng để hành vi
+ở hai nơi giống nhau:
+
+```
+NEXTAUTH_SECRET="ci-build-only-secret-do-not-use-in-prod-32chars"
+AUTH_SECRET="ci-build-only-secret-do-not-use-in-prod-32chars"
+NEXTAUTH_URL="http://localhost:3100"
+NEXT_PUBLIC_APP_URL="http://localhost:3100"
+```
+
+⚠️ **Một khác biệt của CI mà `.env.test` KHÔNG chép được:** CI chia bộ R7 làm **hai shard,
+mỗi shard một container Postgres RIÊNG** (`ci.yml:438-441`). Chạy cả bộ R7 trên MỘT DB ở
+local là cấu hình CI không dùng — `resetDb()` của spec này xoá dữ liệu spec kia. Gặp đỏ lạ
+khi chạy cả bộ thì chạy `--shard=1/2` và `--shard=2/2` trên HAI database khác nhau trước
+khi kết luận có hồi quy.
+
 - **Trước khi test:** apply schema lên DB test: `prisma migrate deploy` (hoặc `db push`) với env test, rồi seed helper.
 - **`resetDb()`** trong `tests/e2e/_helpers/seed.ts` reset/truncate **programmatic qua Prisma client** (đọc `TEST_DATABASE_URL`/`.env.test`) — không gọi shell, nên hook destructive không chặn. Helper PHẢI assert URL là `127.0.0.1`/`localhost` trước khi reset (fail-safe chống trỏ nhầm prod).
 
@@ -77,6 +116,10 @@ pnpm exec prisma migrate deploy && pnpm db:seed && pnpm db:seed:orgunit   && pnp
 ## Reset DB — chỉ cho phép trên DB test (local)
 
 - `pnpm db:reset` / `prisma migrate reset` trần → **hook `block-destructive.sh` CHẶN** (bảo vệ prod).
+  ⚠️ Câu trên **SAI suốt nhiều tháng**: hook đọc lệnh từ một biến môi trường không
+  tồn tại, và chặn bằng mã thoát mà Claude Code không coi là chặn ⇒ nó chưa từng
+  chặn được gì. **Vá 09/09/2026**, nay có `.claude/hooks/hooks.test.ts` cấy thử.
+  Xem luật 14 — `docs/luat-doc-so-va-ket-luan.md`.
 - Chỉ được reset khi command thể hiện rõ target local/test (chứa `localhost` / `127.0.0.1` / `.env.test` / `satarobo_test`). Ví dụ PowerShell:
   ```powershell
   $env:DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:5432/satarobo_test'; pnpm prisma migrate reset --force --skip-seed
@@ -90,15 +133,34 @@ pnpm exec prisma migrate deploy && pnpm db:seed && pnpm db:seed:orgunit   && pnp
 
 ## Migrations
 
-- **Tên rõ nghĩa**: `pnpm db:migrate` (Prisma sẽ prompt name).
+> ⛔ **CẤM `prisma migrate dev` (= `pnpm db:migrate`) cho tới khi drift 14 bảng được đóng
+> [chốt 08/09/2026].** Xem CLAUDE.md mục "Prisma migrations" — repo đang lệch sẵn giữa
+> `prisma/migrations` và `schema.prisma`, nên `migrate dev` sẽ tự sinh một migration "sửa kiểu
+> cột" cho 14 bảng, trông vô hại trong diff, và merge vào là ALTER hàng loạt trên bảng có dữ
+> liệu PROD. Không cổng CI nào canh việc này.
+
+- **Đường DUY NHẤT hiện nay**: viết SQL tay + `prisma migrate deploy` (non-interactive).
+  186/242 migration của repo vốn đã là SQL gõ tay (timestamp kết thúc `0000`) — đây là nếp thật,
+  không phải đường vòng.
+- **Tên thư mục**: `yyyyMMddHHmmss_ten_snake_case`, dấu thời gian phải LỚN HƠN migration cuối cùng
+  đang có, kẻo `prisma migrate deploy` ở bước CI sập. Kiểm cả `origin/main` và `origin/test` trước
+  khi chốt tên — 8 worktree song song đã từng đẻ migration trùng ngày ở nhánh khác.
+- **Bảng MỚI phải tự bật RLS**: `ALTER TABLE "X" ENABLE ROW LEVEL SECURITY;` ở cuối file. Chỉ
+  ENABLE, không FORCE, không policy. Khuôn đúng: `20260825120000_lead_status_history`.
+  Đừng chép `20260826180000_media_review` — mẫu đó **quên** RLS.
+- **Tên index/constraint phải khớp quy ước Prisma** (`Bang_pkey`, `Bang_cot_key`, `Bang_cot_idx`).
+  CI **không** bắt sai; lệch chỉ lộ ra ở lần ai đó chạy `migrate dev` sau này.
 - **Migration đã apply → NEVER edit**. Tạo migration mới để sửa.
-- **Tool**: `prisma migrate dev` (interactive) hoặc viết SQL tay + `prisma migrate deploy` (non-interactive).
 - **EPERM trên Windows DLL** sau migrate generate: dev server đang lock file. Tắt dev → retry hoặc dùng `pnpm build` đè.
 
 ## After schema change
 
-1. `pnpm db:migrate --name <descriptive_name>` apply.
-2. Dev server **PHẢI RESTART** — Prisma Client trong memory cache cũ, không có model mới (`db.newModel` → undefined error).
+1. Viết `prisma/migrations/<ten>/migration.sql` + sửa `schema.prisma` cho khớp.
+2. **Kiểm SQL có khớp schema không** — bắt buộc, vì không CI nào canh (công thức DB nháp ở
+   CLAUDE.md mục "Prisma migrations"; chỉ `--from-url`, KHÔNG BAO GIỜ `--from-migrations
+   --shadow-database-url`, lệnh đó RESET DB đích).
+3. `prisma migrate deploy` lên môi trường đích, rồi `prisma generate`.
+4. Dev server **PHẢI RESTART** — Prisma Client trong memory cache cũ, không có model mới (`db.newModel` → undefined error).
 3. Update `prisma/seed*.ts` nếu cần seed data mới.
 
 ## 2-phase migration pattern (giảm risk drop column)
@@ -133,3 +195,34 @@ Khi đổi schema dạng "thay đổi nguồn data":
 - ❌ Edit migration đã apply.
 - ❌ Reset prod DB (`prisma migrate reset` không có marker local → hook block). Reset chỉ được phép trên DB test local (xem mục "Reset DB").
 - ❌ Trỏ test (`resetDb`/seed test) vào Supabase — test luôn dùng Postgres local Docker.
+
+## `pnpm test:unit` KHÔNG được đụng DB (chốt 04/09/2026)
+
+`resetDb()` **TRUNCATE mọi bảng** trong `public` với CASCADE. Cổng cũ chỉ hỏi "URL có
+trỏ localhost / có tên `satarobo_test` không" — mà DB làm việc hằng ngày ở máy dev
+ĐÚNG LÀ `127.0.0.1/satarobo_test`. Hệ quả: mỗi lần `pnpm test:unit` là xoá sạch dữ
+liệu đang xem. Đã xảy ra thật: 250 học viên · 100 lớp · 609 buổi · 12 tài khoản
+`uat.*` bay hết, đăng nhập báo "sai tài khoản mật khẩu".
+
+**Nay xoá DB phải có chủ đích — hai cổng, bỏ cái nào cũng mở lại một đường mất dữ liệu:**
+
+| Cổng | Chặn gì |
+|---|---|
+| `assertTestDb()` (địa chỉ) | trỏ nhầm Supabase prod/dev |
+| `ALLOW_DB_RESET=1` (chủ đích) | đúng địa chỉ nhưng SAI LÚC |
+
+- `pnpm test:unit` → không có cờ → bộ chạm DB **SKIP**, `resetDb()` **ném lỗi**.
+- Chạy thật: `pnpm test:chat-db` · `test:nen-db` · `test:lead-intake` ·
+  `test:elearning-db` · `test:inbox-db` — chúng dùng `vitest.db.config.ts`, nơi DUY
+  NHẤT bật cờ. CI gọi đúng các script này nên không đổi gì.
+- Cổng chạy dùng chung ở `tests/_helpers/db-gate.ts` (trước đó chép tay ở 8 file).
+- Cờ đặt trong file cấu hình chứ không phải `VAR=1 lệnh` trong `package.json`: repo
+  không có `cross-env`, cú pháp đó không chạy trên cmd.exe của Windows.
+
+**DB nháp cho test:** `satarobo_vitest` (đã tạo + `prisma migrate deploy`). Muốn chạy
+bộ DB mà không đụng dữ liệu đang xem:
+
+```bash
+DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:5432/satarobo_vitest' \
+DIRECT_URL="$DATABASE_URL" pnpm test:chat-db
+```

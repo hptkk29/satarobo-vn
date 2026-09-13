@@ -1,0 +1,188 @@
+# Chạy TAY (workflow_dispatch) — SEED NỀN module chấm công lên PROD. ĐÂY LÀ NÚT GHI THẬT.
+#
+# ⚠️ TÊN ĐẶT ĐỂ KHÔNG BẤM NHẦM. Hai nút chạm PROD của module này dùng chung tiền tố và khác nhau
+# đúng MỘT từ viết hoa, để nằm cạnh nhau trong danh sách mà không lẫn được:
+#     Chấm công · PROD · ĐO  (chỉ đọc — không ghi gì)   ← cham-cong-prod-do-chi-doc.yml
+#     Chấm công · PROD · GHI (danh mục nền · vá dòng)   ← file này
+#
+# ── BỐN VIỆC, CHỌN BẰNG INPUT `viec` (cập nhật 13/09/2026) ─────────────────────────────
+#
+#   · `seed-nen`          — seed 5 nhóm danh mục nền (mô tả bên dưới). Chỉ TẠO dòng còn thiếu.
+#   · `nhap-danh-muc-nen` — NHẬP NỐT chiều seed → prod: tạo dòng thiếu VÀ vá những TRƯỜNG
+#                           đang trống/mặc-định trên dòng đã có (`scripts/nhap-danh-muc-nen.ts`).
+#   · `backfill-dong-buoi-thoa` — ĐÓNG buổi cũ đã thoả cổng tự đóng mà còn kẹt
+#                           (`scripts/backfill-dong-buoi-thoa.ts`). KHÔNG phát
+#                           `session.taught` ⇒ 0 bài tập hồi tố, 0 tin nhắn phụ huynh.
+#   · `tinh-lai-mot-ngay`  — TÍNH LẠI đúng MỘT (người × ngày), theo hai ô `user_id` + `ngay`
+#                           (`scripts/tinh-lai-mot-ngay.ts --apply`). Đây là việc DUY NHẤT ở
+#                           file này chạm bảng SỐ LIỆU (`StaffAttendanceDay`) thay vì danh mục.
+#                           Nó KHÔNG có chế độ chạy cả dải — cố ý, xem mục dưới.
+#
+#   Vì sao cần việc thứ hai: đo prod 09/09 cho thấy prod CHƯA TỪNG được seed — 31/31 dòng đang
+#   có đều do gõ tay qua màn (AuditLog CREATE, 08/09). `seed-nen` bỏ qua mọi dòng đã tồn tại nên
+#   nó KHÔNG vá được 14 trường mã ca + 6 trường loại nghỉ đang lệch. Còn `force` thì đè cả bảng,
+#   kể cả `displayOrder` chưa ai đo — tức xoá thứ tự người vận hành đã sắp.
+#
+#   ⚠️ CHẠY THỬ nằm ở workflow ĐO (`viec = nhap-danh-muc-chay-thu`) — nó dùng user CHỈ-ĐỌC và
+#      in bảng TRƯỚC→SAU từng trường. Đọc bảng đó, và đọc kỹ mục "KHÔNG CHẠM", rồi mới bấm đây.
+#
+# ── PHẠM VI GHI CỦA `seed-nen` — 5 NHÓM (cập nhật 07/09/2026) ──────────────────────────
+#   | # | Nhóm                                | Kỳ vọng lần seed đầu   |
+#   |---|-------------------------------------|------------------------|
+#   | 1 | ShiftTemplate (mã ca dùng chung)    | +21 tạo                |
+#   | 2 | LeaveType (loại nghỉ, K-06 theo MISA)| 8                     |
+#   | 3 | WorkLocation (điểm chấm công)       | +2 (CS1, CS2)          |
+#   | 4 | SessionCategory (phân loại buổi)    | 7  ← THÊM 07/09        |
+#   | 5 | TeachingCreditType (loại công dạy)  | 6  ← THÊM 07/09        |
+#
+# ⚠️ BẢN 06/09 CỦA HEADER NÀY GHI "3 THỨ" TRONG KHI SCRIPT ĐÃ GHI 5. Hai nhóm cuối được thêm vào
+# `prisma/seed-cham-cong.ts` ở hai commit khác (`2b9ade32`, `0a67b8d7`) mà mô tả ở đây không đổi
+# theo — người bấm nút đọc mô tả, còn thứ chạy là script. Từ nay có luật bắt cập nhật cùng commit:
+# `docs/luat-mo-ta-workflow-prod.md`.
+#
+# Script còn TỰ IN phạm vi thật (bảng "đang có / sẽ tạo / sẽ đè" theo từng nhóm) TRƯỚC khi ghi
+# dòng đầu tiên — đọc bảng đó, đừng tin bảng ở trên nếu hai bên lệch nhau.
+#
+# ── Idempotent, và ranh giới của `force` ───────────────────────────────────────────────
+# Không có `force`: chỉ TẠO dòng còn thiếu, KHÔNG đè dòng người vận hành đã sửa, và KHÔNG nhả cờ
+# "mặc định" của phân loại buổi mà họ đã tự chọn (script sẽ báo "đã nhường" trong log).
+# Có `force`: ĐÈ toàn bộ dòng danh mục về bản trong mã nguồn — mất mọi chỉnh sửa tay.
+#
+# Vì sao bấm tay trên prod (cùng luật với seed-prod-roles.yml): đây là danh mục vận hành — sau lần
+# seed đầu, NGUỒN SỰ THẬT là DB và người vận hành sửa trên màn danh mục (PHẦN 6b kế hoạch).
+#
+# ⚠️ Trước khi bấm: (1) mọi migration của module đã lên prod qua deploy.yml — tính đến 07/09 là
+# `20260906090000_cham_cong_v3_l1` … `20260907050000_snapshot_si_so_buoi`; (2) đã bấm
+# seed-prod-roles.yml (5 key hr_attendance:* mới + adjust hạ CENTER).
+name: Chấm công · PROD · GHI (danh mục nền · vá dòng)
+on:
+  workflow_dispatch:
+    inputs:
+      viec:
+        description: "Làm gì"
+        required: true
+        type: choice
+        default: seed-nen
+        options:
+          - seed-nen
+          - nhap-danh-muc-nen
+          - backfill-dong-buoi-thoa
+          - tinh-lai-mot-ngay
+      # Hai ô dưới CHỈ dùng cho `tinh-lai-mot-ngay`. Để trống cho mọi việc khác.
+      user_id:
+        description: "(chỉ cho tinh-lai-mot-ngay) userId"
+        required: false
+        default: ""
+      ngay:
+        description: "(chỉ cho tinh-lai-mot-ngay) ngày YYYY-MM-DD"
+        required: false
+        default: ""
+      force:
+        description: "Đè lại tên/giờ 21 mã ca theo danh mục trong code (mất chỉnh sửa tay trên màn Danh mục mã ca)"
+        required: false
+        type: boolean
+        default: false
+      confirm:
+        description: 'Gõ đúng "GHI THAT VAO PROD"'
+        required: true
+        default: ""
+concurrency:
+  group: cham-cong-prod-seed
+  cancel-in-progress: false
+jobs:
+  seed:
+    name: Ghi vào Supabase prod (GHI THẬT — phạm vi theo `viec`)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Kiểm tra secrets + chuỗi xác nhận
+        run: |
+          missing=0
+          [ "${{ inputs.confirm }}" = "GHI THAT VAO PROD" ] || { echo "::error::Chuỗi xác nhận sai — dừng, không ghi gì."; missing=1; }
+          [ -n "${{ secrets.PROD_DATABASE_URL }}" ] || { echo "::error::Thiếu secret PROD_DATABASE_URL"; missing=1; }
+          [ -n "${{ secrets.PROD_DIRECT_URL }}" ]   || { echo "::error::Thiếu secret PROD_DIRECT_URL"; missing=1; }
+          exit $missing
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+      - name: "Seed nền chấm công (prod) — script tự in phạm vi trước khi ghi"
+        if: inputs.viec == 'seed-nen'
+        run: pnpm exec tsx prisma/seed-cham-cong.ts ${{ inputs.force && '-- --force' || '' }}
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+
+      # NHẬP NỐT danh mục nền — chiều seed → prod, chạm ĐÚNG những trường đã đo và đã chốt.
+      #
+      # Vì sao KHÔNG dùng `seed-nen` + `force` cho việc này: `force` đè TOÀN BỘ mọi trường của
+      # mọi dòng, kể cả `displayOrder` của LeaveType/SessionCategory vốn KHÔNG nằm trong phép
+      # đo 09/09 — tức xoá thứ tự người vận hành đã sắp mà không ai nhìn thấy.
+      #
+      # ⚠️ BẤM CHẠY THỬ TRƯỚC: workflow ĐO → viec = `nhap-danh-muc-chay-thu`. Đọc bảng
+      #    TRƯỚC→SAU và mục "KHÔNG CHẠM" ở đó rồi mới bấm nút này.
+      - name: "Nhập nốt danh mục nền (prod) — GHI THẬT"
+        if: inputs.viec == 'nhap-danh-muc-nen'
+        run: pnpm exec tsx scripts/nhap-danh-muc-nen.ts --apply
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+
+      # BACKFILL đóng buổi cũ đã THOẢ cổng tự đóng nhưng còn kẹt.
+      #
+      # Vì sao chúng kẹt (đo, không đoán): cổng tự đóng CHỈ chạy trong đường LƯU ĐIỂM DANH.
+      # Buổi đủ điểm danh TRƯỚC khi bản vá lên prod thì không còn lượt lưu nào để đánh thức.
+      # Đo 09/09: 90 buổi THOẢ, và 90/90 có lượt điểm danh cuối TRƯỚC mốc bản vá — 0 buổi sau.
+      #
+      # ⚠️ BA ĐIỀU KIỆN đã gắn CỨNG trong mã, không phải lời hứa ở đây:
+      #   · KHÔNG phát `session.taught` (chặn ở TẦNG PHÁT theo `nguonChot`, không bằng
+      #     `assignMode` — `r7-lifecycle` không đọc `assignMode`) ⇒ 0 bài tập hồi tố,
+      #     0 tin nhắn phụ huynh;
+      #   · `nguonChot = "BACKFILL"` — cột riêng, không đội lên cột "tự động" của phép đo;
+      #   · `rosterSource = "BACKFILL_CLOSE"` — cổng lương vẫn TỪ CHỐI số sĩ số này.
+      #
+      # ⚠️ BẤM CHẠY THỬ TRƯỚC: workflow ĐO → `viec = backfill-buoi-chay-thu`. Script tự in
+      #    BẢNG PHẠM VI trước khi đóng buổi đầu tiên — đọc bảng đó, đừng tin mô tả này nếu
+      #    hai bên lệch.
+      - name: "Backfill đóng buổi thoả (prod) — GHI THẬT"
+        if: inputs.viec == 'backfill-dong-buoi-thoa'
+        run: pnpm exec tsx scripts/backfill-dong-buoi-thoa.ts --apply
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+
+      # TÍNH LẠI MỘT DÒNG — bug 13/09: `recompute` từng lấy NƠI QUÉT làm nơi chịu công cho
+      # ngày KHÔNG có ca xếp. Mã đã vá (PR #243) nhưng dòng ĐÃ GHI chỉ đổi khi tính lại.
+      #
+      # Vì sao chỉ MỘT dòng, không có chế độ chạy cả dải:
+      # phép đo prod 13/09 (`viec = noi-chiu-cong-lech`) ra ĐÚNG 1 dòng lệch trên 525 dòng đã
+      # đọc — 1 ở nhóm KHÔNG CÓ CA, 0 thuộc kỳ đã chốt, 0 dòng `CenterSetting` đè khoá
+      # `shift.*`. Việc cần làm nhỏ đúng bằng một dòng, nên nút cũng chỉ to bằng một dòng.
+      # Cần chạy dải thì đó là việc KHÁC, có phép đo khác, và phải báo kế toán trước.
+      #
+      # ⚠️ BẤM CHẠY THỬ TRƯỚC: workflow ĐO → `viec = tinh-lai-mot-ngay-chay-thu`, cùng hai ô
+      #    `user_id` + `ngay`. Nó in bảng TRƯỚC (centerId · orgUnitId · hai cột công) bằng user
+      #    CHỈ-ĐỌC. Đối chiếu bảng đó rồi mới bấm nút này.
+      #
+      # Cổng KHÔNG nằm ở đây mà nằm trong `recomputeAttendanceDay`: kỳ `LOCKED` ⇒ hàm trả
+      # `skipped: LOCKED` và không ghi gì. Đã cấy thử trên DB local 13/09 — đặt `status=LOCKED`
+      # thì lượt `--apply` in "BỎ QUA (LOCKED)" và "KHÔNG cột nào đổi".
+      - name: "Tính lại MỘT ngày công (prod) — GHI THẬT"
+        if: inputs.viec == 'tinh-lai-mot-ngay'
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+          U: ${{ inputs.user_id }}
+          NGAY: ${{ inputs.ngay }}
+        run: |
+          if [ -z "$U" ] || [ -z "$NGAY" ]; then
+            echo "::error::Việc này cần CẢ HAI ô user_id và ngay. Bỏ trống thì không biết ghi vào dòng nào — dừng."
+            exit 1
+          fi
+          pnpm exec tsx scripts/tinh-lai-mot-ngay.ts --user="$U" --ngay="$NGAY" --apply

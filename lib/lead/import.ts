@@ -10,6 +10,18 @@ import { canonicalPhone, isValidPhoneVN } from "@/lib/phone";
 
 export const LEAD_IMPORT_CENTER_HEADER = "Cơ sở (mã CS, để trống)";
 
+/**
+ * Cột SALE PHỤ TRÁCH — TUỲ CHỌN (chủ dự án chốt 04/09/2026).
+ *
+ * Để trống ⇒ máy chia theo vòng luân phiên như trước. Có điền ⇒ giao đích danh
+ * người đó và **KHÔNG tiêu lượt** (ca "gán tay lúc tạo lead" của ma trận — chưa
+ * rút lượt nào thì không có gì để trừ).
+ *
+ * Nhận EMAIL hoặc MÃ NHÂN VIÊN: người nhập file cầm bảng nào thì gõ bảng đó, bắt
+ * nhớ đúng một dạng là mời gõ sai.
+ */
+export const LEAD_IMPORT_SALE_HEADER = "Sale phụ trách (email hoặc mã NV, để trống)";
+
 export const LEAD_IMPORT_COLUMNS = [
   "Tên phụ huynh",
   "SĐT",
@@ -20,6 +32,11 @@ export const LEAD_IMPORT_COLUMNS = [
   "Khoá quan tâm",
   "Nguồn",
   "Ghi chú",
+  // Đặt CUỐI có chủ đích: file mẫu `mau-lead-v2.xlsx` là bản soạn tay có sẵn 9
+  // cột A–I kèm định dạng và ràng buộc dropdown neo theo CHỮ CÁI CỘT. Chèn vào
+  // giữa là dời hết cột phía sau và mọi ràng buộc trỏ sai chỗ; thêm vào cột J thì
+  // không đụng gì. Tầng đọc tra theo TÊN cột nên vị trí không ảnh hưởng.
+  LEAD_IMPORT_SALE_HEADER,
 ] as const;
 
 // AUTH-SĐT P1 — 3 hàm dưới đây từng là bản chuẩn hoá RIÊNG của luồng import
@@ -86,6 +103,11 @@ export interface ParsedLeadRow {
   childName: string | null;
   childAge: number | null;
   centerCode: string | null; // mã CS (resolve hợp lệ ở DB) / null
+  /**
+   * Email hoặc mã NV của sale phụ trách — TUỲ CHỌN, resolve ở DB.
+   * `null` = để trống ⇒ máy chia.
+   */
+  saleRaw: string | null;
   courseRaw: string | null; // khoá quan tâm (resolve ở DB)
   source: string;
   note: string | null;
@@ -126,6 +148,10 @@ export function parseLeadImportRow(
       childName: cell(raw, "Tên con") || null,
       childAge: ageRes.age,
       centerCode: centerRes.code,
+      // KHÔNG kiểm tính hợp lệ ở đây: tầng thuần này không biết ai là sale. Tra
+      // người + kiểm vai/cơ sở làm ở tầng DB, và sai thì CẢNH BÁO chứ không bỏ
+      // dòng — mất một lead thật vì gõ sai một ô tuỳ chọn là đổi hỏng lấy hỏng.
+      saleRaw: cell(raw, LEAD_IMPORT_SALE_HEADER) || null,
       courseRaw: cell(raw, "Khoá quan tâm") || null,
       source: cell(raw, "Nguồn") || "Import Excel",
       note: cell(raw, "Ghi chú") || null,

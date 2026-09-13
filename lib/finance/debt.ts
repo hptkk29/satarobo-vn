@@ -48,6 +48,51 @@ export async function confirmOrderPayment(
 
 // ═══ R7-04 — công nợ đa chiều theo Enrollment (Payment 2 tầng) ═════════════════
 
+// ─────────────────────────────────────────────────────────────────────────────
+// TRỤC A — "tiền ĐÃ XÁC NHẬN". Định nghĩa nằm ở ĐÚNG MỘT CHỖ: dưới đây.
+//
+// Vì sao gom (07/09/2026): cùng một phép cộng từng được chép tay ở BỐN nơi, mỗi nơi
+// một kiểu — `debt.ts` (hàm thuần), `debt.ts:getDebtRows` (tự reduce, không gọi hàm
+// thuần), `portal/billing.ts` và `portal/billing-student.ts` (lọc trong JS trên truy vấn
+// chỉ lọc `deletedAt`). Bốn bản đó lệch nhau là chuyện sớm muộn, và tiền lệch thì không
+// ai phát hiện bằng mắt.
+//
+// ⚠️ KHÔNG lọc theo `paymentType`: bút toán ADJUSTMENT LUÔN được cộng. Đó là cả điểm của
+// mô hình delta — dòng gốc giữ số cũ, dòng điều chỉnh mang phần chênh lệch, tổng mới là
+// con số đúng. Lọc `paymentType = 'PAYMENT'` ở bất kỳ đâu là ném điều chỉnh đi lần nữa,
+// đúng cái lỗi cả đợt này đang sửa.
+//
+// ⚠️ Đây là TRỤC A. Trục B ("đã ghi nhận", `saleStatus = RECORDED` — mã QR, webhook
+// SePay, tin ZNS, cổng chốt lead) là một câu hỏi KHÁC và có khoá khác (đơn, không phải
+// ghi danh). Không gộp hai trục: chênh lệch giữa chúng chính là tín hiệu phát hiện
+// webhook hỏng.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Điều kiện `where` cho MỌI truy vấn cộng tiền đã xác nhận.
+ * Dùng thẳng trong `where` của Prisma, kể cả trong quan hệ lồng (`payments: { where }`).
+ */
+export const KHOAN_DA_XAC_NHAN = {
+  accountantStatus: "CONFIRMED",
+  deletedAt: null,
+} as const;
+
+/**
+ * Bản JS của cùng điều kiện — cho chỗ đã nạp sẵn cả danh sách rồi lọc trong bộ nhớ
+ * (vd trang Học phí còn phải đếm khoản PENDING/REJECTED nên không lọc được ở query).
+ */
+export function laKhoanDaXacNhan(p: {
+  accountantStatus: string;
+  deletedAt?: Date | null;
+}): boolean {
+  return p.accountantStatus === "CONFIRMED" && !p.deletedAt;
+}
+
+/** Σ tiền đã xác nhận từ danh sách ĐÃ LỌC sẵn. THUẦN. */
+export function tongDaXacNhan(confirmedPayments: { amount: number }[]): number {
+  return confirmedPayments.reduce((s, p) => s + p.amount, 0);
+}
+
 /**
  * Công nợ 1 ghi danh = finalPrice − Σ amount(Payment CONFIRMED). THUẦN.
  * Có thể ÂM (đóng thừa) — trả raw, caller tự bucket/hiển thị. finalPrice null → 0.
@@ -56,8 +101,21 @@ export function computeEnrollmentDebt(
   finalPrice: number | null,
   confirmedPayments: { amount: number }[],
 ): number {
-  const paid = confirmedPayments.reduce((s, p) => s + p.amount, 0);
-  return (finalPrice ?? 0) - paid;
+  return (finalPrice ?? 0) - tongDaXacNhan(confirmedPayments);
+}
+
+/**
+ * Σ tiền ĐÃ XÁC NHẬN của một ghi danh — đọc thẳng DB.
+ *
+ * Khoá là `enrollmentId` và điều đó an toàn: `confirmPayment` từ chối xác nhận khoản
+ * chưa gắn ghi danh, nên không có đồng tiền đã xác nhận nào nằm ngoài tầm với.
+ */
+export async function sumConfirmed(enrollmentId: string): Promise<number> {
+  const r = await db.payment.aggregate({
+    where: { enrollmentId, ...KHOAN_DA_XAC_NHAN },
+    _sum: { amount: true },
+  });
+  return r._sum.amount ?? 0;
 }
 
 const DAY_MS = 86_400_000;
@@ -131,13 +189,13 @@ export async function getDebtRows(
       course: { select: { name: true } },
       class: { select: { centerId: true } },
       // FIX-C3: nested include không auto-scope → tự lọc payment đã xóa.
-      payments: { where: { accountantStatus: "CONFIRMED", deletedAt: null }, select: { amount: true } },
+      payments: { where: KHOAN_DA_XAC_NHAN, select: { amount: true } },
     },
   });
 
   return enrollments.map((e) => {
     const finalPrice = e.finalPrice ?? e.tuition ?? 0;
-    const confirmedPaid = e.payments.reduce((s, p) => s + p.amount, 0);
+    const confirmedPaid = tongDaXacNhan(e.payments);
     return {
       enrollmentId: e.id,
       studentId: e.studentId,

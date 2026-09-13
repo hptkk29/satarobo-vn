@@ -33,7 +33,32 @@ export const internalLeadSchema = z.object({
    * ca "không ô nào bắt buộc") sẽ ăn 400.
    */
   phone: z.preprocess((v) => v ?? null, phoneVnNullable),
+  /**
+   * Tên con — cột PHẲNG cũ. Giữ lại vì `map-internal-form` còn dùng nó để suy
+   * tên phụ huynh khi phiếu chỉ có tên con (`parentNameFallback`).
+   */
   childName: optionalText(120),
+  /**
+   * NHIỀU CON, mỗi em một khoá quan tâm riêng (03/09/2026).
+   *
+   * Vì sao là mảng: phiếu thật hay có 2 em. Trước đợt này biểu mẫu chỉ nhận
+   * được một, em thứ hai phải gõ thành phiếu riêng rồi bị chính cơ chế chống
+   * trùng SĐT gộp lại — tức là mất.
+   *
+   * Dòng KHÔNG có tên bị bỏ ở mapper (người dùng bấm "Thêm con" rồi để trống).
+   * Trần 10 em: đủ cho mọi ca thật, và chặn payload rác.
+   */
+  children: z
+    .array(
+      z.object({
+        fullName: optionalText(120),
+        /** `Course.id`. Rỗng ⇒ em này chưa khai khoá quan tâm. */
+        courseId: optionalText(40),
+      }),
+    )
+    .max(10)
+    .optional()
+    .default([]),
   /** Nguồn khách — ô GÕ TỰ DO (chốt 22/08). Đi thẳng vào `Lead.source`. */
   source: optionalText(80),
   /** Link Facebook/Messenger của phụ huynh. Chuẩn hoá + chặn scheme lạ ở mapper. */
@@ -54,7 +79,14 @@ export type InternalLeadInput = z.infer<typeof internalLeadSchema>;
  * một manh mối nào để liên hệ.
  */
 export function hasAnyContent(input: InternalLeadInput): boolean {
-  return Object.values(input).some((v) => typeof v === "string" && v.length > 0);
+  // Ô chữ nào có nội dung là đủ.
+  if (Object.values(input).some((v) => typeof v === "string" && v.length > 0)) {
+    return true;
+  }
+  // Hoặc có ÍT NHẤT một em đã khai tên. Thiếu vế này thì phiếu chỉ điền phần
+  // "con" (ca rất thật: gõ tên hai em trước, tên phụ huynh sau) bị chặn với lời
+  // báo "Phiếu trống" — vô lý ngay trước mắt người vừa gõ.
+  return (input.children ?? []).some((c) => (c.fullName ?? "").length > 0);
 }
 
 /**

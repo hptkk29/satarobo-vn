@@ -95,6 +95,15 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "payroll:edit", scopeType: "GLOBAL" },
       { action: "payments:record", scopeType: "GLOBAL" },
       { action: "payments:confirm", scopeType: "GLOBAL" },
+      // 07/09/2026 — ĐIỀU CHỈNH khoản thu đã xác nhận (bút toán delta, dòng gốc bất
+      // biến). Quyền RIÊNG, không gộp vào `payments:confirm`: xác nhận là chấp nhận
+      // một con số, điều chỉnh là sửa một con số đã vào sổ và đã đối soát sao kê.
+      // ⚠️ Ma trận v1 (`lib/auth/permissions.ts`) cố ý CHỈ có SUPER_ADMIN — vai nghiệp
+      // vụ nhận quyền này DUY NHẤT ở đây (v2/DB). Prod bật RBAC_V2 nên kế toán dùng
+      // được; máy dev chạy v1 nên phải đăng nhập SUPER_ADMIN mới thấy nút.
+      // ⚠️ Seed vai KHÔNG tự chạy theo deploy — phải bấm workflow seed trên prod,
+      // nếu không thì nút "Điều chỉnh" vẫn ẩn với kế toán dù mã đã lên.
+      { action: "payments:adjust", scopeType: "GLOBAL" },
       // #15 (câu 32) — break-glass xem đầy đủ CCCD PH + địa chỉ ở màn thanh toán.
       { action: "payments:view-pii", scopeType: "GLOBAL" },
       { action: "orders:view", scopeType: "GLOBAL" },
@@ -126,6 +135,10 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "elearning:portal:access", scopeType: "GLOBAL" },
       { action: "elearning:lesson:learn", scopeType: "GLOBAL" },
       { action: "elearning:progress:view-own", scopeType: "GLOBAL" },
+      { action: "hr_attendance:view", scopeType: "GLOBAL" }, // L1 chấm công v3 (06/09/2026) — kế hoạch §5
+      { action: "hr_attendance:close-period", scopeType: "GLOBAL" }, // L1 chấm công v3 (06/09/2026) — kế hoạch §5
+      { action: "hr_attendance:export", scopeType: "GLOBAL" }, // L1 chấm công v3 (06/09/2026) — kế hoạch §5
+      { action: "hr_attendance:config", scopeType: "GLOBAL" }, // L1 chấm công v3 (06/09/2026) — kế hoạch §5
     ],
   },
   {
@@ -178,6 +191,8 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "elearning:certificate:issue", scopeType: "GLOBAL" },
       { action: "elearning:certificate:revoke", scopeType: "GLOBAL" },
       { action: "elearning:report:export", scopeType: "GLOBAL" },
+      { action: "hr_attendance:assign", scopeType: "GLOBAL" }, // L1 chấm công v3 (06/09/2026) — kế hoạch §5
+      { action: "hr_attendance:config", scopeType: "GLOBAL" }, // L1 chấm công v3 (06/09/2026) — kế hoạch §5
     ],
   },
   {
@@ -216,6 +231,8 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "elearning:portal:access", scopeType: "GLOBAL" },
       { action: "elearning:lesson:learn", scopeType: "GLOBAL" },
       { action: "elearning:progress:view-own", scopeType: "GLOBAL" },
+      { action: "hr_attendance:assign", scopeType: "CENTER" }, // L1 chấm công v3 (06/09/2026) — v1 HR ↔ CENTER_HR (parity #09)
+      { action: "hr_attendance:config", scopeType: "CENTER" }, // L1 chấm công v3 (06/09/2026) — v1 HR ↔ CENTER_HR (parity #09)
     ],
   },
   {
@@ -356,13 +373,25 @@ export const ROLE_SEED: RoleSeed[] = [
       //     đổi lịch/phòng/tên lớp, sinh & xếp lại buổi, và HUỶ LỚP (cancelClassAction).
       //     KHÔNG kèm: tạo lớp, xoá lớp (perm riêng), duyệt/từ chối lớp (chặn bằng
       //     APPROVE_ROLES chứ không bằng permission — xem requireApprover).
-      //   · trials:view + trials:assign-teacher — đủ để mở màn Trial và gán GV. CỐ Ý
-      //     KHÔNG cấp trials:manage (thêm/bớt học viên, tạo lớp trải nghiệm) và
-      //     trials:config: quản lý toàn bộ GV ≠ điều hành tuyển sinh lớp thử.
+      //   · trials:view + trials:assign-teacher — đủ để mở màn Trial và gán GV.
+      //     ~~CỐ Ý KHÔNG cấp trials:manage (thêm/bớt học viên, tạo lớp trải nghiệm)
+      //     và trials:config: quản lý toàn bộ GV ≠ điều hành tuyển sinh lớp thử.~~
+      //     **[ĐẢO 08/09/2026 — chủ dự án: "Đào tạo được sử dụng FULL quyền trong màn
+      //     Lớp Trial"]** xem 3 dòng thêm ngay dưới.
       { action: "classes:view-all", scopeType: "GLOBAL" },
       { action: "classes:edit", scopeType: "GLOBAL" },
       { action: "trials:view", scopeType: "GLOBAL" },
       { action: "trials:assign-teacher", scopeType: "GLOBAL" },
+      // 08/09/2026 — FULL quyền màn `/admin/lop-trial`. Ba khoá này là ĐÚNG BỘ mà màn
+      // đó gác (đo bằng `grep checkPermission` trên `lop-trial/**`), không hơn:
+      //   · trials:manage           tạo lớp · thêm/sửa/huỷ buổi · xếp & gỡ học viên · huỷ lớp
+      //   · trials:attendance       điểm danh + hoàn tất buổi
+      //   · trials:override-capacity xếp vượt sĩ số (cờ `allowOverride` có cổng RIÊNG)
+      // KHÔNG kèm `trials:config` (cấu hình số buổi — màn khác, QLCS giữ theo QĐ-T3b)
+      // và KHÔNG kèm `trials:feedback` (chấm phiếu nằm trọn ở site giáo viên).
+      { action: "trials:manage", scopeType: "GLOBAL" },
+      { action: "trials:attendance", scopeType: "GLOBAL" },
+      { action: "trials:override-capacity", scopeType: "GLOBAL" },
       // 03/08 — checkin là self-action của mọi nhân viên; sót từ khi thêm TRAINING
       // (FL W0) nên tài khoản chỉ-Đào-tạo không mở được trang chấm công nào.
       { action: "hr_attendance:checkin", scopeType: "GLOBAL" },
@@ -429,6 +458,7 @@ export const ROLE_SEED: RoleSeed[] = [
     // giao việc, chuyển cơ sở, thêm con…). Đó là lý do có key hẹp riêng.
     code: "HO_SALE", name: "Sale Hội sở (phiếu mình nhập)",
     perms: [
+      { action: "hr_attendance:checkin", scopeType: "GLOBAL" }, // L0 0.2 (05/09/2026) — Q-12: self-action chấm công cho mọi nhân sự
       { action: "leads:create", scopeType: "GLOBAL" },
       // GLOBAL chứ KHÔNG "OWN" — luật R1 đầu file: action bị gọi TRẦN (không kèm
       // target) thì scope OWN luôn trả false và người ta bị đá khỏi trang.
@@ -542,7 +572,7 @@ export const ROLE_SEED: RoleSeed[] = [
       // Shadow prod 10/07 (25+2 lệch): adjust bị pending-tasks cfg.can() gọi TRẦN → GLOBAL
       // (đúng R1); checkin call-site truyền {centerId} nhưng OWN đòi createdById → GLOBAL
       // (action tự ghi userId từ session, permission chỉ gate "là nhân viên").
-      { action: "hr_attendance:adjust", scopeType: "GLOBAL" },
+      { action: "hr_attendance:adjust", scopeType: "CENTER" }, // L5 chấm công v3 (06/09/2026): hạ GLOBAL → CENTER — call-site trần cũ (chinh-cong, pending-tasks) đã gỡ; nay chỉ ghi đè công ngày tại cơ sở (/cham-cong/_actions.ts)
       { action: "hr_attendance:checkin", scopeType: "GLOBAL" },
       // ── Thu tiền tại quầy · xuất kit (user chốt 09/07 câu 4: "có, có") ──
       { action: "payments:record", scopeType: "GLOBAL" },
@@ -624,6 +654,11 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "elearning:progress:view-team", scopeType: "GLOBAL" },
       { action: "elearning:video-analytics:view", scopeType: "GLOBAL" },
       { action: "elearning:report:export", scopeType: "GLOBAL" },
+      { action: "hr_attendance:assign", scopeType: "CENTER" }, // L1 chấm công v3 (06/09/2026) — kế hoạch §5
+      { action: "hr_attendance:approve", scopeType: "CENTER" }, // L1 chấm công v3 (06/09/2026) — kế hoạch §5
+      { action: "hr_attendance:close-period", scopeType: "CENTER" }, // L1 chấm công v3 (06/09/2026) — kế hoạch §5
+      { action: "hr_attendance:export", scopeType: "CENTER" }, // L1 chấm công v3 (06/09/2026) — kế hoạch §5
+      { action: "hr_attendance:config", scopeType: "CENTER" }, // L1 chấm công v3 (06/09/2026) — kế hoạch §5
     ],
   },
   {
@@ -633,6 +668,7 @@ export const ROLE_SEED: RoleSeed[] = [
     // (markAttendance). CHƯA gán UserOrgRole cho ai — để trống cho tương lai.
     code: "CENTER_CLASS_MANAGER", name: "Quản lý lớp học",
     perms: [
+      { action: "hr_attendance:checkin", scopeType: "GLOBAL" }, // L0 0.2 (05/09/2026) — Q-12: self-action chấm công cho mọi nhân sự
       { action: "attendance:edit", scopeType: "CENTER" },
       { action: "attendance:view", scopeType: "CENTER" },
       { action: "classes:view-all", scopeType: "GLOBAL" },
@@ -726,6 +762,16 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "chat:read", scopeType: "OWN" },
       { action: "chat:send", scopeType: "OWN" },
       { action: "parent-requests:manage", scopeType: "GLOBAL" },
+      // 04/09/2026 (chủ dự án chốt) — Sale vào xem chi tiết lớp thì CHỈ XEM, trừ hai
+      // việc: ĐIỂM DANH và ÚP ẢNH. `attendance:edit` đã có sẵn; hai dòng này bổ nốt
+      // vế ảnh. Cùng bộ đôi mà Giáo vụ (CENTER_CLASS_MANAGER) đang giữ và cùng lý do:
+      // góp ảnh vào KHO của lớp, còn GV mới là người chọn ảnh gửi phụ huynh.
+      //
+      // KHÔNG cấp `media:upload` (gửi thẳng cho phụ huynh) và KHÔNG cấp
+      // `media:approve` (duyệt). Cách ly cơ sở do scopedDb/passesScope lo ở tầng
+      // query — xem `canStageToClass` trong app/(admin)/admin/media/actions.ts.
+      { action: "media:view", scopeType: "GLOBAL" },
+      { action: "media:upload-draft", scopeType: "GLOBAL" },
       { action: "hr_attendance:checkin", scopeType: "GLOBAL" },
       { action: "blog:view", scopeType: "CENTER" },
       { action: "course-packages:view", scopeType: "CENTER" },
@@ -838,6 +884,7 @@ export const ROLE_SEED: RoleSeed[] = [
   {
     code: "ASSISTANT_TEACHER", name: "Trợ giảng",
     perms: [
+      { action: "hr_attendance:checkin", scopeType: "GLOBAL" }, // L0 0.2 (05/09/2026) — Q-12: self-action chấm công cho mọi nhân sự
       { action: "attendance:view", scopeType: "ASSIGNED" },
       // US-05 chat (08/08) — trợ giảng là participant nhóm lớp được gán, cùng bộ với
       // TEACHER (assignedClassIds đã gồm Class.assistantId — lib/auth/actor.ts).
@@ -861,10 +908,15 @@ export const ROLE_SEED: RoleSeed[] = [
     // HO_ACCOUNTANT — đây là chức năng quản lý tập trung, không phải thu tiền quầy.
     code: "CENTER_ACCOUNTANT", name: "Kế toán cơ sở",
     perms: [
+      { action: "hr_attendance:checkin", scopeType: "GLOBAL" }, // L0 0.2 (05/09/2026) — Q-12: self-action chấm công cho mọi nhân sự
       { action: "payments:manage", scopeType: "GLOBAL" },
       { action: "payments:view", scopeType: "GLOBAL" },
       { action: "payments:record", scopeType: "GLOBAL" },
       { action: "payments:confirm", scopeType: "GLOBAL" },
+      // 07/09/2026 — điều chỉnh khoản thu đã xác nhận. Kế toán cơ sở là người ngồi
+      // đối soát sao kê hằng ngày, tức đúng người phát hiện số sai. Cách ly cơ sở
+      // vẫn do `loadScopedPayment` trong Server Action lo, không do scopeType.
+      { action: "payments:adjust", scopeType: "GLOBAL" },
       // #15 (câu 32) — break-glass xem đầy đủ CCCD PH + địa chỉ (chỉ cơ sở mình).
       { action: "payments:view-pii", scopeType: "GLOBAL" },
       { action: "students:view-all", scopeType: "GLOBAL" },
@@ -878,6 +930,10 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "elearning:portal:access", scopeType: "GLOBAL" },
       { action: "elearning:lesson:learn", scopeType: "GLOBAL" },
       { action: "elearning:progress:view-own", scopeType: "GLOBAL" },
+      { action: "hr_attendance:view", scopeType: "CENTER" }, // L1 chấm công v3 (06/09/2026) — kế hoạch §5
+      { action: "hr_attendance:close-period", scopeType: "CENTER" }, // L1 chấm công v3 (06/09/2026) — kế hoạch §5
+      { action: "hr_attendance:export", scopeType: "CENTER" }, // L1 chấm công v3 (06/09/2026) — kế hoạch §5
+      { action: "hr_attendance:config", scopeType: "CENTER" }, // L1 chấm công v3 (06/09/2026) — kế hoạch §5
     ],
   },
   {

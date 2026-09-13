@@ -1,5 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { KHOAN_DA_XAC_NHAN, laKhoanDaXacNhan, tongDaXacNhan } from "@/lib/finance/debt";
+import { xepPhieuThuVaDieuChinh } from "@/lib/portal/phieu-thu";
 
 // =============================================================================
 // PORTAL BILLING — Phase NHÓM 3
@@ -76,6 +78,14 @@ export const PAYMENT_METHOD_LABEL: Record<string, string> = {
   TINGEE: "Tingee",
   COD: "COD",
   auto: "Tự động",
+  // 06/09 — mã do HỆ THỐNG tự sinh, không có trong danh mục `PaymentMethod` nên trước
+  // đây rơi thẳng ra giao diện dưới dạng mã trần. Phụ huynh đọc được chữ "backfill"
+  // trong lịch sử đóng tiền của con mình.
+  //
+  // `backfill` = khoản đã thu TRƯỚC khi lên hệ thống, nhập bù lúc chuyển dữ liệu
+  // (lib/crm/backfill-order.ts:112). Không phải một cách thanh toán, nên nhãn phải nói
+  // đúng bản chất chứ đừng bịa ra "Chuyển khoản".
+  backfill: "Đã thu trước khi lên hệ thống",
 };
 
 /**
@@ -112,6 +122,21 @@ export type ConfirmedPaymentRow = {
   paidDate: string;
   confirmedAt: string | null;
   receiptCode: string | null;
+  /** `PAYMENT` = phiếu thu · `ADJUSTMENT` = bút toán điều chỉnh (mang DELTA, có thể âm). */
+  paymentType: string;
+  /** Với dòng ADJUSTMENT: id phiếu thu gốc mà nó đang sửa. */
+  adjustmentOfId: string | null;
+  /**
+   * Lý do điều chỉnh — CHỈ có ở dòng ADJUSTMENT.
+   *
+   * ⚠️ `Payment.note` của phiếu thu THƯỜNG chứa ghi chú nội bộ và marker máy sinh
+   * (`[auto:order-confirm]`, `[auto:order-installment:dot2]`…). Không bao giờ đổ nguyên
+   * `note` ra cổng phụ huynh; chỉ dòng điều chỉnh mới có `note` do người nhập, và nội
+   * dung của nó chính là lý do phải in cho phụ huynh đọc.
+   */
+  lyDoDieuChinh: string | null;
+  /** Phiếu gốc đã bị điều chỉnh ≥1 lần → gắn nhãn; số tiền GIỮ NGUYÊN. */
+  daBiDieuChinh: boolean;
 };
 
 /** Resolve childIds: nhận sẵn mảng studentIds, hoặc tra theo parentUserId. */
@@ -141,8 +166,7 @@ export async function getParentConfirmedPayments(
 
   const payments = await client.payment.findMany({
     where: {
-      accountantStatus: "CONFIRMED",
-      deletedAt: null, // FIX-C3
+      ...KHOAN_DA_XAC_NHAN,
       enrollment: { studentId: { in: childIds }, deletedAt: null },
     },
     select: {
@@ -153,6 +177,9 @@ export async function getParentConfirmedPayments(
       paidDate: true,
       confirmedAt: true,
       enrollmentId: true,
+      paymentType: true,
+      adjustmentOfId: true,
+      note: true,
       order: { select: { code: true } },
       enrollment: { select: { student: { select: { name: true } } } },
       receipts: {
@@ -167,18 +194,26 @@ export async function getParentConfirmedPayments(
     take: 200,
   });
 
-  return payments.map((p) => ({
-    id: p.id,
-    orderId: p.orderId,
-    orderCode: p.order?.code ?? null,
-    enrollmentId: p.enrollmentId,
-    studentName: p.enrollment?.student?.name ?? null,
-    amount: p.amount,
-    method: p.method,
-    paidDate: p.paidDate.toISOString(),
-    confirmedAt: p.confirmedAt?.toISOString() ?? null,
-    receiptCode: p.receipts[0]?.code ?? null,
-  }));
+  // Xếp bút toán điều chỉnh ngay dưới phiếu thu gốc + gắn nhãn cho phiếu gốc.
+  // KHÔNG đụng `amount` của bất kỳ dòng nào — xem lib/portal/phieu-thu.ts.
+  return xepPhieuThuVaDieuChinh(
+    payments.map((p) => ({
+      id: p.id,
+      orderId: p.orderId,
+      orderCode: p.order?.code ?? null,
+      enrollmentId: p.enrollmentId,
+      studentName: p.enrollment?.student?.name ?? null,
+      amount: p.amount,
+      method: p.method,
+      paidDate: p.paidDate.toISOString(),
+      confirmedAt: p.confirmedAt?.toISOString() ?? null,
+      receiptCode: p.receipts[0]?.code ?? null,
+      paymentType: p.paymentType,
+      adjustmentOfId: p.adjustmentOfId,
+      lyDoDieuChinh: p.paymentType === "ADJUSTMENT" ? (p.note?.trim() || null) : null,
+      daBiDieuChinh: false, // hàm xếp sẽ đặt lại
+    })),
+  );
 }
 
 // =============================================================================
@@ -248,9 +283,7 @@ export async function getParentBilling(parentUserId: string): Promise<ParentBill
 
   const rows: EnrollmentBillingRow[] = enrollments.map((e) => {
     const finalPrice = e.finalPrice ?? e.tuition ?? 0;
-    const confirmedPaid = e.payments
-      .filter((p) => p.accountantStatus === "CONFIRMED")
-      .reduce((s, p) => s + p.amount, 0);
+    const confirmedPaid = tongDaXacNhan(e.payments.filter(laKhoanDaXacNhan));
     const pendingCount = e.payments.filter((p) => p.accountantStatus === "PENDING").length;
     const rejectedCount = e.payments.filter((p) => p.accountantStatus === "REJECTED").length;
     return {

@@ -132,7 +132,7 @@ const BY_PREFIX: Readonly<Record<string, NotiDef>> = {
   },
   "timesheet_adjust:": {
     group: "action_required", priority: 2, entity: "timesheet",
-    recipients: "Quản lý chấm công", target: "/cham-cong/chinh-cong",
+    recipients: "Quản lý chấm công", target: "/don-tu", // L5: màn chỉnh công cũ đã gỡ, đơn chỉnh công nay ở Duyệt đơn từ
   },
   "parent_request:": {
     group: "action_required", priority: 1, entity: "parent_request",
@@ -237,6 +237,13 @@ const BY_PREFIX: Readonly<Record<string, NotiDef>> = {
     // luận loại này gãy trên site giáo viên rồi đi sửa nhầm chỗ.
     recipients: "Tư vấn viên phụ trách lead (không có thì admin lead)", target: "/leads/<leadId>",
   },
+  // 03/09 — giáo viên chấm xong phiếu rubric ⇒ Sale có căn cứ chốt với phụ huynh.
+  // Việc MỚI rơi xuống chứ không phải tin để biết, nên xếp "new_task" như trial.assigned.
+  "trial.evaluated:": {
+    group: "new_task", priority: 2, entity: "trial",
+    // Là SALE, không phải giáo viên: người chấm chính là giáo viên nên báo lại là vô nghĩa.
+    recipients: "Tư vấn viên phụ trách lead (không có thì admin lead)", target: "/lop-trial/<trialClassId>",
+  },
   "trial.schedule_changed:": {
     group: "system", priority: 2, entity: "trial",
     // Cũng là SALE (lib/_handlers/trial-schedule-notif.ts), không phải giáo viên.
@@ -249,6 +256,13 @@ const BY_PREFIX: Readonly<Record<string, NotiDef>> = {
   "trial-class.assigned:": {
     group: "new_task", priority: 2, entity: "trial",
     recipients: "Giáo viên được phân lớp học thử", target: "/lop-trial",
+  },
+  // 03/09 — có EM vừa được xếp vào ca của GV (enrollLeadChild). Khác ba loại "assigned"
+  // còn lại: chúng báo việc được giao LỚP/BUỔI/CA, loại này báo SIĨ SỐ của ca đổi.
+  // Lớp trải nghiệm là slot tái sử dụng nên hai việc cách nhau hàng tuần.
+  "trial-enroll.assigned:": {
+    group: "new_task", priority: 2, entity: "trial",
+    recipients: "Giáo viên dạy buổi (không có thì GV chính của lớp)", target: "/lop-trial",
   },
   // Buổi ad-hoc thêm tay vào lớp trải nghiệm (addTrialSession) — GV được gán buổi đó.
   // Cùng mức với hai loại trên: là ca dạy vừa rơi vào lịch của mình, không phải tin để biết.
@@ -338,6 +352,29 @@ const BY_PREFIX: Readonly<Record<string, NotiDef>> = {
   "birthday:": {
     group: "system", priority: 3, entity: "student",
     recipients: "CSKH + giáo viên lớp", target: "/sinh-nhat",
+  },
+  // ── Module chấm công v3 (L3, 06/09/2026) ────────────────────────────────────
+  // Ca của tôi bị đổi (sửa tay trên lưới / đơn được duyệt) — T-07: "duyệt ⇒ đổi lịch ⇒ báo".
+  "shift.changed:": {
+    group: "new_task", priority: 2, entity: "timesheet",
+    recipients: "Chính người có ca", target: "/cham-cong/lich-ca",
+  },
+  // Tin nhắc lịch NGÀY MAI (thay tin Zalo 19:00 của Sheet). dedupeKey = shift.brief:<userId>:<ymd>
+  // ⇒ cron bơm dày (test 5′/lần) không kêu chuông lần hai.
+  "shift.brief:": {
+    group: "due_date", priority: 3, entity: "timesheet",
+    recipients: "Mọi nhân sự có trong lưới phân ca", target: "/cham-cong/lich-ca",
+  },
+  // L5 — đơn từ (ca/nghỉ/chỉnh công/lớp) dùng chung mọi nhân sự.
+  // Đơn mới tới cơ sở nhận đơn: báo người có quyền duyệt ở cơ sở đó. dedupeKey = request.submitted:<requestId>
+  "request.submitted:": {
+    group: "new_task", priority: 2, entity: "timesheet",
+    recipients: "Người giữ quyền duyệt đơn (hr_attendance:approve) tại cơ sở nhận đơn", target: "/don-tu",
+  },
+  // Đơn của tôi được duyệt / từ chối. dedupeKey = request.decided:<requestId>:<userId>
+  "request.decided:": {
+    group: "new_task", priority: 2, entity: "timesheet",
+    recipients: "Người nộp đơn (và người nhận ca/làm thay nếu có)", target: "/don-tu/cua-toi",
   },
 };
 

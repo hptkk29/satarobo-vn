@@ -36,6 +36,15 @@ export const leadCreateSchema = z.object({
   phone: phoneVn,
   email: z.string().email('Email không hợp lệ').optional().or(z.literal('')),
   centerId: z.string().min(1).optional(),
+  /**
+   * MÃ cơ sở khách chọn trên biểu mẫu công khai (`Center.code`, vd "CS1"),
+   * 03/09/2026. Server quy ra `Lead.centerId`.
+   *
+   * Vì sao là MÃ chứ không phải id: `/lien-he` là trang marketing công khai,
+   * danh sách cơ sở ở đó lấy từ `lib/locations` (tĩnh) nên trang không phải
+   * chạm DB — giữ được ngân sách LCP. `Center.code` là chỗ hai bên gặp nhau.
+   */
+  centerCode: z.string().trim().min(1).max(20).optional(),
   orgUnitId: z.string().min(1).optional(), // PR-C: đơn vị (OrgUnit) — nguồn chính; centerId suy ra (HO→null)
   courseId: z.string().min(1).optional(),
   source: z.string().min(1),

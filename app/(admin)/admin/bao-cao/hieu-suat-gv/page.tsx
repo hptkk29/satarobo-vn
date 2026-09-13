@@ -28,6 +28,7 @@ import {
   reportDateWhere,
   type ReportFilters,
 } from "@/lib/reports/filters";
+import { giaoVienDuocQuyCong } from "@/lib/lms/session-ownership";
 import { ReportFilterBar } from "@/components/admin/report-filter-bar";
 import { PageHelp } from "@/components/admin/ui/page-help";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
@@ -222,7 +223,14 @@ async function computeTeacherPerformanceReport(
             classId: { in: classIds },
             ...(dateWhere ? { date: dateWhere } : {}),
           },
-          select: { classId: true, status: true, actualTeacherId: true },
+          select: {
+            classId: true,
+            status: true,
+            actualTeacherId: true,
+            // Cột này TỪNG THIẾU ở đây — không select thì `giaoVienDuocQuyCong` nhận
+            // `undefined` và bug quay lại im lặng.
+            substituteTeacherId: true,
+          },
         })
       : Promise.resolve([]),
     // 3. Điểm danh các buổi của những lớp này (lọc theo ngày buổi qua quan hệ session).
@@ -277,10 +285,19 @@ async function computeTeacherPerformanceReport(
       })
     : [];
 
-  // 6. GV cần đưa vào báo cáo = GV phụ trách lớp ∪ GV dạy thực tế buổi.
+  // 6. GV cần đưa vào báo cáo = GV phụ trách lớp ∪ GV được QUY CÔNG buổi.
+  //
+  // ⚠️ Trước 08/09/2026 chỗ này viết `actualTeacherId ?? classToTeacher.get(classId)` —
+  // BỎ SÓT `substituteTeacherId`. Mỗi lần quản lý đổi giáo viên cho một buổi
+  // (`lib/classes/adjust.ts:245`), buổi ấy bị quy công cho người KHÔNG dạy. Luật quy
+  // công ở MỘT chỗ: `giaoVienDuocQuyCong` (`lib/lms/session-ownership.ts`).
   const teacherIdSet = new Set<string>(classToTeacher.values());
   for (const s of sessionRows) {
-    const tId = s.actualTeacherId ?? classToTeacher.get(s.classId);
+    const tId =
+      giaoVienDuocQuyCong({
+        actualTeacherId: s.actualTeacherId,
+        substituteTeacherId: s.substituteTeacherId,
+      }) ?? classToTeacher.get(s.classId);
     if (tId) teacherIdSet.add(tId);
   }
   const teacherIds = [...teacherIdSet];
@@ -299,7 +316,12 @@ async function computeTeacherPerformanceReport(
   // ── Gắn teacherId vào từng record cho hàm THUẦN ────────────────────────────
   const sessions: TeacherSessionRecord[] = [];
   for (const s of sessionRows) {
-    const teacherId = s.actualTeacherId ?? classToTeacher.get(s.classId);
+    // Cùng luật với vòng ở trên — hai chỗ tính lệch nhau là báo cáo tự mâu thuẫn.
+    const teacherId =
+      giaoVienDuocQuyCong({
+        actualTeacherId: s.actualTeacherId,
+        substituteTeacherId: s.substituteTeacherId,
+      }) ?? classToTeacher.get(s.classId);
     if (teacherId)
       sessions.push({ teacherId, status: s.status as SessionStatusValue });
   }

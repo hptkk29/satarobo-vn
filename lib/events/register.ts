@@ -13,11 +13,13 @@ import { registerEvalNotifHandlers } from "@/lib/_handlers/eval-notif";
 import { registerHomeworkNotifHandlers } from "@/lib/_handlers/homework-notif";
 import { registerScormIngestHandlers } from "@/lib/events/handlers/scorm-ingest";
 import { registerTrialScheduleNotifHandlers } from "@/lib/_handlers/trial-schedule-notif";
+import { registerTrialEvalNotifHandlers } from "@/lib/_handlers/trial-eval-notif";
 import { registerAccountNotifHandlers } from "@/lib/_handlers/account-notif";
 import { registerCommentNotifHandlers } from "@/lib/_handlers/comment-notif";
 import { registerConversationNotifHandlers } from "@/lib/_handlers/conversation-notif";
 import { registerParentRequestHandlers } from "@/lib/events/handlers/parent-request";
 import { registerChatParticipantRemovedHandlers } from "@/lib/chat/_handlers/participant-removed";
+import { registerAttendanceDayHandlers } from "@/lib/cham-cong/_handlers/attendance-day";
 
 let registered = false;
 
@@ -36,10 +38,12 @@ export function ensureHandlersRegistered(): void {
   registerHomeworkNotifHandlers(); // R7-17 — session.taught → thông báo "Bài tập mới" cho HV
   registerScormIngestHandlers(); // R7-11 — scorm.uploaded → giải nén + upload R2 + parse manifest → tự phát hành + thay giáo án cũ
   registerTrialScheduleNotifHandlers(); // R7-17 — trial.schedule_changed → báo Sale phụ trách
+  registerTrialEvalNotifHandlers(); // 03/09 — trial.evaluated → báo Sale phiếu đã chấm xong
   registerAccountNotifHandlers(); // R7-17 — account.activated → chào mừng PH lên portal
   registerCommentNotifHandlers(); // R7-17 — comment.added → báo PH có nhận xét mới của GV
   registerConversationNotifHandlers(); // LMS-15 — conversation.message_posted → báo GV (PH gửi) / PH (GV trả lời)
   registerParentRequestHandlers(); // #08 — parent_request.created → báo Sale + Quản lý cơ sở
   registerChatParticipantRemovedHandlers(); // US-07/F-KICK — chat.participant_removed → đá client ra khỏi kênh realtime
   registerElearningNotifyHandlers(); // EL-06 — giao bài / quá hạn / hoàn thành → in-app + email (KHÔNG ZNS)
+  registerAttendanceDayHandlers(); // Chấm công v3 L2 — hr.attendance_day_dirty → recomputeAttendanceDay (không xin khe cron)
 }

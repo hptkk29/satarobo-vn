@@ -109,8 +109,8 @@ export function EmployeesAdminTable({ employees, canDelete, hoEmployeeIds = [] }
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-border bg-card">
-      <PhanTrangBang>
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <PhanTrangBang cuonNgang>
         <table className="w-full text-sm">
           <thead className="bg-muted text-left text-xs uppercase tracking-wider text-muted-foreground">
             <tr>

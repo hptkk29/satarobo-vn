@@ -70,7 +70,19 @@ const VIEC = [
   "Nhắc lịch học thử", "Chốt đơn sau học thử", "Chăm sóc lại sau 2 tuần",
 ];
 
-export async function seedCrm(coSo: CoSo[], uat: Uat) {
+export async function seedCrm(
+  coSo: CoSo[],
+  uat: Uat,
+  /**
+   * Khoá học của bộ nền — để gán `interestedCourseId` cho từng con.
+   *
+   * Thiếu nó thì cột "Khoá học" ở bảng Trial của site giáo viên rỗng 100% dòng, và QA
+   * vòng 1 đọc ra thành "cột chưa nối API" (BUG-038) rồi đề nghị ẩn đi. Cột ĐÃ nối
+   * đúng (`leadChild.interestedCourseId` → lib/lms/teacher-schedule.ts); thứ thiếu là
+   * dữ liệu seed.
+   */
+  khoaHoc: { id: string }[] = [],
+) {
   const rng = makeRng(2002);
   const SO_LEAD = MOI_CO_SO;
 
@@ -148,6 +160,7 @@ export async function seedCrm(coSo: CoSo[], uat: Uat) {
           gender: gt,
           gradeLevel: `Lớp ${int(rng, 1, 9)}`,
           interestedCenterId: cs.centerId,
+          interestedCourseId: khoaHoc.length ? pick(rng, khoaHoc).id : null,
         });
       }
 

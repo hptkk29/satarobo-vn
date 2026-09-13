@@ -24,12 +24,28 @@ import {
 import { Sidebar } from "@/components/admin/sidebar";
 import { Topbar } from "@/components/admin/topbar";
 import { Toaster } from "@/components/ui/sonner";
+import { ServiceWorkerRegister } from "@/components/push/service-worker-register";
 
 // Default title cho MỌI trang admin chưa tự khai metadata (86/199 trang) → không rơi về
 // title public "Sata Robo – Trung tâm…". Trang tự khai `title: "X | Admin"` giữ nguyên
 // (không set template ở đây để tránh nhân đôi "| Admin").
 export const metadata = {
   title: { default: "Quản trị" },
+  // Web Push Đợt 2 — phát ra `<link rel="manifest" href="/manifest.json">`, điều kiện để nhân
+  // viên iPhone "Thêm vào màn hình chính" (iOS chỉ giao push cho web app đã cài).
+  //
+  // ⚠️ TRỎ FILE TĨNH `public/manifest.json`, CỐ Ý KHÔNG dùng `app/manifest.ts`: file quy ước
+  // của Next phát ra đường `/manifest.webmanifest`, mà `isInfraPath` (`lib/auth/route-policy.ts`)
+  // chỉ mở đúng chuỗi `/manifest.json`. Đường `.webmanifest` không được matcher của `proxy.ts`
+  // loại (matcher chỉ loại `.js`/`.css`/ảnh), nên nó rơi vào luật host×role và hỏng câm với một
+  // request nặc danh — đúng thứ trình duyệt dùng để lấy manifest.
+  manifest: "/manifest.json",
+};
+
+// Màu thanh trạng thái khi chạy dạng ứng dụng đã cài. Lấy đúng `--primary` của app
+// (cam #F97316, `app/globals.css:196`).
+export const viewport = {
+  themeColor: "#f97316",
 };
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -138,6 +154,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       </div>
 
       <Toaster richColors position="top-right" />
+      {/* Web Push Đợt 2 — cài service worker, KHÔNG xin quyền (đó là Đợt 3, chỉ trong user gesture). */}
+      <ServiceWorkerRegister nguoiDung={session.user.id} />
     </div>
   );
 }

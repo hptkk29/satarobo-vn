@@ -9,8 +9,9 @@ import {
   pickCenterEvenly,
   type SaleStat,
 } from "@/lib/lead/assign-strategy";
-import { takeRotationTurn } from "@/lib/lead/rotation";
+import { congMotLuot, takeRotationTurn } from "@/lib/lead/rotation";
 import { canManualAssign } from "@/lib/lead/assign-guard";
+import { baoSaleCoLeadMoi, thuHoiChuongLeadCu } from "@/lib/lead/assign-lead";
 import { assignmentWrite } from "@/lib/lead/assignment";
 import { LEAD_CLOSED_STATUSES } from "@/lib/leads/status";
 
@@ -168,7 +169,8 @@ export type AutoAssignResult = {
 export async function autoAssignNewLead(leadId: string, actor: Actor): Promise<AutoAssignResult> {
   const lead = await db.lead.findUnique({
     where: { id: leadId },
-    select: { id: true, centerId: true, status: true, assignedToId: true },
+    // `parentName` chỉ để dựng nội dung chuông ở cuối hàm — thêm vào select đang có.
+    select: { id: true, centerId: true, status: true, assignedToId: true, parentName: true },
   });
   if (!lead) return { ok: false, error: "Lead không tồn tại" };
   if (lead.assignedToId) return { ok: true, skipped: true, assignedToId: lead.assignedToId };
@@ -284,6 +286,27 @@ export async function autoAssignNewLead(leadId: string, actor: Actor): Promise<A
     });
   });
 
+  // BÁO CHO SALE VỪA ĐƯỢC CHIA (vá 08/09/2026).
+  //
+  // Đây là NHÁNH LÙI của cả hai nguồn lead lớn nhất: `POST /api/leads` (form web) và
+  // `ingestIntakeLead` (quatang, form Sale) đều rơi vào đây khi `centerId` không giải được —
+  // khách bỏ trống ô cơ sở, hoặc chuỗi cơ sở trên phiếu không khớp cơ sở nào. Đường chính
+  // (`chiaChoLead`) có chuông từ 30/08; đường lùi thì câm, nên đúng những phiếu KHÓ NHẤT —
+  // phiếu mà hệ thống phải tự đoán cơ sở — lại là phiếu không ai được báo.
+  //
+  // ⚠️ NGOÀI transaction, sau dấu đóng ở trên: `notifyStaff` cố ý không nhận `tx`.
+  //
+  // `source: "AUTO"` — máy chia, không phải người giao tay.
+  //
+  // KHÔNG thu hồi chuông chủ cũ ở đây: hàm đã thoát sớm ở đầu khi `lead.assignedToId` có giá
+  // trị, nên tới được dòng này thì lead chắc chắn CHƯA có chủ — không có gì để thu hồi.
+  await baoSaleCoLeadMoi({
+    ownerId: target,
+    leadId,
+    parentName: lead.parentName,
+    source: "AUTO",
+  });
+
   return { ok: true, assignedToId: target, centerId, mode };
 }
 
@@ -339,7 +362,9 @@ export async function manualAssignLead(
   const [lead, sale] = await Promise.all([
     db.lead.findUnique({
       where: { id: leadId },
-      select: { id: true, assignedToId: true, status: true, centerId: true },
+      // `parentName` chỉ để dựng nội dung chuông ở cuối hàm — thêm vào select đang có
+      // thay vì mở một câu tra thứ hai.
+      select: { id: true, assignedToId: true, status: true, centerId: true, parentName: true },
     }),
     db.user.findFirst({
       where: { id: saleId, roles: { has: "SALES_CSM" } },
@@ -359,6 +384,18 @@ export async function manualAssignLead(
   });
   if (!guard.ok) return { ok: false, error: guard.error };
 
+  // 03/09 — GÁN TAY CŨNG TIÊU LƯỢT (chủ dự án chốt).
+  //
+  // Trước đợt này đường gán tay đổi chủ lead mà KHÔNG đụng sổ lượt, nên người vừa
+  // được giao tay 5 lead vẫn đứng nguyên vị trí trong vòng và lượt tự động kế tiếp
+  // lại rơi vào chính họ. Sổ lượt sinh ra để nói "ai đã nhận bao nhiêu"; một trong
+  // hai đường giao lead không ghi vào đó thì con số ấy sai theo đúng hướng dễ gây
+  // tranh cãi nhất.
+  //
+  // Suy đơn vị NGOÀI transaction: `orgUnitIdForCenter` là một lượt đọc riêng, để
+  // trong transaction chỉ tổ giữ khoá lâu hơn cần thiết.
+  const orgUnitId = lead.centerId ? await orgUnitIdForCenter(lead.centerId) : null;
+
   await db.$transaction(async (tx) => {
     await tx.lead.update({
       where: { id: leadId },
@@ -367,6 +404,25 @@ export async function manualAssignLead(
       // và đó mới là chỗ đọc ra "lead này đã phân cho ai, lúc nào".
       data: assignmentWrite(saleId), // Đợt A — kèm mốc phân công
     });
+
+    // Cơ sở chưa gắn vào cây tổ chức ⇒ không có sổ lượt để ghi. Vẫn gán bình thường
+    // (đó là hành vi đang chạy đúng ở mọi cơ sở như vậy), chỉ là không đếm được.
+    if (orgUnitId) {
+      const turnCountAfter = await congMotLuot(tx, orgUnitId, saleId);
+      // Ghi vào SỔ CHIA để lượt giao tay hiện ra cùng chỗ với lượt máy chia —
+      // nếu không, sổ đếm thiếu đúng những lần quản lý can thiệp.
+      await tx.leadAssignmentLog.create({
+        data: {
+          leadId,
+          orgUnitId,
+          assignedToId: saleId,
+          createdById: actor.actorId,
+          source: "MANAGER",
+          consumedTurn: true,
+          turnCountAfter,
+        },
+      });
+    }
     await logLeadAudit({
       leadId,
       action: "ASSIGN",
@@ -388,6 +444,31 @@ export async function manualAssignLead(
       },
     });
   });
+
+  // BÁO CHO SALE VỪA ĐƯỢC GIAO LEAD (vá 08/09/2026).
+  //
+  // Trước bản vá này, gán tay là đường CÂM: quản lý bấm giao lead, sổ ghi đủ ba vết
+  // (LeadAssignmentLog + audit ASSIGN + LeadActivity), nhưng sale không nhận gì. Họ chỉ biết
+  // khi tự mở danh sách — hoặc khi cron SLA kêu vì họ ĐÃ trễ, tức thông báo đầu tiên đến tay
+  // luôn là một lời trách. Đúng loại lead nóng nhất (quản lý giao tận tay) lại là loại im nhất.
+  //
+  // ⚠️ NGOÀI transaction, sau dấu đóng ở trên: `notifyStaff` cố ý không nhận `tx` vì broadcast
+  // phải chạy SAU commit (`lib/notifications/notify.ts:18`). Đừng kéo dòng này vào trong tx.
+  //
+  // `source: "MANAGER"` khớp đúng giá trị vừa ghi vào sổ chia ở trên — không đẻ giá trị enum mới.
+  // `baoSaleCoLeadMoi` tự nuốt lỗi nên chuông hỏng không kéo theo lượt gán; không cần bọc thêm.
+  //
+  // Gán tay cho ĐÚNG người đang giữ lead không đẻ chuông thứ hai: khoá `(userId, dedupeKey)` đã
+  // tồn tại và nội dung không đổi ⇒ `ghiThongBaoNhanSu` không ghi, không rung.
+  await baoSaleCoLeadMoi({
+    ownerId: saleId,
+    leadId,
+    parentName: lead.parentName,
+    source: "MANAGER",
+  });
+
+  // Chuông của CHỦ CŨ trỏ tới một lead họ không còn giữ ⇒ thu hồi trong cùng lượt.
+  await thuHoiChuongLeadCu({ chuCuId: lead.assignedToId, chuMoiId: saleId, leadId });
 
   return { ok: true };
 }

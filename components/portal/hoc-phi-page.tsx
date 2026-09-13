@@ -7,6 +7,7 @@ import {
   Receipt,
 } from "lucide-react";
 import type { StudentBilling } from "@/lib/portal/billing-student";
+import { soTienCoDau, tongPhieuThuHienThi } from "@/lib/portal/phieu-thu";
 
 import { PageHero, HeroMetric } from "@/components/portal/page-header";
 import { ChildSwitcher } from "@/components/portal/child-switcher";
@@ -109,6 +110,27 @@ export function HocPhiPageV2({
           <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
             Khoản cần thanh toán
           </h2>
+          {/* 06/09 — ghi danh CHƯA CHỐT HỌC PHÍ hiện thành một dòng nói rõ, thay vì bị
+              lọc mất (trước đây trang báo "Đã thanh toán đủ" ngay trên phiếu thu thật)
+              hoặc in "0 đ" (đọc như khoá miễn phí). */}
+          {data.rows
+            .filter((r) => r.chuaChotGia)
+            .map((r) => (
+              <div
+                key={r.enrollmentId}
+                className="rounded-2xl border border-dashed border-caution bg-caution/5 p-4"
+              >
+                <p className="text-sm font-bold text-foreground">
+                  {r.courseName ?? "Khoá học"}
+                  {r.className ? ` · ${r.className}` : ""}
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Trung tâm chưa chốt học phí cho khoá này. Vui lòng liên hệ để được báo
+                  giá — số tiền bên dưới chưa bao gồm khoá này.
+                </p>
+              </div>
+            ))}
+
           {data.outstanding > 0 ? (
             <div className="space-y-3">
               {data.rows
@@ -212,25 +234,70 @@ export function HocPhiPageV2({
               Chưa có phiếu thu nào được xác nhận.
             </p>
           ) : (
-            data.receipts.map((r) => (
-              <div key={r.id} className="flex items-center gap-3 p-4">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-bold text-foreground">
-                    Học phí{r.orderCode ? ` · ${r.orderCode}` : ""}
-                  </p>
-                  <p className="mt-0.5 text-xs font-medium text-muted-foreground">
-                    {dmy(r.paidDate)} ·{" "}
-                    {methodLabels[r.method] ?? r.method}
-                  </p>
-                </div>
-                <p className="shrink-0 text-sm font-bold text-foreground">
-                  {vnd(r.amount)}
+            <>
+              {data.receipts.map((r) =>
+                r.paymentType === "ADJUSTMENT" ? (
+                  // BÚT TOÁN ĐIỀU CHỈNH — dòng riêng, in phần chênh lệch kèm dấu + lý do.
+                  // Thụt lề để đọc ra ngay là nó thuộc về phiếu thu ngay bên trên.
+                  <div key={r.id} className="flex items-start gap-3 bg-muted/30 p-4 pl-8">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-bold text-foreground">
+                        Điều chỉnh phiếu thu
+                      </p>
+                      {r.lyDoDieuChinh && (
+                        <p className="mt-0.5 text-xs font-medium text-muted-foreground">
+                          Lý do: {r.lyDoDieuChinh}
+                        </p>
+                      )}
+                      <p className="mt-0.5 text-xs font-medium text-muted-foreground">
+                        {dmy(r.confirmedAt ?? r.paidDate)}
+                      </p>
+                    </div>
+                    <p
+                      className={`shrink-0 text-sm font-bold ${
+                        r.amount < 0 ? "text-destructive" : "text-success"
+                      }`}
+                    >
+                      {soTienCoDau(r.amount)}
+                    </p>
+                  </div>
+                ) : (
+                  <div key={r.id} className="flex items-center gap-3 p-4">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-bold text-foreground">
+                        Học phí{r.orderCode ? ` · ${r.orderCode}` : ""}
+                      </p>
+                      <p className="mt-0.5 text-xs font-medium text-muted-foreground">
+                        {dmy(r.paidDate)} ·{" "}
+                        {methodLabels[r.method] ?? r.method}
+                      </p>
+                    </div>
+                    {/* Số tiền của phiếu gốc GIỮ NGUYÊN — khớp biên lai phụ huynh đang cầm. */}
+                    <p className="shrink-0 text-sm font-bold text-foreground">
+                      {vnd(r.amount)}
+                    </p>
+                    {r.daBiDieuChinh ? (
+                      <span className="shrink-0 rounded-md bg-caution/10 px-2 py-0.5 text-xs font-bold text-caution">
+                        Đã điều chỉnh
+                      </span>
+                    ) : (
+                      <span className="shrink-0 rounded-md bg-success/10 px-2 py-0.5 text-xs font-bold text-success">
+                        Đã xác nhận
+                      </span>
+                    )}
+                  </div>
+                ),
+              )}
+              {/* Tổng ở CUỐI: chỉ khi cộng cả dòng gốc lẫn dòng điều chỉnh mới ra số đúng. */}
+              <div className="flex items-center gap-3 bg-muted/50 p-4">
+                <p className="min-w-0 flex-1 text-sm font-bold text-foreground">
+                  Tổng đã xác nhận
                 </p>
-                <span className="shrink-0 rounded-md bg-success/10 px-2 py-0.5 text-xs font-bold text-success">
-                  Đã xác nhận
-                </span>
+                <p className="shrink-0 text-sm font-bold text-foreground">
+                  {vnd(tongPhieuThuHienThi(data.receipts))}
+                </p>
               </div>
-            ))
+            </>
           )}
         </div>
       </section>

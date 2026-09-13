@@ -109,3 +109,48 @@ export function parseVnYmd(value: string): Date | null {
   const d = vnDateAt(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
   return Number.isNaN(d.getTime()) ? null : d;
 }
+
+/**
+ * Chuỗi của `<input type="datetime-local">` → `Date`, đọc theo ĐỒNG HỒ VN.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Vì sao phải có (06/09/2026)
+ *
+ * `<input type="datetime-local">` gửi lên `"YYYY-MM-DDTHH:mm"` — KHÔNG kèm múi giờ. Theo
+ * chuẩn ECMAScript, chuỗi ngày-giờ không có hậu tố múi được hiểu là giờ ĐỊA PHƯƠNG CỦA
+ * TIẾN TRÌNH. Máy dev chạy +07 nên nhìn như đúng; **Vercel chạy UTC**, nên mọi
+ * `new Date(value)` / `z.coerce.date()` trên chuỗi này đều ghi lệch **7 tiếng**:
+ *
+ *   giáo vụ nhập buổi 17:30 ngày 12/09  →  DB ghi 2026-09-12T17:30:00Z  =  00:30 13/09 VN
+ *   giáo viên đặt hạn nộp 23:59 12/09   →  DB ghi 2026-09-12T23:59:00Z  =  06:59 13/09 VN
+ *
+ * Phụ huynh đọc ra giờ học nửa đêm và hạn nộp sang ngày hôm sau; các phép "đã diễn ra" /
+ * "buổi hôm nay" cũng lệch theo. Lỗi thuộc loại "chạy máy tôi thì được".
+ *
+ * Chuỗi ĐÃ có múi giờ (`Z` hoặc `±hh:mm`) được tôn trọng nguyên trạng — chỉ chuỗi trần
+ * mới được gán +07:00.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export function parseVnDateTimeLocal(value: string | null | undefined): Date | null {
+  if (typeof value !== "string") return null;
+  const v = value.trim();
+  if (v === "") return null;
+  if (/(?:Z|[+-]\d{2}:?\d{2})$/.test(v)) {
+    const d = new Date(v);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(v);
+  if (!m) {
+    const d = new Date(v);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const d = vnDateAt(
+    Number(m[1]),
+    Number(m[2]) - 1,
+    Number(m[3]),
+    Number(m[4]),
+    Number(m[5]),
+  );
+  if (Number.isNaN(d.getTime())) return null;
+  return m[6] ? new Date(d.getTime() + Number(m[6]) * 1000) : d;
+}

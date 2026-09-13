@@ -108,6 +108,8 @@ export function EmployeeForm({
     emergencyContact: initial?.emergencyContact ?? "",
     notes: initial?.notes ?? "",
     isCEO: initial?.isCEO ?? false,
+    // Module chấm công v3 (T-02): miễn tính công. Server chỉ nhận từ SUPER_ADMIN.
+    timesheetExempt: initial?.timesheetExempt ?? false,
 
     // Phase C1
     nationalId: initial?.nationalId ?? "",
@@ -318,6 +320,15 @@ export function EmployeeForm({
                 onCheckedChange={(v) => setData({ ...data, isCEO: v })}
               />
               <span className="text-sm font-medium">CEO Quote auto-link</span>
+            </label>
+          )}
+          {visibility.personal && (
+            <label className="flex items-center gap-2" title="Không sinh bảng công, không vào kỳ công (T-02). Chỉ Quản trị tối cao đặt được.">
+              <Switch
+                checked={data.timesheetExempt}
+                onCheckedChange={(v) => setData({ ...data, timesheetExempt: v })}
+              />
+              <span className="text-sm font-medium">Miễn tính công (chấm công)</span>
             </label>
           )}
         </div>

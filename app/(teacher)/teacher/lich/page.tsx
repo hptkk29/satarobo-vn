@@ -39,9 +39,8 @@ import { resolveActor } from "@/lib/auth/actor";
 import { withMakeupException } from "@/lib/db-scope";
 import { isSessionLifecycleV2Enabled } from "@/lib/flags";
 import { sessionTimeRange } from "@/lib/classes/slots";
-import { SHIFT_ORDER, shiftLabel } from "@/lib/shifts";
+import { getMyAssignments } from "@/lib/cham-cong/my-schedule";
 import {
-  getOwnShiftRegistrations,
   getTeacherTrialSessions,
   getVisibleHolidays,
   type TeacherTrialSessionRow,
@@ -172,7 +171,7 @@ type DayAgg = {
   classes: ClassSessionRow[];
   trials: TeacherTrialSessionRow[];
 };
-/** Ca làm trong ngày: nhãn VI đã sort theo SHIFT_ORDER + cờ xin nghỉ khẩn. */
+/** Ca làm trong ngày: mã ca + khung giờ từ lưới phân ca; `leave` = ô nghỉ đã duyệt. */
 type DayShift = { labels: string[]; leave: boolean };
 type DayHoliday = { name: string; typeLabel: string };
 
@@ -313,7 +312,7 @@ export default async function TeacherSchedulePage({
       take: 500,
     }),
     getTeacherTrialSessions(session.user.id, fromDay, toDay),
-    getOwnShiftRegistrations(session.user.id, fromDay, toDay),
+    getMyAssignments(session.user.id, fromDay, toDay),
     // Vá 24/07 — getVisibleHolidays nhận actor, tự tính per-model scope Holiday.
     getVisibleHolidays(actor, fromDay, toDay),
   ]);
@@ -361,11 +360,12 @@ export default async function TeacherSchedulePage({
   // @db.Date trả UTC 00:00 = 07:00 VN cùng ngày lịch → isoKey khớp khóa VN.
   for (const t of fTrials) dayAgg(isoKey(t.date), t.date).trials.push(t);
 
+  // L5 chấm công v3: ca làm đọc từ lưới ShiftAssignment (Quản lý xếp), không còn tự đăng ký.
   const shiftsByDay = new Map<string, DayShift>();
   for (const r of shiftRows) {
     shiftsByDay.set(isoKey(r.date), {
-      labels: SHIFT_ORDER.filter((c) => r.shifts.includes(c)).map(shiftLabel),
-      leave: r.status === "LEAVE_REQUESTED", // xin nghỉ khẩn — vẫn hiện, kèm nhãn
+      labels: [r.timeLabel ? `${r.code} ${r.timeLabel}` : `${r.code} · ${r.name}`],
+      leave: r.isLeave, // ô nghỉ đã duyệt (P/X) — vẫn hiện, kèm nhãn
     });
   }
 
@@ -507,6 +507,7 @@ function ListView({
         // rơi về view Tháng, không còn đúng nghĩa "toàn bộ danh sách".
         <Link
           href="?view=ds"
+          scroll={false}
           className="inline-flex items-center gap-1.5 rounded-sm text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
         >
           ← Toàn bộ lịch dạy
@@ -717,7 +718,9 @@ function MonthView({
               const shown = items.slice(0, 2);
               const overflow = items.length - shown.length;
               return (
-                // Click ô → danh sách đúng ngày đó (href CHỈ-query).
+                // Click ô → danh sách đúng ngày đó (href CHỈ-query). CỐ Ý KHÔNG
+                // `scroll={false}`: đây là bấm XEM CHI TIẾT một ngày — cả thân trang
+                // đổi từ lưới lịch sang danh sách, phải cuộn lên đầu mới thấy ngày vừa chọn.
                 <Link
                   key={c.key}
                   href={`?view=ds&moc=${c.key}`}
@@ -856,6 +859,8 @@ function WeekView({
                   shift && !holiday && "bg-primary-soft dark:bg-primary-soft", // nền nhẹ: ngày có ca làm
                 )}
               >
+                {/* Click đầu cột → danh sách đúng ngày đó. CỐ Ý KHÔNG `scroll={false}`:
+                    bấm XEM CHI TIẾT một ngày, cả thân trang đổi sang danh sách — cuộn lên đầu mới đúng. */}
                 <Link
                   href={`?view=ds&moc=${d.key}`}
                   className={cn(
@@ -988,7 +993,9 @@ function WeekView({
 
 /* ─────────────────────────────── UI phụ trợ (server) ─────────────────────────────── */
 
-/** Nút chuyển view — Link chỉ-query (giữ path, chạy đúng trên host giaovien lẫn localhost). */
+/** Nút chuyển view — Link chỉ-query (giữ path, chạy đúng trên host giaovien lẫn localhost).
+ *  `scroll={false}`: đổi view là ĐỔI THAM SỐ của CHÍNH trang này, không phải sang trang
+ *  khác — để mặc định thì App Router cuộn vọt lên đầu, mất chỗ đang xem. */
 function ToggleLink({
   active,
   href,
@@ -1003,6 +1010,7 @@ function ToggleLink({
   return (
     <Link
       href={href}
+      scroll={false}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-semibold transition-colors",
         active
@@ -1016,7 +1024,8 @@ function ToggleLink({
   );
 }
 
-/** Thanh điều hướng prev/next tháng-tuần — toàn Link chỉ-query. */
+/** Thanh điều hướng prev/next tháng-tuần — toàn Link chỉ-query.
+ *  `scroll={false}` ở cả 3 nút: lùi/tiến tháng-tuần chỉ đổi ?moc= của CHÍNH trang này. */
 function CalNav({
   label,
   count,
@@ -1037,6 +1046,7 @@ function CalNav({
       <div className="flex items-center gap-2">
         <Link
           href={prevHref}
+          scroll={false}
           aria-label="Trước"
           className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:bg-muted/50"
         >
@@ -1044,6 +1054,7 @@ function CalNav({
         </Link>
         <Link
           href={nextHref}
+          scroll={false}
           aria-label="Sau"
           className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:bg-muted/50"
         >
@@ -1051,6 +1062,7 @@ function CalNav({
         </Link>
         <Link
           href={todayHref}
+          scroll={false}
           className="ml-1 inline-flex h-9 items-center rounded-lg border border-border bg-card px-3 text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted/50"
         >
           {todayLabel}

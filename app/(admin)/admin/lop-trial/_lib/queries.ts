@@ -4,6 +4,7 @@
 // cơ sở (CS1 không thấy lớp CS2). Hai hàm dựng `where` nằm ở ./filters — tách ra để
 // test được bằng vitest mà không phải nạp Prisma Client.
 import { scopedDb } from "@/lib/db-scope";
+import { getCenterOptions } from "@/lib/org/center-options";
 import type { Actor } from "@/lib/auth/actor";
 import { vnParts } from "@/lib/time/vn";
 import { toVnInput } from "./schemas";
@@ -77,12 +78,11 @@ export async function layLuaChonTaoLop(
 }> {
   const sdb = scopedDb(actor);
   const [centers, courses] = await Promise.all([
-    sdb.center.findMany({
-      where: { isActive: true },
-      // 28/08 — thêm `code` để form xem trước được tên lớp sẽ sinh ("CS2-sata4-Lớp trial …").
-      select: { id: true, name: true, code: true },
-      orderBy: { name: "asc" },
-    }),
+    // 03/09 — dùng helper chung: bản cũ (`center.findMany` trần) bày cả Hội sở, các
+    // dòng Center mồ côi (`ITLI_*`), và không cắt theo tầm nhìn actor nên người dùng
+    // chọn được cơ sở mình không quản. Helper vẫn trả `code` mà form cần để xem trước
+    // tên lớp ("CS2-sata4-Lớp trial …").
+    getCenterOptions(actor),
     // Khoá trải nghiệm = khoá quan tâm. `Course` không thuộc SCOPED_MODELS (danh mục
     // dùng chung toàn hệ) nên `sdb` chỉ pass-through.
     sdb.course.findMany({

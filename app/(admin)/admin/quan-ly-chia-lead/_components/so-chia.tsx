@@ -266,6 +266,9 @@ function Trang({
   return (
     <Link
       href={`/quan-ly-chia-lead?${u.toString()}`}
+      // Sang trang khác của CÙNG sổ — chỉ đổi `?trang=`. Không tắt thì App Router
+      // cuốn về đầu, mất chỗ đang đọc.
+      scroll={false}
       className="rounded-lg border border-border px-3 py-1.5 hover:bg-muted"
     >
       {nhan}

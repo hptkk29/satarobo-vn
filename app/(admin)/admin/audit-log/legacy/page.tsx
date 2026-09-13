@@ -71,8 +71,8 @@ export default async function LegacyAuditLogPage() {
           Không có bản ghi cũ.
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-border bg-card">
-          <PhanTrangBang>
+        <div className="overflow-hidden rounded-xl border border-border bg-card">
+          <PhanTrangBang cuonNgang>
             <table className="min-w-full text-sm">
               <thead className="bg-muted text-left text-xs uppercase text-muted-foreground">
                 <tr>

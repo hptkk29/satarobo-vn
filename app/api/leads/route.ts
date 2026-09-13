@@ -6,6 +6,7 @@ import { sendMetaCapi, sendGa4Event } from '@/lib/tracking'
 import { rateLimit } from '@/lib/rate-limit'
 import { findRecentDuplicate, logDuplicateAttempt } from '@/lib/lead/dedup'
 import { autoAssignNewLead } from '@/lib/lead/auto-assign'
+import { chiaChoLead } from '@/lib/lead/assign-lead'
 import { resolveAffiliateByCode } from '@/lib/affiliate'
 import { getSetting } from '@/lib/settings/service'
 
@@ -77,6 +78,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, leadId: duplicate.id, duplicate: true })
     }
 
+    // ─── CƠ SỞ KHÁCH CHỌN ─────────────────────────────────────────────
+    // 03/09/2026 — biểu mẫu công khai gửi MÃ cơ sở (`Center.code`); quy ra id ở
+    // đây. `centerId` gửi thẳng (nguồn nội bộ) vẫn thắng nếu có.
+    //
+    // Mã không khớp cơ sở nào đang hoạt động ⇒ để `null` và đi nhánh "hệ thống
+    // tự chọn cơ sở". KHÔNG từ chối phiếu: lỗi cấu hình danh sách cơ sở không
+    // phải lý do để mất một lead thật đang gõ số vào form.
+    let centerId = data.centerId ?? null
+    if (!centerId && data.centerCode) {
+      const c = await db.center.findFirst({
+        where: { code: data.centerCode, isActive: true },
+        select: { id: true },
+      })
+      centerId = c?.id ?? null
+      if (!c) {
+        console.warn(
+          `[/api/leads] mã cơ sở "${data.centerCode}" không khớp cơ sở nào đang hoạt động — để hệ thống tự chia.`,
+        )
+      }
+    }
+
     let courseId = data.courseId
     if (!courseId && data.source) {
       const course = await db.course.findUnique({ where: { slug: data.source } })
@@ -95,7 +117,7 @@ export async function POST(req: NextRequest) {
         childAge: data.childAge,
         phone: data.phone,
         email: data.email || undefined,
-        centerId: data.centerId,
+        centerId,
         courseId,
         source: data.source,
         status: 'MOI',
@@ -151,13 +173,42 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // ─── Auto-assign theo cơ sở → chế độ (Module CRM PHẦN 2) ─────────
-    // Lead web chưa có assignedToId → định cơ sở rồi chia theo chế độ cơ sở.
-    // Await để đảm bảo gán (serverless có thể kill fire-and-forget).
-    await autoAssignNewLead(lead.id, {
-      actorId: null,
-      actorName: 'Hệ thống (web)',
-    }).catch((err) => console.error('[/api/leads] auto-assign error:', err))
+    // ─── CHIA LEAD ────────────────────────────────────────────────────
+    // 03/09/2026 — lead từ biểu mẫu web (`/lien-he`, ConsultModal, landing) là
+    // LEAD DO MARKETING MANG VỀ, nên phải đi qua ĐÚNG cơ chế chia như mọi nguồn
+    // khác (chủ dự án chốt).
+    //
+    // Trước đợt này chỗ này gọi `autoAssignNewLead`. Hàm đó có dùng sổ lượt,
+    // nhưng KHÔNG đi qua pool (`layPoolDangBat`) và KHÔNG ghi
+    // `LeadAssignmentLog` ⇒ lead web không bao giờ hiện trong màn "Sổ chia
+    // lead". Người vận hành mở sổ ra không thấy nguồn web ở đâu cả.
+    //
+    // `entryPoint: "LANDING"` — cùng giá trị `ingestIntakeLead` dùng cho nguồn web.
+    //
+    // `aff: null` CÓ CHỦ ĐÍCH, không phải bỏ sót: mã `?ref=` ở đây là chương
+    // trình GIỚI THIỆU (phụ huynh/học viên cũ), và `resolveAffiliateByCode` chỉ
+    // tra `{id, code, name}` — không tra ra người dùng nào. Công giới thiệu vẫn
+    // được ghi nhận qua `Lead.affiliateId` ở trên; còn CHỦ lead thì để vòng chia
+    // quyết định, đúng hành vi đang chạy. Muốn mã NV của sale tự nhận lead thì
+    // đó là việc khác (ca [7]–[10] của ma trận) và phải tra thêm user + vai.
+    //
+    // Còn `centerId` rỗng (khách không chọn cơ sở, hoặc nguồn không có ô đó) thì
+    // giữ đường cũ: `autoAssignNewLead` có nhánh "tự chọn cơ sở đều tay" mà
+    // `chiaChoLead` cố ý không có — nó đòi biết cơ sở trước để có sổ lượt mà ghi.
+    if (lead.centerId) {
+      await chiaChoLead(lead.id, {
+        targetCenterId: lead.centerId,
+        createdById: null,
+        entryPoint: 'LANDING',
+        aff: null,
+      }).catch((err) => console.error('[/api/leads] chia lead error:', err))
+    } else {
+      // Await để đảm bảo gán (serverless có thể kill fire-and-forget).
+      await autoAssignNewLead(lead.id, {
+        actorId: null,
+        actorName: 'Hệ thống (web)',
+      }).catch((err) => console.error('[/api/leads] auto-assign error:', err))
+    }
 
     Promise.all([
       sendMetaCapi({

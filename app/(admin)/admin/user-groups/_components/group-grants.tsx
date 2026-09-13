@@ -244,8 +244,8 @@ export function GroupGrants({
       {grants.length === 0 ? (
         <p className="text-sm text-muted-foreground">Nhóm chưa có grant nào.</p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border">
-          <PhanTrangBang>
+        <div className="overflow-hidden rounded-lg border">
+          <PhanTrangBang cuonNgang>
             <Table>
               <TableHeader>
                 <TableRow>

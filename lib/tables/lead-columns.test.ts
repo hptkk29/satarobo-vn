@@ -8,7 +8,7 @@
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { LEAD_COLUMNS, cotMacDinh, chuanHoaCot, doiChoCot } from "./lead-columns";
+import { LEAD_COLUMNS, cotMacDinh, chuanHoaCot, doiChoCot, laNhapLai } from "./lead-columns";
 
 const NGUON = path.join(
   process.cwd(),
@@ -75,5 +75,29 @@ describe("danh mục cột bảng Lead", () => {
     expect(doiChoCot(c, "z", 1)).toEqual(c);
     // Không sửa mảng gốc.
     expect(c).toEqual(["a", "b", "c"]);
+  });
+});
+
+describe("laNhapLai — nhãn 'nhập lại' trên ô Ngày nhận lead", () => {
+  const TAO = "2026-06-04T15:26:00.000Z";
+
+  it("mốc nhập MỚI HƠN ngày tạo ⇒ đúng là khách quay lại", () => {
+    expect(laNhapLai(TAO, "2026-09-07T15:26:00.000Z")).toBe(true);
+  });
+
+  it("BẰNG ngày tạo ⇒ SAI — đây là ca thường gặp nhất, không phải ngoại lệ", () => {
+    // Lúc tạo lead, `lastInboundAt` được đặt BẰNG `createdAt` (intake/ingest.ts,
+    // assign-lead.ts). Dùng `>=` là dán nhãn "nhập lại" lên MỌI phiếu — nhãn mất sạch
+    // ý nghĩa mà nhìn qua không ai thấy sai.
+    expect(laNhapLai(TAO, TAO)).toBe(false);
+  });
+
+  it("mốc CŨ HƠN ngày tạo (dữ liệu lệch) ⇒ SAI, không dán nhãn bừa", () => {
+    expect(laNhapLai(TAO, "2026-01-01T00:00:00.000Z")).toBe(false);
+  });
+
+  it("null / undefined (lead trước migration 29/08) ⇒ SAI, không kết luận gì", () => {
+    expect(laNhapLai(TAO, null)).toBe(false);
+    expect(laNhapLai(TAO, undefined)).toBe(false);
   });
 });

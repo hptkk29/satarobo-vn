@@ -50,6 +50,32 @@ export const hrModule: ModuleDecl = {
       action: "adjust",
       description: "Chỉnh bản ghi công + duyệt yêu cầu chỉnh công.",
     },
+    // --- Module chấm công v3 (L1 · 06/09/2026) — kế hoạch §5 ---
+    {
+      key: "hr_attendance:assign",
+      action: "assign",
+      description: "Khung ca tuần, lưới tháng, import lịch phân ca (QLCS, Nhân sự HO).",
+    },
+    {
+      key: "hr_attendance:approve",
+      action: "approve",
+      description: "Duyệt đơn nghỉ / đổi ca / chỉnh công của cơ sở (QLCS).",
+    },
+    {
+      key: "hr_attendance:close-period",
+      action: "close-period",
+      description: "Chốt / mở lại kỳ công của cơ sở (QLCS, Kế toán).",
+    },
+    {
+      key: "hr_attendance:export",
+      action: "export",
+      description: "Xuất bảng công tổng hợp Excel.",
+    },
+    {
+      key: "hr_attendance:config",
+      action: "config",
+      description: "Danh mục mã ca, điểm chấm công, loại nghỉ, ngày lễ + hệ số công.",
+    },
 
     // --- Payroll ---
     { key: "payroll:view", action: "view" },

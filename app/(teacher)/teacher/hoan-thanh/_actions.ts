@@ -1,7 +1,9 @@
 // app/(teacher)/teacher/hoan-thanh/_actions.ts — Đề xuất hoàn thành khoá (site GV).
 // proposeCourseCompletion: GV đề xuất (own-class) → CourseCompletionRequest PENDING.
-// reviewCourseCompletion: CENTER_MANAGER cơ sở duyệt → tạo CourseCompletion (UI quản
-// lý ở admin — action sẵn sàng). GV KHÔNG tự xác nhận hoàn thành (completions:manage).
+// Đường DUYỆT nay ở app/(admin)/admin/hoan-thanh-khoa/ (03/09) — trước đó
+// reviewCourseCompletion nằm trong file này và KHÔNG CÓ CALLER NÀO trong toàn repo,
+// nên mỗi lần GV bấm đề xuất là một dòng PENDING không ai thấy và không ai duyệt được
+// (QA vòng 1, BUG-028). GV KHÔNG tự xác nhận hoàn thành (đó là completions:manage).
 "use server";
 
 import { auth } from "@/lib/auth";
@@ -10,8 +12,6 @@ import { scopedDb } from "@/lib/db-scope";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { hasRole } from "@/lib/auth/permissions";
-import { completeCourse } from "@/lib/completion/service";
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -92,73 +92,6 @@ export async function proposeCourseCompletion(input: unknown): Promise<Result> {
     return {
       ok: false,
       error: `Lỗi gửi đề xuất: ${err instanceof Error ? err.message : "Unknown"}`,
-    };
-  }
-  revalidatePath("/teacher/hoan-thanh");
-  return { ok: true };
-}
-
-const reviewSchema = z.object({
-  id: z.string().min(1),
-  decision: z.enum(["APPROVED", "REJECTED"]),
-  note: z.string().max(1000).optional().nullable(),
-});
-
-/** CENTER_MANAGER duyệt đề xuất hoàn thành cùng cơ sở → tạo CourseCompletion. */
-export async function reviewCourseCompletion(input: unknown): Promise<Result> {
-  const session = await auth();
-  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  const isSuper = hasRole(session.user, "SUPER_ADMIN");
-  if (!isSuper && !hasRole(session.user, "CENTER_MANAGER")) {
-    return { ok: false, error: "Không có quyền duyệt" };
-  }
-  const parsed = reviewSchema.safeParse(input);
-  if (!parsed.success) {
-    return {
-      ok: false,
-      error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ",
-    };
-  }
-  const { id, decision, note } = parsed.data;
-
-  const actor = await resolveActor(session.user.id);
-  const sdb = scopedDb(actor);
-  const req = await sdb.courseCompletionRequest.findUnique({
-    where: { id },
-    select: { status: true, centerId: true, studentId: true, courseId: true },
-  });
-  if (!req) return { ok: false, error: "Không tìm thấy đề xuất" };
-  if (!isSuper && req.centerId !== (session.user.centerId ?? null)) {
-    return { ok: false, error: "Đề xuất thuộc cơ sở khác" };
-  }
-  if (req.status !== "PENDING")
-    return { ok: false, error: "Đề xuất đã được xử lý" };
-
-  if (decision === "APPROVED") {
-    const res = await completeCourse({
-      studentId: req.studentId,
-      courseId: req.courseId,
-      createdById: session.user.id,
-    });
-    if (!res.ok)
-      return { ok: false, error: res.error ?? "Lỗi xác nhận hoàn thành" };
-  }
-
-  try {
-    await sdb.courseCompletionRequest.update({
-      where: { id },
-      data: {
-        status: decision,
-        reviewedById: session.user.id,
-        reviewedByName: session.user.name ?? null,
-        reviewedAt: new Date(),
-        reviewNote: note?.trim() || null,
-      },
-    });
-  } catch (err) {
-    return {
-      ok: false,
-      error: `Lỗi duyệt: ${err instanceof Error ? err.message : "Unknown"}`,
     };
   }
   revalidatePath("/teacher/hoan-thanh");

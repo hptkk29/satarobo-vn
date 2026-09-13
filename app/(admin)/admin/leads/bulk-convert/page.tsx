@@ -1,10 +1,12 @@
 import Link from "next/link";
+import { KHOAN_DA_GHI_NHAN } from "@/lib/finance/ghi-nhan";
 import { redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
+import { getCenterOptions } from "@/lib/org/center-options";
 import { BulkConvertClient } from "./_components/bulk-convert-client";
 import { PageHelp } from "@/components/admin/ui/page-help";
 
@@ -27,7 +29,8 @@ export default async function BulkConvertPage() {
     (await checkPermission("enrollments:create"));
   if (!allowed) redirect("/leads");
 
-  const sdb = scopedDb(await resolveActor(session.user.id));
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
 
   // GĐ5 — "đã đăng ký mà CHƯA convert" nay cần HAI điều kiện. Trước đây một mình
   // REGISTERED đã đủ vì lượt convert đẩy lead sang ENROLLED; enum mới gộp hai bậc đó
@@ -64,8 +67,7 @@ export default async function BulkConvertPage() {
   const recorded = leadIds.length
     ? await sdb.payment.findMany({
         where: {
-          saleStatus: "RECORDED",
-          deletedAt: null,
+          ...KHOAN_DA_GHI_NHAN,
           order: { leadId: { in: leadIds } },
         },
         select: { order: { select: { leadId: true } } },
@@ -96,10 +98,10 @@ export default async function BulkConvertPage() {
     },
   });
 
-  const centers = await sdb.center.findMany({
-    select: { id: true, name: true, code: true },
-    orderBy: { code: "asc" },
-  });
+  // Ô lọc "Cơ sở" đi qua helper chung: bản cũ bày cả Hội sở, cả dòng Center mồ côi
+  // (ITLI_* của bộ test), cả cơ sở đã tắt, và không cắt theo tầm nhìn người dùng —
+  // lệch với danh sách lead bên dưới (Lead ∈ SCOPED_MODELS nên đã bị scopedDb cắt).
+  const centers = await getCenterOptions(actor);
 
   return (
     <div className="p-6">

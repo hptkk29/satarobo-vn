@@ -1,6 +1,8 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { GHI_DANH_DANG_HOC } from "@/lib/portal/trang-thai-ghi-danh";
 import { getStudentSchedule } from "@/lib/portal/schedule";
+import { vnParts } from "@/lib/time/vn";
 import { getStudentSessionsView } from "@/lib/portal/student-sessions";
 import { getStudentMakeup } from "@/lib/portal/makeup";
 import { getStudentAssignmentTrack } from "@/lib/portal/student-assignments";
@@ -11,7 +13,15 @@ import { getStudentExams, getStudentAssignmentResults } from "@/lib/portal/learn
 
 const DONE_EXAM = new Set(["SUBMITTED", "GRADED"]);
 
-export type JourneyDot = { idx: number; status: "done" | "today" | "makeup" | "absent" | "future"; title: string | null };
+export type JourneyDot = {
+  idx: number;
+  /** Khoá React — số buổi TRÙNG NHAU khi con học 2 lớp, nên không dùng `idx` làm khoá. */
+  id: string;
+  status: "done" | "today" | "makeup" | "absent" | "future" | "chua-cham" | "da-huy";
+  title: string | null;
+  /** Lớp nào — chỉ khác null khi con học nhiều lớp. */
+  className: string | null;
+};
 export type StudentTodo = { id: string; kind: "BÀI TẬP" | "KIỂM TRA"; title: string; meta: string; overdue: boolean; href: string };
 export type SkillBar = { label: string; pct: number };
 export type ResultRow = { title: string; score: number; total: number };
@@ -60,10 +70,19 @@ const SKILL_LABEL: Record<string, string> = {
 };
 const SKILL_PCT: Record<string, number> = { NEED_SUPPORT: 45, BASIC: 65, GOOD: 82, EXCELLENT: 95 };
 
+/**
+ * `dd/MM/yyyy` theo LỊCH VN.
+ *
+ * 06/09 — bản cũ dùng `getDate()/getMonth()/getFullYear()`, tức giờ của TIẾN TRÌNH.
+ * Vercel chạy UTC nên trong khoảng 00:00–07:00 giờ VN mọi mốc lùi một ngày: hạn nộp
+ * 07/09 in ra 06/09, và buổi học chiều nay hiện "hôm qua".
+ */
 function dmy(iso: string | null): string {
   if (!iso) return "—";
-  const d = new Date(iso);
-  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return "—";
+  const p = vnParts(new Date(t));
+  return `${String(p.day).padStart(2, "0")}/${String(p.month + 1).padStart(2, "0")}/${p.year}`;
 }
 
 export async function getStudentHome(studentId: string): Promise<StudentHome> {
@@ -76,7 +95,14 @@ export async function getStudentHome(studentId: string): Promise<StudentHome> {
     getStudentAssignmentResults(studentId).catch(() => []),
     db.studentSkillAssessment.findMany({ where: { studentId }, orderBy: { assessedAt: "desc" }, select: { skill: true, level: true } }),
     db.student.findUnique({ where: { id: studentId }, select: { name: true } }),
-    db.enrollment.findFirst({ where: { studentId }, orderBy: { enrolledAt: "desc" }, select: { class: { select: { teacher: { select: { name: true } } } } } }),
+    // 06/09 — LỌC ghi danh còn hiệu lực. Bản cũ lấy ghi danh mới nhất bất kể trạng
+    // thái: con rút khỏi lớp B (WITHDREW / xoá mềm) rồi vào lớp A thì cổng học sinh in
+    // tên giáo viên của LỚP B đã nghỉ.
+    db.enrollment.findFirst({
+      where: { studentId, status: { in: [...GHI_DANH_DANG_HOC] }, deletedAt: null },
+      orderBy: { enrolledAt: "desc" },
+      select: { class: { select: { teacher: { select: { name: true } } } } },
+    }),
   ]);
 
   const total = view.total;
@@ -85,14 +111,20 @@ export async function getStudentHome(studentId: string): Promise<StudentHome> {
   const progressPct = total > 0 ? Math.round((done / total) * 100) : 0;
 
   // Hành trình: trạng thái từng buổi.
+  //
+  // ⚠️ Thứ tự nhánh có ý nghĩa. Buổi ĐÃ HUỶ phải xét TRƯỚC `s.today`: buổi huỷ rơi trúng
+  // hôm nay mà để nhánh "today" thắng thì portal khẳng định "hôm nay có buổi" ở đúng lớp
+  // vừa báo nghỉ.
   const journey: JourneyDot[] = view.sessions.map((s) => {
     let status: JourneyDot["status"];
-    if (s.today) status = "today";
+    if (s.attendance === "CANCELLED") status = "da-huy";
+    else if (s.attendance === "UNMARKED") status = "chua-cham";
+    else if (s.today) status = "today";
     else if (s.attendance === "MAKEUP") status = "makeup";
     else if (s.attendance === "ABSENT" || s.attendance === "EXCUSED") status = "absent";
     else if (s.past) status = "done";
     else status = "future";
-    return { idx: s.order, status, title: s.title };
+    return { idx: s.order, id: s.id, status, title: s.title, className: s.className };
   });
 
   // Việc cần làm: bài tập chưa nộp + bài kiểm tra chưa làm.
@@ -103,7 +135,10 @@ export async function getStudentHome(studentId: string): Promise<StudentHome> {
         id: it.assignment.id,
         kind: "BÀI TẬP",
         title: it.assignment.title,
-        meta: `Buổi ${it.order} · Hạn ${dmy(it.assignment.dueAt)}`,
+        // Bài KHÔNG đặt hạn thì đừng bịa ra dòng "Hạn —"; nói đúng những gì có.
+        meta: it.assignment.nhanHan
+          ? `Buổi ${it.order} · Hạn ${it.assignment.nhanHan}`
+          : `Buổi ${it.order}`,
         overdue: it.assignment.overdue,
         href: `/portal/bai-tap/${it.assignment.id}`,
       });
@@ -125,14 +160,16 @@ export async function getStudentHome(studentId: string): Promise<StudentHome> {
 
   // Lớp học tiếp theo.
   const n = sched?.next ?? null;
-  const nextIsTodayClass = n ? new Date(n.dateISO).toDateString() === new Date().toDateString() : false;
+  // `homNay` do server tính theo lịch VN (lib/portal/buoi-hoc.ts). Bản cũ so
+  // `toDateString()` — theo TZ tiến trình, tức UTC trên Vercel.
+  const nextIsTodayClass = n?.homNay ?? false;
   const nextClass: NextClass | null = n
     ? {
         title: n.title,
         time: n.time || null,
         room: n.room,
         teacher: n.teacher,
-        label: nextIsTodayClass ? "Hôm nay" : dmy(n.dateISO),
+        label: nextIsTodayClass ? "Hôm nay" : n.nhanNgay || dmy(n.dateISO),
         isToday: nextIsTodayClass,
       }
     : null;
@@ -153,7 +190,10 @@ export async function getStudentHome(studentId: string): Promise<StudentHome> {
     ? Math.round((graded.reduce((s, r) => s + ((r.score as number) / r.totalPoints) * 10, 0) / graded.length) * 10) / 10
     : null;
 
-  const next = view.sessions.find((s) => !s.past);
+  // Buổi tiếp theo: KHÔNG được chọn buổi đã huỷ. `!s.past` đúng với mọi buổi huỷ (kể cả
+  // buổi huỷ trong quá khứ — `daDienRa` của buổi huỷ luôn false), nên bản cũ trỏ phụ
+  // huynh tới một NGÀY ĐÃ QUA, chọi với thẻ "Lớp học tiếp theo" ngay bên dưới.
+  const next = view.sessions.find((s) => !s.past && s.attendance !== "CANCELLED");
   const nextIsToday = next?.today ?? false;
   const nextLabel = next ? (next.today ? "Hôm nay" : dmy(next.date)) : null;
 

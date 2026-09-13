@@ -4,7 +4,7 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import { autoAssignNewLeadAction } from "../../actions";
+import { chiaLaiLeadAction } from "../../actions";
 
 export function ReassignButton({ leadId }: { leadId: string }) {
   const router = useRouter();
@@ -16,7 +16,10 @@ export function ReassignButton({ leadId }: { leadId: string }) {
       disabled={isPending}
       onClick={() =>
         startTransition(async () => {
-          const res = await autoAssignNewLeadAction(leadId);
+          // 03/09 — đổi sang `chiaLaiLeadAction`. Nút cũ gọi `autoAssignNewLeadAction`,
+          // vốn dành cho lead MỚI và cố ý bỏ qua lead đã có chủ; nó trả `ok: true`
+          // kèm `skipped` nên nút báo thành công trong khi lead không đổi tay.
+          const res = await chiaLaiLeadAction(leadId);
           if (res.ok) {
             toast.success("Đã chia lại lead theo cấu hình cơ sở");
             router.refresh();

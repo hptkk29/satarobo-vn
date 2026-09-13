@@ -109,17 +109,32 @@ test.describe("[LNGN] Lần nhập gần nhất", () => {
     expect(chiSo("PH B moi tao")).toBeLessThan(chiSo("PH C khong moc"));
   });
 
-  test("[LNGN-02] mặc định vẫn sắp theo NGÀY TẠO — không lặng lẽ đổi thứ tự quen thuộc", async ({
+  /**
+   * ⚠️ ĐẢO CHỐT 29/08 — chủ dự án quyết 07/09/2026.
+   *
+   * Bản trước của ca này khoá luật NGƯỢC LẠI: "mặc định vẫn sắp theo NGÀY TẠO — không
+   * lặng lẽ đổi thứ tự quen thuộc", với lý do người dùng cũ mở bảng ra thấy thứ tự lạ.
+   * Lý do đó vẫn đúng, nhưng chủ dự án cân nhắc và chọn đánh đổi: Sale phải THẤY được
+   * phiếu khách quay lại thì mới gọi lại được, mà nằm dưới đáy thì không ai thấy.
+   *
+   * Ca này ĐỎ đúng lúc bản vá 07/09 lần đầu chạy CI — nó làm đúng việc của nó, nên được
+   * SỬA sang khoá luật mới chứ không bị xoá. Ai đảo lại lần nữa thì cũng phải đi qua đây.
+   *
+   * Kèm khoá luôn phần HIỂN THỊ: hai thứ đó phải đi cùng nhau. In ngày mới mà sắp theo
+   * ngày tạo là phiếu hiện ngày hôm nay nằm ở vị trí ba tháng trước, ngay dưới một cột
+   * đang có mũi tên sắp xếp.
+   */
+  test("[LNGN-02] mặc định sắp theo LẦN NHẬP GẦN NHẤT — phiếu khách quay lại lên đầu", async ({
     page,
   }) => {
     const cu = new Date("2026-01-01T03:00:00Z");
     const moi = new Date("2026-08-29T03:00:00Z");
     await db.lead.create({
-      // Tạo lâu rồi nhưng vừa nhập lại — nếu mặc định đổi sang "lần nhập" thì con này
-      // nhảy lên đầu, và người dùng cũ mở bảng ra thấy thứ tự khác hẳn mà không hiểu vì sao.
+      // Tạo lâu rồi nhưng VỪA NHẬP LẠI ⇒ phải lên TRÊN.
       data: { parentName: "PH cu quay lai", phone: "84900000004", centerId: cs1, createdAt: cu, lastInboundAt: moi },
     });
     await db.lead.create({
+      // Tạo sau nhưng KHÔNG quay lại ⇒ nằm dưới.
       data: { parentName: "PH tao sau", phone: "84900000005", centerId: cs1, createdAt: moi, lastInboundAt: cu },
     });
 
@@ -132,8 +147,15 @@ test.describe("[LNGN] Lần nhập gần nhất", () => {
     });
 
     const ten = await page.locator("tbody tr td:first-child").allInnerTexts();
-    expect(ten.findIndex((t) => t.includes("PH tao sau"))).toBeLessThan(
-      ten.findIndex((t) => t.includes("PH cu quay lai")),
+    expect(ten.findIndex((t) => t.includes("PH cu quay lai"))).toBeLessThan(
+      ten.findIndex((t) => t.includes("PH tao sau")),
     );
+
+    // HIỂN THỊ: dòng khách quay lại phải mang nhãn, và phải in mốc MỚI (29/08) chứ không
+    // phải ngày tạo (01/01). Thiếu vế này thì đổi thứ tự mà quên đổi ô ngày vẫn xanh.
+    const dongQuayLai = page.locator("tbody tr", { hasText: "PH cu quay lai" }).first();
+    await expect(dongQuayLai).toContainText("nhập lại");
+    await expect(dongQuayLai).toContainText("29/08/2026");
+    await expect(dongQuayLai).not.toContainText("01/01/2026");
   });
 });

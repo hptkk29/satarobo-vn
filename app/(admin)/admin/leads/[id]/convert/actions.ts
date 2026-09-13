@@ -153,6 +153,64 @@ export async function submitConvertV2(
   })
   const classMap = new Map(classes.map((c) => [c.id, c]))
 
+  // ── KHOÁ QUAN TÂM ↔ LỚP PHẢI KHỚP (chủ dự án chốt 03/09/2026) ──────────────
+  //
+  // Ô chọn ở giao diện đã chỉ hiện lớp thuộc khoá quan tâm của từng em, nhưng ô
+  // chọn KHÔNG PHẢI cổng: Server Action là một endpoint riêng, gửi thẳng payload
+  // là bỏ qua nó. Mà sai ở đây ăn tiền thật — học phí ghi vào công nợ lấy theo
+  // giá LỚP, nên chốt nhầm lớp là ghi cho phụ huynh một khoản của khoá không ai
+  // đặt, và không có gì báo.
+  //
+  // Chỉ chặn khi em ĐÃ CÓ khoá quan tâm. Em chưa khai thì mọi lớp đều hợp lệ —
+  // đúng như giao diện, và đó là phần lớn lead thật.
+  //
+  // Khoá của em suy theo cùng luật màn Chuyển đổi: khoá của CHÍNH EM, không có
+  // thì rơi về khoá cấp lead. Hai nơi lệch luật là giao diện cho chọn còn server
+  // từ chối — người dùng bấm Chốt và ăn lỗi mà không hiểu vì sao.
+  const leadChildIds = d.students.map((s) => s.leadChildId).filter(Boolean) as string[]
+  if (leadChildIds.length > 0) {
+    const [conRows, leadRow] = await Promise.all([
+      sdb.leadChild.findMany({
+        where: { id: { in: leadChildIds } },
+        select: { id: true, interestedCourseId: true },
+      }),
+      sdb.lead.findUnique({ where: { id: leadId }, select: { courseId: true } }),
+    ])
+    const khoaTheoCon = new Map(conRows.map((c) => [c.id, c.interestedCourseId]))
+    const tenKhoa = new Map(
+      (
+        await sdb.course.findMany({
+          where: {
+            id: {
+              in: [
+                ...new Set(
+                  [...khoaTheoCon.values(), leadRow?.courseId].filter(Boolean) as string[],
+                ),
+              ],
+            },
+          },
+          select: { id: true, name: true },
+        })
+      ).map((c) => [c.id, c.name]),
+    )
+
+    for (const s of d.students) {
+      if (!s.leadChildId) continue
+      const khoaEm = khoaTheoCon.get(s.leadChildId) ?? leadRow?.courseId ?? null
+      if (!khoaEm) continue
+      const cls = classMap.get(s.classId)
+      if (cls && cls.courseId !== khoaEm) {
+        return {
+          ok: false,
+          error:
+            `Lớp đã chọn cho "${s.name}" không thuộc khoá quan tâm ` +
+            `"${tenKhoa.get(khoaEm) ?? khoaEm}". Chọn lại lớp, hoặc sửa khoá quan tâm ` +
+            `của em trên phiếu lead trước khi chốt.`,
+        }
+      }
+    }
+  }
+
   const students: ConvertV2Student[] = []
   let totalDiscountAmount = 0
   for (const s of d.students) {

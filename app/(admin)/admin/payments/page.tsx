@@ -23,13 +23,18 @@ export default async function PaymentsPage() {
   // xác nhận (Kế toán)"): người GHI NHẬN giữ `payments:record`, không phải
   // `payments:manage`. Hậu quả: Quản lý cơ sở và Sale — đúng hai vai phải thu tiền
   // tại quầy — bị đá về dashboard ngay ở cửa. Nhận CẢ HAI quyền.
-  const [canManage, canRecord, canConfirm, canViewPii] = await Promise.all([
+  const [canManage, canRecord, canConfirm, canAdjust, canViewPii] = await Promise.all([
     checkPermission("payments:manage"),
     checkPermission("payments:record"),
     // Nút xác nhận/từ chối/điều chỉnh phải soi ĐÚNG quyền mà server action đòi
     // (`payments:confirm` trong _actions.ts). Trước đây suy từ `payments:manage` +
     // danh sách role tĩnh nên QLCS thấy nút rồi bấm mới báo lỗi.
     checkPermission("payments:confirm"),
+    // Quyền RIÊNG chứ không dùng lại `payments:confirm`: xác nhận và điều chỉnh là hai
+    // việc khác nhau, khoá cái này không được khoá luôn cái kia.
+    // ⚠️ Ma trận v1 cố ý chỉ có SUPER_ADMIN; kế toán nhận quyền này ở RBAC v2 (DB).
+    // Nghĩa là trên máy dev (v1) nút ẩn với kế toán, trên prod (v2 đang BẬT) thì hiện.
+    checkPermission("payments:adjust"),
     // #15 (câu 32) — chỉ kế toán/admin (payments:view-pii) mới thấy nút "Xem đầy đủ"
     // CCCD PH + địa chỉ (break-glass). Mặc định mọi người xem bản đã che.
     checkPermission("payments:view-pii"),
@@ -66,6 +71,7 @@ export default async function PaymentsPage() {
         orders={orders}
         methods={methods}
         canConfirm={canConfirm}
+        canAdjust={canAdjust}
         canRecord={canRecord}
         canViewPii={canViewPii}
       />

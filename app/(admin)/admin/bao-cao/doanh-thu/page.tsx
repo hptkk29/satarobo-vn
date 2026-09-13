@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { KHOAN_DA_XAC_NHAN } from "@/lib/finance/debt";
 import { safeCache } from "@/lib/cache/safe-cache";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
@@ -64,8 +65,7 @@ async function computeRevenueRows(actor: Actor, filters: ReportFilters) {
   const [payments, targetRows] = await Promise.all([
     sdb.payment.findMany({
       where: {
-        accountantStatus: "CONFIRMED",
-        deletedAt: null,
+        ...KHOAN_DA_XAC_NHAN,
         ...(filters.centerId ? { centerId: filters.centerId } : {}),
         ...(dateWhere ? { paidDate: dateWhere } : {}),
       },

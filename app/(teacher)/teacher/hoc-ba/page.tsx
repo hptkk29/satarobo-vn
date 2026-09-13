@@ -24,6 +24,7 @@ import { FileText, Lock } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { rosterWhere } from "@/lib/enrollment-scope";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { attendanceSummaryForEnrollments } from "@/lib/attendance/summary";
 import {
@@ -212,8 +213,11 @@ export default async function TeacherReportCardsPage({
           id: true,
           name: true,
           course: { select: { name: true } },
+          // "lich-su": học bạ phải còn cho lớp đã kết khoá và em đã nghỉ. Nhưng ghi
+          // danh "Chờ xác nhận"/"Đã huỷ" thì KHÔNG có học bạ để in, và HV đã xoá mềm
+          // không được hiện tên (trước đây chỉ lọc deletedAt của ghi danh).
           enrollments: {
-            where: { deletedAt: null },
+            where: rosterWhere("lich-su"),
             // Câu 46: CHỈ tên + mã HV — KHÔNG contact PH.
             select: {
               id: true,

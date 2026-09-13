@@ -1,0 +1,274 @@
+# Chạy TAY (workflow_dispatch) — ĐO trên PROD, CHỈ ĐỌC, KHÔNG GHI GÌ.
+#
+# ⚠️ TÊN ĐẶT ĐỂ KHÔNG BẤM NHẦM. Danh sách workflow trên GitHub Actions xếp theo tên, nên hai nút
+# chạm PROD của module này cố ý dùng chung tiền tố và khác nhau đúng MỘT từ viết hoa:
+#     Chấm công · PROD · ĐO  (chỉ đọc — không ghi gì)   ← file này
+#     Chấm công · PROD · GHI (seed danh mục nền)        ← cham-cong-prod-seed.yml
+# Hai nút nằm cạnh nhau, và từ phân biệt là thứ đọc trước tiên.
+#
+# Vì sao có workflow này: prod chỉ chạm được qua GitHub Actions (`.env` trên máy dev trỏ DB DEV,
+# và Vercel che `DATABASE_URL` là Sensitive nên `vercel env pull` vô dụng). Mọi số đo trên dữ liệu
+# thật đều phải đi qua đây.
+#
+# ── BA LỚP KHOÁ, ĐỘC LẬP NHAU ───────────────────────────────────────────────────────────
+# 1. KHÔNG CÓ CHẾ ĐỘ GHI. Không input `--ghi`, không chuỗi xác nhận "GHI THAT VAO PROD" — vì
+#    không có gì để xác nhận. Cả hai script chạy ở chế độ mặc định (chỉ đo).
+# 2. KẾT NỐI BẰNG USER CHỈ-ĐỌC. File này CỐ Ý KHÔNG đọc `PROD_DATABASE_URL` /`PROD_DIRECT_URL`
+#    (hai secret đầy quyền). Nó chỉ biết `PROD_DATABASE_URL_RO`. Có gõ nhầm một dòng `run` thành
+#    lệnh ghi thì Postgres vẫn từ chối. Cách tạo user: `docs/cham-cong/USER-CHI-DOC-PROD.md`.
+# 3. SCRIPT TỰ KHAI. Dòng đầu log in `user=… · chỉ đọc / CÓ QUYỀN GHI` (`scripts/_kiem-quyen.ts`,
+#    thuần SELECT). Secret bị đặt nhầm sang chuỗi đầy quyền thì hiện ra ngay dòng đầu — GitHub
+#    không cho đọc lại secret để đối chiếu, nên đây là cách duy nhất thấy được.
+#
+# KHÔNG có bước nào chạy migration, seed, hay ghi vào DB. `prisma generate` chỉ sinh mã client
+# vào `node_modules` của runner — không chạm DB (và cũng không chạm được, user chỉ có SELECT).
+# Kết quả in ra LOG, không ghi file, không commit ngược lại repo.
+#
+# Dùng chuỗi SESSION POOLER (:5432), không phải transaction pooler (:6543): pgbouncer không giữ
+# prepared statement giữa các câu lệnh, mà script chạy hàng trăm truy vấn liên tiếp thì dính
+# `prepared statement "sN" does not exist`. Đã ăn thật hai lần — xem `scripts/_script-db.ts`.
+name: Chấm công · PROD · ĐO (chỉ đọc — không ghi gì)
+on:
+  workflow_dispatch:
+    inputs:
+      viec:
+        description: "Đo cái gì"
+        required: true
+        type: choice
+        default: si-so
+        options:
+          - si-so
+          - buoi-day
+          - backlog
+          - khung-ca-diem-cham
+          - danh-muc-nen
+          - nhap-danh-muc-chay-thu
+          - vai-ke-toan
+          - cong-day-thuc-te
+          - backfill-buoi-chay-thu
+          - noi-chiu-cong-lech
+          - tinh-lai-mot-ngay-chay-thu
+          - buoi-ket-theo-lop
+          - noi-quet
+          - tat-ca
+      # Hai ô dưới CHỈ dùng cho việc `tinh-lai-mot-ngay-chay-thu`. Để trống cho mọi việc khác.
+      user_id:
+        description: "(chỉ cho tính lại một ngày) userId"
+        required: false
+        default: ""
+      ngay:
+        description: "(chỉ cho tính lại một ngày) ngày YYYY-MM-DD"
+        required: false
+        default: ""
+concurrency:
+  group: cham-cong-prod-do-chi-doc
+  cancel-in-progress: false
+jobs:
+  do:
+    name: Đo (không ghi)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # Kiểm HÌNH DẠNG chuỗi trước khi tốn 40 giây cài đặt rồi mới chết ở Prisma.
+      # KHÔNG in giá trị secret ra log — chỉ nói chỗ nào sai.
+      - name: Kiểm secret chỉ-đọc
+        env:
+          U: ${{ secrets.PROD_DATABASE_URL_RO }}
+        run: |
+          if [ -z "$U" ]; then
+            echo "::error::Thiếu secret PROD_DATABASE_URL_RO (chuỗi session pooler của user chỉ-đọc)."
+            echo "::error::Cách tạo user + lấy chuỗi: docs/cham-cong/USER-CHI-DOC-PROD.md"
+            echo "::error::KHÔNG đặt PROD_DATABASE_URL / PROD_DIRECT_URL vào đây — chúng đầy quyền."
+            exit 1
+          fi
+          proto="${U%%://*}"
+          rest="${U#*://}"
+          userinfo="${rest%@*}"          # tới dấu @ CUỐI CÙNG — mật khẩu có thể chứa @
+          user="${userinfo%%:*}"
+          pass="${userinfo#*:}"
+          hostport="${rest##*@}"
+          port="${hostport##*:}"; port="${port%%/*}"
+          ok=1
+          case "$proto" in
+            postgresql|postgres) ;;
+            *) echo "::error::Chuỗi phải bắt đầu bằng postgresql:// — đang là '$proto://'"; ok=0 ;;
+          esac
+          case "$user" in
+            *.*) ;;
+            *) echo "::error::Tên user THIẾU hậu tố '.<mã dự án>'. Supavisor định tuyến theo mã dự án nằm TRONG tên user, nên phải là 'satarobo_readonly.<mã dự án>' chứ không phải 'satarobo_readonly'. Lấy mã đó từ chuỗi gốc Supabase đưa (phần ngay sau 'postgres.') — chỉ đổi chữ 'postgres', GIỮ NGUYÊN dấu chấm và phần sau nó."; ok=0 ;;
+          esac
+          if [ "$port" != "5432" ]; then
+            echo "::error::Cổng đang là '$port' — phải là 5432 (tab 'Session pooler'). Cổng 6543 là Transaction pooler: nó không giữ prepared statement nên script chạy vài trăm truy vấn sẽ chết giữa chừng."
+            ok=0
+          fi
+          case "$pass" in
+            *[@/?#]*|*'['*|*']'*)
+              echo "::error::Mật khẩu chứa ký tự làm vỡ URL (@ / ? # [ ]). Đổi sang mật khẩu chỉ gồm chữ và số: ALTER ROLE satarobo_readonly WITH PASSWORD '...';"
+              ok=0 ;;
+          esac
+          [ $ok -eq 1 ] || { echo "::error::Sửa secret PROD_DATABASE_URL_RO rồi chạy lại. Không có bước nào chạm DB."; exit 1; }
+          echo "Chuỗi đúng hình dạng: giao thức postgresql, user có hậu tố mã dự án, cổng 5432."
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Sinh Prisma client (không chạm DB)
+        run: pnpm exec prisma generate
+
+      # Số cần nhìn nhất ở bước này: CHÊNH LỆCH giữa hai nguồn ở những buổi tính được CẢ HAI.
+      # Nó đo trực tiếp độ thừa của cách "đếm ghi danh" trên dữ liệu thật, thay vì để ta suy luận.
+      - name: "Đo sĩ số biên chế của buổi cũ (chỉ đọc)"
+        if: inputs.viec == 'si-so' || inputs.viec == 'tat-ca'
+        run: pnpm exec tsx scripts/backfill-si-so-buoi.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+
+      # Ba chỗ đếm "buổi dạy" nghi sai + LỖI THƯỢNG NGUỒN quan trọng hơn cả ba.
+      # Đọc `docs/cham-cong/GHI-CHU-BA-CHO-DEM-BUOI-DAY.md` §2 để biết đọc số theo thứ tự nào —
+      # con số đầu tiên quyết định ba con số sau có nghĩa hay không.
+      # `!cancelled()` để phép đo này VẪN CHẠY khi bước trên hỏng. Hai phép đo độc lập nhau, và
+      # chúng chỉ ĐỌC — mất cả hai vì một cái lỗi là bắt người bấm chạy lại thêm một lượt vô ích.
+      - name: "Đo chênh lệch ba chỗ đếm buổi dạy (chỉ đọc)"
+        if: ${{ !cancelled() && (inputs.viec == 'buoi-day' || inputs.viec == 'tat-ca') }}
+        run: pnpm exec tsx scripts/do-lech-buoi-day.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+
+      # Backlog buổi đã qua ngày mà chưa chốt: bao nhiêu buổi THOẢ cổng tự đóng ĐÃ SỬA
+      # (4df347b4 so ngày · a94e5aa7 giao tập studentId). Số này quyết định có nên viết
+      # script đóng hàng loạt hay không — phần lớn KHÔNG thoả thì đóng chúng là bịa dữ liệu.
+      # Script dùng CHÍNH `quyetDinhTuHoanTat`, không chép lại luật.
+      - name: "Đo backlog buổi chưa chốt (chỉ đọc)"
+        if: ${{ !cancelled() && (inputs.viec == 'backlog' || inputs.viec == 'tat-ca') }}
+        run: pnpm exec tsx scripts/do-backlog-buoi-chua-chot.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+
+      # Đo cho hai câu hỏi 08/09: màn khung ca (gỡ người / thêm hàng loạt / thứ tự) và
+      # điểm chấm (Hội sở chấm cho CS1/CS2 được không). CHỈ ĐỌC.
+      - name: "Đo khung ca + điểm chấm (chỉ đọc)"
+        if: ${{ !cancelled() && (inputs.viec == 'khung-ca-diem-cham' || inputs.viec == 'tat-ca') }}
+        run: pnpm exec tsx scripts/do-khung-ca-diem-cham.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+
+      # Đo TOÀN BỘ 5 nhóm danh mục nền mà `prisma/seed-cham-cong.ts` phụ trách, đối chiếu với
+      # danh mục trong mã nguồn, kèm NGUỒN DỮ LIỆU suy từ AuditLog CREATE (có audit = gõ tay qua
+      # màn; không có = nhiều khả năng seed — seed không ghi audit).
+      #
+      # Vì sao cần: 09/09 phát hiện 21 mã ca trên prod đều do gõ tay, prod CHƯA TỪNG được seed
+      # nhóm đó. Câu hỏi phải trả lời trước mọi việc khác là bốn nhóm còn lại thì sao.
+      # `Holiday` đo riêng ở mục 6 — nó KHÔNG thuộc phạm vi seed chấm công.
+      - name: "Đo toàn bộ danh mục nền vs seed (chỉ đọc)"
+        if: ${{ !cancelled() && (inputs.viec == 'danh-muc-nen' || inputs.viec == 'tat-ca') }}
+        run: pnpm exec tsx scripts/do-danh-muc-nen.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+
+      # CHẠY THỬ của nút GHI, đặt ở đây CÓ CHỦ ĐÍCH — hai lớp khoá độc lập:
+      #   1. script không có `--apply` ⇒ không câu lệnh ghi nào chạy;
+      #   2. kết nối là user CHỈ-ĐỌC ⇒ có gõ nhầm thành `--apply` thì Postgres vẫn từ chối.
+      # Đọc bảng "TRƯỚC → SAU" của bước này rồi mới sang workflow GHI.
+      # ⚠️ KHÔNG để `tat-ca` chạy bước này: `tat-ca` là để đo định kỳ, còn đây là bước đọc
+      #    trước một lượt ghi — người bấm phải chọn nó có ý thức.
+      - name: "Nhập danh mục nền — CHẠY THỬ (chỉ đọc, in bảng TRƯỚC→SAU)"
+        if: ${{ !cancelled() && inputs.viec == 'nhap-danh-muc-chay-thu' }}
+        run: pnpm exec tsx scripts/nhap-danh-muc-nen.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+
+      # Việc 2 — neo vai kế toán. Chủ dự án yêu cầu BIẾT TRƯỚC khi ghi: ai đang mang
+      # HO_ACCOUNTANT trên prod, và SR.NV.002 hiện mang vai gì. Đo `UserOrgRole` chứ KHÔNG
+      # đọc màn /admin/users/[id]/permissions — màn đó vẽ RBAC v1.
+      - name: "Đo vai kế toán (chỉ đọc)"
+        if: ${{ !cancelled() && (inputs.viec == 'vai-ke-toan' || inputs.viec == 'tat-ca') }}
+        run: pnpm exec tsx scripts/do-vai-ke-toan.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+
+      # Con số màn Công dạy ĐANG hiển thị, gọi ĐÚNG hàm màn dùng (luật 9) thay vì chép lại
+      # phép tính. Số cần nhìn nhất là "RƠI RA": buổi nạp được nhưng KHÔNG dòng danh mục nào
+      # nhận. Trước 09/09 bảng TeachingCreditType rỗng nên MỌI buổi rơi ra và công dạy = 0
+      # cho tất cả, im lặng — xem luật 15.
+      - name: "Đo con số màn Công dạy (chỉ đọc)"
+        if: ${{ !cancelled() && (inputs.viec == 'cong-day-thuc-te' || inputs.viec == 'tat-ca') }}
+        run: pnpm exec tsx scripts/do-cong-day-thuc-te.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+
+      # CHẠY THỬ của nút backfill đóng buổi. Hai lớp khoá độc lập, cùng khuôn nút nhập
+      # danh mục: script không có `--apply` ⇒ không câu lệnh ghi nào chạy; và kết nối là
+      # user CHỈ-ĐỌC ⇒ có gõ nhầm thành `--apply` thì Postgres vẫn từ chối.
+      - name: "Backfill đóng buổi thoả — CHẠY THỬ (chỉ đọc, in BẢNG PHẠM VI)"
+        if: ${{ !cancelled() && inputs.viec == 'backfill-buoi-chay-thu' }}
+        run: pnpm exec tsx scripts/backfill-dong-buoi-thoa.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+
+      # Buổi quá hạn KHÔNG đóng được bằng bất cứ đường tự động nào, gom theo LỚP — số mang
+      # đi hỏi Đào tạo. Trả lời bốn câu: thuộc lớp nào · trạng thái lớp · sĩ số đang học ·
+      # có ai từng ghi danh rồi rời đi không. Dùng CHÍNH `quyetDinhTuHoanTat` để phân nhóm.
+      - name: "Đo buổi kẹt theo lớp (chỉ đọc)"
+        if: ${{ !cancelled() && (inputs.viec == 'buoi-ket-theo-lop' || inputs.viec == 'tat-ca') }}
+        run: pnpm exec tsx scripts/do-buoi-ket-theo-lop.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+
+      # D1 — NƠI QUÉT vs NƠI CHỊU CÔNG. Bảng công ngày đang in "quét nơi khác" trong khi
+      # hệ BIẾT chính xác lượt đó ở đâu (`StaffTimeLog.centerId` + `workLocationId`).
+      # Đo kèm: toạ độ đang lưu được bao nhiêu, và số ngày công mã NG (phần A).
+      - name: "Đo nơi quét vs nơi chịu công (chỉ đọc)"
+        if: ${{ !cancelled() && (inputs.viec == 'noi-quet' || inputs.viec == 'tat-ca') }}
+        run: pnpm exec tsx scripts/do-noi-quet.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+
+      # Bug 13/09 — NGÀY CÔNG bị gán sai cơ sở vì `recompute` từng lấy NƠI QUÉT làm nơi chịu
+      # công khi ngày đó không có ca xếp. Mã đã vá, nhưng dòng ĐÃ GHI chỉ đổi khi tính lại —
+      # bước này đếm xem còn bao nhiêu, tách nhóm CÓ CA / KHÔNG CA và kỳ đã chốt.
+      - name: "Đo ngày công bị gán sai cơ sở (chỉ đọc)"
+        if: ${{ !cancelled() && (inputs.viec == 'noi-chiu-cong-lech' || inputs.viec == 'tat-ca') }}
+        run: pnpm exec tsx scripts/do-noi-chiu-cong-lech.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+
+      # CHẠY THỬ của nút tính lại MỘT dòng — cùng khuôn `nhap-danh-muc-chay-thu` và
+      # `backfill-buoi-chay-thu`: chạy thử ở đây bằng user CHỈ-ĐỌC, ghi thật ở workflow GHI.
+      #
+      # Script KHÔNG được truyền `--apply` ở bước này, nên kể cả secret bị trỏ nhầm sang chuỗi
+      # đầy quyền thì lượt này vẫn không ghi — cổng là THAM SỐ VẮNG MẶT, không phải lời hứa.
+      - name: "Tính lại một ngày — CHẠY THỬ (chỉ đọc)"
+        if: ${{ !cancelled() && inputs.viec == 'tinh-lai-mot-ngay-chay-thu' }}
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          U: ${{ inputs.user_id }}
+          NGAY: ${{ inputs.ngay }}
+        run: |
+          if [ -z "$U" ] || [ -z "$NGAY" ]; then
+            echo "::error::Việc này cần CẢ HAI ô user_id và ngay. Bỏ trống thì không có dòng nào để đo."
+            exit 1
+          fi
+          pnpm exec tsx scripts/tinh-lai-mot-ngay.ts --user="$U" --ngay="$NGAY"
+
+      - name: Nhắc lại
+        if: ${{ !cancelled() }}
+        run: |
+          echo "Workflow này chỉ ĐỌC, bằng user chỉ-đọc. Không bước nào ghi vào DB prod."
+          echo "Nếu số đo ra 0 bất thường: xem docs/cham-cong/USER-CHI-DOC-PROD.md mục 'Nếu số đo ra 0'."

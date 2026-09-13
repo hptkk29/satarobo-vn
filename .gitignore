@@ -109,3 +109,7 @@ docs/merge-lead/*.csv
 docs/merge-lead/*.xlsx
 docs/merge-lead/*.sql
 docs/merge-lead/*.txt
+
+# Dữ liệu PROD dump ra lúc chạy script vận hành (scripts/don-customtitle-may-chep.ts …).
+# KHÔNG BAO GIỜ commit — đây là bản sao nội dung thật của khách hàng.
+var/

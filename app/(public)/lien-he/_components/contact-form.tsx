@@ -54,6 +54,22 @@ import {
 const centerLabel = (name: string, address: string) =>
   `${name.split(' - ')[0] ?? name} - ${address}`
 
+/**
+ * Nhãn hiển thị → MÃ cơ sở (`Center.code`, vd "CS1"), 03/09/2026.
+ *
+ * Vì sao cần: ô cơ sở dùng chính NHÃN làm value (xem chú thích trên — `Select`
+ * của base-ui hiện giá trị thô, không tra nhãn như Radix), nên nhãn là thứ duy
+ * nhất form có trong tay. Bản đồ này quy nó về mã thật để gửi lên server.
+ *
+ * TRƯỚC BẢN VÁ NÀY lựa chọn của khách chỉ được nhồi vào `note` dạng chữ
+ * ("Cơ sở: Cơ sở 2 - 114 Hoàng Diệu"), còn `Lead.centerId` để trống. Hệ quả:
+ * lead web KHÔNG bao giờ về đúng cơ sở khách chọn — nó rơi vào nhánh "hệ thống
+ * tự chọn cơ sở đều tay" của bộ chia, tức là chia sang cơ sở khác cũng được.
+ */
+const CENTER_CODE_BY_LABEL = new Map(
+  operationalLocations().map((loc) => [centerLabel(loc.name, loc.address), loc.code]),
+)
+
 const CENTER_OPTIONS = operationalLocations().map((loc) =>
   centerLabel(loc.name, loc.address),
 )
@@ -332,7 +348,13 @@ function ContactFormInner() {
     // bỏ dropdown chủ đề nhưng KHÔNG được đánh rơi tham số, nếu không sale mất
     // thông tin khách hỏi về học cụ chứ không phải khoá học.
     const subject = searchParams.get('subject')
-    // Lead không có cột cơ sở/trường/lớp/tỉnh ⇒ nhồi vào `note` (server max 500).
+    // Cơ sở khách chọn → MÃ thật, gửi lên `centerCode` để server quy ra
+    // `Lead.centerId`. Dòng "Cơ sở: …" trong `note` vẫn giữ: nó ghi lại đúng
+    // NHÃN khách nhìn thấy lúc bấm, hữu ích khi đối chiếu về sau — nhưng từ nay
+    // `centerId` mới là nguồn quyết định lead về cơ sở nào.
+    const centerCode = values.coSo ? CENTER_CODE_BY_LABEL.get(values.coSo) : undefined
+
+    // Trường/lớp/tỉnh vẫn nhồi vào `note` (Lead không có cột riêng cho chúng).
     const note = [
       values.coSo ? `Cơ sở: ${values.coSo}` : '',
       values.truong?.trim() ? `Trường: ${values.truong.trim()}` : '',
@@ -354,6 +376,7 @@ function ContactFormInner() {
       phone: canonicalPhone(values.sdt) ?? values.sdt.trim(),
       email: values.email?.trim() || undefined,
       source: 'lien-he',
+      centerCode,
       note,
       eventId,
       timeOnPage,

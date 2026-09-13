@@ -2,6 +2,7 @@
 // + dedupe parent/student + consent + mã HV v2, tất cả ATOMIC. Giữ convert-lead.ts cũ cho
 // regression (flag CONVERT_V2_ENABLED). Side-effect (notify) đi DomainEvent SAU commit.
 import { db } from "@/lib/db";
+import { KHOAN_DA_GHI_NHAN } from "@/lib/finance/ghi-nhan";
 import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
 import { publishEvent } from "@/lib/events/publish";
 import { genStudentCodeV2 } from "@/lib/codegen";
@@ -145,8 +146,10 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
     computeEnrollmentPrice({ listPrice: s.listPrice, discount: s.discount ?? null }),
   );
   const totalFinalPrice = prices.reduce((sum, p) => sum + p.finalPrice, 0);
+  // 07/09 — thêm `deletedAt: null` cho khớp `lib/crm/bulk-convert.ts:191` (vốn đã có).
+  // Thiếu nó thì một khoản đã xoá sổ vẫn mở được cổng chốt ghi danh.
   const recordedCount = await db.payment.count({
-    where: { saleStatus: "RECORDED", order: { leadId: lead.id } },
+    where: { ...KHOAN_DA_GHI_NHAN, order: { leadId: lead.id } },
   });
   const guard = evaluatePaymentGuard({
     // backfillPayment sẽ tạo khoản RECORDED trong chính transaction bên dưới → coi như đã có.

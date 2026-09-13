@@ -16,6 +16,7 @@ import {
   missingMilestoneComments,
 } from "@/lib/lms/report-card-milestone";
 import { formatDateVN } from "@/lib/format/date";
+import { WR_KIND_LABEL, type WorkRequestKindV } from "@/lib/work-request";
 import {
   formatDayKeyDMY,
   shiftDayKey,
@@ -83,20 +84,23 @@ interface PendingCfg {
    * và làm hàm mất tính thuần. Thay vào đó caller resolve `Actor` MỘT lần rồi truyền vào.
    */
   can: (action: Action) => boolean;
+  /** Kiểm quyền CÓ target cơ sở — cho nhóm việc gác bằng action scope CENTER (rbac-scope R1). */
+  canAt: (action: Action, centerId: string) => boolean;
 }
 
 /** Đóng gói `evaluatePermission` + ghi shadow (fire-and-forget) cho 1 request. */
-function makePermChecker(user: TaskUser, actor: Actor): (action: Action) => boolean {
+function makePermChecker(user: TaskUser, actor: Actor): (action: Action, centerId?: string) => boolean {
   const flagOn = isRbacV2Enabled();
-  return (action) =>
+  return (action, centerId) =>
     evaluatePermission({
       sessionUser: user,
       actor,
       action,
+      target: centerId ? { centerId } : undefined,
       flagOn,
       onEvaluated: ({ v1, v2 }) => {
         if (v1 !== v2) {
-          void recordPermissionShadow({ action, userId: actor.userId, v1, v2, targetKey: null });
+          void recordPermissionShadow({ action, userId: actor.userId, v1, v2, targetKey: centerId ?? null });
         }
       },
     });
@@ -146,28 +150,35 @@ async function classApproval(user: TaskUser, now: Date, cfg: PendingCfg): Promis
   };
 }
 
-async function timesheetAdjust(user: TaskUser, now: Date, cfg: PendingCfg): Promise<PendingTaskGroup | null> {
-  if (!cfg.can("hr_attendance:adjust")) return null;
-  const { centerScope } = scope(user);
+/**
+ * L5 chấm công v3 (06/09/2026) — ĐƠN TỪ chờ duyệt (WorkRequest), thay nhóm "Yêu cầu chỉnh công"
+ * cũ (TimesheetAdjustmentRequest — đã đóng băng, màn /cham-cong/chinh-cong đã gỡ). Gác bằng
+ * `hr_attendance:approve` CÓ target từng cơ sở nhìn thấy (action scope CENTER — gọi trần là
+ * QLCS tự khoá mình, rbac-scope R1). Giữ key nhóm `timesheet_adjust` để pending-sync/badge cũ
+ * không đổi.
+ */
+async function timesheetAdjust(user: TaskUser, now: Date, cfg: PendingCfg, actor: Actor): Promise<PendingTaskGroup | null> {
+  const centerIds = [...new Set([...actor.visibleCenterIds, "hoi-so"])].filter((c) => cfg.canAt("hr_attendance:approve", c));
+  if (centerIds.length === 0) return null;
   const twoDaysAgo = new Date(now.getTime() - cfg.staleMs);
 
-  const rows = await db.timesheetAdjustmentRequest.findMany({
-    where: { status: "PENDING", ...(centerScope ? { centerId: centerScope } : {}) },
-    select: { id: true, date: true, createdAt: true },
+  const rows = await db.workRequest.findMany({
+    where: { status: "PENDING", centerId: { in: centerIds } },
+    select: { id: true, kind: true, fromDate: true, createdAt: true, submittedLate: true },
     orderBy: { createdAt: "asc" },
     take: 50,
   });
   const overdueCount = rows.filter((r) => r.createdAt < twoDaysAgo).length;
   return {
     type: "timesheet_adjust",
-    label: "Yêu cầu chỉnh công",
+    label: "Đơn từ chờ duyệt",
     count: rows.length,
     overdueCount,
-    href: "/cham-cong/chinh-cong",
+    href: "/don-tu",
     items: rows.slice(0, cfg.itemLimit).map((r) => ({
       id: r.id,
-      label: `Chỉnh công ${formatDateVN(r.date)}`,
-      href: "/cham-cong/chinh-cong",
+      label: `${WR_KIND_LABEL[r.kind as WorkRequestKindV] ?? r.kind}${r.fromDate ? ` ${formatDateVN(r.fromDate)}` : ""}${r.submittedLate ? " (nộp muộn)" : ""}`,
+      href: "/don-tu",
       overdue: r.createdAt < twoDaysAgo,
     })),
   };
@@ -687,10 +698,11 @@ export async function getPendingTasks(user: TaskUser, actor: Actor): Promise<Pen
     staleMs: staleDays * 86400000,
     birthdayAlertDays,
     can: makePermChecker(user, actor),
+    canAt: makePermChecker(user, actor),
   };
   const groups = await Promise.all([
     classApproval(user, now, cfg),
-    timesheetAdjust(user, now, cfg),
+    timesheetAdjust(user, now, cfg, actor),
     parentRequest(user, now, cfg),
     mediaApproval(user, now, cfg),
     sessionIncomplete(user, now, cfg),

@@ -63,7 +63,6 @@ export function ChildDetailPage({ data }: { data: ChildDetail }) {
   const [school, setSchool] = useState(data.school ?? "");
   const [health, setHealth] = useState(data.healthNotes ?? "");
   const [allergies, setAllergies] = useState((data.allergies ?? []).join(", "));
-  const [notes, setNotes] = useState(data.notes ?? "");
 
   function save() {
     start(async () => {
@@ -77,7 +76,6 @@ export function ChildDetailPage({ data }: { data: ChildDetail }) {
           .split(",")
           .map((a) => a.trim())
           .filter(Boolean),
-        notes,
       });
       if (res.ok) {
         toast.success("Đã lưu hồ sơ con");
@@ -189,16 +187,23 @@ export function ChildDetailPage({ data }: { data: ChildDetail }) {
               />
             </Field>
           </div>
+          {/* 06/09 — GỠ ô "Ghi chú khác". Nó ghi thẳng vào `Student.notes`, tức ô GHI
+              CHÚ NỘI BỘ của nhân viên: phụ huynh vừa đọc được ghi chú nội bộ về con
+              mình, vừa xoá đè lên nó mỗi lần bấm Lưu. Muốn nhắn cho trung tâm thì đi
+              qua /portal/yeu-cau — kênh có người nhận và có trạng thái xử lý. */}
           <div className="sm:col-span-2">
-            <Field icon={BookOpen} label="Ghi chú khác">
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                rows={2}
-                placeholder="Ghi chú thêm cho trung tâm"
-                className={inputCls}
-              />
-            </Field>
+            <p className="rounded-xl border border-dashed border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+              <BookOpen className="mr-1.5 inline size-3.5 align-[-2px] text-primary" />
+              Cần nhắn gì thêm cho trung tâm (đổi lịch, xin học bù, thắc mắc học phí)?
+              Gửi ở mục{" "}
+              <a
+                href="/portal/yeu-cau"
+                className="font-semibold text-primary underline underline-offset-2"
+              >
+                Yêu cầu
+              </a>{" "}
+              để có người tiếp nhận và trả lời.
+            </p>
           </div>
         </div>
         <div className="mt-5 flex justify-end">

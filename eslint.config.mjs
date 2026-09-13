@@ -6,6 +6,7 @@ import { DB_IMPORT_ALLOWLIST } from './lib/eslint/db-import-allowlist.mjs'
 import { INLINE_AUTHZ_ALLOWLIST } from './lib/eslint/inline-authz-allowlist.mjs'
 import inlineAuthzPlugin from './lib/eslint/require-can-in-write-action.mjs'
 import noBareNextResponsePlugin from './lib/eslint/no-bare-next-response.mjs'
+import requireNowPlugin from './lib/eslint/require-now-in-tests.mjs'
 
 // R6-F1 — chặn import @/lib/db TRẦN trong route group admin/portal (nơi cần cách ly
 // cơ sở). Code mới PHẢI đi qua scopedDb(actor) (cổng an toàn dữ liệu, A0-04/D1).
@@ -274,6 +275,45 @@ export default tseslint.config(
           ],
         },
       ],
+    },
+  },
+
+  // tests/** — 13/09/2026: mở phạm vi `pnpm lint` sang thư mục test.
+  //
+  // Vì sao BẮT BUỘC phải mở: `pnpm lint` trước đây quét `app components lib scripts` —
+  // KHÔNG có `tests`. Nghĩa là MỌI rule nhắm vào test đều vô hiệu trong CI, kể cả rule
+  // cắm ngay dưới đây. Một cổng không soi tới nơi cần soi thì bằng không có cổng
+  // (luật 10 — `docs/luat-doc-so-va-ket-luan.md`). Phát hiện khi viết rule `thoigian`:
+  // rule báo 12 lỗi khi gọi `eslint <file>` tay, nhưng `pnpm lint` im lặng.
+  //
+  // Đây là khai môi trường Node y như khối `scripts/**` ngay dưới, KHÔNG phải hạ luật:
+  // `Buffer`/`console` thật sự tồn tại khi Vitest chạy trên Node — thiếu khai thì
+  // `no-undef` báo nhầm 12 chỗ.
+  {
+    files: ['tests/**/*.{ts,tsx,mts,cts,mjs,cjs,js}'],
+    languageOptions: {
+      globals: {
+        console: 'readonly',
+        process: 'readonly',
+        __dirname: 'readonly',
+        __filename: 'readonly',
+        Buffer: 'readonly',
+        require: 'readonly',
+        module: 'writable',
+      },
+    },
+  },
+
+  // Ép test chốt `now` khi gọi hàm nhạy-thời-gian (sự cố 13/09/2026 — xem
+  // `lib/eslint/require-now-in-tests.mjs`). Ngày cứng trong ca + `now` rơi về giờ thật =
+  // ca xanh vài ngày rồi ĐỎ MÃI MÃI, nổ một chiều, không có cửa sổ để đợi tự xanh lại.
+  //
+  // Phạm vi CỐ Ý loại mã sản phẩm: ở đó gọi với `now` mặc định là đường chạy THẬT.
+  {
+    files: ['tests/**/*.ts', '**/*.test.ts', '**/*.spec.ts'],
+    plugins: { thoigian: requireNowPlugin },
+    rules: {
+      'thoigian/require-now-in-tests': 'error',
     },
   },
 

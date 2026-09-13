@@ -163,7 +163,8 @@ function AdminLibraryTab({ templates }: { templates: KhoTemplate[] }) {
         />
       ) : (
         <div className="t-card overflow-hidden">
-          <PhanTrangBang cuonNgang tenDonVi="mẫu">
+          <PhanTrangBang cuonNgang tenDonVi="mẫu"
+          khoaGhiNho="gv-cham-bai-thu-vien">
           <table className="min-w-[820px] w-full border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">

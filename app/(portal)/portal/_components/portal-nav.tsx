@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { SU_KIEN_DA_DOC_THONG_BAO } from "@/lib/portal/su-kien-thong-bao";
 import {
   Home,
   CalendarDays,
@@ -68,6 +69,17 @@ export function PortalNav({
   msgCount?: number;
   evalV2Enabled?: boolean;
 }) {
+  // Badge "Thông báo" đếm từ server, nhưng phải trừ được NGAY khi phụ huynh vừa đọc
+  // xong — layout không tự dựng lại trong cùng một lượt xem (xem
+  // `lib/portal/su-kien-thong-bao.ts`). Lượt tải sau server vẫn là nguồn đúng.
+  const [soChuaDoc, setSoChuaDoc] = useState(notifCount);
+  // Server đếm lại (điều hướng mới, có tin mới) thì nghe theo server.
+  useEffect(() => setSoChuaDoc(notifCount), [notifCount]);
+  useEffect(() => {
+    const xong = () => setSoChuaDoc(0);
+    window.addEventListener(SU_KIEN_DA_DOC_THONG_BAO, xong);
+    return () => window.removeEventListener(SU_KIEN_DA_DOC_THONG_BAO, xong);
+  }, []);
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
@@ -90,8 +102,8 @@ export function PortalNav({
               ? pathname === "/portal"
               : pathname.startsWith(item.href);
           const badge =
-            item.href === "/portal/thong-bao" && notifCount > 0
-              ? notifCount
+            item.href === "/portal/thong-bao" && soChuaDoc > 0
+              ? soChuaDoc
               : item.href === "/portal/tin-nhan" && liveMsgCount > 0
                 ? liveMsgCount
                 : 0;
@@ -137,9 +149,9 @@ export function PortalNav({
             {open ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
             Menu
           </span>
-          {!open && notifCount + liveMsgCount > 0 && (
+          {!open && soChuaDoc + liveMsgCount > 0 && (
             <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
-              {notifCount + liveMsgCount > 9 ? "9+" : notifCount + liveMsgCount}
+              {soChuaDoc + liveMsgCount > 9 ? "9+" : soChuaDoc + liveMsgCount}
             </span>
           )}
         </button>

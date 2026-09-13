@@ -13,6 +13,14 @@ describe("[A0-07] registry", () => {
     expect(getHandlers("lead.trialAttended")).toHaveLength(1);
   });
 
+  it("[vé 03/09] mốc 'đã học thử xong' nghe CẢ tên đang được phát thật", () => {
+    // `syncTrialProgress` phát `lead.awaitingDecision`, không phải `lead.trialAttended`.
+    // Trước 03/09 handler chỉ nghe tên sau ⇒ Sale chưa từng nhận tin này.
+    // Cuộc đối chiếu ĐẦY ĐỦ hai đầu nằm ở `lib/events/khop-phat-nghe.test.ts`.
+    registerR7NotificationHandlers();
+    expect(getHandlers("lead.awaitingDecision")).toHaveLength(1);
+  });
+
   it("[A0-07-T5-01] nhiều handler/1 type (thêm = 1 dòng on)", async () => {
     on("demo.ping", async () => {});
     on("demo.ping", async () => {});

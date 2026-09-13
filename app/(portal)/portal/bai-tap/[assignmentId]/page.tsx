@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft, FileText } from "lucide-react";
+import { ngayGioVN } from "@/lib/format/date";
 import { requireActiveStudent } from "@/lib/portal/session";
 import { getAssignmentDetail } from "@/lib/portal/learning";
 import {
@@ -96,7 +97,9 @@ export default async function AssignmentDetailPage({ params }: Props) {
         </div>
         <p className="mt-1 text-xs text-neutral-600">
           {a.totalPoints} điểm
-          {a.dueAt && ` · Hạn ${new Date(a.dueAt).toLocaleString("vi-VN")}`}
+          {/* 06/09 — GHIM giờ VN; `toLocaleString("vi-VN")` trần lấy giờ tiến trình
+              (Vercel = UTC) nên hạn 23:59 giờ VN in ra "16:59". */}
+          {a.dueAt && ` · Hạn ${ngayGioVN(a.dueAt)}`}
         </p>
       </div>
 

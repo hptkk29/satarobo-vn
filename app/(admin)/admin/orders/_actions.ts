@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { KHOAN_DA_GHI_NHAN } from "@/lib/finance/ghi-nhan";
 import { revalidatePath } from "next/cache";
 import { Prisma, type OrderStatus, type OrderType } from "@prisma/client";
 import { auth } from "@/lib/auth";
@@ -615,7 +616,7 @@ export async function changeOrderStatusAction(
     // [auto:order-confirm]). Tránh double-count khi installments đã ghi sổ.
     if (parsed.data.toStatus === "CONFIRMED" && order.status === "PENDING_PAYMENT") {
       const recorded = await tx.payment.aggregate({
-        where: { orderId, saleStatus: "RECORDED", deletedAt: null },
+        where: { orderId, ...KHOAN_DA_GHI_NHAN },
         _count: { _all: true },
       });
       if (recorded._count._all === 0) {

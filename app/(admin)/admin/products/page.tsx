@@ -153,6 +153,8 @@ export default async function ProductsPage({ searchParams }: Props) {
             category: categoryParam,
             status: statusParam,
           })}
+          // Chip lọc nhanh: vẫn ở /products, chỉ bỏ/thêm `?lowStock`. Giữ chỗ đang xem.
+          scroll={false}
           className={
             "rounded-full px-3 py-1 " +
             (!lowStock
@@ -169,6 +171,7 @@ export default async function ProductsPage({ searchParams }: Props) {
             status: statusParam,
             lowStock: "1",
           })}
+          scroll={false}
           className={
             "rounded-full px-3 py-1 " +
             (lowStock

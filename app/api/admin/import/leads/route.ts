@@ -14,6 +14,7 @@ import { parseLeadImportRow, resolveDefaultCenterId } from "@/lib/lead/import";
 import { normalizeVi } from "@/lib/lead/import-registered";
 import { autoAssignNewLead } from "@/lib/lead/auto-assign";
 import { chiaChoLead } from "@/lib/lead/assign-lead";
+import { canManualAssign } from "@/lib/lead/assign-guard";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
 
@@ -77,6 +78,25 @@ export async function POST(req: NextRequest) {
     if (c.slug) courseByKey.set(c.slug.trim().toLowerCase(), c.id);
   }
 
+  // ── BẢNG TRA SALE cho cột "Sale phụ trách" (tuỳ chọn, 04/09/2026) ─────────
+  //
+  // Nhận EMAIL hoặc MÃ NHÂN VIÊN — người nhập cầm bảng nào thì gõ bảng đó.
+  // Chỉ lấy người CÓ vai SALES_CSM: giao lead cho người không phải sale là giao
+  // vào chỗ không ai xử lý.
+  //
+  // Tra MỘT LẦN cho cả file thay vì mỗi dòng một truy vấn: file 300 dòng thì
+  // cách kia là 300 lượt đi DB cho một cột tuỳ chọn.
+  const saleUsers = await sdb.user.findMany({
+    where: { roles: { has: "SALES_CSM" }, deletedAt: null },
+    select: { id: true, email: true, isActive: true, deletedAt: true, centerId: true, employee: { select: { employeeCode: true } } },
+  });
+  const saleByKey = new Map<string, (typeof saleUsers)[number]>();
+  for (const u of saleUsers) {
+    if (u.email) saleByKey.set(u.email.trim().toLowerCase(), u);
+    const ma = u.employee?.employeeCode;
+    if (ma) saleByKey.set(ma.trim().toLowerCase(), u);
+  }
+
   const errors: ImportError[] = [];
   type Valid = {
     parentName: string;
@@ -89,6 +109,8 @@ export async function POST(req: NextRequest) {
     courseId: string | null;
     source: string;
     note: string | null;
+    /** Sale được chỉ định trên dòng Excel. `null` = để trống ⇒ máy chia. */
+    saleId: string | null;
   };
   // Gộp con (1 PH nhiều con): nhóm theo SĐT. 26/07 — GỘP TỰ ĐỘNG, không cần bấm
   // "Xác nhận gộp con" nữa: các dòng cùng SĐT (kể cả ghi KHÁC tên phụ huynh — bố/mẹ
@@ -128,6 +150,37 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // ── SALE PHỤ TRÁCH (cột tuỳ chọn) ──────────────────────────────────────
+    //
+    // Để trống ⇒ `null` ⇒ máy chia theo vòng luân phiên (chủ dự án chốt 04/09).
+    //
+    // Gõ sai thì CẢNH BÁO rồi vẫn nhận dòng, KHÔNG bỏ dòng: mất một lead thật vì
+    // gõ sai một ô TUỲ CHỌN là đổi hỏng lấy hỏng. Lead đó rơi về máy chia — vẫn
+    // có người nhận, và dòng cảnh báo nói rõ để người nhập sửa lại sau.
+    let saleId: string | null = null;
+    if (d.saleRaw) {
+      const u = saleByKey.get(d.saleRaw.trim().toLowerCase());
+      if (!u) {
+        errors.push({
+          row: rowNo,
+          error: `⚠️ Không tìm thấy sale "${d.saleRaw}" — để máy chia dòng này.`,
+        });
+      } else {
+        // Cùng luật với ô gán sale trên trang lead: còn làm việc, có gắn cơ sở, và
+        // đúng cơ sở của lead (trừ khi người nhập ở cấp Hội sở, được điều liên cơ sở).
+        const guard = canManualAssign({
+          sale: u,
+          leadCenterId: centerId,
+          actorIsHoLevel: actor.isHoLevel,
+        });
+        if (!guard.ok) {
+          errors.push({ row: rowNo, error: `⚠️ ${d.saleRaw}: ${guard.error} Để máy chia dòng này.` });
+        } else {
+          saleId = u.id;
+        }
+      }
+    }
+
     if (!passesScope("Lead", { centerId }, actor)) {
       errors.push({
         row: rowNo,
@@ -142,6 +195,21 @@ export async function POST(req: NextRequest) {
     if (g) {
       // Trùng SĐT trong file → gộp con vào lead của nhóm (tự động).
       g.children.push({ name: d.childName, age: d.childAge });
+      // Nhiều dòng cùng SĐT = một nhà = MỘT lead. Dòng đầu tiên có ghi sale thì
+      // lấy; các dòng sau không ghi đè — người nhập ghi hai sale khác nhau cho
+      // cùng một số là mâu thuẫn trong chính file họ, và im lặng chọn dòng cuối
+      // thì kết quả phụ thuộc thứ tự dòng.
+      if (!g.base.saleId && d.saleRaw) {
+        const u = saleByKey.get(d.saleRaw.trim().toLowerCase());
+        if (u) {
+          const guard = canManualAssign({
+            sale: u,
+            leadCenterId: g.base.centerId,
+            actorIsHoLevel: actor.isHoLevel,
+          });
+          if (guard.ok) g.base.saleId = u.id;
+        }
+      }
       if (normalizeVi(d.parentName) !== normalizeVi(g.base.parentName)) {
         g.otherParentNames.push(d.parentName);
       }
@@ -159,6 +227,7 @@ export async function POST(req: NextRequest) {
         courseId,
         source: d.source,
         note: d.note,
+        saleId,
       },
       children: [{ name: d.childName, age: d.childAge }],
       otherParentNames: [],
@@ -230,7 +299,8 @@ export async function POST(req: NextRequest) {
   let success = 0;
   let mergedChildren = 0;
   let mergedLeads = 0;
-  const createdIds: string[] = [];
+  // Mang theo sale được chỉ định để vòng chia bên dưới truyền `explicitOwnerId`.
+  const createdIds: { id: string; saleId: string | null }[] = [];
   try {
     await sdb.$transaction(async (tx) => {
       for (const g of groups.values()) {
@@ -282,7 +352,7 @@ export async function POST(req: NextRequest) {
           },
           select: { id: true },
         });
-        createdIds.push(created.id);
+        createdIds.push({ id: created.id, saleId: g.base.saleId });
         success++;
       }
 
@@ -359,7 +429,7 @@ export async function POST(req: NextRequest) {
   // xếp hàng theo thứ tự vòng lặp. Bọc chung transaction thì đổi lại một thứ ĐẮT
   // HƠN NHIỀU: dòng thứ 250 hỏng là rollback cả 300 dòng đã đúng, trong khi nếp
   // đang chạy (và người vận hành đang trông đợi) là "hỏng dòng nào bỏ dòng đó".
-  for (const id of createdIds) {
+  for (const { id, saleId } of createdIds) {
     const lead = await sdb.lead.findUnique({
       where: { id },
       select: { centerId: true },
@@ -375,7 +445,9 @@ export async function POST(req: NextRequest) {
       targetCenterId: lead.centerId,
       createdById: actorId,
       entryPoint: "IMPORT",
-      explicitOwnerId: null,
+      // Có ghi sale ⇒ giao đích danh, KHÔNG tiêu lượt (ma trận, ca IMPORT).
+      // Để trống ⇒ `null` ⇒ về vòng chia và CÓ tiêu lượt.
+      explicitOwnerId: saleId,
     }).catch((err) => console.error("[import/leads] chia lead:", err));
   }
 

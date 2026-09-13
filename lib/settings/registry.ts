@@ -314,6 +314,43 @@ export const SETTINGS = {
     default: false,
     centerOverridable: false, // quyền không được lệch nhau giữa các cơ sở
   }),
+  // Web Push (08/09/2026) — CÔNG TẮC của kênh thông báo đẩy cho NHÂN VIÊN.
+  //
+  // Ở SystemSetting chứ không phải env, đúng nếp của MỌI kênh gửi ra ngoài trong repo này
+  // (`chat.znsNotifyEnabled`, `zalo.znsLive`): tắt kênh phải có hiệu lực trong ≤5 phút mà
+  // không cần deploy. Env chỉ giữ khoá bí mật (`VAPID_PRIVATE_KEY`).
+  //
+  // ✅ ĐÃ CÓ ĐƯỜNG ĐỌC TỪ ĐỢT 4: `chayLuotGuiPush` (lib/push/engine.ts) đọc key này ở dòng đầu
+  // mỗi lượt cron và THOÁT SẠCH khi tắt — không đọc bảng nào, không đánh dấu dòng nào. Vì thế
+  // hậu tố "CHƯA HOẠT ĐỘNG" trong `label` đã được gỡ.
+  //
+  // ⚠️ "≤5 phút" là con số ĐÚNG, đừng viết thành "ngay": `getSetting` cache `revalidate: 300`
+  // (lib/settings/service.ts — docstring ở đầu file đó ghi "60s" là SAI so với code), còn nhánh
+  // xoá cache theo tag chỉ chạy được trong Server Action. Màn /admin/cau-hinh-van-hanh sửa qua
+  // Server Action nên thường ăn ngay, nhưng một lượt cron đang giữ bản cache vẫn có thể gửi
+  // thêm trong tối đa 5 phút sau khi người vận hành gạt tắt.
+  //
+  // ⚠️ Bật công tắc KHÔNG đủ để kênh chạy: engine còn một cổng thứ hai là ba biến môi trường
+  // `NEXT_PUBLIC_VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT`. Thiếu hoặc sai hình
+  // dạng thì mỗi lượt trả `reason: "NO_VAPID"` và không dòng nào bị đụng.
+  //
+  // TẮT mặc định. DB trống ở mọi môi trường sẽ rơi về `default` (lib/settings/resolve.ts) nên
+  // `true` ở đây nghĩa là tự bật ở cả những nơi chưa ai cấu hình gì.
+  //
+  // Đặt tạm ở nhóm `system` chứ không mở nhóm `push` riêng: hiện chỉ có MỘT key, và thêm
+  // nhóm phải sửa union `SettingGroup` + nhãn ở `settings-editor.tsx`. Khoá cấu hình lưu
+  // theo `key` chứ không theo nhóm, nên chuyển sang nhóm riêng về sau là đổi code thuần,
+  // không migration. Chuyển khi có ≥3 key push (allowlist tiền tố, trần/ngày…).
+  "push.webPushEnabled": def({
+    key: "push.webPushEnabled",
+    group: "system",
+    label: "Bật thông báo đẩy (Web Push) cho nhân viên — cần khai khoá VAPID trước",
+    schema: z.boolean(),
+    default: false,
+    // Kênh bật/tắt toàn hệ: một cơ sở tự tắt thì nhân viên cơ sở đó im lặng mà không ai
+    // ở Hội sở biết — đúng loại lỗi câm mà module này sinh ra để tránh.
+    centerOverridable: false,
+  }),
   "student.birthdayZnsEnabled": def({
     key: "student.birthdayZnsEnabled",
     group: "student",
@@ -451,6 +488,116 @@ export const SETTINGS = {
     schema: z.number().int().min(0).max(31),
     default: 2, // lib/attendance/adjust.ts MANAGER_EDIT_WINDOW_DAYS
     centerOverridable: true,
+  }),
+  // ── Module chấm công v3 (L1 · 06/09/2026) — PHẦN 6b "tự vận hành": không tham số nào
+  // của module sống trong code. Mọi key đè được theo cơ sở. Đọc qua getSetting(key,{orgUnitId}).
+  "shift.weeklyOffDays": def({
+    key: "shift.weeklyOffDays",
+    group: "shift",
+    label: "Ngày nghỉ tuần (0=CN … 6=T7)",
+    schema: z.array(z.number().int().min(0).max(6)).max(7),
+    default: [1], // Thứ Hai toàn Trung tâm nghỉ (Sheet 29/08) — công chuẩn = ngày trong kỳ − nghỉ tuần − lễ
+    centerOverridable: true,
+  }),
+  "shift.lateGraceMinutes": def({
+    key: "shift.lateGraceMinutes",
+    group: "shift",
+    label: "Dung sai đi muộn theo ca (phút) — quá mức này mới gắn cờ DI_MUON",
+    schema: z.number().int().min(0).max(180),
+    default: 30, // T-12
+    centerOverridable: true,
+  }),
+  // ── Nội quy: đếm lần trễ và mức trừ (chốt 07/09/2026) ────────────────────────────────
+  // Tách RIÊNG khỏi `shift.lateGraceMinutes` có chủ đích. Dung sai 30′ ở trên là để GẮN CỜ
+  // cho quản lý rà; lấy luôn nó làm căn cứ phạt thì người vào muộn 25′ không bị tính lần
+  // nào — tức nội quy có cũng như không.
+  "shift.latePenaltyGraceMinutes": def({
+    key: "shift.latePenaltyGraceMinutes",
+    group: "shift",
+    label: "Trễ quá bao nhiêu phút thì tính 1 lần trễ (dùng để trừ % nội quy)",
+    schema: z.number().int().min(0).max(120),
+    default: 15, // chủ dự án chốt 06/09
+    centerOverridable: true,
+  }),
+  "shift.penaltyLatePercent": def({
+    key: "shift.penaltyLatePercent",
+    group: "shift",
+    label: "Trừ bao nhiêu % nội quy cho MỖI lần đi trễ",
+    schema: z.number().min(0).max(100),
+    default: 0.5,
+    centerOverridable: true,
+  }),
+  "shift.penaltyAbsentPercent": def({
+    key: "shift.penaltyAbsentPercent",
+    group: "shift",
+    label: "Trừ bao nhiêu % nội quy cho MỖI ngày nghỉ không phép (quản lý đã xác nhận)",
+    schema: z.number().min(0).max(100),
+    default: 2,
+    centerOverridable: true,
+  }),
+  "shift.earlyArrivalMinutes": def({
+    key: "shift.earlyArrivalMinutes",
+    group: "shift",
+    label: "Có mặt trước ca (phút) — chỉ nhắc, không phạt",
+    schema: z.number().int().min(0).max(60),
+    default: 10, // quy định Sheet: có mặt trước ca 10 phút
+    centerOverridable: true,
+  }),
+  "shift.maxLogsPerDay": def({
+    key: "shift.maxLogsPerDay",
+    group: "shift",
+    label: "Trần lượt quét mỗi người mỗi ngày (vượt vẫn ghi + cờ VUOT_TRAN)",
+    schema: z.number().int().min(2).max(50),
+    default: 10,
+    centerOverridable: true,
+  }),
+  "shift.pairingMaxGapMinutes": def({
+    key: "shift.pairingMaxGapMinutes",
+    group: "shift",
+    label: "Cửa sổ nhận diện buổi khi ghép cặp vào/ra (± phút quanh mốc ca)",
+    schema: z.number().int().min(15).max(240),
+    default: 60,
+    centerOverridable: true,
+  }),
+  "shift.duplicateTapMinutes": def({
+    key: "shift.duplicateTapMinutes",
+    group: "shift",
+    label: "Hai lượt quét cách nhau dưới mức này (phút) coi là bấm trùng",
+    schema: z.number().int().min(0).max(30),
+    default: 2,
+    centerOverridable: true,
+  }),
+  "shift.briefNoteHourVN": def({
+    key: "shift.briefNoteHourVN",
+    group: "shift",
+    label: "Giờ gửi tin nhắc lịch ngày mai (giờ VN, 0–23)",
+    schema: z.number().int().min(0).max(23),
+    default: 19,
+    centerOverridable: true,
+  }),
+  "shift.requestNoticeDays": def({
+    key: "shift.requestNoticeDays",
+    group: "shift",
+    label: "Báo nghỉ / đổi ca trước ít nhất (ngày) — nộp sát hơn bị đánh dấu Nộp muộn",
+    schema: z.number().int().min(0).max(30),
+    default: 2, // quy định Sheet
+    centerOverridable: true,
+  }),
+  "shift.leaveAccrualPerMonth": def({
+    key: "shift.leaveAccrualPerMonth",
+    group: "shift",
+    label: "Phép năm cộng dồn mỗi tháng (ngày) — quỹ phép đợt 2",
+    schema: z.number().min(0).max(5),
+    default: 1, // K-06 theo MISA
+    centerOverridable: false,
+  }),
+  "shift.leaveDaysPerYear": def({
+    key: "shift.leaveDaysPerYear",
+    group: "shift",
+    label: "Phép năm tối đa (ngày/năm, nhân sự chính thức) — quỹ phép đợt 2",
+    schema: z.number().int().min(0).max(60),
+    default: 12, // K-06 theo MISA
+    centerOverridable: false,
   }),
   "otp.ttlMinutes": def({
     key: "otp.ttlMinutes",

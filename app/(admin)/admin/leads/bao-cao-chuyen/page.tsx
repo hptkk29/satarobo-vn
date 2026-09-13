@@ -143,9 +143,12 @@ export default async function TransferReportPage({ searchParams }: Props) {
           </p>
         </div>
         <div className="flex items-center gap-2 text-sm">
-          <Link href={`/leads/bao-cao-chuyen?month=${mStr(prevM)}`} className="rounded-lg border border-border px-2 py-1.5 hover:bg-muted">←</Link>
+          {/* `scroll={false}`: lùi/tiến tháng chỉ đổi `?month=` của chính trang này —
+              để Next cuộn lên đầu thì mỗi lần đổi tháng người xem lại phải cuộn xuống
+              đúng chỗ bảng vừa nhìn. */}
+          <Link href={`/leads/bao-cao-chuyen?month=${mStr(prevM)}`} scroll={false} className="rounded-lg border border-border px-2 py-1.5 hover:bg-muted">←</Link>
           <span className="font-semibold text-foreground">{month}</span>
-          <Link href={`/leads/bao-cao-chuyen?month=${mStr(nextM)}`} className="rounded-lg border border-border px-2 py-1.5 hover:bg-muted">→</Link>
+          <Link href={`/leads/bao-cao-chuyen?month=${mStr(nextM)}`} scroll={false} className="rounded-lg border border-border px-2 py-1.5 hover:bg-muted">→</Link>
         </div>
       </div>
 
@@ -162,8 +165,8 @@ export default async function TransferReportPage({ searchParams }: Props) {
           Không có lead chuyển liên cơ sở trong tháng này.
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-border bg-card">
-          <PhanTrangBang>
+        <div className="overflow-hidden rounded-xl border border-border bg-card">
+          <PhanTrangBang cuonNgang>
             <table className="min-w-full text-sm">
               <thead className="border-b border-border bg-muted text-left text-xs uppercase tracking-wider text-muted-foreground">
                 <tr>

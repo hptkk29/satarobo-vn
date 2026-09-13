@@ -10,7 +10,7 @@
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
-import { shiftLabel } from "@/lib/shifts";
+import { loadRequestFormOptions } from "@/lib/cham-cong/request-form-data";
 import type { WorkRequestKindV } from "@/lib/work-request";
 import { DonTuClient, type WorkRequestRow } from "./_components/don-tu-client";
 
@@ -22,13 +22,6 @@ const dateFmt = new Intl.DateTimeFormat("vi-VN", {
   year: "numeric",
   timeZone: "Asia/Ho_Chi_Minh",
 });
-function startOfTodayUtc(): Date {
-  const now = new Date();
-  const vn = new Date(now.getTime() + 7 * 60 * 60 * 1000);
-  return new Date(
-    Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()),
-  );
-}
 
 export default async function DonTuPage({
   searchParams,
@@ -41,40 +34,13 @@ export default async function DonTuPage({
   const sp = await searchParams;
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
-  const classIds = [...actor.assignedClassIds];
-  const centerId = session.user.centerId ?? null;
-
-  const [requests, myClasses, otherTeachers, myShifts] = await Promise.all([
+  const [requests, options] = await Promise.all([
     sdb.workRequest.findMany({
       where: { requesterId: session.user.id },
       orderBy: { createdAt: "desc" },
       take: 200,
     }),
-    classIds.length
-      ? sdb.class.findMany({
-          where: { id: { in: classIds } },
-          select: { id: true, name: true },
-          orderBy: { name: "asc" },
-        })
-      : [],
-    centerId
-      ? sdb.user.findMany({
-          where: {
-            centerId,
-            id: { not: session.user.id },
-            roles: { has: "TEACHER" },
-          },
-          select: { id: true, name: true },
-          orderBy: { name: "asc" },
-          take: 100,
-        })
-      : [],
-    sdb.shiftRegistration.findMany({
-      where: { userId: session.user.id, date: { gte: startOfTodayUtc() } },
-      select: { id: true, date: true, shifts: true },
-      orderBy: { date: "asc" },
-      take: 40,
-    }),
+    loadRequestFormOptions(session.user.id),
   ]);
 
   const rows: WorkRequestRow[] = requests.map((r) => ({
@@ -96,15 +62,7 @@ export default async function DonTuPage({
   return (
     <DonTuClient
       rows={rows}
-      myClasses={myClasses}
-      otherTeachers={otherTeachers.map((t) => ({
-        id: t.id,
-        name: t.name ?? "GV",
-      }))}
-      myShifts={myShifts.map((s) => ({
-        id: s.id,
-        label: `${dateFmt.format(s.date)} · ${s.shifts.map((sh) => shiftLabel(sh)).join(", ")}`,
-      }))}
+      options={options}
       presetKind={sp.type ?? null}
       presetSwap={sp.swap ?? null}
     />

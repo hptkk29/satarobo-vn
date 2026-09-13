@@ -25,7 +25,12 @@ export async function GET() {
 `;
 
 describe("[EL-07-T10-06] cấm NextResponse.json trần trong route e-learning", () => {
-  it("app/api/elearning/** → BÁO LỖI", async () => {
+  // Trần 60s như `db-restriction.test.ts` / `inline-authz.test.ts` — cùng lý do:
+  // lượt `lintText` ĐẦU TIÊN phải nạp cấu hình + plugin, nên nó gánh toàn bộ chi phí
+  // khởi động của ESLint. Chạy riêng file này mất 2,8s, nhưng trong cả bộ (351 file
+  // chạy song song) mất 10,6s ⇒ vượt trần mặc định 5s và đỏ THẤT THƯỜNG. Đã đỏ hai
+  // lượt rồi xanh lượt sau — đúng dạng flake dễ bị đổ oan cho code vừa sửa.
+  it("app/api/elearning/** → BÁO LỖI", { timeout: 60_000 }, async () => {
     const ms = await loi("app/api/elearning/khoa-hoc/route.ts", BARE);
     expect(ms.length).toBe(1);
     expect(ms[0]?.message).toContain("lib/api/response");

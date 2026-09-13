@@ -33,10 +33,14 @@ export const LEAD_COLUMNS: readonly LeadColumn[] = [
   // 30/08 — đổi tên từ "Ngày đăng ký": lead vào hệ thống chưa phải là đã đăng ký học,
   // gọi vậy làm người đọc tưởng đây là mốc chốt đơn. Có kèm GIỜ vì trong ngày cao
   // điểm, thứ tự nhận lead trong cùng một ngày mới là thứ Sale cần.
+  // ⚠️ 07/09 — ô này IN NGÀY NHẬN HIỆU LỰC (`lastInboundAt` khi khách quay lại), chứ
+  // không phải `createdAt` trần. Xem `laNhapLai` cuối file.
   { key: "createdAt", label: "Ngày nhận lead", macDinh: true },
   // 30/08 — MẶC ĐỊNH ẨN (chủ dự án chốt). Cột này chỉ có nghĩa với phiếu khách quay
   // lại; để mặc định thì đa số dòng in ra đúng bằng "Ngày nhận lead", tốn một cột
   // ngang mà không nói thêm gì.
+  // 07/09 — nay còn TRÙNG nhiều hơn nữa: "Ngày nhận lead" đã in mốc quay lại. Giữ vì
+  // nó là chỗ DUY NHẤT xem được mốc thô, và vì gỡ một cột là quyết định của chủ dự án.
   { key: "lastInboundAt", label: "Lần nhập gần nhất", macDinh: false },
   { key: "childName", label: "Tên con", macDinh: false },
   { key: "childAge", label: "Tuổi con", macDinh: false },
@@ -101,4 +105,24 @@ export function doiChoCot(cot: string[], key: string, huong: -1 | 1): string[] {
   const ra = [...cot];
   [ra[i], ra[j]] = [ra[j], ra[i]];
   return ra;
+}
+
+/**
+ * Phiếu này có phải khách QUAY LẠI không (để ô "Ngày nhận lead" in mốc mới + dán nhãn).
+ *
+ * ⚠️ Phải là `>` chứ KHÔNG phải `>=`. Lúc tạo lead, `lastInboundAt` được đặt BẰNG
+ * `createdAt` (`lib/lead/intake/ingest.ts`, `lib/lead/assign-lead.ts`) — dùng `>=` là
+ * dán nhãn "nhập lại" lên MỌI phiếu, nhãn mất sạch ý nghĩa mà không ai thấy sai ngay.
+ *
+ * `null` = lead cũ chưa có mốc (trước migration 29/08, hoặc chèn bằng SQL thô) ⇒ không
+ * kết luận gì, coi như chưa quay lại.
+ *
+ * Nhận CHUỖI ISO: đó là dạng dữ liệu đi từ server sang bảng (`toISOString()`), và ISO
+ * 8601 cùng múi Z thì so chuỗi ra đúng thứ tự thời gian.
+ */
+export function laNhapLai(
+  createdAt: string,
+  lastInboundAt: string | null | undefined,
+): boolean {
+  return !!lastInboundAt && lastInboundAt > createdAt;
 }

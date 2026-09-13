@@ -18,6 +18,7 @@ import {
   chuanHoaCot,
   cotMacDinh,
   doiChoCot,
+  laNhapLai,
 } from '@/lib/tables/lead-columns'
 import { deleteLead } from '../actions'
 import {
@@ -54,6 +55,8 @@ export type LeadRow = {
   createdAt: string
   /** Lần nhập gần nhất; null với lead cũ chưa có mốc. */
   lastInboundAt: string | null
+  /** Số lần khách vào phễu (1 = chưa quay lại). Dùng cho nhãn "nhập lại N lần". */
+  inboundCount: number
   center: { name: string } | null
   courseName: string | null
   assignedTo: { name: string | null } | null
@@ -168,6 +171,9 @@ function ThSap({
   return (
     <Link
       href={`/leads?${u.toString()}`}
+      // Đổi sắp xếp = đổi tham số của CHÍNH trang này. Không có `scroll={false}` thì
+      // Next cuộn lên đầu, người dùng đang soi dòng giữa bảng bị mất chỗ.
+      scroll={false}
       className={`inline-flex items-center gap-1 hover:text-foreground ${dang ? 'text-foreground' : ''}`}
       title={dang ? 'Đang sắp theo cột này' : `Sắp theo ${nhan.toLowerCase()}`}
     >
@@ -267,12 +273,43 @@ function LeadCell({
           )}
         </td>
       )
-    case 'createdAt':
+    case 'createdAt': {
+      // ⚠️ 07/09/2026 — cột này in NGÀY NHẬN HIỆU LỰC, không phải `createdAt` trần.
+      //
+      // Khách gọi lại / điền form lần nữa thì hệ thống KHÔNG đẻ lead mới (trùng SĐT),
+      // nó nâng `lastInboundAt` (`ghiNhanNhapLai`). In `createdAt` trần thì phiếu vừa
+      // nóng lại trông y hệt phiếu nguội ba tháng và Sale không có cách nào biết để
+      // gọi trước — đúng thứ chủ dự án báo.
+      //
+      // Ngày gốc KHÔNG mất: nằm ở `title` của ô này, ở cột tuỳ chọn "Lần nhập gần
+      // nhất", và ở màn chi tiết (kèm số lần).
+      //
+      // ⚠️ Ô này và THỨ TỰ SẮP XẾP phải đi cùng nhau. In ngày mới mà vẫn sắp theo
+      // `createdAt` là tệ hơn lúc đầu: phiếu hiện ngày hôm nay nhưng nằm ở vị trí
+      // của ba tháng trước, và cột lại có mũi tên sắp xếp trên đầu.
+      const nhapLai = laNhapLai(lead.createdAt, lead.lastInboundAt)
       return (
-        <td className="px-4 py-3 whitespace-nowrap text-sm text-muted-foreground tabular-nums">
-          {formatDateTimeVNZoned(lead.createdAt)}
+        <td className="px-4 py-3 whitespace-nowrap text-sm tabular-nums">
+          <span
+            className={
+              nhapLai ? 'font-semibold text-state-success-ink' : 'text-muted-foreground'
+            }
+            title={
+              nhapLai
+                ? `Nhận lần đầu: ${formatDateTimeVNZoned(lead.createdAt)}`
+                : undefined
+            }
+          >
+            {formatDateTimeVNZoned(nhapLai ? lead.lastInboundAt! : lead.createdAt)}
+          </span>
+          {nhapLai && (
+            <span className="ml-1.5 text-xs font-medium text-state-success-ink">
+              · nhập lại{lead.inboundCount > 1 ? ` ${lead.inboundCount} lần` : ''}
+            </span>
+          )}
         </td>
       )
+    }
     case 'lastInboundAt':
       return (
         <td className="px-4 py-3 whitespace-nowrap text-sm tabular-nums">
@@ -436,13 +473,16 @@ export function LeadsTable({
       }
     })
     params.delete('page')
-    router.push(`/leads?${params.toString()}`)
+    // `scroll: false` — đổi bộ lọc là ở LẠI trang này, chỉ khác tham số truy vấn.
+    router.push(`/leads?${params.toString()}`, { scroll: false })
   }
 
   const goPage = (p: number) => {
     const params = new URLSearchParams(searchParams.toString())
     params.set('page', String(p))
-    router.push(`/leads?${params.toString()}`)
+    // `scroll: false` — sang trang khác của cùng bảng thì giữ nguyên vị trí đang xem,
+    // đừng để Next kéo về đầu tài liệu.
+    router.push(`/leads?${params.toString()}`, { scroll: false })
   }
 
   return (

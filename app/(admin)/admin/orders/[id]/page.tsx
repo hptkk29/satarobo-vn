@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { KHOAN_DA_GHI_NHAN } from "@/lib/finance/ghi-nhan";
 import { notFound, redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
+import { laKhoanDaXacNhan, tongDaXacNhan } from "@/lib/finance/debt";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
@@ -110,7 +112,14 @@ export default async function OrderDetailPage({ params }: Props) {
       // (b) PA-A 22/07 — trạng thái sổ kế toán (Payment.accountantStatus) hiển thị
       // read-only cạnh kế hoạch đợt: installment PAID = "Sale đã thu", tiền chỉ
       // "xong" khi kế toán CONFIRMED bên /payments.
+      // ⚠️ 07/09/2026 — PHẢI có `deletedAt: null`. Trước đó include này KHÔNG có
+      // `where` nào cả, mà bộ lọc duy nhất ở dưới (dòng ~355) chỉ soi
+      // `accountantStatus === "CONFIRMED"` ⇒ khoản đã XOÁ MỀM vẫn được cộng vào ô
+      // "Đã xác nhận" của màn chi tiết đơn. Tiền đã huỷ sổ vẫn hiện là tiền đã thu.
+      // (Đo 07/09: 0 dòng `deletedAt != null` ở local và dev/test ⇒ đang sai 0 đ,
+      // nhưng `softDeletePayment` là đường ghi có thật.)
       payments: {
+        where: { deletedAt: null },
         select: { amount: true, accountantStatus: true },
       },
     },
@@ -164,7 +173,7 @@ export default async function OrderDetailPage({ params }: Props) {
   // con số, lệch là QR in một đằng máy đối khớp một nẻo (khách trả đúng vẫn bị
   // xếp vào "trả thiếu → xử lý tay").
   const paidSoFar = await sdb.payment.aggregate({
-    where: { orderId: order.id, saleStatus: "RECORDED", deletedAt: null },
+    where: { orderId: order.id, ...KHOAN_DA_GHI_NHAN },
     _sum: { amount: true },
   });
   const dueNow = computeDueNow({
@@ -341,9 +350,9 @@ export default async function OrderDetailPage({ params }: Props) {
         installmentPlanApproved={order.installmentApprovalStatus === "APPROVED"}
         paymentMethods={paymentMethods}
         accounting={{
-          confirmed: order.payments
-            .filter((p) => p.accountantStatus === "CONFIRMED")
-            .reduce((s, p) => s + p.amount, 0),
+          // Trục A — dùng chung định nghĩa "khoản đã xác nhận" với công nợ và cổng
+          // phụ huynh (lib/finance/debt.ts). Bút toán ADJUSTMENT nằm trong đó.
+          confirmed: tongDaXacNhan(order.payments.filter(laKhoanDaXacNhan)),
           pending: order.payments
             .filter((p) => p.accountantStatus === "PENDING")
             .reduce((s, p) => s + p.amount, 0),

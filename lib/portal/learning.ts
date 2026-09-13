@@ -1,8 +1,11 @@
 import "server-only";
 import { cache } from "react";
+
 import { cookies } from "next/headers";
 import type { RubricCriterion, RubricLevel } from "@prisma/client";
 import { db } from "@/lib/db";
+import { napBuoiCuaLop } from "@/lib/portal/buoi-hoc";
+import { GHI_DANH_DANG_HOC } from "@/lib/portal/trang-thai-ghi-danh";
 import { sessionTimeRange } from "@/lib/classes/slots";
 import { getSetting } from "@/lib/settings/service";
 import { getStudentClassProgress } from "@/lib/students/progress";
@@ -18,7 +21,9 @@ import {
 // chỉ trả data của các lớp HS đang theo học.
 // =============================================================================
 
-const ACTIVE_ENROLLMENT = ["CONFIRMED", "STUDYING", "ACTIVE"] as const;
+// 06/09 — danh sách hợp nhất, xem lib/portal/trang-thai-ghi-danh.ts. Bản cũ ở đây
+// THIẾU "PAUSED" nên con đang tạm nghỉ mở cổng ra là trống trơn.
+const ACTIVE_ENROLLMENT = GHI_DANH_DANG_HOC;
 
 export type StudentClass = {
   id: string;
@@ -124,7 +129,7 @@ export async function getStudentAttendanceSummaries(
   });
   // Gộp thay vì gọi attendanceSummary từng ghi danh (~6 truy vấn/lần — xem summary.ts).
   const summaries = await attendanceSummaryForEnrollments(enrollments.map((e) => e.id));
-  const EMPTY = { total: 0, attended: 0, absent: 0, needMakeup: 0, madeUp: 0 };
+  const EMPTY = { total: 0, daDienRa: 0, attended: 0, absent: 0, needMakeup: 0, madeUp: 0 };
   return enrollments.map((e) => ({
     classId: e.class.id,
     className: e.class.name,
@@ -187,6 +192,10 @@ export type UpcomingSessionRow = {
   topic: string | null;
   className: string;
   lessonTitle: string | null;
+  /** Nhãn buổi CHUNG với mọi màn khác: `Buổi 5 - HP2 - Họa Sĩ Robot`. */
+  nhan: string;
+  /** `Thứ 7, 12/09` theo lịch VN, tính sẵn ở server. */
+  nhanNgay: string;
 };
 
 /**
@@ -197,31 +206,27 @@ export type UpcomingSessionRow = {
 export async function getStudentUpcomingSessions(
   studentId: string,
 ): Promise<UpcomingSessionRow[]> {
-  const classIds = await classIdsFor(studentId);
-  if (classIds.length === 0) return [];
-  const sessions = await db.classSession.findMany({
-    where: {
-      classId: { in: classIds },
-      date: { gte: new Date() },
-      status: { not: "CANCELLED" },
-    },
-    select: {
-      id: true,
-      date: true,
-      topic: true,
-      class: { select: { name: true } },
-      lesson: { select: { title: true } },
-    },
-    orderBy: { date: "asc" },
-    take: 30,
-  });
-  return sessions.map((s) => ({
-    id: s.id,
-    date: s.date.toISOString(),
-    topic: s.topic,
-    className: s.class.name,
-    lessonTitle: s.lesson?.title ?? null,
-  }));
+  const classes = await getStudentClasses(studentId);
+  if (classes.length === 0) return [];
+  const tenLop = new Map(classes.map((c) => [c.id, c.name]));
+  // 06/09 — nạp ĐỦ buổi rồi mới lọc, thay vì lọc ngay ở query: số buổi trong nhãn phải
+  // tính trên toàn bộ buổi của lớp (lib/portal/buoi-hoc.ts), lọc trước là ra số sai.
+  const buoiList = await napBuoiCuaLop(
+    classes.map((c) => c.id),
+    new Date(),
+  );
+  return buoiList
+    .filter((b) => !b.daHuy && !b.daDienRa) // buổi sắp tới, chưa bị huỷ (R7-06)
+    .slice(0, 30)
+    .map((b) => ({
+      id: b.id,
+      date: b.ngayISO,
+      topic: null,
+      className: tenLop.get(b.classId) ?? "—",
+      lessonTitle: b.tieuDe || null,
+      nhan: b.nhanDayDu || "Buổi học",
+      nhanNgay: `${b.nhanThu}, ${b.nhanNgayNgan}`,
+    }));
 }
 
 export type LessonRow = {

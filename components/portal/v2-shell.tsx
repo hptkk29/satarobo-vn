@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { SU_KIEN_DA_DOC_THONG_BAO } from "@/lib/portal/su-kien-thong-bao";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
@@ -28,6 +30,9 @@ import {
   Palette,
   KeyRound,
   Check,
+  FileText,
+  Trophy,
+  Coins,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -51,12 +56,33 @@ type NavItem = {
   icon: LucideIcon;
   shortLabel?: string;
 };
+// ⚠️ 06/09/2026 — SIDEBAR NÀY LÀ LỐI VÀO DUY NHẤT.
+//
+// Bản v1 (`app/(portal)/portal/_components/portal-nav.tsx`) có 22 mục; bản v2 — thứ prod
+// đang chạy — chỉ có 12, và menu avatar chỉ thêm Hồ sơ / Hướng dẫn / Giao diện. Bảy
+// trang vẫn chạy đúng nhưng KHÔNG CÒN ĐƯỜNG NÀO ĐỂ MỞ kể từ ngày bật cờ v2:
+// bai-tap · bai-thi · ket-qua · bai-giang · danh-gia · danh-gia-gv · satacoin.
+//
+// Nặng hơn: tài liệu hướng dẫn trong chính portal vẫn dặn phụ huynh mở các trang đó
+// (`app/(portal)/portal/huong-dan/_content/guides.generated.ts` — bài 13 trỏ
+// `/portal/bai-giang`, bài 14 trỏ `/portal/bai-thi` và `/portal/ket-qua`). Phụ huynh
+// đọc hướng dẫn rồi đi tìm trong menu và không thấy gì.
+//
+// Nav dài hơn thì xấu hơn một chút; trang không có lối vào thì coi như không tồn tại.
 const parentNav: NavItem[] = [
   { label: "Tổng quan", href: "/portal", icon: Home },
   { label: "Các con", href: "/portal/ho-so-con", icon: Users },
   { label: "Lịch học", href: "/portal/lich", icon: CalendarDays },
   { label: "Nhận xét", href: "/portal/nhan-xet", icon: MessageSquareText },
+  // 06/09 — BỔ SUNG. Sidebar v2 (bản prod đang chạy) không có mục này, nên phụ huynh
+  // KHÔNG có đường nào vào `/portal/bai-tap` để xem bài giáo viên giao: trang tồn tại
+  // và chạy đúng, chỉ là không ai tới được. Lối tắt duy nhất trên trang chủ lại đếm
+  // bảng `HomeworkAssignment` (bài thi giao theo giáo án), không phải `Assignment`.
+  { label: "Bài tập", href: "/portal/bai-tap", icon: ClipboardList },
   { label: "Hình ảnh lớp", href: "/portal/hinh-anh", icon: ImageIcon },
+  { label: "Bài thi", href: "/portal/bai-thi", icon: FileText },
+  { label: "Kết quả học tập", href: "/portal/ket-qua", icon: Trophy, shortLabel: "Kết quả" },
+  { label: "Bài giảng", href: "/portal/bai-giang", icon: BookOpen },
   { label: "Học bạ", href: "/portal/hoc-ba", icon: Award },
   {
     label: "Học phí & công nợ",
@@ -70,10 +96,24 @@ const parentNav: NavItem[] = [
     href: "/portal/khao-sat",
     icon: ClipboardList,
   },
+  { label: "Đánh giá trung tâm", href: "/portal/danh-gia", icon: Star, shortLabel: "Đánh giá" },
+  { label: "SataCoin", href: "/portal/satacoin", icon: Coins },
   { label: "Thông báo", href: "/portal/thong-bao", icon: Bell },
   { label: "Tin nhắn", href: "/portal/tin-nhan", icon: MessagesSquare },
   { label: "Hồ sơ", href: "/portal/ho-so", icon: Settings },
 ];
+
+/**
+ * Mục chỉ hiện khi bật cờ `EVAL_V2_ENABLED` — trang tự chặn khi cờ tắt
+ * (app/(portal)/portal/danh-gia-gv/page.tsx:23), nên đưa vào nav mà không kiểm cờ là
+ * dẫn phụ huynh tới một trang từ chối họ.
+ */
+const parentNavEval: NavItem = {
+  label: "Đánh giá giáo viên",
+  href: "/portal/danh-gia-gv",
+  icon: Star,
+  shortLabel: "Đánh giá GV",
+};
 
 // Cổng học sinh (student-mode) — 6 mục, sidebar cam. Nav gọn quanh việc học của con.
 const STUDENT_ROOT = "/portal/hoc-sinh";
@@ -148,6 +188,7 @@ export function PortalV2Shell({
   notifCount,
   msgCount = 0,
   switcherChildren = [],
+  evalV2Enabled = false,
   children,
 }: {
   /** `User.id` — topic realtime `user:{id}` để badge "Tin nhắn" tự nhảy. */
@@ -158,10 +199,23 @@ export function PortalV2Shell({
   notifCount: number;
   msgCount?: number;
   switcherChildren?: SwitcherChild[];
+  /** Cờ EVAL_V2_ENABLED — quyết định có hiện mục "Đánh giá giáo viên" hay không. */
+  evalV2Enabled?: boolean;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const navPhuHuynh = evalV2Enabled ? [...parentNav, parentNavEval] : parentNav;
+  // Badge "Thông báo" đếm từ server, nhưng phải trừ được NGAY khi phụ huynh vừa đọc
+  // xong: ở bản v2 con số này còn nằm sau `unstable_cache` TTL 60s, nên chờ server
+  // là phụ huynh nhìn badge cũ thêm cả phút. Lượt tải sau server vẫn là nguồn đúng.
+  const [soChuaDoc, setSoChuaDoc] = useState(notifCount);
+  useEffect(() => setSoChuaDoc(notifCount), [notifCount]);
+  useEffect(() => {
+    const xong = () => setSoChuaDoc(0);
+    window.addEventListener(SU_KIEN_DA_DOC_THONG_BAO, xong);
+    return () => window.removeEventListener(SU_KIEN_DA_DOC_THONG_BAO, xong);
+  }, []);
 
   // MỘT hook cho cả shell: sidebar desktop, bottom-nav mobile, menu "Thêm" và chấm tổng
   // hợp đều đọc cùng con số qua `badgeFor` ⇒ không có chỗ nào lệch nhau.
@@ -177,7 +231,7 @@ export function PortalV2Shell({
         : `/portal${pathname}`;
   const isStudent =
     norm === STUDENT_ROOT || norm.startsWith(`${STUDENT_ROOT}/`);
-  const nav = isStudent ? studentNav : parentNav;
+  const nav = isStudent ? studentNav : navPhuHuynh;
   const rootHref = isStudent ? STUDENT_ROOT : "/portal";
   const bottomHrefs = isStudent ? STUDENT_BOTTOM : PARENT_BOTTOM;
   const bottomNav = bottomHrefs.flatMap((href) => {
@@ -189,7 +243,7 @@ export function PortalV2Shell({
   // Badge số chưa đọc theo mục nav (Thông báo = chuông, Tin nhắn = hội thoại).
   const badgeFor = (href: string): number =>
     href.endsWith("/thong-bao")
-      ? notifCount
+      ? soChuaDoc
       : href === "/portal/tin-nhan"
         ? liveMsgCount
         : 0;
@@ -268,9 +322,9 @@ export function PortalV2Shell({
               className="relative grid size-10 place-items-center rounded-xl text-foreground transition-colors hover:bg-muted"
             >
               <Bell className="size-5" />
-              {notifCount > 0 && (
+              {soChuaDoc > 0 && (
                 <span className="absolute right-1 top-1 grid size-5 place-items-center rounded-full bg-destructive text-[10px] font-bold text-white">
-                  {notifCount > 9 ? "9+" : notifCount}
+                  {soChuaDoc > 9 ? "9+" : soChuaDoc}
                 </span>
               )}
             </Link>
