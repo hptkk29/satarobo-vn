@@ -464,12 +464,14 @@ export default async function TeacherTimesheetPage({
                 ? "Công tháng này (chưa có công chuẩn)"
                 : "Công tháng này / công chuẩn"
             }
+            xuongDong
             tone="brand"
           />
           <StatCard
             icon={CalendarCheck}
             value={`${tomTat.ngayDaLam} / ${tomTat.ngayCoCa}`}
             label="Ngày đã đi làm / ngày có ca"
+            xuongDong
             tone="green"
           />
           {/* Số LẦN và số PHÚT cùng lúc: phạt (mục 3) tính được theo một trong hai, và
@@ -480,6 +482,7 @@ export default async function TeacherTimesheetPage({
             value={`${tomTat.lateCount} lần · ${tomTat.latePhut}′`}
             label="Đi muộn"
             hint={`Về sớm: ${tomTat.earlyLeaveCount} lần · ${tomTat.earlyLeavePhut}′`}
+            xuongDong
             tone="amber"
           />
           <StatCard
@@ -491,6 +494,7 @@ export default async function TeacherTimesheetPage({
                 ? tomTat.nhomNghi.map((n) => `${n.nhan} ${n.soNgay}`).join(" · ")
                 : "không có ngày nghỉ nào"
             }
+            xuongDong
             tone="blue"
           />
         </div>
