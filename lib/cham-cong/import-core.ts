@@ -323,6 +323,18 @@ export async function applyImport(
             jobLabel: row.role || null,
             displayOrder: row.stt,
             orgUnitId,
+            // 🔴 BẮT BUỘC — luật của module, `lib/cham-cong/khung-ca.ts`:
+            //   "mọi đường GHI vào cụm phải XOÁ `effectiveTo`."
+            // Gỡ người khỏi khối là gỡ MỀM: nó chỉ đặt `effectiveTo`, KHÔNG đổi khoá duy
+            // nhất `(userId, centerId, weekday, effectiveFrom)`. Nên `upsert` một ô của
+            // người đã gỡ rơi vào ĐÚNG nhánh `update` này và sửa trúng dòng đã đóng —
+            // thiếu dòng dưới thì ghi xong ô VẪN TÀNG HÌNH (màn lọc `effectiveTo: null`,
+            // `generate.ts` cũng bỏ dòng hết hiệu lực), và người dùng thấy "bấm mà không
+            // có gì xảy ra".
+            //
+            // Đường admin (`khung-ca/_actions.ts`) đã vá chuyện này tuần trước; đường NHẬP
+            // FILE thì chưa — cùng một bug, hai cửa, vá cửa còn lại 13/09/2026.
+            effectiveTo: null,
           },
         });
         result.patterns.upserted += 1;
