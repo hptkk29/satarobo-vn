@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { KHOAN_DA_GHI_NHAN } from "@/lib/finance/ghi-nhan";
+import { congNoDon } from "@/lib/finance/cong-no-don";
 import { notFound, redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
@@ -182,6 +183,17 @@ export default async function OrderDetailPage({ params }: Props) {
     installments: order.installments,
     installmentApprovalStatus: order.installmentApprovalStatus,
   });
+  // Bộ số in ra khối "Công nợ đơn hàng" — TÁI DÙNG `paidSoFar` (trục B) đã tính ở
+  // trên cho mã QR, nên số trên màn và số trong QR không thể lệch nhau. Trục A lấy
+  // đúng bộ lọc mà công nợ + cổng phụ huynh dùng (`laKhoanDaXacNhan`).
+  //
+  // Trước bản này `paidSoFar` chỉ dùng cho QR rồi bị bỏ: trang tính được "còn thiếu"
+  // mà không in ra đâu cả.
+  const congNo = congNoDon({
+    totalAmount: order.totalAmount,
+    daGhiNhan: paidSoFar._sum.amount ?? 0,
+    daXacNhan: tongDaXacNhan(order.payments.filter(laKhoanDaXacNhan)),
+  });
   // ⚠️ QR nhận bản ĐẦY ĐỦ (`transferContent`), KHÔNG phải bản che: mã phải mang đúng
   // nội dung phụ huynh sẽ chuyển, che ở đây là tiền không về được.
   //
@@ -349,6 +361,7 @@ export default async function OrderDetailPage({ params }: Props) {
         qrSessions={qrSessions}
         installmentPlanApproved={order.installmentApprovalStatus === "APPROVED"}
         paymentMethods={paymentMethods}
+        congNo={congNo}
         accounting={{
           // Trục A — dùng chung định nghĩa "khoản đã xác nhận" với công nợ và cổng
           // phụ huynh (lib/finance/debt.ts). Bút toán ADJUSTMENT nằm trong đó.

@@ -34,7 +34,9 @@ import {
 import { requestInstallmentApprovalAction } from "./_installment-request-actions";
 import { OrderApprovalButtons } from "../duyet/_components/order-approval-buttons";
 import { OrderInstallmentPlan, OrderQrSection } from "./order-payment-section";
+import { OrderDebtSummary } from "./order-debt-summary";
 import { formatVndPlain } from "@/lib/format/money";
+import type { CongNoDon } from "@/lib/finance/cong-no-don";
 import {
   PaymentRequestsSection,
   type PaymentRequestRow,
@@ -144,6 +146,7 @@ export function OrderDetailClient({
   installmentPlanApproved,
   paymentMethods,
   accounting,
+  congNo,
 }: {
   order: OrderWithIncludes;
   canManage: boolean;
@@ -165,6 +168,7 @@ export function OrderDetailClient({
   paymentMethods: PaymentMethodOption[];
   // (b) PA-A — tổng theo sổ kế toán (Payment) của đơn: CONFIRMED vs PENDING (chờ ✓).
   accounting: { confirmed: number; pending: number };
+  congNo: CongNoDon;
 }) {
   const router = useRouter();
   const [statusModalOpen, setStatusModalOpen] = useState(false);
@@ -285,6 +289,10 @@ export function OrderDetailClient({
 
   return (
     <div className="space-y-6">
+      {/* Công nợ — ô ĐẦU TIÊN. Câu hỏi đầu tiên khi mở một đơn là "còn thiếu bao nhiêu";
+          trước bản này con số đó được tính ở server rồi bỏ đi. */}
+      <OrderDebtSummary congNo={congNo} />
+
       {/* Customer info */}
       <section className="rounded-xl border border-border bg-card p-5">
         <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">
