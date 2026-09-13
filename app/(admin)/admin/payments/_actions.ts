@@ -16,6 +16,15 @@ import { lookupMethodCenterByCode } from "@/lib/payments/method-lookup";
 import { maskNationalId, maskAddress } from "@/lib/finance/pii-mask";
 import { breakGlassSchema } from "@/lib/validators/audit";
 import { writeAudit } from "@/lib/audit/audit-log";
+// Phương án B (13/09/2026) — chọn khoản NHẬP LIỆU BAN ĐẦU đủ điều kiện xác nhận hàng
+// loạt. Luật THUẦN, ở một chỗ, và KHÔNG lách cổng nào của `confirmPayment`.
+import {
+  BACKFILL_PAYMENT_MARKER,
+} from "@/lib/finance/payment-markers";
+import {
+  lapKeHoachXacNhan,
+  type BackfillCandidate,
+} from "@/lib/finance/backfill-confirm";
 import { getAuditActor } from "@/lib/audit/log";
 import { getRequestMetadata } from "@/lib/audit/headers";
 // ─── lib/finance/* — parallel agent owns these. Combined typecheck resolves. ──
@@ -534,4 +543,115 @@ export async function refundPaymentAction(
   revalidatePath("/payments");
   revalidatePath("/cong-no");
   return { ok: true as const };
+}
+
+// ─── XÁC NHẬN HÀNG LOẠT khoản NHẬP LIỆU BAN ĐẦU (phương án B, 13/09/2026) ────
+//
+// VÌ SAO CÓ: học phí của khách chốt TRƯỚC 06/08 nhập từ sheet qua
+// `/leads/import/registered`. Nó tạo Order `CONFIRMED` + `Payment` mang dấu
+// `[backfill-import]` nhưng để `accountantStatus: PENDING`, mà doanh thu chỉ đếm
+// `CONFIRMED` ⇒ tiền cũ không vào doanh thu, và `confirmPaymentAction` là từng khoản một.
+//
+// ⚠️ KHÔNG lách cổng nào. Mỗi khoản vẫn đi qua ĐÚNG `confirmPayment` đang chạy (sinh
+// `Receipt`, ghi nhật ký), và cổng TÁCH NHIỆM VỤ ("người ghi nhận không tự xác nhận")
+// được giữ nguyên — thực thi ở `lapKeHoachXacNhan` rồi `confirmPayment` kiểm lại.
+//
+// ⚠️ ĐỘI NHỎ: nếu người bấm nút CHÍNH LÀ người đã nhập liệu thì MỌI khoản rơi vào
+// `TU_XAC_NHAN` và lượt này xác nhận 0 khoản. Đó không phải lỗi — hàm trả về số đếm
+// theo lý do để màn hiện ra, người vận hành đổi người xác nhận hoặc xin đổi luật.
+//
+// `xemThu: true` → chỉ TRẢ VỀ kế hoạch, KHÔNG ghi gì. Dùng cho màn xem trước.
+
+export async function bulkConfirmBackfillPaymentsAction(opts?: {
+  xemThu?: boolean;
+  /** Trần số khoản xử lý một lượt — tránh transaction dài trên prod. */
+  gioiHan?: number;
+}) {
+  const session = await requireAccountant();
+  const actorId = session.user.id as string;
+  const sdb = scopedDb(await resolveActor(actorId));
+  const gioiHan = Math.min(Math.max(1, Math.round(opts?.gioiHan ?? 200)), 500);
+
+  // scopedDb lọc theo tầm nhìn cơ sở (Payment ∈ SCOPED_MODELS) — người cấp cơ sở chỉ
+  // thấy khoản của cơ sở mình.
+  const rows = await sdb.payment.findMany({
+    where: {
+      deletedAt: null,
+      accountantStatus: "PENDING",
+      note: { contains: BACKFILL_PAYMENT_MARKER },
+    },
+    select: {
+      id: true,
+      note: true,
+      accountantStatus: true,
+      enrollmentId: true,
+      recordedById: true,
+      amount: true,
+    },
+    orderBy: { paidDate: "asc" },
+    take: gioiHan,
+  });
+
+  const plan = lapKeHoachXacNhan(rows as BackfillCandidate[], actorId);
+
+  if (opts?.xemThu) {
+    return {
+      ok: true as const,
+      xemThu: true as const,
+      soNhan: plan.nhan.length,
+      tongNhan: plan.tongNhan,
+      soBo: plan.bo.length,
+      demTheoLyDo: plan.demTheoLyDo,
+    };
+  }
+
+  // Chạy TỪNG khoản qua `confirmPayment` — KHÔNG gộp một transaction lớn: một khoản
+  // hỏng không được kéo cả lượt về, và `confirmPayment` tự mở transaction riêng
+  // (sinh Receipt + publishEvent bên trong).
+  let thanhCong = 0;
+  const loi: { id: string; error: string }[] = [];
+  for (const p of plan.nhan) {
+    const res = await confirmPayment({ paymentId: p.id, confirmedById: actorId });
+    if (res.ok) thanhCong += 1;
+    else loi.push({ id: p.id, error: res.error });
+  }
+
+  await writeAudit({
+    actor: (() => {
+      const a = getAuditActor(session);
+      return { id: a.actorId, name: a.actorName };
+    })(),
+    module: "finance",
+    entityType: "Payment",
+    // Không có một khoản cụ thể — dùng id người bấm làm mốc của LƯỢT chạy.
+    entityId: `bulk-backfill-confirm:${actorId}`,
+    action: "CONFIRM",
+    newValues: {
+      quet: rows.length,
+      nhan: plan.nhan.length,
+      thanhCong,
+      loi: loi.length,
+      tongTien: plan.tongNhan,
+      demTheoLyDo: plan.demTheoLyDo,
+    },
+    reason: "Xác nhận hàng loạt khoản nhập liệu ban đầu (học phí chốt trước 06/08)",
+    ...(await getRequestMetadata()),
+  });
+
+  revalidatePath("/payments");
+  revalidatePath("/cong-no");
+  revalidatePath("/bao-cao/doanh-thu");
+  revalidatePath("/bao-cao/trung-tam");
+  revalidatePath("/dashboard");
+
+  return {
+    ok: true as const,
+    xemThu: false as const,
+    quet: rows.length,
+    thanhCong,
+    soBo: plan.bo.length,
+    demTheoLyDo: plan.demTheoLyDo,
+    loi,
+    tongTien: plan.tongNhan,
+  };
 }
