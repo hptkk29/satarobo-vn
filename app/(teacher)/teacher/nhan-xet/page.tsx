@@ -96,7 +96,7 @@ export default async function TeacherFeedbackPage({
         topic: true,
         status: true,
         // 25/08 — nguồn NHÃN BUỔI cho tiêu đề màn chi tiết.
-        plan: { select: { customTitle: true } },
+        plan: { select: { customTitle: true, order: true } },
         lesson: { select: { order: true, title: true, moduleCode: true } },
         class: { select: { name: true } },
       },
@@ -175,6 +175,7 @@ export default async function TeacherFeedbackPage({
             deriveSessionLabel({
               sessionNumber: sessionNo,
               planTitle: sess.plan?.customTitle,
+              planOrder: sess.plan?.order,
               lessonTitle: sess.lesson?.title,
               lessonOrder: sess.lesson?.order,
               moduleCode: sess.lesson?.moduleCode,
@@ -225,7 +226,7 @@ export default async function TeacherFeedbackPage({
           topic: true,
           status: true,
           // 25/08 — nguồn NHÃN BUỔI "Buổi 1 - HP1 - Bàn Tay Ma Thuật".
-          plan: { select: { customTitle: true } },
+          plan: { select: { customTitle: true, order: true } },
           lesson: { select: { order: true, title: true, moduleCode: true } },
         },
         orderBy: { date: "desc" },
@@ -341,7 +342,10 @@ export default async function TeacherFeedbackPage({
                   }),
                 };
               }),
-              (r) => ({ number: r.no, complete: r.complete }),
+        // 08/09 — SẮP THEO NGÀY, không theo số buổi. Nhãn nay là số LỘ TRÌNH
+        // (`soBuoiTheoLoTrinh`), sắp theo nó thì buổi 25/06 mang nhãn "Buổi 43" rơi
+        // xuống sau buổi 12/09 "Buổi 19". Xem `lib/lms/session-order.ts`.
+              (r) => ({ thoiGian: new Date(r.s.date).getTime(), complete: r.complete }),
             ).map(({ s, stat, no }) => {
               return (
                 // href CHỈ-query (giữ path hiện tại): chạy đúng cả trên host giaovien
@@ -356,6 +360,7 @@ export default async function TeacherFeedbackPage({
                       {deriveSessionLabel({
                         sessionNumber: no,
                         planTitle: s.plan?.customTitle,
+                        planOrder: s.plan?.order,
                         lessonTitle: s.lesson?.title,
                         lessonOrder: s.lesson?.order,
                         moduleCode: s.lesson?.moduleCode,

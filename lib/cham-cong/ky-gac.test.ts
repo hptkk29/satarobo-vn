@@ -102,4 +102,60 @@ describe("hai cổng được cắm đúng chỗ", () => {
       );
     }
   });
+
+  // ── CỔNG THỨ BA: DUYỆT đơn vào kỳ đã chốt (09/09/2026) ────────────────────
+  //
+  // Hai cổng cũ canh đường GHI của quản lý (chốt kỳ, xếp lại khung ca). Đường thứ ba đi
+  // qua ĐƠN TỪ và trước 09/09 KHÔNG ai canh: `createRequest` chặn NỘP vào kỳ đã chốt,
+  // nhưng `decideRequest` không kiểm gì. Đơn nộp TRƯỚC khi chốt, duyệt SAU khi chốt thì
+  // nhánh TIMESHEET_FIX `createMany` thẳng `StaffTimeLog` vào kỳ đã đóng băng.
+  //
+  // Hỏng câm: `summaryJson` là ảnh chụp lúc khoá nên số trên màn Kỳ công KHÔNG đổi — sổ
+  // đã chốt và dữ liệu sống lệch nhau mà không có gì báo.
+  it("decideRequest có cổng kỳ đã chốt, và nó đứng TRƯỚC mọi đường ghi", () => {
+    const src = doc("lib/cham-cong/requests.ts");
+    const iGate = src.indexOf(
+      'if (input.decision === "APPROVED" && req.fromDate',
+    );
+    expect(iGate, "phải có cổng trong decideRequest").toBeGreaterThan(-1);
+    // Ba đường ghi hệ quả nằm sau cổng.
+    for (const dau of [
+      "setAssignmentCell({",
+      "tx.staffTimeLog.createMany(",
+      "markAttendanceDayDirty(",
+    ]) {
+      const i = src.indexOf(dau);
+      expect(i, `${dau} phải tồn tại`).toBeGreaterThan(-1);
+      expect(iGate, `cổng phải đứng trước ${dau}`).toBeLessThan(i);
+    }
+  });
+
+  it("chỉ chặn khi DUYỆT — TỪ CHỐI đơn cũ vẫn làm được", () => {
+    // Từ chối không ghi gì vào kỳ; chặn cả từ chối là khoá luôn hàng chờ của quản lý.
+    expect(doc("lib/cham-cong/requests.ts")).toContain(
+      'input.decision === "APPROVED" && req.fromDate',
+    );
+  });
+
+  it("đơn LỚP không đi qua cổng này — hệ quả của nó không nằm trong kỳ công", () => {
+    // CLASS_OFF/SUB_TEACH ghi vào `lib/classes/adjust.ts`, không đụng StaffAttendanceDay.
+    const src = doc("lib/cham-cong/requests.ts");
+    const i = src.indexOf('input.decision === "APPROVED" && req.fromDate');
+    expect(src.slice(i, i + 200)).toContain("!isClassKind(req.kind)");
+  });
+
+  it("đường vượt của đơn từ cũng ở cấp HỘI SỞ và bắt buộc lý do", () => {
+    const src = doc("lib/cham-cong/request-actions.ts");
+    expect(src).toContain("centerId: HO_CENTER_ID");
+    expect(src).toContain("tối thiểu 5 ký tự");
+    // Quyền phải kiểm ở ACTION, không ở lib — lib tự hỏi quyền là cơ sở tự vượt cổng.
+    expect(doc("lib/cham-cong/requests.ts")).not.toContain("checkPermission");
+  });
+
+  it("audit ghi rõ lượt duyệt có VƯỢT cổng hay không", () => {
+    // Không ghi thì sau này không trả lời được "ai đã ghi vào kỳ đã chốt, vì sao".
+    expect(doc("lib/cham-cong/request-actions.ts")).toContain(
+      "boQuaKyDaChot: boQua",
+    );
+  });
 });

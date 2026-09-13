@@ -2,7 +2,11 @@
 # Block destructive operations without explicit user confirmation.
 # Phase 4.X.2 security hardening.
 
-cmd="${CLAUDE_COMMAND:-}"
+# ⚠️ ĐỌC LỆNH TỪ STDIN JSON, KHÔNG PHẢI `$CLAUDE_COMMAND` (vá 09/09/2026).
+# Biến `CLAUDE_COMMAND` chưa bao giờ tồn tại — hook này đã `exit 0` im lặng suốt nhiều
+# tháng trong khi CLAUDE.md ghi "ENFORCED by hooks". Chi tiết: `_doc-lenh.sh`.
+source "$(dirname "${BASH_SOURCE[0]}")/_doc-lenh.sh"
+[ -n "$cmd" ] || exit 0
 
 # Patterns blocked unless user typed them directly (Claude Code shouldn't auto-run)
 patterns=(
@@ -23,7 +27,8 @@ for pattern in "${patterns[@]}"; do
     echo "   Pattern matched: $pattern" >&2
     echo "   Command: $cmd" >&2
     echo "   If you really mean this, ask user to authorize in chat first." >&2
-    exit 1
+    # exit 2 = CHẶN (exit 1 chỉ là lỗi không chặn).
+    exit 2
   fi
 done
 
@@ -47,7 +52,8 @@ if echo "$cmd" | grep -qE 'prisma[[:space:]]+migrate[[:space:]]+diff' && echo "$
   echo "   Lệnh này RESET database đích trước khi replay — nó đã xoá sạch DB dev/test 26/08/2026." >&2
   echo "   Shadow URL đọc được: ${shadow:-(không tách được — vẫn chặn)}" >&2
   echo "   Dựng Postgres local rồi trỏ shadow vào 127.0.0.1:5432 (xem .claude/rules/prisma-db.md)." >&2
-  exit 1
+  # exit 2 = CHẶN. `exit 1` chỉ là lỗi không chặn — bẫy thứ hai của hook cũ.
+  exit 2
 fi
 
 # ── prisma db push --force-reset ─────────────────────────────────────────────
@@ -60,7 +66,8 @@ if echo "$cmd" | grep -qE 'prisma[[:space:]]+db[[:space:]]+push' && echo "$cmd" 
   echo "🚫 BLOCKED: 'prisma db push --force-reset' chỉ được phép trên DB test local." >&2
   echo "   Thiếu marker local (localhost / 127.0.0.1 / .env.test / satarobo_test) trong command." >&2
   echo "   Command: $cmd" >&2
-  exit 1
+  # exit 2 = CHẶN. `exit 1` chỉ là lỗi không chặn — bẫy thứ hai của hook cũ.
+  exit 2
 fi
 
 # prisma migrate reset: cho phép CHỈ KHI target là DB test/local; chặn mọi trường hợp khác (prod).
@@ -72,7 +79,8 @@ if echo "$cmd" | grep -qE 'prisma[[:space:]]+migrate[[:space:]]+reset'; then
   echo "   Thiếu marker local (localhost / 127.0.0.1 / .env.test / satarobo_test) trong command." >&2
   echo "   Command: $cmd" >&2
   echo "   Set DATABASE_URL về Postgres local rồi chạy lại (xem .claude/rules/prisma-db.md)." >&2
-  exit 1
+  # exit 2 = CHẶN. `exit 1` chỉ là lỗi không chặn — bẫy thứ hai của hook cũ.
+  exit 2
 fi
 
 exit 0

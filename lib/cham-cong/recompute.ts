@@ -15,6 +15,8 @@ import { getSetting } from "@/lib/settings/service";
 import { vnDateAt, vnParts, vnWeekday, vnYmd } from "@/lib/time/vn";
 import { computeDay, type EngineAssignment, type EngineInput, type EngineLog, type EngineRules } from "./engine";
 import { resolveHomeCenter } from "./home-center";
+import { noiChiuCongCuaNgay } from "./noi-chiu-cong";
+import { orgUnitIdForCenter } from "../org/org-service";
 import type { ShiftSegment } from "./catalog";
 
 type Client = PrismaClient | Prisma.TransactionClient;
@@ -85,8 +87,19 @@ export async function recomputeAttendanceDay(
     },
   });
   const logs = await acceptedLogsOfDay(client, userId, workDate);
-  const centerId = assignment?.centerId ?? logs[0]?.centerId ?? home.centerId;
-  const orgUnitId = assignment?.orgUnitId ?? logs[0]?.orgUnitId ?? null;
+  // 🔴 Vá 13/09/2026 — NƠI CHỊU CÔNG là nơi TRỰC THUỘC / được xếp ca, KHÔNG phải nơi quét.
+  // Bản cũ: `?? logs[0]?.centerId ??` chen NƠI QUÉT vào giữa, nên ngày KHÔNG có ca xếp thì
+  // công của người Hội sở rơi vào cơ sở họ vừa ghé. Vế ấy chưa bao giờ cần: `resolveHomeCenter`
+  // luôn trả về một centerId. Luật + ca test ở `noi-chiu-cong.ts`.
+  const centerId = noiChiuCongCuaNgay({
+    centerIdCaDuocXep: assignment?.centerId ?? null,
+    centerIdNha: home.centerId,
+  });
+  // `orgUnitId` phải theo CÙNG nguồn với `centerId` — nó là thứ `loadEngineRules` và
+  // `getSetting("shift.weeklyOffDays")` đọc, nên lấy theo nơi quét là tính ngày công của
+  // người này bằng tham số vận hành của cơ sở khác. (Trả `null` cho Center("hoi-so") mồ côi
+  // là ĐÚNG: rơi về tham số toàn hệ thống, không mượn của ai.)
+  const orgUnitId = assignment?.orgUnitId ?? (await orgUnitIdForCenter(centerId));
 
   // Kỳ đã khoá ⇒ không tính lại (kể cả khi chưa có dòng — dòng mới sau khoá là sai).
   const periodKey = vnYmd(vnDateAt(workDate.getUTCFullYear(), workDate.getUTCMonth(), workDate.getUTCDate())).slice(0, 7);

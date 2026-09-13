@@ -205,7 +205,7 @@ export async function getClassUploadContext(
         topic: true,
         // Nguồn nhãn "Buổi 1 - HP1 - Bàn Tay Ma Thuật" (deriveSessionLabel) — trước
         // 25/08 ô chọn buổi chỉ in ngày, giáo viên phải tự nhớ hôm đó dạy bài nào.
-        plan: { select: { customTitle: true } },
+        plan: { select: { customTitle: true, order: true } },
         lesson: { select: { order: true, title: true, moduleCode: true } },
       },
       orderBy: { date: "desc" },
@@ -223,6 +223,7 @@ export async function getClassUploadContext(
       const label = deriveSessionLabel({
         sessionNumber: sessionNo.get(s.id) ?? null,
         planTitle: s.plan?.customTitle,
+        planOrder: s.plan?.order,
         lessonTitle: s.lesson?.title,
         lessonOrder: s.lesson?.order,
         moduleCode: s.lesson?.moduleCode,

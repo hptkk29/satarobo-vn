@@ -250,7 +250,7 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
         // Nhãn buổi lấy từ GIÁO TRÌNH của lớp: kế hoạch buổi ghim cho lớp này trước,
         // rồi mới tới tên bài của giáo án gốc (deriveSessionLabel).
         // `moduleCode` = học phần (HP1…) — thiếu nó thì nhãn rụng mất mảnh giữa.
-        plan: { select: { customTitle: true } },
+        plan: { select: { customTitle: true, order: true } },
         lesson: { select: { title: true, order: true, moduleCode: true } },
       },
     });
@@ -347,6 +347,7 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
           deriveSessionLabel({
             sessionNumber: numberOf.get(s.id) ?? null,
             planTitle: s.plan?.customTitle,
+            planOrder: s.plan?.order,
             lessonTitle: s.lesson?.title,
             lessonOrder: s.lesson?.order,
             moduleCode: s.lesson?.moduleCode,

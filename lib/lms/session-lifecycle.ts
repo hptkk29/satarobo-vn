@@ -65,6 +65,26 @@ export async function completeSession(opts: {
    * ĐỪNG thêm lại mặc định "cho gọn".
    */
   assignMode: "NOW" | "DEFER" | "CUSTOM_DUE";
+  /**
+   * Buổi này đóng vì AI — máy hay người. Ghi vào `newValues` của AuditLog.
+   *
+   *   TU_DONG  = cổng tự đóng nổ trong đường LƯU ĐIỂM DANH (`teacher/lop/_actions.ts`);
+   *   TAY      = có người bấm nút chốt buổi;
+   *   BACKFILL = lệnh dọn buổi cũ (`scripts/backfill-dong-buoi-thoa.ts`). KHÔNG phải một
+   *              lượt dạy — nó KHÔNG phát `session.taught` và ghi `rosterSource` riêng.
+   *              Xem hai khối chú thích ở thân hàm.
+   *
+   * ⚠️ VÌ SAO BẮT BUỘC, KHÔNG MẶC ĐỊNH (luật 7). Mặc định nào cũng DÁN NHÃN SAI cho một
+   * trong hai đường, và nhãn sai ở đây không nổ ra lỗi — nó chỉ làm mọi phép đo về sau nói
+   * dối. Đã ăn một lần: 09/09/2026 tôi chia hai đường theo `completedById = null` và in ra
+   * "tự động 1 / người bấm 39" trên prod. Con số đó VÔ NGHĨA — đường tự đóng gọi hàm này
+   * với `actorId` của chính giáo viên vừa lưu điểm danh, nên `completedById` có giá trị ở
+   * CẢ HAI đường. Trước đó không trường nào phân biệt được: cùng `action`, cùng `assignMode`.
+   *
+   * Bắt buộc thì `tsc` liệt kê ĐỦ call site và mỗi chỗ phải nói ra ý định của mình.
+   * ĐỪNG thêm mặc định "cho gọn".
+   */
+  nguonChot: "TU_DONG" | "TAY" | "BACKFILL";
   assignDueAt?: Date | null;
   actorId: string | null;
   actorName: string;
@@ -177,7 +197,14 @@ export async function completeSession(opts: {
       data: {
         status: "COMPLETED",
         rosterSize,
-        rosterSource: "SNAPSHOT",
+        // ⚠️ `rosterSize` ở trên đếm ghi danh ĐANG CÓ tại lúc gọi. Với một lượt đóng THẬT
+        // (người dạy vừa xong buổi) đó là số đo. Với BACKFILL — buổi dạy tháng 4, đóng
+        // tháng 9 — đó là sĩ số HÔM NAY, một số suy đoán.
+        //
+        // Ghi `SNAPSHOT` cho dòng backfill là dán nhãn "số đo" lên số suy đoán, và
+        // `lib/payroll/roster-guard.ts` sẽ NHẬN nó vào công thức lương. Đúng loại lỗi mà
+        // chú thích của enum `ClassRosterSource` được viết ra để chặn.
+        rosterSource: opts.nguonChot === "BACKFILL" ? "BACKFILL_CLOSE" : "SNAPSHOT",
         rosterAt: now,
         completedAt: now,
         completedById: opts.actorId,
@@ -210,9 +237,30 @@ export async function completeSession(opts: {
         status: "COMPLETED",
         actualTeacherId: nguoiDungLop,
         actualRoomId: phongThucTe,
+        // Dấu DUY NHẤT phân biệt máy đóng với người bấm — xem chú thích ở chữ ký.
+        nguonChot: opts.nguonChot,
       },
       tx,
     });
+
+    // ── CHẶN SỰ KIỆN CHO LƯỢT BACKFILL — chặn Ở ĐÂY, tầng PHÁT ────────────────────
+    //
+    // `session.taught` có BA người nghe, và không ai trong ba được phép chạy cho một buổi
+    // dạy từ nhiều tháng trước:
+    //   · `lib/events/handlers/homework-assign.ts`  — giao bài tập hồi tố;
+    //   · `lib/_handlers/homework-notif.ts`         — gửi tin "Bài tập mới" cho phụ huynh;
+    //   · `lib/_handlers/r7-lifecycle.ts`           — hệ quả vòng đời buổi.
+    //
+    // ⚠️ VÌ SAO KHÔNG CHẶN BẰNG `assignMode: "DEFER"`: `r7-lifecycle` KHÔNG ĐỌC
+    // `assignMode`. Chặn bằng nó là chặn được hai trong ba, và người viết sẽ tin là đã
+    // chặn cả ba — đúng hình dạng "cổng trông như có mà không có" (luật 14).
+    //
+    // Chặn ở tầng phát thì không consumer nào phải biết về backfill, và thêm consumer thứ
+    // tư sau này cũng tự động được chặn.
+    if (opts.nguonChot === "BACKFILL") {
+      // Không phát gì. Buổi vẫn được đóng, audit vẫn ghi (kèm `nguonChot: "BACKFILL"`).
+      return;
+    }
 
     await publishEvent(
       "session.taught",

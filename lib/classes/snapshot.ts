@@ -24,6 +24,21 @@ export function resolveEffectiveCurriculumVersion(
 /**
  * Tạo ClassSessionPlan cho lớp từ giáo trình đã ghim (1 plan / 1 lesson, theo thứ tự).
  * Idempotent: nếu lớp ĐÃ có plan → không làm gì (trả về số plan hiện có).
+ *
+ * ⚠️ **KHÔNG ghi `customTitle`** (08/09/2026). Trước đây dòng này chép `customTitle: l.title`
+ * — và đó là gốc của sự cố "lệch tên bài" (`docs/dieu-tra-lech-bai-hoc.md`).
+ *
+ * `customTitle` là ô dành cho thứ NGƯỜI gõ (`updateSessionPlan` ở màn quản lý lộ trình).
+ * Đổ giá trị máy vào đó tạo ra một **bản sao đông cứng** không bao giờ tự đồng bộ khi giáo
+ * trình đổi tên bài. Đo prod 08/09 cho thấy hậu quả: **960/960 plan có `customTitle`, 0 dòng
+ * NULL** — đường máy bịt kín ô của người; trong đó 582 là ô trống `"Buổi N"`, 345 chép đúng
+ * y `Lesson.title` (thừa), 33 mang **tên giáo trình CŨ** và đang che tên đúng. Chỉ **2/960**
+ * dòng có dấu vết người thật sửa.
+ *
+ * Bỏ đi không mất gì: `deriveSessionTitle` đã có `Lesson.title` làm nấc kế ngay sau
+ * `customTitle`, nên nhãn vẫn ra đúng tên bài — mà nay là tên **hiện hành**, không phải ảnh
+ * chụp lúc tạo lớp. Giáo vụ muốn đặt tên riêng cho một buổi thì vẫn gõ vào đúng ô đó như cũ.
+ *
  * @returns số ClassSessionPlan của lớp sau khi chạy.
  */
 export async function createSessionPlansForClass(opts: {
@@ -41,7 +56,8 @@ export async function createSessionPlansForClass(opts: {
     select: {
       lessons: {
         orderBy: { order: "asc" },
-        select: { id: true, title: true },
+        // `title` KHÔNG còn cần: tên bài đọc thẳng từ `Lesson` lúc dựng nhãn.
+        select: { id: true },
       },
     },
   });
@@ -53,7 +69,7 @@ export async function createSessionPlansForClass(opts: {
       classId,
       seq: i + 1,
       lessonId: l.id,
-      customTitle: l.title,
+      // customTitle để NULL — xem docblock. Ô này chỉ dành cho thứ người gõ.
       order: i,
     })),
   });

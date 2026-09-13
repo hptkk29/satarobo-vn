@@ -97,12 +97,27 @@ export type AssignHomeworkResult = {
  */
 export async function assignHomeworkForSession(opts: {
   sessionId: string;
-  assignMode?: AssignMode;
+  /**
+   * ⚠️ BẮT BUỘC — cố ý KHÔNG có mặc định.
+   *
+   * Trước 08/09/2026 đây là `assignMode?` với `?? "NOW"`. Mà `NOW` nghĩa là **giao bài
+   * NGAY và bắn thông báo cho phụ huynh NGAY**. Một mặc định như thế ở tham số tuỳ chọn
+   * là: người viết call site mới quên một dòng ⇒ tin nhắn bay tới phụ huynh, không lỗi,
+   * không cảnh báo.
+   *
+   * Bỏ mặc định để `tsc` liệt kê từng call site và bắt mỗi nơi tự nói ý định. Đây là
+   * luật đã ghi ở `docs/luat-doc-so-va-ket-luan.md`: *tham số có mặc định NGUY HIỂM
+   * (gửi tin · ghi tiền · giao bài · xoá · mở rộng phạm vi nhìn) thì bỏ mặc định — để
+   * trình biên dịch đếm hộ, vì mắt thấy 2 chỗ mà `tsc` thấy 6.*
+   *
+   * `DEFER` = chưa giao, chờ giáo viên bấm.
+   */
+  assignMode: AssignMode;
   customDueAt?: Date | null;
   assignedById?: string | null;
   now?: Date;
 }): Promise<AssignHomeworkResult> {
-  const assignMode: AssignMode = opts.assignMode ?? "NOW";
+  const assignMode: AssignMode = opts.assignMode;
   const now = opts.now ?? new Date();
   const empty: AssignHomeworkResult = { created: 0, examCount: 0, studentCount: 0, skipped: true };
 

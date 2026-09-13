@@ -106,6 +106,18 @@ d("requests — DB thật", () => {
     await db.$disconnect();
   });
 
+  /**
+   * Mốc thời gian CỐ ĐỊNH cho mọi lời gọi hàm nhạy-thời-gian trong file này —
+   * 09/09/2026 10:00 giờ VN.
+   *
+   * ⚠️ Bắt buộc phải chốt, không được để hàm rơi về `new Date()`: các ca ở đây xin nghỉ /
+   * sửa giờ cho ngày 08–12/09/2026, mà `submitAttendanceRequest` có cổng `isSubmittedLate`
+   * so `fromDate` với HÔM NAY. Để giờ thật thì ca xanh vài ngày rồi ĐỎ MÃI MÃI — đã xảy
+   * ra 13/09/2026 với ca LEAVE (xanh tới 10/09, rerun cùng commit ngày 13/09 thì đỏ).
+   * Lint `thoigian/require-now-in-tests` nay chặn việc quên.
+   */
+  const NOW_TEST = new Date("2026-09-09T03:00:00Z");
+
   const base = {
     startTime: null, endTime: null, hours: null, className: null, classId: null, targetUserId: null,
     requesterNewTemplateId: null, targetNewTemplateId: null, leaveTypeId: null, requestedInAt: null, requestedOutAt: null,
@@ -120,9 +132,9 @@ d("requests — DB thật", () => {
   });
 
   it("người Hội sở không chọn cơ sở ⇒ từ chối; chọn CS1 ⇒ đơn vào CS1", async () => {
-    const bad = await requests.submitAttendanceRequest({ ...base, requesterId: ho, kind: "OT", fromDate: d10, toDate: null, startTime: "18:00", endTime: "20:00" });
+    const bad = await requests.submitAttendanceRequest({ now: NOW_TEST, ...base, requesterId: ho, kind: "OT", fromDate: d10, toDate: null, startTime: "18:00", endTime: "20:00" });
     expect(bad.ok).toBe(false);
-    const ok = await requests.submitAttendanceRequest({ ...base, requesterId: ho, kind: "OT", fromDate: d10, toDate: null, startTime: "18:00", endTime: "20:00", chosenCenterId: cs1 });
+    const ok = await requests.submitAttendanceRequest({ now: NOW_TEST, ...base, requesterId: ho, kind: "OT", fromDate: d10, toDate: null, startTime: "18:00", endTime: "20:00", chosenCenterId: cs1 });
     expect(ok.ok).toBe(true);
     if (ok.ok) expect(ok.centerId).toBe(cs1);
   });
@@ -176,10 +188,10 @@ d("requests — DB thật", () => {
   });
 
   it("SHIFT_SWAP duyệt: đổi ca CẢ HAI người trên lưới trong một tx, nguồn SWAP, notify 2 người", async () => {
-    const s = await requests.submitAttendanceRequest({ ...base, requesterId: gv, kind: "SHIFT_SWAP", fromDate: d9, toDate: null, requesterNewTemplateId: tplD1, targetUserId: tv, targetNewTemplateId: tplS });
+    const s = await requests.submitAttendanceRequest({ now: NOW_TEST, ...base, requesterId: gv, kind: "SHIFT_SWAP", fromDate: d9, toDate: null, requesterNewTemplateId: tplD1, targetUserId: tv, targetNewTemplateId: tplS });
     expect(s.ok).toBe(true);
     if (!s.ok) return;
-    const r = await requests.decideRequest({ requestId: s.id, decision: "APPROVED", note: null, actor, canWriteCenter: (c) => c === cs1 });
+    const r = await requests.decideRequest({ now: NOW_TEST, requestId: s.id, decision: "APPROVED", note: null, actor, canWriteCenter: (c) => c === cs1 });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.notify.map((n) => n.userId).sort()).toEqual([gv, tv].sort());
@@ -191,18 +203,18 @@ d("requests — DB thật", () => {
     expect(req.status).toBe("APPROVED");
     expect(req.appliedAt).not.toBeNull();
     // Duyệt lần hai ⇒ đã xử lý.
-    const again = await requests.decideRequest({ requestId: s.id, decision: "APPROVED", note: null, actor, canWriteCenter: () => true });
+    const again = await requests.decideRequest({ now: NOW_TEST, requestId: s.id, decision: "APPROVED", note: null, actor, canWriteCenter: () => true });
     expect(again.ok).toBe(false);
   });
 
   it("T-05: áp thất bại (không có quyền ở cơ sở của ca) ⇒ rollback trạng thái, đơn vẫn PENDING + applyError", async () => {
     // GV có ca ở CS2 ngày 08; người duyệt chỉ có quyền CS2 (cơ sở nhận đơn) nhưng KHÔNG có quyền CS1
     // — mã CG defaultPlace HOME ⇒ ca mới rơi về CS1 ⇒ setAssignmentCell từ chối ⇒ cả quyết định phải lùi.
-    const s = await requests.submitAttendanceRequest({ ...base, requesterId: gv, kind: "SHIFT_SWAP", fromDate: d8, toDate: null, requesterNewTemplateId: tplD1 });
+    const s = await requests.submitAttendanceRequest({ now: NOW_TEST, ...base, requesterId: gv, kind: "SHIFT_SWAP", fromDate: d8, toDate: null, requesterNewTemplateId: tplD1 });
     expect(s.ok).toBe(true);
     if (!s.ok) return;
     expect(s.centerId).toBe(cs2);
-    const r = await requests.decideRequest({ requestId: s.id, decision: "APPROVED", note: null, actor, canWriteCenter: (c) => c === cs2 });
+    const r = await requests.decideRequest({ now: NOW_TEST, requestId: s.id, decision: "APPROVED", note: null, actor, canWriteCenter: (c) => c === cs2 });
     expect(r.ok).toBe(false);
     const req = await db.workRequest.findUniqueOrThrow({ where: { id: s.id } });
     expect(req.status).toBe("PENDING");
@@ -215,19 +227,27 @@ d("requests — DB thật", () => {
   it("LEAVE 2 ngày duyệt ⇒ ghi P cả 2 ngày (nguồn LEAVE); TIMESHEET_FIX ⇒ 2 mốc MANUAL_ADJUST + event tính lại", async () => {
     const d11 = utc(2026, 9, 11);
     const d12 = utc(2026, 9, 12);
-    const l = await requests.submitAttendanceRequest({ ...base, requesterId: tv, kind: "LEAVE", fromDate: d11, toDate: d12, leaveTypeId: leaveId });
+    // ⚠️ PHẢI chốt `now`. Ca trước trong file này đặt `NGHI_PHEP.noticeDays = 1`, nên cổng
+    // `isSubmittedLate` so `fromDate` với HÔM NAY THẬT nếu không truyền `now` — đơn xin nghỉ
+    // cho 11/09 hoá "nộp muộn" kể từ 11/09/2026, và ca xanh suốt 4 ngày rồi đỏ mãi mãi.
+    // Đã nổ thật: xanh mọi lượt tới 10/09, rerun CÙNG commit ngày 13/09 thì đỏ.
+    // Chốt về 09/09 lúc 10:00 VN — trước `d11` đúng 2 ngày, thoả hạn báo trước 1 ngày.
+    const now = new Date("2026-09-09T03:00:00Z");
+    const l = await requests.submitAttendanceRequest({ ...base, now, requesterId: tv, kind: "LEAVE", fromDate: d11, toDate: d12, leaveTypeId: leaveId });
     expect(l.ok).toBe(true);
     if (!l.ok) return;
-    const rl = await requests.decideRequest({ requestId: l.id, decision: "APPROVED", note: "ok", actor, canWriteCenter: (c) => c === cs1 });
+    const rl = await requests.decideRequest({ now: NOW_TEST, requestId: l.id, decision: "APPROVED", note: "ok", actor, canWriteCenter: (c) => c === cs1 });
     expect(rl.ok).toBe(true);
     const cells = await db.shiftAssignment.findMany({ where: { userId: tv, workDate: { in: [d11, d12] }, status: "ACTIVE" } });
     expect(cells.map((c) => c.templateCode)).toEqual(["P", "P"]);
     expect(cells.every((c) => c.source === "LEAVE" && c.isLeave)).toBe(true);
 
-    const f = await requests.submitAttendanceRequest({ ...base, requesterId: tv, kind: "TIMESHEET_FIX", fromDate: d9, toDate: null, requestedInAt: "07:40", requestedOutAt: "11:35" });
+    // TIMESHEET_FIX không đi qua cổng báo-trước, nhưng chốt `now` cho cả vế sau để ca này
+    // không còn chỗ nào đọc giờ thật.
+    const f = await requests.submitAttendanceRequest({ ...base, now, requesterId: tv, kind: "TIMESHEET_FIX", fromDate: d9, toDate: null, requestedInAt: "07:40", requestedOutAt: "11:35" });
     expect(f.ok).toBe(true);
     if (!f.ok) return;
-    const rf = await requests.decideRequest({ requestId: f.id, decision: "APPROVED", note: null, actor, canWriteCenter: (c) => c === cs1 });
+    const rf = await requests.decideRequest({ now: NOW_TEST, requestId: f.id, decision: "APPROVED", note: null, actor, canWriteCenter: (c) => c === cs1 });
     expect(rf.ok).toBe(true);
     const logs = await db.staffTimeLog.findMany({ where: { userId: tv, workDate: d9 }, orderBy: { loggedAt: "asc" } });
     expect(logs.map((x) => [x.direction, x.source, x.loggedAt.toISOString()])).toEqual([
@@ -240,16 +260,16 @@ d("requests — DB thật", () => {
   });
 
   it("từ chối: chỉ đổi trạng thái, không chạm lưới; đơn vào kỳ đã KHOÁ bị từ chối nhận", async () => {
-    const s = await requests.submitAttendanceRequest({ ...base, requesterId: gv, kind: "SHIFT_SWAP", fromDate: d10, toDate: null, requesterNewTemplateId: tplD1 });
+    const s = await requests.submitAttendanceRequest({ now: NOW_TEST, ...base, requesterId: gv, kind: "SHIFT_SWAP", fromDate: d10, toDate: null, requesterNewTemplateId: tplD1 });
     expect(s.ok).toBe(true);
     if (!s.ok) return;
-    const r = await requests.decideRequest({ requestId: s.id, decision: "REJECTED", note: "bận", actor, canWriteCenter: (c) => c === cs1 });
+    const r = await requests.decideRequest({ now: NOW_TEST, requestId: s.id, decision: "REJECTED", note: "bận", actor, canWriteCenter: (c) => c === cs1 });
     expect(r.ok && r.applied).toBe(false);
     expect((await db.workRequest.findUniqueOrThrow({ where: { id: s.id } })).status).toBe("REJECTED");
     expect(await db.shiftAssignment.findFirst({ where: { userId: gv, workDate: d10, status: "ACTIVE" } })).toBeNull();
 
     await db.attendancePeriod.create({ data: { centerId: cs1, periodKey: "2026-08", status: "LOCKED" } });
-    const late = await requests.submitAttendanceRequest({ ...base, requesterId: gv, kind: "TIMESHEET_FIX", fromDate: utc(2026, 8, 20), toDate: null, requestedInAt: "08:00" });
+    const late = await requests.submitAttendanceRequest({ now: NOW_TEST, ...base, requesterId: gv, kind: "TIMESHEET_FIX", fromDate: utc(2026, 8, 20), toDate: null, requestedInAt: "08:00" });
     expect(late.ok).toBe(false);
     if (!late.ok) expect(late.error).toMatch(/chốt sổ/);
   });

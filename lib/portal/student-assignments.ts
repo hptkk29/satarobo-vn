@@ -160,7 +160,8 @@ export async function getStudentAssignmentTrack(studentId: string): Promise<Assi
       items.push({
         // Khoá theo BUỔI, không theo bài: hai buổi cùng bài (buổi bù) là hai dòng khác nhau.
         key: b.id,
-        order: b.soBuoi,
+        // 08/09 — số LỘ TRÌNH. `student-home.ts:140` in `Buổi ${it.order}` cạnh tên bài.
+        order: b.soBuoiLoTrinh ?? b.soBuoi,
         title: b.tieuDe || "Buổi học",
         nhan: b.nhanDayDu || "Buổi học",
         nhanNgay: b.nhanNgay,

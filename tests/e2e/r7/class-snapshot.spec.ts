@@ -59,10 +59,17 @@ test.describe("[R7-06] Class snapshot + cancel session", () => {
     const plans = await db.classSessionPlan.findMany({
       where: { classId: cls.id },
       orderBy: { order: "asc" },
-      select: { seq: true, customTitle: true },
+      select: { seq: true, customTitle: true, lessonId: true },
     });
     expect(plans.map((p) => p.seq)).toEqual([1, 2, 3, 4, 5]);
-    expect(plans[0]!.customTitle).toBe("Bài 1");
+
+    // 08/09 — ĐỔI KỲ VỌNG (trước: `customTitle === "Bài 1"`). `customTitle` là ô dành cho
+    // thứ NGƯỜI gõ; đổ tên bài của máy vào đó tạo bản sao ĐÔNG CỨNG không tự đồng bộ khi
+    // giáo trình đổi tên — gốc của sự cố "lệch tên bài" (docs/dieu-tra-lech-bai-hoc.md).
+    // Tên bài nay đọc thẳng từ `Lesson` mỗi lần dựng nhãn.
+    for (const p of plans) expect(p.customTitle).toBeNull();
+    // Nhưng vẫn phải NỐI đủ bài — đó mới là việc của hàm này.
+    expect(plans.every((p) => p.lessonId !== null)).toBe(true);
   });
 
   test("[R7-06-02] createSessionPlansForClass idempotent — gọi lại không nhân đôi", async () => {

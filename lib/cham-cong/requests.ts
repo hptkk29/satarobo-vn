@@ -27,6 +27,8 @@ import { setAssignmentCell, type CellDb } from "./cells";
 import { markAttendanceDayDirty } from "./recompute";
 import { applyApprovedWorkRequest } from "@/lib/work-request-apply";
 import { WR_KIND_LABEL, isClassKind, isRangeKind, type WorkRequestKindV } from "@/lib/work-request";
+import { chanSuaKyDaChot } from "./ky-gac";
+import { dungDongChinhTay, vnTimeOn } from "./sua-gio-quet";
 
 // ─── Cơ sở nhận đơn ───────────────────────────────────────────────────────────────────
 
@@ -230,6 +232,11 @@ export type DecideInput = {
   actor: { id: string; name: string };
   /** Quyền GHI ca theo cơ sở — action tính sẵn từ `hr_attendance:approve`. */
   canWriteCenter: (centerId: string) => boolean;
+  /**
+   * Đường vượt cổng "kỳ đã chốt sổ" — CHỈ cấp Hội sở, và action phải tự kiểm quyền đó
+   * trước khi truyền `true` vào đây. Cùng khuôn `generateMonthAction`.
+   */
+  boQuaKyDaChot?: boolean;
   now?: Date;
 };
 
@@ -262,6 +269,37 @@ export async function decideRequest(input: DecideInput): Promise<DecideResult> {
   if (!req) return { ok: false, error: "Không tìm thấy đơn" };
   if (req.status !== "PENDING") return { ok: false, error: "Đơn đã được xử lý" };
   if (!req.centerId || !input.canWriteCenter(req.centerId)) return { ok: false, error: "Đơn thuộc cơ sở bạn không có quyền duyệt" };
+
+  // ── CHẶN CỨNG: không DUYỆT đơn vào kỳ ĐÃ CHỐT SỔ (09/09/2026) ──────────────
+  //
+  // `createRequest` đã chặn NỘP đơn vào kỳ đã chốt (xem cổng ở trên trong file này),
+  // nhưng đó là cổng ở đầu vào. Đơn nộp TRƯỚC khi chốt, duyệt SAU khi chốt thì đi lọt:
+  // nhánh TIMESHEET_FIX `createMany` thẳng `StaffTimeLog` rồi `markAttendanceDayDirty`,
+  // tức GHI vào một kỳ đã đóng băng.
+  //
+  // Hậu quả im lặng: `summaryJson` của kỳ đã chốt KHÔNG đổi (nó là ảnh chụp lúc khoá,
+  // `ky-cong/page.tsx` đọc thẳng từ đó), nên sổ đã chốt và dữ liệu sống lệch nhau mà
+  // không có gì báo. Đo prod 09/09: 0 kỳ LOCKED ⇒ chưa ai rơi vào — nhưng đường ghi
+  // còn sống, và nó sẽ cháy đúng lần chốt kỳ ĐẦU TIÊN (luật 1).
+  //
+  // Chỉ chặn khi DUYỆT: từ chối một đơn cũ không ghi gì vào kỳ, để nguyên cho quản lý
+  // dọn hàng chờ.
+  if (input.decision === "APPROVED" && req.fromDate && !isClassKind(req.kind)) {
+    const kyChot = await db.attendancePeriod.findFirst({
+      where: {
+        centerId: req.centerId,
+        status: "LOCKED",
+        periodKey: { in: periodKeysBetween(req.fromDate, req.toDate ?? req.fromDate) },
+      },
+      select: { periodKey: true, status: true },
+    });
+    if (kyChot) {
+      const loi = chanSuaKyDaChot({ status: kyChot.status, periodKey: kyChot.periodKey });
+      // Cơ sở tự vượt cổng của chính mình thì cổng đó không tồn tại — quyền vượt do
+      // ACTION kiểm (cấp Hội sở), ở đây chỉ nhận kết quả.
+      if (!input.boQuaKyDaChot) return { ok: false, error: loi! };
+    }
+  }
 
   const decisionData = {
     status: input.decision,
@@ -377,14 +415,23 @@ export async function decideRequest(input: DecideInput): Promise<DecideResult> {
         const centerId = a?.centerId ?? req.centerId ?? home.centerId;
         if (!input.canWriteCenter(centerId)) throw new DecideError("Không có quyền chỉnh công ở cơ sở này");
         const orgUnitId = a?.orgUnitId ?? Object.values(map.byCode).find((c) => c.centerId === centerId)?.orgUnitId ?? null;
-        const rows: Prisma.StaffTimeLogCreateManyInput[] = [];
-        for (const [dir, hhmm] of [["CHECK_IN", req.requestedInAt], ["CHECK_OUT", req.requestedOutAt]] as const) {
-          if (!hhmm) continue;
-          const at = vnTimeOn(req.fromDate, hhmm);
-          if (!at) throw new DecideError(`Giờ "${hhmm}" không hợp lệ`);
-          rows.push({ userId: req.requesterId, centerId, orgUnitId, direction: dir, loggedAt: at, workDate: req.fromDate, source: "MANUAL_ADJUST", result: "ACCEPTED", reviewStatus: "CONFIRMED", reviewedById: input.actor.id, reviewedAt: now, reviewNote: input.note?.trim() || null, adjustRequestId: req.id, flags: ["CHINH_TAY"] });
-        }
-        if (rows.length === 0) throw new DecideError("Đơn không có giờ vào/ra để ghi");
+        // Dựng dòng đi qua LÕI DÙNG CHUNG (`sua-gio-quet.ts`) — cùng bản với đường quản lý
+        // sửa giờ ngoài luồng đơn. Khác biệt duy nhất là `canCu`: qua đơn thì
+        // `adjustRequestId = <id đơn>`, sửa tay thì `null`.
+        const dung = dungDongChinhTay({
+          userId: req.requesterId,
+          centerId,
+          orgUnitId,
+          workDate: req.fromDate,
+          gioVao: req.requestedInAt,
+          gioRa: req.requestedOutAt,
+          actorId: input.actor.id,
+          now,
+          lyDo: input.note ?? null,
+          canCu: { kieu: "DON", requestId: req.id },
+        });
+        if (!dung.ok) throw new DecideError(dung.error);
+        const rows = dung.rows;
         await tx.staffTimeLog.createMany({ data: rows });
         await markAttendanceDayDirty(req.requesterId, req.fromDate, { tx, reason: "TIMESHEET_FIX" });
         messages.push(`Đã ghi ${rows.length} mốc giờ chỉnh tay cho ${dateLabel}`);
@@ -441,12 +488,7 @@ async function templateCode(tx: Prisma.TransactionClient, id: string | null): Pr
   return t?.code ?? null;
 }
 
-/** "HH:mm" trên một ngày công (giờ VN) → thời điểm tuyệt đối. */
-export function vnTimeOn(workDate: Date, hhmm: string): Date | null {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm.trim());
-  if (!m) return null;
-  const h = Number(m[1]);
-  const mi = Number(m[2]);
-  if (h > 23 || mi > 59) return null;
-  return new Date(Date.UTC(workDate.getUTCFullYear(), workDate.getUTCMonth(), workDate.getUTCDate(), h - 7, mi));
-}
+// `vnTimeOn` nay ở `sua-gio-quet.ts` cùng phần dựng dòng dùng nó. Tái xuất để giữ nguyên
+// đường nhập cũ (`tests/cham-cong/requests.spec.ts` và mọi chỗ khác không phải sửa) — chứ
+// KHÔNG chép lại thân hàm: hai bản là hai cơ hội để một bản lệch đi.
+export { vnTimeOn };

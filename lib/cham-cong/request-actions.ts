@@ -110,6 +110,8 @@ const decideSchema = z.object({
   id: z.string().min(1),
   decision: z.enum(["APPROVED", "REJECTED"]),
   note: z.string().max(1000).optional().nullable(),
+  /** Đường vượt cổng "kỳ đã chốt sổ" — chỉ cấp Hội sở, bắt buộc lý do. */
+  boQuaKyDaChot: z.boolean().optional(),
 });
 
 /** Tập cơ sở người này được duyệt đơn — tính một lần cho mỗi lượt gọi. */
@@ -132,12 +134,28 @@ export async function decideRequestAction(input: unknown): Promise<Res> {
   if (allowed.size === 0) return { ok: false, error: "Không có quyền duyệt đơn" };
 
   const before = await db.workRequest.findUnique({ where: { id: p.data.id }, select: { status: true, kind: true, centerId: true, requesterId: true, fromDate: true } });
+  // ── Đường vượt cổng "kỳ đã chốt" — kiểm quyền Ở ĐÂY, không ở tầng lib ────────
+  //
+  // `decideRequest` chỉ NHẬN kết quả kiểm; để nó tự hỏi quyền thì cơ sở tự vượt cổng của
+  // chính mình, và cổng đó không tồn tại. Cùng khuôn `generateMonthAction`.
+  let boQua = false;
+  if (p.data.boQuaKyDaChot) {
+    if (!(await checkPermission("hr_attendance:close-period", { centerId: HO_CENTER_ID }))) {
+      return { ok: false, error: "Chỉ cấp Hội sở mới duyệt được đơn vào kỳ đã chốt" };
+    }
+    if ((p.data.note ?? "").trim().length < 5) {
+      return { ok: false, error: "Duyệt đơn vào kỳ đã chốt phải ghi lý do (tối thiểu 5 ký tự)" };
+    }
+    boQua = true;
+  }
+
   const r = await decideRequest({
     requestId: p.data.id,
     decision: p.data.decision,
     note: p.data.note ?? null,
     actor: { id: session.user.id, name: session.user.name ?? "Quản lý" },
     canWriteCenter: (c) => allowed.has(c),
+    boQuaKyDaChot: boQua,
   });
   if (!r.ok) return r;
 
@@ -148,7 +166,7 @@ export async function decideRequestAction(input: unknown): Promise<Res> {
     entityId: p.data.id,
     action: p.data.decision === "APPROVED" ? "APPROVE_REQUEST" : "REJECT_REQUEST",
     oldValues: before ? { status: before.status } : undefined,
-    newValues: { status: p.data.decision, applied: r.applied, kind: before?.kind, centerId: before?.centerId, fromDate: before?.fromDate ? vnYmd(new Date(before.fromDate.getTime() + 12 * 3_600_000)) : null },
+    newValues: { status: p.data.decision, applied: r.applied, kind: before?.kind, centerId: before?.centerId, fromDate: before?.fromDate ? vnYmd(new Date(before.fromDate.getTime() + 12 * 3_600_000)) : null, boQuaKyDaChot: boQua },
     reason: p.data.note ?? undefined,
   });
   for (const n of r.notify) {

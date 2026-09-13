@@ -14,11 +14,18 @@ import type { ShiftSegment, PlaceToken } from "./catalog";
 import { mergePointerCells, resolvePlace, type CenterMap } from "./place";
 import type { KhungCaRow, MonthGrid, ParsedWorkbook } from "./sheet-parse";
 import { countCodes } from "./sheet-parse";
-import { suggestCandidates, type NameCandidate, type NameSuggestion } from "./name-match";
+import {
+  suggestCandidates,
+  type NameCandidate,
+  type NameSuggestion,
+} from "./name-match";
 
 const DEFAULT_EFFECTIVE_FROM = new Date(Date.UTC(2000, 0, 1));
 
-export type ImportDb = Pick<PrismaClient, "shiftTemplate" | "shiftWeeklyPattern" | "shiftAssignment">;
+export type ImportDb = Pick<
+  PrismaClient,
+  "shiftTemplate" | "shiftWeeklyPattern" | "shiftAssignment"
+>;
 
 /** displayName trên Sheet → userId. */
 export type ImportMapping = Record<string, string>;
@@ -35,7 +42,12 @@ export type PreviewPerson = {
 
 export type ImportPreview = {
   people: PreviewPerson[];
-  months: { periodKey: string; sheetName: string; rows: number; counts: Record<string, number> }[];
+  months: {
+    periodKey: string;
+    sheetName: string;
+    rows: number;
+    counts: Record<string, number>;
+  }[];
   unknownCodes: string[];
   warnings: string[];
 };
@@ -49,12 +61,22 @@ export async function buildImportPreview(
     select: { sheetName: true, userId: true },
     distinct: ["sheetName"],
   });
-  const rememberedBy = new Map(remembered.map((r) => [r.sheetName as string, r.userId]));
-  const templates = await deps.db.shiftTemplate.findMany({ where: { isActive: true }, select: { code: true } });
+  const rememberedBy = new Map(
+    remembered.map((r) => [r.sheetName as string, r.userId]),
+  );
+  const templates = await deps.db.shiftTemplate.findMany({
+    where: { isActive: true },
+    select: { code: true },
+  });
   const known = new Set(templates.map((t) => t.code));
 
   const byName = new Map<string, PreviewPerson>();
-  const consider = (displayName: string, fullName: string, unit: string, role: string) => {
+  const consider = (
+    displayName: string,
+    fullName: string,
+    unit: string,
+    role: string,
+  ) => {
     const p = byName.get(displayName);
     if (p) {
       if (!p.units.includes(unit)) p.units.push(unit);
@@ -69,11 +91,17 @@ export async function buildImportPreview(
       suggestions: [],
     });
   };
-  for (const r of parsed.khungCa) consider(r.displayName, r.fullName, r.unit, r.role);
-  for (const m of parsed.months) for (const r of m.rows) consider(r.name, r.name, r.unit, r.role);
+  for (const r of parsed.khungCa)
+    consider(r.displayName, r.fullName, r.unit, r.role);
+  for (const m of parsed.months)
+    for (const r of m.rows) consider(r.name, r.name, r.unit, r.role);
   for (const p of byName.values()) {
     p.suggestions = suggestCandidates(
-      { displayName: p.displayName, fullName: p.fullName, unit: p.units.length === 1 ? p.units[0] : null },
+      {
+        displayName: p.displayName,
+        fullName: p.fullName,
+        unit: p.units.length === 1 ? p.units[0] : null,
+      },
       deps.candidates,
     ).slice(0, 5);
   }
@@ -82,15 +110,33 @@ export async function buildImportPreview(
   const months = parsed.months.map((m) => {
     const counts = countCodes(m);
     for (const c of Object.keys(counts)) if (!known.has(c)) unknownCodes.add(c);
-    return { periodKey: m.periodKey, sheetName: m.sheetName, rows: m.rows.length, counts };
+    return {
+      periodKey: m.periodKey,
+      sheetName: m.sheetName,
+      rows: m.rows.length,
+      counts,
+    };
   });
-  for (const r of parsed.khungCa) for (const c of Object.values(r.byWeekday)) if (c && !known.has(c)) unknownCodes.add(c);
+  for (const r of parsed.khungCa)
+    for (const c of Object.values(r.byWeekday))
+      if (c && !known.has(c)) unknownCodes.add(c);
 
-  return { people: [...byName.values()], months, unknownCodes: [...unknownCodes].sort(), warnings: [...parsed.warnings] };
+  return {
+    people: [...byName.values()],
+    months,
+    unknownCodes: [...unknownCodes].sort(),
+    warnings: [...parsed.warnings],
+  };
 }
 
 export type ApplyResult = {
-  patterns: { upserted: number; deleted: number; skippedNoMapping: number; skippedNoPermission: number; unknownCode: number };
+  patterns: {
+    upserted: number;
+    deleted: number;
+    skippedNoMapping: number;
+    skippedNoPermission: number;
+    unknownCode: number;
+  };
   assignments: {
     created: number;
     cancelled: number;
@@ -101,7 +147,11 @@ export type ApplyResult = {
     unknownCode: number;
   };
   /** 15 con số: đếm trên Sheet vs đếm ACTIVE trong DB sau import (chỉ người đã ánh xạ). */
-  counts: { periodKey: string; sheet: Record<string, number>; db: Record<string, number> }[];
+  counts: {
+    periodKey: string;
+    sheet: Record<string, number>;
+    db: Record<string, number>;
+  }[];
   /** Ngày công có ca đổi (tạo/huỷ) — action xếp hàng tính lại (hr.attendance_day_dirty). */
   changedDays: { userId: string; workDate: Date }[];
   warnings: string[];
@@ -119,13 +169,21 @@ type TemplateRow = {
 };
 
 function unitCenterId(unit: string, map: CenterMap): string {
-  return unit === "HO" ? map.hoCenterId : (map.byCode[unit]?.centerId ?? map.hoCenterId);
+  return unit === "HO"
+    ? map.hoCenterId
+    : (map.byCode[unit]?.centerId ?? map.hoCenterId);
 }
 
 function sectionOf(role: string): "KINH_DOANH" | "GIAO_VIEN" | "VAN_PHONG" {
   const r = role.toLowerCase();
   if (r.includes("giáo viên") || r.includes("giao vien")) return "GIAO_VIEN";
-  if (r.includes("tư vấn") || r.includes("quản lý") || r.includes("tu van") || r.includes("quan ly")) return "KINH_DOANH";
+  if (
+    r.includes("tư vấn") ||
+    r.includes("quản lý") ||
+    r.includes("tu van") ||
+    r.includes("quan ly")
+  )
+    return "KINH_DOANH";
   return "VAN_PHONG";
 }
 
@@ -146,7 +204,16 @@ export async function applyImport(
   const warnings: string[] = [];
   const templates = await opts.db.shiftTemplate.findMany({
     where: { isActive: true, centerId: null },
-    select: { id: true, code: true, segments: true, defaultPlace: true, attendanceMode: true, dayCredit: true, isLeave: true, nominalMinutes: true },
+    select: {
+      id: true,
+      code: true,
+      segments: true,
+      defaultPlace: true,
+      attendanceMode: true,
+      dayCredit: true,
+      isLeave: true,
+      nominalMinutes: true,
+    },
   });
   const tplByCode = new Map<string, TemplateRow>(
     templates.map((t) => [
@@ -165,8 +232,22 @@ export async function applyImport(
   );
 
   const result: ApplyResult = {
-    patterns: { upserted: 0, deleted: 0, skippedNoMapping: 0, skippedNoPermission: 0, unknownCode: 0 },
-    assignments: { created: 0, cancelled: 0, unchanged: 0, keptManual: 0, skippedNoMapping: 0, skippedNoPermission: 0, unknownCode: 0 },
+    patterns: {
+      upserted: 0,
+      deleted: 0,
+      skippedNoMapping: 0,
+      skippedNoPermission: 0,
+      unknownCode: 0,
+    },
+    assignments: {
+      created: 0,
+      cancelled: 0,
+      unchanged: 0,
+      keptManual: 0,
+      skippedNoMapping: 0,
+      skippedNoPermission: 0,
+      unknownCode: 0,
+    },
     counts: [],
     changedDays: [],
     warnings,
@@ -185,19 +266,38 @@ export async function applyImport(
         result.patterns.skippedNoPermission += 1;
         continue;
       }
-      const orgUnitId = row.unit === "HO" ? null : (opts.centerMap.byCode[row.unit]?.orgUnitId ?? null);
+      const orgUnitId =
+        row.unit === "HO"
+          ? null
+          : (opts.centerMap.byCode[row.unit]?.orgUnitId ?? null);
       for (let wd = 0; wd <= 6; wd += 1) {
         const code = row.byWeekday[wd] ?? null;
-        const where = { userId_centerId_weekday_effectiveFrom: { userId, centerId, weekday: wd, effectiveFrom: DEFAULT_EFFECTIVE_FROM } };
+        const where = {
+          userId_centerId_weekday_effectiveFrom: {
+            userId,
+            centerId,
+            weekday: wd,
+            effectiveFrom: DEFAULT_EFFECTIVE_FROM,
+          },
+        };
         if (!code) {
-          const del = await opts.db.shiftWeeklyPattern.deleteMany({ where: { userId, centerId, weekday: wd, effectiveFrom: DEFAULT_EFFECTIVE_FROM } });
+          const del = await opts.db.shiftWeeklyPattern.deleteMany({
+            where: {
+              userId,
+              centerId,
+              weekday: wd,
+              effectiveFrom: DEFAULT_EFFECTIVE_FROM,
+            },
+          });
           result.patterns.deleted += del.count;
           continue;
         }
         const tpl = tplByCode.get(code);
         if (!tpl) {
           result.patterns.unknownCode += 1;
-          warnings.push(`KHUNG CA: "${row.displayName}" ${WEEKDAY_LABEL[wd]} mã "${code}" không có trong danh mục — bỏ ô`);
+          warnings.push(
+            `KHUNG CA: "${row.displayName}" ${WEEKDAY_LABEL[wd]} mã "${code}" không có trong danh mục — bỏ ô`,
+          );
           continue;
         }
         await opts.db.shiftWeeklyPattern.upsert({
@@ -215,10 +315,34 @@ export async function applyImport(
             displayOrder: row.stt,
             effectiveFrom: DEFAULT_EFFECTIVE_FROM,
           },
-          update: { templateId: tpl.id, templateCode: tpl.code, sheetName: row.displayName, section: sectionOf(row.role), jobLabel: row.role || null, displayOrder: row.stt, orgUnitId },
+          update: {
+            templateId: tpl.id,
+            templateCode: tpl.code,
+            sheetName: row.displayName,
+            section: sectionOf(row.role),
+            jobLabel: row.role || null,
+            displayOrder: row.stt,
+            orgUnitId,
+          },
         });
         result.patterns.upserted += 1;
       }
+
+      // ── CỔNG (d): kéo CẢ CỤM về một `section` ────────────────────────────
+      //
+      // Vòng trên chỉ chạm những thứ CÓ MÃ trong file; ô trống thì `continue`/xoá. Nên
+      // khi một file phủ nửa vời, dòng cũ giữ `section` cũ còn dòng mới mang giá trị mới
+      // — cụm lệch, im lặng. `brief-db.ts:45-52` đọc `distinct` rồi lọc thông báo theo
+      // `section`, nên lệch nghĩa là "ai nhận thông báo của bộ phận nào" do thứ tự truy
+      // vấn quyết định. Luật đầy đủ: `lib/cham-cong/khung-ca.ts` mục (d).
+      //
+      // File LÀ nguồn sự thật về vai trò ở đây, nên ghi thẳng `sectionOf(row.role)` cho
+      // cả cụm chứ không đi qua `sectionChoCum` (hàm đó giữ giá trị CŨ — đúng cho màn
+      // admin, sai cho lượt nhập file).
+      await opts.db.shiftWeeklyPattern.updateMany({
+        where: { userId, centerId, effectiveFrom: DEFAULT_EFFECTIVE_FROM },
+        data: { section: sectionOf(row.role) },
+      });
     }
   }
 
@@ -242,9 +366,19 @@ export async function applyImport(
         const workDate = new Date(Date.UTC(grid.year, grid.month - 1, day));
         const existing = await opts.db.shiftAssignment.findFirst({
           where: { userId, workDate, status: "ACTIVE" },
-          select: { id: true, templateCode: true, centerId: true, source: true },
+          select: {
+            id: true,
+            templateCode: true,
+            centerId: true,
+            source: true,
+          },
         });
-        if (existing && (existing.source === "SWAP" || existing.source === "LEAVE" || existing.source === "MANUAL")) {
+        if (
+          existing &&
+          (existing.source === "SWAP" ||
+            existing.source === "LEAVE" ||
+            existing.source === "MANUAL")
+        ) {
           result.assignments.keptManual += 1;
           continue;
         }
@@ -254,7 +388,10 @@ export async function applyImport(
               result.assignments.skippedNoPermission += 1;
               continue;
             }
-            await opts.db.shiftAssignment.updateMany({ where: { id: existing.id }, data: { status: "CANCELLED" } });
+            await opts.db.shiftAssignment.updateMany({
+              where: { id: existing.id },
+              data: { status: "CANCELLED" },
+            });
             result.assignments.cancelled += 1;
             result.changedDays.push({ userId, workDate });
           }
@@ -263,27 +400,49 @@ export async function applyImport(
         const tpl = tplByCode.get(merged.code);
         if (!tpl) {
           result.assignments.unknownCode += 1;
-          warnings.push(`${grid.sheetName}: "${displayName}" ngày ${day} mã "${merged.code}" không có trong danh mục — bỏ ô`);
+          warnings.push(
+            `${grid.sheetName}: "${displayName}" ngày ${day} mã "${merged.code}" không có trong danh mục — bỏ ô`,
+          );
           continue;
         }
         const homeUnit = merged.unit ?? rows[0].unit;
-        const place = resolvePlace({ segments: tpl.segments, defaultPlace: tpl.defaultPlace, homeUnit, map: opts.centerMap });
-        for (const w of place.warnings) warnings.push(`${grid.sheetName}: "${displayName}" ngày ${day}: ${w}`);
+        const place = resolvePlace({
+          segments: tpl.segments,
+          defaultPlace: tpl.defaultPlace,
+          homeUnit,
+          map: opts.centerMap,
+        });
+        for (const w of place.warnings)
+          warnings.push(
+            `${grid.sheetName}: "${displayName}" ngày ${day}: ${w}`,
+          );
         const centerId = place.centerId;
         if (!opts.canWriteCenter(centerId)) {
           result.assignments.skippedNoPermission += 1;
           continue;
         }
-        if (existing && existing.templateCode === tpl.code && existing.centerId === centerId) {
+        if (
+          existing &&
+          existing.templateCode === tpl.code &&
+          existing.centerId === centerId
+        ) {
           result.assignments.unchanged += 1;
           mappedUserIds.add(userId);
           continue;
         }
         if (existing) {
-          await opts.db.shiftAssignment.updateMany({ where: { id: existing.id }, data: { status: "CANCELLED" } });
+          await opts.db.shiftAssignment.updateMany({
+            where: { id: existing.id },
+            data: { status: "CANCELLED" },
+          });
           result.assignments.cancelled += 1;
         }
-        const orgUnitId = centerId === opts.centerMap.hoCenterId ? null : (Object.values(opts.centerMap.byCode).find((c) => c.centerId === centerId)?.orgUnitId ?? null);
+        const orgUnitId =
+          centerId === opts.centerMap.hoCenterId
+            ? null
+            : (Object.values(opts.centerMap.byCode).find(
+                (c) => c.centerId === centerId,
+              )?.orgUnitId ?? null);
         await opts.db.shiftAssignment.create({
           data: {
             userId,
@@ -313,27 +472,42 @@ export async function applyImport(
       if (touched) mappedUserIds.add(userId);
     }
     // Đối chiếu 15 con số: Sheet (người đã ánh xạ) vs DB.
-    const sheetCounts = countCodes({ rows: grid.rows.filter((r) => opts.mapping[r.name]) });
+    const sheetCounts = countCodes({
+      rows: grid.rows.filter((r) => opts.mapping[r.name]),
+    });
     const from = new Date(Date.UTC(grid.year, grid.month - 1, 1));
     const to = new Date(Date.UTC(grid.year, grid.month - 1, grid.daysInMonth));
     const dbRows = await opts.db.shiftAssignment.findMany({
-      where: { userId: { in: [...mappedUserIds] }, workDate: { gte: from, lte: to }, status: "ACTIVE" },
+      where: {
+        userId: { in: [...mappedUserIds] },
+        workDate: { gte: from, lte: to },
+        status: "ACTIVE",
+      },
       select: { templateCode: true, sourceCells: true },
     });
     const dbCounts: Record<string, number> = {};
     for (const r of dbRows) {
       // Đếm theo Ô Sheet (sourceCells) để so được với lưới: một ngày D2+CG là 2 ô trên Sheet.
-      const cells = (r.sourceCells as Record<string, string> | null) ?? { "?": r.templateCode };
-      for (const code of Object.values(cells)) dbCounts[code] = (dbCounts[code] ?? 0) + 1;
+      const cells = (r.sourceCells as Record<string, string> | null) ?? {
+        "?": r.templateCode,
+      };
+      for (const code of Object.values(cells))
+        dbCounts[code] = (dbCounts[code] ?? 0) + 1;
     }
-    result.counts.push({ periodKey: grid.periodKey, sheet: sheetCounts, db: dbCounts });
+    result.counts.push({
+      periodKey: grid.periodKey,
+      sheet: sheetCounts,
+      db: dbCounts,
+    });
   }
   return result;
 }
 
 const WEEKDAY_LABEL = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
 
-export function groupRowsByName(grid: MonthGrid): Map<string, MonthGrid["rows"]> {
+export function groupRowsByName(
+  grid: MonthGrid,
+): Map<string, MonthGrid["rows"]> {
   const m = new Map<string, MonthGrid["rows"]>();
   for (const r of grid.rows) {
     const list = m.get(r.name) ?? [];
@@ -345,7 +519,13 @@ export function groupRowsByName(grid: MonthGrid): Map<string, MonthGrid["rows"]>
 
 /** Tiện ích cho action: ứng viên = nhân sự đang làm việc có tài khoản. */
 export function toCandidates(
-  employees: { id: string; fullName: string; phone: string | null; center: { code: string | null } | null; userAccount: { id: string; name: string | null } | null }[],
+  employees: {
+    id: string;
+    fullName: string;
+    phone: string | null;
+    center: { code: string | null } | null;
+    userAccount: { id: string; name: string | null } | null;
+  }[],
 ): NameCandidate[] {
   return employees
     .filter((e) => e.userAccount)

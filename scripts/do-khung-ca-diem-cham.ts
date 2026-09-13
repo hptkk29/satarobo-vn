@@ -18,6 +18,7 @@
  */
 import { currentDbHost } from "./_load-env";
 import { scriptDb } from "./_script-db";
+import { SHIFT_CATALOG } from "../lib/cham-cong/catalog";
 import { inQuyen, kiemQuyen } from "./_kiem-quyen";
 
 const db = scriptDb();
@@ -535,6 +536,331 @@ async function main() {
     );
     console.log(
       "   chưa vinh danh ai trong nhóm 1970. Đường ghi vẫn hở: luật 1.)",
+    );
+  }
+
+  // ── V11 — AI ĐÃ SỬA ShiftTemplate TRÊN PROD, LÚC NÀO ────────────────────────
+  //
+  // 5 mã HC/12/21/2C/NG mất HẾT `place` trong segments. Hai giả thuyết đã LOẠI:
+  //  · seed đời cũ thiếu `place` — SAI, `place` có trong catalog từ commit đầu (7a57c6c0);
+  //  · form đời cũ thiếu ô `place` — SAI, form + validator cùng sinh 06/09 (`221ad0da`)
+  //    và cả 5 trường (place · defaultPlace · payMode · nominalMinutes · note) có ngay từ
+  //    commit đó.
+  //
+  // Còn đúng một cách biết: đọc AuditLog. `danh-muc-ca/_actions.ts` ghi CREATE/UPDATE/
+  // ACTIVATE/DEACTIVATE với `oldValues.segments`, nên nếu có ai sửa thì có dấu.
+  //
+  // KHÔNG có dòng nào ⇒ chúng chưa từng bị sửa qua màn ⇒ đường làm mất nằm chỗ khác, và
+  // "prod sạch" lại chỉ là "không thấy dấu" (bài học của sự cố nhập nhân sự 08/09).
+  {
+    const auditCa = await db.auditLog.findMany({
+      where: { entityType: "ShiftTemplate" },
+      select: {
+        action: true, entityId: true, createdAt: true, actorName: true,
+        oldValues: true, newValues: true, changedFields: true,
+      },
+      orderBy: { createdAt: "asc" },
+    });
+    tieuDe("══ V11 — AuditLog của ShiftTemplate ══");
+    dong("Tổng dòng audit ShiftTemplate", auditCa.length);
+    if (auditCa.length === 0) {
+      console.log("  🔴 KHÔNG có dòng nào — 21 mã ca chưa từng đi qua màn Danh mục.");
+      console.log("     ⇒ đường làm mất `place` KHÔNG phải màn đó. Chưa biết là đường nào.");
+    } else {
+      const theoMa = new Map<string, number>();
+      for (const a of auditCa) theoMa.set(a.entityId, (theoMa.get(a.entityId) ?? 0) + 1);
+      console.log(`  Số mã từng bị chạm: ${theoMa.size}`);
+      for (const a of auditCa) {
+        const cu = (a.oldValues ?? {}) as Record<string, unknown>;
+        const moi = (a.newValues ?? {}) as Record<string, unknown>;
+        const coPlaceCu = JSON.stringify(cu.segments ?? "").includes('"place"');
+        const coPlaceMoi = JSON.stringify(moi.segments ?? "").includes('"place"');
+        console.log(
+          `    ${a.createdAt.toISOString().slice(0, 16)} · ${a.action.padEnd(10)}` +
+            ` · ${String(moi.code ?? cu.code ?? a.entityId).padEnd(6)}` +
+            ` · ${(a.actorName ?? "?").slice(0, 18).padEnd(19)}` +
+            ` · place cũ=${coPlaceCu ? "CÓ" : "không"} → mới=${coPlaceMoi ? "CÓ" : "không"}` +
+            `${coPlaceCu && !coPlaceMoi ? "  🔴 MẤT Ở ĐÂY" : ""}`,
+        );
+      }
+    }
+  }
+
+  // ── V10 — ĐỐI CHIẾU SHIFT_CATALOG (seed) ↔ ShiftTemplate (prod) ───────────
+  //
+  // Câu của chủ dự án rộng hơn `dayCredit`: "còn giá trị nào khác trên prod đang lệch
+  // với seed không?". Đừng soi bằng mắt — so ĐỦ 17 cột mà `seedShiftTemplates` ghi.
+  //
+  // Vì sao đáng lo dù `seedShiftTemplates` chỉ ghi đè khi `--force`: seed không còn mô tả
+  // đúng thực tế, nên bất kỳ ai đọc nó để hiểu hệ thống sẽ hiểu sai — và một lần chạy
+  // `--force` là mất mọi chỉnh tay.
+  {
+    const tren = await db.shiftTemplate.findMany({
+      where: { centerId: null },
+      select: {
+        code: true,
+        name: true,
+        kind: true,
+        segments: true,
+        defaultPlace: true,
+        attendanceMode: true,
+        dayCredit: true,
+        isLeave: true,
+        nominalMinutes: true,
+        payMode: true,
+        amStart: true,
+        amEnd: true,
+        pmStart: true,
+        pmEnd: true,
+        pmBreakStart: true,
+        pmBreakEnd: true,
+        note: true,
+        displayOrder: true,
+      },
+    });
+    const theoMa = new Map(tren.map((t) => [t.code, t]));
+    // ⚠️ `JSON.stringify` NHẠY THỨ TỰ KHOÁ, mà Postgres `jsonb` tự sắp lại khoá theo
+    // thứ tự của nó. Bản đầu của bộ so này báo 18/21 mã lệch, trong đó ~9 mã chỉ khác
+    // `{start,end,kind}` ↔ `{end,kind,start}` — giá trị y hệt. Chuẩn hoá bằng cách sắp
+    // khoá trước khi so, kẻo cổng kêu suốt và không ai đọc nữa (luật 11: một bộ so báo
+    // sai thì cũng vô dụng như một bộ so luôn im).
+    const sapKhoa = (v: unknown): unknown =>
+      Array.isArray(v)
+        ? v.map(sapKhoa)
+        : v && typeof v === "object"
+          ? Object.fromEntries(
+              Object.entries(v as Record<string, unknown>)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([k, x]) => [k, sapKhoa(x)]),
+            )
+          : v;
+    const chuan = (v: unknown) => JSON.stringify(sapKhoa(v ?? null));
+    tieuDe("══ V10 — seed SHIFT_CATALOG vs prod ShiftTemplate ══");
+    dong("Mã trong seed", SHIFT_CATALOG.length);
+    dong("Mã trên prod (dùng chung)", tren.length);
+    const thieuTrenProd = SHIFT_CATALOG.filter((e) => !theoMa.has(e.code)).map(
+      (e) => e.code,
+    );
+    const laTrenProd = tren
+      .filter((t) => !SHIFT_CATALOG.some((e) => e.code === t.code))
+      .map((t) => t.code);
+    if (thieuTrenProd.length)
+      console.log(`  🔴 seed có, prod KHÔNG: ${thieuTrenProd.join(", ")}`);
+    if (laTrenProd.length)
+      console.log(`  🔴 prod có, seed KHÔNG: ${laTrenProd.join(", ")}`);
+
+    let soMaLech = 0;
+    for (const e of SHIFT_CATALOG) {
+      const t = theoMa.get(e.code);
+      if (!t) continue;
+      const cap: [string, unknown, unknown][] = [
+        ["name", e.name, t.name],
+        ["kind", e.kind, t.kind],
+        ["segments", e.segments, t.segments],
+        ["defaultPlace", e.defaultPlace, t.defaultPlace],
+        ["attendanceMode", e.attendanceMode, t.attendanceMode],
+        ["dayCredit", e.dayCredit, t.dayCredit],
+        ["isLeave", e.isLeave, t.isLeave],
+        ["nominalMinutes", e.nominalMinutes, t.nominalMinutes],
+        ["payMode", e.payMode, t.payMode],
+        ["amStart", e.amStart ?? null, t.amStart],
+        ["amEnd", e.amEnd ?? null, t.amEnd],
+        ["pmStart", e.pmStart ?? null, t.pmStart],
+        ["pmEnd", e.pmEnd ?? null, t.pmEnd],
+        ["pmBreakStart", e.pmBreakStart ?? null, t.pmBreakStart],
+        ["pmBreakEnd", e.pmBreakEnd ?? null, t.pmBreakEnd],
+        ["note", e.note ?? null, t.note],
+        ["displayOrder", e.displayOrder, t.displayOrder],
+      ];
+      const lech = cap.filter(([, a, b]) => chuan(a) !== chuan(b));
+      if (lech.length === 0) continue;
+      soMaLech += 1;
+      console.log(`  🔴 ${e.code}`);
+      for (const [ten, a, b] of lech) {
+        console.log(`       ${ten}`);
+        console.log(`         seed: ${chuan(a)}`);
+        console.log(`         prod: ${chuan(b)}`);
+      }
+    }
+    dong("Mã LỆCH", soMaLech);
+    if (soMaLech === 0) console.log("  ✅ seed và prod khớp trên cả 17 cột");
+  }
+
+  // ── V9 — BÁN KÍNH ĐỔI ĐƠN VỊ CÔNG → CA (khảo sát 09/09/2026) ─────────────
+  //
+  // Ba câu: (a) đường ghi đã có dữ liệu chưa — nếu còn 0 thì đây là cửa sổ đổi mô hình
+  // rẻ nhất; (b) kỳ nào đã CHỐT (số của kỳ chốt phải bất biến); (c) 21 mã ca thật trông
+  // ra sao, mã nào là HAI BUỔI.
+  const [soAssign, soDay, soLog, soVe] = await Promise.all([
+    db.shiftAssignment.count(),
+    db.staffAttendanceDay.count(),
+    db.staffTimeLog.count(),
+    db.attendanceTicket.count(),
+  ]);
+  tieuDe("══ V9.1 — đường ghi chấm công đã có dữ liệu chưa ══");
+  dong("ShiftAssignment (ô lưới tháng)", soAssign);
+  dong("StaffAttendanceDay (công ngày)", soDay);
+  dong("StaffTimeLog (lượt quét)", soLog);
+  dong("AttendanceTicket (vé)", soVe);
+
+  const kyDaChot = await db.attendancePeriod.findMany({
+    where: { status: "LOCKED" },
+    select: {
+      periodKey: true,
+      centerId: true,
+      lockedAt: true,
+      standardUnits: true,
+      summaryJson: true,
+    },
+    orderBy: { periodKey: "asc" },
+  });
+  tieuDe("══ V9.2 — kỳ ĐÃ CHỐT (summaryJson là số đóng băng) ══");
+  dong("Số kỳ LOCKED", kyDaChot.length);
+  for (const k of kyDaChot) {
+    const sj = k.summaryJson as {
+      totals?: { units?: number; people?: number };
+    } | null;
+    console.log(
+      `    ${k.periodKey} · ${k.centerId} · chốt ${k.lockedAt?.toISOString().slice(0, 10) ?? "?"}` +
+        ` · công chuẩn=${k.standardUnits ?? "—"}` +
+        ` · summaryJson: ${sj ? `${sj.totals?.people ?? "?"} người / ${sj.totals?.units ?? "?"} công` : "TRỐNG"}`,
+    );
+  }
+
+  const maCa = await db.shiftTemplate.findMany({
+    select: {
+      code: true,
+      name: true,
+      kind: true,
+      dayCredit: true,
+      isLeave: true,
+      nominalMinutes: true,
+      segments: true,
+      isActive: true,
+      amStart: true,
+      amEnd: true,
+      pmStart: true,
+      pmEnd: true,
+      pmBreakStart: true,
+      pmBreakEnd: true,
+      attendanceMode: true,
+      payMode: true,
+    },
+    orderBy: { code: "asc" },
+  });
+  tieuDe("══ V9.3 — DANH MỤC MÃ CA: mã nào là HAI BUỔI ══");
+  dong("Tổng mã ca", maCa.length);
+  dong("… đang bật", maCa.filter((t) => t.isActive).length);
+  for (const t of maCa) {
+    const segs =
+      (t.segments as { start: string; end: string; kind: string }[] | null) ??
+      [];
+    const lam = segs.filter((x) => x.kind === "WORK");
+    // HAI BUỔI = có ≥2 đoạn WORK, hoặc khai đủ cả am* lẫn pm*.
+    const haiBuoi = lam.length >= 2 || (!!t.amStart && !!t.pmStart);
+    const gio =
+      lam.map((x) => `${x.start}-${x.end}`).join(" + ") || "(không đoạn)";
+    const nghi = segs
+      .filter((x) => x.kind !== "WORK")
+      .map((x) => `${x.kind}:${x.start}-${x.end}`)
+      .join(" ");
+    console.log(
+      `    ${haiBuoi ? "🟦2BUỔI" : "      1"} ${t.code.padEnd(6)} ${t.name.slice(0, 22).padEnd(23)}` +
+        ` ${t.kind.padEnd(6)} công=${t.dayCredit} ${t.isLeave ? "NGHỈ " : "     "}` +
+        `phút=${t.nominalMinutes ?? "—"} | ${gio}${nghi ? ` | nghỉ ${nghi}` : ""}`,
+    );
+    if (t.amStart || t.pmStart)
+      console.log(
+        `             cột hiển thị: am ${t.amStart ?? "—"}-${t.amEnd ?? "—"} · pm ${t.pmStart ?? "—"}-${t.pmEnd ?? "—"} · nghỉ giữa ${t.pmBreakStart ?? "—"}-${t.pmBreakEnd ?? "—"}`,
+      );
+  }
+
+  // Vai KẾ TOÁN: đã có ai được neo chưa (việc 2).
+  const vaiKeToan = await db.userOrgRole.findMany({
+    where: {
+      role: { code: { in: ["HO_ACCOUNTANT", "CENTER_ACCOUNTANT"] } },
+      status: "ACTIVE",
+    },
+    select: { userId: true, orgUnitId: true, role: { select: { code: true } } },
+  });
+  const dsRoleDef = await db.roleDef.findMany({
+    select: { code: true, _count: { select: { permissions: true } } },
+    orderBy: { code: "asc" },
+  });
+  tieuDe("══ V9.4 — vai KẾ TOÁN đã neo cho ai chưa ══");
+  dong("UserOrgRole ACTIVE của 2 vai kế toán", vaiKeToan.length);
+  for (const v of vaiKeToan)
+    console.log(
+      `    ${v.role.code} · user=${v.userId} · orgUnit=${v.orgUnitId}`,
+    );
+  dong("RoleDef trên prod", dsRoleDef.length);
+  console.log(
+    `    ${dsRoleDef.map((r) => `${r.code}(${r._count.permissions})`).join(" · ")}`,
+  );
+
+  // ── V8 — BA CHỖ ĐẾM BUỔI DẠY BỎ SÓT `substituteTeacherId` ─────────────────
+  //
+  // Ba chỗ đếm "buổi dạy" cùng bỏ sót MỘT cột. Tiền lệ đã sửa đúng nằm ngay cạnh:
+  // `cham-cong/cong-day/page.tsx:109` gom cả bốn nguồn
+  // (`actualTeacherId`, `substituteTeacherId`, `class.teacherId`, `class.assistantId`).
+  //
+  //  (1) `bao-cao/hieu-suat-gv/page.tsx:283,302` — `actualTeacherId ?? class.teacherId`
+  //  (2) `dashboard/_components/manager-dashboard.tsx:132` — y hệt
+  //  (3) `teacher/bang-cong/page.tsx:188-190` — `OR[classId ∈ assignedClassIds,
+  //      actualTeacherId = tôi]`, KHÔNG có nhánh dạy thay
+  //
+  // ĐO TRƯỚC, SỬA SAU. Con số cần: buổi có `substituteTeacherId`, và trong đó bao nhiêu
+  // buổi mà người dạy thay KHÁC người sẽ được ba chỗ trên quy công cho.
+  const tongBuoi = await db.classSession.count({
+    where: { status: { not: "CANCELLED" } },
+  });
+  const buoiCoDayThay = await db.classSession.findMany({
+    where: { substituteTeacherId: { not: null }, status: { not: "CANCELLED" } },
+    select: {
+      id: true,
+      status: true,
+      actualTeacherId: true,
+      substituteTeacherId: true,
+      class: { select: { teacherId: true, assistantId: true } },
+    },
+  });
+  tieuDe("══ V8 — buổi có GV DẠY THAY (ba chỗ đếm đang bỏ sót) ══");
+  dong("Buổi (khác CANCELLED)", tongBuoi);
+  dong("… có substituteTeacherId", buoiCoDayThay.length);
+  if (buoiCoDayThay.length > 0) {
+    // Quy công theo CÔNG THỨC của (1) và (2): actualTeacherId ?? class.teacherId.
+    const quyNhamNguoi = buoiCoDayThay.filter(
+      (b) =>
+        (b.actualTeacherId ?? b.class?.teacherId ?? null) !==
+        b.substituteTeacherId,
+    );
+    dong("🔴 … quy công cho NGƯỜI KHÁC người dạy thay", quyNhamNguoi.length);
+    const khongAi = buoiCoDayThay.filter(
+      (b) => (b.actualTeacherId ?? b.class?.teacherId ?? null) === null,
+    );
+    dong("🔴 … không quy được cho ai (rơi khỏi báo cáo)", khongAi.length);
+    // Chỗ (3): người dạy thay có nằm trong assignedClassIds của lớp đó không? Xấp xỉ
+    // bằng "dạy thay KHÁC cả GV chính lẫn trợ giảng của lớp" — khi đó buổi ấy không
+    // lọt nhánh nào của `bang-cong`.
+    const ngoaiBangCong = buoiCoDayThay.filter(
+      (b) =>
+        b.substituteTeacherId !== b.class?.teacherId &&
+        b.substituteTeacherId !== b.class?.assistantId &&
+        b.substituteTeacherId !== b.actualTeacherId,
+    );
+    dong(
+      "🔴 … KHÔNG hiện trên bảng công của người dạy thay",
+      ngoaiBangCong.length,
+    );
+    const theoTrangThai = new Map<string, number>();
+    for (const b of buoiCoDayThay)
+      theoTrangThai.set(b.status, (theoTrangThai.get(b.status) ?? 0) + 1);
+    console.log(
+      `  theo trạng thái: ${[...theoTrangThai].map(([k, v]) => `${k}=${v}`).join(" · ")}`,
+    );
+  } else {
+    console.log(
+      "  (0 buổi — luật 1: đường ghi vẫn hở, xem `complete-session.tsx`)",
     );
   }
 

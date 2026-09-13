@@ -246,6 +246,7 @@ test.describe("[#06-DB] hoàn tất buổi + đề xuất sửa giáo án — ow
     ).toBe(true);
 
     const res = await completeSession({
+      nguonChot: "TAY",
       assignMode: "DEFER", // bắt buộc từ 08/09; test này không nói về giao bài
 
       sessionId: s.sessionId,
@@ -274,6 +275,7 @@ test.describe("[#06-DB] hoàn tất buổi + đề xuất sửa giáo án — ow
     });
 
     const warn = await completeSession({
+      nguonChot: "TAY",
       assignMode: "DEFER", // bắt buộc từ 08/09; test này không nói về giao bài
       sessionId: s.sessionId,
       actorId: gv.id,
@@ -284,6 +286,7 @@ test.describe("[#06-DB] hoàn tất buổi + đề xuất sửa giáo án — ow
     expect(warn.needsConfirm).toBe(true);
 
     const done = await completeSession({
+      nguonChot: "TAY",
       assignMode: "DEFER", // bắt buộc từ 08/09; test này không nói về giao bài
 
       sessionId: s.sessionId,
