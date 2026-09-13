@@ -17,13 +17,65 @@ export function monthKeyVN(date: Date): string {
 // TÀI CHÍNH — Payment (đã xác nhận / chờ / hoàn) + công nợ theo Enrollment.
 // =============================================================================
 
-/** Khoản thanh toán phẳng (đã query). `accountantStatus` = PaymentAccountantStatus. */
+/**
+ * Khoản thanh toán phẳng (đã query). `accountantStatus` = PaymentAccountantStatus.
+ *
+ * ⚠️ `id` + `adjustmentOfId` là BẮT BUỘC từ 13/09/2026 (R-13), cố ý không optional để
+ * trình biên dịch ÉP mọi chỗ gọi phải select thêm. Thiếu chúng thì không thể biết một
+ * khoản CONFIRMED đã bị dòng ĐIỀU CHỈNH thay hay chưa, và bản gốc sẽ được đếm bằng
+ * SỐ CŨ mãi mãi.
+ */
 export type PaymentRecord = {
+  id: string;
   centerId: string | null;
   amount: number;
   accountantStatus: string;
   paidDate: Date;
+  /** Trỏ tới khoản GỐC khi dòng này là bản ĐIỀU CHỈNH hoặc HOÀN tiền. */
+  adjustmentOfId: string | null;
 };
+
+// ─── R-13 (13/09/2026) — LUẬT "ĐÃ THU" DÙNG CHUNG ──────────────────────────────
+//
+// Đo mã thật: repo CỐ Ý không sửa bản gốc khi điều chỉnh / hoàn tiền — nó tạo DÒNG MỚI:
+//  · `refundPayment` → `amount: -refundAbs`, `accountantStatus: "REFUNDED"`, `adjustmentOfId`
+//  · `adjustPayment` → `amount` ĐÚNG, `accountantStatus: "ADJUSTED"`, `adjustmentOfId`
+// Bản gốc trong CẢ HAI ca đều GIỮ NGUYÊN `CONFIRMED`.
+//
+// Trước bản vá, `summarizeFinance` chỉ cộng `CONFIRMED` và `PENDING`, còn `REFUNDED` đếm
+// riêng (cộng dồn số ÂM) và `ADJUSTED` bị bỏ qua HẲN. Ba hệ quả:
+//  (1) ô "Đã thu" KHÔNG BAO GIỜ GIẢM dù hoàn bao nhiêu lần;
+//  (2) ô "Đã hoàn" hiện số âm, và màn `/bao-cao/trung-tam` gác `refundedAmount > 0` nên
+//      CẢNH BÁO KHÔNG BAO GIỜ BẬT;
+//  (3) gõ sai 100tr rồi điều chỉnh về 10tr thì báo cáo vẫn đọc 100tr.
+
+/** Id các khoản GỐC đã bị một dòng ĐIỀU CHỈNH thay thế. */
+function idBiThayThe(payments: PaymentRecord[]): Set<string> {
+  const s = new Set<string>();
+  for (const p of payments) {
+    if (p.accountantStatus === "ADJUSTED" && p.adjustmentOfId) s.add(p.adjustmentOfId);
+  }
+  return s;
+}
+
+/**
+ * Khoản này góp bao nhiêu vào "đã thu" — MỘT luật cho cả bảng tổng và bảng theo cơ sở,
+ * để hai bên không bao giờ lệch (`[R13-03]` khoá bất biến này).
+ *
+ * `REFUNDED` có `amount` ÂM sẵn nên CỘNG là TRỪ — không đảo dấu ở đây.
+ */
+function gopVaoDaThu(p: PaymentRecord, biThay: Set<string>): number {
+  switch (p.accountantStatus) {
+    case "CONFIRMED":
+      return biThay.has(p.id) ? 0 : p.amount;
+    case "ADJUSTED":
+      return p.amount;
+    case "REFUNDED":
+      return p.amount;
+    default:
+      return 0; // PENDING đếm riêng; REJECTED không đếm vào đâu cả
+  }
+}
 
 /** Lượt ghi danh phẳng — centerId resolve từ Class ở page (Enrollment không có centerId). */
 export type EnrollmentRecord = {
@@ -59,19 +111,19 @@ export function summarizeFinance(
   payments: PaymentRecord[],
   enrollments: Pick<EnrollmentRecord, "finalPrice" | "tuition">[],
 ): FinanceSummary {
+  const biThay = idBiThayThe(payments);
   let confirmedRevenue = 0;
   let pendingRevenue = 0;
   let refundedAmount = 0;
   let confirmedCount = 0;
   for (const p of payments) {
-    if (p.accountantStatus === "CONFIRMED") {
-      confirmedRevenue += p.amount;
-      confirmedCount += 1;
-    } else if (p.accountantStatus === "PENDING") {
-      pendingRevenue += p.amount;
-    } else if (p.accountantStatus === "REFUNDED") {
-      refundedAmount += p.amount;
-    }
+    confirmedRevenue += gopVaoDaThu(p, biThay);
+    if (p.accountantStatus === "PENDING") pendingRevenue += p.amount;
+    // "Đã hoàn" là ĐỘ LỚN, không phải số âm: nhãn trên màn đọc là "đã hoàn X", và cảnh
+    // báo ở `/bao-cao/trung-tam` gác `> 0` nên trả số âm là cảnh báo chết vĩnh viễn.
+    if (p.accountantStatus === "REFUNDED") refundedAmount += Math.abs(p.amount);
+    if (p.accountantStatus === "CONFIRMED" && !biThay.has(p.id)) confirmedCount += 1;
+    if (p.accountantStatus === "ADJUSTED") confirmedCount += 1;
   }
   const totalReceivable = enrollments.reduce((s, e) => s + receivableOf(e), 0);
   const debt = Math.max(0, totalReceivable - confirmedRevenue);
@@ -125,10 +177,12 @@ export function revenueByCenter(
     }
     return e;
   };
+  const biThay = idBiThayThe(payments);
   for (const p of payments) {
     const e = get(p.centerId);
-    if (p.accountantStatus === "CONFIRMED") e.confirmed += p.amount;
-    else if (p.accountantStatus === "PENDING") e.pending += p.amount;
+    // CÙNG luật với `summarizeFinance` — dùng chung `gopVaoDaThu`, không viết lại.
+    e.confirmed += gopVaoDaThu(p, biThay);
+    if (p.accountantStatus === "PENDING") e.pending += p.amount;
   }
   for (const en of enrollments) {
     get(en.centerId).receivable += receivableOf(en);
