@@ -3,9 +3,9 @@
 # ⚠️ TÊN ĐẶT ĐỂ KHÔNG BẤM NHẦM. Hai nút chạm PROD của module này dùng chung tiền tố và khác nhau
 # đúng MỘT từ viết hoa, để nằm cạnh nhau trong danh sách mà không lẫn được:
 #     Chấm công · PROD · ĐO  (chỉ đọc — không ghi gì)   ← cham-cong-prod-do-chi-doc.yml
-#     Chấm công · PROD · GHI (seed danh mục nền)        ← file này
+#     Chấm công · PROD · GHI (danh mục nền · vá dòng)   ← file này
 #
-# ── HAI VIỆC, CHỌN BẰNG INPUT `viec` (cập nhật 09/09/2026) ─────────────────────────────
+# ── BỐN VIỆC, CHỌN BẰNG INPUT `viec` (cập nhật 13/09/2026) ─────────────────────────────
 #
 #   · `seed-nen`          — seed 5 nhóm danh mục nền (mô tả bên dưới). Chỉ TẠO dòng còn thiếu.
 #   · `nhap-danh-muc-nen` — NHẬP NỐT chiều seed → prod: tạo dòng thiếu VÀ vá những TRƯỜNG
@@ -13,6 +13,10 @@
 #   · `backfill-dong-buoi-thoa` — ĐÓNG buổi cũ đã thoả cổng tự đóng mà còn kẹt
 #                           (`scripts/backfill-dong-buoi-thoa.ts`). KHÔNG phát
 #                           `session.taught` ⇒ 0 bài tập hồi tố, 0 tin nhắn phụ huynh.
+#   · `tinh-lai-mot-ngay`  — TÍNH LẠI đúng MỘT (người × ngày), theo hai ô `user_id` + `ngay`
+#                           (`scripts/tinh-lai-mot-ngay.ts --apply`). Đây là việc DUY NHẤT ở
+#                           file này chạm bảng SỐ LIỆU (`StaffAttendanceDay`) thay vì danh mục.
+#                           Nó KHÔNG có chế độ chạy cả dải — cố ý, xem mục dưới.
 #
 #   Vì sao cần việc thứ hai: đo prod 09/09 cho thấy prod CHƯA TỪNG được seed — 31/31 dòng đang
 #   có đều do gõ tay qua màn (AuditLog CREATE, 08/09). `seed-nen` bỏ qua mọi dòng đã tồn tại nên
@@ -50,7 +54,7 @@
 # ⚠️ Trước khi bấm: (1) mọi migration của module đã lên prod qua deploy.yml — tính đến 07/09 là
 # `20260906090000_cham_cong_v3_l1` … `20260907050000_snapshot_si_so_buoi`; (2) đã bấm
 # seed-prod-roles.yml (5 key hr_attendance:* mới + adjust hạ CENTER).
-name: Chấm công · PROD · GHI (seed danh mục nền)
+name: Chấm công · PROD · GHI (danh mục nền · vá dòng)
 on:
   workflow_dispatch:
     inputs:
@@ -63,6 +67,16 @@ on:
           - seed-nen
           - nhap-danh-muc-nen
           - backfill-dong-buoi-thoa
+          - tinh-lai-mot-ngay
+      # Hai ô dưới CHỈ dùng cho `tinh-lai-mot-ngay`. Để trống cho mọi việc khác.
+      user_id:
+        description: "(chỉ cho tinh-lai-mot-ngay) userId"
+        required: false
+        default: ""
+      ngay:
+        description: "(chỉ cho tinh-lai-mot-ngay) ngày YYYY-MM-DD"
+        required: false
+        default: ""
       force:
         description: "Đè lại tên/giờ 21 mã ca theo danh mục trong code (mất chỉnh sửa tay trên màn Danh mục mã ca)"
         required: false
@@ -77,7 +91,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   seed:
-    name: Seed 5 danh mục nền vào Supabase prod (GHI THẬT)
+    name: Ghi vào Supabase prod (GHI THẬT — phạm vi theo `viec`)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -142,3 +156,33 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
           DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+
+      # TÍNH LẠI MỘT DÒNG — bug 13/09: `recompute` từng lấy NƠI QUÉT làm nơi chịu công cho
+      # ngày KHÔNG có ca xếp. Mã đã vá (PR #243) nhưng dòng ĐÃ GHI chỉ đổi khi tính lại.
+      #
+      # Vì sao chỉ MỘT dòng, không có chế độ chạy cả dải:
+      # phép đo prod 13/09 (`viec = noi-chiu-cong-lech`) ra ĐÚNG 1 dòng lệch trên 525 dòng đã
+      # đọc — 1 ở nhóm KHÔNG CÓ CA, 0 thuộc kỳ đã chốt, 0 dòng `CenterSetting` đè khoá
+      # `shift.*`. Việc cần làm nhỏ đúng bằng một dòng, nên nút cũng chỉ to bằng một dòng.
+      # Cần chạy dải thì đó là việc KHÁC, có phép đo khác, và phải báo kế toán trước.
+      #
+      # ⚠️ BẤM CHẠY THỬ TRƯỚC: workflow ĐO → `viec = tinh-lai-mot-ngay-chay-thu`, cùng hai ô
+      #    `user_id` + `ngay`. Nó in bảng TRƯỚC (centerId · orgUnitId · hai cột công) bằng user
+      #    CHỈ-ĐỌC. Đối chiếu bảng đó rồi mới bấm nút này.
+      #
+      # Cổng KHÔNG nằm ở đây mà nằm trong `recomputeAttendanceDay`: kỳ `LOCKED` ⇒ hàm trả
+      # `skipped: LOCKED` và không ghi gì. Đã cấy thử trên DB local 13/09 — đặt `status=LOCKED`
+      # thì lượt `--apply` in "BỎ QUA (LOCKED)" và "KHÔNG cột nào đổi".
+      - name: "Tính lại MỘT ngày công (prod) — GHI THẬT"
+        if: inputs.viec == 'tinh-lai-mot-ngay'
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+          U: ${{ inputs.user_id }}
+          NGAY: ${{ inputs.ngay }}
+        run: |
+          if [ -z "$U" ] || [ -z "$NGAY" ]; then
+            echo "::error::Việc này cần CẢ HAI ô user_id và ngay. Bỏ trống thì không biết ghi vào dòng nào — dừng."
+            exit 1
+          fi
+          pnpm exec tsx scripts/tinh-lai-mot-ngay.ts --user="$U" --ngay="$NGAY" --apply
