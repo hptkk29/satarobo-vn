@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
-import { Menu, X, Phone, ChevronRight, ArrowRight } from "lucide-react";
+import { Menu, X, Phone, ChevronRight, ArrowRight, LogIn } from "lucide-react";
 import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
 
 // F-UI-4 — Right-slide drawer cho mobile. Replace mobile half của
@@ -211,6 +211,22 @@ export function MobileNavDrawer() {
                   Đặt buổi học thử
                   <ArrowRight className="h-4 w-4" />
                 </Link>
+
+                {/* ĐĂNG NHẬP — trước đây CHỈ có ở `components/public/header.tsx`, mà khối đó
+                    mang `hidden lg:flex` ⇒ trên điện thoại KHÔNG có đường nào vào `/login` từ
+                    site public. Drawer này là nửa mobile của chính cái header đó, nên mọi hành
+                    động CHÍNH của header phải có mặt ở đây — có ca test canh đúng điều đó.
+                    Tím violet-500 giữ đúng bản desktop: đăng nhập là hành động THỨ CẤP, không
+                    được cạnh tranh với CTA cam ở trên. */}
+                <Link
+                  href="/login"
+                  onClick={() => setIsOpen(false)}
+                  className="flex w-full items-center justify-center gap-2 rounded-full bg-violet-500 py-3 font-semibold text-white transition-colors hover:bg-violet-600"
+                >
+                  <LogIn className="h-4 w-4" />
+                  Đăng nhập
+                </Link>
+
                 {SATA_ROBO_CONTACT_CENTERS.map((c) => (
                   <a
                     key={c.code}
