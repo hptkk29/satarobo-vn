@@ -428,6 +428,38 @@ chính bộ test. Một test không bao giờ đỏ được là một cổng lu
 
 ---
 
+### Luật 8 ở tầng sâu hơn — lượt cấy KHÔNG ĐỎ thì nghi CA TEST trước khi nghi phép cấy
+
+> **Phép cấy bắt được lỗi trong chính ca test.**
+> Lượt cấy không đỏ thì nghi ca test trước khi nghi phép cấy.
+
+Luật 8 nói: test canh lỗi chỉ được tin sau khi cấy lại lỗi và thấy nó ĐỎ. Câu hỏi tiếp theo
+— thứ mà bản gốc của luật 8 chưa trả lời — là **khi lượt cấy ra XANH thì đổ cho ai**.
+
+Phản xạ tự nhiên là nghi phép cấy: "chắc mình sửa nhầm dòng", "chắc chuỗi thay thế không
+khớp". Phản xạ đó **sai thứ tự**. Ba khả năng, xếp theo xác suất đo được:
+
+| # | khả năng | dấu hiệu |
+|---|---|---|
+| 1 | **ca test không chạm tới nhánh vừa cấy** | phép cấy khớp đúng 1 lần, mã đã đổi thật, mà vẫn xanh |
+| 2 | phép cấy khớp 0 lần (hoặc nhiều lần) | đếm số lần khớp trước khi thay — nếu script không đếm thì nó đang đoán |
+| 3 | ca test chạm tới nhưng khẳng định quá lỏng | cấy đổi giá trị mà khẳng định vẫn qua |
+
+**Sự cố 13/09/2026 — mục 6, chế độ XEM TRƯỚC.** Cấy bốn lời hứa của chế độ xem trước, lượt
+thứ hai (*"xem trước VẪN huỷ ô cũ"* — bỏ chặn `updateMany ... CANCELLED`) ra **XANH**. Phép
+cấy đúng: khớp 1 lần, file đã đổi. Lỗi nằm ở **ca test**: nó chỉ dựng một ô ca ngày QUÁ KHỨ,
+nên planner trả `SKIP_QUA_KHU` và nhánh `REPLACE` — nơi chứa đúng câu `updateMany` vừa cấy —
+**chưa từng chạy một lần nào**. Thêm một ô ngày TƯƠNG LAI vào fixture: cả 4 lượt cấy đỏ.
+
+Nói cách khác: **lượt cấy xanh là một phép đo về ĐỘ PHỦ của ca test**, không phải một trục
+trặc kỹ thuật của script cấy. Nó đang nói "nhánh này không có ai canh" — và đó là tin đáng
+giá hơn cả lượt cấy đỏ, vì lượt đỏ chỉ xác nhận thứ ta đã tin.
+
+**Việc phải làm khi gặp:** sửa **fixture** cho tới khi nhánh ấy chạy, rồi cấy lại. Đừng sửa
+phép cấy, và tuyệt đối đừng kết luận "chỗ này chắc ổn".
+
+---
+
 ### Luật 8 áp cho một CON SỐ, không chỉ cho một ca test
 
 > **Một cột phân loại cũng phải được cấy thử.** Trước khi tin nó, hỏi đúng một câu:

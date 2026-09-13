@@ -47,9 +47,19 @@ on:
           - cong-day-thuc-te
           - backfill-buoi-chay-thu
           - noi-chiu-cong-lech
+          - tinh-lai-mot-ngay-chay-thu
           - buoi-ket-theo-lop
           - noi-quet
           - tat-ca
+      # Hai ô dưới CHỈ dùng cho việc `tinh-lai-mot-ngay-chay-thu`. Để trống cho mọi việc khác.
+      user_id:
+        description: "(chỉ cho tính lại một ngày) userId"
+        required: false
+        default: ""
+      ngay:
+        description: "(chỉ cho tính lại một ngày) ngày YYYY-MM-DD"
+        required: false
+        default: ""
 concurrency:
   group: cham-cong-prod-do-chi-doc
   cancel-in-progress: false
@@ -237,6 +247,25 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
           DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+
+      # CHẠY THỬ của nút tính lại MỘT dòng — cùng khuôn `nhap-danh-muc-chay-thu` và
+      # `backfill-buoi-chay-thu`: chạy thử ở đây bằng user CHỈ-ĐỌC, ghi thật ở workflow GHI.
+      #
+      # Script KHÔNG được truyền `--apply` ở bước này, nên kể cả secret bị trỏ nhầm sang chuỗi
+      # đầy quyền thì lượt này vẫn không ghi — cổng là THAM SỐ VẮNG MẶT, không phải lời hứa.
+      - name: "Tính lại một ngày — CHẠY THỬ (chỉ đọc)"
+        if: ${{ !cancelled() && inputs.viec == 'tinh-lai-mot-ngay-chay-thu' }}
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          U: ${{ inputs.user_id }}
+          NGAY: ${{ inputs.ngay }}
+        run: |
+          if [ -z "$U" ] || [ -z "$NGAY" ]; then
+            echo "::error::Việc này cần CẢ HAI ô user_id và ngay. Bỏ trống thì không có dòng nào để đo."
+            exit 1
+          fi
+          pnpm exec tsx scripts/tinh-lai-mot-ngay.ts --user="$U" --ngay="$NGAY"
 
       - name: Nhắc lại
         if: ${{ !cancelled() }}

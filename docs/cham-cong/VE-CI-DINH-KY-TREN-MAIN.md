@@ -139,6 +139,64 @@ chỉ sau khi lượt đo tay đầu tiên cho biết ngưỡng bình thường 
 
 ---
 
+## 🔵 Đối chiếu với PR #247 (`bom-hen-gio.yml`) — ĐÃ ĐỌC 13/09, CHỜ CHỦ DỰ ÁN TRẢ LỜI
+
+> PR #247 (`90d9aa65`, đã trên `main`) dựng một lưới chạy theo lịch **trước** vé này.
+> Chủ dự án yêu cầu đọc nó rồi báo: **bù nhau hay trùng.**
+> **Kết luận: BÙ NHAU** — chúng trả lời hai câu hỏi khác nhau. Phần trùng là **khuôn báo issue**,
+> và đó là thứ vé này nên DÙNG LẠI chứ không dựng bản thứ hai.
+> ⚠️ Chưa dựng gì thêm. Chờ trả lời.
+
+### Hai câu hỏi khác nhau
+
+| | **#247 — Bom hẹn giờ** | **vé này — CI định kỳ** |
+|---|---|---|
+| hỏi gì | *ca nào SẼ đỏ ở tương lai?* | *`main` có đang đỏ NGAY BÂY GIỜ không?* |
+| đồng hồ | **đẩy tới** +90 và +400 ngày | **giờ thật** |
+| chạy bộ nào | chỉ Vitest (`vitest.bom.config.ts`) | cả **5 job đang required**, gồm Quality (build) + R7 1/2 + 2/2 |
+| nhịp | hằng **tuần** (CN 02:00 VN) | hằng **ngày** (01:00 VN) |
+| bắt được | **chỉ** họ lỗi phụ thuộc đồng hồ | thêm: API ngoài đổi hành vi · chứng chỉ hết hạn · gói giải ra khác · dữ liệu đổi dưới chân một ca |
+| nhãn issue | `bom-hen-gio`, **một issue cho mỗi CA** (khoá `<file> > <tên ca>`) | `ci-dinh-ky`, **một issue MỐC** duy nhất |
+
+Chính vé này đã viết sẵn vế ấy trước khi đọc #247: *"Lớp lỗi đi đúng đường ấy, **không chỉ mỗi
+đồng hồ** (luật 19 bịt được vế đó)"*. #247 **là** vế luật 19. Bốn gạch đầu dòng còn lại vẫn chưa
+ai canh.
+
+### Phần TRÙNG — và nó là tin tốt
+
+Cả hai đều cần *"chạy theo lịch → mở / cập nhật GitHub Issue"*. #247 **đã làm xong khuôn đó**:
+`scripts/bao-bom-hen-gio.mjs` (dedupe theo khoá, comment vào issue cũ thay vì mở cái mới, có cờ
+`--thu` để chạy thử không rải issue thật). Vé này **dùng lại khuôn ấy**, đừng dựng bản thứ hai —
+hai khuôn báo issue là hai chỗ để lệch nhau.
+
+⇒ Phần 2 của vé rút ngắn đáng kể. Ước lượng 2–3 giờ nên đo lại sau khi chủ dự án chốt.
+
+### 🔴 Thứ #247 KHÔNG có — và đúng là điều chủ dự án nhấn mạnh nhất
+
+**DẤU NHỊP.** Nguyên văn trong `scripts/bao-bom-hen-gio.mjs`:
+
+> *"Không có ca đỏ ⇒ không làm gì, thoát 0."*
+
+Nghĩa là **lượt XANH không để lại dấu vết nào ở đâu cả**. Nếu GitHub tắt scheduled workflow sau
+60 ngày im, hoặc file rơi khỏi nhánh mặc định, hoặc cron đơn giản không chạy — #247 **im lặng y
+hệt lúc nó khoẻ**. Đây đúng là thứ chủ dự án đặt thành điều kiện bắt buộc:
+
+> *"Im lặng vì ổn và im lặng vì chết trông giống hệt nhau."*
+
+Ba thứ nữa của vé này mà #247 không có:
+
+| | |
+|---|---|
+| tự **đóng** issue khi xanh lại | không có — issue `bom-hen-gio` mở ra thì nằm đó |
+| chú thích *"GitHub tự tắt scheduled workflow sau 60 ngày"* | không có trong header #247 |
+| ca cấy **cho KÊNH BÁO** (chủ dự án nhận được thông báo THẬT) | #247 có `--thu` để thử script, nhưng đó là thử **script**, không phải thử **kênh tới người** |
+
+⇒ Dù chủ dự án quyết **không** làm vé này, **dấu nhịp vẫn nên gắn vào #247** — nó là một dòng
+cập nhật mỗi lượt chạy, rẻ hơn hẳn phần còn lại, và không có nó thì #247 cũng nằm trong đúng cái
+bẫy mà nó sinh ra để chống.
+
+---
+
 ## Liên quan
 
 - `docs/luat-doc-so-va-ket-luan.md` — **luật 19** (test không đọc đồng hồ thật), **luật 10**

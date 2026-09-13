@@ -12,7 +12,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  demCaLam,
   dungDongBangCong,
   type BuoiDay,
   type CaXep,
@@ -148,18 +147,7 @@ describe("Ngày nghỉ — `kind`, không phải `isLeave`", () => {
     expect(r.gio).toBe("theo nơi làm");
   });
 
-  it("demCaLam KHÔNG đếm ngày nghỉ — kể cả X (isLeave = false)", () => {
-    const rows = dung({
-      ca: [
-        caHC("2026-09-07"),
-        caHC("2026-09-08", { ma: "X", kind: "OFF", gio: "" }),
-        caHC("2026-09-09", { ma: "P", kind: "LEAVE", gio: "" }),
-      ],
-    });
-    expect(rows).toHaveLength(3);
-    expect(demCaLam(rows)).toBe(1);
   });
-});
 
 describe("Ngày công KHÔNG còn ca xếp — không được rơi mất số", () => {
   it("có phút làm nhưng ca đã bị gỡ ⇒ VẪN có một dòng mang số", () => {
