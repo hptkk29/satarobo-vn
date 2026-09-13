@@ -1010,14 +1010,19 @@ export async function sendManualOrderEmailAction(input: {
   return { ok: true as const, logId: result.logId };
 }
 
-// ─── Commit 4 — thanh toán 2 đợt ─────────────────────────────────────
+// ─── THANH TOÁN LINH HOẠT — kế hoạch n đợt ───────────────────────────
+//
+// Chủ dự án chốt đổi "thanh toán 2 đợt" thành đóng theo 1/2/3/4 học phần. Luật chia tiền,
+// hạn từng đợt và phép kiểm nằm ở `lib/payments/ke-hoach-dot.ts` (thuần, có test) —
+// action này chỉ gác quyền/scope rồi chuyển tiếp.
 export async function recordOrderInstallmentsAction(input: {
   orderId: string;
-  dot1Amount: number;
-  dot2Amount: number;
-  dot2DueDate: string | null;
-  // OD1 — số ngày nhắc trước hạn đợt 2; null → cron dùng SystemSetting default 14.
-  reminderDays?: number | null;
+  dots: Array<{
+    amount: number;
+    daThu: boolean;
+    dueDate: string | null;
+    reminderDays?: number | null;
+  }>;
 }): Promise<{ ok: boolean; error?: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
@@ -1033,14 +1038,22 @@ export async function recordOrderInstallmentsAction(input: {
     return { ok: false, error: "Không tìm thấy đơn hàng" };
   }
 
+  // Ngày từ client là chuỗi — quy về Date ở BIÊN, để phần trong chỉ có một kiểu.
+  // Ngày hỏng (`Invalid Date`) quy về null rồi để `kiemKeHoachDot` từ chối với câu nói
+  // được: cho `Invalid Date` đi tiếp là ghi `dueDate` rác vào DB và cron im lặng bỏ qua.
   const res = await recordInstallmentPlan({
     orderId: input.orderId,
-    dot1Amount: Math.round(input.dot1Amount),
-    dot2Amount: Math.round(input.dot2Amount),
-    dot2DueDate: input.dot2DueDate ? new Date(input.dot2DueDate) : null,
+    dots: input.dots.map((d) => {
+      const ngay = d.dueDate ? new Date(d.dueDate) : null;
+      return {
+        amount: Math.round(d.amount),
+        daThu: d.daThu === true,
+        dueDate: ngay && !Number.isNaN(ngay.getTime()) ? ngay : null,
+        reminderDays:
+          d.reminderDays == null ? null : Math.max(0, Math.round(d.reminderDays)),
+      };
+    }),
     actorId: session.user.id ?? null,
-    reminderDays:
-      input.reminderDays == null ? null : Math.max(0, Math.round(input.reminderDays)),
   });
   if (res.ok) {
     revalidatePath(`/orders/${input.orderId}`);

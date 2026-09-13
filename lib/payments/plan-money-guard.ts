@@ -12,8 +12,17 @@ export type PlanMoneyState = {
   recordedPaid: number;
   /** Σ `PaymentAllocation` của đơn (mọi phiếu). */
   allocated: number;
-  /** Số tiền đợt 1 mà kế hoạch sắp lưu nhận là "đã thu". */
-  dot1Amount: number;
+  /**
+   * Σ số tiền của MỌI đợt mà kế hoạch sắp lưu nhận là "đã thu".
+   *
+   * ⚠️ ĐỔI TÊN 14/09/2026 (`dot1Amount` → `tienCacDotDaThu`) khi kế hoạch chuyển từ 2 đợt
+   * sang n đợt. Không phải đổi tên cho đẹp: với n đợt, truyền `dots[0].amount` (cách đọc
+   * tự nhiên của tên cũ) là CHẶN OAN mọi kế hoạch có ≥2 đợt đã thu — nhánh (b) đo
+   * `boSot = daThu − max(tienCacDotDaThu, daRot)`, mà `daThu` lúc đó là Σ của mọi đợt.
+   * Còn truyền Σ TẤT CẢ các đợt (kể cả chưa thu) thì `boSot` luôn ≤ 0 và CỔNG TẮT HẲN.
+   * Tên cũ mời cả hai cách đọc sai, nên nó phải đổi.
+   */
+  tienCacDotDaThu: number;
 };
 
 export type PlanMoneyVerdict = {
@@ -61,7 +70,7 @@ export function keHoachLamMatTien(state: PlanMoneyState): PlanMoneyVerdict {
   const fullAlloc = tien(state.fullOrderAllocated);
   const daThu = tien(state.recordedPaid);
   const daRot = tien(state.allocated);
-  const dot1 = tien(state.dot1Amount);
+  const dot1 = tien(state.tienCacDotDaThu);
 
   if (fullAlloc > 0) {
     return {
