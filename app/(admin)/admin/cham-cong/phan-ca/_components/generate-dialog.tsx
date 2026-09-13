@@ -25,6 +25,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 import { BTN_OUTLINE, BTN_PRIMARY, FIELD } from "@/components/admin/cham-cong/classes";
 import { generateMonthAction, xemTruocSinhLuoiAction } from "../../khung-ca/_actions";
 
@@ -219,9 +220,14 @@ export function GenerateDialog({
                   <summary className="cursor-pointer text-sm font-semibold text-foreground">
                     Chi tiết từng ngày ({ketQua.chiTiet.length} ô)
                   </summary>
-                  <div className="mt-2 max-h-64 overflow-auto">
+                  {/* Bọc `PhanTrangBang` — cổng `components/ui/bang-coverage.test.ts` bắt được
+                      bản đầu dùng `<table>` trần, VÀ nó đúng: bảng xem trước có thể vài trăm ô,
+                      bản đầu của tôi cắt còn 300 dòng kèm câu "cắt bớt cho đỡ nặng" — tức bày ra
+                      một NỬA sự thật ngay trong màn sinh ra để nói sự thật. */}
+                  <div className="mt-2">
+                    <PhanTrangBang tenDonVi="ô" khoaGhiNho="gen-chi-tiet" soDongMacDinh={20}>
                     <table className="w-full text-left text-xs">
-                      <thead className="sticky top-0 bg-card">
+                      <thead className="bg-card">
                         <tr className="text-muted-foreground">
                           <th scope="col" className="py-1 pr-2 font-semibold">Ngày</th>
                           <th scope="col" className="py-1 pr-2 font-semibold">Việc</th>
@@ -230,7 +236,7 @@ export function GenerateDialog({
                         </tr>
                       </thead>
                       <tbody>
-                        {ketQua.chiTiet.slice(0, 300).map((c, i) => (
+                        {ketQua.chiTiet.map((c, i) => (
                           <tr key={`${c.userId}-${c.ngay}-${i}`} className="border-t border-border/60">
                             <td className="py-1 pr-2 tabular-nums">{ngayVi(c.ngay)}</td>
                             <td className="py-1 pr-2">{NHAN_VIEC[c.action] ?? c.action}</td>
@@ -240,12 +246,7 @@ export function GenerateDialog({
                         ))}
                       </tbody>
                     </table>
-                    {ketQua.chiTiet.length > 300 && (
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        … còn {ketQua.chiTiet.length - 300} ô nữa — bảy con số ở trên đã tính ĐỦ, chỉ
-                        bảng này cắt bớt cho đỡ nặng.
-                      </p>
-                    )}
+                    </PhanTrangBang>
                   </div>
                 </details>
               )}
