@@ -8,6 +8,7 @@ import { scopedDb } from "@/lib/db-scope";
 import { BACKFILL_PAYMENT_MARKER } from "@/lib/finance/payment-markers";
 import { KHOAN_DA_GHI_NHAN } from "@/lib/finance/ghi-nhan";
 import { canXuLy, conThieu, phanLoaiHocPhi } from "@/lib/finance/thieu-hoc-phi";
+import { chonDonDeGhiThem } from "@/lib/finance/ghi-them-hoc-phi";
 
 import { ThieuHocPhiClient, type DongThieu } from "./_components/thieu-hoc-phi-client";
 
@@ -73,6 +74,8 @@ export default async function Page() {
         where: { deletedAt: null },
         select: {
           id: true,
+          code: true,
+          createdAt: true,
           totalAmount: true,
           payments: {
             where: KHOAN_DA_GHI_NHAN,
@@ -114,11 +117,26 @@ export default async function Page() {
       conThieu: conThieu(input),
       // Tên dòng đơn gợi ý: lấy từ đơn cũ nếu có, để người nhập không phải gõ lại.
       goiYTenKhoa: l.orders[0]?.items[0]?.itemName ?? null,
-      // Đã có khoản nhập liệu ban đầu ⇒ `createBackfillOrderPaymentInTx` sẽ từ chối tạo
-      // lần hai. Nói trước trên màn thay vì để người dùng bấm rồi mới thấy lỗi.
-      daCoKhoanNhapLieu: l.orders.some((o) =>
-        o.payments.some((p) => (p.note ?? "").includes(BACKFILL_PAYMENT_MARKER)),
-      ),
+      // Chế độ ghi cho dòng này. Bản trước chỉ mang cờ `daCoKhoanNhapLieu` rồi KHOÁ nút —
+      // nên một em thiếu 7.000.000đ không có đường nào ghi tiếp. Luật chọn đơn nằm ở
+      // `lib/finance/ghi-them-hoc-phi.ts` (hàm thuần, có test): ghi tiền vào sai đơn là
+      // công nợ hai đơn đều sai mà tổng vẫn đúng, không màn nào lộ ra.
+      ghiThem: (() => {
+        const kq = chonDonDeGhiThem(
+          l.orders.map((o) => ({
+            id: o.id,
+            totalAmount: o.totalAmount,
+            daThu: o.payments.reduce((x, p) => x + p.amount, 0),
+            coKhoanNhapLieu: o.payments.some((p) =>
+              (p.note ?? "").includes(BACKFILL_PAYMENT_MARKER),
+            ),
+            taoLuc: o.createdAt.getTime(),
+          })),
+        );
+        if (kq.cheDo !== "GHI_THEM") return null;
+        const don = l.orders.find((o) => o.id === kq.orderId);
+        return { orderId: kq.orderId, toiDa: kq.toiDa, maDon: don?.code ?? "" };
+      })(),
     });
   }
 

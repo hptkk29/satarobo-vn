@@ -9,7 +9,10 @@ import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
-import { createBackfillOrderPaymentInTx } from "@/lib/crm/backfill-order";
+import {
+  createBackfillOrderPaymentInTx,
+  themKhoanVaoDonBackfillInTx,
+} from "@/lib/crm/backfill-order";
 import { getAuditActor } from "@/lib/audit/log";
 import { computeEnrollmentPrice } from "@/lib/finance/pricing";
 
@@ -35,6 +38,14 @@ import { computeEnrollmentPrice } from "@/lib/finance/pricing";
  */
 const schema = z.object({
   leadId: z.string().min(1),
+  /**
+   * Chế độ GHI THÊM — id đơn ĐÃ CÓ để nhận khoản mới.
+   *
+   * Có `orderId` ⇒ khoản vào đơn đó và MỌI ô giá bị bỏ qua: đơn đã có tiền rót vào thì
+   * `totalAmount` là số đã báo phụ huynh, đổi nó ở một lượt "ghi thêm tiền" là sửa số
+   * phải thu sau lưng khách. Muốn đổi giá thì là lượt điều chỉnh riêng.
+   */
+  orderId: z.string().min(1).nullish(),
   /** Loại đơn — khớp `OrderType` của Prisma. */
   orderType: z.enum(["COURSE", "PACKAGE", "EXAM", "PRODUCT", "COMBO"]).default("COURSE"),
   /** Giá NIÊM YẾT trước giảm. Đây là gốc để suy công nợ. */
@@ -80,6 +91,45 @@ export async function ghiHocPhiBackfillAction(input: unknown) {
   const ngay = new Date(d.paidDate);
   if (Number.isNaN(ngay.getTime())) {
     return { ok: false as const, error: "Ngày đóng không hợp lệ" };
+  }
+
+  // ── CHẾ ĐỘ GHI THÊM ──────────────────────────────────────────────────────────
+  // "Học phí thiếu sao lại khoá luôn?" — đúng, thiếu thì phải ghi tiếp. Đường này ghi
+  // khoản mới vào ĐƠN CŨ; trần và mọi phép chặn nằm trong
+  // `themKhoanVaoDonBackfillInTx` (một nhà, không chép luật ra action).
+  if (d.orderId) {
+    const don = await sdb.order.findUnique({
+      where: { id: d.orderId },
+      select: { id: true, leadId: true, centerId: true, deletedAt: true },
+    });
+    if (!don || don.deletedAt || !passesScope("Order", don, actor)) {
+      return { ok: false as const, error: "Không tìm thấy đơn trong phạm vi của bạn" };
+    }
+    // Đơn phải THUỘC lead đang mở. Thiếu vế này là gửi `orderId` của lead khác lên và
+    // ghi tiền vào đơn của người khác — `passesScope` không chặn được vì hai lead có
+    // thể cùng một cơ sở.
+    if (don.leadId !== lead.id) {
+      return { ok: false as const, error: "Đơn này không thuộc phụ huynh đang chọn" };
+    }
+
+    const auditActorGhiThem = getAuditActor(session);
+    const kq = await sdb.$transaction((txRaw) =>
+      themKhoanVaoDonBackfillInTx(txRaw as unknown as Prisma.TransactionClient, {
+        actor: { id: auditActorGhiThem.actorId, name: auditActorGhiThem.actorName },
+        orderId: don.id,
+        amount: d.amount,
+        paidDate: ngay,
+        note: d.note?.trim() || null,
+      }),
+    );
+    if (!kq.ok) return { ok: false as const, error: kq.error };
+
+    revalidatePath("/thieu-hoc-phi");
+    revalidatePath("/payments");
+    revalidatePath("/cong-no");
+    revalidatePath(`/orders/${don.id}`);
+    revalidatePath(`/leads/${d.leadId}`);
+    return { ok: true as const, paymentId: kq.paymentId, ghiThem: true as const };
   }
 
   // Giảm giá tính bằng ĐÚNG `computeEnrollmentPrice` mà toàn hệ dùng — không tự nhân %

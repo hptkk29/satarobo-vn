@@ -8,6 +8,7 @@ import type { Prisma } from "@prisma/client";
 import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
 import { materializeInstallmentRequests } from "@/lib/payments/payment-request";
 import { generateOrderCode } from "@/lib/orders/code";
+import { KHOAN_DA_GHI_NHAN } from "@/lib/finance/ghi-nhan";
 
 type Tx = Prisma.TransactionClient;
 
@@ -178,4 +179,113 @@ export async function createBackfillOrderPaymentInTx(
   });
 
   return { created: true, paymentId: payment.id };
+}
+
+/**
+ * GHI THÊM một khoản vào đơn nhập liệu ĐÃ CÓ — "thiếu thì ghi tiếp cho đến khi đủ".
+ *
+ * Khác `createBackfillOrderPaymentInTx` ở đúng một điểm nhưng là điểm quan trọng: hàm
+ * kia idempotent theo LEAD và cố ý từ chối lượt hai (chống tạo đơn thứ hai); hàm này là
+ * đường cho lượt hai — khoản mới vào ĐƠN CŨ.
+ *
+ * ⚠️ KHÔNG sửa `Order.totalAmount`/`discountAmount`. Đơn đã có tiền rót vào thì số phải
+ * thu là con số đã báo phụ huynh và đã in lên mã QR; sửa sau lưng là tiền về một đằng sổ
+ * ghi một nẻo (cùng lý lẽ với luật "không sửa amountDue của phiếu đã có allocation").
+ * Muốn đổi giá thì phải là một lượt điều chỉnh có chủ đích, không phải hệ quả của việc
+ * ghi thêm tiền.
+ *
+ * ⚠️ KHÔNG đụng `Order.status` — máy trạng thái đơn có 6 đường ghi, đây không phải một
+ * trong số đó.
+ *
+ * Trần: `totalAmount − Σ đã ghi nhận`. Ghi vượt bị TỪ CHỐI thay vì cho qua rồi để công
+ * nợ âm — số âm trong sổ tiền không tự lộ ra ở màn nào.
+ */
+export async function themKhoanVaoDonBackfillInTx(
+  tx: Tx,
+  params: {
+    actor: AuditActor;
+    orderId: string;
+    amount: number;
+    paidDate: Date;
+    note?: string | null;
+  },
+): Promise<{ ok: true; paymentId: string } | { ok: false; error: string }> {
+  const { actor, orderId, amount: amountRaw, paidDate, note } = params;
+
+  const amount = Math.round(amountRaw);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { ok: false, error: "Số tiền phải lớn hơn 0" };
+  }
+
+  const order = await tx.order.findUnique({
+    where: { id: orderId },
+    select: { id: true, code: true, totalAmount: true, centerId: true, deletedAt: true },
+  });
+  if (!order || order.deletedAt) return { ok: false, error: "Không tìm thấy đơn" };
+
+  // Trục B — dùng chung định nghĩa "đã ghi nhận" với mã QR và đối khớp webhook.
+  const daThuAgg = await tx.payment.aggregate({
+    where: { orderId, ...KHOAN_DA_GHI_NHAN },
+    _sum: { amount: true },
+  });
+  const daThu = daThuAgg._sum.amount ?? 0;
+  const conThieu = Math.max(0, order.totalAmount - daThu);
+
+  if (conThieu <= 0) {
+    return { ok: false, error: `Đơn ${order.code} đã thu đủ — không còn khoản nào để ghi` };
+  }
+  if (amount > conThieu) {
+    return {
+      ok: false,
+      error:
+        `Ghi ${amount.toLocaleString("vi-VN")}đ vượt phần còn thiếu của đơn ${order.code} ` +
+        `(${conThieu.toLocaleString("vi-VN")}đ). Nhập tối đa bằng phần còn thiếu.`,
+    };
+  }
+
+  // Ghi danh: lấy theo khoản ĐÃ CÓ của cùng đơn. Khoản mới thuộc cùng ghi danh với
+  // khoản trước — suy lại từ học viên là tự đoán, và đoán sai thì công nợ ở cổng phụ
+  // huynh (đọc qua `Enrollment.payments`) treo sai chỗ.
+  const khoanCu = await tx.payment.findFirst({
+    where: { orderId, deletedAt: null, enrollmentId: { not: null } },
+    select: { enrollmentId: true },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const payment = await tx.payment.create({
+    data: {
+      orderId,
+      enrollmentId: khoanCu?.enrollmentId ?? null,
+      amount,
+      method: "backfill",
+      paidDate,
+      note: `Nhập liệu ban đầu — ghi thêm${note?.trim() ? ` (${note.trim()})` : ""} ${BACKFILL_PAYMENT_MARKER}`,
+      saleStatus: "RECORDED",
+      accountantStatus: "PENDING",
+      recordedById: actor.id,
+      centerId: order.centerId,
+    },
+    select: { id: true },
+  });
+
+  await writeAudit({
+    actor,
+    module: "finance",
+    entityType: "Payment",
+    entityId: payment.id,
+    action: "CREATE",
+    newValues: {
+      amount,
+      saleStatus: "RECORDED",
+      source: "thieu-hoc-phi-ghi-them",
+      orderCode: order.code,
+      daThuTruocLuotNay: daThu,
+      conThieuTruocLuotNay: conThieu,
+      paidDate: paidDate.toISOString(),
+    },
+    orgUnitId: order.centerId,
+    tx,
+  });
+
+  return { ok: true, paymentId: payment.id };
 }

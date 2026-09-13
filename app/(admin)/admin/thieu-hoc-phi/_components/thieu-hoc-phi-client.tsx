@@ -29,7 +29,11 @@ export type DongThieu = {
   tongDaThu: number;
   conThieu: number;
   goiYTenKhoa: string | null;
-  daCoKhoanNhapLieu: boolean;
+  /**
+   * Có đơn ĐÃ CÓ đang còn thiếu ⇒ lượt ghi tới là GHI THÊM vào đơn đó (không tạo đơn
+   * thứ hai). `null` = chưa có đơn nào còn thiếu ⇒ tạo đơn mới.
+   */
+  ghiThem: { orderId: string; toiDa: number; maDon: string } | null;
 };
 
 const vnd = (n: number) => `${n.toLocaleString("vi-VN")}đ`;
@@ -145,18 +149,20 @@ export function ThieuHocPhiClient({
                   </TableCell>
                   {ghiDuoc && (
                     <TableCell className="whitespace-nowrap px-5 py-3.5 text-right">
-                      {r.daCoKhoanNhapLieu ? (
-                        <span className="text-xs text-muted-foreground">Đã có khoản nhập liệu</span>
-                      ) : (
-                        <Button
-                          size="sm"
-                          onClick={() => setDangMo(r)}
-                          className="min-h-9 transition-colors duration-150"
-                        >
-                          <Pencil className="h-3.5 w-3.5" aria-hidden />
-                          Ghi học phí
-                        </Button>
-                      )}
+                      {/* Thiếu thì phải GHI TIẾP — bản trước hiện chữ "Đã có khoản
+                          nhập liệu" và khoá luôn, nên một em thiếu 7.000.000đ không có
+                          đường nào đóng thêm. Nút vẫn mở, chỉ đổi nhãn + nói trần. */}
+                      <Button
+                        size="sm"
+                        variant={r.ghiThem ? "outline" : "default"}
+                        onClick={() => setDangMo(r)}
+                        className="min-h-9 transition-colors duration-150"
+                      >
+                        <Pencil className="h-3.5 w-3.5" aria-hidden />
+                        {r.ghiThem
+                          ? `Ghi thêm · tối đa ${r.ghiThem.toiDa.toLocaleString("vi-VN")}đ`
+                          : "Ghi học phí"}
+                      </Button>
                     </TableCell>
                   )}
                 </TableRow>

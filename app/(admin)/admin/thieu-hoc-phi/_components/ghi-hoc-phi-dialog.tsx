@@ -119,15 +119,24 @@ export function GhiHocPhiDialog({
   }, [listPrice, loaiGiam, mucGiam]);
 
   const thu = soTu(daThu);
-  const conThieu = Math.max(0, gia.finalPrice - thu);
-  const thuQuaNhieu = thu > gia.finalPrice && gia.finalPrice > 0;
-  const canLyDo = loaiGiam !== "NONE" && gia.discountAmount > 0;
+
+  // ── HAI CHẾ ĐỘ ───────────────────────────────────────────────────────────────
+  // GHI THÊM: đơn đã tồn tại và còn thiếu ⇒ chỉ nhận SỐ TIỀN + NGÀY + GHI CHÚ.
+  // Các ô giá bị ẩn hẳn, không phải vì gọn màn mà vì đơn đã có tiền rót vào thì
+  // `totalAmount` là con số đã báo phụ huynh và đã in lên mã QR — đổi nó trong một
+  // lượt "đóng thêm tiền" là sửa số phải thu sau lưng khách.
+  const ghiThem = dong?.ghiThem ?? null;
+  const tran = ghiThem ? ghiThem.toiDa : gia.finalPrice;
+  const conThieu = Math.max(0, tran - thu);
+  const thuQuaNhieu = thu > tran && tran > 0;
+  const canLyDo = !ghiThem && loaiGiam !== "NONE" && gia.discountAmount > 0;
 
   const ghi = () => {
     if (!dong) return;
     startTransition(async () => {
       const res = await ghiHocPhiBackfillAction({
         leadId: dong.leadId,
+        orderId: ghiThem?.orderId ?? null,
         orderType,
         listPrice: soTu(listPrice),
         discountType: loaiGiam === "NONE" ? null : loaiGiam,
@@ -142,9 +151,12 @@ export function GhiHocPhiDialog({
         toast.error(res.error);
         return;
       }
+      // Nhánh GHI THÊM không trả `conThieu` (nó không tính lại giá) — số còn thiếu ở
+      // đó suy từ trần đã biết trên màn.
+      const conLai = res.conThieu ?? conThieu;
       toast.success(
-        res.conThieu > 0
-          ? `Đã ghi ${vnd(thu)} · còn nợ ${vnd(res.conThieu)}`
+        conLai > 0
+          ? `Đã ghi ${vnd(thu)} · còn nợ ${vnd(conLai)}`
           : `Đã ghi ${vnd(thu)} · thu đủ`,
       );
       onXong(dong.leadId);
@@ -156,7 +168,9 @@ export function GhiHocPhiDialog({
     <Dialog open={dong != null} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle className="text-base">Ghi học phí cũ</DialogTitle>
+          <DialogTitle className="text-base">
+            {ghiThem ? "Ghi thêm học phí" : "Ghi học phí cũ"}
+          </DialogTitle>
           <DialogDescription className="text-xs leading-relaxed">
             {dong ? (
               <>
@@ -169,7 +183,24 @@ export function GhiHocPhiDialog({
           </DialogDescription>
         </DialogHeader>
 
+        {/* Chế độ GHI THÊM: nói rõ tiền vào ĐƠN NÀO và trần là bao nhiêu, trước khi
+            người dùng gõ số. */}
+        {ghiThem && (
+          <div className="rounded-xl border border-state-info bg-state-info-soft px-4 py-3">
+            <p className="text-xs font-semibold text-state-info-ink">
+              Ghi thêm vào đơn {ghiThem.maDon || "đã có"} — còn thiếu{" "}
+              {vnd(ghiThem.toiDa)}
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-state-info-ink">
+              Khoản mới vào chính đơn này, không tạo đơn thứ hai. Giá niêm yết và mức giảm
+              của đơn giữ nguyên — đó là số đã báo phụ huynh và đã in lên mã QR.
+            </p>
+          </div>
+        )}
+
         <div className="grid gap-4 sm:grid-cols-2">
+          {!ghiThem && (
+          <>
           <div className="sm:col-span-2">
             <Label htmlFor="loaidon" className="text-xs">
               Loại đơn hàng
@@ -221,6 +252,9 @@ export function GhiHocPhiDialog({
             />
           </div>
 
+          </>
+          )}
+
           <div>
             <Label htmlFor="ngay" className="text-xs">
               Ngày đóng
@@ -234,6 +268,8 @@ export function GhiHocPhiDialog({
             />
           </div>
 
+          {!ghiThem && (
+          <>
           <div>
             <Label htmlFor="loaigiam" className="text-xs">
               Chính sách giảm giá
@@ -287,9 +323,12 @@ export function GhiHocPhiDialog({
             </div>
           )}
 
+          </>
+          )}
+
           <div>
             <Label htmlFor="dathu" className="text-xs">
-              Tiền ĐÃ THU
+              {ghiThem ? "Số tiền đóng thêm" : "Tiền ĐÃ THU"}
             </Label>
             <Input
               id="dathu"
@@ -320,12 +359,12 @@ export function GhiHocPhiDialog({
         <div className="grid gap-3 rounded-xl border border-border bg-muted/40 p-4 sm:grid-cols-3">
           <div className="min-w-0">
             <p className="truncate text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Tổng phải đóng
+              {ghiThem ? "Còn thiếu trước lượt này" : "Tổng phải đóng"}
             </p>
             <p className="mt-1 truncate text-xl font-bold tabular-nums text-foreground">
-              {vnd(gia.finalPrice)}
+              {vnd(tran)}
             </p>
-            {gia.discountAmount > 0 && (
+            {!ghiThem && gia.discountAmount > 0 && (
               <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
                 đã giảm {vnd(gia.discountAmount)}
               </p>
@@ -333,7 +372,7 @@ export function GhiHocPhiDialog({
           </div>
           <div className="min-w-0">
             <p className="truncate text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Đã thu
+              {ghiThem ? "Đóng thêm lượt này" : "Đã thu"}
             </p>
             <p className="mt-1 truncate text-xl font-bold tabular-nums text-state-success-ink">
               {vnd(thu)}
@@ -341,7 +380,7 @@ export function GhiHocPhiDialog({
           </div>
           <div className="min-w-0">
             <p className="truncate text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Còn thiếu
+              {ghiThem ? "Còn thiếu sau lượt này" : "Còn thiếu"}
             </p>
             <p
               className={`mt-1 truncate text-xl font-bold tabular-nums ${
@@ -358,8 +397,9 @@ export function GhiHocPhiDialog({
             role="alert"
             className="rounded-xl border border-state-danger bg-state-danger-soft px-4 py-2.5 text-xs leading-relaxed text-state-danger-ink"
           >
-            Đã thu lớn hơn tổng phải đóng. Kiểm lại giá niêm yết hoặc mức giảm — ghi thế này
-            là tạo ra một khoản thu thừa không có căn cứ.
+            {ghiThem
+              ? `Số đóng thêm vượt phần còn thiếu (${vnd(tran)}). Server cũng từ chối — ghi vượt là tạo công nợ âm, và số âm trong sổ tiền không tự lộ ra ở màn nào.`
+              : "Đã thu lớn hơn tổng phải đóng. Kiểm lại giá niêm yết hoặc mức giảm — ghi thế này là tạo ra một khoản thu thừa không có căn cứ."}
           </p>
         )}
 
@@ -369,18 +409,23 @@ export function GhiHocPhiDialog({
           </Button>
           <Button
             onClick={ghi}
-            disabled={dangGhi || thu <= 0 || thuQuaNhieu || !itemName.trim()}
+            disabled={dangGhi || thu <= 0 || thuQuaNhieu || (!ghiThem && !itemName.trim())}
             className="min-h-11"
           >
             {dangGhi && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
-            <span className="whitespace-nowrap">Tạo đơn + ghi khoản</span>
+            <span className="whitespace-nowrap">
+              {ghiThem ? `Ghi thêm ${vnd(thu)}` : "Tạo đơn + ghi khoản"}
+            </span>
           </Button>
         </DialogFooter>
 
         <p className="text-xs leading-relaxed text-muted-foreground">
-          Tạo đơn hàng đã xác nhận + khoản thu mang dấu nhập liệu ban đầu. Khoản ở trạng thái{" "}
-          <b className="font-semibold text-foreground">chờ kế toán</b> — muốn vào doanh thu thì
-          xác nhận hàng loạt ở màn Thanh toán. Phần còn thiếu ở lại thành công nợ.
+          {ghiThem
+            ? "Khoản mới vào đơn đã có, không tạo đơn thứ hai và không đụng giá của đơn."
+            : "Tạo đơn hàng đã xác nhận + khoản thu mang dấu nhập liệu ban đầu."}{" "}
+          Khoản ở trạng thái <b className="font-semibold text-foreground">chờ kế toán</b> —
+          muốn vào doanh thu thì xác nhận hàng loạt ở màn Thanh toán. Phần còn thiếu ở lại
+          thành công nợ.
         </p>
       </DialogContent>
     </Dialog>
