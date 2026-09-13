@@ -25,6 +25,11 @@ import { SETTING_KEYS, type SettingKey } from "./registry";
 /**
  * Các tab của trang, theo đúng thứ tự hiện ra.
  *
+ * ⚠️ `ten` phải NGẮN — một hoặc hai từ. Đo 13/09: bản đầu đặt nhãn đầy đủ ("Thông báo điện
+ * thoại", "Đăng nhập & mã xác thực"…) thì 11 tab cần ~1553px, tức KHÔNG BAO GIỜ vừa một
+ * hàng kể cả trên màn 1440 — thanh tab cuộn ngang và tab đầu bị cắt cụt giữa chữ. Câu đầy
+ * đủ nằm ở `moTa`, hiện ngay dưới thanh tab khi tab đó đang mở, nên không mất thông tin gì.
+ *
  * Chia theo CÔNG VIỆC của người vận hành, không theo module mã nguồn. Ví dụ mọi thứ liên quan
  * tới tin Zalo gửi phụ huynh nằm chung một tab, dù trong mã chúng thuộc ba nhóm khác nhau
  * (`chat`, `zalo`, `student`) — người đi chỉnh "tin nhắn cho phụ huynh" không việc gì phải
@@ -33,17 +38,17 @@ import { SETTING_KEYS, type SettingKey } from "./registry";
 export const TAB_CAU_HINH = [
   {
     id: "thong-bao-day",
-    ten: "Thông báo điện thoại",
+    ten: "Thông báo đẩy",
     moTa: "Thông báo hiện trên màn hình khoá điện thoại của nhân viên.",
   },
   {
     id: "zalo",
-    ten: "Tin Zalo cho phụ huynh",
+    ten: "Tin Zalo",
     moTa: "Các loại tin nhắn Zalo hệ thống gửi cho phụ huynh. Mỗi tin gửi đi đều tốn phí.",
   },
   {
     id: "dang-nhap",
-    ten: "Đăng nhập & mã xác thực",
+    ten: "Đăng nhập",
     moTa: "Mã xác thực gửi qua Zalo khi đăng nhập hoặc kích hoạt tài khoản.",
   },
   {
@@ -58,17 +63,17 @@ export const TAB_CAU_HINH = [
   },
   {
     id: "cham-cong",
-    ten: "Chấm công & ca làm",
+    ten: "Chấm công",
     moTa: "Quy định chấm công, đi muộn, nghỉ phép và đăng ký ca.",
   },
   {
     id: "khach-hang",
-    ten: "Khách hàng & tư vấn",
+    ten: "Khách hàng",
     moTa: "Chống trùng khách, hoa hồng, và các mốc thời gian bị coi là chậm xử lý.",
   },
   {
     id: "tien",
-    ten: "Tiền & thanh toán",
+    ten: "Thanh toán",
     moTa: "Nhắc công nợ, mã QR chuyển khoản và cách đối khớp tiền về.",
   },
   {
@@ -78,7 +83,7 @@ export const TAB_CAU_HINH = [
   },
   {
     id: "cong-ty",
-    ten: "Thông tin công ty",
+    ten: "Công ty",
     moTa: "Số điện thoại, email và các khối nội dung hiện trên website.",
   },
   {

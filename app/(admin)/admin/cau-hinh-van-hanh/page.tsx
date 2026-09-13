@@ -87,7 +87,15 @@ export default async function OperationalSettingsPage() {
   }
 
   return (
-    <div className="max-w-4xl space-y-5">
+    // CĂN GIỮA + trần theo bậc màn. Bản đầu để `max-w-4xl` không `mx-auto`, và đo thật trên
+    // Chromium cho thấy khối nội dung dính mép trái, bỏ trống 2688px ở 4K và 6528px ở 8K —
+    // trang thành một dải hẹp lệch hẳn về một bên.
+    //
+    // Trần nới theo bậc chứ không thả tự do: một hàng cấu hình kéo dài 3000px thì nhãn nằm
+    // tận mép trái còn ô nhập tận mép phải, mắt phải quét cả màn hình cho MỘT dòng. 1180px ở
+    // laptop, 1360px từ 2K trở lên — đủ để 11 tab nằm gọn một hàng mà vẫn giữ được khoảng
+    // quét mắt hợp lý.
+    <div className="mx-auto w-full max-w-[1180px] space-y-5 2xl:max-w-[1360px]">
       <div>
         <h1 className="text-2xl font-bold text-foreground">Cấu hình vận hành</h1>
         <p className="mt-1 text-sm text-muted-foreground">

@@ -244,7 +244,8 @@ describe("[CFG-T12] ô nhập đúng kiểu, và gửi xuống đúng KIỂU D�
     fireEvent.change(screen.getByLabelText(/Lý do thay đổi: Số điện thoại/), {
       target: { value: "đổi hotline" },
     });
-    fireEvent.click(screen.getAllByRole("button", { name: "Lưu" })[1]!);
+    // Chỉ dòng vừa đổi mới có nút Lưu — nên đây là nút DUY NHẤT trên màn, không phải nút thứ hai.
+    fireEvent.click(screen.getByRole("button", { name: "Lưu" }));
     expect(h.luuSetting.mock.calls[0]![0].value).toEqual([
       { code: "CS1", label: "Cơ sở 1", phone: "0900000000" },
     ]);
@@ -259,7 +260,7 @@ describe("[CFG-T12] ô nhập đúng kiểu, và gửi xuống đúng KIỂU D�
     fireEvent.change(screen.getByLabelText(/Lý do thay đổi: Số điện thoại/), {
       target: { value: "x" },
     });
-    fireEvent.click(screen.getAllByRole("button", { name: "Lưu" })[1]!);
+    fireEvent.click(screen.getByRole("button", { name: "Lưu" }));
     expect(h.luuSetting).not.toHaveBeenCalled();
   });
 
@@ -269,10 +270,24 @@ describe("[CFG-T12] ô nhập đúng kiểu, và gửi xuống đúng KIỂU D�
     expect(screen.getByText("phút")).toBeTruthy();
   });
 
-  it("chưa đổi gì ⇒ nút Lưu khoá", () => {
+  it("chưa đổi gì ⇒ CHƯA có khung lưu nào", () => {
+    // Đổi hợp đồng có chủ đích 13/09: trước đây mỗi dòng mang sẵn một ô "Lý do thay đổi" và
+    // một nút Lưu mờ. Với 86 dòng, đó là 86 hộp chữ không ai điền và 86 lời hứa suông. Nay
+    // khung lưu chỉ hiện ở dòng THẬT SỰ vừa đổi.
     dung();
     moTab("Chấm công & ca làm");
-    expect(screen.getByRole("button", { name: "Lưu" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.queryByRole("button", { name: "Lưu" })).toBeNull();
+    expect(screen.queryByLabelText(/Lý do thay đổi/)).toBeNull();
+  });
+
+  it("đổi một ô ⇒ khung lưu hiện ra ĐÚNG ở dòng đó", () => {
+    // Cặp đôi với ca trên. Không có ca này thì một bản vá "ẩn luôn khung lưu" vẫn xanh, và
+    // người dùng đổi xong không có cách nào lưu.
+    dung();
+    moTab("Chấm công & ca làm");
+    fireEvent.change(screen.getByLabelText(O_DUNG_SAI), { target: { value: "7" } });
+    expect(screen.getByRole("button", { name: "Lưu" })).toBeTruthy();
+    expect(screen.getByLabelText(/Lý do thay đổi: Chấm công lệch/)).toBeTruthy();
   });
 
   it("thiếu lý do ⇒ KHÔNG gọi máy chủ", () => {

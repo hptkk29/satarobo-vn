@@ -45,11 +45,20 @@ export function KhungCauHinh({
 
   return (
     <div className="space-y-4">
-      <ThanhTab tabs={tabs} dangChon={tab.id} onChon={setDangChon} />
+      {/* Dính đỉnh khi cuộn — CHỈ từ `lg` trở lên: tab "Chấm công" có 18 dòng, cuộn tới cuối
+          rồi muốn đổi tab thì không phải kéo ngược lên đầu trang. Dưới `lg` thì thanh tab
+          chiếm 2–3 hàng (và ở điện thoại là ô chọn), dính vào là ăn mất một phần ba màn hình
+          suốt lúc cuộn.
+          ⚠️ Nền ĐẶC, tuyệt đối không `backdrop-blur` — một tổ tiên có `backdrop-filter` trở
+          thành khối chứa cho mọi con `position: fixed`, đúng lỗi đã làm vỡ drawer trang public
+          hôm 13/09. Ở đây có lớp phủ dính bên dưới, không đáng đánh đổi. */}
+      <div className="z-20 -mx-1 bg-muted px-1 pb-1 pt-1 lg:sticky lg:top-0">
+        <ThanhTab tabs={tabs} dangChon={tab.id} onChon={setDangChon} />
+      </div>
 
       {/* Câu mô tả tab đặt NGAY dưới thanh tab, không nhét vào tooltip: người mở một tab lạ
           cần biết mình đang xem gì trước khi đọc 18 dòng tham số. */}
-      <p className="text-sm text-muted-foreground">{tab.moTa}</p>
+      <p className="max-w-[72ch] text-sm text-muted-foreground">{tab.moTa}</p>
 
       <div role="tabpanel" aria-label={tab.ten} className="space-y-4">
         <BangCauHinhTab rows={tab.rows} choSua={choSua} />

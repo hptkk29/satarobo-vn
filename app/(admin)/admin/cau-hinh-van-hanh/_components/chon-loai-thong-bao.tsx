@@ -48,6 +48,8 @@ export function ChonLoaiThongBao({
   const banDau = useMemo(() => new Set(dangBat), [dangBat]);
   const [chon, setChon] = useState<ReadonlySet<string>>(banDau);
   const [lyDo, setLyDo] = useState("");
+  /** Mã thô `lead.moi:` — TẮT sẵn. Xem khối chú thích ở chỗ hiển thị. */
+  const [hienMa, setHienMa] = useState(false);
   const [dangLuu, batDauLuu] = useTransition();
 
   // So theo NỘI DUNG chứ không theo tham chiếu: bật rồi tắt lại đúng mục đó là KHÔNG có thay
@@ -103,7 +105,8 @@ export function ChonLoaiThongBao({
           className="flex items-start gap-3 rounded-lg border border-state-warning-soft bg-state-warning-soft px-4 py-3 text-sm text-state-warning-ink"
         >
           <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-          <p>
+          {/* `break-words`: một chuỗi dài không dấu cách lọt vào đây là tràn khung ở 320px. */}
+          <p className="min-w-0 break-words">
             <strong>{c.cau}</strong> — chọn gì ở bảng dưới cũng chưa ai nhận được. {c.choSua}
           </p>
         </div>
@@ -124,11 +127,28 @@ export function ChonLoaiThongBao({
             </span>
           )}
         </p>
-        {coDoi && (
-          <span className="text-xs font-semibold text-state-warning-ink">
-            Có thay đổi chưa lưu
-          </span>
-        )}
+        <div className="flex items-center gap-4">
+          {coDoi && (
+            <span className="text-xs font-semibold text-state-warning-ink">
+              Có thay đổi chưa lưu
+            </span>
+          )}
+          {/* Mã thô của từng loại (`lead.moi:`) TẮT sẵn.
+              Người dùng trang này không đọc được nó, và in sẵn 51 dòng mã là 51 dòng nhiễu.
+              Nhưng khi có người báo "tôi không nhận được thông báo X" thì đó lại là thứ DUY
+              NHẤT tra được trong sổ gửi — nên giấu đi, không xoá. */}
+          <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-muted-foreground pointer-coarse:min-h-11">
+            <input
+              type="checkbox"
+              checked={hienMa}
+              onChange={(e) => setHienMa(e.target.checked)}
+              /* Nới vùng bấm lên 44px bằng lớp phủ trong suốt — ô tick chỉ 16×16, chính
+                 phép đo cảm ứng vừa bắt được nó ngay sau khi tôi thêm vào. */
+              className="relative h-4 w-4 accent-[color:var(--primary)] after:absolute after:-inset-x-3.5 after:-inset-y-3.5 after:content-['']"
+            />
+            Hiện mã kỹ thuật
+          </label>
+        </div>
       </div>
 
       {theoNhom.map(([nhom, ds]) => (
@@ -139,26 +159,34 @@ export function ChonLoaiThongBao({
               {ds.filter((e) => chon.has(e.prefix)).length}/{ds.length} bật
             </span>
           </h2>
-          <ul className="divide-y divide-border">
+          {/* Nhiều cột từ màn rộng: 51 dòng một cột là cuộn 6 màn hình ở 4K trong khi bên
+              phải bỏ trống. Chia cột giữ được mật độ — nguyên tắc số 1 của DESIGN.md. Viền
+              ngăn cách chuyển sang lưới nên phải dùng `border-b` từng ô, không `divide-y`. */}
+          <ul className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3">
             {ds.map((e) => (
-              <li key={e.prefix} className="flex items-start gap-4 px-4 py-3">
+              <li
+                key={e.prefix}
+                className="flex items-start gap-3 border-b border-border px-4 py-3 last:border-b-0 xl:border-r xl:[&:nth-child(2n)]:border-r-0 2xl:[&:nth-child(2n)]:border-r 2xl:[&:nth-child(3n)]:border-r-0"
+              >
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-foreground">{e.label}</p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     {MUC_NHAN[e.priority] ?? `Mức ${e.priority}`} · {e.recipients}
                   </p>
-                  {/* Khoá thô vẫn hiện, cỡ nhỏ: khi có người báo "không nhận được thông báo X",
-                      thứ tra được trong `WebPushOutbox.dedupeKey` là chuỗi này chứ không phải
-                      nhãn tiếng Việt. */}
-                  <code className="mt-0.5 block text-[11px] text-muted-foreground/70">
-                    {e.prefix}
-                  </code>
+                  {hienMa && (
+                    <code className="mt-0.5 block break-all text-[11px] text-muted-foreground/70">
+                      {e.prefix}
+                    </code>
+                  )}
                 </div>
                 <Switch
                   checked={chon.has(e.prefix)}
                   onCheckedChange={(v) => bat(e.prefix, v)}
                   disabled={!choSua || dangLuu}
                   aria-label={`Đẩy Web Push cho: ${e.label}`}
+                  /* Nới vùng bấm lên chuẩn 44px mà không phóng to công tắc trên hình —
+                     công tắc shadcn cao 20px, bấm bằng ngón tay là chuyện may rủi. */
+                  className="relative mt-0.5 shrink-0 after:absolute after:-inset-x-3 after:-inset-y-3 after:content-['']"
                 />
               </li>
             ))}
@@ -166,33 +194,32 @@ export function ChonLoaiThongBao({
         </section>
       ))}
 
-      {choSua && (
-        <div className="sticky bottom-0 space-y-3 rounded-xl border border-border bg-card p-4 shadow-lg">
-          <div>
-            <label
-              htmlFor="ly-do-doi-loai-push"
-              className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-            >
-              Lý do thay đổi (bắt buộc)
-            </label>
+      {/* Khung lưu chỉ hiện KHI CÓ thay đổi.
+          Bản đầu ghim nó ở đáy màn vĩnh viễn: ba dòng giao diện che mất nội dung suốt thời
+          gian người ta chỉ đang đọc, và một nút "Lưu thay đổi" mờ sẵn là một lời hứa suông
+          thường trực. Hiện đúng lúc có việc để lưu thì nó vừa là chỗ lưu vừa là câu trả lời
+          cho "tôi vừa đổi gì đó, xong rồi làm sao". */}
+      {choSua && coDoi && (
+        <div className="sticky bottom-0 -mx-1 rounded-xl border border-border bg-card p-3 shadow-lg sm:p-4">
+          <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center">
             <Input
               id="ly-do-doi-loai-push"
               value={lyDo}
               onChange={(ev) => setLyDo(ev.target.value)}
-              placeholder="Ví dụ: BGĐ duyệt bật thêm nhắc lịch ca cho giáo viên"
+              placeholder="Vì sao đổi? (bắt buộc)"
               disabled={dangLuu}
-              className="mt-1"
+              autoFocus
+              aria-label="Lý do thay đổi danh sách loại thông báo"
+              className="h-10 pointer-coarse:h-11 lg:flex-1"
             />
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs text-muted-foreground">
-              Lưu xong có hiệu lực trong vòng <strong>5 phút</strong> (cấu hình được nhớ đệm),
-              không tức thì.
-            </p>
-            <Button onClick={luu} disabled={!coDoi || dangLuu}>
-              {dangLuu ? "Đang lưu…" : "Lưu thay đổi"}
+            <Button onClick={luu} disabled={dangLuu} className="shrink-0 pointer-coarse:h-11">
+              {dangLuu ? "Đang lưu…" : `Lưu ${chon.size} loại`}
             </Button>
           </div>
+          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+            Lưu xong có hiệu lực trong vòng <strong>5 phút</strong> (cấu hình được nhớ đệm),
+            không tức thì.
+          </p>
         </div>
       )}
     </div>

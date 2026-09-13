@@ -30,13 +30,22 @@ export interface CauHinhVapid {
 /** Vì sao cấu hình VAPID không dùng được — để màn hình nói đúng chỗ cần sửa. */
 export type LoiVapid = "THIEU_KHOA_CONG_KHAI" | "THIEU_KHOA_RIENG" | "THIEU_SUBJECT" | "LECH_CAP";
 
+/**
+ * Câu hiện cho NGƯỜI VẬN HÀNH đọc trên màn cấu hình.
+ *
+ * ⚠️ KHÔNG nhét tên biến môi trường vào đây. Hai lý do, lý do thứ hai mới là lý do thật:
+ *  1. Người đọc màn đó là quản trị hệ thống của trung tâm — `NEXT_PUBLIC_VAPID_PUBLIC_KEY`
+ *     với họ là một chuỗi vô nghĩa, và việc sửa cũng không nằm trong tay họ.
+ *  2. Đo ở 320px: chuỗi 28 ký tự không dấu cách KHÔNG xuống dòng được, nó tràn ra ngoài
+ *     khung cảnh báo và đẩy cả trang rộng ra. Một câu tiếng Việt bình thường thì không.
+ * Tên biến thật vẫn nằm nguyên trong log máy chủ (`kiemVapid`), nơi người sửa sẽ đọc.
+ */
 export const MO_TA_LOI_VAPID: Readonly<Record<LoiVapid, string>> = {
-  THIEU_KHOA_CONG_KHAI: "Thiếu hoặc sai NEXT_PUBLIC_VAPID_PUBLIC_KEY",
-  THIEU_KHOA_RIENG: "Thiếu hoặc sai VAPID_PRIVATE_KEY",
-  THIEU_SUBJECT: "VAPID_SUBJECT phải là mailto: hoặc https:",
+  THIEU_KHOA_CONG_KHAI: "máy chủ chưa khai khoá gửi thông báo",
+  THIEU_KHOA_RIENG: "máy chủ thiếu nửa khoá bí mật",
+  THIEU_SUBJECT: "chưa khai địa chỉ liên hệ kỹ thuật cho dịch vụ thông báo",
   LECH_CAP:
-    "VAPID_PRIVATE_KEY và NEXT_PUBLIC_VAPID_PUBLIC_KEY không phải một cặp — " +
-    "thường là vừa xoay khoá trên Vercel mà chưa deploy lại (biến NEXT_PUBLIC_ nhúng lúc BUILD)",
+    "hai nửa khoá trên máy chủ không khớp nhau — thường là vừa đổi khoá mà chưa cài đặt lại",
 };
 
 /**

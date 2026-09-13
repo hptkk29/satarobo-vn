@@ -65,11 +65,20 @@ describe("[PUSH-D7-T23] bảng bày đúng danh mục thật", () => {
     expect(DANH_MUC.length).toBeGreaterThan(40); // guard cho chính phép đếm trên
   });
 
-  it("hiện cả khoá thô — thứ tra được trong WebPushOutbox khi có người báo lỗi", () => {
-    // Nhãn tiếng Việt để quyết định; khoá thô để đi tra sổ. Thiếu khoá thô thì người trực phải
-    // đọc mã nguồn mới nối được "Lead mới" với dòng `lead.moi:...` trong DB.
+  it("mã kỹ thuật TẮT SẴN — 51 dòng mã là 51 dòng nhiễu với người vận hành", () => {
+    // Chủ dự án chốt 13/09: người dùng trang này không đọc được `lead.moi:`, nên nó không được
+    // chiếm chỗ mặc định.
     dung();
+    expect(screen.queryByText("lead.moi:")).toBeNull();
+  });
+
+  it("bật công tắc mã kỹ thuật ⇒ hiện đủ mã của mọi loại", () => {
+    // Giấu đi KHÔNG được thành xoá mất: khi có người báo "tôi không nhận được thông báo X" thì
+    // chuỗi này là thứ duy nhất tra được trong sổ gửi (`WebPushOutbox.dedupeKey`).
+    dung();
+    fireEvent.click(screen.getByLabelText(/Hiện mã kỹ thuật/));
     expect(screen.getByText("lead.moi:")).toBeTruthy();
+    expect(screen.getByText("sla:")).toBeTruthy();
   });
 });
 
@@ -92,19 +101,20 @@ describe("[PUSH-D7-T24] công tắc nói đúng trạng thái đang lưu", () =>
 });
 
 describe("[PUSH-D7-T25] lưu đúng thứ vừa chọn", () => {
-  it("chưa đổi gì ⇒ nút Lưu KHOÁ", () => {
-    // Nút sáng khi chẳng có gì để lưu là một lời hứa suông: bấm vào ghi một bản ghi kiểm toán
-    // rỗng nghĩa, và người dùng tưởng mình vừa thay đổi điều gì đó.
+  it("chưa đổi gì ⇒ CHƯA có khung lưu", () => {
+    // Đổi hợp đồng có chủ đích 13/09: khung lưu từng ghim ở đáy màn vĩnh viễn — ba dòng giao
+    // diện che nội dung suốt lúc người ta chỉ đang đọc, kèm một nút mờ sẵn là lời hứa suông
+    // thường trực. Nay nó hiện đúng lúc có việc để lưu.
     dung();
-    expect(screen.getByRole("button", { name: /Lưu thay đổi/ }).hasAttribute("disabled")).toBe(true);
+    expect(screen.queryByRole("button", { name: /^Lưu/ })).toBeNull();
+    expect(screen.queryByLabelText(/Lý do thay đổi/)).toBeNull();
   });
 
-  it("bật thêm một loại ⇒ nút mở, và lưu gửi CẢ danh sách mới", () => {
+  it("bật thêm một loại ⇒ khung lưu hiện ra, và lưu gửi CẢ danh sách mới", () => {
     dung({ dangBat: ["lead.moi:"] });
     fireEvent.click(congTac(NHAN_SLA));
 
-    const nut = screen.getByRole("button", { name: /Lưu thay đổi/ });
-    expect(nut.hasAttribute("disabled")).toBe(false);
+    const nut = screen.getByRole("button", { name: /^Lưu/ });
 
     fireEvent.change(screen.getByLabelText(/Lý do thay đổi/), { target: { value: "BGĐ duyệt" } });
     fireEvent.click(nut);
@@ -115,15 +125,14 @@ describe("[PUSH-D7-T25] lưu đúng thứ vừa chọn", () => {
     expect(g.reason).toBe("BGĐ duyệt");
   });
 
-  it("bật rồi tắt lại đúng mục đó ⇒ coi như KHÔNG đổi, nút khoá lại", () => {
+  it("bật rồi tắt lại đúng mục đó ⇒ coi như KHÔNG đổi, khung lưu biến mất", () => {
     // So theo NỘI DUNG chứ không theo "đã từng chạm". Nếu chỉ đếm số lần bấm thì người dùng
-    // thử rồi hoàn tác vẫn thấy nút sáng và vẫn bị đòi nhập lý do cho một thay đổi không có.
+    // thử rồi hoàn tác vẫn bị đòi nhập lý do cho một thay đổi không tồn tại.
     dung({ dangBat: ["lead.moi:"] });
-    const nut = screen.getByRole("button", { name: /Lưu thay đổi/ });
     fireEvent.click(congTac(NHAN_SLA));
-    expect(nut.hasAttribute("disabled")).toBe(false);
+    expect(screen.getByRole("button", { name: /^Lưu/ })).toBeTruthy();
     fireEvent.click(congTac(NHAN_SLA));
-    expect(nut.hasAttribute("disabled")).toBe(true);
+    expect(screen.queryByRole("button", { name: /^Lưu/ })).toBeNull();
   });
 
   it("thiếu lý do ⇒ KHÔNG gọi action", async () => {
@@ -131,7 +140,7 @@ describe("[PUSH-D7-T25] lưu đúng thứ vừa chọn", () => {
     // thay vì đi một vòng máy chủ rồi nhận một thông báo lỗi chung chung.
     dung({ dangBat: [] });
     fireEvent.click(congTac(NHAN_SLA));
-    fireEvent.click(screen.getByRole("button", { name: /Lưu thay đổi/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Lưu/ }));
     expect(h.luu).not.toHaveBeenCalled();
   });
 
@@ -139,7 +148,7 @@ describe("[PUSH-D7-T25] lưu đúng thứ vừa chọn", () => {
     dung({ dangBat: ["lead.moi:"] });
     fireEvent.click(congTac(NHAN_LEAD_MOI));
     fireEvent.change(screen.getByLabelText(/Lý do thay đổi/), { target: { value: "tạm dừng kênh" } });
-    fireEvent.click(screen.getByRole("button", { name: /Lưu thay đổi/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Lưu/ }));
     expect(h.luu.mock.calls[0]![0].tienTo).toEqual([]);
   });
 });
@@ -150,7 +159,7 @@ describe("[PUSH-D7-T26] chỉ-được-xem thì KHOÁ công tắc, không chỉ 
     // nhích, tưởng đã đổi được cấu hình — rồi tải lại trang thì mọi thứ như cũ.
     dung({ choSua: false });
     expect(screen.getAllByRole("switch").every((s) => s.hasAttribute("disabled"))).toBe(true);
-    expect(screen.queryByRole("button", { name: /Lưu thay đổi/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Lưu/ })).toBeNull();
   });
 });
 
@@ -180,7 +189,7 @@ describe("[PUSH-D7-T27] cảnh báo kênh chưa chạy", () => {
     });
     fireEvent.click(congTac(NHAN_SLA));
     fireEvent.change(screen.getByLabelText(/Lý do thay đổi/), { target: { value: "chuẩn bị" } });
-    fireEvent.click(screen.getByRole("button", { name: /Lưu thay đổi/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Lưu/ }));
     expect(h.luu).toHaveBeenCalledTimes(1);
   });
 });
