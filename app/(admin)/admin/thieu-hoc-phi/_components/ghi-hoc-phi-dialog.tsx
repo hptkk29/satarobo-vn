@@ -26,7 +26,7 @@ import {
 import { computeEnrollmentPrice } from "@/lib/finance/pricing";
 
 import { ghiHocPhiBackfillAction } from "../_actions";
-import type { DongThieu } from "./thieu-hoc-phi-client";
+import type { DongThieu } from "./types";
 
 /**
  * HỘP THOẠI ghi học phí cũ cho một phụ huynh.

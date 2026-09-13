@@ -16,25 +16,8 @@ import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 import { NHAN_TRANG_THAI, type TrangThaiHocPhi } from "@/lib/finance/thieu-hoc-phi";
 
 import { GhiHocPhiDialog } from "./ghi-hoc-phi-dialog";
+import type { DongThieu } from "./types";
 
-export type DongThieu = {
-  leadId: string;
-  parentName: string;
-  phone: string;
-  centerName: string;
-  studentNames: string[];
-  trangThai: TrangThaiHocPhi;
-  soDon: number;
-  tongPhaiThu: number;
-  tongDaThu: number;
-  conThieu: number;
-  goiYTenKhoa: string | null;
-  /**
-   * Có đơn ĐÃ CÓ đang còn thiếu ⇒ lượt ghi tới là GHI THÊM vào đơn đó (không tạo đơn
-   * thứ hai). `null` = chưa có đơn nào còn thiếu ⇒ tạo đơn mới.
-   */
-  ghiThem: { orderId: string; toiDa: number; maDon: string } | null;
-};
 
 const vnd = (n: number) => `${n.toLocaleString("vi-VN")}đ`;
 

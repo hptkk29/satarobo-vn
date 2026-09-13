@@ -10,7 +10,8 @@ import { KHOAN_DA_GHI_NHAN } from "@/lib/finance/ghi-nhan";
 import { canXuLy, conThieu, phanLoaiHocPhi } from "@/lib/finance/thieu-hoc-phi";
 import { chonDonDeGhiThem } from "@/lib/finance/ghi-them-hoc-phi";
 
-import { ThieuHocPhiClient, type DongThieu } from "./_components/thieu-hoc-phi-client";
+import { ThieuHocPhiClient } from "./_components/thieu-hoc-phi-client";
+import type { DongThieu } from "./_components/types";
 
 export const metadata = { title: "Thiếu học phí · Sata Robo" };
 
