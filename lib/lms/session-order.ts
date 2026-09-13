@@ -134,6 +134,40 @@ export function nhanSoBuoi(src: {
   return "—";
 }
 
+/**
+ * Nhãn cho nơi phải nói CẢ HAI con số — danh sách/ô chọn buổi sắp theo NGÀY.
+ *
+ * Đợt 1c. Ba màn quản lý lớp (ô chọn buổi ở tab Điểm danh và tab Nhận xét, danh sách quản
+ * lý buổi) xếp theo ngày, nên số đứng đầu dòng PHẢI là số theo lịch — in số lộ trình ở đó
+ * là danh sách nhảy cóc `1, 43, 2, 44…` và người dùng không dò được nữa. Nhưng chỉ in số
+ * theo lịch thì lại giấu mất bài đang dạy, đúng chỗ nhập nhằng đã đẻ ra sự cố lệch tên bài.
+ *
+ * Nên: in cả hai, và CHỈ khi chúng khác nhau.
+ *
+ *   lịch 2, lộ trình 43  →  `Buổi 2 · bài 43`   (lớp CS2.SATA6.26.001, buổi 25/06)
+ *   lịch 7, lộ trình 7   →  `Buổi 7`            (trùng nhau thì nói một lần cho gọn)
+ *   chỉ có lịch          →  `Buổi 7 (theo lịch)`
+ *   chỉ có lộ trình      →  `Bài 43`
+ *   không có gì          →  `—`
+ *
+ * Vì sao KHÔNG luôn in cả hai: 95 % buổi có hai số trùng nhau (đo prod 08/09 — chỉ lớp có
+ * buổi dời ngày mới lệch). In `Buổi 7 · bài 7` ở mọi dòng là rác, và rác thì người ta thôi
+ * đọc — rồi thôi đọc luôn dòng thật sự lệch.
+ */
+export function nhanSoBuoiVaBai(src: {
+  lich: number | null | undefined;
+  loTrinh: number | null | undefined;
+}): string {
+  const lich = typeof src.lich === "number" && src.lich > 0 ? src.lich : null;
+  const bai = typeof src.loTrinh === "number" && src.loTrinh > 0 ? src.loTrinh : null;
+  if (lich !== null && bai !== null) {
+    return lich === bai ? `Buổi ${lich}` : `Buổi ${lich} · bài ${bai}`;
+  }
+  if (lich !== null) return `Buổi ${lich} (theo lịch)`;
+  if (bai !== null) return `Bài ${bai}`;
+  return "—";
+}
+
 // ─── Thứ tự hiển thị: việc còn nợ lên trước ──────────────────────────────────
 
 /** Ba việc sau buổi mà giáo viên phải làm. */
