@@ -120,18 +120,42 @@ describe("[PUSH-D7-T22] push.tienToDuocDay — chặn khoá gõ sai ngay ở t�
     expect(validateSettingValue("push.tienToDuocDay", []).ok).toBe(true);
   });
 
-  it("⚠️ TỪ CHỐI khoá không có trong catalog — đây là cổng chống 'màn hình nói dối'", () => {
-    // Gõ thiếu dấu hai chấm, hay chép nhầm một khoá đã xoá: `startsWith` sẽ không khớp gì, nên
-    // danh sách trông như đã bật mà thực tế im lặng hoàn toàn. Không lỗi, không cảnh báo, và
-    // cách duy nhất phát hiện là có người báo "tôi không nhận được thông báo".
+  it("⚠️ TỪ CHỐI khoá thiếu dấu hai chấm — nó khớp LẤN sang loại sinh sau", () => {
+    // `lead.moi` (không có dấu hai chấm) khớp cả `lead.moi_gi_do:` ra đời sau đó. Dấu hai chấm
+    // là luật khớp dùng chung với `lib/notifications/catalog.ts`; hai bảng cùng đọc một khoá mà
+    // luật khớp lệch nhau là loại lệch không ai nhìn thấy cho tới lúc gửi nhầm.
     expect(validateSettingValue("push.tienToDuocDay", ["lead.moi"]).ok).toBe(false);
-    expect(validateSettingValue("push.tienToDuocDay", ["khong_ton_tai:"]).ok).toBe(false);
-    expect(validateSettingValue("push.tienToDuocDay", ["lead.moi:", "sai:"]).ok).toBe(false);
+    expect(validateSettingValue("push.tienToDuocDay", ["lead.moi:", "sai"]).ok).toBe(false);
+  });
+
+  it("tầng này KHÔNG đối chiếu danh mục — đó là việc của đường ghi", () => {
+    // ⚠️ Ca này khoá một sự ĐÁNH ĐỔI CÓ CHỦ ĐÍCH, không phải một lỗ hổng bị bỏ quên.
+    //
+    // Đặt phép đối chiếu danh mục ở đây cần `import catalogPrefixes`, và `lint:boundaries` bắt
+    // được 11 vòng import khi thử: registry → notifications/catalog → notifications/pending-sync
+    // → pending-tasks → settings/service · auth/actor → … → registry. Nới luật `no-circular`
+    // chung của repo để hợp thức hoá một tính năng là đổi rào cho cả repo — không làm.
+    //
+    // Phép đối chiếu nằm ở `luuLoaiDuocDayAction` và có ca test riêng. Ai dời nó về đây thì ca
+    // này đỏ, và buộc đọc lý do trước khi sửa.
+    expect(validateSettingValue("push.tienToDuocDay", ["khong_ton_tai:"]).ok).toBe(true);
   });
 
   it("TỪ CHỐI chuỗi rỗng — nó khớp MỌI khoá, tức biến danh sách trắng thành 'đẩy tất'", () => {
     expect(validateSettingValue("push.tienToDuocDay", [""]).ok).toBe(false);
     expect(validateSettingValue("push.tienToDuocDay", ["lead.moi:", ""]).ok).toBe(false);
+  });
+
+  it("chuỗi rỗng báo ĐÚNG lý do của nó, không phải lý do 'thiếu dấu hai chấm'", () => {
+    // ⚠️ Ca này sinh ra từ một phép CẤY LỖI XANH GIẢ: gỡ hẳn nhánh kiểm chuỗi rỗng thì không
+    // ca nào đỏ, vì `"".endsWith(":")` cũng false nên nhánh dấu hai chấm bắt thay. Tức là ca
+    // trên KHÔNG chứng minh được nhánh chuỗi rỗng còn sống.
+    //
+    // Thứ nhánh đó thật sự đóng góp là CÂU BÁO LỖI. "Phải kết thúc bằng dấu hai chấm" nói sai
+    // bản chất cho một ô trống, và người vận hành sẽ đi thêm dấu hai chấm vào một chuỗi rỗng.
+    const r = validateSettingValue("push.tienToDuocDay", [""]);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toContain("rỗng");
   });
 
   it("TỪ CHỐI khoá khai hai lần", () => {

@@ -81,6 +81,27 @@ export async function luuLoaiDuocDayAction(input: {
     (a, b) => (thuTu.get(a) ?? 9999) - (thuTu.get(b) ?? 9999) || a.localeCompare(b),
   );
 
+  // ⚠️ ĐỐI CHIẾU DANH MỤC Ở ĐÂY, không ở registry — xem khối chú thích tại `push.tienToDuocDay`
+  // trong `lib/settings/registry.ts`: đặt phép kiểm đó ở tầng kia tạo 11 vòng import mà
+  // `lint:boundaries` chặn cứng.
+  //
+  // TỪ CHỐI chứ không lặng lẽ lọc bỏ. Lọc bỏ thì người dùng bấm Lưu, thấy báo thành công, rồi
+  // loại họ vừa chọn biến mất không dấu vết — màn hình nói dối đúng nghĩa. Một khoá lạ tới được
+  // đây nghĩa là giao diện và danh mục đã lệch nhau; đó là thứ phải nổ ra, không phải thứ để
+  // dọn dẹp im lặng.
+  const hopLe = new Set(catalogPrefixes());
+  const la = tienTo.filter((t) => !hopLe.has(t));
+  if (la.length > 0) {
+    return {
+      ok: false,
+      error: {
+        code: "VALIDATION",
+        message: `Không có loại thông báo nào mang mã ${la.join(", ")} — tải lại trang rồi thử lại`,
+        field: "push.tienToDuocDay",
+      },
+    };
+  }
+
   const actor = await resolveActor(session.user.id);
   const res = await setGlobalSetting(actor, {
     key: "push.tienToDuocDay",

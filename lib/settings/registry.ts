@@ -12,8 +12,6 @@
  * finance.debtReminderDaysBefore=14 (QĐ-O7), enrollment.suspendMaxMonths=6 (TBD-4).
  */
 import { z } from "zod";
-// Thuần, không DB — `catalog.ts` là nguồn sự thật của "có những loại thông báo nào".
-import { catalogPrefixes } from "@/lib/notifications/catalog";
 import { internalAwards } from "@/components/legacy-laptrinhrobot/_data/awards";
 import { gifts } from "@/components/legacy-laptrinhrobot/_data/gifts";
 import { commitments } from "@/components/legacy-laptrinhrobot/_data/commitments";
@@ -372,18 +370,38 @@ export const SETTINGS = {
     group: "system",
     label:
       "Loại thông báo được đẩy Web Push — chọn ở màn Cấu hình thông báo đẩy, để trống = không đẩy loại nào",
+    // ⚠️ CỐ Ý không import `catalogPrefixes` để đối chiếu danh mục ở đây, dù đó mới là phép
+    // kiểm mạnh nhất. `lint:boundaries` (dependency-cruiser) bắt được 11 vòng import khi thử:
+    //     registry → notifications/catalog → notifications/pending-sync → pending-tasks
+    //     → settings/service · auth/actor · auth/permission-eval → … → registry
+    // `pending-sync` chỉ `import type` từ `pending-tasks` nên vòng đó không tồn tại lúc chạy,
+    // nhưng luật `no-circular` của repo không loại trừ import kiểu, và nới luật chung để hợp
+    // thức hoá một tính năng là đổi rào cho cả repo — không phải việc của đợt này.
+    //
+    // Nên chia đôi trách nhiệm: tầng này gác HÌNH DẠNG (thứ không cần biết catalog), còn phép
+    // đối chiếu "có thật trong danh mục không" nằm ở `luuLoaiDuocDayAction` — đường ghi DUY
+    // NHẤT mà giao diện dùng, và ở đó import catalog không tạo vòng nào.
     schema: z
       .array(z.string())
       .max(200)
       .superRefine((ds, ctx) => {
-        const hopLe = new Set(catalogPrefixes());
         const daGap = new Set<string>();
         ds.forEach((d, i) => {
-          if (!hopLe.has(d)) {
+          // Chuỗi rỗng là ca CHẾT NGƯỜI: `"x".startsWith("")` luôn đúng ⇒ một phần tử rỗng
+          // biến danh sách trắng thành "đẩy tất cả 51 loại".
+          if (d.length === 0) {
             ctx.addIssue({
               code: z.ZodIssueCode.custom,
               path: [i],
-              message: `"${d}" không phải loại thông báo đã khai trong catalog`,
+              message: "Chuỗi rỗng khớp MỌI loại thông báo — không được phép",
+            });
+          } else if (!d.endsWith(":")) {
+            // Dấu hai chấm là luật khớp dùng chung với `lib/notifications/catalog.ts`. Thiếu
+            // nó thì `lead.moi` khớp lấn sang `lead.moi_gi_do` sinh sau.
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: [i],
+              message: `"${d}" phải kết thúc bằng dấu hai chấm`,
             });
           }
           if (daGap.has(d)) {
