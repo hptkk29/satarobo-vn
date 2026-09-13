@@ -21,6 +21,8 @@
 // PHẢI đứng TRƯỚC import lib/db.
 import { currentDbHost } from "./_load-env";
 import { db } from "../lib/db";
+// Dùng lại hàm tách mã đơn của chính đường webhook — không chép lại regex.
+import { extractOrderCode } from "../lib/payments/sepay";
 
 function bang(tieuDe: string, dong: [string, number | string][]): void {
   console.log(`\n── ${tieuDe} ──`);
@@ -264,6 +266,144 @@ async function main(): Promise<void> {
     soDonCoTienNamIm > 0
       ? `  ⚠ ${soDonCoTienNamIm} đơn treo duyệt đang giữ ${fmt(tienNamIm)}đ CHƯA RÓT vào phiếu nào.`
       : `  ✓ Không đơn treo duyệt nào đang giữ tiền chưa rót.`,
+  );
+
+  // ── 9. PHÂN LOẠI GIAO DỊCH NGÂN HÀNG CHƯA KHỚP ĐƠN NÀO ─────────────────────
+  //
+  // Đo 13/09 ra 21 giao dịch UNMATCHED / 102.433.000đ trên prod — 46% tiền về ngân
+  // hàng chưa gắn được vào đơn nào. Nếu trong đó có học phí THẬT thì có phụ huynh đã
+  // chuyển tiền mà hệ thống vẫn ghi nợ họ.
+  //
+  // BA RỔ, và rổ 3 CỐ Ý không đoán:
+  //  1. RẤT CÓ THỂ LÀ HỌC PHÍ THẬT — tiền VÀO, và có ít nhất một dấu buộc được vào đơn:
+  //     mã đơn trong nội dung tra ra đơn có thật, HOẶC số tiền khớp ĐÚNG MỘT đơn đang nợ.
+  //  2. KHÔNG PHẢI HỌC PHÍ — tiền RA (rút/chuyển đi), hoặc không mang dấu nào của
+  //     định dạng nội dung CK hệ thống phát ra và cũng không khớp số tiền đơn nào.
+  //  3. KHÔNG KẾT LUẬN ĐƯỢC — để nguyên, không suy diễn.
+  //
+  // ⚠️ PII: `content` chứa TÊN CON + SĐT PHỤ HUYNH. Output này đi vào log GitHub
+  // Actions nên KHÔNG in nội dung thô. Chỉ in thứ suy ra được: mã đơn (không phải PII),
+  // cờ "có chuỗi giống SĐT", và `unmatchedNote` đã che mọi dãy ≥4 chữ số.
+  const che = (s: string | null | undefined): string =>
+    (s ?? "").replace(/\d{4,}/g, "****").slice(0, 60);
+  /**
+   * Tiền VÀO hay RA. SePay để ở `rawPayload.transferType` ("in" | "out"); các cổng khác
+   * dùng tên khác. Trả "?" khi KHÔNG biết — và "?" đẩy giao dịch xuống rổ 3, không đoán.
+   */
+  const chieuTien = (raw: unknown): "in" | "out" | "?" => {
+    const p = (raw ?? {}) as Record<string, unknown>;
+    for (const k of ["transferType", "transfer_type", "type", "direction"]) {
+      const v = p[k];
+      if (typeof v !== "string") continue;
+      const lo = v.toLowerCase();
+      if (lo === "in" || lo === "credit" || lo === "receive") return "in";
+      if (lo === "out" || lo === "debit" || lo === "send") return "out";
+    }
+    return "?";
+  };
+
+  const chuaKhop = await db.bankTransaction.findMany({
+    where: { status: "UNMATCHED" },
+    select: {
+      provider: true,
+      providerTxnId: true,
+      amount: true,
+      transferredAt: true,
+      content: true,
+      unmatchedNote: true,
+      rawPayload: true,
+    },
+    orderBy: { transferredAt: "asc" },
+  });
+
+  // Đơn CÒN NỢ theo sổ cũ (công thức đang hiển thị) — để so số tiền.
+  const donConNo = await db.order.findMany({
+    where: { deletedAt: null, status: { notIn: ["CANCELLED", "REFUNDED"] } },
+    select: { id: true, code: true, totalAmount: true },
+  });
+  const daTraTheoDon = new Map<string, number>();
+  for (const o of donConNo) {
+    const t = await db.payment.aggregate({
+      where: { orderId: o.id, deletedAt: null, saleStatus: "RECORDED" },
+      _sum: { amount: true },
+    });
+    daTraTheoDon.set(o.id, t._sum.amount ?? 0);
+  }
+  const conNo = donConNo
+    .map((o) => ({ code: o.code, thieu: o.totalAmount - (daTraTheoDon.get(o.id) ?? 0) }))
+    .filter((x) => x.thieu > 0);
+  const maDonCoThat = new Set(donConNo.map((o) => o.code));
+
+  const ro: Record<1 | 2 | 3, string[]> = { 1: [], 2: [], 3: [] };
+  for (const t of chuaKhop) {
+    const chieu = chieuTien(t.rawPayload);
+    const maDon = extractOrderCode(t.content);
+    const maTraDuoc = maDon != null && maDonCoThat.has(maDon);
+    // "Giống SĐT" = có dãy 9–11 chữ số liền — dấu của định dạng TenCon_SdtPH_MaKhoa.
+    const coSdt = /\d{9,11}/.test(t.content ?? "");
+    const khopTien = conNo.filter((x) => x.thieu === t.amount);
+    const dong =
+      `${t.provider}/${t.providerTxnId.slice(-8)} ${t.transferredAt.toISOString().slice(0, 10)} ` +
+      `${fmt(t.amount)}đ chiều=${chieu}` +
+      `${maDon ? ` mã=${maDon}${maTraDuoc ? "(CÓ THẬT)" : "(không tra ra)"}` : ""}` +
+      `${coSdt ? " có-sđt" : ""}` +
+      `${khopTien.length === 1 ? ` KHỚP-NỢ=${khopTien[0]!.code}` : khopTien.length > 1 ? ` khớp-nợ×${khopTien.length}` : ""}` +
+      `${t.unmatchedNote ? ` · ${che(t.unmatchedNote)}` : ""}`;
+
+    if (chieu === "out") ro[2].push(dong);
+    else if (maTraDuoc || khopTien.length === 1) ro[1].push(dong);
+    else if (chieu === "in" && !coSdt && maDon == null && khopTien.length === 0) ro[2].push(dong);
+    else ro[3].push(dong);
+  }
+
+  const tongRo = (ds: string[]) => ds.length;
+  const soKhongRoChieu = chuaKhop.filter((t) => chieuTien(t.rawPayload) === "?").length;
+  console.log(`\n── ${chuaKhop.length} giao dịch chưa khớp — PHÂN LOẠI ──`);
+  if (soKhongRoChieu > 0) {
+    // Nói ra thay vì im lặng: rổ 3 phình lên vì THIẾU DỮ KIỆN, không phải vì dữ liệu
+    // mơ hồ. Hai thứ đó đòi hành động khác nhau.
+    console.log(
+      `  ⚠ ${soKhongRoChieu}/${chuaKhop.length} giao dịch KHÔNG đọc được chiều tiền từ rawPayload ⇒ tự động về rổ 3.`,
+    );
+  }
+  console.log(`  Rổ 1 · RẤT CÓ THỂ LÀ HỌC PHÍ THẬT chưa rót : ${tongRo(ro[1])}`);
+  for (const d of ro[1]) console.log(`      ${d}`);
+  console.log(`  Rổ 2 · KHÔNG phải học phí                  : ${tongRo(ro[2])}`);
+  for (const d of ro[2]) console.log(`      ${d}`);
+  console.log(`  Rổ 3 · KHÔNG kết luận được (để nguyên)     : ${tongRo(ro[3])}`);
+  for (const d of ro[3]) console.log(`      ${d}`);
+  if (ro[1].length > 0) {
+    console.log(`\n  ⚠️⚠️ RỔ 1 KHÁC 0 — có tiền rất có thể là học phí thật chưa vào sổ.`);
+  }
+
+  // ── 10. `centerOverridable` của dung sai làm tròn đã bị DÙNG chưa ──────────
+  // Đơn ORD-260910-000008 trả thiếu 9.000đ (> mặc định 5.000đ) mà vẫn COMPLETED ⇒ nghi
+  // cơ sở đó đã tự đặt ngưỡng cao hơn. Đây là câu tra để biết chắc, trước khi chốt bỏ
+  // `centerOverridable`.
+  const KEY_DUNG_SAI = "payment.roundingToleranceVnd";
+  const [toanCuc, theoCoSo] = await Promise.all([
+    db.systemSetting.findUnique({ where: { key: KEY_DUNG_SAI }, select: { valueJson: true } }),
+    db.centerSetting.findMany({
+      where: { key: KEY_DUNG_SAI },
+      select: { orgUnitId: true, valueJson: true },
+    }),
+  ]);
+  bang("Dung sai làm tròn — giá trị THẬT đang chạy", [
+    ["Mặc định trong registry", "5.000đ"],
+    ["SystemSetting (toàn cục)", toanCuc ? JSON.stringify(toanCuc.valueJson) : "(chưa đặt → dùng mặc định)"],
+    ["Số cơ sở ĐÃ tự đặt riêng", theoCoSo.length],
+  ]);
+  for (const c of theoCoSo) {
+    const ou = await db.orgUnit.findUnique({
+      where: { id: c.orgUnitId },
+      select: { code: true, name: true },
+    });
+    console.log(`      ${ou?.code ?? c.orgUnitId} (${ou?.name ?? "?"}) → ${JSON.stringify(c.valueJson)}`);
+  }
+  console.log(
+    theoCoSo.length === 0
+      ? `  ✓ centerOverridable CHƯA từng được dùng ⇒ bỏ nó không ảnh hưởng dữ liệu đang chạy.`
+      : `  ⚠ centerOverridable ĐÃ được dùng ⇒ bỏ nó sẽ đổi hành vi của ${theoCoSo.length} cơ sở.`,
   );
 
   // ── Kết luận: shadow-compare có đáng đọc theo cột lý do, hay chỉ đang báo "sổ trống"?
