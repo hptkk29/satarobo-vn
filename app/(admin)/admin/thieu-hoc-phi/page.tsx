@@ -6,6 +6,7 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { BACKFILL_PAYMENT_MARKER } from "@/lib/finance/payment-markers";
+import { KHOAN_DA_GHI_NHAN } from "@/lib/finance/ghi-nhan";
 import { canXuLy, conThieu, phanLoaiHocPhi } from "@/lib/finance/thieu-hoc-phi";
 
 import { ThieuHocPhiClient, type DongThieu } from "./_components/thieu-hoc-phi-client";
@@ -74,7 +75,7 @@ export default async function Page() {
           id: true,
           totalAmount: true,
           payments: {
-            where: { deletedAt: null, saleStatus: "RECORDED" },
+            where: KHOAN_DA_GHI_NHAN,
             select: { amount: true, note: true },
           },
           items: { select: { itemName: true }, take: 1 },

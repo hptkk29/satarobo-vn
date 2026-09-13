@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { BACKFILL_PAYMENT_MARKER, installmentMarker } from "./payment-markers";
 import { LY_DO_BO, lapKeHoachXacNhan, nenXacNhanHangLoat } from "./backfill-confirm";
+import { KHOAN_DA_XAC_NHAN } from "./debt";
 
 const ACTOR = "u-ketoan";
 
@@ -73,7 +74,7 @@ describe("[BF-03] lapKeHoachXacNhan — màn xem thử phải nói được SỐ
         khoan({ id: "b", amount: 1_000_000 }),
         khoan({ id: "c", enrollmentId: null, amount: 5_000_000 }),
         khoan({ id: "d", recordedById: ACTOR, amount: 7_000_000 }),
-        khoan({ id: "e", accountantStatus: "CONFIRMED", amount: 2_000_000 }),
+        khoan({ id: "e", accountantStatus: KHOAN_DA_XAC_NHAN.accountantStatus, amount: 2_000_000 }),
       ],
       ACTOR,
     );

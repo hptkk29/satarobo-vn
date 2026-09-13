@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { assertCan } from "@/lib/auth/permissions";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { ensureOrderPaymentRecorded } from "@/lib/finance/payment";
+import { KHOAN_DA_GHI_NHAN } from "@/lib/finance/ghi-nhan";
 import { formatVndPlain } from "@/lib/format/money";
 // 03/08 — SỔ MỚI (PaymentRequest) chạy SONG SONG sổ cũ (OrderInstallment).
 // Sổ cũ giữ nguyên hành vi (đợt 1 = PAID) để không phá công nợ đang chạy; sổ mới
@@ -182,7 +183,7 @@ export async function recordInstallmentPlan(params: {
     // Đếm SAU lượt xoá mềm ở trên, nên khoản nháp của lần lưu trước không bị tính.
     if (dot1Amount > 0) {
       const daCo = await tx.payment.aggregate({
-        where: { orderId, deletedAt: null, saleStatus: "RECORDED" },
+        where: { orderId, ...KHOAN_DA_GHI_NHAN },
         _sum: { amount: true },
       });
       const canGhiThem = phanConPhaiGhi(dot1Amount, daCo._sum.amount ?? 0);
@@ -218,7 +219,7 @@ export async function recordInstallmentPlan(params: {
           _sum: { amount: true },
         }),
         tx.payment.aggregate({
-          where: { orderId, deletedAt: null, saleStatus: "RECORDED" },
+          where: { orderId, ...KHOAN_DA_GHI_NHAN },
           _sum: { amount: true },
         }),
         tx.paymentAllocation.aggregate({
