@@ -26,6 +26,8 @@ const NGOAI_LE: Record<string, string> = {
   "lib/finance/ghi-nhan.test.ts": "TEST: chính cổng này — khẳng định hình dạng hằng",
   "lib/finance/payment.ts": "GHI: tạo phiếu thu + AuditLog.newValues (đường đọc đã dùng hằng)",
   "lib/crm/backfill-order.ts": "GHI: tạo phiếu thu backfill khi chuyển dữ liệu",
+  "lib/finance/ghi-giao-dich-cu.ts":
+    "GHI: tạo phiếu thu khi nhập giao dịch cũ từ sheet đăng ký",
   "lib/payments/payos-ingest.ts": "GHI: tạo phiếu thu từ cổng thanh toán",
   "lib/payments/summary.test.ts": "TEST: khẳng định đúng hình dạng `where` mà hằng sinh ra",
 };

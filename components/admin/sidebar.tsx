@@ -65,6 +65,7 @@ import {
   UsersRound,
   Wallet,
   Workflow,
+  FileSpreadsheet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useChatUnread } from "@/components/chat/use-chat-unread";
@@ -275,6 +276,10 @@ const NAV_GROUPS: NavGroup[] = [
       // Nhóm HV chốt hàng loạt mà chưa nhập tiền: có ghi danh nhưng KHÔNG có đơn/khoản thu
       // (nhánh allowNoPayment của bulk-convert). Không màn nào khác nhìn thấy nhóm này.
       { label: "Thiếu học phí", href: "/thieu-hoc-phi", icon: Wallet, perm: ["payments:view", "payments:manage"] },
+      // Đưa học phí đã đóng TRƯỚC khi lên hệ thống vào hồ sơ từng em — nếu không thì
+      // cổng phụ huynh hiện nợ nguyên dù nhà đã đóng đủ. Gác `payments:record` vì đây là
+      // đường GHI TIỀN, cùng cổng với màn Thanh toán.
+      { label: "Nhập giao dịch cũ", href: "/nhap-giao-dich-cu", icon: FileSpreadsheet, perm: ["payments:record", "payments:manage"] },
       // Đối soát tiền về từ SePay — nơi kiểm "máy đã tự xác nhận đúng chưa".
       { label: "Biến động số dư", href: "/bien-dong-so-du", icon: Wallet, perm: ["payments:manage", "payments:view"] },
       { label: "Hoàn tiền", href: "/hoan-tien", icon: Undo2, perm: ["payments:manage"] },
