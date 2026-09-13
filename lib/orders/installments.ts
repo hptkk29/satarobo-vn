@@ -19,6 +19,8 @@ import {
 import { isInstallmentPlanActive } from "@/lib/payments/installment-plan";
 // Sổ đăng ký marker + phép ghi phần chênh — MỘT chỗ (DS-03 + R-01, 13/09/2026).
 import { planOwnedNoteOr, phanConPhaiGhi } from "@/lib/finance/payment-markers";
+// R-02 — cổng chặn việc lưu kế hoạch làm mất dấu tiền khách đã đóng (thuần).
+import { keHoachLamMatTien } from "@/lib/payments/plan-money-guard";
 
 // =============================================================================
 // Commit 4 — thanh toán TỐI ĐA 2 ĐỢT cho 1 Order.
@@ -58,6 +60,25 @@ async function recomputeOrder(orderId: string): Promise<void> {
  * Ghi/ghi đè kế hoạch 2 đợt. dot1Amount đã thu (PAID ngay), dot2 còn lại (PENDING,
  * dueDate hẹn). Nếu dot2Amount=0 → chỉ 1 đợt (đã đóng đủ).
  */
+/**
+ * R-02 — ném khi lưu kế hoạch sẽ làm mất dấu tiền khách đã đóng.
+ *
+ * PHẢI là `throw`, KHÔNG được trả cờ: cả ba chỗ gọi `materializeInstallmentRequests`
+ * đều BỎQUA giá trị trả về, và quan trọng hơn: khi cổng bật thì `orderInstallment.deleteMany`
+ * + xoá mềm `Payment` ở trên ĐÃ chạy trong cùng transaction. Trả cờ thì transaction
+ * vẫn COMMIT phần phá hoại — chỉ `throw` mới rollback được.
+ */
+export class InstallmentMoneyBlocked extends Error {
+  readonly code = "INSTALLMENT_MONEY_BLOCKED" as const;
+  constructor(
+    message: string,
+    readonly soTien: number,
+  ) {
+    super(message);
+    this.name = "InstallmentMoneyBlocked";
+  }
+}
+
 export async function recordInstallmentPlan(params: {
   orderId: string;
   dot1Amount: number;
@@ -91,7 +112,7 @@ export async function recordInstallmentPlan(params: {
   if (dot2Amount > 0 && !dot2DueDate) return { ok: false, error: "Cần ngày hẹn đóng đợt 2" };
 
   const now = new Date();
-  await db.$transaction(async (tx) => {
+  const chan = await db.$transaction(async (tx) => {
     await tx.orderInstallment.deleteMany({ where: { orderId } });
     // S1-fix (double-write) — kế hoạch 2 đợt là NGUỒN SỰ THẬT về tiền của đơn:
     // xoá mềm Payment auto cũ TRƯỚC khi dựng lại. Nếu không:
@@ -185,6 +206,45 @@ export async function recordInstallmentPlan(params: {
     // Đơn trả 1 lần (không có đợt 2) giữ nguyên đường cũ: 1 phiếu "thu toàn đơn" —
     // gọi nó là "Đợt 1/1" chỉ làm sale rối chứ không thêm thông tin gì.
     if (dot2Amount > 0) {
+      // ── R-02 ── Chặn TRƯỚC khi `materializeInstallmentRequests` VOID phiếu "thu toàn
+      // đơn". Đo bốn số rồi hỏi `keHoachLamMatTien` (thuần, `lib/payments/plan-money-guard.ts`).
+      // Đo Ở ĐÂY, sau lượt xoá mềm và sau khi đã ghi phần chênh đợt 1: `recordedPaid`
+      // phải là số THẬT còn sống tại thời điểm phiếu sắp bị VOID.
+      const [rotVaoToanDon, tongDaThu, tongDaRot] = await Promise.all([
+        tx.paymentAllocation.aggregate({
+          where: {
+            paymentRequest: { orderId, installmentNo: 0, status: { not: "VOID" } },
+          },
+          _sum: { amount: true },
+        }),
+        tx.payment.aggregate({
+          where: { orderId, deletedAt: null, saleStatus: "RECORDED" },
+          _sum: { amount: true },
+        }),
+        tx.paymentAllocation.aggregate({
+          where: { paymentRequest: { orderId } },
+          _sum: { amount: true },
+        }),
+      ]);
+      const canhBao = keHoachLamMatTien({
+        fullOrderAllocated: rotVaoToanDon._sum.amount ?? 0,
+        recordedPaid: tongDaThu._sum.amount ?? 0,
+        allocated: tongDaRot._sum.amount ?? 0,
+        dot1Amount,
+      });
+      if (canhBao.chan) {
+        await writeAudit({
+          actor: { id: actorId, name: "" },
+          module: "finance",
+          entityType: "Order",
+          entityId: orderId,
+          action: "PAYMENT_REQUESTS_MATERIALIZE_BLOCKED",
+          newValues: { soTien: canhBao.soTien ?? 0, dot1Amount, lyDo: canhBao.lyDo ?? "" },
+          orgUnitId: order.centerId,
+          tx,
+        });
+        throw new InstallmentMoneyBlocked(canhBao.lyDo ?? "", canhBao.soTien ?? 0);
+      }
       await materializeInstallmentRequests(tx, orderId, { id: actorId, name: "" });
     } else {
       await ensureFullOrderRequest(tx, {
@@ -194,7 +254,13 @@ export async function recordInstallmentPlan(params: {
         centerId: order.centerId,
       });
     }
+  }).catch((e: unknown) => {
+    // R-02 — transaction ĐÃ rollback ở đây (đó là lý do dùng throw). Chỉ còn việc đổi
+    // sang kênh `{ok,error}` sẵn có để toast trên màn đơn nói được cho sale biết làm gì tiếp.
+    if (e instanceof InstallmentMoneyBlocked) return e;
+    throw e;
   });
+  if (chan instanceof InstallmentMoneyBlocked) return { ok: false, error: chan.message };
   await recomputeOrder(orderId);
   return { ok: true };
 }
