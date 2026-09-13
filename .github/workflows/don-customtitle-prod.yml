@@ -1,0 +1,108 @@
+# Chạy TAY — dọn `ClassSessionPlan.customTitle` do MÁY chép, trên PROD.
+#
+# Vì sao phải là workflow: prod chỉ chạm được qua GitHub Actions. `.env` trên máy dev trỏ DB
+# DEV (`mqvojwccdhqbagfnjhfo`), và chuỗi prod duy nhất ở máy là user CHỈ-ĐỌC — chạy `--apply`
+# bằng nó thì `updateMany` bị Postgres từ chối SAU KHI đã ghi dump. Chuỗi đầy quyền chỉ có ở
+# đây, dạng secret.
+#
+# ⚠️ ĐÂY LÀ NÚT GHI. Một lượt bấm làm ba việc, theo đúng thứ tự của runbook:
+#     1. xem trước (dry-run)  → in đủ danh sách lớp + phân nhóm, KHÔNG ghi gì
+#     2. dọn thật (--apply)   → chỉ chạy khi chuỗi xác nhận đúng
+#     3. nghiệm thu           → ba phép, mã thoát 1 nếu trượt
+#
+# Bối cảnh đầy đủ: `docs/dieu-tra-lech-bai-hoc.md`.
+#
+# ── BỐN CỔNG AN TOÀN (nằm trong chính script, không phải ở file này) ────────────────────
+#   · `--dry-run` là mặc định; chỉ `--apply` mới ghi.
+#   · Phạm vi phải khai tường minh (`--tat-ca` in ra đủ 22 lớp trước khi hỏi).
+#   · Dump giá trị cũ ra file TRƯỚC khi ghi; dump hỏng thì không ghi.
+#   · Loại trừ nhóm NGƯỜI GÕ, phát hiện bằng `updatedAt` lệch `createdAt` — không hard-code id.
+#
+# Dump + CSV bàn giao đi lên **artifact**, KHÔNG commit ngược vào repo: chúng là bản sao nội
+# dung thật của khách hàng.
+#
+# Dùng SESSION POOLER (`PROD_DIRECT_URL`, cổng 5432) chứ không phải transaction pooler (6543):
+# pgbouncer không giữ prepared statement giữa các câu lệnh, mà script chạy hàng trăm truy vấn
+# liên tiếp thì dính `prepared statement "sN" does not exist`. Đã ăn thật hai lần.
+
+name: Dọn customTitle · PROD · GHI
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Gõ đúng "DON THAT VAO PROD" để chạy bước ghi. Để trống = chỉ xem trước.'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  don:
+    name: Dọn customTitle (PROD)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      # Session pooler — xem ghi chú đầu file.
+      #
+      # ⚠️ CỐ Ý KHÔNG đặt `PROD_READONLY_URL` ở đây, dù cả ba script đều đọc biến đó trước.
+      # Chuỗi này là chuỗi ĐẦY QUYỀN; gán nó vào một biến tên "readonly" là đặt tên nói dối,
+      # và cái tên đó sẽ theo người đọc sang mọi lượt gỡ rối sau này. Các script rơi về
+      # `DATABASE_URL` khi không thấy nó — đúng thứ ta muốn ở NÚT GHI này.
+      DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+      DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prisma generate
+
+      - name: Kiểm secret có mặt
+        run: |
+          [ -n "${{ secrets.PROD_DIRECT_URL }}" ] || { echo "::error::Thiếu secret PROD_DIRECT_URL."; exit 1; }
+
+      # Script tự in `Đích: <user>@<host>:<port>/<db>` (che mật khẩu) ở dòng thứ hai — đó là
+      # cách DUY NHẤT đối chiếu, vì GitHub không cho đọc lại secret.
+      - name: 1) Xem trước — KHÔNG ghi gì
+        run: |
+          pnpm exec tsx scripts/don-customtitle-may-chep.ts \
+            --tat-ca --csv-nguoi-go=var/customtitle-nguoi-sua.csv
+
+      - name: 2) Dọn THẬT
+        if: inputs.confirm == 'DON THAT VAO PROD'
+        run: |
+          pnpm exec tsx scripts/don-customtitle-may-chep.ts \
+            --tat-ca --csv-nguoi-go=var/customtitle-nguoi-sua.csv --apply
+
+      - name: 2b) Bỏ qua bước ghi (không gõ chuỗi xác nhận)
+        if: inputs.confirm != 'DON THAT VAO PROD'
+        run: |
+          echo "::notice::Chỉ chạy XEM TRƯỚC. Muốn ghi thật thì chạy lại và gõ: DON THAT VAO PROD"
+
+      - name: 3) Nghiệm thu
+        if: inputs.confirm == 'DON THAT VAO PROD'
+        run: pnpm exec tsx scripts/nghiem-thu-don-customtitle.ts
+
+      # Dump = bản sao nội dung thật của khách hàng ⇒ artifact, KHÔNG commit vào repo.
+      # Nó là thứ duy nhất để quay lui: `scripts/quay-lui-customtitle.ts --dump=… --apply`.
+      - name: Giữ dump + CSV bàn giao
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: don-customtitle-${{ github.run_id }}
+          path: |
+            var/customtitle/dump-truoc-khi-don.json
+            var/customtitle-nguoi-sua.csv
+          if-no-files-found: warn
+          retention-days: 30
