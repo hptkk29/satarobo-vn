@@ -135,11 +135,7 @@ export default async function OrderDetailPage({ params }: Props) {
   const canViewPii = await checkPermission("orders:view-pii");
   // OD1b — duyệt kế hoạch trả góp 2 đợt tách khỏi orders:manage (ACCOUNTANT không có quyền duyệt).
   // order đã fetch có centerId → truyền target để scope-aware (CENTER nếu có role seed sau này).
-  const canApprove = await checkPermission("installments:approve", { centerId: order.centerId });
   // BGĐ 31/07 — duyệt giảm giá nhập tay (Quản lý cơ sở).
-  const canApproveDiscount = await checkPermission("discounts:approve", {
-    centerId: order.centerId,
-  });
 
   // Commit 4 — thanh toán 2 đợt + QR.
   // BGĐ 31/07 — QR lấy tài khoản NHẬN TIỀN theo đơn. 31/08/2026: nguồn đổi từ "theo cơ
@@ -344,8 +340,6 @@ export default async function OrderDetailPage({ params }: Props) {
               }
         }
         canManage={canManage}
-        canApprove={canApprove}
-        canApproveDiscount={canApproveDiscount}
         qrUrl={qrUrl}
         dueNow={dueNow}
         transferContent={transferContentShown}

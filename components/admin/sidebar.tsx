@@ -9,7 +9,6 @@ import {
   ArrowLeftRight,
   Award,
   BarChart3,
-  BadgeCheck,
   Bell,
   BookMarked,
   BookOpen,
@@ -269,16 +268,6 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Tài chính",
     items: [
       { label: "Đơn hàng", href: "/orders", icon: ShoppingBag, perm: ["orders:view"] },
-      // 20/08/2026 — hàng chờ DUYỆT ĐƠN của quản lý cơ sở (một nút duyệt cho cả giảm
-      // giá lẫn kế hoạch thanh toán). Thiếu mục này thì trang chỉ tới được từ TRONG
-      // chi tiết một đơn đang chờ — tức phải tìm ra đơn rồi mới biết hàng chờ tồn tại.
-      // perm dùng OR: ai có MỘT trong hai quyền duyệt là thấy link.
-      {
-        label: "Duyệt đơn hàng",
-        href: "/orders/duyet",
-        icon: BadgeCheck,
-        perm: ["discounts:approve", "installments:approve"],
-      },
       // Ghi nhận khoản thu là việc của quầy (payments:record) — xem ghi chú trong
       // app/(admin)/admin/payments/page.tsx. Đừng thu lại còn mỗi payments:manage.
       { label: "Thanh toán", href: "/payments", icon: CreditCard, perm: ["payments:manage", "payments:record"] },

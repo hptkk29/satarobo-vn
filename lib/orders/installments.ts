@@ -97,16 +97,18 @@ export async function recordInstallmentPlan(params: {
     select: { code: true, totalAmount: true, centerId: true, leadId: true, installmentApprovalStatus: true },
   });
   if (!order) return { ok: false, error: "Không tìm thấy đơn" };
-  // Chủ dự án chốt 03/08 — DUYỆT = KHOÁ. Kế hoạch đã duyệt thì không sửa số tiền/
-  // số đợt được nữa: phiếu thu và mã QR đã phát cho khách bám theo nó, sửa sau lưng
-  // là tiền về một đằng sổ ghi một nẻo. Muốn đổi thì QLCS từ chối kế hoạch trước.
-  if (order.installmentApprovalStatus === "APPROVED") {
-    return {
-      ok: false,
-      error:
-        "Kế hoạch trả góp đã được duyệt — không sửa được nữa. Cần đổi thì quản lý cơ sở từ chối kế hoạch rồi lập lại.",
-    };
-  }
+  // ⚠️ ĐÃ THAY [14/09/2026] — KHÔNG gỡ trắng, ĐỔI KHOÁ.
+  //
+  // Trước: "kế hoạch đã DUYỆT thì không sửa" (chốt 03/08, duyệt = khoá). Cơ chế duyệt đã
+  // bỏ nên khoá đó không còn cửa nào để bám. Nhưng thứ nó bảo vệ thì vẫn thật: phiếu thu
+  // và mã QR đã phát cho khách bám theo kế hoạch, sửa sau lưng là tiền về một đằng sổ
+  // ghi một nẻo.
+  //
+  // Khoá MỚI không hỏi ai đã bấm duyệt, nó hỏi TIỀN: cổng R-02 (`keHoachLamMatTien`,
+  // lib/payments/plan-money-guard.ts) chạy ngay dưới, TRƯỚC khi `materializeInstallmentRequests`
+  // VOID phiếu "thu toàn đơn". Phiếu đã có tiền rót vào thì không huỷ được — đúng chốt
+  // của chủ dự án. Khoá theo tiền chặt hơn khoá theo cờ: cờ duyệt có thể chưa ai bấm
+  // trong khi tiền đã về.
   if (dot1Amount + dot2Amount !== order.totalAmount) {
     return { ok: false, error: `Tổng 2 đợt phải bằng học phí (${formatVndPlain(order.totalAmount, false)})` };
   }
@@ -158,13 +160,10 @@ export async function recordInstallmentPlan(params: {
       await tx.orderInstallment.create({
         data: { orderId, soDot: 2, amount: dot2Amount, status: "PENDING", dueDate: dot2DueDate, recordedById: actorId, reminderDays: reminderDays ?? null },
       });
-      // C4 — kế hoạch 2 đợt cần CENTER_MANAGER duyệt; mặc định PENDING_APPROVAL (chỉ set khi chưa có).
-      if (order.installmentApprovalStatus == null) {
-        await tx.order.update({
-          where: { id: orderId },
-          data: { installmentApprovalStatus: "PENDING_APPROVAL", installmentRequestedById: actorId },
-        });
-      }
+      // ⚠️ ĐÃ GỠ [14/09/2026] — khối set `installmentApprovalStatus: "PENDING_APPROVAL"`.
+      // Đây là nơi DUY NHẤT sinh hàng chờ duyệt kế hoạch (đo: đúng 1 đơn trên prod).
+      // Gỡ nó là hết hàng chờ MỚI; hàng cũ xử lý bằng migration dữ liệu ở đợt riêng.
+      // Cột giữ nguyên trong schema — không drop cột trên bảng có dữ liệu prod.
     }
     // S1 — đợt 1 (đã thu) ghi Payment(RECORDED) idempotent → Ledger-A khớp Ledger-B.
     //

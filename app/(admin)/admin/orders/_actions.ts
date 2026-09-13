@@ -21,7 +21,7 @@ import { generateOrderCode, withUniqueRetry } from "@/lib/orders/code";
 import { checkOrderCreateOwnership } from "@/lib/orders/create-guard";
 import { canTransition } from "@/lib/orders/status";
 import { recordInstallmentPlan, markInstallmentPaid } from "@/lib/orders/installments";
-import { discountFromPercent, needsDiscountApproval } from "@/lib/orders/discount";
+import { discountFromPercent } from "@/lib/orders/discount";
 import { ensureParentAccountForOrder } from "@/lib/parents/provision";
 import { ensureOrderPaymentRecorded } from "@/lib/finance/payment";
 import { ensureFullOrderRequest } from "@/lib/payments/payment-request";
@@ -301,12 +301,13 @@ export async function createOrderManualAction(input: unknown) {
     return { ok: false as const, error: "Tổng tiền không thể âm" };
   }
 
-  // BGĐ 31/07 — giảm giá nhập tay phải qua duyệt của Quản lý cơ sở trước khi đơn
-  // được xác nhận (đơn tạo ra ở trạng thái chờ duyệt giảm giá).
-  const discountNeedsApproval = needsDiscountApproval({
-    discountAmount: data.discountAmount,
-  });
-  if (discountNeedsApproval && !data.discountReason?.trim()) {
+  // ⚠️ 14/09/2026 — cơ chế DUYỆT đã gỡ, nhưng GIẢI TRÌNH thì GIỮ.
+  //
+  // Hai thứ này hay bị gộp làm một. "Duyệt" là một người phải bấm trước khi đơn đi tiếp
+  // — đó là thứ chủ dự án bỏ. "Giải trình" là một dòng chữ nói vì sao bớt tiền — đó là
+  // DẤU VẾT, và dấu vết chính là cái thay thế cổng duyệt, nên bỏ nó là bỏ cả hai.
+  const coGiamGia = data.discountAmount > 0;
+  if (coGiamGia && !data.discountReason?.trim()) {
     return { ok: false as const, error: "Nhập giải trình giảm giá" };
   }
 
@@ -439,11 +440,14 @@ export async function createOrderManualAction(input: unknown) {
         paymentMethodId: data.paymentMethodId,
         subtotal,
         discountAmount: data.discountAmount,
-        // BGĐ 31/07 — snapshot cách nhập giảm giá + giải trình + cờ chờ duyệt.
+        // Snapshot cách nhập giảm giá + giải trình.
+        //
+        // ⚠️ 14/09/2026 — KHÔNG còn set `discountApprovalStatus`/`discountRequestedById`:
+        // đơn mới không đi vào hàng chờ duyệt nữa. Hai cột GIỮ trong schema (dữ liệu cũ
+        // đang mang giá trị thật, và drop cột trên bảng có dữ liệu prod là đợt riêng —
+        // luật cứng #4), chỉ không có đường GHI mới.
         discountPercent: data.discountPercent ?? null,
-        discountReason: discountNeedsApproval ? (data.discountReason?.trim() ?? null) : null,
-        discountApprovalStatus: discountNeedsApproval ? "PENDING_APPROVAL" : null,
-        discountRequestedById: discountNeedsApproval ? actorId : null,
+        discountReason: coGiamGia ? (data.discountReason?.trim() ?? null) : null,
         shippingFee: data.shippingFee,
         totalAmount,
         customerNote: data.customerNote?.trim() || null,
@@ -624,21 +628,10 @@ export async function changeOrderStatusAction(
     return { ok: false as const, error: "Không tìm thấy đơn hàng" };
   }
 
-  // BGĐ 31/07 — đơn có giảm giá nhập tay chỉ được xác nhận sau khi QL cơ sở duyệt.
-  if (parsed.data.toStatus === "CONFIRMED" && order.discountApprovalStatus != null) {
-    if (order.discountApprovalStatus === "PENDING_APPROVAL") {
-      return {
-        ok: false as const,
-        error: "Giảm giá đang chờ Quản lý cơ sở duyệt — chưa thể xác nhận đơn",
-      };
-    }
-    if (order.discountApprovalStatus === "REJECTED") {
-      return {
-        ok: false as const,
-        error: "Giảm giá đã bị từ chối — sửa lại đơn trước khi xác nhận",
-      };
-    }
-  }
+  // ⚠️ ĐÃ GỠ [14/09/2026] — cổng "giảm giá chưa duyệt thì chưa xác nhận đơn" (BGĐ 31/07).
+  // Gỡ CÙNG LÚC với cổng máy chốt ở `lib/payments/payos-ingest.ts`: lệch nhịp thì webhook
+  // chốt được mà người không chốt được (hoặc ngược lại), và không ai đọc ra vì sao.
+  // Thay cho nó là dấu vết `lib/orders/price-guard.ts` + AuditLog ORDER_CREATED.
 
   if (order.status === parsed.data.toStatus) {
     return {
