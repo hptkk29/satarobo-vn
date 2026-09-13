@@ -16,6 +16,14 @@
 
 import { describe, it, expect } from "vitest";
 import { deriveStatus } from "./allocation";
+// 13/09/2026 — [DS-03] ĐÃ VÁ: test nay gọi SỔ ĐĂNG KÝ THẬT thay vì bản sao cục bộ.
+import {
+  AUTO_ORDER_CONFIRM_MARKER,
+  gatewayMarker,
+  installmentMarker,
+  isPlanOwnedNote,
+  planOwnedNoteOr,
+} from "@/lib/finance/payment-markers";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LỖI 1 — DUNG SAI LÀM TRÒN BỊ ĐÁNH MẤT KHI TÍNH LẠI ⇒ PAID tụt về PARTIAL
@@ -119,47 +127,32 @@ describe("[DS-02] ngưỡng dung sai — 100.000đ không còn là 'làm tròn'"
 // bằng số tiền khách đã chuyển.
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Đúng chuỗi mà `installments.ts:102` dùng làm điều kiện xoá mềm. */
-const DIEU_KIEN_XOA_MEM = "[auto:";
+describe("[DS-03] điều kiện xoá mềm của kế hoạch KHÔNG được trúng tiền ngân hàng", () => {
+  // ✅ ĐÃ VÁ 13/09/2026 — `lib/finance/payment-markers.ts` + thu hẹp điều kiện ở
+  // `lib/orders/installments.ts`. Ghim `it.fails` đã gỡ; từ đây trở đi các test này
+  // phải XANH, và đỏ trở lại nghĩa là ai đó nới điều kiện về tiền tố `[auto:`.
 
-/** Đúng cách `payos-ingest.ts:1038` dựng marker cho tiền thật từ ngân hàng. */
-function markerTienThatTuNganHang(provider: string, providerTxnId: string): string {
-  return `[auto:${provider.toLowerCase()}:${providerTxnId}]`;
-}
-
-/** Marker của khoản TỰ SINH bởi kế hoạch đợt (`lib/finance/payment.ts:55`). */
-function markerKhoanTuSinh(soDot: number | null): string {
-  return soDot != null ? `[auto:order-installment:dot${soDot}]` : "[auto:order-confirm]";
-}
-
-describe("[DS-03] marker tiền ngân hàng KHÔNG được trúng điều kiện xoá mềm của kế hoạch", () => {
   it("điều kiện xoá mềm PHẢI trúng khoản tự sinh của kế hoạch — đây là việc của nó", () => {
-    // `it` thường, phải xanh: ghim phần ĐÚNG để lần vá không vô tình bỏ mất.
-    expect(markerKhoanTuSinh(1).includes(DIEU_KIEN_XOA_MEM)).toBe(true);
-    expect(markerKhoanTuSinh(2).includes(DIEU_KIEN_XOA_MEM)).toBe(true);
-    expect(markerKhoanTuSinh(null).includes(DIEU_KIEN_XOA_MEM)).toBe(true);
+    expect(isPlanOwnedNote(installmentMarker(1))).toBe(true);
+    expect(isPlanOwnedNote(installmentMarker(2))).toBe(true);
+    expect(isPlanOwnedNote(AUTO_ORDER_CONFIRM_MARKER)).toBe(true);
   });
 
-  it.fails("tiền thật từ SePay KHÔNG được trúng điều kiện xoá mềm", () => {
-    expect(markerTienThatTuNganHang("SEPAY", "TX123").includes(DIEU_KIEN_XOA_MEM)).toBe(false);
+  it("tiền thật từ SePay KHÔNG trúng điều kiện xoá mềm", () => {
+    expect(isPlanOwnedNote(`Tiền về qua SEPAY TX123 ${gatewayMarker("SEPAY", "TX123")}`)).toBe(false);
   });
 
-  it.fails("tiền thật từ payOS KHÔNG được trúng điều kiện xoá mềm", () => {
-    expect(markerTienThatTuNganHang("PAYOS", "TX123").includes(DIEU_KIEN_XOA_MEM)).toBe(false);
+  it("tiền thật từ payOS KHÔNG trúng điều kiện xoá mềm", () => {
+    expect(isPlanOwnedNote(`Tiền về qua PAYOS TX123 ${gatewayMarker("PAYOS", "TX123")}`)).toBe(false);
   });
 
-  it.fails("phải phân biệt được hai HỌ marker bằng một luật ở MỘT chỗ", () => {
-    // Bản vá đúng: gom danh sách marker vào một chỗ (vd lib/finance/payment-markers.ts)
-    // và hỏi "khoản này có phải do KẾ HOẠCH ĐỢT tự sinh không", thay vì so chuỗi
-    // `[auto:` rải ở 3 nơi độc lập. Hàm dưới đây CHƯA TỒN TẠI — đó là nội dung bản vá.
-    const laKhoanCuaKeHoach = (note: string) =>
-      note.includes("[auto:order-installment:dot") || note.includes("[auto:order-confirm]");
-
-    expect(laKhoanCuaKeHoach(markerKhoanTuSinh(1))).toBe(true);
-    expect(laKhoanCuaKeHoach(markerTienThatTuNganHang("SEPAY", "TX123"))).toBe(false);
-
-    // Vế cuối là vế ĐỎ: chứng minh mã HÔM NAY không dùng luật đó mà dùng `[auto:`.
-    // Còn dùng `contains "[auto:"` thì tiền ngân hàng vẫn bị quét.
-    expect(DIEU_KIEN_XOA_MEM).toBe("[auto:order-");
+  it("điều kiện Prisma thật KHÔNG chứa mảnh tiền tố `[auto:`", () => {
+    // Đây là vế quyết định: chừng nào còn một mảnh `contains "[auto:"` thì tiền ngân
+    // hàng vẫn bị quét, dù các hàm thuần ở trên có đúng đến đâu.
+    const chuoi = planOwnedNoteOr([1, 2]).map((o) => o.note.contains);
+    expect(chuoi).not.toContain("[auto:");
+    for (const c of chuoi) {
+      expect(isPlanOwnedNote(c), `mảnh ${c} phải là marker của kế hoạch`).toBe(true);
+    }
   });
 });

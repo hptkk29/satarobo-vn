@@ -17,6 +17,8 @@ import {
 // Điều kiện "kế hoạch còn hiệu lực" — DÙNG CHUNG với `computeDueNow`. Hai bên lệch
 // nhau là nhận tiền một đằng, ghi sổ một nẻo (xem file đó).
 import { isInstallmentPlanActive } from "@/lib/payments/installment-plan";
+// Sổ đăng ký marker + phép ghi phần chênh — MỘT chỗ (DS-03 + R-01, 13/09/2026).
+import { planOwnedNoteOr, phanConPhaiGhi } from "@/lib/finance/payment-markers";
 
 // =============================================================================
 // Commit 4 — thanh toán TỐI ĐA 2 ĐỢT cho 1 Order.
@@ -92,14 +94,39 @@ export async function recordInstallmentPlan(params: {
   await db.$transaction(async (tx) => {
     await tx.orderInstallment.deleteMany({ where: { orderId } });
     // S1-fix (double-write) — kế hoạch 2 đợt là NGUỒN SỰ THẬT về tiền của đơn:
-    // xoá mềm MỌI Payment auto cũ ([auto:order-confirm] khi đơn đã xác nhận tổng,
-    // và [auto:order-installment:dotN] của lần lưu trước) TRƯỚC khi dựng lại. Nếu không:
+    // xoá mềm Payment auto cũ TRƯỚC khi dựng lại. Nếu không:
     //  (a) đơn CONFIRMED trước rồi mới lưu kế hoạch → confirm(full) + đợt1 = cộng đôi "đã nộp";
     //  (b) sửa lại số tiền đợt 1 → marker cũ khiến ensureOrderPaymentRecorded no-op, lệch số.
-    // Chỉ set deletedAt (không DELETE) nên không vướng FK Receipt (Restrict); khoản auto vốn
-    // chưa gắn enrollment nên không có Receipt.
+    //
+    // ⚠️ THU HẸP 13/09/2026 (DS-03) — trước đây điều kiện là `note contains "[auto:"`.
+    // Tiền tố đó quét luôn `[auto:sepay:<txn>]` / `[auto:payos:<txn>]`, tức TIỀN THẬT
+    // KHÁCH ĐÃ CHUYỂN (`lib/payments/payos-ingest.ts` ghi Ledger-A bằng marker đó).
+    // Hệ quả đang sống trên prod: bấm "Lưu kế hoạch" lần nữa trên đơn đã nhận chuyển
+    // khoản là xoá mềm dòng ledger DUY NHẤT của khoản đó ⇒ tiền rơi khỏi công nợ hiển
+    // thị (mọi phép đọc lọc `deletedAt: null`), trong khi `PaymentAllocation` ở sổ mới
+    // vẫn còn ⇒ hai sổ lệch đúng bằng số khách đã chuyển.
+    //
+    // Nay liệt kê TƯỜNG MINH đúng marker của chính kế hoạch (`lib/finance/payment-markers.ts`).
+    // KHÔNG "tối ưu" lại thành một mảnh tiền tố — `[MK-04]` khoá điều đó.
+    //
+    // Ba điều kiện gác thêm, vì so chuỗi KHÔNG đủ để nói "khoản này của kế hoạch":
+    //  · `enrollmentId: null`     — khoản đã gắn ghi danh là khoản đã vào sổ học phí thật.
+    //  · `accountantStatus: PENDING` — kế toán đã xác nhận/từ chối/điều chỉnh/hoàn thì
+    //    khoản đó không còn là nháp của kế hoạch nữa.
+    //  · `receipts: { none: {} }` — đã phát phiếu thu cho phụ huynh thì tuyệt đối không đụng.
+    // (Chú thích cũ ở đây nói "khoản auto vốn chưa gắn enrollment nên không có Receipt" —
+    //  MÃ NGUỒN NÓI NGƯỢC: `linkRecordedPaymentsToEnrollments` gắn `enrollmentId` cho MỌI
+    //  khoản RECORDED của đơn lúc convert. Vì thế phải gác tường minh, không tin chú thích.)
+    const soDotCuaKeHoach = dot2Amount > 0 ? [1, 2] : [1];
     await tx.payment.updateMany({
-      where: { orderId, deletedAt: null, note: { contains: "[auto:" } },
+      where: {
+        orderId,
+        deletedAt: null,
+        OR: planOwnedNoteOr(soDotCuaKeHoach),
+        enrollmentId: null,
+        accountantStatus: "PENDING",
+        receipts: { none: {} },
+      },
       data: { deletedAt: now },
     });
     await tx.orderInstallment.create({
@@ -118,15 +145,36 @@ export async function recordInstallmentPlan(params: {
       }
     }
     // S1 — đợt 1 (đã thu) ghi Payment(RECORDED) idempotent → Ledger-A khớp Ledger-B.
+    //
+    // ⚠️ GHI PHẦN CHÊNH, KHÔNG GHI LẠI TỪ ĐẦU (R-01, 13/09/2026).
+    //
+    // Bất biến mà chỗ này luôn muốn giữ: "tổng Payment còn sống của đơn = tiền đợt 1
+    // đã thu". Trước đây nó giữ bằng cách xoá sạch rồi ghi lại nguyên `dot1Amount` —
+    // cách đó chỉ đúng khi phép xoá quét SẠCH mọi thứ, và chính vì nó quét sạch nên
+    // nó cuốn cả tiền ngân hàng (DS-03, đã thu hẹp ở trên).
+    //
+    // Sau khi thu hẹp, ba loại khoản SỐNG SÓT có chủ đích: tiền cổng `[auto:<provider>:…]`,
+    // khoản nhập lịch sử `[backfill-import]`, và khoản kế toán gõ tay. Ghi lại nguyên
+    // `dot1Amount` lúc này là CỘNG ĐÔI — đó đúng là R-01, và nó nổ luôn cho tiền cổng
+    // chứ không chỉ đơn backfill. Vì thế chỉ ghi phần còn thiếu.
+    //
+    // Đếm SAU lượt xoá mềm ở trên, nên khoản nháp của lần lưu trước không bị tính.
     if (dot1Amount > 0) {
-      await ensureOrderPaymentRecorded(tx, {
-        orderId,
-        soDot: 1,
-        amount: dot1Amount,
-        leadId: order.leadId,
-        centerId: order.centerId,
-        actor: { id: actorId },
+      const daCo = await tx.payment.aggregate({
+        where: { orderId, deletedAt: null, saleStatus: "RECORDED" },
+        _sum: { amount: true },
       });
+      const canGhiThem = phanConPhaiGhi(dot1Amount, daCo._sum.amount ?? 0);
+      if (canGhiThem > 0) {
+        await ensureOrderPaymentRecorded(tx, {
+          orderId,
+          soDot: 1,
+          amount: canGhiThem,
+          leadId: order.leadId,
+          centerId: order.centerId,
+          actor: { id: actorId },
+        });
+      }
     }
     // ⚠️ 03/08 — ĐẢO QĐ-1 (chủ dự án chốt trong chat). Trước đây chỗ này chỉ dựng
     // phiếu "thu toàn đơn" và đợi QLCS duyệt mới sinh phiếu theo đợt ⇒ khách đứng ở
