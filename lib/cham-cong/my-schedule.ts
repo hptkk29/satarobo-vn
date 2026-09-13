@@ -2,6 +2,7 @@
 // ShiftRegistration cũ (đăng ký ca tự đề xuất — đã đóng băng L5, kế hoạch §5). Dùng chung cho
 // /cham-cong/lich-ca (admin), /teacher/lich và /teacher/bang-cong. Đọc `db` trần vì luôn lọc theo
 // CHÍNH userId của phiên (dữ liệu của mình).
+import type { NgayCongGop } from "./tong-hop-cong";
 import { db } from "@/lib/db";
 import type { ShiftSegment } from "./catalog";
 import type { LoaiMaCa } from "./nhan-ca";
@@ -49,13 +50,62 @@ export async function getMyAssignments(userId: string, from: Date, to: Date): Pr
   }));
 }
 
-export type MyDayRow = { date: Date; units: number; worked: number; expected: number; flags: string[]; override: boolean; locked: boolean; code: string | null };
+/**
+ * Một ngày công của CHÍNH người đăng nhập.
+ *
+ * `gop` mang ĐỦ cột mà `gopNgayCong` (`tong-hop-cong.ts`) cần — cùng phép gộp admin dùng ở
+ * `buildPeriodSummary`. Đừng cộng tay từ các trường phẳng bên trên: chúng có để hiển thị
+ * từng dòng, còn mọi con số TỔNG phải đi qua `gopNgayCong` (luật 12b — site GV đọc số của
+ * admin, không dựng lại).
+ */
+export type MyDayRow = {
+  date: Date;
+  units: number;
+  worked: number;
+  expected: number;
+  flags: string[];
+  override: boolean;
+  locked: boolean;
+  code: string | null;
+  gop: NgayCongGop;
+};
 
 export async function getMyAttendanceDays(userId: string, from: Date, to: Date): Promise<MyDayRow[]> {
   const rows = await db.staffAttendanceDay.findMany({
     where: { userId, workDate: { gte: from, lt: to } },
-    select: { workDate: true, overrideUnits: true, dayCreditEarned: true, workedMinutes: true, expectedMinutes: true, flags: true, status: true, templateCode: true },
+    select: {
+      workDate: true, overrideUnits: true, dayCreditEarned: true, dayCreditExpected: true,
+      workedMinutes: true, expectedMinutes: true, flags: true, status: true, templateCode: true,
+      dayType: true, leaveUnits: true, holidayPaidUnits: true, hourCredit: true,
+      lateMinutes: true, earlyLeaveMinutes: true, absenceStatus: true,
+    },
     orderBy: { workDate: "asc" },
   });
-  return rows.map((r) => ({ date: r.workDate, units: r.overrideUnits ?? r.dayCreditEarned, worked: r.workedMinutes, expected: r.expectedMinutes, flags: r.flags, override: r.overrideUnits != null, locked: r.status === "LOCKED", code: r.templateCode }));
+  return rows.map((r) => ({
+    date: r.workDate,
+    units: r.overrideUnits ?? r.dayCreditEarned,
+    worked: r.workedMinutes,
+    expected: r.expectedMinutes,
+    flags: r.flags,
+    override: r.overrideUnits != null,
+    locked: r.status === "LOCKED",
+    code: r.templateCode,
+    gop: {
+      workDate: r.workDate,
+      dayType: r.dayType,
+      templateCode: r.templateCode,
+      overrideUnits: r.overrideUnits,
+      dayCreditEarned: r.dayCreditEarned,
+      dayCreditExpected: r.dayCreditExpected,
+      leaveUnits: r.leaveUnits,
+      holidayPaidUnits: r.holidayPaidUnits,
+      hourCredit: r.hourCredit,
+      workedMinutes: r.workedMinutes,
+      expectedMinutes: r.expectedMinutes,
+      lateMinutes: r.lateMinutes,
+      earlyLeaveMinutes: r.earlyLeaveMinutes,
+      flags: r.flags,
+      absenceStatus: r.absenceStatus,
+    },
+  }));
 }
