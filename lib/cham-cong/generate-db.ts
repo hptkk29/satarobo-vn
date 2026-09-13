@@ -17,6 +17,8 @@ export type GenerateResult = {
   skippedNoPermission: number;
   unknownCode: number;
   people: number;
+  /** Ngày ≤ HÔM NAY bị chừa lại — lượt sinh lưới không chạm quá khứ và hôm nay. */
+  skippedPast: number;
   restWarnings: { userId: string; from: string; to: string }[];
   warnings: string[];
 };
@@ -35,6 +37,12 @@ export async function generateMonthAssignments(opts: {
   canWriteCenter: (centerId: string) => boolean;
   actorUserId: string;
   onlyUserIds?: string[];
+  /**
+   * HÔM NAY theo lịch VN (`vnDateOnly(new Date())`) — BẮT BUỘC, không mặc định.
+   * Luật 7 + luật 19: để hàm tự đọc đồng hồ là biến ranh giới "chỉ áp từ ngày mai" thành
+   * thứ không test được. Nơi gọi quyết định, và test truyền mốc cố định.
+   */
+  homNay: Date;
 }): Promise<GenerateResult> {
   const m = /^(\d{4})-(\d{2})$/.exec(opts.periodKey);
   if (!m) throw new Error(`periodKey không hợp lệ: ${opts.periodKey}`);
@@ -78,8 +86,8 @@ export async function generateMonthAssignments(opts: {
   });
   const tpl = new Map(templates.map((t) => [t.code, t]));
 
-  const plan = planMonthFromPatterns({ year, month1, patterns, existing, onlyUserIds: opts.onlyUserIds });
-  const result: GenerateResult = { created: 0, replaced: 0, kept: 0, cleared: 0, skippedProtected: 0, skippedNoPermission: 0, unknownCode: 0, people: userIds.length, restWarnings: [], warnings: [] };
+  const plan = planMonthFromPatterns({ year, month1, patterns, existing, onlyUserIds: opts.onlyUserIds, homNay: opts.homNay });
+  const result: GenerateResult = { created: 0, replaced: 0, kept: 0, cleared: 0, skippedProtected: 0, skippedPast: 0, skippedNoPermission: 0, unknownCode: 0, people: userIds.length, restWarnings: [], warnings: [] };
   const changed: { userId: string; workDate: Date }[] = [];
 
   for (const cell of plan) {
@@ -87,6 +95,12 @@ export async function generateMonthAssignments(opts: {
     const ex = existingId.get(key);
     if (cell.action === "SKIP_PROTECTED") {
       result.skippedProtected += 1;
+      continue;
+    }
+    // Ngày ≤ hôm nay: planner đã quyết định chừa. Ở đây chỉ đếm — KHÔNG có câu lệnh ghi nào
+    // sau nhánh này, và đó là điều duy nhất khiến bản vá có nghĩa.
+    if (cell.action === "SKIP_QUA_KHU") {
+      result.skippedPast += 1;
       continue;
     }
     if (cell.action === "KEEP") {

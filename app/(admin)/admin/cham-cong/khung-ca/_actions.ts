@@ -447,6 +447,9 @@ export async function generateMonthAction(
   const map = await loadCenterMap();
   const result = await generateMonthAssignments({
     db: sdb as unknown as GenerateDb,
+    // Ranh giới "chỉ áp KỂ TỪ NGÀY MAI" — đọc đồng hồ ở ĐÂY, tầng ngoài cùng, để lõi thuần
+    // vẫn test được bằng mốc cố định (luật 19).
+    homNay: vnDateOnly(new Date()),
     periodKey: p.data.periodKey,
     centerMap: map,
     centerIds: [...allowed],
