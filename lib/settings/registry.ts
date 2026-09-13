@@ -12,6 +12,8 @@
  * finance.debtReminderDaysBefore=14 (QĐ-O7), enrollment.suspendMaxMonths=6 (TBD-4).
  */
 import { z } from "zod";
+// Thuần, không DB — `catalog.ts` là nguồn sự thật của "có những loại thông báo nào".
+import { catalogPrefixes } from "@/lib/notifications/catalog";
 import { internalAwards } from "@/components/legacy-laptrinhrobot/_data/awards";
 import { gifts } from "@/components/legacy-laptrinhrobot/_data/gifts";
 import { commitments } from "@/components/legacy-laptrinhrobot/_data/commitments";
@@ -349,6 +351,55 @@ export const SETTINGS = {
     default: false,
     // Kênh bật/tắt toàn hệ: một cơ sở tự tắt thì nhân viên cơ sở đó im lặng mà không ai
     // ở Hội sở biết — đúng loại lỗi câm mà module này sinh ra để tránh.
+    centerOverridable: false,
+  }),
+  // ── Loại thông báo nào được đẩy ───────────────────────────────────────────────────────
+  //
+  // Trước 13/09/2026 danh sách này là HẰNG SỐ trong `lib/push/allowlist.ts`, nên "đổi loại
+  // nào được rung máy" là một lần sửa mã + deploy. Nay nó là tham số vận hành: sửa ở
+  // `/admin/cau-hinh-thong-bao-day`, có lý do, có nhật ký kiểm toán, không cần deploy.
+  //
+  // ⚠️ VẪN LÀ DANH SÁCH TRẮNG — rỗng nghĩa là KHÔNG đẩy gì, không phải "đẩy tất". Toàn bộ lập
+  // luận vì sao trắng-chứ-không-đen nằm ở đầu `lib/push/allowlist.ts`; đừng đảo ở đây.
+  //
+  // Giá trị phải là TIỀN TỐ ĐÃ KHAI trong `lib/notifications/catalog.ts`. Cổng này quan trọng
+  // hơn vẻ ngoài: gõ sai một ký tự (`lead.moi` thiếu dấu hai chấm) thì `startsWith` vẫn khớp
+  // đúng loại đó nhưng có thể khớp LẤN sang loại khác sinh sau; còn gõ hẳn một khoá không tồn
+  // tại thì danh sách trông như đã bật mà thực tế không bao giờ khớp gì — màn hình nói dối,
+  // và không có lỗi nào được ném ra. Chặn ngay ở tầng validate là chỗ rẻ nhất.
+  "push.tienToDuocDay": def({
+    key: "push.tienToDuocDay",
+    group: "system",
+    label:
+      "Loại thông báo được đẩy Web Push — chọn ở màn Cấu hình thông báo đẩy, để trống = không đẩy loại nào",
+    schema: z
+      .array(z.string())
+      .max(200)
+      .superRefine((ds, ctx) => {
+        const hopLe = new Set(catalogPrefixes());
+        const daGap = new Set<string>();
+        ds.forEach((d, i) => {
+          if (!hopLe.has(d)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: [i],
+              message: `"${d}" không phải loại thông báo đã khai trong catalog`,
+            });
+          }
+          if (daGap.has(d)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: [i],
+              message: `"${d}" bị khai hai lần`,
+            });
+          }
+          daGap.add(d);
+        });
+      }),
+    // ĐÚNG giá trị đang hardcode trước 13/09 ⇒ DB trống ở mọi môi trường vẫn ra hành vi cũ.
+    default: ["lead.moi:"],
+    // Cùng lý do với công tắc tổng: một cơ sở tự tắt một loại thì nhân viên cơ sở đó im lặng
+    // mà Hội sở không biết.
     centerOverridable: false,
   }),
   "student.birthdayZnsEnabled": def({

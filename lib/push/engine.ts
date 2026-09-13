@@ -24,6 +24,7 @@ import { sendNotification, WebPushError } from "web-push";
 import { db } from "@/lib/db";
 import { getSetting } from "@/lib/settings/service";
 import { duocDayPush } from "./allowlist";
+import { docTienToDuocDay, LY_DO_NGOAI_DANH_SACH } from "./cau-hinh-allowlist";
 import {
   backoffMs,
   bamEndpoint,
@@ -37,12 +38,7 @@ import {
 } from "./ket-qua";
 import { dungGoiTin } from "./payload";
 import { endpointConAnToan } from "./subscription";
-import {
-  chuanHoaVapidSubject,
-  khoaCongKhaiTuKhoaRieng,
-  laKhoaCongKhaiVapidHopLe,
-  laKhoaRiengVapidHopLe,
-} from "./vapid";
+import { docCauHinhVapid, type CauHinhVapid } from "./cau-hinh-vapid";
 
 // ── Tham số vận hành ────────────────────────────────────────────────────────────────────
 
@@ -110,7 +106,12 @@ const guiThat: HamGui = (sub, payload, opts) => sendNotification(sub, payload, o
 export interface KetQuaLuot {
   /** true = không làm gì cả (công tắc tắt hoặc khoá hỏng). Không dòng nào bị đụng. */
   skipped: boolean;
-  reason?: "DISABLED" | "NO_VAPID";
+  /**
+   * `NO_ALLOWLIST` — không đọc được `push.tienToDuocDay`. Cố ý là một lý do RIÊNG, không gộp
+   * vào `DISABLED`: "người vận hành tắt kênh" và "kênh không đọc nổi cấu hình" phải phân biệt
+   * được từ log cron, nếu không thì một sự cố DB nằm im nhiều ngày dưới lớp vỏ "đang tắt".
+   */
+  reason?: "DISABLED" | "NO_VAPID" | "NO_ALLOWLIST";
   /** Dòng treo được kéo về PENDING. */
   reaped: number;
   /** Dòng giành được trong lượt này. */
@@ -136,67 +137,6 @@ const LUOT_RONG: KetQuaLuot = {
   purged: 0,
   hetGio: false,
 };
-
-interface CauHinhVapid {
-  subject: string;
-  publicKey: string;
-  privateKey: string;
-}
-
-/**
- * Đọc + gác cấu hình VAPID.
- *
- * Gác ở ĐẦU LƯỢT và dừng CẢ LƯỢT nếu hỏng, chứ không để từng dòng tự chết: một lần dán nhầm
- * biến môi trường mà cứ chạy tiếp thì mỗi dòng ăn một lỗi 400/403, tiêu hết `maxAttempts` và
- * chuyển sang `DEAD` — tức một thao tác vận hành sai sẽ ĐỐT SẠCH hàng đợi, và không có đường
- * nào lấy lại. Dừng sạch thì sửa env xong là lượt sau chạy tiếp như chưa có gì.
- *
- * CỐ Ý chỉ ba biến: `NEXT_PUBLIC_VAPID_PUBLIC_KEY` (server đọc CHÍNH biến này, không có bản
- * `VAPID_PUBLIC_KEY` riêng), `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`. Hai biến giữ cùng một khoá
- * công khai mà lệch nhau = 403 `VapidPkHashMismatch` cho MỌI thiết bị, và không lint/build nào
- * bắt được — đúng vết `AUTH_SECRET` vs `NEXTAUTH_SECRET` của repo.
- */
-function docCauHinhVapid(): CauHinhVapid | null {
-  const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "";
-  const privateKey = process.env.VAPID_PRIVATE_KEY ?? "";
-  const subject = chuanHoaVapidSubject(process.env.VAPID_SUBJECT ?? "");
-
-  if (!laKhoaCongKhaiVapidHopLe(publicKey)) {
-    console.error("[push] NEXT_PUBLIC_VAPID_PUBLIC_KEY thiếu hoặc sai hình dạng — bỏ cả lượt");
-    return null;
-  }
-  if (!laKhoaRiengVapidHopLe(privateKey)) {
-    console.error("[push] VAPID_PRIVATE_KEY thiếu hoặc sai hình dạng — bỏ cả lượt");
-    return null;
-  }
-  if (!subject) {
-    // Push service dùng địa chỉ này để liên hệ khi hạ tầng ta gây sự cố; thiếu/sai thì một số
-    // dịch vụ từ chối thẳng. Đây là lỗi cấu hình, không phải lỗi của dòng nào.
-    console.error("[push] VAPID_SUBJECT phải là mailto: hoặc https: — bỏ cả lượt");
-    return null;
-  }
-
-  // HAI NỬA CÓ KHỚP NHAU KHÔNG — cổng quan trọng nhất trong hàm này.
-  //
-  // `VAPID_PRIVATE_KEY` là biến RUNTIME; `NEXT_PUBLIC_VAPID_PUBLIC_KEY` thì bị Next thay bằng
-  // CHUỖI LITERAL lúc BUILD, cho cả bundle server. Người vận hành sửa cả hai biến trên Vercel
-  // rồi KHÔNG deploy lại — thao tác trông hoàn toàn hợp lý — sẽ có khoá riêng MỚI ghép khoá
-  // công khai CŨ. Push service trả 403 `VapidPkHashMismatch` cho MỌI thiết bị, mà 403 là CHẾT
-  // ngay lượt đầu ⇒ cả hàng đợi chuyển `DEAD` trong vài phút và triệu chứng duy nhất là im lặng.
-  //
-  // Suy khoá công khai từ khoá riêng rồi so — biến ca đó thành một dòng lỗi nói thẳng.
-  const suyRa = khoaCongKhaiTuKhoaRieng(privateKey);
-  if (suyRa !== publicKey) {
-    console.error(
-      "[push] VAPID_PRIVATE_KEY và NEXT_PUBLIC_VAPID_PUBLIC_KEY KHÔNG phải một cặp — bỏ cả lượt. " +
-        "Thường gặp nhất: vừa xoay khoá trên Vercel mà chưa deploy lại (biến NEXT_PUBLIC_ được " +
-        "nhúng lúc BUILD, không đọc lúc chạy). Deploy lại rồi thử.",
-    );
-    return null;
-  }
-
-  return { subject, publicKey, privateKey };
-}
 
 /**
  * Bóc lỗi của một cú gửi thành (mã, mốc chờ, thông điệp) — KHÔNG để rò endpoint.
@@ -278,6 +218,18 @@ export async function chayLuotGuiPush(opts?: {
   const vapid = docCauHinhVapid();
   if (!vapid) return { ...LUOT_RONG, skipped: true, reason: "NO_VAPID" };
 
+  // ── Cổng 3: danh sách loại được đẩy. Đọc ĐÚNG MỘT LẦN cho cả lượt, không đọc trong vòng lặp:
+  // `getGlobalSetting` có cache nên đọc lại rẻ, nhưng đọc một lần còn cho tính chất quan trọng
+  // hơn — mọi dòng trong CÙNG một lượt được xét bằng CÙNG một danh sách. Người vận hành bấm lưu
+  // đúng lúc cron đang chạy sẽ không tạo ra một lượt nửa theo luật cũ nửa theo luật mới.
+  //
+  // Đọc HỎNG ⇒ thoát sạch cả lượt, KHÔNG đụng dòng nào. Nếu thay vào đó ta chạy tiếp với danh
+  // sách rỗng thì mỗi dòng `PENDING` sẽ bị chốt `SKIPPED` — trạng thái KHÔNG quay lại được —
+  // và một cú chập DB 2 giây xoá sổ toàn bộ thông báo đẩy đang chờ. Thoát ra thì lượt sau
+  // (một phút nữa) xử lại như chưa có gì xảy ra.
+  const cauHinh = await docTienToDuocDay();
+  if (!cauHinh.docDuoc) return { ...LUOT_RONG, skipped: true, reason: "NO_ALLOWLIST" };
+
   const kq: KetQuaLuot = { ...LUOT_RONG };
 
   // ── Cứu dòng treo. ĐO THEO `claimedAt`, không theo `createdAt` (xem đầu file).
@@ -338,7 +290,14 @@ export async function chayLuotGuiPush(opts?: {
     const soLanDaThu = dong.attempts + 1;
 
     try {
-      const ket = await xuLyMotDong({ dong, soLanDaThu, now, vapid, gui });
+      const ket = await xuLyMotDong({
+        dong,
+        soLanDaThu,
+        now,
+        vapid,
+        gui,
+        tienTo: cauHinh.tienTo,
+      });
       if (ket === "SENT") kq.sent++;
       else if (ket === "FAILED") kq.failed++;
       else if (ket === "DEAD") kq.dead++;
@@ -398,8 +357,10 @@ async function xuLyMotDong(params: {
   now: Date;
   vapid: CauHinhVapid;
   gui: HamGui;
+  /** Danh sách tiền tố của CẢ lượt — đọc một lần ở `chayLuotGuiPush`, xem cổng 3 ở đó. */
+  tienTo: readonly string[];
 }): Promise<"SENT" | "FAILED" | "DEAD" | "SKIPPED"> {
-  const { dong, soLanDaThu, now, vapid, gui } = params;
+  const { dong, soLanDaThu, now, vapid, gui, tienTo } = params;
 
   const boQua = async (lyDo: string): Promise<"SKIPPED"> => {
     await db.webPushOutbox.update({
@@ -414,10 +375,11 @@ async function xuLyMotDong(params: {
     return boQua("Quá hạn gửi");
   }
 
-  // ── Ngoài allowlist ⇒ bỏ. Điểm móc đã lọc rồi, nhưng kiểm LẠI ở đây là cổng thật: dòng có
-  // thể được ghi trước một lần đổi allowlist, hoặc bằng tay.
-  if (!duocDayPush(dong.dedupeKey)) {
-    return boQua("Ngoài allowlist tiền tố dedupeKey");
+  // ── Không thuộc loại được bật ⇒ bỏ. Điểm móc đã lọc rồi, nhưng kiểm LẠI ở đây là CỔNG THẬT:
+  // dòng có thể được ghi trước một lần đổi cấu hình, được ghi lúc điểm móc chưa đọc nổi cấu
+  // hình (xem `outbox.ts`), hoặc được nhét bằng tay.
+  if (!duocDayPush(dong.dedupeKey, tienTo)) {
+    return boQua(LY_DO_NGOAI_DANH_SACH);
   }
 
   // ── Đọc nội dung NGAY LÚC GỬI, không dùng bản chụp lúc ghi.

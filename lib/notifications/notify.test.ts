@@ -11,12 +11,17 @@ const h = vi.hoisted(() => {
   // thay vì để `ghiOutboxPush` nuốt một TypeError: nuốt được thì bộ này vẫn xanh, nhưng nó
   // xanh vì cái bẫy an toàn chứ không vì hàm chạy đúng — và console đầy cảnh báo giả.
   const outboxCreateMany = vi.fn(async (_a: { data: unknown[] }) => ({ count: 0 }));
+  // 13/09 — `ghiOutboxPush` đọc `push.tienToDuocDay` để biết loại nào được đẩy. Không mock
+  // thì lần đọc HỎNG ⇒ hàm giữ dòng ở `PENDING` (fail-safe có chủ đích) ⇒ ca 'ngoài danh
+  // sách ⇒ SKIPPED' đỏ, còn ca 'lead.moi: ⇒ PENDING' XANH GIẢ vì lý do sai.
+  const getGlobalSetting = vi.fn(async (_k: string) => ["lead.moi:"] as unknown);
   return {
     findMany,
     upsert,
     update,
     broadcastMessages,
     outboxCreateMany,
+    getGlobalSetting,
     mockDb: {
       staffNotification: { findMany, upsert, update },
       webPushOutbox: { createMany: outboxCreateMany },
@@ -25,6 +30,7 @@ const h = vi.hoisted(() => {
 });
 
 vi.mock("@/lib/db", () => ({ db: h.mockDb }));
+vi.mock("@/lib/settings/read-global", () => ({ getGlobalSetting: h.getGlobalSetting }));
 vi.mock("@/lib/chat/broadcast", async (importOriginal) => {
   const mod = await importOriginal<typeof import("@/lib/chat/broadcast")>();
   return { ...mod, broadcastMessages: h.broadcastMessages };
@@ -155,7 +161,7 @@ describe("[PUSH-D4-T28] notifyStaff ghi outbox theo canRung", () => {
     expect(h.outboxCreateMany).not.toHaveBeenCalled();
   });
 
-  it("loại NGOÀI allowlist ghi thẳng SKIPPED — có vết, không gửi", async () => {
+  it("loại KHÔNG được bật đẩy ghi thẳng SKIPPED — có vết, không gửi", async () => {
     h.findMany.mockResolvedValue([]);
     await notifyStaff(THAM_SO);
     const data = (h.outboxCreateMany.mock.calls[0]?.[0].data ?? []) as Record<string, unknown>[];

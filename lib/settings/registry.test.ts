@@ -104,3 +104,49 @@ describe("[R6-A] resolve — Center → Global → default (US-R6A-2)", () => {
     // 999999 > max 100 → invalid → default
   });
 });
+
+describe("[PUSH-D7-T22] push.tienToDuocDay — chặn khoá gõ sai ngay ở tầng validate", () => {
+  it("mặc định ĐÚNG bằng danh sách đã chạy trước khi có màn cấu hình", () => {
+    // DB trống ở một môi trường mới dựng phải ra hành vi y hệt bản cũ, không im lặng hơn cũng
+    // không ồn hơn. Đây là điều kiện để đổi từ hằng số sang tham số mà không ai nhận ra.
+    expect(SETTINGS["push.tienToDuocDay"].default).toEqual(["lead.moi:"]);
+  });
+
+  it("nhận danh sách gồm các tiền tố CÓ THẬT", () => {
+    expect(validateSettingValue("push.tienToDuocDay", ["lead.moi:", "sla:"]).ok).toBe(true);
+  });
+
+  it("nhận danh sách RỖNG — 'tắt hết' là một lựa chọn hợp lệ", () => {
+    expect(validateSettingValue("push.tienToDuocDay", []).ok).toBe(true);
+  });
+
+  it("⚠️ TỪ CHỐI khoá không có trong catalog — đây là cổng chống 'màn hình nói dối'", () => {
+    // Gõ thiếu dấu hai chấm, hay chép nhầm một khoá đã xoá: `startsWith` sẽ không khớp gì, nên
+    // danh sách trông như đã bật mà thực tế im lặng hoàn toàn. Không lỗi, không cảnh báo, và
+    // cách duy nhất phát hiện là có người báo "tôi không nhận được thông báo".
+    expect(validateSettingValue("push.tienToDuocDay", ["lead.moi"]).ok).toBe(false);
+    expect(validateSettingValue("push.tienToDuocDay", ["khong_ton_tai:"]).ok).toBe(false);
+    expect(validateSettingValue("push.tienToDuocDay", ["lead.moi:", "sai:"]).ok).toBe(false);
+  });
+
+  it("TỪ CHỐI chuỗi rỗng — nó khớp MỌI khoá, tức biến danh sách trắng thành 'đẩy tất'", () => {
+    expect(validateSettingValue("push.tienToDuocDay", [""]).ok).toBe(false);
+    expect(validateSettingValue("push.tienToDuocDay", ["lead.moi:", ""]).ok).toBe(false);
+  });
+
+  it("TỪ CHỐI khoá khai hai lần", () => {
+    expect(validateSettingValue("push.tienToDuocDay", ["lead.moi:", "lead.moi:"]).ok).toBe(false);
+  });
+
+  it("TỪ CHỐI thứ không phải mảng chuỗi", () => {
+    for (const v of ["lead.moi:", 1, null, { a: 1 }, [1, 2], [null]]) {
+      expect(validateSettingValue("push.tienToDuocDay", v).ok, JSON.stringify(v)).toBe(false);
+    }
+  });
+
+  it("KHÔNG cho override theo cơ sở", () => {
+    // Một cơ sở tự tắt một loại thì nhân viên cơ sở đó im lặng mà Hội sở không biết — đúng
+    // loại lỗi câm mà cả module này sinh ra để tránh.
+    expect(SETTINGS["push.tienToDuocDay"].centerOverridable).toBe(false);
+  });
+});

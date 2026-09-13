@@ -11,6 +11,7 @@ import {
   BarChart3,
   BadgeCheck,
   Bell,
+  BellRing,
   BookMarked,
   BookOpen,
   Boxes,
@@ -337,6 +338,10 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Chạy lại webhook", href: "/crm/webhook-replay", icon: RefreshCw, perm: ["settings:edit"] },
       { label: "Tích hợp", href: "/tich-hop", icon: Plug, perm: ["settings:view"] },
       { label: "Cấu hình vận hành", href: "/cau-hinh-van-hanh", icon: SlidersHorizontal, perm: ["settings:view"] },
+      // Tách khỏi "Cấu hình vận hành" chứ không nhét vào ô JSON của nó: chọn trong 51 loại
+      // thông báo bằng textarea JSON là việc không ai làm đúng được — xem chú thích đầu
+      // `app/(admin)/admin/cau-hinh-thong-bao-day/page.tsx`.
+      { label: "Cấu hình thông báo đẩy", href: "/cau-hinh-thong-bao-day", icon: BellRing, perm: ["settings:view"] },
       { label: "Cài đặt", href: "/settings", icon: Settings, perm: ["settings:view"] },
     ],
   },

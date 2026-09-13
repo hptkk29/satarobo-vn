@@ -104,6 +104,9 @@ export type NotiEntityType =
 // ─── Bảng khai ─────────────────────────────────────────────────────────────────
 
 interface NotiDef {
+  /** Nhãn người đọc được — dùng ở màn cấu hình thông báo đẩy. Bắt buộc: một dòng
+   *  thiếu nhãn thì màn cấu hình hiện khoá thô `lead.moi:` và người vận hành phải đoán. */
+  label: string;
   /** Nhóm hiển thị trong panel. */
   group: NotiGroupKey;
   /** Mức mặc định. Khoá `:overdue` của vòng việc tồn luôn được nâng lên 1 — xem `classifyNotification`. */
@@ -127,56 +130,69 @@ interface NotiDef {
 const BY_PREFIX: Readonly<Record<string, NotiDef>> = {
   // ── Vòng đồng bộ việc tồn (lib/pending-tasks.ts → lib/staff-notifications.ts) ──
   "class_approval:": {
+    label: "Lớp chờ duyệt",
     group: "action_required", priority: 2, entity: "class",
     recipients: "Người có quyền duyệt lớp", target: "/classes?status=PENDING_APPROVAL",
   },
   "timesheet_adjust:": {
+    label: "Đơn chỉnh công chờ duyệt",
     group: "action_required", priority: 2, entity: "timesheet",
     recipients: "Quản lý chấm công", target: "/don-tu", // L5: màn chỉnh công cũ đã gỡ, đơn chỉnh công nay ở Duyệt đơn từ
   },
   "parent_request:": {
+    label: "Yêu cầu phụ huynh còn tồn",
     group: "action_required", priority: 1, entity: "parent_request",
     recipients: "CSKH / Quản lý cơ sở", target: "/parent-requests",
   },
   "media_approval:": {
+    label: "Ảnh lớp chờ duyệt",
     group: "action_required", priority: 2, entity: "media",
     recipients: "Người duyệt ảnh lớp", target: "/media",
   },
   "session_incomplete:": {
+    label: "Buổi học chưa chốt",
     group: "action_required", priority: 1, entity: "session",
     recipients: "Giáo viên phụ trách buổi", target: "/sessions",
   },
   "center_checklist:": {
+    label: "Checklist cơ sở chưa xong",
     group: "action_required", priority: 1, entity: "center",
     recipients: "Quản lý cơ sở", target: "/cham-cong/checklist-co-so",
   },
   // 30/08 — LEAD MỚI VỀ TAY BẠN. `priority: 1` như `lead_followup`: lead mới là thứ
   // phải gọi trong ngày, để chung nhóm "chờ xử lý" với việc follow-up.
   "lead.moi:": {
+    label: "Lead mới vừa chia cho tôi",
     group: "action_required", priority: 1, entity: "lead",
     recipients: "Tư vấn viên vừa được chia lead", target: "/leads",
   },
   "lead_followup:": {
+    label: "Lead đến hạn chăm sóc",
     group: "action_required", priority: 1, entity: "lead",
     recipients: "Tư vấn viên phụ trách lead", target: "/leads",
   },
   "renewal:": {
+    label: "Học viên sắp hết khoá",
     group: "due_date", priority: 2, entity: "enrollment",
     recipients: "Tư vấn viên / CSKH", target: "/students/sap-het-khoa",
   },
   "student_risk:": {
+    label: "Cảnh báo học viên rủi ro",
     group: "action_required", priority: 2, entity: "student",
     recipients: "CSKH phụ trách học viên", target: "/canh-bao-rui-ro",
   },
   "student_care:": {
+    label: "Việc chăm sóc học viên được giao",
     group: "new_task", priority: 2, entity: "student",
     recipients: "Người được giao việc chăm sóc", target: "/cham-soc-hv",
   },
   "student_birthday:": {
+    label: "Sinh nhật học viên — nhắc CSKH/giáo viên",
     group: "system", priority: 3, entity: "student",
     recipients: "CSKH + giáo viên lớp", target: "/sinh-nhat",
   },
   "class_no_teacher:": {
+    label: "Lớp chưa có giáo viên",
     group: "action_required", priority: 1, entity: "class",
     recipients: "Quản lý cơ sở / Đào tạo", target: "/sessions",
   },
@@ -184,53 +200,64 @@ const BY_PREFIX: Readonly<Record<string, NotiDef>> = {
   // KHÔNG báo lỗi, nên link cũ (?status=REGISTERED) mở ra TOÀN BỘ danh sách lead —
   // trông như bộ lọc chạy đúng mà thật ra không lọc gì.
   "registered_stale:": {
+    label: "Lead đã đăng ký nhưng đứng im",
     group: "action_required", priority: 2, entity: "lead",
     recipients: "Tư vấn viên phụ trách lead", target: "/leads?status=DA_DANG_KY",
   },
   "report_card_milestone:": {
+    label: "Đến mốc phải làm học bạ",
     group: "due_date", priority: 2, entity: "report_card",
     recipients: "Giáo viên phụ trách lớp", target: "/report-cards",
   },
   "elearning_due:": {
+    label: "Khoá đào tạo nội bộ đến hạn",
     group: "due_date", priority: 1, entity: "trn_enrollment",
     recipients: "Chính người được giao khoá", target: "host đào tạo nội bộ",
   },
 
   // ── Sinh từ sự kiện: lớp & buổi học ──
   "class.session_changed:": {
+    label: "Lịch lớp vừa thay đổi",
     group: "system", priority: 2, entity: "class",
     recipients: "Giáo viên phụ trách lớp", target: "/classes/<classId>/edit",
   },
   "class.cancelled:": {
+    label: "Lớp bị huỷ",
     group: "system", priority: 2, entity: "class",
     recipients: "Giáo viên phụ trách lớp", target: "/classes/<classId>/edit",
   },
   "session.taught:": {
+    label: "Buổi học đã dạy xong",
     group: "system", priority: 3, entity: "session",
     recipients: "Giáo viên dạy buổi đó", target: "/sessions/<sessionId>",
   },
   // Điểm danh bị người khác sửa hồi tố — giáo viên phải kiểm lại, đây là việc chứ không phải tin.
   "attendance.edited:": {
+    label: "Điểm danh bị sửa hồi tố",
     group: "action_required", priority: 2, entity: "session",
     recipients: "Giáo viên chính của lớp", target: "/attendance?sessionId=<id>",
   },
   // Lịch dạy thay ngày mai — đổi ca của chính mình.
   "session.substitute:": {
+    label: "Được xếp dạy thay",
     group: "system", priority: 2, entity: "session",
     recipients: "Giáo viên dạy thay", target: "/lich",
   },
   // Buổi đã kết thúc mà chưa chốt — đây là hạn chót thật.
   "session.close-reminder:": {
+    label: "Nhắc chốt buổi đã kết thúc",
     group: "due_date", priority: 1, entity: "session",
     recipients: "Giáo viên phụ trách buổi", target: "/lich",
   },
 
   // ── Sinh từ sự kiện: lead & học thử ──
   "lead.trialAttended:": {
+    label: "Lead đã đi học thử",
     group: "new_task", priority: 2, entity: "lead",
     recipients: "Tư vấn viên phụ trách lead", target: "/leads/<leadId>",
   },
   "trial.assigned:": {
+    label: "Lead của tôi được xếp ca học thử",
     group: "new_task", priority: 2, entity: "trial",
     // Người nhận là SALE, KHÔNG phải giáo viên: producer lấy `lead.assignedToId` (rơi về admin
     // lead nếu trống) — lib/_handlers/trial-notif.ts. Khai nhầm ở đây làm người rà deep-link kết
@@ -240,20 +267,24 @@ const BY_PREFIX: Readonly<Record<string, NotiDef>> = {
   // 03/09 — giáo viên chấm xong phiếu rubric ⇒ Sale có căn cứ chốt với phụ huynh.
   // Việc MỚI rơi xuống chứ không phải tin để biết, nên xếp "new_task" như trial.assigned.
   "trial.evaluated:": {
+    label: "Giáo viên đã chấm phiếu học thử",
     group: "new_task", priority: 2, entity: "trial",
     // Là SALE, không phải giáo viên: người chấm chính là giáo viên nên báo lại là vô nghĩa.
     recipients: "Tư vấn viên phụ trách lead (không có thì admin lead)", target: "/lop-trial/<trialClassId>",
   },
   "trial.schedule_changed:": {
+    label: "Lịch học thử của lead thay đổi",
     group: "system", priority: 2, entity: "trial",
     // Cũng là SALE (lib/_handlers/trial-schedule-notif.ts), không phải giáo viên.
     recipients: "Tư vấn viên phụ trách lead (không có thì admin lead)", target: "/leads/<leadId>",
   },
   "trial-v1.assigned:": {
+    label: "Được phân buổi học thử (luồng cũ)",
     group: "new_task", priority: 2, entity: "trial",
     recipients: "Giáo viên được phân buổi học thử", target: "/lop-trial/lich-hen",
   },
   "trial-class.assigned:": {
+    label: "Được phân lớp học thử",
     group: "new_task", priority: 2, entity: "trial",
     recipients: "Giáo viên được phân lớp học thử", target: "/lop-trial",
   },
@@ -261,27 +292,32 @@ const BY_PREFIX: Readonly<Record<string, NotiDef>> = {
   // còn lại: chúng báo việc được giao LỚP/BUỔI/CA, loại này báo SIĨ SỐ của ca đổi.
   // Lớp trải nghiệm là slot tái sử dụng nên hai việc cách nhau hàng tuần.
   "trial-enroll.assigned:": {
+    label: "Có em mới xếp vào ca trải nghiệm",
     group: "new_task", priority: 2, entity: "trial",
     recipients: "Giáo viên dạy buổi (không có thì GV chính của lớp)", target: "/lop-trial",
   },
   // Buổi ad-hoc thêm tay vào lớp trải nghiệm (addTrialSession) — GV được gán buổi đó.
   // Cùng mức với hai loại trên: là ca dạy vừa rơi vào lịch của mình, không phải tin để biết.
   "trial-session.assigned:": {
+    label: "Được phân buổi trải nghiệm thêm",
     group: "new_task", priority: 2, entity: "trial",
     recipients: "Giáo viên được phân buổi trải nghiệm", target: "/lop-trial",
   },
   // ── GĐ3 — luồng giáo viên theo TỪNG CA (không phải theo lớp) ────────────────
   "trial-case.assigned:": {
+    label: "Được phân một ca trải nghiệm",
     group: "new_task", priority: 2, entity: "trial",
     recipients: "Giáo viên được Đào tạo phân công một ca trải nghiệm", target: "/lop-trial",
   },
   // Lịch bị dời ⇒ giáo viên MẤT ca đang cầm. Ưu tiên cao hơn tin "được phân công":
   // biết muộn là tới lớp thừa hoặc bỏ trống ca đã hẹn với phụ huynh.
   "trial-case.rescheduled:": {
+    label: "Bị gỡ ca trải nghiệm do dời lịch",
     group: "new_task", priority: 3, entity: "trial",
     recipients: "Giáo viên vừa bị gỡ phân công do dời lịch", target: "/lop-trial",
   },
   "trial.cho-phan-cong:": {
+    label: "Ca trải nghiệm chưa có giáo viên",
     group: "new_task", priority: 2, entity: "trial",
     recipients: "Bộ phận Đào tạo (ca trải nghiệm chưa có giáo viên)", target: "/lop-trial",
   },
@@ -289,90 +325,108 @@ const BY_PREFIX: Readonly<Record<string, NotiDef>> = {
   // KHÔNG gửi tin tự động cho phụ huynh; đây là chốt nghiệp vụ, không phải giới hạn
   // kỹ thuật. Xếp nhóm "due_date" vì đây là việc CÓ HẠN, không phải việc mới rơi xuống.
   "trial.reminder:": {
+    label: "Nhắc trước buổi học thử",
     group: "due_date", priority: 2, entity: "trial",
     recipients: "Sale phụ trách lead (không có thì admin lead)", target: "/leads/<leadId>",
   },
   // Vi phạm SLA chăm lead — theo PRD đây là "đã trễ", không phải "việc mới".
   "sla:": {
+    label: "Vi phạm SLA chăm lead",
     group: "due_date", priority: 1, entity: "lead",
     recipients: "Tư vấn viên phụ trách + Quản lý", target: "/leads/<leadId>",
   },
 
   // ── Sinh từ sự kiện: phụ huynh ──
   "conversation.message_posted:": {
+    label: "Phụ huynh nhắn tin",
     group: "parent_message", priority: 2, entity: "conversation",
     recipients: "Giáo viên chính + trợ giảng của lớp", target: "/tin-nhan?c=<conversationId>",
   },
   "parent_request.created:": {
+    label: "Phụ huynh vừa gửi yêu cầu",
     group: "action_required", priority: 1, entity: "parent_request",
     recipients: "CSKH / Quản lý cơ sở", target: "/parent-requests",
   },
   "parent_request.reminder:": {
+    label: "Nhắc yêu cầu phụ huynh chưa xử",
     group: "action_required", priority: 1, entity: "parent_request",
     recipients: "CSKH / Quản lý cơ sở", target: "/parent-requests",
   },
 
   // ── Sinh từ sự kiện: học viên & tiền ──
   "reserve.expired:": {
+    label: "Bảo lưu đã hết hạn",
     group: "action_required", priority: 2, entity: "student",
     recipients: "CSKH phụ trách học viên", target: "/students/<studentId>/edit",
   },
   "reserve-expiry:": {
+    label: "Bảo lưu sắp hết hạn (luồng cũ)",
     group: "action_required", priority: 2, entity: "student",
     recipients: "CSKH phụ trách học viên", target: "/students/<studentId>/edit",
   },
   "payment-reconcile:unmatched:": {
+    label: "Tiền về chưa khớp đơn nào",
     group: "action_required", priority: 1, entity: "payment",
     recipients: "Kế toán", target: "/bien-dong-so-du?status=unmatched",
   },
   "payment-reconcile:overdue-partial:": {
+    label: "Công nợ quá hạn / đóng thiếu",
     group: "action_required", priority: 1, entity: "payment",
     recipients: "Kế toán", target: "/cong-no",
   },
 
   // ── Sinh từ sự kiện: marketing & tích hợp ──
   "cost-unconfirmed:": {
+    label: "Chi phí quảng cáo chưa xác nhận",
     group: "action_required", priority: 2, entity: "marketing",
     recipients: "Marketing", target: "/marketing/funnel",
   },
   // Đến hạn chốt sổ mà chưa nộp báo cáo — PRD xếp ACTION.REPORT_MISSING là P1.
   "report-missing:": {
+    label: "Đến hạn chốt sổ mà chưa nộp báo cáo",
     group: "action_required", priority: 1, entity: "marketing",
     recipients: "Marketing", target: "/marketing/funnel",
   },
   // Nguồn lead hỏng/im lặng = tiền quảng cáo đang chảy vào hư không ⇒ khẩn.
   "intake-failing:": {
+    label: "Nguồn lead đang lỗi",
     group: "system", priority: 1, entity: "integration",
     recipients: "SUPER_ADMIN", target: "/crm/webhook-replay",
   },
   "intake-silent:": {
+    label: "Nguồn lead im lặng bất thường",
     group: "system", priority: 1, entity: "integration",
     recipients: "SUPER_ADMIN", target: "/crm/webhook-replay",
   },
   "birthday:": {
+    label: "Sinh nhật học viên (luồng cũ)",
     group: "system", priority: 3, entity: "student",
     recipients: "CSKH + giáo viên lớp", target: "/sinh-nhat",
   },
   // ── Module chấm công v3 (L3, 06/09/2026) ────────────────────────────────────
   // Ca của tôi bị đổi (sửa tay trên lưới / đơn được duyệt) — T-07: "duyệt ⇒ đổi lịch ⇒ báo".
   "shift.changed:": {
+    label: "Ca làm việc của tôi bị đổi",
     group: "new_task", priority: 2, entity: "timesheet",
     recipients: "Chính người có ca", target: "/cham-cong/lich-ca",
   },
   // Tin nhắc lịch NGÀY MAI (thay tin Zalo 19:00 của Sheet). dedupeKey = shift.brief:<userId>:<ymd>
   // ⇒ cron bơm dày (test 5′/lần) không kêu chuông lần hai.
   "shift.brief:": {
+    label: "Nhắc lịch ca ngày mai",
     group: "due_date", priority: 3, entity: "timesheet",
     recipients: "Mọi nhân sự có trong lưới phân ca", target: "/cham-cong/lich-ca",
   },
   // L5 — đơn từ (ca/nghỉ/chỉnh công/lớp) dùng chung mọi nhân sự.
   // Đơn mới tới cơ sở nhận đơn: báo người có quyền duyệt ở cơ sở đó. dedupeKey = request.submitted:<requestId>
   "request.submitted:": {
+    label: "Đơn từ mới chờ duyệt",
     group: "new_task", priority: 2, entity: "timesheet",
     recipients: "Người giữ quyền duyệt đơn (hr_attendance:approve) tại cơ sở nhận đơn", target: "/don-tu",
   },
   // Đơn của tôi được duyệt / từ chối. dedupeKey = request.decided:<requestId>:<userId>
   "request.decided:": {
+    label: "Đơn của tôi đã được quyết",
     group: "new_task", priority: 2, entity: "timesheet",
     recipients: "Người nộp đơn (và người nhận ca/làm thay nếu có)", target: "/don-tu/cua-toi",
   },
@@ -385,6 +439,7 @@ const PREFIXES_LONGEST_FIRST: readonly string[] = Object.keys(BY_PREFIX).sort(
 
 /** Khai báo dùng khi không khớp tiền tố nào: rơi xuống đáy panel, không gây ồn. */
 const FALLBACK: NotiDef = {
+  label: "(chưa khai trong catalog)",
   group: "system",
   priority: 3,
   entity: "integration",
@@ -424,4 +479,44 @@ export function classifyNotification(dedupeKey: string): NotiClassification {
 /** Chỉ dùng cho test/kiểm kê — đừng đọc trực tiếp ở đường chạy. */
 export function catalogPrefixes(): readonly string[] {
   return PREFIXES_LONGEST_FIRST;
+}
+
+/** Một dòng để BÀY RA cho người vận hành chọn — không phải để quyết định lúc chạy. */
+export interface NotiCatalogEntry {
+  /** Tiền tố `dedupeKey` — cũng là giá trị lưu trong cấu hình allowlist. */
+  prefix: string;
+  label: string;
+  groupKey: NotiGroupKey;
+  groupLabel: string;
+  priority: NotiPriority;
+  recipients: string;
+}
+
+/**
+ * Toàn bộ loại thông báo đã khai, để màn cấu hình bày ra.
+ *
+ * ⚠️ Màn cấu hình PHẢI dựng danh sách từ đây chứ không chép tay: chép tay thì thêm một loại
+ * thông báo mới ở `BY_PREFIX` mà quên cập nhật màn ⇒ loại đó vĩnh viễn không ai bật/tắt được,
+ * và không có gì báo — đúng lớp lỗi "màn hình nói dối" mà luật 12 của repo nói tới.
+ *
+ * Sắp theo NHÓM (đúng thứ tự `NOTI_GROUPS`) rồi theo MỨC rồi theo nhãn — không theo thứ tự
+ * khai, vì thứ tự khai là lịch sử phát triển, vô nghĩa với người vận hành.
+ */
+export function catalogEntries(): readonly NotiCatalogEntry[] {
+  const thuTuNhom = new Map(NOTI_GROUPS.map((g, i) => [g.key, i] as const));
+  return Object.entries(BY_PREFIX)
+    .map(([prefix, def]) => ({
+      prefix,
+      label: def.label,
+      groupKey: def.group,
+      groupLabel: notiGroupLabel(def.group),
+      priority: def.priority,
+      recipients: def.recipients,
+    }))
+    .sort(
+      (a, b) =>
+        (thuTuNhom.get(a.groupKey) ?? 99) - (thuTuNhom.get(b.groupKey) ?? 99) ||
+        a.priority - b.priority ||
+        a.label.localeCompare(b.label, "vi"),
+    );
 }
