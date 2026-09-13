@@ -23,6 +23,7 @@ import {
   type HocVienGop,
 } from "@/lib/finance/nhap-giao-dich-sheet";
 import { MUC_KHOP, NHAN_MUC_KHOP } from "@/lib/finance/doi-chieu-hoc-vien";
+import { NHAN_MUC_TRUNG } from "@/lib/finance/trung-giao-dich-cu";
 
 import {
   ghiNhapGiaoDichAction,
@@ -148,8 +149,11 @@ export function NhapGiaoDichClient() {
   const [rows, setRows] = useState<DongDoiChieu[] | null>(null);
   const [tomTat, setTomTat] = useState<{
     tongEm: number; khop: number; canChon: number; khongThay: number;
-    tienKhop: number; daNhapTruoc: number;
+    tienKhop: number; daNhapTruoc: number; daCoTien: number;
+    sanSang: number; tienSanSang: number;
   } | null>(null);
+  /** Em đã có tiền nhưng người vẫn muốn ghi — phải bấm tay từng em. */
+  const [ghiDeTrung, setGhiDeTrung] = useState<Record<string, boolean>>({});
   /** Người chọn tay cho dòng lệch tên: khoá `sdt|hoTen` → hocVienId. */
   const [chonTay, setChonTay] = useState<Record<string, string>>({});
   const [loi, setLoi] = useState<string | null>(null);
@@ -161,20 +165,27 @@ export function NhapGiaoDichClient() {
     if (!rows || !doc) return [];
     return rows
       .map((r) => {
-        const id = r.hocVienId ?? chonTay[khoaEm(r)] ?? null;
+        const k = khoaEm(r);
+        const id = r.hocVienId ?? chonTay[k] ?? null;
         if (!id) return null;
-        const em = doc.gop.find((g) => khoaEm(g) === khoaEm(r));
+        // ⚠️ EM ĐÃ CÓ TIỀN TRONG HỆ THỐNG KHÔNG VÀO ĐÂY TỰ ĐỘNG.
+        // Đây là lưới chống cộng đôi: nhập trùng không báo lỗi gì, chỉ làm số dư
+        // phình lên và không ai biết lượt nào thừa. Muốn ghi vẫn được — bấm tay
+        // từng em.
+        if (!r.nenNhap && !ghiDeTrung[k]) return null;
+        const em = doc.gop.find((g) => khoaEm(g) === k);
         if (!em) return null;
         return { hocVienId: id, giaoDich: em.giaoDich };
       })
       .filter((x): x is { hocVienId: string; giaoDich: GiaoDichSheet[] } => x != null);
-  }, [rows, doc, chonTay]);
+  }, [rows, doc, chonTay, ghiDeTrung]);
 
   function chonFile(f: File) {
     setLoi(null);
     setRows(null);
     setTomTat(null);
     setChonTay({});
+    setGhiDeTrung({});
     setTenFile(f.name);
     f.arrayBuffer()
       .then((buf) => {
@@ -341,10 +352,10 @@ export function NhapGiaoDichClient() {
           <h2 className="text-sm font-semibold text-foreground">3 · Đối chiếu với hệ thống</h2>
 
           <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <O nhan="Khớp — ghi được" giaTri={`${tomTat.khop} em`} tone={tomTat.khop > 0 ? "ok" : "neutral"} chu={vnd(tomTat.tienKhop)} />
+            <O nhan="Sẽ ghi" giaTri={`${tomTat.sanSang} em`} tone={tomTat.sanSang > 0 ? "ok" : "neutral"} chu={vnd(tomTat.tienSanSang)} />
+            <O nhan="Đã có tiền — bỏ qua" giaTri={`${tomTat.daCoTien} em`} tone={tomTat.daCoTien > 0 ? "warn" : "neutral"} chu="Chống cộng đôi" />
             <O nhan="Cần chọn" giaTri={`${tomTat.canChon} em`} tone={tomTat.canChon > 0 ? "warn" : "neutral"} />
             <O nhan="Không tìm thấy" giaTri={`${tomTat.khongThay} em`} tone={tomTat.khongThay > 0 ? "danger" : "neutral"} />
-            <O nhan="Đã nhập lượt trước" giaTri={`${tomTat.daNhapTruoc} dòng`} chu={tomTat.daNhapTruoc > 0 ? "Sẽ bỏ qua, không cộng đôi" : undefined} />
           </div>
 
           <div className="mt-4 overflow-hidden rounded-xl border border-border">
@@ -355,6 +366,7 @@ export function NhapGiaoDichClient() {
                     <TableHead className="whitespace-nowrap text-xs font-semibold uppercase">Trong file</TableHead>
                     <TableHead className="whitespace-nowrap text-right text-xs font-semibold uppercase">Tiền</TableHead>
                     <TableHead className="whitespace-nowrap text-xs font-semibold uppercase">Kết quả</TableHead>
+                    <TableHead className="whitespace-nowrap text-xs font-semibold uppercase">Đã có trong hệ thống</TableHead>
                     <TableHead className="whitespace-nowrap text-xs font-semibold uppercase">Hồ sơ hệ thống</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -362,6 +374,8 @@ export function NhapGiaoDichClient() {
                   {rows.map((r) => {
                     const k = khoaEm(r);
                     const daChon = chonTay[k];
+                    const coId = r.hocVienId ?? daChon ?? null;
+                    const seGhi = !!coId && (r.nenNhap || ghiDeTrung[k] === true);
                     return (
                       <TableRow key={k}>
                         <TableCell className="px-5 py-3.5 text-sm">
@@ -379,15 +393,48 @@ export function NhapGiaoDichClient() {
                         <TableCell className="whitespace-nowrap px-5 py-3.5">
                           <span
                             className={`inline-flex whitespace-nowrap rounded-md px-2 py-0.5 text-xs font-semibold ${
-                              r.muc === MUC_KHOP.KHOP || daChon
+                              seGhi
                                 ? "bg-state-success-soft text-state-success-ink"
                                 : r.muc === MUC_KHOP.KHONG_THAY
                                   ? "bg-state-danger-soft text-state-danger-ink"
                                   : "bg-state-warning-soft text-state-warning-ink"
                             }`}
                           >
-                            {daChon ? "Đã chọn tay" : NHAN_MUC_KHOP[r.muc]}
+                            {seGhi ? "Sẽ ghi" : daChon ? "Đã chọn tay" : NHAN_MUC_KHOP[r.muc]}
                           </span>
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap px-5 py-3.5 text-sm">
+                          {r.daCoTien > 0 ? (
+                            <div className="flex flex-col gap-1">
+                              <span className="whitespace-nowrap font-semibold tabular-nums text-state-warning-ink">
+                                {vnd(r.daCoTien)}
+                              </span>
+                              <span className="whitespace-nowrap text-xs text-muted-foreground">
+                                {NHAN_MUC_TRUNG[r.mucTrung]}
+                                {r.soDonHienCo > 0 && ` · ${r.soDonHienCo} đơn`}
+                              </span>
+                              {/* Vẫn cho ghi — nhưng phải BẤM TAY từng em. Chống cộng đôi
+                                  không phải là cấm, mà là buộc người ta nhìn con số trước. */}
+                              {coId && (
+                                <button
+                                  type="button"
+                                  onClick={() => setGhiDeTrung((c) => ({ ...c, [k]: !c[k] }))}
+                                  aria-pressed={ghiDeTrung[k] === true}
+                                  className={`min-h-9 w-fit whitespace-nowrap rounded-md border px-2.5 text-xs font-medium transition-colors duration-150 ${
+                                    ghiDeTrung[k]
+                                      ? "border-state-danger bg-state-danger-soft text-state-danger-ink"
+                                      : "border-border bg-background hover:bg-muted"
+                                  }`}
+                                >
+                                  {ghiDeTrung[k] ? "Sẽ ghi chồng — bấm để huỷ" : "Vẫn ghi"}
+                                </button>
+                              )}
+                            </div>
+                          ) : r.muc === MUC_KHOP.KHOP ? (
+                            <span className="text-xs text-muted-foreground">Chưa có khoản nào</span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
                         </TableCell>
                         <TableCell className="px-5 py-3.5 text-sm">
                           {r.muc === MUC_KHOP.KHOP ? (
@@ -450,6 +497,8 @@ export function NhapGiaoDichClient() {
               <span className="whitespace-nowrap">Ghi cho {sanSangGhi.length} em</span>
             </Button>
             <p className="max-w-prose text-xs leading-relaxed text-muted-foreground">
+              Em <b className="font-semibold text-foreground">đã có tiền trong hệ thống</b>{" "}
+              không được ghi tự động — muốn ghi phải bấm &quot;Vẫn ghi&quot; ở từng dòng.
               Mỗi em một đơn &quot;nhập liệu ban đầu&quot; + một khoản cho mỗi đợt (giữ đúng
               ngày đóng). Khoản ở trạng thái{" "}
               <b className="font-semibold text-foreground">chờ kế toán</b> — muốn vào doanh

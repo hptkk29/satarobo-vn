@@ -12,6 +12,8 @@ import { scopedDb, passesScope } from "@/lib/db-scope";
 import { getAuditActor } from "@/lib/audit/log";
 import { khopHocVien, MUC_KHOP, type HoSoHocVien, type MucKhop } from "@/lib/finance/doi-chieu-hoc-vien";
 import { ghiGiaoDichCuChoHocVienInTx } from "@/lib/finance/ghi-giao-dich-cu";
+import { phanLoaiTrung, type MucTrung } from "@/lib/finance/trung-giao-dich-cu";
+import { KHOAN_DA_GHI_NHAN } from "@/lib/finance/ghi-nhan";
 import type { GiaoDichSheet } from "@/lib/finance/nhap-giao-dich-sheet";
 
 /**
@@ -62,6 +64,13 @@ export type DongDoiChieu = {
   ungVien: HoSoHocVien[];
   /** Số dòng sheet của em này đã nhập ở lượt trước — hiện ra để không ai tưởng bị mất. */
   daNhapTruoc: number;
+  /** Σ tiền ĐÃ GHI NHẬN của em trong hệ thống — thước đo chống nhập trùng. */
+  daCoTien: number;
+  /** Số đơn hiện có. CHỈ để hiển thị; quyết định dựa vào TIỀN, xem lib/finance/trung-giao-dich-cu.ts. */
+  soDonHienCo: number;
+  mucTrung: MucTrung;
+  /** Ghi được tự động không (chỉ khi chưa có đồng nào trong hệ thống). */
+  nenNhap: boolean;
 };
 
 async function gacQuyen() {
@@ -136,12 +145,62 @@ export async function xemThuNhapGiaoDichAction(input: unknown) {
     : [];
   const noteDaCo = daCo.map((p) => p.note ?? "");
 
+  // ── CHỐNG NHẬP TRÙNG ────────────────────────────────────────────────────────
+  // Chủ dự án: "bỏ trùng các học viên đã được tạo đơn hàng rồi."
+  //
+  // ⚠️ Thước đo là TIỀN, không phải SỐ ĐƠN: nhóm cần chữa nhất lại chính là nhóm ĐÃ CÓ
+  // ĐƠN mà CHƯA CÓ TIỀN (chốt hàng loạt qua `allowNoPayment` — có Order, có Enrollment,
+  // không Payment nào). Lọc theo "có đơn" là bỏ sót đúng nhóm đang đi cứu.
+  //
+  // Đếm tiền qua CẢ HAI đường liên kết: `Payment.enrollmentId → Enrollment.studentId` và
+  // `Payment.orderId → Order.studentId`. Chỉ đếm một đường là bỏ lọt khoản còn lại.
+  const idKhop = [...new Set(hoSo.map((h) => h.id))];
+  const tienTheoEm = new Map<string, number>();
+  const donTheoEm = new Map<string, number>();
+  if (idKhop.length > 0) {
+    const khoan = await sdb.payment.findMany({
+      where: {
+        ...KHOAN_DA_GHI_NHAN,
+        OR: [
+          { enrollment: { studentId: { in: idKhop } } },
+          { order: { studentId: { in: idKhop } } },
+        ],
+      },
+      select: {
+        id: true,
+        amount: true,
+        enrollment: { select: { studentId: true } },
+        order: { select: { studentId: true } },
+      },
+    });
+    // Một khoản có thể khớp CẢ HAI đường — đếm theo id khoản để không cộng đôi.
+    const daTinh = new Set<string>();
+    for (const k of khoan) {
+      const sid = k.enrollment?.studentId ?? k.order?.studentId;
+      if (!sid || daTinh.has(k.id)) continue;
+      daTinh.add(k.id);
+      tienTheoEm.set(sid, (tienTheoEm.get(sid) ?? 0) + k.amount);
+    }
+    const don = await sdb.order.groupBy({
+      by: ["studentId"],
+      where: { deletedAt: null, studentId: { in: idKhop } },
+      _count: { _all: true },
+    });
+    for (const d of don) {
+      if (d.studentId) donTheoEm.set(d.studentId, d._count._all);
+    }
+  }
+
   const rows: DongDoiChieu[] = parsed.data.ds.map((e) => {
     const kq = khopHocVien({ sdt: e.sdt, hoTen: e.hoTen }, theoSdt.get(e.sdt ?? "") ?? []);
     const daNhapTruoc = e.giaoDich.filter((g) => {
       const d = dauDongSheet(g.sheet, g.dong);
       return noteDaCo.some((n) => n.includes(d));
     }).length;
+    const daCoTien = kq.hocVienId ? (tienTheoEm.get(kq.hocVienId) ?? 0) : 0;
+    const soDonHienCo = kq.hocVienId ? (donTheoEm.get(kq.hocVienId) ?? 0) : 0;
+    const trung = phanLoaiTrung({ daCoTien, tienTrongFile: e.tongTien, soDon: soDonHienCo });
+
     return {
       sdt: e.sdt,
       hoTen: e.hoTen,
@@ -152,6 +211,11 @@ export async function xemThuNhapGiaoDichAction(input: unknown) {
       hocVienId: kq.hocVienId,
       ungVien: kq.ungVien,
       daNhapTruoc,
+      daCoTien,
+      soDonHienCo,
+      mucTrung: trung.muc,
+      // Ghi tự động CHỈ khi khớp chắc VÀ chưa có đồng nào trong hệ thống.
+      nenNhap: kq.muc === MUC_KHOP.KHOP && trung.nenNhap,
     };
   });
 
@@ -169,6 +233,9 @@ export async function xemThuNhapGiaoDichAction(input: unknown) {
         .filter((r) => r.muc === MUC_KHOP.KHOP)
         .reduce((s, r) => s + r.tongTien, 0),
       daNhapTruoc: rows.reduce((s, r) => s + r.daNhapTruoc, 0),
+      daCoTien: rows.filter((r) => r.daCoTien > 0).length,
+      sanSang: rows.filter((r) => r.nenNhap).length,
+      tienSanSang: rows.filter((r) => r.nenNhap).reduce((s, r) => s + r.tongTien, 0),
     },
   };
 }
