@@ -27,6 +27,8 @@ import { ensureOrderPaymentRecorded } from "@/lib/finance/payment";
 import { ensureFullOrderRequest } from "@/lib/payments/payment-request";
 import { getRequestMetadata } from "@/lib/audit/headers";
 import { getAuditActor } from "@/lib/audit/log";
+import { writeAudit } from "@/lib/audit/audit-log";
+import { soatGiaDon } from "@/lib/orders/price-guard";
 import { sendEmailForTrigger } from "@/lib/email/trigger";
 import { notifyOrderByZnsIfNoEmail } from "@/lib/notify/order";
 import { renderTemplate } from "@/lib/email/render";
@@ -231,6 +233,58 @@ export async function createOrderManualAction(input: unknown) {
   if (data.centerId && !passesScope("Order", { centerId: data.centerId }, actor)) {
     return { ok: false as const, error: "Không có quyền tạo đơn cho cơ sở này" };
   }
+
+  // ── DẤU VẾT GIÁ ──────────────────────────────────────────────────────────────
+  // Hôm nay server tin tuyệt đối `unitPrice` client gửi, và vì `needsDiscountApproval`
+  // chỉ xét `discountAmount > 0` nên đơn HẠ ĐƠN GIÁ không vào hàng chờ duyệt, không ghi
+  // log nào, mà vẫn tự chốt được qua webhook — cổng duyệt chỉ che ô "Giảm giá".
+  //
+  // Ở đây CHỈ SO VÀ GHI DẤU, cố ý không từ chối và cố ý không quy lệch thành
+  // `discountAmount` — lý do đầy đủ ở đầu `lib/orders/price-guard.ts` (tóm tắt: bán Coach
+  // 1-1 ×2,0 và bán theo học phần ÷4 đều HỢP LỆ theo công văn, còn quy thành giảm giá là
+  // bật cổng `sepay.ts` vốn làm tiền về không vào sổ nào).
+  const courseIds = [
+    ...new Set(
+      data.items
+        .map((it) => {
+          const m = it.metadata as Record<string, unknown> | null | undefined;
+          const v = m?.courseId;
+          return typeof v === "string" && v ? v : null;
+        })
+        .filter((v): v is string => v != null),
+    ),
+  ];
+  const productIds = [
+    ...new Set(data.items.map((it) => it.productId).filter((v): v is string => !!v)),
+  ];
+  const [giaKhoa, giaSanPham] = await Promise.all([
+    courseIds.length > 0
+      ? sdb.course.findMany({ where: { id: { in: courseIds } }, select: { id: true, price: true } })
+      : Promise.resolve([]),
+    productIds.length > 0
+      ? sdb.product.findMany({
+          where: { id: { in: productIds } },
+          select: { id: true, salePrice: true },
+        })
+      : Promise.resolve([]),
+  ]);
+  const bangGia = new Map<string, number | null>([
+    ...giaKhoa.map((c) => [c.id, c.price] as const),
+    ...giaSanPham.map((p) => [p.id, p.salePrice] as const),
+  ]);
+  const soatGia = soatGiaDon(
+    data.items.map((it) => {
+      const m = it.metadata as Record<string, unknown> | null | undefined;
+      const courseId = typeof m?.courseId === "string" ? m.courseId : null;
+      const khoa = courseId ?? it.productId ?? null;
+      return {
+        itemName: it.itemName,
+        soLuong: it.quantity,
+        giaGhi: it.unitPrice,
+        giaNiemYet: khoa ? (bangGia.get(khoa) ?? null) : null,
+      };
+    }),
+  );
 
   const subtotal = data.items.reduce(
     (s, it) => s + it.unitPrice * it.quantity,
@@ -453,6 +507,35 @@ export async function createOrderManualAction(input: unknown) {
         },
       });
     }
+
+    // ⚠️ TRONG CÙNG TRANSACTION — "có đơn là có log", không nửa vời. Trước bản này
+    // đường tạo đơn KHÔNG ghi một dòng AuditLog nào (đo trên DB: chỉ có
+    // DISCOUNT_APPROVED), nên hạ giá là tuyệt đối vô dấu.
+    //
+    // Ghi CẢ đơn khớp giá lẫn đơn lệch giá: chỉ ghi đơn lệch thì "không có log"
+    // trở thành hai nghĩa khác nhau (chưa từng ghi / đã soát và không lệch), và
+    // người soát sau không phân biệt được.
+    await writeAudit({
+      actor: { id: actorId, name: actorName },
+      module: "orders",
+      entityType: "Order",
+      entityId: order.id,
+      action: "CREATE",
+      newValues: {
+        orderCode: order.code,
+        subtotal,
+        discountAmount: data.discountAmount,
+        discountPercent: data.discountPercent ?? null,
+        discountReason: data.discountReason?.trim() || null,
+        totalAmount,
+        // Dấu vết giá — đủ để soát lại mà không phải mở lại payload.
+        giaLech: soatGia.coLech,
+        giaTongLechThap: soatGia.tongLechThap,
+        giaDongLech: soatGia.dongLech,
+      },
+      orgUnitId: data.centerId || null,
+      tx,
+    });
 
       return order;
     }),
