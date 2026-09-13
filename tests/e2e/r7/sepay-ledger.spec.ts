@@ -153,7 +153,15 @@ test.describe("[SEPAY-LEDGER] SePay → sổ thu theo đợt", () => {
     expect((await db.paymentRequest.findUniqueOrThrow({ where: { id: d1.id } })).status).toBe("PAID");
     expect((await db.paymentRequest.findUniqueOrThrow({ where: { id: d2.id } })).status).toBe("PAID");
     const after = await db.order.findUniqueOrThrow({ where: { id: order.id } });
-    expect(after.status).toBe("PENDING_PAYMENT"); // chờ QLCS duyệt giảm giá
+    // ⚠️ CHÚ THÍCH CŨ SAI TỪ 14/09/2026: nó ghi "chờ QLCS duyệt giảm giá". Cổng đó ĐÃ GỠ
+    // cùng cơ chế duyệt đơn hàng (`payos-ingest.ts` không còn lọc `discountApprovalStatus`,
+    // `sepay.ts` không còn trả MANUAL vì giảm giá).
+    //
+    // Ca vẫn XANH, nhưng lý do nay nằm ở `isOrderSettled` (`lib/payments/allocation.ts`:
+    // mọi phiếu không-VOID phải PAID) chứ KHÔNG ở cờ duyệt — `confirmSettledOrder` chỉ
+    // được gọi khi `result.settled`. CHƯA ĐO phiếu nào còn chưa PAID ở ca này; ai cần
+    // dựa vào ca này để kết luận về đường tự chốt thì phải đo trước.
+    expect(after.status).toBe("PENDING_PAYMENT");
   });
 
   test("[SEPAY-LEDGER-07] không map được phiếu nào → UNMATCHED, tiền KHÔNG mất", async () => {

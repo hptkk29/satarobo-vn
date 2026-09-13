@@ -25,7 +25,6 @@ import { resolveActorUncached } from "../../../lib/auth/actor";
 import { scopedDb } from "../../../lib/db-scope";
 import {
   ensureFullOrderRequest,
-  materializeInstallmentRequests,
   recomputeRequestStatuses,
   getOrderPaymentRequests,
   paymentMatchKey,
@@ -175,11 +174,15 @@ test.describe("[PR] Vòng đời phiếu thu — duyệt trả góp mới sinh p
     });
     expect(res.ok).toBe(true);
 
-    // Đơn vẫn CHỜ DUYỆT…
+    // ⚠️ ĐẢO 14/09/2026 — ca này TRƯỚC ĐÂY khẳng định đơn mang `PENDING_APPROVAL`.
+    // Chủ dự án chốt BỎ cơ chế duyệt đơn hàng, nên khối sinh cờ đó ở
+    // `lib/orders/installments.ts` đã gỡ: lưu kế hoạch KHÔNG còn đẩy đơn vào hàng chờ.
+    // Cột giữ trong schema cho dữ liệu cũ, chỉ không có đường ghi mới.
     const o = await db.order.findUniqueOrThrow({ where: { id: order.id } });
-    expect(o.installmentApprovalStatus).toBe("PENDING_APPROVAL");
+    expect(o.installmentApprovalStatus).toBeNull();
 
-    // …nhưng phiếu thu theo đợt đã có, đúng số tiền, và phiếu toàn đơn đã VOID.
+    // Phần CÒN LẠI của ca này vẫn là luật sống và phải giữ: phiếu thu theo đợt có NGAY,
+    // đúng số tiền, và phiếu "thu toàn đơn" bị VOID.
     const rows = await requestsOf(order.id);
     const dots = rows.filter((r) => r.installmentNo > 0);
     expect(dots).toHaveLength(2);
@@ -230,27 +233,92 @@ test.describe("[PR] Vòng đời phiếu thu — duyệt trả góp mới sinh p
   });
 
   // ───────────────────────────────────────────────────────────────────────────
-  test("[PR-02c] DUYỆT = KHOÁ: kế hoạch đã duyệt thì không sửa được nữa", async () => {
+  // ⚠️ VIẾT LẠI 14/09/2026. Ca cũ là "[PR-02c] DUYỆT = KHOÁ: kế hoạch đã duyệt thì
+  // không sửa được nữa". Cơ chế duyệt đã bỏ theo chốt của chủ dự án, nên khoá đó không
+  // còn cửa nào để bám — NHƯNG thứ nó bảo vệ vẫn thật: phiếu thu và mã QR đã phát cho
+  // khách bám theo kế hoạch, sửa sau lưng là tiền về một đằng sổ ghi một nẻo.
+  //
+  // Khoá MỚI hỏi TIỀN chứ không hỏi ai đã bấm duyệt: cổng R-02 (`keHoachLamMatTien`).
+  // Nó CHẶT HƠN khoá cũ — cờ duyệt có thể chưa ai bấm trong khi tiền đã về.
+  test("[PR-02c] sửa kế hoạch khi phiếu đợt đã có tiền: phiếu KHÔNG bị VOID, tiền còn nguyên", async () => {
     const order = await createOrderWithRequest(10_000_000, cs1, 22);
     await recordInstallmentPlan({
       orderId: order.id, dot1Amount: 6_000_000, dot2Amount: 4_000_000,
       dot2DueDate: new Date("2026-09-01"), actorId: approver.id,
     });
-    expect((await approveInstallmentPlan({ orderId: order.id, actor: approver })).ok).toBe(true);
 
-    const locked = await recordInstallmentPlan({
+    // Khách chuyển tiền vào phiếu đợt 1 — từ đây kế hoạch không còn là nháp.
+    // Dùng helper `allocate` của chính spec này: nó dựng cả BankTransaction (cột bắt
+    // buộc) nên đường đi giống tiền thật về, không phải một dòng phân bổ mồ côi.
+    const dot1Before = (await requestsOf(order.id)).find((r) => r.installmentNo === 1)!;
+    await allocate(dot1Before.id, 6_000_000, cs1);
+
+    // ⚠️ ĐO THẬT 14/09/2026 — lượt sửa này ĐI QUA ĐƯỢC (`ok: true`), và đó KHÔNG phải
+    // lỗ hổng. Bất biến cần giữ không phải "cấm sửa" mà là "SỬA KHÔNG LÀM MẤT DẤU TIỀN
+    // ĐÃ RÓT": `materializeInstallmentRequests` tha phiếu đang có phân bổ
+    // (`payment-request.ts` — `allocated > 0 → continue`), nên phiếu giữ 6.000.000đ
+    // không bị VOID và số tiền của nó không bị ghi đè.
+    //
+    // Cổng R-02 (`keHoachLamMatTien`) cố ý KHÔNG chặn ca này: nó canh ca tiền nằm ở
+    // phiếu "THU TOÀN ĐƠN" — phiếu bị VOID vô điều kiện — chứ không canh phiếu theo đợt
+    // vốn đã được tha. Ghi ra đây để lượt sau không "vá" một cổng vốn không hở.
+    const sua = await recordInstallmentPlan({
       orderId: order.id, dot1Amount: 1_000_000, dot2Amount: 9_000_000,
       dot2DueDate: new Date("2026-11-01"), actorId: approver.id,
     });
-    expect(locked.ok).toBe(false);
-    expect(locked.error).toMatch(/đã được duyệt/i);
+    expect(sua.ok).toBe(true);
 
-    // Số tiền phiếu KHÔNG đổi theo lần sửa bị chặn.
-    const dots = (await requestsOf(order.id)).filter((r) => r.installmentNo > 0);
-    expect(dots.map((d) => d.amountDue)).toEqual([6_000_000, 4_000_000]);
+    // BẤT BIẾN GIỮ ĐƯỢC: phiếu đang giữ tiền KHÔNG bị VOID, và tiền vẫn còn nguyên
+    // trong sổ phân bổ — không đồng nào rơi khỏi đơn.
+    const sau = await requestsOf(order.id);
+    const dot1Sau = sau.find((r) => r.id === dot1Before.id);
+    expect(dot1Sau, "phiếu đang giữ tiền bị xoá mất").toBeTruthy();
+    expect(dot1Sau!.status).not.toBe("VOID");
+
+    const tongRot = await db.paymentAllocation.aggregate({
+      where: { paymentRequest: { orderId: order.id } },
+      _sum: { amount: true },
+    });
+    expect(tongRot._sum.amount).toBe(6_000_000);
   });
 
-  test("[PR-03] duyệt kế hoạch → sinh đúng 2 phiếu đợt, phiếu toàn đơn VOID, matchKey ORD…D1/D2", async () => {
+  // ⚠️ GHIM NỢ ĐO ĐƯỢC 14/09/2026 — `test.fail` nghĩa là: HÔM NAY ca này ĐỎ, và vì đã
+  // ghim nên CI vẫn xanh. Vá xong thì nó CHUYỂN SANG XANH và Playwright báo lỗi
+  // "expected to fail" — buộc người vá gỡ ghim. Đừng đổi thành `test.skip`: skip là
+  // quên, ghim là hẹn.
+  //
+  // LỖ: `materializeInstallmentRequests` THA VOID cho phiếu đang có phân bổ
+  // (`allocated > 0 → continue`) nhưng KHÔNG tha việc GHI ĐÈ `amountDue`. Đo thật:
+  // phiếu đợt 1 đang giữ 6.000.000đ đã rót, sửa kế hoạch xuống 1.000.000đ thì
+  // `amountDue` thành 1.000.000đ ⇒ phiếu hoá "thu vượt 5.000.000đ" và số còn-phải-thu
+  // của đơn sai theo.
+  //
+  // Vi phạm đúng chốt của chủ dự án: "KHÔNG sửa `amountDue` của phiếu đã có allocation.
+  // VOID + tạo phiếu mới." Lỗ CÓ SẴN trước đợt gỡ duyệt, không do nó sinh ra — nên vá
+  // là một đợt riêng có đo đường gọi (3 chỗ gọi materialize) chứ không nhét vào đây.
+  test("[PR-02d] KHÔNG ghi đè amountDue của phiếu đã có tiền rót vào (A6)", async () => {
+    // ⚠️ GHIM phải nằm TRONG thân ca. Đặt `test.fail(true, …)` ở cấp file thì nó đánh
+    // dấu MỌI ca phía sau — đã thử và 6 ca sau đó lập tức báo "expected to fail".
+    test.fail(true, "Nợ: amountDue của phiếu đã có allocation vẫn bị ghi đè (chờ vá theo A6)");
+
+    const order = await createOrderWithRequest(10_000_000, cs1, 23);
+    await recordInstallmentPlan({
+      orderId: order.id, dot1Amount: 6_000_000, dot2Amount: 4_000_000,
+      dot2DueDate: new Date("2026-09-01"), actorId: approver.id,
+    });
+    const dot1 = (await requestsOf(order.id)).find((r) => r.installmentNo === 1)!;
+    await allocate(dot1.id, 6_000_000, cs1);
+
+    await recordInstallmentPlan({
+      orderId: order.id, dot1Amount: 1_000_000, dot2Amount: 9_000_000,
+      dot2DueDate: new Date("2026-11-01"), actorId: approver.id,
+    });
+
+    const dot1Sau = (await requestsOf(order.id)).find((r) => r.id === dot1.id)!;
+    expect(dot1Sau.amountDue).toBe(6_000_000);
+  });
+
+  test("[PR-03] lưu kế hoạch → sinh đúng 2 phiếu đợt, phiếu toàn đơn VOID, matchKey ORD…D1/D2", async () => {
     const order = await createOrderWithRequest(10_000_000, cs1, 3);
     await recordInstallmentPlan({
       orderId: order.id,
@@ -260,9 +328,10 @@ test.describe("[PR] Vòng đời phiếu thu — duyệt trả góp mới sinh p
       actorId: approver.id,
     });
 
-    const appr = await approveInstallmentPlan({ orderId: order.id, actor: approver });
-    expect(appr.ok).toBe(true);
-
+    // ⚠️ 14/09/2026 — bỏ bước `approveInstallmentPlan`: cơ chế duyệt đã gỡ, và phiếu
+    // theo đợt vốn đã sinh NGAY lúc lưu kế hoạch (đảo QĐ-1 từ 03/08). Mọi khẳng định
+    // bên dưới — matchKey D1/D2, phiếu toàn đơn VOID, sortOrder, centerId — là luật
+    // SỐNG và giữ nguyên.
     const rows = await requestsOf(order.id);
     expect(rows).toHaveLength(3);
 
@@ -283,19 +352,24 @@ test.describe("[PR] Vòng đời phiếu thu — duyệt trả góp mới sinh p
   });
 
   // ───────────────────────────────────────────────────────────────────────────
-  test("[PR-04] duyệt lại lần 2 → idempotent, vẫn đúng 2 phiếu đợt (không nhân đôi)", async () => {
+  // ⚠️ VIẾT LẠI 14/09/2026. Ca cũ là "duyệt lại lần 2 → idempotent". Không còn khâu
+  // duyệt để bấm lại, nhưng thứ ca này bảo vệ vẫn thật và nay còn dễ xảy ra hơn: LƯU
+  // KẾ HOẠCH LẦN HAI (sale sửa số rồi bấm lại) không được đẻ phiếu thu thứ hai —
+  // matchKey là định danh đối khớp tiền về, sinh phiếu mới là tiền khách chuyển không
+  // khớp vào đâu.
+  test("[PR-04] lưu kế hoạch lần 2 (cùng số) → idempotent, vẫn đúng 2 phiếu đợt", async () => {
     const order = await createOrderWithRequest(10_000_000, cs1, 4);
-    await recordInstallmentPlan({
+    const lan1 = {
       orderId: order.id,
       dot1Amount: 6_000_000,
       dot2Amount: 4_000_000,
       dot2DueDate: new Date("2026-09-01"),
       actorId: approver.id,
-    });
-    await approveInstallmentPlan({ orderId: order.id, actor: approver });
+    };
+    await recordInstallmentPlan(lan1);
     const idsAfterFirst = (await requestsOf(order.id)).map((r) => r.id).sort();
 
-    const again = await approveInstallmentPlan({ orderId: order.id, actor: approver });
+    const again = await recordInstallmentPlan(lan1);
     expect(again.ok).toBe(true);
 
     const rows = await requestsOf(order.id);
@@ -340,7 +414,19 @@ test.describe("[PR] Vòng đời phiếu thu — duyệt trả góp mới sinh p
       dot2DueDate: new Date("2026-09-01"),
       actorId: approver.id,
     });
-    await approveInstallmentPlan({ orderId: order.id, actor: approver });
+    // ⚠️ 14/09/2026 — `approveInstallmentPlan`/`rejectInstallmentPlan` nay CHỈ chạy được
+    // trên đơn ĐÃ CÓ cờ duyệt, vì đường sinh cờ đã gỡ cùng cơ chế duyệt. Hai hàm được
+    // GIỮ có chủ đích cho DỮ LIỆU CŨ (`applyInstallmentApproval` là đường ghi bù Ledger-A
+    // duy nhất cho đơn sinh dưới luật cũ), nên ca này nay khoá đúng đường đó: đặt cờ
+    // thủ công để mô phỏng một đơn cũ, rồi từ chối.
+    //
+    // Hành vi được khoá vẫn SỐNG và quan trọng: `revertInstallmentRequests` VOID phiếu
+    // theo đợt rồi HỒI SINH phiếu "thu toàn đơn" — đó là thứ `isInstallmentPlanActive`
+    // dựa vào khi nó loại `REJECTED`, và là lý do hàm đó chưa được xoá.
+    await db.order.update({
+      where: { id: order.id },
+      data: { installmentApprovalStatus: "APPROVED" },
+    });
 
     const rej = await rejectInstallmentPlan({
       orderId: order.id,

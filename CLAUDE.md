@@ -213,6 +213,27 @@ prisma/
 - ⚠️ **Cờ `PAYMENT_LEDGER_V2` là cờ CHẾT — đừng lấy nó làm cổng quyết định [đo 13/09/2026].** `isPaymentLedgerV2Enabled()` có **0 đường gọi** trong mã chạy thật (`lib/flags.ts:168` là định nghĩa duy nhất, còn lại chỉ `lib/flags.test.ts`), và biến env **không tồn tại** trong 40 biến Production. Bật nó KHÔNG đổi hành vi gì — muốn cutover thì phải viết phần "nối cờ" (chuyển `lib/finance/debt.ts` + `lib/portal/billing-student.ts` + `lib/portal/dashboard.ts` + màn `/orders/[id]`, `/cong-no` sang đọc `PaymentRequest`) trước, đó là dự án riêng. Đo prod bằng workflow chỉ-đọc `shadow-compare-cong-no.yml` (`payments:shadow-compare` chạy ở máy dev là đo DB DEV, **không nói gì về prod**).
 - ❌ KHÔNG gõ tay tên bài vào `Lesson` để "sửa tên dự án". Nguồn tên buổi/dự án là 2 file marketing (`components/legacy-laptrinhrobot/_data/roadmap-5-years.ts` + `exam-roadmap.ts`) → `lib/lms/curriculum-sata.ts` → `prisma/seed-curriculum-sata.ts`; lần seed sau ghi đè. Nhãn buổi/tên gửi PH đi qua `deriveSessionLabel`/`deriveSessionProjectName`, đừng tự ghép chuỗi.
 
+- ⚠️ **NỢ ĐANG GHIM: `amountDue` của phiếu thu ĐÃ CÓ TIỀN vẫn bị ghi đè [đo 14/09/2026].**
+  `materializeInstallmentRequests` THA VOID cho phiếu đang có phân bổ
+  (`lib/payments/payment-request.ts:309` — `allocated > 0 → continue`) nhưng vòng UPSERT ở
+  `:284` thì **không** kiểm điều đó: `if (cur.amountDue !== dot.amount) patch.amountDue = …`.
+  Đo thật: phiếu đợt 1 đang giữ **6.000.000đ đã rót**, lưu lại kế hoạch với đợt 1 =
+  1.000.000đ ⇒ `amountDue` thành 1.000.000đ, phiếu hoá **"thu vượt 5.000.000đ"** và số
+  còn-phải-thu của đơn sai theo. Tiền KHÔNG mất (dòng `PaymentAllocation` còn nguyên, phiếu
+  không VOID) — nhưng mọi con số đọc từ phiếu đều lệch.
+  · Vi phạm đúng chốt của chủ dự án: **"KHÔNG sửa `amountDue` của phiếu đã có allocation —
+    VOID + tạo phiếu mới."**
+  · Cổng R-02 (`keHoachLamMatTien`) **cố ý không** che ca này: nó canh tiền nằm ở phiếu
+    **THU TOÀN ĐƠN** (phiếu bị VOID vô điều kiện), không canh phiếu theo đợt vốn đã được
+    tha. Đừng "vá" R-02 — nó không hở.
+  · Ghim ở `tests/e2e/r7/payment-request-lifecycle.spec.ts` ca **`[PR-02d]`** bằng
+    `test.fail()` **đặt TRONG thân ca** (đặt ở cấp file thì nó đánh dấu mọi ca phía sau —
+    đã thử, 6 ca lập tức báo "expected to fail"). Vá xong ca đó chuyển sang XANH và
+    Playwright báo lỗi, buộc gỡ ghim.
+  · Vá là đợt RIÊNG: phải đo cả **3 đường gọi** `materializeInstallmentRequests`
+    (`lib/orders/installments.ts:332`, `:500`, `lib/crm/backfill-order.ts:153`) — lỗ có sẵn
+    từ trước đợt gỡ duyệt, không do nó sinh ra.
+
 ## Mẫu test: LƯỚI GHIM MÃ NGUỒN [13/09/2026]
 
 Dùng khi luật cần khoá có dạng **"lời gọi này phải truyền tham số kia"** — loại luật mà
