@@ -1795,3 +1795,147 @@ loại "cổng im lặng" ba lần (hook đọc biến không tồn tại · `pn
 
 Đã cấy lại lỗi: **bỏ `env: { TZ }` ⇒ cả 3 ca ĐỎ** (`expected -420 to be +0`, `expected 23
 to be 16`); để lại ⇒ 3/3 xanh.
+
+---
+
+# Bước 7 — sửa phạm vi "chưa đo", và lưới #2
+
+## 7.1 ⚠️ SỬA §6.2 — nhóm "chưa đo" hẹp hơn tôi ghi
+
+§6.2 xếp 5 file Playwright + `payment-request-lifecycle` vào "chưa đo được, lưới fake-timer
+không tới". **Câu đó đánh giá thấp phạm vi đã phủ.**
+
+Lưới #1 (ESLint) chặn theo **HÌNH DẠNG LỜI GỌI**, không cần chạy — nên nó phủ luôn `.spec.ts`
+của Playwright, không vướng fake-timer. Phạm vi rule đã khai đúng thế từ đầu:
+`['tests/**/*.ts', '**/*.test.ts', '**/*.spec.ts']`.
+
+**Khoảng hở thật hẹp hơn nhiều:** chỉ là hàm nhạy-thời-gian **chưa có trong**
+`HAM_NHAY_THOI_GIAN`.
+
+### Đo khoảng hở đó
+
+6 file kia import gì (đọc thật, không đoán):
+
+| File | Module sản phẩm nó gọi |
+|---|---|
+| `payment-request-lifecycle` | `lib/auth/actor` · `rbac-service` · `db` · `db-scope` |
+| `reserve-request` | `lib/auth/actor` · `rbac-service` · `db` · `settings/service` · `students/lifecycle` |
+| `commission-config` | `lib/auth/actor` · `rbac-service` · `db` |
+| `bulk-convert` | `lib/crm/convert-lead-v2` |
+| `class-snapshot` | `lib/classes/adjust` · `lib/classes/snapshot` |
+| `messenger-models` | `lib/auth/actor` · `rbac-service` · `db` · `db-scope` |
+
+Soát 8 module đó bằng 8 tác nhân độc lập, rồi **phản biện từng ứng viên bằng 2 góc soi**
+("có phải chỉ đóng dấu `createdAt`?" và "có thật đối chiếu với ngày CALLER truyền, hay với
+giá trị đọc từ DB?"), mặc định bác bỏ khi không chắc.
+
+**Kết quả: 1 hàm sống sót, 0 bị bác.**
+
+`buildActor` (`lib/auth/actor.ts:217`) — cổng lọc vai còn hiệu lực:
+
+```ts
+const now = input.now ?? new Date();
+const liveRows = input.rows.filter((r) =>
+  r.status === "ACTIVE" && r.role.isActive &&
+  r.effectiveFrom <= now && (r.effectiveTo == null || r.effectiveTo >= now));
+```
+
+`effectiveFrom` / `effectiveTo` nằm trên `input.rows` — **ngày do caller truyền**. Đạt cả hai
+vế của tiêu chí.
+
+## 7.2 Nhưng KHÔNG thêm `buildActor` vào rule — lý do bằng số
+
+Đo trước khi thêm, đúng như chủ dự án dặn. Thêm tạm rồi chạy lint:
+
+| | |
+|---|---|
+| Vi phạm sinh ra | **14** |
+| Trong đó là bom thật | **0** |
+
+Ba file `lib/**` (12/14 vi phạm) dựng hàng vai như nhau:
+
+```ts
+effectiveFrom: new Date("2000-01-01"),
+effectiveTo: null,
+```
+
+`effectiveFrom = 2000-01-01` luôn ≤ mọi `now`; `effectiveTo = null` luôn thoả nhánh
+`== null`. **Cổng không bao giờ đổi câu trả lời** — an toàn vĩnh viễn. Hai file `tests/e2e/r7/*`
+còn lại không truyền ngày hiệu lực nào.
+
+### Điều kiện thứ ba mà tiêu chí cũ thiếu
+
+"Có cổng đối chiếu" là điều kiện **cần**, chưa **đủ**. Còn cần:
+
+> **Ngày rủi ro phải NHÌN THẤY ĐƯỢC ngay tại lời gọi.**
+
+- `submitAttendanceRequest({ fromDate: d11, … })` — ngày nằm **ngay đó**. Rule tĩnh đọc được
+  hình dạng, và thiếu `now` là dấu hiệu thật.
+- `buildActor({ rows, … })` — ngày nằm **trong `rows`**, dựng ở chỗ khác. Rule nhìn tại lời
+  gọi **không có thông tin** để phân biệt an toàn với nguy hiểm ⇒ mọi lời gọi đều bị bắt,
+  14/14 là dương tính giả.
+
+Và hình dạng ngày cũng không tự tố cáo: đo toàn repo có **11 chỗ** `effectiveTo` mang ngày
+cứng, nhưng ngày **quá khứ** ở đó dùng để kiểm *"đã hết hiệu lực"* (an toàn mãi mãi), còn
+`effectiveFrom: 2099-01-01` dùng để kiểm *"chưa tới hiệu lực"* (an toàn tới 2099). Thứ phân
+biệt là **kỳ vọng của ca**, không phải con số ngày — mà rule tĩnh không đọc được kỳ vọng.
+
+### Phân công đúng giữa hai lưới
+
+| Lưới | Bắt được gì | Vì sao |
+|---|---|---|
+| **#1 ESLint** | hình dạng **tự tố cáo** — ngày rủi ro nằm ngay tại lời gọi | tất định, chặn lúc viết, phủ cả Playwright |
+| **#2 đẩy đồng hồ** | rủi ro **ẩn trong dữ liệu** — `rows`, fixture, seed | chạy thật nên đọc được kỳ vọng của ca |
+
+`buildActor` thuộc ô thứ hai, và lưới #2 **đã phủ nó**: 564 ca (gồm `lib/**`) xanh ở +90 ngày.
+
+⇒ Ghi `buildActor` vào docblock của rule như **hàm đã xét và cố ý loại**, kèm lý do, để lần
+sau không phải soát lại từ đầu.
+
+## 7.3 Lưới #2 — ĐÃ LÀM
+
+| Tệp | Vai trò |
+|---|---|
+| `tests/_helpers/setup-bom-hen-gio.ts` | đẩy đồng hồ `DAY_OFFSET` ngày; chỉ fake `Date`, `shouldAdvanceTime` để không treo `setTimeout` |
+| `vitest.bom.config.ts` | nối setup trên vào cấu hình gốc + bật `ALLOW_DB_RESET` (bom nằm nhiều nhất ở bộ chạm DB — chính `tests/cham-cong` đã nổ) |
+| `scripts/bao-bom-hen-gio.mjs` | đọc JSON reporter → mở / **cập nhật** issue |
+| `.github/workflows/bom-hen-gio.yml` | Chủ nhật 02:00 VN (19:00Z thứ Bảy), ma trận `+90` và `+400` ngày |
+
+### Không bám vào PR nào
+
+Chỉ `schedule` + `workflow_dispatch` — **không** `push`, **không** `pull_request`. Không có
+đường nào để nó xuất hiện trong danh sách check của một PR. Tên job: `Bom hẹn giờ (+90 ngày)`.
+
+### Issue nói được BOM NÀO
+
+Điều kiện chủ dự án đặt ra, và nó quyết định thiết kế `bao-bom-hen-gio.mjs`: script đọc
+**chính file test** của ca đỏ để trích ngày cứng, chứ không đoán từ tên ca. Thử bằng bom cấy
+lại:
+
+```
+[THỬ] SẼ MỞ issue mới
+  tiêu đề : [bom] tests/cham-cong/requests.spec.ts > requests — DB thật > LEAVE 2 ngày duyệt …
+  file    : tests/cham-cong/requests.spec.ts
+  ca      : requests — DB thật > LEAVE 2 ngày duyệt ⇒ ghi P cả 2 ngày (nguồn LEAVE); …
+  ngày cứng: 2026-08-20 · 2026-09-01 · … · 2026-09-11 · 2026-09-12 · …
+```
+
+`2026-09-11` — đúng ngày bom thật — nằm trong danh sách.
+
+### Không mở issue thứ hai cho cùng một ca
+
+Khoá trùng là `<file> > <tên ca>`, nhúng vào tiêu đề. Trước khi tạo, tra issue **đang mở**
+cùng nhãn; trùng khoá thì **comment vào cái cũ**. Tuần nào cũng một issue mới là cách nhanh
+nhất để người ta thôi đọc nhãn đó.
+
+Nhãn `bom-hen-gio` đã tạo trên repo (màu #B60205).
+
+### Chế độ `--thu`
+
+In ra thứ **sẽ** mở, không gọi `gh`. Có để kiểm được chính script mà không rải issue thật —
+và đó là cách duy nhất thử đường trích dữ liệu trước khi tin nó.
+
+### Giới hạn đã biết, ghi ngay trong file
+
+Chỉ phủ bộ Vitest. Playwright chạy tiến trình riêng nên `vi.useFakeTimers` không tới — nhưng
+khoảng hở đó **không bỏ ngỏ**, lưới #1 phủ bằng hình dạng lời gọi (xem §7.1).
