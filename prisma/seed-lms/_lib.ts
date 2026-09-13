@@ -6,10 +6,10 @@
 import type { PrismaClient } from "@prisma/client";
 
 // ─── Safety guard ─────────────────────────────────────────────────────────────
-export function assertLocalDb(): void {
+export function assertLocalDb(nhan = "seed-lms"): void {
   const url = process.env.DATABASE_URL ?? "";
   if (process.env.SEED_ALLOW_REMOTE === "1") {
-    console.warn("⚠️  SEED_ALLOW_REMOTE=1 — bỏ qua kiểm tra DB local. Bạn tự chịu trách nhiệm.");
+    console.warn(`⚠️  SEED_ALLOW_REMOTE=1 — bỏ qua kiểm tra DB local (${nhan}). Bạn tự chịu trách nhiệm.`);
     return;
   }
   const isLocal = /(@|\/\/)(localhost|127\.0\.0\.1)[:/]/.test(url);
@@ -22,9 +22,10 @@ export function assertLocalDb(): void {
       /* ignore */
     }
     throw new Error(
-      `[seed-lms] TỪ CHỐI: DATABASE_URL không trỏ DB local/test (host=${host}). ` +
-        `Chạy: pnpm exec dotenv -e .env.test -- tsx prisma/seed-lms/index.ts. ` +
-        `Nếu thực sự muốn ghi DB remote: đặt SEED_ALLOW_REMOTE=1.`,
+      `[${nhan}] TỪ CHỐI: DATABASE_URL không trỏ DB local/test (host=${host}). ` +
+        `Máy dev thường có \`.env\` trỏ DB DEV — chạy seed ở đó là ghi dữ liệu dựng sẵn ` +
+        `vào DB người khác đang nghiệm thu. ` +
+        `Nếu thực sự muốn ghi DB remote: đặt SEED_ALLOW_REMOTE=1 (workflow đã đặt sẵn).`,
     );
   }
 }

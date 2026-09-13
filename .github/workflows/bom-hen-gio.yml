@@ -1,0 +1,118 @@
+# Lưới "bom hẹn giờ" — chạy bộ test với đồng hồ đẩy tới tương lai để lộ ca sẽ đỏ.
+#
+# ══ Vì sao nó là workflow RIÊNG, không nằm trong ci.yml ══
+#
+# Điều kiện chủ dự án đặt ra: đỏ ở đây phải đọc được là **"bom sắp nổ"**, KHÔNG phải
+# "PR này hỏng". Nên:
+#   · file riêng, không phải job trong `ci.yml`;
+#   · CHỈ `schedule` + `workflow_dispatch` — không `push`, không `pull_request`, nên nó
+#     không có đường nào bám vào danh sách check của một PR;
+#   · tên job nói thẳng nó là gì.
+#
+# ══ Họ lỗi ══
+#
+# Test dựng ngày CỨNG rồi gọi hàm có cổng so ngày đó với "hôm nay" (`now ?? new Date()`).
+# Ngày cứng ở tương lai thì xanh; tới lúc ngày thật vượt qua, ca **đỏ mãi mãi**.
+# Đã xảy ra 13/09/2026: cùng commit `507ff13b`, CI ngày 10/09 XANH, rerun 13/09 ĐỎ.
+#
+# ══ Giờ chạy ══
+#
+# Chủ nhật 02:00 giờ VN = 19:00Z thứ Bảy. Ba lý do:
+#   · không PR nào đang chạy, không ai đang nghiệm thu;
+#   · 19:00Z nằm TRONG cửa sổ 15:30Z→24:00Z của họ lỗi MÚI GIỜ ⇒ một lượt bắt cả hai họ;
+#   · hằng tuần chứ không hằng ngày — bom nổ theo NGÀY, và tiếng ồn là đường dẫn tới chỗ
+#     người ta thôi đọc nhãn này.
+#
+# ══ Giới hạn đã biết ══
+#
+# Chỉ phủ bộ Vitest — Playwright chạy tiến trình riêng nên `vi.useFakeTimers` không tới.
+# Khoảng hở đó KHÔNG bỏ ngỏ: rule ESLint `thoigian/require-now-in-tests` chặn theo HÌNH
+# DẠNG lời gọi nên phủ cả `.spec.ts` của Playwright mà không cần chạy chúng.
+
+name: Bom hẹn giờ (test với đồng hồ tương lai)
+
+on:
+  schedule:
+    # 19:00Z thứ Bảy = 02:00 sáng Chủ nhật giờ VN.
+    - cron: "0 19 * * 6"
+  workflow_dispatch:
+    inputs:
+      day_offset:
+        description: "Số ngày đẩy đồng hồ (để trống = chạy cả 90 và 400)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  bom:
+    name: Bom hẹn giờ (+${{ matrix.days }} ngày)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # +90 = sắp nổ (đủ sớm để vá). +400 = bom xa, gồm cả ca lệch năm.
+        days: [90, 400]
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ci_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ci_test
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/ci_test
+      NEXTAUTH_SECRET: ci-build-only-secret-do-not-use-in-prod-32chars
+      AUTH_SECRET: ci-build-only-secret-do-not-use-in-prod-32chars
+      NEXTAUTH_URL: http://localhost:3100
+      NEXT_PUBLIC_APP_URL: http://localhost:3100
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Dựng schema
+        run: pnpm exec prisma migrate deploy
+
+      - name: Chạy test với đồng hồ +${{ matrix.days }} ngày
+        id: chay
+        # `|| true` là CÓ CHỦ ĐÍCH: ca đỏ ở đây KHÔNG phải lỗi build — nó là phát hiện, và
+        # phải đi tiếp tới bước mở issue. Bước "Kết luận" cuối mới quyết mã thoát.
+        run: |
+          DAY_OFFSET=${{ matrix.days }} pnpm exec vitest run \
+            -c vitest.bom.config.ts \
+            --reporter=json --outputFile=bom-${{ matrix.days }}.json \
+            --reporter=default || true
+
+      - name: Mở / cập nhật issue cho từng bom
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/bao-bom-hen-gio.mjs bom-${{ matrix.days }}.json ${{ matrix.days }}
+
+      - name: Kết luận
+        run: |
+          if node -e "const r=require('./bom-${{ matrix.days }}.json');process.exit(r.numFailedTests>0?1:0)"; then
+            echo "✔ Không bom nào ở +${{ matrix.days }} ngày."
+          else
+            echo "⚠️ Có bom ở +${{ matrix.days }} ngày — xem issue nhãn bom-hen-gio."
+            exit 1
+          fi
