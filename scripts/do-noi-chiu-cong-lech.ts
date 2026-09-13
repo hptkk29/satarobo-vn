@@ -196,6 +196,34 @@ async function main() {
   for (const l of lech) theoThang.set(l.ngay.slice(0, 7), (theoThang.get(l.ngay.slice(0, 7)) ?? 0) + 1);
   for (const [k, n] of [...theoThang.entries()].sort()) dong(k, n);
 
+  // ── THAM SỐ ĐỂ BẤM NÚT TÍNH LẠI ──────────────────────────────────────────────
+  //
+  // Vì sao khối này tồn tại: nút tính lại (`viec = tinh-lai-mot-ngay`) nhận `user_id` +
+  // `ngay`, mà bản đầu của phép đo chỉ in HỌ TÊN và SỐ NGÀY. Hai mảnh không khớp nhau —
+  // đo xong vẫn không bấm được nút, phải mở SQL Editor tra tay. Đó là lỗ của lượt 13/09.
+  //
+  // In thẳng cặp tham số, ĐÚNG hình dạng dán được vào ô của workflow.
+  //
+  // ⚠️ Trần 50 dòng: đây là danh sách để BẤM TAY từng dòng. Quá 50 thì việc cần làm không
+  // còn là bấm tay nữa — nó là một lượt chạy dải, có phép đo khác và phải báo kế toán
+  // trước (xem cảnh báo cuối file). Số bị cắt được nói ra, không im lặng.
+  tieu("THAM SỐ ĐỂ BẤM NÚT TÍNH LẠI (workflow GHI · viec = tinh-lai-mot-ngay)");
+  const TRAN = 50;
+  const sap = [...lech].sort((a, b) => (a.ngay === b.ngay ? 0 : a.ngay < b.ngay ? -1 : 1));
+  for (const l of sap.slice(0, TRAN)) {
+    console.log(
+      `  user_id = ${l.userId}   ngay = ${l.ngay}` +
+        `   (${String(tenNguoi.get(l.userId) ?? "?").slice(0, 24)} · ${l.dang} → ${l.dung})`,
+    );
+  }
+  if (sap.length > TRAN) {
+    console.log("");
+    console.log(`  … CÒN ${sap.length - TRAN} dòng nữa KHÔNG in ở đây (trần ${TRAN}).`);
+    console.log("    Đừng đọc danh sách trên như là ĐỦ — nhiều dòng thế này thì bấm tay là sai cách.");
+  }
+  console.log("");
+  console.log("  Bấm CHẠY THỬ trước: workflow ĐO · viec = tinh-lai-mot-ngay-chay-thu, cùng hai ô trên.");
+
   console.log("");
   console.log("  ⚠️ Script này KHÔNG sửa gì. Muốn các dòng trên mang đúng cơ sở thì phải TÍNH LẠI");
   console.log("     (`recomputeRange`) — một lượt RIÊNG, và phải báo kế toán trước vì số công theo");

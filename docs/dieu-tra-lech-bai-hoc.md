@@ -1946,3 +1946,5 @@ khoảng hở đó **không bỏ ngỏ**, lưới #1 phủ bằng hình dạng l
 > DB dev — vốn dùng chung với `test.satarobo.vn`; chạy với chuỗi chỉ-đọc thì `updateMany` bị
 > từ chối **sau khi** đã ghi dump và CSV. Cổng "đối chiếu dòng `Đích`" trong runbook chính là
 > thứ chặn lại ở đây. Chờ chủ dự án cấp chuỗi ghi, hoặc tự chạy lệnh.
+
+> **13/09 03:53Z — ĐÃ CHẠY `--apply` trên prod qua workflow `Dọn customTitle · PROD · GHI`: dọn 958 dòng, giữ 2.** Nghiệm thu: phép 2 ĐẠT (0 buổi còn hiện tên giáo trình cũ) · phép 3 ĐẠT (2/1056 plan còn `customTitle`, đúng hai dòng người gõ) · **phép 1 TRƯỢT vì chính phép đo sai, không phải dữ liệu**: nó đếm nhóm "giữ" bằng `updatedAt` lệch `createdAt`, mà `updateMany` vừa đổi `updatedAt` của 958 dòng vừa dọn ⇒ ra 960. Đo độc lập bằng chuỗi chỉ-đọc xác nhận `còn customTitle = 2`. **Phép đo tự huỷ sau lần dọn đầu tiên** — vế "GIỮ 2" của phép 1 phải đổi sang đếm `customTitle != null` (tức trùng phép 3), hoặc bỏ hẳn. Chưa sửa.
