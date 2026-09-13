@@ -137,8 +137,12 @@ test.describe("[OA] Duyệt cả đơn bằng một lệnh", () => {
     });
     expect(plan.ok).toBe(true);
 
-    // Đợt 2 được thu TRƯỚC khi duyệt: Ledger-B ghi PAID nhưng Payment bị gate lại
-    // (kế hoạch còn PENDING_APPROVAL) — đây chính là khoản phải ghi bù lúc duyệt.
+    // Đợt 2 được thu TRƯỚC khi duyệt.
+    //
+    // ⚠️ ĐẢO 13/09/2026 — trước đây Payment bị gate lại cho tới lúc duyệt (kỳ vọng 0 ở
+    // đây), và lúc duyệt mới "ghi bù". Giữ luật đó nghĩa là tiền đã vào tài khoản mà công
+    // nợ hiển thị không giảm. Nay ghi NGAY ⇒ kỳ vọng 1; đường "ghi bù" lúc duyệt thành
+    // no-op idempotent, nên assertion sau khi duyệt (vẫn = 1) không đổi.
     const dot2 = await db.orderInstallment.findFirstOrThrow({
       where: { orderId: order.id, soDot: 2 },
       select: { id: true },
@@ -148,7 +152,8 @@ test.describe("[OA] Duyệt cả đơn bằng một lệnh", () => {
       await db.payment.count({
         where: { orderId: order.id, deletedAt: null, note: { contains: "[auto:order-installment:dot2]" } },
       }),
-    ).toBe(0);
+      "đóng đợt 2 là ghi Ledger-A ngay, không chờ duyệt",
+    ).toBe(1);
 
     const res = await approveOrder({ orderId: order.id, actor: qlcs });
     expect(res.ok).toBe(true);
@@ -163,7 +168,7 @@ test.describe("[OA] Duyệt cả đơn bằng một lệnh", () => {
       await db.payment.count({
         where: { orderId: order.id, deletedAt: null, note: { contains: "[auto:order-installment:dot2]" } },
       }),
-      "duyệt xong phải ghi bù Payment cho đợt 2 đã thu",
+      "duyệt xong vẫn đúng 1 khoản — đường ghi bù idempotent theo marker, không cộng đôi",
     ).toBe(1);
 
     const requests = await getOrderPaymentRequests(order.id);
