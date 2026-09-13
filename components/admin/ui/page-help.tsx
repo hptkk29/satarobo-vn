@@ -32,7 +32,10 @@ export function PageHelp({
 }) {
   return (
     <details className={cn("group mb-4 rounded-xl border border-border bg-card", className)}>
-      <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
+      {/* `pointer-coarse:min-h-11` — đo 13/09: `py-2.5` cho ra 40px, dưới sàn 44px của
+          PRODUCT.md. Chỉ đặt sàn CHIỀU CAO và chỉ khi dùng ngón tay, nên bố cục của 42
+          trang đang dùng thành phần này không đổi một pixel nào trên máy có chuột. */}
+      <summary className="flex min-h-0 cursor-pointer list-none items-center gap-2 px-4 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground pointer-coarse:min-h-11 [&::-webkit-details-marker]:hidden">
         <CircleHelp className="h-4 w-4 shrink-0 text-primary" aria-hidden />
         {label}
         <ChevronRight

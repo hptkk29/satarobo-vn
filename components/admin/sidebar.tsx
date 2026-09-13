@@ -374,6 +374,7 @@ export function Sidebar({
   evalV2Enabled = false,
   scormEnabled = false,
   classGroupEnabled = false,
+  onNavigate,
 }: {
   granted: string[];
   /** `User.id` — topic realtime `user:{id}` để badge "Tin nhắn" tự nhảy. */
@@ -384,6 +385,15 @@ export function Sidebar({
   scormEnabled?: boolean;
   /** Cờ GỠ — mặc định false ⇒ mục "Nhóm lớp" ẩn. */
   classGroupEnabled?: boolean;
+  /**
+   * Gọi khi người dùng bấm một mục — để bản DRAWER trên điện thoại tự đóng lại.
+   *
+   * `undefined` ở bản desktop (thanh cố định, không có gì để đóng). Thiếu nó thì trên điện
+   * thoại bấm một mục xong drawer vẫn che kín trang vừa mở — người dùng phải bấm ra ngoài
+   * một lần nữa mới thấy nội dung, và đó là kiểu chạm-hai-lần khiến người ta tưởng nút không
+   * ăn. Xem `components/admin/admin-shell.tsx`.
+   */
+  onNavigate?: () => void;
 }) {
   const pathname = usePathname();
 
@@ -453,6 +463,7 @@ export function Sidebar({
       <div className="flex h-16 items-center border-b border-border px-6">
         <Link
           href="/dashboard"
+          onClick={onNavigate}
           className="group text-xl font-bold transition-opacity hover:opacity-90"
         >
           {/* DESIGN.md §7 — KHÔNG gradient trong admin. Bản cũ tô "Sata" bằng gradient
@@ -501,6 +512,7 @@ export function Sidebar({
                       )}
                       <Link
                         href={item.href}
+                        onClick={onNavigate}
                         className={cn(
                           "flex items-center gap-3 px-6 py-2 text-sm font-medium transition-colors",
                           active

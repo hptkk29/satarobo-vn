@@ -1,145 +1,362 @@
 "use client";
 
-import { useState, useTransition } from "react";
+// Trình sửa tham số vận hành — bản TAB NGANG (13/09/2026).
+//
+// ── BẢN CŨ SAI Ở ĐÂU ─────────────────────────────────────────────────────────────────────
+// Một danh sách dọc 86 ô, gom theo `group` của mã nguồn, mỗi ô là một `<textarea>` JSON kèm
+// tên khoá kiểu `cron.renewalReminderMinDays`. Người dùng trang này là quản trị hệ thống của
+// trung tâm — họ không biết "cron" là gì, không biết `5` phải gõ trần còn `"616899"` phải có
+// nháy kép, và phải cuộn qua 80 dòng không liên quan để tới thứ mình cần.
+//
+// Hệ quả không phải "xấu": tham số mà người có quyền đổi không hiểu nghĩa thì hoặc không ai
+// đụng tới, hoặc bị đổi sai. Một trang cấu hình không dùng được cũng bằng không có.
+//
+// ── BẢN NÀY ──────────────────────────────────────────────────────────────────────────────
+// · Chia tab theo CÔNG VIỆC (`lib/settings/nhan-van-hanh.ts`), không theo module mã nguồn.
+// · Mỗi dòng: tên viết như một câu nói + một câu "đổi cái này thì chuyện gì xảy ra" + đơn vị.
+// · Ô nhập theo ĐÚNG KIỂU giá trị: bật/tắt ra công tắc, số ra ô số, chữ ra ô chữ. Chỉ những
+//   giá trị thật sự phức tạp (danh sách, bảng) mới còn ô JSON — và có dòng nhắc riêng.
+// · Tên khoá kỹ thuật KHÔNG hiện mặc định; nằm trong mục "Chi tiết kỹ thuật" gấp lại, vì khi
+//   có sự cố thì đó là thứ duy nhất tra được trong nhật ký kiểm toán.
+//
+// ── MỘT THỨ CỐ Ý GIỮ ─────────────────────────────────────────────────────────────────────
+// Lưu TỪNG Ô một, mỗi lần một lý do — không gom "Lưu tất cả". Mỗi dòng nhật ký kiểm toán phải
+// trả lời được "ai đổi cái gì, vì sao"; gom 20 ô vào một lý do là mất hẳn câu trả lời đó.
+//
+// ── ĐỢT RÀ BỐ CỤC 13/09 (đo thật trên Chromium, 14 bề ngang 320→7680) ────────────────────
+// Ba lỗi đo được, không phải cảm giác:
+//  1. Khối nội dung `max-w-4xl` KHÔNG căn giữa ⇒ ở 4K bỏ trống 2688px bên phải, ở 8K là
+//     6528px. Trang thành một dải hẹp dính mép trái.
+//  2. Thanh tab kiểu gạch chân cuộn ngang: 11 nhãn đầy đủ cần ~1553px nên bị cắt ngay từ
+//     896px — kể cả trên màn 1440 tab đầu vẫn cụt giữa chữ, và không có dấu hiệu nào cho biết
+//     còn tab bên trái.
+//  3. 86 ô "Lý do thay đổi" hiện thường trực dù chưa ai đổi gì — 86 hộp chữ chết chiếm chỗ.
+// Vá: khối căn giữa + nới trần theo bậc màn · tab đổi sang dạng viên thuốc TỰ XUỐNG HÀNG
+// (thấy đủ 11 tab, không cuộn ngầm) · ô lý do chỉ hiện khi dòng đó THẬT SỰ có thay đổi.
+
+import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
+import { TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
+import type { NhanVanHanh } from "@/lib/settings/nhan-van-hanh";
 import { saveGlobalSettingAction } from "../actions";
 
 export type SettingRowView = {
   key: string;
-  label: string;
-  group: string;
-  centerOverridable: boolean;
   value: unknown;
-  /** Setting kiểu bật/tắt → hiện CÔNG TẮC thay vì ô JSON (chốt 07/08). */
-  isBoolean?: boolean;
+  nhan: NhanVanHanh;
 };
 
-const GROUP_LABEL: Record<string, string> = {
-  student: "Học viên",
-  risk: "Rủi ro / chăm sóc",
-  class: "Lớp học",
-  shift: "Ca làm việc",
-  contact: "Liên hệ hiển thị",
-  finance: "Tài chính",
-  enrollment: "Ghi danh / bảo lưu",
-  chat: "Tin nhắn (chat)",
-};
+/**
+ * Nới vùng bấm của công tắc lên chuẩn 44px mà KHÔNG phóng to nó trên hình.
+ *
+ * Công tắc shadcn cao 20px — bấm trúng bằng ngón tay là chuyện may rủi, và PRODUCT.md đặt sàn
+ * 44px. Phóng to thật thì phá mật độ của cả trang; nới bằng lớp phủ trong suốt thì vùng bấm
+ * đúng chuẩn còn hình thì giữ nguyên. Đây là đúng cách repo đã dùng cho hàng bảng (luật 12).
+ */
+const VUNG_BAM_RONG =
+  "relative after:absolute after:-inset-x-3 after:-inset-y-3 after:content-['']";
 
-function toText(v: unknown): string {
-  return typeof v === "string" ? v : JSON.stringify(v, null, 2);
+/** Kiểu ô nhập suy từ GIÁ TRỊ, không cần đưa schema Zod qua ranh giới client. */
+type KieuO = "batTat" | "so" | "chu" | "phucTap";
+
+function kieuCuaGiaTri(v: unknown): KieuO {
+  if (typeof v === "boolean") return "batTat";
+  if (typeof v === "number") return "so";
+  if (typeof v === "string") return "chu";
+  return "phucTap";
 }
 
-function SettingRow({ row, canEdit }: { row: SettingRowView; canEdit: boolean }) {
-  const [text, setText] = useState(() => toText(row.value));
-  const [reason, setReason] = useState("");
-  const [pending, start] = useTransition();
+function HangCauHinh({ row, choSua }: { row: SettingRowView; choSua: boolean }) {
+  const kieu = kieuCuaGiaTri(row.value);
+  const [thoNhap, setThoNhap] = useState(() =>
+    kieu === "phucTap" ? JSON.stringify(row.value, null, 2) : String(row.value ?? ""),
+  );
+  const [bat, setBat] = useState(() => row.value === true);
+  const [lyDo, setLyDo] = useState("");
+  const [dangLuu, batDauLuu] = useTransition();
 
-  const save = () => {
-    let parsed: unknown;
+  const giaTriMoi = (): { ok: true; v: unknown } | { ok: false; loi: string } => {
+    if (kieu === "batTat") return { ok: true, v: bat };
+    if (kieu === "so") {
+      const n = Number(thoNhap.trim().replace(/\s/g, ""));
+      if (thoNhap.trim() === "" || Number.isNaN(n)) {
+        return { ok: false, loi: "Hãy nhập một con số" };
+      }
+      return { ok: true, v: n };
+    }
+    if (kieu === "chu") return { ok: true, v: thoNhap };
     try {
-      parsed = JSON.parse(text);
+      return { ok: true, v: JSON.parse(thoNhap) };
     } catch {
-      toast.error("Giá trị không phải JSON hợp lệ");
+      return {
+        ok: false,
+        loi: "Nội dung chưa đúng định dạng — kiểm lại dấu phẩy và dấu ngoặc",
+      };
+    }
+  };
+
+  // So với giá trị ĐANG LƯU để biết có gì để lưu không. Đây cũng là công tắc hiện khung nhập
+  // lý do: chưa đổi gì thì không có gì để giải thích, và 86 hộp chữ chết là thứ làm trang
+  // nhìn như một biểu mẫu khai thuế chứ không phải một trang cấu hình.
+  const coDoi = useMemo(() => {
+    const g = giaTriMoi();
+    if (!g.ok) return true; // đang nhập dở ⇒ vẫn cho bấm để hiện thông báo lỗi
+    return JSON.stringify(g.v) !== JSON.stringify(row.value);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [thoNhap, bat, row.value]);
+
+  const luu = () => {
+    const g = giaTriMoi();
+    if (!g.ok) {
+      toast.error(g.loi);
       return;
     }
-    if (!reason.trim()) {
+    if (!lyDo.trim()) {
       toast.error("Vui lòng nhập lý do thay đổi");
       return;
     }
-    start(async () => {
-      const res = await saveGlobalSettingAction({ key: row.key, value: parsed, reason });
+    batDauLuu(async () => {
+      const res = await saveGlobalSettingAction({ key: row.key, value: g.v, reason: lyDo });
       if (res.ok) {
-        toast.success(`Đã lưu ${row.label}`);
-        setReason("");
+        toast.success(`Đã lưu: ${row.nhan.ten}`);
+        setLyDo("");
       } else {
         toast.error(res.error.message);
       }
     });
   };
 
+  const idO = `o-${row.key.replace(/\./g, "-")}`;
+
   return (
-    <div className="rounded-lg border border-border bg-card p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-foreground">{row.label}</p>
-          <code className="text-xs text-muted-foreground">{row.key}</code>
-          {row.centerOverridable && (
-            <span className="ml-2 rounded bg-state-info-soft px-1.5 py-0.5 text-[10px] font-medium text-state-info-ink">
-              cho phép override theo cơ sở
-            </span>
-          )}
-        </div>
-      </div>
-      {row.isBoolean ? (
-        // Công tắc: bấm ĐỔI NGAY trạng thái hiển thị (kèm nhãn "chưa lưu"), nhưng vẫn
-        // phải nhập lý do rồi bấm Lưu mới ghi — giữ luật "mọi thay đổi có lý do + audit",
-        // không biến công tắc thành đường ghi tắt bỏ qua nhật ký.
-        <div className="mt-2 flex items-center gap-3">
-          <Switch
-            checked={text === "true"}
-            onCheckedChange={(v) => setText(v ? "true" : "false")}
-            disabled={!canEdit || pending}
-            aria-label={row.label}
-          />
-          <span
-            className={`text-sm font-medium ${ text === "true" ? "text-state-success-ink" : "text-muted-foreground" }`}
-          >
-            {text === "true" ? "Đang BẬT" : "Đang TẮT"}
-          </span>
-          {text !== toText(row.value) && (
-            <span className="rounded-full bg-state-warning-soft px-2 py-0.5 text-xs font-semibold text-state-warning-ink">
-              chưa lưu
-            </span>
-          )}
-        </div>
-      ) : (
-        <Textarea
-          className="mt-2 font-mono text-xs"
-          rows={text.includes("\n") ? 6 : 1}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          disabled={!canEdit || pending}
-        />
+    <div
+      className={cn(
+        "border-b border-border px-4 py-4 transition-colors last:border-b-0 sm:px-5",
+        coDoi && choSua && "bg-primary/[0.03]",
       )}
-      {canEdit && (
-        <div className="mt-2 flex items-center gap-2">
-          <Input
-            placeholder="Lý do thay đổi (bắt buộc)"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            disabled={pending}
+    >
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-8">
+        <div className="min-w-0 flex-1">
+          <label
+            htmlFor={idO}
+            className="inline-flex items-start gap-1.5 text-sm font-semibold leading-snug text-foreground"
+          >
+            <span>{row.nhan.ten}</span>
+            {row.nhan.canThan && (
+              <TriangleAlert
+                className="mt-0.5 h-3.5 w-3.5 shrink-0 text-state-warning-ink"
+                aria-label="Cần cân nhắc: đổi sai ảnh hưởng rộng hoặc phát sinh chi phí"
+              />
+            )}
+          </label>
+          {/* Trần đo chữ: câu giải thích không được dài quá ~72 ký tự một dòng, nếu không thì
+              trên màn rộng mắt phải quét ngang cả nghìn pixel để về đầu dòng sau. */}
+          <p className="mt-1 max-w-[72ch] text-xs leading-relaxed text-muted-foreground">
+            {row.nhan.giaiThich}
+          </p>
+        </div>
+
+        {kieu !== "phucTap" && (
+          <div className="flex shrink-0 items-center gap-2.5 lg:w-72 lg:justify-end">
+            {kieu === "batTat" ? (
+              <>
+                <span className="text-sm tabular-nums text-muted-foreground">
+                  {bat ? "Đang bật" : "Đang tắt"}
+                </span>
+                <Switch
+                  id={idO}
+                  checked={bat}
+                  onCheckedChange={setBat}
+                  disabled={!choSua || dangLuu}
+                  aria-label={row.nhan.ten}
+                  className={VUNG_BAM_RONG}
+                />
+              </>
+            ) : (
+              <>
+                <Input
+                  id={idO}
+                  value={thoNhap}
+                  inputMode={kieu === "so" ? "decimal" : "text"}
+                  onChange={(e) => setThoNhap(e.target.value)}
+                  disabled={!choSua || dangLuu}
+                  className={cn(
+                    // Cao theo loại con trỏ: chuột thì 40px cho đúng mật độ admin, ngón tay
+                    // thì 44px theo sàn tiếp cận của PRODUCT.md — kể cả trên iPad rộng.
+                    "h-10 w-full pointer-coarse:h-11",
+                    kieu === "so" ? "sm:w-36 lg:text-right" : "sm:w-56",
+                  )}
+                />
+                {row.nhan.donVi && (
+                  <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
+                    {row.nhan.donVi}
+                  </span>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      {kieu === "phucTap" && (
+        // Trần bề ngang cho ô nhiều dòng: ở 4K khung nội dung rộng 1360px, mà nội dung thật
+        // của nó là một danh sách ngắn — kéo dài hết khung thì ba dòng JSON nằm lọt thỏm
+        // trong một hộp rỗng mênh mông.
+        <div className="mt-3 max-w-2xl">
+          <Textarea
+            id={idO}
+            value={thoNhap}
+            onChange={(e) => setThoNhap(e.target.value)}
+            disabled={!choSua || dangLuu}
+            rows={Math.min(14, thoNhap.split("\n").length + 1)}
+            className="font-mono text-xs"
           />
-          <Button onClick={save} disabled={pending} size="sm">
-            {pending ? "Đang lưu…" : "Lưu"}
+          <p className="mt-1 max-w-[72ch] text-xs text-muted-foreground">
+            Đây là một danh sách nhiều mục. Giữ nguyên dấu ngoặc và dấu phẩy như mẫu sẵn có —
+            chỉ sửa phần chữ bên trong dấu nháy.
+          </p>
+        </div>
+      )}
+
+      {/* Khung lưu chỉ hiện khi dòng này THẬT SỰ đổi. Trước đó nó nằm thường trực ở cả 86
+          dòng — 86 hộp chữ không ai điền, và một nút Lưu mờ ở mỗi dòng là 86 lời hứa suông. */}
+      {choSua && coDoi && (
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+          <Input
+            value={lyDo}
+            onChange={(e) => setLyDo(e.target.value)}
+            placeholder="Vì sao đổi? (bắt buộc)"
+            disabled={dangLuu}
+            autoFocus
+            aria-label={`Lý do thay đổi: ${row.nhan.ten}`}
+            className="h-10 pointer-coarse:h-11 sm:flex-1"
+          />
+          <Button
+            onClick={luu}
+            disabled={dangLuu}
+            className="shrink-0 pointer-coarse:h-11"
+          >
+            {dangLuu ? "Đang lưu…" : "Lưu"}
           </Button>
         </div>
       )}
+
+      <details className="mt-2">
+        {/* Vùng bấm 44px cho ngón tay: `py-1` cho ra 25px, đo được ở 390px. */}
+        <summary className="inline-flex cursor-pointer items-center py-1 text-[11px] text-muted-foreground/70 hover:text-muted-foreground pointer-coarse:min-h-11">
+          Chi tiết kỹ thuật
+        </summary>
+        {/* Tên khoá là thứ DUY NHẤT tra được trong nhật ký kiểm toán và khi hỏi bên kỹ thuật —
+            nên phải có, nhưng gấp lại để nó không chen vào giữa người dùng và việc của họ. */}
+        <code className="mt-1 block text-[11px] text-muted-foreground">{row.key}</code>
+      </details>
     </div>
   );
 }
 
-export function SettingsEditor({ rows, canEdit }: { rows: SettingRowView[]; canEdit: boolean }) {
-  const groups = Array.from(new Set(rows.map((r) => r.group)));
+export function BangCauHinhTab({
+  rows,
+  choSua,
+}: {
+  rows: readonly SettingRowView[];
+  choSua: boolean;
+}) {
+  if (rows.length === 0) return null;
   return (
-    <div className="space-y-6">
-      {groups.map((g) => (
-        <section key={g}>
-          <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-muted-foreground">
-            {GROUP_LABEL[g] ?? g}
-          </h2>
-          <div className="space-y-3">
-            {rows
-              .filter((r) => r.group === g)
-              .map((r) => (
-                <SettingRow key={r.key} row={r} canEdit={canEdit} />
-              ))}
-          </div>
-        </section>
+    <div className="overflow-hidden rounded-xl border border-border bg-card">
+      {rows.map((r) => (
+        <HangCauHinh key={r.key} row={r} choSua={choSua} />
       ))}
     </div>
+  );
+}
+
+/**
+ * Bộ chọn tab — HAI hình thức, chọn theo bề ngang.
+ *
+ * ── Vì sao không phải thanh gạch chân cuộn ngang (bản đầu) ──────────────────────────────
+ * Đo 13/09: 11 tab cần ~1553px với nhãn đầy đủ, ~1050px sau khi rút gọn — vẫn rộng hơn khung
+ * nội dung ở laptop 1440. Thanh cuộn ngang nằm trong một trang vốn đã cuộn dọc là thứ người
+ * dùng KHÔNG phát hiện ra: họ thấy tab đầu cụt giữa chữ và kết luận trang lỗi, chứ không nghĩ
+ * tới chuyện kéo ngang.
+ *
+ * ── Vì sao hai hình thức, không phải một ────────────────────────────────────────────────
+ * Viên thuốc tự xuống hàng giải được chuyện bị cắt, nhưng đo lại ở 320px thì 11 viên xếp
+ * thành **6 hàng** — khoảng 290px, gần nửa màn hình, và thanh này lại còn dính đỉnh. Chữa một
+ * lỗi bằng cách đẻ ra lỗi nặng hơn.
+ *
+ * Nên: dưới 640px dùng một ô chọn của hệ điều hành — một hàng 44px, bấm vào ra danh sách đủ
+ * 11 mục, đúng thứ người dùng điện thoại đã quen. Từ 640px trở lên là viên thuốc, tối đa 3
+ * hàng và 1 hàng từ Full HD.
+ *
+ * Cả hai luôn nằm trong DOM và ẩn/hiện bằng `display` — trình đọc màn hình bỏ qua nhánh đang
+ * `display:none`, nên không có chuyện đọc hai lần.
+ */
+export function ThanhTab({
+  tabs,
+  dangChon,
+  onChon,
+}: {
+  tabs: readonly { id: string; ten: string }[];
+  dangChon: string;
+  onChon: (id: string) => void;
+}) {
+  return (
+    <>
+      {/* Điện thoại — ô chọn của hệ điều hành. */}
+      <div className="sm:hidden">
+        <label htmlFor="chon-nhom-cau-hinh" className="sr-only">
+          Nhóm cấu hình
+        </label>
+        <select
+          id="chon-nhom-cau-hinh"
+          value={dangChon}
+          onChange={(e) => onChon(e.target.value)}
+          className="h-12 w-full rounded-xl border border-border bg-card px-3 text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {tabs.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.ten}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Từ tablet trở lên — viên thuốc tự xuống hàng, không bao giờ bị cắt. */}
+      <div
+        role="tablist"
+        aria-label="Nhóm cấu hình"
+        className="hidden flex-wrap gap-1.5 rounded-xl border border-border bg-card p-1.5 sm:flex"
+      >
+        {tabs.map((t) => {
+          const chon = t.id === dangChon;
+          return (
+            <button
+              key={t.id}
+              role="tab"
+              type="button"
+              aria-selected={chon}
+              onClick={() => onChon(t.id)}
+              className={cn(
+                // Cao theo LOẠI CON TRỎ, không theo bề ngang: một chiếc iPad rộng 1024px vẫn
+                // là ngón tay, mà bậc `lg:` thì lại coi nó như có chuột.
+                "inline-flex min-h-9 items-center rounded-lg px-3.5 text-sm font-semibold transition-colors pointer-coarse:min-h-11",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                chon
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              )}
+            >
+              {t.ten}
+            </button>
+          );
+        })}
+      </div>
+    </>
   );
 }

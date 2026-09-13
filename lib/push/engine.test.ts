@@ -61,6 +61,11 @@ const h = vi.hoisted(() => {
   });
 
   const getSetting = vi.fn(async (_k: string) => true as unknown);
+  /**
+   * 13/09 — danh sách loại được đẩy nay đọc từ `push.tienToDuocDay` qua `getGlobalSetting`.
+   * Mặc định của harness = đúng danh sách mặc định của hệ, để mọi ca cũ giữ nguyên nghĩa.
+   */
+  const getGlobalSetting = vi.fn(async (_k: string) => ["lead.moi:"] as unknown);
 
   return {
     trangThai,
@@ -76,6 +81,7 @@ const h = vi.hoisted(() => {
     subFindMany,
     subUpdate,
     getSetting,
+    getGlobalSetting,
     mockDb: {
       webPushOutbox: {
         findMany: outboxFindMany,
@@ -91,8 +97,10 @@ const h = vi.hoisted(() => {
 
 vi.mock("@/lib/db", () => ({ db: h.mockDb }));
 vi.mock("@/lib/settings/service", () => ({ getSetting: h.getSetting }));
+vi.mock("@/lib/settings/read-global", () => ({ getGlobalSetting: h.getGlobalSetting }));
 
 import { backoffMs } from "./ket-qua";
+import { LY_DO_NGOAI_DANH_SACH } from "./cau-hinh-allowlist";
 import { chayLuotGuiPush, type HamGui } from "./engine";
 import { taoCapKhoaVapid } from "./vapid";
 
@@ -184,6 +192,7 @@ beforeEach(() => {
   h.trangThai.thietBi = [thietBi("sub_1", EP1)];
   h.trangThai.hanThatTrongDb = null;
   h.getSetting.mockResolvedValue(true);
+  h.getGlobalSetting.mockResolvedValue(["lead.moi:"]);
   vi.stubEnv("NEXT_PUBLIC_VAPID_PUBLIC_KEY", CAP.publicKey);
   vi.stubEnv("VAPID_PRIVATE_KEY", CAP.privateKey);
   vi.stubEnv("VAPID_SUBJECT", "mailto:it@satarobo.vn");
@@ -530,14 +539,53 @@ describe("[PUSH-D4-T20] các cổng bỏ qua khác", () => {
     expect(String(chotOutbox().lastError)).toContain("Quá hạn");
   });
 
-  it("dòng ngoài allowlist ⇒ SKIPPED dù trạng thái là PENDING", async () => {
-    // Cổng thứ hai, sau cổng ở điểm móc: dòng có thể được ghi trước một lần đổi allowlist,
-    // hoặc bằng tay.
+  it("dòng thuộc loại KHÔNG được bật ⇒ SKIPPED dù trạng thái là PENDING", async () => {
+    // Cổng thứ hai, sau cổng ở điểm móc: dòng có thể được ghi trước một lần đổi cấu hình,
+    // được ghi lúc điểm móc chưa đọc nổi cấu hình, hoặc bị nhét bằng tay.
     h.trangThai.rows = [dongOutbox({ dedupeKey: "sla:SLA-1:lead_1" })];
     const g = guiGia({});
     expect((await chay(g)).skippedRows).toBe(1);
     expect(g.soLan()).toBe(0);
-    expect(String(chotOutbox().lastError)).toContain("allowlist");
+    expect(chotOutbox().lastError).toBe(LY_DO_NGOAI_DANH_SACH);
+  });
+
+  it("bật thêm loại đó trong cấu hình ⇒ CHÍNH dòng ấy được gửi", async () => {
+    // Cặp đôi với ca trên: cùng một dòng, chỉ khác danh sách cấu hình, ra hai kết cục ngược
+    // nhau. Không có ca này thì ca trên vẫn xanh kể cả khi engine bỏ qua cấu hình và luôn
+    // dùng hằng số cũ.
+    h.trangThai.rows = [dongOutbox({ dedupeKey: "sla:SLA-1:lead_1" })];
+    h.getGlobalSetting.mockResolvedValue(["sla:"]);
+    const g = guiGia({ [EP1]: 201 });
+    expect((await chay(g)).sent).toBe(1);
+    expect(g.soLan()).toBe(1);
+  });
+
+  it("danh sách RỖNG ⇒ không gửi gì, kể cả lead.moi:", async () => {
+    h.getGlobalSetting.mockResolvedValue([]);
+    const g = guiGia({});
+    expect((await chay(g)).skippedRows).toBe(1);
+    expect(g.soLan()).toBe(0);
+  });
+
+  it("⚠️ đọc cấu hình danh sách HỎNG ⇒ THOÁT sạch cả lượt, KHÔNG đụng dòng nào", async () => {
+    // Nếu thay vào đó engine chạy tiếp với danh sách rỗng thì mọi dòng PENDING bị chốt
+    // SKIPPED — trạng thái không quay lại được — và một cú chập DB xoá sổ toàn bộ hàng chờ.
+    // Thoát ra thì lượt sau (một phút nữa) xử lại như chưa có gì xảy ra.
+    h.getGlobalSetting.mockRejectedValue(new Error("P1001 không tới được DB"));
+    const g = guiGia({});
+    const kq = await chay(g);
+    expect(kq.skipped).toBe(true);
+    expect(kq.reason).toBe("NO_ALLOWLIST");
+    expect(g.soLan()).toBe(0);
+    // Không dòng nào bị đụng — đây mới là phần quan trọng, `skipped: true` chỉ là nhãn.
+    expect(h.goiOutboxUpdate).toHaveLength(0);
+    expect(h.outboxFindMany).not.toHaveBeenCalled();
+  });
+
+  it("lý do NO_ALLOWLIST phân biệt được với DISABLED", async () => {
+    // Gộp hai thứ này làm một là để một sự cố DB nằm im nhiều ngày dưới lớp vỏ "đang tắt".
+    h.getSetting.mockResolvedValue(false);
+    expect((await chay(guiGia({}))).reason).toBe("DISABLED");
   });
 
   it("người nhận không còn thiết bị ACTIVE nào ⇒ SKIPPED, KHÔNG phải DEAD", async () => {

@@ -21,8 +21,7 @@ import {
   isRbacV2Enabled,
   isScormEnabled,
 } from "@/lib/flags";
-import { Sidebar } from "@/components/admin/sidebar";
-import { Topbar } from "@/components/admin/topbar";
+import { AdminShell } from "@/components/admin/admin-shell";
 import { Toaster } from "@/components/ui/sonner";
 import { ServiceWorkerRegister } from "@/components/push/service-worker-register";
 
@@ -127,35 +126,35 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const chatUserId = canSeeChat ? session.user.id : "";
 
   return (
-    <div className="admin-scope flex h-screen overflow-hidden bg-muted">
-      {/* Desktop Sidebar */}
-      <div className="hidden md:flex md:shrink-0">
-        <Sidebar
-          granted={granted}
-          userId={chatUserId}
-          chatUnread={chatUnread}
-          evalV2Enabled={isEvalV2Enabled()}
-          scormEnabled={isScormEnabled()}
-          classGroupEnabled={isClassGroupEnabled()}
-        />
-      </div>
+    <>
+      {/*
+        Khung + trạng thái "drawer đang mở" nằm ở `AdminShell` (client): layout này là Server
+        Component (nó `auth()`, `resolveActor`, đọc DB) nên không giữ được `useState`.
 
-      {/* Main */}
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <Topbar
-          userId={session.user.id}
-          userName={session.user.name}
-          userRole={activeRole ?? session.user.role}
-          roles={roleOptions}
-          activeRole={activeRole}
-          elearningUrl={elearningUrl}
-        />
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
-      </div>
+        Trước 13/09/2026 khối này tự dựng khung tại chỗ với `<div className="hidden md:flex">`
+        bọc sidebar và KHÔNG có nút mở nào ⇒ dưới 768px cả 234 trang admin không điều hướng
+        được từ điện thoại. Đừng dựng lại khung ở đây.
+      */}
+      <AdminShell
+        granted={granted}
+        chatUserId={chatUserId}
+        chatUnread={chatUnread}
+        evalV2Enabled={isEvalV2Enabled()}
+        scormEnabled={isScormEnabled()}
+        classGroupEnabled={isClassGroupEnabled()}
+        userId={session.user.id}
+        userName={session.user.name}
+        userRole={activeRole ?? session.user.role}
+        roles={roleOptions}
+        activeRole={activeRole}
+        elearningUrl={elearningUrl}
+      >
+        {children}
+      </AdminShell>
 
       <Toaster richColors position="top-right" />
       {/* Web Push Đợt 2 — cài service worker, KHÔNG xin quyền (đó là Đợt 3, chỉ trong user gesture). */}
       <ServiceWorkerRegister nguoiDung={session.user.id} />
-    </div>
+    </>
   );
 }
