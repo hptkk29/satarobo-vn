@@ -23,6 +23,7 @@ import {
   type LoaiMaCa,
   type TrangThaiNgay,
 } from "./nhan-ca";
+import { gopNgayCong, type NgayCongGop } from "./tong-hop-cong";
 
 export type LoaiOCa = "Dạy" | "Trải nghiệm" | "Ca làm" | "Nghỉ" | "Nghỉ phép";
 
@@ -171,7 +172,106 @@ export function dungDongBangCong(input: {
   return ra;
 }
 
-/** Số ca LÀM VIỆC — dòng nghỉ nay có trong bảng nhưng không phải một ca công. */
-export function demCaLam(rows: readonly DongBangCong[]): number {
-  return rows.filter((r) => r.loai !== "Nghỉ" && r.loai !== "Nghỉ phép").length;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// BẢNG TỔNG HỢP CÔNG (mục 1) — bốn số ở hàng đầu + khối gấp lại
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// Chủ dự án chốt 13/09: "Đừng bày mười số ngang nhau, không ai đọc số nào."
+//
+// Ba ràng buộc, và chỗ từng cái được thi hành:
+//  1. MỌI con số đọc từ cùng nguồn admin đọc ⇒ mọi tổng ở đây đến từ `gopNgayCong`
+//     (`tong-hop-cong.ts`), đúng hàm `buildPeriodSummary` gọi. Hàm dưới KHÔNG cộng lại gì.
+//  2. Nhãn phải nói đúng thứ nó đếm ⇒ xem `NHAN_TOM_TAT` và hai đính chính ghi ở đó.
+//  3. Kỳ chưa chốt thì ghi rõ TẠM TÍNH ⇒ `tamTinh` dưới đây, đọc từ trạng thái KỲ chứ
+//     không phải từ "tháng này có phải tháng hiện tại không" (bản cũ đoán theo tháng: một
+//     tháng đã qua mà kỳ chưa chốt vẫn là tạm tính, mà bản cũ in như số cuối cùng).
+
+/** Một nhóm ngày nghỉ, tách theo đúng thứ DB phân biệt được — không bịa nhóm. */
+export type NhomNghi = {
+  khoa: string;
+  nhan: string;
+  soNgay: number;
+};
+
+export type TomTatCong = {
+  /** Công thực nhận trong tháng. */
+  cong: number;
+  /** Công chuẩn của KỲ. `null` = kỳ chưa được lập ⇒ phải in "—", đừng in 0. */
+  congChuan: number | null;
+  ngayDaLam: number;
+  ngayCoCa: number;
+  latePhut: number;
+  lateCount: number;
+  earlyLeavePhut: number;
+  earlyLeaveCount: number;
+  /** Tổng ngày nghỉ mọi loại (lễ + nghỉ tuần + phép). */
+  ngayNghi: number;
+  nhomNghi: NhomNghi[];
+  phutLam: number;
+  phutKeHoach: number;
+  /** Ngày CÓ VẤN ĐỀ — thứ người dùng cần thấy để đi nộp đơn. */
+  thieuLuotRa: number;
+  chuaCham: number;
+  chinhTay: number;
+  /** Kỳ chưa chốt ⇒ mọi số trên là TẠM TÍNH. */
+  tamTinh: boolean;
+};
+
+/**
+ * Gom một tháng của MỘT người thành bộ số cho màn "Bảng công".
+ *
+ * `congChuan` và `kyDaChot` là ĐỐI SỐ, không tra trong này: hàm phải thuần để cấy lỗi được.
+ */
+export function tomTatCongThang(input: {
+  ngay: readonly NgayCongGop[];
+  congChuan: number | null;
+  kyDaChot: boolean;
+}): TomTatCong {
+  const g = gopNgayCong(input.ngay);
+
+  // Tách nghỉ theo đúng thứ `dayType` phân biệt được. Nhóm "phép" tách tiếp CÓ/KHÔNG lương
+  // bằng `leaveUnits` — engine đã ghi sẵn phần hưởng lương, không suy từ mã ca.
+  let le = 0;
+  let nghiTuan = 0;
+  let phepCoLuong = 0;
+  let phepKhongLuong = 0;
+  for (const d of input.ngay) {
+    if (d.dayType === "HOLIDAY") le += 1;
+    else if (d.dayType === "WEEKLY_OFF") nghiTuan += 1;
+    else if (d.dayType === "LEAVE") {
+      if (d.leaveUnits > 0) phepCoLuong += 1;
+      else phepKhongLuong += 1;
+    }
+  }
+  const nhomNghi: NhomNghi[] = [
+    { khoa: "phep-co-luong", nhan: "Phép có lương", soNgay: phepCoLuong },
+    { khoa: "phep-khong-luong", nhan: "Phép không lương", soNgay: phepKhongLuong },
+    { khoa: "le", nhan: "Nghỉ lễ", soNgay: le },
+    { khoa: "nghi-tuan", nhan: "Nghỉ tuần", soNgay: nghiTuan },
+  ].filter((n) => n.soNgay > 0);
+
+  let thieuLuotRa = 0;
+  for (const d of input.ngay)
+    if (d.flags.includes("THIEU_LUOT_RA") || d.flags.includes("RA_KHONG_CO_VAO"))
+      thieuLuotRa += 1;
+
+  return {
+    cong: g.units,
+    congChuan: input.congChuan,
+    ngayDaLam: g.ngayDaLam,
+    ngayCoCa: g.ngayCoCa,
+    latePhut: g.latePhut,
+    lateCount: g.lateCount,
+    earlyLeavePhut: g.earlyLeavePhut,
+    earlyLeaveCount: g.earlyLeaveCount,
+    ngayNghi: le + nghiTuan + phepCoLuong + phepKhongLuong,
+    nhomNghi,
+    phutLam: g.workedMinutes,
+    phutKeHoach: g.expectedMinutes,
+    thieuLuotRa,
+    chuaCham: g.missingTapDays,
+    chinhTay: g.overrideDays,
+    tamTinh: !input.kyDaChot,
+  };
 }
