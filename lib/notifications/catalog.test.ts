@@ -20,12 +20,25 @@ const KHOA_DANG_CHAY: ReadonlyArray<[key: string, file: string]> = [
   ["trial.assigned:te1", "lib/_handlers/trial-notif.ts"],
   ["trial.schedule_changed:t1:2026-08-19T00:00:00.000Z", "lib/_handlers/trial-schedule-notif.ts"],
   ["trial.evaluated:te1:ts1", "lib/_handlers/trial-eval-notif.ts"],
-  // 3 khoá dưới cùng đi qua helper `notifyTrialTeacherAssigned` (lib/trial/service.ts) nhưng
+  // Các khoá dưới đi qua helper `notifyTrialTeacherAssigned` (lib/trial/service.ts) nhưng
   // dedupeKey do NƠI GỌI dựng — ghi đúng nơi gọi để lần sau còn tìm ra.
-  ["trial-v1.assigned:t1", "app/(admin)/admin/trials/actions.ts"],
-  ["trial-class.assigned:tc1", "app/(admin)/admin/trial-classes/_actions.ts"],
+  //
+  // ⚠️ 14/09/2026 — GỠ hai dòng `trial-v1.assigned:` và `trial-class.assigned:`. Ảnh chụp này
+  // vốn đã NÓI SAI: hai tệp nó trỏ tới (`app/(admin)/admin/trials/actions.ts` và
+  // `app/(admin)/admin/trial-classes/_actions.ts`) KHÔNG còn tồn tại, mà ca test chỉ hỏi
+  // "khoá có được khai trong catalog không" nên vẫn xanh. Một ảnh chụp trỏ vào tệp đã xoá thì
+  // không còn là ảnh chụp của hiện thực — nó chỉ giữ cho một mục chết sống mãi trong danh mục,
+  // và chính mục chết đó bày ra màn cấu hình thành công tắc không nối vào đâu.
   ["trial-session.assigned:ts1", "lib/trial/service.ts"],
   ["trial-enroll.assigned:te1", "lib/trial/service.ts"],
+  // 14/09 — ba khoá của luồng SỬA / DỜI NGƯỜI DẠY / HUỶ buổi trải nghiệm. Chúng sinh thật từ
+  // trước nhưng chưa từng được khai, nên rơi về "Hệ thống / P3" trong chuông và không hiện ở
+  // màn cấu hình đẩy. Sổ `WebPushOutbox` prod ngày 13/09 ghi đúng ba khoá này.
+  ["trial-session.updated:ts1:1789321086280", "app/(admin)/admin/lop-trial/_actions.ts"],
+  ["trial-session.moved-out:ts1:1789321086280", "app/(admin)/admin/lop-trial/_actions.ts"],
+  ["trial-session.cancelled:ts1", "app/(admin)/admin/lop-trial/_actions.ts"],
+  // 14/09 — báo Đào tạo khi thêm buổi mà KHÔNG chọn giáo viên (đường mặc định của form).
+  ["trial.cho-phan-cong:ts1", "lib/trial/notify-training.ts"],
   ["conversation.message_posted:m1", "lib/_handlers/conversation-notif.ts"],
   ["reserve.expired:r1:2026-08-19", "app/api/cron/reserve-expiry/route.ts"],
   ["reserve-expiry:r1", "lib/students/reserve-expiry.ts"],

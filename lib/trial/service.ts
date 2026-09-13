@@ -8,6 +8,7 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { notifyStaff } from "@/lib/notifications/notify";
+import { baoDaoTaoBuoiChuaCoGiaoVien } from "./notify-training";
 import { tenLopTrial } from "@/lib/trial/lop-moi";
 import { teacherCenterAssignmentError } from "@/lib/teachers/center-filter";
 import { nextSeq, yy } from "@/lib/codegen";
@@ -273,15 +274,34 @@ export async function addTrialSession(params: {
       return created.id;
     });
 
+    const dateStr = params.date.toLocaleDateString("vi-VN", { timeZone: "UTC" });
+    const moTaBuoi = `${dateStr} ${params.startTime}–${params.endTime}`;
+
     // #6 — báo GV được gán buổi (không tự báo mình).
     if (teacherId && teacherId !== params.actorId) {
-      const dateStr = params.date.toLocaleDateString("vi-VN", { timeZone: "UTC" });
       await notifyTrialTeacherAssigned({
         teacherId,
         title: "Bạn được phân công buổi trải nghiệm",
-        body: `Buổi ${dateStr} ${params.startTime}–${params.endTime} · lớp ${cls.name}.`,
+        body: `Buổi ${moTaBuoi} · lớp ${cls.name}.`,
         dedupeKey: `trial-session.assigned:${sessionId}`,
         entityId: sessionId,
+      });
+    } else if (!teacherId) {
+      // #6b (14/09/2026) — BUỔI KHÔNG CÓ AI DẠY. Trước đợt này nhánh đó im lặng tuyệt đối, và
+      // nó là đường MẶC ĐỊNH chứ không phải ca hiếm: ô "Giáo viên" ở form để trống sẵn
+      // (`add-session-form.tsx`), lớp trải nghiệm sinh ra đã `teacherId: null` (xem
+      // `createTrialClass` bên trên) và KHÔNG màn nào gán giáo viên cấp lớp. Tức bấm "Thêm
+      // buổi" theo đường tự nhiên nhất là tạo ra một buổi không ai dạy, không ai biết.
+      //
+      // Chủ dự án đi đúng vào đường này ngày 13/09 rồi kết luận kênh thông báo hỏng.
+      //
+      // Cố ý KHÔNG báo cho chính người vừa bấm — họ vừa làm việc đó, họ biết rồi; người cần
+      // biết là bộ phận Đào tạo, người đi phân công.
+      await baoDaoTaoBuoiChuaCoGiaoVien({
+        sessionId,
+        centerId: cls.centerId,
+        className: cls.name,
+        moTaBuoi,
       });
     }
     return { ok: true, sessionId };

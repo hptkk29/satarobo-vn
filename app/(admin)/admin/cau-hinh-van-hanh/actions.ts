@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { setGlobalSetting, setCenterSetting, type SetResult } from "@/lib/settings/service";
-import { catalogPrefixes } from "@/lib/notifications/catalog";
+import { catalogPrefixesDayDuoc } from "@/lib/notifications/catalog";
 
 function actorName(user: { id: string; name?: string | null; email?: string | null }): string {
   return user.name ?? user.email ?? user.id;
@@ -76,7 +76,7 @@ export async function luuLoaiDuocDayAction(input: {
   // Vì sao sắp lại: giá trị này nằm trong `oldValues`/`newValues` của nhật ký kiểm toán. Nếu
   // thứ tự chạy theo thứ tự người dùng bấm thì hai lần lưu CÙNG một lựa chọn vẫn ra hai JSON
   // khác nhau, và người đọc nhật ký sẽ đi tìm một thay đổi không tồn tại.
-  const thuTu = new Map(catalogPrefixes().map((p, i) => [p, i] as const));
+  const thuTu = new Map(catalogPrefixesDayDuoc().map((p, i) => [p, i] as const));
   const tienTo = [...new Set(input.tienTo.filter((t) => typeof t === "string" && t.length > 0))].sort(
     (a, b) => (thuTu.get(a) ?? 9999) - (thuTu.get(b) ?? 9999) || a.localeCompare(b),
   );
@@ -89,7 +89,9 @@ export async function luuLoaiDuocDayAction(input: {
   // loại họ vừa chọn biến mất không dấu vết — màn hình nói dối đúng nghĩa. Một khoá lạ tới được
   // đây nghĩa là giao diện và danh mục đã lệch nhau; đó là thứ phải nổ ra, không phải thứ để
   // dọn dẹp im lặng.
-  const hopLe = new Set(catalogPrefixes());
+    // Danh sách HẸP: bỏ các loại của vòng quét — chúng không bao giờ đẩy được, nên lưu
+  // vào cấu hình cũng vô nghĩa. Xem `catalogPrefixesDayDuoc`.
+  const hopLe = new Set(catalogPrefixesDayDuoc());
   const la = tienTo.filter((t) => !hopLe.has(t));
   if (la.length > 0) {
     return {

@@ -25,6 +25,7 @@ vi.mock("../actions", () => ({ luuLoaiDuocDayAction: h.luu }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 import { catalogEntries } from "@/lib/notifications/catalog";
+import { PENDING_SYNC_TYPES } from "@/lib/notifications/pending-sync";
 import { ChonLoaiThongBao } from "./chon-loai-thong-bao";
 
 const DANH_MUC = catalogEntries();
@@ -59,10 +60,47 @@ beforeEach(() => {
 });
 
 describe("[PUSH-D7-T23] bảng bày đúng danh mục thật", () => {
-  it("mỗi loại trong catalog có đúng MỘT công tắc", () => {
+  it("mỗi loại ĐẨY ĐƯỢC có đúng MỘT công tắc", () => {
     dung();
     expect(screen.getAllByRole("switch")).toHaveLength(DANH_MUC.length);
-    expect(DANH_MUC.length).toBeGreaterThan(40); // guard cho chính phép đếm trên
+    expect(DANH_MUC.length).toBeGreaterThan(25); // guard cho chính phép đếm trên
+  });
+
+  it("⚠️ KHÔNG bày loại sinh từ vòng quét việc tồn — chúng không bao giờ đẩy được", () => {
+    // `lib/staff-notifications.ts` ghi thẳng `db.staffNotification.upsert`, không đi qua
+    // `notifyStaff` — mà đó là điểm móc DUY NHẤT của Web Push. Ranh giới ấy là cố ý (xem khối
+    // chú thích ở `lib/notifications/notify.ts`: cửa dưới dành cho cron quét ~1.800 vi phạm
+    // mỗi lượt và đi cửa đó CHÍNH VÌ không muốn rung máy).
+    //
+    // Bày chúng ra là mời người ta bật một công tắc không nối vào đâu. Chủ dự án đã bật thật
+    // hai trong số đó (`class_no_teacher:`, `timesheet_adjust:`) ngày 13/09 rồi ngồi chờ.
+    const co = new Set(DANH_MUC.map((e) => e.prefix));
+    for (const t of PENDING_SYNC_TYPES) {
+      expect(co.has(`${t}:`), `${t}: không được bày ra bảng đẩy`).toBe(false);
+    }
+    expect(co.has("class_no_teacher:")).toBe(false);
+    expect(co.has("timesheet_adjust:")).toBe(false);
+  });
+
+  it("VẪN bày loại sinh từ sự kiện có cùng họ tên", () => {
+    // Cặp đôi với ca trên — không có nó thì một bản vá "lọc thừa tay" (vd lọc mọi khoá chứa
+    // \"parent_request\") vẫn xanh, trong khi đã cắt nhầm loại đẩy được.
+    const co = new Set(DANH_MUC.map((e) => e.prefix));
+    expect(co.has("parent_request.created:")).toBe(true);
+    expect(co.has("lead.moi:")).toBe(true);
+    expect(co.has("trial-session.assigned:")).toBe(true);
+  });
+
+  it("ba loại sửa/dời/huỷ buổi trải nghiệm đã có mặt", () => {
+    // Đúng ba thao tác chủ dự án thử ngày 13/09 mà không bật được vì chưa có trong danh mục.
+    const co = new Set(DANH_MUC.map((e) => e.prefix));
+    for (const t of [
+      "trial-session.updated:",
+      "trial-session.moved-out:",
+      "trial-session.cancelled:",
+    ]) {
+      expect(co.has(t), t).toBe(true);
+    }
   });
 
   it("mã kỹ thuật TẮT SẴN — 51 dòng mã là 51 dòng nhiễu với người vận hành", () => {

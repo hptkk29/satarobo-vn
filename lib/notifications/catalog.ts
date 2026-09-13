@@ -13,7 +13,7 @@
 //
 // THUẦN — không import DB, không import React. Test bằng Vitest không cần dựng gì.
 
-import { isPendingSyncKey } from "./pending-sync";
+import { isPendingSyncKey, PENDING_SYNC_TYPES } from "./pending-sync";
 
 // ─── 5 nhóm của PRD §7.4 ────────────────────────────────────────────────────────
 
@@ -278,16 +278,6 @@ const BY_PREFIX: Readonly<Record<string, NotiDef>> = {
     // Cũng là SALE (lib/_handlers/trial-schedule-notif.ts), không phải giáo viên.
     recipients: "Tư vấn viên phụ trách lead (không có thì admin lead)", target: "/leads/<leadId>",
   },
-  "trial-v1.assigned:": {
-    label: "Được phân buổi học thử (luồng cũ)",
-    group: "new_task", priority: 2, entity: "trial",
-    recipients: "Giáo viên được phân buổi học thử", target: "/lop-trial/lich-hen",
-  },
-  "trial-class.assigned:": {
-    label: "Được phân lớp học thử",
-    group: "new_task", priority: 2, entity: "trial",
-    recipients: "Giáo viên được phân lớp học thử", target: "/lop-trial",
-  },
   // 03/09 — có EM vừa được xếp vào ca của GV (enrollLeadChild). Khác ba loại "assigned"
   // còn lại: chúng báo việc được giao LỚP/BUỔI/CA, loại này báo SIĨ SỐ của ca đổi.
   // Lớp trải nghiệm là slot tái sử dụng nên hai việc cách nhau hàng tuần.
@@ -303,18 +293,27 @@ const BY_PREFIX: Readonly<Record<string, NotiDef>> = {
     group: "new_task", priority: 2, entity: "trial",
     recipients: "Giáo viên được phân buổi trải nghiệm", target: "/lop-trial",
   },
-  // ── GĐ3 — luồng giáo viên theo TỪNG CA (không phải theo lớp) ────────────────
-  "trial-case.assigned:": {
-    label: "Được phân một ca trải nghiệm",
+  // 14/09 — BA loại dưới đây sinh thật từ `app/(admin)/admin/lop-trial/_actions.ts` nhưng
+  // TRƯỚC ĐỢT NÀY không có trong bảng: hệ quả là chúng rơi về "Hệ thống / P3" trong chuông,
+  // và màn cấu hình đẩy KHÔNG BÀY RA nên không ai bật được. Chủ dự án thử đúng ba thao tác
+  // này rồi kết luận kênh hỏng — sổ `WebPushOutbox` trên prod ghi rõ ba dòng SKIPPED lúc
+  // 17:38–17:40 ngày 13/09.
+  "trial-session.updated:": {
+    label: "Buổi trải nghiệm vừa bị sửa",
     group: "new_task", priority: 2, entity: "trial",
-    recipients: "Giáo viên được Đào tạo phân công một ca trải nghiệm", target: "/lop-trial",
+    recipients: "Giáo viên đang được phân buổi sau khi sửa", target: "/lop-trial",
   },
-  // Lịch bị dời ⇒ giáo viên MẤT ca đang cầm. Ưu tiên cao hơn tin "được phân công":
-  // biết muộn là tới lớp thừa hoặc bỏ trống ca đã hẹn với phụ huynh.
-  "trial-case.rescheduled:": {
-    label: "Bị gỡ ca trải nghiệm do dời lịch",
-    group: "new_task", priority: 3, entity: "trial",
-    recipients: "Giáo viên vừa bị gỡ phân công do dời lịch", target: "/lop-trial",
+  // GV CŨ bị thay khỏi buổi. Mức 2 như "được phân": biết muộn là tới lớp thừa.
+  "trial-session.moved-out:": {
+    label: "Bị gỡ khỏi buổi trải nghiệm",
+    group: "new_task", priority: 2, entity: "trial",
+    recipients: "Giáo viên vừa bị thay khỏi buổi", target: "/lop-trial",
+  },
+  // Buổi bị huỷ hẳn. Đây là tin PHẢI tới trước giờ dạy, nên xếp mức 1.
+  "trial-session.cancelled:": {
+    label: "Buổi trải nghiệm bị huỷ",
+    group: "new_task", priority: 1, entity: "trial",
+    recipients: "Giáo viên được phân buổi bị huỷ", target: "/lop-trial",
   },
   "trial.cho-phan-cong:": {
     label: "Ca trải nghiệm chưa có giáo viên",
@@ -481,6 +480,43 @@ export function catalogPrefixes(): readonly string[] {
   return PREFIXES_LONGEST_FIRST;
 }
 
+/**
+ * Tiền tố mà vòng ĐỒNG BỘ VIỆC TỒN sở hữu — những loại KHÔNG BAO GIỜ đẩy được Web Push.
+ *
+ * ── VÌ SAO PHẢI TÁCH RA (14/09/2026) ───────────────────────────────────────────────────
+ * Chúng do `lib/staff-notifications.ts` ghi thẳng bằng `db.staffNotification.upsert`, KHÔNG đi
+ * qua `notifyStaff` — mà `notifyStaff` là điểm móc DUY NHẤT của Web Push. Ranh giới đó là cố ý
+ * và khối chú thích ở `lib/notifications/notify.ts` nói rõ lý do: hàm dưới dành cho cron quét
+ * hàng loạt (`lib/crm/sla.ts`, ~1.800 vi phạm mỗi lượt) và nó đi cửa đó CHÍNH VÌ không muốn
+ * rung điện thoại. Push đi theo sự kiện, không đi theo lượt quét.
+ *
+ * Hệ quả: bày những loại này ra màn cấu hình đẩy là mời người ta bật một công tắc không nối
+ * vào đâu. Chủ dự án đã bật thật 2 trong số đó (`class_no_teacher:`, `timesheet_adjust:`) rồi
+ * ngồi chờ — đúng định nghĩa affordance nói dối.
+ *
+ * SUY RA từ `PENDING_SYNC_TYPES` chứ không đánh dấu tay từng dòng: đánh dấu tay thì thêm một
+ * loại việc tồn mới mà quên đánh dấu là lại có thêm một công tắc chết.
+ */
+const TIEN_TO_VONG_QUET: ReadonlySet<string> = new Set(
+  PENDING_SYNC_TYPES.map((t) => `${t}:`),
+);
+
+/** Loại này có khả năng đẩy Web Push không (false = sinh từ vòng quét, không bao giờ đẩy). */
+export function dayDuocPush(prefix: string): boolean {
+  return !TIEN_TO_VONG_QUET.has(prefix);
+}
+
+/**
+ * Tiền tố ĐƯỢC PHÉP nằm trong `push.tienToDuocDay`.
+ *
+ * Hẹp hơn `catalogPrefixes()` đúng ở chỗ bỏ các loại của vòng quét. Đường ghi cấu hình phải
+ * kiểm theo danh sách NÀY, không theo danh sách đầy đủ — nếu không thì một khoá không đẩy được
+ * vẫn lưu được vào DB qua đường khác và nằm đó vô nghĩa.
+ */
+export function catalogPrefixesDayDuoc(): readonly string[] {
+  return PREFIXES_LONGEST_FIRST.filter(dayDuocPush);
+}
+
 /** Một dòng để BÀY RA cho người vận hành chọn — không phải để quyết định lúc chạy. */
 export interface NotiCatalogEntry {
   /** Tiền tố `dedupeKey` — cũng là giá trị lưu trong cấu hình allowlist. */
@@ -505,6 +541,8 @@ export interface NotiCatalogEntry {
 export function catalogEntries(): readonly NotiCatalogEntry[] {
   const thuTuNhom = new Map(NOTI_GROUPS.map((g, i) => [g.key, i] as const));
   return Object.entries(BY_PREFIX)
+    // Bỏ loại của vòng quét: chúng không bao giờ đẩy được, bày ra là hứa suông.
+    .filter(([prefix]) => dayDuocPush(prefix))
     .map(([prefix, def]) => ({
       prefix,
       label: def.label,
