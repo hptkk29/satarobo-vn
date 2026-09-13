@@ -14,6 +14,8 @@
 // THUẦN — không DB. Toàn bộ chỉ gọi `deriveStatus`, là hàm quyết định trạng thái
 // phiếu thu, và so chuỗi marker.
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, it, expect } from "vitest";
 import { deriveStatus } from "./allocation";
 // 13/09/2026 — [DS-03] ĐÃ VÁ: test nay gọi SỔ ĐĂNG KÝ THẬT thay vì bản sao cục bộ.
@@ -43,31 +45,46 @@ import {
 // đúng chuyện này. Mã nguồn cho thấy nó VẪN CÒN. Luật A1: mã nguồn thắng chú thích.
 // ═══════════════════════════════════════════════════════════════════════════
 
-describe("[DS-01] deriveStatus — dung sai làm tròn phải BỀN qua lần tính lại", () => {
+describe("[DS-01] dung sai làm tròn phải BỀN qua lần tính lại", () => {
   // Khách phải đóng 8.000.000đ, chuyển 7.996.000đ (thiếu 4.000đ, trong dung sai 5.000đ).
   const AMOUNT_DUE = 8_000_000;
   const ALLOCATED = 7_996_000;
   const WAIVED = 4_000;
 
-  it.fails("phiếu PAID nhờ dung sai KHÔNG được tụt về PARTIAL khi tính lại", () => {
-    // Đường tiền về (payos-ingest) — có truyền waived:
-    const luc_tien_ve = deriveStatus(AMOUNT_DUE, ALLOCATED, WAIVED, "PENDING");
-    expect(luc_tien_ve).toBe("PAID");
-
-    // Đường tính lại (recomputeRequestStatuses:404) — truyền 0:
-    const luc_tinh_lai = deriveStatus(AMOUNT_DUE, ALLOCATED, 0, "PAID");
-
-    // Cùng một phiếu, cùng một số tiền đã về, mà hai đường ra hai trạng thái khác nhau.
-    // Đây là lỗi: trạng thái phiếu phải là HÀM của sổ, không phụ thuộc đường nào gọi.
-    expect(luc_tinh_lai).toBe(luc_tien_ve);
+  it("deriveStatus cho PAID khi phần thiếu nằm trong dung sai", () => {
+    expect(deriveStatus(AMOUNT_DUE, ALLOCATED, WAIVED, "PENDING")).toBe("PAID");
   });
 
-  it.fails("phiếu đã tha dư KHÔNG được quay lại đòi tiền sau khi tính lại", () => {
-    // Hệ quả tiền: phiếu tụt về PARTIAL ⇒ `outstandingOf` (allocation.ts:43-46) trả
-    // lại 4.000đ ⇒ hệ thống đòi tiếp khoản đã tha, và `isOrderSettled`
-    // (allocation.ts:113-116) đòi MỌI phiếu phải PAID nên đơn không bao giờ chốt được.
-    const sauKhiTinhLai = deriveStatus(AMOUNT_DUE, ALLOCATED, 0, "PAID");
-    expect(sauKhiTinhLai).not.toBe("PARTIAL");
+  it("Bỏ QUÊN waived thì PAID tụt về PARTIAL — đây là bản thân con bug", () => {
+    // Giữ lại làm chứng: chỉ cần MỘT đường quên truyền waived là trạng thái đảo chiều.
+    expect(deriveStatus(AMOUNT_DUE, ALLOCATED, 0, "PAID")).toBe("PARTIAL");
+  });
+});
+
+// ⚠️ Hai test trên là THUẦN nên KHÔNG chứng minh được đường recompute có truyền waived
+// hay không — đó là một lời gọi Prisma trong `recomputeRequestStatuses`. Test dưới đây
+// ghim CHÍNH MÃ NGUỒN, theo đúng lối mà repo đã dùng cho các luật không test được bằng
+// hàm thuần (`lib/eslint/*.test.ts`). Đây là lưới chặn tái phát, không phải test đẹp.
+
+describe("[DS-01b] mã nguồn — đường tính lại phải thực sự đọc roundingWaived", () => {
+  // Đọc theo gốc dự án: `import.meta.url` trong cấu hình vitest của repo này không
+  // phải URL dạng file:// nên `fileURLToPath` ném.
+  const nguon = readFileSync(resolve(process.cwd(), "lib/payments/payment-request.ts"), "utf8");
+
+  it("allocatedByRequest SUM cả roundingWaived, không chỉ amount", () => {
+    // Trước bản vá: `_sum: { amount: true }`.
+    expect(nguon).toMatch(/_sum:\s*\{\s*amount:\s*true,\s*roundingWaived:\s*true\s*\}/);
+  });
+
+  it("KHÔNG còn lời gọi deriveStatus nào truyền hằng 0 cho waived", () => {
+    // Trước bản vá: `deriveStatus(r.amountDue, allocated.get(r.id) ?? 0, 0, r.status)`.
+    // Chính cái hằng `0` ở vị trí thứ ba là con bug.
+    const goi = nguon.match(/deriveStatus\([^)]*\)/g) ?? [];
+    expect(goi.length).toBeGreaterThan(0);
+    for (const g of goi) {
+      const thamSo = g.slice("deriveStatus(".length, -1).split(",").map((x) => x.trim());
+      expect(thamSo[2], `lời gọi ${g} truyền hằng 0 cho waived`).not.toBe("0");
+    }
   });
 });
 

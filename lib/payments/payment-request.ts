@@ -60,18 +60,47 @@ type OrderRef = {
   centerId?: string | null;
 };
 
-/** Tổng đã phân bổ theo phiếu (0 nếu chưa có đồng nào). */
+/**
+ * Tổng đã phân bổ theo phiếu (0 nếu chưa có đồng nào), TÁCH RIÊNG phần tiền thật rót
+ * vào và phần được THA theo dung sai làm tròn.
+ *
+ * ⚠️ 13/09/2026 (DS-01) — trước đây hàm này chỉ `_sum: { amount: true }`, bỏ qua
+ * `roundingWaived`. `recomputeRequestStatuses` lại truyền thẳng hằng `0` vào `deriveStatus`
+ * ⇒ một phiếu đã PAID nhờ dung sai bị TÍNH LẠI thành PARTIAL. Hai đường tính trạng thái
+ * không đồng ý với nhau: `payos-ingest.ts:968-973` CÓ cộng `roundingWaived`, chỗ này KHÔNG.
+ *
+ * Hệ quả tiền: `outstandingOf` trả lại đúng khoản đã tha ⇒ hệ thống đòi tiếp tiền đã tha,
+ * và `isOrderSettled` không bao giờ true ⇒ đơn KHÔNG CHỐT ĐƯỢC. Và vì
+ * `recomputeRequestStatuses` chạy ngay trong `materializeInstallmentRequests`, lỗi nổ ở
+ * đúng cú bấm "Lưu kế hoạch" / "Duyệt kế hoạch" kế tiếp.
+ *
+ * Chú thích ở `payos-ingest.ts:947-952` tuyên bố hành vi này ĐÃ được tránh — mã nguồn
+ * nói ngược. Luật A1: mã nguồn thắng chú thích.
+ */
 async function allocatedByRequest(
   tx: TxClient,
   requestIds: string[],
-): Promise<Map<string, number>> {
+): Promise<Map<string, { allocated: number; waived: number }>> {
   if (requestIds.length === 0) return new Map();
   const sums = await tx.paymentAllocation.groupBy({
     by: ["paymentRequestId"],
     where: { paymentRequestId: { in: requestIds } },
-    _sum: { amount: true },
+    _sum: { amount: true, roundingWaived: true },
   });
-  return new Map(sums.map((s) => [s.paymentRequestId, s._sum.amount ?? 0]));
+  return new Map(
+    sums.map((s) => [
+      s.paymentRequestId,
+      { allocated: s._sum.amount ?? 0, waived: s._sum.roundingWaived ?? 0 },
+    ]),
+  );
+}
+
+/** Trính đọc gọn cho map trên — phiếu chưa có dòng nào thì cả hai số là 0. */
+function soCuaPhieu(
+  m: Map<string, { allocated: number; waived: number }>,
+  id: string,
+): { allocated: number; waived: number } {
+  return m.get(id) ?? { allocated: 0, waived: 0 };
 }
 
 /**
@@ -276,7 +305,8 @@ export async function materializeInstallmentRequests(
   const planned = new Set(dots.map((d) => d.soDot));
   for (const r of existing) {
     if (r.installmentNo <= 0 || planned.has(r.installmentNo)) continue;
-    if (r.status === "VOID" || (allocated.get(r.id) ?? 0) > 0) continue;
+    // Tiền THẬT đã rót mới là lý do giữ phiếu; phần THA không phải tiền nhận được.
+    if (r.status === "VOID" || soCuaPhieu(allocated, r.id).allocated > 0) continue;
     await tx.paymentRequest.update({ where: { id: r.id }, data: { status: "VOID" } });
     await expireQrSessions(tx, r.id); // phiếu đã huỷ thì mã của nó không được sống
     updated += 1;
@@ -287,7 +317,7 @@ export async function materializeInstallmentRequests(
   let voidedFullOrder = false;
   let fullOrderAllocated = 0;
   if (full && full.status !== "VOID") {
-    fullOrderAllocated = allocated.get(full.id) ?? 0;
+    fullOrderAllocated = soCuaPhieu(allocated, full.id).allocated;
     await tx.paymentRequest.update({ where: { id: full.id }, data: { status: "VOID" } });
     await expireQrSessions(tx, full.id); // QR "tổng đơn" không được sống cạnh QR theo đợt
     voidedFullOrder = true;
@@ -349,7 +379,7 @@ export async function revertInstallmentRequests(
   let voided = 0;
   let keptWithMoney = 0;
   for (const r of rows) {
-    if ((allocated.get(r.id) ?? 0) > 0) {
+    if (soCuaPhieu(allocated, r.id).allocated > 0) {
       keptWithMoney += 1;
       continue;
     }
@@ -401,7 +431,9 @@ export async function recomputeRequestStatuses(
 
   const statuses: RequestStatus[] = [];
   for (const r of rows) {
-    const next = deriveStatus(r.amountDue, allocated.get(r.id) ?? 0, 0, r.status);
+    // DS-01 — truyền WAIVED THẬT, không phải hằng 0. Xem `allocatedByRequest`.
+    const so = soCuaPhieu(allocated, r.id);
+    const next = deriveStatus(r.amountDue, so.allocated, so.waived, r.status);
     statuses.push(next);
     if (next !== r.status) {
       await tx.paymentRequest.update({ where: { id: r.id }, data: { status: next } });
@@ -467,19 +499,29 @@ export async function getOrderPaymentRequests(orderId: string): Promise<PaymentR
   const sums = await db.paymentAllocation.groupBy({
     by: ["paymentRequestId"],
     where: { paymentRequestId: { in: rows.map((r) => r.id) } },
-    _sum: { amount: true },
+    _sum: { amount: true, roundingWaived: true },
   });
-  const allocated = new Map(sums.map((s) => [s.paymentRequestId, s._sum.amount ?? 0]));
+  // DS-01 (đường ĐỌC) — phần đã THA phải trừ vào "còn thiếu", nếu không thì màn
+  // phiếu thu hiện "còn thiếu 4.000đ" trên một phiếu đang PAID — mâu thuẫn ngay trên
+  // cùng một dòng. Giữ `allocated` là tiền THẬT (để hiển thị đúng số đã thu), chỉ cộng
+  // phần tha khi tính còn-thiếu.
+  const allocated = new Map(
+    sums.map((s) => [
+      s.paymentRequestId,
+      { allocated: s._sum.amount ?? 0, waived: s._sum.roundingWaived ?? 0 },
+    ]),
+  );
 
   return rows.map((r) => {
-    const alloc = allocated.get(r.id) ?? 0;
+    const so = soCuaPhieu(allocated, r.id);
+    const alloc = so.allocated;
     return {
       ...r,
       allocated: alloc,
       outstanding: outstandingOf({
         id: r.id,
         amountDue: r.amountDue,
-        allocated: alloc,
+        allocated: alloc + so.waived,
         sortOrder: r.sortOrder,
         status: r.status,
       }),
