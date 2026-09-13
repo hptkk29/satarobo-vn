@@ -205,7 +205,10 @@ jobs:
       - name: Seed dữ liệu nghiệm thu chấm công (2 kỳ gần nhất)
         if: ${{ inputs.du_lieu_cham_cong && !inputs.chi_lich_hen }}
         run: pnpm exec tsx prisma/seed-cham-cong-demo.ts --nguoi=10 ${{ inputs.ky_cham_cong && format('--ky={0}', inputs.ky_cham_cong) || '' }}
-        env: { DATABASE_URL: "${{ secrets.TEST_DIRECT_URL }}", DIRECT_URL: "${{ secrets.TEST_DIRECT_URL }}" }
+        # `SEED_ALLOW_REMOTE=1`: script có cổng `assertLocalDb` chặn ghi DB không-local. DB
+        # test là Supabase chứ không phải localhost nên lượt NÀY phải khai chủ đích. An toàn
+        # vì bước "Kiểm secret" ở trên đã từ chối khi TEST_DIRECT_URL trùng PROD_DIRECT_URL.
+        env: { DATABASE_URL: "${{ secrets.TEST_DIRECT_URL }}", DIRECT_URL: "${{ secrets.TEST_DIRECT_URL }}", SEED_ALLOW_REMOTE: "1" }
 
       - name: Tóm tắt
         run: |
