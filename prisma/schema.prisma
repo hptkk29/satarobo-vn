@@ -9216,3 +9216,191 @@ model LeaveType {
   createdAt      DateTime @default(now()) @db.Timestamptz(6)
   updatedAt      DateTime @updatedAt @db.Timestamptz(6)
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// WEB PUSH — THÔNG BÁO ĐẨY VÀO ĐIỆN THOẠI NHÂN VIÊN (Đợt 1, 08/09/2026)
+//
+// Vì sao có module này: chuông trong ứng dụng (`StaffNotification` + kênh realtime
+// `user:{id}`) chỉ sống khi TAB ĐANG MỞ. Đóng trình duyệt là im. Lead nóng nhất là lead
+// vừa để lại số, mà đúng lúc đó Sale thường không ngồi trước máy — đó là lỗ mà Web Push
+// sinh ra để bịt, và là lỗ DUY NHẤT nó được giao.
+//
+// PHẠM VI ĐÃ CHỐT (chủ dự án, 08/09/2026): chỉ NHÂN VIÊN NỘI BỘ. Phụ huynh KHÔNG nhận
+// Web Push — họ đi ZNS theo chốt 09/08/2026 (`lib/chat/zns-notify.ts:20`). Lý do không
+// phải kỹ thuật: cơ chế này đứng được là nhờ ép được nhân viên iPhone "Thêm vào màn hình
+// chính" (công cụ làm việc, bắt được); phụ huynh không ép được. Đừng mở lại vòng này.
+//
+// KÊNH DUY NHẤT, KHÔNG FALLBACK. Không Firebase, không dịch vụ bên thứ ba — VAPID thuần.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+enum WebPushSubscriptionStatus {
+  ACTIVE
+  REVOKED // người dùng tự gỡ, hoặc tài khoản bị vô hiệu hoá
+  EXPIRED // push service trả 404/410 Gone — đăng ký đã chết ở đầu bên kia
+}
+
+enum WebPushOutboxStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED // còn trong hạn thử lại
+  DEAD // hết maxAttempts, hoặc lỗi 4xx vĩnh viễn
+  SKIPPED // ngoài allowlist, hết hạn, hoặc người nhận không còn thiết bị nào ACTIVE
+}
+
+/// Thiết bị đã bật thông báo đẩy của MỘT người dùng.
+///
+/// NGOẠI LỆ CÓ CHỦ ĐÍCH của luật Nền Hệ thống #3 ("bảng mới có dữ liệu theo đơn vị BẮT
+/// BUỘC có orgUnitId"): đây là dữ liệu THEO NGƯỜI, không theo đơn vị — một cái điện thoại
+/// thuộc về một nhân viên, không thuộc về cơ sở nào. Cùng khuôn `StaffNotification`,
+/// `ChatZnsNotification`, `AttendanceTicket`; và cùng lý do đã ghi thành văn tại
+/// `docs/notification/00-ke-hoach-notification.md:48` — "luật Nền Hệ thống #3 KHÔNG ÁP
+/// DỤNG: bảng này là dữ liệu theo người, không theo đơn vị; phạm vi đã được ép ở đường sinh".
+///
+/// ĐỪNG "sửa cho đúng luật #3" bằng cách thêm cột đơn vị. Đo được: `scopedDb` chỉ chèn theo
+/// `centerId`, và `lib/org/dual-write.ts` chỉ kích hoạt khi khối `data` CÓ `centerId` — nên
+/// `orgUnitId` ở đây sẽ KHÔNG BAO GIỜ được ghi tự động, và sẽ ôi thiu ngay lần nhân viên
+/// chuyển cơ sở đầu tiên. Cơ sở suy từ User TẠI THỜI ĐIỂM GỬI; cách ly ép ở đường sinh
+/// danh sách người nhận, không ở tầng bảng.
+model WebPushSubscription {
+  id     String @id @default(cuid())
+  userId String
+
+  /// URL của push service (FCM/Mozilla/WNS). KHOÁ TỰ NHIÊN: trình duyệt cấp lại ĐÚNG chuỗi
+  /// này khi cùng máy + cùng khoá VAPID ⇒ đường ghi là UPSERT theo cột này, không bao giờ
+  /// đẻ dòng thứ hai. Vì thế bảng CỐ Ý không có `deletedAt`: soft-delete + unique toàn cục
+  /// là mâu thuẫn không vá được ở tầng code (bật lại thông báo trên máy cũ sẽ vỡ P2002),
+  /// và `lib/soft-delete.ts` chỉ tự lọc `deletedAt` cho 4 model tài chính.
+  /// Đo: endpoint thật ~90–250 ký tự, còn rất xa trần btree 2704 byte ⇒ giữ String (TEXT),
+  /// KHÔNG băm, KHÔNG @db.VarChar. Trần độ dài chặn ở Zod (`lib/push/subscription.ts`).
+  endpoint String @unique
+
+  /// Khoá mã hoá payload đầu-cuối (RFC 8291), base64url. p256dh ~87 ký tự, auth ~22.
+  /// Không ràng độ dài ở DB — hình dạng do Zod gác.
+  p256dh String
+  auth   String
+
+  /// Origin đã đăng ký. Service worker khoá theo ORIGIN mà hệ thống chạy 4 host trên cùng
+  /// một app ⇒ MỘT người có thể có nhiều dòng hợp lệ cùng lúc. Lưu tách ra để đo được "ai
+  /// bật ở đâu" mà không phải bóc chuỗi endpoint.
+  origin String
+
+  /// Cặp khoá VAPID đã dùng lúc đăng ký. Ngày xoay khoá là ngày mọi dòng khác phiên bản
+  /// chết 403 VapidPkHashMismatch — có cột này mới phân biệt được "khoá đổi" với "người
+  /// dùng gỡ quyền". Thêm sau = ALTER trên bảng có dữ liệu (luật cứng #4 chặn).
+  vapidKeyId String @default("v1")
+
+  userAgent   String?
+  deviceLabel String?
+
+  /// Chế độ hiển thị lúc đăng ký — `matchMedia("(display-mode: standalone)")` ở trình duyệt.
+  ///
+  /// Đây là cột ĐO ĐƯỢC ĐIỀU KIỆN mà toàn bộ lý lẽ phạm vi của module đứng lên: iOS Safari CHỈ
+  /// giao push khi trang đã được "Thêm vào màn hình chính". Không có cột này thì khi 6 nhân viên
+  /// iPhone không nhận gì, màn quản trị chỉ thấy `status=ACTIVE, lastSuccessAt=null` — không phân
+  /// biệt được "chưa cài PWA" với "push service bóp" hay "chưa có thông báo nào để gửi", tức
+  /// người trực không có đường nào lần ra. Nullable vì trình duyệt cũ có thể không trả lời.
+  displayMode String?
+
+  status        WebPushSubscriptionStatus @default(ACTIVE)
+  revokedAt     DateTime?                 @db.Timestamptz(6)
+  revokedReason String?
+
+  failureCount  Int       @default(0)
+  lastErrorCode Int?
+  lastSuccessAt DateTime? @db.Timestamptz(6)
+  lastFailureAt DateTime? @db.Timestamptz(6)
+  lastSeenAt    DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  /// Đường đọc chính: lấy thiết bị còn sống của một người ngay trước lúc gửi.
+  @@index([userId, status])
+  /// Rà thiết bị hỏng để dọn.
+  @@index([status, lastFailureAt])
+}
+
+/// SỔ GỬI của kênh Web Push. 1 dòng = 1 thông báo cần đẩy tới 1 NGƯỜI.
+///
+/// KHÔNG PHẢI BUS SỰ KIỆN. `DomainEvent` vẫn là nơi DUY NHẤT ghi sự kiện miền, và không
+/// handler nào đăng ký nghe theo `type` trên bảng này. Bảng này cùng vai `EmailQueue` và
+/// `ChatZnsNotification` — mỗi kênh gửi giữ một sổ riêng.
+///
+/// Vì sao KHÔNG dùng thẳng `DomainEvent` (đo, không phải ý kiến):
+///   1. Nó không có mốc lùi lịch. `lib/events/dispatcher.ts` quét PENDING theo `createdAt`
+///      KHÔNG kèm điều kiện thời gian nào, cron chạy mỗi phút, `maxAttempts` 5 ⇒ nhịp thử
+///      lại CỐ ĐỊNH 60 giây và một lượt gửi hỏng chết hẳn sau ~5 phút. Không có chỗ nào ghi
+///      được `Retry-After` của 429.
+///   2. Nó chỉ có MỘT cặp status/attempts cho cả sự kiện, trong khi 3 thiết bị của cùng một
+///      người trả 3 số phận khác nhau (201 / 410 Gone / 429). `decideOutcome` chỉ biết
+///      `anyFailed` ⇒ hỏng 1 máy là cả sự kiện về PENDING ⇒ lượt sau BẮN LẠI vào máy đã nhận.
+///   3. Repo đã tự trả lời bằng tiền lệ: handler DomainEvent duy nhất gửi ra ngoài
+///      (`lib/crm/_handlers/lead-converted.ts`) không tự gửi — nó đẩy vào `EmailQueue`.
+///
+/// NỘI DUNG KHÔNG LƯU Ở ĐÂY. Lúc gửi mới đọc `StaffNotification` theo (userId, dedupeKey).
+/// Ba tính chất có được nhờ vậy: `lib/notifications/notify.ts` giữ nguyên vai "đường ghi
+/// DUY NHẤT" (nó sinh ra để dẹp 17 đường ghi rời); số điện thoại đã bị `cheSdt()` che không
+/// bị chép sang bảng thứ hai nên không đẻ bài toán lưu trữ PII mới; và thông báo đã bị thu
+/// hồi (state REVOKED/EXPIRED) thì tự động không còn gì để gửi.
+///
+/// NGOẠI LỆ luật Nền #3 như `WebPushSubscription` — dữ liệu theo NGƯỜI. Xem chú thích ở đó.
+model WebPushOutbox {
+  id     String @id @default(cuid())
+  userId String
+
+  /// Nguyên khoá của chuông, vd `lead.moi:<leadId>`. DÙNG LẠI chứ không đẻ quy ước thứ hai:
+  /// `lib/notifications/catalog.ts` phân loại bằng TIỀN TỐ của khoá này, và cặp
+  /// (userId, dedupeKey) chính là khoá đọc ngược `StaffNotification`.
+  ///
+  /// Allowlist tiền tố (chốt 08/09/2026): Đợt 4 chỉ GỬI cho tiền tố nằm trong allowlist,
+  /// đợt đầu đúng một giá trị `lead.moi:`. Loại khác ghi dòng SKIPPED chứ không gửi.
+  /// Vì sao cần allowlist: `lead.nhap_lai:` nhét `now.getTime()` vào khoá
+  /// (`lib/lead/assign-lead.ts:345`) ⇒ khách điền form 10 lần là 10 dòng chuông mới, không
+  /// trần nào chặn. Allowlist cũng tự vô hiệu hoá 4 nơi đang bật `reopen: true`.
+  dedupeKey String
+
+  status      WebPushOutboxStatus @default(PENDING)
+  attempts    Int                 @default(0)
+  maxAttempts Int                 @default(5)
+
+  /// Mốc được phép thử lần kế: 429 tôn trọng `Retry-After`, 5xx nhân đôi. Đây chính là thứ
+  /// `DomainEvent` không có, và là lý do bảng này tồn tại.
+  nextAttemptAt DateTime @default(now()) @db.Timestamptz(6)
+
+  /// Mốc một lượt cron GIÀNH CHỖ. Reaper phải đo theo cột NÀY, không theo `createdAt` —
+  /// `lib/events/dispatcher.ts` đang đo nhầm đúng chỗ đó, nên mọi việc tồn đọng quá ngưỡng
+  /// bị kéo về PENDING NGAY TRONG LÚC đang chạy. Với push, kế thừa lỗi đó là gửi trùng.
+  claimedAt DateTime? @db.Timestamptz(6)
+
+  /// Quá mốc này thì bỏ (SKIPPED), không gửi. Bật lại kênh sau sự cố không xả tin cũ hàng loạt.
+  expiresAt DateTime? @db.Timestamptz(6)
+
+  /// Kết quả theo TỪNG endpoint: `{ "<endpoint>": { code, at, error? } }`. Lượt thử sau chỉ
+  /// gửi cho thiết bị CHƯA có kết quả thành công ⇒ máy đã nhận không bao giờ bị bắn lại.
+  /// Thiết bị được phân giải theo `userId` LÚC GỬI, tuyệt đối không chốt subscriptionId lúc
+  /// ghi: endpoint có thể đổi chủ trên máy dùng chung, chốt sớm là lead của A nổ trên màn
+  /// hình khoá của B.
+  resultJson    Json?
+  lastError     String?
+  lastErrorCode Int?
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+  sentAt    DateTime? @db.Timestamptz(6)
+
+  /// Chống trùng ở tầng DB: hai lượt cron chồng nhau va nhau ở đây chứ không gửi đôi.
+  /// Cái giá của gửi đôi không phải tiền — là người dùng tắt quyền thông báo ở cấp trình
+  /// duyệt, mất kênh vĩnh viễn, code không lấy lại được.
+  @@unique([userId, dedupeKey])
+  /// Vòng quét của cron gửi.
+  @@index([status, nextAttemptAt])
+  /// Vòng DỌN. Cố ý theo `createdAt` chứ KHÔNG theo `sentAt`: mọi thông báo ngoài allowlist ghi
+  /// một dòng `SKIPPED`, mà `SKIPPED`/`DEAD` luôn có `sentAt = NULL` — với allowlist đợt đầu đúng
+  /// một tiền tố, gần như cả bảng sẽ là `SKIPPED`. Câu dọn tự nhiên
+  /// (`status IN ('DEAD','SKIPPED') AND createdAt < X`) sẽ không có index nào dẫn nếu khoá thứ
+  /// hai là `sentAt`. Tra "gửi lúc nào" vẫn đi được qua `status` rồi lọc.
+  @@index([status, createdAt])
+  /// Màn quản trị: sổ gửi của một người, mới nhất trước.
+  @@index([userId, createdAt(sort: Desc)])
+}

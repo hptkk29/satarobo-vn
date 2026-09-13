@@ -27,6 +27,8 @@ import {
   Phone,
 } from "lucide-react";
 import { auth } from "@/lib/auth";
+import { BatThongBao } from "@/components/push/bat-thong-bao";
+import { layThietBiCuaToi } from "@/lib/push/thiet-bi";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb, withMakeupException } from "@/lib/db-scope";
 import { rosterWhere } from "@/lib/enrollment-scope";
@@ -96,6 +98,8 @@ export default async function TeacherProfilePage() {
   if (!session?.user) return null; // layout đã gate — guard cho type-narrow
 
   const actor = await resolveActor(session.user.id);
+  // Web Push Đợt 3 — thiết bị của CHÍNH giáo viên đang đăng nhập.
+  const thietBiPush = await layThietBiCuaToi(session.user.id);
   const sdb = scopedDb(actor);
   const xdb = withMakeupException(actor);
   const classIds = [...actor.assignedClassIds];
@@ -306,6 +310,23 @@ export default async function TeacherProfilePage() {
               </p>
             </div>
             <ChangePasswordDialog />
+          </CardContent>
+        </Card>
+
+        {/* Thông báo đẩy (Web Push Đợt 3) — cùng khuôn card Bảo mật ngay trên, và dùng CHUNG
+            component + Server Action với màn /settings của admin, đúng tiền lệ
+            ChangePasswordDialog. Giáo viên THUẦN làm việc ở host này chứ không phải admin
+            (TEACHER_SITE_ENABLED mặc định ON), nên thiếu khối này là đúng nhóm người đó
+            không có đường bật thông báo. */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Lock className="h-4 w-4 text-primary-ink" aria-hidden />
+              Thông báo đẩy
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <BatThongBao thietBi={thietBiPush} nguoiDung={session.user.id} />
           </CardContent>
         </Card>
 

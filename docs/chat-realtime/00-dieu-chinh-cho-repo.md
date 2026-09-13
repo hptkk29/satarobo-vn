@@ -48,7 +48,7 @@ Repo **không dùng Supabase Auth**: Auth.js v5 (Credentials, session JWT-JWE, s
 | "Class chuyển sang hoạt động" | `Class.status` sang ACTIVE (xem enum thật trong schema khi làm US-03) |
 | bảng `conversation_participant` trong policy mẫu | tên bảng Prisma thật: `"ConversationParticipant"` (PascalCase, có quotes trong SQL) |
 | Supabase Storage bucket `chat-attachments` | R2 prefix `chat-attachments/` + signed URL (Q2) |
-| Push Web Push/FCM (US-14) | Chưa có hạ tầng (0 service worker/VAPID) — dựng mới ở Đợt 2, chốt công nghệ khi làm US-14 |
+| Push Web Push/FCM (US-14) | **ĐÃ ĐẢO 09/08/2026 — US-14 đi ZNS, KHÔNG đi Web Push** (`lib/chat/zns-notify.ts:20`), đã chạy. Web Push nay là hạng mục RIÊNG **US-14b, chỉ cho NHÂN VIÊN** — phụ huynh không nhận. Đợt 1 (tầng dữ liệu + khoá VAPID) xong 08/09/2026: `docs/web-push/00-dot-1-ha-tang-du-lieu.md` |
 
 ## E. Quy ước tích hợp repo (bắt buộc cho mọi story)
 

@@ -314,6 +314,43 @@ export const SETTINGS = {
     default: false,
     centerOverridable: false, // quyền không được lệch nhau giữa các cơ sở
   }),
+  // Web Push (08/09/2026) — CÔNG TẮC của kênh thông báo đẩy cho NHÂN VIÊN.
+  //
+  // Ở SystemSetting chứ không phải env, đúng nếp của MỌI kênh gửi ra ngoài trong repo này
+  // (`chat.znsNotifyEnabled`, `zalo.znsLive`): tắt kênh phải có hiệu lực trong ≤5 phút mà
+  // không cần deploy. Env chỉ giữ khoá bí mật (`VAPID_PRIVATE_KEY`).
+  //
+  // ✅ ĐÃ CÓ ĐƯỜNG ĐỌC TỪ ĐỢT 4: `chayLuotGuiPush` (lib/push/engine.ts) đọc key này ở dòng đầu
+  // mỗi lượt cron và THOÁT SẠCH khi tắt — không đọc bảng nào, không đánh dấu dòng nào. Vì thế
+  // hậu tố "CHƯA HOẠT ĐỘNG" trong `label` đã được gỡ.
+  //
+  // ⚠️ "≤5 phút" là con số ĐÚNG, đừng viết thành "ngay": `getSetting` cache `revalidate: 300`
+  // (lib/settings/service.ts — docstring ở đầu file đó ghi "60s" là SAI so với code), còn nhánh
+  // xoá cache theo tag chỉ chạy được trong Server Action. Màn /admin/cau-hinh-van-hanh sửa qua
+  // Server Action nên thường ăn ngay, nhưng một lượt cron đang giữ bản cache vẫn có thể gửi
+  // thêm trong tối đa 5 phút sau khi người vận hành gạt tắt.
+  //
+  // ⚠️ Bật công tắc KHÔNG đủ để kênh chạy: engine còn một cổng thứ hai là ba biến môi trường
+  // `NEXT_PUBLIC_VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT`. Thiếu hoặc sai hình
+  // dạng thì mỗi lượt trả `reason: "NO_VAPID"` và không dòng nào bị đụng.
+  //
+  // TẮT mặc định. DB trống ở mọi môi trường sẽ rơi về `default` (lib/settings/resolve.ts) nên
+  // `true` ở đây nghĩa là tự bật ở cả những nơi chưa ai cấu hình gì.
+  //
+  // Đặt tạm ở nhóm `system` chứ không mở nhóm `push` riêng: hiện chỉ có MỘT key, và thêm
+  // nhóm phải sửa union `SettingGroup` + nhãn ở `settings-editor.tsx`. Khoá cấu hình lưu
+  // theo `key` chứ không theo nhóm, nên chuyển sang nhóm riêng về sau là đổi code thuần,
+  // không migration. Chuyển khi có ≥3 key push (allowlist tiền tố, trần/ngày…).
+  "push.webPushEnabled": def({
+    key: "push.webPushEnabled",
+    group: "system",
+    label: "Bật thông báo đẩy (Web Push) cho nhân viên — cần khai khoá VAPID trước",
+    schema: z.boolean(),
+    default: false,
+    // Kênh bật/tắt toàn hệ: một cơ sở tự tắt thì nhân viên cơ sở đó im lặng mà không ai
+    // ở Hội sở biết — đúng loại lỗi câm mà module này sinh ra để tránh.
+    centerOverridable: false,
+  }),
   "student.birthdayZnsEnabled": def({
     key: "student.birthdayZnsEnabled",
     group: "student",
