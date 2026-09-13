@@ -3,39 +3,54 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import type { Prisma } from "@prisma/client";
+
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
-import type { Prisma } from "@prisma/client";
 import { createBackfillOrderPaymentInTx } from "@/lib/crm/backfill-order";
 import { getAuditActor } from "@/lib/audit/log";
+import { computeEnrollmentPrice } from "@/lib/finance/pricing";
 
 /**
- * Ghi học phí cho học viên ĐÃ CHỐT nhưng CHƯA PHÁT SINH ĐƠN HÀNG.
+ * Ghi học phí CŨ cho học viên đã chốt nhưng CHƯA PHÁT SINH ĐƠN HÀNG.
  *
  * Nhóm này sinh ra từ nhánh `allowNoPayment` của `lib/crm/bulk-convert.ts`: chốt lead
  * hàng loạt mà không nhập tiền thì hệ thống CỐ Ý không bịa khoản thu — nên các em có
  * `Enrollment` nhưng không có `Order`/`Payment`, và học phí không nằm trong sổ nào.
  *
  * DÙNG LẠI `createBackfillOrderPaymentInTx` — cùng hàm mà màn import dùng. Không viết
- * đường tạo đơn thứ hai: nó tạo Order `CONFIRMED` + Payment mang dấu `[backfill-import]`,
- * và tự IDEMPOTENT theo lead (đã có khoản backfill thì trả `created: false`, không tạo
- * lần hai) ⇒ bấm hai lần không sinh hai đơn.
+ * đường tạo đơn thứ hai. Nó idempotent theo lead ⇒ bấm hai lần không sinh hai đơn.
+ *
+ * ⚠️ GIÁ NIÊM YẾT VÀ SỐ ĐÃ THU LÀ HAI SỐ KHÁC NHAU, và đó là cả lý do màn này tồn tại.
+ * Dữ liệu cũ có đủ kiểu: thu đủ, thu một phần (cọc / trả góp), và có giảm giá. Nếu chỉ
+ * nhận MỘT con số thì mọi dòng thành "thu đủ, không nợ" — tức **xoá sạch công nợ cũ**.
+ * Cùng bài học với `lib/lead/import-fee-plan.ts` (đo trên file thật 04/08: suy chênh
+ * thành giảm giá làm mất ~30 triệu tiền phải đòi).
  *
  * Khoản tạo ra để `accountantStatus: PENDING` như mọi khoản backfill khác ⇒ muốn vào
- * doanh thu thì xác nhận ở `/payments` (nút "Xem thử: xác nhận học phí nhập từ sheet").
- * Cố ý KHÔNG tự xác nhận ở đây: đó là đường ghi `CONFIRMED` thứ hai.
+ * doanh thu thì xác nhận hàng loạt ở `/payments`. Cố ý KHÔNG tự xác nhận ở đây: đó là
+ * đường ghi `CONFIRMED` thứ hai.
  */
 const schema = z.object({
   leadId: z.string().min(1),
-  amount: z.number().int().positive("Số tiền phải lớn hơn 0"),
+  /** Loại đơn — khớp `OrderType` của Prisma. */
+  orderType: z.enum(["COURSE", "PACKAGE", "EXAM", "PRODUCT", "COMBO"]).default("COURSE"),
+  /** Giá NIÊM YẾT trước giảm. Đây là gốc để suy công nợ. */
+  listPrice: z.number().int().nonnegative(),
+  /** Chính sách giảm giá — bỏ trống = không giảm. */
+  discountType: z.enum(["AMOUNT", "PERCENT", "SCHOLARSHIP", "PROGRAM"]).nullish(),
+  discountValue: z.number().nonnegative().nullish(),
+  discountReason: z.string().max(300).nullish(),
+  /** Số tiền THỰC ĐÃ THU (có thể nhỏ hơn tổng phải đóng ⇒ còn nợ). */
+  amount: z.number().int().positive("Số tiền đã thu phải lớn hơn 0"),
   paidDate: z.string().min(1),
-  /** Giá niêm yết của khoá để dựng dòng đơn; bỏ trống → lấy đúng số đã thu. */
-  listPrice: z.number().int().nonnegative().optional(),
-  itemName: z.string().min(1).max(200),
-  note: z.string().max(500).optional(),
+  itemName: z.string().min(1, "Nhập nội dung dòng đơn").max(200),
+  note: z.string().max(500).nullish(),
 });
+
+export type GhiHocPhiInput = z.input<typeof schema>;
 
 export async function ghiHocPhiBackfillAction(input: unknown) {
   const session = await auth();
@@ -49,22 +64,41 @@ export async function ghiHocPhiBackfillAction(input: unknown) {
   if (!parsed.success) {
     return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
-  const { leadId, amount, paidDate, listPrice, itemName, note } = parsed.data;
+  const d = parsed.data;
 
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
   // scopedDb auto-scope READ; vẫn tự gác vì đây là đường GHI (Lead ∈ SCOPED_MODELS).
   const lead = await sdb.lead.findUnique({
-    where: { id: leadId },
+    where: { id: d.leadId },
     select: { id: true, centerId: true, parentName: true, phone: true, email: true },
   });
   if (!lead || !passesScope("Lead", lead, actor)) {
     return { ok: false as const, error: "Không tìm thấy lead trong phạm vi của bạn" };
   }
 
-  const ngay = new Date(paidDate);
+  const ngay = new Date(d.paidDate);
   if (Number.isNaN(ngay.getTime())) {
     return { ok: false as const, error: "Ngày đóng không hợp lệ" };
+  }
+
+  // Giảm giá tính bằng ĐÚNG `computeEnrollmentPrice` mà toàn hệ dùng — không tự nhân %
+  // ở đây, kẻo màn này ra một con số khác màn chốt lead.
+  const gia = computeEnrollmentPrice({
+    listPrice: d.listPrice,
+    discount:
+      d.discountType && d.discountValue != null
+        ? { type: d.discountType, value: d.discountValue }
+        : null,
+  });
+
+  if (d.amount > gia.finalPrice) {
+    return {
+      ok: false as const,
+      error:
+        `Đã thu (${d.amount.toLocaleString("vi-VN")}đ) lớn hơn tổng phải đóng ` +
+        `(${gia.finalPrice.toLocaleString("vi-VN")}đ). Kiểm lại giá niêm yết hoặc mức giảm.`,
+    };
   }
 
   const auditActor = getAuditActor(session);
@@ -76,14 +110,14 @@ export async function ghiHocPhiBackfillAction(input: unknown) {
       actor: { id: auditActor.actorId, name: auditActor.actorName },
       lead,
       paid: {
-        amount,
+        amount: d.amount,
         paidDate: ngay,
-        note: note?.trim() || null,
-        // Giá niêm yết bỏ trống ⇒ lấy đúng số đã thu, tức đơn không có công nợ. Đó là
-        // lựa chọn AN TOÀN: bịa giá niêm yết cao hơn là tự tạo ra một khoản nợ không
-        // có căn cứ trên đầu phụ huynh.
-        items: [{ itemName, unitPrice: listPrice ?? amount }],
-        discountAmount: listPrice && listPrice > amount ? 0 : 0,
+        note: d.note?.trim() || null,
+        items: [{ itemName: d.itemName.trim(), unitPrice: d.listPrice }],
+        // Giảm giá ghi lên ĐƠN ⇒ `totalAmount = listPrice − discount`, và công nợ =
+        // totalAmount − đã thu. Đây là thứ giữ lại được khoản còn nợ của dữ liệu cũ.
+        discountAmount: gia.discountAmount,
+        discountReason: d.discountReason?.trim() || null,
       },
     }),
   );
@@ -100,6 +134,11 @@ export async function ghiHocPhiBackfillAction(input: unknown) {
   revalidatePath("/thieu-hoc-phi");
   revalidatePath("/payments");
   revalidatePath("/cong-no");
-  revalidatePath(`/leads/${leadId}`);
-  return { ok: true as const, paymentId: res.paymentId };
+  revalidatePath(`/leads/${d.leadId}`);
+  return {
+    ok: true as const,
+    paymentId: res.paymentId,
+    tongPhaiDong: gia.finalPrice,
+    conThieu: Math.max(0, gia.finalPrice - d.amount),
+  };
 }

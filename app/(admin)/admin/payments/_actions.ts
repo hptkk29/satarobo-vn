@@ -598,6 +598,10 @@ export async function bulkConfirmBackfillPaymentsAction(opts?: {
     return {
       ok: true as const,
       xemThu: true as const,
+      // `quet` = số khoản backfill CHỜ KẾ TOÁN tìm được. Phải trả về để màn phân biệt
+      // "CHƯA CÓ khoản nào nhập từ sheet" (quet = 0) với "CÓ nhưng bị cổng bỏ qua"
+      // (quet > 0, soNhan = 0). Gộp hai thứ đó vào một câu là báo sai nguyên nhân.
+      quet: rows.length,
       soNhan: plan.nhan.length,
       tongNhan: plan.tongNhan,
       soBo: plan.bo.length,

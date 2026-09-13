@@ -25,6 +25,8 @@ import { bulkConfirmBackfillPaymentsAction } from "../_actions";
  * transition 150ms, không gradient, không bóng nặng.
  */
 type XemThuState = {
+  /** Số khoản backfill CHỜ KẾ TOÁN tìm được — 0 nghĩa là CHƯA NHẬP GÌ, khác hẳn "bị bỏ". */
+  quet: number;
   soNhan: number;
   tongNhan: number;
   soBo: number;
@@ -69,6 +71,7 @@ export function BulkBackfillConfirm() {
     // Thu hẹp theo cờ `xemThu`: cả hai nhánh đều `ok: true` nên `in` không thu hẹp được.
     if (!r.ok || r.xemThu !== true) return null;
     return {
+      quet: r.quet,
       soNhan: r.soNhan,
       tongNhan: r.tongNhan,
       soBo: r.soBo,
@@ -157,8 +160,8 @@ export function BulkBackfillConfirm() {
 
       {/* Đang tải: skeleton đúng hình dạng 3 ô số, không phải spinner giữa màn. */}
       {dangChay && !xemThu && (
-        <div className="mt-4 grid gap-3 sm:grid-cols-3" aria-hidden>
-          {[0, 1, 2].map((i) => (
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-hidden>
+          {[0, 1, 2, 3].map((i) => (
             <div key={i} className="h-[74px] animate-pulse rounded-xl border border-border bg-muted" />
           ))}
         </div>
@@ -166,7 +169,8 @@ export function BulkBackfillConfirm() {
 
       {xemThu && (
         <div className="mt-5 space-y-4 border-t border-border pt-5">
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <O nhan="Đang chờ kế toán" giaTri={`${xemThu.quet} khoản`} />
             <O nhan="Sẽ xác nhận" giaTri={`${xemThu.soNhan} khoản`} tone={xemThu.soNhan > 0 ? "ok" : "neutral"} />
             <O nhan="Vào doanh thu" giaTri={vnd(xemThu.tongNhan)} tone={xemThu.soNhan > 0 ? "ok" : "neutral"} />
             <O nhan="Bỏ qua" giaTri={`${xemThu.soBo} khoản`} tone={xemThu.soBo > 0 ? "warn" : "neutral"} />
@@ -190,16 +194,49 @@ export function BulkBackfillConfirm() {
             </div>
           )}
 
-          {/* Trạng thái RỖNG: nói rõ VÌ SAO rỗng và LÀM GÌ TIẾP (DESIGN.md §5). */}
-          {xemThu.soNhan === 0 ? (
+          {/* Trạng thái RỖNG — HAI nguyên nhân KHÁC NHAU, cố ý không gộp một câu:
+              · quet = 0  → chưa nhập học phí cũ vào hệ thống lần nào ⇒ chỉ đường NHẬP.
+              · quet > 0 nhưng soNhan = 0 → có khoản nhưng cổng bỏ hết ⇒ nói lý do.
+              Bản đầu gộp lại và báo "Bạn là người ghi nhận khoản này" cho cả hai — sai
+              nguyên nhân, và dẫn người dùng đi tìm người xác nhận trong khi thật ra chưa
+              có gì để xác nhận. */}
+          {xemThu.quet === 0 ? (
+            <div className="rounded-xl border border-state-info bg-state-info-soft px-4 py-3">
+              <p className="text-xs font-semibold text-state-info-ink">
+                Chưa có khoản học phí cũ nào trong hệ thống.
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-state-info-ink">
+                Khối này chỉ xác nhận khoản ĐÃ nhập. Nhập học phí cũ bằng một trong hai đường:
+              </p>
+              <ul className="mt-2 space-y-1 text-xs leading-relaxed text-state-info-ink">
+                <li>
+                  •{" "}
+                  <a
+                    href="/leads/import/registered"
+                    className="font-semibold underline underline-offset-2"
+                  >
+                    Nhập từ file Excel
+                  </a>{" "}
+                  — cả sheet nhiều tháng, có bước xem thử từng dòng.
+                </li>
+                <li>
+                  •{" "}
+                  <a href="/thieu-hoc-phi" className="font-semibold underline underline-offset-2">
+                    Thiếu học phí
+                  </a>{" "}
+                  — từng phụ huynh một, nhập được cả giảm giá và phần còn nợ.
+                </li>
+              </ul>
+            </div>
+          ) : xemThu.soNhan === 0 ? (
             <div className="rounded-xl border border-state-warning bg-state-warning-soft px-4 py-3">
               <p className="text-xs font-semibold text-state-warning-ink">
-                Không có khoản nào đủ điều kiện trong lượt này.
+                Có {xemThu.quet} khoản chờ kế toán, nhưng không khoản nào đủ điều kiện xác nhận.
               </p>
               <p className="mt-1 text-xs leading-relaxed text-state-warning-ink">
-                Nếu lý do là <b>&quot;Bạn là người ghi nhận khoản này&quot;</b> thì cần một
-                người khác xác nhận. Đây là quy tắc tách nhiệm vụ giữa người nhập tiền và
-                người xác nhận tiền — cố ý không bỏ.
+                Xem lý do ở trên. Nếu là <b>&quot;Bạn là người ghi nhận khoản này&quot;</b> thì
+                cần một người khác xác nhận — quy tắc tách nhiệm vụ giữa người nhập tiền và
+                người xác nhận tiền, cố ý không bỏ.
               </p>
             </div>
           ) : (
