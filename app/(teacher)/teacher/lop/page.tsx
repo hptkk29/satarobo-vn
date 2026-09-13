@@ -23,7 +23,8 @@ import { isSessionOwnedByTeacher } from "@/lib/lms/session-ownership";
 import { buildSessionAttendanceRows } from "@/lib/attendance/roster";
 import {
   buildSessionNumberMap,
-  sessionNumberLabel,
+  nhanSoBuoi,
+  soBuoiTheoLoTrinh,
 } from "@/lib/lms/session-order";
 import { EmptyState } from "../_components/ui/empty-state";
 import { PageHeader } from "../_components/ui/page-header";
@@ -132,6 +133,10 @@ export default async function TeacherClassesPage({
         substituteTeacherId: true,
         actualTeacherId: true,
         room: { select: { code: true, name: true } },
+        // Đợt 1c — nguồn số LỘ TRÌNH. Tiêu đề trang này nói về MỘT buổi cụ thể, nên
+        // giáo viên cần biết buổi đó dạy BÀI nào, không phải nó là buổi thứ mấy theo lịch.
+        plan: { select: { order: true } },
+        lesson: { select: { order: true } },
         class: { select: { name: true, startTime: true, endTime: true } },
       },
     });
@@ -161,6 +166,16 @@ export default async function TeacherClassesPage({
       }),
     ]);
     const sessionNo = buildSessionNumberMap(allSessions).get(sessionId) ?? null;
+    // Đợt 1c — LỘ TRÌNH, không phải hạng-theo-ngày. Đây là tiêu đề của MỘT buổi: giáo viên
+    // mở trang này để dạy, nên con số phải trả lời "bài nào". `nhanSoBuoi` tự khai
+    // "(theo lịch)" ở nấc lùi, nên lớp chưa ghim giáo trình vẫn không nói dối.
+    const nhanBuoi = nhanSoBuoi({
+      loTrinh: soBuoiTheoLoTrinh({
+        planOrder: sess.plan?.order ?? null,
+        lessonOrder: sess.lesson?.order ?? null,
+      }),
+      lich: sessionNo,
+    });
     // Câu 46: bỏ studentPhone khỏi payload client — chỉ giữ tên + trạng thái.
     const panelRows: AttendancePanelRow[] = rows.map((r) => ({
       studentId: r.studentId,
@@ -181,7 +196,7 @@ export default async function TeacherClassesPage({
         <PageHeader
           title={`Điểm danh — ${sess.topic ?? sess.class.name}`}
           subtitle={[
-            sessionNo ? sessionNumberLabel(sessionNo) : null,
+            nhanBuoi === "—" ? null : nhanBuoi,
             dayFmt.format(sess.date),
             sess.class.startTime && sess.class.endTime
               ? `${sess.class.startTime}-${sess.class.endTime}`

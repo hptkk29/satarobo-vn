@@ -10,7 +10,7 @@ import { getAssignableTeachers } from "@/lib/teachers/assignable";
 import { isSessionLifecycleV2Enabled, isClassGroupEnabled } from "@/lib/flags";
 import { resolveClassSlots } from "@/lib/classes/slots";
 import { pickDefaultSession } from "@/lib/classes/default-session";
-import { buildSessionNumberMap } from "@/lib/lms/session-order";
+import { buildSessionNumberMap, soBuoiTheoLoTrinh } from "@/lib/lms/session-order";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ClassForm, type ClassFormValue } from "../_components/class-form";
 import { ClassApprovalActions } from "./_components/class-approval-actions";
@@ -190,6 +190,11 @@ export default async function ClassDetailPage({ params }: Props) {
         // nó nằm sau cờ SESSION_LIFECYCLE_V2 đang OFF), dropdown chọn buổi chỉ in ngày.
         // Đó là thứ đã làm quản lý kết luận "GV chưa điểm danh" trong khi dữ liệu vẫn còn.
         _count: { select: { attendances: true, studentFeedbacks: true } },
+        // Đợt 1c — nguồn số LỘ TRÌNH (bài thứ mấy của giáo trình). `seq` bên dưới là
+        // hạng theo NGÀY; hai con số này KHÁC nhau ở lớp có buổi dời ngày, và chính
+        // chỗ nhập nhằng đó đẻ ra sự cố "lệch tên bài".
+        plan: { select: { order: true } },
+        lesson: { select: { order: true } },
       },
     }),
     sdb.curriculum.findMany({
@@ -233,7 +238,15 @@ export default async function ClassDetailPage({ params }: Props) {
     date: s.date.toISOString(),
     topic: s.topic,
     status: s.status,
+    // ⚠️ HAI con số, đừng trộn:
+    //   `seq`        — buổi thứ mấy tính theo NGÀY (dùng để khớp thứ tự danh sách);
+    //   `soLoTrinh`  — BÀI thứ mấy của giáo trình (dùng để nói về nội dung dạy).
+    // Lớp `CS2.SATA6.26.001` có buổi 25/06 với seq = 2 mà soLoTrinh = 43.
     seq: sessionNumberOf.get(s.id) ?? null,
+    soLoTrinh: soBuoiTheoLoTrinh({
+      planOrder: s.plan?.order ?? null,
+      lessonOrder: s.lesson?.order ?? null,
+    }),
     attendanceCount: s._count.attendances,
     feedbackCount: s._count.studentFeedbacks,
   }));
