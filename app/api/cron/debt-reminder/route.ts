@@ -23,10 +23,17 @@ export async function GET(req: NextRequest) {
   const defaultDays = await getSetting("finance.debtReminderDaysBefore");
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-  // Lấy mọi đợt 2 còn PENDING (per-row reminderDays quyết định đã đến hạn nhắc chưa).
+  // Lấy mọi đợt CHƯA THU còn PENDING (per-row reminderDays quyết định đã đến hạn nhắc chưa).
+  //
+  // ⚠️ ĐÃ GỠ `soDot: 2` [14/09/2026]. Bộ lọc đó là một trần 2 đợt giấu trong cron: kế
+  // hoạch 3-4 đợt thì đợt 3 và 4 KHÔNG BAO GIỜ được nhắc, và khoản đó lặng lẽ quá hạn mà
+  // không ai gọi cho phụ huynh. Đợt nào chưa thu và có hạn thì đều phải nhắc — số thứ tự
+  // của đợt không nói gì về việc đó.
+  //
+  // `dueDate: { not: null }` ngay dưới là thứ giữ cho lượt quét không ôm đợt đã thu
+  // (đợt `daThu` được ghi với `dueDate: null`).
   const candidates = await db.orderInstallment.findMany({
     where: {
-      soDot: 2,
       status: "PENDING",
       dueDate: { not: null },
       order: { status: { notIn: ["CANCELLED", "REFUNDED"] } },

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { KHOAN_DA_GHI_NHAN } from "@/lib/finance/ghi-nhan";
+import { congNoDon } from "@/lib/finance/cong-no-don";
 import { notFound, redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
@@ -134,11 +135,7 @@ export default async function OrderDetailPage({ params }: Props) {
   const canViewPii = await checkPermission("orders:view-pii");
   // OD1b — duyệt kế hoạch trả góp 2 đợt tách khỏi orders:manage (ACCOUNTANT không có quyền duyệt).
   // order đã fetch có centerId → truyền target để scope-aware (CENTER nếu có role seed sau này).
-  const canApprove = await checkPermission("installments:approve", { centerId: order.centerId });
   // BGĐ 31/07 — duyệt giảm giá nhập tay (Quản lý cơ sở).
-  const canApproveDiscount = await checkPermission("discounts:approve", {
-    centerId: order.centerId,
-  });
 
   // Commit 4 — thanh toán 2 đợt + QR.
   // BGĐ 31/07 — QR lấy tài khoản NHẬN TIỀN theo đơn. 31/08/2026: nguồn đổi từ "theo cơ
@@ -181,6 +178,17 @@ export default async function OrderDetailPage({ params }: Props) {
     paidAmount: paidSoFar._sum.amount ?? 0,
     installments: order.installments,
     installmentApprovalStatus: order.installmentApprovalStatus,
+  });
+  // Bộ số in ra khối "Công nợ đơn hàng" — TÁI DÙNG `paidSoFar` (trục B) đã tính ở
+  // trên cho mã QR, nên số trên màn và số trong QR không thể lệch nhau. Trục A lấy
+  // đúng bộ lọc mà công nợ + cổng phụ huynh dùng (`laKhoanDaXacNhan`).
+  //
+  // Trước bản này `paidSoFar` chỉ dùng cho QR rồi bị bỏ: trang tính được "còn thiếu"
+  // mà không in ra đâu cả.
+  const congNo = congNoDon({
+    totalAmount: order.totalAmount,
+    daGhiNhan: paidSoFar._sum.amount ?? 0,
+    daXacNhan: tongDaXacNhan(order.payments.filter(laKhoanDaXacNhan)),
   });
   // ⚠️ QR nhận bản ĐẦY ĐỦ (`transferContent`), KHÔNG phải bản che: mã phải mang đúng
   // nội dung phụ huynh sẽ chuyển, che ở đây là tiền không về được.
@@ -332,8 +340,6 @@ export default async function OrderDetailPage({ params }: Props) {
               }
         }
         canManage={canManage}
-        canApprove={canApprove}
-        canApproveDiscount={canApproveDiscount}
         qrUrl={qrUrl}
         dueNow={dueNow}
         transferContent={transferContentShown}
@@ -349,6 +355,7 @@ export default async function OrderDetailPage({ params }: Props) {
         qrSessions={qrSessions}
         installmentPlanApproved={order.installmentApprovalStatus === "APPROVED"}
         paymentMethods={paymentMethods}
+        congNo={congNo}
         accounting={{
           // Trục A — dùng chung định nghĩa "khoản đã xác nhận" với công nợ và cổng
           // phụ huynh (lib/finance/debt.ts). Bút toán ADJUSTMENT nằm trong đó.

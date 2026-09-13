@@ -106,12 +106,21 @@ export function decideSepayAction(input: SepayMatchInput): SepayMatchResult {
   if (order.status !== "PENDING_PAYMENT") {
     return { action: "SKIP", reason: `Đơn đang ở trạng thái ${order.status}` };
   }
-  if (
-    order.discountApprovalStatus === "PENDING_APPROVAL" ||
-    order.discountApprovalStatus === "REJECTED"
-  ) {
-    return { action: "MANUAL", reason: "Giảm giá chưa được duyệt — cần xử lý tay" };
-  }
+  // ⚠️ ĐÃ GỠ [14/09/2026] — cổng "giảm giá chưa duyệt ⇒ MANUAL".
+  //
+  // Chủ dự án chốt bỏ cơ chế duyệt đơn hàng. Nhưng kể cả không có chốt đó thì cổng này
+  // vẫn phải gỡ: nó LÀM MẤT TIỀN chứ không bảo vệ gì. Ở webhook,
+  // `app/api/public/webhook/sepay/route.ts` vào nhánh sớm với mọi action ≠ CONFIRM, và
+  // cửa ghi vào sổ mới CHỈ chạy `if (decision.action === "MANUAL" && !order)` — ca "có
+  // đơn + giảm giá chưa duyệt" tra RA đơn nên không qua cửa đó, chỉ ghi IntegrationLog
+  // rồi return: không BankTransaction (kể cả UNMATCHED), không PaymentRequest/Allocation,
+  // không Payment. Tiền vào tài khoản ngân hàng, ba sổ trống.
+  //
+  // Chưa ai đau vì cổng chưa từng chạy thật trên prod (MANUAL_REVIEW do nó = 0), nhưng
+  // mọi đơn có giảm giá thanh toán bằng QR sẽ đau.
+  //
+  // Thay cho cổng này là DẤU VẾT, không phải khoảng trống: `lib/orders/price-guard.ts`
+  // + AuditLog `ORDER_CREATED` ghi trong cùng transaction tạo đơn.
   // Ngưỡng đối khớp = số tiền phải thu NGAY (đợt 1 nếu khách chọn 2 đợt), không
   // phải tổng đơn — nếu không, mọi ca trả góp đều rơi vào "trả thiếu → xử lý tay"
   // và luồng tự xác nhận coi như không tồn tại với khách đóng 2 đợt.

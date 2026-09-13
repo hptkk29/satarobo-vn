@@ -125,6 +125,8 @@ export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
   "classes",
   "compliance",
   "cong-no",
+  "thieu-hoc-phi",
+  "nhap-giao-dich-cu",
   "bien-dong-so-du",
   "convert-conflicts",
   "course-packages",

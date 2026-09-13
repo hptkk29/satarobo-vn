@@ -9,6 +9,11 @@ import { recordOrderInstallmentsAction, markOrderInstallmentPaidAction } from ".
 import { formatDateVN } from "@/lib/format/date";
 import { MoneyInput } from "@/components/ui/money-input";
 import { HelpHint } from "@/components/admin/ui/help-hint";
+import {
+  chiaDotHocPhi,
+  hanChoDot,
+  TRAN_SO_DOT,
+} from "@/lib/payments/ke-hoach-dot";
 
 type Installment = {
   id: string;
@@ -23,6 +28,35 @@ type Installment = {
 
 function vnd(n: number) {
   return n.toLocaleString("vi-VN") + "đ";
+}
+
+/** Một dòng đợt trên form. `dueDate` là chuỗi `yyyy-mm-dd` vì `<input type="date">`. */
+type DotForm = {
+  amount: number;
+  daThu: boolean;
+  dueDate: string;
+  reminderDays: number;
+};
+
+/**
+ * Dựng trạng thái ban đầu của form từ kế hoạch ĐÃ LƯU.
+ *
+ * Chưa có kế hoạch → một đợt, bằng cả đơn, đánh dấu ĐÃ THU. Đó là hiện trạng mặc định
+ * của một đơn vừa tạo (sale thu đủ tại quầy), và cũng là thứ khiến bấm "Lưu" mà không
+ * đổi gì thì không sinh ra khoản nợ ma.
+ */
+function dotsBanDau(installments: Installment[], totalAmount: number): DotForm[] {
+  if (installments.length === 0) {
+    return [{ amount: totalAmount, daThu: true, dueDate: "", reminderDays: 14 }];
+  }
+  return [...installments]
+    .sort((a, b) => a.soDot - b.soDot)
+    .map((i) => ({
+      amount: i.amount,
+      daThu: i.status === "PAID",
+      dueDate: i.dueDate?.slice(0, 10) ?? "",
+      reminderDays: i.reminderDays ?? 14,
+    }));
 }
 
 // G4 — Kế hoạch thanh toán 2 đợt. ĐẶT NGAY SAU section "Phương thức thanh toán"
@@ -45,37 +79,62 @@ export function OrderInstallmentPlan({
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [dot1, setDot1] = useState(installments.find((i) => i.soDot === 1)?.amount ?? totalAmount);
-  // BGĐ 31/07 — đợt 2 tự tính = Tổng − đợt 1, không nhập tay (server vẫn validate tổng 2 đợt).
-  const dot2 = Math.max(0, totalAmount - dot1);
-  const [dot2Due, setDot2Due] = useState(
-    installments.find((i) => i.soDot === 2)?.dueDate?.slice(0, 10) ?? "",
-  );
-  // OD1 — số ngày nhắc công nợ trước hạn đợt 2: pre-fill từ giá trị đã lưu (fallback 14, khớp SystemSetting).
-  const [reminderDays, setReminderDays] = useState(
-    installments.find((i) => i.soDot === 2)?.reminderDays ?? 14,
-  );
+
+  // ── TRẠNG THÁI: MỘT MẢNG ĐỢT, không phải dot1/dot2 ────────────────────────────
+  // Trần "2 đợt" cũ nằm ở đây chứ không ở DB: hai biến `dot1`/`dot2`, đợt 2 tự tính,
+  // một ô ngày. Nay là mảng — thêm đợt là thêm phần tử.
+  const [dots, setDots] = useState<DotForm[]>(() => dotsBanDau(installments, totalAmount));
+
+  const tongCacDot = dots.reduce((s, d) => s + d.amount, 0);
+  const lech = tongCacDot - totalAmount;
+  const thieuHan = dots.findIndex((d) => !d.daThu && !d.dueDate);
+
+  /** Chọn số đợt → chia đều + sinh hạn cách 30 ngày. Người dùng sửa lại từng dòng được. */
+  function chonSoDot(n: number) {
+    const tien = chiaDotHocPhi(totalAmount, n);
+    // Mốc hạn = HÔM NAY. `hanChoDot` cố ý không tự đọc đồng hồ (luật 19) nên mốc truyền
+    // từ đây — chỗ duy nhất thật sự có quyền biết "hôm nay".
+    const han = hanChoDot(new Date(), n);
+    setDots(
+      tien.map((amount, i) => ({
+        amount,
+        // Giữ nguyên "đã thu" của các đợt cũ còn trong tầm — đổi số đợt không được âm
+        // thầm biến tiền đã thu thành chưa thu.
+        daThu: dots[i]?.daThu ?? i === 0,
+        dueDate: han[i]!.toISOString().slice(0, 10),
+        reminderDays: dots[i]?.reminderDays ?? 14,
+      })),
+    );
+  }
+
+  function suaDot(i: number, thayDoi: Partial<DotForm>) {
+    setDots((cu) => cu.map((d, k) => (k === i ? { ...d, ...thayDoi } : d)));
+  }
 
   function save() {
-    if (dot1 + dot2 !== totalAmount) {
-      toast.error(`Tổng 2 đợt phải bằng ${vnd(totalAmount)}`);
+    if (lech !== 0) {
+      toast.error(
+        `Tổng ${dots.length} đợt phải bằng ${vnd(totalAmount)} — đang lệch ${vnd(Math.abs(lech))}`,
+      );
       return;
     }
-    if (dot2 > 0 && !dot2Due) {
-      toast.error("Chọn ngày hẹn đóng đợt 2");
+    if (thieuHan >= 0) {
+      toast.error(`Đợt ${thieuHan + 1} chưa thu — chọn ngày hẹn đóng`);
       return;
     }
     start(async () => {
       const res = await recordOrderInstallmentsAction({
         orderId,
-        dot1Amount: dot1,
-        dot2Amount: dot2,
-        dot2DueDate: dot2 > 0 ? dot2Due : null,
-        // OD1 — chỉ gửi reminderDays khi có đợt 2; null → cron fallback default.
-        reminderDays: dot2 > 0 ? reminderDays : null,
+        dots: dots.map((d) => ({
+          amount: d.amount,
+          daThu: d.daThu,
+          // Đợt đã thu không cần hạn — gửi null để cron nhắc nợ không ôm nhầm.
+          dueDate: d.daThu ? null : d.dueDate || null,
+          reminderDays: d.daThu ? null : d.reminderDays,
+        })),
       });
       if (res.ok) {
-        toast.success("Đã lưu kế hoạch thanh toán");
+        toast.success(`Đã lưu kế hoạch ${dots.length} đợt`);
         router.refresh();
       } else toast.error(res.error ?? "Lỗi");
     });
@@ -85,7 +144,7 @@ export function OrderInstallmentPlan({
     start(async () => {
       const res = await markOrderInstallmentPaidAction(id, orderId);
       if (res.ok) {
-        toast.success("Đã ghi nhận đóng đợt 2");
+        toast.success("Đã ghi nhận đóng đợt");
         router.refresh();
       } else toast.error(res.error ?? "Lỗi");
     });
@@ -94,48 +153,73 @@ export function OrderInstallmentPlan({
   return (
     <section className="rounded-xl border border-border bg-card p-5">
       <h2 className="mb-4 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-foreground">
-        <CalendarClock className="h-4 w-4 text-primary" /> Kế hoạch thanh toán 2 đợt
+        <CalendarClock className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+        Kế hoạch thanh toán
+        <HelpHint>
+          Đóng một lần hoặc chia theo học phần (48 buổi = 4 học phần × 12 buổi). Công văn
+          SR.QD.223 nêu mốc các đợt cách 30 ngày; SR.QD.219 Điều 2 cho phép chia đều tối đa
+          12 kỳ theo tháng.
+        </HelpHint>
       </h2>
 
       <div className="mb-3 space-y-2">
         {installments.map((i) => (
-          <div key={i.id} className="flex items-center justify-between rounded-lg bg-muted px-3 py-2 text-sm">
-            <span>
-              <b>Đợt {i.soDot}</b> · {vnd(i.amount)}
-              {i.soDot === 2 && i.dueDate ? ` · hẹn ${formatDateVN(i.dueDate)}` : ""}
+          <div
+            key={i.id}
+            className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted px-3 py-2 text-sm"
+          >
+            <span className="min-w-0">
+              <b className="font-semibold">Đợt {i.soDot}</b> · {vnd(i.amount)}
+              {i.dueDate ? ` · hẹn ${formatDateVN(i.dueDate)}` : ""}
             </span>
             {i.status === "PAID" ? (
-              // PA-A: PAID = Sale đã thu; chỉ ghi "KT đã xác nhận" khi đơn không còn
-              // khoản PENDING và kế toán đã ✓ (mapping đợt↔khoản là mức ĐƠN, không per-đợt).
+              // PA-A: PAID = Sale đã thu; chỉ ghi "KT đã xác nhận" khi đơn không còn khoản
+              // PENDING và kế toán đã ✓ (mapping đợt↔khoản là mức ĐƠN, không per-đợt).
               accounting.pending === 0 && accounting.confirmed > 0 ? (
-                <span className="inline-flex items-center gap-1 text-xs font-semibold text-state-success-ink">
-                  <BadgeCheck className="h-4 w-4" /> Sale đã thu · KT đã xác nhận
+                <span className="inline-flex items-center gap-1 whitespace-nowrap text-xs font-semibold text-state-success-ink">
+                  <BadgeCheck className="h-4 w-4" aria-hidden /> Sale đã thu · KT đã xác nhận
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1 text-xs font-semibold text-state-warning-ink">
-                  <BadgeCheck className="h-4 w-4" /> Sale đã thu — chờ kế toán
+                <span className="inline-flex items-center gap-1 whitespace-nowrap text-xs font-semibold text-state-warning-ink">
+                  <BadgeCheck className="h-4 w-4" aria-hidden /> Sale đã thu — chờ kế toán
                 </span>
               )
             ) : canManage ? (
-              <button onClick={() => markPaid(i.id)} disabled={pending} className="rounded bg-state-success-ink px-2 py-0.5 text-xs font-semibold text-white disabled:opacity-50">
+              <button
+                onClick={() => markPaid(i.id)}
+                disabled={pending}
+                className="rounded bg-state-success-ink px-2 py-0.5 text-xs font-semibold text-white transition-opacity duration-150 disabled:opacity-50"
+              >
                 Đánh dấu đã đóng
               </button>
             ) : (
-              <span className="text-xs text-state-warning-ink">Chờ đóng</span>
+              <span className="whitespace-nowrap text-xs text-state-warning-ink">Chờ đóng</span>
             )}
           </div>
         ))}
-        {installments.length === 0 && <p className="text-sm text-muted-foreground">Chưa thiết lập kế hoạch.</p>}
+        {installments.length === 0 && (
+          <p className="text-sm text-muted-foreground">Chưa thiết lập kế hoạch.</p>
+        )}
 
         {/* PA-A — trạng thái sổ kế toán (read-only): nguồn sự thật tiền là /payments. */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-dashed border-border px-3 py-2 text-xs">
-          <span className="font-semibold uppercase tracking-wider text-muted-foreground">Sổ kế toán</span>
+          <span className="font-semibold uppercase tracking-wider text-muted-foreground">
+            Sổ kế toán
+          </span>
           {accounting.confirmed === 0 && accounting.pending === 0 ? (
             <span className="text-muted-foreground">Chưa có khoản thu nào được ghi nhận.</span>
           ) : (
             <>
-              <span className="font-semibold text-state-success-ink">Đã xác nhận: {vnd(accounting.confirmed)}</span>
-              <span className={accounting.pending > 0 ? "font-semibold text-state-warning-ink" : "text-muted-foreground"}>
+              <span className="whitespace-nowrap font-semibold text-state-success-ink">
+                Đã xác nhận: {vnd(accounting.confirmed)}
+              </span>
+              <span
+                className={`whitespace-nowrap ${
+                  accounting.pending > 0
+                    ? "font-semibold text-state-warning-ink"
+                    : "text-muted-foreground"
+                }`}
+              >
                 Chờ xác nhận: {vnd(accounting.pending)}
               </span>
             </>
@@ -147,62 +231,139 @@ export function OrderInstallmentPlan({
       </div>
 
       {canManage && (
-        <div className="space-y-2 rounded-lg border border-border p-3">
-          <p className="text-xs font-semibold text-muted-foreground">Thiết lập tối đa 2 đợt (tổng = {vnd(totalAmount)})</p>
-          <label className="block text-sm">
-            <span className="text-xs text-muted-foreground">Đợt 1 — đã thu (đ)</span>
-            {/* Ô tiền: gõ 10000000 → hiện 10.000.000. Vẫn kẹp [0, tổng đơn] như cũ —
-                MoneyInput ở chế độ controlled nên nhận lại đúng số đã kẹp.
-                suffix={null}: nhãn đã ghi "(đ)", và ô hẹp này dùng px-2 riêng — để hậu tố
-                thì nó đè lên chữ số (px-2 ghi đè pr-8 mà MoneyInput chừa cho hậu tố). */}
-            <MoneyInput
-              name="dot1Amount"
-              min={0}
-              max={totalAmount}
-              value={dot1}
-              onValueChange={(v) => setDot1(Math.min(totalAmount, Math.max(0, v ?? 0)))}
-              suffix={null}
-              className="mt-0.5 rounded-md px-2 py-1.5"
-            />
-          </label>
-          <div className="grid grid-cols-2 gap-2">
-            <label className="block text-sm">
-              <span className="text-xs text-muted-foreground">Đợt 2 — tự tính (đ)</span>
-              <MoneyInput
-                name="dot2Amount"
-                value={dot2}
-                readOnly
-                aria-readonly
-                suffix={null}
-                className="mt-0.5 rounded-md bg-muted px-2 py-1.5 text-muted-foreground"
+        <div className="space-y-3 rounded-lg border border-border p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold text-muted-foreground">Chia thành</span>
+            {[1, 2, 3, 4].map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => chonSoDot(n)}
+                aria-pressed={dots.length === n}
+                className={`min-h-9 whitespace-nowrap rounded-md border px-3 text-sm font-semibold transition-colors duration-150 ${
+                  dots.length === n
+                    ? "border-primary bg-primary text-white"
+                    : "border-border bg-background text-foreground hover:bg-muted"
+                }`}
+              >
+                {n === 1 ? "1 lần" : `${n} học phần`}
+              </button>
+            ))}
+            <label className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
+              hoặc
+              <input
+                type="number"
+                min={1}
+                max={TRAN_SO_DOT}
+                value={dots.length}
+                onChange={(e) => {
+                  const n = Math.min(TRAN_SO_DOT, Math.max(1, Number(e.target.value) || 1));
+                  chonSoDot(n);
+                }}
+                aria-label="Số đợt tuỳ chọn"
+                className="w-16 rounded-md border border-border px-2 py-1.5 text-sm tabular-nums"
               />
-            </label>
-            <label className="block text-sm">
-              <span className="text-xs text-muted-foreground">Hẹn đóng đợt 2</span>
-              <input type="date" value={dot2Due} onChange={(e) => setDot2Due(e.target.value)} disabled={dot2 <= 0} className="mt-0.5 w-full rounded-md border border-border px-2 py-1.5 text-sm disabled:bg-muted" />
+              đợt
             </label>
           </div>
+
+          <div className="space-y-2">
+            {dots.map((d, i) => (
+              <div
+                key={i}
+                className="grid grid-cols-2 items-end gap-2 rounded-lg border border-border bg-background p-2 sm:grid-cols-[auto_1fr_1fr_auto]"
+              >
+                <span className="self-center whitespace-nowrap text-xs font-semibold text-muted-foreground">
+                  Đợt {i + 1}
+                </span>
+                <label className="block text-sm">
+                  <span className="text-xs text-muted-foreground">Số tiền (đ)</span>
+                  <MoneyInput
+                    name={`dot-${i}-amount`}
+                    min={0}
+                    value={d.amount}
+                    onValueChange={(v) => suaDot(i, { amount: Math.max(0, v ?? 0) })}
+                    suffix={null}
+                    className="mt-0.5 rounded-md px-2 py-1.5"
+                  />
+                </label>
+                <label className="block text-sm">
+                  <span className="text-xs text-muted-foreground">
+                    {d.daThu ? "Đã thu — không cần hạn" : "Hẹn đóng"}
+                  </span>
+                  <input
+                    type="date"
+                    value={d.dueDate}
+                    onChange={(e) => suaDot(i, { dueDate: e.target.value })}
+                    disabled={d.daThu}
+                    className="mt-0.5 w-full rounded-md border border-border px-2 py-1.5 text-sm disabled:bg-muted"
+                  />
+                </label>
+                <label className="flex items-center gap-1.5 self-center whitespace-nowrap text-xs text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={d.daThu}
+                    onChange={(e) => suaDot(i, { daThu: e.target.checked })}
+                    className="h-4 w-4"
+                  />
+                  đã thu
+                </label>
+              </div>
+            ))}
+          </div>
+
+          {/* Tổng phải khớp — nói ra NGAY khi gõ, không đợi bấm Lưu rồi nhận toast. */}
+          <div
+            className={`flex flex-wrap items-center justify-between gap-2 rounded-md px-3 py-2 text-xs ${
+              lech === 0
+                ? "bg-muted text-muted-foreground"
+                : "bg-state-danger-soft text-state-danger-ink"
+            }`}
+          >
+            <span className="whitespace-nowrap font-semibold tabular-nums">
+              Tổng {dots.length} đợt: {vnd(tongCacDot)} / {vnd(totalAmount)}
+            </span>
+            {lech !== 0 && (
+              <span className="whitespace-nowrap font-semibold tabular-nums">
+                {lech > 0 ? "Thừa" : "Thiếu"} {vnd(Math.abs(lech))}
+              </span>
+            )}
+          </div>
+
           <label className="block text-sm">
-            {/* Câu giải thích cơ chế nhắc nợ trước nằm dưới nút Lưu — xa ô nhập nên hay
-                bị bỏ qua. Chuyển vào icon "?" ngay cạnh nhãn, giữ nguyên chữ. */}
             <span className="text-xs text-muted-foreground">
               Nhắc công nợ trước (ngày){" "}
               <HelpHint>
-                {dot2 > 0
-                  ? `Email nhắc công nợ đợt 2 gửi từ ${reminderDays} ngày trước hạn.`
-                  : "Nhắc công nợ đợt 2 tự động khi có đợt 2 (email)."}
+                Áp cho MỌI đợt chưa thu. Cron nhắc nợ nay quét mọi đợt chưa thu — trước đây
+                nó lọc cứng đợt 2, nên kế hoạch 3-4 đợt thì đợt 3 và 4 không bao giờ được
+                nhắc.
               </HelpHint>
             </span>
-            <input type="number" min={0} value={reminderDays} onChange={(e) => setReminderDays(Math.max(0, Number(e.target.value) || 0))} disabled={dot2 <= 0} className="mt-0.5 w-full rounded-md border border-border px-2 py-1.5 text-sm disabled:bg-muted" />
+            <input
+              type="number"
+              min={0}
+              value={dots.find((d) => !d.daThu)?.reminderDays ?? 14}
+              onChange={(e) => {
+                const v = Math.max(0, Number(e.target.value) || 0);
+                setDots((cu) => cu.map((d) => (d.daThu ? d : { ...d, reminderDays: v })));
+              }}
+              className="mt-0.5 w-full rounded-md border border-border px-2 py-1.5 text-sm tabular-nums"
+            />
           </label>
-          <button onClick={save} disabled={pending} className="w-full rounded-md bg-primary-dark px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
-            {pending ? "Đang lưu…" : "Lưu kế hoạch thanh toán"}
+
+          <button
+            onClick={save}
+            disabled={pending || lech !== 0 || thieuHan >= 0}
+            className="min-h-11 w-full rounded-md bg-primary-dark px-3 py-2 text-sm font-semibold text-white transition-opacity duration-150 disabled:opacity-50"
+          >
+            {pending ? "Đang lưu…" : `Lưu kế hoạch ${dots.length} đợt`}
           </button>
         </div>
       )}
     </section>
   );
 }
+
 
 // "Thanh toán & QR" — QR chuyển khoản VietQR (đặt gần cuối trang, ngay trước nút đổi trạng thái).
 export function OrderQrSection({

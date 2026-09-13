@@ -203,7 +203,66 @@ prisma/
   · **Tài khoản ngân hàng nằm TRÊN CHÍNH phương thức [ĐẢO 31/08/2026].** ~~4 cột `bank*` là dữ liệu chết; tài khoản THẬT ở `IntegrationConfig VIETQR:<centerId>`, khai ở `/centers/<id>/edit` hoặc `/admin/tich-hop`~~ **[ĐẢO]** chủ dự án chốt gộp về MỘT màn: `PaymentMethod.bankBin` (cột mới) + `bankAccountNumber` + `bankAccountName` là **nguồn dựng mã QR**, khai ngay trong form phương thức khi `type = BANK_TRANSFER`, bắt buộc (validator chặn). Khối VietQR ở `/admin/tich-hop` **đã gỡ** cùng `setVietQrConfig`.
   · **Thứ tự tìm tài khoản cho một đơn** — `resolveOrderPaymentConfig` (`lib/payments/vietqr.ts`): phương thức ĐÃ CHỌN trên đơn → phương thức chuyển khoản đang bật của CƠ SỞ đơn → phương thức chuyển khoản dùng chung → kho cũ `IntegrationConfig VIETQR:*` (chỉ còn là **đường lùi**). Bước 2 bắt buộc phải có: đơn từ `convert-lead` **không set `paymentMethodId`**, thiếu bước đó là phần lớn đơn thật báo "chưa cấu hình". Dọn nốt đuôi cũ: `scripts/pttt-chuyen-tai-khoan-vietqr.ts` (dry-run mặc định, chạy tay).
   · Trang cơ sở `/centers/<id>/edit` → mục **Thanh toán** (nằm TRƯỚC mục Hình ảnh, BÊN TRONG form vì chỉ hiển thị + link) liệt kê phương thức riêng của cơ sở + nút tạo `?centerId=<id>`. Nó **không còn ô khai tài khoản** — khai ở form phương thức.
+- ⚠️ **"Kế hoạch trả góp còn hiệu lực không" hỏi ở MỘT chỗ: `lib/payments/installment-plan.ts` [ĐẢO 13/09/2026].** ~~Chỉ `null`/`APPROVED` mới có hiệu lực; `PENDING_APPROVAL` bị loại vì "chưa duyệt mà cho quét QR đợt 1 là lách duyệt trả góp"~~ **[ĐẢO]** luật đó là tàn dư của QĐ-1 bản đầu, mà QĐ-1 **đã bị đảo từ 03/08/2026** (`lib/payments/payment-request.ts:184-192` gỡ hẳn cái chặn "chưa APPROVED thì ném lỗi": lưu kế hoạch là có phiếu thu + QR theo đợt NGAY, duyệt chỉ còn nghĩa **KHOÁ**). Hai chỗ gọi không đảo theo nên sinh bug tiền thật: `PaymentRequest` đã có phiếu đợt 1 3.000.000đ mà `computeDueNow` in QR **cả 5.000.000đ học phí**. Nay **chỉ `REJECTED`** làm kế hoạch mất hiệu lực — và đó không phải ngoại lệ tuỳ ý: `rejectInstallmentPlan` → `revertInstallmentRequests` VOID phiếu theo đợt + dựng lại phiếu "thu toàn đơn", nên số phải thu cũng phải quay về cả đơn.
+  · **Hai chỗ gọi phải SỬA CÙNG NHAU** — `computeDueNow` (số tiền in QR + ngưỡng đối khớp SePay) và `markInstallmentPaid` (có ghi Ledger-A `Payment` không). Sửa một bên là **nhận tiền một đằng, ghi sổ một nẻo**: vá QR mà giữ cổng cũ ở `markInstallmentPaid` thì khách quét QR đóng đợt 1 → Ledger-B PAID, Ledger-A bỏ qua → **công nợ hiển thị KHÔNG GIẢM dù tiền đã vào tài khoản**. Đó là lý do hàm dùng chung tồn tại; đừng viết lại điều kiện tại chỗ.
+  · Cổng chống lách duyệt **vẫn còn**, nằm ở đường TỰ CHỐT đơn chứ không ở đường nhận tiền: `confirmSettledOrder` + `lib/payments/payos-ingest.ts:1169-1181` vẫn từ chối đẩy đơn sang `CONFIRMED` khi **giảm giá** chưa duyệt. Phần "ghi bù Payment khi APPROVED" ở `approveInstallmentPlan` **giữ lại** (phục vụ ca REJECTED→APPROVED + dữ liệu cũ; idempotent theo marker nên không cộng đôi).
+- ⚠️ **`audit-logs:view` KHÔNG vai nào được cấp — đây là quyền ĐÃ MẤT, không phải quyết định [đo 13/09/2026].** `prisma/seed-roles.ts:601-607` còn nguyên chú thích *"#05 (câu 13 BGĐ): QL cơ sở xem audit log + break-glass xem đầy đủ PII"* nhưng **các dòng `{ action: "audit-logs:view*" }` đã biến mất** — `grep audit-logs prisma/seed-roles.ts` chỉ ra đúng 1 dòng, và nó là chú thích. Trang `/admin/audit-log` gác `audit-logs:view` (`page.tsx:21`) và mọi action của nó cũng vậy (`_actions.ts:30`), còn `can()` v2 trả true cho SUPER_ADMIN (`lib/auth/can.ts:46-47`) ⇒ **trên prod chỉ Quản trị tối cao mở được trang đó.**
+  · **Đừng "vá" bằng cách nới `audit-logs:view` cho thêm vai.** Trang đó là log TOÀN HỆ THỐNG có PII; nới quyền ở đó là chữa một vấn đề bằng cách mở một vấn đề lớn hơn. Ai cần trang tổng thì phải **khai lại có chủ đích** (sửa seed + bấm chạy `seed-prod-roles.yml` — RBAC v2 động từ DB, merge file seed KHÔNG đổi gì trên prod).
+  · **Log của một đơn thì đọc trên TRANG ĐƠN, không qua trang tổng.** `AuditLog` đã ghi `entityType: "Order"` + `entityId: <orderId>`, nên lọc theo cặp đó rồi hiển thị ngay ở `/orders/<id>` dưới cổng `orders:view` là đủ — **không cần bảng mới** (A5 không phát sinh) và không cần nới quyền nào. 4 vai có `orders:view`: HO_ACCOUNTANT · CENTER_MANAGER · CENTER_SALES_CSM · CENTER_ACCOUNTANT. `OrderStatusHistory` (có `reason` + `metadata Json?`) đã được đọc ở `orders/[id]/page.tsx:96` dưới đúng cổng đó — dùng làm chỗ tham chiếu.
+  · Bài học chung: **chú thích trong seed không phải bằng chứng quyền tồn tại.** Hỏi "vai X có quyền Y không" thì `grep` dòng khai, đừng đọc chú thích (cùng họ với bài học memory *"Giáo vụ đã có người giữ vai"*).
+- ⚠️ **Cờ `PAYMENT_LEDGER_V2` là cờ CHẾT — đừng lấy nó làm cổng quyết định [đo 13/09/2026].** `isPaymentLedgerV2Enabled()` có **0 đường gọi** trong mã chạy thật (`lib/flags.ts:168` là định nghĩa duy nhất, còn lại chỉ `lib/flags.test.ts`), và biến env **không tồn tại** trong 40 biến Production. Bật nó KHÔNG đổi hành vi gì — muốn cutover thì phải viết phần "nối cờ" (chuyển `lib/finance/debt.ts` + `lib/portal/billing-student.ts` + `lib/portal/dashboard.ts` + màn `/orders/[id]`, `/cong-no` sang đọc `PaymentRequest`) trước, đó là dự án riêng. Đo prod bằng workflow chỉ-đọc `shadow-compare-cong-no.yml` (`payments:shadow-compare` chạy ở máy dev là đo DB DEV, **không nói gì về prod**).
 - ❌ KHÔNG gõ tay tên bài vào `Lesson` để "sửa tên dự án". Nguồn tên buổi/dự án là 2 file marketing (`components/legacy-laptrinhrobot/_data/roadmap-5-years.ts` + `exam-roadmap.ts`) → `lib/lms/curriculum-sata.ts` → `prisma/seed-curriculum-sata.ts`; lần seed sau ghi đè. Nhãn buổi/tên gửi PH đi qua `deriveSessionLabel`/`deriveSessionProjectName`, đừng tự ghép chuỗi.
+
+- ⚠️ **NỢ ĐANG GHIM: `amountDue` của phiếu thu ĐÃ CÓ TIỀN vẫn bị ghi đè [đo 14/09/2026].**
+  `materializeInstallmentRequests` THA VOID cho phiếu đang có phân bổ
+  (`lib/payments/payment-request.ts:309` — `allocated > 0 → continue`) nhưng vòng UPSERT ở
+  `:284` thì **không** kiểm điều đó: `if (cur.amountDue !== dot.amount) patch.amountDue = …`.
+  Đo thật: phiếu đợt 1 đang giữ **6.000.000đ đã rót**, lưu lại kế hoạch với đợt 1 =
+  1.000.000đ ⇒ `amountDue` thành 1.000.000đ, phiếu hoá **"thu vượt 5.000.000đ"** và số
+  còn-phải-thu của đơn sai theo. Tiền KHÔNG mất (dòng `PaymentAllocation` còn nguyên, phiếu
+  không VOID) — nhưng mọi con số đọc từ phiếu đều lệch.
+  · Vi phạm đúng chốt của chủ dự án: **"KHÔNG sửa `amountDue` của phiếu đã có allocation —
+    VOID + tạo phiếu mới."**
+  · Cổng R-02 (`keHoachLamMatTien`) **cố ý không** che ca này: nó canh tiền nằm ở phiếu
+    **THU TOÀN ĐƠN** (phiếu bị VOID vô điều kiện), không canh phiếu theo đợt vốn đã được
+    tha. Đừng "vá" R-02 — nó không hở.
+  · Ghim ở `tests/e2e/r7/payment-request-lifecycle.spec.ts` ca **`[PR-02d]`** bằng
+    `test.fail()` **đặt TRONG thân ca** (đặt ở cấp file thì nó đánh dấu mọi ca phía sau —
+    đã thử, 6 ca lập tức báo "expected to fail"). Vá xong ca đó chuyển sang XANH và
+    Playwright báo lỗi, buộc gỡ ghim.
+  · Vá là đợt RIÊNG: phải đo cả **3 đường gọi** `materializeInstallmentRequests`
+    (`lib/orders/installments.ts:332`, `:500`, `lib/crm/backfill-order.ts:153`) — lỗ có sẵn
+    từ trước đợt gỡ duyệt, không do nó sinh ra.
+
+## Mẫu test: LƯỚI GHIM MÃ NGUỒN [13/09/2026]
+
+Dùng khi luật cần khoá có dạng **"lời gọi này phải truyền tham số kia"** — loại luật mà
+test thuần KHÔNG chứng minh được, vì thứ cần kiểm là một lời gọi Prisma/hàm nội bộ chứ
+không phải giá trị trả về.
+
+Ca sinh ra mẫu này (`[DS-01b]`, `lib/payments/dung-sai-lam-tron.test.ts`): `deriveStatus`
+là hàm thuần và test nó bao nhiêu cũng xanh, trong khi con bug nằm ở chỗ
+`recomputeRequestStatuses` gọi nó với **hằng `0`** cho tham số `waived`. Test thuần viết
+kiểu nào cũng thành tautology.
+
+**Cách làm — bốn bước, đừng bỏ bước 3:**
+1. `readFileSync(resolve(process.cwd(), "<đường dẫn file>"))` — đọc chính mã nguồn.
+   (⚠️ `import.meta.url` trong cấu hình vitest của repo này **không** phải URL `file://`
+   nên `fileURLToPath` ném — dùng `process.cwd()`.)
+2. Assert bằng regex/parse trên chuỗi đó, kèm chú thích ghi rõ **mã TRƯỚC bản vá** trông
+   thế nào, để người đọc sau biết lưới đang chặn cái gì.
+3. **HOÀN NGUYÊN mã về bản cũ, chạy lại, chứng minh lưới ĐỎ** — rồi mới khôi phục bản vá.
+   Bỏ bước này thì không biết lưới có bắt được gì không; một regex viết sai vẫn xanh vĩnh
+   viễn và trông y hệt một lưới đang làm việc.
+4. Dán output đỏ vào commit message.
+
+Repo đã dùng lối "test đọc mã/chạy lint thật" ở `lib/eslint/*.test.ts` — đây là cùng họ,
+chỉ khác là không cần viết hẳn một ESLint rule cho một luật dùng đúng một chỗ.
+
+**Kèm mẫu GHIM BUG bằng `it.fails`:** bug đã đo được nhưng chưa tới lượt vá thì viết test
+mô tả hành vi ĐÚNG rồi đánh `it.fails`. Hôm nay nó xanh (thân test ném ⇒ CI không đỏ,
+không chặn merge của người khác); vá xong nó **đỏ**, buộc người vá gỡ ghim. `pnpm test:unit`
+đếm chúng ở dòng "expected fail". Đừng dùng `it.skip` — skip là quên, `it.fails` là hẹn.
 
 ## Workflow
 
