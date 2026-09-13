@@ -25,8 +25,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 import { BTN_OUTLINE, BTN_PRIMARY, FIELD } from "@/components/admin/cham-cong/classes";
-import { generateMonthAction } from "../../khung-ca/_actions";
+import { generateMonthAction, xemTruocSinhLuoiAction } from "../../khung-ca/_actions";
 
 /** Gương của `GenerateResult` (lib/cham-cong/generate-db.ts) — khai lại để component client không
  *  kéo module server vào cây import chỉ vì một kiểu dữ liệu. */
@@ -39,6 +40,8 @@ type GenKetQua = {
   skippedNoPermission: number;
   unknownCode: number;
   people: number;
+  skippedPast: number;
+  chiTiet: { userId: string; ngay: string; action: string; maCu: string; maMoi: string }[];
   /** `name` do `generateMonthAction` làm giàu sau khi lib trả về — lib không tra được tên. */
   restWarnings: { userId: string; from: string; to: string; name?: string | null }[];
   warnings: string[];
@@ -51,9 +54,20 @@ const SO_DO: { key: keyof GenKetQua; label: string; hint: string }[] = [
   { key: "kept", label: "Ô giữ nguyên", hint: "mã trùng khung ca, không ghi lại" },
   { key: "cleared", label: "Ô bị xoá", hint: "khung ca bỏ trống thứ đó" },
   { key: "skippedProtected", label: "Ô được bảo vệ", hint: "sửa tay / đơn đã duyệt / file import" },
+  { key: "skippedPast", label: "Ô chừa lại", hint: "ngày đã qua và hôm nay — lưới chỉ áp từ NGÀY MAI" },
   { key: "skippedNoPermission", label: "Ô ngoài quyền", hint: "thuộc khối bạn không xếp được" },
   { key: "unknownCode", label: "Mã lạ", hint: "mã trong khung ca không có trong danh mục" },
 ];
+
+/** Nhãn tiếng Việt cho `action` của kế hoạch — mã trần trong bảng là vô nghĩa với người đọc. */
+const NHAN_VIEC: Record<string, string> = {
+  CREATE: "Tạo mới",
+  REPLACE: "Đổi mã",
+  KEEP: "Giữ nguyên",
+  CLEAR: "Xoá ô",
+  SKIP_PROTECTED: "Chừa — ô được bảo vệ",
+  SKIP_QUA_KHU: "Chừa — ngày đã qua / hôm nay",
+};
 
 function ngayVi(iso: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
@@ -79,26 +93,48 @@ export function GenerateDialog({
     defaultBlockId && blocks.some((b) => b.id === defaultBlockId) ? [defaultBlockId] : blocks.map((b) => b.id),
   );
   const [ketQua, setKetQua] = useState<GenKetQua | null>(null);
+  /**
+   * `null` chưa chạy gì · `"XEM"` đang hiện bản chạy thử · `"GHI"` đã ghi thật.
+   *
+   * Mặc định của nút là XEM TRƯỚC. Hàm này huỷ rồi tạo lại ô ca cho cả tháng, và trước
+   * 13/09/2026 bảy con số chỉ hiện SAU KHI ĐÃ GHI — đúng hình dạng đã làm mất dữ liệu ở
+   * đường nhập file. "Ghi thật" nay là bước xác nhận THỨ HAI.
+   */
+  const [che, setChe] = useState<null | "XEM" | "GHI">(null);
 
   if (blocks.length === 0) return null;
 
   function toggle(id: string) {
-    setChon((cu) => (cu.includes(id) ? cu.filter((x) => x !== id) : [...cu, id]));
+    doiThamSo(() => setChon((cu) => (cu.includes(id) ? cu.filter((x) => x !== id) : [...cu, id])));
   }
 
-  function chay() {
+  function chay(ghiThat: boolean) {
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(ky) || chon.length === 0) return;
     setKetQua(null);
+    setChe(null);
     start(async () => {
-      const r = await generateMonthAction({ periodKey: ky, centerIds: chon });
+      const r = ghiThat
+        ? await generateMonthAction({ periodKey: ky, centerIds: chon })
+        : await xemTruocSinhLuoiAction({ periodKey: ky, centerIds: chon });
       if (!r.ok) {
         toast.error(r.error);
         return;
       }
       setKetQua(r.data);
-      toast.success("Đã sinh lưới tháng");
-      router.refresh();
+      setChe(ghiThat ? "GHI" : "XEM");
+      if (ghiThat) {
+        toast.success("Đã sinh lưới tháng");
+        router.refresh();
+      }
     });
+  }
+
+  /** Đổi kỳ / đổi khối thì bản chạy thử cũ không còn đúng — bỏ đi, đừng để người ta bấm
+      "Ghi thật" dựa trên một bảng đã lạc hậu. Affordance phải nói thật (luật 12). */
+  function doiThamSo(f: () => void) {
+    f();
+    setKetQua(null);
+    setChe(null);
   }
 
   return (
@@ -127,7 +163,7 @@ export function GenerateDialog({
                 id="gen-ky"
                 type="month"
                 value={ky}
-                onChange={(e) => setKy(e.target.value)}
+                onChange={(e) => doiThamSo(() => setKy(e.target.value))}
                 aria-invalid={!/^\d{4}-(0[1-9]|1[0-2])$/.test(ky)}
                 className={cn(FIELD, "w-48")}
               />
@@ -159,8 +195,13 @@ export function GenerateDialog({
           {ketQua && (
             <div className="mt-4 rounded-xl border border-border bg-muted/40 p-4">
               <p className="mb-2 text-sm font-semibold text-foreground">
-                Kỳ {ky} · {ketQua.people} người
+                {che === "XEM" ? "CHẠY THỬ — chưa ghi gì" : "Đã ghi"} · Kỳ {ky} · {ketQua.people} người
               </p>
+              {che === "XEM" && (
+                <p className="mb-2 text-xs text-muted-foreground">
+                  Bảng dưới là thứ SẼ xảy ra nếu bấm &ldquo;Ghi thật&rdquo;. Chưa câu lệnh ghi nào chạy.
+                </p>
+              )}
               <dl className="grid grid-cols-1 gap-x-4 gap-y-1.5 sm:grid-cols-2">
                 {SO_DO.map((s) => (
                   <div key={s.key} className="flex items-baseline justify-between gap-2">
@@ -173,6 +214,42 @@ export function GenerateDialog({
                   </div>
                 ))}
               </dl>
+
+              {che === "XEM" && ketQua.chiTiet.length > 0 && (
+                <details className="mt-3 rounded-lg border border-border bg-card p-3">
+                  <summary className="cursor-pointer text-sm font-semibold text-foreground">
+                    Chi tiết từng ngày ({ketQua.chiTiet.length} ô)
+                  </summary>
+                  {/* Bọc `PhanTrangBang` — cổng `components/ui/bang-coverage.test.ts` bắt được
+                      bản đầu dùng `<table>` trần, VÀ nó đúng: bảng xem trước có thể vài trăm ô,
+                      bản đầu của tôi cắt còn 300 dòng kèm câu "cắt bớt cho đỡ nặng" — tức bày ra
+                      một NỬA sự thật ngay trong màn sinh ra để nói sự thật. */}
+                  <div className="mt-2">
+                    <PhanTrangBang tenDonVi="ô" khoaGhiNho="gen-chi-tiet" soDongMacDinh={20}>
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-card">
+                        <tr className="text-muted-foreground">
+                          <th scope="col" className="py-1 pr-2 font-semibold">Ngày</th>
+                          <th scope="col" className="py-1 pr-2 font-semibold">Việc</th>
+                          <th scope="col" className="py-1 pr-2 font-semibold">Mã cũ</th>
+                          <th scope="col" className="py-1 font-semibold">Mã mới</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ketQua.chiTiet.map((c, i) => (
+                          <tr key={`${c.userId}-${c.ngay}-${i}`} className="border-t border-border/60">
+                            <td className="py-1 pr-2 tabular-nums">{ngayVi(c.ngay)}</td>
+                            <td className="py-1 pr-2">{NHAN_VIEC[c.action] ?? c.action}</td>
+                            <td className="py-1 pr-2 font-mono">{c.maCu || "—"}</td>
+                            <td className="py-1 font-mono">{c.maMoi || "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    </PhanTrangBang>
+                  </div>
+                </details>
+              )}
 
               {ketQua.restWarnings.length > 0 && (
                 <div className="mt-3 rounded-lg border border-state-warning-soft bg-state-warning-soft p-3">
@@ -217,21 +294,34 @@ export function GenerateDialog({
 
           <DialogFooter className="mt-4">
             <button type="button" onClick={() => setOpen(false)} className={BTN_OUTLINE}>
-              {ketQua ? "Đóng" : "Huỷ"}
+              {che === "GHI" ? "Đóng" : "Huỷ"}
             </button>
+            {/* MẶC ĐỊNH là chạy thử. "Ghi thật" chỉ hiện SAU khi đã có bảng để đọc — không ai
+                xác nhận được một thứ chưa nhìn thấy. */}
             <button
               type="button"
-              onClick={chay}
+              onClick={() => chay(false)}
               disabled={pending || chon.length === 0}
-              className={BTN_PRIMARY}
+              className={che === "XEM" ? BTN_OUTLINE : BTN_PRIMARY}
             >
               {pending ? (
                 <Loader2 aria-hidden className="h-4 w-4 animate-spin" />
               ) : (
                 <Wand2 aria-hidden className="h-4 w-4" />
               )}
-              {ketQua ? "Sinh lại" : "Sinh lưới"}
+              {che ? "Chạy thử lại" : "Chạy thử"}
             </button>
+            {che === "XEM" && (
+              <button
+                type="button"
+                onClick={() => chay(true)}
+                disabled={pending || chon.length === 0}
+                className={BTN_PRIMARY}
+              >
+                {pending ? <Loader2 aria-hidden className="h-4 w-4 animate-spin" /> : null}
+                Ghi thật
+              </button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
