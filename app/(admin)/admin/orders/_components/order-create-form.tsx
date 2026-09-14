@@ -4,6 +4,13 @@ import { useState, useTransition, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  HE_SO_COACH,
+  laKhoaLoaiTruCoach,
+  NHAN_COACH,
+  type CoachFormat,
+} from "@/lib/finance/coach-pricing";
+import { goiYGiaCoach, veMetadataDongDon } from "@/lib/orders/hinh-thuc-lop";
 import type { OrderType, OrderStatus, OrderItemType } from "@prisma/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +37,15 @@ type Course = {
   code: string | null;
   name: string;
   price: number | null;
+  slug: string | null;
+  /**
+   * Số buổi CHUẨN của khoá — mẫu số của giá/buổi (SR.QD.219 Mục 5.2).
+   *
+   * ⚠️ Nullable THẬT và hay thiếu: `prisma/seed.ts` không đặt cột này, và đường ghi duy
+   * nhất (`/admin/course-packages`) ghi NULL đè lên được. Thiếu ⇒ KHÔNG gợi ý được giá,
+   * và màn phải nói ra chứ không được lặng lẽ ra số 0.
+   */
+  totalSessions: number | null;
 };
 type ProductOption = {
   id: string;
@@ -117,6 +133,9 @@ export function OrderCreateForm({
   const [itemName, setItemName] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [unitPrice, setUnitPrice] = useState(0);
+  // SR.QD.219 Điều 5 — hình thức tổ chức lớp + số buổi mua. Chỉ có nghĩa với đơn KHOÁ HỌC.
+  const [coachFormat, setCoachFormat] = useState<CoachFormat>("GROUP");
+  const [soBuoiMua, setSoBuoiMua] = useState<number | null>(null);
 
   // Pricing
   const [discountAmount, setDiscountAmount] = useState(0);
@@ -195,6 +214,9 @@ export function OrderCreateForm({
       if (c) {
         setItemName(c.name);
         setUnitPrice(c.price ?? 0);
+        // Số buổi mua mặc định = ĐỦ KHOÁ. Khoá thiếu `totalSessions` thì để null — ô
+        // trống buộc người bán gõ, còn điền 0 là bịa ra một con số rồi nhân với tiền.
+        setSoBuoiMua(c.totalSessions ?? null);
       }
     } else {
       const pd = products.find((x) => x.id === refId);
@@ -223,6 +245,34 @@ export function OrderCreateForm({
       })
       .finally(() => setWardLoading(false));
   }
+
+  const khoaDangChon = useMemo(
+    () => (orderType === "COURSE" ? (courses.find((c) => c.id === itemRefId) ?? null) : null),
+    [orderType, itemRefId, courses],
+  );
+
+  /**
+   * GỢI Ý học phí theo SR.QD.219 Điều 5 — để người bán ĐỌC, không phải giá hệ thống áp.
+   *
+   * Ô "Đơn giá" vẫn do người bán gõ (đợt này KHÔNG đổi điều đó): hệ thống chưa có cách
+   * đối chiếu hình thức lớp đã bán với lớp học thật, nên tự áp giá ×2 là biến một con số
+   * người khai thành một con số hệ thống bảo đảm.
+   *
+   * Giảm giá: cố ý truyền `null`. Ô giảm giá của ĐƠN trừ trên TỔNG sau khi đã nhân hệ
+   * số, còn Mục 5.3 bảo giảm TRƯỚC rồi mới nhân — hai thứ tự khác nhau. Với giảm theo %
+   * chúng trùng nhau; với giảm theo SỐ TIỀN thì lệch, và phần cảnh báo dưới nói ra.
+   */
+  const goiY = useMemo(() => {
+    if (orderType !== "COURSE" || !khoaDangChon) return null;
+    return goiYGiaCoach({
+      giaNiemYet: khoaDangChon.price,
+      tongSoBuoi: khoaDangChon.totalSessions,
+      soBuoiMua,
+      coachFormat,
+      giamGia: null,
+      khoaKhongApDungCoach: laKhoaLoaiTruCoach(khoaDangChon),
+    });
+  }, [orderType, khoaDangChon, soBuoiMua, coachFormat]);
 
   const subtotal = unitPrice * quantity;
   // O5 — bỏ phí vận chuyển: tổng = max(0, tạm tính − giảm giá).
@@ -261,7 +311,11 @@ export function OrderCreateForm({
       packageId: null,
       examAttemptId: null,
       productId: orderType === "PRODUCT" ? itemRefId : null,
-      metadata: orderType === "COURSE" ? { courseId: itemRefId } : null,
+      // Một khuôn duy nhất cho hình thức lớp, đọc lại bằng `docHinhThucLop` ở server.
+      metadata:
+        orderType === "COURSE"
+          ? veMetadataDongDon({ courseId: itemRefId, coachFormat, soBuoi: soBuoiMua })
+          : null,
     };
 
     const cityName = provinceId
@@ -636,6 +690,141 @@ export function OrderCreateForm({
               );
             })()}
         </div>
+        {/* ── HÌNH THỨC LỚP — SR.QD.219 Điều 5 ──────────────────────────────
+            Chỉ đơn KHOÁ HỌC mới có nghĩa. Khối này KHAI hình thức đã bán và GỢI Ý giá
+            theo công văn; nó cố ý KHÔNG tự ghi đè "Đơn giá" — xem chú thích ở `goiY`. */}
+        {orderType === "COURSE" && (
+          <div className="space-y-3 rounded-lg border border-border bg-background p-4">
+            <div className="space-y-1.5">
+              <Label>
+                Hình thức lớp
+                <HelpHint>
+                  Theo SR.QD.219 Điều 5: Coach 1-1 là 1 giáo viên kèm riêng 1 học sinh,
+                  1-2 kèm 2, 1-4 kèm tối đa 4. Giá mỗi buổi = giá/buổi của khoá × hệ số
+                  (1-1 ×2,0 · 1-2 ×1,8 · 1-4 ×1,5). Chọn ở đây để đơn GHI LẠI hình thức
+                  đã bán; đơn giá vẫn do bạn gõ.
+                </HelpHint>
+              </Label>
+              <div className="flex flex-wrap gap-2">
+                {(["GROUP", "ONE_ON_ONE", "ONE_ON_TWO", "ONE_ON_FOUR"] as CoachFormat[]).map(
+                  (f) => (
+                    <button
+                      key={f}
+                      type="button"
+                      onClick={() => setCoachFormat(f)}
+                      aria-pressed={coachFormat === f}
+                      className={`min-h-11 whitespace-nowrap rounded-lg border px-3 text-sm font-medium transition-colors duration-150 ${
+                        coachFormat === f
+                          ? "border-primary bg-primary text-white"
+                          : "border-border bg-background hover:bg-muted"
+                      }`}
+                    >
+                      {NHAN_COACH[f]}
+                      {f !== "GROUP" && (
+                        <span className="ml-1 text-xs opacity-80">
+                          ×{HE_SO_COACH[f].toLocaleString("vi-VN")}
+                        </span>
+                      )}
+                    </button>
+                  ),
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="space-y-1.5 sm:col-span-1">
+                <Label>
+                  Số buổi mua
+                  <HelpHint>
+                    Mặc định bằng tổng số buổi của khoá. Sửa khi khách mua LẺ buổi (học
+                    thêm ngoài chính khoá — Mục 5.4) hoặc mua theo học phần.
+                  </HelpHint>
+                </Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={500}
+                  value={soBuoiMua ?? ""}
+                  placeholder={khoaDangChon?.totalSessions ? String(khoaDangChon.totalSessions) : "—"}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setSoBuoiMua(Number.isInteger(v) && v > 0 ? v : null);
+                  }}
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                {goiY?.dungDuoc ? (
+                  <div className="rounded-lg border border-state-info bg-state-info-soft/40 p-3">
+                    <p className="text-xs leading-relaxed text-state-info-ink">
+                      Theo công văn:{" "}
+                      <b className="font-semibold tabular-nums">
+                        {goiY.giaMoiBuoi.toLocaleString("vi-VN")}đ/buổi
+                      </b>{" "}
+                      × hệ số <b className="font-semibold">{goiY.heSo.toLocaleString("vi-VN")}</b> ×{" "}
+                      <b className="font-semibold tabular-nums">{goiY.soBuoiMua} buổi</b> ={" "}
+                      <b className="font-semibold tabular-nums">
+                        {goiY.thanhTien.toLocaleString("vi-VN")}đ
+                      </b>
+                      {goiY.lechLamTron !== 0 && (
+                        <>
+                          {" "}
+                          <span className="text-muted-foreground">
+                            (lệch {goiY.lechLamTron > 0 ? "+" : ""}
+                            {goiY.lechLamTron.toLocaleString("vi-VN")}đ do làm tròn giá/buổi)
+                          </span>
+                        </>
+                      )}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setUnitPrice(goiY.thanhTien)}
+                      className="mt-2 min-h-9 rounded-md border border-border bg-background px-2.5 text-xs font-medium transition-colors duration-150 hover:bg-muted"
+                    >
+                      Áp số này vào Đơn giá
+                    </button>
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-state-warning bg-state-warning-soft p-3 text-xs leading-relaxed text-state-warning-ink">
+                    {goiY?.thieu === "LOAI_TRU" ? (
+                      <>
+                        Khoá này <b className="font-semibold">không áp dụng Coach</b>{" "}
+                        (SR.QD.219 Điều 5 — gói cam kết 5 buổi, giá cố định Điều 3). Chọn
+                        lớp nhóm, hoặc chọn khoá khác — server cũng từ chối đơn này.
+                      </>
+                    ) : goiY?.thieu === "SO_BUOI" ? (
+                      <>
+                        Khoá chưa khai <b className="font-semibold">tổng số buổi</b> nên
+                        không tính được giá/buổi. Khai ở màn Gói khoá học, hoặc gõ đơn giá
+                        tay theo thoả thuận.
+                      </>
+                    ) : goiY?.thieu === "GIA" ? (
+                      <>
+                        Khoá chưa có <b className="font-semibold">giá niêm yết</b> nên
+                        không gợi ý được. Nhập đơn giá tay.
+                      </>
+                    ) : (
+                      <>Chọn khoá học để xem gợi ý giá theo công văn.</>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {coachFormat !== "GROUP" && (
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Hình thức lớp được <b className="font-semibold text-foreground">ghi lại trên
+                dòng đơn</b>; <b className="font-semibold text-foreground">đơn giá vẫn là số
+                bạn gõ</b>. Hai điều phải biết: (1) ô Giảm giá bên dưới trừ trên TỔNG sau khi
+                đã nhân hệ số, còn Mục 5.3 bảo giảm TRƯỚC rồi mới nhân — giảm theo % thì hai
+                cách trùng nhau, giảm theo SỐ TIỀN thì lệch; (2) công nợ và cổng phụ huynh
+                hiện vẫn đọc giá LỚP NHÓM của ghi danh, nên đơn Coach sẽ lệch với số phụ
+                huynh thấy cho tới khi phần ghi danh được sửa.
+              </p>
+            )}
+          </div>
+        )}
+
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div className="space-y-1.5 sm:col-span-1">
             <Label>Số lượng</Label>

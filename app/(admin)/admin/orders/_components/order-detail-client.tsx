@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { docHinhThucLop } from "@/lib/orders/hinh-thuc-lop";
+import { NHAN_COACH } from "@/lib/finance/coach-pricing";
 import Link from "next/link";
 import { Loader2, ChevronDown, Pencil } from "lucide-react";
 import { toast } from "sonner";
@@ -307,6 +309,19 @@ export function OrderDetailClient({
                 <tr key={it.id} className="border-b border-border">
                   <td className="p-2">
                     <div className="font-medium text-foreground">{it.itemName}</div>
+                    {/* Hình thức lớp (SR.QD.219 Điều 5) — hiện ra vì nó GIẢI THÍCH đơn
+                        giá: Coach 1-1 ×2,0 cao hơn giá niêm yết là hợp lệ, và không có
+                        nhãn này thì người soát đơn chỉ thấy "bán đắt gấp đôi". */}
+                    {(() => {
+                      const ht = docHinhThucLop(it.metadata);
+                      if (ht.coachFormat === "GROUP") return null;
+                      return (
+                        <span className="mt-0.5 inline-flex whitespace-nowrap rounded-md bg-state-info-soft px-2 py-0.5 text-xs font-semibold text-state-info-ink">
+                          {NHAN_COACH[ht.coachFormat]}
+                          {ht.soBuoi != null ? ` · ${ht.soBuoi} buổi` : ""}
+                        </span>
+                      );
+                    })()}
                     {it.product && (
                       <Link
                         href={`/products/${it.product.id}`}

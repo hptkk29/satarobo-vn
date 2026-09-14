@@ -29,6 +29,8 @@ import { getRequestMetadata } from "@/lib/audit/headers";
 import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { soatGiaDon } from "@/lib/orders/price-guard";
+import { docHinhThucLop } from "@/lib/orders/hinh-thuc-lop";
+import { laKhoaLoaiTruCoach } from "@/lib/finance/coach-pricing";
 import { sendEmailForTrigger } from "@/lib/email/trigger";
 import { notifyOrderByZnsIfNoEmail } from "@/lib/notify/order";
 import { renderTemplate } from "@/lib/email/render";
@@ -272,6 +274,41 @@ export async function createOrderManualAction(input: unknown) {
     ...giaKhoa.map((c) => [c.id, c.price] as const),
     ...giaSanPham.map((p) => [p.id, p.salePrice] as const),
   ]);
+  // ── HÌNH THỨC LỚP (SR.QD.219 Điều 5) ────────────────────────────────────────
+  // Gác đúng MỘT điều server kiểm được: khoá mà công văn LOẠI khỏi Coach thì không được
+  // bán Coach. Những thứ còn lại (`coachFormat` có khớp lớp học thật không, `soBuoi` có
+  // đúng số buổi khách mua không) server KHÔNG suy ra được — model `Class` không có cột
+  // hình thức lớp — nên chúng chỉ được GHI LẠI, không được dùng để định giá.
+  //
+  // ⚠️ CỐ Ý KHÔNG đưa hình thức lớp vào `giaNiemYet` của `soatGiaDon` bên dưới. Hôm nay
+  // `giaNiemYet` là `Course.price` tra từ DB nên client không chạm được; nếu giá kỳ vọng
+  // tính từ `coachFormat` + `soBuoi` (vốn nằm trong payload client) thì client cầm CẢ HAI
+  // VẾ của phép so — khai `soBuoi` nhỏ là mọi đơn bán rẻ thành "khớp". Đo + phản biện
+  // 14/09/2026; chi tiết ở đầu `lib/orders/hinh-thuc-lop.ts`.
+  const hinhThucDong = data.items.map((it) => docHinhThucLop(it.metadata));
+  const idKhoaCoach = [
+    ...new Set(
+      hinhThucDong
+        .filter((h) => h.coachFormat !== "GROUP" && h.courseId)
+        .map((h) => h.courseId as string),
+    ),
+  ];
+  if (idKhoaCoach.length > 0) {
+    const khoaCoach = await sdb.course.findMany({
+      where: { id: { in: idKhoaCoach } },
+      select: { id: true, name: true, slug: true, code: true },
+    });
+    const biLoai = khoaCoach.find((c) => laKhoaLoaiTruCoach(c));
+    if (biLoai) {
+      return {
+        ok: false as const,
+        error:
+          `Khoá "${biLoai.name}" không áp dụng hình thức Coach (SR.QD.219 Điều 5 — gói ` +
+          "cam kết 5 buổi, giá cố định Điều 3). Chọn lớp nhóm, hoặc chọn khoá khác.",
+      };
+    }
+  }
+
   const soatGia = soatGiaDon(
     data.items.map((it) => {
       const m = it.metadata as Record<string, unknown> | null | undefined;
@@ -536,6 +573,11 @@ export async function createOrderManualAction(input: unknown) {
         giaLech: soatGia.coLech,
         giaTongLechThap: soatGia.tongLechThap,
         giaDongLech: soatGia.dongLech,
+        // Hình thức lớp đã KHAI trên từng dòng. Ghi ở đây để đơn bán Coach có lời giải
+        // thích đi kèm ngay cạnh `giaLech` — bán 1-1 ×2,0 là HỢP LỆ theo công văn nhưng
+        // vẫn rơi vào CAO_HON, và người soát sau cần biết vì sao mà không phải mở payload.
+        hinhThucLop: hinhThucDong.map((h) => h.coachFormat),
+        soBuoiKhai: hinhThucDong.map((h) => h.soBuoi),
       },
       orgUnitId: data.centerId || null,
       tx,
@@ -901,7 +943,19 @@ export async function loadCreateOrderFormData() {
       // (publish chỉ dùng cho trang marketing công khai). Đơn hàng gate theo isTeachable.
       where: { isActive: true, isTeachable: true },
       orderBy: { displayOrder: "asc" },
-      select: { id: true, code: true, name: true, price: true, type: true },
+      // `totalSessions` + `slug`: hai thứ màn tạo đơn cần để GỢI Ý giá theo hình thức
+      // lớp (SR.QD.219 Điều 5) — giá/buổi = price ÷ totalSessions, và `slug` để nhận ra
+      // khoá công văn LOẠI khỏi Coach. Cả hai chỉ phục vụ gợi ý; cổng soát giá vẫn so
+      // với `Course.price` như cũ.
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        price: true,
+        type: true,
+        slug: true,
+        totalSessions: true,
+      },
     }),
     sdb.product.findMany({
       // O3: đơn "Sản phẩm" chỉ gồm KIT_ROBOT + SENSOR.

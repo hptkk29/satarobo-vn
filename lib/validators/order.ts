@@ -18,7 +18,36 @@ const orderItemSchema = z.object({
   examAttemptId: z.string().min(1).optional().nullable(),
   productId: z.string().min(1).optional().nullable(),
   // Metadata cho COURSE_ENROLLMENT (chứa courseId vì Enrollment chưa tồn tại)
-  metadata: z.record(z.string(), z.unknown()).optional().nullable(),
+  /**
+   * Json tự do — nhưng HAI khoá dưới đây có nghĩa và phải đúng khuôn:
+   * `coachFormat` (hình thức lớp, SR.QD.219 Điều 5) và `soBuoi`.
+   *
+   * ⚠️ Siết KIỂU ở đây KHÔNG làm GIÁ TRỊ đáng tin — `coachFormat` vẫn là thứ client tự
+   * khai, và không có gì trên server suy ngược ra được (model `Class` không có cột hình
+   * thức lớp). Đó chính là lý do hình thức lớp KHÔNG được đi vào `giaNiemYet` của cổng
+   * soát giá; xem đầu `lib/orders/hinh-thuc-lop.ts`.
+   *
+   * ⚠️ Và nó CHỈ phủ đường `createOrderManualAction`. Ba đường tạo OrderItem còn lại
+   * (`lib/crm/backfill-order.ts`, `lib/finance/ghi-giao-dich-cu.ts`, convert) ghi thẳng
+   * bằng Prisma, không qua schema này.
+   */
+  metadata: z
+    .record(z.string(), z.unknown())
+    .refine(
+      (m) =>
+        m.coachFormat === undefined ||
+        (typeof m.coachFormat === "string" &&
+          ["GROUP", "ONE_ON_ONE", "ONE_ON_TWO", "ONE_ON_FOUR"].includes(m.coachFormat)),
+      { message: "Hình thức lớp không hợp lệ" },
+    )
+    .refine(
+      (m) =>
+        m.soBuoi === undefined ||
+        (typeof m.soBuoi === "number" && Number.isInteger(m.soBuoi) && m.soBuoi > 0 && m.soBuoi <= 500),
+      { message: "Số buổi phải là số nguyên từ 1 đến 500" },
+    )
+    .optional()
+    .nullable(),
 });
 
 export const orderCreateManualSchema = z.object({
