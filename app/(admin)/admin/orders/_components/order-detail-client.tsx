@@ -116,7 +116,6 @@ export function OrderDetailClient({
   installments,
   paymentRequests,
   qrSessions,
-  installmentPlanApproved,
   paymentMethods,
   accounting,
   congNo,
@@ -135,7 +134,6 @@ export function OrderDetailClient({
   paymentRequests: PaymentRequestRow[];
   /** Phiên QR ACTIVE còn hạn của từng phiếu (key = paymentRequestId). */
   qrSessions: Record<string, QrSessionView>;
-  installmentPlanApproved: boolean;
   paymentMethods: PaymentMethodOption[];
   // (b) PA-A — tổng theo sổ kế toán (Payment) của đơn: CONFIRMED vs PENDING (chờ ✓).
   accounting: { confirmed: number; pending: number };
@@ -579,7 +577,6 @@ export function OrderDetailClient({
           requests={paymentRequests}
           initialSessions={qrSessions}
           canManage={canManage}
-          installmentPlanApproved={installmentPlanApproved}
         />
       ) : (
         <OrderQrSection qrUrl={qrUrl} transferContent={transferContent} dueNow={dueNow} />

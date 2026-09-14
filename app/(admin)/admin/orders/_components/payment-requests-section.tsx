@@ -190,14 +190,11 @@ export function PaymentRequestsSection({
   requests,
   initialSessions,
   canManage,
-  installmentPlanApproved,
 }: {
   requests: PaymentRequestRow[];
   /** Phiên QR ACTIVE còn hạn của từng phiếu (server đọc sẵn lúc render). */
   initialSessions: Record<string, QrSessionView>;
   canManage: boolean;
-  /** Kế hoạch trả góp đã được duyệt chưa — quyết định câu giải thích ở cuối bảng. */
-  installmentPlanApproved: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -330,12 +327,18 @@ export function PaymentRequestsSection({
         );
       })()}
 
-      {!installmentPlanApproved && (
-        <p className="mt-4 rounded-lg border border-dashed border-border bg-muted px-3 py-2 text-xs text-muted-foreground">
-          Đơn này <b>chưa có kế hoạch trả góp được duyệt</b> nên chỉ thu được toàn bộ
-          đơn trong một lần. Muốn tách đợt: lập kế hoạch 2 đợt ở mục &ldquo;Kế hoạch
-          thanh toán 2 đợt&rdquo; phía trên, gửi Quản lý cơ sở duyệt — duyệt xong bảng
-          này sẽ tách thành từng đợt kèm QR riêng.
+      {/* ⚠️ ĐÃ THAY [14/09/2026]. Câu cũ: "Đơn này CHƯA CÓ KẾ HOẠCH TRẢ GÓP ĐƯỢC DUYỆT
+          … gửi Quản lý cơ sở duyệt — duyệt xong bảng này sẽ tách thành từng đợt kèm QR
+          riêng." Nó bám `installmentPlanApproved`, mà cờ duyệt đã gỡ nên cờ LUÔN false ⇒
+          câu đó hiện trên MỌI đơn, kể cả đơn đã có đủ n phiếu kèm QR ngay bên trên nó.
+          Người đọc tưởng QR chưa sinh và đi tìm một khâu duyệt không còn tồn tại.
+
+          Nay chỉ nói khi đơn THẬT SỰ chưa tách đợt, và chỉ đúng đường. */}
+      {requests.filter((r) => r.installmentNo > 0).length === 0 && (
+        <p className="mt-4 rounded-lg border border-dashed border-border bg-muted px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+          Đơn này <b>chưa tách đợt</b> nên chỉ có một phiếu thu toàn đơn. Muốn tách: lập
+          kế hoạch ở mục <b>&ldquo;Kế hoạch thanh toán&rdquo;</b> phía trên — lưu xong là
+          mỗi đợt có một phiếu kèm QR riêng ngay, không cần ai duyệt.
         </p>
       )}
     </section>

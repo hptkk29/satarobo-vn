@@ -25,6 +25,7 @@ import {
   chiaDotHocPhi,
   hanChoDot,
   kiemKeHoachDot,
+  chenCoc,
   phanBoGhiTheoDot,
   TRAN_SO_DOT,
 } from "./ke-hoach-dot";
@@ -196,5 +197,70 @@ describe("[KH-04] phân phần chênh Ledger-A cho TỪNG marker đợt", () => 
 
   it("số không hữu hạn → coi như 0", () => {
     expect(phanBoGhiTheoDot([Number.NaN, 2_000_000], Number.NaN)).toEqual([0, 2_000_000]);
+  });
+});
+
+describe("[KH-05] TIỀN CỌC — trừ vào đợt 1, sinh phiếu riêng để quét QR trước", () => {
+  // Chủ dự án chốt 14/09/2026: "có 1 ô tích cọc tiền, nếu tích vào thì điền cọc bao
+  // nhiêu, số tiền đó sẽ được sinh mã QR trước để KH thanh toán, và sau khi KH cọc thì
+  // lần sau thanh toán sẽ được trừ cọc trên số tiền khoá học, và cọc trừ vào đợt 1
+  // (tuỳ theo KH chọn đóng bao nhiêu học phần)."
+  //
+  // ⚠️ BẤT BIẾN KHÔNG ĐƯỢC PHÁ: Σ (cọc + các đợt) === tổng đơn. Cọc KHÔNG phải khoản
+  // thu thêm — nó là phần ĐẦU của học phí, đóng sớm. Cộng cọc vào ngoài tổng là đòi
+  // khách trả nhiều hơn giá khoá.
+
+  it("cọc 1tr + 1 đợt: đợt 1 còn lại đúng phần trừ cọc", () => {
+    const r = chenCoc(chiaDotHocPhi(10_000_000, 1), 1_000_000);
+    expect(r.map((d) => d.amount)).toEqual([1_000_000, 9_000_000]);
+    expect(r[0]!.laCoc).toBe(true);
+    expect(r[1]!.laCoc).toBe(false);
+  });
+
+  it("cọc 1tr + 2 đợt (mỗi đợt 2 học phần): cọc trừ vào ĐỢT 1, đợt 2 giữ nguyên", () => {
+    const r = chenCoc(chiaDotHocPhi(10_560_000, 2), 1_000_000);
+    expect(r.map((d) => d.amount)).toEqual([1_000_000, 4_280_000, 5_280_000]);
+  });
+
+  it("cọc 1tr + 4 đợt: chỉ đợt 1 bị trừ, ba đợt sau nguyên", () => {
+    const r = chenCoc(chiaDotHocPhi(10_560_000, 4), 1_000_000);
+    expect(r.map((d) => d.amount)).toEqual([1_000_000, 1_640_000, 2_640_000, 2_640_000, 2_640_000]);
+  });
+
+  it("BẤT BIẾN: tổng luôn bằng tổng đơn, với mọi số đợt và mọi mức cọc", () => {
+    for (const tong of [10_560_000, 2_500_000, 9_999_999]) {
+      for (const n of [1, 2, 3, 4]) {
+        for (const coc of [0, 1, 500_000, 1_000_000, tong - 1, tong]) {
+          const r = chenCoc(chiaDotHocPhi(tong, n), coc);
+          expect(r.reduce((s, d) => s + d.amount, 0), `${tong}/${n} đợt/cọc ${coc}`).toBe(tong);
+        }
+      }
+    }
+  });
+
+  it("cọc LỚN HƠN đợt 1 → tràn sang đợt sau, không để đợt nào âm", () => {
+    // Khách cọc 5tr trong khi đợt 1 chỉ 2,64tr.
+    const r = chenCoc(chiaDotHocPhi(10_560_000, 4), 5_000_000);
+    expect(r.map((d) => d.amount)).toEqual([5_000_000, 0, 280_000, 2_640_000, 2_640_000]);
+    expect(r.every((d) => d.amount >= 0)).toBe(true);
+  });
+
+  it("cọc bằng CẢ ĐƠN → mọi đợt về 0, tổng vẫn đúng", () => {
+    const r = chenCoc(chiaDotHocPhi(10_000_000, 2), 10_000_000);
+    expect(r.map((d) => d.amount)).toEqual([10_000_000, 0, 0]);
+  });
+
+  it("cọc 0 hoặc âm hoặc không hữu hạn → KHÔNG chèn phiếu cọc nào", () => {
+    const goc = chiaDotHocPhi(10_000_000, 2);
+    expect(chenCoc(goc, 0).some((d) => d.laCoc)).toBe(false);
+    expect(chenCoc(goc, -5).some((d) => d.laCoc)).toBe(false);
+    expect(chenCoc(goc, Number.NaN).some((d) => d.laCoc)).toBe(false);
+    expect(chenCoc(goc, 0).map((d) => d.amount)).toEqual(goc);
+  });
+
+  it("cọc VƯỢT tổng đơn → kẹp về tổng đơn, không tạo tiền từ không khí", () => {
+    const r = chenCoc(chiaDotHocPhi(10_000_000, 2), 99_000_000);
+    expect(r.reduce((s, d) => s + d.amount, 0)).toBe(10_000_000);
+    expect(r[0]!.amount).toBe(10_000_000);
   });
 });

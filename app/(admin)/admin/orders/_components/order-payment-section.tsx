@@ -10,6 +10,7 @@ import { formatDateVN } from "@/lib/format/date";
 import { MoneyInput } from "@/components/ui/money-input";
 import { HelpHint } from "@/components/admin/ui/help-hint";
 import {
+  chenCoc,
   chiaDotHocPhi,
   hanChoDot,
   TRAN_SO_DOT,
@@ -36,6 +37,8 @@ type DotForm = {
   daThu: boolean;
   dueDate: string;
   reminderDays: number;
+  /** Phiếu CỌC — đóng trước, và là phần ĐẦU của học phí chứ không phải khoản thu thêm. */
+  laCoc: boolean;
 };
 
 /**
@@ -47,7 +50,7 @@ type DotForm = {
  */
 function dotsBanDau(installments: Installment[], totalAmount: number): DotForm[] {
   if (installments.length === 0) {
-    return [{ amount: totalAmount, daThu: true, dueDate: "", reminderDays: 14 }];
+    return [{ amount: totalAmount, daThu: true, dueDate: "", reminderDays: 14, laCoc: false }];
   }
   return [...installments]
     .sort((a, b) => a.soDot - b.soDot)
@@ -56,6 +59,9 @@ function dotsBanDau(installments: Installment[], totalAmount: number): DotForm[]
       daThu: i.status === "PAID",
       dueDate: i.dueDate?.slice(0, 10) ?? "",
       reminderDays: i.reminderDays ?? 14,
+      // Kế hoạch đã lưu: đợt 1 mang số tiền nhỏ hơn phần chia đều là dấu hiệu có cọc,
+      // nhưng ĐOÁN ở đây là sai. Giữ false; người dùng tích lại nếu muốn đổi.
+      laCoc: false,
     }));
 }
 
@@ -84,23 +90,37 @@ export function OrderInstallmentPlan({
   // Trần "2 đợt" cũ nằm ở đây chứ không ở DB: hai biến `dot1`/`dot2`, đợt 2 tự tính,
   // một ô ngày. Nay là mảng — thêm đợt là thêm phần tử.
   const [dots, setDots] = useState<DotForm[]>(() => dotsBanDau(installments, totalAmount));
+  /** Có thu cọc trước không + số tiền cọc. Cọc là phần ĐẦU của học phí, không cộng thêm. */
+  const [coCoc, setCoCoc] = useState(false);
+  const [tienCoc, setTienCoc] = useState(0);
 
+  // Số ĐỢT HỌC PHÍ — KHÔNG đếm phiếu cọc. Chip "2 học phần" phải sáng khi khách chia
+  // 2 đợt, dù bảng đang có 3 dòng vì có thêm phiếu cọc đứng đầu.
+  const soDotHocPhi = dots.filter((d) => !d.laCoc).length;
   const tongCacDot = dots.reduce((s, d) => s + d.amount, 0);
   const lech = tongCacDot - totalAmount;
   const thieuHan = dots.findIndex((d) => !d.daThu && !d.dueDate);
 
   /** Chọn số đợt → chia đều + sinh hạn cách 30 ngày. Người dùng sửa lại từng dòng được. */
-  function chonSoDot(n: number) {
-    const tien = chiaDotHocPhi(totalAmount, n);
+  function chonSoDot(n: number, cocMoi?: number) {
+    const coc = cocMoi ?? (coCoc ? tienCoc : 0);
+    // Chia học phí thành n đợt TRƯỚC, rồi chèn cọc và trừ dần từ đợt 1 —
+    // `chenCoc` giữ bất biến Σ = tổng đơn (xem lib/payments/ke-hoach-dot.ts).
+    const tien = chenCoc(chiaDotHocPhi(totalAmount, n), coc).map((d) => d.amount);
+    const coCocThat = coc > 0;
     // Mốc hạn = HÔM NAY. `hanChoDot` cố ý không tự đọc đồng hồ (luật 19) nên mốc truyền
     // từ đây — chỗ duy nhất thật sự có quyền biết "hôm nay".
-    const han = hanChoDot(new Date(), n);
+    // +1 mốc hạn khi có cọc: phiếu cọc đứng đầu và đến hạn NGAY (khách quét trả trước).
+    const han = hanChoDot(new Date(), tien.length);
     setDots(
       tien.map((amount, i) => ({
         amount,
+        laCoc: coCocThat && i === 0,
         // Giữ nguyên "đã thu" của các đợt cũ còn trong tầm — đổi số đợt không được âm
         // thầm biến tiền đã thu thành chưa thu.
-        daThu: dots[i]?.daThu ?? i === 0,
+        //
+        // ⚠️ Phiếu CỌC mặc định CHƯA THU: cả điểm của nó là sinh QR để khách trả trước.
+        daThu: coCocThat && i === 0 ? false : (dots[i]?.daThu ?? i === 0),
         dueDate: han[i]!.toISOString().slice(0, 10),
         reminderDays: dots[i]?.reminderDays ?? 14,
       })),
@@ -114,7 +134,7 @@ export function OrderInstallmentPlan({
   function save() {
     if (lech !== 0) {
       toast.error(
-        `Tổng ${dots.length} đợt phải bằng ${vnd(totalAmount)} — đang lệch ${vnd(Math.abs(lech))}`,
+        `Tổng các phiếu phải bằng ${vnd(totalAmount)} — đang lệch ${vnd(Math.abs(lech))}`,
       );
       return;
     }
@@ -123,6 +143,11 @@ export function OrderInstallmentPlan({
       return;
     }
     start(async () => {
+      // ⚠️ HẠN CHẾ ĐÃ BIẾT: cờ `laCoc` KHÔNG được lưu xuống DB — `OrderInstallment` không
+      // có cột cho nó, và thêm cột chỉ để hiện một cái nhãn là không đáng một migration
+      // trên bảng có dữ liệu prod. Hệ quả: sau khi lưu, bảng phía trên hiện "Đợt 1" thay
+      // vì "Cọc". Tiền và QR thì ĐÚNG — cọc là một phiếu thu riêng, có QR riêng, và đã
+      // được trừ khỏi đợt sau.
       const res = await recordOrderInstallmentsAction({
         orderId,
         dots: dots.map((d) => ({
@@ -134,7 +159,7 @@ export function OrderInstallmentPlan({
         })),
       });
       if (res.ok) {
-        toast.success(`Đã lưu kế hoạch ${dots.length} đợt`);
+        toast.success(`Đã lưu kế hoạch ${dots[0]?.laCoc ? "cọc + " : ""}${soDotHocPhi} đợt`);
         router.refresh();
       } else toast.error(res.error ?? "Lỗi");
     });
@@ -232,6 +257,57 @@ export function OrderInstallmentPlan({
 
       {canManage && (
         <div className="space-y-3 rounded-lg border border-border p-3">
+          {/* ── TIỀN CỌC ──────────────────────────────────────────────────────
+              Cọc là phần ĐẦU của học phí, đóng sớm — KHÔNG phải khoản thu thêm.
+              Nó thành một phiếu riêng đứng đầu (có QR để khách quét trả trước), và
+              số tiền đó được TRỪ DẦN từ đợt 1. Tổng vẫn đúng bằng học phí. */}
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-background p-2.5">
+            <label className="flex items-center gap-2 whitespace-nowrap text-sm">
+              <input
+                type="checkbox"
+                checked={coCoc}
+                onChange={(e) => {
+                  const bat = e.target.checked;
+                  setCoCoc(bat);
+                  if (!bat) {
+                    setTienCoc(0);
+                    chonSoDot(soDotHocPhi, 0);
+                  }
+                }}
+                className="h-4 w-4"
+              />
+              <span className="font-medium">Thu cọc trước</span>
+            </label>
+
+            {coCoc && (
+              <>
+                <label className="flex items-center gap-1.5 text-sm">
+                  <span className="whitespace-nowrap text-xs text-muted-foreground">
+                    Số tiền cọc (đ)
+                  </span>
+                  <MoneyInput
+                    name="tien-coc"
+                    min={0}
+                    max={totalAmount}
+                    value={tienCoc}
+                    onValueChange={(v) => {
+                      const c = Math.min(totalAmount, Math.max(0, v ?? 0));
+                      setTienCoc(c);
+                      chonSoDot(soDotHocPhi, c);
+                    }}
+                    suffix={null}
+                    className="w-40 rounded-md px-2 py-1.5"
+                  />
+                </label>
+                <HelpHint>
+                  Cọc sinh một phiếu thu riêng kèm QR để khách quét trả trước. Số đã cọc
+                  được trừ vào đợt 1; cọc lớn hơn đợt 1 thì trừ tiếp sang đợt sau. Tổng
+                  các phiếu vẫn đúng bằng học phí — cọc KHÔNG cộng thêm.
+                </HelpHint>
+              </>
+            )}
+          </div>
+
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-semibold text-muted-foreground">Chia thành</span>
             {[1, 2, 3, 4].map((n) => (
@@ -239,9 +315,9 @@ export function OrderInstallmentPlan({
                 key={n}
                 type="button"
                 onClick={() => chonSoDot(n)}
-                aria-pressed={dots.length === n}
+                aria-pressed={soDotHocPhi === n}
                 className={`min-h-9 whitespace-nowrap rounded-md border px-3 text-sm font-semibold transition-colors duration-150 ${
-                  dots.length === n
+                  soDotHocPhi === n
                     ? "border-primary bg-primary text-white"
                     : "border-border bg-background text-foreground hover:bg-muted"
                 }`}
@@ -255,7 +331,7 @@ export function OrderInstallmentPlan({
                 type="number"
                 min={1}
                 max={TRAN_SO_DOT}
-                value={dots.length}
+                value={soDotHocPhi}
                 onChange={(e) => {
                   const n = Math.min(TRAN_SO_DOT, Math.max(1, Number(e.target.value) || 1));
                   chonSoDot(n);
@@ -273,8 +349,12 @@ export function OrderInstallmentPlan({
                 key={i}
                 className="grid grid-cols-2 items-end gap-2 rounded-lg border border-border bg-background p-2 sm:grid-cols-[auto_1fr_1fr_auto]"
               >
-                <span className="self-center whitespace-nowrap text-xs font-semibold text-muted-foreground">
-                  Đợt {i + 1}
+                <span
+                  className={`self-center whitespace-nowrap text-xs font-semibold ${
+                    d.laCoc ? "text-accent-ink" : "text-muted-foreground"
+                  }`}
+                >
+                  {d.laCoc ? "Cọc" : `Đợt ${i + (dots[0]?.laCoc ? 0 : 1)}`}
                 </span>
                 <label className="block text-sm">
                   <span className="text-xs text-muted-foreground">Số tiền (đ)</span>
@@ -321,7 +401,7 @@ export function OrderInstallmentPlan({
             }`}
           >
             <span className="whitespace-nowrap font-semibold tabular-nums">
-              Tổng {dots.length} đợt: {vnd(tongCacDot)} / {vnd(totalAmount)}
+              Tổng {dots[0]?.laCoc ? "cọc + " : ""}{soDotHocPhi} đợt: {vnd(tongCacDot)} / {vnd(totalAmount)}
             </span>
             {lech !== 0 && (
               <span className="whitespace-nowrap font-semibold tabular-nums">
@@ -356,7 +436,9 @@ export function OrderInstallmentPlan({
             disabled={pending || lech !== 0 || thieuHan >= 0}
             className="min-h-11 w-full rounded-md bg-primary-dark px-3 py-2 text-sm font-semibold text-white transition-opacity duration-150 disabled:opacity-50"
           >
-            {pending ? "Đang lưu…" : `Lưu kế hoạch ${dots.length} đợt`}
+            {pending
+              ? "Đang lưu…"
+              : `Lưu kế hoạch ${dots[0]?.laCoc ? "cọc + " : ""}${soDotHocPhi} đợt`}
           </button>
         </div>
       )}

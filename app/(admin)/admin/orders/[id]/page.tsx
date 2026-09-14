@@ -353,7 +353,6 @@ export default async function OrderDetailPage({ params }: Props) {
           matchKey: r.matchKey,
         }))}
         qrSessions={qrSessions}
-        installmentPlanApproved={order.installmentApprovalStatus === "APPROVED"}
         paymentMethods={paymentMethods}
         congNo={congNo}
         accounting={{

@@ -151,3 +151,44 @@ export function phanBoGhiTheoDot(soTienCacDotDaThu: number[], daCoTrongSo: numbe
     return ghi;
   });
 }
+
+/** Một đợt sau khi đã chèn cọc. `laCoc` để màn hình đặt nhãn và để đường ghi đánh dấu phiếu. */
+export type DotCoCoc = { amount: number; laCoc: boolean };
+
+/**
+ * Chèn TIỀN CỌC vào đầu kế hoạch và trừ dần từ đợt 1.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * CHỦ DỰ ÁN CHỐT 14/09/2026: "có 1 ô tích cọc tiền… số tiền đó sinh mã QR trước để KH
+ * thanh toán, và sau khi KH cọc thì lần sau thanh toán sẽ được trừ cọc trên số tiền khoá
+ * học, và cọc trừ vào đợt 1 (tuỳ theo KH chọn đóng bao nhiêu học phần)."
+ *
+ * ⚠️ CỌC KHÔNG PHẢI KHOẢN THU THÊM. Nó là phần ĐẦU của học phí, đóng sớm. Bất biến phải
+ * giữ: Σ (cọc + mọi đợt) === tổng đơn. Cộng cọc ra ngoài tổng là đòi khách trả nhiều hơn
+ * giá khoá — và vì mỗi đợt có QR riêng, khách sẽ quét đủ số đó thật.
+ *
+ * Cọc lớn hơn đợt 1 thì TRÀN sang đợt sau chứ không để đợt nào âm: khách cọc 5tr trong
+ * khi đợt 1 chỉ 2,64tr là chuyện thật, và một đợt mang số âm sẽ phá mọi phép cộng phía sau.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export function chenCoc(soTienCacDot: number[], coc: number): DotCoCoc[] {
+  const dots = soTienCacDot.map((n) =>
+    Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0,
+  );
+  const tong = dots.reduce((s, x) => s + x, 0);
+
+  const c = Number.isFinite(coc) ? Math.max(0, Math.round(coc)) : 0;
+  if (c <= 0) return dots.map((amount) => ({ amount, laCoc: false }));
+
+  // Cọc không bao giờ vượt tổng đơn — kẹp lại thay vì tạo tiền từ không khí.
+  const cocThuc = Math.min(c, tong);
+
+  let conTru = cocThuc;
+  const sau = dots.map((amount) => {
+    const tru = Math.min(amount, conTru);
+    conTru -= tru;
+    return { amount: amount - tru, laCoc: false };
+  });
+
+  return [{ amount: cocThuc, laCoc: true }, ...sau];
+}
