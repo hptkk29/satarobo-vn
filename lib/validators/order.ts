@@ -26,6 +26,21 @@ const orderItemSchema = z.object({
    * `centerId`, xem chú thích ở đó.
    */
   studentId: z.string().min(1).optional().nullable(),
+  /**
+   * GIẢM GIÁ CỦA RIÊNG DÒNG NÀY (15/09/2026 — "tách riêng theo từng dòng").
+   *
+   * Người bán gõ MỘT trong hai: số tiền (`discountAmount`) hoặc phần trăm
+   * (`discountPercent`). Server tính lại bằng `lib/orders/giam-gia-dong.ts` và KHÔNG
+   * tin số client gửi — đây là tiền, và cả hai vế của phép trừ đều do client khai.
+   *
+   * ⚠️ Giảm giá KHÔNG được biểu diễn bằng cách hạ `unitPrice`. `lib/orders/price-guard.ts`
+   * so `unitPrice` với giá niêm yết để phát hiện đơn bán lệch; hạ đơn giá là làm mù
+   * cổng đó (xem mục (c) ở đầu tệp ấy).
+   */
+  discountAmount: z.number().int().min(0).default(0),
+  discountPercent: z.number().int().min(1).max(100).optional().nullable(),
+  /** Giải trình của RIÊNG dòng — bắt buộc khi dòng đó có giảm (refine bên dưới). */
+  discountReason: z.string().max(1000).optional().nullable(),
   // Metadata cho COURSE_ENROLLMENT (chứa courseId vì Enrollment chưa tồn tại)
   /**
    * Json tự do — nhưng HAI khoá dưới đây có nghĩa và phải đúng khuôn:
@@ -57,7 +72,22 @@ const orderItemSchema = z.object({
     )
     .optional()
     .nullable(),
-});
+})
+  // Cơ chế DUYỆT giảm giá đã gỡ 14/09/2026 — GIẢI TRÌNH thì GIỮ, và nay nó theo DÒNG.
+  // Hai em được giảm vì hai lý do khác nhau là ca thường, không phải ngoại lệ; một ô
+  // giải trình dùng chung không nói được điều đó.
+  .refine(
+    (it) =>
+      !((it.discountPercent ?? 0) > 0 || it.discountAmount > 0) ||
+      !!it.discountReason?.trim(),
+    { message: "Dòng có giảm giá thì phải nhập giải trình", path: ["discountReason"] },
+  )
+  // Gõ CẢ HAI kiểu trên cùng một dòng là mơ hồ — và mơ hồ về tiền thì phải nổ, không
+  // được chọn hộ một kiểu rồi vứt kiểu kia.
+  .refine((it) => !((it.discountPercent ?? 0) > 0 && it.discountAmount > 0), {
+    message: "Mỗi dòng chỉ khai giảm giá theo MỘT kiểu: số tiền hoặc phần trăm",
+    path: ["discountAmount"],
+  });
 
 export const orderCreateManualSchema = z.object({
   type: z.nativeEnum(OrderType),
@@ -97,11 +127,16 @@ export const orderCreateManualSchema = z.object({
   // Items (v1 = 1 item required, schema allows up to 20)
   items: z.array(orderItemSchema).min(1, "Phải có ít nhất 1 sản phẩm").max(20),
 
-  // Pricing manual (computed final at server)
+  // ── GIẢM GIÁ CẤP ĐƠN: ĐÃ ĐÓNG [15/09/2026] ─────────────────────────────────
+  //
+  // Chủ dự án chốt giảm giá khai theo TỪNG DÒNG. Ba trường dưới GIỮ LẠI trong schema
+  // cố ý, nhưng chỉ để **TỪ CHỐI cho ra tiếng** (refine ở cuối): bỏ hẳn khỏi schema
+  // thì Zod lặng lẽ bỏ qua khoá lạ, và một người gọi cũ gửi `discountAmount: 500000`
+  // sẽ thấy đơn tạo thành công với giá NGUYÊN — mất 500.000đ mà không lỗi nào báo.
+  // Cột `Order.discountAmount` vẫn còn và vẫn là TỔNG, nhưng nay chỉ có một nguồn
+  // sinh ra nó: Σ các dòng (`lib/orders/giam-gia-dong.ts`).
   discountAmount: z.number().int().min(0).default(0),
-  // BGĐ 31/07 — nhập giảm giá theo % (1..100); server tự quy ra discountAmount.
   discountPercent: z.number().int().min(1).max(100).optional().nullable(),
-  // BGĐ 31/07 — giải trình giảm giá: BẮT BUỘC khi giảm tay > 0 (refine bên dưới).
   discountReason: z.string().max(1000).optional().nullable(),
   shippingFee: z.number().int().min(0).default(0),
 
@@ -109,15 +144,12 @@ export const orderCreateManualSchema = z.object({
   customerNote: z.string().max(2000).optional().nullable(),
   internalNote: z.string().max(2000).optional().nullable(),
 })
-  // BGĐ 31/07 — MỌI giảm giá đều do nhân viên nhập tay (% hoặc số tiền) nên
-  // LUÔN phải có giải trình. Hệ mã khuyến mãi đã gỡ 03/08 theo chốt chủ dự án:
-  // giảm theo %/số tiền linh động hơn, không phải tạo mã cho từng đợt.
-  .refine(
-    (d) =>
-      !((d.discountPercent ?? 0) > 0 || d.discountAmount > 0) ||
-      !!d.discountReason?.trim(),
-    { message: "Nhập giải trình giảm giá", path: ["discountReason"] },
-  );
+  // Giảm giá CẤP ĐƠN bị từ chối cho ra tiếng — xem chú thích ở ba trường trên.
+  .refine((d) => !((d.discountPercent ?? 0) > 0 || d.discountAmount > 0), {
+    message:
+      "Giảm giá nay khai theo TỪNG DÒNG, không khai ở cấp đơn — đặt vào items[].discountAmount / discountPercent",
+    path: ["discountAmount"],
+  });
 
 export const orderStatusChangeSchema = z.object({
   toStatus: z.nativeEnum(OrderStatus),

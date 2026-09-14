@@ -232,6 +232,12 @@ export function OrderDetailClient({
     order.items.map((it) => it.studentId).filter((id): id is string => !!id),
   ).size;
 
+  // Tổng giảm khai Ở CẤP DÒNG. Khác `order.discountAmount` với dữ liệu CŨ: đơn cũ giảm
+  // ở cấp đơn nên tổng này = 0 trong khi cột đơn > 0. Không được "sửa" chênh lệch đó —
+  // chia ngược một khoản giảm cả đơn về từng dòng là bịa ra một sự thật mịn hơn sự thật
+  // gốc (xem đầu migration 20260915140000).
+  const giamTheoDong = order.items.reduce((s, it) => s + it.discountAmount, 0);
+
   const nextOptions = NEXT_STATUSES[order.status];
   // G4 — chỉ cho sửa phương thức khi đơn còn DRAFT/PENDING_PAYMENT (khớp guard server).
   const canEditPaymentMethod =
@@ -494,6 +500,15 @@ export function OrderDetailClient({
                             {it.itemDescription}
                           </div>
                         )}
+                        {/* Giải trình của RIÊNG dòng — dấu vết thay cho cơ chế duyệt đã
+                            gỡ 14/09/2026. Để cạnh khoản giảm chứ không gom xuống chân
+                            bảng: hai em được bớt vì hai lý do khác nhau là ca thường. */}
+                        {it.discountAmount > 0 && it.discountReason && (
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            <span className="font-medium text-state-danger-ink">Giảm giá:</span>{" "}
+                            {it.discountReason}
+                          </div>
+                        )}
                       </td>
                       <td className="whitespace-nowrap px-3 py-3 text-right align-top tabular-nums">
                         {it.quantity}
@@ -502,7 +517,24 @@ export function OrderDetailClient({
                         {it.unitPrice.toLocaleString("vi-VN")}
                       </td>
                       <td className="whitespace-nowrap px-3 py-3 text-right align-top font-medium tabular-nums">
-                        {it.totalPrice.toLocaleString("vi-VN")}
+                        {/* Dòng CÓ giảm riêng: hiện tạm tính gạch ngang → số sau giảm.
+                            Chỉ in số cuối thì người soát không thấy khoản ưu đãi ở đâu
+                            ra, mà đó đúng là con số phụ huynh sẽ hỏi. Đơn CŨ (giảm ở cấp
+                            đơn, `Σ dòng = 0`) rơi vào nhánh dưới và hiện y như trước. */}
+                        {it.discountAmount > 0 ? (
+                          <>
+                            <span className="block text-xs font-normal text-muted-foreground line-through">
+                              {it.totalPrice.toLocaleString("vi-VN")}
+                            </span>
+                            <span className="block text-xs font-normal text-state-danger-ink">
+                              −{it.discountAmount.toLocaleString("vi-VN")}
+                              {it.discountPercent != null ? ` (${it.discountPercent}%)` : ""}
+                            </span>
+                            {(it.totalPrice - it.discountAmount).toLocaleString("vi-VN")}
+                          </>
+                        ) : (
+                          it.totalPrice.toLocaleString("vi-VN")
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -525,7 +557,10 @@ export function OrderDetailClient({
                         colSpan={3}
                         className="px-3 py-2 text-right text-muted-foreground"
                       >
-                        Giảm giá
+                        {/* Đơn MỚI: tổng này = Σ giảm của các dòng (đã in ngay trên).
+                            Đơn CŨ: giảm khai ở cấp đơn, `Σ dòng = 0` — nhãn đổi theo để
+                            người đọc không đi tìm khoản giảm ở từng dòng mà không thấy. */}
+                        {giamTheoDong > 0 ? "Tổng giảm (theo dòng)" : "Giảm giá"}
                         {/* Đơn CŨ tạo bằng mã khuyến mãi (hệ đã gỡ 03/08) vẫn hiện mã đã
                             dùng để đối soát lịch sử — không còn link tới màn voucher. */}
                         {order.voucherCode ? <> — mã {order.voucherCode}</> : null}:

@@ -4221,7 +4221,29 @@ model OrderItem {
   // Pricing (VND, Int)
   quantity   Int @default(1)
   unitPrice  Int
+  /// TẠM TÍNH của dòng — `unitPrice * quantity`, TRƯỚC giảm giá.
+  ///
+  /// Cố ý giữ nguyên nghĩa GỘP: `Order.subtotal` = Σ cột này, và chân bảng sản phẩm
+  /// trừ giảm giá ở một dòng riêng. Đổi cột này thành số sau-giảm là làm lệch âm thầm
+  /// ba đường ghi khác đang đặt nó bằng giá gộp (`backfill-order`, `ghi-giao-dich-cu`).
   totalPrice Int
+
+  /// Giảm giá của RIÊNG dòng này (15/09/2026 — "tách riêng theo từng dòng").
+  ///
+  /// Ưu đãi thật gần như luôn bám vào MỘT em (anh chị em học cùng, học bổng), nên gộp
+  /// thành một số ở cấp đơn là mất thông tin đúng lúc sau này phải trả lời: hoàn tiền
+  /// cho một em thì trừ bao nhiêu.
+  ///
+  /// ⚠️ KHÔNG hạ `unitPrice` để thay cho cột này — `lib/orders/price-guard.ts` so
+  /// `unitPrice` với giá niêm yết, nhét phần giảm vào đó là làm mù cổng soát giá.
+  /// Cùng khuôn với `Enrollment` (listPrice + discountAmount + finalPrice).
+  ///
+  /// Thành tiền sau giảm = `totalPrice - discountAmount` (xem `lib/orders/giam-gia-dong.ts`).
+  discountAmount  Int     @default(0)
+  /// % đã gõ, giữ lại ý định của người bán. NULL = nhập theo số tiền tuyệt đối.
+  discountPercent Int?
+  /// Giải trình của RIÊNG dòng — dấu vết thay cho cơ chế duyệt đã gỡ 14/09/2026.
+  discountReason  String? @db.Text
 
   metadata Json?
 

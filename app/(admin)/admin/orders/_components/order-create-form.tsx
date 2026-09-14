@@ -27,6 +27,13 @@ import {
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { nationalPhone } from "@/lib/phone";
 import { studentIdChoDon, thieuHocVienODong } from "@/lib/orders/hoc-vien-dong-don";
+import {
+  KIEU_GIAM,
+  dongThieuGiaiTrinh,
+  tienDon,
+  tienDong,
+  type KieuGiam,
+} from "@/lib/orders/giam-gia-dong";
 import { HelpHint } from "@/components/admin/ui/help-hint";
 import {
   methodAllowsOrderType,
@@ -101,8 +108,33 @@ type DongHang = {
   soBuoiMua: number | null;
   /** Dòng này mua cho CON NÀO. null = chưa chọn / đơn sản phẩm. */
   studentId: string | null;
+  /**
+   * GIẢM GIÁ CỦA RIÊNG DÒNG NÀY (15/09/2026 — chốt của chủ dự án).
+   *
+   * Ưu đãi thật bám vào MỘT em (anh chị em học cùng, học bổng), nên nó phải ở đây chứ
+   * không ở cấp đơn. `giamGiaTri = 0` nghĩa là không giảm — không cần cờ bật/tắt riêng.
+   */
+  giamKieu: KieuGiam;
+  giamGiaTri: number;
+  giamLyDo: string;
 };
 
+/**
+ * Bộ đếm sinh `key` cho dòng — CHỈ dùng làm khoá đối chiếu của React.
+ *
+ * ⚠️ TUYỆT ĐỐI KHÔNG đưa `key` này vào thuộc tính DOM nào (`name`, `id`, `htmlFor`…).
+ * Nó là biến ở TẦNG MODULE, nên server và client giữ HAI bộ đếm khác nhau: tiến trình
+ * dev server sống lâu nên nó đã đếm tới `d3` khi lượt kết xuất trên máy khách mới ở
+ * `d1`. Đo thật 15/09/2026 trên `/orders/new`:
+ *
+ *     + <input type="hidden" name="unitPrice-d3">   (client)
+ *     - <input type="hidden" name="unitPrice-d1">   (server)
+ *     Error: Hydration failed because the server rendered HTML didn't match the client.
+ *
+ * React vứt cả cây của server và dựng lại ở client — không có lỗi nào hiện ra cho
+ * người dùng, chỉ có một trang chậm hơn và một cảnh báo trong console. Vì thế tên
+ * trường trong DOM nay suy từ CHỈ SỐ dòng (`stt`), thứ hai bên đều tính ra như nhau.
+ */
 let demKey = 0;
 const dongMoi = (): DongHang => ({
   key: `d${(demKey += 1)}`,
@@ -113,6 +145,9 @@ const dongMoi = (): DongHang => ({
   coachFormat: "GROUP",
   soBuoiMua: null,
   studentId: null,
+  giamKieu: KIEU_GIAM.SO_TIEN,
+  giamGiaTri: 0,
+  giamLyDo: "",
 });
 
 // O1 — selector loại đơn chỉ 2 lựa chọn (combo là course teachable → nằm trong "Khoá học").
@@ -192,12 +227,9 @@ export function OrderCreateForm({
     setDong((cu) => (cu.length <= 1 ? cu : cu.filter((d) => d.key !== key)));
   }
 
-  // Pricing
-  const [discountAmount, setDiscountAmount] = useState(0);
-  // BGĐ 31/07 — giảm giá nhập theo % hoặc số tiền + giải trình bắt buộc.
-  const [discountMode, setDiscountMode] = useState<"amount" | "percent">("amount");
-  const [discountPercent, setDiscountPercent] = useState(0);
-  const [discountReason, setDiscountReason] = useState("");
+  // ⚠️ KHÔNG còn state giảm giá CẤP ĐƠN [15/09/2026]. Giảm giá nay là thuộc tính của
+  // từng `DongHang` — xem `giamKieu`/`giamGiaTri`/`giamLyDo`. Server cũng đã TỪ CHỐI
+  // cho ra tiếng nếu ai đó gửi `discountAmount` ở cấp đơn (lib/validators/order.ts).
 
   // Notes
   const [customerNote, setCustomerNote] = useState("");
@@ -291,17 +323,22 @@ export function OrderCreateForm({
       .finally(() => setWardLoading(false));
   }
 
-  const subtotal = useMemo(
-    () => dong.reduce((t, d) => t + d.unitPrice * d.quantity, 0),
+  // Tiền của đơn suy từ CÁC DÒNG, bằng CHÍNH hàm server dùng (`lib/orders/giam-gia-dong.ts`).
+  // Hai bản cài đặt = hai con số, và con số người bán đọc trên màn hình sẽ khác con số
+  // vào sổ — đúng loại sai lệch mà không lỗi nào báo.
+  const tien = useMemo(
+    () =>
+      tienDon(
+        dong.map((d) => ({
+          unitPrice: d.unitPrice,
+          quantity: d.quantity,
+          giam: d.giamGiaTri > 0 ? { kieu: d.giamKieu, giaTri: d.giamGiaTri } : null,
+        })),
+      ),
     [dong],
   );
-  // O5 — bỏ phí vận chuyển: tổng = max(0, tạm tính − giảm giá).
-  // BGĐ 31/07 — chế độ %: số tiền giảm suy từ % (server tính lại — nguồn sự thật).
-  const effectiveDiscount =
-    discountMode === "percent"
-      ? Math.min(subtotal, Math.round((subtotal * Math.min(100, Math.max(0, discountPercent))) / 100))
-      : discountAmount;
-  const totalAmount = Math.max(0, subtotal - effectiveDiscount);
+  const subtotal = tien.tamTinh;
+  const totalAmount = tien.tongDon;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -322,6 +359,22 @@ export function OrderCreateForm({
     // chấp nhận không thể lệch nhau.
     if (thieuHocVienODong(dong)) {
       toast.error("Đơn có nhiều học viên — mỗi dòng phải chọn rõ là của con nào");
+      return;
+    }
+    // Cơ chế DUYỆT giảm giá đã gỡ 14/09 — GIẢI TRÌNH thì giữ, và nay nó theo DÒNG.
+    // Cùng hàm với server (`dongThieuGiaiTrinh`), nên không thể lệch nhau.
+    const thieuLyDo = dongThieuGiaiTrinh(
+      dong.map((d) => ({
+        unitPrice: d.unitPrice,
+        quantity: d.quantity,
+        giam: d.giamGiaTri > 0 ? { kieu: d.giamKieu, giaTri: d.giamGiaTri } : null,
+        lyDo: d.giamLyDo,
+      })),
+    );
+    if (thieuLyDo.length > 0) {
+      toast.error(
+        `Dòng ${thieuLyDo.map((i) => i + 1).join(", ")}: có giảm giá thì phải nhập giải trình`,
+      );
       return;
     }
     // AUTH-SĐT P5 — email khách hàng KHÔNG còn bắt buộc (xác nhận/nhắc nợ đi
@@ -346,6 +399,12 @@ export function OrderCreateForm({
       examAttemptId: null,
       productId: orderType === "PRODUCT" ? d.refId : null,
       studentId: d.studentId,
+      // Giảm giá của RIÊNG dòng. Gửi đúng KIỂU người bán đã gõ — server tính lại số
+      // tiền, nên hai trường này loại trừ nhau (validator chặn gõ cả hai).
+      discountAmount: d.giamKieu === KIEU_GIAM.SO_TIEN ? d.giamGiaTri : 0,
+      discountPercent:
+        d.giamKieu === KIEU_GIAM.PHAN_TRAM && d.giamGiaTri > 0 ? d.giamGiaTri : null,
+      discountReason: d.giamLyDo.trim() || null,
       // Một khuôn duy nhất cho hình thức lớp, đọc lại bằng `docHinhThucLop` ở server.
       metadata:
         orderType === "COURSE"
@@ -383,10 +442,8 @@ export function OrderCreateForm({
       centerId: centerId === NO_CENTER ? null : centerId,
       paymentMethodId,
       items,
-      // Chế độ %: gửi cả % (server quy ra tiền) — chế độ tiền: gửi số tuyệt đối.
-      discountAmount: discountMode === "percent" ? 0 : discountAmount,
-      discountPercent: discountMode === "percent" ? discountPercent || null : null,
-      discountReason: discountReason.trim() || null,
+      // ⚠️ KHÔNG gửi giảm giá ở cấp đơn — nó nằm trong `items[]`. Server TỪ CHỐI cho ra
+      // tiếng nếu ba trường này > 0, thay vì lặng lẽ bỏ qua và tạo đơn giá nguyên.
       customerNote: customerNote || null,
       internalNote: internalNote || null,
     };
@@ -751,27 +808,45 @@ export function OrderCreateForm({
             Tóm tắt
           </h2>
           <dl className="space-y-2 text-sm">
-            {dong.map((d, idx) => (
-              <div key={d.key} className="flex items-start justify-between gap-3">
-                <dt className="min-w-0 break-words text-muted-foreground">
-                  {d.itemName || `Dòng ${idx + 1} — chưa chọn`}
-                  {d.quantity > 1 && (
-                    <span className="ml-1 text-xs">×{d.quantity}</span>
+            {dong.map((d, idx) => {
+              const t = tien.dong[idx]!;
+              return (
+                <div key={d.key} className="space-y-0.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <dt className="min-w-0 break-words text-muted-foreground">
+                      {d.itemName || `Dòng ${idx + 1} — chưa chọn`}
+                      {d.quantity > 1 && (
+                        <span className="ml-1 text-xs">×{d.quantity}</span>
+                      )}
+                      {(() => {
+                        const hv = students.find((x) => x.id === d.studentId);
+                        return hv ? (
+                          <span className="block text-xs text-muted-foreground">
+                            {hv.name}
+                          </span>
+                        ) : null;
+                      })()}
+                    </dt>
+                    <dd className="shrink-0 tabular-nums text-foreground">
+                      {t.tamTinh.toLocaleString("vi-VN")}đ
+                    </dd>
+                  </div>
+                  {/* Giảm của RIÊNG dòng, hiện ngay dưới dòng đó. Dồn hết vào một con
+                      số "giảm giá" ở chân thẻ là mất đúng thứ chủ dự án yêu cầu tách:
+                      bớt cho ĐỨA NÀO. */}
+                  {t.giam > 0 && (
+                    <div className="flex items-start justify-between gap-3 pl-3 text-xs">
+                      <dt className="text-state-danger-ink">
+                        Giảm{t.phanTram != null ? ` ${t.phanTram}%` : ""}
+                      </dt>
+                      <dd className="shrink-0 tabular-nums text-state-danger-ink">
+                        −{t.giam.toLocaleString("vi-VN")}đ
+                      </dd>
+                    </div>
                   )}
-                  {(() => {
-                    const hv = students.find((x) => x.id === d.studentId);
-                    return hv ? (
-                      <span className="block text-xs text-muted-foreground">
-                        {hv.name}
-                      </span>
-                    ) : null;
-                  })()}
-                </dt>
-                <dd className="shrink-0 tabular-nums text-foreground">
-                  {(d.unitPrice * d.quantity).toLocaleString("vi-VN")}đ
-                </dd>
-              </div>
-            ))}
+                </div>
+              );
+            })}
 
             <div className="flex items-center justify-between gap-3 border-t border-border pt-2">
               <dt className="text-muted-foreground">Tạm tính</dt>
@@ -779,11 +854,18 @@ export function OrderCreateForm({
                 {subtotal.toLocaleString("vi-VN")}đ
               </dd>
             </div>
-            {effectiveDiscount > 0 && (
+            {tien.tongGiam > 0 && (
               <div className="flex items-center justify-between gap-3">
-                <dt className="text-muted-foreground">Giảm giá</dt>
+                <dt className="text-muted-foreground">
+                  Tổng giảm
+                  <HelpHint>
+                    Cộng từ phần giảm của từng dòng ở trên — không có ô giảm giá nào cho
+                    cả đơn. Muốn bớt cho một em thì bớt ở đúng dòng của em đó, để sau này
+                    hoàn tiền hay chuyển lớp còn biết phần giảm thuộc về ai.
+                  </HelpHint>
+                </dt>
                 <dd className="tabular-nums text-state-danger-ink">
-                  −{effectiveDiscount.toLocaleString("vi-VN")}đ
+                  −{tien.tongGiam.toLocaleString("vi-VN")}đ
                 </dd>
               </div>
             )}
@@ -796,123 +878,11 @@ export function OrderCreateForm({
             </div>
           </dl>
         </section>
-          {/* Pricing */}
-          <section className="space-y-4 rounded-xl border border-border bg-muted/50 p-5">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
-              Định giá
-            </h2>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {/* BGĐ 31/07 — giảm giá: chọn hình thức % hoặc số tiền. */}
-              <div className="space-y-1.5">
-                <Label>
-                  Giảm giá
-                  <HelpHint>
-                    Theo số tiền: gõ thẳng số tiền bớt cho khách. Theo %: gõ 1–100, hệ thống
-                    quy ra tiền trên phần tạm tính. Hai cách cho ra cùng một khoản giảm —
-                    chọn cách nào đúng với thoả thuận với phụ huynh thì dễ giải trình hơn.
-                  </HelpHint>
-                </Label>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={discountMode === "amount" ? "default" : "outline"}
-                    onClick={() => setDiscountMode("amount")}
-                  >
-                    Theo số tiền
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={discountMode === "percent" ? "default" : "outline"}
-                    onClick={() => setDiscountMode("percent")}
-                  >
-                    Theo %
-                  </Button>
-                </div>
-                {discountMode === "amount" ? (
-                  // Chỉ nhánh "theo số tiền" là ô tiền; nhánh "theo %" vẫn là số đếm 1–100.
-                  <MoneyInput
-                    name="discountAmount"
-                    min={0}
-                    value={discountAmount}
-                    onValueChange={(v) => setDiscountAmount(v ?? 0)}
-                    placeholder="Số tiền giảm"
-                  />
-                ) : (
-                  <Input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={discountPercent}
-                    onChange={(e) =>
-                      setDiscountPercent(Math.min(100, Math.max(0, Number(e.target.value) || 0)))
-                    }
-                    placeholder="% giảm (1–100)"
-                  />
-                )}
-              </div>
-            </div>
-
-            {/* BGĐ 31/07 — giải trình bắt buộc khi giảm giá tay; đơn sẽ chờ QLCS duyệt. */}
-            {effectiveDiscount > 0 && (
-              <div className="space-y-1.5">
-                <Label>
-                  Giải trình giảm giá *
-                  <HelpHint>
-                    Quản lý cơ sở duyệt đơn đọc đúng dòng này để đồng ý hay trả lại, nên ghi
-                    rõ lý do và ai đã đồng ý (VD: &ldquo;em ruột HV Sata2, chị Lan CS1 đồng
-                    ý&rdquo;). Ghi &ldquo;ưu đãi&rdquo; chung chung thì đơn dễ bị trả lại và
-                    phụ huynh phải chờ.
-                  </HelpHint>
-                </Label>
-                <Input
-                  value={discountReason}
-                  onChange={(e) => setDiscountReason(e.target.value)}
-                  maxLength={1000}
-                  placeholder="VD: HV cũ giới thiệu em ruột — ưu đãi theo chính sách anh chị em"
-                />
-                <p className="text-xs text-state-warning-ink">
-                  Đơn có giảm giá sẽ ở trạng thái <strong>chờ Quản lý cơ sở duyệt</strong> — chỉ
-                  xác nhận được sau khi duyệt.
-                </p>
-              </div>
-            )}
-
-            <div className="text-right">
-              <div className="text-sm text-muted-foreground">
-                Tạm tính:{" "}
-                <span className="tabular-nums">
-                  {subtotal.toLocaleString("vi-VN")}
-                </span>{" "}
-                đ
-              </div>
-              {effectiveDiscount > 0 && (
-                <div className="text-sm text-muted-foreground">
-                  Giảm giá:{" "}
-                  <span className="tabular-nums">
-                    −{effectiveDiscount.toLocaleString("vi-VN")}
-                  </span>{" "}
-                  đ
-                  {discountMode === "percent" && discountPercent > 0
-                    ? ` (${discountPercent}%)`
-                    : ""}
-                </div>
-              )}
-              <div className="text-2xl font-bold text-foreground">
-                Tổng:{" "}
-                <span className="tabular-nums">
-                  {totalAmount.toLocaleString("vi-VN")}
-                </span>{" "}
-                đ
-                <HelpHint className="ml-1.5 [&_svg]:size-4">
-                  Số tiền phụ huynh phải đóng cho đơn này = Tạm tính − Giảm giá. Nếu phụ
-                  huynh đóng làm 2 đợt thì vẫn lấy số này làm tổng, phần chia đợt làm ở màn
-                  chi tiết đơn sau khi tạo.
-                </HelpHint>
-              </div>
-            </div>
-          </section>
+          {/* ⚠️ KHỐI "ĐỊNH GIÁ" CẤP ĐƠN ĐÃ GỠ [15/09/2026].
+              Nó chứa ô Giảm giá + Giải trình dùng chung cho cả đơn — thứ chủ dự án chốt
+              bỏ. Phần TỔNG mà nó hiện đã trùng sẵn với thẻ "Tóm tắt" ngay trên (chú thích
+              ở thẻ đó đã ghi nhận sự trùng lặp này), nên gỡ cả khối chứ không giữ lại một
+              thẻ rỗng chỉ để in lại con số. Ô giảm giá nay nằm trong từng `DongHangCard`. */}
 
           <div className="flex gap-3">
             <Button type="submit" disabled={isPending}>
@@ -1024,6 +994,13 @@ function DongHangCard({
   // (`09…`) thì danh sách ra RỖNG — đúng lúc họ cần nó nhất, tức lúc tìm các con của
   // cùng một phụ huynh. Dạng nội địa khớp cả hai kiểu dữ liệu vì `nationalPhone`
   // chuẩn hoá trước.
+  // Tiền của CHÍNH dòng này — cùng hàm với thẻ Tóm tắt và với server.
+  const tienDongNay = tienDong({
+    unitPrice: dong.unitPrice,
+    quantity: dong.quantity,
+    giam: dong.giamGiaTri > 0 ? { kieu: dong.giamKieu, giaTri: dong.giamGiaTri } : null,
+  });
+
   const hocVienOptions: ComboboxOption[] = useMemo(
     () =>
       students.map((hv) => ({
@@ -1300,17 +1277,122 @@ function DongHangCard({
             Đơn giá (VND) *
             <HelpHint>
               Tự điền theo giá niêm yết khi chọn khoá học/sản phẩm; chỉ sửa tay khi khoá
-              chưa có giá. Muốn bớt tiền cho khách thì dùng ô Giảm giá bên dưới — hạ thẳng
-              đơn giá sẽ không ai duyệt và báo cáo mất dấu khoản ưu đãi.
+              chưa có giá. Muốn bớt tiền cho khách thì dùng ô Giảm giá ngay bên dưới — hạ
+              thẳng đơn giá là báo cáo mất dấu khoản ưu đãi, và cổng soát giá (so đơn giá
+              với giá niêm yết) không còn thấy gì bất thường để cảnh báo.
             </HelpHint>
           </Label>
           <MoneyInput
-            name={`unitPrice-${dong.key}`}
+            /* Theo `stt`, KHÔNG theo `dong.key` — xem chú thích ở `demKey`. */
+            name={`unitPrice-${stt}`}
             min={0}
             value={dong.unitPrice}
             onValueChange={(v) => onSua({ unitPrice: v ?? 0 })}
           />
         </div>
+      </div>
+
+      {/* ── GIẢM GIÁ CỦA RIÊNG DÒNG NÀY (15/09/2026) ──────────────────────────
+          Chủ dự án: "giảm giá tách riêng theo từng đơn luôn chứ không gộp chung giảm
+          tổng đơn." Ưu đãi thật bám vào MỘT em — anh chị em học cùng, học bổng — nên
+          ô này phải đứng trong thẻ của dòng đó, cạnh tên con, chứ không ở cuối trang. */}
+      <div className="mt-4 rounded-lg border border-border bg-muted/40 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Giảm giá dòng này
+            <HelpHint>
+              Theo số tiền: gõ thẳng số bớt cho dòng này. Theo %: gõ 1–100, hệ thống quy
+              ra tiền trên tạm tính của CHÍNH dòng này (không phải của cả đơn). Để 0 là
+              không giảm.
+            </HelpHint>
+          </Label>
+          {/* Thành tiền sau giảm hiện ngay đây — người bán gõ phần giảm và thấy ngay số
+              cuối của dòng, không phải đưa mắt sang thẻ Tóm tắt rồi tìm lại đúng dòng. */}
+          {tienDongNay.giam > 0 && (
+            <span className="text-xs tabular-nums text-muted-foreground">
+              {tienDongNay.tamTinh.toLocaleString("vi-VN")}đ
+              <span className="mx-1 text-state-danger-ink">
+                −{tienDongNay.giam.toLocaleString("vi-VN")}đ
+              </span>
+              = <strong className="text-foreground">{tienDongNay.thanhTien.toLocaleString("vi-VN")}đ</strong>
+            </span>
+          )}
+        </div>
+
+        <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-[auto_minmax(0,1fr)]">
+          {/* Cùng khuôn nút với "Hình thức lớp" ngay trên (min-h-11, bo 8px, viền/nền
+              đổi theo `aria-pressed`) — hai bộ chọn nằm trong CÙNG một thẻ mà trông
+              khác nhau thì mắt phải học hai lần. `min-w-[4.5rem]` vì nhãn "%" chỉ một
+              ký tự: để `Button` tự co, nó ra một nút rộng ~22px, đứng cạnh "Số tiền"
+              trông như phần thừa của nút bên cạnh chứ không như một lựa chọn. */}
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                [KIEU_GIAM.SO_TIEN, "Số tiền"],
+                [KIEU_GIAM.PHAN_TRAM, "Theo %"],
+              ] as [KieuGiam, string][]
+            ).map(([k, nhan]) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => onSua({ giamKieu: k, giamGiaTri: 0 })}
+                aria-pressed={dong.giamKieu === k}
+                className={`min-h-11 min-w-[4.5rem] whitespace-nowrap rounded-lg border px-3 text-sm font-medium transition-colors duration-150 ${
+                  dong.giamKieu === k
+                    ? "border-primary bg-primary text-white"
+                    : "border-border bg-background hover:bg-muted"
+                }`}
+              >
+                {nhan}
+              </button>
+            ))}
+          </div>
+          {/* Đổi kiểu thì ĐẶT LẠI giá trị về 0 (xem onClick trên). Giữ lại số cũ là để
+              "500000" đang nghĩa là 500.000đ bỗng thành 100% sau một cú bấm — cùng con
+              số, khác hẳn số tiền, và không có gì trên màn hình nói ra điều đó. */}
+          {dong.giamKieu === KIEU_GIAM.SO_TIEN ? (
+            <MoneyInput
+              name={`giamGia-${stt}`}
+              min={0}
+              value={dong.giamGiaTri}
+              onValueChange={(v) => onSua({ giamGiaTri: v ?? 0 })}
+              placeholder="Số tiền giảm"
+            />
+          ) : (
+            <Input
+              type="number"
+              min={0}
+              max={100}
+              value={dong.giamGiaTri}
+              onChange={(e) =>
+                onSua({ giamGiaTri: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })
+              }
+              placeholder="% giảm (1–100)"
+            />
+          )}
+        </div>
+
+        {/* Giải trình theo DÒNG. Cơ chế duyệt đã gỡ 14/09 — dòng chữ này chính là thứ
+            thay thế nó, nên nó phải nói được vì sao bớt cho ĐÚNG em này. */}
+        {tienDongNay.giam > 0 && (
+          <div className="mt-2 space-y-1.5">
+            <Label className="text-xs">
+              Giải trình *
+              <HelpHint>
+                Ghi rõ lý do và ai đã đồng ý (VD: &ldquo;em ruột HV Sata2, chị Lan CS1
+                đồng ý&rdquo;). Đây là dấu vết duy nhất còn lại của khoản bớt này —
+                &ldquo;ưu đãi&rdquo; chung chung thì sáu tháng sau không ai giải thích
+                được cho kế toán.
+              </HelpHint>
+            </Label>
+            <Input
+              value={dong.giamLyDo}
+              onChange={(e) => onSua({ giamLyDo: e.target.value })}
+              maxLength={1000}
+              placeholder="VD: em ruột HV Sata2 — ưu đãi theo chính sách anh chị em"
+            />
+          </div>
+        )}
       </div>
     </div>
   );

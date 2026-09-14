@@ -13,12 +13,13 @@ import { writeAudit } from "@/lib/audit/audit-log";
 // + assertCan (lớp phòng thủ); gate CHÍNH theo cờ RBAC nằm ở server action wrapper.
 // =============================================================================
 
-/** THUẦN — số tiền giảm từ % (làm tròn, clamp trong [0, subtotal]). */
-export function discountFromPercent(subtotal: number, percent: number): number {
-  if (!(percent > 0)) return 0;
-  const pct = Math.min(100, Math.max(0, percent));
-  return Math.min(subtotal, Math.round((subtotal * pct) / 100));
-}
+// ⚠️ `discountFromPercent` ĐÃ DỜI [15/09/2026] → `lib/orders/giam-gia-dong.ts`.
+//
+// Tệp này mở đầu bằng `import "server-only"`, mà từ khi giảm giá khai theo TỪNG DÒNG,
+// form tạo đơn (client component) cũng phải tính ra đúng con số ấy để hiện cho người
+// bán xem. Hai bản cài đặt = hai con số, và con số trên màn hình sẽ khác con số vào sổ.
+// Nhập lại để mọi chỗ gọi cũ không phải đổi đường dẫn.
+export { discountFromPercent } from "@/lib/orders/giam-gia-dong";
 
 // ⚠️ ĐÃ XOÁ [14/09/2026] — `needsDiscountApproval`.
 //

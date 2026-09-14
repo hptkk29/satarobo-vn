@@ -21,7 +21,11 @@ import { generateOrderCode, withUniqueRetry } from "@/lib/orders/code";
 import { checkOrderCreateOwnership } from "@/lib/orders/create-guard";
 import { canTransition } from "@/lib/orders/status";
 import { recordInstallmentPlan, markInstallmentPaid } from "@/lib/orders/installments";
-import { discountFromPercent } from "@/lib/orders/discount";
+import {
+  KIEU_GIAM,
+  dongThieuGiaiTrinh,
+  tienDon,
+} from "@/lib/orders/giam-gia-dong";
 import { ensureParentAccountForOrder } from "@/lib/parents/provision";
 import { ensureOrderPaymentRecorded } from "@/lib/finance/payment";
 import { ensureFullOrderRequest } from "@/lib/payments/payment-request";
@@ -382,30 +386,55 @@ export async function createOrderManualAction(input: unknown) {
     }),
   );
 
-  const subtotal = data.items.reduce(
-    (s, it) => s + it.unitPrice * it.quantity,
-    0,
-  );
+  // ── TIỀN CỦA ĐƠN: SUY TỪ CÁC DÒNG (15/09/2026) ───────────────────────────────
+  //
+  // Giảm giá nay khai theo TỪNG DÒNG. Server TÍNH LẠI toàn bộ bằng `tienDon` chứ không
+  // nhận con số nào từ client: `discountAmount` client gửi là Ý ĐỊNH, không phải kết
+  // quả. Tin nó là để client cầm cả hai vế của phép trừ — gửi `unitPrice` 10.000.000 và
+  // `discountAmount` 9.999.999 thì đơn ra 1đ mà không cổng nào thấy gì bất thường.
+  const khaiDong = data.items.map((it) => ({
+    unitPrice: it.unitPrice,
+    quantity: it.quantity,
+    giam:
+      (it.discountPercent ?? 0) > 0
+        ? { kieu: KIEU_GIAM.PHAN_TRAM, giaTri: it.discountPercent! }
+        : it.discountAmount > 0
+          ? { kieu: KIEU_GIAM.SO_TIEN, giaTri: it.discountAmount }
+          : null,
+    lyDo: it.discountReason ?? null,
+  }));
 
-  // BGĐ 31/07 — giảm giá theo %: server tự quy ra số tiền (nguồn sự thật).
-  if (data.discountPercent && data.discountPercent > 0) {
-    data.discountAmount = discountFromPercent(subtotal, data.discountPercent);
+  // Giải trình BẮT BUỘC cho từng dòng có giảm. Validator đã gác từng dòng một, nhưng
+  // gác lại ở đây để thông báo nói được DÒNG NÀO — với đơn bốn dòng thì "thiếu giải
+  // trình" không đủ để người bán biết đi sửa ở đâu.
+  const thieuLyDo = dongThieuGiaiTrinh(khaiDong);
+  if (thieuLyDo.length > 0) {
+    return {
+      ok: false as const,
+      error: `Dòng ${thieuLyDo.map((i) => i + 1).join(", ")}: có giảm giá thì phải nhập giải trình`,
+    };
   }
 
-  const totalAmount = subtotal - data.discountAmount + data.shippingFee;
+  const tien = tienDon(khaiDong, data.shippingFee);
+  const subtotal = tien.tamTinh;
+  const totalAmount = tien.tongDon;
+  // `tienDong` đã kẹp giảm ≤ tạm tính TỪNG DÒNG, nên tổng không thể âm trừ khi
+  // `shippingFee` âm — mà validator đã chặn `min(0)`. Giữ cổng vì nó rẻ và vì mất nó
+  // thì một đổi thay ở `tienDon` sẽ đi thẳng ra đơn âm mà không ai chặn.
   if (totalAmount < 0) {
     return { ok: false as const, error: "Tổng tiền không thể âm" };
   }
 
-  // ⚠️ 14/09/2026 — cơ chế DUYỆT đã gỡ, nhưng GIẢI TRÌNH thì GIỮ.
-  //
-  // Hai thứ này hay bị gộp làm một. "Duyệt" là một người phải bấm trước khi đơn đi tiếp
-  // — đó là thứ chủ dự án bỏ. "Giải trình" là một dòng chữ nói vì sao bớt tiền — đó là
-  // DẤU VẾT, và dấu vết chính là cái thay thế cổng duyệt, nên bỏ nó là bỏ cả hai.
-  const coGiamGia = data.discountAmount > 0;
-  if (coGiamGia && !data.discountReason?.trim()) {
-    return { ok: false as const, error: "Nhập giải trình giảm giá" };
-  }
+  const coGiamGia = tien.tongGiam > 0;
+  // `Order.discountReason` vẫn được hoá đơn · nhật ký đọc, nên nó phải nói được điều gì
+  // đó — ghép từ giải trình của các dòng CÓ giảm, kèm số thứ tự dòng để lần ngược được.
+  const giaiTrinhGop = coGiamGia
+    ? data.items
+        .map((it, i) => ({ i, tien: tien.dong[i]!, lyDo: it.discountReason?.trim() }))
+        .filter((x) => x.tien.giam > 0 && x.lyDo)
+        .map((x) => `Dòng ${x.i + 1}: ${x.lyDo}`)
+        .join(" · ") || null
+    : null;
 
   // 30/08/2026 — PaymentMethod ∈ SCOPED_MODELS: câu này nay TỰ LỌC theo tầm nhìn cơ sở
   // của người tạo đơn.
@@ -536,27 +565,35 @@ export async function createOrderManualAction(input: unknown) {
         createdById: session.user.id ?? null,
         paymentMethodId: data.paymentMethodId,
         subtotal,
-        discountAmount: data.discountAmount,
+        // TỔNG các dòng — không phải một số nhập độc lập. Hai đường nhập cho cùng một
+        // con tiền là định nghĩa của sổ lệch.
+        discountAmount: tien.tongGiam,
         // Snapshot cách nhập giảm giá + giải trình.
         //
         // ⚠️ 14/09/2026 — KHÔNG còn set `discountApprovalStatus`/`discountRequestedById`:
         // đơn mới không đi vào hàng chờ duyệt nữa. Hai cột GIỮ trong schema (dữ liệu cũ
         // đang mang giá trị thật, và drop cột trên bảng có dữ liệu prod là đợt riêng —
         // luật cứng #4), chỉ không có đường GHI mới.
-        discountPercent: data.discountPercent ?? null,
-        discountReason: coGiamGia ? (data.discountReason?.trim() ?? null) : null,
+        // % nay là thuộc tính của DÒNG (mỗi dòng một mức), nên ở cấp đơn nó vô nghĩa.
+        discountPercent: null,
+        discountReason: giaiTrinhGop,
         shippingFee: data.shippingFee,
         totalAmount,
         customerNote: data.customerNote?.trim() || null,
         internalNote: data.internalNote?.trim() || null,
         items: {
-          create: data.items.map((it) => ({
+          create: data.items.map((it, i) => ({
             type: it.type,
             itemName: it.itemName,
             itemDescription: it.itemDescription || null,
             quantity: it.quantity,
             unitPrice: it.unitPrice,
-            totalPrice: it.unitPrice * it.quantity,
+            // TẠM TÍNH của dòng (trước giảm) — `Order.subtotal` = Σ cột này.
+            totalPrice: tien.dong[i]!.tamTinh,
+            // Số SERVER tính, không phải số client gửi.
+            discountAmount: tien.dong[i]!.giam,
+            discountPercent: tien.dong[i]!.phanTram,
+            discountReason: tien.dong[i]!.giam > 0 ? (it.discountReason?.trim() ?? null) : null,
             packageId: it.packageId || null,
             examAttemptId: it.examAttemptId || null,
             productId: it.productId || null,
@@ -628,10 +665,21 @@ export async function createOrderManualAction(input: unknown) {
       newValues: {
         orderCode: order.code,
         subtotal,
-        discountAmount: data.discountAmount,
-        discountPercent: data.discountPercent ?? null,
-        discountReason: data.discountReason?.trim() || null,
+        discountAmount: tien.tongGiam,
+        discountReason: giaiTrinhGop,
         totalAmount,
+        // Giảm giá theo TỪNG DÒNG (15/09/2026). Ghi cả bản chi tiết chứ không chỉ tổng:
+        // tổng không nói được bớt cho ĐỨA NÀO, mà đó đúng là câu hỏi sẽ được hỏi lúc
+        // hoàn tiền hoặc lúc phụ huynh thắc mắc.
+        giamTungDong: tien.dong.map((d, i) => ({
+          dong: i + 1,
+          hocVienId: data.items[i]?.studentId ?? null,
+          tamTinh: d.tamTinh,
+          giam: d.giam,
+          phanTram: d.phanTram,
+          thanhTien: d.thanhTien,
+          lyDo: data.items[i]?.discountReason?.trim() || null,
+        })),
         // Dấu vết giá — đủ để soát lại mà không phải mở lại payload.
         giaLech: soatGia.coLech,
         giaTongLechThap: soatGia.tongLechThap,
