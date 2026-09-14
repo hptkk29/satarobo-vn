@@ -85,18 +85,29 @@ export function nguoiMuaChoDon(don: DonChoHoaDon): NguoiMuaHoaDon {
 }
 
 export type ThieuChoHoaDon = {
-  /** Thiếu thứ này thì KHÔNG xuất được — dựa trên ô có mặt ở cả ba tờ thật. */
+  /**
+   * Thiếu thứ này thì TỜ HOÁ ĐƠN không dựng được — dựa trên ô có mặt ở cả ba tờ thật.
+   *
+   * ⚠️ "Chặn" ở đây CHỈ có nghĩa với khâu XUẤT, KHÔNG chặn đơn hàng và KHÔNG chặn lưu.
+   * Chủ dự án chốt 14/09: "tuỳ khách hàng — có KH cần hoá đơn, có KH không cần… không
+   * bắt buộc nhập người mua trên hoá đơn mà sẽ nhập tuỳ lúc, miễn sao lúc nào cũng có
+   * thể sửa mục này và xuất hoá đơn để gửi KH là được." Nên màn phải đọc danh sách này
+   * thành "cần bổ sung KHI xuất hoá đơn", đừng đọc thành "đơn này đang sai".
+   */
   chan: string[];
-  /** Nên có, nhưng không chặn. Hiện lên màn để kế toán biết mà hỏi khách. */
+  /** Nên có, nhưng không chặn cả khâu xuất. Hiện để kế toán biết mà hỏi khách. */
   nhac: string[];
 };
 
 /**
- * Còn thiếu gì để xuất hoá đơn cho đơn này.
+ * Còn thiếu gì để DỰNG ĐƯỢC tờ hoá đơn cho đơn này.
  *
  * TÁCH "CHẶN" KHỎI "NHẮC" CÓ CHỦ ĐÍCH. Gộp tất cả thành lỗi chặn thì cổng sẽ chặn cả
  * những tờ hoá đơn ĐÃ TỒN TẠI ngoài đời (1/3 tờ mẫu không có CCCD), và người vận hành
  * học cách điền bừa cho qua — lúc đó cổng vừa cản trở vừa không còn nghĩa gì.
+ *
+ * Và cả hai danh sách đều KHÔNG phải điều kiện của đơn hàng: một đơn không ai xin hoá
+ * đơn thì để trống vĩnh viễn là đúng, không phải nợ.
  */
 export function thieuChoHoaDon(nm: NguoiMuaHoaDon): ThieuChoHoaDon {
   const chan: string[] = [];
@@ -124,7 +135,28 @@ export function thieuChoHoaDon(nm: NguoiMuaHoaDon): ThieuChoHoaDon {
   return { chan, nhac };
 }
 
-/** Gọn cho màn: đơn này xuất hoá đơn được chưa. */
+/**
+ * Gọn cho màn: bấm "Xuất hoá đơn" bây giờ thì dựng được tờ giấy chưa.
+ *
+ * KHÔNG dùng hàm này để chặn lưu đơn, chặn thu tiền, hay tô đỏ đơn hàng — nó chỉ trả lời
+ * đúng một câu ở đúng một khoảnh khắc: khâu XUẤT.
+ */
 export function xuatDuocHoaDon(don: DonChoHoaDon): boolean {
   return thieuChoHoaDon(nguoiMuaChoDon(don)).chan.length === 0;
+}
+
+/**
+ * Khách này có đang YÊU CẦU hoá đơn không — suy từ việc đã có ai khai ô nào chưa.
+ *
+ * Vì sao cần: phần lớn phụ huynh KHÔNG xin hoá đơn, nên "chưa khai gì" là trạng thái
+ * BÌNH THƯỜNG chứ không phải thiếu sót. Màn dùng cờ này để im lặng ở ca đó, thay vì
+ * treo một nhãn cảnh báo trên mọi đơn trong hệ thống.
+ */
+export function daKhaiHoaDon(don: DonChoHoaDon): boolean {
+  return Boolean(
+    sach(don.invoiceBuyerName) ||
+      sach(don.invoiceCompanyName) ||
+      sach(don.invoiceTaxCode) ||
+      sach(don.invoiceEmail),
+  );
 }

@@ -3,6 +3,7 @@
 // Ba ca đầu dựng lại người mua của BA TỜ THẬT; phần còn lại khoá luật rơi-về và luật chặn.
 import { describe, it, expect } from "vitest";
 import {
+  daKhaiHoaDon,
   nguoiMuaChoDon,
   thieuChoHoaDon,
   xuatDuocHoaDon,
@@ -178,5 +179,38 @@ describe("[NM-03] luật CHẶN", () => {
     expect(
       xuatDuocHoaDon(don({ customerName: "A", customerCity: "Đà Nẵng" })),
     ).toBe(true);
+  });
+});
+
+describe("[NM-04] hoá đơn là TUỲ KHÁCH, không phải nghĩa vụ của đơn", () => {
+  it("chưa ai khai ô nào ⇒ daKhaiHoaDon = false (trạng thái BÌNH THƯỜNG)", () => {
+    // Chủ dự án 14/09: "có KH cần hoá đơn, có KH không cần". Màn dựa vào cờ này để im
+    // lặng thay vì treo nhãn cảnh báo trên mọi đơn trong hệ thống.
+    expect(daKhaiHoaDon(don({ customerName: "A", customerCity: "Đà Nẵng" }))).toBe(
+      false,
+    );
+  });
+
+  it("khai BẤT KỲ ô invoice* nào ⇒ true", () => {
+    for (const o of [
+      { invoiceBuyerName: "Mẹ" },
+      { invoiceCompanyName: "CÔNG TY X" },
+      { invoiceTaxCode: "0402301783" },
+      { invoiceEmail: "ketoan@x.vn" },
+    ]) {
+      expect(daKhaiHoaDon(don(o)), JSON.stringify(o)).toBe(true);
+    }
+  });
+
+  it("ô chỉ có khoảng trắng KHÔNG tính là đã khai", () => {
+    expect(daKhaiHoaDon(don({ invoiceBuyerName: "   " }))).toBe(false);
+  });
+
+  it("đơn chưa khai gì VẪN có thể thiếu mục để xuất — hai câu hỏi KHÁC nhau", () => {
+    // `daKhaiHoaDon` = "khách có hỏi hoá đơn không"; `thieuChoHoaDon` = "dựng được tờ
+    // giấy chưa". Trộn hai câu này là nguồn của nhãn "còn thiếu N mục bắt buộc" cũ.
+    const d = don({ customerName: "A" }); // thiếu địa chỉ
+    expect(daKhaiHoaDon(d)).toBe(false);
+    expect(thieuChoHoaDon(nguoiMuaChoDon(d)).chan).toContain("Địa chỉ người mua");
   });
 });

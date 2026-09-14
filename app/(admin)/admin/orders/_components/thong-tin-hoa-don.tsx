@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { ChuThich } from "@/components/admin/ui/chu-thich";
 import {
+  daKhaiHoaDon,
   nguoiMuaChoDon,
   thieuChoHoaDon,
   type DonChoHoaDon,
@@ -66,6 +67,9 @@ export function ThongTinHoaDon({
   const nm = nguoiMuaChoDon(don);
   const thieu = thieuChoHoaDon(nm);
   const sanSang = thieu.chan.length === 0;
+  // Đã có ai khai ô nào chưa — phần lớn phụ huynh KHÔNG xin hoá đơn, nên "chưa khai gì"
+  // là trạng thái BÌNH THƯỜNG. Màn im lặng ở ca đó thay vì treo cảnh báo trên mọi đơn.
+  const daKhai = daKhaiHoaDon(don);
 
   function luu() {
     startTransition(async () => {
@@ -92,20 +96,30 @@ export function ThongTinHoaDon({
           <ChuThich
             nhan="Khối này dùng để làm gì"
             noiDung={
-              "Đây là thông tin in ở khối 'người mua' của hoá đơn GTGT — có thể KHÁC người " +
-              "đặt đơn (bố đặt, hoá đơn ghi tên mẹ). Ô nào để trống thì lấy theo thông tin " +
+              "Thông tin in ở khối 'người mua' của hoá đơn GTGT. KHÔNG bắt buộc: phần lớn " +
+              "phụ huynh không xin hoá đơn, và khối này sửa được bất cứ lúc nào — kể cả sau " +
+              "khi đơn đã hoàn tất — rồi xuất hoá đơn gửi khách. Người mua có thể KHÁC người " +
+              "đặt đơn (bố đặt, hoá đơn ghi tên mẹ); ô nào để trống thì lấy theo thông tin " +
               "khách hàng ở khối trên. Hệ thống KHÔNG tự phát hành hoá đơn: nó dựng đúng bộ " +
               "số để kế toán nạp vào MISA/VIN, nơi cấp Mã CQT và ký số."
             }
           />
         </h2>
+        {/* KHÔNG có nhãn "bắt buộc" ở đây. Chủ dự án chốt 14/09: hoá đơn là TUỲ KHÁCH —
+            có người cần, có người không — nên khối này không bao giờ được đọc thành "đơn
+            đang sai". Ba trạng thái, và trạng thái hay gặp nhất (chưa ai hỏi hoá đơn) là
+            một câu trung tính, không màu cảnh báo. */}
         {sanSang ? (
           <Badge className="bg-state-success-soft text-state-success-ink hover:bg-state-success-soft">
-            Đủ để xuất hoá đơn
+            Xuất hoá đơn được
+          </Badge>
+        ) : daKhai ? (
+          <Badge className="bg-state-warning-soft text-state-warning-ink hover:bg-state-warning-soft">
+            Cần bổ sung {thieu.chan.length} mục để xuất
           </Badge>
         ) : (
-          <Badge className="bg-state-warning-soft text-state-warning-ink hover:bg-state-warning-soft">
-            Còn thiếu {thieu.chan.length} mục bắt buộc
+          <Badge variant="outline" className="whitespace-nowrap font-normal">
+            Chưa cần hoá đơn
           </Badge>
         )}
         {canManage && (
@@ -151,22 +165,32 @@ export function ThongTinHoaDon({
         </O>
       </dl>
 
-      {(thieu.chan.length > 0 || thieu.nhac.length > 0) && (
-        <div className="mt-4 space-y-1.5 border-t border-border pt-3 text-xs">
-          {thieu.chan.length > 0 && (
-            <p className="text-state-warning-ink">
-              <span className="font-semibold">Chưa xuất được — còn thiếu:</span>{" "}
-              {thieu.chan.join(" · ")}
-            </p>
-          )}
-          {thieu.nhac.length > 0 && (
-            <p className="text-muted-foreground">
-              <span className="font-semibold">Nên có (không bắt buộc):</span>{" "}
-              {thieu.nhac.join(" · ")}
-            </p>
-          )}
-        </div>
-      )}
+      <div className="mt-4 space-y-1.5 border-t border-border pt-3 text-xs">
+        {!daKhai && !sanSang && (
+          <p className="text-muted-foreground">
+            Khách chưa hỏi hoá đơn thì để trống — điền lúc nào cũng được, kể cả
+            sau khi đơn đã hoàn tất.
+          </p>
+        )}
+        {thieu.chan.length > 0 && daKhai && (
+          <p className="text-state-warning-ink">
+            <span className="font-semibold">Cần bổ sung để xuất:</span>{" "}
+            {thieu.chan.join(" · ")}
+          </p>
+        )}
+        {thieu.chan.length > 0 && !daKhai && (
+          <p className="text-muted-foreground">
+            <span className="font-semibold">Khi cần xuất sẽ phải có:</span>{" "}
+            {thieu.chan.join(" · ")}
+          </p>
+        )}
+        {thieu.nhac.length > 0 && (
+          <p className="text-muted-foreground">
+            <span className="font-semibold">Nên có:</span>{" "}
+            {thieu.nhac.join(" · ")}
+          </p>
+        )}
+      </div>
 
       <Dialog open={mo} onOpenChange={setMo}>
         <DialogContent className="max-w-lg">
@@ -175,8 +199,9 @@ export function ThongTinHoaDon({
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-xs text-muted-foreground">
-              Để trống ô nào thì hoá đơn lấy theo thông tin khách hàng của đơn.
-              Địa chỉ và CCCD sửa ở khối Thông tin khách hàng.
+              Chỉ điền khi khách cần hoá đơn — sửa được bất cứ lúc nào, kể cả sau
+              khi đơn đã hoàn tất. Để trống ô nào thì hoá đơn lấy theo thông tin
+              khách hàng của đơn; địa chỉ và CCCD sửa ở khối Thông tin khách hàng.
             </p>
             <div className="space-y-1.5">
               <Label htmlFor="hd-ten">Họ tên người mua</Label>

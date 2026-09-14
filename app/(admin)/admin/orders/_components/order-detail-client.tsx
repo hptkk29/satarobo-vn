@@ -383,9 +383,11 @@ export function OrderDetailClient({
       </header>
 
       {/* ── HAI CỘT ──────────────────────────────────────────────────────────
-          Cột TRÁI là tiền và việc: còn thiếu bao nhiêu → thu bằng gì → bán cái
-          gì → chia mấy đợt. Cột PHẢI là hồ sơ: ai mua, xuất hoá đơn cho ai, ghi
-          chú, lịch sử.
+          Cột TRÁI đi theo ĐÚNG trình tự nghiệp vụ, chủ dự án chốt 14/09: còn
+          thiếu bao nhiêu → bán cái gì → chia mấy đợt → in phiếu thu và QR. Khối
+          QR đứng CUỐI vì nó là HỆ QUẢ của kế hoạch: đặt nó trước kế hoạch là mời
+          người ta quét một mã dựng từ số tiền chưa chốt. Cột PHẢI là hồ sơ: ai
+          mua, xuất hoá đơn cho ai, ghi chú, lịch sử.
 
           Trước bản này trang cao 1 cột và chốt `max-w-5xl`, nên ở màn 1531px hơn
           nửa bề ngang bỏ trống trong khi khối QR — công cụ thu tiền — nằm dưới cả
@@ -397,23 +399,6 @@ export function OrderDetailClient({
         <div className="min-w-0 space-y-5 lg:space-y-6">
           {/* Công nợ — câu hỏi đầu tiên khi mở một đơn là "còn thiếu bao nhiêu". */}
           <OrderDebtSummary congNo={congNo} />
-
-          {/* 03/08 — QR xuất THEO TỪNG PHIẾU THU (đợt), thay cho 1 nút QR mức đơn.
-              Đơn cũ chưa có phiếu thu nào → giữ nguyên khối QR mức đơn để không mất
-              khả năng thu tiền. */}
-          {paymentRequests.length > 0 ? (
-            <PaymentRequestsSection
-              requests={paymentRequests}
-              initialSessions={qrSessions}
-              canManage={canManage}
-            />
-          ) : (
-            <OrderQrSection
-              qrUrl={qrUrl}
-              transferContent={transferContent}
-              dueNow={dueNow}
-            />
-          )}
 
           {/* Sản phẩm */}
           <section className="rounded-xl border border-border bg-card p-4 sm:p-5">
@@ -559,6 +544,23 @@ export function OrderDetailClient({
             installments={installments}
             accounting={accounting}
           />
+
+          {/* 03/08 — QR xuất THEO TỪNG PHIẾU THU (đợt), thay cho 1 nút QR mức đơn.
+              Đơn cũ chưa có phiếu thu nào → giữ nguyên khối QR mức đơn để không mất
+              khả năng thu tiền. */}
+          {paymentRequests.length > 0 ? (
+            <PaymentRequestsSection
+              requests={paymentRequests}
+              initialSessions={qrSessions}
+              canManage={canManage}
+            />
+          ) : (
+            <OrderQrSection
+              qrUrl={qrUrl}
+              transferContent={transferContent}
+              dueNow={dueNow}
+            />
+          )}
         </div>
 
         {/* ── CỘT PHẢI — hồ sơ đơn ────────────────────────────────────────────
