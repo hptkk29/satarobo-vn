@@ -337,6 +337,11 @@ export default async function OrderDetailPage({ params }: Props) {
                 customerEmail: order.customerEmail ? maskEmail(order.customerEmail) : order.customerEmail,
                 customerCccd: null,
                 customerAddress: null,
+                // Email nhận hoá đơn cũng là PII — che cùng cửa với `customerEmail`,
+                // nếu không thì khối "Người mua trên hoá đơn" thành đường vòng đọc email.
+                invoiceEmail: order.invoiceEmail
+                  ? maskEmail(order.invoiceEmail)
+                  : order.invoiceEmail,
               }
         }
         canManage={canManage}

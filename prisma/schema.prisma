@@ -4022,6 +4022,25 @@ model Order {
   customerCity    String?
   customerCccd    String? // FIX lead→payment→enroll (M0) — CCCD người mua (snapshot đơn)
 
+  // ─── Hoá đơn GTGT (14/09/2026) — khối "người mua" của mẫu hoá đơn ───
+  // ĐỀU NULLABLE và KHÔNG có default: để trống = "chưa khai", đường đọc tự rơi về cột
+  // `customer*` tương ứng (`lib/finance/hoa-don/nguoi-mua.ts`). Đặt default kiểu copy
+  // `customerName` là biến "chưa khai" thành "đã khai đúng bằng tên người đặt" — sai im
+  // lặng trên một tờ giấy pháp lý.
+  //
+  // ⚠️ KHÔNG có cột thuế suất / pháp nhân ở đây: đó là CẤU HÌNH vận hành, không phải
+  // thuộc tính của đơn. Chốt vào đơn là mỗi lần BGĐ đổi mức thuế lại phải chạy migration.
+  /// Người ĐỨNG TÊN hoá đơn — có thể khác người đặt đơn (1C26MNV-13: người mua "Phan Thị
+  /// Hồng", học viên "Nguyễn Đức Huy Hoàng"). Trống ⇒ dùng `customerName`.
+  invoiceBuyerName   String?
+  /// Ô "Tên đơn vị" khi khách xuất hoá đơn cho công ty.
+  invoiceCompanyName String?
+  /// "MST/CCCD chủ hộ" của NGƯỜI MUA — khác mã số thuế của pháp nhân BÁN.
+  invoiceTaxCode     String?
+  /// Nơi nhận hoá đơn điện tử. Tách khỏi `customerEmail`: email nhận hoá đơn thường là
+  /// email kế toán của khách, không phải email liên hệ. Trống ⇒ dùng `customerEmail`.
+  invoiceEmail       String?
+
   // Optional links
   studentId String?
   student   Student? @relation("StudentOrders", fields: [studentId], references: [id])

@@ -1155,3 +1155,69 @@ export async function markOrderInstallmentPaidAction(
 
 // ─── Row type for client ─────────────────────────────────────────────
 export type OrderRow = Awaited<ReturnType<typeof queryOrders>>["items"][number];
+
+// ─── THÔNG TIN NGƯỜI MUA TRÊN HOÁ ĐƠN (14/09/2026) ──────────────────────────
+//
+// Chủ dự án: "thiếu các trường thông tin của khách hàng để xuất hoá đơn khi kế toán duyệt".
+// Bốn ô đo từ ba tờ hoá đơn thật mà `Order` chưa có — xem migration
+// 20260914120000_hoa_don_thong_tin_nguoi_mua và `lib/finance/hoa-don/nguoi-mua.ts`.
+//
+// ⚠️ CHUỖI RỖNG GHI THÀNH `null`, KHÔNG ghi "". Đường đọc phân biệt "chưa khai" (rơi về
+// cột `customer*`) với "đã khai"; một chuỗi rỗng lọt vào DB là "đã khai bằng ô trắng" —
+// tên người mua biến mất khỏi tờ hoá đơn mà không ai thấy lỗi.
+//
+// KHÔNG chặn khi còn thiếu ô bắt buộc: người nhập thường có thông tin nhỏ giọt (gọi khách
+// hỏi mã số thuế mất một buổi). Cổng "đủ chưa" nằm ở khâu XUẤT, và màn hiện rõ còn thiếu
+// gì — chặn ở đây chỉ khiến người ta không lưu được phần đã có.
+export async function luuThongTinHoaDonAction(
+  orderId: string,
+  input: {
+    invoiceBuyerName?: string | null;
+    invoiceCompanyName?: string | null;
+    invoiceTaxCode?: string | null;
+    invoiceEmail?: string | null;
+  },
+  expectedUpdatedAt?: string,
+) {
+  const session = await requireOrdersManage();
+
+  const sach = (v: string | null | undefined) => {
+    const t = (v ?? "").trim();
+    return t.length > 0 ? t : null;
+  };
+  const dulieu = {
+    invoiceBuyerName: sach(input.invoiceBuyerName),
+    invoiceCompanyName: sach(input.invoiceCompanyName),
+    invoiceTaxCode: sach(input.invoiceTaxCode),
+    invoiceEmail: sach(input.invoiceEmail),
+  };
+  for (const [k, v] of Object.entries(dulieu)) {
+    if (v && v.length > 200) {
+      return { ok: false as const, error: `Trường ${k} quá dài (tối đa 200 ký tự)` };
+    }
+  }
+  if (dulieu.invoiceEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(dulieu.invoiceEmail)) {
+    return { ok: false as const, error: "Email nhận hoá đơn không hợp lệ" };
+  }
+
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const order = await sdb.order.findUnique({
+    where: { id: orderId },
+    select: { id: true, centerId: true },
+  });
+  // `scopedDb` KHÔNG che write — gác lại lần nữa trước khi ghi.
+  if (!order || !passesScope("Order", order, actor)) {
+    return { ok: false as const, error: "Không tìm thấy đơn hàng" };
+  }
+
+  const expectedAt = expectedUpdatedAt ? new Date(expectedUpdatedAt) : null;
+  const upd = await sdb.order.updateMany({
+    where: { id: orderId, ...(expectedAt ? { updatedAt: expectedAt } : {}) },
+    data: dulieu,
+  });
+  if (upd.count === 0) return { ok: false as const, error: "STALE_WRITE" };
+
+  revalidatePath(`/orders/${orderId}`);
+  return { ok: true as const };
+}

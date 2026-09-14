@@ -39,6 +39,7 @@ import {
 import type { QrSessionView } from "../_qr-core";
 import { ORDER_STATUS_LABEL } from "@/lib/orders/status";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
+import { ThongTinHoaDon } from "./thong-tin-hoa-don";
 import {
   methodAllowsOrderType,
   methodServesCenter,
@@ -288,6 +289,30 @@ export function OrderDetailClient({
           )}
         </div>
       </section>
+
+      {/* Người mua trên hoá đơn — khối RIÊNG, xem chú thích trong component. */}
+      <ThongTinHoaDon
+        orderId={order.id}
+        don={{
+          customerName: order.customerName,
+          customerPhone: order.customerPhone,
+          customerEmail: order.customerEmail,
+          customerAddress: order.customerAddress,
+          customerWard: order.customerWard,
+          customerCity: order.customerCity,
+          customerCccd: order.customerCccd,
+          invoiceBuyerName: order.invoiceBuyerName,
+          invoiceCompanyName: order.invoiceCompanyName,
+          invoiceTaxCode: order.invoiceTaxCode,
+          invoiceEmail: order.invoiceEmail,
+        }}
+        updatedAt={
+          order.updatedAt instanceof Date
+            ? order.updatedAt.toISOString()
+            : String(order.updatedAt)
+        }
+        canManage={canManage}
+      />
 
       {/* Items */}
       <section className="rounded-xl border border-border bg-card p-5">
