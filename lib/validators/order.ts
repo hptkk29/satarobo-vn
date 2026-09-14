@@ -17,6 +17,15 @@ const orderItemSchema = z.object({
   packageId: z.string().min(1).optional().nullable(),
   examAttemptId: z.string().min(1).optional().nullable(),
   productId: z.string().min(1).optional().nullable(),
+  /**
+   * Dòng hàng này mua cho CON NÀO — đơn nhiều con (15/09/2026).
+   *
+   * ⚠️ Chỉ là Ý ĐỊNH của client cho tới khi `createOrderManualAction` tra lại qua
+   * `scopedDb` và gác `passesScope`. Một `studentId` lọt vào đây là một quan hệ TIỀN
+   * (“khoản này của con nào”), nên không bao giờ được tin thẳng — cùng lý do với
+   * `centerId`, xem chú thích ở đó.
+   */
+  studentId: z.string().min(1).optional().nullable(),
   // Metadata cho COURSE_ENROLLMENT (chứa courseId vì Enrollment chưa tồn tại)
   /**
    * Json tự do — nhưng HAI khoá dưới đây có nghĩa và phải đúng khuôn:

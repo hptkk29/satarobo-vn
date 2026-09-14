@@ -1731,6 +1731,8 @@ model Student {
 
   // Phase 5.6 — Order
   orders Order[] @relation("StudentOrders")
+  /// Dòng hàng mua CHO em này — đơn nhiều con (15/09/2026).
+  orderItems OrderItem[] @relation("StudentOrderItems")
 
   // Phase 5.9 — Reserve history
   reserves StudentReserve[] @relation("StudentReserves")
@@ -4200,6 +4202,18 @@ model OrderItem {
   productId String?
   product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
 
+  /// Dòng hàng này mua cho CON NÀO (15/09/2026 — đơn nhiều con).
+  ///
+  /// Lúc tạo đơn thủ công thì `Enrollment` CHƯA tồn tại (convert-lead sinh sau), nên
+  /// `enrollmentId` luôn null và không có gì phân biệt hai dòng của hai đứa trẻ. Cột này
+  /// là chỗ đó.
+  ///
+  /// NULL là giá trị HỢP LỆ, không phải thiếu dữ liệu: đơn sản phẩm không thuộc học viên
+  /// nào, và khách vãng lai thì con chưa có bản ghi `Student` (tên con nằm ở `itemName`).
+  /// `SetNull` theo đúng nếp `productId`: xoá học viên không được kéo theo sổ tiền.
+  studentId String?
+  student   Student? @relation("StudentOrderItems", fields: [studentId], references: [id], onDelete: SetNull)
+
   // Item display snapshot (immutable)
   itemName        String
   itemDescription String? @db.Text
@@ -4220,6 +4234,7 @@ model OrderItem {
   @@index([packageId])
   @@index([examAttemptId])
   @@index([productId])
+  @@index([studentId])
 }
 
 model OrderStatusHistory {

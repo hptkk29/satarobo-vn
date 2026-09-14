@@ -43,6 +43,21 @@ function quetTatCaFile(): string[] {
   return ra;
 }
 
+/**
+ * Trần thời gian cho hai ca QUÉT MÃ NGUỒN — phép tính ghi ngay đây theo nếp của
+ * `vitest.cham-cong.config.ts`.
+ *
+ * Đo 15/09/2026 trên máy dev (Windows): chạy MỘT MÌNH mất 1,28s cho ~2.000 tệp; chạy
+ * trong cả bộ `pnpm test:unit` (506 tệp test song song, đĩa bị giành) mất **8,31s** và
+ * vượt trần mặc định 5s ⇒ cả bộ ĐỎ với thông báo "Test timed out", không phải với một
+ * vi phạm nào. Đây đúng là thứ luật 19 cảnh báo: ca đỏ vì ĐỒNG HỒ chứ không vì mã.
+ *
+ * Trần 30s = ~3,6× lần đo tệ nhất. KHÔNG phải "nâng cho hết đỏ": việc của ca này là
+ * đọc thật ~2.000 tệp, nên 5s vốn chưa bao giờ là ngân sách đúng cho nó. Nếu ca này
+ * chạm 30s thì đó là tín hiệu thật (repo phình hoặc đĩa hỏng), không phải nhiễu.
+ */
+const TRAN_QUET_MS = 30_000;
+
 describe("[BUOC-6] trục A chỉ có MỘT nhà", () => {
   const files = quetTatCaFile();
 
@@ -50,7 +65,7 @@ describe("[BUOC-6] trục A chỉ có MỘT nhà", () => {
     expect(files.length).toBeGreaterThan(500);
   });
 
-  it("không nơi nào ngoài debt.ts tự gõ lại điều kiện `accountantStatus: CONFIRMED`", () => {
+  it("không nơi nào ngoài debt.ts tự gõ lại điều kiện `accountantStatus: CONFIRMED`", { timeout: TRAN_QUET_MS }, () => {
     const viPham: string[] = [];
     for (const f of files) {
       const key = relative(GOC, f).split(sep).join("/");
@@ -63,7 +78,7 @@ describe("[BUOC-6] trục A chỉ có MỘT nhà", () => {
     ).toEqual([]);
   });
 
-  it("mọi ngoại lệ khai trong NGOAI_LE đều còn tồn tại và còn chứa chuỗi đó", () => {
+  it("mọi ngoại lệ khai trong NGOAI_LE đều còn tồn tại và còn chứa chuỗi đó", { timeout: TRAN_QUET_MS }, () => {
     for (const [key, lyDo] of Object.entries(NGOAI_LE)) {
       const co = /accountantStatus:\s*"CONFIRMED"/.test(readFileSync(join(GOC, key), "utf8"));
       expect(co, `${key} (${lyDo}) không còn chuỗi — xoá khỏi NGOAI_LE`).toBe(true);

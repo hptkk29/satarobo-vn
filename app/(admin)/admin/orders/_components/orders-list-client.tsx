@@ -3,6 +3,7 @@
 import { useState, useTransition, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Eye, Loader2 } from "lucide-react";
+import { nationalPhone } from "@/lib/phone";
 import {
   Table,
   TableBody,
@@ -225,8 +226,9 @@ export function OrdersListClient() {
                       <div className="font-medium text-foreground">
                         {o.customerName}
                       </div>
+                      {/* Dạng nội địa — xem chú thích cùng nội dung ở trang chi tiết đơn. */}
                       <div className="text-xs text-muted-foreground">
-                        {o.customerPhone}
+                        {nationalPhone(o.customerPhone) ?? o.customerPhone}
                       </div>
                     </TableCell>
                     <TableCell>

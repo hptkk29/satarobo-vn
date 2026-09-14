@@ -78,6 +78,10 @@ export default async function OrderDetailPage({ params }: Props) {
         orderBy: { createdAt: "asc" },
         include: {
           product: { select: { id: true, sku: true } },
+          // Học viên CỦA TỪNG DÒNG. Một đơn nay chở được nhiều con của cùng một phụ
+          // huynh (mỗi con một khoá), nên `order.student` — vốn chỉ có giá trị khi
+          // đơn quy về đúng MỘT em — không còn trả lời được "khoản này là của ai".
+          student: { select: { id: true, name: true } },
         },
       },
       paymentMethod: true,

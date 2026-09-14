@@ -29,6 +29,11 @@ import { getRequestMetadata } from "@/lib/audit/headers";
 import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { soatGiaDon } from "@/lib/orders/price-guard";
+import {
+  hocVienTrenCacDong,
+  studentIdChoDon,
+  thieuHocVienODong,
+} from "@/lib/orders/hoc-vien-dong-don";
 import { docHinhThucLop } from "@/lib/orders/hinh-thuc-lop";
 import { laKhoaLoaiTruCoach } from "@/lib/finance/coach-pricing";
 import { sendEmailForTrigger } from "@/lib/email/trigger";
@@ -235,6 +240,60 @@ export async function createOrderManualAction(input: unknown) {
   if (data.centerId && !passesScope("Order", { centerId: data.centerId }, actor)) {
     return { ok: false as const, error: "Không có quyền tạo đơn cho cơ sở này" };
   }
+
+  // ── HỌC VIÊN CỦA TỪNG DÒNG HÀNG (15/09/2026 — đơn nhiều con) ────────────────
+  //
+  // `OrderItem.studentId` là một quan hệ TIỀN ("khoản này của con nào"), nên id client
+  // gửi KHÔNG BAO GIỜ được tin thẳng: tra lại qua `scopedDb` (học viên ngoài tầm nhìn
+  // trả rỗng) rồi đối chiếu đủ số. `scopedDb` KHÔNG che write — đây là chỗ tự gác.
+  //
+  // ⚠️ TỪ CHỐI CẢ ĐƠN, không âm thầm hoá null cái id lạ. Hoá null thì đơn vẫn tạo ra
+  // nhưng mất thông tin "của con nào" — và mất im lặng, đúng lúc người nhập tin là đã
+  // khai xong. Thà báo lỗi để họ chọn lại.
+  const hocVienTrenDong = hocVienTrenCacDong(data.items);
+  // Đơn hai con mà còn dòng bỏ trống ô học viên → chặn. Form đã chặn, nhưng form
+  // chặn ở CLIENT; cổng thật phải ở đây (luật "scopedDb không che write").
+  if (thieuHocVienODong(data.items)) {
+    return {
+      ok: false as const,
+      error:
+        "Đơn có nhiều học viên thì mọi dòng phải chọn rõ học viên — nếu không sau này không ai biết khoản tiền là của ai",
+    };
+  }
+  // `data.studentId` (cột trên ĐƠN) đi cùng một cổng — trước đợt này nó chưa từng
+  // được tra scope lần nào, tức một lời gọi action tự chế gắn được đơn vào học viên
+  // của cơ sở khác. Gộp vào cùng tập để chỉ phải viết cổng MỘT lần.
+  const hocVienIds = [
+    ...new Set([...hocVienTrenDong, ...(data.studentId?.trim() ? [data.studentId.trim()] : [])]),
+  ];
+  if (hocVienIds.length > 0) {
+    const thay = await sdb.student.findMany({
+      where: { id: { in: hocVienIds }, deletedAt: null },
+      select: { id: true },
+    });
+    if (thay.length !== hocVienIds.length) {
+      return {
+        ok: false as const,
+        error:
+          "Có học viên không tồn tại hoặc ngoài phạm vi của bạn — chọn lại ở dòng hàng",
+      };
+    }
+  }
+
+  /**
+   * `Order.studentId` — SUY TỪ CÁC DÒNG, không nhận từ client.
+   *
+   * Cột này chỉ có nghĩa khi cả đơn về ĐÚNG MỘT em; đơn hai con phải để NULL, vì
+   * "con nào" lúc đó là thuộc tính của từng dòng chứ không của đơn. Form đã tính
+   * đúng như vậy, nhưng nó tính ở CLIENT: gọi thẳng action vẫn gửi được một đơn có
+   * hai dòng của hai em mà cột đơn trỏ vào em thứ ba. Từ đó mọi thứ đọc
+   * `Order.studentId` — hoàn tiền, ZNS học phí, cổng phụ huynh — nói sai tên một
+   * đứa trẻ, và không có lỗi nào nổ ra để ai biết.
+   *
+   * Không có dòng nào khai học viên thì giữ nguyên giá trị client gửi (đường
+   * convert-lead vẫn dựa vào nó) — nhưng nay giá trị ấy đã qua cổng scope ở trên.
+   */
+  const studentIdCuaDon = studentIdChoDon(data.items, data.studentId);
 
   // ── DẤU VẾT GIÁ ──────────────────────────────────────────────────────────────
   // Hôm nay server tin tuyệt đối `unitPrice` client gửi, và vì `needsDiscountApproval`
@@ -467,7 +526,8 @@ export async function createOrderManualAction(input: unknown) {
         customerAddress: data.customerAddress?.trim() || null,
         customerWard: data.customerWard?.trim() || null,
         customerCity: data.customerCity?.trim() || null,
-        studentId: data.studentId || null,
+        // Suy từ các dòng — xem `studentIdCuaDon` bên trên. KHÔNG dùng `data.studentId`.
+        studentId: studentIdCuaDon,
         leadId: data.leadId || null,
         centerId: data.centerId || null,
         // Người tạo đơn — cột danh sách /admin/orders. Lấy từ phiên, KHÔNG nhận từ
@@ -500,6 +560,9 @@ export async function createOrderManualAction(input: unknown) {
             packageId: it.packageId || null,
             examAttemptId: it.examAttemptId || null,
             productId: it.productId || null,
+            // Đã được gác ở `hocVienHopLe` bên trên — chỉ id đã tra qua `scopedDb` mới
+            // lọt tới đây. Id lạ/ngoài cơ sở đã bị từ chối cả đơn, không âm thầm hoá null.
+            studentId: it.studentId || null,
             metadata: (it.metadata as Prisma.InputJsonValue) ?? Prisma.JsonNull,
           })),
         },
@@ -914,7 +977,7 @@ export async function loadCreateOrderFormData() {
   // PaymentMethod/Course/Product là catalog, Center exempt — scopedDb pass-through.
   const sdb = scopedDb(await resolveActor(session.user.id));
 
-  const [paymentMethods, courses, products, centers] = await Promise.all([
+  const [paymentMethods, courses, products, centers, students] = await Promise.all([
     // Nạp CẢ phương thức của mọi cơ sở trong tầm nhìn (scopedDb đã lọc) + phương thức
     // dùng chung, rồi để client lọc lại theo cơ sở ĐANG CHỌN trên form. Cố ý không nạp
     // lại qua server action mỗi lần đổi cơ sở: hàm này chạy MỘT LẦN ở RSC trước khi
@@ -976,9 +1039,27 @@ export async function loadCreateOrderFormData() {
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),
+    // ── HỌC VIÊN cho ô "của con nào" trên từng dòng hàng (15/09/2026) ──────────
+    //
+    // Chủ dự án: "phụ huynh có 2 con và học 2 khoá khác nhau thì phải tạo 2 đơn à?"
+    // Một đơn nhiều dòng thì mỗi dòng phải nói được nó mua cho ai
+    // (`OrderItem.studentId`).
+    //
+    // `Student` là SCOPED_MODEL ⇒ `scopedDb` đã tự lọc theo cơ sở của actor; cổng ghi
+    // `createOrderManualAction` vẫn tra lại độc lập (scopedDb KHÔNG che write).
+    //
+    // `parentPhone` đi kèm vì đó là thứ người nhập đối chiếu: một trung tâm có nhiều em
+    // trùng tên, và người bán đang cầm SĐT của phụ huynh trước mặt. Chỉ SĐT phụ huynh,
+    // KHÔNG kèm gì thêm — danh sách này rơi xuống client.
+    sdb.student.findMany({
+      where: { deletedAt: null, status: { not: "INACTIVE" } },
+      orderBy: { name: "asc" },
+      take: 1000,
+      select: { id: true, name: true, parentName: true, parentPhone: true },
+    }),
   ]);
 
-  return { paymentMethods, courses, products, centers };
+  return { paymentMethods, courses, products, centers, students };
 }
 
 // ─── MANUAL SEND EMAIL từ template (Phase 5.13.1) ───────────────────

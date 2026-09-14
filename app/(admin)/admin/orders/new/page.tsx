@@ -60,7 +60,10 @@ export default async function NewOrderPage({
   }
 
   return (
-    <div className="max-w-4xl">
+    /* Trần 104rem (1664px) thay cho `max-w-4xl` (896px) cũ. Form nay hai cột nên cần
+       bề ngang thật; vẫn phải CÓ trần vì ở 4k/8k một form trải hết màn thì mắt phải
+       quét cả mét giữa nhãn và ô nhập. Cùng con số với màn chi tiết đơn. */
+    <div className="mx-auto w-full max-w-[104rem]">
       <Link
         href={lead ? `/leads/${lead.id}/convert` : "/orders"}
         className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
@@ -75,7 +78,7 @@ export default async function NewOrderPage({
       <p className="mb-6 text-sm text-muted-foreground">
         {lead
           ? `Đơn gắn với lead "${lead.parentName}" — sau khi ghi nhận thanh toán sẽ đủ điều kiện chốt (convert).`
-          : "Dùng cho khách walk-in tại trung tâm hoặc nhập tay đơn đã thoả thuận offline."}
+          : "Dùng cho khách walk-in tại trung tâm hoặc nhập tay đơn đã thoả thuận offline. Một đơn nhận NHIỀU dòng — phụ huynh có hai con học hai khoá thì vẫn là một đơn, một công nợ, một mã QR."}
       </p>
 
       <OrderCreateForm
@@ -83,6 +86,7 @@ export default async function NewOrderPage({
         courses={data.courses}
         products={data.products}
         centers={data.centers}
+        students={data.students}
         provinces={provinces.map((p) => ({ value: p.id, label: p.name }))}
         leadId={lead?.id ?? null}
         defaultCustomer={

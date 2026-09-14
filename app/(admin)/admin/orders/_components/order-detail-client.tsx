@@ -4,7 +4,8 @@ import { useState, useTransition } from "react";
 import { docHinhThucLop } from "@/lib/orders/hinh-thuc-lop";
 import { NHAN_COACH } from "@/lib/finance/coach-pricing";
 import Link from "next/link";
-import { Loader2, ChevronDown, Pencil, ArrowRightLeft } from "lucide-react";
+import { Loader2, ChevronDown, Pencil, ArrowRightLeft, User } from "lucide-react";
+import { nationalPhone } from "@/lib/phone";
 import { toast } from "sonner";
 import type { Prisma, OrderStatus } from "@prisma/client";
 import { Badge } from "@/components/ui/badge";
@@ -76,6 +77,7 @@ type OrderWithIncludes = Prisma.OrderGetPayload<{
     items: {
       include: {
         product: { select: { id: true; sku: true } };
+        student: { select: { id: true; name: true } };
       };
     };
     paymentMethod: true;
@@ -222,6 +224,13 @@ export function OrderDetailClient({
   // G4 — sửa phương thức thanh toán (chỉ khi đơn chưa xác nhận).
   const [pmEditing, setPmEditing] = useState(false);
   const [pmValue, setPmValue] = useState(order.paymentMethodId ?? "");
+
+  // Số học viên KHÁC NHAU mà đơn này đang gánh. Đếm theo `OrderItem.studentId` chứ
+  // không theo `order.studentId`: cột trên đơn chỉ được set khi đơn quy về đúng một
+  // em, nên với đơn hai con nó là NULL và đếm ở đó luôn ra 0.
+  const soHocVienTrenDon = new Set(
+    order.items.map((it) => it.studentId).filter((id): id is string => !!id),
+  ).size;
 
   const nextOptions = NEXT_STATUSES[order.status];
   // G4 — chỉ cho sửa phương thức khi đơn còn DRAFT/PENDING_PAYMENT (khớp guard server).
@@ -402,9 +411,21 @@ export function OrderDetailClient({
 
           {/* Sản phẩm */}
           <section className="rounded-xl border border-border bg-card p-4 sm:p-5">
-            <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">
-              Sản phẩm ({order.items.length})
-            </h2>
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                Sản phẩm ({order.items.length})
+              </h2>
+              {/* Đơn NHIỀU CON phải tự khai ra là nó nhiều con. `order.student` để
+                  trống ở đơn loại này (cố ý — không quy một đơn hai em về một em),
+                  nên nếu không có nhãn đây thì trên đầu trang đơn trông y hệt đơn
+                  "chưa gắn học viên", và người soát sẽ đi tìm cái không thiếu. */}
+              {soHocVienTrenDon > 1 && (
+                <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-primary-soft px-2.5 py-0.5 text-xs font-semibold text-primary">
+                  <User className="h-3 w-3" aria-hidden />
+                  {soHocVienTrenDon} học viên
+                </span>
+              )}
+            </div>
             <PhanTrangBang cuonNgang>
               {/* Mật độ theo DESIGN.md §2: `whitespace-nowrap` trên CẢ th và td là
                   thứ duy nhất chặn chiều cao dòng nhảy loạn (đo trước đợt 11/08:
@@ -434,6 +455,19 @@ export function OrderDetailClient({
                         <div className="font-medium text-foreground">
                           {it.itemName}
                         </div>
+                        {/* Dòng này mua cho CON NÀO. Với đơn một con nó là thừa vô
+                            hại; với đơn hai con nó là thứ DUY NHẤT nối được số tiền
+                            với đứa trẻ — hoàn tiền, chuyển lớp và nhắc nợ đều hỏi
+                            đúng câu đó. */}
+                        {it.student && (
+                          <Link
+                            href={`/students/${it.student.id}`}
+                            className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-state-info-ink hover:underline"
+                          >
+                            <User className="h-3 w-3 shrink-0" aria-hidden />
+                            {it.student.name}
+                          </Link>
+                        )}
                         {/* Hình thức lớp (SR.QD.219 Điều 5) — hiện ra vì nó GIẢI THÍCH đơn
                             giá: Coach 1-1 ×2,0 cao hơn giá niêm yết là hợp lệ, và không có
                             nhãn này thì người soát đơn chỉ thấy "bán đắt gấp đôi". */}
@@ -575,7 +609,12 @@ export function OrderDetailClient({
           <Khoi tieuDe="Thông tin khách hàng">
             <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
               <O nhan="Tên">{order.customerName}</O>
-              <O nhan="SĐT">{order.customerPhone}</O>
+              {/* Dạng NỘI ĐỊA `0930000015`, không phải `84930000015` như trong DB.
+                  `canonicalPhone` cất dạng 84 vì đó là khoá đối chiếu; nhưng người
+                  đọc ô này đang chuẩn bị BẤM SỐ ĐÓ gọi cho phụ huynh, và dạng 84 là
+                  dạng không ai đọc to lên được. Cùng lý do đã đưa nội dung CK về
+                  dạng nội địa (lib/payments/noi-dung-ck.ts). */}
+              <O nhan="SĐT">{nationalPhone(order.customerPhone) ?? order.customerPhone}</O>
               <O nhan="Email">{order.customerEmail ?? "—"}</O>
               <O nhan="Địa chỉ">
                 {[order.customerAddress, order.customerWard, order.customerCity]

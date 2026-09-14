@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Loader2, Plus, Trash2, User } from "lucide-react";
 import { toast } from "sonner";
 import {
   HE_SO_COACH,
@@ -25,6 +25,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
+import { nationalPhone } from "@/lib/phone";
+import { studentIdChoDon, thieuHocVienODong } from "@/lib/orders/hoc-vien-dong-don";
 import { HelpHint } from "@/components/admin/ui/help-hint";
 import {
   methodAllowsOrderType,
@@ -67,6 +69,51 @@ type PM = {
   canBuyProduct: boolean;
 };
 type Center = { id: string; name: string };
+type StudentOption = {
+  id: string;
+  name: string;
+  parentName: string | null;
+  parentPhone: string | null;
+};
+
+/**
+ * MỘT DÒNG HÀNG của đơn.
+ *
+ * ⚠️ Trước 15/09/2026 màn này chỉ có SÁU biến rời (`itemRefId`, `itemName`, `quantity`,
+ * `unitPrice`, `coachFormat`, `soBuoiMua`) — tức chốt cứng MỘT dòng, dù cổng server
+ * `createOrderManualAction` vốn đã nhận `items: z.array(...).max(20)` từ đầu. Hệ quả
+ * nghiệp vụ: phụ huynh có hai con học hai khoá phải tạo HAI đơn ⇒ hai công nợ, hai mã
+ * QR, hai lần nhắc nợ cho cùng một người trả tiền.
+ *
+ * `key` là id ổn định phía client để React không nhầm dòng khi xoá giữa danh sách —
+ * KHÔNG dùng chỉ số mảng: xoá dòng 1 thì dòng 2 tụt lên chỉ số 1 và mang theo state của
+ * dòng vừa xoá (giá trị ô input, ô đang focus).
+ */
+type DongHang = {
+  key: string;
+  /** `Course.id` hoặc `Product.id` tuỳ loại đơn. */
+  refId: string;
+  itemName: string;
+  quantity: number;
+  unitPrice: number;
+  /** SR.QD.219 Điều 5 — chỉ có nghĩa với đơn KHOÁ HỌC. */
+  coachFormat: CoachFormat;
+  soBuoiMua: number | null;
+  /** Dòng này mua cho CON NÀO. null = chưa chọn / đơn sản phẩm. */
+  studentId: string | null;
+};
+
+let demKey = 0;
+const dongMoi = (): DongHang => ({
+  key: `d${(demKey += 1)}`,
+  refId: "",
+  itemName: "",
+  quantity: 1,
+  unitPrice: 0,
+  coachFormat: "GROUP",
+  soBuoiMua: null,
+  studentId: null,
+});
 
 // O1 — selector loại đơn chỉ 2 lựa chọn (combo là course teachable → nằm trong "Khoá học").
 type UiOrderType = Extract<OrderType, "COURSE" | "PRODUCT">;
@@ -78,6 +125,7 @@ export function OrderCreateForm({
   courses,
   products,
   centers,
+  students,
   provinces,
   leadId = null,
   defaultCustomer,
@@ -88,6 +136,7 @@ export function OrderCreateForm({
   courses: Course[];
   products: ProductOption[];
   centers: Center[];
+  students: StudentOption[];
   // O2 — danh sách tỉnh/thành (2 cấp 2025) load từ server (vietnam-address-data).
   provinces: ComboboxOption[];
   // convert-v2 (R7-05/06): khi tạo đơn TỪ một lead, gắn leadId để convert sau tìm
@@ -128,14 +177,20 @@ export function OrderCreateForm({
   const [wardLoading, setWardLoading] = useState(false);
   const [centerId, setCenterId] = useState<string>(defaultCenterId ?? NO_CENTER);
 
-  // Single item
-  const [itemRefId, setItemRefId] = useState("");
-  const [itemName, setItemName] = useState("");
-  const [quantity, setQuantity] = useState(1);
-  const [unitPrice, setUnitPrice] = useState(0);
-  // SR.QD.219 Điều 5 — hình thức tổ chức lớp + số buổi mua. Chỉ có nghĩa với đơn KHOÁ HỌC.
-  const [coachFormat, setCoachFormat] = useState<CoachFormat>("GROUP");
-  const [soBuoiMua, setSoBuoiMua] = useState<number | null>(null);
+  // NHIỀU dòng hàng — xem chú thích ở `DongHang`.
+  const [dong, setDong] = useState<DongHang[]>(() => [dongMoi()]);
+
+  function suaDong(key: string, thayDoi: Partial<DongHang>) {
+    setDong((cu) => cu.map((d) => (d.key === key ? { ...d, ...thayDoi } : d)));
+  }
+  function themDong() {
+    setDong((cu) => [...cu, dongMoi()]);
+  }
+  function xoaDong(key: string) {
+    // Luôn chừa lại ÍT NHẤT một dòng: đơn 0 dòng không lưu được (server đòi min 1), và
+    // một form trống trơn không nói cho người dùng biết phải làm gì tiếp.
+    setDong((cu) => (cu.length <= 1 ? cu : cu.filter((d) => d.key !== key)));
+  }
 
   // Pricing
   const [discountAmount, setDiscountAmount] = useState(0);
@@ -194,37 +249,27 @@ export function OrderCreateForm({
     () => ({ [NO_CENTER]: "— Không gán —", ...Object.fromEntries(centers.map((c) => [c.id, c.name])) }),
     [centers],
   );
-  const itemItems = useMemo(() => {
-    if (orderType === "COURSE")
-      return Object.fromEntries(courses.map((c) => [c.id, c.code ? `${c.name} (${c.code})` : c.name]));
-    return Object.fromEntries(products.map((pd) => [pd.id, `${pd.sku} · ${pd.name}`]));
-  }, [orderType, courses, products]);
 
-  // O4 hardening — khoá học có giá null/0 (vd Sata5 chưa nạp giá) → cảnh báo nhập tay.
-  const coursePriceMissing = useMemo(() => {
-    if (orderType !== "COURSE" || !itemRefId) return false;
-    const c = courses.find((x) => x.id === itemRefId);
-    return c ? c.price == null || c.price <= 0 : false;
-  }, [orderType, itemRefId, courses]);
-
-  function handleItemSelect(refId: string) {
-    setItemRefId(refId);
+  /** Chọn khoá/sản phẩm cho MỘT dòng — tự điền tên + đơn giá + số buổi mặc định. */
+  function chonMatHang(key: string, refId: string) {
     if (orderType === "COURSE") {
       const c = courses.find((x) => x.id === refId);
-      if (c) {
-        setItemName(c.name);
-        setUnitPrice(c.price ?? 0);
+      suaDong(key, {
+        refId,
+        itemName: c?.name ?? "",
+        unitPrice: c?.price ?? 0,
         // Số buổi mua mặc định = ĐỦ KHOÁ. Khoá thiếu `totalSessions` thì để null — ô
         // trống buộc người bán gõ, còn điền 0 là bịa ra một con số rồi nhân với tiền.
-        setSoBuoiMua(c.totalSessions ?? null);
-      }
-    } else {
-      const pd = products.find((x) => x.id === refId);
-      if (pd) {
-        setItemName(`${pd.name} (${pd.sku})`);
-        setUnitPrice(pd.salePrice);
-      }
+        soBuoiMua: c?.totalSessions ?? null,
+      });
+      return;
     }
+    const pd = products.find((x) => x.id === refId);
+    suaDong(key, {
+      refId,
+      itemName: pd ? `${pd.name} (${pd.sku})` : "",
+      unitPrice: pd?.salePrice ?? 0,
+    });
   }
 
   // O2 — đổi tỉnh: reset phường + lazy-load danh sách phường theo tỉnh.
@@ -246,35 +291,10 @@ export function OrderCreateForm({
       .finally(() => setWardLoading(false));
   }
 
-  const khoaDangChon = useMemo(
-    () => (orderType === "COURSE" ? (courses.find((c) => c.id === itemRefId) ?? null) : null),
-    [orderType, itemRefId, courses],
+  const subtotal = useMemo(
+    () => dong.reduce((t, d) => t + d.unitPrice * d.quantity, 0),
+    [dong],
   );
-
-  /**
-   * GỢI Ý học phí theo SR.QD.219 Điều 5 — để người bán ĐỌC, không phải giá hệ thống áp.
-   *
-   * Ô "Đơn giá" vẫn do người bán gõ (đợt này KHÔNG đổi điều đó): hệ thống chưa có cách
-   * đối chiếu hình thức lớp đã bán với lớp học thật, nên tự áp giá ×2 là biến một con số
-   * người khai thành một con số hệ thống bảo đảm.
-   *
-   * Giảm giá: cố ý truyền `null`. Ô giảm giá của ĐƠN trừ trên TỔNG sau khi đã nhân hệ
-   * số, còn Mục 5.3 bảo giảm TRƯỚC rồi mới nhân — hai thứ tự khác nhau. Với giảm theo %
-   * chúng trùng nhau; với giảm theo SỐ TIỀN thì lệch, và phần cảnh báo dưới nói ra.
-   */
-  const goiY = useMemo(() => {
-    if (orderType !== "COURSE" || !khoaDangChon) return null;
-    return goiYGiaCoach({
-      giaNiemYet: khoaDangChon.price,
-      tongSoBuoi: khoaDangChon.totalSessions,
-      soBuoiMua,
-      coachFormat,
-      giamGia: null,
-      khoaKhongApDungCoach: laKhoaLoaiTruCoach(khoaDangChon),
-    });
-  }, [orderType, khoaDangChon, soBuoiMua, coachFormat]);
-
-  const subtotal = unitPrice * quantity;
   // O5 — bỏ phí vận chuyển: tổng = max(0, tạm tính − giảm giá).
   // BGĐ 31/07 — chế độ %: số tiền giảm suy từ % (server tính lại — nguồn sự thật).
   const effectiveDiscount =
@@ -286,8 +306,22 @@ export function OrderCreateForm({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    if (!itemRefId || !itemName || unitPrice <= 0) {
-      toast.error("Vui lòng chọn sản phẩm và nhập đơn giá > 0");
+    const chuaChon = dong.findIndex((d) => !d.refId || !d.itemName);
+    if (chuaChon >= 0) {
+      toast.error(`Dòng ${chuaChon + 1}: chưa chọn ${orderType === "COURSE" ? "khoá học" : "sản phẩm"}`);
+      return;
+    }
+    const giaXau = dong.findIndex((d) => d.unitPrice <= 0);
+    if (giaXau >= 0) {
+      toast.error(`Dòng ${giaXau + 1}: đơn giá phải lớn hơn 0`);
+      return;
+    }
+    // Đơn MỘT dòng cho khách vãng lai (con chưa có hồ sơ) để trống ô học viên là
+    // đúng; đơn nhiều con mà còn dòng trống thì không. Luật ở `hoc-vien-dong-don.ts`
+    // — dùng chung với `createOrderManualAction`, để cái hiện ở đây và cái server
+    // chấp nhận không thể lệch nhau.
+    if (thieuHocVienODong(dong)) {
+      toast.error("Đơn có nhiều học viên — mỗi dòng phải chọn rõ là của con nào");
       return;
     }
     // AUTH-SĐT P5 — email khách hàng KHÔNG còn bắt buộc (xác nhận/nhắc nợ đi
@@ -303,20 +337,25 @@ export function OrderCreateForm({
     };
     const itemType: OrderItemType = itemTypeMap[orderType];
 
-    const item = {
+    const items = dong.map((d) => ({
       type: itemType,
-      itemName,
-      quantity,
-      unitPrice,
+      itemName: d.itemName,
+      quantity: d.quantity,
+      unitPrice: d.unitPrice,
       packageId: null,
       examAttemptId: null,
-      productId: orderType === "PRODUCT" ? itemRefId : null,
+      productId: orderType === "PRODUCT" ? d.refId : null,
+      studentId: d.studentId,
       // Một khuôn duy nhất cho hình thức lớp, đọc lại bằng `docHinhThucLop` ở server.
       metadata:
         orderType === "COURSE"
-          ? veMetadataDongDon({ courseId: itemRefId, coachFormat, soBuoi: soBuoiMua })
+          ? veMetadataDongDon({
+              courseId: d.refId,
+              coachFormat: d.coachFormat,
+              soBuoi: d.soBuoiMua,
+            })
           : null,
-    };
+    }));
 
     const cityName = provinceId
       ? (provinces.find((p) => p.value === provinceId)?.label ?? null)
@@ -335,11 +374,15 @@ export function OrderCreateForm({
       customerAddress: customer.address || null,
       customerWard: wardName,
       customerCity: cityName,
-      studentId: null,
+      // `Order.studentId` chỉ có nghĩa khi cả đơn về ĐÚNG MỘT em — đơn nhiều con để
+      // null, và null là giá trị hợp lệ sẵn có (mọi đường đọc đã xử). Ép một em làm
+      // "con chính" là dựng một sự thật không có thật. Server TÍNH LẠI bằng chính hàm
+      // này và không tin số gửi lên; gửi kèm chỉ để bản nháp/log khớp nhau.
+      studentId: studentIdChoDon(dong, null),
       leadId: leadId ?? null,
       centerId: centerId === NO_CENTER ? null : centerId,
       paymentMethodId,
-      items: [item],
+      items,
       // Chế độ %: gửi cả % (server quy ra tiền) — chế độ tiền: gửi số tuyệt đối.
       discountAmount: discountMode === "percent" ? 0 : discountAmount,
       discountPercent: discountMode === "percent" ? discountPercent || null : null,
@@ -362,263 +405,688 @@ export function OrderCreateForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Order header */}
-      <section className="space-y-4 rounded-xl border border-border bg-muted/50 p-5">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
-          Thông tin đơn
-        </h2>
-        {/* 4 ô: Loại đơn · Trạng thái · Trung tâm · Phương thức TT.
-            "Trung tâm" DỜI LÊN ĐÂY (trước ở khối Khách hàng, tức DƯỚI ô Phương thức):
-            nó quyết định danh sách phương thức, nên để sau là người dùng chọn phương
-            thức xong, kéo xuống đổi cơ sở, và lựa chọn vừa chọn bị bỏ mà không hiểu vì
-            sao. Cơ sở cũng vốn là thông tin của ĐƠN (doanh thu/công nợ tính về nó),
-            không phải thông tin của khách. */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="space-y-1.5">
-            <Label>
-              Loại đơn *
-              <HelpHint>
-                Khoá học = học phí (gói combo cũng nằm ở đây). Sản phẩm = kit/robot bán
-                rời. Chọn sai thì danh sách bên dưới và các hình thức thanh toán sẽ
-                không hiện đúng.
-              </HelpHint>
-            </Label>
-            <Select
-              items={ORDER_TYPE_ITEMS}
-              value={orderType}
-              onValueChange={(v) => {
-                setOrderType(v as UiOrderType);
-                setItemRefId("");
-                setItemName("");
-                setUnitPrice(0);
-                setPaymentMethodId("");
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="COURSE">Khoá học</SelectItem>
-                <SelectItem value="PRODUCT">Sản phẩm</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label>
-              Trạng thái ban đầu
-              <HelpHint>
-                Nháp: lưu tạm để sửa tiếp. Chờ thanh toán: đã chốt với khách, đang đợi
-                thu tiền — chọn cái này cho hầu hết đơn. Đã xác nhận đơn: chỉ chọn khi
-                tiền đã về đủ và kế toán đã đối chiếu.
-              </HelpHint>
-            </Label>
-            <Select
-              items={ORDER_STATUS_ITEMS}
-              value={orderStatus}
-              onValueChange={(v) => setOrderStatus(v as OrderStatus)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="DRAFT">Nháp</SelectItem>
-                <SelectItem value="PENDING_PAYMENT">Chờ thanh toán</SelectItem>
-                <SelectItem value="CONFIRMED">Đã xác nhận đơn</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label>
-              Trung tâm
-              <HelpHint>
-                {lockCenter ? (
-                  <span className="block normal-case tracking-normal">
-                    Cơ sở của đơn lấy theo cơ sở của khách bạn đang chốt, không đổi được.
-                    Nó quyết định danh sách Phương thức TT bên cạnh và tài khoản ngân hàng
-                    mà mã QR trỏ vào. Cần đổi cơ sở thì chuyển cơ sở cho khách trước.
-                  </span>
-                ) : (
-                  <span className="block normal-case tracking-normal">
-                    Cơ sở đứng tên đơn này — doanh thu và công nợ tính về cơ sở đó, và
-                    người của cơ sở khác sẽ không thấy đơn. Cơ sở cũng quyết định danh
-                    sách Phương thức TT bên cạnh và tài khoản ngân hàng mà mã QR trỏ vào,
-                    nên chọn cơ sở TRƯỚC. Chỉ để trống khi đơn thật sự không thuộc cơ sở
-                    nào.
-                  </span>
-                )}
-              </HelpHint>
-            </Label>
-            {lockCenter ? (
-              // Ô TĨNH thay vì <Select disabled>: giá trị vẫn phải đọc được rõ ràng, và
-              // `centerId` đã nằm trong state nên submit không đổi gì.
-              <div className="flex h-9 items-center rounded-lg border border-border bg-muted px-3 text-sm text-muted-foreground">
-                {centerItems[centerId] ?? "— Không gán —"}
+      {/* ── HAI CỘT ──────────────────────────────────────────────────────
+          Trái là thứ người bán ĐIỀN (đơn · khách · dòng hàng · ghi chú); phải là
+          thứ họ ĐỌC và bấm (tổng tiền · giảm giá · nút tạo), dính lại khi cuộn.
+          Dưới `lg` xếp chồng đúng thứ tự đó — điền xong mới tới tổng. */}
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem] lg:gap-6 2xl:grid-cols-[minmax(0,1fr)_26rem]">
+        <div className="min-w-0 space-y-5 lg:space-y-6">
+          {/* Order header */}
+          <section className="space-y-4 rounded-xl border border-border bg-muted/50 p-5">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+              Thông tin đơn
+            </h2>
+            {/* 4 ô: Loại đơn · Trạng thái · Trung tâm · Phương thức TT.
+                "Trung tâm" DỜI LÊN ĐÂY (trước ở khối Khách hàng, tức DƯỚI ô Phương thức):
+                nó quyết định danh sách phương thức, nên để sau là người dùng chọn phương
+                thức xong, kéo xuống đổi cơ sở, và lựa chọn vừa chọn bị bỏ mà không hiểu vì
+                sao. Cơ sở cũng vốn là thông tin của ĐƠN (doanh thu/công nợ tính về nó),
+                không phải thông tin của khách. */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="space-y-1.5">
+                <Label>
+                  Loại đơn *
+                  <HelpHint>
+                    Khoá học = học phí (gói combo cũng nằm ở đây). Sản phẩm = kit/robot bán
+                    rời. Chọn sai thì danh sách bên dưới và các hình thức thanh toán sẽ
+                    không hiện đúng.
+                  </HelpHint>
+                </Label>
+                <Select
+                  items={ORDER_TYPE_ITEMS}
+                  value={orderType}
+                  onValueChange={(v) => {
+                    setOrderType(v as UiOrderType);
+                    // Đổi loại đơn thì mọi dòng đang chọn đều vô nghĩa (khoá học ≠ sản
+                    // phẩm) — dựng lại MỘT dòng trống thay vì giữ tên/giá cũ trên một
+                    // danh mục khác.
+                    setDong([dongMoi()]);
+                    setPaymentMethodId("");
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="COURSE">Khoá học</SelectItem>
+                    <SelectItem value="PRODUCT">Sản phẩm</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-            ) : (
-              <Select
-                items={centerItems}
-                value={centerId}
-                onValueChange={(v) => setCenterId(v ?? NO_CENTER)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NO_CENTER}>— Không gán —</SelectItem>
-                  {centers.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="space-y-1.5">
+                <Label>
+                  Trạng thái ban đầu
+                  <HelpHint>
+                    Nháp: lưu tạm để sửa tiếp. Chờ thanh toán: đã chốt với khách, đang đợi
+                    thu tiền — chọn cái này cho hầu hết đơn. Đã xác nhận đơn: chỉ chọn khi
+                    tiền đã về đủ và kế toán đã đối chiếu.
+                  </HelpHint>
+                </Label>
+                <Select
+                  items={ORDER_STATUS_ITEMS}
+                  value={orderStatus}
+                  onValueChange={(v) => setOrderStatus(v as OrderStatus)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="DRAFT">Nháp</SelectItem>
+                    <SelectItem value="PENDING_PAYMENT">Chờ thanh toán</SelectItem>
+                    <SelectItem value="CONFIRMED">Đã xác nhận đơn</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>
+                  Trung tâm
+                  <HelpHint>
+                    {lockCenter ? (
+                      <span className="block normal-case tracking-normal">
+                        Cơ sở của đơn lấy theo cơ sở của khách bạn đang chốt, không đổi được.
+                        Nó quyết định danh sách Phương thức TT bên cạnh và tài khoản ngân hàng
+                        mà mã QR trỏ vào. Cần đổi cơ sở thì chuyển cơ sở cho khách trước.
+                      </span>
+                    ) : (
+                      <span className="block normal-case tracking-normal">
+                        Cơ sở đứng tên đơn này — doanh thu và công nợ tính về cơ sở đó, và
+                        người của cơ sở khác sẽ không thấy đơn. Cơ sở cũng quyết định danh
+                        sách Phương thức TT bên cạnh và tài khoản ngân hàng mà mã QR trỏ vào,
+                        nên chọn cơ sở TRƯỚC. Chỉ để trống khi đơn thật sự không thuộc cơ sở
+                        nào.
+                      </span>
+                    )}
+                  </HelpHint>
+                </Label>
+                {lockCenter ? (
+                  // Ô TĨNH thay vì <Select disabled>: giá trị vẫn phải đọc được rõ ràng, và
+                  // `centerId` đã nằm trong state nên submit không đổi gì.
+                  <div className="flex h-9 items-center rounded-lg border border-border bg-muted px-3 text-sm text-muted-foreground">
+                    {centerItems[centerId] ?? "— Không gán —"}
+                  </div>
+                ) : (
+                  <Select
+                    items={centerItems}
+                    value={centerId}
+                    onValueChange={(v) => setCenterId(v ?? NO_CENTER)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NO_CENTER}>— Không gán —</SelectItem>
+                      {centers.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label>
+                  Phương thức TT *
+                  <HelpHint>
+                    Cách phụ huynh trả tiền cho đơn này. Danh sách lọc theo HAI thứ: loại
+                    đơn đang chọn, và CƠ SỞ bên trái — mỗi cơ sở chỉ dùng phương thức của
+                    mình cộng các phương thức dùng chung, không thấy phương thức của cơ sở
+                    khác. Đổi loại đơn hoặc đổi cơ sở thì lựa chọn cũ tự bỏ, phải chọn lại.
+                  </HelpHint>
+                </Label>
+                <Select
+                  items={pmItems}
+                  value={paymentMethodId}
+                  onValueChange={(v) => setPaymentMethodId(v ?? "")}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Chọn..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availablePMs.map((pm) => (
+                      <SelectItem key={pm.id} value={pm.id}>
+                        {pm.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {availablePMs.length === 0 && (
+                  // Danh sách rỗng mà không nói gì thì người dùng ngồi bấm mãi không ra.
+                  // Ca thật: cơ sở chỉ có phương thức riêng loại "Chuyển khoản" nhưng đang
+                  // tạo đơn Sản phẩm, hoặc mọi phương thức của cơ sở đã bị tắt.
+                  <p className="text-xs text-state-warning-ink">
+                    Cơ sở đang chọn chưa có phương thức thanh toán nào dùng được cho loại đơn
+                    này. Khai thêm ở trang Cơ sở → mục Thanh toán.
+                  </p>
+                )}
+              </div>
+            </div>
+          </section>
+
+          {/* Customer */}
+          <section className="space-y-4 rounded-xl border border-border bg-card p-5">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+              Khách hàng
+            </h2>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Tên phụ huynh *</Label>
+                <Input
+                  value={customer.name}
+                  onChange={(e) =>
+                    setCustomer({ ...customer, name: e.target.value })
+                  }
+                  required
+                  minLength={2}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>SĐT *</Label>
+                <Input
+                  value={customer.phone}
+                  onChange={(e) =>
+                    setCustomer({ ...customer, phone: e.target.value })
+                  }
+                  required
+                  placeholder="09xxxxxxxx"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Email (không bắt buộc)</Label>
+                <Input
+                  type="email"
+                  value={customer.email}
+                  onChange={(e) =>
+                    setCustomer({ ...customer, email: e.target.value })
+                  }
+                  placeholder="Kênh dự phòng — bỏ trống nếu khách không dùng"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>
+                  CCCD/CMND
+                  {/* Câu hỏi phụ huynh hay hỏi lại nhân viên ("sao phải đưa CCCD?") — để sẵn
+                      câu trả lời ngay cạnh ô, khỏi mỗi người giải thích một kiểu. */}
+                  <HelpHint>
+                    Chỉ cần khi phụ huynh muốn xuất hoá đơn hoặc phiếu thu đứng tên mình. Bỏ
+                    trống được. Số này là thông tin nhạy cảm nên ở màn Thanh toán sẽ bị che,
+                    ai mở xem đầy đủ đều bị ghi nhật ký.
+                  </HelpHint>
+                </Label>
+                <Input
+                  value={customer.cccd}
+                  onChange={(e) =>
+                    setCustomer({ ...customer, cccd: e.target.value })
+                  }
+                  inputMode="numeric"
+                  placeholder="9 hoặc 12 chữ số"
+                />
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label>Địa chỉ (số nhà, đường)</Label>
+                <Input
+                  value={customer.address}
+                  onChange={(e) =>
+                    setCustomer({ ...customer, address: e.target.value })
+                  }
+                />
+              </div>
+              {/* O2 — Tỉnh/Thành TRƯỚC (searchable), Phường/Xã SAU (phụ thuộc tỉnh) */}
+              <div className="space-y-1.5">
+                <Label>Tỉnh/Thành</Label>
+                <Combobox
+                  options={provinces}
+                  value={provinceId}
+                  onValueChange={handleProvinceChange}
+                  placeholder="Tìm tỉnh/thành..."
+                  emptyText="Không tìm thấy tỉnh/thành"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Phường/Xã</Label>
+                <Combobox
+                  options={wardOptions}
+                  value={wardId}
+                  onValueChange={setWardId}
+                  disabled={!provinceId || wardLoading}
+                  placeholder={
+                    !provinceId
+                      ? "Chọn tỉnh/thành trước"
+                      : wardLoading
+                        ? "Đang tải..."
+                        : "Tìm phường/xã..."
+                  }
+                  emptyText="Không tìm thấy phường/xã"
+                />
+              </div>
+            </div>
+          </section>
+
+          {/* ── DÒNG HÀNG ────────────────────────────────────────────────────────
+              Một đơn NHIỀU dòng, mỗi dòng nói rõ mua cho CON NÀO. Chủ dự án 15/09:
+              "phụ huynh có 2 con và học 2 khoá khác nhau thì phải tạo 2 đơn à?" —
+              không, và đây là chỗ sửa điều đó. Cổng server vốn đã nhận tới 20 dòng. */}
+          <section className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                {orderType === "COURSE" ? "Khoá học" : "Sản phẩm"} ({dong.length})
+              </h2>
+              <Button type="button" variant="outline" size="sm" onClick={themDong}>
+                <Plus className="h-4 w-4" aria-hidden />
+                Thêm dòng
+              </Button>
+            </div>
+
+            <div className="space-y-4">
+              {dong.map((d, idx) => (
+                <DongHangCard
+                  key={d.key}
+                  stt={idx + 1}
+                  tongDong={dong.length}
+                  dong={d}
+                  orderType={orderType}
+                  courses={courses}
+                  products={products}
+                  students={students}
+                  onSua={(t) => suaDong(d.key, t)}
+                  onChonMatHang={(refId) => chonMatHang(d.key, refId)}
+                  onXoa={() => xoaDong(d.key)}
+                />
+              ))}
+            </div>
+
+            {/* Nút thêm thứ hai ở CUỐI danh sách: với đơn 3-4 dòng, nút trên đầu đã cuộn
+                khuất khi người dùng nhập xong dòng cuối — đó là đúng lúc họ cần nó. */}
+            {dong.length > 1 && (
+              <Button type="button" variant="outline" size="sm" onClick={themDong} className="w-full sm:w-auto">
+                <Plus className="h-4 w-4" aria-hidden />
+                Thêm dòng nữa
+              </Button>
             )}
-          </div>
-          <div className="space-y-1.5">
-            <Label>
-              Phương thức TT *
-              <HelpHint>
-                Cách phụ huynh trả tiền cho đơn này. Danh sách lọc theo HAI thứ: loại
-                đơn đang chọn, và CƠ SỞ bên trái — mỗi cơ sở chỉ dùng phương thức của
-                mình cộng các phương thức dùng chung, không thấy phương thức của cơ sở
-                khác. Đổi loại đơn hoặc đổi cơ sở thì lựa chọn cũ tự bỏ, phải chọn lại.
-              </HelpHint>
-            </Label>
-            <Select
-              items={pmItems}
-              value={paymentMethodId}
-              onValueChange={(v) => setPaymentMethodId(v ?? "")}
+          </section>
+
+
+          {/* Notes */}
+          <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label>
+                Ghi chú khách hàng
+                <HelpHint>
+                  Nội dung liên quan trực tiếp tới khách: yêu cầu riêng, thoả thuận lúc bán.
+                  Việc nội bộ (dặn nhau, đánh giá khách) ghi ở ô bên cạnh.
+                </HelpHint>
+              </Label>
+              <Textarea
+                value={customerNote}
+                onChange={(e) => setCustomerNote(e.target.value)}
+                rows={2}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>
+                Ghi chú nội bộ
+                <HelpHint>
+                  Chỉ nhân viên Sata Robo đọc được — dùng để dặn nhau về đơn này (đã hẹn gọi
+                  lại, chờ phụ huynh chuyển khoản…).
+                </HelpHint>
+              </Label>
+              <Textarea
+                value={internalNote}
+                onChange={(e) => setInternalNote(e.target.value)}
+                rows={2}
+              />
+            </div>
+          </section>
+
+        </div>
+
+        <aside className="min-w-0 space-y-5 lg:sticky lg:top-4 lg:self-start lg:space-y-6">
+        {/* ── TÓM TẮT TIỀN ────────────────────────────────────────────────
+            Dính bên phải khi cuộn: người bán vừa nhập từng dòng vừa phải thấy tổng,
+            và với đơn nhiều con thì tổng là con số họ đọc cho phụ huynh nghe. Trước
+            bản này tổng nằm lẫn trong khối Định giá ở cuối trang — nhập tới dòng thứ
+            ba là nó đã cuộn khuất. */}
+        <section className="rounded-xl border border-border bg-card p-4 sm:p-5">
+          <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">
+            Tóm tắt
+          </h2>
+          <dl className="space-y-2 text-sm">
+            {dong.map((d, idx) => (
+              <div key={d.key} className="flex items-start justify-between gap-3">
+                <dt className="min-w-0 break-words text-muted-foreground">
+                  {d.itemName || `Dòng ${idx + 1} — chưa chọn`}
+                  {d.quantity > 1 && (
+                    <span className="ml-1 text-xs">×{d.quantity}</span>
+                  )}
+                  {(() => {
+                    const hv = students.find((x) => x.id === d.studentId);
+                    return hv ? (
+                      <span className="block text-xs text-muted-foreground">
+                        {hv.name}
+                      </span>
+                    ) : null;
+                  })()}
+                </dt>
+                <dd className="shrink-0 tabular-nums text-foreground">
+                  {(d.unitPrice * d.quantity).toLocaleString("vi-VN")}đ
+                </dd>
+              </div>
+            ))}
+
+            <div className="flex items-center justify-between gap-3 border-t border-border pt-2">
+              <dt className="text-muted-foreground">Tạm tính</dt>
+              <dd className="tabular-nums text-foreground">
+                {subtotal.toLocaleString("vi-VN")}đ
+              </dd>
+            </div>
+            {effectiveDiscount > 0 && (
+              <div className="flex items-center justify-between gap-3">
+                <dt className="text-muted-foreground">Giảm giá</dt>
+                <dd className="tabular-nums text-state-danger-ink">
+                  −{effectiveDiscount.toLocaleString("vi-VN")}đ
+                </dd>
+              </div>
+            )}
+            <div className="flex items-center justify-between gap-3 border-t border-border pt-2">
+              <dt className="font-semibold text-foreground">Tổng đơn</dt>
+              {/* text-xl là TRẦN cho số tiền (DESIGN.md §3) — 955.563.000đ từng tràn thẻ. */}
+              <dd className="text-xl font-bold tabular-nums text-foreground">
+                {totalAmount.toLocaleString("vi-VN")}đ
+              </dd>
+            </div>
+          </dl>
+        </section>
+          {/* Pricing */}
+          <section className="space-y-4 rounded-xl border border-border bg-muted/50 p-5">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+              Định giá
+            </h2>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {/* BGĐ 31/07 — giảm giá: chọn hình thức % hoặc số tiền. */}
+              <div className="space-y-1.5">
+                <Label>
+                  Giảm giá
+                  <HelpHint>
+                    Theo số tiền: gõ thẳng số tiền bớt cho khách. Theo %: gõ 1–100, hệ thống
+                    quy ra tiền trên phần tạm tính. Hai cách cho ra cùng một khoản giảm —
+                    chọn cách nào đúng với thoả thuận với phụ huynh thì dễ giải trình hơn.
+                  </HelpHint>
+                </Label>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={discountMode === "amount" ? "default" : "outline"}
+                    onClick={() => setDiscountMode("amount")}
+                  >
+                    Theo số tiền
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={discountMode === "percent" ? "default" : "outline"}
+                    onClick={() => setDiscountMode("percent")}
+                  >
+                    Theo %
+                  </Button>
+                </div>
+                {discountMode === "amount" ? (
+                  // Chỉ nhánh "theo số tiền" là ô tiền; nhánh "theo %" vẫn là số đếm 1–100.
+                  <MoneyInput
+                    name="discountAmount"
+                    min={0}
+                    value={discountAmount}
+                    onValueChange={(v) => setDiscountAmount(v ?? 0)}
+                    placeholder="Số tiền giảm"
+                  />
+                ) : (
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={discountPercent}
+                    onChange={(e) =>
+                      setDiscountPercent(Math.min(100, Math.max(0, Number(e.target.value) || 0)))
+                    }
+                    placeholder="% giảm (1–100)"
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* BGĐ 31/07 — giải trình bắt buộc khi giảm giá tay; đơn sẽ chờ QLCS duyệt. */}
+            {effectiveDiscount > 0 && (
+              <div className="space-y-1.5">
+                <Label>
+                  Giải trình giảm giá *
+                  <HelpHint>
+                    Quản lý cơ sở duyệt đơn đọc đúng dòng này để đồng ý hay trả lại, nên ghi
+                    rõ lý do và ai đã đồng ý (VD: &ldquo;em ruột HV Sata2, chị Lan CS1 đồng
+                    ý&rdquo;). Ghi &ldquo;ưu đãi&rdquo; chung chung thì đơn dễ bị trả lại và
+                    phụ huynh phải chờ.
+                  </HelpHint>
+                </Label>
+                <Input
+                  value={discountReason}
+                  onChange={(e) => setDiscountReason(e.target.value)}
+                  maxLength={1000}
+                  placeholder="VD: HV cũ giới thiệu em ruột — ưu đãi theo chính sách anh chị em"
+                />
+                <p className="text-xs text-state-warning-ink">
+                  Đơn có giảm giá sẽ ở trạng thái <strong>chờ Quản lý cơ sở duyệt</strong> — chỉ
+                  xác nhận được sau khi duyệt.
+                </p>
+              </div>
+            )}
+
+            <div className="text-right">
+              <div className="text-sm text-muted-foreground">
+                Tạm tính:{" "}
+                <span className="tabular-nums">
+                  {subtotal.toLocaleString("vi-VN")}
+                </span>{" "}
+                đ
+              </div>
+              {effectiveDiscount > 0 && (
+                <div className="text-sm text-muted-foreground">
+                  Giảm giá:{" "}
+                  <span className="tabular-nums">
+                    −{effectiveDiscount.toLocaleString("vi-VN")}
+                  </span>{" "}
+                  đ
+                  {discountMode === "percent" && discountPercent > 0
+                    ? ` (${discountPercent}%)`
+                    : ""}
+                </div>
+              )}
+              <div className="text-2xl font-bold text-foreground">
+                Tổng:{" "}
+                <span className="tabular-nums">
+                  {totalAmount.toLocaleString("vi-VN")}
+                </span>{" "}
+                đ
+                <HelpHint className="ml-1.5 [&_svg]:size-4">
+                  Số tiền phụ huynh phải đóng cho đơn này = Tạm tính − Giảm giá. Nếu phụ
+                  huynh đóng làm 2 đợt thì vẫn lấy số này làm tổng, phần chia đợt làm ở màn
+                  chi tiết đơn sau khi tạo.
+                </HelpHint>
+              </div>
+            </div>
+          </section>
+
+          <div className="flex gap-3">
+            <Button type="submit" disabled={isPending}>
+              {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              {isPending ? "Đang tạo..." : "Tạo đơn"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => router.back()}
+              disabled={isPending}
             >
-              <SelectTrigger>
-                <SelectValue placeholder="Chọn..." />
-              </SelectTrigger>
-              <SelectContent>
-                {availablePMs.map((pm) => (
-                  <SelectItem key={pm.id} value={pm.id}>
-                    {pm.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {availablePMs.length === 0 && (
-              // Danh sách rỗng mà không nói gì thì người dùng ngồi bấm mãi không ra.
-              // Ca thật: cơ sở chỉ có phương thức riêng loại "Chuyển khoản" nhưng đang
-              // tạo đơn Sản phẩm, hoặc mọi phương thức của cơ sở đã bị tắt.
-              <p className="text-xs text-state-warning-ink">
-                Cơ sở đang chọn chưa có phương thức thanh toán nào dùng được cho loại đơn
-                này. Khai thêm ở trang Cơ sở → mục Thanh toán.
-              </p>
-            )}
+              Huỷ
+            </Button>
           </div>
-        </div>
-      </section>
+        </aside>
+      </div>
+    </form>
+  );
+}
 
-      {/* Customer */}
-      <section className="space-y-4 rounded-xl border border-border bg-card p-5">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
-          Khách hàng
-        </h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label>Tên phụ huynh *</Label>
-            <Input
-              value={customer.name}
-              onChange={(e) =>
-                setCustomer({ ...customer, name: e.target.value })
-              }
-              required
-              minLength={2}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>SĐT *</Label>
-            <Input
-              value={customer.phone}
-              onChange={(e) =>
-                setCustomer({ ...customer, phone: e.target.value })
-              }
-              required
-              placeholder="09xxxxxxxx"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Email (không bắt buộc)</Label>
-            <Input
-              type="email"
-              value={customer.email}
-              onChange={(e) =>
-                setCustomer({ ...customer, email: e.target.value })
-              }
-              placeholder="Kênh dự phòng — bỏ trống nếu khách không dùng"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>
-              CCCD/CMND
-              {/* Câu hỏi phụ huynh hay hỏi lại nhân viên ("sao phải đưa CCCD?") — để sẵn
-                  câu trả lời ngay cạnh ô, khỏi mỗi người giải thích một kiểu. */}
-              <HelpHint>
-                Chỉ cần khi phụ huynh muốn xuất hoá đơn hoặc phiếu thu đứng tên mình. Bỏ
-                trống được. Số này là thông tin nhạy cảm nên ở màn Thanh toán sẽ bị che,
-                ai mở xem đầy đủ đều bị ghi nhật ký.
-              </HelpHint>
-            </Label>
-            <Input
-              value={customer.cccd}
-              onChange={(e) =>
-                setCustomer({ ...customer, cccd: e.target.value })
-              }
-              inputMode="numeric"
-              placeholder="9 hoặc 12 chữ số"
-            />
-          </div>
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label>Địa chỉ (số nhà, đường)</Label>
-            <Input
-              value={customer.address}
-              onChange={(e) =>
-                setCustomer({ ...customer, address: e.target.value })
-              }
-            />
-          </div>
-          {/* O2 — Tỉnh/Thành TRƯỚC (searchable), Phường/Xã SAU (phụ thuộc tỉnh) */}
-          <div className="space-y-1.5">
-            <Label>Tỉnh/Thành</Label>
-            <Combobox
-              options={provinces}
-              value={provinceId}
-              onValueChange={handleProvinceChange}
-              placeholder="Tìm tỉnh/thành..."
-              emptyText="Không tìm thấy tỉnh/thành"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Phường/Xã</Label>
-            <Combobox
-              options={wardOptions}
-              value={wardId}
-              onValueChange={setWardId}
-              disabled={!provinceId || wardLoading}
-              placeholder={
-                !provinceId
-                  ? "Chọn tỉnh/thành trước"
-                  : wardLoading
-                    ? "Đang tải..."
-                    : "Tìm phường/xã..."
-              }
-              emptyText="Không tìm thấy phường/xã"
-            />
-          </div>
-        </div>
-      </section>
+/**
+ * MỘT dòng hàng — chọn con, chọn khoá/sản phẩm, hình thức lớp, số buổi, SL, đơn giá.
+ *
+ * Tách ra component riêng vì mỗi dòng có state dẫn xuất RIÊNG (gợi ý giá theo công văn
+ * phụ thuộc khoá + số buổi + hình thức của CHÍNH dòng đó). Để chung trong form thì phải
+ * tính một mảng `goiY[]` song song với `dong[]` và giữ hai mảng đồng bộ bằng tay — đúng
+ * loại việc mà React tách component ra để khỏi phải làm.
+ */
+function DongHangCard({
+  stt,
+  tongDong,
+  dong,
+  orderType,
+  courses,
+  products,
+  students,
+  onSua,
+  onChonMatHang,
+  onXoa,
+}: {
+  stt: number;
+  tongDong: number;
+  dong: DongHang;
+  orderType: UiOrderType;
+  courses: Course[];
+  products: ProductOption[];
+  students: StudentOption[];
+  onSua: (thayDoi: Partial<DongHang>) => void;
+  onChonMatHang: (refId: string) => void;
+  onXoa: () => void;
+}) {
+  const khoa = useMemo(
+    () =>
+      orderType === "COURSE"
+        ? (courses.find((c) => c.id === dong.refId) ?? null)
+        : null,
+    [orderType, courses, dong.refId],
+  );
+  const sanPham = useMemo(
+    () =>
+      orderType === "PRODUCT"
+        ? (products.find((p) => p.id === dong.refId) ?? null)
+        : null,
+    [orderType, products, dong.refId],
+  );
 
-      {/* Item */}
-      {/* Viền ĐỀU 1px: vạch màu dày một bên là lối trang trí, và nó không mang thêm
-          thông tin nào mà nền nhạt + tiêu đề chưa nói. */}
-      <section className="space-y-4 rounded-xl border border-border bg-state-info-soft/20 p-5">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-state-info-ink">
-          Sản phẩm
-        </h2>
+  /**
+   * GỢI Ý học phí theo SR.QD.219 Điều 5 — để người bán ĐỌC, không phải giá hệ thống áp.
+   *
+   * Ô "Đơn giá" vẫn do người bán gõ: hệ thống chưa có cách đối chiếu hình thức lớp đã
+   * bán với lớp học thật, nên tự áp giá ×2 là biến một con số người khai thành một con
+   * số hệ thống bảo đảm.
+   *
+   * Giảm giá: cố ý truyền `null`. Ô giảm giá của ĐƠN trừ trên TỔNG sau khi đã nhân hệ
+   * số, còn Mục 5.3 bảo giảm TRƯỚC rồi mới nhân — hai thứ tự khác nhau.
+   */
+  const goiY = useMemo(() => {
+    if (orderType !== "COURSE" || !khoa) return null;
+    return goiYGiaCoach({
+      giaNiemYet: khoa.price,
+      tongSoBuoi: khoa.totalSessions,
+      soBuoiMua: dong.soBuoiMua,
+      coachFormat: dong.coachFormat,
+      giamGia: null,
+      khoaKhongApDungCoach: laKhoaLoaiTruCoach(khoa),
+    });
+  }, [orderType, khoa, dong.soBuoiMua, dong.coachFormat]);
+
+  const thieuGiaNiemYet =
+    orderType === "COURSE" && !!khoa && (khoa.price == null || khoa.price <= 0);
+  const thieuKho = !!sanPham && sanPham.stockOnHand < dong.quantity;
+  const thanhTien = dong.unitPrice * dong.quantity;
+
+  const matHangItems = useMemo(() => {
+    if (orderType === "COURSE")
+      return Object.fromEntries(
+        courses.map((c) => [c.id, c.code ? `${c.name} (${c.code})` : c.name]),
+      );
+    return Object.fromEntries(products.map((pd) => [pd.id, `${pd.sku} · ${pd.name}`]));
+  }, [orderType, courses, products]);
+
+  // Nhãn học viên mang THÊM tên phụ huynh + SĐT: một cơ sở có nhiều em trùng tên, và
+  // người bán đang cầm SĐT của phụ huynh trước mặt — đó là thứ họ đối chiếu được.
+  //
+  // ⚠️ SĐT phải ra dạng NỘI ĐỊA `0987654321`, không phải `84987654321` như trong DB.
+  // Đây KHÔNG chỉ là chuyện hiển thị: bộ lọc của `Combobox` khớp trên chính chuỗi
+  // `label` này, nên để nguyên dạng `84…` là người bán gõ số họ đang cầm trên tay
+  // (`09…`) thì danh sách ra RỖNG — đúng lúc họ cần nó nhất, tức lúc tìm các con của
+  // cùng một phụ huynh. Dạng nội địa khớp cả hai kiểu dữ liệu vì `nationalPhone`
+  // chuẩn hoá trước.
+  const hocVienOptions: ComboboxOption[] = useMemo(
+    () =>
+      students.map((hv) => ({
+        value: hv.id,
+        label: [hv.name, hv.parentName, nationalPhone(hv.parentPhone) ?? hv.parentPhone]
+          .filter(Boolean)
+          .join(" · "),
+      })),
+    [students],
+  );
+
+  return (
+    <div className="rounded-xl border border-border bg-background p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-muted tabular-nums">
+            {stt}
+          </span>
+          Dòng {stt}
+        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-semibold tabular-nums text-foreground">
+            {thanhTien.toLocaleString("vi-VN")}đ
+          </span>
+          {/* Dòng cuối cùng KHÔNG xoá được — đơn 0 dòng không lưu được (server đòi
+              min 1) và một form trống trơn không nói được phải làm gì tiếp. Vô hiệu
+              hoá kèm `title` chứ không ẩn nút: nút biến mất làm người ta tưởng hỏng. */}
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={onXoa}
+            disabled={tongDong <= 1}
+            title={tongDong <= 1 ? "Đơn phải có ít nhất một dòng" : "Xoá dòng này"}
+            aria-label={`Xoá dòng ${stt}`}
+          >
+            <Trash2 className="h-3.5 w-3.5" aria-hidden />
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {/* HỌC VIÊN — ô đầu tiên vì đó là câu hỏi đầu tiên khi bán cho nhà nhiều con. */}
+        <div className="space-y-1.5">
+          <Label>
+            <User className="mr-1 inline h-3.5 w-3.5 align-[-2px]" aria-hidden />
+            Học viên
+            <HelpHint>
+              Dòng này mua cho con nào. Để trống được khi khách vãng lai — con chưa có hồ
+              sơ trong hệ thống, tên con lúc đó nằm ở tên khoá học. Nhưng đơn có TỪ HAI
+              con trở lên thì bắt buộc chọn rõ từng dòng, nếu không thì sau này không ai
+              biết khoản tiền là của ai.
+            </HelpHint>
+          </Label>
+          <Combobox
+            options={hocVienOptions}
+            value={dong.studentId}
+            onValueChange={(v) => onSua({ studentId: v })}
+            placeholder="Chọn học viên (tuỳ chọn)…"
+            emptyText="Không tìm thấy học viên"
+          />
+        </div>
+
         <div className="space-y-1.5">
           <Label>
             {orderType === "COURSE" ? "Khoá học *" : "Sản phẩm *"}
@@ -629,9 +1097,9 @@ export function OrderCreateForm({
             </HelpHint>
           </Label>
           <Select
-            items={itemItems}
-            value={itemRefId}
-            onValueChange={(v) => handleItemSelect(v ?? "")}
+            items={matHangItems}
+            value={dong.refId}
+            onValueChange={(v) => onChonMatHang(v ?? "")}
           >
             <SelectTrigger>
               <SelectValue placeholder="Chọn..." />
@@ -651,377 +1119,199 @@ export function OrderCreateForm({
               )}
               {orderType === "PRODUCT" &&
                 products.map((pd) => (
-                  <SelectItem
-                    key={pd.id}
-                    value={pd.id}
-                    disabled={pd.stockOnHand <= 0}
-                  >
-                    {pd.sku} · {pd.name} ·{" "}
-                    {pd.salePrice.toLocaleString("vi-VN")}đ · còn{" "}
+                  <SelectItem key={pd.id} value={pd.id} disabled={pd.stockOnHand <= 0}>
+                    {pd.sku} · {pd.name} · {pd.salePrice.toLocaleString("vi-VN")}đ · còn{" "}
                     {pd.stockOnHand}
                   </SelectItem>
                 ))}
             </SelectContent>
           </Select>
-          {/* O4 hardening — cảnh báo giá khoá học rỗng → nhập đơn giá tay */}
-          {coursePriceMissing && (
-            <div className="mt-2 rounded-lg border border-state-warning bg-state-warning-soft p-2 text-sm text-state-warning-ink">
-              ⚠️ Khoá học này chưa có giá niêm yết. Vui lòng nhập đơn giá thủ
-              công bên dưới.
-            </div>
-          )}
-          {orderType === "PRODUCT" &&
-            itemRefId &&
-            (() => {
-              const selected = products.find((p) => p.id === itemRefId);
-              if (!selected) return null;
-              const insufficient = selected.stockOnHand < quantity;
-              return (
-                <div
-                  className={
-                    "mt-2 rounded-lg p-2 text-sm " +
-                    (insufficient
-                      ? "border border-state-danger-soft bg-state-danger-soft text-state-danger-ink"
-                      : "border border-state-info-soft bg-state-info-soft text-state-info-ink")
-                  }
-                >
-                  {insufficient ? "⚠️" : "ℹ️"} Tồn kho hiện tại:{" "}
-                  {selected.stockOnHand}
-                  {insufficient && ` — không đủ cho yêu cầu ${quantity}`}
-                </div>
-              );
-            })()}
         </div>
-        {/* ── HÌNH THỨC LỚP — SR.QD.219 Điều 5 ──────────────────────────────
-            Chỉ đơn KHOÁ HỌC mới có nghĩa. Khối này KHAI hình thức đã bán và GỢI Ý giá
-            theo công văn; nó cố ý KHÔNG tự ghi đè "Đơn giá" — xem chú thích ở `goiY`. */}
-        {orderType === "COURSE" && (
-          <div className="space-y-3 rounded-lg border border-border bg-background p-4">
-            <div className="space-y-1.5">
+      </div>
+
+      {thieuGiaNiemYet && (
+        <p className="mt-2 rounded-lg border border-state-warning bg-state-warning-soft p-2 text-sm text-state-warning-ink">
+          ⚠️ Khoá học này chưa có giá niêm yết. Nhập đơn giá thủ công bên dưới.
+        </p>
+      )}
+      {sanPham && (
+        <p
+          className={
+            "mt-2 rounded-lg p-2 text-sm " +
+            (thieuKho
+              ? "border border-state-danger-soft bg-state-danger-soft text-state-danger-ink"
+              : "border border-state-info-soft bg-state-info-soft text-state-info-ink")
+          }
+        >
+          {thieuKho ? "⚠️" : "ℹ️"} Tồn kho hiện tại: {sanPham.stockOnHand}
+          {thieuKho && ` — không đủ cho yêu cầu ${dong.quantity}`}
+        </p>
+      )}
+
+      {/* ── HÌNH THỨC LỚP — SR.QD.219 Điều 5 ─────────────────────────────────
+          Chỉ đơn KHOÁ HỌC mới có nghĩa. Khối này KHAI hình thức đã bán và GỢI Ý giá
+          theo công văn; nó cố ý KHÔNG tự ghi đè "Đơn giá" — xem chú thích ở `goiY`. */}
+      {orderType === "COURSE" && (
+        <div className="mt-4 space-y-3 rounded-lg border border-border bg-muted/40 p-3 sm:p-4">
+          <div className="space-y-1.5">
+            <Label>
+              Hình thức lớp
+              <HelpHint>
+                Theo SR.QD.219 Điều 5: Coach 1-1 là 1 giáo viên kèm riêng 1 học sinh, 1-2
+                kèm 2, 1-4 kèm tối đa 4. Giá mỗi buổi = giá/buổi của khoá × hệ số (1-1
+                ×2,0 · 1-2 ×1,8 · 1-4 ×1,5). Chọn ở đây để đơn GHI LẠI hình thức đã bán;
+                đơn giá vẫn do bạn gõ.
+              </HelpHint>
+            </Label>
+            <div className="flex flex-wrap gap-2">
+              {(
+                ["GROUP", "ONE_ON_ONE", "ONE_ON_TWO", "ONE_ON_FOUR"] as CoachFormat[]
+              ).map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => onSua({ coachFormat: f })}
+                  aria-pressed={dong.coachFormat === f}
+                  className={`min-h-11 whitespace-nowrap rounded-lg border px-3 text-sm font-medium transition-colors duration-150 ${
+                    dong.coachFormat === f
+                      ? "border-primary bg-primary text-white"
+                      : "border-border bg-background hover:bg-muted"
+                  }`}
+                >
+                  {NHAN_COACH[f]}
+                  {f !== "GROUP" && (
+                    <span className="ml-1 text-xs opacity-80">
+                      ×{HE_SO_COACH[f].toLocaleString("vi-VN")}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="space-y-1.5 sm:col-span-1">
               <Label>
-                Hình thức lớp
+                Số buổi mua
                 <HelpHint>
-                  Theo SR.QD.219 Điều 5: Coach 1-1 là 1 giáo viên kèm riêng 1 học sinh,
-                  1-2 kèm 2, 1-4 kèm tối đa 4. Giá mỗi buổi = giá/buổi của khoá × hệ số
-                  (1-1 ×2,0 · 1-2 ×1,8 · 1-4 ×1,5). Chọn ở đây để đơn GHI LẠI hình thức
-                  đã bán; đơn giá vẫn do bạn gõ.
+                  Mặc định bằng tổng số buổi của khoá. Sửa khi khách mua LẺ buổi (học
+                  thêm ngoài chính khoá — Mục 5.4) hoặc mua theo học phần.
                 </HelpHint>
               </Label>
-              <div className="flex flex-wrap gap-2">
-                {(["GROUP", "ONE_ON_ONE", "ONE_ON_TWO", "ONE_ON_FOUR"] as CoachFormat[]).map(
-                  (f) => (
-                    <button
-                      key={f}
-                      type="button"
-                      onClick={() => setCoachFormat(f)}
-                      aria-pressed={coachFormat === f}
-                      className={`min-h-11 whitespace-nowrap rounded-lg border px-3 text-sm font-medium transition-colors duration-150 ${
-                        coachFormat === f
-                          ? "border-primary bg-primary text-white"
-                          : "border-border bg-background hover:bg-muted"
-                      }`}
-                    >
-                      {NHAN_COACH[f]}
-                      {f !== "GROUP" && (
-                        <span className="ml-1 text-xs opacity-80">
-                          ×{HE_SO_COACH[f].toLocaleString("vi-VN")}
-                        </span>
-                      )}
-                    </button>
-                  ),
-                )}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <div className="space-y-1.5 sm:col-span-1">
-                <Label>
-                  Số buổi mua
-                  <HelpHint>
-                    Mặc định bằng tổng số buổi của khoá. Sửa khi khách mua LẺ buổi (học
-                    thêm ngoài chính khoá — Mục 5.4) hoặc mua theo học phần.
-                  </HelpHint>
-                </Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={500}
-                  value={soBuoiMua ?? ""}
-                  placeholder={khoaDangChon?.totalSessions ? String(khoaDangChon.totalSessions) : "—"}
-                  onChange={(e) => {
-                    const v = Number(e.target.value);
-                    setSoBuoiMua(Number.isInteger(v) && v > 0 ? v : null);
-                  }}
-                />
-              </div>
-
-              <div className="sm:col-span-2">
-                {goiY?.dungDuoc ? (
-                  <div className="rounded-lg border border-state-info bg-state-info-soft/40 p-3">
-                    <p className="text-xs leading-relaxed text-state-info-ink">
-                      Theo công văn:{" "}
-                      <b className="font-semibold tabular-nums">
-                        {goiY.giaMoiBuoi.toLocaleString("vi-VN")}đ/buổi
-                      </b>{" "}
-                      × hệ số <b className="font-semibold">{goiY.heSo.toLocaleString("vi-VN")}</b> ×{" "}
-                      <b className="font-semibold tabular-nums">{goiY.soBuoiMua} buổi</b> ={" "}
-                      <b className="font-semibold tabular-nums">
-                        {goiY.thanhTien.toLocaleString("vi-VN")}đ
-                      </b>
-                      {goiY.lechLamTron !== 0 && (
-                        <>
-                          {" "}
-                          <span className="text-muted-foreground">
-                            (lệch {goiY.lechLamTron > 0 ? "+" : ""}
-                            {goiY.lechLamTron.toLocaleString("vi-VN")}đ do làm tròn giá/buổi)
-                          </span>
-                        </>
-                      )}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setUnitPrice(goiY.thanhTien)}
-                      className="mt-2 min-h-9 rounded-md border border-border bg-background px-2.5 text-xs font-medium transition-colors duration-150 hover:bg-muted"
-                    >
-                      Áp số này vào Đơn giá
-                    </button>
-                  </div>
-                ) : (
-                  <div className="rounded-lg border border-state-warning bg-state-warning-soft p-3 text-xs leading-relaxed text-state-warning-ink">
-                    {goiY?.thieu === "LOAI_TRU" ? (
-                      <>
-                        Khoá này <b className="font-semibold">không áp dụng Coach</b>{" "}
-                        (SR.QD.219 Điều 5 — gói cam kết 5 buổi, giá cố định Điều 3). Chọn
-                        lớp nhóm, hoặc chọn khoá khác — server cũng từ chối đơn này.
-                      </>
-                    ) : goiY?.thieu === "SO_BUOI" ? (
-                      <>
-                        Khoá chưa khai <b className="font-semibold">tổng số buổi</b> nên
-                        không tính được giá/buổi. Khai ở màn Gói khoá học, hoặc gõ đơn giá
-                        tay theo thoả thuận.
-                      </>
-                    ) : goiY?.thieu === "GIA" ? (
-                      <>
-                        Khoá chưa có <b className="font-semibold">giá niêm yết</b> nên
-                        không gợi ý được. Nhập đơn giá tay.
-                      </>
-                    ) : (
-                      <>Chọn khoá học để xem gợi ý giá theo công văn.</>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {coachFormat !== "GROUP" && (
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                Hình thức lớp được <b className="font-semibold text-foreground">ghi lại trên
-                dòng đơn</b>; <b className="font-semibold text-foreground">đơn giá vẫn là số
-                bạn gõ</b>. Hai điều phải biết: (1) ô Giảm giá bên dưới trừ trên TỔNG sau khi
-                đã nhân hệ số, còn Mục 5.3 bảo giảm TRƯỚC rồi mới nhân — giảm theo % thì hai
-                cách trùng nhau, giảm theo SỐ TIỀN thì lệch; (2) công nợ và cổng phụ huynh
-                hiện vẫn đọc giá LỚP NHÓM của ghi danh, nên đơn Coach sẽ lệch với số phụ
-                huynh thấy cho tới khi phần ghi danh được sửa.
-              </p>
-            )}
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div className="space-y-1.5 sm:col-span-1">
-            <Label>Số lượng</Label>
-            <Input
-              type="number"
-              min={1}
-              value={quantity}
-              onChange={(e) => setQuantity(Number(e.target.value) || 1)}
-            />
-          </div>
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label>
-              Đơn giá (VND) *
-              <HelpHint>
-                Tự điền theo giá niêm yết khi chọn khoá học/sản phẩm; chỉ sửa tay khi
-                khoá chưa có giá. Muốn bớt tiền cho khách thì dùng ô Giảm giá bên dưới —
-                hạ thẳng đơn giá sẽ không ai duyệt và báo cáo mất dấu khoản ưu đãi.
-              </HelpHint>
-            </Label>
-            {/* Ô tiền: gõ 10000000 → hiện 10.000.000. Xoá trắng quy về 0 để chốt chặn
-                `unitPrice <= 0` ở handleSubmit vẫn bắt được như trước. */}
-            <MoneyInput
-              name="unitPrice"
-              min={0}
-              value={unitPrice}
-              onValueChange={(v) => setUnitPrice(v ?? 0)}
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* Pricing */}
-      <section className="space-y-4 rounded-xl border border-border bg-muted/50 p-5">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
-          Định giá
-        </h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {/* BGĐ 31/07 — giảm giá: chọn hình thức % hoặc số tiền. */}
-          <div className="space-y-1.5">
-            <Label>
-              Giảm giá
-              <HelpHint>
-                Theo số tiền: gõ thẳng số tiền bớt cho khách. Theo %: gõ 1–100, hệ thống
-                quy ra tiền trên phần tạm tính. Hai cách cho ra cùng một khoản giảm —
-                chọn cách nào đúng với thoả thuận với phụ huynh thì dễ giải trình hơn.
-              </HelpHint>
-            </Label>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant={discountMode === "amount" ? "default" : "outline"}
-                onClick={() => setDiscountMode("amount")}
-              >
-                Theo số tiền
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={discountMode === "percent" ? "default" : "outline"}
-                onClick={() => setDiscountMode("percent")}
-              >
-                Theo %
-              </Button>
-            </div>
-            {discountMode === "amount" ? (
-              // Chỉ nhánh "theo số tiền" là ô tiền; nhánh "theo %" vẫn là số đếm 1–100.
-              <MoneyInput
-                name="discountAmount"
-                min={0}
-                value={discountAmount}
-                onValueChange={(v) => setDiscountAmount(v ?? 0)}
-                placeholder="Số tiền giảm"
-              />
-            ) : (
               <Input
                 type="number"
-                min={0}
-                max={100}
-                value={discountPercent}
-                onChange={(e) =>
-                  setDiscountPercent(Math.min(100, Math.max(0, Number(e.target.value) || 0)))
-                }
-                placeholder="% giảm (1–100)"
+                min={1}
+                max={500}
+                value={dong.soBuoiMua ?? ""}
+                placeholder={khoa?.totalSessions ? String(khoa.totalSessions) : "—"}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  onSua({ soBuoiMua: Number.isInteger(v) && v > 0 ? v : null });
+                }}
               />
-            )}
-          </div>
-        </div>
-
-        {/* BGĐ 31/07 — giải trình bắt buộc khi giảm giá tay; đơn sẽ chờ QLCS duyệt. */}
-        {effectiveDiscount > 0 && (
-          <div className="space-y-1.5">
-            <Label>
-              Giải trình giảm giá *
-              <HelpHint>
-                Quản lý cơ sở duyệt đơn đọc đúng dòng này để đồng ý hay trả lại, nên ghi
-                rõ lý do và ai đã đồng ý (VD: &ldquo;em ruột HV Sata2, chị Lan CS1 đồng
-                ý&rdquo;). Ghi &ldquo;ưu đãi&rdquo; chung chung thì đơn dễ bị trả lại và
-                phụ huynh phải chờ.
-              </HelpHint>
-            </Label>
-            <Input
-              value={discountReason}
-              onChange={(e) => setDiscountReason(e.target.value)}
-              maxLength={1000}
-              placeholder="VD: HV cũ giới thiệu em ruột — ưu đãi theo chính sách anh chị em"
-            />
-            <p className="text-xs text-state-warning-ink">
-              Đơn có giảm giá sẽ ở trạng thái <strong>chờ Quản lý cơ sở duyệt</strong> — chỉ
-              xác nhận được sau khi duyệt.
-            </p>
-          </div>
-        )}
-
-        <div className="text-right">
-          <div className="text-sm text-muted-foreground">
-            Tạm tính:{" "}
-            <span className="tabular-nums">
-              {subtotal.toLocaleString("vi-VN")}
-            </span>{" "}
-            đ
-          </div>
-          {effectiveDiscount > 0 && (
-            <div className="text-sm text-muted-foreground">
-              Giảm giá:{" "}
-              <span className="tabular-nums">
-                −{effectiveDiscount.toLocaleString("vi-VN")}
-              </span>{" "}
-              đ
-              {discountMode === "percent" && discountPercent > 0
-                ? ` (${discountPercent}%)`
-                : ""}
             </div>
-          )}
-          <div className="text-2xl font-bold text-foreground">
-            Tổng:{" "}
-            <span className="tabular-nums">
-              {totalAmount.toLocaleString("vi-VN")}
-            </span>{" "}
-            đ
-            <HelpHint className="ml-1.5 [&_svg]:size-4">
-              Số tiền phụ huynh phải đóng cho đơn này = Tạm tính − Giảm giá. Nếu phụ
-              huynh đóng làm 2 đợt thì vẫn lấy số này làm tổng, phần chia đợt làm ở màn
-              chi tiết đơn sau khi tạo.
-            </HelpHint>
+
+            <div className="sm:col-span-2">
+              {goiY?.dungDuoc ? (
+                <div className="rounded-lg border border-state-info bg-state-info-soft/40 p-3">
+                  <p className="text-xs leading-relaxed text-state-info-ink">
+                    Theo công văn:{" "}
+                    <b className="font-semibold tabular-nums">
+                      {goiY.giaMoiBuoi.toLocaleString("vi-VN")}đ/buổi
+                    </b>{" "}
+                    × hệ số{" "}
+                    <b className="font-semibold">{goiY.heSo.toLocaleString("vi-VN")}</b> ×{" "}
+                    <b className="font-semibold tabular-nums">{goiY.soBuoiMua} buổi</b> ={" "}
+                    <b className="font-semibold tabular-nums">
+                      {goiY.thanhTien.toLocaleString("vi-VN")}đ
+                    </b>
+                    {goiY.lechLamTron !== 0 && (
+                      <>
+                        {" "}
+                        <span className="text-muted-foreground">
+                          (lệch {goiY.lechLamTron > 0 ? "+" : ""}
+                          {goiY.lechLamTron.toLocaleString("vi-VN")}đ do làm tròn giá/buổi)
+                        </span>
+                      </>
+                    )}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => onSua({ unitPrice: goiY.thanhTien })}
+                    className="mt-2 min-h-9 rounded-md border border-border bg-background px-2.5 text-xs font-medium transition-colors duration-150 hover:bg-muted"
+                  >
+                    Áp số này vào Đơn giá
+                  </button>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-state-warning bg-state-warning-soft p-3 text-xs leading-relaxed text-state-warning-ink">
+                  {goiY?.thieu === "LOAI_TRU" ? (
+                    <>
+                      Khoá này <b className="font-semibold">không áp dụng Coach</b>{" "}
+                      (SR.QD.219 Điều 5 — gói cam kết 5 buổi, giá cố định Điều 3). Chọn
+                      lớp nhóm, hoặc chọn khoá khác — server cũng từ chối đơn này.
+                    </>
+                  ) : goiY?.thieu === "SO_BUOI" ? (
+                    <>
+                      Khoá chưa khai <b className="font-semibold">tổng số buổi</b> nên
+                      không tính được giá/buổi. Khai ở màn Gói khoá học, hoặc gõ đơn giá
+                      tay.
+                    </>
+                  ) : goiY?.thieu === "GIA" ? (
+                    <>
+                      Khoá chưa có <b className="font-semibold">giá niêm yết</b> nên không
+                      gợi ý được. Nhập đơn giá tay.
+                    </>
+                  ) : (
+                    <>Chọn khoá học để xem gợi ý giá theo công văn.</>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      </section>
 
-      {/* Notes */}
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label>
-            Ghi chú khách hàng
-            <HelpHint>
-              Nội dung liên quan trực tiếp tới khách: yêu cầu riêng, thoả thuận lúc bán.
-              Việc nội bộ (dặn nhau, đánh giá khách) ghi ở ô bên cạnh.
-            </HelpHint>
-          </Label>
-          <Textarea
-            value={customerNote}
-            onChange={(e) => setCustomerNote(e.target.value)}
-            rows={2}
+          {dong.coachFormat !== "GROUP" && (
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Hình thức lớp được{" "}
+              <b className="font-semibold text-foreground">ghi lại trên dòng đơn</b>;{" "}
+              <b className="font-semibold text-foreground">đơn giá vẫn là số bạn gõ</b>.
+              Hai điều phải biết: (1) ô Giảm giá bên dưới trừ trên TỔNG sau khi đã nhân hệ
+              số, còn Mục 5.3 bảo giảm TRƯỚC rồi mới nhân — giảm theo % thì hai cách trùng
+              nhau, giảm theo SỐ TIỀN thì lệch; (2) công nợ và cổng phụ huynh hiện vẫn đọc
+              giá LỚP NHÓM của ghi danh, nên đơn Coach sẽ lệch với số phụ huynh thấy cho
+              tới khi phần ghi danh được sửa.
+            </p>
+          )}
+        </div>
+      )}
+
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="space-y-1.5 sm:col-span-1">
+          <Label>Số lượng</Label>
+          <Input
+            type="number"
+            min={1}
+            value={dong.quantity}
+            onChange={(e) => onSua({ quantity: Number(e.target.value) || 1 })}
           />
         </div>
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 sm:col-span-2">
           <Label>
-            Ghi chú nội bộ
+            Đơn giá (VND) *
             <HelpHint>
-              Chỉ nhân viên Sata Robo đọc được — dùng để dặn nhau về đơn này (đã hẹn gọi
-              lại, chờ phụ huynh chuyển khoản…).
+              Tự điền theo giá niêm yết khi chọn khoá học/sản phẩm; chỉ sửa tay khi khoá
+              chưa có giá. Muốn bớt tiền cho khách thì dùng ô Giảm giá bên dưới — hạ thẳng
+              đơn giá sẽ không ai duyệt và báo cáo mất dấu khoản ưu đãi.
             </HelpHint>
           </Label>
-          <Textarea
-            value={internalNote}
-            onChange={(e) => setInternalNote(e.target.value)}
-            rows={2}
+          <MoneyInput
+            name={`unitPrice-${dong.key}`}
+            min={0}
+            value={dong.unitPrice}
+            onValueChange={(v) => onSua({ unitPrice: v ?? 0 })}
           />
         </div>
-      </section>
-
-      <div className="flex gap-3">
-        <Button type="submit" disabled={isPending}>
-          {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-          {isPending ? "Đang tạo..." : "Tạo đơn"}
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => router.back()}
-          disabled={isPending}
-        >
-          Huỷ
-        </Button>
       </div>
-    </form>
+    </div>
   );
 }
