@@ -12,6 +12,7 @@
     "phone:audit": "tsx scripts/phone-audit.ts",
     "phone:backfill": "tsx scripts/phone-backfill.ts",
     "payments:backfill": "tsx scripts/backfill-payment-requests.ts",
+    "parents:provision-debtors": "tsx scripts/cap-tai-khoan-phu-huynh-con-no.ts",
     "payments:shadow-compare": "tsx scripts/shadow-compare-debt.ts",
     "import:legacy-leads": "tsx scripts/import-legacy-leads.ts",
     "kiem-tra:legacy-leads": "tsx scripts/kiem-tra-lead-cu.ts",
