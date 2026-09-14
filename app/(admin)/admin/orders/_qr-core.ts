@@ -43,6 +43,7 @@ import {
   transferContentForOrder,
   VIETQR_ADDINFO_MAX,
 } from "@/lib/payments/vietqr";
+import { noiDungCkCoKhoa } from "@/lib/payments/noi-dung-ck";
 import { getSetting } from "@/lib/settings/service";
 
 /** Một phiên QR đã "phẳng hoá" cho client component (Date → ISO). */
@@ -315,7 +316,7 @@ export async function loadActiveQrSessions(
  * in ra màn hình TRÙNG chuỗi nằm trong QR.
  */
 function addInfoFor(req: LoadedRequest): string {
-  return transferContentForOrder(
+  const nguoiDoc = transferContentForOrder(
     {
       studentName: req.order.studentName,
       customerName: req.order.customerName,
@@ -324,6 +325,15 @@ function addInfoFor(req: LoadedRequest): string {
     },
     VIETQR_ADDINFO_MAX,
   );
+  // 14/09/2026 — GẮN KHOÁ ĐỐI KHỚP LÊN ĐẦU. Đo đầy đủ ở `lib/payments/noi-dung-ck.ts`;
+  // tóm tắt: BA trong BỐN nhánh đối khớp của `payos-ingest` đang chết với mã QR này,
+  // và nhánh sống sót phải ĐOÁN theo SĐT + tên, lại không biết tiền thuộc ĐỢT nào
+  // (chú thích ngay trên đã tự ghi nhận "đợt 1 và đợt 2 ra CÙNG một chuỗi"). Có khoá
+  // thì nhánh (a) khớp bằng MỘT truy vấn trên cột @unique, đúng đợt — đó là câu trả
+  // lời cho "làm sao xác nhận thật nhanh".
+  //
+  // `matchKey` null (phiếu cũ chưa sinh khoá) ⇒ trả đúng chuỗi cũ, không đổi gì.
+  return noiDungCkCoKhoa(req.matchKey, nguoiDoc, VIETQR_ADDINFO_MAX);
 }
 
 /**
