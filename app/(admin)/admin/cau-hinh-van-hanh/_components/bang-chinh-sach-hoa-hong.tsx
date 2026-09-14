@@ -2,7 +2,8 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, Info, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
+import { AlertTriangle, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
+import { ChuThich } from "@/components/admin/ui/chu-thich";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -43,37 +44,6 @@ const pct = (n: number) => `${Number((n * 100).toFixed(4))}%`;
 const O =
   "min-h-11 w-full rounded-lg border border-border bg-background px-2.5 text-sm transition-colors duration-150 focus:border-primary focus:outline-none";
 
-/**
- * Dấu ⓘ — bấm ra lời giải thích.
- *
- * Cố ý KHÔNG dùng `title=""`: điện thoại không hover được, mà đây đúng là chỗ người dùng
- * cần giải thích nhất. Chủ dự án 14/09: "hãy là 1 icon chữ i hình tròn để ghi chú rõ ràng hơn".
- */
-function ChuThich({ noiDung, nhan }: { noiDung: string; nhan: string }) {
-  const [mo, setMo] = useState(false);
-  return (
-    <span className="relative inline-flex">
-      <button
-        type="button"
-        onClick={() => setMo((v) => !v)}
-        onBlur={() => setMo(false)}
-        aria-label={nhan}
-        aria-expanded={mo}
-        className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground"
-      >
-        <Info className="h-3.5 w-3.5" aria-hidden />
-      </button>
-      {mo && (
-        <span
-          role="tooltip"
-          className="absolute left-0 top-6 z-30 w-[min(22rem,80vw)] rounded-lg border border-border bg-card p-3 text-xs leading-relaxed text-foreground shadow-md"
-        >
-          {noiDung}
-        </span>
-      )}
-    </span>
-  );
-}
 
 type Nhap = { cs: ChinhSachHoaHong; moi: boolean };
 
