@@ -1,0 +1,210 @@
+// lib/finance/hoa-don/phap-nhan.ts — pháp nhân phát hành hoá đơn + thuế suất theo loại
+// đơn. THUẦN: không Prisma, không DB.
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// HAI PHÁP NHÂN — ĐO TỪ HOÁ ĐƠN THẬT, KHÔNG PHẢI DỮ LIỆU BẨN
+//
+// Ba tờ ở `E:\websatarobo data\hoadon` (14/09/2026) mang HAI đơn vị bán khác nhau, hai mã
+// số thuế khác nhau, hai phần mềm phát hành khác nhau:
+//
+//   · CÔNG TY CỔ PHẦN CÔNG NGHỆ GIÁO DỤC SATA ROBO  · MST 0402301783
+//     258 Lê Thanh Nghị, Phường Hòa Cường, TP Đà Nẵng · ký hiệu 1C26TSR · MISA meInvoice
+//   · CÔNG TY CỔ PHẦN CÔNG NGHỆ GIÁO DỤC NEW VISION · MST 0402341070
+//     114–116 Hoàng Diệu, Phường Hải Châu, TP Đà Nẵng · ký hiệu 1C26MNV · VIN HOADON
+//
+// ⚠️ ĐỪNG SUY PHÁP NHÂN TỪ ĐỊA CHỈ CƠ SỞ. "114–116 Hoàng Diệu" TRÙNG địa chỉ CS2
+// (CLAUDE.md § Business context), còn "258 Lê Thanh Nghị" không phải cơ sở nào — nó là trụ
+// sở đăng ký. Khớp theo địa chỉ là đúng ngẫu nhiên một nửa rồi sai vĩnh viễn nửa còn lại;
+// cùng họ với bẫy `Center("hoi-so").address = "Đà Nẵng"` khớp lỏng mọi chuỗi cơ sở đã ghi
+// trong memory. Ánh xạ cơ sở → pháp nhân là DỮ LIỆU KHAI (`macDinhTheoCoSo`), không suy.
+//
+// ⚠️ HỆ THỐNG KHÔNG TỰ PHÁT HÀNH HOÁ ĐƠN. Cả ba tờ đều mang **Mã CQT** (mã cơ quan thuế
+// cấp) và **chữ ký số của pháp nhân** — hai thứ chỉ MISA/VIN tạo ra được. Phần này chỉ
+// dựng ĐÚNG bộ số rồi xuất file cho kế toán nạp vào phần mềm phát hành. Mọi chữ "xuất hoá
+// đơn" trong mã phải hiểu theo nghĩa đó.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { KIEU_GIA, type KieuGia } from "@/lib/finance/hoa-don/tinh-hoa-don";
+
+export type PhapNhan = {
+  /** Mã do người vận hành đặt, dùng làm khoá tham chiếu. */
+  ma: string;
+  /** Tên đầy đủ in ở dòng "Đơn vị bán hàng". */
+  ten: string;
+  maSoThue: string;
+  diaChi: string;
+  dienThoai?: string;
+  website?: string;
+  /** "1C26TSR" — ký hiệu hoá đơn năm nay của pháp nhân đó. */
+  kyHieu?: string;
+  /** Phần mềm phát hành, để kế toán biết xuất file theo khuôn nào. */
+  phanMem?: string;
+  ghiChu?: string;
+  bat: boolean;
+};
+
+/** Thuế suất + quy ước giá, khai theo TỪNG loại đơn. */
+export type ThueTheoLoaiDon = {
+  /** `OrderType` của Prisma, hoặc "TAT_CA" cho dòng phủ chung. */
+  loaiDon: string;
+  thueSuat: number;
+  kieuGia: KieuGia;
+  ghiChu?: string;
+};
+
+export type CauHinhHoaDon = {
+  phapNhan: PhapNhan[];
+  /** `Center.code` → `PhapNhan.ma`. Kế toán vẫn đổi được lúc xuất. */
+  macDinhTheoCoSo: { maCoSo: string; maPhapNhan: string }[];
+  /** Dùng khi cơ sở của đơn không có dòng khai nào. */
+  phapNhanMacDinh?: string;
+  thue: ThueTheoLoaiDon[];
+};
+
+/**
+ * Mặc định dựng từ ĐÚNG ba tờ hoá đơn đo được — không phải số bịa để form có gì hiển thị.
+ *
+ * `macDinhTheoCoSo` để RỖNG có chủ đích: ba tờ mẫu không đủ để kết luận cơ sở nào phát
+ * hành qua pháp nhân nào (tờ New Vision ghi tên một học viên, không ghi cơ sở). Đoán ở đây
+ * là gán sai mã số thuế lên hoá đơn thật. Kế toán khai một lần ở màn Cấu hình vận hành.
+ */
+export const CAU_HINH_HOA_DON_MAC_DINH: CauHinhHoaDon = {
+  phapNhan: [
+    {
+      ma: "SATA_ROBO",
+      ten: "CÔNG TY CỔ PHẦN CÔNG NGHỆ GIÁO DỤC SATA ROBO",
+      maSoThue: "0402301783",
+      diaChi: "258 Lê Thanh Nghị, Phường Hòa Cường, Thành phố Đà Nẵng, Việt Nam",
+      kyHieu: "1C26TSR",
+      phanMem: "MISA meInvoice",
+      ghiChu: "Đo từ hoá đơn 1C26TSR-86 và 1C26TSR-127 (16/07 và 04/09/2026).",
+      bat: true,
+    },
+    {
+      ma: "NEW_VISION",
+      ten: "CÔNG TY CỔ PHẦN CÔNG NGHỆ GIÁO DỤC NEW VISION",
+      maSoThue: "0402341070",
+      diaChi: "114 - 116 Hoàng Diệu, Phường Hải Châu, Thành phố Đà Nẵng, Việt Nam",
+      dienThoai: "0702.193.933",
+      website: "https://satarobo.vn",
+      kyHieu: "1C26MNV",
+      phanMem: "VIN HOADON",
+      ghiChu:
+        "Đo từ hoá đơn 1C26MNV-13 (29/08/2026). Địa chỉ TRÙNG CS2 — trùng thật, đừng dùng địa chỉ để suy pháp nhân.",
+      bat: true,
+    },
+  ],
+  macDinhTheoCoSo: [],
+  phapNhanMacDinh: "SATA_ROBO",
+  thue: [
+    {
+      loaiDon: "TAT_CA",
+      thueSuat: 8,
+      kieuGia: KIEU_GIA.DA_GOM_THUE,
+      ghiChu:
+        "8% là mức trên cả ba tờ đo được. Quy ước giá mặc định lấy theo 2/3 tờ (1C26TSR-86 và 1C26MNV-13): số khách trả ĐÃ GỒM thuế. Tờ còn lại (1C26TSR-127, học phí) lại CHƯA GỒM — kế toán khai riêng dòng COURSE nếu đúng là vậy.",
+    },
+  ],
+};
+
+/**
+ * Thuế suất + quy ước giá cho một loại đơn. Dòng khai ĐÍCH DANH loại đơn thắng dòng
+ * "TAT_CA"; không có dòng nào thì rơi về 8% / đã-gồm-thuế (mức của cả ba tờ đo được).
+ *
+ * ⚠️ KHÔNG có mặc định 0%: một hoá đơn in nhầm 0% thuế là sai tờ khai thuế, và nó không
+ * báo lỗi ở đâu cả. Thà lấy mức phổ biến nhất đo được rồi để kế toán sửa.
+ */
+export function thueChoLoaiDon(
+  loaiDon: string,
+  cauHinh: Pick<CauHinhHoaDon, "thue">,
+): { thueSuat: number; kieuGia: KieuGia } {
+  const dung = cauHinh.thue.find((t) => t.loaiDon === loaiDon);
+  const chung = cauHinh.thue.find((t) => t.loaiDon === "TAT_CA");
+  const d = dung ?? chung;
+  return {
+    thueSuat: d?.thueSuat ?? 8,
+    kieuGia: d?.kieuGia ?? KIEU_GIA.DA_GOM_THUE,
+  };
+}
+
+/**
+ * Pháp nhân gợi ý cho một đơn: theo cơ sở của đơn, rồi tới mặc định chung, rồi tới pháp
+ * nhân ĐANG BẬT đầu tiên. Trả `null` khi không còn gì bật — màn phải bắt chọn tay chứ
+ * KHÔNG được im lặng in một mã số thuế nào đó lên hoá đơn.
+ */
+export function phapNhanChoDon(
+  maCoSo: string | null | undefined,
+  cauHinh: CauHinhHoaDon,
+): PhapNhan | null {
+  const dangBat = cauHinh.phapNhan.filter((p) => p.bat);
+  const tim = (ma: string | undefined) =>
+    ma ? (dangBat.find((p) => p.ma === ma) ?? null) : null;
+
+  const theoCoSo = maCoSo
+    ? tim(cauHinh.macDinhTheoCoSo.find((m) => m.maCoSo === maCoSo)?.maPhapNhan)
+    : null;
+  return theoCoSo ?? tim(cauHinh.phapNhanMacDinh) ?? dangBat[0] ?? null;
+}
+
+/**
+ * Luật NGHIỆP VỤ của cấu hình hoá đơn — zod ở registry chỉ kiểm hình dạng.
+ * Trả mảng câu tiếng Việt; rỗng = hợp lệ. Đường ghi PHẢI gọi hàm này.
+ */
+export function kiemCauHinhHoaDon(c: CauHinhHoaDon): string[] {
+  const loi: string[] = [];
+
+  if (c.phapNhan.length === 0) loi.push("Phải khai ít nhất một pháp nhân.");
+  if (c.phapNhan.length > 0 && !c.phapNhan.some((p) => p.bat)) {
+    loi.push("Phải có ít nhất một pháp nhân đang bật.");
+  }
+
+  const daGap = new Set<string>();
+  for (const p of c.phapNhan) {
+    if (daGap.has(p.ma)) loi.push(`Mã pháp nhân bị trùng: ${p.ma}`);
+    daGap.add(p.ma);
+    // MST doanh nghiệp Việt Nam: 10 số, hoặc 13 số dạng đơn vị phụ thuộc (10-3).
+    const so = p.maSoThue.replace(/[\s-]/g, "");
+    if (!/^\d{10}$|^\d{13}$/.test(so)) {
+      loi.push(
+        `Mã số thuế của "${p.ten}" phải là 10 hoặc 13 chữ số (đang: ${p.maSoThue}).`,
+      );
+    }
+    if (p.diaChi.trim().length < 5) {
+      loi.push(
+        `Pháp nhân "${p.ten}" thiếu địa chỉ — địa chỉ là trường bắt buộc trên hoá đơn.`,
+      );
+    }
+  }
+
+  const maHopLe = new Set(c.phapNhan.map((p) => p.ma));
+  for (const m of c.macDinhTheoCoSo) {
+    if (!maHopLe.has(m.maPhapNhan)) {
+      loi.push(
+        `Cơ sở "${m.maCoSo}" trỏ tới pháp nhân không tồn tại: ${m.maPhapNhan}`,
+      );
+    }
+  }
+  if (c.phapNhanMacDinh && !maHopLe.has(c.phapNhanMacDinh)) {
+    loi.push(`Pháp nhân mặc định không tồn tại: ${c.phapNhanMacDinh}`);
+  }
+
+  const loaiDaGap = new Set<string>();
+  for (const t of c.thue) {
+    if (loaiDaGap.has(t.loaiDon)) {
+      loi.push(`Loại đơn "${t.loaiDon}" được khai thuế hai lần.`);
+    }
+    loaiDaGap.add(t.loaiDon);
+    // Không chặn cứng vào {0,5,8,10}: mức thuế là chính sách nhà nước, đổi thì đổi ở màn
+    // chứ không phải sửa mã. Chỉ chặn số vô nghĩa.
+    if (t.thueSuat < 0 || t.thueSuat > 100) {
+      loi.push(`Thuế suất của "${t.loaiDon}" phải trong khoảng 0–100%.`);
+    }
+  }
+  if (!c.thue.some((t) => t.loaiDon === "TAT_CA")) {
+    loi.push(
+      "Phải có dòng thuế 'TAT_CA' làm mức phủ chung — thiếu nó thì loại đơn chưa khai sẽ rơi về mặc định trong mã.",
+    );
+  }
+
+  return loi;
+}
