@@ -8,10 +8,8 @@ import { laKhoanDaXacNhan, tongDaXacNhan } from "@/lib/finance/debt";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
-import { Badge } from "@/components/ui/badge";
 import { OrderDetailClient } from "../_components/order-detail-client";
 import { SendEmailModal } from "../_components/send-email-modal";
-import { ORDER_STATUS_LABEL, ORDER_TYPE_LABEL, deriveInstallmentBadge } from "@/lib/orders/status";
 import {
   resolveOrderPaymentConfig,
   transferContentForOrder,
@@ -23,19 +21,9 @@ import { computeDueNow } from "@/lib/payments/due-now";
 import { getOrderPaymentRequests } from "@/lib/payments/payment-request";
 import { loadActiveQrSessions } from "../_qr-core";
 import { maskPhone, maskEmail } from "@/lib/utils";
-import type { OrderStatus } from "@prisma/client";
 
 export const metadata = { title: "Chi tiết đơn hàng | Admin" };
 export const dynamic = "force-dynamic";
-
-const STATUS_BADGE_CLASS: Record<OrderStatus, string> = {
-  DRAFT: "bg-muted text-foreground hover:bg-muted",
-  PENDING_PAYMENT: "bg-state-warning-soft text-state-warning-ink hover:bg-state-warning-soft",
-  CONFIRMED: "bg-state-info-soft text-state-info-ink hover:bg-state-info-soft",
-  COMPLETED: "bg-state-success-soft text-state-success-ink hover:bg-state-success-soft",
-  CANCELLED: "bg-state-danger-soft text-state-danger-ink hover:bg-state-danger-soft",
-  REFUNDED: "bg-primary-soft text-primary hover:bg-primary-soft",
-};
 
 /**
  * Che phần SĐT trong nội dung CK — CHỈ cho thứ in ra màn hình.
@@ -265,67 +253,19 @@ export default async function OrderDetailPage({ params }: Props) {
     : [];
 
   return (
-    <div className="max-w-5xl">
+    /* Trần bề ngang 104rem (1664px) thay cho `max-w-5xl` (1024px) cũ.
+       `max-w-5xl` là lý do màn 1531px bỏ trống hơn nửa bề ngang trong khi khối QR —
+       công cụ thu tiền — bị đẩy xuống dưới cả ghi chú và lịch sử. Vẫn phải CÓ trần:
+       ở 4k/8k một trang trải hết bề ngang thì mắt phải quét cả mét để đọc một cặp
+       nhãn/giá trị. */
+    <div className="mx-auto w-full max-w-[104rem]">
       <Link
         href="/orders"
         className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
-        <ChevronLeft className="h-4 w-4" />
+        <ChevronLeft className="h-4 w-4" aria-hidden />
         Quay lại danh sách
       </Link>
-
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="font-mono text-2xl font-bold text-foreground">
-              {order.code}
-            </h1>
-            <Badge variant="outline">{ORDER_TYPE_LABEL[order.type]}</Badge>
-            <Badge className={STATUS_BADGE_CLASS[order.status]}>
-              {ORDER_STATUS_LABEL[order.status]}
-            </Badge>
-            {(() => {
-              // G5 — badge suy diễn tiến độ trả góp 2 đợt (vd "Đã đóng đợt 1").
-              const b = deriveInstallmentBadge(order.installments);
-              if (!b) return null;
-              return (
-                <Badge
-                  className={
-                    b.color === "emerald"
-                      ? "bg-state-success-soft text-state-success-ink hover:bg-state-success-soft"
-                      : "bg-state-warning-soft text-state-warning-ink hover:bg-state-warning-soft"
-                  }
-                >
-                  {b.label}
-                </Badge>
-              );
-            })()}
-          </div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Tạo:{" "}
-            {new Intl.DateTimeFormat("vi-VN", {
-              day: "2-digit",
-              month: "2-digit",
-              year: "numeric",
-              hour: "2-digit",
-              minute: "2-digit",
-            }).format(order.createdAt)}
-          </p>
-        </div>
-        <div className="text-right space-y-2">
-          <div className="text-3xl font-bold text-foreground tabular-nums">
-            {order.totalAmount.toLocaleString("vi-VN")} đ
-          </div>
-          {canManage && (
-            <SendEmailModal
-              orderId={order.id}
-              defaultEmail={order.customerEmail}
-              defaultName={order.customerName}
-              templates={emailTemplates}
-            />
-          )}
-        </div>
-      </div>
 
       <OrderDetailClient
         order={
@@ -345,6 +285,16 @@ export default async function OrderDetailPage({ params }: Props) {
               }
         }
         canManage={canManage}
+        hanhDongPhu={
+          canManage ? (
+            <SendEmailModal
+              orderId={order.id}
+              defaultEmail={order.customerEmail}
+              defaultName={order.customerName}
+              templates={emailTemplates}
+            />
+          ) : null
+        }
         qrUrl={qrUrl}
         dueNow={dueNow}
         transferContent={transferContentShown}

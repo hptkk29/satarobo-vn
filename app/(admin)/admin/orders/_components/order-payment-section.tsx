@@ -471,9 +471,13 @@ export function OrderQrSection({
       <h2 className="mb-4 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-foreground">
         <QrCode className="h-4 w-4 text-primary" /> Thanh toán & QR
       </h2>
-      <div className="max-w-sm">
+      {/* `max-w-sm` cũ ép ảnh QR + toàn bộ chữ vào một cột 24rem, nên trong cột trái
+          rộng ~44rem của bản dựng lại thì hơn nửa khối là khoảng trắng. Từ `sm` trở lên
+          xếp NGANG: ảnh trái, số tiền + nội dung CK phải — và chữ căn trái, dễ đọc hơn
+          căn giữa. Dưới `sm` giữ nguyên một cột căn giữa. */}
+      <div>
         {qrUrl ? (
-          <div className="flex flex-col items-center gap-2">
+          <div className="flex flex-col items-center gap-3 sm:flex-row sm:items-start sm:gap-5">
             {/* Ảnh QR public từ img.vietqr.io — không cần API key. Bấm để phóng to. */}
             <QrZoom
               src={qrUrl}
@@ -485,15 +489,23 @@ export function OrderQrSection({
             {/* Nói rõ QR đang thu bao nhiêu — khách đóng 2 đợt dễ tưởng phải
                 chuyển cả tổng đơn. Nội dung CK bên dưới là dạng người đọc
                 (`HoTenCon_SdtPH_TenKhoa`, chốt 20/08), sale đọc thẳng cho khách. */}
-            <p className="text-center text-sm font-semibold text-foreground">
-              {dueNow.label}: {dueNow.amount.toLocaleString("vi-VN")}đ
-            </p>
-            <p className="text-center text-xs text-muted-foreground">
-              Nội dung CK: <span className="font-mono font-semibold text-foreground">{transferContent}</span>
-            </p>
-            <p className="text-center text-xs text-muted-foreground">
-              Chuyển đúng số tiền + giữ nguyên nội dung → hệ thống tự xác nhận đơn.
-            </p>
+            <div className="min-w-0 space-y-2 text-center sm:text-left">
+              <p className="text-sm font-semibold text-foreground">
+                {dueNow.label}:{" "}
+                <span className="tabular-nums">
+                  {dueNow.amount.toLocaleString("vi-VN")}đ
+                </span>
+              </p>
+              <div className="text-xs text-muted-foreground">
+                Nội dung CK:{" "}
+                <span className="break-all font-mono font-semibold text-foreground">
+                  {transferContent}
+                </span>
+              </div>
+              <p className="max-w-prose text-xs text-muted-foreground">
+                Chuyển đúng số tiền + giữ nguyên nội dung → hệ thống tự xác nhận đơn.
+              </p>
+            </div>
           </div>
         ) : (
           <div className="flex h-56 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-muted p-4 text-center">

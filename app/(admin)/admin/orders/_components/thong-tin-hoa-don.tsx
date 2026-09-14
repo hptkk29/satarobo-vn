@@ -31,6 +31,18 @@ import { luuThongTinHoaDonAction } from "../_actions";
  * KHÁC NHAU (người mua "Phan Thị Hồng", học viên "Nguyễn Đức Huy Hoàng"). Trộn chung là
  * mời người dùng sửa thông tin liên hệ khi họ chỉ định sửa tên trên hoá đơn.
  */
+/** Cặp nhãn/giá trị — cùng hình thức với các khối khác ở cột phải của trang đơn. */
+function O({ nhan, children }: { nhan: string; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {nhan}
+      </dt>
+      <dd className="mt-0.5 break-words text-sm text-foreground">{children}</dd>
+    </div>
+  );
+}
+
 export function ThongTinHoaDon({
   orderId,
   don,
@@ -72,7 +84,7 @@ export function ThongTinHoaDon({
   }
 
   return (
-    <section className="rounded-xl border border-border bg-card p-5">
+    <section className="rounded-xl border border-border bg-card p-4 sm:p-5">
       <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
         <h2 className="flex items-center gap-1.5 text-sm font-bold uppercase tracking-wider text-muted-foreground">
           <FileText className="h-4 w-4" aria-hidden />
@@ -109,44 +121,35 @@ export function ThongTinHoaDon({
         )}
       </div>
 
-      <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-        <div>
-          <span className="text-muted-foreground">Họ tên người mua: </span>
-          <span className="font-medium text-foreground">{nm.hoTen || "—"}</span>
+      {/* MỘT cột, cùng lối nhãn/giá trị với các khối khác ở cột phải: khối này sống ở
+          cột ~23rem, chia đôi ở đó thì "Phạm Thuý Anh (theo tên khách hàng)" xuống ba
+          dòng cạnh một ô "—". */}
+      <dl className="grid grid-cols-1 gap-3">
+        <O nhan="Họ tên người mua">
+          <span className="font-medium">{nm.hoTen || "—"}</span>
           {!don.invoiceBuyerName && nm.hoTen && (
             <span className="ml-1 text-xs text-muted-foreground">
               (theo tên khách hàng)
             </span>
           )}
-        </div>
-        <div>
-          <span className="text-muted-foreground">Tên đơn vị: </span>
-          <span className="text-foreground">{nm.tenDonVi ?? "—"}</span>
-        </div>
-        <div>
-          <span className="text-muted-foreground">Mã số thuế: </span>
-          <span className="text-foreground tabular-nums">
-            {nm.maSoThue ?? "—"}
-          </span>
-        </div>
-        <div>
-          <span className="text-muted-foreground">CCCD/Hộ chiếu: </span>
-          <span className="text-foreground tabular-nums">{nm.cccd ?? "—"}</span>
-        </div>
-        <div>
-          <span className="text-muted-foreground">Địa chỉ: </span>
-          <span className="text-foreground">{nm.diaChi ?? "—"}</span>
-        </div>
-        <div>
-          <span className="text-muted-foreground">Email nhận hoá đơn: </span>
-          <span className="text-foreground">{nm.email ?? "—"}</span>
+        </O>
+        <O nhan="Tên đơn vị">{nm.tenDonVi ?? "—"}</O>
+        <O nhan="Mã số thuế">
+          <span className="tabular-nums">{nm.maSoThue ?? "—"}</span>
+        </O>
+        <O nhan="CCCD/Hộ chiếu">
+          <span className="tabular-nums">{nm.cccd ?? "—"}</span>
+        </O>
+        <O nhan="Địa chỉ">{nm.diaChi ?? "—"}</O>
+        <O nhan="Email nhận hoá đơn">
+          {nm.email ?? "—"}
           {!don.invoiceEmail && nm.email && (
             <span className="ml-1 text-xs text-muted-foreground">
               (theo email khách hàng)
             </span>
           )}
-        </div>
-      </div>
+        </O>
+      </dl>
 
       {(thieu.chan.length > 0 || thieu.nhac.length > 0) && (
         <div className="mt-4 space-y-1.5 border-t border-border pt-3 text-xs">
