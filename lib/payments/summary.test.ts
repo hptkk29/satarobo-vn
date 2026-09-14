@@ -1,6 +1,7 @@
 // lib/payments/summary.test.ts — K3 (PAY-DEDUP): tổng "đã nộp" đọc từ 1 nguồn,
 // không cộng đôi khi có bút toán điều chỉnh (Payment auto cũ đã soft-delete).
 import { describe, it, expect } from "vitest";
+import { KHOAN_DA_GHI_NHAN } from "@/lib/finance/ghi-nhan";
 import { getLeadPaymentSummary } from "./summary";
 import type { scopedDb } from "@/lib/db-scope";
 
@@ -48,12 +49,19 @@ describe("getLeadPaymentSummary (K3 PAY-DEDUP)", () => {
     expect(s.recordedCount).toBe(2);
   });
 
-  it("[K3-guard] query nested Payment PHẢI lọc saleStatus=RECORDED + deletedAt=null (chặn đếm khoản soft-deleted/chưa ghi nhận)", async () => {
+  it("[K3-guard] query nested Payment PHẢI lọc đúng điều kiện TRỤC B (chặn đếm khoản soft-deleted/chưa ghi nhận)", async () => {
     const captured: Captured = {};
     await getLeadPaymentSummary(fakeSdb([], captured), "lead1");
     expect(captured.where).toEqual({ leadId: "lead1", deletedAt: null });
     const paymentsSelect = (captured.select as { payments: { where: unknown } }).payments;
-    expect(paymentsSelect.where).toEqual({ saleStatus: "RECORDED", deletedAt: null });
+    // So với CHÍNH hằng dùng chung, không chép lại hình dạng bằng tay: 14/09 trục B đổi
+    // từ `saleStatus: "RECORDED"` sang `{ in: ["RECORDED", "COLLECT_CONFIRMED"] }` (xem
+    // lib/finance/ghi-nhan.ts — `COLLECT_CONFIRMED` là bước ĐI SAU nên lọc bằng dấu `=`
+    // làm tiền rụng khỏi sổ). Ca này chép tay nên nó đỏ theo, và mọi lần đổi sau cũng
+    // sẽ bắt sửa lại ở đây mà chẳng thêm bảo đảm gì. Chốt của ca vẫn nguyên: truy vấn
+    // KHÔNG được bỏ điều kiện lọc.
+    expect(paymentsSelect.where).toEqual(KHOAN_DA_GHI_NHAN);
+    expect(paymentsSelect.where).toMatchObject({ deletedAt: null });
   });
 
   it("học bổng toàn phần: có đơn, tổng 0đ, chưa có khoản → vẫn eligible", async () => {

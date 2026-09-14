@@ -5,7 +5,7 @@ import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
 import { enqueueDebtReminder } from "@/lib/email/triggers";
 // TRỤC B — hằng điều kiện "đã ghi nhận". Import để KHÔNG gõ tay "RECORDED" ở đây:
 // mỗi lần gõ tay là một bản sao thứ hai của định nghĩa "đã thu".
-import { KHOAN_DA_GHI_NHAN } from "@/lib/finance/ghi-nhan";
+import { laKhoanDaGhiNhan } from "@/lib/finance/ghi-nhan";
 import type { ScopedDb } from "@/lib/actions/factory";
 
 // ĐỊNH NGHĨA dời sang `debt-pure.ts` (14/09/2026) vì file này import `@/lib/db`: mọi
@@ -240,9 +240,10 @@ export async function getDebtRows(
     const daXacNhan = e.payments.filter(
       (p) => p.accountantStatus === KHOAN_DA_XAC_NHAN.accountantStatus,
     );
-    const daGhiNhan = e.payments.filter(
-      (p) => p.saleStatus === KHOAN_DA_GHI_NHAN.saleStatus,
-    );
+    // ⚠️ Dùng HÀM, không so với `KHOAN_DA_GHI_NHAN.saleStatus`: từ 14/09 trường đó là
+    // `{ in: [...] }`, nên phép so chuỗi-với-đối-tượng luôn false và cột "đã ghi nhận"
+    // im lặng về 0 cho mọi dòng công nợ.
+    const daGhiNhan = e.payments.filter(laKhoanDaGhiNhan);
     const confirmedPaid = tongDaXacNhan(daXacNhan);
     return {
       enrollmentId: e.id,
