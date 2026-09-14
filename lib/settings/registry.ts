@@ -12,6 +12,11 @@
  * finance.debtReminderDaysBefore=14 (QĐ-O7), enrollment.suspendMaxMonths=6 (TBD-4).
  */
 import { z } from "zod";
+
+// Bộ chính sách hoa hồng chép từ SR.QD.208 — dùng làm GIÁ TRỊ MẶC ĐỊNH khi DB chưa có gì.
+// `chinh-sach-hoa-hong.ts` là file THUẦN (không Prisma, không DB) nên import được vào đây
+// mà không kéo theo gì.
+import { CHINH_SACH_MAC_DINH } from "@/lib/crm/chinh-sach-hoa-hong";
 import { internalAwards } from "@/components/legacy-laptrinhrobot/_data/awards";
 import { gifts } from "@/components/legacy-laptrinhrobot/_data/gifts";
 import { commitments } from "@/components/legacy-laptrinhrobot/_data/commitments";
@@ -56,6 +61,40 @@ const hotlineSchema = z.array(
     code: z.string().min(1),
     label: z.string().min(1),
     phone: z.string().min(1),
+  }),
+);
+
+/**
+ * Chính sách hoa hồng do người vận hành khai (SR.QD.208).
+ *
+ * ⚠️ `vaiNhan` là CHUỖI TỰ DO, cố ý: chủ dự án 14/09/2026 yêu cầu "thêm bớt các role
+ * nhận hoa hồng riêng chứ không khoá cứng". Ràng vào enum là mỗi vai mới lại phải sửa mã.
+ *
+ * ⚠️ Zod ở đây chỉ kiểm HÌNH DẠNG. Luật nghiệp vụ — trần tổng theo từng rổ, tỉ lệ 0..1,
+ * kiểu "thưởng theo bậc" phải có bậc — nằm ở `kiemChinhSach` trong
+ * `lib/crm/chinh-sach-hoa-hong.ts`, và đường ghi phải gọi nó. Nhét luật đó vào đây thì
+ * `registry.ts` phải biết trần, mà trần lại chính là một key khác trong cùng registry.
+ */
+const chinhSachHoaHongSchema = z.array(
+  z.object({
+    ma: z.string().min(1).max(60),
+    ten: z.string().min(1).max(200),
+    vaiNhan: z.string().min(1).max(60),
+    suKien: z.enum(["HOC_VIEN_MOI", "TAI_TUC", "CHUYEN_TRUNG_TAM", "BAN_THIET_BI"]),
+    loaiDon: z.enum(["TAT_CA", "COURSE", "PRODUCT"]),
+    kieuTinh: z.enum(["PHAN_TRAM", "SO_TIEN_CO_DINH", "THUONG_THEO_BAC"]),
+    giaTri: z.number().min(0),
+    bac: z
+      .array(
+        z.object({
+          nguong: z.number().min(0),
+          thuong: z.number().min(0),
+          danhHieu: z.string().max(40).optional(),
+        }),
+      )
+      .optional(),
+    nguon: z.string().max(300).optional(),
+    bat: z.boolean(),
   }),
 );
 
@@ -415,6 +454,24 @@ export const SETTINGS = {
     schema: z.number().min(0.08).max(0.2),
     default: 0.09,
     centerOverridable: false,
+  }),
+  /**
+   * TOÀN BỘ chính sách hoa hồng — người vận hành tự thêm/bớt, dev không phải code.
+   *
+   * Mặc định là bộ chép nguyên văn SR.QD.208 (`CHINH_SACH_MAC_DINH`). Từ lần lưu đầu
+   * tiên trở đi, bản trong DB thắng — file mã nguồn chỉ còn là giá trị khởi đầu.
+   *
+   * ⚠️ `centerOverridable: true`: PL08 Điều 4 nói "doanh thu ghi nhận tại Trung tâm nào
+   * thì chi phí hoa hồng hạch toán tại Trung tâm đó", nên từng cơ sở phải đè được. Mở cơ
+   * sở mới = khai dữ liệu, không sửa mã — đúng nguyên tắc của PRODUCT.md.
+   */
+  "crm.commissionPolicies": def({
+    key: "crm.commissionPolicies",
+    group: "crm",
+    label: "Chính sách hoa hồng (theo SR.QD.208)",
+    schema: chinhSachHoaHongSchema,
+    default: CHINH_SACH_MAC_DINH,
+    centerOverridable: true,
   }),
   "crm.trialMaxSessions": def({
     key: "crm.trialMaxSessions",

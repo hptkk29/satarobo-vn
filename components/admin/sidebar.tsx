@@ -283,7 +283,10 @@ const NAV_GROUPS: NavGroup[] = [
       // Đối soát tiền về từ SePay — nơi kiểm "máy đã tự xác nhận đúng chưa".
       { label: "Biến động số dư", href: "/bien-dong-so-du", icon: Wallet, perm: ["payments:manage", "payments:view"] },
       { label: "Hoàn tiền", href: "/hoan-tien", icon: Undo2, perm: ["payments:manage"] },
-      { label: "Phương thức TT", href: "/payment-methods", icon: CreditCard, perm: ["payments:manage"] },
+      // "Phương thức TT" ĐÃ GỠ khỏi sidebar 14/09/2026 theo chốt của chủ dự án: nó nay là
+      // một TAB trong Cấu hình vận hành (`/cau-hinh-van-hanh?tab=phuong-thuc-tt`), và
+      // `/payment-methods` chuyển hướng về đó. Lối vào duy nhất là
+      // `app/(admin)/admin/cau-hinh-van-hanh/_components/config-tabs.tsx`.
       { label: "Hoa hồng", href: "/crm/commission", icon: Coins, perm: ["payments:manage"] },
     ],
   },
