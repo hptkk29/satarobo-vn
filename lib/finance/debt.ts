@@ -3,12 +3,15 @@ import type { Order } from "@prisma/client";
 import { db } from "@/lib/db";
 import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
 import { enqueueDebtReminder } from "@/lib/email/triggers";
+// TRỤC B — hằng điều kiện "đã ghi nhận". Import để KHÔNG gõ tay "RECORDED" ở đây:
+// mỗi lần gõ tay là một bản sao thứ hai của định nghĩa "đã thu".
+import { KHOAN_DA_GHI_NHAN } from "@/lib/finance/ghi-nhan";
 import type { ScopedDb } from "@/lib/actions/factory";
 
-/** Công nợ = tổng hoá đơn − đã trả (không âm). THUẦN (C6.1). */
-export function computeDebt(totalAmount: number, paidAmount: number): number {
-  return Math.max(0, totalAmount - paidAmount);
-}
+// ĐỊNH NGHĨA dời sang `debt-pure.ts` (14/09/2026) vì file này import `@/lib/db`: mọi
+// component client dùng lại `computeDebt` đều kéo PrismaClient vào bundle trình duyệt và
+// nổ lúc chạy — typecheck/lint/depcruise đều xanh. Re-export để ~30 chỗ gọi cũ không đổi.
+export { computeDebt } from "@/lib/finance/debt-pure";
 
 /** Đã trả của 1 order (CONFIRMED/COMPLETED = trả đủ; còn lại = 0). THUẦN. */
 export function paidOf(order: Pick<Order, "status" | "totalAmount">): number {
@@ -155,6 +158,19 @@ export type DebtRow = {
   finalPrice: number;
   confirmedPaid: number;
   debt: number;
+  /**
+   * TRỤC B — Σ `Payment` có `saleStatus = RECORDED`. Tiền vừa nhập từ sheet nằm ở đây và
+   * nó CHƯA vào `confirmedPaid` cho tới khi kế toán xác nhận ở /payments.
+   *
+   * Thêm 14/09/2026, ADDITIVE: `debt` và `confirmedPaid` giữ nguyên công thức cũ nên hai
+   * caller còn lại (`manager-dashboard`, nhóm tổng của /cong-no) không đổi một con số nào.
+   */
+  recordedPaid: number;
+  /**
+   * Ghi danh CHƯA có `finalPrice`. Chỉ có thể `true` khi người gọi truyền
+   * `keCaChuaChotGia: true`; mặc định hàm vẫn lọc bỏ như trước.
+   */
+  chuaChotGia: boolean;
 };
 
 /**
@@ -163,7 +179,21 @@ export type DebtRow = {
  */
 export async function getDebtRows(
   scopedDbClient: ScopedDb,
-  filters?: { enrollmentId?: string; studentId?: string },
+  filters?: {
+    enrollmentId?: string;
+    studentId?: string;
+    /**
+     * Lấy CẢ ghi danh chưa chốt giá (`finalPrice = null`).
+     *
+     * ⚠️ MẶC ĐỊNH `false` — giữ nguyên hành vi cũ cho hai caller đang có. Bật mặc định là
+     * đổi con số tổng nợ trên dashboard quản lý mà không ai yêu cầu.
+     *
+     * Nhưng nhóm này KHÔNG được quên: nhà đã đóng tiền mà hệ thống không biết phải đóng
+     * bao nhiêu ⇒ không ai nợ ai trong sổ, không màn nào kêu. Màn đối soát học phí bật cờ
+     * này và hiện chúng thành một trạng thái riêng.
+     */
+    keCaChuaChotGia?: boolean;
+  },
 ): Promise<DebtRow[]> {
   // G4 fix: lái theo ENROLLMENT (không theo payment) để ghi danh CHƯA đóng đồng nào
   // — nợ nhiều nhất — vẫn hiện. Cách ly cơ sở: lọc theo lớp NẰM TRONG scope của actor
@@ -175,7 +205,9 @@ export async function getDebtRows(
   const enrollments = await db.enrollment.findMany({
     where: {
       classId: { in: classIds },
-      finalPrice: { not: null }, // chỉ ghi danh đã chốt giá (snapshot tại convert R7-05)
+      // Mặc định chỉ ghi danh ĐÃ chốt giá (snapshot tại convert R7-05); `keCaChuaChotGia`
+      // mở thêm nhóm chưa chốt — xem chú thích ở tham số.
+      ...(filters?.keCaChuaChotGia ? {} : { finalPrice: { not: null } }),
       deletedAt: null, // FIX-C3
       ...(filters?.enrollmentId ? { id: filters.enrollmentId } : {}),
       ...(filters?.studentId ? { studentId: filters.studentId } : {}),
@@ -189,13 +221,29 @@ export async function getDebtRows(
       course: { select: { name: true } },
       class: { select: { centerId: true } },
       // FIX-C3: nested include không auto-scope → tự lọc payment đã xóa.
-      payments: { where: KHOAN_DA_XAC_NHAN, select: { amount: true } },
+      //
+      // ⚠️ NẠP CẢ HAI TRỤC TRONG MỘT LƯỢT, lọc trong bộ nhớ. Prisma KHÔNG cho đặt bí danh
+      // cho cùng một quan hệ hai lần, nên không thể viết `payments` (trục A) cạnh
+      // `khoanDaGhiNhan` (trục B). Lấy khoản còn sống rồi lọc bằng chính hai hằng điều
+      // kiện của repo — KHÔNG gõ tay `"CONFIRMED"`/`"RECORDED"` ở đây, vì gõ tay là đẻ
+      // bản sao thứ hai của định nghĩa "đã thu".
+      payments: {
+        where: { deletedAt: null },
+        select: { amount: true, accountantStatus: true, saleStatus: true },
+      },
     },
   });
 
   return enrollments.map((e) => {
     const finalPrice = e.finalPrice ?? e.tuition ?? 0;
-    const confirmedPaid = tongDaXacNhan(e.payments);
+    // Lọc bằng chính hằng điều kiện của repo để hai đường (query và bộ nhớ) không lệch.
+    const daXacNhan = e.payments.filter(
+      (p) => p.accountantStatus === KHOAN_DA_XAC_NHAN.accountantStatus,
+    );
+    const daGhiNhan = e.payments.filter(
+      (p) => p.saleStatus === KHOAN_DA_GHI_NHAN.saleStatus,
+    );
+    const confirmedPaid = tongDaXacNhan(daXacNhan);
     return {
       enrollmentId: e.id,
       studentId: e.studentId,
@@ -205,6 +253,8 @@ export async function getDebtRows(
       finalPrice,
       confirmedPaid,
       debt: finalPrice - confirmedPaid,
+      recordedPaid: tongDaXacNhan(daGhiNhan),
+      chuaChotGia: e.finalPrice == null,
     };
   });
 }

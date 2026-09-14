@@ -14,6 +14,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { DebtFilterBar } from "./_components/debt-filter-bar";
+import { BangDoiSoat } from "./_components/bang-doi-soat";
+import type { DongDoiSoat } from "./_components/types";
 // lib/finance/debt.ts — parallel agent owns. Combined typecheck resolves.
 import { getDebtRows, overdueBucket, type DebtRow } from "@/lib/finance/debt";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
@@ -74,9 +76,19 @@ export default async function CongNoPage({
 
   // ── Debt rows (CHỈ Payment CONFIRMED) — lib getDebtRows. Cast tránh so kiểu
   // sâu giữa Prisma client mở rộng và DebtScopedDb hẹp của lib. ──
-  let rows = await getDebtRows(
-    sdb as unknown as Parameters<typeof getDebtRows>[0],
-  );
+  //
+  // ⚠️ HAI LƯỢT TRA, HAI PHẠM VI KHÁC NHAU — cố ý, không phải thừa:
+  //   · `rows` (dưới) giữ nguyên phạm vi cũ để KHỐI TUỔI NỢ + nhóm tổng không đổi số.
+  //   · `dongDoiSoat` mở thêm nhóm CHƯA CHỐT GIÁ và không lọc `debt > 0`, vì màn đối soát
+  //     phải hiện cả em đã đóng đủ (để người nhập biết đã xong) lẫn em chưa chốt giá
+  //     (nhóm mà bộ lọc cũ giấu mất hẳn).
+  const [rowsGoc, rowsDoiSoat] = await Promise.all([
+    getDebtRows(sdb as unknown as Parameters<typeof getDebtRows>[0]),
+    getDebtRows(sdb as unknown as Parameters<typeof getDebtRows>[0], {
+      keCaChuaChotGia: true,
+    }),
+  ]);
+  let rows = rowsGoc;
   if (search) {
     const s = search.toLowerCase();
     rows = rows.filter(
@@ -87,6 +99,20 @@ export default async function CongNoPage({
   }
   // Chỉ hiện đăng ký còn nợ (> 0).
   rows = rows.filter((r) => r.debt > 0);
+
+  const dongDoiSoat: DongDoiSoat[] = rowsDoiSoat.map((r) => ({
+    enrollmentId: r.enrollmentId,
+    hocVien: r.studentName,
+    khoa: r.courseName,
+    hocPhi: r.finalPrice,
+    daGhiNhan: r.recordedPaid,
+    daXacNhan: r.confirmedPaid,
+    chuaChotGia: r.chuaChotGia,
+  }));
+  // Nút "Sửa học phí" chỉ hiện khi thật sự bấm được — nhãn/nút là LỜI HỨA (luật 12
+  // docs/luat-doc-so-va-ket-luan.md); hiện nút rồi để action từ chối là hứa suông.
+  // Server action vẫn tự gác độc lập.
+  const suaDuoc = await checkPermission("enrollments:edit");
 
   // ── Aging buckets từ installment PENDING của các đơn trong scope ──
   const now = new Date();
@@ -193,6 +219,18 @@ export default async function CongNoPage({
         lịch trả góp) — hai phạm vi khác nhau nên có thể không bằng nhau.
       </p>
 
+      {/* ── ĐỐI SOÁT TỪNG HỌC VIÊN ───────────────────────────────────────
+          Đặt TRƯỚC bảng gom nhóm: câu hỏi "em nào đủ, em nào thiếu" là việc hằng ngày
+          sau đợt nhập liệu, còn bảng gom nhóm là báo cáo. Và trước hôm nay màn này
+          KHÔNG có một thao tác nào — chủ dự án 14/09: "màn này cũng chỉ vào xem công nợ
+          chứ không có thao tác gì". */}
+      <div className="mb-6">
+        <BangDoiSoat dong={dongDoiSoat} suaDuoc={suaDuoc} />
+      </div>
+
+      <h2 className="mb-2 text-sm font-bold uppercase tracking-wider text-muted-foreground">
+        Gom nhóm công nợ
+      </h2>
       <DebtFilterBar groupBy={groupBy} search={search} />
 
       <div className="overflow-hidden rounded-lg border border-border">

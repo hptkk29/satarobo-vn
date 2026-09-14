@@ -613,7 +613,9 @@ export function OrderCreateForm({
       </section>
 
       {/* Item */}
-      <section className="space-y-4 rounded-xl border-l-4 border-state-info border-y border-r border-border bg-state-info-soft/20 p-5">
+      {/* Viền ĐỀU 1px: vạch màu dày một bên là lối trang trí, và nó không mang thêm
+          thông tin nào mà nền nhạt + tiêu đề chưa nói. */}
+      <section className="space-y-4 rounded-xl border border-border bg-state-info-soft/20 p-5">
         <h2 className="text-sm font-bold uppercase tracking-wider text-state-info-ink">
           Sản phẩm
         </h2>
