@@ -79,11 +79,14 @@ const chinhSachHoaHongSchema = z.array(
   z.object({
     ma: z.string().min(1).max(60),
     ten: z.string().min(1).max(200),
-    vaiNhan: z.string().min(1).max(60),
     suKien: z.enum(["HOC_VIEN_MOI", "TAI_TUC", "CHUYEN_TRUNG_TAM", "BAN_THIET_BI"]),
     loaiDon: z.enum(["TAT_CA", "COURSE", "PRODUCT"]),
     kieuTinh: z.enum(["PHAN_TRAM", "SO_TIEN_CO_DINH", "THUONG_THEO_BAC"]),
-    giaTri: z.number().min(0),
+    // MỘT chính sách mang NHIỀU khoản (vai × giá trị) — gom "học viên mới" từ 5 dòng
+    // rời thành 1 quyết định. Tỉ lệ nằm trên TỪNG khoản vì công văn cho mỗi vai một mức.
+    khoan: z
+      .array(z.object({ vaiNhan: z.string().min(1).max(60), giaTri: z.number().min(0) }))
+      .max(30),
     bac: z
       .array(
         z.object({
@@ -94,6 +97,7 @@ const chinhSachHoaHongSchema = z.array(
       )
       .optional(),
     nguon: z.string().max(300).optional(),
+    ghiChu: z.string().max(2000).optional(),
     bat: z.boolean(),
   }),
 );
@@ -388,6 +392,75 @@ export const SETTINGS = {
     default: false,
     // Kênh bật/tắt toàn hệ: một cơ sở tự tắt thì nhân viên cơ sở đó im lặng mà không ai
     // ở Hội sở biết — đúng loại lỗi câm mà module này sinh ra để tránh.
+    centerOverridable: false,
+  }),
+  // ── Loại thông báo nào được đẩy ───────────────────────────────────────────────────────
+  //
+  // Trước 13/09/2026 danh sách này là HẰNG SỐ trong `lib/push/allowlist.ts`, nên "đổi loại
+  // nào được rung máy" là một lần sửa mã + deploy. Nay nó là tham số vận hành: sửa ở
+  // `/admin/cau-hinh-van-hanh`, có lý do, có nhật ký kiểm toán, không cần deploy.
+  //
+  // ⚠️ VẪN LÀ DANH SÁCH TRẮNG — rỗng nghĩa là KHÔNG đẩy gì, không phải "đẩy tất". Toàn bộ lập
+  // luận vì sao trắng-chứ-không-đen nằm ở đầu `lib/push/allowlist.ts`; đừng đảo ở đây.
+  //
+  // Giá trị phải là TIỀN TỐ ĐÃ KHAI trong `lib/notifications/catalog.ts`. Cổng này quan trọng
+  // hơn vẻ ngoài: gõ sai một ký tự (`lead.moi` thiếu dấu hai chấm) thì `startsWith` vẫn khớp
+  // đúng loại đó nhưng có thể khớp LẤN sang loại khác sinh sau; còn gõ hẳn một khoá không tồn
+  // tại thì danh sách trông như đã bật mà thực tế không bao giờ khớp gì — màn hình nói dối,
+  // và không có lỗi nào được ném ra. Chặn ngay ở tầng validate là chỗ rẻ nhất.
+  "push.tienToDuocDay": def({
+    key: "push.tienToDuocDay",
+    group: "system",
+    label:
+      "Loại thông báo được đẩy Web Push — chọn ở màn Cấu hình thông báo đẩy, để trống = không đẩy loại nào",
+    // ⚠️ CỐ Ý không import `catalogPrefixes` để đối chiếu danh mục ở đây, dù đó mới là phép
+    // kiểm mạnh nhất. `lint:boundaries` (dependency-cruiser) bắt được 11 vòng import khi thử:
+    //     registry → notifications/catalog → notifications/pending-sync → pending-tasks
+    //     → settings/service · auth/actor · auth/permission-eval → … → registry
+    // `pending-sync` chỉ `import type` từ `pending-tasks` nên vòng đó không tồn tại lúc chạy,
+    // nhưng luật `no-circular` của repo không loại trừ import kiểu, và nới luật chung để hợp
+    // thức hoá một tính năng là đổi rào cho cả repo — không phải việc của đợt này.
+    //
+    // Nên chia đôi trách nhiệm: tầng này gác HÌNH DẠNG (thứ không cần biết catalog), còn phép
+    // đối chiếu "có thật trong danh mục không" nằm ở `luuLoaiDuocDayAction` — đường ghi DUY
+    // NHẤT mà giao diện dùng, và ở đó import catalog không tạo vòng nào.
+    schema: z
+      .array(z.string())
+      .max(200)
+      .superRefine((ds, ctx) => {
+        const daGap = new Set<string>();
+        ds.forEach((d, i) => {
+          // Chuỗi rỗng là ca CHẾT NGƯỜI: `"x".startsWith("")` luôn đúng ⇒ một phần tử rỗng
+          // biến danh sách trắng thành "đẩy tất cả 51 loại".
+          if (d.length === 0) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: [i],
+              message: "Chuỗi rỗng khớp MỌI loại thông báo — không được phép",
+            });
+          } else if (!d.endsWith(":")) {
+            // Dấu hai chấm là luật khớp dùng chung với `lib/notifications/catalog.ts`. Thiếu
+            // nó thì `lead.moi` khớp lấn sang `lead.moi_gi_do` sinh sau.
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: [i],
+              message: `"${d}" phải kết thúc bằng dấu hai chấm`,
+            });
+          }
+          if (daGap.has(d)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: [i],
+              message: `"${d}" bị khai hai lần`,
+            });
+          }
+          daGap.add(d);
+        });
+      }),
+    // ĐÚNG giá trị đang hardcode trước 13/09 ⇒ DB trống ở mọi môi trường vẫn ra hành vi cũ.
+    default: ["lead.moi:"],
+    // Cùng lý do với công tắc tổng: một cơ sở tự tắt một loại thì nhân viên cơ sở đó im lặng
+    // mà Hội sở không biết.
     centerOverridable: false,
   }),
   "student.birthdayZnsEnabled": def({

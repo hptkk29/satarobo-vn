@@ -34,10 +34,14 @@ import { PaymentMethodsTable } from "../../payment-methods/_components/payment-m
  * chặn được đúng ca cần chặn.
  */
 export async function TabPhuongThucThanhToan({
-  centerIdFilter,
+  centerIdFilter = null,
 }: {
-  /** Đến từ `?centerId=` — đường vào từ trang Cơ sở. `null` = xem tất cả. */
-  centerIdFilter: string | null;
+  /**
+   * Bộ lọc theo cơ sở. Khung tab giữ trạng thái ở CLIENT nên không có `?centerId=` để
+   * đọc — tham số giữ lại cho đường vào từ trang Cơ sở khi nó được nối lại, và mặc định
+   * `null` nghĩa là xem tất cả (đúng thứ người mở tab Cấu hình mong đợi).
+   */
+  centerIdFilter?: string | null;
 }) {
   const session = await auth();
   if (!session?.user) return null;

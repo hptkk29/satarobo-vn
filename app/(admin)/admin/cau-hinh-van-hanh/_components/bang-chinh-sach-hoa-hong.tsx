@@ -2,22 +2,23 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, Coins, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { AlertTriangle, Info, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MoneyInput } from "@/components/ui/money-input";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
   CHINH_SACH_MAC_DINH,
+  KHI_NAO_CHI,
   KIEU_TINH,
   kiemChinhSach,
   LOAI_DON,
@@ -25,72 +26,124 @@ import {
   NHAN_LOAI_DON,
   NHAN_SU_KIEN,
   SU_KIEN,
+  tongCuaChinhSach,
   tongTiLeTheoSuKien,
   type ChinhSachHoaHong,
   type KieuTinhHoaHong,
   type LoaiDonHoaHong,
   type SuKienHoaHong,
 } from "@/lib/crm/chinh-sach-hoa-hong";
+import type { VaiNhanHoaHong } from "@/lib/crm/vai-nhan-hoa-hong";
 
 import { luuChinhSachHoaHongAction } from "../actions";
 
 const vnd = (n: number) => `${n.toLocaleString("vi-VN")}đ`;
-const pct = (n: number) => `${(n * 100).toFixed(2).replace(/\.?0+$/, "")}%`;
+const pct = (n: number) => `${Number((n * 100).toFixed(4))}%`;
 
 const O =
-  "min-h-9 w-full min-w-[9rem] rounded-lg border border-border bg-background px-2 text-sm transition-colors duration-150 focus:border-primary focus:outline-none";
+  "min-h-11 w-full rounded-lg border border-border bg-background px-2.5 text-sm transition-colors duration-150 focus:border-primary focus:outline-none";
 
 /**
- * KHAI CHÍNH SÁCH HOA HỒNG.
+ * Dấu ⓘ — bấm ra lời giải thích.
  *
- * ⚠️ Ô "Vai nhận" là Ô CHỮ TỰ DO có gợi ý, KHÔNG phải danh sách đóng. Chủ dự án
- * 14/09/2026: "thêm bớt các role nhận hoa hồng riêng chứ không khoá cứng". Danh sách vai
- * có thật chỉ để gợi ý (`<datalist>`) — gõ một mã chưa từng có vẫn lưu được, vì chính
- * sách mới thường ra trước khi vai mới được tạo.
+ * Cố ý KHÔNG dùng `title=""`: điện thoại không hover được, mà đây đúng là chỗ người dùng
+ * cần giải thích nhất. Chủ dự án 14/09: "hãy là 1 icon chữ i hình tròn để ghi chú rõ ràng hơn".
+ */
+function ChuThich({ noiDung, nhan }: { noiDung: string; nhan: string }) {
+  const [mo, setMo] = useState(false);
+  return (
+    <span className="relative inline-flex">
+      <button
+        type="button"
+        onClick={() => setMo((v) => !v)}
+        onBlur={() => setMo(false)}
+        aria-label={nhan}
+        aria-expanded={mo}
+        className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground"
+      >
+        <Info className="h-3.5 w-3.5" aria-hidden />
+      </button>
+      {mo && (
+        <span
+          role="tooltip"
+          className="absolute left-0 top-6 z-30 w-[min(22rem,80vw)] rounded-lg border border-border bg-card p-3 text-xs leading-relaxed text-foreground shadow-md"
+        >
+          {noiDung}
+        </span>
+      )}
+    </span>
+  );
+}
+
+type Nhap = { cs: ChinhSachHoaHong; moi: boolean };
+
+/**
+ * CHÍNH SÁCH HOA HỒNG — mỗi thẻ là MỘT quyết định, không phải một khoản lẻ.
  *
- * ⚠️ Kiểm hợp lệ chạy Ở CẢ HAI ĐẦU bằng CÙNG một hàm `kiemChinhSach`: ở đây để người khai
- * thấy lỗi ngay khi gõ, và ở Server Action vì Server Action là endpoint riêng — gọi thẳng
- * nó thì màn này không đứng chắn được.
+ * ⚠️ Bản đầu (14/09 sáng) để mỗi dòng là một cặp (vai × tỉ lệ), nên riêng "học viên mới"
+ * thành NĂM dòng trông như năm chính sách khác nhau. Chủ dự án: "có thể gom thành 1 hàng
+ * tên chính sách khi có học viên mới: trần chính sách bao nhiêu %, loại đơn, các vai nhận,
+ * cách tính, nguồn, nút sửa". Nay danh sách chỉ ĐỌC; mọi thao tác khai nằm trong hộp thoại.
+ *
+ * ⚠️ Vai hiện bằng TÊN TIẾNG VIỆT. Mã (`HO_SALE_ADMIN`) chỉ là khoá lưu trữ — in nó lên
+ * màn là bắt người vận hành đọc tên biến.
+ *
+ * ⚠️ KHÔNG dùng `<table>`: tám cột thì ở 320px phải cuộn ngang, còn ở 8K thì một dòng kéo
+ * dài 3000px và mắt phải quét cả màn hình cho MỘT chính sách. Lưới thẻ đọc được ở mọi bề
+ * ngang và nở thêm CỘT khi màn rộng ra, đúng hướng mà `7b7f65b8` đã chốt cho trang này.
  */
 export function BangChinhSachHoaHong({
   banDau,
   tranTongTiLe,
-  vaiCoThat,
+  vai,
   suaDuoc,
 }: {
   banDau: ChinhSachHoaHong[];
   /** `crm.commissionMaxTotalRate` — trần áp cho TỪNG rổ (sự kiện × loại đơn). */
   tranTongTiLe: number;
-  /** Mã vai có thật trong hệ thống, chỉ để GỢI Ý. */
-  vaiCoThat: string[];
+  /** Toàn bộ vai trong hệ thống, kèm tên tiếng Việt. */
+  vai: VaiNhanHoaHong[];
   suaDuoc: boolean;
 }) {
   const [ds, setDs] = useState<ChinhSachHoaHong[]>(banDau);
   const [lyDo, setLyDo] = useState("");
+  const [nhap, setNhap] = useState<Nhap | null>(null);
+  const [xoaMa, setXoaMa] = useState<string | null>(null);
   const [dangChay, start] = useTransition();
 
-  const loi = useMemo(() => kiemChinhSach(ds, { tranTongTiLe }), [ds, tranTongTiLe]);
-  const doiKhac = useMemo(
-    () => JSON.stringify(ds) !== JSON.stringify(banDau),
-    [ds, banDau],
-  );
+  const tenVai = useMemo(() => new Map(vai.map((v) => [v.ma, v.ten])), [vai]);
+  const nhanVai = (ma: string) => tenVai.get(ma) ?? ma;
 
-  /** Tổng tỉ lệ TỪNG RỔ — cộng chung mọi sự kiện là báo vượt trần giả (xem [CSH-04]). */
-  const tongTheoRo = useMemo(
+  const loi = useMemo(() => kiemChinhSach(ds, { tranTongTiLe }), [ds, tranTongTiLe]);
+  const doiKhac = useMemo(() => JSON.stringify(ds) !== JSON.stringify(banDau), [ds, banDau]);
+
+  /**
+   * Tổng theo TỪNG RỔ, và mỗi ô nói đúng về CHÍNH NÓ.
+   *
+   * ⚠️ Bản đầu in cả bốn ô đều ghi "đơn khoá học · trần 9%" — kể cả rổ Bán thiết bị vốn
+   * không có chính sách phần trăm nào, nên con số 0% + "trần 9%" là một câu vô nghĩa.
+   * Chủ dự án bắt được: "đang lỗi là tất cả đều để đơn khoá học trần 9%".
+   */
+  const ro = useMemo(
     () =>
-      Object.values(SU_KIEN).map((sk) => ({
-        suKien: sk,
-        khoa: tongTiLeTheoSuKien(ds, sk, "COURSE"),
-        sanPham: tongTiLeTheoSuKien(ds, sk, "PRODUCT"),
-      })),
+      Object.values(SU_KIEN).map((sk) => {
+        const cs = ds.filter((c) => c.bat && c.suKien === sk);
+        const loaiCo = [...new Set(cs.map((c) => c.loaiDon))];
+        const loaiChinh: LoaiDonHoaHong =
+          loaiCo.length === 1 ? loaiCo[0]! : loaiCo.includes("COURSE") ? "COURSE" : "TAT_CA";
+        return {
+          suKien: sk,
+          soChinhSach: cs.length,
+          loaiDon: loaiChinh,
+          tiLe: tongTiLeTheoSuKien(ds, sk, loaiChinh),
+          coPhanTram: cs.some((c) => c.kieuTinh === KIEU_TINH.PHAN_TRAM),
+          coSoTien: cs.some((c) => c.kieuTinh === KIEU_TINH.SO_TIEN_CO_DINH),
+        };
+      }),
     [ds],
   );
 
-  function sua(i: number, vá: Partial<ChinhSachHoaHong>) {
-    setDs((c) => c.map((x, j) => (j === i ? { ...x, ...vá } : x)));
-  }
-
-  /** Tên → mã: bỏ dấu, viết hoa, nối gạch dưới. Trùng thì thêm hậu tố số. */
+  /** Tên → mã. Trùng thì thêm hậu tố số. Người vận hành không phải nghĩ về mã. */
   function sinhMa(ten: string, daCo: Set<string>): string {
     const goc =
       ten
@@ -106,21 +159,30 @@ export function BangChinhSachHoaHong({
     return `${goc}_X`;
   }
 
-  function them() {
-    setDs((c) => [
-      ...c,
-      {
-        ma: sinhMa("Chính sách mới", new Set(c.map((x) => x.ma))),
-        ten: "Chính sách mới",
-        vaiNhan: "",
+  function moThem() {
+    setNhap({
+      moi: true,
+      cs: {
+        ma: "",
+        ten: "",
         suKien: "HOC_VIEN_MOI",
         loaiDon: "COURSE",
         kieuTinh: "PHAN_TRAM",
-        giaTri: 0,
+        khoan: [],
         nguon: "",
+        ghiChu: "",
         bat: false,
       },
-    ]);
+    });
+  }
+
+  function luuHopThoai() {
+    if (!nhap) return;
+    const khac = new Set(ds.filter((c) => c.ma !== nhap.cs.ma).map((c) => c.ma));
+    const ma = nhap.cs.ma?.trim() || sinhMa(nhap.cs.ten, khac);
+    const moi = { ...nhap.cs, ma };
+    setDs((c) => (nhap.moi ? [...c, moi] : c.map((x) => (x.ma === nhap.cs.ma ? moi : x))));
+    setNhap(null);
   }
 
   function luu() {
@@ -137,44 +199,44 @@ export function BangChinhSachHoaHong({
 
   return (
     <section className="space-y-4">
-      <div className="rounded-xl border border-border bg-muted/30 p-4">
-        <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-          <Coins className="h-4 w-4 shrink-0 text-accent-ink" aria-hidden />
-          Chính sách hoa hồng
-        </h2>
-        <p className="mt-1 max-w-prose text-xs leading-relaxed text-muted-foreground">
-          Mỗi dòng là <b className="font-semibold text-foreground">một khoản chi</b>, khai
-          theo bốn trục: ai nhận · khi nào · loại đơn nào · tính thế nào. Thêm bớt tuỳ ý —
-          không cần lập trình viên. Bộ khởi đầu chép từ{" "}
-          <b className="font-semibold text-foreground">SR.QD.208</b>; sửa xong thì bản trong
-          hệ thống thắng.
-        </p>
-      </div>
-
-      {/* Tổng theo rổ — con số duy nhất người duyệt chính sách thật sự cần nhìn */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {tongTheoRo.map((r) => {
-          const vuot = r.khoa > tranTongTiLe + 1e-9 || r.sanPham > tranTongTiLe + 1e-9;
+      {/* Ở 320px là MỘT cột: ép hai cột rồi bóp số tiền 9 chữ số xuống nửa ô là mất số. */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {ro.map((r) => {
+          const vuot = r.tiLe > tranTongTiLe + 1e-9;
           return (
             <div
               key={r.suKien}
-              className={`min-w-0 rounded-xl border px-3 py-2.5 ${
-                vuot ? "border-state-danger bg-state-danger-soft" : "border-border bg-background"
+              className={`min-w-0 rounded-xl border px-4 py-3 ${
+                vuot ? "border-state-danger bg-state-danger-soft" : "border-border bg-card"
               }`}
             >
-              <p className="truncate text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                {NHAN_SU_KIEN[r.suKien]}
+              <p className="flex min-w-0 items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <span className="truncate">{NHAN_SU_KIEN[r.suKien]}</span>
+                <ChuThich
+                  nhan={`Khoản ${NHAN_SU_KIEN[r.suKien]} chi khi nào`}
+                  noiDung={KHI_NAO_CHI[r.suKien]}
+                />
               </p>
-              <p
-                className={`mt-1 truncate text-lg font-bold tabular-nums ${
-                  vuot ? "text-state-danger-ink" : "text-foreground"
-                }`}
-              >
-                {pct(r.khoa)}
-              </p>
-              <p className="truncate text-xs text-muted-foreground">
-                đơn khoá học · trần {pct(tranTongTiLe)}
-              </p>
+              {r.soChinhSach === 0 ? (
+                <>
+                  <p className="mt-1 truncate text-lg font-bold text-muted-foreground">—</p>
+                  <p className="truncate text-xs text-muted-foreground">Chưa có chính sách nào</p>
+                </>
+              ) : (
+                <>
+                  <p
+                    className={`mt-1 truncate text-xl font-bold tabular-nums ${
+                      vuot ? "text-state-danger-ink" : "text-foreground"
+                    }`}
+                  >
+                    {r.coPhanTram ? pct(r.tiLe) : r.coSoTien ? "Số tiền cố định" : "Thưởng bậc"}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {r.soChinhSach} chính sách · {NHAN_LOAI_DON[r.loaiDon].toLowerCase()}
+                    {r.coPhanTram ? ` · trần ${pct(tranTongTiLe)}` : ""}
+                  </p>
+                </>
+              )}
             </div>
           );
         })}
@@ -199,234 +261,119 @@ export function BangChinhSachHoaHong({
         </div>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-border">
-        {/* ⚠️ min-w BẮT BUỘC: 9 cột mà cột nào cũng chứa ô nhập, để bảng co theo khung
-            thì trình duyệt bóp mỗi ô còn vài chục pixel — đo trên màn 1531px: mã chính
-            sách đè lên ô vai nhận, ba ô chọn cụt thành "H", "Đơ", "% trị". Cho bảng một
-            bề rộng tối thiểu rồi cuộn ngang là cách duy nhất giữ được mọi ô đọc được. */}
-        <Table className="min-w-[86rem]">
-            <TableHeader>
-              <TableRow>
-                <TableHead className="whitespace-nowrap text-xs font-semibold uppercase tracking-wide">
-                  Bật
-                </TableHead>
-                <TableHead className="whitespace-nowrap text-xs font-semibold uppercase tracking-wide">
-                  Tên chính sách
-                </TableHead>
-                <TableHead className="whitespace-nowrap text-xs font-semibold uppercase tracking-wide">
-                  Vai nhận
-                </TableHead>
-                <TableHead className="whitespace-nowrap text-xs font-semibold uppercase tracking-wide">
-                  Khi nào
-                </TableHead>
-                <TableHead className="whitespace-nowrap text-xs font-semibold uppercase tracking-wide">
-                  Loại đơn
-                </TableHead>
-                <TableHead className="whitespace-nowrap text-xs font-semibold uppercase tracking-wide">
-                  Cách tính
-                </TableHead>
-                <TableHead className="whitespace-nowrap text-right text-xs font-semibold uppercase tracking-wide">
-                  Giá trị
-                </TableHead>
-                <TableHead className="whitespace-nowrap text-xs font-semibold uppercase tracking-wide">
-                  Nguồn
-                </TableHead>
-                <TableHead className="whitespace-nowrap text-xs font-semibold uppercase tracking-wide">
-                  <span className="sr-only">Xoá</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {ds.map((c, i) => (
-                <TableRow key={`${c.ma}-${i}`}>
-                  <TableCell className="whitespace-nowrap px-5 py-3.5">
-                    <input
-                      type="checkbox"
-                      checked={c.bat}
-                      disabled={!suaDuoc}
-                      onChange={(e) => sua(i, { bat: e.target.checked })}
-                      aria-label={`Bật chính sách ${c.ten}`}
-                      className="h-4 w-4 accent-[var(--primary)]"
-                    />
-                  </TableCell>
-                  <TableCell className="min-w-[17rem] px-5 py-3.5">
-                    <Input
-                      value={c.ten}
-                      disabled={!suaDuoc}
-                      onChange={(e) => {
-                        const ten = e.target.value;
-                        // Dòng CHƯA BẬT là dòng đang soạn ⇒ mã bám theo tên. Dòng đã bật
-                        // thì GIỮ NGUYÊN mã: nó có thể đã đi vào dòng hoa hồng đã sinh,
-                        // và đổi mã lúc đó là làm mồ côi những dòng ấy.
-                        sua(
-                          i,
-                          c.bat
-                            ? { ten }
-                            : { ten, ma: sinhMa(ten, new Set(ds.filter((_, j) => j !== i).map((x) => x.ma))) },
-                        );
-                      }}
-                      className="w-full"
-                      aria-label="Tên chính sách"
-                    />
-                    {/* MÃ là định danh kỹ thuật, không phải thứ người vận hành cần gõ —
-                        nó tự sinh từ tên khi thêm dòng. Để nó thành ô nhập thứ hai trong
-                        cùng một ô bảng thì ô tràn sang cột bên cạnh và đè chữ (đo trên
-                        màn 1531px). Hiện dạng chữ nhỏ là đủ để đối chiếu khi cần. */}
-                    <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">
-                      {c.ma}
+      {ds.length === 0 ? (
+        <div className="rounded-xl border border-border bg-card px-5 py-12 text-center">
+          <p className="text-sm font-medium text-foreground">Chưa có chính sách hoa hồng nào</p>
+          <p className="mx-auto mt-1 max-w-prose text-xs leading-relaxed text-muted-foreground">
+            Không chính sách nào nghĩa là{" "}
+            <b className="font-semibold">hệ thống không chi hoa hồng cho ai</b>. Đó là một lựa
+            chọn hợp lệ — nhưng nếu không cố ý thì nạp lại bộ theo công văn SR.QD.208.
+          </p>
+        </div>
+      ) : (
+        <ul className="grid grid-cols-1 gap-3 xl:grid-cols-2 min-[2200px]:grid-cols-3">
+          {ds.map((c) => {
+            const tong = tongCuaChinhSach(c);
+            return (
+              <li
+                key={c.ma}
+                className={`flex min-w-0 flex-col gap-3 rounded-xl border bg-card p-4 ${
+                  c.bat ? "border-border" : "border-dashed border-border opacity-70"
+                }`}
+              >
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h3 className="flex min-w-0 items-center gap-1 text-sm font-semibold text-foreground">
+                      <span className="truncate">{c.ten || "(chưa đặt tên)"}</span>
+                      {c.ghiChu && <ChuThich nhan={`Giải thích: ${c.ten}`} noiDung={c.ghiChu} />}
+                    </h3>
+                    <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                      <span>{NHAN_SU_KIEN[c.suKien]}</span>
+                      <span aria-hidden>·</span>
+                      <span>{NHAN_LOAI_DON[c.loaiDon]}</span>
+                      {!c.bat && (
+                        <>
+                          <span aria-hidden>·</span>
+                          <span className="font-semibold text-state-warning-ink">Đang tắt</span>
+                        </>
+                      )}
                     </p>
-                  </TableCell>
-                  <TableCell className="min-w-[15rem] px-5 py-3.5">
-                    {/* Ô CHỮ có gợi ý, không phải danh sách đóng — xem chú thích đầu file. */}
-                    <Input
-                      value={c.vaiNhan}
-                      disabled={!suaDuoc}
-                      list="vai-nhan-hoa-hong"
-                      placeholder="SALES_CSM…"
-                      onChange={(e) => sua(i, { vaiNhan: e.target.value })}
-                      className="w-full font-mono text-xs"
-                      aria-label="Mã vai nhận hoa hồng"
-                    />
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap px-5 py-3.5">
-                    <select
-                      value={c.suKien}
-                      disabled={!suaDuoc}
-                      onChange={(e) => sua(i, { suKien: e.target.value as SuKienHoaHong })}
-                      className={O}
-                      aria-label="Sự kiện sinh hoa hồng"
-                    >
-                      {Object.values(SU_KIEN).map((k) => (
-                        <option key={k} value={k}>
-                          {NHAN_SU_KIEN[k]}
-                        </option>
-                      ))}
-                    </select>
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap px-5 py-3.5">
-                    <select
-                      value={c.loaiDon}
-                      disabled={!suaDuoc}
-                      onChange={(e) => sua(i, { loaiDon: e.target.value as LoaiDonHoaHong })}
-                      className={O}
-                      aria-label="Loại đơn áp dụng"
-                    >
-                      {Object.values(LOAI_DON).map((k) => (
-                        <option key={k} value={k}>
-                          {NHAN_LOAI_DON[k]}
-                        </option>
-                      ))}
-                    </select>
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap px-5 py-3.5">
-                    <select
-                      value={c.kieuTinh}
-                      disabled={!suaDuoc}
-                      onChange={(e) => sua(i, { kieuTinh: e.target.value as KieuTinhHoaHong })}
-                      className={O}
-                      aria-label="Cách tính"
-                    >
-                      {Object.values(KIEU_TINH).map((k) => (
-                        <option key={k} value={k}>
-                          {NHAN_KIEU_TINH[k]}
-                        </option>
-                      ))}
-                    </select>
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap px-5 py-3.5 text-right">
-                    {c.kieuTinh === KIEU_TINH.PHAN_TRAM ? (
-                      <div className="flex items-center justify-end gap-1">
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min={0}
-                          max={100}
-                          disabled={!suaDuoc}
-                          // Người khai gõ theo PHẦN TRĂM (4), lưu theo tỉ lệ (0,04).
-                          // Bắt gõ 0,04 là mời nhầm — và nhầm ở đây chi gấp 100 lần.
-                          value={Number((c.giaTri * 100).toFixed(4))}
-                          onChange={(e) =>
-                            sua(i, { giaTri: (Number(e.target.value) || 0) / 100 })
-                          }
-                          className="w-24 text-right tabular-nums"
-                          aria-label="Tỉ lệ phần trăm"
-                        />
-                        <span className="text-xs text-muted-foreground">%</span>
-                      </div>
-                    ) : c.kieuTinh === KIEU_TINH.SO_TIEN_CO_DINH ? (
-                      <MoneyInput
-                        name={`giaTri-${i}`}
-                        value={c.giaTri}
-                        min={0}
-                        disabled={!suaDuoc}
-                        onValueChange={(v) => sua(i, { giaTri: v ?? 0 })}
-                      />
-                    ) : (
-                      <span className="text-xs tabular-nums text-muted-foreground">
-                        {(c.bac ?? []).length} bậc ·{" "}
-                        {(c.bac ?? []).length > 0
-                          ? `${vnd(Math.min(...(c.bac ?? []).map((b) => b.thuong)))}–${vnd(
-                              Math.max(...(c.bac ?? []).map((b) => b.thuong)),
-                            )}`
-                          : "chưa khai"}
+                  </div>
+                  <p className="shrink-0 text-right">
+                    <span className="block whitespace-nowrap text-lg font-bold tabular-nums text-foreground">
+                      {c.kieuTinh === KIEU_TINH.PHAN_TRAM
+                        ? pct(tong)
+                        : c.kieuTinh === KIEU_TINH.SO_TIEN_CO_DINH
+                          ? vnd(tong)
+                          : `${(c.bac ?? []).length} bậc`}
+                    </span>
+                    <span className="block whitespace-nowrap text-xs text-muted-foreground">
+                      {NHAN_KIEU_TINH[c.kieuTinh]}
+                    </span>
+                  </p>
+                </div>
+
+                <div className="flex min-w-0 flex-wrap gap-1.5">
+                  {(c.khoan ?? []).length === 0 ? (
+                    <span className="text-xs text-state-danger-ink">Chưa chọn vai nhận</span>
+                  ) : (
+                    (c.khoan ?? []).map((k) => (
+                      <span
+                        key={k.vaiNhan}
+                        className="inline-flex max-w-full items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs"
+                      >
+                        <span className="truncate">{nhanVai(k.vaiNhan)}</span>
+                        {c.kieuTinh !== KIEU_TINH.THUONG_THEO_BAC && (
+                          <b className="shrink-0 font-semibold tabular-nums text-foreground">
+                            {c.kieuTinh === KIEU_TINH.PHAN_TRAM ? pct(k.giaTri) : vnd(k.giaTri)}
+                          </b>
+                        )}
                       </span>
-                    )}
-                  </TableCell>
-                  <TableCell className="min-w-[18rem] px-5 py-3.5">
-                    <Input
-                      value={c.nguon ?? ""}
-                      disabled={!suaDuoc}
-                      placeholder="SR.QD.208 · PL…"
-                      onChange={(e) => sua(i, { nguon: e.target.value })}
-                      className="w-full text-xs"
-                      aria-label="Nguồn văn bản"
-                    />
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap px-5 py-3.5">
-                    {suaDuoc && (
+                    ))
+                  )}
+                </div>
+
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
+                  <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                    {c.nguon || "Chưa ghi nguồn"}
+                  </p>
+                  {suaDuoc && (
+                    <div className="flex shrink-0 gap-2">
                       <button
                         type="button"
-                        onClick={() => setDs((c2) => c2.filter((_, j) => j !== i))}
+                        onClick={() => setNhap({ cs: structuredClone(c), moi: false })}
+                        className="inline-flex min-h-9 items-center gap-1 rounded-md border border-border bg-background px-2.5 text-xs font-medium transition-colors duration-150 hover:bg-muted"
+                      >
+                        <Pencil className="h-3.5 w-3.5" aria-hidden />
+                        Sửa
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setXoaMa(c.ma)}
                         aria-label={`Xoá chính sách ${c.ten}`}
-                        className="inline-flex min-h-9 items-center rounded-md border border-border bg-background px-2 text-xs text-state-danger-ink transition-colors duration-150 hover:bg-state-danger-soft"
+                        className="inline-flex min-h-9 items-center rounded-md border border-border bg-background px-2.5 text-state-danger-ink transition-colors duration-150 hover:bg-state-danger-soft"
                       >
                         <Trash2 className="h-3.5 w-3.5" aria-hidden />
                       </button>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-        </Table>
-
-        {ds.length === 0 && (
-          <div className="px-5 py-10 text-center">
-            <p className="text-sm font-medium text-foreground">Chưa có chính sách nào</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Không chính sách nào nghĩa là <b className="font-semibold">không chi hoa hồng</b>.
-              Đó là một lựa chọn hợp lệ — nhưng nếu không cố ý thì nạp lại bộ theo công văn.
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* Gợi ý vai có thật — chỉ gợi ý, ô vẫn nhập tự do. */}
-      <datalist id="vai-nhan-hoa-hong">
-        {vaiCoThat.map((v) => (
-          <option key={v} value={v} />
-        ))}
-      </datalist>
+                    </div>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
 
       {suaDuoc && (
         <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
-          <Button type="button" variant="outline" onClick={them} className="min-h-11">
+          <Button type="button" variant="outline" onClick={moThem} className="min-h-11">
             <Plus className="h-4 w-4" aria-hidden />
             Thêm chính sách
           </Button>
           <Button
             type="button"
             variant="outline"
-            onClick={() => setDs(CHINH_SACH_MAC_DINH)}
+            onClick={() => setDs(structuredClone(CHINH_SACH_MAC_DINH))}
             className="min-h-11"
           >
             <RotateCcw className="h-4 w-4" aria-hidden />
@@ -436,8 +383,8 @@ export function BangChinhSachHoaHong({
             value={lyDo}
             onChange={(e) => setLyDo(e.target.value)}
             placeholder="Lý do thay đổi (bắt buộc)"
-            className="min-w-0 flex-1 sm:max-w-sm"
             aria-label="Lý do thay đổi"
+            className="min-w-0 flex-1 sm:max-w-sm"
           />
           <Button
             type="button"
@@ -447,11 +394,353 @@ export function BangChinhSachHoaHong({
           >
             {dangChay ? "Đang lưu…" : "Lưu chính sách"}
           </Button>
-          {!doiKhac && (
-            <span className="text-xs text-muted-foreground">Chưa có thay đổi nào.</span>
-          )}
+          {!doiKhac && <span className="text-xs text-muted-foreground">Chưa có thay đổi nào.</span>}
         </div>
       )}
+
+      <HopThoaiSua
+        nhap={nhap}
+        vai={vai}
+        onDong={() => setNhap(null)}
+        onDoi={(cs) => setNhap((n) => (n ? { ...n, cs } : n))}
+        onLuu={luuHopThoai}
+      />
+
+      <Dialog open={xoaMa != null} onOpenChange={(o) => !o && setXoaMa(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Xoá chính sách này?</DialogTitle>
+            <DialogDescription>{ds.find((c) => c.ma === xoaMa)?.ten}</DialogDescription>
+          </DialogHeader>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Xoá xong vẫn phải bấm <b className="font-semibold text-foreground">Lưu chính sách</b>{" "}
+            thì mới có hiệu lực. Dòng hoa hồng đã sinh trước đó{" "}
+            <b className="font-semibold text-foreground">không bị ảnh hưởng</b> — xoá chính sách
+            chỉ dừng việc chi từ đây về sau.
+          </p>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setXoaMa(null)}>
+              Huỷ
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                setDs((c) => c.filter((x) => x.ma !== xoaMa));
+                setXoaMa(null);
+              }}
+            >
+              Xoá
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
+  );
+}
+
+/** Hộp thoại khai chi tiết một chính sách. Tách hàm để phần danh sách ở trên chỉ còn việc ĐỌC. */
+function HopThoaiSua({
+  nhap,
+  vai,
+  onDong,
+  onDoi,
+  onLuu,
+}: {
+  nhap: Nhap | null;
+  vai: VaiNhanHoaHong[];
+  onDong: () => void;
+  onDoi: (cs: ChinhSachHoaHong) => void;
+  onLuu: () => void;
+}) {
+  const cs = nhap?.cs;
+  const daChon = new Set((cs?.khoan ?? []).map((k) => k.vaiNhan));
+  const conLai = vai.filter((v) => !daChon.has(v.ma));
+  const tenVai = new Map(vai.map((v) => [v.ma, v.ten]));
+
+  function doi(va: Partial<ChinhSachHoaHong>) {
+    if (cs) onDoi({ ...cs, ...va });
+  }
+  function doiKhoan(vaiNhan: string, giaTri: number) {
+    if (cs) doi({ khoan: cs.khoan.map((k) => (k.vaiNhan === vaiNhan ? { ...k, giaTri } : k)) });
+  }
+
+  const hopLe =
+    !!cs?.ten?.trim() && (cs.kieuTinh === KIEU_TINH.THUONG_THEO_BAC || cs.khoan.length > 0);
+
+  return (
+    <Dialog open={nhap != null} onOpenChange={(o) => !o && onDong()}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{nhap?.moi ? "Thêm chính sách hoa hồng" : "Sửa chính sách"}</DialogTitle>
+          <DialogDescription>
+            Khai theo bốn trục: chi khi nào · cho loại đơn nào · tính thế nào · ai nhận bao nhiêu.
+          </DialogDescription>
+        </DialogHeader>
+
+        {cs && (
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="cs-ten">Tên chính sách</Label>
+              <Input
+                id="cs-ten"
+                value={cs.ten}
+                onChange={(e) => doi({ ten: e.target.value })}
+                placeholder="Ví dụ: Hoa hồng học viên mới"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="cs-su-kien">Chi khi nào</Label>
+                <select
+                  id="cs-su-kien"
+                  className={O}
+                  value={cs.suKien}
+                  onChange={(e) => doi({ suKien: e.target.value as SuKienHoaHong })}
+                >
+                  {Object.values(SU_KIEN).map((k) => (
+                    <option key={k} value={k}>
+                      {NHAN_SU_KIEN[k]}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {KHI_NAO_CHI[cs.suKien]}
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="cs-loai-don">Loại đơn</Label>
+                <select
+                  id="cs-loai-don"
+                  className={O}
+                  value={cs.loaiDon}
+                  onChange={(e) => doi({ loaiDon: e.target.value as LoaiDonHoaHong })}
+                >
+                  {Object.values(LOAI_DON).map((k) => (
+                    <option key={k} value={k}>
+                      {NHAN_LOAI_DON[k]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="cs-kieu">Cách tính</Label>
+                <select
+                  id="cs-kieu"
+                  className={O}
+                  value={cs.kieuTinh}
+                  onChange={(e) => doi({ kieuTinh: e.target.value as KieuTinhHoaHong })}
+                >
+                  {Object.values(KIEU_TINH).map((k) => (
+                    <option key={k} value={k}>
+                      {NHAN_KIEU_TINH[k]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-3">
+              <Label>Ai nhận, nhận bao nhiêu</Label>
+              {cs.khoan.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Chưa chọn vai nào. Một chính sách không có người nhận thì không chi cho ai.
+                </p>
+              )}
+              <ul className="space-y-2">
+                {cs.khoan.map((k) => (
+                  <li key={k.vaiNhan} className="flex flex-wrap items-center gap-2">
+                    <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                      {tenVai.get(k.vaiNhan) ?? k.vaiNhan}
+                    </span>
+                    {cs.kieuTinh === KIEU_TINH.PHAN_TRAM ? (
+                      <span className="flex shrink-0 items-center gap-1">
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min={0}
+                          max={100}
+                          // Người khai gõ theo PHẦN TRĂM (4), lưu theo tỉ lệ (0,04). Bắt gõ
+                          // 0,04 là mời nhầm — và nhầm ở đây chi gấp 100 lần.
+                          value={Number((k.giaTri * 100).toFixed(4))}
+                          onChange={(e) => doiKhoan(k.vaiNhan, (Number(e.target.value) || 0) / 100)}
+                          aria-label={`Tỉ lệ cho ${tenVai.get(k.vaiNhan) ?? k.vaiNhan}`}
+                          className="w-24 text-right tabular-nums"
+                        />
+                        <span className="text-xs text-muted-foreground">%</span>
+                      </span>
+                    ) : cs.kieuTinh === KIEU_TINH.SO_TIEN_CO_DINH ? (
+                      <span className="w-40 shrink-0">
+                        <MoneyInput
+                          name={`khoan-${k.vaiNhan}`}
+                          value={k.giaTri}
+                          min={0}
+                          onValueChange={(v) => doiKhoan(k.vaiNhan, v ?? 0)}
+                        />
+                      </span>
+                    ) : (
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        theo bảng bậc bên dưới
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        doi({ khoan: cs.khoan.filter((x) => x.vaiNhan !== k.vaiNhan) })
+                      }
+                      aria-label={`Bỏ ${tenVai.get(k.vaiNhan) ?? k.vaiNhan}`}
+                      className="inline-flex min-h-9 shrink-0 items-center rounded-md border border-border bg-background px-2 text-state-danger-ink transition-colors duration-150 hover:bg-state-danger-soft"
+                    >
+                      <X className="h-3.5 w-3.5" aria-hidden />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+
+              {conLai.length > 0 && (
+                <select
+                  className={O}
+                  value=""
+                  aria-label="Thêm vai nhận"
+                  onChange={(e) => {
+                    if (!e.target.value) return;
+                    doi({ khoan: [...cs.khoan, { vaiNhan: e.target.value, giaTri: 0 }] });
+                  }}
+                >
+                  <option value="">+ Thêm vai nhận…</option>
+                  {conLai.map((v) => (
+                    <option key={v.ma} value={v.ma}>
+                      {v.ten}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            {cs.kieuTinh === KIEU_TINH.THUONG_THEO_BAC && (
+              <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-3">
+                <Label>Bậc thưởng theo doanh thu kỳ</Label>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  Nhận mức <b className="font-semibold text-foreground">cao nhất đạt được</b>,
+                  không cộng dồn nhiều bậc.
+                </p>
+                <ul className="space-y-2">
+                  {(cs.bac ?? []).map((b, i) => (
+                    <li key={i} className="flex flex-wrap items-center gap-2">
+                      <span className="shrink-0 text-xs text-muted-foreground">Từ</span>
+                      <span className="w-40 shrink-0">
+                        <MoneyInput
+                          name={`bac-nguong-${i}`}
+                          value={b.nguong}
+                          min={0}
+                          onValueChange={(v) =>
+                            doi({
+                              bac: (cs.bac ?? []).map((x, j) =>
+                                j === i ? { ...x, nguong: v ?? 0 } : x,
+                              ),
+                            })
+                          }
+                        />
+                      </span>
+                      <span className="shrink-0 text-xs text-muted-foreground">thưởng</span>
+                      <span className="w-36 shrink-0">
+                        <MoneyInput
+                          name={`bac-thuong-${i}`}
+                          value={b.thuong}
+                          min={0}
+                          onValueChange={(v) =>
+                            doi({
+                              bac: (cs.bac ?? []).map((x, j) =>
+                                j === i ? { ...x, thuong: v ?? 0 } : x,
+                              ),
+                            })
+                          }
+                        />
+                      </span>
+                      <Input
+                        value={b.danhHieu ?? ""}
+                        onChange={(e) =>
+                          doi({
+                            bac: (cs.bac ?? []).map((x, j) =>
+                              j === i ? { ...x, danhHieu: e.target.value } : x,
+                            ),
+                          })
+                        }
+                        placeholder="Danh hiệu"
+                        aria-label="Danh hiệu"
+                        className="min-w-0 flex-1"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => doi({ bac: (cs.bac ?? []).filter((_, j) => j !== i) })}
+                        aria-label="Bỏ bậc này"
+                        className="inline-flex min-h-9 shrink-0 items-center rounded-md border border-border bg-background px-2 text-state-danger-ink transition-colors duration-150 hover:bg-state-danger-soft"
+                      >
+                        <X className="h-3.5 w-3.5" aria-hidden />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-9"
+                  onClick={() => doi({ bac: [...(cs.bac ?? []), { nguong: 0, thuong: 0 }] })}
+                >
+                  <Plus className="h-3.5 w-3.5" aria-hidden />
+                  Thêm bậc
+                </Button>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="cs-nguon">Nguồn văn bản</Label>
+                <Input
+                  id="cs-nguon"
+                  value={cs.nguon ?? ""}
+                  onChange={(e) => doi({ nguon: e.target.value })}
+                  placeholder="SR.QD.208 · PL04 Điều 1"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="cs-bat">Trạng thái</Label>
+                <label className="flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-2.5 text-sm">
+                  <input
+                    id="cs-bat"
+                    type="checkbox"
+                    checked={cs.bat}
+                    onChange={(e) => doi({ bat: e.target.checked })}
+                    className="h-4 w-4 accent-[var(--primary)]"
+                  />
+                  Đang áp dụng
+                </label>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="cs-ghi-chu">Ghi chú cho người vận hành</Label>
+              <textarea
+                id="cs-ghi-chu"
+                rows={3}
+                value={cs.ghiChu ?? ""}
+                onChange={(e) => doi({ ghiChu: e.target.value })}
+                placeholder="Điều kiện áp dụng, ngoại lệ, điều cấm… — hiện trong dấu ⓘ cạnh tên."
+                className="w-full rounded-lg border border-border bg-background px-2.5 py-2 text-sm leading-relaxed transition-colors duration-150 focus:border-primary focus:outline-none"
+              />
+            </div>
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onDong}>
+            Huỷ
+          </Button>
+          <Button type="button" onClick={onLuu} disabled={!hopLe}>
+            Xong
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -36,26 +36,33 @@
 // sẽ xuất hiện ngay ngày nhập đủ chính sách công văn, nên nó có ca riêng ở [CSH-04].
 // ─────────────────────────────────────────────────────────────────────────────
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   CHINH_SACH_MAC_DINH,
   kiemChinhSach,
   tinhHoaHongDon,
   tinhThuongBac,
+  tongCuaChinhSach,
   tongTiLeTheoSuKien,
+  KHI_NAO_CHI,
+  SU_KIEN,
   type ChinhSachHoaHong,
 } from "./chinh-sach-hoa-hong";
 
 const cs = (x: Partial<ChinhSachHoaHong>): ChinhSachHoaHong => ({
   ma: "TEST",
   ten: "Test",
-  vaiNhan: "SALES_CSM",
   suKien: "HOC_VIEN_MOI",
   loaiDon: "TAT_CA",
   kieuTinh: "PHAN_TRAM",
-  giaTri: 0.04,
+  khoan: [{ vaiNhan: "CENTER_SALES_CSM", giaTri: 0.04 }],
   bat: true,
   ...x,
 });
+
+/** Một khoản — viết tắt cho đỡ ồn. */
+const k = (vaiNhan: string, giaTri: number) => ({ vaiNhan, giaTri });
 
 describe("[CSH-01] tính hoa hồng một đơn — theo % học phí thực thu", () => {
   it("ví dụ NGUYÊN VĂN công văn: học phí 6.000.000 → TVV 240.000 + Sale Admin 60.000", () => {
@@ -64,18 +71,22 @@ describe("[CSH-01] tính hoa hồng một đơn — theo % học phí thực thu
     const dong = tinhHoaHongDon(
       { soTien: 6_000_000, suKien: "HOC_VIEN_MOI", loaiDon: "COURSE" },
       [
-        cs({ ma: "TVV_MOI", vaiNhan: "SALES_CSM", giaTri: 0.04 }),
-        cs({ ma: "ADMIN_MOI", vaiNhan: "HO_SALE_ADMIN", giaTri: 0.01 }),
+        cs({
+          ma: "HV_MOI",
+          khoan: [k("CENTER_SALES_CSM", 0.04), k("HO_SALE", 0.01)],
+        }),
       ],
     );
+    // MỘT chính sách sinh HAI dòng — đúng ý "gom 5 hàng thành 1": người khai thấy một
+    // quyết định, hệ thống vẫn chi đúng từng vai.
     expect(dong).toHaveLength(2);
-    expect(dong[0]).toMatchObject({ ma: "TVV_MOI", vaiNhan: "SALES_CSM", soTien: 240_000 });
-    expect(dong[1]).toMatchObject({ ma: "ADMIN_MOI", soTien: 60_000 });
+    expect(dong[0]).toMatchObject({ ma: "HV_MOI", vaiNhan: "CENTER_SALES_CSM", soTien: 240_000 });
+    expect(dong[1]).toMatchObject({ ma: "HV_MOI", vaiNhan: "HO_SALE", soTien: 60_000 });
   });
 
   it("ví dụ công văn PL08: học viên mới 8.000.000 → Quản lý TT 160.000", () => {
     const dong = tinhHoaHongDon({ soTien: 8_000_000, suKien: "HOC_VIEN_MOI", loaiDon: "COURSE" }, [
-      cs({ ma: "QL_MOI", vaiNhan: "CENTER_MANAGER", giaTri: 0.02 }),
+      cs({ ma: "QL_MOI", khoan: [k("CENTER_MANAGER", 0.02)] }),
     ]);
     expect(dong[0]!.soTien).toBe(160_000);
   });
@@ -83,8 +94,8 @@ describe("[CSH-01] tính hoa hồng một đơn — theo % học phí thực thu
   it("TÁI TỤC dùng chính sách khác: 7.000.000 → Quản lý TT 70.000 (1%)", () => {
     // Cùng công văn, cùng vai, KHÁC sự kiện ⇒ khác tỉ lệ. Đây là trục mà 4 tầng cũ không có.
     const ds = [
-      cs({ ma: "QL_MOI", vaiNhan: "CENTER_MANAGER", suKien: "HOC_VIEN_MOI", giaTri: 0.02 }),
-      cs({ ma: "QL_TT", vaiNhan: "CENTER_MANAGER", suKien: "TAI_TUC", giaTri: 0.01 }),
+      cs({ ma: "QL_MOI", suKien: "HOC_VIEN_MOI", khoan: [k("CENTER_MANAGER", 0.02)] }),
+      cs({ ma: "QL_TT", suKien: "TAI_TUC", khoan: [k("CENTER_MANAGER", 0.01)] }),
     ];
     const dong = tinhHoaHongDon({ soTien: 7_000_000, suKien: "TAI_TUC", loaiDon: "COURSE" }, ds);
     expect(dong).toHaveLength(1);
@@ -100,8 +111,8 @@ describe("[CSH-01] tính hoa hồng một đơn — theo % học phí thực thu
 
   it("lọc theo LOẠI ĐƠN — chính sách khoá học không ăn vào đơn sản phẩm", () => {
     const ds = [
-      cs({ ma: "KHOA", loaiDon: "COURSE", giaTri: 0.04 }),
-      cs({ ma: "MOI_LOAI", loaiDon: "TAT_CA", giaTri: 0.01 }),
+      cs({ ma: "KHOA", loaiDon: "COURSE", khoan: [k("CENTER_SALES_CSM", 0.04)] }),
+      cs({ ma: "MOI_LOAI", loaiDon: "TAT_CA", khoan: [k("CENTER_SALES_CSM", 0.01)] }),
     ];
     const dong = tinhHoaHongDon({ soTien: 1_000_000, suKien: "HOC_VIEN_MOI", loaiDon: "PRODUCT" }, ds);
     expect(dong.map((d) => d.ma)).toEqual(["MOI_LOAI"]);
@@ -118,7 +129,7 @@ describe("[CSH-02] SỐ TIỀN CỐ ĐỊNH — bán thiết bị (PL05), không
         suKien: "BAN_THIET_BI",
         loaiDon: "PRODUCT",
         kieuTinh: "SO_TIEN_CO_DINH",
-        giaTri: 100_000,
+        khoan: [k("MOI_NHAN_SU", 100_000)],
       }),
     ];
     for (const giaBan of [1_000_000, 9_000_000]) {
@@ -137,7 +148,7 @@ describe("[CSH-02] SỐ TIỀN CỐ ĐỊNH — bán thiết bị (PL05), không
         suKien: "BAN_THIET_BI",
         loaiDon: "PRODUCT",
         kieuTinh: "SO_TIEN_CO_DINH",
-        giaTri: 50_000,
+        khoan: [k("MOI_NHAN_SU", 50_000)],
       }),
     ];
     const dong = tinhHoaHongDon(
@@ -149,7 +160,12 @@ describe("[CSH-02] SỐ TIỀN CỐ ĐỊNH — bán thiết bị (PL05), không
 
   it("KHÔNG có số lượng → coi như 1, không phải 0", () => {
     const ds = [
-      cs({ ma: "X", kieuTinh: "SO_TIEN_CO_DINH", giaTri: 50_000, suKien: "BAN_THIET_BI" }),
+      cs({
+        ma: "X",
+        kieuTinh: "SO_TIEN_CO_DINH",
+        khoan: [k("MOI_NHAN_SU", 50_000)],
+        suKien: "BAN_THIET_BI",
+      }),
     ];
     expect(
       tinhHoaHongDon({ soTien: 1, suKien: "BAN_THIET_BI", loaiDon: "TAT_CA" }, ds)[0]!.soTien,
@@ -235,8 +251,12 @@ describe("[CSH-04] TRẦN TỔNG tính THEO SỰ KIỆN — không cộng chung 
 
   it("chính sách SỐ TIỀN CỐ ĐỊNH không tham gia phép cộng tỉ lệ", () => {
     const ds = [
-      cs({ ma: "A", giaTri: 0.04 }),
-      cs({ ma: "B", kieuTinh: "SO_TIEN_CO_DINH", giaTri: 100_000 }),
+      cs({ ma: "A", khoan: [k("CENTER_SALES_CSM", 0.04)] }),
+      cs({
+        ma: "B",
+        kieuTinh: "SO_TIEN_CO_DINH",
+        khoan: [k("MOI_NHAN_SU", 100_000)],
+      }),
     ];
     expect(tongTiLeTheoSuKien(ds, "HOC_VIEN_MOI", "TAT_CA")).toBeCloseTo(0.04, 6);
   });
@@ -250,13 +270,17 @@ describe("[CSH-05] kiểm chính sách — chặn TRƯỚC khi lưu, không đ�
 
   it("phần trăm ngoài 0..1 → lỗi (chống gõ 4 thay vì 0,04)", () => {
     // Gõ "4" ý là 4% mà hệ hiểu 400% thì một đơn 6tr chi 24tr hoa hồng.
-    expect(kiemChinhSach([cs({ giaTri: 4 })], { tranTongTiLe: 0.09 }).length).toBeGreaterThan(0);
-    expect(kiemChinhSach([cs({ giaTri: -0.01 })], { tranTongTiLe: 0.09 }).length).toBeGreaterThan(0);
+    expect(
+      kiemChinhSach([cs({ khoan: [k("CENTER_SALES_CSM", 4)] })], { tranTongTiLe: 0.09 }).length,
+    ).toBeGreaterThan(0);
+    expect(
+      kiemChinhSach([cs({ khoan: [k("CENTER_SALES_CSM", -0.01)] })], { tranTongTiLe: 0.09 }).length,
+    ).toBeGreaterThan(0);
   });
 
   it("số tiền cố định ÂM → lỗi", () => {
     const loi = kiemChinhSach(
-      [cs({ kieuTinh: "SO_TIEN_CO_DINH", giaTri: -1000 })],
+      [cs({ kieuTinh: "SO_TIEN_CO_DINH", khoan: [k("MOI_NHAN_SU", -1000)] })],
       { tranTongTiLe: 0.09 },
     );
     expect(loi.length).toBeGreaterThan(0);
@@ -271,9 +295,9 @@ describe("[CSH-05] kiểm chính sách — chặn TRƯỚC khi lưu, không đ�
 
   it("vượt trần Ở MỘT SỰ KIỆN → lỗi, và lỗi nói rõ sự kiện nào", () => {
     const ds = [
-      cs({ ma: "A", giaTri: 0.05 }),
-      cs({ ma: "B", giaTri: 0.05 }),
-      cs({ ma: "C", suKien: "TAI_TUC", giaTri: 0.01 }),
+      cs({ ma: "A", khoan: [k("CENTER_SALES_CSM", 0.05)] }),
+      cs({ ma: "B", khoan: [k("CENTER_MANAGER", 0.05)] }),
+      cs({ ma: "C", suKien: "TAI_TUC", khoan: [k("CENTER_SALES_CSM", 0.01)] }),
     ];
     const loi = kiemChinhSach(ds, { tranTongTiLe: 0.09 });
     expect(loi.some((l) => l.includes("HOC_VIEN_MOI") || l.includes("học viên mới"))).toBe(true);
@@ -294,32 +318,55 @@ describe("[CSH-05] kiểm chính sách — chặn TRƯỚC khi lưu, không đ�
   it("vai nhận là CHUỖI TỰ DO — thêm vai mới không cần sửa mã", () => {
     // Đây đúng là điều chủ dự án yêu cầu: "thêm bớt các role nhận hoa hồng riêng chứ
     // không khoá cứng". Ràng buộc duy nhất là không để trống.
-    expect(kiemChinhSach([cs({ vaiNhan: "VAI_MOI_CHUA_TUNG_CO" })], { tranTongTiLe: 0.09 })).toEqual(
-      [],
-    );
-    expect(kiemChinhSach([cs({ vaiNhan: "  " })], { tranTongTiLe: 0.09 }).length).toBeGreaterThan(0);
+    expect(
+      kiemChinhSach([cs({ khoan: [k("VAI_MOI_CHUA_TUNG_CO", 0.04)] })], { tranTongTiLe: 0.09 }),
+    ).toEqual([]);
+    expect(
+      kiemChinhSach([cs({ khoan: [k("  ", 0.04)] })], { tranTongTiLe: 0.09 }).length,
+    ).toBeGreaterThan(0);
   });
 });
 
-describe("[CSH-06] bộ MẶC ĐỊNH chép từ công văn — đủ mọi khoản đã ban hành", () => {
-  it("có đủ 5 khoản hoa hồng học viên MỚI", () => {
+describe("[CSH-06] bộ MẶC ĐỊNH chép từ công văn — GOM theo quyết định, không theo vai", () => {
+  it("học viên mới là MỘT chính sách với NĂM khoản, không phải năm chính sách", () => {
+    // Chủ dự án 14/09: "1 chính sách học viên mới mà phải sinh ra đến 5 hàng, trong khi
+    // đó có thể gom thành 1 hàng". Nghiệp vụ nói "khi có học viên mới thì chi 9%, chia
+    // cho năm vai" — đó là MỘT quyết định.
     const moi = CHINH_SACH_MAC_DINH.filter(
       (c) => c.suKien === "HOC_VIEN_MOI" && c.kieuTinh === "PHAN_TRAM",
     );
-    expect(moi.map((c) => c.vaiNhan).sort()).toEqual(
-      ["CENTER_MANAGER", "HO_MARKETING", "HO_SALE_ADMIN", "SALES_CSM", "TEACHER"].sort(),
+    expect(moi).toHaveLength(1);
+    expect(moi[0]!.khoan.map((x) => x.vaiNhan).sort()).toEqual(
+      ["CENTER_MANAGER", "CENTER_SALES_CSM", "HO_MARKETING", "HO_SALE", "TEACHER"].sort(),
     );
+    expect(tongCuaChinhSach(moi[0]!)).toBeCloseTo(0.09, 6);
   });
 
-  it("có khoản TÁI TỤC cho cả TVV và Quản lý", () => {
-    const tt = CHINH_SACH_MAC_DINH.filter((c) => c.suKien === "TAI_TUC");
-    expect(tt.map((c) => c.vaiNhan).sort()).toEqual(["CENTER_MANAGER", "SALES_CSM"]);
+  it("mỗi vai giữ TỈ LỆ RIÊNG — không chia đều 9% cho năm người", () => {
+    // Chia đều là bịa ra một chính sách công văn không hề ban hành.
+    const moi = CHINH_SACH_MAC_DINH.find((c) => c.ma === "HV_MOI")!;
+    const theoVai = Object.fromEntries(moi.khoan.map((x) => [x.vaiNhan, x.giaTri]));
+    expect(theoVai.CENTER_SALES_CSM).toBeCloseTo(0.04, 6);
+    expect(theoVai.CENTER_MANAGER).toBeCloseTo(0.02, 6);
+    expect(theoVai.TEACHER).toBeCloseTo(0.01, 6);
   });
 
-  it("có khoản BÁN THIẾT BỊ dạng số tiền cố định", () => {
+  it("có chính sách TÁI TỤC cho cả TVV và Quản lý", () => {
+    const tt = CHINH_SACH_MAC_DINH.find((c) => c.suKien === "TAI_TUC")!;
+    expect(tt.khoan.map((x) => x.vaiNhan).sort()).toEqual(["CENTER_MANAGER", "CENTER_SALES_CSM"]);
+  });
+
+  it("có chính sách BÁN THIẾT BỊ dạng số tiền cố định", () => {
     const tb = CHINH_SACH_MAC_DINH.filter((c) => c.suKien === "BAN_THIET_BI");
     expect(tb.length).toBeGreaterThanOrEqual(1);
     expect(tb.every((c) => c.kieuTinh === "SO_TIEN_CO_DINH")).toBe(true);
+  });
+
+  it("hai bảng thưởng danh hiệu TÁCH RIÊNG vì ngưỡng khác nhau", () => {
+    const bac = CHINH_SACH_MAC_DINH.filter((c) => c.kieuTinh === "THUONG_THEO_BAC");
+    expect(bac).toHaveLength(2);
+    const [tvv, ql] = bac.map((c) => c.bac![0]!.nguong);
+    expect(tvv).not.toBe(ql);
   });
 
   it("mọi chính sách đều ghi NGUỒN công văn — số tiền không được vô danh", () => {
@@ -328,9 +375,51 @@ describe("[CSH-06] bộ MẶC ĐỊNH chép từ công văn — đủ mọi kho�
     }
   });
 
+  it("mọi chính sách đều có GHI CHÚ giải thích — người vận hành không phải tra công văn", () => {
+    // Chủ dự án 14/09: "ở tên chính sách cũng vậy không có ghi chú ở dưới, người dùng sẽ
+    // không hiểu đâu". Ghi chú là thứ hiện trong dấu ⓘ cạnh tên.
+    for (const c of CHINH_SACH_MAC_DINH) {
+      expect(c.ghiChu, `${c.ma} thiếu ghi chú`).toBeTruthy();
+    }
+  });
+
   it("mã chính sách là duy nhất", () => {
     const ma = CHINH_SACH_MAC_DINH.map((c) => c.ma);
     expect(new Set(ma).size).toBe(ma.length);
+  });
+
+  it("mọi sự kiện đều có câu 'chi khi nào' đọc được", () => {
+    for (const sk of Object.values(SU_KIEN)) {
+      expect(KHI_NAO_CHI[sk]).toBeTruthy();
+    }
+  });
+});
+
+describe("[CSH-05b] một vai KHÔNG được khai hai lần trong cùng chính sách", () => {
+  it("trùng vai → lỗi, vì đó là chi đôi cho cùng một người", () => {
+    const loi = kiemChinhSach(
+      [cs({ khoan: [k("CENTER_SALES_CSM", 0.04), k("CENTER_SALES_CSM", 0.01)] })],
+      { tranTongTiLe: 0.09 },
+    );
+    expect(loi.some((l) => l.includes("hai lần"))).toBe(true);
+  });
+
+  it("cùng một vai ở HAI chính sách KHÁC nhau thì hợp lệ", () => {
+    // TVV nhận cả ở "học viên mới" lẫn "tái tục" — hai sự kiện khác nhau.
+    expect(
+      kiemChinhSach(
+        [
+          cs({ ma: "A", suKien: "HOC_VIEN_MOI", khoan: [k("CENTER_SALES_CSM", 0.04)] }),
+          cs({ ma: "B", suKien: "TAI_TUC", khoan: [k("CENTER_SALES_CSM", 0.01)] }),
+        ],
+        { tranTongTiLe: 0.09 },
+      ),
+    ).toEqual([]);
+  });
+
+  it("chính sách KHÔNG có khoản nào → lỗi, không lặng lẽ bỏ qua", () => {
+    const loi = kiemChinhSach([cs({ khoan: [] })], { tranTongTiLe: 0.09 });
+    expect(loi.some((l) => l.includes("chưa chọn vai"))).toBe(true);
   });
 });
 
@@ -338,7 +427,7 @@ describe("[CSH-07] số rác không thành tiền", () => {
   it("số tiền đơn âm / NaN → 0 đồng hoa hồng, không ném", () => {
     for (const v of [-1_000_000, Number.NaN, Infinity]) {
       const dong = tinhHoaHongDon({ soTien: v, suKien: "HOC_VIEN_MOI", loaiDon: "COURSE" }, [
-        cs({ giaTri: 0.04 }),
+        cs({}),
       ]);
       expect(dong[0]!.soTien).toBe(0);
     }
@@ -346,9 +435,43 @@ describe("[CSH-07] số rác không thành tiền", () => {
 
   it("làm tròn về ĐỒNG — không để số lẻ đi vào bảng lương", () => {
     const dong = tinhHoaHongDon({ soTien: 3_333_333, suKien: "HOC_VIEN_MOI", loaiDon: "COURSE" }, [
-      cs({ giaTri: 0.04 }),
+      cs({}),
     ]);
     expect(Number.isInteger(dong[0]!.soTien)).toBe(true);
     expect(dong[0]!.soTien).toBe(133_333);
+  });
+});
+
+describe("[CSH-08] LƯỚI GHIM — mã vai trong bộ mặc định phải là RoleDef.code CÓ THẬT", () => {
+  // ⚠️ Đây là lưới cho một lỗi ĐÃ XẢY RA (14/09/2026), không phải lo xa.
+  //
+  // Hệ có HAI bộ mã vai trông na ná nhau:
+  //   · enum Prisma `Role` — `SALES_CSM`, dùng cho `User.roles[]`;
+  //   · `RoleDef.code` (RBAC v2) — `CENTER_SALES_CSM`, `HO_SALE`; đây là thứ màn cấu
+  //     hình tra để lấy TÊN TIẾNG VIỆT.
+  // Bản đầu gõ theo enum. Hậu quả KHÔNG phải lỗi đỏ: màn lặng lẽ in ra "SALES_CSM" cạnh
+  // các vai khác đã dịch, và dòng hoa hồng sinh ra treo không ai nhận.
+  //
+  // Lưới đọc thẳng `prisma/seed-roles.ts` vì đó là nguồn sinh `RoleDef` — test thuần
+  // không chạm DB được, mà so với một danh sách chép tay thì chính danh sách đó lại trôi.
+  it("mọi vaiNhan đều có trong seed-roles (trừ vai đặc biệt đã khai)", () => {
+    const src = readFileSync(resolve(process.cwd(), "prisma/seed-roles.ts"), "utf8");
+    // `code: "XXX"` trong seed — neo hẹp, không dùng cờ /s.
+    const coThat = new Set(
+      [...src.matchAll(/code:\s*"([A-Z_]+)"/g)].map((m) => m[1]!),
+    );
+    expect(coThat.size, "không đọc được mã vai nào từ seed-roles.ts").toBeGreaterThan(8);
+
+    // Vai KHÔNG có trong RoleDef nhưng chính sách cần — khai ở `vai-nhan-hoa-hong.ts`.
+    // SR.QD.208 PL05 chi cho "TẤT CẢ nhân sự", không phải một vai nào cả.
+    const DAC_BIET = new Set(["MOI_NHAN_SU"]);
+
+    const sai = CHINH_SACH_MAC_DINH.flatMap((c) =>
+      c.khoan
+        .map((k) => k.vaiNhan)
+        .filter((v) => !coThat.has(v) && !DAC_BIET.has(v))
+        .map((v) => `${c.ma} → ${v}`),
+    );
+    expect(sai, "Mã vai không có trong seed-roles.ts: " + sai.join(", ")).toEqual([]);
   });
 });

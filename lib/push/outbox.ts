@@ -14,6 +14,7 @@ import "server-only";
 
 import { db } from "@/lib/db";
 import { duocDayPush } from "./allowlist";
+import { docTienToDuocDay, LY_DO_NGOAI_DANH_SACH } from "./cau-hinh-allowlist";
 
 /**
  * Hạn sống mặc định của một việc đẩy — 6 giờ.
@@ -64,7 +65,26 @@ export async function ghiOutboxPush(params: {
   // hỏi sẽ không phân biệt được "loại này cố ý không đẩy" với "kênh hỏng". Cái giá là số dòng —
   // chấp nhận được vì `@@unique([userId, dedupeKey])` chặn nhân bản, và `notifyStaff` chỉ gọi
   // vào đây với `canRung` (người THẬT SỰ vừa có mục mới), không phải toàn bộ danh sách nhận.
-  const duocDay = duocDayPush(params.dedupeKey);
+  //
+  // 13/09 — danh sách nay đọc từ cấu hình vận hành (`push.tienToDuocDay`).
+  //
+  // ⚠️ ĐỌC HỎNG THÌ GIỮ DÒNG Ở `PENDING`, KHÔNG chốt `SKIPPED`. Nhìn qua tưởng fail-OPEN —
+  // KHÔNG PHẢI, và đừng "sửa" nó:
+  //   · `SKIPPED` là trạng thái CHỐT: engine chỉ quét `PENDING`/`FAILED`, nên một dòng bị chốt
+  //     vì pooler Supabase chập 2 giây là MẤT HẲN, không lượt nào cứu.
+  //   · Quyết định GỬI không nằm ở đây. Engine kiểm LẠI danh sách ngay trước lúc bắn
+  //     (`engine.ts`), và nếu chính nó cũng không đọc được cấu hình thì nó THOÁT cả lượt chứ
+  //     không gửi. Tức là: không cú push nào rời máy mà chưa đọc được cấu hình một lần thành
+  //     công. Giữ `PENDING` chỉ là "chưa biết, để lượt sau xét" — đúng nghĩa của `PENDING`.
+  //   · Cái giá: trong lúc DB chập, vài dòng thuộc loại KHÔNG bật cũng nằm `PENDING`. Chúng
+  //     chết ở cổng engine (ghi `SKIPPED` kèm lý do) hoặc hết hạn 6 giờ. Có sổ, không gửi.
+  const cauHinh = await docTienToDuocDay();
+  const duocDay = !cauHinh.docDuoc || duocDayPush(params.dedupeKey, cauHinh.tienTo);
+  if (!cauHinh.docDuoc) {
+    console.warn(
+      `[push] chưa xét được danh sách loại cho "${params.dedupeKey}" — để PENDING, engine sẽ xét lại trước khi gửi.`,
+    );
+  }
 
   try {
     const kq = await db.webPushOutbox.createMany({
@@ -75,7 +95,7 @@ export async function ghiOutboxPush(params: {
         // Dòng SKIPPED không bao giờ được gửi nên hạn của nó vô nghĩa — vẫn ghi để hai loại
         // dòng có cùng hình dạng, câu dọn về sau không phải viết hai nhánh.
         expiresAt: han,
-        ...(duocDay ? {} : { lastError: "Ngoài allowlist tiền tố dedupeKey" }),
+        ...(duocDay ? {} : { lastError: LY_DO_NGOAI_DANH_SACH }),
       })),
       // Đã có dòng cho cặp (người, khoá) này ⇒ BỎ QUA, tuyệt đối không kéo về `PENDING`.
       //

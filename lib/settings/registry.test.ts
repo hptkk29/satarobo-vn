@@ -104,3 +104,73 @@ describe("[R6-A] resolve — Center → Global → default (US-R6A-2)", () => {
     // 999999 > max 100 → invalid → default
   });
 });
+
+describe("[PUSH-D7-T22] push.tienToDuocDay — chặn khoá gõ sai ngay ở tầng validate", () => {
+  it("mặc định ĐÚNG bằng danh sách đã chạy trước khi có màn cấu hình", () => {
+    // DB trống ở một môi trường mới dựng phải ra hành vi y hệt bản cũ, không im lặng hơn cũng
+    // không ồn hơn. Đây là điều kiện để đổi từ hằng số sang tham số mà không ai nhận ra.
+    expect(SETTINGS["push.tienToDuocDay"].default).toEqual(["lead.moi:"]);
+  });
+
+  it("nhận danh sách gồm các tiền tố CÓ THẬT", () => {
+    expect(validateSettingValue("push.tienToDuocDay", ["lead.moi:", "sla:"]).ok).toBe(true);
+  });
+
+  it("nhận danh sách RỖNG — 'tắt hết' là một lựa chọn hợp lệ", () => {
+    expect(validateSettingValue("push.tienToDuocDay", []).ok).toBe(true);
+  });
+
+  it("⚠️ TỪ CHỐI khoá thiếu dấu hai chấm — nó khớp LẤN sang loại sinh sau", () => {
+    // `lead.moi` (không có dấu hai chấm) khớp cả `lead.moi_gi_do:` ra đời sau đó. Dấu hai chấm
+    // là luật khớp dùng chung với `lib/notifications/catalog.ts`; hai bảng cùng đọc một khoá mà
+    // luật khớp lệch nhau là loại lệch không ai nhìn thấy cho tới lúc gửi nhầm.
+    expect(validateSettingValue("push.tienToDuocDay", ["lead.moi"]).ok).toBe(false);
+    expect(validateSettingValue("push.tienToDuocDay", ["lead.moi:", "sai"]).ok).toBe(false);
+  });
+
+  it("tầng này KHÔNG đối chiếu danh mục — đó là việc của đường ghi", () => {
+    // ⚠️ Ca này khoá một sự ĐÁNH ĐỔI CÓ CHỦ ĐÍCH, không phải một lỗ hổng bị bỏ quên.
+    //
+    // Đặt phép đối chiếu danh mục ở đây cần `import catalogPrefixes`, và `lint:boundaries` bắt
+    // được 11 vòng import khi thử: registry → notifications/catalog → notifications/pending-sync
+    // → pending-tasks → settings/service · auth/actor → … → registry. Nới luật `no-circular`
+    // chung của repo để hợp thức hoá một tính năng là đổi rào cho cả repo — không làm.
+    //
+    // Phép đối chiếu nằm ở `luuLoaiDuocDayAction` và có ca test riêng. Ai dời nó về đây thì ca
+    // này đỏ, và buộc đọc lý do trước khi sửa.
+    expect(validateSettingValue("push.tienToDuocDay", ["khong_ton_tai:"]).ok).toBe(true);
+  });
+
+  it("TỪ CHỐI chuỗi rỗng — nó khớp MỌI khoá, tức biến danh sách trắng thành 'đẩy tất'", () => {
+    expect(validateSettingValue("push.tienToDuocDay", [""]).ok).toBe(false);
+    expect(validateSettingValue("push.tienToDuocDay", ["lead.moi:", ""]).ok).toBe(false);
+  });
+
+  it("chuỗi rỗng báo ĐÚNG lý do của nó, không phải lý do 'thiếu dấu hai chấm'", () => {
+    // ⚠️ Ca này sinh ra từ một phép CẤY LỖI XANH GIẢ: gỡ hẳn nhánh kiểm chuỗi rỗng thì không
+    // ca nào đỏ, vì `"".endsWith(":")` cũng false nên nhánh dấu hai chấm bắt thay. Tức là ca
+    // trên KHÔNG chứng minh được nhánh chuỗi rỗng còn sống.
+    //
+    // Thứ nhánh đó thật sự đóng góp là CÂU BÁO LỖI. "Phải kết thúc bằng dấu hai chấm" nói sai
+    // bản chất cho một ô trống, và người vận hành sẽ đi thêm dấu hai chấm vào một chuỗi rỗng.
+    const r = validateSettingValue("push.tienToDuocDay", [""]);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toContain("rỗng");
+  });
+
+  it("TỪ CHỐI khoá khai hai lần", () => {
+    expect(validateSettingValue("push.tienToDuocDay", ["lead.moi:", "lead.moi:"]).ok).toBe(false);
+  });
+
+  it("TỪ CHỐI thứ không phải mảng chuỗi", () => {
+    for (const v of ["lead.moi:", 1, null, { a: 1 }, [1, 2], [null]]) {
+      expect(validateSettingValue("push.tienToDuocDay", v).ok, JSON.stringify(v)).toBe(false);
+    }
+  });
+
+  it("KHÔNG cho override theo cơ sở", () => {
+    // Một cơ sở tự tắt một loại thì nhân viên cơ sở đó im lặng mà Hội sở không biết — đúng
+    // loại lỗi câm mà cả module này sinh ra để tránh.
+    expect(SETTINGS["push.tienToDuocDay"].centerOverridable).toBe(false);
+  });
+});

@@ -43,11 +43,6 @@ const MIEN_TRU: Record<string, string> = {
     "bảng CHẠY THỬ của lượt nhập nhân sự — dựng sau sự cố 08/09/2026 (file 9 cột xoá trắng 3 cột ngày trên 9 hồ sơ PROD). Nó tồn tại ĐỂ người vận hành nhìn HẾT trước khi bấm Ghi thật, và mỗi dòng đỏ là một ô sắp mất dữ liệu; cắt trang là giấu đúng thứ nó sinh ra để phơi bày. Số dòng chặn bởi số hồ sơ THỰC SỰ ĐỔI, không phải số dòng file",
   "app/(admin)/admin/cham-cong/phan-ca/import/_components/result-diff-table.tsx":
     'bảng đối chiếu 15–21 MÃ CA (Sheet vs hệ thống) sau khi áp — số dòng chặn bởi danh mục mã ca, và đây là bằng chứng "khớp hay lệch" phải đọc trọn vẹn một lần; phân trang một bảng đối chiếu là giấu mất dòng lệch',
-  "app/(admin)/admin/cau-hinh-van-hanh/_components/bang-chinh-sach-hoa-hong.tsx":
-    "bảng KHAI CẤU HÌNH, không phải danh sách dữ liệu: số dòng chặn bởi số chính sách " +
-    "công ty ban hành (14 dòng theo SR.QD.208). Người duyệt phải nhìn HẾT một lượt mới " +
-    "kiểm được tổng tỉ lệ từng rổ có vượt trần không — cắt trang là giấu đúng thứ bảng " +
-    "này sinh ra để phơi bày, và ô tổng ở trên cộng trên TOÀN BỘ chứ không theo trang.",
   "app/(admin)/admin/quan-ly-chia-lead/_components/pool-table.tsx":
     "một bảng = MỘT cơ sở, số dòng = số sale của cơ sở đó (thực tế 2–5). Phân trang ở đây là thêm thanh điều khiển vô nghĩa, mà đây lại đúng là bảng cần nhìn HẾT một lượt để tin là công bằng — cắt trang là giấu mất người đang bị tắt",
   "app/(admin)/admin/quan-ly-chia-lead/_components/so-chia.tsx":
