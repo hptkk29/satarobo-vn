@@ -55,12 +55,24 @@ export function PaymentMethodForm({
   method,
   centers,
   defaultCenterId,
+  onXong,
 }: {
   method?: PaymentMethod;
   /** Cơ sở trong tầm nhìn của người đang thao tác (đã lọc ở RSC). */
   centers: CenterPaymentOption[];
   /** Chọn sẵn cơ sở khi vào từ trang Cơ sở (`?centerId=`). */
   defaultCenterId?: string | null;
+  /**
+   * Gọi khi lưu THÀNH CÔNG, thay cho việc rời trang.
+   *
+   * Có mặt ⇒ form đang nằm trong HỘP THOẠI (tab Phương thức thanh toán của Cấu hình vận
+   * hành, 14/09/2026): đóng hộp thoại và làm mới danh sách tại chỗ. Vắng mặt ⇒ form đang
+   * là một trang riêng (`/payment-methods/[id]/edit`) và vẫn quay về danh sách như cũ.
+   *
+   * ⚠️ KHÔNG tự suy bằng `useSearchParams` hay đoán theo route: chỗ gọi biết rõ nó đang
+   * dựng form ở đâu, còn form thì không.
+   */
+  onXong?: () => void;
 }) {
   const router = useRouter();
   const isEdit = !!method;
@@ -118,7 +130,10 @@ export function PaymentMethodForm({
 
       if (result.ok) {
         toast.success(isEdit ? "Đã cập nhật" : "Đã tạo phương thức");
-        router.push("/payment-methods");
+        // Trong hộp thoại: đóng lại rồi làm mới DANH SÁCH ĐANG ĐỨNG. `router.push` ở đây
+        // sẽ kéo người dùng ra khỏi tab Cấu hình họ đang mở — mất hẳn ngữ cảnh.
+        if (onXong) onXong();
+        else router.push("/payment-methods");
         router.refresh();
       } else {
         if ("issues" in result && result.issues) {

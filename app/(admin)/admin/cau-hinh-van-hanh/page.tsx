@@ -34,12 +34,19 @@ const KHOA_DO_BANG_CONG_TAC_LO = "push.tienToDuocDay";
  */
 const KHOA_DO_BANG_HOA_HONG = "crm.commissionPolicies";
 
-export default async function OperationalSettingsPage() {
+export default async function OperationalSettingsPage({
+  searchParams,
+}: {
+  // `?tab=` giữ tab đang mở qua các lần rời trang rồi quay lại — xem `doiTab` trong
+  // `khung-cau-hinh.tsx`. `?centerId=` là đường vào từ trang Cơ sở.
+  searchParams: Promise<{ tab?: string; centerId?: string }>;
+}) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!(await checkPermission("settings:view"))) redirect("/admin/dashboard");
 
   const canEditGlobal = await checkPermission("settings:edit"); // settings:edit = SUPER_ADMIN
+  const sp = await searchParams;
 
   // Chỉ đọc những key THẬT SỰ bày ra. Dựng danh sách từ bảng tab chứ không từ `SETTING_KEYS`:
   // như vậy một key mới mà quên khai nhãn vận hành sẽ KHÔNG lặng lẽ hiện ra dưới dạng tên
@@ -152,8 +159,11 @@ export default async function OperationalSettingsPage() {
         danhMucThongBao={danhMucThongBao}
         loaiDangBat={loaiDangBat}
         canhBaoKenh={canhBaoKenh}
+        tabBanDau={sp.tab}
         noiDungRieng={{
-          "phuong-thuc-tt": <TabPhuongThucThanhToan />,
+          "phuong-thuc-tt": (
+            <TabPhuongThucThanhToan centerIdFilter={sp.centerId?.trim() || null} />
+          ),
           "hoa-hong": (
             <BangChinhSachHoaHong
               banDau={(resolved[KHOA_DO_BANG_HOA_HONG] ??

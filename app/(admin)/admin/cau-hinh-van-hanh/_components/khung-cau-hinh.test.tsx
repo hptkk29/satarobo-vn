@@ -93,7 +93,9 @@ const TABS: TabView[] = [
   },
 ];
 
-function dung(x: { choSua?: boolean; loaiDangBat?: string[] } = {}) {
+function dung(
+  x: { choSua?: boolean; loaiDangBat?: string[]; tabBanDau?: string } = {},
+) {
   return render(
     <KhungCauHinh
       tabs={TABS}
@@ -102,6 +104,7 @@ function dung(x: { choSua?: boolean; loaiDangBat?: string[] } = {}) {
       danhMucThongBao={DANH_MUC}
       loaiDangBat={x.loaiDangBat ?? ["lead.moi:"]}
       canhBaoKenh={[]}
+      tabBanDau={x.tabBanDau}
     />,
   );
 }
@@ -321,5 +324,39 @@ describe("[CFG-T14] chỉ-được-xem thì KHOÁ ô nhập, không chỉ giấu
     moTab("Chấm công & ca làm");
     expect(screen.getByLabelText(O_DUNG_SAI).hasAttribute("disabled")).toBe(true);
     expect(screen.queryAllByRole("button", { name: "Lưu" })).toHaveLength(0);
+  });
+});
+
+describe("[CFG-K05] tab sống sót khi rời trang rồi quay lui", () => {
+  // Chủ dự án 14/09/2026: "khi ở tab hoa hồng ở cấu hình vận hành xong chuyển sang màn
+  // leads xong bấm quay lui thì bị chuyển về tab thông báo đẩy của cấu hình vận hành".
+  //
+  // Nguyên nhân: tab chỉ sống trong `useState`. State mất khi rời trang, nên lần quay lại
+  // là một lượt mount mới và luôn rơi về tab đầu. Vá bằng cách để tab nằm trong ĐƯỜNG DẪN.
+  //
+  // ⚠️ Ba ca dưới đây kiểm ba mắt xích KHÁC NHAU của cùng một đường. Bỏ ca nào thì mắt
+  // xích đó hỏng vẫn xanh: đọc được `?tab=` mà không ghi lại thì Back vô dụng; ghi mà
+  // không đọc thì URL đúng còn màn sai.
+
+  it("mở đúng tab ghi trên đường dẫn, không phải tab đầu", () => {
+    dung({ tabBanDau: TABS[1]!.id });
+    // Mô tả tab là thứ chỉ có ở tab đang mở — dùng nó làm bằng chứng.
+    expect(screen.getByText(TABS[1]!.moTa)).toBeInTheDocument();
+  });
+
+  it("`?tab=` lạ rơi về tab đầu chứ KHÔNG ra trang trắng", () => {
+    // Đường dẫn cũ, hoặc người gõ tay. Fail-soft: phải ra một trang dùng được.
+    dung({ tabBanDau: "khong-ton-tai" });
+    expect(screen.getByText(TABS[0]!.moTa)).toBeInTheDocument();
+  });
+
+  it("bấm tab thì GHI vào đường dẫn — nếu không, Back chẳng có gì để khôi phục", () => {
+    const goc = window.location.href;
+    dung({});
+    fireEvent.click(screen.getByRole("tab", { name: TABS[1]!.ten }));
+    expect(new URL(window.location.href).searchParams.get("tab")).toBe(TABS[1]!.id);
+    // ĐÈ mục lịch sử, không THÊM: bấm qua 5 tab rồi Back phải ra khỏi trang, không phải
+    // lùi từng tab một.
+    window.history.replaceState(window.history.state, "", goc);
   });
 });

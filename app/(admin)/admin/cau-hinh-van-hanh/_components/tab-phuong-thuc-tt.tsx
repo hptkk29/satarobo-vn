@@ -1,11 +1,11 @@
 import Link from "next/link";
-import { Plus } from "lucide-react";
 
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
-import { Button } from "@/components/ui/button";
+import { loadCenterPaymentOptions } from "@/lib/payments/center-options";
 import { PaymentMethodsTable } from "../../payment-methods/_components/payment-methods-table";
+import { NutThemPhuongThuc } from "./nut-them-phuong-thuc";
 
 /**
  * TAB "Phương thức thanh toán" trong Cấu hình vận hành.
@@ -13,6 +13,11 @@ import { PaymentMethodsTable } from "../../payment-methods/_components/payment-m
  * Nội dung dời từ `/payment-methods` (chủ dự án 14/09/2026: "gộp vào trong cấu hình vận
  * hành thành 1 tab riêng, và ẩn khỏi sidebar luôn"). Trang cũ nay chuyển hướng về đây nên
  * link cũ, dấu trang cũ và nút "Quản lý phương thức thanh toán →" ở màn Cơ sở đều không vỡ.
+ *
+ * ⚠️ `/payment-methods/new` ĐÃ XOÁ HẲN (14/09/2026): "bấm thêm phương thức thanh toán thì
+ * hiển thị popup như của bên hoa hồng". Tạo mới nay đi qua `NutThemPhuongThuc`. Trang
+ * `[id]/edit` thì GIỮ — sửa một phương thức là việc có đường dẫn riêng đáng chia sẻ, và
+ * nút Sửa trong bảng vẫn trỏ tới nó.
  *
  * ─────────────────────────────────────────────────────────────────────────────
  * "LINH HOẠT KHI THÊM CƠ SỞ" — ĐÃ CÓ SẴN, VÀ ĐÂY LÀ CHỖ NÓ NẰM
@@ -45,7 +50,8 @@ export async function TabPhuongThucThanhToan({
 }) {
   const session = await auth();
   if (!session?.user) return null;
-  const sdb = scopedDb(await resolveActor(session.user.id));
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
 
   // "Chỉ cơ sở X" nghĩa là phương thức RIÊNG của X *cộng* phương thức dùng chung — đó mới
   // đúng bộ mà người tạo đơn cho cơ sở X thật sự chọn được. Lọc `centerId: X` trần sẽ
@@ -54,14 +60,24 @@ export async function TabPhuongThucThanhToan({
     ? { OR: [{ centerId: null }, { centerId: centerIdFilter }] }
     : {};
 
-  const [methods, centers] = await Promise.all([
+  const [methods, centers, coSoChonDuoc] = await Promise.all([
     sdb.paymentMethod.findMany({
       where,
       orderBy: [{ centerId: "asc" }, { displayOrder: "asc" }, { name: "asc" }],
     }),
     sdb.center.findMany({ select: { id: true, name: true } }),
+    // Danh sách cho ô "Cơ sở" trong hộp thoại thêm — ĐÃ LỌC theo tầm nhìn của actor.
+    // Lọc ở đây không phải lớp bảo vệ (Server Action vẫn `passesScope`), nó chỉ để màn
+    // không bày ra thứ người dùng bấm vào sẽ bị từ chối.
+    loadCenterPaymentOptions(actor),
   ]);
   const centerNames = Object.fromEntries(centers.map((c) => [c.id, c.name]));
+  // `?centerId=` bịa tay không được thành đường gán chéo cơ sở: chỉ nhận id NẰM TRONG
+  // danh sách đã lọc.
+  const coSoMacDinh =
+    centerIdFilter && coSoChonDuoc.some((c) => c.id === centerIdFilter)
+      ? centerIdFilter
+      : null;
 
   return (
     <div className="space-y-4">
@@ -73,12 +89,7 @@ export async function TabPhuongThucThanhToan({
           hiện ở mọi cơ sở, kể cả cơ sở mở sau này. Tài khoản ngân hàng dựng mã QR khai ngay
           trong từng phương thức.
         </p>
-        <Link href="/payment-methods/new">
-          <Button className="min-h-11">
-            <Plus className="h-4 w-4" aria-hidden />
-            Thêm phương thức
-          </Button>
-        </Link>
+        <NutThemPhuongThuc centers={coSoChonDuoc} defaultCenterId={coSoMacDinh} />
       </div>
 
       {centerIdFilter && (
@@ -109,12 +120,9 @@ export async function TabPhuongThucThanhToan({
             <b className="font-semibold">màn tạo đơn hiện danh sách rỗng</b> và không ai chốt
             được đơn. Tạo ít nhất một phương thức dùng chung (tiền mặt) để bắt đầu.
           </p>
-          <Link href="/payment-methods/new" className="mt-3 inline-block">
-            <Button className="min-h-11">
-              <Plus className="h-4 w-4" aria-hidden />
-              Thêm phương thức
-            </Button>
-          </Link>
+          <div className="mt-3 inline-block">
+            <NutThemPhuongThuc centers={coSoChonDuoc} defaultCenterId={coSoMacDinh} />
+          </div>
         </div>
       ) : (
         <PaymentMethodsTable methods={methods} centerNames={centerNames} />

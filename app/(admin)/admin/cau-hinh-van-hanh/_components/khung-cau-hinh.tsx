@@ -11,7 +11,7 @@
 // thứ kia là chọn trong danh sách dài. Nhét chung một khuôn là được sự "nhất quán" trên hình
 // và mất đi thứ người dùng cần — sự rõ ràng về hai tầng quyết định.
 
-import { useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { BangCauHinhTab, ThanhTab, type SettingRowView } from "./settings-editor";
 import { ChonLoaiThongBao, type CanhBaoKenh } from "./chon-loai-thong-bao";
 import type { NotiCatalogEntry } from "@/lib/notifications/catalog";
@@ -31,6 +31,7 @@ export function KhungCauHinh({
   loaiDangBat,
   canhBaoKenh,
   noiDungRieng,
+  tabBanDau,
 }: {
   tabs: readonly TabView[];
   choSua: boolean;
@@ -51,8 +52,56 @@ export function KhungCauHinh({
    * đi hỏi gì thêm, đúng như nó vẫn làm với mọi tab khác.
    */
   noiDungRieng?: Readonly<Record<string, ReactNode>>;
+  /**
+   * Tab mở sẵn — trang đọc từ `?tab=` rồi truyền xuống.
+   *
+   * Bỏ trống ⇒ tab đầu tiên. Giá trị lạ cũng rơi về tab đầu (fail-soft): đường dẫn cũ hoặc
+   * người gõ tay `?tab=linh-tinh` phải ra một trang dùng được, không phải trang trắng.
+   */
+  tabBanDau?: string;
 }) {
-  const [dangChon, setDangChon] = useState(tabs[0]?.id ?? "");
+  const [dangChon, setDangChon] = useState(
+    () => (tabBanDau && tabs.some((t) => t.id === tabBanDau) ? tabBanDau : tabs[0]?.id) ?? "",
+  );
+
+  /**
+   * ĐỔI TAB THÌ ĐỔI CẢ ĐƯỜNG DẪN.
+   *
+   * Chủ dự án 14/09/2026: "khi ở tab hoa hồng ở cấu hình vận hành xong chuyển sang màn
+   * leads xong bấm quay lui thì bị chuyển về tab thông báo đẩy". Đúng — tab chỉ sống trong
+   * `useState`, mà state mất khi rời trang; quay lại là mount mới và về tab đầu.
+   *
+   * ⚠️ Dùng `history.replaceState` THUẦN, KHÔNG `router.replace`:
+   *   · `router.replace` kéo theo một lượt dựng lại Server Component cho MỌI lần bấm tab —
+   *     trang này `force-dynamic` và đọc DB, nên mỗi cú bấm tốn một vòng máy chủ chỉ để
+   *     đổi thứ đã nằm sẵn trong bộ nhớ trình duyệt.
+   *   · `replaceState` ĐÈ mục lịch sử hiện tại thay vì thêm mục mới — bấm qua 5 tab rồi
+   *     Back phải ra khỏi trang, không phải lùi từng tab một. Đó cũng đúng ý: người dùng
+   *     nhớ "tôi đang ở Cấu hình vận hành", không nhớ mình đã xem tab nào trước đó.
+   *
+   * Khi rời trang, URL đã mang `?tab=…`; lúc Back, trang dựng lại từ đường dẫn đó và
+   * `tabBanDau` khôi phục đúng tab.
+   */
+  const doiTab = useCallback((id: string) => {
+    setDangChon(id);
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", id);
+    window.history.replaceState(window.history.state, "", url);
+  }, []);
+
+  // Back/Forward của trình duyệt KHÔNG dựng lại component này khi Next phục vụ từ bộ đệm
+  // phía client — state cũ ở lại trong khi đường dẫn đã đổi, và màn hiện một tab khác với
+  // tab ghi trên URL. Nghe theo `popstate` để hai thứ luôn nói cùng một điều.
+  useEffect(() => {
+    function theoLichSu() {
+      const id = new URL(window.location.href).searchParams.get("tab");
+      if (id && tabs.some((t) => t.id === id)) setDangChon(id);
+    }
+    window.addEventListener("popstate", theoLichSu);
+    return () => window.removeEventListener("popstate", theoLichSu);
+  }, [tabs]);
+
   const tab = tabs.find((t) => t.id === dangChon) ?? tabs[0];
   if (!tab) return null;
 
@@ -66,7 +115,7 @@ export function KhungCauHinh({
           thành khối chứa cho mọi con `position: fixed`, đúng lỗi đã làm vỡ drawer trang public
           hôm 13/09. Ở đây có lớp phủ dính bên dưới, không đáng đánh đổi. */}
       <div className="z-20 -mx-1 bg-muted px-1 pb-1 pt-1 lg:sticky lg:top-0">
-        <ThanhTab tabs={tabs} dangChon={tab.id} onChon={setDangChon} />
+        <ThanhTab tabs={tabs} dangChon={tab.id} onChon={doiTab} />
       </div>
 
       {/* Câu mô tả tab đặt NGAY dưới thanh tab, không nhét vào tooltip: người mở một tab lạ
