@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { canonicalPhone } from "@/lib/phone";
+import { nationalPhone } from "@/lib/phone";
 
 // =============================================================================
 // Commit 4 — VietQR động. Tài khoản nhận tiền lưu ở IntegrationConfig
@@ -183,7 +183,7 @@ export const MAX_TRANSFER_CONTENT = 80;
  * (lib/payments/payos-ingest.ts) ⇒ mọi giao dịch của phụ huynh đó rơi vào đối
  * soát tay vĩnh viễn mà không ai biết. `buildTransferContent` cắt TÊN CON và giữ
  * trọn SĐT + tên khoá, nên cắt ở ta là an toàn — đã đo: "NguyenThiMinhKhue_
- * 84987654321_Sata4" dài 34 ký tự, vượt trần 9 ký tự.
+ * 0987654321_Sata4" dài 34 ký tự, vượt trần 9 ký tự.
  */
 export const VIETQR_ADDINFO_MAX = 25;
 
@@ -195,7 +195,9 @@ export const VIETQR_ADDINFO_MAX = 25;
  *     (prisma/seed-courses.ts đặt tên khoá là `${c.id} — ${c.displayName}`, phần
  *     mã là `c.id`). Cắt ở 5 nên KHÔNG khoá nào bị cụt mã.
  *  2. Đúng bằng phần còn lại của trần QR sau khi trả đủ các phần bắt buộc:
- *     25 − 11 (SĐT canonical `84…`) − 2 (hai dấu `_`) − 7 (`TRANSFER_NAME_MIN`) = 5.
+ *     25 − 10 (SĐT nội địa `0…`) − 2 (hai dấu `_`) − 7 (`TRANSFER_NAME_MIN`) = 6,
+ *     nên trần 5 nay còn dư một ký tự — dư đó chảy sang TÊN CON, không nới mã khoá
+ *     (lý do 1 vẫn chặn ở 5).
  *     Chọn lớn hơn thì ở trần 25 nó vẫn bị ngân sách cắt lại (mã khoá trong QR sẽ
  *     KHÁC mã khoá trong bản 80 ký tự sale đọc — hai bên lệch nhau là tự đẻ ca
  *     trượt đối khớp); chọn nhỏ hơn thì mã thật bị cụt vô cớ.
@@ -213,12 +215,12 @@ export const COURSE_TOKEN_MAX = 5;
  * chủ dự án đổi định dạng để có được.
  *
  * VÌ SAO 7: đủ chứa họ + ký tự đầu của chữ đệm ("NguyenV"), và là số lớn nhất còn
- * chừa trọn 5 ký tự mã khoá ở trần 25 (7 + 1 + 11 + 1 + 5 = 25 khít).
+ * chừa trọn 5 ký tự mã khoá ở trần 25 (7 + 1 + 10 + 1 + 5 = 24, dư 1 ký tự cho tên con).
  *
  * ⚠️ Giới hạn CÒN LẠI, cố ý không vá ở đây: hai anh em ruột mà 7 ký tự đầu của tên
  * trùng nhau ("Nguyen Van An" / "Nguyen Van Anh" → đều "NguyenV") vẫn sinh chuỗi
  * giống hệt ở trần 25. Viết tắt kiểu "NVAn" tách được ca đó nhưng làm hỏng định
- * dạng chủ dự án đã chốt (`NguyenV_84987654321_Sata4`), nên ca này nhường cho tiêu
+ * dạng chủ dự án đã chốt (`NguyenV_0987654321_Sata4`), nên ca này nhường cho tiêu
  * chí phụ theo số tiền ở lib/payments/payos-ingest.ts.
  */
 export const TRANSFER_NAME_MIN = 7;
@@ -251,16 +253,34 @@ export function shortCourseToken(courseName: string | null | undefined): string 
 }
 
 /**
- * Phần SĐT trong nội dung CK — canonical `84XXXXXXXXX` (lib/phone.ts là nguồn
+ * Phần SĐT trong nội dung CK — dạng NỘI ĐỊA `0XXXXXXXXX` (lib/phone.ts là nguồn
  * chuẩn hoá DUY NHẤT của repo, đừng viết lại regex ở đây).
+ *
+ * ⚠️ ĐỔI 14/09/2026 — trước đây in canonical `84XXXXXXXXX`. Chủ dự án: "sđt trong
+ * nội dung ck là 0987654321 chứ không dùng 0987654321". Chuỗi này là thứ SALE ĐỌC
+ * cho phụ huynh và phụ huynh GÕ TAY, mà không ai đọc số của mình theo dạng `84…`.
+ *
+ * ĐỐI KHỚP KHÔNG HỀ HẤN — đã kiểm cả hai chiều trước khi đổi:
+ *  · `extractVnPhoneCandidates` (payos-ingest) chuẩn hoá NGƯỢC mọi token về `84…`,
+ *    và đã có ca sẵn cho `0987654321` (payos-ingest.test.ts).
+ *  · `findPendingOrdersByPhone` tra bằng `phoneVariants`, vốn trả CẢ `84…` LẪN `0…`.
+ *  · `expectedContentsFor` tái dựng bằng CHÍNH hàm này nên hai vế luôn cùng dạng.
+ *
+ * Lợi phụ: `0…` ngắn hơn `84…` một ký tự, và ngân sách trong `transferContentParts`
+ * tính động theo `phone.length`, nên ký tự đó tự chảy sang TÊN CON.
+ *
+ * ⚠️ Nợ đi kèm, chưa vá ở đây: mã QR PHÁT TRƯỚC 14/09 mang `84…`, nên tầng 1 của
+ * nhánh (d) ("chứa trọn chuỗi tái dựng") sẽ trượt với chúng và tụt xuống tầng 2
+ * (bằng chứng yếu hơn, vẫn khớp được nhờ tên con). Vá triệt để = cho
+ * `expectedContentsFor` thử cả hai dạng SĐT — nằm ở `payos-ingest.ts`, để đợt sau.
  *
  * Số không chuẩn hoá được (số bàn, số nước ngoài, dữ liệu cũ lỗi) vẫn in phần chữ
  * số để kế toán soi sao kê còn đối chiếu được bằng mắt; nó KHÔNG tự khớp bừa được
- * vì nhánh đối khớp theo SĐT (lib/payments/payos-ingest.ts) chỉ nhận di động VN.
+ * vì nhánh đối khớp theo SĐT chỉ nhận di động VN.
  */
 export function transferPhonePart(raw: string | null | undefined): string {
-  const canon = canonicalPhone(raw);
-  if (canon) return canon;
+  const noiDia = nationalPhone(raw);
+  if (noiDia) return noiDia;
   const digits = String(raw ?? "").replace(/\D/g, "");
   return digits.length >= 8 && digits.length <= 15 ? digits : "";
 }
@@ -271,7 +291,7 @@ export function transferPhonePart(raw: string | null | undefined): string {
  * ⚠️ VÌ SAO CÓ (chủ dự án 21/08): trần 25 ký tự của mã QR không đủ cho họ tên đầy
  * đủ, và bản trước cắt cụt giữa chừng ra `"NguyenV"` — vừa khó đọc, vừa không phải
  * tên ai cả. Chủ dự án chốt: "nếu họ tên dài quá thì chỉ lấy tên", mẫu
- * `An_84987654321_sata4`. Tên gọi ngắn, phụ huynh nhận ra ngay, và tách anh em ruột
+ * `An_0987654321_sata4`. Tên gọi ngắn, phụ huynh nhận ra ngay, và tách anh em ruột
  * TỐT HƠN cách cắt cũ (hai anh em thường trùng họ + chữ đệm, khác nhau ở chữ cuối —
  * `"Trần Minh An"`/`"Trần Minh Anh"` cắt 7 ký tự đều ra `"TranMin"`, lấy tên gọi
  * thì ra `"An"`/`"Anh"`).
@@ -289,7 +309,7 @@ export function givenNamePart(fullName: string | null | undefined): string {
 }
 
 /**
- * Nội dung CK: `HoTenCon_SdtPH_TenKhoa` — vd `NguyenVanA_84987654321_Sata4`.
+ * Nội dung CK: `HoTenCon_SdtPH_TenKhoa` — vd `NguyenVanA_0987654321_Sata4`.
  *
  * ⚠️ Chủ dự án 20/08 ĐẢO quy ước cũ: nội dung KHÔNG còn mang MÃ ĐƠN
  * (`ORD260820000001D1`). Lý do: sale phải đọc chuỗi này qua điện thoại cho phụ
@@ -379,7 +399,7 @@ export function transferContentParts(
   if (nameCost + courseCost > budget) {
     // ── Bước 1: THU GỌN HỌ TÊN VỀ TÊN GỌI, chưa cắt chữ nào ────────────────
     // Chủ dự án 21/08: "nếu họ tên dài quá thì chỉ lấy tên" (mẫu
-    // `An_84987654321_sata4`). Thu gọn nguyên chữ bao giờ cũng hơn cắt cụt: `"An"`
+    // `An_0987654321_sata4`). Thu gọn nguyên chữ bao giờ cũng hơn cắt cụt: `"An"`
     // là một cái tên, `"NguyenV"` thì không. Đại đa số ca dừng ngay ở đây — tên gọi
     // tiếng Việt hiếm khi quá 6 ký tự sau khi bỏ dấu.
     const shortName = givenNamePart(studentName);
