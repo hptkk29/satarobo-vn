@@ -123,6 +123,11 @@ const moTab = (ten: string) => fireEvent.click(screen.getByRole("tab", { name: t
 beforeEach(() => {
   h.luuSetting.mockClear().mockResolvedValue({ ok: true });
   h.luuLoai.mockClear().mockResolvedValue({ ok: true });
+  // ⚠️ DỌN ĐƯỜNG DẪN — khung nay đọc `?tab=` lúc mount, nên một ca để lại query bẩn là
+  // mọi ca sau mở nhầm tab. Đo thật: chạy riêng thì xanh, chạy cả bộ thì 5 ca đỏ — đúng
+  // chữ ký của lớp lỗi "ca này mượn trạng thái ca trước" (luật 18,
+  // docs/luat-doc-so-va-ket-luan.md). Dọn ở MỘT chỗ, không bắt từng ca tự nhớ.
+  window.history.replaceState(null, "", "/");
 });
 
 describe("[CFG-T10] tab thật sự đổi NỘI DUNG, không chỉ đổi tiêu đề", () => {
@@ -350,13 +355,26 @@ describe("[CFG-K05] tab sống sót khi rời trang rồi quay lui", () => {
     expect(screen.getByText(TABS[0]!.moTa)).toBeInTheDocument();
   });
 
+  it("QUAY LUI: mount lại với props CŨ nhưng đường dẫn đã có ?tab= ⇒ theo đường dẫn", () => {
+    // ⚠️ ĐÂY LÀ CA CỦA CHÍNH CON BUG, và nó khác hẳn ca "mở đúng tab ghi trên đường dẫn".
+    //
+    // Tái hiện đúng thao tác chủ dự án mô tả (bấm LINK sidebar, không gõ địa chỉ): Next
+    // dựng lại trang từ BỘ ĐỆM CLIENT, nên component mount lại nhưng mang props của lần
+    // render máy chủ CŨ — `tabBanDau` là `undefined` vì lúc ấy đường dẫn chưa có `?tab=`.
+    // Máy chủ không chạy lại lần nào. Kết quả đo được: URL `?tab=hoa-hong` mà màn hiện
+    // "Thông báo đẩy" — màn nói dối so với đường dẫn.
+    //
+    // Nên ca này CỐ Ý bỏ trống `tabBanDau` và chỉ đặt đường dẫn.
+    window.history.replaceState(null, "", `?tab=${TABS[2]!.id}`);
+    dung({});
+    expect(screen.getByText(TABS[2]!.moTa)).toBeInTheDocument();
+  });
+
   it("bấm tab thì GHI vào đường dẫn — nếu không, Back chẳng có gì để khôi phục", () => {
-    const goc = window.location.href;
     dung({});
     fireEvent.click(screen.getByRole("tab", { name: TABS[1]!.ten }));
     expect(new URL(window.location.href).searchParams.get("tab")).toBe(TABS[1]!.id);
     // ĐÈ mục lịch sử, không THÊM: bấm qua 5 tab rồi Back phải ra khỏi trang, không phải
     // lùi từng tab một.
-    window.history.replaceState(window.history.state, "", goc);
   });
 });

@@ -87,19 +87,50 @@ export function KhungCauHinh({
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
     url.searchParams.set("tab", id);
-    window.history.replaceState(window.history.state, "", url);
+    // ⚠️ Tham số đầu là `null`, KHÔNG phải `window.history.state`.
+    //
+    // Đo 14/09/2026 sau khi chủ dự án báo "vẫn lỗi": truyền lại state cũ là giữ nguyên
+    // STATE NỘI BỘ CỦA NEXT APP ROUTER, thứ đang mang đường dẫn CŨ. Bấm tab → thanh địa
+    // chỉ đổi, nhưng Next vẫn nhớ `/cau-hinh-van-hanh`; đi sang màn khác rồi Back thì nó
+    // khôi phục theo trí nhớ của nó và `?tab=` bay mất.
+    //
+    // Next hỗ trợ chính thức `history.pushState/replaceState` để đổi đường dẫn mà không
+    // nạp lại trang — với điều kiện KHÔNG giẫm lên state của nó.
+    window.history.replaceState(null, "", url);
   }, []);
 
-  // Back/Forward của trình duyệt KHÔNG dựng lại component này khi Next phục vụ từ bộ đệm
-  // phía client — state cũ ở lại trong khi đường dẫn đã đổi, và màn hiện một tab khác với
-  // tab ghi trên URL. Nghe theo `popstate` để hai thứ luôn nói cùng một điều.
+  /**
+   * ĐỒNG BỘ VỚI ĐƯỜNG DẪN THẬT — hai đường, vì Back có HAI kết cục khác nhau.
+   *
+   * ⚠️ Đo 14/09/2026 sau khi chủ dự án báo "vẫn lỗi" lần hai, tái hiện đúng thao tác của
+   * họ (bấm LINK trong sidebar, không phải gõ địa chỉ): sau khi Back, đường dẫn đúng
+   * `?tab=hoa-hong` nhưng màn hiện "Thông báo đẩy" — MÀN NÓI DỐI SO VỚI URL.
+   *
+   * Vì sao: Next dựng lại trang từ BỘ ĐỆM CLIENT, tức component mount lại nhưng mang
+   * props của lần render server CŨ — lúc ấy đường dẫn chưa có `?tab=`, nên `tabBanDau`
+   * là `undefined` và state khởi tạo về tab đầu. Máy chủ không chạy lại lần nào.
+   *
+   *   · effect [] — chạy sau MỖI lần mount, kể cả lần mount do Back. Đây là đường vá
+   *     chính, và là đường mà bản trước THIẾU.
+   *   · popstate  — cho ca ngược lại: Next giữ nguyên cây, không mount lại, nên effect []
+   *     không chạy; lúc đó chỉ sự kiện lịch sử mới báo được.
+   *
+   * Đọc `window.location` chứ không `useSearchParams()`: `history.replaceState` ở trên
+   * không đi qua router, nên hook đó có thể còn giữ giá trị cũ. `window.location` thì
+   * luôn là đường dẫn THẬT đang hiển thị.
+   *
+   * Cố ý KHÔNG khởi tạo state trực tiếp từ `window.location`: máy chủ không có `window`,
+   * và đọc nó trong lần render đầu là lệch HTML hai bên (hydration mismatch). Effect chạy
+   * SAU khi hydrate xong nên an toàn.
+   */
   useEffect(() => {
-    function theoLichSu() {
+    function theoDuongDan() {
       const id = new URL(window.location.href).searchParams.get("tab");
       if (id && tabs.some((t) => t.id === id)) setDangChon(id);
     }
-    window.addEventListener("popstate", theoLichSu);
-    return () => window.removeEventListener("popstate", theoLichSu);
+    theoDuongDan();
+    window.addEventListener("popstate", theoDuongDan);
+    return () => window.removeEventListener("popstate", theoDuongDan);
   }, [tabs]);
 
   const tab = tabs.find((t) => t.id === dangChon) ?? tabs[0];
