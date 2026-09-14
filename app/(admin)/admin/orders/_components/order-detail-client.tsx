@@ -543,6 +543,10 @@ export function OrderDetailClient({
             canManage={canManage}
             installments={installments}
             accounting={accounting}
+            // TRỤC B (`Payment.saleStatus = RECORDED`) — nguồn của mặc định ô "đã thu".
+            // Phải là ĐÚNG con số mà `recordInstallmentPlan` đo khi gác; xem chú thích
+            // ở `daThuTheoSo` trong `order-payment-section.tsx`.
+            daThuTheoSo={congNo.daThu}
           />
 
           {/* 03/08 — QR xuất THEO TỪNG PHIẾU THU (đợt), thay cho 1 nút QR mức đơn.

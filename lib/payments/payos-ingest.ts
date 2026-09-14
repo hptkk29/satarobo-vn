@@ -6,6 +6,9 @@ import { ensureParentAccountForOrder } from "@/lib/parents/provision";
 import { sendEmailForTrigger } from "@/lib/email/trigger";
 import { notifyOrderByZnsIfNoEmail } from "@/lib/notify/order";
 import { extractOrderCode, normalizeContent } from "@/lib/payments/sepay";
+// Quy tắc "khoản này thuộc ghi danh nào" — MỘT chỗ duy nhất, dùng chung với màn sửa tay
+// ở /admin/payments. Xem khối chú thích tại chỗ gọi (ghi sổ cũ) để biết vì sao.
+import { chonGhiDanhChoKhoan } from "@/lib/finance/gan-ghi-danh-khoan";
 import { canonicalPhone, phoneVariants } from "@/lib/phone";
 import {
   transferContentPartsForOrder,
@@ -1054,9 +1057,111 @@ export async function allocateToOrder(params: {
           select: { id: true },
         });
         if (!dup) {
+          // ── GẮN GHI DANH cho khoản tiền về (14/09/2026) ───────────────────────
+          //
+          // ĐO ĐƯỢC: `confirmPayment` (lib/finance/payment.ts) mở đầu bằng
+          // `if (!existing.enrollmentId) return fail(...)`. Khoản do webhook sinh ra
+          // trước đây KHÔNG mang `enrollmentId` (grep `enrollmentId` trong tệp này ra
+          // 0 kết quả) ⇒ kế toán KHÔNG BAO GIỜ xác nhận được nó ⇒ TRỤC A
+          // (`accountantStatus: CONFIRMED`) không bao giờ cộng ⇒ `/cong-no` và cổng
+          // phụ huynh KHÔNG giảm nợ cho MỌI đồng tiền về qua QR. Tiền thật đã vào tài
+          // khoản mà màn hình vẫn báo nợ nguyên.
+          //
+          // Thêm tầng thứ hai: cổng phụ huynh cộng tiền theo QUAN HỆ
+          // `Enrollment.payments` (lib/portal/billing-student.ts, dashboard.ts) — khoản
+          // `enrollmentId = null` thì dù có xác nhận được cũng không trừ vào công nợ
+          // của ghi danh nào.
+          //
+          // ⚠️ KHÔNG gọi `ensureOrderPaymentRecorded` để "dùng lại sẵn": hàm đó đóng
+          // dấu `[auto:order-confirm]` / `[auto:order-installment:dotN]`, mà
+          // `lib/orders/installments.ts` XOÁ MỀM đúng hai họ marker đó mỗi lần ai bấm
+          // "Lưu kế hoạch" ⇒ tiền ngân hàng sẽ bị xoá mềm ở lần lưu kế hoạch kế tiếp.
+          // Marker riêng `[auto:<provider>:<txn>]` ở dưới GIỮ NGUYÊN — chỉ CHÉP QUY
+          // TẮC gắn ghi danh, không chép marker.
+          //
+          // ── HAI NGUỒN ỨNG VIÊN, THEO THỨ TỰ CHẮC CHẮN GIẢM DẦN ────────────────
+          //
+          // (1) Ghi danh mà CHÍNH ĐƠN NÀY trỏ tới (`OrderItem.enrollmentId`). Đây là
+          //     bằng chứng TRỰC TIẾP — bản thân đơn khai nó đang thu tiền cho ghi danh
+          //     nào — chứ không phải suy đoán.
+          // (2) Lùi về luật của `ensureOrderPaymentRecorded` (lib/finance/payment.ts):
+          //     học viên của đơn có ĐÚNG MỘT ghi danh còn sống. Giữ nhánh này để hai
+          //     đường ghi vào cùng bảng `Payment` quy kết giống nhau cho đơn không có
+          //     dòng ghi danh nào.
+          //
+          // ⚠️ VÌ SAO KHÔNG CHỈ DÙNG NGUỒN (2) — ĐO TRÊN satarobo_local 14/09/2026,
+          //    496 đơn còn sống:
+          //      · nguồn (2) một mình:  32 đơn gắn được ·   3 đơn không có học viên ·
+          //                            461 đơn MƠ HỒ (6,5% gắn được)
+          //      · nguồn (1) trước:    493 đơn gắn được ·   0 đơn trỏ ≥2 ghi danh ·
+          //                              3 đơn không có dòng ghi danh (99,4%)
+          //    Phân bố ghi danh/học viên nói rõ vì sao: 168/250 em có ≥2 ghi danh còn
+          //    sống, đa số vì `COMPLETED` KHÔNG bị xoá mềm (191 dòng) — học xong Sata1
+          //    rồi lên Sata2 là đã "mơ hồ" theo nguồn (2). Chỉ chép nguồn (2) là vá
+          //    xong mà 93% tiền về qua QR vẫn không xác nhận được, tức chưa vá.
+          //    Kiểm chéo an toàn của nguồn (1): 0 đơn có item trỏ ghi danh của em KHÁC,
+          //    0 đơn có item trỏ ghi danh đã xoá mềm.
+          //
+          // MƠ HỒ THÌ ĐỂ NULL. Bốn ca biên, cả hai nguồn đều đi qua đúng một luật ở
+          // `lib/finance/gan-ghi-danh-khoan.ts` (dùng lại, không viết hàm thứ hai):
+          //  · đơn KHÔNG có `studentId` (đơn tạo ở /orders/new) → nguồn (1) vẫn tra
+          //    được theo dòng hàng; hết dòng thì nguồn (2) không chạy (không biết em
+          //    nào) → để null.
+          //  · học viên có ≥2 ghi danh còn sống (combo / học lại / hai khoá) → nguồn
+          //    (2) trả về 2 ⇒ null. Chia tiền cho nhiều ghi danh phải theo `finalPrice`
+          //    (đúng phép chia của `linkRecordedPaymentsToEnrollments`); đoán hộ ở đây
+          //    là cộng tiền vào công nợ của khoá khác và KHÔNG AI BIẾT.
+          //  · ghi danh đã `deletedAt` → bị loại ở `where` của CẢ HAI nguồn.
+          //  · đơn có nhiều `OrderItem` trỏ nhiều ghi danh → nguồn (1) trả ≥2 ⇒ null,
+          //    và KHÔNG lùi sang (2) (lùi là lấy một ghi danh mà đơn còn chưa chọn nổi).
+          //
+          // Nguồn (1) khoá thêm theo `order.studentId` khi đơn có: item trỏ ghi danh
+          // của em KHÁC thì đó là dữ liệu hỏng, và gắn vào là rót tiền sang sổ nhà khác.
+          const dongHangCoGhiDanh = await tx.orderItem.findMany({
+            where: {
+              orderId: order.id,
+              enrollmentId: { not: null },
+              enrollment: {
+                deletedAt: null,
+                ...(order.studentId ? { studentId: order.studentId } : {}),
+              },
+            },
+            select: { enrollmentId: true },
+          });
+          // Gộp trùng: đơn hay có nhiều dòng hàng cùng trỏ MỘT ghi danh (học phí +
+          // giáo cụ). Không gộp thì đơn chắc chắn nhất lại bị đếm thành "≥2" ⇒ null.
+          const idTheoDon = [...new Set(dongHangCoGhiDanh.map((d) => d.enrollmentId!))];
+
+          // `take: 2` chứ không phải `take: 1`: chỉ cần biết "có nhiều hơn một hay
+          // không". Lấy 1 là biến ca mơ hồ thành ca chắc chắn và gắn bừa vào ghi danh
+          // đầu bảng.
+          const ungVienGhiDanh =
+            idTheoDon.length > 0
+              ? idTheoDon.map((id) => ({ id }))
+              : order.studentId
+                ? await tx.enrollment.findMany({
+                    where: { studentId: order.studentId, deletedAt: null },
+                    select: { id: true },
+                    take: 2,
+                  })
+                : [];
+          const chonGhiDanh = chonGhiDanhChoKhoan(
+            ungVienGhiDanh.map((e) => ({
+              id: e.id,
+              // Ba trường dưới chỉ phục vụ MÀN CHỌN TAY (hiện tên lớp cho người bấm).
+              // Đường webhook không có người bấm nên không tra thêm — tra thêm là gánh
+              // hai join nữa bên trong transaction đang giữ advisory lock của đơn.
+              tenLop: null,
+              tenKhoa: null,
+              finalPrice: null,
+            })),
+          );
+
           await tx.payment.create({
             data: {
               orderId: order.id,
+              // null khi mơ hồ — xem khối chú thích ngay trên.
+              enrollmentId: chonGhiDanh.ghiDanhId,
               amount: allocated,
               method: provider.toLowerCase(),
               paidDate: new Date(),

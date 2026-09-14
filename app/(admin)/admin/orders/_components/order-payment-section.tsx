@@ -15,6 +15,8 @@ import {
   hanChoDot,
   TRAN_SO_DOT,
 } from "@/lib/payments/ke-hoach-dot";
+// Mặc định ô "đã thu" SUY TỪ TIỀN THẬT — thuần, dùng chung luật với cổng ở đường ghi.
+import { dotsBanDauTuTien } from "@/lib/payments/khai-da-thu";
 
 type Installment = {
   id: string;
@@ -44,13 +46,32 @@ type DotForm = {
 /**
  * Dựng trạng thái ban đầu của form từ kế hoạch ĐÃ LƯU.
  *
- * Chưa có kế hoạch → một đợt, bằng cả đơn, đánh dấu ĐÃ THU. Đó là hiện trạng mặc định
- * của một đơn vừa tạo (sale thu đủ tại quầy), và cũng là thứ khiến bấm "Lưu" mà không
- * đổi gì thì không sinh ra khoản nợ ma.
+ * ⚠️ ĐÃ SỬA [14/09/2026] — chưa có kế hoạch thì KHÔNG còn mặc định "đã thu cả đơn".
+ *
+ * Chú thích cũ ở đây nói mặc định đó "khiến bấm Lưu mà không đổi gì thì không sinh ra
+ * khoản nợ ma". Nó sinh ra thứ NGƯỢC LẠI và tệ hơn: TIỀN MA. Đo trên `satarobo_local`,
+ * đơn `ORD-260913-000001` (8.000.000đ, sổ có đúng 1.000.000đ): mở đơn, không đổi gì,
+ * bấm "Lưu" ⇒ một `Payment` 7.000.000đ khống + đơn lật `CONFIRMED` + màn in "còn thiếu
+ * 0đ". 193/496 đơn đang ở đúng hình dạng đó.
+ *
+ * Nay hỏi `dotsBanDauTuTien` (thuần, `lib/payments/khai-da-thu.ts` — có test + có phần
+ * giải thích vì sao chọn TRỤC B). Ba ô UI thuần (`dueDate`/`reminderDays`/`laCoc`) gắn ở
+ * đây chứ không ở hàm thuần: hàm đó cố ý không biết "hôm nay" là ngày nào (luật 19), và
+ * bịa một cái hạn cũng là bịa, chỉ khó thấy hơn bịa tiền.
  */
-function dotsBanDau(installments: Installment[], totalAmount: number): DotForm[] {
+function dotsBanDau(
+  installments: Installment[],
+  totalAmount: number,
+  daThuTheoSo: number,
+): DotForm[] {
   if (installments.length === 0) {
-    return [{ amount: totalAmount, daThu: true, dueDate: "", reminderDays: 14, laCoc: false }];
+    return dotsBanDauTuTien({ totalAmount, daThuTheoSo }).map((d) => ({
+      amount: d.amount,
+      daThu: d.daThu,
+      dueDate: "",
+      reminderDays: 14,
+      laCoc: false,
+    }));
   }
   return [...installments]
     .sort((a, b) => a.soDot - b.soDot)
@@ -74,6 +95,7 @@ export function OrderInstallmentPlan({
   canManage,
   installments,
   accounting,
+  daThuTheoSo,
 }: {
   orderId: string;
   totalAmount: number;
@@ -82,6 +104,22 @@ export function OrderInstallmentPlan({
   // (b) PA-A 22/07 — tổng theo sổ kế toán (Payment): tiền chỉ "xong" khi kế toán
   // CONFIRMED ở /payments. Đợt PAID nghĩa là SALE đã thu, không phải kế toán đã ✓.
   accounting: { confirmed: number; pending: number };
+  /**
+   * TRỤC B — Σ `Payment` còn sống `saleStatus = RECORDED` của đơn (`congNo.daThu` ở
+   * trang cha). Nguồn của mặc định ô "đã thu".
+   *
+   * ⚠️ BẮT BUỘC, KHÔNG CÓ MẶC ĐỊNH (luật 7: tham số có mặc định nguy hiểm thì bỏ mặc
+   * định — để `tsc` liệt kê call site thay vì để một chỗ gọi quên rồi im lặng bịa tiền).
+   *
+   * ⚠️ ĐỪNG suy nó từ `accounting.confirmed + accounting.pending`. Hai bộ lọc KHÁC NHAU
+   * (`accountantStatus` ∈ {CONFIRMED, PENDING} vs `saleStatus = RECORDED`) và chênh lệch
+   * KHÔNG lý thuyết: đo 14/09 trên `satarobo_local` có 379/380 khoản mang
+   * `saleStatus = COLLECT_CONFIRMED` ⇒ trục B ≈ 0 trong khi tổng `accounting` là toàn bộ
+   * số tiền. Dựng mặc định bằng một trục rồi để đường ghi (`recordInstallmentPlan` đo
+   * `KHOAN_DA_GHI_NHAN`) gác bằng trục kia là hai con số không bao giờ gặp nhau — đúng
+   * con bug đang vá, chỉ nhỏ hơn.
+   */
+  daThuTheoSo: number;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -89,7 +127,9 @@ export function OrderInstallmentPlan({
   // ── TRẠNG THÁI: MỘT MẢNG ĐỢT, không phải dot1/dot2 ────────────────────────────
   // Trần "2 đợt" cũ nằm ở đây chứ không ở DB: hai biến `dot1`/`dot2`, đợt 2 tự tính,
   // một ô ngày. Nay là mảng — thêm đợt là thêm phần tử.
-  const [dots, setDots] = useState<DotForm[]>(() => dotsBanDau(installments, totalAmount));
+  const [dots, setDots] = useState<DotForm[]>(() =>
+    dotsBanDau(installments, totalAmount, daThuTheoSo),
+  );
   /** Có thu cọc trước không + số tiền cọc. Cọc là phần ĐẦU của học phí, không cộng thêm. */
   const [coCoc, setCoCoc] = useState(false);
   const [tienCoc, setTienCoc] = useState(0);
@@ -430,6 +470,18 @@ export function OrderInstallmentPlan({
               className="mt-0.5 w-full rounded-md border border-border px-2 py-1.5 text-sm tabular-nums"
             />
           </label>
+
+          {/* Nút Lưu bị khoá thì PHẢI nói vì sao (luật 12 — affordance phải nói thật).
+              Từ 14/09 mặc định của form không còn tự nhận "đã thu cả đơn", nên đơn chưa
+              thu đồng nào mở lên là nút khoá NGAY từ đầu; trước đây `thieuHan` hầu như
+              không bao giờ xảy ra lúc vừa mở nên không ai thấy khoảng lặng này. Toast
+              trong `save()` không cứu được: nút disabled thì `onClick` không chạy. */}
+          {thieuHan >= 0 && (
+            <p className="rounded-md bg-state-warning-soft px-3 py-2 text-xs font-semibold text-state-warning-ink">
+              Đợt {thieuHan + 1} chưa thu — chọn ngày hẹn đóng để lưu được kế hoạch. Nếu
+              khách đã đóng rồi thì tích ô &quot;đã thu&quot; của đợt đó.
+            </p>
+          )}
 
           <button
             onClick={save}
