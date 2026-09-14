@@ -41,6 +41,13 @@ export async function withdrawStudentFromAllClasses(params: {
   /** Lý do đã kèm tiền tố, ví dụ `Học viên nghỉ học: <lý do admin nhập>`. */
   reason: string;
   orgUnitId?: string | null;
+  /**
+   * Mốc "bây giờ" dùng để hỏi sổ buổi của lớp đã chốt tới đâu (`createRefundRequest`).
+   * Bỏ trống = đồng hồ thật. Có mặt để TEST đóng băng được mốc — luật 19: ca test đọc
+   * đồng hồ thật là ca hẹn giờ nổ (fixture ghi ngày tuyệt đối, tờ lịch đổi thì kết quả
+   * đổi trong khi mã không đổi dòng nào).
+   */
+  now?: Date;
 }): Promise<RemovedEnrollment[]> {
   const removed = await removeStudentFromClasses({
     tx: params.tx,
@@ -61,6 +68,7 @@ export async function withdrawStudentFromAllClasses(params: {
       requestedById: params.actorId,
       actorName: params.actorName,
       tx: params.tx,
+      ...(params.now ? { now: params.now } : {}),
     });
   }
 

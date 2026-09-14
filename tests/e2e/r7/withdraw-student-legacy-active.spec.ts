@@ -25,16 +25,16 @@
  *  W2 — sau khi gỡ, roster buổi học không còn em đó.
  *  W3 — bộ trạng thái dọn được PHỦ ĐÚNG bộ mà roster lớp coi là "đang trong lớp".
  *  W4 — convert lead sinh ra ghi danh ACTIVE (khoá lại giả định nền của bug này).
- *  W5 — ghi danh ACTIVE ĐÃ THU TIỀN: việc gỡ khỏi lớp phải XONG, còn phần tiền thì theo
- *       cầu dao `REFUND_REQUEST_DISABLED` (bám hằng, không chốt cứng — gỡ cầu dao là ca
- *       tự đổi chiều).
+ *  W5 — ghi danh ACTIVE ĐÃ THU TIỀN, sổ buổi của lớp ĐÃ CHỐT: gỡ khỏi lớp XONG và có
+ *       đề xuất hoàn tiền đúng số.
+ *  W5b — cùng ca đó nhưng sổ buổi CHƯA CHỐT: vẫn gỡ khỏi lớp, nhưng TỪ CHỐI đề xuất
+ *       tiền (và để lại dấu). Thay cho nhánh cầu dao cũ, nay là hợp đồng THẬT.
  *  W6 — cùng gốc bệnh: BẢO LƯU cũng phải nhận ghi danh ACTIVE (trước đây báo
  *       "Chỉ có thể bảo lưu lớp đang STUDYING" nên đa số học viên thật không bảo lưu được).
  */
 import { test, expect } from "@playwright/test";
 import type { Prisma } from "@prisma/client";
 import { db } from "../../../lib/db";
-import { REFUND_REQUEST_DISABLED } from "../../../lib/finance/cau-dao-hoan-tien";
 import { resetDb } from "../_helpers/seed";
 import { buildActor } from "../../../lib/auth/actor";
 import { buildSessionAttendanceRows } from "../../../lib/attendance/roster";
@@ -100,7 +100,11 @@ async function seedConvertedStudent() {
  * nếu không test sẽ xanh trong khi đường thật vẫn hỏng (chính là cái bẫy của bug này:
  * `removeStudentFromClasses` vốn ĐÃ đúng, hỏng nằm ở chỗ action không gọi nó).
  */
-async function withdrawLikeAction(studentId: string, centerId: string | null) {
+async function withdrawLikeAction(
+  studentId: string,
+  centerId: string | null,
+  now?: Date,
+) {
   return db.$transaction(async (txRaw) => {
     const tx = txRaw as unknown as Prisma.TransactionClient;
     await tx.student.update({
@@ -114,6 +118,7 @@ async function withdrawLikeAction(studentId: string, centerId: string | null) {
       actorName: "test",
       reason: "Học viên nghỉ học: test",
       orgUnitId: centerId,
+      ...(now ? { now } : {}),
     });
   });
 }
@@ -174,9 +179,18 @@ test.describe("[BUG-2108] Nghỉ học phải gỡ khỏi lớp — kể cả gh
     expect(after.rows.map((r) => r.studentId)).not.toContain(student.id);
   });
 
-  test("[W5] ghi danh ACTIVE đã thu tiền: gỡ khỏi lớp XONG, tiền theo cầu dao", async () => {
-    const { student, enr, cls, center } = await seedConvertedStudent();
-    // Có buổi CHƯA học + khoản đã thu xác nhận → computeRefund ra số dương.
+  // ── W5: MỐC THỜI GIAN ĐÓNG BĂNG ────────────────────────────────────────────
+  //
+  // `createRefundRequest` nay hỏi "lớp còn buổi nào đã qua ngày mà chưa chốt không" —
+  // câu hỏi đó cần một mốc "bây giờ". Bản trước của W5 để nó rơi về `new Date()` và ghi
+  // fixture bằng ngày tuyệt đối (buổi 01/09, 08/09) với chú thích "buổi CHƯA học": đúng
+  // vào hôm viết thì hai buổi ấy ở tương lai, còn hôm nay chúng đã thành quá khứ. Mã
+  // không đổi dòng nào mà hợp đồng của ca đã đổi chiều — luật 19, `docs/luat-doc-so-va-
+  // ket-luan.md`. Nay mốc là THAM SỐ và ca truyền mốc cố định.
+  const MOC = new Date("2026-09-15T00:00:00+07:00");
+
+  test("[W5] sổ buổi ĐÃ CHỐT: gỡ khỏi lớp XONG và có đề xuất hoàn tiền", async () => {
+    const { student, enr, cls, center, session } = await seedConvertedStudent();
     const order = await db.order.create({
       data: {
         code: `ORD-${uniq()}`,
@@ -201,6 +215,75 @@ test.describe("[BUG-2108] Nghỉ học phải gỡ khỏi lớp — kể cả gh
         centerId: center.id,
       },
     });
+    // Lớp 3 buổi: 2 buổi quá khứ ĐÃ CHỐT + 1 buổi chưa tới ⇒ còn tiền để hoàn.
+    // Buổi của `seedConvertedStudent` (01/08) cũng phải chốt: sổ chốt nghĩa là chốt HẾT
+    // phần đã qua, sót một buổi là rơi sang hợp đồng của [W5b].
+    await db.classSession.update({
+      where: { id: session.id },
+      data: { status: "COMPLETED" },
+    });
+    await db.classSession.createMany({
+      data: [
+        {
+          classId: cls.id,
+          date: new Date("2026-09-01"),
+          centerId: center.id,
+          status: "COMPLETED",
+        },
+        { classId: cls.id, date: new Date("2026-12-01"), centerId: center.id },
+      ],
+    });
+
+    await withdrawLikeAction(student.id, center.id, MOC);
+
+    // Khẳng định gốc của W5, giữ nguyên từ bản trước cầu dao.
+    const refunds = await db.refundRequest.findMany({
+      where: { enrollmentId: enr.id },
+    });
+    expect(refunds).toHaveLength(1);
+    expect(refunds[0]).toMatchObject({
+      trigger: "WITHDRAW",
+      status: "PENDING",
+    });
+    // 4.000.000 đã thu − 2 buổi × round(4.000.000/3) = 1.333.334.
+    expect(refunds[0].proposedAmount).toBe(1_333_334);
+  });
+
+  test("[W5b] sổ buổi CHƯA CHỐT: vẫn gỡ khỏi lớp, nhưng TỪ CHỐI đề xuất tiền", async () => {
+    // Thay cho nhánh "cầu dao đang bật" của bản trước (`REFUND_REQUEST_DISABLED`, sống
+    // 08/09 → 14/09). Cầu dao tắt HẲN tính năng cho mọi người vì MỘT ca: `sessionsLearned`
+    // đếm `ClassSession.status = COMPLETED`, mà status không phản ánh thực tế đã dạy (đo
+    // prod 07/09: 2 COMPLETED / 287 SCHEDULED, 209 buổi quá hạn chưa chốt) ⇒ một lớp đã
+    // dạy gần hết vẫn đọc ra 0 buổi học ⇒ đề xuất hoàn 100% học phí.
+    //
+    // Nay chỉ ĐÚNG ca đó bị chặn, và ca này là hợp đồng của nó — hợp đồng THẬT, chạy mãi,
+    // không còn bám vào một hằng có ngày chết.
+    const { student, enr, cls, center } = await seedConvertedStudent();
+    const order = await db.order.create({
+      data: {
+        code: `ORD-${uniq()}`,
+        type: "COURSE",
+        customerName: "PH test",
+        customerPhone: "0900000000",
+        centerId: center.id,
+        studentId: student.id,
+        subtotal: 4_000_000,
+        totalAmount: 4_000_000,
+        status: "CONFIRMED",
+      },
+    });
+    await db.payment.create({
+      data: {
+        orderId: order.id,
+        enrollmentId: enr.id,
+        amount: 4_000_000,
+        method: "CASH",
+        paidDate: new Date("2026-08-01"),
+        accountantStatus: "CONFIRMED",
+        centerId: center.id,
+      },
+    });
+    // Buổi đã qua mốc mà KHÔNG buổi nào chốt — đúng hình dạng dữ liệu prod.
     await db.classSession.createMany({
       data: [
         { classId: cls.id, date: new Date("2026-09-01"), centerId: center.id },
@@ -208,59 +291,38 @@ test.describe("[BUG-2108] Nghỉ học phải gỡ khỏi lớp — kể cả gh
       ],
     });
 
-    await withdrawLikeAction(student.id, center.id);
+    await withdrawLikeAction(student.id, center.id, MOC);
 
     const refunds = await db.refundRequest.findMany({
       where: { enrollmentId: enr.id },
     });
+    expect(
+      refunds,
+      "sổ đọc ra 0 buổi đã học thì KHÔNG được đề xuất hoàn 100%",
+    ).toHaveLength(0);
 
-    // ── Ca này BÁM THEO hằng cầu dao, không chốt cứng một chiều ───────────────
-    //
-    // Từ `fb7f8422` (PR #228) `REFUND_REQUEST_DISABLED = true` chặn TẠO yêu cầu hoàn
-    // tiền cho mọi người, vì `sessionsLearned` đọc theo `ClassSession.status` mà status
-    // đang thiếu 209 buổi đã dạy ⇒ hệ thống đề xuất hoàn tới 100% học phí.
-    //
-    // Ca này khi đó thành ĐỎ và đã đỏ suốt — nhưng R7 không phải cổng bắt buộc nên nó
-    // merge lên main mà không ai bị chặn. Đó là "cổng merge giả": một ca đỏ không ai
-    // đọc thì bằng không có ca.
-    //
-    // Viết bám hằng thay vì chốt cứng, để **gỡ cầu dao là ca tự đổi chiều** — không ai
-    // phải nhớ quay lại sửa test. Hai nhánh dưới đây là HAI hợp đồng khác nhau, và cả
-    // hai đều thật.
-    if (REFUND_REQUEST_DISABLED) {
-      // Hợp đồng khi cầu dao ĐANG TẮT: không đề xuất tiền, NHƯNG việc gỡ vẫn xong.
-      // Đây đúng là lý do `createRefundRequest` trả `null` chứ không ném — ném ở đây là
-      // cuộn ngược cả transaction gỡ học viên, biến "không đề xuất được tiền" thành
-      // "không gỡ được học viên".
-      expect(refunds).toHaveLength(0);
+    // Nhưng việc GỠ vẫn phải xong. Đây đúng là lý do `createRefundRequest` trả `null`
+    // chứ không ném: ném ở đây là cuộn ngược cả transaction gỡ học viên, biến "không đề
+    // xuất được tiền" thành "không gỡ được học viên".
+    const conTrongLop = await db.enrollment.findFirst({
+      where: {
+        id: enr.id,
+        status: { in: [...REMOVABLE_ENROLLMENT_STATUSES] },
+        deletedAt: null,
+      },
+    });
+    expect(
+      conTrongLop,
+      "lưới KHÔNG được chặn luôn việc gỡ khỏi lớp",
+    ).toBeNull();
 
-      const conTrongLop = await db.enrollment.findFirst({
-        where: {
-          id: enr.id,
-          status: { in: [...REMOVABLE_ENROLLMENT_STATUSES] },
-          deletedAt: null,
-        },
-      });
-      expect(
-        conTrongLop,
-        "cầu dao KHÔNG được chặn luôn việc gỡ khỏi lớp",
-      ).toBeNull();
-
-      // Và lần chạm phải để lại DẤU — `RefundRequest` đang 0 dòng, nên chính những lần
-      // chạm này là câu trả lời cho "có ai thực sự cần hoàn tiền không".
-      const dauVet = await db.auditLog.findMany({
-        where: { action: "REFUND_REQUEST_BLOCKED", entityId: enr.id },
-      });
-      expect(dauVet.length, "mỗi lần chạm cầu dao phải ghi AuditLog").toBe(1);
-    } else {
-      // Hợp đồng khi cầu dao ĐÃ GỠ — khẳng định gốc của W5, giữ nguyên.
-      expect(refunds).toHaveLength(1);
-      expect(refunds[0]).toMatchObject({
-        trigger: "WITHDRAW",
-        status: "PENDING",
-      });
-      expect(refunds[0].proposedAmount).toBeGreaterThan(0);
-    }
+    // Và mỗi lần từ chối phải để lại DẤU — `RefundRequest` còn 0 dòng trên prod, nên
+    // chính những dòng này là câu trả lời cho "có ai thực sự cần hoàn tiền không".
+    const dauVet = await db.auditLog.findMany({
+      where: { action: "REFUND_REQUEST_BLOCKED", entityId: enr.id },
+    });
+    expect(dauVet.length, "mỗi lần từ chối phải ghi AuditLog").toBe(1);
+    expect(dauVet[0].newValues).toMatchObject({ tuChoiDeXuatHoanTien: true });
   });
 
   test("[W6] bảo lưu nhận ghi danh ACTIVE, và state machine cho phép ACTIVE→PAUSED", async () => {
