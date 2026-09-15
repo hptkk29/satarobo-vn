@@ -375,6 +375,28 @@ describe("[NHAP-T18] ba lỗi hiển thị thấy trên PROD 15/09/2026", () => 
     }
   });
 
+  it("⚠️ thẻ bảng phải có nền ĐỤC của riêng nó", async () => {
+    // Đo 15/09 (lượt hai): cả chuỗi cha từ bảng lên tới `.admin-scope` đều TRONG SUỐT, nên
+    // hàng không tô màu ăn nền xám `lab(96.52)` của khung admin, trong khi ô ghim buộc phải
+    // đục nên ra `lab(100)` trắng tinh. Chênh 3,5 điểm sáng — đủ để thành một dải trắng lệch
+    // chạy dọc bảng, và đó đúng là thứ chủ dự án chụp được trên prod SAU khi đã vá lượt một.
+    //
+    // Bản vá lượt một (đắp `::before` cho dòng CÓ tô màu) không chạm tới ca này, vì dòng
+    // "trùng" và "hợp lệ" vốn không tô màu nào cả.
+    dung({ dong: [] });
+    await napFile([{ Tên: "A", "SĐT": "01" }]);
+    const vo = document.querySelector("table")!.parentElement!.parentElement!;
+    expect(vo.className, `vỏ bảng thiếu nền đục: ${vo.className}`).toMatch(/\bbg-background\b/);
+  });
+
+  it("thẻ ở màn hẹp cũng có nền riêng", async () => {
+    // Cùng lý do: thẻ không nền là một mảng xám trên nền xám, mất hẳn hình dạng thẻ.
+    dung({ dong: [] });
+    await napFile([{ Tên: "A", "SĐT": "01" }]);
+    const the = document.querySelector('ul[class*="hidden"] > li > div');
+    expect(the?.className ?? "").toMatch(/\bbg-background\b/);
+  });
+
   it("nền hàng TIÊU ĐỀ và nền ô ghim của nó phải cùng một lớp màu", async () => {
     // Đo 15/09: hàng là `bg-muted/60`, ô ghim là `bg-muted` — hai sắc độ khác nhau tạo một
     // vệt sáng chạy dọc qua tiêu đề. Ô ghim không được dùng màu trong suốt, nên hàng nhượng bộ.

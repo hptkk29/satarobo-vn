@@ -217,7 +217,8 @@ export function BangLeadNguoi({
       ) : (
         <>
           {/* Từ `md`: bảng. Sáu cột vừa đủ nên không cần ghim cột nào — càng ít chrome càng tốt. */}
-          <div className="hidden overflow-hidden rounded-xl border border-border md:block">
+          {/* Nền đục của riêng thẻ — xem chú thích cùng nội dung ở `components/admin/ExcelImporter.tsx`. */}
+          <div className="hidden overflow-hidden rounded-xl border border-border bg-background md:block">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[46rem] text-sm">
                 <thead>
@@ -295,7 +296,7 @@ export function BangLeadNguoi({
               <li key={d.id}>
                 <label
                   className={cn(
-                    "flex cursor-pointer gap-3 rounded-xl border border-border p-4 transition-colors",
+                    "flex cursor-pointer gap-3 rounded-xl border border-border bg-background p-4 transition-colors",
                     chon.has(d.id) && "border-primary bg-primary-soft",
                   )}
                 >

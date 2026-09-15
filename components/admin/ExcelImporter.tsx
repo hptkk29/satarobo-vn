@@ -534,7 +534,13 @@ export function ExcelImporter<T>({
             <>
               {/* Vùng cuộn ngang nằm ở thẻ TRONG, viền bo ở thẻ NGOÀI — hai thẻ khác nhau,
                   nếu không nội dung bị vạt góc khi kéo ngang (luật `bang-coverage`). */}
-              <div className="hidden overflow-hidden rounded-xl border border-border md:block">
+              {/* ⚠️ `bg-background` KHÔNG phải trang trí — nó là thứ giữ cho ô ghim khớp màu hàng.
+                  Đo 15/09: cả chuỗi cha từ bảng lên tới `.admin-scope` đều TRONG SUỐT, nên hàng
+                  không tô màu sẽ ăn nền xám `lab(96.52)` của khung admin, trong khi ô ghim buộc
+                  phải đục nên ra `lab(100)` trắng tinh. Hai màu đó chính là dải trắng lệch mà
+                  chủ dự án chụp được trên prod. Cho thẻ một nền ĐỤC của riêng nó thì hàng và ô
+                  ghim cùng một màu, và thẻ trắng trên khung xám cũng đúng hình dạng một thẻ. */}
+              <div className="hidden overflow-hidden rounded-xl border border-border bg-background md:block">
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[54rem] text-sm">
                     <thead>
@@ -1206,7 +1212,7 @@ function TheDong({
   onXoa: () => void;
 }) {
   return (
-    <div className={cn("rounded-xl border border-border", NEN_DONG[trangThai.kieu])}>
+    <div className={cn("rounded-xl border border-border bg-background", NEN_DONG[trangThai.kieu])}>
       <div className="flex items-start justify-between gap-2 border-b border-border/70 px-4 py-2.5">
         <span className="text-xs font-semibold tabular-nums text-muted-foreground">
           Dòng {soDong}
