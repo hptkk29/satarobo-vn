@@ -183,6 +183,47 @@ describe("[LEAD-T52] đổi chủ / xoá lead ⇒ phải đồng bộ chuông", 
     ).toEqual([]);
   });
 
+  it("⚠️ cờ `imLangChuong` KHÔNG được che luôn phần THU HỒI", () => {
+    // Cờ này sinh ra 15/09 cho đường nhập hàng loạt: tắt chuông "bạn có lead mới" để nơi gọi
+    // gộp thành một tin. Nó CHỈ được tắt nửa BÁO.
+    //
+    // Nếu ai đó kéo `thuHoiChuongLeadCu` vào trong khối `if (!input.imLangChuong)` — một
+    // thao tác gom dòng trông rất hợp lý khi đọc lướt — thì mỗi lượt nhập Excel lại để lại
+    // đúng những cái chuông mồ côi mà bản vá 15/09 vừa dẹp, và KHÔNG ca hành vi nào đỏ:
+    // hàm `chiaChoLead` cần DB thật nên không mock gọi thẳng được.
+    const src = KHOI.find((k) => k.khoa === "lib/lead/assign-lead.ts#chiaChoLead")?.than;
+    expect(src, "không cắt được `chiaChoLead` — bộ chọn hỏng").toBeTruthy();
+
+    const mo = src!.indexOf("if (!input.imLangChuong)");
+    expect(mo, "không còn khối `if (!input.imLangChuong)` — cờ đã đổi hình dạng").toBeGreaterThan(0);
+
+    // Cắt đúng thân khối bằng đếm ngoặc, không đoán theo số dòng.
+    const dau = src!.indexOf("{", mo);
+    let sau = 0;
+    let cuoi = src!.length;
+    for (let i = dau; i < src!.length; i++) {
+      if (src![i] === "{") sau++;
+      else if (src![i] === "}") {
+        sau--;
+        if (sau === 0) {
+          cuoi = i;
+          break;
+        }
+      }
+    }
+    const trongKhoi = src!.slice(dau, cuoi + 1);
+
+    expect(
+      /thuHoiChuongLeadCu/.test(trongKhoi),
+      "`thuHoiChuongLeadCu` đang nằm TRONG khối im chuông. Thu hồi chuông chủ cũ là phép sửa " +
+        "đúng trong MỌI ca — đưa nó ra ngoài khối `if`.",
+    ).toBe(false);
+    expect(
+      /thuHoiChuongLeadCu/.test(src!),
+      "`chiaChoLead` phải vẫn còn gọi `thuHoiChuongLeadCu` ở đâu đó",
+    ).toBe(true);
+  });
+
   it("danh sách MIỄN không có dòng chết", () => {
     const con = new Map(KHOI.map((k) => [k.khoa, k.than] as const));
     const chet = Object.keys(MIEN).filter((k) => {

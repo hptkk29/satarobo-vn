@@ -29,6 +29,7 @@ const KHOA_DANG_CHAY: ReadonlyArray<[key: string, file: string]> = [
   // "khoá có được khai trong catalog không" nên vẫn xanh. Một ảnh chụp trỏ vào tệp đã xoá thì
   // không còn là ảnh chụp của hiện thực — nó chỉ giữ cho một mục chết sống mãi trong danh mục,
   // và chính mục chết đó bày ra màn cấu hình thành công tắc không nối vào đâu.
+  ["lead.moi_nhieu:u1:1789400000000", "lib/lead/assign-lead.ts"],
   ["trial-session.assigned:ts1", "lib/trial/service.ts"],
   ["trial-enroll.assigned:te1", "lib/trial/service.ts"],
   // 14/09 — ba khoá của luồng SỬA / DỜI NGƯỜI DẠY / HUỶ buổi trải nghiệm. Chúng sinh thật từ

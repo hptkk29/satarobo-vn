@@ -13,7 +13,13 @@ import { getAuditActor } from "@/lib/audit/log";
 import { parseLeadImportRow, resolveDefaultCenterId } from "@/lib/lead/import";
 import { normalizeVi } from "@/lib/lead/import-registered";
 import { autoAssignNewLead } from "@/lib/lead/auto-assign";
-import { chiaChoLead } from "@/lib/lead/assign-lead";
+import {
+  chiaChoLead,
+  baoSaleCoLeadMoi,
+  baoSaleNhieuLeadMoi,
+  lenKeHoachBaoNhapHangLoat,
+} from "@/lib/lead/assign-lead";
+import { db } from "@/lib/db";
 import { canManualAssign } from "@/lib/lead/assign-guard";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
@@ -324,6 +330,13 @@ export async function POST(req: NextRequest) {
             source: v.source,
             note: v.note,
             status: "MOI",
+            // 15/09/2026 — BẮT BUỘC. Danh sách /leads sắp theo `lastInboundAt` với
+            // `nulls: 'last'`, nên lead tạo mà bỏ trống cột này bị đẩy xuống CUỐI mọi
+            // trang — người dùng báo "nhập xong không thấy lead đâu", nhưng tìm theo
+            // SĐT/nguồn thì lại ra (tập kết quả nhỏ nên nó lọt trang 1).
+            // Quy ước: lúc tạo, `lastInboundAt` = `createdAt`; `laNhapLai()` chỉ đúng
+            // khi nó LỚN HƠN `createdAt`. Xem `lib/tables/lead-columns.ts`.
+            lastInboundAt: new Date(),
             ...(namedChildren.length > 0
               ? {
                   children: {
@@ -429,6 +442,21 @@ export async function POST(req: NextRequest) {
   // xếp hàng theo thứ tự vòng lặp. Bọc chung transaction thì đổi lại một thứ ĐẮT
   // HƠN NHIỀU: dòng thứ 250 hỏng là rollback cả 300 dòng đã đúng, trong khi nếp
   // đang chạy (và người vận hành đang trông đợi) là "hỏng dòng nào bỏ dòng đó".
+  // 15/09/2026 — GỘP CHUÔNG. Chủ dự án chốt: "nhập nhiều thì báo là có bao nhiêu lead mới
+  // chứ không gửi nhiều thông báo có lead mới".
+  //
+  // Nên vòng chia chạy với `imLangChuong: true`, gom người nhận lại, rồi báo MỘT lần mỗi
+  // người ở cuối. Ai chỉ nhận đúng 1 lead thì vẫn dùng chuông thường — nó trỏ THẲNG trang
+  // chi tiết lead, bấm là đọc được số điện thoại, hơn hẳn một tin gộp trỏ về danh sách.
+  //
+  // ⚠️ `imLangChuong` CHỈ tắt nửa BÁO. Nửa THU HỒI chuông chủ cũ vẫn chạy bên trong
+  // `chiaChoLead` — xem chú thích của cờ đó.
+  const daChia: { leadId: string; ownerId: string }[] = [];
+  // MỘT mốc cho cả lượt: `dedupeKey` của tin gộp mang mốc này, nên tính lại theo từng người
+  // là hai lượt nhập cách nhau một nhịp đồng hồ cũng ra hai khoá — đúng thứ khoá chống trùng
+  // sinh ra để chặn.
+  const mocLuot = Date.now();
+
   for (const { id, saleId } of createdIds) {
     const lead = await sdb.lead.findUnique({
       where: { id },
@@ -441,14 +469,37 @@ export async function POST(req: NextRequest) {
       );
       continue;
     }
-    await chiaChoLead(id, {
+    const kq = await chiaChoLead(id, {
       targetCenterId: lead.centerId,
       createdById: actorId,
       entryPoint: "IMPORT",
       // Có ghi sale ⇒ giao đích danh, KHÔNG tiêu lượt (ma trận, ca IMPORT).
       // Để trống ⇒ `null` ⇒ về vòng chia và CÓ tiêu lượt.
       explicitOwnerId: saleId,
-    }).catch((err) => console.error("[import/leads] chia lead:", err));
+      imLangChuong: true,
+    }).catch((err) => {
+      console.error("[import/leads] chia lead:", err);
+      return null;
+    });
+    if (kq?.assignedToId) daChia.push({ leadId: id, ownerId: kq.assignedToId });
+  }
+
+  // Báo một lần cho mỗi người nhận. Nuốt lỗi: chuông hỏng không được làm hỏng lượt nhập.
+  for (const tin of lenKeHoachBaoNhapHangLoat(daChia)) {
+    if (tin.kieu === "mot") {
+      const l = await db.lead.findUnique({
+        where: { id: tin.leadId },
+        select: { parentName: true },
+      });
+      await baoSaleCoLeadMoi({
+        ownerId: tin.ownerId,
+        leadId: tin.leadId,
+        parentName: l?.parentName ?? "(không tên)",
+        source: "IMPORT",
+      });
+    } else {
+      await baoSaleNhieuLeadMoi({ ownerId: tin.ownerId, soLead: tin.soLead, mocLuot });
+    }
   }
 
   if (mergedLeads > 0) {

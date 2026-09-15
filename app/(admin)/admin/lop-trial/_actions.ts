@@ -13,7 +13,6 @@
 import { revalidatePath } from "next/cache";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
-import { teacherCenterAssignmentError } from "@/lib/teachers/center-filter";
 import { leadStatusLabel } from "@/lib/leads/status";
 import { phoneSearchTerm } from "@/lib/phone";
 import {

@@ -166,6 +166,14 @@ const BY_PREFIX: Readonly<Record<string, NotiDef>> = {
     group: "action_required", priority: 1, entity: "lead",
     recipients: "Tư vấn viên vừa được chia lead", target: "/leads",
   },
+  // 15/09 — bản GỘP cho đường nhập hàng loạt. Chủ dự án chốt: "nhập nhiều thì báo là có bao
+  // nhiêu lead mới chứ không gửi nhiều thông báo". Chỉ bắn khi một người nhận từ HAI lead trở
+  // lên; đúng một lead thì `lead.moi:` tốt hơn vì nó trỏ thẳng trang chi tiết.
+  "lead.moi_nhieu:": {
+    label: "Nhận nhiều lead mới cùng lúc",
+    group: "action_required", priority: 1, entity: "lead",
+    recipients: "Tư vấn viên được chia lead trong một lượt nhập danh sách", target: "/leads",
+  },
   "lead_followup:": {
     label: "Lead đến hạn chăm sóc",
     group: "action_required", priority: 1, entity: "lead",
