@@ -162,8 +162,51 @@ describe("SHIFT_CATALOG ↔ docs/cham-cong/BANG-MA-CA-CHOT.md", () => {
     expect(BANG).toContain("giữ nguyên 24");
   });
 
-  it("bảng chốt ghi rõ hai thứ CHƯA cắm được — đừng tưởng đã xong", () => {
-    expect(BANG).toContain("UNPAID_BREAK");
-    expect(BANG).toContain("soCapQuetKyVong");
+  it("bảng chốt vẫn nêu rõ thứ CHƯA cắm được — đừng tưởng đã xong", () => {
+    // `soCapQuetKyVong` đã cắm 15/09; `UNPAID_BREAK` thì chưa. Ca này canh vế CÒN LẠI.
+    //
+    // ⚠️ Bản đầu chỉ viết `expect(BANG).toContain("UNPAID_BREAK")` và lượt cấy "xoá dòng
+    // trạng thái" ra XANH — vì chữ ấy còn xuất hiện ở đoạn giải thích phía trên. Khẳng
+    // định phải neo vào ĐÚNG DÒNG TRẠNG THÁI (luật 11: neo chuỗi hẹp nhất).
+    const dongTrangThai = BANG.split(String.fromCharCode(10)).find(
+      (l) => l.trim().startsWith("|") && l.includes("UNPAID_BREAK") && l.includes("chưa có"),
+    );
+    expect(
+      dongTrangThai,
+      "bảng chốt phải còn dòng trạng thái ❌ cho UNPAID_BREAK — xoá nó nghĩa là đã cắm xong",
+    ).toBeTruthy();
+  });
+
+  // ── Cặp quét kỳ vọng: MÃ ↔ BẢNG, từng mã một ──────────────────────────────
+  //
+  // Đây là cổng chủ dự án đặt ra khi chốt phần A: "Sửa cả SHIFT_CATALOG lẫn
+  // docs/cham-cong/BANG-MA-CA-CHOT.md — ca test đối chiếu sẽ đỏ nếu chỉ sửa một bên, đó
+  // là đúng ý đồ." Nó quan trọng ngay lúc này vì `NG` sắp đảo 0 → 1 ở phần A.
+  it("soCapQuetKyVong của MỌI mã khớp cột 'Cặp quét' trong bảng chốt", () => {
+    const dongCuaMa = (code: string) =>
+      BANG.split(String.fromCharCode(10)).find(
+        (l) => l.trim().startsWith("|") && l.includes("`" + code + "`"),
+      );
+
+    const daKiem: string[] = [];
+    for (const e of SHIFT_CATALOG) {
+      const dong = dongCuaMa(e.code);
+      expect(dong, `bảng chốt phải có dòng cho mã ${e.code}`).toBeTruthy();
+      // Cột cuối = "Cặp quét". Bỏ `**` rồi lấy SỐ ĐẦU TIÊN của ô đó — ô có thể mang thêm
+      // lời giải thích ("**0** — không cần chấm").
+      const o = dong!.split("|").filter((x) => x.trim() !== "");
+      const cuoi = o[o.length - 1]!.replace(/\*/g, "").trim();
+      const so = cuoi.match(/\d+/)?.[0];
+      expect(so, `${e.code}: không đọc được số cặp quét từ "${cuoi}"`).toBeTruthy();
+      expect(
+        Number(so),
+        `${e.code}: mã khai ${e.soCapQuetKyVong}, bảng chốt ghi ${so}`,
+      ).toBe(e.soCapQuetKyVong);
+      daKiem.push(e.code);
+    }
+    // Anti-vacuity: đủ 20 mã, và phải có ĐỦ CẢ BA giá trị — nếu bảng chỉ còn toàn số 1
+    // thì vòng trên vẫn xanh mà chẳng phân biệt được gì.
+    expect(daKiem.length).toBe(SHIFT_CATALOG.length);
+    expect(new Set(SHIFT_CATALOG.map((e) => e.soCapQuetKyVong))).toEqual(new Set([0, 1, 2]));
   });
 });

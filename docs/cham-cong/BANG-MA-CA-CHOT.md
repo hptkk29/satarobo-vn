@@ -57,7 +57,7 @@ Ghi ra để không ai tưởng đã xong:
 | `dayCredit` | ✅ **đã cắm** — `SHIFT_CATALOG`, và test canh | — |
 | Nghỉ **VẪN** tính (`PAID_BREAK`) | ✅ đã có sẵn từ trước | — |
 | Nghỉ **KHÔNG** tính | ❌ chưa có `kind` nào — cần `UNPAID_BREAK` | **đợt 3** |
-| Số **cặp quét kỳ vọng** | ❌ chưa có cột — engine đang suy từ số đoạn WORK | **đợt 3** |
+| Số **cặp quét kỳ vọng** | ✅ **đã cắm** 15/09/2026 — `SHIFT_CATALOG.soCapQuetKyVong`, và test đối chiếu chính bảng này | — |
 
 ⚠️ Vì thế cột "Nghỉ KHÔNG tính" ở bảng trên hiện **chưa có hiệu lực trong mã**: các mã
 `CG` `CCT` `CGD` `HC` `12` `21` `2C` `SC` `SCT` đang khai hai đoạn `WORK` rời nhau, và
@@ -67,7 +67,7 @@ mong muốn, nhưng **vì lý do khác**. Khi thêm `UNPAID_BREAK` thì phải k
 
 ---
 
-## Cột `soCapQuetKyVong` — thiết kế đã duyệt (chưa cắm)
+## Cột `soCapQuetKyVong` — ĐÃ CẮM 15/09/2026
 
 | Giá trị | Nghĩa | Mốc đối chiếu |
 |---|---|---|
@@ -77,6 +77,11 @@ mong muốn, nhưng **vì lý do khác**. Khi thêm `UNPAID_BREAK` thì phải k
 
 Cờ `THIEU_BUOI_SANG`/`THIEU_BUOI_CHIEU` chuyển thành *thiếu cụm thứ n*, chỉ có nghĩa khi
 `soCapQuetKyVong ≥ 2`.
+
+⚠️ **`NG` vẫn đang là `0` trong bảng trên.** Phần A đảo nó sang `1`, nhưng CHỈ SAU khi đo
+xong số ngày công tác trên prod (`viec = ngay-cong-tac`) — đảo là gắn cờ ngược về quá khứ
+cho một việc người ta không thể đã làm. Sửa bảng này mà quên `SHIFT_CATALOG` (hoặc ngược
+lại) thì `catalog.test.ts` ĐỎ, và đó là đúng ý đồ.
 
 ---
 
