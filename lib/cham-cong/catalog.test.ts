@@ -69,9 +69,17 @@ describe("SHIFT_CATALOG — 21 mã theo tab DANH MỤC CA", () => {
     expect(catalogByCode("D2")!.defaultPlace).toBe("CENTER:CS2");
   });
 
-  it("chế độ chấm: LD/NG/D1/D2 OPTIONAL (1 công không cần lượt), X/P NONE, còn lại REQUIRED", () => {
+  // 🔴 `NG` RỜI khỏi nhóm OPTIONAL ngày 15/09/2026 (phần A) — đảo chốt cũ, không phải sót.
+  //
+  // Cũ: "công tác ngoài thì 1 công, không cần lượt nào". Nay: đi công tác vẫn phải bấm
+  // Check in / Check out (hai nút ở màn "Của tôi", hiện khi `placeMode === "OFFSITE"`),
+  // và ngày đó kỳ vọng ĐÚNG MỘT cặp quét.
+  //
+  // `LD` `D1` `D2` GIỮ OPTIONAL: `LD` là ca linh động không khung giờ, `D1`/`D2` là NHÃN
+  // NƠI LÀM chứ không phải ca có giờ — không có gì để quét vào/ra.
+  it("chế độ chấm: LD/D1/D2 OPTIONAL, X/P NONE, còn lại (kể cả NG) REQUIRED", () => {
     for (const e of SHIFT_CATALOG) {
-      const expected = ["LD", "NG", "D1", "D2"].includes(e.code)
+      const expected = ["LD", "D1", "D2"].includes(e.code)
         ? "OPTIONAL"
         : ["X", "P"].includes(e.code)
           ? "NONE"
@@ -81,6 +89,10 @@ describe("SHIFT_CATALOG — 21 mã theo tab DANH MỤC CA", () => {
     expect(catalogByCode("P")!.isLeave).toBe(true);
     expect(catalogByCode("LD")!.nominalMinutes).toBeNull(); // T-03: 1 công, 0 giờ
     expect(catalogByCode("NG")!.nominalMinutes).toBe(450);
+    // Ba vế của cú đảo phải khớp nhau — thiếu một vế là cấu hình vô nghĩa (xem bảng chốt).
+    expect(catalogByCode("NG")!.attendanceMode).toBe("REQUIRED");
+    expect(catalogByCode("NG")!.soCapQuetKyVong).toBe(1);
+    expect(catalogByCode("NG")!.defaultPlace).toBe("OFFSITE");
   });
 
   it("cột hiển thị chép đúng chữ Sheet cho vài mã tiêu biểu", () => {

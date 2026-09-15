@@ -48,6 +48,173 @@ d("vé + ghi lượt + tính lại", () => {
     await db.$disconnect();
   });
 
+  // ══ ĐƯỜNG CÔNG TÁC (phần A, 15/09/2026) ═══════════════════════════════════════════════
+  //
+  // `workLocationId: null` — không mã QR, không điểm chấm, không geofence. Bốn ca dưới đây
+  // canh đúng bốn khẳng định của bản vá, và mỗi ca tự dọn lượt của mình (luật 18).
+  describe("lượt CÔNG TÁC — workLocationId = null", () => {
+    const homNay = () => vnDateOnly(new Date());
+    const donDep = async () => {
+      await db.staffTimeLog.deleteMany({ where: { userId } });
+      await db.staffAttendanceDay.deleteMany({ where: { userId } });
+    };
+    // 🔴 DỌN SAU khối này, không chỉ dọn TRƯỚC mỗi ca.
+    //
+    // Bản đầu chỉ có `donDep()` ở đầu từng ca, và ca "điểm ĐÃ bật định vị" đứng SAU khối
+    // này lập tức ĐỎ với `TRUNG_2_PHUT`: lượt CHECK_IN cuối của tôi còn nằm đó, cách lượt
+    // của ca kia chưa tới 2 phút. Đúng luật 18 — và đúng chữ ký của nó: ca vô tội đứng sau
+    // là ca báo lỗi.
+    afterAll(async () => {
+      await donDep();
+      await db.shiftAssignment.deleteMany({ where: { userId } });
+      await db.center.deleteMany({ where: { slug: `${TAG}-cs2` } });
+    });
+
+    it("ghi được KHÔNG cần điểm chấm, và centerId = CƠ SỞ NHÀ của người đó", async () => {
+      await donDep();
+      const r = await mod.recordTimeLog({
+        userId,
+        workLocationId: null,
+        direction: "CHECK_IN",
+        latitude: 16.05,
+        longitude: 108.22,
+        accuracyMeters: 12,
+        source: "CONG_TAC",
+      });
+      expect(r.ok, "đường công tác KHÔNG được bị từ chối vì thiếu điểm chấm").toBe(true);
+      if (!r.ok) return;
+      // Chốt của chủ dự án: "centerId = CƠ SỞ TRỰC THUỘC của người đó (chi phí về nơi họ
+      // thuộc về)". Người này có `User.centerId = centerId` ⇒ `resolveHomeCenter` trả về nó.
+      expect(r.centerId).toBe(centerId);
+
+      const log = await db.staffTimeLog.findUnique({
+        where: { id: r.logId },
+        select: {
+          workLocationId: true, source: true, centerId: true,
+          latitude: true, longitude: true, accuracyMeters: true,
+          distanceMeters: true, withinGeofence: true, flags: true,
+        },
+      });
+      expect(log!.workLocationId).toBeNull();
+      // `source` riêng — chủ dự án chốt "có source riêng trong StaffTimeLog để phân biệt được".
+      expect(log!.source).toBe("CONG_TAC");
+      // TOẠ ĐỘ VẪN LƯU dù không có điểm chấm để so.
+      expect(log!.latitude).toBeCloseTo(16.05, 4);
+      expect(log!.accuracyMeters).toBe(12);
+      // Không có điểm chấm ⇒ không đo được khoảng cách. `null`, KHÔNG phải 0.
+      expect(log!.distanceMeters).toBeNull();
+      expect(log!.withinGeofence).toBeNull();
+      // Không cờ vị trí nào: đường này KHÔNG tự gắn cờ (chủ dự án: "hiện toạ độ cho quản lý
+      // rà, không tự gắn cờ").
+      expect(log!.flags).not.toContain("NGOAI_VUNG");
+      expect(log!.flags).not.toContain("CHUA_TOA_DO");
+      expect(log!.flags).not.toContain("THIEU_GPS");
+    });
+
+    it("KHÔNG lấy được vị trí vẫn GHI, chỉ gắn cờ THIEU_GPS", async () => {
+      await donDep();
+      // "Người ở chỗ sóng kém mà không chấm được là hỏng đúng mục đích."
+      const r = await mod.recordTimeLog({
+        userId, workLocationId: null, direction: "CHECK_IN",
+        latitude: null, longitude: null, source: "CONG_TAC",
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.flags).toContain("THIEU_GPS");
+    });
+
+    it("GPS lệch quá 200m vẫn ghi, gắn cờ GPS_KEM_CHINH_XAC", async () => {
+      await donDep();
+      const r = await mod.recordTimeLog({
+        userId, workLocationId: null, direction: "CHECK_IN",
+        latitude: 16.05, longitude: 108.22, accuracyMeters: 950, source: "CONG_TAC",
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.flags).toContain("GPS_KEM_CHINH_XAC");
+      expect(r.flags).not.toContain("THIEU_GPS");
+    });
+
+    // 🔑 `centerId` lấy từ CƠ SỞ NHÀ, KHÔNG phải cơ sở ô ca được xếp.
+    //
+    // Ca này cố ý cho hai giá trị KHÁC NHAU. Bản đầu của fixture để ô ca cùng cơ sở với
+    // người, và lượt cấy `wl?.centerId ?? assignment?.centerId ?? home.centerId` ra XANH —
+    // hai đường cho cùng một kết quả nên chẳng phân biệt được gì (luật 8, tầng sâu).
+    it("centerId = cơ sở NHÀ, kể cả khi ô ca hôm nay được xếp ở cơ sở KHÁC", async () => {
+      await donDep();
+      const cs2 = await db.center.upsert({
+        where: { slug: `${TAG}-cs2` },
+        update: {},
+        create: { slug: `${TAG}-cs2`, name: "CS2 timelog", address: "y", code: `${TAG}-CS2` },
+        select: { id: true },
+      });
+      const tpl = await db.shiftTemplate.findFirst({ where: { code: "NG" }, select: { id: true } });
+      await db.shiftAssignment.create({
+        data: {
+          userId, centerId: cs2.id, workDate: homNay(), templateId: tpl!.id, templateCode: "NG",
+          placeMode: "OFFSITE", attendanceMode: "REQUIRED", soCapQuetKyVong: 1,
+          segments: [], status: "ACTIVE", source: "MANUAL",
+        },
+      });
+      const r = await mod.recordTimeLog({
+        userId, workLocationId: null, direction: "CHECK_IN", source: "CONG_TAC",
+        latitude: 16.05, longitude: 108.22,
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      // "Chi phí về nơi họ THUỘC VỀ", không phải nơi ca được xếp.
+      expect(r.centerId).toBe(centerId);
+      expect(r.centerId).not.toBe(cs2.id);
+      await db.shiftAssignment.deleteMany({ where: { userId } });
+    });
+
+    // Ca AT_UNITS + KHÔNG có điểm chấm: nhánh `SAI_NOI_LAM` đọc `wl.orgUnitId`/`wl.centerId`,
+    // nên thiếu cổng `wl != null` là NÉM LỖI chứ không phải gắn cờ nhầm. Ca này canh đúng đó.
+    it("ca AT_UNITS nhưng lượt KHÔNG có điểm chấm → không SAI_NOI_LAM, không ném lỗi", async () => {
+      await donDep();
+      const tpl = await db.shiftTemplate.findFirst({ where: { code: "S" }, select: { id: true } });
+      await db.shiftAssignment.create({
+        data: {
+          userId, centerId, workDate: homNay(), templateId: tpl!.id, templateCode: "S",
+          placeMode: "AT_UNITS", attendanceMode: "REQUIRED", soCapQuetKyVong: 1,
+          segments: [], status: "ACTIVE", source: "MANUAL",
+        },
+      });
+      const r = await mod.recordTimeLog({
+        userId, workLocationId: null, direction: "CHECK_IN", source: "CONG_TAC",
+        latitude: 16.05, longitude: 108.22,
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.flags).not.toContain("SAI_NOI_LAM");
+      await db.shiftAssignment.deleteMany({ where: { userId } });
+    });
+
+    it("KHÔNG gắn SAI_NOI_LAM — ca công tác không có nơi nào để sai", async () => {
+      await donDep();
+      // Vế đối xứng (luật 16): ca công tác là OFFSITE nên nhánh SAI_NOI_LAM không chạy, dù
+      // người đó đang đứng ở đâu.
+      const tpl = await db.shiftTemplate.findFirst({ where: { code: "NG" }, select: { id: true } });
+      await db.shiftAssignment.create({
+        data: {
+          userId, centerId, workDate: homNay(), templateId: tpl!.id, templateCode: "NG",
+          placeMode: "OFFSITE", attendanceMode: "REQUIRED", soCapQuetKyVong: 1,
+          segments: [], status: "ACTIVE", source: "MANUAL",
+        },
+      });
+      const r = await mod.recordTimeLog({
+        userId, workLocationId: null, direction: "CHECK_IN",
+        latitude: 21.03, longitude: 105.85, source: "CONG_TAC", // Hà Nội, cách CS1 ~760km
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.flags).not.toContain("SAI_NOI_LAM");
+      // Có ca xếp ⇒ cũng không phải "chấm ngoài lịch".
+      expect(r.flags).not.toContain("CHAM_NGOAI_LICH");
+      await db.shiftAssignment.deleteMany({ where: { userId } });
+    });
+  });
+
   it("vé: cấp → tiêu được đúng 1 lần; sai nonce / dùng lại / hết hạn đều fail-closed", async () => {
     const t = await mod.issueTicket({ userId, workLocationId: wlId });
     expect(await mod.consumeTicket({ ticketId: t.ticketId, nonce: "sai", userId })).toEqual({ ok: false, reason: "TICKET_INVALID" });

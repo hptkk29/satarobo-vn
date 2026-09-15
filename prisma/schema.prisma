@@ -8722,6 +8722,10 @@ enum StaffTimeLogSource {
   LEGACY_CHECKIN // chuyển từ EmployeeCheckin cũ
   MANUAL_ADJUST // TIMESHEET_FIX được duyệt
   KIOSK
+  /// Bấm Check in/out ở màn "Của tôi" cho ngày CÔNG TÁC — không QR, không điểm chấm,
+  /// `workLocationId = null`. Là ĐƯỜNG THỨ HAI, cố ý phân biệt được ở DB với đường QR
+  /// (chốt phần A 15/09/2026: "có source riêng trong StaffTimeLog để phân biệt được").
+  CONG_TAC
 }
 
 enum StaffTimeLogResult {

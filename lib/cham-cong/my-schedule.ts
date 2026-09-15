@@ -153,3 +153,58 @@ export async function getMyPeriod(userId: string, periodKey: string): Promise<My
     lockedAt: r?.lockedAt ?? null,
   };
 }
+
+export type MyTapRow = {
+  id: string;
+  direction: "CHECK_IN" | "CHECK_OUT";
+  loggedAt: Date;
+  source: string;
+  flags: string[];
+};
+
+/**
+ * Lượt chấm ĐÃ GHI NHẬN của chính người này trong một ngày.
+ *
+ * Đọc `db` trần theo đúng khuôn own-rows của file này: khoá tra là `userId` của phiên, nên
+ * không có gì để scope. Đi qua `scopedDb` ở đây còn ẩn oan — lượt công tác mang `centerId`
+ * là cơ sở NHÀ, có thể khác cơ sở người đang xem được gán.
+ *
+ * Chỉ `ACCEPTED`: lượt `REJECTED` (vé hỏng, ngoài vùng) ghi để hậu kiểm, KHÔNG phải thứ nói
+ * với người dùng rằng "bạn đã chấm rồi".
+ */
+export async function getMyTapsOfDay(userId: string, workDate: Date): Promise<MyTapRow[]> {
+  const rows = await db.staffTimeLog.findMany({
+    where: { userId, workDate, result: "ACCEPTED" },
+    select: { id: true, direction: true, loggedAt: true, source: true, flags: true },
+    orderBy: { loggedAt: "asc" },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    direction: r.direction as "CHECK_IN" | "CHECK_OUT",
+    loggedAt: r.loggedAt,
+    source: r.source,
+    flags: r.flags,
+  }));
+}
+
+export type MyCaHomNay = {
+  templateCode: string;
+  placeMode: "AT_UNITS" | "ANY_CENTER" | "OFFSITE" | "ANYWHERE";
+  soCapQuetKyVong: number;
+};
+
+/**
+ * Ca được xếp cho chính người này trong một ngày — đủ để màn "Của tôi" biết hiện nút gì.
+ *
+ * Trả `placeMode` chứ KHÔNG trả riêng "có phải mã NG không": chủ dự án chốt hai nút công tác
+ * hiện theo ĐIỀU KIỆN, không theo mã. Mã nào khai `OFFSITE` cũng được nút.
+ */
+export async function getMyShiftOfDay(userId: string, workDate: Date): Promise<MyCaHomNay | null> {
+  const a = await db.shiftAssignment.findFirst({
+    where: { userId, workDate, status: "ACTIVE" },
+    select: { templateCode: true, placeMode: true, soCapQuetKyVong: true },
+  });
+  return a
+    ? { templateCode: a.templateCode, placeMode: a.placeMode, soCapQuetKyVong: a.soCapQuetKyVong }
+    : null;
+}
