@@ -110,7 +110,10 @@ async function main() {
 
   const nguoi = await db.user.findUnique({
     where: { id: userId },
-    select: { id: true, name: true, email: true },
+    // CỐ Ý không lấy `name`/`email`: log Actions của repo PUBLIC ai cũng đọc được, và
+    // `userId` đã đủ để xác nhận đúng dòng (nó được dán từ đầu ra của phép ĐO).
+    // Không lấy thì không lỡ in — chốt 15/09/2026.
+    select: { id: true },
   });
   if (!nguoi) {
     console.error(`Không có user id=${userId}. DỪNG, không chạm gì.`);
@@ -120,7 +123,7 @@ async function main() {
   // Cơ sở "nhà" đọc bằng ĐÚNG hàm `recompute` sẽ gọi — không tự suy từ `User.centerId`
   // (`timesheetExempt` nằm trên `Employee`, không nằm trên `User`).
   const nha = await resolveHomeCenter(userId);
-  console.log(`  người : ${nguoi.name ?? nguoi.email ?? nguoi.id}  (id=${nguoi.id})`);
+  console.log(`  người : ${nguoi.id}`);
   console.log(`  ngày  : ${vnYmd(workDate)}`);
   console.log(`  nhà   : ${nha.centerCode} (${nha.centerId})${nha.isHo ? "  ← Hội sở" : ""}`);
   if (nha.timesheetExempt) {
