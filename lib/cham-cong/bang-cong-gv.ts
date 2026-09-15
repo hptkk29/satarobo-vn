@@ -218,8 +218,24 @@ export type TomTatCong = {
   cong: number;
   congChuan: So;
   phutLam: number;
+  /**
+   * Σ `expectedMinutes` — giờ theo KẾ HOẠCH của các ca đã xếp.
+   *
+   * Luôn đi CẶP với `phutLam` khi hiển thị. Một mình `phutLam` không nói được gì: 120 giờ
+   * là nhiều hay ít phụ thuộc tháng ấy xếp bao nhiêu ca, và người đọc không có sẵn con số
+   * kia trong đầu.
+   */
+  phutKeHoach: number;
   ngayDaCham: number;
   ngayCoCa: number;
+  /**
+   * Ngày CÓ CA mà chưa có dấu quét nào (`ngayCoCa − ngayDaCham`, chặn dưới ở 0).
+   *
+   * Tính ở đây chứ không để trang RSC tự trừ: đây đúng lớp phép nối mà luật 12b cấm đặt
+   * inline trong trang — không có chỗ cấy lỗi, và ba lần trước site GV đã tự dựng lại số
+   * của admin theo đúng kiểu ấy.
+   */
+  chuaCham: number;
   ngayCanXuLy: number;
   kyTrangThai: "OPEN" | "CLOSING" | "LOCKED" | "REOPENED" | null;
   kyChotLuc: Date | null;
@@ -322,8 +338,13 @@ export function tomTatCongThang(input: {
     cong: g.units,
     congChuan: input.congChuan,
     phutLam: g.workedMinutes,
+    phutKeHoach: g.expectedMinutes,
     ngayDaCham,
     ngayCoCa: g.ngayCoCa,
+    // `Math.max(0, …)`: `ngayCoCa` đếm ngày `WORK` có kế hoạch công, còn `ngayDaCham` đếm
+    // ngày `WORK` có kế hoạch công VÀ có dấu — nên hiệu không âm được. Chặn dưới là để một
+    // ngày sửa định nghĩa một trong hai vế thì hỏng ra lỗi, không hỏng ra số âm trên màn.
+    chuaCham: Math.max(0, g.ngayCoCa - ngayDaCham),
     ngayCanXuLy,
     kyTrangThai: input.kyTrangThai,
     kyChotLuc: input.kyChotLuc,
