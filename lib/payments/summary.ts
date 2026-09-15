@@ -19,6 +19,31 @@ export type LeadPaymentSummary = {
   scholarshipFull: boolean;
   /** Đủ điều kiện chốt ghi danh (guard: có khoản ghi nhận HOẶC miễn phí toàn phần). */
   eligible: boolean;
+  /**
+   * ĐƠN CỦA LEAD, để trang lead bấm SANG được (15/09/2026).
+   *
+   * Chủ dự án: *"khi khách hàng đến để đóng đợt 2 thì sale vào lead đó rồi bấm sang
+   * hoá đơn để cung cấp mã QR đóng đợt 2 cho KH."* Trước bản này card thanh toán của
+   * lead BIẾT là đã có đơn (`hasOrder`) nhưng không có đường nào tới đơn đó — sale
+   * phải sang danh sách đơn rồi tự tìm theo tên.
+   */
+  donHang: Array<{
+    id: string;
+    code: string;
+    totalAmount: number;
+    /** Σ `Payment` (trục B) của ĐÚNG đơn này. */
+    daThu: number;
+    conThieu: number;
+    /**
+     * Đợt CHƯA thu xong gần nhất — để nút nói đúng việc sale sắp làm
+     * ("Đóng đợt 2 · 3.000.000đ") thay vì một chữ "Xem đơn" vô nghĩa.
+     *
+     * ⚠️ Đọc `PaymentRequest.status` chứ KHÔNG tự cộng lại allocation:
+     * `recomputeRequestStatuses` là nơi duy nhất quyết định PENDING/PARTIAL/PAID, và
+     * dựng phép tính thứ hai ở đây là đẻ ra một con số thứ hai để lệch.
+     */
+    dotKeTiep: { soDot: number; conThieu: number } | null;
+  }>;
 };
 
 /**
@@ -39,12 +64,23 @@ export async function getLeadPaymentSummary(
   const orders = await sdb.order.findMany({
     where: { leadId, deletedAt: null },
     select: {
+      id: true,
+      code: true,
       totalAmount: true,
       payments: {
         where: KHOAN_DA_GHI_NHAN,
         select: { amount: true },
       },
+      // Phiếu thu THEO ĐỢT còn nợ, đợt nhỏ nhất trước — đợt sale sắp thu.
+      // `installmentNo > 0` loại phiếu "thu toàn đơn" (số 0): nó không phải một đợt.
+      paymentRequests: {
+        where: { installmentNo: { gt: 0 }, status: { in: ["PENDING", "PARTIAL"] } },
+        select: { installmentNo: true, amountDue: true, allocations: { select: { amount: true } } },
+        orderBy: { installmentNo: "asc" },
+        take: 1,
+      },
     },
+    orderBy: { createdAt: "desc" },
   });
 
   let total = 0;
@@ -63,5 +99,30 @@ export async function getLeadPaymentSummary(
   const scholarshipFull = hasOrder && total === 0;
   const eligible = recordedCount > 0 || scholarshipFull;
 
-  return { paid, total, remaining, recordedCount, hasOrder, scholarshipFull, eligible };
+  const donHang = orders.map((o) => {
+    const daThu = o.payments.reduce((s, x) => s + x.amount, 0);
+    const pr = o.paymentRequests[0];
+    const daRot = pr ? pr.allocations.reduce((s, a) => s + a.amount, 0) : 0;
+    return {
+      id: o.id,
+      code: o.code,
+      totalAmount: o.totalAmount,
+      daThu,
+      conThieu: Math.max(0, o.totalAmount - daThu),
+      dotKeTiep: pr
+        ? { soDot: pr.installmentNo, conThieu: Math.max(0, pr.amountDue - daRot) }
+        : null,
+    };
+  });
+
+  return {
+    paid,
+    total,
+    remaining,
+    recordedCount,
+    hasOrder,
+    scholarshipFull,
+    eligible,
+    donHang,
+  };
 }

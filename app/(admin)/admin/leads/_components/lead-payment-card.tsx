@@ -22,7 +22,7 @@ export function LeadPaymentCard({
    */
   canCreateOrder?: boolean;
 }) {
-  const { paid, total, remaining, hasOrder, scholarshipFull, eligible } = summary;
+  const { paid, total, remaining, hasOrder, scholarshipFull, eligible, donHang } = summary;
 
   return (
     <div className="rounded-xl border border-border bg-card p-4">
@@ -56,6 +56,37 @@ export function LeadPaymentCard({
           </span>
         )}
       </div>
+
+      {/* ── ĐƯỜNG SANG ĐƠN (15/09/2026) ───────────────────────────────────────
+          Chủ dự án: khách đến đóng đợt 2 ⇒ sale vào lead rồi "bấm sang hoá đơn để
+          cung cấp mã QR đóng đợt 2". Nhãn nút nói ĐÚNG việc sắp làm kèm SỐ TIỀN —
+          một chữ "Xem đơn" buộc sale mở ra rồi mới biết còn nợ đợt mấy.
+
+          Hiện ngay khi CÓ đơn, không chờ tiền về: mã QR của ĐỢT 1 cũng nằm trong
+          trang đó, và đó là việc đầu tiên sale cần sau khi tạo đơn. */}
+      {donHang.length > 0 && (
+        <div className="mt-3 space-y-1.5">
+          {donHang.map((d) => (
+            <Link
+              key={d.id}
+              href={`/orders/${d.id}`}
+              className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2 text-sm hover:bg-muted"
+            >
+              <span className="min-w-0">
+                <span className="block font-mono text-xs text-muted-foreground">{d.code}</span>
+                <span className="block font-medium text-foreground">
+                  {d.dotKeTiep
+                    ? `Đóng đợt ${d.dotKeTiep.soDot} · ${fmt(d.dotKeTiep.conThieu)}`
+                    : d.conThieu > 0
+                      ? `Còn thiếu ${fmt(d.conThieu)} — mở đơn để xuất QR`
+                      : "Đã thu đủ — mở đơn để xem"}
+                </span>
+              </span>
+              <span aria-hidden className="shrink-0 text-muted-foreground">→</span>
+            </Link>
+          ))}
+        </div>
+      )}
 
       {canCreateOrder && (
         <Link

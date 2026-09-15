@@ -726,7 +726,19 @@ export function OrderDetailClient({
                   </Link>
                 </O>
               )}
-              {order.lead && <O nhan="Lead">{order.lead.parentName}</O>}
+              {/* Đường VỀ lead — nửa còn lại của cặp liên kết (15/09/2026). Sale đi
+                  lead → đơn để xuất QR, rồi cần quay lại lead để ghi nhật ký gọi.
+                  Trước bản này đây là chữ trơ, và mũi tên một chiều là một nửa lời hứa. */}
+              {order.lead && (
+                <O nhan="Lead">
+                  <Link
+                    href={`/leads/${order.lead.id}`}
+                    className="font-medium text-primary underline underline-offset-2"
+                  >
+                    {order.lead.parentName}
+                  </Link>
+                </O>
+              )}
               {order.center && <O nhan="Trung tâm">{order.center.name}</O>}
             </dl>
           </Khoi>
