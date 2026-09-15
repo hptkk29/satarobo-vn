@@ -106,16 +106,23 @@ export async function GET(
 
   // Người thu — `recordedById` là String thuần, không có quan hệ Prisma.
   //
-  // ⚠️ KHÔNG còn tra `Center` ở đây [15/09/2026]. Bên bán trên phiếu là PHÁP NHÂN, không
-  // phải cơ sở: hai tờ mẫu mang hai mã số thuế khác nhau, và "258 Lê Thanh Nghị" (trụ sở
-  // đăng ký của Sata Robo) không phải địa chỉ của cơ sở nào. In tên/địa chỉ cơ sở vào ô
-  // "Đơn vị thu" là in sai pháp nhân — lý do đầy đủ ở đầu `lib/finance/hoa-don/phap-nhan.ts`.
-  const collector = payment.recordedById
-    ? await sdb.user.findUnique({
-        where: { id: payment.recordedById },
-        select: { name: true },
-      })
-    : null;
+  // ⚠️ Tra `Center` CHỈ để lấy `code`, KHÔNG lấy tên/địa chỉ. Bên bán trên phiếu là PHÁP
+  // NHÂN, không phải cơ sở: hai tờ mẫu mang hai mã số thuế khác nhau, và "258 Lê Thanh
+  // Nghị" (trụ sở đăng ký của Sata Robo) không phải địa chỉ của cơ sở nào. In tên/địa chỉ
+  // cơ sở vào ô "Đơn vị thu" là in sai pháp nhân.
+  //
+  // ⚠️ `macDinhTheoCoSo` khớp theo `Center.code` ("CS1"/"CS2"), còn `Order.centerId` giữ
+  // `Center.id` (slug "co-so-hoang-dieu"). Truyền thẳng `centerId` vào `phapNhanChoDon` là
+  // KHÔNG BAO GIỜ khớp dòng khai nào rồi âm thầm rơi về pháp nhân mặc định — tức in sai mã
+  // số thuế mà không lỗi nào báo. Tôi vừa viết đúng cái đó ở bản trước; nay đổi id→code.
+  const [collector, coSo] = await Promise.all([
+    payment.recordedById
+      ? sdb.user.findUnique({ where: { id: payment.recordedById }, select: { name: true } })
+      : Promise.resolve(null),
+    payment.order?.centerId
+      ? sdb.center.findUnique({ where: { id: payment.order.centerId }, select: { code: true } })
+      : Promise.resolve(null),
+  ]);
 
   // 30/08/2026 — mã phương thức nay có thể là mã riêng của cơ sở ("BANK_CS1"), không
   // nằm trong bảng nhãn cứng của lib/pdf/receipt.tsx. Tờ phiếu này đưa tận tay phụ
@@ -131,7 +138,7 @@ export async function GET(
   // ⚠️ `phapNhanChoDon` trả `null` khi không còn pháp nhân nào BẬT. Khi đó KHÔNG in một
   // mã số thuế đoán bừa: trả 409 để kế toán đi khai cấu hình.
   const cauHinh = CAU_HINH_HOA_DON_MAC_DINH;
-  const phapNhan = phapNhanChoDon(payment.order?.centerId ?? null, cauHinh);
+  const phapNhan = phapNhanChoDon(coSo?.code ?? null, cauHinh);
   if (!phapNhan) {
     return NextResponse.json(
       {

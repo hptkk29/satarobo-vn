@@ -67,6 +67,10 @@ export type CauHinhHoaDon = {
  * `macDinhTheoCoSo` để RỖNG có chủ đích: ba tờ mẫu không đủ để kết luận cơ sở nào phát
  * hành qua pháp nhân nào (tờ New Vision ghi tên một học viên, không ghi cơ sở). Đoán ở đây
  * là gán sai mã số thuế lên hoá đơn thật. Kế toán khai một lần ở màn Cấu hình vận hành.
+ *
+ * ⚠️ CẬP NHẬT 15/09/2026 — `macDinhTheoCoSo` KHÔNG còn rỗng: chủ dự án đã chốt
+ * *"cs1 là satarobo còn cs2 là new vision"*. Xem chú thích ngay tại ô đó, kèm số phiếu đã
+ * in SAI pháp nhân trong lúc ô này còn trống.
  */
 export const CAU_HINH_HOA_DON_MAC_DINH: CauHinhHoaDon = {
   phapNhan: [
@@ -94,7 +98,30 @@ export const CAU_HINH_HOA_DON_MAC_DINH: CauHinhHoaDon = {
       bat: true,
     },
   ],
-  macDinhTheoCoSo: [],
+  /**
+   * ÁNH XẠ CƠ SỞ → PHÁP NHÂN — chủ dự án chốt 15/09/2026:
+   * *"cs1 là satarobo còn cs2 là new vision đấy nhé"*.
+   *
+   * Trước đó ô này để RỖNG có chủ đích vì ba tờ mẫu không nói được điều này (tờ New Vision
+   * ghi tên một học viên, không ghi cơ sở). Nay có người quyết nên khai thẳng.
+   *
+   * ⚠️ HỆ QUẢ ĐO ĐƯỢC CỦA VIỆC BỎ TRỐNG: `phapNhanChoDon` rơi về `phapNhanMacDinh`, nên
+   * phiếu RCP-CS2-26-0011 của đơn ORD-260915-000010 (cơ sở **CS2**) in ra "CÔNG TY … SATA
+   * ROBO · MST 0402301783" — SAI PHÁP NHÂN, sai mã số thuế, trên giấy đưa phụ huynh. Bỏ
+   * trống không phải trạng thái trung tính: nó im lặng chọn pháp nhân đầu tiên.
+   *
+   * ⚠️ Vẫn KHÔNG suy từ địa chỉ. Địa chỉ New Vision ("114–116 Hoàng Diệu") TRÙNG địa chỉ
+   * CS2, nên lần này suy theo địa chỉ sẽ đúng — đúng NGẪU NHIÊN. Sata Robo đăng ký ở "258
+   * Lê Thanh Nghị", không phải cơ sở nào, nên cùng phép suy đó lại không tìm ra CS1. Đây là
+   * DỮ LIỆU KHAI, và chỉ người vận hành mới nói được.
+   *
+   * ⚠️ `maCoSo` là `Center.code` ("CS1"/"CS2"), KHÔNG phải `Center.id` (id là slug
+   * "co-so-nguyen-huu-tho"). Đo trên DB 15/09: code CS1 · CS2 · CS91 · CS92 · HO · ITLI_HO.
+   */
+  macDinhTheoCoSo: [
+    { maCoSo: "CS1", maPhapNhan: "SATA_ROBO" },
+    { maCoSo: "CS2", maPhapNhan: "NEW_VISION" },
+  ],
   phapNhanMacDinh: "SATA_ROBO",
   thue: [
     {
