@@ -205,6 +205,21 @@ describe("tomTatCongThang — chi tiết", () => {
     expect([t.nghiPhep, t.nghiTuan, t.nghiLe]).toEqual([3, 2, 1]);
   });
 
+  it("nghỉ phép tách tiếp CÓ LƯƠNG / KHÔNG LƯƠNG, và hai vế phải cộng lại bằng tổng", () => {
+    // 2 có lương / 1 không — LỆCH nhau, kẻo đảo hai nhóm vẫn ra đúng số cũ (luật 8 tầng sâu).
+    const t = tomTatCongThang({
+      ...THANG_9,
+      ngay: [
+        ngay({ workDate: utc(2026, 9, 1), dayType: "LEAVE", leaveUnits: 1 }),
+        ngay({ workDate: utc(2026, 9, 2), dayType: "LEAVE", leaveUnits: 0.5 }),
+        ngay({ workDate: utc(2026, 9, 3), dayType: "LEAVE", leaveUnits: 0 }),
+      ],
+    });
+    expect(t.nghiPhepCoLuong).toBe(2);
+    expect(t.nghiPhepKhongLuong).toBe(1);
+    expect(t.nghiPhepCoLuong + t.nghiPhepKhongLuong).toBe(t.nghiPhep);
+  });
+
   it("công tác: đếm ngày mã NG, và tách riêng ngày ĐỦ CẶP vào/ra", () => {
     const t = tomTatCongThang({
       ...THANG_9,

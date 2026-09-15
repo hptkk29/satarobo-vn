@@ -413,6 +413,20 @@ export default async function TeacherTimesheetPage({
   ]);
   const congDay = congDayCuaNguoi(buoiDayThat, danhMucCongDay);
 
+  // BUỔI QUÁ HẠN CHƯA CHỐT — "việc phải làm", nên nó đi kèm ĐƯỜNG ĐI, không chỉ con số.
+  //
+  // Phạm vi: ĐÚNG tháng đang xem (cùng `sessions` mà bảng dưới dùng), không phải mọi thời
+  // gian — hai phạm vi khác nhau trên cùng một màn là cách chắc chắn để người ta cộng nhầm.
+  // Nhãn nói rõ "trong tháng này".
+  //
+  // `IN_PROGRESS` CỐ Ý cũng tính: buổi mở ra rồi bỏ dở vẫn là buổi chưa chốt, và với người
+  // dạy thì việc phải làm y hệt. Chỉ `COMPLETED` mới là xong (`CANCELLED` đã bị loại từ truy vấn).
+  const buoiQuaHan = sessions.filter(
+    (s) =>
+      (s.status as SessionStatus) !== "COMPLETED" &&
+      dayKeyFmt.format(s.date) < todayKey,
+  ).length;
+
   // ── Chuẩn hoá về CA rows ──────────────────────────────────────────────────────
   // 🔴 Phép nối "ngày công đã tính × ca đã xếp" nằm ở `lib/cham-cong/bang-cong-gv.ts`, KHÔNG
   // ở đây. Trang chỉ chuyển dữ liệu về hình dạng của hàm đó rồi in ra. Đây là chỗ đã ba lần
@@ -617,6 +631,8 @@ export default async function TeacherTimesheetPage({
               tieuDe="Ngày nghỉ"
               dong={[
                 ["Nghỉ phép (P)", `${tomTat.nghiPhep} ngày`],
+                ["— trong đó có lương", `${tomTat.nghiPhepCoLuong} ngày`],
+                ["— không lương", `${tomTat.nghiPhepKhongLuong} ngày`],
                 ["Nghỉ theo ca (X)", `${tomTat.nghiTuan} ngày`],
                 ["Nghỉ lễ", `${tomTat.nghiLe} ngày`],
               ]}
@@ -641,7 +657,7 @@ export default async function TeacherTimesheetPage({
           </div>
 
           {/* ── C · CÔNG DẠY — chỉ hiện khi CÓ ───────────────────────────────── */}
-          {congDay.dong.length > 0 && (
+          {(congDay.dong.length > 0 || buoiQuaHan > 0) && (
             <div className="border-t border-border px-4 py-4 sm:px-5">
               <div className="mb-3">
                 <h3 className="text-xs font-bold tracking-wide text-muted-foreground uppercase">
@@ -654,6 +670,17 @@ export default async function TeacherTimesheetPage({
                   lịch, buổi dạy là LẦN đứng lớp, và một ngày có thể có nhiều buổi.
                 </p>
               </div>
+              {buoiQuaHan > 0 && (
+                <Link
+                  href="/teacher/diem-danh"
+                  className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-state-warning-soft px-3 py-2 text-sm font-semibold text-state-warning-ink hover:underline"
+                >
+                  {buoiQuaHan} buổi trong tháng này đã qua ngày mà chưa chốt
+                  <span className="text-xs font-normal">
+                    — mở màn Điểm danh để chốt →
+                  </span>
+                </Link>
+              )}
               <div className="grid gap-px bg-border sm:grid-cols-2 xl:grid-cols-4">
                 {congDay.dong.map((d) => (
                   <div key={d.code} className="bg-card p-3">

@@ -231,6 +231,9 @@ export type TomTatCong = {
   earlyPhut: number;
   thieuLuotNgay: number;
   nghiPhep: number;
+  /** Trong `nghiPhep`. Engine đã ghi sẵn phần hưởng lương ở `leaveUnits` — không suy từ mã ca. */
+  nghiPhepCoLuong: number;
+  nghiPhepKhongLuong: number;
   nghiTuan: number;
   nghiLe: number;
   congTacNgay: number;
@@ -274,6 +277,8 @@ export function tomTatCongThang(input: {
   const g = gopNgayCong(input.ngay);
 
   let nghiPhep = 0;
+  let nghiPhepCoLuong = 0;
+  let nghiPhepKhongLuong = 0;
   let nghiTuan = 0;
   let nghiLe = 0;
   let congTacNgay = 0;
@@ -285,7 +290,11 @@ export function tomTatCongThang(input: {
   for (const d of input.ngay) {
     if (d.dayType === "HOLIDAY") nghiLe += 1;
     else if (d.dayType === "WEEKLY_OFF") nghiTuan += 1;
-    else if (d.dayType === "LEAVE") nghiPhep += 1;
+    else if (d.dayType === "LEAVE") {
+      nghiPhep += 1;
+      if (d.leaveUnits > 0) nghiPhepCoLuong += 1;
+      else nghiPhepKhongLuong += 1;
+    }
 
     if (d.templateCode && MA_CONG_TAC.has(d.templateCode)) {
       congTacNgay += 1;
@@ -325,6 +334,8 @@ export function tomTatCongThang(input: {
     earlyPhut: g.earlyLeavePhut,
     thieuLuotNgay,
     nghiPhep,
+    nghiPhepCoLuong,
+    nghiPhepKhongLuong,
     nghiTuan,
     nghiLe,
     congTacNgay,
