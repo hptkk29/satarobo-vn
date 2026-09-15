@@ -84,22 +84,29 @@ export type TienDong = {
 };
 
 /**
- * LUẬT CỘNG DỒN — đọc kỹ, đây là chỗ quyết định số tiền.
+ * LUẬT CỘNG DỒN — CHỐT CỦA CHỦ DỰ ÁN 15/09/2026. Đây là chỗ quyết định số tiền.
  *
- * Mỗi khoản % tính trên TẠM TÍNH GỐC của dòng, KHÔNG lũy tiến trên phần còn lại.
- *   10% + 500.000đ trên dòng 2.400.000đ  ⇒  240.000 + 500.000 = 740.000
- *   (lũy tiến sẽ ra 240.000 + 500.000 = 740.000 ở ca này, nhưng 10% + 20% thì khác hẳn:
- *    cộng dồn = 30% · lũy tiến = 28%.)
+ * Nguyên văn: *"2 dòng là để 1 dòng giảm theo tiền 1 dòng giảm theo % thôi, còn nếu
+ * cả 2 dòng đều giảm % thì = TỔNG % 2 dòng."*
  *
- * Vì sao chọn cộng dồn:
- *   · Đó là cách phụ huynh tự tính. "Giảm 10% rồi giảm tiếp 20%" — không ai nhẩm ra 28%,
- *     và một con số khách không nhẩm được là một cuộc gọi thắc mắc.
- *   · Đó là cách MỘT khoản giảm đang chạy hôm nay đã tính (% trên `tamTinh`), nên không
- *     có đơn cũ nào đổi nghĩa.
- *   · Lũy tiến làm THỨ TỰ GÕ thành yếu tố quyết định số tiền — sắp xếp lại hai khoản
- *     trên màn hình là đổi tiền, mà không có gì trên màn hình nói ra điều đó.
+ * ⇒ Mỗi khoản % tính trên TẠM TÍNH GỐC của dòng, KHÔNG lũy tiến trên phần còn lại:
+ *     10%  + 500.000đ  trên 2.400.000đ  ⇒  240.000 + 500.000 = 740.000
+ *     10%  + 20%       trên 1.000.000đ  ⇒  **30%** = 300.000  (lũy tiến sẽ ra 28%)
  *
- * Muốn đổi sang lũy tiến thì sửa ĐÚNG hàm này; đừng rải phép tính ra chỗ khác.
+ * ⚠️ ĐỪNG ĐỔI SANG LŨY TIẾN. Đây không còn là một lựa chọn kỹ thuật để cân đo — nó là
+ * quyết định nghiệp vụ đã ký. Ba lý do đứng sau nó, để người sau hiểu vì sao chứ không
+ * phải để mở lại cuộc tranh luận:
+ *   · Đó là cách phụ huynh tự nhẩm. "Giảm 10% rồi giảm tiếp 20%" — không ai nhẩm ra
+ *     28%, và một con số khách không nhẩm được là một cuộc gọi thắc mắc.
+ *   · Đó là cách MỘT khoản giảm vốn đã tính (% trên `tamTinh`) ⇒ không đơn cũ nào đổi
+ *     nghĩa khi cột `discounts` ra đời.
+ *   · Lũy tiến làm THỨ TỰ GÕ thành yếu tố quyết định số tiền — kéo đổi chỗ hai khoản
+ *     trên màn hình là đổi tiền, mà không gì trên màn hình nói ra điều đó.
+ *
+ * Chủ dự án cũng xác nhận ca "hai khoản cùng kiểu %" là ca BIÊN, không phải ca thường
+ * ("sẽ không có trường hợp đó xảy ra đâu") — nhưng luật vẫn phải khai tường minh, vì
+ * một ca biên không được khai là một ca biên sẽ tự chọn hành vi vào ngày nó xảy ra.
+ * Ghim ở [GGD-07].
  *
  * ⚠️ KẸP THEO PHẦN CÒN LẠI, và `giam` ghi SỐ THẬT. Khi tổng vượt tạm tính, khoản cuối bị
  * cắt bớt chứ không phải cả dòng bị kẹp ở tổng: nhờ vậy bảng hiển thị cộng các khoản LUÔN

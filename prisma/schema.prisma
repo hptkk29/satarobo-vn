@@ -4253,6 +4253,11 @@ model OrderItem {
   ///
   /// `[{ kieu: "SO_TIEN"|"PHAN_TRAM", giaTri: number, giam: number, lyDo: string|null }]`
   ///
+  /// Cột JSON (thay vì bảng `OrderItemDiscount` riêng) và luật `discountPercent = NULL
+  /// khi nhiều khoản` là hai đề xuất của người viết mã, chủ dự án đã PHÊ 15/09/2026
+  /// ("bạn tự đề xuất rồi tự quyết đi"). Lý do đầy đủ ở đầu migration
+  /// `20260915170000_order_item_nhieu_giam_gia`.
+  ///
   /// ⚠️ KHÔNG phải sổ tiền thứ hai. Số tiền của dòng vẫn là `discountAmount` (Int) và
   /// `Order.discountAmount` = Σ cột đó; mảng này là BẢN GIẢI THÍCH của con số ấy. Ai
   /// cộng tiền thì cộng `discountAmount`, không duyệt JSON.

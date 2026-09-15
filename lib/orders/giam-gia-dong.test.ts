@@ -73,10 +73,17 @@ describe("[GGD] tiền của một dòng", () => {
 });
 
 describe("[GGD] NHIỀU khoản trên một dòng", () => {
-  it("[GGD-07] các khoản CỘNG DỒN, không lũy tiến", () => {
+  it("[GGD-07] các khoản CỘNG DỒN, không lũy tiến — CHỐT 15/09/2026", () => {
     // Ca phân biệt hai luật: cộng dồn = 30%, lũy tiến = 1 − 0,9×0,8 = 28%.
-    // Chọn cộng dồn vì đó là cách phụ huynh tự nhẩm; một con số khách không nhẩm được
-    // là một cuộc gọi thắc mắc.
+    //
+    // CHỐT của chủ dự án, nguyên văn: "nếu cả 2 dòng đều giảm % thì = TỔNG % 2 dòng".
+    // Ca này KHÔNG phải để bảo vệ một suy luận của người viết mã — nó ghim một quyết
+    // định nghiệp vụ đã ký. Ai đổi `gopGiamGia` sang lũy tiến sẽ làm ca này đỏ, và đó
+    // là mục đích: buộc họ đọc chú thích ở hàm đó trước khi đổi tiền.
+    //
+    // Chủ dự án nói thêm ca này là ca BIÊN ("sẽ không có trường hợp đó xảy ra đâu" —
+    // thực tế là một khoản theo tiền + một khoản theo %). Vẫn ghim, vì một ca biên
+    // không được khai sẽ tự chọn hành vi vào ngày nó xảy ra.
     const t = tienDong({
       unitPrice: 1_000_000,
       quantity: 1,
@@ -84,6 +91,26 @@ describe("[GGD] NHIỀU khoản trên một dòng", () => {
     });
     expect(t.giam).toBe(300_000); // KHÔNG phải 280.000
     expect(t.thanhTien).toBe(700_000);
+    // Và phát biểu ĐÚNG NHƯ chủ dự án nói ra: tỉ lệ giảm thực tế = TỔNG hai con % đã gõ.
+    expect((t.giam / t.tamTinh) * 100).toBe(10 + 20);
+  });
+
+  it("[GGD-07b] hai khoản % cộng lại VƯỢT 100% ⇒ kẹp ở 100% của dòng, không âm", () => {
+    // Biên của luật cộng dồn. 60% + 60% = 120% là con số không tồn tại trong thực tế
+    // (chủ dự án: ca hai khoản cùng kiểu % vốn đã là ca biên), nhưng luật cộng dồn TỰ
+    // SINH ra khả năng đó, nên hành vi phải được khai chứ không để nó tự chọn.
+    const t = tienDong({
+      unitPrice: 1_000_000,
+      quantity: 1,
+      giam: [{ ...PCT, giaTri: 60 }, { ...PCT, giaTri: 60 }],
+    });
+    // Khoản 1 lấy đủ 60%; khoản 2 muốn 60% nhưng chỉ còn 40% ⇒ nhận 40%.
+    expect(t.khoan.map((k) => k.giam)).toEqual([600_000, 400_000]);
+    // Vẫn giữ bất biến quan trọng nhất: các khoản cộng lại ĐÚNG bằng tổng đã trừ.
+    expect(t.khoan.reduce((a, k) => a + k.giam, 0)).toBe(t.giam);
+    expect(t.thanhTien).toBe(0);
+    // `giaTri` của khoản 2 vẫn giữ Ý ĐỊNH 60 — dấu vết việc đã bị cắt không được mất.
+    expect(t.khoan[1]).toMatchObject({ giaTri: 60, phanTram: 60, giam: 400_000 });
   });
 
   it("[GGD-08] trộn % và số tiền — mỗi khoản tính trên tạm tính GỐC", () => {
