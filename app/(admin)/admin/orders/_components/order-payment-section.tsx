@@ -20,6 +20,8 @@ import {
 // Mặc định ô "đã thu" SUY TỪ TIỀN THẬT — thuần, dùng chung luật với cổng ở đường ghi.
 import { dotsBanDauTuTien } from "@/lib/payments/khai-da-thu";
 import { NGAY_NHAC_MAC_DINH } from "@/lib/payments/ke-hoach-don-moi";
+// MỘT câu trả lời cho một đợt, suy từ CẢ HAI SỔ — xem chú thích đầu tệp đó.
+import { trangThaiDot } from "@/lib/payments/trang-thai-dot";
 
 type Installment = {
   id: string;
@@ -246,29 +248,51 @@ export function OrderInstallmentPlan({
                 </span>
               )}
             </span>
-            {i.status === "PAID" ? (
-              // PA-A: PAID = Sale đã thu; chỉ ghi "KT đã xác nhận" khi đơn không còn khoản
-              // PENDING và kế toán đã ✓ (mapping đợt↔khoản là mức ĐƠN, không per-đợt).
-              accounting.pending === 0 && accounting.confirmed > 0 ? (
-                <span className="inline-flex items-center gap-1 whitespace-nowrap text-xs font-semibold text-state-success-ink">
-                  <BadgeCheck className="h-4 w-4" aria-hidden /> Sale đã thu · KT đã xác nhận
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 whitespace-nowrap text-xs font-semibold text-state-warning-ink">
-                  <BadgeCheck className="h-4 w-4" aria-hidden /> Sale đã thu — chờ kế toán
-                </span>
-              )
-            ) : canManage ? (
-              <button
-                onClick={() => markPaid(i.id)}
-                disabled={pending}
-                className="rounded bg-state-success-ink px-2 py-0.5 text-xs font-semibold text-white transition-opacity duration-150 disabled:opacity-50"
-              >
-                Đánh dấu đã đóng
-              </button>
-            ) : (
-              <span className="whitespace-nowrap text-xs text-state-warning-ink">Chờ đóng</span>
-            )}
+            {/* ── NHÃN ĐỢT ĐỌC CẢ HAI SỔ [15/09/2026] ──────────────────────────
+                Trước bản này nhãn chỉ đọc `OrderInstallment.status`, nên đợt mà TIỀN ĐÃ
+                VỀ qua QR vẫn bày nút "Đánh dấu đã đóng" — trong khi bảng Phiếu thu ngay
+                trên đã ghi "Đã đủ". Hai giọng cho một đợt, và giọng sai lại là giọng có
+                nút bấm. Luật ở `trangThaiDot`. */}
+            {(() => {
+              const tt = trangThaiDot({
+                soDot: i.soDot,
+                amountDue: i.amount,
+                daRot: daRotTheoDot.get(i.soDot) ?? 0,
+                keHoachDaThu: i.status === "PAID",
+              });
+              if (tt.ma === "DA_THU") {
+                // PA-A: đã thu ≠ kế toán đã ✓. Chỉ ghi "KT đã xác nhận" khi đơn không còn
+                // khoản PENDING và kế toán đã ✓ (mapping đợt↔khoản là mức ĐƠN).
+                const ktXong = accounting.pending === 0 && accounting.confirmed > 0;
+                return (
+                  <span
+                    className={`inline-flex items-center gap-1 whitespace-nowrap text-xs font-semibold ${
+                      ktXong ? "text-state-success-ink" : "text-state-warning-ink"
+                    }`}
+                  >
+                    <BadgeCheck className="h-4 w-4" aria-hidden />
+                    {tt.nguon === "SALE_THU_TAY" ? "Sale đã thu" : "Tiền đã về"}
+                    {ktXong ? " · KT đã xác nhận" : " — chờ kế toán"}
+                  </span>
+                );
+              }
+              if (!canManage) {
+                return (
+                  <span className="whitespace-nowrap text-xs text-state-warning-ink">
+                    {tt.ma === "MOT_PHAN" ? "Thu một phần" : "Chờ đóng"}
+                  </span>
+                );
+              }
+              return (
+                <button
+                  onClick={() => markPaid(i.id)}
+                  disabled={pending}
+                  className="rounded bg-state-success-ink px-2 py-0.5 text-xs font-semibold text-white transition-opacity duration-150 disabled:opacity-50"
+                >
+                  {tt.ma === "MOT_PHAN" ? "Đánh dấu thu đủ" : "Đánh dấu đã đóng"}
+                </button>
+              );
+            })()}
           </div>
         ))}
         {installments.length === 0 && (

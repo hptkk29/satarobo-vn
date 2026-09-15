@@ -681,6 +681,11 @@ export function OrderDetailClient({
               requests={paymentRequests}
               initialSessions={qrSessions}
               canManage={canManage}
+              // Cột kế hoạch — sổ DUY NHẤT biết tới tiền mặt. Không truyền thì bảng in
+              // "Chờ thu · còn thiếu X" cho đợt sale đã thu xong và vẫn mở nút Xuất QR.
+              daThuTay={Object.fromEntries(
+                installments.filter((i) => i.status === "PAID").map((i) => [i.soDot, true]),
+              )}
             />
           ) : (
             <OrderQrSection

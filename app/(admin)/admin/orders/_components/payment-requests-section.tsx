@@ -24,6 +24,7 @@ import { issueQrForRequest, regenerateQr } from "../_qr-actions";
 import type { QrIssueResult, QrSessionView } from "../_qr-core";
 import { formatDateVN } from "@/lib/format/date";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
+import { trangThaiDot } from "@/lib/payments/trang-thai-dot";
 
 export type PaymentRequestRow = {
   id: string;
@@ -55,9 +56,31 @@ function vnd(n: number): string {
   return n.toLocaleString("vi-VN") + "đ";
 }
 
-function outstanding(r: PaymentRequestRow): number {
+/**
+ * Đợt nào SALE ĐÃ THU TAY (`OrderInstallment.status === "PAID"`) — sổ DUY NHẤT biết tới
+ * tiền mặt, vì `PaymentRequest.status` chỉ suy từ `PaymentAllocation` mà tiền mặt không
+ * sinh allocation nào.
+ *
+ * ⚠️ Thiếu nó thì bảng này in "Đợt 1 · Chờ thu · còn thiếu 2.000.000đ" cho một đợt sale đã
+ * thu xong, và nút "Xuất QR" vẫn mở — mời khách trả lần hai. Đo trên ORD-260915-000007.
+ */
+export type DotDaThuTay = Record<number, boolean>;
+
+/**
+ * Còn thiếu của một phiếu, đọc CẢ HAI SỔ.
+ *
+ * ⚠️ Nhánh `VOID` phải ở ĐẦU và phải giữ. Phiếu bị huỷ (vd "thu toàn đơn" sau khi lập kế
+ * hoạch theo đợt) không còn là khoản phải thu; bỏ nhánh đó là bảng in lại nguyên tổng đơn
+ * ở dòng đã huỷ — tôi vừa làm đúng lỗi này và thấy "18.468.000đ" hiện ra ở dòng "Đã huỷ".
+ */
+function outstanding(r: PaymentRequestRow, daThuTay: DotDaThuTay): number {
   if (r.status === "VOID") return 0;
-  return Math.max(0, r.amountDue - r.allocated);
+  return trangThaiDot({
+    soDot: r.installmentNo,
+    amountDue: r.amountDue,
+    daRot: r.allocated,
+    keHoachDaThu: daThuTay[r.installmentNo] === true,
+  }).conThieu;
 }
 
 function requestLabel(r: PaymentRequestRow, totalDots: number): string {
@@ -190,11 +213,14 @@ export function PaymentRequestsSection({
   requests,
   initialSessions,
   canManage,
+  daThuTay = {},
 }: {
   requests: PaymentRequestRow[];
   /** Phiên QR ACTIVE còn hạn của từng phiếu (server đọc sẵn lúc render). */
   initialSessions: Record<string, QrSessionView>;
   canManage: boolean;
+  /** `soDot` → sale đã thu tay. Xem `DotDaThuTay`. */
+  daThuTay?: DotDaThuTay;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -261,13 +287,32 @@ export function PaymentRequestsSection({
                     {vnd(r.allocated)}
                   </td>
                   <td className="p-2 text-right font-semibold tabular-nums text-foreground">
-                    {vnd(outstanding(r))}
+                    {vnd(outstanding(r, daThuTay))}
                   </td>
                   <td className="p-2 text-muted-foreground">
                     {r.dueDate ? formatDateVN(r.dueDate) : "—"}
                   </td>
                   <td className="p-2">
-                    <Badge className={STATUS_CLASS[r.status]}>{STATUS_LABEL[r.status]}</Badge>
+                    {/* Nhãn đọc CẢ HAI SỔ. Phiếu VOID giữ nhãn riêng — nó không phải một
+                        đợt đang chờ thu mà là phiếu đã bị huỷ. */}
+                    {(() => {
+                      if (r.status === "VOID") {
+                        return <Badge className={STATUS_CLASS.VOID}>{STATUS_LABEL.VOID}</Badge>;
+                      }
+                      const tt = trangThaiDot({
+                        soDot: r.installmentNo,
+                        amountDue: r.amountDue,
+                        daRot: r.allocated,
+                        keHoachDaThu: daThuTay[r.installmentNo] === true,
+                      });
+                      const ma =
+                        tt.ma === "DA_THU" ? "PAID" : tt.ma === "MOT_PHAN" ? "PARTIAL" : "PENDING";
+                      return (
+                        <Badge className={STATUS_CLASS[ma]}>
+                          {tt.nguon === "SALE_THU_TAY" ? "Đã thu (tay)" : STATUS_LABEL[ma]}
+                        </Badge>
+                      );
+                    })()}
                   </td>
                   <td className="p-2 text-right">
                     {canIssue ? (

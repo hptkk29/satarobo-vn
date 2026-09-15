@@ -3,6 +3,7 @@
 // đã nộp / tổng phải thu / còn thiếu + điều kiện chốt (khớp guard convertLeadV2).
 import { scopedDb } from "@/lib/db-scope";
 import { KHOAN_DA_GHI_NHAN } from "@/lib/finance/ghi-nhan";
+import { dotSapThu } from "@/lib/payments/trang-thai-dot";
 
 export type LeadPaymentSummary = {
   /** Đã nộp = Σ Payment.amount (saleStatus=RECORDED) trên các đơn của lead. */
@@ -71,14 +72,21 @@ export async function getLeadPaymentSummary(
         where: KHOAN_DA_GHI_NHAN,
         select: { amount: true },
       },
-      // Phiếu thu THEO ĐỢT còn nợ, đợt nhỏ nhất trước — đợt sale sắp thu.
-      // `installmentNo > 0` loại phiếu "thu toàn đơn" (số 0): nó không phải một đợt.
+      // ⚠️ LẤY ĐỦ MỌI ĐỢT, không lọc PENDING và không `take: 1` [15/09/2026].
+      //
+      // Phép cũ (`PaymentRequest` PENDING/PARTIAL đầu tiên) MÙ VỚI TIỀN MẶT:
+      // `PaymentRequest.status` chỉ suy từ `PaymentAllocation`, mà tiền mặt không bao giờ
+      // sinh allocation (`bankTransactionId` bắt buộc). Sale thu đợt 1 bằng tiền mặt thì
+      // phiếu đợt 1 vẫn PENDING, và thẻ này mời "Đóng đợt 1" cho một đợt đã thu xong — đo
+      // được trên ORD-260915-000006 và …007.
+      //
+      // Nay đọc CẢ HAI SỔ rồi để `dotSapThu` quyết. Xem `lib/payments/trang-thai-dot.ts`.
       paymentRequests: {
-        where: { installmentNo: { gt: 0 }, status: { in: ["PENDING", "PARTIAL"] } },
+        where: { installmentNo: { gt: 0 } },
         select: { installmentNo: true, amountDue: true, allocations: { select: { amount: true } } },
         orderBy: { installmentNo: "asc" },
-        take: 1,
       },
+      installments: { select: { soDot: true, status: true } },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -101,17 +109,23 @@ export async function getLeadPaymentSummary(
 
   const donHang = orders.map((o) => {
     const daThu = o.payments.reduce((s, x) => s + x.amount, 0);
-    const pr = o.paymentRequests[0];
-    const daRot = pr ? pr.allocations.reduce((s, a) => s + a.amount, 0) : 0;
+    // Cột kế hoạch của từng đợt — sổ DUY NHẤT biết tiền mặt.
+    const keHoachPaid = new Map(o.installments.map((i) => [i.soDot, i.status === "PAID"]));
+    const sapThu = dotSapThu(
+      o.paymentRequests.map((pr) => ({
+        soDot: pr.installmentNo,
+        amountDue: pr.amountDue,
+        daRot: pr.allocations.reduce((t, a) => t + a.amount, 0),
+        keHoachDaThu: keHoachPaid.get(pr.installmentNo) === true,
+      })),
+    );
     return {
       id: o.id,
       code: o.code,
       totalAmount: o.totalAmount,
       daThu,
       conThieu: Math.max(0, o.totalAmount - daThu),
-      dotKeTiep: pr
-        ? { soDot: pr.installmentNo, conThieu: Math.max(0, pr.amountDue - daRot) }
-        : null,
+      dotKeTiep: sapThu ? { soDot: sapThu.soDot, conThieu: sapThu.conThieu } : null,
     };
   });
 
