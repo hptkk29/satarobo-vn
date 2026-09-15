@@ -323,11 +323,24 @@ export function KeHoachDotEditor({
           </label>
         </div>
 
-        <div className="space-y-2">
+        {/* ── HÀNG ĐỢT ĐO THEO KHUNG CHỨA, KHÔNG THEO MÀN [15/09/2026] ────────────
+            `@container` + `@md:` (48rem khung chứa) thay cho `sm:` (40rem MÀN HÌNH).
+
+            ⚠️ Vì sao đổi — đo thật ở màn 1024: khối này nằm trong cột trái của bố cục
+            `lg:grid-cols-[minmax(0,1fr)_22rem]`, mà `lg` bật đúng ở 1024. Cột trái khi đó
+            chỉ còn ~302px, trong khi `sm:` (≥640px MÀN) đã bật bố cục 4 cột từ lâu ⇒ hàng
+            đợt xếp 4 cột trong một khung 302px và ô nhập SỐ TIỀN bị bóp còn **22px**:
+
+              cols = 30,2px | 22,4px | 153px | 59,4px      ("Đợt N" | Số tiền | Hẹn | đã thu)
+
+            Trang KHÔNG tràn ngang nên không cổng nào kêu; chỉ người bán mở ra ở laptop
+            1024 mới thấy ô tiền hẹp bằng hai chữ số. Đây đúng là ca mà bề rộng MÀN không
+            nói gì về bề rộng CHỖ ĐỨNG — thứ duy nhất trả lời được là khung chứa. */}
+        <div className="@container space-y-2">
           {dots.map((d, i) => (
             <div
               key={i}
-              className="grid grid-cols-2 items-end gap-2 rounded-lg border border-border bg-background p-2 sm:grid-cols-[auto_1fr_1fr_auto]"
+              className="grid grid-cols-2 items-end gap-2 rounded-lg border border-border bg-background p-2 @md:grid-cols-[auto_1fr_1fr_auto]"
             >
               <span
                 className={`self-center whitespace-nowrap text-xs font-semibold ${
