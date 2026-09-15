@@ -224,6 +224,41 @@ describe("[LEAD-T52] đổi chủ / xoá lead ⇒ phải đồng bộ chuông", 
     ).toBe(true);
   });
 
+  it("⚠️ LUẬT C — ba đường chia HÀNG LOẠT đều báo cho NGƯỜI NHẬN", () => {
+    // Chốt 15/09/2026 đợt hai. Trước đó bàn giao và chia-lại-khi-sale-nghỉ im hoàn toàn với
+    // người nhận: họ được giao lead mà không ai đánh động, phải tự mở danh sách mới biết.
+    //
+    // Luật A ở trên KHÔNG với tới đây — nó chỉ đòi "có đụng chuông", mà thu hồi chuông chủ cũ
+    // đã thoả điều đó. Tức cả hai đường này từng XANH ở luật A trong khi vẫn câm với người
+    // nhận. Đây là lý do phải có luật riêng thay vì nới luật A.
+    //
+    // Neo theo TÊN HÀM và liệt kê đích danh: đây là một quyết định vận hành có ngày tháng,
+    // không phải một quy tắc suy ra được từ hình dạng mã.
+    const DUONG_HANG_LOAT = [
+      "lib/lead-handover/service.ts#bulkReassignLeads",
+      "lib/lead/assign.ts#reassignOpenLeads",
+    ];
+    const con = new Map(KHOI.map((k) => [k.khoa, k.than] as const));
+    const thieu = DUONG_HANG_LOAT.filter((k) => {
+      const than = con.get(k);
+      // Không cắt được hàm cũng tính là thiếu — im lặng vì bộ chọn hỏng là xanh giả.
+      return than === undefined || !/\bbaoLoLeadMoi\s*\(/.test(than);
+    });
+    expect(
+      thieu,
+      "Đường chia hàng loạt phải gọi `baoLoLeadMoi` — nó tự gộp thành MỘT tin mỗi người, nên " +
+        "không có cớ 'sợ bão push' nữa:\n  - " + thieu.join("\n  - "),
+    ).toEqual([]);
+  });
+
+  it("đường nhập danh sách cũng đi qua `baoLoLeadMoi`", () => {
+    // Route handler nằm ngoài THU_MUC nên đọc thẳng tệp. Đọc bằng đường dẫn thật để tệp bị
+    // dời chỗ thì ca này đỏ chứ không âm thầm bỏ qua.
+    const duong = path.join(ROOT, "app", "api", "admin", "import", "leads", "route.ts");
+    expect(fs.existsSync(duong), `${duong} không còn ở chỗ cũ`).toBe(true);
+    expect(/\bbaoLoLeadMoi\s*\(/.test(fs.readFileSync(duong, "utf8"))).toBe(true);
+  });
+
   it("danh sách MIỄN không có dòng chết", () => {
     const con = new Map(KHOI.map((k) => [k.khoa, k.than] as const));
     const chet = Object.keys(MIEN).filter((k) => {

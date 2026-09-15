@@ -19,6 +19,16 @@
  * Chủ dự án chốt: "nhập nhiều thì báo là có bao nhiêu lead mới chứ không gửi nhiều thông báo".
  * Đây cũng là điều đúng về kỹ thuật — 40 lần rung máy liên tiếp là "bão push" mà
  * `lib/push/allowlist.ts` nói là cái giá không lấy lại được.
+ *
+ * ── ĐỢT HAI: BA ĐƯỜNG DÙNG CHUNG MỘT PHÉP BÁO ────────────────────────────────────────────
+ * Chủ dự án chốt tiếp: nối tin gộp vào cả BÀN GIAO và CHIA LẠI KHI SALE NGHỈ — hai đường
+ * trước đó im hoàn toàn với người nhận (họ được giao lead mà không ai đánh động).
+ *
+ * Ba đường nay đi qua đúng một hàm `baoLoLeadMoi`. Gom vào một chỗ vì lần trước lỗi đúng kiểu
+ * ngược lại: bốn đường đổi chủ ra đời bốn thời điểm, mỗi đường quên cùng một bước.
+ *
+ * Nhưng CÂU CHỮ thì không được gom: lead bàn giao là lead đang chạy dở, có lịch sử trao đổi,
+ * khách đã nói chuyện với người khác. Nói y hệt lead nhập mới là một affordance nói dối.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
@@ -35,7 +45,15 @@ vi.mock("@/lib/notifications/notify", () => ({
   broadcastNotificationBump: h.broadcastNotificationBump,
 }));
 
-import { baoSaleNhieuLeadMoi, lenKeHoachBaoNhapHangLoat } from "./assign-lead";
+import {
+  baoSaleNhieuLeadMoi,
+  lenKeHoachBaoLoLead,
+  moTaLoLead,
+  nguonGanCuaLo,
+} from "./assign-lead";
+
+/** Nguồn mặc định của bộ này — ca nào quan tâm tới nguồn thì tự truyền cái khác. */
+const NHAP = { kieu: "nhap_danh_sach" } as const;
 
 const tinCuoi = () => {
   const c = h.notifyStaff.mock.calls.at(-1)?.[0];
@@ -50,47 +68,47 @@ beforeEach(() => {
 
 describe("[LEAD-T60] chuông GỘP khi nhập hàng loạt", () => {
   it("nhận nhiều lead ⇒ ĐÚNG MỘT chuông, nói rõ số lượng", async () => {
-    await baoSaleNhieuLeadMoi({ ownerId: "sale_a", soLead: 12, mocLuot: 1789400000000 });
+    await baoSaleNhieuLeadMoi({ ownerId: "sale_a", soLead: 12, mocLuot: 1789400000000, nguon: NHAP });
     expect(h.notifyStaff).toHaveBeenCalledTimes(1);
     expect(String(tinCuoi().title)).toContain("12");
   });
 
   it("chỉ tới ĐÚNG người nhận, không ai khác", async () => {
-    await baoSaleNhieuLeadMoi({ ownerId: "sale_a", soLead: 5, mocLuot: 1 });
+    await baoSaleNhieuLeadMoi({ ownerId: "sale_a", soLead: 5, mocLuot: 1, nguon: NHAP });
     expect(tinCuoi().userIds).toEqual(["sale_a"]);
   });
 
   it("⚠️ đúng MỘT lead ⇒ KHÔNG dùng tin gộp", async () => {
     // Một lead thì `baoSaleCoLeadMoi` tốt hơn hẳn: nó trỏ thẳng trang chi tiết, bấm là đọc
     // được số điện thoại. Tin gộp chỉ trỏ về danh sách.
-    await baoSaleNhieuLeadMoi({ ownerId: "sale_a", soLead: 1, mocLuot: 1 });
+    await baoSaleNhieuLeadMoi({ ownerId: "sale_a", soLead: 1, mocLuot: 1, nguon: NHAP });
     expect(h.notifyStaff).not.toHaveBeenCalled();
   });
 
   it("không lead nào ⇒ im", async () => {
-    await baoSaleNhieuLeadMoi({ ownerId: "sale_a", soLead: 0, mocLuot: 1 });
+    await baoSaleNhieuLeadMoi({ ownerId: "sale_a", soLead: 0, mocLuot: 1, nguon: NHAP });
     expect(h.notifyStaff).not.toHaveBeenCalled();
   });
 
   it("hai lượt nhập khác nhau ⇒ hai khoá khác nhau (không bị nuốt mất tin thứ hai)", async () => {
     // `@@unique([userId, dedupeKey])` nuốt lượt thứ hai nếu khoá trùng — sale sẽ không biết
     // mình vừa nhận thêm lead. Đây là lý do khoá CÓ mốc thời gian, ngược với luật chung.
-    await baoSaleNhieuLeadMoi({ ownerId: "sale_a", soLead: 3, mocLuot: 1_000 });
+    await baoSaleNhieuLeadMoi({ ownerId: "sale_a", soLead: 3, mocLuot: 1_000, nguon: NHAP });
     const k1 = tinCuoi().dedupeKey;
-    await baoSaleNhieuLeadMoi({ ownerId: "sale_a", soLead: 4, mocLuot: 2_000 });
+    await baoSaleNhieuLeadMoi({ ownerId: "sale_a", soLead: 4, mocLuot: 2_000, nguon: NHAP });
     expect(tinCuoi().dedupeKey).not.toBe(k1);
   });
 
   it("CÙNG một lượt ⇒ mỗi người một khoá riêng", async () => {
-    await baoSaleNhieuLeadMoi({ ownerId: "sale_a", soLead: 3, mocLuot: 7 });
+    await baoSaleNhieuLeadMoi({ ownerId: "sale_a", soLead: 3, mocLuot: 7, nguon: NHAP });
     const kA = tinCuoi().dedupeKey;
-    await baoSaleNhieuLeadMoi({ ownerId: "sale_b", soLead: 2, mocLuot: 7 });
+    await baoSaleNhieuLeadMoi({ ownerId: "sale_b", soLead: 2, mocLuot: 7, nguon: NHAP });
     expect(tinCuoi().dedupeKey).not.toBe(kA);
   });
 
   it("khoá mang đúng tiền tố đã khai trong danh mục", async () => {
     // Sai tiền tố thì thông báo rơi về nhóm "Hệ thống / P3" — nằm chót panel, không ai thấy.
-    await baoSaleNhieuLeadMoi({ ownerId: "sale_a", soLead: 3, mocLuot: 1 });
+    await baoSaleNhieuLeadMoi({ ownerId: "sale_a", soLead: 3, mocLuot: 1, nguon: NHAP });
     expect(String(tinCuoi().dedupeKey).startsWith("lead.moi_nhieu:")).toBe(true);
   });
 
@@ -98,13 +116,15 @@ describe("[LEAD-T60] chuông GỘP khi nhập hàng loạt", () => {
     h.notifyStaff.mockRejectedValue(new Error("DB chập"));
     vi.spyOn(console, "error").mockImplementation(() => {});
     await expect(
-      baoSaleNhieuLeadMoi({ ownerId: "sale_a", soLead: 3, mocLuot: 1 }),
+      baoSaleNhieuLeadMoi({ ownerId: "sale_a", soLead: 3, mocLuot: 1, nguon: NHAP }),
     ).resolves.toBeUndefined();
   });
 });
 
 describe("[LEAD-T62] gom tin theo NGƯỜI NHẬN", () => {
-  const ke = lenKeHoachBaoNhapHangLoat;
+  // Phần lớn ca không quan tâm người thao tác ⇒ truyền null cho gọn.
+  const ke = (ds: readonly { leadId: string; ownerId: string }[]) =>
+    lenKeHoachBaoLoLead(ds, null);
 
   it("⚠️ mỗi người một tin — KHÔNG phải một tin chung cho cả lượt", () => {
     // Đây là chỗ lỗi dễ lọt nhất: đếm tổng số lead của lượt rồi bắn một tin. Sale nhận
@@ -144,7 +164,7 @@ describe("[LEAD-T62] gom tin theo NGƯỜI NHẬN", () => {
     const kq = ke(
       Array.from({ length: 20 }, (_, i) => ({ leadId: `l${i}`, ownerId: i % 3 === 0 ? "a" : "b" })),
     );
-    expect(new Set(kq.map((t) => t.ownerId)).size).toBe(kq.length);
+    expect(new Set(kq.map((t: { ownerId: string }) => t.ownerId)).size).toBe(kq.length);
   });
 
   it("cùng một lead lọt hai lần ⇒ đếm MỘT", () => {
@@ -166,6 +186,88 @@ describe("[LEAD-T62] gom tin theo NGƯỜI NHẬN", () => {
       { leadId: "", ownerId: "a" },
       { leadId: "l2", ownerId: "a" },
     ])).toEqual([{ kieu: "mot", ownerId: "a", leadId: "l2" }]);
+  });
+});
+
+describe("[LEAD-T63] ba đường nói ba câu khác nhau", () => {
+  const BAN_GIAO = { kieu: "ban_giao", tuNguoi: "Chị Lan" } as const;
+  const SALE_NGHI = { kieu: "sale_nghi", tuNguoi: "Anh Hùng" } as const;
+
+  it("⚠️ tin BÀN GIAO nói rõ lead đang chạy dở và của ai", async () => {
+    // Nếu câu này giống hệt tin nhập mới thì người nhận gọi khách như lead nguội — trong khi
+    // khách vừa nói chuyện với một tư vấn viên khác tuần trước.
+    await baoSaleNhieuLeadMoi({ ownerId: "b", soLead: 9, mocLuot: 1, nguon: BAN_GIAO });
+    const body = String(tinCuoi().body);
+    expect(body).toContain("Chị Lan");
+    expect(body).toContain("9");
+    expect(body).toContain("lịch sử trao đổi");
+  });
+
+  it("tin SALE NGHỈ nói tên người đã nghỉ", async () => {
+    await baoSaleNhieuLeadMoi({ ownerId: "b", soLead: 4, mocLuot: 1, nguon: SALE_NGHI });
+    expect(String(tinCuoi().body)).toContain("Anh Hùng");
+  });
+
+  it("ba nguồn ⇒ ba câu KHÁC NHAU, không câu nào rỗng", () => {
+    const cau = [NHAP, BAN_GIAO, SALE_NGHI].map((n) => moTaLoLead(n, 5));
+    expect(new Set(cau).size, `ba câu bị trùng nhau: ${cau.join(" | ")}`).toBe(3);
+    for (const c of cau) expect(c.length).toBeGreaterThan(20);
+  });
+
+  it("mọi câu đều mang đúng con số truyền vào", () => {
+    for (const n of [NHAP, BAN_GIAO, SALE_NGHI]) {
+      expect(moTaLoLead(n, 37)).toContain("37");
+    }
+  });
+
+  it("⚠️ nguồn gán của ca MỘT lead phải khác nhau theo đường", () => {
+    // `baoSaleCoLeadMoi` bỏ qua `source === "SELF"`, và nguồn còn đi vào audit/thống kê —
+    // trả bừa một giá trị là làm hỏng cả hai chỗ.
+    expect(nguonGanCuaLo(NHAP)).toBe("IMPORT");
+    expect(nguonGanCuaLo(BAN_GIAO)).toBe("MANAGER");
+    expect(nguonGanCuaLo(SALE_NGHI)).toBe("AUTO");
+  });
+
+  it("KHÔNG đường nào trả `SELF` — nó sẽ nuốt im chuông", () => {
+    // `SELF` là nhánh thoát sớm của `baoSaleCoLeadMoi`. Một đường hàng loạt mà rơi vào đó thì
+    // người nhận đúng một lead sẽ không được báo gì, và không ca nào khác đỏ.
+    for (const n of [NHAP, BAN_GIAO, SALE_NGHI]) {
+      expect(nguonGanCuaLo(n)).not.toBe("SELF");
+    }
+  });
+});
+
+describe("[LEAD-T64] không tự báo cho người vừa bấm nút", () => {
+  it("⚠️ quản lý bàn giao lead về cho CHÍNH MÌNH ⇒ không tự báo", () => {
+    // Cùng luật với nhánh `source === "SELF"` của `baoSaleCoLeadMoi`: không ai cần một cái
+    // chuông kể lại việc mình vừa làm xong.
+    expect(lenKeHoachBaoLoLead([
+      { leadId: "l1", ownerId: "quanly" },
+      { leadId: "l2", ownerId: "quanly" },
+    ], "quanly")).toEqual([]);
+  });
+
+  it("người khác trong cùng lượt VẪN được báo", () => {
+    // Bỏ sót vế này là đổi một lỗi ồn ào thành một lỗi im lặng.
+    expect(lenKeHoachBaoLoLead([
+      { leadId: "l1", ownerId: "quanly" },
+      { leadId: "l2", ownerId: "sale_a" },
+    ], "quanly")).toEqual([{ kieu: "mot", ownerId: "sale_a", leadId: "l2" }]);
+  });
+
+  it("lead của chính người thao tác KHÔNG tính vào con số của người khác", () => {
+    const kq = lenKeHoachBaoLoLead([
+      { leadId: "l1", ownerId: "quanly" },
+      { leadId: "l2", ownerId: "sale_a" },
+      { leadId: "l3", ownerId: "sale_a" },
+    ], "quanly");
+    expect(kq).toEqual([{ kieu: "gop", ownerId: "sale_a", soLead: 2 }]);
+  });
+
+  it("máy chạy (không có người thao tác) ⇒ báo đủ mọi người", () => {
+    expect(lenKeHoachBaoLoLead([{ leadId: "l1", ownerId: "sale_a" }], null)).toEqual([
+      { kieu: "mot", ownerId: "sale_a", leadId: "l1" },
+    ]);
   });
 });
 
