@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import {
+  conChonSan,
+  conCuaPhuHuynh,
   hocVienTrenCacDong,
   studentIdChoDon,
   thieuHocVienODong,
@@ -99,5 +101,70 @@ describe("[HVD] lưới ghim: action không được tự tính lại luật nà
       /\.\.\.\(data\.studentId\?\.trim\(\) \? \[data\.studentId\.trim\(\)\] : \[\]\)/,
     );
     expect(nguon).toMatch(/where: \{ id: \{ in: hocVienIds \}, deletedAt: null \}/);
+  });
+});
+
+// ═══ CON CỦA MỘT SỐ ĐIỆN THOẠI [15/09/2026] ═══════════════════════════════════
+//
+// Chủ dự án: *"ở dưới khoá học thì tên học viên được chọn sẵn 1 trong số con của PH luôn"*.
+//
+// ⚠️ Số liệu trong các ca dưới là HÌNH DẠNG THẬT của DB, không phải số tròn trịa: đo trên
+// `satarobo_local` thì `Lead.phone` mẫu là `84930000001` còn ô nhập của người bán cho ra
+// `0930000001`. Đây đúng là chỗ so chuỗi thô sẽ lọc mất bản ghi cần tìm.
+const HV = [
+  { id: "hv1", parentPhone: "84930000001" },
+  { id: "hv2", parentPhone: "0930000001" },   // cùng một phụ huynh, ghi kiểu khác
+  { id: "hv3", parentPhone: "0905123456" },
+  { id: "hv4", parentPhone: null },
+];
+
+describe("[CON-01] khớp theo SĐT ĐÃ CHUẨN HOÁ, không so chuỗi thô", () => {
+  it("84… và 0… của cùng một số là MỘT phụ huynh", () => {
+    expect(conCuaPhuHuynh(HV, "0930000001").map((h) => h.id)).toEqual(["hv1", "hv2"]);
+    expect(conCuaPhuHuynh(HV, "84930000001").map((h) => h.id)).toEqual(["hv1", "hv2"]);
+    expect(conCuaPhuHuynh(HV, "+84 930 000 001").map((h) => h.id)).toEqual(["hv1", "hv2"]);
+  });
+
+  it("phụ huynh khác thì không lẫn sang", () => {
+    expect(conCuaPhuHuynh(HV, "0905123456").map((h) => h.id)).toEqual(["hv3"]);
+  });
+
+  it("học viên không có SĐT phụ huynh KHÔNG bao giờ khớp", () => {
+    expect(conCuaPhuHuynh(HV, "0930000001").some((h) => h.id === "hv4")).toBe(false);
+  });
+});
+
+describe("[CON-02] chưa biết SĐT ⇒ RỖNG, KHÔNG phải 'tất cả'", () => {
+  it("rỗng / khoảng trắng / null / undefined", () => {
+    for (const x of ["", "   ", null, undefined]) {
+      expect(conCuaPhuHuynh(HV, x), `sdt=${JSON.stringify(x)}`).toEqual([]);
+    }
+  });
+
+  it("chuỗi không phải số điện thoại", () => {
+    for (const x of ["abc", "123", "0000000000"]) {
+      expect(conCuaPhuHuynh(HV, x), `sdt=${x}`).toEqual([]);
+    }
+  });
+
+  it("SĐT hợp lệ nhưng không ai là con ⇒ rỗng", () => {
+    expect(conCuaPhuHuynh(HV, "0988888888")).toEqual([]);
+  });
+});
+
+describe("[CON-03] con CHỌN SẴN = em đầu tiên của danh sách", () => {
+  it("đúng em đầu, theo thứ tự danh sách đang bày", () => {
+    expect(conChonSan(HV, "0930000001")).toBe("hv1");
+    expect(conChonSan([...HV].reverse(), "0930000001")).toBe("hv2");
+  });
+
+  it("một con ⇒ chính em đó", () => {
+    expect(conChonSan(HV, "0905123456")).toBe("hv3");
+  });
+
+  it("không khớp ai / chưa có SĐT ⇒ null, KHÔNG đoán bừa một em", () => {
+    expect(conChonSan(HV, "0988888888")).toBeNull();
+    expect(conChonSan(HV, "")).toBeNull();
+    expect(conChonSan([], "0930000001")).toBeNull();
   });
 });

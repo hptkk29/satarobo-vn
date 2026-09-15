@@ -20,6 +20,62 @@
  * gửi, action tính lại từ các dòng.
  */
 
+import { canonicalPhone } from "@/lib/phone";
+
+/** Đủ để trả lời "em này là con của SĐT nào" — cố ý hẹp, đừng đòi cả bản ghi học viên. */
+export type HocVienTheoSdt = { id: string; parentPhone: string | null };
+
+/**
+ * CON CỦA SỐ ĐIỆN THOẠI NÀY — một luật, ba chỗ gọi [15/09/2026].
+ *
+ * Chủ dự án: *"ở phần khoá học, học viên thì lấy đúng số con trong lead nhập ở sđt ở trên
+ * session khách hàng, chứ không hiển thị full như vậy"* và *"ở dưới khoá học thì tên học
+ * viên được chọn sẵn 1 trong số con của PH luôn"*.
+ *
+ * Ba nơi cần đúng CÙNG một câu trả lời, nếu không thì ô lọc bày ra một tập còn ô chọn sẵn
+ * lại trỏ vào em ngoài tập đó:
+ *   1. danh sách gợi ý trong ô "Học viên" của dòng hàng;
+ *   2. lúc người bán bấm chọn một lead từ gợi ý SĐT;
+ *   3. lúc mở `/orders/new?leadId=…` từ trang lead (đường CHÍNH, và là đường trước bản này
+ *      KHÔNG chọn sẵn con nào — đo thật: tên PH + SĐT điền sẵn, lọc đúng "1 con", mà ô học
+ *      viên vẫn rỗng).
+ *
+ * ⚠️ So bằng `canonicalPhone`, KHÔNG so chuỗi thô. `Student.parentPhone` trong DB đang có
+ * cả `0…` lẫn `84…` (di sản 6 hàm chuẩn hoá cũ) và `Lead.phone` cũng vậy — đo trên
+ * `satarobo_local`: lead mẫu mang `84930000001`, nên so thô là lọc mất đúng bản ghi cần tìm.
+ *
+ * ⚠️ SĐT rỗng/không đọc được ⇒ mảng RỖNG, KHÔNG phải "tất cả". Đây là hàm trả lời "con của
+ * ai", và "chưa biết ai" thì câu trả lời đúng là không ai. Việc "chưa có SĐT thì bày đủ
+ * danh sách cho đơn walk-in" là quyết định của MÀN HÌNH, và nó phải nằm ở màn hình — trộn
+ * vào đây là biến một hàm tra cứu thành một hàm đôi lúc trả về cả thế giới.
+ */
+export function conCuaPhuHuynh<T extends HocVienTheoSdt>(
+  hocVien: readonly T[],
+  sdt: string | null | undefined,
+): T[] {
+  const chuan = canonicalPhone(sdt);
+  if (!chuan) return [];
+  return hocVien.filter((hv) => canonicalPhone(hv.parentPhone) === chuan);
+}
+
+/**
+ * Em được CHỌN SẴN ở dòng đầu — `null` khi SĐT chưa có hoặc không con nào khớp.
+ *
+ * Lấy em ĐẦU TIÊN theo đúng thứ tự danh sách gợi ý đang bày, để thứ được chọn sẵn luôn là
+ * thứ người bán nhìn thấy đầu bảng.
+ *
+ * ⚠️ Phụ huynh NHIỀU CON thì đây là một PHỎNG ĐOÁN, và nó gán tiền cho một đứa trẻ. Chủ dự
+ * án chốt vẫn chọn sẵn ("chọn sẵn 1 trong số con của PH luôn") vì đa số đơn là một con;
+ * bù lại màn hình phải NÓI RA số con đang khớp để người bán biết mà đổi — xem lời nhắc
+ * dưới ô Học viên. Đừng bỏ lời nhắc đó đi cùng lúc với việc giữ phép đoán này.
+ */
+export function conChonSan(
+  hocVien: readonly HocVienTheoSdt[],
+  sdt: string | null | undefined,
+): string | null {
+  return conCuaPhuHuynh(hocVien, sdt)[0]?.id ?? null;
+}
+
 /** Bỏ khoảng trắng, bỏ rỗng, bỏ trùng — danh sách học viên KHÁC NHAU trên các dòng. */
 export function hocVienTrenCacDong(
   items: readonly { studentId?: string | null }[],

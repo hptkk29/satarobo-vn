@@ -7,6 +7,7 @@ import { getSetting } from "@/lib/settings/service";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { nationalPhone } from "@/lib/phone";
 import { loadCreateOrderFormData } from "../_actions";
 import { OrderCreateForm } from "../_components/order-create-form";
 
@@ -97,7 +98,19 @@ export default async function NewOrderPage({
         leadId={lead?.id ?? null}
         defaultCustomer={
           lead
-            ? { name: lead.parentName, phone: lead.phone, email: lead.email ?? "" }
+            ? {
+                name: lead.parentName,
+                // DẠNG NỘI ĐỊA (`09…`), không phải chuỗi thô trong DB.
+                //
+                // `Lead.phone` lưu cả `84…` lẫn `0…` (di sản 6 hàm chuẩn hoá cũ) — đo
+                // trên `satarobo_local`: lead mẫu mang `84930000001`, và trước bản này ô
+                // SĐT hiện đúng chuỗi đó. Không sai về tiền (`phoneVn` nhận cả hai và
+                // chuẩn hoá lại) nhưng LỆCH với đường kia: chọn lead từ gợi ý SĐT thì
+                // `chonLead` đã đổi về `09…`. Hai đường vào cùng một ô mà hiện hai kiểu
+                // là thứ người bán sẽ hỏi, và là thứ không ai trả lời được.
+                phone: nationalPhone(lead.phone) ?? lead.phone,
+                email: lead.email ?? "",
+              }
             : undefined
         }
         defaultCenterId={lead?.centerId ?? null}

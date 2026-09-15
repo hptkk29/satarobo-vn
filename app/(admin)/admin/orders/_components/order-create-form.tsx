@@ -25,8 +25,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
-import { canonicalPhone, nationalPhone } from "@/lib/phone";
-import { studentIdChoDon, thieuHocVienODong } from "@/lib/orders/hoc-vien-dong-don";
+import { nationalPhone } from "@/lib/phone";
+import {
+  conChonSan,
+  conCuaPhuHuynh,
+  studentIdChoDon,
+  thieuHocVienODong,
+} from "@/lib/orders/hoc-vien-dong-don";
 import {
   KIEU_GIAM,
   TRAN_KHOAN_GIAM_MOI_DONG,
@@ -241,7 +246,22 @@ export function OrderCreateForm({
   const [centerId, setCenterId] = useState<string>(defaultCenterId ?? NO_CENTER);
 
   // NHIỀU dòng hàng — xem chú thích ở `DongHang`.
-  const [dong, setDong] = useState<DongHang[]>(() => [dongMoi()]);
+  //
+  // ── CHỌN SẴN CON CỦA PHỤ HUYNH [15/09/2026] ────────────────────────────────
+  // Chủ dự án: *"ở dưới khoá học thì tên học viên được chọn sẵn 1 trong số con của PH
+  // luôn"*.
+  //
+  // ⚠️ PHẢI LÀM Ở ĐÂY, không chỉ trong `chonLead`. Trước bản này việc chọn sẵn chỉ chạy
+  // khi người bán GÕ SĐT rồi bấm một lead trong danh sách gợi ý — còn đường CHÍNH mà chủ
+  // dự án mô tả ("bấm từ trang lead sang trang tạo đơn hàng") thì `leadId` có sẵn trên
+  // URL nên `daChonLead` bật ngay từ đầu và `chonLead` KHÔNG BAO GIỜ chạy.
+  //
+  // Đo thật trên `/orders/new?leadId=…` trước bản vá: tên PH và SĐT điền sẵn, ô lọc
+  // hiện đúng "Đang lọc theo SĐT 0930000001 — 1 con", mà ô Học viên vẫn RỖNG. Người bán
+  // vẫn phải tự mở danh sách và chọn đúng cái tên duy nhất trong đó.
+  const [dong, setDong] = useState<DongHang[]>(() => [
+    { ...dongMoi(), studentId: conChonSan(students, defaultCustomer?.phone) },
+  ]);
 
   function suaDong(key: string, thayDoi: Partial<DongHang>) {
     setDong((cu) => cu.map((d) => (d.key === key ? { ...d, ...thayDoi } : d)));
@@ -461,12 +481,13 @@ export function OrderCreateForm({
     if (l.centerId && !lockCenter) setCenterId(l.centerId);
     setDaChonLead(true);
     setLeadGoiY([]);
-    const con = students.filter(
-      (hv) => canonicalPhone(hv.parentPhone) === canonicalPhone(l.phone),
-    );
-    if (con.length > 0) {
+    // Cùng LUẬT với lúc mở trang từ lead và với ô lọc bên dưới — `conChonSan`. Ba bản
+    // chép tay của cùng một phép so SĐT là ba cách lệch nhau, và lệch ở đây nghĩa là ô
+    // lọc bày ra một tập còn ô chọn sẵn trỏ vào em ngoài tập đó.
+    const chonSan = conChonSan(students, l.phone);
+    if (chonSan) {
       setDong((cu) =>
-        cu.map((d, i) => (i === 0 && !d.studentId ? { ...d, studentId: con[0]!.id } : d)),
+        cu.map((d, i) => (i === 0 && !d.studentId ? { ...d, studentId: chonSan } : d)),
       );
     }
   }
@@ -1263,34 +1284,31 @@ function DongHangCard({
    * ⚠️ SĐT TRỐNG thì vẫn bày ĐỦ, cố ý: đơn walk-in không gắn lead nào vẫn phải chọn được
    * con: lọc-về-rỗng khi chưa có SĐT là khoá luồng đó. Lọc chỉ bật khi đã có SĐT để lọc.
    *
-   * ⚠️ So bằng `canonicalPhone`, KHÔNG so chuỗi thô: `Student.parentPhone` trong DB đang
-   * có cả `0…` lẫn `84…` (lib/phone.ts — 6 hàm chuẩn hoá thời trước), nên so thô là lọc
-   * mất đúng những bản ghi cần tìm.
+   * ⚠️ PHÉP SO SĐT không nằm ở đây mà ở `conCuaPhuHuynh` (thuần, có test + đã cấy lỗi):
+   * cùng một hàm với lúc dựng dòng đầu (chọn sẵn con) và với `chonLead`. Ba bản chép tay
+   * của cùng phép so là ba cách lệch, và lệch ở đây nghĩa là ô này bày ra một tập còn ô
+   * kia chọn sẵn một em NGOÀI tập đó.
    */
-  const sdtChuan = canonicalPhone(customerPhone);
+  const conCuaSdt = useMemo(
+    () => conCuaPhuHuynh(students, customerPhone),
+    [students, customerPhone],
+  );
   const hocVienOptions: ComboboxOption[] = useMemo(() => {
-    const loc = sdtChuan
-      ? students.filter((hv) => canonicalPhone(hv.parentPhone) === sdtChuan)
-      : students;
-    // SĐT có nhưng KHÔNG con nào khớp (phụ huynh mới, con chưa có hồ sơ) ⇒ bày lại đủ
-    // danh sách thay vì một ô rỗng không giải thích được. Lời nhắc ở dưới ô nói rõ.
-    const dung = loc.length > 0 ? loc : students;
+    // SĐT chưa có, HOẶC có nhưng không con nào khớp (phụ huynh mới, con chưa có hồ sơ)
+    // ⇒ bày lại ĐỦ danh sách thay vì một ô rỗng không giải thích được. Đây là quyết định
+    // của MÀN HÌNH và nó nằm ở màn hình — `conCuaPhuHuynh` cố ý chỉ trả lời "con của ai",
+    // và "chưa biết ai" thì câu trả lời đúng là không ai. Lời nhắc dưới ô nói rõ.
+    const dung = conCuaSdt.length > 0 ? conCuaSdt : students;
     return dung.map((hv) => ({
       value: hv.id,
       label: [hv.name, hv.parentName, nationalPhone(hv.parentPhone) ?? hv.parentPhone]
         .filter(Boolean)
         .join(" · "),
     }));
-  }, [students, sdtChuan]);
+  }, [students, conCuaSdt]);
 
   /** Đang lọc theo SĐT và có khớp ⇒ nói ra, kẻo người bán tưởng mất dữ liệu. */
-  const soConCuaSdt = useMemo(
-    () =>
-      sdtChuan
-        ? students.filter((hv) => canonicalPhone(hv.parentPhone) === sdtChuan).length
-        : 0,
-    [students, sdtChuan],
-  );
+  const soConCuaSdt = conCuaSdt.length;
 
   return (
     <div className="rounded-xl border border-border bg-background p-4">
