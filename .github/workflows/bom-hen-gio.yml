@@ -116,3 +116,34 @@ jobs:
             echo "⚠️ Có bom ở +${{ matrix.days }} ngày — xem issue nhãn bom-hen-gio."
             exit 1
           fi
+
+  # ── DẤU NHỊP ────────────────────────────────────────────────────────────────────────
+  #
+  # Job RIÊNG, `needs: bom` + `if: always()` — nó phải chạy CẢ KHI job trên đỏ, và phải
+  # chạy MỘT LẦN chứ không một lần cho mỗi nhánh matrix (hai nhánh cùng ghi một issue là
+  # hai lượt đè nhau, và dấu nhịp thành thứ tự ngẫu nhiên).
+  #
+  # Vì sao cần: `bao-bom-hen-gio.mjs` "không có ca đỏ ⇒ không làm gì". Nghĩa là một lượt
+  # XANH không để lại dấu vết nào — nên cron chết trông y hệt cron khoẻ. Job này ghi một
+  # dòng "lần chạy gần nhất" vào issue mốc ở MỌI lượt, kèm trần im lặng để người đọc phân
+  # biệt được hai thứ đó.
+  nhip:
+    name: Dấu nhịp (chạy cả khi đỏ)
+    needs: bom
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Ghi dấu nhịp vào issue mốc
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # Script KHÔNG quyết mã thoát của lưới — nó chỉ ghi đèn. Kết luận đỏ/xanh vẫn là
+        # của job `bom`, và `needs.bom.result` là thứ nó chép vào đèn.
+        run: node scripts/nhip-bom-hen-gio.mjs ${{ needs.bom.result }}
