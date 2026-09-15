@@ -17,6 +17,7 @@ import { NHAN_TRANG_THAI, type TrangThaiHocPhi } from "@/lib/finance/thieu-hoc-p
 
 import { GhiHocPhiDialog } from "./ghi-hoc-phi-dialog";
 import type { DongThieu } from "./types";
+import { formatPhoneVN } from "@/lib/phone";
 
 
 const vnd = (n: number) => `${n.toLocaleString("vi-VN")}đ`;
@@ -102,7 +103,7 @@ export function ThieuHocPhiClient({
                       <span className="whitespace-nowrap font-medium text-foreground">
                         {r.parentName}
                         <span className="ml-2 font-normal tabular-nums text-xs text-muted-foreground">
-                          {r.phone}
+                          {formatPhoneVN(r.phone)}
                         </span>
                       </span>
                       <span className="line-clamp-1 text-xs text-muted-foreground">

@@ -71,12 +71,47 @@ export interface ImportContext {
   confirmed: Set<number>;
 }
 
+/** Một cột của file nhập, như màn gọi khai báo. */
+export interface GoiYCot {
+  key: string;
+  label: string;
+  required?: boolean;
+  /**
+   * Đổi giá trị thô của ô thành dạng NGƯỜI ĐỌC trước khi bày ra.
+   *
+   * Sinh ra cho cột SĐT: file có thể ghi `84905123456`, `+84 905 123 456`, hay `905123456`
+   * (Excel lưu kiểu number nên nuốt mất số 0 đầu) — cả ba đều được hệ thống coi là CÙNG một
+   * số, nhưng bày nguyên văn thì người nhập không đối chiếu được với danh bạ của họ.
+   *
+   * ⚠️ Chỉ đổi phần HIỂN THỊ. Giá trị gốc vẫn đọc lại được ở tooltip, ô nhập lúc sửa tay vẫn
+   * mang giá trị của file, và thứ gửi lên server cũng là giá trị gốc — tầng phân tích của
+   * từng màn mới là nơi chuẩn hoá thật.
+   */
+  hienThi?: (giaTriTho: unknown) => string;
+}
+
 export interface ExcelImporterProps<T> {
   templateUrl: string;
   templateFilename: string;
   parseRow: (row: Record<string, unknown>, rowIndex: number) => T | { error: string };
   onImport: (rows: T[], ctx?: ImportContext) => Promise<ImportResult>;
-  columnHints: { key: string; label: string; required?: boolean }[];
+  columnHints: {
+    key: string;
+    label: string;
+    required?: boolean;
+    /**
+     * Đổi giá trị thô của ô thành dạng NGƯỜI ĐỌC trước khi bày ra.
+     *
+     * Sinh ra cho cột SĐT: file có thể ghi `84905123456`, `+84 905 123 456`, hay `905123456`
+     * (Excel lưu kiểu number nên nuốt mất số 0 đầu) — cả ba đều được hệ thống coi là CÙNG
+     * một số, nhưng bày nguyên văn thì người nhập không đối chiếu được với danh bạ của họ.
+     *
+     * ⚠️ Chỉ đổi phần HIỂN THỊ. Giá trị gốc vẫn nằm ở tooltip, ô nhập lúc sửa tay vẫn mang
+     * giá trị của file, và thứ gửi lên server cũng là giá trị gốc — tầng phân tích của từng
+     * màn mới là nơi chuẩn hoá thật.
+     */
+    hienThi?: (giaTriTho: unknown) => string;
+  }[];
   title?: string;
   /**
    * Khoá chống trùng TRONG FILE, hiện ngay ở preview (server vẫn là chốt chặn
@@ -499,7 +534,13 @@ export function ExcelImporter<T>({
             <>
               {/* Vùng cuộn ngang nằm ở thẻ TRONG, viền bo ở thẻ NGOÀI — hai thẻ khác nhau,
                   nếu không nội dung bị vạt góc khi kéo ngang (luật `bang-coverage`). */}
-              <div className="hidden overflow-hidden rounded-xl border border-border md:block">
+              {/* ⚠️ `bg-background` KHÔNG phải trang trí — nó là thứ giữ cho ô ghim khớp màu hàng.
+                  Đo 15/09: cả chuỗi cha từ bảng lên tới `.admin-scope` đều TRONG SUỐT, nên hàng
+                  không tô màu sẽ ăn nền xám `lab(96.52)` của khung admin, trong khi ô ghim buộc
+                  phải đục nên ra `lab(100)` trắng tinh. Hai màu đó chính là dải trắng lệch mà
+                  chủ dự án chụp được trên prod. Cho thẻ một nền ĐỤC của riêng nó thì hàng và ô
+                  ghim cùng một màu, và thẻ trắng trên khung xám cũng đúng hình dạng một thẻ. */}
+              <div className="hidden overflow-hidden rounded-xl border border-border bg-background md:block">
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[54rem] text-sm">
                     <thead>
@@ -634,7 +675,12 @@ export function ExcelImporter<T>({
           {/* Thanh hành động dính đáy: ở màn nhỏ, danh sách dài đẩy nút ra khỏi tầm nhìn và
               người dùng cuộn mãi không thấy nút Nhập. `bottom` cộng safe-area cho máy có
               thanh gạt dưới. */}
-          <div className="sticky bottom-0 -mx-4 flex flex-wrap items-center gap-2 border-t border-border bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:mx-0 sm:rounded-xl sm:border sm:px-4">
+          {/* ⚠️ `z-20` KHÔNG thừa. Ô ghim và hàng tiêu đề của bảng mang `z-10`; thanh này nếu
+          để `z-auto` thì mọi ô ghim chồng lên nó đều VẼ ĐÈ LÊN TRÊN — chủ dự án chụp được
+          đúng cảnh đó: danh sách 145 dòng che mất nút "Nhập". Vỏ bảng không tạo ngữ cảnh xếp
+          lớp riêng (chỉ `overflow`, không `transform`/`filter`/`z-index`), nên `z-10` của ô
+          ghim leo thẳng lên gốc và so trực tiếp với thanh này. */}
+      <div className="sticky bottom-0 z-20 -mx-4 flex flex-wrap items-center gap-2 border-t border-border bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:mx-0 sm:rounded-xl sm:border sm:px-4">
             {/* Nút chính chiếm TRỌN dòng ở màn hẹp: ở 320px ba nút xếp thành ba dòng và nút
                 quan trọng nhất trông ngang hàng với nút xoá. */}
             <Button
@@ -1070,7 +1116,7 @@ function DongBang({
   onXoa,
 }: {
   soDong: number;
-  columnHints: { key: string; label: string; required?: boolean }[];
+  columnHints: GoiYCot[];
   gia: Record<string, unknown>;
   trangThai: TrangThaiDong;
   nhanXacNhan: string | null;
@@ -1096,14 +1142,16 @@ function DongBang({
           <span className="relative">{soDong}</span>
         </td>
         {columnHints.map((c) => {
-          const v = oThanhChuoi(gia[c.key]);
+          const tho = oThanhChuoi(gia[c.key]);
+          const v = tho && c.hienThi ? c.hienThi(gia[c.key]) : tho;
           return (
             <td
               key={c.key}
               className="max-w-[22ch] truncate whitespace-nowrap px-4 py-3"
               // Cắt chữ mà không cho cách nào đọc lại là giấu dữ liệu. Tên tiếng Việt và tên
               // cơ sở dài hơn 22 ký tự là chuyện thường, không phải ca biên.
-              title={v || undefined}
+              // Giá trị GỐC luôn đọc lại được, kể cả khi ô đã đổi dạng hiển thị.
+              title={v !== tho ? `${v}  (trong file ghi: ${tho})` : tho || undefined}
             >
               {v || <span className="text-muted-foreground">—</span>}
             </td>
@@ -1160,7 +1208,7 @@ function TheDong({
   onXoa,
 }: {
   soDong: number;
-  columnHints: { key: string; label: string; required?: boolean }[];
+  columnHints: GoiYCot[];
   gia: Record<string, unknown>;
   trangThai: TrangThaiDong;
   nhanXacNhan: string | null;
@@ -1169,7 +1217,7 @@ function TheDong({
   onXoa: () => void;
 }) {
   return (
-    <div className={cn("rounded-xl border border-border", NEN_DONG[trangThai.kieu])}>
+    <div className={cn("rounded-xl border border-border bg-background", NEN_DONG[trangThai.kieu])}>
       <div className="flex items-start justify-between gap-2 border-b border-border/70 px-4 py-2.5">
         <span className="text-xs font-semibold tabular-nums text-muted-foreground">
           Dòng {soDong}
@@ -1184,7 +1232,8 @@ function TheDong({
           Hai cột từ 420px trở lên để thẻ 10 trường không dài thượt. */}
       <dl className="grid grid-cols-1 gap-x-4 gap-y-2.5 px-4 py-3 text-sm min-[420px]:grid-cols-2">
         {columnHints.map((c) => {
-          const v = oThanhChuoi(gia[c.key]);
+          const tho = oThanhChuoi(gia[c.key]);
+          const v = tho && c.hienThi ? c.hienThi(gia[c.key]) : tho;
           return (
             <div key={c.key} className="min-w-0">
               <dt className="text-xs text-muted-foreground">{c.label}</dt>
@@ -1240,7 +1289,7 @@ function FormSuaDong({
   onHuy,
 }: {
   soDong: number;
-  columnHints: { key: string; label: string; required?: boolean }[];
+  columnHints: GoiYCot[];
   giaTri: Record<string, unknown>;
   onLuu: (o: Record<string, unknown>) => void;
   onHuy: () => void;

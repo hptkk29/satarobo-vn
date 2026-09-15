@@ -13,6 +13,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   conMoDeChiaLai,
+  dongDoiChieu,
   dungBanCapNhatLeadTrung,
   moTaLuotCapNhat,
   noiGhiChu,
@@ -34,37 +35,39 @@ const CU = {
 const ban = (file: Parameters<typeof dungBanCapNhatLeadTrung>[0]["file"]) =>
   dungBanCapNhatLeadTrung({ cu: CU, file, moc: MOC });
 
-describe("[LEAD-T70] file THẮNG ở ô file có giá trị", () => {
-  it("ghi đè tên phụ huynh khi file ghi khác", () => {
-    const b = ban({ parentName: "Chị Lan Anh" });
-    expect(b.data.parentName).toBe("Chị Lan Anh");
-    expect(b.daDoi).toContain("tên phụ huynh");
+describe("[LEAD-T70] ô ĐANG TRỐNG thì ĐIỀN", () => {
+  it("lead chưa có email ⇒ lấy email của file", () => {
+    const b = dungBanCapNhatLeadTrung({
+      cu: { ...CU, email: null },
+      file: { email: "moi@moi.vn" },
+      moc: MOC,
+    });
+    expect(b.data.email).toBe("moi@moi.vn");
+    expect(b.daDien).toContain("email");
+    expect(b.khacBiet).toEqual([]);
   });
 
-  it("ghi đè được mọi cột đã khai là ghi đè được", () => {
-    const b = ban({
-      parentName: "X",
-      email: "moi@moi.vn",
-      childName: "Bé Bình",
-      childAge: 9,
-      centerId: "cs2",
-      courseId: "kh_robosim",
-      source: "ZALO",
+  it("điền được mọi cột đang trống", () => {
+    const b = dungBanCapNhatLeadTrung({
+      cu: {},
+      file: {
+        parentName: "X",
+        email: "e@e.vn",
+        childName: "Bé B",
+        childAge: 9,
+        centerId: "cs2",
+        courseId: "kh",
+        source: "ZALO",
+      },
+      moc: MOC,
     });
-    expect(b.data).toMatchObject({
-      parentName: "X",
-      email: "moi@moi.vn",
-      childName: "Bé Bình",
-      childAge: 9,
-      centerId: "cs2",
-      courseId: "kh_robosim",
-      source: "ZALO",
-    });
-    expect(b.daDoi).toHaveLength(7);
+    expect(b.daDien).toHaveLength(7);
+    expect(b.khacBiet).toEqual([]);
   });
 
-  it("cắt khoảng trắng hai đầu trước khi ghi", () => {
-    expect(ban({ parentName: "  Chị Mai  " }).data.parentName).toBe("Chị Mai");
+  it("cắt khoảng trắng hai đầu trước khi điền", () => {
+    const b = dungBanCapNhatLeadTrung({ cu: {}, file: { parentName: "  Chị Mai  " }, moc: MOC });
+    expect(b.data.parentName).toBe("Chị Mai");
   });
 
   it("luôn đóng mốc `lastInboundAt` — nhập lại LÀ một lần khách quay lại", () => {
@@ -74,11 +77,71 @@ describe("[LEAD-T70] file THẮNG ở ô file có giá trị", () => {
   });
 });
 
-describe("[LEAD-T71] ⚠️ ô TRỐNG không phải lệnh xoá", () => {
-  // Người nhập bỏ trống vì họ KHÔNG BIẾT, không phải vì họ muốn xoá. Đây là khác biệt quan
-  // trọng nhất của cả tệp: hiểu ngược là mỗi lượt nhập lại bào mòn dữ liệu đang có.
-  it("ô trống ⇒ không đụng cột đó", () => {
-    const b = ban({ parentName: "Chị Lan Anh", email: "", childName: null });
+describe("[LEAD-T71] ⚠️ ô ĐÃ CÓ giá trị thì KHÔNG BAO GIỜ bị ghi đè", () => {
+  // Chốt thứ hai của chủ dự án 15/09, đảo chiều bản sáng cùng ngày: "các thông tin khác sẽ
+  // ghi tiếp nối ở ghi chú, KHÔNG update thay thế hoàn toàn".
+  //
+  // Lý lẽ: dữ liệu đang lưu là thứ Sale đã xác minh qua điện thoại; dữ liệu trong file là thứ
+  // ai đó gõ vào Excel. Cho file thắng là để bản chưa xác minh đè lên bản đã xác minh.
+
+  it("tên phụ huynh đang có ⇒ giữ nguyên, KHÔNG lấy tên trong file", () => {
+    const b = ban({ parentName: "Chị Lan Anh" });
+    expect(b.data).not.toHaveProperty("parentName");
+    expect(b.daDien).toEqual([]);
+  });
+
+  it("giá trị trong file được ghi lại ở `khacBiet` — không bốc hơi", () => {
+    // Không ghi đè KHÔNG có nghĩa là vứt đi. Ai muốn lấy giá trị của file vẫn lấy được bằng
+    // tay, sau khi tự quyết định bản nào đúng.
+    const b = ban({ parentName: "Chị Lan Anh", source: "ZALO" });
+    expect(b.khacBiet).toEqual([
+      { cot: "tên phụ huynh", dangLuu: "Chị Lan", trongFile: "Chị Lan Anh" },
+      { cot: "nguồn", dangLuu: "FACEBOOK", trongFile: "ZALO" },
+    ]);
+  });
+
+  it("KHÔNG cột nào của lead đầy đủ bị ghi", () => {
+    // Quét cả bảy cột cùng lúc: vá quá tay ở một cột thì ca này đỏ.
+    const b = ban({
+      parentName: "X",
+      email: "khac@khac.vn",
+      childName: "Bé Khác",
+      childAge: 12,
+      centerId: "cs9",
+      courseId: "kh_khac",
+      source: "ZALO",
+    });
+    expect(Object.keys(b.data).filter((k) => k !== "lastInboundAt" && k !== "note")).toEqual([]);
+    expect(b.khacBiet).toHaveLength(7);
+  });
+
+  it("file ghi GIỐNG hệt ⇒ không phải khác biệt, không ghi gì", () => {
+    const b = ban({ parentName: "Chị Lan", email: "lan@cu.vn" });
+    expect(b.khacBiet).toEqual([]);
+    expect(b.daDien).toEqual([]);
+  });
+
+  it("khác nhau chỉ ở khoảng trắng ⇒ vẫn coi là giống", () => {
+    expect(ban({ parentName: "  Chị Lan " }).khacBiet).toEqual([]);
+  });
+
+  it("một lead nửa trống nửa đầy ⇒ điền nửa trống, giữ nửa đầy", () => {
+    // Ca thật hay gặp nhất, và là chỗ một bản vá lười dễ làm sai một trong hai nửa.
+    const b = dungBanCapNhatLeadTrung({
+      cu: { parentName: "Chị Lan", email: null },
+      file: { parentName: "Chị Lan Anh", email: "moi@moi.vn" },
+      moc: MOC,
+    });
+    expect(b.data.email).toBe("moi@moi.vn");
+    expect(b.data).not.toHaveProperty("parentName");
+    expect(b.daDien).toEqual(["email"]);
+    expect(b.khacBiet.map((k) => k.cot)).toEqual(["tên phụ huynh"]);
+  });
+});
+
+describe("[LEAD-T72] ⚠️ ô TRỐNG trong file không phải lệnh xoá", () => {
+  it("file để trống ⇒ không đụng cột đó", () => {
+    const b = ban({ email: "", childName: null });
     expect(b.data).not.toHaveProperty("email");
     expect(b.data).not.toHaveProperty("childName");
   });
@@ -87,31 +150,17 @@ describe("[LEAD-T71] ⚠️ ô TRỐNG không phải lệnh xoá", () => {
     expect(ban({ email: "   " }).data).not.toHaveProperty("email");
   });
 
-  it("file rỗng hoàn toàn ⇒ chỉ đóng mốc, không đổi gì", () => {
+  it("file rỗng hoàn toàn ⇒ chỉ đóng mốc", () => {
     const b = ban({});
     expect(Object.keys(b.data)).toEqual(["lastInboundAt"]);
-    expect(b.daDoi).toEqual([]);
+    expect(b.daDien).toEqual([]);
+    expect(b.khacBiet).toEqual([]);
   });
 
   it("⚠️ tuổi con = 0 KHÔNG bị coi là trống", () => {
-    // `!0` là `true` — đây là cách kinh điển để một phép kiểm "trống" nuốt mất số 0.
-    // Tuổi 0 ngoài khoảng 3–18 nên tầng phân tích chặn trước, nhưng luật ở đây phải đúng
-    // theo giá trị chứ không dựa vào tầng khác đứng chắn.
-    expect(ban({ childAge: 0 }).data.childAge).toBe(0);
-  });
-});
-
-describe("[LEAD-T72] không ghi cột không đổi", () => {
-  it("giá trị giống hệt ⇒ không đưa vào bản cập nhật", () => {
-    // Ghi lại y nguyên giá trị cũ vẫn làm `updatedAt` nhảy, và nhật ký báo "đã cập nhật tên
-    // phụ huynh" trong khi không có gì đổi — người đi tra sau này mất công vô ích.
-    const b = ban({ parentName: "Chị Lan", email: "lan@cu.vn" });
-    expect(b.data).not.toHaveProperty("parentName");
-    expect(b.daDoi).toEqual([]);
-  });
-
-  it("khác nhau chỉ ở khoảng trắng ⇒ vẫn coi là không đổi", () => {
-    expect(ban({ parentName: "  Chị Lan " }).data).not.toHaveProperty("parentName");
+    // `!0` là `true` — cách kinh điển để một phép kiểm "trống" nuốt mất số 0.
+    const b = dungBanCapNhatLeadTrung({ cu: { childAge: null }, file: { childAge: 0 }, moc: MOC });
+    expect(b.data.childAge).toBe(0);
   });
 });
 
@@ -124,18 +173,10 @@ describe("[LEAD-T73] ⚠️ GHI CHÚ chỉ được NỐI THÊM", () => {
   });
 
   it("ghi chú cũ đứng TRƯỚC, mới nối xuống dưới", () => {
-    const b = ban({ note: "MỚI" });
-    expect(String(b.data.note)).toBe(`${CU.note}\nMỚI`);
-  });
-
-  it("file không ghi chú ⇒ không đụng cột ghi chú", () => {
-    expect(ban({ note: "" }).data).not.toHaveProperty("note");
-    expect(ban({}).daNoiGhiChu).toBe(false);
+    expect(String(ban({ note: "MỚI" }).data.note)).toBe(`${CU.note}\nMỚI`);
   });
 
   it("⚠️ nhập LẠI cùng nội dung ⇒ KHÔNG nối bản sao thứ hai", () => {
-    // Người vận hành sửa vài dòng rồi nhập lại cả file là chuyện thường. Nối mù thì sau ba
-    // lượt ô ghi chú không đọc được nữa.
     const b = ban({ note: "Gọi 12/09: khách bận, hẹn gọi lại thứ 5." });
     expect(b.data).not.toHaveProperty("note");
     expect(b.daNoiGhiChu).toBe(false);
@@ -154,14 +195,52 @@ describe("[LEAD-T73] ⚠️ GHI CHÚ chỉ được NỐI THÊM", () => {
   });
 });
 
-describe("[LEAD-T74] ⚠️ TRẠNG THÁI PHỄU không bao giờ bị đụng", () => {
+describe("[LEAD-T74] ⚠️ giá trị file bị từ chối PHẢI vào ghi chú", () => {
+  // Đây là nửa còn lại của chốt: không ghi đè, nhưng cũng không được im lặng nuốt mất.
+
+  it("ghi chú mang đủ giá trị đang lưu VÀ giá trị trong file", () => {
+    // ⚠️ Phải neo vào CỤM ĐẦY ĐỦ, không phải chuỗi con.
+    // Phép cấy lỗi chứng minh: bỏ hẳn vế `(đang lưu "…")` mà ca này vẫn XANH, vì
+    // "Chị Lan Anh" CHỨA "Chị Lan" — `toContain` không phân biệt được hai giá trị khi một
+    // cái là tiền tố của cái kia, mà đó đúng là hình dạng thật của dữ liệu tên người.
+    const n = String(ban({ parentName: "Chị Lan Anh" }).data.note);
+    expect(n).toContain('tên phụ huynh "Chị Lan Anh"');
+    expect(n).toContain('đang lưu "Chị Lan"');
+    expect(n).toContain("GIỮ");
+  });
+
+  it("có ngày tháng để tra ngược", () => {
+    // Ghi chú nối thêm mà không có mốc thời gian thì đọc lại không biết lượt nào ghi.
+    expect(String(ban({ parentName: "X" }).data.note)).toContain("15/09/2026");
+  });
+
+  it("không có khác biệt nào ⇒ KHÔNG thêm dòng đối chiếu rỗng", () => {
+    expect(dongDoiChieu([], MOC)).toBeNull();
+    expect(ban({}).daNoiGhiChu).toBe(false);
+  });
+
+  it("vừa có ghi chú của file vừa có khác biệt ⇒ ghi cả hai", () => {
+    const n = String(ban({ note: "Khách hẹn thứ 3", parentName: "X" }).data.note);
+    expect(n).toContain("Khách hẹn thứ 3");
+    expect(n).toContain("đang lưu");
+  });
+
+  it("nhập lại LẦN HAI cùng khác biệt ⇒ không nhân đôi dòng đối chiếu", () => {
+    // Người vận hành nhập lại cả file là chuyện thường; nối mù thì ghi chú phình vô hạn.
+    const b1 = ban({ parentName: "X" });
+    const b2 = dungBanCapNhatLeadTrung({
+      cu: { ...CU, note: String(b1.data.note) },
+      file: { parentName: "X" },
+      moc: MOC,
+    });
+    expect(b2.data).not.toHaveProperty("note");
+  });
+});
+
+describe("[LEAD-T75] trạng thái phễu và nhật ký", () => {
   it("bản cập nhật KHÔNG chứa `status`", () => {
-    // Đẩy một lead đang ở L3 về MOI là làm lệch báo cáo phễu và hoa hồng. File nhập không có
-    // cột này, nhưng cổng phải nằm ở tầng luật chứ không dựa vào "file không có cột đó".
     const b = dungBanCapNhatLeadTrung({
       cu: CU,
-      // Ép kiểu để dựng đúng ca người sau thêm cột: nếu ai đó nối `status` vào đường này thì
-      // ca test phải đỏ, chứ không phải không biên dịch được rồi thôi.
       file: { parentName: "X", status: "MOI" } as Parameters<
         typeof dungBanCapNhatLeadTrung
       >[0]["file"],
@@ -175,26 +254,24 @@ describe("[LEAD-T74] ⚠️ TRẠNG THÁI PHỄU không bao giờ bị đụng",
     expect(b.data).not.toHaveProperty("convertedAt");
     expect(b.data).not.toHaveProperty("assignedToId");
   });
-});
 
-describe("[LEAD-T75] nhật ký nói ĐÚNG cái gì đã đổi", () => {
-  it("liệt kê tên cột bằng tiếng Việt người vận hành đọc được", () => {
-    const m = moTaLuotCapNhat(ban({ parentName: "X", email: "e@e.vn" }), true);
+  it("nhật ký nói rõ ĐIỀN gì và GIỮ gì", () => {
+    const m = moTaLuotCapNhat(
+      dungBanCapNhatLeadTrung({
+        cu: { parentName: "Chị Lan", email: null },
+        file: { parentName: "Khác", email: "e@e.vn" },
+        moc: MOC,
+      }),
+      true,
+    );
+    expect(m).toContain("điền email");
+    expect(m).toContain("GIỮ NGUYÊN");
     expect(m).toContain("tên phụ huynh");
-    expect(m).toContain("email");
-    // Không được lộ tên cột kỹ thuật ra màn hình người vận hành.
     expect(m).not.toContain("parentName");
   });
 
-  it("không có gì đổi ⇒ nói thẳng là không có gì đổi", () => {
-    // Một dòng "Cập nhật từ import Excel" trống rỗng là thứ tệ nhất: chứng minh có người đụng
-    // vào mà không nói đụng cái gì, nên ai nghi mất dữ liệu cũng không tra được.
-    expect(moTaLuotCapNhat(ban({}), true)).toContain("không có gì để cập nhật");
-  });
-
-  it("nói rõ có nối ghi chú hay không", () => {
-    expect(moTaLuotCapNhat(ban({ note: "mới" }), true)).toContain("không ghi đè ghi chú cũ");
-    expect(moTaLuotCapNhat(ban({}), true)).not.toContain("ghi chú");
+  it("không điền được ô nào ⇒ nói thẳng ra", () => {
+    expect(moTaLuotCapNhat(ban({}), true)).toContain("không ô trống nào được điền");
   });
 
   it("nói rõ lead có được chia lại hay không", () => {

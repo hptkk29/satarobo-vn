@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 import { createLeadManual, updateLeadFields, addLeadChild } from "../actions";
 import { groupTeachableCourses, type TeachableCourse } from "@/lib/courses/grouped";
+import { formatPhoneVN } from "@/lib/phone";
 import {
   ChildFields,
   childDraftToPayload,
@@ -52,7 +53,9 @@ export function LeadForm({
   const courseGroups = groupTeachableCourses(courses);
 
   const [parentName, setParentName] = useState(initial?.parentName ?? "");
-  const [phone, setPhone] = useState(initial?.phone ?? "");
+  // SĐT lưu dạng canonical `84…`; ô nhập phải hiện dạng người Việt đọc được `0…`.
+  // Lưu lại vẫn chuẩn hoá nên không có đường nào lệch.
+  const [phone, setPhone] = useState(formatPhoneVN(initial?.phone ?? ""));
   const [email, setEmail] = useState(initial?.email ?? "");
   const [childName, setChildName] = useState(initial?.childName ?? "");
   const [childAge, setChildAge] = useState(initial?.childAge != null ? String(initial.childAge) : "");

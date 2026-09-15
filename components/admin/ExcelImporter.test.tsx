@@ -46,6 +46,8 @@ function dung(opts: {
    * (file 146 dòng, 145 trùng với CRM) thì phải đi qua đường đối chiếu hệ thống.
    */
   trungHeThong?: boolean;
+  /** Đổi dạng hiển thị cho cột SĐT (màn lead truyền `formatPhoneVN`). */
+  hienThiSdt?: (v: unknown) => string;
   onImport?: (rows: unknown[]) => Promise<{ success: number; errors: [] }>;
 }) {
   const onImport =
@@ -54,7 +56,11 @@ function dung(opts: {
     <ExcelImporter<Dong>
       templateUrl="/mau"
       templateFilename="mau.xlsx"
-      columnHints={COT}
+      columnHints={
+        opts.hienThiSdt
+          ? COT.map((c) => (c.key === "SĐT" ? { ...c, hienThi: opts.hienThiSdt } : c))
+          : COT
+      }
       parseRow={(r) => (r["SĐT"] ? (r as Dong) : { error: "Thiếu SĐT" })}
       onImport={onImport}
       duplicateKey={opts.coTrung ? (r) => String(r["SĐT"] ?? "") || null : undefined}
@@ -369,6 +375,56 @@ describe("[NHAP-T18] ba lỗi hiển thị thấy trên PROD 15/09/2026", () => 
     }
   });
 
+  it("⚠️ thẻ bảng phải có nền ĐỤC của riêng nó", async () => {
+    // Đo 15/09 (lượt hai): cả chuỗi cha từ bảng lên tới `.admin-scope` đều TRONG SUỐT, nên
+    // hàng không tô màu ăn nền xám `lab(96.52)` của khung admin, trong khi ô ghim buộc phải
+    // đục nên ra `lab(100)` trắng tinh. Chênh 3,5 điểm sáng — đủ để thành một dải trắng lệch
+    // chạy dọc bảng, và đó đúng là thứ chủ dự án chụp được trên prod SAU khi đã vá lượt một.
+    //
+    // Bản vá lượt một (đắp `::before` cho dòng CÓ tô màu) không chạm tới ca này, vì dòng
+    // "trùng" và "hợp lệ" vốn không tô màu nào cả.
+    dung({ dong: [] });
+    await napFile([{ Tên: "A", "SĐT": "01" }]);
+    const vo = document.querySelector("table")!.parentElement!.parentElement!;
+    expect(vo.className, `vỏ bảng thiếu nền đục: ${vo.className}`).toMatch(/\bbg-background\b/);
+  });
+
+  it("⚠️ thanh hành động phải nằm TRÊN ô ghim của bảng", async () => {
+    // Ô ghim và hàng tiêu đề mang `z-10`. Thanh dính đáy để `z-auto` thì mọi ô ghim chồng lên
+    // nó đều VẼ ĐÈ LÊN TRÊN — chủ dự án chụp được đúng cảnh đó: danh sách 145 dòng che mất nút
+    // "Nhập". Vỏ bảng không tạo ngữ cảnh xếp lớp riêng (chỉ `overflow`), nên `z-10` của ô ghim
+    // leo thẳng lên gốc và so trực tiếp với thanh.
+    //
+    // So QUAN HỆ, không neo vào con số: đổi 10→30 ở ô ghim mà quên thanh thì ca này vẫn đỏ.
+    dung({ dong: [] });
+    await napFile([{ Tên: "A", "SĐT": "01" }]);
+
+    const lopZ = (cls: string) => {
+      const m = /(?:^|\s)z-(\d+)(?:\s|$)/.exec(cls);
+      return m ? Number(m[1]) : 0;
+    };
+    const thanh = [...document.querySelectorAll("div")].find((d) =>
+      d.className.includes("sticky bottom-0"),
+    )!;
+    const oGhim = document.querySelector('tbody td[class*="sticky"]')!;
+    const thGhim = document.querySelector('thead th[class*="sticky"]')!;
+
+    expect(thanh, "không tìm thấy thanh hành động dính đáy").toBeTruthy();
+    expect(
+      lopZ(thanh.className),
+      `thanh (z=${lopZ(thanh.className)}) phải cao hơn ô ghim (z=${lopZ(oGhim.className)})`,
+    ).toBeGreaterThan(lopZ(oGhim.className));
+    expect(lopZ(thanh.className)).toBeGreaterThan(lopZ(thGhim.className));
+  });
+
+  it("thẻ ở màn hẹp cũng có nền riêng", async () => {
+    // Cùng lý do: thẻ không nền là một mảng xám trên nền xám, mất hẳn hình dạng thẻ.
+    dung({ dong: [] });
+    await napFile([{ Tên: "A", "SĐT": "01" }]);
+    const the = document.querySelector('ul[class*="hidden"] > li > div');
+    expect(the?.className ?? "").toMatch(/\bbg-background\b/);
+  });
+
   it("nền hàng TIÊU ĐỀ và nền ô ghim của nó phải cùng một lớp màu", async () => {
     // Đo 15/09: hàng là `bg-muted/60`, ô ghim là `bg-muted` — hai sắc độ khác nhau tạo một
     // vệt sáng chạy dọc qua tiêu đề. Ô ghim không được dùng màu trong suốt, nên hàng nhượng bộ.
@@ -433,6 +489,54 @@ describe("[NHAP-T18] ba lỗi hiển thị thấy trên PROD 15/09/2026", () => 
     expect(screen.queryByText(/cột Tình trạng/)).toBeNull();
     // Và tiêu đề cột đó cũng không được quay lại.
     expect(screen.queryAllByRole("columnheader", { name: /Tình trạng/ })).toEqual([]);
+  });
+});
+
+describe("[NHAP-T19] cột có thể đổi DẠNG HIỂN THỊ", () => {
+  // Sinh ra cho cột SĐT: file có thể ghi `84987654321`, `+84 987 654 321` hay `987654321`
+  // (Excel lưu kiểu number nên nuốt mất số 0 đầu). Cả ba là CÙNG một số với hệ thống, nhưng
+  // bày nguyên văn thì người nhập không đối chiếu được với danh bạ của họ.
+  //
+  // ⚠️ Ca này sinh ra vì phép cấy lỗi: gỡ hẳn phép đổi dạng mà KHÔNG ca nào đỏ — tính năng
+  // được thêm vào nhưng chưa từng có gì canh.
+  const sangSoNoiDia = (v: unknown) => {
+    const s = String(v ?? "").replace(/\D/g, "");
+    return s.startsWith("84") ? `0${s.slice(2)}` : s;
+  };
+
+  it("bày ra dạng đã đổi, KHÔNG phải nguyên văn trong file", async () => {
+    dung({ dong: [], hienThiSdt: sangSoNoiDia });
+    await napFile([{ Tên: "A", "SĐT": "84987654321" }]);
+    expect(screen.getAllByText("0987654321").length).toBeGreaterThan(0);
+    expect(screen.queryAllByText("84987654321")).toEqual([]);
+  });
+
+  it("giá trị GỐC vẫn đọc lại được — không giấu gì", async () => {
+    // Đổi dạng hiển thị mà không cho đường nào xem lại nguyên văn là giấu dữ liệu: người
+    // nhập mất cách đối chiếu với file của chính họ.
+    // ⚠️ Phải tự dựng lại — `afterEach(cleanup)` đã xoá DOM của ca trước. Bản đầu của ca này
+    // đọc DOM còn sót và vì thế không kiểm được gì.
+    dung({ dong: [], hienThiSdt: sangSoNoiDia });
+    await napFile([{ Tên: "A", "SĐT": "84987654321" }]);
+    const o = [...document.querySelectorAll("td")].find((e) =>
+      e.getAttribute("title")?.includes("84987654321"),
+    );
+    expect(o, "phải có ô mang giá trị gốc ở tooltip").toBeTruthy();
+  });
+
+  it("cột KHÔNG khai đổi dạng thì giữ nguyên văn", async () => {
+    // Chỉ cột SĐT có `hienThi`; cột Tên phải đi qua nguyên vẹn.
+    dung({ dong: [], hienThiSdt: sangSoNoiDia });
+    await napFile([{ Tên: "84000000000", "SĐT": "0909" }]);
+    // Giá trị của cột Tên trông y hệt một SĐT dạng 84 — nếu phép đổi dạng áp nhầm cho mọi
+    // cột thì nó thành "0000000000" và ca này đỏ.
+    expect(screen.getAllByText("84000000000").length).toBeGreaterThan(0);
+  });
+
+  it("màn KHÔNG khai `hienThi` ⇒ bày nguyên văn", async () => {
+    dung({ dong: [] });
+    await napFile([{ Tên: "A", "SĐT": "84987654321" }]);
+    expect(screen.getAllByText("84987654321").length).toBeGreaterThan(0);
   });
 });
 
