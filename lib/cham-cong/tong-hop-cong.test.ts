@@ -253,6 +253,104 @@ describe("tomTatCongThang — chi tiết", () => {
     expect([t.donChoDuyet, t.donTuChoi, t.donChinhDaDuyet]).toEqual([null, null, null]);
   });
 
+  // ══ HAI NHÃN ĐÃ TỪNG SAI — ghim lại để không sai lần nữa ══════════════════════════════
+  //
+  // Chủ dự án 15/09: *"Sửa luôn hai nhãn sai đang có: 'Ngày nghỉ = 2' đang đếm ngày lễ."*
+  // Ngày lễ KHÔNG phải ngày người ta xin nghỉ — gộp chung là biến một ngày công ty cho nghỉ
+  // thành một ngày trừ vào phép của họ. Ca này canh đúng vế ấy, ở tầng SỐ chứ không ở nhãn:
+  // nhãn có thể viết lại, nhưng số phải tách sẵn thì nhãn mới có gì để nói.
+  it("ngày lễ KHÔNG rơi vào nghỉ phép — ba loại nghỉ tách hẳn nhau", () => {
+    const t = tomTatCongThang({
+      ...THANG_9,
+      ngay: [
+        ngay({ workDate: utc(2026, 9, 2), dayType: "HOLIDAY" }), // Quốc khánh
+        ngay({ workDate: utc(2026, 9, 3), dayType: "HOLIDAY" }), // lễ nối
+        ngay({ workDate: utc(2026, 9, 6), dayType: "WEEKLY_OFF", templateCode: "X" }),
+        ngay({ workDate: utc(2026, 9, 7), dayType: "LEAVE", leaveUnits: 1 }),
+      ],
+    });
+    expect(t.nghiLe).toBe(2);
+    expect(t.nghiTuan).toBe(1);
+    // ⭐ Đây là con số đã sai: nó phải là 1 (một ngày xin nghỉ), KHÔNG phải 3 hay 4.
+    expect(t.nghiPhep).toBe(1);
+    expect(t.nghiPhepCoLuong).toBe(1);
+    expect(t.nghiPhepKhongLuong).toBe(0);
+  });
+
+  it("nghỉ phép KHÔNG LƯƠNG vẫn là nghỉ phép, chỉ khác ở vế có lương", () => {
+    const t = tomTatCongThang({
+      ...THANG_9,
+      ngay: [
+        ngay({ workDate: utc(2026, 9, 7), dayType: "LEAVE", leaveUnits: 1 }),
+        ngay({ workDate: utc(2026, 9, 8), dayType: "LEAVE", leaveUnits: 0 }),
+      ],
+    });
+    expect(t.nghiPhep).toBe(2);
+    expect(t.nghiPhepCoLuong).toBe(1);
+    expect(t.nghiPhepKhongLuong).toBe(1);
+  });
+
+  // ══ HAI SỐ MỚI của bố cục 4 ô + khối gấp (chốt 15/09) ═════════════════════════════════
+  it("phutKeHoach cộng theo KẾ HOẠCH, độc lập với giờ làm thật", () => {
+    const t = tomTatCongThang({
+      ...THANG_9,
+      ngay: [
+        // Làm THIẾU so với kế hoạch.
+        ngay({ workDate: utc(2026, 9, 1), expectedMinutes: 480, workedMinutes: 400 }),
+        // Làm VƯỢT kế hoạch — hai vế phải đi riêng, không vế nào kẹp vế nào.
+        ngay({ workDate: utc(2026, 9, 2), expectedMinutes: 480, workedMinutes: 530 }),
+      ],
+    });
+    expect(t.phutKeHoach).toBe(960);
+    expect(t.phutLam).toBe(930);
+  });
+
+  it("chuaCham = ngày CÓ CA trừ ngày đã có dấu; ngày nghỉ không vào mẫu số", () => {
+    const t = tomTatCongThang({
+      ...THANG_9,
+      ngay: [
+        // có ca + có dấu
+        ngay({ workDate: utc(2026, 9, 1), dayCreditExpected: 1, workedMinutes: 480 }),
+        // có ca + KHÔNG dấu nào
+        ngay({
+          workDate: utc(2026, 9, 2),
+          dayCreditExpected: 1,
+          flags: ["KHONG_CO_LUOT"],
+        }),
+        ngay({
+          workDate: utc(2026, 9, 3),
+          dayCreditExpected: 1,
+          flags: ["KHONG_CO_LUOT"],
+        }),
+        // nghỉ phép: KHÔNG phải "chưa chấm" — không có gì để chấm.
+        ngay({ workDate: utc(2026, 9, 4), dayType: "LEAVE", leaveUnits: 1 }),
+      ],
+    });
+    expect(t.ngayCoCa).toBe(3);
+    expect(t.ngayDaCham).toBe(1);
+    expect(t.chuaCham).toBe(2);
+  });
+
+  it("quét vào quên quét ra vẫn là ĐÃ CHẤM ⇒ chuaCham = 0, không phải 1", () => {
+    // Ranh giới dễ sai nhất: ngày ấy `workedMinutes = 0` nhưng nó mang `THIEU_LUOT_RA`
+    // chứ không mang `KHONG_CO_LUOT`. Đếm bằng giờ làm sẽ xếp nó vào "chưa chấm" và người
+    // ta đi tìm nhầm việc — họ cần nộp đơn bổ sung giờ ra, không phải đi quét lại.
+    const t = tomTatCongThang({
+      ...THANG_9,
+      ngay: [
+        ngay({
+          workDate: utc(2026, 9, 1),
+          dayCreditExpected: 1,
+          workedMinutes: 0,
+          flags: ["THIEU_LUOT_RA"],
+        }),
+      ],
+    });
+    expect(t.ngayCoCa).toBe(1);
+    expect(t.chuaCham).toBe(0);
+    expect(t.thieuLuotNgay).toBe(1);
+  });
+
   it("thiếu lượt gộp cả RA_KHONG_CO_VAO — cùng một việc phải đi nộp đơn", () => {
     const t = tomTatCongThang({
       ...THANG_9,
