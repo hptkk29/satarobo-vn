@@ -14,6 +14,7 @@ import {
   searchLopTrialCandidatesAction,
 } from "../_actions";
 import type { Candidate } from "../_lib/types";
+import { formatPhoneVN } from "@/lib/phone";
 
 
 export function EnrollPanel({
@@ -169,7 +170,7 @@ export function EnrollPanel({
                     <span className="text-sm font-medium text-foreground">{c.childName}</span>
                     <span className="ml-2 text-xs text-muted-foreground">
                       {c.parentName ?? "—"}
-                      {c.phone ? ` · ${c.phone}` : ""} · {c.leadStatus}
+                      {c.phone ? ` · ${formatPhoneVN(c.phone)}` : ""} · {c.leadStatus}
                     </span>
                   </div>
 

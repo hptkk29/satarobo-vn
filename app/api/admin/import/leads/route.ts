@@ -485,9 +485,13 @@ export async function POST(req: NextRequest) {
           },
         });
 
-        // Ghi sổ kiểm toán cho ĐÚNG những cột vừa đổi. Nhật ký hoạt động ở trên là thứ Sale
+        // Ghi sổ kiểm toán cho ĐÚNG những cột vừa ghi. Nhật ký hoạt động ở trên là thứ Sale
         // đọc; `logLeadAudit` là thứ tra khi có tranh chấp "ai sửa dữ liệu của tôi".
-        if (banCapNhat.daDoi.length > 0) {
+        //
+        // Từ bản chốt thứ hai (15/09) lượt nhập KHÔNG còn ghi đè ô đã có giá trị, nên sổ chỉ
+        // ghi khi thực sự có ô trống được điền. Phần file ghi khác nằm ở `khacBiet` và đã đi
+        // vào ghi chú — không phải một lượt sửa dữ liệu nên không vào sổ kiểm toán.
+        if (banCapNhat.daDien.length > 0) {
           await logLeadAudit({
             leadId: m.leadId,
             action: "UPDATE",

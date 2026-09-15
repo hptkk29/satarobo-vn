@@ -37,8 +37,10 @@ export default function ImportLeadsPage() {
         </Link>
         <h1 className="text-xl font-bold sm:text-2xl">Nhập lead từ Excel</h1>
         <p className="max-w-[70ch] text-sm text-muted-foreground">
-          Nhập nhiều lead cùng lúc. File được kiểm từng dòng và chia làm ba nhóm trước khi ghi
-          — bạn xem và sửa ngay tại đây, không cần mở lại Excel.
+          Nhập nhiều lead cùng lúc. Số điện thoại là căn cứ duy nhất để biết một dòng có trùng
+          hay không — mọi cách ghi (<code>0987654321</code>, <code>84987654321</code>,{" "}
+          <code>+84 987 654 321</code>, hay thiếu số 0 đầu) đều được quy về cùng một số. File
+          chia làm ba nhóm trước khi ghi; bạn xem và sửa ngay tại đây, không cần mở lại Excel.
         </p>
         <p className="text-sm">
           Có file <b>danh sách khách ĐÃ ĐĂNG KÝ</b> của Sale (nhiều sheet theo tháng)?{" "}
@@ -56,7 +58,7 @@ export default function ImportLeadsPage() {
         templateFilename="mau-lead.xlsx"
         duplicateLabel="SĐT"
         duplicateKey={(raw) => normalizePhone(raw["SĐT"]) || null}
-        mergeDuplicates={{ label: "Sẽ cập nhật lead đang có" }}
+        mergeDuplicates={{ label: "Sẽ bổ sung vào lead đang có" }}
         checkExisting={async (raws, excelNos) => {
           // Đối chiếu SĐT với lead ĐÃ CÓ trong CRM — nói rõ dòng này sẽ ghi đè lên ai, để
           // Sale nhận ra ngay nếu đó thật sự là người khác cùng số.
@@ -79,7 +81,9 @@ export default function ImportLeadsPage() {
                 `SĐT ${formatPhoneVN(m.phone)} đã có trong CRM — PH "${m.parentName}"` +
                   `, con: ${m.childName?.trim() || "(chưa ghi tên con)"}` +
                   `, trạng thái: ${leadStatusLabel(m.status)}.` +
-                  ` Dòng này sẽ CẬP NHẬT lead đó và chia lại cho tư vấn viên mới.` +
+                  ` Dòng này chỉ ĐIỀN những ô lead đó đang để trống; ô đã có giá trị thì` +
+                  ` giữ nguyên, thông tin khác trong file được ghi vào ghi chú. Lead chưa chốt` +
+                  ` sẽ được chia lại cho tư vấn viên mới.` +
                   ` Nếu đúng là người khác → sửa SĐT hoặc xoá dòng.`,
               );
             }
@@ -90,6 +94,11 @@ export default function ImportLeadsPage() {
           key: c,
           label: c,
           required: c === "Tên phụ huynh" || c === "SĐT",
+          // Cột SĐT bày ra dạng `0987654321` dù file ghi `84987654321`, `+84 987 654 321`
+          // hay `987654321` (Excel lưu kiểu number nên mất số 0 đầu). Cả ba đều được hệ
+          // thống coi là CÙNG một số; bày nguyên văn thì người nhập không đối chiếu được
+          // với danh bạ của họ. Giá trị gốc vẫn còn ở tooltip.
+          ...(c === "SĐT" ? { hienThi: formatPhoneVN } : {}),
         }))}
         parseRow={(row) => {
           const res = parseLeadImportRow(row as Record<string, unknown>);
@@ -135,11 +144,16 @@ export default function ImportLeadsPage() {
             <li>
               {/* Đây là phần đổi nghĩa 15/09/2026 — viết dài hơn các mục khác có chủ đích, vì
                   nó là thứ duy nhất trên màn này GHI ĐÈ dữ liệu người dùng đã nhập tay. */}
-              <b className="text-foreground">Trùng SĐT</b> không còn bị bỏ qua: hệ thống{" "}
-              <b className="text-foreground">cập nhật lead đang có</b> bằng thông tin trong
-              file, ô nào file để trống thì giữ nguyên giá trị cũ, và con mới được thêm vào
-              cùng lead (không tạo lead trùng số).
+              <b className="text-foreground">Trùng SĐT</b> không còn bị bỏ qua, nhưng cũng{" "}
+              <b className="text-foreground">không ghi đè</b> dữ liệu đang có: hệ thống chỉ{" "}
+              <b className="text-foreground">điền vào những ô lead đang để trống</b>, còn con
+              mới thì thêm vào cùng lead (không tạo lead trùng số).
               <ul className="mt-1 list-inside list-disc space-y-0.5 pl-1">
+                <li>
+                  Ô <b className="text-foreground">đã có giá trị</b> mà file ghi khác thì{" "}
+                  <b className="text-foreground">giữ nguyên giá trị đang có</b> — giá trị
+                  trong file được ghi lại vào ghi chú kèm ngày, để bạn tự đối chiếu.
+                </li>
                 <li>
                   <b className="text-foreground">Ghi chú</b> của Sale không bị mất — ghi chú
                   trong file được nối thêm xuống dưới.

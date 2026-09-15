@@ -24,6 +24,7 @@ import { toast } from "sonner";
 import { X } from "lucide-react";
 import { unenrollLeadChildLopTrialAction } from "../_actions";
 import type { EnrollmentRow, TrialEnrollmentStatusV2 } from "../_lib/types";
+import { formatPhoneVN } from "@/lib/phone";
 
 const NHAN: Record<TrialEnrollmentStatusV2, string> = {
   ACTIVE: "Đang học",
@@ -107,7 +108,7 @@ export function RosterList({
                 ) : (
                   "—"
                 )}
-                {e.phone ? ` · ${e.phone}` : ""}
+                {e.phone ? ` · ${formatPhoneVN(e.phone)}` : ""}
               </p>
             </div>
 
