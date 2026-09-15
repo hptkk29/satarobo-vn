@@ -29,6 +29,8 @@ import { nationalPhone } from "@/lib/phone";
 import {
   conChonSan,
   conCuaPhuHuynh,
+  locConChoODon,
+  MA_LOC_CON,
   studentIdChoDon,
   thieuHocVienODong,
 } from "@/lib/orders/hoc-vien-dong-don";
@@ -1064,10 +1066,16 @@ export function OrderCreateForm({
                 </b>
               </span>
             </div>
+            {/* `choKhaiDaThu={false}` — chủ dự án 16/09: *"đây chỉ là giai đoạn tạo đơn
+                và tạo kế hoạch thanh toán để xuất QR cho KH quét thì làm gì đã thu mà
+                tick?"*. Đúng: đơn còn chưa tồn tại, nên một ô tick ở đây chỉ mở đường ghi
+                một khoản Ledger-A khống. Khách đã đóng trước thì khai ở TRANG ĐƠN, nơi
+                prop này là `true`. */}
             <KeHoachDotEditor
               kh={keHoach}
               totalAmount={totalAmount}
               khoa={khoaKeHoach}
+              choKhaiDaThu={false}
             />
           </section>
 
@@ -1332,27 +1340,32 @@ function DongHangCard({
    * cùng một hàm với lúc dựng dòng đầu (chọn sẵn con) và với `chonLead`. Ba bản chép tay
    * của cùng phép so là ba cách lệch, và lệch ở đây nghĩa là ô này bày ra một tập còn ô
    * kia chọn sẵn một em NGOÀI tập đó.
+   *
+   * ⚠️ CẬP NHẬT 16/09/2026 — QUYẾT ĐỊNH "bày ai" ĐÃ RA KHỎI TỆP NÀY. Chủ dự án nêu lỗi
+   * lần thứ hai (*"đã lọc sđt ph vẫn hiển thị full… có thể chọn sai con"*) và gốc là dòng
+   * fail-open TỪNG nằm ngay dưới chú thích này. Nay hỏi `locConChoODon` — nó trả CẢ tập
+   * LẪN mã trạng thái, nên ô chọn và câu nhắc không thể nói khác nhau. Lý do đầy đủ + số
+   * đo 121/125 lead ở `lib/orders/hoc-vien-dong-don.ts`.
    */
-  const conCuaSdt = useMemo(
-    () => conCuaPhuHuynh(students, customerPhone),
-    [students, customerPhone],
+  /** Người bán CHỦ ĐỘNG xin cả danh sách — mặc định TẮT, và reset theo từng dòng hàng. */
+  const [bayCaDanhSach, setBayCaDanhSach] = useState(false);
+  const loc = useMemo(
+    () => locConChoODon(students, customerPhone, bayCaDanhSach),
+    [students, customerPhone, bayCaDanhSach],
   );
   const hocVienOptions: ComboboxOption[] = useMemo(() => {
-    // SĐT chưa có, HOẶC có nhưng không con nào khớp (phụ huynh mới, con chưa có hồ sơ)
-    // ⇒ bày lại ĐỦ danh sách thay vì một ô rỗng không giải thích được. Đây là quyết định
-    // của MÀN HÌNH và nó nằm ở màn hình — `conCuaPhuHuynh` cố ý chỉ trả lời "con của ai",
-    // và "chưa biết ai" thì câu trả lời đúng là không ai. Lời nhắc dưới ô nói rõ.
-    const dung = conCuaSdt.length > 0 ? conCuaSdt : students;
+    // ⚠️ KHÔNG lọc lại ở đây, KHÔNG thay bằng tập khác. `locConChoODon` là chỗ DUY NHẤT
+    // quyết định ô này bày ai, và nó trả kèm mã trạng thái để câu nhắc bên dưới không phải
+    // suy lại. Dòng cũ ở đây là `conCuaSdt.length > 0 ? conCuaSdt : students` — fail-open,
+    // và nó làm 121/125 lead bày đủ 247 em (xem chú thích trong `hoc-vien-dong-don.ts`).
+    const dung = loc.ds;
     return dung.map((hv) => ({
       value: hv.id,
       label: [hv.name, hv.parentName, nationalPhone(hv.parentPhone) ?? hv.parentPhone]
         .filter(Boolean)
         .join(" · "),
     }));
-  }, [students, conCuaSdt]);
-
-  /** Đang lọc theo SĐT và có khớp ⇒ nói ra, kẻo người bán tưởng mất dữ liệu. */
-  const soConCuaSdt = conCuaSdt.length;
+  }, [loc]);
 
   return (
     <div className="rounded-xl border border-border bg-background p-4">
@@ -1405,12 +1418,43 @@ function DongHangCard({
             emptyText="Không tìm thấy học viên"
           />
           {/* Việc LỌC phải tự nói ra. Một ô đột nhiên chỉ còn 2 dòng mà không giải thích
-              thì người bán tưởng mất dữ liệu và đi tìm ở chỗ khác. */}
-          {customerPhone.replace(/D/g, "").length >= 6 && (
+              thì người bán tưởng mất dữ liệu và đi tìm ở chỗ khác.
+
+              ⚠️ Câu nhắc đi theo `loc.ma`, KHÔNG tự suy lại từ `customerPhone`. Bản cũ tự
+              suy bằng `customerPhone.replace(/D/g, "").length >= 6` — thiếu dấu gạch chéo
+              (`/\D/g`) nên nó xoá chữ "D" hoa chứ không xoá ký tự không-phải-số; ý định
+              "đủ 6 chữ số mới nhắc" chưa từng chạy. Lỗi câm kiểu đó chỉ tránh được bằng
+              cách để tập và câu nhắc là CÙNG MỘT giá trị trả về. */}
+          {loc.ma === MA_LOC_CON.DANG_LOC && (
             <p className="text-xs text-muted-foreground">
-              {soConCuaSdt > 0
-                ? `Đang lọc theo SĐT ${nationalPhone(customerPhone) ?? customerPhone} — ${soConCuaSdt} con`
-                : "SĐT này chưa có hồ sơ học viên nào — đang bày cả danh sách; để trống được nếu con chưa có hồ sơ."}
+              Đang lọc theo SĐT {nationalPhone(customerPhone) ?? customerPhone} —{" "}
+              {loc.soCon} con
+            </p>
+          )}
+          {loc.ma === MA_LOC_CON.KHONG_CO_CON && (
+            <p className="text-xs text-state-warning-ink">
+              SĐT {nationalPhone(customerPhone) ?? customerPhone} chưa có hồ sơ học viên nào.
+              Để trống ô này được — tên con khi đó nằm ở tên khoá học.{" "}
+              <button
+                type="button"
+                onClick={() => setBayCaDanhSach(true)}
+                className="font-semibold text-primary underline-offset-2 hover:underline"
+              >
+                Bày cả danh sách ({loc.tong} em)
+              </button>
+            </p>
+          )}
+          {loc.ma === MA_LOC_CON.BAY_TAY && (
+            <p className="text-xs text-muted-foreground">
+              Đang bày cả danh sách ({loc.tong} em) — KHÔNG lọc theo SĐT, hãy đối chiếu tên
+              phụ huynh trong từng dòng.{" "}
+              <button
+                type="button"
+                onClick={() => setBayCaDanhSach(false)}
+                className="font-semibold text-primary underline-offset-2 hover:underline"
+              >
+                Lọc lại theo SĐT
+              </button>
             </p>
           )}
         </div>

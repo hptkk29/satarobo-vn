@@ -157,6 +157,15 @@ export type PaymentListRow = {
   hienTai: number;
   /** Số bút toán điều chỉnh đã có trên phiếu này. */
   soLanDieuChinh: number;
+  /**
+   * Id của đơn — CHỈ để dựng link sang `/admin/orders/<id>`.
+   *
+   * Chủ dự án 16/09: *"link giữa trang thanh toán và trang đơn hàng chi tiết cho từng
+   * đơn khi bấm vào xem luôn chứ?"*. Trước bản này cột mã đơn là chữ TRƠN — và nguyên
+   * nhân không phải thiếu dữ liệu: câu Prisma ở `:207` ĐÃ `select: { id: true }`, chỉ
+   * phép map bên dưới bỏ nó đi, nên màn không có gì để dựng `href`.
+   */
+  orderId: string | null;
   orderCode: string | null;
   customerName: string | null;
   studentName: string | null; // tên bé
@@ -277,6 +286,7 @@ async function fetchPaymentRows(
       paymentType: p.paymentType,
       hienTai: p.amount + (dc?.tong ?? 0),
       soLanDieuChinh: dc?.soLan ?? 0,
+      orderId: p.order?.id ?? null,
       orderCode: p.order?.code ?? null,
       customerName: p.order?.customerName ?? null,
       studentName: p.order?.student?.name ?? null,

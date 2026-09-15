@@ -191,10 +191,33 @@ export function KeHoachDotEditor({
   kh,
   totalAmount,
   khoa = null,
+  choKhaiDaThu,
 }: {
   kh: KeHoachDotState;
   totalAmount: number;
   khoa?: string | null;
+  /**
+   * CÓ cho khai "đợt này đã thu rồi" hay KHÔNG [16/09/2026].
+   *
+   * Chủ dự án: *"ở trang /orders/new session kế hoạch thanh toán thì bỏ nút tick đã thu
+   * đi vì đây chỉ là giai đoạn tạo đơn và tạo kế hoạch thanh toán để xuất QR cho KH quét
+   * thì làm gì đã thu mà tick?"*
+   *
+   * ⚠️ VÌ SAO LÀ PROP CHỨ KHÔNG XOÁ HẲN Ô TICK. Editor này mount ở ĐÚNG HAI chỗ và hai
+   * chỗ có nghĩa nghiệp vụ KHÁC nhau:
+   *   · `/orders/new` (`order-create-form.tsx`) — đơn ĐANG ĐƯỢC LẬP. Chưa có đơn thì
+   *     chưa có tiền; ô tick ở đây chỉ mở đường ghi một khoản khống.
+   *   · `/orders/[id]` (`order-payment-section.tsx`) — đơn ĐÃ CÓ THẬT, và ca "cọc đã đóng
+   *     trước đó" là ca thật chủ dự án đã chạy qua trong vòng đời 15/09. Xoá ô tick ở đây
+   *     là khoá đường khai cọc.
+   * Xoá trắng ô tick vì trang A là làm hỏng trang B.
+   *
+   * ⚠️ Đây là bản vá UI. Đường SERVER cố ý KHÔNG đổi: `daThu` trong validator vẫn là
+   * `z.boolean()` BẮT BUỘC (bỏ trường ⇒ 400), và `dotsGhiTuForm` vẫn chuẩn hoá
+   * `daThu === true`. Trang tạo đơn gửi `daThu: false` cho mọi đợt — tức server vẫn là
+   * bên quyết định, và một client bị sửa tay cũng không vượt qua được luật ở đó.
+   */
+  choKhaiDaThu: boolean;
 }) {
   const {
     dots,
@@ -340,7 +363,13 @@ export function KeHoachDotEditor({
           {dots.map((d, i) => (
             <div
               key={i}
-              className="grid grid-cols-2 items-end gap-2 rounded-lg border border-border bg-background p-2 @md:grid-cols-[auto_1fr_1fr_auto]"
+              // Cột cuối `auto` là ô tick "đã thu". Không cho khai đã-thu thì hàng còn BA
+              // ô, và giữ nguyên bốn rãnh là chừa một khoảng trống không ai hiểu vì sao.
+              className={`grid grid-cols-2 items-end gap-2 rounded-lg border border-border bg-background p-2 ${
+                choKhaiDaThu
+                  ? "@md:grid-cols-[auto_1fr_1fr_auto]"
+                  : "@md:grid-cols-[auto_1fr_1fr]"
+              }`}
             >
               <span
                 className={`self-center whitespace-nowrap text-xs font-semibold ${
@@ -386,15 +415,17 @@ export function KeHoachDotEditor({
                   className="mt-0.5 w-full rounded-md border border-border px-2 py-1.5 text-sm disabled:bg-muted"
                 />
               </label>
-              <label className="flex items-center gap-1.5 self-center whitespace-nowrap text-xs text-muted-foreground">
-                <input
-                  type="checkbox"
-                  checked={d.daThu}
-                  onChange={(e) => suaDot(i, { daThu: e.target.checked })}
-                  className="h-4 w-4"
-                />
-                đã thu
-              </label>
+              {choKhaiDaThu && (
+                <label className="flex items-center gap-1.5 self-center whitespace-nowrap text-xs text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={d.daThu}
+                    onChange={(e) => suaDot(i, { daThu: e.target.checked })}
+                    className="h-4 w-4"
+                  />
+                  đã thu
+                </label>
+              )}
             </div>
           ))}
         </div>
@@ -447,10 +478,16 @@ export function KeHoachDotEditor({
           trong `save()` không cứu được: nút disabled thì `onClick` không chạy.
           ĐẶT NGOÀI `fieldset`: lời giải thích không phải một ô nhập, và khi khối bị khoá
           thì nó là thứ duy nhất còn đáng đọc. */}
+      {/* ⚠️ Câu này PHẢI đi theo `choKhaiDaThu`. Bản cũ dặn *"tích ô đã thu của đợt đó"*
+          vô điều kiện; ở trang tạo đơn ô đó nay không còn, nên giữ nguyên câu là chỉ người
+          dùng đi tìm một thứ không tồn tại — đúng loại lời hứa suông mà luật 12 nói tới,
+          và nó không làm test nào đỏ, console vẫn sạch. */}
       {khoa == null && thieuHan >= 0 && (
         <p className="rounded-md bg-state-warning-soft px-3 py-2 text-xs font-semibold text-state-warning-ink">
-          Đợt {thieuHan + 1} chưa thu — chọn ngày hẹn đóng để lưu được kế hoạch. Nếu khách
-          đã đóng rồi thì tích ô &quot;đã thu&quot; của đợt đó.
+          Đợt {thieuHan + 1} chưa thu — chọn ngày hẹn đóng để lưu được kế hoạch.
+          {choKhaiDaThu
+            ? " Nếu khách đã đóng rồi thì tích ô “đã thu” của đợt đó."
+            : " Khách đã đóng trước rồi thì tạo đơn xong, mở trang đơn và khai ở đó — trang tạo đơn chỉ lập kế hoạch để xuất QR."}
         </p>
       )}
     </div>

@@ -363,7 +363,10 @@ export function OrderInstallmentPlan({
             </div>
           )}
 
-          <KeHoachDotEditor kh={kh} totalAmount={totalAmount} />
+          {/* `choKhaiDaThu` = true: đơn ở đây ĐÃ TỒN TẠI, và "cọc đã đóng trước khi lên
+              hệ thống" là ca thật. Đây là chỗ DUY NHẤT còn khai được đã-thu — trang tạo
+              đơn đã tắt. */}
+          <KeHoachDotEditor kh={kh} totalAmount={totalAmount} choKhaiDaThu />
 
           <button
             onClick={save}

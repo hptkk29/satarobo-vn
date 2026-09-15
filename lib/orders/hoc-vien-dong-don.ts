@@ -123,3 +123,93 @@ export function thieuHocVienODong(
     items.some((it) => !it.studentId?.trim())
   );
 }
+
+/**
+ * Ô CHỌN HỌC VIÊN BÀY RA TẬP NÀO — và vì sao [16/09/2026].
+ *
+ * ── Vì sao có hàm này, khi `conCuaPhuHuynh` đã tồn tại ──
+ * Chủ dự án nêu lỗi này LẦN THỨ HAI: *"bộ lọc học viên khi đã lọc sđt ph vẫn hiển thị full
+ * chứ không hiển thị chỉ con của PH đó, dẫn đến loạn, có thể chọn sai con"*. Bản vá lần
+ * trước (`9b69d193`, giữ nguyên qua `f3259122`) KHÔNG sai ở phép so — nó sai ở một dòng
+ * fail-open nằm TRONG màn hình:
+ *
+ *     const dung = conCuaSdt.length > 0 ? conCuaSdt : students;   // order-create-form.tsx:1345
+ *
+ * Không con nào khớp ⇒ bày lại TOÀN BỘ danh sách. Đo trên `satarobo_local` (chính DB mà
+ * dev server đọc): **121/125 lead = 96,8% cho ra 0 con khớp** ⇒ ô chọn bày đủ 247 học viên.
+ * Từ ghế người bán, hành vi đó KHÔNG phân biệt được với "không lọc gì cả" — nên bản vá
+ * trước, dù đúng về hàm, không đổi được điều chủ dự án nhìn thấy.
+ *
+ * Vì sao 121/125: với lead MỚI, "con của phụ huynh này" sống ở `LeadChild` chứ chưa ở
+ * `Student` (đo: 130 dòng `LeadChild` / 104 lead, và `LeadChild` KHÔNG có cột `studentId`).
+ * Ô chọn chỉ nạp từ `Student` (`orders/_actions.ts:1179-1184`) nên nó không thể khớp.
+ *
+ * ⚠️ Bẫy mà người vá trước NGHI SAI, ghi lại để không ai đi lại: hình dạng SĐT KHÔNG phải
+ * nguyên nhân. `canonicalPhone("84938691925") === canonicalPhone("0938691925")` → `true`
+ * (đo thật). Và chú thích ở `conCuaPhuHuynh` bảo DB có cả `0…` lẫn `84…` cũng SAI: đo
+ * 259/259 `Student.parentPhone` đều dạng `84…`, 0 bản ghi dạng `0…`. Chú thích không phải
+ * bằng chứng.
+ *
+ * ── Vì sao ĐÚNG MỘT hàm trả CẢ tập LẪN mã trạng thái ──
+ * Bản cũ để màn hình tự suy câu nhắc bằng một biểu thức RIÊNG, và biểu thức đó mang một
+ * lỗi câm suốt thời gian sống của nó: `customerPhone.replace(/D/g, "")` — thiếu dấu gạch
+ * chéo, nên nó xoá chữ `D` hoa chứ không xoá ký tự không-phải-số (`/\D/g`; dòng 498 cùng
+ * tệp viết ĐÚNG). Ý định "đủ 6 chữ số mới nhắc" vì thế chưa từng được thi hành. Tách tập
+ * và câu nhắc thành hai phép tính là mở sẵn đường cho chúng nói khác nhau — nên ở đây
+ * chúng là MỘT giá trị trả về.
+ *
+ * ── Bốn trạng thái, loại trừ nhau ──
+ * · `CHUA_CO_SDT`  — chưa đọc được SĐT (trống, hoặc đang gõ dở) ⇒ bày ĐỦ. Cố ý: chặn lúc
+ *                    người ta đang gõ là ô chọn nhảy loạn, và đơn walk-in không có SĐT vẫn
+ *                    phải chọn được con.
+ * · `DANG_LOC`     — SĐT đọc được, có con khớp ⇒ bày ĐÚNG các con đó.
+ * · `KHONG_CO_CON` — SĐT đọc được, KHÔNG con nào khớp ⇒ bày **RỖNG**. Đây là chỗ đảo hành
+ *                    vi cũ, và là toàn bộ mục đích của hàm: thà một ô rỗng có lời giải
+ *                    thích còn hơn 247 em trong đó có con của nhà khác.
+ * · `BAY_TAY`      — người bán CHỦ ĐỘNG bấm "bày cả danh sách" ⇒ bày ĐỦ.
+ *
+ * `BAY_TAY` không phải cửa hậu cho hành vi cũ: khác biệt là AI quyết. Trước đây hệ thống
+ * âm thầm mở; nay người bán phải bấm, và cú bấm đó là lúc họ tự nhận "tôi biết em này
+ * không khớp SĐT". Bỏ hẳn cửa này thì ca SĐT nhà có hai số (mẹ đăng ký, bố đóng tiền) trở
+ * thành đường cụt.
+ */
+export const MA_LOC_CON = {
+  CHUA_CO_SDT: "CHUA_CO_SDT",
+  DANG_LOC: "DANG_LOC",
+  KHONG_CO_CON: "KHONG_CO_CON",
+  BAY_TAY: "BAY_TAY",
+} as const;
+
+export type MaLocCon = (typeof MA_LOC_CON)[keyof typeof MA_LOC_CON];
+
+export type KetQuaLocCon<T> = {
+  /** Tập ĐEM VÀO ô chọn. Màn hình không được lọc lại, không được thay bằng tập khác. */
+  ds: T[];
+  ma: MaLocCon;
+  /** Số con khớp SĐT — dùng cho câu nhắc. Luôn là số con THẬT, kể cả khi `ma = BAY_TAY`. */
+  soCon: number;
+  /** Tổng số học viên đang có, để câu nhắc nói được "bày cả danh sách (N em)". */
+  tong: number;
+};
+
+export function locConChoODon<T extends HocVienTheoSdt>(
+  hocVien: readonly T[],
+  sdt: string | null | undefined,
+  bayTay: boolean,
+): KetQuaLocCon<T> {
+  const con = conCuaPhuHuynh(hocVien, sdt);
+  const tong = hocVien.length;
+  // ⚠️ Thứ tự BA nhánh dưới đây có nghĩa. `BAY_TAY` phải đứng TRƯỚC nhánh SĐT: người bán
+  // đã chủ động xin cả danh sách thì một SĐT khớp 1 con KHÔNG được thu ô lại — làm vậy là
+  // cú bấm của họ bị hệ thống lặng lẽ huỷ (luật 12: affordance phải nói thật).
+  if (bayTay) {
+    return { ds: [...hocVien], ma: MA_LOC_CON.BAY_TAY, soCon: con.length, tong };
+  }
+  if (!canonicalPhone(sdt)) {
+    return { ds: [...hocVien], ma: MA_LOC_CON.CHUA_CO_SDT, soCon: 0, tong };
+  }
+  if (con.length > 0) {
+    return { ds: con, ma: MA_LOC_CON.DANG_LOC, soCon: con.length, tong };
+  }
+  return { ds: [], ma: MA_LOC_CON.KHONG_CO_CON, soCon: 0, tong };
+}

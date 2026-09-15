@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import {
   Loader2,
   Plus,
@@ -289,7 +290,24 @@ export function PaymentsClient({
               {rows.map((p) => (
                 <TableRow key={p.id}>
                   <TableCell className="font-medium">
-                    <div>{p.orderCode ?? "—"}</div>
+                    {/* Mã đơn MỞ ĐƯỢC ĐƠN [16/09/2026]. Chủ dự án: *"link giữa trang thanh
+                        toán và trang đơn hàng chi tiết cho từng đơn khi bấm vào xem luôn
+                        chứ?"*. Trước bản này là một `<div>` chữ trơn, và cả tệp không có
+                        MỘT link nào trỏ `/orders/` — kế toán muốn xem đơn phải tự nhớ mã
+                        rồi đi tìm ở danh sách đơn.
+                        `orderId` có thể `null` với khoản chưa gắn đơn ⇒ khi đó in chữ
+                        trơn, KHÔNG dựng một link chết (luật 12: mũi/con trỏ là lời hứa). */}
+                    {p.orderId && p.orderCode ? (
+                      <Link
+                        href={`/orders/${p.orderId}`}
+                        className="text-primary underline-offset-2 hover:underline"
+                        title={`Mở đơn ${p.orderCode}`}
+                      >
+                        {p.orderCode}
+                      </Link>
+                    ) : (
+                      <div>{p.orderCode ?? "—"}</div>
+                    )}
                     <div className="text-xs text-muted-foreground">
                       {p.customerName ?? ""}
                     </div>
