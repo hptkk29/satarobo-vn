@@ -28,6 +28,7 @@ import {
   chenCoc,
   phanBoGhiTheoDot,
   TRAN_SO_DOT,
+  chiaDotGiuDotDaKhoa,
 } from "./ke-hoach-dot";
 
 describe("[KH-01] chia tiền theo số đợt — tổng LUÔN bằng tổng đơn", () => {
@@ -262,5 +263,62 @@ describe("[KH-05] TIỀN CỌC — trừ vào đợt 1, sinh phiếu riêng đ�
     const r = chenCoc(chiaDotHocPhi(10_000_000, 2), 99_000_000);
     expect(r.reduce((s, d) => s + d.amount, 0)).toBe(10_000_000);
     expect(r[0]!.amount).toBe(10_000_000);
+  });
+});
+
+/**
+ * CHIA LẠI KHI ĐÃ CÓ ĐỢT THU TIỀN (15/09/2026).
+ *
+ * Chủ dự án: *"khoá phần đã thu lại, chỉ cho sửa các đợt sau đó với số tiền còn thiếu
+ * chưa thanh toán."* Bất biến quan trọng nhất vẫn là Σ === tổng đơn: một đồng lệch ở đây
+ * là một đồng lệch giữa số phải thu của đơn và tổng phiếu thu, và nó không tự lộ ra ở
+ * màn nào.
+ */
+describe("[KHOA] chiaDotGiuDotDaKhoa — giữ đợt đã thu, chia phần còn thiếu", () => {
+  it("[KHOA-01] giữ nguyên đợt đã khoá, chia đều phần còn lại, Σ vẫn bằng tổng đơn", () => {
+    // Đơn 10tr, đợt 1 đã thu 6tr ⇒ còn 4tr chia cho 2 đợt sau.
+    const r = chiaDotGiuDotDaKhoa(10_000_000, [6_000_000], 2);
+    expect(r).toEqual([6_000_000, 2_000_000, 2_000_000]);
+    expect(r.reduce((a, b) => a + b, 0)).toBe(10_000_000);
+  });
+
+  it("[KHOA-02] nhiều đợt đã khoá", () => {
+    const r = chiaDotGiuDotDaKhoa(10_000_000, [6_000_000, 1_000_000], 1);
+    expect(r).toEqual([6_000_000, 1_000_000, 3_000_000]);
+    expect(r.reduce((a, b) => a + b, 0)).toBe(10_000_000);
+  });
+
+  it("[KHOA-03] phần lẻ dồn vào đợt CUỐI, không dồn vào đợt đã khoá", () => {
+    // Đợt đã khoá là tiền THẬT đã nhận — cộng một đồng lẻ vào đó là sửa số đã thu.
+    const r = chiaDotGiuDotDaKhoa(10_000_001, [6_000_000], 3);
+    expect(r[0]).toBe(6_000_000);
+    expect(r.reduce((a, b) => a + b, 0)).toBe(10_000_001);
+    expect(r[3]).toBe(1_333_335);
+  });
+
+  it("[KHOA-04] Σ đã khoá VƯỢT tổng đơn ⇒ đợt sau nhận 0, KHÔNG nhận số ÂM", () => {
+    // Ca thật: giảm giá sau khi đã thu, hoặc khách đóng thừa. Một phiếu thu ÂM không
+    // tồn tại trong nghiệp vụ; trả 0 để người bán thấy là không còn gì để chia.
+    const r = chiaDotGiuDotDaKhoa(5_000_000, [6_000_000], 2);
+    expect(r).toEqual([6_000_000, 0, 0]);
+    expect(r.every((n) => n >= 0)).toBe(true);
+  });
+
+  it("[KHOA-05] không còn đợt nào sau ⇒ trả đúng phần đã khoá", () => {
+    expect(chiaDotGiuDotDaKhoa(10_000_000, [6_000_000, 4_000_000], 0)).toEqual([
+      6_000_000, 4_000_000,
+    ]);
+  });
+
+  it("[KHOA-06] không có đợt nào khoá ⇒ hành vi TRÙNG chiaDotHocPhi", () => {
+    // Nếu hai hàm lệch nhau ở ca này thì màn hình sẽ nhảy số vào đúng lúc đợt đầu
+    // được thu tiền — thời điểm khó soi nhất.
+    expect(chiaDotGiuDotDaKhoa(10_000_000, [], 3)).toEqual(chiaDotHocPhi(10_000_000, 3));
+  });
+
+  it("[KHOA-07] đầu vào rác không sinh số âm cũng không ném", () => {
+    expect(chiaDotGiuDotDaKhoa(Number.NaN, [1_000], 2)).toEqual([1_000, 0, 0]);
+    expect(chiaDotGiuDotDaKhoa(1_000, [Number.NaN], 1)).toEqual([0, 1_000]);
+    expect(chiaDotGiuDotDaKhoa(1_000, [-5], 1)).toEqual([0, 1_000]);
   });
 });

@@ -665,20 +665,15 @@ export function OrderDetailClient({
               (lib/orders/price-guard.ts), và khoá kế hoạch nay theo TIỀN chứ không
               theo cờ duyệt (lib/payments/plan-money-guard.ts). */}
 
-          {/* G4 (3b) — Kế hoạch thanh toán 2 đợt */}
-          <OrderInstallmentPlan
-            orderId={order.id}
-            totalAmount={order.totalAmount}
-            canManage={canManage}
-            installments={installments}
-            accounting={accounting}
-            // TRỤC B (`Payment.saleStatus = RECORDED`) — nguồn của mặc định ô "đã thu".
-            // Phải là ĐÚNG con số mà `recordInstallmentPlan` đo khi gác; xem chú thích
-            // ở `daThuTheoSo` trong `order-payment-section.tsx`.
-            daThuTheoSo={congNo.daThu}
-          />
+          {/* ── MÃ QR LÊN TRƯỚC KẾ HOẠCH [15/09/2026] ─────────────────────────
+              Chủ dự án: *"đưa phần mã QR lên trước phần kế hoạch thanh toán"*.
 
-          {/* 03/08 — QR xuất THEO TỪNG PHIẾU THU (đợt), thay cho 1 nút QR mức đơn.
+              Vì sao đúng: sau đợt này kế hoạch được lập NGAY ở trang tạo đơn, nên khi
+              mở lại trang đơn thì việc của sale gần như luôn là XUẤT QR cho đợt kế
+              tiếp — còn kế hoạch chỉ sửa khi khách đổi ý. Thứ dùng mỗi ngày phải đứng
+              trên thứ dùng thỉnh thoảng.
+
+              03/08 — QR xuất THEO TỪNG PHIẾU THU (đợt), thay cho 1 nút QR mức đơn.
               Đơn cũ chưa có phiếu thu nào → giữ nguyên khối QR mức đơn để không mất
               khả năng thu tiền. */}
           {paymentRequests.length > 0 ? (
@@ -694,6 +689,22 @@ export function OrderDetailClient({
               dueNow={dueNow}
             />
           )}
+
+          {/* Kế hoạch thanh toán — ĐỨNG SAU khối QR từ 15/09/2026 (xem chú thích trên). */}
+          <OrderInstallmentPlan
+            orderId={order.id}
+            totalAmount={order.totalAmount}
+            canManage={canManage}
+            installments={installments}
+            accounting={accounting}
+            // TRỤC B (`Payment.saleStatus = RECORDED`) — nguồn của mặc định ô "đã thu".
+            // Phải là ĐÚNG con số mà `recordInstallmentPlan` đo khi gác; xem chú thích
+            // ở `daThuTheoSo` trong `order-payment-section.tsx`.
+            daThuTheoSo={congNo.daThu}
+            // TIỀN THẬT đã rót về TỪNG PHIẾU — nguồn để KHOÁ đợt đã thu. Không suy từ
+            // `OrderInstallment.status`: cột đó là kế hoạch, còn đây là sổ tiền.
+            paymentRequests={paymentRequests}
+          />
         </div>
 
         {/* ── CỘT PHẢI — hồ sơ đơn ────────────────────────────────────────────

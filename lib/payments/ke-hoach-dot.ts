@@ -55,6 +55,48 @@ export function chiaDotHocPhi(tongTien: number, soDot: number, tiLe?: number[]):
 }
 
 /**
+ * Chia lại kế hoạch KHI đã có đợt thu tiền — giữ nguyên các đợt ĐÃ KHOÁ, chia phần
+ * CÒN THIẾU cho các đợt sau (15/09/2026).
+ *
+ * Chủ dự án: *"khi PH đã thanh toán thì ... phải khoá phần đã thu lại, chỉ cho sửa các
+ * đợt sau đó với số tiền còn thiếu chưa thanh toán."*
+ *
+ * ⚠️ VÌ SAO KHÔNG DÙNG `chiaDotHocPhi(tong, n)` RỒI THAY MẤY Ô ĐẦU: hàm đó chia ĐỀU
+ * trên TOÀN BỘ tổng, nên đè lại đợt đã khoá bằng một số khác rồi mới sửa về là một
+ * khoảnh khắc mà Σ không còn bằng tổng đơn. Ở màn hình thì khoảnh khắc đó vô hình, còn
+ * ở cổng `kiemKeHoachDot` nó là một lần từ chối không ai hiểu vì sao.
+ *
+ * ⚠️ BẤT BIẾN GIỮ NGUYÊN: Σ (đã khoá + chia mới) === `tongTien`. Phần chia cho các đợt
+ * sau = `tongTien − Σ đã khoá`, và `chiaDotHocPhi` tự giữ bất biến trên phần đó.
+ *
+ * ⚠️ Σ đã khoá VƯỢT tổng đơn (giảm giá sau khi đã thu, hoặc khách đóng thừa) ⇒ các đợt
+ * sau nhận 0đ, KHÔNG nhận số âm. Số âm ở đây là một phiếu thu âm — thứ không tồn tại
+ * trong nghiệp vụ, và `kiemKeHoachDot` sẽ từ chối; trả 0 để người bán tự thấy là không
+ * còn gì để chia và đi sửa tổng đơn.
+ *
+ * `soDotConLai <= 0` ⇒ trả đúng phần đã khoá: kế hoạch chỉ còn những đợt đã thu.
+ */
+export function chiaDotGiuDotDaKhoa(
+  tongTien: number,
+  daKhoa: readonly number[],
+  soDotConLai: number,
+): number[] {
+  const tong = Number.isFinite(tongTien) ? Math.max(0, Math.round(tongTien)) : 0;
+  const khoa = daKhoa.map((n) => (Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0));
+  const daDung = khoa.reduce((a, b) => a + b, 0);
+  const n = Math.floor(Number.isFinite(soDotConLai) ? soDotConLai : 0);
+  if (n <= 0) return khoa;
+  // KHÔNG bọc `Math.max(0, …)` ở đây: `chiaDotHocPhi` ĐÃ kẹp âm về 0 bên trong, nên bọc
+  // lần nữa là MÃ CHẾT — và mã chết trông y hệt một cái gác đang làm việc.
+  //
+  // ⚠️ Biết được điều này nhờ BƯỚC CẤY LỖI: cấy bỏ kẹp của tôi mà cả 40 ca VẪN XANH,
+  // tức dòng đó chưa từng có tác dụng và [KHOA-04] đang kiểm cái kẹp của `chiaDotHocPhi`
+  // chứ không kiểm dòng này. Ai muốn đổi luật kẹp thì sửa ở `chiaDotHocPhi` — chỗ DUY
+  // NHẤT giữ nó.
+  return [...khoa, ...chiaDotHocPhi(tong - daDung, n)];
+}
+
+/**
  * Hạn đóng cho từng đợt: đợt 1 đến hạn NGAY mốc, các đợt sau cách đều `buoc` ngày.
  *
  * ⚠️ Mốc BẮT BUỘC truyền vào — hàm không đọc `new Date()`. Test có ngày tuyệt đối mà hàm
