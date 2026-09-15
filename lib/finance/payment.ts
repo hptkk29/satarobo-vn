@@ -12,6 +12,7 @@ import {
   type GhiDanhCuaLead,
 } from "@/lib/finance/chia-khoan-theo-don";
 import { KHOAN_DA_XAC_NHAN } from "@/lib/finance/debt";
+import { expandPhoneVariants } from "@/lib/phone";
 import { recordLeadStatusChange } from "@/lib/leads/set-status";
 // Sổ đăng ký marker — MỘT chỗ định nghĩa chuỗi nhận dạng khoản tự sinh.
 import {
@@ -114,34 +115,10 @@ export async function ensureOrderPaymentRecorded(
   }
   if (!centerId) centerId = params.actor.centerId ?? null;
 
-  // ⚠️ GẮN GHI DANH cho khoản thu tự động (06/09/2026).
-  //
-  // Cổng phụ huynh cộng tiền theo QUAN HỆ `Enrollment.payments` (lib/portal/billing.ts,
-  // billing-student.ts, dashboard.ts). Khoản nào `enrollmentId = null` thì dù kế toán đã
-  // xác nhận vẫn KHÔNG trừ vào công nợ của bất kỳ ghi danh nào — phụ huynh đóng đợt 2
-  // xong mở portal ra vẫn thấy nợ nguyên.
-  //
-  // `linkRecordedPaymentsToEnrollments` chỉ chạy MỘT LẦN, trong `convert-lead-v2`. Mọi
-  // khoản sinh SAU đó (đợt 2 qua markInstallmentPaid, xác nhận đơn offline, webhook
-  // SePay) đều đi qua đúng hàm này và trước đây rơi vào khoảng trống ấy.
-  //
-  // Chỉ gắn khi KHÔNG MƠ HỒ — học viên của đơn có ĐÚNG MỘT ghi danh còn hiệu lực. Đơn
-  // nhiều ghi danh phải chia theo `finalPrice` (đúng phép chia của
-  // `linkRecordedPaymentsToEnrollments`), việc đó không làm lén ở đây; để null như cũ,
-  // không tệ hơn hiện trạng và không bao giờ gắn nhầm sổ.
-  const donHang = await tx.order.findUnique({
-    where: { id: orderId },
-    select: { studentId: true },
-  });
-  let enrollmentId: string | null = null;
-  if (donHang?.studentId) {
-    const ghiDanh = await tx.enrollment.findMany({
-      where: { studentId: donHang.studentId, deletedAt: null },
-      select: { id: true },
-      take: 2,
-    });
-    if (ghiDanh.length === 1) enrollmentId = ghiDanh[0]!.id;
-  }
+  // ⚠️ GẮN GHI DANH cho khoản thu tự động — nay làm SAU khi tạo, bằng hàm dùng chung
+  // `ganGhiDanhChoKhoanCuaDon` (xem cuối tệp). Xem chú thích ở đó để biết vì sao bản
+  // 06/09/2026 (chỉ gắn khi `Order.studentId` có giá trị) không đủ.
+  const enrollmentId: string | null = null;
 
   const now = new Date();
   const payment = await tx.payment.create({
@@ -177,6 +154,14 @@ export async function ensureOrderPaymentRecorded(
     },
     orgUnitId: centerId,
     tx,
+  });
+
+  // ── GẮN GHI DANH NGAY, KHÔNG ĐỢI CONVERT [15/09/2026] ──────────────────────
+  // Học viên đã tồn tại (lead đã chuyển đổi) thì khoản này gắn được luôn. Không gắn được
+  // thì để nguyên `enrollmentId = null` — đúng hiện trạng, không tệ hơn.
+  await ganGhiDanhChoKhoanCuaDon(tx, {
+    orderId,
+    actor: { id: params.actor.id, name: params.actor.name ?? "Hệ thống" },
   });
 
   // S3 / PH-2 — ghi nhận tiền → lead tự lên 'Đã đăng ký' (mở khoá convert).
@@ -377,6 +362,154 @@ export async function linkRecordedPaymentsToEnrollments(
     }
   }
   return { linked: recorded.length, splitCreated, duongLui };
+}
+
+/**
+ * GẮN GHI DANH CHO KHOẢN CỦA MỘT ĐƠN — chạy được BẤT CỨ LÚC NÀO, không chỉ lúc convert.
+ *
+ * ── Con bug đóng ở đây (đo 15/09/2026, chạy tay đầu-cuối) ──
+ * `linkRecordedPaymentsToEnrollments` chỉ chạy MỘT LẦN, trong `convert-lead-v2`. Mọi đợt
+ * đóng SAU đó sinh `Payment` với `enrollmentId = null`, mà `confirmPayment` lại cần
+ * `enrollmentId` (nó truyền thẳng vào `issueReceipt`). Hệ quả đo được:
+ *
+ *   · Màn Khoản thu hiện "Chờ convert" cho một lead ĐÃ chuyển đổi xong, và không có nút
+ *     nào thoát khỏi trạng thái đó.
+ *   · Hai đơn thật: 13.920.000đ / 22.080.000đ (63%) không bao giờ vào sổ kế toán được,
+ *     không bao giờ có phiếu thu — trong khi trang đơn vẫn in "Đã đóng đủ · Còn thiếu 0đ".
+ *
+ * Bản vá 06/09/2026 trước đó có cố gắng gắn ngay trong `ensureOrderPaymentRecorded`, nhưng
+ * điều kiện là `Order.studentId` phải có giá trị. Đơn lập từ `/orders/new?leadId=…` để cột
+ * đó NULL (suy từ dòng hàng, mà dòng hàng chưa có học viên lúc tạo đơn), nên nhánh ấy chưa
+ * từng chạy trong luồng lead.
+ *
+ * ⚠️ KHÔNG DÙNG ĐƯỜNG LUI Ở ĐÂY. `chiaKhoanTheoDon` có nhánh "không khớp được thì chia cho
+ * mọi ghi danh theo finalPrice" — đúng cho lúc convert (khi ta biết chắc mọi ghi danh vừa
+ * tạo là của lead này), nhưng SAI ở đây: gắn bừa một khoản vào ghi danh không liên quan còn
+ * tệ hơn để nó chưa gắn. Không khớp ⇒ bỏ qua, giữ nguyên hiện trạng.
+ */
+export async function ganGhiDanhChoKhoanCuaDon(
+  tx: Tx,
+  params: { orderId: string; actor: AuditActor },
+): Promise<{ linked: number; splitCreated: number; boQua: number }> {
+  const { orderId, actor } = params;
+
+  const chuaGan = await tx.payment.findMany({
+    where: { ...KHOAN_DA_GHI_NHAN, enrollmentId: null, orderId },
+    select: {
+      id: true, amount: true, orderId: true, method: true, paidDate: true,
+      note: true, evidenceUrl: true, recordedById: true, centerId: true,
+      accountantStatus: true,
+    },
+  });
+  if (chuaGan.length === 0) return { linked: 0, splitCreated: 0, boQua: 0 };
+
+  // Cùng chốt chặn cứng với hàm convert: nhánh tách SỬA `amount` của dòng gốc, chỉ đúng
+  // khi dòng còn là bản nháp chưa qua kế toán.
+  if (chuaGan.some((p) => p.accountantStatus === "CONFIRMED")) {
+    throw new Error(
+      "ganGhiDanhChoKhoanCuaDon: gặp khoản ĐÃ XÁC NHẬN chưa gắn ghi danh — " +
+        "không được sửa tiền đã đối soát, dùng adjustPayment.",
+    );
+  }
+
+  const don = await tx.order.findUnique({
+    where: { id: orderId },
+    select: {
+      customerPhone: true,
+      studentId: true,
+      items: { select: { studentId: true, totalPrice: true, discountAmount: true, metadata: true } },
+    },
+  });
+  if (!don) return { linked: 0, splitCreated: 0, boQua: chuaGan.length };
+
+  const dongDon = don.items.map((it) => {
+    const m = it.metadata as Record<string, unknown> | null;
+    return {
+      studentId: it.studentId,
+      courseId: typeof m?.courseId === "string" && m.courseId ? m.courseId : null,
+      thanhTien: it.totalPrice - (it.discountAmount ?? 0),
+    };
+  });
+
+  // Ứng viên: ghi danh của các học viên LIÊN QUAN tới đơn — học viên trên dòng, học viên
+  // của đơn, và (nếu đơn gắn lead) học viên của lead đó.
+  const idHocVien = new Set<string>();
+  for (const d of dongDon) if (d.studentId) idHocVien.add(d.studentId);
+  if (don.studentId) idHocVien.add(don.studentId);
+  // ⚠️ `Student` KHÔNG có cột `leadId` — con của phụ huynh nối bằng SĐT. Tra bằng
+  // `expandPhoneVariants` vì DB đang có cả `0…` lẫn `84…` (di sản 6 hàm chuẩn hoá cũ);
+  // so chuỗi thô là lọc mất đúng những bản ghi cần tìm.
+  if (don.customerPhone) {
+    const cuaPhuHuynh = await tx.student.findMany({
+      where: { parentPhone: { in: expandPhoneVariants([don.customerPhone]) }, deletedAt: null },
+      select: { id: true },
+    });
+    for (const s of cuaPhuHuynh) idHocVien.add(s.id);
+  }
+  if (idHocVien.size === 0) return { linked: 0, splitCreated: 0, boQua: chuaGan.length };
+
+  const dsGhiDanh = await tx.enrollment.findMany({
+    where: { studentId: { in: [...idHocVien] }, deletedAt: null },
+    select: { id: true, studentId: true, finalPrice: true, class: { select: { courseId: true } } },
+    orderBy: { createdAt: "asc" },
+  });
+  const ghiDanh: GhiDanhCuaLead[] = dsGhiDanh.map((e) => ({
+    enrollmentId: e.id,
+    studentId: e.studentId,
+    courseId: e.class?.courseId ?? null,
+    finalPrice: e.finalPrice ?? 0,
+  }));
+  if (ghiDanh.length === 0) return { linked: 0, splitCreated: 0, boQua: chuaGan.length };
+
+  let linked = 0;
+  let splitCreated = 0;
+  let boQua = 0;
+  for (const p of chuaGan) {
+    const { phan, duongLui } = chiaKhoanTheoDon(p.amount, dongDon, ghiDanh);
+    // Xem chú thích đầu hàm: đường lui KHÔNG được dùng ngoài lúc convert.
+    if (duongLui || phan.length === 0) {
+      boQua++;
+      continue;
+    }
+    linked++;
+    const soPhan = phan.length;
+    let daDungBanGoc = false;
+    for (let k = 0; k < soPhan; k++) {
+      const { enrollmentId, amount } = phan[k]!;
+      const note =
+        soPhan === 1
+          ? (p.note ?? null)
+          : `${(p.note ?? "").trim()} [tách ${k + 1}/${soPhan}]`.trim();
+      if (!daDungBanGoc) {
+        await tx.payment.update({ where: { id: p.id }, data: { enrollmentId, amount, note } });
+        await writeAudit({
+          actor, module: "finance", entityType: "Payment", entityId: p.id, action: "UPDATE",
+          changedFields: ["amount", "enrollmentId"],
+          oldValues: { amount: p.amount, enrollmentId: null },
+          newValues: { amount, enrollmentId, source: "gan-sau-convert" },
+          orgUnitId: p.centerId, tx,
+        });
+        daDungBanGoc = true;
+      } else {
+        const moi = await tx.payment.create({
+          data: {
+            orderId: p.orderId, enrollmentId, amount,
+            method: p.method, paidDate: p.paidDate, evidenceUrl: p.evidenceUrl ?? null, note,
+            saleStatus: "RECORDED", accountantStatus: "PENDING",
+            recordedById: p.recordedById, centerId: p.centerId,
+          },
+          select: { id: true },
+        });
+        splitCreated++;
+        await writeAudit({
+          actor, module: "finance", entityType: "Payment", entityId: moi.id, action: "CREATE",
+          newValues: { amount, enrollmentId, source: "gan-sau-convert", splitFrom: p.id },
+          orgUnitId: p.centerId, tx,
+        });
+      }
+    }
+  }
+  return { linked, splitCreated, boQua };
 }
 
 // ─── AC1 — Sale ghi nhận khoản ────────────────────────────────────────────────
