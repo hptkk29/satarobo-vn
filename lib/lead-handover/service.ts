@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { logLeadAudit } from "@/lib/audit/log";
 import { assignmentWrite } from "@/lib/lead/assignment";
+import { thuHoiChuongLeadCu } from "@/lib/lead/assign-lead";
 import { LEAD_CLOSED_STATUSES } from "@/lib/leads/status";
 import type { Prisma } from "@prisma/client";
 
@@ -154,6 +155,28 @@ export async function bulkReassignLeads(params: {
         reason: params.reason ?? "Bàn giao lead",
         tx,
       });
+    });
+  }
+
+  // 15/09/2026 — THU HỒI chuông "Bạn có lead mới" của sale CŨ cho từng lead vừa chuyển.
+  //
+  // Thiếu bước này thì bàn giao 30 lead là để lại ở sale cũ 30 cái chuông trỏ tới 30 lead họ
+  // không còn giữ — bấm vào ra trang "không tồn tại" vì `Lead` nằm trong `SCOPED_MODELS`.
+  // Đây là đường rò NẶNG NHẤT trong bốn đường tìm được ngày 15/09, vì nó hàng loạt.
+  //
+  // Đặt NGOÀI vòng transaction ở trên: `notifyStaff`/`thuHoiThongBao` cố ý không nhận `tx`,
+  // và thu hồi hỏng thì việc bàn giao vẫn phải thành công (`thuHoiChuongLeadCu` tự nuốt lỗi).
+  //
+  // ⚠️ CỐ Ý KHÔNG báo chuông cho sale MỚI ở đây. Bàn giao là thao tác HÀNG LOẠT: 30 lead sẽ
+  // thành 30 lần rung điện thoại liên tiếp, đúng kiểu "bão push" mà khối chú thích ở
+  // `lib/push/allowlist.ts` nói là cái giá không lấy lại được (người dùng tắt quyền thông báo
+  // ở cấp trình duyệt). Muốn báo thì phải là MỘT tin gộp "bạn vừa nhận N lead từ X" — một loại
+  // thông báo mới, chưa có, và là quyết định vận hành chứ không phải việc dọn kỹ thuật.
+  for (const lead of leads) {
+    await thuHoiChuongLeadCu({
+      chuCuId: params.fromUserId,
+      chuMoiId: params.toUserId,
+      leadId: lead.id,
     });
   }
 

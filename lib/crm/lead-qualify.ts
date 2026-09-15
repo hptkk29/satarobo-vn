@@ -91,6 +91,13 @@ export async function qualifyConversationToLead(input: {
         note: input.note ?? null,
         centerId: conv.centerId,
         qualifiedAt: now,
+        // 15/09/2026 — BẮT BUỘC. Danh sách /leads sắp theo `lastInboundAt` với
+        // `nulls: 'last'`, nên lead tạo mà bỏ trống cột này bị đẩy xuống CUỐI mọi
+        // trang — người dùng báo "nhập xong không thấy lead đâu", nhưng tìm theo
+        // SĐT/nguồn thì lại ra (tập kết quả nhỏ nên nó lọt trang 1).
+        // Quy ước: lúc tạo, `lastInboundAt` = `createdAt`; `laNhapLai()` chỉ đúng
+        // khi nó LỚN HƠN `createdAt`. Xem `lib/tables/lead-columns.ts`.
+        lastInboundAt: new Date(),
         commissionSource: input.commissionSource,
         adminId: input.adminId ?? null,
       },

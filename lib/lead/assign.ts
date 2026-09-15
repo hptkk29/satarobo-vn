@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { logLeadAudit } from "@/lib/audit/log";
 import { assignmentWrite } from "@/lib/lead/assignment";
+import { baoSaleCoLeadMoi, thuHoiChuongLeadCu } from "@/lib/lead/assign-lead";
 import { takeRotationTurn, takeRotationTurns } from "@/lib/lead/rotation";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
 import { LEAD_CLOSED_STATUSES } from "@/lib/leads/status";
@@ -177,6 +178,23 @@ export async function autoAssignLead(
     });
   });
 
+  // 15/09/2026 — đồng bộ chuông. Đây là đường MỘT lead (không hàng loạt) nên báo được cả hai
+  // đầu, đúng như `chiaChoLead` và `manualAssignLead` vẫn làm.
+  //
+  // Trước bản vá: đường này ghi `assignedToId` rồi im lặng — chủ mới không biết mình có lead,
+  // chủ cũ (nếu có) giữ lại một cái chuông trỏ tới lead đã mất.
+  await thuHoiChuongLeadCu({ chuCuId: lead.assignedToId, chuMoiId: target, leadId });
+  if (target !== lead.assignedToId) {
+    const ten = await db.lead.findUnique({ where: { id: leadId }, select: { parentName: true } });
+    await baoSaleCoLeadMoi({
+      ownerId: target,
+      leadId,
+      parentName: ten?.parentName ?? "",
+      // Máy rút theo sổ lượt, không phải người giao tay.
+      source: "AUTO",
+    });
+  }
+
   return { ok: true, assignedToId: target };
 }
 
@@ -262,6 +280,18 @@ export async function reassignOpenLeads(
       });
     }
   });
+
+  // 15/09/2026 — THU HỒI chuông "Bạn có lead mới" của sale vừa nghỉ.
+  //
+  // Thiếu bước này thì mỗi lượt chia lại để lại ở người nghỉ đúng bằng số lead một đống chuông
+  // trỏ tới lead họ không còn giữ. Tài khoản đã khoá nên ít ai thấy — nhưng cùng một lỗ này
+  // cũng có ở đường bàn giao hàng loạt, nơi người cũ VẪN đang đi làm.
+  //
+  // ⚠️ CỐ Ý KHÔNG báo chuông cho người nhận: đây là thao tác hàng loạt, N lead là N lần rung
+  // máy. Xem khối chú thích cùng nội dung ở `lib/lead-handover/service.ts`.
+  for (const [leadId, assigneeId] of dist) {
+    await thuHoiChuongLeadCu({ chuCuId: userId, chuMoiId: assigneeId, leadId });
+  }
 
   // Báo đúng số ĐÃ chia, không phải số lead tìm thấy — hai số này bằng nhau ở
   // đường đi thường, nhưng báo theo số thật thì khi lệch còn nhìn ra.
