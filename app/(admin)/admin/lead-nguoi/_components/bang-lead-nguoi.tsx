@@ -345,7 +345,8 @@ export function BangLeadNguoi({
           ⚠️ CHƯA CHỌN GÌ thì thu về một dòng. Đo 15/09: bản đầu luôn cao 3 dòng và che mất 3
           dòng dữ liệu, kể cả lúc mọi điều khiển trong nó đều chưa dùng được — lấy mất chỗ của
           đúng thứ người dùng đang cần đọc để quyết định chọn dòng nào. */}
-      <div className="sticky bottom-0 -mx-4 space-y-3 border-t border-border bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:mx-0 sm:rounded-xl sm:border sm:px-4">
+      {/* `z-20` — xem chú thích cùng nội dung ở `components/admin/ExcelImporter.tsx`. */}
+      <div className="sticky bottom-0 z-20 -mx-4 space-y-3 border-t border-border bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:mx-0 sm:rounded-xl sm:border sm:px-4">
         {chon.size === 0 ? (
           <p className="text-sm text-muted-foreground">
             Tick chọn những lead muốn chuyển đi, rồi chọn cách phân bổ.

@@ -675,7 +675,12 @@ export function ExcelImporter<T>({
           {/* Thanh hành động dính đáy: ở màn nhỏ, danh sách dài đẩy nút ra khỏi tầm nhìn và
               người dùng cuộn mãi không thấy nút Nhập. `bottom` cộng safe-area cho máy có
               thanh gạt dưới. */}
-          <div className="sticky bottom-0 -mx-4 flex flex-wrap items-center gap-2 border-t border-border bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:mx-0 sm:rounded-xl sm:border sm:px-4">
+          {/* ⚠️ `z-20` KHÔNG thừa. Ô ghim và hàng tiêu đề của bảng mang `z-10`; thanh này nếu
+          để `z-auto` thì mọi ô ghim chồng lên nó đều VẼ ĐÈ LÊN TRÊN — chủ dự án chụp được
+          đúng cảnh đó: danh sách 145 dòng che mất nút "Nhập". Vỏ bảng không tạo ngữ cảnh xếp
+          lớp riêng (chỉ `overflow`, không `transform`/`filter`/`z-index`), nên `z-10` của ô
+          ghim leo thẳng lên gốc và so trực tiếp với thanh này. */}
+      <div className="sticky bottom-0 z-20 -mx-4 flex flex-wrap items-center gap-2 border-t border-border bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:mx-0 sm:rounded-xl sm:border sm:px-4">
             {/* Nút chính chiếm TRỌN dòng ở màn hẹp: ở 320px ba nút xếp thành ba dòng và nút
                 quan trọng nhất trông ngang hàng với nút xoá. */}
             <Button

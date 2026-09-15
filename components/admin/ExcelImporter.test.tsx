@@ -389,6 +389,34 @@ describe("[NHAP-T18] ba lỗi hiển thị thấy trên PROD 15/09/2026", () => 
     expect(vo.className, `vỏ bảng thiếu nền đục: ${vo.className}`).toMatch(/\bbg-background\b/);
   });
 
+  it("⚠️ thanh hành động phải nằm TRÊN ô ghim của bảng", async () => {
+    // Ô ghim và hàng tiêu đề mang `z-10`. Thanh dính đáy để `z-auto` thì mọi ô ghim chồng lên
+    // nó đều VẼ ĐÈ LÊN TRÊN — chủ dự án chụp được đúng cảnh đó: danh sách 145 dòng che mất nút
+    // "Nhập". Vỏ bảng không tạo ngữ cảnh xếp lớp riêng (chỉ `overflow`), nên `z-10` của ô ghim
+    // leo thẳng lên gốc và so trực tiếp với thanh.
+    //
+    // So QUAN HỆ, không neo vào con số: đổi 10→30 ở ô ghim mà quên thanh thì ca này vẫn đỏ.
+    dung({ dong: [] });
+    await napFile([{ Tên: "A", "SĐT": "01" }]);
+
+    const lopZ = (cls: string) => {
+      const m = /(?:^|\s)z-(\d+)(?:\s|$)/.exec(cls);
+      return m ? Number(m[1]) : 0;
+    };
+    const thanh = [...document.querySelectorAll("div")].find((d) =>
+      d.className.includes("sticky bottom-0"),
+    )!;
+    const oGhim = document.querySelector('tbody td[class*="sticky"]')!;
+    const thGhim = document.querySelector('thead th[class*="sticky"]')!;
+
+    expect(thanh, "không tìm thấy thanh hành động dính đáy").toBeTruthy();
+    expect(
+      lopZ(thanh.className),
+      `thanh (z=${lopZ(thanh.className)}) phải cao hơn ô ghim (z=${lopZ(oGhim.className)})`,
+    ).toBeGreaterThan(lopZ(oGhim.className));
+    expect(lopZ(thanh.className)).toBeGreaterThan(lopZ(thGhim.className));
+  });
+
   it("thẻ ở màn hẹp cũng có nền riêng", async () => {
     // Cùng lý do: thẻ không nền là một mảng xám trên nền xám, mất hẳn hình dạng thẻ.
     dung({ dong: [] });
