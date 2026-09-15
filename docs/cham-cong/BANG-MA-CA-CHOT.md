@@ -42,7 +42,8 @@ do bảng này chốt "1 ngày = 1 công" thay vì đếm buổi.
 | `S` | 7:45–11:30 | — | **0,5** | 1 |
 | `C` | 13:45–17:30 | — | **0,5** | 1 |
 | `T` | 17:15–21:00 | — | **0,5** | 1 |
-| `LD` · `NG` | — | — | 1 | **0** — không cần chấm |
+| `LD` | — | — | 1 | **0** — không cần chấm |
+| `NG` | 8:00–11:30 + 13:30–17:30 (ngoài) | — | 1 | **1** — đảo 15/09/2026, xem ghi chú dưới |
 | `D1` · `D2` | — | — | 1 | **0** — nhãn NƠI LÀM, không phải ca có giờ |
 | `P` · `X` | — | — | 0 | 0 |
 
@@ -78,10 +79,24 @@ mong muốn, nhưng **vì lý do khác**. Khi thêm `UNPAID_BREAK` thì phải k
 Cờ `THIEU_BUOI_SANG`/`THIEU_BUOI_CHIEU` chuyển thành *thiếu cụm thứ n*, chỉ có nghĩa khi
 `soCapQuetKyVong ≥ 2`.
 
-⚠️ **`NG` vẫn đang là `0` trong bảng trên.** Phần A đảo nó sang `1`, nhưng CHỈ SAU khi đo
-xong số ngày công tác trên prod (`viec = ngay-cong-tac`) — đảo là gắn cờ ngược về quá khứ
-cho một việc người ta không thể đã làm. Sửa bảng này mà quên `SHIFT_CATALOG` (hoặc ngược
-lại) thì `catalog.test.ts` ĐỎ, và đó là đúng ý đồ.
+### `NG` — đảo 0 → 1 ngày 15/09/2026 (phần A)
+
+`NG` (Công tác ngoài) chuyển từ **1 công / 0 cặp quét** sang **1 công / 1 CẶP QUÉT**, cùng
+với `attendanceMode: OPTIONAL → REQUIRED` và hai nút Check in / Check out ở màn "Của tôi".
+
+**Ba thứ này phải đi CÙNG NHAU:**
+
+| | nếu đi một mình |
+|---|---|
+| `soCapQuetKyVong: 1` | KHÔNG đổi gì — cổng ngoài của engine là `attendanceMode === "REQUIRED"` |
+| `attendanceMode: REQUIRED` | đòi quét mà **chưa có nút nào để bấm** |
+| hai nút | có nút nhưng không ai bị đòi ⇒ không ai bấm |
+
+**Đo prod TRƯỚC khi đảo** (`viec = ngay-cong-tac`, 15/09/2026): **0 ô ca công tác đã xếp,
+0 ngày công mã công tác** ⇒ không ngày quá khứ nào bị gắn cờ oan. Đó là lý do đảo được ngay
+mà không cần một lượt xử lý quá khứ — nếu số ấy khác 0 thì đây đã là một quyết định khác.
+
+Sửa bảng này mà quên `SHIFT_CATALOG` (hoặc ngược lại) thì `catalog.test.ts` **ĐỎ** — đúng ý đồ.
 
 ---
 

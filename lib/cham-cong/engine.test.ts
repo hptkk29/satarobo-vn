@@ -205,9 +205,24 @@ describe("mã không giờ, nghỉ, lễ, miễn công", () => {
     expect([r.dayCreditEarned, r.expectedMinutes, r.workedMinutes, r.flags]).toEqual([1, 0, 0, []]);
     expect(run("LD", [IN("09:00"), OUT("12:00")]).rawPairedMinutes).toBe(180);
   });
-  it("NG: OPTIONAL, 1 công, giờ kế hoạch 450, không lượt không cờ", () => {
+  // 🔴 ĐẢO 15/09/2026 (phần A). Cũ: NG OPTIONAL ⇒ đi công tác không cần lượt nào, không cờ.
+  // Nay: NG REQUIRED + 1 cặp quét ⇒ không bấm Check in/out thì CÓ cờ `KHONG_CO_LUOT`.
+  //
+  // Công VẪN 1 và giờ kế hoạch VẪN 450 — engine không tự trừ công (luật T-01). Cú đảo đổi
+  // TÍN HIỆU (có đi không, có bấm không), KHÔNG đổi TIỀN.
+  it("NG: REQUIRED, không bấm nút nào → KHONG_CO_LUOT, nhưng VẪN 1 công", () => {
     const r = run("NG", []);
-    expect([r.dayCreditEarned, r.expectedMinutes, r.flags]).toEqual([1, 450, []]);
+    expect([r.dayCreditEarned, r.expectedMinutes]).toEqual([1, 450]);
+    expect(r.flags).toContain("KHONG_CO_LUOT");
+  });
+  it("NG: bấm đủ một cặp vào–ra → KHÔNG cờ thiếu lượt nào", () => {
+    // Đây là vế CHO QUA của luật 16: đảo mà chỉ kiểm vế "thiếu thì có cờ" là không biết
+    // người làm ĐÚNG có sạch cờ hay không.
+    const r = run("NG", [IN("08:00"), OUT("17:30")]);
+    expect(r.flags).not.toContain("KHONG_CO_LUOT");
+    expect(r.flags).not.toContain("THIEU_BUOI_SANG");
+    expect(r.flags).not.toContain("THIEU_BUOI_CHIEU");
+    expect(r.dayCreditEarned).toBe(1);
   });
   it("D1: LOCATION_ONLY, 1 công 0 giờ", () => {
     expect(run("D1", []).dayCreditEarned).toBe(1);

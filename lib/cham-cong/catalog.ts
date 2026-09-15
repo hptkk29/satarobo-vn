@@ -230,11 +230,19 @@ const RAW_CATALOG: CatalogEntry[] = [
     displayOrder: 0,
   },
   timed("NG", "Công tác ngoài", [W("08:00", "11:30", "OFFSITE"), W("13:30", "17:30", "OFFSITE")], {
-    // GIỮ 0 ở lượt B1. Đảo sang 1 là việc của PHẦN A — và chỉ sau khi đo xong số
-    // ngày công tác trên prod (`viec = ngay-cong-tac`), vì đảo là gắn cờ ngược về quá khứ.
-    soCapQuetKyVong: 0,
+    // ĐẢO 15/09/2026 (phần A): 1 công / 0 cặp quét → 1 công / **1 CẶP QUÉT**.
+    //
+    // Hai vế phải đi CÙNG NHAU, và cùng với hai nút Check in/out ở màn "Của tôi":
+    //   · `soCapQuetKyVong: 1` một mình KHÔNG đổi gì — cổng ngoài của engine là
+    //     `attendanceMode === "REQUIRED"`, nên ca OPTIONAL không chạy nhánh kiểm nào;
+    //   · `attendanceMode: "REQUIRED"` một mình là đòi quét mà chưa có nút để bấm.
+    //
+    // Đo prod 15/09 TRƯỚC khi đảo (`viec = ngay-cong-tac`): 0 ô ca công tác đã xếp,
+    // 0 ngày công mã công tác ⇒ KHÔNG ngày quá khứ nào bị gắn cờ oan. Đó là lý do đảo
+    // được ngay mà không cần một lượt xử lý quá khứ.
+    soCapQuetKyVong: 1,
     defaultPlace: "OFFSITE",
-    attendanceMode: "OPTIONAL",
+    attendanceMode: "REQUIRED",
     nominalMinutes: 450,
   }),
   {
