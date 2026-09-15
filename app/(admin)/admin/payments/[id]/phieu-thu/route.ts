@@ -10,7 +10,15 @@ import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { withFreshFonts } from "@/lib/pdf/brand";
 import { lookupMethodNameByCode } from "@/lib/payments/method-lookup";
-import { ReceiptPdf, type ReceiptPdfData } from "@/lib/pdf/receipt";
+import { PhieuThuPdf, type PhieuThuPdfData } from "@/lib/pdf/phieu-thu";
+import {
+  CAU_HINH_HOA_DON_MAC_DINH,
+  phapNhanChoDon,
+  thueChoLoaiDon,
+} from "@/lib/finance/hoa-don/phap-nhan";
+import { nguoiMuaChoDon } from "@/lib/finance/hoa-don/nguoi-mua";
+import { soTienBangChu } from "@/lib/finance/hoa-don/so-tien-bang-chu";
+import { tinhDongHoaDon, tongHoaDon } from "@/lib/finance/hoa-don/tinh-hoa-don";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -54,6 +62,19 @@ export async function GET(
       order: {
         select: {
           code: true,
+          type: true,
+          centerId: true,
+          customerName: true,
+          customerPhone: true,
+          customerEmail: true,
+          customerAddress: true,
+          customerWard: true,
+          customerCity: true,
+          customerCccd: true,
+          invoiceBuyerName: true,
+          invoiceCompanyName: true,
+          invoiceTaxCode: true,
+          invoiceEmail: true,
           student: { select: { name: true, parentName: true } },
         },
       },
@@ -83,51 +104,96 @@ export async function GET(
     );
   }
 
-  // Người thu (recordedById là String thuần, không có quan hệ Prisma) + thông tin cơ sở.
-  const [collector, center] = await Promise.all([
-    payment.recordedById
-      ? sdb.user.findUnique({
-          where: { id: payment.recordedById },
-          select: { name: true },
-        })
-      : Promise.resolve(null),
-    payment.centerId
-      ? sdb.center.findUnique({
-          where: { id: payment.centerId },
-          select: { name: true, address: true },
-        })
-      : Promise.resolve(null),
-  ]);
+  // Người thu — `recordedById` là String thuần, không có quan hệ Prisma.
+  //
+  // ⚠️ KHÔNG còn tra `Center` ở đây [15/09/2026]. Bên bán trên phiếu là PHÁP NHÂN, không
+  // phải cơ sở: hai tờ mẫu mang hai mã số thuế khác nhau, và "258 Lê Thanh Nghị" (trụ sở
+  // đăng ký của Sata Robo) không phải địa chỉ của cơ sở nào. In tên/địa chỉ cơ sở vào ô
+  // "Đơn vị thu" là in sai pháp nhân — lý do đầy đủ ở đầu `lib/finance/hoa-don/phap-nhan.ts`.
+  const collector = payment.recordedById
+    ? await sdb.user.findUnique({
+        where: { id: payment.recordedById },
+        select: { name: true },
+      })
+    : null;
 
   // 30/08/2026 — mã phương thức nay có thể là mã riêng của cơ sở ("BANK_CS1"), không
   // nằm trong bảng nhãn cứng của lib/pdf/receipt.tsx. Tờ phiếu này đưa tận tay phụ
   // huynh nên không được in mã nội bộ.
   const methodLabel = await lookupMethodNameByCode(payment.method);
 
-  const data: ReceiptPdfData = {
-    receiptCode: receipt.code,
-    centerName: center?.name ?? "Sata Robo",
-    centerAddress: center?.address ?? null,
-    issuedAt: fmtDate(receipt.issuedAt),
-    studentName: payment.order?.student?.name ?? null,
-    parentName: payment.order?.student?.parentName ?? null,
-    className: payment.enrollment?.class?.name ?? null,
-    courseName: payment.enrollment?.class?.course?.name ?? null,
-    amount: payment.amount,
-    method: payment.method,
+  // ── BỘ SỐ LẤY TỪ TẦNG THUẦN HOÁ ĐƠN [15/09/2026] ───────────────────────────
+  //
+  // `lib/finance/hoa-don/*` đã đo sẵn từ ba tờ thật (pháp nhân, thuế suất theo loại đơn,
+  // quy ước giá đã-gồm/chưa-gồm thuế, khối người mua, số tiền bằng chữ). Dùng lại để con
+  // số trên phiếu KHỚP với con số kế toán sẽ nạp sang MISA/VIN — không phải nhập lại.
+  //
+  // ⚠️ `phapNhanChoDon` trả `null` khi không còn pháp nhân nào BẬT. Khi đó KHÔNG in một
+  // mã số thuế đoán bừa: trả 409 để kế toán đi khai cấu hình.
+  const cauHinh = CAU_HINH_HOA_DON_MAC_DINH;
+  const phapNhan = phapNhanChoDon(payment.order?.centerId ?? null, cauHinh);
+  if (!phapNhan) {
+    return NextResponse.json(
+      {
+        error:
+          "Chưa khai pháp nhân phát hành trong Cấu hình hoá đơn — không in phiếu với mã số thuế đoán bừa",
+      },
+      { status: 409 },
+    );
+  }
+
+  const { thueSuat, kieuGia } = thueChoLoaiDon(payment.order?.type ?? "TAT_CA", cauHinh);
+  const tenHocVien = payment.order?.student?.name ?? null;
+  const tenKhoa = payment.enrollment?.class?.course?.name ?? null;
+  const tenLop = payment.enrollment?.class?.name ?? null;
+  const dong = [
+    tinhDongHoaDon({
+      // Nội dung thu viết như mẫu VIN: "Khoá học <khoá> — HV <tên bé>".
+      ten:
+        [tenKhoa ? `Khoá học ${tenKhoa}` : "Học phí", tenHocVien ? `HV ${tenHocVien}` : null]
+          .filter(Boolean)
+          .join(" — ") + (tenLop ? ` (lớp ${tenLop})` : ""),
+      donViTinh: tenKhoa ? "Khoá" : "Lần",
+      soLuong: 1,
+      soTien: payment.amount,
+      thueSuat,
+      kieuGia,
+    }),
+  ];
+  const tong = tongHoaDon(dong);
+
+  const data: PhieuThuPdfData = {
+    maPhieu: receipt.code,
+    ngayLap: fmtDate(receipt.issuedAt),
+    phapNhan,
+    nguoiMua: nguoiMuaChoDon({
+      customerName: payment.order?.customerName ?? null,
+      customerPhone: payment.order?.customerPhone ?? null,
+      customerEmail: payment.order?.customerEmail ?? null,
+      customerAddress: payment.order?.customerAddress ?? null,
+      customerWard: payment.order?.customerWard ?? null,
+      customerCity: payment.order?.customerCity ?? null,
+      customerCccd: payment.order?.customerCccd ?? null,
+      invoiceBuyerName: payment.order?.invoiceBuyerName ?? null,
+      invoiceCompanyName: payment.order?.invoiceCompanyName ?? null,
+      invoiceTaxCode: payment.order?.invoiceTaxCode ?? null,
+      invoiceEmail: payment.order?.invoiceEmail ?? null,
+    }),
     // Tra nhãn từ DANH MỤC (không lọc isActive: phương thức đã tắt vẫn phải in đúng tên
-    // trên phiếu thu CŨ). Không tra được thì ReceiptPdf tự lùi về bảng cứng rồi về mã.
-    methodLabel,
-    paidDate: fmtDate(payment.paidDate),
-    collectedByName: collector?.name ?? null,
-    orderCode: payment.order?.code ?? null,
+    // trên phiếu thu CŨ).
+    hinhThucThanhToan: methodLabel?.trim() || payment.method,
+    dong,
+    tong,
+    soTienBangChu: soTienBangChu(tong.congTienThanhToan),
+    maDon: payment.order?.code ?? null,
+    nguoiThu: collector?.name ?? null,
   };
 
   let pdf: Buffer;
   try {
     pdf = await withFreshFonts(() =>
       renderToBuffer(
-        createElement(ReceiptPdf, { data }) as unknown as ReactElement<DocumentProps>,
+        createElement(PhieuThuPdf, { data }) as unknown as ReactElement<DocumentProps>,
       ),
     );
   } catch (err) {
