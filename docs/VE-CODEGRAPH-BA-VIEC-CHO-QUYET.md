@@ -1,8 +1,12 @@
 # VÉ — CodeGraph: ba việc chờ chủ dự án quyết
 
-> **Trạng thái:** MỞ, **CỐ Ý chưa làm**. Chốt 13/09/2026: *"CodeGraph: dừng ở đây, không cấu
-> hình thêm. Ba việc bạn nêu — ghi vé, tôi quyết sau."*
-> Vé này chỉ ghi lại **số đo** và **đánh đổi** của từng việc, không đề xuất làm ngay.
+> **Trạng thái:** ĐÃ QUYẾT 15/09/2026. Hai việc đã làm, một việc dừng ở ĐO.
+>
+> | việc | chủ dự án chốt | tình trạng |
+> |---|---|---|
+> | `.gitignore` | *"thêm .codegraph vào .gitignore"* | **xong** — hướng B |
+> | agent | *"thêm .claude/agents/ đi"* | **xong** — 3 agent, xem cuối vé |
+> | telemetry | *"cho đo telemetry"* | **đã đo** — đang BẬT; tắt hay không thì chưa chốt |
 
 ## Hiện trạng đã đo (13/09/2026)
 
@@ -76,3 +80,49 @@ thì dừng lại hỏi tôi trước."*
 
 - `docs/luat-doc-so-va-ket-luan.md` — luật 17 (đọc cấu hình THẬT, đừng trích tài liệu), và hệ
   quả "chẩn đoán chưa đo thì đừng viết vào chú thích".
+
+---
+
+# ĐÃ LÀM — 15/09/2026
+
+## Việc 1 — `.gitignore` (hướng B)
+
+Thêm `.codegraph/` vào `.gitignore` **GỐC**. Chọn B chứ không phải A vì lưới chặn nay nằm ở
+nơi **không phụ thuộc vào một file do công cụ khác quản lý** — xoá nhầm `.codegraph/.gitignore`
+thì vẫn còn dòng này.
+
+## Việc 2 — ba agent, đều CodeGraph-first
+
+| agent | dùng khi | quyền |
+|---|---|---|
+| `do-truoc-khi-ket-luan` | cần biết hiện trạng THẬT trước khi thiết kế / kết luận | chỉ đọc |
+| `cay-lai-loi` | sau khi vá bug hoặc viết test mới, trước khi báo xong (luật 8) | sửa tạm, trả nguyên, không commit |
+| `soi-nhan-va-nguon-so` | trước khi thêm cột số lên site GV / portal, và khi rà một màn (luật 12 + 12b) | chỉ đọc |
+
+Ba agent này **không phải bộ mẫu của CodeGraph**. Chúng là ba nghi thức lặp lại ở repo này,
+mỗi cái ứng với một lớp lỗi ĐÃ XẢY RA THẬT và đã ghi vào sổ luật — nên mỗi file mang sẵn
+danh sách ca hỏng thật để agent nhận dạng, chứ không chỉ mang lời khuyên chung.
+
+Cả ba mở màn bằng `codegraph_explore` thay vì `grep` — đó chính là vế *"wire CodeGraph vào
+agent"* của vé này.
+
+⚠️ CỐ Ý **không** dựng agent "sửa mã" hay "viết test": hai việc đó cần đúng bối cảnh của
+phiên chính, tách ra là mất thứ khiến chúng đúng.
+
+## Việc 3 — telemetry: ĐÃ ĐO, CHƯA TẮT
+
+```
+$ codegraph telemetry
+Telemetry: enabled (your saved choice)
+Machine ID: d642005e-...
+Config:     ~/.codegraph/telemetry.json
+```
+
+**Đang BẬT**, và là *"your saved choice"* — tức có người đã chọn lúc cài, không phải mặc
+định câm.
+
+**Chưa tắt**, vì config nằm ở **global** (`~/.codegraph/`) chứ không trong repo, và ràng buộc
+chủ dự án đặt từ lượt cài còn hiệu lực: *"lệnh nào cần quyền sudo hoặc ghi vào config global
+thì dừng lại hỏi tôi trước"*.
+
+Tắt bằng `codegraph telemetry off`. Nội dung thu thập: `TELEMETRY.md` của dự án CodeGraph.
