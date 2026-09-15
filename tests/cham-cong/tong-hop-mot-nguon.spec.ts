@@ -120,14 +120,27 @@ d("tổng hợp công — admin và site GV đọc CÙNG MỘT SỐ", () => {
       (x) => x.gop,
     );
 
+    const KHUNG = {
+      kyKhoa: "2026-09",
+      dauThang: "2026-09-01",
+      cuoiThang: "2026-09-30",
+      homNay: "2026-10-05",
+      don: null,
+    };
+
     const chuaLap = await db.attendancePeriod.findUnique({
       where: { centerId_periodKey: { centerId, periodKey: "2026-09" } },
-      select: { standardUnits: true, status: true },
+      select: { standardUnits: true, status: true, lockedAt: true },
     });
     expect(chuaLap).toBeNull();
     expect(
-      tomTatCongThang({ ngay, congChuan: chuaLap?.standardUnits ?? null, kyDaChot: false })
-        .congChuan,
+      tomTatCongThang({
+        ...KHUNG,
+        ngay,
+        congChuan: chuaLap?.standardUnits ?? null,
+        kyTrangThai: chuaLap?.status ?? null,
+        kyChotLuc: chuaLap?.lockedAt ?? null,
+      }).congChuan,
     ).toBeNull();
 
     await db.attendancePeriod.create({
@@ -135,14 +148,16 @@ d("tổng hợp công — admin và site GV đọc CÙNG MỘT SỐ", () => {
     });
     const daLap = await db.attendancePeriod.findUnique({
       where: { centerId_periodKey: { centerId, periodKey: "2026-09" } },
-      select: { standardUnits: true, status: true },
+      select: { standardUnits: true, status: true, lockedAt: true },
     });
     const t = tomTatCongThang({
+      ...KHUNG,
       ngay,
       congChuan: daLap!.standardUnits,
-      kyDaChot: daLap!.status === "LOCKED",
+      kyTrangThai: daLap!.status,
+      kyChotLuc: daLap!.lockedAt,
     });
     expect(t.congChuan).toBe(25);
-    expect(t.tamTinh).toBe(false);
+    expect(t.kyTrangThai).toBe("LOCKED");
   });
 });
