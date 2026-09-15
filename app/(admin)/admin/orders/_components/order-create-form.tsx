@@ -31,7 +31,9 @@ import {
   KIEU_GIAM,
   TRAN_KHOAN_GIAM_MOI_DONG,
   dongThieuGiaiTrinh,
+  khoanVuotTran,
   loiThieuGiaiTrinh,
+  loiVuotTran,
   tienDon,
   tienDong,
   type KhaiGiam,
@@ -166,6 +168,7 @@ export function OrderCreateForm({
   defaultCustomer,
   defaultCenterId,
   lockCenter = false,
+  tranPhanTram,
 }: {
   paymentMethods: PM[];
   courses: Course[];
@@ -190,6 +193,14 @@ export function OrderCreateForm({
    * hình nói đúng thứ hệ thống sẽ làm.
    */
   lockCenter?: boolean;
+  /**
+   * Trần % giảm của MỘT khoản — `orders.maxDiscountPercent` đọc ở RSC.
+   *
+   * Truyền xuống thay vì để form đoán: client không đọc được `getSetting`, và một hằng
+   * cứng ở client là con số thứ hai sống song song với tham số vận hành. Người vận hành
+   * hạ trần mà form vẫn cho gõ tới 50 là sale gõ xong rồi mới bị server từ chối.
+   */
+  tranPhanTram: number;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -334,8 +345,9 @@ export function OrderCreateForm({
           quantity: d.quantity,
           giam: d.giam,
         })),
+        { tranPhanTram },
       ),
-    [dong],
+    [dong, tranPhanTram],
   );
   const subtotal = tien.tamTinh;
   const totalAmount = tien.tongDon;
@@ -363,7 +375,14 @@ export function OrderCreateForm({
     }
     // Cơ chế DUYỆT giảm giá đã gỡ 14/09 — GIẢI TRÌNH thì giữ, và nay nó theo DÒNG.
     // Cùng hàm với server (`dongThieuGiaiTrinh`), nên không thể lệch nhau.
-    const thieuLyDo = dongThieuGiaiTrinh(dong);
+    // Vượt trần % xét TRƯỚC giải trình: bắt người bán viết lý do cho một khoản rồi mới
+    // báo khoản đó không hợp lệ là hai lần làm mất việc của họ.
+    const vuot = khoanVuotTran(dong, tranPhanTram);
+    if (vuot.length > 0) {
+      toast.error(loiVuotTran(vuot, tranPhanTram));
+      return;
+    }
+    const thieuLyDo = dongThieuGiaiTrinh(dong, tranPhanTram);
     if (thieuLyDo.length > 0) {
       toast.error(loiThieuGiaiTrinh(thieuLyDo));
       return;
@@ -730,6 +749,7 @@ export function OrderCreateForm({
                   key={d.key}
                   stt={idx + 1}
                   tongDong={dong.length}
+                  tranPhanTram={tranPhanTram}
                   dong={d}
                   orderType={orderType}
                   courses={courses}
@@ -905,6 +925,7 @@ export function OrderCreateForm({
 function DongHangCard({
   stt,
   tongDong,
+  tranPhanTram,
   dong,
   orderType,
   courses,
@@ -916,6 +937,7 @@ function DongHangCard({
 }: {
   stt: number;
   tongDong: number;
+  tranPhanTram: number;
   dong: DongHang;
   orderType: UiOrderType;
   courses: Course[];
@@ -985,11 +1007,10 @@ function DongHangCard({
   // cùng một phụ huynh. Dạng nội địa khớp cả hai kiểu dữ liệu vì `nationalPhone`
   // chuẩn hoá trước.
   // Tiền của CHÍNH dòng này — cùng hàm với thẻ Tóm tắt và với server.
-  const tienDongNay = tienDong({
-    unitPrice: dong.unitPrice,
-    quantity: dong.quantity,
-    giam: dong.giam,
-  });
+  const tienDongNay = tienDong(
+    { unitPrice: dong.unitPrice, quantity: dong.quantity, giam: dong.giam },
+    tranPhanTram,
+  );
 
   /** Sửa MỘT khoản giảm tại chỗ — giữ nguyên thứ tự, không dựng lại cả mảng ở chỗ gọi. */
   const suaKhoan = (idx: number, thayDoi: Partial<KhaiGiam>) =>
@@ -1407,18 +1428,31 @@ function DongHangCard({
                       placeholder="Số tiền giảm"
                     />
                   ) : (
-                    <Input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={k.giaTri}
-                      onChange={(e) =>
-                        suaKhoan(idx, {
-                          giaTri: Math.min(100, Math.max(0, Number(e.target.value) || 0)),
-                        })
-                      }
-                      placeholder="% giảm (1–100)"
-                    />
+                    // `max` = TRẦN CẤU HÌNH, không phải 100: nút tăng/giảm của ô số
+                    // dừng ngay ở mức chính sách. Vẫn kẹp trong `onChange` vì người
+                    // dùng gõ tay được con số bất kỳ, `max` chỉ chặn mũi tên.
+                    <div className="space-y-1">
+                      <Input
+                        type="number"
+                        min={0}
+                        max={tranPhanTram}
+                        value={k.giaTri}
+                        onChange={(e) =>
+                          suaKhoan(idx, {
+                            giaTri: Math.max(0, Number(e.target.value) || 0),
+                          })
+                        }
+                        placeholder={`% giảm (1–${tranPhanTram})`}
+                      />
+                      {/* Nói NGAY, không chờ bấm Lưu. `gopGiamGia` đã kẹp xuống trần nên
+                          con số luôn đúng chính sách, nhưng người bán vừa gõ một mức
+                          khác — im lặng là để họ đi hứa với phụ huynh mức đã gõ. */}
+                      {daAp?.vuotTran && (
+                        <p className="text-xs font-medium text-state-danger-ink">
+                          Vượt trần {tranPhanTram}% — sửa lại để lưu được đơn
+                        </p>
+                      )}
+                    </div>
                   )}
                 </div>
 

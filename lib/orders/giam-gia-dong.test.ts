@@ -8,11 +8,24 @@ import {
   discountFromPercent,
   dongThieuGiaiTrinh,
   giaiTrinhGopChoDon,
+  TRAN_PHAN_TRAM_MAC_DINH,
   gopGiamGia,
+  khoanVuotTran,
+  loiVuotTran,
   loiThieuGiaiTrinh,
   tienDon,
   tienDong,
 } from "./giam-gia-dong";
+
+/**
+ * Trần % dùng cho các ca KHÔNG đo trần.
+ *
+ * 100 = "không có trần", cố ý: những ca dưới đây đo phép CỘNG DỒN và phép KẸP theo tạm
+ * tính dòng, hai luật độc lập với trần chính sách. Nhét trần 50 vào chúng là trộn hai
+ * thứ, và khi trần đổi thì một loạt ca đỏ mà không ca nào chỉ ra luật nào vỡ.
+ * Trần THẬT (50, tham số vận hành) có bộ ca riêng ở [GGD-26..29].
+ */
+const KHONG_TRAN = 100;
 
 const TIEN = { kieu: KIEU_GIAM.SO_TIEN } as const;
 const PCT = { kieu: KIEU_GIAM.PHAN_TRAM } as const;
@@ -26,7 +39,7 @@ const PCT = { kieu: KIEU_GIAM.PHAN_TRAM } as const;
  */
 describe("[GGD] tiền của một dòng", () => {
   it("[GGD-01] không khai khoản nào ⇒ thành tiền = tạm tính", () => {
-    const t = tienDong({ unitPrice: 2_400_000, quantity: 1 });
+    const t = tienDong({ unitPrice: 2_400_000, quantity: 1 }, KHONG_TRAN);
     expect(t).toMatchObject({ tamTinh: 2_400_000, giam: 0, thanhTien: 2_400_000, phanTram: null });
     expect(t.khoan).toEqual([]);
   });
@@ -36,7 +49,7 @@ describe("[GGD] tiền của một dòng", () => {
       unitPrice: 1_000_000,
       quantity: 3,
       giam: [{ ...TIEN, giaTri: 200_000 }],
-    });
+    }, KHONG_TRAN);
     expect(t.tamTinh).toBe(3_000_000);
     expect(t.giam).toBe(200_000);
     expect(t.thanhTien).toBe(2_800_000);
@@ -46,14 +59,14 @@ describe("[GGD] tiền của một dòng", () => {
     // Con số này là lý do đợt sáng nay tồn tại: 10% của dòng 10.560.000đ là 1.056.000đ,
     // còn 10% của cả đơn (12.960.000đ) là 1.296.000đ. Lệch 240.000đ, và không có gì
     // trên màn hình nói ra là đã lấy nhầm mẫu số.
-    const t = tienDong({ unitPrice: 10_560_000, quantity: 1, giam: [{ ...PCT, giaTri: 10 }] });
+    const t = tienDong({ unitPrice: 10_560_000, quantity: 1, giam: [{ ...PCT, giaTri: 10 }] }, KHONG_TRAN);
     expect(t.giam).toBe(1_056_000);
     expect(t.thanhTien).toBe(9_504_000);
     expect(t.phanTram).toBe(10);
   });
 
   it("[GGD-04] một khoản giảm lố bị kẹp ở tạm tính của dòng — không có dòng âm", () => {
-    const t = tienDong({ unitPrice: 1_000_000, quantity: 1, giam: [{ ...TIEN, giaTri: 9_999_999 }] });
+    const t = tienDong({ unitPrice: 1_000_000, quantity: 1, giam: [{ ...TIEN, giaTri: 9_999_999 }] }, KHONG_TRAN);
     expect(t.giam).toBe(1_000_000);
     expect(t.thanhTien).toBe(0);
     // `giaTri` giữ Ý ĐỊNH, `giam` giữ SỐ THẬT — mất một trong hai là mất dấu việc đã cắt.
@@ -61,8 +74,8 @@ describe("[GGD] tiền của một dòng", () => {
   });
 
   it("[GGD-05] % ngoài [0,100] bị kẹp", () => {
-    expect(tienDong({ unitPrice: 1_000_000, quantity: 1, giam: [{ ...PCT, giaTri: 150 }] }).giam).toBe(1_000_000);
-    expect(tienDong({ unitPrice: 1_000_000, quantity: 1, giam: [{ ...PCT, giaTri: -5 }] }).giam).toBe(0);
+    expect(tienDong({ unitPrice: 1_000_000, quantity: 1, giam: [{ ...PCT, giaTri: 150 }] }, KHONG_TRAN).giam).toBe(1_000_000);
+    expect(tienDong({ unitPrice: 1_000_000, quantity: 1, giam: [{ ...PCT, giaTri: -5 }] }, KHONG_TRAN).giam).toBe(0);
   });
 
   it("[GGD-06] discountFromPercent giữ nguyên hành vi sau khi dời khỏi discount.ts", () => {
@@ -88,7 +101,7 @@ describe("[GGD] NHIỀU khoản trên một dòng", () => {
       unitPrice: 1_000_000,
       quantity: 1,
       giam: [{ ...PCT, giaTri: 10 }, { ...PCT, giaTri: 20 }],
-    });
+    }, KHONG_TRAN);
     expect(t.giam).toBe(300_000); // KHÔNG phải 280.000
     expect(t.thanhTien).toBe(700_000);
     // Và phát biểu ĐÚNG NHƯ chủ dự án nói ra: tỉ lệ giảm thực tế = TỔNG hai con % đã gõ.
@@ -103,7 +116,7 @@ describe("[GGD] NHIỀU khoản trên một dòng", () => {
       unitPrice: 1_000_000,
       quantity: 1,
       giam: [{ ...PCT, giaTri: 60 }, { ...PCT, giaTri: 60 }],
-    });
+    }, KHONG_TRAN);
     // Khoản 1 lấy đủ 60%; khoản 2 muốn 60% nhưng chỉ còn 40% ⇒ nhận 40%.
     expect(t.khoan.map((k) => k.giam)).toEqual([600_000, 400_000]);
     // Vẫn giữ bất biến quan trọng nhất: các khoản cộng lại ĐÚNG bằng tổng đã trừ.
@@ -121,7 +134,7 @@ describe("[GGD] NHIỀU khoản trên một dòng", () => {
         { ...PCT, giaTri: 10, lyDo: "anh chị em" },
         { ...TIEN, giaTri: 500_000, lyDo: "đóng sớm" },
       ],
-    });
+    }, KHONG_TRAN);
     expect(t.khoan.map((k) => k.giam)).toEqual([240_000, 500_000]);
     expect(t.giam).toBe(740_000);
     expect(t.thanhTien).toBe(1_660_000);
@@ -130,7 +143,7 @@ describe("[GGD] NHIỀU khoản trên một dòng", () => {
   it("[GGD-09] nhiều khoản ⇒ phanTram của DÒNG là null", () => {
     // "Phần trăm của cả dòng" không tồn tại như một con số khi có hai khoản; trả một số
     // gần đúng ở đây là in lên hoá đơn một tỉ lệ không ai tính lại được.
-    const t = tienDong({ unitPrice: 1_000_000, quantity: 1, giam: [{ ...PCT, giaTri: 10 }, { ...TIEN, giaTri: 1 }] });
+    const t = tienDong({ unitPrice: 1_000_000, quantity: 1, giam: [{ ...PCT, giaTri: 10 }, { ...TIEN, giaTri: 1 }] }, KHONG_TRAN);
     expect(t.phanTram).toBeNull();
   });
 
@@ -141,7 +154,7 @@ describe("[GGD] NHIỀU khoản trên một dòng", () => {
       unitPrice: 1_000_000,
       quantity: 1,
       giam: [{ ...TIEN, giaTri: 800_000 }, { ...TIEN, giaTri: 500_000 }],
-    });
+    }, KHONG_TRAN);
     expect(t.khoan.map((k) => k.giam)).toEqual([800_000, 200_000]);
     expect(t.khoan.reduce((s, k) => s + k.giam, 0)).toBe(t.giam);
     expect(t.giam).toBe(1_000_000);
@@ -149,7 +162,7 @@ describe("[GGD] NHIỀU khoản trên một dòng", () => {
   });
 
   it("[GGD-11] khoản giaTri = 0 bị bỏ qua, không đẻ ra dòng rỗng", () => {
-    const t = tienDong({ unitPrice: 1_000_000, quantity: 1, giam: [{ ...TIEN, giaTri: 0 }, { ...TIEN, giaTri: 100 }] });
+    const t = tienDong({ unitPrice: 1_000_000, quantity: 1, giam: [{ ...TIEN, giaTri: 0 }, { ...TIEN, giaTri: 100 }] }, KHONG_TRAN);
     expect(t.khoan).toHaveLength(1);
   });
 
@@ -157,7 +170,7 @@ describe("[GGD] NHIỀU khoản trên một dòng", () => {
     const ra = gopGiamGia(1_000_000, [
       { ...TIEN, giaTri: 100_000, lyDo: "a" },
       { ...PCT, giaTri: 5, lyDo: "b" },
-    ]);
+    ], KHONG_TRAN);
     expect(ra.map((k) => k.lyDo)).toEqual(["a", "b"]);
   });
 
@@ -175,7 +188,7 @@ describe("[GGD] tiền của cả đơn", () => {
   ];
 
   it("[GGD-14] tổng giảm = Σ các khoản của mọi dòng", () => {
-    const t = tienDon(HAI_CON);
+    const t = tienDon(HAI_CON, { tranPhanTram: KHONG_TRAN });
     expect(t.tamTinh).toBe(12_960_000);
     expect(t.tongGiam).toBe(1_740_000);
     expect(t.tongDon).toBe(11_220_000);
@@ -185,7 +198,7 @@ describe("[GGD] tiền của cả đơn", () => {
     const t = tienDon([
       { unitPrice: 1_000_000, quantity: 1, giam: [{ ...TIEN, giaTri: 3_000_000 }] },
       { unitPrice: 2_000_000, quantity: 1, giam: [] },
-    ]);
+    ], { tranPhanTram: KHONG_TRAN });
     expect(t.dong[0]!.thanhTien).toBe(0);
     expect(t.tongGiam).toBe(1_000_000);
     expect(t.tongDon).toBe(2_000_000);
@@ -193,7 +206,7 @@ describe("[GGD] tiền của cả đơn", () => {
 
   it("[GGD-16] phí vận chuyển cộng SAU khi trừ giảm", () => {
     expect(
-      tienDon([{ unitPrice: 1_000_000, quantity: 1, giam: [{ ...TIEN, giaTri: 200_000 }] }], 50_000).tongDon,
+      tienDon([{ unitPrice: 1_000_000, quantity: 1, giam: [{ ...TIEN, giaTri: 200_000 }] }], { phiVanChuyen: 50_000, tranPhanTram: KHONG_TRAN }).tongDon,
     ).toBe(850_000);
   });
 
@@ -201,7 +214,7 @@ describe("[GGD] tiền của cả đơn", () => {
     const t = tienDon([
       { unitPrice: 1_000_000, quantity: 1, giam: [{ ...PCT, giaTri: 100 }] },
       { unitPrice: 2_000_000, quantity: 1, giam: [{ ...PCT, giaTri: 100 }] },
-    ]);
+    ], { tranPhanTram: KHONG_TRAN });
     expect(t.tongDon).toBe(0);
   });
 });
@@ -218,7 +231,7 @@ describe("[GGD] giải trình theo TỪNG KHOẢN", () => {
           { ...TIEN, giaTri: 100_000, lyDo: "  " },
         ],
       },
-    ]);
+    ], KHONG_TRAN);
     expect(thieu).toEqual([{ dong: 2, khoan: 2 }]);
     expect(loiThieuGiaiTrinh(thieu)).toContain("dòng 2 (khoản 2)");
   });
@@ -235,7 +248,7 @@ describe("[GGD] giải trình theo TỪNG KHOẢN", () => {
           { ...TIEN, giaTri: 500_000 },
         ],
       },
-    ]);
+    ], KHONG_TRAN);
     expect(thieu).toEqual([]);
   });
 
@@ -243,9 +256,9 @@ describe("[GGD] giải trình theo TỪNG KHOẢN", () => {
     const t = tienDon([
       { unitPrice: 1_000_000, quantity: 1, giam: [{ ...TIEN, giaTri: 100_000, lyDo: "a" }] },
       { unitPrice: 2_000_000, quantity: 1, giam: [{ ...PCT, giaTri: 5, lyDo: "b" }, { ...TIEN, giaTri: 1, lyDo: "c" }] },
-    ]);
+    ], { tranPhanTram: KHONG_TRAN });
     expect(giaiTrinhGopChoDon(t.dong)).toBe("Dòng 1: a · Dòng 2: b · Dòng 2: c");
-    expect(giaiTrinhGopChoDon(tienDon([{ unitPrice: 1_000, quantity: 1 }]).dong)).toBeNull();
+    expect(giaiTrinhGopChoDon(tienDon([{ unitPrice: 1_000, quantity: 1 }], { tranPhanTram: KHONG_TRAN }).dong)).toBeNull();
   });
 });
 
@@ -256,6 +269,85 @@ describe("[GGD] giải trình theo TỪNG KHOẢN", () => {
  * gửi: hàm thuần vẫn đúng, chỉ lời gọi biến mất. Đó đúng là lớp bug mẫu này sinh ra để
  * chặn (CLAUDE.md — LƯỚI GHIM MÃ NGUỒN). Đã cấy lại để thấy ĐỎ — xem commit message.
  */
+
+/**
+ * TRẦN % CỦA MỘT KHOẢN — chốt của chủ dự án 15/09/2026:
+ * *"quy định lại mức giảm % tối đa là 50% và phần này cũng nên set ở trong cấu hình
+ * vận hành luôn."*
+ *
+ * Hai nửa của chốt, cả hai đều phải đo được:
+ *   (a) con số 50 là MẶC ĐỊNH, không phải hằng cố định trong mã;
+ *   (b) nguồn sự thật là tham số vận hành `orders.maxDiscountPercent`, nên mọi hàm tính
+ *       phải NHẬN trần từ ngoài — không tự tra, không tự đoán.
+ */
+describe("[GGD] trần % của một khoản", () => {
+  it("[GGD-26] mặc định là 50, và nó nằm trong registry cấu hình vận hành", () => {
+    expect(TRAN_PHAN_TRAM_MAC_DINH).toBe(50);
+    // Nửa (b) của chốt: phải có KEY trong registry, không chỉ có hằng trong mã. Thiếu
+    // key thì người vận hành không sửa được, và cả đợt này chỉ là đổi một con số cứng.
+    const registry = readFileSync(resolve(process.cwd(), "lib/settings/registry.ts"), "utf8");
+    expect(registry).toMatch(/"orders\.maxDiscountPercent"/);
+    expect(registry).toMatch(/default: 50,/);
+    // Và phải có NHÃN vận hành, kẻo key tồn tại mà màn cấu hình không bày ra
+    // (`page.tsx` dựng danh sách từ bảng nhãn, không từ SETTING_KEYS).
+    const nhan = readFileSync(resolve(process.cwd(), "lib/settings/nhan-van-hanh.ts"), "utf8");
+    expect(nhan).toMatch(/"orders\.maxDiscountPercent"/);
+  });
+
+  it("[GGD-27] gõ % vượt trần ⇒ KẸP xuống trần, và ĐÁNH DẤU vuotTran", () => {
+    const t = tienDong(
+      { unitPrice: 1_000_000, quantity: 1, giam: [{ ...PCT, giaTri: 80 }] },
+      50,
+    );
+    // Kẹp: không đường nào tính ra số vượt chính sách…
+    expect(t.giam).toBe(500_000);
+    // …nhưng `giaTri` giữ Ý ĐỊNH 80 và cờ nói rõ đã vượt. Kẹp im lặng là người bán hứa
+    // khách 80% rồi hệ thống trừ 50%, và sai lệch đó chỉ lộ lúc phụ huynh đọc hoá đơn.
+    expect(t.khoan[0]).toMatchObject({ giaTri: 80, phanTram: 50, vuotTran: true });
+  });
+
+  it("[GGD-28] khoanVuotTran chỉ đúng dòng nào khoản nào, và câu lỗi mang con số trần", () => {
+    const dong = [
+      { unitPrice: 1_000_000, quantity: 1, giam: [{ ...PCT, giaTri: 50, lyDo: "vừa đủ trần" }] },
+      {
+        unitPrice: 2_000_000,
+        quantity: 1,
+        giam: [
+          { ...TIEN, giaTri: 100_000, lyDo: "tiền thì không bị trần %" },
+          { ...PCT, giaTri: 51, lyDo: "hơn trần 1%" },
+        ],
+      },
+    ];
+    const vuot = khoanVuotTran(dong, 50);
+    expect(vuot).toEqual([{ dong: 2, khoan: 2 }]);
+    // Câu lỗi phải mang CON SỐ TRẦN: người bán cần biết trần là bao nhiêu để sửa, và
+    // con số đó do người vận hành đặt nên không hard-code được vào chuỗi.
+    expect(loiVuotTran(vuot, 50)).toContain("50%");
+    expect(loiVuotTran(vuot, 50)).toContain("dòng 2 (khoản 2)");
+  });
+
+  it("[GGD-29] trần đến TỪ NGOÀI: đổi trần là đổi kết quả, không phải sửa mã", () => {
+    // Đây là nửa (b) của chốt, đo bằng hành vi: cùng một đầu vào, hai trần khác nhau
+    // ⇒ hai số tiền khác nhau. Nếu hàm tự tra hằng trong mã thì ca này bất khả.
+    const dong = { unitPrice: 1_000_000, quantity: 1, giam: [{ ...PCT, giaTri: 70 }] };
+    expect(tienDong(dong, 50).giam).toBe(500_000);
+    expect(tienDong(dong, 80).giam).toBe(700_000);
+    expect(tienDong(dong, 70).khoan[0]!.vuotTran).toBe(false);
+  });
+
+  it("[GGD-30] trần RÁC rơi về mặc định, không thành \"không có trần\"", () => {
+    // `getSetting` có zod nên giá trị rác khó lọt, nhưng hàm thuần này cũng được gọi từ
+    // client và từ test. Một trần 0/âm/NaN phải fail-CLOSED về 50, không được hoá thành
+    // 'bỏ trần' — hướng sai đó cho bớt tới 100% mà không cổng nào thấy.
+    for (const rac of [0, -5, Number.NaN, 999]) {
+      const t = tienDong(
+        { unitPrice: 1_000_000, quantity: 1, giam: [{ ...PCT, giaTri: 100 }] },
+        rac as number,
+      );
+      expect(t.giam).toBe(500_000);
+    }
+  });
+});
 describe("[GGD] lưới ghim: tiền của đơn phải do server tính lại", () => {
   const action = readFileSync(
     resolve(process.cwd(), "app/(admin)/admin/orders/_actions.ts"),
@@ -273,7 +365,14 @@ describe("[GGD] lưới ghim: tiền của đơn phải do server tính lại", 
   });
 
   it("[GGD-22] subtotal + totalAmount cùng đến từ MỘT lời gọi tienDon", () => {
-    const goi = action.match(/const tien = tienDon\(khaiDong, data\.shippingFee\);/g) ?? [];
+    // ⚠️ Chuỗi ghim ĐÃ ĐỔI 15/09/2026 khi trần % dời vào cấu hình vận hành: đối số thứ
+    // hai từ `data.shippingFee` thành object `{ phiVanChuyen, tranPhanTram }`. Lưới đã
+    // ĐỎ đúng lúc đó (`expected +0 to be 1`) — ghi lại để người sau biết nó CÓ cắn,
+    // không phải một chuỗi được chép lại cho khớp.
+    const goi =
+      action.match(
+        /const tien = tienDon\(khaiDong, \{ phiVanChuyen: data\.shippingFee, tranPhanTram \}\);/g,
+      ) ?? [];
     expect(goi.length).toBe(1);
     expect(action).toMatch(/const subtotal = tien\.tamTinh;/);
     expect(action).toMatch(/const totalAmount = tien\.tongDon;/);
@@ -294,6 +393,25 @@ describe("[GGD] lưới ghim: tiền của đơn phải do server tính lại", 
     expect(validator).toMatch(/Giảm giá nay khai theo TỪNG DÒNG, không khai ở cấp đơn/);
   });
 
+  it("[GGD-31] action ĐỌC trần từ cấu hình vận hành, không dùng hằng trong mã", () => {
+    // Bẫy mà CLAUDE.md đã ghi cho `crm.commissionMaxTotalRate`: người vận hành nới trần
+    // ở màn cấu hình mà đường ghi vẫn chặn theo số cũ — không lỗi nào báo.
+    expect(action).toMatch(/getSetting\("orders\.maxDiscountPercent"\)/);
+    expect(action).toMatch(/khoanVuotTran\(khaiDong, tranPhanTram\)/);
+    // Và KHÔNG được nhập hằng mặc định vào đường ghi — nhập là mời người sau dùng nó.
+    expect(action).not.toMatch(/TRAN_PHAN_TRAM_MAC_DINH/);
+  });
+
+  it("[GGD-32] trần truyền từ RSC xuống form, form KHÔNG tự đoán", () => {
+    const page = readFileSync(
+      resolve(process.cwd(), "app/(admin)/admin/orders/new/page.tsx"),
+      "utf8",
+    );
+    expect(page).toMatch(/getSetting\("orders\.maxDiscountPercent"\)/);
+    expect(page).toMatch(/tranPhanTram=\{tranPhanTram\}/);
+    // Form nhận qua prop; một hằng cứng ở client là con số thứ hai sống song song.
+    expect(form).not.toMatch(/TRAN_PHAN_TRAM_MAC_DINH/);
+  });
   it("[GGD-25] form và server dùng CHUNG một hàm tính, không mỗi bên một bản", () => {
     for (const nguon of [action, form]) {
       expect(nguon).toMatch(/from "@\/lib\/orders\/giam-gia-dong"/);

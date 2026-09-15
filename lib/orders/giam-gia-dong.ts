@@ -35,6 +35,25 @@ export type KieuGiam = (typeof KIEU_GIAM)[keyof typeof KIEU_GIAM];
 export const TRAN_KHOAN_GIAM_MOI_DONG = 5;
 
 /**
+ * TRẦN % của MỘT khoản giảm — MẶC ĐỊNH cho code thuần. 50% (chốt 15/09/2026).
+ *
+ * ⚠️ ĐÂY KHÔNG PHẢI NGUỒN SỰ THẬT. Trần thật là tham số vận hành
+ * `orders.maxDiscountPercent`, quản trị sửa ở màn "Cấu hình vận hành". Hằng này chỉ
+ * dùng cho nơi KHÔNG chạm DB được (test thuần, bản nháp).
+ *
+ * Cùng bài học với `crm.commissionMaxTotalRate` (CLAUDE.md, 27/08/2026): mọi đường
+ * chạm DB được PHẢI `getSetting` rồi TRUYỀN VÀO, nếu không thì người vận hành nới trần
+ * ở màn cấu hình mà đường ghi vẫn chặn theo số cũ — và không lỗi nào báo.
+ *
+ * Vì thế `tranPhanTram` của `gopGiamGia`/`tienDong`/`tienDon` cố ý KHÔNG có giá trị
+ * mặc định: để `tsc` liệt kê hết chỗ gọi khi con số này đổi nhà (luật 7 — tham số có
+ * mặc định NGUY HIỂM thì bỏ mặc định). Mặc định ở đây nguy hiểm theo CHIỀU HẠ: người
+ * vận hành hạ trần về 30 mà một chỗ gọi quên truyền thì chỗ đó vẫn cho tới 50 — fail
+ * OPEN, tức bớt cho khách nhiều hơn chính sách.
+ */
+export const TRAN_PHAN_TRAM_MAC_DINH = 50;
+
+/**
  * Số tiền giảm từ % — làm tròn, kẹp trong `[0, goc]`.
  *
  * ⚠️ Dời từ `lib/orders/discount.ts` sang (15/09/2026) vì tệp đó `server-only` mà form
@@ -65,6 +84,15 @@ export type GiamDaAp = {
   /** Số THỰC SỰ trừ được sau khi kẹp vào phần còn lại của dòng (SỐ THẬT). */
   giam: number;
   lyDo: string | null;
+  /**
+   * Khoản này gõ % VƯỢT trần cấu hình.
+   *
+   * `gopGiamGia` vẫn KẸP xuống trần để không đường nào tính ra số vượt chính sách,
+   * nhưng cờ này phải tồn tại: kẹp im lặng là người bán hứa khách 80% rồi hệ thống
+   * trừ 50%, và sai lệch đó chỉ lộ ra lúc phụ huynh đọc hoá đơn. Form đọc cờ để báo
+   * ngay, action đọc cờ để TỪ CHỐI cả đơn.
+   */
+  vuotTran: boolean;
 };
 
 export type TienDong = {
@@ -113,15 +141,29 @@ export type TienDong = {
  * ra đúng tổng. Kẹp ở tổng thì từng dòng in ra một đằng, tổng một nẻo — và người đọc sẽ
  * tin cái họ cộng được bằng tay.
  */
-export function gopGiamGia(tamTinh: number, khai: readonly KhaiGiam[]): GiamDaAp[] {
+export function gopGiamGia(
+  tamTinh: number,
+  khai: readonly KhaiGiam[],
+  /** Trần % cho MỘT khoản — `orders.maxDiscountPercent`. KHÔNG có mặc định, xem
+   *  chú thích ở `TRAN_PHAN_TRAM_MAC_DINH`. */
+  tranPhanTram: number,
+): GiamDaAp[] {
   const goc = Math.max(0, tamTinh);
+  // Trần rác (0, âm, > 100) ⇒ rơi về mặc định thay vì cho qua: một con số trần sai
+  // không được biến thành 'không có trần'.
+  const tran =
+    Number.isFinite(tranPhanTram) && tranPhanTram >= 1 && tranPhanTram <= 100
+      ? Math.floor(tranPhanTram)
+      : TRAN_PHAN_TRAM_MAC_DINH;
   let conLai = goc;
   const ra: GiamDaAp[] = [];
 
   for (const k of khai) {
     if (!k || !(k.giaTri > 0)) continue;
     const laPct = k.kieu === KIEU_GIAM.PHAN_TRAM;
-    const pct = laPct ? Math.min(100, Math.max(0, k.giaTri)) : null;
+    // Kẹp xuống TRẦN (không phải 100): trần là chính sách, 100 chỉ là giới hạn toán học.
+    const pct = laPct ? Math.min(tran, Math.max(0, k.giaTri)) : null;
+    const vuotTran = laPct && k.giaTri > tran;
     // Tính trên GỐC (cộng dồn), rồi mới kẹp vào phần còn lại.
     const muon = laPct
       ? discountFromPercent(goc, pct!)
@@ -134,6 +176,7 @@ export function gopGiamGia(tamTinh: number, khai: readonly KhaiGiam[]): GiamDaAp
       phanTram: pct,
       giam,
       lyDo: k.lyDo?.trim() || null,
+      vuotTran,
     });
   }
   return ra;
@@ -153,10 +196,10 @@ export type DongDeTinh = {
  * từng phím gõ, ném ở đó là trắng màn hình giữa lúc nhập liệu. Cổng chặn giá trị bậy là
  * validator + action, không phải hàm tính.
  */
-export function tienDong(input: DongDeTinh): TienDong {
+export function tienDong(input: DongDeTinh, tranPhanTram: number): TienDong {
   const tamTinh =
     Math.max(0, Math.round(input.unitPrice)) * Math.max(0, Math.round(input.quantity));
-  const khoan = gopGiamGia(tamTinh, input.giam ?? []);
+  const khoan = gopGiamGia(tamTinh, input.giam ?? [], tranPhanTram);
   const giam = khoan.reduce((s, k) => s + k.giam, 0);
   // Chỉ quy ra "% của dòng" khi dòng có ĐÚNG MỘT khoản và khoản đó là %.
   const phanTram =
@@ -182,8 +225,15 @@ export type TienDon = {
  * nên nó phải là tổng thật chứ không phải một số nhập độc lập — hai đường nhập cho cùng
  * một con tiền là định nghĩa của sổ lệch.
  */
-export function tienDon(dong: readonly DongDeTinh[], phiVanChuyen = 0): TienDon {
-  const tung = dong.map((d) => tienDong(d));
+/**
+ * Tuỳ chọn của `tienDon`. `tranPhanTram` BẮT BUỘC, `phiVanChuyen` thì không —
+ * phí vận chuyển thiếu thì ra 0 (đúng với đơn khoá học), còn trần thiếu thì sai chính sách.
+ */
+export type TuyChonTienDon = { phiVanChuyen?: number; tranPhanTram: number };
+
+export function tienDon(dong: readonly DongDeTinh[], opts: TuyChonTienDon): TienDon {
+  const phiVanChuyen = opts.phiVanChuyen ?? 0;
+  const tung = dong.map((d) => tienDong(d, opts.tranPhanTram));
   const tamTinh = tung.reduce((s, d) => s + d.tamTinh, 0);
   const tongGiam = tung.reduce((s, d) => s + d.giam, 0);
   return {
@@ -211,14 +261,45 @@ export type ThieuGiaiTrinh = { dong: number; khoan: number };
  */
 export function dongThieuGiaiTrinh(
   dong: readonly (DongDeTinh & { giam?: readonly KhaiGiam[] | null })[],
+  tranPhanTram: number,
 ): ThieuGiaiTrinh[] {
   const ra: ThieuGiaiTrinh[] = [];
   dong.forEach((d, i) => {
-    tienDong(d).khoan.forEach((k, j) => {
+    tienDong(d, tranPhanTram).khoan.forEach((k, j) => {
       if (k.giam > 0 && !k.lyDo) ra.push({ dong: i + 1, khoan: j + 1 });
     });
   });
   return ra;
+}
+
+/**
+ * Khoản nào gõ % VƯỢT trần — cùng khuôn trả về với `dongThieuGiaiTrinh`.
+ *
+ * TỪ CHỐI chứ không kẹp im lặng. `gopGiamGia` có kẹp, nhưng kẹp là lưới an toàn cho
+ * con SỐ; còn con NGƯỜI thì vừa hứa với phụ huynh một mức bớt khác. Để đơn lưu được
+ * với 50% trong khi sale gõ 80% là dựng sẵn một cuộc tranh cãi mà hệ thống có đủ dữ
+ * kiện để chặn ngay lúc bấm Lưu.
+ */
+export function khoanVuotTran(
+  dong: readonly (DongDeTinh & { giam?: readonly KhaiGiam[] | null })[],
+  tranPhanTram: number,
+): ThieuGiaiTrinh[] {
+  const ra: ThieuGiaiTrinh[] = [];
+  dong.forEach((d, i) => {
+    tienDong(d, tranPhanTram).khoan.forEach((k, j) => {
+      if (k.vuotTran) ra.push({ dong: i + 1, khoan: j + 1 });
+    });
+  });
+  return ra;
+}
+
+/** Câu thông báo cho người bán khi có khoản vượt trần. */
+export function loiVuotTran(
+  vuot: readonly ThieuGiaiTrinh[],
+  tranPhanTram: number,
+): string {
+  const cho = vuot.map((t) => `dòng ${t.dong} (khoản ${t.khoan})`).join(", ");
+  return `Giảm theo % tối đa ${tranPhanTram}% mỗi khoản — vượt trần ở ${cho}`;
 }
 
 /** Câu thông báo cho người bán, từ kết quả `dongThieuGiaiTrinh`. */

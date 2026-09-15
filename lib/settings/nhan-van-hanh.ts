@@ -598,6 +598,16 @@ const N: Readonly<Record<SettingKey, NhanVanHanh>> = {
   },
 
   // ── Tiền & thanh toán ──────────────────────────────────────────────────────────────────
+  "orders.maxDiscountPercent": {
+    tab: "tien",
+    ten: "Giảm giá theo % tối đa cho một ưu đãi",
+    giaiThich:
+      "Áp cho TỪNG ưu đãi trên một dòng đơn, tính trên tạm tính của chính dòng đó. " +
+      "Một dòng có thể chồng nhiều ưu đãi và các mức % CỘNG DỒN, nên hạ số này không " +
+      "chặn được tổng mức bớt — nó chỉ chặn một ưu đãi đơn lẻ quá lớn. Sale gõ vượt " +
+      "trần thì đơn không lưu được, kèm thông báo chỉ rõ dòng nào khoản nào.",
+    donVi: "%",
+  },
   "finance.debtReminderDaysBefore": {
     tab: "tien",
     ten: "Nhắc đóng đợt 2 trước hạn",

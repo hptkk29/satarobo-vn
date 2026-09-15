@@ -186,8 +186,25 @@ describe("iconTranTrongNguon — bộ quét có thật sự phân biệt đượ
   });
 });
 
+/**
+ * Trần thời gian cho ca QUÉT CÂY — phép tính ghi ngay đây, cùng khuôn với
+ * `lib/finance/truc-a.test.ts`, `lib/finance/ghi-nhan.test.ts` và `HAN_QUET_CAY` của
+ * `lib/events/khop-phat-nghe.test.ts`.
+ *
+ * Đo 15/09/2026: ca này đọc + soi regex ~2.000 tệp .tsx, chạy MỘT MÌNH **627ms**; trong
+ * cả bộ `pnpm test:unit` (máy đang tải) **6335ms** ⇒ vượt trần mặc định 5s ⇒ ĐỎ với
+ * "Test timed out", không phải với một vi phạm affordance nào.
+ *
+ * ⚠️ KHÁC hai ca vá cùng ngày ở `requests.spec.ts` và `require-now-in-tests.test.ts`:
+ * ở đó chi phí là KHỞI TẠO MỘT LẦN nên dời được về `beforeAll` và ca về 1ms/10ms. Ở
+ * đây việc quét CHÍNH LÀ việc của ca — dời đi chỉ là chuyển chỗ tính tiền, không giảm.
+ * Nên đây là ca duy nhất trong ba ca đáng NỚI TRẦN, và nới có phép tính: 30s ≈ 4,7× lần
+ * đo tệ nhất. 5s vốn chưa bao giờ là ngân sách đúng cho một ca đọc 2.000 tệp.
+ */
+const TRAN_QUET_MS = 30_000;
+
 describe("luật 12 — icon chỉ hướng trong hàng bảng phải nằm trong vùng bấm", () => {
-  it("không file nào có mũi tên TRƠ trong ô bảng", () => {
+  it("không file nào có mũi tên TRƠ trong ô bảng", { timeout: TRAN_QUET_MS }, () => {
     expect(
       viPhamToanRepo(),
       "Mũi tên/chevron trong <td> mà không nằm trong <button>/<a>/<Link>/Trigger, và " +

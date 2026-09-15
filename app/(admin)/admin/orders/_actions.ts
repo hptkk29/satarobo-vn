@@ -21,10 +21,13 @@ import { generateOrderCode, withUniqueRetry } from "@/lib/orders/code";
 import { checkOrderCreateOwnership } from "@/lib/orders/create-guard";
 import { canTransition } from "@/lib/orders/status";
 import { recordInstallmentPlan, markInstallmentPaid } from "@/lib/orders/installments";
+import { getSetting } from "@/lib/settings/service";
 import {
   dongThieuGiaiTrinh,
   giaiTrinhGopChoDon,
+  khoanVuotTran,
   loiThieuGiaiTrinh,
+  loiVuotTran,
   tienDon,
   type KieuGiam,
 } from "@/lib/orders/giam-gia-dong";
@@ -409,12 +412,28 @@ export async function createOrderManualAction(input: unknown) {
   // Giải trình BẮT BUỘC cho từng dòng có giảm. Validator đã gác từng dòng một, nhưng
   // gác lại ở đây để thông báo nói được DÒNG NÀO — với đơn bốn dòng thì "thiếu giải
   // trình" không đủ để người bán biết đi sửa ở đâu.
-  const thieuLyDo = dongThieuGiaiTrinh(khaiDong);
+  // TRẦN % lấy từ THAM SỐ VẬN HÀNH, không phải hằng trong mã. Người vận hành sửa ở màn
+  // "Cấu hình vận hành" (`orders.maxDiscountPercent`, mặc định 50 — chốt 15/09/2026) và
+  // đường ghi này phải đi theo ngay. Đây đúng là cái bẫy CLAUDE.md đã ghi cho
+  // `crm.commissionMaxTotalRate`: nới trần ở màn cấu hình mà đường ghi vẫn chặn theo số
+  // cũ thì không lỗi nào báo, chỉ có sale gọi điện hỏi vì sao không lưu được đơn.
+  const tranPhanTram = await getSetting("orders.maxDiscountPercent");
+
+  // Vượt trần ⇒ TỪ CHỐI, không kẹp im lặng. `gopGiamGia` có kẹp như lưới an toàn cho
+  // con SỐ, nhưng người bán vừa hứa với phụ huynh một mức bớt khác — để đơn lưu được
+  // với 50% trong khi sale gõ 80% là dựng sẵn một cuộc tranh cãi mà hệ thống có đủ dữ
+  // kiện để chặn ngay lúc bấm Lưu.
+  const vuotTran = khoanVuotTran(khaiDong, tranPhanTram);
+  if (vuotTran.length > 0) {
+    return { ok: false as const, error: loiVuotTran(vuotTran, tranPhanTram) };
+  }
+
+  const thieuLyDo = dongThieuGiaiTrinh(khaiDong, tranPhanTram);
   if (thieuLyDo.length > 0) {
     return { ok: false as const, error: loiThieuGiaiTrinh(thieuLyDo) };
   }
 
-  const tien = tienDon(khaiDong, data.shippingFee);
+  const tien = tienDon(khaiDong, { phiVanChuyen: data.shippingFee, tranPhanTram });
   const subtotal = tien.tamTinh;
   const totalAmount = tien.tongDon;
   // `tienDong` đã kẹp giảm ≤ tạm tính TỪNG DÒNG, nên tổng không thể âm trừ khi

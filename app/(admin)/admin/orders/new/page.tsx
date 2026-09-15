@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { provinces } from "vietnam-address-data";
 import { auth } from "@/lib/auth";
+import { getSetting } from "@/lib/settings/service";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
@@ -27,6 +28,11 @@ export default async function NewOrderPage({
   const canManageAll = await checkPermission("orders:manage");
 
   const data = await loadCreateOrderFormData();
+  // Trần % giảm — THAM SỐ VẬN HÀNH (`orders.maxDiscountPercent`, mặc định 50). Đọc ở đây
+  // rồi truyền xuống form: client không gọi được `getSetting`, và một hằng cứng ở client
+  // là con số thứ hai sống song song với cấu hình. Server action đọc LẠI độc lập — đây
+  // chỉ là lớp trải nghiệm, không phải lớp bảo vệ.
+  const tranPhanTram = await getSetting("orders.maxDiscountPercent");
 
   // convert-v2: tạo đơn GẮN lead (từ trang convert). Đọc lead trong tầm nhìn cơ sở
   // actor (scopedDb) — ngoài scope/không tồn tại → bỏ qua leadId (đơn walk-in thường).
@@ -98,6 +104,7 @@ export default async function NewOrderPage({
         // Sale (không có `orders:manage`) KHÔNG đổi được cơ sở: cổng server đã ép theo
         // cơ sở của lead, nên để ô mở là cho họ chọn một thứ sẽ bị vứt im lặng.
         lockCenter={!canManageAll}
+        tranPhanTram={tranPhanTram}
       />
     </div>
   );

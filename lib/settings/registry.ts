@@ -235,6 +235,33 @@ export const SETTINGS = {
     },
     centerOverridable: false,
   }),
+  // 15/09/2026 — TRẦN % GIẢM GIÁ cho MỘT khoản trên một dòng đơn. Chủ dự án:
+  // "quy định lại mức giảm % tối đa là 50% và phần này cũng nên set ở trong cấu hình
+  // vận hành luôn."
+  //
+  // ⚠️ Đây là CẤU HÌNH, không phải hằng số — cùng bài học với
+  // `crm.commissionMaxTotalRate` (27/08): hằng `TRAN_PHAN_TRAM_MAC_DINH` trong
+  // `lib/orders/giam-gia-dong.ts` chỉ còn là mặc định cho code THUẦN. Mọi đường chạm
+  // DB được PHẢI `getSetting` rồi TRUYỀN VÀO `tienDon`/`gopGiamGia` — không thì người
+  // vận hành nới trần ở màn này mà đường ghi vẫn chặn theo số cũ, và không lỗi nào báo.
+  // Tham số ấy cố ý KHÔNG có mặc định để `tsc` liệt kê hết chỗ gọi (luật 7).
+  //
+  // ⚠️ KHÔNG `centerOverridable`: đây là mức TRẦN quản trị, không phải một chương trình
+  // khuyến mãi. Cho mỗi cơ sở tự nới trần là mỗi cơ sở một mức bớt tối đa, và kế toán
+  // không còn MỘT con số để đối. Ưu đãi khác nhau theo cơ sở thì khai ở từng khoản
+  // giảm trên dòng đơn — chỗ đó vốn đã tự do.
+  //
+  // Chặn dưới 1%: trần 0 nghĩa là MỌI khoản % âm thầm thành 0đ, người bán gõ 10% mà
+  // khách không được bớt gì. Muốn cấm hẳn giảm theo % thì đó là một quyết định khác,
+  // cần một cái công tắc nói đúng tên nó, không phải hạ trần về 0.
+  "orders.maxDiscountPercent": def({
+    key: "orders.maxDiscountPercent",
+    group: "finance",
+    label: "Trần % giảm giá mỗi khoản trên dòng đơn",
+    schema: z.number().int().min(1).max(100),
+    default: 50,
+    centerOverridable: false,
+  }),
   "finance.debtReminderDaysBefore": def({
     key: "finance.debtReminderDaysBefore",
     group: "finance",
