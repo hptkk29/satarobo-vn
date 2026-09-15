@@ -7,7 +7,10 @@ import { KHOAN_DA_GHI_NHAN } from "@/lib/finance/ghi-nhan";
 import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
 import { publishEvent } from "@/lib/events/publish";
 import { issueReceipt } from "@/lib/finance/receipt";
-import { allocateByWeight } from "@/lib/finance/allocate";
+import {
+  chiaKhoanTheoDon,
+  type GhiDanhCuaLead,
+} from "@/lib/finance/chia-khoan-theo-don";
 import { KHOAN_DA_XAC_NHAN } from "@/lib/finance/debt";
 import { recordLeadStatusChange } from "@/lib/leads/set-status";
 // Sổ đăng ký marker — MỘT chỗ định nghĩa chuỗi nhận dạng khoản tự sinh.
@@ -237,10 +240,21 @@ export async function maybeAdvanceLeadToRegistered(
  */
 export async function linkRecordedPaymentsToEnrollments(
   tx: Tx,
-  params: { leadId: string; enrollmentIds: string[]; weights: number[]; actor: AuditActor },
-): Promise<{ linked: number; splitCreated: number }> {
-  const { leadId, enrollmentIds, weights, actor } = params;
-  if (enrollmentIds.length === 0) return { linked: 0, splitCreated: 0 };
+  params: {
+    leadId: string;
+    /**
+     * Ghi danh vừa tạo, KÈM `studentId` — bắt buộc từ 15/09/2026.
+     *
+     * ⚠️ Trước bản này tham số là hai mảng song song `enrollmentIds` + `weights`. Không có
+     * `studentId` thì hàm KHÔNG THỂ biết khoản của đơn nào thuộc về em nào, nên nó chia mọi
+     * khoản cho mọi ghi danh của lead. Đổi kiểu để cái sai đó không diễn đạt lại được.
+     */
+    ghiDanh: GhiDanhCuaLead[];
+    actor: AuditActor;
+  },
+): Promise<{ linked: number; splitCreated: number; duongLui: number }> {
+  const { leadId, ghiDanh, actor } = params;
+  if (ghiDanh.length === 0) return { linked: 0, splitCreated: 0, duongLui: 0 };
 
   const recorded = await tx.payment.findMany({
     where: { ...KHOAN_DA_GHI_NHAN, enrollmentId: null, order: { leadId } },
@@ -250,7 +264,7 @@ export async function linkRecordedPaymentsToEnrollments(
       accountantStatus: true,
     },
   });
-  if (recorded.length === 0) return { linked: 0, splitCreated: 0 };
+  if (recorded.length === 0) return { linked: 0, splitCreated: 0, duongLui: 0 };
 
   // ⚠️ CHỐT CHẶN CỨNG (07/09/2026) — nhánh tách dưới đây SỬA `amount` của dòng gốc
   // (dòng 268: `tx.payment.update({ data: { amount: part } })`). Điều đó chỉ đúng khi
@@ -271,42 +285,82 @@ export async function linkRecordedPaymentsToEnrollments(
     );
   }
 
-  // 1 ghi danh → gắn nguyên khoản (không tách).
-  if (enrollmentIds.length === 1) {
-    const r = await tx.payment.updateMany({
-      where: { id: { in: recorded.map((p) => p.id) } },
-      data: { enrollmentId: enrollmentIds[0]! },
+  // ── CHIA THEO ĐƠN, KHÔNG THEO LEAD [15/09/2026] ────────────────────────────
+  //
+  // Luật ở `lib/finance/chia-khoan-theo-don.ts` (thuần, có test + đã cấy lỗi). Ở đây chỉ
+  // còn việc nạp CÁC DÒNG của những đơn có khoản, rồi ghi kết quả.
+  //
+  // ⚠️ Nạp dòng theo `orderId` CỦA CHÍNH CÁC KHOẢN, không nạp theo lead. Đó đúng là chỗ
+  // bản cũ đánh mất ranh giới đơn.
+  const maDon = [...new Set(recorded.map((p) => p.orderId).filter((x): x is string => !!x))];
+  const dongTheoDon = new Map<
+    string,
+    { studentId: string | null; courseId: string | null; thanhTien: number }[]
+  >();
+  if (maDon.length > 0) {
+    const items = await tx.orderItem.findMany({
+      where: { orderId: { in: maDon } },
+      select: {
+        orderId: true,
+        studentId: true,
+        totalPrice: true,
+        discountAmount: true,
+        metadata: true,
+      },
     });
-    return { linked: r.count, splitCreated: 0 };
+    for (const it of items) {
+      const ds = dongTheoDon.get(it.orderId) ?? [];
+      // ⚠️ `studentId` của dòng thường NULL ở luồng lead — học viên chỉ ra đời ở bước
+      // Chuyển đổi, SAU khi đơn đã tồn tại. Khoá học mới là thứ luôn có trên dòng, nên nó
+      // là móc nối chính; xem `chiaKhoanTheoDon`.
+      const m = it.metadata as Record<string, unknown> | null;
+      const courseId = typeof m?.courseId === "string" && m.courseId ? m.courseId : null;
+      // TIỀN DÒNG SAU GIẢM GIÁ: `totalPrice` là tạm tính của dòng, `discountAmount` là tổng
+      // khoản giảm của dòng. Cân theo tạm tính là bỏ qua ưu đãi đã cho riêng em đó.
+      ds.push({
+        studentId: it.studentId,
+        courseId,
+        thanhTien: it.totalPrice - (it.discountAmount ?? 0),
+      });
+      dongTheoDon.set(it.orderId, ds);
+    }
   }
 
-  // Nhiều ghi danh → chia theo finalPrice (bất biến tổng).
-  const n = enrollmentIds.length;
   let splitCreated = 0;
+  let duongLui = 0;
   for (const p of recorded) {
-    const parts = allocateByWeight(p.amount, weights);
+    const { phan, duongLui: lui } = chiaKhoanTheoDon(
+      p.amount,
+      dongTheoDon.get(p.orderId ?? "") ?? [],
+      ghiDanh,
+    );
+    if (lui) duongLui++;
+    if (phan.length === 0) continue;
+
+    const soPhan = phan.length;
     let reusedOriginal = false;
-    for (let j = 0; j < n; j++) {
-      const part = parts[j]!;
-      if (part <= 0) continue; // ghi danh không được chia phần nào (finalPrice 0) → bỏ
-      const note = `${(p.note ?? "").trim()} [tách ${j + 1}/${n}]`.trim();
+    for (let k = 0; k < soPhan; k++) {
+      const { enrollmentId, amount } = phan[k]!;
+      // Một mảnh ⇒ giữ nguyên ghi chú. Dán "[tách 1/1]" vào một khoản không hề tách là nói
+      // dối trên chính dòng sổ.
+      const note =
+        soPhan === 1
+          ? (p.note ?? null)
+          : `${(p.note ?? "").trim()} [tách ${k + 1}/${soPhan}]`.trim();
       if (!reusedOriginal) {
-        await tx.payment.update({
-          where: { id: p.id },
-          data: { enrollmentId: enrollmentIds[j]!, amount: part, note },
-        });
+        await tx.payment.update({ where: { id: p.id }, data: { enrollmentId, amount, note } });
         await writeAudit({
           actor, module: "finance", entityType: "Payment", entityId: p.id, action: "UPDATE",
           changedFields: ["amount", "enrollmentId"],
           oldValues: { amount: p.amount, enrollmentId: null },
-          newValues: { amount: part, enrollmentId: enrollmentIds[j]!, source: "convert-split" },
+          newValues: { amount, enrollmentId, source: "convert-split", duongLui: lui },
           orgUnitId: p.centerId, tx,
         });
         reusedOriginal = true;
       } else {
         const created = await tx.payment.create({
           data: {
-            orderId: p.orderId, enrollmentId: enrollmentIds[j]!, amount: part,
+            orderId: p.orderId, enrollmentId, amount,
             method: p.method, paidDate: p.paidDate, evidenceUrl: p.evidenceUrl ?? null, note,
             saleStatus: "RECORDED", accountantStatus: "PENDING",
             recordedById: p.recordedById, centerId: p.centerId,
@@ -316,13 +370,13 @@ export async function linkRecordedPaymentsToEnrollments(
         splitCreated++;
         await writeAudit({
           actor, module: "finance", entityType: "Payment", entityId: created.id, action: "CREATE",
-          newValues: { amount: part, enrollmentId: enrollmentIds[j]!, source: "convert-split", splitFrom: p.id },
+          newValues: { amount, enrollmentId, source: "convert-split", splitFrom: p.id },
           orgUnitId: p.centerId, tx,
         });
       }
     }
   }
-  return { linked: recorded.length, splitCreated };
+  return { linked: recorded.length, splitCreated, duongLui };
 }
 
 // ─── AC1 — Sale ghi nhận khoản ────────────────────────────────────────────────

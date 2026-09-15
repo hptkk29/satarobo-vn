@@ -477,10 +477,27 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
     // ghi danh) các khoản RECORDED của đơn vào ghi danh → confirmPayment sinh Receipt được →
     // getDebtRows phản ánh. Nhiều ghi danh: chia theo finalPrice (bất biến tổng). KHÔNG
     // auto-confirm ở đây (giữ tách vai kế toán). weights ↔ enrollmentIds cùng thứ tự students.
+    // `studentIds` / `enrollmentIds` / `prices` cùng thứ tự `input.students` — gộp lại
+    // thành MỘT danh sách để hàm chia biết khoản của đơn nào thuộc về em nào.
+    //
+    // KHOÁ HỌC CỦA LỚP là móc nối CHÍNH, không phải phụ: đơn lập từ `/orders/new?leadId=…`
+    // có `OrderItem.studentId` = NULL ở mọi dòng (học viên chỉ ra đời ở chính bước này),
+    // nên nếu chỉ khớp theo học viên thì phép chia rơi hết vào đường lui và tiền lại chảy
+    // sang em khác — đo được 15/09/2026, xem `lib/finance/chia-khoan-theo-don.ts`.
+    const lopCuaGhiDanh = await tx.class.findMany({
+      where: { id: { in: [...new Set(input.students.map((s) => s.classId))] } },
+      select: { id: true, courseId: true },
+    });
+    const khoaTheoLop = new Map(lopCuaGhiDanh.map((c) => [c.id, c.courseId]));
+
     await linkRecordedPaymentsToEnrollments(tx, {
       leadId: lead.id,
-      enrollmentIds,
-      weights: prices.map((p) => p.finalPrice),
+      ghiDanh: enrollmentIds.map((enrollmentId, i) => ({
+        enrollmentId,
+        studentId: studentIds[i]!,
+        courseId: khoaTheoLop.get(input.students[i]!.classId) ?? null,
+        finalPrice: prices[i]!.finalPrice,
+      })),
       actor,
     });
 
