@@ -234,6 +234,60 @@ async function main() {
       " Không dùng làm khoá của một con số chạm lương.",
   );
 
+  // ── 4bis. BA KHOÁ CÓ ĐỒNG Ý VỚI NHAU KHÔNG ────────────────────────────────
+  //
+  // Đếm riêng từng khoá chỉ nói "khoá nào phủ đủ". Câu quyết định là khoá nào NÓI
+  // CÙNG MỘT CHUYỆN — vì nếu ba khoá bất đồng về việc ai là giáo viên, thì chọn khoá
+  // là chọn luôn một danh sách người khác nhau, và danh sách ấy là mẫu số lương.
+  //
+  // Bảng chéo dưới đây in ĐẾM, không in ai.
+  const vaiCua = (uid: string) => vaiTheoNguoi.get(uid) ?? new Set<string>();
+  const nsCoId = nhanSu
+    .map((e) => ({ ...e, uid: e.userAccount?.id ?? null }))
+    .filter((e): e is typeof e & { uid: string } => !!e.uid);
+
+  tieu("4bis. BA KHOÁ CÓ ĐỒNG Ý 'AI LÀ GIÁO VIÊN' KHÔNG");
+  const theoPhongBan = nsCoId.filter((e) => String(e.department) === "DAO_TAO" || String(e.department) === "GIANG_DAY");
+  const theoVai = nsCoId.filter((e) => vaiCua(e.uid).has("TEACHER"));
+  const theoChucDanh = nsCoId.filter((e) => /gi[áa]o vi[êe]n/i.test(e.jobTitle));
+  dong("Là GV theo Employee.department (DAO_TAO/GIANG_DAY)", theoPhongBan.length);
+  dong("Là GV theo vai RBAC (có TEACHER)", theoVai.length);
+  dong("Là GV theo jobTitle (khớp 'giáo viên')", theoChucDanh.length);
+  const bo = (a: typeof nsCoId) => new Set(a.map((e) => e.uid));
+  const A = bo(theoPhongBan), B = bo(theoVai), C = bo(theoChucDanh);
+  const hieu = (x: Set<string>, y: Set<string>) => [...x].filter((u) => !y.has(u)).length;
+  dong("Có phòng ban đào tạo NHƯNG không vai TEACHER", hieu(A, B));
+  dong("Có vai TEACHER NHƯNG phòng ban khác", hieu(B, A));
+  dong("Chức danh 'giáo viên' NHƯNG không vai TEACHER", hieu(C, B));
+  dong("Có vai TEACHER NHƯNG chức danh không ghi 'giáo viên'", hieu(B, C));
+  console.log(
+    A.size === B.size && B.size === C.size && hieu(A, B) === 0 && hieu(B, C) === 0
+      ? "  ⓘ Ba khoá cho CÙNG một danh sách người."
+      : "  ⚠️ BA KHOÁ CHO BA DANH SÁCH KHÁC NHAU. Chọn khoá = chọn ai được mẫu số nào.",
+  );
+
+  console.log("");
+  console.log("  ── Bảng chéo: phòng ban × loại hợp đồng (đếm người) ──");
+  const loaiHD = [...new Set(nsCoId.map((e) => (e.contractType ? String(e.contractType) : "(null)")))].sort();
+  const phongBan = [...new Set(nsCoId.map((e) => String(e.department)))].sort();
+  console.log(`  ${"".padEnd(22)}${loaiHD.map((l) => l.padStart(12)).join("")}`);
+  for (const pb of phongBan) {
+    const hang = loaiHD.map(
+      (l) =>
+        String(
+          nsCoId.filter(
+            (e) => String(e.department) === pb && (e.contractType ? String(e.contractType) : "(null)") === l,
+          ).length,
+        ).padStart(12),
+    );
+    console.log(`  ${pb.padEnd(22)}${hang.join("")}`);
+  }
+  console.log(
+    "  ⓘ 'GV fulltime / GV parttime' mà mục 4 nói tới ĐỌC ĐƯỢC ở đúng ô (DAO_TAO × FULLTIME)" +
+      " và (DAO_TAO × PARTTIME) của bảng này — KHÔNG đọc được từ `TeacherProfile.employmentType`" +
+      " nếu bảng đó rỗng, và KHÔNG đọc được từ vai RBAC (vai không phân biệt fulltime/parttime).",
+  );
+
   // ── 5. CÔNG CHUẨN CÓ ĐANG LÀ MẪU SỐ THẬT KHÔNG ────────────────────────────
   //
   // Đo bằng mã nguồn chứ không bằng DB, nên in ra đây như một lời khai để người đọc
