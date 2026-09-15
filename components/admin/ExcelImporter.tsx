@@ -422,9 +422,24 @@ export function ExcelImporter<T>({
   const trangThaiDong = (i: number) => {
     const row = parsedRows[i]!;
     if (isErrorRow(row)) return { kieu: "loi" as const, chu: row.error };
-    const dup = dupErrors.get(i) ?? dbDup.get(excelRows[i] ?? -1);
+    // ⚠️ HAI loại trùng, và chúng KHÁC NHAU về nghĩa:
+    //   · trùng trong FILE  — gộp với một dòng khác của chính file này, chưa liên quan gì
+    //     tới bản ghi đang có trong hệ thống;
+    //   · trùng với HỆ THỐNG — sẽ ghi đè lên một bản ghi thật.
+    // Ảnh prod 15/09 cho thấy bản đầu dán chung một nhãn: "Sẽ cập nhật lead đang có — Trùng
+    // SĐT với dòng 4 trong file". Câu đó đúng một nửa, mà nửa sai lại là nửa đáng sợ hơn.
+    const dupFile = dupErrors.get(i);
+    const dupDb = dbDup.get(excelRows[i] ?? -1);
+    const dup = dupFile ?? dupDb;
     if (dup) {
-      if (mergeDuplicates) return { kieu: "trung" as const, chu: `${mergeDuplicates.label} — ${dup}` };
+      if (mergeDuplicates) {
+        return {
+          kieu: "trung" as const,
+          chu: dupFile
+            ? `${dupFile} — hai dòng sẽ gộp làm một khi nhập`
+            : `${mergeDuplicates.label} — ${dupDb}`,
+        };
+      }
       if (confirmDuplicates && isConfirmedRow(i)) {
         return { kieu: "trung" as const, chu: "Đã xác nhận — sẽ xử lý khi nhập", hoanTac: true };
       }
@@ -488,7 +503,13 @@ export function ExcelImporter<T>({
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[54rem] text-sm">
                     <thead>
-                      <tr className="border-b border-border bg-muted/60">
+                      {/* ⚠️ Nền hàng tiêu đề phải ĐẶC và TRÙNG KHỚP với nền ô ghim.
+                          Đo 15/09: hàng là `bg-muted/60` (muted 60%) còn ô ghim là
+                          `bg-muted` (100%) — hai sắc độ khác nhau, nên cột ghim hiện ra
+                          thành một vệt sáng chạy dọc qua hàng tiêu đề. Ô ghim KHÔNG được
+                          dùng màu trong suốt (dữ liệu sẽ chạy dưới nó khi kéo ngang), nên
+                          bên phải nhượng bộ: hàng cũng dùng đặc. */}
+                      <tr className="border-b border-border bg-muted">
                         {/* GHIM hai cột chrome vào hai mép. Đo 15/09 trước khi ghim: nút Sửa
                             nằm ở x=1971 trên màn 994px — phải kéo ngang 1165px mới tới đúng
                             thứ màn này sinh ra để dùng. Cột ghim để nền ĐỤC (`bg-muted`,
@@ -608,7 +629,7 @@ export function ExcelImporter<T>({
             </>
           )}
 
-          {dsNhom.length === 0 && <NhomRong nhom={nhom} />}
+          {dsNhom.length === 0 && <NhomRong nhom={nhom} soDongSeGhi={validRows.length} />}
 
           {/* Thanh hành động dính đáy: ở màn nhỏ, danh sách dài đẩy nút ra khỏi tầm nhìn và
               người dùng cuộn mãi không thấy nút Nhập. `bottom` cộng safe-area cho máy có
@@ -877,20 +898,32 @@ function GiaiThichNhom({
           ? coXacNhan
             ? `${trungBiBo} dòng đang chờ bạn xác nhận; dòng nào không xác nhận sẽ bị bỏ qua.`
             : `${trungBiBo} dòng trùng sẽ bị bỏ qua. Sửa lại giá trị bị trùng, hoặc xoá dòng.`
-          : `Đã có bản ghi cùng khoá trong hệ thống.${nhanTrung ? ` ${nhanTrung}.` : ""} Đọc kỹ cột Tình trạng trước khi nhập.`;
+          // ⚠️ KHÔNG nhắc tới "cột Tình trạng" nữa — cột đó đã bị bỏ khi lý do chuyển
+          // xuống dòng riêng dưới mỗi dòng dữ liệu. Ảnh prod 15/09 còn in nguyên câu cũ:
+          // một chỉ dẫn trỏ vào thứ không tồn tại trên màn hình (luật 12).
+          : `Đã có bản ghi cùng khoá trong hệ thống.${nhanTrung ? ` ${nhanTrung}.` : ""} Dòng chữ dưới mỗi dòng nói rõ sẽ ghi đè lên ai — đọc trước khi nhập.`;
 
   return <p className="text-sm text-muted-foreground">{chu}</p>;
 }
 
-function NhomRong({ nhom }: { nhom: Nhom }) {
-  const chu: Record<Nhom, string> = {
-    hopLe: "Chưa có dòng nào sẵn sàng. Xử lý nhóm Lỗi và Trùng trước đã.",
-    trung: "Không dòng nào trùng với dữ liệu đang có — file này toàn bản ghi mới.",
-    loi: "Không dòng nào lỗi. File đọc được sạch.",
-  };
+function NhomRong({ nhom, soDongSeGhi }: { nhom: Nhom; soDongSeGhi: number }) {
+  // ⚠️ Nhóm "Hợp lệ" rỗng KHÔNG đồng nghĩa với "chưa nhập được gì".
+  //
+  // Ảnh prod 15/09: file 146 dòng, 145 trùng — tab hiện "Hợp lệ 0" và câu rỗng bảo người
+  // dùng "Xử lý nhóm Lỗi và Trùng trước đã", trong khi 145 dòng kia VẪN SẼ ĐƯỢC NHẬP. Câu đó
+  // sai chỉ dẫn: nó bảo đi xử lý thứ không cần xử lý, và gieo nghi ngờ rằng lượt nhập hỏng.
+  const chu =
+    nhom === "hopLe"
+      ? soDongSeGhi > 0
+        ? `Không dòng nào là bản ghi mới — cả ${soDongSeGhi} dòng đều đã có trong hệ thống và sẽ được cập nhật. Xem nhóm Trùng.`
+        : "Chưa có dòng nào sẵn sàng. Xử lý nhóm Lỗi và Trùng trước đã."
+      : nhom === "trung"
+        ? "Không dòng nào trùng với dữ liệu đang có — file này toàn bản ghi mới."
+        : "Không dòng nào lỗi. File đọc được sạch.";
+
   return (
     <div className="rounded-xl border border-dashed border-border px-6 py-10 text-center">
-      <p className="text-sm text-muted-foreground">{chu[nhom]}</p>
+      <p className="mx-auto max-w-[60ch] text-sm text-muted-foreground">{chu}</p>
     </div>
   );
 }
@@ -912,11 +945,42 @@ const MAU_TRANG_THAI: Record<TrangThaiDong["kieu"], string> = {
   loi: "text-state-danger-ink",
 };
 
+/**
+ * NỀN DÒNG — chỉ tô những dòng sẽ KHÔNG được ghi.
+ *
+ * ⚠️ Bản đầu tô cả nhóm "trùng". Ảnh chụp prod 15/09 (file 146 dòng, 145 trùng) cho thấy hai
+ * điều sai cùng lúc:
+ *
+ *  1. Tô cả 145 dòng trong tab "Trùng" là nói lại đúng thứ cái tab đã nói — trang trí, không
+ *     phải thông tin. Thứ CẦN nổi bật là dòng khác với hàng xóm của nó, không phải dòng
+ *     giống hệt 144 dòng còn lại.
+ *  2. Nó làm HỎNG cột ghim: token `-soft` là `rgba(..., 0.12)`, còn ô ghim buộc phải có nền
+ *     ĐỤC (nếu không dữ liệu chạy dưới nó khi kéo ngang). Hai thứ không khớp nên ô ghim hiện
+ *     ra như một hộp TRẮNG rời khỏi hàng — xem ảnh, mỗi nút "Sửa" nằm trong một ô trắng nổi
+ *     trên nền kem.
+ *
+ * Nay chỉ dòng sẽ bị bỏ mới có nền, và với đúng những dòng đó ô ghim đắp thêm một lớp
+ * `::before` cùng màu (xem `NEN_GHIM`) để dải ghim không còn trắng.
+ */
 const NEN_DONG: Record<TrangThaiDong["kieu"], string> = {
   ok: "",
-  trung: "bg-state-warning-soft",
+  trung: "",
   chan: "bg-state-danger-soft",
   loi: "bg-state-danger-soft",
+};
+
+/**
+ * Nền cho Ô GHIM của dòng sẽ bị bỏ.
+ *
+ * Ô ghim cần nền đục để che dữ liệu chạy phía dưới, nhưng cũng phải mang màu của dòng. Không
+ * đặt được hai `background` trên một phần tử, nên: nền đục ở chính ô, màu dòng đắp lên bằng
+ * `::before`, và nội dung nâng lên `relative` để không bị lớp đó phủ mất.
+ */
+const NEN_GHIM: Record<TrangThaiDong["kieu"], string> = {
+  ok: "",
+  trung: "",
+  chan: "before:absolute before:inset-0 before:bg-state-danger-soft before:content-['']",
+  loi: "before:absolute before:inset-0 before:bg-state-danger-soft before:content-['']",
 };
 
 /**
@@ -1018,8 +1082,18 @@ function DongBang({
   return (
     <>
       <tr className={cn("border-t border-border", NEN_DONG[trangThai.kieu])}>
-        <td className="sticky left-0 z-10 whitespace-nowrap border-r border-border bg-background px-4 py-3 text-xs tabular-nums text-muted-foreground">
-          {soDong}
+        <td
+          className={cn(
+            // ⚠️ KHÔNG thêm `relative` ở đây. `relative` và `sticky` cùng là thuộc tính
+            // `position`, nên cái nào đứng sau trong CSS sinh ra sẽ thắng — thêm vào là
+            // cột MẤT GHIM trong khi tiêu đề vẫn ghim, và bảng trông như lệch hàng.
+            // `position: sticky` tự nó đã là phần tử được định vị, nên lớp `::before`
+            // `absolute inset-0` neo vào nó sẵn rồi.
+            "sticky left-0 z-10 whitespace-nowrap border-r border-border bg-background px-4 py-3 text-xs tabular-nums text-muted-foreground",
+            NEN_GHIM[trangThai.kieu],
+          )}
+        >
+          <span className="relative">{soDong}</span>
         </td>
         {columnHints.map((c) => {
           const v = oThanhChuoi(gia[c.key]);
@@ -1035,8 +1109,15 @@ function DongBang({
             </td>
           );
         })}
-        <td className="sticky right-0 z-10 whitespace-nowrap border-l border-border bg-background px-4 py-1.5">
-          <NutDong soDong={soDong} onSua={onSua} onXoa={onXoa} gon />
+        <td
+          className={cn(
+            "sticky right-0 z-10 whitespace-nowrap border-l border-border bg-background px-4 py-1.5",
+            NEN_GHIM[trangThai.kieu],
+          )}
+        >
+          <div className="relative">
+            <NutDong soDong={soDong} onSua={onSua} onXoa={onXoa} gon />
+          </div>
         </td>
       </tr>
       {coLyDo && (
