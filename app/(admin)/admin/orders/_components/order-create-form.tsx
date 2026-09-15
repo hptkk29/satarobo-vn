@@ -32,6 +32,7 @@ import {
   studentIdChoDon,
   thieuHocVienODong,
 } from "@/lib/orders/hoc-vien-dong-don";
+import { nhacTraLead, SO_CHU_SO_TOI_THIEU_TRA_LEAD } from "@/lib/orders/goi-y-sdt";
 import {
   KIEU_GIAM,
   TRAN_KHOAN_GIAM_MOI_DONG,
@@ -297,6 +298,14 @@ export function OrderCreateForm({
   };
   const [leadGoiY, setLeadGoiY] = useState<LeadGoiY[]>([]);
   const [dangTraSdt, setDangTraSdt] = useState(false);
+  /**
+   * SĐT (chỉ chữ số) mà kết quả hiện tại thuộc về — `null` là chưa tra lần nào.
+   *
+   * ⚠️ Cần cái này để phân biệt HAI kiểu "danh sách rỗng": chưa tra (đang gõ dở) và đã tra
+   * rồi mà không có lead. Suy từ `leadGoiY.length === 0` thì hai ca đó giống hệt nhau, và
+   * đó chính là lý do ô SĐT im lặng trước bản này.
+   */
+  const [sdtDaTra, setSdtDaTra] = useState<string | null>(null);
   /** Đã chọn một gợi ý rồi thì thôi bày bảng ra nữa, kẻo nó che ô bên dưới. */
   const [daChonLead, setDaChonLead] = useState(leadId != null);
 
@@ -442,8 +451,10 @@ export function OrderCreateForm({
   useEffect(() => {
     if (daChonLead) return;
     const so = customer.phone.replace(/\D/g, "");
-    if (so.length < 6) {
+    if (so.length < SO_CHU_SO_TOI_THIEU_TRA_LEAD) {
       setLeadGoiY([]);
+      // Gõ ngắn lại ⇒ kết quả cũ không còn thuộc về số đang gõ nữa.
+      setSdtDaTra(null);
       return;
     }
     let boQua = false;
@@ -453,6 +464,8 @@ export function OrderCreateForm({
         .then((r) => {
           if (boQua) return;
           setLeadGoiY(r.ok ? (r.leads ?? []) : []);
+          // Ghi lại KẾT QUẢ NÀY THUỘC VỀ SỐ NÀO — xem chú thích ở `sdtDaTra`.
+          setSdtDaTra(so);
         })
         .finally(() => {
           if (!boQua) setDangTraSdt(false);
@@ -471,6 +484,30 @@ export function OrderCreateForm({
    * chưa có `Student` thì KHÔNG chọn được (ô này lưu `Student.id`) — hiện thành lời
    * nhắc thay vì một tuỳ chọn bấm vào không ăn (affordance phải nói thật).
    */
+  /**
+   * CÂU NHẮC DƯỚI Ô SĐT — trả lời đúng câu hỏi của chủ dự án 15/09:
+   * *"đang nhập ở sđt thì lọc theo sđt chứ sao lại lọc xuống dưới khoá học → học viên?"*
+   *
+   * Việc tra lead vẫn chạy; cái hỏng là nhánh RỖNG không vẽ gì, nên khi SĐT không có lead
+   * thì ô này im, còn phản ứng duy nhất nhìn thấy được lại nằm tận dưới khối Khoá học.
+   * Nay ô SĐT tự nói kết quả của nó, và khi SĐT có hồ sơ học viên thì CHỈ ĐƯỜNG xuống đó.
+   *
+   * Luật ở `lib/orders/goi-y-sdt.ts` (thuần, có test + đã cấy lỗi): bốn trạng thái phải
+   * loại trừ nhau, viết thẳng vào JSX là có ngày hiện cả spinner lẫn "không tìm thấy".
+   */
+  const soChuSoSdt = customer.phone.replace(/\D/g, "").length;
+  const nhacSdt = daChonLead
+    ? null
+    : nhacTraLead({
+        soChuSo: soChuSoSdt,
+        dangTra: dangTraSdt,
+        daTraXong: sdtDaTra === customer.phone.replace(/\D/g, ""),
+        soLead: leadGoiY.length,
+        // Cùng hàm mà ô Học viên dùng để lọc — câu nhắc không được hứa một con số khác
+        // với con số người bán sẽ thấy ở dưới.
+        soCon: conCuaPhuHuynh(students, customer.phone).length,
+      });
+
   function chonLead(l: LeadGoiY) {
     setCustomer((c) => ({
       ...c,
@@ -873,6 +910,13 @@ export function OrderCreateForm({
                     </ul>
                   )}
                 </div>
+                {/* Ô SĐT NÓI KẾT QUẢ TRA CỦA CHÍNH NÓ. Trước bản này chỉ có nhánh
+                    "có lead" được vẽ, nên SĐT không có lead là ô im hoàn toàn — và im
+                    lặng mang hai nghĩa (chưa tra / tra rồi mà không có) mà người dùng
+                    không tách được. Luật 12. */}
+                {nhacSdt && (
+                  <p className="text-xs text-muted-foreground">{nhacSdt}</p>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label>Email (không bắt buộc)</Label>
