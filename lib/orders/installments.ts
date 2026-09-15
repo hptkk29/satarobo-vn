@@ -119,24 +119,14 @@ async function recomputeOrder(orderId: string, actorId: string | null): Promise<
  * Ghi/ghi đè kế hoạch 2 đợt. dot1Amount đã thu (PAID ngay), dot2 còn lại (PENDING,
  * dueDate hẹn). Nếu dot2Amount=0 → chỉ 1 đợt (đã đóng đủ).
  */
-/**
- * R-02 — ném khi lưu kế hoạch sẽ làm mất dấu tiền khách đã đóng.
- *
- * PHẢI là `throw`, KHÔNG được trả cờ: cả ba chỗ gọi `materializeInstallmentRequests`
- * đều BỎQUA giá trị trả về, và quan trọng hơn: khi cổng bật thì `orderInstallment.deleteMany`
- * + xoá mềm `Payment` ở trên ĐÃ chạy trong cùng transaction. Trả cờ thì transaction
- * vẫn COMMIT phần phá hoại — chỉ `throw` mới rollback được.
- */
-export class InstallmentMoneyBlocked extends Error {
-  readonly code = "INSTALLMENT_MONEY_BLOCKED" as const;
-  constructor(
-    message: string,
-    readonly soTien: number,
-  ) {
-    super(message);
-    this.name = "InstallmentMoneyBlocked";
-  }
-}
+// `InstallmentMoneyBlocked` ĐÃ DỜI sang `lib/payments/plan-money-guard.ts` [15/09/2026]
+// — cổng A6 phải ném cùng lớp lỗi này từ `materializeInstallmentRequests`, mà tệp đó
+// không nhập ngược được vào đây (vòng nhập). Xuất lại để mọi chỗ gọi cũ không đổi.
+// ⚠️ NHẬP rồi XUẤT LẠI, không dùng `export … from`: dạng đó tái xuất được nhưng KHÔNG
+// đưa tên vào phạm vi cục bộ, mà tệp này còn `throw new InstallmentMoneyBlocked(...)`
+// ở bốn chỗ (tsc báo đúng bốn lỗi khi thử).
+import { InstallmentMoneyBlocked } from "@/lib/payments/plan-money-guard";
+export { InstallmentMoneyBlocked };
 
 export type DotGhi = {
   amount: number;

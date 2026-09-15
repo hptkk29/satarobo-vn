@@ -3,6 +3,10 @@ import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { writeAudit } from "@/lib/audit/audit-log";
 import {
+  InstallmentMoneyBlocked,
+  doiTienDotDaThu,
+} from "@/lib/payments/plan-money-guard";
+import {
   deriveStatus,
   isOrderSettled,
   outstandingOf,
@@ -281,6 +285,21 @@ export async function materializeInstallmentRequests(
 
     const patch: Prisma.PaymentRequestUncheckedUpdateInput = {};
     if (cur.status === "VOID") patch.status = "PENDING"; // duyệt lại sau khi từ chối.
+
+    // ── A6 — `amountDue` của phiếu ĐÃ CÓ TIỀN là BẤT BIẾN ──────────────────────
+    // Luật + lý do + số đo ở `doiTienDotDaThu` (plan-money-guard.ts). Cắm Ở ĐÂY chứ
+    // không ở `recordInstallmentPlan`: một cổng che CẢ BA đường gọi
+    // (`installments.ts:332`, `:500`, `crm/backfill-order.ts:153`) — vá ở đường gọi là
+    // vá một cửa rồi để hai cửa mở.
+    const aSauA6 = doiTienDotDaThu({
+      soDot: dot.soDot,
+      tienHienTai: cur.amountDue,
+      tienMuonDat: dot.amount,
+      daRot: soCuaPhieu(allocated, cur.id).allocated,
+    });
+    if (aSauA6.chan) {
+      throw new InstallmentMoneyBlocked(aSauA6.lyDo ?? "Không sửa được đợt đã thu", aSauA6.soTien ?? 0);
+    }
     if (cur.amountDue !== dot.amount) patch.amountDue = dot.amount;
     if ((cur.dueDate?.getTime() ?? null) !== (dot.dueDate?.getTime() ?? null)) {
       patch.dueDate = dot.dueDate;

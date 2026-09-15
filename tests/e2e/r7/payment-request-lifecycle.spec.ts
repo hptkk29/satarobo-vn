@@ -293,14 +293,19 @@ test.describe("[PR] Vòng đời phiếu thu — duyệt trả góp mới sinh p
   // `amountDue` thành 1.000.000đ ⇒ phiếu hoá "thu vượt 5.000.000đ" và số còn-phải-thu
   // của đơn sai theo.
   //
-  // Vi phạm đúng chốt của chủ dự án: "KHÔNG sửa `amountDue` của phiếu đã có allocation.
-  // VOID + tạo phiếu mới." Lỗ CÓ SẴN trước đợt gỡ duyệt, không do nó sinh ra — nên vá
-  // là một đợt riêng có đo đường gọi (3 chỗ gọi materialize) chứ không nhét vào đây.
-  test("[PR-02d] KHÔNG ghi đè amountDue của phiếu đã có tiền rót vào (A6)", async () => {
-    // ⚠️ GHIM phải nằm TRONG thân ca. Đặt `test.fail(true, …)` ở cấp file thì nó đánh
-    // dấu MỌI ca phía sau — đã thử và 6 ca sau đó lập tức báo "expected to fail".
-    test.fail(true, "Nợ: amountDue của phiếu đã có allocation vẫn bị ghi đè (chờ vá theo A6)");
-
+  // A6: "KHÔNG sửa `amountDue` của phiếu đã có allocation. VOID + tạo phiếu mới."
+  //
+  // ✅ ĐÃ GỠ GHIM [15/09/2026]. Cổng nằm ở `doiTienDotDaThu` (plan-money-guard.ts), cắm
+  // trong vòng UPSERT của `materializeInstallmentRequests` — MỘT chỗ che cả ba đường gọi
+  // (`installments.ts:332`, `:500`, `crm/backfill-order.ts:153`), vì vá ở đường gọi là vá
+  // một cửa rồi để hai cửa mở.
+  //
+  // ⚠️ KỲ VỌNG CỦA CA NÀY ĐÃ ĐỔI, và đổi có chủ đích. Bản ghim cũ kỳ vọng lượt lưu thứ
+  // hai THÀNH CÔNG và `amountDue` âm thầm ở lại 6tr. Giữ im lặng như vậy đẻ ra
+  // split-brain: `OrderInstallment` ghi 1tr còn `PaymentRequest` giữ 6tr — hai sổ nói hai
+  // số cho cùng một đợt và KHÔNG AI được báo. Nay lượt lưu bị TỪ CHỐI, cả transaction
+  // rollback, nên không sổ nào lệch và người bấm nút biết ngay.
+  test("[PR-02d] TỪ CHỐI sửa amountDue của phiếu đã có tiền rót vào (A6)", async () => {
     const order = await createOrderWithRequest(10_000_000, cs1, 23);
     await recordInstallmentPlan({
       orderId: order.id, dot1Amount: 6_000_000, dot2Amount: 4_000_000,
@@ -309,13 +314,43 @@ test.describe("[PR] Vòng đời phiếu thu — duyệt trả góp mới sinh p
     const dot1 = (await requestsOf(order.id)).find((r) => r.installmentNo === 1)!;
     await allocate(dot1.id, 6_000_000, cs1);
 
-    await recordInstallmentPlan({
+    // Đổi số của ĐỢT ĐÃ THU ⇒ phải bị chặn, và câu chặn phải nêu SỐ TIỀN đang bị đe doạ.
+    const kq = await recordInstallmentPlan({
       orderId: order.id, dot1Amount: 1_000_000, dot2Amount: 9_000_000,
       dot2DueDate: new Date("2026-11-01"), actorId: approver.id,
     });
+    expect(kq.ok).toBe(false);
+    expect(kq.error ?? "").toContain("6.000.000");
 
+    // Và sổ KHÔNG lệch một đồng: phiếu giữ nguyên, kế hoạch cũng không bị ghi nửa vời.
     const dot1Sau = (await requestsOf(order.id)).find((r) => r.id === dot1.id)!;
     expect(dot1Sau.amountDue).toBe(6_000_000);
+  });
+
+  // Nửa còn lại của A6, và là luồng THẬT mà chủ dự án mô tả 15/09: "chỉ cho sửa các đợt
+  // sau đó với số tiền còn thiếu". Không có ca này thì cổng trên có thể được cài quá
+  // rộng (chặn mọi lượt lưu khi đơn đã có tiền) mà vẫn xanh — tức khoá cứng màn đơn.
+  test("[PR-02e] VẪN sửa được đợt CHƯA thu khi đợt trước đã thu (A6, nửa cho-qua)", async () => {
+    const order = await createOrderWithRequest(10_000_000, cs1, 24);
+    await recordInstallmentPlan({
+      orderId: order.id, dot1Amount: 6_000_000, dot2Amount: 4_000_000,
+      dot2DueDate: new Date("2026-09-01"), actorId: approver.id,
+    });
+    const dot1 = (await requestsOf(order.id)).find((r) => r.installmentNo === 1)!;
+    await allocate(dot1.id, 6_000_000, cs1);
+
+    // Đợt 1 giữ NGUYÊN số (6tr — đúng như màn hình khoá lại), chỉ đổi hạn + số đợt 2.
+    const kq = await recordInstallmentPlan({
+      orderId: order.id, dot1Amount: 6_000_000, dot2Amount: 4_000_000,
+      dot2DueDate: new Date("2026-12-01"), actorId: approver.id,
+    });
+    expect(kq.ok).toBe(true);
+
+    const sau = await requestsOf(order.id);
+    expect(sau.find((r) => r.id === dot1.id)!.amountDue).toBe(6_000_000);
+    const dot2 = sau.find((r) => r.installmentNo === 2)!;
+    expect(dot2.amountDue).toBe(4_000_000);
+    expect(dot2.dueDate?.toISOString().slice(0, 10)).toBe("2026-12-01");
   });
 
   test("[PR-03] lưu kế hoạch → sinh đúng 2 phiếu đợt, phiếu toàn đơn VOID, matchKey ORD…D1/D2", async () => {
