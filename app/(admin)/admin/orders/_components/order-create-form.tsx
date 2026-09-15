@@ -25,7 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
-import { nationalPhone } from "@/lib/phone";
+import { canonicalPhone, nationalPhone } from "@/lib/phone";
 import { studentIdChoDon, thieuHocVienODong } from "@/lib/orders/hoc-vien-dong-don";
 import {
   KIEU_GIAM,
@@ -44,7 +44,10 @@ import {
   methodAllowsOrderType,
   methodServesCenter,
 } from "@/lib/payments/method-scope";
-import { createOrderManualAction } from "../_actions";
+import {
+  createOrderManualAction,
+  timPhuHuynhTheoSdtAction,
+} from "../_actions";
 
 type Course = {
   id: string;
@@ -242,6 +245,27 @@ export function OrderCreateForm({
   // từng `DongHang` — xem `giamKieu`/`giamGiaTri`/`giamLyDo`. Server cũng đã TỪ CHỐI
   // cho ra tiếng nếu ai đó gửi `discountAmount` ở cấp đơn (lib/validators/order.ts).
 
+  // ── SĐT LÀ NEO (15/09/2026) ────────────────────────────────────────────────
+  //
+  // Chủ dự án: nhập SĐT ⇒ thấy lead của SĐT đó ⇒ chọn ⇒ tự điền tên PH ⇒ ô Học viên
+  // ở dưới chỉ còn con của PH đó và chọn sẵn một đứa.
+  //
+  // Tra THEO YÊU CẦU chứ không nạp cả bảng lead vào form (xem chú thích ở
+  // `timPhuHuynhTheoSdtAction`). Danh sách con thì lọc từ `students` đã nạp sẵn —
+  // nó vốn đã mang `parentPhone`.
+  type LeadGoiY = {
+    id: string;
+    parentName: string;
+    phone: string;
+    email: string | null;
+    centerId: string | null;
+    conKhai: string[];
+  };
+  const [leadGoiY, setLeadGoiY] = useState<LeadGoiY[]>([]);
+  const [dangTraSdt, setDangTraSdt] = useState(false);
+  /** Đã chọn một gợi ý rồi thì thôi bày bảng ra nữa, kẻo nó che ô bên dưới. */
+  const [daChonLead, setDaChonLead] = useState(leadId != null);
+
   // Notes
   const [customerNote, setCustomerNote] = useState("");
   const [internalNote, setInternalNote] = useState("");
@@ -351,6 +375,61 @@ export function OrderCreateForm({
   );
   const subtotal = tien.tamTinh;
   const totalAmount = tien.tongDon;
+
+  // Debounce 350ms: gõ 10 chữ số mà không chờ là 10 lượt gọi server cho một lần nhập.
+  // Huỷ theo cờ `boQua` chứ không huỷ request: lượt trả về muộn của một chuỗi CŨ hơn
+  // sẽ ghi đè kết quả của chuỗi mới nếu không chặn (đua bàn phím).
+  useEffect(() => {
+    if (daChonLead) return;
+    const so = customer.phone.replace(/\D/g, "");
+    if (so.length < 6) {
+      setLeadGoiY([]);
+      return;
+    }
+    let boQua = false;
+    setDangTraSdt(true);
+    const t = setTimeout(() => {
+      timPhuHuynhTheoSdtAction(so)
+        .then((r) => {
+          if (boQua) return;
+          setLeadGoiY(r.ok ? (r.leads ?? []) : []);
+        })
+        .finally(() => {
+          if (!boQua) setDangTraSdt(false);
+        });
+    }, 350);
+    return () => {
+      boQua = true;
+      clearTimeout(t);
+    };
+  }, [customer.phone, daChonLead]);
+
+  /**
+   * Chọn một lead gợi ý — điền tên/email/cơ sở, rồi CHỌN SẴN một con vào dòng 1.
+   *
+   * Chỉ chọn sẵn khi PH có ĐÚNG hồ sơ học viên trong tầm nhìn; con mà lead khai nhưng
+   * chưa có `Student` thì KHÔNG chọn được (ô này lưu `Student.id`) — hiện thành lời
+   * nhắc thay vì một tuỳ chọn bấm vào không ăn (affordance phải nói thật).
+   */
+  function chonLead(l: LeadGoiY) {
+    setCustomer((c) => ({
+      ...c,
+      name: l.parentName || c.name,
+      phone: nationalPhone(l.phone) ?? l.phone,
+      email: l.email ?? c.email,
+    }));
+    if (l.centerId && !lockCenter) setCenterId(l.centerId);
+    setDaChonLead(true);
+    setLeadGoiY([]);
+    const con = students.filter(
+      (hv) => canonicalPhone(hv.parentPhone) === canonicalPhone(l.phone),
+    );
+    if (con.length > 0) {
+      setDong((cu) =>
+        cu.map((d, i) => (i === 0 && !d.studentId ? { ...d, studentId: con[0]!.id } : d)),
+      );
+    }
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -648,14 +727,54 @@ export function OrderCreateForm({
               </div>
               <div className="space-y-1.5">
                 <Label>SĐT *</Label>
-                <Input
-                  value={customer.phone}
-                  onChange={(e) =>
-                    setCustomer({ ...customer, phone: e.target.value })
-                  }
-                  required
-                  placeholder="09xxxxxxxx"
-                />
+                {/* ── SĐT LÀ NEO ────────────────────────────────────────────
+                    Gõ ≥6 chữ số ⇒ tra lead THẬT theo SĐT (mọi biến thể 0…/84…) và bày
+                    gợi ý. Vẫn là ô TỰ DO: khách walk-in không có lead nào vẫn gõ được
+                    và bảng gợi ý chỉ đơn giản trống. Đây là autocomplete, không phải
+                    một ô chọn — biến nó thành select là chặn đúng nhóm khách mới. */}
+                <div className="relative">
+                  <Input
+                    value={customer.phone}
+                    onChange={(e) => {
+                      setCustomer({ ...customer, phone: e.target.value });
+                      // Sửa lại SĐT nghĩa là đổi ý ⇒ mở lại gợi ý.
+                      setDaChonLead(false);
+                    }}
+                    placeholder="09xxxxxxxx"
+                    required
+                  />
+                  {dangTraSdt && !daChonLead && (
+                    <span className="absolute inset-y-0 right-2 flex items-center text-muted-foreground">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    </span>
+                  )}
+                  {leadGoiY.length > 0 && !daChonLead && (
+                    <ul
+                      className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-border bg-popover py-1 shadow-md"
+                      aria-label="Lead trùng số điện thoại"
+                    >
+                      {leadGoiY.map((l) => (
+                        <li key={l.id}>
+                          <button
+                            type="button"
+                            onClick={() => chonLead(l)}
+                            className="w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                          >
+                            <span className="font-medium">{l.parentName}</span>
+                            <span className="ml-1.5 text-muted-foreground">
+                              {nationalPhone(l.phone) ?? l.phone}
+                            </span>
+                            {l.conKhai.length > 0 && (
+                              <span className="block text-xs text-muted-foreground">
+                                {l.conKhai.length} con: {l.conKhai.join(", ")}
+                              </span>
+                            )}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               </div>
               <div className="space-y-1.5">
                 <Label>Email (không bắt buộc)</Label>
@@ -750,6 +869,7 @@ export function OrderCreateForm({
                   stt={idx + 1}
                   tongDong={dong.length}
                   tranPhanTram={tranPhanTram}
+                  customerPhone={customer.phone}
                   dong={d}
                   orderType={orderType}
                   courses={courses}
@@ -926,6 +1046,7 @@ function DongHangCard({
   stt,
   tongDong,
   tranPhanTram,
+  customerPhone,
   dong,
   orderType,
   courses,
@@ -938,6 +1059,8 @@ function DongHangCard({
   stt: number;
   tongDong: number;
   tranPhanTram: number;
+  /** SĐT phụ huynh đang nhập — dùng để LỌC danh sách con. */
+  customerPhone: string;
   dong: DongHang;
   orderType: UiOrderType;
   courses: Course[];
@@ -1016,15 +1139,43 @@ function DongHangCard({
   const suaKhoan = (idx: number, thayDoi: Partial<KhaiGiam>) =>
     onSua({ giam: dong.giam.map((k, i) => (i === idx ? { ...k, ...thayDoi } : k)) });
 
-  const hocVienOptions: ComboboxOption[] = useMemo(
+  /**
+   * Danh sách học viên cho ô chọn — LỌC THEO SĐT PHỤ HUYNH đang nhập (15/09/2026).
+   *
+   * Chủ dự án: *"học viên thì lấy đúng số con trong lead nhập ở sđt ở trên session khách
+   * hàng, chứ không hiển thị full như vậy."* Trước bản này ô này bày cả 250 học viên của
+   * cơ sở, và người bán phải tự nhớ con nào là của khách đang đứng trước mặt.
+   *
+   * ⚠️ SĐT TRỐNG thì vẫn bày ĐỦ, cố ý: đơn walk-in không gắn lead nào vẫn phải chọn được
+   * con: lọc-về-rỗng khi chưa có SĐT là khoá luồng đó. Lọc chỉ bật khi đã có SĐT để lọc.
+   *
+   * ⚠️ So bằng `canonicalPhone`, KHÔNG so chuỗi thô: `Student.parentPhone` trong DB đang
+   * có cả `0…` lẫn `84…` (lib/phone.ts — 6 hàm chuẩn hoá thời trước), nên so thô là lọc
+   * mất đúng những bản ghi cần tìm.
+   */
+  const sdtChuan = canonicalPhone(customerPhone);
+  const hocVienOptions: ComboboxOption[] = useMemo(() => {
+    const loc = sdtChuan
+      ? students.filter((hv) => canonicalPhone(hv.parentPhone) === sdtChuan)
+      : students;
+    // SĐT có nhưng KHÔNG con nào khớp (phụ huynh mới, con chưa có hồ sơ) ⇒ bày lại đủ
+    // danh sách thay vì một ô rỗng không giải thích được. Lời nhắc ở dưới ô nói rõ.
+    const dung = loc.length > 0 ? loc : students;
+    return dung.map((hv) => ({
+      value: hv.id,
+      label: [hv.name, hv.parentName, nationalPhone(hv.parentPhone) ?? hv.parentPhone]
+        .filter(Boolean)
+        .join(" · "),
+    }));
+  }, [students, sdtChuan]);
+
+  /** Đang lọc theo SĐT và có khớp ⇒ nói ra, kẻo người bán tưởng mất dữ liệu. */
+  const soConCuaSdt = useMemo(
     () =>
-      students.map((hv) => ({
-        value: hv.id,
-        label: [hv.name, hv.parentName, nationalPhone(hv.parentPhone) ?? hv.parentPhone]
-          .filter(Boolean)
-          .join(" · "),
-      })),
-    [students],
+      sdtChuan
+        ? students.filter((hv) => canonicalPhone(hv.parentPhone) === sdtChuan).length
+        : 0,
+    [students, sdtChuan],
   );
 
   return (
@@ -1077,6 +1228,15 @@ function DongHangCard({
             placeholder="Chọn học viên (tuỳ chọn)…"
             emptyText="Không tìm thấy học viên"
           />
+          {/* Việc LỌC phải tự nói ra. Một ô đột nhiên chỉ còn 2 dòng mà không giải thích
+              thì người bán tưởng mất dữ liệu và đi tìm ở chỗ khác. */}
+          {customerPhone.replace(/D/g, "").length >= 6 && (
+            <p className="text-xs text-muted-foreground">
+              {soConCuaSdt > 0
+                ? `Đang lọc theo SĐT ${nationalPhone(customerPhone) ?? customerPhone} — ${soConCuaSdt} con`
+                : "SĐT này chưa có hồ sơ học viên nào — đang bày cả danh sách; để trống được nếu con chưa có hồ sơ."}
+            </p>
+          )}
         </div>
 
         <div className="space-y-1.5">

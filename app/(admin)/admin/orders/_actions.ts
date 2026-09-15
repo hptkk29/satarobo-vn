@@ -22,6 +22,7 @@ import { checkOrderCreateOwnership } from "@/lib/orders/create-guard";
 import { canTransition } from "@/lib/orders/status";
 import { recordInstallmentPlan, markInstallmentPaid } from "@/lib/orders/installments";
 import { getSetting } from "@/lib/settings/service";
+import { expandPhoneVariants } from "@/lib/phone";
 import {
   dongThieuGiaiTrinh,
   giaiTrinhGopChoDon,
@@ -1220,6 +1221,79 @@ export async function sendManualOrderEmailAction(input: {
 
   revalidatePath(`/orders/${input.orderId}`);
   return { ok: true as const, logId: result.logId };
+}
+
+// ─── TÌM PHỤ HUYNH THEO SĐT (15/09/2026) ─────────────────────────────────────
+//
+// Chủ dự án: *"ở phần khách hàng thì khi nhập sđt sẽ thấy lead của sđt đó ... chọn sđt xong
+// thì tự điền tên PH, và ở dưới khoá học thì tên học viên được chọn sẵn 1 trong số con của
+// PH luôn."*
+//
+// SĐT LÀ NEO của cả form: từ nó suy ra tên phụ huynh, cơ sở, và danh sách con. Trước bản
+// này sale phải gõ tay tên PH rồi tự tìm con trong danh sách 250 học viên của cả cơ sở.
+//
+// ⚠️ TÌM THEO YÊU CẦU, KHÔNG NẠP CẢ BẢNG vào form. Đo 15/09: 122 lead / 123 con — nạp
+// hết vẫn chạy được HÔM NAY, nhưng bảng lead là bảng phình theo thời gian (mỗi quảng cáo
+// một đợt lead mới), nên một form nạp-tất-cả là bom hẹn giờ không ai nhớ đã cài. Học viên
+// thì vẫn dùng danh sách đã nạp sẵn (đã có `parentPhone`, lọc ở client là đủ).
+//
+// ⚠️ `phoneVariants` BẮT BUỘC: DB đang có CẢ HAI dạng `0…` và `84…` (xem lib/phone.ts —
+// 6 hàm chuẩn hoá khác nhau thời trước). Tra bằng đúng chuỗi người dùng gõ là trượt hết
+// bản ghi dạng kia.
+export async function timPhuHuynhTheoSdtAction(sdt: string): Promise<{
+  ok: boolean;
+  leads?: Array<{
+    id: string;
+    parentName: string;
+    phone: string;
+    email: string | null;
+    centerId: string | null;
+    /** Tên con LEAD KHAI — có thể CHƯA có hồ sơ `Student` nào. */
+    conKhai: string[];
+  }>;
+  error?: string;
+}> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  // Cùng cổng với trang tạo đơn: ai tạo được đơn thì tra được SĐT khách của mình.
+  if (!(await checkPermission("orders:create"))) return { ok: false, error: "Không có quyền" };
+
+  const so = (sdt ?? "").replace(/\D/g, "");
+  // Dưới 6 chữ số thì mọi SĐT đều khớp — trả rỗng thay vì đổ nửa bảng lead lên màn.
+  if (so.length < 6) return { ok: true, leads: [] };
+
+  const actor = await resolveActor(session.user.id);
+  const bienThe = expandPhoneVariants([so]);
+  const rows = await scopedDb(actor).lead.findMany({
+    where: {
+      deletedAt: null,
+      // Gõ đủ số → khớp chính xác theo mọi biến thể; gõ thiếu → khớp phần đuôi.
+      OR: [{ phone: { in: bienThe } }, { phone: { contains: so } }],
+    },
+    select: {
+      id: true,
+      parentName: true,
+      phone: true,
+      email: true,
+      centerId: true,
+      children: { select: { fullName: true }, orderBy: { createdAt: "asc" } },
+    },
+    orderBy: { createdAt: "desc" },
+    // Trần 8: danh sách gợi ý dài hơn thì người bán không đọc, chỉ bấm bừa.
+    take: 8,
+  });
+
+  return {
+    ok: true,
+    leads: rows.map((l) => ({
+      id: l.id,
+      parentName: l.parentName,
+      phone: l.phone,
+      email: l.email,
+      centerId: l.centerId,
+      conKhai: l.children.map((c) => c.fullName),
+    })),
+  };
 }
 
 // ─── THANH TOÁN LINH HOẠT — kế hoạch n đợt ───────────────────────────
