@@ -93,3 +93,28 @@ trần phải nâng tiếp"*.
 Chưa có. Chạy từng ca một mình cho **mọi** bộ DB là hàng trăm lượt vitest — quá đắt cho mỗi
 PR. Ý tưởng chưa chốt: một job **hằng đêm** chạy phép rà này và mở issue khi có ca đỏ.
 Chưa làm, chưa hứa.
+
+---
+
+## Phụ lục — CHỤP MÀN site giáo viên ở máy (15/09/2026)
+
+Ghi lại vì lượt đầu mất 5 vòng thử mới chạy được, và cả 5 lỗi đều là bẫy MÔI TRƯỜNG chứ
+không phải mã. Lần sau ai cần soi bố cục một màn GV thì khỏi dò lại.
+
+Khuôn có sẵn: `playwright.teacher.config.ts` + `tests/e2e/_helpers/{seed,auth}.ts`
+(`resetDb` · `seedOrg` · `seedRoles` · `seedUser` · `login`).
+
+| Bẫy | Triệu chứng | Cách qua |
+|---|---|---|
+| **`AUTH_URL` của `.env.local`** | login xong bị đá về `localhost:3000/login`, treo tới hết timeout | `.env.local` đặt `AUTH_URL=http://localhost:3000` và nó THẮNG khối `env` của `webServer`. Tự bật dev server với `AUTH_URL`/`NEXTAUTH_URL`/`NEXT_PUBLIC_APP_URL` trỏ đúng cổng, rồi chạy `TEACHER_SKIP_WEBSERVER=1`. CI không dính vì CI không có `.env.local` |
+| `seedOrg(["CS1"])` | `thiếu Center CS1` | Nó dựng **OrgUnit**, không dựng **Center** — hai cây khác nhau (`lib/org/center-bridge.ts`). Tạo `db.center` riêng |
+| `ShiftAssignment.segments` | `Argument 'segments' is missing` | Cột bắt buộc, kiểu Json |
+| `ShiftAssignment.templateId` | lỗi FK | Bắt buộc và trỏ `ShiftTemplate`. Chạy `seedShiftTemplates(db)` rồi tra id theo `code`; mã nào danh mục không có thì bỏ qua ô ca |
+| `TEACHER_SITE_ENABLED` | `/teacher/*` đá về `/dashboard` | Phải `=true` cho tiến trình server |
+
+⚠️ **Và bẫy thứ sáu, không phải môi trường:** giáo viên seed KHÔNG có `UserOrgRole` thì
+`scopedDb` lọc sạch mọi bảng trong `SCOPED_MODELS`. Ở lượt chụp 15/09 nó làm thẻ "Kỳ công"
+in **"Chưa lập kỳ"** cho một kỳ ĐÃ lập. Đó là dữ liệu fixture thiếu — nhưng nó phơi ra một
+lỗi THẬT trong mã: `null` từ `scopedDb` không phân biệt được "chưa có" với "không được xem",
+nên màn hình nói một câu SAI thay vì nói "không biết". Vá bằng `getMyPeriod` (own-rows).
+**Chụp màn là thứ duy nhất tìm ra nó** — `tsc`, eslint và cả bộ test đều xanh.

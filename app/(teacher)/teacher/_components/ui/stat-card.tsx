@@ -32,32 +32,15 @@ export function StatCard({
   label,
   tone = "brand",
   hint,
-  xuongDong = false,
 }: {
   icon: LucideIcon;
   value: string | number;
   label: string;
   tone?: StatTone;
   hint?: string;
-  /**
-   * Cho nhãn/ghi chú XUỐNG DÒNG thay vì cắt bằng `…`.
-   *
-   * Vì sao là tham số chứ không đổi mặc định: `truncate` đúng cho thẻ có nhãn một từ
-   * ("Buổi dạy", "Lớp") — bỏ nó đi là mọi thẻ cũ đổi chiều cao. Nhưng nhãn dạng
-   * "Ngày đã đi làm / ngày có ca" thì CẮT LÀ NÓI SAI: ở 375px mỗi thẻ chỉ còn ~88px cho
-   * chữ, và "Công tháng này / công chuẩn" hoá thành "Công tháng nà…" — đúng cái lỗi nhãn
-   * mà mục 1 sinh ra để sửa, chỉ là do CSS thay vì do phép đếm.
-   */
-  xuongDong?: boolean;
 }) {
   return (
-    <div
-      className={cn(
-        "t-card t-card-hover flex gap-3 p-3.5",
-        // Chữ xuống dòng thì thẻ cao lên; canh giữa sẽ đẩy icon xuống lưng chừng.
-        xuongDong ? "items-start" : "items-center",
-      )}
-    >
+    <div className="t-card t-card-hover flex items-center gap-3 p-3.5">
       <span
         className={cn(
           "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
@@ -74,23 +57,9 @@ export function StatCard({
         <p className={cn("text-xl leading-tight font-bold", tones[tone])}>
           {value}
         </p>
-        <p
-          className={cn(
-            "text-xs text-muted-foreground",
-            xuongDong ? "leading-snug" : "truncate",
-          )}
-        >
-          {label}
-        </p>
+        <p className="truncate text-xs text-muted-foreground">{label}</p>
         {hint && (
-          <p
-            className={cn(
-              "text-[11px] text-muted-foreground",
-              xuongDong ? "leading-snug" : "truncate",
-            )}
-          >
-            {hint}
-          </p>
+          <p className="truncate text-[11px] text-muted-foreground">{hint}</p>
         )}
       </div>
     </div>

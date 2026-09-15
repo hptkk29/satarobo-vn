@@ -21,14 +21,10 @@
 // withMakeupException (dạy thay/bù liên cơ sở). ⚠️ Câu 46: chỉ tên lớp/cơ sở + giờ — không HV/PH.
 import Link from "next/link";
 import {
-  AlarmClock,
-  CalendarCheck,
-  CalendarOff,
   CalendarX2,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
-  Clock,
 } from "lucide-react";
 import type { SessionStatus } from "@prisma/client";
 import { auth } from "@/lib/auth";
@@ -41,17 +37,20 @@ import {
 import {
   getMyAssignments,
   getMyAttendanceDays,
+  getMyPeriod,
 } from "@/lib/cham-cong/my-schedule";
 import {
   NHAN_TRANG_THAI,
   type TrangThaiNgay,
 } from "@/lib/cham-cong/nhan-ca";
 import {
+  CO_CAN_XU_LY,
   dungDongBangCong,
   tomTatCongThang,
   type LoaiOCa,
 } from "@/lib/cham-cong/bang-cong-gv";
-import { resolveHomeCenter } from "@/lib/cham-cong/home-center";
+import { congDayCuaNguoi } from "@/lib/cham-cong/cong-day";
+import { loadBuoiDay, loadLoaiCongDay } from "@/lib/cham-cong/cong-day-db";
 import { FlagList } from "@/components/cham-cong/ui/flag-chip";
 import { scopedDb } from "@/lib/db-scope";
 import {
@@ -63,7 +62,6 @@ import {
 import { cn } from "@/lib/utils";
 import { dieuKienBuoiTinhCong } from "@/lib/lms/session-ownership";
 import { PageHeader } from "../_components/ui/page-header";
-import { StatCard } from "../_components/ui/stat-card";
 import { EmptyState } from "../_components/ui/empty-state";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
@@ -175,53 +173,108 @@ const TRANG_THAI_TONE: Record<TrangThaiNgay, string> = {
 const fmtMin = (m: number) =>
   m ? `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}` : "—";
 
-/** Đếm đơn theo trạng thái. Tách ra để lời gọi trong JSX đọc được, không phải để tính gì. */
-function demDon(
-  ds: readonly { status: string }[],
-  tt: "PENDING" | "REJECTED",
-): number {
-  return ds.filter((d) => d.status === tt).length;
+/** Nhãn trạng thái kỳ công. `CHUA_LAP` = chưa ai lập kỳ — khác hẳn "đang mở". */
+const KY_NHAN: Record<string, string> = {
+  OPEN: "Đang mở",
+  CLOSING: "Đang chốt",
+  LOCKED: "Đã chốt",
+  REOPENED: "Đã mở lại",
+  CHUA_LAP: "Chưa lập kỳ",
+};
+
+/**
+ * `null` ⇒ "—". Đây là ràng buộc 3 của chủ dự án, viết thành MỘT hàm để không chỗ nào
+ * lỡ in `0` cho một thứ chưa đo được: số 0 và "chưa có dữ liệu" là hai chuyện khác nhau.
+ */
+function soHoacGach(n: number | null, donVi: string): string {
+  return n == null ? "—" : `${n} ${donVi}`;
 }
 
 /**
- * Một nhóm nhãn→giá trị trong khối gấp lại.
+ * Một ô trong hàng năm số.
  *
- * `nhacDonTu`: khi nhóm "Ngày có vấn đề" có số > 0 thì chỉ luôn đường đi tiếp. Chủ dự án:
- * "Đây là thứ người dùng cần thấy để đi nộp đơn, và hôm nay họ không thấy" — bày con số mà
- * không bày lối đi thì mới đi được nửa quãng.
+ * `nhan` và `phu` CỐ Ý không `truncate`: nhãn ở màn này phải khai đúng thứ nó đếm và khai
+ * cả phạm vi, mà nhãn đúng thì dài (13/09: "Công tháng này / công chuẩn" bị cắt thành
+ * "Công tháng nà…" ở 375px). Ô cao thêm một dòng rẻ hơn một nhãn nói dối.
  */
-function ThongTinNhom({
+function OTong({
+  nhan,
+  chinh,
+  phu,
+  nhanManh = false,
+  canhBao = false,
+  href,
+  nhanLink,
+}: {
+  nhan: string;
+  chinh: string;
+  phu: string;
+  nhanManh?: boolean;
+  canhBao?: boolean;
+  href?: string;
+  nhanLink?: string;
+}) {
+  return (
+    <div className="relative flex min-w-0 flex-col gap-1 bg-card p-4 sm:p-5">
+      <p className="text-xs leading-snug font-semibold text-muted-foreground">
+        {nhan}
+      </p>
+      <p
+        className={cn(
+          "leading-tight font-bold tabular-nums",
+          // `text-2xl` chứ không `text-4xl`: DESIGN.md §3 — số tiền/số dài đã từng TRÀN
+          // ra ngoài thẻ ở cỡ lớn, và đây là giao diện dữ liệu dày chứ không phải hero.
+          nhanManh ? "text-2xl" : "text-xl",
+          canhBao
+            ? "text-state-warning-ink"
+            : nhanManh
+              ? "text-primary-ink"
+              : "text-foreground",
+        )}
+      >
+        {chinh}
+      </p>
+      <p className="text-[11px] leading-snug text-muted-foreground">{phu}</p>
+      {href && nhanLink && (
+        <Link
+          href={href}
+          scroll={false}
+          // Vùng bấm phủ CẢ ô (`after:absolute after:inset-0`) chứ không chỉ dòng chữ —
+          // luật 12: mở rộng vùng bấm, đừng để một lời hứa bé bằng con chữ. ≥44px nhờ ô.
+          className="mt-0.5 text-[11px] font-semibold text-primary-ink after:absolute after:inset-0 hover:underline"
+        >
+          {nhanLink} →
+        </Link>
+      )}
+    </div>
+  );
+}
+
+/** Một nhóm nhãn→giá trị trong khối chi tiết. */
+function NhomSo({
   tieuDe,
   dong,
-  nhacDonTu = false,
 }: {
   tieuDe: string;
   dong: [string, string][];
-  nhacDonTu?: boolean;
 }) {
   return (
-    <div>
-      <p className="mb-2 text-xs font-bold tracking-wide text-muted-foreground uppercase">
+    <div className="min-w-0 bg-card p-4 sm:p-5">
+      <h3 className="mb-2 text-xs font-bold tracking-wide text-muted-foreground uppercase">
         {tieuDe}
-      </p>
-      <dl className="space-y-1">
+      </h3>
+      <dl className="space-y-1.5">
         {dong.map(([k, v]) => (
-          <div key={k} className="flex items-baseline justify-between gap-2">
-            <dt className="text-sm text-muted-foreground">{k}</dt>
-            <dd className="text-sm font-semibold text-foreground tabular-nums">
+          <div key={k} className="flex items-baseline justify-between gap-3">
+            <dt className="min-w-0 text-sm leading-snug text-muted-foreground">
+              {k}
+            </dt>
+            <dd className="shrink-0 text-sm font-semibold whitespace-nowrap text-foreground tabular-nums">
               {v}
             </dd>
           </div>
         ))}
       </dl>
-      {nhacDonTu && (
-        <Link
-          href="/teacher/don-tu?type=TIMESHEET_FIX"
-          className="mt-2 inline-block text-xs font-semibold text-primary hover:underline"
-        >
-          Nộp đơn chỉnh công →
-        </Link>
-      )}
     </div>
   );
 }
@@ -229,7 +282,7 @@ function ThongTinNhom({
 export default async function TeacherTimesheetPage({
   searchParams,
 }: {
-  searchParams: Promise<{ thang?: string }>;
+  searchParams: Promise<{ thang?: string; loc?: string }>;
 }) {
   const session = await auth();
   if (!session?.user) return null; // layout đã gate
@@ -239,8 +292,17 @@ export default async function TeacherTimesheetPage({
   const todayKey = isoKey(todayUtc);
   const thisMonth = startOfMonthUtc(todayUtc);
   const monthStart = parseThang(sp.thang) ?? thisMonth;
+  // Bộ lọc "ngày cần xử lý" sống trong URL, không trong state — trang này là RSC, và một
+  // đường dẫn chia sẻ được thì người ta gửi cho quản lý được.
+  const locCo = sp.loc === "co";
+  const hrefThang = (loc: string | null) => {
+    const q = new URLSearchParams();
+    if (sp.thang) q.set("thang", sp.thang);
+    if (loc) q.set("loc", loc);
+    const t = q.toString();
+    return t ? `?${t}` : "?";
+  };
   const nextMonth = addMonthsUtc(monthStart, 1);
-  const isCurrentMonth = monthStart.getTime() === thisMonth.getTime();
 
   const actor = await resolveActor(session.user.id);
   const xdb = withMakeupException(actor);
@@ -306,23 +368,64 @@ export default async function TeacherTimesheetPage({
       }),
     ]);
   // ── Kỳ công của tháng đang xem ────────────────────────────────────────────────
-  // `standardUnits` là MẪU SỐ của thẻ "Công tháng này", và nó sống ở `AttendancePeriod`
-  // theo (cơ sở × kỳ) — không phải theo người. Đọc bằng cơ sở NHÀ (`resolveHomeCenter`),
-  // đúng cơ sở mà `buildPeriodSummary` của admin dùng cho người này.
+  // `standardUnits` là MẪU SỐ của thẻ "Công thực tế / công chuẩn", và nó sống ở
+  // `AttendancePeriod` theo (cơ sở × kỳ) — không phải theo người.
   //
-  // ⚠️ `standardUnits` CÓ THỂ null (kỳ chưa lập, hoặc kế toán chưa điền). Null thì in "—".
-  // In 0 là bịa một mẫu số, và mẫu số bịa thì mọi tỷ lệ đọc từ nó đều sai.
-  const nha = await resolveHomeCenter(session.user.id);
-  const kyCong = await sdb.attendancePeriod.findFirst({
-    where: { centerId: nha.centerId, periodKey: monthKey(monthStart) },
-    select: { standardUnits: true, status: true },
-  });
+  // ⚠️ Đi qua `getMyPeriod` (own-rows) chứ KHÔNG qua `scopedDb`: xem chú thích ở hàm đó.
+  // Bản đầu tra bằng `sdb` và thẻ in "Chưa lập kỳ" cho một kỳ ĐÃ lập — vì giáo viên thiếu
+  // `UserOrgRole` thì `scopedDb` lọc sạch và trả `null`, không phân biệt được "chưa có"
+  // với "không được xem".
+  //
+  // `standardUnits` vẫn CÓ THỂ null thật (kế toán chưa điền) — lúc đó in "—", không in 0.
+  const kyCong = await getMyPeriod(session.user.id, monthKey(monthStart));
+
+  // ĐƠN của tôi trong tháng, đếm theo trạng thái. Đây là NGOẠI LỆ duy nhất của ràng buộc
+  // "mọi số đọc từ StaffAttendanceDay": đơn là một sự việc riêng, không phải lượt quét —
+  // và nó KHÔNG phải `StaffTimeLog`, tức không mở lại đường đã sinh ra bug nơi chịu công.
+  const donTheoTrangThai = myRequests.reduce(
+    (a, r) => {
+      if (r.status === "PENDING") a.choDuyet += 1;
+      else if (r.status === "REJECTED") a.tuChoi += 1;
+      else if (r.status === "APPROVED" && r.kind === "TIMESHEET_FIX")
+        a.daDuyetChinhCong += 1;
+      return a;
+    },
+    { choDuyet: 0, daDuyetChinhCong: 0, tuChoi: 0 },
+  );
+
   const tomTat = tomTatCongThang({
     ngay: myDays.map((d) => d.gop),
-    congChuan: kyCong?.standardUnits ?? null,
-    // Chỉ `LOCKED` mới là đã chốt. `REOPENED` là kỳ đã mở lại ⇒ số còn đổi được ⇒ TẠM TÍNH.
-    kyDaChot: kyCong?.status === "LOCKED",
+    kyKhoa: monthKey(monthStart),
+    congChuan: kyCong.standardUnits,
+    kyTrangThai: kyCong.status,
+    kyChotLuc: kyCong.lockedAt,
+    homNay: todayKey,
+    dauThang: isoKey(monthStart),
+    cuoiThang: isoKey(new Date(nextMonth.getTime() - 86_400_000)),
+    don: donTheoTrangThai,
   });
+
+  // CÔNG DẠY — đọc bằng ĐÚNG đường admin dùng (`loadBuoiDay` + `congDayCuaNguoi`), tách theo
+  // từng `TeachingCreditType` vì mỗi loại một hệ số. Không tự đếm `rows` ở trang này.
+  const [buoiDayThat, danhMucCongDay] = await Promise.all([
+    loadBuoiDay([session.user.id], monthStart, nextMonth),
+    loadLoaiCongDay(),
+  ]);
+  const congDay = congDayCuaNguoi(buoiDayThat, danhMucCongDay);
+
+  // BUỔI QUÁ HẠN CHƯA CHỐT — "việc phải làm", nên nó đi kèm ĐƯỜNG ĐI, không chỉ con số.
+  //
+  // Phạm vi: ĐÚNG tháng đang xem (cùng `sessions` mà bảng dưới dùng), không phải mọi thời
+  // gian — hai phạm vi khác nhau trên cùng một màn là cách chắc chắn để người ta cộng nhầm.
+  // Nhãn nói rõ "trong tháng này".
+  //
+  // `IN_PROGRESS` CỐ Ý cũng tính: buổi mở ra rồi bỏ dở vẫn là buổi chưa chốt, và với người
+  // dạy thì việc phải làm y hệt. Chỉ `COMPLETED` mới là xong (`CANCELLED` đã bị loại từ truy vấn).
+  const buoiQuaHan = sessions.filter(
+    (s) =>
+      (s.status as SessionStatus) !== "COMPLETED" &&
+      dayKeyFmt.format(s.date) < todayKey,
+  ).length;
 
   // ── Chuẩn hoá về CA rows ──────────────────────────────────────────────────────
   // 🔴 Phép nối "ngày công đã tính × ca đã xếp" nằm ở `lib/cham-cong/bang-cong-gv.ts`, KHÔNG
@@ -379,22 +482,12 @@ export default async function TeacherTimesheetPage({
     homNay: todayKey,
   });
 
-  // ── Tổng hợp ─────────────────────────────────────────────────────────────────
-  // ⚠️ HAI THẺ BỊ GỠ 13/09/2026 vì nhãn NÓI SAI thứ chúng đếm (mục 1, luật 12):
-  //
-  //  · "Ngày nghỉ" cũ = `holidayDays.size`, dựng từ `getVisibleHolidays` ⇒ nó đếm ngày LỄ
-  //    CỦA CÔNG TY, không phải ngày nghỉ của người đang xem. Ai nghỉ phép 5 ngày vẫn thấy
-  //    đúng số ngày lễ trong tháng. Nay đọc từ `StaffAttendanceDay.dayType`, tách 4 nhóm.
-  //
-  //  · "Số ca" cũ = `demCaLam(rows)`, mà `rows` là DÒNG của bảng: buổi dạy + ca làm + ngày
-  //    mồ côi. Một GV dạy 2 lớp trong ngày có 1 ca làm được đếm 3 — và 2 trong số đó đã nằm
-  //    ở thẻ "Buổi dạy" ngay cạnh. Nó là "số dòng làm việc", không phải "số ca".
-  //
-  // Cả hai thay bằng bốn số của `tomTatCongThang`, lấy từ CÙNG phép gộp admin dùng
-  // (`gopNgayCong`). Số buổi dạy giữ lại nhưng chuyển vào khối gấp, mục "Công dạy".
-  const teachingCount = rows.filter((r) => r.loai === "Dạy").length;
-  const trialCount = rows.filter((r) => r.loai === "Trải nghiệm").length;
-  const totalHours = rows.reduce((n, r) => n + (r.soGio ?? 0), 0);
+  // Bộ lọc của thẻ "Ngày cần xử lý". Dùng ĐÚNG tập cờ mà thẻ đếm (`CO_CAN_XU_LY`) —
+  // hai danh sách rời nhau là cách chắc chắn để thẻ nói "3" mà bảng lọc ra 5 dòng.
+  const dongHienThi = locCo
+    ? rows.filter((r) => r.flags.some((f) => CO_CAN_XU_LY.has(f)))
+    : rows;
+
 
   const monthLabel = `Tháng ${monthStart.getUTCMonth() + 1}/${monthStart.getUTCFullYear()}`;
 
@@ -402,7 +495,7 @@ export default async function TeacherTimesheetPage({
     <div>
       <PageHeader
         title="Bảng công"
-        subtitle="Số ca và giờ công theo tháng — giờ dạy/trải nghiệm ước tính từ khung giờ; công chính thức là số Công (tính theo ca đã xếp)."
+        subtitle="Công, giờ làm và ngày nghỉ của bạn theo từng tháng. Số ở đây đọc cùng nguồn với bảng công của quản lý — giờ dạy là ước tính từ khung giờ lớp, không phải công."
         actions={
           canRequestAdjust ? (
             <Link
@@ -437,130 +530,212 @@ export default async function TeacherTimesheetPage({
           <p className="ml-2 text-base font-bold text-foreground">
             {monthLabel}
           </p>
-          {/* TẠM TÍNH đọc từ TRẠNG THÁI KỲ, không đoán theo "có phải tháng này không".
-              Tháng 7 đã qua mà kỳ chưa chốt thì số vẫn còn đổi được — bản cũ in nó như số
-              cuối cùng. Vế "đến hôm nay" giữ riêng cho tháng đang chạy vì nó nói thêm một
-              điều khác: dữ liệu mới chạy được nửa tháng. */}
-          {tomTat.tamTinh && (
-            <span className="rounded bg-state-warning-soft px-2 py-0.5 text-xs font-semibold text-state-warning-ink">
-              TẠM TÍNH{isCurrentMonth ? " — đến hôm nay" : " — kỳ chưa chốt"}
-            </span>
-          )}
         </div>
 
-        {/* ── BỐN số (mục 1) ───────────────────────────────────────────────────
-            Chủ dự án chốt: "Đừng bày mười số ngang nhau, không ai đọc số nào."
-            Phần còn lại nằm trong khối gấp lại ngay dưới. */}
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <StatCard
-            icon={Clock}
-            value={
-              tomTat.congChuan == null
-                ? `${tomTat.cong}`
-                : `${tomTat.cong} / ${tomTat.congChuan}`
-            }
-            label={
-              tomTat.congChuan == null
-                ? "Công tháng này (chưa có công chuẩn)"
-                : "Công tháng này / công chuẩn"
-            }
-            xuongDong
-            tone="brand"
-          />
-          <StatCard
-            icon={CalendarCheck}
-            value={`${tomTat.ngayDaLam} / ${tomTat.ngayCoCa}`}
-            label="Ngày đã đi làm / ngày có ca"
-            xuongDong
-            tone="green"
-          />
-          {/* Số LẦN và số PHÚT cùng lúc: phạt (mục 3) tính được theo một trong hai, và
-              2 lần × 3′ khác hẳn 2 lần × 90′. Đi muộn và về sớm đi chung MỘT thẻ để hàng đầu
-              đúng BỐN số — `hint` giữ vế thứ hai hiện đủ, không phải giấu nó. */}
-          <StatCard
-            icon={AlarmClock}
-            value={`${tomTat.lateCount} lần · ${tomTat.latePhut}′`}
-            label="Đi muộn"
-            hint={`Về sớm: ${tomTat.earlyLeaveCount} lần · ${tomTat.earlyLeavePhut}′`}
-            xuongDong
-            tone="amber"
-          />
-          <StatCard
-            icon={CalendarOff}
-            value={tomTat.ngayNghi}
-            label="Ngày nghỉ"
-            hint={
-              tomTat.nhomNghi.length
-                ? tomTat.nhomNghi.map((n) => `${n.nhan} ${n.soNgay}`).join(" · ")
-                : "không có ngày nghỉ nào"
-            }
-            xuongDong
-            tone="blue"
-          />
-        </div>
+        {/* ══ TỔNG HỢP CÔNG THÁNG ══════════════════════════════════════════════
+            MỘT panel liền mạch, đường kẻ dựng bằng `gap-px` trên nền `bg-border`.
+            Vì sao KHÔNG phải 5 thẻ rời: lưới thẻ rời luôn đẻ ra một ô mồ côi ở hàng cuối
+            khi số cột không chia hết cho 5 — tức ở 2, 3 và 4 cột, gần như mọi bề rộng
+            thật. `gap-px` cho đường kẻ tự khớp với MỌI số cột, từ 320px tới 8K, và không
+            cần một luật `border-r last:border-r-0` riêng cho từng breakpoint. */}
+        <section
+          aria-labelledby="tong-hop-thang"
+          className="overflow-hidden rounded-xl border border-border bg-card"
+        >
+          {/* Câu KHAI PHẠM VI — ràng buộc 2. Người đọc không phải đoán "tháng này tính tới
+              đâu" và "có gồm ngày chưa tới không". */}
+          <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-border px-4 py-3 sm:px-5">
+            <h2 id="tong-hop-thang" className="text-sm font-bold text-foreground">
+              Tổng hợp {monthLabel.toLowerCase()}
+            </h2>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              {tomTat.tinhToiNgay
+                ? `tính tới hết ngày ${tomTat.tinhToiNgay.slice(8)}/${tomTat.tinhToiNgay.slice(5, 7)}`
+                : "trọn tháng"}
+              {" · "}
+              {tomTat.gomNgayTuongLai
+                ? "chưa gồm ngày chưa tới"
+                : "đã gồm mọi ngày trong tháng"}
+            </p>
+          </header>
 
-        {/* ── Khối gấp lại ─────────────────────────────────────────────────── */}
-        <details className="rounded-xl border border-border bg-card">
-          <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-foreground select-none">
-            Xem thêm — nghỉ, giờ làm, ngày có vấn đề, đơn của tôi
-          </summary>
-          <div className="grid gap-4 border-t border-border px-4 py-4 sm:grid-cols-2 lg:grid-cols-4">
-            <ThongTinNhom
-              tieuDe={`Ngày nghỉ · ${tomTat.ngayNghi}`}
-              dong={
-                tomTat.nhomNghi.length
-                  ? tomTat.nhomNghi.map((n) => [n.nhan, String(n.soNgay)])
-                  : [["Không có ngày nghỉ nào", ""]]
+          {/* ── A · NĂM SỐ luôn hiện ─────────────────────────────────────────── */}
+          <div className="grid gap-px bg-border min-[420px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
+            <OTong
+              nhan="Công thực tế / công chuẩn"
+              chinh={
+                tomTat.congChuan == null
+                  ? String(tomTat.cong)
+                  : `${tomTat.cong} / ${tomTat.congChuan}`
+              }
+              phu={
+                tomTat.congChuan == null
+                  ? "kỳ chưa có công chuẩn — Kế toán chưa lập"
+                  : "chưa nhân hệ số lương — Kế toán tính riêng"
+              }
+              nhanManh
+            />
+            <OTong
+              nhan="Giờ làm thực tế"
+              chinh={fmtMin(tomTat.phutLam)}
+              phu="cộng từ mốc quét đã ghép cặp"
+            />
+            <OTong
+              nhan="Ngày đã chấm / ngày có ca"
+              chinh={`${tomTat.ngayDaCham} / ${tomTat.ngayCoCa}`}
+              phu={
+                tomTat.ngayCoCa - tomTat.ngayDaCham > 0
+                  ? `còn ${tomTat.ngayCoCa - tomTat.ngayDaCham} ngày chưa có dấu nào`
+                  : "mọi ngày có ca đều đã có dấu"
               }
             />
-            <ThongTinNhom
-              tieuDe="Giờ làm"
-              dong={[
-                ["Thực tế", fmtMin(tomTat.phutLam)],
-                ["Kế hoạch", fmtMin(tomTat.phutKeHoach)],
-              ]}
+            {/* Bấm vào lọc thẳng xuống bảng. Affordance phải NÓI THẬT (luật 12): chỉ là
+                nút khi thật sự có gì để lọc; 0 ngày thì nó là một con số, không phải lời hứa. */}
+            <OTong
+              nhan="Ngày cần xử lý"
+              chinh={String(tomTat.ngayCanXuLy)}
+              phu="đi muộn · về sớm · thiếu lượt · sai nơi làm"
+              canhBao={tomTat.ngayCanXuLy > 0}
+              href={
+                tomTat.ngayCanXuLy > 0
+                  ? locCo
+                    ? hrefThang(null)
+                    : hrefThang("co")
+                  : undefined
+              }
+              nhanLink={locCo ? "Bỏ lọc, xem lại tất cả" : "Lọc bảng xuống các ngày này"}
             />
-            {/* "Đây là thứ người dùng cần thấy để đi nộp đơn, và hôm nay họ không thấy." */}
-            <ThongTinNhom
-              tieuDe="Ngày có vấn đề"
-              dong={[
-                ["Thiếu lượt ra", String(tomTat.thieuLuotRa)],
-                ["Chưa chấm", String(tomTat.chuaCham)],
-                ["Chỉnh tay", String(tomTat.chinhTay)],
-              ]}
-              nhacDonTu={tomTat.thieuLuotRa + tomTat.chuaCham > 0}
+            <OTong
+              nhan="Kỳ công"
+              chinh={KY_NHAN[tomTat.kyTrangThai ?? "CHUA_LAP"]}
+              phu={
+                tomTat.kyTrangThai === "LOCKED"
+                  ? `đã chốt${tomTat.kyChotLuc ? " " + dayKeyFmt.format(tomTat.kyChotLuc) : ""} — không nộp đơn chỉnh được nữa`
+                  : "nộp đơn chỉnh công được tới khi kỳ chốt"
+              }
+              canhBao={tomTat.kyTrangThai !== "LOCKED"}
             />
-            <ThongTinNhom
-              tieuDe="Đơn của tôi"
-              dong={[
-                ["Đã nộp", String(myRequests.length)],
-                ["Chờ duyệt", String(demDon(myRequests, "PENDING"))],
-                ["Bị từ chối", String(demDon(myRequests, "REJECTED"))],
-              ]}
-            />
-            {/* Công dạy chỉ hiện khi CÓ — người không đứng lớp không cần một khối toàn số 0. */}
-            {teachingCount + trialCount > 0 && (
-              <ThongTinNhom
-                tieuDe="Công dạy"
-                dong={[
-                  ["Lớp chính", `${teachingCount} buổi`],
-                  ["Trải nghiệm", `${trialCount} buổi`],
-                  ["Giờ dạy ước tính", `${fmtHours(totalHours)}h`],
-                ]}
-              />
-            )}
           </div>
-        </details>
+
+          {/* ── B · CHI TIẾT ─────────────────────────────────────────────────── */}
+          <div className="grid gap-px border-t border-border bg-border sm:grid-cols-2 xl:grid-cols-4">
+            <NhomSo
+              tieuDe="Kỷ luật giờ"
+              dong={[
+                ["Đi muộn", `${tomTat.lateCount} lần · ${tomTat.latePhut}′`],
+                ["Về sớm", `${tomTat.earlyCount} lần · ${tomTat.earlyPhut}′`],
+                ["Thiếu lượt vào/ra", `${tomTat.thieuLuotNgay} ngày`],
+              ]}
+            />
+            <NhomSo
+              tieuDe="Ngày nghỉ"
+              dong={[
+                ["Nghỉ phép (P)", `${tomTat.nghiPhep} ngày`],
+                ["— trong đó có lương", `${tomTat.nghiPhepCoLuong} ngày`],
+                ["— không lương", `${tomTat.nghiPhepKhongLuong} ngày`],
+                ["Nghỉ theo ca (X)", `${tomTat.nghiTuan} ngày`],
+                ["Nghỉ lễ", `${tomTat.nghiLe} ngày`],
+              ]}
+            />
+            <NhomSo
+              tieuDe="Công tác ngoài"
+              dong={[
+                ["Ngày công tác", `${tomTat.congTacNgay} ngày`],
+                ["Trong đó đủ cặp vào/ra", `${tomTat.congTacDuCap} ngày`],
+              ]}
+            />
+            <NhomSo
+              tieuDe="Điều chỉnh & đơn từ"
+              dong={[
+                ["Quản lý ghi đè công", `${tomTat.ghiDeCong} ngày`],
+                ["Giờ thêm qua đơn duyệt", soHoacGach(tomTat.donChinhDaDuyet, "đơn")],
+                ["Tự chỉnh", soHoacGach(tomTat.tuChinh, "đơn")],
+                ["Đơn chờ duyệt", soHoacGach(tomTat.donChoDuyet, "đơn")],
+                ["Đơn bị từ chối", soHoacGach(tomTat.donTuChoi, "đơn")],
+              ]}
+            />
+          </div>
+
+          {/* ── C · CÔNG DẠY — chỉ hiện khi CÓ ───────────────────────────────── */}
+          {(congDay.dong.length > 0 || buoiQuaHan > 0) && (
+            <div className="border-t border-border px-4 py-4 sm:px-5">
+              <div className="mb-3">
+                <h3 className="text-xs font-bold tracking-wide text-muted-foreground uppercase">
+                  Công dạy
+                </h3>
+                {/* Định nghĩa IN RA, không để người đọc tự suy vì sao hai số khác nhau. */}
+                <p className="mt-1 max-w-prose text-[11px] leading-relaxed text-muted-foreground">
+                  Tách theo loại công dạy, đếm theo NGƯỜI — gồm cả buổi dạy thay ở cơ sở
+                  khác. Số này khác &ldquo;ngày có ca&rdquo; ở trên: ca là NGÀY được xếp
+                  lịch, buổi dạy là LẦN đứng lớp, và một ngày có thể có nhiều buổi.
+                </p>
+              </div>
+              {buoiQuaHan > 0 && (
+                <Link
+                  href="/teacher/diem-danh"
+                  className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-state-warning-soft px-3 py-2 text-sm font-semibold text-state-warning-ink hover:underline"
+                >
+                  {buoiQuaHan} buổi trong tháng này đã qua ngày mà chưa chốt
+                  <span className="text-xs font-normal">
+                    — mở màn Điểm danh để chốt →
+                  </span>
+                </Link>
+              )}
+              <div className="grid gap-px bg-border sm:grid-cols-2 xl:grid-cols-4">
+                {congDay.dong.map((d) => (
+                  <div key={d.code} className="bg-card p-3">
+                    <p className="text-lg leading-tight font-bold text-foreground tabular-nums">
+                      {d.buoi} buổi
+                      <span className="ml-2 text-xs font-semibold text-muted-foreground">
+                        {d.cong} công
+                      </span>
+                    </p>
+                    <p className="mt-0.5 text-xs leading-snug text-muted-foreground">
+                      {d.name}
+                      {!d.tinhVaoKy && " · không tính vào kỳ"}
+                    </p>
+                    {d.boQuaThieuGio > 0 && (
+                      <p className="mt-1 text-[11px] leading-snug text-state-warning-ink">
+                        {d.boQuaThieuGio} buổi chưa có giờ nên chưa tính công
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
 
         {/* Chi tiết ca */}
         <section className="space-y-3">
-          <h2 className="text-sm font-bold tracking-wide text-muted-foreground uppercase">
-            Chi tiết ca ({rows.length})
-          </h2>
-          {rows.length === 0 ? (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <h2 className="text-sm font-bold tracking-wide text-muted-foreground uppercase">
+              Chi tiết ca ({dongHienThi.length}
+              {locCo ? ` / ${rows.length}` : ""})
+            </h2>
+            {/* Đang lọc thì PHẢI nói ra và phải có đường thoát — bảng thiếu dòng mà không
+                giải thích là dạng nói dối im lặng tệ nhất ở màn số liệu. */}
+            {locCo && (
+              <span className="inline-flex items-center gap-2 rounded-full bg-state-warning-soft px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap text-state-warning-ink">
+                Đang lọc: ngày cần xử lý
+                <Link
+                  href={hrefThang(null)}
+                  scroll={false}
+                  className="underline underline-offset-2"
+                >
+                  bỏ lọc
+                </Link>
+              </span>
+            )}
+          </div>
+          {dongHienThi.length === 0 ? (
             <EmptyState
               icon={CalendarX2}
-              title="Không có ca dạy, trải nghiệm hay ca làm nào trong tháng này."
+              title={
+                locCo
+                  ? "Không ngày nào trong tháng này cần xử lý."
+                  : "Không có ca dạy, trải nghiệm hay ca làm nào trong tháng này."
+              }
             />
           ) : (
             <div className="t-card overflow-hidden">
@@ -598,7 +773,7 @@ export default async function TeacherTimesheetPage({
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((r) => (
+                    {dongHienThi.map((r) => (
                       <tr
                         key={r.key}
                         className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"

@@ -50,6 +50,8 @@ export type NgayCongGop = {
   earlyLeaveMinutes: number;
   flags: string[];
   absenceStatus: AttendanceAbsenceStatus | null;
+  /** Mốc quét đã ghép cặp, do engine dựng. Đọc qua `coDuVaoRa` — đừng tự bóc JSON. */
+  pairs: unknown;
 };
 
 export type TongHopCong = {
