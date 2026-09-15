@@ -11,6 +11,8 @@ const asg = (code: string, extra: Partial<EngineAssignment> = {}): EngineAssignm
     templateCode: e.code,
     segments: e.segments,
     attendanceMode: e.attendanceMode,
+    // Lấy từ DANH MỤC, không gõ tay — ca test phải đi qua đúng giá trị mã ca thật mang.
+    soCapQuetKyVong: e.soCapQuetKyVong,
     dayCredit: e.dayCredit,
     isLeave: e.isLeave,
     nominalMinutes: e.nominalMinutes,
@@ -128,11 +130,61 @@ describe("muộn / sớm / thiếu buổi (§4.5)", () => {
     expect(r.flags).toContain("VE_SOM");
     expect(r.earlyLeaveMinutes).toBe(60);
   });
-  it("SC chỉ chấm buổi sáng → THIEU_BUOI_CHIEU, vẫn 1 công (engine không tự trừ)", () => {
+  // 🔴 ĐỔI HÀNH VI 15/09/2026 cùng `soCapQuetKyVong` — đọc kỹ trước khi "sửa cho xanh".
+  //
+  // `SC` khai **1 cặp quét** trong bảng chốt. Người quét vào 07:40 và ra 11:30 ĐÃ ĐƯA ĐỦ
+  // một cặp — họ không thiếu lượt, họ VỀ SỚM. Bản cũ lặp trên từng đoạn WORK nên đoạn
+  // chiều "không ai phủ" và ra `THIEU_BUOI_CHIEU`, đọc thành "quên quét buổi chiều".
+  //
+  // Hai cờ mới nói đúng sự việc hơn: `VE_SOM` (về lúc 11:30 thay vì 17:30) + `THIEU_GIO`.
+  //
+  // ⚠️ Hệ quả trên dữ liệu THẬT: ngày cũ mang `THIEU_BUOI_CHIEU` ở các mã 1-cụm sẽ MẤT cờ
+  // đó và NHẬN `VE_SOM` khi có lượt tính lại. Đây là đổi có chủ đích, không phải hồi quy.
+  it("SC (1 cụm) chỉ chấm buổi sáng → KHÔNG phải thiếu lượt, mà là VỀ SỚM", () => {
     const r = run("SC", [IN("07:40"), OUT("11:30")]);
-    expect(r.flags).toContain("THIEU_BUOI_CHIEU");
+    expect(r.flags).not.toContain("THIEU_BUOI_CHIEU");
+    expect(r.flags).toContain("VE_SOM");
+    expect(r.earlyLeaveMinutes).toBe(360); // 11:30 → 17:30
     expect(r.flags).toContain("THIEU_GIO");
+    expect(r.dayCreditEarned).toBe(1); // engine KHÔNG tự trừ công (luật T-01)
+  });
+
+  // Vế đối xứng: mã 2 CỤM thì thiếu một cụm VẪN là thiếu lượt — luật 16, nửa CHO QUA.
+  it("ST (2 cụm) chỉ chấm cụm sáng → THIEU_BUOI_CHIEU, đúng nghĩa thiếu CỤM", () => {
+    const r = run("ST", [IN("07:40"), OUT("11:30")]);
+    expect(r.flags).toContain("THIEU_BUOI_CHIEU");
     expect(r.dayCreditEarned).toBe(1);
+  });
+  it("ST thiếu cụm SÁNG (chỉ chấm tối) → THIEU_BUOI_SANG — cờ theo THỨ TỰ CỤM", () => {
+    const r = run("ST", [IN("17:10"), OUT("21:00")]);
+    expect(r.flags).toContain("THIEU_BUOI_SANG");
+    expect(r.flags).not.toContain("THIEU_BUOI_CHIEU");
+  });
+
+  // 🔑 Ca một CỤM không bao giờ mang cờ "thiếu cụm" — bảng chốt: cờ ấy chỉ có nghĩa khi ≥ 2.
+  // `T` (17:15–21:00) là ca chiều/tối: mốc "trước 12h ⇒ SÁNG" của bản cũ sẽ in ra
+  // `THIEU_BUOI_CHIEU` cho cụm DUY NHẤT, còn đánh theo chỉ số cụm thì ra `THIEU_BUOI_SANG`
+  // cho một ca không có buổi sáng nào. Cả hai đều vô nghĩa ⇒ KHÔNG cờ nào.
+  it("T (1 cụm) có lượt nhưng không phủ ca → KHÔNG cờ thiếu cụm nào", () => {
+    const r = run("T", [IN("09:00"), OUT("09:30")]);
+    expect(r.flags).not.toContain("THIEU_BUOI_SANG");
+    expect(r.flags).not.toContain("THIEU_BUOI_CHIEU");
+    expect(r.flags).toContain("THIEU_GIO"); // tín hiệu KHÔNG mất, chỉ nói đúng chuyện hơn
+  });
+
+  // Mã khai 0 cặp quét thì KHÔNG kiểm gì — kể cả khi `attendanceMode` là REQUIRED.
+  it("soCapQuetKyVong = 0 ⇒ không KHONG_CO_LUOT, không cờ thiếu cụm", () => {
+    const r = run("S", [], { assignment: asg("S", { soCapQuetKyVong: 0 }) });
+    expect(r.flags).not.toContain("KHONG_CO_LUOT");
+    expect(r.flags).not.toContain("THIEU_BUOI_SANG");
+    expect(r.dayCreditEarned).toBe(0.5); // công vẫn theo kế hoạch
+  });
+
+  // `arrivalDeltaMinutes` đo ở CỤM ĐẦU. Bản cũ so `blk === planned[0]`; nay cụm là object
+  // MỚI nên phép so địa chỉ ấy không bao giờ đúng — ca này canh đúng chỗ đó.
+  it("đến muộn ở cụm đầu → arrivalDeltaMinutes ghi THÔ, không chịu dung sai", () => {
+    const r = run("HC", [IN("08:20"), OUT("17:30")]);
+    expect(r.arrivalDeltaMinutes).toBe(20);
   });
   it("ca REQUIRED không lượt nào → KHONG_CO_LUOT, VẪN đủ công theo kế hoạch", () => {
     const r = run("T", []);

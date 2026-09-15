@@ -163,6 +163,7 @@ type TemplateRow = {
   segments: ShiftSegment[];
   defaultPlace: PlaceToken;
   attendanceMode: "REQUIRED" | "OPTIONAL" | "NONE";
+  soCapQuetKyVong: number;
   dayCredit: number;
   isLeave: boolean;
   nominalMinutes: number | null;
@@ -213,6 +214,7 @@ export async function applyImport(
       dayCredit: true,
       isLeave: true,
       nominalMinutes: true,
+      soCapQuetKyVong: true,
     },
   });
   const tplByCode = new Map<string, TemplateRow>(
@@ -227,6 +229,7 @@ export async function applyImport(
         dayCredit: t.dayCredit,
         isLeave: t.isLeave,
         nominalMinutes: t.nominalMinutes,
+        soCapQuetKyVong: t.soCapQuetKyVong,
       },
     ]),
   );
@@ -471,6 +474,7 @@ export async function applyImport(
             dayCredit: tpl.dayCredit,
             isLeave: tpl.isLeave,
             nominalMinutes: tpl.nominalMinutes,
+            soCapQuetKyVong: tpl.soCapQuetKyVong,
             sourceCells: merged.sourceCells as Prisma.InputJsonValue,
             source: "IMPORT",
             createdById: opts.actorUserId,

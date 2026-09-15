@@ -79,6 +79,7 @@ export async function recomputeAttendanceDay(
       templateCode: true,
       segments: true,
       attendanceMode: true,
+      soCapQuetKyVong: true,
       dayCredit: true,
       isLeave: true,
       nominalMinutes: true,
@@ -134,6 +135,11 @@ export async function recomputeAttendanceDay(
         templateCode: assignment.templateCode,
         segments: ((assignment.segments as ShiftSegment[] | null) ?? []).map((s) => ({ start: s.start, end: s.end, kind: s.kind, place: s.place })),
         attendanceMode: assignment.attendanceMode,
+        // Ép về 0|1|2: cột DB là `Int` nên Prisma trả `number`. Giá trị lạ (ai đó gõ tay
+        // vào DB) rơi về 1 — chiều FAIL-CLOSED, cùng lý do với DEFAULT của migration.
+        soCapQuetKyVong: ([0, 1, 2] as const).includes(assignment.soCapQuetKyVong as 0 | 1 | 2)
+          ? (assignment.soCapQuetKyVong as 0 | 1 | 2)
+          : 1,
         dayCredit: assignment.dayCredit,
         isLeave: assignment.isLeave,
         nominalMinutes: assignment.nominalMinutes,
