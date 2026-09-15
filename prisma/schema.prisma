@@ -2083,12 +2083,12 @@ model ClassSession {
   notes   String?  @db.Text
 
   // Phase E6 — link session to curriculum lesson for progress tracking
-  lessonId    String?
-  lessonNotes String? @db.Text
+  lessonId          String?
+  lessonNotes       String? @db.Text
   // R7-06 — trỏ tới ClassSessionPlan (kế hoạch buổi của lớp); lessonId cũ giữ 2-phase.
-  planId      String?
+  planId            String?
   // W2-4b — phòng học theo TỪNG BUỔI (để soát trùng phòng per-session); khác actualRoomId (ghi sau-thực-tế).
-  roomId      String?
+  roomId            String?
   // 07/09 — PHÂN LOẠI BUỔI (chính thức / Coach / bù / vượt / workshop / sự kiện). null = chưa
   // phân loại ⇒ tính như dòng `SessionCategory.isDefault`. Cố ý NULLABLE: ~toàn bộ buổi cũ không
   // ai đi gán lại được, và ép NOT NULL là chặn mọi đường tạo buổi đang có.
@@ -2110,14 +2110,14 @@ model ClassSession {
   /// SUY ĐOÁN khi backfill dữ liệu cũ — không được trộn lẫn hai loại khi tính tiền.
   rosterSource ClassRosterSource?
   /// Thời điểm chốt con số. Có nó mới phân biệt được "chốt lúc dạy" với "backfill tháng sau".
-  rosterAt     DateTime? @db.Timestamptz(6)
+  rosterAt     DateTime?          @db.Timestamptz(6)
   // FL3-02 — centerId denormalized từ class. ĐÃ flip vào SCOPED_MODELS (db-scope.ts);
   // mọi write set centerId + backfill migration 20260624010000. scopedDb cách ly theo cơ sở.
-  centerId    String?
+  centerId     String?
   // P1 · US-07 — cột SONG SONG với centerId (ghi kép tới hết P4).
   // Cột TRẦN, không FK — giống 28 bảng của PR-A. Ý nghĩa của NULL theo
   // từng bảng: xem BACKFILL_SPECS trong lib/org/center-bridge.ts.
-  orgUnitId   String?
+  orgUnitId    String?
 
   // LMS-3 — quy trình sau buổi + checklist
   status            SessionStatus @default(SCHEDULED)
@@ -8783,34 +8783,41 @@ enum HolidayAttendanceEffect {
 /// Danh mục mã ca — tab DANH MỤC CA của Sheet. segments = [{start,end,kind:"WORK"|"PAID_BREAK",place?}].
 /// centerId = NULL là mã dùng chung mọi cơ sở (SCOPED + NULL_IS_GLOBAL, khuôn PaymentMethod).
 model ShiftTemplate {
-  id             String              @id @default(cuid())
-  code           String // "S", "CG", "D1"… chuỗi Sheet, KHÔNG enum — thêm mã mới không cần dev
-  name           String
-  kind           ShiftTemplateKind   @default(TIMED)
-  segments       Json // [{start:"07:45",end:"11:30",kind:"WORK",place?:"HOME"|"CENTER:CS1"|…}]
-  defaultPlace   String              @default("HOME") // HOME | CENTER:<code> | ANY_CENTER | ASSIGNED | OFFSITE | ANYWHERE
-  attendanceMode ShiftAttendanceMode @default(REQUIRED)
-  dayCredit      Float               @default(1) // K-01 theo Sheet: mọi mã làm việc = 1; X/P = 0
-  isLeave        Boolean             @default(false)
-  nominalMinutes Int? // giờ kế hoạch khi không có segment (NG = 450); LD = null
-  payMode        ShiftPayMode        @default(SHIFT)
-  scopeUserIds   String[]            @default([]) // Q-15: mã đặc thù của vài người — chỉ cảnh báo
-  effectiveFrom  DateTime            @default(dbgenerated("'2000-01-01'::date")) @db.Date
-  effectiveTo    DateTime?           @db.Date
+  id              String              @id @default(cuid())
+  code            String // "S", "CG", "D1"… chuỗi Sheet, KHÔNG enum — thêm mã mới không cần dev
+  name            String
+  kind            ShiftTemplateKind   @default(TIMED)
+  segments        Json // [{start:"07:45",end:"11:30",kind:"WORK",place?:"HOME"|"CENTER:CS1"|…}]
+  defaultPlace    String              @default("HOME") // HOME | CENTER:<code> | ANY_CENTER | ASSIGNED | OFFSITE | ANYWHERE
+  attendanceMode  ShiftAttendanceMode @default(REQUIRED)
+  dayCredit       Float               @default(1) // K-01 theo Sheet: mọi mã làm việc = 1; X/P = 0
+  isLeave         Boolean             @default(false)
+  nominalMinutes  Int? // giờ kế hoạch khi không có segment (NG = 450); LD = null
+  payMode         ShiftPayMode        @default(SHIFT)
+  /// Số CẶP QUÉT kỳ vọng trong ngày — 0 / 1 / 2. Nguồn sự thật:
+  /// `docs/cham-cong/BANG-MA-CA-CHOT.md` (chốt 09/09/2026), `catalog.test.ts` canh hai bên.
+  ///   0 = không kiểm quét, không cờ thiếu lượt (LD · D1 · D2 · X · P)
+  ///   1 = gom MỌI đoạn WORK thành MỘT cụm (vào = đầu, ra = cuối)
+  ///   2 = HAI cụm, cắt ở khoảng hở LỚN NHẤT (chỉ ST)
+  /// Mặc định 1 là chiều FAIL-CLOSED: quên khai thì hệ KIỂM THỪA, không KIỂM THIẾU.
+  soCapQuetKyVong Int                 @default(1)
+  scopeUserIds    String[]            @default([]) // Q-15: mã đặc thù của vài người — chỉ cảnh báo
+  effectiveFrom   DateTime            @default(dbgenerated("'2000-01-01'::date")) @db.Date
+  effectiveTo     DateTime?           @db.Date
   // Cột hiển thị cho màn danh mục (không dùng để tính — tính từ segments)
-  amStart        String?
-  amEnd          String?
-  pmStart        String?
-  pmEnd          String?
-  pmBreakStart   String?
-  pmBreakEnd     String?
-  note           String?             @db.Text
-  displayOrder   Int                 @default(0)
-  isActive       Boolean             @default(true)
-  centerId       String?
-  orgUnitId      String?
-  createdAt      DateTime            @default(now()) @db.Timestamptz(6)
-  updatedAt      DateTime            @updatedAt @db.Timestamptz(6)
+  amStart         String?
+  amEnd           String?
+  pmStart         String?
+  pmEnd           String?
+  pmBreakStart    String?
+  pmBreakEnd      String?
+  note            String?             @db.Text
+  displayOrder    Int                 @default(0)
+  isActive        Boolean             @default(true)
+  centerId        String?
+  orgUnitId       String?
+  createdAt       DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime            @updatedAt @db.Timestamptz(6)
 
   patterns    ShiftWeeklyPattern[]
   assignments ShiftAssignment[]
@@ -8861,6 +8868,10 @@ model ShiftAssignment {
   placeMode         ShiftPlaceMode        @default(AT_UNITS)
   allowedOrgUnitIds String[]              @default([])
   attendanceMode    ShiftAttendanceMode   @default(REQUIRED)
+  /// Bản CHỤP `ShiftTemplate.soCapQuetKyVong` lúc xếp ca — cùng lý do `attendanceMode`,
+  /// `dayCredit`, `segments` cũng được chụp: đổi danh mục hôm nay KHÔNG được đổi cách tính
+  /// của những ngày đã xếp. Engine đọc cột này, KHÔNG đọc bảng danh mục.
+  soCapQuetKyVong   Int                   @default(1)
   dayCredit         Float                 @default(1)
   isLeave           Boolean               @default(false)
   nominalMinutes    Int?

@@ -111,7 +111,7 @@ export async function generateMonthAssignments(opts: {
 
   const templates = await opts.db.shiftTemplate.findMany({
     where: { isActive: true, centerId: null },
-    select: { id: true, code: true, segments: true, defaultPlace: true, attendanceMode: true, dayCredit: true, isLeave: true, nominalMinutes: true },
+    select: { id: true, code: true, segments: true, defaultPlace: true, attendanceMode: true, dayCredit: true, isLeave: true, nominalMinutes: true, soCapQuetKyVong: true },
   });
   const tpl = new Map(templates.map((t) => [t.code, t]));
 
@@ -185,6 +185,7 @@ export async function generateMonthAssignments(opts: {
         placeMode: place.placeMode,
         allowedOrgUnitIds: place.allowedOrgUnitIds,
         attendanceMode: t.attendanceMode,
+        soCapQuetKyVong: t.soCapQuetKyVong,
         dayCredit: t.dayCredit,
         isLeave: t.isLeave,
         nominalMinutes: t.nominalMinutes,
