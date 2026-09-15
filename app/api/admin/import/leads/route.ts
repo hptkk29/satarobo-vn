@@ -13,12 +13,7 @@ import { getAuditActor } from "@/lib/audit/log";
 import { parseLeadImportRow, resolveDefaultCenterId } from "@/lib/lead/import";
 import { normalizeVi } from "@/lib/lead/import-registered";
 import { autoAssignNewLead } from "@/lib/lead/auto-assign";
-import {
-  chiaChoLead,
-  baoSaleCoLeadMoi,
-  baoSaleNhieuLeadMoi,
-  lenKeHoachBaoNhapHangLoat,
-} from "@/lib/lead/assign-lead";
+import { chiaChoLead, baoLoLeadMoi } from "@/lib/lead/assign-lead";
 import { db } from "@/lib/db";
 import { canManualAssign } from "@/lib/lead/assign-guard";
 import { checkPermission } from "@/lib/auth/check-permission";
@@ -485,22 +480,12 @@ export async function POST(req: NextRequest) {
   }
 
   // Báo một lần cho mỗi người nhận. Nuốt lỗi: chuông hỏng không được làm hỏng lượt nhập.
-  for (const tin of lenKeHoachBaoNhapHangLoat(daChia)) {
-    if (tin.kieu === "mot") {
-      const l = await db.lead.findUnique({
-        where: { id: tin.leadId },
-        select: { parentName: true },
-      });
-      await baoSaleCoLeadMoi({
-        ownerId: tin.ownerId,
-        leadId: tin.leadId,
-        parentName: l?.parentName ?? "(không tên)",
-        source: "IMPORT",
-      });
-    } else {
-      await baoSaleNhieuLeadMoi({ ownerId: tin.ownerId, soLead: tin.soLead, mocLuot });
-    }
-  }
+  await baoLoLeadMoi({
+    daChia,
+    nguon: { kieu: "nhap_danh_sach" },
+    mocLuot,
+    boQuaNguoi: actorId,
+  });
 
   if (mergedLeads > 0) {
     errors.push({

@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { logLeadAudit } from "@/lib/audit/log";
 import { assignmentWrite } from "@/lib/lead/assignment";
-import { baoSaleCoLeadMoi, thuHoiChuongLeadCu } from "@/lib/lead/assign-lead";
+import { baoLoLeadMoi, baoSaleCoLeadMoi, thuHoiChuongLeadCu } from "@/lib/lead/assign-lead";
 import { takeRotationTurn, takeRotationTurns } from "@/lib/lead/rotation";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
 import { LEAD_CLOSED_STATUSES } from "@/lib/leads/status";
@@ -287,11 +287,25 @@ export async function reassignOpenLeads(
   // trỏ tới lead họ không còn giữ. Tài khoản đã khoá nên ít ai thấy — nhưng cùng một lỗ này
   // cũng có ở đường bàn giao hàng loạt, nơi người cũ VẪN đang đi làm.
   //
-  // ⚠️ CỐ Ý KHÔNG báo chuông cho người nhận: đây là thao tác hàng loạt, N lead là N lần rung
-  // máy. Xem khối chú thích cùng nội dung ở `lib/lead-handover/service.ts`.
   for (const [leadId, assigneeId] of dist) {
     await thuHoiChuongLeadCu({ chuCuId: userId, chuMoiId: assigneeId, leadId });
   }
+
+  // 15/09/2026 (đợt hai) — BÁO CHO NGƯỜI NHẬN, gộp theo từng người.
+  //
+  // Đường này chia VÒNG nên một lượt có thể rải cho nhiều người: ai nhận 1 lead thì được
+  // chuông thường (trỏ thẳng trang chi tiết), ai nhận từ 2 trở lên thì một tin gộp.
+  // `baoLoLeadMoi` tự chọn giùm — đừng tự đếm lại ở đây.
+  //
+  // MỘT mốc cho cả lượt: tính lại theo từng người là hai lượt chia cách nhau một nhịp đồng hồ
+  // cũng ra hai khoá, đúng thứ khoá chống trùng sinh ra để chặn.
+  const nguoiNghi = await db.user.findUnique({ where: { id: userId }, select: { name: true } });
+  await baoLoLeadMoi({
+    daChia: [...dist].map(([leadId, ownerId]) => ({ leadId, ownerId })),
+    nguon: { kieu: "sale_nghi", tuNguoi: nguoiNghi?.name ?? "tư vấn viên đã nghỉ" },
+    mocLuot: Date.now(),
+    boQuaNguoi: actor.actorId,
+  });
 
   // Báo đúng số ĐÃ chia, không phải số lead tìm thấy — hai số này bằng nhau ở
   // đường đi thường, nhưng báo theo số thật thì khi lệch còn nhìn ra.

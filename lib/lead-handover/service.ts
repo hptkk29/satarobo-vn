@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { logLeadAudit } from "@/lib/audit/log";
 import { assignmentWrite } from "@/lib/lead/assignment";
-import { thuHoiChuongLeadCu } from "@/lib/lead/assign-lead";
+import { baoLoLeadMoi, thuHoiChuongLeadCu } from "@/lib/lead/assign-lead";
 import { LEAD_CLOSED_STATUSES } from "@/lib/leads/status";
 import type { Prisma } from "@prisma/client";
 
@@ -167,11 +167,6 @@ export async function bulkReassignLeads(params: {
   // Đặt NGOÀI vòng transaction ở trên: `notifyStaff`/`thuHoiThongBao` cố ý không nhận `tx`,
   // và thu hồi hỏng thì việc bàn giao vẫn phải thành công (`thuHoiChuongLeadCu` tự nuốt lỗi).
   //
-  // ⚠️ CỐ Ý KHÔNG báo chuông cho sale MỚI ở đây. Bàn giao là thao tác HÀNG LOẠT: 30 lead sẽ
-  // thành 30 lần rung điện thoại liên tiếp, đúng kiểu "bão push" mà khối chú thích ở
-  // `lib/push/allowlist.ts` nói là cái giá không lấy lại được (người dùng tắt quyền thông báo
-  // ở cấp trình duyệt). Muốn báo thì phải là MỘT tin gộp "bạn vừa nhận N lead từ X" — một loại
-  // thông báo mới, chưa có, và là quyết định vận hành chứ không phải việc dọn kỹ thuật.
   for (const lead of leads) {
     await thuHoiChuongLeadCu({
       chuCuId: params.fromUserId,
@@ -179,6 +174,27 @@ export async function bulkReassignLeads(params: {
       leadId: lead.id,
     });
   }
+
+  // 15/09/2026 (đợt hai) — BÁO CHO SALE NHẬN, bằng MỘT tin gộp.
+  //
+  // Trước đó đường này im hoàn toàn với người nhận: họ được giao 30 lead đang chạy dở mà
+  // không ai đánh động, phải tự mở danh sách mới biết. Đợt vá đầu cố ý để nguyên vì bắn 30
+  // chuông là "bão push" — người dùng tắt quyền thông báo ở CẤP TRÌNH DUYỆT và code không
+  // xin lại được (`lib/push/allowlist.ts`). Nay đã có tin gộp nên nối vào được.
+  //
+  // Lead bàn giao KHÁC lead nhập mới: nó đang chạy dở, có lịch sử trao đổi, và khách đã nói
+  // chuyện với người khác. Câu chữ nói rõ điều đó — xem `moTaLoLead`.
+  const nguoiBanGiao = await db.user.findUnique({
+    where: { id: params.fromUserId },
+    select: { name: true },
+  });
+  await baoLoLeadMoi({
+    daChia: leads.map((l) => ({ leadId: l.id, ownerId: params.toUserId })),
+    nguon: { kieu: "ban_giao", tuNguoi: nguoiBanGiao?.name ?? "tư vấn viên trước" },
+    mocLuot: Date.now(),
+    // Quản lý tự bàn giao về cho chính mình thì không cần chuông báo lại việc mình vừa bấm.
+    boQuaNguoi: params.actorId,
+  });
 
   return { ok: true, moved: leads.length, tasksMoved };
 }
