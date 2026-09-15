@@ -56,6 +56,26 @@ function quetTatCaFile(): string[] {
   return ra;
 }
 
+/**
+ * Trần thời gian cho hai ca QUÉT MÃ NGUỒN — phép tính ghi ngay đây, theo nếp
+ * `vitest.cham-cong.config.ts` và ĐỐI XỨNG với `lib/finance/truc-a.test.ts` (trục A).
+ *
+ * Đo 15/09/2026 trên máy dev (Windows): chạy MỘT MÌNH mất 1,16s cho ~2.000 tệp; chạy
+ * trong cả bộ `pnpm test:unit` (507 tệp test song song, đĩa bị giành) mất **11,79s** và
+ * vượt trần mặc định 5s ⇒ cả bộ ĐỎ với thông báo "Test timed out", không phải với một
+ * vi phạm nào. Đây đúng là thứ luật 19 cảnh báo: ca đỏ vì ĐỒNG HỒ chứ không vì mã.
+ *
+ * ⚠️ BÀI HỌC KÈM THEO: trục A đã được vá sáng nay, tệp này thì KHÔNG — vì hôm đó nó
+ * tình cờ chạy kịp. Hai ca cùng một khuôn, cùng một điểm yếu, nhưng chỉ ca nào xui
+ * mới lộ ra. Gặp một ca đỏ vì đồng hồ thì tìm luôn ANH EM CÙNG KHUÔN của nó, đừng vá
+ * đúng ca vừa đỏ rồi coi là xong.
+ *
+ * Trần 30s = ~2,5× lần đo tệ nhất. KHÔNG phải "nâng cho hết đỏ": việc của ca này là
+ * đọc thật ~2.000 tệp, nên 5s vốn chưa bao giờ là ngân sách đúng cho nó. Nếu nó chạm
+ * 30s thì đó là tín hiệu thật (repo phình hoặc đĩa hỏng), không phải nhiễu.
+ */
+const TRAN_QUET_MS = 30_000;
+
 describe("[BUOC-4b] trục B chỉ có MỘT nhà", () => {
   const files = quetTatCaFile();
 
@@ -63,7 +83,7 @@ describe("[BUOC-4b] trục B chỉ có MỘT nhà", () => {
     expect(files.length).toBeGreaterThan(500);
   });
 
-  it("không nơi nào ngoài ghi-nhan.ts tự gõ lại điều kiện `saleStatus: RECORDED`", () => {
+  it("không nơi nào ngoài ghi-nhan.ts tự gõ lại điều kiện `saleStatus: RECORDED`", { timeout: TRAN_QUET_MS }, () => {
     const viPham: string[] = [];
     for (const f of files) {
       const key = relative(GOC, f).split(sep).join("/");
@@ -74,7 +94,7 @@ describe("[BUOC-4b] trục B chỉ có MỘT nhà", () => {
     expect(viPham, `Dùng KHOAN_DA_GHI_NHAN từ @/lib/finance/ghi-nhan thay vì gõ tay:\n${viPham.join("\n")}`).toEqual([]);
   });
 
-  it("mọi ngoại lệ khai trong NGOAI_LE đều còn tồn tại và còn chứa chuỗi đó", () => {
+  it("mọi ngoại lệ khai trong NGOAI_LE đều còn tồn tại và còn chứa chuỗi đó", { timeout: TRAN_QUET_MS }, () => {
     // Ngoại lệ chết là ngoại lệ nguy hiểm: nó nới cổng cho một file đã dọn xong.
     for (const [key, lyDo] of Object.entries(NGOAI_LE)) {
       const noiDung = readFileSync(join(GOC, key), "utf8");

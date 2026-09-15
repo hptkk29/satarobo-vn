@@ -4245,6 +4245,23 @@ model OrderItem {
   /// Giải trình của RIÊNG dòng — dấu vết thay cho cơ chế duyệt đã gỡ 14/09/2026.
   discountReason  String? @db.Text
 
+  /// CÁC KHOẢN giảm của dòng này, theo thứ tự người bán gõ (15/09/2026 — "làm flex").
+  ///
+  /// Ưu đãi thật chồng lên nhau: anh chị em học cùng + đóng sớm cả khoá + học bổng
+  /// riêng. Một ô duy nhất làm mất TÊN của từng khoản — và đó đúng là thứ kế toán hỏi
+  /// sáu tháng sau ("500.000đ này là chương trình nào").
+  ///
+  /// `[{ kieu: "SO_TIEN"|"PHAN_TRAM", giaTri: number, giam: number, lyDo: string|null }]`
+  ///
+  /// ⚠️ KHÔNG phải sổ tiền thứ hai. Số tiền của dòng vẫn là `discountAmount` (Int) và
+  /// `Order.discountAmount` = Σ cột đó; mảng này là BẢN GIẢI THÍCH của con số ấy. Ai
+  /// cộng tiền thì cộng `discountAmount`, không duyệt JSON.
+  ///
+  /// ⚠️ `giaTri` (số đã gõ) và `giam` (số thực sự trừ được sau khi kẹp vào tạm tính của
+  /// dòng) cố ý tách đôi: lưu một trong hai là hoặc bảng hiển thị cộng không ra tổng,
+  /// hoặc mất dấu việc khoản cuối đã bị cắt bớt.
+  discounts       Json?
+
   metadata Json?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)

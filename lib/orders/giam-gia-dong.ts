@@ -2,33 +2,37 @@
  * GIẢM GIÁ THEO TỪNG DÒNG ĐƠN — phép tính tiền ở ĐÚNG MỘT chỗ.
  *
  * ── Vì sao có file này (15/09/2026) ──
- * Chủ dự án: "giảm giá tách riêng theo từng đơn luôn chứ không gộp chung giảm tổng đơn."
+ * Chủ dự án, sáng: "giảm giá tách riêng theo từng đơn luôn chứ không gộp chung giảm tổng
+ * đơn." Chiều: "chỗ giảm giá cũng làm flex đi, vì 1 đơn có thể áp nhiều giảm giá khác
+ * nhau." Nên một DÒNG nay mang một DANH SÁCH khoản giảm, không phải một ô.
+ *
  * Từ khi một đơn chở được nhiều con ([[hoc-vien-dong-don]]), một ô giảm giá cấp đơn
- * không còn trả lời được câu duy nhất đáng hỏi: **bớt cho đứa nào**. Ưu đãi thật gần
- * như luôn bám vào một em — anh chị em học cùng, học bổng, chuyển tiếp khoá.
+ * không trả lời được "bớt cho đứa nào"; và một ô giảm giá cấp dòng không trả lời được
+ * "bớt theo chương trình nào" khi ưu đãi chồng lên nhau — anh chị em học cùng + đóng sớm
+ * cả khoá + học bổng riêng của em đó.
  *
  * ⚠️ File THUẦN — KHÔNG `import "server-only"`. Form tạo đơn (client) và
  * `createOrderManualAction` (server) phải tính ra CÙNG một con số; hai bản cài đặt là
  * hai con số, và con số người bán đọc trên màn hình sẽ khác con số vào sổ.
- * `lib/orders/discount.ts` là `server-only` nên `discountFromPercent` đã dời về đây và
- * được tệp đó nhập lại — MỘT cài đặt, không phải hai.
- *
- * ── Ba bất biến, mỗi cái đều từng là một lỗ tiền ở đâu đó ──
- *  1. Giảm KHÔNG vượt tạm tính của chính dòng đó ⇒ không có dòng âm, không có đơn âm.
- *  2. `unitPrice` KHÔNG BAO GIỜ bị hạ để thay cho giảm giá. `lib/orders/price-guard.ts`
- *     so `unitPrice` với giá niêm yết để phát hiện đơn bán lệch; nhét phần giảm vào đó
- *     là làm mù cổng soát giá (lý do đầy đủ ở đầu tệp ấy, mục (c)).
- *  3. `Order.discountAmount` = ĐÚNG tổng các dòng. Nó vốn đã được đọc bởi hoá đơn · ZNS
- *     · báo cáo, nên nó phải là tổng thật chứ không phải một số nhập độc lập — hai
- *     đường nhập cho cùng một con tiền là định nghĩa của sổ lệch.
+ * `lib/orders/discount.ts` là `server-only` nên `discountFromPercent` ở đây và được tệp
+ * đó nhập lại — MỘT cài đặt, không phải hai.
  */
 
-/** Cách người bán gõ phần giảm. Số tiền tuyệt đối hay phần trăm của tạm tính dòng. */
+/** Cách người bán gõ một khoản giảm: số tiền tuyệt đối hay phần trăm. */
 export const KIEU_GIAM = {
   SO_TIEN: "SO_TIEN",
   PHAN_TRAM: "PHAN_TRAM",
 } as const;
 export type KieuGiam = (typeof KIEU_GIAM)[keyof typeof KIEU_GIAM];
+
+/**
+ * Trần số khoản giảm trên MỘT dòng.
+ *
+ * Không phải giới hạn kỹ thuật — là giới hạn để người đọc đơn còn hiểu được. Sáu khoản
+ * ưu đãi trên một dòng thì không ai đối chiếu nổi với chính sách, và gần như chắc chắn
+ * là người bán đang gõ nhầm chỗ. Validator dùng đúng con số này.
+ */
+export const TRAN_KHOAN_GIAM_MOI_DONG = 5;
 
 /**
  * Số tiền giảm từ % — làm tròn, kẹp trong `[0, goc]`.
@@ -42,22 +46,97 @@ export function discountFromPercent(goc: number, percent: number): number {
   return Math.min(goc, Math.round((goc * pct) / 100));
 }
 
-/** Phần khai giảm giá của một dòng, đúng như người bán gõ. */
-export type KhaiGiamDong = {
+/** Một khoản giảm ĐÚNG NHƯ người bán gõ. */
+export type KhaiGiam = {
   kieu: KieuGiam;
   /** Số tiền (VND) khi `SO_TIEN`; phần trăm (0..100) khi `PHAN_TRAM`. */
   giaTri: number;
+  /** Giải trình của RIÊNG khoản này. */
+  lyDo?: string | null;
+};
+
+/** Một khoản giảm SAU KHI đã tính và đã kẹp — đây là thứ ghi vào `OrderItem.discounts`. */
+export type GiamDaAp = {
+  kieu: KieuGiam;
+  /** Số người bán gõ (Ý ĐỊNH). */
+  giaTri: number;
+  /** % đã gõ; null khi gõ theo số tiền. */
+  phanTram: number | null;
+  /** Số THỰC SỰ trừ được sau khi kẹp vào phần còn lại của dòng (SỐ THẬT). */
+  giam: number;
+  lyDo: string | null;
 };
 
 export type TienDong = {
   /** `unitPrice * quantity` — TRƯỚC giảm. Đây là thứ cộng thành `Order.subtotal`. */
   tamTinh: number;
-  /** Phần giảm của dòng, đã kẹp `0 ≤ giam ≤ tamTinh`. */
+  /** Σ các khoản đã áp. Luôn `0 ≤ giam ≤ tamTinh`. */
   giam: number;
   /** `tamTinh - giam`. Không bao giờ âm. */
   thanhTien: number;
-  /** % đã gõ, giữ lại để mở đơn ra còn thấy ý định. NULL khi gõ theo số tiền. */
+  /**
+   * % của CẢ DÒNG — chỉ có nghĩa khi dòng có ĐÚNG MỘT khoản kiểu `PHAN_TRAM`.
+   * Nhiều khoản ⇒ `null`, vì lúc đó "phần trăm của dòng" không tồn tại như một con số.
+   */
   phanTram: number | null;
+  /** Từng khoản, cùng thứ tự người bán gõ. */
+  khoan: GiamDaAp[];
+};
+
+/**
+ * LUẬT CỘNG DỒN — đọc kỹ, đây là chỗ quyết định số tiền.
+ *
+ * Mỗi khoản % tính trên TẠM TÍNH GỐC của dòng, KHÔNG lũy tiến trên phần còn lại.
+ *   10% + 500.000đ trên dòng 2.400.000đ  ⇒  240.000 + 500.000 = 740.000
+ *   (lũy tiến sẽ ra 240.000 + 500.000 = 740.000 ở ca này, nhưng 10% + 20% thì khác hẳn:
+ *    cộng dồn = 30% · lũy tiến = 28%.)
+ *
+ * Vì sao chọn cộng dồn:
+ *   · Đó là cách phụ huynh tự tính. "Giảm 10% rồi giảm tiếp 20%" — không ai nhẩm ra 28%,
+ *     và một con số khách không nhẩm được là một cuộc gọi thắc mắc.
+ *   · Đó là cách MỘT khoản giảm đang chạy hôm nay đã tính (% trên `tamTinh`), nên không
+ *     có đơn cũ nào đổi nghĩa.
+ *   · Lũy tiến làm THỨ TỰ GÕ thành yếu tố quyết định số tiền — sắp xếp lại hai khoản
+ *     trên màn hình là đổi tiền, mà không có gì trên màn hình nói ra điều đó.
+ *
+ * Muốn đổi sang lũy tiến thì sửa ĐÚNG hàm này; đừng rải phép tính ra chỗ khác.
+ *
+ * ⚠️ KẸP THEO PHẦN CÒN LẠI, và `giam` ghi SỐ THẬT. Khi tổng vượt tạm tính, khoản cuối bị
+ * cắt bớt chứ không phải cả dòng bị kẹp ở tổng: nhờ vậy bảng hiển thị cộng các khoản LUÔN
+ * ra đúng tổng. Kẹp ở tổng thì từng dòng in ra một đằng, tổng một nẻo — và người đọc sẽ
+ * tin cái họ cộng được bằng tay.
+ */
+export function gopGiamGia(tamTinh: number, khai: readonly KhaiGiam[]): GiamDaAp[] {
+  const goc = Math.max(0, tamTinh);
+  let conLai = goc;
+  const ra: GiamDaAp[] = [];
+
+  for (const k of khai) {
+    if (!k || !(k.giaTri > 0)) continue;
+    const laPct = k.kieu === KIEU_GIAM.PHAN_TRAM;
+    const pct = laPct ? Math.min(100, Math.max(0, k.giaTri)) : null;
+    // Tính trên GỐC (cộng dồn), rồi mới kẹp vào phần còn lại.
+    const muon = laPct
+      ? discountFromPercent(goc, pct!)
+      : Math.max(0, Math.round(k.giaTri));
+    const giam = Math.min(muon, conLai);
+    conLai -= giam;
+    ra.push({
+      kieu: k.kieu,
+      giaTri: k.giaTri,
+      phanTram: pct,
+      giam,
+      lyDo: k.lyDo?.trim() || null,
+    });
+  }
+  return ra;
+}
+
+/** Đầu vào tiền của một dòng. `giam` là DANH SÁCH khoản, kể cả khi chỉ có một. */
+export type DongDeTinh = {
+  unitPrice: number;
+  quantity: number;
+  giam?: readonly KhaiGiam[] | null;
 };
 
 /**
@@ -67,35 +146,21 @@ export type TienDong = {
  * từng phím gõ, ném ở đó là trắng màn hình giữa lúc nhập liệu. Cổng chặn giá trị bậy là
  * validator + action, không phải hàm tính.
  */
-export function tienDong(input: {
-  unitPrice: number;
-  quantity: number;
-  giam?: KhaiGiamDong | null;
-}): TienDong {
-  const tamTinh = Math.max(0, Math.round(input.unitPrice)) * Math.max(0, Math.round(input.quantity));
-  const khai = input.giam;
-
-  if (!khai || !(khai.giaTri > 0)) {
-    return { tamTinh, giam: 0, thanhTien: tamTinh, phanTram: null };
-  }
-
-  if (khai.kieu === KIEU_GIAM.PHAN_TRAM) {
-    const pct = Math.min(100, Math.max(0, khai.giaTri));
-    const giam = discountFromPercent(tamTinh, pct);
-    return { tamTinh, giam, thanhTien: tamTinh - giam, phanTram: pct };
-  }
-
-  // Bất biến 1: giảm không vượt tạm tính của chính dòng — chặn ở ĐÂY chứ không ở tổng.
-  // Kẹp ở tổng thì một dòng giảm lố vẫn được dòng khác "gánh hộ", và đơn vẫn ra số
-  // dương trông hợp lệ trong khi một dòng đang mang giá âm.
-  const giam = Math.min(tamTinh, Math.max(0, Math.round(khai.giaTri)));
-  return { tamTinh, giam, thanhTien: tamTinh - giam, phanTram: null };
+export function tienDong(input: DongDeTinh): TienDong {
+  const tamTinh =
+    Math.max(0, Math.round(input.unitPrice)) * Math.max(0, Math.round(input.quantity));
+  const khoan = gopGiamGia(tamTinh, input.giam ?? []);
+  const giam = khoan.reduce((s, k) => s + k.giam, 0);
+  // Chỉ quy ra "% của dòng" khi dòng có ĐÚNG MỘT khoản và khoản đó là %.
+  const phanTram =
+    khoan.length === 1 && khoan[0]!.phanTram != null ? khoan[0]!.phanTram : null;
+  return { tamTinh, giam, thanhTien: tamTinh - giam, phanTram, khoan };
 }
 
 export type TienDon = {
   /** Σ tạm tính từng dòng — đặt vào `Order.subtotal`. */
   tamTinh: number;
-  /** Σ giảm từng dòng — đặt vào `Order.discountAmount` (bất biến 3). */
+  /** Σ giảm từng dòng — đặt vào `Order.discountAmount`. */
   tongGiam: number;
   /** `tamTinh - tongGiam + phiVanChuyen` — đặt vào `Order.totalAmount`. */
   tongDon: number;
@@ -103,11 +168,14 @@ export type TienDon = {
   dong: TienDong[];
 };
 
-/** Tiền của CẢ ĐƠN, suy từ các dòng. Không có đường nhập giảm giá nào khác. */
-export function tienDon(
-  dong: readonly { unitPrice: number; quantity: number; giam?: KhaiGiamDong | null }[],
-  phiVanChuyen = 0,
-): TienDon {
+/**
+ * Tiền của CẢ ĐƠN, suy từ các dòng. Không có đường nhập giảm giá nào khác.
+ *
+ * `Order.discountAmount` = ĐÚNG tổng các dòng. Cột đó được hoá đơn · ZNS · báo cáo đọc,
+ * nên nó phải là tổng thật chứ không phải một số nhập độc lập — hai đường nhập cho cùng
+ * một con tiền là định nghĩa của sổ lệch.
+ */
+export function tienDon(dong: readonly DongDeTinh[], phiVanChuyen = 0): TienDon {
   const tung = dong.map((d) => tienDong(d));
   const tamTinh = tung.reduce((s, d) => s + d.tamTinh, 0);
   const tongGiam = tung.reduce((s, d) => s + d.giam, 0);
@@ -119,23 +187,50 @@ export function tienDon(
   };
 }
 
+/** Một khoản giảm THIẾU giải trình — chỉ ra ĐÚNG dòng nào, khoản thứ mấy. */
+export type ThieuGiaiTrinh = { dong: number; khoan: number };
+
 /**
- * Dòng nào CÓ giảm mà THIẾU giải trình — trả về chỉ số (0-based) của chúng.
+ * Khoản nào CÓ giảm mà THIẾU giải trình.
  *
- * Cơ chế DUYỆT giảm giá đã gỡ 14/09/2026, nhưng GIẢI TRÌNH thì giữ, và hai thứ đó hay
- * bị gộp làm một. "Duyệt" là một người phải bấm trước khi đơn đi tiếp — đó là thứ đã bỏ.
+ * Cơ chế DUYỆT giảm giá đã gỡ 14/09/2026, nhưng GIẢI TRÌNH thì giữ, và hai thứ đó hay bị
+ * gộp làm một. "Duyệt" là một người phải bấm trước khi đơn đi tiếp — đó là thứ đã bỏ.
  * "Giải trình" là một dòng chữ nói vì sao bớt tiền — nó chính là cái THAY THẾ cổng duyệt,
- * nên bỏ nó là bỏ cả hai.
+ * nên bỏ nó là bỏ cả hai. Nay nó theo TỪNG KHOẢN: gộp ba ưu đãi vào một ô giải trình là
+ * mất đúng thứ vừa cất công tách ra.
  *
- * Trả chỉ số chứ không trả boolean: người bán cần biết DÒNG NÀO thiếu, và với đơn bốn
- * dòng thì "thiếu giải trình" không đủ để họ biết đi sửa ở đâu.
+ * Trả chỉ số (1-based khi hiển thị) chứ không trả boolean: với đơn bốn dòng mỗi dòng ba
+ * khoản thì "thiếu giải trình" không đủ để người bán biết đi sửa ở đâu.
  */
 export function dongThieuGiaiTrinh(
-  dong: readonly { unitPrice: number; quantity: number; giam?: KhaiGiamDong | null; lyDo?: string | null }[],
-): number[] {
-  const ra: number[] = [];
+  dong: readonly (DongDeTinh & { giam?: readonly KhaiGiam[] | null })[],
+): ThieuGiaiTrinh[] {
+  const ra: ThieuGiaiTrinh[] = [];
   dong.forEach((d, i) => {
-    if (tienDong(d).giam > 0 && !d.lyDo?.trim()) ra.push(i);
+    tienDong(d).khoan.forEach((k, j) => {
+      if (k.giam > 0 && !k.lyDo) ra.push({ dong: i + 1, khoan: j + 1 });
+    });
   });
   return ra;
+}
+
+/** Câu thông báo cho người bán, từ kết quả `dongThieuGiaiTrinh`. */
+export function loiThieuGiaiTrinh(thieu: readonly ThieuGiaiTrinh[]): string {
+  const cho = thieu.map((t) => `dòng ${t.dong} (khoản ${t.khoan})`).join(", ");
+  return `Có giảm giá thì phải nhập giải trình — còn thiếu ở ${cho}`;
+}
+
+/**
+ * Chuỗi giải trình GỘP cho `Order.discountReason`.
+ *
+ * Cột đó được hoá đơn và nhật ký đọc, nên nó phải nói được điều gì đó mà không cần biết
+ * về cột JSON. Kèm số thứ tự dòng để lần ngược được về đúng đứa trẻ.
+ */
+export function giaiTrinhGopChoDon(dong: readonly TienDong[]): string | null {
+  const phan = dong.flatMap((d, i) =>
+    d.khoan
+      .filter((k) => k.giam > 0 && k.lyDo)
+      .map((k) => `Dòng ${i + 1}: ${k.lyDo}`),
+  );
+  return phan.length > 0 ? phan.join(" · ") : null;
 }

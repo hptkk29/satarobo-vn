@@ -29,9 +29,12 @@ import { nationalPhone } from "@/lib/phone";
 import { studentIdChoDon, thieuHocVienODong } from "@/lib/orders/hoc-vien-dong-don";
 import {
   KIEU_GIAM,
+  TRAN_KHOAN_GIAM_MOI_DONG,
   dongThieuGiaiTrinh,
+  loiThieuGiaiTrinh,
   tienDon,
   tienDong,
+  type KhaiGiam,
   type KieuGiam,
 } from "@/lib/orders/giam-gia-dong";
 import { HelpHint } from "@/components/admin/ui/help-hint";
@@ -109,14 +112,13 @@ type DongHang = {
   /** Dòng này mua cho CON NÀO. null = chưa chọn / đơn sản phẩm. */
   studentId: string | null;
   /**
-   * GIẢM GIÁ CỦA RIÊNG DÒNG NÀY (15/09/2026 — chốt của chủ dự án).
+   * CÁC KHOẢN GIẢM CỦA RIÊNG DÒNG NÀY (15/09/2026 — "làm flex").
    *
-   * Ưu đãi thật bám vào MỘT em (anh chị em học cùng, học bổng), nên nó phải ở đây chứ
-   * không ở cấp đơn. `giamGiaTri = 0` nghĩa là không giảm — không cần cờ bật/tắt riêng.
+   * Ưu đãi thật bám vào MỘT em (anh chị em học cùng, học bổng) và CHỒNG LÊN NHAU — một
+   * em có thể vừa được ưu đãi anh chị em vừa được ưu đãi đóng sớm. Mảng rỗng = không
+   * giảm; không cần cờ bật/tắt riêng.
    */
-  giamKieu: KieuGiam;
-  giamGiaTri: number;
-  giamLyDo: string;
+  giam: KhaiGiam[];
 };
 
 /**
@@ -145,9 +147,7 @@ const dongMoi = (): DongHang => ({
   coachFormat: "GROUP",
   soBuoiMua: null,
   studentId: null,
-  giamKieu: KIEU_GIAM.SO_TIEN,
-  giamGiaTri: 0,
-  giamLyDo: "",
+  giam: [],
 });
 
 // O1 — selector loại đơn chỉ 2 lựa chọn (combo là course teachable → nằm trong "Khoá học").
@@ -332,7 +332,7 @@ export function OrderCreateForm({
         dong.map((d) => ({
           unitPrice: d.unitPrice,
           quantity: d.quantity,
-          giam: d.giamGiaTri > 0 ? { kieu: d.giamKieu, giaTri: d.giamGiaTri } : null,
+          giam: d.giam,
         })),
       ),
     [dong],
@@ -363,18 +363,9 @@ export function OrderCreateForm({
     }
     // Cơ chế DUYỆT giảm giá đã gỡ 14/09 — GIẢI TRÌNH thì giữ, và nay nó theo DÒNG.
     // Cùng hàm với server (`dongThieuGiaiTrinh`), nên không thể lệch nhau.
-    const thieuLyDo = dongThieuGiaiTrinh(
-      dong.map((d) => ({
-        unitPrice: d.unitPrice,
-        quantity: d.quantity,
-        giam: d.giamGiaTri > 0 ? { kieu: d.giamKieu, giaTri: d.giamGiaTri } : null,
-        lyDo: d.giamLyDo,
-      })),
-    );
+    const thieuLyDo = dongThieuGiaiTrinh(dong);
     if (thieuLyDo.length > 0) {
-      toast.error(
-        `Dòng ${thieuLyDo.map((i) => i + 1).join(", ")}: có giảm giá thì phải nhập giải trình`,
-      );
+      toast.error(loiThieuGiaiTrinh(thieuLyDo));
       return;
     }
     // AUTH-SĐT P5 — email khách hàng KHÔNG còn bắt buộc (xác nhận/nhắc nợ đi
@@ -399,12 +390,11 @@ export function OrderCreateForm({
       examAttemptId: null,
       productId: orderType === "PRODUCT" ? d.refId : null,
       studentId: d.studentId,
-      // Giảm giá của RIÊNG dòng. Gửi đúng KIỂU người bán đã gõ — server tính lại số
-      // tiền, nên hai trường này loại trừ nhau (validator chặn gõ cả hai).
-      discountAmount: d.giamKieu === KIEU_GIAM.SO_TIEN ? d.giamGiaTri : 0,
-      discountPercent:
-        d.giamKieu === KIEU_GIAM.PHAN_TRAM && d.giamGiaTri > 0 ? d.giamGiaTri : null,
-      discountReason: d.giamLyDo.trim() || null,
+      // CÁC KHOẢN giảm của dòng, đúng thứ tự người bán gõ. Gửi Ý ĐỊNH (kiểu + số đã
+      // gõ + lý do); server tính lại số tiền thật và kẹp theo tạm tính của dòng.
+      discounts: d.giam
+        .filter((k) => k.giaTri > 0)
+        .map((k) => ({ kieu: k.kieu, giaTri: k.giaTri, lyDo: k.lyDo?.trim() || null })),
       // Một khuôn duy nhất cho hình thức lớp, đọc lại bằng `docHinhThucLop` ở server.
       metadata:
         orderType === "COURSE"
@@ -998,8 +988,12 @@ function DongHangCard({
   const tienDongNay = tienDong({
     unitPrice: dong.unitPrice,
     quantity: dong.quantity,
-    giam: dong.giamGiaTri > 0 ? { kieu: dong.giamKieu, giaTri: dong.giamGiaTri } : null,
+    giam: dong.giam,
   });
+
+  /** Sửa MỘT khoản giảm tại chỗ — giữ nguyên thứ tự, không dựng lại cả mảng ở chỗ gọi. */
+  const suaKhoan = (idx: number, thayDoi: Partial<KhaiGiam>) =>
+    onSua({ giam: dong.giam.map((k, i) => (i === idx ? { ...k, ...thayDoi } : k)) });
 
   const hocVienOptions: ComboboxOption[] = useMemo(
     () =>
@@ -1292,107 +1286,187 @@ function DongHangCard({
         </div>
       </div>
 
-      {/* ── GIẢM GIÁ CỦA RIÊNG DÒNG NÀY (15/09/2026) ──────────────────────────
-          Chủ dự án: "giảm giá tách riêng theo từng đơn luôn chứ không gộp chung giảm
-          tổng đơn." Ưu đãi thật bám vào MỘT em — anh chị em học cùng, học bổng — nên
-          ô này phải đứng trong thẻ của dòng đó, cạnh tên con, chứ không ở cuối trang. */}
+      {/* ── CÁC KHOẢN GIẢM CỦA RIÊNG DÒNG NÀY (15/09/2026) ───────────────────
+          Chủ dự án: "giảm giá tách riêng theo từng đơn" rồi "làm flex đi, vì 1 đơn có
+          thể áp nhiều giảm giá khác nhau". Ưu đãi thật chồng lên nhau — anh chị em học
+          cùng + đóng sớm cả khoá + học bổng — nên đây là một DANH SÁCH, đứng trong thẻ
+          của dòng đó, cạnh tên con. */}
       <div className="mt-4 rounded-lg border border-border bg-muted/40 p-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Giảm giá dòng này
+            {dong.giam.length > 0 ? ` (${dong.giam.length})` : ""}
             <HelpHint>
-              Theo số tiền: gõ thẳng số bớt cho dòng này. Theo %: gõ 1–100, hệ thống quy
-              ra tiền trên tạm tính của CHÍNH dòng này (không phải của cả đơn). Để 0 là
-              không giảm.
+              Mỗi ưu đãi là MỘT khoản riêng, có giải trình riêng — anh chị em học cùng,
+              đóng sớm cả khoá, học bổng… Các khoản CỘNG DỒN trên tạm tính của chính dòng
+              này (không tính lũy tiến): 10% + 20% là bớt 30%, không phải 28%. Tổng các
+              khoản không bao giờ vượt quá tạm tính của dòng.
             </HelpHint>
           </Label>
-          {/* Thành tiền sau giảm hiện ngay đây — người bán gõ phần giảm và thấy ngay số
-              cuối của dòng, không phải đưa mắt sang thẻ Tóm tắt rồi tìm lại đúng dòng. */}
+          {/* Số cuối của dòng hiện ngay đây — người bán gõ phần giảm và thấy ngay kết
+              quả, không phải đưa mắt sang thẻ Tóm tắt rồi tìm lại đúng dòng. */}
           {tienDongNay.giam > 0 && (
             <span className="text-xs tabular-nums text-muted-foreground">
               {tienDongNay.tamTinh.toLocaleString("vi-VN")}đ
               <span className="mx-1 text-state-danger-ink">
                 −{tienDongNay.giam.toLocaleString("vi-VN")}đ
               </span>
-              = <strong className="text-foreground">{tienDongNay.thanhTien.toLocaleString("vi-VN")}đ</strong>
+              ={" "}
+              <strong className="text-foreground">
+                {tienDongNay.thanhTien.toLocaleString("vi-VN")}đ
+              </strong>
             </span>
           )}
         </div>
 
-        <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-[auto_minmax(0,1fr)]">
-          {/* Cùng khuôn nút với "Hình thức lớp" ngay trên (min-h-11, bo 8px, viền/nền
-              đổi theo `aria-pressed`) — hai bộ chọn nằm trong CÙNG một thẻ mà trông
-              khác nhau thì mắt phải học hai lần. `min-w-[4.5rem]` vì nhãn "%" chỉ một
-              ký tự: để `Button` tự co, nó ra một nút rộng ~22px, đứng cạnh "Số tiền"
-              trông như phần thừa của nút bên cạnh chứ không như một lựa chọn. */}
-          <div className="flex flex-wrap gap-2">
-            {(
-              [
-                [KIEU_GIAM.SO_TIEN, "Số tiền"],
-                [KIEU_GIAM.PHAN_TRAM, "Theo %"],
-              ] as [KieuGiam, string][]
-            ).map(([k, nhan]) => (
-              <button
-                key={k}
-                type="button"
-                onClick={() => onSua({ giamKieu: k, giamGiaTri: 0 })}
-                aria-pressed={dong.giamKieu === k}
-                className={`min-h-11 min-w-[4.5rem] whitespace-nowrap rounded-lg border px-3 text-sm font-medium transition-colors duration-150 ${
-                  dong.giamKieu === k
-                    ? "border-primary bg-primary text-white"
-                    : "border-border bg-background hover:bg-muted"
-                }`}
+        {dong.giam.length === 0 && (
+          <p className="mt-1.5 text-xs text-muted-foreground">
+            Chưa có khoản giảm nào — dòng này bán đúng giá.
+          </p>
+        )}
+
+        <div className="mt-2 space-y-3">
+          {dong.giam.map((k, idx) => {
+            const daAp = tienDongNay.khoan[idx];
+            return (
+              <div
+                key={idx}
+                className="rounded-md border border-border bg-background p-2.5"
               >
-                {nhan}
-              </button>
-            ))}
-          </div>
-          {/* Đổi kiểu thì ĐẶT LẠI giá trị về 0 (xem onClick trên). Giữ lại số cũ là để
-              "500000" đang nghĩa là 500.000đ bỗng thành 100% sau một cú bấm — cùng con
-              số, khác hẳn số tiền, và không có gì trên màn hình nói ra điều đó. */}
-          {dong.giamKieu === KIEU_GIAM.SO_TIEN ? (
-            <MoneyInput
-              name={`giamGia-${stt}`}
-              min={0}
-              value={dong.giamGiaTri}
-              onValueChange={(v) => onSua({ giamGiaTri: v ?? 0 })}
-              placeholder="Số tiền giảm"
-            />
-          ) : (
-            <Input
-              type="number"
-              min={0}
-              max={100}
-              value={dong.giamGiaTri}
-              onChange={(e) =>
-                onSua({ giamGiaTri: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })
-              }
-              placeholder="% giảm (1–100)"
-            />
-          )}
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-muted-foreground">
+                    Khoản {idx + 1}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {/* Hiện SỐ THẬT đã trừ được, không phải số đã gõ: khi các khoản cộng
+                        lại vượt tạm tính thì khoản cuối bị cắt bớt, và người bán phải
+                        thấy điều đó ngay chứ không phải đoán từ tổng. */}
+                    {daAp && daAp.giam > 0 && (
+                      <span className="text-xs tabular-nums text-state-danger-ink">
+                        −{daAp.giam.toLocaleString("vi-VN")}đ
+                        {daAp.giam < (daAp.phanTram != null
+                          ? Math.round((tienDongNay.tamTinh * daAp.phanTram) / 100)
+                          : daAp.giaTri) && (
+                          <span className="ml-1 text-muted-foreground">(đã chạm trần dòng)</span>
+                        )}
+                      </span>
+                    )}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-state-danger-ink"
+                      onClick={() =>
+                        onSua({ giam: dong.giam.filter((_, i) => i !== idx) })
+                      }
+                      title="Xoá khoản giảm này"
+                      aria-label={`Xoá khoản giảm ${idx + 1}`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-[auto_minmax(0,1fr)]">
+                  {/* Cùng khuôn nút với "Hình thức lớp" ngay trên — hai bộ chọn trong
+                      CÙNG một thẻ mà trông khác nhau thì mắt phải học hai lần.
+                      `min-w-[4.5rem]` vì nhãn ngắn: để `Button` tự co thì nút "%" ra
+                      rộng ~22px, đứng cạnh "Số tiền" trông như phần thừa của nút bên
+                      cạnh chứ không như một lựa chọn. */}
+                  <div className="flex flex-wrap gap-2">
+                    {(
+                      [
+                        [KIEU_GIAM.SO_TIEN, "Số tiền"],
+                        [KIEU_GIAM.PHAN_TRAM, "Theo %"],
+                      ] as [KieuGiam, string][]
+                    ).map(([kieu, nhan]) => (
+                      <button
+                        key={kieu}
+                        type="button"
+                        onClick={() => suaKhoan(idx, { kieu, giaTri: 0 })}
+                        aria-pressed={k.kieu === kieu}
+                        className={`min-h-11 min-w-[4.5rem] whitespace-nowrap rounded-lg border px-3 text-sm font-medium transition-colors duration-150 ${
+                          k.kieu === kieu
+                            ? "border-primary bg-primary text-white"
+                            : "border-border bg-background hover:bg-muted"
+                        }`}
+                      >
+                        {nhan}
+                      </button>
+                    ))}
+                  </div>
+                  {/* Đổi kiểu thì ĐẶT LẠI giá trị về 0 (xem onClick trên). Giữ số cũ là
+                      để "500000" đang nghĩa là 500.000đ bỗng thành 100% sau một cú bấm —
+                      cùng con số, khác hẳn số tiền, và không gì trên màn hình nói ra. */}
+                  {k.kieu === KIEU_GIAM.SO_TIEN ? (
+                    <MoneyInput
+                      name={`giamGia-${stt}-${idx + 1}`}
+                      min={0}
+                      value={k.giaTri}
+                      onValueChange={(v) => suaKhoan(idx, { giaTri: v ?? 0 })}
+                      placeholder="Số tiền giảm"
+                    />
+                  ) : (
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={k.giaTri}
+                      onChange={(e) =>
+                        suaKhoan(idx, {
+                          giaTri: Math.min(100, Math.max(0, Number(e.target.value) || 0)),
+                        })
+                      }
+                      placeholder="% giảm (1–100)"
+                    />
+                  )}
+                </div>
+
+                {/* Giải trình theo TỪNG KHOẢN. Cơ chế duyệt đã gỡ 14/09 — dòng chữ này
+                    chính là thứ thay thế nó, nên nó phải nói được vì sao có ĐÚNG khoản
+                    này, không phải vì sao dòng được bớt nói chung. */}
+                <div className="mt-2 space-y-1.5">
+                  <Label className="text-xs">
+                    Giải trình *
+                    <HelpHint>
+                      Ghi rõ chương trình và ai đã đồng ý (VD: &ldquo;em ruột HV Sata2,
+                      chị Lan CS1 đồng ý&rdquo;). Đây là dấu vết duy nhất còn lại của
+                      khoản bớt này — &ldquo;ưu đãi&rdquo; chung chung thì sáu tháng sau
+                      không ai giải thích được cho kế toán.
+                    </HelpHint>
+                  </Label>
+                  <Input
+                    value={k.lyDo ?? ""}
+                    onChange={(e) => suaKhoan(idx, { lyDo: e.target.value })}
+                    maxLength={1000}
+                    placeholder="VD: em ruột HV Sata2 — ưu đãi theo chính sách anh chị em"
+                  />
+                </div>
+              </div>
+            );
+          })}
         </div>
 
-        {/* Giải trình theo DÒNG. Cơ chế duyệt đã gỡ 14/09 — dòng chữ này chính là thứ
-            thay thế nó, nên nó phải nói được vì sao bớt cho ĐÚNG em này. */}
-        {tienDongNay.giam > 0 && (
-          <div className="mt-2 space-y-1.5">
-            <Label className="text-xs">
-              Giải trình *
-              <HelpHint>
-                Ghi rõ lý do và ai đã đồng ý (VD: &ldquo;em ruột HV Sata2, chị Lan CS1
-                đồng ý&rdquo;). Đây là dấu vết duy nhất còn lại của khoản bớt này —
-                &ldquo;ưu đãi&rdquo; chung chung thì sáu tháng sau không ai giải thích
-                được cho kế toán.
-              </HelpHint>
-            </Label>
-            <Input
-              value={dong.giamLyDo}
-              onChange={(e) => onSua({ giamLyDo: e.target.value })}
-              maxLength={1000}
-              placeholder="VD: em ruột HV Sata2 — ưu đãi theo chính sách anh chị em"
-            />
-          </div>
-        )}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="mt-3"
+          disabled={dong.giam.length >= TRAN_KHOAN_GIAM_MOI_DONG}
+          title={
+            dong.giam.length >= TRAN_KHOAN_GIAM_MOI_DONG
+              ? `Tối đa ${TRAN_KHOAN_GIAM_MOI_DONG} khoản giảm mỗi dòng`
+              : "Thêm một khoản giảm nữa cho dòng này"
+          }
+          onClick={() =>
+            onSua({
+              giam: [...dong.giam, { kieu: KIEU_GIAM.SO_TIEN, giaTri: 0, lyDo: "" }],
+            })
+          }
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Thêm khoản giảm
+        </Button>
       </div>
     </div>
   );

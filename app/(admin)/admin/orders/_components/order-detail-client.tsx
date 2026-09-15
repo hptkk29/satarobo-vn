@@ -109,6 +109,41 @@ const STATUS_BADGE_CLASS: Record<OrderStatus, string> = {
   REFUNDED: "bg-primary-soft text-primary hover:bg-primary-soft",
 };
 
+/**
+ * Các khoản giảm của một dòng, đọc từ cột JSON `OrderItem.discounts`.
+ *
+ * ⚠️ `Json?` của Prisma tới đây là `unknown` — dữ liệu đi qua ranh giới RSC và không
+ * có kiểu nào ép nó. Đọc phòng thủ và trả MẢNG RỖNG khi không hiểu, chứ không ném:
+ * một đơn cũ (cột NULL) hay một hàng bị sửa tay ở DB không được làm trắng cả trang
+ * đơn. Số tiền ở chân bảng vẫn lấy từ cột Int `discountAmount`, nên mảng này chỉ ảnh
+ * hưởng phần GIẢI THÍCH — không có đường nào để nó làm sai một con số tiền.
+ */
+type KhoanGiamDaAp = {
+  kieu: string;
+  giaTri: number;
+  phanTram: number | null;
+  giam: number;
+  lyDo: string | null;
+};
+
+function docKhoanGiam(raw: unknown): KhoanGiamDaAp[] {
+  if (!Array.isArray(raw)) return [];
+  const ra: KhoanGiamDaAp[] = [];
+  for (const r of raw) {
+    if (!r || typeof r !== "object") continue;
+    const o = r as Record<string, unknown>;
+    if (typeof o.giam !== "number") continue;
+    ra.push({
+      kieu: typeof o.kieu === "string" ? o.kieu : "SO_TIEN",
+      giaTri: typeof o.giaTri === "number" ? o.giaTri : 0,
+      phanTram: typeof o.phanTram === "number" ? o.phanTram : null,
+      giam: o.giam,
+      lyDo: typeof o.lyDo === "string" ? o.lyDo : null,
+    });
+  }
+  return ra;
+}
+
 // OD1b — duyệt kế hoạch trả góp 2 đợt (C4).
 
 /**
@@ -500,15 +535,35 @@ export function OrderDetailClient({
                             {it.itemDescription}
                           </div>
                         )}
-                        {/* Giải trình của RIÊNG dòng — dấu vết thay cho cơ chế duyệt đã
-                            gỡ 14/09/2026. Để cạnh khoản giảm chứ không gom xuống chân
-                            bảng: hai em được bớt vì hai lý do khác nhau là ca thường. */}
-                        {it.discountAmount > 0 && it.discountReason && (
-                          <div className="mt-1 text-xs text-muted-foreground">
-                            <span className="font-medium text-state-danger-ink">Giảm giá:</span>{" "}
-                            {it.discountReason}
-                          </div>
-                        )}
+                        {/* TỪNG KHOẢN giảm kèm giải trình riêng — dấu vết thay cho cơ
+                            chế duyệt đã gỡ 14/09/2026. Liệt kê ra chứ không gộp: ba ưu
+                            đãi trên một dòng là ba chương trình khác nhau, và “giảm
+                            740.000đ” không nói được đó là những chương trình nào.
+                            Đơn CŨ (cột JSON rỗng) rơi về nhánh dưới, hiện y như trước. */}
+                        {(() => {
+                          const khoan = docKhoanGiam(it.discounts).filter((k) => k.giam > 0);
+                          if (khoan.length > 0) {
+                            return (
+                              <ul className="mt-1 space-y-0.5">
+                                {khoan.map((k, i) => (
+                                  <li key={i} className="text-xs text-muted-foreground">
+                                    <span className="font-medium text-state-danger-ink">
+                                      −{k.giam.toLocaleString("vi-VN")}đ
+                                      {k.phanTram != null ? " (" + k.phanTram + "%)" : ""}
+                                    </span>
+                                    {k.lyDo ? <> · {k.lyDo}</> : null}
+                                  </li>
+                                ))}
+                              </ul>
+                            );
+                          }
+                          return it.discountAmount > 0 && it.discountReason ? (
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              <span className="font-medium text-state-danger-ink">Giảm giá:</span>{" "}
+                              {it.discountReason}
+                            </div>
+                          ) : null;
+                        })()}
                       </td>
                       <td className="whitespace-nowrap px-3 py-3 text-right align-top tabular-nums">
                         {it.quantity}
@@ -526,6 +581,11 @@ export function OrderDetailClient({
                             <span className="block text-xs font-normal text-muted-foreground line-through">
                               {it.totalPrice.toLocaleString("vi-VN")}
                             </span>
+                            {/* `discountPercent` chỉ có nghĩa khi dòng có ĐÚNG MỘT
+                                khoản kiểu % — nhiều khoản thì "phần trăm của dòng"
+                                không tồn tại như một con số, và in một tỉ lệ gần đúng
+                                lên đây là in ra thứ không ai tính lại được. Chi tiết
+                                từng khoản đã nằm ở cột Tên. */}
                             <span className="block text-xs font-normal text-state-danger-ink">
                               −{it.discountAmount.toLocaleString("vi-VN")}
                               {it.discountPercent != null ? ` (${it.discountPercent}%)` : ""}

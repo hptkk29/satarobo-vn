@@ -22,9 +22,11 @@ import { checkOrderCreateOwnership } from "@/lib/orders/create-guard";
 import { canTransition } from "@/lib/orders/status";
 import { recordInstallmentPlan, markInstallmentPaid } from "@/lib/orders/installments";
 import {
-  KIEU_GIAM,
   dongThieuGiaiTrinh,
+  giaiTrinhGopChoDon,
+  loiThieuGiaiTrinh,
   tienDon,
+  type KieuGiam,
 } from "@/lib/orders/giam-gia-dong";
 import { ensureParentAccountForOrder } from "@/lib/parents/provision";
 import { ensureOrderPaymentRecorded } from "@/lib/finance/payment";
@@ -395,13 +397,13 @@ export async function createOrderManualAction(input: unknown) {
   const khaiDong = data.items.map((it) => ({
     unitPrice: it.unitPrice,
     quantity: it.quantity,
-    giam:
-      (it.discountPercent ?? 0) > 0
-        ? { kieu: KIEU_GIAM.PHAN_TRAM, giaTri: it.discountPercent! }
-        : it.discountAmount > 0
-          ? { kieu: KIEU_GIAM.SO_TIEN, giaTri: it.discountAmount }
-          : null,
-    lyDo: it.discountReason ?? null,
+    // DANH SÁCH khoản giảm của dòng, đúng thứ tự người bán gõ. Validator đã chặn cách
+    // khai cũ (một khoản/dòng) cho ra tiếng, nên ở đây chỉ còn MỘT hình dạng.
+    giam: (it.discounts ?? []).map((k) => ({
+      kieu: k.kieu as KieuGiam,
+      giaTri: k.giaTri,
+      lyDo: k.lyDo ?? null,
+    })),
   }));
 
   // Giải trình BẮT BUỘC cho từng dòng có giảm. Validator đã gác từng dòng một, nhưng
@@ -409,10 +411,7 @@ export async function createOrderManualAction(input: unknown) {
   // trình" không đủ để người bán biết đi sửa ở đâu.
   const thieuLyDo = dongThieuGiaiTrinh(khaiDong);
   if (thieuLyDo.length > 0) {
-    return {
-      ok: false as const,
-      error: `Dòng ${thieuLyDo.map((i) => i + 1).join(", ")}: có giảm giá thì phải nhập giải trình`,
-    };
+    return { ok: false as const, error: loiThieuGiaiTrinh(thieuLyDo) };
   }
 
   const tien = tienDon(khaiDong, data.shippingFee);
@@ -425,16 +424,9 @@ export async function createOrderManualAction(input: unknown) {
     return { ok: false as const, error: "Tổng tiền không thể âm" };
   }
 
-  const coGiamGia = tien.tongGiam > 0;
   // `Order.discountReason` vẫn được hoá đơn · nhật ký đọc, nên nó phải nói được điều gì
-  // đó — ghép từ giải trình của các dòng CÓ giảm, kèm số thứ tự dòng để lần ngược được.
-  const giaiTrinhGop = coGiamGia
-    ? data.items
-        .map((it, i) => ({ i, tien: tien.dong[i]!, lyDo: it.discountReason?.trim() }))
-        .filter((x) => x.tien.giam > 0 && x.lyDo)
-        .map((x) => `Dòng ${x.i + 1}: ${x.lyDo}`)
-        .join(" · ") || null
-    : null;
+  // đó mà không cần biết về cột JSON. Ghép ở MỘT chỗ dùng chung với form.
+  const giaiTrinhGop = giaiTrinhGopChoDon(tien.dong);
 
   // 30/08/2026 — PaymentMethod ∈ SCOPED_MODELS: câu này nay TỰ LỌC theo tầm nhìn cơ sở
   // của người tạo đơn.
@@ -591,9 +583,22 @@ export async function createOrderManualAction(input: unknown) {
             // TẠM TÍNH của dòng (trước giảm) — `Order.subtotal` = Σ cột này.
             totalPrice: tien.dong[i]!.tamTinh,
             // Số SERVER tính, không phải số client gửi.
+            //
+            // `discountAmount` là TỔNG của dòng (cột tiền, `Order.discountAmount` = Σ nó);
+            // `discountPercent` chỉ có nghĩa khi dòng có ĐÚNG MỘT khoản kiểu %;
+            // `discountReason` là bản ghép để đường đọc cũ không phải biết về JSON;
+            // `discounts` là bản chi tiết — nguồn sự thật cho hiển thị.
             discountAmount: tien.dong[i]!.giam,
             discountPercent: tien.dong[i]!.phanTram,
-            discountReason: tien.dong[i]!.giam > 0 ? (it.discountReason?.trim() ?? null) : null,
+            discountReason:
+              tien.dong[i]!.khoan
+                .filter((k) => k.giam > 0 && k.lyDo)
+                .map((k) => k.lyDo)
+                .join(" · ") || null,
+            discounts:
+              tien.dong[i]!.khoan.length > 0
+                ? (tien.dong[i]!.khoan as unknown as Prisma.InputJsonValue)
+                : Prisma.JsonNull,
             packageId: it.packageId || null,
             examAttemptId: it.examAttemptId || null,
             productId: it.productId || null,
@@ -676,9 +681,14 @@ export async function createOrderManualAction(input: unknown) {
           hocVienId: data.items[i]?.studentId ?? null,
           tamTinh: d.tamTinh,
           giam: d.giam,
-          phanTram: d.phanTram,
           thanhTien: d.thanhTien,
-          lyDo: data.items[i]?.discountReason?.trim() || null,
+          // TỪNG KHOẢN, không chỉ tổng: tổng không nói được bớt theo chương trình nào.
+          khoan: d.khoan.map((k) => ({
+            kieu: k.kieu,
+            giaTri: k.giaTri,
+            giam: k.giam,
+            lyDo: k.lyDo,
+          })),
         })),
         // Dấu vết giá — đủ để soát lại mà không phải mở lại payload.
         giaLech: soatGia.coLech,
