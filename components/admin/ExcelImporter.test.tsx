@@ -38,6 +38,14 @@ function dung(opts: {
   coTrung?: boolean;
   gopTrung?: boolean;
   xacNhanTrung?: boolean;
+  /**
+   * Mọi dòng đều trùng với bản ghi ĐANG CÓ trong hệ thống.
+   *
+   * ⚠️ Khác hẳn trùng-trong-file: dòng ĐẦU TIÊN của một cặp trùng trong file vẫn là dòng hợp
+   * lệ, nên trùng-trong-file không bao giờ dựng được ca "Hợp lệ = 0". Đúng ca prod 15/09
+   * (file 146 dòng, 145 trùng với CRM) thì phải đi qua đường đối chiếu hệ thống.
+   */
+  trungHeThong?: boolean;
   onImport?: (rows: unknown[]) => Promise<{ success: number; errors: [] }>;
 }) {
   const onImport =
@@ -53,6 +61,12 @@ function dung(opts: {
       duplicateLabel="SĐT"
       mergeDuplicates={opts.gopTrung ? { label: "Sẽ cập nhật bản ghi cũ" } : undefined}
       confirmDuplicates={opts.xacNhanTrung ? { label: "Xác nhận gộp" } : undefined}
+      checkExisting={
+        opts.trungHeThong
+          ? async (_raws, excelNos) =>
+              new Map(excelNos.map((n) => [n, `SĐT đã có trong CRM — PH "Bản ghi cũ ${n}"`]))
+          : undefined
+      }
     />,
   );
 }
@@ -293,6 +307,132 @@ describe("[NHAP-T13] dòng trùng nói rõ hệ thống sắp làm gì", () => {
     await napFile([{ Tên: "A", "SĐT": "01" }]);
     // Cả hai hình dạng (bảng + thẻ) đều phải im — bản trước bảng bỏ mà thẻ vẫn in.
     expect(screen.queryAllByText(/Sẵn sàng nhập/)).toEqual([]);
+  });
+});
+
+describe("[NHAP-T18] ba lỗi hiển thị thấy trên PROD 15/09/2026", () => {
+  // Cả ba đều KHÔNG ném lỗi, KHÔNG làm đỏ test nào, console sạch — chỉ người mở màn ra nhìn
+  // mới biết. Đúng lớp lỗi mà luật 12 nói tới, nên chúng cần ca riêng chứ không thể trông vào
+  // các ca đếm ở trên.
+
+  /** Hai ô GHIM của một dòng dữ liệu (số dòng bên trái, nút thao tác bên phải). */
+  const oGhim = () => {
+    const tr = [...document.querySelectorAll("tbody tr")].find((r) =>
+      r.querySelector('button[aria-label^="Sửa dòng"]'),
+    )!;
+    const o = [...tr.children];
+    return [o[0]!, o[o.length - 1]!].map((e) => e.className);
+  };
+
+  it("⚠️ ô ghim KHÔNG được mang `relative` — nó đè mất `sticky`", async () => {
+    // `relative` và `sticky` cùng là thuộc tính `position`; cái nào đứng sau trong CSS sinh
+    // ra sẽ thắng. Đã cấy đúng lỗi này ngày 15/09: cột SỬA mất ghim trong khi TIÊU ĐỀ vẫn
+    // ghim, nên bảng trông như lệch hàng — và không gì kêu lên cả.
+    dung({ dong: [] });
+    await napFile([{ Tên: "A", "SĐT": "01" }]);
+    for (const cls of oGhim()) {
+      expect(cls, `ô ghim không được có \`relative\`: ${cls}`).not.toMatch(/\brelative\b/);
+      expect(cls).toMatch(/\bsticky\b/);
+    }
+  });
+
+  it("⚠️ dòng TRÙNG không tô nền cả loạt", async () => {
+    // Tô cả nhóm "Trùng" là nói lại đúng thứ cái tab đã nói, VÀ làm hỏng cột ghim: token
+    // `-soft` là rgba 12% còn ô ghim buộc phải đục ⇒ mỗi nút Sửa thành một hộp trắng nổi
+    // trên nền kem (ảnh prod 15/09, file 146 dòng / 145 trùng).
+    dung({ coTrung: true, gopTrung: true, dong: [] });
+    await napFile([
+      { Tên: "A", "SĐT": "01" },
+      { Tên: "B", "SĐT": "01" },
+    ]);
+    fireEvent.click(screen.getByRole("tab", { name: /Trùng/ }));
+    const tr = [...document.querySelectorAll("tbody tr")].find((r) =>
+      r.querySelector('button[aria-label^="Sửa dòng"]'),
+    )!;
+    expect(tr.className).not.toMatch(/bg-state-/);
+  });
+
+  it("dòng SẼ BỊ BỎ vẫn được tô, và ô ghim mang ĐÚNG màu ấy", async () => {
+    // Vế ngược của ca trên: bỏ nền hết thì dòng hỏng chìm lẫn vào dòng lành. Và ô ghim phải
+    // đắp cùng màu, nếu không nó lại thành dải trắng — đúng lỗi vừa vá.
+    dung({ dong: [] });
+    await napFile([{ Tên: "A", "SĐT": "" }]);
+    fireEvent.click(screen.getByRole("tab", { name: /Lỗi/ }));
+    const tr = [...document.querySelectorAll("tbody tr")].find((r) =>
+      r.querySelector('button[aria-label^="Sửa dòng"]'),
+    )!;
+    expect(tr.className).toMatch(/bg-state-danger-soft/);
+    for (const cls of oGhim()) {
+      expect(cls, `ô ghim phải đắp màu của dòng: ${cls}`).toMatch(
+        /before:bg-state-danger-soft/,
+      );
+    }
+  });
+
+  it("nền hàng TIÊU ĐỀ và nền ô ghim của nó phải cùng một lớp màu", async () => {
+    // Đo 15/09: hàng là `bg-muted/60`, ô ghim là `bg-muted` — hai sắc độ khác nhau tạo một
+    // vệt sáng chạy dọc qua tiêu đề. Ô ghim không được dùng màu trong suốt, nên hàng nhượng bộ.
+    dung({ dong: [] });
+    await napFile([{ Tên: "A", "SĐT": "01" }]);
+    const hTr = document.querySelector("thead tr")!;
+    const hTh = [...hTr.children];
+    expect(hTr.className).toMatch(/bg-muted(?!\/)/);
+    expect(hTr.className).not.toMatch(/bg-muted\//);
+    for (const e of [hTh[0]!, hTh[hTh.length - 1]!]) {
+      expect(e.className).toMatch(/bg-muted(?!\/)/);
+    }
+  });
+
+  it("nhóm Hợp lệ rỗng mà VẪN có dòng sẽ ghi ⇒ nói đúng điều đó", async () => {
+    // Ảnh prod: "Hợp lệ 0" + câu "Xử lý nhóm Lỗi và Trùng trước đã", trong khi 145 dòng trùng
+    // vẫn sẽ được nhập. Câu đó bảo người dùng đi xử lý thứ không cần xử lý.
+    dung({ coTrung: true, gopTrung: true, trungHeThong: true, dong: [] });
+    await napFile([
+      { Tên: "A", "SĐT": "01" },
+      { Tên: "B", "SĐT": "02" },
+    ]);
+    await screen.findByText(/sẽ được cập nhật/);
+    expect(demNhom(/Hợp lệ/)).toBe(0);
+    expect(demNhom(/Trùng/)).toBe(2);
+    expect(nutNhap()).toContain("2"); // vẫn ghi được
+    fireEvent.click(screen.getByRole("tab", { name: /Hợp lệ/ }));
+    expect(screen.getByText(/sẽ được cập nhật/)).toBeTruthy();
+    expect(screen.queryByText(/Xử lý nhóm Lỗi và Trùng trước đã/)).toBeNull();
+  });
+
+  it("không ghi được dòng nào ⇒ MỚI bảo đi xử lý nhóm khác", async () => {
+    // Vế ngược: vá quá tay thì câu đúng ở ca trên lại nuốt mất câu đúng ở ca này.
+    dung({ dong: [] });
+    await napFile([{ Tên: "A", "SĐT": "" }]);
+    fireEvent.click(screen.getByRole("tab", { name: /Hợp lệ/ }));
+    expect(screen.getByText(/Xử lý nhóm Lỗi và Trùng trước đã/)).toBeTruthy();
+  });
+
+  it("⚠️ trùng TRONG FILE nói khác trùng với HỆ THỐNG", async () => {
+    // Ảnh prod in ra "Sẽ cập nhật lead đang có — Trùng SĐT với dòng 4 trong file": đúng một
+    // nửa, mà nửa sai lại là nửa đáng sợ hơn (nó hứa ghi đè một bản ghi thật).
+    dung({ coTrung: true, gopTrung: true, dong: [] });
+    await napFile([
+      { Tên: "A", "SĐT": "01" },
+      { Tên: "B", "SĐT": "01" },
+    ]);
+    fireEvent.click(screen.getByRole("tab", { name: /Trùng/ }));
+    expect(screen.getAllByText(/hai dòng sẽ gộp làm một/).length).toBeGreaterThan(0);
+    expect(screen.queryAllByText(/Sẽ cập nhật bản ghi cũ — Trùng/)).toEqual([]);
+  });
+
+  it("không chỉ người dùng tới một CỘT không còn tồn tại", async () => {
+    // Bảng không còn cột "Tình trạng" từ khi lý do chuyển xuống dòng riêng. Câu hướng dẫn vẫn
+    // bảo "Đọc kỹ cột Tình trạng" — chỉ dẫn trỏ vào thứ không có trên màn hình.
+    dung({ coTrung: true, gopTrung: true, dong: [] });
+    await napFile([
+      { Tên: "A", "SĐT": "01" },
+      { Tên: "B", "SĐT": "01" },
+    ]);
+    fireEvent.click(screen.getByRole("tab", { name: /Trùng/ }));
+    expect(screen.queryByText(/cột Tình trạng/)).toBeNull();
+    // Và tiêu đề cột đó cũng không được quay lại.
+    expect(screen.queryAllByRole("columnheader", { name: /Tình trạng/ })).toEqual([]);
   });
 });
 
