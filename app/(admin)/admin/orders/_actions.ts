@@ -35,6 +35,7 @@ import {
 import { ensureParentAccountForOrder } from "@/lib/parents/provision";
 import { ensureOrderPaymentRecorded } from "@/lib/finance/payment";
 import { ensureFullOrderRequest } from "@/lib/payments/payment-request";
+import { dotsGhiTuForm } from "@/lib/payments/ke-hoach-dot";
 import { getRequestMetadata } from "@/lib/audit/headers";
 import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
@@ -728,6 +729,46 @@ export async function createOrderManualAction(input: unknown) {
     }),
   );
 
+  // ── KẾ HOẠCH THANH TOÁN LẬP NGAY LÚC TẠO ĐƠN [15/09/2026] ───────────────────
+  //
+  // Chủ dự án: *"đưa phần kế hoạch thanh toán ra trang tạo đơn hàng luôn đi"*. Từ đây
+  // người bán chia đợt NGAY trên form tạo đơn, và mở trang chi tiết là đã có sẵn phiếu
+  // thu + QR cho từng đợt.
+  //
+  // ⚠️ NGOÀI transaction tạo đơn, CÓ CHỦ ĐÍCH. `recordInstallmentPlan` mở `db.$transaction`
+  // của riêng nó (`lib/orders/installments.ts`) và đọc lại đơn qua `db` — lồng nó vào tx ở
+  // trên là đọc một bản ghi CHƯA COMMIT bằng một kết nối khác, tức luôn "Không tìm thấy
+  // đơn". Nhét nó vào trong sẽ đòi mổ cả hàm đó, mà hàm đó là đường ghi tiền của 3 chỗ gọi
+  // khác; đợt này không mở việc ấy ra.
+  //
+  // ⚠️ THẤT BẠI Ở ĐÂY KHÔNG ĐƯỢC LÀM HỎNG CÂU TRẢ LỜI "đã tạo đơn". Đơn ĐÃ nằm trong DB;
+  // trả `ok: false` là để người bán tin là chưa tạo được rồi bấm lại — và có hai đơn thật
+  // cho một khách. Trả kèm CẢNH BÁO để form nói đúng: đơn xong, kế hoạch thì mở trang chi
+  // tiết mà đặt lại (khối kế hoạch ở đó vẫn làm được đúng việc ấy).
+  //
+  // `try/catch` vì `materializeInstallmentRequests` NÉM (`InstallmentMoneyBlocked`) chứ
+  // không trả lỗi. Đơn vừa sinh ra thì không thể có phân bổ nào nên cổng A6 không thể nổ ở
+  // đây — nhưng một ngoại lệ lọt ra là mất luôn mã đơn vừa tạo khỏi câu trả lời, nên bọc.
+  let canhBaoKeHoach: string | null = null;
+  const keHoach = data.keHoachDot ?? [];
+  if (keHoach.length > 0) {
+    try {
+      const resKh = await recordInstallmentPlan({
+        orderId: created.id,
+        // Quy đổi ở BIÊN bằng hàm dùng chung với `recordOrderInstallmentsAction` — hai
+        // bản quy đổi ngày/cờ đã-thu là hai cách ghi lệch sổ.
+        dots: dotsGhiTuForm(keHoach),
+        actorId: session.user.id ?? null,
+      });
+      if (!resKh.ok) canhBaoKeHoach = resKh.error ?? "Không lưu được kế hoạch thanh toán";
+    } catch (err) {
+      console.error("[orders] luu ke hoach luc tao don that bai:", err);
+      canhBaoKeHoach =
+        err instanceof Error ? err.message : "Không lưu được kế hoạch thanh toán";
+    }
+    revalidatePath(`/orders/${created.id}`);
+  }
+
   revalidatePath("/orders");
   if (productSnapshot) {
     revalidatePath("/products");
@@ -758,7 +799,13 @@ export async function createOrderManualAction(input: unknown) {
   // P5 — khách không có email thì email trigger ở trên tự bỏ qua; ZNS lo phần đó.
   void notifyOrderByZnsIfNoEmail(created.id);
 
-  return { ok: true as const, id: created.id, code: created.code };
+  return {
+    ok: true as const,
+    id: created.id,
+    code: created.code,
+    // Đơn ĐÃ tạo nhưng kế hoạch thì chưa — form phải nói ra, không được im.
+    canhBaoKeHoach,
+  };
 }
 
 function renderItemsListHtml(
@@ -1325,20 +1372,11 @@ export async function recordOrderInstallmentsAction(input: {
   }
 
   // Ngày từ client là chuỗi — quy về Date ở BIÊN, để phần trong chỉ có một kiểu.
-  // Ngày hỏng (`Invalid Date`) quy về null rồi để `kiemKeHoachDot` từ chối với câu nói
-  // được: cho `Invalid Date` đi tiếp là ghi `dueDate` rác vào DB và cron im lặng bỏ qua.
+  // Phép quy đổi ở `dotsGhiTuForm` (thuần, có test): từ 15/09/2026 có HAI đường ghi kế
+  // hoạch (đây + `createOrderManualAction`) nên nó không được viết tại chỗ nữa.
   const res = await recordInstallmentPlan({
     orderId: input.orderId,
-    dots: input.dots.map((d) => {
-      const ngay = d.dueDate ? new Date(d.dueDate) : null;
-      return {
-        amount: Math.round(d.amount),
-        daThu: d.daThu === true,
-        dueDate: ngay && !Number.isNaN(ngay.getTime()) ? ngay : null,
-        reminderDays:
-          d.reminderDays == null ? null : Math.max(0, Math.round(d.reminderDays)),
-      };
-    }),
+    dots: dotsGhiTuForm(input.dots),
     actorId: session.user.id ?? null,
   });
   if (res.ok) {

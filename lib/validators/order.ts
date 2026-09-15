@@ -2,6 +2,7 @@ import { z } from "zod";
 import { OrderType, OrderStatus, OrderItemType } from "@prisma/client";
 import { phoneVn } from "@/lib/validators/phone";
 import { TRAN_KHOAN_GIAM_MOI_DONG } from "@/lib/orders/giam-gia-dong";
+import { TRAN_SO_DOT } from "@/lib/payments/ke-hoach-dot";
 
 // AUTH-SĐT P1 — regex riêng đã gỡ; nguồn duy nhất ở `lib/phone.ts`.
 export { PHONE_VN_RE as PHONE_VN } from "@/lib/phone";
@@ -166,6 +167,40 @@ export const orderCreateManualSchema = z.object({
   discountPercent: z.number().int().min(1).max(100).optional().nullable(),
   discountReason: z.string().max(1000).optional().nullable(),
   shippingFee: z.number().int().min(0).default(0),
+
+  /**
+   * KẾ HOẠCH THANH TOÁN LẬP NGAY LÚC TẠO ĐƠN [15/09/2026].
+   *
+   * Chủ dự án: *"đưa phần kế hoạch thanh toán ra trang tạo đơn hàng luôn đi, đặt ở dưới
+   * session khoá học và lấy số tiền cần thanh toán ở phần khoá học sau khi hoàn thành các
+   * tuỳ chọn của đơn hàng khoá học luôn"*.
+   *
+   * Rỗng/thiếu ⇒ đơn ra đời KHÔNG có kế hoạch, đúng hành vi cũ: một phiếu "thu toàn đơn"
+   * (`ensureFullOrderRequest`) và người bán lập kế hoạch sau ở trang chi tiết. Các đường
+   * tạo đơn khác (convert-lead, backfill) không gửi khoá này nên không đổi gì.
+   *
+   * ⚠️ CỐ Ý KHÔNG kiểm Σ ở đây. Tổng phải khớp `Order.totalAmount` — con số mà SERVER tính
+   * từ các dòng (`tienDon`), không phải con số nào trong payload này. Kiểm ở đây là so hai
+   * vế đều do client khai: gửi kế hoạch Σ = 1đ cho một đơn 10.000.000đ vẫn "hợp lệ". Cổng
+   * thật là `kiemKeHoachDot` bên trong `recordInstallmentPlan`, nơi vế phải đọc từ DB.
+   */
+  keHoachDot: z
+    .array(
+      z.object({
+        amount: z.number().int().min(0),
+        daThu: z.boolean(),
+        /** `yyyy-mm-dd` của `<input type="date">`; đợt đã thu gửi null. */
+        dueDate: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/, "Ngày hẹn đóng phải dạng yyyy-mm-dd")
+          .optional()
+          .nullable(),
+        reminderDays: z.number().int().min(0).max(365).optional().nullable(),
+      }),
+    )
+    .max(TRAN_SO_DOT, `Kế hoạch tối đa ${TRAN_SO_DOT} đợt`)
+    .optional()
+    .nullable(),
 
   // Notes
   customerNote: z.string().max(2000).optional().nullable(),

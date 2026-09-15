@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Plus, Trash2, User } from "lucide-react";
+import { CalendarClock, Loader2, Plus, Trash2, User } from "lucide-react";
 import { toast } from "sonner";
 import {
   HE_SO_COACH,
@@ -40,6 +40,10 @@ import {
   type KieuGiam,
 } from "@/lib/orders/giam-gia-dong";
 import { HelpHint } from "@/components/admin/ui/help-hint";
+// KHỐI NHẬP KẾ HOẠCH — CÙNG component với trang chi tiết đơn (15/09/2026). Lý do không
+// chép sang: chia đợt là phép chia TIỀN; xem chú thích đầu `ke-hoach-dot-editor.tsx`.
+import { KeHoachDotEditor, useKeHoachDot } from "./ke-hoach-dot-editor";
+import { dotsChoDonMoi, khoaKeHoachDonMoi } from "@/lib/payments/ke-hoach-don-moi";
 import {
   methodAllowsOrderType,
   methodServesCenter,
@@ -159,6 +163,16 @@ const dongMoi = (): DongHang => ({
 type UiOrderType = Extract<OrderType, "COURSE" | "PRODUCT">;
 
 const NO_CENTER = "NONE";
+
+/**
+ * Đơn CHƯA TỒN TẠI ⇒ không đợt nào có thể đã nhận tiền.
+ *
+ * Khối nhập dùng chung khoá ô số tiền theo `PaymentAllocation` (cổng A6). Ở đây Map rỗng
+ * là một khẳng định, không phải một chỗ trống chưa điền: không có `Order` thì không có
+ * `PaymentRequest`, nên không có gì để khoá. Đặt ở mức module để mỗi lượt render không
+ * sinh một Map mới.
+ */
+const KHONG_CO_TIEN_DA_ROT: Map<number, number> = new Map();
 
 export function OrderCreateForm({
   paymentMethods,
@@ -376,6 +390,32 @@ export function OrderCreateForm({
   const subtotal = tien.tamTinh;
   const totalAmount = tien.tongDon;
 
+  // ── KẾ HOẠCH THANH TOÁN NGAY TRÊN FORM TẠO ĐƠN [15/09/2026] ─────────────────
+  //
+  // Chủ dự án: *"lấy số tiền cần thanh toán ở phần khoá học sau khi hoàn thành các tuỳ
+  // chọn của đơn hàng khoá học luôn"* và *"khi sale chưa chọn khoá học thì khối kế hoạch
+  // hiện nhưng khoá"* — số tiền là `totalAmount`, tức TỔNG ĐƠN SAU GIẢM GIÁ, đúng con số
+  // thẻ "Tóm tắt" bên phải đang in và đúng con số server sẽ lưu vào `Order.totalAmount`.
+  //
+  // `theoTong: true` ⇒ đổi khoá học / số lượng / một khoản giảm giá là kế hoạch tự chia
+  // lại. Không có nó thì Σ các đợt giữ số cũ, lệch tổng, và nút "Tạo đơn" bị chặn vì một
+  // lỗi người bán không gây ra.
+  const khoaKeHoach = khoaKeHoachDonMoi(totalAmount);
+  const keHoach = useKeHoachDot({
+    totalAmount,
+    dots0: () =>
+      // Mốc "hôm nay" đọc ở ĐÂY — `dotsChoDonMoi` cố ý không tự đọc đồng hồ (luật 19).
+      dotsChoDonMoi(totalAmount, new Date()).map((d) => ({
+        amount: d.amount,
+        daThu: d.daThu,
+        dueDate: d.dueDate.toISOString().slice(0, 10),
+        reminderDays: d.reminderDays,
+        laCoc: false,
+      })),
+    daRotTheoDot: KHONG_CO_TIEN_DA_ROT,
+    theoTong: true,
+  });
+
   // Debounce 350ms: gõ 10 chữ số mà không chờ là 10 lượt gọi server cho một lần nhập.
   // Huỷ theo cờ `boQua` chứ không huỷ request: lượt trả về muộn của một chuỗi CŨ hơn
   // sẽ ghi đè kết quả của chuỗi mới nếu không chặn (đua bàn phím).
@@ -472,6 +512,21 @@ export function OrderCreateForm({
       toast.error("Vui lòng chọn phương thức thanh toán");
       return;
     }
+    // KẾ HOẠCH phải khớp tổng đơn TRƯỚC khi gửi. Cổng thật ở server (`kiemKeHoachDot` so
+    // với `Order.totalAmount` vừa tính), nhưng để nó báo thì đơn đã được TẠO RỒI và người
+    // bán nhận một cảnh báo "đơn xong, kế hoạch chưa" — đúng thứ nói ở đây là tránh được.
+    if (khoaKeHoach == null) {
+      if (keHoach.lech !== 0) {
+        toast.error(
+          `Kế hoạch thanh toán đang lệch ${Math.abs(keHoach.lech).toLocaleString("vi-VN")}đ so với tổng đơn — sửa số tiền các đợt`,
+        );
+        return;
+      }
+      if (keHoach.thieuHan >= 0) {
+        toast.error(`Kế hoạch: đợt ${keHoach.thieuHan + 1} chưa thu — chọn ngày hẹn đóng`);
+        return;
+      }
+    }
 
     const itemTypeMap: Record<UiOrderType, OrderItemType> = {
       COURSE: "COURSE_ENROLLMENT",
@@ -534,12 +589,34 @@ export function OrderCreateForm({
       // tiếng nếu ba trường này > 0, thay vì lặng lẽ bỏ qua và tạo đơn giá nguyên.
       customerNote: customerNote || null,
       internalNote: internalNote || null,
+      // KẾ HOẠCH THANH TOÁN gửi KÈM lúc tạo đơn. Khối đang khoá (chưa chọn khoá học) ⇒
+      // null, tức đơn ra đời như trước: một phiếu "thu toàn đơn", kế hoạch lập sau ở trang
+      // chi tiết. Server KHÔNG tin Σ này — nó kiểm lại với tổng đơn nó tự tính.
+      keHoachDot:
+        khoaKeHoach != null
+          ? null
+          : keHoach.dots.map((d) => ({
+              amount: d.amount,
+              daThu: d.daThu,
+              // Đợt đã thu không cần hạn — `dotsGhiTuForm` ở server cũng ép về null, đây
+              // chỉ là đừng gửi rác lên.
+              dueDate: d.daThu ? null : d.dueDate || null,
+              reminderDays: d.daThu ? null : d.reminderDays,
+            })),
     };
 
     startTransition(async () => {
       const result = await createOrderManualAction(input);
       if (result.ok) {
         toast.success(`Đã tạo đơn ${result.code}`);
+        // Đơn XONG mà kế hoạch thì chưa — nói ra, đừng để người bán tưởng đã xong cả hai.
+        // Vẫn chuyển sang trang chi tiết: đó đúng là nơi đặt lại được kế hoạch.
+        if (result.canhBaoKeHoach) {
+          toast.error(
+            `Đơn đã tạo, nhưng CHƯA lưu được kế hoạch thanh toán: ${result.canhBaoKeHoach}. Đặt lại ở khối "Kế hoạch thanh toán" trong trang đơn.`,
+            { duration: 12_000 },
+          );
+        }
         router.push(`/orders/${result.id}`);
         router.refresh();
       } else {
@@ -890,6 +967,43 @@ export function OrderCreateForm({
                 Thêm dòng nữa
               </Button>
             )}
+          </section>
+
+          {/* ── KẾ HOẠCH THANH TOÁN ──────────────────────────────────────────────
+              Chủ dự án 15/09: *"đặt ở dưới session khoá học và lấy số tiền cần thanh toán
+              ở phần khoá học sau khi hoàn thành các tuỳ chọn"*. Đứng NGAY dưới các dòng
+              hàng vì số tiền của nó đến từ đó — và người bán vừa chốt giá xong thì câu kế
+              tiếp với phụ huynh đúng là "đóng một lần hay chia đợt".
+
+              Chưa chọn khoá học ⇒ HIỆN NHƯNG KHOÁ (chốt của chủ dự án), không ẩn: ẩn thì
+              người mới không biết là có thể chia đợt ngay ở đây. */}
+          <section className="space-y-3 rounded-xl border border-border bg-card p-4 sm:p-5">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+              <h2 className="flex min-w-0 items-center gap-2 text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                <CalendarClock className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+                Kế hoạch thanh toán
+                <HelpHint>
+                  Đóng một lần hoặc chia theo học phần (48 buổi = 4 học phần × 12 buổi).
+                  Công văn SR.QD.223 nêu mốc các đợt cách 30 ngày; SR.QD.219 Điều 2 cho
+                  phép chia đều tối đa 12 kỳ theo tháng. Lưu cùng lúc với đơn — mở trang
+                  đơn là đã có phiếu thu và mã QR cho từng đợt.
+                </HelpHint>
+              </h2>
+              {/* NÓI RÕ NGUỒN SỐ TIỀN. Câu hỏi đầu tiên của người bán khi thấy một con số
+                  tiền thứ hai trên cùng trang là "con này lấy ở đâu" — và nếu không trả
+                  lời thì họ tự đoán, thường là đoán thành "tạm tính". */}
+              <span className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">
+                Tổng đơn sau giảm giá:{" "}
+                <b className="font-semibold text-foreground">
+                  {totalAmount.toLocaleString("vi-VN")}đ
+                </b>
+              </span>
+            </div>
+            <KeHoachDotEditor
+              kh={keHoach}
+              totalAmount={totalAmount}
+              khoa={khoaKeHoach}
+            />
           </section>
 
 

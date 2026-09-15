@@ -234,3 +234,53 @@ export function chenCoc(soTienCacDot: number[], coc: number): DotCoCoc[] {
 
   return [{ amount: cocThuc, laCoc: true }, ...sau];
 }
+
+/** Một đợt như FORM gửi lên: ngày là chuỗi `yyyy-mm-dd` của `<input type="date">`. */
+export type DotTuForm = {
+  amount: number;
+  daThu: boolean;
+  /** Tuỳ chọn vì Zod cho `.optional().nullable()` — "thiếu" và "null" cùng nghĩa ở đây. */
+  dueDate?: string | null;
+  reminderDays?: number | null;
+};
+
+/** Một đợt đã sẵn sàng GHI (khớp `DotGhi` của `lib/orders/installments.ts`). */
+export type DotDeGhi = {
+  amount: number;
+  daThu: boolean;
+  dueDate: Date | null;
+  reminderDays: number | null;
+};
+
+/**
+ * Quy đợt từ FORM về đợt để GHI — BIÊN giữa chuỗi của trình duyệt và Date của DB.
+ *
+ * Nay có HAI đường ghi kế hoạch: `recordOrderInstallmentsAction` (đơn đã có) và
+ * `createOrderManualAction` (kế hoạch lập ngay lúc tạo đơn, 15/09/2026). Phép quy đổi này
+ * phải là MỘT — nó quyết định ba thứ mà lệch một cái là lệch tiền hoặc lệch nhắc nợ:
+ *
+ *  · `Invalid Date` → `null`, KHÔNG đi tiếp. Cho nó qua là ghi `dueDate` rác vào DB và cron
+ *    nhắc nợ im lặng bỏ qua đợt đó — khoản nợ biến khỏi mọi màn theo dõi mà không lỗi nào
+ *    báo. Để null thì `kiemKeHoachDot` từ chối với một câu nói được.
+ *
+ *  · `daThu === true` (so TUYỆT ĐỐI, không `truthy`): đây là cái cờ quyết định có ghi một
+ *    dòng Ledger-A hay không. Chuỗi `"false"` là truthy.
+ *
+ *  · Đợt ĐÃ THU thì hạn và số ngày nhắc về `null`. Trước bản này chỉ CLIENT làm việc đó
+ *    (`d.daThu ? null : …` trong `order-payment-section.tsx`), còn action thì không — nên
+ *    một lời gọi tự chế vẫn gửi được đợt "đã thu" kèm hạn đóng, tức một hàng đợi nhắc nợ
+ *    trên số tiền đã nằm trong két.
+ */
+export function dotsGhiTuForm(dots: readonly DotTuForm[]): DotDeGhi[] {
+  return dots.map((d) => {
+    const daThu = d.daThu === true;
+    const ngay = !daThu && d.dueDate ? new Date(d.dueDate) : null;
+    return {
+      amount: Number.isFinite(d.amount) ? Math.round(d.amount) : 0,
+      daThu,
+      dueDate: ngay && !Number.isNaN(ngay.getTime()) ? ngay : null,
+      reminderDays:
+        daThu || d.reminderDays == null ? null : Math.max(0, Math.round(d.reminderDays)),
+    };
+  });
+}

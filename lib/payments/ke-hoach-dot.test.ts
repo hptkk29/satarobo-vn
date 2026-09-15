@@ -29,6 +29,7 @@ import {
   phanBoGhiTheoDot,
   TRAN_SO_DOT,
   chiaDotGiuDotDaKhoa,
+  dotsGhiTuForm,
 } from "./ke-hoach-dot";
 
 describe("[KH-01] chia tiền theo số đợt — tổng LUÔN bằng tổng đơn", () => {
@@ -320,5 +321,99 @@ describe("[KHOA] chiaDotGiuDotDaKhoa — giữ đợt đã thu, chia phần còn
     expect(chiaDotGiuDotDaKhoa(Number.NaN, [1_000], 2)).toEqual([1_000, 0, 0]);
     expect(chiaDotGiuDotDaKhoa(1_000, [Number.NaN], 1)).toEqual([0, 1_000]);
     expect(chiaDotGiuDotDaKhoa(1_000, [-5], 1)).toEqual([0, 1_000]);
+  });
+});
+
+// ═══ BIÊN FORM → BẢN GHI ═══════════════════════════════════════════════════════
+//
+// Từ 15/09/2026 có HAI đường ghi kế hoạch: `recordOrderInstallmentsAction` (đơn đã có) và
+// `createOrderManualAction` (kế hoạch lập ngay lúc tạo đơn). Phép quy đổi ngày + cờ đã-thu
+// vì thế phải là MỘT — hai bản là hai cách ghi lệch sổ, và cả hai đều im lặng.
+describe("[GTF-01] Invalid Date → null, KHÔNG đi tiếp vào DB", () => {
+  it("chuỗi ngày rác quy về null để `kiemKeHoachDot` từ chối cho ra tiếng", () => {
+    for (const xau of ["hôm nay", "20/01/2026", "2026-13-45", "  "]) {
+      expect(dotsGhiTuForm([{ amount: 100, daThu: false, dueDate: xau }])[0]!.dueDate).toBeNull();
+    }
+  });
+
+  it("ngày đúng khuôn giữ nguyên (yyyy-mm-dd đọc là nửa đêm UTC)", () => {
+    const ra = dotsGhiTuForm([{ amount: 100, daThu: false, dueDate: "2026-01-20" }]);
+    expect(ra[0]!.dueDate?.toISOString()).toBe("2026-01-20T00:00:00.000Z");
+  });
+
+  it("null / thiếu hẳn → null", () => {
+    expect(dotsGhiTuForm([{ amount: 100, daThu: false, dueDate: null }])[0]!.dueDate).toBeNull();
+    expect(dotsGhiTuForm([{ amount: 100, daThu: false }])[0]!.dueDate).toBeNull();
+  });
+});
+
+describe("[GTF-02] `daThu` so TUYỆT ĐỐI — cờ này quyết định có ghi Ledger-A hay không", () => {
+  it("chỉ `true` mới là đã thu", () => {
+    expect(dotsGhiTuForm([{ amount: 1, daThu: true, dueDate: null }])[0]!.daThu).toBe(true);
+    expect(dotsGhiTuForm([{ amount: 1, daThu: false, dueDate: null }])[0]!.daThu).toBe(false);
+  });
+
+  it("giá trị truthy KHÁC true KHÔNG thành 'đã thu'", () => {
+    for (const xau of ["true", 1, {}, []] as unknown[]) {
+      const ra = dotsGhiTuForm([
+        { amount: 1, daThu: xau as boolean, dueDate: "2026-01-20" },
+      ]);
+      expect(ra[0]!.daThu, `daThu=${JSON.stringify(xau)}`).toBe(false);
+    }
+  });
+});
+
+describe("[GTF-03] đợt ĐÃ THU thì KHÔNG mang hạn và KHÔNG mang số ngày nhắc", () => {
+  it("hạn bị bỏ dù client có gửi — nhắc nợ trên tiền đã nằm trong két là nhắc bậy", () => {
+    const ra = dotsGhiTuForm([
+      { amount: 5_000_000, daThu: true, dueDate: "2026-02-19", reminderDays: 7 },
+    ]);
+    expect(ra[0]!.dueDate).toBeNull();
+    expect(ra[0]!.reminderDays).toBeNull();
+  });
+
+  it("đợt CHƯA thu thì giữ cả hai", () => {
+    const ra = dotsGhiTuForm([
+      { amount: 5_000_000, daThu: false, dueDate: "2026-02-19", reminderDays: 7 },
+    ]);
+    expect(ra[0]!.dueDate?.toISOString().slice(0, 10)).toBe("2026-02-19");
+    expect(ra[0]!.reminderDays).toBe(7);
+  });
+});
+
+describe("[GTF-04] số tiền và số ngày nhắc được làm sạch", () => {
+  it("làm tròn số tiền, kẹp số ngày nhắc về ≥ 0", () => {
+    const ra = dotsGhiTuForm([
+      { amount: 1_000_000.6, daThu: false, dueDate: "2026-01-20", reminderDays: -5 },
+    ]);
+    expect(ra[0]!.amount).toBe(1_000_001);
+    expect(ra[0]!.reminderDays).toBe(0);
+  });
+
+  it("số tiền không hữu hạn → 0, để cổng Σ từ chối chứ không ghi NaN vào cột tiền", () => {
+    expect(
+      dotsGhiTuForm([{ amount: Number.NaN, daThu: false, dueDate: "2026-01-20" }])[0]!.amount,
+    ).toBe(0);
+  });
+
+  it("reminderDays thiếu → null (cron rơi về tham số vận hành)", () => {
+    expect(
+      dotsGhiTuForm([{ amount: 1, daThu: false, dueDate: "2026-01-20" }])[0]!.reminderDays,
+    ).toBeNull();
+  });
+});
+
+describe("[GTF-05] giữ nguyên THỨ TỰ — soDot đánh theo thứ tự này", () => {
+  it("3 đợt ra đúng 3 bản ghi, đúng thứ tự", () => {
+    const ra = dotsGhiTuForm([
+      { amount: 3, daThu: false, dueDate: "2026-03-21" },
+      { amount: 1, daThu: true, dueDate: null },
+      { amount: 2, daThu: false, dueDate: "2026-02-19" },
+    ]);
+    expect(ra.map((d) => d.amount)).toEqual([3, 1, 2]);
+  });
+
+  it("mảng rỗng → mảng rỗng", () => {
+    expect(dotsGhiTuForm([])).toEqual([]);
   });
 });

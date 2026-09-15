@@ -8,17 +8,18 @@ import { QrZoom } from "./qr-zoom";
 import type { PaymentRequestRow } from "./payment-requests-section";
 import { recordOrderInstallmentsAction, markOrderInstallmentPaidAction } from "../_actions";
 import { formatDateVN } from "@/lib/format/date";
-import { MoneyInput } from "@/components/ui/money-input";
 import { HelpHint } from "@/components/admin/ui/help-hint";
+// KHỐI NHẬP KẾ HOẠCH dùng chung với TRANG TẠO ĐƠN [15/09/2026]. Luật chia đợt (chia đều ·
+// chèn cọc · giữ đợt đã khoá · kiểm Σ) nằm hết trong `useKeHoachDot` — tệp này chỉ còn
+// phần RIÊNG của trang chi tiết: bảng đọc, nút đánh dấu đã đóng, và đường GHI.
 import {
-  chenCoc,
-  chiaDotHocPhi,
-  hanChoDot,
-  TRAN_SO_DOT,
-  chiaDotGiuDotDaKhoa,
-} from "@/lib/payments/ke-hoach-dot";
+  KeHoachDotEditor,
+  useKeHoachDot,
+  type DotForm,
+} from "./ke-hoach-dot-editor";
 // Mặc định ô "đã thu" SUY TỪ TIỀN THẬT — thuần, dùng chung luật với cổng ở đường ghi.
 import { dotsBanDauTuTien } from "@/lib/payments/khai-da-thu";
+import { NGAY_NHAC_MAC_DINH } from "@/lib/payments/ke-hoach-don-moi";
 
 type Installment = {
   id: string;
@@ -34,16 +35,6 @@ type Installment = {
 function vnd(n: number) {
   return n.toLocaleString("vi-VN") + "đ";
 }
-
-/** Một dòng đợt trên form. `dueDate` là chuỗi `yyyy-mm-dd` vì `<input type="date">`. */
-type DotForm = {
-  amount: number;
-  daThu: boolean;
-  dueDate: string;
-  reminderDays: number;
-  /** Phiếu CỌC — đóng trước, và là phần ĐẦU của học phí chứ không phải khoản thu thêm. */
-  laCoc: boolean;
-};
 
 /**
  * Dựng trạng thái ban đầu của form từ kế hoạch ĐÃ LƯU.
@@ -71,7 +62,7 @@ function dotsBanDau(
       amount: d.amount,
       daThu: d.daThu,
       dueDate: "",
-      reminderDays: 14,
+      reminderDays: NGAY_NHAC_MAC_DINH,
       laCoc: false,
     }));
   }
@@ -81,7 +72,7 @@ function dotsBanDau(
       amount: i.amount,
       daThu: i.status === "PAID",
       dueDate: i.dueDate?.slice(0, 10) ?? "",
-      reminderDays: i.reminderDays ?? 14,
+      reminderDays: i.reminderDays ?? NGAY_NHAC_MAC_DINH,
       // Kế hoạch đã lưu: đợt 1 mang số tiền nhỏ hơn phần chia đều là dấu hiệu có cọc,
       // nhưng ĐOÁN ở đây là sai. Giữ false; người dùng tích lại nếu muốn đổi.
       laCoc: false,
@@ -136,24 +127,6 @@ export function OrderInstallmentPlan({
   const router = useRouter();
   const [pending, start] = useTransition();
 
-  // ── TRẠNG THÁI: MỘT MẢNG ĐỢT, không phải dot1/dot2 ────────────────────────────
-  // Trần "2 đợt" cũ nằm ở đây chứ không ở DB: hai biến `dot1`/`dot2`, đợt 2 tự tính,
-  // một ô ngày. Nay là mảng — thêm đợt là thêm phần tử.
-  const [dots, setDots] = useState<DotForm[]>(() =>
-    dotsBanDau(installments, totalAmount, daThuTheoSo),
-  );
-  /** Có thu cọc trước không + số tiền cọc. Cọc là phần ĐẦU của học phí, không cộng thêm. */
-  const [coCoc, setCoCoc] = useState(false);
-  const [tienCoc, setTienCoc] = useState(0);
-
-  // Số ĐỢT HỌC PHÍ — KHÔNG đếm phiếu cọc. Chip "2 học phần" phải sáng khi khách chia
-  // 2 đợt, dù bảng đang có 3 dòng vì có thêm phiếu cọc đứng đầu.
-  const soDotHocPhi = dots.filter((d) => !d.laCoc).length;
-  const tongCacDot = dots.reduce((s, d) => s + d.amount, 0);
-  const lech = tongCacDot - totalAmount;
-  const thieuHan = dots.findIndex((d) => !d.daThu && !d.dueDate);
-
-  /** Chọn số đợt → chia đều + sinh hạn cách 30 ngày. Người dùng sửa lại từng dòng được. */
   /**
    * Đợt nào đã có TIỀN THẬT rót vào ⇒ số tiền của nó BẤT BIẾN (A6).
    *
@@ -167,13 +140,22 @@ export function OrderInstallmentPlan({
     return m;
   }, [paymentRequests]);
 
-  /** Số thứ tự đợt của hàng thứ `i` trên form (hàng cọc không phải một đợt học phí). */
-  const soDotCuaHang = (i: number) => i + (dots[0]?.laCoc ? 0 : 1);
-  const tienDaRot = (i: number) => daRotTheoDot.get(soDotCuaHang(i)) ?? 0;
-  const hangBiKhoa = (i: number) => tienDaRot(i) > 0;
-  /** Số hàng ĐẦU liên tiếp đang bị khoá — phần `chonSoDot` không được chia lại. */
-  const soHangKhoa = dots.findIndex((_, i) => !hangBiKhoa(i));
-  const demHangKhoa = soHangKhoa < 0 ? dots.length : soHangKhoa;
+  // ── TRẠNG THÁI: MỘT MẢNG ĐỢT, không phải dot1/dot2 ────────────────────────────
+  // Trần "2 đợt" cũ nằm ở đây chứ không ở DB: hai biến `dot1`/`dot2`, đợt 2 tự tính,
+  // một ô ngày. Nay là mảng — thêm đợt là thêm phần tử.
+  //
+  // ⚠️ TRẠNG THÁI + LUẬT CHIA ĐỢT nay ở `useKeHoachDot`, DÙNG CHUNG với trang tạo đơn
+  // (15/09/2026). Đừng dựng lại ở đây: chia đợt là phép chia TIỀN, và hai bản cài đặt sẽ
+  // lệch nhau ở lần sửa thứ nhất mà KHÔNG test nào đỏ — cả `lech` lẫn `thieuHan` chỉ
+  // CHẶN LƯU, nên bản lệch chỉ hiện ra thành "không lưu được đơn, không rõ vì sao".
+  const kh = useKeHoachDot({
+    totalAmount,
+    dots0: () => dotsBanDau(installments, totalAmount, daThuTheoSo),
+    daRotTheoDot,
+    // `theoTong` để MẶC ĐỊNH (false) — `Order.totalAmount` của đơn ĐÃ TẠO là bất động, và
+    // một effect "tổng đổi thì chia lại" chạy ở đây sẽ ghi đè kế hoạch kế toán vừa đặt.
+  });
+  const { dots, soDotHocPhi, lech, thieuHan } = kh;
 
   /**
    * THU GỌN khối sửa kế hoạch khi kế hoạch ĐÃ CÓ (15/09/2026).
@@ -185,46 +167,6 @@ export function OrderInstallmentPlan({
    * Chưa có kế hoạch ⇒ MỞ SẴN: lúc đó lập kế hoạch đúng là việc cần làm.
    */
   const [moSua, setMoSua] = useState(installments.length === 0);
-
-  function chonSoDot(n: number, cocMoi?: number) {
-    const coc = cocMoi ?? (coCoc ? tienCoc : 0);
-    // Chia học phí thành n đợt TRƯỚC, rồi chèn cọc và trừ dần từ đợt 1 —
-    // `chenCoc` giữ bất biến Σ = tổng đơn (xem lib/payments/ke-hoach-dot.ts).
-    // ĐÃ CÓ ĐỢT THU TIỀN ⇒ giữ nguyên chúng, chỉ chia PHẦN CÒN THIẾU cho các đợt sau
-    // (chủ dự án 15/09). Chia đều trên toàn bộ tổng rồi mới sửa mấy ô đầu về là một
-    // khoảnh khắc Σ ≠ tổng đơn — vô hình trên màn, nhưng `kiemKeHoachDot` sẽ từ chối và
-    // không ai hiểu vì sao. Luật ở `chiaDotGiuDotDaKhoa`.
-    const tien =
-      demHangKhoa > 0
-        ? chiaDotGiuDotDaKhoa(
-            totalAmount,
-            dots.slice(0, demHangKhoa).map((d) => d.amount),
-            Math.max(1, n - demHangKhoa),
-          )
-        : chenCoc(chiaDotHocPhi(totalAmount, n), coc).map((d) => d.amount);
-    const coCocThat = coc > 0;
-    // Mốc hạn = HÔM NAY. `hanChoDot` cố ý không tự đọc đồng hồ (luật 19) nên mốc truyền
-    // từ đây — chỗ duy nhất thật sự có quyền biết "hôm nay".
-    // +1 mốc hạn khi có cọc: phiếu cọc đứng đầu và đến hạn NGAY (khách quét trả trước).
-    const han = hanChoDot(new Date(), tien.length);
-    setDots(
-      tien.map((amount, i) => ({
-        amount,
-        laCoc: coCocThat && i === 0,
-        // Giữ nguyên "đã thu" của các đợt cũ còn trong tầm — đổi số đợt không được âm
-        // thầm biến tiền đã thu thành chưa thu.
-        //
-        // ⚠️ Phiếu CỌC mặc định CHƯA THU: cả điểm của nó là sinh QR để khách trả trước.
-        daThu: coCocThat && i === 0 ? false : (dots[i]?.daThu ?? i === 0),
-        dueDate: han[i]!.toISOString().slice(0, 10),
-        reminderDays: dots[i]?.reminderDays ?? 14,
-      })),
-    );
-  }
-
-  function suaDot(i: number, thayDoi: Partial<DotForm>) {
-    setDots((cu) => cu.map((d, k) => (k === i ? { ...d, ...thayDoi } : d)));
-  }
 
   function save() {
     if (lech !== 0) {
@@ -397,212 +339,7 @@ export function OrderInstallmentPlan({
             </div>
           )}
 
-          {/* Đã có đợt thu tiền ⇒ nói NGAY, trước khi người bán gõ vào ô nào. */}
-          {demHangKhoa > 0 && (
-            <p className="rounded-md bg-state-info-soft px-2.5 py-1.5 text-xs text-state-info-ink">
-              {demHangKhoa === 1 ? "Đợt đầu" : `${demHangKhoa} đợt đầu`} đã nhận tiền nên
-              số tiền của các đợt đó KHOÁ lại. Chia lại số đợt chỉ phân bổ phần CÒN THIẾU
-              cho các đợt sau.
-            </p>
-          )}
-          {/* ── TIỀN CỌC ──────────────────────────────────────────────────────
-              Cọc là phần ĐẦU của học phí, đóng sớm — KHÔNG phải khoản thu thêm.
-              Nó thành một phiếu riêng đứng đầu (có QR để khách quét trả trước), và
-              số tiền đó được TRỪ DẦN từ đợt 1. Tổng vẫn đúng bằng học phí. */}
-          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-background p-2.5">
-            <label className="flex items-center gap-2 whitespace-nowrap text-sm">
-              <input
-                type="checkbox"
-                checked={coCoc}
-                onChange={(e) => {
-                  const bat = e.target.checked;
-                  setCoCoc(bat);
-                  if (!bat) {
-                    setTienCoc(0);
-                    chonSoDot(soDotHocPhi, 0);
-                  }
-                }}
-                className="h-4 w-4"
-              />
-              <span className="font-medium">Thu cọc trước</span>
-            </label>
-
-            {coCoc && (
-              <>
-                <label className="flex items-center gap-1.5 text-sm">
-                  <span className="whitespace-nowrap text-xs text-muted-foreground">
-                    Số tiền cọc (đ)
-                  </span>
-                  <MoneyInput
-                    name="tien-coc"
-                    min={0}
-                    max={totalAmount}
-                    value={tienCoc}
-                    onValueChange={(v) => {
-                      const c = Math.min(totalAmount, Math.max(0, v ?? 0));
-                      setTienCoc(c);
-                      chonSoDot(soDotHocPhi, c);
-                    }}
-                    suffix={null}
-                    className="w-40 rounded-md px-2 py-1.5"
-                  />
-                </label>
-                <HelpHint>
-                  Cọc sinh một phiếu thu riêng kèm QR để khách quét trả trước. Số đã cọc
-                  được trừ vào đợt 1; cọc lớn hơn đợt 1 thì trừ tiếp sang đợt sau. Tổng
-                  các phiếu vẫn đúng bằng học phí — cọc KHÔNG cộng thêm.
-                </HelpHint>
-              </>
-            )}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-semibold text-muted-foreground">Chia thành</span>
-            {[1, 2, 3, 4].map((n) => (
-              <button
-                key={n}
-                type="button"
-                onClick={() => chonSoDot(n)}
-                aria-pressed={soDotHocPhi === n}
-                className={`min-h-9 whitespace-nowrap rounded-md border px-3 text-sm font-semibold transition-colors duration-150 ${
-                  soDotHocPhi === n
-                    ? "border-primary bg-primary text-white"
-                    : "border-border bg-background text-foreground hover:bg-muted"
-                }`}
-              >
-                {n === 1 ? "1 lần" : `${n} học phần`}
-              </button>
-            ))}
-            <label className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
-              hoặc
-              <input
-                type="number"
-                min={1}
-                max={TRAN_SO_DOT}
-                value={soDotHocPhi}
-                onChange={(e) => {
-                  const n = Math.min(TRAN_SO_DOT, Math.max(1, Number(e.target.value) || 1));
-                  chonSoDot(n);
-                }}
-                aria-label="Số đợt tuỳ chọn"
-                className="w-16 rounded-md border border-border px-2 py-1.5 text-sm tabular-nums"
-              />
-              đợt
-            </label>
-          </div>
-
-          <div className="space-y-2">
-            {dots.map((d, i) => (
-              <div
-                key={i}
-                className="grid grid-cols-2 items-end gap-2 rounded-lg border border-border bg-background p-2 sm:grid-cols-[auto_1fr_1fr_auto]"
-              >
-                <span
-                  className={`self-center whitespace-nowrap text-xs font-semibold ${
-                    d.laCoc ? "text-accent-ink" : "text-muted-foreground"
-                  }`}
-                >
-                  {d.laCoc ? "Cọc" : `Đợt ${i + (dots[0]?.laCoc ? 0 : 1)}`}
-                </span>
-                <label className="block text-sm">
-                  <span className="text-xs text-muted-foreground">
-                    {hangBiKhoa(i) ? "Số tiền — đã thu, không sửa" : "Số tiền (đ)"}
-                  </span>
-                  {/* ── KHOÁ ĐỢT ĐÃ THU (A6) ────────────────────────────────────
-                      Server đã TỪ CHỐI lượt lưu đổi số của đợt đã có tiền
-                      (`doiTienDotDaThu`). Khoá ở đây để người bán KHÔNG gõ vào một ô
-                      rồi mới bị từ chối — một ô gõ được mà lưu không được là một ô
-                      nói dối (luật 12). */}
-                  <MoneyInput
-                    name={`dot-${i}-amount`}
-                    min={0}
-                    value={d.amount}
-                    disabled={hangBiKhoa(i)}
-                    onValueChange={(v) => suaDot(i, { amount: Math.max(0, v ?? 0) })}
-                    suffix={null}
-                    className="mt-0.5 rounded-md px-2 py-1.5"
-                  />
-                  {hangBiKhoa(i) && (
-                    <span className="mt-0.5 block text-xs text-state-success-ink">
-                      Đã nhận {vnd(tienDaRot(i))}
-                    </span>
-                  )}
-                </label>
-                <label className="block text-sm">
-                  <span className="text-xs text-muted-foreground">
-                    {d.daThu ? "Đã thu — không cần hạn" : "Hẹn đóng"}
-                  </span>
-                  <input
-                    type="date"
-                    value={d.dueDate}
-                    onChange={(e) => suaDot(i, { dueDate: e.target.value })}
-                    disabled={d.daThu}
-                    className="mt-0.5 w-full rounded-md border border-border px-2 py-1.5 text-sm disabled:bg-muted"
-                  />
-                </label>
-                <label className="flex items-center gap-1.5 self-center whitespace-nowrap text-xs text-muted-foreground">
-                  <input
-                    type="checkbox"
-                    checked={d.daThu}
-                    onChange={(e) => suaDot(i, { daThu: e.target.checked })}
-                    className="h-4 w-4"
-                  />
-                  đã thu
-                </label>
-              </div>
-            ))}
-          </div>
-
-          {/* Tổng phải khớp — nói ra NGAY khi gõ, không đợi bấm Lưu rồi nhận toast. */}
-          <div
-            className={`flex flex-wrap items-center justify-between gap-2 rounded-md px-3 py-2 text-xs ${
-              lech === 0
-                ? "bg-muted text-muted-foreground"
-                : "bg-state-danger-soft text-state-danger-ink"
-            }`}
-          >
-            <span className="whitespace-nowrap font-semibold tabular-nums">
-              Tổng {dots[0]?.laCoc ? "cọc + " : ""}{soDotHocPhi} đợt: {vnd(tongCacDot)} / {vnd(totalAmount)}
-            </span>
-            {lech !== 0 && (
-              <span className="whitespace-nowrap font-semibold tabular-nums">
-                {lech > 0 ? "Thừa" : "Thiếu"} {vnd(Math.abs(lech))}
-              </span>
-            )}
-          </div>
-
-          <label className="block text-sm">
-            <span className="text-xs text-muted-foreground">
-              Nhắc công nợ trước (ngày){" "}
-              <HelpHint>
-                Áp cho MỌI đợt chưa thu. Cron nhắc nợ nay quét mọi đợt chưa thu — trước đây
-                nó lọc cứng đợt 2, nên kế hoạch 3-4 đợt thì đợt 3 và 4 không bao giờ được
-                nhắc.
-              </HelpHint>
-            </span>
-            <input
-              type="number"
-              min={0}
-              value={dots.find((d) => !d.daThu)?.reminderDays ?? 14}
-              onChange={(e) => {
-                const v = Math.max(0, Number(e.target.value) || 0);
-                setDots((cu) => cu.map((d) => (d.daThu ? d : { ...d, reminderDays: v })));
-              }}
-              className="mt-0.5 w-full rounded-md border border-border px-2 py-1.5 text-sm tabular-nums"
-            />
-          </label>
-
-          {/* Nút Lưu bị khoá thì PHẢI nói vì sao (luật 12 — affordance phải nói thật).
-              Từ 14/09 mặc định của form không còn tự nhận "đã thu cả đơn", nên đơn chưa
-              thu đồng nào mở lên là nút khoá NGAY từ đầu; trước đây `thieuHan` hầu như
-              không bao giờ xảy ra lúc vừa mở nên không ai thấy khoảng lặng này. Toast
-              trong `save()` không cứu được: nút disabled thì `onClick` không chạy. */}
-          {thieuHan >= 0 && (
-            <p className="rounded-md bg-state-warning-soft px-3 py-2 text-xs font-semibold text-state-warning-ink">
-              Đợt {thieuHan + 1} chưa thu — chọn ngày hẹn đóng để lưu được kế hoạch. Nếu
-              khách đã đóng rồi thì tích ô &quot;đã thu&quot; của đợt đó.
-            </p>
-          )}
+          <KeHoachDotEditor kh={kh} totalAmount={totalAmount} />
 
           <button
             onClick={save}
