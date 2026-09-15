@@ -505,7 +505,7 @@ export async function deleteLead(
 
   const before = await db.lead.findUnique({
     where: { id: leadId, deletedAt: null },
-    select: { parentName: true, phone: true, status: true, centerId: true },
+    select: { parentName: true, phone: true, status: true, centerId: true, assignedToId: true },
   })
   const actor = await resolveActor(session.user.id)
   if (!before || !passesScope('Lead', before, actor)) {
@@ -543,6 +543,21 @@ export async function deleteLead(
   } catch {
     return { ok: false, error: 'Lead khong ton tai hoac da bi xoa' }
   }
+
+  // 15/09/2026 — THU HỒI chuông "Bạn có lead mới" của người đang giữ lead.
+  //
+  // Sự cố có thật: một tư vấn viên báo nhận được thông báo lead mới nhưng mở ra không thấy
+  // lead nào, và tra dữ liệu thì lead ĐÃ KHÔNG CÒN. Chuông vẫn nằm đó vì đường xoá mềm này
+  // chưa từng gọi thu hồi — `deletedAt` che lead khỏi mọi truy vấn, nhưng `StaffNotification`
+  // là bảng riêng, không ai dọn hộ.
+  //
+  // Triệu chứng dễ chẩn nhầm thành "chuông của người khác nhảy sang": người đó nhận ĐÚNG
+  // chuông của mình, vào lúc họ còn giữ lead. Đường đọc chuông lọc `userId` nên không có rò
+  // chéo — thiếu là ở nửa THU HỒI.
+  //
+  // Đặt NGOÀI transaction và nuốt lỗi (`thuHoiChuongLeadCu` tự lo): thu hồi hỏng thì lead vẫn
+  // phải xoá được. `chuMoiId: null` = không ai tiếp quản.
+  await thuHoiChuongLeadCu({ chuCuId: before.assignedToId, chuMoiId: null, leadId })
 
   revalidatePath('/leads')
   revalidatePath('/dashboard')
