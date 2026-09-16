@@ -21,8 +21,8 @@
 **Dò cờ trong 5 giây, không cần đăng nhập** (đo thật 16/09/2026 — `test` đã trả 401):
 
 ```bash
-curl -s -o /dev/null -w "%{http_code}
-" -X POST   https://test.satarobo.vn/api/webhooks/zalocrm/cs1   -H "Content-Type: application/json" -d '{"probe":true}'
+curl -s -i -X POST https://test.satarobo.vn/api/webhooks/zalocrm/cs1 \
+  -H "Content-Type: application/json" -d '{"probe":true}'
 ```
 
 | Mã trả về | Nghĩa |
