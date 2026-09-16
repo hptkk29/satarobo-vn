@@ -134,7 +134,13 @@ Bằng chứng từng mục:
    `RUN npm run build`** (Vite nướng lúc build — đặt sai stage là rỗng mà build vẫn xanh);
    `docker-compose.yml` truyền từ env; `.env` đặt `VITE_SATA_ORIGIN=https://test.satarobo.vn`.
 
-⚠️ **Mục 1 và 5 sống sót nhờ gỡ xung đột đúng, KHÔNG nhờ một cổng.** Cả hai đều là loại
-"hàm thuần có test, dây nối thì không" — bỏ `code: true` khỏi `select`, hoặc bỏ một dòng
-trong route cron, thì test vẫn xanh và hỏng câm. Đây là cùng một lớp lỗi với bảy tính năng
-đã mất. Bịt bằng lưới ghim mã nguồn (mẫu ở CLAUDE.md) là việc nên làm trước lượt hợp nhất sau.
+⚠️ **Mục 1, 5, 6 sống sót nhờ gỡ xung đột đúng, KHÔNG nhờ một cổng** — loại "hàm thuần có
+test, dây nối thì không". **ĐÃ BỊT (17/09/2026):**
+
+| Lưới | Ở đâu | Bắt được gì |
+|---|---|---|
+| `[ZC-DN-01]` · `[ZC-DN-02]` | `lib/integrations/zalocrm/day-noi.test.ts` | bỏ `code: true` khỏi `select` · bỏ tham số `org` ở chỗ gọi · đổi nguồn `orgCodeCuaCoSo` · route cron thôi gọi `capQuyenNickZalocrm()` · **đảo thứ tự** cấp quyền ↔ nạp bù tin |
+| `[SATA-BA-01]` · `[SATA-BA-02]` | fork: `backend/tests/sata-build-args-dockerfile.test.ts` | `ARG`/`ENV` sai stage · đặt SAU `RUN npm run build` · compose thôi truyền build arg |
+
+Cả hai lưới đều đã **cấy lại lỗi để chứng minh đỏ** (5/5 và 3/3 phép cấy), không chỉ xanh
+trên mã đang đúng. Chi tiết output đỏ nằm trong commit message của từng lưới.
