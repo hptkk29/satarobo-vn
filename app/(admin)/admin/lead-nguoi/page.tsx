@@ -3,7 +3,8 @@ import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { getModelVisibleCenterIds, scopedDb } from "@/lib/db-scope";
-import { NGUONG_NGUOI_MAC_DINH } from "@/lib/lead/lead-nguoi";
+import { docSoDong } from "@/lib/ui/phan-trang";
+import { chuanNguong } from "@/lib/lead/lead-nguoi";
 import { timLeadNguoi } from "@/lib/lead/nguoi-service";
 import { BangLeadNguoi } from "./_components/bang-lead-nguoi";
 
@@ -15,8 +16,20 @@ export const dynamic = "force-dynamic";
  * Yêu cầu 15/09/2026 của chủ dự án. Khác màn Bàn giao lead ở chỗ nó quét TOÀN BỘ tư vấn viên
  * cùng lúc, nên quản lý nhìn ra bức tranh "ai đang ôm lead mà không chăm" thay vì phải mở
  * từng người một.
+ *
+ * ── PHÂN TRANG ĐI QUA URL, GIỐNG `/leads` (chốt 16/09/2026) ──────────────────────────────
+ * Bản đầu giữ trang trong state React và nạp qua Server Action. Hai cái sai:
+ *   · `ChonSoDong` — bộ chọn số dòng dùng chung của repo — hoạt động bằng cách đổi `?size=`
+ *     trên URL, nên nó không thể nói chuyện với một trang giữ state trong bộ nhớ;
+ *   · làm mới trang là mất chỗ đang đứng, và không gửi được đường dẫn cho người khác xem
+ *     đúng cái mình đang xem.
+ * Nay mọi điều kiện nằm trên URL (`?nguong=`, `?cs=`, `?page=`, `?size=`) — đúng nếp `/leads`.
  */
-export default async function LeadNguoiPage() {
+export default async function LeadNguoiPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
@@ -36,18 +49,38 @@ export default async function LeadNguoiPage() {
     );
   }
 
+  const sp = await searchParams;
+  const mot = (k: string) => {
+    const v = sp[k];
+    return Array.isArray(v) ? v[0] : v;
+  };
+  const nguongNgay = chuanNguong(mot("nguong"));
+  const soDong = docSoDong(sp.size);
+  const trangXin = Math.max(1, Number(mot("page")) || 1);
+  const centerId = mot("cs") || null;
+
   const actor = await resolveActor(session.user.id);
   const visibleCenterIds = getModelVisibleCenterIds("Lead", actor);
   const now = new Date();
 
-  const [{ tong, dong }, coSo, saleList] = await Promise.all([
-    timLeadNguoi({ now, nguongNgay: NGUONG_NGUOI_MAC_DINH, visibleCenterIds }),
+  const [kq, coSo, saleList] = await Promise.all([
+    timLeadNguoi({
+      now,
+      nguongNgay,
+      visibleCenterIds,
+      centerId,
+      trang: trangXin,
+      soDong,
+    }),
     scopedDb(actor).center.findMany({
       where: { isActive: true },
       select: { id: true, name: true, code: true },
       orderBy: { code: "asc" },
     }),
-    // Danh sách người có thể nhận — dùng cho nhánh "giao đích danh".
+    // Người có thể nhận. `centerId` đi kèm để màn hình LỌC theo cơ sở của lead — chủ dự án
+    // chốt 16/09: lead ở cơ sở nào thì chia lại trong cơ sở đó, không chia qua cơ sở khác.
+    // Server vẫn gác lại lần nữa (`canManualAssign` trong `nguoi-service.ts`); danh sách ở
+    // đây chỉ để người dùng không chọn được một lựa chọn sẽ bị từ chối.
     scopedDb(actor).user.findMany({
       where: { isActive: true, deletedAt: null, roles: { has: "SALES_CSM" } },
       select: { id: true, name: true, email: true, centerId: true },
@@ -57,9 +90,14 @@ export default async function LeadNguoiPage() {
 
   return (
     <BangLeadNguoi
-      tongBanDau={tong}
-      dongBanDau={dong}
-      nguongBanDau={NGUONG_NGUOI_MAC_DINH}
+      tong={kq.tong}
+      dong={kq.dong}
+      trang={kq.trang}
+      soTrang={kq.soTrang}
+      soDong={soDong}
+      quetThieu={kq.quetThieu}
+      nguong={nguongNgay}
+      centerId={centerId ?? ""}
       coSo={coSo.map((c) => ({ id: c.id, ten: c.name, ma: c.code ?? "—" }))}
       nguoiNhan={saleList.map((u) => ({
         id: u.id,
