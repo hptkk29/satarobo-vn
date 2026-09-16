@@ -165,6 +165,41 @@ async function main() {
   for (const [k, v] of [...demNguon.entries()].sort((a, b) => b[1].thieu + b[1].co - (a[1].thieu + a[1].co)))
     console.log(`  ${k.padEnd(14)} tổng=${String(v.thieu + v.co).padStart(5)}  thiếu=${String(v.thieu).padStart(5)}  (${ti(v)})`);
 
+  // ── ⑥ VẾ QUYẾT ĐỊNH CÒN LẠI: các lượt thiếu là CŨ hay MỚI ─────────────────
+  //
+  // Lượt chạy đầu cho thấy: MỌI lượt có `userAgent` đều CÓ toạ độ (0% thiếu ở mọi nhóm
+  // trình duyệt), còn MỌI lượt thiếu toạ độ thì cũng thiếu luôn `userAgent`. Hai cột cùng
+  // rỗng không phải trùng hợp — nó nói rằng những dòng ấy KHÔNG đi qua đường trình duyệt
+  // bình thường.
+  //
+  // `checkin-action.ts:52` CÓ truyền `userAgent`, nên lượt quét QR hôm nay phải có. Vậy
+  // những dòng rỗng cả hai hoặc là ghi từ trước khi cột đó được nối, hoặc đi đường khác.
+  // Mốc NGÀY phân biệt được hai khả năng ấy — và nếu chúng đều CŨ thì lỗi nhân viên đang
+  // gặp KHÔNG nằm trong bảng này, tức nó hỏng TRƯỚC khi kịp ghi dòng nào.
+  tieu("⑥ LƯỢT QUÉT QR (TICKET) THEO NGÀY — thiếu toạ độ là chuyện CŨ hay ĐANG XẢY RA");
+  const ve = luot.filter((l) => String(l.source) === "TICKET");
+  const theoNgay = new Map<string, { co: number; thieu: number; coUA: number }>();
+  for (const l of ve) {
+    const k = l.workDate.toISOString().slice(0, 10);
+    const v = theoNgay.get(k) ?? { co: 0, thieu: 0, coUA: 0 };
+    if (coToaDo(l)) v.co += 1;
+    else v.thieu += 1;
+    if (l.userAgent) v.coUA += 1;
+    theoNgay.set(k, v);
+  }
+  console.log(
+    `  ${"NGÀY".padEnd(12)}${"TỔNG".padStart(6)}${"CÓ TOẠ ĐỘ".padStart(11)}${"THIẾU".padStart(7)}${"CÓ userAgent".padStart(14)}`,
+  );
+  for (const [k, v] of [...theoNgay.entries()].sort()) {
+    console.log(
+      `  ${k.padEnd(12)}${String(v.co + v.thieu).padStart(6)}${String(v.co).padStart(11)}${String(v.thieu).padStart(7)}${String(v.coUA).padStart(14)}`,
+    );
+  }
+  console.log("");
+  console.log("  ⓘ Nếu cột THIẾU chỉ có ở những ngày ĐẦU rồi tắt hẳn ⇒ đó là dữ liệu cũ, và lỗi");
+  console.log("    nhân viên đang báo KHÔNG để lại dòng nào — tức nó hỏng TRƯỚC lúc gửi, chứ");
+  console.log("    không phải gửi lên mà thiếu toạ độ. Hai chuyện ấy vá ở hai chỗ khác nhau.");
+
   console.log("");
   console.log("Xong. Không dòng nào bị ghi.");
 }
