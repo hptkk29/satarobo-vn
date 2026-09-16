@@ -53,6 +53,14 @@ Direct connection `db.<ref>.supabase.co:5432` chỉ có **IPv6 AAAA record** —
      (`dynamic_shared_memory_type = windows` vốn đã đúng — KHÔNG phải nguyên nhân, đừng đổi.)
   `psql` cần `PGPASSWORD=postgres` **và cờ `-w`**; thiếu `-w` thì nó chờ nhập mật khẩu và
   cũng trông như treo.
+- 🔴 **Bẫy thứ BA, đắt nhất: máy chủ chết mà `pg_ctl status` vẫn báo "server is running".**
+  File `postmaster.pid` nằm lại sau khi chết bẩn, và Windows cấp phát PID vòng lại rất nhanh
+  ⇒ trùng số là nó báo đang chạy. Hỏi đúng bằng **`pg_isready -h 127.0.0.1 -p 5432`**.
+  Đo 16/09/2026: 8 lần khởi động trong 25 ngày, **7 lần chết bẩn**. Nguyên nhân KHÔNG phải
+  thiếu RAM (32 GB, đỉnh dùng pagefile 59 MB) mà là **hết hạn mức commit theo từng cơn** —
+  pagefile tự quản nở không kịp. Siết `shared_buffers` thêm là đi sai đường.
+  ⇒ Chẩn đoán đầy đủ + cách phòng: [`docs/runbook-postgres-local-windows.md`](../../docs/runbook-postgres-local-windows.md).
+  ⇒ Đang chết thì chạy: `pwsh -File scripts\pg-local-hoi-phuc.ps1`
 - 🔴 **Bộ test chạm DB SKIP SẠCH khi không có Postgres — im lặng, không đỏ.**
   `tests/{chat,nen,lead-intake,elearning}` dùng `describe.skipIf(!RUN)`, và `RUN` chỉ bật khi
   `TEST_DATABASE_URL`/`DATABASE_URL` trỏ `localhost`/`127.0.0.1` (hoặc tên DB chứa
