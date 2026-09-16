@@ -96,7 +96,12 @@ async function main() {
         status: true,
         actualTeacherId: true,
         substituteTeacherId: true,
-        class: { select: { teacherId: true } },
+        // ⚠️ `assistantId` PHẢI có. Bản đầu của script này chỉ lấy ba trường giáo viên
+        // chính, và 5/9 GV parttime hiện ra "0 buổi dạy" — con số ấy sẽ dẫn thẳng tới một
+        // kết luận sai nếu họ là TRỢ GIẢNG: trợ giảng có mặt ở mọi buổi mà không đứng tên
+        // buổi nào. Repo đã có đúng sự cố này ("76 buổi của trợ giảng", prod 08/09) và tôi
+        // vẫn vấp lại — nên đếm riêng, in riêng, đừng gộp vào "ngày dạy".
+        class: { select: { teacherId: true, assistantId: true } },
       },
     }),
     db.staffAttendanceDay.findMany({
@@ -107,19 +112,29 @@ async function main() {
 
   // Buổi dạy quy về NGƯỜI theo đúng chuỗi ưu tiên `buildPeriodSummary` dùng.
   const buoiCuaNguoi = new Map<string, Set<string>>();
+  const troGiangCuaNguoi = new Map<string, Set<string>>();
   for (const s of buoi) {
     const t = s.actualTeacherId ?? s.substituteTeacherId ?? s.class.teacherId;
-    if (!t || !ids.includes(t)) continue;
-    const set = buoiCuaNguoi.get(t) ?? new Set<string>();
-    set.add(ymd(s.date));
-    buoiCuaNguoi.set(t, set);
+    if (t && ids.includes(t)) {
+      const set = buoiCuaNguoi.get(t) ?? new Set<string>();
+      set.add(ymd(s.date));
+      buoiCuaNguoi.set(t, set);
+    }
+    // Trợ giảng đếm RIÊNG, không gộp: "đứng lớp" và "trợ giảng" là hai việc khác nhau, và
+    // gộp lại là mất đúng thông tin cần để đọc bảng.
+    const a = s.class.assistantId;
+    if (a && ids.includes(a)) {
+      const set = troGiangCuaNguoi.get(a) ?? new Set<string>();
+      set.add(ymd(s.date));
+      troGiangCuaNguoi.set(a, set);
+    }
   }
 
   // ── BẢNG CHÍNH ────────────────────────────────────────────────────────────
   tieu(`SO LƯỚI XẾP ↔ BUỔI DẠY THẬT — từng người (kỳ ${ky}, cả tháng)`);
   console.log(
-    `  ${"MÃ NV".padEnd(13)}${"NGÀY LƯỚI".padStart(10)}${"NGÀY DẠY".padStart(10)}${"LỆCH".padStart(7)}` +
-      `${"LƯỚI ko DẠY".padStart(13)}${"DẠY ko LƯỚI".padStart(13)}${"THIẾU QUÉT".padStart(12)}`,
+    `  ${"MÃ NV".padEnd(13)}${"NGÀY LƯỚI".padStart(10)}${"NGÀY DẠY".padStart(10)}${"TRỢ GIẢNG".padStart(11)}` +
+      `${"CÓ MẶT".padStart(9)}${"LỆCH".padStart(7)}${"THIẾU QUÉT".padStart(12)}`,
   );
 
   let tongLuoiThua = 0;
@@ -132,8 +147,10 @@ async function main() {
     // Ngày LƯỚI: ca ACTIVE, KHÔNG phải mã nghỉ (nghỉ thì không ai mong họ đến).
     const ngayLuoi = new Set(ca.filter((c) => c.userId === uid && !c.isLeave).map((c) => ymd(c.workDate)));
     const ngayDay = buoiCuaNguoi.get(uid) ?? new Set<string>();
-    const luoiKhongDay = [...ngayLuoi].filter((d) => !ngayDay.has(d)).length;
-    const dayKhongLuoi = [...ngayDay].filter((d) => !ngayLuoi.has(d)).length;
+    const ngayTro = troGiangCuaNguoi.get(uid) ?? new Set<string>();
+    // "CÓ MẶT vì lớp" = ngày họ đứng lớp HOẶC trợ giảng. Đây mới là mẫu số đúng để so với
+    // lưới: câu hỏi là "hôm ấy lớp có cần họ không", không phải "hôm ấy họ có đứng tên không".
+    const ngayCoMat = new Set([...ngayDay, ...ngayTro]);
     // "Thiếu quét" = đúng nhóm ① của phép đo trước: ngày WORK đã qua, có công, 0 phút,
     // mang cờ KHONG_CO_LUOT.
     const thieuQuet = ngayCong.filter(
@@ -146,7 +163,7 @@ async function main() {
         d.flags.includes("KHONG_CO_LUOT"),
     ).length;
 
-    const lech = ngayLuoi.size - ngayDay.size;
+    const lech = ngayLuoi.size - ngayCoMat.size;
     if (lech > 0) {
       tongLuoiThua += lech;
       soNguoiLuoiThua += 1;
@@ -155,8 +172,8 @@ async function main() {
 
     console.log(
       `  ${e.employeeCode.padEnd(13)}${String(ngayLuoi.size).padStart(10)}${String(ngayDay.size).padStart(10)}` +
-        `${(lech > 0 ? `+${lech}` : String(lech)).padStart(7)}${String(luoiKhongDay).padStart(13)}` +
-        `${String(dayKhongLuoi).padStart(13)}${String(thieuQuet).padStart(12)}`,
+        `${String(ngayTro.size).padStart(11)}${String(ngayCoMat.size).padStart(9)}` +
+        `${(lech > 0 ? `+${lech}` : String(lech)).padStart(7)}${String(thieuQuet).padStart(12)}`,
     );
   }
 
