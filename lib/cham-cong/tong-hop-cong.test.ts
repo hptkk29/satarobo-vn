@@ -351,6 +351,87 @@ describe("tomTatCongThang — chi tiết", () => {
     expect(t.thieuLuotNgay).toBe(1);
   });
 
+  // ══ NGÀY CHƯA DIỄN RA (sự cố 16/09/2026) ═════════════════════════════════════════════
+  //
+  // Chủ dự án bắt trên localhost: *"những ngày chưa diễn ra thì không tính vào chứ? Sao
+  // thống kê lại tính cả full cả tháng?"* — và đúng. `homNay` trước đây CHỈ dựng hai nhãn;
+  // vòng cộng số không lọc gì. Đo prod hôm ấy: 250 dòng ngày tương lai, 196 cờ oan, 185 công.
+  //
+  // Bộ ca dưới đây canh đúng vế ấy ở tầng SỐ. THANG_9 có `homNay` mặc định là ngày cuối
+  // tháng, nên mọi ca phải TRUYỀN `homNay` giữa tháng thì mới có "tương lai" để mà lọc.
+  describe("ngày chưa diễn ra không được tính vào bất kỳ số nào", () => {
+    const GIUA_THANG = { ...THANG_9, homNay: "2026-09-16" };
+
+    it("ngày sau hôm nay KHÔNG vào công, giờ, ngày có ca, chưa chấm, cần xử lý", () => {
+      const t = tomTatCongThang({
+        ...GIUA_THANG,
+        ngay: [
+          // đã qua: làm đủ
+          ngay({
+            workDate: utc(2026, 9, 15),
+            dayCreditExpected: 1, dayCreditEarned: 1,
+            expectedMinutes: 480, workedMinutes: 480,
+          }),
+          // HÔM NAY — cố ý KHÔNG phải tương lai: đang diễn ra mà chưa quét thì đúng là chưa chấm.
+          ngay({
+            workDate: utc(2026, 9, 16),
+            dayCreditExpected: 1, dayCreditEarned: 1,
+            expectedMinutes: 480, flags: ["KHONG_CO_LUOT"],
+          }),
+          // CHƯA TỚI — đúng hình dạng dòng prod sinh ra: có công, 0 phút, cờ oan.
+          ngay({
+            workDate: utc(2026, 9, 17),
+            dayCreditExpected: 1, dayCreditEarned: 1,
+            expectedMinutes: 480, flags: ["KHONG_CO_LUOT"],
+          }),
+          ngay({
+            workDate: utc(2026, 9, 18),
+            dayCreditExpected: 1, dayCreditEarned: 1,
+            expectedMinutes: 480, flags: ["KHONG_CO_LUOT"],
+          }),
+        ],
+      });
+      // 2 công của ngày đã qua + hôm nay, KHÔNG phải 4.
+      expect(t.cong).toBe(2);
+      // Ô phụ mới: kế hoạch cả tháng VẪN thấy đủ 4 — nhưng đứng riêng, có tên riêng.
+      expect(t.congKeHoachCaThang).toBe(4);
+      expect(t.ngayCoCa).toBe(2);
+      expect(t.ngayDaCham).toBe(1);
+      expect(t.chuaCham).toBe(1); // chỉ HÔM NAY, không tính 17 và 18
+      expect(t.ngayCanXuLy).toBe(1);
+      expect(t.phutLam).toBe(480);
+      expect(t.phutKeHoach).toBe(960); // 2 ngày × 480, không phải 4 ngày
+    });
+
+    it("ngày nghỉ/lễ chưa tới cũng không được đếm", () => {
+      const t = tomTatCongThang({
+        ...GIUA_THANG,
+        ngay: [
+          ngay({ workDate: utc(2026, 9, 2), dayType: "HOLIDAY" }),
+          ngay({ workDate: utc(2026, 9, 25), dayType: "HOLIDAY" }), // chưa tới
+          ngay({ workDate: utc(2026, 9, 10), dayType: "LEAVE", leaveUnits: 1 }),
+          ngay({ workDate: utc(2026, 9, 28), dayType: "LEAVE", leaveUnits: 1 }), // chưa tới
+        ],
+      });
+      expect(t.nghiLe).toBe(1);
+      expect(t.nghiPhep).toBe(1);
+    });
+
+    it("tháng ĐÃ QUA TRỌN: không có gì để lọc, kế hoạch bằng đúng công", () => {
+      // Vế đối xứng — lọc không được phép ăn mất ngày nào của một tháng đã khép.
+      const t = tomTatCongThang({
+        ...THANG_9, // homNay = 2026-10-05, tháng 9 đã qua trọn
+        ngay: [
+          ngay({ workDate: utc(2026, 9, 15), dayCreditExpected: 1, dayCreditEarned: 1 }),
+          ngay({ workDate: utc(2026, 9, 30), dayCreditExpected: 1, dayCreditEarned: 1 }),
+        ],
+      });
+      expect(t.cong).toBe(2);
+      expect(t.congKeHoachCaThang).toBe(2);
+      expect(t.ngayCoCa).toBe(2);
+    });
+  });
+
   it("thiếu lượt gộp cả RA_KHONG_CO_VAO — cùng một việc phải đi nộp đơn", () => {
     const t = tomTatCongThang({
       ...THANG_9,
