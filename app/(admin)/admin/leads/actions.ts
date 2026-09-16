@@ -474,7 +474,16 @@ export async function updateLeadNote(
   await db.$transaction(async (tx) => {
     await tx.lead.update({
       where: { id: leadId },
-      data: { note: newNote },
+      // ⚠️ `lastActivityAt` PHẢI nhảy theo. Chốt 16/09/2026 của chủ dự án: "lần gần nhất
+      // tương tác lead tính cả ghi chú lead luôn".
+      //
+      // Trước bản vá: Sale mở lead ra gõ ghi chú rồi lưu ⇒ chỉ cột `note` đổi, không dòng
+      // hoạt động nào sinh ra, `lastActivityAt` đứng im. Hệ quả đo được ở hai chỗ:
+      //   · `/lead-nguoi` chấm lead đó là "chưa ai chăm" dù vừa có người ghi chú xong, và
+      //     màn đó có nút PHÂN BỔ HÀNG LOẠT — tức giật lead khỏi tay người đang làm;
+      //   · `isLeadIdle` (`lib/crm/sla.ts`) cũng đọc đúng cột này nên cảnh báo SLA nổ nhầm.
+      // Chỉ nhảy khi ghi chú THỰC SỰ đổi — lưu lại y nguyên không phải một lần chăm.
+      data: newNote !== before.note ? { note: newNote, lastActivityAt: new Date() } : { note: newNote },
     })
 
     await logLeadAudit({
@@ -890,7 +899,14 @@ export async function updateLeadFields(
     // chưa bao giờ ghi được: sửa xong là mất im lặng. Thêm cho cả hai đường.
     ...(d.facebookUrl !== undefined ? { facebookUrl: d.facebookUrl || null } : {}),
   }
-  await db.lead.update({ where: { id: leadId }, data: updateData })
+  // Ghi chú đổi qua đường biểu mẫu đầy đủ cũng là một lần chăm — xem chú thích dài ở
+  // `updateLeadNote`. Hai đường ghi `note`, cả hai phải nhảy đồng hồ, nếu không lỗ chỉ
+  // chuyển chỗ chứ không mất.
+  const noteDoi = d.note !== undefined && updateData.note !== before.note
+  await db.lead.update({
+    where: { id: leadId },
+    data: noteDoi ? { ...updateData, lastActivityAt: new Date() } : updateData,
+  })
 
   // P2-1: ghi nhật ký kiểm toán — chỉ field thực sự đổi.
   const changedFields = (Object.keys(updateData) as (keyof typeof updateData)[]).filter(

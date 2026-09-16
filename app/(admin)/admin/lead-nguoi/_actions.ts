@@ -10,9 +10,7 @@ import { getModelVisibleCenterIds } from "@/lib/db-scope";
 import { chuanNguong } from "@/lib/lead/lead-nguoi";
 import {
   phanBoLaiLeadNguoi,
-  timLeadNguoi,
   type CachPhanBo,
-  type DongLeadNguoi,
 } from "@/lib/lead/nguoi-service";
 
 // Lead nguội — gate `leads:assign`, cùng quyền với màn Bàn giao lead: cả hai đều là thao tác
@@ -21,6 +19,8 @@ import {
 const locSchema = z.object({
   nguongNgay: z.union([z.number(), z.string()]).optional(),
   centerId: z.string().optional().or(z.literal("")),
+  trang: z.number().int().min(1).max(100_000).optional(),
+  soDong: z.number().int().optional(),
 });
 
 const phanBoSchema = locSchema.extend({
@@ -33,33 +33,6 @@ const phanBoSchema = locSchema.extend({
   // người bị giật hỏi "vì sao" thì phải có câu trả lời, không phải một dòng log trống.
   lyDo: z.string().trim().min(3).max(2000),
 });
-
-export async function locLeadNguoiAction(input: unknown): Promise<{
-  ok: boolean;
-  error?: string;
-  tong?: number;
-  dong?: DongLeadNguoi[];
-  nguongNgay?: number;
-}> {
-  const session = await auth();
-  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!(await checkPermission("leads:assign"))) return { ok: false, error: "Không có quyền" };
-
-  const parsed = locSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Tham số lọc không hợp lệ" };
-
-  const actor = await resolveActor(session.user.id);
-  const visibleCenterIds = getModelVisibleCenterIds("Lead", actor);
-  const nguongNgay = chuanNguong(parsed.data.nguongNgay);
-
-  const { tong, dong } = await timLeadNguoi({
-    now: new Date(),
-    nguongNgay,
-    visibleCenterIds,
-    centerId: parsed.data.centerId || null,
-  });
-  return { ok: true, tong, dong, nguongNgay };
-}
 
 export async function phanBoLeadNguoiAction(input: unknown): Promise<{
   ok: boolean;

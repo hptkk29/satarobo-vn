@@ -14,6 +14,7 @@ import path from "node:path";
 import {
   conMoDeChiaLai,
   dongDoiChieu,
+  dongGhiDe,
   dungBanCapNhatLeadTrung,
   moTaLuotCapNhat,
   noiGhiChu,
@@ -33,7 +34,11 @@ const CU = {
 };
 
 const ban = (file: Parameters<typeof dungBanCapNhatLeadTrung>[0]["file"]) =>
-  dungBanCapNhatLeadTrung({ cu: CU, file, moc: MOC });
+  dungBanCapNhatLeadTrung({ cu: CU, file, moc: MOC, ghiDe: false });
+
+/** Cùng lead `CU`, nhưng người vận hành ĐÃ TICK ghi đè. */
+const de = (file: Parameters<typeof dungBanCapNhatLeadTrung>[0]["file"]) =>
+  dungBanCapNhatLeadTrung({ cu: CU, file, moc: MOC, ghiDe: true });
 
 describe("[LEAD-T70] ô ĐANG TRỐNG thì ĐIỀN", () => {
   it("lead chưa có email ⇒ lấy email của file", () => {
@@ -41,6 +46,7 @@ describe("[LEAD-T70] ô ĐANG TRỐNG thì ĐIỀN", () => {
       cu: { ...CU, email: null },
       file: { email: "moi@moi.vn" },
       moc: MOC,
+      ghiDe: false,
     });
     expect(b.data.email).toBe("moi@moi.vn");
     expect(b.daDien).toContain("email");
@@ -60,13 +66,14 @@ describe("[LEAD-T70] ô ĐANG TRỐNG thì ĐIỀN", () => {
         source: "ZALO",
       },
       moc: MOC,
+      ghiDe: false,
     });
     expect(b.daDien).toHaveLength(7);
     expect(b.khacBiet).toEqual([]);
   });
 
   it("cắt khoảng trắng hai đầu trước khi điền", () => {
-    const b = dungBanCapNhatLeadTrung({ cu: {}, file: { parentName: "  Chị Mai  " }, moc: MOC });
+    const b = dungBanCapNhatLeadTrung({ cu: {}, file: { parentName: "  Chị Mai  " }, moc: MOC, ghiDe: false });
     expect(b.data.parentName).toBe("Chị Mai");
   });
 
@@ -131,6 +138,7 @@ describe("[LEAD-T71] ⚠️ ô ĐÃ CÓ giá trị thì KHÔNG BAO GIỜ bị gh
       cu: { parentName: "Chị Lan", email: null },
       file: { parentName: "Chị Lan Anh", email: "moi@moi.vn" },
       moc: MOC,
+      ghiDe: false,
     });
     expect(b.data.email).toBe("moi@moi.vn");
     expect(b.data).not.toHaveProperty("parentName");
@@ -159,7 +167,7 @@ describe("[LEAD-T72] ⚠️ ô TRỐNG trong file không phải lệnh xoá", ()
 
   it("⚠️ tuổi con = 0 KHÔNG bị coi là trống", () => {
     // `!0` là `true` — cách kinh điển để một phép kiểm "trống" nuốt mất số 0.
-    const b = dungBanCapNhatLeadTrung({ cu: { childAge: null }, file: { childAge: 0 }, moc: MOC });
+    const b = dungBanCapNhatLeadTrung({ cu: { childAge: null }, file: { childAge: 0 }, moc: MOC, ghiDe: false });
     expect(b.data.childAge).toBe(0);
   });
 });
@@ -232,6 +240,7 @@ describe("[LEAD-T74] ⚠️ giá trị file bị từ chối PHẢI vào ghi ch�
       cu: { ...CU, note: String(b1.data.note) },
       file: { parentName: "X" },
       moc: MOC,
+      ghiDe: false,
     });
     expect(b2.data).not.toHaveProperty("note");
   });
@@ -245,6 +254,7 @@ describe("[LEAD-T75] trạng thái phễu và nhật ký", () => {
         typeof dungBanCapNhatLeadTrung
       >[0]["file"],
       moc: MOC,
+      ghiDe: false,
     });
     expect(b.data).not.toHaveProperty("status");
   });
@@ -261,6 +271,7 @@ describe("[LEAD-T75] trạng thái phễu và nhật ký", () => {
         cu: { parentName: "Chị Lan", email: null },
         file: { parentName: "Khác", email: "e@e.vn" },
         moc: MOC,
+        ghiDe: false,
       }),
       true,
     );
@@ -358,9 +369,207 @@ describe("[LEAD-T77] đường nhập Excel THẬT SỰ dùng luật ghi đè", 
     expect(NGUON).toMatch(/for \(const \{ id, saleId \} of \[\.\.\.createdIds, \.\.\.chiaLaiOps\]\)/);
   });
 
+  it("⚠️ CÓ nối cờ ghi đè từ body xuống luật thuần", () => {
+    // Luật thuần đúng KHÔNG chứng minh được gì nếu route không truyền cờ xuống — đúng lớp
+    // lỗi đã bắt được ở ca RT-1: hàm xanh, đường ghi không gọi, và không ai biết.
+    expect(NGUON).toContain("const ghiDeRaw =");
+    expect(NGUON).toContain("ghiDe: m.ghiDe");
+    expect(NGUON).toContain("ghiDe: ghiDeIdx.has(i)");
+    expect(NGUON).toContain("if (ghiDeIdx.has(i)) g.ghiDe = true");
+  });
+
+  it("⚠️ cờ ghi đè nhận theo CHỈ SỐ, không nhận theo SĐT", () => {
+    // Chuẩn hoá SĐT ở trình duyệt và ở server là hai cỗ máy khác nhau; khớp theo SĐT là mời
+    // một ca biên nào đó nuốt mất lệnh ghi đè mà không báo gì.
+    expect(NGUON).toContain("Number.isInteger(v)");
+    expect(NGUON).toContain("v < rows.length");
+  });
+
+  it("⚠️ đường CẬP NHẬT lấy nguồn THÔ, không lấy nguồn đã rơi về mặc định", () => {
+    // `parseLeadImportRow` mặc định `source = "Import Excel"` khi ô trống — đúng cho lượt
+    // TẠO, nhưng đường cập nhật mà đọc trường đó là ô trống hoá lệnh đè nguồn thật.
+    expect(NGUON).toContain("source: g.base.sourceRaw");
+    expect(NGUON).not.toContain("source: g.base.source,");
+  });
+
+  it("⚠️ lượt GHI ĐÈ phải vào SỔ KIỂM TOÁN", () => {
+    // Đây là lượt sửa dữ liệu nặng nhất đường này làm được. Cổng chỉ hỏi `daDien` là đúng
+    // những lượt cần tra nhất lại không có dòng nào trong sổ.
+    expect(NGUON).toContain("banCapNhat.daDien.length > 0 || banCapNhat.daDe.length > 0");
+  });
+
   it("mốc nhập dùng CHUNG cho cả lượt, không tính lại từng chỗ", () => {
     // Hai chỗ tính `Date.now()` riêng là hai khoá chống trùng khác nhau cho cùng một lượt.
     expect((NGUON.match(/const mocNhap = new Date\(\)/g) ?? []).length).toBe(1);
     expect((NGUON.match(/Date\.now\(\)/g) ?? []).length).toBe(0);
+  });
+});
+
+describe("[LEAD-T78] chế độ GHI ĐÈ (người vận hành tự tick)", () => {
+  // Chốt 16/09/2026: "thiết kế thêm tuỳ chọn ghi đè riêng cho các lead bị trùng". Khối này
+  // ĐỐI XỨNG với [LEAD-T71] — cùng dữ liệu, ngược kết quả — nên hai khối phải đọc cạnh
+  // nhau được.
+
+  it("ô đã CÓ giá trị mà file ghi khác ⇒ ĐÈ bằng giá trị file", () => {
+    const b = de({ parentName: "Chị Lan Anh" });
+    expect(b.data.parentName).toBe("Chị Lan Anh");
+    expect(b.daDe.map((k) => k.cot)).toEqual(["tên phụ huynh"]);
+    // Và nhánh GIỮ phải rỗng — hai mảng không bao giờ cùng có nội dung.
+    expect(b.khacBiet).toEqual([]);
+  });
+
+  it("đè được mọi cột, không sót cột nào", () => {
+    const b = de({
+      parentName: "PH mới",
+      email: "moi@moi.vn",
+      childName: "Bé Bo",
+      childAge: 9,
+      centerId: "cs2",
+      courseId: "kh_ai",
+      source: "ZALO",
+    });
+    expect(b.data).toMatchObject({
+      parentName: "PH mới",
+      email: "moi@moi.vn",
+      childName: "Bé Bo",
+      childAge: 9,
+      centerId: "cs2",
+      courseId: "kh_ai",
+      source: "ZALO",
+    });
+    expect(b.daDe).toHaveLength(7);
+  });
+
+  it("⚠️ GIÁ TRỊ CŨ phải vào ghi chú — ghi đè KHÔNG được thành phá huỷ", () => {
+    const b = de({ parentName: "Chị Lan Anh", email: "moi@moi.vn" });
+    const note = String(b.data.note);
+    expect(note).toContain("ĐÃ GHI ĐÈ");
+    // Đủ CẢ HAI vế cho từng cột: giá trị mới, và giá trị vừa mất.
+    expect(note).toContain('tên phụ huynh "Chị Lan Anh" (giá trị cũ "Chị Lan")');
+    expect(note).toContain('email "moi@moi.vn" (giá trị cũ "lan@cu.vn")');
+  });
+
+  it("có ngày tháng để tra ngược", () => {
+    expect(String(de({ parentName: "X" }).data.note)).toContain("15/09/2026");
+  });
+
+  it("⚠️ ô TRỐNG trong file vẫn KHÔNG phải lệnh xoá, kể cả khi bật ghi đè", () => {
+    // Ca nguy hiểm nhất của tính năng này: file thật cột nào cũng có dòng bỏ trống, nên cho
+    // `ghiDe` vượt qua vế "file im lặng" là xoá trắng hàng loạt cột trên lead thật.
+    const b = de({ parentName: "Chị Lan Anh", email: null, childName: "", childAge: undefined });
+    expect(b.data).not.toHaveProperty("email");
+    expect(b.data).not.toHaveProperty("childName");
+    expect(b.data).not.toHaveProperty("childAge");
+    expect(b.daDe.map((k) => k.cot)).toEqual(["tên phụ huynh"]);
+  });
+
+  it("file rỗng hoàn toàn ⇒ chỉ đóng mốc, không đè gì", () => {
+    const b = de({});
+    expect(Object.keys(b.data)).toEqual(["lastInboundAt"]);
+    expect(b.daDe).toEqual([]);
+  });
+
+  it("ô đang lưu TRỐNG vẫn là ĐIỀN, không kể là ghi đè", () => {
+    const b = dungBanCapNhatLeadTrung({
+      cu: { parentName: "Chị Lan", email: null },
+      file: { parentName: "Chị Lan", email: "e@e.vn" },
+      moc: MOC,
+      ghiDe: true,
+    });
+    expect(b.daDien).toEqual(["email"]);
+    expect(b.daDe).toEqual([]);
+    // Không đè gì thì cũng không có dòng "ĐÃ GHI ĐÈ" trong ghi chú.
+    expect(String(b.data.note ?? "")).not.toContain("ĐÃ GHI ĐÈ");
+  });
+
+  it("file ghi GIỐNG hệt ⇒ không đè, không ghi gì", () => {
+    const b = de({ parentName: "Chị Lan", source: "FACEBOOK" });
+    expect(b.data).not.toHaveProperty("parentName");
+    expect(b.daDe).toEqual([]);
+  });
+
+  it("⚠️ tuổi con = 0 vẫn là giá trị THẬT, đè được", () => {
+    const b = dungBanCapNhatLeadTrung({
+      cu: { childAge: 8 },
+      file: { childAge: 0 },
+      moc: MOC,
+      ghiDe: true,
+    });
+    expect(b.data.childAge).toBe(0);
+  });
+
+  it("đè cơ sở thì đơn vị tổ chức đi theo", () => {
+    const b = dungBanCapNhatLeadTrung({
+      cu: { centerId: "cs1" },
+      file: { centerId: "cs2", orgUnitId: "ou_cs2" },
+      moc: MOC,
+      ghiDe: true,
+    });
+    expect(b.data.centerId).toBe("cs2");
+    expect(b.data.orgUnitId).toBe("ou_cs2");
+    // Người vận hành chỉ thấy MỘT thay đổi — đừng báo "đã đè 2 ô".
+    expect(b.daDe).toHaveLength(1);
+  });
+
+  it("⚠️ GHI CHÚ của Sale vẫn chỉ được NỐI — ghi đè không đụng tới nó", () => {
+    const b = de({ parentName: "Chị Lan Anh", note: "Ghi chú trong file" });
+    const note = String(b.data.note);
+    expect(note.indexOf("Gọi 12/09: khách bận, hẹn gọi lại thứ 5.")).toBe(0);
+    expect(note).toContain("Ghi chú trong file");
+  });
+
+  it("⚠️ TRẠNG THÁI PHỄU vẫn không bị đụng", () => {
+    const b = de({ parentName: "X", source: "ZALO" });
+    expect(b.data).not.toHaveProperty("status");
+    expect(b.data).not.toHaveProperty("convertedAt");
+    expect(b.data).not.toHaveProperty("assignedToId");
+  });
+
+  it("nhập LẠI cùng nội dung ⇒ không nhân đôi dòng ghi đè trong ghi chú", () => {
+    const lan1 = String(de({ parentName: "Chị Lan Anh" }).data.note);
+    const lan2 = dungBanCapNhatLeadTrung({
+      cu: { ...CU, parentName: "Chị Lan", note: lan1 },
+      file: { parentName: "Chị Lan Anh" },
+      moc: MOC,
+      ghiDe: true,
+    });
+    expect(lan2.data.note ?? lan1).toBe(lan1);
+  });
+
+  it("nhật ký nói THẲNG chữ GHI ĐÈ và liệt kê đúng cột", () => {
+    const m = moTaLuotCapNhat(de({ parentName: "Chị Lan Anh", email: "moi@moi.vn" }), true);
+    expect(m).toContain("GHI ĐÈ 2 ô theo yêu cầu");
+    expect(m).toContain("tên phụ huynh");
+    expect(m).toContain("email");
+    expect(m).toContain("giá trị cũ đã ghi vào ghi chú");
+    // Không được nói "GIỮ NGUYÊN" trong cùng một lượt — hai câu trái nghĩa nhau.
+    expect(m).not.toContain("GIỮ NGUYÊN");
+    expect(m).not.toContain("parentName");
+  });
+
+  it("`dongGhiDe` rỗng ⇒ null, không thêm dòng trống vào ghi chú", () => {
+    expect(dongGhiDe([], MOC)).toBeNull();
+  });
+
+  it("⚠️ ô Nguồn để TRỐNG không được biến thành \"Import Excel\" rồi đè nguồn thật", () => {
+    // ĐO THẬT trên máy 16/09/2026, lead `uat-lead-CS1-5`: file bỏ trống cột Nguồn, tick Ghi
+    // đè ⇒ `source` từ "Website" thành "Import Excel". Thủ phạm không nằm ở hàm này mà ở
+    // `parseLeadImportRow`: `cell(raw,"Nguồn") || "Import Excel"`. Mặc định ấy ĐÚNG cho lượt
+    // TẠO (lead mới không được sinh ra mà không có nguồn) nhưng ở lượt CẬP NHẬT nó biến
+    // "file không nói gì" thành "file bảo ghi Import Excel".
+    //
+    // Hỏng im lặng và lan rộng: nguồn lead là thứ báo cáo marketing đọc để biết tiền quảng
+    // cáo đi đâu. Một lượt nhập 300 dòng thổi bay phân bổ nguồn của cả lô, không ô nào đỏ.
+    //
+    // Vá ở `ParsedLeadRow.sourceRaw` + route truyền `sourceRaw` cho đường cập nhật; ca này
+    // khoá phía luật thuần: `null` phải được hiểu là "không nói gì".
+    const b = dungBanCapNhatLeadTrung({
+      cu: { source: "Website" },
+      file: { source: null },
+      moc: MOC,
+      ghiDe: true,
+    });
+    expect(b.data).not.toHaveProperty("source");
+    expect(b.daDe).toEqual([]);
   });
 });

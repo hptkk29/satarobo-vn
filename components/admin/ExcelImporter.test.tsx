@@ -48,7 +48,12 @@ function dung(opts: {
   trungHeThong?: boolean;
   /** Đổi dạng hiển thị cho cột SĐT (màn lead truyền `formatPhoneVN`). */
   hienThiSdt?: (v: unknown) => string;
-  onImport?: (rows: unknown[]) => Promise<{ success: number; errors: [] }>;
+  /** Bật cột "Đè" của nhóm Trùng (màn lead, chốt 16/09/2026). */
+  coCotDe?: boolean;
+  onImport?: (
+    rows: unknown[],
+    ctx?: { excelRowOf: number[]; confirmed: Set<number>; ghiDe: Set<number> },
+  ) => Promise<{ success: number; errors: [] }>;
 }) {
   const onImport =
     opts.onImport ?? (async () => ({ success: 0, errors: [] as [] }));
@@ -67,6 +72,15 @@ function dung(opts: {
       duplicateLabel="SĐT"
       mergeDuplicates={opts.gopTrung ? { label: "Sẽ cập nhật bản ghi cũ" } : undefined}
       confirmDuplicates={opts.xacNhanTrung ? { label: "Xác nhận gộp" } : undefined}
+      overwriteDuplicates={
+        opts.coCotDe
+          ? {
+              label: "Đè",
+              moTa: "Tick cột Đè để dòng đó ghi đè thông tin đang lưu.",
+              chuKhiBat: "SẼ GHI ĐÈ thông tin đang lưu bằng dữ liệu dòng này.",
+            }
+          : undefined
+      }
       checkExisting={
         opts.trungHeThong
           ? async (_raws, excelNos) =>
@@ -662,5 +676,280 @@ describe("[NHAP-T17] bảng kết quả: ghi chú KHÔNG phải lỗi", () => {
     // Màn nhập nào không có khái niệm ghi đè thì đừng bày ra một con số 0 vô nghĩa.
     render(<ImportOutcome result={{ success: 3, errors: [] }} onReset={noop} />);
     expect(screen.queryByText("Cập nhật")).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────
+// CỘT "ĐÈ" — tuỳ chọn ghi đè cho riêng nhóm Trùng (chốt 16/09/2026)
+// ─────────────────────────────────────────────────────────────────────────────────────────
+
+/** Ô tick "Đè" của một dòng cụ thể trong BẢNG (bản thẻ có nhãn chữ nên tìm bằng tên khác). */
+const oDe = (soDong: number) =>
+  screen.getByRole("checkbox", { name: `Đè dòng ${soDong}` }) as HTMLInputElement;
+
+/**
+ * Ô "tick tất cả".
+ *
+ * ⚠️ CÓ HAI BẢN cùng tên đọc được: một ở hàng tiêu đề bảng (từ `md`), một ở trên danh sách
+ * thẻ (dưới `md`). Cùng câu chữ là CỐ Ý — hai bản làm đúng một việc, đặt tên khác nhau mới
+ * là nói dối. jsdom không chạy media query nên cả hai cùng dựng; lấy theo thứ tự DOM, đúng
+ * nếp `getAllBy*[0]` của bộ này.
+ */
+const oDeTatCaBang = () =>
+  screen.getAllByRole("checkbox", { name: /^Đè tất cả \d+ dòng trùng$/ })[0] as HTMLInputElement;
+const oDeTatCaThe = () =>
+  screen.getAllByRole("checkbox", { name: /^Đè tất cả \d+ dòng trùng$/ })[1] as HTMLInputElement;
+const oDeTatCa = oDeTatCaBang;
+
+const sangTabTrung = () => fireEvent.click(screen.getByRole("tab", { name: /Trùng/ }));
+
+describe("[NHAP-T20] cột Đè chỉ có mặt ở đúng chỗ nó có nghĩa", () => {
+  it("⚠️ KHÔNG có cột Đè khi màn không khai `overwriteDuplicates`", async () => {
+    // Tệp này dùng chung cho 10 màn nhập. Mặc định phải là KHÔNG CÓ GÌ ĐỔI.
+    dung({ dong: [{ Tên: "A", SĐT: "1" }], coTrung: true, gopTrung: true, trungHeThong: true });
+    await napFile([{ Tên: "A", SĐT: "1" }]);
+    sangTabTrung();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+  });
+
+  it("⚠️ KHÔNG có cột Đè ở tab Hợp lệ — ở đó không có bản ghi cũ nào để đè", async () => {
+    // Một ô tick ở tab Hợp lệ là lời hứa suông: bấm vào không có tác dụng gì, và không gì
+    // báo cho người bấm biết (luật 12).
+    dung({
+      dong: [{ Tên: "A", SĐT: "1" }],
+      coTrung: true,
+      gopTrung: true,
+      coCotDe: true,
+    });
+    await napFile([{ Tên: "A", SĐT: "1" }]);
+    // Đang đứng ở tab Hợp lệ (mặc định) — dòng này không trùng gì cả.
+    expect(demNhom(/Hợp lệ/)).toBe(1);
+    expect(screen.queryByRole("checkbox")).toBeNull();
+  });
+
+  it("có cột Đè ở tab Trùng, kèm ô tick ở HÀNG TIÊU ĐỀ", async () => {
+    dung({
+      dong: [],
+      coTrung: true,
+      gopTrung: true,
+      trungHeThong: true,
+      coCotDe: true,
+    });
+    await napFile([
+      { Tên: "A", SĐT: "1" },
+      { Tên: "B", SĐT: "2" },
+    ]);
+    sangTabTrung();
+    expect(oDeTatCaBang()).toBeTruthy();
+    expect(oDe(2)).toBeTruthy();
+    expect(oDe(3)).toBeTruthy();
+  });
+
+  it("⚠️ màn NHỎ cũng phải có ô tick tất cả", async () => {
+    // Đo 16/09 ở 320–640px: bảng không dựng nên ô ở hàng tiêu đề KHÔNG tồn tại. Thiếu bản
+    // này là file 145 dòng trùng phải tick tay 145 lần trên điện thoại — đúng việc mà ô
+    // "tick tất cả" sinh ra để khỏi phải làm.
+    dung({ dong: [], coTrung: true, gopTrung: true, trungHeThong: true, coCotDe: true });
+    await napFile([
+      { Tên: "A", SĐT: "1" },
+      { Tên: "B", SĐT: "2" },
+    ]);
+    sangTabTrung();
+    // Bản cho màn nhỏ phải MANG NHÃN CHỮ — một ô vuông trơ trọi trên điện thoại là câu đố.
+    expect(screen.getByText("Đè tất cả 2 dòng trùng")).toBeTruthy();
+    expect(oDeTatCaThe()).toBeTruthy();
+    // Và nó điều khiển CÙNG một tập với ô ở hàng tiêu đề, không phải một tập riêng.
+    fireEvent.click(oDeTatCaThe());
+    expect(oDe(2).checked).toBe(true);
+    expect(oDe(3).checked).toBe(true);
+    expect(oDeTatCaBang().checked).toBe(true);
+    // ⚠️ Và CHÍNH NÓ phải sáng lên theo.
+    //
+    // Bản đầu của ca này dừng ở ba dòng trên: cấy lỗi `checked={false}` (ô màn nhỏ không
+    // bao giờ sáng) mà bộ vẫn XANH, vì `onChange` vẫn chạy nên mọi thứ khác đúng hết. Đó
+    // đúng là lớp lỗi luật 12 nói tới: ô tick vẫn hoạt động, chỉ là nó NÓI DỐI về trạng
+    // thái của mình — người dùng bấm xong thấy ô trống, tưởng chưa ăn, bấm lại lần nữa.
+    expect(oDeTatCaThe().checked).toBe(true);
+    expect(oDeTatCaThe().indeterminate).toBe(false);
+    // Bỏ một dòng ⇒ cả hai ô cùng chuyển sang LỬNG.
+    fireEvent.click(oDe(2));
+    expect(oDeTatCaThe().checked).toBe(false);
+    expect(oDeTatCaThe().indeterminate).toBe(true);
+  });
+
+  it("⚠️ dòng LỖI không có ô tick — dòng đó còn không được ghi", async () => {
+    dung({ dong: [], coTrung: true, gopTrung: true, trungHeThong: true, coCotDe: true });
+    await napFile([{ Tên: "A", SĐT: "1" }, { Tên: "B" }]);
+    fireEvent.click(screen.getByRole("tab", { name: /Lỗi/ }));
+    expect(screen.queryByRole("checkbox")).toBeNull();
+  });
+});
+
+describe("[NHAP-T21] ô tick ở hàng tiêu đề bật cho CẢ NHÓM", () => {
+  const bonDong = [
+    { Tên: "A", SĐT: "1" },
+    { Tên: "B", SĐT: "2" },
+    { Tên: "C", SĐT: "3" },
+    { Tên: "D", SĐT: "4" },
+  ];
+
+  it("bấm một lần ⇒ mọi dòng trùng đều được tick", async () => {
+    dung({ dong: [], coTrung: true, gopTrung: true, trungHeThong: true, coCotDe: true });
+    await napFile(bonDong);
+    sangTabTrung();
+    fireEvent.click(oDeTatCa());
+    for (const d of [2, 3, 4, 5]) expect(oDe(d).checked).toBe(true);
+  });
+
+  it("bấm lần nữa ⇒ bỏ tick hết", async () => {
+    dung({ dong: [], coTrung: true, gopTrung: true, trungHeThong: true, coCotDe: true });
+    await napFile(bonDong);
+    sangTabTrung();
+    fireEvent.click(oDeTatCa());
+    fireEvent.click(oDeTatCa());
+    for (const d of [2, 3, 4, 5]) expect(oDe(d).checked).toBe(false);
+  });
+
+  it("⚠️ tick VÀI dòng ⇒ ô tiêu đề ở trạng thái LỬNG, không phải đã-tick-hết", async () => {
+    // Vẽ nó như đã tick hết là nói dối đúng lúc người dùng cần biết mình đã ra lệnh cho
+    // bao nhiêu dòng — và lệnh ở đây là ghi đè dữ liệu thật.
+    dung({ dong: [], coTrung: true, gopTrung: true, trungHeThong: true, coCotDe: true });
+    await napFile(bonDong);
+    sangTabTrung();
+    fireEvent.click(oDe(2));
+    expect(oDeTatCa().checked).toBe(false);
+    expect(oDeTatCa().indeterminate).toBe(true);
+  });
+
+  it("tick đủ từng dòng ⇒ ô tiêu đề tự sáng, hết lửng", async () => {
+    dung({ dong: [], coTrung: true, gopTrung: true, trungHeThong: true, coCotDe: true });
+    await napFile(bonDong);
+    sangTabTrung();
+    for (const d of [2, 3, 4, 5]) fireEvent.click(oDe(d));
+    expect(oDeTatCa().checked).toBe(true);
+    expect(oDeTatCa().indeterminate).toBe(false);
+  });
+
+  it("⚠️ đếm ra CON SỐ THẬT đang bị đè, không để người dùng tự đoán", async () => {
+    dung({ dong: [], coTrung: true, gopTrung: true, trungHeThong: true, coCotDe: true });
+    await napFile(bonDong);
+    sangTabTrung();
+    expect(screen.getByText(/Chưa tick dòng nào/)).toBeTruthy();
+    fireEvent.click(oDe(2));
+    fireEvent.click(oDe(3));
+    expect(screen.getByText(/Đang đè 2\/4 dòng trùng/)).toBeTruthy();
+  });
+});
+
+describe("[NHAP-T22] ⚠️ dòng đã tick phải NÓI ĐÚNG việc sắp xảy ra", () => {
+  it("chưa tick ⇒ vẫn là câu gộp mặc định", async () => {
+    dung({ dong: [], coTrung: true, gopTrung: true, trungHeThong: true, coCotDe: true });
+    await napFile([{ Tên: "A", SĐT: "1" }]);
+    sangTabTrung();
+    expect(screen.getAllByText(/Sẽ cập nhật bản ghi cũ/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/SẼ GHI ĐÈ/)).toBeNull();
+  });
+
+  it("tick rồi ⇒ câu đổi thành cảnh báo ghi đè", async () => {
+    // Câu mặc định của màn lead hứa nguyên văn "chỉ điền những ô đang để trống". Để nguyên
+    // câu đó cạnh một ô tick đang bật là màn hình nói ngược với việc nó sắp làm.
+    dung({ dong: [], coTrung: true, gopTrung: true, trungHeThong: true, coCotDe: true });
+    await napFile([{ Tên: "A", SĐT: "1" }]);
+    sangTabTrung();
+    fireEvent.click(oDe(2));
+    expect(screen.getAllByText(/SẼ GHI ĐÈ thông tin đang lưu/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Sẽ cập nhật bản ghi cũ —/)).toBeNull();
+  });
+
+  it("bỏ tick ⇒ câu quay lại như cũ", async () => {
+    dung({ dong: [], coTrung: true, gopTrung: true, trungHeThong: true, coCotDe: true });
+    await napFile([{ Tên: "A", SĐT: "1" }]);
+    sangTabTrung();
+    fireEvent.click(oDe(2));
+    fireEvent.click(oDe(2));
+    expect(screen.queryByText(/SẼ GHI ĐÈ/)).toBeNull();
+    expect(screen.getAllByText(/Sẽ cập nhật bản ghi cũ/).length).toBeGreaterThan(0);
+  });
+});
+
+describe("[NHAP-T23] ⚠️ lệnh ghi đè phải ĐI TỚI NƠI, đúng dòng", () => {
+  it("gửi kèm `ctx.ghiDe` đúng những dòng đã tick", async () => {
+    // Đây là ca then chốt: tick ở màn hình mà không tới được `onImport` thì mọi ca giao
+    // diện phía trên chỉ chứng minh một ô vuông biết đổi màu.
+    let batDuoc: Set<number> | null = null;
+    dung({
+      dong: [],
+      coTrung: true,
+      gopTrung: true,
+      trungHeThong: true,
+      coCotDe: true,
+      onImport: async (_rows, ctx) => {
+        batDuoc = ctx?.ghiDe ?? null;
+        return { success: 0, errors: [] as [] };
+      },
+    });
+    await napFile([
+      { Tên: "A", SĐT: "1" },
+      { Tên: "B", SĐT: "2" },
+      { Tên: "C", SĐT: "3" },
+    ]);
+    sangTabTrung();
+    fireEvent.click(oDe(2));
+    fireEvent.click(oDe(4));
+    fireEvent.click(screen.getByRole("button", { name: /^Nhập \d+ dòng/ }));
+    await screen.findByText(/Nhập xong|Đang nhập/);
+    expect(batDuoc).not.toBeNull();
+    expect([...(batDuoc as unknown as Set<number>)].sort()).toEqual([2, 4]);
+  });
+
+  it("⚠️ không tick gì ⇒ gửi tập RỖNG, không phải `undefined`", async () => {
+    // Trang gọi đọc `ctx.ghiDe.has(...)`. Gửi `undefined` là ném lỗi giữa lượt nhập.
+    let batDuoc: Set<number> | null = null;
+    dung({
+      dong: [],
+      coTrung: true,
+      gopTrung: true,
+      trungHeThong: true,
+      coCotDe: true,
+      onImport: async (_rows, ctx) => {
+        batDuoc = ctx?.ghiDe ?? null;
+        return { success: 0, errors: [] as [] };
+      },
+    });
+    await napFile([{ Tên: "A", SĐT: "1" }]);
+    fireEvent.click(screen.getByRole("button", { name: /^Nhập \d+ dòng/ }));
+    await screen.findByText(/Nhập xong|Đang nhập/);
+    expect(batDuoc).toBeInstanceOf(Set);
+    expect((batDuoc as unknown as Set<number>).size).toBe(0);
+  });
+
+  it("⚠️ SỬA một dòng thì BỎ luôn tick của nó", async () => {
+    // Người dùng sửa SĐT chính là để dòng trỏ sang chỗ khác. Giữ lại cái tick là đè lên
+    // đúng một bản ghi không liên quan — hỏng theo kiểu không khôi phục được.
+    dung({ dong: [], coTrung: true, gopTrung: true, trungHeThong: true, coCotDe: true });
+    await napFile([
+      { Tên: "A", SĐT: "1" },
+      { Tên: "B", SĐT: "2" },
+    ]);
+    sangTabTrung();
+    fireEvent.click(oDe(2));
+    fireEvent.click(oDe(3));
+    expect(oDe(2).checked).toBe(true);
+    fireEvent.click(screen.getAllByRole("button", { name: /Sửa dòng 2/ })[0]!);
+    fireEvent.click(screen.getAllByRole("button", { name: /Lưu dòng/ })[0]!);
+    // ⚠️ PHẢI `findBy` (chờ) chứ không `queryBy` (hỏi ngay).
+    //
+    // Lưu xong, `luuDongDaSua` xoá dấu trùng của dòng đó NGAY rồi mới hỏi lại server —
+    // nên có một nhịp dòng 2 rời khỏi nhóm Trùng và ô tick biến mất. Bản đầu của ca này
+    // viết `queryBy` + `if (con)`: cấy lại lỗi (giữ nguyên tick khi sửa) mà nó vẫn XANH,
+    // vì `con` là null nên không có khẳng định nào chạy. Đúng nghĩa xanh giả — một ca
+    // trông như đang canh mà thực ra không chạm tới thứ nó nói.
+    const con = (await screen.findByRole("checkbox", {
+      name: "Đè dòng 2",
+    })) as HTMLInputElement;
+    expect(con.checked).toBe(false);
+    // Và dòng KHÔNG bị sửa thì tick của nó phải còn nguyên — nếu không thì "bỏ tick" chỉ
+    // là một cách nói khác của "xoá sạch mọi tick", và người dùng mất cả 144 dòng kia.
+    expect(oDe(3).checked).toBe(true);
   });
 });

@@ -109,7 +109,27 @@ export interface ParsedLeadRow {
    */
   saleRaw: string | null;
   courseRaw: string | null; // khoá quan tâm (resolve ở DB)
+  /**
+   * Nguồn để TẠO lead mới. Ô trống rơi về `"Import Excel"` — một lead mới không được
+   * sinh ra mà không có nguồn nào.
+   */
   source: string;
+  /**
+   * Nguồn NGƯỜI TA THỰC SỰ GÕ. `null` = ô để trống.
+   *
+   * ⚠️ Tách khỏi `source` sau khi ĐO thật 16/09/2026 trên máy: nhập lại một lead có
+   * `source = "Website"` bằng file bỏ trống cột Nguồn, có tick Ghi đè ⇒ nguồn bị đổi thành
+   * `"Import Excel"`. Mặc định vốn đúng cho lượt TẠO lại thành lệnh XOÁ ở lượt CẬP NHẬT: nó
+   * biến "file không nói gì" thành "file bảo ghi Import Excel", và đường nhập lại không có
+   * cách nào phân biệt hai điều đó.
+   *
+   * Hỏng ở đây im lặng và lan rộng: nguồn lead là thứ báo cáo marketing đọc để biết tiền
+   * quảng cáo đi đâu, nên một lượt nhập 300 dòng thổi bay phân bổ nguồn của cả lô mà không
+   * ô nào trên màn hình đỏ lên.
+   *
+   * Đường CẬP NHẬT phải dùng trường này; đường TẠO dùng `source`.
+   */
+  sourceRaw: string | null;
   note: string | null;
 }
 
@@ -154,6 +174,7 @@ export function parseLeadImportRow(
       saleRaw: cell(raw, LEAD_IMPORT_SALE_HEADER) || null,
       courseRaw: cell(raw, "Khoá quan tâm") || null,
       source: cell(raw, "Nguồn") || "Import Excel",
+      sourceRaw: cell(raw, "Nguồn") || null,
       note: cell(raw, "Ghi chú") || null,
     },
   };
