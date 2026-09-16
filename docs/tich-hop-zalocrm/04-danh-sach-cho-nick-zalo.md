@@ -117,6 +117,18 @@ curl -s -i -X POST https://test.satarobo.vn/api/webhooks/zalocrm/cs1 \
   chéo cơ sở), không phải lỗi mới.
 
 ### ⑩ Cron tự cấp quyền nick — 5 phút chờ
+
+> ⚠️ **Trên `test`, Vercel Cron KHÔNG chạy** (custom environment). Cron của ZaloCRM được
+> bơm bằng `.github/workflows/cron-pump-test.yml`, nhịp ~5 phút. **Không muốn chờ thì kích tay:**
+>
+> ```bash
+> gh workflow run cron-pump-test.yml
+> ```
+>
+> Lệnh này cũng chạy kèm job đối soát OrgUnit ban đêm — vô hại, nó idempotent.
+> (Nhắc để khỏi tưởng cron hỏng: trước 16/09/2026 `zalocrm-doi-soat` **không** nằm trong
+> danh sách bơm, nên mục ⑩ và ⑪ sẽ không bao giờ đạt trên `test`. Đã vá.)
+
 - **Làm gì:** lấy một Sale CS1 **chưa từng mở ZaloCRM**. Cho đăng nhập `test.satarobo.vn`, mở `/admin/zalo-crm`.
 - **Lần đầu có thể TRỐNG** — đúng như thiết kế, cron chưa chạy.
 - **Chờ tối đa 5 phút**, tải lại trang.
@@ -141,7 +153,7 @@ curl -s -i -X POST https://test.satarobo.vn/api/webhooks/zalocrm/cs1 \
 | # | Việc | Đạt khi |
 |---|---|---|
 | ⑫ | **F5 — nút "Tạo lead" trong chat.** Trong khung thông tin liên hệ bên phải của chat. | Sata nhảy sang trang nhập khách, **đã điền sẵn** số điện thoại + tên lấy từ hội thoại |
-| ⑬ | **Lưới bù tin.** Tắt đường hầm 2 phút, nhắn 1 tin, bật lại, chờ ≤5 phút. | Tin tự về, không phải bấm gì |
+| ⑬ | **Lưới bù tin.** Tắt đường hầm 2 phút, nhắn 1 tin, bật lại, chờ ≤5 phút (hoặc `gh workflow run cron-pump-test.yml`). | Tin tự về, không phải bấm gì |
 | ⑭ | **Báo cáo phản hồi.** `/admin/bao-cao/phan-hoi-hop-thu`. | Có số liệu, không trống |
 
 ---
