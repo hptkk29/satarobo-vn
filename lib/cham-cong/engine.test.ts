@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { catalogByCode } from "./catalog";
-import { computeDay, dedupeTaps, pairLogs, DEFAULT_RULES, m, type EngineAssignment, type EngineLog } from "./engine";
+import {
+  computeDay,
+  dedupeTaps,
+  ketQuaNgayChuaDienRa,
+  pairLogs,
+  DEFAULT_RULES,
+  m,
+  type EngineAssignment,
+  type EngineLog,
+} from "./engine";
 
 // Test viết TRƯỚC hiện thực (luật cứng #5). Nguồn: kế hoạch v3.3 §4 + BA §6.3-bis (7 ví dụ
 // dịch sang giờ Sheet: S 07:45–11:30 · C 13:45–17:30 · T 17:15–21:00; dung sai 30′ T-12).
@@ -268,5 +277,63 @@ describe("cờ chuyển tiếp + trần lượt (GC-07)", () => {
   });
   it("ruleSnapshot ghi tham số đã dùng", () => {
     expect(run("S", []).ruleSnapshot).toMatchObject({ rules: DEFAULT_RULES, templateCode: "S" });
+  });
+});
+
+// ══ NGÀY CHƯA DIỄN RA (sự cố 16/09/2026) ═════════════════════════════════════════════════
+//
+// Chủ dự án bắt trên localhost: bảng in "Không có lượt" cho 17/09 → 30/09 kèm đường dẫn
+// "Nộp đơn chỉnh công" — màn bảo người ta xin bổ sung giờ cho NGÀY MAI. Đo prod hôm ấy:
+// 250 dòng ngày chưa diễn ra, 196 cờ oan, 185 công.
+//
+// Chốt của chủ dự án: giữ KẾ HOẠCH, bỏ CỜ và CÔNG THỰC NHẬN.
+describe("ketQuaNgayChuaDienRa — giữ kế hoạch, xoá vế đã xảy ra", () => {
+  // Đúng hình dạng dòng prod sinh ra: ca REQUIRED, không lượt quét nào.
+  const ngayChuaToi = () => run("HC", []);
+
+  it("bản GỐC (ngày đã khép) đúng là có cờ và có công — nếu không thì ca dưới vô nghĩa", () => {
+    // Vế này phải xanh TRƯỚC, kẻo ca chính chỉ chứng minh "0 bằng 0".
+    const r = ngayChuaToi();
+    expect(r.flags).toContain("KHONG_CO_LUOT");
+    expect(r.dayCreditEarned).toBeGreaterThan(0);
+  });
+
+  it("xoá HẾT cờ, không lọc riêng nhóm thiếu-quét", () => {
+    const r = ketQuaNgayChuaDienRa(ngayChuaToi());
+    expect(r.flags).toEqual([]);
+  });
+
+  it("xoá cả BỐN vế đã nhận — kể cả leaveUnits/holidayPaidUnits", () => {
+    // `buildPeriodSummary` của màn Kỳ công cộng thẳng hai cột sau. Bỏ sót chúng là vá được
+    // màn cá nhân mà màn Kỳ công vẫn cộng ngày chưa tới — cùng bug, chỗ khác.
+    const r = ketQuaNgayChuaDienRa({
+      ...ngayChuaToi(),
+      dayCreditEarned: 1,
+      hourCredit: 0.5,
+      leaveUnits: 1,
+      holidayPaidUnits: 1,
+    });
+    expect([r.dayCreditEarned, r.hourCredit, r.leaveUnits, r.holidayPaidUnits]).toEqual([0, 0, 0, 0]);
+  });
+
+  it("GIỮ NGUYÊN kế hoạch — đây là thứ màn Kỳ công cần để chốt sổ", () => {
+    const goc = ngayChuaToi();
+    const r = ketQuaNgayChuaDienRa(goc);
+    expect(r.dayCreditExpected).toBe(goc.dayCreditExpected);
+    expect(r.dayCreditExpected).toBeGreaterThan(0); // fixture phải có kế hoạch thật
+    expect(r.expectedMinutes).toBe(goc.expectedMinutes);
+    expect(r.amExpected).toBe(goc.amExpected);
+    expect(r.pmExpected).toBe(goc.pmExpected);
+    expect(r.dayType).toBe(goc.dayType);
+  });
+
+  it("KHÔNG giấu lượt quét có thật của ngày tương lai", () => {
+    // Nếu một ngày chưa tới mà lại CÓ mốc quét thì đó là tín hiệu thật (ai đó quét nhầm
+    // ngày, hoặc đồng hồ lệch) — hàm này không được xoá dấu vết ấy đi.
+    const goc = run("HC", [IN("07:45"), OUT("11:30")]);
+    const r = ketQuaNgayChuaDienRa(goc);
+    expect(r.workedMinutes).toBe(goc.workedMinutes);
+    expect(r.workedMinutes).toBeGreaterThan(0);
+    expect(r.pairs).toEqual(goc.pairs);
   });
 });
