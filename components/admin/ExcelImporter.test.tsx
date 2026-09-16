@@ -953,3 +953,78 @@ describe("[NHAP-T23] ⚠️ lệnh ghi đè phải ĐI TỚI NƠI, đúng dòng"
     expect(oDe(3).checked).toBe(true);
   });
 });
+
+describe("[NHAP-T24] ⚠️ lượt nhập HỎNG phải nói RÕ vì sao, ngay tại chỗ", () => {
+  // Ảnh chụp prod 16/09/2026: hộp thoại in đúng một câu "Nhập thất bại: Nhập thất bại"
+  // rồi biến mất khi bấm OK. Ba cái sai cùng lúc: chữ không chọn được nên không gửi được
+  // cho ai, hộp thoại chặn cả trang, và đóng xong là mất luôn.
+
+  it("hiện lý do ngay trên màn, KHÔNG dùng hộp thoại", async () => {
+    const goiAlert = vi.fn();
+    const alertCu = globalThis.alert;
+    globalThis.alert = goiAlert as unknown as typeof globalThis.alert;
+    try {
+      dung({
+        dong: [],
+        onImport: async () => {
+          throw new Error("Lỗi ghi: Transaction already closed");
+        },
+      });
+      await napFile([{ "Tên": "A", "SĐT": "1" }]);
+      fireEvent.click(screen.getByRole("button", { name: /^Nhập \d+ dòng/ }));
+      const bao = await screen.findByRole("alert");
+      expect(bao.textContent).toContain("Lỗi ghi: Transaction already closed");
+      // ⚠️ `alert()` chặn cả trang và nuốt chữ — không được dùng cho lỗi này nữa.
+      expect(goiAlert).not.toHaveBeenCalled();
+    } finally {
+      globalThis.alert = alertCu;
+    }
+  });
+
+  it("⚠️ danh sách dòng KHÔNG bị mất — sửa rồi bấm lại, không phải chọn file lại", async () => {
+    const alertCu = globalThis.alert;
+    globalThis.alert = (() => {}) as unknown as typeof globalThis.alert;
+    try {
+      dung({
+        dong: [],
+        onImport: async () => {
+          throw new Error("hopng");
+        },
+      });
+      await napFile([
+        { "Tên": "A", "SĐT": "1" },
+        { "Tên": "B", "SĐT": "2" },
+      ]);
+      fireEvent.click(screen.getByRole("button", { name: /^Nhập \d+ dòng/ }));
+      await screen.findByRole("alert");
+      expect(demNhom(/Hợp lệ/)).toBe(2);
+      expect(nutNhap()).toContain("Nhập 2 dòng");
+    } finally {
+      globalThis.alert = alertCu;
+    }
+  });
+
+  it("⚠️ lượt thứ hai hỏng KHÁC lý do ⇒ hiện lý do MỚI", async () => {
+    // Ca đầu tiên viết ở đây là "lượt hai THÀNH CÔNG thì lỗi cũ biến mất" — cấy lại lỗi
+    // (bỏ `setLoiNhap(null)`) mà nó vẫn XANH. Đúng: thành công thì màn kết quả thay cả
+    // khung, panel lỗi không được dựng nữa dù state còn hay không. Tức ca đó canh một thứ
+    // KHÔNG QUAN SÁT ĐƯỢC — xanh vĩnh viễn, trông y hệt một ca đang làm việc.
+    //
+    // Thứ quan sát được, và thực sự nguy hiểm: lượt hai hỏng vì lý do khác mà màn hình
+    // vẫn in lý do cũ ⇒ người dùng đi sửa nhầm chỗ.
+    let lan = 0;
+    dung({
+      dong: [],
+      onImport: async () => {
+        lan += 1;
+        throw new Error(lan === 1 ? "Lý do CŨ 12345" : "Lý do MỚI 67890");
+      },
+    });
+    await napFile([{ "Tên": "A", "SĐT": "1" }]);
+    fireEvent.click(screen.getByRole("button", { name: /^Nhập \d+ dòng/ }));
+    expect((await screen.findByRole("alert")).textContent).toContain("Lý do CŨ 12345");
+    fireEvent.click(screen.getByRole("button", { name: /^Nhập \d+ dòng/ }));
+    await screen.findByText(/Lý do MỚI 67890/);
+    expect(screen.queryByText(/Lý do CŨ 12345/)).toBeNull();
+  });
+});
