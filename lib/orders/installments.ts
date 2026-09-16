@@ -5,6 +5,7 @@ import { assertCan } from "@/lib/auth/permissions";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { ensureOrderPaymentRecorded } from "@/lib/finance/payment";
 import { KHOAN_DA_GHI_NHAN } from "@/lib/finance/ghi-nhan";
+import { laThuTienLinhHoatBat } from "@/lib/finance/feature";
 // 03/08 — SỔ MỚI (PaymentRequest) chạy SONG SONG sổ cũ (OrderInstallment).
 // Sổ cũ giữ nguyên hành vi (đợt 1 = PAID) để không phá công nợ đang chạy; sổ mới
 // ⚠️ 03/08 luật ĐÃ ĐỔI: phiếu theo đợt sinh NGAY khi lưu kế hoạch (không chờ duyệt),
@@ -183,7 +184,7 @@ export async function recordInstallmentPlan(params: {
 
   const order = await db.order.findUnique({
     where: { id: orderId },
-    select: { code: true, totalAmount: true, centerId: true, leadId: true },
+    select: { code: true, totalAmount: true, centerId: true, orgUnitId: true, leadId: true },
   });
   if (!order) return { ok: false, error: "Không tìm thấy đơn" };
 
@@ -206,6 +207,15 @@ export async function recordInstallmentPlan(params: {
   const coDotChuaThu = kiem.coDotChuaThu;
 
   const now = new Date();
+
+  // PHIÊN A (16/09/2026) — đọc CÔNG TẮC trước transaction. `getSetting` có câu tra DB riêng;
+  // gọi nó BÊN TRONG transaction là giữ transaction mở trong lúc chờ một truy vấn không liên
+  // quan, và transaction của đường ghi tiền là thứ phải ngắn nhất có thể.
+  //
+  // Đọc theo `orgUnitId` của CƠ SỞ GIỮ ĐƠN, không theo người đang bấm: một đơn của cơ sở đã
+  // bật luồng mới phải được bảo vệ kể cả khi người bấm thuộc cơ sở khác.
+  const batLuongMoi = await laThuTienLinhHoatBat(order.orgUnitId);
+
   const chan = await db.$transaction(async (tx) => {
     await tx.orderInstallment.deleteMany({ where: { orderId } });
     // S1-fix (double-write) — kế hoạch 2 đợt là NGUỒN SỰ THẬT về tiền của đơn:
@@ -238,6 +248,20 @@ export async function recordInstallmentPlan(params: {
     //
     // Quét cả `TRAN_SO_DOT` đợt chứ không chỉ số đợt lần này: kế hoạch trước có thể
     // nhiều đợt hơn kế hoạch mới, và khoản nháp của đợt bị bỏ phải được dọn.
+    // ⚠️ PHIÊN A — CÔNG TẮC BẬT ⇒ TUYỆT ĐỐI KHÔNG CHẠM `Payment`.
+    //
+    // Chủ dự án chốt: *"'Lưu kế hoạch' đang xoá mềm Payment → cấm. Lưu/sửa đợt không bao giờ
+    // chạm dòng Payment đã có."*
+    //
+    // Phép xoá mềm dưới đây sinh ra cho luồng CŨ, nơi kế hoạch đợt TỰ ĐẺ dòng Ledger-A
+    // (`ensureOrderPaymentRecorded`) và vì thế phải tự dọn bản nháp của chính nó. Luồng MỚI
+    // (đợt theo con) KHÔNG đẻ dòng `Payment` nào — tiền chỉ vào sổ khi có giao dịch ngân hàng
+    // thật — nên không có gì để dọn, và mọi dòng `Payment` đang có đều là TIỀN THẬT.
+    //
+    // Cổng đặt Ở ĐÂY chứ không ở đường gọi, vì có BA đường gọi (`installments.ts:332`, `:500`,
+    // `crm/backfill-order.ts:153`). Gác ở đường gọi là gác một cửa rồi để hai cửa mở — đúng bài
+    // học của cổng A6 ngay phía trên.
+    if (!batLuongMoi) {
     const soDotCuaKeHoach = Array.from({ length: TRAN_SO_DOT }, (_, i) => i + 1);
     await tx.payment.updateMany({
       where: {
@@ -250,6 +274,7 @@ export async function recordInstallmentPlan(params: {
       },
       data: { deletedAt: now },
     });
+    }
     // Dựng đủ n đợt. `soDot` đánh số từ 1 theo thứ tự trong `dots` — đó cũng là thứ tự
     // hạn đóng, và là thứ tự `computeDueNow` chọn "đợt chưa thu sớm nhất".
     //

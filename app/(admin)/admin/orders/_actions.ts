@@ -36,6 +36,9 @@ import { ensureParentAccountForOrder } from "@/lib/parents/provision";
 import { ensureOrderPaymentRecorded } from "@/lib/finance/payment";
 import { ensureFullOrderRequest } from "@/lib/payments/payment-request";
 import { dotsGhiTuForm } from "@/lib/payments/ke-hoach-dot";
+import { thuTuRot } from "@/lib/payments/thu-tu-rot";
+import { laThuTienLinhHoatBat } from "@/lib/finance/feature";
+import { noTheoCon, kiemTaoDot, kiemHuyDot } from "@/lib/finance/debt";
 import { getRequestMetadata } from "@/lib/audit/headers";
 import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
@@ -1038,6 +1041,35 @@ export async function changeOrderStatusAction(
       },
     });
 
+    // ── PHIÊN A (16/09/2026) · HUỶ ĐƠN PHẢI VOID PHIẾU THU ────────────────────
+    //
+    // Trước bản này, huỷ đơn chỉ đổi `Order.status` — **phiếu thu ở nguyên `PENDING`**. Cộng
+    // với việc tầng đối khớp không kiểm trạng thái đơn (đã vá cùng phiên ở
+    // `payos-ingest.ts`), hai lỗ ghép lại thành: đơn huỷ → phiếu vẫn sống → phụ huynh quét lại
+    // ảnh QR cũ trong điện thoại → `matchKey` bền theo đời phiếu nên khớp ngay → tiền vào một
+    // đơn không còn tồn tại. Không ai thấy, vì màn đơn đã huỷ thì chẳng ai mở.
+    //
+    // ⚠️ VOID mọi phiếu CHƯA PAID, kể cả `PARTIAL` (đã có một phần tiền). VOID **không xoá**
+    // đồng nào: `PaymentAllocation` còn nguyên, tiền vẫn truy được. Nó chỉ thôi làm ĐÍCH RÓT.
+    // Bỏ `PARTIAL` ra khỏi danh sách là để lại đúng cái phiếu nguy hiểm nhất — phiếu mà khách
+    // đã từng quét thành công một lần.
+    //
+    // ⚠️ Phiếu `PAID` KHÔNG đụng: nó là bằng chứng một lần thu đã hoàn tất. Huỷ đơn không xoá
+    // lịch sử tiền; phần xử lý tiền của đơn huỷ là việc của kế toán (hoàn), không phải của một
+    // lệnh đổi trạng thái.
+    if (parsed.data.toStatus === "CANCELLED") {
+      await tx.paymentRequest.updateMany({
+        where: { orderId, status: { in: ["PENDING", "PARTIAL"] } },
+        data: { status: "VOID" },
+      });
+      // Mã QR đang sống của các phiếu đó cũng phải chết theo — nếu không thì màn hình vẫn
+      // hiện một mã bấm được, và affordance đó nói dối (luật 12).
+      await tx.qrSession.updateMany({
+        where: { paymentRequest: { orderId }, status: "ACTIVE" },
+        data: { status: "EXPIRED" },
+      });
+    }
+
     // S1 — xác nhận đơn (thu offline): nếu CHƯA có khoản RECORDED nào (đơn không đi qua
     // installments) → ghi 1 Payment(RECORDED) cho phần đã thu (idempotent theo marker
     // [auto:order-confirm]). Tránh double-count khi installments đã ghi sổ.
@@ -1621,5 +1653,167 @@ export async function luuThongTinHoaDonAction(
   if (upd.count === 0) return { ok: false as const, error: "STALE_WRITE" };
 
   revalidatePath(`/orders/${orderId}`);
+  return { ok: true as const };
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// PHIÊN A (16/09/2026) — ĐỢT THU THEO TỪNG CON
+//
+// Chủ dự án chốt: *"Sale trên đơn: chọn con → nhập số tiền → hạn → 'Tạo đợt'. Số tiền ≤ học
+// phí thực của con − đã thu − đợt đang mở của con. Không bắt lên lịch cả khoá."*
+//
+// ⚠️ HAI ĐIỂM KHÁC HẲN kế hoạch trả góp cũ (`recordInstallmentPlan`), và cả hai là chủ ý:
+//   1. **Không đẻ dòng `Payment` nào.** Đợt chỉ là một khoản PHẢI THU; tiền vào sổ khi và chỉ
+//      khi có giao dịch ngân hàng thật. Đó là lý do "Lưu kế hoạch xoá mềm Payment" không thể
+//      tái diễn ở đường này — không có gì để dọn.
+//   2. **Không đụng `OrderInstallment`.** Sổ kế hoạch cũ đóng băng theo quyết định của chủ dự
+//      án; đợt theo con sống ở `PaymentRequest.orderItemId`.
+// ═════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Tạo MỘT đợt thu cho MỘT con.
+ *
+ * Cổng số tiền nằm ở `kiemTaoDot` (thuần, có test) — ở đây chỉ nạp dữ liệu và ghi.
+ */
+export async function taoDotChoConAction(input: {
+  orderId: string;
+  orderItemId: string;
+  soTien: number;
+  dueDate?: string | null;
+}) {
+  const session = await requireOrdersManage();
+  const actor = await resolveActor(session.user.id);
+  const { actorId, actorName } = getAuditActor(session);
+  const sdb = scopedDb(actor);
+
+  const order = await sdb.order.findUnique({
+    where: { id: input.orderId },
+    select: { id: true, centerId: true, orgUnitId: true, status: true },
+  });
+  if (!order || !passesScope("Order", order, actor)) {
+    return { ok: false as const, error: "Không tìm thấy đơn hàng" };
+  }
+  if (!(await laThuTienLinhHoatBat(order.orgUnitId))) {
+    return { ok: false as const, error: "Tính năng thu học phí linh hoạt chưa bật cho cơ sở này" };
+  }
+  // Đơn đã huỷ/hoàn thì không tạo thêm khoản phải thu. Cùng danh sách trạng thái mà tầng đối
+  // khớp dùng để từ chối rót tiền — hai chỗ nói cùng một câu về "đơn còn sống".
+  if (["DRAFT", "CANCELLED", "REFUNDED"].includes(order.status)) {
+    return { ok: false as const, error: `Đơn đang ở trạng thái ${order.status} — không tạo đợt được` };
+  }
+
+  // Bỏ qua scope CÓ CHỦ Ý: con số công nợ phải giống nhau với mọi người xem (chốt của chủ
+  // dự án), và cổng "không vượt còn nợ" mà đọc qua scope thì một khoản ngoài tầm nhìn sẽ bị
+  // coi như không tồn tại ⇒ cổng cho tạo đợt VƯỢT quá số nợ thật. Đúng ca cấy (f) của `_qr-core`.
+  const bdb = scopedDb(actor, { bypass: true });
+  const so = await noTheoCon(input.orderId);
+  const con = so.con.find((c) => c.orderItemId === input.orderItemId);
+  if (!con) return { ok: false as const, error: "Dòng hàng không thuộc đơn này" };
+
+  const kiem = kiemTaoDot({
+    soTien: input.soTien,
+    conNo: con.conNo,
+    tongDotDangMo: con.tongDotDangMo,
+    tenCon: con.ten,
+  });
+  if (!kiem.ok) return { ok: false as const, error: kiem.loi };
+
+  const han = input.dueDate ? new Date(input.dueDate) : null;
+  if (han && Number.isNaN(han.getTime())) {
+    return { ok: false as const, error: "Hạn đóng không hợp lệ" };
+  }
+
+  // Số đợt kế tiếp CỦA RIÊNG CON NÀY (không phải của đơn) — khoá duy nhất từng phần là
+  // `[orderItemId, installmentNo] WHERE orderItemId IS NOT NULL`, nên hai con đếm độc lập.
+  const maxDot = await bdb.paymentRequest.aggregate({
+    where: { orderItemId: input.orderItemId },
+    _max: { installmentNo: true },
+  });
+  const soDot = (maxDot._max.installmentNo ?? 0) + 1;
+
+  await bdb.paymentRequest.create({
+    data: {
+      orderId: input.orderId,
+      orderItemId: input.orderItemId,
+      centerId: order.centerId,
+      installmentNo: soDot,
+      amountDue: kiem.soTien,
+      dueDate: han,
+      status: "PENDING",
+      // Thứ tự rót: DÒNG trước, ĐỢT sau (`lib/payments/thu-tu-rot.ts`). Không đặt thì hai
+      // con cùng "đợt 1" có cùng `sortOrder` và thứ tự rót rơi về so sánh cuid.
+      sortOrder: thuTuRot({
+        thuTuDong: so.con.findIndex((c) => c.orderItemId === input.orderItemId),
+        installmentNo: soDot,
+      }),
+    },
+  });
+
+  await writeAudit({
+    actor: { id: actorId ?? "", name: actorName },
+    module: "finance",
+    entityType: "Order",
+    entityId: input.orderId,
+    action: "DOT_THEO_CON_CREATED",
+    newValues: { orderItemId: input.orderItemId, ten: con.ten, soTien: kiem.soTien, soDot },
+  });
+
+  revalidatePath(`/orders/${input.orderId}`);
+  return { ok: true as const };
+}
+
+/** Huỷ một đợt CHƯA CÓ TIỀN. Đợt đã nhận đồng nào thì không huỷ — xem `kiemHuyDot`. */
+export async function huyDotChoConAction(input: { orderId: string; paymentRequestId: string }) {
+  const session = await requireOrdersManage();
+  const actor = await resolveActor(session.user.id);
+  const { actorId, actorName } = getAuditActor(session);
+  const sdb = scopedDb(actor);
+
+  const order = await sdb.order.findUnique({
+    where: { id: input.orderId },
+    select: { id: true, centerId: true, orgUnitId: true },
+  });
+  if (!order || !passesScope("Order", order, actor)) {
+    return { ok: false as const, error: "Không tìm thấy đơn hàng" };
+  }
+  if (!(await laThuTienLinhHoatBat(order.orgUnitId))) {
+    return { ok: false as const, error: "Tính năng thu học phí linh hoạt chưa bật cho cơ sở này" };
+  }
+
+  const bdb = scopedDb(actor, { bypass: true });
+  const phieu = await bdb.paymentRequest.findUnique({
+    where: { id: input.paymentRequestId },
+    select: { id: true, orderId: true, status: true, allocations: { select: { amount: true } } },
+  });
+  // So `orderId` chứ không tin tham số: người gọi có thể gửi id phiếu của đơn khác.
+  if (!phieu || phieu.orderId !== input.orderId) {
+    return { ok: false as const, error: "Không tìm thấy đợt thu" };
+  }
+
+  const kiem = kiemHuyDot({
+    trangThai: phieu.status,
+    daRot: phieu.allocations.reduce((s, a) => s + a.amount, 0),
+  });
+  if (!kiem.ok) return { ok: false as const, error: kiem.loi };
+
+  await bdb.$transaction(async (tx) => {
+    await tx.paymentRequest.update({ where: { id: phieu.id }, data: { status: "VOID" } });
+    // Mã QR của đợt vừa huỷ phải chết theo — affordance phải nói thật.
+    await tx.qrSession.updateMany({
+      where: { paymentRequestId: phieu.id, status: "ACTIVE" },
+      data: { status: "EXPIRED" },
+    });
+  });
+
+  await writeAudit({
+    actor: { id: actorId ?? "", name: actorName },
+    module: "finance",
+    entityType: "Order",
+    entityId: input.orderId,
+    action: "DOT_THEO_CON_VOIDED",
+    newValues: { paymentRequestId: phieu.id },
+  });
+
+  revalidatePath(`/orders/${input.orderId}`);
   return { ok: true as const };
 }

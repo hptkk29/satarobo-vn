@@ -1730,7 +1730,7 @@ model Student {
   auditLogs StudentAuditLog[] @relation("StudentAuditLogs")
 
   // Phase 5.6 — Order
-  orders Order[] @relation("StudentOrders")
+  orders     Order[]     @relation("StudentOrders")
   /// Dòng hàng mua CHO em này — đơn nhiều con (15/09/2026).
   orderItems OrderItem[] @relation("StudentOrderItems")
 
@@ -4267,7 +4267,7 @@ model OrderItem {
   /// ⚠️ `giaTri` (số đã gõ) và `giam` (số thực sự trừ được sau khi kẹp vào tạm tính của
   /// dòng) cố ý tách đôi: lưu một trong hai là hoặc bảng hiển thị cộng không ra tổng,
   /// hoặc mất dấu việc khoản cuối đã bị cắt bớt.
-  discounts       Json?
+  discounts Json?
 
   metadata Json?
 
@@ -4276,6 +4276,8 @@ model OrderItem {
 
   /// 16/09 — phiếu thu của RIÊNG dòng này ("công nợ theo CON").
   paymentRequests PaymentRequest[]
+  /// 16/09 — khoản tiền đã vào RIÊNG dòng này. Xem chú thích `Payment.orderItemId`.
+  payments        Payment[]
 
   @@index([orderId])
   @@index([type])
@@ -6170,11 +6172,29 @@ model Payment {
   order        Order       @relation("OrderPayments", fields: [orderId], references: [id], onDelete: Restrict) // FIX-C3
   enrollmentId String?
   enrollment   Enrollment? @relation("EnrollmentPayments", fields: [enrollmentId], references: [id], onDelete: SetNull) // FIX-C3: liên kết mềm, giữ SetNull
-  amount       Int
-  method       String // tiền mặt / chuyển khoản / ... (id hoặc nhãn)
-  paidDate     DateTime    @db.Timestamptz(6)
-  evidenceUrl  String?
-  note         String?     @db.Text
+
+  /// Khoản này của DÒNG HÀNG nào — tức của CON nào [16/09/2026, phiên A].
+  ///
+  /// ⚠️ KHÔNG thay `enrollmentId`, hai cột sống chung và có vai khác nhau:
+  ///   · `orderItemId`  — con nào trên ĐƠN. Có NGAY từ lúc tạo đơn. Hạt của công nợ theo con.
+  ///   · `enrollmentId` — ghi danh nào. Chỉ có SAU khi chốt lead. Hạt của học bạ, hoàn tiền.
+  ///
+  /// Vì sao cần: `/orders/new` không tạo `Enrollment` nào (convert-lead đúc sau), nên suốt
+  /// quãng "đơn đã tạo, chưa chốt lead" — đúng quãng phụ huynh chuyển đợt 1 — không có gì để
+  /// gắn tiền vào một đứa trẻ. Đo trên prod 16/09: **18 đơn / 24 khoản / 178.544.000đ** đang
+  /// kẹt ở đúng tình trạng đó (`enrollmentId IS NULL`).
+  ///
+  /// `Restrict` (khác `SetNull` của `enrollmentId` ngay trên, và khác có chủ ý): xoá ghi danh
+  /// là việc học vụ nên không được kéo sổ tiền theo; còn dòng hàng thì không có đường xoá nào
+  /// trong mã chạy thật, nên `Restrict` không chặn ai mà vẫn bảo đảm tiền không mất dấu con.
+  orderItemId String?
+  orderItem   OrderItem? @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+
+  amount      Int
+  method      String // tiền mặt / chuyển khoản / ... (id hoặc nhãn)
+  paidDate    DateTime @db.Timestamptz(6)
+  evidenceUrl String?
+  note        String?  @db.Text
 
   saleStatus       PaymentSaleStatus       @default(RECORDED)
   accountantStatus PaymentAccountantStatus @default(PENDING)
@@ -6206,6 +6226,7 @@ model Payment {
 
   @@index([orderId])
   @@index([enrollmentId])
+  @@index([orderItemId])
   @@index([centerId])
   @@index([accountantStatus])
   @@index([orgUnitId])
@@ -6242,9 +6263,9 @@ enum PaymentRequestStatus {
 /// (đơn không trả góp / kế hoạch chưa duyệt). Phiếu theo đợt (1,2,…) CHỈ được
 /// sinh bởi đường duyệt kế hoạch trả góp — xem lib/payments/payment-request.ts.
 model PaymentRequest {
-  id        String  @id @default(cuid())
-  orderId   String
-  order     Order   @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  id          String     @id @default(cuid())
+  orderId     String
+  order       Order      @relation(fields: [orderId], references: [id], onDelete: Restrict)
   /// Phiếu này thu tiền cho DÒNG HÀNG nào — tức cho CON nào [16/09/2026, bước B].
   ///
   /// NULL = luồng CŨ (phiếu "thu toàn đơn", hoặc mọi phiếu sinh trước 16/09). Là giá trị
@@ -6257,11 +6278,11 @@ model PaymentRequest {
   /// tiền của một em hoá tiền chung. Con nghỉ học thì HUỶ dòng, không xoá dòng.
   orderItemId String?
   orderItem   OrderItem? @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
-  centerId  String? // cách ly cơ sở (scopedDb)
+  centerId    String? // cách ly cơ sở (scopedDb)
   // P1 · US-07 — cột SONG SONG với centerId (ghi kép tới hết P4).
   // Cột TRẦN, không FK — giống 28 bảng của PR-A. Ý nghĩa của NULL theo
   // từng bảng: xem BACKFILL_SPECS trong lib/org/center-bridge.ts.
-  orgUnitId String?
+  orgUnitId   String?
 
   installmentNo Int // 0 = toàn đơn; 1,2,… = số thứ tự đợt
   amountDue     Int

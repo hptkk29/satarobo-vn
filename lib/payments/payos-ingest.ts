@@ -6,6 +6,10 @@ import { ensureParentAccountForOrder } from "@/lib/parents/provision";
 import { sendEmailForTrigger } from "@/lib/email/trigger";
 import { notifyOrderByZnsIfNoEmail } from "@/lib/notify/order";
 import { extractOrderCode, normalizeContent } from "@/lib/payments/sepay";
+import {
+  qrConRotDuocTien,
+  TRANG_THAI_DON_KHONG_NHAN_TIEN,
+} from "@/lib/payments/don-nhan-tien";
 // Quy tắc "khoản này thuộc ghi danh nào" — MỘT chỗ duy nhất, dùng chung với màn sửa tay
 // ở /admin/payments. Xem khối chú thích tại chỗ gọi (ghi sổ cũ) để biết vì sao.
 import { chonGhiDanhChoKhoan } from "@/lib/finance/gan-ghi-danh-khoan";
@@ -662,7 +666,14 @@ export async function resolvePaymentTargetDetailed(
   const candidates = collectMatchKeyCandidates(data);
   if (candidates.length > 0) {
     const rows = await db.paymentRequest.findMany({
-      where: { matchKey: { in: candidates } },
+      // PHIÊN A — hai vế lọc THÊM so với bản cũ, và cả hai đều là tiền:
+      //  · phiếu VOID không còn là đích rót (huỷ đợt xong mà QR cũ vẫn khớp là rót vào chỗ đã bỏ);
+      //  · đơn DRAFT/CANCELLED/REFUNDED không nhận tiền tự động — xem hằng ở trên.
+      where: {
+        matchKey: { in: candidates },
+        status: { not: "VOID" },
+        order: { status: { notIn: [...TRANG_THAI_DON_KHONG_NHAN_TIEN] }, deletedAt: null },
+      },
       select: { id: true, orderId: true, matchKey: true },
     });
     for (const c of candidates) {
@@ -677,9 +688,24 @@ export async function resolvePaymentTargetDetailed(
   if (orderCode) {
     const session = await db.qrSession.findUnique({
       where: { providerOrderCode: orderCode },
-      select: { id: true, paymentRequest: { select: { id: true, orderId: true } } },
+      select: {
+        id: true,
+        paymentRequest: {
+          select: {
+            id: true,
+            orderId: true,
+            status: true,
+            order: { select: { status: true, deletedAt: true } },
+          },
+        },
+      },
     });
-    if (session?.paymentRequest) {
+    // PHIÊN A — cùng hai vế lọc như nhánh (a). Ở đây phải lọc SAU khi tra (không phải trong
+    // `where`) vì `findUnique` khoá theo `providerOrderCode`; thêm điều kiện vào `where` của
+    // `findUnique` là lỗi kiểu, không phải lựa chọn.
+    const phieuCuaQr = session?.paymentRequest ?? null;
+    const qrConHieuLuc = qrConRotDuocTien(phieuCuaQr);
+    if (session && phieuCuaQr && qrConHieuLuc) {
       return {
         target: {
           paymentRequestId: session.paymentRequest.id,

@@ -22,6 +22,9 @@ import { computeDueNow } from "@/lib/payments/due-now";
 import { getOrderPaymentRequests } from "@/lib/payments/payment-request";
 import { loadActiveQrSessions } from "../_qr-core";
 import { maskPhone, maskEmail } from "@/lib/utils";
+import { laThuTienLinhHoatBat } from "@/lib/finance/feature";
+import { noTheoCon } from "@/lib/finance/debt";
+import { CongNoTheoCon } from "../_components/cong-no-theo-con";
 
 export const metadata = { title: "Chi tiết đơn hàng | Admin" };
 export const dynamic = "force-dynamic";
@@ -194,6 +197,15 @@ export default async function OrderDetailPage({ params }: Props) {
   );
   const donNhiem = nhiemMap.get(order.id) ?? DON_SACH;
 
+  // PHIÊN A — công nợ theo từng con. Chỉ tính khi CÔNG TẮC BẬT cho cơ sở giữ đơn: tắt thì
+  // trang giữ nguyên y như cũ, không thêm một truy vấn nào.
+  //
+  // ⚠️ `noTheoCon` cố ý đọc bằng `db` TRẦN (không `scopedDb`) — chốt của chủ dự án: *"cùng một
+  // đơn, ai mở cũng ra cùng con số"*. Cách ly cơ sở đã ép ở cửa vào: tới được dòng này nghĩa là
+  // `scopedDb` đã cho phép đọc chính cái đơn này.
+  const batThuTheoCon = await laThuTienLinhHoatBat(order.orgUnitId);
+  const soTheoCon = batThuTheoCon ? await noTheoCon(order.id) : null;
+
   const congNo = congNoDon({
     totalAmount: order.totalAmount,
     daGhiNhan: paidSoFar._sum.amount ?? 0,
@@ -287,6 +299,12 @@ export default async function OrderDetailPage({ params }: Props) {
         <ChevronLeft className="h-4 w-4" aria-hidden />
         Quay lại danh sách
       </Link>
+
+      {soTheoCon && (
+        <div className="mb-4">
+          <CongNoTheoCon orderId={order.id} so={soTheoCon} duocSua={canManage} />
+        </div>
+      )}
 
       <OrderDetailClient
         order={

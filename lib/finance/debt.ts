@@ -395,3 +395,104 @@ export async function remindOverdueInstallments(
   }
   return { found, sent, skipped };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CÔNG NỢ THEO TỪNG CON — PHIÊN A (16/09/2026)
+//
+// Chủ dự án chốt: *"Công nợ con = học phí thực − đã thu; công nợ đơn = Σ các con. Tính một
+// chỗ trong debt.ts."* Đây là chỗ đó. Phép tính THUẦN ở `lib/finance/no-theo-con.ts`; ở đây
+// chỉ có phần đọc DB.
+//
+// ⚠️ ĐỌC BẰNG `db` TRẦN, KHÔNG QUA `scopedDb` — VÀ ĐÓ LÀ YÊU CẦU, KHÔNG PHẢI SƠ SUẤT.
+//
+// Chủ dự án chốt: *"KHÔNG lọc theo scopedDb/cơ sở của người xem: cùng một đơn, ai mở cũng ra
+// cùng con số."*
+//
+// Vì sao luật đó quan trọng đến mức phải viết ra: `Payment` nằm trong `SCOPED_MODELS` và KHÔNG
+// nằm trong `NULL_IS_GLOBAL_MODELS` (`lib/db-scope.ts`). Nghĩa là một khoản có `centerId` khác
+// — hoặc `centerId = NULL` — sẽ bị `scopedDb` LỌC MẤT với người cấp cơ sở. Hệ quả đo được:
+// **con số "đã thu" của cùng một đơn KHÁC NHAU tuỳ ai mở màn**, và không lỗi nào báo. Một phụ
+// huynh bị hai nhân viên nói hai số nợ khác nhau là thứ không sửa được bằng bản vá.
+//
+// Cách ly cơ sở vẫn còn nguyên, chỉ là nó ép ở CỬA VÀO: trang đơn đã gác quyền `orders:view` +
+// `scopedDb` khi tra chính cái đơn đó. Ai mở được đơn thì thấy đủ tiền của đơn đó — đúng.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import {
+  kiemHuyDot,
+  kiemTaoDot,
+  tinhNoTheoCon,
+  type DotCuaDong,
+  type NoTheoConKetQua,
+} from "@/lib/finance/no-theo-con";
+
+export { kiemHuyDot, kiemTaoDot };
+export type { NoCuaCon, NoTheoConKetQua } from "@/lib/finance/no-theo-con";
+
+/**
+ * Công nợ từng con của một đơn.
+ *
+ * Tập trạng thái `Payment` được cộng — nói rõ một lần, dùng ở mọi chỗ gọi:
+ *   · `daThu`      = TRỤC A — `KHOAN_DA_XAC_NHAN` (`accountantStatus: CONFIRMED`, chưa xoá mềm)
+ *   · `choXacNhan` = TRỤC B trừ đi trục A — đã ghi nhận nhưng kế toán chưa xác nhận
+ * Lý do chọn trục A cho `conNo`: xem đầu `lib/finance/no-theo-con.ts`.
+ */
+export async function noTheoCon(orderId: string): Promise<NoTheoConKetQua> {
+  const [dong, khoan, dot] = await Promise.all([
+    db.orderItem.findMany({
+      where: { orderId },
+      select: {
+        id: true,
+        itemName: true,
+        totalPrice: true,
+        discountAmount: true,
+        enrollment: { select: { class: { select: { course: { select: { name: true } } } } } },
+      },
+      orderBy: { createdAt: "asc" },
+    }),
+    db.payment.findMany({
+      where: { orderId, deletedAt: null },
+      select: { orderItemId: true, amount: true, accountantStatus: true, saleStatus: true },
+    }),
+    db.paymentRequest.findMany({
+      where: { orderId },
+      select: {
+        id: true,
+        orderItemId: true,
+        installmentNo: true,
+        amountDue: true,
+        dueDate: true,
+        status: true,
+        allocations: { select: { amount: true } },
+      },
+    }),
+  ]);
+
+  // Lọc TRONG BỘ NHỚ bằng đúng hai hàm chuẩn của hai trục, thay vì hai câu `where` riêng:
+  // một câu tra thì không có cách nào để hai tập lệch định nghĩa nhau.
+  const daXacNhan = khoan.filter((k) => laKhoanDaXacNhan(k));
+  const choXacNhan = khoan.filter((k) => laKhoanDaGhiNhan(k) && !laKhoanDaXacNhan(k));
+
+  return tinhNoTheoCon({
+    dong: dong.map((d) => ({
+      orderItemId: d.id,
+      ten: d.itemName,
+      khoa: d.enrollment?.class?.course?.name ?? null,
+      tamTinh: d.totalPrice,
+      giam: d.discountAmount,
+    })),
+    khoanDaXacNhan: daXacNhan.map((k) => ({ orderItemId: k.orderItemId, amount: k.amount })),
+    khoanChoXacNhan: choXacNhan.map((k) => ({ orderItemId: k.orderItemId, amount: k.amount })),
+    dot: dot.map(
+      (r): DotCuaDong => ({
+        id: r.id,
+        orderItemId: r.orderItemId,
+        installmentNo: r.installmentNo,
+        amountDue: r.amountDue,
+        dueDate: r.dueDate,
+        trangThai: r.status,
+        daRot: r.allocations.reduce((s, a) => s + a.amount, 0),
+      }),
+    ),
+  });
+}
