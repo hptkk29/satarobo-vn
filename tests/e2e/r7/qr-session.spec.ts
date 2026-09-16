@@ -23,6 +23,7 @@ import { testEmail } from "../_helpers/fixtures";
 import { assignUserOrgRole, type RbacActor } from "../../../lib/auth/rbac-service";
 import { resolveActorUncached, type Actor } from "../../../lib/auth/actor";
 import { paymentMatchKey } from "../../../lib/payments/payment-request";
+import { coKhoaDoiKhop } from "../../../lib/payments/noi-dung-ck";
 import {
   issueQrForRequestCore,
   regenerateQrCore,
@@ -151,20 +152,40 @@ test.describe("[QR] Xuất QR theo từng phiếu thu", () => {
     expect(rows[0]!.amountShown).toBe(3_000_000);
     expect(rows[0]!.centerId).toBe(cs1);
     expect(rows[0]!.expiresAt.getTime()).toBeGreaterThan(Date.now());
-    // 20/08 — nội dung in lên QR là dạng NGƯỜI ĐỌC `HoTenCon_SdtPH_TenKhoa`, KHÔNG
-    // còn là matchKey (sale phải đọc được chuỗi này cho phụ huynh qua điện thoại).
-    // Đơn seed không gắn học viên/dòng hàng nên rút về "tên người mua_SĐT".
-    expect(rows[0]!.qrContent).toContain("PHQR_84905123456");
-    expect(rows[0]!.qrContent).not.toContain(paymentMatchKey(order.code, 1));
+    // ⚠️ SỬA 17/09/2026 — ca này ĐỎ TRÊN CI. Mã đúng, TEST CŨ.
+    //
+    // Bản cũ khoá luật 20/08: *"nội dung QR là dạng NGƯỜI ĐỌC, KHÔNG còn là matchKey"* và
+    // khẳng định `not.toContain(paymentMatchKey(...))`. Luật đó bị `361ea7d4` đảo có chủ
+    // đích — nội dung nay MANG KHOÁ LÊN ĐẦU (`ORD…D1 NguyenV`) để nhánh (a) khớp thẳng một
+    // truy vấn, thay vì rơi xuống nhánh (d) đoán theo SĐT. Xem khối chú thích đầu
+    // `lib/payments/noi-dung-ck.ts`: *"khoá được ưu tiên tuyệt đối; hết chỗ thì phần người
+    // đọc bị cắt, không bao giờ ngược lại."*
+    //
+    // Dùng `coKhoaDoiKhop` — chính hàm tệp đó dựng ra "để test khẳng định QR mới KHÁC QR cũ
+    // ở đúng điểm đó" — thay vì so chuỗi cứng.
+    // `qrContent` là `string | null` trên lược đồ — khẳng định nó CÓ trước, kẻo `null` lọt
+    // qua thành "không mang khoá" và ca này đỏ vì một lý do khác hẳn.
+    expect(rows[0]!.qrContent).not.toBeNull();
+    expect(coKhoaDoiKhop(rows[0]!.qrContent!, paymentMatchKey(order.code, 1))).toBe(true);
+    // Phần người đọc vẫn còn chỗ nào thì vẫn in: SĐT nay là dạng NỘI ĐỊA `0…` (`c95c6c25`).
+    expect(rows[0]!.qrContent).toContain("PHQR_0");
     // Phiếu đợt 2 không bị đụng tới.
     expect(await db.qrSession.count()).toBe(1);
   });
 
-  test("[QR-01b] đợt 1 và đợt 2 dùng CHUNG một nội dung CK — có chủ đích, không phải lỗi", async () => {
-    // Định dạng chủ dự án chốt 20/08 không mang thông tin "đợt nào". Cái phân biệt
-    // là SỐ TIỀN trên QR; tiền về thì nhánh (d) của webhook neo vào đợt chưa đóng
-    // đủ sớm nhất rồi để waterfall rót tiếp. Khoá hành vi này lại để người sau
-    // đừng "sửa" nó thành mỗi đợt một chuỗi (sẽ vỡ đường đối khớp theo SĐT).
+  test("[QR-01b] đợt 1 và đợt 2 có nội dung CK KHÁC NHAU — mỗi đợt mang khoá của chính nó", async () => {
+    // ⚠️ SỬA 17/09/2026 — ca này ĐỎ TRÊN CI, và nó bị ĐẢO NGƯỢC HOÀN TOÀN, không phải chỉnh
+    // vài ký tự. Bản cũ khoá đúng điều ngược lại: *"hai đợt dùng CHUNG một nội dung CK"*, kèm
+    // lời dặn *"người sau đừng sửa nó thành mỗi đợt một chuỗi (sẽ vỡ đường đối khớp theo
+    // SĐT)"*.
+    //
+    // Lời dặn ấy đã bị chính chủ dự án đảo ở `361ea7d4`: nội dung nay MANG `matchKey` lên
+    // đầu, mà khoá thì riêng từng đợt (`…D1`, `…D2`) ⇒ hai chuỗi KHÁC nhau, và đó chính là
+    // mục đích — tiền về rơi đúng đợt bằng nhánh (a), không phải đoán bằng số tiền.
+    // Đường đối khớp theo SĐT KHÔNG vỡ: nó vẫn là nhánh (d), chạy khi nhánh (a) trượt.
+    //
+    // Giữ nguyên ca cũ là ghim một luật đã chết ở đúng chỗ nguy hiểm nhất: người sau đọc nó
+    // như đặc tả rồi gỡ khoá khỏi nội dung CK, và cả bản vá `361ea7d4` biến mất.
     const order = await seedOrder(cs1, 10_000_000);
     const dot1 = await seedRequest(order, 1, 4_000_000);
     const dot2 = await seedRequest(order, 2, 6_000_000);
@@ -174,9 +195,11 @@ test.describe("[QR] Xuất QR theo từng phiếu thu", () => {
     expect(a.ok && b.ok).toBe(true);
     if (!a.ok || !b.ok) return;
 
-    expect(a.session.transferContent).toBe("PHQR_84905123456");
-    expect(b.session.transferContent).toBe(a.session.transferContent);
-    // …nhưng SỐ TIỀN thì khác nhau, đó mới là thứ phân biệt hai mã.
+    // Mỗi đợt mang khoá của CHÍNH NÓ ⇒ hai chuỗi khác nhau.
+    expect(coKhoaDoiKhop(a.session.transferContent, paymentMatchKey(order.code, 1))).toBe(true);
+    expect(coKhoaDoiKhop(b.session.transferContent, paymentMatchKey(order.code, 2))).toBe(true);
+    expect(a.session.transferContent).not.toBe(b.session.transferContent);
+    // Và SỐ TIỀN cũng khác nhau — nay là lớp phân biệt THỨ HAI, không còn là lớp duy nhất.
     expect(a.session.amountShown).toBe(4_000_000);
     expect(b.session.amountShown).toBe(6_000_000);
     // matchKey vẫn nguyên trong DB — đường khớp của mọi QR phát trước 20/08.
