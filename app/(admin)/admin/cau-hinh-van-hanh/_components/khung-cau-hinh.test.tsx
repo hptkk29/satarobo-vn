@@ -93,7 +93,9 @@ const TABS: TabView[] = [
   },
 ];
 
-function dung(x: { choSua?: boolean; loaiDangBat?: string[] } = {}) {
+function dung(
+  x: { choSua?: boolean; loaiDangBat?: string[]; tabBanDau?: string } = {},
+) {
   return render(
     <KhungCauHinh
       tabs={TABS}
@@ -102,6 +104,7 @@ function dung(x: { choSua?: boolean; loaiDangBat?: string[] } = {}) {
       danhMucThongBao={DANH_MUC}
       loaiDangBat={x.loaiDangBat ?? ["lead.moi:"]}
       canhBaoKenh={[]}
+      tabBanDau={x.tabBanDau}
     />,
   );
 }
@@ -120,6 +123,11 @@ const moTab = (ten: string) => fireEvent.click(screen.getByRole("tab", { name: t
 beforeEach(() => {
   h.luuSetting.mockClear().mockResolvedValue({ ok: true });
   h.luuLoai.mockClear().mockResolvedValue({ ok: true });
+  // ⚠️ DỌN ĐƯỜNG DẪN — khung nay đọc `?tab=` lúc mount, nên một ca để lại query bẩn là
+  // mọi ca sau mở nhầm tab. Đo thật: chạy riêng thì xanh, chạy cả bộ thì 5 ca đỏ — đúng
+  // chữ ký của lớp lỗi "ca này mượn trạng thái ca trước" (luật 18,
+  // docs/luat-doc-so-va-ket-luan.md). Dọn ở MỘT chỗ, không bắt từng ca tự nhớ.
+  window.history.replaceState(null, "", "/");
 });
 
 describe("[CFG-T10] tab thật sự đổi NỘI DUNG, không chỉ đổi tiêu đề", () => {
@@ -321,5 +329,52 @@ describe("[CFG-T14] chỉ-được-xem thì KHOÁ ô nhập, không chỉ giấu
     moTab("Chấm công & ca làm");
     expect(screen.getByLabelText(O_DUNG_SAI).hasAttribute("disabled")).toBe(true);
     expect(screen.queryAllByRole("button", { name: "Lưu" })).toHaveLength(0);
+  });
+});
+
+describe("[CFG-K05] tab sống sót khi rời trang rồi quay lui", () => {
+  // Chủ dự án 14/09/2026: "khi ở tab hoa hồng ở cấu hình vận hành xong chuyển sang màn
+  // leads xong bấm quay lui thì bị chuyển về tab thông báo đẩy của cấu hình vận hành".
+  //
+  // Nguyên nhân: tab chỉ sống trong `useState`. State mất khi rời trang, nên lần quay lại
+  // là một lượt mount mới và luôn rơi về tab đầu. Vá bằng cách để tab nằm trong ĐƯỜNG DẪN.
+  //
+  // ⚠️ Ba ca dưới đây kiểm ba mắt xích KHÁC NHAU của cùng một đường. Bỏ ca nào thì mắt
+  // xích đó hỏng vẫn xanh: đọc được `?tab=` mà không ghi lại thì Back vô dụng; ghi mà
+  // không đọc thì URL đúng còn màn sai.
+
+  it("mở đúng tab ghi trên đường dẫn, không phải tab đầu", () => {
+    dung({ tabBanDau: TABS[1]!.id });
+    // Mô tả tab là thứ chỉ có ở tab đang mở — dùng nó làm bằng chứng.
+    expect(screen.getByText(TABS[1]!.moTa)).toBeInTheDocument();
+  });
+
+  it("`?tab=` lạ rơi về tab đầu chứ KHÔNG ra trang trắng", () => {
+    // Đường dẫn cũ, hoặc người gõ tay. Fail-soft: phải ra một trang dùng được.
+    dung({ tabBanDau: "khong-ton-tai" });
+    expect(screen.getByText(TABS[0]!.moTa)).toBeInTheDocument();
+  });
+
+  it("QUAY LUI: mount lại với props CŨ nhưng đường dẫn đã có ?tab= ⇒ theo đường dẫn", () => {
+    // ⚠️ ĐÂY LÀ CA CỦA CHÍNH CON BUG, và nó khác hẳn ca "mở đúng tab ghi trên đường dẫn".
+    //
+    // Tái hiện đúng thao tác chủ dự án mô tả (bấm LINK sidebar, không gõ địa chỉ): Next
+    // dựng lại trang từ BỘ ĐỆM CLIENT, nên component mount lại nhưng mang props của lần
+    // render máy chủ CŨ — `tabBanDau` là `undefined` vì lúc ấy đường dẫn chưa có `?tab=`.
+    // Máy chủ không chạy lại lần nào. Kết quả đo được: URL `?tab=hoa-hong` mà màn hiện
+    // "Thông báo đẩy" — màn nói dối so với đường dẫn.
+    //
+    // Nên ca này CỐ Ý bỏ trống `tabBanDau` và chỉ đặt đường dẫn.
+    window.history.replaceState(null, "", `?tab=${TABS[2]!.id}`);
+    dung({});
+    expect(screen.getByText(TABS[2]!.moTa)).toBeInTheDocument();
+  });
+
+  it("bấm tab thì GHI vào đường dẫn — nếu không, Back chẳng có gì để khôi phục", () => {
+    dung({});
+    fireEvent.click(screen.getByRole("tab", { name: TABS[1]!.ten }));
+    expect(new URL(window.location.href).searchParams.get("tab")).toBe(TABS[1]!.id);
+    // ĐÈ mục lịch sử, không THÊM: bấm qua 5 tab rồi Back phải ra khỏi trang, không phải
+    // lùi từng tab một.
   });
 });

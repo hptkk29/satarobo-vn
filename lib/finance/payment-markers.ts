@@ -159,3 +159,57 @@ export function phanConPhaiGhi(muonGhi: number, daCoTrongSo: number): number {
   if (can <= 0) return 0;
   return Math.max(0, can - Math.max(0, co));
 }
+
+// ─── KHOẢN NÀY TỪ ĐÂU TỚI ────────────────────────────────────────────────────
+//
+// Thêm 14/09/2026. Ba hàm `isPlanOwnedNote` / `isGatewayNote` / so `BACKFILL_PAYMENT_MARKER`
+// đã trả lời được từng vế, nhưng KHÔNG có chỗ nào trả lời câu người dùng thật sự hỏi khi
+// nhìn một dòng tiền: "khoản này ở đâu ra?". Thiếu câu đó, màn hình chỉ còn cách LỌC THEO
+// MỘT NGUỒN rồi coi đó là tất cả — và đó chính là con bug vừa đo:
+// `khoanBiBoAction` lọc `note contains "[backfill-import]"` nên khoản do webhook cổng
+// thanh toán sinh ra (`[auto:sepay:…]` / `[auto:payos:…]`) KHÔNG BAO GIỜ hiện ra để gắn
+// ghi danh. Tiền thật đã về tài khoản, đã có dòng trong sổ, mà không thao tác nào đưa nó
+// vào công nợ được.
+//
+// Để phép phân loại ở ĐÂY chứ không rải `note.includes(...)` trong action: sổ đăng ký
+// marker chỉ có một, và marker mới (cổng thanh toán thứ ba chẳng hạn) phải tự động rơi
+// đúng nhóm mà không ai phải nhớ đi sửa màn hình.
+
+export const NGUON_KHOAN = {
+  /** `[backfill-import]` — học phí khách cũ nhập từ sheet/Excel. */
+  NHAP_LICH_SU: "NHAP_LICH_SU",
+  /** `[auto:<provider>:<txn>]` — TIỀN THẬT về từ SePay/payOS qua webhook. */
+  CONG_THANH_TOAN: "CONG_THANH_TOAN",
+  /** `[auto:order-confirm]` / `[auto:order-installment:dotN]` — hệ tự sinh theo đơn/đợt. */
+  TU_DONG_THEO_DON: "TU_DONG_THEO_DON",
+  /** Không mang marker nào — Sale/kế toán gõ tay ở màn Thanh toán. */
+  NGUOI_NHAP: "NGUOI_NHAP",
+} as const;
+export type NguonKhoan = (typeof NGUON_KHOAN)[keyof typeof NGUON_KHOAN];
+
+/** Nhãn cho người vận hành đọc. Ngắn — nó đứng chung dòng với lý do vướng mắc. */
+export const NHAN_NGUON_KHOAN: Record<NguonKhoan, string> = {
+  NHAP_LICH_SU: "nhập từ file Excel",
+  CONG_THANH_TOAN: "tiền về qua cổng thanh toán",
+  TU_DONG_THEO_DON: "hệ thống tự sinh theo đơn",
+  NGUOI_NHAP: "người dùng ghi nhận tay",
+};
+
+/**
+ * Khoản mang `note` này do NGUỒN nào sinh ra.
+ *
+ * ⚠️ THỨ TỰ XÉT CÓ CHỦ ĐÍCH, đừng đảo:
+ *  1. `[backfill-import]` trước — dấu dòng sheet `[sheet:X#12]` đứng CẠNH nó nên một
+ *     note backfill có thể mang hai dấu; nhận ra nguồn nhập lịch sử phải là ưu tiên.
+ *  2. cổng thanh toán trước kế hoạch đợt — `isGatewayNote` đã có lookahead `(?!order-)`
+ *     nên hai họ không giẫm nhau, nhưng giữ thứ tự này thì đọc mã khỏi phải chứng minh lại.
+ *  3. còn lại là người gõ tay. CỐ Ý để `NGUOI_NHAP` làm nhánh MẶC ĐỊNH (không phải
+ *     "KHÔNG RÕ"): note trống/ghi chú tự do đúng là do người nhập, và gọi nó là "không
+ *     rõ" sẽ đẩy người vận hành đi tìm một nguyên nhân không tồn tại.
+ */
+export function nguonKhoan(note: string | null | undefined): NguonKhoan {
+  if (note && note.includes(BACKFILL_PAYMENT_MARKER)) return NGUON_KHOAN.NHAP_LICH_SU;
+  if (isGatewayNote(note)) return NGUON_KHOAN.CONG_THANH_TOAN;
+  if (isPlanOwnedNote(note)) return NGUON_KHOAN.TU_DONG_THEO_DON;
+  return NGUON_KHOAN.NGUOI_NHAP;
+}

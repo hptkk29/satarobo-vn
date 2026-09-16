@@ -7,6 +7,10 @@ import { TAB_CAU_HINH, keyCuaTab, nhanCuaKey } from "@/lib/settings/nhan-van-han
 import { catalogEntries } from "@/lib/notifications/catalog";
 import { kiemVapid, MO_TA_LOI_VAPID } from "@/lib/push/cau-hinh-vapid";
 import { PageHelp } from "@/components/admin/ui/page-help";
+import { layVaiNhanHoaHong } from "@/lib/crm/vai-nhan-hoa-hong";
+import type { ChinhSachHoaHong } from "@/lib/crm/chinh-sach-hoa-hong";
+import { BangChinhSachHoaHong } from "./_components/bang-chinh-sach-hoa-hong";
+import { TabPhuongThucThanhToan } from "./_components/tab-phuong-thuc-tt";
 import { KhungCauHinh, type TabView } from "./_components/khung-cau-hinh";
 import type { CanhBaoKenh } from "./_components/chon-loai-thong-bao";
 
@@ -24,26 +28,48 @@ const TAB_THONG_BAO = "thong-bao-day";
  */
 const KHOA_DO_BANG_CONG_TAC_LO = "push.tienToDuocDay";
 
-export default async function OperationalSettingsPage() {
+/**
+ * Cùng lý do với khoá trên: chính sách hoa hồng là một DANH SÁCH, sửa bằng bảng riêng ở
+ * tab "Hoa hồng". Để nó hiện thành ô nhập JSON nữa là hai chỗ cùng sửa một giá trị.
+ */
+const KHOA_DO_BANG_HOA_HONG = "crm.commissionPolicies";
+
+export default async function OperationalSettingsPage({
+  searchParams,
+}: {
+  // `?tab=` giữ tab đang mở qua các lần rời trang rồi quay lại — xem `doiTab` trong
+  // `khung-cau-hinh.tsx`. `?centerId=` là đường vào từ trang Cơ sở.
+  searchParams: Promise<{ tab?: string; centerId?: string }>;
+}) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!(await checkPermission("settings:view"))) redirect("/admin/dashboard");
 
   const canEditGlobal = await checkPermission("settings:edit"); // settings:edit = SUPER_ADMIN
+  const sp = await searchParams;
 
   // Chỉ đọc những key THẬT SỰ bày ra. Dựng danh sách từ bảng tab chứ không từ `SETTING_KEYS`:
   // như vậy một key mới mà quên khai nhãn vận hành sẽ KHÔNG lặng lẽ hiện ra dưới dạng tên
   // biến — nó vắng mặt, và `nhan-van-hanh.test.ts` làm đỏ ngay ở CI.
   const keyTheoTab = TAB_CAU_HINH.map((t) => ({ tab: t, keys: keyCuaTab(t.id) }));
   const moiKey = keyTheoTab.flatMap((x) => x.keys);
-  const resolved = await getResolvedSettings(moiKey);
+  // Hai key của hai tab có bảng riêng KHÔNG nằm trong `moiKey` (đã lọc khỏi danh sách ô
+  // nhập) nên phải nạp thêm — quên là bảng hoa hồng mở ra rỗng và người dùng tưởng mất
+  // cấu hình.
+  const resolved = await getResolvedSettings([
+    ...moiKey,
+    "crm.commissionPolicies",
+    "crm.commissionMaxTotalRate",
+  ]);
+  // Vai có thật, kèm TÊN TIẾNG VIỆT — ô chọn vai nhận hoa hồng không được in mã máy.
+  const vai = await layVaiNhanHoaHong();
 
   const tabs: TabView[] = keyTheoTab.map(({ tab, keys }) => ({
     id: tab.id,
     ten: tab.ten,
     moTa: tab.moTa,
     rows: keys
-      .filter((k) => k !== KHOA_DO_BANG_CONG_TAC_LO)
+      .filter((k) => k !== KHOA_DO_BANG_CONG_TAC_LO && k !== KHOA_DO_BANG_HOA_HONG)
       .map((key) => ({
         key,
         // `resolved` trả giá trị đã hoà (cơ sở → toàn hệ → mặc định). Thiếu thì lấy mặc định
@@ -133,6 +159,25 @@ export default async function OperationalSettingsPage() {
         danhMucThongBao={danhMucThongBao}
         loaiDangBat={loaiDangBat}
         canhBaoKenh={canhBaoKenh}
+        tabBanDau={sp.tab}
+        noiDungRieng={{
+          "phuong-thuc-tt": (
+            <TabPhuongThucThanhToan centerIdFilter={sp.centerId?.trim() || null} />
+          ),
+          "hoa-hong": (
+            <BangChinhSachHoaHong
+              banDau={(resolved[KHOA_DO_BANG_HOA_HONG] ??
+                SETTINGS[KHOA_DO_BANG_HOA_HONG].default) as ChinhSachHoaHong[]}
+              tranTongTiLe={
+                typeof resolved["crm.commissionMaxTotalRate"] === "number"
+                  ? (resolved["crm.commissionMaxTotalRate"] as number)
+                  : (SETTINGS["crm.commissionMaxTotalRate"].default as number)
+              }
+              vai={vai}
+              suaDuoc={canEditGlobal}
+            />
+          ),
+        }}
       />
     </div>
   );

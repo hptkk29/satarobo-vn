@@ -3,12 +3,16 @@ import type { Order } from "@prisma/client";
 import { db } from "@/lib/db";
 import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
 import { enqueueDebtReminder } from "@/lib/email/triggers";
+// TRỤC B — hằng điều kiện "đã ghi nhận". Import để KHÔNG gõ tay "RECORDED" ở đây:
+// mỗi lần gõ tay là một bản sao thứ hai của định nghĩa "đã thu".
+import { laKhoanDaGhiNhan } from "@/lib/finance/ghi-nhan";
+import { chanGuiRaNgoai, donNhiemTheoDon } from "@/lib/orders/don-nhiem";
 import type { ScopedDb } from "@/lib/actions/factory";
 
-/** Công nợ = tổng hoá đơn − đã trả (không âm). THUẦN (C6.1). */
-export function computeDebt(totalAmount: number, paidAmount: number): number {
-  return Math.max(0, totalAmount - paidAmount);
-}
+// ĐỊNH NGHĨA dời sang `debt-pure.ts` (14/09/2026) vì file này import `@/lib/db`: mọi
+// component client dùng lại `computeDebt` đều kéo PrismaClient vào bundle trình duyệt và
+// nổ lúc chạy — typecheck/lint/depcruise đều xanh. Re-export để ~30 chỗ gọi cũ không đổi.
+export { computeDebt } from "@/lib/finance/debt-pure";
 
 /** Đã trả của 1 order (CONFIRMED/COMPLETED = trả đủ; còn lại = 0). THUẦN. */
 export function paidOf(order: Pick<Order, "status" | "totalAmount">): number {
@@ -155,6 +159,19 @@ export type DebtRow = {
   finalPrice: number;
   confirmedPaid: number;
   debt: number;
+  /**
+   * TRỤC B — Σ `Payment` có `saleStatus = RECORDED`. Tiền vừa nhập từ sheet nằm ở đây và
+   * nó CHƯA vào `confirmedPaid` cho tới khi kế toán xác nhận ở /payments.
+   *
+   * Thêm 14/09/2026, ADDITIVE: `debt` và `confirmedPaid` giữ nguyên công thức cũ nên hai
+   * caller còn lại (`manager-dashboard`, nhóm tổng của /cong-no) không đổi một con số nào.
+   */
+  recordedPaid: number;
+  /**
+   * Ghi danh CHƯA có `finalPrice`. Chỉ có thể `true` khi người gọi truyền
+   * `keCaChuaChotGia: true`; mặc định hàm vẫn lọc bỏ như trước.
+   */
+  chuaChotGia: boolean;
 };
 
 /**
@@ -163,7 +180,21 @@ export type DebtRow = {
  */
 export async function getDebtRows(
   scopedDbClient: ScopedDb,
-  filters?: { enrollmentId?: string; studentId?: string },
+  filters?: {
+    enrollmentId?: string;
+    studentId?: string;
+    /**
+     * Lấy CẢ ghi danh chưa chốt giá (`finalPrice = null`).
+     *
+     * ⚠️ MẶC ĐỊNH `false` — giữ nguyên hành vi cũ cho hai caller đang có. Bật mặc định là
+     * đổi con số tổng nợ trên dashboard quản lý mà không ai yêu cầu.
+     *
+     * Nhưng nhóm này KHÔNG được quên: nhà đã đóng tiền mà hệ thống không biết phải đóng
+     * bao nhiêu ⇒ không ai nợ ai trong sổ, không màn nào kêu. Màn đối soát học phí bật cờ
+     * này và hiện chúng thành một trạng thái riêng.
+     */
+    keCaChuaChotGia?: boolean;
+  },
 ): Promise<DebtRow[]> {
   // G4 fix: lái theo ENROLLMENT (không theo payment) để ghi danh CHƯA đóng đồng nào
   // — nợ nhiều nhất — vẫn hiện. Cách ly cơ sở: lọc theo lớp NẰM TRONG scope của actor
@@ -175,7 +206,9 @@ export async function getDebtRows(
   const enrollments = await db.enrollment.findMany({
     where: {
       classId: { in: classIds },
-      finalPrice: { not: null }, // chỉ ghi danh đã chốt giá (snapshot tại convert R7-05)
+      // Mặc định chỉ ghi danh ĐÃ chốt giá (snapshot tại convert R7-05); `keCaChuaChotGia`
+      // mở thêm nhóm chưa chốt — xem chú thích ở tham số.
+      ...(filters?.keCaChuaChotGia ? {} : { finalPrice: { not: null } }),
       deletedAt: null, // FIX-C3
       ...(filters?.enrollmentId ? { id: filters.enrollmentId } : {}),
       ...(filters?.studentId ? { studentId: filters.studentId } : {}),
@@ -189,13 +222,30 @@ export async function getDebtRows(
       course: { select: { name: true } },
       class: { select: { centerId: true } },
       // FIX-C3: nested include không auto-scope → tự lọc payment đã xóa.
-      payments: { where: KHOAN_DA_XAC_NHAN, select: { amount: true } },
+      //
+      // ⚠️ NẠP CẢ HAI TRỤC TRONG MỘT LƯỢT, lọc trong bộ nhớ. Prisma KHÔNG cho đặt bí danh
+      // cho cùng một quan hệ hai lần, nên không thể viết `payments` (trục A) cạnh
+      // `khoanDaGhiNhan` (trục B). Lấy khoản còn sống rồi lọc bằng chính hai hằng điều
+      // kiện của repo — KHÔNG gõ tay `"CONFIRMED"`/`"RECORDED"` ở đây, vì gõ tay là đẻ
+      // bản sao thứ hai của định nghĩa "đã thu".
+      payments: {
+        where: { deletedAt: null },
+        select: { amount: true, accountantStatus: true, saleStatus: true },
+      },
     },
   });
 
   return enrollments.map((e) => {
     const finalPrice = e.finalPrice ?? e.tuition ?? 0;
-    const confirmedPaid = tongDaXacNhan(e.payments);
+    // Lọc bằng chính hằng điều kiện của repo để hai đường (query và bộ nhớ) không lệch.
+    const daXacNhan = e.payments.filter(
+      (p) => p.accountantStatus === KHOAN_DA_XAC_NHAN.accountantStatus,
+    );
+    // ⚠️ Dùng HÀM, không so với `KHOAN_DA_GHI_NHAN.saleStatus`: từ 14/09 trường đó là
+    // `{ in: [...] }`, nên phép so chuỗi-với-đối-tượng luôn false và cột "đã ghi nhận"
+    // im lặng về 0 cho mọi dòng công nợ.
+    const daGhiNhan = e.payments.filter(laKhoanDaGhiNhan);
+    const confirmedPaid = tongDaXacNhan(daXacNhan);
     return {
       enrollmentId: e.id,
       studentId: e.studentId,
@@ -205,6 +255,8 @@ export async function getDebtRows(
       finalPrice,
       confirmedPaid,
       debt: finalPrice - confirmedPaid,
+      recordedPaid: tongDaXacNhan(daGhiNhan),
+      chuaChotGia: e.finalPrice == null,
     };
   });
 }
@@ -230,9 +282,28 @@ export async function remindOverdueSingleOrders(
   const startOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const orders = await getOverdueOrders({ olderThanDays: opts.olderThanDays, now });
 
+  /**
+   * ── BƯỚC A3 [16/09/2026]: KHÔNG NHẮC NỢ TỪ ĐƠN MANG TÊN CON NHÀ KHÁC ─────────
+   *
+   * Chủ dự án: *"đơn nhiễm: không phát QR, không nhắc nợ ZNS… gửi ra ngoài là lộ thông
+   * tin."* Tin nhắc nợ đi THẲNG tới phụ huynh, nên nó cùng loại rủi ro với mã QR.
+   *
+   * Hỏi MỘT LẦN cho cả lô (`donNhiemTheoDon` nhận cả tập), không hỏi trong vòng lặp.
+   *
+   * ⚠️ `db` trần là ĐÚNG ở đây: cron chạy không có actor, và một cổng an toàn bị lọc theo
+   * tầm nhìn sẽ coi đơn nhiễm ngoài tầm nhìn là SẠCH.
+   *
+   * ⚠️ CHỈ chặn tiêu chí CON_NHÀ_KHÁC (`chanGuiRaNgoai`). Dữ liệu PROD 16/09: 18 đơn kẹt
+   * tiền (178.544.000đ) chỉ dính tiêu chí nhẹ — chặn theo `nhiem` là im lặng thôi nhắc nợ
+   * 18 khách vì một lỗi nội bộ, tức hệ thống tự bỏ đòi tiền mà không ai biết.
+   */
+  const nhiem = await donNhiemTheoDon(db, orders.map((o) => o.id));
+
   let sent = 0;
   let skipped = 0;
   for (const o of orders) {
+    const dn = nhiem.get(o.id);
+    if (dn && chanGuiRaNgoai(dn)) { skipped++; continue; }
     if (!o.customerEmail) { skipped++; continue; }
     const installmentCount = await db.orderInstallment.count({ where: { orderId: o.id } });
     if (installmentCount > 0) { skipped++; continue; } // trả góp → cron installment lo
@@ -292,10 +363,16 @@ export async function remindOverdueInstallments(
     },
   });
 
+  // Cùng cổng A3 với `remindOverdueSingleOrders` — chặn một cron mà để hở cron kia thì
+  // đơn nhiễm vẫn nhắn ra ngoài, chỉ đổi đường. Hỏi MỘT LẦN cho cả lô.
+  const nhiem = await donNhiemTheoDon(db, installments.map((i) => i.order.id));
+
   let found = 0;
   let sent = 0;
   let skipped = 0;
   for (const inst of installments) {
+    const dn = nhiem.get(inst.order.id);
+    if (dn && chanGuiRaNgoai(dn)) { skipped++; continue; }
     const days = effectiveReminderDays(inst.reminderDays, defaultDays);
     if (!isReminderDue(inst.dueDate, days, now)) continue; // chưa đến mốc nhắc
     found++;
@@ -317,4 +394,105 @@ export async function remindOverdueInstallments(
     sent++;
   }
   return { found, sent, skipped };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CÔNG NỢ THEO TỪNG CON — PHIÊN A (16/09/2026)
+//
+// Chủ dự án chốt: *"Công nợ con = học phí thực − đã thu; công nợ đơn = Σ các con. Tính một
+// chỗ trong debt.ts."* Đây là chỗ đó. Phép tính THUẦN ở `lib/finance/no-theo-con.ts`; ở đây
+// chỉ có phần đọc DB.
+//
+// ⚠️ ĐỌC BẰNG `db` TRẦN, KHÔNG QUA `scopedDb` — VÀ ĐÓ LÀ YÊU CẦU, KHÔNG PHẢI SƠ SUẤT.
+//
+// Chủ dự án chốt: *"KHÔNG lọc theo scopedDb/cơ sở của người xem: cùng một đơn, ai mở cũng ra
+// cùng con số."*
+//
+// Vì sao luật đó quan trọng đến mức phải viết ra: `Payment` nằm trong `SCOPED_MODELS` và KHÔNG
+// nằm trong `NULL_IS_GLOBAL_MODELS` (`lib/db-scope.ts`). Nghĩa là một khoản có `centerId` khác
+// — hoặc `centerId = NULL` — sẽ bị `scopedDb` LỌC MẤT với người cấp cơ sở. Hệ quả đo được:
+// **con số "đã thu" của cùng một đơn KHÁC NHAU tuỳ ai mở màn**, và không lỗi nào báo. Một phụ
+// huynh bị hai nhân viên nói hai số nợ khác nhau là thứ không sửa được bằng bản vá.
+//
+// Cách ly cơ sở vẫn còn nguyên, chỉ là nó ép ở CỬA VÀO: trang đơn đã gác quyền `orders:view` +
+// `scopedDb` khi tra chính cái đơn đó. Ai mở được đơn thì thấy đủ tiền của đơn đó — đúng.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import {
+  kiemHuyDot,
+  kiemTaoDot,
+  tinhNoTheoCon,
+  type DotCuaDong,
+  type NoTheoConKetQua,
+} from "@/lib/finance/no-theo-con";
+
+export { kiemHuyDot, kiemTaoDot };
+export type { NoCuaCon, NoTheoConKetQua } from "@/lib/finance/no-theo-con";
+
+/**
+ * Công nợ từng con của một đơn.
+ *
+ * Tập trạng thái `Payment` được cộng — nói rõ một lần, dùng ở mọi chỗ gọi:
+ *   · `daThu`      = TRỤC A — `KHOAN_DA_XAC_NHAN` (`accountantStatus: CONFIRMED`, chưa xoá mềm)
+ *   · `choXacNhan` = TRỤC B trừ đi trục A — đã ghi nhận nhưng kế toán chưa xác nhận
+ * Lý do chọn trục A cho `conNo`: xem đầu `lib/finance/no-theo-con.ts`.
+ */
+export async function noTheoCon(orderId: string): Promise<NoTheoConKetQua> {
+  const [dong, khoan, dot] = await Promise.all([
+    db.orderItem.findMany({
+      where: { orderId },
+      select: {
+        id: true,
+        itemName: true,
+        totalPrice: true,
+        discountAmount: true,
+        enrollment: { select: { class: { select: { course: { select: { name: true } } } } } },
+      },
+      orderBy: { createdAt: "asc" },
+    }),
+    db.payment.findMany({
+      where: { orderId, deletedAt: null },
+      select: { orderItemId: true, amount: true, accountantStatus: true, saleStatus: true },
+    }),
+    db.paymentRequest.findMany({
+      where: { orderId },
+      select: {
+        id: true,
+        orderItemId: true,
+        installmentNo: true,
+        amountDue: true,
+        dueDate: true,
+        status: true,
+        allocations: { select: { amount: true } },
+      },
+    }),
+  ]);
+
+  // Lọc TRONG BỘ NHỚ bằng đúng hai hàm chuẩn của hai trục, thay vì hai câu `where` riêng:
+  // một câu tra thì không có cách nào để hai tập lệch định nghĩa nhau.
+  const daXacNhan = khoan.filter((k) => laKhoanDaXacNhan(k));
+  const choXacNhan = khoan.filter((k) => laKhoanDaGhiNhan(k) && !laKhoanDaXacNhan(k));
+
+  return tinhNoTheoCon({
+    dong: dong.map((d) => ({
+      orderItemId: d.id,
+      ten: d.itemName,
+      khoa: d.enrollment?.class?.course?.name ?? null,
+      tamTinh: d.totalPrice,
+      giam: d.discountAmount,
+    })),
+    khoanDaXacNhan: daXacNhan.map((k) => ({ orderItemId: k.orderItemId, amount: k.amount })),
+    khoanChoXacNhan: choXacNhan.map((k) => ({ orderItemId: k.orderItemId, amount: k.amount })),
+    dot: dot.map(
+      (r): DotCuaDong => ({
+        id: r.id,
+        orderItemId: r.orderItemId,
+        installmentNo: r.installmentNo,
+        amountDue: r.amountDue,
+        dueDate: r.dueDate,
+        trangThai: r.status,
+        daRot: r.allocations.reduce((s, a) => s + a.amount, 0),
+      }),
+    ),
+  });
 }

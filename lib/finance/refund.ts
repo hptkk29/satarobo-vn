@@ -12,10 +12,7 @@ import type {
 import { db } from "@/lib/db";
 import { KHOAN_DA_XAC_NHAN } from "@/lib/finance/debt";
 import { writeAudit } from "@/lib/audit/audit-log";
-import {
-  REFUND_REQUEST_DISABLED,
-  ghiNhanChamCauDaoHoanTien,
-} from "@/lib/finance/cau-dao-hoan-tien";
+import { canhBaoSoBuoi, soBuoiChuaChot } from "@/lib/finance/lop-chua-chot-buoi";
 import type { ScopedDb } from "@/lib/actions/factory";
 
 type DbClient = PrismaClient | Prisma.TransactionClient;
@@ -68,6 +65,13 @@ export async function createRefundRequest(input: {
   requestedById?: string | null;
   actorName?: string;
   tx?: DbClient;
+  /**
+   * Mốc "hôm nay" để đếm buổi đã qua ngày. Bỏ trống ⇒ đồng hồ thật.
+   *
+   * Có mặt để test TRUYỀN VÀO được: luật 19 (docs/luat-doc-so-va-ket-luan.md) — ca dựa
+   * vào `new Date()` là ca hẹn giờ nổ, và ở đây nó quyết định có chi tiền hoàn hay không.
+   */
+  now?: Date;
 }): Promise<RefundRequest | null> {
   const {
     enrollmentId,
@@ -76,28 +80,25 @@ export async function createRefundRequest(input: {
     requestedById = null,
     actorName = "Hệ thống",
     tx,
+    now,
   } = input;
 
-  // ── CẦU DAO TÍNH NĂNG (08/09/2026) ─────────────────────────────────────────
+  // ── CẦU DAO TÍNH NĂNG ĐÃ GỠ (14/09/2026) ───────────────────────────────────
   //
-  // Đặt TRƯỚC mọi truy vấn: cầu dao là câu hỏi "tính năng có đang bật không", trả lời
-  // được mà không cần đọc gì.
+  // Cầu dao `REFUND_REQUEST_DISABLED` tắt HẲN tính năng từ 08/09 vì MỘT ca cụ thể:
+  // `sessionsLearned` đếm `ClassSession.status = COMPLETED`, mà `status` không phản ánh
+  // thực tế đã dạy (đo prod 07/09: 2 COMPLETED / 287 SCHEDULED, 209 buổi đã qua ngày chưa
+  // ai chốt) ⇒ lớp đã dạy gần hết vẫn đọc ra 0 buổi học ⇒ đề xuất hoàn 100% học phí.
   //
-  // Trả `null` chứ KHÔNG ném: hàm này chạy TRONG transaction gỡ học viên khỏi lớp /
-  // huỷ lớp; ném ở đây là cuộn ngược cả việc gỡ — biến "không đề xuất được tiền" thành
-  // "không gỡ được học viên". `null` vốn đã nằm trong hợp đồng của hàm (chưa thu đồng
-  // nào, ghi danh không tồn tại), nên caller đã xử sẵn.
+  // Nay ca đó bị chặn TẠI GỐC bởi lưới `canhBaoSoBuoi` bên dưới — đúng "điều kiện gỡ số
+  // 2" mà chính file cầu dao đã viết ra. Và đề xuất sinh ra vẫn ở `PENDING`: phải qua
+  // `approveRefund` mới thành tiền, nên còn một lớp người nữa.
   //
-  // Lý do tắt + 4 điều kiện gỡ: `lib/finance/cau-dao-hoan-tien.ts`.
-  if (REFUND_REQUEST_DISABLED) {
-    await ghiNhanChamCauDaoHoanTien({
-      actorId: requestedById,
-      actorName,
-      enrollmentId,
-      trigger: String(trigger),
-    });
-    return null;
-  }
+  // ⚠️ Điều kiện 1 và 4 của cầu dao (backlog buổi chưa chốt trên prod về ~0) KHÔNG còn là
+  // điều kiện chặn — chốt lại có chủ đích 14/09/2026: backlog nay chỉ làm hệ thống TỪ
+  // CHỐI đề xuất (hướng AN TOÀN), không còn đề xuất sai. Cái giá phải nói rõ với người
+  // vận hành: lớp còn buổi chưa chốt mà sổ đọc ra 0 buổi học thì KHÔNG hoàn được — phải
+  // đi chốt sổ buổi trước.
 
   const client: DbClient = tx ?? db;
 
@@ -135,6 +136,58 @@ export async function createRefundRequest(input: {
   const sessionsLearned = await client.classSession.count({
     where: { classId: enrollment.classId, status: "COMPLETED" },
   });
+
+  // ── LƯỚI CHẶN ĐỀ XUẤT HOÀN 100% DO SỔ BUỔI CHƯA CHỐT ───────────────────────
+  //
+  // Đây là ĐIỀU KIỆN GỠ SỐ 2 mà file cầu dao (nay đã xoá) viết nguyên văn:
+  // "`createRefundRequest` TỪ CHỐI đề xuất khi lớp có buổi đã qua ngày mà
+  //  `sessionsLearned = 0` — ném lỗi rõ ràng, KHÔNG lặng lẽ đề xuất 100%."
+  //
+  // `sessionsLearned` đếm `status = COMPLETED`, mà `status` không phản ánh thực tế đã dạy
+  // (đo prod 07/09: 2 COMPLETED / 287 SCHEDULED, 209 buổi đã qua ngày chưa ai chốt). Với
+  // một lớp đã dạy gần hết khoá, con số đó vẫn là 0 ⇒ đề xuất hoàn TOÀN BỘ học phí.
+  //
+  // ⚠️ TỪ CHỐI, KHÔNG TỰ ĐOÁN: đếm buổi "đã qua ngày" thay cho COMPLETED là chi tiền theo
+  // một con số không ai xác nhận — buổi qua ngày chưa chắc đã dạy. Việc đúng là dừng và
+  // bắt người chốt sổ buổi. Chi tiết + lý do chỉ chặn ĐÚNG ca này: `lop-chua-chot-buoi.ts`.
+  //
+  // Trả `null` chứ không ném, cùng lý do với cầu dao ở trên: hàm chạy TRONG transaction gỡ
+  // học viên / huỷ lớp, ném là cuộn ngược cả việc gỡ.
+  const buoiCuaLop = await client.classSession.findMany({
+    where: { classId: enrollment.classId },
+    select: { date: true, status: true },
+  });
+  const canhBao = canhBaoSoBuoi({
+    soBuoiChuaChot: soBuoiChuaChot(buoiCuaLop, now ?? new Date()),
+    sessionsLearned,
+    sessionsTotal,
+  });
+  if (!canhBao.choDeXuat) {
+    await writeAudit({
+      actor: { id: requestedById, name: actorName },
+      module: "finance",
+      entityType: "Enrollment",
+      entityId: enrollmentId,
+      // Tên hành động RIÊNG, không phải "UPDATE": lượt gỡ học viên cũng ghi UPDATE lên
+      // chính `Enrollment` này, nên lọc theo "UPDATE" là trộn hai việc khác hẳn nhau.
+      // Giữ đúng tên cầu dao cũ dùng — dòng cũ và dòng mới nói cùng một câu ("một đề
+      // xuất hoàn tiền đã bị từ chối"), và chính chúng là câu trả lời cho "có ai thực sự
+      // cần hoàn tiền không" khi `RefundRequest` còn 0 dòng.
+      action: "REFUND_REQUEST_BLOCKED",
+      newValues: {
+        tuChoiDeXuatHoanTien: true,
+        lyDo: canhBao.lyDo,
+        muc: canhBao.muc,
+        sessionsLearned,
+        sessionsTotal,
+        trigger: String(trigger),
+      },
+      reason: "Từ chối sinh đề xuất hoàn tiền: sổ buổi của lớp chưa chốt",
+      orgUnitId: enrollment.class?.centerId ?? null,
+      ...(tx ? { tx } : {}),
+    });
+    return null;
+  }
 
   const finalPrice = enrollment.finalPrice ?? enrollment.tuition ?? 0;
   const { unitPrice, proposedAmount } = computeRefund({

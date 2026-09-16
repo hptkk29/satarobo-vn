@@ -48,6 +48,38 @@ export const NHAN_COACH: Record<CoachFormat, string> = {
   ONE_ON_FOUR: "Coach 1-4",
 };
 
+/**
+ * Khoá này bị công văn LOẠI khỏi hình thức Coach?
+ *
+ * Ghi chú Điều 5: "Sata8 KHÔNG áp dụng Coach" (gói cam kết 5 buổi, giá cố định Điều 3).
+ *
+ * ⚠️ ĐÂY LÀ PHÉP ĐOÁN THEO TÊN, và nó được khai ra đúng chỗ này thay vì giấu trong một
+ * `if` ở màn hình. `Course` KHÔNG có cột "được Coach hay không", và thêm cột là ALTER
+ * trên bảng có dữ liệu prod ⇒ phải là story riêng có dry-run (luật cứng #4). Khi cột đó
+ * ra đời thì bỏ hàm này, đừng để hai nguồn.
+ *
+ * Hướng sai của nó là AN TOÀN: đặt tên khoá mới kiểu "Sata 8 nâng cao" cũng bị chặn
+ * Coach — chặn nhầm còn hơn bán một hình thức công văn cấm. Nhưng thiếu cả ba trường thì
+ * KHÔNG chặn: chặn vì không đọc được tên là chặn một việc bán hàng hợp lệ.
+ */
+export function laKhoaLoaiTruCoach(khoa: {
+  slug?: string | null;
+  code?: string | null;
+  name?: string | null;
+}): boolean {
+  const chuan = (v: string | null | undefined) =>
+    (v ?? "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toUpperCase()
+      // Gom "sata-8" · "Sata 8" · "SATA8" về một dạng; ranh giới từ ở dưới lo
+      // phần "Sata 18" / "Sata 80".
+      .replace(/[^A-Z0-9]+/g, " ")
+      .trim();
+  const mau = /\bSATA\s*8\b/;
+  return [khoa.slug, khoa.code, khoa.name].some((v) => mau.test(chuan(v)));
+}
+
 function so(n: number, macDinh = 0): number {
   return Number.isFinite(n) ? n : macDinh;
 }

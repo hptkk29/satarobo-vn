@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
-import { AlertTriangle, CheckCheck, FileUp, Loader2, ShieldAlert } from "lucide-react";
+import { AlertTriangle, CalendarOff, CheckCheck, FileUp, Loader2, ShieldAlert, UserCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -16,12 +16,19 @@ import {
 } from "@/components/ui/table";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 import {
+  chuanTenSoSanh,
   docDongGiaoDich,
   gopTheoHocVien,
   sheetChuaTronSheet,
   type GiaoDichSheet,
   type HocVienGop,
 } from "@/lib/finance/nhap-giao-dich-sheet";
+import {
+  goiYSale,
+  gomTenSale,
+  thangCuaSheet,
+  type TaiKhoanSale,
+} from "@/lib/finance/khop-sale-sheet";
 import { MUC_KHOP, NHAN_MUC_KHOP } from "@/lib/finance/doi-chieu-hoc-vien";
 import { NHAN_MUC_TRUNG } from "@/lib/finance/trung-giao-dich-cu";
 
@@ -52,6 +59,18 @@ const SHEET_HOC_PHI = [
 ];
 
 const vnd = (n: number) => `${n.toLocaleString("vi-VN")}đ`;
+
+/**
+ * Giá trị "để tên tôi" trong ô gán sale.
+ *
+ * Cố ý KHÔNG phải mặc định: mặc định lùi về người bấm chính là hành vi cũ mà chủ dự án
+ * bảo sửa ("người tạo phải gán cho sale"). Vẫn giữ lối thoát vì tên trong sheet có thể
+ * chưa có tài khoản — nhưng phải CHỌN nó, và màn đếm ra đã chọn bao nhiêu lần.
+ */
+const SALE_LA_TOI = "__TOI__";
+
+const ngayVN = (d: Date) =>
+  `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
 
 type DocFileKetQua = {
   gop: HocVienGop[];
@@ -156,10 +175,52 @@ export function NhapGiaoDichClient() {
   const [ghiDeTrung, setGhiDeTrung] = useState<Record<string, boolean>>({});
   /** Người chọn tay cho dòng lệch tên: khoá `sdt|hoTen` → hocVienId. */
   const [chonTay, setChonTay] = useState<Record<string, string>>({});
+  /** Tài khoản sale được phép gán — server trả ở bước đối chiếu. */
+  const [taiKhoanSale, setTaiKhoanSale] = useState<TaiKhoanSale[]>([]);
+  /** Map tên sale trong sheet (dạng bỏ dấu) → userId, hoặc `SALE_LA_TOI`. */
+  const [ganSale, setGanSale] = useState<Record<string, string>>({});
   const [loi, setLoi] = useState<string | null>(null);
   const [dangChay, start] = useTransition();
 
   const khoaEm = (r: { sdt: string | null; hoTen: string | null }) => `${r.sdt ?? ""}|${r.hoTen ?? ""}`;
+
+  /**
+   * Các tên trong cột "Sales" — đếm theo DÒNG (đối chiếu được với file) và theo EM (đơn
+   * vị thật sự được gán, vì mỗi em một đơn).
+   *
+   * Đo file 14/09/2026: đúng 6 tên ⇒ người nhập chọn 6 lần, không phải 136.
+   */
+  const tenSale = useMemo(() => {
+    if (!doc) return [];
+    const theoEm = new Map<string, number>();
+    for (const g of doc.gop) {
+      const k = chuanTenSoSanh(g.sale ?? "");
+      theoEm.set(k, (theoEm.get(k) ?? 0) + 1);
+    }
+    return gomTenSale(doc.gop.flatMap((g) => g.giaoDich)).map((t) => ({
+      ...t,
+      khoa: chuanTenSoSanh(t.ten),
+      soEm: theoEm.get(chuanTenSoSanh(t.ten)) ?? 0,
+    }));
+  }, [doc]);
+
+  /** Em nào có hai đợt ghi hai sale khác nhau — nêu ra, đơn chỉ mang được một người. */
+  const emLechSale = useMemo(() => (doc ? doc.gop.filter((g) => g.saleKhac) : []), [doc]);
+
+  /**
+   * Dòng sheet BỎ TRỐNG NGÀY. Đo thật 23/136 — chúng không được mang ngày hôm nay, mà
+   * lùi về ngày 1 của tháng trong tên sheet; nói rõ ở đây để người nhập quyết trước khi ghi.
+   */
+  const thieuNgay = useMemo(() => {
+    if (!doc) return [] as Array<{ sheet: string; so: number; moc: Date | null }>;
+    const m = new Map<string, number>();
+    for (const g of doc.gop.flatMap((x) => x.giaoDich)) {
+      if (g.ngay instanceof Date) continue;
+      m.set(g.sheet, (m.get(g.sheet) ?? 0) + 1);
+    }
+    return [...m.entries()].map(([sheet, so]) => ({ sheet, so, moc: thangCuaSheet(sheet) }));
+  }, [doc]);
+
 
   const sanSangGhi = useMemo(() => {
     if (!rows || !doc) return [];
@@ -175,10 +236,43 @@ export function NhapGiaoDichClient() {
         if (!r.nenNhap && !ghiDeTrung[k]) return null;
         const em = doc.gop.find((g) => khoaEm(g) === k);
         if (!em) return null;
-        return { hocVienId: id, giaoDich: em.giaoDich };
+        // ⚠️ SALE ĐI VÀO `Order.createdById`. `SALE_LA_TOI` là lựa chọn CÓ CHỦ ĐÍCH của
+        // người nhập (lùi về chính họ), phải phân biệt với "chưa chọn" — nên gửi lên
+        // `null`, còn cổng chặn nút Ghi ở dưới lo phần "chưa chọn".
+        const chon = ganSale[chuanTenSoSanh(em.sale ?? "")];
+        return {
+          hocVienId: id,
+          giaoDich: em.giaoDich,
+          sale: em.sale,
+          saleUserId: chon && chon !== SALE_LA_TOI ? chon : null,
+        };
       })
-      .filter((x): x is { hocVienId: string; giaoDich: GiaoDichSheet[] } => x != null);
-  }, [rows, doc, chonTay, ghiDeTrung]);
+      .filter(
+        (
+          x,
+        ): x is {
+          hocVienId: string;
+          giaoDich: GiaoDichSheet[];
+          sale: string | null;
+          saleUserId: string | null;
+        } => x != null,
+      );
+  }, [rows, doc, chonTay, ghiDeTrung, ganSale]);
+
+  /**
+   * Tên sale của EM SẮP GHI mà người nhập chưa chọn gì — cổng chặn nút Ghi.
+   *
+   * Tính trên em sắp ghi chứ không phải mọi tên trong file: một sale chỉ xuất hiện ở
+   * những em đã có tiền (bị bỏ qua) thì không có lý do gì chặn cả lượt.
+   */
+  const saleChuaGan = useMemo(() => {
+    if (!doc) return [] as string[];
+    const can = new Set<string>();
+    for (const x of sanSangGhi) {
+      if (!ganSale[chuanTenSoSanh(x.sale ?? "")]) can.add(x.sale?.trim() || "(bỏ trống)");
+    }
+    return [...can];
+  }, [doc, sanSangGhi, ganSale]);
 
   function chonFile(f: File) {
     setLoi(null);
@@ -186,6 +280,7 @@ export function NhapGiaoDichClient() {
     setTomTat(null);
     setChonTay({});
     setGhiDeTrung({});
+    setGanSale({});
     setTenFile(f.name);
     f.arrayBuffer()
       .then((buf) => {
@@ -223,16 +318,25 @@ export function NhapGiaoDichClient() {
       }
       setRows(r.rows);
       setTomTat(r.tomTat);
+      setTaiKhoanSale(r.taiKhoanSale);
     });
   }
 
   function ghi() {
     if (sanSangGhi.length === 0) return;
+    if (saleChuaGan.length > 0) {
+      setLoi(
+        `Chưa gán sale cho: ${saleChuaGan.join(", ")}. Đơn ghi ai bán ở cột "người tạo" — ` +
+          "bỏ trống là cả lô mang tên người bấm nút.",
+      );
+      return;
+    }
     setLoi(null);
     start(async () => {
       const r = await ghiNhapGiaoDichAction({
         ds: sanSangGhi.map((x) => ({
           hocVienId: x.hocVienId,
+          saleUserId: x.saleUserId,
           giaoDich: x.giaoDich.map((g) => ({ ...g, ngay: g.ngay ? g.ngay.toISOString() : null })),
         })),
       });
@@ -334,6 +438,37 @@ export function NhapGiaoDichClient() {
             </p>
           ))}
 
+          {thieuNgay.length > 0 && (
+            <div className="mt-3 flex items-start gap-2 rounded-xl border border-state-warning bg-state-warning-soft px-4 py-2.5">
+              <CalendarOff className="mt-0.5 h-4 w-4 shrink-0 text-state-warning-ink" aria-hidden />
+              <div className="min-w-0 text-xs leading-relaxed text-state-warning-ink">
+                <p>
+                  <b className="font-semibold">
+                    {thieuNgay.reduce((n, x) => n + x.so, 0)} dòng bỏ trống cột Ngày.
+                  </b>{" "}
+                  Đơn sẽ mang <b className="font-semibold">ngày 1 của tháng trong tên sheet</b>,
+                  không phải hôm nay — báo cáo doanh thu xếp theo ngày tạo đơn, để hôm nay là
+                  học phí tháng cũ nhảy hết vào tháng này. Muốn đúng ngày thật thì điền vào
+                  file rồi chọn lại.
+                </p>
+                <ul className="mt-1 space-y-0.5">
+                  {thieuNgay.map((x) => (
+                    <li key={x.sheet} className="tabular-nums">
+                      · {x.sheet}: {x.so} dòng →{" "}
+                      {x.moc ? (
+                        ngayVN(x.moc)
+                      ) : (
+                        <b className="font-semibold">
+                          không đọc được tháng từ tên sheet — sẽ lấy ngày hôm nay
+                        </b>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
+
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <Button onClick={xemThu} disabled={dangChay} className="min-h-11 transition-colors duration-150">
               {dangChay ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <CheckCheck className="h-4 w-4" aria-hidden />}
@@ -356,6 +491,86 @@ export function NhapGiaoDichClient() {
             <O nhan="Đã có tiền — bỏ qua" giaTri={`${tomTat.daCoTien} em`} tone={tomTat.daCoTien > 0 ? "warn" : "neutral"} chu="Chống cộng đôi" />
             <O nhan="Cần chọn" giaTri={`${tomTat.canChon} em`} tone={tomTat.canChon > 0 ? "warn" : "neutral"} />
             <O nhan="Không tìm thấy" giaTri={`${tomTat.khongThay} em`} tone={tomTat.khongThay > 0 ? "danger" : "neutral"} />
+          </div>
+
+          {/* ── Gán sale ────────────────────────────────────────────────────
+              Chủ dự án 14/09/2026: "người tạo phải gán cho sale". `Order` không có cột
+              sale phụ trách — thứ danh sách đơn và báo cáo đọc là `createdById`, nên đó
+              là cột được gán. Sheet chỉ có 6 tên ⇒ chọn 6 lần, không phải 136. */}
+          <div className="mt-4 rounded-xl border border-border bg-muted/30 p-4">
+            <h3 className="flex flex-wrap items-center gap-2 text-sm font-semibold text-foreground">
+              <UserCheck className="h-4 w-4 shrink-0 text-accent-ink" aria-hidden />
+              Gán sale phụ trách
+              {saleChuaGan.length > 0 && (
+                <span className="rounded-md bg-state-warning-soft px-2 py-0.5 text-xs font-semibold text-state-warning-ink">
+                  còn {saleChuaGan.length} tên chưa gán
+                </span>
+              )}
+            </h3>
+            <p className="mt-1 max-w-prose text-xs leading-relaxed text-muted-foreground">
+              Mỗi em một đơn, và đơn ghi người bán ở cột{" "}
+              <b className="font-semibold text-foreground">người tạo</b>. Không gán thì cả lô
+              mang tên bạn, và thành tích của các sale biến mất.{" "}
+              <b className="font-semibold text-foreground">Không có gợi ý nào được chọn sẵn</b> —
+              gán nhầm thì đơn vẫn tạo thành công nên sẽ không ai phát hiện.
+            </p>
+
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              {tenSale.map((t) => {
+                const ungVien = goiYSale(t.ten, taiKhoanSale);
+                return (
+                  <label
+                    key={t.khoa}
+                    className="flex min-w-0 flex-col gap-1.5 rounded-xl border border-border bg-background px-3 py-2.5"
+                  >
+                    <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+                      <b className="truncate text-sm font-semibold text-foreground">
+                        {t.ten || "(bỏ trống cột Sales)"}
+                      </b>
+                      <span className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">
+                        {t.soEm} em · {t.soDong} dòng · {vnd(t.tien)}
+                      </span>
+                    </span>
+                    <select
+                      value={ganSale[t.khoa] ?? ""}
+                      onChange={(e) => setGanSale((c) => ({ ...c, [t.khoa]: e.target.value }))}
+                      className="min-h-11 w-full rounded-lg border border-border bg-background px-2.5 text-sm transition-colors duration-150 focus:border-primary focus:outline-none"
+                    >
+                      <option value="">— Chưa chọn —</option>
+                      {ungVien.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.name ?? u.id}
+                          {u.goiY ? " · gợi ý" : ""}
+                        </option>
+                      ))}
+                      <option value={SALE_LA_TOI}>Không có tài khoản — để tên tôi</option>
+                    </select>
+                  </label>
+                );
+              })}
+            </div>
+
+            {taiKhoanSale.length === 0 && (
+              <p className="mt-3 rounded-lg border border-state-warning bg-state-warning-soft px-3 py-2 text-xs leading-relaxed text-state-warning-ink">
+                Không có tài khoản sale nào trong phạm vi của bạn. Chọn{" "}
+                <b className="font-semibold">&quot;để tên tôi&quot;</b> để ghi, rồi nhờ quản
+                trị tạo tài khoản cho các sale và sửa lại người tạo trên từng đơn.
+              </p>
+            )}
+
+            {emLechSale.length > 0 && (
+              <p className="mt-3 rounded-lg border border-state-warning bg-state-warning-soft px-3 py-2 text-xs leading-relaxed text-state-warning-ink">
+                <b className="font-semibold">{emLechSale.length} em</b> có các đợt ghi{" "}
+                <b className="font-semibold">hai tên sale khác nhau</b>. Một em một đơn nên đơn
+                chỉ mang được một người — hệ thống lấy sale của{" "}
+                <b className="font-semibold">đợt đầu</b>:{" "}
+                {emLechSale
+                  .slice(0, 4)
+                  .map((g) => `${g.hoTen ?? "?"} → ${g.sale ?? "?"}`)
+                  .join(" · ")}
+                {emLechSale.length > 4 && ` · và ${emLechSale.length - 4} em nữa`}.
+              </p>
+            )}
           </div>
 
           <div className="mt-4 overflow-hidden rounded-xl border border-border">
@@ -492,10 +707,19 @@ export function NhapGiaoDichClient() {
           )}
 
           <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-border pt-4">
-            <Button onClick={ghi} disabled={dangChay || sanSangGhi.length === 0} className="min-h-11 transition-colors duration-150">
+            <Button
+              onClick={ghi}
+              disabled={dangChay || sanSangGhi.length === 0 || saleChuaGan.length > 0}
+              className="min-h-11 transition-colors duration-150"
+            >
               {dangChay && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
               <span className="whitespace-nowrap">Ghi cho {sanSangGhi.length} em</span>
             </Button>
+            {saleChuaGan.length > 0 && (
+              <span className="text-xs font-medium text-state-warning-ink">
+                Chưa gán sale: {saleChuaGan.join(", ")}
+              </span>
+            )}
             <p className="max-w-prose text-xs leading-relaxed text-muted-foreground">
               Em <b className="font-semibold text-foreground">đã có tiền trong hệ thống</b>{" "}
               không được ghi tự động — muốn ghi phải bấm &quot;Vẫn ghi&quot; ở từng dòng.

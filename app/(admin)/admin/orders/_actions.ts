@@ -21,14 +21,40 @@ import { generateOrderCode, withUniqueRetry } from "@/lib/orders/code";
 import { checkOrderCreateOwnership } from "@/lib/orders/create-guard";
 import { canTransition } from "@/lib/orders/status";
 import { recordInstallmentPlan, markInstallmentPaid } from "@/lib/orders/installments";
-import { discountFromPercent } from "@/lib/orders/discount";
+import { getSetting } from "@/lib/settings/service";
+import { expandPhoneVariants } from "@/lib/phone";
+import {
+  dongThieuGiaiTrinh,
+  giaiTrinhGopChoDon,
+  khoanVuotTran,
+  loiThieuGiaiTrinh,
+  loiVuotTran,
+  tienDon,
+  type KieuGiam,
+} from "@/lib/orders/giam-gia-dong";
 import { ensureParentAccountForOrder } from "@/lib/parents/provision";
 import { ensureOrderPaymentRecorded } from "@/lib/finance/payment";
 import { ensureFullOrderRequest } from "@/lib/payments/payment-request";
+import { dotsGhiTuForm } from "@/lib/payments/ke-hoach-dot";
+import { thuTuRot } from "@/lib/payments/thu-tu-rot";
+import { laThuTienLinhHoatBat } from "@/lib/finance/feature";
+import { noTheoCon, kiemTaoDot, kiemHuyDot } from "@/lib/finance/debt";
 import { getRequestMetadata } from "@/lib/audit/headers";
 import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { soatGiaDon } from "@/lib/orders/price-guard";
+import { congNoDon } from "@/lib/finance/cong-no-don";
+import { haiTrucTheoDon, KHONG_CO_TIEN } from "@/lib/finance/hai-truc-theo-don";
+import { trangThaiDon } from "@/lib/orders/trang-thai-don";
+import {
+  hocVienLaCuaNguoiKhac,
+  hocVienTrenCacDong,
+  studentIdChoDon,
+  thieuHocVienODong,
+  veMetadataConLead,
+} from "@/lib/orders/hoc-vien-dong-don";
+import { docHinhThucLop } from "@/lib/orders/hinh-thuc-lop";
+import { laKhoaLoaiTruCoach } from "@/lib/finance/coach-pricing";
 import { sendEmailForTrigger } from "@/lib/email/trigger";
 import { notifyOrderByZnsIfNoEmail } from "@/lib/notify/order";
 import { renderTemplate } from "@/lib/email/render";
@@ -180,12 +206,43 @@ export async function queryOrders(
     : [];
   const creatorNameById = new Map(creators.map((u) => [u.id, u.name]));
 
-  const items = rawItems.map((o) => ({
-    ...o,
-    // null = đơn tạo TRƯỚC 31/08/2026 (chưa có cột) hoặc người tạo đã bị xoá. Màn hình
-    // in "—"; cố ý KHÔNG đoán bừa từ nguồn khác.
-    createdByName: o.createdById ? (creatorNameById.get(o.createdById) ?? null) : null,
-  }));
+  /**
+   * HAI TRỤC cho cả trang — MỘT lượt tra, không N+1 [16/09/2026].
+   *
+   * Chủ dự án chốt trạng thái đơn suy từ TIỀN và hiển thị hai trục. Trang chi tiết đã đổi;
+   * danh sách mà không đổi thì CÙNG MỘT ĐƠN mang hai nhãn khác nhau ở hai màn — đo trên
+   * `satarobo_local`: lọc "Đã xác nhận đơn" trả 81 đơn mà **0/81** đơn nào còn mang nhãn
+   * đó ở trang chi tiết (77 hoá "Đang đóng", 4 hoá "Đã đóng đủ").
+   *
+   * ⚠️ Truyền `sdb` (đã scope), KHÔNG phải `db` trần — `Payment` ∈ SCOPED_MODELS.
+   */
+  const tienTheoDon = await haiTrucTheoDon(sdb, rawItems.map((o) => o.id));
+
+  const items = rawItems.map((o) => {
+    const t = tienTheoDon.get(o.id) ?? KHONG_CO_TIEN;
+    const so = congNoDon({
+      totalAmount: o.totalAmount,
+      daGhiNhan: t.daGhiNhan,
+      daXacNhan: t.daXacNhan,
+    });
+    return {
+      ...o,
+      // null = đơn tạo TRƯỚC 31/08/2026 (chưa có cột) hoặc người tạo đã bị xoá. Màn hình
+      // in "—"; cố ý KHÔNG đoán bừa từ nguồn khác.
+      createdByName: o.createdById ? (creatorNameById.get(o.createdById) ?? null) : null,
+      /**
+       * Trạng thái SUY TỪ TIỀN — tính ở SERVER và gửi xuống nguyên vẹn.
+       *
+       * Cố ý không gửi hai con số thô rồi để client tự gọi `trangThaiDon`: client cũng
+       * gọi được (hàm thuần), nhưng như thế là hai chỗ quyết định cùng một nhãn, và
+       * trang chi tiết đã tính ở client rồi. Một trong hai phải là nơi duy nhất — chọn
+       * server cho danh sách vì `congNoDon` cần số tiền mà chỉ server có.
+       */
+      trangThai: trangThaiDon({ status: o.status, so }),
+      /** Bộ số thô đi kèm, để bảng in được "còn thiếu" mà không phải suy lại. */
+      congNo: so,
+    };
+  });
 
   return { items, nextCursor };
 }
@@ -234,6 +291,135 @@ export async function createOrderManualAction(input: unknown) {
     return { ok: false as const, error: "Không có quyền tạo đơn cho cơ sở này" };
   }
 
+  // ── HỌC VIÊN CỦA TỪNG DÒNG HÀNG (15/09/2026 — đơn nhiều con) ────────────────
+  //
+  // `OrderItem.studentId` là một quan hệ TIỀN ("khoản này của con nào"), nên id client
+  // gửi KHÔNG BAO GIỜ được tin thẳng: tra lại qua `scopedDb` (học viên ngoài tầm nhìn
+  // trả rỗng) rồi đối chiếu đủ số. `scopedDb` KHÔNG che write — đây là chỗ tự gác.
+  //
+  // ⚠️ TỪ CHỐI CẢ ĐƠN, không âm thầm hoá null cái id lạ. Hoá null thì đơn vẫn tạo ra
+  // nhưng mất thông tin "của con nào" — và mất im lặng, đúng lúc người nhập tin là đã
+  // khai xong. Thà báo lỗi để họ chọn lại.
+  const hocVienTrenDong = hocVienTrenCacDong(data.items);
+  // Đơn hai con mà còn dòng bỏ trống ô học viên → chặn. Form đã chặn, nhưng form
+  // chặn ở CLIENT; cổng thật phải ở đây (luật "scopedDb không che write").
+  if (thieuHocVienODong(data.items)) {
+    return {
+      ok: false as const,
+      error:
+        "Đơn có nhiều học viên thì mọi dòng phải chọn rõ học viên — nếu không sau này không ai biết khoản tiền là của ai",
+    };
+  }
+  // `data.studentId` (cột trên ĐƠN) đi cùng một cổng — trước đợt này nó chưa từng
+  // được tra scope lần nào, tức một lời gọi action tự chế gắn được đơn vào học viên
+  // của cơ sở khác. Gộp vào cùng tập để chỉ phải viết cổng MỘT lần.
+  const hocVienIds = [
+    ...new Set([...hocVienTrenDong, ...(data.studentId?.trim() ? [data.studentId.trim()] : [])]),
+  ];
+  if (hocVienIds.length > 0) {
+    const thay = await sdb.student.findMany({
+      where: { id: { in: hocVienIds }, deletedAt: null },
+      select: { id: true, name: true, parentPhone: true },
+    });
+    if (thay.length !== hocVienIds.length) {
+      return {
+        ok: false as const,
+        error:
+          "Có học viên không tồn tại hoặc ngoài phạm vi của bạn — chọn lại ở dòng hàng",
+      };
+    }
+
+    /**
+     * ── BƯỚC A1 [16/09/2026]: EM TRÊN DÒNG PHẢI LÀ CON CỦA KHÁCH TRÊN ĐƠN ──
+     *
+     * Chủ dự án: *"mọi OrderItem khi tạo/sửa phải có học viên thuộc đúng lead/phụ huynh
+     * của đơn, sai → từ chối"*.
+     *
+     * Cổng scope ở TRÊN chỉ hỏi "em này có thật và có thuộc cơ sở bạn nhìn thấy không" —
+     * mà cả 247 em của cơ sở đều qua được câu đó. Nó KHÔNG hỏi "em này có phải con của
+     * người đang mua không". Đơn `ORD-260915-000007` lọt đúng khe đó: đơn của chị Diễm
+     * (`84941000002`) mà hai dòng ghi con của hai gia đình khác.
+     *
+     * Ô chọn đã vá sáng nay, nhưng vá ở CLIENT. Đây là vế SERVER — luật thật nằm ở
+     * `hocVienLaCuaNguoiKhac` (thuần, có test + đã cấy lỗi), dùng chung với màn hình.
+     */
+    const sdtLead = data.leadId?.trim()
+      ? ((await sdb.lead.findUnique({
+          where: { id: data.leadId.trim() },
+          select: { phone: true },
+        }))?.phone ?? null)
+      : null;
+    const nhaKhac = hocVienLaCuaNguoiKhac(thay, data.customerPhone, sdtLead);
+    if (nhaKhac.length > 0) {
+      return {
+        ok: false as const,
+        error:
+          `Không tạo được đơn: ${nhaKhac.map((h) => h.name).join(", ")} không phải con của ` +
+          `số điện thoại trên đơn. Chọn lại học viên ở dòng hàng, hoặc cập nhật SĐT phụ ` +
+          `huynh của em đó trước.`,
+      };
+    }
+  }
+
+  /**
+   * CON LEAD trên các dòng — phải THẬT thuộc lead của đơn này [16/09/2026].
+   *
+   * Chủ dự án: *"lead này đa số là lead chưa chốt nên chưa phải là học viên nên sẽ lấy
+   * thông tin con của PH lead đó chứ"*. Nên ô chọn học viên nay bày cả `LeadChild`.
+   *
+   * ⚠️ CỔNG NÀY KHÔNG PHẢI THỦ TỤC. `leadChildId` client gửi là một quan hệ TIỀN ("khoản
+   * này của con nào"), y như `studentId`. Không tra lại thì một lời gọi action tự chế gắn
+   * được dòng đơn vào con của gia đình KHÁC — và `LeadChild` KHÔNG thuộc `SCOPED_MODELS`
+   * nên `scopedDb` không tự lọc giúp. Vì thế tra theo `leadId` của ĐƠN, chứ không tra
+   * "con này có tồn tại không".
+   *
+   * ⚠️ Không có `leadId` trên đơn mà lại khai con lead ⇒ TỪ CHỐI. Đơn walk-in không gắn
+   * lead thì không có cơ sở nào để nói đứa trẻ đó là con của khách này.
+   */
+  const conLeadTrenDong = [
+    ...new Set(
+      data.items
+        .map((it) => it.leadChildId?.trim())
+        .filter((v): v is string => !!v),
+    ),
+  ];
+  if (conLeadTrenDong.length > 0) {
+    const leadIdCuaDon = data.leadId?.trim() || null;
+    if (!leadIdCuaDon) {
+      return {
+        ok: false as const,
+        error:
+          "Đơn không gắn lead nào mà lại chọn con khai trong lead — mở lại trang tạo đơn từ lead, hoặc chọn học viên đã có hồ sơ",
+      };
+    }
+    const thayCon = await sdb.leadChild.findMany({
+      where: { id: { in: conLeadTrenDong }, leadId: leadIdCuaDon },
+      select: { id: true },
+    });
+    if (thayCon.length !== conLeadTrenDong.length) {
+      return {
+        ok: false as const,
+        error:
+          "Có con không thuộc lead của đơn này — chọn lại ở dòng hàng",
+      };
+    }
+  }
+
+  /**
+   * `Order.studentId` — SUY TỪ CÁC DÒNG, không nhận từ client.
+   *
+   * Cột này chỉ có nghĩa khi cả đơn về ĐÚNG MỘT em; đơn hai con phải để NULL, vì
+   * "con nào" lúc đó là thuộc tính của từng dòng chứ không của đơn. Form đã tính
+   * đúng như vậy, nhưng nó tính ở CLIENT: gọi thẳng action vẫn gửi được một đơn có
+   * hai dòng của hai em mà cột đơn trỏ vào em thứ ba. Từ đó mọi thứ đọc
+   * `Order.studentId` — hoàn tiền, ZNS học phí, cổng phụ huynh — nói sai tên một
+   * đứa trẻ, và không có lỗi nào nổ ra để ai biết.
+   *
+   * Không có dòng nào khai học viên thì giữ nguyên giá trị client gửi (đường
+   * convert-lead vẫn dựa vào nó) — nhưng nay giá trị ấy đã qua cổng scope ở trên.
+   */
+  const studentIdCuaDon = studentIdChoDon(data.items, data.studentId);
+
   // ── DẤU VẾT GIÁ ──────────────────────────────────────────────────────────────
   // Hôm nay server tin tuyệt đối `unitPrice` client gửi, và vì `needsDiscountApproval`
   // chỉ xét `discountAmount > 0` nên đơn HẠ ĐƠN GIÁ không vào hàng chờ duyệt, không ghi
@@ -272,6 +458,41 @@ export async function createOrderManualAction(input: unknown) {
     ...giaKhoa.map((c) => [c.id, c.price] as const),
     ...giaSanPham.map((p) => [p.id, p.salePrice] as const),
   ]);
+  // ── HÌNH THỨC LỚP (SR.QD.219 Điều 5) ────────────────────────────────────────
+  // Gác đúng MỘT điều server kiểm được: khoá mà công văn LOẠI khỏi Coach thì không được
+  // bán Coach. Những thứ còn lại (`coachFormat` có khớp lớp học thật không, `soBuoi` có
+  // đúng số buổi khách mua không) server KHÔNG suy ra được — model `Class` không có cột
+  // hình thức lớp — nên chúng chỉ được GHI LẠI, không được dùng để định giá.
+  //
+  // ⚠️ CỐ Ý KHÔNG đưa hình thức lớp vào `giaNiemYet` của `soatGiaDon` bên dưới. Hôm nay
+  // `giaNiemYet` là `Course.price` tra từ DB nên client không chạm được; nếu giá kỳ vọng
+  // tính từ `coachFormat` + `soBuoi` (vốn nằm trong payload client) thì client cầm CẢ HAI
+  // VẾ của phép so — khai `soBuoi` nhỏ là mọi đơn bán rẻ thành "khớp". Đo + phản biện
+  // 14/09/2026; chi tiết ở đầu `lib/orders/hinh-thuc-lop.ts`.
+  const hinhThucDong = data.items.map((it) => docHinhThucLop(it.metadata));
+  const idKhoaCoach = [
+    ...new Set(
+      hinhThucDong
+        .filter((h) => h.coachFormat !== "GROUP" && h.courseId)
+        .map((h) => h.courseId as string),
+    ),
+  ];
+  if (idKhoaCoach.length > 0) {
+    const khoaCoach = await sdb.course.findMany({
+      where: { id: { in: idKhoaCoach } },
+      select: { id: true, name: true, slug: true, code: true },
+    });
+    const biLoai = khoaCoach.find((c) => laKhoaLoaiTruCoach(c));
+    if (biLoai) {
+      return {
+        ok: false as const,
+        error:
+          `Khoá "${biLoai.name}" không áp dụng hình thức Coach (SR.QD.219 Điều 5 — gói ` +
+          "cam kết 5 buổi, giá cố định Điều 3). Chọn lớp nhóm, hoặc chọn khoá khác.",
+      };
+    }
+  }
+
   const soatGia = soatGiaDon(
     data.items.map((it) => {
       const m = it.metadata as Record<string, unknown> | null | undefined;
@@ -286,30 +507,61 @@ export async function createOrderManualAction(input: unknown) {
     }),
   );
 
-  const subtotal = data.items.reduce(
-    (s, it) => s + it.unitPrice * it.quantity,
-    0,
-  );
+  // ── TIỀN CỦA ĐƠN: SUY TỪ CÁC DÒNG (15/09/2026) ───────────────────────────────
+  //
+  // Giảm giá nay khai theo TỪNG DÒNG. Server TÍNH LẠI toàn bộ bằng `tienDon` chứ không
+  // nhận con số nào từ client: `discountAmount` client gửi là Ý ĐỊNH, không phải kết
+  // quả. Tin nó là để client cầm cả hai vế của phép trừ — gửi `unitPrice` 10.000.000 và
+  // `discountAmount` 9.999.999 thì đơn ra 1đ mà không cổng nào thấy gì bất thường.
+  const khaiDong = data.items.map((it) => ({
+    unitPrice: it.unitPrice,
+    quantity: it.quantity,
+    // DANH SÁCH khoản giảm của dòng, đúng thứ tự người bán gõ. Validator đã chặn cách
+    // khai cũ (một khoản/dòng) cho ra tiếng, nên ở đây chỉ còn MỘT hình dạng.
+    giam: (it.discounts ?? []).map((k) => ({
+      kieu: k.kieu as KieuGiam,
+      giaTri: k.giaTri,
+      lyDo: k.lyDo ?? null,
+    })),
+  }));
 
-  // BGĐ 31/07 — giảm giá theo %: server tự quy ra số tiền (nguồn sự thật).
-  if (data.discountPercent && data.discountPercent > 0) {
-    data.discountAmount = discountFromPercent(subtotal, data.discountPercent);
+  // Giải trình BẮT BUỘC cho từng dòng có giảm. Validator đã gác từng dòng một, nhưng
+  // gác lại ở đây để thông báo nói được DÒNG NÀO — với đơn bốn dòng thì "thiếu giải
+  // trình" không đủ để người bán biết đi sửa ở đâu.
+  // TRẦN % lấy từ THAM SỐ VẬN HÀNH, không phải hằng trong mã. Người vận hành sửa ở màn
+  // "Cấu hình vận hành" (`orders.maxDiscountPercent`, mặc định 50 — chốt 15/09/2026) và
+  // đường ghi này phải đi theo ngay. Đây đúng là cái bẫy CLAUDE.md đã ghi cho
+  // `crm.commissionMaxTotalRate`: nới trần ở màn cấu hình mà đường ghi vẫn chặn theo số
+  // cũ thì không lỗi nào báo, chỉ có sale gọi điện hỏi vì sao không lưu được đơn.
+  const tranPhanTram = await getSetting("orders.maxDiscountPercent");
+
+  // Vượt trần ⇒ TỪ CHỐI, không kẹp im lặng. `gopGiamGia` có kẹp như lưới an toàn cho
+  // con SỐ, nhưng người bán vừa hứa với phụ huynh một mức bớt khác — để đơn lưu được
+  // với 50% trong khi sale gõ 80% là dựng sẵn một cuộc tranh cãi mà hệ thống có đủ dữ
+  // kiện để chặn ngay lúc bấm Lưu.
+  const vuotTran = khoanVuotTran(khaiDong, tranPhanTram);
+  if (vuotTran.length > 0) {
+    return { ok: false as const, error: loiVuotTran(vuotTran, tranPhanTram) };
   }
 
-  const totalAmount = subtotal - data.discountAmount + data.shippingFee;
+  const thieuLyDo = dongThieuGiaiTrinh(khaiDong, tranPhanTram);
+  if (thieuLyDo.length > 0) {
+    return { ok: false as const, error: loiThieuGiaiTrinh(thieuLyDo) };
+  }
+
+  const tien = tienDon(khaiDong, { phiVanChuyen: data.shippingFee, tranPhanTram });
+  const subtotal = tien.tamTinh;
+  const totalAmount = tien.tongDon;
+  // `tienDong` đã kẹp giảm ≤ tạm tính TỪNG DÒNG, nên tổng không thể âm trừ khi
+  // `shippingFee` âm — mà validator đã chặn `min(0)`. Giữ cổng vì nó rẻ và vì mất nó
+  // thì một đổi thay ở `tienDon` sẽ đi thẳng ra đơn âm mà không ai chặn.
   if (totalAmount < 0) {
     return { ok: false as const, error: "Tổng tiền không thể âm" };
   }
 
-  // ⚠️ 14/09/2026 — cơ chế DUYỆT đã gỡ, nhưng GIẢI TRÌNH thì GIỮ.
-  //
-  // Hai thứ này hay bị gộp làm một. "Duyệt" là một người phải bấm trước khi đơn đi tiếp
-  // — đó là thứ chủ dự án bỏ. "Giải trình" là một dòng chữ nói vì sao bớt tiền — đó là
-  // DẤU VẾT, và dấu vết chính là cái thay thế cổng duyệt, nên bỏ nó là bỏ cả hai.
-  const coGiamGia = data.discountAmount > 0;
-  if (coGiamGia && !data.discountReason?.trim()) {
-    return { ok: false as const, error: "Nhập giải trình giảm giá" };
-  }
+  // `Order.discountReason` vẫn được hoá đơn · nhật ký đọc, nên nó phải nói được điều gì
+  // đó mà không cần biết về cột JSON. Ghép ở MỘT chỗ dùng chung với form.
+  const giaiTrinhGop = giaiTrinhGopChoDon(tien.dong);
 
   // 30/08/2026 — PaymentMethod ∈ SCOPED_MODELS: câu này nay TỰ LỌC theo tầm nhìn cơ sở
   // của người tạo đơn.
@@ -430,7 +682,8 @@ export async function createOrderManualAction(input: unknown) {
         customerAddress: data.customerAddress?.trim() || null,
         customerWard: data.customerWard?.trim() || null,
         customerCity: data.customerCity?.trim() || null,
-        studentId: data.studentId || null,
+        // Suy từ các dòng — xem `studentIdCuaDon` bên trên. KHÔNG dùng `data.studentId`.
+        studentId: studentIdCuaDon,
         leadId: data.leadId || null,
         centerId: data.centerId || null,
         // Người tạo đơn — cột danh sách /admin/orders. Lấy từ phiên, KHÔNG nhận từ
@@ -439,31 +692,65 @@ export async function createOrderManualAction(input: unknown) {
         createdById: session.user.id ?? null,
         paymentMethodId: data.paymentMethodId,
         subtotal,
-        discountAmount: data.discountAmount,
+        // TỔNG các dòng — không phải một số nhập độc lập. Hai đường nhập cho cùng một
+        // con tiền là định nghĩa của sổ lệch.
+        discountAmount: tien.tongGiam,
         // Snapshot cách nhập giảm giá + giải trình.
         //
         // ⚠️ 14/09/2026 — KHÔNG còn set `discountApprovalStatus`/`discountRequestedById`:
         // đơn mới không đi vào hàng chờ duyệt nữa. Hai cột GIỮ trong schema (dữ liệu cũ
         // đang mang giá trị thật, và drop cột trên bảng có dữ liệu prod là đợt riêng —
         // luật cứng #4), chỉ không có đường GHI mới.
-        discountPercent: data.discountPercent ?? null,
-        discountReason: coGiamGia ? (data.discountReason?.trim() ?? null) : null,
+        // % nay là thuộc tính của DÒNG (mỗi dòng một mức), nên ở cấp đơn nó vô nghĩa.
+        discountPercent: null,
+        discountReason: giaiTrinhGop,
         shippingFee: data.shippingFee,
         totalAmount,
         customerNote: data.customerNote?.trim() || null,
         internalNote: data.internalNote?.trim() || null,
         items: {
-          create: data.items.map((it) => ({
+          create: data.items.map((it, i) => ({
             type: it.type,
             itemName: it.itemName,
             itemDescription: it.itemDescription || null,
             quantity: it.quantity,
             unitPrice: it.unitPrice,
-            totalPrice: it.unitPrice * it.quantity,
+            // TẠM TÍNH của dòng (trước giảm) — `Order.subtotal` = Σ cột này.
+            totalPrice: tien.dong[i]!.tamTinh,
+            // Số SERVER tính, không phải số client gửi.
+            //
+            // `discountAmount` là TỔNG của dòng (cột tiền, `Order.discountAmount` = Σ nó);
+            // `discountPercent` chỉ có nghĩa khi dòng có ĐÚNG MỘT khoản kiểu %;
+            // `discountReason` là bản ghép để đường đọc cũ không phải biết về JSON;
+            // `discounts` là bản chi tiết — nguồn sự thật cho hiển thị.
+            discountAmount: tien.dong[i]!.giam,
+            discountPercent: tien.dong[i]!.phanTram,
+            discountReason:
+              tien.dong[i]!.khoan
+                .filter((k) => k.giam > 0 && k.lyDo)
+                .map((k) => k.lyDo)
+                .join(" · ") || null,
+            discounts:
+              tien.dong[i]!.khoan.length > 0
+                ? (tien.dong[i]!.khoan as unknown as Prisma.InputJsonValue)
+                : Prisma.JsonNull,
             packageId: it.packageId || null,
             examAttemptId: it.examAttemptId || null,
             productId: it.productId || null,
-            metadata: (it.metadata as Prisma.InputJsonValue) ?? Prisma.JsonNull,
+            // Đã được gác ở `hocVienHopLe` bên trên — chỉ id đã tra qua `scopedDb` mới
+            // lọt tới đây. Id lạ/ngoài cơ sở đã bị từ chối cả đơn, không âm thầm hoá null.
+            studentId: it.studentId || null,
+            // CON LEAD đi vào `metadata.leadChildId` (đã gác bằng `conLeadTrenDong` bên
+            // trên). Vì sao metadata chứ không một cột riêng: `LeadChild` KHÔNG có cột
+            // `studentId`, và cầu nối THẬT giữa hai thế giới là `Enrollment.leadChildId`
+            // do `convert-lead-v2` ghi lúc chốt — nên giá trị này chỉ cần sống tới lúc
+            // convert rồi ráp lại. Thêm một cột + migration trên bảng có dữ liệu prod cho
+            // một giá trị tạm là không xứng, và `metadata` vốn đã giữ `courseId` cùng họ.
+            metadata:
+              (veMetadataConLead(
+                (it.metadata as Record<string, unknown> | null) ?? null,
+                it.leadChildId || null,
+              ) as Prisma.InputJsonValue | null) ?? Prisma.JsonNull,
           })),
         },
       },
@@ -528,14 +815,35 @@ export async function createOrderManualAction(input: unknown) {
       newValues: {
         orderCode: order.code,
         subtotal,
-        discountAmount: data.discountAmount,
-        discountPercent: data.discountPercent ?? null,
-        discountReason: data.discountReason?.trim() || null,
+        discountAmount: tien.tongGiam,
+        discountReason: giaiTrinhGop,
         totalAmount,
+        // Giảm giá theo TỪNG DÒNG (15/09/2026). Ghi cả bản chi tiết chứ không chỉ tổng:
+        // tổng không nói được bớt cho ĐỨA NÀO, mà đó đúng là câu hỏi sẽ được hỏi lúc
+        // hoàn tiền hoặc lúc phụ huynh thắc mắc.
+        giamTungDong: tien.dong.map((d, i) => ({
+          dong: i + 1,
+          hocVienId: data.items[i]?.studentId ?? null,
+          tamTinh: d.tamTinh,
+          giam: d.giam,
+          thanhTien: d.thanhTien,
+          // TỪNG KHOẢN, không chỉ tổng: tổng không nói được bớt theo chương trình nào.
+          khoan: d.khoan.map((k) => ({
+            kieu: k.kieu,
+            giaTri: k.giaTri,
+            giam: k.giam,
+            lyDo: k.lyDo,
+          })),
+        })),
         // Dấu vết giá — đủ để soát lại mà không phải mở lại payload.
         giaLech: soatGia.coLech,
         giaTongLechThap: soatGia.tongLechThap,
         giaDongLech: soatGia.dongLech,
+        // Hình thức lớp đã KHAI trên từng dòng. Ghi ở đây để đơn bán Coach có lời giải
+        // thích đi kèm ngay cạnh `giaLech` — bán 1-1 ×2,0 là HỢP LỆ theo công văn nhưng
+        // vẫn rơi vào CAO_HON, và người soát sau cần biết vì sao mà không phải mở payload.
+        hinhThucLop: hinhThucDong.map((h) => h.coachFormat),
+        soBuoiKhai: hinhThucDong.map((h) => h.soBuoi),
       },
       orgUnitId: data.centerId || null,
       tx,
@@ -544,6 +852,46 @@ export async function createOrderManualAction(input: unknown) {
       return order;
     }),
   );
+
+  // ── KẾ HOẠCH THANH TOÁN LẬP NGAY LÚC TẠO ĐƠN [15/09/2026] ───────────────────
+  //
+  // Chủ dự án: *"đưa phần kế hoạch thanh toán ra trang tạo đơn hàng luôn đi"*. Từ đây
+  // người bán chia đợt NGAY trên form tạo đơn, và mở trang chi tiết là đã có sẵn phiếu
+  // thu + QR cho từng đợt.
+  //
+  // ⚠️ NGOÀI transaction tạo đơn, CÓ CHỦ ĐÍCH. `recordInstallmentPlan` mở `db.$transaction`
+  // của riêng nó (`lib/orders/installments.ts`) và đọc lại đơn qua `db` — lồng nó vào tx ở
+  // trên là đọc một bản ghi CHƯA COMMIT bằng một kết nối khác, tức luôn "Không tìm thấy
+  // đơn". Nhét nó vào trong sẽ đòi mổ cả hàm đó, mà hàm đó là đường ghi tiền của 3 chỗ gọi
+  // khác; đợt này không mở việc ấy ra.
+  //
+  // ⚠️ THẤT BẠI Ở ĐÂY KHÔNG ĐƯỢC LÀM HỎNG CÂU TRẢ LỜI "đã tạo đơn". Đơn ĐÃ nằm trong DB;
+  // trả `ok: false` là để người bán tin là chưa tạo được rồi bấm lại — và có hai đơn thật
+  // cho một khách. Trả kèm CẢNH BÁO để form nói đúng: đơn xong, kế hoạch thì mở trang chi
+  // tiết mà đặt lại (khối kế hoạch ở đó vẫn làm được đúng việc ấy).
+  //
+  // `try/catch` vì `materializeInstallmentRequests` NÉM (`InstallmentMoneyBlocked`) chứ
+  // không trả lỗi. Đơn vừa sinh ra thì không thể có phân bổ nào nên cổng A6 không thể nổ ở
+  // đây — nhưng một ngoại lệ lọt ra là mất luôn mã đơn vừa tạo khỏi câu trả lời, nên bọc.
+  let canhBaoKeHoach: string | null = null;
+  const keHoach = data.keHoachDot ?? [];
+  if (keHoach.length > 0) {
+    try {
+      const resKh = await recordInstallmentPlan({
+        orderId: created.id,
+        // Quy đổi ở BIÊN bằng hàm dùng chung với `recordOrderInstallmentsAction` — hai
+        // bản quy đổi ngày/cờ đã-thu là hai cách ghi lệch sổ.
+        dots: dotsGhiTuForm(keHoach),
+        actorId: session.user.id ?? null,
+      });
+      if (!resKh.ok) canhBaoKeHoach = resKh.error ?? "Không lưu được kế hoạch thanh toán";
+    } catch (err) {
+      console.error("[orders] luu ke hoach luc tao don that bai:", err);
+      canhBaoKeHoach =
+        err instanceof Error ? err.message : "Không lưu được kế hoạch thanh toán";
+    }
+    revalidatePath(`/orders/${created.id}`);
+  }
 
   revalidatePath("/orders");
   if (productSnapshot) {
@@ -575,7 +923,13 @@ export async function createOrderManualAction(input: unknown) {
   // P5 — khách không có email thì email trigger ở trên tự bỏ qua; ZNS lo phần đó.
   void notifyOrderByZnsIfNoEmail(created.id);
 
-  return { ok: true as const, id: created.id, code: created.code };
+  return {
+    ok: true as const,
+    id: created.id,
+    code: created.code,
+    // Đơn ĐÃ tạo nhưng kế hoạch thì chưa — form phải nói ra, không được im.
+    canhBaoKeHoach,
+  };
 }
 
 function renderItemsListHtml(
@@ -686,6 +1040,35 @@ export async function changeOrderStatusAction(
         metadata: metadata as unknown as Prisma.InputJsonValue,
       },
     });
+
+    // ── PHIÊN A (16/09/2026) · HUỶ ĐƠN PHẢI VOID PHIẾU THU ────────────────────
+    //
+    // Trước bản này, huỷ đơn chỉ đổi `Order.status` — **phiếu thu ở nguyên `PENDING`**. Cộng
+    // với việc tầng đối khớp không kiểm trạng thái đơn (đã vá cùng phiên ở
+    // `payos-ingest.ts`), hai lỗ ghép lại thành: đơn huỷ → phiếu vẫn sống → phụ huynh quét lại
+    // ảnh QR cũ trong điện thoại → `matchKey` bền theo đời phiếu nên khớp ngay → tiền vào một
+    // đơn không còn tồn tại. Không ai thấy, vì màn đơn đã huỷ thì chẳng ai mở.
+    //
+    // ⚠️ VOID mọi phiếu CHƯA PAID, kể cả `PARTIAL` (đã có một phần tiền). VOID **không xoá**
+    // đồng nào: `PaymentAllocation` còn nguyên, tiền vẫn truy được. Nó chỉ thôi làm ĐÍCH RÓT.
+    // Bỏ `PARTIAL` ra khỏi danh sách là để lại đúng cái phiếu nguy hiểm nhất — phiếu mà khách
+    // đã từng quét thành công một lần.
+    //
+    // ⚠️ Phiếu `PAID` KHÔNG đụng: nó là bằng chứng một lần thu đã hoàn tất. Huỷ đơn không xoá
+    // lịch sử tiền; phần xử lý tiền của đơn huỷ là việc của kế toán (hoàn), không phải của một
+    // lệnh đổi trạng thái.
+    if (parsed.data.toStatus === "CANCELLED") {
+      await tx.paymentRequest.updateMany({
+        where: { orderId, status: { in: ["PENDING", "PARTIAL"] } },
+        data: { status: "VOID" },
+      });
+      // Mã QR đang sống của các phiếu đó cũng phải chết theo — nếu không thì màn hình vẫn
+      // hiện một mã bấm được, và affordance đó nói dối (luật 12).
+      await tx.qrSession.updateMany({
+        where: { paymentRequest: { orderId }, status: "ACTIVE" },
+        data: { status: "EXPIRED" },
+      });
+    }
 
     // S1 — xác nhận đơn (thu offline): nếu CHƯA có khoản RECORDED nào (đơn không đi qua
     // installments) → ghi 1 Payment(RECORDED) cho phần đã thu (idempotent theo marker
@@ -872,7 +1255,7 @@ export async function loadCreateOrderFormData() {
   // PaymentMethod/Course/Product là catalog, Center exempt — scopedDb pass-through.
   const sdb = scopedDb(await resolveActor(session.user.id));
 
-  const [paymentMethods, courses, products, centers] = await Promise.all([
+  const [paymentMethods, courses, products, centers, students] = await Promise.all([
     // Nạp CẢ phương thức của mọi cơ sở trong tầm nhìn (scopedDb đã lọc) + phương thức
     // dùng chung, rồi để client lọc lại theo cơ sở ĐANG CHỌN trên form. Cố ý không nạp
     // lại qua server action mỗi lần đổi cơ sở: hàm này chạy MỘT LẦN ở RSC trước khi
@@ -901,7 +1284,19 @@ export async function loadCreateOrderFormData() {
       // (publish chỉ dùng cho trang marketing công khai). Đơn hàng gate theo isTeachable.
       where: { isActive: true, isTeachable: true },
       orderBy: { displayOrder: "asc" },
-      select: { id: true, code: true, name: true, price: true, type: true },
+      // `totalSessions` + `slug`: hai thứ màn tạo đơn cần để GỢI Ý giá theo hình thức
+      // lớp (SR.QD.219 Điều 5) — giá/buổi = price ÷ totalSessions, và `slug` để nhận ra
+      // khoá công văn LOẠI khỏi Coach. Cả hai chỉ phục vụ gợi ý; cổng soát giá vẫn so
+      // với `Course.price` như cũ.
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        price: true,
+        type: true,
+        slug: true,
+        totalSessions: true,
+      },
     }),
     sdb.product.findMany({
       // O3: đơn "Sản phẩm" chỉ gồm KIT_ROBOT + SENSOR.
@@ -922,9 +1317,27 @@ export async function loadCreateOrderFormData() {
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),
+    // ── HỌC VIÊN cho ô "của con nào" trên từng dòng hàng (15/09/2026) ──────────
+    //
+    // Chủ dự án: "phụ huynh có 2 con và học 2 khoá khác nhau thì phải tạo 2 đơn à?"
+    // Một đơn nhiều dòng thì mỗi dòng phải nói được nó mua cho ai
+    // (`OrderItem.studentId`).
+    //
+    // `Student` là SCOPED_MODEL ⇒ `scopedDb` đã tự lọc theo cơ sở của actor; cổng ghi
+    // `createOrderManualAction` vẫn tra lại độc lập (scopedDb KHÔNG che write).
+    //
+    // `parentPhone` đi kèm vì đó là thứ người nhập đối chiếu: một trung tâm có nhiều em
+    // trùng tên, và người bán đang cầm SĐT của phụ huynh trước mặt. Chỉ SĐT phụ huynh,
+    // KHÔNG kèm gì thêm — danh sách này rơi xuống client.
+    sdb.student.findMany({
+      where: { deletedAt: null, status: { not: "INACTIVE" } },
+      orderBy: { name: "asc" },
+      take: 1000,
+      select: { id: true, name: true, parentName: true, parentPhone: true },
+    }),
   ]);
 
-  return { paymentMethods, courses, products, centers };
+  return { paymentMethods, courses, products, centers, students };
 }
 
 // ─── MANUAL SEND EMAIL từ template (Phase 5.13.1) ───────────────────
@@ -1010,6 +1423,90 @@ export async function sendManualOrderEmailAction(input: {
   return { ok: true as const, logId: result.logId };
 }
 
+// ─── TÌM PHỤ HUYNH THEO SĐT (15/09/2026) ─────────────────────────────────────
+//
+// Chủ dự án: *"ở phần khách hàng thì khi nhập sđt sẽ thấy lead của sđt đó ... chọn sđt xong
+// thì tự điền tên PH, và ở dưới khoá học thì tên học viên được chọn sẵn 1 trong số con của
+// PH luôn."*
+//
+// SĐT LÀ NEO của cả form: từ nó suy ra tên phụ huynh, cơ sở, và danh sách con. Trước bản
+// này sale phải gõ tay tên PH rồi tự tìm con trong danh sách 250 học viên của cả cơ sở.
+//
+// ⚠️ TÌM THEO YÊU CẦU, KHÔNG NẠP CẢ BẢNG vào form. Đo 15/09: 122 lead / 123 con — nạp
+// hết vẫn chạy được HÔM NAY, nhưng bảng lead là bảng phình theo thời gian (mỗi quảng cáo
+// một đợt lead mới), nên một form nạp-tất-cả là bom hẹn giờ không ai nhớ đã cài. Học viên
+// thì vẫn dùng danh sách đã nạp sẵn (đã có `parentPhone`, lọc ở client là đủ).
+//
+// ⚠️ `phoneVariants` BẮT BUỘC: DB đang có CẢ HAI dạng `0…` và `84…` (xem lib/phone.ts —
+// 6 hàm chuẩn hoá khác nhau thời trước). Tra bằng đúng chuỗi người dùng gõ là trượt hết
+// bản ghi dạng kia.
+export async function timPhuHuynhTheoSdtAction(sdt: string): Promise<{
+  ok: boolean;
+  leads?: Array<{
+    id: string;
+    parentName: string;
+    phone: string;
+    email: string | null;
+    centerId: string | null;
+    /**
+     * Con LEAD KHAI — có thể CHƯA có hồ sơ `Student` nào.
+     *
+     * ⚠️ MANG CẢ `id` từ 16/09/2026. Bản cũ chỉ trả TÊN, nên ô chọn học viên ở dòng đơn
+     * không có gì để lưu và con của lead chưa convert KHÔNG chọn được — dù tên em đang
+     * hiện ngay trên dòng gợi ý. Chủ dự án: *"lead này đa số là lead chưa chốt nên chưa
+     * phải là học viên nên sẽ lấy thông tin con của PH lead đó chứ"*.
+     */
+    conKhai: Array<{ id: string; fullName: string }>;
+  }>;
+  error?: string;
+}> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  // Cùng cổng với trang tạo đơn: ai tạo được đơn thì tra được SĐT khách của mình.
+  if (!(await checkPermission("orders:create"))) return { ok: false, error: "Không có quyền" };
+
+  const so = (sdt ?? "").replace(/\D/g, "");
+  // Dưới 6 chữ số thì mọi SĐT đều khớp — trả rỗng thay vì đổ nửa bảng lead lên màn.
+  if (so.length < 6) return { ok: true, leads: [] };
+
+  const actor = await resolveActor(session.user.id);
+  const bienThe = expandPhoneVariants([so]);
+  const rows = await scopedDb(actor).lead.findMany({
+    where: {
+      deletedAt: null,
+      // Gõ đủ số → khớp chính xác theo mọi biến thể; gõ thiếu → khớp phần đuôi.
+      OR: [{ phone: { in: bienThe } }, { phone: { contains: so } }],
+    },
+    select: {
+      id: true,
+      parentName: true,
+      phone: true,
+      email: true,
+      centerId: true,
+      children: { select: { id: true, fullName: true }, orderBy: { createdAt: "asc" } },
+    },
+    orderBy: { createdAt: "desc" },
+    // Trần 8: danh sách gợi ý dài hơn thì người bán không đọc, chỉ bấm bừa.
+    take: 8,
+  });
+
+  return {
+    ok: true,
+    leads: rows.map((l) => ({
+      id: l.id,
+      parentName: l.parentName,
+      phone: l.phone,
+      email: l.email,
+      centerId: l.centerId,
+      // ⚠️ MANG CẢ `id`, không chỉ tên [16/09/2026]. Trước bản này gợi ý lead chỉ trả về
+      // TÊN con, nên ô chọn học viên không có gì để lưu và con của lead chưa convert
+      // không chọn được — chủ dự án: *"lead này đa số là lead chưa chốt… sẽ lấy thông tin
+      // con của PH lead đó chứ"*. Dòng đơn nay lưu `leadChildId`.
+      conKhai: l.children.map((c) => ({ id: c.id, fullName: c.fullName })),
+    })),
+  };
+}
+
 // ─── THANH TOÁN LINH HOẠT — kế hoạch n đợt ───────────────────────────
 //
 // Chủ dự án chốt đổi "thanh toán 2 đợt" thành đóng theo 1/2/3/4 học phần. Luật chia tiền,
@@ -1039,20 +1536,11 @@ export async function recordOrderInstallmentsAction(input: {
   }
 
   // Ngày từ client là chuỗi — quy về Date ở BIÊN, để phần trong chỉ có một kiểu.
-  // Ngày hỏng (`Invalid Date`) quy về null rồi để `kiemKeHoachDot` từ chối với câu nói
-  // được: cho `Invalid Date` đi tiếp là ghi `dueDate` rác vào DB và cron im lặng bỏ qua.
+  // Phép quy đổi ở `dotsGhiTuForm` (thuần, có test): từ 15/09/2026 có HAI đường ghi kế
+  // hoạch (đây + `createOrderManualAction`) nên nó không được viết tại chỗ nữa.
   const res = await recordInstallmentPlan({
     orderId: input.orderId,
-    dots: input.dots.map((d) => {
-      const ngay = d.dueDate ? new Date(d.dueDate) : null;
-      return {
-        amount: Math.round(d.amount),
-        daThu: d.daThu === true,
-        dueDate: ngay && !Number.isNaN(ngay.getTime()) ? ngay : null,
-        reminderDays:
-          d.reminderDays == null ? null : Math.max(0, Math.round(d.reminderDays)),
-      };
-    }),
+    dots: dotsGhiTuForm(input.dots),
     actorId: session.user.id ?? null,
   });
   if (res.ok) {
@@ -1101,3 +1589,231 @@ export async function markOrderInstallmentPaidAction(
 
 // ─── Row type for client ─────────────────────────────────────────────
 export type OrderRow = Awaited<ReturnType<typeof queryOrders>>["items"][number];
+
+// ─── THÔNG TIN NGƯỜI MUA TRÊN HOÁ ĐƠN (14/09/2026) ──────────────────────────
+//
+// Chủ dự án: "thiếu các trường thông tin của khách hàng để xuất hoá đơn khi kế toán duyệt".
+// Bốn ô đo từ ba tờ hoá đơn thật mà `Order` chưa có — xem migration
+// 20260914120000_hoa_don_thong_tin_nguoi_mua và `lib/finance/hoa-don/nguoi-mua.ts`.
+//
+// ⚠️ CHUỖI RỖNG GHI THÀNH `null`, KHÔNG ghi "". Đường đọc phân biệt "chưa khai" (rơi về
+// cột `customer*`) với "đã khai"; một chuỗi rỗng lọt vào DB là "đã khai bằng ô trắng" —
+// tên người mua biến mất khỏi tờ hoá đơn mà không ai thấy lỗi.
+//
+// KHÔNG chặn khi còn thiếu ô bắt buộc: người nhập thường có thông tin nhỏ giọt (gọi khách
+// hỏi mã số thuế mất một buổi). Cổng "đủ chưa" nằm ở khâu XUẤT, và màn hiện rõ còn thiếu
+// gì — chặn ở đây chỉ khiến người ta không lưu được phần đã có.
+export async function luuThongTinHoaDonAction(
+  orderId: string,
+  input: {
+    invoiceBuyerName?: string | null;
+    invoiceCompanyName?: string | null;
+    invoiceTaxCode?: string | null;
+    invoiceEmail?: string | null;
+  },
+  expectedUpdatedAt?: string,
+) {
+  const session = await requireOrdersManage();
+
+  const sach = (v: string | null | undefined) => {
+    const t = (v ?? "").trim();
+    return t.length > 0 ? t : null;
+  };
+  const dulieu = {
+    invoiceBuyerName: sach(input.invoiceBuyerName),
+    invoiceCompanyName: sach(input.invoiceCompanyName),
+    invoiceTaxCode: sach(input.invoiceTaxCode),
+    invoiceEmail: sach(input.invoiceEmail),
+  };
+  for (const [k, v] of Object.entries(dulieu)) {
+    if (v && v.length > 200) {
+      return { ok: false as const, error: `Trường ${k} quá dài (tối đa 200 ký tự)` };
+    }
+  }
+  if (dulieu.invoiceEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(dulieu.invoiceEmail)) {
+    return { ok: false as const, error: "Email nhận hoá đơn không hợp lệ" };
+  }
+
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const order = await sdb.order.findUnique({
+    where: { id: orderId },
+    select: { id: true, centerId: true },
+  });
+  // `scopedDb` KHÔNG che write — gác lại lần nữa trước khi ghi.
+  if (!order || !passesScope("Order", order, actor)) {
+    return { ok: false as const, error: "Không tìm thấy đơn hàng" };
+  }
+
+  const expectedAt = expectedUpdatedAt ? new Date(expectedUpdatedAt) : null;
+  const upd = await sdb.order.updateMany({
+    where: { id: orderId, ...(expectedAt ? { updatedAt: expectedAt } : {}) },
+    data: dulieu,
+  });
+  if (upd.count === 0) return { ok: false as const, error: "STALE_WRITE" };
+
+  revalidatePath(`/orders/${orderId}`);
+  return { ok: true as const };
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// PHIÊN A (16/09/2026) — ĐỢT THU THEO TỪNG CON
+//
+// Chủ dự án chốt: *"Sale trên đơn: chọn con → nhập số tiền → hạn → 'Tạo đợt'. Số tiền ≤ học
+// phí thực của con − đã thu − đợt đang mở của con. Không bắt lên lịch cả khoá."*
+//
+// ⚠️ HAI ĐIỂM KHÁC HẲN kế hoạch trả góp cũ (`recordInstallmentPlan`), và cả hai là chủ ý:
+//   1. **Không đẻ dòng `Payment` nào.** Đợt chỉ là một khoản PHẢI THU; tiền vào sổ khi và chỉ
+//      khi có giao dịch ngân hàng thật. Đó là lý do "Lưu kế hoạch xoá mềm Payment" không thể
+//      tái diễn ở đường này — không có gì để dọn.
+//   2. **Không đụng `OrderInstallment`.** Sổ kế hoạch cũ đóng băng theo quyết định của chủ dự
+//      án; đợt theo con sống ở `PaymentRequest.orderItemId`.
+// ═════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Tạo MỘT đợt thu cho MỘT con.
+ *
+ * Cổng số tiền nằm ở `kiemTaoDot` (thuần, có test) — ở đây chỉ nạp dữ liệu và ghi.
+ */
+export async function taoDotChoConAction(input: {
+  orderId: string;
+  orderItemId: string;
+  soTien: number;
+  dueDate?: string | null;
+}) {
+  const session = await requireOrdersManage();
+  const actor = await resolveActor(session.user.id);
+  const { actorId, actorName } = getAuditActor(session);
+  const sdb = scopedDb(actor);
+
+  const order = await sdb.order.findUnique({
+    where: { id: input.orderId },
+    select: { id: true, centerId: true, orgUnitId: true, status: true },
+  });
+  if (!order || !passesScope("Order", order, actor)) {
+    return { ok: false as const, error: "Không tìm thấy đơn hàng" };
+  }
+  if (!(await laThuTienLinhHoatBat(order.orgUnitId))) {
+    return { ok: false as const, error: "Tính năng thu học phí linh hoạt chưa bật cho cơ sở này" };
+  }
+  // Đơn đã huỷ/hoàn thì không tạo thêm khoản phải thu. Cùng danh sách trạng thái mà tầng đối
+  // khớp dùng để từ chối rót tiền — hai chỗ nói cùng một câu về "đơn còn sống".
+  if (["DRAFT", "CANCELLED", "REFUNDED"].includes(order.status)) {
+    return { ok: false as const, error: `Đơn đang ở trạng thái ${order.status} — không tạo đợt được` };
+  }
+
+  // Bỏ qua scope CÓ CHỦ Ý: con số công nợ phải giống nhau với mọi người xem (chốt của chủ
+  // dự án), và cổng "không vượt còn nợ" mà đọc qua scope thì một khoản ngoài tầm nhìn sẽ bị
+  // coi như không tồn tại ⇒ cổng cho tạo đợt VƯỢT quá số nợ thật. Đúng ca cấy (f) của `_qr-core`.
+  const bdb = scopedDb(actor, { bypass: true });
+  const so = await noTheoCon(input.orderId);
+  const con = so.con.find((c) => c.orderItemId === input.orderItemId);
+  if (!con) return { ok: false as const, error: "Dòng hàng không thuộc đơn này" };
+
+  const kiem = kiemTaoDot({
+    soTien: input.soTien,
+    conNo: con.conNo,
+    tongDotDangMo: con.tongDotDangMo,
+    tenCon: con.ten,
+  });
+  if (!kiem.ok) return { ok: false as const, error: kiem.loi };
+
+  const han = input.dueDate ? new Date(input.dueDate) : null;
+  if (han && Number.isNaN(han.getTime())) {
+    return { ok: false as const, error: "Hạn đóng không hợp lệ" };
+  }
+
+  // Số đợt kế tiếp CỦA RIÊNG CON NÀY (không phải của đơn) — khoá duy nhất từng phần là
+  // `[orderItemId, installmentNo] WHERE orderItemId IS NOT NULL`, nên hai con đếm độc lập.
+  const maxDot = await bdb.paymentRequest.aggregate({
+    where: { orderItemId: input.orderItemId },
+    _max: { installmentNo: true },
+  });
+  const soDot = (maxDot._max.installmentNo ?? 0) + 1;
+
+  await bdb.paymentRequest.create({
+    data: {
+      orderId: input.orderId,
+      orderItemId: input.orderItemId,
+      centerId: order.centerId,
+      installmentNo: soDot,
+      amountDue: kiem.soTien,
+      dueDate: han,
+      status: "PENDING",
+      // Thứ tự rót: DÒNG trước, ĐỢT sau (`lib/payments/thu-tu-rot.ts`). Không đặt thì hai
+      // con cùng "đợt 1" có cùng `sortOrder` và thứ tự rót rơi về so sánh cuid.
+      sortOrder: thuTuRot({
+        thuTuDong: so.con.findIndex((c) => c.orderItemId === input.orderItemId),
+        installmentNo: soDot,
+      }),
+    },
+  });
+
+  await writeAudit({
+    actor: { id: actorId ?? "", name: actorName },
+    module: "finance",
+    entityType: "Order",
+    entityId: input.orderId,
+    action: "DOT_THEO_CON_CREATED",
+    newValues: { orderItemId: input.orderItemId, ten: con.ten, soTien: kiem.soTien, soDot },
+  });
+
+  revalidatePath(`/orders/${input.orderId}`);
+  return { ok: true as const };
+}
+
+/** Huỷ một đợt CHƯA CÓ TIỀN. Đợt đã nhận đồng nào thì không huỷ — xem `kiemHuyDot`. */
+export async function huyDotChoConAction(input: { orderId: string; paymentRequestId: string }) {
+  const session = await requireOrdersManage();
+  const actor = await resolveActor(session.user.id);
+  const { actorId, actorName } = getAuditActor(session);
+  const sdb = scopedDb(actor);
+
+  const order = await sdb.order.findUnique({
+    where: { id: input.orderId },
+    select: { id: true, centerId: true, orgUnitId: true },
+  });
+  if (!order || !passesScope("Order", order, actor)) {
+    return { ok: false as const, error: "Không tìm thấy đơn hàng" };
+  }
+  if (!(await laThuTienLinhHoatBat(order.orgUnitId))) {
+    return { ok: false as const, error: "Tính năng thu học phí linh hoạt chưa bật cho cơ sở này" };
+  }
+
+  const bdb = scopedDb(actor, { bypass: true });
+  const phieu = await bdb.paymentRequest.findUnique({
+    where: { id: input.paymentRequestId },
+    select: { id: true, orderId: true, status: true, allocations: { select: { amount: true } } },
+  });
+  // So `orderId` chứ không tin tham số: người gọi có thể gửi id phiếu của đơn khác.
+  if (!phieu || phieu.orderId !== input.orderId) {
+    return { ok: false as const, error: "Không tìm thấy đợt thu" };
+  }
+
+  const kiem = kiemHuyDot({
+    trangThai: phieu.status,
+    daRot: phieu.allocations.reduce((s, a) => s + a.amount, 0),
+  });
+  if (!kiem.ok) return { ok: false as const, error: kiem.loi };
+
+  await bdb.$transaction(async (tx) => {
+    await tx.paymentRequest.update({ where: { id: phieu.id }, data: { status: "VOID" } });
+    // Mã QR của đợt vừa huỷ phải chết theo — affordance phải nói thật.
+    await tx.qrSession.updateMany({
+      where: { paymentRequestId: phieu.id, status: "ACTIVE" },
+      data: { status: "EXPIRED" },
+    });
+  });
+
+  await writeAudit({
+    actor: { id: actorId ?? "", name: actorName },
+    module: "finance",
+    entityType: "Order",
+    entityId: input.orderId,
+    action: "DOT_THEO_CON_VOIDED",
+    newValues: { paymentRequestId: phieu.id },
+  });
+
+  revalidatePath(`/orders/${input.orderId}`);
+  return { ok: true as const };
+}

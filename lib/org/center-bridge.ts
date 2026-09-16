@@ -221,6 +221,16 @@ export const BACKFILL_SPECS: readonly BackfillSpec[] = [
     vi: "số dư — order.centerId",
   },
   {
+    // 16/09 — phiếu gộp (1 QR cho cả gia đình). `PaymentBillLine` cố ý KHÔNG có cột đơn
+    // vị: nó là dòng chi tiết của phiếu, y như `OrderItem` với `Order` — cách ly đi theo
+    // bản ghi cha. Thêm cột đơn vị cho nó là đẻ một cột không đường ghi nào đặt và sẽ ôi
+    // thiu ngay lần đầu có người chuyển cơ sở.
+    model: "PaymentBill",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "phiếu gộp — order.centerId",
+  },
+  {
     model: "RefundRequest",
     nullMeaning: "BAT_BUOC",
     scoped: false,

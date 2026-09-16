@@ -91,6 +91,20 @@ export const TAB_CAU_HINH = [
     ten: "Nâng cao",
     moTa: "Ít khi phải đụng tới. Hỏi bên kỹ thuật trước khi đổi.",
   },
+  {
+    id: "phuong-thuc-tt",
+    ten: "Phương thức thanh toán",
+    moTa:
+      "Tiền mặt, chuyển khoản, cổng online — khai theo từng cơ sở hoặc dùng chung cho cả " +
+      "hệ thống. Tài khoản ngân hàng dựng mã QR nằm ngay trong từng phương thức.",
+  },
+  {
+    id: "hoa-hong",
+    ten: "Hoa hồng",
+    moTa:
+      "Khoản chi cho nhân sự khi có học viên mới, tái tục, chuyển trung tâm hoặc bán thiết " +
+      "bị. Thêm bớt được, không cần lập trình viên.",
+  },
 ] as const;
 
 export type TabId = (typeof TAB_CAU_HINH)[number]["id"];
@@ -489,6 +503,15 @@ const N: Readonly<Record<SettingKey, NhanVanHanh>> = {
       "nhận trùng; quá dài thì khách quay lại sau vài tháng bị gộp vào hồ sơ cũ.",
     donVi: "ngày",
   },
+  "crm.commissionPolicies": {
+    tab: "hoa-hong",
+    ten: "Chính sách hoa hồng",
+    giaiThich:
+      "Toàn bộ khoản chi hoa hồng, khai theo bốn trục: ai nhận · khi nào · loại đơn nào · " +
+      "tính thế nào. Bảng bên dưới là nơi sửa — dòng này không hiện thành ô nhập vì nó là " +
+      "một danh sách, không phải một con số.",
+    canThan: true,
+  },
   "crm.commissionMaxTotalRate": {
     tab: "khach-hang",
     ten: "Trần tổng hoa hồng",
@@ -575,6 +598,16 @@ const N: Readonly<Record<SettingKey, NhanVanHanh>> = {
   },
 
   // ── Tiền & thanh toán ──────────────────────────────────────────────────────────────────
+  "orders.maxDiscountPercent": {
+    tab: "tien",
+    ten: "Giảm giá theo % tối đa cho một ưu đãi",
+    giaiThich:
+      "Áp cho TỪNG ưu đãi trên một dòng đơn, tính trên tạm tính của chính dòng đó. " +
+      "Một dòng có thể chồng nhiều ưu đãi và các mức % CỘNG DỒN, nên hạ số này không " +
+      "chặn được tổng mức bớt — nó chỉ chặn một ưu đãi đơn lẻ quá lớn. Sale gõ vượt " +
+      "trần thì đơn không lưu được, kèm thông báo chỉ rõ dòng nào khoản nào.",
+    donVi: "%",
+  },
   "finance.debtReminderDaysBefore": {
     tab: "tien",
     ten: "Nhắc đóng đợt 2 trước hạn",
@@ -681,6 +714,15 @@ const N: Readonly<Record<SettingKey, NhanVanHanh>> = {
       "Tính từ lúc bấm chọn tệp. Mạng chậm mà đặt ngắn quá thì tải ảnh lớn hay bị hỏng giữa " +
       "chừng.",
     donVi: "giây",
+  },
+  "billing.flexV1Enabled": {
+    tab: "tien",
+    ten: "Thu học phí linh hoạt (công nợ theo từng con)",
+    giaiThich:
+      "Bật thì mỗi con trên một đơn có công nợ riêng, và cả nhà quét MỘT mã QR in sẵn số tiền. " +
+      "Phụ huynh chuyển ĐÚNG số thì hệ thống tự chia cho từng con; chuyển thừa hoặc thiếu thì " +
+      "tiền không được ghi nhận và kế toán hoàn lại. Có thể bật riêng cho từng cơ sở.",
+    canThan: true,
   },
   "orgScope.cutoverEnabled": {
     tab: "nang-cao",

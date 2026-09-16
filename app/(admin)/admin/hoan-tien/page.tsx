@@ -6,8 +6,10 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { listRefundRequests } from "@/lib/finance/refund";
+import { layChoDeXuatHoanTien } from "@/lib/finance/cho-de-xuat-hoan-tien";
 import type { RefundStatus } from "@prisma/client";
 import { RefundTable } from "./_components/refund-table";
+import { ChoDeXuat } from "./_components/cho-de-xuat";
 
 export const metadata = { title: "Hoàn tiền | Admin" };
 export const dynamic = "force-dynamic";
@@ -52,6 +54,12 @@ export default async function HoanTienPage({
   );
 
   const canApprove = await checkPermission("payments:confirm");
+  // Việc còn tồn: đã nghỉ học, đã đóng tiền, mà lượt gỡ không sinh được đề xuất nào.
+  // Nằm ngoài bộ lọc trạng thái vì nó KHÔNG phải một trạng thái của `RefundRequest` —
+  // chính xác là những ca chưa có bản ghi nào để mà lọc.
+  const choDeXuat = await layChoDeXuatHoanTien(
+    sdb as unknown as Parameters<typeof layChoDeXuatHoanTien>[0],
+  );
 
   return (
     <div>
@@ -67,6 +75,14 @@ export default async function HoanTienPage({
           </p>
         </div>
       </div>
+
+      <ChoDeXuat
+        dong={choDeXuat.dong}
+        tongSo={choDeXuat.tongSo}
+        daCat={choDeXuat.daCat}
+        khongPhaiHoan={choDeXuat.khongPhaiHoan}
+        canTao={canApprove}
+      />
 
       <div className="mb-4 flex flex-wrap gap-2">
         {STATUSES.map((s) => {

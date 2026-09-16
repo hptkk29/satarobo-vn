@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { KHOAN_DA_GHI_NHAN } from "@/lib/finance/ghi-nhan";
 import { congNoDon } from "@/lib/finance/cong-no-don";
+import { DON_SACH, donNhiemTheoDon } from "@/lib/orders/don-nhiem";
 import { notFound, redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
@@ -8,10 +9,8 @@ import { laKhoanDaXacNhan, tongDaXacNhan } from "@/lib/finance/debt";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
-import { Badge } from "@/components/ui/badge";
 import { OrderDetailClient } from "../_components/order-detail-client";
 import { SendEmailModal } from "../_components/send-email-modal";
-import { ORDER_STATUS_LABEL, ORDER_TYPE_LABEL, deriveInstallmentBadge } from "@/lib/orders/status";
 import {
   resolveOrderPaymentConfig,
   transferContentForOrder,
@@ -23,19 +22,12 @@ import { computeDueNow } from "@/lib/payments/due-now";
 import { getOrderPaymentRequests } from "@/lib/payments/payment-request";
 import { loadActiveQrSessions } from "../_qr-core";
 import { maskPhone, maskEmail } from "@/lib/utils";
-import type { OrderStatus } from "@prisma/client";
+import { laThuTienLinhHoatBat } from "@/lib/finance/feature";
+import { noTheoCon } from "@/lib/finance/debt";
+import { CongNoTheoCon } from "../_components/cong-no-theo-con";
 
 export const metadata = { title: "Chi tiết đơn hàng | Admin" };
 export const dynamic = "force-dynamic";
-
-const STATUS_BADGE_CLASS: Record<OrderStatus, string> = {
-  DRAFT: "bg-muted text-foreground hover:bg-muted",
-  PENDING_PAYMENT: "bg-state-warning-soft text-state-warning-ink hover:bg-state-warning-soft",
-  CONFIRMED: "bg-state-info-soft text-state-info-ink hover:bg-state-info-soft",
-  COMPLETED: "bg-state-success-soft text-state-success-ink hover:bg-state-success-soft",
-  CANCELLED: "bg-state-danger-soft text-state-danger-ink hover:bg-state-danger-soft",
-  REFUNDED: "bg-primary-soft text-primary hover:bg-primary-soft",
-};
 
 /**
  * Che phần SĐT trong nội dung CK — CHỈ cho thứ in ra màn hình.
@@ -90,6 +82,10 @@ export default async function OrderDetailPage({ params }: Props) {
         orderBy: { createdAt: "asc" },
         include: {
           product: { select: { id: true, sku: true } },
+          // Học viên CỦA TỪNG DÒNG. Một đơn nay chở được nhiều con của cùng một phụ
+          // huynh (mỗi con một khoá), nên `order.student` — vốn chỉ có giá trị khi
+          // đơn quy về đúng MỘT em — không còn trả lời được "khoản này là của ai".
+          student: { select: { id: true, name: true } },
         },
       },
       paymentMethod: true,
@@ -185,6 +181,31 @@ export default async function OrderDetailPage({ params }: Props) {
   //
   // Trước bản này `paidSoFar` chỉ dùng cho QR rồi bị bỏ: trang tính được "còn thiếu"
   // mà không in ra đâu cả.
+  /**
+   * ── BƯỚC A3 [16/09/2026]: ĐƠN CÓ DỮ LIỆU HỎNG THÌ NÓI RA NGAY ĐẦU TRANG ─────
+   *
+   * Chủ dự án: *"màn đơn hiện banner 'Đang chờ sửa dữ liệu'"*. Người mở đơn phải biết
+   * TRƯỚC KHI thao tác, chứ không phải bấm "Xuất QR" rồi mới ăn một câu từ chối.
+   *
+   * ⚠️ `bypass: true` — đây là cổng AN TOÀN, không phải cổng hiển thị. Đơn này người dùng
+   * đã qua scope ở trên rồi; nếu phép phán xét lại bị lọc theo tầm nhìn thì một đơn nhiễm
+   * nằm ngoài tầm nhìn sẽ hiện ra là SẠCH.
+   */
+  const nhiemMap = await donNhiemTheoDon(
+    scopedDb(actor, { bypass: true }),
+    [order.id],
+  );
+  const donNhiem = nhiemMap.get(order.id) ?? DON_SACH;
+
+  // PHIÊN A — công nợ theo từng con. Chỉ tính khi CÔNG TẮC BẬT cho cơ sở giữ đơn: tắt thì
+  // trang giữ nguyên y như cũ, không thêm một truy vấn nào.
+  //
+  // ⚠️ `noTheoCon` cố ý đọc bằng `db` TRẦN (không `scopedDb`) — chốt của chủ dự án: *"cùng một
+  // đơn, ai mở cũng ra cùng con số"*. Cách ly cơ sở đã ép ở cửa vào: tới được dòng này nghĩa là
+  // `scopedDb` đã cho phép đọc chính cái đơn này.
+  const batThuTheoCon = await laThuTienLinhHoatBat(order.orgUnitId);
+  const soTheoCon = batThuTheoCon ? await noTheoCon(order.id) : null;
+
   const congNo = congNoDon({
     totalAmount: order.totalAmount,
     daGhiNhan: paidSoFar._sum.amount ?? 0,
@@ -265,67 +286,25 @@ export default async function OrderDetailPage({ params }: Props) {
     : [];
 
   return (
-    <div className="max-w-5xl">
+    /* Trần bề ngang 104rem (1664px) thay cho `max-w-5xl` (1024px) cũ.
+       `max-w-5xl` là lý do màn 1531px bỏ trống hơn nửa bề ngang trong khi khối QR —
+       công cụ thu tiền — bị đẩy xuống dưới cả ghi chú và lịch sử. Vẫn phải CÓ trần:
+       ở 4k/8k một trang trải hết bề ngang thì mắt phải quét cả mét để đọc một cặp
+       nhãn/giá trị. */
+    <div className="mx-auto w-full max-w-[104rem]">
       <Link
         href="/orders"
         className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
-        <ChevronLeft className="h-4 w-4" />
+        <ChevronLeft className="h-4 w-4" aria-hidden />
         Quay lại danh sách
       </Link>
 
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="font-mono text-2xl font-bold text-foreground">
-              {order.code}
-            </h1>
-            <Badge variant="outline">{ORDER_TYPE_LABEL[order.type]}</Badge>
-            <Badge className={STATUS_BADGE_CLASS[order.status]}>
-              {ORDER_STATUS_LABEL[order.status]}
-            </Badge>
-            {(() => {
-              // G5 — badge suy diễn tiến độ trả góp 2 đợt (vd "Đã đóng đợt 1").
-              const b = deriveInstallmentBadge(order.installments);
-              if (!b) return null;
-              return (
-                <Badge
-                  className={
-                    b.color === "emerald"
-                      ? "bg-state-success-soft text-state-success-ink hover:bg-state-success-soft"
-                      : "bg-state-warning-soft text-state-warning-ink hover:bg-state-warning-soft"
-                  }
-                >
-                  {b.label}
-                </Badge>
-              );
-            })()}
-          </div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Tạo:{" "}
-            {new Intl.DateTimeFormat("vi-VN", {
-              day: "2-digit",
-              month: "2-digit",
-              year: "numeric",
-              hour: "2-digit",
-              minute: "2-digit",
-            }).format(order.createdAt)}
-          </p>
+      {soTheoCon && (
+        <div className="mb-4">
+          <CongNoTheoCon orderId={order.id} so={soTheoCon} duocSua={canManage} />
         </div>
-        <div className="text-right space-y-2">
-          <div className="text-3xl font-bold text-foreground tabular-nums">
-            {order.totalAmount.toLocaleString("vi-VN")} đ
-          </div>
-          {canManage && (
-            <SendEmailModal
-              orderId={order.id}
-              defaultEmail={order.customerEmail}
-              defaultName={order.customerName}
-              templates={emailTemplates}
-            />
-          )}
-        </div>
-      </div>
+      )}
 
       <OrderDetailClient
         order={
@@ -337,9 +316,24 @@ export default async function OrderDetailPage({ params }: Props) {
                 customerEmail: order.customerEmail ? maskEmail(order.customerEmail) : order.customerEmail,
                 customerCccd: null,
                 customerAddress: null,
+                // Email nhận hoá đơn cũng là PII — che cùng cửa với `customerEmail`,
+                // nếu không thì khối "Người mua trên hoá đơn" thành đường vòng đọc email.
+                invoiceEmail: order.invoiceEmail
+                  ? maskEmail(order.invoiceEmail)
+                  : order.invoiceEmail,
               }
         }
         canManage={canManage}
+        hanhDongPhu={
+          canManage ? (
+            <SendEmailModal
+              orderId={order.id}
+              defaultEmail={order.customerEmail}
+              defaultName={order.customerName}
+              templates={emailTemplates}
+            />
+          ) : null
+        }
         qrUrl={qrUrl}
         dueNow={dueNow}
         transferContent={transferContentShown}
@@ -353,9 +347,9 @@ export default async function OrderDetailPage({ params }: Props) {
           matchKey: r.matchKey,
         }))}
         qrSessions={qrSessions}
-        installmentPlanApproved={order.installmentApprovalStatus === "APPROVED"}
         paymentMethods={paymentMethods}
         congNo={congNo}
+        donNhiem={donNhiem}
         accounting={{
           // Trục A — dùng chung định nghĩa "khoản đã xác nhận" với công nợ và cổng
           // phụ huynh (lib/finance/debt.ts). Bút toán ADJUSTMENT nằm trong đó.

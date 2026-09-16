@@ -22,7 +22,9 @@
 // Chênh lệch A/B KHÔNG bị nuốt: nó ra ô `choXacNhan` riêng, đúng tinh thần "chênh lệch
 // giữa hai trục là thông tin, không phải lỗi".
 // ─────────────────────────────────────────────────────────────────────────────
-import { computeDebt } from "./debt";
+// ⚠️ Import từ `debt-pure`, KHÔNG từ `debt`: `debt.ts` chạm `@/lib/db`, và file này
+// được dùng lại ở tầng client (bảng đối soát ở /cong-no). Xem đầu `debt-pure.ts`.
+import { computeDebt } from "./debt-pure";
 
 export type CongNoDonInput = {
   /** `Order.totalAmount` — tổng phải đóng sau giảm giá. */

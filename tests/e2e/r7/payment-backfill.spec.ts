@@ -112,12 +112,37 @@ test.describe("[PAY-BF] Backfill phiếu thu từ sổ cũ", () => {
     expect(markerInstallmentNo("Ghi nhận tự động (xác nhận đơn) [auto:order-confirm]")).toBeNull();
     expect(markerInstallmentNo(null)).toBeNull();
 
-    // Kế hoạch CHƯA duyệt → vẫn 1 phiếu toàn đơn (không tách đợt).
+    // ⚠️ SỬA 17/09/2026 — ca này TRƯỚC ĐÂY khẳng định *"kế hoạch CHƯA duyệt → vẫn 1 phiếu
+    // toàn đơn"*, và nó đã ĐỎ TRÊN CI. Mã đúng, TEST SAI: luật ấy bị đảo từ 13/09
+    // (`00131d18`) — nay **chỉ `REJECTED`** làm kế hoạch mất hiệu lực, còn `PENDING_APPROVAL`
+    // và `null` đều CÓ hiệu lực. `planRequests` đã sửa theo từ 14/09; ca này thì không, vì nó
+    // nằm ở bộ R7 mà lượt sửa hôm ấy không chạy.
+    //
+    // Giữ nguyên ca cũ là ghim một luật đã chết: người sửa sau sẽ đọc nó như đặc tả và "sửa"
+    // mã cho khớp — tức dựng lại đúng con bug đơn 8tr hoá 16tr phải thu (xem khối chú thích
+    // của `planRequests`).
     expect(
       planRequests({
         code: "ORD-260803-000099",
         totalAmount: 6_000_000,
         installmentApprovalStatus: "PENDING_APPROVAL",
+        installments: [
+          { soDot: 1, amount: 3_000_000, dueDate: null },
+          { soDot: 2, amount: 3_000_000, dueDate: null },
+        ],
+      }),
+    ).toEqual([
+      { installmentNo: 1, amountDue: 3_000_000, dueDate: null, sortOrder: 1, matchKey: "ORD260803000099D1" },
+      { installmentNo: 2, amountDue: 3_000_000, dueDate: null, sortOrder: 2, matchKey: "ORD260803000099D2" },
+    ]);
+
+    // Và vế còn lại của luật mới, để ca này nói ĐỦ chứ không nửa vời: `REJECTED` vẫn rơi về
+    // một phiếu toàn đơn.
+    expect(
+      planRequests({
+        code: "ORD-260803-000099",
+        totalAmount: 6_000_000,
+        installmentApprovalStatus: "REJECTED",
         installments: [
           { soDot: 1, amount: 3_000_000, dueDate: null },
           { soDot: 2, amount: 3_000_000, dueDate: null },

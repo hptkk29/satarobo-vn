@@ -234,6 +234,29 @@ prisma/
     (`lib/orders/installments.ts:332`, `:500`, `lib/crm/backfill-order.ts:153`) — lỗ có sẵn
     từ trước đợt gỡ duyệt, không do nó sinh ra.
 
+- ⚠️ **NỢ ĐANG GHIM: bán Coach 1-1/1-2/1-4 thì TRỤC GHI DANH vẫn giữ GIÁ NHÓM [đo 14/09/2026].**
+  Hình thức lớp (SR.QD.219 Điều 5) nay khai được trên dòng đơn
+  (`OrderItem.metadata.coachFormat`, xem `lib/orders/hinh-thuc-lop.ts`), nhưng số tiền mà
+  **công nợ · cổng phụ huynh · hoàn tiền · hoa hồng GV Trial** đọc là
+  `Enrollment.finalPrice`, và cột đó do các đường convert ghi bằng
+  `computeEnrollmentPrice({ listPrice: Course.price })` — tức **giá LỚP NHÓM**.
+  Đo với Coach 1-1 Sata3 (đơn 10.400.000đ, ghi danh 5.200.000đ):
+  · ZNS học phí gửi `order.totalAmount` ⇒ phụ huynh nhận tin **~10,4tr**
+    (`lib/notify/order.ts`);
+  · `/portal/hoc-phi` in **5,2tr** (`lib/portal/billing-student.ts`);
+  · `/cong-no` ra **−5.200.000đ** ("đóng thừa") — `lib/finance/debt.ts`;
+  · hoàn tiền học 6/12 buổi chi **dư ~2.600.002đ** (`lib/finance/refund.ts`).
+  · **Ghim** ở `lib/orders/hinh-thuc-lop.test.ts` ca **`[HTL-09]`** bằng `it.fails`.
+  · **Vá là đợt RIÊNG**: `/orders/new` KHÔNG tạo `Enrollment`, nên phải chạm cả **4 đường
+    tạo đơn** (`orders/_actions.ts`, `lib/crm/convert-lead.ts`, `lib/crm/backfill-order.ts`,
+    `lib/finance/ghi-giao-dich-cu.ts`) **lẫn đường tạo ghi danh**. Sửa nửa sổ là sửa đúng
+    nửa KHÔNG giữ tiền ra.
+  · ⛔ **ĐỪNG "vá" bằng cách đưa hình thức lớp vào `giaNiemYet` của `soatGiaDon`.**
+    Hôm nay `giaNiemYet` là `Course.price` tra từ DB nên client không chạm được; còn
+    `coachFormat`/`soBuoi` nằm trong `items[].metadata` tức PAYLOAD CLIENT — làm vậy là
+    để client cầm **cả hai vế** của phép so, khai `soBuoi` nhỏ là mọi đơn bán rẻ thành
+    "khớp". Lý do đầy đủ + 5 lỗ tiền khác ở đầu `lib/orders/hinh-thuc-lop.ts`.
+
 ## Mẫu test: LƯỚI GHIM MÃ NGUỒN [13/09/2026]
 
 Dùng khi luật cần khoá có dạng **"lời gọi này phải truyền tham số kia"** — loại luật mà

@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { checkPermission, assertPermission } from "@/lib/auth/check-permission";
 import { PermissionError } from "@/lib/auth/can";
@@ -20,11 +21,21 @@ import { writeAudit } from "@/lib/audit/audit-log";
 // loạt. Luật THUẦN, ở một chỗ, và KHÔNG lách cổng nào của `confirmPayment`.
 import {
   BACKFILL_PAYMENT_MARKER,
+  type NguonKhoan,
 } from "@/lib/finance/payment-markers";
 import {
   lapKeHoachXacNhan,
   type BackfillCandidate,
 } from "@/lib/finance/backfill-confirm";
+import {
+  MUC_GAN,
+  dongVuongMac,
+  mucGanChoKhoan,
+  vuongMacCuaKhoan,
+  type GhiDanhUngVien,
+  type MucGan,
+  type VuongMacKhoan,
+} from "@/lib/finance/gan-ghi-danh-khoan";
 import { getAuditActor } from "@/lib/audit/log";
 import { getRequestMetadata } from "@/lib/audit/headers";
 // ─── lib/finance/* — parallel agent owns these. Combined typecheck resolves. ──
@@ -146,6 +157,15 @@ export type PaymentListRow = {
   hienTai: number;
   /** Số bút toán điều chỉnh đã có trên phiếu này. */
   soLanDieuChinh: number;
+  /**
+   * Id của đơn — CHỈ để dựng link sang `/admin/orders/<id>`.
+   *
+   * Chủ dự án 16/09: *"link giữa trang thanh toán và trang đơn hàng chi tiết cho từng
+   * đơn khi bấm vào xem luôn chứ?"*. Trước bản này cột mã đơn là chữ TRƠN — và nguyên
+   * nhân không phải thiếu dữ liệu: câu Prisma ở `:207` ĐÃ `select: { id: true }`, chỉ
+   * phép map bên dưới bỏ nó đi, nên màn không có gì để dựng `href`.
+   */
+  orderId: string | null;
   orderCode: string | null;
   customerName: string | null;
   studentName: string | null; // tên bé
@@ -266,6 +286,7 @@ async function fetchPaymentRows(
       paymentType: p.paymentType,
       hienTai: p.amount + (dc?.tong ?? 0),
       soLanDieuChinh: dc?.soLan ?? 0,
+      orderId: p.order?.id ?? null,
       orderCode: p.order?.code ?? null,
       customerName: p.order?.customerName ?? null,
       studentName: p.order?.student?.name ?? null,
@@ -775,4 +796,284 @@ export async function bulkConfirmBackfillPaymentsAction(opts?: {
     loi,
     tongTien: plan.tongNhan,
   };
+}
+
+// ─── KHOẢN BỊ BỎ: XEM TỪNG CÁI, VÀ SỬA ĐƯỢC ───────────────────────────────────
+//
+// Chủ dự án 14/09/2026, chỉ vào màn này: "bấm xem thử xong chỉ xem và không có thao tác
+// gì nữa à?"
+//
+// Đúng. Khối xem thử đếm được số khoản bị bỏ và nêu lý do, nhưng không cho làm gì. Mà lý
+// do phổ biến nhất — `LY_DO_BO.CHUA_GAN_GHI_DANH` — là thứ SỬA ĐƯỢC: trỏ khoản vào đúng
+// ghi danh của em. Không có đường sửa thì tiền nằm mãi ở trạng thái chờ, và cổng phụ
+// huynh vẫn hiện nợ dù nhà đã đóng.
+
+export type KhoanBiBoView = {
+  id: string;
+  soTien: number;
+  ngay: string | null;
+  lyDo: string;
+  hocVien: string | null;
+  phuHuynh: string | null;
+  maDon: string | null;
+  /** Ghi danh còn sống của em — để người dùng chọn. Rỗng = em chưa có ghi danh nào. */
+  ungVien: { id: string; tenLop: string | null; tenKhoa: string | null; finalPrice: number | null }[];
+  /** Gợi ý khi CHỈ CÓ MỘT ghi danh. `null` ⇒ phải có người chọn. */
+  goiYGhiDanhId: string | null;
+  mucGan: MucGan;
+  /**
+   * Khoản này do đâu sinh ra — dạng MÁY ĐỌC, để màn nhóm/đếm theo nguồn khi cần.
+   *
+   * Nhãn cho người đọc đã nằm sẵn trong `lyDo` (xem `dongVuongMac`) vì đó là trường DUY
+   * NHẤT màn đang vẽ; giữ thêm bản máy ở đây để lần nâng cấp sau khỏi phải tách chuỗi.
+   */
+  nguon: NguonKhoan;
+};
+
+/**
+ * Danh sách khoản TIỀN CHƯA VÀO ĐƯỢC CÔNG NỢ, kèm ứng viên ghi danh để gắn.
+ *
+ * Chỉ ĐỌC. Cùng cổng quyền và cùng phạm vi `scopedDb` với lượt xác nhận hàng loạt.
+ *
+ * ⚠️ PHẠM VI ĐÃ MỞ 14/09/2026 — tên "khoản bị bỏ" nay hẹp hơn việc nó làm. Trước bản vá
+ * nó CHỈ tra khoản `[backfill-import]`, nên mọi đồng tiền về qua cổng thanh toán mà hệ
+ * thống không dám tự gắn lớp đều tàng hình. Nay danh sách gồm HAI nhóm:
+ *   · khoản nhập từ Excel bị lượt xác nhận hàng loạt bỏ lại — đủ mọi lý do, y như trước;
+ *   · MỌI khoản đang chờ kế toán mà CHƯA GẮN GHI DANH, bất kể marker nào sinh ra nó.
+ *
+ * Lý do vẫn dùng chung ATOM với khối "Xem thử" (`nenXacNhanHangLoat`) cho nhóm thứ nhất,
+ * nên hai chỗ không thể lệch nhau. Vì sao không dùng thẳng `lapKeHoachXacNhan` cho cả
+ * hai nhóm: xem chú thích trong `lib/finance/gan-ghi-danh-khoan.ts` — nó trả lời câu
+ * "có vào được lượt hàng loạt không", không phải câu "đồng tiền này vướng gì".
+ */
+export async function khoanBiBoAction(opts?: { gioiHan?: number }) {
+  const session = await requireAccountant();
+  const actorId = session.user.id as string;
+  const sdb = scopedDb(await resolveActor(actorId));
+  const gioiHan = Math.min(Math.max(1, Math.round(opts?.gioiHan ?? 200)), 500);
+
+  const rows = await sdb.payment.findMany({
+    where: {
+      deletedAt: null,
+      accountantStatus: "PENDING",
+      // Hai vế dưới chỉ để DB khỏi kéo về dữ liệu không bao giờ hiện. LUẬT + LÝ DO nằm ở
+      // `vuongMacCuaKhoan` (bút toán ADJUSTMENT giữ delta của phiếu gốc; dòng hoàn tiền
+      // mang số ÂM) — và hàm đó kiểm lại lần nữa, cố ý.
+      paymentType: "PAYMENT",
+      amount: { gt: 0 },
+      // ⚠️ BẢN VÁ 14/09/2026 — TRƯỚC ĐÂY Ở ĐÂY CHỈ CÓ MỘT DÒNG:
+      //     note: { contains: BACKFILL_PAYMENT_MARKER }
+      // tức danh sách CHỈ thấy khoản nhập từ file Excel. Khoản do webhook cổng thanh
+      // toán sinh ra mang `[auto:sepay:<txn>]` / `[auto:payos:<txn>]` nên KHÔNG BAO GIỜ
+      // hiện ra để mà gắn — trong khi `lib/payments/payos-ingest.ts:1120` CỐ Ý để
+      // `enrollmentId = null` mỗi khi mơ hồ (em học ≥2 lớp, hoặc đơn không gắn học
+      // viên) và ghi rõ trong chú thích rằng ca đó nhường cho NGƯỜI quyết.
+      //
+      // Người đó không có màn nào để quyết: `confirmPayment` mở đầu bằng
+      // `if (!existing.enrollmentId) return fail(...)`, nên tiền thật đã về tài khoản,
+      // đã có dòng trong sổ, mà không thao tác nào đưa được vào công nợ.
+      //
+      // Vế `enrollmentId: null` là vế MỞ, KHÔNG thay vế cũ: khoản backfill còn vướng
+      // những lý do khác (đã gắn lớp nhưng "bạn là người ghi nhận khoản này") vẫn phải
+      // hiện, kẻo bản vá này lại giấu đi đúng nhóm mà màn sinh ra để phục vụ.
+      OR: [
+        { note: { contains: BACKFILL_PAYMENT_MARKER } },
+        { enrollmentId: null },
+      ],
+    },
+    select: {
+      id: true,
+      note: true,
+      accountantStatus: true,
+      paymentType: true,
+      enrollmentId: true,
+      recordedById: true,
+      amount: true,
+      paidDate: true,
+      order: {
+        select: {
+          code: true,
+          customerName: true,
+          studentId: true,
+          student: { select: { id: true, name: true } },
+        },
+      },
+    },
+    orderBy: { paidDate: "asc" },
+    take: gioiHan,
+  });
+
+  // Nhánh backfill của `vuongMacCuaKhoan` ỦY QUYỀN cho `nenXacNhanHangLoat` — cùng ATOM
+  // với `lapKeHoachXacNhan` ở khối "Xem thử", nên lý do hiện ở đây và con số đếm ở trên
+  // không thể lệch nhau. Xem chú thích dài trong `lib/finance/gan-ghi-danh-khoan.ts`.
+  const vuongTheoId = new Map<string, Extract<VuongMacKhoan, { hien: true }>>();
+  for (const r of rows) {
+    const v = vuongMacCuaKhoan(r, actorId);
+    if (v.hien) vuongTheoId.set(r.id, v);
+  }
+  const khoanBo = rows.filter((r) => vuongTheoId.has(r.id));
+
+  // Tra ghi danh MỘT LƯỢT cho mọi học viên liên quan — mỗi khoản một câu tra thì 200
+  // khoản là 200 lượt đi DB.
+  const idHocVien = [
+    ...new Set(khoanBo.map((r) => r.order?.student?.id).filter((v): v is string => !!v)),
+  ];
+  const ghiDanh = idHocVien.length
+    ? await sdb.enrollment.findMany({
+        where: { studentId: { in: idHocVien }, deletedAt: null },
+        select: {
+          id: true,
+          studentId: true,
+          finalPrice: true,
+          class: { select: { name: true } },
+          course: { select: { name: true } },
+        },
+      })
+    : [];
+  const theoHocVien = new Map<string, GhiDanhUngVien[]>();
+  for (const e of ghiDanh) {
+    if (!e.studentId) continue;
+    const item: GhiDanhUngVien = {
+      id: e.id,
+      tenLop: e.class?.name ?? null,
+      tenKhoa: e.course?.name ?? null,
+      finalPrice: e.finalPrice,
+    };
+    const cu = theoHocVien.get(e.studentId);
+    if (cu) cu.push(item);
+    else theoHocVien.set(e.studentId, [item]);
+  }
+
+  const ds: KhoanBiBoView[] = khoanBo.map((r) => {
+    const v = vuongTheoId.get(r.id)!;
+    const hvId = r.order?.student?.id ?? null;
+    const chon = mucGanChoKhoan({
+      // Khoản ĐÃ gắn lớp thì `ganGhiDanhChoKhoanAction` từ chối ("Khoản này đã gắn ghi
+      // danh rồi") — nên màn KHÔNG được bày nút Gắn cho nó. Luật 12.
+      daGanGhiDanh: !!r.enrollmentId,
+      coHocVien: !!hvId,
+      ghiDanh: hvId ? (theoHocVien.get(hvId) ?? []) : [],
+    });
+    // Ca "đơn chưa gắn học viên" phải nói ra VIỆC PHẢI LÀM, kẻo nó trông y hệt ca "em
+    // chưa có lớp" và người dùng bị chỉ sang trang Ghi danh — nơi không tạo được ghi
+    // danh cho một đơn chưa biết là của em nào.
+    const viecPhaiLam =
+      chon.muc === MUC_GAN.THIEU_HOC_VIEN
+        ? "mở đơn gắn học viên trước — ở đây chưa biết tiền này của em nào"
+        : null;
+    return {
+      id: r.id,
+      soTien: r.amount,
+      ngay: r.paidDate ? r.paidDate.toISOString() : null,
+      lyDo: dongVuongMac(v.lyDo, v.nguon, viecPhaiLam),
+      hocVien: r.order?.student?.name ?? null,
+      phuHuynh: r.order?.customerName ?? null,
+      maDon: r.order?.code ?? null,
+      ungVien: chon.ungVien,
+      goiYGhiDanhId: chon.ghiDanhId,
+      mucGan: chon.muc,
+      nguon: v.nguon,
+    };
+  });
+
+  return { ok: true as const, ds };
+}
+
+/**
+ * GẮN một khoản thu vào ghi danh.
+ *
+ * ⚠️ ĐÂY LÀ ĐƯỜNG GHI TIỀN, dù không đổi một đồng nào: `Payment.enrollmentId` chính là
+ * thứ cổng phụ huynh và màn công nợ dùng để cộng — gắn nhầm lớp là tiền của lớp này trừ
+ * vào nợ của lớp kia, và không màn nào kêu lên.
+ *
+ * Ba lớp gác:
+ *   · quyền `payments:confirm` — cùng cổng với việc xác nhận khoản, vì hệ quả tương đương;
+ *   · `passesScope` cho CẢ khoản lẫn ghi danh — `scopedDb` chỉ auto-scope đường ĐỌC;
+ *   · ghi danh phải THUỘC ĐÚNG học viên của đơn mang khoản đó. Thiếu vế này thì gửi lên
+ *     `enrollmentId` của em khác cùng cơ sở là gắn được — `passesScope` không chặn nổi.
+ *
+ * Chỉ nhận khoản CHƯA GẮN. Đổi ghi danh của khoản đã gắn là chuyện khác hẳn (tiền đang
+ * nằm trong công nợ của một em rồi) và không đi qua đây.
+ */
+export async function ganGhiDanhChoKhoanAction(input: unknown) {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (!(await checkPermission("payments:confirm"))) {
+    return { ok: false as const, error: "Không có quyền xác nhận khoản thu" };
+  }
+
+  const parsed = z
+    .object({ paymentId: z.string().min(1), enrollmentId: z.string().min(1) })
+    .safeParse(input);
+  if (!parsed.success) {
+    return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  }
+  const d = parsed.data;
+
+  const actor = await resolveActor(session.user.id as string);
+  const sdb = scopedDb(actor);
+
+  const khoan = await sdb.payment.findUnique({
+    where: { id: d.paymentId },
+    select: {
+      id: true,
+      centerId: true,
+      deletedAt: true,
+      enrollmentId: true,
+      accountantStatus: true,
+      amount: true,
+      order: { select: { code: true, studentId: true } },
+    },
+  });
+  if (!khoan || khoan.deletedAt || !passesScope("Payment", khoan, actor)) {
+    return { ok: false as const, error: "Không tìm thấy khoản thu trong phạm vi của bạn" };
+  }
+  if (khoan.enrollmentId) {
+    return {
+      ok: false as const,
+      error: "Khoản này đã gắn ghi danh rồi — muốn đổi thì xử lý ở màn khoản thu.",
+    };
+  }
+
+  const gd = await sdb.enrollment.findUnique({
+    where: { id: d.enrollmentId },
+    select: { id: true, centerId: true, studentId: true, deletedAt: true },
+  });
+  if (!gd || gd.deletedAt || !passesScope("Enrollment", gd, actor)) {
+    return { ok: false as const, error: "Không tìm thấy ghi danh trong phạm vi của bạn" };
+  }
+  // Ghi danh phải của ĐÚNG em mang đơn này. Không có vế này thì `passesScope` cho qua
+  // mọi ghi danh cùng cơ sở, và tiền rơi vào hồ sơ người khác.
+  if (!khoan.order?.studentId || gd.studentId !== khoan.order.studentId) {
+    return { ok: false as const, error: "Ghi danh này không thuộc học viên của đơn" };
+  }
+
+  const au = getAuditActor(session);
+  await sdb.$transaction(async (txRaw) => {
+    const tx = txRaw as unknown as Prisma.TransactionClient;
+    await tx.payment.update({
+      where: { id: khoan.id },
+      data: { enrollmentId: gd.id },
+    });
+    await writeAudit({
+      actor: { id: au.actorId, name: au.actorName },
+      module: "finance",
+      entityType: "Payment",
+      entityId: khoan.id,
+      action: "UPDATE",
+      oldValues: { enrollmentId: null },
+      newValues: {
+        enrollmentId: gd.id,
+        soTien: khoan.amount,
+        maDon: khoan.order?.code ?? null,
+        nguon: "khoan-bi-bo-backfill",
+      },
+      orgUnitId: khoan.centerId,
+      tx,
+    });
+  });
+
+  revalidatePath("/payments");
+  revalidatePath("/cong-no");
+  return { ok: true as const };
 }

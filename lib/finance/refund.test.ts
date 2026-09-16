@@ -80,63 +80,69 @@ describe("[W3-1] computeRefund", () => {
   });
 });
 
-// ── Cầu dao tính năng (08/09/2026) ────────────────────────────────────────────
+// ── Lưới sổ buổi chưa chốt (14/09/2026) ──────────────────────────────────────
 //
-// `RefundRequest` = 0 dòng trên prod, NHƯNG đường ghi còn sống (2 caller: gỡ học viên
-// khỏi lớp, huỷ lớp) ⇒ bom hẹn giờ theo docs/luat-doc-so-va-ket-luan.md §Luật 1.
+// THAY CHO cầu dao `REFUND_REQUEST_DISABLED` (sống 08/09 → 14/09). Cầu dao tắt HẲN tính
+// năng vì MỘT ca cụ thể: `sessionsLearned` đếm `status = COMPLETED`, mà `status` không
+// phản ánh thực tế đã dạy ⇒ lớp đã dạy gần hết vẫn đọc ra 0 buổi ⇒ đề xuất hoàn 100%.
 //
-// Test này khoá HAI thứ: cầu dao đang bật, và nó chặn ở CỬA DUY NHẤT chứ không phải
-// rải ở từng caller.
+// Nay ca đó bị chặn TẠI GỐC bởi `canhBaoSoBuoi`, nên tính năng mở lại được. Bộ ca dưới
+// khoá đúng ba thứ bộ ca cầu dao từng khoá: lưới nằm ở CỬA DUY NHẤT, nó trả `null` chứ
+// không ném, và mỗi lần chặn đều để lại dấu.
 const doc = (f: string) => readFileSync(join(__dirname, f), "utf8");
 
-describe("cầu dao hoàn tiền", () => {
-  it("cầu dao ĐANG BẬT — xoá hằng này là mở lại đường ghi", async () => {
-    const { REFUND_REQUEST_DISABLED } = await import("./cau-dao-hoan-tien");
-    expect(REFUND_REQUEST_DISABLED).toBe(true);
-  });
-
-  it("chặn ở createRefundRequest — cửa DUY NHẤT, không rải ở từng caller", async () => {
+describe("lưới sổ buổi chưa chốt", () => {
+  it("chặn ở createRefundRequest — cửa DUY NHẤT, không rải ở từng caller", () => {
     const src = doc("refund.ts");
-    expect(src).toContain("REFUND_REQUEST_DISABLED");
-    // Cầu dao phải đứng TRƯỚC truy vấn đầu tiên: nó trả lời được mà không cần đọc gì,
-    // và đặt sau là "chặn nhưng vẫn đi hỏi DB".
-    expect(src.indexOf("if (REFUND_REQUEST_DISABLED)")).toBeLessThan(
-      src.indexOf("enrollment.findFirst"),
-    );
+    const iLuoi = src.indexOf("canhBaoSoBuoi(");
+    const iGhi = src.indexOf("refundRequest.create");
+    // ⚠️ PHẢI khẳng định TÌM THẤY trước khi so vị trí. `indexOf` trả -1 khi không thấy,
+    // và -1 < mọi vị trí ⇒ xoá sạch lời gọi lưới thì phép so vẫn ĐÚNG. Bước cấy lỗi của
+    // LƯỚI GHIM MÃ NGUỒN bắt đúng lỗ này: đổi tên hàm đi mà ca vẫn xanh.
+    expect(iLuoi, "không thấy lời gọi canhBaoSoBuoi(").toBeGreaterThanOrEqual(0);
+    expect(iGhi, "không thấy refundRequest.create").toBeGreaterThanOrEqual(0);
+    // Lưới đứng SAU khi đã đếm buổi (nó cần chính con số đó) nhưng TRƯỚC khi tạo bản ghi.
+    expect(iLuoi).toBeLessThan(iGhi);
   });
 
-  it("trả null chứ KHÔNG ném — hàm chạy trong transaction gỡ học viên", async () => {
-    // Ném ở đây là cuộn ngược cả việc gỡ: "không đề xuất được tiền" biến thành "không
-    // gỡ được học viên". Khoá lại bằng chữ, vì hành vi này là quyết định chứ không phải
-    // tiện tay.
+  it("trả null chứ KHÔNG ném — hàm chạy trong transaction gỡ học viên", () => {
+    // Ném ở đây là cuộn ngược cả việc gỡ: "không đề xuất được tiền" biến thành "không gỡ
+    // được học viên". Giữ nguyên quyết định của bản cầu dao.
     const src = doc("refund.ts");
     const than = src.slice(
-      src.indexOf("if (REFUND_REQUEST_DISABLED)"),
-      src.indexOf("const client: DbClient"),
+      src.indexOf("if (!canhBao.choDeXuat)"),
+      src.indexOf("const finalPrice"),
     );
     expect(than).toContain("return null");
     expect(than).not.toContain("throw");
   });
 
-  it("mỗi lần chạm cầu dao đều để lại dấu (AuditLog + console)", async () => {
-    const src = doc("cau-dao-hoan-tien.ts");
-    expect(src).toContain("REFUND_REQUEST_BLOCKED");
-    expect(src).toContain("writeAudit");
-    // Ghi log hỏng KHÔNG được làm hỏng lượt gỡ học viên.
-    expect(src).toContain("catch");
+  it("mỗi lần chặn đều để lại dấu trong nhật ký", () => {
+    const src = doc("refund.ts");
+    const than = src.slice(
+      src.indexOf("if (!canhBao.choDeXuat)"),
+      src.indexOf("const finalPrice"),
+    );
+    expect(than).toContain("writeAudit");
+    expect(than).toContain("tuChoiDeXuatHoanTien");
   });
 
-  it("file cầu dao ghi ĐỦ 4 điều kiện gỡ", async () => {
-    // Cầu dao không có điều kiện gỡ là cầu dao ở lại vĩnh viễn.
-    const src = doc("cau-dao-hoan-tien.ts");
-    expect(src).toContain("ĐIỀU KIỆN GỠ");
-    for (const n of ["1.", "2.", "3.", "4."])
-      expect(src).toContain(`//   ${n}`);
+  it("cầu dao ĐÃ GỠ — không còn nhánh nào tắt hẳn tính năng", () => {
+    // Thay cho ca "cầu dao ĐANG BẬT" của bản trước. Ca này tồn tại để lần sau ai định
+    // dựng lại một cầu dao tắt-hẳn thì phải sửa test và đọc lý do ở đây trước.
+    //
+    // ⚠️ Nhắm vào MÃ CHẠY (`if (...)` + đường import), KHÔNG phải tên hằng: khối chú
+    // thích trong `refund.ts` CỐ Ý nhắc tên cũ để người đọc sau tra được lịch sử. Bản
+    // đầu của ca này bắt luôn chú thích và báo đỏ giả — đúng họ với luật 11 (test grep
+    // mã nguồn là loại mong manh nhất; neo chuỗi HẸP nhất có thể).
+    const src = doc("refund.ts");
+    expect(src).not.toContain("if (REFUND_REQUEST_DISABLED)");
+    expect(src).not.toContain('from "@/lib/finance/cau-dao-hoan-tien"');
   });
 });
 
-// Vì sao phải chặn — giữ con số biết nói ngay cạnh cầu dao.
-describe("computeRefund — lý do dựng cầu dao", () => {
+// Vì sao phải chặn — giữ con số biết nói ngay cạnh lưới.
+describe("computeRefund — lý do dựng lưới", () => {
   it("sessionsLearned = 0 vì status chưa đóng ⇒ đề xuất hoàn TOÀN BỘ học phí", () => {
     // Lớp 20 buổi, đã dạy gần hết, phụ huynh đóng đủ 10.000.000.
     // Prod 07/09: 2 COMPLETED / 287 SCHEDULED ⇒ sessionsLearned đọc ra 0.
