@@ -87,6 +87,7 @@ async function main() {
       flags: true,
       source: true,
       result: true,
+      rejectReason: true,
       userAgent: true,
     },
     orderBy: { workDate: "desc" },
@@ -199,6 +200,41 @@ async function main() {
   console.log("  ⓘ Nếu cột THIẾU chỉ có ở những ngày ĐẦU rồi tắt hẳn ⇒ đó là dữ liệu cũ, và lỗi");
   console.log("    nhân viên đang báo KHÔNG để lại dòng nào — tức nó hỏng TRƯỚC lúc gửi, chứ");
   console.log("    không phải gửi lên mà thiếu toạ độ. Hai chuyện ấy vá ở hai chỗ khác nhau.");
+
+  // ── ⑦ HOÁ RA KHÔNG PHẢI "THIẾU TOẠ ĐỘ" MÀ LÀ "BỊ TỪ CHỐI" ────────────────
+  //
+  // Đọc `lib/cham-cong/timelog.ts:220`: `recordRejectedLog` ghi dòng với
+  // `source: "TICKET"` · `result: "REJECTED"` · CHỈ `ip`, **không** `userAgent`, **không**
+  // toạ độ — và có `rejectReason`.
+  //
+  // Đó chính là hình dạng của mọi dòng "thiếu" trong bảng trên: rỗng cả toạ độ lẫn UA. Nên
+  // câu hỏi đúng không phải "vì sao không lấy được vị trí" mà **"vì sao lượt quét bị từ
+  // chối"** — và `rejectReason` trả lời thẳng. Đây là lý do phải tách `result` ra: gộp
+  // ACCEPTED với REJECTED làm một là đo nhầm hẳn một chuyện khác.
+  tieu("⑦ TÁCH THEO KẾT QUẢ — ACCEPTED vs REJECTED");
+  const okLuot = luot.filter((l) => String(l.result) === "ACCEPTED");
+  const tuChoi = luot.filter((l) => String(l.result) === "REJECTED");
+  dong("ACCEPTED", okLuot.length);
+  dong("  — trong đó THIẾU toạ độ", okLuot.filter((l) => !coToaDo(l)).length);
+  dong("REJECTED", tuChoi.length);
+  dong("  — trong đó THIẾU toạ độ", tuChoi.filter((l) => !coToaDo(l)).length);
+  console.log("");
+  console.log("  ⓘ Nếu 'ACCEPTED thiếu toạ độ' ≈ 0 thì hệ KHÔNG hề mất toạ độ ở lượt thành công.");
+  console.log("    Toàn bộ vẻ 'thiếu vị trí' ở các bảng trên là do dòng BỊ TỪ CHỐI trộn vào.");
+
+  tieu("⑧ LÝ DO BỊ TỪ CHỐI — câu trả lời thật cho việc nhân viên không chấm được");
+  const demLyDo = new Map<string, number>();
+  for (const l of tuChoi) demLyDo.set(l.rejectReason ?? "(không ghi lý do)", (demLyDo.get(l.rejectReason ?? "(không ghi lý do)") ?? 0) + 1);
+  if (demLyDo.size === 0) console.log("  (không có lượt nào bị từ chối)");
+  for (const [r, n] of [...demLyDo.entries()].sort((a2, b2) => b2[1] - a2[1])) dong(`  ${r}`, n);
+
+  tieu("⑧a LƯỢT BỊ TỪ CHỐI THEO NGÀY — đang xảy ra tới đâu");
+  const tcNgay = new Map<string, number>();
+  for (const l of tuChoi) {
+    const k = l.workDate.toISOString().slice(0, 10);
+    tcNgay.set(k, (tcNgay.get(k) ?? 0) + 1);
+  }
+  for (const [k, n] of [...tcNgay.entries()].sort()) dong(`  ${k}`, n);
 
   console.log("");
   console.log("Xong. Không dòng nào bị ghi.");
