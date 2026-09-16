@@ -145,6 +145,41 @@ async function main() {
   console.log("  ⓘ Dòng KHÔNG CỜ là dòng nguy hiểm nhất: ăn công, không ai quét, và trên màn");
   console.log("    không có gì báo. Dòng CÓ CỜ ít nhất còn hiện ra để Quản lý xử lý.");
 
+  // Tổ hợp cờ THẬT của 54 dòng — đây mới là chỗ quyết định "nhãn sai" hay "tiền sai".
+  //
+  // `THIEU_LUOT_RA` / `RA_KHONG_CO_VAO` nghĩa là người ta CÓ quét, chỉ thiếu một đầu ⇒ họ có
+  // mặt, chỉ là hệ không ghép được cặp nên `workedMinutes = 0`. Công đủ cho ngày đó không
+  // sai về bản chất, cái sai là hệ không biết họ làm mấy giờ.
+  // `KHONG_CO_LUOT` mới là "không có dấu vết nào" — và đó là ca phải hỏi Kế toán.
+  tieu("②a2 TỔ HỢP CỜ THẬT — đếm theo từng cờ (một dòng có thể mang nhiều cờ)");
+  const demCo = new Map<string, number>();
+  for (const d of dangNgo) for (const f of d.flags) demCo.set(f, (demCo.get(f) ?? 0) + 1);
+  for (const [f, n] of [...demCo.entries()].sort((a, b) => b[1] - a[1])) dong(`  ${f}`, n);
+  console.log("");
+  const coDauVet = dangNgo.filter((d) =>
+    d.flags.some((f) => f === "THIEU_LUOT_RA" || f === "RA_KHONG_CO_VAO"),
+  );
+  dong("Dòng CÓ dấu vết quét (thiếu một đầu) ⇒ người ta CÓ mặt", coDauVet.length);
+  dong("Dòng KHÔNG dấu vết nào (KHONG_CO_LUOT)", coLuot.length);
+  console.log("");
+  console.log("  ⓘ Hai nhóm này khác nhau về BẢN CHẤT:");
+  console.log("    · thiếu một đầu  ⇒ có mặt, hệ không ghép được cặp nên không biết mấy giờ;");
+  console.log("    · không lượt nào ⇒ không có dấu vết gì cả. Đây mới là ca phải hỏi Kế toán.");
+
+  // Mã ca KHÔNG yêu cầu quét thì 0 phút + đủ công là ĐÚNG THIẾT KẾ, không phải lỗ hổng.
+  // Đo 16/09 trên `lib/cham-cong/catalog.ts`: `LD` · `D1` · `D2` mang `attendanceMode:
+  // "OPTIONAL"`. Nhóm "KHÔNG cờ nào" ở trên gần như chắc chắn là chúng — in ra để khỏi ai
+  // phải đoán.
+  tieu("②a3 NHÓM 'KHÔNG CỜ NÀO' là mã ca gì");
+  const maKhongCo = new Map<string, number>();
+  for (const d of khongCo) maKhongCo.set(d.templateCode ?? "(không mã)", (maKhongCo.get(d.templateCode ?? "(không mã)") ?? 0) + 1);
+  if (khongCo.length === 0) console.log("  (không dòng nào)");
+  for (const [k, n] of [...maKhongCo.entries()].sort((a, b) => b[1] - a[1])) dong(`  ${k}`, n);
+  console.log("");
+  console.log("  ⓘ `LD` · `D1` · `D2` khai `attendanceMode: OPTIONAL` trong danh mục — với chúng,");
+  console.log("    0 phút mà vẫn đủ công là ĐÚNG THIẾT KẾ. Mã nào KHÁC ba mã đó xuất hiện ở đây");
+  console.log("    mới là chuyện phải truy.");
+
   tieu("②b ĐÃ CHỐT KỲ CHƯA — chốt rồi thì số đã đóng băng vào bảng lương");
   dong("Dòng thuộc ngày đã CHỐT (status = LOCKED)", dangNgo.filter((d) => d.status === "LOCKED").length);
   dong("Dòng CHƯA chốt", dangNgo.filter((d) => d.status !== "LOCKED").length);
