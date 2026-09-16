@@ -180,6 +180,38 @@ async function main() {
   console.log("    0 phút mà vẫn đủ công là ĐÚNG THIẾT KẾ. Mã nào KHÁC ba mã đó xuất hiện ở đây");
   console.log("    mới là chuyện phải truy.");
 
+  // BẢNG KẾT — ba nhóm, mỗi nhóm kèm SỐ NGƯỜI và SỐ CÔNG. Đây là bảng mang đi hỏi Kế toán,
+  // nên tiền phải gắn vào từng nhóm chứ không gộp một cục: 50,5 công cho cả 54 dòng không
+  // trả lời được câu "bao nhiêu tiền đang treo ở những ngày KHÔNG AI BIẾT người đó có đến
+  // hay không" — mà đó mới là câu phải hỏi.
+  const bang = (nhan: string, ds: typeof dangNgo) => {
+    const c = Math.round(ds.reduce((s2, d) => s2 + cong(d), 0) * 100) / 100;
+    console.log(
+      `  ${nhan.padEnd(46)} dòng=${String(ds.length).padStart(4)}  người=${String(new Set(ds.map((d) => d.userId)).size).padStart(3)}  công=${String(c).padStart(7)}`,
+    );
+  };
+  const conLai = dangNgo.filter(
+    (d) =>
+      !d.flags.includes("KHONG_CO_LUOT") &&
+      d.flags.length > 0 &&
+      !d.flags.some((f) => f === "THIEU_LUOT_RA" || f === "RA_KHONG_CO_VAO"),
+  );
+  tieu("②a4 BẢNG KẾT — ba nhóm, kèm người và CÔNG của riêng từng nhóm");
+  bang("① KHÔNG dấu vết nào (KHONG_CO_LUOT)", coLuot);
+  bang("② CÓ mặt, thiếu một đầu quét", coDauVet);
+  bang("③ Mã ca OPTIONAL (đúng thiết kế)", khongCo);
+  bang("④ Còn lại, chưa xếp được vào ba nhóm trên", conLai);
+  console.log("");
+  console.log("  ⓘ Nhóm ① là con số mang đi hỏi Kế toán: công đang ghi cho những ngày KHÔNG");
+  console.log("    AI BIẾT người đó có đến hay không. Nhóm ② thì người ta có đến thật.");
+  if (conLai.length > 0) {
+    console.log("");
+    console.log("  Nhóm ④ — in cờ ra để không ai phải đoán:");
+    for (const d of conLai.slice(0, 10)) {
+      console.log(`    ${d.workDate.toISOString().slice(0, 10)}  mã=${d.templateCode ?? "—"}  cờ=[${d.flags.join(",")}]`);
+    }
+  }
+
   tieu("②b ĐÃ CHỐT KỲ CHƯA — chốt rồi thì số đã đóng băng vào bảng lương");
   dong("Dòng thuộc ngày đã CHỐT (status = LOCKED)", dangNgo.filter((d) => d.status === "LOCKED").length);
   dong("Dòng CHƯA chốt", dangNgo.filter((d) => d.status !== "LOCKED").length);
