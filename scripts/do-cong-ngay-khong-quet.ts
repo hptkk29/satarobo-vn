@@ -212,6 +212,86 @@ async function main() {
     }
   }
 
+  // ══ ③ NHÓM ① CÓ THẬT SỰ DÙNG HỆ THỐNG KHÔNG ══════════════════════════════
+  //
+  // Chủ dự án 16/09: *"13/19 người là gần hết công ty. Nếu phần lớn là '0 lượt cả kỳ' thì
+  // câu hỏi cho chị Huệ đổi hẳn — từ 'chị có tính lương theo số này không' thành 'hệ thống
+  // quét đã chạy thật chưa, hay mọi người vẫn chấm bằng cách cũ'."*
+  //
+  // Đây là phép phân biệt quan trọng nhất trong cả file:
+  //   · 0 lượt CẢ KỲ      ⇒ người này CHƯA DÙNG hệ. Không phải nghỉ không phép, và số công
+  //                          của họ không nói lên điều gì về việc họ có đi làm hay không.
+  //   · có quét nhiều ngày, thiếu vài ngày ⇒ hệ ĐANG chạy với người này, và những ngày
+  //                          thiếu mới thật sự đáng hỏi.
+  //
+  // Đếm `result = ACCEPTED`: lượt `REJECTED` là lượt bị hệ từ chối (sai điểm chấm, ngoài
+  // vùng…) — nó chứng minh người ta CÓ thử quét, nhưng không phải dấu chấm công hợp lệ.
+  // Tách riêng để không lẫn "chưa từng dùng" với "dùng mà bị từ chối".
+  const kyDo = kyMoiNhat ?? homNayYmd.slice(0, 7);
+  const [yy, mm] = kyDo.split("-").map(Number);
+  const kyFrom = new Date(Date.UTC(yy!, mm! - 1, 1));
+  const kyTo = new Date(Date.UTC(yy!, mm!, 0));
+
+  const luot = await db.staffTimeLog.findMany({
+    where: { workDate: { gte: kyFrom, lte: kyTo } },
+    select: { userId: true, workDate: true, result: true },
+  });
+  const luotOk = luot.filter((l) => l.result === "ACCEPTED");
+
+  tieu(`③ TOÀN KỲ ${kyDo} — hệ thống quét đã chạy tới đâu`);
+  dong("Tổng lượt quét (mọi kết quả)", luot.length);
+  dong("  — ACCEPTED", luotOk.length);
+  dong("  — REJECTED", luot.length - luotOk.length);
+  dong("Số NGƯỜI có ít nhất 1 lượt ACCEPTED", new Set(luotOk.map((l) => l.userId)).size);
+  dong("Số người trong kỳ (mẫu số)", new Set(daQua.map((d) => d.userId)).size);
+
+  // Tra mã NV cho 13 người của nhóm ① — KHÔNG in tên (repo PUBLIC).
+  const idNhom1 = [...new Set(coLuot.map((d) => d.userId))];
+  const maNV = new Map(
+    (
+      await db.employee.findMany({
+        where: { userAccount: { id: { in: idNhom1 } } },
+        select: { employeeCode: true, department: true, userAccount: { select: { id: true } } },
+      })
+    ).map((e) => [e.userAccount!.id, { ma: e.employeeCode, pb: String(e.department) }]),
+  );
+
+  tieu("③a NHÓM ① TÁCH THEO NGƯỜI — ai chưa từng dùng hệ, ai dùng mà thiếu ngày");
+  const hang = idNhom1
+    .map((uid) => {
+      const cua = luotOk.filter((l) => l.userId === uid);
+      return {
+        uid,
+        ma: maNV.get(uid)?.ma ?? "(không có hồ sơ NV)",
+        pb: maNV.get(uid)?.pb ?? "—",
+        luot: cua.length,
+        ngayCoQuet: new Set(cua.map((l) => l.workDate.toISOString().slice(0, 10))).size,
+        ngayThieu: coLuot.filter((d) => d.userId === uid).length,
+        congTreo: Math.round(coLuot.filter((d) => d.userId === uid).reduce((s2, d) => s2 + cong(d), 0) * 100) / 100,
+      };
+    })
+    .sort((a, b) => a.luot - b.luot || a.ma.localeCompare(b.ma));
+
+  console.log(`  ${"MÃ NV".padEnd(14)} ${"PHÒNG BAN".padEnd(20)} ${"LƯỢT OK".padStart(8)} ${"NGÀY CÓ QUÉT".padStart(13)} ${"NGÀY THIẾU".padStart(11)} ${"CÔNG TREO".padStart(10)}`);
+  for (const h of hang) {
+    console.log(
+      `  ${h.ma.padEnd(14)} ${h.pb.padEnd(20)} ${String(h.luot).padStart(8)} ${String(h.ngayCoQuet).padStart(13)} ${String(h.ngayThieu).padStart(11)} ${String(h.congTreo).padStart(10)}`,
+    );
+  }
+
+  const chuaDung = hang.filter((h) => h.luot === 0);
+  const dangDung = hang.filter((h) => h.luot > 0);
+  console.log("");
+  dong("⇒ CHƯA DÙNG hệ (0 lượt cả kỳ)", `${chuaDung.length} người`);
+  dong("   công treo của nhóm này", chuaDung.reduce((s2, h) => s2 + h.congTreo, 0));
+  dong("⇒ ĐANG DÙNG mà thiếu vài ngày", `${dangDung.length} người`);
+  dong("   công treo của nhóm này", Math.round(dangDung.reduce((s2, h) => s2 + h.congTreo, 0) * 100) / 100);
+  console.log("");
+  console.log("  ⓘ Hai nhóm này dẫn tới HAI câu hỏi khác nhau:");
+  console.log("    · CHƯA DÙNG  ⇒ hỏi 'hệ quét đã chạy thật chưa, hay còn chấm bằng cách cũ'.");
+  console.log("                   Công của họ không chứng minh được gì — đây không phải bug tiền.");
+  console.log("    · ĐANG DÙNG mà thiếu ngày ⇒ đây mới là ca hỏi Kế toán về cách tính lương.");
+
   tieu("②b ĐÃ CHỐT KỲ CHƯA — chốt rồi thì số đã đóng băng vào bảng lương");
   dong("Dòng thuộc ngày đã CHỐT (status = LOCKED)", dangNgo.filter((d) => d.status === "LOCKED").length);
   dong("Dòng CHƯA chốt", dangNgo.filter((d) => d.status !== "LOCKED").length);
