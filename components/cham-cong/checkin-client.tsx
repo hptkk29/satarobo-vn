@@ -22,6 +22,7 @@ import { ArrowRight, CircleCheck, Loader2, LogIn, LogOut, MapPin } from "lucide-
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { recordCheckin } from "@/lib/attendance/checkin-action";
+import { xinViTri } from "@/lib/cham-cong/xin-vi-tri";
 import { ShiftCodeChip, type ShiftSource } from "@/components/cham-cong/ui/shift-code-chip";
 import { PILL } from "@/components/cham-cong/ui/flag-chip";
 
@@ -75,6 +76,9 @@ export function CheckinClient({
   const [done, setDone] = useState<{ label: string; timeLabel: string; warning?: string } | null>(null);
   /** Vé đã bị tiêu ở một lượt gửi hỏng — không bấm lại được, phải quét mã mới. */
   const [veChet, setVeChet] = useState(false);
+  // Lý do KHÔNG lấy được vị trí, giữ DÍNH trên màn. Toast tự tắt, mà `cachSua` là mấy bước
+  // phải làm theo — lời hướng dẫn biến mất trước khi người ta làm xong thì vô dụng.
+  const [loiViTri, setLoiViTri] = useState<string | null>(null);
   const [left, setLeft] = useState(() => Math.max(0, Math.round((new Date(expiresAt).getTime() - Date.now()) / 1000)));
 
   useEffect(() => {
@@ -85,27 +89,27 @@ export function CheckinClient({
     return () => clearInterval(id);
   }, [expiresAt]);
 
-  function getPosition(): Promise<GeolocationPosition | null> {
-    return new Promise((resolve) => {
-      if (!navigator.geolocation) return resolve(null);
-      navigator.geolocation.getCurrentPosition(
-        (pos) => resolve(pos),
-        () => resolve(null),
-        { enableHighAccuracy: true, timeout: 8000 },
-      );
-    });
-  }
+  // ⚠️ KHÔNG còn `getPosition` cục bộ ở đây (sự cố 16/09/2026).
+  //
+  // Bản cũ viết callback lỗi là `() => resolve(null)` — vứt sạch `GeolocationPositionError`,
+  // nên "trang chưa chạy HTTPS", "trình duyệt đã chặn quyền cho trang này" và "máy không bắt
+  // được tín hiệu" đều rơi về đúng một chữ `null`. Ba nguyên nhân ấy có ba cách sửa khác hẳn
+  // nhau, và người dùng không có gì để lần ra.
+  //
+  // Phép xin vị trí + phân biệt lý do nay ở `lib/cham-cong/xin-vi-tri.ts`, dùng chung với
+  // hai nút chấm công tác. MỘT bản, hai màn — đừng chép lại ở đây.
 
   function submit(type: "CHECK_IN" | "CHECK_OUT") {
     startTransition(async () => {
-      const pos = await getPosition();
+      const v = await xinViTri();
+      setLoiViTri(v.ok ? null : v.cachSua ? `${v.loi} ${v.cachSua}` : v.loi);
       const res = await recordCheckin({
         ticketId,
         nonce,
         type,
-        latitude: pos?.coords.latitude ?? null,
-        longitude: pos?.coords.longitude ?? null,
-        accuracyMeters: pos?.coords.accuracy ?? null,
+        latitude: v.ok ? v.latitude : null,
+        longitude: v.ok ? v.longitude : null,
+        accuracyMeters: v.ok ? v.accuracyMeters : null,
       });
       if (res.ok) {
         const label = type === "CHECK_IN" ? "Check-in" : "Check-out";
@@ -189,6 +193,19 @@ export function CheckinClient({
           {geofenceEnabled ? "Có kiểm định vị" : "Không kiểm định vị"}
         </span>
       </p>
+
+      {/* Lý do KHÔNG lấy được vị trí — DÍNH trên màn, không phải toast.
+          `aria-live` để người dùng trình đọc màn hình cũng nghe được: đây là hướng dẫn phải
+          làm theo, không phải trang trí. Đặt ngay dưới nhãn "Có kiểm định vị" vì khi cơ sở
+          BẬT kiểm định vị thì thiếu toạ độ là lý do lượt quét bị từ chối. */}
+      {loiViTri && (
+        <p
+          aria-live="polite"
+          className="mt-2 rounded-lg bg-state-warning-soft px-3 py-2 text-left text-xs leading-relaxed text-state-warning-ink"
+        >
+          <strong>Chưa lấy được vị trí.</strong> {loiViTri}
+        </p>
+      )}
 
       <p aria-live="polite" aria-atomic className="mt-5 text-3xl font-bold tabular-nums text-foreground">
         <span aria-hidden>{expired ? "Vé đã hết hạn" : `Vé còn ${left} giây`}</span>
