@@ -6,10 +6,7 @@ import { ensureParentAccountForOrder } from "@/lib/parents/provision";
 import { sendEmailForTrigger } from "@/lib/email/trigger";
 import { notifyOrderByZnsIfNoEmail } from "@/lib/notify/order";
 import { extractOrderCode, normalizeContent } from "@/lib/payments/sepay";
-import {
-  qrConRotDuocTien,
-  TRANG_THAI_DON_KHONG_NHAN_TIEN,
-} from "@/lib/payments/don-nhan-tien";
+import { qrConRotDuocTien, locDonNhanTien } from "@/lib/payments/don-nhan-tien";
 // Quy tắc "khoản này thuộc ghi danh nào" — MỘT chỗ duy nhất, dùng chung với màn sửa tay
 // ở /admin/payments. Xem khối chú thích tại chỗ gọi (ghi sổ cũ) để biết vì sao.
 import { chonGhiDanhChoKhoan } from "@/lib/finance/gan-ghi-danh-khoan";
@@ -365,13 +362,15 @@ async function findPendingOrdersByPhone(phone: string): Promise<PhoneCandidate[]
   const variants = phoneVariants(phone);
   return db.order.findMany({
     where: {
-      deletedAt: null,
       // Đơn đã huỷ/hoàn tiền không phải đích rót tự động. DRAFT cũng KHÔNG: đó là
       // đơn sale ĐANG SOẠN DỞ (vẫn kịp có phiếu thu PENDING) — rót tiền vào đó là
       // chốt giùm một đơn chưa ai duyệt, và đơn thật của khách vẫn nợ. Nếu đơn bị
       // loại là ứng viên DUY NHẤT thì ta ra 0 đơn → UNMATCHED → kế toán quyết,
       // đúng ý đồ.
-      status: { notIn: ["DRAFT", "CANCELLED", "REFUNDED"] },
+      //
+      // PHIÊN B — trước đây nhánh này gõ tay `["DRAFT", "CANCELLED", "REFUNDED"]`, tức bản
+      // sao thứ hai của danh sách. Nay dùng chung mảnh lọc với nhánh (a) và (c).
+      ...locDonNhanTien(),
       paymentRequests: { some: { status: { in: ["PENDING", "PARTIAL"] } } },
       OR: [
         { customerPhone: { in: variants } },
@@ -672,7 +671,7 @@ export async function resolvePaymentTargetDetailed(
       where: {
         matchKey: { in: candidates },
         status: { not: "VOID" },
-        order: { status: { notIn: [...TRANG_THAI_DON_KHONG_NHAN_TIEN] }, deletedAt: null },
+        order: locDonNhanTien(),
       },
       select: { id: true, orderId: true, matchKey: true },
     });
@@ -724,8 +723,20 @@ export async function resolvePaymentTargetDetailed(
   for (const c of collectMatchKeyCandidates(data)) {
     const code = extractOrderCode(c);
     if (!code) continue;
-    const order = await db.order.findUnique({
-      where: { code },
+    // PHIÊN B — `findFirst` chứ không `findUnique`, chỉ để CHỖ NÀY nhận thêm được mảnh lọc
+    // (`findUnique` chỉ nhận đúng khoá). `code` vẫn là cột `@unique` nên kết quả không đổi
+    // nghĩa: vẫn là "đơn mang mã này", chỉ thêm "và đơn ấy còn nhận tiền tự động được".
+    //
+    // TRƯỚC BẢN VÁ: nhánh này tra mã đơn rồi rót vào phiếu chưa đóng sớm nhất, KHÔNG hỏi đơn
+    // đang ở trạng thái nào — đơn DRAFT (sale soạn dở, đã kịp có phiếu PENDING), đơn CANCELLED
+    // và đơn REFUNDED đều hút được tiền. Đây là nhánh của nội dung CK đời cũ `ORD…D<số>`, tức
+    // nhánh mà dữ liệu thật đang đi qua nhiều nhất, và PHIÊN A đã bỏ sót đúng nó.
+    //
+    // (Đơn XOÁ MỀM thì chưa bao giờ lọt ở đây: `Order` ∈ `SOFT_DELETE_MODELS` nên tầng base của
+    // `lib/db.ts` tự chèn `deletedAt: null`. Vế ấy trong `locDonNhanTien()` giữ cho câu `where`
+    // tự nói đủ luật — nhánh (a) mới là chỗ nó thật sự gánh việc.)
+    const order = await db.order.findFirst({
+      where: { code, ...locDonNhanTien() },
       select: {
         id: true,
         paymentRequests: {

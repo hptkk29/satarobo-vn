@@ -24,7 +24,11 @@ import {
   type DongDon,
 } from "./no-theo-con";
 import { giaiCongTac } from "./feature";
-import { donNhanTienTuDong, qrConRotDuocTien } from "@/lib/payments/don-nhan-tien";
+import {
+  donNhanTienTuDong,
+  locDonNhanTien,
+  qrConRotDuocTien,
+} from "@/lib/payments/don-nhan-tien";
 
 /** Số của chủ dự án: An Sata3 8.640.000 · Bình Sata5 12.000.000. */
 const AN = "oi-an";
@@ -318,15 +322,58 @@ describe("[NTC-05] ba lỗ đã bịt — luật về hình dạng đường ghi
     ).toBe(false);
   });
 
-  it("LỖ 3 · và CẢ HAI nhánh (matchKey, QrSession) đều đi qua vị từ đó", () => {
+  it("LỖ 3 · mảnh lọc `where` nói ĐÚNG một luật với vị từ thuần", () => {
+    // Hai hình dạng của cùng một luật (một cho Prisma, một cho TS thuần) là hai chỗ để lệch.
+    // Ca này ghim chúng vào nhau: sửa danh sách ở hằng thì cả hai đổi theo, quên sửa một bên
+    // thì đỏ ở đây.
+    expect(locDonNhanTien()).toEqual({
+      deletedAt: null,
+      status: { notIn: ["DRAFT", "CANCELLED", "REFUNDED"] },
+    });
+    expect(locDonNhanTien()).not.toBe(locDonNhanTien());
+    // Danh sách trên đã bị `toEqual` ghim, nên lặp trên chính nó là đủ để nối hai hình dạng:
+    // đổi hằng mà quên một bên ⇒ `toEqual` đỏ; giữ danh sách mà đổi vị từ ⇒ vòng này đỏ.
+    for (const st of ["DRAFT", "CANCELLED", "REFUNDED"]) {
+      expect(donNhanTienTuDong({ trangThaiDon: st, donDaXoa: false, trangThaiPhieu: "PENDING" }), st).toBe(false);
+    }
+  });
+
+  it("LỖ 3 · CẢ BỐN nhánh tra đơn đều đi qua luật đó", () => {
+    // ⚠️ PHIÊN A chỉ vá (a) và (b). Ca này viết lại ở PHIÊN B sau khi đo ra nhánh (c) — nhánh
+    // của nội dung CK đời cũ `ORD…D<số>`, tức nhánh dữ liệu THẬT đi qua nhiều nhất — chưa hề
+    // được kiểm, và nhánh (d) thì đúng luật nhưng bằng một mảng gõ tay riêng.
     const src = docMa("lib/payments/payos-ingest.ts");
-    // Nhánh (a) dùng hằng trong `where` của Prisma; nhánh (b) gọi hàm.
-    expect(src.match(/TRANG_THAI_DON_KHONG_NHAN_TIEN/g) ?? []).toHaveLength(2);
+    // (a) matchKey · (c) orderCode · (d) SĐT — cả ba nhét mảnh lọc vào `where` của Prisma.
+    expect(src.match(/locDonNhanTien\(\)/g) ?? []).toHaveLength(3);
+    // (b) QrSession: `findUnique` khoá theo `providerOrderCode` nên phải lọc SAU khi tra ⇒ vị từ.
     expect(src.match(/qrConRotDuocTien\(/g) ?? []).toHaveLength(1);
     // ⚠️ Và nhánh đó phải là MỘT LỜI GỌI TRẦN, không có `&&` nào ghép vào — xem chú thích
     // `qrConRotDuocTien`: một `&&` đổi thành `||` là cổng mở mà lưới vẫn xanh.
     expect(src).toMatch(/const qrConHieuLuc = qrConRotDuocTien\(phieuCuaQr\);/);
     expect(src).toMatch(/status:\s*\{\s*not:\s*"VOID"\s*\}/);
+    // Không còn bản CHÉP TAY nào của danh sách trạng thái trong tệp này.
+    expect(src).not.toMatch(/notIn:\s*\[\s*"DRAFT"/);
+    // Và nhánh (c) phải là `findFirst`: `findUnique` chỉ nhận đúng khoá, không nhét lọc vào được.
+    // ⚠️ Neo vào TRA-THEO-`code`, không phải mọi `findUnique`: tệp còn một câu tra theo `id`
+    // CHẠY SAU khi đã resolve xong (`where: { id: target.orderId }`) — đơn đó đã qua cổng rồi,
+    // cấm nó là cấm nhầm và sẽ đẩy người sau đi vòng.
+    expect(src).toMatch(/where:\s*\{\s*code,\s*\.\.\.locDonNhanTien\(\)\s*\}/);
+    expect(src).not.toMatch(/findUnique\(\{\s*where:\s*\{\s*code[,:]/);
+  });
+
+  it("LỖ 3 · đường SePay đi CHUNG tầng đối khớp — không có cổng thứ hai", () => {
+    // Câu hỏi của chủ dự án: SePay có qua `resolvePaymentTargetDetailed` không.
+    // ĐO ĐƯỢC: có, ở CẢ HAI nhánh của route (nhánh "không tra ra đơn" và nhánh CONFIRM) —
+    // cả hai đều gọi `ingestPayosWebhook`, mà hàm đó gọi `resolvePaymentTargetDetailed`.
+    // Nên bốn ca trên đã phủ luôn SePay, không cần vá riêng.
+    const rt = docMa("app/api/public/webhook/sepay/route.ts");
+    expect(rt.match(/ingestPayosWebhook\(/g) ?? []).toHaveLength(2);
+    const ing = docMa("lib/payments/payos-ingest.ts");
+    expect(ing).toMatch(/const resolved = await resolvePaymentTargetDetailed\(data\);/);
+    // Còn đơn XOÁ MỀM ở route thì tầng base lo: `Order` ∈ `SOFT_DELETE_MODELS`, và hook
+    // `findUnique` của `lib/db.ts` lọc hậu kỳ trả `null`. Đã thử vá thêm ở route rồi HOÀN
+    // NGUYÊN — vá một lỗ không tồn tại thì chỗ vá ấy sẽ được ai đó tin là có lý do.
+    expect(rt).toMatch(/db\.order\.findUnique\(/);
   });
 
   it("LUẬT 5 · `noTheoCon` đọc bằng `db` TRẦN — ai mở đơn cũng ra CÙNG con số", () => {
