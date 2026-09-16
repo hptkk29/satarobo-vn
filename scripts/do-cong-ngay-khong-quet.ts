@@ -316,6 +316,66 @@ async function main() {
   for (const d of dangNgo) theoMa.set(d.templateCode ?? "(không mã)", (theoMa.get(d.templateCode ?? "(không mã)") ?? 0) + 1);
   for (const [k, n] of [...theoMa.entries()].sort((a, b) => b[1] - a[1])) dong(`  ${k}`, n);
 
+  // ══ ④ 26,5 CÔNG KIA LÀ "NGHỈ KHÔNG PHÉP" HAY "BỊ MÁY CHỦ TỪ CHỐI" ═════════
+  //
+  // Câu quan trọng nhất của cả file. Chủ dự án 16/09:
+  //
+  //   *"Nếu trùng nhiều thì 26,5 công kia không phải 'nghỉ không phép' — họ CÓ đến, máy chủ
+  //   từ chối họ. Lúc đó tôi không hỏi chị Huệ về tiền nữa, mà đi xin lỗi 13 người."*
+  //
+  // Đo được vì `recordRejectedLog` VẪN ghi dòng cho lượt bị từ chối: `result = REJECTED`,
+  // `rejectReason = NO_GPS`. Tức dấu vết "người này CÓ bấm quét hôm ấy" còn nguyên trên DB —
+  // chỉ là nó không nằm ở chỗ ta vẫn nhìn.
+  //
+  // ⚠️ Ghép theo (người × NGÀY), không theo ngày suông: một người bị từ chối hôm 13/09 không
+  // nói được gì về ngày thiếu quét của người khác.
+  const tuChoiNoGps = await db.staffTimeLog.findMany({
+    where: { result: "REJECTED", rejectReason: "NO_GPS" },
+    select: { userId: true, workDate: true },
+  });
+  const khoa = (u: string, d: Date) => `${u}|${d.toISOString().slice(0, 10)}`;
+  const coBamQuet = new Set(tuChoiNoGps.map((l) => khoa(l.userId, l.workDate)));
+
+  tieu("④ NGÀY THIẾU QUÉT CỦA NHÓM ① — có phải họ ĐÃ BẤM mà bị từ chối không");
+  const trung = coLuot.filter((d) => coBamQuet.has(khoa(d.userId, d.workDate)));
+  const khongTrung = coLuot.filter((d) => !coBamQuet.has(khoa(d.userId, d.workDate)));
+  dong("Tổng lượt bị từ chối vì NO_GPS (mọi ngày)", tuChoiNoGps.length);
+  dong("Ngày của nhóm ① (có công, 0 phút, cờ KHONG_CO_LUOT)", coLuot.length);
+  console.log("");
+  dong("⇒ CÓ bấm quét hôm ấy nhưng BỊ TỪ CHỐI", trung.length);
+  dong("   — số người", new Set(trung.map((d) => d.userId)).size);
+  dong("   — CÔNG đang treo ở những ngày này", Math.round(trung.reduce((s2, d) => s2 + cong(d), 0) * 100) / 100);
+  console.log("");
+  dong("⇒ KHÔNG thấy dấu vết bấm quét nào hôm ấy", khongTrung.length);
+  dong("   — số người", new Set(khongTrung.map((d) => d.userId)).size);
+  dong("   — CÔNG đang treo ở những ngày này", Math.round(khongTrung.reduce((s2, d) => s2 + cong(d), 0) * 100) / 100);
+  console.log("");
+  console.log("  ⓘ Nhóm TRÊN: người ta CÓ ĐẾN và CÓ BẤM — máy chủ từ chối vì không lấy được");
+  console.log("    toạ độ. Đây KHÔNG phải câu hỏi tiền cho Kế toán, đây là lỗi của hệ thống.");
+  console.log("    Nhóm DƯỚI: không có dấu vết nào, mới là ca còn phải hỏi.");
+
+  // In theo người để biết ai bị oan — MÃ NV, không tên.
+  if (trung.length > 0) {
+    const idTrung = [...new Set(trung.map((d) => d.userId))];
+    const ma = new Map(
+      (
+        await db.employee.findMany({
+          where: { userAccount: { id: { in: idTrung } } },
+          select: { employeeCode: true, userAccount: { select: { id: true } } },
+        })
+      ).map((e) => [e.userAccount!.id, e.employeeCode]),
+    );
+    tieu("④a AI BỊ OAN — mã NV, số ngày, và công đang treo");
+    for (const uid of idTrung) {
+      const cua = trung.filter((d) => d.userId === uid);
+      console.log(
+        `  ${(ma.get(uid) ?? "(không có hồ sơ NV)").padEnd(14)} ${String(cua.length).padStart(2)} ngày   ` +
+          `công=${Math.round(cua.reduce((s2, d) => s2 + cong(d), 0) * 100) / 100}   ` +
+          `ngày: ${cua.map((d) => d.workDate.toISOString().slice(5, 10)).sort().join(" ")}`,
+      );
+    }
+  }
+
   console.log("");
   console.log("Xong. Không dòng nào bị ghi.");
 }
