@@ -575,6 +575,55 @@ Câu hỏi đúng hoá ra là *"vì sao máy chủ từ chối"*, và `rejectRea
 - **Luật 15** — một triệu chứng nhiều nguyên nhân đủ. Ở đây nặng hơn: triệu chứng **không
   có thật**, nên mọi nguyên nhân tìm được đều là nguyên nhân của chuyện khác.
 
+### Luật 8 tầng bốn — đếm NGƯỜI VẮNG MẶT thì phải hỏi "đường ghi có ghi lại người KHÔNG THÀNH CÔNG không"
+
+> Chốt của chủ dự án 16/09/2026: *"Từ giờ mọi phép đo về người vắng mặt phải kèm câu 'đường
+> ghi có ghi lại được người KHÔNG thành công không'. Nếu không, số đo chỉ đếm được người đã
+> thành công ở một bước nào đó — và chúng ta vừa suýt mang một con số như thế đi buộc tội 13
+> người."*
+
+Ba tầng trên nói về việc đếm nhầm **thứ có thật**. Tầng này nói về việc đếm một thứ mà
+**bằng chứng ngược lại chưa bao giờ được ghi**: sự vắng mặt không để lại dòng nào, nên nó
+luôn trông giống hệt "có mặt mà hệ không ghi được".
+
+#### Sự cố sinh ra luật này — 16/09/2026
+
+Đo được **28 ngày** nhân viên "có công mà không quét lần nào", thuộc 13 người trên tổng số
+19 của cả công ty. Suýt mang đi hỏi Kế toán như một câu chuyện tiền lương.
+
+Đối chiếu với `StaffTimeLog` có `result = REJECTED` thì lộ ra: **2 ngày là người ta CÓ bấm
+mà máy chủ từ chối** (`rejectReason = NO_GPS`). Nếu không đối chiếu, hai ngày ấy đã nằm
+trong danh sách "nghỉ không phép" của một người cụ thể.
+
+Nhưng vế nặng hơn là **26 ngày còn lại**, và nó là lý do luật này tồn tại: đường ghi cũ ở
+màn quét QR **không có lưới chống treo nào**. Trình duyệt không gọi callback thì nút quay
+mãi và **không một dòng nào được gửi lên** — kể cả dòng `REJECTED`. Người bỏ cuộc ở bước đó
+không để lại dấu vết gì.
+
+⇒ 26 ngày ấy là **CẬN TRÊN** của "không đến", không phải con số chắc. Và không có cách nào
+đo được phần chênh, vì thứ cần đo chưa bao giờ được ghi.
+
+#### Cách làm
+
+Trước khi báo bất kỳ con số nào về vắng mặt / không làm / không nộp / không phản hồi, trả
+lời **ba câu, theo thứ tự**:
+
+| # | Câu hỏi |
+|---|---|
+| 1 | Đường ghi có tạo dòng cho lượt **THẤT BẠI** không? (`REJECTED`, `status = FAILED`, log lỗi) |
+| 2 | Có nhánh nào người dùng **bỏ cuộc trước khi gửi** không? Nhánh ấy để lại gì? |
+| 3 | Nếu câu 2 là "không để lại gì" ⇒ con số phải được gọi là **CẬN TRÊN**, kèm câu giải thích |
+
+Câu 2 là câu hay bị bỏ qua nhất, vì nó hỏi về một đoạn mã **ở phía client** trong khi phép
+đo thì chạy trên DB.
+
+#### Liên hệ
+
+- **Luật 1** — "0 dòng trên prod" không hạ được mức nghiêm trọng. Ở đây là họ hàng gần:
+  **0 dòng không chứng minh 0 lần xảy ra**, nó chỉ chứng minh 0 lần được ghi.
+- **Luật 12** — một con số trình ra cho người đọc là một LỜI HỨA, y như một mũi tên. Gọi
+  cận trên là con số chắc thì lời hứa ấy suông, và ở đây cái giá là buộc tội nhầm người.
+
 ---
 
 ## Luật 9 — cổng phải được cho ăn bằng thứ đường THẬT cho nó ăn
