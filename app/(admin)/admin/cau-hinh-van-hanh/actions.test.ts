@@ -76,6 +76,21 @@ describe("[PUSH-D7-T30] đối chiếu danh mục — cổng đã dời từ reg
     expect(h.setGlobalSetting).not.toHaveBeenCalled();
   });
 
+  it("⚠️ TỪ CHỐI loại KHÔNG ĐẨY ĐƯỢC, dù nó có thật trong danh mục chuông", async () => {
+    // `class_no_teacher:` và `timesheet_adjust:` là thông báo CÓ THẬT — chúng hiện trong chuông
+    // hằng ngày. Nhưng chúng do vòng quét việc tồn ghi thẳng `db.staffNotification.upsert`,
+    // không đi qua `notifyStaff`, nên KHÔNG BAO GIỜ đẩy được (ranh giới cố ý, xem
+    // `lib/notifications/notify.ts`).
+    //
+    // Lưu chúng vào cấu hình đẩy là để lại một công tắc không nối vào đâu — chủ dự án đã bật
+    // thật cả hai ngày 13/09 rồi ngồi chờ. Đường ghi phải kiểm theo danh sách HẸP.
+    for (const t of ["class_no_teacher:", "timesheet_adjust:", "renewal:", "student_risk:"]) {
+      const kq = await luuLoaiDuocDayAction({ tienTo: ["lead.moi:", t], reason: "x" });
+      expect(kq.ok, t).toBe(false);
+    }
+    expect(h.setGlobalSetting).not.toHaveBeenCalled();
+  });
+
   it("thông báo lỗi NÓI RÕ mã nào sai", async () => {
     const kq = await luuLoaiDuocDayAction({ tienTo: ["bia_ra:"], reason: "x" });
     expect(kq.ok).toBe(false);

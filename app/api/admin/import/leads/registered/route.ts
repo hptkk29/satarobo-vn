@@ -512,6 +512,11 @@ export async function POST(req: NextRequest) {
               courseId: c.courseId,
               assignedToId: c.assignedToId,
               assignedAt: c.assignedToId ? new Date() : null,
+              // 15/09/2026 — BẮT BUỘC. Danh sách /leads sắp theo `lastInboundAt` với
+              // `nulls: 'last'`, nên lead tạo mà bỏ trống cột này bị đẩy xuống CUỐI mọi
+              // trang. Cùng lỗ với đường import Excel sự kiện: người dùng báo "nhập xong
+              // không thấy lead đâu", nhưng tìm theo SĐT/nguồn thì lại ra.
+              lastInboundAt: new Date(),
               // BGĐ câu 4(1): khách ĐÃ đăng ký → DA_DANG_KY trực tiếp (backfill,
               // không đi transition guard C4). Convert → flow convert v2.
               // GĐ5 — lead nhập kiểu này CHƯA convert; mốc phân biệt là `convertedAt`

@@ -77,7 +77,7 @@ export async function getMyAttendanceDays(userId: string, from: Date, to: Date):
       workDate: true, overrideUnits: true, dayCreditEarned: true, dayCreditExpected: true,
       workedMinutes: true, expectedMinutes: true, flags: true, status: true, templateCode: true,
       dayType: true, leaveUnits: true, holidayPaidUnits: true, hourCredit: true,
-      lateMinutes: true, earlyLeaveMinutes: true, absenceStatus: true,
+      lateMinutes: true, earlyLeaveMinutes: true, absenceStatus: true, pairs: true,
     },
     orderBy: { workDate: "asc" },
   });
@@ -106,6 +106,105 @@ export async function getMyAttendanceDays(userId: string, from: Date, to: Date):
       earlyLeaveMinutes: r.earlyLeaveMinutes,
       flags: r.flags,
       absenceStatus: r.absenceStatus,
+      pairs: r.pairs,
     },
   }));
+}
+
+export type MyKyCong = {
+  centerId: string;
+  periodKey: string;
+  standardUnits: number | null;
+  status: "OPEN" | "CLOSING" | "LOCKED" | "REOPENED" | null;
+  lockedAt: Date | null;
+};
+
+/**
+ * KỲ CÔNG của chính người này, cho tháng `periodKey` ("YYYY-MM").
+ *
+ * 🔴 ĐỌC `db` TRẦN, KHÔNG qua `scopedDb` — và đây là một bản vá, không phải tiện tay.
+ *
+ * Bản đầu (15/09/2026) tra bằng `sdb.attendancePeriod.findFirst(...)`. Chụp màn thật thì thẻ
+ * "Kỳ công" in **"Chưa lập kỳ"** trong khi kỳ ĐÃ được lập, có `standardUnits = 24`. Nguyên do:
+ * `AttendancePeriod` nằm trong `SCOPED_MODELS`, và một giáo viên không có dòng `UserOrgRole`
+ * thì `visibleCenterIds` rỗng ⇒ `scopedDb` lọc sạch ⇒ trả `null`.
+ *
+ * `null` ở đó KHÔNG phân biệt được "chưa lập kỳ" với "bạn không được xem" — nên màn hình nói
+ * một câu SAI thay vì nói "không biết". Đúng lớp lỗi mục 1 sinh ra để sửa, và đúng họ RC-A
+ * (thiếu `UserOrgRole` ⇒ ẩn oan) đã gặp ở đợt R7.
+ *
+ * Vì sao đọc trần là ĐÚNG chứ không phải nới quyền: khoá tra là `centerId` của CHÍNH cơ sở nhà
+ * người này (`resolveHomeCenter`), và `standardUnits` là hằng số vận hành của cơ sở họ đang làm
+ * — thứ họ phải biết để đọc bảng công của mình. Cùng khuôn "own-rows" mà `getMyAssignments`
+ * ngay trên đây và `lib/lms/teacher-schedule.ts` đã dùng, với cùng lý do.
+ */
+export async function getMyPeriod(userId: string, periodKey: string): Promise<MyKyCong> {
+  const { resolveHomeCenter } = await import("./home-center");
+  const nha = await resolveHomeCenter(userId);
+  const r = await db.attendancePeriod.findUnique({
+    where: { centerId_periodKey: { centerId: nha.centerId, periodKey } },
+    select: { standardUnits: true, status: true, lockedAt: true },
+  });
+  return {
+    centerId: nha.centerId,
+    periodKey,
+    standardUnits: r?.standardUnits ?? null,
+    status: r?.status ?? null,
+    lockedAt: r?.lockedAt ?? null,
+  };
+}
+
+export type MyTapRow = {
+  id: string;
+  direction: "CHECK_IN" | "CHECK_OUT";
+  loggedAt: Date;
+  source: string;
+  flags: string[];
+};
+
+/**
+ * Lượt chấm ĐÃ GHI NHẬN của chính người này trong một ngày.
+ *
+ * Đọc `db` trần theo đúng khuôn own-rows của file này: khoá tra là `userId` của phiên, nên
+ * không có gì để scope. Đi qua `scopedDb` ở đây còn ẩn oan — lượt công tác mang `centerId`
+ * là cơ sở NHÀ, có thể khác cơ sở người đang xem được gán.
+ *
+ * Chỉ `ACCEPTED`: lượt `REJECTED` (vé hỏng, ngoài vùng) ghi để hậu kiểm, KHÔNG phải thứ nói
+ * với người dùng rằng "bạn đã chấm rồi".
+ */
+export async function getMyTapsOfDay(userId: string, workDate: Date): Promise<MyTapRow[]> {
+  const rows = await db.staffTimeLog.findMany({
+    where: { userId, workDate, result: "ACCEPTED" },
+    select: { id: true, direction: true, loggedAt: true, source: true, flags: true },
+    orderBy: { loggedAt: "asc" },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    direction: r.direction as "CHECK_IN" | "CHECK_OUT",
+    loggedAt: r.loggedAt,
+    source: r.source,
+    flags: r.flags,
+  }));
+}
+
+export type MyCaHomNay = {
+  templateCode: string;
+  placeMode: "AT_UNITS" | "ANY_CENTER" | "OFFSITE" | "ANYWHERE";
+  soCapQuetKyVong: number;
+};
+
+/**
+ * Ca được xếp cho chính người này trong một ngày — đủ để màn "Của tôi" biết hiện nút gì.
+ *
+ * Trả `placeMode` chứ KHÔNG trả riêng "có phải mã NG không": chủ dự án chốt hai nút công tác
+ * hiện theo ĐIỀU KIỆN, không theo mã. Mã nào khai `OFFSITE` cũng được nút.
+ */
+export async function getMyShiftOfDay(userId: string, workDate: Date): Promise<MyCaHomNay | null> {
+  const a = await db.shiftAssignment.findFirst({
+    where: { userId, workDate, status: "ACTIVE" },
+    select: { templateCode: true, placeMode: true, soCapQuetKyVong: true },
+  });
+  return a
+    ? { templateCode: a.templateCode, placeMode: a.placeMode, soCapQuetKyVong: a.soCapQuetKyVong }
+    : null;
 }

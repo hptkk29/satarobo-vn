@@ -9,11 +9,20 @@ import {
   logScopeBypass,
 } from "@/lib/db-scope";
 import { revalidatePath } from "next/cache";
-import { getAuditActor } from "@/lib/audit/log";
+import { getAuditActor, logLeadAudit } from "@/lib/audit/log";
+import {
+  conMoDeChiaLai,
+  dungBanCapNhatLeadTrung,
+  moTaLuotCapNhat,
+  type OLeadDangCo,
+  type OLeadTuFile,
+} from "@/lib/lead/nhap-trung";
+import { TERMINAL_LEAD_STATUSES } from "@/lib/lead/assign";
 import { parseLeadImportRow, resolveDefaultCenterId } from "@/lib/lead/import";
 import { normalizeVi } from "@/lib/lead/import-registered";
 import { autoAssignNewLead } from "@/lib/lead/auto-assign";
-import { chiaChoLead } from "@/lib/lead/assign-lead";
+import { chiaChoLead, baoLoLeadMoi } from "@/lib/lead/assign-lead";
+import { db } from "@/lib/db";
 import { canManualAssign } from "@/lib/lead/assign-guard";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
@@ -244,8 +253,16 @@ export async function POST(req: NextRequest) {
     children: Child[];
     legacyChild: Child | null; // childName cũ (backfill thành LeadChild khi children[] rỗng)
     existingNames: string[];
-    /** Tên PH trong file khác tên PH của lead cũ → ghi chú lại, không ghi đè. */
+    /** Tên PH trong file khác tên PH của lead cũ → ghi vào nhật ký kèm lượt cập nhật. */
     otherParentNames: string[];
+    /** Ảnh chụp lead đang có — đầu vào của luật ghi đè. */
+    cu: OLeadDangCo;
+    /** Giá trị file mang tới cho chính lead này. */
+    file: OLeadTuFile;
+    /** Sale ghi đích danh trong file (nếu có) — truyền cho vòng chia. */
+    saleId: string | null;
+    /** Lead còn được chia lại không — xem `conMoDeChiaLai`. */
+    chiaLai: boolean;
   };
   const mergeOps: MergeOp[] = [];
   if (groups.size > 0) {
@@ -262,6 +279,17 @@ export async function POST(req: NextRequest) {
         parentName: true,
         childName: true,
         childAge: true,
+        // 15/09/2026 — bốn cột dưới đây nạp thêm cho LUẬT GHI ĐÈ: phải so được giá trị cũ
+        // với giá trị file thì mới biết cột nào THỰC SỰ đổi, và mới nối được ghi chú thay vì
+        // đè lên nó.
+        email: true,
+        courseId: true,
+        source: true,
+        note: true,
+        // Hai cột quyết định có chia lại hay không. `status` một mình là thiếu — xem
+        // `conMoDeChiaLai`.
+        status: true,
+        convertedAt: true,
         children: { select: { fullName: true } },
       },
     });
@@ -284,6 +312,24 @@ export async function POST(req: NextRequest) {
         children: g.children,
         legacyChild: ex.childName ? { name: ex.childName, age: ex.childAge } : null,
         existingNames: ex.children.map((c) => c.fullName),
+        cu: ex,
+        file: {
+          parentName: g.base.parentName,
+          email: g.base.email,
+          childName: g.base.childName,
+          childAge: g.base.childAge,
+          centerId: g.base.centerId,
+          orgUnitId: g.base.orgUnitId,
+          courseId: g.base.courseId,
+          source: g.base.source,
+          note: g.base.note,
+        },
+        saleId: g.base.saleId,
+        chiaLai: conMoDeChiaLai({
+          status: ex.status,
+          convertedAt: ex.convertedAt,
+          trangThaiDong: TERMINAL_LEAD_STATUSES,
+        }),
         otherParentNames: [
           ...new Set(fileNames.filter((n) => normalizeVi(n) !== normalizeVi(ex.parentName))),
         ],
@@ -301,6 +347,15 @@ export async function POST(req: NextRequest) {
   let mergedLeads = 0;
   // Mang theo sale được chỉ định để vòng chia bên dưới truyền `explicitOwnerId`.
   const createdIds: { id: string; saleId: string | null }[] = [];
+  // Lead ĐÃ CÓ vừa được cập nhật và còn đủ điều kiện chia lại — dồn chung vào vòng chia bên
+  // dưới. Trước 15/09 mảng này không tồn tại: lead trùng không đi qua vòng chia nên nó ở
+  // nguyên với sale cũ, đúng thứ chủ dự án yêu cầu bỏ.
+  const chiaLaiOps: { id: string; saleId: string | null }[] = [];
+  // MỘT mốc cho cả lượt, dùng ở HAI chỗ: `lastInboundAt` của mọi dòng, và `dedupeKey` của
+  // tin gộp. Tính lại ở mỗi chỗ là hai lượt nhập cách nhau một nhịp đồng hồ cũng ra hai
+  // khoá — đúng thứ khoá chống trùng sinh ra để chặn.
+  const mocNhap = new Date();
+  const mocLuot = mocNhap.getTime();
   try {
     await sdb.$transaction(async (tx) => {
       for (const g of groups.values()) {
@@ -324,6 +379,13 @@ export async function POST(req: NextRequest) {
             source: v.source,
             note: v.note,
             status: "MOI",
+            // 15/09/2026 — BẮT BUỘC. Danh sách /leads sắp theo `lastInboundAt` với
+            // `nulls: 'last'`, nên lead tạo mà bỏ trống cột này bị đẩy xuống CUỐI mọi
+            // trang — người dùng báo "nhập xong không thấy lead đâu", nhưng tìm theo
+            // SĐT/nguồn thì lại ra (tập kết quả nhỏ nên nó lọt trang 1).
+            // Quy ước: lúc tạo, `lastInboundAt` = `createdAt`; `laNhapLai()` chỉ đúng
+            // khi nó LỚN HƠN `createdAt`. Xem `lib/tables/lead-columns.ts`.
+            lastInboundAt: mocNhap,
             ...(namedChildren.length > 0
               ? {
                   children: {
@@ -356,9 +418,24 @@ export async function POST(req: NextRequest) {
         success++;
       }
 
-      // GỘP con vào lead CÓ SẴN (Sale đã bấm xác nhận): dedupe theo tên chuẩn hoá,
-      // backfill childName cũ thành LeadChild để danh sách con đầy đủ.
+      // ── NHẬP LẠI LEAD ĐÃ CÓ ───────────────────────────────────────────────────
+      //
+      // 15/09/2026 — chủ dự án chốt đổi hẳn ngữ nghĩa. TRƯỚC đây đường này chỉ GỘP CON:
+      // thêm `LeadChild` nào chưa có tên, còn tên PH / email / nguồn / khoá / ghi chú trong
+      // file thì BỎ QUA hoàn toàn (tên PH khác chỉ ghi vào nhật ký). Con đã có sẵn thì dòng
+      // đó không làm gì cả, báo "ℹ️ không thêm gì". Và lead trùng KHÔNG đi qua vòng chia nên
+      // nó ở nguyên với sale cũ.
+      //
+      // NAY: "ghi đè các thông tin cũ, thông tin nào chưa có thì fill vào" + chia lại lead.
+      // Luật ghi đè nằm ở `lib/lead/nhap-trung.ts` (hàm thuần, có test) chứ không trải ra
+      // đây — đây là chỗ DUY NHẤT trong repo cố ý ghi đè dữ liệu người dùng nhập tay, và
+      // một phép ghi đè viết lỏng tay không ném lỗi, không làm test đỏ.
       for (const m of mergeOps) {
+        const banCapNhat = dungBanCapNhatLeadTrung({ cu: m.cu, file: m.file, moc: mocNhap });
+
+        // Con: vẫn THÊM theo tên chuẩn hoá (không xoá con cũ — file thiếu một con không có
+        // nghĩa là đứa đó nghỉ học). Backfill `childName` legacy thành `LeadChild` để danh
+        // sách con đầy đủ.
         const seen = new Set(m.existingNames.map((n) => normalizeVi(n)));
         if (m.legacyChild?.name) seen.add(normalizeVi(m.legacyChild.name));
         const toCreate: Child[] = [];
@@ -374,39 +451,71 @@ export async function POST(req: NextRequest) {
           toCreate.push(ch);
           added++;
         }
-        if (added === 0) {
-          errors.push({
-            row: 0,
-            error: `ℹ️ SĐT ${m.phone}: con trong file đã có sẵn trong lead (hoặc dòng không ghi tên con) — không thêm gì`,
-          });
-          continue;
-        }
-        const otherNamesNote =
+
+        const phanCon =
+          added > 0 ? ` · thêm ${added} con vào lead` : "";
+        const phanTenKhac =
           m.otherParentNames.length > 0
-            ? ` · file ghi tên PH khác cùng số: ${m.otherParentNames.join(", ")} (giữ nguyên tên PH hiện tại)`
+            ? ` · file còn ghi tên PH khác cùng số: ${m.otherParentNames.join(", ")}`
             : "";
+
         await tx.lead.update({
           where: { id: m.leadId },
           data: {
-            children: {
-              create: toCreate.map((c) => ({
-                fullName: c.name!.trim(),
-                ageYears: c.age,
-              })),
-            },
+            ...banCapNhat.data,
+            ...(toCreate.length > 0
+              ? {
+                  children: {
+                    create: toCreate.map((c) => ({
+                      fullName: c.name!.trim(),
+                      ageYears: c.age,
+                    })),
+                  },
+                }
+              : {}),
             activities: {
               create: {
                 actorId,
                 actorName,
                 type: "NOTE",
-                content: `Gộp thêm ${added} con từ import Excel (sự kiện) — trùng SĐT với lead có sẵn${otherNamesNote}`,
-                metadata: { system: true, import: "event-excel", merge: true },
+                content: moTaLuotCapNhat(banCapNhat, m.chiaLai) + phanCon + phanTenKhac,
+                metadata: { system: true, import: "event-excel", capNhat: true },
               },
             },
           },
         });
+
+        // Ghi sổ kiểm toán cho ĐÚNG những cột vừa ghi. Nhật ký hoạt động ở trên là thứ Sale
+        // đọc; `logLeadAudit` là thứ tra khi có tranh chấp "ai sửa dữ liệu của tôi".
+        //
+        // Từ bản chốt thứ hai (15/09) lượt nhập KHÔNG còn ghi đè ô đã có giá trị, nên sổ chỉ
+        // ghi khi thực sự có ô trống được điền. Phần file ghi khác nằm ở `khacBiet` và đã đi
+        // vào ghi chú — không phải một lượt sửa dữ liệu nên không vào sổ kiểm toán.
+        if (banCapNhat.daDien.length > 0) {
+          await logLeadAudit({
+            leadId: m.leadId,
+            action: "UPDATE",
+            actorId,
+            actorName,
+            oldValues: Object.fromEntries(
+              Object.keys(banCapNhat.data)
+                .filter((k) => k !== "lastInboundAt")
+                .map((k) => [k, (m.cu as Record<string, unknown>)[k] ?? null]),
+            ),
+            newValues: banCapNhat.data,
+            changedFields: Object.keys(banCapNhat.data).filter((k) => k !== "lastInboundAt"),
+            reason: "Nhập lại từ file Excel",
+            // `sdb.$transaction` đưa ra một client ĐÃ BỌC phạm vi, kiểu không khớp
+            // `Prisma.TransactionClient` mà tầng ghi sổ khai. Cùng dạng ép kiểu với
+            // `app/api/admin/import/employees/route.ts` — giữ audit NẰM TRONG transaction,
+            // vì một dòng sổ ghi ngoài là dòng sổ có thể sống sót khi lượt ghi bị huỷ.
+            tx: tx as unknown as Parameters<typeof logLeadAudit>[0]["tx"],
+          });
+        }
+
         mergedChildren += added;
         mergedLeads++;
+        if (m.chiaLai) chiaLaiOps.push({ id: m.leadId, saleId: m.saleId });
       }
     });
   } catch (err) {
@@ -429,7 +538,20 @@ export async function POST(req: NextRequest) {
   // xếp hàng theo thứ tự vòng lặp. Bọc chung transaction thì đổi lại một thứ ĐẮT
   // HƠN NHIỀU: dòng thứ 250 hỏng là rollback cả 300 dòng đã đúng, trong khi nếp
   // đang chạy (và người vận hành đang trông đợi) là "hỏng dòng nào bỏ dòng đó".
-  for (const { id, saleId } of createdIds) {
+  // 15/09/2026 — GỘP CHUÔNG. Chủ dự án chốt: "nhập nhiều thì báo là có bao nhiêu lead mới
+  // chứ không gửi nhiều thông báo có lead mới".
+  //
+  // Nên vòng chia chạy với `imLangChuong: true`, gom người nhận lại, rồi báo MỘT lần mỗi
+  // người ở cuối. Ai chỉ nhận đúng 1 lead thì vẫn dùng chuông thường — nó trỏ THẲNG trang
+  // chi tiết lead, bấm là đọc được số điện thoại, hơn hẳn một tin gộp trỏ về danh sách.
+  //
+  // ⚠️ `imLangChuong` CHỈ tắt nửa BÁO. Nửa THU HỒI chuông chủ cũ vẫn chạy bên trong
+  // `chiaChoLead` — xem chú thích của cờ đó.
+  const daChia: { leadId: string; ownerId: string }[] = [];
+
+  // Lead MỚI TẠO và lead VỪA CẬP NHẬT đi chung một vòng: cùng một ma trận, cùng một sổ lượt,
+  // cùng thứ tự dòng. Tách hai vòng là mời hai luật chia khác nhau ra đời.
+  for (const { id, saleId } of [...createdIds, ...chiaLaiOps]) {
     const lead = await sdb.lead.findUnique({
       where: { id },
       select: { centerId: true },
@@ -441,22 +563,48 @@ export async function POST(req: NextRequest) {
       );
       continue;
     }
-    await chiaChoLead(id, {
+    const kq = await chiaChoLead(id, {
       targetCenterId: lead.centerId,
       createdById: actorId,
       entryPoint: "IMPORT",
       // Có ghi sale ⇒ giao đích danh, KHÔNG tiêu lượt (ma trận, ca IMPORT).
       // Để trống ⇒ `null` ⇒ về vòng chia và CÓ tiêu lượt.
       explicitOwnerId: saleId,
-    }).catch((err) => console.error("[import/leads] chia lead:", err));
+      imLangChuong: true,
+    }).catch((err) => {
+      console.error("[import/leads] chia lead:", err);
+      return null;
+    });
+    if (kq?.assignedToId) daChia.push({ leadId: id, ownerId: kq.assignedToId });
   }
 
-  if (mergedLeads > 0) {
+  // Báo một lần cho mỗi người nhận. Nuốt lỗi: chuông hỏng không được làm hỏng lượt nhập.
+  await baoLoLeadMoi({
+    daChia,
+    nguon: { kieu: "nhap_danh_sach" },
+    mocLuot,
+    boQuaNguoi: actorId,
+  });
+
+  // Con thêm vào lead có sẵn là việc PHỤ của lượt cập nhật — không phải một con số ngang hàng
+  // với "bao nhiêu lead", nên nó đi vào ghi chú chứ không vào thẻ đếm.
+  if (mergedChildren > 0) {
     errors.push({
       row: 0,
-      error: `ℹ️ Đã gộp ${mergedChildren} con vào ${mergedLeads} lead có sẵn cùng SĐT (không tạo lead trùng số)`,
+      error: `ℹ️ Đã thêm ${mergedChildren} con vào lead có sẵn cùng SĐT (không tạo lead trùng số)`,
+    });
+  }
+  // Lead đã chốt thì giữ nguyên người phụ trách — nói ra để người nhập không tưởng hệ thống
+  // quên chia. Im lặng ở đây là để họ tự đoán, và đoán sai theo hướng nghi hệ thống hỏng.
+  const giuNguyenChu = mergedLeads - chiaLaiOps.length;
+  if (giuNguyenChu > 0) {
+    errors.push({
+      row: 0,
+      error:
+        `ℹ️ ${giuNguyenChu} lead đã chốt/đã ghi danh: thông tin vẫn được cập nhật nhưng ` +
+        `GIỮ NGUYÊN tư vấn viên đang phụ trách (hoa hồng đã tính theo người đó)`,
     });
   }
   revalidatePath("/leads");
-  return NextResponse.json({ success, errors });
+  return NextResponse.json({ success, updated: mergedLeads, errors });
 }

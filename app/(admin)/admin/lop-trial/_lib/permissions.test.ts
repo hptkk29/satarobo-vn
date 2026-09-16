@@ -40,8 +40,6 @@ const CONG_QUYEN: Record<string, Action> = {
   enrollLeadChildLopTrialAction: "trials:manage",
   searchLopTrialCandidatesAction: "trials:manage",
   unenrollLeadChildLopTrialAction: "trials:manage",
-  // GĐ3 (chốt câu 2) — gán giáo viên là việc của ĐÀO TẠO, không phải Quản lý cơ sở.
-  assignLopTrialTeacherAction: "trials:assign-teacher",
   cancelLopTrialClassAction: "trials:manage",
   // GĐ4 — điểm danh là việc của SALE phụ trách khách, KHÁC phiếu đánh giá của giáo
   // viên (`trials:feedback`). Dùng chung một khoá là đảo ngược quy trình đã chốt.

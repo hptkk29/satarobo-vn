@@ -45,7 +45,16 @@ export function ChonLoaiThongBao({
   choSua: boolean;
   canhBao: readonly CanhBaoKenh[];
 }) {
-  const banDau = useMemo(() => new Set(dangBat), [dangBat]);
+  // GIAO của "đang lưu" và "còn trong danh mục" — KHÔNG lấy thẳng `dangBat`.
+  //
+  // Cấu hình trên prod có thể còn khoá của loại đã bị gỡ (13/09 có thật: 4 loại của luồng học
+  // thử cũ). Nếu khởi tạo thẳng từ `dangBat` thì những khoá đó nằm im trong `chon`, và cú bấm
+  // Lưu sẽ gửi chúng xuống — nơi đường ghi TỪ CHỐI vì không còn trong danh mục. Tức dòng cảnh
+  // báo "bấm Lưu một lần là dọn xong" ngay phía trên sẽ là một lời hứa suông.
+  const banDau = useMemo(() => {
+    const co = new Set(danhMuc.map((e) => e.prefix));
+    return new Set(dangBat.filter((t) => co.has(t)));
+  }, [dangBat, danhMuc]);
   const [chon, setChon] = useState<ReadonlySet<string>>(banDau);
   const [lyDo, setLyDo] = useState("");
   /** Mã thô `lead.moi:` — TẮT sẵn. Xem khối chú thích ở chỗ hiển thị. */

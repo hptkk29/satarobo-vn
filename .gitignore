@@ -113,3 +113,9 @@ docs/merge-lead/*.txt
 # Dữ liệu PROD dump ra lúc chạy script vận hành (scripts/don-customtitle-may-chep.ts …).
 # KHÔNG BAO GIỜ commit — đây là bản sao nội dung thật của khách hàng.
 var/
+
+# CodeGraph — chỉ mục mã nguồn, cục bộ theo từng máy (134 MB đo 13/09/2026).
+# CodeGraph tự sinh `.codegraph/.gitignore` chặn nội dung bên trong, nhưng dòng này đặt
+# lưới chặn ở nơi KHÔNG phụ thuộc vào một file do công cụ khác quản lý: xoá nhầm file con
+# thì vẫn còn dòng này. Chủ dự án chốt 15/09/2026.
+.codegraph/

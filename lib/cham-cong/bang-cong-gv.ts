@@ -172,106 +172,207 @@ export function dungDongBangCong(input: {
   return ra;
 }
 
-
 // ═══════════════════════════════════════════════════════════════════════════════
-// BẢNG TỔNG HỢP CÔNG (mục 1) — bốn số ở hàng đầu + khối gấp lại
+// TỔNG HỢP CÔNG THÁNG (mục 1 — bộ chốt 15/09/2026)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
-// Chủ dự án chốt 13/09: "Đừng bày mười số ngang nhau, không ai đọc số nào."
+// Ba ràng buộc của chủ dự án, và chỗ từng cái được thi hành:
 //
-// Ba ràng buộc, và chỗ từng cái được thi hành:
-//  1. MỌI con số đọc từ cùng nguồn admin đọc ⇒ mọi tổng ở đây đến từ `gopNgayCong`
-//     (`tong-hop-cong.ts`), đúng hàm `buildPeriodSummary` gọi. Hàm dưới KHÔNG cộng lại gì.
-//  2. Nhãn phải nói đúng thứ nó đếm ⇒ xem `NHAN_TOM_TAT` và hai đính chính ghi ở đó.
-//  3. Kỳ chưa chốt thì ghi rõ TẠM TÍNH ⇒ `tamTinh` dưới đây, đọc từ trạng thái KỲ chứ
-//     không phải từ "tháng này có phải tháng hiện tại không" (bản cũ đoán theo tháng: một
-//     tháng đã qua mà kỳ chưa chốt vẫn là tạm tính, mà bản cũ in như số cuối cùng).
+//  1. MỌI số đọc từ `StaffAttendanceDay` qua `getMyAttendanceDays`. CẤM cộng thẳng từ
+//     `StaffTimeLog` — đó đúng là gốc bug nơi chịu công (13/09). Hàm này chỉ nhận
+//     `NgayCongGop[]`, nên nguồn thứ ba KHÔNG có đường vào.
+//     · Ngoại lệ DUY NHẤT, và nó không phải `StaffTimeLog`: số ĐƠN đọc từ `WorkRequest`
+//       (đơn là sự việc riêng, không phải lượt quét).
+//  2. Nhãn phải khai PHẠM VI ⇒ `kyKhoa` · `tinhToiNgay` · `gomNgayTuongLai` trả ra để
+//     trang in thành câu, không để người đọc tự đoán "tháng này tính tới đâu".
+//  3. KHÔNG tính được thì "—", không phải 0 ⇒ kiểu `So = number | null`. `null` nghĩa là
+//     KHÔNG ĐO ĐƯỢC; `0` nghĩa là đo được và bằng không. Hai chuyện khác nhau — đúng
+//     bài học nhãn "Đã làm".
 
-/** Một nhóm ngày nghỉ, tách theo đúng thứ DB phân biệt được — không bịa nhóm. */
-export type NhomNghi = {
-  khoa: string;
-  nhan: string;
-  soNgay: number;
-};
+/** `null` = CHƯA/KHÔNG đo được (in "—"). `0` = đo được và bằng không. Đừng trộn hai thứ. */
+export type So = number | null;
+
+/** Cờ mà NGƯỜI DÙNG phải làm gì đó — bộ bốn họ chủ dự án chốt 15/09. */
+export const CO_CAN_XU_LY = new Set([
+  "DI_MUON",
+  "VE_SOM",
+  "KHONG_CO_LUOT",
+  "THIEU_LUOT_RA",
+  "RA_KHONG_CO_VAO",
+  "SAI_NOI_LAM",
+]);
+// ⚠️ CỐ Ý KHÔNG gồm: THIEU_GIO · NGOAI_VUNG · CHAM_NGOAI_LICH · VUOT_TRAN. Chúng nằm trong
+// `CO_CANH_BAO` (tập rộng hơn, admin dùng để đếm `flaggedDays`) nhưng không phải việc người
+// đi làm tự xử lý được bằng một cái đơn. Ghi ra để lần sau ai thấy hai con số lệch nhau thì
+// biết đó là chủ đích, không phải sót.
 
 export type TomTatCong = {
-  /** Công thực nhận trong tháng. */
+  // ── Phạm vi — ràng buộc 2 ───────────────────────────────────────────────────
+  kyKhoa: string;
+  /** "YYYY-MM-DD" nếu kỳ đang chạy (số mới tính tới đây); `null` nếu kỳ đã qua trọn. */
+  tinhToiNgay: string | null;
+  /** Tháng đang xem có chứa ngày chưa tới hay không. */
+  gomNgayTuongLai: boolean;
+
+  // ── A · năm thẻ đầu trang ───────────────────────────────────────────────────
   cong: number;
-  /** Công chuẩn của KỲ. `null` = kỳ chưa được lập ⇒ phải in "—", đừng in 0. */
-  congChuan: number | null;
-  ngayDaLam: number;
-  ngayCoCa: number;
-  latePhut: number;
-  lateCount: number;
-  earlyLeavePhut: number;
-  earlyLeaveCount: number;
-  /** Tổng ngày nghỉ mọi loại (lễ + nghỉ tuần + phép). */
-  ngayNghi: number;
-  nhomNghi: NhomNghi[];
+  congChuan: So;
   phutLam: number;
+  /**
+   * Σ `expectedMinutes` — giờ theo KẾ HOẠCH của các ca đã xếp.
+   *
+   * Luôn đi CẶP với `phutLam` khi hiển thị. Một mình `phutLam` không nói được gì: 120 giờ
+   * là nhiều hay ít phụ thuộc tháng ấy xếp bao nhiêu ca, và người đọc không có sẵn con số
+   * kia trong đầu.
+   */
   phutKeHoach: number;
-  /** Ngày CÓ VẤN ĐỀ — thứ người dùng cần thấy để đi nộp đơn. */
-  thieuLuotRa: number;
+  ngayDaCham: number;
+  ngayCoCa: number;
+  /**
+   * Ngày CÓ CA mà chưa có dấu quét nào (`ngayCoCa − ngayDaCham`, chặn dưới ở 0).
+   *
+   * Tính ở đây chứ không để trang RSC tự trừ: đây đúng lớp phép nối mà luật 12b cấm đặt
+   * inline trong trang — không có chỗ cấy lỗi, và ba lần trước site GV đã tự dựng lại số
+   * của admin theo đúng kiểu ấy.
+   */
   chuaCham: number;
-  chinhTay: number;
-  /** Kỳ chưa chốt ⇒ mọi số trên là TẠM TÍNH. */
-  tamTinh: boolean;
+  ngayCanXuLy: number;
+  kyTrangThai: "OPEN" | "CLOSING" | "LOCKED" | "REOPENED" | null;
+  kyChotLuc: Date | null;
+
+  // ── B · chi tiết ────────────────────────────────────────────────────────────
+  lateCount: number;
+  latePhut: number;
+  earlyCount: number;
+  earlyPhut: number;
+  thieuLuotNgay: number;
+  nghiPhep: number;
+  /** Trong `nghiPhep`. Engine đã ghi sẵn phần hưởng lương ở `leaveUnits` — không suy từ mã ca. */
+  nghiPhepCoLuong: number;
+  nghiPhepKhongLuong: number;
+  nghiTuan: number;
+  nghiLe: number;
+  congTacNgay: number;
+  congTacDuCap: number;
+  /** Ngày quản lý GHI ĐÈ công. */
+  ghiDeCong: number;
+  /** Đơn chỉnh công ĐÃ DUYỆT trong tháng. */
+  donChinhDaDuyet: So;
+  /** "Tự chỉnh" — KHÔNG đo được vì đường ấy không tồn tại. Xem chú thích dưới. */
+  tuChinh: So;
+  donChoDuyet: So;
+  donTuChoi: So;
 };
 
-/**
- * Gom một tháng của MỘT người thành bộ số cho màn "Bảng công".
- *
- * `congChuan` và `kyDaChot` là ĐỐI SỐ, không tra trong này: hàm phải thuần để cấy lỗi được.
- */
+/** Mã ca mang nghĩa ĐI CÔNG TÁC. Một chỗ, đừng rải chuỗi "NG" khắp nơi. */
+const MA_CONG_TAC = new Set(["NG"]);
+
+/** Có ít nhất một cặp vào–ra đã đóng. Cùng phép kiểm `noi-quy.ts` dùng cho nội quy. */
+function coDuCapVaoRa(pairs: unknown): boolean {
+  if (!Array.isArray(pairs)) return false;
+  return pairs.some((p) => {
+    if (!p || typeof p !== "object") return false;
+    const o = p as Record<string, unknown>;
+    return o.open === false && typeof o.inId === "string" && typeof o.outId === "string";
+  });
+}
+
 export function tomTatCongThang(input: {
   ngay: readonly NgayCongGop[];
-  congChuan: number | null;
-  kyDaChot: boolean;
+  kyKhoa: string;
+  congChuan: So;
+  kyTrangThai: TomTatCong["kyTrangThai"];
+  kyChotLuc: Date | null;
+  /** "YYYY-MM-DD" giờ VN. Đối số — hàm này KHÔNG đọc đồng hồ (luật 19). */
+  homNay: string;
+  /** Ngày đầu và ngày cuối của tháng đang xem, "YYYY-MM-DD". */
+  dauThang: string;
+  cuoiThang: string;
+  don: { choDuyet: number; daDuyetChinhCong: number; tuChoi: number } | null;
 }): TomTatCong {
   const g = gopNgayCong(input.ngay);
 
-  // Tách nghỉ theo đúng thứ `dayType` phân biệt được. Nhóm "phép" tách tiếp CÓ/KHÔNG lương
-  // bằng `leaveUnits` — engine đã ghi sẵn phần hưởng lương, không suy từ mã ca.
-  let le = 0;
+  let nghiPhep = 0;
+  let nghiPhepCoLuong = 0;
+  let nghiPhepKhongLuong = 0;
   let nghiTuan = 0;
-  let phepCoLuong = 0;
-  let phepKhongLuong = 0;
+  let nghiLe = 0;
+  let congTacNgay = 0;
+  let congTacDuCap = 0;
+  let ngayDaCham = 0;
+  let ngayCanXuLy = 0;
+  let thieuLuotNgay = 0;
+
   for (const d of input.ngay) {
-    if (d.dayType === "HOLIDAY") le += 1;
+    if (d.dayType === "HOLIDAY") nghiLe += 1;
     else if (d.dayType === "WEEKLY_OFF") nghiTuan += 1;
     else if (d.dayType === "LEAVE") {
-      if (d.leaveUnits > 0) phepCoLuong += 1;
-      else phepKhongLuong += 1;
+      nghiPhep += 1;
+      if (d.leaveUnits > 0) nghiPhepCoLuong += 1;
+      else nghiPhepKhongLuong += 1;
     }
-  }
-  const nhomNghi: NhomNghi[] = [
-    { khoa: "phep-co-luong", nhan: "Phép có lương", soNgay: phepCoLuong },
-    { khoa: "phep-khong-luong", nhan: "Phép không lương", soNgay: phepKhongLuong },
-    { khoa: "le", nhan: "Nghỉ lễ", soNgay: le },
-    { khoa: "nghi-tuan", nhan: "Nghỉ tuần", soNgay: nghiTuan },
-  ].filter((n) => n.soNgay > 0);
 
-  let thieuLuotRa = 0;
-  for (const d of input.ngay)
+    if (d.templateCode && MA_CONG_TAC.has(d.templateCode)) {
+      congTacNgay += 1;
+      if (coDuCapVaoRa(d.pairs)) congTacDuCap += 1;
+    }
+
+    const laNgayLam = d.dayType === "WORK" && d.dayCreditExpected > 0;
+    // "Đã chấm" = ĐÃ CÓ DẤU, không phải "đã đủ giờ". Ngày quét vào mà quên quét ra vẫn là
+    // đã có dấu — nó mang `THIEU_LUOT_RA` chứ không mang `KHONG_CO_LUOT`. Đếm bằng
+    // `workedMinutes > 0` sẽ xếp ngày ấy vào nhóm "chưa có dấu" và người ta đi tìm nhầm việc.
+    if (laNgayLam && !d.flags.includes("KHONG_CO_LUOT")) ngayDaCham += 1;
+
+    if (d.flags.some((f) => CO_CAN_XU_LY.has(f))) ngayCanXuLy += 1;
     if (d.flags.includes("THIEU_LUOT_RA") || d.flags.includes("RA_KHONG_CO_VAO"))
-      thieuLuotRa += 1;
+      thieuLuotNgay += 1;
+  }
+
+  const dangChay = input.homNay >= input.dauThang && input.homNay <= input.cuoiThang;
 
   return {
+    kyKhoa: input.kyKhoa,
+    tinhToiNgay: dangChay ? input.homNay : null,
+    gomNgayTuongLai: input.cuoiThang > input.homNay,
+
     cong: g.units,
     congChuan: input.congChuan,
-    ngayDaLam: g.ngayDaLam,
-    ngayCoCa: g.ngayCoCa,
-    latePhut: g.latePhut,
-    lateCount: g.lateCount,
-    earlyLeavePhut: g.earlyLeavePhut,
-    earlyLeaveCount: g.earlyLeaveCount,
-    ngayNghi: le + nghiTuan + phepCoLuong + phepKhongLuong,
-    nhomNghi,
     phutLam: g.workedMinutes,
     phutKeHoach: g.expectedMinutes,
-    thieuLuotRa,
-    chuaCham: g.missingTapDays,
-    chinhTay: g.overrideDays,
-    tamTinh: !input.kyDaChot,
+    ngayDaCham,
+    ngayCoCa: g.ngayCoCa,
+    // `Math.max(0, …)`: `ngayCoCa` đếm ngày `WORK` có kế hoạch công, còn `ngayDaCham` đếm
+    // ngày `WORK` có kế hoạch công VÀ có dấu — nên hiệu không âm được. Chặn dưới là để một
+    // ngày sửa định nghĩa một trong hai vế thì hỏng ra lỗi, không hỏng ra số âm trên màn.
+    chuaCham: Math.max(0, g.ngayCoCa - ngayDaCham),
+    ngayCanXuLy,
+    kyTrangThai: input.kyTrangThai,
+    kyChotLuc: input.kyChotLuc,
+
+    lateCount: g.lateCount,
+    latePhut: g.latePhut,
+    earlyCount: g.earlyLeaveCount,
+    earlyPhut: g.earlyLeavePhut,
+    thieuLuotNgay,
+    nghiPhep,
+    nghiPhepCoLuong,
+    nghiPhepKhongLuong,
+    nghiTuan,
+    nghiLe,
+    congTacNgay,
+    congTacDuCap,
+    ghiDeCong: g.overrideDays,
+    donChinhDaDuyet: input.don ? input.don.daDuyetChinhCong : null,
+    // ⚠️ "TỰ CHỈNH" LUÔN LÀ null, và đó là CÂU TRẢ LỜI chứ không phải việc còn nợ.
+    //
+    // Đo 15/09/2026: hệ thống KHÔNG có đường nào cho một người tự sửa giờ của chính mình.
+    // Hai thứ thật sự phân biệt được là:
+    //   · `StaffAttendanceDay.overrideUnits` — QUẢN LÝ ghi đè công (`ghiDeCong` ở trên);
+    //   · `WorkRequest(TIMESHEET_FIX, APPROVED)` — giờ thêm QUA ĐƠN đã duyệt.
+    // Vắng đường tự chỉnh là CHỦ ĐÍCH (không ai tự sửa công của mình). In "—" ở đây nói
+    // đúng điều đó; in 0 sẽ đọc thành "có đường ấy, tháng này chưa ai dùng".
+    tuChinh: null,
+    donChoDuyet: input.don ? input.don.choDuyet : null,
+    donTuChoi: input.don ? input.don.tuChoi : null,
   };
 }

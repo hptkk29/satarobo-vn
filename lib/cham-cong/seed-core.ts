@@ -27,6 +27,7 @@ export async function seedShiftTemplates(db: Db, opts: { force?: boolean } = {})
       isLeave: e.isLeave,
       nominalMinutes: e.nominalMinutes,
       payMode: e.payMode,
+      soCapQuetKyVong: e.soCapQuetKyVong,
       amStart: e.amStart ?? null,
       amEnd: e.amEnd ?? null,
       pmStart: e.pmStart ?? null,

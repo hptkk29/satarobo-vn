@@ -49,7 +49,7 @@ export async function setAssignmentCell(opts: {
 
   const t = await db.shiftTemplate.findFirst({
     where: { code: opts.code, isActive: true, centerId: null },
-    select: { id: true, code: true, segments: true, defaultPlace: true, attendanceMode: true, dayCredit: true, isLeave: true, nominalMinutes: true },
+    select: { id: true, code: true, segments: true, defaultPlace: true, attendanceMode: true, dayCredit: true, isLeave: true, nominalMinutes: true, soCapQuetKyVong: true },
   });
   if (!t) return { before, after: null, changed: false, error: `Mã ca "${opts.code}" không có trong danh mục` };
   const place = resolvePlace({ segments: (t.segments as ShiftSegment[] | null) ?? [], defaultPlace: t.defaultPlace as PlaceToken, homeUnit: opts.homeUnit, map: opts.centerMap });
@@ -71,6 +71,7 @@ export async function setAssignmentCell(opts: {
       placeMode: place.placeMode,
       allowedOrgUnitIds: place.allowedOrgUnitIds,
       attendanceMode: t.attendanceMode,
+      soCapQuetKyVong: t.soCapQuetKyVong,
       dayCredit: t.dayCredit,
       isLeave: t.isLeave,
       nominalMinutes: t.nominalMinutes,

@@ -2,6 +2,7 @@
 
 > **Trạng thái:** MỞ, chưa làm. Ghi 13/09/2026, tách ra từ bản vá mục 2 (PR #243).
 > **Nhu cầu này là THẬT.** Vé tồn tại để nó không mất theo bản vá.
+> **Chỗ trong hàng:** đề xuất 15/09 — **gộp vào mục 5**, làm **SAU phần A**. Lý do ở cuối vé.
 
 ---
 
@@ -64,3 +65,48 @@ file nav — `components/admin/cham-cong/{module-nav,config-tabs,me-nav}.tsx` �
   có hai nguồn.
 - `lib/cham-cong/noi-quet.ts` (D1) — nhãn `· quét ở CS2` trên dòng của người đó tại cơ sở
   chịu công.
+
+---
+
+## Chỗ trong hàng — đề xuất 15/09/2026
+
+**Gộp vào mục 5 (Nội quy & thống kê), và làm SAU phần A (công tác).**
+
+### Vì sao SAU phần A, không phải trước
+
+Phần A định nghĩa lại **"có mặt" nghĩa là gì**. Hôm nay `NG` (công tác ngoài) mang
+`attendanceMode: OPTIONAL` — người đi công tác **không quét gì cả** mà vẫn đủ công. Dựng màn
+"ai có mặt" trước phần A thì nó trả lời được đúng một nửa:
+
+| người | hôm nay màn sẽ nói | sự thật |
+|---|---|---|
+| quét ở CS1 | có mặt ở CS1 | ✔ |
+| đi công tác (`NG`), không quét | **không thấy ở đâu cả** | đang làm việc, ở ngoài |
+| đi công tác, có quét ở nơi đến | có mặt ở nơi quét | ✔ nhưng chỉ sau phần A mới có nút để quét |
+
+Phần A đảo `NG` sang **1 cặp quét** và thêm hai nút check-in/out ở "Của tôi". Sau đó câu hỏi
+"ai có mặt" mới có đủ ba trạng thái thật: **ở cơ sở · đi công tác · chưa rõ**. Làm trước là
+dựng một màn rồi phải dựng lại.
+
+### Vì sao GỘP vào mục 5, không làm riêng
+
+Câu hỏi trung tâm của mục 5 do chính chủ dự án đặt:
+
+> *"Dữ liệu nào ĐÃ CÓ trong DB mà màn chưa dùng? Đây là câu chính — nhiều khả năng ta đã có
+> số, chỉ chưa bày ra."*
+
+Vé này **chính là một câu trả lời cho câu hỏi đó**: `StaffTimeLog` đã ghi đủ nơi quét và giờ
+quét từ lâu; thứ thiếu là một màn đọc nó theo trục *"đứng ở đâu"* thay vì trục *"ăn công ở
+đâu"*. Khảo sát mục 5 sẽ đi qua đúng bảng ấy — tách ra làm riêng là **soi cùng một bảng hai
+lần và thiết kế cùng một màn hai lần**.
+
+⚠️ Nhưng **giữ hai con số tách bạch trên màn**, đừng gộp lại: *"ai ăn công ở đây"* và *"ai
+đứng ở đây"* là hai câu hỏi khác nhau — trộn chúng đúng là lỗi mà PR #243 vừa gỡ. Gộp ở đây
+nghĩa là **cùng một lượt làm**, không phải cùng một con số.
+
+### Nếu chủ dự án muốn sớm hơn
+
+Đường ngắn nhất không cần chờ phần A: thêm một **tab** vào màn `/cham-cong` hiện có, đọc
+`StaffTimeLog` theo ngày × cơ sở, và **nói thẳng trong nhãn** rằng nó chưa biết ai đang đi
+công tác. Nhãn nói ra giới hạn thì màn vẫn dùng được; nhãn im thì nó là một danh sách thiếu
+người mà không ai biết là thiếu.

@@ -114,6 +114,18 @@ export type ChiaChoLeadInput = {
   entryPoint: LeadEntryPoint;
   explicitOwnerId?: string | null;
   aff?: AffiliateActor | null;
+  /**
+   * true = KHÔNG bắn chuông "Bạn có lead mới" cho chủ mới; nơi gọi tự lo phần báo.
+   *
+   * Sinh ra cho đường NHẬP HÀNG LOẠT (import Excel): nhập 40 dòng mà mỗi dòng một cái chuông
+   * là 40 lần rung điện thoại liên tiếp — đúng "bão push" mà `lib/push/allowlist.ts` nói là
+   * cái giá không lấy lại được (người dùng tắt quyền thông báo ở CẤP TRÌNH DUYỆT). Nơi gọi
+   * gộp lại thành MỘT tin "Bạn có N lead mới".
+   *
+   * ⚠️ Cờ này CHỈ tắt nửa BÁO. Nửa THU HỒI chuông chủ cũ vẫn chạy vô điều kiện — đó là phép
+   * sửa đúng đắn trong mọi ca, và tắt nó đi là dựng lại sự cố 15/09/2026.
+   */
+  imLangChuong?: boolean;
 };
 
 /** Nạp thông tin người nhập rồi hỏi ma trận. Dùng chung hai nhánh có/không đơn vị. */
@@ -278,13 +290,17 @@ export async function chiaChoLead(
     // ngay lập tức. Không thu hồi ở đây là để lại đúng cái chuông mồ côi mà bản vá này dẹp.
     await thuHoiChuongLeadCu({ chuCuId: ketQua.chuCu, chuMoiId: null, leadId });
   } else if (ketQua.ownerId) {
-    const l = await db.lead.findUnique({ where: { id: leadId }, select: { parentName: true } });
-    await baoSaleCoLeadMoi({
-      ownerId: ketQua.ownerId,
-      leadId,
-      parentName: l?.parentName ?? "(không tên)",
-      source: ketQua.source,
-    });
+    if (!input.imLangChuong) {
+      const l = await db.lead.findUnique({ where: { id: leadId }, select: { parentName: true } });
+      await baoSaleCoLeadMoi({
+        ownerId: ketQua.ownerId,
+        leadId,
+        parentName: l?.parentName ?? "(không tên)",
+        source: ketQua.source,
+      });
+    }
+    // Thu hồi chạy CẢ KHI im chuông: chủ cũ giữ lại một cái chuông trỏ tới lead họ không còn
+    // giữ là lỗi trong mọi ca, không liên quan tới việc có báo chủ mới hay không.
     await thuHoiChuongLeadCu({ chuCuId: ketQua.chuCu, chuMoiId: ketQua.ownerId, leadId });
   }
 
@@ -331,6 +347,179 @@ export async function baoSaleCoLeadMoi(params: {
     href: `/leads/${params.leadId}`,
     entityId: params.leadId,
   }).catch((err) => console.error("[assign-lead] không gửi được thông báo lead mới:", err));
+}
+
+/**
+ * ĐÂU LÀ MỘT "LÔ" LEAD, VÀ VÌ SAO NÓ CẦN TÊN RIÊNG.
+ *
+ * Ba đường dưới đây đều chia nhiều lead cùng một lúc, nhưng hình dạng khác nhau:
+ *   · nhập danh sách  — nhiều lead, nhiều người nhận, không có "người bàn giao";
+ *   · bàn giao        — nhiều lead, ĐÚNG MỘT người nhận, có người bàn giao rõ tên;
+ *   · sale nghỉ       — nhiều lead của một người, chia vòng cho NHIỀU người nhận.
+ *
+ * Người nhận cần biết lead ở đâu ra thì mới biết phải làm gì: lead bàn giao là lead ĐANG chạy
+ * dở, có lịch sử trao đổi, gọi tới phải biết mà xin lỗi vì đổi người. Lead nhập mới thì chưa ai
+ * chạm tới. Một câu "Bạn có 12 lead mới" giống hệt nhau cho cả ba ca là một affordance nói dối
+ * (luật 12).
+ */
+export type NguonLoLead =
+  | { kieu: "nhap_danh_sach" }
+  | { kieu: "ban_giao"; tuNguoi: string }
+  | { kieu: "sale_nghi"; tuNguoi: string };
+
+/** Nguồn gán tương ứng, cho ca chỉ có MỘT lead (chuông thường cần giá trị enum thật). */
+export function nguonGanCuaLo(nguon: NguonLoLead): LeadAssignSource {
+  switch (nguon.kieu) {
+    case "nhap_danh_sach":
+      return "IMPORT";
+    case "ban_giao":
+      // Người bấm nút bàn giao là quản lý — cùng loại với giao tay trên màn chi tiết.
+      return "MANAGER";
+    case "sale_nghi":
+      // `reassignOpenLeads` chia bằng `takeRotationTurns`, tức máy chia theo sổ lượt.
+      return "AUTO";
+  }
+}
+
+/** Câu mô tả trong tin GỘP. Tách ra để test đọc được, và để ba ca không lẫn vào nhau. */
+export function moTaLoLead(nguon: NguonLoLead, soLead: number): string {
+  switch (nguon.kieu) {
+    case "nhap_danh_sach":
+      return `${soLead} lead vừa được chia cho bạn từ một lượt nhập danh sách. Gọi sớm giúp tăng tỉ lệ chốt.`;
+    case "ban_giao":
+      return `${soLead} lead đang theo dõi của ${nguon.tuNguoi} vừa được bàn giao cho bạn. Xem lại lịch sử trao đổi trước khi gọi.`;
+    case "sale_nghi":
+      return `${soLead} lead của ${nguon.tuNguoi} vừa được chia lại cho bạn. Xem lại lịch sử trao đổi trước khi gọi.`;
+  }
+}
+
+/**
+ * BÁO GỘP: "Bạn có N lead mới".
+ *
+ * ── VÌ SAO GỘP, KHÔNG BẮN TỪNG CÁI ──────────────────────────────────────────────────────
+ * Chủ dự án chốt 15/09/2026: "phần lead này khi nhập nhiều thì báo là có bao nhiêu lead mới
+ * chứ không gửi nhiều thông báo có lead mới".
+ *
+ * Đó cũng là điều đúng về mặt kỹ thuật: nhập 40 dòng mà mỗi dòng một chuông là 40 lần rung
+ * điện thoại liên tiếp. Cái giá của một đợt push rác không phải tiền — người dùng tắt quyền
+ * thông báo ở CẤP TRÌNH DUYỆT và code không có cách nào xin lại (xem `lib/push/allowlist.ts`).
+ *
+ * ⚠️ CHỈ gọi khi một người nhận TỪ HAI lead trở lên. Đúng một lead thì `baoSaleCoLeadMoi`
+ * tốt hơn hẳn: nó trỏ thẳng trang chi tiết lead, bấm là đọc được số điện thoại ngay.
+ * `baoLoLeadMoi` bên dưới tự chọn giùm — đừng gọi thẳng hàm này từ nơi khác.
+ *
+ * ⚠️ `dedupeKey` CÓ mốc thời gian — cố ý, và ngược với luật chung.
+ * Khối chú thích ở `lib/push/allowlist.ts` nêu `lead.nhap_lai:` làm ví dụ mìn đúng vì nó nhét
+ * `Date.now()` vào khoá: khách điền form 10 lần là 10 chuông. Ở đây khác về BẢN CHẤT TẦN SUẤT:
+ * mỗi lượt là một thao tác do QUẢN LÝ chủ động làm, vài lần một tháng, và mỗi lượt sinh đúng
+ * MỘT chuông cho mỗi người nhận. Không có mốc thời gian thì lượt thứ hai trong ngày bị
+ * `@@unique([userId, dedupeKey])` nuốt mất và sale không biết mình vừa nhận thêm lead.
+ */
+export async function baoSaleNhieuLeadMoi(params: {
+  ownerId: string;
+  soLead: number;
+  /** Mốc của lượt chia — mọi người nhận trong CÙNG lượt phải dùng chung một giá trị. */
+  mocLuot: number;
+  /** ⚠️ BẮT BUỘC, cố ý không có mặc định: ba ca đọc ra ba câu khác nhau. */
+  nguon: NguonLoLead;
+}): Promise<void> {
+  if (params.soLead < 2) return;
+  await notifyStaff({
+    userIds: [params.ownerId],
+    dedupeKey: `lead.moi_nhieu:${params.ownerId}:${params.mocLuot}`,
+    title: `Bạn có ${params.soLead} lead mới`,
+    body: moTaLoLead(params.nguon, params.soLead),
+    href: "/leads",
+    entityId: null,
+  }).catch((err) => console.error("[assign-lead] không gửi được thông báo gộp lead mới:", err));
+}
+
+/** Một tin cần gửi sau một lượt chia nhiều lead. */
+export type TinBaoLoLead =
+  | { kieu: "mot"; ownerId: string; leadId: string }
+  | { kieu: "gop"; ownerId: string; soLead: number };
+
+/**
+ * LÊN KẾ HOẠCH BÁO cho một lô lead vừa chia — hàm THUẦN, không chạm DB.
+ *
+ * Tách ra khỏi nơi gọi vì đây là chỗ nằm TOÀN BỘ quyết định vận hành của bản vá 15/09: gộp
+ * theo NGƯỜI NHẬN, và ngưỡng gộp là hai. Để inline trong route handler thì không có chỗ nào
+ * cấy lỗi được — handler cần auth + phân tích tệp xlsx mới chạy tới đây, nên mọi cách gom sai
+ * (một tin chung cho cả lượt, gộp cả người chỉ nhận một lead, đếm trùng lead) đều đi qua CI
+ * im lặng. Đây là luật 12b áp cho đường ghi.
+ *
+ * `boQuaNguoi` là NGƯỜI THAO TÁC: quản lý tự bàn giao lead về cho chính mình thì không cần
+ * chuông báo lại việc mình vừa bấm — cùng luật với nhánh `source === "SELF"` của
+ * `baoSaleCoLeadMoi`. Cố ý KHÔNG có mặc định để `tsc` liệt kê đủ nơi gọi (luật 7).
+ *
+ * Thứ tự trả về bám thứ tự NGƯỜI NHẬN xuất hiện lần đầu — để nhật ký của hai lượt giống nhau
+ * đọc ra giống nhau.
+ */
+export function lenKeHoachBaoLoLead(
+  daChia: readonly { leadId: string; ownerId: string }[],
+  boQuaNguoi: string | null,
+): TinBaoLoLead[] {
+  const theoChu = new Map<string, string[]>();
+  for (const { leadId, ownerId } of daChia) {
+    if (!ownerId || !leadId) continue;
+    if (boQuaNguoi && ownerId === boQuaNguoi) continue;
+    const ds = theoChu.get(ownerId);
+    // Cùng một lead lọt vào hai lần thì đếm một — con số trong tin là thứ người nhận sẽ đối
+    // chiếu với danh sách của họ, lệch một cái là mất tin vào cả cơ chế.
+    if (ds) {
+      if (!ds.includes(leadId)) ds.push(leadId);
+    } else theoChu.set(ownerId, [leadId]);
+  }
+
+  const ra: TinBaoLoLead[] = [];
+  for (const [ownerId, leadIds] of theoChu) {
+    if (leadIds.length === 1) ra.push({ kieu: "mot", ownerId, leadId: leadIds[0]! });
+    else ra.push({ kieu: "gop", ownerId, soLead: leadIds.length });
+  }
+  return ra;
+}
+
+/**
+ * GỬI chuông cho cả một lô lead vừa chia — đường DUY NHẤT cho mọi thao tác hàng loạt.
+ *
+ * Ba nơi gọi: nhập danh sách (`app/api/admin/import/leads`), bàn giao
+ * (`lib/lead-handover/service.ts`), và chia lại khi sale nghỉ (`lib/lead/assign.ts`). Trước
+ * 15/09 hai đường sau KHÔNG báo gì cho người nhận — họ nhận lead mà không ai đánh động, phải
+ * tự mở danh sách ra mới biết mình có việc.
+ *
+ * Gom vào MỘT hàm thay vì chép vòng lặp ba lần vì lần trước lỗi đúng kiểu đó: bốn đường đổi
+ * chủ ra đời ở bốn thời điểm, mỗi đường quên cùng một bước.
+ *
+ * Nuốt lỗi: chuông hỏng không được làm hỏng việc chia lead.
+ */
+export async function baoLoLeadMoi(params: {
+  daChia: readonly { leadId: string; ownerId: string }[];
+  nguon: NguonLoLead;
+  /** Mốc dùng chung cho cả lượt — xem `baoSaleNhieuLeadMoi`. */
+  mocLuot: number;
+  /** Người thao tác; không tự báo cho chính họ. `null` = máy chạy, không ai để bỏ qua. */
+  boQuaNguoi: string | null;
+}): Promise<void> {
+  for (const tin of lenKeHoachBaoLoLead(params.daChia, params.boQuaNguoi)) {
+    if (tin.kieu === "mot") {
+      const l = await db.lead
+        .findUnique({ where: { id: tin.leadId }, select: { parentName: true } })
+        .catch(() => null);
+      await baoSaleCoLeadMoi({
+        ownerId: tin.ownerId,
+        leadId: tin.leadId,
+        parentName: l?.parentName ?? "(không tên)",
+        source: nguonGanCuaLo(params.nguon),
+      });
+    } else {
+      await baoSaleNhieuLeadMoi({
+        ownerId: tin.ownerId,
+        soLead: tin.soLead,
+        mocLuot: params.mocLuot,
+        nguon: params.nguon,
+      });
+    }
+  }
 }
 
 /**

@@ -4,8 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import {
-  // Trophy, // tạm ẩn cùng mục "Vinh danh" trong NAV_GROUPS (bật lại: bỏ comment)
+  // Trophy,
+  // tạm ẩn cùng mục "Vinh danh" trong NAV_GROUPS (bật lại: bỏ comment)
   AlertTriangle,
+  AlarmClock,
   ArrowLeftRight,
   Award,
   BarChart3,
@@ -26,6 +28,7 @@ import {
   Coins,
   CreditCard,
   DoorOpen,
+  FileSpreadsheet,
   FileText,
   FlaskConical,
   Gauge,
@@ -34,8 +37,8 @@ import {
   IdCard,
   Image as ImageIcon,
   KeyRound,
-  ListOrdered,
   LayoutDashboard,
+  ListOrdered,
   Mail,
   MapPin,
   MessageCircle,
@@ -65,7 +68,6 @@ import {
   UsersRound,
   Wallet,
   Workflow,
-  FileSpreadsheet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useChatUnread } from "@/components/chat/use-chat-unread";
@@ -127,6 +129,7 @@ const NAV_GROUPS: NavGroup[] = [
       // "sao bạn kia nhiều lead hơn" là Quản lý cơ sở, không phải Super Admin.
       { label: "Quản lý chia lead", href: "/quan-ly-chia-lead", icon: ListOrdered, perm: ["lead_pool:manage"] },
       { label: "Bàn giao lead", href: "/ban-giao-lead", icon: ArrowLeftRight, perm: ["leads:assign"] },
+      { label: "Lead lâu ngày chưa chăm", href: "/lead-nguoi", icon: AlarmClock, perm: ["leads:assign"] },
       { label: "Chuyển lead liên CS", href: "/leads/bao-cao-chuyen", icon: Workflow, perm: ["leads:assign"] },
       // BGĐ 31/07 — nguồn giới thiệu (affiliate): mã + link ?ref= + đối soát.
       { label: "Nguồn giới thiệu", href: "/affiliates", icon: Share2, perm: ["leads:view-all"] },

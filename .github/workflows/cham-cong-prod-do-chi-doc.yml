@@ -50,6 +50,8 @@ on:
           - tinh-lai-mot-ngay-chay-thu
           - buoi-ket-theo-lop
           - noi-quet
+          - ngay-cong-tac
+          - cong-chuan-theo-role
           - tat-ca
       # Hai ô dưới CHỈ dùng cho việc `tinh-lai-mot-ngay-chay-thu`. Để trống cho mọi việc khác.
       user_id:
@@ -266,6 +268,27 @@ jobs:
             exit 1
           fi
           pnpm exec tsx scripts/tinh-lai-mot-ngay.ts --user="$U" --ngay="$NGAY"
+
+      # PHẦN A câu 5 — đo TRƯỚC khi đảo NG sang "1 cặp quét". Con số cần biết là số ngày
+      # công tác CHƯA có cặp quét: đó chính là số ngày sẽ bị gắn cờ OAN, cho một việc người
+      # ta không thể đã làm (hôm đó chưa có nút nào để bấm).
+      - name: "Đo ngày công tác (chỉ đọc)"
+        if: ${{ !cancelled() && (inputs.viec == 'ngay-cong-tac' || inputs.viec == 'tat-ca') }}
+        run: pnpm exec tsx scripts/do-ngay-cong-tac.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+
+      # MỤC 4 — công chuẩn theo role. Đo TRƯỚC khi đề xuất, vì "role" chưa được định nghĩa:
+      # repo có BỐN cột có thể đóng vai khoá (phòng ban · loại GV · loại hợp đồng · vai RBAC)
+      # và chúng phủ khác nhau. Số quyết định nhất là "người mang ≥2 vai RBAC" — khoá không
+      # đơn trị thì "công chuẩn của vai nào" không có câu trả lời.
+      - name: "Đo công chuẩn + khoá theo role (chỉ đọc)"
+        if: ${{ !cancelled() && (inputs.viec == 'cong-chuan-theo-role' || inputs.viec == 'tat-ca') }}
+        run: pnpm exec tsx scripts/do-cong-chuan-theo-role.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
 
       - name: Nhắc lại
         if: ${{ !cancelled() }}

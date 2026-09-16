@@ -13,7 +13,6 @@
 import { revalidatePath } from "next/cache";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
-import { teacherCenterAssignmentError } from "@/lib/teachers/center-filter";
 import { leadStatusLabel } from "@/lib/leads/status";
 import { phoneSearchTerm } from "@/lib/phone";
 import {
@@ -478,64 +477,21 @@ export async function unenrollLeadChildLopTrialAction(input: {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 7) Gán giáo viên phụ trách lớp
+// 7) Gán giáo viên phụ trách LỚP — ĐÃ GỠ 14/09/2026
 // ═══════════════════════════════════════════════════════════════════════════
-
-export async function assignLopTrialTeacherAction(
-  trialClassId: string,
-  teacherId: string | null,
-): Promise<ActionResult> {
-  const ctx = await requireActor();
-  if (!ctx) return { ok: false, error: CHUA_DANG_NHAP };
-  if (!(await checkPermission("trials:assign-teacher"))) {
-    return { ok: false, error: "Không có quyền gán giáo viên" };
-  }
-
-  const cls = await loadScopedTrialClass(ctx.actor, trialClassId);
-  if (!cls) return { ok: false, error: KHONG_THAY_LOP };
-
-  const sdb = scopedDb(ctx.actor);
-
-  // Backstop cho dropdown. Từ 06/08 hàm này chỉ còn chặn user KHÔNG TỒN TẠI —
-  // chính sách hiện hành là "giáo viên là nguồn lực chung", không ràng buộc cơ sở.
-  if (teacherId) {
-    const t = await sdb.user.findUnique({
-      where: { id: teacherId },
-      select: { centerId: true },
-    });
-    const err = teacherCenterAssignmentError(cls.centerId, [
-      { id: teacherId, centerId: t?.centerId },
-    ]);
-    if (err) return { ok: false, error: err };
-  }
-
-  // ⚠️ update/updateMany KHÔNG được scopedDb che. An toàn nhờ loadScopedTrialClass ở trên.
-  await sdb.trialClassV2.update({
-    where: { id: trialClassId },
-    data: { teacherId: teacherId || null },
-  });
-  // Lan GV xuống các buổi CHƯA diễn ra; buổi đã xong giữ nguyên GV cũ để không viết
-  // lại lịch sử ai đã dạy.
-  await sdb.trialClassSession.updateMany({
-    where: { trialClassId, status: "SCHEDULED" },
-    data: { teacherId: teacherId || null },
-  });
-
-  // Không báo khi: gỡ gán, gán lại chính GV cũ, hoặc tự gán mình.
-  if (teacherId && teacherId !== cls.teacherId && teacherId !== ctx.session.user.id) {
-    await notifyTrialTeacherAssigned({
-      teacherId,
-      title: "Bạn được phân công lớp trải nghiệm",
-      body: `Bạn vừa được gán phụ trách lớp trải nghiệm ${cls.name}. Xem lịch và học viên ở mục Lớp Trial.`,
-      dedupeKey: `trial-class.assigned:${trialClassId}`,
-      entityId: trialClassId,
-    });
-  }
-
-  lamMoi(trialClassId);
-  return { ok: true };
-}
-
+//
+// `assignLopTrialTeacherAction` gỡ hẳn. Nó là action CHẾT: grep toàn repo chỉ ra chính nó và
+// một dòng trong `_lib/permissions.test.ts` — không component/page nào gọi, và cũng không thể
+// gọi, vì giao diện không có chỗ nào gán giáo viên ở cấp LỚP.
+//
+// Đó không phải thiếu sót mà là chốt kiến trúc 28/08: giáo viên là thuộc tính của TỪNG BUỔI
+// (`createTrialClass` đặt thẳng `teacherId: null`, xem chú thích tại `lib/trial/service.ts`).
+// Lớp trải nghiệm là slot tái sử dụng, mỗi buổi có thể một người dạy khác nhau.
+//
+// Hệ quả kéo theo, và là lý do đợt này đụng tới nó: tiền tố `trial-class.assigned:` vẫn nằm
+// trong danh mục thông báo nên màn Cấu hình thông báo đẩy BÀY RA một công tắc không nối vào
+// đâu — chủ dự án đã bật thật rồi ngồi chờ. Gỡ action ⇒ gỡ luôn tiền tố ⇒ màn hình thôi hứa.
+//
 // ═══════════════════════════════════════════════════════════════════════════
 // 8) Huỷ lớp
 // ═══════════════════════════════════════════════════════════════════════════
