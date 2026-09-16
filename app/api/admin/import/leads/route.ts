@@ -29,6 +29,34 @@ import { orgUnitIdForCenter } from "@/lib/org/org-service";
 
 type ImportError = { row: number; error: string };
 
+/**
+ * ⚠️ HAI TRẦN THỜI GIAN, PHẢI ĐẶT CẢ HAI — nới một cái là lỗi chỉ ĐỔI CHỖ.
+ *
+ * Sự cố prod 16/09/2026, chủ dự án chụp màn hình. Người dùng nhập một file lead và nhận:
+ *
+ *   Lỗi ghi: Invalid `prisma.auditLog.create()` invocation: Transaction API error:
+ *   Transaction not found. Transaction ID is invalid, refers to an old closed transaction
+ *
+ * Đó KHÔNG phải lỗi dữ liệu. Đó là Prisma tự đóng giao dịch vì quá hạn **mặc định 5 giây**,
+ * rồi lệnh ghi tiếp theo đập vào một giao dịch đã chết. Thân `$transaction` ở đây lặp qua
+ * TỪNG dòng và mỗi dòng tốn 2–4 lượt đi-về DB (`lead.create`/`lead.update` + `LeadChild` +
+ * `LeadActivity` + `AuditLog`), nên file chỉ cần vài trăm dòng là vượt 5 giây trên Supabase.
+ *
+ * Hậu quả tệ nhất có thể: ROLLBACK SẠCH. Người dùng nhập file đúng, chờ, rồi nhận thông báo
+ * hỏng và KHÔNG dòng nào vào hệ thống — trong khi chẳng có dòng nào sai cả.
+ *
+ * Nợ CÓ SẴN, không do đợt ghi đè 16/09 sinh ra: `$transaction` ở đây chưa từng khai
+ * `timeout`. Nó chỉ chưa nổ vì file nhập trước đây nhỏ.
+ *
+ * Cách vá theo đúng NẾP ĐÃ ĐO của repo — `app/api/admin/import/leads/registered/route.ts`
+ * gặp y hệt bài này ngày 05/08 ("60123 ms passed", 75 lead, rollback sạch) và chốt:
+ *   · `maxDuration` cho HÀM  — không nới thì nới `timeout` cũng vô nghĩa, Vercel giết hàm
+ *     trước khi giao dịch kịp xong, và triệu chứng đổi thành 504 chứ không hết;
+ *   · `timeout` cho GIAO DỊCH — 5 giây mặc định là con số dành cho một lệnh ghi lẻ, không
+ *     phải cho một vòng lặp ghi hàng nghìn dòng.
+ */
+export const maxDuration = 300;
+
 // POST /api/admin/import/leads — nhập nhiều lead từ Excel (thu ở sự kiện).
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -408,7 +436,8 @@ export async function POST(req: NextRequest) {
   const mocNhap = new Date();
   const mocLuot = mocNhap.getTime();
   try {
-    await sdb.$transaction(async (tx) => {
+    await sdb.$transaction(
+      async (tx) => {
       for (const g of groups.values()) {
         const v = g.base;
         // Nhiều con (đã xác nhận gộp trong file) → tạo LeadChild cho các con CÓ TÊN
@@ -578,7 +607,13 @@ export async function POST(req: NextRequest) {
         mergedLeads++;
         if (m.chiaLai) chiaLaiOps.push({ id: m.leadId, saleId: m.saleId });
       }
-    });
+      },
+      // Xem khối `maxDuration` ở đầu tệp: 5 giây mặc định của Prisma là con số dành cho
+      // MỘT lệnh ghi lẻ, không phải cho vòng lặp ghi tới 5.000 dòng. 180 giây khớp với
+      // `registered/route.ts` — cùng bài, cùng cách vá, đừng để hai đường nhập lead chọn
+      // hai con số khác nhau rồi không ai nhớ vì sao.
+      { timeout: 180_000 },
+    );
   } catch (err) {
     return NextResponse.json(
       { success: 0, errors: [...errors, { row: 0, error: `Lỗi ghi: ${err instanceof Error ? err.message : "Unknown"}` }] },
