@@ -230,3 +230,55 @@ describe("[TTD-DON-06] hai đường đọc còn suy tiền từ Order.status", 
     expect(sach).toContain("gamma");
   });
 });
+
+// ═══ [TTD-DON-07] LƯỚI GHIM: HAI MÀN PHẢI NÓI CÙNG MỘT NHÃN ══════════════════
+//
+// Ca này sinh ra từ một lỗi TÔI TỰ TẠO trong phiên: nối badge ở trang chi tiết trước, để
+// danh sách nguyên nhãn cũ ⇒ CÙNG MỘT ĐƠN mang hai nhãn khác nhau ở hai màn. Đo lúc đó:
+// lọc "Đã xác nhận đơn" ra 81 đơn mà 0/81 đơn nào còn mang nhãn đó ở trang chi tiết.
+//
+// Không có lưới thì lần sau ai sửa một màn sẽ lại mở ra đúng khoảng lệch ấy, và nó KHÔNG
+// làm test nào đỏ, không ném lỗi, console sạch — chỉ người dùng đối chiếu hai màn mới thấy.
+//
+// Luật 11: neo HẸP, KHÔNG cờ `/s`, BỎ CHÚ THÍCH trước khi soi. Đã cấy lại để thấy đỏ.
+describe("[TTD-DON-07] badge ở DANH SÁCH và CHI TIẾT cùng một nguồn", () => {
+  const boChuThich = (x: string) =>
+    x.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*/g, "$1");
+  const doc = (p: string) =>
+    boChuThich(readFileSync(resolve(process.cwd(), p), "utf8"));
+
+  const DS = doc("app/(admin)/admin/orders/_components/orders-list-client.tsx");
+  const CT = doc("app/(admin)/admin/orders/_components/order-detail-client.tsx");
+
+  it("bộ bỏ chú thích thật sự bỏ được (lưới-canh-lưới)", () => {
+    const mau = "a /* K */ b // D\nc";
+    expect(boChuThich(mau)).not.toContain("K");
+    expect(boChuThich(mau)).not.toContain("D");
+  });
+
+  it("DANH SÁCH in nhãn suy từ tiền, KHÔNG in ORDER_STATUS_LABEL cho badge", () => {
+    expect(DS).toMatch(/\{o\.trangThai\.nhan\}/);
+    // Bảng nhãn cũ vẫn được phép tồn tại cho Ô LỌC (nó lọc `Order.status` thật), nhưng
+    // KHÔNG được quay lại làm badge của dòng.
+    expect(DS).not.toMatch(/<Badge className=\{STATUS_BADGE_CLASS\[o\.status\]\}>/);
+  });
+
+  it("CHI TIẾT in nhãn suy từ tiền ở đầu trang", () => {
+    expect(CT).toMatch(/\{ttDon\.nhan\}/);
+    expect(CT).toMatch(/trangThaiDon\(\{ status: order\.status, so: congNo \}\)/);
+  });
+
+  it("cả hai màn đọc sắc thái từ CÙNG một khoá ngữ nghĩa", () => {
+    expect(DS).toMatch(/SAC_THAI_CLASS\[o\.trangThai\.sacThai\]/);
+    expect(CT).toMatch(/SAC_THAI_CLASS\[ttDon\.sacThai\]/);
+  });
+
+  it("DANH SÁCH nhận nhãn từ SERVER, không tự suy lại", () => {
+    // `queryOrders` tính sẵn (nó có số tiền); client gọi lại `trangThaiDon` là hai chỗ
+    // quyết định cùng một nhãn.
+    expect(DS).not.toMatch(/trangThaiDon\(/);
+    const ACT = doc("app/(admin)/admin/orders/_actions.ts");
+    expect(ACT.match(/trangThaiDon\(\{ status: o\.status, so \}\)/g)?.length).toBe(1);
+    expect(ACT).toMatch(/haiTrucTheoDon\(sdb, rawItems\.map\(\(o\) => o\.id\)\)/);
+  });
+});

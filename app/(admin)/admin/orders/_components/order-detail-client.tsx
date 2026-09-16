@@ -43,6 +43,10 @@ import {
   ORDER_TYPE_LABEL,
   deriveInstallmentBadge,
 } from "@/lib/orders/status";
+import {
+  trangThaiDon,
+  type SacThaiTrangThai,
+} from "@/lib/orders/trang-thai-don";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 import { ThongTinHoaDon } from "./thong-tin-hoa-don";
 import {
@@ -97,16 +101,21 @@ const NEXT_STATUSES: Record<OrderStatus, OrderStatus[]> = {
   REFUNDED: [],
 };
 
-const STATUS_BADGE_CLASS: Record<OrderStatus, string> = {
-  DRAFT: "bg-muted text-foreground hover:bg-muted",
-  PENDING_PAYMENT:
+/**
+ * Lớp badge theo SẮC THÁI của trạng thái SUY TỪ TIỀN [16/09/2026].
+ *
+ * `lib/orders/trang-thai-don.ts` là tệp THUẦN nên nó trả khoá NGỮ NGHĨA
+ * (`thanh-cong`/`dang-cho`/…) chứ không giữ tên lớp Tailwind. Bảng ánh xạ nằm ở đây, nơi
+ * đã biết về giao diện.
+ */
+const SAC_THAI_CLASS: Record<SacThaiTrangThai, string> = {
+  "trung-tinh": "bg-muted text-foreground hover:bg-muted",
+  "dang-cho":
     "bg-state-warning-soft text-state-warning-ink hover:bg-state-warning-soft",
-  CONFIRMED: "bg-state-info-soft text-state-info-ink hover:bg-state-info-soft",
-  COMPLETED:
+  "thanh-cong":
     "bg-state-success-soft text-state-success-ink hover:bg-state-success-soft",
-  CANCELLED:
+  "canh-bao":
     "bg-state-danger-soft text-state-danger-ink hover:bg-state-danger-soft",
-  REFUNDED: "bg-primary-soft text-primary hover:bg-primary-soft",
 };
 
 /**
@@ -273,6 +282,15 @@ export function OrderDetailClient({
   // gốc (xem đầu migration 20260915140000).
   const giamTheoDong = order.items.reduce((s, it) => s + it.discountAmount, 0);
 
+  /**
+   * TRẠNG THÁI SUY TỪ TIỀN — tính ngay ở client vì `congNo` đã có sẵn trong props và
+   * `trangThaiDon` là hàm THUẦN. Không cần thêm một lượt tra nào.
+   *
+   * ⚠️ KHÔNG tự suy lại ở JSX. Hàm trả CẢ nhãn LẪN sắc thái LẪN nhãn phụ trong một giá
+   * trị, đúng để badge và câu phụ không thể nói khác nhau.
+   */
+  const ttDon = trangThaiDon({ status: order.status, so: congNo });
+
   const nextOptions = NEXT_STATUSES[order.status];
   // G4 — chỉ cho sửa phương thức khi đơn còn DRAFT/PENDING_PAYMENT (khớp guard server).
   const canEditPaymentMethod =
@@ -385,11 +403,37 @@ export function OrderDetailClient({
               <Badge variant="outline" className="whitespace-nowrap">
                 {ORDER_TYPE_LABEL[order.type]}
               </Badge>
+              {/* ── TRẠNG THÁI SUY TỪ TIỀN [16/09/2026] ────────────────────────
+                  Chủ dự án: *"các trạng thái này không phù hợp nữa rồi… dựa vào tình
+                  trạng Giao dịch của KH để hiển thị"*, và chốt hiển thị HAI TRỤC.
+
+                  Đo trên satarobo_local: 77/507 đơn mang "Đã xác nhận đơn"/"Hoàn tất"
+                  trong khi CÒN NỢ (Σ 195.835.000đ), và 0 đơn lệch chiều ngược — nhãn cũ
+                  CHỈ BIẾT NÓI QUÁ. 80 đơn rơi vào "Đang đóng", ô mà `Order.status` không
+                  có giá trị nào biểu diễn nổi.
+
+                  ⚠️ Badge `Order.status` BỊ BỎ KHỎI ĐẦU TRANG, nhưng KHÔNG biến mất
+                  khỏi màn: nó còn nguyên ở khối "Lịch sử trạng thái" và trong hộp thoại
+                  đổi trạng thái (`ORDER_STATUS_LABEL` vẫn được dùng ở cả hai chỗ). Đó là
+                  đúng chỗ của nó — máy trạng thái là việc vận hành/giao hàng, không phải
+                  câu trả lời cho "còn thiếu bao nhiêu". Giữ hai badge cạnh nhau ở đầu
+                  trang thì người đọc phải tự đoán cái nào đúng, mà đó chính là thứ đợt
+                  này gỡ đi. */}
               <Badge
-                className={`whitespace-nowrap ${STATUS_BADGE_CLASS[order.status]}`}
+                className={`whitespace-nowrap ${SAC_THAI_CLASS[ttDon.sacThai]}`}
+                title={
+                  ttDon.doNguoiQuyet
+                    ? "Trạng thái này do người quyết (nháp/huỷ/hoàn tiền) — tiền không suy ra được"
+                    : "Trạng thái suy từ tiền đã thu, không phải từ cột Order.status"
+                }
               >
-                {ORDER_STATUS_LABEL[order.status]}
+                {ttDon.nhan}
               </Badge>
+              {ttDon.nhanPhu && (
+                <Badge variant="outline" className="whitespace-nowrap font-normal">
+                  {ttDon.nhanPhu}
+                </Badge>
+              )}
               {badgeTraGop && (
                 <Badge
                   className={`whitespace-nowrap ${

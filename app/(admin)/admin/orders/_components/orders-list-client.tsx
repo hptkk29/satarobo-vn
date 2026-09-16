@@ -25,6 +25,7 @@ import {
 import { toast } from "sonner";
 import { queryOrders, type OrderFilters, type OrderRow } from "../_actions";
 import { ORDER_STATUS_LABEL, ORDER_TYPE_LABEL, deriveInstallmentBadge } from "@/lib/orders/status";
+import type { SacThaiTrangThai } from "@/lib/orders/trang-thai-don";
 import type { OrderStatus, OrderType } from "@prisma/client";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
@@ -38,13 +39,19 @@ const ALL_STATUSES: OrderStatus[] = [
 ];
 const ALL_TYPES: OrderType[] = ["COURSE", "PACKAGE", "EXAM", "PRODUCT", "COMBO"];
 
-const STATUS_BADGE_CLASS: Record<OrderStatus, string> = {
-  DRAFT: "bg-muted text-foreground hover:bg-muted",
-  PENDING_PAYMENT: "bg-state-warning-soft text-state-warning-ink hover:bg-state-warning-soft",
-  CONFIRMED: "bg-state-info-soft text-state-info-ink hover:bg-state-info-soft",
-  COMPLETED: "bg-state-success-soft text-state-success-ink hover:bg-state-success-soft",
-  CANCELLED: "bg-state-danger-soft text-state-danger-ink hover:bg-state-danger-soft",
-  REFUNDED: "bg-primary-soft text-primary hover:bg-primary-soft",
+/**
+ * Lớp badge theo SẮC THÁI của nhãn suy từ tiền. Bản sao có chủ đích của bảng cùng tên ở
+ * `order-detail-client.tsx`: cả hai đều là tầng hiển thị của CÙNG một khoá ngữ nghĩa do
+ * `lib/orders/trang-thai-don.ts` trả về, và tệp thuần đó cố ý không giữ tên lớp Tailwind.
+ */
+const SAC_THAI_CLASS: Record<SacThaiTrangThai, string> = {
+  "trung-tinh": "bg-muted text-foreground hover:bg-muted",
+  "dang-cho":
+    "bg-state-warning-soft text-state-warning-ink hover:bg-state-warning-soft",
+  "thanh-cong":
+    "bg-state-success-soft text-state-success-ink hover:bg-state-success-soft",
+  "canh-bao":
+    "bg-state-danger-soft text-state-danger-ink hover:bg-state-danger-soft",
 };
 
 function formatDateTime(date: Date): string {
@@ -136,10 +143,18 @@ export function OrdersListClient() {
             }
           >
             <SelectTrigger>
-              <SelectValue placeholder="Trạng thái" />
+              {/* ⚠️ NHÃN PHẢI NÓI THẬT (luật 12). Từ 16/09/2026 badge trên bảng là nhãn
+                  SUY TỪ TIỀN, còn ô lọc này vẫn lọc cột `Order.status` — hai thứ khác
+                  nhau. Đo: lọc "Đã xác nhận đơn" ra 81 đơn mà 0/81 đơn nào mang nhãn đó
+                  trên bảng; và nhãn "Đang đóng" (80 đơn) KHÔNG có giá trị lọc nào vì nó
+                  nằm vắt qua hai giá trị enum.
+                  Để nguyên chữ "Trạng thái" là hứa rằng ô này lọc theo badge. Đổi ô sang
+                  lọc-theo-tiền là quyết định của chủ dự án (đánh đổi an toàn scope vs quy
+                  mô, xem báo cáo), nên trước mắt ô NÓI RÕ nó lọc cái gì. */}
+              <SelectValue placeholder="Sổ trạng thái đơn" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="ALL">Tất cả trạng thái</SelectItem>
+              <SelectItem value="ALL">Tất cả (sổ trạng thái)</SelectItem>
               {ALL_STATUSES.map((s) => (
                 <SelectItem key={s} value={s}>
                   {ORDER_STATUS_LABEL[s]}
@@ -244,9 +259,28 @@ export function OrdersListClient() {
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap items-center gap-1">
-                        <Badge className={STATUS_BADGE_CLASS[o.status]}>
-                          {ORDER_STATUS_LABEL[o.status]}
+                        {/* Nhãn SUY TỪ TIỀN, cùng nguồn với trang chi tiết [16/09/2026].
+                            Trước bản này danh sách in `ORDER_STATUS_LABEL[o.status]` còn
+                            chi tiết đã in nhãn suy từ tiền ⇒ CÙNG MỘT ĐƠN hai nhãn khác
+                            nhau. Đo: lọc "Đã xác nhận đơn" ra 81 đơn mà 0/81 đơn còn mang
+                            nhãn đó ở chi tiết. Server tính sẵn (`queryOrders`) nên ở đây
+                            chỉ in, KHÔNG suy lại. */}
+                        <Badge className={SAC_THAI_CLASS[o.trangThai.sacThai]}>
+                          {o.trangThai.nhan}
                         </Badge>
+                        {o.trangThai.conThieu > 0 && (
+                          <span className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">
+                            còn {o.trangThai.conThieu.toLocaleString("vi-VN")}đ
+                          </span>
+                        )}
+                        {o.trangThai.choDoiSoat > 0 && (
+                          <span
+                            className="whitespace-nowrap text-xs tabular-nums text-state-warning-ink"
+                            title="Sale đã thu, kế toán chưa đối soát — vế thứ hai của hai trục"
+                          >
+                            chờ đối soát {o.trangThai.choDoiSoat.toLocaleString("vi-VN")}đ
+                          </span>
+                        )}
                         {(() => {
                           const b = deriveInstallmentBadge(o.installments);
                           if (!b) return null;

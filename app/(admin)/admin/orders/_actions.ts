@@ -40,6 +40,9 @@ import { getRequestMetadata } from "@/lib/audit/headers";
 import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { soatGiaDon } from "@/lib/orders/price-guard";
+import { congNoDon } from "@/lib/finance/cong-no-don";
+import { haiTrucTheoDon, KHONG_CO_TIEN } from "@/lib/finance/hai-truc-theo-don";
+import { trangThaiDon } from "@/lib/orders/trang-thai-don";
 import {
   hocVienTrenCacDong,
   studentIdChoDon,
@@ -199,12 +202,43 @@ export async function queryOrders(
     : [];
   const creatorNameById = new Map(creators.map((u) => [u.id, u.name]));
 
-  const items = rawItems.map((o) => ({
-    ...o,
-    // null = đơn tạo TRƯỚC 31/08/2026 (chưa có cột) hoặc người tạo đã bị xoá. Màn hình
-    // in "—"; cố ý KHÔNG đoán bừa từ nguồn khác.
-    createdByName: o.createdById ? (creatorNameById.get(o.createdById) ?? null) : null,
-  }));
+  /**
+   * HAI TRỤC cho cả trang — MỘT lượt tra, không N+1 [16/09/2026].
+   *
+   * Chủ dự án chốt trạng thái đơn suy từ TIỀN và hiển thị hai trục. Trang chi tiết đã đổi;
+   * danh sách mà không đổi thì CÙNG MỘT ĐƠN mang hai nhãn khác nhau ở hai màn — đo trên
+   * `satarobo_local`: lọc "Đã xác nhận đơn" trả 81 đơn mà **0/81** đơn nào còn mang nhãn
+   * đó ở trang chi tiết (77 hoá "Đang đóng", 4 hoá "Đã đóng đủ").
+   *
+   * ⚠️ Truyền `sdb` (đã scope), KHÔNG phải `db` trần — `Payment` ∈ SCOPED_MODELS.
+   */
+  const tienTheoDon = await haiTrucTheoDon(sdb, rawItems.map((o) => o.id));
+
+  const items = rawItems.map((o) => {
+    const t = tienTheoDon.get(o.id) ?? KHONG_CO_TIEN;
+    const so = congNoDon({
+      totalAmount: o.totalAmount,
+      daGhiNhan: t.daGhiNhan,
+      daXacNhan: t.daXacNhan,
+    });
+    return {
+      ...o,
+      // null = đơn tạo TRƯỚC 31/08/2026 (chưa có cột) hoặc người tạo đã bị xoá. Màn hình
+      // in "—"; cố ý KHÔNG đoán bừa từ nguồn khác.
+      createdByName: o.createdById ? (creatorNameById.get(o.createdById) ?? null) : null,
+      /**
+       * Trạng thái SUY TỪ TIỀN — tính ở SERVER và gửi xuống nguyên vẹn.
+       *
+       * Cố ý không gửi hai con số thô rồi để client tự gọi `trangThaiDon`: client cũng
+       * gọi được (hàm thuần), nhưng như thế là hai chỗ quyết định cùng một nhãn, và
+       * trang chi tiết đã tính ở client rồi. Một trong hai phải là nơi duy nhất — chọn
+       * server cho danh sách vì `congNoDon` cần số tiền mà chỉ server có.
+       */
+      trangThai: trangThaiDon({ status: o.status, so }),
+      /** Bộ số thô đi kèm, để bảng in được "còn thiếu" mà không phải suy lại. */
+      congNo: so,
+    };
+  });
 
   return { items, nextCursor };
 }
