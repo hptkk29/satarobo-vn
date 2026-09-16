@@ -1441,7 +1441,7 @@ function DongHangCard({
     // được hai nhóm bằng mắt, vì chọn nhóm nào quyết định tiền ghi vào bảng nào.
     const cl = loc.conLead.map((c) => ({
       value: maChonConLead(c.id),
-      label: `${c.fullName} · con khai trong lead (chưa có hồ sơ)`,
+      label: `${c.fullName} · chưa có hồ sơ học viên`,
     }));
     return [...hoSo, ...cl];
   }, [loc]);
@@ -1528,8 +1528,8 @@ function DongHangCard({
           {loc.ma === MA_LOC_CON.CON_LEAD && (
             <p className="text-xs text-muted-foreground">
               Đang bày <b className="font-semibold text-foreground">{loc.conLead.length} con
-              khai trong lead</b> — các em này chưa có hồ sơ học viên, hồ sơ sẽ được tạo lúc
-              chốt lead. Chọn đúng em rồi vẫn tạo đơn được.
+              của khách này</b> — các em chưa có hồ sơ học viên (hồ sơ được tạo khi chốt
+              khách và xếp lớp). Cứ chọn đúng em, đơn vẫn tạo được bình thường.
             </p>
           )}
           {loc.ma === MA_LOC_CON.KHONG_CO_CON && (
