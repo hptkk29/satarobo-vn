@@ -8,6 +8,7 @@ import {
   hocVienTrenCacDong,
   docConLeadTuMetadata,
   docMaChonHocVien,
+  hocVienLaCuaNguoiKhac,
   locConChoODon,
   MA_LOC_CON,
   maChonConLead,
@@ -527,5 +528,118 @@ describe("[CONLEAD-05] action phải TRA con lead theo leadId của ĐƠN", () =
   it("`leadChildId` đi vào metadata qua HÀM DÙNG CHUNG, không ghép tay tại chỗ", () => {
     expect(ACT.match(/veMetadataConLead\(/g)?.length).toBe(1);
     expect(ACT).not.toMatch(/leadChildId: it\.leadChildId/);
+  });
+});
+
+// ═══ [SOHUU] BƯỚC A1 — EM TRÊN DÒNG PHẢI LÀ CON CỦA KHÁCH TRÊN ĐƠN ═══════════
+//
+// Chủ dự án 16/09: *"mọi OrderItem khi tạo/sửa phải có học viên thuộc đúng lead/phụ huynh
+// của đơn, sai → từ chối. Test deny."*
+//
+// Ca THẬT sinh ra cổng này — đơn `ORD-260915-000007` trên `satarobo_local`:
+//   · đơn của Chị Diễm, SĐT 84941000002;
+//   · dòng 1 ghi Dương Duy Đạt (mẹ 84930000044) — NHÀ KHÁC;
+//   · dòng 2 ghi Bùi Thanh Thảo (mẹ 84930000150) — NHÀ KHÁC.
+// Đơn mang tên con nhà khác; phát QR/ZNS ra ngoài là lộ thông tin một đứa trẻ.
+const NHA_DIEM = [
+  { id: "d1", parentPhone: "84941000002" },
+  { id: "d2", parentPhone: "0941000002" }, // cùng nhà, ghi dạng nội địa
+];
+const NHA_KHAC = [
+  { id: "x1", parentPhone: "84930000044" },
+  { id: "x2", parentPhone: "84930000150" },
+];
+
+describe("[SOHUU-01] TỪ CHỐI em của nhà khác — ca thật ORD-260915-000007", () => {
+  it("hai em của hai nhà khác đều bị nêu tên", () => {
+    const vp = hocVienLaCuaNguoiKhac(NHA_KHAC, "84941000002", null);
+    expect(vp.map((h) => h.id)).toEqual(["x1", "x2"]);
+  });
+
+  it("trả DANH SÁCH em vi phạm, không phải boolean — màn phải gọi được tên", () => {
+    const vp = hocVienLaCuaNguoiKhac([...NHA_DIEM, ...NHA_KHAC], "0941000002", null);
+    expect(vp.map((h) => h.id)).toEqual(["x1", "x2"]);
+    expect(vp.length).toBeGreaterThan(0);
+  });
+
+  it("con ĐÚNG nhà thì cho qua, khớp cả hai dạng SĐT", () => {
+    expect(hocVienLaCuaNguoiKhac(NHA_DIEM, "0941000002", null)).toEqual([]);
+    expect(hocVienLaCuaNguoiKhac(NHA_DIEM, "84941000002", null)).toEqual([]);
+  });
+});
+
+describe("[SOHUU-02] SĐT của LEAD cũng được chấp nhận", () => {
+  it("đơn sửa SĐT khách nhưng em là con của lead ⇒ vẫn qua", () => {
+    // Đơn mở từ lead rồi người bán gõ lại SĐT ở ô khách hàng — ca thật, không phải giả định.
+    expect(hocVienLaCuaNguoiKhac(NHA_DIEM, "0905000000", "84941000002")).toEqual([]);
+  });
+
+  it("không khớp CẢ HAI vế thì vẫn từ chối", () => {
+    expect(
+      hocVienLaCuaNguoiKhac(NHA_KHAC, "0905000000", "84941000002").map((h) => h.id),
+    ).toEqual(["x1", "x2"]);
+  });
+});
+
+describe("[SOHUU-03] hai nhánh biên — fail-closed và fail-open, mỗi cái đúng chỗ", () => {
+  it("em KHÔNG có SĐT phụ huynh ⇒ TỪ CHỐI (không chứng minh được ≠ chứng minh được)", () => {
+    const vp = hocVienLaCuaNguoiKhac([{ id: "n1", parentPhone: null }], "0941000002", null);
+    expect(vp.map((h) => h.id)).toEqual(["n1"]);
+  });
+
+  it("em có SĐT RÁC cũng TỪ CHỐI", () => {
+    for (const x of ["", "   ", "abc", "123"]) {
+      expect(
+        hocVienLaCuaNguoiKhac([{ id: "n1", parentPhone: x }], "0941000002", null).length,
+        `parentPhone=${JSON.stringify(x)}`,
+      ).toBe(1);
+    }
+  });
+
+  it("ĐƠN không có SĐT nào đọc được ⇒ KHÔNG chặn — đó là việc của cổng khác", () => {
+    // Chặn ở đây sẽ khoá luôn đường tạo đơn walk-in chưa kịp nhập SĐT, mà ca đó không
+    // phải ca cổng này sinh ra để chặn.
+    for (const [don, lead] of [["", null], [null, null], ["abc", "   "]] as const) {
+      expect(hocVienLaCuaNguoiKhac(NHA_KHAC, don, lead), `don=${don}`).toEqual([]);
+    }
+  });
+
+  it("danh sách rỗng ⇒ rỗng, không ném", () => {
+    expect(hocVienLaCuaNguoiKhac([], "0941000002", null)).toEqual([]);
+  });
+});
+
+// ⚠️ LƯỚI GHIM MÃ NGUỒN — cổng phải nằm ở SERVER, không chỉ ở form.
+// Ô chọn học viên đã vá sáng 16/09 nhưng vá ở CLIENT: một lời gọi action tự chế, hay một
+// tab còn mở bản client cũ, vẫn gửi được `studentId` bất kỳ. Ca này canh vế server.
+// Luật 11: neo hẹp, KHÔNG cờ `/s`, BỎ CHÚ THÍCH trước khi soi. Đã cấy lại để thấy đỏ.
+describe("[SOHUU-04] lưới ghim: cổng sở hữu có mặt ở SERVER", () => {
+  const boChuThich = (x: string) =>
+    x.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*/g, "$1");
+  const ACT = boChuThich(
+    readFileSync(resolve(process.cwd(), "app/(admin)/admin/orders/_actions.ts"), "utf8"),
+  );
+
+  it("bộ bỏ chú thích thật sự bỏ được (lưới-canh-lưới)", () => {
+    const mau = "a /* K */ b // D\nc";
+    expect(boChuThich(mau)).not.toContain("K");
+    expect(boChuThich(mau)).not.toContain("D");
+  });
+
+  it("action GỌI hàm dùng chung, đúng MỘT lần, và CHẶN khi có vi phạm", () => {
+    expect(ACT.match(/hocVienLaCuaNguoiKhac\(/g)?.length).toBe(1);
+    expect(ACT).toMatch(/if \(nhaKhac\.length > 0\) \{/);
+    expect(ACT).toMatch(/ok: false as const,/);
+  });
+
+  it("cổng đọc CẢ SĐT đơn LẪN SĐT lead", () => {
+    expect(ACT).toMatch(/hocVienLaCuaNguoiKhac\(thay, data\.customerPhone, sdtLead\)/);
+    expect(ACT).toMatch(/select: \{ phone: true \}/);
+  });
+
+  it("câu tra học viên phải lấy `parentPhone` — thiếu nó là cổng đọc undefined rồi cho qua", () => {
+    // Luật 7 của repo: trường BẮT BUỘC biến "quên select cột nguồn" từ lỗi câm thành lỗi
+    // biên dịch. Ở đây `select` là object nên tsc không bắt được — nên ghim bằng lưới.
+    expect(ACT).toMatch(/select: \{ id: true, name: true, parentPhone: true \}/);
   });
 });

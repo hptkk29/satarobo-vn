@@ -326,3 +326,53 @@ export function docConLeadTuMetadata(
   const v = (metadata as Record<string, unknown>).leadChildId;
   return typeof v === "string" && v.trim() ? v.trim() : null;
 }
+
+/**
+ * HỌC VIÊN TRÊN DÒNG PHẢI THUỘC ĐÚNG PHỤ HUYNH CỦA ĐƠN [16/09/2026].
+ *
+ * ── Vì sao cổng này tồn tại ──
+ * Chủ dự án 16/09, bước A1: *"mọi OrderItem khi tạo/sửa phải có học viên thuộc đúng
+ * lead/phụ huynh của đơn, sai → từ chối"*.
+ *
+ * Không phải phòng xa. ĐO ĐƯỢC trên `satarobo_local`, đơn `ORD-260915-000007`:
+ *   · đơn của **Chị Diễm** (`84941000002`);
+ *   · hai dòng hàng lại ghi **Dương Duy Đạt** (mẹ `84930000044`) và **Bùi Thanh Thảo**
+ *     (mẹ `84930000150`) — con của HAI GIA ĐÌNH KHÁC;
+ *   · tiền thì chảy đúng về ba con của chị Diễm (nhờ nhánh `duongLui` bỏ qua `studentId`).
+ * Tức bản ghi đơn đang mang tên con nhà khác. Đơn đó phát QR/ZNS ra ngoài là LỘ THÔNG TIN
+ * một đứa trẻ cho một gia đình không liên quan.
+ *
+ * Nguồn gốc: ô chọn học viên trước 16/09 bày cả 247 em của cơ sở (nhánh fail-open, xem
+ * `locConChoODon`). Ô đó đã vá — nhưng vá ở CLIENT. Cổng này là vế SERVER: một lời gọi
+ * action tự chế, hay một bản client cũ còn mở trong tab, vẫn gửi được `studentId` bất kỳ.
+ *
+ * ── Luật ──
+ * Em hợp lệ khi `canonicalPhone(parentPhone)` của em khớp SĐT của ĐƠN, hoặc khớp SĐT của
+ * LEAD mà đơn gắn vào. Hai vế vì đơn mở từ lead có thể mang SĐT đã sửa lại ở ô khách hàng.
+ *
+ * ⚠️ `parentPhone` RỖNG ⇒ TỪ CHỐI, không phải "cho qua". Đây là cổng chứng minh quyền sở
+ * hữu; "không chứng minh được" và "chứng minh được" không phải một. Fail-open ở đúng chỗ
+ * này là thứ vừa sinh ra dữ liệu hỏng.
+ *
+ * ⚠️ Trả về DANH SÁCH em vi phạm, không phải boolean: màn hình phải gọi được TÊN em sai để
+ * người bán biết sửa dòng nào. Một câu "có lỗi" thì họ phải tự dò.
+ */
+export function hocVienLaCuaNguoiKhac<T extends HocVienTheoSdt>(
+  hocVien: readonly T[],
+  sdtDon: string | null | undefined,
+  sdtLead: string | null | undefined,
+): T[] {
+  const duoc = new Set(
+    [canonicalPhone(sdtDon), canonicalPhone(sdtLead)].filter(
+      (v): v is string => !!v,
+    ),
+  );
+  // Đơn KHÔNG có SĐT nào đọc được ⇒ không có gì để đối chiếu. Trả RỖNG (không chặn) và để
+  // cổng khác lo: chặn ở đây sẽ khoá luôn đường tạo đơn walk-in chưa kịp nhập SĐT, mà ca
+  // đó không phải ca cổng này sinh ra để chặn.
+  if (duoc.size === 0) return [];
+  return hocVien.filter((hv) => {
+    const c = canonicalPhone(hv.parentPhone);
+    return !c || !duoc.has(c);
+  });
+}

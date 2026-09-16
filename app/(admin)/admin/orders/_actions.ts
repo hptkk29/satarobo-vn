@@ -44,6 +44,7 @@ import { congNoDon } from "@/lib/finance/cong-no-don";
 import { haiTrucTheoDon, KHONG_CO_TIEN } from "@/lib/finance/hai-truc-theo-don";
 import { trangThaiDon } from "@/lib/orders/trang-thai-don";
 import {
+  hocVienLaCuaNguoiKhac,
   hocVienTrenCacDong,
   studentIdChoDon,
   thieuHocVienODong,
@@ -315,13 +316,44 @@ export async function createOrderManualAction(input: unknown) {
   if (hocVienIds.length > 0) {
     const thay = await sdb.student.findMany({
       where: { id: { in: hocVienIds }, deletedAt: null },
-      select: { id: true },
+      select: { id: true, name: true, parentPhone: true },
     });
     if (thay.length !== hocVienIds.length) {
       return {
         ok: false as const,
         error:
           "Có học viên không tồn tại hoặc ngoài phạm vi của bạn — chọn lại ở dòng hàng",
+      };
+    }
+
+    /**
+     * ── BƯỚC A1 [16/09/2026]: EM TRÊN DÒNG PHẢI LÀ CON CỦA KHÁCH TRÊN ĐƠN ──
+     *
+     * Chủ dự án: *"mọi OrderItem khi tạo/sửa phải có học viên thuộc đúng lead/phụ huynh
+     * của đơn, sai → từ chối"*.
+     *
+     * Cổng scope ở TRÊN chỉ hỏi "em này có thật và có thuộc cơ sở bạn nhìn thấy không" —
+     * mà cả 247 em của cơ sở đều qua được câu đó. Nó KHÔNG hỏi "em này có phải con của
+     * người đang mua không". Đơn `ORD-260915-000007` lọt đúng khe đó: đơn của chị Diễm
+     * (`84941000002`) mà hai dòng ghi con của hai gia đình khác.
+     *
+     * Ô chọn đã vá sáng nay, nhưng vá ở CLIENT. Đây là vế SERVER — luật thật nằm ở
+     * `hocVienLaCuaNguoiKhac` (thuần, có test + đã cấy lỗi), dùng chung với màn hình.
+     */
+    const sdtLead = data.leadId?.trim()
+      ? ((await sdb.lead.findUnique({
+          where: { id: data.leadId.trim() },
+          select: { phone: true },
+        }))?.phone ?? null)
+      : null;
+    const nhaKhac = hocVienLaCuaNguoiKhac(thay, data.customerPhone, sdtLead);
+    if (nhaKhac.length > 0) {
+      return {
+        ok: false as const,
+        error:
+          `Không tạo được đơn: ${nhaKhac.map((h) => h.name).join(", ")} không phải con của ` +
+          `số điện thoại trên đơn. Chọn lại học viên ở dòng hàng, hoặc cập nhật SĐT phụ ` +
+          `huynh của em đó trước.`,
       };
     }
   }
