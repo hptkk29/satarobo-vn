@@ -225,29 +225,51 @@ d("vé + ghi lượt + tính lại", () => {
     expect(await mod.consumeTicket({ ticketId: t2.ticketId, nonce: t2.nonce, userId })).toEqual({ ok: false, reason: "TICKET_EXPIRED" });
   });
 
-  it("điểm ĐÃ bật định vị: trong vùng ghi được; ngoài vùng và thiếu GPS bị CHẶN, không ghi dòng nào", async () => {
-    // Đây là chỗ luật đảo chiều so với Q-07 cũ ("ghi luôn + gắn cờ"), và đảo vì QR đổi thiết kế:
-    // mã tĩnh dán ở quầy thì ai chụp ảnh cũng quét được, nên định vị là lớp bảo vệ CÒN LẠI duy
-    // nhất — gắn cờ thôi thì mã tĩnh + cờ = không chặn gì cả.
+  it("điểm ĐÃ bật định vị: NGOÀI VÙNG bị chặn, THIẾU GPS thì GHI + gắn cờ", async () => {
+    // Điểm ĐÃ bật định vị vẫn CHẶN người đứng ngoài vùng, và đảo ấy (so với Q-07 cũ "ghi luôn
+    // + gắn cờ") vẫn nguyên: mã QR tĩnh dán ở quầy thì ai chụp ảnh cũng quét được, nên định vị
+    // là lớp bảo vệ CÒN LẠI duy nhất.
+    //
+    // ⚠️ NHƯNG THIẾU TOẠ ĐỘ THÌ KHÔNG CÒN BỊ CHẶN — đảo 16/09/2026.
+    //
+    // Đo prod hôm ấy: 53 lượt bị từ chối vì `NO_GPS`, đang xảy ra hằng ngày. Người bị chặn
+    // không chấm được, mà vé thì đã tiêu. Chốt của chủ dự án: *"Không mất lớp bảo vệ nào: kẻ
+    // gian lận có toạ độ (giả) chứ không thiếu toạ độ."* Chặn người KHÔNG có toạ độ chỉ chặn
+    // được người trung thực đứng chỗ sóng kém; kẻ gian gửi lên một cặp toạ độ bịa và bị vế
+    // NGOÀI VÙNG chặn — vế ấy giữ nguyên, và ca này canh cả hai vế cạnh nhau đúng vì thế.
     const r1 = await mod.recordTimeLog({ userId, workLocationId: wlId, direction: "CHECK_IN", latitude: 16.0472, longitude: 108.2063 });
     expect(r1.ok).toBe(true);
     if (r1.ok) expect(r1.flags).toEqual(["CHAM_NGOAI_LICH"]); // chưa xếp ca hôm nay
 
+    // VẾ GIỮ NGUYÊN — lớp bảo vệ thật.
     const r2 = await mod.recordTimeLog({ userId, workLocationId: wlId, direction: "CHECK_IN", latitude: 16.06, longitude: 108.22 });
     expect(r2.ok).toBe(false);
     if (!r2.ok) expect(r2.rejectReason).toBe("OUTSIDE_GEOFENCE");
 
+    // VẾ ĐẢO — thiếu toạ độ: GHI ĐƯỢC, và mang cờ để Quản lý rà.
     const r3 = await mod.recordTimeLog({ userId, workLocationId: wlId, direction: "CHECK_OUT" });
-    expect(r3.ok).toBe(false);
-    if (!r3.ok) expect(r3.rejectReason).toBe("NO_GPS");
+    expect(r3.ok, "thiếu GPS KHÔNG còn bị chặn — xem chốt 16/09").toBe(true);
+    if (r3.ok) expect(r3.flags).toContain("THIEU_GPS");
 
     // Trùng 2′ vẫn là CỜ chứ không phải chặn — người bấm nhầm hai lần không bị mất lượt.
-    const r4 = await mod.recordTimeLog({ userId, workLocationId: wlId, direction: "CHECK_IN", latitude: 16.0472, longitude: 108.2063 });
+    //
+    // ⚠️ CHIỀU của lượt này phải là CHECK_OUT, và đó là HỆ QUẢ BẬC HAI của bản vá 16/09.
+    //
+    // Luật trùng 2′ so với lượt ACCEPTED NGAY TRƯỚC ĐÓ và đòi CÙNG CHIỀU (`timelog.ts`:
+    // `last.direction === input.direction`) — nó canh việc bấm hai lần một nút, không canh
+    // vào-ra-vào. Trước bản vá, `r3` (thiếu GPS) bị CHẶN nên không để lại dòng nào, và lượt
+    // ngay trước `r4` vẫn là `r1` cùng chiều CHECK_IN. Nay `r3` ĐƯỢC GHI, nên lượt ngay
+    // trước `r4` là một CHECK_OUT — khác chiều, không còn là trùng.
+    //
+    // Đổi chiều `r4` thay vì nới luật: luật vẫn đúng, chỉ có kịch bản đổi vì dòng giữa nay
+    // tồn tại. Sửa luật ở đây là đi vá một thứ không hỏng.
+    const r4 = await mod.recordTimeLog({ userId, workLocationId: wlId, direction: "CHECK_OUT", latitude: 16.0472, longitude: 108.2063 });
     expect(r4.ok).toBe(true);
     if (r4.ok) expect(r4.flags).toContain("TRUNG_2_PHUT");
 
     const rows = await db.staffTimeLog.findMany({ where: { userId, result: "ACCEPTED" } });
-    expect(rows).toHaveLength(2); // r1 + r4; hai lượt bị chặn KHÔNG để lại dòng nào
+    // r1 + r3 + r4. Chỉ lượt NGOÀI VÙNG không để lại dòng ACCEPTED nào.
+    expect(rows).toHaveLength(3);
     expect(rows.every((x) => x.centerId === centerId)).toBe(true);
   });
 

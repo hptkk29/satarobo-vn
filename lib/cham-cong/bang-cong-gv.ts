@@ -98,6 +98,25 @@ export function dungDongBangCong(input: {
   const { buoi, ca, cong, homNay } = input;
   const congTheoNgay = new Map(cong.map((c) => [c.ngay, c]));
   const tuongLai = (ngay: string) => ngay > homNay;
+
+  /**
+   * Cờ của một ngày CHƯA DIỄN RA — luôn rỗng.
+   *
+   * ⚠️ Vì sao cần hàm này (sự cố 16/09/2026, chủ dự án bắt trên localhost): bảng in
+   * "Không có lượt" cho 17/09 → 30/09 kèm đường dẫn **"Nộp đơn chỉnh công"**. Tức màn hình
+   * bảo người ta đi xin bổ sung giờ cho NGÀY MAI. Đó không phải con số sai — đó là màn hình
+   * hướng dẫn một việc vô nghĩa, và nếu ai làm theo thì đơn chạy thẳng vào hàng chờ duyệt
+   * của Quản lý. Đúng luật 12 ở dạng thuần nhất.
+   *
+   * Rỗng HẾT chứ không lọc riêng nhóm "thiếu mốc quét": soi lại danh sách cờ thì MỌI cờ đều
+   * là lời kể về một việc ĐÃ xảy ra (quét muộn · quét thiếu · sai nơi · ngoài vùng · thiếu
+   * giờ · vượt trần). Không cờ nào có nghĩa cho một ngày chưa tới, nên lọc từng cái là để
+   * ngỏ chỗ cho cái tiếp theo lọt.
+   *
+   * Dòng ngày công của ngày tương lai VẪN CÒN trên DB — đây chỉ là tầng HIỂN THỊ. Chặn ở
+   * đường ghi là việc riêng, chạm dữ liệu đã có nên phải do chủ dự án bấm.
+   */
+  const coCuaNgay = (ngay: string, flags: string[]): string[] => (tuongLai(ngay) ? [] : flags);
   const ra: DongBangCong[] = [];
 
   for (const b of buoi) {
@@ -133,7 +152,7 @@ export function dungDongBangCong(input: {
       soGio: null,
       phutLam: nghi ? null : (n?.phutLam ?? null),
       cong: n?.cong ?? null,
-      flags: nghi ? [] : (n?.flags ?? []),
+      flags: nghi ? [] : coCuaNgay(c.ngay, n?.flags ?? []),
       trangThai: trangThaiNgay({
         tuongLai: tuongLai(c.ngay),
         kind: c.kind,
@@ -159,7 +178,7 @@ export function dungDongBangCong(input: {
       soGio: null,
       phutLam: n.phutLam,
       cong: n.cong,
-      flags: n.flags,
+      flags: coCuaNgay(n.ngay, n.flags),
       trangThai: trangThaiNgay({
         tuongLai: tuongLai(n.ngay),
         kind: "TIMED",
@@ -215,7 +234,23 @@ export type TomTatCong = {
   gomNgayTuongLai: boolean;
 
   // ── A · năm thẻ đầu trang ───────────────────────────────────────────────────
+  /**
+   * Công tới HẾT HÔM NAY — không gồm ngày chưa diễn ra.
+   *
+   * ⚠️ Trước 16/09/2026 số này gộp cả tháng: một người có 12,5 công thì 6 trong đó là của
+   * những ngày chưa xảy ra. Chủ dự án bắt được trên localhost và chốt phương án (a):
+   * "chỉ công tới hôm nay, ghi thêm dòng nhỏ kế hoạch cả tháng".
+   */
   cong: number;
+  /**
+   * Công theo KẾ HOẠCH của cả tháng, gồm cả ngày chưa tới. Chỉ để in dòng phụ dưới ô
+   * "Công tháng" — KHÔNG phải số để cộng vào lương.
+   *
+   * ⚠️ Nó chỉ đếm được những ngày ĐÃ CÓ DÒNG `StaffAttendanceDay`. Ngày tương lai chỉ có
+   * dòng sau khi ai đó bấm "Tính lại", nên con số này phụ thuộc việc đã bấm hay chưa —
+   * lý do nó được in dưới dạng dòng phụ, và chỉ in khi thật sự lớn hơn `cong`.
+   */
+  congKeHoachCaThang: number;
   congChuan: So;
   phutLam: number;
   /**
@@ -290,7 +325,23 @@ export function tomTatCongThang(input: {
   cuoiThang: string;
   don: { choDuyet: number; daDuyetChinhCong: number; tuChoi: number } | null;
 }): TomTatCong {
-  const g = gopNgayCong(input.ngay);
+  // ── NGÀY CHƯA DIỄN RA KHÔNG ĐƯỢC TÍNH VÀO BẤT KỲ SỐ NÀO Ở ĐÂY ───────────────
+  //
+  // Sự cố 16/09/2026. Chủ dự án hỏi: *"những ngày chưa diễn ra thì không tính vào chứ?
+  // Sao thống kê lại tính cả full cả tháng?"* — và đúng: `homNay` trước đây CHỈ dùng để
+  // dựng hai nhãn `tinhToiNgay`/`gomNgayTuongLai`, còn vòng cộng số thì không lọc gì.
+  // Nhãn in "chưa gồm ngày chưa tới" ngay phía trên ô ghi "còn 14 ngày chưa có dấu nào".
+  // Lời hứa suông — đo trên prod ngày ấy: 250 dòng ngày tương lai, 196 cờ oan.
+  //
+  // Nay MỌI số trong khối này đều là "tính tới hết hôm nay", khớp đúng câu nhãn đã hứa.
+  // Hôm nay KHÔNG phải tương lai: một ngày đang diễn ra mà chưa ai quét thì đúng là chưa
+  // chấm thật (cùng quy ước với `dungDongBangCong`).
+  const daXayRa = input.ngay.filter(
+    (d) => d.workDate.toISOString().slice(0, 10) <= input.homNay,
+  );
+  const g = gopNgayCong(daXayRa);
+  // Vế DUY NHẤT còn đọc cả tháng — và nó đi ra ngoài dưới cái tên nói đúng điều đó.
+  const gCaThang = gopNgayCong(input.ngay);
 
   let nghiPhep = 0;
   let nghiPhepCoLuong = 0;
@@ -303,7 +354,7 @@ export function tomTatCongThang(input: {
   let ngayCanXuLy = 0;
   let thieuLuotNgay = 0;
 
-  for (const d of input.ngay) {
+  for (const d of daXayRa) {
     if (d.dayType === "HOLIDAY") nghiLe += 1;
     else if (d.dayType === "WEEKLY_OFF") nghiTuan += 1;
     else if (d.dayType === "LEAVE") {
@@ -336,6 +387,7 @@ export function tomTatCongThang(input: {
     gomNgayTuongLai: input.cuoiThang > input.homNay,
 
     cong: g.units,
+    congKeHoachCaThang: gCaThang.units,
     congChuan: input.congChuan,
     phutLam: g.workedMinutes,
     phutKeHoach: g.expectedMinutes,

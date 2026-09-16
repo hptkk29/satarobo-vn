@@ -69,6 +69,14 @@ export interface ImportContext {
   excelRowOf: number[];
   /** Các số dòng Excel đã được bấm nút xác nhận (confirmDuplicates). */
   confirmed: Set<number>;
+  /**
+   * Các số dòng Excel người dùng đã tick "ghi đè" (`overwriteDuplicates`).
+   *
+   * Luôn có mặt (rỗng khi màn không bật tính năng), để trang gọi không phải kiểm `undefined`
+   * trước khi đọc — một `ctx?.ghiDe?.has()` viết thiếu dấu chấm hỏi nào đó là im lặng trả
+   * `false` cho MỌI dòng, tức nuốt sạch lệnh ghi đè mà không báo gì.
+   */
+  ghiDe: Set<number>;
 }
 
 /** Một cột của file nhập, như màn gọi khai báo. */
@@ -146,6 +154,27 @@ export interface ExcelImporterProps<T> {
    * Ưu tiên hơn `confirmDuplicates`.
    */
   mergeDuplicates?: { label: string };
+  /**
+   * CỘT "ĐÈ" cho nhóm Trùng — người vận hành tự chọn dòng nào được ghi đè bản ghi cũ.
+   *
+   * Chủ dự án 16/09/2026: "thiết kế thêm tuỳ chọn ghi đè riêng cho các lead bị trùng nữa",
+   * kèm yêu cầu cụ thể "có 1 ô tích ở hàng trên cùng chỗ chữ đè để tick tất cả nữa".
+   *
+   * ⚠️ Cột này CHỈ hiện ở tab Trùng. Ở tab Hợp lệ không có bản ghi cũ nào để đè, nên một ô
+   * tick ở đó là một lời hứa suông — và affordance nói dối thì không ném lỗi, không làm test
+   * đỏ, chỉ người bấm mới biết (luật 12).
+   *
+   * Không khai prop này = màn đó không có cột, không có state, không gửi gì thêm. 9 màn nhập
+   * còn lại dùng chung tệp này nên mặc định phải là KHÔNG CÓ GÌ ĐỔI.
+   */
+  overwriteDuplicates?: {
+    /** Nhãn cột, viết ngắn (vd "Đè"). */
+    label: string;
+    /** Câu giải thích ở đầu tab Trùng — nói rõ đè cái gì và cái gì được giữ. */
+    moTa: string;
+    /** Câu thay cho dòng lý do của những dòng ĐÃ tick. Phải nói đúng việc sẽ xảy ra. */
+    chuKhiBat: string;
+  };
 }
 
 type Step = "idle" | "preview" | "importing" | "done";
@@ -183,6 +212,7 @@ export function ExcelImporter<T>({
   checkExisting,
   confirmDuplicates,
   mergeDuplicates,
+  overwriteDuplicates,
 }: ExcelImporterProps<T>) {
   const [step, setStep] = useState<Step>("idle");
   const [rawRows, setRawRows] = useState<Record<string, unknown>[]>([]);
@@ -195,7 +225,16 @@ export function ExcelImporter<T>({
   // Cảnh báo GHI ĐÈ: dòng VẪN nhập được — key theo dòng Excel.
   const [dbWarn, setDbWarn] = useState<Map<number, string>>(new Map());
   const [confirmedDups, setConfirmedDups] = useState<Set<number>>(new Set());
+  /**
+   * Dòng người dùng tick "ghi đè" — key theo SỐ DÒNG EXCEL, không phải index.
+   *
+   * Cùng lý do với `confirmedDups`: xoá bớt dòng làm index trôi, và một lệnh GHI ĐÈ trôi
+   * sang dòng khác là đè nhầm lead — hỏng theo kiểu không khôi phục được.
+   */
+  const [ghiDeRows, setGhiDeRows] = useState<Set<number>>(new Set());
   const [checkingDb, setCheckingDb] = useState(false);
+  /** Lý do lượt nhập HỎNG — hiện tại chỗ, không phải hộp thoại. `null` = chưa hỏng. */
+  const [loiNhap, setLoiNhap] = useState<string | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [filename, setFilename] = useState("");
 
@@ -234,6 +273,7 @@ export function ExcelImporter<T>({
         setDbDup(new Map());
         setDbWarn(new Map());
         setConfirmedDups(new Set());
+        setGhiDeRows(new Set());
         setDangSua(null);
         setTrang(1);
         setStep("preview");
@@ -338,6 +378,45 @@ export function ExcelImporter<T>({
   /** Dòng nằm trong nhóm "trùng" nhưng sẽ KHÔNG được ghi — phải nói ra, đừng để họ tự đoán. */
   const trungBiBo = theoNhom.trung.filter((i) => !seVao(i)).length;
 
+  // ── CỘT "ĐÈ" ────────────────────────────────────────────────────────────────────────
+  //
+  // Chỉ dựng khi màn có khai `overwriteDuplicates` VÀ người dùng đang đứng ở tab Trùng.
+  // Xem chú thích của prop: một ô tick ở tab Hợp lệ là lời hứa suông.
+  const coCotDe = Boolean(overwriteDuplicates) && nhom === "trung";
+  /** Dòng trùng ĐƯỢC PHÉP tick: phải là dòng thực sự sẽ được ghi, tick dòng bị bỏ là vô nghĩa. */
+  const dongDeDuoc = overwriteDuplicates
+    ? theoNhom.trung.filter((i) => seVao(i)).map((i) => excelRows[i] ?? i + 2)
+    : [];
+  const soDaDe = dongDeDuoc.filter((r) => ghiDeRows.has(r)).length;
+  const deTatCa = dongDeDuoc.length > 0 && soDaDe === dongDeDuoc.length;
+  const laGhiDe = (i: number) => ghiDeRows.has(excelRows[i] ?? -1);
+
+  const toggleGhiDe = (excelRow: number) => {
+    setGhiDeRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(excelRow)) next.delete(excelRow);
+      else next.add(excelRow);
+      return next;
+    });
+  };
+
+  /**
+   * Ô tick ở HÀNG TIÊU ĐỀ — bật/tắt cho TOÀN BỘ nhóm Trùng, không chỉ trang đang xem.
+   *
+   * Chủ dự án yêu cầu đúng ô này ("để tick tất cả nữa"), và phạm vi phải là cả nhóm: file
+   * thật 145 dòng trùng thì "tất cả" mà chỉ được 25 dòng của trang hiện tại là một cái bẫy —
+   * người dùng thấy ô tiêu đề đã tick, sang trang sau thấy trống, và không biết rốt cuộc
+   * mình đã ra lệnh cho bao nhiêu dòng. Con số thật hiện ở `GiaiThichNhom` ngay trên bảng.
+   */
+  const toggleDeTatCa = () => {
+    setGhiDeRows((prev) => {
+      const next = new Set(prev);
+      if (deTatCa) for (const r of dongDeDuoc) next.delete(r);
+      else for (const r of dongDeDuoc) next.add(r);
+      return next;
+    });
+  };
+
   // Trang hiện tại của nhóm đang xem. Đổi nhóm hoặc dữ liệu co lại thì kéo trang về hợp lệ.
   const dsNhom = theoNhom[nhom];
   const soTrang = Math.max(1, Math.ceil(dsNhom.length / SO_DONG_MOI_TRANG));
@@ -356,11 +435,27 @@ export function ExcelImporter<T>({
       const res = await onImport(validRows, {
         excelRowOf: validIdx.map((i) => excelRows[i] ?? i + 2),
         confirmed: confirmedDups,
+        ghiDe: ghiDeRows,
       });
       setResult(res);
       setStep("done");
     } catch (err) {
-      alert(`Nhập thất bại: ${err instanceof Error ? err.message : "Unknown"}`);
+      // ⚠️ KHÔNG dùng `alert()` cho lỗi này.
+      //
+      // Đo 16/09/2026 (ảnh chụp prod): hộp thoại in đúng một câu "Nhập thất bại: Nhập thất
+      // bại" rồi biến mất khi bấm OK. Ba cái sai cùng lúc: chữ không chọn được nên người
+      // dùng không gửi được cho ai, hộp thoại chặn cả trang nên không mở DevTools xem tiếp
+      // được, và đóng xong là mất luôn. Thông điệp ở đây có thể là một câu lỗi Prisma dài
+      // — thứ PHẢI đọc và chép lại được.
+      //
+      // Để nguyên tại chỗ, có thể bôi đen, và danh sách dòng vẫn còn nguyên bên dưới để sửa.
+      //
+      // ⚠️ KHÔNG thêm `setLoiNhap(null)` ở đầu hàm cho "sạch". Đã thử: dòng đó KHÔNG QUAN
+      // SÁT ĐƯỢC — trong lúc chạy thì panel không dựng (step `importing`), xong mà thành
+      // công thì màn kết quả thay cả khung, xong mà hỏng thì chính dòng dưới đây ghi đè.
+      // Cấy lỗi vào nó, cả bộ vẫn xanh. Một dòng không test nào chạm tới được là một dòng
+      // trông như đang bảo vệ điều gì đó mà không bảo vệ gì cả.
+      setLoiNhap(err instanceof Error ? err.message : "Không rõ lý do");
       setStep("preview");
     }
   };
@@ -373,7 +468,9 @@ export function ExcelImporter<T>({
     setDbDup(new Map());
     setDbWarn(new Map());
     setConfirmedDups(new Set());
+    setGhiDeRows(new Set());
     setCheckingDb(false);
+    setLoiNhap(null);
     setResult(null);
     setFilename("");
     setNhom("hopLe");
@@ -438,6 +535,15 @@ export function ExcelImporter<T>({
       next.delete(excelNo);
       return next;
     });
+    // Lệnh GHI ĐÈ cũng vậy, và ở đây còn gắt hơn: người dùng vừa sửa SĐT thì dòng này có thể
+    // đã trỏ sang một lead KHÁC — giữ lại cái tick là đè lên đúng người không liên quan. Bỏ
+    // tick là fail-closed; muốn đè thì tick lại, một cú bấm.
+    setGhiDeRows((prev) => {
+      if (!prev.has(excelNo)) return prev;
+      const next = new Set(prev);
+      next.delete(excelNo);
+      return next;
+    });
     setDangSua(null);
 
     if (!checkExisting) return;
@@ -468,6 +574,13 @@ export function ExcelImporter<T>({
     const dup = dupFile ?? dupDb;
     if (dup) {
       if (mergeDuplicates) {
+        // ⚠️ Dòng ĐÃ TICK ghi đè thì câu này PHẢI đổi. Câu mặc định của màn lead hứa nguyên
+        // văn "chỉ ĐIỀN những ô lead đó đang để trống; ô đã có giá trị thì giữ nguyên" —
+        // để nguyên câu đó bên cạnh một ô tick đang bật là màn hình nói ngược với việc nó
+        // sắp làm, và người dùng chỉ biết sau khi dữ liệu đã mất (luật 12).
+        if (overwriteDuplicates && laGhiDe(i)) {
+          return { kieu: "trung" as const, chu: overwriteDuplicates.chuKhiBat };
+        }
         return {
           kieu: "trung" as const,
           chu: dupFile
@@ -528,6 +641,16 @@ export function ExcelImporter<T>({
             trungBiBo={trungBiBo}
             coXacNhan={Boolean(confirmDuplicates)}
             nhanTrung={mergeDuplicates?.label ?? null}
+            ghiDe={
+              coCotDe && overwriteDuplicates
+                ? {
+                    moTa: overwriteDuplicates.moTa,
+                    nhan: overwriteDuplicates.label,
+                    daChon: soDaDe,
+                    tong: dongDeDuoc.length,
+                  }
+                : null
+            }
           />
 
           {dsNhom.length > 0 && (
@@ -560,7 +683,28 @@ export function ExcelImporter<T>({
                           scope="col"
                           className="sticky left-0 z-10 whitespace-nowrap border-r border-border bg-muted px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground"
                         >
-                          Dòng
+                          {coCotDe && overwriteDuplicates ? (
+                            // Ô tick TẤT CẢ nằm ngay cạnh chữ "Đè" — đúng chỗ chủ dự án chỉ.
+                            // Giữ luôn chữ "dòng" để cột số bên dưới không mất nhãn.
+                            <span className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 cursor-pointer accent-primary"
+                                checked={deTatCa}
+                                // Tick một phần thì KHÔNG được vẽ như đã tick hết — ô
+                                // "lửng" là cách duy nhất nói đúng trạng thái khi người
+                                // dùng mới chọn vài dòng trong 145.
+                                ref={(el) => {
+                                  if (el) el.indeterminate = soDaDe > 0 && !deTatCa;
+                                }}
+                                onChange={toggleDeTatCa}
+                                aria-label={`${overwriteDuplicates.label} tất cả ${dongDeDuoc.length} dòng trùng`}
+                              />
+                              <span>{overwriteDuplicates.label} / dòng</span>
+                            </span>
+                          ) : (
+                            "Dòng"
+                          )}
                         </th>
                         {columnHints.map((c) => (
                           <th
@@ -611,6 +755,15 @@ export function ExcelImporter<T>({
                                 ? confirmDuplicates.label
                                 : null
                             }
+                            ghiDe={
+                              coCotDe && overwriteDuplicates && seVao(i)
+                                ? {
+                                    nhan: overwriteDuplicates.label,
+                                    bat: laGhiDe(i),
+                                    onDoi: () => toggleGhiDe(excelRows[i] ?? -1),
+                                  }
+                                : null
+                            }
                             onXacNhan={() => toggleConfirm(excelRows[i] ?? -1)}
                             onSua={() => setDangSua(i)}
                             onXoa={() => removeRows(new Set([i]))}
@@ -624,6 +777,29 @@ export function ExcelImporter<T>({
 
               {/* Dưới `md`: thẻ xếp dọc. Bảng 10 cột trên màn 320px là không đọc được, và màn
                   này tồn tại để người ta SỬA chứ không chỉ để liếc. */}
+              {/* "Tick tất cả" cho màn nhỏ.
+                  ⚠️ `md:hidden` — trên desktop ô này đã có ở hàng tiêu đề bảng, hai ô cùng
+                  làm một việc trên một màn hình là mời người dùng đoán xem chúng khác nhau
+                  chỗ nào. Đo 16/09 ở 320–640px: bảng không dựng nên ô tiêu đề KHÔNG tồn tại,
+                  và file 145 dòng trùng thì thiếu nó là bắt tick tay 145 lần trên điện thoại
+                  — đúng thứ chủ dự án yêu cầu để khỏi phải làm. */}
+              {coCotDe && overwriteDuplicates && dongDeDuoc.length > 0 && (
+                <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-border bg-background px-4 text-sm md:hidden">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 cursor-pointer accent-primary"
+                    checked={deTatCa}
+                    ref={(el) => {
+                      if (el) el.indeterminate = soDaDe > 0 && !deTatCa;
+                    }}
+                    onChange={toggleDeTatCa}
+                  />
+                  <span className="font-medium">
+                    {overwriteDuplicates.label} tất cả {dongDeDuoc.length} dòng trùng
+                  </span>
+                </label>
+              )}
+
               <ul className="space-y-3 md:hidden">
                 {dsTrang.map((i) => (
                   <li key={excelRows[i] ?? i}>
@@ -646,6 +822,15 @@ export function ExcelImporter<T>({
                         nhanXacNhan={
                           trangThaiDong(i).kieu === "chan" && confirmDuplicates
                             ? confirmDuplicates.label
+                            : null
+                        }
+                        ghiDe={
+                          coCotDe && overwriteDuplicates && seVao(i)
+                            ? {
+                                nhan: overwriteDuplicates.label,
+                                bat: laGhiDe(i),
+                                onDoi: () => toggleGhiDe(excelRows[i] ?? -1),
+                              }
                             : null
                         }
                         onXacNhan={() => toggleConfirm(excelRows[i] ?? -1)}
@@ -671,6 +856,26 @@ export function ExcelImporter<T>({
           )}
 
           {dsNhom.length === 0 && <NhomRong nhom={nhom} soDongSeGhi={validRows.length} />}
+
+          {loiNhap && (
+            // `select-text` + `break-words`: câu lỗi Prisma dài và người dùng cần CHÉP nó
+            // đi hỏi. `role="alert"` để trình đọc màn hình đọc ngay, vì lúc này tiêu điểm
+            // đang ở nút Nhập chứ không ở đây.
+            <div
+              role="alert"
+              className="rounded-xl border border-state-danger bg-state-danger-soft px-4 py-3"
+            >
+              <p className="text-sm font-semibold text-state-danger-ink">
+                Không ghi được — chưa dòng nào vào hệ thống
+              </p>
+              <p className="mt-1 select-text break-words text-sm text-state-danger-ink">
+                {loiNhap}
+              </p>
+              <p className="mt-1.5 text-xs text-state-danger-ink/80">
+                Danh sách bên trên vẫn còn nguyên: sửa rồi bấm Nhập lại, không cần chọn file lần nữa.
+              </p>
+            </div>
+          )}
 
           {/* Thanh hành động dính đáy: ở màn nhỏ, danh sách dài đẩy nút ra khỏi tầm nhìn và
               người dùng cuộn mãi không thấy nút Nhập. `bottom` cộng safe-area cho máy có
@@ -927,12 +1132,15 @@ function GiaiThichNhom({
   trungBiBo,
   coXacNhan,
   nhanTrung,
+  ghiDe,
 }: {
   nhom: Nhom;
   soDong: number;
   trungBiBo: number;
   coXacNhan: boolean;
   nhanTrung: string | null;
+  /** Cột "Đè" của nhóm Trùng — `null` khi màn không bật. */
+  ghiDe: { moTa: string; nhan: string; daChon: number; tong: number } | null;
 }) {
   if (soDong === 0) return null;
   const chu =
@@ -949,7 +1157,25 @@ function GiaiThichNhom({
           // một chỉ dẫn trỏ vào thứ không tồn tại trên màn hình (luật 12).
           : `Đã có bản ghi cùng khoá trong hệ thống.${nhanTrung ? ` ${nhanTrung}.` : ""} Dòng chữ dưới mỗi dòng nói rõ sẽ ghi đè lên ai — đọc trước khi nhập.`;
 
-  return <p className="text-sm text-muted-foreground">{chu}</p>;
+  return (
+    <div className="space-y-2">
+      <p className="text-sm text-muted-foreground">{chu}</p>
+      {ghiDe && ghiDe.tong > 0 && (
+        // ⚠️ Khối này CHỈ hiện ở nhóm Trùng (chỗ gọi đã gác), và nó phải in CON SỐ THẬT.
+        // Ô tick ở hàng tiêu đề bật cho cả nhóm chứ không chỉ trang đang xem, nên nếu màn
+        // hình không nói "đang đè N/M dòng" thì người dùng ở trang 3 không có cách nào biết
+        // mình vừa ra lệnh cho bao nhiêu dòng.
+        <div className="rounded-xl border border-state-warning/40 bg-state-warning-soft px-4 py-3 text-xs text-state-warning-ink">
+          <p className="max-w-[86ch]">{ghiDe.moTa}</p>
+          <p className="mt-1.5 font-semibold tabular-nums">
+            {ghiDe.daChon === 0
+              ? `Chưa tick dòng nào — cả ${ghiDe.tong} dòng đều GIỮ NGUYÊN thông tin đang có.`
+              : `Đang ${ghiDe.nhan.toLowerCase()} ${ghiDe.daChon}/${ghiDe.tong} dòng trùng.`}
+          </p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function NhomRong({ nhom, soDongSeGhi }: { nhom: Nhom; soDongSeGhi: number }) {
@@ -1105,12 +1331,20 @@ function NutXacNhan({ nhan, onBam }: { nhan: string; onBam: () => void }) {
  * Lý do là câu văn, không phải giá trị bảng. Ép nó vào lưới cột là hỏng cả hai.
  * Dòng "sẵn sàng nhập" KHÔNG có dòng lý do — không có gì để nói thì đừng chiếm chỗ.
  */
+/** Ô tick "ghi đè" của một dòng. `null` = màn này không có cột đó. */
+export interface OGhiDe {
+  nhan: string;
+  bat: boolean;
+  onDoi: () => void;
+}
+
 function DongBang({
   soDong,
   columnHints,
   gia,
   trangThai,
   nhanXacNhan,
+  ghiDe,
   onXacNhan,
   onSua,
   onXoa,
@@ -1120,6 +1354,7 @@ function DongBang({
   gia: Record<string, unknown>;
   trangThai: TrangThaiDong;
   nhanXacNhan: string | null;
+  ghiDe: OGhiDe | null;
   onXacNhan: () => void;
   onSua: () => void;
   onXoa: () => void;
@@ -1139,7 +1374,18 @@ function DongBang({
             NEN_GHIM[trangThai.kieu],
           )}
         >
-          <span className="relative">{soDong}</span>
+          <span className="relative flex items-center gap-2">
+            {ghiDe && (
+              <input
+                type="checkbox"
+                className="h-4 w-4 cursor-pointer accent-primary"
+                checked={ghiDe.bat}
+                onChange={ghiDe.onDoi}
+                aria-label={`${ghiDe.nhan} dòng ${soDong}`}
+              />
+            )}
+            {soDong}
+          </span>
         </td>
         {columnHints.map((c) => {
           const tho = oThanhChuoi(gia[c.key]);
@@ -1203,6 +1449,7 @@ function TheDong({
   gia,
   trangThai,
   nhanXacNhan,
+  ghiDe,
   onXacNhan,
   onSua,
   onXoa,
@@ -1212,6 +1459,7 @@ function TheDong({
   gia: Record<string, unknown>;
   trangThai: TrangThaiDong;
   nhanXacNhan: string | null;
+  ghiDe: OGhiDe | null;
   onXacNhan: () => void;
   onSua: () => void;
   onXoa: () => void;
@@ -1224,6 +1472,22 @@ function TheDong({
         </span>
         <NutDong soDong={soDong} onSua={onSua} onXoa={onXoa} />
       </div>
+      {/* Ở thẻ, ô tick phải có NHÃN CHỮ đi kèm: bảng còn có hàng tiêu đề để giải nghĩa, thẻ
+          thì không có gì cả — một ô vuông trơ trọi trên điện thoại là câu đố. Vùng chạm lấy
+          trọn bề ngang và cao 44px theo DESIGN.md §2. */}
+      {ghiDe && (
+        <label className="flex min-h-11 cursor-pointer items-center gap-2 border-b border-border/70 px-4 text-sm">
+          <input
+            type="checkbox"
+            className="h-4 w-4 cursor-pointer accent-primary"
+            checked={ghiDe.bat}
+            onChange={ghiDe.onDoi}
+          />
+          <span className="font-medium">
+            {ghiDe.nhan} thông tin cũ bằng dữ liệu dòng này
+          </span>
+        </label>
+      )}
       {/* ⚠️ Nhãn NẰM TRÊN giá trị, không nằm cạnh.
           Đo 15/09 ở 390px: để nhãn và giá trị chia đôi hàng thì nhãn dài ("Sale phụ trách
           (email hoặc mã NV, để trống)") ăn gần hết bề ngang, giá trị còn một cột hẹp tới mức
