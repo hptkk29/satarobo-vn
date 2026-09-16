@@ -35,7 +35,7 @@ Ba trong số đó là bảo mật/riêng tư:
 
 ## NỢ — chưa làm, cố ý
 
-### 1. Gỡ VietQR khỏi màn Tích hợp (theo ý `main`)
+### NỢ-1 · Gỡ VietQR khỏi màn Tích hợp (theo ý `main`)
 `main` 31/08 gỡ `setVietQrConfig` + `vietqrSchema` vì giữ lại là giữ **một cửa ghi thứ hai**
 vào kho cũ `IntegrationConfig` khoá `VIETQR:*` (tài khoản nhận tiền đã chuyển sang
 `/admin/payment-methods`). Nhưng mã ZaloCRM của `test` nằm **trong cùng khối xung đột** —
@@ -44,14 +44,42 @@ lấy bản `main` là xoá luôn tích hợp ZaloCRM vừa nghiệm thu.
 ⇒ Đã **giữ bản `test`** (giữ cả hai). Gỡ VietQR là **một lượt riêng, thuần dọn dẹp** —
 không phải lỗi đang chạy.
 
-### 2. Thu hẹp phủ test: "hoàn tiền → công nợ"
-`tests/e2e/r7/hoan-tien-cong-no.spec.ts` bị xoá vì viết theo mô hình cũ
-(`accountantStatus in [… ADJUSTED]`) — không biên dịch được với schema sau
-`20260907090000_payment_type_tach_khoi_status`. Bộ thay thế của `main`
-(`tests/finance/dieu-chinh.test.ts`, đo theo `paymentType`) **không phủ y hệt** phần
-"hoàn tiền → công nợ". Ghi ra để không ai tưởng phủ vẫn nguyên.
+### NỢ-2 · MẤT PHỦ TEST: "hoàn tiền → công nợ" — PHẢI LÀM TRƯỚC PR `test` → `main`
 
-### 3. Bố cục cột bảng Lead — CHỜ CHỦ DỰ ÁN CHỐT
+**Không phải đổi chỗ. Là mất.**
+
+`tests/e2e/r7/hoan-tien-cong-no.spec.ts` (361 dòng, **8 ca**) bị xoá vì viết theo mô hình
+cũ `accountantStatus in [… ADJUSTED]` — không biên dịch được với schema sau
+`20260907090000_payment_type_tach_khoi_status`.
+
+Bộ được coi là "thay thế", `tests/finance/dieu-chinh.test.ts` (435 dòng, 24 ca), nhắc
+`refund` / `hoàn tiền` / `REFUNDED` **ĐÚNG 0 LẦN**. Nó phủ cơ chế DELTA ở tầng sổ (hai
+trục A/B, xoá mềm, trần học phí, khoá lạc quan, AuditLog) — **không chạm đường hoàn tiền,
+không chạm màn phụ huynh**.
+
+**Tám ca mất, ghi tên để dựng lại:**
+
+| Ca | Phủ gì |
+|---|---|
+| `[HT-E1]` | hoàn TOÀN BỘ — PH thấy đã thu về 0, biên lai có dòng hoàn, **công nợ không đẻ nợ ma** |
+| `[HT-E2]` | hoàn MỘT PHẦN — trừ đúng phần đã trả lại trên **cả 3 màn PH** |
+| `[HT-E3]` | hoàn HAI LẦN liên tiếp — đề xuất lần hai KHÔNG tính lại trên số gộp |
+| `[HT-E3b]` | đã DUYỆT hoàn nhưng kế toán chưa ghi bút toán âm → đề xuất kế tiếp vẫn không phồng |
+| `[HT-E4]` | hoàn SAU KHI ĐÃ ĐIỀU CHỈNH — bản gốc bị loại, bút toán âm bị trừ |
+| `[HT-E5]` | ghi danh CHƯA THU ĐỒNG NÀO — mọi màn giữ nguyên, không tạo yêu cầu hoàn rỗng |
+| `[HT-E6]` | khoản `PENDING` vẫn KHÔNG hiện tiền cho PH (AC1 không bị đợt vá nới ra) |
+| `[HT-E7]` | màn ĐANG ĐÚNG không được đổi số — doanh thu thực thu khớp tổng PH thấy |
+
+**Phần còn được phủ ở nơi khác** (unit, tầng sổ — KHÔNG thay được 8 ca trên):
+`lib/finance/thuc-thu.test.ts` · `lib/finance/truc-a.test.ts` ·
+`lib/portal/trang-thai-ghi-danh.test.ts` · `lib/reports/revenue-*.test.ts`.
+
+**Vì sao phải làm TRƯỚC khi lên prod:** đúng lượt này đổi cách ghi điều chỉnh
+(`ADJUSTMENT` mang DELTA, cộng dồn). Ca `[HT-E4]` là ca duy nhất từng canh giao điểm
+**hoàn tiền × điều chỉnh** — tức canh đúng chỗ vừa bị thay cơ chế. Bản dựng lại phải viết
+theo mô hình `paymentType`, không chép lại bản cũ.
+
+### NỢ-3 · Bố cục cột bảng Lead — CHỜ CHỦ DỰ ÁN CHỐT
 Đã lấy bản `main` (lưu `localStorage`, mỗi người một bộ) và **gỡ tầng lưu theo người trong
 DB** của `test`: `_column-actions.ts`, `column-picker.tsx`,
 `lib/validators/table-preference.{ts,test.ts}`. Bảng `UserTablePreference` **vẫn còn trong
@@ -76,3 +104,37 @@ Quay lại tầng DB = nối nó vào bảng Lead bản mới của `main` ⇒ m
 - Chốt tiền R-02 (`lib/payments/plan-money-guard.ts`) còn nguyên và độc lập với cơ chế đã gỡ.
 - 15 migration `test` còn thiếu: **toàn bộ là thêm**, 0 lệnh làm mất dữ liệu. Lệnh `UPDATE`
   duy nhất chỉ đặt `soCapQuetKyVong`/`attendanceMode` cho ca `NG`.
+
+## Rà ZaloCRM sau merge — sáu điểm không có test khoá đầy đủ
+
+Toàn bộ việc ZaloCRM nằm trên nhánh MỚI HƠN `main`, nên mọi file ZaloCRM dính xung đột
+đều có thể bị kéo ngược — đúng cơ chế đã làm mất bảy tính năng. Đọc mã trên `96098478`:
+
+| # | Kiểm gì | Kết luận | Có test khoá? |
+|---|---|---|---|
+| 1 | nút "Nhắn Zalo" suy `?org=` từ `Center.code` của phiếu | **CÒN** | hàm thuần CÓ · **chỗ gọi KHÔNG** |
+| 2 | `CENTER_CLASS_MANAGER` đã bỏ · `CENTER_MANAGER` = `member` · chỉ `SUPER_ADMIN` = `admin` | **CÒN** | CÓ — `[ZC-SSO-07a]` |
+| 3 | `seed-roles.ts`: `zalocrm:use` vẫn bị gỡ khỏi Giáo vụ | **CÒN** | CÓ — `[ZC-Q-03]` chốt cứng cả tập |
+| 4 | `vercel.json` còn khe `zalocrm-doi-soat` | **CÒN** | CÓ — `lib/cron/dang-ky-cron.test.ts` |
+| 5 | `cap-quyen-nick.ts` + gắn vào cron 5 phút | **CÒN** | mô-đun CÓ · **dây nối KHÔNG** |
+| 6 | fork: build args `VITE_SATA_ORIGIN` + `VITE_SOURCE_URL` | **CÒN** | KHÔNG (repo khác) |
+
+Bằng chứng từng mục:
+
+1. `app/(admin)/admin/leads/[id]/page.tsx:76` giữ `center: { select: { name: true, code: true } }`;
+   `:188` gọi `duongDanNhanZalo(lead.phone, lead.id, orgCodeCuaCoSo(lead.center?.code, orgCodesZalo))`.
+2. `VAI_ZALOCRM` = `{ SUPER_ADMIN: "admin", CENTER_MANAGER: "member", CENTER_SALES_CSM: "member", SALES_CSM: "member" }`.
+   `[ZC-SSO-07a]` khẳng định `"CENTER_CLASS_MANAGER" in VAI_ZALOCRM === false`.
+3. `zalocrm:use` chỉ ở `SUPER_ADMIN` (d.54) · `CENTER_MANAGER` (d.677) · `CENTER_SALES_CSM` (d.951).
+   Dưới `CENTER_CLASS_MANAGER` chỉ còn khối chú thích ⛔. `[ZC-Q-03]` dùng `toEqual` trên cả tập
+   nên vai THỪA cũng đỏ — seed của `main` KHÔNG cấp lại.
+4. JSON hợp lệ, 29 khe, 0 trùng, `{ "path": "/api/cron/zalocrm-doi-soat", "schedule": "*/5 * * * *" }`.
+5. `app/api/cron/zalocrm-doi-soat/route.ts` gọi `capQuyenNickZalocrm()` TRƯỚC `doiSoatZalocrm()`.
+6. `docker/Dockerfile` khai `ARG`/`ENV` cả hai **trong Stage 1 `frontend-builder`, trước
+   `RUN npm run build`** (Vite nướng lúc build — đặt sai stage là rỗng mà build vẫn xanh);
+   `docker-compose.yml` truyền từ env; `.env` đặt `VITE_SATA_ORIGIN=https://test.satarobo.vn`.
+
+⚠️ **Mục 1 và 5 sống sót nhờ gỡ xung đột đúng, KHÔNG nhờ một cổng.** Cả hai đều là loại
+"hàm thuần có test, dây nối thì không" — bỏ `code: true` khỏi `select`, hoặc bỏ một dòng
+trong route cron, thì test vẫn xanh và hỏng câm. Đây là cùng một lớp lỗi với bảy tính năng
+đã mất. Bịt bằng lưới ghim mã nguồn (mẫu ở CLAUDE.md) là việc nên làm trước lượt hợp nhất sau.
