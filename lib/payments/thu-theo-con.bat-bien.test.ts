@@ -5,16 +5,19 @@
 // trước"*. Nên tệp này có HAI loại ca, và phải đọc được cái nào là cái nào:
 //
 //   · ca THƯỜNG — bất biến đã hiện thực xong, xanh hôm nay, đỏ nếu ai phá.
-//   · ca `it.fails` — bất biến của phần CHƯA XÂY (cột `orderItemId`, `PaymentBill`).
-//     Hôm nay thân ca ném nên CI không đỏ; xây xong nó chuyển XANH và vitest báo
-//     "expected to fail" ⇒ buộc người xây gỡ ghim. Đó là cách tệp này biến thành
-//     danh sách việc tự kiểm.
+//   · ca `it.fails` — bất biến của phần CHƯA XÂY. Hôm nay thân ca ném nên CI không đỏ;
+//     xây xong nó chuyển XANH và vitest báo "expected to fail" ⇒ buộc người xây gỡ ghim.
+//     Đó là cách tệp này biến thành danh sách việc tự kiểm.
+//
+// [16/09, đợt 2] Migration `20260916120000_payment_request_theo_con` đã hiện thực chiều
+// CON trên lược đồ, nên 4 trong 5 ca hẹn đã GỠ GHIM và chuyển thành ca thường. Còn đúng
+// MỘT hẹn: `payment-request.ts` sinh đợt theo từng dòng.
 //
 // FIXTURE dùng SỐ THẬT, không số tròn: đơn `ORD-260915-000007` trên `satarobo_local` —
 // hai con, tổng 18.468.000đ, kế hoạch 5 đợt + cọc 2.000.000đ. Dữ liệu tròn trịa trong test
 // là dữ liệu không kiểm được gì (luật đọc số của repo).
 import { describe, it, expect } from "vitest";
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { planAllocation, type AllocTarget } from "@/lib/payments/allocation";
 import {
@@ -152,53 +155,171 @@ describe("[BTC-03] Σ ĐỢT CỦA MỘT DÒNG === THÀNH TIỀN DÒNG ĐÓ", ()
   });
 });
 
-// ═══ BẤT BIẾN CỦA PHẦN CHƯA XÂY — `it.fails` là HẸN, không phải quên ══════════
+// ═══ CHIỀU "CON" TRÊN LƯỢC ĐỒ — VÀ LƯỚI DUY NHẤT CANH MIGRATION ═══════════════
 //
-// Bốn ca dưới mô tả hành vi ĐÚNG của phần bước B chưa hiện thực. Xây xong, chúng chuyển
-// XANH và vitest báo "expected to fail" ⇒ người xây BUỘC phải quay lại gỡ ghim. Đừng đổi
-// sang `it.skip` — skip là quên.
-describe("[BTC-04] chưa xây: cột `PaymentRequest.orderItemId`", () => {
-  const coCot = () => {
-    const schema = readFileSync(
-      resolve(process.cwd(), "prisma/schema.prisma"),
-      "utf8",
-    );
-    const model = /model PaymentRequest \{[\s\S]*?\n\}/.exec(schema)?.[0] ?? "";
-    return /orderItemId/.test(model);
-  };
+// ⚠️ ĐO ĐƯỢC 16/09, và đây là lý do các ca dưới phải đọc thẳng văn bản migration:
+// `prisma migrate diff` **BỎ QUA HẲN** chỉ mục có mệnh đề `WHERE`. Đo cụ thể — dựng DB
+// nháp, `migrate deploy` đủ 253 migration, rồi diff với `schema.prisma`: 63 dòng ra, và
+// KHÔNG dòng nào nhắc tới hai khoá duy nhất từng phần của bảng này.
+//
+// Nghĩa là xoá nhầm hai câu `CREATE UNIQUE INDEX` trong migration thì DB mất sạch lưới
+// chống phiếu trùng, trong khi `typecheck`, `lint`, và cả phép rà drift đều XANH. Không
+// cổng tự động nào khác canh chúng. Các ca dưới là lưới duy nhất.
+//
+// Theo luật 11 của repo (test grep mã nguồn là loại MONG MANH NHẤT): neo chuỗi hẹp, KHÔNG
+// dùng cờ `/s`, ĐẾM số lần khớp, và **bóc chú thích trước khi soi** — chú thích giải
+// thích bản vá thường chứa đúng chuỗi đang tìm.
 
-  it.fails("PaymentRequest phải có cột `orderItemId` (nullable — dòng cũ giữ NULL)", () => {
-    expect(coCot()).toBe(true);
+const MIGRATION_CON =
+  "prisma/migrations/20260916120000_payment_request_theo_con/migration.sql";
+
+/**
+ * Bóc chú thích khỏi văn bản mã, để lưới soi MÃ chứ không soi lời kể về mã.
+ *
+ * ⚠️ HAI chi tiết ở đây từng làm chính lưới này VÔ HIỆU TRONG IM LẶNG, và cả hai đều
+ * không biểu hiện gì ngoài một ca xanh nhầm:
+ *
+ *   1. Tách dòng bằng `/\r?\n/`, KHÔNG phải `"\n"`. `prisma/schema.prisma` là CRLF (đo
+ *      bằng `file`: "with CRLF line terminators"), nên tách bằng `"\n"` để lại một `\r`
+ *      ở cuối mỗi dòng.
+ *   2. Dùng `[^\n]*`, KHÔNG phải `.*`. Trong JavaScript, `.` KHÔNG khớp `\r` — nên
+ *      `/\/\/.*$/` gặp dòng còn `\r` là không khớp gì cả, hàm trả về NGUYÊN VĂN và chú
+ *      thích còn nguyên.
+ *
+ * Đo 16/09, cùng một phép bóc trên cùng một tệp: Python bỏ đúng dòng chú thích (`.` của
+ * Python CÓ khớp `\r`), JavaScript bỏ 0 dòng. Lưới vẫn "chạy", vẫn xanh với mọi ca lành,
+ * và chỉ lộ ra khi có người viết đúng chuỗi cấm vào một chú thích — đúng lúc nó phải
+ * đáng tin nhất thì nó lại báo động giả. Ca `[BTC-07]` canh chính hàm này: lưới canh lưới.
+ */
+function bocChuThich(vanBan: string, moChuThich: RegExp): string {
+  return vanBan
+    .split(/\r?\n/)
+    .map((d) => d.replace(moChuThich, ""))
+    .join("\n");
+}
+
+const MO_JS = /\/\/[^\n]*$/;
+const MO_SQL = /--[^\n]*$/;
+
+/** Văn bản `schema.prisma`, đã bóc chú thích `//` (và `///`). */
+function docSchema(): string {
+  return bocChuThich(
+    readFileSync(resolve(process.cwd(), "prisma/schema.prisma"), "utf8"),
+    MO_JS,
+  );
+}
+
+/** Văn bản migration, đã bóc chú thích `-- …` với cùng lý do. */
+function docMigration(): string {
+  return bocChuThich(
+    readFileSync(resolve(process.cwd(), MIGRATION_CON), "utf8"),
+    MO_SQL,
+  );
+}
+
+function modelPaymentRequest(): string {
+  return /model PaymentRequest \{[\s\S]*?\n\}/.exec(docSchema())?.[0] ?? "";
+}
+
+describe("[BTC-04] chiều CON: cột `orderItemId` + khoá duy nhất chia đôi", () => {
+  it("PaymentRequest có cột `orderItemId`, và nó NULLABLE", () => {
+    // Nullable là thứ giữ cho migration additive: mọi dòng cũ ở lại với NULL. Đặt NOT
+    // NULL là phải backfill một cột không suy ngược được, trên bảng tiền của prod.
+    expect(modelPaymentRequest()).toMatch(/\n\s*orderItemId\s+String\?/);
   });
 
-  it.fails("unique cũ phải thành PARTIAL để dòng mới không đụng dòng cũ", () => {
-    // Chủ dự án chốt: `[orderItemId, installmentNo] WHERE orderItemId IS NOT NULL`, và đổi
-    // `[orderId, installmentNo]` thành partial `WHERE orderItemId IS NULL`.
-    // ⚠️ Prisma KHÔNG khai được partial unique — phải là SQL tay trong migration, và
-    // `@@unique` trong schema phải gỡ đi kẻo `migrate deploy` dựng lại bản đầy đủ.
-    const migrations = readdirSync(resolve(process.cwd(), "prisma/migrations"))
-      .join(" ");
-    expect(/payment_request_order_item/.test(migrations)).toBe(true);
+  it("schema KHÔNG được khai lại `@@unique([orderId, installmentNo])`", () => {
+    // Khai lại là `migrate dev` sinh câu dựng lại khoá ĐẦY ĐỦ ⇒ đơn hai con hết tạo được
+    // phiếu đợt 1 cho em thứ hai, ngay lúc chạy migration, và không lỗi nào báo trước.
+    // Ca này soi bản ĐÃ BÓC CHÚ THÍCH: chú thích ngay trên chỗ đó có nhắc đúng chuỗi này.
+    const khop =
+      modelPaymentRequest().match(/@@unique\(\[orderId, installmentNo\]\)/g) ?? [];
+    expect(khop).toHaveLength(0);
+  });
+
+  it("migration có ĐỦ HAI khoá duy nhất từng phần, đúng hai nhánh", () => {
+    const sql = docMigration();
+    // Luồng CŨ — giữ nguyên tên khoá, thu hẹp về đúng tập dòng cũ (`orderItemId IS NULL`).
+    const nhanhCu =
+      sql.match(
+        /CREATE UNIQUE INDEX[^;]*"PaymentRequest_orderId_installmentNo_key"[^;]*WHERE "orderItemId" IS NULL;/g,
+      ) ?? [];
+    // Luồng MỚI — đây là thứ cho phép hai con cùng có "đợt 1" trên một đơn.
+    const nhanhMoi =
+      sql.match(
+        /CREATE UNIQUE INDEX[^;]*"PaymentRequest_orderItemId_installmentNo_key"[^;]*WHERE "orderItemId" IS NOT NULL;/g,
+      ) ?? [];
+    expect({ cu: nhanhCu.length, moi: nhanhMoi.length }).toEqual({ cu: 1, moi: 1 });
+
+    // Và khoá ĐẦY ĐỦ cũ phải bị gỡ trước đó — còn nó thì nhánh mới vô nghĩa, vì khoá cũ
+    // vẫn cấm hai phiếu cùng `installmentNo` trên một đơn.
+    expect(sql).toMatch(/DROP INDEX[^;]*"PaymentRequest_orderId_installmentNo_key";/);
   });
 });
 
-describe("[BTC-05] chưa xây: phiếu thu GỘP (một QR cho cả nhà)", () => {
-  it.fails("model `PaymentBill` tồn tại", () => {
-    const schema = readFileSync(
-      resolve(process.cwd(), "prisma/schema.prisma"),
-      "utf8",
-    );
-    expect(/^model PaymentBill /m.test(schema)).toBe(true);
+describe("[BTC-05] phiếu thu GỘP — một QR cho cả nhà", () => {
+  it("có `PaymentBill` và `PaymentBillLine`", () => {
+    const schema = docSchema();
+    expect(/^model PaymentBill \{/m.test(schema)).toBe(true);
+    expect(/^model PaymentBillLine \{/m.test(schema)).toBe(true);
   });
 
-  it.fails("mỗi đơn tối đa MỘT phiếu gộp đang mở", () => {
-    // Bất biến này phải do DB gác (partial unique trên `orderId WHERE status='OPEN'`),
-    // không phải do mã nhớ kiểm — hai lượt bấm đồng thời sẽ lách mọi phép kiểm trong mã.
-    const schema = readFileSync(
-      resolve(process.cwd(), "prisma/schema.prisma"),
-      "utf8",
-    );
-    expect(/PaymentBill[\s\S]*?OPEN/.test(schema)).toBe(true);
+  it("mỗi đơn tối đa MỘT phiếu gộp đang mở — do DB gác, không do mã nhớ kiểm", () => {
+    // Đếm phiếu OPEN ở tầng mã rồi mới tạo KHÔNG chặn được hai lượt bấm đồng thời: cả hai
+    // cùng đọc thấy 0, cả hai cùng ghi ⇒ hai mã QR cùng sống cho một gia đình, khách quét
+    // mã cũ, tiền về khớp phiếu đã bỏ. Chỉ chỉ mục từng phần mới chặn được.
+    const khop =
+      docMigration().match(
+        /CREATE UNIQUE INDEX[^;]*"PaymentBill_orderId_open_key"[^;]*WHERE "status" = 'OPEN';/g,
+      ) ?? [];
+    expect(khop).toHaveLength(1);
+  });
+
+  it("CẢ HAI bảng mới phải tự BẬT RLS", () => {
+    // Bảng mới ra đời với RLS TẮT — migration bật hàng loạt (20260617) chỉ chạy MỘT LẦN,
+    // và 31 bảng sinh sau nó đã từng nằm trần cho anon/authenticated (sự cố 09/08). Thiếu
+    // dòng này là sổ tiền của phụ huynh phơi qua PostgREST.
+    const sql = docMigration();
+    for (const bang of ["PaymentBill", "PaymentBillLine"]) {
+      expect(sql).toContain(`ALTER TABLE "${bang}" ENABLE ROW LEVEL SECURITY;`);
+    }
+  });
+});
+
+describe("[BTC-07] LƯỚI CANH LƯỚI — phép bóc chú thích phải THẬT SỰ bóc", () => {
+  // Vì sao có nhóm ca này: 16/09, `docSchema()` bản đầu bóc được **0 dòng** trên
+  // `schema.prisma` (CRLF + `.` của JS không khớp `\r`). Hệ quả là ca [BTC-04] đỏ ngay
+  // trên bản ĐÃ VÁ, vì nó đọc trúng chuỗi cấm nằm trong một câu chú thích CẤM chuỗi đó.
+  // Một lưới bóc-chú-thích hỏng không tự tố cáo: nó chỉ hoặc im, hoặc báo động giả.
+  it("bóc được chú thích JS trên dòng kết thúc bằng CRLF", () => {
+    const vao = '  // @@unique([orderId, installmentNo])\r\n  orderItemId String?\r\n';
+    const ra = bocChuThich(vao, MO_JS);
+    expect(ra).not.toContain("@@unique");
+    expect(ra).toContain("orderItemId String?");
+  });
+
+  it("bóc được chú thích SQL trên dòng kết thúc bằng CRLF", () => {
+    const vao = '-- CREATE UNIQUE INDEX "X" ...\r\nCREATE TABLE "Y" (\r\n';
+    const ra = bocChuThich(vao, MO_SQL);
+    expect(ra).not.toContain("CREATE UNIQUE INDEX");
+    expect(ra).toContain('CREATE TABLE "Y" (');
+  });
+
+  it("và nó đang bóc trên TỆP THẬT, không chỉ trên chuỗi gõ tay", () => {
+    // Luật 9 của repo: cổng được cho ăn bằng đầu vào gõ tay thì nó kiểm CỔNG, không kiểm
+    // HỆ THỐNG. Hai ca trên là đầu vào gõ tay; ca này chạy trên đúng hai tệp mà [BTC-04]
+    // và [BTC-05] soi. Vế đầu mỗi cặp khẳng định tệp THỰC SỰ có chú thích — thiếu nó thì
+    // vế sau xanh vì "không có gì để bóc", tức xanh vô nghĩa.
+    const coDongMo = (v: string, mo: string) =>
+      v.split(/\r?\n/).some((d) => d.trimStart().startsWith(mo));
+
+    const schemaTho = readFileSync(resolve(process.cwd(), "prisma/schema.prisma"), "utf8");
+    expect(coDongMo(schemaTho, "//")).toBe(true);
+    expect(coDongMo(docSchema(), "//")).toBe(false);
+
+    const sqlTho = readFileSync(resolve(process.cwd(), MIGRATION_CON), "utf8");
+    expect(coDongMo(sqlTho, "--")).toBe(true);
+    expect(coDongMo(docMigration(), "--")).toBe(false);
   });
 });
 

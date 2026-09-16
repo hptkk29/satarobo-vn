@@ -4125,6 +4125,8 @@ model Order {
   // 03/08 — sổ thu theo ĐỢT (PaymentRequest) + sổ phân bổ. Chạy SONG SONG với
   // OrderInstallment/Payment cho tới khi shadow-compare sạch (cờ PAYMENT_LEDGER_V2).
   paymentRequests PaymentRequest[]
+  /// 16/09 — phiếu gộp: MỘT mã QR cho cả gia đình, chia về từng con theo thứ tự dòng.
+  paymentBills    PaymentBill[]
 
   @@index([code])
   @@index([status])
@@ -4271,6 +4273,9 @@ model OrderItem {
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  /// 16/09 — phiếu thu của RIÊNG dòng này ("công nợ theo CON").
+  paymentRequests PaymentRequest[]
 
   @@index([orderId])
   @@index([type])
@@ -6240,6 +6245,18 @@ model PaymentRequest {
   id        String  @id @default(cuid())
   orderId   String
   order     Order   @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  /// Phiếu này thu tiền cho DÒNG HÀNG nào — tức cho CON nào [16/09/2026, bước B].
+  ///
+  /// NULL = luồng CŨ (phiếu "thu toàn đơn", hoặc mọi phiếu sinh trước 16/09). Là giá trị
+  /// HỢP LỆ với dữ liệu cũ, KHÔNG phải thiếu dữ liệu — đó là thứ giữ cho migration
+  /// additive. Luồng MỚI thì bắt buộc có, và cổng đó nằm ở tầng mã chứ không phải
+  /// NOT NULL ở DB (chủ dự án: *"luồng mới BẮT BUỘC có, không có đợt NULL/đợt chung"*).
+  ///
+  /// `Restrict`: phiếu thu là sổ tiền. Xoá dòng hàng mà kéo phiếu theo là mất dấu khoản
+  /// đã thu; để phiếu ở lại với `orderItemId = NULL` thì nó lặng lẽ tụt về luồng cũ và
+  /// tiền của một em hoá tiền chung. Con nghỉ học thì HUỶ dòng, không xoá dòng.
+  orderItemId String?
+  orderItem   OrderItem? @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
   centerId  String? // cách ly cơ sở (scopedDb)
   // P1 · US-07 — cột SONG SONG với centerId (ghi kép tới hết P4).
   // Cột TRẦN, không FK — giống 28 bảng của PR-A. Ý nghĩa của NULL theo
@@ -6262,11 +6279,99 @@ model PaymentRequest {
 
   qrSessions  QrSession[]
   allocations PaymentAllocation[]
+  billLines   PaymentBillLine[]
 
-  @@unique([orderId, installmentNo])
+  // ⛔ KHÔNG khai lại `@@unique([orderId, installmentNo])` ở đây.
+  //
+  // [16/09/2026] Khoá đó nay CHIA ĐÔI theo luồng và là hai chỉ mục TỪNG PHẦN (partial
+  // unique) viết tay trong `20260916120000_payment_request_theo_con`:
+  //   · ("orderId","installmentNo")     WHERE "orderItemId" IS NULL      — luồng CŨ;
+  //   · ("orderItemId","installmentNo") WHERE "orderItemId" IS NOT NULL  — luồng MỚI.
+  //
+  // Prisma không có cú pháp cho mệnh đề WHERE của chỉ mục, nên chỗ này BẮT BUỘC trống.
+  // Thêm `@@unique` lại là `migrate dev` sinh câu dựng lại khoá ĐẦY ĐỦ ⇒ đơn nhiều con
+  // hết tạo được phiếu đợt 2 ngay lúc chạy migration, và không lỗi nào báo trước.
+  //
+  // ⚠️ Và đây là chỗ dễ yên tâm nhầm, ĐÃ ĐO 16/09: `migrate diff` **KHÔNG** kêu gì cả —
+  // Prisma bỏ qua hẳn chỉ mục có mệnh đề WHERE, nên hai khoá trên vô hình với nó. Nghĩa
+  // là **không cổng tự động nào canh chúng**: xoá nhầm hai dòng `CREATE UNIQUE INDEX`
+  // trong migration thì DB mất sạch lưới chống phiếu trùng mà mọi phép kiểm vẫn xanh.
+  // Lưới duy nhất là ca `[BTC-05]`/`[BTC-06]` trong `lib/payments/thu-theo-con.bat-bien.test.ts`
+  // (đọc thẳng văn bản migration) — đừng gỡ chúng.
+  @@index([orderItemId])
   @@index([centerId, status])
   @@index([status, dueDate])
   @@index([orgUnitId])
+}
+
+/// PHIẾU GỘP — MỘT mã QR cho cả gia đình, chia về từng con [16/09/2026, bước B].
+///
+/// Chủ dự án chốt: *"công nợ theo CON, QR theo ĐƠN"*. Phụ huynh hai con không nên phải
+/// quét hai mã và nhớ chuyển đúng số cho đúng em — họ chuyển MỘT lần, hệ thống chia.
+///
+/// Webhook khớp `matchKey` của phiếu gộp → rót vào các `PaymentRequest` của dòng theo
+/// `PaymentBillLine.sortOrder` tăng dần: thiếu thì lấp dần từ dòng đầu, thừa thì phần dư
+/// vào ví gia đình (`CreditBalance`). KHÔNG chia theo tỷ lệ.
+///
+/// ⚠️ Phiếu gộp KHÔNG phải sổ tiền thứ tư. Tiền vẫn chỉ nằm ở `PaymentAllocation`
+/// (BankTransaction → PaymentRequest). Phiếu gộp là cái PHONG BÌ: nó nói "lần thu này
+/// gồm những phiếu nào, theo thứ tự nào". Ai cộng tiền thì cộng `PaymentAllocation`.
+model PaymentBill {
+  id        String  @id @default(cuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  centerId  String? // cách ly cơ sở (scopedDb)
+  // P1 · US-07 — cột SONG SONG với centerId (ghi kép tới hết P4).
+  orgUnitId String?
+
+  /// Σ số tiền các dòng, CHỤP LẠI lúc phát phiếu. Không tính lại khi đọc: mã QR khách
+  /// đang cầm in số của lúc phát, và đối khớp phải so với đúng số đã in ra.
+  amountDue Int
+  status    PaymentBillStatus @default(OPEN)
+  /// Định danh đối khớp của phiếu gộp (VA / mã tham chiếu tĩnh) — cùng vai trò
+  /// `PaymentRequest.matchKey` nhưng ở cấp GIA ĐÌNH.
+  matchKey  String?           @unique
+  createdAt DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime          @updatedAt @db.Timestamptz(6)
+
+  lines PaymentBillLine[]
+
+  // ⛔ "Mỗi đơn tối đa MỘT phiếu OPEN" là chỉ mục TỪNG PHẦN viết tay
+  // (`PaymentBill_orderId_open_key ... WHERE "status" = 'OPEN'`), không khai được ở đây.
+  // Luật đó PHẢI do DB gác: đếm phiếu OPEN ở tầng mã rồi mới tạo thì hai lượt bấm đồng
+  // thời cùng đọc thấy 0 và cùng ghi ⇒ hai mã QR cùng sống cho một gia đình.
+  @@index([orderId])
+  @@index([centerId, status])
+  @@index([orgUnitId])
+}
+
+/// Một dòng của phiếu gộp = "phần này của lần thu là của phiếu thu kia".
+model PaymentBillLine {
+  id               String         @id @default(cuid())
+  billId           String
+  bill             PaymentBill    @relation(fields: [billId], references: [id], onDelete: Cascade)
+  paymentRequestId String
+  paymentRequest   PaymentRequest @relation(fields: [paymentRequestId], references: [id], onDelete: Restrict)
+
+  /// Thứ tự RÓT trong phiếu gộp. Sao lại `PaymentRequest.sortOrder` (xem
+  /// `lib/payments/thu-tu-rot.ts`) LÚC PHÁT PHIẾU, để thứ tự đã hứa với khách không đổi
+  /// khi ai đó sửa kế hoạch giữa chừng.
+  sortOrder Int      @default(0)
+  /// Phần của phiếu gộp dành cho dòng này. Σ cột này = `PaymentBill.amountDue`.
+  amount    Int
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([billId, paymentRequestId])
+  @@index([paymentRequestId])
+}
+
+enum PaymentBillStatus {
+  /// Đang chờ tiền. Mỗi đơn tối đa MỘT phiếu ở trạng thái này (DB gác).
+  OPEN
+  /// Đã thu đủ, hoặc đã chốt sổ lần thu này.
+  CLOSED
+  /// Huỷ — phát lại phiếu khác. Mã QR của phiếu VOID không được đối khớp nữa.
+  VOID
 }
 
 enum QrSessionStatus {
