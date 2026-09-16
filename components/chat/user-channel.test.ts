@@ -110,17 +110,24 @@ describe("createUserChannelHub", () => {
     expect(fake.calls.unsubscribe).toBe(1);
   });
 
-  it("MỖI lần SUBSCRIBED phát `resync` cho mọi người nghe (kể cả re-subscribe sau chập mạng)", async () => {
+  // Sự cố egress 05/09/2026: bản cũ `resync` ở MỌI lần SUBSCRIBED ⇒ mỗi lần gia hạn vé (4') là
+  // mọi tab gọi lại summary + unread. Nay chỉ `resync` sau khi kênh ĐỨT rồi nối lại được.
+  it("`resync` CHỈ phát ở lần SUBSCRIBED sau khi kênh đứt — không ở lần join đầu", async () => {
     const { hub, fake } = setup();
     const events: UserChannelEvent[] = [];
     const off = hub.subscribe(ME, (e) => events.push(e));
     await flush();
 
     fake.handlers.onStatus("SUBSCRIBED");
+    expect(events.filter((e) => e.type === "resync")).toHaveLength(0);
+
     fake.handlers.onStatus("CHANNEL_ERROR", new Error("rớt mạng"));
     fake.handlers.onStatus("SUBSCRIBED");
+    expect(events.filter((e) => e.type === "resync")).toHaveLength(1);
 
-    expect(events.filter((e) => e.type === "resync")).toHaveLength(2);
+    // Join lại do gia hạn vé không đi qua trạng thái đứt ⇒ không resync thêm.
+    fake.handlers.onStatus("SUBSCRIBED");
+    expect(events.filter((e) => e.type === "resync")).toHaveLength(1);
     off();
   });
 

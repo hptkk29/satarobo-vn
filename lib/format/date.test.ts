@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { formatDateVN, formatDateDMY, formatDateTimeVN, formatDateOrDash } from "./date";
+import {
+  formatDateVN,
+  formatDateDMY,
+  formatDateTimeVN,
+  formatDateOrDash,
+  formatDateTimeVNZoned,
+} from "./date";
 
 // Noon-UTC → cùng ngày lịch trên mọi TZ thực tế (UTC-8..UTC+9) nên assert
 // date-only ổn định, không phụ thuộc TZ máy CI.
@@ -37,5 +43,17 @@ describe("format/date", () => {
 
   it("formatDateOrDash: ngày hợp lệ → như formatDateVN", () => {
     expect(formatDateOrDash(NOON_UTC)).toBe(formatDateVN(NOON_UTC));
+  });
+});
+
+describe("formatDateTimeVNZoned — mốc có giờ, ghim múi VN", () => {
+  it("in `HH:mm dd/MM/yyyy` theo giờ Việt Nam bất kể máy chạy ở múi nào", () => {
+    // 2026-08-29T17:30:00Z = 00:30 ngày 30/08 giờ VN. Đây chính là ca làm lộ bug:
+    // trên Vercel (UTC) mốc này từng in ra ngày 29, trên máy dev (+07) in ra ngày 30.
+    expect(formatDateTimeVNZoned("2026-08-29T17:30:00.000Z")).toBe("00:30 30/08/2026");
+  });
+
+  it("giờ đứng TRƯỚC ngày, ngày/tháng luôn 2 chữ số", () => {
+    expect(formatDateTimeVNZoned("2026-01-05T02:04:00.000Z")).toBe("09:04 05/01/2026");
   });
 });

@@ -184,7 +184,7 @@ export function TemplateTable({
         // góc hiện ra rồi biến mất khi dữ liệu về.
         <div className="overflow-hidden rounded-xl border border-border bg-card">
           <PhanTrangBang cuonNgang tenDonVi="mã ca" khoaGhiNho="cham-cong-danh-muc-ca">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[1120px] text-sm">
             <thead className="border-b border-border bg-muted/40">
               <tr>
                 <th scope="col" className={adminTh}>Mã</th>

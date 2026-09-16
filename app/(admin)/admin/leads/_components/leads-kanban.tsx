@@ -16,6 +16,7 @@ import { updateLeadStatus, autoAssignLeadAction } from "../actions";
 import { LyDoRotDialog } from "./ly-do-rot-dialog";
 import { ChonSoDong } from "@/components/ui/chon-so-dong";
 import { MUC_THE_MOI_COT, SO_THE_MOI_COT_MAC_DINH } from "@/lib/ui/phan-trang";
+import { formatPhoneVN, telHrefVN } from "@/lib/phone";
 
 export type KanbanLead = {
   id: string;
@@ -77,7 +78,7 @@ export function LeadsKanban({
   /**
    * Số thẻ hiển thị tối đa MỖI CỘT. Cắt ở tầng HIỂN THỊ, không phải ở truy vấn:
    * con số trên phù hiệu mỗi cột vẫn là TỔNG THẬT của cột đó, nếu không thì người
-   * dùng đọc "12" rồi đếm được 10 thẻ và không biết mình đang thiếu gì.
+   * dùng đọc "12" rồi đếm được 5 thẻ và không biết mình đang thiếu gì.
    */
   soTheMoiCot?: number;
 }) {
@@ -241,10 +242,10 @@ export function LeadsKanban({
                       </div>
                     </div>
                     <a
-                      href={`tel:${lead.phone}`}
+                      href={telHrefVN(lead.phone)}
                       className="text-sm font-medium text-primary"
                     >
-                      {lead.phone}
+                      {formatPhoneVN(lead.phone)}
                     </a>
                     <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
                       {lead.courseName && <div>Khoá: {lead.courseName}</div>}
@@ -309,9 +310,9 @@ export function LeadsKanban({
                 ))}
                 {conLai > 0 && (
                   // Nói thẳng còn bao nhiêu thẻ chưa hiện. Không có dòng này thì phù hiệu
-                  // đếm 37 mà cột chỉ có 10 thẻ, và người dùng tưởng dữ liệu bị mất.
+                  // đếm 37 mà cột chỉ có 5 thẻ, và người dùng tưởng dữ liệu bị mất.
                   <p className="px-2 py-2 text-center text-xs text-muted-foreground">
-                    còn {conLai} thẻ nữa — tăng &quot;Mỗi cột&quot; ở trên để xem thêm
+                    còn {conLai} thẻ nữa — tăng &quot;Mỗi cột&quot; ở dưới để xem thêm
                   </p>
                 )}
               </div>
@@ -320,10 +321,11 @@ export function LeadsKanban({
         })}
       </div>
 
-      {/* Ô chọn số thẻ mỗi cột — ĐẶT DƯỚI CÙNG (chủ dự án chốt 28/08), giống chỗ đứng
-          của thanh phân trang ở chế độ Bảng: người dùng cuộn hết cột rồi mới nảy ra nhu
-          cầu xem thêm, lúc đó nút nằm ngay dưới tay.
-          Cùng cơ chế `?size=` với bảng, nên đổi ở đây rồi bấm sang Bảng là giữ nguyên.
+      {/* Ô chọn số thẻ mỗi cột — ĐẶT DƯỚI CÙNG (chủ dự án chốt), giống chỗ đứng của thanh
+          phân trang ở chế độ Bảng: người dùng cuộn hết cột rồi mới nảy ra nhu cầu xem
+          thêm, lúc đó nút nằm ngay dưới tay.
+          Dùng CHUNG tham số `?size=` với bảng — bốn mức 10/20/50/100 giữ nguyên khi bấm
+          qua lại. Mức 5 chỉ Kanban có (xem `MUC_THE_MOI_COT`).
           ⚠️ `sticky left-0` là bắt buộc: khối cha cuộn NGANG (10 cột), không ghim thì
           ở cột thứ 7 ô chọn nằm ngoài màn hình và không ai tìm ra nó. */}
       <div className="sticky left-0 mt-3 flex justify-end">

@@ -30,11 +30,17 @@ function o(nhan: string): HTMLInputElement | HTMLTextAreaElement | HTMLSelectEle
   return screen.getByLabelText(nhan) as HTMLInputElement;
 }
 
-/** Bảy ô của biểu mẫu (chốt 22/08/2026) — dùng để khẳng định "trắng hoàn toàn". */
+/**
+ * Các ô của biểu mẫu — dùng để khẳng định "trắng hoàn toàn".
+ *
+ * 03/09/2026 (bản trên `main`) — ô "Tên con" ĐƠN LẺ đã thay bằng khối NHIỀU CON, mỗi bé
+ * một dòng với nhãn `Tên bé thứ N`. Ca này đo "form giống hệt EMPTY", nên đo ô đầu tiên
+ * của khối đó là đủ; số dòng con do `conMoi()` quyết, không phải việc của bộ ca này.
+ */
 const MOI_O = [
   "Tên phụ huynh",
   "SĐT phụ huynh",
-  "Tên con",
+  "Tên bé thứ 1",
   "Nguồn",
   "Link Facebook",
   "Cơ sở phụ huynh chọn",
@@ -43,31 +49,31 @@ const MOI_O = [
 
 describe("[ZC-PF] QuickLeadForm điền sẵn", () => {
   it("[ZC-PF-01] initial.phone điền sẵn vào ô SĐT", () => {
-    render(<QuickLeadForm centers={CENTERS} initial={{ phone: "0905123456" }} />);
+    render(<QuickLeadForm centers={CENTERS} courses={[]} initial={{ phone: "0905123456" }} />);
     expect(o("SĐT phụ huynh").value).toBe("0905123456");
   });
 
   it("[ZC-PF-01b] initial.parentName điền sẵn vào ô tên phụ huynh", () => {
     render(
-      <QuickLeadForm centers={CENTERS} initial={{ phone: "0905123456", parentName: "Chị An" }} />,
+      <QuickLeadForm centers={CENTERS} courses={[]} initial={{ phone: "0905123456", parentName: "Chị An" }} />,
     );
     expect(o("Tên phụ huynh").value).toBe("Chị An");
     expect(o("SĐT phụ huynh").value).toBe("0905123456");
   });
 
   it("[ZC-PF-01c] có giá trị điền sẵn ⇒ nút Lưu KHÔNG còn bị khoá", () => {
-    render(<QuickLeadForm centers={CENTERS} initial={{ phone: "0905123456" }} />);
+    render(<QuickLeadForm centers={CENTERS} courses={[]} initial={{ phone: "0905123456" }} />);
     expect(screen.getByRole("button", { name: /Lưu và nhập phiếu tiếp/ })).not.toBeDisabled();
   });
 
   it("[ZC-PF-02] không truyền initial ⇒ form giống hệt EMPTY và nút Lưu bị khoá", () => {
-    render(<QuickLeadForm centers={CENTERS} />);
+    render(<QuickLeadForm centers={CENTERS} courses={[]} />);
     for (const nhan of MOI_O) expect(o(nhan).value).toBe("");
     expect(screen.getByRole("button", { name: /Lưu và nhập phiếu tiếp/ })).toBeDisabled();
   });
 
   it("[ZC-PF-02b] initial rỗng ({}) cho kết quả y hệt không truyền gì", () => {
-    render(<QuickLeadForm centers={CENTERS} initial={{}} />);
+    render(<QuickLeadForm centers={CENTERS} courses={[]} initial={{}} />);
     for (const nhan of MOI_O) expect(o(nhan).value).toBe("");
   });
 
@@ -76,7 +82,7 @@ describe("[ZC-PF] QuickLeadForm điền sẵn", () => {
     // vì chỗ hỏng nằm ở mối nối giữa hai tầng.
     render(
       <QuickLeadForm
-        centers={CENTERS}
+        centers={CENTERS} courses={[]}
         initial={docPrefillTuQuery({ phone: "khong-phai-so", name: "Chị An" })}
       />,
     );
@@ -87,7 +93,7 @@ describe("[ZC-PF] QuickLeadForm điền sẵn", () => {
   it("[ZC-PF-03b] initial KHÔNG chạm được các ô khác (chỉ tên + SĐT đi qua query)", () => {
     render(
       <QuickLeadForm
-        centers={CENTERS}
+        centers={CENTERS} courses={[]}
         initial={docPrefillTuQuery({ phone: "0905123456", note: "rac", centerCode: "CS9" })}
       />,
     );

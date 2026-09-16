@@ -10,7 +10,6 @@ import {
   validateSettingValue,
 } from "@/lib/settings/registry";
 import { resolveSettingValue } from "@/lib/settings/resolve";
-import { STALE_LEAD_WARN_DAYS, STALE_LEAD_DANGER_DAYS } from "@/lib/lead/stale-lead";
 
 describe("[R6-A] registry — validate giá trị (US-R6A-1 AC4)", () => {
   it("[R6-A-T2-01] key không có schema → từ chối", () => {
@@ -55,59 +54,6 @@ describe("[R6-A] registry — validate giá trị (US-R6A-1 AC4)", () => {
       const r = d.schema.safeParse(d.default);
       expect(r.success, `default của ${key} phải hợp lệ`).toBe(true);
     }
-  });
-});
-
-describe("[F-20] hạn duyệt ảnh/video trong Cấu hình vận hành", () => {
-  it("[F-20-T30] mặc định đúng spec: 10h sáng, 1 ngày sau buổi dạy", () => {
-    expect(SETTINGS["media.reviewDeadlineHour"].default).toBe(10);
-    expect(SETTINGS["media.reviewDeadlineOffsetDays"].default).toBe(1);
-  });
-
-  it("[F-20-T31] mỗi cơ sở đặt hạn riêng được (centerOverridable)", () => {
-    expect(SETTINGS["media.reviewDeadlineHour"].centerOverridable).toBe(true);
-    expect(SETTINGS["media.reviewDeadlineOffsetDays"].centerOverridable).toBe(true);
-  });
-
-  it("[F-20-T32] nhãn nói rõ GIỜ VN — người sửa cấu hình không phải đoán múi giờ", () => {
-    expect(SETTINGS["media.reviewDeadlineHour"].label).toMatch(/giờ VN/i);
-  });
-
-  it("[F-20-T33] giờ ngoài 0..23 và số ngày ngoài 0..7 → từ chối ngay ở ô cấu hình", () => {
-    expect(validateSettingValue("media.reviewDeadlineHour", 24).ok).toBe(false);
-    expect(validateSettingValue("media.reviewDeadlineHour", -1).ok).toBe(false);
-    expect(validateSettingValue("media.reviewDeadlineHour", 9.5).ok).toBe(false);
-    expect(validateSettingValue("media.reviewDeadlineOffsetDays", 8).ok).toBe(false);
-    expect(validateSettingValue("media.reviewDeadlineOffsetDays", -1).ok).toBe(false);
-    // Biên hợp lệ vẫn phải qua.
-    expect(validateSettingValue("media.reviewDeadlineHour", 0).ok).toBe(true);
-    expect(validateSettingValue("media.reviewDeadlineHour", 23).ok).toBe(true);
-    expect(validateSettingValue("media.reviewDeadlineOffsetDays", 0).ok).toBe(true);
-    expect(validateSettingValue("media.reviewDeadlineOffsetDays", 7).ok).toBe(true);
-  });
-});
-
-describe("[C-05] ngưỡng cảnh báo lead treo nằm trong Cấu hình vận hành", () => {
-  it("[C-05-T01] mặc định ĐÚNG quyết định 12(a) ngày 24/08/2026: vàng 2 ngày · đỏ 7 ngày", () => {
-    expect(SETTINGS["crm.staleLeadWarnDays"].default).toBe(STALE_LEAD_WARN_DAYS);
-    expect(SETTINGS["crm.staleLeadDangerDays"].default).toBe(STALE_LEAD_DANGER_DAYS);
-    expect(SETTINGS["crm.staleLeadWarnDays"].default).toBe(2);
-    expect(SETTINGS["crm.staleLeadDangerDays"].default).toBe(7);
-  });
-
-  it("[C-05-T02] mỗi cơ sở đặt ngưỡng riêng được (quyết định 12(a) ghi rõ centerOverridable)", () => {
-    expect(SETTINGS["crm.staleLeadWarnDays"].centerOverridable).toBe(true);
-    expect(SETTINGS["crm.staleLeadDangerDays"].centerOverridable).toBe(true);
-  });
-
-  it("[C-05-T03] ngưỡng 0 hoặc âm bị chặn ngay ở ô cấu hình", () => {
-    // 0 ngày = mọi lead đều đỏ ngay lúc vừa vào hệ thống ⇒ cột cảnh báo thành nhiễu
-    // trắng và người dùng tắt mắt với nó. Chặn ở đây, không chặn ở chỗ vẽ.
-    expect(validateSettingValue("crm.staleLeadWarnDays", 0).ok).toBe(false);
-    expect(validateSettingValue("crm.staleLeadDangerDays", -1).ok).toBe(false);
-    expect(validateSettingValue("crm.staleLeadWarnDays", 1.5).ok).toBe(false);
-    expect(validateSettingValue("crm.staleLeadWarnDays", 1).ok).toBe(true);
-    expect(validateSettingValue("crm.staleLeadDangerDays", 365).ok).toBe(true);
   });
 });
 
@@ -159,67 +105,72 @@ describe("[R6-A] resolve — Center → Global → default (US-R6A-2)", () => {
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ZaloCRM (đợt tích hợp 06/09/2026) — 3 tham số vận hành của trục ZaloCRM.
-//
-// Vì sao phải có test riêng cho việc "đã khai vào registry chưa": `getSetting`
-// **NÉM** `Unknown setting key: …` khi key vắng mặt (lib/settings/service.ts:63).
-// Lỗi đó không rơi vào một khối nhỏ — nó ném giữa Server Component ⇒ sập cả màn.
-// Quên khai một key mà không có lưới thì phát hiện bằng cách màn Tích hợp trắng
-// trên prod. Đây là lưới đó.
-// ─────────────────────────────────────────────────────────────────────────────
-describe("[ZC-CFG] tham số vận hành ZaloCRM", () => {
-  it("[ZC-CFG-01] `zalocrm.orgCodes` có mặt trong registry — getSetting không ném Unknown setting key", () => {
-    // Mô phỏng đúng vế chặn của service: `const def = getSettingDef(key); if (!def) throw`.
-    expect(getSettingDef("zalocrm.orgCodes"), "chưa khai zalocrm.orgCodes").toBeTruthy();
-    expect(SETTING_KEYS).toContain("zalocrm.orgCodes");
+describe("[PUSH-D7-T22] push.tienToDuocDay — chặn khoá gõ sai ngay ở tầng validate", () => {
+  it("mặc định ĐÚNG bằng danh sách đã chạy trước khi có màn cấu hình", () => {
+    // DB trống ở một môi trường mới dựng phải ra hành vi y hệt bản cũ, không im lặng hơn cũng
+    // không ồn hơn. Đây là điều kiện để đổi từ hằng số sang tham số mà không ai nhận ra.
+    expect(SETTINGS["push.tienToDuocDay"].default).toEqual(["lead.moi:"]);
   });
 
-  it("[ZC-CFG-02] `zalocrm.orgCodes` mặc định RỖNG — chưa ánh xạ cơ sở nào thì không đoán bừa", () => {
-    expect(SETTINGS["zalocrm.orgCodes"].default).toEqual({});
+  it("nhận danh sách gồm các tiền tố CÓ THẬT", () => {
+    expect(validateSettingValue("push.tienToDuocDay", ["lead.moi:", "sla:"]).ok).toBe(true);
   });
 
-  it("[ZC-CFG-03] `zalocrm.orgCodes` nhận ánh xạ mã cơ sở → orgCode, chặn orgCode sai khuôn", () => {
-    expect(validateSettingValue("zalocrm.orgCodes", { CS1: "cs1", CS2: "cs2" }).ok).toBe(true);
-    // orgCode đi thẳng vào đường dẫn webhook `/api/webhooks/zalocrm/<org>` và bị
-    // chặn ở đó bằng /^[a-z0-9-]{1,32}$/. Khai sai khuôn ở đây = webhook 404 câm
-    // lúc 3 giờ sáng; chặn ngay tại ô cấu hình thì người khai biết mình gõ sai.
-    expect(validateSettingValue("zalocrm.orgCodes", { CS1: "CS1" }).ok).toBe(false);
-    expect(validateSettingValue("zalocrm.orgCodes", { CS1: "cs 1" }).ok).toBe(false);
-    expect(validateSettingValue("zalocrm.orgCodes", { CS1: "" }).ok).toBe(false);
-    expect(validateSettingValue("zalocrm.orgCodes", { CS1: 1 }).ok).toBe(false);
-    expect(validateSettingValue("zalocrm.orgCodes", "cs1").ok).toBe(false);
+  it("nhận danh sách RỖNG — 'tắt hết' là một lựa chọn hợp lệ", () => {
+    expect(validateSettingValue("push.tienToDuocDay", []).ok).toBe(true);
   });
 
-  it("[ZC-CFG-04] `zalocrm.idleAlertHours` default = 2", () => {
-    expect(SETTINGS["zalocrm.idleAlertHours"].default).toBe(2);
+  it("⚠️ TỪ CHỐI khoá thiếu dấu hai chấm — nó khớp LẤN sang loại sinh sau", () => {
+    // `lead.moi` (không có dấu hai chấm) khớp cả `lead.moi_gi_do:` ra đời sau đó. Dấu hai chấm
+    // là luật khớp dùng chung với `lib/notifications/catalog.ts`; hai bảng cùng đọc một khoá mà
+    // luật khớp lệch nhau là loại lệch không ai nhìn thấy cho tới lúc gửi nhầm.
+    expect(validateSettingValue("push.tienToDuocDay", ["lead.moi"]).ok).toBe(false);
+    expect(validateSettingValue("push.tienToDuocDay", ["lead.moi:", "sai"]).ok).toBe(false);
   });
 
-  it("[ZC-CFG-05] `zalocrm.idleAlertHours` chặn 0 / âm / số lẻ", () => {
-    // 0 giờ = mọi hội thoại vừa nhận đã cảnh báo ⇒ chuông kêu liên tục, người dùng
-    // tắt mắt với nó. Cùng bài học ngưỡng lead treo (C-05-T03).
-    expect(validateSettingValue("zalocrm.idleAlertHours", 0).ok).toBe(false);
-    expect(validateSettingValue("zalocrm.idleAlertHours", -1).ok).toBe(false);
-    expect(validateSettingValue("zalocrm.idleAlertHours", 1.5).ok).toBe(false);
-    expect(validateSettingValue("zalocrm.idleAlertHours", 1).ok).toBe(true);
-    expect(validateSettingValue("zalocrm.idleAlertHours", 72).ok).toBe(true);
-    expect(validateSettingValue("zalocrm.idleAlertHours", 73).ok).toBe(false);
+  it("tầng này KHÔNG đối chiếu danh mục — đó là việc của đường ghi", () => {
+    // ⚠️ Ca này khoá một sự ĐÁNH ĐỔI CÓ CHỦ ĐÍCH, không phải một lỗ hổng bị bỏ quên.
+    //
+    // Đặt phép đối chiếu danh mục ở đây cần `import catalogPrefixes`, và `lint:boundaries` bắt
+    // được 11 vòng import khi thử: registry → notifications/catalog → notifications/pending-sync
+    // → pending-tasks → settings/service · auth/actor → … → registry. Nới luật `no-circular`
+    // chung của repo để hợp thức hoá một tính năng là đổi rào cho cả repo — không làm.
+    //
+    // Phép đối chiếu nằm ở `luuLoaiDuocDayAction` và có ca test riêng. Ai dời nó về đây thì ca
+    // này đỏ, và buộc đọc lý do trước khi sửa.
+    expect(validateSettingValue("push.tienToDuocDay", ["khong_ton_tai:"]).ok).toBe(true);
   });
 
-  it('[ZC-CFG-06] `inbox.zaloCaNhanLive` schema là z.boolean — chuỗi "true" KHÔNG hợp lệ', () => {
-    // Bẫy thật: `resolveSendMode` (lib/integrations/fail-safe.ts:37) kiểm kiểu CHẶT
-    // và trả `SETTING_UNREADABLE` cho mọi giá trị không phải boolean. Ghi chuỗi
-    // "true" vào ô này ⇒ công tắc trông như ĐANG BẬT trên màn cấu hình nhưng
-    // adapter vẫn chạy MÔ PHỎNG — khách không nhận được gì mà không ai báo lỗi.
-    expect(validateSettingValue("inbox.zaloCaNhanLive", true).ok).toBe(true);
-    expect(validateSettingValue("inbox.zaloCaNhanLive", false).ok).toBe(true);
-    expect(validateSettingValue("inbox.zaloCaNhanLive", "true").ok).toBe(false);
-    expect(validateSettingValue("inbox.zaloCaNhanLive", 1).ok).toBe(false);
+  it("TỪ CHỐI chuỗi rỗng — nó khớp MỌI khoá, tức biến danh sách trắng thành 'đẩy tất'", () => {
+    expect(validateSettingValue("push.tienToDuocDay", [""]).ok).toBe(false);
+    expect(validateSettingValue("push.tienToDuocDay", ["lead.moi:", ""]).ok).toBe(false);
   });
 
-  it("[ZC-CFG-07] `inbox.zaloCaNhanLive` mặc định TẮT — nick cá nhân không tự gửi tin thật", () => {
-    expect(SETTINGS["inbox.zaloCaNhanLive"].default).toBe(false);
-    // Cùng khuôn hai công tắc kênh đã có: tắt = mô phỏng, không phải hỏng.
-    expect(SETTINGS["inbox.zaloCaNhanLive"].group).toBe(SETTINGS["inbox.zaloOaLive"].group);
+  it("chuỗi rỗng báo ĐÚNG lý do của nó, không phải lý do 'thiếu dấu hai chấm'", () => {
+    // ⚠️ Ca này sinh ra từ một phép CẤY LỖI XANH GIẢ: gỡ hẳn nhánh kiểm chuỗi rỗng thì không
+    // ca nào đỏ, vì `"".endsWith(":")` cũng false nên nhánh dấu hai chấm bắt thay. Tức là ca
+    // trên KHÔNG chứng minh được nhánh chuỗi rỗng còn sống.
+    //
+    // Thứ nhánh đó thật sự đóng góp là CÂU BÁO LỖI. "Phải kết thúc bằng dấu hai chấm" nói sai
+    // bản chất cho một ô trống, và người vận hành sẽ đi thêm dấu hai chấm vào một chuỗi rỗng.
+    const r = validateSettingValue("push.tienToDuocDay", [""]);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toContain("rỗng");
+  });
+
+  it("TỪ CHỐI khoá khai hai lần", () => {
+    expect(validateSettingValue("push.tienToDuocDay", ["lead.moi:", "lead.moi:"]).ok).toBe(false);
+  });
+
+  it("TỪ CHỐI thứ không phải mảng chuỗi", () => {
+    for (const v of ["lead.moi:", 1, null, { a: 1 }, [1, 2], [null]]) {
+      expect(validateSettingValue("push.tienToDuocDay", v).ok, JSON.stringify(v)).toBe(false);
+    }
+  });
+
+  it("KHÔNG cho override theo cơ sở", () => {
+    // Một cơ sở tự tắt một loại thì nhân viên cơ sở đó im lặng mà Hội sở không biết — đúng
+    // loại lỗi câm mà cả module này sinh ra để tránh.
+    expect(SETTINGS["push.tienToDuocDay"].centerOverridable).toBe(false);
   });
 });

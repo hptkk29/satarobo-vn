@@ -55,10 +55,11 @@ import {
 } from "../../lib/chat/admin";
 import { seedChatFixture, type ChatFixture } from "./_helpers/seed-chat";
 
-const DB_URL = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL ?? "";
-const HAS_LOCAL_DB =
-  /(@|\/\/)(localhost|127\.0\.0\.1)[:/]/.test(DB_URL) ||
-  /satarobo_test|ci_test/.test(DB_URL);
+import { RUN_DB_TESTS as RUN_DB_TESTS_CHUNG } from "../_helpers/db-gate";
+// CỔNG CHẠY dùng chung — xem `tests/_helpers/db-gate.ts`. Từ 04/09/2026 cổng này
+// ĐÒI THÊM `ALLOW_DB_RESET=1`: `pnpm test:unit` trần gọi tới đây sẽ SKIP thay vì
+// TRUNCATE sạch DB đang làm việc. Chạy thật bằng `pnpm test:chat-db`.
+const HAS_LOCAL_DB = RUN_DB_TESTS_CHUNG;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Seed chuẩn TestScenarios — phần CHẠY THẬT ngay từ US-05 (khi có DB local).
@@ -521,6 +522,22 @@ describe.skipIf(!HAS_LOCAL_DB)("US-15 · Quản trị hội thoại (DB local)",
   });
 
   it("[AC3] mở khoá LopA → ACTIVE, phát locked=false, gv1 gửi lại được, audit ghi lần hai", async () => {
+    // ── ARRANGE của CHÍNH ca này (luật 18) ─────────────────────────────────────
+    // 🔴 Trước 10/09/2026 ca này MƯỢN cái khoá do ca "[AC3 + TS-03.7b] khoá LopA" đặt.
+    // Chạy riêng nó thì ĐỎ: LopA vốn ACTIVE ⇒ `setConversationLock(false)` là no-op,
+    // KHÔNG phát `conversation.locked` nào ⇒ `expected undefined to match object
+    // { locked: false, status: "ACTIVE" }`. Cả bộ vẫn xanh vì thứ tự đang cứu nhau.
+    // Chạy sau ca kia thì lượt khoá này là no-op, trạng thái y hệt.
+    // Ghi THẲNG DB chứ không gọi `setConversationLockAsActor`: arrange không được để lại
+    // dòng AuditLog — ca này khẳng định `orderBy createdAt desc` ra đúng dòng "mở lại",
+    // mà hai dòng rơi cùng một giây thì thứ tự bấp bênh.
+    await db.conversation.update({
+      where: { id: fx.conversations.lopA },
+      data: { status: "LOCKED" },
+    });
+
+    // Xoá SAU khi arrange: sự kiện locked=true của bước trên mà lọt lại thì `.find()`
+    // dưới đây vớ đúng nó và ca test xanh vì lý do sai.
     broadcastLog.length = 0;
     const res = await setConversationLockAsActor(await actorOf(fx.users.admin1), "Admin HO", {
       conversationId: fx.conversations.lopA,

@@ -1,6 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
+// 30/08 (từ `main`) — SĐT lưu dạng canonical `84…`; ô nhập phải hiện dạng người Việt
+// đọc được `0…`. Lưu lại vẫn chuẩn hoá nên không có đường nào lệch.
+import { formatPhoneVN } from "@/lib/phone";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
@@ -107,7 +110,7 @@ export function LeadForm({
   const courseGroups = groupTeachableCourses(courses);
 
   const [parentName, setParentName] = useState(initial?.parentName ?? "");
-  const [phone, setPhone] = useState(initial?.phone ?? "");
+  const [phone, setPhone] = useState(formatPhoneVN(initial?.phone ?? ""));
   const [email, setEmail] = useState(initial?.email ?? "");
   const [childName, setChildName] = useState(initial?.childName ?? "");
   const [childAge, setChildAge] = useState(initial?.childAge != null ? String(initial.childAge) : "");

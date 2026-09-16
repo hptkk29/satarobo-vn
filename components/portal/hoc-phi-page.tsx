@@ -7,7 +7,8 @@ import {
   Receipt,
 } from "lucide-react";
 import type { StudentBilling } from "@/lib/portal/billing-student";
-import { PAYMENT_METHOD_LABEL, LOAI_BUT_TOAN_LABEL } from "@/lib/portal/billing";
+import { soTienCoDau, tongPhieuThuHienThi } from "@/lib/portal/phieu-thu";
+
 import { PageHero, HeroMetric } from "@/components/portal/page-header";
 import { ChildSwitcher } from "@/components/portal/child-switcher";
 import { hotlinesInline } from "@/lib/locations";
@@ -46,11 +47,19 @@ export function HocPhiPageV2({
   activeId,
   studentName,
   data,
+  methodLabels,
 }: {
   kids: { id: string; name: string }[];
   activeId: string | null;
   studentName: string;
   data: StudentBilling;
+  /**
+   * Mã phương thức → nhãn tiếng Việt, dựng ở RSC bằng `getPaymentMethodLabels()`.
+   * Truyền qua props chứ không import bảng cứng: từ 30/08/2026 mỗi cơ sở có thể có
+   * phương thức riêng (mã "BANK_CS1"…) mà bảng cứng không biết ⇒ phụ huynh sẽ đọc thấy
+   * mã nội bộ thay vì tên phương thức.
+   */
+  methodLabels: Record<string, string>;
 }) {
   const dleft = daysLeft(data.nextDueDate);
   return (
@@ -101,6 +110,27 @@ export function HocPhiPageV2({
           <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
             Khoản cần thanh toán
           </h2>
+          {/* 06/09 — ghi danh CHƯA CHỐT HỌC PHÍ hiện thành một dòng nói rõ, thay vì bị
+              lọc mất (trước đây trang báo "Đã thanh toán đủ" ngay trên phiếu thu thật)
+              hoặc in "0 đ" (đọc như khoá miễn phí). */}
+          {data.rows
+            .filter((r) => r.chuaChotGia)
+            .map((r) => (
+              <div
+                key={r.enrollmentId}
+                className="rounded-2xl border border-dashed border-caution bg-caution/5 p-4"
+              >
+                <p className="text-sm font-bold text-foreground">
+                  {r.courseName ?? "Khoá học"}
+                  {r.className ? ` · ${r.className}` : ""}
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Trung tâm chưa chốt học phí cho khoá này. Vui lòng liên hệ để được báo
+                  giá — số tiền bên dưới chưa bao gồm khoá này.
+                </p>
+              </div>
+            ))}
+
           {data.outstanding > 0 ? (
             <div className="space-y-3">
               {data.rows
@@ -189,58 +219,85 @@ export function HocPhiPageV2({
               <b className="text-foreground">kế toán đã xác nhận thực thu</b>.
             </li>
             <li>• Phiếu thu tách riêng theo từng con / khóa học.</li>
-            <li>
-              • Khoản đã <b className="text-foreground">hoàn lại</b> cho quý phụ
-              huynh được trừ ra khỏi số &ldquo;Đã thanh toán&rdquo; và hiện thành
-              một dòng riêng trong sổ bên dưới.
-            </li>
-            <li>• Công nợ = giá phải đóng − số đã thanh toán.</li>
+            <li>• Công nợ = giá phải đóng − số đã xác nhận.</li>
           </ul>
         </div>
       </div>
 
       <section className="space-y-3">
         <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-foreground">
-          <Receipt className="size-4 text-primary" /> Sổ thu &amp; hoàn tiền
+          <Receipt className="size-4 text-primary" /> Phiếu thu đã xác nhận
         </h2>
         <div className="rounded-2xl border border-border bg-card divide-y divide-border">
           {data.receipts.length === 0 ? (
             <p className="p-6 text-center text-sm text-muted-foreground">
-              Chưa có khoản nào được kế toán xác nhận.
+              Chưa có phiếu thu nào được xác nhận.
             </p>
           ) : (
-            data.receipts.map((r) => (
-              <div key={r.id} className="flex items-center gap-3 p-4">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-bold text-foreground">
-                    {r.loai === "HOAN" ? "Hoàn tiền" : "Học phí"}
-                    {r.orderCode ? ` · ${r.orderCode}` : ""}
-                  </p>
-                  <p className="mt-0.5 text-xs font-medium text-muted-foreground">
-                    {dmy(r.paidDate)} ·{" "}
-                    {PAYMENT_METHOD_LABEL[r.method] ?? r.method}
-                  </p>
-                </div>
-                <p
-                  className={
-                    "shrink-0 text-sm font-bold " +
-                    (r.loai === "HOAN" ? "text-caution" : "text-foreground")
-                  }
-                >
-                  {vnd(r.amount)}
+            <>
+              {data.receipts.map((r) =>
+                r.paymentType === "ADJUSTMENT" ? (
+                  // BÚT TOÁN ĐIỀU CHỈNH — dòng riêng, in phần chênh lệch kèm dấu + lý do.
+                  // Thụt lề để đọc ra ngay là nó thuộc về phiếu thu ngay bên trên.
+                  <div key={r.id} className="flex items-start gap-3 bg-muted/30 p-4 pl-8">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-bold text-foreground">
+                        Điều chỉnh phiếu thu
+                      </p>
+                      {r.lyDoDieuChinh && (
+                        <p className="mt-0.5 text-xs font-medium text-muted-foreground">
+                          Lý do: {r.lyDoDieuChinh}
+                        </p>
+                      )}
+                      <p className="mt-0.5 text-xs font-medium text-muted-foreground">
+                        {dmy(r.confirmedAt ?? r.paidDate)}
+                      </p>
+                    </div>
+                    <p
+                      className={`shrink-0 text-sm font-bold ${
+                        r.amount < 0 ? "text-destructive" : "text-success"
+                      }`}
+                    >
+                      {soTienCoDau(r.amount)}
+                    </p>
+                  </div>
+                ) : (
+                  <div key={r.id} className="flex items-center gap-3 p-4">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-bold text-foreground">
+                        Học phí{r.orderCode ? ` · ${r.orderCode}` : ""}
+                      </p>
+                      <p className="mt-0.5 text-xs font-medium text-muted-foreground">
+                        {dmy(r.paidDate)} ·{" "}
+                        {methodLabels[r.method] ?? r.method}
+                      </p>
+                    </div>
+                    {/* Số tiền của phiếu gốc GIỮ NGUYÊN — khớp biên lai phụ huynh đang cầm. */}
+                    <p className="shrink-0 text-sm font-bold text-foreground">
+                      {vnd(r.amount)}
+                    </p>
+                    {r.daBiDieuChinh ? (
+                      <span className="shrink-0 rounded-md bg-caution/10 px-2 py-0.5 text-xs font-bold text-caution">
+                        Đã điều chỉnh
+                      </span>
+                    ) : (
+                      <span className="shrink-0 rounded-md bg-success/10 px-2 py-0.5 text-xs font-bold text-success">
+                        Đã xác nhận
+                      </span>
+                    )}
+                  </div>
+                ),
+              )}
+              {/* Tổng ở CUỐI: chỉ khi cộng cả dòng gốc lẫn dòng điều chỉnh mới ra số đúng. */}
+              <div className="flex items-center gap-3 bg-muted/50 p-4">
+                <p className="min-w-0 flex-1 text-sm font-bold text-foreground">
+                  Tổng đã xác nhận
                 </p>
-                <span
-                  className={
-                    "shrink-0 rounded-md px-2 py-0.5 text-xs font-bold " +
-                    (r.loai === "HOAN"
-                      ? "bg-caution/10 text-caution"
-                      : "bg-success/10 text-success")
-                  }
-                >
-                  {LOAI_BUT_TOAN_LABEL[r.loai]}
-                </span>
+                <p className="shrink-0 text-sm font-bold text-foreground">
+                  {vnd(tongPhieuThuHienThi(data.receipts))}
+                </p>
               </div>
-            ))
+            </>
           )}
         </div>
       </section>

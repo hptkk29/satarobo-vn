@@ -34,6 +34,13 @@ const GOC = join(process.cwd(), "prisma", "migrations");
  * cách xử cẩu thả là xoá luôn guard.
  */
 const TU_KHOA = [
+  // 16/09/2026 (hợp nhất `main`) — bốn từ NỐI của câu SELECT nhiều dòng. Migration
+  // `20260829090000_lead_chia_tu_dong` bên `main` xuống dòng ở `LEFT JOIN LATERAL (`,
+  // và đó là SQL hợp lệ — danh sách này thiếu chứ không phải tệp sai.
+  "LEFT",
+  "RIGHT",
+  "INNER",
+  "JOIN",
   "CREATE",
   "ALTER",
   "DROP",

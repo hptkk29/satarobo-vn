@@ -1,36 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { makeKioskToken, verifyKioskToken,
-  makeStaticKioskToken,
-  verifyStaticKioskToken,
-  laMaTinh,
-} from "./kiosk-token";
+import { laMaXoayDoiCu, makeStaticKioskToken, verifyStaticKioskToken } from "./kiosk-token";
 
-const S = "test-secret";
-const T0 = new Date("2026-09-08T00:45:00Z");
-
-describe("kiosk token xoay 60s", () => {
-  it("token vừa sinh → hợp lệ, đúng workLocationId", () => {
-    const t = makeKioskToken("wl1", S, T0);
-    expect(verifyKioskToken(t, S, T0)).toEqual({ ok: true, workLocationId: "wl1", ageWindows: 0 });
-  });
-  it("2 phút sau vẫn nhận (2 cửa sổ trước); 3 phút sau hết hạn", () => {
-    const t = makeKioskToken("wl1", S, T0);
-    expect(verifyKioskToken(t, S, new Date(T0.getTime() + 2 * 60_000)).ok).toBe(true);
-    expect(verifyKioskToken(t, S, new Date(T0.getTime() + 3 * 60_000 + 1))).toEqual({ ok: false, reason: "EXPIRED" });
-  });
-  it("token từ tương lai (đồng hồ lệch) bị từ chối", () => {
-    const t = makeKioskToken("wl1", S, new Date(T0.getTime() + 5 * 60_000));
-    expect(verifyKioskToken(t, S, T0)).toEqual({ ok: false, reason: "EXPIRED" });
-  });
-  it("sai secret / sửa workLocationId → SIGNATURE; sai định dạng → FORMAT", () => {
-    const t = makeKioskToken("wl1", S, T0);
-    expect(verifyKioskToken(t, "other", T0)).toEqual({ ok: false, reason: "SIGNATURE" });
-    expect(verifyKioskToken(t.replace("wl1", "wl2"), S, T0)).toEqual({ ok: false, reason: "SIGNATURE" });
-    expect(verifyKioskToken("abc", S, T0)).toEqual({ ok: false, reason: "FORMAT" });
-  });
-});
-
-describe("mã TĨNH in ra (đợt 2)", () => {
+describe("mã TĨNH in ra — họ mã DUY NHẤT từ 07/09/2026", () => {
   const S = "x".repeat(40);
 
   it("ký và kiểm được, mang đúng điểm chấm công và đời khoá", () => {
@@ -42,7 +13,8 @@ describe("mã TĨNH in ra (đợt 2)", () => {
 
   it("KHÔNG hết hạn — đó là cả điểm của mã in ra", () => {
     const t = makeStaticKioskToken("wl-1", 1, S);
-    // Mã xoay chết sau 3 phút; mã tĩnh thì không có khái niệm thời gian trong chữ ký.
+    // Không có khái niệm thời gian trong chữ ký ⇒ không có gì để hết hạn. Cách duy nhất giết một
+    // tờ mã là tăng đời khoá.
     expect(verifyStaticKioskToken(t, S).ok).toBe(true);
   });
 
@@ -74,8 +46,18 @@ describe("mã TĨNH in ra (đợt 2)", () => {
     }
   });
 
-  it("laMaTinh phân biệt được hai dạng — cổng vào dựa vào đúng dấu hiệu này", () => {
-    expect(laMaTinh(makeStaticKioskToken("wl-1", 1, S))).toBe(true);
-    expect(laMaTinh(makeKioskToken("wl-1", S))).toBe(false);
+  it("nhận ra mã ĐỜI CŨ để báo đúng lý do, không lẫn với mã rác", () => {
+    // Mã xoay đã gỡ (07/09) nhưng ảnh chụp màn TV cũ vẫn còn trong máy người ta. Cổng vào phân
+    // biệt bằng chỗ này để nói "mã đời cũ đã ngừng dùng" thay vì "mã không hợp lệ" — người cầm
+    // ảnh cũ cần được bảo đi quét tờ mới, chứ báo chung chung thì họ đứng bấm lại.
+    expect(laMaXoayDoiCu("wl-1.29051730.abcdef")).toBe(true);
+    expect(laMaXoayDoiCu(makeStaticKioskToken("wl-1", 1, S))).toBe(false);
+    for (const x of ["", "a.b", "a.b.c.d", "wl.xyz.sig"]) expect(laMaXoayDoiCu(x)).toBe(false);
+  });
+
+  it("mã tĩnh KHÔNG bị nhận nhầm là mã đời cũ dù đời khoá là số", () => {
+    // `v12` phải đọc là "đời khoá 12", không phải "cửa sổ thời gian 12".
+    expect(laMaXoayDoiCu(makeStaticKioskToken("wl-1", 12, S))).toBe(false);
+    expect(verifyStaticKioskToken(makeStaticKioskToken("wl-1", 12, S), S).ok).toBe(true);
   });
 });

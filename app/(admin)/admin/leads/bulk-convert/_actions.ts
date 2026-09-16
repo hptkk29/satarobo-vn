@@ -11,6 +11,12 @@ import { z } from 'zod'
 import { auth } from '@/lib/auth'
 import { resolveActor } from '@/lib/auth/actor'
 import { checkPermission } from '@/lib/auth/check-permission'
+import { computeEnrollmentPrice } from '@/lib/finance/pricing'
+import {
+  canGrantFullScholarship,
+  isFullWaiver,
+  SCHOLARSHIP_FORBIDDEN,
+} from '@/lib/crm/scholarship'
 import { scopedDb } from '@/lib/db-scope'
 import { getAuditActor } from '@/lib/audit/log'
 import {
@@ -119,6 +125,44 @@ export async function bulkConvertLeadsAction(input: unknown): Promise<BulkConver
     : []
   const visible = new Set(visibleLeads.map((l) => l.id))
 
+  // ⚠️ CỬA THỨ HAI của "miễn phí học bổng toàn phần" — phải đóng cùng cổng với màn chốt
+  // lẻ (chốt 31/08/2026: chỉ Quản trị tối cao được miễn 100%).
+  //
+  // Màn này nhận ưu đãi từ ghi chú do IMPORT ghi (`Giảm=100%` / `Giảm=9000000đ`), và
+  // `leads:import` thuộc cả CENTER_MANAGER lẫn SALES_CSM. Không chặn ở đây thì khoá ở
+  // màn chốt lẻ chỉ là hình thức: cùng một người, cùng kết quả (học phí về 0, guard
+  // PAYMENT_REQUIRED tự thoả), chỉ khác đường đi.
+  //
+  // Chặn ĐÚNG ca miễn TOÀN PHẦN, không đụng ưu đãi một phần: import lịch sử có giảm
+  // 10%/500k là dữ liệu thật của khách cũ, khoá luôn là chặn cả nghiệp vụ nhập liệu.
+  // Tính bằng CHÍNH `computeEnrollmentPrice` mà service dùng — hai bên không thể lệch.
+  const waiveBlocked = new Set<string>()
+  if (!canGrantFullScholarship(actor)) {
+    const classIds = [
+      ...new Set(
+        itemStates.flatMap((st) => (st.item ? st.item.students.map((s) => s.classId) : [])),
+      ),
+    ]
+    const priceByClass = new Map<string, number>()
+    if (classIds.length) {
+      const classes = await sdb.class.findMany({
+        where: { id: { in: classIds } },
+        select: { id: true, course: { select: { price: true } } },
+      })
+      for (const c of classes) priceByClass.set(c.id, c.course?.price ?? 0)
+    }
+    for (const st of itemStates) {
+      if (!st.item) continue
+      const waives = st.item.students.some((s) => {
+        if (!s.discount) return false
+        const listPrice = priceByClass.get(s.classId) ?? 0
+        const { finalPrice } = computeEnrollmentPrice({ listPrice, discount: s.discount })
+        return isFullWaiver(listPrice, finalPrice)
+      })
+      if (waives) waiveBlocked.add(st.item.leadId)
+    }
+  }
+
   const results: BulkConvertLeadResult[] = []
   for (const state of itemStates) {
     if (!state.item) {
@@ -126,6 +170,15 @@ export async function bulkConvertLeadsAction(input: unknown): Promise<BulkConver
       continue
     }
     const item = state.item
+    if (waiveBlocked.has(item.leadId)) {
+      results.push({
+        leadId: item.leadId,
+        ok: false,
+        code: 'SCHOLARSHIP_FORBIDDEN',
+        message: `${SCHOLARSHIP_FORBIDDEN} Lead này có mức giảm làm học phí về 0đ — bỏ tick lead này, hoặc nhờ Quản trị tối cao chốt.`,
+      })
+      continue
+    }
     if (!visible.has(item.leadId)) {
       results.push({
         leadId: item.leadId,

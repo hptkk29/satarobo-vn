@@ -19,7 +19,10 @@ import { auth } from "@/lib/auth";
 import { checkAnyPermission } from "@/lib/auth/check-permission";
 import { PAGE_GATES } from "@/lib/auth/page-gates";
 import { resolveActor } from "@/lib/auth/actor";
-import { loadIntakeCenterOptions } from "@/lib/lead/intake/center-options";
+import {
+  loadIntakeCenterOptions,
+  loadIntakeCourseOptions,
+} from "@/lib/lead/intake/center-options";
 import { docPrefillTuQuery } from "@/lib/lead/intake/prefill";
 import { QuickLeadForm } from "@/components/lead-intake/quick-lead-form";
 
@@ -42,7 +45,10 @@ export default async function SaleNhapKhachHangPage({
   }
 
   const actor = await resolveActor(session.user.id);
-  const centers = await loadIntakeCenterOptions(actor);
+  const [centers, courses] = await Promise.all([
+    loadIntakeCenterOptions(actor),
+    loadIntakeCourseOptions(),
+  ]);
   const prefill = docPrefillTuQuery(await searchParams);
 
   return (
@@ -55,7 +61,7 @@ export default async function SaleNhapKhachHangPage({
           cơ sở.
         </p>
       </div>
-      <QuickLeadForm centers={centers} initial={prefill} />
+      <QuickLeadForm centers={centers} courses={courses} initial={prefill} />
     </div>
   );
 }

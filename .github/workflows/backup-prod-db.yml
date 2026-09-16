@@ -126,6 +126,12 @@ jobs:
           EP: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
           BUCKET: ${{ secrets.R2_BACKUP_BUCKET }}
         run: |
+          # pipefail: không có nó, `aws s3 ls` hỏng (hết hạn khoá / lỗi mạng) thì vòng
+          # `while` chỉ đơn giản không chạy lần nào, ống trả mã thoát của `while` = 0, và
+          # bước này XANH trong khi không xoá bản nào. Dọn bản cũ ngừng chạy âm thầm là
+          # kiểu hỏng chỉ lộ ra khi hết dung lượng R2. Xem docs/luat-doc-so-va-ket-luan.md
+          # §Luật 6.
+          set -o pipefail
           CUTOFF=$(date -u -d "$RETENTION_DAYS days ago" +%Y-%m-%d)
           echo "Xoá bản trước $CUTOFF"
           aws s3 ls "s3://$BUCKET/db/" --endpoint-url "$EP" | while read -r d _t _sz key; do

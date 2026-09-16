@@ -24,6 +24,7 @@ import {
   getSessionRosterStudentIds,
 } from "@/lib/attendance/roster";
 import { isSessionOwnedByTeacher } from "@/lib/lms/session-ownership";
+import { chotBuoi, type ChotBuoiKetQua } from "@/lib/lms/chot-buoi";
 import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
 import {
@@ -33,6 +34,10 @@ import {
 import { notifyAttendanceForSession } from "@/lib/notify/attendance";
 import { evaluateAbsenceRisk } from "@/lib/risk/service";
 import { mapWithConcurrency } from "@/lib/util/concurrency";
+import { completeSession } from "@/lib/lms/session-lifecycle";
+import { quyetDinhTuHoanTat } from "@/lib/lms/tu-hoan-tat-buoi";
+import { rosterWhere } from "@/lib/enrollment-scope";
+import { vnDateOnly } from "@/lib/time/vn";
 
 const MAKEUP_STATUSES = ["NONE", "NEEDS_MAKEUP", "MADE_UP"] as const;
 
@@ -116,6 +121,8 @@ export async function saveClassAttendanceAction(
       classId: true,
       centerId: true,
       date: true,
+      // `status`: quyết định tự-hoàn-tất ở cuối hàm (xem khối #TU-HOAN-TAT).
+      status: true,
       substituteTeacherId: true,
       actualTeacherId: true,
       class: { select: { centerId: true } },
@@ -282,25 +289,29 @@ export async function saveClassAttendanceAction(
   try {
     // Song song CÓ TRẦN — mỗi HV một lượt độc lập; nối đuôi thì GV bấm Lưu phải chờ hết
     // 20 vòng truy vấn mới thấy phản hồi.
-    await mapWithConcurrency(plans, 5, async ({ r, makeupStatus, absenceReason }) => {
-      if (makeupStatus === "NEEDS_MAKEUP") {
-        await createMakeupNeed({
-          studentId: r.studentId,
-          missedSessionId: data.sessionId,
-          createdById: actorId,
-          note: absenceReason,
-          // Chuyển trạng thái THẬT: trước lần lưu này HV chưa ở diện cần bù. Lưu lại một
-          // buổi vốn đã NEEDS_MAKEUP thì không dựng dậy nhu cầu mà quản lý vừa huỷ tay.
-          reviveCancelled:
-            existingBy.get(r.studentId)?.makeupStatus !== "NEEDS_MAKEUP",
-        });
-      } else if (!isAbsent(r.status)) {
-        await cancelPendingMakeupNeed({
-          studentId: r.studentId,
-          missedSessionId: data.sessionId,
-        });
-      }
-    });
+    await mapWithConcurrency(
+      plans,
+      5,
+      async ({ r, makeupStatus, absenceReason }) => {
+        if (makeupStatus === "NEEDS_MAKEUP") {
+          await createMakeupNeed({
+            studentId: r.studentId,
+            missedSessionId: data.sessionId,
+            createdById: actorId,
+            note: absenceReason,
+            // Chuyển trạng thái THẬT: trước lần lưu này HV chưa ở diện cần bù. Lưu lại một
+            // buổi vốn đã NEEDS_MAKEUP thì không dựng dậy nhu cầu mà quản lý vừa huỷ tay.
+            reviveCancelled:
+              existingBy.get(r.studentId)?.makeupStatus !== "NEEDS_MAKEUP",
+          });
+        } else if (!isAbsent(r.status)) {
+          await cancelPendingMakeupNeed({
+            studentId: r.studentId,
+            missedSessionId: data.sessionId,
+          });
+        }
+      },
+    );
   } catch (err) {
     console.error("[saveClassAttendanceAction] makeup:", err);
   }
@@ -335,6 +346,87 @@ export async function saveClassAttendanceAction(
     console.error("[saveClassAttendanceAction] audit:", err);
   }
 
+  // #TU-HOAN-TAT (04/09/2026) — ĐIỂM DANH ĐỦ LÀ BUỔI XONG, không còn nút riêng.
+  //
+  // Chủ dự án: "mở khoá hoàn thành buổi: chỉ cần điểm danh". Cổng của
+  // `completeSession` vốn đã không chặn (thiếu điểm danh chỉ cảnh báo) — cái thiếu là
+  // KHÔNG AI BẤM. Đo 04/09 trên DB test: 524 buổi đã qua ngày mà chỉ 486 buổi
+  // COMPLETED, nên mọi màn đếm theo `status` đọc hụt so với màn đếm theo ngày.
+  //
+  // Best-effort: điểm danh ĐÃ lưu rồi, đóng buổi hỏng không được biến thành
+  // "không lưu được điểm danh" trước mắt giáo viên.
+  try {
+    // Lấy DANH SÁCH studentId, không phải số đếm (08/09/2026). Học viên HỌC BÙ từ lớp
+    // khác cũng sinh dòng `Attendance` cho buổi này, nên đếm thô sẽ bù chỗ cho một em
+    // trong sĩ số chưa được đánh dấu — xem `quyetDinhTuHoanTat`.
+    const [siSoRows, daDanhDauRows] = await Promise.all([
+      xdb.enrollment.findMany({
+        where: { classId: sess.classId, ...rosterWhere("dang-hoc") },
+        select: { studentId: true },
+      }),
+      xdb.attendance.findMany({
+        where: { sessionId: data.sessionId },
+        select: { studentId: true },
+      }),
+    ]);
+    const qd = quyetDinhTuHoanTat({
+      trangThaiBuoi: sess.status,
+      ngayBuoi: sess.date,
+      homNayUtcMs: vnDateOnly(new Date()).getTime(),
+      siSoStudentIds: siSoRows.map((r) => r.studentId),
+      daDanhDauStudentIds: daDanhDauRows.map((r) => r.studentId),
+    });
+    if (qd.tuHoanTat) {
+      // Đi qua `completeSession` chứ KHÔNG `update({status})` trần: hàm đó còn ghi
+      // audit, ghi người/giờ thực dạy và phát `session.taught` (R7-14 nghe để tự giao
+      // bài). Bỏ qua chúng là buổi đóng mà bài tập không bao giờ được giao.
+      await completeSession({
+        sessionId: data.sessionId,
+        // Điểm danh vừa lưu xong nên cảnh báo "chưa điểm danh" không thể xảy ra;
+        // cờ này chỉ để khỏi phải đi một vòng hỏi-đáp không ai trả lời được.
+        confirmNoAttendance: true,
+        // DEFER — khớp nút chốt tay (`lib/lms/chot-buoi.ts`). Đóng buổi ở đây là chốt
+        // điểm danh, KHÔNG phải giao bài: để "NOW" thì lượt lưu điểm danh im lặng biến
+        // thành đường giao bài tập + gửi tin "Bài tập mới" cho phụ huynh. Trước 08/09
+        // chỗ này KHÔNG truyền gì và rơi về mặc định "NOW" — xem chú thích ở chữ ký
+        // `completeSession`.
+        assignMode: "DEFER",
+        // ĐÂY là đường tự đóng: không ai bấm nút, cổng nổ trong lượt lưu điểm danh.
+        // `actorId` dưới đây là GIÁO VIÊN VỪA LƯU ĐIỂM DANH, không phải người bấm chốt —
+        // đó chính là lý do `completedById` không phân biệt được hai đường.
+        nguonChot: "TU_DONG",
+        actorId,
+        actorName,
+      });
+    }
+  } catch (err) {
+    // ── HỎNG PHẢI ĐỂ LẠI DẤU (07/09/2026) ────────────────────────────────────────
+    //
+    // Giữ best-effort: điểm danh ĐÃ lưu rồi, đóng buổi hỏng không được biến thành
+    // "không lưu được điểm danh" trước mắt giáo viên.
+    //
+    // NHƯNG từ chốt 07/09 ("một luật, không hai") đây là ĐƯỜNG ĐÓNG BUỔI CHÍNH, nên
+    // nuốt lỗi vào `console.error` là mất hẳn dấu vết: log của Vercel xoay vòng và
+    // không ai tra được "tháng này đóng buổi hỏng bao nhiêu lần". Ghi thêm một dòng
+    // AuditLog để câu hỏi đó trả lời được bằng SQL.
+    //
+    // Bản thân việc ghi audit cũng best-effort — hỏng ở đây tuyệt đối không được làm
+    // hỏng lượt lưu điểm danh.
+    console.error("[saveClassAttendanceAction] tu hoan tat:", err);
+    try {
+      await writeAudit({
+        actor: { id: actorId, name: actorName },
+        module: "attendance",
+        entityType: "ClassSession",
+        entityId: data.sessionId,
+        action: "session.auto-complete.failed",
+        newValues: { error: err instanceof Error ? err.message : String(err) },
+      });
+    } catch (err2) {
+      console.error("[saveClassAttendanceAction] audit tu hoan tat:", err2);
+    }
+  }
+
   // Thông báo điểm danh cho phụ huynh (email; Zalo khi cấu hình) — best-effort.
   try {
     await notifyAttendanceForSession(data.sessionId);
@@ -345,4 +437,39 @@ export async function saveClassAttendanceAction(
   revalidatePath("/lop");
   revalidatePath("/teacher/lop");
   return { ok: true, saved: data.records.length };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// D1 (07/09/2026) — CHỐT BUỔI từ site giáo viên.
+//
+// Trước hôm nay chỉ màn admin `/attendance` có nút này, mà `decideRoute` đá giáo
+// viên thuần khỏi host admin và `attendance` không nằm trong TEACHER_ROUTE_SEGMENTS
+// ⇒ người thực sự dạy buổi không có đường nào bấm. Prod 07/09: 2 COMPLETED / 287
+// SCHEDULED trong 4 tháng.
+//
+// KHÔNG khoét route-policy và KHÔNG nới permission: nút mọc ở trang GV VỐN ĐÃ VÀO
+// ĐƯỢC (`/teacher/lop`, tab Điểm danh), và cổng sở hữu của `chotBuoi` vốn đã cho
+// phép "GV phụ trách đúng lớp" từ ngày viết ra.
+//
+// Luật nằm ở `lib/lms/chot-buoi.ts` — dùng CHUNG với admin. Ở đây chỉ còn xác thực
+// + revalidate đúng đường của site GV.
+export async function chotBuoiAction(
+  sessionId: string,
+): Promise<ChotBuoiKetQua> {
+  const session = await auth();
+  if (!session?.user?.id) return { ok: false, error: "Chưa đăng nhập" };
+
+  const { actorId, actorName } = getAuditActor(session);
+  const res = await chotBuoi({
+    sessionId,
+    actorUserId: session.user.id,
+    actorId,
+    actorName,
+  });
+  if (!res.ok) return res;
+
+  revalidatePath("/teacher/lop");
+  revalidatePath("/teacher/lich");
+  revalidatePath("/teacher");
+  return res;
 }

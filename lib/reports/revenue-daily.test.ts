@@ -199,22 +199,27 @@ describe("[B-04] dùng ĐÚNG công thức thực thu — không viết công th
     expect(points[0]!.txnCount).toBe(0);
   });
 
-  it("🔴 bản gốc đã bị ADJUSTED thay thế phải bị LOẠI, kể cả khi hai bản ở HAI NGÀY khác nhau", () => {
-    // Lọc phải chạy trên TOÀN mảng TRƯỚC khi chia theo ngày. Chia trước rồi lọc sau thì
-    // bản gốc nằm một mình trong ngày của nó ⇒ sống sót ⇒ cộng đôi đúng khoản vừa sửa.
+  it("điều chỉnh ở NGÀY KHÁC: delta rơi vào ngày của NÓ, gốc giữ nguyên ngày của gốc", () => {
+    // 🔴 Đổi 16/09/2026 khi hợp nhất `main`. Mô hình cũ ("bản mới THAY THẾ bản gốc")
+    // buộc phải lọc trên TOÀN mảng trước khi chia ngày, không thì bản gốc nằm một mình
+    // trong ngày của nó và sống sót. Mô hình DELTA bỏ hẳn nỗi lo đó: không loại bản nào,
+    // mỗi dòng rơi vào ngày của chính nó, và TỔNG mới là con số đúng.
+    //
+    // Hệ quả phải nhớ khi đọc biểu đồ: một lượt sửa tiền làm ngày CŨ giữ số cũ và ngày
+    // SỬA mang phần chênh — chứ không dời cả khoản sang ngày sửa.
     const points = buildDailyRevenue(
       [
         bt("2026-08-01T10:00:00+07:00", { id: "goc", amount: 9_000_000 }),
         bt("2026-08-04T10:00:00+07:00", {
           id: "sua",
-          amount: 7_000_000,
-          accountantStatus: "ADJUSTED",
+          amount: -2_000_000,
           adjustmentOfId: "goc",
         }),
       ],
       { fromKey: "2026-08-01", toKey: "2026-08-04", ...GOP },
     );
-    expect(points.map((p) => p.revenue)).toEqual([0, 0, 0, 7_000_000]);
+    expect(points.map((p) => p.revenue)).toEqual([9_000_000, 0, 0, -2_000_000]);
+    expect(points.reduce((s, p) => s + p.revenue, 0)).toBe(7_000_000);
   });
 
   it("txnCount đếm bút toán ĐƯỢC TÍNH, không đếm bản đã bị loại", () => {

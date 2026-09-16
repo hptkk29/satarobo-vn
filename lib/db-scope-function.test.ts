@@ -28,7 +28,15 @@ const perm = (action: string, centerScope: "ALL" | string[]): PermEntry => ({
   centerScope,
 });
 
-/** Toại: TRAINING @ HO (đào tạo toàn hệ thống) + CENTER_MANAGER @ CS1. */
+/**
+ * Ca "Toại": TRAINING @ HO + CENTER_MANAGER @ CS1.
+ *
+ * ⚠️ 04/09/2026 — đây là một KỊCH BẢN, không phải hồ sơ nhân sự. Chủ dự án cho
+ * biết người thật nay chỉ còn giữ vai đào tạo ở Hội sở, không còn quản lý CS1.
+ * Giữ nguyên fixture vì thứ nó khoá vẫn đúng và vẫn cần: hình dạng "cờ isHoLevel
+ * BẬT nhưng quyền chỉ ở một cơ sở" tồn tại với bất kỳ ai kiêm nhiệm, và đó là
+ * hình dạng dễ bị dùng nhầm làm quyền bao trùm nhất.
+ */
 const toai: Actor = {
   userId: "u-toai",
   isSuperAdmin: false,
@@ -111,9 +119,42 @@ describe("passesScope — guard GHI theo scope per-model (tạo/chuyển cơ s�
       expect(passesScope(m, { centerId: CS2 }, toai), `${m} CS2 phải bị chặn`).toBe(false);
       expect(passesScope(m, { centerId: CS1 }, toai), `${m} CS1 phải qua`).toBe(true);
     }
-    // Ngày nghỉ TOÀN HỆ THỐNG / NV HO (centerId null) — cần scope ALL, Toại không có.
-    expect(passesScope("Holiday", { centerId: null }, toai)).toBe(false);
+    // NV HO (centerId null) — cần scope ALL, Toại không có.
     expect(passesScope("Employee", { centerId: null }, toai)).toBe(false);
+  });
+
+  it("NGÀY NGHỈ toàn hệ thống: ĐỌC được, nhưng GHI thì không (đảo 04/09/2026)", () => {
+    // `Holiday` nay ∈ NULL_IS_GLOBAL_MODELS: `centerId = null` nghĩa là Tết/lễ áp
+    // cho MỌI cơ sở, không phải "chưa gán". Trước đổi này người cấp cơ sở KHÔNG
+    // BAO GIỜ thấy 4/6 ngày nghỉ thật — đúng những ngày sinh ra lịch buổi học.
+    expect(passesScope("Holiday", { centerId: null }, toai)).toBe(true);
+
+    // ⚠️ NHƯNG `passesScope` là luật ĐỌC. Luật GHI chặt hơn và nằm ở
+    // `app/(admin)/admin/holidays/_actions.ts` (`actorCanUseCenterTarget`): phạm vi
+    // "toàn hệ thống" chỉ Hội sở / quản trị hệ thống được tạo–sửa–xoá.
+    //
+    // Vì sao tách: guard ghi cũ gọi THẲNG `passesScope`, nên nếu không tách thì
+    // đúng thay đổi trên biến quản lý một cơ sở thành người xoá được ngày nghỉ áp
+    // cho mọi cơ sở. Đó là nới quyền, không phải sửa lỗi.
+    //
+    // Luật ghi KHÔNG hỏi cờ `isHoLevel`: Toại BẬT cờ đó (có vai neo tại Hội sở) mà
+    // vẫn không phải quản trị hệ thống — lấy cờ làm quyền bao trùm đúng là lỗi cả
+    // file test này sinh ra để chặn.
+    expect(toai.isHoLevel).toBe(true);
+    expect(toai.isSuperAdmin).toBe(false);
+
+    // Cũng KHÔNG hỏi `getModelVisibleCenterIds`: hàm đó gộp mọi quyền cùng tiền tố
+    // `holidays:`/`centers:`, nên `holidays:VIEW` phạm vi GLOBAL cũng ra "ALL" —
+    // quyền ĐỌC bị đọc thành quyền GHI. Và khi vai không có quyền `holidays:` nào
+    // thì nó rơi về `isHoLevel ? "ALL"`, tức đúng cái cờ vừa loại ở trên.
+    // Guard thật nằm ở `app/(admin)/admin/holidays/_actions.ts` và hỏi
+    // `actor.isSuperAdmin` — khớp seed (`holidays:edit` chỉ cấp cho SUPER_ADMIN).
+    const chiCoQuyenXem: Actor = {
+      ...toai,
+      permissions: [{ action: "holidays:view", centerScope: "ALL" } as never],
+    };
+    expect(getModelVisibleCenterIds("Holiday", chiCoQuyenXem)).toBe("ALL");
+    expect(chiCoQuyenXem.isSuperAdmin).toBe(false); // ⇒ guard ghi vẫn chặn
   });
 
   it("duyệt học bạ CS2 GIỮ NGUYÊN (ReportCard = ALL — câu 55)", () => {

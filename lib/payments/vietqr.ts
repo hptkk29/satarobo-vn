@@ -64,6 +64,80 @@ export async function getPaymentConfigExact(
   return parseConfig(cfg?.settings);
 }
 
+/** Ba cột tài khoản trên một dòng `PaymentMethod` → `PaymentConfig`, hoặc null nếu thiếu. */
+function configFromMethod(m: {
+  bankBin: string | null;
+  bankAccountNumber: string | null;
+  bankAccountName: string | null;
+}): PaymentConfig | null {
+  if (!m.bankBin || !m.bankAccountNumber || !m.bankAccountName) return null;
+  return {
+    bankBin: m.bankBin,
+    accountNumber: m.bankAccountNumber,
+    accountName: m.bankAccountName,
+  };
+}
+
+/**
+ * TÀI KHOẢN NHẬN TIỀN của một ĐƠN — nguồn sự thật từ 31/08/2026.
+ *
+ * Thứ tự tìm, và mỗi bước đều có lý do nghiệp vụ:
+ *  1. PHƯƠNG THỨC ĐÃ CHỌN TRÊN ĐƠN, nếu nó là chuyển khoản và đã khai đủ tài khoản.
+ *     Đây là ý chính của cả đợt: sale chọn "Chuyển khoản — CS1" thì phụ huynh quét ra
+ *     đúng tài khoản CS1, không phải một tài khoản chung nào đó.
+ *  2. Đơn chọn tiền mặt / chưa chọn phương thức (đơn từ convert lead luôn rơi vào đây —
+ *     lib/crm/convert-lead.ts tạo đơn KHÔNG set paymentMethodId) → lấy phương thức
+ *     chuyển khoản ĐANG BẬT của CƠ SỞ đơn, theo displayOrder. Không có bước này thì
+ *     "xuất QR" trên phần lớn đơn thật sẽ báo chưa cấu hình.
+ *  3. Phương thức chuyển khoản DÙNG CHUNG (centerId null) — cho đơn không gắn cơ sở.
+ *  4. Kho CŨ `IntegrationConfig` khoá `VIETQR:*`. Chỉ còn là đường LÙI cho dữ liệu khai
+ *     trước 31/08; màn /admin/tich-hop đã gỡ ô nhập nên không ai tạo thêm được. Chuyển
+ *     nốt sang phương thức bằng `scripts/pttt-chuyen-tai-khoan-vietqr.ts` rồi bước này
+ *     sẽ không bao giờ chạy nữa.
+ */
+export async function resolveOrderPaymentConfig(input: {
+  centerId?: string | null;
+  paymentMethodId?: string | null;
+}): Promise<PaymentConfig | null> {
+  const BANK_SELECT = {
+    bankBin: true,
+    bankAccountNumber: true,
+    bankAccountName: true,
+  } as const;
+
+  // 1 — phương thức đã chọn trên đơn.
+  if (input.paymentMethodId) {
+    const chosen = await db.paymentMethod.findUnique({
+      where: { id: input.paymentMethodId },
+      select: { type: true, ...BANK_SELECT },
+    });
+    if (chosen?.type === "BANK_TRANSFER") {
+      const cfg = configFromMethod(chosen);
+      if (cfg) return cfg;
+    }
+  }
+
+  // 2 + 3 — phương thức chuyển khoản của cơ sở, rồi tới dùng chung.
+  // Một câu truy vấn cho cả hai, sắp `centerId` giảm dần để dòng CỦA CƠ SỞ đứng trước
+  // dòng dùng chung (Postgres xếp NULL sau cùng với `NULLS LAST`).
+  const candidates = await db.paymentMethod.findMany({
+    where: {
+      type: "BANK_TRANSFER",
+      isActive: true,
+      OR: [{ centerId: input.centerId ?? null }, { centerId: null }],
+    },
+    orderBy: [{ centerId: { sort: "desc", nulls: "last" } }, { displayOrder: "asc" }],
+    select: BANK_SELECT,
+  });
+  for (const c of candidates) {
+    const cfg = configFromMethod(c);
+    if (cfg) return cfg;
+  }
+
+  // 4 — đường lùi cho dữ liệu cũ.
+  return getPaymentConfig(input.centerId ?? null);
+}
+
 export async function setPaymentConfig(
   input: PaymentConfig,
   centerId?: string | null,

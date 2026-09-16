@@ -43,7 +43,12 @@ describe("[R7-04] reject/adjust/refund yêu cầu reason (AC3 / C3)", () => {
   });
 
   it("adjustPayment reason rỗng → fail", async () => {
-    const r = await adjustPayment({ paymentId: "p1", confirmedById: "u1", reason: "" });
+    const r = await adjustPayment({
+      paymentId: "p1",
+      correctAmount: 1_000_000,
+      reason: "",
+      actorId: "u1",
+    });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toMatch(/Lý do/);
   });
@@ -76,8 +81,9 @@ describe("[FIX-H9] optimistic lock — additive param không phá guard", () => 
   it("adjustPayment vẫn fail reason rỗng dù có expectedUpdatedAt", async () => {
     const r = await adjustPayment({
       paymentId: "p1",
-      confirmedById: "u1",
+      correctAmount: 1_000_000,
       reason: "",
+      actorId: "u1",
       expectedUpdatedAt: new Date(),
     });
     expect(r.ok).toBe(false);

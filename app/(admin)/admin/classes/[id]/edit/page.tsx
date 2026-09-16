@@ -16,7 +16,7 @@ import type { PhaseFormValue } from "@/lib/classes/phase-form";
 import { loadClassPhases } from "@/lib/classes/phases-service";
 import { vnAddDays, vnStartOfDay, vnYmd } from "@/lib/time/vn";
 import { ClassSessionsManage } from "../_components/class-sessions-manage";
-import { buildSessionNumberMap } from "@/lib/lms/session-order";
+import { buildSessionNumberMap, soBuoiTheoLoTrinh } from "@/lib/lms/session-order";
 import { isSessionLifecycleV2Enabled, isClassGroupEnabled } from "@/lib/flags";
 
 interface Props {
@@ -133,6 +133,9 @@ export default async function EditClassPage({ params }: Props) {
         // Cùng lý do với trang chi tiết lớp: `status` không phản ánh việc GV đã điểm
         // danh/nhận xét hay chưa, phải đếm thật thì danh sách buổi mới nói được sự thật.
         _count: { select: { attendances: true, studentFeedbacks: true } },
+        // Đợt 1c — nguồn số LỘ TRÌNH, cùng lý do với trang chi tiết lớp.
+        plan: { select: { order: true } },
+        lesson: { select: { order: true } },
       },
     }),
     sdb.curriculum.findMany({
@@ -177,7 +180,12 @@ export default async function EditClassPage({ params }: Props) {
     date: s.date.toISOString(),
     topic: s.topic,
     status: s.status,
+    // HAI con số, đừng trộn — xem ghi chú ở `app/(admin)/admin/classes/[id]/page.tsx`.
     seq: sessionNumberOf.get(s.id) ?? null,
+    soLoTrinh: soBuoiTheoLoTrinh({
+      planOrder: s.plan?.order ?? null,
+      lessonOrder: s.lesson?.order ?? null,
+    }),
     attendanceCount: s._count.attendances,
     feedbackCount: s._count.studentFeedbacks,
   }));

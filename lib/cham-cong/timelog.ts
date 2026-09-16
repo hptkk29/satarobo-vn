@@ -54,7 +54,17 @@ export async function consumeTicket(input: { ticketId: string; nonce: string; us
 
 export type RecordTimeLogInput = {
   userId: string;
-  workLocationId: string;
+  /**
+   * `null` = LƯỢT CÔNG TÁC — không có điểm chấm nào, và đó là chủ đích.
+   *
+   * Chốt của chủ dự án (phần A): "KHÔNG mã QR. KHÔNG ghim toạ độ nơi công tác — công tác
+   * nhiều nơi, không xác định trước." Người đi công tác bấm hai nút ở màn "Của tôi".
+   *
+   * ⚠️ ĐÂY LÀ ĐƯỜNG THỨ HAI, KHÔNG phải một nhánh của đường QR. Hai vế đầu của chuỗi kiểm
+   * (điểm chấm tồn tại/bật → geofence) KHÔNG áp dụng; ba vế còn lại (độ chính xác GPS,
+   * trần lượt/ngày, trùng 2 phút) vẫn chạy y nguyên. `source` phân biệt được ở DB.
+   */
+  workLocationId: string | null;
   direction: "CHECK_IN" | "CHECK_OUT";
   latitude?: number | null;
   longitude?: number | null;
@@ -62,7 +72,7 @@ export type RecordTimeLogInput = {
   ticketId?: string | null;
   ip?: string | null;
   userAgent?: string | null;
-  source?: "TICKET" | "KIOSK";
+  source?: "TICKET" | "KIOSK" | "CONG_TAC";
   now?: Date;
 };
 
@@ -73,11 +83,18 @@ export type RecordTimeLogResult =
 /** Ghi lượt (ACCEPTED + cờ) rồi xếp hàng tính lại ngày. */
 export async function recordTimeLog(input: RecordTimeLogInput): Promise<RecordTimeLogResult> {
   const now = input.now ?? new Date();
-  const wl = await db.workLocation.findUnique({
-    where: { id: input.workLocationId },
-    select: { id: true, centerId: true, orgUnitId: true, latitude: true, longitude: true, radiusMeters: true, geofenceEnabled: true, isActive: true, name: true },
-  });
-  if (!wl || !wl.isActive) return { ok: false, error: "Điểm chấm công không tồn tại hoặc đã tắt", rejectReason: "NO_WORKLOCATION" };
+  // LƯỢT CÔNG TÁC: `workLocationId = null` ⇒ không tra điểm chấm, và hai vế kiểm đầu tiên
+  // (điểm tồn tại/bật · geofence) không có gì để kiểm. Mọi chỗ dùng `wl` bên dưới đều đã
+  // được viết cho `wl == null`.
+  const wl = input.workLocationId
+    ? await db.workLocation.findUnique({
+        where: { id: input.workLocationId },
+        select: { id: true, centerId: true, orgUnitId: true, latitude: true, longitude: true, radiusMeters: true, geofenceEnabled: true, isActive: true, name: true },
+      })
+    : null;
+  if (input.workLocationId && (!wl || !wl.isActive)) {
+    return { ok: false, error: "Điểm chấm công không tồn tại hoặc đã tắt", rejectReason: "NO_WORKLOCATION" };
+  }
 
   const workDate = vnDateOnly(now);
   const home = await resolveHomeCenter(input.userId);
@@ -85,13 +102,21 @@ export async function recordTimeLog(input: RecordTimeLogInput): Promise<RecordTi
     where: { userId: input.userId, workDate, status: "ACTIVE" },
     select: { centerId: true, orgUnitId: true, placeMode: true, allowedOrgUnitIds: true, templateCode: true },
   });
-  const orgUnitId = wl.orgUnitId ?? assignment?.orgUnitId ?? null;
+  const orgUnitId = wl?.orgUnitId ?? assignment?.orgUnitId ?? null;
   const [maxLogs, dupMinutes] = await Promise.all([getSetting("shift.maxLogsPerDay", { orgUnitId }), getSetting("shift.duplicateTapMinutes", { orgUnitId })]);
 
   const flags = new Set<string>();
   let dist: number | null = null;
   let within: boolean | null = null;
-  if (wl.latitude == null || wl.longitude == null) {
+  if (wl == null) {
+    // CÔNG TÁC — không có điểm chấm nên KHÔNG có gì để đo khoảng cách. Toạ độ vẫn được LƯU
+    // (cột `latitude`/`longitude` bên dưới); chỉ `distanceMeters`/`withinGeofence` là null.
+    //
+    // KHÔNG CHẶN khi thiếu GPS — chốt của chủ dự án: "Người ở chỗ sóng kém mà không chấm
+    // được là hỏng đúng mục đích." Chỉ gắn cờ để quản lý rà.
+    if (input.latitude == null || input.longitude == null) flags.add("THIEU_GPS");
+    else if ((input.accuracyMeters ?? 0) > 200) flags.add("GPS_KEM_CHINH_XAC");
+  } else if (wl.latitude == null || wl.longitude == null) {
     flags.add("CHUA_TOA_DO");
   } else if (input.latitude == null || input.longitude == null) {
     flags.add("THIEU_GPS");
@@ -115,7 +140,7 @@ export async function recordTimeLog(input: RecordTimeLogInput): Promise<RecordTi
   //
   // Người bị chặn nhầm KHÔNG kẹt: đơn chỉnh công (`TIMESHEET_FIX`) là đường sửa có sẵn, quản lý
   // duyệt là mốc giờ vào đúng chỗ.
-  if (wl.geofenceEnabled && wl.latitude != null && wl.longitude != null) {
+  if (wl != null && wl.geofenceEnabled && wl.latitude != null && wl.longitude != null) {
     if (input.latitude == null || input.longitude == null) {
       return {
         ok: false,
@@ -133,7 +158,9 @@ export async function recordTimeLog(input: RecordTimeLogInput): Promise<RecordTi
     }
   }
   // Sai nơi làm (§4.10): chỉ khi ca hôm nay AT_UNITS và điểm chấm không thuộc đơn vị cho phép.
-  if (assignment && assignment.placeMode === "AT_UNITS") {
+  // `SAI_NOI_LAM` chỉ có nghĩa khi ca ràng buộc NƠI (`AT_UNITS`) và có điểm chấm để so.
+  // Ca công tác là `OFFSITE` — không nơi nào để sai — nên nhánh này tự không chạy.
+  if (wl != null && assignment && assignment.placeMode === "AT_UNITS") {
     const allowed = assignment.allowedOrgUnitIds;
     const okUnit = allowed.length > 0 && wl.orgUnitId ? allowed.includes(wl.orgUnitId) : assignment.centerId === wl.centerId;
     if (!okUnit) flags.add("SAI_NOI_LAM");
@@ -149,13 +176,25 @@ export async function recordTimeLog(input: RecordTimeLogInput): Promise<RecordTi
   const last = todays[0];
   if (last && last.direction === input.direction && now.getTime() - last.loggedAt.getTime() < dupMinutes * 60_000) flags.add("TRUNG_2_PHUT");
 
-  const centerId = wl.centerId;
+  // ── `centerId` của lượt — cột NOT NULL ────────────────────────────────────────────────
+  //
+  // Đường QR: nơi chấm = cơ sở của điểm chấm.
+  // Đường CÔNG TÁC: không có điểm chấm. Chủ dự án chốt: "centerId = CƠ SỞ TRỰC THUỘC của
+  // người đó (chi phí về nơi họ thuộc về)" ⇒ `resolveHomeCenter`, ĐÚNG hàm mà `recompute`
+  // dùng để chốt nơi chịu công, nên hai bên không thể nói khác nhau.
+  //
+  // ⚠️ KHÔNG dùng `assignment.centerId` dù ô ca `NG` có cột ấy: nó là nơi ca được XẾP, còn
+  // câu hỏi ở đây là chi phí về đâu. Với `NG` hai giá trị thường trùng, nhưng "thường
+  // trùng" không phải một luật — và chuỗi dự phòng ghi trong chú thích schema
+  // ("không WorkLocation thì assignment.centerId, rồi home") CHƯA TỪNG được hiện thực,
+  // nên đừng đọc nó như mô tả hành vi.
+  const centerId = wl?.centerId ?? home.centerId;
   const log = await db.staffTimeLog.create({
     data: {
       userId: input.userId,
       centerId,
       orgUnitId,
-      workLocationId: wl.id,
+      workLocationId: wl?.id ?? null,
       direction: input.direction,
       loggedAt: now,
       workDate,
@@ -173,7 +212,6 @@ export async function recordTimeLog(input: RecordTimeLogInput): Promise<RecordTi
     } satisfies Prisma.StaffTimeLogUncheckedCreateInput,
     select: { id: true },
   });
-  void home;
   await markAttendanceDayDirty(input.userId, workDate, { reason: "timelog" });
   return { ok: true, logId: log.id, flags: [...flags].sort(), workDate, centerId };
 }

@@ -63,14 +63,22 @@ test.describe("[R1-08] Funnel dashboard", () => {
         accountantStatus: "REFUNDED", adjustmentOfId: p2.id,
       },
     });
-    // (3) có điều chỉnh giảm: 3tr → bản ADJUSTED 1tr thay thế bản gốc → +1tr (không phải 4tr)
+    // (3) có điều chỉnh giảm: thu 3tr, kế toán sửa xuống 1tr ⇒ dòng điều chỉnh mang
+    //     DELTA −2tr. Cộng CẢ HAI ra 1tr.
+    //
+    // 🔴 Đổi mô hình 07/09/2026 (`payment_type_tach_khoi_status`), áp khi hợp nhất
+    // `main` → `test` 16/09. TRƯỚC: dòng điều chỉnh mang trạng thái `ADJUSTED` và SỐ
+    // ĐÚNG (1tr), thay thế bản gốc ⇒ phải loại gốc. NAY: `ADJUSTED` đã bị bỏ khỏi
+    // `PaymentAccountantStatus`; dòng điều chỉnh là `CONFIRMED` + `paymentType`
+    // ADJUSTMENT, mang PHẦN CHÊNH LỆCH, và bản gốc VẪN được cộng.
+    // Tổng của ca này không đổi (1tr) — chỉ cách ghi sổ đổi.
     const p3 = await db.payment.create({
       data: { orderId: o3.id, amount: 3_000_000, method: "cash", paidDate, accountantStatus: "CONFIRMED" },
     });
     await db.payment.create({
       data: {
-        orderId: o3.id, amount: 1_000_000, method: "cash", paidDate,
-        accountantStatus: "ADJUSTED", adjustmentOfId: p3.id,
+        orderId: o3.id, amount: -2_000_000, method: "cash", paidDate,
+        accountantStatus: "CONFIRMED", adjustmentOfId: p3.id,
       },
     });
     // (4) khoản Sale mới ghi nhận, kế toán chưa duyệt → không phải tiền thật
@@ -83,7 +91,7 @@ test.describe("[R1-08] Funnel dashboard", () => {
     expect(counts.l2).toBe(2);
     expect(counts.l3).toBe(1);
     expect(counts.spend).toBe(1_000_000);
-    // 2tr + 0 (đã hoàn hết) + 1tr (bản điều chỉnh) = 3tr.
+    // 2tr + 0 (đã hoàn hết) + 1tr (3tr gốc + delta −2tr) = 3tr.
     // Công thức cũ (Σ Order.totalAmount của đơn CONFIRMED) cho 15tr — phồng 5 lần.
     expect(counts.revenue).toBe(3_000_000);
 

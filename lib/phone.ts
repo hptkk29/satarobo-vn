@@ -90,6 +90,26 @@ export function formatPhoneVN(raw: unknown): string {
 }
 
 /**
+ * Giá trị cho `href="tel:..."` — dạng E.164 CÓ dấu `+`.
+ *
+ * ⚠️ Đừng nhét thẳng giá trị đang lưu trong DB vào `tel:`. DB lưu canonical `84…`
+ * KHÔNG có dấu `+`, và máy điện thoại hiểu chuỗi đó là số nội địa: nó quay đúng
+ * "84941000000" rồi báo không tồn tại. Thiếu mỗi một ký tự mà nút gọi chết, trong
+ * khi trên màn hình số vẫn hiện đẹp — không ai soi ra bằng mắt.
+ *
+ * Số không chuẩn hoá được (dữ liệu rác cũ) thì trả chuỗi gốc: thà để người dùng
+ * tự nhìn còn hơn dựng một link chắc chắn sai.
+ */
+export function telHrefVN(raw: unknown): string {
+  const c = canonicalPhone(raw);
+  // Trả CẢ scheme `tel:` — hàm này sở hữu trọn giá trị `href`. Để nơi gọi tự ghép
+  // `tel:` là mời gọi đúng lỗi vừa gặp: quên phần đầu thì href thành đường dẫn
+  // TƯƠNG ĐỐI, bấm vào là điều hướng lạc trong app chứ không mở trình gọi — và
+  // trên màn hình số vẫn hiện đẹp nên không ai nhìn ra.
+  return c ? `tel:+${c}` : `tel:${String(raw ?? "")}`;
+}
+
+/**
  * Mọi dạng một SĐT CÓ THỂ đang được lưu trong DB, để tra cứu chịu được giai
  * đoạn chuyển tiếp: `["84XXXXXXXXX", "0XXXXXXXXX"]`.
  *

@@ -13,7 +13,8 @@
 // một cửa: cùng `WHERE_THUC_THU`, cùng `butToanThucThu`. Nếu ngày nào luật thực thu
 // đổi thì hoa hồng đổi theo, không lệch âm thầm.
 //
-//   CONFIRMED → cộng · REFUNDED (âm) → cộng ⇒ trừ ra · ADJUSTED → cộng và LOẠI bản gốc
+//   CONFIRMED → cộng · REFUNDED (âm) → cộng ⇒ trừ ra · ĐIỀU CHỈNH (paymentType) → là
+//   DELTA nên cộng thêm, KHÔNG loại bản gốc (đổi mô hình 07/09/2026)
 //   PENDING / REJECTED → bỏ.
 //
 // ⚠️ CHÊNH CÓ CHỦ ĐÍCH VỚI CÔNG NỢ/CỔNG PH: `lib/finance/debt.ts` và `lib/portal/*`
@@ -118,9 +119,12 @@ export const SELECT_PHAN_CONG = {
 /**
  * THUẦN — dịch sổ `Payment` sang bút toán hoa hồng.
  *
- * Chạy `butToanThucThu` TRƯỚC: nó loại bản gốc đã bị một bản ADJUSTED thay thế. Lớp
- * này trùng với `WHERE_THUC_THU` ở tầng SQL và đó là CHỦ ĐÍCH — caller nào quên mảnh
- * `where` vẫn không tạo ra tiền khống.
+ * Chạy `butToanThucThu` TRƯỚC: nó lọc đúng hai trạng thái tham gia thực thu. Lớp này
+ * trùng với `WHERE_THUC_THU` ở tầng SQL và đó là CHỦ ĐÍCH — caller nào quên mảnh `where`
+ * vẫn không tạo ra tiền khống.
+ *
+ * 🔴 Từ 07/09/2026 nó KHÔNG còn loại bản gốc: bút toán điều chỉnh là DELTA, gốc giữ số
+ * cũ, cộng cả hai mới ra số đúng.
  */
 export function mapButToanHoaHong(
   rows: HangThanhToanHoaHong[],

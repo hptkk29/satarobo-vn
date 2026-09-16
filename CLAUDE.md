@@ -17,16 +17,62 @@ Brand hub + admin CMS + portal phụ huynh + site giáo viên cho Sata Robo (Đ�
 1. **Server-first** — default Server Component. `'use client'` chỉ khi cần state/effect/handler. Data fetch trong RSC (`async`), mutations qua Server Actions (`'use server'`).
 2. **Strict TS** — không `any` (dùng `unknown` + narrow). Zod schema là source of truth → suy ra type qua `z.infer`.
 3. **Route groups** — public: `app/(public)/...`, legacy: `app/(legacy)/...`, admin: `app/(admin)/admin/...`, portal: `app/(portal)/portal/...`, teacher: `app/(teacher)/teacher/...` (L5 — site GV **ĐÃ LIVE**: flag `TEACHER_SITE_ENABLED` mặc định **ON** từ 10/07/2026 (`lib/flags.ts:86`), host `giaovien.satarobo.vn` **đã wire** trong `proxy.ts:18`; rollback = set env `TEACHER_SITE_ENABLED="false"`), auth: `app/(auth)/login/...`, **nhập khách: `app/(admin)/admin/nhap-khach-hang/`** (23/08/2026 — DỜI VÀO ADMIN, đảo chốt 22/08 vốn để nó ở host public: mục sidebar bấm vào là văng khỏi khung admin. Địa chỉ `admin.satarobo.vn/nhap-khach-hang`; đường public cũ đá 307 về đây. Giao diện + action + loader dùng chung ở `components/lead-intake/` + `lib/lead/intake/` để site Sale sau này mount lại). Không tạo `/admin/*` ngoài route group. Host-based routing qua `proxy.ts` + `lib/auth/route-policy.ts` (sửa rule host×role CHỈ ở `decideRoute()` + test, không sửa proxy.ts).
-4. **Imports** — `@/lib/auth` (Auth.js), `@/lib/utils` (cn helper), `@/components/blog/markdown-renderer` (NOT `<Markdown>`). ⚠️ **Cổng DB ĐÃ ĐÓNG** (không còn là "target"): import `@/lib/db` trần trong `app/(admin|portal|teacher|sale)/** + components/lead-intake/**` = ESLint **error**. Đi qua `scopedDb(actor)` (admin/teacher) hoặc `portalDb` (portal). Allowlist còn đúng 3 file exception (`lib/eslint/db-import-allowlist.mjs`) — code mới KHÔNG xin thêm vào.
+4. **Imports** — `@/lib/auth` (Auth.js), `@/lib/utils` (cn helper), `@/components/blog/markdown-renderer` (NOT `<Markdown>`). ⚠️ **Cổng DB ĐÃ ĐÓNG** (không còn là "target"): import `@/lib/db` trần trong `app/(admin|portal|teacher|sale)/** + components/lead-intake/**` = ESLint **error**. Đi qua `scopedDb(actor)` (admin/teacher) hoặc `portalDb` (portal). Allowlist exception ở `lib/eslint/db-import-allowlist.mjs` — mở file để biết còn những file nào; code mới KHÔNG xin thêm vào.
 5. **Auth gate** — admin/portal layout đã redirect `/login`. Server Actions/API route VẪN phải `auth()` + `assertCan(...)` ngay đầu function (layout gate là chưa đủ). Portal actions thêm ownership check `assertOwnsStudent`. **RBAC 2 tầng:** quyền action = `can()` v2 động từ DB (`@/lib/auth/can`) — **đang enforce trên prod** vì `RBAC_V2_ENABLED="true"` trên Vercel Production (xác minh 29/07/2026); v1 matrix tĩnh (`@/lib/auth/permissions`) chỉ còn chạy song song để so lệch, và là thứ chạy ở local/dev (mặc định trong code vẫn OFF — `lib/flags.ts:8`).
-   ⚠️ **`scopedDb` KHÔNG che write** — chỉ auto-scope 7 method đọc. Mọi `update/delete` phải tự `passesScope()`; mọi `create` trên model thuộc `SCOPED_MODELS` phải set `centerId` (quên = record vô hình với actor cấp cơ sở).
-6. **Prisma migrations** — KHÔNG raw SQL trừ khi cần. Mỗi schema change: `pnpm db:migrate` + tên rõ nghĩa. Sau migration: restart dev server (Prisma Client cache stale trong memory).
+   ⚠️ **`scopedDb` KHÔNG che write** — chỉ auto-scope các method ĐỌC (danh sách ở `lib/db-scope.ts`). Mọi `update/delete` phải tự `passesScope()`; mọi `create` trên model thuộc `SCOPED_MODELS` phải set `centerId` (quên = record vô hình với actor cấp cơ sở).
+6. **Prisma migrations** — ⛔ **CẤM `prisma migrate dev` (= `pnpm db:migrate`) trên repo này cho tới khi drift được đóng [08/09/2026].** Viết SQL tay vào `prisma/migrations/<yyyyMMddHHmmss>_<ten_snake_case>/migration.sql` + sửa `schema.prisma` cho khớp + `prisma migrate deploy`. Sau migration: `prisma generate` và restart dev server (Prisma Client cache stale trong memory).
+   **Vì sao cấm:** đo 08/09/2026 — repo đang **lệch sẵn giữa `prisma/migrations` và `schema.prisma` ở 14 bảng** (`Timestamptz` vs `Timestamp(3)` trên ClassSessionMedia · CoinRuleConfig · EvalForm · EvalResponse · EvaluationRound · HomeworkAssignment · Lesson · LessonChangeRequest · ReportCard · ReportCardCriterion · ScormAccessLog · ScormPackage; `ScopeShadowDiff.dataScope` thừa; thiếu `OrgUnit_path_idx`). `migrate dev` sẽ **tự sinh một migration "sửa kiểu cột"** cho 14 bảng đó và nó trông vô hại trong diff — merge vào là ALTER hàng loạt trên bảng có dữ liệu PROD, vi phạm luật cứng #4. **Không cổng nào canh**: không workflow nào so schema với migrations (`prod-db-status.yml:50` chỉ hạ xuống `::warning`).
+   **Kiểm drift AN TOÀN** (không reset gì — chỉ `--from-url`, TUYỆT ĐỐI không `--from-migrations --shadow-database-url` vì lệnh đó RESET DB đích, đã xoá sạch DB dev/test 26/08):
+   ```bash
+   DB=drift_check; createdb -U postgres -h 127.0.0.1 "$DB"
+   URL="postgresql://postgres:postgres@127.0.0.1:5432/$DB"
+   DATABASE_URL="$URL" DIRECT_URL="$URL" pnpm exec prisma migrate deploy
+   DATABASE_URL="$URL" DIRECT_URL="$URL" pnpm exec prisma migrate diff \
+     --from-url "$URL" --to-schema-datamodel prisma/schema.prisma --script
+   dropdb -U postgres -h 127.0.0.1 "$DB"
+   ```
+   Diff **rỗng là không thể** cho tới khi drift đóng — điều cần đạt là **0 dòng nhắc bảng mình vừa thêm**. Đóng drift phải quyết **từng bảng một** là schema đúng hay migration đúng ⇒ ticket riêng, đừng nhét vào việc đang làm.
 7. **UI library split** (Phase 4.X.1): admin = shadcn/ui + Recharts; client = shadcn/ui + Magic UI + Framer Motion. ESLint chặn cross-import — đừng workaround.
-8. **Security (ENFORCED by hooks):**
-   - NEVER `git add .env*` files (only `.env.example` allowed) — hook block.
+8. **Security — hook `PreToolUse` ĐANG SỐNG (đo lại 09/09/2026, có test).**
+   Danh sách cắm thật ở `.claude/settings.json`, khoá `hooks.PreToolUse`:
+
+   > ⚠️ **Dòng "ENFORCED by hooks" ở đây đã NÓI DỐI nhiều tháng.** `block-env-add.sh` và
+   > `block-destructive.sh` cùng chết vì HAI lỗi: (1) đọc `cmd="${CLAUDE_COMMAND:-}"` —
+   > biến đó **không tồn tại**; PreToolUse đưa JSON qua **STDIN**, chuỗi lệnh nằm ở
+   > `.tool_input.command`; (2) chặn bằng `exit 1`, mà Claude Code chỉ coi **`exit 2`** là
+   > CHẶN. Hai lỗi che nhau: sửa lỗi (1) mà quên (2) thì hook in ra `BLOCKED` rất thuyết
+   > phục rồi vẫn cho lệnh chạy — **chỉ mã thoát mới là bằng chứng.**
+   > **Vá 09/09/2026**, kèm `.claude/hooks/hooks.test.ts` — chạy hook THẬT với JSON thật
+   > trên stdin và đọc MÃ THOÁT (số ca: `pnpm exec vitest run .claude/hooks`), và đã cấy
+   > lại cả hai lỗi gốc để thấy nó đỏ. Luật 14 —
+   > `docs/luat-doc-so-va-ket-luan.md`.
+
+   | Hook | Chặn gì | Tình trạng |
+   |---|---|---|
+   | `block-env-add.sh` | `git add .env*` (chỉ `.env.example` được qua) | **vừa cứu 09/09/2026** |
+   | `block-destructive.sh` | mẫu lệnh phá dữ liệu (liệt kê dưới; nguồn: mảng `patterns` trong chính file) | **vừa cứu 09/09/2026** |
+   | `chan-commit-khi-do.sh` | `git commit` khi `typecheck` hoặc `vitest related` ĐỎ | mới, sống từ 09/09/2026 |
+
+   **`block-destructive.sh` chặn** (nguồn: mảng `patterns` + ba khối `prisma` trong chính file): `rm -rf` vào `/` · `rm -rf` vào `~` ·
+   `git push --force` nhắm `main` · nhắm `master` · `git reset --hard` · `git clean -fd` · `DROP TABLE` ·
+   `DROP DATABASE` · `TRUNCATE TABLE` · `prisma migrate diff --shadow-database-url` trỏ DB **không**
+   local · `prisma db push --force-reset` thiếu marker local · `prisma migrate reset`
+   thiếu marker local. (Marker local = chuỗi lệnh có `localhost` / `127.0.0.1` /
+   `.env.test` / `satarobo_test` / `ci_test`.)
+
+   ⚠️ **Hai giới hạn phải biết, đừng tin quá:**
+   · Hook chỉ soi **chuỗi lệnh ở tầng trên** — `bash mot-file.sh` thì nội dung file
+     KHÔNG đi qua hook.
+   · Nó khớp cả **văn xuôi**: một câu `echo` mô tả mẫu chặn cũng bị chặn dù chẳng phá gì.
+     Gặp thì đưa kịch bản ra file rồi chạy file, đừng gỡ mẫu.
+
+   - NEVER `git add .env*` files (only `.env.example` allowed) — hook chặn (**đã kiểm**).
    - NEVER commit `*.bak`, `*.backup`, `*.key`, `*.pem` — `.gitignore` block.
+     ⚠️ `.gitignore` **KHÔNG** chặn `vapid-keys.txt` / `vapid.json` — đừng `git add -A`.
    - NEVER hardcode credentials — luôn `process.env.X`.
    - NEVER paste real secrets vào chat — mask `abc1...xyz9`.
+   - **KHÔNG `git commit --no-verify`.** Nó bỏ qua git hook. Hook Claude Code thì không
+     thoát được, nhưng thói quen gõ nó là thói quen đi vòng qua cổng — bỏ hẳn.
    - File nghi ngờ nhạy cảm → ASK user, don't commit.
 9. **Verify trước khi báo PASS** — `pnpm typecheck && pnpm lint && pnpm build` PASS. UI changes: smoke test localhost + mobile viewport 375px.
 
@@ -80,7 +126,7 @@ prisma/
 ## Permission & tổ chức
 
 **Hiện trạng (`lib/auth/permissions.ts`):**
-- **9 roles** (enum `Role`): `SUPER_ADMIN`, `CENTER_MANAGER`, `HR`, `SALES_CSM`, `TEACHER`, `TRAINING`, `MARKETING`, `ACCOUNTANT`, `PARENT`. (Đã rename `MANAGER→CENTER_MANAGER`, `SALES→SALES_CSM` — legacy shim trong JWT callback. `TRAINING` thêm ở FL W0 (QĐ-T1) — Đào tạo: quản lý TOÀN BỘ LMS, KHÁC `TEACHER` chỉ lớp được giao.)
+- **Vai** — enum `Role`, nguồn ở `prisma/schema.prisma`: `SUPER_ADMIN`, `CENTER_MANAGER`, `HR`, `SALES_CSM`, `TEACHER`, `TRAINING`, `MARKETING`, `ACCOUNTANT`, `PARENT`. (Đã rename `MANAGER→CENTER_MANAGER`, `SALES→SALES_CSM` — legacy shim trong JWT callback. `TRAINING` thêm ở FL W0 (QĐ-T1) — Đào tạo: quản lý TOÀN BỘ LMS, KHÁC `TEACHER` chỉ lớp được giao.)
 - ⚠️ **RBAC v2 ĐÃ BẬT TRÊN PROD** — `RBAC_V2_ENABLED="true"` trên Vercel Production (xác minh 29/07/2026 bằng `vercel env pull --environment=production`). Prod enforce **v2 động** (`lib/auth/can.ts`); `lib/auth/shadow-compare.ts:27` trả `flagOn ? v2 : v1`. **Mặc định trong code vẫn OFF** (`lib/flags.ts:8`) ⇒ local/dev/CI chạy **v1**, khác prod — đừng kết luận hành vi quyền từ máy local. Rollback: set env `false` + redeploy.
 - ⚠️ **Nợ đi kèm việc flip: `can()` v2 KHÔNG có nhánh DENY.** `lib/auth/can.ts:36-44` là ALLOW-wins thuần, `grantsDeny` không tồn tại ⇒ `UserPermissionGrant` có `grant=DENY` sẽ **bị bỏ qua im lặng**. Đây là 1 trong 3 việc chặn cứng của QĐ-B (`docs/taicautruc/QUYET-DINH.md:52-58`) mà cờ đã bật trước khi làm xong. **Chưa gây thiệt hại:** đo prod 29/07/2026 → bảng `UserPermissionGrant` **rỗng** (0 ALLOW, 0 DENY). **Luật tạm cho tới khi vá:** KHÔNG tạo grant `DENY` — nó không có tác dụng và không báo lỗi. Cần chặn quyền thì gỡ `UserOrgRole` tương ứng.
 - Multi-role: `User.roles[]` (quyền = union). Per-user grant ALLOW/DENY: `UserPermissionGrant` (Sprint 5.3). `User.centerId` scope theo cơ sở.
@@ -170,6 +216,73 @@ prisma/
   · Cổng chống lách duyệt **vẫn còn**, nằm ở đường TỰ CHỐT đơn chứ không ở đường nhận tiền: `confirmSettledOrder` + `lib/payments/payos-ingest.ts:1169-1181` vẫn từ chối đẩy đơn sang `CONFIRMED` khi **giảm giá** chưa duyệt. Phần "ghi bù Payment khi APPROVED" ở `approveInstallmentPlan` **giữ lại** (phục vụ ca REJECTED→APPROVED + dữ liệu cũ; idempotent theo marker nên không cộng đôi).
 - ⚠️ **Cờ `PAYMENT_LEDGER_V2` là cờ CHẾT — đừng lấy nó làm cổng quyết định [đo 13/09/2026].** `isPaymentLedgerV2Enabled()` có **0 đường gọi** trong mã chạy thật (`lib/flags.ts:168` là định nghĩa duy nhất, còn lại chỉ `lib/flags.test.ts`), và biến env **không tồn tại** trong 40 biến Production. Bật nó KHÔNG đổi hành vi gì — muốn cutover thì phải viết phần "nối cờ" (chuyển `lib/finance/debt.ts` + `lib/portal/billing-student.ts` + `lib/portal/dashboard.ts` + màn `/orders/[id]`, `/cong-no` sang đọc `PaymentRequest`) trước, đó là dự án riêng. Đo prod bằng workflow chỉ-đọc `shadow-compare-cong-no.yml` (`payments:shadow-compare` chạy ở máy dev là đo DB DEV, **không nói gì về prod**).
 - ❌ KHÔNG gõ tay tên bài vào `Lesson` để "sửa tên dự án". Nguồn tên buổi/dự án là 2 file marketing (`components/legacy-laptrinhrobot/_data/roadmap-5-years.ts` + `exam-roadmap.ts`) → `lib/lms/curriculum-sata.ts` → `prisma/seed-curriculum-sata.ts`; lần seed sau ghi đè. Nhãn buổi/tên gửi PH đi qua `deriveSessionLabel`/`deriveSessionProjectName`, đừng tự ghép chuỗi.
+- ⚠️ **`PaymentMethod` KHÔNG còn là danh mục toàn cục [30/08/2026].** Model có `centerId` (+`orgUnitId` ghi kép) và nằm trong **CẢ HAI** `SCOPED_MODELS` và `NULL_IS_GLOBAL_MODELS`, và có prefix `["payments:"]` ở `getModelPrefixes` (`lib/db-scope.ts`): `centerId = NULL` nghĩa là **DÙNG CHUNG mọi cơ sở**, KHÔNG phải "chưa gán" — quên khai ở `NULL_IS_GLOBAL_MODELS` là tiền mặt/cổng online tàng hình với người cấp cơ sở và form tạo đơn hiện danh sách RỖNG. Luật "phương thức nào dùng được" ở **một chỗ**: `lib/payments/method-scope.ts` (thuần, test không cần DB) — đừng chép lại switch `canBuy*` như 4 bản cũ. Mọi đường GHI phải tự gác (`scopedDb` không che write): `createOrderManualAction`, `updateOrderPaymentMethodAction`, `recordPaymentAction`, và 3 action của `/payment-methods`.
+  · **`code` VẪN `@unique` TOÀN CỤC** (cố ý không hạ thành `@@unique([code, centerId])`: ALTER trên bảng có dữ liệu prod + Postgres coi NULL là khác nhau nên khoá ghép không chặn được đúng ca cần chặn). Phương thức riêng của cơ sở đặt mã có hậu tố: `BANK_CS1`, `BANK_CS2`.
+  · **`centerScope: "ALL"` đến từ NƠI NEO VAI (HO/ROOT), KHÔNG phải từ `scopeType: GLOBAL`** (`lib/auth/actor.ts:50-56`) — đo thật: CENTER_MANAGER/CENTER_ACCOUNTANT/CENTER_SALES_CSM neo tại CS1 đều ra `centerScope: [CS1]` dù `payments:*` seed GLOBAL. Đừng bỏ prefix vì sợ nới quyền; bỏ prefix mới là nới (rơi về `isHoLevel ? ALL : …`, `lib/db-scope-function.test.ts` chặn sẵn).
+  · **Câu tra để CHẶN phải KHÔNG-SCOPE** — `lib/payments/method-lookup.ts`. Tra qua `scopedDb` thì đúng mã cần chặn bị lọc mất, trả null, và cổng đọc null thành "mã lạ, cho qua" ⇒ mở toang đúng lúc phải đóng.
+  · **Tài khoản ngân hàng nằm TRÊN CHÍNH phương thức [ĐẢO 31/08/2026].** ~~4 cột `bank*` là dữ liệu chết; tài khoản THẬT ở `IntegrationConfig VIETQR:<centerId>`, khai ở `/centers/<id>/edit` hoặc `/admin/tich-hop`~~ **[ĐẢO]** chủ dự án chốt gộp về MỘT màn: `PaymentMethod.bankBin` (cột mới) + `bankAccountNumber` + `bankAccountName` là **nguồn dựng mã QR**, khai ngay trong form phương thức khi `type = BANK_TRANSFER`, bắt buộc (validator chặn). Khối VietQR ở `/admin/tich-hop` **đã gỡ** cùng `setVietQrConfig`.
+  · **Thứ tự tìm tài khoản cho một đơn** — `resolveOrderPaymentConfig` (`lib/payments/vietqr.ts`): phương thức ĐÃ CHỌN trên đơn → phương thức chuyển khoản đang bật của CƠ SỞ đơn → phương thức chuyển khoản dùng chung → kho cũ `IntegrationConfig VIETQR:*` (chỉ còn là **đường lùi**). Bước 2 bắt buộc phải có: đơn từ `convert-lead` **không set `paymentMethodId`**, thiếu bước đó là phần lớn đơn thật báo "chưa cấu hình". Dọn nốt đuôi cũ: `scripts/pttt-chuyen-tai-khoan-vietqr.ts` (dry-run mặc định, chạy tay).
+  · Trang cơ sở `/centers/<id>/edit` → mục **Thanh toán** (nằm TRƯỚC mục Hình ảnh, BÊN TRONG form vì chỉ hiển thị + link) liệt kê phương thức riêng của cơ sở + nút tạo `?centerId=<id>`. Nó **không còn ô khai tài khoản** — khai ở form phương thức.
+- ⚠️ **"Kế hoạch trả góp còn hiệu lực không" hỏi ở MỘT chỗ: `lib/payments/installment-plan.ts` [ĐẢO 13/09/2026].** ~~Chỉ `null`/`APPROVED` mới có hiệu lực; `PENDING_APPROVAL` bị loại vì "chưa duyệt mà cho quét QR đợt 1 là lách duyệt trả góp"~~ **[ĐẢO]** luật đó là tàn dư của QĐ-1 bản đầu, mà QĐ-1 **đã bị đảo từ 03/08/2026** (`lib/payments/payment-request.ts:184-192` gỡ hẳn cái chặn "chưa APPROVED thì ném lỗi": lưu kế hoạch là có phiếu thu + QR theo đợt NGAY, duyệt chỉ còn nghĩa **KHOÁ**). Hai chỗ gọi không đảo theo nên sinh bug tiền thật: `PaymentRequest` đã có phiếu đợt 1 3.000.000đ mà `computeDueNow` in QR **cả 5.000.000đ học phí**. Nay **chỉ `REJECTED`** làm kế hoạch mất hiệu lực — và đó không phải ngoại lệ tuỳ ý: `rejectInstallmentPlan` → `revertInstallmentRequests` VOID phiếu theo đợt + dựng lại phiếu "thu toàn đơn", nên số phải thu cũng phải quay về cả đơn.
+  · **Hai chỗ gọi phải SỬA CÙNG NHAU** — `computeDueNow` (số tiền in QR + ngưỡng đối khớp SePay) và `markInstallmentPaid` (có ghi Ledger-A `Payment` không). Sửa một bên là **nhận tiền một đằng, ghi sổ một nẻo**: vá QR mà giữ cổng cũ ở `markInstallmentPaid` thì khách quét QR đóng đợt 1 → Ledger-B PAID, Ledger-A bỏ qua → **công nợ hiển thị KHÔNG GIẢM dù tiền đã vào tài khoản**. Đó là lý do hàm dùng chung tồn tại; đừng viết lại điều kiện tại chỗ.
+  · Cổng chống lách duyệt **vẫn còn**, nằm ở đường TỰ CHỐT đơn chứ không ở đường nhận tiền: `confirmSettledOrder` + `lib/payments/payos-ingest.ts:1169-1181` vẫn từ chối đẩy đơn sang `CONFIRMED` khi **giảm giá** chưa duyệt. Phần "ghi bù Payment khi APPROVED" ở `approveInstallmentPlan` **giữ lại** (phục vụ ca REJECTED→APPROVED + dữ liệu cũ; idempotent theo marker nên không cộng đôi).
+- ⚠️ **`audit-logs:view` KHÔNG vai nào được cấp — đây là quyền ĐÃ MẤT, không phải quyết định [đo 13/09/2026].** `prisma/seed-roles.ts:601-607` còn nguyên chú thích *"#05 (câu 13 BGĐ): QL cơ sở xem audit log + break-glass xem đầy đủ PII"* nhưng **các dòng `{ action: "audit-logs:view*" }` đã biến mất** — `grep audit-logs prisma/seed-roles.ts` chỉ ra đúng 1 dòng, và nó là chú thích. Trang `/admin/audit-log` gác `audit-logs:view` (`page.tsx:21`) và mọi action của nó cũng vậy (`_actions.ts:30`), còn `can()` v2 trả true cho SUPER_ADMIN (`lib/auth/can.ts:46-47`) ⇒ **trên prod chỉ Quản trị tối cao mở được trang đó.**
+  · **Đừng "vá" bằng cách nới `audit-logs:view` cho thêm vai.** Trang đó là log TOÀN HỆ THỐNG có PII; nới quyền ở đó là chữa một vấn đề bằng cách mở một vấn đề lớn hơn. Ai cần trang tổng thì phải **khai lại có chủ đích** (sửa seed + bấm chạy `seed-prod-roles.yml` — RBAC v2 động từ DB, merge file seed KHÔNG đổi gì trên prod).
+  · **Log của một đơn thì đọc trên TRANG ĐƠN, không qua trang tổng.** `AuditLog` đã ghi `entityType: "Order"` + `entityId: <orderId>`, nên lọc theo cặp đó rồi hiển thị ngay ở `/orders/<id>` dưới cổng `orders:view` là đủ — **không cần bảng mới** (A5 không phát sinh) và không cần nới quyền nào. 4 vai có `orders:view`: HO_ACCOUNTANT · CENTER_MANAGER · CENTER_SALES_CSM · CENTER_ACCOUNTANT. `OrderStatusHistory` (có `reason` + `metadata Json?`) đã được đọc ở `orders/[id]/page.tsx:96` dưới đúng cổng đó — dùng làm chỗ tham chiếu.
+  · Bài học chung: **chú thích trong seed không phải bằng chứng quyền tồn tại.** Hỏi "vai X có quyền Y không" thì `grep` dòng khai, đừng đọc chú thích (cùng họ với bài học memory *"Giáo vụ đã có người giữ vai"*).
+- ⚠️ **Cờ `PAYMENT_LEDGER_V2` là cờ CHẾT — đừng lấy nó làm cổng quyết định [đo 13/09/2026].** `isPaymentLedgerV2Enabled()` có **0 đường gọi** trong mã chạy thật (`lib/flags.ts:168` là định nghĩa duy nhất, còn lại chỉ `lib/flags.test.ts`), và biến env **không tồn tại** trong 40 biến Production. Bật nó KHÔNG đổi hành vi gì — muốn cutover thì phải viết phần "nối cờ" (chuyển `lib/finance/debt.ts` + `lib/portal/billing-student.ts` + `lib/portal/dashboard.ts` + màn `/orders/[id]`, `/cong-no` sang đọc `PaymentRequest`) trước, đó là dự án riêng. Đo prod bằng workflow chỉ-đọc `shadow-compare-cong-no.yml` (`payments:shadow-compare` chạy ở máy dev là đo DB DEV, **không nói gì về prod**).
+- ❌ KHÔNG gõ tay tên bài vào `Lesson` để "sửa tên dự án". Nguồn tên buổi/dự án là 2 file marketing (`components/legacy-laptrinhrobot/_data/roadmap-5-years.ts` + `exam-roadmap.ts`) → `lib/lms/curriculum-sata.ts` → `prisma/seed-curriculum-sata.ts`; lần seed sau ghi đè. Nhãn buổi/tên gửi PH đi qua `deriveSessionLabel`/`deriveSessionProjectName`, đừng tự ghép chuỗi.
+
+- ⚠️ **NỢ ĐANG GHIM: `amountDue` của phiếu thu ĐÃ CÓ TIỀN vẫn bị ghi đè [đo 14/09/2026].**
+  `materializeInstallmentRequests` THA VOID cho phiếu đang có phân bổ
+  (`lib/payments/payment-request.ts:309` — `allocated > 0 → continue`) nhưng vòng UPSERT ở
+  `:284` thì **không** kiểm điều đó: `if (cur.amountDue !== dot.amount) patch.amountDue = …`.
+  Đo thật: phiếu đợt 1 đang giữ **6.000.000đ đã rót**, lưu lại kế hoạch với đợt 1 =
+  1.000.000đ ⇒ `amountDue` thành 1.000.000đ, phiếu hoá **"thu vượt 5.000.000đ"** và số
+  còn-phải-thu của đơn sai theo. Tiền KHÔNG mất (dòng `PaymentAllocation` còn nguyên, phiếu
+  không VOID) — nhưng mọi con số đọc từ phiếu đều lệch.
+  · Vi phạm đúng chốt của chủ dự án: **"KHÔNG sửa `amountDue` của phiếu đã có allocation —
+    VOID + tạo phiếu mới."**
+  · Cổng R-02 (`keHoachLamMatTien`) **cố ý không** che ca này: nó canh tiền nằm ở phiếu
+    **THU TOÀN ĐƠN** (phiếu bị VOID vô điều kiện), không canh phiếu theo đợt vốn đã được
+    tha. Đừng "vá" R-02 — nó không hở.
+  · Ghim ở `tests/e2e/r7/payment-request-lifecycle.spec.ts` ca **`[PR-02d]`** bằng
+    `test.fail()` **đặt TRONG thân ca** (đặt ở cấp file thì nó đánh dấu mọi ca phía sau —
+    đã thử, 6 ca lập tức báo "expected to fail"). Vá xong ca đó chuyển sang XANH và
+    Playwright báo lỗi, buộc gỡ ghim.
+  · Vá là đợt RIÊNG: phải đo cả **3 đường gọi** `materializeInstallmentRequests`
+    (`lib/orders/installments.ts:332`, `:500`, `lib/crm/backfill-order.ts:153`) — lỗ có sẵn
+    từ trước đợt gỡ duyệt, không do nó sinh ra.
+
+## Mẫu test: LƯỚI GHIM MÃ NGUỒN [13/09/2026]
+
+Dùng khi luật cần khoá có dạng **"lời gọi này phải truyền tham số kia"** — loại luật mà
+test thuần KHÔNG chứng minh được, vì thứ cần kiểm là một lời gọi Prisma/hàm nội bộ chứ
+không phải giá trị trả về.
+
+Ca sinh ra mẫu này (`[DS-01b]`, `lib/payments/dung-sai-lam-tron.test.ts`): `deriveStatus`
+là hàm thuần và test nó bao nhiêu cũng xanh, trong khi con bug nằm ở chỗ
+`recomputeRequestStatuses` gọi nó với **hằng `0`** cho tham số `waived`. Test thuần viết
+kiểu nào cũng thành tautology.
+
+**Cách làm — bốn bước, đừng bỏ bước 3:**
+1. `readFileSync(resolve(process.cwd(), "<đường dẫn file>"))` — đọc chính mã nguồn.
+   (⚠️ `import.meta.url` trong cấu hình vitest của repo này **không** phải URL `file://`
+   nên `fileURLToPath` ném — dùng `process.cwd()`.)
+2. Assert bằng regex/parse trên chuỗi đó, kèm chú thích ghi rõ **mã TRƯỚC bản vá** trông
+   thế nào, để người đọc sau biết lưới đang chặn cái gì.
+3. **HOÀN NGUYÊN mã về bản cũ, chạy lại, chứng minh lưới ĐỎ** — rồi mới khôi phục bản vá.
+   Bỏ bước này thì không biết lưới có bắt được gì không; một regex viết sai vẫn xanh vĩnh
+   viễn và trông y hệt một lưới đang làm việc.
+4. Dán output đỏ vào commit message.
+
+Repo đã dùng lối "test đọc mã/chạy lint thật" ở `lib/eslint/*.test.ts` — đây là cùng họ,
+chỉ khác là không cần viết hẳn một ESLint rule cho một luật dùng đúng một chỗ.
+
+**Kèm mẫu GHIM BUG bằng `it.fails`:** bug đã đo được nhưng chưa tới lượt vá thì viết test
+mô tả hành vi ĐÚNG rồi đánh `it.fails`. Hôm nay nó xanh (thân test ném ⇒ CI không đỏ,
+không chặn merge của người khác); vá xong nó **đỏ**, buộc người vá gỡ ghim. `pnpm test:unit`
+đếm chúng ở dòng "expected fail". Đừng dùng `it.skip` — skip là quên, `it.fails` là hẹn.
 
 ## Workflow
 
@@ -223,6 +336,83 @@ feature → PR → merge `test`  → test.satarobo.vn tự deploy → nghiệm t
 - [Document/README.md](Document/README.md) — bộ tài liệu PRD→DB→API→Flow→Security→Test (mô tả hiện trạng).
 
 ## Detailed rules (load on-demand)
+
+- [docs/luat-doc-so-va-ket-luan.md](docs/luat-doc-so-va-ket-luan.md) — **Luật đọc số + luật kết luận (07/09/2026).**
+  "0 dòng trên prod" KHÔNG hạ được mức nghiêm trọng — phân loại theo đường ghi còn sống hay chết;
+  mọi con số báo ra phải kèm PHÉP TÍNH sinh ra nó (đo ≠ suy). Kết luận "hệ thống không có cơ chế X"
+  phải kiểm trên `origin/main`, KHÔNG phải nhánh đang đứng — nhánh tụt 87 commit đã làm hỏng một
+  chẩn đoán 07/09. Chú thích không phải bằng chứng: hình dạng dữ liệu xác minh bằng schema + `psql`.
+  **Fixture phải mang hình dạng dữ liệu thật** — dữ liệu tròn trịa trong test là dữ liệu không kiểm
+  được gì. Bẫy sẵn của repo: 9 model có `date` là `@db.Date` (nửa đêm ĐÚNG) nhưng `ClassSession.date`
+  là `@db.Timestamptz(6)` MANG GIỜ THẬT — khớp theo tên cột là sai.
+  **Tập dựng cho mục đích A không dùng cho mục đích B khi chưa kiểm lại định nghĩa** —
+  `assignedClassIds` đúng cho QUYỀN, sai cho THƯỚC ĐO CÔNG (76 buổi của trợ giảng, prod 08/09).
+  **Không đặt lệnh kiểm sau dấu ống** — `pnpm test | grep` trả mã thoát của `grep`, nên hạ tầng
+  chết cũng thành "xanh"; cổng im lặng khi hạ tầng hỏng tệ hơn không có cổng. CI mặc định là
+  `bash -e`, KHÔNG có `-o pipefail`.
+  **Tham số có mặc định NGUY HIỂM thì bỏ mặc định** (gửi tin · ghi tiền · giao bài · xoá ·
+  mở rộng phạm vi nhìn) — để `tsc` liệt kê call site: mắt thấy 2, trình biên dịch thấy 6.
+  Mặc định của SCOPE phải fail-closed, không bao giờ là `"ALL"`.
+  **Test canh lỗi chỉ được tin sau khi CẤY LẠI lỗi và thấy nó ĐỎ** — test xanh có thể nghĩa
+  là "lỗi không còn" hoặc "test không chạm tới lỗi"; ghi cả bốn bước vào commit.
+  **Cổng phải được cho ăn bằng thứ đường THẬT cho nó ăn** (luật 9, sự cố nhập nhân sự
+  08/09): ca test gõ tay đầu vào của cổng thì nó kiểm cổng, không kiểm hệ thống — nếu đầu
+  vào ấy do tầng khác tính ra thì **tầng đó là chỗ bug nằm**.
+  **Test grep mã nguồn là loại MONG MANH NHẤT** (luật 11): ưu tiên khẳng định HÀNH VI;
+  buộc phải canh bằng văn bản mã thì neo chuỗi hẹp nhất, **không dùng cờ `/s`**, khẳng
+  định cả SỐ LẦN khớp (chú thích giải thích bản vá thường chứa đúng chuỗi đang cấm), và
+  **chưa cấy thử thì coi như vô dụng**. Ba ca soi nhầm chỗ trong một ngày 08/09.
+  Luật 7 có điểm cộng ngoài dự kiến: trường BẮT BUỘC không chỉ liệt kê call site, nó còn
+  biến **"quên `select` cột nguồn"** từ lỗi câm thành lỗi biên dịch.
+  **Affordance phải NÓI THẬT** (luật 12): con trỏ · mũi tên · nhãn trạng thái · nút đều là
+  LỜI HỨA, và lời hứa suông không ném lỗi, không làm test đỏ, console vẫn sạch — chỉ người
+  dùng bấm mới biết. Ba ca một tuần: nhãn "Hoàn tất" suy ra · `photoDone` không bao giờ
+  true · chevron `/cham-cong` chưa từng được nối. Vá bằng cách **mở rộng vùng bấm**
+  (`<tr relative cursor-pointer>` + trigger `after:inset-0`), đừng gỡ mũi tên. Cổng canh:
+  `components/ui/affordance-coverage.test.ts` — nó phải viết lại BA lần mới bite, cả ba
+  lần vì chú thích giải thích bản vá chứa đúng chuỗi bộ so khớp đang tìm. Sổ sự cố cùng file; điều
+  đáng nhớ nhất: **quy trình chụp trước/sau là thứ duy nhất hoạt động** — bộ test xanh,
+  bản vá vừa merge, và 9 hồ sơ prod vẫn bị xoá trắng ba cột ngày. Đừng bỏ nó kể cả khi
+  test đã xanh.
+  **Site GV đọc số của admin, KHÔNG dựng lại** (luật 12b): ba lần trong hai tuần site GV
+  in một con số/nhãn khác admin cho cùng một ô — và lần thứ ba, hàm đúng
+  (`getMyAttendanceDays`) ĐÃ được gọi sẵn trong trang, chỉ dùng để cộng một con tổng còn
+  từng dòng vẫn tự suy từ ngày. Trước khi thêm bất kỳ cột SỐ nào lên site GV: tìm hàm admin
+  đang dùng và gọi nó; nếu không gọi được thì NÓI RÕ ranh giới trước khi vòng. Phép nối
+  dữ liệu×hiển thị không để inline trong trang RSC (không có chỗ cấy lỗi) — đưa ra hàm
+  thuần: `lib/cham-cong/nhan-ca.ts` (nhãn) + `lib/cham-cong/bang-cong-gv.ts` (dòng bảng).
+  ⚠️ `isLeave` KHÔNG phân biệt được ngày nghỉ: mã `X` mang `kind: OFF` nhưng
+  `isLeave: false`. Thứ phân biệt là `kind`.
+  **Mỗi ca test phải XANH khi chạy MỘT MÌNH** (luật 18): bộ xanh khi chạy đủ chỉ chứng minh
+  thứ tự hiện tại đang cứu nhau. Chữ ký của lớp lỗi này là **cấy vào thì "chạy 1 ca ĐỎ, cả
+  bộ XANH"** — ca đó đang mượn trạng thái ca trước, và nó sẽ nổ vào ngày runner chậm với
+  triệu chứng chỉ vào ca vô tội đứng sau (10/09: một ca timeout → `applyImport` của nó vẫn
+  chạy tiếp vì vitest KHÔNG huỷ được promise → hai lượt chồng nhau → `P2002`). Đo 2 file
+  đầu tiên ra 2 lỗ, cả hai CÓ SẴN không cần runner chậm; danh sách còn phải rà ở
+  `docs/cham-cong/VE-RA-CACH-LY-BO-TEST.md`. Trần thời gian đặt ở config riêng cho từng bộ
+  (`vitest.cham-cong.config.ts`) — phép tính ghi ngay trong file, và nâng trần là vá TRIỆU
+  CHỨNG chứ không phải vá cách ly.
+  **Test KHÔNG được đọc đồng hồ thật** (luật 19): ngày TUYỆT ĐỐI trong fixture + một hàm rơi
+  về `new Date()` = ca hẹn giờ nổ — mã không đổi, tờ lịch đổi. Đo dứt điểm 13/09: CÙNG commit
+  `507ff13b`, CI ngày 10/09 XANH, chạy lại ngày 12/09 ĐỎ, không diff nào ở giữa. Hình dạng
+  nhận biết: **ca đỏ mà `git log` của file liên quan im nhiều ngày ⇒ nghi ĐỒNG HỒ trước khi
+  nghi MÃ**; và lỗi hay báo ở dòng SỚM HƠN dòng mà tên ca gợi ý. Hàm đã có sẵn `now?: Date`
+  thì test phải TRUYỀN, đóng băng ở mức khối, và cấy lại bằng cách dời mốc sang phía sai.
+  Danh sách còn phải rà: `docs/cham-cong/VE-BOM-HEN-GIO-TRONG-TEST.md`.
+  ⚠️ **Đính chính luật 10 cho ca này:** required check trên `main` nay có `Quality` ·
+  `Unit tests` · `Chat DB invariants` · `E2E Phase R7 1/2` · `2/2`, và `enforce_admins` ĐÃ
+  BẬT (đo `gh api …/branches/main/protection` ngày 13/09). Cổng KHÔNG thủng — nhưng required
+  check chỉ gác lúc MERGE, **không gác trạng thái `main` về sau**, nên một ca phụ thuộc đồng
+  hồ vẫn đỏ lên mà không ai đẩy gì cả.
+  **Một ca đỏ mà không ai bị chặn thì bằng không có ca** (luật 10). ~~Đo 08/09: required
+  check CHỈ có `Quality` + `Unit tests`, `enforce_admins=false`~~ **[ĐÃ SỬA — đo lại 13/09]**
+  danh sách required nay gồm `Quality` · `Unit tests` · `Chat DB invariants` ·
+  `E2E Phase R7 1/2` · `2/2`, và `enforce_admins` ĐÃ BẬT. Bài học của luật 10 vẫn nguyên,
+  chỉ con số là cũ — và đó đúng là luật 17 đang tự chứng minh. **Luôn đọc cấu hình THẬT bằng
+  `gh api repos/<o>/<r>/branches/main/protection`**, đừng trích lại con số trong tài liệu
+  (tài liệu từng ghi "không đọc được từ repo", câu sai đó đã hoãn một phép đo 5 giây suốt
+  một ngày). ⚠️ Giới hạn còn lại, KHÔNG vá được bằng danh sách required: nó gác lúc **MERGE**,
+  không gác trạng thái `main` **về sau** — xem luật 19.
 
 - [docs/cham-cong/DESIGN-CHAM-CONG-ADMIN.md](docs/cham-cong/DESIGN-CHAM-CONG-ADMIN.md) — **Giao diện module chấm công (admin), chốt 06/09/2026.** Đọc TRƯỚC khi sửa bất kỳ màn nào dưới `app/(admin)/admin/cham-cong/**` hoặc `/don-tu**`. Luận đề "Sổ kỳ công": mọi màn vận hành chia sẻ khung KỲ (tháng × khối) — `PageHeader → ModuleNav → ScopeBar → nội dung`. **Sidebar chỉ còn 5 mục**; 9 màn còn lại vào bằng `components/admin/cham-cong/{module-nav,config-tabs,me-nav}.tsx` — 3 file này là LỐI VÀO DUY NHẤT nên `href` phải là chuỗi literal (test `nav-coverage` quét literal, xoá là màn thành mồ côi). Quyền hỏi MỘT lần bằng `loadModuleScope(userId)` (`lib/cham-cong/module-scope.ts`) — đừng rải `checkPermission` (action là biến nên rbac-scope R1 không đếm, nhưng target thì luôn phải thật). `components/cham-cong/ui/**` dùng chung với site GV ⇒ CHỈ token `:root`, **cấm `primary-soft`/`primary-ink`/`primary-dark`** (site GV không có `.admin-scope`, `--primary-ink` ở `:root` là CAM).
 

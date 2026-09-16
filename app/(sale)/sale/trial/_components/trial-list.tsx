@@ -45,9 +45,12 @@ const TRANG_THAI: Record<string, string> = {
 export function SaleTrialList({
   slots,
   unassigned,
+  laPhamViMacDinh = true,
 }: {
   slots: SlotDto[];
   unassigned: (SaleTrialStudent & { trialClassName: string })[];
+  /** Đang ở phạm vi "Sắp tới" — để khung rỗng chỉ đường sang "Đã diễn ra". */
+  laPhamViMacDinh?: boolean;
 }) {
   const [tim, setTim] = useState("");
   const [loc, setLoc] = useState<"tat-ca" | "chua-danh-gia" | "da-danh-gia" | "da-nhap-hoc">(
@@ -117,7 +120,15 @@ export function SaleTrialList({
 
       {rong ? (
         <div className="mt-6 rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-          Không có học viên trải nghiệm nào khớp bộ lọc.
+          <p>Không có học viên trải nghiệm nào khớp bộ lọc.</p>
+          {/* Phạm vi mặc định chỉ nhìn về TƯƠNG LAI, mà phiếu đánh giá thì luôn nằm ở
+              buổi ĐÃ QUA — không chỉ đường thì người dùng kết luận "hệ thống mất phiếu". */}
+          {laPhamViMacDinh && (
+            <p className="mt-1">
+              Phiếu đánh giá của giáo viên nằm ở buổi đã học — chọn{" "}
+              <strong className="font-medium text-foreground">Đã diễn ra</strong> ở trên.
+            </p>
+          )}
         </div>
       ) : (
         <div className="mt-6 space-y-8">

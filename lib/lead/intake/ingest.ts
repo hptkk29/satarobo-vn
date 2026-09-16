@@ -6,6 +6,8 @@ import { LEAD_KHONG_NHAN_THEM_CON } from "@/lib/leads/status";
 import { autoAssignLead } from "../assign";
 import { recordLeadActivity } from "../activity-write";
 import { SYSTEM_ACTIVITY_META } from "../activity-clock";
+import { chiaChoLead, ghiNhanNhapLai } from "../assign-lead";
+import type { LeadEntryPoint } from "../assign-resolve";
 import { getNonEnrollableCenterIds } from "@/lib/enrollment-flow";
 import { buildNote, isSameChildName, matchCenter } from "./normalize";
 import type { MappedLead } from "./types";
@@ -41,6 +43,20 @@ export type IntakeContext = {
   createdByUserId?: string | null;
   /** Cơ sở đã biết sẵn (lời gọi cũ truyền thẳng id) — thắng `centerHint`. */
   centerId?: string | null;
+  /**
+   * ĐƯỜNG VÀO — quyết định dòng nào của ma trận chia lead được áp (29/08/2026).
+   *
+   * Bỏ trống ⇒ `"LANDING"`, đúng nghĩa "phiếu từ ngoài vào, không rõ người nhập":
+   * đó là mặc định AN TOÀN vì nó luôn rơi về chia tự động, không bao giờ tự gán
+   * cho ai. Đặt nhầm thành `"FORM"` mới là thứ nguy hiểm — phiếu sẽ về tay người
+   * nhập mà không qua vòng.
+   */
+  entryPoint?: LeadEntryPoint;
+  /**
+   * Chủ lead CHỈ ĐỊNH SẴN — cột sale trong file Excel. Caller phải tra ra tài
+   * khoản thật; không khớp thì để trống, KHÔNG đoán.
+   */
+  explicitOwnerId?: string | null;
   /** `Lead.eventId` dựng sẵn bởi caller; nếu bỏ trống sẽ suy từ `externalId`. */
   eventId?: string | null;
   utmSource?: string | null;
@@ -225,8 +241,8 @@ async function attachExtraChild(
   centerId: string | null,
   actorName: string,
 ): Promise<boolean> {
-  const child = mapped.child;
-  if (!child) return false;
+  const dsCon = mapped.children ?? [];
+  if (dsCon.length === 0) return false;
 
   const [existingChildren, lead] = await Promise.all([
     db.leadChild.findMany({ where: { leadId }, select: { fullName: true } }),
@@ -237,28 +253,45 @@ async function attachExtraChild(
     ...existingChildren.map((c) => c.fullName),
     lead?.childName ?? null,
   ];
-  if (known.some((name) => isSameChildName(name, child.fullName))) return false;
+  // Lọc ra những em CHƯA có trong hồ sơ. Khử trùng cả trong chính phiếu này —
+  // phiếu gõ hai dòng cùng tên thì không được đẻ hai `LeadChild`.
+  const conMoi: typeof dsCon = [];
+  for (const c of dsCon) {
+    const daBiet = [...known, ...conMoi.map((x) => x.fullName)];
+    if (daBiet.some((name) => isSameChildName(name, c.fullName))) continue;
+    conMoi.push(c);
+  }
+  if (conMoi.length === 0) return false;
+
+  const child = conMoi[0];
 
   await db.$transaction(async (tx) => {
-    await tx.leadChild.create({
-      data: {
-        leadId,
-        fullName: child.fullName,
-        schoolName: child.schoolName ?? null,
-        gradeLevel: child.gradeLevel ?? null,
-        interestedCenterId: centerId,
-      },
-    });
+    for (const c of conMoi) {
+      await tx.leadChild.create({
+        data: {
+          leadId,
+          fullName: c.fullName,
+          schoolName: c.schoolName ?? null,
+          gradeLevel: c.gradeLevel ?? null,
+          interestedCenterId: centerId,
+          interestedCourseId: c.interestedCourseId ?? null,
+        },
+      });
+    }
+    // N-4 — mọi đường ghi hoạt động đi qua MỘT cửa: `recordLeadActivity` vừa tạo dòng
+    // vừa nhảy đồng hồ "chưa tiếp cận lại". Ghi thẳng `leadActivity.create` là dòng có
+    // mà đồng hồ đứng im — lead vừa có tín hiệu nóng lại nằm trong danh sách treo.
+    // S-3 — dấu `SYSTEM_ACTIVITY_META`: dòng này do MÁY ghi, không phải một lần chạm khách.
     await recordLeadActivity({
       tx,
       leadId,
+      actorId: null,
       actorName,
       type: "NOTE",
       content:
         `[Thêm con] Phụ huynh gửi thêm phiếu cho "${child.fullName}"` +
         `${child.gradeLevel ? ` (${child.gradeLevel})` : ""}` +
         ` — đã thêm vào hồ sơ này thay vì tạo lead mới.`,
-      // S-3 — phiếu do KHÁCH gửi, chưa ai gọi khách: không đóng dấu đã-liên-hệ.
       metadata: SYSTEM_ACTIVITY_META,
     });
   });
@@ -438,6 +471,15 @@ export async function ingestIntakeLead(
       // Không ghi lại thì mọi cảnh báo (mã NV sai, cơ sở lạ, thiếu tên PH) cũng
       // bốc hơi — đúng kiểu nuốt lỗi im lặng mà luật cứng #6 cấm.
       await recordIntakeNotes(dup.id, dupNoteLines, warnings, actorName);
+      // 29/08 — nâng mốc LẦN NHẬP GẦN NHẤT + ghi sổ + báo người đang giữ lead.
+      // Không có bước này thì phiếu khách vừa gọi lại trông y hệt phiếu nguội ba
+      // tháng, và Sale không có cách nào biết để gọi trước.
+      await ghiNhanNhapLai({
+        leadId: dup.id,
+        centerId,
+        source: ctx.source,
+        createdById: ctx.createdByUserId ?? null,
+      }).catch((err) => console.error(`[intake:${ctx.source}] ghi nhận nhập lại:`, err));
       return { ok: true, leadId: dup.id, duplicate: true, childAdded, warnings };
     }
 
@@ -456,13 +498,27 @@ export async function ingestIntakeLead(
           parentName,
           phone,
           email: mapped.email ?? undefined,
-          childName: mapped.child?.fullName ?? mapped.childName ?? undefined,
+          // Cột phẳng cũ chỉ đựng được MỘT tên ⇒ lấy em đầu tiên. Bản ghi đầy đủ
+          // của từng em nằm ở `LeadChild` bên dưới.
+          childName: mapped.children?.[0]?.fullName ?? mapped.childName ?? undefined,
+          // `Lead.courseId` = khoá của em ĐẦU TIÊN có khai khoá. Cùng luật với
+          // `syncLeadCourseFromChildren` ở màn quản trị — cột này là bản sao
+          // phẳng để lọc/hiển thị, nguồn thật là `LeadChild.interestedCourseId`.
+          // Không nhân bản luật sang đây bằng cách gọi action bên `app/`: sai
+          // chiều phụ thuộc, và action đó còn kiểm quyền của người đăng nhập.
+          courseId:
+            mapped.children?.find((c) => c.interestedCourseId)?.interestedCourseId ??
+            undefined,
           centerId: centerId ?? undefined,
-          assignedToId: assignedToId ?? undefined,
-          // GĐ5 — chỉ còn ghi MỐC phân công. Trạng thái ASSIGNED cũ nay là MOI, mà
-          // MOI đã là mặc định của cột nên đặt lại chẳng khác gì; việc "lead này có
-          // người nhận" đọc từ assignedToId + assignedAt.
-          ...(assignedToId ? { assignedAt: new Date() } : {}),
+          // 29/08 — KHÔNG gán chủ ở đây nữa khi đã biết cơ sở: `chiaChoLead` bên
+          // dưới mới là cửa quyết chủ, và nó áp thêm vế CƠ SỞ mà chỗ này không có
+          // (mã NV của sale CS1 trên phiếu khách chọn CS2 vốn vẫn gán về CS1).
+          // Đường không-biết-cơ-sở vẫn giữ nếp cũ để `autoAssignNewLead` tự thoát.
+          ...(centerId && !ctx.legacyWebhook
+            ? {}
+            : assignedToId
+              ? { assignedToId, assignedAt: new Date() }
+              : {}),
           // Nguồn marketing do người nhập khai thắng kênh kỹ thuật (xem
           // `MappedLead.leadSource`); bỏ trống thì giữ nguyên hành vi cũ.
           source: mapped.leadSource ?? ctx.source,
@@ -477,18 +533,21 @@ export async function ingestIntakeLead(
           referrer: ctx.referrer ?? undefined,
           utmSource: ctx.utmSource ?? undefined,
           utmCampaign: ctx.utmCampaign ?? undefined,
+          // Mốc lần nhập ĐẦU TIÊN; các lần sau do `ghiNhanNhapLai` nâng.
+          lastInboundAt: new Date(),
         },
         select: { id: true },
       });
 
-      if (mapped.child) {
+      for (const con of mapped.children ?? []) {
         await tx.leadChild.create({
           data: {
             leadId: created.id,
-            fullName: mapped.child.fullName,
-            schoolName: mapped.child.schoolName ?? null,
-            gradeLevel: mapped.child.gradeLevel ?? null,
+            fullName: con.fullName,
+            schoolName: con.schoolName ?? null,
+            gradeLevel: con.gradeLevel ?? null,
             interestedCenterId: centerId,
+            interestedCourseId: con.interestedCourseId ?? null,
           },
         });
       }
@@ -508,15 +567,62 @@ export async function ingestIntakeLead(
       return created;
     });
 
-    // Đã có người phụ trách thì hàm này tự thoát — gọi vô hại, giữ 1 đường duy nhất.
+    // ── CHIA CHỦ ────────────────────────────────────────────────────────────
+    //
     // Await chứ không fire-and-forget: serverless có thể kill tiến trình ngay sau
     // khi response đi, lead sẽ nằm không ai nhận (đã burn ở `/api/leads`).
-    const assign = ctx.legacyWebhook
-      ? autoAssignLead(lead.id, { actorId: null, actorName })
-      : autoAssignNewLead(lead.id, { actorId: null, actorName });
-    await assign.catch((err) =>
-      console.error(`[intake:${ctx.source}] auto-assign error:`, err),
-    );
+    //
+    // 29/08/2026 — đi qua `chiaChoLead` (ma trận quyết định + sổ chia lead) khi
+    // ĐÃ BIẾT CƠ SỞ. Chưa biết cơ sở thì vẫn dùng đường cũ: `autoAssignNewLead`
+    // còn làm thêm một việc mà cửa mới không làm — CHỌN CƠ SỞ (`pickCenterEvenly`)
+    // — và bỏ nó đi là mọi phiếu không khai cơ sở nằm im mãi mãi.
+    //
+    // Ba webhook cũ (`legacyWebhook`) giữ nguyên đường cũ trong đợt này: chúng
+    // không mang `entryPoint`, và đổi hành vi của chúng không nằm trong bước 5.
+    if (!ctx.legacyWebhook && centerId) {
+      // Mã NV trên phiếu = người giới thiệu. Đưa vào `aff` chứ không `explicitOwnerId`
+      // để ma trận áp ĐỦ ba vế của ca affiliate — trong đó có vế CƠ SỞ: người CS1
+      // phát link mà khách chọn CS2 thì lead thuộc pool CS2, không về tay họ.
+      const aff =
+        owner.assignedToId
+          ? {
+              userId: owner.assignedToId,
+              centerId: owner.fallbackCenterId,
+              isSale: true as const,
+            }
+          : null;
+      await chiaChoLead(lead.id, {
+        targetCenterId: centerId,
+        createdById: ctx.createdByUserId ?? null,
+        entryPoint: ctx.entryPoint ?? "LANDING",
+        explicitOwnerId: ctx.explicitOwnerId ?? null,
+        aff,
+      }).catch((err) => console.error(`[intake:${ctx.source}] chia lead:`, err));
+    } else {
+      // ⚠️ 05/09/2026 — MÃ GIỚI THIỆU TRÊN LINK TỪNG BỊ GHI ĐÈ IM LẶNG.
+      //
+      // Khối tạo lead ở trên đã gán `assignedToId` theo mã NV trên phiếu (nhánh
+      // `legacyWebhook` của biểu thức ở ~dòng 504). Rồi `autoAssignLead` rút một
+      // người khác từ vòng chia và ĐÈ LÊN — nên người phát link cờ vua / quà tặng
+      // không bao giờ nhận được lead của mình, mà cũng không có lỗi nào nổ.
+      //
+      // Vì sao chặn Ở ĐÂY chứ không thêm chốt vào `autoAssignLead`: hàm đó còn phục
+      // vụ nút "Chia tự động" của quản lý (`autoAssignLeadAction`), nơi rút lại
+      // người mới chính là CHỦ ĐÍCH. Thêm chốt vào trong là giết đúng nút đó — lặp
+      // lại y hệt lỗi "bấm chia lại mà lead không đổi tay" đã phải vá hồi 03/09.
+      //
+      // `autoAssignNewLead` KHÔNG cần nhánh này: nó tự thoát sớm khi lead đã có chủ
+      // (`lib/lead/auto-assign.ts:174`). Chênh lệch giữa hai hàm chính là gốc của bug.
+      const daCoChuTuMaGioiThieu = !!ctx.legacyWebhook && !!assignedToId;
+      if (!daCoChuTuMaGioiThieu) {
+        const assign = ctx.legacyWebhook
+          ? autoAssignLead(lead.id, { actorId: null, actorName })
+          : autoAssignNewLead(lead.id, { actorId: null, actorName });
+        await assign.catch((err) =>
+          console.error(`[intake:${ctx.source}] auto-assign error:`, err),
+        );
+      }
+    }
 
     return { ok: true, leadId: lead.id, duplicate: false, warnings };
   } catch (err) {

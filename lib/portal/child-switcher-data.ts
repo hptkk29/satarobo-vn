@@ -1,11 +1,12 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { GHI_DANH_DANG_HOC } from "@/lib/portal/trang-thai-ghi-danh";
 
 // Portal v2 — dữ liệu switcher "Chế độ Phụ huynh / các con" ở topbar.
 // Nhẹ: chỉ id + name + tên khóa học đang học (để hiện subtitle) — KHÔNG kéo
 // attendance/debt như getParentChildrenOverview (chạy ở mọi page qua layout).
 
-const ACTIVE = ["CONFIRMED", "STUDYING", "ACTIVE", "PAUSED"] as const;
+const ACTIVE = GHI_DANH_DANG_HOC; // lib/portal/trang-thai-ghi-danh.ts
 
 export type SwitcherChild = {
   id: string;
@@ -26,7 +27,11 @@ export async function getSwitcherChildren(
 ): Promise<SwitcherChild[]> {
   const students = await db.student.findMany({
     where: { parentUserId, deletedAt: null },
-    orderBy: { createdAt: "asc" },
+    // 06/09 — CÙNG thứ tự với `getChildren` (lib/portal/session.ts sắp theo `name asc`).
+    // Con MẶC ĐỊNH là `children[0]` của danh sách đó, nên hai nguồn sắp khác nhau thì
+    // con được chọn sẵn lại không phải con đứng đầu trong bộ chuyển — trông như hệ
+    // thống chọn nhầm con.
+    orderBy: { name: "asc" },
     select: {
       id: true,
       name: true,

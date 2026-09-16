@@ -20,17 +20,31 @@ import {
   isEvalV2Enabled,
   isRbacV2Enabled,
   isScormEnabled,
-  isZalocrmEnabled,
 } from "@/lib/flags";
-import { Sidebar } from "@/components/admin/sidebar";
-import { Topbar } from "@/components/admin/topbar";
+import { AdminShell } from "@/components/admin/admin-shell";
 import { Toaster } from "@/components/ui/sonner";
+import { ServiceWorkerRegister } from "@/components/push/service-worker-register";
 
 // Default title cho MỌI trang admin chưa tự khai metadata (86/199 trang) → không rơi về
 // title public "Sata Robo – Trung tâm…". Trang tự khai `title: "X | Admin"` giữ nguyên
 // (không set template ở đây để tránh nhân đôi "| Admin").
 export const metadata = {
   title: { default: "Quản trị" },
+  // Web Push Đợt 2 — phát ra `<link rel="manifest" href="/manifest.json">`, điều kiện để nhân
+  // viên iPhone "Thêm vào màn hình chính" (iOS chỉ giao push cho web app đã cài).
+  //
+  // ⚠️ TRỎ FILE TĨNH `public/manifest.json`, CỐ Ý KHÔNG dùng `app/manifest.ts`: file quy ước
+  // của Next phát ra đường `/manifest.webmanifest`, mà `isInfraPath` (`lib/auth/route-policy.ts`)
+  // chỉ mở đúng chuỗi `/manifest.json`. Đường `.webmanifest` không được matcher của `proxy.ts`
+  // loại (matcher chỉ loại `.js`/`.css`/ảnh), nên nó rơi vào luật host×role và hỏng câm với một
+  // request nặc danh — đúng thứ trình duyệt dùng để lấy manifest.
+  manifest: "/manifest.json",
+};
+
+// Màu thanh trạng thái khi chạy dạng ứng dụng đã cài. Lấy đúng `--primary` của app
+// (cam #F97316, `app/globals.css:196`).
+export const viewport = {
+  themeColor: "#f97316",
 };
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -112,34 +126,35 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const chatUserId = canSeeChat ? session.user.id : "";
 
   return (
-    <div className="admin-scope flex h-screen overflow-hidden bg-muted">
-      {/* Desktop Sidebar */}
-      <div className="hidden md:flex md:shrink-0">
-        <Sidebar
-          granted={granted}
-          userId={chatUserId}
-          chatUnread={chatUnread}
-          evalV2Enabled={isEvalV2Enabled()}
-          scormEnabled={isScormEnabled()}
-          classGroupEnabled={isClassGroupEnabled()}
-          zalocrmEnabled={isZalocrmEnabled()}
-        />
-      </div>
+    <>
+      {/*
+        Khung + trạng thái "drawer đang mở" nằm ở `AdminShell` (client): layout này là Server
+        Component (nó `auth()`, `resolveActor`, đọc DB) nên không giữ được `useState`.
 
-      {/* Main */}
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <Topbar
-          userId={session.user.id}
-          userName={session.user.name}
-          userRole={activeRole ?? session.user.role}
-          roles={roleOptions}
-          activeRole={activeRole}
-          elearningUrl={elearningUrl}
-        />
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
-      </div>
+        Trước 13/09/2026 khối này tự dựng khung tại chỗ với `<div className="hidden md:flex">`
+        bọc sidebar và KHÔNG có nút mở nào ⇒ dưới 768px cả 234 trang admin không điều hướng
+        được từ điện thoại. Đừng dựng lại khung ở đây.
+      */}
+      <AdminShell
+        granted={granted}
+        chatUserId={chatUserId}
+        chatUnread={chatUnread}
+        evalV2Enabled={isEvalV2Enabled()}
+        scormEnabled={isScormEnabled()}
+        classGroupEnabled={isClassGroupEnabled()}
+        userId={session.user.id}
+        userName={session.user.name}
+        userRole={activeRole ?? session.user.role}
+        roles={roleOptions}
+        activeRole={activeRole}
+        elearningUrl={elearningUrl}
+      >
+        {children}
+      </AdminShell>
 
       <Toaster richColors position="top-right" />
-    </div>
+      {/* Web Push Đợt 2 — cài service worker, KHÔNG xin quyền (đó là Đợt 3, chỉ trong user gesture). */}
+      <ServiceWorkerRegister nguoiDung={session.user.id} />
+    </>
   );
 }

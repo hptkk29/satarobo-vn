@@ -190,6 +190,9 @@ export function compareAttendanceQueueOrder(
   const pa = ATTENDANCE_QUEUE_ORDER[a.phase];
   const pb = ATTENDANCE_QUEUE_ORDER[b.phase];
   if (pa !== pb) return pa - pb;
+  // 08/09 — THỜI GIAN thắng số buổi: nhãn nay là số LỘ TRÌNH, sắp theo nó thì buổi
+  // dời sớm mang bài cuối bị đẩy xuống đáy hàng đợi. Xem `lib/lms/session-order.ts`.
+  if (a.time !== b.time) return a.time - b.time;
   const an = a.number ?? Number.MAX_SAFE_INTEGER;
   const bn = b.number ?? Number.MAX_SAFE_INTEGER;
   if (an !== bn) return an - bn;

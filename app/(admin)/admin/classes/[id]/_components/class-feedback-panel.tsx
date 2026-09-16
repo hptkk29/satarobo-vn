@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ExternalLink, MessageSquareText } from "lucide-react";
 import { formatDateDMY } from "@/lib/format/date";
-import { sessionNumberLabel } from "@/lib/lms/session-order";
+import { nhanSoBuoi } from "@/lib/lms/session-order";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 import { SessionEvalCard } from "@/components/admin/session-eval-card";
 import type { ClassSessionFeedbackData } from "@/lib/classes/session-feedback-data";
@@ -75,7 +75,12 @@ export function ClassFeedbackPanel({ data }: { data: ClassSessionFeedbackData })
           <table className="w-full min-w-[34rem] text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                <th className="px-4 py-2 font-semibold">Buổi</th>
+                {/* Đợt 1c — cột này là số THEO LỊCH, và tiêu đề phải nói ra. Cột
+                    "Bài / chủ đề" ngay bên phải mang số LỘ TRÌNH (`Bài {order}: {title}`);
+                    hai cột trả lời hai câu khác nhau — "đã học tới buổi thứ mấy" vs
+                    "buổi này dạy bài nào" — nên KHÔNG gộp. Trước đợt này cột trái in
+                    "Buổi 2" cạnh cột phải "Bài 43: …" mà không nói vì sao lệch. */}
+                <th className="px-4 py-2 font-semibold">Buổi (lịch)</th>
                 <th className="px-4 py-2 font-semibold">Ngày</th>
                 <th className="px-4 py-2 font-semibold">Bài / chủ đề</th>
                 <th className="px-4 py-2 font-semibold">Đã nhận xét</th>
@@ -90,7 +95,7 @@ export function ClassFeedbackPanel({ data }: { data: ClassSessionFeedbackData })
                     {/* Ô riêng, không ghép vào text node của nhãn bài — test hồi quy dò
                         nhãn bằng getByText khớp chính xác. */}
                     <td className="whitespace-nowrap px-4 py-2 font-semibold tabular-nums text-foreground">
-                      {sessionNumberLabel(s.seq)}
+                      {nhanSoBuoi({ lich: s.seq, loTrinh: null })}
                     </td>
                     <td className="whitespace-nowrap px-4 py-2 font-medium tabular-nums text-foreground">
                       {formatDateDMY(s.dateISO)}
@@ -168,7 +173,7 @@ export function ClassFeedbackPanel({ data }: { data: ClassSessionFeedbackData })
                               title={s ? s.label : "Buổi học"}
                               subtitle={
                                 s
-                                  ? `${sessionNumberLabel(s.seq)} · ${formatDateDMY(s.dateISO)}`
+                                  ? `${nhanSoBuoi({ lich: s.seq, loTrinh: null })} · ${formatDateDMY(s.dateISO)}`
                                   : null
                               }
                               data={e}

@@ -1,7 +1,5 @@
 import "server-only";
 import type { DiscountApprovalStatus, Prisma, Role } from "@prisma/client";
-import { db } from "@/lib/db";
-import { assertCan } from "@/lib/auth/permissions";
 import { writeAudit } from "@/lib/audit/audit-log";
 
 // =============================================================================
@@ -22,10 +20,12 @@ export function discountFromPercent(subtotal: number, percent: number): number {
   return Math.min(subtotal, Math.round((subtotal * pct) / 100));
 }
 
-/** THUẦN — đơn có cần duyệt giảm giá không (mọi giảm giá > 0 đều cần). */
-export function needsDiscountApproval(input: { discountAmount: number }): boolean {
-  return input.discountAmount > 0;
-}
+// ⚠️ ĐÃ XOÁ [14/09/2026] — `needsDiscountApproval`.
+//
+// Nó là CỔNG DUYỆT ("có giảm giá ⇒ phải duyệt"), mà cơ chế duyệt đã bỏ. Giữ lại một
+// hàm tên "cần duyệt không" trong repo không còn khâu duyệt là để người sau nối lại
+// nhầm. Chỗ tạo đơn nay hỏi thẳng `data.discountAmount > 0` để biết CÓ GIẢM GIÁ —
+// dùng cho việc bắt GIẢI TRÌNH, việc đó vẫn còn và cố ý còn.
 
 export type DiscountApprovalActor = {
   id: string;
@@ -111,74 +111,9 @@ export async function applyDiscountRejection(
   });
 }
 
-/**
- * QLCS/SUPER_ADMIN duyệt giảm giá → APPROVED (đơn được phép xác nhận).
- *
- * @deprecated Dùng `approveOrder()` (lib/orders/approval.ts) — một nút duyệt cho cả
- * giảm giá lẫn kế hoạch thanh toán. Giữ lại cho đơn/luồng chỉ có giảm giá và cho
- * caller cũ; hành vi KHÔNG đổi.
- */
-export async function approveOrderDiscount(params: {
-  orderId: string;
-  actor: DiscountApprovalActor;
-  reason?: string;
-}): Promise<{ ok: boolean; error?: string }> {
-  try {
-    assertCan(
-      { role: params.actor.role ?? null, roles: params.actor.roles ?? undefined },
-      "discounts:approve",
-    );
-  } catch {
-    return { ok: false, error: "Không có quyền duyệt giảm giá" };
-  }
-
-  const order = await db.order.findUnique({
-    where: { id: params.orderId },
-    select: { id: true, centerId: true, leadId: true, discountApprovalStatus: true },
-  });
-  if (!order) return { ok: false, error: "Không tìm thấy đơn" };
-  if (order.discountApprovalStatus == null) {
-    return { ok: false, error: "Đơn không có giảm giá cần duyệt" };
-  }
-
-  await db.$transaction(async (tx) => {
-    await applyDiscountApproval(tx, { order, actor: params.actor, reason: params.reason });
-  });
-  return { ok: true };
-}
-
-/**
- * QLCS/SUPER_ADMIN từ chối giảm giá → REJECTED (reason bắt buộc).
- *
- * @deprecated Dùng `rejectOrder()` (lib/orders/approval.ts) — xem chú thích ở
- * `approveOrderDiscount`.
- */
-export async function rejectOrderDiscount(params: {
-  orderId: string;
-  actor: DiscountApprovalActor;
-  reason: string;
-}): Promise<{ ok: boolean; error?: string }> {
-  try {
-    assertCan(
-      { role: params.actor.role ?? null, roles: params.actor.roles ?? undefined },
-      "discounts:approve",
-    );
-  } catch {
-    return { ok: false, error: "Không có quyền duyệt giảm giá" };
-  }
-  if (!params.reason?.trim()) return { ok: false, error: "Lý do từ chối là bắt buộc" };
-
-  const order = await db.order.findUnique({
-    where: { id: params.orderId },
-    select: { id: true, centerId: true, discountApprovalStatus: true },
-  });
-  if (!order) return { ok: false, error: "Không tìm thấy đơn" };
-  if (order.discountApprovalStatus == null) {
-    return { ok: false, error: "Đơn không có giảm giá cần duyệt" };
-  }
-
-  await db.$transaction(async (tx) => {
-    await applyDiscountRejection(tx, { order, actor: params.actor, reason: params.reason });
-  });
-  return { ok: true };
-}
+// ⚠️ ĐÃ XOÁ [14/09/2026] — `approveOrderDiscount` + `rejectOrderDiscount`.
+//
+// Chúng là MÃ CHẾT trước cả lúc gỡ duyệt: grep toàn repo ra 0 chỗ gọi, kể cả test —
+// đường duyệt thật đã dời sang `lib/orders/approval.ts` từ 20/08, và file đó nay cũng
+// đã xoá cùng cơ chế duyệt. Hai hàm `applyDiscountApproval` / `applyDiscountRejection`
+// BÊN DƯỚI giữ lại: chúng là phần ĐẶT CỘT trong transaction, còn dùng cho dữ liệu cũ.

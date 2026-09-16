@@ -79,6 +79,9 @@ export const ROLE_SEED: RoleSeed[] = [
       // nên dòng này KHÔNG đổi hành vi; khai để ma trận nói được ai mở được màn kiểm
       // chứng mà không phải suy từ bypass.
       { action: "leads:rotation-view", scopeType: "GLOBAL" },
+      // 29/08 — màn "Quản lý chia lead". GLOBAL vì là cổng TRANG; cách ly cơ sở do
+      // truy vấn gác (`visibleCenterIds`), không do scope của quyền.
+      { action: "lead_pool:manage", scopeType: "GLOBAL" },
       // #17 (câu 55): học bạ. SUPER_ADMIN đã bypass toàn bộ quyền trong can() v2
       // (lib/auth/can.ts) → 2 dòng này KHÔNG đổi hành vi, thêm cho khớp v1 + rõ ý.
       { action: "report-cards:manage", scopeType: "GLOBAL" },
@@ -143,6 +146,15 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "payroll:edit", scopeType: "GLOBAL" },
       { action: "payments:record", scopeType: "GLOBAL" },
       { action: "payments:confirm", scopeType: "GLOBAL" },
+      // 07/09/2026 — ĐIỀU CHỈNH khoản thu đã xác nhận (bút toán delta, dòng gốc bất
+      // biến). Quyền RIÊNG, không gộp vào `payments:confirm`: xác nhận là chấp nhận
+      // một con số, điều chỉnh là sửa một con số đã vào sổ và đã đối soát sao kê.
+      // ⚠️ Ma trận v1 (`lib/auth/permissions.ts`) cố ý CHỈ có SUPER_ADMIN — vai nghiệp
+      // vụ nhận quyền này DUY NHẤT ở đây (v2/DB). Prod bật RBAC_V2 nên kế toán dùng
+      // được; máy dev chạy v1 nên phải đăng nhập SUPER_ADMIN mới thấy nút.
+      // ⚠️ Seed vai KHÔNG tự chạy theo deploy — phải bấm workflow seed trên prod,
+      // nếu không thì nút "Điều chỉnh" vẫn ẩn với kế toán dù mã đã lên.
+      { action: "payments:adjust", scopeType: "GLOBAL" },
       // #15 (câu 32) — break-glass xem đầy đủ CCCD PH + địa chỉ ở màn thanh toán.
       { action: "payments:view-pii", scopeType: "GLOBAL" },
       { action: "orders:view", scopeType: "GLOBAL" },
@@ -306,7 +318,10 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "jobs:view", scopeType: "GLOBAL" },
       { action: "leads:create", scopeType: "GLOBAL" },
       { action: "leads:edit", scopeType: "GLOBAL" },
-      { action: "leads:export", scopeType: "GLOBAL" },
+      // 31/08/2026 — GỠ `leads:export` khỏi Marketing Hội sở. Chủ dự án chốt chỉ QLCS
+      // + Quản trị tối cao được xuất danh sách lead. Seed xoá-rồi-tạo-lại theo từng vai
+      // (seed-roles.ts:941) nên gỡ dòng này là quyền BIẾN MẤT trên prod sau khi chạy
+      // `seed-prod-roles.yml` — nhớ chạy tay, seed vai không tự chạy theo deploy.
       // D-02 — đặt chỉ tiêu NGÂN SÁCH QUẢNG CÁO theo tháng × cơ sở. Marketing Hội sở là
       // người cầm ví quảng cáo nên là người đặt chỉ tiêu (PRD CDB-dashboard §D.4);
       // Quản lý cơ sở cố ý KHÔNG có — họ xem chi phí/CPL/CPA của cơ sở mình, không tự
@@ -433,13 +448,25 @@ export const ROLE_SEED: RoleSeed[] = [
       //     đổi lịch/phòng/tên lớp, sinh & xếp lại buổi, và HUỶ LỚP (cancelClassAction).
       //     KHÔNG kèm: tạo lớp, xoá lớp (perm riêng), duyệt/từ chối lớp (chặn bằng
       //     APPROVE_ROLES chứ không bằng permission — xem requireApprover).
-      //   · trials:view + trials:assign-teacher — đủ để mở màn Trial và gán GV. CỐ Ý
-      //     KHÔNG cấp trials:manage (thêm/bớt học viên, tạo lớp trải nghiệm) và
-      //     trials:config: quản lý toàn bộ GV ≠ điều hành tuyển sinh lớp thử.
+      //   · trials:view + trials:assign-teacher — đủ để mở màn Trial và gán GV.
+      //     ~~CỐ Ý KHÔNG cấp trials:manage (thêm/bớt học viên, tạo lớp trải nghiệm)
+      //     và trials:config: quản lý toàn bộ GV ≠ điều hành tuyển sinh lớp thử.~~
+      //     **[ĐẢO 08/09/2026 — chủ dự án: "Đào tạo được sử dụng FULL quyền trong màn
+      //     Lớp Trial"]** xem 3 dòng thêm ngay dưới.
       { action: "classes:view-all", scopeType: "GLOBAL" },
       { action: "classes:edit", scopeType: "GLOBAL" },
       { action: "trials:view", scopeType: "GLOBAL" },
       { action: "trials:assign-teacher", scopeType: "GLOBAL" },
+      // 08/09/2026 — FULL quyền màn `/admin/lop-trial`. Ba khoá này là ĐÚNG BỘ mà màn
+      // đó gác (đo bằng `grep checkPermission` trên `lop-trial/**`), không hơn:
+      //   · trials:manage           tạo lớp · thêm/sửa/huỷ buổi · xếp & gỡ học viên · huỷ lớp
+      //   · trials:attendance       điểm danh + hoàn tất buổi
+      //   · trials:override-capacity xếp vượt sĩ số (cờ `allowOverride` có cổng RIÊNG)
+      // KHÔNG kèm `trials:config` (cấu hình số buổi — màn khác, QLCS giữ theo QĐ-T3b)
+      // và KHÔNG kèm `trials:feedback` (chấm phiếu nằm trọn ở site giáo viên).
+      { action: "trials:manage", scopeType: "GLOBAL" },
+      { action: "trials:attendance", scopeType: "GLOBAL" },
+      { action: "trials:override-capacity", scopeType: "GLOBAL" },
       // 03/08 — checkin là self-action của mọi nhân viên; sót từ khi thêm TRAINING
       // (FL W0) nên tài khoản chỉ-Đào-tạo không mở được trang chấm công nào.
       { action: "hr_attendance:checkin", scopeType: "GLOBAL" },
@@ -483,6 +510,14 @@ export const ROLE_SEED: RoleSeed[] = [
       // main). Phần việc của GĐ3 là GỠ `trials:assign-teacher` khỏi Quản lý cơ sở —
       // xem chú thích ở vai CENTER_MANAGER. Khai lại ở đây là hai dòng trùng trong
       // cùng một vai, và người đọc sau sẽ tưởng có hai nguồn cấp khác nhau.
+      // Chuyển từ Quản lý cơ sở sang Đào tạo: Sale chỉ ĐỀ XUẤT, Đào tạo mới chốt.
+      // `trials:view` đi kèm bắt buộc — thiếu nó thì Đào tạo không vào nổi trang
+      // /lop-trial/[id] để bấm nút (trang gác bằng trials:view).
+      // scopeType GLOBAL là BẮT BUỘC: hai call-site gọi trần không kèm target, mà
+      // scope CENTER thiếu target.centerId thì `can()` trả false (luật R1, có test khoá).
+      //
+      // ⚠️ Hai dòng quyền tương ứng KHAI Ở KHỐI TRÊN (mục 23/08 "Đào tạo quản lý toàn
+      // bộ giáo viên") — khai lại ở đây là TRÙNG, và test EL-02/T10-08 bắt đúng lỗi đó.
     ],
   },
   {
@@ -572,6 +607,8 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "leads:create", scopeType: "GLOBAL" },
       { action: "leads:edit", scopeType: "GLOBAL" },
       { action: "leads:assign", scopeType: "GLOBAL" },
+      // 29/08 — điều hành vòng chia lead của CƠ SỞ MÌNH (bật/tắt người nhận lead).
+      { action: "lead_pool:manage", scopeType: "GLOBAL" },
       { action: "leads:import", scopeType: "GLOBAL" },
       { action: "leads:export", scopeType: "GLOBAL" },
       // C-01 — đặt chỉ tiêu lead (SỐ HỌC SINH) theo tháng cho CƠ SỞ MÌNH QUẢN.
@@ -915,12 +952,29 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "chat:read", scopeType: "OWN" },
       { action: "chat:send", scopeType: "OWN" },
       { action: "parent-requests:manage", scopeType: "GLOBAL" },
+      // 04/09/2026 (chủ dự án chốt) — Sale vào xem chi tiết lớp thì CHỈ XEM, trừ hai
+      // việc: ĐIỂM DANH và ÚP ẢNH. `attendance:edit` đã có sẵn; hai dòng này bổ nốt
+      // vế ảnh. Cùng bộ đôi mà Giáo vụ (CENTER_CLASS_MANAGER) đang giữ và cùng lý do:
+      // góp ảnh vào KHO của lớp, còn GV mới là người chọn ảnh gửi phụ huynh.
+      //
+      // KHÔNG cấp `media:upload` (gửi thẳng cho phụ huynh) và KHÔNG cấp
+      // `media:approve` (duyệt). Cách ly cơ sở do scopedDb/passesScope lo ở tầng
+      // query — xem `canStageToClass` trong app/(admin)/admin/media/actions.ts.
+      { action: "media:view", scopeType: "GLOBAL" },
+      { action: "media:upload-draft", scopeType: "GLOBAL" },
       { action: "hr_attendance:checkin", scopeType: "GLOBAL" },
       { action: "blog:view", scopeType: "CENTER" },
       { action: "course-packages:view", scopeType: "CENTER" },
-      { action: "centers:view", scopeType: "CENTER" },
-      { action: "holidays:view", scopeType: "CENTER" },
-      { action: "kits:view", scopeType: "CENTER" },
+      // 29/08/2026 — GỠ `centers:view` · `holidays:view` · `kits:view` khỏi Sale cơ sở
+      // (chủ dự án chốt): ba mục "Cơ sở" · "Lịch nghỉ" · "Học cụ" là màn quản trị/kho,
+      // không phải việc của người tư vấn. Sidebar đọc CÙNG hàm quyết định với cổng
+      // trang (lib/auth/menu-permissions.ts) nên gỡ quyền là mục biến mất VÀ trang
+      // cũng khoá — không đẻ ra "menu nói dối" theo chiều nào.
+      //
+      // Cách ly cơ sở của Sale KHÔNG dựa vào `centers:view`: nó đến từ
+      // `actor.visibleCenterIds` (suy từ `UserOrgRole`) + `scopedDb`. Đã soát: trong
+      // toàn repo `centers:view` chỉ có 2 nơi đọc — /centers và
+      // /centers/[id]/gio-lam-viec — cả hai đều là màn đang muốn giấu.
       { action: "payments:record", scopeType: "GLOBAL" },
       { action: "orders:view", scopeType: "GLOBAL" },
       // G-A (biên bản chốt 4 cổng, 21/08/2026) — mở trục chốt đơn cho Sale:
@@ -1051,6 +1105,10 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "payments:view", scopeType: "GLOBAL" },
       { action: "payments:record", scopeType: "GLOBAL" },
       { action: "payments:confirm", scopeType: "GLOBAL" },
+      // 07/09/2026 — điều chỉnh khoản thu đã xác nhận. Kế toán cơ sở là người ngồi
+      // đối soát sao kê hằng ngày, tức đúng người phát hiện số sai. Cách ly cơ sở
+      // vẫn do `loadScopedPayment` trong Server Action lo, không do scopeType.
+      { action: "payments:adjust", scopeType: "GLOBAL" },
       // #15 (câu 32) — break-glass xem đầy đủ CCCD PH + địa chỉ (chỉ cơ sở mình).
       { action: "payments:view-pii", scopeType: "GLOBAL" },
       { action: "students:view-all", scopeType: "GLOBAL" },

@@ -5,6 +5,7 @@ import {
   isValidPhoneVN,
   phoneSearchTerm,
   phoneVariants,
+  telHrefVN,
   PHONE_VN_RE,
 } from "./phone";
 
@@ -120,5 +121,22 @@ describe("[AUTH-SDT-P1-C5] phoneSearchTerm — ô Tìm phải bắt được C�
 
   it("số cố định vẫn tra được (ô tìm không được kén như canonicalPhone)", () => {
     expect(phoneSearchTerm("02363123456")).toBe("2363123456");
+  });
+});
+
+describe("telHrefVN — giá trị href cho nút gọi", () => {
+  it("LUÔN có scheme `tel:` và dấu `+`", () => {
+    // Thiếu `tel:` thì href thành đường dẫn TƯƠNG ĐỐI: bấm vào là điều hướng lạc
+    // trong app chứ không mở trình gọi. Thiếu `+` thì máy quay đúng chuỗi
+    // "84941000000" như số nội địa và báo không tồn tại. Cả hai lỗi đều KHÔNG lộ ra
+    // trên màn hình — số vẫn hiện đẹp — nên khoá bằng test.
+    expect(telHrefVN("0941000000")).toBe("tel:+84941000000");
+    expect(telHrefVN("84941000000")).toBe("tel:+84941000000");
+    expect(telHrefVN("+84 941 000 000")).toBe("tel:+84941000000");
+  });
+
+  it("số rác cũ vẫn ra một href có scheme, không ra chuỗi trần", () => {
+    expect(telHrefVN("02363123456")).toBe("tel:02363123456");
+    expect(telHrefVN(null)).toBe("tel:");
   });
 });

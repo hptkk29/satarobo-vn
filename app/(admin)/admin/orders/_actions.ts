@@ -1,12 +1,18 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { KHOAN_DA_GHI_NHAN } from "@/lib/finance/ghi-nhan";
 import { revalidatePath } from "next/cache";
 import { Prisma, type OrderStatus, type OrderType } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
+import {
+  METHOD_WRONG_CENTER_ERROR,
+  methodAllowsOrderType,
+  methodServesCenter,
+} from "@/lib/payments/method-scope";
 import {
   orderCreateManualSchema,
   orderStatusChangeSchema,
@@ -16,13 +22,14 @@ import { checkOrderCreateOwnership } from "@/lib/orders/create-guard";
 import { resolveOrderLeadChildId } from "@/lib/orders/lead-child-link";
 import { canTransition } from "@/lib/orders/status";
 import { recordInstallmentPlan, markInstallmentPaid } from "@/lib/orders/installments";
-import { discountFromPercent, needsDiscountApproval } from "@/lib/orders/discount";
+import { discountFromPercent } from "@/lib/orders/discount";
 import { ensureParentAccountForOrder } from "@/lib/parents/provision";
 import { ensureOrderPaymentRecorded } from "@/lib/finance/payment";
 import { ensureFullOrderRequest } from "@/lib/payments/payment-request";
 import { getRequestMetadata } from "@/lib/audit/headers";
 import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
+import { soatGiaDon } from "@/lib/orders/price-guard";
 import { sendEmailForTrigger } from "@/lib/email/trigger";
 import { notifyOrderByZnsIfNoEmail } from "@/lib/notify/order";
 import { renderTemplate } from "@/lib/email/render";
@@ -153,10 +160,33 @@ export async function queryOrders(
   });
 
   const hasMore = rows.length > PAGE_SIZE;
-  const items = hasMore ? rows.slice(0, PAGE_SIZE) : rows;
-  const last = items[items.length - 1];
+  const rawItems = hasMore ? rows.slice(0, PAGE_SIZE) : rows;
+  const last = rawItems[rawItems.length - 1];
   const nextCursor =
     hasMore && last ? encodeCursor(last.createdAt, last.id) : null;
+
+  // "Người tạo đơn" — `Order.createdById` là String THUẦN (không quan hệ Prisma, cùng
+  // lối với `confirmedByUserId` / `Payment.recordedById`) → tra tên bằng MỘT query User.
+  // Khuôn mẫu chép từ `queryPayments` (admin/payments/_actions.ts).
+  // User ∈ SCOPE_EXEMPT nên đọc toàn cục OK — và cần vậy: đơn của cơ sở mình có thể do
+  // người Hội sở tạo, scope theo cơ sở sẽ làm mất tên chính người đó.
+  const creatorIds = [
+    ...new Set(rawItems.map((r) => r.createdById).filter((v): v is string => !!v)),
+  ];
+  const creators = creatorIds.length
+    ? await sdb.user.findMany({
+        where: { id: { in: creatorIds } },
+        select: { id: true, name: true },
+      })
+    : [];
+  const creatorNameById = new Map(creators.map((u) => [u.id, u.name]));
+
+  const items = rawItems.map((o) => ({
+    ...o,
+    // null = đơn tạo TRƯỚC 31/08/2026 (chưa có cột) hoặc người tạo đã bị xoá. Màn hình
+    // in "—"; cố ý KHÔNG đoán bừa từ nguồn khác.
+    createdByName: o.createdById ? (creatorNameById.get(o.createdById) ?? null) : null,
+  }));
 
   return { items, nextCursor };
 }
@@ -166,6 +196,9 @@ export async function createOrderManualAction(input: unknown) {
   const { session, canManageAll } = await requireOrdersCreate();
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
+  // Đọc NGOÀI transaction: `getRequestMetadata` gọi `headers()`, không dùng được bên
+  // trong `$transaction` của Prisma.
+  const auditMeta = await getRequestMetadata();
   const parsed = orderCreateManualSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -177,29 +210,17 @@ export async function createOrderManualAction(input: unknown) {
 
   const data = parsed.data;
 
-  // Phiếu khách đọc MỘT lượt cho hai việc: cổng "khách của mình" (G-A) và danh sách con
-  // (N-2). `Lead` ∈ `SCOPED_MODELS` ⇒ phiếu ngoài tầm nhìn trả `null`.
-  //
-  // ⚠️ Con phải đọc QUA PHIẾU, KHÔNG đọc thẳng `sdb.leadChild`: `LeadChild` không có
-  // `centerId` nên KHÔNG nằm trong `SCOPED_MODELS` và `scopedDb` là pass-through với nó.
-  // Phiếu là cổng duy nhất chặn "gắn đơn vào con của cơ sở khác" bằng cách sửa payload.
-  const leadId = data.leadId?.trim() || null;
-  const lead = leadId
-    ? await sdb.lead.findFirst({
-        where: { id: leadId, deletedAt: null },
-        select: {
-          id: true,
-          assignedToId: true,
-          centerId: true,
-          children: { select: { id: true, leadId: true } },
-        },
-      })
-    : null;
-
   // G-A — người chỉ có `orders:create` (Sale) phải gắn đơn vào lead CỦA MÌNH.
-  // Lead ngoài cơ sở trả null ⇒ guard từ chối.
+  // Lead nạp qua `scopedDb` ⇒ lead ngoài cơ sở trả null ⇒ guard từ chối.
   // Kiểm TRƯỚC mọi truy vấn khác để không rò rỉ thông tin qua thông báo lỗi.
   if (!canManageAll) {
+    const leadId = data.leadId?.trim() || null;
+    const lead = leadId
+      ? await sdb.lead.findFirst({
+          where: { id: leadId, deletedAt: null },
+          select: { id: true, assignedToId: true, centerId: true },
+        })
+      : null;
     const guard = checkOrderCreateOwnership({
       canManageAll,
       leadId,
@@ -213,11 +234,22 @@ export async function createOrderManualAction(input: unknown) {
 
   // N-2 · quyết định B4 — quy đơn về ĐÚNG MỘT CON. Phiếu 1 con thì suy; phiếu nhiều con
   // mà không chọn thì để `null` và báo cáo nói ra — KHÔNG đoán, vì đoán sai là gán doanh
-  // thu sang đứa khác mà tổng vẫn khớp nên không ai phát hiện.
+  // thu sang đứa khác mà TỔNG vẫn khớp nên không ai phát hiện.
+  //
+  // Cấy lại khi hợp nhất `main` → `test` 16/09/2026: bản `_actions.ts` bên `main` không
+  // có bước này, trong khi biểu mẫu vẫn gửi `leadChildId` lên và `Order.leadChildId` có
+  // thật trong schema ⇒ ô "Học sinh của đơn" rơi vào hư không, im lặng.
+  const leadIdChoCon = data.leadId?.trim() || null;
+  const leadChoCon = leadIdChoCon
+    ? await sdb.lead.findFirst({
+        where: { id: leadIdChoCon, deletedAt: null },
+        select: { id: true, children: { select: { id: true, leadId: true } } },
+      })
+    : null;
   const childLink = resolveOrderLeadChildId({
-    leadId,
+    leadId: leadIdChoCon,
     requestedLeadChildId: data.leadChildId,
-    children: lead?.children ?? [],
+    children: leadChoCon?.children ?? [],
   });
   if (!childLink.ok) return { ok: false as const, error: childLink.message };
   const leadChildId = childLink.leadChildId;
@@ -227,6 +259,58 @@ export async function createOrderManualAction(input: unknown) {
   if (data.centerId && !passesScope("Order", { centerId: data.centerId }, actor)) {
     return { ok: false as const, error: "Không có quyền tạo đơn cho cơ sở này" };
   }
+
+  // ── DẤU VẾT GIÁ ──────────────────────────────────────────────────────────────
+  // Hôm nay server tin tuyệt đối `unitPrice` client gửi, và vì `needsDiscountApproval`
+  // chỉ xét `discountAmount > 0` nên đơn HẠ ĐƠN GIÁ không vào hàng chờ duyệt, không ghi
+  // log nào, mà vẫn tự chốt được qua webhook — cổng duyệt chỉ che ô "Giảm giá".
+  //
+  // Ở đây CHỈ SO VÀ GHI DẤU, cố ý không từ chối và cố ý không quy lệch thành
+  // `discountAmount` — lý do đầy đủ ở đầu `lib/orders/price-guard.ts` (tóm tắt: bán Coach
+  // 1-1 ×2,0 và bán theo học phần ÷4 đều HỢP LỆ theo công văn, còn quy thành giảm giá là
+  // bật cổng `sepay.ts` vốn làm tiền về không vào sổ nào).
+  const courseIds = [
+    ...new Set(
+      data.items
+        .map((it) => {
+          const m = it.metadata as Record<string, unknown> | null | undefined;
+          const v = m?.courseId;
+          return typeof v === "string" && v ? v : null;
+        })
+        .filter((v): v is string => v != null),
+    ),
+  ];
+  const productIds = [
+    ...new Set(data.items.map((it) => it.productId).filter((v): v is string => !!v)),
+  ];
+  const [giaKhoa, giaSanPham] = await Promise.all([
+    courseIds.length > 0
+      ? sdb.course.findMany({ where: { id: { in: courseIds } }, select: { id: true, price: true } })
+      : Promise.resolve([]),
+    productIds.length > 0
+      ? sdb.product.findMany({
+          where: { id: { in: productIds } },
+          select: { id: true, salePrice: true },
+        })
+      : Promise.resolve([]),
+  ]);
+  const bangGia = new Map<string, number | null>([
+    ...giaKhoa.map((c) => [c.id, c.price] as const),
+    ...giaSanPham.map((p) => [p.id, p.salePrice] as const),
+  ]);
+  const soatGia = soatGiaDon(
+    data.items.map((it) => {
+      const m = it.metadata as Record<string, unknown> | null | undefined;
+      const courseId = typeof m?.courseId === "string" ? m.courseId : null;
+      const khoa = courseId ?? it.productId ?? null;
+      return {
+        itemName: it.itemName,
+        soLuong: it.quantity,
+        giaGhi: it.unitPrice,
+        giaNiemYet: khoa ? (bangGia.get(khoa) ?? null) : null,
+      };
+    }),
+  );
 
   const subtotal = data.items.reduce(
     (s, it) => s + it.unitPrice * it.quantity,
@@ -243,22 +327,25 @@ export async function createOrderManualAction(input: unknown) {
     return { ok: false as const, error: "Tổng tiền không thể âm" };
   }
 
-  // BGĐ 31/07 — giảm giá nhập tay phải qua duyệt của Quản lý cơ sở trước khi đơn
-  // được xác nhận (đơn tạo ra ở trạng thái chờ duyệt giảm giá).
-  const discountNeedsApproval = needsDiscountApproval({
-    discountAmount: data.discountAmount,
-  });
-  if (discountNeedsApproval && !data.discountReason?.trim()) {
+  // ⚠️ 14/09/2026 — cơ chế DUYỆT đã gỡ, nhưng GIẢI TRÌNH thì GIỮ.
+  //
+  // Hai thứ này hay bị gộp làm một. "Duyệt" là một người phải bấm trước khi đơn đi tiếp
+  // — đó là thứ chủ dự án bỏ. "Giải trình" là một dòng chữ nói vì sao bớt tiền — đó là
+  // DẤU VẾT, và dấu vết chính là cái thay thế cổng duyệt, nên bỏ nó là bỏ cả hai.
+  const coGiamGia = data.discountAmount > 0;
+  if (coGiamGia && !data.discountReason?.trim()) {
     return { ok: false as const, error: "Nhập giải trình giảm giá" };
   }
 
-  // PaymentMethod/Product là catalog toàn cục (không scoped) — scopedDb pass-through.
+  // 30/08/2026 — PaymentMethod ∈ SCOPED_MODELS: câu này nay TỰ LỌC theo tầm nhìn cơ sở
+  // của người tạo đơn.
   const pm = await sdb.paymentMethod.findUnique({
     where: { id: data.paymentMethodId },
     select: {
       id: true,
       name: true,
       isActive: true,
+      centerId: true,
       canBuyCourse: true,
       canBuyPackage: true,
       canBuyExam: true,
@@ -276,14 +363,17 @@ export async function createOrderManualAction(input: unknown) {
       error: "Phương thức thanh toán đã bị vô hiệu hoá",
     };
 
-  const allowedMap: Record<OrderType, boolean> = {
-    COURSE: pm.canBuyCourse,
-    PACKAGE: pm.canBuyPackage,
-    EXAM: pm.canBuyExam,
-    PRODUCT: pm.canBuyProduct,
-    COMBO: false,
-  };
-  if (!allowedMap[data.type]) {
+  // ⚠️ CỔNG SERVER cho luật "cơ sở nào dùng ngân hàng của cơ sở đó".
+  // Dropdown ở form đã lọc rồi, nhưng lọc client KHÔNG phải lớp bảo vệ: mỗi Server
+  // Action là một endpoint HTTP riêng, gọi thẳng với id phương thức của cơ sở khác vẫn
+  // tới được đây. Hệ quả nếu thiếu: đơn của CS2 mang phương thức của CS1 ⇒ mã QR dựng
+  // theo `order.centerId` nên vẫn trỏ tài khoản CS2, còn sổ sách ghi phương thức CS1 —
+  // hai bên lệch nhau đúng ở chỗ đối soát tiền.
+  if (!methodServesCenter(pm, data.centerId || null)) {
+    return { ok: false as const, error: METHOD_WRONG_CENTER_ERROR };
+  }
+
+  if (!methodAllowsOrderType(pm, data.type)) {
     return {
       ok: false as const,
       error: `Phương thức này không hỗ trợ loại đơn "${data.type}"`,
@@ -344,9 +434,6 @@ export async function createOrderManualAction(input: unknown) {
   }
 
   const { actorId, actorName } = getAuditActor(session);
-  // S-6 — `headers()` chỉ gọi được ngoài transaction; lấy sẵn để cú ghi vết bên
-  // trong tx biết đơn ra đời từ máy nào.
-  const metadata = await getRequestMetadata();
 
   // FIX-C5 — codegen atomic BÊN TRONG tx (`generateOrderCode(tx)`) + retry khi
   // đụng unique-violation (P2002) như backstop. Cả tx re-run khi retry.
@@ -371,17 +458,26 @@ export async function createOrderManualAction(input: unknown) {
         customerCity: data.customerCity?.trim() || null,
         studentId: data.studentId || null,
         leadId: data.leadId || null,
-        // N-2 — `null` ở đây nghĩa là "chưa quy được về con", KHÔNG phải "không có con".
+        // N-2 — MỘT ĐƠN quy về MỘT CON. Thiếu cột này thì doanh thu/tỷ lệ chốt/chi phí
+        // trên mỗi khách không bổ dọc được theo học sinh, mà tổng vẫn khớp nên báo cáo
+        // trông vẫn đúng.
         leadChildId,
         centerId: data.centerId || null,
+        // Người tạo đơn — cột danh sách /admin/orders. Lấy từ phiên, KHÔNG nhận từ
+        // client: đây là thứ dùng để quy trách nhiệm, để client gửi lên là tự mở đường
+        // ghi tên người khác vào đơn của mình.
+        createdById: session.user.id ?? null,
         paymentMethodId: data.paymentMethodId,
         subtotal,
         discountAmount: data.discountAmount,
-        // BGĐ 31/07 — snapshot cách nhập giảm giá + giải trình + cờ chờ duyệt.
+        // Snapshot cách nhập giảm giá + giải trình.
+        //
+        // ⚠️ 14/09/2026 — KHÔNG còn set `discountApprovalStatus`/`discountRequestedById`:
+        // đơn mới không đi vào hàng chờ duyệt nữa. Hai cột GIỮ trong schema (dữ liệu cũ
+        // đang mang giá trị thật, và drop cột trên bảng có dữ liệu prod là đợt riêng —
+        // luật cứng #4), chỉ không có đường GHI mới.
         discountPercent: data.discountPercent ?? null,
-        discountReason: discountNeedsApproval ? (data.discountReason?.trim() ?? null) : null,
-        discountApprovalStatus: discountNeedsApproval ? "PENDING_APPROVAL" : null,
-        discountRequestedById: discountNeedsApproval ? actorId : null,
+        discountReason: coGiamGia ? (data.discountReason?.trim() ?? null) : null,
         shippingFee: data.shippingFee,
         totalAmount,
         customerNote: data.customerNote?.trim() || null,
@@ -446,49 +542,46 @@ export async function createOrderManualAction(input: unknown) {
       });
     }
 
-    // ─── S-6 (27/08/2026) — VẾT TẠO ĐƠN ────────────────────────────────────
-    // Trước đây lượt tạo đơn KHÔNG để lại dòng nào trong nhật ký hợp nhất: mọi
-    // lượt ĐỔI về sau có vết (`OrderStatusHistory`, duyệt giảm giá, ghi nhận
-    // tiền), riêng cái đầu tiên — nơi ấn định subtotal / giảm giá / tổng — thì
-    // trống. Lúc khách và người bán bất đồng về con số, hệ thống chỉ có giá trị
-    // HIỆN TẠI của đơn, không trả lời được đơn RA ĐỜI với con số nào và do ai.
+    // ⚠️ TRONG CÙNG TRANSACTION — "có đơn là có log", không nửa vời. Trước bản này
+    // đường tạo đơn KHÔNG ghi một dòng AuditLog nào (đo trên DB: chỉ có
+    // DISCOUNT_APPROVED), nên hạ giá là tuyệt đối vô dấu.
     //
-    // TRONG tx, không `.catch()`: đơn tiền mà không có vết thì tranh chấp không
-    // xử được, nên thà không có đơn còn hơn có đơn không vết (cùng lý do
-    // `recordLeadActivity` cấm nuốt lỗi bump đồng hồ).
-    //
-    // `orgUnitId` truyền `centerId` — `writeAudit` tự quy về OrgUnit thật, và tự
-    // suy lại từ chính đơn nếu đơn chưa gắn cơ sở.
+    // Ghi CẢ đơn khớp giá lẫn đơn lệch giá: chỉ ghi đơn lệch thì "không có log"
+    // trở thành hai nghĩa khác nhau (chưa từng ghi / đã soát và không lệch), và
+    // người soát sau không phân biệt được.
     await writeAudit({
       actor: { id: actorId, name: actorName },
-      module: "finance",
+      module: "orders",
       entityType: "Order",
       entityId: order.id,
       action: "CREATE",
       newValues: {
-        code: order.code,
-        type: data.type,
-        status: data.status,
+        orderCode: order.code,
         subtotal,
         discountAmount: data.discountAmount,
         discountPercent: data.discountPercent ?? null,
-        discountApprovalStatus: discountNeedsApproval ? "PENDING_APPROVAL" : null,
-        shippingFee: data.shippingFee,
+        discountReason: data.discountReason?.trim() || null,
         totalAmount,
+        // Dấu vết giá — đủ để soát lại mà không phải mở lại payload.
+        giaLech: soatGia.coLech,
+        giaTongLechThap: soatGia.tongLechThap,
+        giaDongLech: soatGia.dongLech,
+        // Khớp `PII_KEY_RE` của viewer ⇒ tự che với người không có quyền xem PII.
+        customerPhone: data.customerPhone.trim(),
+        shippingFee: data.shippingFee,
         paymentMethodId: data.paymentMethodId,
-        paymentMethodName: pm.name,
-        centerId: data.centerId || null,
         leadId: data.leadId || null,
         leadChildId,
         studentId: data.studentId || null,
-        // Khớp `PII_KEY_RE` của viewer ⇒ tự mask với người không có quyền xem PII.
-        customerPhone: data.customerPhone.trim(),
         itemCount: data.items.length,
       },
-      reason: discountNeedsApproval ? (data.discountReason?.trim() ?? undefined) : undefined,
       orgUnitId: data.centerId || null,
-      ip: metadata.ip ?? null,
-      userAgent: metadata.userAgent ?? null,
+      // S-6a — ĐƯỜNG NỐI MÁY GỌI. Đơn là chứng từ tiền; khi có tranh chấp "ai bấm tạo
+      // đơn này", tên người ghi chưa đủ (tài khoản dùng chung, phiên bị mượn). Bản trên
+      // `main` bỏ hai trường này; cấy lại khi hợp nhất 16/09/2026 — `writeAudit` vốn đã
+      // nhận sẵn, chỉ là không ai truyền.
+      ip: auditMeta.ip ?? null,
+      userAgent: auditMeta.userAgent ?? null,
       tx,
     });
 
@@ -579,21 +672,10 @@ export async function changeOrderStatusAction(
     return { ok: false as const, error: "Không tìm thấy đơn hàng" };
   }
 
-  // BGĐ 31/07 — đơn có giảm giá nhập tay chỉ được xác nhận sau khi QL cơ sở duyệt.
-  if (parsed.data.toStatus === "CONFIRMED" && order.discountApprovalStatus != null) {
-    if (order.discountApprovalStatus === "PENDING_APPROVAL") {
-      return {
-        ok: false as const,
-        error: "Giảm giá đang chờ Quản lý cơ sở duyệt — chưa thể xác nhận đơn",
-      };
-    }
-    if (order.discountApprovalStatus === "REJECTED") {
-      return {
-        ok: false as const,
-        error: "Giảm giá đã bị từ chối — sửa lại đơn trước khi xác nhận",
-      };
-    }
-  }
+  // ⚠️ ĐÃ GỠ [14/09/2026] — cổng "giảm giá chưa duyệt thì chưa xác nhận đơn" (BGĐ 31/07).
+  // Gỡ CÙNG LÚC với cổng máy chốt ở `lib/payments/payos-ingest.ts`: lệch nhịp thì webhook
+  // chốt được mà người không chốt được (hoặc ngược lại), và không ai đọc ra vì sao.
+  // Thay cho nó là dấu vết `lib/orders/price-guard.ts` + AuditLog ORDER_CREATED.
 
   if (order.status === parsed.data.toStatus) {
     return {
@@ -654,7 +736,7 @@ export async function changeOrderStatusAction(
     // [auto:order-confirm]). Tránh double-count khi installments đã ghi sổ.
     if (parsed.data.toStatus === "CONFIRMED" && order.status === "PENDING_PAYMENT") {
       const recorded = await tx.payment.aggregate({
-        where: { orderId, saleStatus: "RECORDED", deletedAt: null },
+        where: { orderId, ...KHOAN_DA_GHI_NHAN },
         _count: { _all: true },
       });
       if (recorded._count._all === 0) {
@@ -789,6 +871,7 @@ export async function updateOrderPaymentMethodAction(
     select: {
       id: true,
       isActive: true,
+      centerId: true,
       canBuyCourse: true,
       canBuyPackage: true,
       canBuyExam: true,
@@ -801,14 +884,13 @@ export async function updateOrderPaymentMethodAction(
   if (!pm.isActive) {
     return { ok: false as const, error: "Phương thức thanh toán đã bị vô hiệu hoá" };
   }
-  const allowedMap: Record<OrderType, boolean> = {
-    COURSE: pm.canBuyCourse,
-    PACKAGE: pm.canBuyPackage,
-    EXAM: pm.canBuyExam,
-    PRODUCT: pm.canBuyProduct,
-    COMBO: false,
-  };
-  if (!allowedMap[order.type]) {
+  // ĐƯỜNG GHI THỨ HAI của cùng một luật. Thiếu vế này thì cách né rất rẻ: tạo đơn đúng
+  // phương thức rồi bấm "đổi phương thức" sang phương thức của cơ sở khác.
+  // `order.centerId` đã có sẵn trong câu đọc ngay trên, không tốn thêm truy vấn nào.
+  if (!methodServesCenter(pm, order.centerId)) {
+    return { ok: false as const, error: METHOD_WRONG_CENTER_ERROR };
+  }
+  if (!methodAllowsOrderType(pm, order.type)) {
     return {
       ok: false as const,
       error: `Phương thức này không hỗ trợ loại đơn "${order.type}"`,
@@ -835,6 +917,11 @@ export async function loadCreateOrderFormData() {
   const sdb = scopedDb(await resolveActor(session.user.id));
 
   const [paymentMethods, courses, products, centers] = await Promise.all([
+    // Nạp CẢ phương thức của mọi cơ sở trong tầm nhìn (scopedDb đã lọc) + phương thức
+    // dùng chung, rồi để client lọc lại theo cơ sở ĐANG CHỌN trên form. Cố ý không nạp
+    // lại qua server action mỗi lần đổi cơ sở: hàm này chạy MỘT LẦN ở RSC trước khi
+    // người dùng chọn gì, và thứ lọt xuống client chỉ là tên + cờ của phương thức —
+    // không có số tài khoản nào (tài khoản nằm ở kho VietQR, không ở bảng này).
     sdb.paymentMethod.findMany({
       where: { isActive: true },
       orderBy: { displayOrder: "asc" },
@@ -843,6 +930,7 @@ export async function loadCreateOrderFormData() {
         code: true,
         name: true,
         type: true,
+        centerId: true,
         canBuyCourse: true,
         canBuyPackage: true,
         canBuyExam: true,
@@ -966,14 +1054,19 @@ export async function sendManualOrderEmailAction(input: {
   return { ok: true as const, logId: result.logId };
 }
 
-// ─── Commit 4 — thanh toán 2 đợt ─────────────────────────────────────
+// ─── THANH TOÁN LINH HOẠT — kế hoạch n đợt ───────────────────────────
+//
+// Chủ dự án chốt đổi "thanh toán 2 đợt" thành đóng theo 1/2/3/4 học phần. Luật chia tiền,
+// hạn từng đợt và phép kiểm nằm ở `lib/payments/ke-hoach-dot.ts` (thuần, có test) —
+// action này chỉ gác quyền/scope rồi chuyển tiếp.
 export async function recordOrderInstallmentsAction(input: {
   orderId: string;
-  dot1Amount: number;
-  dot2Amount: number;
-  dot2DueDate: string | null;
-  // OD1 — số ngày nhắc trước hạn đợt 2; null → cron dùng SystemSetting default 14.
-  reminderDays?: number | null;
+  dots: Array<{
+    amount: number;
+    daThu: boolean;
+    dueDate: string | null;
+    reminderDays?: number | null;
+  }>;
 }): Promise<{ ok: boolean; error?: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
@@ -989,14 +1082,22 @@ export async function recordOrderInstallmentsAction(input: {
     return { ok: false, error: "Không tìm thấy đơn hàng" };
   }
 
+  // Ngày từ client là chuỗi — quy về Date ở BIÊN, để phần trong chỉ có một kiểu.
+  // Ngày hỏng (`Invalid Date`) quy về null rồi để `kiemKeHoachDot` từ chối với câu nói
+  // được: cho `Invalid Date` đi tiếp là ghi `dueDate` rác vào DB và cron im lặng bỏ qua.
   const res = await recordInstallmentPlan({
     orderId: input.orderId,
-    dot1Amount: Math.round(input.dot1Amount),
-    dot2Amount: Math.round(input.dot2Amount),
-    dot2DueDate: input.dot2DueDate ? new Date(input.dot2DueDate) : null,
+    dots: input.dots.map((d) => {
+      const ngay = d.dueDate ? new Date(d.dueDate) : null;
+      return {
+        amount: Math.round(d.amount),
+        daThu: d.daThu === true,
+        dueDate: ngay && !Number.isNaN(ngay.getTime()) ? ngay : null,
+        reminderDays:
+          d.reminderDays == null ? null : Math.max(0, Math.round(d.reminderDays)),
+      };
+    }),
     actorId: session.user.id ?? null,
-    reminderDays:
-      input.reminderDays == null ? null : Math.max(0, Math.round(input.reminderDays)),
   });
   if (res.ok) {
     revalidatePath(`/orders/${input.orderId}`);

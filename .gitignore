@@ -30,6 +30,8 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 appdev.log
+# log của dev server chạy tay ở worktree (pnpm exec next dev --webpack > dev-local.log)
+dev-local.log
 *.dev.log
 
 # env files — chặn TẤT CẢ biến thể (.env.vercel, .env.bak, .env.cs2…),
@@ -102,3 +104,20 @@ shots-teacher/
 
 # ghi chép làm việc của agent (không commit)
 .zalocrm-work/
+# docs/merge-lead — dữ liệu lead cũ nhập tay: 795 SĐT + tên phụ huynh/học viên THẬT.
+# Repo này PUBLIC (github.com/hptkk29/satarobo-vn) ⇒ commit file là công khai PII.
+# Script `import:legacy-leads` đọc bản gốc tại chỗ; không nhân bản CSV ra nơi khác.
+docs/merge-lead/*.csv
+docs/merge-lead/*.xlsx
+docs/merge-lead/*.sql
+docs/merge-lead/*.txt
+
+# Dữ liệu PROD dump ra lúc chạy script vận hành (scripts/don-customtitle-may-chep.ts …).
+# KHÔNG BAO GIỜ commit — đây là bản sao nội dung thật của khách hàng.
+var/
+
+# CodeGraph — chỉ mục mã nguồn, cục bộ theo từng máy (134 MB đo 13/09/2026).
+# CodeGraph tự sinh `.codegraph/.gitignore` chặn nội dung bên trong, nhưng dòng này đặt
+# lưới chặn ở nơi KHÔNG phụ thuộc vào một file do công cụ khác quản lý: xoá nhầm file con
+# thì vẫn còn dòng này. Chủ dự án chốt 15/09/2026.
+.codegraph/

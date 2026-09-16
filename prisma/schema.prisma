@@ -311,6 +311,9 @@ model Center {
 
   // 27/08 — sổ người hưởng hoa hồng theo cơ sở (QC 1% + Quản lý TT 2%).
   commissionAssignees CenterCommissionAssignee[] @relation("CenterCommissionAssignees")
+  // 30/08/2026 — phương thức thanh toán RIÊNG của cơ sở (dòng centerId = null là
+  // phương thức dùng chung, không thuộc cơ sở nào).
+  paymentMethods PaymentMethod[]
 
   // Module chấm công v3 (L1 · 06/09/2026) — điểm chấm công của cơ sở vận hành.
   workLocations WorkLocation[]
@@ -1165,6 +1168,7 @@ model Holiday {
   type             HolidayType              @default(HOLIDAY)
   note             String?                  @db.Text
   // ── Module chấm công v3 (L1 · 06/09/2026) — T-04: lễ là CỘT RIÊNG, hệ số Kế toán tự set.
+  // Cột nullable/additive — KHÔNG đổi nghĩa dòng đang có (mọi reader Holiday dời buổi học).
   attendanceEffect HolidayAttendanceEffect?
   coefficient      Float                    @default(1) // holidayPaidUnits = dayCreditExpected × coefficient
   briefMode        ShiftBriefMode? // tin 19:00: SUPPRESS = không gửi, REPLACE = thay toàn bộ
@@ -1535,16 +1539,6 @@ model Lead {
   convertedById    String?
   convertedAt      DateTime?  @db.Timestamptz(6)
 
-  // C-06 (SL-10, quyết định B5 + 12(b) ngày 24/08/2026) — LÝ DO RỚT ở cấp PHỤ HUYNH.
-  // Ô ghi chú TỰ DO, không danh mục: chủ dự án bỏ hẳn enum lý do rớt, đổi lại là không
-  // có báo cáo "top lý do rớt" (đã chấp nhận).
-  // Trạng thái rớt thì theo TỪNG CON (`LeadChild.status = LOST`) — hai tầng khác nhau,
-  // cố ý. Hệ quả đã biết: hai con rớt vì hai lý do khác nhau ⇒ lượt ghi sau ĐÈ lượt
-  // trước; lý do của từng con tra ở `AuditLog` + `LeadActivity` (mỗi lượt đánh dấu ghi
-  // kèm tên + id của đứa con).
-  lostNote String?   @db.Text
-  lostAt   DateTime? @db.Timestamptz(6)
-
   // ─── G-06 (26/08/2026) — MÃ CAMPAIGN + NGÀY HẸN KẾ TIẾP, cấp PHỤ HUYNH ──────
   //
   // Quảng cáo dẫn tới một CUỘC LIÊN LẠC với người lớn, không thuộc riêng đứa con
@@ -1591,6 +1585,19 @@ model Lead {
   // optional: chỉ là gợi ý khi tạo đơn; orderKind=COURSE → expectedCourseId, =PRODUCT → expectedProductId.
   expectedCourseId  String?
   expectedProductId String?
+
+  /// ─── Chia lead (29/08/2026) ──────────────────────────────────────────────
+  /// Đường nào đưa lead này tới chủ của nó. Null = lead có TRƯỚC ngày đổi, không
+  /// suy ngược được — đừng đoán.
+  assignmentSource LeadAssignSource?
+  /// Người THAO TÁC gán (quản lý giao tay). Null khi máy chia.
+  assignedById     String?
+  /// LẦN NHẬP GẦN NHẤT. Khác `createdAt`: khách gọi lại/điền form lại thì không
+  /// đẻ lead mới (trùng SĐT), nhưng mốc này nhảy — nếu không, phiếu nóng trông
+  /// y hệt phiếu nguội ba tháng.
+  lastInboundAt    DateTime?         @db.Timestamptz(6)
+  /// Đã vào hệ thống bao nhiêu lần (kể cả các lần bị chặn vì trùng).
+  inboundCount     Int               @default(1)
 
   deletedAt DateTime? @db.Timestamptz(6)
   createdAt DateTime  @default(now()) @db.Timestamptz(6)
@@ -1640,6 +1647,16 @@ model Lead {
   /// Lead rơi khỏi phễu ở BẬC NÀO (trạng thái ngay trước khi sang DANG_NUOI_DUONG
   /// hoặc mất). NULL với toàn bộ lead cũ — không suy ngược được, đừng bịa.
   droppedAtStage  LeadStatus?
+  /// LÝ DO RỚT ở cấp PHỤ HUYNH — ô ghi chú TỰ DO, không danh mục.
+  /// C-06 (SL-10, quyết định B5 + 12(b) ngày 24/08/2026): chủ dự án bỏ hẳn enum lý do
+  /// rớt, đổi lại là KHÔNG có báo cáo "top lý do rớt" — đã chấp nhận.
+  ///
+  /// Trạng thái rớt thì theo TỪNG CON (`LeadChild.status = LOST`) — hai tầng khác nhau,
+  /// cố ý. Hệ quả đã biết: hai con rớt vì hai lý do khác nhau ⇒ lượt ghi sau ĐÈ lượt
+  /// trước; lý do của từng con tra ở `AuditLog` + `LeadActivity` (mỗi lượt đánh dấu ghi
+  /// kèm tên + id của đứa con).
+  lostNote        String?     @db.Text
+  lostAt          DateTime?   @db.Timestamptz(6)
   /// 27/08/2026 — cột `dropReason` ĐÃ GỠ. Lý do rơi nay dùng chung `lostNote`/`lostAt`
   /// ở trên: hai cột cùng trả lời "vì sao phiếu này rụng", mà `lostNote` đã là một
   /// tính năng chạy thật (đánh dấu rớt theo TỪNG CON, bảng "Lead rớt" ở dashboard
@@ -1668,6 +1685,7 @@ model Lead {
   // G-06 — "hôm nay phải gọi lại những ai": lọc theo khoảng ngày, quét thường xuyên.
   @@index([nextFollowUpAt])
 }
+
 
 /// GĐ1 — SỔ ĐỔI TRẠNG THÁI LEAD. Một dòng cho MỖI lần trạng thái đổi thật.
 ///
@@ -2278,19 +2296,41 @@ model ClassSession {
   notes   String?  @db.Text
 
   // Phase E6 — link session to curriculum lesson for progress tracking
-  lessonId    String?
-  lessonNotes String? @db.Text
+  lessonId          String?
+  lessonNotes       String? @db.Text
   // R7-06 — trỏ tới ClassSessionPlan (kế hoạch buổi của lớp); lessonId cũ giữ 2-phase.
-  planId      String?
+  planId            String?
   // W2-4b — phòng học theo TỪNG BUỔI (để soát trùng phòng per-session); khác actualRoomId (ghi sau-thực-tế).
-  roomId      String?
+  roomId            String?
+  // 07/09 — PHÂN LOẠI BUỔI (chính thức / Coach / bù / vượt / workshop / sự kiện). null = chưa
+  // phân loại ⇒ tính như dòng `SessionCategory.isDefault`. Cố ý NULLABLE: ~toàn bộ buổi cũ không
+  // ai đi gán lại được, và ép NOT NULL là chặn mọi đường tạo buổi đang có.
+  sessionCategoryId String?
+
+  // ── SNAPSHOT SĨ SỐ BIÊN CHẾ (chốt chủ dự án 07/09/2026) ────────────────────────────────
+  // "Sĩ số thực tế" ở SR.QD.230 PL04 là sĩ số BIÊN CHẾ, không phải điểm danh — và phải GHI CỨNG
+  // tại thời điểm buổi diễn ra, KHÔNG join động từ danh sách lớp hôm nay.
+  //
+  // Vì sao không join động: học viên vào lớp tháng 10 mà làm đổi số buổi tháng 8 là đổi cả kỳ
+  // lương đã chốt. Cùng loại lỗi với bút toán điều chỉnh bên thanh toán.
+  //
+  // Vì sao không dùng điểm danh: số tính tiền phải biết TRƯỚC khi buổi diễn ra; lấy điểm danh thì
+  // lương giáo viên dao động theo học viên nghỉ ốm, và tạo động cơ ngược.
+  /// Số học viên BIÊN CHẾ của lớp tại thời điểm chốt. null = chưa có số (buổi chưa hoàn tất, hoặc
+  /// buổi cũ chưa backfill).
+  rosterSize   Int?
+  /// Số ở trên đến từ đâu. SNAPSHOT = đo tại lúc hoàn tất buổi (tin được); các giá trị còn lại là
+  /// SUY ĐOÁN khi backfill dữ liệu cũ — không được trộn lẫn hai loại khi tính tiền.
+  rosterSource ClassRosterSource?
+  /// Thời điểm chốt con số. Có nó mới phân biệt được "chốt lúc dạy" với "backfill tháng sau".
+  rosterAt     DateTime?          @db.Timestamptz(6)
   // FL3-02 — centerId denormalized từ class. ĐÃ flip vào SCOPED_MODELS (db-scope.ts);
   // mọi write set centerId + backfill migration 20260624010000. scopedDb cách ly theo cơ sở.
-  centerId    String?
+  centerId     String?
   // P1 · US-07 — cột SONG SONG với centerId (ghi kép tới hết P4).
   // Cột TRẦN, không FK — giống 28 bảng của PR-A. Ý nghĩa của NULL theo
   // từng bảng: xem BACKFILL_SPECS trong lib/org/center-bridge.ts.
-  orgUnitId   String?
+  orgUnitId    String?
 
   // LMS-3 — quy trình sau buổi + checklist
   status            SessionStatus @default(SCHEDULED)
@@ -2323,6 +2363,7 @@ model ClassSession {
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   class            Class                    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  sessionCategory  SessionCategory?         @relation(fields: [sessionCategoryId], references: [id], onDelete: SetNull)
   lesson           Lesson?                  @relation(fields: [lessonId], references: [id], onDelete: SetNull)
   plan             ClassSessionPlan?        @relation(fields: [planId], references: [id], onDelete: SetNull)
   room             Room?                    @relation(fields: [roomId], references: [id], onDelete: SetNull)
@@ -2333,6 +2374,7 @@ model ClassSession {
 
   @@index([classId])
   @@index([date])
+  @@index([sessionCategoryId])
   @@index([lessonId])
   @@index([planId])
   @@index([roomId])
@@ -2828,7 +2870,9 @@ model Employee {
 
   // CEO flag (chỉ 1 employee được isCEO=true tại 1 thời điểm)
   isCEO           Boolean @default(false)
-  // Module chấm công v3 (T-02, 05/09/2026): miễn tính công (Mr Phúc). Chỉ SUPER_ADMIN set.
+  // Module chấm công v3 (T-02, 05/09/2026): miễn tính công (Mr Phúc). Cờ theo NGƯỜI, chỉ
+  // SUPER_ADMIN set (khuôn SEC-M15 của isCEO) — KHÔNG tái dùng isCEO (cờ vinh danh công khai).
+  // Engine: EXEMPT thì không sinh StaffAttendanceDay, không vào summary kỳ.
   timesheetExempt Boolean @default(false)
 
   // Meta
@@ -3876,22 +3920,103 @@ model LeadAssignmentConfig {
 // Dòng của người đã rời vòng được GIỮ LẠI: họ quay lại thì vào đúng chỗ cũ,
 // không làm lại từ 0 rồi nhận dồn.
 model LeadRotationTurn {
-  id         String    @id @default(cuid())
-  orgUnitId  String
-  userId     String
+  id           String    @id @default(cuid())
+  orgUnitId    String
+  userId       String
   /// Vị trí trong vòng. CHỈ TĂNG — không có đường về 0.
-  turns      Int       @default(0)
+  turns        Int       @default(0)
   /// Khởi điểm lúc VÀO vòng (0 nếu có mặt từ đầu; = mức thấp nhất của vòng nếu
   /// vào sau). Số lead thật sự đã nhận qua vòng chia = `turns - seedTurns`.
   /// Không có cột này thì bảng bằng chứng nói sai về đúng người dễ bị soi nhất.
-  seedTurns  Int       @default(0)
+  seedTurns    Int       @default(0)
   /// Lần gần nhất tới lượt; null = chưa bao giờ. Dùng để phá hoà cho công bằng.
-  lastTurnAt DateTime? @db.Timestamptz(6)
-  createdAt  DateTime  @default(now()) @db.Timestamptz(6)
-  updatedAt  DateTime  @updatedAt @db.Timestamptz(6)
+  lastTurnAt   DateTime? @db.Timestamptz(6)
+  /// 29/08/2026 — CÓ NHẬN LEAD KHÔNG. Đây là tư cách thành viên pool, và nó nằm
+  /// CHUNG HÀNG với bộ đếm có chủ đích (xem khối ghi chú bên dưới model này).
+  ///
+  /// Trước ngày này "pool" là điều kiện ngầm — `role SALES_CSM + isActive + thuộc
+  /// đơn vị` — nên không tắt được một người mà không khoá cả tài khoản của họ.
+  isActive     Boolean   @default(true)
+  pausedAt     DateTime? @db.Timestamptz(6)
+  /// Bắt buộc ở đường ghi khi tắt: tắt là lấy lead khỏi tay người ta.
+  pausedReason String?
+  createdAt    DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @db.Timestamptz(6)
 
   @@unique([orgUnitId, userId])
+  @@index([orgUnitId, isActive, turns])
   @@index([orgUnitId])
+}
+
+// ─── Chia lead tự động (29/08/2026) ─────────────────────────────────────────
+//
+// `LeadRotationTurn` ở trên vừa là BỘ ĐẾM LƯỢT vừa là TƯ CÁCH THÀNH VIÊN pool —
+// cố ý một bảng. Hai thứ đó cùng khoá `(orgUnitId, userId)`, cùng được đọc/ghi
+// trong một transaction dưới cùng một advisory lock, và luật "bật lại thì seed
+// turns = MIN(pool đang bật)" là một thao tác ĐỌC isActive rồi GHI turns nguyên
+// tử. Chung một hàng thì đó là MỘT `UPDATE`; tách hai bảng thì đó là hai bảng
+// phải khoá đúng thứ tự — và sáu tháng nữa sẽ có người khoá sai thứ tự.
+//
+// Hai bảng dưới thì KHÁC: chúng là NHẬT KÝ, không phải trạng thái. Chia tách là
+// đúng — trạng thái đọc mỗi lần chia, nhật ký chỉ ghi rồi đọc khi cần tra.
+
+/// Đường nào đưa lead tới chủ của nó. Chỉ `AUTO` tiêu lượt của vòng.
+enum LeadAssignSource {
+  AUTO /// máy chia theo vòng luân phiên (hoặc tỷ lệ chốt)
+  SELF /// sale tự nhập phiếu cho ĐÚNG cơ sở của mình
+  MANAGER /// quản lý giao tay / đổi chủ
+  IMPORT /// nhập Excel, dòng có sẵn tên sale hợp lệ
+  AFFILIATE /// landing page có mã NV, người đó là sale ĐÚNG cơ sở khách chọn
+  DUPLICATE /// trùng SĐT — giữ nguyên chủ cũ, không đụng bộ đếm
+}
+
+/// SỔ CHIA LEAD — mỗi lượt đưa lead tới một người là một dòng ở đây.
+///
+/// Vì sao tách khỏi `LeadAuditLog`/`LeadAssignmentHistory` đang có: hai bảng đó
+/// trả lời "lead này từng đổi chủ thế nào". Bảng này trả lời câu khác — "vòng
+/// chia có công bằng không" — nên nó phải mang `consumedTurn` + `poolSnapshot`,
+/// hai thứ vô nghĩa với lịch sử đổi chủ. Ghi cả lượt KHÔNG tiêu lượt: đó chính
+/// là chỗ giải thích vì sao "tổng lead đang giữ" cao hơn "lượt đã nhận".
+model LeadAssignmentLog {
+  id             String           @id @default(cuid())
+  leadId         String?
+  /// Luật cứng Nền Hệ thống #3: bảng MỚI dùng `orgUnitId`, không thêm `centerId`.
+  orgUnitId      String
+  assignedToId   String?
+  createdById    String?
+  source         LeadAssignSource
+  consumedTurn   Boolean
+  /// `turns` của người nhận NGAY SAU lượt này. Null khi không tiêu lượt.
+  turnCountAfter Int?
+  /// Ảnh chụp pool lúc chia: `[{userId, turns, isActive}]`. Không có nó thì một
+  /// tháng sau không ai dựng lại được "vì sao lượt đó rơi vào người này".
+  poolSnapshot   Json?
+  note           String?
+  createdAt      DateTime         @default(now()) @db.Timestamptz(6)
+
+  @@index([orgUnitId, createdAt])
+  @@index([assignedToId, createdAt])
+  @@index([leadId])
+}
+
+/// Nhật ký THAY ĐỔI POOL — ai bật/tắt/thêm ai, vì sao.
+///
+/// `reason` để nullable ở tầng DB nhưng đường ghi BẮT BUỘC có với `DEACTIVATE`
+/// và `MANUAL_ADJUST`: hai thao tác đó lấy lead khỏi tay người ta.
+model LeadAssignmentPoolEvent {
+  id        String   @id @default(cuid())
+  orgUnitId String
+  userId    String
+  /// ADD | ACTIVATE | DEACTIVATE | SEED | RESET_UNIT | MANUAL_ADJUST | TRANSFER
+  action    String
+  fromValue Json?
+  toValue   Json?
+  reason    String?
+  actorId   String
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([orgUnitId, createdAt])
+  @@index([userId, createdAt])
 }
 
 // Module CRM & Lead PHẦN 3/4 — log chuyển lead (sale/cơ sở) + bàn giao.
@@ -4036,7 +4161,15 @@ model PaymentMethod {
   canBuyProduct Boolean @default(false) // Sprint 5.10
   canDeposit    Boolean @default(false) // wallet topup — reserved
 
-  // Bank account info (BANK_TRANSFER only)
+  // ─── Tài khoản nhận tiền (chỉ BANK_TRANSFER) ─────────────────────────────
+  // ⚠️ 31/08/2026 — 4 cột này TỪNG là dữ liệu chết (không đường tiền nào đọc), nay là
+  // NGUỒN SỰ THẬT DUY NHẤT: mã QR gửi phụ huynh dựng từ đây. Kho cũ
+  // `IntegrationConfig` khoá `VIETQR:<centerId>` đã NGỪNG là nơi khai (màn /admin/tich-hop
+  // gỡ khối đó) và chỉ còn là đường LÙI cho dữ liệu cũ — xem lib/payments/vietqr.ts.
+  //
+  // Vì tài khoản gắn vào PHƯƠNG THỨC (không phải vào cơ sở), một cơ sở có thể khai nhiều
+  // tài khoản bằng cách tạo nhiều phương thức chuyển khoản (vd Vietcombank + MB).
+  bankBin           String? // mã ngân hàng 6 số chuẩn VietQR (970415 = Vietinbank)
   bankName          String?
   bankBranch        String?
   bankAccountNumber String?
@@ -4048,6 +4181,31 @@ model PaymentMethod {
   displayOrder Int     @default(0)
   isActive     Boolean @default(true)
 
+  // ─── Thanh toán theo cơ sở (30/08/2026) ──────────────────────────────────
+  // `centerId = NULL` nghĩa là PHƯƠNG THỨC DÙNG CHUNG cho mọi cơ sở (tiền mặt,
+  // cổng online…), KHÔNG phải "chưa gán". Đây là lý do PaymentMethod phải khai ở
+  // CẢ HAI nơi trong lib/db-scope.ts: `SCOPED_MODELS` (để cách ly) và
+  // `NULL_IS_GLOBAL_MODELS` (để dòng dùng chung không bị `centerId IN (...)` ẩn mất
+  // khỏi chính người cấp cơ sở — bỏ sót là form tạo đơn hiện danh sách RỖNG).
+  //
+  // ⚠️ `code` VẪN @unique TOÀN CỤC — cố ý không đổi sang @@unique([code, centerId]):
+  //   (a) đổi khoá unique là ALTER trên bảng đang có dữ liệu prod (luật cứng #4),
+  //   (b) 5 chỗ đang gọi `where: { code }` (3 file seed + 2 chỗ trong _actions) sẽ
+  //       vỡ typecheck, và
+  //   (c) Postgres coi NULL là khác nhau nên ("BANK_TRANSFER", NULL) vẫn chèn được
+  //       hai lần ⇒ khoá ghép KHÔNG chặn được đúng ca cần chặn.
+  // Quy ước thay thế: phương thức riêng của cơ sở đặt mã có hậu tố cơ sở
+  // (`BANK_CS1`, `BANK_CS2` — đúng thứ prisma/seed-uat/01-nen.ts đã làm sẵn).
+  centerId String?
+  // Restrict (KHÔNG phải SetNull mặc định của Prisma cho quan hệ optional): xoá cơ sở
+  // mà để null lại là biến phương thức RIÊNG của cơ sở đó thành DÙNG CHUNG — tài khoản
+  // ngân hàng của một cơ sở đã đóng bỗng hiện ra cho mọi cơ sở còn lại.
+  center   Center? @relation(fields: [centerId], references: [id], onDelete: Restrict)
+
+  // P1 · US-07 — cột SONG SONG với centerId (ghi kép tới hết P4). Tự điền qua
+  // lib/org/dual-write.ts nhờ khai PaymentMethod trong BACKFILL_SPECS.
+  orgUnitId String?
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
@@ -4058,6 +4216,8 @@ model PaymentMethod {
 
   @@index([code])
   @@index([isActive, displayOrder])
+  @@index([centerId, isActive, displayOrder])
+  @@index([orgUnitId])
 }
 
 model Order {
@@ -4115,6 +4275,18 @@ model Order {
   paidAt        DateTime? @db.Timestamptz(6)
 
   // Confirmation by staff
+  // 31/08/2026 — NGƯỜI TẠO ĐƠN (cột danh sách /admin/orders).
+  //
+  // Cột TRẦN, KHÔNG quan hệ Prisma — theo đúng lối của `confirmedByUserId` ngay dưới,
+  // `Payment.recordedById`, `installmentRequestedById`…: xoá/vô hiệu một nhân sự không
+  // được kéo theo hay chặn đơn hàng. Tra tên bằng một query `user.findMany` ở tầng đọc
+  // (khuôn mẫu: `queryPayments` trong admin/payments/_actions.ts).
+  //
+  // ⚠️ Đơn TẠO TRƯỚC ngày này để NULL vĩnh viễn: không có nguồn nào suy ngược ra người
+  // tạo (AuditLog chưa từng ghi sự kiện tạo đơn — đo trên DB: chỉ có DISCOUNT_APPROVED).
+  // Danh sách hiển thị "—" cho nhóm đó, KHÔNG đoán bừa.
+  createdById String?
+
   confirmedByUserId String?
   confirmedAt       DateTime? @db.Timestamptz(6)
 
@@ -6070,12 +6242,29 @@ model CourseDiscount {
 // ─── R7-06 — Kế hoạch buổi học theo lớp (snapshot từ curriculum pin) ──────────
 /// Kế hoạch từng buổi của 1 lớp, sao từ Lesson của curriculum version pin lúc tạo lớp.
 /// Reorder/ghi chú sửa ở đây — KHÔNG đụng Lesson gốc (AC4).
+/// Kế hoạch buổi đã GHIM cho một lớp — bản sao đông cứng của giáo trình lúc tạo lớp.
+///
+/// ⚠️ ĐỪNG thêm `@@unique([classId, order])`. Đo prod 08/09: 0 cặp trùng, nên nhìn thì
+/// tưởng thêm được — nhưng nó sẽ LÀM VỠ `adoptCurriculumVersion` (`lib/classes/snapshot.ts`).
+/// Hàm đó giữ nguyên `order` GỐC của plan thuộc buổi COMPLETED, rồi đánh số plan mới từ
+/// `keptCount` trở đi. Lớp `CS1.SATA3.26.001` có 1 buổi COMPLETED mà plan của nó nằm ở
+/// `order` 47 ⇒ `keptCount = 1` ⇒ plan mới xin lại đúng `order` 47 đang bị giữ ⇒ vi phạm
+/// ràng buộc ⇒ rollback CẢ transaction, và lớp đó vĩnh viễn không đổi được giáo trình.
+/// Muốn thêm thì phải sửa hàm đó đánh lại `order` liên tục từ 0 trước — việc riêng, rủi ro riêng.
+///
+/// Cùng lý do, quan hệ `ClassSession.planId` giữ `onDelete: SetNull`: `snapshot.ts:126` là
+/// đường xoá plan DUY NHẤT trong mã sản phẩm và nó dựa vào `SetNull` để buổi tương lai
+/// tự nhả plan cũ. Xem `docs/dieu-tra-lech-bai-hoc.md`.
 model ClassSessionPlan {
   id          String   @id @default(cuid())
   classId     String
   class       Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
   seq         Int // số thứ tự buổi gốc theo curriculum
   lessonId    String? // tham chiếu Lesson nguồn (snapshot; không ràng FK cứng)
+  /// Tên buổi ĐÔNG CỨNG, chép từ `Lesson.title` lúc `createSessionPlansForClass` chạy.
+  /// Giáo trình đổi tên bài SAU đó thì cột này KHÔNG đổi theo — đó là gốc của sự cố
+  /// "lệch tên bài" 08/09. `meaningfulSessionTitle` loại giá trị rỗng-nghĩa ("Buổi 7"),
+  /// nên chỉ tên THẬT cũ mới che được tên mới.
   customTitle String?
   note        String?  @db.Text
   order       Int      @default(0) // thứ tự hiển thị (cho phép reorder)
@@ -6098,7 +6287,19 @@ enum PaymentAccountantStatus {
   CONFIRMED // kế toán xác nhận (giảm công nợ, sinh Receipt)
   REJECTED // kế toán từ chối (bắt buộc reason)
   REFUNDED // hoàn (bút toán âm, không xóa gốc)
-  ADJUSTED // bản điều chỉnh (trỏ adjustmentOfId)
+  // ⚠️ 07/09/2026 — ĐÃ BỎ `ADJUSTED`. Nó là LOẠI bút toán, không phải trạng thái kế
+  // toán: nhét vào đây thì mọi truy vấn lọc `accountantStatus = CONFIRMED` đều bỏ qua
+  // bút toán điều chỉnh, nên số kế toán vừa sửa không bao giờ tới phụ huynh. Loại bút
+  // toán nay nằm ở cột riêng `Payment.paymentType`.
+}
+
+/// Loại bút toán trong sổ thu (07/09/2026 — tách khỏi `accountantStatus`).
+///
+/// KHÔNG có `REFUND`: hoàn tiền đã có `accountantStatus = REFUNDED`, thêm ở đây nữa là
+/// hai cách diễn đạt cùng một sự kiện và sớm muộn hai chỗ sẽ lệch nhau.
+enum PaymentType {
+  PAYMENT // khoản thu bình thường
+  ADJUSTMENT // bút toán điều chỉnh — lưu DELTA, trỏ `adjustmentOfId` về phiếu thu gốc
 }
 
 enum ReceiptStatus {
@@ -6121,6 +6322,8 @@ model Payment {
 
   saleStatus       PaymentSaleStatus       @default(RECORDED)
   accountantStatus PaymentAccountantStatus @default(PENDING)
+  /// LOẠI bút toán. Mặc định PAYMENT — mọi dòng cũ backfill về đây.
+  paymentType      PaymentType             @default(PAYMENT)
   recordedById     String?
   confirmedById    String?
   confirmedAt      DateTime?               @db.Timestamptz(6)
@@ -7219,6 +7422,25 @@ model MessageAttachment {
 }
 
 // Chỉ dùng cho ANNOUNCEMENT — GV cần biết PH nào đã đọc thông báo lịch học
+// Phụ huynh ĐÃ ĐỌC một mục trên bảng tin portal.
+//
+// `itemId` là id của MỤC BẢNG TIN, không phải khoá ngoại tới `Notification`:
+// bảng tin portal v2 (`lib/portal/notification-feed.ts` — bản PROD đang chạy) tổng hợp
+// 7 nhóm, phần lớn KHÔNG phải dòng `Notification` (nhận xét buổi, học bù, học phí,
+// học bạ, khảo sát) và mang id tổng hợp dạng `nt-<id>` / `mk-need-<id>`. Khoá theo
+// item mới phủ được cả bảng tin; khoá theo `Notification.id` chỉ vá được một nhóm.
+//
+// Cùng hình dạng với `AnnouncementRead` ngay dưới (khoá kép, không FK) — bảng đọc thì
+// không cần cascade, và giữ hai bảng giống nhau để ai đọc một cái là hiểu cái kia.
+model PortalFeedRead {
+  itemId String
+  userId String
+  readAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@id([itemId, userId])
+  @@index([userId])
+}
+
 model AnnouncementRead {
   messageId String
   userId    String
@@ -9296,108 +9518,9 @@ enum MediaType {
   VIDEO
 }
 
-/// KHÁC `MediaStatus` (của `ClassSessionMedia` cũ) — cố ý đặt tên riêng để hai hệ không
-/// lẫn vào nhau trong lúc còn sống song song. `PURGED` = đã xoá file khỏi R2, giữ dòng
-/// để còn dấu vết ai loại và loại lúc nào.
-enum MediaAssetStatus {
-  PENDING
-  APPROVED
-  REJECTED
-  PURGED
-}
 
-enum SessionReviewStatus {
-  OPEN
-  APPROVED
-  NO_MEDIA_DECLARED
-}
 
-/// Một tấm ảnh / một video của MỘT BUỔI HỌC.
-model MediaAsset {
-  id String @id @default(cuid())
 
-  centerId  String // cách ly cơ sở (scopedDb) — MỌI create PHẢI set, scopedDb không che write
-  // Luật Nền Hệ thống #3: bảng mới mang dữ liệu theo đơn vị phải có `orgUnitId`.
-  // Giữ CẢ HAI vì cutover P4 chưa bật ở đâu — enforcement hôm nay vẫn chạy trên centerId.
-  orgUnitId String?
-
-  classId        String
-  classSessionId String
-  /// Ngày của buổi (@db.Date) — denormalize để dựng cây ngày→lớp không phải join.
-  sessionDate    DateTime @db.Date
-
-  uploadedById   String
-  uploadedByName String?
-
-  /// CẦU SANG HỆ CŨ, sống đúng một giai đoạn (2-phase migration).
-  ///
-  /// `ClassSessionMedia` vẫn là bản ghi GIAO cho phụ huynh (consent, tag học viên, portal,
-  /// đính vào nhận xét buổi) — MediaAsset chỉ thay phần KHO + DUYỆT. Cột này nối 1-1 hai
-  /// dòng sinh ra từ cùng một lần tải lên, để lúc QLCS duyệt ở màn mới thì dòng cũ cũng
-  /// đổi trạng thái theo, không phải đoán bằng cách so `fileUrl`.
-  /// Phase B (sau khi luồng mới chạy ổn trên prod): gỡ ClassSessionMedia → gỡ cột này.
-  legacyMediaId String? @unique
-
-  type        MediaType
-  /// Khoá vật thể trên R2. KHÔNG lưu URL đầy đủ — bucket/CDN đổi thì mọi dòng chết.
-  r2Key       String
-  thumbKey    String?
-  /// Chỉ video. Dùng cho cổng "phải xem hết" (BA §7.3b).
-  durationSec Int?
-
-  status         MediaAssetStatus @default(PENDING)
-  reviewedById   String?
-  reviewedByName String?
-  reviewedAt     DateTime?        @db.Timestamptz(6)
-  rejectReason   String?          @db.Text
-  /// Duyệt bằng nút "Duyệt tất cả" chứ không mở từng tấm — để về sau soi lại chất lượng duyệt.
-  approvedInBulk Boolean          @default(false)
-  /// Tỉ lệ đã xem của video (0..1).
-  watchedRatio   Float?
-  /// Hạn dọn file khỏi R2 sau khi bị loại (BA §7.3a — xoá mềm 7 ngày, có đường khôi phục).
-  purgeAfterAt   DateTime?        @db.Timestamptz(6)
-
-  createdAt DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @db.Timestamptz(6)
-
-  @@index([centerId, sessionDate, status])
-  @@index([classSessionId, status])
-  @@index([status, purgeAfterAt])
-  @@index([orgUnitId])
-}
-
-/// KẾT LUẬN MEDIA của một buổi học — đúng MỘT dòng / buổi.
-///
-/// Đây là thứ quyết định buổi còn nằm trong cây duyệt hay không: `OPEN` là còn việc,
-/// `APPROVED` / `NO_MEDIA_DECLARED` là xong. Không có bảng này thì "lớp không có ảnh"
-/// không thể biến mất khỏi cây, và không có gì để làm báo cáo SLA.
-model SessionMediaReview {
-  id String @id @default(cuid())
-
-  classSessionId String   @unique
-  centerId       String
-  orgUnitId      String?
-  sessionDate    DateTime @db.Date
-
-  status        SessionReviewStatus @default(OPEN)
-  /// Bắt buộc ≥10 ký tự khi khai "hôm nay không có ảnh" (BA US-04).
-  noMediaReason String?             @db.Text
-
-  decidedById   String?
-  decidedByName String?
-  decidedAt     DateTime? @db.Timestamptz(6)
-
-  /// Hạn chốt (mặc định 10:00 hôm sau, sửa ở SystemSetting "media.reviewDeadlineHour").
-  /// Quá hạn KHÔNG khoá thao tác — chỉ đánh dấu trễ (BA §7.8).
-  deadlineAt DateTime @db.Timestamptz(6)
-
-  createdAt DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @db.Timestamptz(6)
-
-  @@index([centerId, sessionDate, status])
-  @@index([status, deadlineAt])
-  @@index([orgUnitId])
-}
 
 // ───────────────────────────────────────────────────────────────────────────
 // TRẦN CHI PHÍ THÁNG cho lời gọi ra ngoài (chốt 27/08/2026).
@@ -10101,6 +10224,151 @@ model CallDoNotCall {
 // của 0,5 và hệ số lễ 1–3, không phải tiền.
 // ═══════════════════════════════════════════════════════════════════════════
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/// KHÁC `MediaStatus` (của `ClassSessionMedia` cũ) — cố ý đặt tên riêng để hai hệ không
+/// lẫn vào nhau trong lúc còn sống song song. `PURGED` = đã xoá file khỏi R2, giữ dòng
+/// để còn dấu vết ai loại và loại lúc nào.
+enum MediaAssetStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PURGED
+}
+
+enum SessionReviewStatus {
+  OPEN
+  APPROVED
+  NO_MEDIA_DECLARED
+}
+
+/// Một tấm ảnh / một video của MỘT BUỔI HỌC.
+model MediaAsset {
+  id String @id @default(cuid())
+
+  centerId  String // cách ly cơ sở (scopedDb) — MỌI create PHẢI set, scopedDb không che write
+  // Luật Nền Hệ thống #3: bảng mới mang dữ liệu theo đơn vị phải có `orgUnitId`.
+  // Giữ CẢ HAI vì cutover P4 chưa bật ở đâu — enforcement hôm nay vẫn chạy trên centerId.
+  orgUnitId String?
+
+  classId        String
+  classSessionId String
+  /// Ngày của buổi (@db.Date) — denormalize để dựng cây ngày→lớp không phải join.
+  sessionDate    DateTime @db.Date
+
+  uploadedById   String
+  uploadedByName String?
+
+  /// CẦU SANG HỆ CŨ, sống đúng một giai đoạn (2-phase migration).
+  ///
+  /// `ClassSessionMedia` vẫn là bản ghi GIAO cho phụ huynh (consent, tag học viên, portal,
+  /// đính vào nhận xét buổi) — MediaAsset chỉ thay phần KHO + DUYỆT. Cột này nối 1-1 hai
+  /// dòng sinh ra từ cùng một lần tải lên, để lúc QLCS duyệt ở màn mới thì dòng cũ cũng
+  /// đổi trạng thái theo, không phải đoán bằng cách so `fileUrl`.
+  /// Phase B (sau khi luồng mới chạy ổn trên prod): gỡ ClassSessionMedia → gỡ cột này.
+  legacyMediaId String? @unique
+
+  type        MediaType
+  /// Khoá vật thể trên R2. KHÔNG lưu URL đầy đủ — bucket/CDN đổi thì mọi dòng chết.
+  r2Key       String
+  thumbKey    String?
+  /// Chỉ video. Dùng cho cổng "phải xem hết" (BA §7.3b).
+  durationSec Int?
+
+  status         MediaAssetStatus @default(PENDING)
+  reviewedById   String?
+  reviewedByName String?
+  reviewedAt     DateTime?        @db.Timestamptz(6)
+  rejectReason   String?          @db.Text
+  /// Duyệt bằng nút "Duyệt tất cả" chứ không mở từng tấm — để về sau soi lại chất lượng duyệt.
+  approvedInBulk Boolean          @default(false)
+  /// Tỉ lệ đã xem của video (0..1).
+  watchedRatio   Float?
+  /// Hạn dọn file khỏi R2 sau khi bị loại (BA §7.3a — xoá mềm 7 ngày, có đường khôi phục).
+  purgeAfterAt   DateTime?        @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([centerId, sessionDate, status])
+  @@index([classSessionId, status])
+  @@index([status, purgeAfterAt])
+  @@index([orgUnitId])
+}
+
+/// KẾT LUẬN MEDIA của một buổi học — đúng MỘT dòng / buổi.
+///
+/// Đây là thứ quyết định buổi còn nằm trong cây duyệt hay không: `OPEN` là còn việc,
+/// `APPROVED` / `NO_MEDIA_DECLARED` là xong. Không có bảng này thì "lớp không có ảnh"
+/// không thể biến mất khỏi cây, và không có gì để làm báo cáo SLA.
+model SessionMediaReview {
+  id String @id @default(cuid())
+
+  classSessionId String   @unique
+  centerId       String
+  orgUnitId      String?
+  sessionDate    DateTime @db.Date
+
+  status        SessionReviewStatus @default(OPEN)
+  /// Bắt buộc ≥10 ký tự khi khai "hôm nay không có ảnh" (BA US-04).
+  noMediaReason String?             @db.Text
+
+  decidedById   String?
+  decidedByName String?
+  decidedAt     DateTime? @db.Timestamptz(6)
+
+  /// Hạn chốt (mặc định 10:00 hôm sau, sửa ở SystemSetting "media.reviewDeadlineHour").
+  /// Quá hạn KHÔNG khoá thao tác — chỉ đánh dấu trễ (BA §7.8).
+  deadlineAt DateTime @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([centerId, sessionDate, status])
+  @@index([status, deadlineAt])
+  @@index([orgUnitId])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MODULE CHẤM CÔNG v3 (L1 · 06/09/2026) — docs/cham-cong/KE-HOACH-CHAM-CONG-v3.md §3
+//
+// Thay 5 bảng cũ (EmployeeCheckin · ShiftRegistration · TimesheetAdjustmentRequest ·
+// TimesheetEditLog · WorkShiftConfig — 0 dòng prod, giữ tới Pha B). Mọi bảng theo đơn vị
+// mang CẢ `centerId` (scopedDb hôm nay khoá theo cột này) lẫn `orgUnitId` (ghi kép qua
+// lib/org/dual-write.ts, khai ở BACKFILL_SPECS). Số công dùng Float: giá trị chỉ là bội
+// của 0,5 và hệ số lễ 1–3, không phải tiền.
+// ═══════════════════════════════════════════════════════════════════════════
+
 enum ShiftTemplateKind {
   TIMED // có giờ (S, C, HC, CG…)
   LOCATION_ONLY // chỉ nơi làm, không giờ (D1, D2)
@@ -10153,6 +10421,10 @@ enum StaffTimeLogSource {
   LEGACY_CHECKIN // chuyển từ EmployeeCheckin cũ
   MANUAL_ADJUST // TIMESHEET_FIX được duyệt
   KIOSK
+  /// Bấm Check in/out ở màn "Của tôi" cho ngày CÔNG TÁC — không QR, không điểm chấm,
+  /// `workLocationId = null`. Là ĐƯỜNG THỨ HAI, cố ý phân biệt được ở DB với đường QR
+  /// (chốt phần A 15/09/2026: "có source riêng trong StaffTimeLog để phân biệt được").
+  CONG_TAC
 }
 
 enum StaffTimeLogResult {
@@ -10214,34 +10486,41 @@ enum HolidayAttendanceEffect {
 /// Danh mục mã ca — tab DANH MỤC CA của Sheet. segments = [{start,end,kind:"WORK"|"PAID_BREAK",place?}].
 /// centerId = NULL là mã dùng chung mọi cơ sở (SCOPED + NULL_IS_GLOBAL, khuôn PaymentMethod).
 model ShiftTemplate {
-  id             String              @id @default(cuid())
-  code           String // "S", "CG", "D1"… chuỗi Sheet, KHÔNG enum — thêm mã mới không cần dev
-  name           String
-  kind           ShiftTemplateKind   @default(TIMED)
-  segments       Json // [{start:"07:45",end:"11:30",kind:"WORK",place?:"HOME"|"CENTER:CS1"|…}]
-  defaultPlace   String              @default("HOME") // HOME | CENTER:<code> | ANY_CENTER | ASSIGNED | OFFSITE | ANYWHERE
-  attendanceMode ShiftAttendanceMode @default(REQUIRED)
-  dayCredit      Float               @default(1) // K-01 theo Sheet: mọi mã làm việc = 1; X/P = 0
-  isLeave        Boolean             @default(false)
-  nominalMinutes Int? // giờ kế hoạch khi không có segment (NG = 450); LD = null
-  payMode        ShiftPayMode        @default(SHIFT)
-  scopeUserIds   String[]            @default([]) // Q-15: mã đặc thù của vài người — chỉ cảnh báo
-  effectiveFrom  DateTime            @default(dbgenerated("'2000-01-01'::date")) @db.Date
-  effectiveTo    DateTime?           @db.Date
+  id              String              @id @default(cuid())
+  code            String // "S", "CG", "D1"… chuỗi Sheet, KHÔNG enum — thêm mã mới không cần dev
+  name            String
+  kind            ShiftTemplateKind   @default(TIMED)
+  segments        Json // [{start:"07:45",end:"11:30",kind:"WORK",place?:"HOME"|"CENTER:CS1"|…}]
+  defaultPlace    String              @default("HOME") // HOME | CENTER:<code> | ANY_CENTER | ASSIGNED | OFFSITE | ANYWHERE
+  attendanceMode  ShiftAttendanceMode @default(REQUIRED)
+  dayCredit       Float               @default(1) // K-01 theo Sheet: mọi mã làm việc = 1; X/P = 0
+  isLeave         Boolean             @default(false)
+  nominalMinutes  Int? // giờ kế hoạch khi không có segment (NG = 450); LD = null
+  payMode         ShiftPayMode        @default(SHIFT)
+  /// Số CẶP QUÉT kỳ vọng trong ngày — 0 / 1 / 2. Nguồn sự thật:
+  /// `docs/cham-cong/BANG-MA-CA-CHOT.md` (chốt 09/09/2026), `catalog.test.ts` canh hai bên.
+  ///   0 = không kiểm quét, không cờ thiếu lượt (LD · D1 · D2 · X · P)
+  ///   1 = gom MỌI đoạn WORK thành MỘT cụm (vào = đầu, ra = cuối)
+  ///   2 = HAI cụm, cắt ở khoảng hở LỚN NHẤT (chỉ ST)
+  /// Mặc định 1 là chiều FAIL-CLOSED: quên khai thì hệ KIỂM THỪA, không KIỂM THIẾU.
+  soCapQuetKyVong Int                 @default(1)
+  scopeUserIds    String[]            @default([]) // Q-15: mã đặc thù của vài người — chỉ cảnh báo
+  effectiveFrom   DateTime            @default(dbgenerated("'2000-01-01'::date")) @db.Date
+  effectiveTo     DateTime?           @db.Date
   // Cột hiển thị cho màn danh mục (không dùng để tính — tính từ segments)
-  amStart        String?
-  amEnd          String?
-  pmStart        String?
-  pmEnd          String?
-  pmBreakStart   String?
-  pmBreakEnd     String?
-  note           String?             @db.Text
-  displayOrder   Int                 @default(0)
-  isActive       Boolean             @default(true)
-  centerId       String?
-  orgUnitId      String?
-  createdAt      DateTime            @default(now()) @db.Timestamptz(6)
-  updatedAt      DateTime            @updatedAt @db.Timestamptz(6)
+  amStart         String?
+  amEnd           String?
+  pmStart         String?
+  pmEnd           String?
+  pmBreakStart    String?
+  pmBreakEnd      String?
+  note            String?             @db.Text
+  displayOrder    Int                 @default(0)
+  isActive        Boolean             @default(true)
+  centerId        String?
+  orgUnitId       String?
+  createdAt       DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime            @updatedAt @db.Timestamptz(6)
 
   patterns    ShiftWeeklyPattern[]
   assignments ShiftAssignment[]
@@ -10292,6 +10571,10 @@ model ShiftAssignment {
   placeMode         ShiftPlaceMode        @default(AT_UNITS)
   allowedOrgUnitIds String[]              @default([])
   attendanceMode    ShiftAttendanceMode   @default(REQUIRED)
+  /// Bản CHỤP `ShiftTemplate.soCapQuetKyVong` lúc xếp ca — cùng lý do `attendanceMode`,
+  /// `dayCredit`, `segments` cũng được chụp: đổi danh mục hôm nay KHÔNG được đổi cách tính
+  /// của những ngày đã xếp. Engine đọc cột này, KHÔNG đọc bảng danh mục.
+  soCapQuetKyVong   Int                   @default(1)
   dayCredit         Float                 @default(1)
   isLeave           Boolean               @default(false)
   nominalMinutes    Int?
@@ -10528,16 +10811,82 @@ enum TeachingRole {
   ASSISTANT
 }
 
-/// Danh mục LOẠI CÔNG DẠY — người vận hành tự bật/tắt và chỉnh hệ số, KHÔNG cần lập trình viên.
+/// Nguồn của `ClassSession.rosterSize` — thứ phân biệt SỐ ĐO với SỐ SUY ĐOÁN.
 ///
-/// Vì sao khoá `@@unique([source, role])`: sáu tổ hợp (lớp/trải nghiệm × chính/thay/trợ giảng) là
-/// TOÀN BỘ những gì hệ thống tự nhận ra được từ dữ liệu buổi hiện có. Khoá lại thì mỗi buổi ứng
-/// đúng một loại — không cần thứ tự ưu tiên, không cần ngôn ngữ điều kiện, và không bao giờ có
-/// chuyện một buổi được đếm hai lần.
+/// Bắt buộc phải có, vì backfill dữ liệu cũ KHÔNG có nguồn nào đúng cho mọi dòng (đo 07/09/2026):
+/// đếm ghi danh thì THỪA người một chiều (`Enrollment.deletedAt` gần như không bao giờ được set
+/// khi học viên rời lớp — có luật cứng cấm dùng nó cho việc đó), còn đếm dòng điểm danh thì THIẾU
+/// người một chiều với mọi buổi trước 07/08/2026 (lưới cũ chỉ gửi những em đã sửa).
 ///
-/// ⚠️ "Dạy bù" và "vượt giờ" CHƯA có ở đây vì dữ liệu chưa phân biệt được: không cột nào đánh dấu
-/// một `ClassSession` là buổi bù, và `actualStartAt/actualEndAt` gần như luôn rỗng nên không biết
-/// buổi nào vượt giờ. Thêm hai loại đó là thêm một ô luôn bằng 0 — cần chốt cách ghi nhận trước.
+/// Trộn hai loại vào một cột không nhãn là để người mở báo cáo tin số suy đoán như số đo.
+enum ClassRosterSource {
+  /// Đo tại thời điểm hoàn tất buổi, từ danh sách ghi danh của lớp. Đây là số TIN ĐƯỢC.
+  SNAPSHOT
+  /// Backfill: đếm số dòng điểm danh của buổi (trừ khách học bù). Sát nhưng vẫn là suy đoán.
+  FROM_ATTENDANCE
+  /// Backfill: đếm ghi danh theo cửa sổ thời gian. Lệch THỪA người, càng cũ càng thừa.
+  FROM_ENROLLMENT
+  /// Backfill: không suy được. Cố ý ghi ra thay vì để null lẫn với "chưa chạy backfill".
+  UNKNOWN
+  /// Buổi được ĐÓNG bởi lệnh backfill (`scripts/backfill-dong-buoi-thoa.ts`, 09/09/2026),
+  /// không phải bởi người dạy lúc buổi diễn ra.
+  ///
+  /// Vì sao KHÔNG dùng `SNAPSHOT`: `completeSession` đếm ghi danh ĐANG CÓ tại lúc gọi. Với
+  /// một buổi dạy từ tháng 4 mà đóng vào tháng 9, con số đó là sĩ số HÔM NAY — không phải
+  /// sĩ số lúc dạy. Ghi `SNAPSHOT` là dán nhãn "số đo" lên một số suy đoán, và
+  /// `lib/payroll/roster-guard.ts` sẽ NHẬN nó vào công thức lương.
+  ///
+  /// Vì sao KHÔNG dùng `FROM_ENROLLMENT`: giá trị đó thuộc lệnh backfill SĨ SỐ
+  /// (`backfill-si-so-buoi.ts`), một việc khác. Trộn hai nguồn vào một nhãn là mất dấu vết.
+  BACKFILL_CLOSE
+}
+
+/// Danh mục PHÂN LOẠI BUỔI — buổi này là học chính thức, lớp Coach, bù, vượt, workshop hay sự kiện.
+///
+/// Vì sao là BẢNG chứ không phải enum: chủ dự án đặt luật "tự tạo tự add được qua hệ thống chứ
+/// không cần code" (chốt 05/09, nhắc lại 06/09). Enum thì thêm "Sự kiện hè 2027" phải deploy.
+///
+/// Đây là CHIỀU THỨ BA của danh mục công dạy, và là thứ gỡ trần 6 dòng — xem `TeachingCreditType`.
+model SessionCategory {
+  id                String   @id @default(cuid())
+  code              String   @unique
+  name              String
+  /// Dòng nhận những buổi CHƯA phân loại (`ClassSession.sessionCategoryId = null`). Đúng một
+  /// dòng được bật — ép bằng partial unique index, không phải bằng lời hứa ở tầng action.
+  isDefault         Boolean  @default(false)
+  /// Buổi TRÁCH NHIỆM của GV cơ hữu (Trial/Bù/Vượt/Hỗ trợ ĐT&VH — SR.QD.230 PL04 §A.1.b).
+  /// ⚠️ Hiện chỉ LƯU. Chưa nơi nào trừ định mức 50/30/20 buổi — bộ đếm đó là việc của đợt tính
+  /// TIỀN, và tiền thì chưa chốt (BA-CC-CD-001 §13 Q2/Q3 chưa có trả lời).
+  countsTowardQuota Boolean  @default(false)
+  isActive          Boolean  @default(true)
+  displayOrder      Int      @default(0)
+  createdAt         DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(6)
+
+  sessions    ClassSession[]
+  creditTypes TeachingCreditType[]
+}
+
+/// Danh mục LOẠI CÔNG DẠY — người vận hành tự bật/tắt, chỉnh hệ số và THÊM DÒNG, không cần dev.
+///
+/// ── Vì sao khoá có ba cột, và vì sao trước đó chỉ có hai ────────────────────────────────────
+/// Bản 06/09 khoá `@@unique([source, role])`: sáu tổ hợp (lớp/trải nghiệm × chính/thay/trợ giảng)
+/// là TOÀN BỘ những gì hệ thống tự nhận ra được từ dữ liệu buổi lúc đó. Hệ quả không lường trước:
+/// đó là TRẦN CỨNG 6 DÒNG, nên BLĐ chỉ sửa được hệ số chứ không bao giờ THÊM được loại nào —
+/// trong khi SR.QD.230 PL03 §4 đòi đúng những dòng không có chỗ: Coach, bù, vượt, Workshop 120%,
+/// Sự kiện. `categoryId` là chiều thứ ba mở trần đó ra.
+///
+/// ── Cách khớp một buổi với một dòng (`loaiCua` trong lib/cham-cong/cong-day.ts) ─────────────
+/// Khớp ĐÚNG `(source, role, categoryId)` trước; không có thì rơi về dòng `categoryId = null`.
+/// Dòng null là dòng BAO SÂN — sáu dòng seed cũ đều mang null nên hành vi hôm nay không đổi một
+/// con số nào, và BLĐ thêm dòng riêng cho Workshop là nó tự thắng dòng bao sân.
+///
+/// Hai dòng bao sân cùng `(source, role)` thì `loaiCua` sẽ khớp dòng nào cũng được ⇒ số công đổi
+/// theo thứ tự đọc. `@@unique` của Postgres KHÔNG chặn được (NULL coi là khác nhau), nên chặn
+/// bằng partial unique index viết tay trong migration.
+///
+/// ⚠️ Thêm được DÒNG không có nghĩa là số tự chạy: một loại chỉ nhận được buổi khi buổi đó đã
+/// được gán `sessionCategoryId`. Gán ở form sửa buổi.
 model TeachingCreditType {
   id             String               @id @default(cuid())
   code           String               @unique
@@ -10551,10 +10900,15 @@ model TeachingCreditType {
   countsInPeriod Boolean              @default(true)
   isActive       Boolean              @default(true)
   displayOrder   Int                  @default(0)
+  /// null = dòng BAO SÂN cho mọi phân loại chưa có dòng riêng. Xem chú thích khớp ở trên.
+  categoryId     String?
   createdAt      DateTime             @default(now()) @db.Timestamptz(6)
   updatedAt      DateTime             @updatedAt @db.Timestamptz(6)
 
-  @@unique([source, role])
+  category SessionCategory? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  @@unique([source, role, categoryId])
+  @@index([categoryId])
 }
 
 model LeaveType {
@@ -10575,4 +10929,192 @@ model LeaveType {
   displayOrder   Int      @default(0)
   createdAt      DateTime @default(now()) @db.Timestamptz(6)
   updatedAt      DateTime @updatedAt @db.Timestamptz(6)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// WEB PUSH — THÔNG BÁO ĐẨY VÀO ĐIỆN THOẠI NHÂN VIÊN (Đợt 1, 08/09/2026)
+//
+// Vì sao có module này: chuông trong ứng dụng (`StaffNotification` + kênh realtime
+// `user:{id}`) chỉ sống khi TAB ĐANG MỞ. Đóng trình duyệt là im. Lead nóng nhất là lead
+// vừa để lại số, mà đúng lúc đó Sale thường không ngồi trước máy — đó là lỗ mà Web Push
+// sinh ra để bịt, và là lỗ DUY NHẤT nó được giao.
+//
+// PHẠM VI ĐÃ CHỐT (chủ dự án, 08/09/2026): chỉ NHÂN VIÊN NỘI BỘ. Phụ huynh KHÔNG nhận
+// Web Push — họ đi ZNS theo chốt 09/08/2026 (`lib/chat/zns-notify.ts:20`). Lý do không
+// phải kỹ thuật: cơ chế này đứng được là nhờ ép được nhân viên iPhone "Thêm vào màn hình
+// chính" (công cụ làm việc, bắt được); phụ huynh không ép được. Đừng mở lại vòng này.
+//
+// KÊNH DUY NHẤT, KHÔNG FALLBACK. Không Firebase, không dịch vụ bên thứ ba — VAPID thuần.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+enum WebPushSubscriptionStatus {
+  ACTIVE
+  REVOKED // người dùng tự gỡ, hoặc tài khoản bị vô hiệu hoá
+  EXPIRED // push service trả 404/410 Gone — đăng ký đã chết ở đầu bên kia
+}
+
+enum WebPushOutboxStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED // còn trong hạn thử lại
+  DEAD // hết maxAttempts, hoặc lỗi 4xx vĩnh viễn
+  SKIPPED // ngoài allowlist, hết hạn, hoặc người nhận không còn thiết bị nào ACTIVE
+}
+
+/// Thiết bị đã bật thông báo đẩy của MỘT người dùng.
+///
+/// NGOẠI LỆ CÓ CHỦ ĐÍCH của luật Nền Hệ thống #3 ("bảng mới có dữ liệu theo đơn vị BẮT
+/// BUỘC có orgUnitId"): đây là dữ liệu THEO NGƯỜI, không theo đơn vị — một cái điện thoại
+/// thuộc về một nhân viên, không thuộc về cơ sở nào. Cùng khuôn `StaffNotification`,
+/// `ChatZnsNotification`, `AttendanceTicket`; và cùng lý do đã ghi thành văn tại
+/// `docs/notification/00-ke-hoach-notification.md:48` — "luật Nền Hệ thống #3 KHÔNG ÁP
+/// DỤNG: bảng này là dữ liệu theo người, không theo đơn vị; phạm vi đã được ép ở đường sinh".
+///
+/// ĐỪNG "sửa cho đúng luật #3" bằng cách thêm cột đơn vị. Đo được: `scopedDb` chỉ chèn theo
+/// `centerId`, và `lib/org/dual-write.ts` chỉ kích hoạt khi khối `data` CÓ `centerId` — nên
+/// `orgUnitId` ở đây sẽ KHÔNG BAO GIỜ được ghi tự động, và sẽ ôi thiu ngay lần nhân viên
+/// chuyển cơ sở đầu tiên. Cơ sở suy từ User TẠI THỜI ĐIỂM GỬI; cách ly ép ở đường sinh
+/// danh sách người nhận, không ở tầng bảng.
+model WebPushSubscription {
+  id     String @id @default(cuid())
+  userId String
+
+  /// URL của push service (FCM/Mozilla/WNS). KHOÁ TỰ NHIÊN: trình duyệt cấp lại ĐÚNG chuỗi
+  /// này khi cùng máy + cùng khoá VAPID ⇒ đường ghi là UPSERT theo cột này, không bao giờ
+  /// đẻ dòng thứ hai. Vì thế bảng CỐ Ý không có `deletedAt`: soft-delete + unique toàn cục
+  /// là mâu thuẫn không vá được ở tầng code (bật lại thông báo trên máy cũ sẽ vỡ P2002),
+  /// và `lib/soft-delete.ts` chỉ tự lọc `deletedAt` cho 4 model tài chính.
+  /// Đo: endpoint thật ~90–250 ký tự, còn rất xa trần btree 2704 byte ⇒ giữ String (TEXT),
+  /// KHÔNG băm, KHÔNG @db.VarChar. Trần độ dài chặn ở Zod (`lib/push/subscription.ts`).
+  endpoint String @unique
+
+  /// Khoá mã hoá payload đầu-cuối (RFC 8291), base64url. p256dh ~87 ký tự, auth ~22.
+  /// Không ràng độ dài ở DB — hình dạng do Zod gác.
+  p256dh String
+  auth   String
+
+  /// Origin đã đăng ký. Service worker khoá theo ORIGIN mà hệ thống chạy 4 host trên cùng
+  /// một app ⇒ MỘT người có thể có nhiều dòng hợp lệ cùng lúc. Lưu tách ra để đo được "ai
+  /// bật ở đâu" mà không phải bóc chuỗi endpoint.
+  origin String
+
+  /// Cặp khoá VAPID đã dùng lúc đăng ký. Ngày xoay khoá là ngày mọi dòng khác phiên bản
+  /// chết 403 VapidPkHashMismatch — có cột này mới phân biệt được "khoá đổi" với "người
+  /// dùng gỡ quyền". Thêm sau = ALTER trên bảng có dữ liệu (luật cứng #4 chặn).
+  vapidKeyId String @default("v1")
+
+  userAgent   String?
+  deviceLabel String?
+
+  /// Chế độ hiển thị lúc đăng ký — `matchMedia("(display-mode: standalone)")` ở trình duyệt.
+  ///
+  /// Đây là cột ĐO ĐƯỢC ĐIỀU KIỆN mà toàn bộ lý lẽ phạm vi của module đứng lên: iOS Safari CHỈ
+  /// giao push khi trang đã được "Thêm vào màn hình chính". Không có cột này thì khi 6 nhân viên
+  /// iPhone không nhận gì, màn quản trị chỉ thấy `status=ACTIVE, lastSuccessAt=null` — không phân
+  /// biệt được "chưa cài PWA" với "push service bóp" hay "chưa có thông báo nào để gửi", tức
+  /// người trực không có đường nào lần ra. Nullable vì trình duyệt cũ có thể không trả lời.
+  displayMode String?
+
+  status        WebPushSubscriptionStatus @default(ACTIVE)
+  revokedAt     DateTime?                 @db.Timestamptz(6)
+  revokedReason String?
+
+  failureCount  Int       @default(0)
+  lastErrorCode Int?
+  lastSuccessAt DateTime? @db.Timestamptz(6)
+  lastFailureAt DateTime? @db.Timestamptz(6)
+  lastSeenAt    DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  /// Đường đọc chính: lấy thiết bị còn sống của một người ngay trước lúc gửi.
+  @@index([userId, status])
+  /// Rà thiết bị hỏng để dọn.
+  @@index([status, lastFailureAt])
+}
+
+/// SỔ GỬI của kênh Web Push. 1 dòng = 1 thông báo cần đẩy tới 1 NGƯỜI.
+///
+/// KHÔNG PHẢI BUS SỰ KIỆN. `DomainEvent` vẫn là nơi DUY NHẤT ghi sự kiện miền, và không
+/// handler nào đăng ký nghe theo `type` trên bảng này. Bảng này cùng vai `EmailQueue` và
+/// `ChatZnsNotification` — mỗi kênh gửi giữ một sổ riêng.
+///
+/// Vì sao KHÔNG dùng thẳng `DomainEvent` (đo, không phải ý kiến):
+///   1. Nó không có mốc lùi lịch. `lib/events/dispatcher.ts` quét PENDING theo `createdAt`
+///      KHÔNG kèm điều kiện thời gian nào, cron chạy mỗi phút, `maxAttempts` 5 ⇒ nhịp thử
+///      lại CỐ ĐỊNH 60 giây và một lượt gửi hỏng chết hẳn sau ~5 phút. Không có chỗ nào ghi
+///      được `Retry-After` của 429.
+///   2. Nó chỉ có MỘT cặp status/attempts cho cả sự kiện, trong khi 3 thiết bị của cùng một
+///      người trả 3 số phận khác nhau (201 / 410 Gone / 429). `decideOutcome` chỉ biết
+///      `anyFailed` ⇒ hỏng 1 máy là cả sự kiện về PENDING ⇒ lượt sau BẮN LẠI vào máy đã nhận.
+///   3. Repo đã tự trả lời bằng tiền lệ: handler DomainEvent duy nhất gửi ra ngoài
+///      (`lib/crm/_handlers/lead-converted.ts`) không tự gửi — nó đẩy vào `EmailQueue`.
+///
+/// NỘI DUNG KHÔNG LƯU Ở ĐÂY. Lúc gửi mới đọc `StaffNotification` theo (userId, dedupeKey).
+/// Ba tính chất có được nhờ vậy: `lib/notifications/notify.ts` giữ nguyên vai "đường ghi
+/// DUY NHẤT" (nó sinh ra để dẹp 17 đường ghi rời); số điện thoại đã bị `cheSdt()` che không
+/// bị chép sang bảng thứ hai nên không đẻ bài toán lưu trữ PII mới; và thông báo đã bị thu
+/// hồi (state REVOKED/EXPIRED) thì tự động không còn gì để gửi.
+///
+/// NGOẠI LỆ luật Nền #3 như `WebPushSubscription` — dữ liệu theo NGƯỜI. Xem chú thích ở đó.
+model WebPushOutbox {
+  id     String @id @default(cuid())
+  userId String
+
+  /// Nguyên khoá của chuông, vd `lead.moi:<leadId>`. DÙNG LẠI chứ không đẻ quy ước thứ hai:
+  /// `lib/notifications/catalog.ts` phân loại bằng TIỀN TỐ của khoá này, và cặp
+  /// (userId, dedupeKey) chính là khoá đọc ngược `StaffNotification`.
+  ///
+  /// Allowlist tiền tố (chốt 08/09/2026): Đợt 4 chỉ GỬI cho tiền tố nằm trong allowlist,
+  /// đợt đầu đúng một giá trị `lead.moi:`. Loại khác ghi dòng SKIPPED chứ không gửi.
+  /// Vì sao cần allowlist: `lead.nhap_lai:` nhét `now.getTime()` vào khoá
+  /// (`lib/lead/assign-lead.ts:345`) ⇒ khách điền form 10 lần là 10 dòng chuông mới, không
+  /// trần nào chặn. Allowlist cũng tự vô hiệu hoá 4 nơi đang bật `reopen: true`.
+  dedupeKey String
+
+  status      WebPushOutboxStatus @default(PENDING)
+  attempts    Int                 @default(0)
+  maxAttempts Int                 @default(5)
+
+  /// Mốc được phép thử lần kế: 429 tôn trọng `Retry-After`, 5xx nhân đôi. Đây chính là thứ
+  /// `DomainEvent` không có, và là lý do bảng này tồn tại.
+  nextAttemptAt DateTime @default(now()) @db.Timestamptz(6)
+
+  /// Mốc một lượt cron GIÀNH CHỖ. Reaper phải đo theo cột NÀY, không theo `createdAt` —
+  /// `lib/events/dispatcher.ts` đang đo nhầm đúng chỗ đó, nên mọi việc tồn đọng quá ngưỡng
+  /// bị kéo về PENDING NGAY TRONG LÚC đang chạy. Với push, kế thừa lỗi đó là gửi trùng.
+  claimedAt DateTime? @db.Timestamptz(6)
+
+  /// Quá mốc này thì bỏ (SKIPPED), không gửi. Bật lại kênh sau sự cố không xả tin cũ hàng loạt.
+  expiresAt DateTime? @db.Timestamptz(6)
+
+  /// Kết quả theo TỪNG endpoint: `{ "<endpoint>": { code, at, error? } }`. Lượt thử sau chỉ
+  /// gửi cho thiết bị CHƯA có kết quả thành công ⇒ máy đã nhận không bao giờ bị bắn lại.
+  /// Thiết bị được phân giải theo `userId` LÚC GỬI, tuyệt đối không chốt subscriptionId lúc
+  /// ghi: endpoint có thể đổi chủ trên máy dùng chung, chốt sớm là lead của A nổ trên màn
+  /// hình khoá của B.
+  resultJson    Json?
+  lastError     String?
+  lastErrorCode Int?
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+  sentAt    DateTime? @db.Timestamptz(6)
+
+  /// Chống trùng ở tầng DB: hai lượt cron chồng nhau va nhau ở đây chứ không gửi đôi.
+  /// Cái giá của gửi đôi không phải tiền — là người dùng tắt quyền thông báo ở cấp trình
+  /// duyệt, mất kênh vĩnh viễn, code không lấy lại được.
+  @@unique([userId, dedupeKey])
+  /// Vòng quét của cron gửi.
+  @@index([status, nextAttemptAt])
+  /// Vòng DỌN. Cố ý theo `createdAt` chứ KHÔNG theo `sentAt`: mọi thông báo ngoài allowlist ghi
+  /// một dòng `SKIPPED`, mà `SKIPPED`/`DEAD` luôn có `sentAt = NULL` — với allowlist đợt đầu đúng
+  /// một tiền tố, gần như cả bảng sẽ là `SKIPPED`. Câu dọn tự nhiên
+  /// (`status IN ('DEAD','SKIPPED') AND createdAt < X`) sẽ không có index nào dẫn nếu khoá thứ
+  /// hai là `sentAt`. Tra "gửi lúc nào" vẫn đi được qua `status` rồi lọc.
+  @@index([status, createdAt])
+  /// Màn quản trị: sổ gửi của một người, mới nhất trước.
+  @@index([userId, createdAt(sort: Desc)])
 }

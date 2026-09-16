@@ -55,7 +55,7 @@ export default async function SessionDetailPage({ params }: Props) {
       ckIncident: true,
       incidentNote: true,
       lessonNotes: true,
-      plan: { select: { customTitle: true } },
+      plan: { select: { customTitle: true, order: true } },
       lesson: { select: { title: true, order: true, moduleCode: true } },
       class: {
         select: {
@@ -169,6 +169,7 @@ export default async function SessionDetailPage({ params }: Props) {
   const projectSrc = {
     sessionNumber: sessionNo,
     planTitle: sess.plan?.customTitle,
+    planOrder: sess.plan?.order,
     lessonTitle: sess.lesson?.title,
     lessonOrder: sess.lesson?.order,
     moduleCode: sess.lesson?.moduleCode,

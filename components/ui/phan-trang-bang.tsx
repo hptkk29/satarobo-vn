@@ -27,6 +27,7 @@ import {
   useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
   type ReactElement,
   type ReactNode,
@@ -88,8 +89,48 @@ export function PhanTrangBang({
 }) {
   const [soDong, setSoDong] = useState(soDongMacDinh);
   const [trang, setTrang] = useState(1);
+
+  // ── AFFORDANCE CUỘN NGANG (09/09/2026, luật 12) ────────────────────────────
+  //
+  // Bảng Danh mục mã ca có 10 cột, rộng 1561px trong khung 1151px (`max-w-6xl`). Nó CUỘN
+  // ĐƯỢC — đo trên prod: đặt `scrollLeft` thì cột "Hành động" về đúng mép. Nhưng thanh
+  // cuộn nằm ở ĐÁY bảng 21 dòng, cách hàng tiêu đề ~1000px, nên trong tầm mắt người dùng
+  // KHÔNG có gì báo là cuộn được. Chủ dự án báo "cột bị cắt, không cuộn tới được".
+  //
+  // Đây là luật 12 ở dạng ngược: không phải affordance hứa suông, mà là một khả năng CÓ
+  // THẬT nhưng không có affordance nào. Vệt mờ + bóng ở MÉP là chỗ mắt đang nhìn.
+  //
+  // Chỉ hiện khi THẬT SỰ còn nội dung bên đó — một vệt mờ đứng mãi cũng là lời hứa suông.
+  const vungCuon = useRef<HTMLDivElement | null>(null);
+  const [conTrai, setConTrai] = useState(false);
+  const [conPhai, setConPhai] = useState(false);
   const idSelect = useId();
   const khoa = khoaGhiNho ? `${KHOA_LUU}:${khoaGhiNho}` : KHOA_LUU;
+
+  // Đo sau mỗi lần đổi trang / đổi số dòng: bảng đổi chiều rộng thì tình trạng cuộn đổi
+  // theo. `ResizeObserver` bắt cả lúc cửa sổ co lại và lúc nội dung ô đổi.
+  useEffect(() => {
+    const el = vungCuon.current;
+    if (!el) return;
+    const do_ = () => {
+      const thua = el.scrollWidth - el.clientWidth;
+      setConTrai(el.scrollLeft > 1);
+      // −1 cho sai số làm tròn của trình duyệt ở tỉ lệ zoom lạ.
+      setConPhai(thua > 1 && el.scrollLeft < thua - 1);
+    };
+    do_();
+    el.addEventListener("scroll", do_, { passive: true });
+    // ⚠️ jsdom KHÔNG có `ResizeObserver`. Gọi thẳng là 23 test component của bảng khác
+    // chết bằng `ReferenceError` — đã ăn thật 09/09. Thiếu nó chỉ mất phép đo lại khi
+    // khung đổi kích thước; listener `scroll` vẫn chạy, nên trình duyệt thật không thiệt.
+    const ro =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(do_);
+    ro?.observe(el);
+    return () => {
+      el.removeEventListener("scroll", do_);
+      ro?.disconnect();
+    };
+  }, [cuonNgang, soDong, trang, children]);
 
   useEffect(() => {
     try {
@@ -152,7 +193,26 @@ export function PhanTrangBang({
         // KHÔNG cắt được nó, vì absolute chỉ bị cắt bởi tổ tiên CÓ định vị.
         // Site GV vá bằng `.t-card{position:relative}` (teacher.css); admin không có thứ
         // tương đương, nên đặt luôn ở đây cho mọi site.
-        <div className="relative overflow-x-auto">{bangDaCat}</div>
+        <div className="relative">
+          <div ref={vungCuon} className="relative overflow-x-auto">
+            {bangDaCat}
+          </div>
+          {/* Hai lớp phủ: `pointer-events-none` để không nuốt click vào ô dưới nó.
+              Bóng inset thay vì nền gradient — bảng nằm trên `bg-card` ở màn này và
+              `bg-background` ở màn khác, gradient theo màu là sẽ sai ở một trong hai. */}
+          {conTrai && (
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-y-0 left-0 w-8 shadow-[inset_12px_0_10px_-10px_rgba(0,0,0,0.28)]"
+            />
+          )}
+          {conPhai && (
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-y-0 right-0 w-8 shadow-[inset_-12px_0_10px_-10px_rgba(0,0,0,0.28)]"
+            />
+          )}
+        </div>
       ) : (
         bangDaCat
       )}

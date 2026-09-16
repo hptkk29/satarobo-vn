@@ -73,8 +73,9 @@ test("admin sweep P1/P2 routes", async ({ page }, testInfo) => {
 
   const results: { route: string; status: string; note: string }[] = [];
   for (const route of ROUTES) {
+    // `note` được gán lại ở mọi nhánh — bỏ giá trị mồi vô dụng.
     let status = "PASS";
-    let note = "";
+    let note: string;
     try {
       const resp = await page.goto(route, { waitUntil: "domcontentloaded", timeout: 180_000 });
       await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});

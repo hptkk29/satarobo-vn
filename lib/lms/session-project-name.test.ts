@@ -5,6 +5,8 @@ import { describe, it, expect } from "vitest";
 import {
   deriveSessionLabel,
   deriveSessionProjectName,
+  meaningfulSessionTitle,
+  moduleCodeFromTitle,
   resolveDisplayProjectName,
 } from "./session-project-name";
 import { DEFAULT_PROJECT_NAME } from "./session-eval-rubric";
@@ -226,5 +228,47 @@ describe("resolveDisplayProjectName — tên dự án theo BUỔI, không theo p
     expect(resolveDisplayProjectName({ sessionNumber: 4, topic: "Buổi 4" }, null)).toBe(
       "Dự án 4",
     );
+  });
+});
+
+describe("tiền tố HPn — cắt khỏi tên, giữ ở nhãn buổi", () => {
+  // Tên bài THẬT trên prod (đo 26/08): giáo trình do Đào tạo soạn tay đặt kèm học phần.
+  const buoi = {
+    sessionNumber: 5,
+    lessonTitle: "HP2 - Họa Sĩ Robot",
+    lessonOrder: 5,
+    topic: "Buổi 5",
+  };
+
+  it("phiếu gửi phụ huynh là TÊN TRẦN, không còn 'HP2 -'", () => {
+    expect(resolveDisplayProjectName(buoi, null)).toBe("Họa Sĩ Robot");
+    expect(deriveSessionProjectName(buoi)).toBe("Họa Sĩ Robot");
+  });
+
+  it("nhãn buổi VẪN có học phần — suy lại từ chính tiền tố vừa cắt", () => {
+    expect(deriveSessionLabel(buoi)).toBe("Buổi 5 - HP2 - Họa Sĩ Robot");
+  });
+
+  it("Lesson.moduleCode thật thì thắng, không lấy từ tên", () => {
+    expect(deriveSessionLabel({ ...buoi, moduleCode: "HP3" })).toBe(
+      "Buổi 5 - HP3 - Họa Sĩ Robot",
+    );
+  });
+
+  it("cắt được cả hai tiền tố khi tên mang cả hai", () => {
+    expect(meaningfulSessionTitle("Buổi 5 - HP2 - Họa Sĩ Robot")).toBe("Họa Sĩ Robot");
+  });
+
+  it("chỉ cắt khi CÓ dấu ngăn sau số — không ăn mất chữ", () => {
+    expect(meaningfulSessionTitle("HP2")).toBe("HP2");
+    expect(meaningfulSessionTitle("HPV và cảm biến")).toBe("HPV và cảm biến");
+    expect(moduleCodeFromTitle("HP2")).toBe("");
+  });
+
+  it("moduleCodeFromTitle đọc đúng mã, tên không có tiền tố thì rỗng", () => {
+    expect(moduleCodeFromTitle("HP2 - Họa Sĩ Robot")).toBe("HP2");
+    expect(moduleCodeFromTitle("HP10: Tổng kết")).toBe("HP10");
+    expect(moduleCodeFromTitle("Xe dò line")).toBe("");
+    expect(moduleCodeFromTitle(null)).toBe("");
   });
 });

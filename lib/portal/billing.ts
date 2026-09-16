@@ -1,7 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { WHERE_THUC_THU, butToanThucThu, tinhThucThu } from "@/lib/finance/thuc-thu";
-import { computeEnrollmentDebt } from "@/lib/finance/debt";
+import { KHOAN_DA_XAC_NHAN, laKhoanDaXacNhan, tongDaXacNhan } from "@/lib/finance/debt";
+import { xepPhieuThuVaDieuChinh } from "@/lib/portal/phieu-thu";
 
 // =============================================================================
 // PORTAL BILLING — Phase NHÓM 3
@@ -59,23 +59,17 @@ export async function getParentOrders(parentUserId: string): Promise<OrderRow[]>
 }
 
 // =============================================================================
-// R7-04 — PH chỉ thấy khoản đã được KẾ TOÁN chốt sổ. Khoản Sale mới ghi nhận (PENDING)
-// và khoản bị từ chối (REJECTED) KHÔNG hiện tiền cho phụ huynh (AC1) — chỉ đếm làm chỉ
-// dấu trạng thái.
-//
-// HT (27/08/2026) — "kế toán đã chốt sổ" đi qua đúng công thức thực thu dùng chung
-// (`lib/finance/thuc-thu.ts`), KHÔNG còn lọc cứng `accountantStatus = "CONFIRMED"`.
-// Lọc cứng như cũ bỏ sót hai loại bút toán mà chính hệ thống này ghi ra:
-//   • REFUNDED — `refundPayment()` ghi bản MỚI số ÂM, không xoá bản gốc ⇒ PH hoàn tiền
-//     xong vẫn thấy nguyên số đã đóng;
-//   • ADJUSTED — `adjustPayment()` ghi bản MỚI mang số đúng, bản gốc giữ nguyên ⇒ PH
-//     thấy số CŨ đã bị kế toán sửa bỏ.
+// R7-04 — PH chỉ thấy khoản đã được KẾ TOÁN XÁC NHẬN (accountantStatus=CONFIRMED).
+// Khoản Sale mới ghi nhận (PENDING) KHÔNG hiện cho phụ huynh (AC1).
 // =============================================================================
 
 /**
- * Nhãn tiếng Việt cho Payment.method (DB lưu mã thô: METHOD_OPTIONS admin +
- * "auto" từ lib/finance/payment.ts). UI portal B2C dùng
- * `PAYMENT_METHOD_LABEL[method] ?? method` — method lạ fallback nguyên văn.
+ * Nhãn DỰ PHÒNG cho `Payment.method` (DB lưu mã thô + "auto" từ lib/finance/payment.ts).
+ *
+ * ⚠️ Từ 30/08/2026 đây KHÔNG còn là danh sách đầy đủ. Danh mục phương thức nay nằm trong
+ * DB và mỗi cơ sở có thể có phương thức riêng với mã riêng ("BANK_CS1"…), nên bảng cứng
+ * này không thể biết hết. Dùng `getPaymentMethodLabels()` bên dưới để có bảng ĐẦY ĐỦ;
+ * bảng cứng chỉ đỡ cho mã đã ngừng dùng và cho "auto".
  */
 export const PAYMENT_METHOD_LABEL: Record<string, string> = {
   CASH: "Tiền mặt",
@@ -84,19 +78,38 @@ export const PAYMENT_METHOD_LABEL: Record<string, string> = {
   TINGEE: "Tingee",
   COD: "COD",
   auto: "Tự động",
+  // 06/09 — mã do HỆ THỐNG tự sinh, không có trong danh mục `PaymentMethod` nên trước
+  // đây rơi thẳng ra giao diện dưới dạng mã trần. Phụ huynh đọc được chữ "backfill"
+  // trong lịch sử đóng tiền của con mình.
+  //
+  // `backfill` = khoản đã thu TRƯỚC khi lên hệ thống, nhập bù lúc chuyển dữ liệu
+  // (lib/crm/backfill-order.ts:112). Không phải một cách thanh toán, nên nhãn phải nói
+  // đúng bản chất chứ đừng bịa ra "Chuyển khoản".
+  backfill: "Đã thu trước khi lên hệ thống",
 };
 
 /**
- * Loại bút toán, để màn học phí gọi đúng tên thay vì dán "Đã xác nhận" lên mọi dòng.
- * Một dòng ÂM mang nhãn "Đã xác nhận" là thứ khiến phụ huynh gọi điện lên hỏi.
+ * Bảng mã → nhãn ĐẦY ĐỦ cho trang Học phí của phụ huynh: danh mục DB đè lên bảng cứng.
+ *
+ * VÌ SAO CẦN: phụ huynh của CS1 đóng tiền bằng phương thức "BANK_CS1"; không có bảng này
+ * thì trang Học phí in ra đúng chữ "BANK_CS1" — một mã nội bộ, phụ huynh không hiểu.
+ *
+ * ⚠️ Cố ý đọc `db` TRẦN, không qua `scopedDb`: actor PARENT không đứng ở đâu trong cây
+ * OrgUnit nên không có `visibleCenterIds` (xem RELATIONSHIP_ROLE_CODES trong
+ * lib/auth/actor.ts) — scope ở đây sẽ trả rỗng và mọi nhãn rơi về mã trần. An toàn vì
+ * thứ lấy ra chỉ là (mã, tên) của danh mục, KHÔNG có số tài khoản nào: tài khoản ngân
+ * hàng nằm ở IntegrationConfig, không ở bảng này. Và mỗi phụ huynh chỉ nhìn thấy nhãn
+ * của những khoản thu CỦA CHÍNH HỌ — đường lọc khoản thu không đổi.
  */
-export type LoaiButToan = "THU" | "HOAN" | "DIEU_CHINH";
-
-export const LOAI_BUT_TOAN_LABEL: Record<LoaiButToan, string> = {
-  THU: "Đã xác nhận",
-  HOAN: "Hoàn tiền",
-  DIEU_CHINH: "Đã điều chỉnh",
-};
+export async function getPaymentMethodLabels(): Promise<Record<string, string>> {
+  const rows = await db.paymentMethod.findMany({
+    select: { code: true, name: true },
+  });
+  return {
+    ...PAYMENT_METHOD_LABEL,
+    ...Object.fromEntries(rows.map((r) => [r.code, r.name])),
+  };
+}
 
 export type ConfirmedPaymentRow = {
   id: string;
@@ -104,21 +117,27 @@ export type ConfirmedPaymentRow = {
   orderCode: string | null;
   enrollmentId: string | null;
   studentName: string | null;
-  /** ÂM với dòng hoàn tiền. */
   amount: number;
   method: string;
   paidDate: string;
   confirmedAt: string | null;
   receiptCode: string | null;
-  loai: LoaiButToan;
+  /** `PAYMENT` = phiếu thu · `ADJUSTMENT` = bút toán điều chỉnh (mang DELTA, có thể âm). */
+  paymentType: string;
+  /** Với dòng ADJUSTMENT: id phiếu thu gốc mà nó đang sửa. */
+  adjustmentOfId: string | null;
+  /**
+   * Lý do điều chỉnh — CHỈ có ở dòng ADJUSTMENT.
+   *
+   * ⚠️ `Payment.note` của phiếu thu THƯỜNG chứa ghi chú nội bộ và marker máy sinh
+   * (`[auto:order-confirm]`, `[auto:order-installment:dot2]`…). Không bao giờ đổ nguyên
+   * `note` ra cổng phụ huynh; chỉ dòng điều chỉnh mới có `note` do người nhập, và nội
+   * dung của nó chính là lý do phải in cho phụ huynh đọc.
+   */
+  lyDoDieuChinh: string | null;
+  /** Phiếu gốc đã bị điều chỉnh ≥1 lần → gắn nhãn; số tiền GIỮ NGUYÊN. */
+  daBiDieuChinh: boolean;
 };
-
-/** Ánh xạ trạng thái kế toán → nhãn dòng cho phụ huynh. */
-function loaiCua(accountantStatus: string): LoaiButToan {
-  if (accountantStatus === "REFUNDED") return "HOAN";
-  if (accountantStatus === "ADJUSTED") return "DIEU_CHINH";
-  return "THU";
-}
 
 /** Resolve childIds: nhận sẵn mảng studentIds, hoặc tra theo parentUserId. */
 async function resolveChildIds(
@@ -134,14 +153,7 @@ async function resolveChildIds(
 }
 
 /**
- * Sổ thu/hoàn của các con (read-only, cho portal). Đúng những bút toán mà kế toán đã
- * chốt và được tính vào "đã thanh toán" — `WHERE_THUC_THU`.
- *
- * ⚠️ DANH SÁCH NÀY PHẢI CỘNG RA ĐÚNG TỔNG "đã thanh toán" ở `getParentBilling`. Đổi tổng
- * mà không đổi danh sách là để phụ huynh nhìn thấy một bảng không cộng được — đúng loại
- * chi tiết sinh ra cuộc gọi khiếu nại. Vì vậy dòng HOÀN (số âm) và dòng ĐIỀU CHỈNH có
- * mặt ở đây, còn bản gốc đã bị điều chỉnh thay thế thì không.
- *
+ * Khoản thanh toán ĐÃ XÁC NHẬN của các con (read-only, cho portal — AC1: chỉ CONFIRMED).
  * Dùng db trần: ràng buộc theo childIds là cổng sở hữu; PARENT actor không có center-role
  * nên KHÔNG center-scope (scopedDb sẽ lọc rỗng). `client` mặc định db.
  */
@@ -152,21 +164,22 @@ export async function getParentConfirmedPayments(
   const childIds = await resolveChildIds(client, parentUserIdOrStudentIds);
   if (childIds.length === 0) return [];
 
-  const rows = await client.payment.findMany({
+  const payments = await client.payment.findMany({
     where: {
-      ...WHERE_THUC_THU,
+      ...KHOAN_DA_XAC_NHAN,
       enrollment: { studentId: { in: childIds }, deletedAt: null },
     },
     select: {
       id: true,
       orderId: true,
       amount: true,
-      accountantStatus: true,
-      adjustmentOfId: true,
       method: true,
       paidDate: true,
       confirmedAt: true,
       enrollmentId: true,
+      paymentType: true,
+      adjustmentOfId: true,
+      note: true,
       order: { select: { code: true } },
       enrollment: { select: { student: { select: { name: true } } } },
       receipts: {
@@ -181,28 +194,31 @@ export async function getParentConfirmedPayments(
     take: 200,
   });
 
-  // Lớp chắn: `WHERE_THUC_THU` đã loại bản gốc bị thay thế ở tầng SQL, hàm thuần lọc lại
-  // để caller nào quên mảnh `where` vẫn không cộng đôi.
-  const payments = butToanThucThu(rows);
-
-  return payments.map((p) => ({
-    id: p.id,
-    orderId: p.orderId,
-    orderCode: p.order?.code ?? null,
-    enrollmentId: p.enrollmentId,
-    studentName: p.enrollment?.student?.name ?? null,
-    amount: p.amount,
-    method: p.method,
-    paidDate: p.paidDate.toISOString(),
-    confirmedAt: p.confirmedAt?.toISOString() ?? null,
-    receiptCode: p.receipts[0]?.code ?? null,
-    loai: loaiCua(p.accountantStatus),
-  }));
+  // Xếp bút toán điều chỉnh ngay dưới phiếu thu gốc + gắn nhãn cho phiếu gốc.
+  // KHÔNG đụng `amount` của bất kỳ dòng nào — xem lib/portal/phieu-thu.ts.
+  return xepPhieuThuVaDieuChinh(
+    payments.map((p) => ({
+      id: p.id,
+      orderId: p.orderId,
+      orderCode: p.order?.code ?? null,
+      enrollmentId: p.enrollmentId,
+      studentName: p.enrollment?.student?.name ?? null,
+      amount: p.amount,
+      method: p.method,
+      paidDate: p.paidDate.toISOString(),
+      confirmedAt: p.confirmedAt?.toISOString() ?? null,
+      receiptCode: p.receipts[0]?.code ?? null,
+      paymentType: p.paymentType,
+      adjustmentOfId: p.adjustmentOfId,
+      lyDoDieuChinh: p.paymentType === "ADJUSTMENT" ? (p.note?.trim() || null) : null,
+      daBiDieuChinh: false, // hàm xếp sẽ đặt lại
+    })),
+  );
 }
 
 // =============================================================================
 // R7-04 — TRANG HỌC PHÍ PORTAL (P0): nguồn sự thật = Payment 2 tầng, KHÔNG đọc Order cũ.
-// Học phí mỗi ghi danh = finalPrice (snapshot tại convert) − THỰC THU (HT 27/08/2026).
+// Học phí mỗi ghi danh = finalPrice (snapshot tại convert) − Σ Payment(CONFIRMED).
 // PARENT không có center-role → cổng sở hữu là studentId thuộc parentUserId (db trần).
 // =============================================================================
 
@@ -234,9 +250,8 @@ export type ParentBilling = {
 
 /**
  * Tổng hợp học phí + công nợ + biên lai cho phụ huynh, từ Payment 2 tầng (R7-04).
- * Chỉ tính ghi danh đã chốt giá (finalPrice != null tại convert R7-05). "Đã thanh toán"
- * đi qua `tinhThucThu` (HT 27/08/2026) — khoản Sale mới ghi nhận (PENDING) vẫn KHÔNG
- * hiện tiền (AC1), khoản hoàn được trừ ra, bản điều chỉnh thay bản gốc.
+ * Chỉ tính ghi danh đã chốt giá (finalPrice != null tại convert R7-05). Chỉ tính
+ * Payment accountantStatus=CONFIRMED (AC1: khoản Sale mới ghi nhận chưa hiện).
  */
 export async function getParentBilling(parentUserId: string): Promise<ParentBilling> {
   const empty: ParentBilling = {
@@ -257,16 +272,10 @@ export async function getParentBilling(parentUserId: string): Promise<ParentBill
       tuition: true,
       student: { select: { name: true } },
       class: { select: { name: true } },
-      // Lấy MỌI bút toán còn sống của ghi danh; `tinhThucThu` tự chọn ra khoản được
-      // tính, PENDING/REJECTED chỉ dùng để ĐẾM (không kèm amount xuống client) — giữ
-      // AC1: không lộ số tiền khoản chưa xác nhận cho PH.
+      // CHỈ lấy số tiền của khoản CONFIRMED; PENDING/REJECTED chỉ lấy trạng thái để
+      // ĐẾM (không kèm amount) — giữ AC1: không lộ số tiền khoản chưa xác nhận cho PH.
       // FIX-C3: nested include không auto-scope → tự lọc payment đã xóa mềm.
-      // `id` + `adjustmentOfId` là BẮT BUỘC: thiếu chúng `butToanThucThu` không biết bản
-      // gốc nào đã bị bản ADJUSTED thay thế và sẽ cộng đôi.
-      payments: {
-        where: { deletedAt: null },
-        select: { id: true, accountantStatus: true, amount: true, adjustmentOfId: true },
-      },
+      payments: { where: { deletedAt: null }, select: { accountantStatus: true, amount: true } },
     },
     orderBy: { enrolledAt: "desc" },
     take: 100,
@@ -274,7 +283,7 @@ export async function getParentBilling(parentUserId: string): Promise<ParentBill
 
   const rows: EnrollmentBillingRow[] = enrollments.map((e) => {
     const finalPrice = e.finalPrice ?? e.tuition ?? 0;
-    const confirmedPaid = tinhThucThu(e.payments);
+    const confirmedPaid = tongDaXacNhan(e.payments.filter(laKhoanDaXacNhan));
     const pendingCount = e.payments.filter((p) => p.accountantStatus === "PENDING").length;
     const rejectedCount = e.payments.filter((p) => p.accountantStatus === "REJECTED").length;
     return {
@@ -284,9 +293,7 @@ export async function getParentBilling(parentUserId: string): Promise<ParentBill
       className: e.class?.name ?? null,
       finalPrice,
       confirmedPaid,
-      // MỘT công thức công nợ cho cả admin lẫn portal — `lib/finance/debt.ts`. Ở đây nó
-      // còn lo cả việc ghi danh ĐÃ RỜI LỚP không bị khoản hoàn đẩy công nợ lên.
-      outstanding: computeEnrollmentDebt(finalPrice, e.payments, e.status),
+      outstanding: finalPrice - confirmedPaid,
       pendingCount,
       rejectedCount,
     };

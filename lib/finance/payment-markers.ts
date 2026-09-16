@@ -63,6 +63,26 @@ export function gatewayMarker(provider: string, providerTxnId: string): string {
  */
 export const BACKFILL_PAYMENT_MARKER = "[backfill-import]";
 
+/**
+ * DẤU ĐỊNH DANH MỘT DÒNG SHEET — chống nhập đôi khi bấm lại.
+ *
+ * Nhập giao dịch cũ là thao tác người ta sẽ chạy nhiều lần: nhập thử, sửa file, nhập
+ * lại. Không có dấu này thì mỗi lượt cộng thêm một lần tiền, và số dư phình lên mà
+ * không ai biết lượt nào là thừa.
+ *
+ * ⚠️ Dấu này ĐỨNG CẠNH `BACKFILL_PAYMENT_MARKER`, KHÔNG thay nó và KHÔNG nhét vào trong
+ * nó. Mọi câu tra hiện có tìm chuỗi `[backfill-import]` bằng `contains` — viết thành
+ * `[backfill-import:...]` là làm nút xác nhận hàng loạt ở /payments không thấy khoản nào
+ * nữa, mà không có lỗi nào báo ra.
+ *
+ * Tên sheet bị rút gọn về chữ-số để dấu không chứa dấu cách/ký tự lạ khiến `contains`
+ * khớp lem sang dòng khác.
+ */
+export function dauDongSheet(sheet: string, dong: number): string {
+  const gon = sheet.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^A-Za-z0-9]/g, "");
+  return `[sheet:${gon}#${Math.trunc(dong)}]`;
+}
+
 // ─── HỎI: KHOẢN NÀY CỦA AI ───────────────────────────────────────────────────
 
 /**

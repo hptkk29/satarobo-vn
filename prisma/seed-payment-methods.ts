@@ -1,5 +1,12 @@
 import { PrismaClient, PaymentMethodType } from "@prisma/client";
 
+// ⚠️ 30/08/2026 — bốn dòng dưới đây là phương thức DÙNG CHUNG (`centerId` để null): cơ
+// sở nào cũng chọn được. Cố ý KHÔNG set centerId ở seed gốc, và cố ý KHÔNG đụng tới
+// `centerId` trong nhánh `update`: người vận hành có thể đã gắn một dòng vào một cơ sở
+// qua màn /payment-methods, và seed chạy lại mà ghi đè null là âm thầm mở phương thức
+// riêng của cơ sở đó ra cho mọi cơ sở.
+// Phương thức RIÊNG của cơ sở khai bằng tay ở màn quản trị (hoặc seed UAT), với mã có
+// hậu tố cơ sở — `code` là @unique TOÀN CỤC nên hai cơ sở không dùng chung một mã.
 const PAYMENT_METHODS = [
   {
     code: "CASH",

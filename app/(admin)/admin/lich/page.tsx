@@ -45,8 +45,14 @@ export default async function AdminCalendarPage({
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Lịch dạy</h1>
         <div className="flex gap-2 text-sm">
-          <Link href={`/admin/lich?y=${prev.year}&m=${prev.month0}`} className="rounded border px-2 py-1">← Trước</Link>
-          <Link href={`/admin/lich?y=${next.year}&m=${next.month0}`} className="rounded border px-2 py-1">Sau →</Link>
+          {/* href CHỈ-QUERY (giữ nguyên path hiện tại) — ĐỪNG viết `/admin/lich?…`.
+              Trên host admin, mọi đường còn tiền tố `/admin` rơi vào nhánh `redirectPath`
+              của `decideRoute`, mà `redirectTo` trong proxy.ts **xoá sạch query**
+              (`url.search = ""`, chỉ giữ lại callbackUrl/reason). Hệ quả: bấm Trước/Sau
+              thì về `/lich` trần và lịch hiện lại ĐÚNG THÁNG CŨ — không lỗi, không dấu vết.
+              Dạng chỉ-query chạy đúng cả trên admin.satarobo.vn/lich LẪN localhost/admin/lich. */}
+          <Link href={`?y=${prev.year}&m=${prev.month0}`} className="rounded border px-2 py-1">← Trước</Link>
+          <Link href={`?y=${next.year}&m=${next.month0}`} className="rounded border px-2 py-1">Sau →</Link>
         </div>
       </div>
       <MonthCalendar year={year} month0={month0} events={events} />

@@ -17,7 +17,9 @@
 | `R2_BUCKET_NAME` · `R2_PUBLIC_URL` | kho media **CÔNG KHAI** (SCORM, ảnh lớp, honors) | server only | Vercel env | — | ⚠️ Bucket này phát công khai qua `R2_PUBLIC_URL`. **Ảnh chat KHÔNG được nằm ở đây** — xem mục "Bài học" bên dưới. |
 | `CRON_SECRET` | xác thực Vercel Cron → job đối soát (`lib/cron/auth.ts`) | server only | Vercel env | 6 tháng/lần | Trung bình — kích hoạt job trái phép (job idempotent nên thiệt hại giới hạn, nhưng lệch REMOVE tự thi hành có thể bị lạm dụng → job kiểm secret TRƯỚC mọi việc, đã xác minh 401 khi thiếu/sai) |
 | `UPSTASH_REDIS_REST_URL` / `_TOKEN` (hoặc `KV_REST_API_*`) | rate limit (`lib/rate-limit.ts`) | server only | Vercel env | Theo sự cố | Thấp — mất thì fallback in-memory, rate limit yếu đi chứ không hở dữ liệu |
-| `PUSH_*` (VAPID/FCM) | **CHƯA DÙNG** — US-14 thuộc Đợt 2 | server only (public key client OK) | — | — | — |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | khoá công khai VAPID — trình duyệt dùng làm `applicationServerKey` (`lib/push/vapid.ts`) | **client OK, cố ý vào bundle** | Vercel env — **PHẢI Non-sensitive**: biến Sensitive không tồn tại lúc build, mà `NEXT_PUBLIC_` nhúng lúc build ⇒ để Sensitive là trình duyệt nhận `undefined`, không đăng ký được thiết bị nào, và server không thấy lỗi gì | Chỉ khi lộ khoá riêng | Thấp — khoá công khai theo thiết kế |
+| `VAPID_PRIVATE_KEY` | ký JWT VAPID lúc gửi push (Đợt 4) | server only | Vercel env — Sensitive | Theo sự cố | **Cao** — ai có khoá này gửi được push giả mạo vào điện thoại nhân viên. Xoay khoá = MỌI thiết bị phải đăng ký lại (403 VapidPkHashMismatch); nhãn `WebPushSubscription.vapidKeyId` suy từ khoá nên tự đổi theo |
+| `VAPID_SUBJECT` | `mailto:`/`https:` để push service liên hệ khi hạ tầng ta gây sự cố | server only | Vercel env | — | Thấp — nhưng phải là hộp thư CÓ NGƯỜI ĐỌC, không thì cảnh báo đi vào hư không và triệu chứng duy nhất là push im lặng |
 
 ## Xác nhận bắt buộc trước go-live
 

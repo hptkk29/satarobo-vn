@@ -90,19 +90,66 @@ export async function seedNen(coSo: CoSo[]) {
 
   // ── Phương thức thanh toán ─────────────────────────────────────────────────
   buoc("Phương thức thanh toán");
+  // 30/08/2026 — `centerId` nay là cột thật: null = DÙNG CHUNG mọi cơ sở, có giá trị =
+  // CHỈ cơ sở đó thấy. Hai dòng BANK_CS1/BANK_CS2 vốn đã tách theo cơ sở bằng quy ước
+  // đặt mã (vì `code` là @unique toàn cục), nay gắn đúng cơ sở để bộ UAT diễn được
+  // chính cái phải nghiệm thu: Sale CS1 KHÔNG nhìn thấy "Chuyển khoản — CS2".
   const PTTT = [
-    { code: "CASH", name: "Tiền mặt tại quầy", type: "CASH" as const },
-    { code: "BANK_CS1", name: "Chuyển khoản — CS1", type: "BANK_TRANSFER" as const },
-    { code: "BANK_CS2", name: "Chuyển khoản — CS2", type: "BANK_TRANSFER" as const },
-    { code: "QR_SEPAY", name: "Quét QR (SePay)", type: "BANK_TRANSFER" as const },
-    { code: "VNPAY", name: "Cổng VNPAY", type: "VNPAY" as const },
-    { code: "MOMO", name: "Ví MoMo", type: "WALLET" as const },
+    { code: "CASH", name: "Tiền mặt tại quầy", type: "CASH" as const, centerId: null },
+    // 31/08 — phương thức chuyển khoản mang LUÔN tài khoản nhận tiền (nguồn dựng mã QR).
+    // Hai cơ sở phải là hai tài khoản KHÁC nhau, bằng không bộ UAT không diễn được đúng
+    // thứ phải nghiệm thu: QR đơn CS1 ra tài khoản CS1, đơn CS2 ra tài khoản CS2.
+    {
+      code: "BANK_CS1",
+      name: "Chuyển khoản — CS1",
+      type: "BANK_TRANSFER" as const,
+      centerId: "co-so-nguyen-huu-tho",
+      bank: { bin: "970415", acc: "1000000001", name: "CT CP CN GD SATA ROBO" },
+    },
+    {
+      code: "BANK_CS2",
+      name: "Chuyển khoản — CS2",
+      type: "BANK_TRANSFER" as const,
+      centerId: "co-so-hoang-dieu",
+      bank: { bin: "970436", acc: "2000000002", name: "CT CP CN GD SATA ROBO" },
+    },
+    {
+      code: "QR_SEPAY",
+      name: "Quét QR (SePay)",
+      type: "BANK_TRANSFER" as const,
+      centerId: null,
+      bank: { bin: "970422", acc: "3000000003", name: "CT CP CN GD SATA ROBO" },
+    },
+    { code: "VNPAY", name: "Cổng VNPAY", type: "VNPAY" as const, centerId: null },
+    { code: "MOMO", name: "Ví MoMo", type: "WALLET" as const, centerId: null },
   ];
+  // Cơ sở phải tồn tại trước (FK RESTRICT). Seed nền tạo cơ sở ở bước trên cùng file
+  // này; vẫn lọc phòng ca chạy lại trên DB thiếu cơ sở — thà để null (dùng chung) còn
+  // hơn cả bước seed đổ vì một khoá ngoại.
+  const centerIds = new Set(
+    (await db.center.findMany({ select: { id: true } })).map((c) => c.id),
+  );
   for (const p of PTTT) {
+    const centerId = p.centerId && centerIds.has(p.centerId) ? p.centerId : null;
+    const bank =
+      "bank" in p && p.bank
+        ? {
+            bankBin: p.bank.bin,
+            bankAccountNumber: p.bank.acc,
+            bankAccountName: p.bank.name,
+          }
+        : {};
     await db.paymentMethod.upsert({
       where: { code: p.code },
-      update: { name: p.name, isActive: true },
-      create: { code: p.code, name: p.name, type: p.type, isActive: true },
+      update: { name: p.name, isActive: true, centerId, ...bank },
+      create: {
+        code: p.code,
+        name: p.name,
+        type: p.type,
+        isActive: true,
+        centerId,
+        ...bank,
+      },
     });
   }
   xong("Phương thức thanh toán", PTTT.length);

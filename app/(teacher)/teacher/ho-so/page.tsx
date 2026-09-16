@@ -27,8 +27,11 @@ import {
   Phone,
 } from "lucide-react";
 import { auth } from "@/lib/auth";
+import { BatThongBao } from "@/components/push/bat-thong-bao";
+import { layThietBiCuaToi } from "@/lib/push/thiet-bi";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb, withMakeupException } from "@/lib/db-scope";
+import { rosterWhere } from "@/lib/enrollment-scope";
 import { roleLabel } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,6 +39,7 @@ import { EmptyState } from "../_components/ui/empty-state";
 import { PageHeader } from "../_components/ui/page-header";
 import { ChangePasswordDialog } from "./_components/change-password-dialog";
 import { initialsOf } from "@/lib/ui/initials";
+import { ngayVaoLamHopLe } from "@/lib/hr/ngay-vao-lam";
 
 export const metadata = { title: "Hồ sơ cá nhân | Giáo viên Sata Robo" };
 
@@ -94,6 +98,8 @@ export default async function TeacherProfilePage() {
   if (!session?.user) return null; // layout đã gate — guard cho type-narrow
 
   const actor = await resolveActor(session.user.id);
+  // Web Push Đợt 3 — thiết bị của CHÍNH giáo viên đang đăng nhập.
+  const thietBiPush = await layThietBiCuaToi(session.user.id);
   const sdb = scopedDb(actor);
   const xdb = withMakeupException(actor);
   const classIds = [...actor.assignedClassIds];
@@ -131,7 +137,12 @@ export default async function TeacherProfilePage() {
             maxStudents: true,
             course: { select: { name: true } },
             center: { select: { name: true } },
-            _count: { select: { enrollments: true } },
+            // Trước đây `enrollments: true` trần — đếm CẢ ghi danh đã gỡ mềm, đã
+            // nghỉ, đã huỷ và cả "chờ xác nhận", nên sĩ số ở hồ sơ GV luôn cao hơn
+            // mọi màn khác. Đây là hình dạng thứ năm của cùng một truy vấn.
+            _count: {
+              select: { enrollments: { where: rosterWhere("dang-hoc") } },
+            },
           },
           orderBy: { name: "asc" },
         })
@@ -148,7 +159,11 @@ export default async function TeacherProfilePage() {
   const phone = user.employee?.phone ?? null;
   // Chỉ đổi nhãn "Tham gia hệ thống"→"Ngày vào làm" khi thật sự có joinedAt;
   // nếu chỉ có User.createdAt (chưa có hồ sơ NS) thì giữ nhãn cũ (đừng bịa).
-  const hireDate = user.employee?.joinedAt ?? null;
+  // Cổng `ngayVaoLamHopLe` loại mốc Unix 1970 (NULL bị ghi thành 0 — 13 hồ sơ trên prod
+  // 08/09/2026). Không có cổng thì giáo viên thấy "Ngày vào làm: 01/1970" trong hồ sơ
+  // của chính mình. Rơi về `user.createdAt` với nhãn "Tham gia hệ thống" là câu ĐÚNG:
+  // nó nói thứ hệ thống thật sự biết, thay vì bịa một ngày.
+  const hireDate = ngayVaoLamHopLe(user.employee?.joinedAt);
   const joinLabel = hireDate ? "Ngày vào làm" : "Tham gia hệ thống";
   const joinValue = joinFmt.format(hireDate ?? user.createdAt);
 
@@ -295,6 +310,23 @@ export default async function TeacherProfilePage() {
               </p>
             </div>
             <ChangePasswordDialog />
+          </CardContent>
+        </Card>
+
+        {/* Thông báo đẩy (Web Push Đợt 3) — cùng khuôn card Bảo mật ngay trên, và dùng CHUNG
+            component + Server Action với màn /settings của admin, đúng tiền lệ
+            ChangePasswordDialog. Giáo viên THUẦN làm việc ở host này chứ không phải admin
+            (TEACHER_SITE_ENABLED mặc định ON), nên thiếu khối này là đúng nhóm người đó
+            không có đường bật thông báo. */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Lock className="h-4 w-4 text-primary-ink" aria-hidden />
+              Thông báo đẩy
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <BatThongBao thietBi={thietBiPush} nguoiDung={session.user.id} />
           </CardContent>
         </Card>
 

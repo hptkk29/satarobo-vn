@@ -31,7 +31,16 @@ const STATUS_LABEL: Record<string, string> = {
 export default async function ClassStudentsPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!(await checkPermission("classes:edit"))) {
+  // Cổng ĐỌC — cùng bộ với trang chi tiết lớp. Trước 04/09 chỗ này đòi
+  // `classes:edit`, nên Sale và Quản lý lớp học (chỉ có `classes:view-all`) bị đá về
+  // /dashboard dù họ cần xem danh sách em trong lớp.
+  const [canAssign, hasViewAll, hasViewOwn, hasFeedbackView] = await Promise.all([
+    checkPermission("classes:edit"),
+    checkPermission("classes:view-all"),
+    checkPermission("classes:view-own"),
+    checkPermission("session-feedback:view-all"),
+  ]);
+  if (!canAssign && !hasViewAll && !hasViewOwn && !hasFeedbackView) {
     redirect("/dashboard?error=unauthorized");
   }
 
@@ -72,15 +81,19 @@ export default async function ClassStudentsPage({ params }: Props) {
         student: { select: { name: true, studentCode: true, status: true } },
       },
     }),
-    sdb.enrollment.findMany({
-      where: buildAssignableWhere(cls),
-      orderBy: { enrolledAt: "asc" },
-      select: {
-        id: true,
-        status: true,
-        student: { select: { name: true, studentCode: true } },
-      },
-    }),
+    // Chỉ nạp khi được gán. Người CHỈ XEM không cần — và không nên thấy — danh sách
+    // em ngoài lớp kèm nút thêm.
+    canAssign
+      ? sdb.enrollment.findMany({
+          where: buildAssignableWhere(cls),
+          orderBy: { enrolledAt: "asc" },
+          select: {
+            id: true,
+            status: true,
+            student: { select: { name: true, studentCode: true } },
+          },
+        })
+      : Promise.resolve([]),
   ]);
 
   const activeCount = current.filter((e) =>
@@ -176,11 +189,12 @@ export default async function ClassStudentsPage({ params }: Props) {
           Học sinh lớp:{" "}
           <span className="font-bold text-primary">{cls.name}</span>
         </h1>
+        {/* Người CHỈ XEM không vào được /edit — trả họ về trang lớp. */}
         <Link
-          href={`/classes/${cls.id}/edit`}
+          href={canAssign ? `/classes/${cls.id}/edit` : `/classes/${cls.id}`}
           className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold text-foreground hover:bg-muted"
         >
-          <ArrowLeft className="h-4 w-4" /> Về sửa lớp
+          <ArrowLeft className="h-4 w-4" /> {canAssign ? "Về sửa lớp" : "Về lớp"}
         </Link>
       </div>
 
@@ -195,6 +209,7 @@ export default async function ClassStudentsPage({ params }: Props) {
         canTransfer={canTransfer}
         canRemove={canRemove}
         canDeleteStudent={canDeleteStudent}
+        canAssign={canAssign}
         targetClasses={targetClasses}
       />
     </div>

@@ -85,7 +85,7 @@ export async function getReviewTree(
       topic: true,
       actualTeacherId: true,
       substituteTeacherId: true,
-      plan: { select: { customTitle: true } },
+      plan: { select: { customTitle: true, order: true } },
       lesson: { select: { order: true, title: true, moduleCode: true } },
       class: {
         select: {
@@ -168,6 +168,7 @@ export async function getReviewTree(
         deriveSessionLabel({
           sessionNumber: numberOf.get(s.id) ?? null,
           planTitle: s.plan?.customTitle,
+          planOrder: s.plan?.order,
           lessonTitle: s.lesson?.title,
           lessonOrder: s.lesson?.order,
           moduleCode: s.lesson?.moduleCode,

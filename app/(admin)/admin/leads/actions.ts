@@ -23,6 +23,12 @@ import { autoAssignLead, reassignOpenLeads } from '@/lib/lead/assign'
 import { leadSharingEnabled } from '@/lib/lead/sharing'
 import { validateTransferTarget } from '@/lib/crm/transfer-validate'
 import { autoAssignNewLead, manualAssignLead, reassignForCenter } from '@/lib/lead/auto-assign'
+import {
+  chiaChoLead,
+  baoSaleCoLeadMoi,
+  baoPoolRong,
+  thuHoiChuongLeadCu,
+} from '@/lib/lead/assign-lead'
 import { assignmentWrite } from '@/lib/lead/assignment'
 import { centerIdForOrgUnit } from '@/lib/org/org-service'
 import { rejectHeadOffice } from '@/lib/enrollment-flow'
@@ -252,6 +258,12 @@ export async function updateLeadStatus(
       source: 'MANUAL',
     })
 
+    // 🔴 KHÔNG ghi dòng thời gian ở đây nữa. `recordLeadStatusChange` ngay trên đã ghi
+    // CẢ HAI sổ (AuditLog + `LeadActivity` type STATUS_CHANGE), và nội dung nó dựng còn
+    // đầy đủ hơn bản cũ: nhãn tiếng Việt + nguồn đổi + lý do (`leadStatusTrailContent`).
+    // Bản trên `main` giữ nếp cũ "Phase T1.2 tự sinh timeline"; hợp nhất 16/09/2026 thoạt
+    // tiên giữ CẢ HAI ⇒ mỗi lượt đổi trạng thái đẻ HAI dòng trong "Lịch sử tương tác".
+
     // 25/08 — lead MẤT ⇒ đóng sổ học thử của mọi con: `LeadTrialHistory.outcome = "LOST"`.
     //
     // Cột `outcome` có từ FL-R2 với 3 giá trị ENROLLED | LOST | PENDING, nhưng tới trước
@@ -262,9 +274,6 @@ export async function updateLeadStatus(
     //
     // Chỉ đụng dòng đang PENDING: con đã nhập học khoá khác rồi thì lead mất không xoá
     // được thành tích đó.
-    // 'DA_MAT' chứ không 'LOST': GĐ5 rút enum LeadStatus còn 10 giá trị tiếng Việt
-    // (LOST và DUPLICATE gộp làm một). `LeadTrialHistory.outcome` là enum KHÁC, giá
-    // trị 'LOST' của nó không đổi — đừng đổi theo.
     if (parsed.data === 'DA_MAT' && before.status !== 'DA_MAT') {
       await tx.leadTrialHistory.updateMany({
         where: { leadChild: { leadId }, outcome: 'PENDING' },
@@ -277,7 +286,7 @@ export async function updateLeadStatus(
     // Nếp cũ (Phase T1.4) tạo sẵn một lịch học thử "ngày mai cùng giờ" làm chỗ giữ chân.
     // Cái đó nằm ở hệ V1, mà bảng Trial của site giáo viên chỉ đọc V2 — nên lịch giữ chân
     // ấy giáo viên KHÔNG BAO GIỜ thấy, và nó còn đẻ ra một ngày giả trong báo cáo.
-    // Nay chỉ ghi việc cần làm vào dòng thời gian; Sale xếp buổi thật ở màn "Lớp Trial".
+    // Nay chỉ ghi việc cần làm vào dòng thời gian; Sale xếp buổi thật ở "Lớp trải nghiệm".
     if (
       parsed.data === 'DA_HEN_HOC_THU' &&
       before.status !== 'DA_HEN_HOC_THU'
@@ -305,75 +314,11 @@ export async function updateLeadStatus(
   return { ok: true }
 }
 
-// ─── LD1/G2 — Loại đơn dự kiến (OrderKind) + sản phẩm/khoá dự kiến trên lead detail ──
-
-const expectedOrderSchema = z.object({
-  kind: z.enum(['COURSE', 'PRODUCT']),
-  // null/undefined = chỉ chọn loại đơn, chưa chọn item cụ thể (hoặc reset khi đổi loại).
-  itemId: z.string().min(1).nullish(),
-})
-
-/**
- * Đặt loại đơn dự kiến (Khoá học / Sản phẩm) + item cụ thể (khoá/sản phẩm) cho lead.
- * - kind=COURSE → expectedCourseId = item (course teachable+active), expectedProductId=null.
- * - kind=PRODUCT → expectedProductId = item (product ACTIVE KIT_ROBOT/SENSOR), expectedCourseId=null.
- * - itemId rỗng (đổi loại đơn) → xoá cả 2 expected id.
- * Dùng để gợi ý nguồn item khi tạo đơn. Giữ tên cũ để tương thích component.
- */
-export async function updateLeadOrderKind(
-  leadId: string,
-  kind: string,
-  itemId?: string | null,
-): Promise<{ ok: boolean; error?: string }> {
-  const session = await auth()
-  if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
-  if (!(await checkPermission('leads:edit'))) return { ok: false, error: 'Không có quyền' }
-
-  const parsed = expectedOrderSchema.safeParse({ kind, itemId: itemId ?? null })
-  if (!parsed.success) return { ok: false, error: 'Dữ liệu loại đơn không hợp lệ' }
-  const { kind: k, itemId: id } = parsed.data
-
-  const before = await db.lead.findUnique({
-    where: { id: leadId },
-    select: { centerId: true, assignedToId: true },
-  })
-  const actor = await resolveActor(session.user.id)
-  if (!before || !passesScope('Lead', before, actor)) {
-    return { ok: false, error: 'Lead không tồn tại' }
-  }
-  if (!(await actorMayMutateLead(session.user.id, before.assignedToId))) {
-    return { ok: false, error: MUTATE_DENIED }
-  }
-
-  // Validate item khớp loại đơn (nếu có chọn item).
-  let expectedCourseId: string | null = null
-  let expectedProductId: string | null = null
-  if (id) {
-    if (k === 'COURSE') {
-      const c = await db.course.findFirst({
-        where: { id, isActive: true, isTeachable: true },
-        select: { id: true },
-      })
-      if (!c) return { ok: false, error: 'Khoá học không hợp lệ' }
-      expectedCourseId = id
-    } else {
-      const p = await db.product.findFirst({
-        where: { id, status: 'ACTIVE', category: { in: ['KIT_ROBOT', 'SENSOR'] } },
-        select: { id: true },
-      })
-      if (!p) return { ok: false, error: 'Sản phẩm không hợp lệ' }
-      expectedProductId = id
-    }
-  }
-
-  await db.lead.update({
-    where: { id: leadId },
-    data: { orderKind: k, expectedCourseId, expectedProductId },
-  })
-
-  revalidatePath(`/leads/${leadId}`)
-  return { ok: true }
-}
+// 30/08/2026 — GỠ "Loại đơn dự kiến" (chủ dự án chốt).
+// `Lead.orderKind` / `expectedCourseId` / `expectedProductId` chỉ có MỘT nơi ghi (ô
+// này) và KHÔNG nơi nào đọc — kể cả màn tạo đơn, nơi nó lẽ ra dùng để gợi ý. Ô này
+// bắt người trực lead khai một thứ không đi tới đâu.
+// Ba cột vẫn nằm trong DB: không drop cột đang có dữ liệu PROD (luật cứng #4).
 
 // ─── Phase T1.2 — Activity + Task ────────────────────────────────────────────
 
@@ -565,7 +510,16 @@ export async function updateLeadNote(
   await db.$transaction(async (tx) => {
     await tx.lead.update({
       where: { id: leadId },
-      data: { note: newNote },
+      // ⚠️ `lastActivityAt` PHẢI nhảy theo. Chốt 16/09/2026 của chủ dự án: "lần gần nhất
+      // tương tác lead tính cả ghi chú lead luôn".
+      //
+      // Trước bản vá: Sale mở lead ra gõ ghi chú rồi lưu ⇒ chỉ cột `note` đổi, không dòng
+      // hoạt động nào sinh ra, `lastActivityAt` đứng im. Hệ quả đo được ở hai chỗ:
+      //   · `/lead-nguoi` chấm lead đó là "chưa ai chăm" dù vừa có người ghi chú xong, và
+      //     màn đó có nút PHÂN BỔ HÀNG LOẠT — tức giật lead khỏi tay người đang làm;
+      //   · `isLeadIdle` (`lib/crm/sla.ts`) cũng đọc đúng cột này nên cảnh báo SLA nổ nhầm.
+      // Chỉ nhảy khi ghi chú THỰC SỰ đổi — lưu lại y nguyên không phải một lần chăm.
+      data: newNote !== before.note ? { note: newNote, lastActivityAt: new Date() } : { note: newNote },
     })
 
     await logLeadAudit({
@@ -596,7 +550,7 @@ export async function deleteLead(
 
   const before = await db.lead.findUnique({
     where: { id: leadId, deletedAt: null },
-    select: { parentName: true, phone: true, status: true, centerId: true },
+    select: { parentName: true, phone: true, status: true, centerId: true, assignedToId: true },
   })
   const actor = await resolveActor(session.user.id)
   if (!before || !passesScope('Lead', before, actor)) {
@@ -634,6 +588,21 @@ export async function deleteLead(
   } catch {
     return { ok: false, error: 'Lead khong ton tai hoac da bi xoa' }
   }
+
+  // 15/09/2026 — THU HỒI chuông "Bạn có lead mới" của người đang giữ lead.
+  //
+  // Sự cố có thật: một tư vấn viên báo nhận được thông báo lead mới nhưng mở ra không thấy
+  // lead nào, và tra dữ liệu thì lead ĐÃ KHÔNG CÒN. Chuông vẫn nằm đó vì đường xoá mềm này
+  // chưa từng gọi thu hồi — `deletedAt` che lead khỏi mọi truy vấn, nhưng `StaffNotification`
+  // là bảng riêng, không ai dọn hộ.
+  //
+  // Triệu chứng dễ chẩn nhầm thành "chuông của người khác nhảy sang": người đó nhận ĐÚNG
+  // chuông của mình, vào lúc họ còn giữ lead. Đường đọc chuông lọc `userId` nên không có rò
+  // chéo — thiếu là ở nửa THU HỒI.
+  //
+  // Đặt NGOÀI transaction và nuốt lỗi (`thuHoiChuongLeadCu` tự lo): thu hồi hỏng thì lead vẫn
+  // phải xoá được. `chuMoiId: null` = không ai tiếp quản.
+  await thuHoiChuongLeadCu({ chuCuId: before.assignedToId, chuMoiId: null, leadId })
 
   revalidatePath('/leads')
   revalidatePath('/dashboard')
@@ -841,6 +810,13 @@ export async function createLeadManual(
       childAge: d.childAge ?? null,
       centerId,
       orgUnitId,
+      // 15/09/2026 — BẮT BUỘC. Danh sách /leads sắp theo `lastInboundAt` với
+      // `nulls: 'last'`, nên lead tạo mà bỏ trống cột này bị đẩy xuống CUỐI mọi trang —
+      // người dùng báo "nhập xong không thấy lead đâu", nhưng tìm theo SĐT/nguồn thì
+      // lại ra (tập kết quả nhỏ nên nó lọt trang 1).
+      // Quy ước: lúc tạo, `lastInboundAt` = `createdAt`; `laNhapLai()` chỉ đúng khi nó
+      // LỚN HƠN `createdAt`. Xem `lib/tables/lead-columns.ts`.
+      lastInboundAt: new Date(),
       courseId: d.courseId || null,
       source: d.source || 'Nhập tay',
       note: d.note || null,
@@ -1093,6 +1069,16 @@ export async function updateLeadFields(
     ...(d.adId !== undefined ? { adId: d.adId || null } : {}),
     ...(d.nextFollowUpAt !== undefined ? { nextFollowUpAt: d.nextFollowUpAt || null } : {}),
   }
+  // Ghi chú đổi qua đường biểu mẫu đầy đủ cũng là một lần chăm — xem chú thích dài ở
+  // `updateLeadNote`. Hai đường ghi `note`, cả hai phải nhảy đồng hồ, nếu không lỗ chỉ
+  // chuyển chỗ chứ không mất.
+  const noteDoi = d.note !== undefined && updateData.note !== before.note
+  // 🔴 KHÔNG ghi ở đây. Bản trên `main` gọi `db.lead.update` TRẦN ngay chỗ này, còn bản
+  // `test` (vá V-6 · G-02, 25/08) đã dời lượt ghi vào TRONG giao dịch cùng nhật ký kiểm
+  // toán. Hợp nhất 16/09 thoạt tiên giữ CẢ HAI ⇒ ghi hai lần, và lượt ghi trần lại nằm
+  // ngoài giao dịch — đúng cái lỗi mà V-6 sinh ra để bịt. Giữ phép tính `noteDoi`, đưa
+  // `lastActivityAt` vào đúng lượt ghi bên dưới.
+
   // P2-1: ghi nhật ký kiểm toán — chỉ field thực sự đổi.
   //
   // G-01 — `Date` phải so theo MỐC THỜI GIAN, không theo tham chiếu. Từ khi có
@@ -1121,7 +1107,13 @@ export async function updateLeadFields(
   try {
     await db.$transaction(async (txRaw) => {
       const tx = txRaw as unknown as Prisma.TransactionClient
-      await tx.lead.update({ where: { id: leadId }, data: updateData })
+      await tx.lead.update({
+        where: { id: leadId },
+        // Ghi chú đổi qua biểu mẫu đầy đủ cũng là một lần chăm (theo `main`) — xem chú
+        // thích dài ở `updateLeadNote`. Hai đường ghi `note`, cả hai phải nhảy đồng hồ,
+        // nếu không lỗ chỉ chuyển chỗ chứ không mất.
+        data: noteDoi ? { ...updateData, lastActivityAt: new Date() } : updateData,
+      })
       if (changedFields.length > 0) {
         await logLeadAudit({
           leadId,
@@ -1217,6 +1209,55 @@ export async function autoAssignNewLeadAction(
 
   revalidatePath('/leads')
   revalidatePath(`/leads/${leadId}`)
+  return { ok: true, assignedToId: res.assignedToId }
+}
+
+/**
+ * CHIA LẠI một lead ĐÃ CÓ theo cấu hình cơ sở — nút "Chia lại lead".
+ *
+ * ⚠️ KHÔNG dùng `autoAssignNewLead` cho việc này. Hàm đó dành cho lead MỚI và cố ý
+ * bỏ qua lead đã có chủ (`auto-assign.ts:174` — `if (lead.assignedToId) return
+ * { ok: true, skipped: true }`). Nút cũ gọi đúng vào đó rồi coi `ok: true` là
+ * thành công, nên báo "Đã chia lại lead theo cấu hình cơ sở" trong khi lead không
+ * đổi tay — đúng lỗi chủ dự án gặp 03/09/2026.
+ *
+ * Đường đúng là `chiaChoLead`: cửa duy nhất tiêu lượt của vòng, có ghi
+ * `LeadAssignmentLog` nên lượt chia lại hiện ra trong sổ chia.
+ */
+export async function chiaLaiLeadAction(
+  leadId: string,
+): Promise<{ ok: boolean; error?: string; assignedToId?: string | null }> {
+  const session = await auth()
+  if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
+  if (!(await checkPermission('leads:assign'))) return { ok: false, error: 'Không có quyền' }
+
+  const actor = await resolveActor(session.user.id)
+  const lead = await db.lead.findUnique({
+    where: { id: leadId },
+    select: { centerId: true, assignedToId: true },
+  })
+  if (!lead || !passesScope('Lead', lead, actor)) {
+    return { ok: false, error: 'Lead không tồn tại' }
+  }
+  // Không có cơ sở thì không có vòng chia nào để rút — nói thẳng thay vì im lặng
+  // không đổi gì rồi báo thành công (đúng kiểu hỏng vừa phải vá).
+  if (!lead.centerId) {
+    return { ok: false, error: 'Lead chưa gắn cơ sở — chọn cơ sở trước khi chia lại' }
+  }
+
+  const res = await chiaChoLead(leadId, {
+    targetCenterId: lead.centerId,
+    createdById: session.user.id,
+    entryPoint: 'RESHUFFLE',
+  })
+  if (!res.ok) return { ok: false, error: res.error ?? 'Không chia lại được' }
+  if (!res.assignedToId) {
+    return { ok: false, error: 'Cơ sở này chưa có sale nào đang bật trong vòng chia' }
+  }
+
+  revalidatePath('/leads')
+  revalidatePath(`/leads/${leadId}`)
+  revalidatePath('/quan-ly-chia-lead')
   return { ok: true, assignedToId: res.assignedToId }
 }
 
@@ -1320,7 +1361,9 @@ export async function transferLead(
 
   const lead = await db.lead.findFirst({
     where: { id: d.leadId, deletedAt: null },
-    select: { id: true, assignedToId: true, centerId: true, status: true },
+    // `parentName` chỉ để dựng nội dung chuông ở cuối hàm — thêm vào select đang có
+    // thay vì mở một câu tra thứ hai.
+    select: { id: true, assignedToId: true, centerId: true, status: true, parentName: true },
   })
   if (!lead) return { ok: false, error: 'Lead không tồn tại' }
 
@@ -1437,6 +1480,32 @@ export async function transferLead(
       tx,
     })
   })
+
+  // BÁO CHO NGƯỜI NHẬN — vá 08/09/2026.
+  //
+  // Trước bản vá này chuyển lead là đường CÂM: sổ ghi đủ (LeadActivity HANDOVER, LeadTransfer,
+  // audit) nhưng sale nhận KHÔNG biết gì. Tên người nhận thậm chí đã được tra rồi vứt đi bằng
+  // `void toSale` ngay dòng này.
+  //
+  // NGOÀI transaction, sau dấu đóng ở trên: `notifyStaff` cố ý không nhận `tx`.
+  // Dùng ĐÚNG khoá `lead.moi:<leadId>` sẵn có — `catalog.ts` phân loại theo tiền tố đó.
+  if (toSaleId) {
+    await baoSaleCoLeadMoi({
+      ownerId: toSaleId,
+      leadId: lead.id,
+      parentName: lead.parentName,
+      source: 'MANAGER',
+    })
+  } else if (toCenterId) {
+    // `reassignForCenter` trả null khi cơ sở ĐÍCH không còn ai nhận lead. Lead vừa bị chuyển
+    // sang đó và nay KHÔNG có chủ — im lặng ở đây là đúng kiểu hỏng đắt nhất của module này:
+    // có khách đang chờ mà không ai được giao. Báo quản lý cơ sở đích, đúng khuôn pool rỗng.
+    await baoPoolRong(toCenterId, lead.id, lead.parentName)
+  }
+
+  // Chuông của CHỦ CŨ trỏ tới lead họ không còn giữ — và chuyển XUYÊN CƠ SỞ thì scopedDb còn
+  // lọc mất, bấm vào ra trang "không tồn tại". Thu hồi trong cùng lượt.
+  await thuHoiChuongLeadCu({ chuCuId: lead.assignedToId, chuMoiId: toSaleId, leadId: lead.id })
 
   void toSale
   void fromCenter

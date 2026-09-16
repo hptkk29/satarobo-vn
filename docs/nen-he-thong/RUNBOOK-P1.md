@@ -87,7 +87,9 @@ Ba loại số:
 ## 4b. ✅ ĐÃ CHẠY THẬT TRÊN PROD — 12/08/2026 12:4x VN
 
 Bốn bước §1 đã chạy xong trên Supabase PROD, **qua GitHub Actions** chứ không từ máy dev:
-`.github/workflows/nen-p1-orgunit.yml` (`workflow_dispatch`, mặc định dry-run, apply phải gõ
+`.github/workflows/nen-p1-orgunit.yml` — ⚠️ **workflow này đã XOÁ 07/09/2026** sau khi chạy
+xong; script vẫn còn trong repo, cách lấy lại vỏ workflow xem `.github/workflows/README.md`
+(`workflow_dispatch`, mặc định dry-run, apply phải gõ
 đúng chuỗi xác nhận). Lý do dùng workflow: chuỗi kết nối prod nằm trong secret
 `PROD_DATABASE_URL`/`PROD_DIRECT_URL`, còn trên Vercel biến đó là *Sensitive* nên không ai đọc
 lại được — chạy ở đây thì không người nào phải cầm mật khẩu DB prod, và log dry-run nằm lại
@@ -220,7 +222,10 @@ và `finance` (93). Hậu quả: đường đọc lọc `orgUnitId IN visibleOrg
   ### Cách chạy trên PROD — dùng workflow, khỏi dán SQL
 
   > **Nền P1 — dọn AuditLog.orgUnitId (prod)**
-  > (`.github/workflows/nen-p1-sua-audit.yml`, `workflow_dispatch`)
+  > ⚠️ `.github/workflows/nen-p1-sua-audit.yml` **đã XOÁ 07/09/2026 — và CHƯA TỪNG CHẠY.**
+  > Việc này vẫn còn nợ: 246 dòng sai loại ID + 290 dòng trống vẫn vô hình với quản lý cơ
+  > sở. Script `scripts/nen-p1-sua-audit-orgunit.ts` còn nguyên; lấy lại vỏ workflow theo
+  > `.github/workflows/README.md`.
 
   Chạy `scripts/nen-p1-sua-audit-orgunit.ts` (cả hai giai đoạn: đổi `Center.id` sai
   loại + điền dòng `NULL` suy được). Mặc định `dry-run`; `apply` phải gõ

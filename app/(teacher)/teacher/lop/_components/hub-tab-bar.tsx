@@ -66,6 +66,10 @@ export function HubTabBar({
             <Link
               key={t.key}
               href={`?classId=${classId}&tab=${t.key}`}
+              // Đổi tab = ở NGUYÊN trang hub của lớp, chỉ đổi ?tab= → không cho
+              // App Router cuộn về đầu (ScrollAndFocusHandler), kẻo thanh tab vừa
+              // bấm biến khỏi tầm mắt.
+              scroll={false}
               aria-current={isActive ? "page" : undefined}
               className={cn(
                 "inline-flex shrink-0 items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",

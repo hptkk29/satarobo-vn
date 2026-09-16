@@ -25,6 +25,7 @@ import { currentPeriodKey, parsePeriodKey, periodRange } from "@/lib/cham-cong/p
 import { congDayCuaNguoi } from "@/lib/cham-cong/cong-day";
 import { loadBuoiDay, loadLoaiCongDay } from "@/lib/cham-cong/cong-day-db";
 import { HO_CENTER_ID } from "@/lib/cham-cong/home-center";
+import { CanhBaoDanhMuc } from "@/components/admin/cham-cong/canh-bao-danh-muc";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { PageHeader } from "@/components/admin/ui/page-header";
 import { PageHelp } from "@/components/admin/ui/page-help";
@@ -34,7 +35,7 @@ import { ModuleNav } from "@/components/admin/cham-cong/module-nav";
 import { ScopeBar } from "@/components/admin/cham-cong/scope-bar";
 import { KpiStrip } from "@/components/admin/cham-cong/kpi-strip";
 import { SectionCard } from "@/components/admin/cham-cong/section-card";
-import { LoaiCongDayTable, type LoaiRow } from "./_components/loai-cong-day";
+import { LoaiCongDayTable, type LoaiRow, type PhanLoaiChon } from "./_components/loai-cong-day";
 import { CongDayTable, type CongDayRow } from "./_components/cong-day-table";
 
 export const metadata = { title: "Công dạy | Admin", robots: { index: false } };
@@ -113,7 +114,7 @@ export default async function CongDayPage({
     ]),
   ];
 
-  const [danhMuc, buoi, users, canConfig] = await Promise.all([
+  const [danhMuc, buoi, users, canConfig, phanLoai] = await Promise.all([
     loadLoaiCongDay(),
     loadBuoiDay(userIds, from, to),
     userIds.length
@@ -123,6 +124,13 @@ export default async function CongDayPage({
         })
       : Promise.resolve([]),
     checkPermission("hr_attendance:config", { centerId: HO_CENTER_ID }),
+    // Chỉ phân loại ĐANG DÙNG mới vào ô chọn khi thêm dòng — thêm dòng trỏ vào phân loại đã tắt
+    // là tạo ra một dòng không bao giờ nhận được buổi nào.
+    sdb.sessionCategory.findMany({
+      where: { isActive: true },
+      orderBy: [{ displayOrder: "asc" }, { code: "asc" }],
+      select: { code: true, name: true },
+    }),
   ]);
   const tenCua = new Map(users.map((u) => [u.id, { ten: u.name ?? u.email ?? u.id, ma: u.employee?.employeeCode ?? null }]));
 
@@ -161,15 +169,23 @@ export default async function CongDayPage({
   const buoiTheoLoai = new Map<string, number>();
   for (const r of rows) for (const d of r.dong) buoiTheoLoai.set(d.code, (buoiTheoLoai.get(d.code) ?? 0) + d.buoi);
 
+  const tenPhanLoai = new Map(phanLoai.map((c) => [c.code, c.name]));
   const loaiRows: LoaiRow[] = danhMuc.map((l) => ({
     code: l.code,
     name: l.name,
+    source: l.source,
+    role: l.role,
     basis: l.basis,
     factor: l.factor,
     countsInPeriod: l.countsInPeriod,
     isActive: l.isActive,
+    categoryCode: l.categoryCode,
+    // Phân loại đã TẮT không có trong `phanLoai` — vẫn phải in ra mã để dòng không hiện "mọi
+    // phân loại", vì nó KHÔNG phải dòng bao sân.
+    categoryName: l.categoryCode ? (tenPhanLoai.get(l.categoryCode) ?? l.categoryCode) : null,
     buoiTrongKy: buoiTheoLoai.get(l.code) ?? 0,
   }));
+  const phanLoaiChon: PhanLoaiChon[] = phanLoai.map((c) => ({ code: c.code, name: c.name }));
 
   const tongCong = rows.reduce((s, r) => s + r.tongCong, 0);
   const tongBuoi = rows.reduce((s, r) => s + r.tongBuoi, 0);
@@ -183,6 +199,17 @@ export default async function CongDayPage({
       />
 
       <ModuleNav active="congday" scope={scope} ctx={ctx} />
+
+      {/* Màn này KHÔNG đi qua `ConfigTabs` nên phải render riêng — và nó là màn CẦN cảnh
+          báo nhất: `TeachingCreditType` rỗng thì mọi con số ở đây ra 0 mà không báo gì
+          (đo prod 09/09/2026, luật 15). Đây là chỗ thứ hai và CUỐI CÙNG; thêm nữa thì
+          dùng `ConfigTabs`. */}
+      <CanhBaoDanhMuc
+        coSoVanHanhIds={scope
+          .blocksWith("hr_attendance:config")
+          .filter((b) => b.id !== HO_CENTER_ID)
+          .map((b) => b.id)}
+      />
 
       <ScopeBar
         basePath={BASE}
@@ -203,14 +230,15 @@ export default async function CongDayPage({
           ngay theo số mới.
         </p>
         <p className="mt-2">
-          Số ở đây có thể <em>khác</em> cột “Dạy” bên màn Kỳ công. Cột đó đếm buổi theo <b>cơ sở của lớp</b>,
-          nên giáo viên của cơ sở này đi dạy lớp cơ sở khác thì buổi đó không vào đâu cả. Màn này hỏi theo
-          <b> người</b> nên buổi luôn về đúng người, dù dạy ở đâu.
+          Số ở đây <em>khác</em> cột <b>Buổi ở cơ sở</b> bên màn Kỳ công, và khác là <b>ĐÚNG</b>. Cột
+          đó đếm buổi của những lớp <b>thuộc cơ sở đang xem</b>; màn này hỏi theo <b>người</b> nên
+          buổi luôn về đúng người, dù họ dạy ở cơ sở nào. Giáo viên dạy chéo cơ sở là chỗ hai số tách
+          nhau — đừng sửa cho khớp.
         </p>
         <p className="mt-2">
-          <b>Chưa làm được:</b> “dạy bù” và “vượt giờ”. Dữ liệu hiện không có cột nào đánh dấu một buổi là
-          buổi bù, và giờ dạy thực tế gần như luôn để trống nên không biết buổi nào vượt. Thêm hai loại đó
-          bây giờ là thêm hai ô luôn bằng 0 — cần chốt cách ghi nhận trước.
+          <b>Dạy bù và vượt giờ:</b> nay khai được ở tab <b>Cấu hình → Phân loại buổi</b>, nhưng chỉ
+          ra số khi buổi đã <em>được gán</em> phân loại ở form sửa buổi. Riêng “vượt giờ” vẫn chưa đo
+          được: giờ dạy thực tế gần như luôn để trống nên không biết buổi nào vượt.
         </p>
       </PageHelp>
 
@@ -218,7 +246,12 @@ export default async function CongDayPage({
         cols={4}
         items={[
           { icon: GraduationCap, label: "Tổng công dạy", value: so(tongCong), hint: "đã nhân hệ số" },
-          { icon: Layers, label: "Tổng buổi đã dạy", value: tongBuoi },
+          {
+            icon: Layers,
+            label: "Tổng buổi của người",
+            value: tongBuoi,
+            hint: "kể cả dạy chéo cơ sở",
+          },
           { icon: Users, label: "Người có buổi dạy", value: rows.length },
           {
             icon: Hourglass,
@@ -251,7 +284,7 @@ export default async function CongDayPage({
               ? "Sửa hệ số hoặc bỏ “Cộng vào kỳ” là số ở bảng trên đổi theo ngay. Tắt “Đang dùng” thì cả nhóm buổi đó rơi khỏi bảng."
               : "Sửa hệ số cần quyền cấu hình tại Hội sở — danh mục này dùng chung mọi cơ sở."}
           </p>
-          <LoaiCongDayTable rows={loaiRows} canEdit={canConfig} />
+          <LoaiCongDayTable rows={loaiRows} phanLoai={phanLoaiChon} canEdit={canConfig} />
         </SectionCard>
       </div>
     </div>

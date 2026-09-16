@@ -111,6 +111,9 @@ export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
   "attendance",
   "audit-log",
   "ban-giao-lead",
+  "lead-nguoi",
+  // 29/08 — màn Quản lý chia lead. Thiếu dòng này là đá qua đá lại thành vòng lặp.
+  "quan-ly-chia-lead",
   "bao-cao",
   "canh-bao-rui-ro",
   "cau-hinh-van-hanh",
@@ -123,6 +126,8 @@ export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
   "classes",
   "compliance",
   "cong-no",
+  "thieu-hoc-phi",
+  "nhap-giao-dich-cu",
   "bien-dong-so-du",
   "convert-conflicts",
   "course-packages",

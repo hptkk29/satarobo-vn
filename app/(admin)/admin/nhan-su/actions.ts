@@ -19,10 +19,14 @@ import {
 } from "@/lib/validators/employee";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
-import { reconcileUserOrgRoles, OrgRoleSyncError } from "@/lib/auth/org-role-sync";
+import {
+  reconcileUserOrgRoles,
+  OrgRoleSyncError,
+} from "@/lib/auth/org-role-sync";
 import { syncCenterClassConversations } from "@/lib/chat/sync-membership";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
 import { keoTaiKhoanTheoHoSo } from "@/lib/hr/sync-employee-unit";
+import { canVoHieuTaiKhoan } from "@/lib/hr/nghi-viec";
 
 type ActionResult<T = unknown> =
   | { ok: true; data?: T }
@@ -40,12 +44,18 @@ function actorCanUseCenter(actor: Actor, centerId: string | null): boolean {
 /** NV `id` có thuộc tầm nhìn cơ sở actor không (sdb null-filter + passesScope).
  * Vá 24/07: bỏ bypass isHoLevel trần — scoped read + passesScope đã per-model
  * (role HO có quyền employees: → ALL vẫn qua; role HO khác chức năng → theo scope). */
-async function employeeInScope(userId: string | undefined, id: string): Promise<boolean> {
+async function employeeInScope(
+  userId: string | undefined,
+  id: string,
+): Promise<boolean> {
   if (!userId) return false;
   const actor = await resolveActor(userId);
   if (actor.isSuperAdmin) return true;
   const sdb = scopedDb(actor);
-  const e = await sdb.employee.findUnique({ where: { id }, select: { centerId: true } });
+  const e = await sdb.employee.findUnique({
+    where: { id },
+    select: { centerId: true },
+  });
   return !!e && passesScope("Employee", e, actor);
 }
 
@@ -152,7 +162,8 @@ function auditActorOf(session: {
 }) {
   return {
     id: session.user.id ?? null,
-    name: session.user.name ?? session.user.email ?? session.user.id ?? "Unknown",
+    name:
+      session.user.name ?? session.user.email ?? session.user.id ?? "Unknown",
   };
 }
 
@@ -223,7 +234,10 @@ export async function createEmployeeAction(
   // mà `centerId` giữ nguyên giá trị cũ. NV HO → không thuộc cơ sở nào; chỗ làm xác định
   // qua `EmployeeOrgAssignment`.
   const createData = { ...parsed.data };
-  const donViTao = await suyCoSoTuDonVi({ isHO, orgUnitId: createData.orgUnitId });
+  const donViTao = await suyCoSoTuDonVi({
+    isHO,
+    orgUnitId: createData.orgUnitId,
+  });
   if (donViTao) createData.centerId = donViTao.centerId;
   // SEC-M15: chống mass-assignment khi CREATE (write path song song với update:265-270).
   // Non-SUPER_ADMIN không được tự đặt cờ CEO; CENTER_MANAGER thuần không được đặt bậc/mức lương.
@@ -232,7 +246,10 @@ export async function createEmployeeAction(
   if (!canSetPrivileged) createData.timesheetExempt = false;
   // SEC-H04: strip field ngoài quyền (khớp update + redact-khi-đọc). Bao trùm strip
   // salary CM cũ + chặn set nhóm personal/contact ngoài quyền lúc tạo.
-  stripHiddenEmployeeFields(createData, getEmployeeFieldVisibility(session.user.role));
+  stripHiddenEmployeeFields(
+    createData,
+    getEmployeeFieldVisibility(session.user.role),
+  );
 
   // Cách ly cơ sở: chỉ tạo NV cho cơ sở trong tầm nhìn actor (NV HO/centerId=null → super/HO).
   if (!actorCanUseCenter(actor, createData.centerId ?? null)) {
@@ -258,7 +275,11 @@ export async function createEmployeeAction(
   // #10 — NV HO: gán phân công PRIMARY vào OrgUnit Hội sở (khi isHO, orgUnitId rỗng).
   await syncHoAssignment(
     sdb,
-    { id: session.user.id, name: session.user.name ?? session.user.email ?? session.user.id ?? "Unknown" },
+    {
+      id: session.user.id,
+      name:
+        session.user.name ?? session.user.email ?? session.user.id ?? "Unknown",
+    },
     created.id,
     isHO,
   );
@@ -297,10 +318,15 @@ export async function updateEmployeeAction(
 
   // Target gate: employees:edit có cả tầng GLOBAL (HO_HR) và CENTER (CENTER_HR) —
   // truyền centerId của NV HIỆN TẠI để v2 đánh giá đúng nhánh CENTER.
-  const targetEmployee = await sdb.employee.findUnique({ where: { id }, select: { centerId: true } });
+  const targetEmployee = await sdb.employee.findUnique({
+    where: { id },
+    select: { centerId: true },
+  });
   if (!targetEmployee) return { ok: false, error: "Không tìm thấy nhân sự" };
   try {
-    await assertPermission("employees:edit", { centerId: targetEmployee.centerId });
+    await assertPermission("employees:edit", {
+      centerId: targetEmployee.centerId,
+    });
   } catch {
     return { ok: false, error: "Không có quyền" };
   }
@@ -329,10 +355,16 @@ export async function updateEmployeeAction(
   // SEC-H04: strip field ngoài quyền (khớp redact-khi-đọc bên page) — chống mất data khi
   // client gửi null do đã redact + chặn set field ngoài quyền. Bao trùm strip salary CM cũ.
   const data = { ...parsed.data };
-  stripHiddenEmployeeFields(data, getEmployeeFieldVisibility(session.user.role));
+  stripHiddenEmployeeFields(
+    data,
+    getEmployeeFieldVisibility(session.user.role),
+  );
   // Module chấm công v3 (T-02): cờ miễn tính công chỉ SUPER_ADMIN đặt/gỡ được (khuôn SEC-M15
   // của isCEO). Vai khác gửi lên thì bỏ qua — không đổi giá trị đang có.
-  if (data.timesheetExempt !== undefined && !hasRole(session.user, "SUPER_ADMIN")) {
+  if (
+    data.timesheetExempt !== undefined &&
+    !hasRole(session.user, "SUPER_ADMIN")
+  ) {
     delete data.timesheetExempt;
   }
   // ĐƠN VỊ LÀM VIỆC → CƠ SỞ (xem `lib/hr/employee-unit.ts`). Ba trạng thái của
@@ -344,7 +376,10 @@ export async function updateEmployeeAction(
   // Đổi cơ sở → cơ sở đích cũng phải trong tầm nhìn actor.
   if (data.centerId !== undefined) {
     if (!actorCanUseCenter(actor, data.centerId ?? null)) {
-      return { ok: false, error: "Không có quyền chuyển nhân sự sang cơ sở này" };
+      return {
+        ok: false,
+        error: "Không có quyền chuyển nhân sự sang cơ sở này",
+      };
     }
   }
 
@@ -366,6 +401,52 @@ export async function updateEmployeeAction(
     select: EMPLOYEE_AUDIT_SELECT,
   });
 
+  // ── NGHỈ VIỆC ⇒ TÀI KHOẢN CHẾT THEO (08/09/2026) ───────────────────────────
+  //
+  // Trước bản vá này, đổi `status` sang RESIGNED/TERMINATED chỉ ghi vào `Employee`:
+  // tài khoản vẫn đăng nhập được và JWT cũ sống tới hạn. Repo vốn có sẵn cơ chế cắt
+  // phiên và dùng đúng ở đổi-vai + cấp-quyền; chỉ nghỉ việc là quên.
+  //
+  // Bump `tokenVersion` cắt phiên NGAY request kế (`checkSessionLiveness` đối chiếu
+  // với DB); `isActive = false` chặn đăng nhập lại.
+  //
+  // Best-effort có chủ đích: hồ sơ ĐÃ ghi xong: khoá tài khoản hỏng không được biến
+  // thành "không sửa được hồ sơ". Nhưng KHÔNG im lặng — ghi AuditLog riêng.
+  if (canVoHieuTaiKhoan(auditBefore?.status, auditAfter?.status)) {
+    try {
+      const tk = await sdb.user.findFirst({
+        where: { employeeId: id },
+        select: { id: true, isActive: true },
+      });
+      if (tk?.isActive) {
+        await sdb.user.update({
+          where: { id: tk.id },
+          data: { isActive: false, tokenVersion: { increment: 1 } },
+        });
+        await writeAudit({
+          actor: { id: session.user.id, name: session.user.name ?? "" },
+          module: "hr",
+          entityType: "User",
+          entityId: tk.id,
+          action: "DEACTIVATE_ON_OFFBOARD",
+          oldValues: { isActive: true },
+          newValues: {
+            isActive: false,
+            employeeId: id,
+            employeeStatus: auditAfter?.status,
+          },
+          reason:
+            "Nhân sự chuyển sang trạng thái đã nghỉ — vô hiệu hoá tài khoản và cắt phiên",
+        });
+      }
+    } catch (err) {
+      console.error(
+        "[nhan-su] không vô hiệu hoá được tài khoản khi nghỉ việc:",
+        err,
+      );
+    }
+  }
+
   // ĐƠN VỊ NẰM Ở HAI BẢNG — sửa hồ sơ thì kéo tài khoản theo (xem lib/hr/sync-employee-unit.ts).
   // Đọc LẠI sau khi ghi, không lấy từ `data`: hai cột do hai nguồn điền — `orgUnitId`
   // từ form, `centerId` do `suyCoSoTuDonVi` ở trên — và cơ chế ghi kép trong `lib/db.ts`
@@ -383,7 +464,10 @@ export async function updateEmployeeAction(
       await sdb.$transaction(async (tx) => {
         await keoTaiKhoanTheoHoSo(tx as never, {
           employeeId: id,
-          donVi: { centerId: sauKhiGhi.centerId, orgUnitId: sauKhiGhi.orgUnitId },
+          donVi: {
+            centerId: sauKhiGhi.centerId,
+            orgUnitId: sauKhiGhi.orgUnitId,
+          },
           actor: auditActorOf(session),
         });
       });
@@ -404,7 +488,14 @@ export async function updateEmployeeAction(
   if (isHO !== undefined) {
     await syncHoAssignment(
       sdb,
-      { id: session.user.id, name: session.user.name ?? session.user.email ?? session.user.id ?? "Unknown" },
+      {
+        id: session.user.id,
+        name:
+          session.user.name ??
+          session.user.email ??
+          session.user.id ??
+          "Unknown",
+      },
       id,
       isHO,
     );
@@ -458,7 +549,9 @@ export async function deleteEmployeeAction(id: string): Promise<ActionResult> {
   return { ok: true };
 }
 
-export async function toggleEmployeeActiveAction(id: string): Promise<ActionResult> {
+export async function toggleEmployeeActiveAction(
+  id: string,
+): Promise<ActionResult> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
 
@@ -495,7 +588,9 @@ export async function toggleEmployeeActiveAction(id: string): Promise<ActionResu
   return { ok: true };
 }
 
-export async function toggleEmployeePublicAction(id: string): Promise<ActionResult> {
+export async function toggleEmployeePublicAction(
+  id: string,
+): Promise<ActionResult> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
 
@@ -588,7 +683,9 @@ export async function changeEmployeeRoleAction(input: {
       fullName: true,
       centerId: true,
       // orgUnitId: đơn vị neo để đồng bộ UserOrgRole (RBAC v2) theo vai trò mới.
-      userAccount: { select: { id: true, role: true, roles: true, orgUnitId: true } },
+      userAccount: {
+        select: { id: true, role: true, roles: true, orgUnitId: true },
+      },
     },
   });
   if (!employee) return { ok: false, error: "Không tìm thấy nhân viên" };
@@ -628,47 +725,51 @@ export async function changeEmployeeRoleAction(input: {
     session.user.name ?? session.user.email ?? session.user.id ?? "Unknown";
 
   try {
-    await sdb.$transaction(async (txRaw) => {
-      const tx = txRaw as unknown as Prisma.TransactionClient;
-      await tx.user.update({
-        where: { id: userAccount.id },
-        // Bump tokenVersion → token cũ vô hiệu ngay request kế (buộc re-login để
-        // mang roles mới). role = vai trò chính; roles = union.
-        data: { role: primaryRole, roles, tokenVersion: { increment: 1 } },
-      });
-      await tx.roleAuditLog.create({
-        data: {
-          employeeId: employee.id,
-          fromRole,
-          toRole: primaryRole,
-          changedByUserId: session.user.id ?? null,
-          changedByName,
-          reason: `${parsed.data.reason} · vai trò: [${roles.join(", ")}] (chính: ${primaryRole})`,
-        },
-      });
-      // RBAC v2 phải đi CÙNG: đổi vai trò ở v1 mà quên UserOrgRole thì trên prod người
-      // ta mất/giữ quyền sai (prod enforce v2). Gán vai mới + thu hồi vai cũ trong 1 tx.
-      await reconcileUserOrgRoles({
-        tx,
-        userId: userAccount.id,
-        previous: { roles: previousRoles, orgUnitId: anchorOrgUnitId },
-        next: { roles, orgUnitId: anchorOrgUnitId },
-        actorId: session.user.id ?? null,
-        actorName: changedByName,
-        reason: parsed.data.reason,
-      });
+    await sdb.$transaction(
+      async (txRaw) => {
+        const tx = txRaw as unknown as Prisma.TransactionClient;
+        await tx.user.update({
+          where: { id: userAccount.id },
+          // Bump tokenVersion → token cũ vô hiệu ngay request kế (buộc re-login để
+          // mang roles mới). role = vai trò chính; roles = union.
+          data: { role: primaryRole, roles, tokenVersion: { increment: 1 } },
+        });
+        await tx.roleAuditLog.create({
+          data: {
+            employeeId: employee.id,
+            fromRole,
+            toRole: primaryRole,
+            changedByUserId: session.user.id ?? null,
+            changedByName,
+            reason: `${parsed.data.reason} · vai trò: [${roles.join(", ")}] (chính: ${primaryRole})`,
+          },
+        });
+        // RBAC v2 phải đi CÙNG: đổi vai trò ở v1 mà quên UserOrgRole thì trên prod người
+        // ta mất/giữ quyền sai (prod enforce v2). Gán vai mới + thu hồi vai cũ trong 1 tx.
+        await reconcileUserOrgRoles({
+          tx,
+          userId: userAccount.id,
+          previous: { roles: previousRoles, orgUnitId: anchorOrgUnitId },
+          next: { roles, orgUnitId: anchorOrgUnitId },
+          actorId: session.user.id ?? null,
+          actorName: changedByName,
+          reason: parsed.data.reason,
+        });
 
-      // US-03 chat — đổi vai trò có đụng CENTER_MANAGER → đồng bộ nhóm lớp của cơ sở
-      // nhân sự trong cùng transaction (F-SYNC "đổi QLCS").
-      if (
-        previousRoles.includes("CENTER_MANAGER") ||
-        roles.includes("CENTER_MANAGER")
-      ) {
-        await syncCenterClassConversations(tx, employee.centerId);
-      }
-    }, { timeout: 30_000, maxWait: 10_000 });
+        // US-03 chat — đổi vai trò có đụng CENTER_MANAGER → đồng bộ nhóm lớp của cơ sở
+        // nhân sự trong cùng transaction (F-SYNC "đổi QLCS").
+        if (
+          previousRoles.includes("CENTER_MANAGER") ||
+          roles.includes("CENTER_MANAGER")
+        ) {
+          await syncCenterClassConversations(tx, employee.centerId);
+        }
+      },
+      { timeout: 30_000, maxWait: 10_000 },
+    );
   } catch (err) {
-    if (err instanceof OrgRoleSyncError) return { ok: false, error: err.message };
+    if (err instanceof OrgRoleSyncError)
+      return { ok: false, error: err.message };
     return {
       ok: false,
       error: `Lỗi DB: ${err instanceof Error ? err.message : "Unknown"}`,

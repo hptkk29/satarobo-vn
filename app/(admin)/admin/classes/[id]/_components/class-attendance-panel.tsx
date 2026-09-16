@@ -6,7 +6,7 @@ import { AttendanceGrid } from "../../../attendance/_components/attendance-grid"
 import { loadClassSessionRoster } from "../_attendance-actions";
 import type { AttendanceRosterRow } from "@/lib/attendance/roster";
 import { formatDateDMY } from "@/lib/format/date";
-import { sessionNumberLabel } from "@/lib/lms/session-order";
+import { nhanSoBuoiVaBai } from "@/lib/lms/session-order";
 import type { SessionRow } from "./class-sessions-manage";
 
 function fmt(dateIso: string): string {
@@ -20,7 +20,11 @@ function fmt(dateIso: string): string {
 function optionLabel(s: SessionRow): string {
   // 21/08 — mở đầu bằng SỐ BUỔI: quản lý và giáo viên nói chuyện với nhau bằng "buổi 7",
   // không bằng ngày. Giữ y hệt ở class-eval-panel để hai dropdown cùng trang không lệch.
-  const no = s.seq ? `${sessionNumberLabel(s.seq)} · ` : "";
+  //
+  // Đợt 1c — in CẢ HAI số khi chúng lệch (`Buổi 2 · bài 43`). Danh sách này sắp theo NGÀY
+  // nên số đứng đầu phải là số theo lịch, kẻo nhảy cóc `1, 43, 2, 44…`; nhưng chỉ có số
+  // theo lịch thì giấu mất bài đang dạy. `nhanSoBuoiVaBai` gộp một lần khi hai số trùng.
+  const no = `${nhanSoBuoiVaBai({ lich: s.seq, loTrinh: s.soLoTrinh })} · `;
   const base = `${no}${fmt(s.date)}${s.topic ? ` — ${s.topic}` : ""}`;
   if (s.status === "CANCELLED") return `${base} (đã huỷ)`;
   return `${base} · ${s.attendanceCount > 0 ? `đã điểm danh ${s.attendanceCount}` : "chưa điểm danh"}`;

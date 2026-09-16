@@ -31,6 +31,8 @@ export type LoaiCongDay = {
   factor: number;
   countsInPeriod: boolean;
   isActive: boolean;
+  /** Phân loại buổi mà dòng này áp cho. null = dòng BAO SÂN (mọi phân loại chưa có dòng riêng). */
+  categoryCode: string | null;
 };
 
 /** Một buổi dạy đã quy về dạng chung, bất kể đến từ lớp chính hay lớp trải nghiệm. */
@@ -44,6 +46,12 @@ export type BuoiDay = {
   ymd: string;
   /** Số phút dạy. null = không suy được giờ ⇒ loại tính theo GIỜ sẽ bỏ qua buổi này. */
   minutes: number | null;
+  /**
+   * Phân loại buổi ĐÃ QUY ĐỔI — chỗ gọi phải thay `null` (buổi chưa phân loại) bằng mã của dòng
+   * mặc định trước khi đưa vào đây. Để `null` lọt xuống thì buổi chưa phân loại rơi thẳng vào
+   * dòng bao sân, tức dòng mặc định người vận hành chọn bị bỏ qua im lặng.
+   */
+  categoryCode: string | null;
 };
 
 export type DongCongDay = {
@@ -73,9 +81,27 @@ function lamTron(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-/** Loại khớp với một buổi. Khoá `(source, role)` là duy nhất nên tối đa một loại khớp. */
+/**
+ * Loại khớp với một buổi: ĐÚNG phân loại trước, rồi mới tới dòng bao sân.
+ *
+ * Hai tầng chứ không phải một, vì đó là thứ giữ cho việc THÊM một dòng không làm đổi số của
+ * những buổi không liên quan: BLĐ thêm "(Lớp, chính, Workshop) hệ số 1,2" thì chỉ buổi Workshop
+ * đổi, còn mọi buổi khác vẫn ăn dòng bao sân "(Lớp, chính, —)" như hôm qua.
+ *
+ * Không có tầng thứ ba: buổi mang phân loại mà cả hai tầng đều trượt thì rơi ra hẳn (không tính
+ * công). Đó là cách tắt một nhóm buổi — bỏ "Đang dùng" ở dòng danh mục.
+ */
 export function loaiCua(buoi: BuoiDay, danhMuc: readonly LoaiCongDay[]): LoaiCongDay | null {
-  return danhMuc.find((l) => l.isActive && l.source === buoi.source && l.role === buoi.role) ?? null;
+  const hop = danhMuc.filter(
+    (l) => l.isActive && l.source === buoi.source && l.role === buoi.role,
+  );
+  return (
+    (buoi.categoryCode != null
+      ? hop.find((l) => l.categoryCode === buoi.categoryCode)
+      : undefined) ??
+    hop.find((l) => l.categoryCode == null) ??
+    null
+  );
 }
 
 /**

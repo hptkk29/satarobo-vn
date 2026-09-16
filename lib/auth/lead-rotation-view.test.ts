@@ -29,7 +29,10 @@ import { PERMISSIONS, can as canV1, type Action } from "@/lib/auth/permissions";
 import { crmModule } from "@/lib/permissions/registry/crm";
 import { ROLE_SEED } from "../../prisma/seed-roles";
 
-const GATE = PAGE_GATES["/leads/so-luot"] as readonly string[];
+// 16/09/2026 — màn "Sổ lượt chia lead" (`/leads/so-luot`) đã nhập vào
+// `/quan-ly-chia-lead` (chốt 30/08); đường cũ chỉ còn một dòng `redirect`. Quyền S-5
+// theo sang màn mới, nên cổng đo ở đây cũng đổi theo.
+const GATE = PAGE_GATES["/quan-ly-chia-lead"] as readonly string[];
 const KEY = "leads:rotation-view";
 
 /** v1: vào được ⟺ có ≥1 action trong gate (đúng ngữ nghĩa `checkAnyPermission`). */
@@ -60,11 +63,15 @@ describe("[S-5] /leads/so-luot — tổ Sale mở được sổ lượt", () => 
     }
   });
 
-  it("gate GIỮ `leads:view-all` bên cạnh key mới — không có khe trắng màn trước khi seed prod", () => {
-    // Bỏ `leads:view-all` khỏi gate là đặt cược rằng seed-prod chạy CÙNG LÚC với
-    // deploy. Nó không chạy cùng lúc: workflow seed-prod-roles.yml bấm tay sau khi
-    // merge vào main.
-    expect(GATE).toContain("leads:view-all");
+  it("gate GIỮ một key ĐÃ SEED bên cạnh key mới — không có khe trắng màn trước khi seed prod", () => {
+    // Bỏ key cũ khỏi gate là đặt cược rằng seed-prod chạy CÙNG LÚC với deploy. Nó không
+    // chạy cùng lúc: workflow `seed-prod-roles.yml` bấm tay sau khi merge vào main.
+    //
+    // 16/09/2026 — key "đã seed" ở màn này nay là `lead_pool:manage` (đang chạy trên
+    // prod từ 29/08), không còn là `leads:view-all`: màn đổi từ `/leads/so-luot` sang
+    // `/quan-ly-chia-lead`, và cho `leads:view-all` vào cổng một màn ĐIỀU HÀNH là nới
+    // rộng hơn mức cần — ai xem được mọi lead sẽ mở được cả màn chia lead.
+    expect(GATE).toContain("lead_pool:manage");
     expect(GATE).toContain(KEY);
   });
 

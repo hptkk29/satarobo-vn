@@ -1162,22 +1162,18 @@ async function confirmSettledOrder(
   providerTxnId: string,
 ): Promise<boolean> {
   const now = new Date();
-  // Giảm giá do nhân viên nhập tay phải được QLCS duyệt TRƯỚC khi đơn được xác
-  // nhận (BGĐ 31/07). Tiền vẫn được ghi nhận và phân bổ bình thường — bất biến
-  // "không bao giờ từ chối vì lệch/điều kiện" chỉ nói về việc NHẬN tiền; chốt đơn
-  // là việc khác. Thiếu guard này thì quét QR trở thành đường lách duyệt giảm giá.
+  // ⚠️ ĐÃ GỠ [14/09/2026] — mệnh đề OR lọc theo `discountApprovalStatus` (cổng chống
+  // lách duyệt giảm giá trên đường TỰ CHỐT đơn, BGĐ 31/07).
+  //
+  // Gỡ CÙNG LÚC với cổng người chốt ở `app/(admin)/admin/orders/_actions.ts` — hai cổng
+  // là một cặp, lệch nhịp thì máy chốt được mà người không chốt được.
+  //
+  // `status: "PENDING_PAYMENT"` GIỮ NGUYÊN: đó không phải cổng duyệt mà là điều kiện
+  // chống chốt lại đơn đã chốt/đã huỷ (và là thứ làm lời gọi này idempotent).
   const upd = await db.order.updateMany({
     where: {
       id: orderId,
       status: "PENDING_PAYMENT",
-      // ⚠️ KHÔNG dùng `NOT: { in: [...] }`: cột này NULL ở ca BÌNH THƯỜNG (đơn
-      // không giảm giá), mà `NOT (col IN (...))` với NULL cho ra NULL — không
-      // phải true — nên sẽ loại luôn mọi đơn bình thường và KHÔNG đơn nào tự
-      // chốt được nữa. Phải liệt kê tường minh nhánh NULL.
-      OR: [
-        { discountApprovalStatus: null },
-        { discountApprovalStatus: { notIn: ["PENDING_APPROVAL", "REJECTED"] } },
-      ],
     },
     data: {
       status: "CONFIRMED",

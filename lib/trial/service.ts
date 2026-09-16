@@ -8,6 +8,7 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { notifyStaff } from "@/lib/notifications/notify";
+import { baoDaoTaoBuoiChuaCoGiaoVien } from "./notify-training";
 import { tenLopTrial } from "@/lib/trial/lop-moi";
 import { teacherCenterAssignmentError } from "@/lib/teachers/center-filter";
 import { nextSeq, yy } from "@/lib/codegen";
@@ -122,6 +123,15 @@ export async function createTrialClass(params: {
         select: { code: true },
       });
       const cc = sanitizeCenter(center?.code ?? params.centerId);
+      // 29/08 — tên lớp mang cả MÃ KHOÁ QUAN TÂM (`CS2-sata4-Lớp trial 3`). Đọc `slug`
+      // chứ không `name`: `name` là câu tiếng Việt có dấu ("Sata 4 — Lập trình khối"),
+      // nhét vào tên lớp thì vừa dài vừa mang ký tự lạ đi thẳng vào phiếu gửi phụ huynh.
+      const khoa = params.courseId
+        ? await tx.course.findUnique({
+            where: { id: params.courseId },
+            select: { slug: true },
+          })
+        : null;
       const y = yy();
       const seq = await nextSeq(`TRIAL:${cc}:${y}`, tx);
       const code = `TRIAL-${cc}-${y}-${String(seq).padStart(3, "0")}`;
@@ -129,9 +139,9 @@ export async function createTrialClass(params: {
       const trialClass = await tx.trialClassV2.create({
         data: {
           code,
-          // Tên theo quy ước `Cơ sở_Lớp trial số`, dùng CHÍNH số thứ tự đã cấp cho
-          // `code` — hai thứ đi cùng một bộ đếm nên không bao giờ lệch nhau.
-          name: tenLopTrial(cc, seq),
+          // Tên theo quy ước `Cơ sở-Khoá-Lớp trial số`, dùng CHÍNH số thứ tự đã cấp
+          // cho `code` — hai thứ đi cùng một bộ đếm nên không bao giờ lệch nhau.
+          name: tenLopTrial(cc, khoa?.slug ?? null, seq),
           centerId: params.centerId,
           courseId: params.courseId ?? null,
           startDate: params.startDate ?? null,
@@ -264,15 +274,34 @@ export async function addTrialSession(params: {
       return created.id;
     });
 
+    const dateStr = params.date.toLocaleDateString("vi-VN", { timeZone: "UTC" });
+    const moTaBuoi = `${dateStr} ${params.startTime}–${params.endTime}`;
+
     // #6 — báo GV được gán buổi (không tự báo mình).
     if (teacherId && teacherId !== params.actorId) {
-      const dateStr = params.date.toLocaleDateString("vi-VN", { timeZone: "UTC" });
       await notifyTrialTeacherAssigned({
         teacherId,
         title: "Bạn được phân công buổi trải nghiệm",
-        body: `Buổi ${dateStr} ${params.startTime}–${params.endTime} · lớp ${cls.name}.`,
+        body: `Buổi ${moTaBuoi} · lớp ${cls.name}.`,
         dedupeKey: `trial-session.assigned:${sessionId}`,
         entityId: sessionId,
+      });
+    } else if (!teacherId) {
+      // #6b (14/09/2026) — BUỔI KHÔNG CÓ AI DẠY. Trước đợt này nhánh đó im lặng tuyệt đối, và
+      // nó là đường MẶC ĐỊNH chứ không phải ca hiếm: ô "Giáo viên" ở form để trống sẵn
+      // (`add-session-form.tsx`), lớp trải nghiệm sinh ra đã `teacherId: null` (xem
+      // `createTrialClass` bên trên) và KHÔNG màn nào gán giáo viên cấp lớp. Tức bấm "Thêm
+      // buổi" theo đường tự nhiên nhất là tạo ra một buổi không ai dạy, không ai biết.
+      //
+      // Chủ dự án đi đúng vào đường này ngày 13/09 rồi kết luận kênh thông báo hỏng.
+      //
+      // Cố ý KHÔNG báo cho chính người vừa bấm — họ vừa làm việc đó, họ biết rồi; người cần
+      // biết là bộ phận Đào tạo, người đi phân công.
+      await baoDaoTaoBuoiChuaCoGiaoVien({
+        sessionId,
+        centerId: cls.centerId,
+        className: cls.name,
+        moTaBuoi,
       });
     }
     return { ok: true, sessionId };
@@ -282,6 +311,15 @@ export async function addTrialSession(params: {
 }
 
 // ─── Ghi danh ─────────────────────────────────────────────────────────────────
+
+/** Gói dữ kiện cho tin "có em mới trong ca của bạn" — xem #GV-MỚI bên dưới. */
+type TinBaoGvCaMoi = {
+  teacherId: string;
+  childName: string;
+  className: string;
+  enrollmentId: string;
+  moTaBuoi: string;
+};
 
 export async function enrollLeadChild(params: {
   trialClassId: string;
@@ -297,10 +335,27 @@ export async function enrollLeadChild(params: {
 }): Promise<{ ok: boolean; error?: string; overCapacity?: boolean }> {
   const allowOverride = params.allowOverride ?? false;
   try {
-    return await db.$transaction(async (tx) => {
+    // #GV-MỚI — gói tin báo giáo viên ĐI thẳng qua giá trị trả về của transaction, không
+    // qua biến ngoài: TypeScript không theo được phép gán bên trong callback nên biến
+    // đó luôn bị thu về `null`. GỬI thì sau khi commit — gửi trong tx là chuông hỏng
+    // kéo theo rollback cả lượt xếp lớp.
+    const { tin, ...ket } = await db.$transaction(async (tx): Promise<{
+      ok: boolean;
+      error?: string;
+      overCapacity?: boolean;
+      tin?: TinBaoGvCaMoi;
+    }> => {
       const cls = await tx.trialClassV2.findUnique({
         where: { id: params.trialClassId },
-        select: { id: true, capacity: true, centerId: true, sessionCount: true },
+        // `name` + `teacherId`: dựng nội dung tin báo giáo viên ở cuối hàm (xem khối #GV-MỚI).
+        select: {
+          id: true,
+          name: true,
+          capacity: true,
+          centerId: true,
+          sessionCount: true,
+          teacherId: true,
+        },
       });
       if (!cls) return { ok: false, error: "Lớp trải nghiệm không tồn tại" };
 
@@ -343,10 +398,68 @@ export async function enrollLeadChild(params: {
           scheduledSessionId,
         },
       });
-      await tx.leadChild.update({
+      const child = await tx.leadChild.update({
         where: { id: params.leadChildId },
         data: { trialStatus: "SCHEDULED" },
+        select: { fullName: true },
       });
+
+      // #GV-MỚI (03/09/2026) — BÁO GIÁO VIÊN có em vừa rơi vào ca của mình.
+      //
+      // Trước bản này, xếp con vào lớp chỉ phát `trial.assigned` — mà tin đó gửi cho
+      // SALE phụ trách lead, không phải giáo viên. Lớp trải nghiệm là **slot tái sử
+      // dụng**: giáo viên được gán từ lâu, con mới được xếp vào sau ⇒ câu hỏi "có em
+      // nào vào ca của tôi chưa" không có tin nào trả lời, giáo viên phải tự mở
+      // /teacher/trial mà xem.
+      //
+      // Người nhận lấy từ BUỔI, không phải từ lớp: từ 28/08 giờ/sĩ số/giáo viên nằm ở
+      // TỪNG BUỔI (`TrialClassSession`), `TrialClassV2.teacherId` chỉ còn là mặc định cũ.
+      //
+      // ⚠️ HAI KIỂU GHI DANH — `scheduledSessionId` null KHÔNG còn nghĩa là "chưa xếp buổi":
+      //   · null  = học TOÀN BỘ buổi của lớp (MẶC ĐỊNH từ 28/08, chủ dự án chốt);
+      //   · có giá trị = ghim vào đúng một buổi (màn chi tiết lớp, dời lịch).
+      // Bản đầu của khối này (03/09) viết khi auto-gán còn sống nên đọc thẳng
+      // `findUnique({ id: scheduledSessionId })` — sau khi nhập với 28/08 thì đường thường
+      // gặp nhất lại là null. Kiểu dữ liệu bắt được chỗ này; đừng gỡ bớt.
+      //
+      // Học toàn bộ buổi thì báo cho người dạy BUỔI SẮP TỚI — người gặp bé đầu tiên.
+      // Các buổi sau có thể khác người, nhưng bắn tin cho mọi giáo viên của lớp là biến
+      // một việc thành một đợt thông báo; ai dạy buổi sau vẫn thấy bé ở /teacher/trial.
+      const buoi = scheduledSessionId
+        ? await tx.trialClassSession.findUnique({
+            where: { id: scheduledSessionId },
+            select: { teacherId: true, date: true, startTime: true, endTime: true },
+          })
+        : await tx.trialClassSession.findFirst({
+            where: {
+              trialClassId: params.trialClassId,
+              status: "SCHEDULED",
+              date: { gte: vnTodayUtc() },
+            },
+            orderBy: [{ date: "asc" }, { seq: "asc" }],
+            select: { teacherId: true, date: true, startTime: true, endTime: true },
+          });
+      const gvId = buoi?.teacherId ?? cls.teacherId ?? null;
+      // Không tự báo mình: giáo viên vừa tự xếp con vào ca của chính mình thì biết rồi.
+      // Lớp chưa có buổi nào sắp tới và cũng không có GV mặc định ⇒ không có ai để báo.
+      const tin: TinBaoGvCaMoi | undefined =
+        gvId && gvId !== params.addedById
+          ? {
+              teacherId: gvId,
+              childName: child.fullName,
+              className: cls.name,
+              enrollmentId: enrollment.id,
+              // MỆNH ĐỀ ĐẦY ĐỦ, không phải mảnh để nơi gọi ghép thêm chữ "buổi" vào trước:
+              // hai nhánh dưới đây mở đầu khác nhau ("buổi …" vs "toàn bộ buổi …"). Bản
+              // trước để nơi gọi ghép cứng `buổi ${…}` nên đường học-cả-lớp bắn ra
+              // "· buổi toàn bộ buổi, bắt đầu …" — đo được ở lượt nghiệm thu 04/09.
+              //
+              // `date` là @db.Date (nửa đêm UTC của ngày VN) ⇒ format PHẢI ép timeZone UTC.
+              moTaBuoi: !buoi
+                ? "học toàn bộ buổi của lớp"
+                : `${scheduledSessionId ? "buổi " : "học toàn bộ buổi, bắt đầu "}${buoi.date.toLocaleDateString("vi-VN", { timeZone: "UTC" })} ${buoi.startTime}–${buoi.endTime}`,
+            }
+          : undefined;
       // FL-R2 (item 6) — mở/ghi lịch sử học thử per-lead (giữ kể cả khi rời pipeline).
       // totalSessions chốt tại lúc gán; nếu đã có history (lead quay lại) → giữ count cũ.
       //
@@ -402,8 +515,22 @@ export async function enrollLeadChild(params: {
           tx,
         });
       }
-      return { ok: true };
+      return { ok: true, tin };
     });
+
+    // Ngoài transaction — xem #GV-MỚI. `notifyTrialTeacherAssigned` tự nuốt lỗi.
+    if (ket.ok && tin) {
+      await notifyTrialTeacherAssigned({
+        teacherId: tin.teacherId,
+        title: "Có học viên mới trong ca trải nghiệm của bạn",
+        // `moTaBuoi` là MỆNH ĐỀ ĐẦY ĐỦ (tự mang chữ "buổi" / "toàn bộ buổi") — ĐỪNG
+        // ghép thêm tiền tố nào ở đây, xem chú thích tại chỗ dựng nó.
+        body: `${tin.childName} vừa được xếp vào lớp ${tin.className} · ${tin.moTaBuoi}.`,
+        dedupeKey: `trial-enroll.assigned:${tin.enrollmentId}`,
+        entityId: tin.enrollmentId,
+      });
+    }
+    return ket;
   } catch (e) {
     // Partial-unique: con đang ACTIVE ở lớp khác (AC3).
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
@@ -467,10 +594,8 @@ export async function cancelTrialClass(params: {
 async function syncTrialProgress(
   tx: Prisma.TransactionClient,
   trialEnrollmentId: string,
-  // Ai gây ra lượt đổi trạng thái này. Cần cho CẢ HAI sổ: sổ đếm phân biệt người làm
-  // với máy chạy (GĐ1), còn vết người đọc mà thiếu nó thì ghi ra "Hệ thống" và mất
-  // người chịu trách nhiệm (C-07). BẮT BUỘC — bỏ mặc định để không chỗ nào quên.
-  actorId: string | null,
+  // GĐ1 — ai gây ra lượt đổi trạng thái này; ghi vào sổ để phân biệt người làm với máy chạy.
+  actorId: string | null = null,
 ): Promise<void> {
   const enr = await tx.trialEnrollment.findUnique({
     where: { id: trialEnrollmentId },
@@ -554,12 +679,10 @@ async function syncTrialProgress(
   const allAttended =
     siblings.length > 0 && siblings.every((s) => s.leadChild.trialStatus === "ATTENDED");
 
-  // HAI SỔ — trước đây hai đường này đổi trạng thái lead mà KHÔNG để lại vết nào
-  // (không `AuditLog`, không `LeadActivity`, không sổ đếm), dù đây là đường có lưu
-  // lượng cao nhất: mỗi lượt điểm danh đều chạy qua. Mốc "lead vào Đang học thử /
-  // Chờ quyết định" — đúng khúc giữa phễu — không truy được ai làm, lúc nào.
-  // Nay đi chung cửa `setLeadStatus`, và cửa đó ghi CẢ sổ đếm lẫn vết người đọc.
-  // Hàm tự bỏ qua khi trạng thái không đổi nên gọi lại nhiều lần không đẻ dòng rác.
+  // GĐ1 — hai đường này trước đây đổi trạng thái lead mà KHÔNG để lại vết nào, dù
+  // đây là đường có lưu lượng cao nhất (mỗi lượt điểm danh đều chạy qua). Nay đi
+  // chung cửa `setLeadStatus`: sổ ghi đủ, và hàm tự bỏ qua khi trạng thái không đổi
+  // nên gọi lại nhiều lần không đẻ dòng rác.
   if (allAttended) {
     const res = await setLeadStatus({
       tx,
@@ -567,7 +690,6 @@ async function syncTrialProgress(
       to: "CHO_QUYET_DINH",
       source: "trial",
       actorId,
-      actorName: await actorName(actorId, tx),
     });
     if (res.changed) {
       await publishEvent(
@@ -583,7 +705,6 @@ async function syncTrialProgress(
       to: "DANG_HOC_THU",
       source: "trial",
       actorId,
-      actorName: await actorName(actorId, tx),
     });
     if (res.changed) {
       await publishEvent(
@@ -650,7 +771,7 @@ export async function markAttendance(params: {
         },
       });
       // ghi lịch sử + auto-Kanban (idempotent — tính lại từ số buổi PRESENT).
-      await syncTrialProgress(tx, params.trialEnrollmentId, params.actorId);
+      await syncTrialProgress(tx, params.trialEnrollmentId, params.actorId ?? null);
     });
     return { ok: true };
   } catch (e) {
@@ -738,27 +859,16 @@ export async function unenrollLeadChild(params: {
   }
 }
 
-// ─── DỜI LỊCH một ca trải nghiệm ─────────────────────────────────────────────
-//
-// ⚠️ HAI NHÁNH CÙNG VIẾT HÀM NÀY, đây là bản gộp. GĐ3 (25/08) làm phần "giáo viên mất
-// phân công + sổ dời lịch"; site GV 25/08 làm phần "buổi CŨ + báo Sale". Bỏ nửa nào
-// cũng hỏng một màn: thiếu `rescheduledFromSessionId` thì bảng Trial của site GV không
-// in được "Bị dời lịch"; thiếu `gvPhanCongId: null` thì giáo viên cũ vẫn ôm ca đã dời.
+// ─── GĐ3 — DỜI LỊCH một ca trải nghiệm ────────────────────────────────────────
 
 /**
- * Dời một ca trải nghiệm sang buổi khác CÙNG LỚP.
+ * Dời một ca trải nghiệm sang buổi khác.
  *
  * Luồng đã chốt với chủ dự án (25/08/2026): phụ huynh vắng hoặc xin dời → Sale bấm
  * "Dời lịch", chọn buổi mới → **giáo viên đang phụ trách ca đó MẤT PHÂN CÔNG**, Sale
  * đề xuất lại nếu muốn (không bắt buộc), và giáo viên được BÁO là lịch đã dời.
  *
- * Vì sao tới 25/08 mới có: `scheduledSessionId` được ghi ĐÚNG MỘT LẦN ở `enrollLeadChild`
- * rồi bất biến — muốn dời phải gỡ con ra (WITHDRAWN, mất dấu) rồi xếp lại.
- *
- * Buổi mới BẮT BUỘC thuộc CÙNG lớp: sĩ số và `LeadTrialHistory` gắn theo lớp. Muốn
- * chuyển lớp Trial khác thì gỡ + xếp lại.
- *
- * Bốn điều dễ làm sai, đã xử ở đây:
+ * Ba điều dễ làm sai, đã xử ở đây:
  *
  * 1. **Không xoá bản ghi điểm danh của buổi cũ.** Bé vắng ở buổi cũ chính là lý do
  *    phải dời; xoá đi là mất luôn bằng chứng và `attendedCount` sẽ tính sai.
@@ -766,11 +876,6 @@ export async function unenrollLeadChild(params: {
  *    nhiều bé, gỡ ở cấp lớp là gỡ nhầm của người khác.
  * 3. **Ghi vết vào `TrialReschedule` dù trên màn bé đó biến mất khỏi buổi cũ.** Tỷ lệ
  *    dời lịch là chỉ số chất lượng chốt lịch của Sale, xoá thẳng là mất hẳn.
- * 4. **`dedupeKey` của sự kiện phải mang MỐC DỜI, không chỉ buổi đích.** Khoá theo đích
- *    thì dãy A→B→A→B trùng khoá ở lần thứ ba; `DomainEvent.dedupeKey` là @unique nên
- *    `publishEvent` ăn P2002 — lỗi đó nổ TRONG transaction này, Postgres huỷ cả
- *    transaction, cú update ngay trên bị rollback. Nói cách khác: học viên vĩnh viễn
- *    không dời về được buổi đã từng ở.
  */
 export async function rescheduleTrialEnrollment(params: {
   trialEnrollmentId: string;
@@ -790,7 +895,6 @@ export async function rescheduleTrialEnrollment(params: {
           scheduledSessionId: true,
           gvPhanCongId: true,
           rescheduleCount: true,
-          leadChild: { select: { leadId: true } },
           trialClass: { select: { centerId: true, orgUnitId: true, name: true } },
         },
       });
@@ -800,7 +904,7 @@ export async function rescheduleTrialEnrollment(params: {
       // ở UI: action nhận id thẳng từ client.
       const ses = await tx.trialClassSession.findUnique({
         where: { id: params.toSessionId },
-        select: { id: true, trialClassId: true, status: true, date: true },
+        select: { id: true, trialClassId: true, status: true },
       });
 
       // Toàn bộ phần quyết định nằm ở hàm thuần (có test phủ đủ nhánh) — ở đây chỉ
@@ -815,27 +919,12 @@ export async function rescheduleTrialEnrollment(params: {
       });
       if (!luat.ok) return { ok: false, error: luat.error };
 
-      const buoiCu = enr.scheduledSessionId
-        ? await tx.trialClassSession.findUnique({
-            where: { id: enr.scheduledSessionId },
-            select: { date: true },
-          })
-        : null;
-
       const gvBiGoId = enr.gvPhanCongId;
-      const mocDoi = new Date();
-      const lyDo = params.reason?.trim() || null;
 
       await tx.trialEnrollment.update({
         where: { id: enr.id },
         data: {
           scheduledSessionId: params.toSessionId,
-          // Buổi CŨ — site GV đọc cột này để in trạng thái "Bị dời lịch"
-          // (`lib/lms/trial-row-status.ts`). Dời nhiều lần chỉ giữ lần gần nhất;
-          // chuỗi đầy đủ nằm ở `TrialReschedule` ngay dưới.
-          rescheduledFromSessionId: enr.scheduledSessionId,
-          rescheduledAt: mocDoi,
-          rescheduleReason: lyDo,
           // Mất phân công. Xoá luôn đề xuất cũ để Sale đề xuất lại từ đầu — giữ đề
           // xuất cũ thì Đào tạo dễ tưởng Sale đã cân nhắc cho lịch MỚI.
           gvPhanCongId: null,
@@ -850,29 +939,13 @@ export async function rescheduleTrialEnrollment(params: {
           fromSessionId: enr.scheduledSessionId,
           toSessionId: params.toSessionId,
           gvBiGoId,
-          reason: lyDo,
+          reason: params.reason?.trim() || null,
           changedById: params.actorId,
           changedByName: await actorName(params.actorId, tx),
           centerId: enr.trialClass.centerId,
           orgUnitId: enr.trialClass.orgUnitId,
         },
       });
-
-      // Cùng tên sự kiện với đường buổi hẹn V1 để Sale phụ trách nhận đúng MỘT loại
-      // thông báo "Đổi lịch học thử", bất kể lịch nằm ở hệ nào.
-      await publishEvent(
-        "trial.schedule_changed",
-        {
-          trialId: enr.id,
-          leadId: enr.leadChild.leadId,
-          fromAt: buoiCu?.date?.toISOString() ?? null,
-          toAt: ses!.date.toISOString(),
-        },
-        {
-          tx,
-          dedupeKey: `trial.schedule_changed:${enr.id}:${params.toSessionId}:${mocDoi.getTime()}`,
-        },
-      );
 
       await writeAudit({
         actor: { id: params.actorId, name: await actorName(params.actorId, tx) },
@@ -882,7 +955,6 @@ export async function rescheduleTrialEnrollment(params: {
         action: "UPDATE",
         oldValues: { scheduledSessionId: enr.scheduledSessionId, gvPhanCongId: gvBiGoId },
         newValues: { scheduledSessionId: params.toSessionId, gvPhanCongId: null },
-        reason: lyDo ?? undefined,
         orgUnitId: enr.trialClass.centerId,
         tx,
       });

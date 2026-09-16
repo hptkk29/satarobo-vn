@@ -95,7 +95,10 @@ vi.mock("@/lib/students/prior-history", () => ({
 // Danh mục mã cơ sở là dữ liệu, không phải hằng trong mã — test bơm vào đúng như
 // đời thật đọc từ `Center.code`.
 vi.mock("@/lib/ads/center-codes", () => ({ loadKnownCenterCodes: h.loadCodes }));
-vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("next/cache", () => ({
+  // 16/09/2026 — bản `main` của `actions.ts` dùng `unstable_cache`; mock thiếu nó là
+  // cả tệp test chết ngay lúc nạp, không phải một ca đỏ.
+  unstable_cache: <T,>(fn: T) => fn, revalidatePath: vi.fn() }));
 
 import { createLeadManual, updateLeadFields, addLeadChild } from "./actions";
 

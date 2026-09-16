@@ -4,9 +4,14 @@
 
 export type CommissionTier = "QC" | "SALE_ADMIN" | "SALE" | "QL_TT";
 
+// ⚠️ KHÔNG có tầng GIAO_VIEN ở đây. GĐ6 từng thêm nó vào pool, nhưng bản chốt tách
+// hẳn ra `lib/crm/trial-teacher-commission.ts`: pool 4 tầng Sale tính trên DOANH THU
+// KỲ, còn hoa hồng giáo viên dạy Trial tính trên TỪNG GHI DANH — hai cơ sở tính khác
+// nhau, nhét chung một mảng là sai ngay ở phép cộng. Trần tổng (9%) vẫn phủ cả hai:
+// `setCommissionRate` cộng tầng TRIAL_TEACHER vào trước khi so trần.
 export const COMMISSION_TIERS: CommissionTier[] = ["QC", "SALE_ADMIN", "SALE", "QL_TT"];
 
-/** % mặc định mỗi tầng (Σ = 8%). */
+/** % mặc định mỗi tầng của pool Sale (Σ = 8%; +1% tầng GV dạy Trial = trần 9%). */
 export const DEFAULT_RATES: Record<CommissionTier, number> = {
   QC: 0.01,
   SALE_ADMIN: 0.01,
@@ -47,50 +52,6 @@ export type CommissionLine = {
   isClawback?: boolean;
 };
 
-/**
- * Người hưởng của từng tầng.
- *
- * 27/08/2026 — nới từ `string` sang `string | string[]` vì tầng QC (1%) gán theo
- * "QC phụ trách cơ sở", mà một cơ sở có thể có NHIỀU QC. KHÔNG phải thêm tầng: số
- * tầng vẫn là 4 và Σ vẫn đúng 8% — chỉ MỘT tầng được chia cho nhiều người.
- * Chuỗi trần vẫn chạy y như cũ (call-site cũ không phải đổi).
- */
-export type CommissionRecipients = Partial<Record<CommissionTier, string | readonly string[]>>;
-
-/**
- * Chia `total` cho `recipientIds` sao cho TỔNG CÁC PHẦN ĐÚNG BẰNG `total`.
- *
- * Vì sao không phải `Math.round(total / n)` mỗi người: 10.000đ chia 3 ra 3.333 × 3 =
- * 9.999 ⇒ hụt 1đ mỗi lần, mãi mãi, và hụt theo hướng công ty giữ lại tiền của nhân
- * viên. Dùng phần dư lớn nhất: mỗi người `floor`, rồi rải `du` đồng lẻ cho những id
- * đứng đầu theo thứ tự CHỮ CÁI.
- *
- * Sắp theo `userId` (không theo thứ tự đầu vào) là điều kiện của "chốt lại kỳ cho ra
- * bảng kê trùng khít" — `chotKyHoaHong` xoá rồi ghi lại cả kỳ, nên hàm này phải TẤT
- * ĐỊNH tuyệt đối. Trùng id bị khử: nhập tay hai dòng cho cùng một người là chuyện sẽ
- * xảy ra, và không khử thì người đó ăn hai suất.
- */
-export function chiaDeuTien(
-  total: number,
-  recipientIds: readonly string[],
-): { recipientId: string; amount: number }[] {
-  const ids = [...new Set(recipientIds)].sort();
-  const n = ids.length;
-  if (n === 0) return [];
-  const dau = total < 0 ? -1 : 1;
-  const abs = Math.abs(total);
-  const base = Math.floor(abs / n);
-  const du = abs - base * n;
-  return ids.map((recipientId, i) => ({ recipientId, amount: dau * (base + (i < du ? 1 : 0)) }));
-}
-
-/** Chuẩn hoá `string | string[] | undefined` về danh sách id (bỏ chuỗi rỗng). */
-function danhSachNguoiHuong(v: string | readonly string[] | undefined): string[] {
-  if (v == null) return [];
-  if (typeof v === "string") return v ? [v] : [];
-  return v.filter((x) => !!x);
-}
-
 function mergedRates(rates?: Partial<Record<CommissionTier, number>>): Record<CommissionTier, number> {
   return { ...DEFAULT_RATES, ...(rates ?? {}) };
 }
@@ -119,28 +80,91 @@ export function validateRates(
 }
 
 /**
+ * Một tầng có thể thuộc NHIỀU người (27/08/2026 — QC theo cơ sở, xem
+ * `CenterCommissionAssignee`). Giữ kiểu cũ `string` để 20+ chỗ gọi không phải đổi.
+ */
+export type CommissionRecipients = Partial<Record<CommissionTier, string | readonly string[]>>;
+
+/** Chuẩn hoá `string | string[] | undefined` về danh sách id (bỏ chuỗi rỗng). */
+function danhSachNguoiHuong(v: string | readonly string[] | undefined): string[] {
+  if (v == null) return [];
+  if (typeof v === "string") return v ? [v] : [];
+  return v.filter((x) => !!x);
+}
+
+/**
+ * Chia `total` cho `recipientIds` sao cho TỔNG CÁC PHẦN ĐÚNG BẰNG `total`.
+ *
+ * Vì sao không phải `Math.round(total / n)` mỗi người: 10.000đ chia 3 ra 3.333 × 3 =
+ * 9.999 ⇒ hụt 1đ mỗi lần, mãi mãi, và hụt theo hướng công ty giữ lại tiền của nhân
+ * viên. Dùng phần dư lớn nhất: mỗi người `floor`, rồi rải `du` đồng lẻ cho những id
+ * đứng đầu theo thứ tự CHỮ CÁI.
+ *
+ * Sắp theo `userId` (không theo thứ tự đầu vào) là điều kiện của "chốt lại kỳ cho ra
+ * bảng kê trùng khít" — `chotKyHoaHong` xoá rồi ghi lại cả kỳ, nên hàm này phải TẤT
+ * ĐỊNH tuyệt đối. Trùng id bị khử: nhập tay hai dòng cho cùng một người là chuyện sẽ
+ * xảy ra, và không khử thì người đó ăn hai suất.
+ */
+export function chiaDeuTien(
+  total: number,
+  recipientIds: readonly string[],
+): { recipientId: string; amount: number }[] {
+  const ids = [...new Set(recipientIds)].sort();
+  const n = ids.length;
+  if (n === 0) return [];
+  const dau = total < 0 ? -1 : 1;
+  const abs = Math.abs(total);
+  const base = Math.floor(abs / n);
+  const du = abs - base * n;
+  return ids.map((recipientId, i) => ({ recipientId, amount: dau * (base + (i < du ? 1 : 0)) }));
+}
+
+/**
  * Tính hoa hồng cho 1 đơn chốt.
  * - isRenewal=true → KHÔNG có hoa hồng 4 tầng (C10.3, OI-26/B2).
  * - recipients.SALE = người CHỐT CUỐI (đổi sale giữa chừng → truyền người cuối — C10.5).
- * - Chỉ sinh dòng cho tầng có recipient. Tầng có NHIỀU người → CHIA ĐỀU (tổng tầng
- *   không đổi, xem `chiaDeuTien`).
+ * - Chỉ sinh dòng cho tầng có recipient.
  */
 export function computeCommission(input: {
   revenue: number;
   isRenewal: boolean;
   recipients: CommissionRecipients;
   rates?: Partial<Record<CommissionTier, number>>;
+  /**
+   * GĐ6 — ĐỢT THU thứ mấy của cùng một hợp đồng (1 = đợt đầu). Bỏ trống = đợt 1.
+   *
+   * ⚠️ Tham số này tồn tại để MỤC 9.2 đổi được bằng cấu hình chứ không phải sửa code.
+   * Câu chưa chốt: chính sách ghi "kỳ 1 mức học viên mới, các kỳ sau mức tái tục",
+   * nhưng không nói "kỳ" là ĐỢT THANH TOÁN hay CHU KỲ HỢP ĐỒNG. Khoá 48 buổi chia 2
+   * đợt thì hai cách hiểu chênh 3% trên nửa học phí.
+   */
+  soDot?: number;
+  /**
+   * Đợt thứ 2 trở đi có bị tính như tái tục không.
+   *
+   * `false` (MẶC ĐỊNH, và là phương án đang đề xuất): một hợp đồng = một kỳ, chia mấy
+   * đợt thu cũng vẫn là khách mới. Lý do: nếu đợt 2 xuống mức tái tục thì Sale có động
+   * cơ ép phụ huynh đóng full, mất đúng nhóm khách khó khăn tài chính.
+   *
+   * `true`: đợt 2 trở đi coi như tái tục (không hoa hồng 4 tầng).
+   *
+   * ĐỪNG hardcode cách hiểu nào vào chỗ khác — truyền cờ này từ cấu hình.
+   */
+  dotSauTinhTaiTuc?: boolean;
   /** Trần tổng đọc từ cấu hình vận hành; bỏ trống → `MAX_TOTAL_RATE`. */
   maxTotalRate?: number;
 }): CommissionLine[] {
   const rates = validateRates(input.rates, input.maxTotalRate);
   if (input.isRenewal) return [];
+  // Mục 9.2 — chỉ có tác dụng khi cờ được BẬT tường minh.
+  if (input.dotSauTinhTaiTuc === true && (input.soDot ?? 1) > 1) return [];
   if (input.revenue <= 0) return [];
   const lines: CommissionLine[] = [];
   for (const tier of COMMISSION_TIERS) {
     const ids = danhSachNguoiHuong(input.recipients[tier]);
     if (ids.length === 0) continue;
-    // Làm tròn MỘT LẦN ở mức tầng rồi mới chia — không làm tròn từng phần.
+    // Làm tròn MỘT LẦN ở mức tầng rồi mới chia — không làm tròn từng phần, kẻo Σ các
+    // phần lệch tổng tầng và trần 9% bị vượt bằng những đồng lẻ.
     const tongTang = Math.round(input.revenue * rates[tier]);
     for (const phan of chiaDeuTien(tongTang, ids)) {
       lines.push({ tier, recipientId: phan.recipientId, amount: phan.amount });

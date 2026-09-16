@@ -2,6 +2,7 @@
 // (convertLeadV2 transaction) để cho e2e/integration.
 import { describe, it, expect } from "vitest";
 import { evaluatePaymentGuard, computeInstallmentSplit } from "@/lib/crm/convert-lead-v2";
+import { computeEnrollmentPrice } from "@/lib/finance/pricing";
 import { normalizeName, classifyParentMatch, studentMatches } from "@/lib/crm/dedupe";
 import {
   randomStudentCodeBody,
@@ -24,6 +25,54 @@ describe("[R7-05] evaluatePaymentGuard (AC1/C1/C3 — R7-05-C2)", () => {
   });
   it("0 khoản RECORDED + finalPrice>0 → PAYMENT_REQUIRED", () => {
     expect(evaluatePaymentGuard({ hasRecordedPayment: false, totalFinalPrice: 9_000_000 }).ok).toBe(false);
+  });
+});
+
+// 27/08 — hồi quy cho bế tắc thật trên prod: lead được miễn phí học phí toàn phần mà
+// bấm chốt vẫn báo PAYMENT_REQUIRED. Guard vốn ĐÚNG; hỏng ở chỗ form convert cố định
+// `discount: null` ⇒ tổng sau ưu đãi luôn = giá niêm yết ⇒ nhánh học bổng không bao
+// giờ tới lượt. Test này chốt lại ĐƯỜNG ĐI đầy đủ giá → ưu đãi → guard, đúng thứ tự
+// mà server action gọi, để lần sau ai bỏ ưu đãi khỏi đường truyền là đỏ ngay.
+describe("[27/08] miễn phí toàn phần chốt được KHÔNG cần khoản thu", () => {
+  const guardFor = (students: { listPrice: number; discount: Parameters<typeof computeEnrollmentPrice>[0]["discount"] }[]) =>
+    evaluatePaymentGuard({
+      hasRecordedPayment: false,
+      totalFinalPrice: students.reduce(
+        (sum, s) => sum + computeEnrollmentPrice(s).finalPrice,
+        0,
+      ),
+    });
+
+  it("học bổng 100% (1 em) → pass + scholarshipFull", () => {
+    expect(guardFor([{ listPrice: 9_000_000, discount: { type: "SCHOLARSHIP", value: 100 } }])).toEqual({
+      ok: true,
+      scholarshipFull: true,
+    });
+  });
+
+  it("giảm 100% dạng PERCENT cũng về 0 → pass", () => {
+    expect(guardFor([{ listPrice: 12_000_000, discount: { type: "PERCENT", value: 100 } }]).ok).toBe(true);
+  });
+
+  it("giảm đúng bằng giá lớp (AMOUNT) → pass", () => {
+    expect(guardFor([{ listPrice: 9_000_000, discount: { type: "AMOUNT", value: 9_000_000 } }]).ok).toBe(true);
+  });
+
+  it("MIỄN PHÍ MỘT PHẦN vẫn phải thu tiền — 2 em, 1 em free thì tổng > 0 ⇒ chặn", () => {
+    expect(
+      guardFor([
+        { listPrice: 9_000_000, discount: { type: "SCHOLARSHIP", value: 100 } },
+        { listPrice: 9_000_000, discount: null },
+      ]).ok,
+    ).toBe(false);
+  });
+
+  it("giảm 50% KHÔNG phải miễn phí ⇒ vẫn đòi khoản thu", () => {
+    expect(guardFor([{ listPrice: 9_000_000, discount: { type: "PERCENT", value: 50 } }]).ok).toBe(false);
+  });
+
+  it("không ưu đãi (hành vi cũ, đường mặc định) ⇒ vẫn đòi khoản thu", () => {
+    expect(guardFor([{ listPrice: 9_000_000, discount: null }]).ok).toBe(false);
   });
 });
 

@@ -56,9 +56,12 @@ describe("[site Sale] ranh giới tiền — chốt chặn nguồn", () => {
   it("chỉ cộng khoản ĐÃ GHI NHẬN và chưa xoá mềm — cùng bộ lọc với màn admin", () => {
     // Lệch bộ lọc là hai màn nói hai con số công nợ khác nhau cho cùng một khách,
     // và không ai biết màn nào đúng.
+    // 16/09/2026 — nay đo bằng việc DÙNG HẰNG chung thay vì gõ tay hai điều kiện: cổng
+    // `lib/finance/ghi-nhan.test.ts` (trục B chỉ có MỘT nhà) cấm chép lại chuỗi đó ra
+    // từng file. Ý của ca này không đổi — hai màn phải cùng một bộ lọc — chỉ đổi cách đo.
     const src = boChuThich(doc("lib/orders/sale-orders.ts"));
-    expect(src).toContain('saleStatus: "RECORDED"');
-    expect(src).toContain("deletedAt: null");
+    expect(src).toContain("KHOAN_DA_GHI_NHAN");
+    expect(src).toContain("@/lib/finance/ghi-nhan");
   });
 
   it("số còn thiếu không bao giờ âm", () => {

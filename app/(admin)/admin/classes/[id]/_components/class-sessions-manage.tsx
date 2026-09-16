@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { CalendarRange, Ban, Pencil, ExternalLink } from "lucide-react";
-import { sessionNumberLabel } from "@/lib/lms/session-order";
+import { nhanSoBuoiVaBai } from "@/lib/lms/session-order";
 import { cancelSessionAction, adjustSessionAction } from "../_curriculum-actions";
 import { CompleteSession } from "../session/_components/complete-session";
 import { GiveHomework } from "../session/_components/give-homework";
@@ -21,7 +21,10 @@ export type SessionRow = {
    * Buổi thứ mấy của lớp (1-based, xếp theo ngày — lib/lms/session-order). Tính ở
    * page.tsx trên TOÀN BỘ buổi của lớp; null khi không tra được.
    */
+  /** Buổi thứ mấy theo NGÀY — khớp thứ tự danh sách này. */
   seq: number | null;
+  /** BÀI thứ mấy của giáo trình. Khác `seq` ở lớp có buổi dời ngày. */
+  soLoTrinh: number | null;
   /**
    * Số bản ghi điểm danh / phiếu nhận xét của buổi (đếm ở page.tsx).
    *
@@ -173,7 +176,7 @@ function SessionItem({
           <span
             className={`mr-2 inline-flex rounded-md bg-muted px-1.5 py-0.5 text-xs font-bold tabular-nums ${ cancelled ? "text-muted-foreground" : "text-foreground" }`}
           >
-            {sessionNumberLabel(session.seq)}
+            {nhanSoBuoiVaBai({ lich: session.seq, loTrinh: session.soLoTrinh })}
           </span>
           <span
             className={`text-sm font-semibold tabular-nums ${ cancelled ? "text-muted-foreground line-through" : "text-foreground" }`}

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { vnParts } from "@/lib/time/vn";
 import { requireActiveStudent } from "@/lib/portal/session";
 import { monthGridRange, shiftMonth } from "@/lib/lms/calendar";
 import { getStudentCalendarEvents } from "@/lib/lms/calendar-data";
@@ -25,9 +26,12 @@ export default async function StudentCalendarPage({
 }) {
   const { studentId } = await requireActiveStudent();
   const sp = await searchParams;
-  const now = new Date();
-  const year = parseInt10(sp.y, now.getFullYear());
-  const month0 = parseInt10(sp.m, now.getMonth());
+  // 06/09 — tháng mặc định theo LỊCH VN. `now.getFullYear()/getMonth()` chạy theo TZ
+  // tiến trình; Vercel là UTC, nên trong khoảng 00:00–07:00 giờ VN ngày mùng 1 thì lịch
+  // mở ra ở THÁNG TRƯỚC và phụ huynh tưởng con không có buổi nào.
+  const homNay = vnParts(new Date());
+  const year = parseInt10(sp.y, homNay.year);
+  const month0 = parseInt10(sp.m, homNay.month);
   const { from, to } = monthGridRange(year, month0);
   const [events, schedule] = await Promise.all([
     getStudentCalendarEvents(studentId, from, to),
@@ -41,12 +45,14 @@ export default async function StudentCalendarPage({
       <div className="flex justify-end gap-1">
         <Link
           href={`/portal/hoc-sinh/lich?y=${prev.year}&m=${prev.month0}`}
+          scroll={false}
           className="grid size-7 place-items-center rounded-lg border border-border text-muted-foreground hover:bg-muted"
         >
           ‹
         </Link>
         <Link
           href={`/portal/hoc-sinh/lich?y=${next.year}&m=${next.month0}`}
+          scroll={false}
           className="grid size-7 place-items-center rounded-lg border border-border text-muted-foreground hover:bg-muted"
         >
           ›

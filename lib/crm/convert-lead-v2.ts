@@ -2,6 +2,7 @@
 // + dedupe parent/student + consent + mã HV v2, tất cả ATOMIC. Giữ convert-lead.ts cũ cho
 // regression (flag CONVERT_V2_ENABLED). Side-effect (notify) đi DomainEvent SAU commit.
 import { db } from "@/lib/db";
+import { KHOAN_DA_GHI_NHAN } from "@/lib/finance/ghi-nhan";
 import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
 import { publishEvent } from "@/lib/events/publish";
 import { recordLeadStatusChange } from "@/lib/lead/status-trail-write";
@@ -10,7 +11,11 @@ import { computeEnrollmentPrice } from "@/lib/finance/pricing";
 import { linkRecordedPaymentsToEnrollments } from "@/lib/finance/payment";
 import { findParentMatch, findExistingStudent } from "@/lib/crm/dedupe";
 import { canonicalPhone } from "@/lib/phone";
-import { recordLeadStatusLedger } from "@/lib/leads/set-status";
+// ⚠️ TRÙNG TÊN với `recordLeadStatusChange` của `@/lib/lead/status-trail-write` ngay
+// trên — hai hàm KHÁC NHAU, hợp nhất 16/09/2026 kéo cả hai vào file này. Bản dưới đây
+// (nhánh `main`) ghi SỔ trạng thái theo `LeadStatusSource`; bản trên (nhánh `test`) ghi
+// DÒNG THỜI GIAN và nhận `auditAlreadyWritten`. Đặt bí danh để không ai nhầm.
+import { recordLeadStatusChange as ghiSoTrangThaiLead } from "@/lib/leads/set-status";
 import {
   createBackfillOrderPaymentInTx,
   type BackfillPaymentInput,
@@ -103,6 +108,14 @@ export type ConvertV2Input = {
    * guard PAYMENT_REQUIRED coi như thoả.
    */
   backfillPayment?: BackfillPaymentInput | null;
+  /**
+   * 27/08 — GIẢI TRÌNH ƯU ĐÃI (miễn phí / học bổng / giảm giá) do người chốt gõ ở
+   * form convert. KHÔNG phải cổng quyền: guard tiền vẫn là `evaluatePaymentGuard`
+   * (tổng sau ưu đãi = 0 ⇒ qua). Field này chỉ để lý do đi vào `AuditLog.reason` —
+   * "ai cho em này miễn phí, vì cái gì" phải tra được, vì tiền biến mất khỏi công
+   * nợ ngay tại đây. Rỗng/không truyền ⇒ giữ nguyên hành vi cũ.
+   */
+  discountReason?: string | null;
 };
 
 export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): Promise<ConvertV2Result> {
@@ -141,8 +154,10 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
     computeEnrollmentPrice({ listPrice: s.listPrice, discount: s.discount ?? null }),
   );
   const totalFinalPrice = prices.reduce((sum, p) => sum + p.finalPrice, 0);
+  // 07/09 — thêm `deletedAt: null` cho khớp `lib/crm/bulk-convert.ts:191` (vốn đã có).
+  // Thiếu nó thì một khoản đã xoá sổ vẫn mở được cổng chốt ghi danh.
   const recordedCount = await db.payment.count({
-    where: { saleStatus: "RECORDED", order: { leadId: lead.id } },
+    where: { ...KHOAN_DA_GHI_NHAN, order: { leadId: lead.id } },
   });
   const guard = evaluatePaymentGuard({
     // backfillPayment sẽ tạo khoản RECORDED trong chính transaction bên dưới → coi như đã có.
@@ -155,6 +170,10 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
     return { ok: false, error: { code: "PAYMENT_REQUIRED", message: "Cần ghi nhận khoản thanh toán trước khi chốt" } };
   }
   const scholarshipFull = guard.ok ? guard.scholarshipFull : false;
+  // Lý do ưu đãi chỉ có nghĩa khi CÓ ưu đãi thật (Σ discountAmount > 0) — không để
+  // chuỗi rác của caller bám vào audit của lead chốt giá đầy đủ.
+  const totalDiscountAmount = prices.reduce((sum, p) => sum + p.discountAmount, 0);
+  const discountReason = totalDiscountAmount > 0 ? input.discountReason?.trim() || null : null;
 
   // 3) Dedupe parent (3 nhánh). Conflict → tạo ConvertConflict + khoá convert (AC3).
   const parentMatch = await findParentMatch({ email: input.parentEmail, phone: input.parentPhone });
@@ -228,11 +247,14 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
     if (claim.count === 0) throw new Error("ALREADY_CONVERTED");
     // GĐ1 — giữ nguyên `updateMany` làm lượt claim atomic (hai Sale bấm cùng lúc thì
     // chỉ một lượt thắng), chỉ nối thêm sổ. `from` là trạng thái đọc TRƯỚC claim.
-    await recordLeadStatusLedger({
+    await ghiSoTrangThaiLead({
       tx,
       leadId: lead.id,
       from: lead.status,
       to: "DA_DANG_KY",
+      // Chữ THƯỜNG: `LeadStatusSource` của `leads/set-status` dùng chữ thường, khác
+      // hẳn `source` của `lead/status-trail-write` ở lời gọi dưới (viết HOA). Hai hàm
+      // trùng tên nhưng kiểu khác nhau — đây đúng là chỗ dễ đổi nhầm.
       source: "convert",
       actorId: actor.id,
       actorName: actor.name ?? null,
@@ -525,12 +547,21 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
       entityId: lead.id,
       action: "STATUS_CHANGE",
       oldValues: { status: lead.status },
-      newValues: { status: "ENROLLED", studentIds, scholarshipFull, backfillNoPayment },
+      newValues: {
+        status: "ENROLLED",
+        studentIds,
+        scholarshipFull,
+        backfillNoPayment,
+        totalDiscountAmount,
+        totalFinalPrice,
+      },
       reason: scholarshipFull
-        ? "SCHOLARSHIP_FULL"
+        ? `SCHOLARSHIP_FULL${discountReason ? `: ${discountReason}` : ""}`
         : backfillNoPayment
           ? input.allowNoPayment!.reason.trim()
-          : undefined,
+          : discountReason
+            ? `DISCOUNT: ${discountReason}`
+            : undefined,
       orgUnitId: lead.centerId,
       tx,
     });

@@ -69,7 +69,9 @@ export function TransferDialog({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-foreground hover:bg-muted"
+        // `whitespace-nowrap`: ở 390px nhãn này xuống 2 dòng, nút cao gấp đôi hàng
+        // nút bên cạnh và hàng hành động lệch hẳn. Nhãn nút không bao giờ được ngắt.
+        className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-border px-3 py-2 text-sm font-semibold text-foreground hover:bg-muted"
       >
         <ArrowLeftRight size={14} /> Chuyển lead
       </button>

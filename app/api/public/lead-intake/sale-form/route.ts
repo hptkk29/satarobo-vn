@@ -6,7 +6,6 @@ import {
   mapSaleForm,
   SALE_FORM_HONEYPOT,
 } from "@/lib/lead/intake/map-sale-form";
-import { mirrorSaleFormToMisa } from "@/lib/lead/intake/misa-mirror";
 import { logWebhookDelivery } from "@/lib/lead/webhook";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
@@ -30,7 +29,7 @@ export const dynamic = "force-dynamic";
 //     "false", không phải viết lại đường nhận.
 //
 // Trước 16/08/2026 form POST thẳng sang MISA và hệ thống ta KHÔNG có gì. Từ 16/08
-// nó POST về đây: tạo Lead thật, rồi gửi bản sao sang MISA (cờ `intake.mirrorMisa`).
+// nó POST về đây để tạo Lead thật. Bản sao sang MISA đã GỠ ngày 29/08/2026.
 //
 // Đây là POST FORM CỦA TRÌNH DUYỆT, không phải fetch JSON:
 //  - body là `application/x-www-form-urlencoded`;
@@ -210,28 +209,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Bản sao sang MISA — Postgres đã ghi xong nên hỏng ở đây KHÔNG ảnh hưởng
-    // lead. Await để serverless không giết tiến trình giữa chừng.
-    //
-    // Hỏng thì phải để lại VẾT GỬI LẠI ĐƯỢC, không chỉ một dòng console: trong
-    // giai đoạn chuyển tiếp MISA vẫn là chỗ Sale làm việc, mà `console.error`
-    // không tới Sentry và không ai đọc log Vercel. `WebhookDelivery` là cơ chế
-    // sẵn có của repo cho đúng việc này (có màn replay). Bài học SePay: 401 im
-    // lặng 6 ngày nuốt 4 giao dịch vì không có chỗ nào nhìn thấy.
-    const mirror = await mirrorSaleFormToMisa(payload);
-    if (mirror.status === "failed" || mirror.status === "misconfigured") {
-      console.error(`[sale-form] mirror MISA: ${mirror.status}`, mirror);
-      await logWebhookDelivery({
-        source: "misa-mirror",
-        externalId: result.leadId ?? null,
-        payload,
-        status: "FAILED",
-        errorMessage:
-          mirror.status === "misconfigured"
-            ? `Thiếu env: ${mirror.missing.join(", ")} — MISA không nhận được phiếu này.`
-            : `Gửi MISA thất bại (${mirror.reason}).`,
-      }).catch((err) => console.error("[sale-form] không ghi được mirror log:", err));
-    }
+    // 29/08/2026 — GỠ bản sao sang MISA (chủ dự án bỏ hẳn CRM của MISA). Endpoint
+    // này GIỮ LẠI vì quảng cáo/QR cũ còn trỏ tới, nhưng nay nó chỉ tạo Lead trong
+    // Postgres rồi thôi: không gọi mạng ra ngoài, không `WebhookDelivery` nào.
 
     return redirect(req, INTAKE_PAGE, {
       ok: "1",

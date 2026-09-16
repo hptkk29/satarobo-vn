@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { broadcastMessages, notificationBumpBroadcasts } from "@/lib/chat/broadcast";
 import { classifyNotification } from "./catalog";
 import { cheSdt, kiemPii } from "./pii";
+import { ghiOutboxPush } from "@/lib/push/outbox";
 
 // =============================================================================
 // ĐƯỜNG GHI DUY NHẤT của thông báo nhân sự.
@@ -43,12 +44,35 @@ export interface NotifyStaffParams {
   reopen?: boolean;
 }
 
-/** Ghi thông báo cho nhiều người + bắn tín hiệu realtime. Trả về số người thật sự được ghi. */
-export async function notifyStaff(params: NotifyStaffParams): Promise<number> {
-  const nguoiNhan = [...new Set(params.userIds.filter((id) => !!id))];
-  if (nguoiNhan.length === 0) return 0;
+/** Kết quả của một lượt ghi — ai vừa được ghi MỚI hoặc MỞ LẠI là người cần rung chuông. */
+export interface GhiThongBaoKetQua {
+  /** Số người trong danh sách nhận (sau khi lọc trùng/rỗng). */
+  soNguoi: number;
+  /** Người có bản ghi mới tạo hoặc vừa kéo về CHƯA ĐỌC — chỉ những người này cần `notification.bumped`. */
+  canRung: string[];
+}
 
-  const canhBao = kiemPii(`${params.title}\n${params.body}`);
+/** Các cột nội dung được so để biết bản ghi có thực sự đổi hay không. */
+const COT_NOI_DUNG = ["title", "body", "href", "groupKey", "priority", "entityType", "entityId"] as const;
+
+/**
+ * Ghi thông báo cho nhiều người, KHÔNG bắn realtime. Dùng cho cron quét hàng loạt (vd `sla-check`)
+ * để gom mọi tín hiệu của một lượt chạy thành MỘT lần `broadcastNotificationBump` ở cuối.
+ *
+ * ⚠️ Vì sao phải so trước rồi mới ghi (sự cố egress 05/09/2026): bản cũ upsert vô điều kiện rồi
+ * bắn `notification.bumped` cho MỌI người nhận ở MỌI lượt gọi. Cron `sla-check` (mỗi 15 phút) đi qua đây
+ * ~1.800 vi phạm/lượt ⇒ 1,34 triệu INSERT cho một bảng chỉ có ~2.000 dòng, và ~170.000 POST
+ * broadcast/ngày làm Realtime cạn pool (`DBConnection.ConnectionError`), rồi mỗi bump lại kéo mọi
+ * tab admin gọi `/api/notifications/summary`. Kết quả: prod vượt trần egress 5 GB dù DB chỉ 57 MB.
+ * Nay: bản ghi đã có và nội dung không đổi ⇒ KHÔNG ghi, KHÔNG rung. Chỉ rung khi tạo mới hoặc
+ * khi `reopen` kéo một bản đã đọc về chưa đọc — đúng nghĩa của dedupeKey.
+ */
+export async function ghiThongBaoNhanSu(params: NotifyStaffParams): Promise<GhiThongBaoKetQua> {
+  const nguoiNhan = [...new Set(params.userIds.filter((id) => !!id))];
+  if (nguoiNhan.length === 0) return { soNguoi: 0, canRung: [] };
+
+  const canhBao = kiemPii(`${params.title}
+${params.body}`);
   if (canhBao.coSdt || canhBao.coTien) {
     // Không chặn — chặn ở đây là nuốt mất một thông báo nghiệp vụ thật. Nhưng phải để lại vết:
     // loại nào lọt SĐT/học phí ra panel là loại cần sửa mẫu câu, không phải sửa chỗ này.
@@ -78,26 +102,146 @@ export async function notifyStaff(params: NotifyStaffParams): Promise<number> {
 
   const category = params.category ?? params.dedupeKey.split(":")[0] ?? "system";
 
+  // Một câu đọc cho cả danh sách người nhận — thay cho N upsert mù.
+  const daCo = await db.staffNotification.findMany({
+    where: { dedupeKey: params.dedupeKey, userId: { in: nguoiNhan } },
+    select: {
+      userId: true,
+      readAt: true,
+      title: true,
+      body: true,
+      href: true,
+      groupKey: true,
+      priority: true,
+      entityType: true,
+      entityId: true,
+      expiresAt: true,
+      // BẮT BUỘC (vá 08/09/2026): thiếu cột này thì `REVOKED` thành ngõ cụt MỘT CHIỀU —
+      // nội dung y hệt ⇒ vòng dưới `continue` ⇒ dòng nằm REVOKED vĩnh viễn và người đó
+      // KHÔNG BAO GIỜ được báo lại cho cùng một việc. Ca thật: lead A→B→A.
+      state: true,
+    },
+  });
+  const theoUser = new Map(daCo.map((r) => [r.userId, r]));
+
+  const canRung: string[] = [];
   for (const userId of nguoiNhan) {
-    await db.staffNotification.upsert({
+    const cu = theoUser.get(userId);
+    if (!cu) {
+      // Chưa có ⇒ tạo. Vẫn dùng upsert để hai lượt cron chồng nhau không đẻ P2002.
+      await db.staffNotification.upsert({
+        where: { userId_dedupeKey: { userId, dedupeKey: params.dedupeKey } },
+        create: { userId, dedupeKey: params.dedupeKey, category, ...noiDung },
+        update: noiDung,
+      });
+      canRung.push(userId);
+      continue;
+    }
+
+    const noiDungDoi =
+      COT_NOI_DUNG.some((k) => cu[k] !== noiDung[k]) ||
+      (cu.expiresAt?.getTime() ?? null) !== (noiDung.expiresAt?.getTime() ?? null);
+    // Bản ghi đã bị THU HỒI (hoặc hết hạn) mà việc đó phát sinh LẠI ⇒ đây là một lần mới,
+    // không phải bản trùng. Không có vế này thì `thuHoiThongBao` là cửa một chiều: đóng rồi
+    // là đóng vĩnh viễn cặp (người, khoá) đó. Module cũ đã gặp đúng bẫy này và phải dựng khối
+    // "MỞ LẠI" riêng — xem `lib/staff-notifications.ts` (EXPIRED → ACTIVE + reset mốc đọc).
+    const daThuHoi = cu.state !== "ACTIVE";
+    const moLai = (!!params.reopen && cu.readAt !== null) || daThuHoi;
+    if (!noiDungDoi && !moLai) continue; // Y nguyên ⇒ không ghi, không rung.
+
+    // Ghi lại nội dung là CÓ CHỦ ĐÍCH: đường duy nhất chữa được bản ghi sinh trước khi
+    // href/nhóm/mức được sửa. Trạng thái đọc giữ nguyên trừ khi nơi gọi xin `reopen`,
+    // hoặc bản ghi đang bị thu hồi và nay sống lại.
+    await db.staffNotification.update({
       where: { userId_dedupeKey: { userId, dedupeKey: params.dedupeKey } },
-      create: { userId, dedupeKey: params.dedupeKey, category, ...noiDung },
-      // Ghi lại nội dung ở nhánh update là CÓ CHỦ ĐÍCH: nó là đường duy nhất chữa được những
-      // bản ghi sinh ra trước khi href/nhóm/mức được sửa. Trạng thái đọc giữ nguyên trừ khi
-      // nơi gọi xin `reopen`.
-      update: { ...noiDung, ...(params.reopen ? { readAt: null } : {}) },
+      data: {
+        ...noiDung,
+        ...(moLai ? { readAt: null } : {}),
+        ...(daThuHoi ? { state: "ACTIVE" } : {}),
+      },
     });
+    // Nội dung đổi nhưng vẫn đang chưa đọc ⇒ badge không đổi số, không cần rung.
+    if (moLai) canRung.push(userId);
   }
 
-  // Fail-and-forget: `broadcastMessages` cam kết không throw, nhưng vẫn bọc — thông báo ĐÃ nằm
-  // trong Postgres, mất tín hiệu realtime chỉ có nghĩa là badge nhảy ở nhịp poll kế tiếp.
+  return { soNguoi: nguoiNhan.length, canRung };
+}
+
+/**
+ * THU HỒI thông báo: đưa các bản ghi còn hiệu lực về trạng thái `REVOKED`.
+ *
+ * Vì sao cần (vá 08/09/2026): chuông của repo chưa từng có đường thu hồi — `entityId` được khai
+ * với ý "để SAU NÀY thu hồi khi đối tượng bị xoá" nhưng chưa ai làm. Hệ quả cụ thể ở module lead:
+ * lead chuyển từ A sang B thì B nhận chuông mới, còn A **giữ nguyên** dòng "Bạn có lead mới" trỏ
+ * tới `/leads/<id>` — một lead họ không còn giữ. Nếu là chuyển XUYÊN CƠ SỞ thì tệ hơn: `Lead` nằm
+ * trong `SCOPED_MODELS` nên `scopedDb` lọc mất, A bấm chuông ra trang "không tồn tại".
+ *
+ * `REVOKED` chứ không xoá: `conHieuLuc` (`service.ts`) chỉ đếm `state = "ACTIVE"`, nên đổi trạng
+ * thái là đủ để mục biến khỏi badge lẫn panel — mà vẫn giữ được vết "đã từng báo cho ai" cho
+ * việc đối soát. Xoá cứng là mất luôn dữ liệu đó.
+ *
+ * KHÔNG bắn realtime: badge chỉ có thể GIẢM, và người dùng không cần bị đánh động vì một mục vừa
+ * biến mất. Nhịp poll kế tiếp sẽ đồng bộ. (Bắn ở đây là mời lại đúng bão broadcast của 05/09.)
+ *
+ * Chỉ đụng dòng đang `ACTIVE` — `updateMany` nên không ném khi không có gì để thu hồi.
+ */
+export async function thuHoiThongBao(params: {
+  userIds: readonly string[];
+  dedupeKey: string;
+}): Promise<number> {
+  const ds = [...new Set(params.userIds.filter((id) => !!id))];
+  if (ds.length === 0 || !params.dedupeKey) return 0;
+  const kq = await db.staffNotification.updateMany({
+    where: { userId: { in: ds }, dedupeKey: params.dedupeKey, state: "ACTIVE" },
+    data: { state: "REVOKED" },
+  });
+  return kq.count;
+}
+
+/**
+ * Bắn `notification.bumped` cho danh sách người. Fail-and-forget: `broadcastMessages` cam kết
+ * không throw, nhưng vẫn bọc — thông báo ĐÃ nằm trong Postgres, mất tín hiệu realtime chỉ có
+ * nghĩa là badge nhảy ở nhịp poll kế tiếp. Người gọi hàng loạt gom một danh sách rồi gọi MỘT lần.
+ */
+export async function broadcastNotificationBump(userIds: readonly string[]): Promise<void> {
+  const ds = [...new Set(userIds.filter((id) => !!id))];
+  if (ds.length === 0) return;
   try {
-    await broadcastMessages(
-      notificationBumpBroadcasts(nguoiNhan, { at: new Date().toISOString() }),
-    );
+    await broadcastMessages(notificationBumpBroadcasts(ds, { at: new Date().toISOString() }));
   } catch (err) {
     console.warn("[notifications] bắn tín hiệu realtime lỗi — thông báo vẫn đã lưu:", err);
   }
+}
 
-  return nguoiNhan.length;
+/** Ghi thông báo cho nhiều người + bắn tín hiệu realtime cho ai cần. Trả về số người nhận. */
+export async function notifyStaff(params: NotifyStaffParams): Promise<number> {
+  const kq = await ghiThongBaoNhanSu(params);
+  await broadcastNotificationBump(kq.canRung);
+  // Dòng thứ ba: ghi việc-cần-đẩy Web Push (US-14b Đợt 4). Ba điều kiện của chỗ móc này:
+  //
+  //  1. Bám `kq.canRung`, TUYỆT ĐỐI không `params.userIds`. `canRung` là "ai vừa có mục MỚI hoặc
+  //     vừa được mở lại"; `userIds` là toàn bộ danh sách nhận, kể cả người đã có y nguyên mục đó
+  //     từ lượt trước. Bám nhầm là đẻ lại đúng bão 05/09 mà khối chú thích ở
+  //     `ghiThongBaoNhanSu` vừa vá — với hệ quả nặng hơn, vì lần này mỗi dòng là một lần rung
+  //     điện thoại chứ không chỉ một POST realtime.
+  //
+  //  2. Ở `notifyStaff`, KHÔNG ở `ghiThongBaoNhanSu`. Ranh giới giữa hai hàm là cố ý: hàm dưới
+  //     dành cho cron quét hàng loạt (`lib/crm/sla.ts`, ~1.800 vi phạm mỗi lượt) và nó đi cửa đó
+  //     CHÍNH VÌ không muốn rung. Push đi theo realtime, không đi theo lượt quét.
+  //
+  //  3. Ngoài mọi transaction, sau khi chuông đã ghi xong. Hàm này vốn không nhận `tx` (xem đầu
+  //     file). Hệ quả chấp nhận có ý thức: tiến trình chết ĐÚNG giữa hai dòng thì có chuông mà
+  //     không có push, và lượt gọi lại thấy nội dung y hệt ⇒ `canRung` rỗng ⇒ không ghi bù.
+  //     Mất một push, giữ được thông báo — đúng thứ tự ưu tiên; đảo lại (ghi outbox trước) là
+  //     đẩy push cho một mục chưa chắc tồn tại.
+  //
+  // `ghiOutboxPush` cam kết KHÔNG NÉM (migration hai bảng push chưa chạy ở môi trường nào), nên
+  // không cần bọc thêm ở đây — nhưng cũng không được bỏ `await`: `void` trong Server Action là
+  // mất ngẫu nhiên theo tải trên Vercel.
+  await ghiOutboxPush({
+    userIds: kq.canRung,
+    dedupeKey: params.dedupeKey,
+    expiresAt: params.expiresAt ?? null,
+  });
+  return kq.soNguoi;
 }

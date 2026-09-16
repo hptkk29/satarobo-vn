@@ -77,7 +77,13 @@ jobs:
           # nghiệm thu mục ⑩/⑪ (Sale thấy nick sau 5′, và MẤT nick sau khi rời cơ sở) không thể
           # đạt — hỏng CÂM, vì không có cron nào để mà đỏ. Cơ sở chưa có nick thì hàm ra ngay,
           # không gọi mạng, không ghi nhật ký, nên bơm 5′/lần lúc chưa có SIM cũng không tốn gì.
-          for p in dispatch-events email-queue chat-zns-notify trial-reminder sla-check webhook-retention shift-brief zalocrm-doi-soat; do
+                    #
+          # push-outbox (US-14b Đợt 4 — từ `main`): worker gửi Web Push cho nhân viên. Trên prod
+          # chạy MỖI PHÚT; ở đây 5 phút/lần là đủ cho nghiệm thu. An toàn để bơm dày vì (a) công
+          # tắc push.webPushEnabled mặc định TẮT ⇒ mỗi lượt chỉ đọc một cờ rồi thoát; (b) khi bật,
+          # mỗi dòng outbox được GIÀNH CHỖ bằng một UPDATE có điều kiện trạng thái nên hai lượt
+          # chồng nhau không gửi đôi.
+          for p in dispatch-events email-queue chat-zns-notify trial-reminder sla-check webhook-retention shift-brief push-outbox zalocrm-doi-soat; do
             code=$(curl -s -o /dev/null -w "%{http_code}" \
               -H "Authorization: Bearer ${{ secrets.TEST_CRON_SECRET }}" \
               "https://test.satarobo.vn/api/cron/$p")

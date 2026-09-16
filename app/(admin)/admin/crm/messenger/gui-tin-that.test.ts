@@ -37,7 +37,10 @@ vi.mock("@/lib/db-scope", () => ({
   scopedDb: vi.fn(() => ({ messengerConversation: { findUnique: h.convFindUnique } })),
 }));
 vi.mock("@/lib/crm/messenger-send", () => ({ guiTraLoiMessenger: h.guiTraLoiMessenger }));
-vi.mock("next/cache", () => ({ revalidatePath: h.revalidatePath }));
+vi.mock("next/cache", () => ({
+  // 16/09/2026 — bản `main` của `actions.ts` dùng `unstable_cache`; mock thiếu nó là
+  // cả tệp test chết ngay lúc nạp, không phải một ca đỏ.
+  unstable_cache: <T,>(fn: T) => fn, revalidatePath: h.revalidatePath }));
 
 import { replyAction } from "./actions";
 

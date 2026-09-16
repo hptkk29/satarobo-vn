@@ -213,8 +213,22 @@ Rail lọc (nhóm/trạng thái/thời gian) · filter đồng bộ URL · cuộ
 ### N4 — Chống nhiễu + escalation + cài đặt (≈ 5 ngày) = V1.1 của PRD
 Cửa sổ gộp theo loại + `aggregateCount` · trần 30/ngày · im lặng ngoài giờ **(chặn bởi Q-C, xem §7)** · escalation QLTT theo cơ sở (`MSG.PARENT_WAITING`, `DUE.OVERDUE`) · `NotificationPreference` per user · tìm kiếm trong `/thong-bao`.
 
+### US-14b — Web Push nội bộ cho NHÂN VIÊN (mở 08/09/2026, đang làm)
+**Phạm vi: chỉ nhân viên nội bộ. Phụ huynh KHÔNG nhận Web Push — họ đi ZNS theo chốt 09/08/2026 (`lib/chat/zns-notify.ts:20`).**
+
+Lý do tách mã riêng thay vì gỡ dòng "Push trình duyệt" ở mục dưới: đây **không phải** US-14 của module chat. US-14 là báo tin nhắn lớp cho **phụ huynh** và đã xong bằng ZNS; mã đó đã đóng. Trộn hai việc vào một mã là đúng cách repo từng đẻ hai nhánh làm trùng một bản bàn giao (26/08).
+
+Lý do phạm vi dừng ở nhân viên, và **đừng mở lại**: cơ chế này đứng được là nhờ ép được nhân viên iPhone "Thêm vào màn hình chính" — đó là công cụ làm việc, bắt được. Phụ huynh không ép được, và đó chính xác là lập luận đã thắng hồi 09/08. Mở lại là đưa lại một câu đã đóng bằng đúng lập luận đã thua.
+
+- **Kênh DUY NHẤT, không fallback.** VAPID thuần, không Firebase, không dịch vụ bên thứ ba.
+- **Điểm móc:** dòng thứ ba trong `notifyStaff()`, dùng chung `canRung` — tập người THỰC SỰ có bản ghi mới hoặc vừa mở lại. Không hook `pickFairTurn()`, không đụng `assign-lead.ts`: thông báo "Bạn có lead mới" đã chạy từ 30/08.
+- **Nội dung:** dùng nguyên `title`/`body`/`href` của `StaffNotification`, đã qua `cheSdt()`. Push hiện trên màn hình khoá — công khai hơn panel chuông, nên không có lý do gì để nó mang nhiều thông tin hơn chuông.
+- **Allowlist tiền tố `dedupeKey`**, đợt đầu đúng một giá trị `lead.moi:`; loại khác ghi `SKIPPED` chứ không gửi. Cần vì `lead.nhap_lai:` nhét `now.getTime()` vào khoá (`lib/lead/assign-lead.ts:345`) ⇒ khách điền form 10 lần là 10 lần rung, không trần nào chặn. Allowlist cũng tự vô hiệu hoá 4 nơi đang bật `reopen: true`. Mở thêm từng loại một, mỗi lần là một quyết định có ý thức.
+- **Chưa làm được gì cho `manualAssignLead`:** đường gán tay hiện **không gọi `notifyStaff`** (`lib/lead/auto-assign.ts:333`) nên đã không có chuông, và sẽ không có push. Đây là lỗ **chặn giá trị**, phải vá trước khi tuyên bố kênh chạy — kẻo nhân viên tin vào push rồi bỏ lỡ đúng loại lead mà Sale tự nhập tay.
+- Đợt 1 (tầng dữ liệu + khoá) xong 08/09/2026: `WebPushSubscription` + `WebPushOutbox` + migration `20260908000000_web_push_ha_tang`. Chi tiết: `docs/web-push/00-dot-1-ha-tang-du-lieu.md`.
+
 ### Ngoài V1 (không làm đợt này)
-Push trình duyệt · Zalo/Email cho P1 · digest buổi sáng · snooze · gộp feed phụ huynh · bàn giao thông báo khi nghỉ việc (PRD E2).
+Push trình duyệt **cho phụ huynh** (nhân viên: xem US-14b ở trên) · Zalo/Email cho P1 · digest buổi sáng · snooze · gộp feed phụ huynh · bàn giao thông báo khi nghỉ việc (PRD E2).
 
 **Tổng V1 (N0→N3): ≈ 3,5 tuần.** N4 thêm ≈ 1 tuần.
 

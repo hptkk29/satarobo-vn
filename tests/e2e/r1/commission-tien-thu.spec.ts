@@ -3,7 +3,8 @@
  *
  * Bộ thuần ở `lib/crm/commission-thuc-thu.test.ts` đã phủ phép tính. Bộ này phủ đúng
  * những thứ CHỈ DB mới lộ ra:
- *   • `WHERE_THUC_THU` có thật sự lọc đúng trên SQL không (PENDING, bản gốc bị ADJUSTED);
+ *   • `WHERE_THUC_THU` có thật sự lọc đúng trên SQL không (PENDING bị loại; gốc và dòng
+ *     điều chỉnh DELTA thì CẢ HAI cùng được cộng — xem [HH-TT-6]);
  *   • bút toán hoàn do CHÍNH `refundPayment()` sinh ra có khớp với thứ engine mong đợi;
  *   • CHỐT LẠI KỲ có cộng đôi không — rủi ro chính, vì khoá unique KHÔNG che đường này.
  */
@@ -11,7 +12,7 @@ import { test, expect } from "@playwright/test";
 import { db } from "../../../lib/db";
 import { assertTestDb } from "../../e2e/_helpers/seed";
 import { chotKyHoaHong } from "../../../lib/crm/commission-run";
-import { refundPayment, adjustPayment } from "../../../lib/finance/payment";
+import { refundPayment } from "../../../lib/finance/payment";
 
 const ACC = { id: "acc-hh", name: "Kế toán" };
 const SALE = "u-sale-chot";
@@ -227,21 +228,40 @@ test.describe("[HH-TT] hoa hồng theo tiền đã thu", () => {
     expect(await db.commissionLine.count({ where: { tier: "SALE", statement: { period: KY_1 } } })).toBe(2);
   });
 
-  test("[HH-TT-6] điều chỉnh khoản thu → tính theo bản MỚI, không cộng đôi", async () => {
+  test("[HH-TT-6] điều chỉnh khoản thu → gốc + delta ra số đúng, không cộng đôi", async () => {
     const goc = await thuTien(10_000_000, NGAY_KY_1);
-    // `adjustPayment` tạo bản MỚI (ADJUSTED) và KHÔNG sửa bản gốc. Nếu `WHERE_THUC_THU`
-    // quên loại bản gốc thì hoa hồng ăn cả 10tr lẫn 6tr = 16tr.
-    const res = await adjustPayment({
-      paymentId: goc.id,
-      confirmedById: ACC.id,
-      reason: "ghi nhầm số tiền",
-      amount: 6_000_000,
+
+    // 🔴 ĐỔI MÔ HÌNH 07/09/2026 (`payment_type_tach_khoi_status`), áp khi hợp nhất
+    // `main` → `test` ngày 16/09.
+    //   TRƯỚC: bút toán điều chỉnh mang trạng thái `ADJUSTED` và SỐ ĐÚNG (6tr), bản gốc
+    //     giữ 10tr ⇒ `WHERE_THUC_THU` phải LOẠI gốc, không thì hoa hồng ăn 16tr.
+    //   NAY: nó là dòng `CONFIRMED` + `paymentType = "ADJUSTMENT"` mang PHẦN CHÊNH LỆCH
+    //     (−4tr), bản gốc giữ nguyên, phép cộng lấy CẢ HAI ⇒ 10tr − 4tr = 6tr.
+    // Con số hoa hồng KHÔNG đổi (240k); thứ đổi là SỐ BÚT TOÁN. Loại nhầm bản gốc bây
+    // giờ là đếm THIẾU đúng phần vừa sửa — ngược hẳn lỗi cũ.
+    //
+    // ⚠️ Dựng dòng delta THẲNG bằng `payment.create` thay vì gọi `adjustPayment`: hàm đó
+    // nay đòi khoản thu phải gắn `enrollmentId` (để kiểm trần học phí) — ràng buộc nghiệp
+    // vụ KHÁC, không phải thứ ca này đo. Ca này hỏi đúng một câu: phép cộng thực thu ở
+    // tầng SQL có lấy đủ gốc + delta không. Cổng trần học phí đã có
+    // `tests/finance/dieu-chinh.test.ts` phủ riêng.
+    // Các trường dưới chép đúng những gì `adjustPayment` ghi (lib/finance/payment.ts).
+    await db.payment.create({
+      data: {
+        orderId,
+        amount: -4_000_000,
+        method: "chuyen-khoan",
+        paidDate: NGAY_KY_1,
+        accountantStatus: "CONFIRMED",
+        paymentType: "ADJUSTMENT",
+        adjustmentOfId: goc.id,
+        confirmedAt: NGAY_KY_1,
+      },
     });
-    expect(res.ok).toBe(true);
 
     const kq = await chotKyHoaHong(ACC, { period: KY_1 });
-    expect(kq.soButToan).toBe(1); // chỉ bản điều chỉnh sống
-    expect(await tienTang(KY_1, "SALE")).toBe(240_000); // 4% × 6tr
+    expect(kq.soButToan).toBe(2); // gốc + dòng điều chỉnh, cả hai cùng sống
+    expect(await tienTang(KY_1, "SALE")).toBe(240_000); // 4% × (10tr − 4tr)
   });
 
   test("[HH-TT-7] CHỐT LẠI KỲ HAI LẦN — không cộng đôi, bảng kê trùng khít", async () => {

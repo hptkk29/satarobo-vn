@@ -9,13 +9,21 @@ import { resolveActor } from '@/lib/auth/actor'
 import { checkPermission } from '@/lib/auth/check-permission'
 import { getAuditActor } from '@/lib/audit/log'
 import { isConvertV2Enabled } from '@/lib/flags'
-import { convertLeadV2, computeInstallmentSplit, type ConvertV2Student } from '@/lib/crm/convert-lead-v2'
-import { recordInstallmentPlan, requestInstallmentApproval } from '@/lib/orders/installments'
+import { convertLeadV2, type ConvertV2Student } from '@/lib/crm/convert-lead-v2'
+import { computeEnrollmentPrice } from '@/lib/finance/pricing'
+import {
+  canGrantFullScholarship,
+  scholarshipAuditReason,
+  SCHOLARSHIP_FORBIDDEN,
+} from '@/lib/crm/scholarship'
 import { phoneVn } from '@/lib/validators/phone'
 
 // ─── R7-05 — wiring Convert v2 vào Server Action (UI → service đã có) ──────────
 // KHÔNG nhân đôi logic convert: chỉ chuẩn hoá input từ form → gọi convertLeadV2.
-// Giá (listPrice) đọc LẠI từ DB theo classId (không tin client). C6 — bỏ ưu đãi.
+// Giá (listPrice) đọc LẠI từ DB theo classId (không tin client).
+// ⚠️ 27/08 — ĐẢO "C6 — bỏ ưu đãi": form nay gửi được ưu đãi/miễn phí từng em. Lý do
+// đảo: bỏ ưu đãi khiến tổng phải thu luôn > 0 ⇒ lead miễn phí toàn phần kẹt cứng ở
+// guard PAYMENT_REQUIRED, không có đường nào chốt (khoản 0đ cũng không ghi nhận được).
 
 const studentSchema = z.object({
   leadChildId: z.string().trim().optional().nullable(),
@@ -23,18 +31,18 @@ const studentSchema = z.object({
   dob: z.string().trim().optional().or(z.literal('')),
   classId: z.string().trim().min(1, 'Chọn lớp cho học viên'),
   consentMedia: z.boolean().optional(),
+  // ⚠️ 31/08/2026 — THU HẸP còn ĐÚNG "học bổng toàn phần", và chỉ SUPER_ADMIN dùng được.
+  //
+  // Trước đó ô này nhận PERCENT / AMOUNT / PROGRAM với mức tuỳ ý, không vai nào bị chặn:
+  // bất kỳ ai chốt được lead là giảm được học phí bao nhiêu tuỳ thích. Chủ dự án chốt
+  // 31/08 gỡ hẳn khung "Ưu đãi học phí" khỏi màn chốt và chỉ giữ MỘT ô tick miễn phí
+  // toàn phần cho quản trị.
+  //
+  // Thu hẹp ngay ở SCHEMA (không chỉ giấu ô trên giao diện): Server Action là endpoint
+  // HTTP riêng, giấu ô mà vẫn nhận `PERCENT: 90` thì cổng chưa đóng. Vai được phép kiểm
+  // ở thân hàm — schema không biết người gọi là ai.
+  scholarship: z.boolean().optional(),
 })
-
-// FL2-01 — kế hoạch học phí: 1 đợt (đóng đủ) hoặc 2 đợt (đợt 1 đã thu + đợt 2 hẹn ngày).
-// Số tiền/tổng đọc LẠI từ Order ở server (không tin client) — client chỉ gửi dự định.
-const installmentSchema = z
-  .object({
-    plan: z.enum(['FULL', 'TWO']),
-    dot1Amount: z.number().int().nonnegative().optional(),
-    dot2DueDate: z.string().trim().optional().or(z.literal('')),
-  })
-  .optional()
-  .nullable()
 
 const convertSchema = z.object({
   parentName: z.string().trim().min(2, 'Tên phụ huynh tối thiểu 2 ký tự').max(120),
@@ -70,7 +78,12 @@ const convertSchema = z.object({
   parentWard: z.string().trim().max(120).optional().or(z.literal('')),
   parentCity: z.string().trim().max(120).optional().or(z.literal('')),
   students: z.array(studentSchema).min(1, 'Cần ít nhất 1 học viên'),
-  installment: installmentSchema,
+  // Bắt buộc khi có ưu đãi (kiểm dưới, sau khi biết ưu đãi có ăn tiền thật không).
+  // Đi vào `AuditLog.reason` của bản ghi STATUS_CHANGE lead → tra được về sau.
+  // `discountReason` ĐÃ GỠ khỏi đầu vào: form không còn ô nhập (chốt 31/08 — "chỉ cần
+  // ô tick"). Lý do ghi vào nhật ký nay do SERVER tự dựng, kèm tên người cấp — xem dưới.
+  // Trách nhiệm không mất đi: cổng vai SUPER_ADMIN + nhật ký có tên là hai lớp thay cho
+  // một ô chữ mà người cấp tự gõ.
 })
 
 export type SubmitConvertV2Result =
@@ -79,11 +92,6 @@ export type SubmitConvertV2Result =
       studentIds: string[]
       enrollmentIds: string[]
       deduped: boolean
-      /** FL2-01 — đã ghi kế hoạch 2 đợt vào Order chưa (cảnh báo nếu không áp được). */
-      installmentApplied?: boolean
-      installmentWarning?: string
-      /** C4 — kế hoạch 2 đợt đã gửi quản lý cơ sở duyệt (PENDING_APPROVAL). */
-      installmentPendingApproval?: boolean
     }
   | { ok: false; code?: string; error: string }
 
@@ -108,7 +116,23 @@ export async function submitConvertV2(
   }
   const d = parsed.data
 
-  const sdb = scopedDb(await resolveActor(session.user.id))
+  const actor = await resolveActor(session.user.id)
+  const sdb = scopedDb(actor)
+
+  // ⚠️ CỔNG VAI cho học bổng toàn phần (chốt 31/08/2026): CHỈ SUPER_ADMIN.
+  //
+  // Giấu ô tick trên giao diện KHÔNG phải lớp bảo vệ — Server Action là endpoint HTTP
+  // riêng, gọi thẳng với `scholarship: true` vẫn tới được đây. Học bổng toàn phần làm
+  // học phí của một em bốc hơi khỏi công nợ và cho lead đi thẳng qua guard
+  // PAYMENT_REQUIRED mà không cần một đồng nào ghi nhận — nên nó phải là cổng cứng.
+  //
+  // Hỏi `actor.isSuperAdmin` chứ không `checkPermission`: repo không có action nào cho
+  // việc này, và đẻ một permission mới bắt buộc phải chạy tay `seed-prod-roles.yml` sau
+  // khi merge — quên là màn chốt lead trắng với mọi vai trên prod.
+  const wantsScholarship = d.students.some((s) => s.scholarship === true)
+  if (wantsScholarship && !canGrantFullScholarship(actor)) {
+    return { ok: false, error: SCHOLARSHIP_FORBIDDEN }
+  }
 
   // Scope: lead phải tồn tại; SALE (chỉ view-own) chỉ chuyển lead của mình.
   const lead = await sdb.lead.findFirst({
@@ -120,8 +144,8 @@ export async function submitConvertV2(
     return { ok: false, error: 'Chỉ chuyển được lead của bạn' }
   }
 
-  // Đọc giá thật từ lớp ở DB (không tin client gửi giá lên). C6 — bỏ ưu đãi: enrollment
-  // lưu finalPrice = listPrice, discountAmount = 0 (convertLeadV2 với discount=null).
+  // Đọc giá thật từ lớp ở DB (không tin client gửi giá lên). Client chỉ được gửi LOẠI
+  // + MỨC ưu đãi; giá gốc và phép trừ đều làm ở server (`computeEnrollmentPrice`).
   const classIds = [...new Set(d.students.map((s) => s.classId))]
   const classes = await sdb.class.findMany({
     where: { id: { in: classIds }, deletedAt: null },
@@ -129,21 +153,97 @@ export async function submitConvertV2(
   })
   const classMap = new Map(classes.map((c) => [c.id, c]))
 
+  // ── KHOÁ QUAN TÂM ↔ LỚP PHẢI KHỚP (chủ dự án chốt 03/09/2026) ──────────────
+  //
+  // Ô chọn ở giao diện đã chỉ hiện lớp thuộc khoá quan tâm của từng em, nhưng ô
+  // chọn KHÔNG PHẢI cổng: Server Action là một endpoint riêng, gửi thẳng payload
+  // là bỏ qua nó. Mà sai ở đây ăn tiền thật — học phí ghi vào công nợ lấy theo
+  // giá LỚP, nên chốt nhầm lớp là ghi cho phụ huynh một khoản của khoá không ai
+  // đặt, và không có gì báo.
+  //
+  // Chỉ chặn khi em ĐÃ CÓ khoá quan tâm. Em chưa khai thì mọi lớp đều hợp lệ —
+  // đúng như giao diện, và đó là phần lớn lead thật.
+  //
+  // Khoá của em suy theo cùng luật màn Chuyển đổi: khoá của CHÍNH EM, không có
+  // thì rơi về khoá cấp lead. Hai nơi lệch luật là giao diện cho chọn còn server
+  // từ chối — người dùng bấm Chốt và ăn lỗi mà không hiểu vì sao.
+  const leadChildIds = d.students.map((s) => s.leadChildId).filter(Boolean) as string[]
+  if (leadChildIds.length > 0) {
+    const [conRows, leadRow] = await Promise.all([
+      sdb.leadChild.findMany({
+        where: { id: { in: leadChildIds } },
+        select: { id: true, interestedCourseId: true },
+      }),
+      sdb.lead.findUnique({ where: { id: leadId }, select: { courseId: true } }),
+    ])
+    const khoaTheoCon = new Map(conRows.map((c) => [c.id, c.interestedCourseId]))
+    const tenKhoa = new Map(
+      (
+        await sdb.course.findMany({
+          where: {
+            id: {
+              in: [
+                ...new Set(
+                  [...khoaTheoCon.values(), leadRow?.courseId].filter(Boolean) as string[],
+                ),
+              ],
+            },
+          },
+          select: { id: true, name: true },
+        })
+      ).map((c) => [c.id, c.name]),
+    )
+
+    for (const s of d.students) {
+      if (!s.leadChildId) continue
+      const khoaEm = khoaTheoCon.get(s.leadChildId) ?? leadRow?.courseId ?? null
+      if (!khoaEm) continue
+      const cls = classMap.get(s.classId)
+      if (cls && cls.courseId !== khoaEm) {
+        return {
+          ok: false,
+          error:
+            `Lớp đã chọn cho "${s.name}" không thuộc khoá quan tâm ` +
+            `"${tenKhoa.get(khoaEm) ?? khoaEm}". Chọn lại lớp, hoặc sửa khoá quan tâm ` +
+            `của em trên phiếu lead trước khi chốt.`,
+        }
+      }
+    }
+  }
+
   const students: ConvertV2Student[] = []
+  let totalDiscountAmount = 0
   for (const s of d.students) {
     const cls = classMap.get(s.classId)
     if (!cls) return { ok: false, error: `Lớp không tồn tại cho học viên "${s.name}"` }
+    const listPrice = cls.course?.price ?? 0
+    // Ô tick → học bổng 100%. `computeEnrollmentPrice` xử lý SCHOLARSHIP như PERCENT
+    // (kẹp 0..100) nên học phí về đúng 0đ. Không tick → KHÔNG ưu đãi, để
+    // `Enrollment.discountType` không bị đóng dấu "PERCENT 0%" gây nhiễu báo cáo.
+    const discount: { type: 'SCHOLARSHIP'; value: number } | null = s.scholarship
+      ? { type: 'SCHOLARSHIP', value: 100 }
+      : null
+    // Tính lại bằng ĐÚNG hàm mà convertLeadV2 dùng — chỉ để biết ưu đãi có ăn tiền thật
+    // không (bắt lý do). Giá ghi vào DB vẫn do convertLeadV2 tự tính, không truyền sang.
+    totalDiscountAmount += computeEnrollmentPrice({ listPrice, discount }).discountAmount
     students.push({
       leadChildId: s.leadChildId || null,
       name: s.name,
       dob: s.dob ? new Date(s.dob) : null,
       courseId: cls.courseId,
       classId: s.classId,
-      listPrice: cls.course?.price ?? 0,
-      discount: null,
+      listPrice,
+      discount,
       consentMedia: s.consentMedia === true,
     })
   }
+
+  // Học phí bốc hơi khỏi công nợ ⇒ nhật ký phải trả lời được "ai cho". Trước 31/08 câu
+  // trả lời là một ô chữ người dùng tự gõ; nay ô đó đã gỡ nên SERVER tự dựng, và tên
+  // lấy từ phiên đăng nhập chứ không nhận từ client.
+  const { actorId, actorName } = getAuditActor(session)
+  const discountReason =
+    totalDiscountAmount > 0 ? scholarshipAuditReason(actorName, new Date()) : ''
 
   // Idempotency key ổn định theo payload (chống double-submit / 2 sale song song).
   const fingerprint = JSON.stringify({
@@ -159,6 +259,9 @@ export async function submitConvertV2(
       name: s.name.trim().toLowerCase(),
       classId: s.classId,
       courseId: s.courseId,
+      // 27/08 — ƯU ĐÃI VÀO KHOÁ. Không có nó thì: chốt hụt vì thiếu lý do → sửa ưu đãi
+      // → bấm lại ⇒ khoá y hệt ⇒ idempotency trả kết quả CŨ (giá cũ) mà báo thành công.
+      discount: s.discount ? `${s.discount.type}:${s.discount.value}` : null,
     })),
   })
   const idempotencyKey = `convert:${leadId}:${createHash('sha256')
@@ -166,7 +269,6 @@ export async function submitConvertV2(
     .digest('hex')
     .slice(0, 16)}`
 
-  const { actorId, actorName } = getAuditActor(session)
   const res = await convertLeadV2(
     { id: actorId, name: actorName },
     {
@@ -181,6 +283,7 @@ export async function submitConvertV2(
       parentCity: d.parentCity || null,
       students,
       idempotencyKey,
+      discountReason: discountReason || null,
     },
   )
 
@@ -188,49 +291,16 @@ export async function submitConvertV2(
     return { ok: false, code: res.error.code, error: res.error.message }
   }
 
-  // FL2-01 — chọn 2 đợt → NỐI recordInstallmentPlan (tái dùng lib sẵn có). Áp lên Order
-  // gắn lead (tạo trước convert ở /orders/new?leadId=...). Tổng đọc từ Order; dot2 =
-  // total - dot1 (computeInstallmentSplit) nên luôn khớp ràng buộc của lib. Thất bại ở
-  // bước này KHÔNG đảo convert đã commit — chỉ trả cảnh báo để Sale ghi nhận thủ công.
-  let installmentApplied: boolean | undefined
-  let installmentWarning: string | undefined
-  let installmentPendingApproval: boolean | undefined
-  if (d.installment?.plan === 'TWO') {
-    const order = await sdb.order.findFirst({
-      where: { leadId, type: 'COURSE' },
-      orderBy: { createdAt: 'desc' },
-      select: { id: true, totalAmount: true },
-    })
-    if (!order || order.totalAmount <= 0) {
-      installmentApplied = false
-      installmentWarning = 'Chưa có đơn hàng học phí để chia 2 đợt — ghi nhận đợt 2 thủ công ở đơn hàng.'
-    } else if (!d.installment.dot2DueDate) {
-      installmentApplied = false
-      installmentWarning = 'Thiếu ngày hẹn đóng đợt 2 — chưa ghi được kế hoạch 2 đợt.'
-    } else {
-      const { dot1, dot2 } = computeInstallmentSplit(order.totalAmount, d.installment.dot1Amount ?? 0)
-      const plan = await recordInstallmentPlan({
-        orderId: order.id,
-        dot1Amount: dot1,
-        dot2Amount: dot2,
-        dot2DueDate: new Date(d.installment.dot2DueDate),
-        actorId,
-      })
-      installmentApplied = plan.ok
-      if (!plan.ok) installmentWarning = plan.error
-      // C4 — có đợt 2 thực sự (dot2>0) → gửi quản lý cơ sở duyệt (PENDING_APPROVAL).
-      // Convert đã commit; đợt 2 chỉ "kích hoạt" ghi Payment sau khi được duyệt.
-      if (plan.ok && dot2 > 0) {
-        const approval = await requestInstallmentApproval({
-          orderId: order.id,
-          actor: { id: actorId ?? session.user.id, name: actorName },
-        })
-        installmentPendingApproval = approval.ok
-        if (!approval.ok && !installmentWarning) installmentWarning = approval.error
-      }
-    }
-    revalidatePath('/orders')
-  }
+  // ⚠️ 31/08/2026 — NHÁNH "chia 2 đợt" ĐÃ GỠ khỏi màn chốt.
+  //
+  // Chốt của chủ dự án: học phí chốt ở TRANG ĐƠN HÀNG, không hỏi lại ở đây. Gỡ cả ở
+  // server chứ không chỉ giấu ô: để lại một đường ghi mà không giao diện nào gọi là để
+  // dành một cửa ghi kế hoạch đợt THỨ HAI — đúng kiểu hai màn ghi đè nhau rồi không ai
+  // biết bản nào thắng.
+  //
+  // Năng lực KHÔNG mất: `recordInstallmentPlan` (orders/_actions.ts:959) và
+  // `requestInstallmentApproval` (orders/_components/_installment-request-actions.ts)
+  // vẫn là đường chính thức, nay là đường DUY NHẤT.
 
   revalidatePath('/leads')
   revalidatePath(`/leads/${leadId}`)
@@ -243,8 +313,5 @@ export async function submitConvertV2(
     studentIds: res.studentIds,
     enrollmentIds: res.enrollmentIds,
     deduped: res.deduped,
-    installmentApplied,
-    installmentWarning,
-    installmentPendingApproval,
   }
 }

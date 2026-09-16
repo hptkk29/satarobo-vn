@@ -5,6 +5,7 @@ import { mapSaleForm, SALE_FORM_FIELDS } from "../../lib/lead/intake/map-sale-fo
 import { mapQuatang, quatangClientMeta } from "../../lib/lead/intake/map-quatang";
 import { mapInternalForm } from "../../lib/lead/intake/map-internal-form";
 import type { MappedLead } from "../../lib/lead/intake/types";
+import { RUN_DB_TESTS } from "../_helpers/db-gate";
 
 // =============================================================================
 // LEAD INTAKE · tầng DB thật (Postgres LOCAL)
@@ -18,9 +19,13 @@ import type { MappedLead } from "../../lib/lead/intake/types";
 // =============================================================================
 
 const DB_URL = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL ?? "";
-const RUN =
-  /(@|\/\/)(localhost|127\.0\.0\.1)[:/]/.test(DB_URL) ||
-  /satarobo_test|ci_test/.test(DB_URL);
+// 16/09/2026 — dùng CỔNG DUY NHẤT `RUN_DB_TESTS` (tests/_helpers/db-gate.ts) thay cho
+// biểu thức chép tay. Bản chép tay chỉ hỏi "URL có trỏ Postgres cục bộ không" nên BỎ MẤT
+// cờ `ALLOW_DB_RESET` — đúng cái chốt dựng sau sự cố mất DB 04/09/2026. Hệ quả đo được:
+// trên máy dev (DATABASE_URL = 127.0.0.1/satarobo_local) các bộ này CHẠY THẬT trên DB
+// đang làm việc, nên `pnpm test:unit` lúc xanh lúc đỏ tuỳ thứ tự, còn `assertTestDb()`
+// thì từ chối dọn ⇒ đỏ câm không liên quan gì tới mã.
+const RUN = RUN_DB_TESTS;
 
 if (!RUN) {
   console.warn(
@@ -56,6 +61,7 @@ const PHONE = {
   dupWarnings: "0900000111",
   closedLead: "0900000112",
   quatang: "0900000113",
+  webhookCuGiuChu: "0900000114",
 } as const;
 const ALL_PHONES = Object.values(PHONE);
 /** Cùng SĐT nhưng ghi dạng canonical — dùng cho ca "nhận ra trùng dù khác dạng". */
@@ -69,7 +75,7 @@ function lead(over: Partial<MappedLead> = {}): MappedLead {
     phone: PHONE.basic,
     email: null,
     centerHint: { kind: "code", value: CODE_A },
-    child: null,
+    children: [],
     employeeCode: null,
     noteLines: [],
     externalId: null,
@@ -275,7 +281,7 @@ describe.skipIf(!RUN)("Lead intake · tầng DB thật", () => {
     const r = await ingestIntakeLead(
       lead({
         phone: PHONE.basic,
-        child: { fullName: "Bé An", schoolName: "TH Phù Đổng", gradeLevel: "Lớp 3" },
+        children: [{ fullName: "Bé An", schoolName: "TH Phù Đổng", gradeLevel: "Lớp 3" }],
       }),
       { source: "sale-form" },
     );
@@ -309,13 +315,13 @@ describe.skipIf(!RUN)("Lead intake · tầng DB thật", () => {
   // ── QĐ-D1: ca có thật trong dữ liệu quatang (1 PH, 2 con, cách nhau 2 phút) ──
   it("trùng SĐT nhưng KHÁC con ⇒ gắn thêm LeadChild vào lead cũ, KHÔNG đẻ lead mới", async () => {
     const first = await ingestIntakeLead(
-      lead({ phone: PHONE.twoChildren, child: { fullName: "Bé Một", gradeLevel: "Lớp 3" } }),
+      lead({ phone: PHONE.twoChildren, children: [{ fullName: "Bé Một", gradeLevel: "Lớp 3" }] }),
       { source: "quatang" },
     );
     expect(first.ok).toBe(true);
 
     const second = await ingestIntakeLead(
-      lead({ phone: PHONE.twoChildren, child: { fullName: "Bé Hai", gradeLevel: "Lớp 8" } }),
+      lead({ phone: PHONE.twoChildren, children: [{ fullName: "Bé Hai", gradeLevel: "Lớp 8" }] }),
       { source: "quatang" },
     );
 
@@ -345,12 +351,12 @@ describe.skipIf(!RUN)("Lead intake · tầng DB thật", () => {
 
   it("trùng SĐT + CÙNG tên con ⇒ không thêm LeadChild (chống bấm gửi 2 lần)", async () => {
     const first = await ingestIntakeLead(
-      lead({ phone: PHONE.sameChild, child: { fullName: "Bé Trùng" } }),
+      lead({ phone: PHONE.sameChild, children: [{ fullName: "Bé Trùng" }] }),
       { source: "sale-form" },
     );
     // Khác dấu/hoa-thường vẫn phải coi là cùng một đứa.
     const second = await ingestIntakeLead(
-      lead({ phone: PHONE.sameChild, child: { fullName: "bé trùng" } }),
+      lead({ phone: PHONE.sameChild, children: [{ fullName: "bé trùng" }] }),
       { source: "sale-form" },
     );
 
@@ -397,6 +403,102 @@ describe.skipIf(!RUN)("Lead intake · tầng DB thật", () => {
     expect(row?.assignedAt).not.toBeNull();
     // Không chọn cơ sở trên phiếu ⇒ lấy cơ sở của chính nhân viên nhập.
     expect(row?.centerId).toBe(centerAId);
+  }, 60_000);
+
+  it("webhook CŨ + mã NV có thật ⇒ GIỮ chủ theo mã, KHÔNG bị vòng chia đè", async () => {
+    // HỒI QUY 05/09/2026 — mã giới thiệu trên link bị ghi đè im lặng.
+    //
+    // Bốn webhook công khai (facebook · google-form · quatang · zalo) đi `ingestLead`
+    // với `legacyWebhook: true`. Khi ĐÃ biết cơ sở, khối tạo lead gán sẵn chủ theo mã NV
+    // rồi `autoAssignLead` rút một người khác từ vòng chia và ĐÈ LÊN — không lỗi nào nổ.
+    // `autoAssignNewLead` không dính vì nó tự thoát khi lead đã có chủ
+    // (`lib/lead/auto-assign.ts:174`); chênh lệch giữa hai hàm chính là gốc của bug.
+    //
+    // ⚠️ CA NÀY PHẢI TỰ DỰNG ĐỦ BỐI CẢNH, và mỗi mảnh đều là một cách nó từng XANH GIẢ:
+    //   1. OrgUnit cho cơ sở — thiếu thì `autoAssignLead` thoát ngay ở "Lead chưa thuộc
+    //      cơ sở nào" và chẳng đè gì cả.
+    //   2. HAI sale — một người thì vòng chia rút lại đúng người cũ, việc đè vô hình.
+    //   3. Sổ lượt ĐẶT SẴN lệch hẳn — không thì kết quả phụ thuộc vòng đang ở bước nào,
+    //      và ca đỏ/xanh theo thứ tự chạy. Đo tay đã thấy: cùng một chủ, lead thứ nhất
+    //      không đổi tay còn lead thứ hai thì đổi.
+    const hau = `${P}WH${Date.now().toString(36).slice(-5)}`;
+    const coSo = await db.center.create({
+      data: { code: hau, name: `Cơ sở ${hau}`, slug: hau.toLowerCase(), address: "x" },
+      select: { id: true },
+    });
+    const donVi = await db.orgUnit.create({
+      data: { code: `OU_${hau}`, name: `Đơn vị ${hau}`, type: "CENTER", centerId: coSo.id },
+      select: { id: true },
+    });
+    const nhanVien = await db.employee.create({
+      data: {
+        employeeCode: `${hau}_NV`,
+        fullName: `${P}NV mang mã`,
+        jobTitle: "Tư vấn tuyển sinh",
+        department: "TUYEN_SINH",
+        centerId: coSo.id,
+        isActive: true,
+      },
+      select: { id: true },
+    });
+    const chuTheoMa = await db.user.create({
+      data: {
+        email: `${hau}_chu@example.test`,
+        name: `${P}Chủ theo mã`,
+        role: "SALES_CSM",
+        roles: ["SALES_CSM"],
+        centerId: coSo.id,
+        employeeId: nhanVien.id,
+        isActive: true,
+      },
+      select: { id: true },
+    });
+    const nguoiVongChia = await db.user.create({
+      data: {
+        email: `${hau}_vong@example.test`,
+        name: `${P}Người vòng chia`,
+        role: "SALES_CSM",
+        roles: ["SALES_CSM"],
+        centerId: coSo.id,
+        isActive: true,
+      },
+      select: { id: true },
+    });
+    // Ép vòng chia CHẮC CHẮN rút `nguoiVongChia`: người kia nhiều lượt hơn hẳn.
+    await db.leadRotationTurn.createMany({
+      data: [
+        { orgUnitId: donVi.id, userId: chuTheoMa.id, turns: 99, seedTurns: 0, lastTurnAt: new Date() },
+        { orgUnitId: donVi.id, userId: nguoiVongChia.id, turns: 0, seedTurns: 0, lastTurnAt: null },
+      ],
+    });
+
+    try {
+      const r = await ingestIntakeLead(
+        lead({
+          phone: PHONE.webhookCuGiuChu,
+          employeeCode: `${hau}_NV`,
+          centerHint: { kind: "code", value: hau },
+        }),
+        { source: "quatang", legacyWebhook: true },
+      );
+
+      const row = await db.lead.findUnique({
+        where: { id: r.leadId! },
+        select: { centerId: true, assignedToId: true, assignedAt: true },
+      });
+      expect(row?.centerId).toBe(coSo.id);
+      expect(row?.assignedAt).not.toBeNull();
+      // Chủ phải là người MANG MÃ NV — không phải người vòng chia rút ra.
+      expect(row?.assignedToId).toBe(chuTheoMa.id);
+      expect(row?.assignedToId).not.toBe(nguoiVongChia.id);
+    } finally {
+      await db.lead.deleteMany({ where: { centerId: coSo.id } });
+      await db.leadRotationTurn.deleteMany({ where: { orgUnitId: donVi.id } });
+      await db.orgUnit.delete({ where: { id: donVi.id } });
+      await db.user.deleteMany({ where: { id: { in: [chuTheoMa.id, nguoiVongChia.id] } } });
+      await db.employee.delete({ where: { id: nhanVien.id } });
+      await db.center.delete({ where: { id: coSo.id } });
+    }
   }, 60_000);
 
   it("mã NV không tồn tại ⇒ VẪN tạo lead, ghi cảnh báo vào note (không nuốt im lặng)", async () => {
@@ -507,14 +609,14 @@ describe.skipIf(!RUN)("Lead intake · tầng DB thật", () => {
 
   it("trùng SĐT ⇒ cảnh báo KHÔNG bị nuốt, phải xuất hiện trên lead cũ", async () => {
     const first = await ingestIntakeLead(
-      lead({ phone: PHONE.dupWarnings, child: { fullName: "Bé Đầu" } }),
+      lead({ phone: PHONE.dupWarnings, children: [{ fullName: "Bé Đầu" }] }),
       { source: "sale-form" },
     );
 
     await ingestIntakeLead(
       lead({
         phone: PHONE.dupWarnings,
-        child: { fullName: "Bé Sau" },
+        children: [{ fullName: "Bé Sau" }],
         employeeCode: `${P}MA_SAI`,
         noteLines: ["Tỉnh/TP: Đà Nẵng"],
       }),
@@ -541,7 +643,7 @@ describe.skipIf(!RUN)("Lead intake · tầng DB thật", () => {
   //   đã đăng ký. Chọn hộ — người đổi tên enum không đủ căn cứ để quyết.
   it("hồ sơ cũ ĐÃ ĐÓNG (DA_DANG_KY) ⇒ tạo lead MỚI, không chôn con thứ hai vào hồ sơ đóng", async () => {
     const first = await ingestIntakeLead(
-      lead({ phone: PHONE.closedLead, child: { fullName: "Bé Anh Cả" } }),
+      lead({ phone: PHONE.closedLead, children: [{ fullName: "Bé Anh Cả" }] }),
       { source: "sale-form" },
     );
     await db.lead.update({
@@ -550,7 +652,7 @@ describe.skipIf(!RUN)("Lead intake · tầng DB thật", () => {
     });
 
     const second = await ingestIntakeLead(
-      lead({ phone: PHONE.closedLead, child: { fullName: "Bé Em Út" } }),
+      lead({ phone: PHONE.closedLead, children: [{ fullName: "Bé Em Út" }] }),
       { source: "sale-form" },
     );
 

@@ -18,12 +18,22 @@ function loai(p: Partial<LoaiCongDay> = {}): LoaiCongDay {
     factor: 1,
     countsInPeriod: true,
     isActive: true,
+    categoryCode: null,
     ...p,
   };
 }
 
 function buoi(p: Partial<BuoiDay> = {}): BuoiDay {
-  return { id: "s1", source: "CLASS", userId: "u1", role: "MAIN", ymd: "2026-09-10", minutes: 90, ...p };
+  return {
+    id: "s1",
+    source: "CLASS",
+    userId: "u1",
+    role: "MAIN",
+    ymd: "2026-09-10",
+    minutes: 90,
+    categoryCode: null,
+    ...p,
+  };
 }
 
 describe("loaiCua — mỗi buổi ứng đúng một loại", () => {
@@ -121,5 +131,53 @@ describe("suy số phút", () => {
     expect(phutGiuaHaiMoc(a, b)).toBe(105);
     expect(phutGiuaHaiMoc(b, a)).toBeNull();
     expect(phutGiuaHaiMoc(a, null)).toBeNull();
+  });
+});
+
+describe("loaiCua — phân loại buổi là chiều thứ ba (07/09)", () => {
+  // Dòng BAO SÂN (categoryCode null) + dòng RIÊNG cho Workshop. Đây đúng là hình dạng sau khi
+  // BLĐ thêm một dòng trên màn: sáu dòng seed cũ mang null, dòng mới mang mã phân loại.
+  const baoSan = loai({ code: "LOP_CHINH", factor: 1 });
+  const ws = loai({ code: "LOP_WORKSHOP", categoryCode: "WORKSHOP", factor: 1.2 });
+
+  it("dòng riêng thắng dòng bao sân khi buổi đúng phân loại đó", () => {
+    expect(loaiCua(buoi({ categoryCode: "WORKSHOP" }), [baoSan, ws])?.code).toBe("LOP_WORKSHOP");
+  });
+
+  it("thứ tự trong danh mục không đổi kết quả — dòng riêng vẫn thắng", () => {
+    // Nếu `loaiCua` chỉ `find` một lượt thì kết quả phụ thuộc thứ tự Postgres trả về, tức tổng
+    // công dạy đổi khi ai đó sửa `displayOrder`. Khoá lại bằng test này.
+    expect(loaiCua(buoi({ categoryCode: "WORKSHOP" }), [ws, baoSan])?.code).toBe("LOP_WORKSHOP");
+  });
+
+  it("phân loại KHÁC rơi về dòng bao sân — thêm dòng mới không đụng buổi cũ", () => {
+    expect(loaiCua(buoi({ categoryCode: "CHINH_THUC" }), [baoSan, ws])?.code).toBe("LOP_CHINH");
+    expect(loaiCua(buoi({ categoryCode: null }), [baoSan, ws])?.code).toBe("LOP_CHINH");
+  });
+
+  it("dòng riêng bị TẮT thì rơi về bao sân, không rơi ra ngoài", () => {
+    const tat = { ...ws, isActive: false };
+    expect(loaiCua(buoi({ categoryCode: "WORKSHOP" }), [baoSan, tat])?.code).toBe("LOP_CHINH");
+  });
+
+  it("chỉ có dòng riêng, không có bao sân ⇒ buổi phân loại khác rơi ra hẳn", () => {
+    expect(loaiCua(buoi({ categoryCode: "CHINH_THUC" }), [ws])).toBeNull();
+    expect(loaiCua(buoi({ categoryCode: "WORKSHOP" }), [ws])?.code).toBe("LOP_WORKSHOP");
+  });
+
+  it("hệ số của dòng riêng thật sự vào tổng — Workshop 120% ra 1,2 công", () => {
+    const r = congDayCuaNguoi(
+      [buoi({ id: "a", categoryCode: "WORKSHOP" }), buoi({ id: "b", categoryCode: "CHINH_THUC" })],
+      [baoSan, ws],
+    );
+    expect(r.tongCong).toBe(2.2);
+    expect(r.tongBuoi).toBe(2);
+  });
+
+  it("vai khác nhau vẫn tách nhau dù cùng phân loại", () => {
+    const tg = loai({ code: "TG_WS", role: "ASSISTANT", categoryCode: "WORKSHOP", factor: 0.5 });
+    const dm = [baoSan, ws, tg];
+    expect(loaiCua(buoi({ categoryCode: "WORKSHOP" }), dm)?.code).toBe("LOP_WORKSHOP");
+    expect(loaiCua(buoi({ role: "ASSISTANT", categoryCode: "WORKSHOP" }), dm)?.code).toBe("TG_WS");
   });
 });
