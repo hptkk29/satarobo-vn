@@ -59,6 +59,19 @@ export default function ImportLeadsPage() {
         duplicateLabel="SĐT"
         duplicateKey={(raw) => normalizePhone(raw["SĐT"]) || null}
         mergeDuplicates={{ label: "Sẽ bổ sung vào lead đang có" }}
+        /* Tuỳ chọn GHI ĐÈ cho riêng nhóm trùng — chốt 16/09/2026.
+           Mặc định TẮT: luật 15/09 (chỉ điền ô trống) vẫn là hành vi khi không ai bấm gì. */
+        overwriteDuplicates={{
+          label: "Đè",
+          moTa:
+            "Tick cột Đè để dòng đó GHI ĐÈ thông tin đang lưu bằng dữ liệu trong file " +
+            "(tên phụ huynh, email, tên con, tuổi con, cơ sở, khoá, nguồn). Giá trị cũ được " +
+            "ghi vào ghi chú kèm ngày nên vẫn lấy lại được. Ô nào file bỏ trống thì KHÔNG bị " +
+            "xoá; ghi chú của Sale và trạng thái phễu không bao giờ bị đè.",
+          chuKhiBat:
+            "SẼ GHI ĐÈ thông tin đang lưu bằng dữ liệu dòng này — giá trị cũ được ghi vào " +
+            "ghi chú kèm ngày. Ô nào file bỏ trống thì giữ nguyên.",
+        }}
         checkExisting={async (raws, excelNos) => {
           // Đối chiếu SĐT với lead ĐÃ CÓ trong CRM — nói rõ dòng này sẽ ghi đè lên ai, để
           // Sale nhận ra ngay nếu đó thật sự là người khác cùng số.
@@ -81,9 +94,10 @@ export default function ImportLeadsPage() {
                 `SĐT ${formatPhoneVN(m.phone)} đã có trong CRM — PH "${m.parentName}"` +
                   `, con: ${m.childName?.trim() || "(chưa ghi tên con)"}` +
                   `, trạng thái: ${leadStatusLabel(m.status)}.` +
-                  ` Dòng này chỉ ĐIỀN những ô lead đó đang để trống; ô đã có giá trị thì` +
-                  ` giữ nguyên, thông tin khác trong file được ghi vào ghi chú. Lead chưa chốt` +
-                  ` sẽ được chia lại cho tư vấn viên mới.` +
+                  ` Mặc định dòng này chỉ ĐIỀN những ô lead đó đang để trống; ô đã có giá trị` +
+                  ` thì giữ nguyên, thông tin khác trong file được ghi vào ghi chú.` +
+                  ` Tick cột Đè nếu muốn dữ liệu trong file thay thế thông tin đang lưu.` +
+                  ` Lead chưa chốt sẽ được chia lại cho tư vấn viên mới.` +
                   ` Nếu đúng là người khác → sửa SĐT hoặc xoá dòng.`,
               );
             }
@@ -106,11 +120,18 @@ export default function ImportLeadsPage() {
           // Giữ nguyên ô gốc để server resolve cơ sở/khoá + đối chiếu trùng.
           return row as LeadImportRow;
         }}
-        onImport={async (rows) => {
+        onImport={async (rows, ctx) => {
+          // Đổi số dòng Excel (thứ màn hình tick) thành CHỈ SỐ trong `rows` (thứ server đọc).
+          // Server cố ý không nhận SĐT — xem khối "DÒNG ĐƯỢC TICK GHI ĐÈ" trong route.
+          const ghiDe = ctx
+            ? rows
+                .map((_, i) => (ctx.ghiDe.has(ctx.excelRowOf[i] ?? -1) ? i : -1))
+                .filter((i) => i >= 0)
+            : [];
           const res = await fetch("/api/admin/import/leads", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ rows }),
+            body: JSON.stringify({ rows, ghiDe }),
           });
           if (!res.ok) {
             const err = (await res.json().catch(() => ({ error: "Unknown" }))) as { error?: string };
@@ -144,8 +165,9 @@ export default function ImportLeadsPage() {
             <li>
               {/* Đây là phần đổi nghĩa 15/09/2026 — viết dài hơn các mục khác có chủ đích, vì
                   nó là thứ duy nhất trên màn này GHI ĐÈ dữ liệu người dùng đã nhập tay. */}
-              <b className="text-foreground">Trùng SĐT</b> không còn bị bỏ qua, nhưng cũng{" "}
-              <b className="text-foreground">không ghi đè</b> dữ liệu đang có: hệ thống chỉ{" "}
+              <b className="text-foreground">Trùng SĐT</b> không còn bị bỏ qua, và{" "}
+              <b className="text-foreground">mặc định cũng không ghi đè</b> dữ liệu đang có:
+              hệ thống chỉ{" "}
               <b className="text-foreground">điền vào những ô lead đang để trống</b>, còn con
               mới thì thêm vào cùng lead (không tạo lead trùng số).
               <ul className="mt-1 list-inside list-disc space-y-0.5 pl-1">
@@ -153,6 +175,16 @@ export default function ImportLeadsPage() {
                   Ô <b className="text-foreground">đã có giá trị</b> mà file ghi khác thì{" "}
                   <b className="text-foreground">giữ nguyên giá trị đang có</b> — giá trị
                   trong file được ghi lại vào ghi chú kèm ngày, để bạn tự đối chiếu.
+                </li>
+                <li>
+                  Muốn ngược lại thì tick <b className="text-foreground">cột Đè</b> ở nhóm
+                  Trùng — dòng đó sẽ lấy dữ liệu trong file thay cho thông tin đang lưu, và{" "}
+                  <b className="text-foreground">giá trị cũ được ghi vào ghi chú</b> kèm ngày
+                  nên vẫn lấy lại được. Ô tick ở hàng tiêu đề bật cho cả nhóm.
+                </li>
+                <li>
+                  Ô nào <b className="text-foreground">file bỏ trống</b> thì không bao giờ bị
+                  xoá, kể cả khi đã tick Đè — bỏ trống trong Excel không phải lệnh xoá.
                 </li>
                 <li>
                   <b className="text-foreground">Ghi chú</b> của Sale không bị mất — ghi chú

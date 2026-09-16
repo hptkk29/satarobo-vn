@@ -49,6 +49,29 @@ export async function POST(req: NextRequest) {
   }
   if (rows.length > 5000) return NextResponse.json({ error: "Quá 5000 rows" }, { status: 400 });
 
+  // ── DÒNG ĐƯỢC TICK "GHI ĐÈ" (chốt 16/09/2026) ─────────────────────────────
+  //
+  // Chỉ số 0-BASED TRONG `rows` — không phải SĐT, không phải số dòng Excel.
+  //
+  // ⚠️ Cố ý KHÔNG nhận SĐT: chuẩn hoá SĐT ở trình duyệt (`normalizePhone`) và ở
+  // đây (`phoneKey` + `expandPhoneVariants`) là HAI cỗ máy khác nhau. Lệch một ca
+  // biên nào đó là cái tick rơi mất — mà rơi mất một lệnh GHI ĐÈ thì không ai
+  // thấy: lead vẫn được cập nhật, chỉ là không đè, và người vận hành đinh ninh
+  // mình đã đè. Chỉ số thì client và server cầm chung đúng một mảng.
+  //
+  // Mặc định RỖNG — không tick gì thì không đè gì. Fail-closed có chủ đích: body
+  // dị dạng, gõ sai tên khoá, hay một bản client cũ đều rơi về luật 15/09 (giữ giá
+  // trị đang lưu), chứ không rơi vào nhánh xoá dữ liệu.
+  const ghiDeRaw = (body as { ghiDe?: unknown })?.ghiDe;
+  const ghiDeIdx = new Set<number>(
+    Array.isArray(ghiDeRaw)
+      ? ghiDeRaw.filter(
+          (v): v is number =>
+            typeof v === "number" && Number.isInteger(v) && v >= 0 && v < rows.length,
+        )
+      : [],
+  );
+
   // Stage 1: parse thuần từng dòng.
   const parsed = rows.map((r) => parseLeadImportRow((r ?? {}) as Record<string, unknown>));
 
@@ -117,6 +140,12 @@ export async function POST(req: NextRequest) {
     orgUnitId: string | null;
     courseId: string | null;
     source: string;
+    /**
+     * Nguồn NGƯỜI TA THỰC SỰ GÕ (`null` = ô trống) — chỉ dùng cho đường CẬP NHẬT.
+     * Xem `ParsedLeadRow.sourceRaw`: mặc định "Import Excel" đúng cho lượt TẠO nhưng ở lượt
+     * cập nhật nó biến ô trống thành lệnh ghi đè nguồn thật.
+     */
+    sourceRaw: string | null;
     note: string | null;
     /** Sale được chỉ định trên dòng Excel. `null` = để trống ⇒ máy chia. */
     saleId: string | null;
@@ -126,7 +155,21 @@ export async function POST(req: NextRequest) {
   // ghi khác nhau) coi như CÙNG MỘT NHÀ, con dồn vào 1 lead. Tên PH khác được ghi lại
   // trong hoạt động lead để sale đối chiếu, KHÔNG ghi đè tên đang có.
   type Child = { name: string | null; age: number | null };
-  type Group = { base: Valid; children: Child[]; otherParentNames: string[] };
+  type Group = {
+    base: Valid;
+    children: Child[];
+    otherParentNames: string[];
+    /**
+     * Có dòng nào của nhóm SĐT này được tick "ghi đè" không.
+     *
+     * Nhiều dòng Excel cùng SĐT = MỘT nhà = một lead, nên lệnh ghi đè cũng phải gộp về một.
+     * Gộp bằng HOẶC (tick một dòng là cả nhóm đè) chứ không phải VÀ: người vận hành tick
+     * theo từng dòng họ NHÌN THẤY trên màn hình, và cái họ vừa nói là "bản trong file mới
+     * hơn". Bắt tick đủ cả ba dòng con mới được đè là một luật không ai đoán ra, và lúc nó
+     * nuốt lệnh thì nuốt im lặng.
+     */
+    ghiDe: boolean;
+  };
   const groups = new Map<string, Group>();
 
   for (let i = 0; i < parsed.length; i++) {
@@ -222,6 +265,8 @@ export async function POST(req: NextRequest) {
       if (normalizeVi(d.parentName) !== normalizeVi(g.base.parentName)) {
         g.otherParentNames.push(d.parentName);
       }
+      // Gộp bằng HOẶC — xem chú thích `Group.ghiDe`.
+      if (ghiDeIdx.has(i)) g.ghiDe = true;
       continue;
     }
     groups.set(d.phone, {
@@ -235,11 +280,13 @@ export async function POST(req: NextRequest) {
         orgUnitId,
         courseId,
         source: d.source,
+        sourceRaw: d.sourceRaw,
         note: d.note,
         saleId,
       },
       children: [{ name: d.childName, age: d.childAge }],
       otherParentNames: [],
+      ghiDe: ghiDeIdx.has(i),
     });
   }
 
@@ -263,6 +310,8 @@ export async function POST(req: NextRequest) {
     saleId: string | null;
     /** Lead còn được chia lại không — xem `conMoDeChiaLai`. */
     chiaLai: boolean;
+    /** Người vận hành đã tick "ghi đè" cho nhóm SĐT này chưa. */
+    ghiDe: boolean;
   };
   const mergeOps: MergeOp[] = [];
   if (groups.size > 0) {
@@ -321,10 +370,12 @@ export async function POST(req: NextRequest) {
           centerId: g.base.centerId,
           orgUnitId: g.base.orgUnitId,
           courseId: g.base.courseId,
-          source: g.base.source,
+          // ⚠️ `sourceRaw`, KHÔNG phải `source`: xem `ParsedLeadRow.sourceRaw`.
+          source: g.base.sourceRaw,
           note: g.base.note,
         },
         saleId: g.base.saleId,
+        ghiDe: g.ghiDe,
         chiaLai: conMoDeChiaLai({
           status: ex.status,
           convertedAt: ex.convertedAt,
@@ -431,7 +482,12 @@ export async function POST(req: NextRequest) {
       // đây — đây là chỗ DUY NHẤT trong repo cố ý ghi đè dữ liệu người dùng nhập tay, và
       // một phép ghi đè viết lỏng tay không ném lỗi, không làm test đỏ.
       for (const m of mergeOps) {
-        const banCapNhat = dungBanCapNhatLeadTrung({ cu: m.cu, file: m.file, moc: mocNhap });
+        const banCapNhat = dungBanCapNhatLeadTrung({
+          cu: m.cu,
+          file: m.file,
+          moc: mocNhap,
+          ghiDe: m.ghiDe,
+        });
 
         // Con: vẫn THÊM theo tên chuẩn hoá (không xoá con cũ — file thiếu một con không có
         // nghĩa là đứa đó nghỉ học). Backfill `childName` legacy thành `LeadChild` để danh
@@ -491,7 +547,12 @@ export async function POST(req: NextRequest) {
         // Từ bản chốt thứ hai (15/09) lượt nhập KHÔNG còn ghi đè ô đã có giá trị, nên sổ chỉ
         // ghi khi thực sự có ô trống được điền. Phần file ghi khác nằm ở `khacBiet` và đã đi
         // vào ghi chú — không phải một lượt sửa dữ liệu nên không vào sổ kiểm toán.
-        if (banCapNhat.daDien.length > 0) {
+        //
+        // ⚠️ 16/09 — `daDe` PHẢI nằm trong cổng này. Ghi đè là lượt sửa dữ liệu NẶNG NHẤT
+        // đường này làm được: nó xoá giá trị Sale nhập tay. Bỏ sót vế đó là đúng những lượt
+        // cần tra nhất lại không có dòng nào trong sổ, còn lượt vô hại (điền ô trống) thì
+        // có — sổ kiểm toán im lặng ở đúng chỗ tranh chấp.
+        if (banCapNhat.daDien.length > 0 || banCapNhat.daDe.length > 0) {
           await logLeadAudit({
             leadId: m.leadId,
             action: "UPDATE",

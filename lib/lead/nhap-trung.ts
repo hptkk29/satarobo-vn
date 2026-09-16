@@ -34,6 +34,27 @@
  * · `note`   — nhật ký gọi điện do Sale tự gõ. Chỉ NỐI THÊM, không bao giờ thay thế.
  * · `status` — trạng thái phễu. File nhập không có cột này, nhưng nếu đẩy một lead đang ở
  *              L3 về MOI thì báo cáo phễu và hoa hồng lệch theo. Không bao giờ đụng tới.
+ *
+ * ── CHỐT 16/09/2026 — THÊM ĐƯỜNG GHI ĐÈ, NGƯỜI DÙNG TỰ BẬT (`ghiDe`) ─────────────────────
+ * Chủ dự án: "chỗ nhập lead = excel thiết kế thêm tuỳ chọn ghi đè riêng cho các lead bị
+ * trùng nữa". Đây KHÔNG phải đảo lại chốt 15/09: luật mặc định vẫn y nguyên (giữ giá trị
+ * đang lưu), chỉ thêm một đường người vận hành phải TỰ TICK cho từng dòng.
+ *
+ * Bật `ghiDe` thì đúng MỘT nhánh đổi chiều — nhánh "ô đang lưu đã có, file ghi khác":
+ *
+ *   ô file TRỐNG            → không đụng tới  (y như cũ: file im lặng KHÔNG phải lệnh xoá)
+ *   ô đang lưu TRỐNG        → ĐIỀN            (y như cũ)
+ *   ô đang lưu ĐÃ CÓ, khác  → ĐÈ bằng giá trị file, GIÁ TRỊ CŨ ghi vào ghi chú  ← đổi chiều
+ *   ô đang lưu ĐÃ CÓ, giống → không làm gì    (y như cũ)
+ *
+ * ⚠️ BẤT BIẾN GIỮ NGUYÊN Ở CẢ HAI CHẾ ĐỘ: KHÔNG MẤT DỮ LIỆU. Chế độ nào cũng ghi bên THUA
+ * vào ghi chú kèm ngày — chỉ đổi bên nào thắng. Ngày nào có người gỡ mất `dongGhiDe` thì
+ * ghi đè thành phá huỷ thật: giá trị Sale xác minh qua điện thoại biến mất không dấu vết,
+ * và không còn bản sao nào để lấy lại.
+ *
+ * ⚠️ `note` và `status` KHÔNG nằm trong phạm vi `ghiDe`. `ghiDe` nghĩa là "tin file hơn bản
+ * ghi" cho DỮ LIỆU LIÊN HỆ; nhật ký gọi điện thì không có khái niệm đó — file làm gì có
+ * nhật ký. Còn `status` thì file nhập không có cột nào sinh ra nó.
  */
 
 import { vnParts } from "@/lib/time/vn";
@@ -67,9 +88,9 @@ export interface OLeadDangCo {
 export interface KhacBiet {
   /** Nhãn tiếng Việt của cột. */
   cot: string;
-  /** Giá trị đang lưu trong hệ thống — thứ được GIỮ. */
+  /** Giá trị đang lưu trong hệ thống. */
   dangLuu: string;
-  /** Giá trị trong file — thứ chỉ được ghi vào ghi chú. */
+  /** Giá trị trong file. */
   trongFile: string;
 }
 
@@ -78,8 +99,20 @@ export interface BanCapNhatLead {
   data: Record<string, unknown>;
   /** Nhãn những cột ĐANG TRỐNG vừa được điền từ file. */
   daDien: string[];
-  /** Những cột file ghi KHÁC giá trị đang lưu — giữ nguyên, chỉ ghi vào ghi chú. */
+  /**
+   * Cột file ghi KHÁC mà hệ GIỮ giá trị đang lưu; giá trị file chỉ vào ghi chú.
+   * Chế độ `ghiDe` → luôn rỗng.
+   */
   khacBiet: KhacBiet[];
+  /**
+   * Cột file ghi KHÁC mà hệ ĐÃ ĐÈ; giá trị cũ đã được ghi vào ghi chú.
+   * Chế độ mặc định → luôn rỗng.
+   *
+   * Hai mảng tách đôi chứ không dùng chung một mảng kèm cờ: nhật ký và sổ kiểm toán phải
+   * nói được ĐÚNG chuyện gì đã xảy ra với từng cột. Một dòng "có 3 ô khác nhau" mà không
+   * nói ô nào thắng là dòng nhật ký vô dụng đúng vào lúc cần tra.
+   */
+  daDe: KhacBiet[];
   /** Ghi chú có được nối thêm gì không (nội dung file và/hoặc dòng đối chiếu). */
   daNoiGhiChu: boolean;
 }
@@ -172,51 +205,89 @@ export function dongDoiChieu(khacBiet: readonly KhacBiet[], moc: Date): string |
 }
 
 /**
+ * Dòng ghi chú cho chế độ GHI ĐÈ — lưu lại những giá trị vừa BỊ ĐÈ MẤT.
+ *
+ * ⚠️ Đây là thứ giữ cho "ghi đè" không thành "phá huỷ". Cột vừa bị đè là dữ liệu Sale đã xác
+ * minh qua điện thoại; người bấm nút ghi đè đang tin rằng bản trong file mới hơn, và họ có
+ * thể tin nhầm. Dòng này là bản sao DUY NHẤT để lấy lại — `updatedAt` chỉ nói CÓ người đụng
+ * chứ không nói đụng cái gì, còn `AuditLog` thì Sale không mở được (xem mục
+ * `audit-logs:view` trong CLAUDE.md: trên prod chỉ Quản trị tối cao vào được trang đó).
+ */
+export function dongGhiDe(daDe: readonly KhacBiet[], moc: Date): string | null {
+  if (daDe.length === 0) return null;
+  const ve = daDe.map((k) => `${k.cot} "${k.trongFile}" (giá trị cũ "${k.dangLuu}")`).join("; ");
+  return `${ngayVn(moc)} — nhập lại từ Excel, ĐÃ GHI ĐÈ theo yêu cầu: ${ve}. Giá trị cũ lưu ở dòng này để đối chiếu.`;
+}
+
+/**
  * Dựng bản cập nhật cho một lead TRÙNG SĐT vừa gặp lại trong file nhập.
  *
  * `moc` là thời điểm của lượt nhập: nó luôn được ghi vào `lastInboundAt` vì một lượt nhập lại
  * CHÍNH LÀ một lần khách quay lại — đó là ý nghĩa của cột đó, và là thứ đẩy lead lên đầu danh
  * sách `/leads` để Sale thấy mà gọi.
+ *
+ * `ghiDe` CỐ Ý KHÔNG CÓ MẶC ĐỊNH (luật 7 — "tham số có mặc định NGUY HIỂM thì bỏ mặc định").
+ * Đây là công tắc quyết định dữ liệu Sale nhập tay còn hay mất; để nó tuỳ chọn là một ngày
+ * nào đó có người thêm đường gọi mới, quên truyền, và nhánh nào chạy thì tuỳ vào giá trị mặc
+ * định chứ không tuỳ vào ý ai. Bắt buộc thì `tsc` liệt kê đủ call site ra màn hình.
  */
 export function dungBanCapNhatLeadTrung(params: {
   cu: OLeadDangCo;
   file: OLeadTuFile;
   moc: Date;
+  /** `true` = người vận hành đã TỰ TICK ghi đè cho đúng dòng này ở màn nhập. */
+  ghiDe: boolean;
 }): BanCapNhatLead {
-  const { cu, file, moc } = params;
+  const { cu, file, moc, ghiDe } = params;
   const data: Record<string, unknown> = { lastInboundAt: moc };
   const daDien: string[] = [];
   const khacBiet: KhacBiet[] = [];
+  const daDe: KhacBiet[] = [];
 
   for (const cot of COT_XET) {
     const vFile = file[cot];
-    if (trong(vFile)) continue; // file không nói gì → không đụng
+    // File không nói gì → không đụng.
+    //
+    // ⚠️ Vế này ĐỨNG TRƯỚC `ghiDe` và không bao giờ được cho `ghiDe` vượt qua: "ghi đè"
+    // nghĩa là tin giá trị TRONG FILE, mà ô trống thì file không mang giá trị nào cả. Cho
+    // nó đè là biến một cột bỏ trống trong Excel thành lệnh XOÁ cả cột trên lead thật —
+    // không ai bấm nút với ý đó, và file thật thì cột nào cũng có dòng bỏ trống.
+    if (trong(vFile)) continue;
+
+    const vSach = typeof vFile === "string" ? vFile.trim() : vFile;
 
     if (trong(cu[cot])) {
       // Ô đang TRỐNG → điền. Đây là nửa "thông tin nào chưa có thì fill vào" của chốt gốc,
-      // và nó không ghi đè gì cả nên không có rủi ro mất dữ liệu.
-      data[cot] = typeof vFile === "string" ? vFile.trim() : vFile;
+      // và nó không ghi đè gì cả nên không có rủi ro mất dữ liệu. Giống nhau ở CẢ HAI chế độ.
+      data[cot] = vSach;
       daDien.push(NHAN[cot] ?? cot);
       continue;
     }
 
-    // Ô đã CÓ giá trị → GIỮ NGUYÊN. Giá trị của file chỉ được ghi lại để đối chiếu.
-    if (khac(vFile, cu[cot])) {
-      khacBiet.push({
-        cot: NHAN[cot] ?? cot,
-        dangLuu: chuoi(cu[cot]),
-        trongFile: chuoi(vFile),
-      });
+    // Ô đã CÓ giá trị và file ghi KHÁC — đây là nhánh DUY NHẤT `ghiDe` đổi chiều.
+    if (!khac(vFile, cu[cot])) continue;
+    const ve: KhacBiet = {
+      cot: NHAN[cot] ?? cot,
+      dangLuu: chuoi(cu[cot]),
+      trongFile: chuoi(vFile),
+    };
+    if (ghiDe) {
+      data[cot] = vSach;
+      daDe.push(ve);
+    } else {
+      khacBiet.push(ve);
     }
   }
 
-  // Cơ sở được ĐIỀN (chỉ khi đang trống) thì đơn vị tổ chức đi theo — không kể vào `daDien`.
+  // Cơ sở được GHI (điền vào ô trống, hoặc đè khi người dùng bật) thì đơn vị tổ chức đi
+  // theo — không kể vào `daDien`/`daDe` vì người vận hành chỉ thấy đó là MỘT thay đổi.
   if ("centerId" in data && !trong(file.orgUnitId)) data.orgUnitId = file.orgUnitId;
 
-  // Ghi chú: nội dung file trước, rồi tới dòng đối chiếu.
+  // Ghi chú: nội dung file trước, rồi tới dòng lưu vết. Đúng MỘT trong hai dòng lưu vết có
+  // nội dung — mảng còn lại rỗng nên hàm kia trả `null`.
   let ghiChu = cu.note ?? null;
   let daNoi = false;
-  for (const phan of [file.note, dongDoiChieu(khacBiet, moc)]) {
+  for (const phan of [file.note, dongDoiChieu(khacBiet, moc), dongGhiDe(daDe, moc)]) {
     const noi = noiGhiChu(ghiChu, phan);
     if (noi !== null) {
       ghiChu = noi;
@@ -225,7 +296,7 @@ export function dungBanCapNhatLeadTrung(params: {
   }
   if (daNoi) data.note = ghiChu;
 
-  return { data, daDien, khacBiet, daNoiGhiChu: daNoi };
+  return { data, daDien, khacBiet, daDe, daNoiGhiChu: daNoi };
 }
 
 /**
@@ -246,6 +317,16 @@ export function moTaLuotCapNhat(ban: BanCapNhatLead, chiaLai: boolean): string {
       `GIỮ NGUYÊN ${ban.khacBiet.length} ô file ghi khác (${ban.khacBiet
         .map((k) => k.cot)
         .join(", ")}) — giá trị trong file đã ghi vào ghi chú`,
+    );
+  }
+  if (ban.daDe.length > 0) {
+    // Phải nói thẳng chữ GHI ĐÈ. Đây là lần duy nhất hệ thống xoá dữ liệu người dùng nhập
+    // tay; một câu nhật ký nói tránh ("đã cập nhật 3 ô") là thứ khiến người đọc lướt qua
+    // đúng dòng họ cần dừng lại.
+    phan.push(
+      `GHI ĐÈ ${ban.daDe.length} ô theo yêu cầu (${ban.daDe
+        .map((k) => k.cot)
+        .join(", ")}) — giá trị cũ đã ghi vào ghi chú`,
     );
   }
   phan.push(
