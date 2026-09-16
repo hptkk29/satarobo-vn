@@ -240,7 +240,7 @@ test.describe("[PR] Vòng đời phiếu thu — duyệt trả góp mới sinh p
   //
   // Khoá MỚI hỏi TIỀN chứ không hỏi ai đã bấm duyệt: cổng R-02 (`keHoachLamMatTien`).
   // Nó CHẶT HƠN khoá cũ — cờ duyệt có thể chưa ai bấm trong khi tiền đã về.
-  test("[PR-02c] sửa kế hoạch khi phiếu đợt đã có tiền: phiếu KHÔNG bị VOID, tiền còn nguyên", async () => {
+  test("[PR-02c] lượt sửa bị TỪ CHỐI vẫn không làm phiếu VOID, không mất đồng nào", async () => {
     const order = await createOrderWithRequest(10_000_000, cs1, 22);
     await recordInstallmentPlan({
       orderId: order.id, dot1Amount: 6_000_000, dot2Amount: 4_000_000,
@@ -253,20 +253,26 @@ test.describe("[PR] Vòng đời phiếu thu — duyệt trả góp mới sinh p
     const dot1Before = (await requestsOf(order.id)).find((r) => r.installmentNo === 1)!;
     await allocate(dot1Before.id, 6_000_000, cs1);
 
-    // ⚠️ ĐO THẬT 14/09/2026 — lượt sửa này ĐI QUA ĐƯỢC (`ok: true`), và đó KHÔNG phải
-    // lỗ hổng. Bất biến cần giữ không phải "cấm sửa" mà là "SỬA KHÔNG LÀM MẤT DẤU TIỀN
-    // ĐÃ RÓT": `materializeInstallmentRequests` tha phiếu đang có phân bổ
-    // (`payment-request.ts` — `allocated > 0 → continue`), nên phiếu giữ 6.000.000đ
-    // không bị VOID và số tiền của nó không bị ghi đè.
+    // ⚠️ SỬA 17/09/2026 — ca này ĐỎ TRÊN CI và nó MÂU THUẪN THẲNG với `[PR-02d]` ngay
+    // dưới. Bản cũ kỳ vọng `ok: true` kèm một khối chú thích dài giải thích vì sao "đi qua
+    // được mà KHÔNG phải lỗ hổng". Khối ấy viết ngày 14/09; ngày 15/09 lỗ ĐƯỢC VÁ
+    // (`doiTienDotDaThu` trong `plan-money-guard.ts`) và `[PR-02d]` được gỡ ghim với kỳ
+    // vọng NGƯỢC LẠI: lượt lưu bị TỪ CHỐI. Ca này thì không ai sửa theo.
     //
-    // Cổng R-02 (`keHoachLamMatTien`) cố ý KHÔNG chặn ca này: nó canh ca tiền nằm ở
-    // phiếu "THU TOÀN ĐƠN" — phiếu bị VOID vô điều kiện — chứ không canh phiếu theo đợt
-    // vốn đã được tha. Ghi ra đây để lượt sau không "vá" một cổng vốn không hở.
+    // Hai ca test nói ngược nhau về CÙNG một thao tác tiền là thứ tệ hơn thiếu ca: người
+    // đọc sau sẽ tin ca nào đang xanh.
+    //
+    // Nay ca này giữ đúng phần RIÊNG của nó — những bất biến mà `[PR-02d]` không kiểm:
+    // phiếu đang giữ tiền không bị VOID, và không đồng nào rơi khỏi sổ phân bổ khi lượt
+    // lưu bị từ chối và transaction rollback.
     const sua = await recordInstallmentPlan({
       orderId: order.id, dot1Amount: 1_000_000, dot2Amount: 9_000_000,
       dot2DueDate: new Date("2026-11-01"), actorId: approver.id,
     });
-    expect(sua.ok).toBe(true);
+    expect(sua.ok, "sửa số tiền của đợt ĐÃ THU phải bị từ chối — xem [PR-02d]").toBe(false);
+    if (!sua.ok) {
+      expect(sua.error).toContain("đã nhận");
+    }
 
     // BẤT BIẾN GIỮ ĐƯỢC: phiếu đang giữ tiền KHÔNG bị VOID, và tiền vẫn còn nguyên
     // trong sổ phân bổ — không đồng nào rơi khỏi đơn.
