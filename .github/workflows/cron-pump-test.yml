@@ -61,7 +61,13 @@ jobs:
           # thứ phải biết trước chứ không phải phát hiện sau.
           # shift-brief (chấm công v3): tin nhắc lịch ngày mai — route tự so giờ VN với setting,
           # dedupeKey shift.brief:<người>:<ngày> nên bơm 5′/lần vẫn chỉ một tin.
-          for p in dispatch-events email-queue chat-zns-notify trial-reminder sla-check webhook-retention shift-brief; do
+          # zalocrm-doi-soat (tích hợp ZaloCRM): cấp/gỡ quyền dùng nick theo cơ sở, RỒI nạp bù
+          # tin webhook rơi. Trên prod nó nằm ở vercel.json (*/5), nhưng Vercel Cron KHÔNG chạy
+          # trên environment tuỳ biến ⇒ thiếu dòng này thì trên `test` nó không bao giờ chạy, và
+          # nghiệm thu mục ⑩/⑪ (Sale thấy nick sau 5′, và MẤT nick sau khi rời cơ sở) không thể
+          # đạt — hỏng CÂM, vì không có cron nào để mà đỏ. Cơ sở chưa có nick thì hàm ra ngay,
+          # không gọi mạng, không ghi nhật ký, nên bơm 5′/lần lúc chưa có SIM cũng không tốn gì.
+          for p in dispatch-events email-queue chat-zns-notify trial-reminder sla-check webhook-retention shift-brief zalocrm-doi-soat; do
             code=$(curl -s -o /dev/null -w "%{http_code}" \
               -H "Authorization: Bearer ${{ secrets.TEST_CRON_SECRET }}" \
               "https://test.satarobo.vn/api/cron/$p")

@@ -143,6 +143,10 @@ lặng lẽ — không tốn gì, không kêu sai.
 | 9.18 | **Tên sản phẩm mới** cho fork (nghĩa vụ giấy phép L4) |
 | 9.14 | Quyết định mua giấy phép thương mại (gỡ banner) hay giữ banner |
 
+> 📋 **Khi SIM về (9.16), chạy [`04-danh-sach-cho-nick-zalo.md`](04-danh-sach-cho-nick-zalo.md)** —
+> 11 mục trong 30 phút, mỗi mục ghi rõ bấm ở đâu · nhìn cái gì · thế nào là đạt, kèm mục 3
+> liệt kê thứ KHÔNG kiểm được dù đã có nick (để khỏi bị ghi là sót).
+
 ### 4.2 Fork ZaloCRM (F1–F7) — **ĐÃ XONG CẢ BẢY** (07–13/09/2026)
 Repo công khai <https://github.com/sataroboit-coder/sata-crm>, nhánh `feat/sata-sso`.
 F1 SSO · F2 webhook giàu ngữ cảnh + outbox retry · F3 cho nhúng iframe · **F4 Public API** ·
