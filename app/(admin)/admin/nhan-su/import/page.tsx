@@ -10,6 +10,7 @@ import {
   ExcelImporter,
   type ImportResult,
 } from "@/components/admin/ExcelImporter";
+import { docLoiPhanHoi } from "@/lib/ui/loi-phan-hoi";
 
 /** Bản xem trước của một lượt CHẠY THỬ — do route trả về, không tính lại ở client. */
 interface XemTruoc {
@@ -150,10 +151,12 @@ export default function ImportEmployeesPage() {
       body: JSON.stringify(dryRun ? { rows, dryRun: true } : { rows }),
     });
     if (!res.ok) {
-      const err = (await res.json().catch(() => ({ error: "Unknown" }))) as {
+      // Route tra loi theo HAI hinh dang; `docLoiPhanHoi` doc du ca hai.
+      const than = (await res.json().catch(() => null)) as {
         error?: string;
-      };
-      throw new Error(err.error || "Import thất bại");
+        errors?: { row: number; error: string }[];
+      } | null;
+      throw new Error(docLoiPhanHoi(res.status, than));
     }
     return res.json();
   };

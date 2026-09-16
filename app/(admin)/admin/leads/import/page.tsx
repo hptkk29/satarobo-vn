@@ -134,8 +134,25 @@ export default function ImportLeadsPage() {
             body: JSON.stringify({ rows, ghiDe }),
           });
           if (!res.ok) {
-            const err = (await res.json().catch(() => ({ error: "Unknown" }))) as { error?: string };
-            throw new Error(err.error || "Nhập thất bại");
+            // ⚠️ Route trả lỗi theo HAI hình dạng khác nhau, và bản trước chỉ đọc một:
+            //   · cổng đầu vào (401/403/400) → `{ error: "..." }`
+            //   · hỏng lúc GHI (500)        → `{ success: 0, errors: [{ row, error }] }`
+            //
+            // Đo 16/09/2026 trên prod: người dùng nhận đúng câu "Nhập thất bại: Nhập thất
+            // bại". Server ĐÃ nói rõ hỏng ở đâu — lý do nằm nguyên trong `errors[0].error`
+            // — nhưng màn hình đọc `err.error`, thấy `undefined`, rồi rơi về chuỗi mặc
+            // định. Tức là một lỗi có chẩn đoán sẵn bị biến thành một lỗi không tra được,
+            // ngay tại chỗ cuối cùng trước mắt người dùng.
+            const than = (await res.json().catch(() => null)) as
+              | { error?: string; errors?: { row: number; error: string }[] }
+              | null;
+            const tuMang = (than?.errors ?? [])
+              .map((e) => (e.row > 0 ? `dòng ${e.row}: ${e.error}` : e.error))
+              .filter(Boolean)
+              .join(" · ");
+            throw new Error(
+              than?.error || tuMang || `Máy chủ trả lỗi ${res.status} và không nói lý do`,
+            );
           }
           const result = (await res.json()) as ImportResult;
           setTimeout(() => router.refresh(), 1000);

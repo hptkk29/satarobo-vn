@@ -233,6 +233,8 @@ export function ExcelImporter<T>({
    */
   const [ghiDeRows, setGhiDeRows] = useState<Set<number>>(new Set());
   const [checkingDb, setCheckingDb] = useState(false);
+  /** Lý do lượt nhập HỎNG — hiện tại chỗ, không phải hộp thoại. `null` = chưa hỏng. */
+  const [loiNhap, setLoiNhap] = useState<string | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [filename, setFilename] = useState("");
 
@@ -438,7 +440,22 @@ export function ExcelImporter<T>({
       setResult(res);
       setStep("done");
     } catch (err) {
-      alert(`Nhập thất bại: ${err instanceof Error ? err.message : "Unknown"}`);
+      // ⚠️ KHÔNG dùng `alert()` cho lỗi này.
+      //
+      // Đo 16/09/2026 (ảnh chụp prod): hộp thoại in đúng một câu "Nhập thất bại: Nhập thất
+      // bại" rồi biến mất khi bấm OK. Ba cái sai cùng lúc: chữ không chọn được nên người
+      // dùng không gửi được cho ai, hộp thoại chặn cả trang nên không mở DevTools xem tiếp
+      // được, và đóng xong là mất luôn. Thông điệp ở đây có thể là một câu lỗi Prisma dài
+      // — thứ PHẢI đọc và chép lại được.
+      //
+      // Để nguyên tại chỗ, có thể bôi đen, và danh sách dòng vẫn còn nguyên bên dưới để sửa.
+      //
+      // ⚠️ KHÔNG thêm `setLoiNhap(null)` ở đầu hàm cho "sạch". Đã thử: dòng đó KHÔNG QUAN
+      // SÁT ĐƯỢC — trong lúc chạy thì panel không dựng (step `importing`), xong mà thành
+      // công thì màn kết quả thay cả khung, xong mà hỏng thì chính dòng dưới đây ghi đè.
+      // Cấy lỗi vào nó, cả bộ vẫn xanh. Một dòng không test nào chạm tới được là một dòng
+      // trông như đang bảo vệ điều gì đó mà không bảo vệ gì cả.
+      setLoiNhap(err instanceof Error ? err.message : "Không rõ lý do");
       setStep("preview");
     }
   };
@@ -453,6 +470,7 @@ export function ExcelImporter<T>({
     setConfirmedDups(new Set());
     setGhiDeRows(new Set());
     setCheckingDb(false);
+    setLoiNhap(null);
     setResult(null);
     setFilename("");
     setNhom("hopLe");
@@ -838,6 +856,26 @@ export function ExcelImporter<T>({
           )}
 
           {dsNhom.length === 0 && <NhomRong nhom={nhom} soDongSeGhi={validRows.length} />}
+
+          {loiNhap && (
+            // `select-text` + `break-words`: câu lỗi Prisma dài và người dùng cần CHÉP nó
+            // đi hỏi. `role="alert"` để trình đọc màn hình đọc ngay, vì lúc này tiêu điểm
+            // đang ở nút Nhập chứ không ở đây.
+            <div
+              role="alert"
+              className="rounded-xl border border-state-danger bg-state-danger-soft px-4 py-3"
+            >
+              <p className="text-sm font-semibold text-state-danger-ink">
+                Không ghi được — chưa dòng nào vào hệ thống
+              </p>
+              <p className="mt-1 select-text break-words text-sm text-state-danger-ink">
+                {loiNhap}
+              </p>
+              <p className="mt-1.5 text-xs text-state-danger-ink/80">
+                Danh sách bên trên vẫn còn nguyên: sửa rồi bấm Nhập lại, không cần chọn file lần nữa.
+              </p>
+            </div>
+          )}
 
           {/* Thanh hành động dính đáy: ở màn nhỏ, danh sách dài đẩy nút ra khỏi tầm nhìn và
               người dùng cuộn mãi không thấy nút Nhập. `bottom` cộng safe-area cho máy có
