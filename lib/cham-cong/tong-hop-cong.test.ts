@@ -6,8 +6,8 @@
  * vào qua đối số `homNay`, nên cấy được cả hai phía ranh giới.
  */
 import { describe, expect, it } from "vitest";
-import { gopNgayCong, type NgayCongGop } from "./tong-hop-cong";
-import { tomTatCongThang } from "./bang-cong-gv";
+import { CO_CANH_BAO, gopNgayCong, type NgayCongGop } from "./tong-hop-cong";
+import { CO_CAN_XU_LY, tomTatCongThang } from "./bang-cong-gv";
 
 const utc = (y: number, m: number, d: number) => new Date(Date.UTC(y, m - 1, d));
 
@@ -442,5 +442,36 @@ describe("tomTatCongThang — chi tiết", () => {
       ],
     });
     expect(t.thieuLuotNgay).toBe(2);
+  });
+});
+
+// ══ CỜ THIẾU GPS PHẢI CÓ CHỖ ĐỌC (chốt 16/09/2026) ═══════════════════════════════════════
+//
+// Ngày 16/09 `recordTimeLog` thôi TỪ CHỐI lượt quét thiếu toạ độ và chuyển sang gắn cờ
+// `THIEU_GPS` — đo prod: 53 lượt bị chặn, đang xảy ra hằng ngày. Nhưng gỡ chặn mà cờ không
+// ai đếm là đổi một lỗi ồn ào lấy một lỗ hổng im lặng.
+//
+// Chủ dự án: *"Cờ không ai rà thì bằng không có."* Ba ca dưới đây là cái neo giữ vế ấy —
+// nếu ai đó lỡ xoá `THIEU_GPS` khỏi `CO_CANH_BAO`, bản vá gỡ chặn lập tức thành lỗ hổng, và
+// sẽ không có triệu chứng nào ngoài việc con số "Ngày có cờ" im lặng nhỏ đi.
+describe("THIEU_GPS — có người đọc, có chỗ đọc (luật 10)", () => {
+  it("nằm trong CO_CANH_BAO ⇒ màn Kỳ công của Quản lý ĐẾM được", () => {
+    expect(CO_CANH_BAO.has("THIEU_GPS")).toBe(true);
+  });
+
+  it("một ngày chỉ có mỗi cờ THIEU_GPS VẪN được tính là ngày có cờ", () => {
+    // Kiểm qua HÀNH VI chứ không chỉ qua tập hợp: tập đúng mà phép đếm đọc tập khác thì
+    // ca trên vẫn xanh trong khi màn vẫn in 0.
+    const g = gopNgayCong([
+      ngay({ workDate: utc(2026, 9, 1), dayCreditExpected: 1, flags: ["THIEU_GPS"] }),
+    ]);
+    expect(g.flaggedDays).toBe(1);
+  });
+
+  it("CỐ Ý KHÔNG nằm trong CO_CAN_XU_LY của site GV", () => {
+    // Tập ấy là "việc người đi làm tự xử lý được bằng một cái đơn". Thiếu GPS thì họ không
+    // xử được: ngày vẫn có công, việc cần làm là của Quản lý và người dựng hệ. Ghim cả vế
+    // PHỦ ĐỊNH để không ai "tiện tay" thêm vào rồi đẩy một việc không làm được sang họ.
+    expect(CO_CAN_XU_LY.has("THIEU_GPS")).toBe(false);
   });
 });
