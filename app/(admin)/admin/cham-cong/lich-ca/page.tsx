@@ -18,7 +18,16 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { CalendarClock, ChevronLeft, ChevronRight, Lock } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { getMyAssignments, getMyAttendanceDays } from "@/lib/cham-cong/my-schedule";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
+import {
+  getMyAssignments,
+  getMyAttendanceDays,
+  getMyPeriod,
+} from "@/lib/cham-cong/my-schedule";
+import { tomTatCongThang } from "@/lib/cham-cong/bang-cong-gv";
+import { congDayCuaNguoi } from "@/lib/cham-cong/cong-day";
+import { loadBuoiDay, loadLoaiCongDay } from "@/lib/cham-cong/cong-day-db";
 import { laNgayNghi, nhanGioCa } from "@/lib/cham-cong/nhan-ca";
 import { currentPeriodKey, parsePeriodKey, periodRange } from "@/lib/cham-cong/period";
 import { hrefWith, shiftKy } from "@/lib/cham-cong/scope-href";
@@ -33,6 +42,7 @@ import { MeNav } from "@/components/admin/cham-cong/me-nav";
 import { BTN_PRIMARY, PILL } from "@/components/admin/cham-cong/classes";
 import { FlagList } from "@/components/cham-cong/ui/flag-chip";
 import { ShiftCodeChip, type ShiftSource } from "@/components/cham-cong/ui/shift-code-chip";
+import { TongHopCongThang } from "@/components/cham-cong/ui/tong-hop-cong-thang";
 
 export const metadata = { title: "Lịch ca của tôi | Admin", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -53,9 +63,38 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
   const ky = month && parsePeriodKey(month) ? month : currentPeriodKey();
   const { from, to, days } = periodRange(ky);
   const toExclusive = new Date(to.getTime() + 86_400_000);
-  const [shifts, dayRows] = await Promise.all([
+  // ── Dữ liệu cho KHỐI TỔNG HỢP (mục 1 bản admin, 15/09/2026) ────────────────
+  //
+  // Vì sao màn này cũng cần khối ấy: đây là chỗ DUY NHẤT một người KHÔNG phải giáo viên
+  // (Sale · Kế toán · Nhân sự · Quản lý cơ sở) xem được công của chính họ — họ không có
+  // site GV. Trước đó cả màn chỉ có một dòng chữ nhỏ "Tổng công tạm tính X · Y ca", không
+  // công chuẩn, không đi muộn/về sớm, không ngày nghỉ, không đơn của mình.
+  //
+  // Khối hiển thị là `components/cham-cong/ui/tong-hop-cong-thang.tsx` — CÙNG một bản với
+  // `/teacher/bang-cong`, và mọi con số qua `tomTatCongThang` (luật 12b: không dựng lại).
+  //
+  // ⚠️ `getMyPeriod` là ĐƯỜNG OWN-ROWS, cố ý KHÔNG đi qua `scopedDb`: người thiếu
+  // `UserOrgRole` bị scopedDb lọc sạch và trả `null`, không phân biệt được "kỳ chưa lập"
+  // với "không được xem" ⇒ màn in "Chưa lập kỳ" cho một kỳ ĐÃ lập (bug 15/09 ở site GV).
+  //
+  // ⚠️ `WorkRequest` thì NGƯỢC LẠI — đọc qua `scopedDb` là ĐÚNG, vì nó nằm trong
+  // SCOPE_EXEMPT (`lib/db-scope.ts`): `centerId` trên đơn chỉ là ảnh chụp và có thể null,
+  // nên `scopedDb` cố ý KHÔNG chèn `centerId IN` cho bảng này.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const [shifts, dayRows, kyCong, myRequests, buoiDay, loaiCongDay] = await Promise.all([
     getMyAssignments(session.user.id, from, toExclusive),
     getMyAttendanceDays(session.user.id, from, toExclusive),
+    getMyPeriod(session.user.id, ky),
+    sdb.workRequest.findMany({
+      where: { requesterId: session.user.id, fromDate: { gte: from, lt: toExclusive } },
+      select: { kind: true, status: true },
+      take: 200,
+    }),
+    // Công dạy: khối tự ẩn khi rỗng, nên người không dạy không thấy gì thêm. Để ở đây vì
+    // có người VỪA quản lý VỪA đứng lớp — họ xem công ở màn này chứ không mở site GV.
+    loadBuoiDay([session.user.id], from, toExclusive),
+    loadLoaiCongDay(),
   ]);
 
   const shiftOf = new Map(shifts.map((s) => [s.date.toISOString().slice(0, 10), s]));
@@ -88,6 +127,51 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
       day: dayOf.get(key) ?? null,
     };
   });
+
+  const donTheoTrangThai = myRequests.reduce(
+    (a, r) => {
+      if (r.status === "PENDING") a.choDuyet += 1;
+      else if (r.status === "REJECTED") a.tuChoi += 1;
+      else if (r.status === "APPROVED" && r.kind === "TIMESHEET_FIX") a.daDuyetChinhCong += 1;
+      return a;
+    },
+    { choDuyet: 0, daDuyetChinhCong: 0, tuChoi: 0 },
+  );
+
+  const tomTat = tomTatCongThang({
+    ngay: dayRows.map((d) => d.gop),
+    kyKhoa: ky,
+    congChuan: kyCong.standardUnits,
+    kyTrangThai: kyCong.status,
+    kyChotLuc: kyCong.lockedAt,
+    // `homNay` là ĐỐI SỐ, hàm không đọc đồng hồ (luật 19).
+    homNay: todayYmd,
+    dauThang: from.toISOString().slice(0, 10),
+    cuoiThang: to.toISOString().slice(0, 10),
+    don: donTheoTrangThai,
+  });
+  const congDay = congDayCuaNguoi(buoiDay, loaiCongDay);
+
+  // ── Vì sao "26 ca đã xếp" mà "25 ngày đã đi làm" ─────────────────────────────
+  //
+  // Hai con số này nằm CẠNH NHAU trên màn và trông như phải bằng nhau. Chúng không, và
+  // cả hai đều đúng:
+  //   · `shiftCount` đếm Ô CA trên lưới (mọi mã không phải mã nghỉ);
+  //   · `tomTat.ngayCoCa` đếm NGÀY CÔNG mà engine xếp loại `WORK`.
+  // Chúng lệch đúng ở những ngày có ca xếp NHƯNG engine xếp ngày đó là lễ / nghỉ.
+  //
+  // Đo thật trên dữ liệu (local 15/09): `uat.sale1` tháng 8 có 26 ca, 25 ngày `WORK`, và
+  // đúng MỘT ngày lệch — 31/08 có ca `C` nhưng `dayType = HOLIDAY`. 25 + 1 lễ = 26.
+  //
+  // Số dưới đây ĐẾM tập ấy chứ không suy ra bằng phép trừ: phép trừ sẽ ra số dương cả khi
+  // nguyên nhân là chuyện khác, rồi giải thích sai cho người đọc. Không có ngày nào như
+  // thế thì không in câu nào.
+  const dayTypeOf = new Map(dayRows.map((d) => [d.date.toISOString().slice(0, 10), d.gop.dayType]));
+  const caTrungNgayNghi = shifts.filter((sh) => {
+    if (laNgayNghi(sh.kind)) return false; // mã nghỉ vốn không nằm trong `shiftCount`
+    const dt = dayTypeOf.get(sh.date.toISOString().slice(0, 10));
+    return dt != null && dt !== "WORK";
+  }).length;
 
   const prevHref = hrefWith("/cham-cong/lich-ca", { month: shiftKy(ky, -1) });
   const nextHref = hrefWith("/cham-cong/lich-ca", { month: shiftKy(ky, 1) });
@@ -127,10 +211,41 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
         >
           <ChevronRight className="h-4 w-4" aria-hidden />
         </Link>
+        {/* Dòng này GIỮ LẠI dù khối tổng hợp ngay dưới có số đầy đủ hơn: nó là con số của
+            ĐÚNG cái bảng bên dưới (mỗi ngày một dòng, đếm ca), còn khối tổng hợp nói về cả
+            tháng. Hai phạm vi khác nhau — nên nhãn phải nói ra "ca đã xếp", đừng để người
+            đọc tưởng nó mâu thuẫn với "ngày đã đi làm" ở khối dưới. */}
         <span className="ml-auto text-xs text-muted-foreground">
           Tổng công tạm tính <strong className="tabular-nums text-foreground">{totalUnits}</strong> ·{" "}
-          <strong className="tabular-nums text-foreground">{shiftCount}</strong> ca
+          <strong className="tabular-nums text-foreground">{shiftCount}</strong> ca đã xếp
+          {caTrungNgayNghi > 0 && (
+            <>
+              {" · "}
+              {/* `{" "}` TƯỜNG MINH — JSX nuốt khoảng trắng quanh chỗ xuống dòng, và bản đầu
+                  in ra "1ca rơi vào". Cùng một lỗi đã dính ở trang GV hôm nay; chỉ ảnh chụp
+                  bắt được, tsc và lint đều xanh. */}
+              <strong className="tabular-nums text-foreground">{caTrungNgayNghi}</strong>{" "}
+              ca rơi vào ngày lễ/nghỉ nên không nằm trong &ldquo;ngày đã đi làm&rdquo;
+            </>
+          )}
         </span>
+      </div>
+
+      <div className="mb-4">
+        <TongHopCongThang
+          tomTat={tomTat}
+          nhanThang={`Tháng ${pad(p.m)}/${p.y}`}
+          nhanChotLuc={
+            kyCong.lockedAt ? kyCong.lockedAt.toISOString().slice(0, 10).split("-").reverse().join("/") : undefined
+          }
+          congDay={congDay.dong}
+          // Màu nhấn do SITE quyết — file dùng chung không được mang `primary-*`
+          // (`docs/cham-cong/DESIGN-CHAM-CONG-ADMIN.md`). Ở đây là tím của `.admin-scope`.
+          lopNhanManh="text-primary-ink"
+          lopLink="text-primary-ink"
+          // KHÔNG truyền `hrefLoc`: màn này chưa có tham số lọc `?loc=co`, và một đường dẫn
+          // không đi tới đâu là lời hứa suông (luật 12). Thêm bộ lọc là việc riêng.
+        />
       </div>
 
       <PageHelp guideSlug="nhan-su-giao-vien">
