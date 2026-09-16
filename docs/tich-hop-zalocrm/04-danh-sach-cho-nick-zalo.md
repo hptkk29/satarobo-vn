@@ -15,8 +15,24 @@
 |---|---|---|
 | 0.1 | SIM công ty đã lắp, đã đăng ký được tài khoản Zalo, đăng nhập được trên điện thoại | Mở app Zalo bằng SIM đó, vào được |
 | 0.2 | Máy chủ fork đang chạy và ra được Internet | Mở `<APP_URL>/health` thấy `ok` |
-| 0.3 | `webhook_secret` của org `cs1` bên ZaloCRM đã đặt, `webhook_url` trỏ về `https://test.satarobo.vn/api/public/webhook/zalocrm` | Xem ở màn cấu hình org của fork |
+| 0.3 | `webhook_secret` của org `cs1` bên ZaloCRM đã đặt, `webhook_url` trỏ về `https://test.satarobo.vn/api/webhooks/zalocrm/cs1` (**có mã org ở cuối**) | Xem ở màn cấu hình org của fork |
 | 0.4 | `ZALOCRM_ENABLED=true` trên Vercel environment `test` và đã deploy lại | Mở `test.satarobo.vn/admin/tich-hop`, mục **ZaloCRM (nick Zalo cá nhân)** hiện nhãn **"Đang bật"**, không phải "Đang tắt (ZALOCRM_ENABLED)" |
+
+**Dò cờ trong 5 giây, không cần đăng nhập** (đo thật 16/09/2026 — `test` đã trả 401):
+
+```bash
+curl -s -o /dev/null -w "%{http_code}
+" -X POST   https://test.satarobo.vn/api/webhooks/zalocrm/cs1   -H "Content-Type: application/json" -d '{"probe":true}'
+```
+
+| Mã trả về | Nghĩa |
+|---|---|
+| **401** + `{"ok":false,"error":"Chữ ký không hợp lệ"}` | ✅ đường đúng, **cờ đã BẬT**. Đây là kết quả mong muốn |
+| **404** + `{"ok":false,"error":"Not found"}` | đường đúng nhưng **cờ đang TẮT** (hoặc chưa deploy lại sau khi thêm biến) |
+| **200** + HTML | **sai đường** — route không tồn tại, Next trả trang không-tìm-thấy với mã 200. Kiểm lại `/api/webhooks/zalocrm/<orgCode>` |
+
+> ⚠️ **200 không phải là đạt.** Đường sai trả 200 chứ không trả 404 — đo được trên prod
+> (`X-Matched-Path: /_not-found`). Ai quen coi 2xx là tốt sẽ đọc nhầm đúng chỗ này.
 
 > ⚠️ **Đường hầm Cloudflare đổi địa chỉ mỗi lần khởi động lại.** Nếu fork đang chạy sau
 > `cloudflared tunnel --url` thì mỗi lần dựng lại máy chủ là phải sửa lại `APP_URL` bên
@@ -58,9 +74,12 @@
 - **Bấm ở đâu:** `test.satarobo.vn/admin/zalo-crm`.
 - **Đạt khi:** hội thoại hiện trong danh sách bên trái, thấy đúng chữ `Test 1`.
 - **Rồi quay lại `/admin/tich-hop`, bấm Đồng bộ nick:** khối đỏ ở mục ③ **phải biến mất**.
-- *Hỏng thì xem đâu:* mở **Nhật ký** ngay trong mục ZaloCRM đó. `401` = lệch
-  `ZALOCRM_WEBHOOK_SECRETS` với secret bên fork. `404` = sai `webhook_url`. Nhật ký trống
-  trơn = webhook chưa gọi tới Sata lần nào, xem lại đường hầm.
+- *Hỏng thì xem đâu:* mở **Nhật ký** ngay trong mục ZaloCRM đó.
+  - `401` = lệch `ZALOCRM_WEBHOOK_SECRETS` với secret bên fork.
+  - `404` = **cờ `ZALOCRM_ENABLED` đang tắt**, không phải sai đường.
+  - **Nhật ký trống trơn** = webhook chưa gọi tới Sata lần nào. Chạy phép dò ở mục 0.4:
+    ra **200 + HTML** là `webhook_url` bên fork ghi sai đường; ra 401 mà nhật ký vẫn trống
+    thì fork chưa gửi — xem lại đường hầm.
 
 ### ⑤ Tin RA — 2 phút
 - **Bấm ở đâu:** trong khung chat ở `/admin/zalo-crm`, gõ `Chào anh/chị` → Gửi.
