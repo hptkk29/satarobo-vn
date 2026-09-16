@@ -521,7 +521,11 @@ test.describe("[PAYOS] webhook ghi nhận + phân bổ tiền", () => {
     });
 
     const res = await ingestPayosWebhook(
-      payload({ amount: 4_000_000, description: "NguyenVanBinh_84987654321_Sata4" }),
+    // ⚠️ SỬA 17/09/2026 — SĐT ở dạng NỘI ĐỊA `0…`, trước đây ca này gửi `84…` và ĐỎ.
+    // Mã đúng, TEST CŨ: `c95c6c25` (14/09) đổi nội dung CK sang `0XXXXXXXXX` theo chốt của
+    // chủ dự án *"sđt trong nội dung ck là 0987654321 chứ không dùng 84987654321"*. Phép THU
+    // HẸP so chuỗi với thứ hệ thống THỰC SỰ phát ra, nên memo dạng `84…` không còn khớp.
+      payload({ amount: 4_000_000, description: "NguyenVanBinh_0987654321_Sata4" }),
     );
 
     expect(res.status).toBe("MATCHED");
@@ -547,7 +551,11 @@ test.describe("[PAYOS] webhook ghi nhận + phân bổ tiền", () => {
     });
 
     const res = await ingestPayosWebhook(
-      payload({ amount: 3_000_000, description: "TranDucAnh_84987654321_Sata4" }),
+    // ⚠️ SỬA 17/09/2026 — SĐT ở dạng NỘI ĐỊA `0…`, trước đây ca này gửi `84…` và ĐỎ.
+    // Mã đúng, TEST CŨ: `c95c6c25` (14/09) đổi nội dung CK sang `0XXXXXXXXX` theo chốt của
+    // chủ dự án *"sđt trong nội dung ck là 0987654321 chứ không dùng 84987654321"*. Phép THU
+    // HẸP so chuỗi với thứ hệ thống THỰC SỰ phát ra, nên memo dạng `84…` không còn khớp.
+      payload({ amount: 3_000_000, description: "TranDucAnh_0987654321_Sata4" }),
     );
 
     expect(res.status).toBe("MATCHED");
