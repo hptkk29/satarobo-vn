@@ -57,6 +57,7 @@ on:
           - cong-ngay-khong-quet
           - luoi-ca-gv-parttime
           - thieu-vi-tri
+          - ngay-co-co-truoc-sau
           - tat-ca
       # Hai ô dưới CHỈ dùng cho việc `tinh-lai-mot-ngay-chay-thu`. Để trống cho mọi việc khác.
       user_id:
@@ -347,6 +348,16 @@ jobs:
       - name: "Đo lượt quét thiếu toạ độ theo trình duyệt (chỉ đọc)"
         if: ${{ !cancelled() && (inputs.viec == 'thieu-vi-tri' || inputs.viec == 'tat-ca') }}
         run: pnpm exec tsx scripts/do-thieu-vi-tri.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+
+      # Bản vá 16/09 thêm `THIEU_GPS` vào `CO_CANH_BAO` ⇒ con số "Ngày có cờ" trên màn Kỳ
+      # công TĂNG ngay lượt deploy mà không ai làm gì sai. Chủ dự án cần con số trước/sau để
+      # BÁO TRƯỚC cho người rà, không để họ tự phát hiện rồi tưởng có sự cố.
+      - name: "Đo Ngày có cờ trước/sau khi thêm THIEU_GPS (chỉ đọc)"
+        if: ${{ !cancelled() && (inputs.viec == 'ngay-co-co-truoc-sau' || inputs.viec == 'tat-ca') }}
+        run: pnpm exec tsx scripts/do-ngay-co-co-truoc-sau.ts
         env:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
           DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
