@@ -10,6 +10,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { planAllocation, type AllocTarget } from "@/lib/payments/allocation";
 import { isThuTheoConEnabled } from "@/lib/flags";
+import { chiaTheoPhieuGop } from "./chia-phieu-gop";
 import {
   gopDotTheoDon,
   kiemKeHoachTheoCon,
@@ -295,11 +296,24 @@ describe("[KHC-04] nối với bộ chia đã có — và GIỚI HẠN THẬT c�
     expect(r.lines.some((l) => l.paymentRequestId.startsWith("oi-be-b"))).toBe(false);
   });
 
-  it.fails("phiếu GỘP 'đợt 1 cả nhà' phải rót đúng hai bé — CHƯA XÂY", () => {
-    // Hẹn của đợt sau: bộ chia theo PHIẾU GỘP (`PaymentBill` + `PaymentBillLine`). Xây
-    // xong ca này chuyển XANH và vitest báo "expected to fail" ⇒ buộc gỡ ghim.
-    const chia = (globalThis as Record<string, unknown>).chiaTheoPhieuGop;
-    expect(typeof chia).toBe("function");
+  it("phiếu GỘP 'đợt 1 cả nhà' rót ĐÚNG hai bé — cùng số tiền, khác kết quả", () => {
+    // Đã xây (`chia-phieu-gop.ts`) — ghim hẹn đã gỡ. Ca này đứng cạnh ca trên để đọc được
+    // cả hai vế: CÙNG 2.000.000đ, cùng đơn, chỉ khác là tiền có gắn phiếu gộp hay không.
+    const p = phieuThuTheoCon(donHaiCon());
+    const dotMotCuaCaNha = p
+      .filter((x) => x.installmentNo === 1)
+      .map((x) => ({
+        paymentRequestId: `${x.orderItemId}-d1`,
+        sortOrder: x.sortOrder,
+        amount: x.amountDue,
+        amountDue: x.amountDue,
+        daRot: 0,
+      }));
+    const r = chiaTheoPhieuGop(2_000_000, dotMotCuaCaNha);
+    expect(r.lines).toEqual([
+      { paymentRequestId: "oi-be-a-d1", amount: 1_000_000 },
+      { paymentRequestId: "oi-be-b-d1", amount: 1_000_000 },
+    ]);
   });
 });
 
