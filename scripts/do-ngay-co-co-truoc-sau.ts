@@ -110,6 +110,41 @@ async function main() {
   console.log("    Nó CHƯA gồm phần sẽ phát sinh khi bản vá bắt đầu GHI những lượt trước kia");
   console.log("    bị chặn vì NO_GPS (đo được 53 lượt). Phần ấy chỉ thấy sau vài ngày chạy thật.");
 
+  // ── PHẦN SẼ TĂNG VỀ SAU — ước lượng có cơ sở, không phải cảm tính ────────
+  //
+  // "Tăng 0 lúc deploy" là câu trả lời ĐÚNG nhưng CHƯA ĐỦ, và trả lời nửa vời ở đây là để
+  // người rà yên tâm hôm nay rồi giật mình tuần sau.
+  //
+  // 53 lượt `NO_GPS` bị chặn chưa từng thành dòng ngày công nào. Sau bản vá chúng ĐƯỢC GHI,
+  // và mỗi (người × ngày) có ít nhất một lượt như thế sẽ thành một "ngày có cờ" mới — đếm
+  // theo CẶP chứ không theo lượt, vì một ngày chỉ được tính một lần dù quét hỏng năm lần.
+  //
+  // ⚠️ Đây là ước lượng theo NHỊP CŨ. Nó giả định tuần tới giống tuần trước, mà bản vá còn
+  // hai lượt gọi định vị mới (GPS thật → hạ xuống wifi) sẽ CỨU phần lớn số ấy. Nên con số
+  // dưới đây là CẬN TRÊN, và thực tế phải thấp hơn.
+  const noGps = await db.staffTimeLog.findMany({
+    where: { result: "REJECTED", rejectReason: "NO_GPS" },
+    select: { userId: true, workDate: true },
+  });
+  const cap = new Set(noGps.map((l) => `${l.userId}|${l.workDate.toISOString().slice(0, 10)}`));
+  const capTheoKy = new Map<string, Set<string>>();
+  for (const l of noGps) {
+    const k = l.workDate.toISOString().slice(0, 7);
+    const set = capTheoKy.get(k) ?? new Set<string>();
+    set.add(`${l.userId}|${l.workDate.toISOString().slice(0, 10)}`);
+    capTheoKy.set(k, set);
+  }
+
+  tieu("PHẦN SẼ TĂNG VỀ SAU — những lượt trước kia bị CHẶN, nay sẽ được GHI");
+  dong("Lượt bị chặn vì NO_GPS (đã xảy ra)", noGps.length);
+  dong("⇒ quy về (người × ngày) — số NGÀY CÓ CỜ sẽ thêm", cap.size);
+  dong("   — số người", new Set(noGps.map((l) => l.userId)).size);
+  for (const [k, v] of [...capTheoKy.entries()].sort()) dong(`   kỳ ${k}`, `${v.size} ngày`);
+  console.log("");
+  console.log("  ⓘ Đây là CẬN TRÊN theo nhịp CŨ. Bản vá còn thêm lượt gọi định vị thứ hai");
+  console.log("    (hạ độ chính xác, dùng wifi/sóng) sẽ cứu phần lớn số ấy — nên thực tế");
+  console.log("    phải THẤP HƠN. Đo lại sau vài ngày chạy thật mới có con số đúng.");
+
   console.log("");
   console.log("Xong. Không dòng nào bị ghi.");
 }
