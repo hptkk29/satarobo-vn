@@ -170,6 +170,27 @@ export function isPaymentLedgerV2Enabled(): boolean {
 }
 
 /**
+ * BƯỚC B — sinh phiếu thu THEO TỪNG CON (`PaymentRequest.orderItemId`) thay vì một phiếu
+ * cho cả đơn mỗi đợt. Chủ dự án chốt 16/09: *"công nợ theo CON, QR theo ĐƠN"*, và chốt
+ * luôn rằng phần này phải nằm **sau một công tắc**.
+ *
+ * ⚠️ Cờ này đổi HÌNH DẠNG SỐ PHIẾU của một đơn, nên nó không phải cờ hiển thị:
+ *   · OFF (mặc định) — mỗi đợt MỘT phiếu cho cả đơn, `orderItemId = NULL`. Đúng hành vi
+ *     đang chạy trên prod, không đổi một ly.
+ *   · ON  — mỗi (dòng × đợt) MỘT phiếu, `sortOrder` mang thứ tự dòng trước đợt sau
+ *     (`lib/payments/thu-tu-rot.ts`), và QR phát ở cấp PHIẾU GỘP chứ không ở cấp đợt.
+ *
+ * ⚠️ BẬT RỒI TẮT LẠI KHÔNG LÀ VÔ HẠI, và đây là điều phải biết TRƯỚC khi bật ở đâu:
+ * phiếu đã sinh theo con VẪN NẰM ĐÓ khi cờ tắt. Đường lùi an toàn là tắt cờ cho đơn MỚI
+ * rồi xử lý tay số đơn đã lỡ sinh, chứ không phải "tắt là như chưa có gì".
+ *
+ * Mặc định OFF ở MỌI môi trường cho tới khi đường ghi + màn sửa kế hoạch theo con xong.
+ */
+export function isThuTheoConEnabled(): boolean {
+  return process.env.PAYMENT_PER_CHILD_ENABLED === "true"; // mặc định OFF
+}
+
+/**
  * 20/08/2026 — TẮT tính năng NHÓM LỚP theo yêu cầu chủ dự án ("ẩn nhóm lớp,
  * disable tính năng nhóm lớp ở sidebar luôn").
  *
