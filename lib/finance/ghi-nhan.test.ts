@@ -38,6 +38,8 @@ const NGOAI_LE: Record<string, string> = {
   "lib/finance/ghi-giao-dich-cu.ts":
     "GHI: tạo phiếu thu khi nhập giao dịch cũ từ sheet đăng ký",
   "lib/payments/payos-ingest.ts": "GHI: tạo phiếu thu từ cổng thanh toán",
+  "lib/finance/ghi-tien-don.ts":
+    "GHI: tạo phiếu thu khi gắn tay giao dịch theo con + chép trục của dòng gốc khi đảo bút toán",
   "lib/payments/summary.test.ts": "TEST: khẳng định đúng hình dạng `where` mà hằng sinh ra",
 };
 

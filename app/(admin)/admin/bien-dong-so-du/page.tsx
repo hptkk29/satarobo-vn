@@ -57,11 +57,22 @@ export default async function SepayLogPage({
   // Cùng quyền với sổ thu chi — người đối soát tiền mới cần trang này.
   // 03/08 — thêm `payments:view` (chỉ xem) cho Quản lý cơ sở: màn này vốn CHỈ ĐỌC
   // (đối soát tiền về từ SePay), không có thao tác ghi nào.
-  const [canManagePayments, canViewPayments] = await Promise.all([
+  //
+  // PHIÊN B — thêm `payments:record` (SALE). Chủ dự án chốt 17/09: sale phải GẮN được tiền
+  // vào đơn, mà sale chỉ có `payments:record`. Ba quyền, ba mức, KHÔNG gộp:
+  //   · `payments:view`   → nhìn;
+  //   · `payments:record` → nhìn + GẮN tiền vào đơn (trong phạm vi cơ sở của mình);
+  //   · `payments:manage` → thêm BỎ QUA và GỠ GẮN (chỉ kế toán).
+  //
+  // ⚠️ Danh sách UNMATCHED KHÔNG lọc theo cơ sở: giao dịch chưa gắn thì chưa biết của cơ sở
+  // nào, lọc nó đi là giấu mất tiền của chính người đang tìm. Cách ly cơ sở áp ở ĐƠN —
+  // `congGanVaoDon` trong `_gan-theo-con.ts`.
+  const [canManagePayments, canRecordPayments, canViewPayments] = await Promise.all([
     checkPermission("payments:manage"),
+    checkPermission("payments:record"),
     checkPermission("payments:view"),
   ]);
-  if (!canManagePayments && !canViewPayments) redirect("/dashboard");
+  if (!canManagePayments && !canRecordPayments && !canViewPayments) redirect("/dashboard");
 
   const { status } = await searchParams;
   const filter = status === "unmatched" || status === "matched" ? status : "all";
@@ -250,7 +261,11 @@ export default async function SepayLogPage({
         </div>
       </div>
 
-      <BankTxnClient items={txnItems} canManage={canManagePayments} />
+      <BankTxnClient
+        items={txnItems}
+        canManage={canManagePayments}
+        canGan={canManagePayments || canRecordPayments}
+      />
 
       <p className="mt-3 text-xs text-muted-foreground">
         Chỉ hiện 200 giao dịch gần nhất. Bảng trống nghĩa là chưa có tiền về qua cổng (webhook

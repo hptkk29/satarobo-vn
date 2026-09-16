@@ -23,7 +23,7 @@ import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
-import { allocateToOrder } from "@/lib/payments/payos-ingest";
+import { extractVnPhoneCandidates } from "@/lib/payments/payos-ingest";
 import { phoneVariants } from "@/lib/phone";
 
 export type DonUngVien = {
@@ -53,11 +53,44 @@ type CongGhi =
   | { ok: false; error: string }
   | { ok: true; session: Session; actor: Actor };
 
-async function gateGhi(): Promise<CongGhi> {
+/**
+ * ⚠️ HAI CỔNG VIẾT ĐẦY ĐỦ, KHÔNG gọi qua một hàm chung nhận `quyen` làm tham số — dù bản gộp
+ * ngắn hơn 12 dòng. Lý do là một cổng THẬT: luật lint `authz/require-can-in-write-action`
+ * (TS-03) chỉ nhận ra `checkPermission()` khi nó nằm trong thân action hoặc trong wrapper cục
+ * bộ ĐÚNG MỘT CẤP. Bản gộp là hai cấp (`action → gateKeToan → cong`) ⇒ lint báo
+ * *"có lời gọi GHI nhưng không thấy kiểm quyền"*, và cách "sửa" nhanh nhất lúc đó là thêm một
+ * dòng `eslint-disable` — tức tắt đúng cái cổng đang làm việc.
+ *
+ * GẮN tiền vào đơn — `payments:record`.
+ *
+ * Chủ dự án chốt 17/09: sale phải gắn được, mà sale (`CENTER_SALES_CSM`) chỉ có
+ * `payments:record`. Đây KHÔNG phải nới quyền mới: `payments:record` vốn đã là quyền "ghi
+ * nhận một khoản tiền" mà sale dùng ở màn đơn — gắn một giao dịch vào đợt đúng là việc đó.
+ * Tiền vẫn dừng ở `accountantStatus = PENDING`; trục kế toán không bị đụng tới.
+ */
+async function gateGan(): Promise<CongGhi> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  if (!(await checkPermission("payments:record"))) {
+    return { ok: false, error: "Không có quyền ghi nhận tiền" };
+  }
+  const actor = await resolveActor(session.user.id);
+  return { ok: true, session, actor };
+}
+
+/**
+ * BỎ QUA và GỠ GẮN — `payments:manage`, tức CHỈ kế toán (`HO_ACCOUNTANT` ·
+ * `CENTER_ACCOUNTANT`; đã đo `prisma/seed-roles.ts`, không vai nào khác giữ quyền này).
+ *
+ * Hai việc này khác hẳn việc gắn: một cái đưa tiền RA KHỎI hàng chờ đối soát, một cái đảo
+ * lại bút toán đã ghi. Cả hai đều là quyết định kế toán, và cả hai đều khó phát hiện khi làm
+ * sai — giao dịch bị bỏ qua nhầm thì không màn nào còn hiện nó ra để ai đó thắc mắc.
+ */
+async function gateKeToan(): Promise<CongGhi> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   if (!(await checkPermission("payments:manage"))) {
-    return { ok: false, error: "Không có quyền đối soát tiền" };
+    return { ok: false, error: "Chỉ kế toán mới làm được việc này" };
   }
   const actor = await resolveActor(session.user.id);
   return { ok: true, session, actor };
@@ -78,13 +111,20 @@ function lamMoi() {
  * cơ sở 2 — cách ly cơ sở áp cả ở đường gán tay, không riêng đường đọc.
  */
 export async function timDonDeGan(tuKhoa: string): Promise<DonUngVien[]> {
-  const ctx = await gateGhi();
+  const ctx = await gateGan();
   if (!ctx.ok) return [];
 
   const q = tuKhoa.trim();
   if (q.length < 2) return [];
 
-  const sdt = phoneVariants(q);
+  // SĐT có thể nằm LẪN trong nội dung CK (`NGUYEN VAN A 0905123456 HOC PHI`), không đứng
+  // một mình. Bóc ra rồi nở cả hai dạng `0…`/`84…` — nếu chỉ `phoneVariants(q)` thì cả chuỗi
+  // 25 ký tự được coi là một số điện thoại và không khớp gì, tức ô tìm đổ sẵn nội dung CK
+  // (đúng thứ tiện nhất) lại là ô không bao giờ ra kết quả theo SĐT.
+  //
+  // ⚠️ Đây là GỢI Ý, không phải đối khớp: kết quả vẫn phải người bấm chọn. SĐT một mình chưa
+  // bao giờ đủ để rót tiền — xem `decideByPhoneCandidates`.
+  const sdt = [...new Set([...phoneVariants(q), ...extractVnPhoneCandidates(q).flatMap(phoneVariants)])];
   const rows = await scopedDb(ctx.actor).order.findMany({
     where: {
       deletedAt: null,
@@ -138,93 +178,6 @@ export async function timDonDeGan(tuKhoa: string): Promise<DonUngVien[]> {
 }
 
 /**
- * Gán một giao dịch UNMATCHED vào đơn mà kế toán chọn.
- *
- * ⚠️ `orderId` tới TỪ CLIENT nên phải tra lại qua `scopedDb` (chống IDOR: gán tiền
- * sang đơn cơ sở khác). `scopedDb` KHÔNG che write — nhưng ở đây mọi thứ ghi xuống
- * đều neo vào bản ghi đã qua `findUnique` có scope, không nhận từ client.
- */
-export async function ganGiaoDichVaoDon(
-  bankTransactionId: string,
-  orderId: string,
-): Promise<KetQua> {
-  const ctx = await gateGhi();
-  if (!ctx.ok) return { ok: false, error: ctx.error };
-  const sdb = scopedDb(ctx.actor);
-
-  const txn = await sdb.bankTransaction.findUnique({
-    where: { id: bankTransactionId },
-    select: { id: true, status: true, amount: true, provider: true, providerTxnId: true, content: true },
-  });
-  if (!txn) return { ok: false, error: "Không tìm thấy giao dịch" };
-  if (txn.status === "MATCHED") return { ok: false, error: "Giao dịch này đã được rót rồi" };
-
-  const order = await sdb.order.findUnique({
-    where: { id: orderId },
-    select: {
-      id: true,
-      code: true,
-      status: true,
-      centerId: true,
-      orgUnitId: true,
-      studentId: true,
-      student: { select: { id: true, parentUserId: true } },
-      paymentRequests: {
-        where: { status: { in: ["PENDING", "PARTIAL"] } },
-        orderBy: [{ sortOrder: "asc" }, { installmentNo: "asc" }],
-        take: 1,
-        select: { id: true },
-      },
-    },
-  });
-  if (!order) return { ok: false, error: "Không tìm thấy đơn hàng" };
-  const phieu = order.paymentRequests[0];
-  if (!phieu) return { ok: false, error: "Đơn này không còn phiếu thu nào đang chờ" };
-
-  const { actorId, actorName } = getAuditActor(ctx.session);
-  const ketQua = await allocateToOrder({
-    bankTransactionId,
-    order,
-    amount: txn.amount,
-    provider: txn.provider,
-    providerTxnId: txn.providerTxnId,
-    // `via: "manual"` để nhật ký phân biệt được tiền tự khớp với tiền người gán.
-    target: { paymentRequestId: phieu.id, orderId: order.id, via: "manual" },
-    // Payload tóm tắt CHỈ để ghi nhật ký — đường gán tay không có payload cổng.
-    data: {
-      description: txn.content ?? undefined,
-      amount: txn.amount,
-      reference: txn.providerTxnId,
-    },
-  });
-
-  if (ketQua.status !== "MATCHED" && ketQua.status !== "DUPLICATE") {
-    const lyDo = "reason" in ketQua ? ketQua.reason : "Không rót được";
-    return { ok: false, error: lyDo };
-  }
-
-  // Ai gán tiền vào đơn nào — câu hỏi đầu tiên khi sau này phát hiện gán nhầm.
-  await writeAudit({
-    actor: { id: actorId ?? "", name: actorName },
-    module: "finance",
-    entityType: "BankTransaction",
-    entityId: bankTransactionId,
-    action: "TXN_MATCHED_MANUAL",
-    newValues: { orderId: order.id, orderCode: order.code, amount: txn.amount },
-    orgUnitId: order.centerId,
-  });
-
-  lamMoi();
-  return {
-    ok: true,
-    message:
-      ketQua.status === "DUPLICATE"
-        ? "Giao dịch đã được rót trước đó — không ghi thêm lần nào."
-        : `Đã rót ${txn.amount.toLocaleString("vi-VN")}đ vào đơn ${order.code}.`,
-  };
-}
-
-/**
  * Đánh dấu giao dịch KHÔNG PHẢI học phí (tiền nhà, hoàn ứng, chuyển nhầm…) →
  * `IGNORED`, ra khỏi hàng chờ.
  *
@@ -236,7 +189,7 @@ export async function boQuaGiaoDich(
   bankTransactionId: string,
   lyDo: string,
 ): Promise<KetQua> {
-  const ctx = await gateGhi();
+  const ctx = await gateKeToan();
   if (!ctx.ok) return { ok: false, error: ctx.error };
   const ghiChu = lyDo.trim();
   if (!ghiChu) return { ok: false, error: "Cần ghi lý do bỏ qua" };

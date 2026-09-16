@@ -380,13 +380,24 @@ describe("[NTC-05] ba lỗ đã bịt — luật về hình dạng đường ghi
     // Chủ dự án: *"KHÔNG lọc theo scopedDb/cơ sở của người xem."* `Payment` nằm trong
     // `SCOPED_MODELS` và KHÔNG nằm trong `NULL_IS_GLOBAL_MODELS`, nên đọc qua `scopedDb` là
     // con số "đã thu" KHÁC NHAU tuỳ ai mở màn — và không lỗi nào báo.
+    // ⚠️ SỬA 17/09/2026 — PHIÊN B tách thân thật ra `docSoTheoCon(doc, orderId)` để đường GHI
+    // đọc được BÊN TRONG transaction đang giữ khoá của đơn. `noTheoCon` nay chỉ còn là cửa
+    // ĐỌC-HIỂN-THỊ và uỷ quyền với `db` TRẦN. Luật không đổi một chữ; chỗ phải soi thì đổi.
     const src = docMa("lib/finance/debt.ts");
-    const than = /export async function noTheoCon\([\s\S]*?\n\}/.exec(src)?.[0] ?? "";
+    expect(src).toMatch(
+      /export async function noTheoCon\(orderId: string\): Promise<NoTheoConKetQua> \{\s*return docSoTheoCon\(db, orderId\);/,
+    );
+    const than = /export async function docSoTheoCon\([\s\S]*?\n\}/.exec(src)?.[0] ?? "";
     expect(than).not.toBe("");
     expect(than).not.toMatch(/\bsdb\./);
     expect(than).not.toContain("scopedDb");
-    // Và nó phải thật sự đọc ba bảng bằng `db.` — nếu không thì phép khẳng định trên là rỗng.
-    for (const bang of ["db.orderItem.findMany", "db.payment.findMany", "db.paymentRequest.findMany"]) {
+    // Và nó phải thật sự đọc ba bảng qua client ĐƯỢC TRUYỀN VÀO — nếu không thì phép khẳng
+    // định trên là rỗng.
+    for (const bang of [
+      "doc.orderItem.findMany",
+      "doc.payment.findMany",
+      "doc.paymentRequest.findMany",
+    ]) {
       expect(than, bang).toContain(bang);
     }
   });

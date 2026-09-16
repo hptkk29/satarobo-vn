@@ -87,10 +87,18 @@ describe("[GGW] tiền về qua QR phải gắn ghi danh — lưới ghim mã ng
     // `COMPLETED` không bị xoá mềm (191 dòng) nên em học xong Sata1 lên Sata2 đã thành
     // mơ hồ. Đọc `OrderItem` trước: 493/496 (99,4%), 0 đơn trỏ ≥2 ghi danh. Bỏ nguồn
     // này đi là vá xong mà 93% tiền về qua QR vẫn không xác nhận được.
+    // ⚠️ SỬA 17/09/2026 — nay có ĐÚNG HAI câu tra `orderItem` trong tệp, hai mục đích khác
+    // nhau, và ca này phải phân biệt được chúng thay vì đếm suông:
+    //   · NGUỒN GHI DANH (câu dưới đây) — lọc `enrollmentId: { not: null }`;
+    //   · ĐẾM DÒNG HÀNG (PHIÊN B) — để gắn `Payment.orderItemId` khi đơn có ĐÚNG một con.
+    // Giữ nguyên `toHaveLength(1)` là ca đỏ vì một lý do sai; đổi thành `>= 1` là mất luôn
+    // thứ ca này canh (không được đẻ bản thứ hai của NGUỒN GHI DANH).
     const tra = viTri(/tx\.orderItem\.findMany\(\{/);
-    expect(tra, `phải có ĐÚNG 1 câu tra dòng hàng trong ${NGUON}`).toHaveLength(1);
+    expect(tra, `phải có ĐÚNG 2 câu tra dòng hàng trong ${NGUON}`).toHaveLength(2);
+    const nguon = tra.filter((d) => lat(d, d + 14).includes("enrollmentId: { not: null }"));
+    expect(nguon, "phải có ĐÚNG 1 câu tra làm NGUỒN GHI DANH").toHaveLength(1);
 
-    const than = lat(tra[0]!, tra[0]! + 14);
+    const than = lat(nguon[0]!, nguon[0]! + 14);
     expect(than, "phải tra dòng hàng của CHÍNH đơn này").toMatch(/orderId: order\.id\b/);
     expect(than, "chỉ lấy dòng hàng CÓ trỏ ghi danh").toMatch(
       /enrollmentId:\s*\{\s*not:\s*null\s*\}/,
