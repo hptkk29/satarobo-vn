@@ -100,7 +100,14 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
   const shiftOf = new Map(shifts.map((s) => [s.date.toISOString().slice(0, 10), s]));
   const dayOf = new Map(dayRows.map((d) => [d.date.toISOString().slice(0, 10), d]));
   const p = parsePeriodKey(ky)!;
-  const totalUnits = Math.round(dayRows.reduce((s, d) => s + d.units, 0) * 100) / 100;
+  // ⚠️ KHÔNG tự cộng `dayRows` ở đây nữa.
+  //
+  // Bản cũ cộng MỌI ngày trong tháng, nên sau khi khối tổng hợp (16/09) chuyển sang "tính
+  // tới hôm nay", cùng một màn in HAI con số cho cùng một thứ: dòng này 12,5 còn khối ngay
+  // dưới 6,5. Hai số cạnh nhau mà lệch thì sẽ có người sửa cho khớp, và sửa nhầm cái đang
+  // đúng — nên nay cả hai đọc CHUNG một nguồn `tomTat.cong` (xem `tomTat` dựng bên dưới).
+  //
+  // `dayRows` vẫn dùng cho bảng, chỉ con số tổng là thôi tự tính.
   // `!isLeave` KHÔNG đủ: `X` (Nghỉ) mang `isLeave: false` nên vẫn bị đếm là ca làm. Cùng gốc
   // với bug nhãn 10/09 — thứ phân biệt là `kind`.
   const shiftCount = shifts.filter((s) => !laNgayNghi(s.kind)).length;
@@ -167,6 +174,15 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
   // nguyên nhân là chuyện khác, rồi giải thích sai cho người đọc. Không có ngày nào như
   // thế thì không in câu nào.
   const dayTypeOf = new Map(dayRows.map((d) => [d.date.toISOString().slice(0, 10), d.gop.dayType]));
+  // Ca đã xếp cho ngày CHƯA DIỄN RA. Cần con số này vì từ 16/09 khối tổng hợp chỉ đếm tới
+  // hôm nay, nên "26 ca đã xếp" (cả tháng) và "ngày đã đi làm … / 13" (tới hôm nay) lệch
+  // nhau một khoảng lớn. Không nói ra thì lại đúng cái bẫy "hai số cạnh nhau trông như phải
+  // bằng nhau" — lần này còn to hơn trước.
+  const caChuaToi = shifts.filter((sh) => {
+    if (laNgayNghi(sh.kind)) return false;
+    return sh.date.toISOString().slice(0, 10) > todayYmd;
+  }).length;
+
   const caTrungNgayNghi = shifts.filter((sh) => {
     if (laNgayNghi(sh.kind)) return false; // mã nghỉ vốn không nằm trong `shiftCount`
     const dt = dayTypeOf.get(sh.date.toISOString().slice(0, 10));
@@ -216,8 +232,16 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
             tháng. Hai phạm vi khác nhau — nên nhãn phải nói ra "ca đã xếp", đừng để người
             đọc tưởng nó mâu thuẫn với "ngày đã đi làm" ở khối dưới. */}
         <span className="ml-auto text-xs text-muted-foreground">
-          Tổng công tạm tính <strong className="tabular-nums text-foreground">{totalUnits}</strong> ·{" "}
+          Tổng công tạm tính{" "}
+          <strong className="tabular-nums text-foreground">{tomTat.cong}</strong> tới hôm nay ·{" "}
           <strong className="tabular-nums text-foreground">{shiftCount}</strong> ca đã xếp
+          {caChuaToi > 0 && (
+            <>
+              {" · "}
+              <strong className="tabular-nums text-foreground">{caChuaToi}</strong>{" "}
+              ca chưa tới
+            </>
+          )}
           {caTrungNgayNghi > 0 && (
             <>
               {" · "}
@@ -287,9 +311,23 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
             <tbody>
               {rows.map((r) => {
                 const isToday = r.key === todayYmd;
-                const flags = (r.day?.flags ?? []).filter((f) => f !== "KHONG_CO_LUOT" || r.shift);
+                // ⚠️ NGÀY CHƯA DIỄN RA: không cờ, không nút nộp đơn (sự cố 16/09/2026).
+                //
+                // Bản trước in "Không có lượt" cho 17/09 → 30/09 kèm đường dẫn "Nộp đơn chỉnh
+                // công". Tức màn bảo người ta đi xin bổ sung giờ cho NGÀY MAI — và nếu ai làm
+                // theo thì đơn chạy thẳng vào hàng chờ duyệt của Quản lý. Chủ dự án bắt được
+                // trên localhost; không cổng nào khác bắt, vì nó là màn hình nói dối chứ
+                // không phải mã ném lỗi.
+                //
+                // Rỗng HẾT chứ không lọc riêng nhóm "thiếu mốc quét": mọi cờ đều là lời kể
+                // về một việc ĐÃ xảy ra, nên không cờ nào có nghĩa cho ngày chưa tới.
+                const chuaToi = r.key > todayYmd;
+                const flags = chuaToi
+                  ? []
+                  : (r.day?.flags ?? []).filter((f) => f !== "KHONG_CO_LUOT" || r.shift);
                 const locked = r.day?.locked ?? false;
-                const needsFix = !locked && (r.day?.flags ?? []).some((f) => MISSING_TAP.has(f));
+                const needsFix =
+                  !chuaToi && !locked && (r.day?.flags ?? []).some((f) => MISSING_TAP.has(f));
                 const canSwap = Boolean(r.shift) && r.key > todayYmd;
                 const source = r.shift && SOURCES.has(r.shift.source) ? (r.shift.source as ShiftSource) : undefined;
                 return [

@@ -172,6 +172,53 @@ function isAm(seg: ShiftSegment): boolean {
   return toMinutes(seg.start) < 12 * 60;
 }
 
+/**
+ * Biến kết quả của một ngày CHƯA DIỄN RA về đúng nghĩa của nó: **giữ KẾ HOẠCH, xoá mọi vế
+ * ĐÃ XẢY RA**.
+ *
+ * ── Vì sao hàm này tồn tại (sự cố 16/09/2026) ──────────────────────────────────────────
+ *
+ * `recomputeRange` lặp mọi ngày của kỳ, kể cả kỳ ĐANG CHẠY, nên bấm "Tính lại" giữa tháng
+ * là sinh dòng ngày công cho những ngày chưa tới. `computeDay` xử chúng y như ngày đã khép:
+ * không có lượt quét nào ⇒ gắn `KHONG_CO_LUOT`, và vẫn ghi đủ `dayCreditEarned` (công tính
+ * theo KẾ HOẠCH CA chứ không theo lượt quét). Đo prod hôm ấy: **250 dòng ngày chưa diễn ra,
+ * 196 cờ oan, 185 công**.
+ *
+ * Hậu quả nhìn thấy được: màn in "Không có lượt" cho 17/09 → 30/09 kèm đường dẫn "Nộp đơn
+ * chỉnh công" — bảo người ta đi xin bổ sung giờ cho NGÀY MAI.
+ *
+ * ── Xoá những vế nào, và vì sao đúng những vế đó ───────────────────────────────────────
+ *
+ * Chủ dự án chốt 16/09: *"vẫn tạo dòng để giữ kế hoạch, nhưng không gắn cờ và không ghi
+ * công thực nhận."* Nên:
+ *
+ *   GIỮ  `dayType` · `templateCode` · `dayCreditExpected` · `expectedMinutes` · `amExpected`
+ *        · `pmExpected` — đây là KẾ HOẠCH, và màn Kỳ công cần nó để chốt sổ.
+ *   XOÁ  `flags` (mọi cờ đều là lời kể về việc ĐÃ xảy ra — rỗng hết chứ không lọc riêng
+ *        nhóm thiếu-quét, vì lọc từng cái là để ngỏ chỗ cho cái tiếp theo lọt)
+ *        `dayCreditEarned` · `hourCredit` · `leaveUnits` · `holidayPaidUnits` — cả bốn là
+ *        vế ĐÃ NHẬN. Chưa tới ngày thì chưa nhận gì.
+ *
+ * ⚠️ Xoá `leaveUnits`/`holidayPaidUnits` KHÔNG phải tiện tay: `buildPeriodSummary` của màn
+ * Kỳ công cộng thẳng hai cột ấy. Bỏ sót chúng là vá được màn cá nhân mà màn Kỳ công vẫn
+ * cộng ngày chưa tới — cùng một bug, chỗ khác. Ngược lại, xoá đủ bốn vế ở ĐÂY làm màn Kỳ
+ * công tự đúng mà không phải sửa một dòng nào bên đó.
+ *
+ * Các vế "đã làm" còn lại (`workedMinutes`, `lateMinutes`, `pairs`…) vốn đã bằng 0/rỗng vì
+ * ngày chưa tới thì không có lượt quét nào — không đụng, để nếu một ngày nào đó chúng KHÁC 0
+ * thì đó là tín hiệu thật (ai đó quét cho ngày tương lai) chứ không bị hàm này giấu đi.
+ */
+export function ketQuaNgayChuaDienRa(r: DayResult): DayResult {
+  return {
+    ...r,
+    flags: [],
+    dayCreditEarned: 0,
+    hourCredit: 0,
+    leaveUnits: 0,
+    holidayPaidUnits: 0,
+  };
+}
+
 export function computeDay(input: EngineInput): DayResult {
   const { assignment: a, rules } = input;
   const flags = new Set<string>();

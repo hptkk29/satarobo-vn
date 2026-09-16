@@ -256,17 +256,26 @@ export function TongHopCongThang({
           8K, không cần luật `border-r last:border-r-0` cho từng breakpoint, và không đẻ ô
           mồ côi ở hàng cuối như lưới thẻ rời. */}
       <div className="grid gap-px bg-border min-[420px]:grid-cols-2 xl:grid-cols-4">
+        {/* ⚠️ Ô NÀY ĐÃ TỪNG GỘP CẢ NGÀY CHƯA DIỄN RA (sự cố 16/09/2026).
+            Một người có "12,5 công" thì 6 trong đó là của những ngày chưa xảy ra. Chủ dự án
+            chốt phương án (a): ô chính chỉ tính TỚI HÔM NAY, kế hoạch cả tháng xuống dòng
+            phụ — và nói rõ đó là kế hoạch, để không ai cộng nhầm vào lương.
+
+            Dòng kế hoạch chỉ hiện khi thật sự LỚN HƠN: tháng đã qua trọn thì hai số bằng
+            nhau, in thêm một câu bằng nhau chỉ làm mắt phải đọc mà không biết thêm gì. */}
         <OTong
-          nhan="Công tháng — thực tế / công chuẩn"
+          nhan="Công tháng — tính tới hôm nay / công chuẩn"
           chinh={
             tomTat.congChuan == null
               ? String(tomTat.cong)
               : `${tomTat.cong} / ${tomTat.congChuan}`
           }
           phu={
-            tomTat.congChuan == null
-              ? "kỳ chưa có công chuẩn — Kế toán chưa lập"
-              : "chưa nhân hệ số lương — Kế toán tính riêng"
+            tomTat.congKeHoachCaThang > tomTat.cong
+              ? `kế hoạch cả tháng ${tomTat.congKeHoachCaThang} · chưa nhân hệ số lương`
+              : tomTat.congChuan == null
+                ? "kỳ chưa có công chuẩn — Kế toán chưa lập"
+                : "chưa nhân hệ số lương — Kế toán tính riêng"
           }
           lopNhanManh={lopNhanManh}
         />

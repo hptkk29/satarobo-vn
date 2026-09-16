@@ -68,6 +68,7 @@ on:
           - nhap-danh-muc-nen
           - backfill-dong-buoi-thoa
           - tinh-lai-mot-ngay
+          - xoa-ngay-chua-toi
       # Hai ô dưới CHỈ dùng cho `tinh-lai-mot-ngay`. Để trống cho mọi việc khác.
       user_id:
         description: "(chỉ cho tinh-lai-mot-ngay) userId"
@@ -186,3 +187,21 @@ jobs:
             exit 1
           fi
           pnpm exec tsx scripts/tinh-lai-mot-ngay.ts --user="$U" --ngay="$NGAY" --apply
+
+      # ⚠️ BẤM CHẠY THỬ TRƯỚC: workflow ĐO → `viec = xoa-ngay-chua-toi-chay-thu`. Nó in BẢNG
+      #    PHẠM VI (tổng · bỏ qua vì LOCKED · bỏ qua vì có ghi đè tay · sẽ xoá · rải theo ngày)
+      #    bằng user CHỈ-ĐỌC. Đọc xong bảng đó rồi mới bấm nút này.
+      #
+      # Xoá dòng `StaffAttendanceDay` của NGÀY CHƯA DIỄN RA — chốt của chủ dự án 16/09/2026
+      # ("xoá hẳn"). Đo prod hôm ấy: 250 dòng · 196 cờ oan · 185 công cho những ngày chưa xảy ra.
+      #
+      # Ba vế script KHÔNG BAO GIỜ động tới, kiểm trong chính file: ngày đã diễn ra · kỳ đã
+      # chốt (LOCKED) · dòng Quản lý đã ghi đè tay. Và nó xoá theo DANH SÁCH id vừa liệt kê,
+      # không xoá lại bằng điều kiện ngày — nếu giữa chừng có người bấm "Tính lại" sinh thêm
+      # dòng thì những dòng ấy KHÔNG nằm trong bảng phạm vi người vận hành vừa đồng ý.
+      - name: "Xoá ngày công của NGÀY CHƯA DIỄN RA (prod) — GHI THẬT"
+        if: inputs.viec == 'xoa-ngay-chua-toi'
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+        run: pnpm exec tsx scripts/xoa-ngay-chua-toi.ts --apply
