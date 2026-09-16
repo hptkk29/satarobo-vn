@@ -170,25 +170,20 @@ export function isPaymentLedgerV2Enabled(): boolean {
 }
 
 /**
- * BƯỚC B — sinh phiếu thu THEO TỪNG CON (`PaymentRequest.orderItemId`) thay vì một phiếu
- * cho cả đơn mỗi đợt. Chủ dự án chốt 16/09: *"công nợ theo CON, QR theo ĐƠN"*, và chốt
- * luôn rằng phần này phải nằm **sau một công tắc**.
+ * ⛔ CÔNG TẮC thu học phí linh hoạt KHÔNG ở đây — nó ở DB.
  *
- * ⚠️ Cờ này đổi HÌNH DẠNG SỐ PHIẾU của một đơn, nên nó không phải cờ hiển thị:
- *   · OFF (mặc định) — mỗi đợt MỘT phiếu cho cả đơn, `orderItemId = NULL`. Đúng hành vi
- *     đang chạy trên prod, không đổi một ly.
- *   · ON  — mỗi (dòng × đợt) MỘT phiếu, `sortOrder` mang thứ tự dòng trước đợt sau
- *     (`lib/payments/thu-tu-rot.ts`), và QR phát ở cấp PHIẾU GỘP chứ không ở cấp đợt.
+ * Sáng 16/09/2026 tôi khai `PAYMENT_PER_CHILD_ENABLED` ở file này. Chiều cùng ngày chủ dự án
+ * chốt: *"nên để bật cho toàn hệ thống đồng loạt, nhưng sẽ có công tắc riêng cho từng cs"* — và
+ * `SystemSetting` + `CenterSetting` làm đúng được việc đó, còn env thì không (env không có
+ * chiều cơ sở, và bật nó phải qua dev + redeploy).
  *
- * ⚠️ BẬT RỒI TẮT LẠI KHÔNG LÀ VÔ HẠI, và đây là điều phải biết TRƯỚC khi bật ở đâu:
- * phiếu đã sinh theo con VẪN NẰM ĐÓ khi cờ tắt. Đường lùi an toàn là tắt cờ cho đơn MỚI
- * rồi xử lý tay số đơn đã lỡ sinh, chứ không phải "tắt là như chưa có gì".
+ * Nên cờ env đã GỠ, và chỗ duy nhất đọc công tắc là `laThuTienLinhHoatBat()` ở
+ * `lib/finance/feature.ts` (khoá `billing.flexV1Enabled`). Có lưới `[FEAT-03]` đếm số chỗ đọc
+ * khoá đó ngoài file ấy = 0.
  *
- * Mặc định OFF ở MỌI môi trường cho tới khi đường ghi + màn sửa kế hoạch theo con xong.
+ * ⚠️ ĐỪNG khai lại cờ ở đây "cho nhanh". Hai công tắc là hai nơi quyết định nghĩa của "bật", và
+ * tắt một cái sẽ tắt được 9 chỗ trong 10 — đúng hình dạng sự cố `PAYMENT_LEDGER_V2`.
  */
-export function isThuTheoConEnabled(): boolean {
-  return process.env.PAYMENT_PER_CHILD_ENABLED === "true"; // mặc định OFF
-}
 
 /**
  * 20/08/2026 — TẮT tính năng NHÓM LỚP theo yêu cầu chủ dự án ("ẩn nhóm lớp,

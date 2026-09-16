@@ -715,6 +715,15 @@ const N: Readonly<Record<SettingKey, NhanVanHanh>> = {
       "chừng.",
     donVi: "giây",
   },
+  "billing.flexV1Enabled": {
+    tab: "tien",
+    ten: "Thu học phí linh hoạt (công nợ theo từng con)",
+    giaiThich:
+      "Bật thì mỗi con trên một đơn có công nợ riêng, và cả nhà quét MỘT mã QR in sẵn số tiền. " +
+      "Phụ huynh chuyển ĐÚNG số thì hệ thống tự chia cho từng con; chuyển thừa hoặc thiếu thì " +
+      "tiền không được ghi nhận và kế toán hoàn lại. Có thể bật riêng cho từng cơ sở.",
+    canThan: true,
+  },
   "orgScope.cutoverEnabled": {
     tab: "nang-cao",
     ten: "Chuyển cách phân chia dữ liệu sang sơ đồ tổ chức mới",

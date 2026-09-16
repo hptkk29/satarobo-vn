@@ -65,10 +65,6 @@ export type GiaoDichVao = {
   soTien: number;
   /** Σ `PaymentAllocation.amount` sinh từ giao dịch này. */
   daRot: number;
-  /** Σ tiền của giao dịch này nằm ở ví (`CreditBalance`). */
-  vaoVi: number;
-  /** Phần được THA theo dung sai làm tròn — là tiền KHÔNG về, nên B2 phải trừ ra. */
-  thaLamTron?: number;
 };
 
 /** Một nghiệp vụ chuyển nội bộ: các dòng ± phải triệt tiêu (B3) và không đi chéo (B8). */
@@ -91,7 +87,8 @@ export type NghiepVuChuyen = {
 
 export type PhieuGop = {
   billId: string;
-  trangThai: "OPEN" | "CLOSED" | "VOID";
+  /** `CLOSED` không dùng ở luồng mới — xem chú thích enum `PaymentBillStatus` ở `schema.prisma`. */
+  trangThai: "OPEN" | "PAID" | "VOID" | "CLOSED";
   /** `PaymentRequest.id` của các dòng phiếu. */
   dongPhieu: string[];
 };
@@ -148,20 +145,33 @@ export function kiemBatBien(anh: AnhChupGiaDinh): ViPham[] {
     }
   }
 
-  // ── B2 · Mỗi giao dịch vào: Σ rót vào dòng + Σ vào ví = số tiền giao dịch ───
-  // Đây là bất biến "không đồng nào bốc hơi giữa ngân hàng và sổ". Phần THA theo dung sai làm
-  // tròn phải trừ ra: nó là tiền hệ thống bỏ qua, không phải tiền nhận được.
+  // ── B2 · Σ phân bổ của một giao dịch ∈ {0, số tiền giao dịch} ──────────────
+  //
+  // ⚠️ BẤT BIẾN NÀY ĐÃ ĐỔI 16/09/2026 (chiều), và bản mới MẠNH HƠN bản BA mô tả.
+  //
+  // BA viết: `Σ dòng PAYMENT + Σ dòng vào ví = số tiền giao dịch` — tức cho phép chia một phần
+  // vào các con và phần dư vào ví. Chủ dự án chốt lại: *"Σ PaymentAllocation của một
+  // BankTransaction ∈ {0, số tiền giao dịch} — hoặc chia hết theo phiếu, hoặc không chia gì."*
+  //
+  // Bản mới mạnh hơn ở chỗ nó loại bỏ TRẠNG THÁI TRUNG GIAN. Với luật cũ, một giao dịch có thể
+  // sống mãi ở tình trạng "đã chia 8 triệu, còn 2 triệu ở ví" — và mỗi tình trạng trung gian là
+  // một thứ phải có màn để xử lý, có quyền để gác, có báo cáo để theo dõi. Với luật mới chỉ có
+  // hai tình trạng: đã chia đúng, hoặc chưa chia gì và đang chờ kế toán hoàn.
+  //
+  // Hệ quả cho người đọc mã: **không có `vaoVi` trong ảnh chụp giao dịch nữa.** Tiền của một
+  // giao dịch không bao giờ vào ví. Ví chỉ nhận tiền từ nghiệp vụ NỘI BỘ (em nghỉ học, dư
+  // chuyển sang) — và tiền đó đã được đếm ở `daThu` của dòng nguồn trước khi chuyển.
   for (const g of anh.giaoDich) {
     const soTien = tron(g.soTien);
-    const chia = tron(g.daRot) + tron(g.vaoVi) - tron(g.thaLamTron ?? 0);
-    if (chia !== soTien) {
+    const daRot = tron(g.daRot);
+    if (daRot !== 0 && daRot !== soTien) {
       v.push({
         ma: "B2",
         tai: g.bankTransactionId,
-        lech: chia - soTien,
+        lech: daRot - soTien,
         moTa:
-          `Giao dịch ${g.bankTransactionId}: về ${vnd(soTien)}đ nhưng sổ ghi ${vnd(chia)}đ ` +
-          `(rót ${vnd(g.daRot)}đ + ví ${vnd(g.vaoVi)}đ − tha ${vnd(g.thaLamTron ?? 0)}đ)`,
+          `Giao dịch ${g.bankTransactionId}: về ${vnd(soTien)}đ nhưng đã phân bổ ` +
+          `${vnd(daRot)}đ — phải là 0đ (chưa xử lý) hoặc đủ ${vnd(soTien)}đ`,
       });
     }
   }
@@ -202,10 +212,15 @@ export function kiemBatBien(anh: AnhChupGiaDinh): ViPham[] {
   // Bất biến TỔNG. Bốn bất biến trên bắt lỗi ở từng chỗ; B5 bắt lỗi ở chỗ không ai nhìn — tiền
   // nằm đúng chỗ của nó nhưng TỔNG không khớp, tức có dòng thừa hoặc thiếu ở đâu đó.
   //
-  // ⚠️ Vế trái là tiền ĐÃ GÁN (`daRot + vaoVi`), KHÔNG phải tổng tiền về. Giao dịch chưa gán
-  // vào đâu vẫn đang nằm ở `BankTransaction` chờ người xử lý; tính nó vào đây là bắt B5 đỏ suốt
-  // mỗi khi có một khoản chờ, và một cảnh báo đỏ thường trực là một cảnh báo bị bỏ qua.
-  const daGan = anh.giaoDich.reduce((s, g) => s + tron(g.daRot) + tron(g.vaoVi), 0);
+  // ⚠️ Vế trái là tiền ĐÃ PHÂN BỔ, KHÔNG phải tổng tiền về. Giao dịch lệch số vẫn nằm nguyên ở
+  // `BankTransaction` chờ kế toán hoàn; tính nó vào đây là bắt B5 đỏ suốt mỗi khi có một khoản
+  // chờ, và một cảnh báo đỏ thường trực là một cảnh báo bị bỏ qua.
+  //
+  // ⚠️ Và đó cũng là một TÍNH CHẤT ĐẸP của luật mới, đáng nói ra: **tiền chưa phân bổ không bao
+  // giờ vào sổ của gia đình**, nên nó không thể làm lệch sổ. Hoàn một khoản chưa phân bổ chỉ là
+  // đánh dấu `BankTransaction` đã xử lý + lưu chứng từ — không sinh bút toán nào, không đụng
+  // `hoan` dưới đây. `hoan` chỉ đếm tiền ĐÃ từng vào một dòng rồi mới hoàn ra.
+  const daGan = anh.giaoDich.reduce((s, g) => s + tron(g.daRot), 0);
   const tongDaThu = anh.dong.reduce((s, d) => s + tron(d.daThu), 0);
   const tongVi = [...viTheoPhapNhan.values()].reduce((s, x) => s + x, 0);
   const vePhai = tongDaThu + tongVi + tron(anh.hoan);

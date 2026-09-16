@@ -294,6 +294,27 @@ export const SETTINGS = {
     default: 10,
     centerOverridable: false,
   }),
+  // ── CÔNG TẮC thu học phí linh hoạt (module đơn nhiều con) ───────────────────────────
+  //
+  // Chủ dự án chốt 16/09/2026: *"nên để bật cho toàn hệ thống đồng loạt, nhưng sẽ có công tắc
+  // riêng cho từng cs."* Đó đúng là hình dạng `SystemSetting` + `CenterSetting` đang có: giá
+  // trị GLOBAL là công tắc chính, `centerOverridable` cho phép một cơ sở lệch.
+  //
+  // ⚠️ Vì sao KHÔNG dùng biến môi trường (dù đã có `PAYMENT_PER_CHILD_ENABLED`): cờ env
+  // `PAYMENT_LEDGER_V2` là tiền lệ đã đo — nó có trong mã, **không có trong 40 biến env của
+  // prod**, và 0 đường gọi thật. Bật nó không đổi hành vi gì. Cờ trong DB thì người vận hành
+  // bật được, thấy được, và có `AuditLog` ghi ai bật lúc nào.
+  //
+  // ⚠️ BẬT RỒI TẮT LẠI KHÔNG VÔ HẠI: phiếu thu đã sinh theo con vẫn nằm đó khi cờ tắt. Đường
+  // lùi là tắt cho đơn MỚI rồi xử lý tay số đơn đã lỡ sinh, không phải "tắt là như chưa có gì".
+  "billing.flexV1Enabled": def({
+    key: "billing.flexV1Enabled",
+    group: "finance",
+    label: "Thu học phí linh hoạt: công nợ theo từng con, phiếu gộp một QR cho cả nhà",
+    schema: z.boolean(),
+    default: false,
+    centerOverridable: true,
+  }),
   "enrollment.suspendMaxMonths": def({
     key: "enrollment.suspendMaxMonths",
     group: "enrollment",

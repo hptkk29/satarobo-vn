@@ -74,19 +74,21 @@ describe("[BB-02] B2 — mỗi giao dịch vào chia hết, không đồng nào 
     expect(codes).not.toContain("B5");
   });
 
-  it("phần THA làm tròn được trừ ra, không bị tính là bốc hơi", () => {
-    // Khách chuyển thiếu 500đ, hệ thống tha. Tiền về 10.319.500, sổ ghi đủ 10.320.000.
+  it("phân bổ MỘT PHẦN ⇒ B2, kể cả khi thiếu đúng 1đ", () => {
+    // Đây là điểm luật mới MẠNH HƠN bản BA: không có trạng thái "đã chia 8 triệu, còn 2 triệu ở
+    // ví". Mỗi tình trạng trung gian là một thứ phải có màn để xử lý, quyền để gác, báo cáo để
+    // theo dõi — luật mới xoá cả nhóm đó bằng cách không cho nó tồn tại.
     const a = anhChupGoc();
-    a.giaoDich[0]!.soTien = SO_CHOT_DON.kyThu01 - 500;
-    a.giaoDich[0]!.thaLamTron = 500;
-    expect(ma(a)).not.toContain("B2");
+    a.giaoDich[0]!.daRot = SO_CHOT_DON.kyThu01 - 1;
+    a.dong[0]!.daThu -= 1;
+    const vp = kiemBatBien(a).find((x) => x.ma === "B2");
+    expect(vp?.lech).toBe(-1);
   });
 
-  it("quên khai phần tha ⇒ B2 bắt đúng 500đ", () => {
+  it("phân bổ 0đ là HỢP LỆ — tiền lệch số nằm nguyên chờ kế toán hoàn", () => {
     const a = anhChupGoc();
-    a.giaoDich[0]!.soTien = SO_CHOT_DON.kyThu01 - 500;
-    const vp = kiemBatBien(a).find((x) => x.ma === "B2");
-    expect(vp?.lech).toBe(500);
+    a.giaoDich.push({ bankTransactionId: "txn-lech", soTien: 3_000_000, daRot: 0 });
+    expect(ma(a)).not.toContain("B2");
   });
 });
 
@@ -132,22 +134,33 @@ describe("[BB-05] B5 — cân gia đình", () => {
     expect(vp?.lech).toBe(320_000);
   });
 
-  it("tiền vào ví vẫn cân — ví là một VẾ của B5, không phải ngoại lệ", () => {
+  it("ví là một VẾ của B5 — tiền nằm ở ví vẫn phải cân", () => {
+    // Ví nay CHỈ nhận tiền từ nghiệp vụ nội bộ (em nghỉ học, dư chuyển sang), không nhận trực
+    // tiếp từ giao dịch ngân hàng nữa. Nên ca này dựng đúng đường đó: rút 500.000 khỏi dòng của
+    // Bình đưa vào ví, tổng vẫn phải khớp.
     const a = anhChupGoc();
-    a.giaoDich.push({ bankTransactionId: "txn-thua", soTien: 500_000, daRot: 0, vaoVi: 500_000 });
+    a.dong[1]!.daThu -= 500_000;
     a.vi.push({ phapNhanId: PHAP_NHAN, amount: 500_000 });
-    expect(ma(a)).not.toContain("B5");
+    a.nghiepVuChuyen.push({
+      nghiepVuId: "op-du-vao-vi",
+      dong: [
+        { tai: OI.binh, giaDinhId: GD_MAU, phapNhanId: PHAP_NHAN, amount: -500_000, nguonDaXacNhan: 6_000_000 },
+        { tai: "VI", giaDinhId: GD_MAU, phapNhanId: PHAP_NHAN, amount: 500_000 },
+      ],
+    });
+    expect(kiemBatBien(a)).toEqual([]);
   });
 
-  it("giao dịch CHƯA GÁN không làm B5 đỏ", () => {
-    // Nếu B5 tính cả tiền chưa gán thì mỗi khoản đang chờ người xử lý sẽ làm kiểm cân đêm đỏ —
-    // và một cảnh báo đỏ thường trực là một cảnh báo bị bỏ qua.
+  it("giao dịch LỆCH SỐ (chưa phân bổ) KHÔNG làm B5 đỏ", () => {
+    // Tính cả tiền chưa phân bổ thì mỗi khoản đang chờ kế toán hoàn sẽ làm kiểm cân đêm đỏ — và
+    // một cảnh báo đỏ thường trực là một cảnh báo bị bỏ qua.
+    //
+    // Đây cũng là một TÍNH CHẤT ĐẸP của luật mới, đáng ghim: tiền chưa phân bổ KHÔNG BAO GIỜ vào
+    // sổ gia đình, nên nó không thể làm lệch sổ. Hoàn nó chỉ là đánh dấu giao dịch đã xử lý +
+    // lưu chứng từ, không sinh bút toán nào.
     const a = anhChupGoc();
-    a.giaoDich.push({ bankTransactionId: "txn-chua-gan", soTien: 3_000_000, daRot: 0, vaoVi: 0 });
-    const codes = ma(a);
-    expect(codes).not.toContain("B5");
-    // Nhưng B2 PHẢI đỏ — 3.000.000 về mà không đi đâu cả là một sự thật phải thấy được.
-    expect(codes).toContain("B2");
+    a.giaoDich.push({ bankTransactionId: "txn-lech-so", soTien: 3_000_000, daRot: 0 });
+    expect(kiemBatBien(a)).toEqual([]);
   });
 });
 
@@ -187,11 +200,11 @@ describe("[BB-07] B7 — mỗi đợt tối đa MỘT phiếu gộp đang mở",
     expect(vp?.tai).toBe(PR.anD2);
   });
 
-  it("phiếu ĐÃ HUỶ / ĐÃ ĐÓNG không tính — nếu không thì không bao giờ phát lại được phiếu", () => {
+  it("phiếu ĐÃ HUỶ / ĐÃ THU ĐỦ không tính — nếu không thì không bao giờ phát lại được phiếu", () => {
     const a = anhChupGoc();
     a.phieuGop = [
       { billId: "KT-cu", trangThai: "VOID", dongPhieu: [PR.anD2] },
-      { billId: "KT-dong", trangThai: "CLOSED", dongPhieu: [PR.anD2] },
+      { billId: "KT-da-thu", trangThai: "PAID", dongPhieu: [PR.anD2] },
       { billId: "KT-moi", trangThai: "OPEN", dongPhieu: [PR.anD2] },
     ];
     expect(ma(a)).not.toContain("B7");

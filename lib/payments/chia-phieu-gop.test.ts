@@ -1,17 +1,23 @@
-// Ca [CPG-*] — chia một lần tiền về cho các con THEO PHIẾU GỘP.
+// Ca [CPG-*] — quyết định có chia tiền về hay không.
 //
-// Đây là bộ giải ca nghiệp vụ gốc của chủ dự án 16/09: *"đợt 1 đóng học phí cho cả 2 (hoặc
-// cọc học phí) nhưng sang đợt 2 lại chỉ muốn đóng cho 1 bạn"*. Ca `[KHC-04]` đã ghim rằng
-// thứ tự rót TOÀN CỤC không giải được ca đó; bộ này là lời giải.
+// LUẬT: ĐƯỢC ĂN CẢ HOẶC KHÔNG ĂN GÌ (chủ dự án chốt 16/09/2026 chiều). Danh sách ca dưới đây là
+// đúng danh sách chủ dự án ra: *"đúng số → chia; thừa 1đ → không chia + CAN_XU_LY; thiếu 1đ →
+// không chia + CAN_XU_LY; quét lại phiếu PAID → CAN_XU_LY; bắn trùng bankTxnId → không làm gì."*
 //
-// Số dùng ở đây là số thật của đơn `ORD-260915-000007` (bé A 8.976.000đ · bé B 9.492.000đ
-// · cọc 2.000.000đ chia đôi 1.000.000 mỗi bé).
+// Số dùng ở đây là số thật của đơn `ORD-260915-000007` (bé A 8.976.000đ · bé B 9.492.000đ ·
+// cọc 2.000.000đ chia đôi 1.000.000 mỗi bé).
 import { describe, it, expect } from "vitest";
-import { chiaTheoPhieuGop, tienPhieuGop, type DongPhieuGop } from "./chia-phieu-gop";
+import {
+  chiaTheoPhieuGop,
+  conPhaiThuCuaPhieu,
+  type DongPhieuGop,
+  type PhieuGopDeChia,
+} from "./chia-phieu-gop";
 import { thuTuRot } from "./thu-tu-rot";
 
-/** Phiếu gộp "đợt 1 của cả nhà": đúng hai dòng, mỗi bé một. */
-function phieuCocCaNha(): DongPhieuGop[] {
+const COC = 2_000_000;
+
+function dongCocCaNha(): DongPhieuGop[] {
   return [
     {
       paymentRequestId: "pr-a-d1",
@@ -30,116 +36,148 @@ function phieuCocCaNha(): DongPhieuGop[] {
   ];
 }
 
-describe("[CPG-01] CA GỐC: cọc của cả nhà rót đúng hai bé", () => {
-  it("2.000.000đ ⇒ mỗi bé 1.000.000đ, không dư", () => {
-    // So với `[KHC-04]`: cùng số tiền, cùng đơn, nhưng đi QUA phiếu gộp thì bé B không còn
-    // bị bỏ lại. Khác biệt không nằm ở thuật toán — nằm ở chỗ ý định được KHAI BÁO.
-    const r = chiaTheoPhieuGop(2_000_000, phieuCocCaNha());
-    expect(r.lines).toEqual([
+/** Phiếu gộp "đợt 1 của cả nhà": đúng hai dòng, mỗi bé một. */
+const phieuCocCaNha = (
+  trangThai: PhieuGopDeChia["trangThai"] = "OPEN",
+  dong = dongCocCaNha(),
+): PhieuGopDeChia => ({ billId: "KT-01", trangThai, dong });
+
+describe("[CPG-01] ĐÚNG SỐ ⇒ chia đích danh, phiếu thu đủ", () => {
+  it("2.000.000đ vào phiếu 2.000.000đ ⇒ mỗi bé 1.000.000đ", () => {
+    // Ca nghiệp vụ gốc: *"đợt 1 đóng học phí cho cả 2 (hoặc cọc học phí)"*. Thứ giải được ca
+    // này không phải một thuật toán khôn hơn, mà là việc Ý ĐỊNH ĐƯỢC KHAI BÁO trên phiếu gộp —
+    // xem ca `[KHC-04]` bên `ke-hoach-theo-con.test.ts` cho vế ngược lại (tiền đi tay không).
+    const r = chiaTheoPhieuGop(COC, phieuCocCaNha());
+    expect(r.chia).toBe(true);
+    expect(r.chia === true && r.lines).toEqual([
       { paymentRequestId: "pr-a-d1", amount: 1_000_000 },
       { paymentRequestId: "pr-b-d1", amount: 1_000_000 },
     ]);
-    expect(r.du).toBe(0);
+    expect(r.chia === true && r.tongRot).toBe(COC);
   });
 
-  it("số in lên QR = Σ dòng, tính ở đúng MỘT chỗ", () => {
-    expect(tienPhieuGop(phieuCocCaNha())).toBe(2_000_000);
+  it("số in lên QR = số CÒN phải thu, tính ở đúng một chỗ", () => {
+    expect(conPhaiThuCuaPhieu(dongCocCaNha())).toBe(COC);
   });
 
-  it("dòng RÁC không làm QR in một số còn sổ ghi số khác", () => {
-    // Ca này thêm sau một lượt cấy LỌT: không ca nào truyền số âm nên phép kẹp trong
-    // `tienPhieuGop` là mã chết trước mắt lưới. Bất biến thật là HAI HÀM PHẢI ĐỒNG Ý —
-    // số in lên QR phải đúng bằng số mà bộ chia rót được khi khách trả đủ.
-    const d: DongPhieuGop[] = [
-      { paymentRequestId: "pr-a", sortOrder: 0, amount: -500_000, amountDue: 1_000_000, daRot: 0 },
-      { paymentRequestId: "pr-b", sortOrder: 100, amount: Number.NaN, amountDue: 1_000_000, daRot: 0 },
-      { paymentRequestId: "pr-c", sortOrder: 200, amount: 1_000_000, amountDue: 1_000_000, daRot: 0 },
-    ];
-    const inRa = tienPhieuGop(d);
-    expect(inRa).toBe(1_000_000);
-    const r = chiaTheoPhieuGop(inRa, d);
-    expect(r.lines.reduce((s, l) => s + l.amount, 0)).toBe(inRa);
-    expect(r.du).toBe(0);
+  it("Σ dòng chia LUÔN bằng số tiền về — không đồng nào rơi ra ngoài", () => {
+    const r = chiaTheoPhieuGop(COC, phieuCocCaNha());
+    expect(r.chia === true && r.lines.reduce((s, l) => s + l.amount, 0)).toBe(COC);
   });
 });
 
-describe("[CPG-02] THIẾU thì lấp dần theo thứ tự dòng, KHÔNG chia tỷ lệ", () => {
-  it("1.500.000đ ⇒ bé A đủ 1.000.000, bé B được 500.000", () => {
-    // Chia tỷ lệ sẽ ra 750.000/750.000 — và khi đó KHÔNG bé nào đóng xong đợt 1, tức cả
-    // hai vẫn hiện "chưa đóng cọc". Lấp dần thì ít nhất một bé xong dứt điểm.
-    const r = chiaTheoPhieuGop(1_500_000, phieuCocCaNha());
-    expect(r.lines).toEqual([
-      { paymentRequestId: "pr-a-d1", amount: 1_000_000 },
-      { paymentRequestId: "pr-b-d1", amount: 500_000 },
-    ]);
-    expect(r.du).toBe(0);
+describe("[CPG-02] LỆCH SỐ ⇒ KHÔNG chia gì, dù chỉ 1đ", () => {
+  it("THỪA 1đ ⇒ không chia, mã LECH_SO", () => {
+    const r = chiaTheoPhieuGop(COC + 1, phieuCocCaNha());
+    expect(r.chia).toBe(false);
+    expect(r.chia === false && r.ma).toBe("LECH_SO");
+    expect(r.chia === false && r.conPhaiThu).toBe(COC);
+    expect(r.chia === false && r.moTa).toContain("thừa 1đ");
   });
 
-  it("thiếu tới mức chỉ đủ một phần dòng đầu ⇒ chỉ ghi MỘT dòng", () => {
-    const r = chiaTheoPhieuGop(300_000, phieuCocCaNha());
-    expect(r.lines).toEqual([{ paymentRequestId: "pr-a-d1", amount: 300_000 }]);
+  it("THIẾU 1đ ⇒ không chia, mã LECH_SO", () => {
+    // Đánh đổi có chủ đích, và nó khắc nghiệt: khách chuyển thiếu 1đ thì KHÔNG đợt nào được ghi
+    // nhận, kế toán hoàn cả khoản. Chủ dự án đã ra cách đo: sau 1 tháng chạy thật, nếu có ca
+    // lệch số thì báo lại. ĐỪNG tự nới trước khi có số đó.
+    const r = chiaTheoPhieuGop(COC - 1, phieuCocCaNha());
+    expect(r.chia === false && r.ma).toBe("LECH_SO");
+    expect(r.chia === false && r.moTa).toContain("thiếu 1đ");
   });
 
-  it("0đ (hoặc số rác) ⇒ không ghi dòng nào, không ném", () => {
-    for (const x of [0, -5_000, Number.NaN]) {
-      expect(chiaTheoPhieuGop(x, phieuCocCaNha()).lines, String(x)).toEqual([]);
+  it("KHÔNG có nhánh 'thiếu lấp dần' và KHÔNG có nhánh 'thừa vào ví'", () => {
+    // Hai nhánh này là thiết kế ban đầu (BA 4.3) và đã bị BỎ. Chúng là cái đuôi phải dọn: ví có
+    // tiền ⇒ màn chia ví ⇒ quyền ⇒ bất biến ⇒ báo cáo. Ca này ghim rằng chúng KHÔNG quay lại.
+    for (const so of [1, 500_000, 1_999_999, 2_000_001, 5_000_000]) {
+      const r = chiaTheoPhieuGop(so, phieuCocCaNha());
+      expect(r.chia, `${so}đ`).toBe(false);
+    }
+  });
+
+  it("0đ và số RÁC rơi vào nhánh an toàn (không chia), KHÔNG ném", () => {
+    // Hàm chạy trong đường xử webhook: một ngoại lệ ở đây làm cả lượt nhận tiền thất bại, và
+    // tiền đã vào tài khoản mà hệ thống không lưu được gì là ca tệ nhất trong mọi ca.
+    for (const so of [0, -5_000, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(chiaTheoPhieuGop(so, phieuCocCaNha()).chia, String(so)).toBe(false);
     }
   });
 });
 
-describe("[CPG-03] THỪA ra ví gia đình, KHÔNG tràn sang đợt sau", () => {
-  it("2.500.000đ ⇒ đủ hai bé, dư 500.000 vào ví", () => {
-    // Khác `planAllocation` ở đúng điểm này. Nhà chuyển dư khi đóng cọc KHÔNG có nghĩa là
-    // họ muốn đóng trước đợt 2 của bé A — mà phiếu gộp thì chỉ hứa đúng hai dòng cọc.
-    const r = chiaTheoPhieuGop(2_500_000, phieuCocCaNha());
-    expect(r.lines.reduce((s, l) => s + l.amount, 0)).toBe(2_000_000);
-    expect(r.du).toBe(500_000);
+describe("[CPG-03] PHIẾU KHÔNG CÒN MỞ ⇒ không chia, và lý do phải ĐÚNG", () => {
+  it("quét lại phiếu ĐÃ PAID ⇒ PHIEU_KHONG_MO, không phải LECH_SO", () => {
+    // Phụ huynh lưu ảnh QR rồi chuyển lần hai (pre-mortem T9). Phiếu PAID có "còn phải thu" = 0
+    // nên nếu kiểm SỐ trước TRẠNG THÁI thì lý do báo ra sẽ là "lệch số" — và kế toán sẽ đi tìm
+    // một khoản lệch không tồn tại thay vì thấy ngay "khách chuyển trùng".
+    const daRotDu = dongCocCaNha().map((d) => ({ ...d, daRot: d.amountDue }));
+    const r = chiaTheoPhieuGop(COC, phieuCocCaNha("PAID", daRotDu));
+    expect(r.chia === false && r.ma).toBe("PHIEU_KHONG_MO");
+    expect(r.chia === false && r.moTa).toContain("ĐÃ THU ĐỦ");
   });
 
-  it("KHÔNG rót quá phần đã hứa trên tờ QR, dù phiếu thu còn nợ nhiều hơn", () => {
-    // Dòng cọc của bé A chỉ hứa 1.000.000, trong khi phiếu thu đó có thể là phiếu "cả
-    // khoá" còn thiếu 8.976.000. Rót vượt là ghi một con số khách chưa từng đồng ý.
-    const d = phieuCocCaNha();
-    d[0]!.amountDue = 8_976_000;
-    const r = chiaTheoPhieuGop(5_000_000, d);
-    expect(r.lines[0]).toEqual({ paymentRequestId: "pr-a-d1", amount: 1_000_000 });
-    expect(r.du).toBe(3_000_000);
+  it("phiếu ĐÃ HUỶ ⇒ PHIEU_KHONG_MO, dù số tiền khớp", () => {
+    const r = chiaTheoPhieuGop(COC, phieuCocCaNha("VOID"));
+    expect(r.chia === false && r.ma).toBe("PHIEU_KHONG_MO");
+    expect(r.chia === false && r.moTa).toContain("ĐÃ HUỶ");
+  });
+
+  it("không tra ra phiếu nào ⇒ KHONG_KHOP_PHIEU, `conPhaiThu` là null", () => {
+    const r = chiaTheoPhieuGop(3_000_000, null);
+    expect(r.chia === false && r.ma).toBe("KHONG_KHOP_PHIEU");
+    expect(r.chia === false && r.conPhaiThu).toBeNull();
+  });
+
+  it("`CLOSED` KHÔNG được dùng ở luồng mới — nhưng vẫn phải không chia", () => {
+    // Trạng thái này sinh ra cho ý tưởng "đóng phiếu khi đã nhận một phần", và luật mới không
+    // có tình trạng đó nữa. Không đường ghi nào được đặt nó; nếu vì lý do gì nó xuất hiện thì
+    // hành vi an toàn là KHÔNG chia.
+    expect(chiaTheoPhieuGop(COC, phieuCocCaNha("CLOSED")).chia).toBe(false);
   });
 });
 
-describe("[CPG-04] dòng đã đóng đủ thì NHƯỜNG tiền cho dòng sau", () => {
-  it("bé A đã đóng lẻ trước ⇒ tiền chảy thẳng sang bé B", () => {
-    const d = phieuCocCaNha();
-    d[0]!.daRot = 1_000_000; // bé A xong rồi
-    const r = chiaTheoPhieuGop(1_000_000, d);
-    expect(r.lines).toEqual([{ paymentRequestId: "pr-b-d1", amount: 1_000_000 }]);
-    expect(r.du).toBe(0);
-  });
+describe("[CPG-04] `conPhaiThu` là CÒN, không phải TỔNG", () => {
+  it("dòng đã được lấp từ đường khác ⇒ QR in số nhỏ hơn, và tiền khớp số nhỏ đó", () => {
+    // Ca thật: bé B nghỉ, dư 1.000.000 bù sang đợt của bé A. Phiếu gộp phát sau đó phải in số
+    // đã trừ phần bù — nếu in số gốc thì khách chuyển đúng số gốc và hệ thống từ chối chia.
+    const dong = dongCocCaNha();
+    dong[0]!.daRot = 400_000;
+    expect(conPhaiThuCuaPhieu(dong)).toBe(1_600_000);
 
-  it("bé A mới đóng một PHẦN ⇒ chỉ lấp phần còn thiếu rồi mới sang bé B", () => {
-    const d = phieuCocCaNha();
-    d[0]!.daRot = 400_000;
-    const r = chiaTheoPhieuGop(1_200_000, d);
-    expect(r.lines).toEqual([
+    const r = chiaTheoPhieuGop(1_600_000, phieuCocCaNha("OPEN", dong));
+    expect(r.chia === true && r.lines).toEqual([
       { paymentRequestId: "pr-a-d1", amount: 600_000 },
-      { paymentRequestId: "pr-b-d1", amount: 600_000 },
+      { paymentRequestId: "pr-b-d1", amount: 1_000_000 },
     ]);
   });
 
-  it("MỌI dòng đã đủ ⇒ toàn bộ tiền vào ví, không ghi dòng 0đ", () => {
-    const d = phieuCocCaNha();
-    for (const x of d) x.daRot = x.amountDue;
-    const r = chiaTheoPhieuGop(2_000_000, d);
-    expect(r.lines).toEqual([]);
-    expect(r.du).toBe(2_000_000);
+  it("dòng đã đủ tiền ⇒ KHÔNG ghi dòng phân bổ 0đ", () => {
+    const dong = dongCocCaNha();
+    dong[0]!.daRot = dong[0]!.amountDue;
+    const r = chiaTheoPhieuGop(1_000_000, phieuCocCaNha("OPEN", dong));
+    expect(r.chia === true && r.lines).toEqual([
+      { paymentRequestId: "pr-b-d1", amount: 1_000_000 },
+    ]);
+  });
+
+  it("MỌI dòng đã đủ ⇒ `conPhaiThu` = 0, và tiền về bất kỳ đều KHÔNG chia", () => {
+    const dong = dongCocCaNha().map((d) => ({ ...d, daRot: d.amountDue }));
+    expect(conPhaiThuCuaPhieu(dong)).toBe(0);
+    expect(chiaTheoPhieuGop(COC, phieuCocCaNha("OPEN", dong)).chia).toBe(false);
+  });
+
+  it("KHÔNG rót quá phần đã hứa trên tờ QR, dù phiếu thu còn nợ nhiều hơn", () => {
+    // Dòng cọc của bé A chỉ hứa 1.000.000, trong khi phiếu thu đó có thể là phiếu "cả khoá" còn
+    // thiếu 8.976.000. Rót vượt là ghi một con số khách chưa từng đồng ý.
+    const dong = dongCocCaNha();
+    dong[0]!.amountDue = 8_976_000;
+    expect(conPhaiThuCuaPhieu(dong)).toBe(COC);
+    const r = chiaTheoPhieuGop(COC, phieuCocCaNha("OPEN", dong));
+    expect(r.chia === true && r.lines[0]).toEqual({ paymentRequestId: "pr-a-d1", amount: 1_000_000 });
   });
 });
 
-describe("[CPG-05] thứ tự rót là của PHIẾU, và phải TẤT ĐỊNH", () => {
-  it("dòng truyền vào lộn xộn vẫn rót theo `sortOrder` của phiếu", () => {
-    const d = phieuCocCaNha().reverse();
-    const r = chiaTheoPhieuGop(1_200_000, d);
-    expect(r.lines[0]!.paymentRequestId).toBe("pr-a-d1");
+describe("[CPG-05] thứ tự dòng là của PHIẾU, và phải TẤT ĐỊNH", () => {
+  it("dòng truyền vào lộn xộn vẫn rót theo `sortOrder`", () => {
+    const r = chiaTheoPhieuGop(COC, phieuCocCaNha("OPEN", dongCocCaNha().reverse()));
+    expect(r.chia === true && r.lines[0]!.paymentRequestId).toBe("pr-a-d1");
   });
 
   it("hai dòng TRÙNG `sortOrder` (dữ liệu hỏng) vẫn cho kết quả GIỐNG NHAU mọi lượt", () => {
@@ -149,23 +187,37 @@ describe("[CPG-05] thứ tự rót là của PHIẾU, và phải TẤT ĐỊNH",
       { paymentRequestId: "pr-z", sortOrder: 7, amount: 500_000, amountDue: 500_000, daRot: 0 },
       { paymentRequestId: "pr-a", sortOrder: 7, amount: 500_000, amountDue: 500_000, daRot: 0 },
     ];
-    const lan1 = chiaTheoPhieuGop(500_000, hong());
-    const lan2 = chiaTheoPhieuGop(500_000, hong().reverse());
-    expect(lan1.lines).toEqual(lan2.lines);
-    expect(lan1.lines[0]!.paymentRequestId).toBe("pr-a");
+    const l1 = chiaTheoPhieuGop(1_000_000, { billId: "b", trangThai: "OPEN", dong: hong() });
+    const l2 = chiaTheoPhieuGop(1_000_000, { billId: "b", trangThai: "OPEN", dong: hong().reverse() });
+    expect(l1.chia === true && l1.lines).toEqual(l2.chia === true && l2.lines);
+    expect(l1.chia === true && l1.lines[0]!.paymentRequestId).toBe("pr-a");
   });
 
   it("KHÔNG sửa mảng người gọi truyền vào", () => {
-    // Đường webhook dùng lại mảng này để ghi `PaymentAllocation`; sắp tại chỗ là đổi thứ
-    // tự dưới chân người gọi.
-    const d = phieuCocCaNha().reverse();
-    const truoc = d.map((x) => x.paymentRequestId);
-    chiaTheoPhieuGop(2_000_000, d);
-    expect(d.map((x) => x.paymentRequestId)).toEqual(truoc);
+    // Đường webhook dùng lại mảng này để ghi `PaymentAllocation`; sắp tại chỗ là đổi thứ tự
+    // dưới chân người gọi.
+    const dong = dongCocCaNha().reverse();
+    const truoc = dong.map((x) => x.paymentRequestId);
+    chiaTheoPhieuGop(COC, phieuCocCaNha("OPEN", dong));
+    expect(dong.map((x) => x.paymentRequestId)).toEqual(truoc);
   });
 });
 
-describe("[CPG-06] phiếu ba con — không có gì đặc biệt, và đó là điểm mạnh", () => {
+describe("[CPG-06] chống TRÙNG giao dịch KHÔNG nằm ở hàm này", () => {
+  it("hàm thuần không biết `bankTxnId` — và đó là chủ ý", () => {
+    // *"bắn trùng bankTxnId → không làm gì"* là một câu TRA DB (`@@unique([provider,
+    // providerTxnId])` trên `BankTransaction`), không phải một phép tính. Nhét nó vào đây là
+    // buộc hàm thuần nhận một tham số nó không kiểm được, tức mời người gọi truyền bừa.
+    //
+    // Ca này ghim ranh giới: gọi hàm HAI LẦN với cùng đầu vào cho cùng kết quả (thuần), và việc
+    // "lần thứ hai thì bỏ qua" là trách nhiệm của tầng gọi.
+    const a = chiaTheoPhieuGop(COC, phieuCocCaNha());
+    const b = chiaTheoPhieuGop(COC, phieuCocCaNha());
+    expect(a).toEqual(b);
+  });
+});
+
+describe("[CPG-07] ba con — không có gì đặc biệt, và đó là điểm mạnh", () => {
   const baCon = (): DongPhieuGop[] =>
     [0, 1, 2].map((i) => ({
       paymentRequestId: `pr-${i}`,
@@ -175,13 +227,14 @@ describe("[CPG-06] phiếu ba con — không có gì đặc biệt, và đó là
       daRot: 0,
     }));
 
-  it("đủ tiền ⇒ ba dòng đủ", () => {
-    const r = chiaTheoPhieuGop(4_500_000, baCon());
-    expect(r.lines.map((l) => l.amount)).toEqual([1_500_000, 1_500_000, 1_500_000]);
+  it("đúng 4.500.000 ⇒ ba dòng đủ", () => {
+    const r = chiaTheoPhieuGop(4_500_000, { billId: "b3", trangThai: "OPEN", dong: baCon() });
+    expect(r.chia === true && r.lines.map((l) => l.amount)).toEqual([1_500_000, 1_500_000, 1_500_000]);
   });
 
-  it("thiếu ⇒ hai bé đầu đủ, bé ba dở dang — không ai bị rải mỏng", () => {
-    const r = chiaTheoPhieuGop(3_200_000, baCon());
-    expect(r.lines.map((l) => l.amount)).toEqual([1_500_000, 1_500_000, 200_000]);
+  it("thiếu ⇒ KHÔNG bé nào được ghi nhận (không còn 'lấp dần')", () => {
+    const r = chiaTheoPhieuGop(3_200_000, { billId: "b3", trangThai: "OPEN", dong: baCon() });
+    expect(r.chia).toBe(false);
+    expect(r.chia === false && r.conPhaiThu).toBe(4_500_000);
   });
 });

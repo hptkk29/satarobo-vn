@@ -6368,8 +6368,18 @@ model PaymentBillLine {
 enum PaymentBillStatus {
   /// Đang chờ tiền. Mỗi đơn tối đa MỘT phiếu ở trạng thái này (DB gác).
   OPEN
-  /// Đã thu đủ, hoặc đã chốt sổ lần thu này.
+
+  /// ⛔ KHÔNG dùng ở luồng mới [chốt 16/09/2026 chiều].
+  ///
+  /// Sinh ra cho ý tưởng "đóng phiếu khi đã nhận một phần" (`CLOSED_PARTIAL` của bản thiết
+  /// kế). Luật mới là ĐƯỢC ĂN CẢ HOẶC KHÔNG ĂN GÌ — một phiếu gộp không bao giờ được lấp một
+  /// phần, nên trạng thái này không còn nghĩa. Giữ giá trị để không phá enum (Postgres không
+  /// bỏ được giá trị enum), nhưng KHÔNG đường ghi nào được đặt nó.
   CLOSED
+
+  /// Đã thu ĐỦ, tiền đã chia đích danh theo dòng.
+  PAID
+
   /// Huỷ — phát lại phiếu khác. Mã QR của phiếu VOID không được đối khớp nữa.
   VOID
 }

@@ -1,41 +1,44 @@
-// lib/payments/chia-phieu-gop.ts — CHIA MỘT LẦN TIỀN VỀ CHO CÁC CON, THEO PHIẾU GỘP. Thuần.
+// lib/payments/chia-phieu-gop.ts — QUYẾT ĐỊNH CÓ CHIA TIỀN VỀ HAY KHÔNG. Thuần.
 //
 // ─────────────────────────────────────────────────────────────────────────────
-// VÌ SAO PHẢI CÓ BỘ CHIA THỨ HAI, TRONG KHI `planAllocation` ĐÃ TỐT
+// LUẬT: ĐƯỢC ĂN CẢ HOẶC KHÔNG ĂN GÌ — chủ dự án chốt 16/09/2026 (chiều)
 //
-// `planAllocation` (allocation.ts) rót theo `sortOrder` TOÀN CỤC của đơn: hết các đợt của
-// con thứ nhất rồi mới sang con thứ hai. Với tiền đi TAY KHÔNG thì đó là thứ tự duy nhất
-// giải thích được, và nó vẫn là đường đúng.
-//
-// Nhưng nó KHÔNG giải được ca nghiệp vụ gốc của chủ dự án (đo bằng ca `[KHC-04]`):
-//
-//     *"đợt 1 đóng học phí cho cả 2 (hoặc cọc học phí) nhưng sang đợt 2 lại chỉ muốn đóng
-//     cho 1 bạn"*
-//
-// Nhà chuyển đúng 2.000.000đ tiền cọc của CẢ HAI bé. Theo thứ tự toàn cục, số đó lấp trọn
-// đợt 1 của bé A (1.000.000) rồi TRÀN sang đợt 2 của chính bé A — bé B vẫn trắng, và hệ
-// thống đi đòi tiền cọc của một đứa trẻ mà bố mẹ vừa đóng.
-//
-// Không sửa được bằng cách đổi thứ tự toàn cục, vì tiền đi tay không thì hệ thống KHÔNG
-// BIẾT nhà muốn gì: 2.000.000 có thể là "cọc cho hai bé", cũng có thể là "đóng trước cho
-// bé A". Thứ tự nào cũng đoán sai một nửa số ca.
-//
-// ⇒ Thứ còn thiếu không phải một thuật toán khôn hơn, mà là **Ý ĐỊNH ĐƯỢC KHAI BÁO**. Đó
-// là phiếu gộp: sale phát MỘT mã QR kèm danh sách dòng ("đợt 1 của cả nhà = bé A 1tr +
-// bé B 1tr"), và tiền về khớp phiếu đó thì chia đúng theo danh sách ấy. Chủ dự án:
-// *"webhook khớp phiếu → chia đích danh theo thứ tự dòng; thiếu lấp dần, thừa vào ví gia
-// đình. Không chia theo tỷ lệ."*
+// *"QR luôn in sẵn số tiền của phiếu gộp. Không xây màn/nút nào cho sale xử lý tiền thừa/thiếu,
+// không có luồng 'gắn phần dư vào đợt kế tiếp'. Webhook chỉ tự phân bổ khi: khớp phiếu OPEN VÀ
+// số tiền = số còn phải thu của phiếu. Khi đó chia đích danh theo dòng, phiếu → PAID. Mọi
+// trường hợp khác: KHÔNG phân bổ, KHÔNG từ chối webhook (vẫn 200). Toàn bộ tiền để chưa phân bổ
+// trên BankTransaction, gắn orderId nếu khớp được phiếu, đánh dấu CAN_XU_LY + thông báo nội bộ
+// cho kế toán. Kế toán xử lý duy nhất bằng hoàn tiền (có chứng từ). Không có đường phân bổ tay
+// số lệch trong V1."*
 //
 // ─────────────────────────────────────────────────────────────────────────────
-// KHÁC BIỆT VỚI `planAllocation` — BA ĐIỂM, ĐỪNG HỢP NHẤT HAI HÀM
+// ĐÂY LÀ BẢN VIẾT LẠI, VÀ BẢN CŨ SAI THEO MỘT CÁCH ĐÁNG GHI LẠI
 //
-//  1. Phạm vi: chỉ các dòng CỦA PHIẾU, không phải mọi phiếu chưa đóng của đơn.
-//  2. Trần mỗi dòng: `min(phần của dòng trong phiếu, phần phiếu thu còn thiếu)` — không
-//     rót quá phần đã hứa với khách trên tờ QR.
-//  3. Thừa: ra VÍ GIA ĐÌNH, KHÔNG tràn sang đợt sau. Nhà chuyển dư 500.000 khi đóng cọc
-//     không có nghĩa là họ muốn đóng trước đợt 2 của bé A.
+// Bản đầu (sáng 16/09) làm đúng theo BA: thiếu thì LẤP DẦN theo thứ tự dòng, thừa thì đưa phần
+// dư vào VÍ GIA ĐÌNH. Nghe hợp lý, và nó là thứ mọi hệ thống thanh toán đều làm.
 //
-// Hợp nhất hai hàm là đánh mất đúng ba điểm đó.
+// Nhưng nó đẻ ra một cái đuôi mà BA phải xây tiếp: ví có tiền ⇒ phải có màn chia ví (US-12) ⇒
+// phải có quyền `billing:split-wallet` ⇒ phải có bất biến "chia ≤ còn nợ, Σ ≤ số dư" ⇒ phải có
+// ca "gán nhầm gia đình thì đảo thế nào" ⇒ phải có báo cáo ai chia ví bao nhiêu (US-26). Năm
+// story và bốn bất biến, tất cả chỉ để dọn hậu quả của việc CHẤP NHẬN một khoản tiền lệch số.
+//
+// Luật mới cắt cả cái đuôi đó: **không chấp nhận thì không phải dọn.** Phiếu in sẵn số, khách
+// chuyển đúng số thì xong; chuyển sai thì tiền nằm nguyên ở `BankTransaction`, kế toán hoàn lại
+// có chứng từ. Không màn nào cho sale, không ví trung gian, không phân bổ tay.
+//
+// ⚠️ Đánh đổi phải nói thẳng: khách chuyển THIẾU 1.000đ thì **không đợt nào được ghi nhận**, và
+// kế toán phải hoàn cả khoản. Nghe khắc nghiệt, nhưng đó là đánh đổi có chủ đích — và chủ dự án
+// đã ra luôn cách đo nó: *"đo sau 1 tháng chạy thật, số ca CAN_XU_LY theo loại. Nếu > 0 ca lệch
+// số mỗi tháng thì báo lại, lúc đó mới xét mở thêm."* Đừng tự nới trước khi có số đó.
+
+/** Vì sao một khoản tiền về KHÔNG được phân bổ — mã để đánh dấu `BankTransaction`. */
+export type MaCanXuLy =
+  /** Số tiền khác số còn phải thu của phiếu (thừa hoặc thiếu, kể cả 1đ). */
+  | "LECH_SO"
+  /** Khớp được phiếu nhưng phiếu không còn OPEN (đã PAID / đã VOID). */
+  | "PHIEU_KHONG_MO"
+  /** Không tra ra phiếu nào từ nội dung chuyển khoản. */
+  | "KHONG_KHOP_PHIEU";
 
 /** Một dòng của phiếu gộp, kèm tình trạng hiện tại của phiếu thu nó trỏ tới. */
 export type DongPhieuGop = {
@@ -50,76 +53,121 @@ export type DongPhieuGop = {
   daRot: number;
 };
 
-export type KetQuaChiaPhieuGop = {
-  /** Rót vào từng phiếu thu, theo đúng thứ tự đã rót. Dòng 0đ bị bỏ, không ghi. */
-  lines: { paymentRequestId: string; amount: number }[];
-  /** Phần thừa so với phiếu gộp → ví gia đình (`CreditBalance`). */
-  du: number;
+export type PhieuGopDeChia = {
+  billId: string;
+  /** `CLOSED` cố ý KHÔNG nằm trong luồng mới — xem chú thích enum ở `schema.prisma`. */
+  trangThai: "OPEN" | "PAID" | "VOID" | "CLOSED";
+  dong: readonly DongPhieuGop[];
 };
 
-/**
- * Chia một lần tiền về cho các dòng của phiếu gộp.
- *
- * ⚠️ KHÔNG xử dung sai làm tròn ở đây, và đó là chủ ý: dung sai là một THAM SỐ VẬN HÀNH
- * đọc từ DB (`payment.roundingToleranceVnd`), còn hàm này phải thuần để test được không
- * cần DB. Nhà chuyển thiếu 1.000đ thì dòng cuối còn thiếu 1.000đ, và `deriveStatus` ở tầng
- * trên mới là chỗ quyết định có THA hay không — đúng một chỗ, như hôm nay.
- *
- * ⚠️ Số âm và số rác bị kẹp về 0 chứ không ném: hàm này chạy trong đường xử webhook, và
- * một ngoại lệ ở đây làm cả lượt nhận tiền thất bại — tiền đã vào tài khoản mà hệ thống
- * không ghi được gì là ca tệ nhất trong mọi ca.
- */
-export function chiaTheoPhieuGop(
-  soTienVe: number,
-  dong: readonly DongPhieuGop[],
-): KetQuaChiaPhieuGop {
-  let conLai = Number.isFinite(soTienVe) ? Math.max(0, Math.round(soTienVe)) : 0;
-  const lines: KetQuaChiaPhieuGop["lines"] = [];
+export type QuyetDinhChia =
+  | {
+      chia: true;
+      billId: string;
+      /** Rót vào từng phiếu thu, theo đúng thứ tự dòng của PHIẾU. */
+      lines: { paymentRequestId: string; amount: number }[];
+      /** Σ `lines` — luôn bằng số tiền về. */
+      tongRot: number;
+    }
+  | {
+      chia: false;
+      ma: MaCanXuLy;
+      /** Số còn phải thu của phiếu (để in vào thông báo cho kế toán). `null` khi không có phiếu. */
+      conPhaiThu: number | null;
+      /** Câu tiếng Việt cho kế toán đọc — nêu số về, số cần, và lệch bao nhiêu. */
+      moTa: string;
+    };
 
-  // Thứ tự rót là `sortOrder` của PHIẾU GỘP (đã chụp lúc phát), không phải của phiếu thu
-  // hôm nay. Sale sửa kế hoạch sau khi đưa QR cho khách thì thứ tự trên tờ giấy khách
-  // đang cầm vẫn là thứ tự tiền đi — đó là điều duy nhất giải thích được cho phụ huynh.
-  //
-  // `paymentRequestId` làm khoá phụ để hai dòng cùng `sortOrder` (dữ liệu hỏng) vẫn cho ra
-  // thứ tự TẤT ĐỊNH. Ngẫu nhiên ở đây nghĩa là cùng một khoản tiền chia khác nhau giữa hai
-  // lần chạy lại — không đối soát được.
-  const theoThuTu = [...dong].sort(
-    (a, b) => a.sortOrder - b.sortOrder || a.paymentRequestId.localeCompare(b.paymentRequestId),
-  );
+const vnd = (n: number) => Math.round(n).toLocaleString("vi-VN");
+const tron = (n: number) => (Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0);
 
-  for (const d of theoThuTu) {
-    if (conLai <= 0) break;
-
-    const phanCuaDong = Number.isFinite(d.amount) ? Math.max(0, Math.round(d.amount)) : 0;
-    const phaiThu = Number.isFinite(d.amountDue) ? Math.max(0, Math.round(d.amountDue)) : 0;
-    const daCo = Number.isFinite(d.daRot) ? Math.max(0, Math.round(d.daRot)) : 0;
-
-    // HAI trần, lấy cái nhỏ hơn:
-    //  · phần đã hứa với khách trên tờ QR (`phanCuaDong`);
-    //  · phần phiếu thu đó còn thiếu (`phaiThu - daCo`) — phiếu đã đóng đủ thì nhận 0 và
-    //    tiền chảy tiếp sang dòng sau. Đây chính là "thiếu lấp dần" khi khách đã đóng lẻ
-    //    một phần trước đó.
-    const tran = Math.min(phanCuaDong, Math.max(0, phaiThu - daCo));
-    if (tran <= 0) continue;
-
-    const rot = Math.min(conLai, tran);
-    lines.push({ paymentRequestId: d.paymentRequestId, amount: rot });
-    conLai -= rot;
-  }
-
-  return { lines, du: conLai };
+/** Phần còn thiếu của MỘT dòng phiếu: không quá phần đã hứa, không quá phần phiếu thu còn nợ. */
+function conThieuCuaDong(d: DongPhieuGop): number {
+  return Math.min(tron(d.amount), Math.max(0, tron(d.amountDue) - tron(d.daRot)));
 }
 
 /**
- * Tổng phải thu của một phiếu gộp — số IN LÊN mã QR.
+ * Số CÒN PHẢI THU của phiếu gộp — số in lên mã QR.
  *
- * Tách ra thành hàm (thay vì cộng tại chỗ) vì con số này phải KHỚP TỪNG ĐỒNG với Σ
- * `PaymentBillLine.amount` lưu trong DB. Hai phép cộng ở hai nơi là cách chắc chắn nhất để
- * một ngày nào đó QR in một số còn sổ ghi một số khác.
+ * "Còn", không phải "tổng": một dòng của phiếu có thể đã được lấp từ đường khác (vd tiền dư của
+ * em nghỉ học bù sang), và khi đó QR phải in số nhỏ hơn. Đây cũng chính là con số mà tiền về
+ * phải khớp TỪNG ĐỒNG.
+ *
+ * ⚠️ Tính ở đúng MỘT chỗ. Hai phép cộng ở hai nơi là cách chắc chắn nhất để một ngày nào đó QR
+ * in một số còn cổng đối khớp so với số khác — và khi đó KHÁCH NÀO CŨNG chuyển sai.
  */
-export function tienPhieuGop(dong: readonly DongPhieuGop[]): number {
-  return dong.reduce(
-    (s, d) => s + (Number.isFinite(d.amount) ? Math.max(0, Math.round(d.amount)) : 0),
-    0,
+export function conPhaiThuCuaPhieu(dong: readonly DongPhieuGop[]): number {
+  return dong.reduce((s, d) => s + conThieuCuaDong(d), 0);
+}
+
+/**
+ * Có chia khoản tiền này hay không, và nếu có thì chia thế nào.
+ *
+ * KHÔNG ném với bất kỳ đầu vào nào: hàm chạy trong đường xử webhook, và một ngoại lệ ở đây làm
+ * cả lượt nhận tiền thất bại — tiền đã vào tài khoản mà hệ thống không lưu được gì là ca tệ
+ * nhất trong mọi ca. Đầu vào rác rơi vào nhánh `LECH_SO`, tức nhánh an toàn: không ghi gì.
+ *
+ * Việc CHỐNG TRÙNG (`bankTxnId` đã xử lý) KHÔNG ở đây — nó thuộc tầng gọi, vì nó là một câu tra
+ * DB (`@@unique([provider, providerTxnId])` trên `BankTransaction`), không phải một phép tính.
+ * Trùng thì bỏ qua hoàn toàn: không phân bổ, không đánh dấu, không thông báo.
+ */
+export function chiaTheoPhieuGop(
+  soTienVe: number,
+  phieu: PhieuGopDeChia | null,
+): QuyetDinhChia {
+  const ve = tron(soTienVe);
+
+  if (phieu == null) {
+    return {
+      chia: false,
+      ma: "KHONG_KHOP_PHIEU",
+      conPhaiThu: null,
+      moTa: `Tiền về ${vnd(ve)}đ không tra ra phiếu gộp nào từ nội dung chuyển khoản`,
+    };
+  }
+
+  const conPhaiThu = conPhaiThuCuaPhieu(phieu.dong);
+
+  // Thứ tự kiểm: TRẠNG THÁI trước, SỐ TIỀN sau. Phiếu đã PAID thì "còn phải thu" bằng 0, nên
+  // nếu kiểm số trước thì một khoản 0đ sẽ lọt vào nhánh "khớp" — và quan trọng hơn: kế toán cần
+  // biết lý do THẬT là "quét lại phiếu cũ", không phải "lệch số".
+  if (phieu.trangThai !== "OPEN") {
+    return {
+      chia: false,
+      ma: "PHIEU_KHONG_MO",
+      conPhaiThu,
+      moTa:
+        `Tiền về ${vnd(ve)}đ khớp phiếu ${phieu.billId} nhưng phiếu đang ` +
+        `${phieu.trangThai === "PAID" ? "ĐÃ THU ĐỦ" : phieu.trangThai === "VOID" ? "ĐÃ HUỶ" : "ĐÃ ĐÓNG"}`,
+    };
+  }
+
+  if (ve !== conPhaiThu) {
+    const lech = ve - conPhaiThu;
+    return {
+      chia: false,
+      ma: "LECH_SO",
+      conPhaiThu,
+      moTa:
+        `Tiền về ${vnd(ve)}đ ≠ số phải thu ${vnd(conPhaiThu)}đ của phiếu ${phieu.billId} ` +
+        `(${lech > 0 ? "thừa" : "thiếu"} ${vnd(Math.abs(lech))}đ) — không phân bổ`,
+    };
+  }
+
+  // Khớp TỪNG ĐỒNG ⇒ chia đích danh theo thứ tự dòng của PHIẾU (đã chụp lúc phát phiếu, nên
+  // thứ tự trên tờ giấy khách đang cầm vẫn là thứ tự tiền đi). `paymentRequestId` làm khoá phụ
+  // để hai dòng cùng `sortOrder` (dữ liệu hỏng) vẫn cho kết quả TẤT ĐỊNH — cùng một khoản tiền
+  // phải chia giống nhau ở mọi lần chạy lại, kẻo không đối soát được.
+  const theoThuTu = [...phieu.dong].sort(
+    (a, b) => a.sortOrder - b.sortOrder || a.paymentRequestId.localeCompare(b.paymentRequestId),
   );
+
+  const lines: { paymentRequestId: string; amount: number }[] = [];
+  for (const d of theoThuTu) {
+    const rot = conThieuCuaDong(d);
+    if (rot <= 0) continue; // dòng đã đủ tiền từ đường khác — không ghi dòng phân bổ 0đ
+    lines.push({ paymentRequestId: d.paymentRequestId, amount: rot });
+  }
+
+  return { chia: true, billId: phieu.billId, lines, tongRot: ve };
 }

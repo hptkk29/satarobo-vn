@@ -7,9 +7,8 @@
 //
 // Dữ liệu tròn trịa trong test là dữ liệu không kiểm được gì — 3.988.000 và 8.492.000 dưới
 // đây là số chia thật, không phải số cho đẹp.
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { planAllocation, type AllocTarget } from "@/lib/payments/allocation";
-import { isThuTheoConEnabled } from "@/lib/flags";
 import { chiaTheoPhieuGop } from "./chia-phieu-gop";
 import {
   gopDotTheoDon,
@@ -309,34 +308,18 @@ describe("[KHC-04] nối với bộ chia đã có — và GIỚI HẠN THẬT c�
         amountDue: x.amountDue,
         daRot: 0,
       }));
-    const r = chiaTheoPhieuGop(2_000_000, dotMotCuaCaNha);
-    expect(r.lines).toEqual([
+    const r = chiaTheoPhieuGop(2_000_000, {
+      billId: "KT-coc",
+      trangThai: "OPEN",
+      dong: dotMotCuaCaNha,
+    });
+    expect(r.chia === true && r.lines).toEqual([
       { paymentRequestId: "oi-be-a-d1", amount: 1_000_000 },
       { paymentRequestId: "oi-be-b-d1", amount: 1_000_000 },
     ]);
   });
 });
 
-describe("[KHC-05] CÔNG TẮC mặc định TẮT", () => {
-  const cu = process.env.PAYMENT_PER_CHILD_ENABLED;
-  afterEach(() => {
-    if (cu === undefined) delete process.env.PAYMENT_PER_CHILD_ENABLED;
-    else process.env.PAYMENT_PER_CHILD_ENABLED = cu;
-  });
-
-  it("chưa khai env ⇒ TẮT (prod giữ nguyên hành vi đang chạy)", () => {
-    delete process.env.PAYMENT_PER_CHILD_ENABLED;
-    expect(isThuTheoConEnabled()).toBe(false);
-  });
-
-  it('chỉ đúng chuỗi "true" mới bật — "1", "TRUE", "yes" đều KHÔNG', () => {
-    // Cùng luật với mọi cờ khác trong `lib/flags.ts`. Nới ra là một biến môi trường gõ
-    // nhầm cũng lật được hình dạng sổ tiền của cả hệ thống.
-    for (const v of ["1", "TRUE", "yes", "on", ""]) {
-      process.env.PAYMENT_PER_CHILD_ENABLED = v;
-      expect(isThuTheoConEnabled(), v).toBe(false);
-    }
-    process.env.PAYMENT_PER_CHILD_ENABLED = "true";
-    expect(isThuTheoConEnabled()).toBe(true);
-  });
-});
+// ⚠️ Khối `[KHC-05]` (công tắc env `PAYMENT_PER_CHILD_ENABLED`) đã GỠ chiều 16/09/2026: chủ dự
+// án chốt công tắc nằm ở DB (`SystemSetting billing.flexV1Enabled` + override theo cơ sở), không
+// nằm ở env. Ca kiểm công tắc nay ở `lib/finance/feature.test.ts` — `[FEAT-01..04]`.

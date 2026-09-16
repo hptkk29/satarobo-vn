@@ -113,20 +113,52 @@ export const KY_VONG_C = {
   anConNoTong: 7_600_000,
 } as const;
 
+/**
+ * ⚠️ TÌNH HUỐNG D ĐÃ ĐỔI KẾT CỤC [chủ dự án chốt 16/09/2026 chiều].
+ *
+ * BA mô tả: cọc gộp 2.000.000 không ghi con → vào VÍ (`DEPOSIT_UNSPLIT`) → sale chia ví cho hai
+ * con khi tạo đơn (TS-13). Luật mới BỎ cả đường đó: *"Mọi trường hợp khác: KHÔNG phân bổ […]
+ * đánh dấu CAN_XU_LY […] Kế toán xử lý duy nhất bằng hoàn tiền."*
+ *
+ * Nên kết cục mới là: tiền nằm nguyên ở `BankTransaction`, mã `KHONG_KHOP_PHIEU`, kế toán hoàn
+ * lại. Sale phát phiếu gộp rồi mời phụ huynh chuyển đúng số.
+ *
+ * Hằng dưới đây giữ CẢ HAI: số của luật mới để test dùng, và số của BA để ai đọc lại tài liệu
+ * biết vì sao nó khác.
+ */
 export const KY_VONG_D = {
   cocGop: 2_000_000,
-  chiaAn: 1_000_000,
-  chiaBinh: 1_000_000,
-  viSauChia: 0,
-  anConNo: 7_640_000, // 8.640.000 − 1.000.000
-  binhConNo: 11_000_000, // 12.000.000 − 1.000.000
+  maCanXuLy: "KHONG_KHOP_PHIEU",
+  phanBo: 0,
+  viSauKhiVe: 0,
+  /** Công nợ KHÔNG đổi — tiền chưa vào sổ gia đình. */
+  anConNo: 8_640_000,
+  binhConNo: 12_000_000,
+  /** ~~BA: chia ví An 1.000.000 / Bình 1.000.000 → còn nợ 7.640.000 / 11.000.000~~ ĐÃ BỎ. */
+  daBo_chiaVi: true,
 } as const;
 
+/**
+ * ⚠️ TÌNH HUỐNG E ĐÃ ĐỔI KẾT CỤC [cùng quyết định].
+ *
+ * BA mô tả: phụ huynh chuyển 4.300.000 cho kỳ thu 3.800.000 → An +3.800.000 (PAID), ví
+ * +500.000 (`OVERPAY`). Luật mới: **thừa 1đ cũng không chia**. Toàn bộ 4.300.000 nằm nguyên,
+ * mã `LECH_SO`, An vẫn còn nợ đủ 3.800.000, kế toán hoàn cả khoản.
+ *
+ * Đây là ca khắc nghiệt nhất của luật mới, và là ca chủ dự án đã ra sẵn cách đo: *"đo sau 1
+ * tháng chạy thật, số ca CAN_XU_LY theo loại. Nếu > 0 ca lệch số mỗi tháng thì báo lại, lúc đó
+ * mới xét mở thêm."* Đừng tự nới trước khi có số đó.
+ */
 export const KY_VONG_E = {
   kyThu: 3_800_000,
   phuHuynhChuyen: 4_300_000,
-  vaoAn: 3_800_000,
-  vaoVi: 500_000,
+  maCanXuLy: "LECH_SO",
+  lech: 500_000,
+  phanBo: 0,
+  /** An KHÔNG được ghi nhận đồng nào. */
+  anConNoSauKhiVe: 3_800_000,
+  /** ~~BA: An +3.800.000, ví +500.000~~ ĐÃ BỎ. */
+  daBo_thuaVaoVi: true,
 } as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -176,17 +208,12 @@ export function anhChupGoc(): AnhChupGiaDinh {
       },
     ],
     giaoDich: [
-      {
-        bankTransactionId: TXN_1,
-        soTien: SO_CHOT_DON.kyThu01,
-        daRot: SO_CHOT_DON.kyThu01,
-        vaoVi: 0,
-      },
+      { bankTransactionId: TXN_1, soTien: SO_CHOT_DON.kyThu01, daRot: SO_CHOT_DON.kyThu01 },
     ],
     vi: [],
     hoan: 0,
     nghiepVuChuyen: [],
-    phieuGop: [{ billId: "KT-01", trangThai: "CLOSED", dongPhieu: [PR.anD1, PR.binhD1] }],
+    phieuGop: [{ billId: "KT-01", trangThai: "PAID", dongPhieu: [PR.anD1, PR.binhD1] }],
   };
 }
 
@@ -218,12 +245,7 @@ export function anhChupSauTinhHuongA(): AnhChupGiaDinh {
       },
     ],
     giaoDich: [
-      {
-        bankTransactionId: TXN_1,
-        soTien: SO_CHOT_DON.kyThu01,
-        daRot: SO_CHOT_DON.kyThu01,
-        vaoVi: 0,
-      },
+      { bankTransactionId: TXN_1, soTien: SO_CHOT_DON.kyThu01, daRot: SO_CHOT_DON.kyThu01 },
     ],
     vi: [],
     hoan: 0,
@@ -247,7 +269,7 @@ export function anhChupSauTinhHuongA(): AnhChupGiaDinh {
         ],
       },
     ],
-    phieuGop: [{ billId: "KT-01", trangThai: "CLOSED", dongPhieu: [PR.anD1, PR.binhD1] }],
+    phieuGop: [{ billId: "KT-01", trangThai: "PAID", dongPhieu: [PR.anD1, PR.binhD1] }],
   };
 }
 
