@@ -31,8 +31,11 @@ import {
   conCuaPhuHuynh,
   locConChoODon,
   MA_LOC_CON,
+  docMaChonHocVien,
+  maChonConLead,
   studentIdChoDon,
   thieuHocVienODong,
+  type ConLead,
 } from "@/lib/orders/hoc-vien-dong-don";
 import { nhacTraLead, SO_CHU_SO_TOI_THIEU_TRA_LEAD } from "@/lib/orders/goi-y-sdt";
 import {
@@ -129,6 +132,20 @@ type DongHang = {
   /** Dòng này mua cho CON NÀO. null = chưa chọn / đơn sản phẩm. */
   studentId: string | null;
   /**
+   * Dòng này mua cho con nào KHI CON ĐÓ CHƯA CÓ HỒ SƠ `Student` [16/09/2026].
+   *
+   * Chủ dự án: *"lead này đa số là lead chưa chốt nên chưa phải là học viên nên sẽ lấy
+   * thông tin con của PH lead đó chứ"*. Đo: 121/125 lead không có `Student` nào khớp SĐT,
+   * còn `LeadChild` có 130 dòng / 104 lead.
+   *
+   * `studentId` và `leadChildId` LOẠI TRỪ NHAU: một dòng trỏ về một đứa trẻ, và đứa trẻ đó
+   * hoặc đã có hồ sơ hoặc chưa. Giữ cả hai cùng lúc là mở đường cho hai câu trả lời khác
+   * nhau cho cùng một câu hỏi "tiền này của ai".
+   */
+  leadChildId: string | null;
+  /** Tên con lead — chỉ để hiển thị lại sau khi chọn; server tự tra tên từ `leadChildId`. */
+  tenConLead: string | null;
+  /**
    * CÁC KHOẢN GIẢM CỦA RIÊNG DÒNG NÀY (15/09/2026 — "làm flex").
    *
    * Ưu đãi thật bám vào MỘT em (anh chị em học cùng, học bổng) và CHỒNG LÊN NHAU — một
@@ -164,6 +181,8 @@ const dongMoi = (): DongHang => ({
   coachFormat: "GROUP",
   soBuoiMua: null,
   studentId: null,
+  leadChildId: null,
+  tenConLead: null,
   giam: [],
 });
 
@@ -188,6 +207,7 @@ export function OrderCreateForm({
   products,
   centers,
   students,
+  conLeadBanDau,
   provinces,
   leadId = null,
   defaultCustomer,
@@ -200,6 +220,18 @@ export function OrderCreateForm({
   products: ProductOption[];
   centers: Center[];
   students: StudentOption[];
+  /**
+   * CON KHAI TRONG LEAD mà trang được mở kèm (`/orders/new?leadId=…`) [16/09/2026].
+   *
+   * Prop BẮT BUỘC, không mặc định `[]` (luật 7): mặc định rỗng làm ca chiếm 96,8% lặng
+   * lẽ biến mất mà không lời gọi nào bị `tsc` chỉ ra. Không mở từ lead thì truyền `[]`
+   * một cách CÓ Ý THỨC.
+   *
+   * ⚠️ Đây chỉ là giá trị BAN ĐẦU. Người bán gõ SĐT rồi chọn một lead khác từ gợi ý thì
+   * danh sách con phải đổi theo — nên form giữ nó trong state (`conLead`), không đọc
+   * thẳng prop này ở chỗ dựng ô chọn.
+   */
+  conLeadBanDau: ConLead[];
   // O2 — danh sách tỉnh/thành (2 cấp 2025) load từ server (vietnam-address-data).
   provinces: ComboboxOption[];
   // convert-v2 (R7-05/06): khi tạo đơn TỪ một lead, gắn leadId để convert sau tìm
@@ -241,6 +273,11 @@ export function OrderCreateForm({
     cccd: "",
     address: "",
   });
+  /**
+   * Con khai trong lead ĐANG gắn với form. Khởi từ prop, nhưng phải là STATE vì người bán
+   * có thể gõ SĐT rồi chọn một lead KHÁC từ gợi ý — lúc đó danh sách con phải đổi theo.
+   */
+  const [conLead, setConLead] = useState<ConLead[]>(conLeadBanDau);
   // O2 — tỉnh/phường qua combobox; lưu id, map sang tên khi submit.
   const [provinceId, setProvinceId] = useState<string | null>(null);
   const [wardId, setWardId] = useState<string | null>(null);
@@ -263,7 +300,16 @@ export function OrderCreateForm({
   // hiện đúng "Đang lọc theo SĐT 0930000001 — 1 con", mà ô Học viên vẫn RỖNG. Người bán
   // vẫn phải tự mở danh sách và chọn đúng cái tên duy nhất trong đó.
   const [dong, setDong] = useState<DongHang[]>(() => [
-    { ...dongMoi(), studentId: conChonSan(students, defaultCustomer?.phone) },
+    (() => {
+      // Dòng đầu chọn sẵn: ưu tiên HỒ SƠ HỌC VIÊN, rơi về CON LEAD nếu chưa em nào có hồ
+      // sơ. Nhánh thứ hai là ca chiếm 96,8% khi mở trang từ `/orders/new?leadId=…`.
+      const hv = conChonSan(students, defaultCustomer?.phone);
+      if (hv) return { ...dongMoi(), studentId: hv };
+      const cl = conLeadBanDau[0];
+      return cl
+        ? { ...dongMoi(), leadChildId: cl.id, tenConLead: cl.fullName }
+        : dongMoi();
+    })(),
   ]);
 
   function suaDong(key: string, thayDoi: Partial<DongHang>) {
@@ -296,7 +342,8 @@ export function OrderCreateForm({
     phone: string;
     email: string | null;
     centerId: string | null;
-    conKhai: string[];
+    /** Con lead khai — CÓ `id` từ 16/09/2026 để dòng đơn lưu được `leadChildId`. */
+    conKhai: ConLead[];
   };
   const [leadGoiY, setLeadGoiY] = useState<LeadGoiY[]>([]);
   const [dangTraSdt, setDangTraSdt] = useState(false);
@@ -520,6 +567,10 @@ export function OrderCreateForm({
     if (l.centerId && !lockCenter) setCenterId(l.centerId);
     setDaChonLead(true);
     setLeadGoiY([]);
+    // Con của lead vừa chọn THAY THẾ danh sách đang có — người bán đổi sang lead khác thì
+    // ô chọn phải đổi theo, giữ lại con của lead cũ là bày ra con nhà khác.
+    setConLead(l.conKhai);
+
     // Cùng LUẬT với lúc mở trang từ lead và với ô lọc bên dưới — `conChonSan`. Ba bản
     // chép tay của cùng một phép so SĐT là ba cách lệch nhau, và lệch ở đây nghĩa là ô
     // lọc bày ra một tập còn ô chọn sẵn trỏ vào em ngoài tập đó.
@@ -527,6 +578,22 @@ export function OrderCreateForm({
     if (chonSan) {
       setDong((cu) =>
         cu.map((d, i) => (i === 0 && !d.studentId ? { ...d, studentId: chonSan } : d)),
+      );
+      return;
+    }
+    // ⚠️ KHÔNG có hồ sơ học viên nào ⇒ chọn sẵn CON LEAD đầu tiên [16/09/2026].
+    //
+    // Đây là ca chiếm 96,8% (121/125 lead). Trước bản này nhánh đó rơi xuống "không chọn
+    // sẵn gì", và vì ô chọn cũng chỉ biết bảng `Student` nên người bán không có đường nào
+    // chỉ ra đứa trẻ — dù tên con đang hiện ngay trên dòng gợi ý lead.
+    const conDau = l.conKhai[0];
+    if (conDau) {
+      setDong((cu) =>
+        cu.map((d, i) =>
+          i === 0 && !d.studentId && !d.leadChildId
+            ? { ...d, leadChildId: conDau.id, tenConLead: conDau.fullName }
+            : d,
+        ),
       );
     }
   }
@@ -603,6 +670,8 @@ export function OrderCreateForm({
       examAttemptId: null,
       productId: orderType === "PRODUCT" ? d.refId : null,
       studentId: d.studentId,
+      // Con lead chưa chốt (loại trừ với `studentId` — validator chặn ca khai cả hai).
+      leadChildId: d.leadChildId,
       // CÁC KHOẢN giảm của dòng, đúng thứ tự người bán gõ. Gửi Ý ĐỊNH (kiểu + số đã
       // gõ + lý do); server tính lại số tiền thật và kẹp theo tạm tính của dòng.
       discounts: d.giam
@@ -903,7 +972,7 @@ export function OrderCreateForm({
                             </span>
                             {l.conKhai.length > 0 && (
                               <span className="block text-xs text-muted-foreground">
-                                {l.conKhai.length} con: {l.conKhai.join(", ")}
+                                {l.conKhai.length} con: {l.conKhai.map((c) => c.fullName).join(", ")}
                               </span>
                             )}
                           </button>
@@ -1019,6 +1088,7 @@ export function OrderCreateForm({
                   courses={courses}
                   products={products}
                   students={students}
+                  conLead={conLead}
                   onSua={(t) => suaDong(d.key, t)}
                   onChonMatHang={(refId) => chonMatHang(d.key, refId)}
                   onXoa={() => xoaDong(d.key)}
@@ -1239,6 +1309,7 @@ function DongHangCard({
   courses,
   products,
   students,
+  conLead,
   onSua,
   onChonMatHang,
   onXoa,
@@ -1253,6 +1324,8 @@ function DongHangCard({
   courses: Course[];
   products: ProductOption[];
   students: StudentOption[];
+  /** Con khai trong lead đang gắn — chưa có hồ sơ `Student`. Xem `KetQuaLocCon.conLead`. */
+  conLead: ConLead[];
   onSua: (thayDoi: Partial<DongHang>) => void;
   onChonMatHang: (refId: string) => void;
   onXoa: () => void;
@@ -1350,22 +1423,31 @@ function DongHangCard({
   /** Người bán CHỦ ĐỘNG xin cả danh sách — mặc định TẮT, và reset theo từng dòng hàng. */
   const [bayCaDanhSach, setBayCaDanhSach] = useState(false);
   const loc = useMemo(
-    () => locConChoODon(students, customerPhone, bayCaDanhSach),
-    [students, customerPhone, bayCaDanhSach],
+    () => locConChoODon(students, customerPhone, bayCaDanhSach, conLead),
+    [students, customerPhone, bayCaDanhSach, conLead],
   );
   const hocVienOptions: ComboboxOption[] = useMemo(() => {
     // ⚠️ KHÔNG lọc lại ở đây, KHÔNG thay bằng tập khác. `locConChoODon` là chỗ DUY NHẤT
     // quyết định ô này bày ai, và nó trả kèm mã trạng thái để câu nhắc bên dưới không phải
     // suy lại. Dòng cũ ở đây là `conCuaSdt.length > 0 ? conCuaSdt : students` — fail-open,
     // và nó làm 121/125 lead bày đủ 247 em (xem chú thích trong `hoc-vien-dong-don.ts`).
-    const dung = loc.ds;
-    return dung.map((hv) => ({
+    const hoSo = loc.ds.map((hv) => ({
       value: hv.id,
       label: [hv.name, hv.parentName, nationalPhone(hv.parentPhone) ?? hv.parentPhone]
         .filter(Boolean)
         .join(" · "),
     }));
+    // CON LEAD đứng SAU, và mang hậu tố nói rõ em chưa có hồ sơ — người bán phải phân biệt
+    // được hai nhóm bằng mắt, vì chọn nhóm nào quyết định tiền ghi vào bảng nào.
+    const cl = loc.conLead.map((c) => ({
+      value: maChonConLead(c.id),
+      label: `${c.fullName} · con khai trong lead (chưa có hồ sơ)`,
+    }));
+    return [...hoSo, ...cl];
   }, [loc]);
+
+  /** Giá trị hiện tại của ô — một dòng trỏ về học viên HOẶC con lead, không bao giờ cả hai. */
+  const giaTriODon = dong.studentId ?? (dong.leadChildId ? maChonConLead(dong.leadChildId) : "");
 
   return (
     <div className="rounded-xl border border-border bg-background p-4">
@@ -1412,8 +1494,20 @@ function DongHangCard({
           </Label>
           <Combobox
             options={hocVienOptions}
-            value={dong.studentId}
-            onValueChange={(v) => onSua({ studentId: v })}
+            value={giaTriODon}
+            onValueChange={(v) => {
+              // ⚠️ Giải mã ở HÀM THUẦN (`docMaChonHocVien`), không tự tách chuỗi tại chỗ:
+              // `Student.id` và `LeadChild.id` đều là cuid nên nhìn không phân biệt được,
+              // và đoán sai ở đây là gán tiền sang nhầm bảng mà không lỗi nào báo.
+              const { studentId, leadChildId } = docMaChonHocVien(v);
+              onSua({
+                studentId,
+                leadChildId,
+                tenConLead: leadChildId
+                  ? (loc.conLead.find((c) => c.id === leadChildId)?.fullName ?? null)
+                  : null,
+              });
+            }}
             placeholder="Chọn học viên (tuỳ chọn)…"
             emptyText="Không tìm thấy học viên"
           />
@@ -1429,6 +1523,13 @@ function DongHangCard({
             <p className="text-xs text-muted-foreground">
               Đang lọc theo SĐT {nationalPhone(customerPhone) ?? customerPhone} —{" "}
               {loc.soCon} con
+            </p>
+          )}
+          {loc.ma === MA_LOC_CON.CON_LEAD && (
+            <p className="text-xs text-muted-foreground">
+              Đang bày <b className="font-semibold text-foreground">{loc.conLead.length} con
+              khai trong lead</b> — các em này chưa có hồ sơ học viên, hồ sơ sẽ được tạo lúc
+              chốt lead. Chọn đúng em rồi vẫn tạo đơn được.
             </p>
           )}
           {loc.ma === MA_LOC_CON.KHONG_CO_CON && (

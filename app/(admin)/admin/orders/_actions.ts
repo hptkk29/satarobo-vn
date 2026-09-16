@@ -44,6 +44,7 @@ import {
   hocVienTrenCacDong,
   studentIdChoDon,
   thieuHocVienODong,
+  veMetadataConLead,
 } from "@/lib/orders/hoc-vien-dong-don";
 import { docHinhThucLop } from "@/lib/orders/hinh-thuc-lop";
 import { laKhoaLoaiTruCoach } from "@/lib/finance/coach-pricing";
@@ -287,6 +288,50 @@ export async function createOrderManualAction(input: unknown) {
         ok: false as const,
         error:
           "Có học viên không tồn tại hoặc ngoài phạm vi của bạn — chọn lại ở dòng hàng",
+      };
+    }
+  }
+
+  /**
+   * CON LEAD trên các dòng — phải THẬT thuộc lead của đơn này [16/09/2026].
+   *
+   * Chủ dự án: *"lead này đa số là lead chưa chốt nên chưa phải là học viên nên sẽ lấy
+   * thông tin con của PH lead đó chứ"*. Nên ô chọn học viên nay bày cả `LeadChild`.
+   *
+   * ⚠️ CỔNG NÀY KHÔNG PHẢI THỦ TỤC. `leadChildId` client gửi là một quan hệ TIỀN ("khoản
+   * này của con nào"), y như `studentId`. Không tra lại thì một lời gọi action tự chế gắn
+   * được dòng đơn vào con của gia đình KHÁC — và `LeadChild` KHÔNG thuộc `SCOPED_MODELS`
+   * nên `scopedDb` không tự lọc giúp. Vì thế tra theo `leadId` của ĐƠN, chứ không tra
+   * "con này có tồn tại không".
+   *
+   * ⚠️ Không có `leadId` trên đơn mà lại khai con lead ⇒ TỪ CHỐI. Đơn walk-in không gắn
+   * lead thì không có cơ sở nào để nói đứa trẻ đó là con của khách này.
+   */
+  const conLeadTrenDong = [
+    ...new Set(
+      data.items
+        .map((it) => it.leadChildId?.trim())
+        .filter((v): v is string => !!v),
+    ),
+  ];
+  if (conLeadTrenDong.length > 0) {
+    const leadIdCuaDon = data.leadId?.trim() || null;
+    if (!leadIdCuaDon) {
+      return {
+        ok: false as const,
+        error:
+          "Đơn không gắn lead nào mà lại chọn con khai trong lead — mở lại trang tạo đơn từ lead, hoặc chọn học viên đã có hồ sơ",
+      };
+    }
+    const thayCon = await sdb.leadChild.findMany({
+      where: { id: { in: conLeadTrenDong }, leadId: leadIdCuaDon },
+      select: { id: true },
+    });
+    if (thayCon.length !== conLeadTrenDong.length) {
+      return {
+        ok: false as const,
+        error:
+          "Có con không thuộc lead của đơn này — chọn lại ở dòng hàng",
       };
     }
   }
@@ -626,7 +671,17 @@ export async function createOrderManualAction(input: unknown) {
             // Đã được gác ở `hocVienHopLe` bên trên — chỉ id đã tra qua `scopedDb` mới
             // lọt tới đây. Id lạ/ngoài cơ sở đã bị từ chối cả đơn, không âm thầm hoá null.
             studentId: it.studentId || null,
-            metadata: (it.metadata as Prisma.InputJsonValue) ?? Prisma.JsonNull,
+            // CON LEAD đi vào `metadata.leadChildId` (đã gác bằng `conLeadTrenDong` bên
+            // trên). Vì sao metadata chứ không một cột riêng: `LeadChild` KHÔNG có cột
+            // `studentId`, và cầu nối THẬT giữa hai thế giới là `Enrollment.leadChildId`
+            // do `convert-lead-v2` ghi lúc chốt — nên giá trị này chỉ cần sống tới lúc
+            // convert rồi ráp lại. Thêm một cột + migration trên bảng có dữ liệu prod cho
+            // một giá trị tạm là không xứng, và `metadata` vốn đã giữ `courseId` cùng họ.
+            metadata:
+              (veMetadataConLead(
+                (it.metadata as Record<string, unknown> | null) ?? null,
+                it.leadChildId || null,
+              ) as Prisma.InputJsonValue | null) ?? Prisma.JsonNull,
           })),
         },
       },
@@ -1295,8 +1350,15 @@ export async function timPhuHuynhTheoSdtAction(sdt: string): Promise<{
     phone: string;
     email: string | null;
     centerId: string | null;
-    /** Tên con LEAD KHAI — có thể CHƯA có hồ sơ `Student` nào. */
-    conKhai: string[];
+    /**
+     * Con LEAD KHAI — có thể CHƯA có hồ sơ `Student` nào.
+     *
+     * ⚠️ MANG CẢ `id` từ 16/09/2026. Bản cũ chỉ trả TÊN, nên ô chọn học viên ở dòng đơn
+     * không có gì để lưu và con của lead chưa convert KHÔNG chọn được — dù tên em đang
+     * hiện ngay trên dòng gợi ý. Chủ dự án: *"lead này đa số là lead chưa chốt nên chưa
+     * phải là học viên nên sẽ lấy thông tin con của PH lead đó chứ"*.
+     */
+    conKhai: Array<{ id: string; fullName: string }>;
   }>;
   error?: string;
 }> {
@@ -1323,7 +1385,7 @@ export async function timPhuHuynhTheoSdtAction(sdt: string): Promise<{
       phone: true,
       email: true,
       centerId: true,
-      children: { select: { fullName: true }, orderBy: { createdAt: "asc" } },
+      children: { select: { id: true, fullName: true }, orderBy: { createdAt: "asc" } },
     },
     orderBy: { createdAt: "desc" },
     // Trần 8: danh sách gợi ý dài hơn thì người bán không đọc, chỉ bấm bừa.
@@ -1338,7 +1400,11 @@ export async function timPhuHuynhTheoSdtAction(sdt: string): Promise<{
       phone: l.phone,
       email: l.email,
       centerId: l.centerId,
-      conKhai: l.children.map((c) => c.fullName),
+      // ⚠️ MANG CẢ `id`, không chỉ tên [16/09/2026]. Trước bản này gợi ý lead chỉ trả về
+      // TÊN con, nên ô chọn học viên không có gì để lưu và con của lead chưa convert
+      // không chọn được — chủ dự án: *"lead này đa số là lead chưa chốt… sẽ lấy thông tin
+      // con của PH lead đó chứ"*. Dòng đơn nay lưu `leadChildId`.
+      conKhai: l.children.map((c) => ({ id: c.id, fullName: c.fullName })),
     })),
   };
 }

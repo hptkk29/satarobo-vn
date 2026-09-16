@@ -119,3 +119,56 @@ describe("[VKH-05] Σ các đợt CỐ Ý không kiểm ở đây — xem chú t
     expect(r.success).toBe(true);
   });
 });
+
+// ═══ [VCL] MỘT DÒNG — MỘT ĐỨA TRẺ [16/09/2026] ════════════════════════════════
+//
+// Ô chọn học viên nay bày CHUNG hai nhóm: em đã có hồ sơ (`studentId`) và con khai trong
+// lead chưa chốt (`leadChildId`). Chủ dự án: *"lead này đa số là lead chưa chốt nên chưa
+// phải là học viên nên sẽ lấy thông tin con của PH lead đó chứ"*.
+//
+// Ca dưới canh luật LOẠI TRỪ. Vì sao nó đáng một ca riêng: khai cả hai khoá KHÔNG ném lỗi
+// ở đâu — nó chỉ để ngỏ hai câu trả lời khác nhau cho "khoản này của ai", và cái sai lộ ra
+// muộn nhất có thể (lúc hoàn tiền, hoặc lúc phụ huynh hỏi). Đã cấy lại (`.refine(() => true)`)
+// để thấy ca này ĐỎ.
+describe("[VCL-01] studentId × leadChildId loại trừ nhau", () => {
+  const donVoi = (them: Record<string, unknown>) => ({
+    type: "COURSE",
+    customerName: "Nguyễn Văn A",
+    customerPhone: "0905123456",
+    paymentMethodId: "pm_1",
+    items: [
+      { type: "COURSE_ENROLLMENT", itemName: "Sata 3", quantity: 1, unitPrice: 10_560_000, ...them },
+    ],
+  });
+
+  it("khai CẢ HAI ⇒ TỪ CHỐI, và nói rõ ở đúng trường", () => {
+    const r = orderCreateManualSchema.safeParse(
+      donVoi({ studentId: "hv-1", leadChildId: "lc-1" }),
+    );
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      expect(r.error.issues.some((i) => i.path.includes("leadChildId"))).toBe(true);
+      expect(r.error.issues.map((i) => i.message).join(" ")).toContain("MỘT học viên");
+    }
+  });
+
+  it("khai MỘT trong hai ⇒ nhận", () => {
+    expect(orderCreateManualSchema.safeParse(donVoi({ studentId: "hv-1" })).success).toBe(true);
+    expect(orderCreateManualSchema.safeParse(donVoi({ leadChildId: "lc-1" })).success).toBe(true);
+  });
+
+  it("KHÔNG khai gì ⇒ vẫn nhận (khách vãng lai, con chưa có hồ sơ ở đâu cả)", () => {
+    expect(orderCreateManualSchema.safeParse(donVoi({})).success).toBe(true);
+    expect(
+      orderCreateManualSchema.safeParse(donVoi({ studentId: null, leadChildId: null })).success,
+    ).toBe(true);
+  });
+
+  it("khoảng trắng KHÔNG phải một lựa chọn — không được lách luật loại trừ bằng ' '", () => {
+    // `z.string().min(1)` cho `" "` qua, nên nếu refine so bằng truthy thuần thì
+    // `{ studentId: "hv-1", leadChildId: " " }` lọt. `.trim()` trong refine chặn đúng đó.
+    expect(
+      orderCreateManualSchema.safeParse(donVoi({ studentId: "hv-1", leadChildId: " " })).success,
+    ).toBe(true);
+  });
+});

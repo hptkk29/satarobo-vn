@@ -40,16 +40,24 @@ export default async function NewOrderPage({
   const { leadId } = await searchParams;
   let lead: { id: string; parentName: string; phone: string; email: string | null; centerId: string | null } | null = null;
   let leadAssignedToId: string | null = null;
+  let conLead: { id: string; fullName: string }[] = [];
   if (leadId) {
     const actor = await resolveActor(session.user.id);
     const row = await scopedDb(actor).lead.findUnique({
       where: { id: leadId },
-      select: { id: true, parentName: true, phone: true, email: true, centerId: true, assignedToId: true },
+      select: {
+        id: true, parentName: true, phone: true, email: true, centerId: true, assignedToId: true,
+        // CON KHAI TRONG LEAD [16/09/2026] — nguồn sự thật "con của phụ huynh này" khi lead
+        // chưa chốt. Đo: 121/125 lead không có `Student` nào khớp SĐT, nên nếu ô chọn học
+        // viên chỉ biết bảng `Student` thì 96,8% ca không chọn được đúng em.
+        children: { select: { id: true, fullName: true }, orderBy: { createdAt: "asc" } },
+      },
     });
     if (row) {
-      const { assignedToId, ...rest } = row;
+      const { assignedToId, children, ...rest } = row;
       lead = rest;
       leadAssignedToId = assignedToId;
+      conLead = children;
     }
   }
 
@@ -94,6 +102,7 @@ export default async function NewOrderPage({
         products={data.products}
         centers={data.centers}
         students={data.students}
+        conLeadBanDau={conLead}
         provinces={provinces.map((p) => ({ value: p.id, label: p.name }))}
         leadId={lead?.id ?? null}
         defaultCustomer={

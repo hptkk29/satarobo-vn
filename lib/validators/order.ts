@@ -29,6 +29,22 @@ const orderItemSchema = z.object({
    */
   studentId: z.string().min(1).optional().nullable(),
   /**
+   * Dòng hàng này mua cho con nào KHI CON ĐÓ CHƯA CÓ HỒ SƠ `Student` [16/09/2026].
+   *
+   * Chủ dự án: *"lead này đa số là lead chưa chốt nên chưa phải là học viên nên sẽ lấy
+   * thông tin con của PH lead đó chứ"*. Đo: 121/125 lead không có `Student` nào khớp SĐT,
+   * còn `LeadChild` có 130 dòng / 104 lead.
+   *
+   * ⚠️ CŨNG chỉ là Ý ĐỊNH của client, y như `studentId`: action phải tra lại con này có
+   * thật thuộc lead của đơn không. Đây là quan hệ TIỀN ("khoản này của con nào") nên
+   * không bao giờ tin thẳng.
+   *
+   * ⚠️ LOẠI TRỪ NHAU với `studentId` — refine ở cuối schema chặn ca khai cả hai. Một dòng
+   * trỏ về MỘT đứa trẻ; giữ hai khoá cùng lúc là mở đường cho hai câu trả lời khác nhau
+   * cho cùng một câu hỏi, và câu trả lời sai không ném lỗi ở đâu cả.
+   */
+  leadChildId: z.string().min(1).optional().nullable(),
+  /**
    * CÁC KHOẢN GIẢM CỦA RIÊNG DÒNG NÀY (15/09/2026 — "làm flex, 1 đơn áp nhiều giảm giá").
    *
    * Mảng, theo thứ tự người bán gõ. Mỗi khoản là MỘT ưu đãi có tên riêng (anh chị em
@@ -115,7 +131,16 @@ const orderItemSchema = z.object({
         "Giảm giá nay khai thành DANH SÁCH ở items[].discounts — không dùng discountAmount/discountPercent của dòng nữa",
       path: ["discounts"],
     },
-  );
+  )
+  // MỘT DÒNG — MỘT ĐỨA TRẺ [16/09/2026]. `studentId` (đã có hồ sơ) và `leadChildId` (con
+  // lead chưa chốt) loại trừ nhau. Cho khai cả hai là để ngỏ hai câu trả lời khác nhau cho
+  // "khoản này của ai", và cái sai sẽ không ném lỗi ở đâu — nó chỉ làm hoàn tiền, ZNS học
+  // phí và cổng phụ huynh nói sai tên một đứa trẻ.
+  .refine((it) => !(it.studentId?.trim() && it.leadChildId?.trim()), {
+    message:
+      "Một dòng chỉ trỏ về MỘT học viên: khai studentId (đã có hồ sơ) HOẶC leadChildId (con lead chưa chốt), không cả hai",
+    path: ["leadChildId"],
+  });
 
 export const orderCreateManualSchema = z.object({
   type: z.nativeEnum(OrderType),

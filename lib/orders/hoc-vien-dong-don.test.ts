@@ -6,10 +6,14 @@ import {
   conChonSan,
   conCuaPhuHuynh,
   hocVienTrenCacDong,
+  docConLeadTuMetadata,
+  docMaChonHocVien,
   locConChoODon,
   MA_LOC_CON,
+  maChonConLead,
   studentIdChoDon,
   thieuHocVienODong,
+  veMetadataConLead,
 } from "./hoc-vien-dong-don";
 
 /**
@@ -194,7 +198,7 @@ const DS_LOC = [
 
 describe("[LOC-01] SĐT đọc được mà KHÔNG con nào khớp ⇒ ô chọn RỖNG", () => {
   it("không bày lại cả danh sách — đây là toàn bộ mục đích của bản vá", () => {
-    const r = locConChoODon(DS_LOC, "0999888777", false);
+    const r = locConChoODon(DS_LOC, "0999888777", false, []);
     expect(r.ma).toBe(MA_LOC_CON.KHONG_CO_CON);
     expect(r.ds).toEqual([]);
     // Ghim đúng con số làm hại: trước bản vá giá trị này là 4 (cả danh sách).
@@ -206,15 +210,15 @@ describe("[LOC-01] SĐT đọc được mà KHÔNG con nào khớp ⇒ ô chọn
 
 describe("[LOC-02] SĐT có con ⇒ bày ĐÚNG các con đó, khớp cả hai dạng SĐT", () => {
   it("84… và 0… của cùng một nhà đều vào tập", () => {
-    const r = locConChoODon(DS_LOC, "0930000001", false);
+    const r = locConChoODon(DS_LOC, "0930000001", false, []);
     expect(r.ma).toBe(MA_LOC_CON.DANG_LOC);
     expect(r.ds.map((h) => h.id)).toEqual(["a", "b"]);
     expect(r.soCon).toBe(2);
   });
 
   it("gõ dạng 84… cho ra ĐÚNG cùng tập — bẫy hình dạng SĐT không được tái sinh", () => {
-    const a = locConChoODon(DS_LOC, "84930000001", false);
-    const b = locConChoODon(DS_LOC, "0930000001", false);
+    const a = locConChoODon(DS_LOC, "84930000001", false, []);
+    const b = locConChoODon(DS_LOC, "0930000001", false, []);
     expect(a.ds.map((h) => h.id)).toEqual(b.ds.map((h) => h.id));
   });
 });
@@ -222,7 +226,7 @@ describe("[LOC-02] SĐT có con ⇒ bày ĐÚNG các con đó, khớp cả hai d
 describe("[LOC-03] CHƯA đọc được SĐT ⇒ bày ĐỦ, cố ý", () => {
   it("trống / null / đang gõ dở đều bày đủ — chặn lúc đang gõ là ô chọn nhảy loạn", () => {
     for (const sdt of ["", null, undefined, "093", "0930"]) {
-      const r = locConChoODon(DS_LOC, sdt, false);
+      const r = locConChoODon(DS_LOC, sdt, false, []);
       expect(r.ma).toBe(MA_LOC_CON.CHUA_CO_SDT);
       expect(r.ds.length).toBe(4);
     }
@@ -231,7 +235,7 @@ describe("[LOC-03] CHƯA đọc được SĐT ⇒ bày ĐỦ, cố ý", () => {
   it("số CỐ ĐỊNH cũng là 'chưa đọc được' — không được biến thành ô rỗng", () => {
     // `canonicalPhone` chỉ nhận di động; số bàn trả null. Nếu ca này ra KHONG_CO_CON thì
     // người bán gõ nhầm số cơ sở vào là ô chọn trống trơn mà không hiểu vì sao.
-    const r = locConChoODon(DS_LOC, "02363123456", false);
+    const r = locConChoODon(DS_LOC, "02363123456", false, []);
     expect(r.ma).toBe(MA_LOC_CON.CHUA_CO_SDT);
     expect(r.ds.length).toBe(4);
   });
@@ -239,7 +243,7 @@ describe("[LOC-03] CHƯA đọc được SĐT ⇒ bày ĐỦ, cố ý", () => {
 
 describe("[LOC-04] BÀY TAY thắng mọi nhánh — cú bấm của người không được hệ thống huỷ", () => {
   it("đã xin cả danh sách thì SĐT khớp 1 con cũng KHÔNG thu ô lại", () => {
-    const r = locConChoODon(DS_LOC, "84930000002", true);
+    const r = locConChoODon(DS_LOC, "84930000002", true, []);
     expect(r.ma).toBe(MA_LOC_CON.BAY_TAY);
     expect(r.ds.length).toBe(4);
     // Vẫn phải nói THẬT số con khớp, để câu nhắc không nói dối.
@@ -249,14 +253,14 @@ describe("[LOC-04] BÀY TAY thắng mọi nhánh — cú bấm của người kh
   it("bày tay lúc chưa có SĐT vẫn là BAY_TAY, không phải CHUA_CO_SDT", () => {
     // Hai nhánh này cùng bày đủ danh sách nhưng câu nhắc KHÁC nhau; trộn mã là màn hình
     // nói "đang lọc theo SĐT" trong lúc không lọc gì.
-    expect(locConChoODon(DS_LOC, "", true).ma).toBe(MA_LOC_CON.BAY_TAY);
+    expect(locConChoODon(DS_LOC, "", true, []).ma).toBe(MA_LOC_CON.BAY_TAY);
   });
 });
 
 describe("[LOC-05] không trả về CHÍNH mảng nguồn — tránh người gọi lỡ tay sắp xếp tại chỗ", () => {
   it("mảng trả về là bản sao ở hai nhánh bày-đủ", () => {
-    expect(locConChoODon(DS_LOC, "", false).ds).not.toBe(DS_LOC);
-    expect(locConChoODon(DS_LOC, "", true).ds).not.toBe(DS_LOC);
+    expect(locConChoODon(DS_LOC, "", false, []).ds).not.toBe(DS_LOC);
+    expect(locConChoODon(DS_LOC, "", true, []).ds).not.toBe(DS_LOC);
   });
 });
 
@@ -320,12 +324,208 @@ describe("[LOC-06] lưới ghim: màn hình KHÔNG được tự quyết 'bày a
 
   it("ô chọn lấy tập từ `locConChoODon`, đúng MỘT lần", () => {
     expect(FORM.match(/locConChoODon\(/g)?.length).toBe(1);
-    expect(FORM).toMatch(/const\s+dung\s*=\s*loc\.ds;/);
+  });
+
+  it("tuỳ chọn dựng từ CẢ HAI tập mà hàm trả về, không tập nào bị bỏ", () => {
+    // ⚠️ Ca này từng ghim chuỗi `const dung = loc.ds;` — tức ghim HÌNH DẠNG MÃ, không
+    // ghim bất biến. Nó đỏ ngay lượt thêm nhóm con lead, dù bản vá đúng. Nay ghim thứ
+    // thật sự phải đúng: ô chọn phải đọc `loc.ds` VÀ `loc.conLead`.
+    expect(FORM).toMatch(/loc\.ds\.map\(/);
+    expect(FORM).toMatch(/loc\.conLead\.map\(/);
+    // ⚠️ Dựng hai tập là CHƯA ĐỦ — phải TRẢ VỀ cả hai. Cấy lỗi `return [...hoSo]` (bỏ
+    // `...cl`) KHÔNG làm hai khẳng định trên đỏ: `.map(` vẫn còn nguyên, chỉ kết quả bị
+    // bỏ. Đó đúng là lớp lỗi kín nhất của màn này — người bán không thấy con nào và
+    // không có gì báo. Nên ghim chính câu `return`.
+    expect(FORM).toMatch(/return \[\.\.\.hoSo, \.\.\.cl\];/);
+    // Và không được có nhánh nào thay bằng `students` (fail-open cũ).
+    expect(FORM).not.toMatch(/\?\s*loc\.ds\s*:\s*students/);
   });
 
   it("biểu thức `/D/g` thiếu gạch chéo không được tái sinh", () => {
     // Lỗi câm đã sống suốt đời dòng cũ: `customerPhone.replace(/D/g, "")` xoá chữ "D" hoa
     // chứ không xoá ký tự không-phải-số. Dòng 498 cùng tệp viết đúng `/\D/g`.
     expect(FORM).not.toMatch(/replace\(\/D\/g/);
+  });
+});
+
+// ═══ [CONLEAD] CON KHAI TRONG LEAD — ĐẢO 16/09/2026 ═══════════════════════════
+//
+// Chủ dự án, ngay khi test bản vá buổi sáng: *"lọc ở học viên sai, vì lead này đa số là
+// lead chưa chốt nên chưa phải là học viên nên sẽ lấy thông tin con của PH lead đó chứ"*.
+//
+// Bản sáng chặn được việc chọn NHẦM con nhà khác (ô rỗng thay vì 247 em) nhưng vẫn chưa
+// cho chọn ĐÚNG con — vì nó chỉ nhìn bảng `Student`. Đo trên `satarobo_local`: 121/125
+// lead không có `Student` nào khớp SĐT, còn `LeadChild` có 130 dòng / 104 lead. Tức ca
+// "con chưa có hồ sơ" KHÔNG phải ca biên, nó là ca chính.
+const CON_LEAD_MAU = [
+  { id: "lc1", fullName: "Bé An" },
+  { id: "lc2", fullName: "Bé Bình" },
+];
+
+describe("[CONLEAD-01] 0 học viên khớp + lead CÓ khai con ⇒ bày con lead", () => {
+  it("ra mã CON_LEAD, ô học viên rỗng nhưng conLead có đủ", () => {
+    const r = locConChoODon(DS_LOC, "0999888777", false, CON_LEAD_MAU);
+    expect(r.ma).toBe(MA_LOC_CON.CON_LEAD);
+    expect(r.ds).toEqual([]);
+    expect(r.conLead.map((c) => c.id)).toEqual(["lc1", "lc2"]);
+  });
+
+  it("KHÔNG rơi về KHONG_CO_CON — đó là hành vi của bản sáng, và nó là đường cụt", () => {
+    const r = locConChoODon(DS_LOC, "0999888777", false, CON_LEAD_MAU);
+    expect(r.ma).not.toBe(MA_LOC_CON.KHONG_CO_CON);
+  });
+
+  it("lead không khai con nào ⇒ vẫn KHONG_CO_CON", () => {
+    expect(locConChoODon(DS_LOC, "0999888777", false, []).ma).toBe(
+      MA_LOC_CON.KHONG_CO_CON,
+    );
+  });
+});
+
+describe("[CONLEAD-02] con lead đi KÈM, không thay thế, ở các nhánh khác", () => {
+  it("có học viên khớp SĐT ⇒ DANG_LOC, nhưng con lead vẫn bày cùng", () => {
+    // Ca thật: lead có 2 con, một em đã convert (có hồ sơ), một em chưa.
+    const r = locConChoODon(DS_LOC, "0930000001", false, CON_LEAD_MAU);
+    expect(r.ma).toBe(MA_LOC_CON.DANG_LOC);
+    expect(r.ds.map((h) => h.id)).toEqual(["a", "b"]);
+    expect(r.conLead.length).toBe(2);
+  });
+
+  it("chưa gõ xong SĐT ⇒ con lead VẪN đi kèm nếu màn đang gắn một lead", () => {
+    // Mở `/orders/new?leadId=…` thì quan hệ cha–con đã chắc chắn từ nguồn, không phụ
+    // thuộc ô SĐT đã gõ xong hay chưa.
+    const r = locConChoODon(DS_LOC, "", false, CON_LEAD_MAU);
+    expect(r.ma).toBe(MA_LOC_CON.CHUA_CO_SDT);
+    expect(r.conLead.length).toBe(2);
+  });
+
+  it("bày tay cũng không làm con lead biến mất", () => {
+    expect(locConChoODon(DS_LOC, "0999888777", true, CON_LEAD_MAU).conLead.length).toBe(2);
+  });
+});
+
+describe("[CONLEAD-03] mã hoá ô chọn — hai loại id KHÔNG được lẫn nhau", () => {
+  it("con lead mang tiền tố, học viên thì không", () => {
+    expect(maChonConLead("lc1")).toBe("lead:lc1");
+    expect(docMaChonHocVien("lead:lc1")).toEqual({ studentId: null, leadChildId: "lc1" });
+    expect(docMaChonHocVien("hv-abc")).toEqual({ studentId: "hv-abc", leadChildId: null });
+  });
+
+  it("KHÔNG BAO GIỜ trả cả hai vế — một dòng trỏ về một đứa trẻ", () => {
+    for (const v of ["lead:lc1", "hv-abc", "", "   ", null, undefined, "lead:", "lead:  "]) {
+      const r = docMaChonHocVien(v);
+      const so = (r.studentId ? 1 : 0) + (r.leadChildId ? 1 : 0);
+      expect(so, `gia=${JSON.stringify(v)}`).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("ô để trống ⇒ cả hai null (khách vãng lai, con chưa có hồ sơ ở đâu cả)", () => {
+    expect(docMaChonHocVien("")).toEqual({ studentId: null, leadChildId: null });
+    expect(docMaChonHocVien(null)).toEqual({ studentId: null, leadChildId: null });
+    // `lead:` trần KHÔNG được thành một leadChildId rỗng.
+    expect(docMaChonHocVien("lead:")).toEqual({ studentId: null, leadChildId: null });
+    // …và KHÔNG được thành một id bằng khoảng trắng. Ca này thêm sau khi cấy lỗi "bỏ
+    // `.trim()`" KHÔNG làm lưới đỏ: `"lead:"` vẫn ra null nhờ chuỗi rỗng là falsy, nên
+    // chỉ dạng CÓ khoảng trắng mới phân biệt được hai bản.
+    expect(docMaChonHocVien("lead:  ")).toEqual({ studentId: null, leadChildId: null });
+    expect(docMaChonHocVien("  lead:lc1  ")).toEqual({ studentId: null, leadChildId: "lc1" });
+    // ⚠️ CA NÀY MỚI LÀ CA PHÂN BIỆT — và tôi chỉ tìm ra nó vì cấy lỗi "bỏ `.trim()` bên
+    // trong" KHÔNG làm lưới đỏ. Lý do: vòng `trim()` ở ĐẦU hàm đã cắt sạch hai đầu, nên
+    // `"lead:  "` và `"lead:"` là CÙNG một đầu vào và `.trim()` trong gần như là mã chết.
+    // Dạng duy nhất còn phân biệt được là khoảng trắng NẰM SAU tiền tố:
+    expect(docMaChonHocVien("lead: lc1")).toEqual({ studentId: null, leadChildId: "lc1" });
+  });
+
+  it("mã hoá rồi giải mã phải về đúng chỗ cũ", () => {
+    for (const id of ["lc1", "cmtfl3p1v00069lfh4ouznrf6"]) {
+      expect(docMaChonHocVien(maChonConLead(id))).toEqual({
+        studentId: null,
+        leadChildId: id,
+      });
+    }
+  });
+
+  it("cuid THẬT không chứa dấu hai chấm ⇒ tiền tố không thể trùng id học viên", () => {
+    // Nếu ngày nào id đổi sang dạng có `:` thì ca này đỏ, và đó đúng là lúc cần biết.
+    for (const id of ["cmtf6rxii000bfvj8g9tzzcy0", "cmqz5if8", "hv-a"]) {
+      expect(id).not.toContain(":");
+      expect(docMaChonHocVien(id).studentId).toBe(id);
+    }
+  });
+});
+
+describe("[CONLEAD-04] ghép vào metadata dòng đơn — KHÔNG đè khoá đang có", () => {
+  it("giữ nguyên courseId/coachFormat, chỉ thêm leadChildId", () => {
+    // Đè `courseId` là làm mù `chiaKhoanTheoDon` — phép chia tiền khớp theo đúng khoá đó.
+    expect(veMetadataConLead({ courseId: "kh1", coachFormat: "COACH_1_1" }, "lc1")).toEqual({
+      courseId: "kh1",
+      coachFormat: "COACH_1_1",
+      leadChildId: "lc1",
+    });
+  });
+
+  it("không có con lead ⇒ trả NGUYÊN metadata cũ, kể cả null", () => {
+    expect(veMetadataConLead({ courseId: "kh1" }, null)).toEqual({ courseId: "kh1" });
+    expect(veMetadataConLead(null, null)).toBeNull();
+    expect(veMetadataConLead(null, "   ")).toBeNull();
+  });
+
+  it("đơn sản phẩm (metadata null) vẫn mang được con lead", () => {
+    expect(veMetadataConLead(null, "lc2")).toEqual({ leadChildId: "lc2" });
+  });
+
+  it("đọc lại đúng thứ đã ghi, và không bịa ra gì từ dữ liệu rác", () => {
+    expect(docConLeadTuMetadata(veMetadataConLead(null, "lc2"))).toBe("lc2");
+    for (const x of [null, undefined, 0, "", "lc2", [], [{ leadChildId: "lc2" }], { leadChildId: 5 }, { leadChildId: "  " }])
+      expect(docConLeadTuMetadata(x), `md=${JSON.stringify(x)}`).toBeNull();
+  });
+});
+
+// ═══ [CONLEAD-05] LƯỚI GHIM MÃ NGUỒN — CỔNG BẢO MẬT của con lead ══════════════
+//
+// Vì sao phải là lưới ĐỌC MÃ chứ không phải test hành vi: cổng nằm trong
+// `createOrderManualAction`, một Server Action chạm DB qua `scopedDb`. Không dựng được nó
+// trong bộ unit (bộ này CẤM chạm DB — xem `tests/_helpers/db-gate.ts`).
+//
+// Và nó BẮT BUỘC phải có lưới: cấy lỗi bỏ vế `leadId` cho ra một lỗ gán tiền sang con của
+// GIA ĐÌNH KHÁC, mà lượt cấy đầu KHÔNG ca nào đỏ. `LeadChild` KHÔNG thuộc `SCOPED_MODELS`
+// nên `scopedDb` không lọc giúp — cổng này là lớp duy nhất.
+//
+// Theo luật 11: neo HẸP, KHÔNG cờ `/s`, BỎ CHÚ THÍCH trước khi soi, và đã cấy lại để thấy đỏ.
+describe("[CONLEAD-05] action phải TRA con lead theo leadId của ĐƠN", () => {
+  const boChuThich = (x: string) =>
+    x.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*/g, "$1");
+  const ACT = boChuThich(
+    readFileSync(resolve(process.cwd(), "app/(admin)/admin/orders/_actions.ts"), "utf8"),
+  );
+
+  it("bộ bỏ chú thích của ca này thật sự bỏ được (lưới-canh-lưới)", () => {
+    const mau = "a /* K */ b // D\nc";
+    expect(boChuThich(mau)).not.toContain("K");
+    expect(boChuThich(mau)).not.toContain("D");
+    expect(ACT.length).toBeLessThan(
+      readFileSync(resolve(process.cwd(), "app/(admin)/admin/orders/_actions.ts"), "utf8").length,
+    );
+  });
+
+  it("câu tra leadChild PHẢI kẹp theo `leadId` của đơn", () => {
+    // Bỏ vế đó = tra "con này có tồn tại không" thay vì "có phải con của khách này không".
+    expect(ACT).toMatch(/leadChild\.findMany\(\{\s*where: \{ id: \{ in: conLeadTrenDong \}, leadId: leadIdCuaDon \}/);
+    // Và KHÔNG được có bản tra trần nào.
+    expect(ACT).not.toMatch(/leadChild\.findMany\(\{\s*where: \{ id: \{ in: conLeadTrenDong \} \}/);
+  });
+
+  it("đơn KHÔNG gắn lead mà khai con lead ⇒ phải có nhánh từ chối", () => {
+    expect(ACT).toMatch(/if \(!leadIdCuaDon\) \{/);
+  });
+
+  it("số con tra được phải SO BẰNG với số con client gửi", () => {
+    // Thiếu phép so này thì một id lạ lẫn trong danh sách sẽ âm thầm lọt.
+    expect(ACT).toMatch(/thayCon\.length !== conLeadTrenDong\.length/);
+  });
+
+  it("`leadChildId` đi vào metadata qua HÀM DÙNG CHUNG, không ghép tay tại chỗ", () => {
+    expect(ACT.match(/veMetadataConLead\(/g)?.length).toBe(1);
+    expect(ACT).not.toMatch(/leadChildId: it\.leadChildId/);
   });
 });

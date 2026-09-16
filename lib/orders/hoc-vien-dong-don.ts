@@ -176,15 +176,40 @@ export function thieuHocVienODong(
 export const MA_LOC_CON = {
   CHUA_CO_SDT: "CHUA_CO_SDT",
   DANG_LOC: "DANG_LOC",
+  /** 0 học viên khớp NHƯNG lead có khai con — ca CHIẾM ĐA SỐ, xem `conLead` bên dưới. */
+  CON_LEAD: "CON_LEAD",
   KHONG_CO_CON: "KHONG_CO_CON",
   BAY_TAY: "BAY_TAY",
 } as const;
 
 export type MaLocCon = (typeof MA_LOC_CON)[keyof typeof MA_LOC_CON];
 
+/** Con KHAI TRONG LEAD — chưa có hồ sơ `Student`. Cố ý hẹp. */
+export type ConLead = { id: string; fullName: string };
+
 export type KetQuaLocCon<T> = {
-  /** Tập ĐEM VÀO ô chọn. Màn hình không được lọc lại, không được thay bằng tập khác. */
+  /** Học viên ĐÃ CÓ HỒ SƠ đem vào ô chọn. Màn hình không được lọc lại. */
   ds: T[];
+  /**
+   * Con KHAI TRONG LEAD, chưa convert nên chưa có `Student`.
+   *
+   * ⚠️ ĐÂY MỚI LÀ CA CHÍNH, không phải ca biên [đảo 16/09/2026]. Chủ dự án: *"lead này đa
+   * số là lead chưa chốt nên chưa phải là học viên nên sẽ lấy thông tin con của PH lead đó
+   * chứ"*. Đo trên `satarobo_local`: **121/125 lead (96,8%)** không có `Student` nào khớp
+   * SĐT, trong khi `LeadChild` có **130 dòng trên 104 lead** — con CÓ trong hệ thống, chỉ
+   * nằm ở bảng khác. Bản vá sáng 16/09 chặn được việc chọn NHẦM con nhà khác, nhưng vẫn
+   * chưa cho chọn ĐÚNG con, vì nó chỉ nhìn bảng `Student`.
+   *
+   * Danh sách này KHÔNG lọc lại theo SĐT: nó là con của ĐÚNG lead mà màn hình đang gắn,
+   * nên quan hệ cha–con đã chắc chắn từ nguồn. Lọc lại ở đây là thêm một phép so có thể
+   * sai mà không thêm bảo đảm nào.
+   *
+   * ⚠️ `LeadChild` KHÔNG có cột `studentId` (đã grep). Không có đường nối sẵn nào từ con
+   * lead sang học viên — cầu nối duy nhất trong repo là `Enrollment.leadChildId`, do
+   * `convert-lead-v2` ghi lúc chốt. Nên dòng đơn chọn con lead phải mang `leadChildId`
+   * để lúc convert còn ráp lại được.
+   */
+  conLead: ConLead[];
   ma: MaLocCon;
   /** Số con khớp SĐT — dùng cho câu nhắc. Luôn là số con THẬT, kể cả khi `ma = BAY_TAY`. */
   soCon: number;
@@ -196,20 +221,108 @@ export function locConChoODon<T extends HocVienTheoSdt>(
   hocVien: readonly T[],
   sdt: string | null | undefined,
   bayTay: boolean,
+  /**
+   * Con khai trong lead đang gắn với màn hình. Tham số BẮT BUỘC, không mặc định `[]`
+   * (luật 7): mặc định rỗng làm ca chiếm 96,8% lặng lẽ biến mất, và không lời gọi nào bị
+   * `tsc` chỉ ra. Không có lead thì truyền `[]` một cách CÓ Ý THỨC.
+   */
+  conLead: readonly ConLead[],
 ): KetQuaLocCon<T> {
   const con = conCuaPhuHuynh(hocVien, sdt);
   const tong = hocVien.length;
-  // ⚠️ Thứ tự BA nhánh dưới đây có nghĩa. `BAY_TAY` phải đứng TRƯỚC nhánh SĐT: người bán
-  // đã chủ động xin cả danh sách thì một SĐT khớp 1 con KHÔNG được thu ô lại — làm vậy là
-  // cú bấm của họ bị hệ thống lặng lẽ huỷ (luật 12: affordance phải nói thật).
+  const cl = [...conLead];
+
+  // ⚠️ Thứ tự các nhánh có nghĩa. `BAY_TAY` đứng TRƯỚC nhánh SĐT: người bán đã chủ động
+  // xin cả danh sách thì một SĐT khớp 1 con KHÔNG được thu ô lại — làm vậy là cú bấm của
+  // họ bị hệ thống lặng lẽ huỷ (luật 12: affordance phải nói thật).
   if (bayTay) {
-    return { ds: [...hocVien], ma: MA_LOC_CON.BAY_TAY, soCon: con.length, tong };
+    return { ds: [...hocVien], conLead: cl, ma: MA_LOC_CON.BAY_TAY, soCon: con.length, tong };
   }
   if (!canonicalPhone(sdt)) {
-    return { ds: [...hocVien], ma: MA_LOC_CON.CHUA_CO_SDT, soCon: 0, tong };
+    // Chưa đọc được SĐT: bày đủ học viên. Con lead VẪN đi kèm nếu màn đang gắn một lead —
+    // mở `/orders/new?leadId=…` thì quan hệ cha–con đã chắc chắn, không phụ thuộc ô SĐT
+    // người bán đã gõ xong hay chưa.
+    return { ds: [...hocVien], conLead: cl, ma: MA_LOC_CON.CHUA_CO_SDT, soCon: 0, tong };
   }
   if (con.length > 0) {
-    return { ds: con, ma: MA_LOC_CON.DANG_LOC, soCon: con.length, tong };
+    return { ds: con, conLead: cl, ma: MA_LOC_CON.DANG_LOC, soCon: con.length, tong };
   }
-  return { ds: [], ma: MA_LOC_CON.KHONG_CO_CON, soCon: 0, tong };
+  if (cl.length > 0) {
+    // CA CHÍNH (121/125 lead): chưa em nào có hồ sơ, nhưng lead đã khai con. Ô chọn phải
+    // bày ĐÚNG những em đó — không rỗng, và tuyệt đối không phải cả 247 em của cơ sở.
+    return { ds: [], conLead: cl, ma: MA_LOC_CON.CON_LEAD, soCon: 0, tong };
+  }
+  return { ds: [], conLead: [], ma: MA_LOC_CON.KHONG_CO_CON, soCon: 0, tong };
+}
+
+/**
+ * MÃ HOÁ LỰA CHỌN CỦA Ô "HỌC VIÊN" — một ô, hai loại đứa trẻ [16/09/2026].
+ *
+ * Ô chọn bày CHUNG hai nhóm: em đã có hồ sơ (`Student.id`) và con khai trong lead
+ * (`LeadChild.id`). Cả hai đều là cuid nên nhìn chuỗi KHÔNG phân biệt được — mà đoán sai
+ * ở đây là gán tiền cho nhầm bảng, im lặng.
+ *
+ * Nên giá trị của con lead mang tiền tố. Cặp mã hoá/giải mã để ở tầng thuần (không phải
+ * trong JSX) vì nó có test, và vì một bản chép tay thứ hai của cùng quy ước là chỗ để lệch.
+ *
+ * ⚠️ Tiền tố `lead:` KHÔNG được xuất hiện trong `Student.id`/`LeadChild.id` thật — cuid chỉ
+ * gồm chữ và số, không có dấu hai chấm. Ca test ghim đúng điều đó.
+ */
+const TIEN_TO_CON_LEAD = "lead:";
+
+/** Giá trị đem vào ô chọn cho một con lead. */
+export function maChonConLead(leadChildId: string): string {
+  return `${TIEN_TO_CON_LEAD}${leadChildId}`;
+}
+
+/**
+ * Giải mã giá trị ô chọn thành ĐÚNG MỘT trong hai khoá.
+ *
+ * Trả `{studentId, leadChildId}` với đúng một vế khác `null` — hoặc cả hai `null` khi ô
+ * để trống (khách vãng lai, con chưa có hồ sơ ở đâu cả). Không bao giờ trả cả hai.
+ */
+export function docMaChonHocVien(gia: string | null | undefined): {
+  studentId: string | null;
+  leadChildId: string | null;
+} {
+  const v = (gia ?? "").trim();
+  if (!v) return { studentId: null, leadChildId: null };
+  if (v.startsWith(TIEN_TO_CON_LEAD)) {
+    const id = v.slice(TIEN_TO_CON_LEAD.length).trim();
+    return id ? { studentId: null, leadChildId: id } : { studentId: null, leadChildId: null };
+  }
+  return { studentId: v, leadChildId: null };
+}
+
+/**
+ * GHÉP `leadChildId` VÀO `metadata` CỦA DÒNG ĐƠN — thuần, có test [16/09/2026].
+ *
+ * Trả về giá trị đem thẳng vào `OrderItem.metadata`. `null` khi không có gì để ghi (người
+ * gọi tự đổi thành `Prisma.JsonNull`) — cố ý KHÔNG import Prisma vào tệp thuần này.
+ *
+ * ⚠️ Vì sao `metadata` chứ không một cột riêng: `LeadChild` KHÔNG có cột `studentId`, và
+ * cầu nối THẬT giữa con lead và học viên là `Enrollment.leadChildId`, do `convert-lead-v2`
+ * ghi lúc chốt. Giá trị này chỉ cần sống từ lúc tạo đơn tới lúc convert. Thêm một cột +
+ * migration trên bảng có dữ liệu prod cho một giá trị tạm là không xứng, và `metadata` vốn
+ * đã giữ `courseId`/`coachFormat` cùng họ (xem `veMetadataDongDon`).
+ *
+ * ⚠️ KHÔNG đè các khoá đang có. Đơn khoá học mang `courseId` trong metadata, và
+ * `chiaKhoanTheoDon` khớp tiền theo đúng khoá đó — ghi đè là làm mù phép chia tiền.
+ */
+export function veMetadataConLead(
+  metadataDangCo: Record<string, unknown> | null,
+  leadChildId: string | null,
+): Record<string, unknown> | null {
+  const id = leadChildId?.trim() || null;
+  if (!id) return metadataDangCo;
+  return { ...(metadataDangCo ?? {}), leadChildId: id };
+}
+
+/** Đọc `leadChildId` từ metadata của dòng đơn. Đối xứng với `veMetadataConLead`. */
+export function docConLeadTuMetadata(
+  metadata: unknown,
+): string | null {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const v = (metadata as Record<string, unknown>).leadChildId;
+  return typeof v === "string" && v.trim() ? v.trim() : null;
 }
