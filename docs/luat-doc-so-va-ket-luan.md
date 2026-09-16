@@ -514,6 +514,67 @@ không làm test đỏ; nó chỉ làm mọi phép đo về sau nói dối. Đó
 - Xem thêm ghi chú "Một lượt cấy không đỏ phải hỏi 'mình có cấy trúng không'" ở trên: cùng
   một phản xạ, áp cho hai thứ khác nhau.
 
+### Luật 8 tầng ba — một phép đếm GỘP HAI TRẠNG THÁI sinh ra một CÂU HỎI GIẢ
+
+> Chốt của chủ dự án 16/09/2026: *"Một phép đếm gộp hai trạng thái khác nhau sẽ sinh ra một
+> câu hỏi giả, và mọi giờ đi tìm câu trả lời cho nó đều mất trắng."*
+
+Hai tầng trên nói về việc **tin một ca test** và **tin một con số**. Tầng này nói về việc
+tin cả một **câu hỏi**: nếu phép đếm sinh ra nó đã gộp nhầm, thì câu hỏi ấy không có đáp án
+đúng — và không có cách nào biết điều đó từ bên trong việc đi tìm đáp án.
+
+#### Sự cố sinh ra luật này — 16/09/2026, chấm công
+
+Nhân viên báo *"không lấy được vị trí"*. Phép đo đầu tiên đếm **lượt quét không có toạ độ**:
+296/376, tức 78,7%. Con số to, và nó dựng lên câu hỏi *"vì sao trình duyệt không trả toạ
+độ"*. Hai giả thuyết ra đời từ đó, cả hai đều được đo cẩn thận và cả hai đều **sai**:
+
+| Giả thuyết | Đo bằng gì | Kết quả |
+|---|---|---|
+| Trang không chạy HTTPS | `curl -D -` vào prod | `Permissions-Policy: geolocation=(self)` — cho phép |
+| Mở trong trình duyệt nhúng (Zalo/webview) | `userAgent` trên `StaffTimeLog` | 4 lượt Zalo, **0% thiếu** |
+
+Chỉ tới lượt đo thứ ba mới lộ ra: cột `result` **đã được `select` từ lượt đầu** mà không ai
+tách theo nó. Tách ra thì:
+
+```
+ACCEPTED  314  — thiếu toạ độ 234  (đều là MANUAL_ADJUST: quản lý chỉnh tay, không có trình duyệt)
+REJECTED   62  — thiếu toạ độ  62  (rejectReason: NO_GPS 53 · OUTSIDE_GEOFENCE 9)
+```
+
+Không có một lượt nào **thành công mà mất toạ độ**. Hiện tượng "78,7% thiếu vị trí" chưa
+từng tồn tại: nó là hai nhóm khác bản chất bị cộng vào một ô — lượt **quản lý chỉnh tay**
+(không đi qua trình duyệt) và lượt **bị máy chủ từ chối** (chính máy chủ vứt toạ độ đi).
+
+Câu hỏi đúng hoá ra là *"vì sao máy chủ từ chối"*, và `rejectReason` trả lời nó ngay ở lượt
+đo đầu — nếu có ai tách.
+
+#### Chữ ký nhận biết
+
+- Một tỉ lệ **to bất thường** cho một thứ lẽ ra hiếm. 78,7% trình duyệt hỏng định vị là con
+  số không đời nào đúng; sự vô lý của nó là dấu hiệu, không phải là mức độ nghiêm trọng.
+- Các nhóm con **hoặc 0% hoặc 100%**, không nhóm nào ở giữa. Bảng theo trình duyệt hôm ấy:
+  mọi nhóm có `userAgent` đều đúng 0% thiếu, nhóm "(không có userAgent)" đúng 100%. Hai cột
+  cùng rỗng khít nhau như thế **không phải trùng hợp** — nó nói rằng chúng là một loại dòng
+  khác, không phải cùng loại bị hỏng.
+
+#### Cách làm
+
+1. Trước khi đếm, liệt kê **mọi cột trạng thái** của bảng đang đếm: `status` · `result` ·
+   `source` · `deletedAt` · `kind`. Với mỗi cột, hỏi **"hai giá trị này có cùng nghĩa với
+   câu tôi đang hỏi không"**. Không thì tách, đừng gộp rồi giải thích sau.
+2. Đã `select` một cột trạng thái mà không dùng tới ⇒ **đó là một cảnh báo**, không phải
+   một dòng thừa vô hại. Ở ca này cột `result` nằm sẵn trong truy vấn suốt hai lượt đo.
+3. In **vế đối chứng** cạnh vế thuận. Bảng "theo trình duyệt" hôm ấy có in cả cột CÓ lẫn
+   THIẾU — chính cặp 0%/100% ấy là thứ làm lộ ra vấn đề, chứ không phải con số tổng.
+
+#### Liên hệ
+
+- **Luật 1** — mọi con số phải kèm phép tính sinh ra nó. Ở đây phép tính có kèm, nhưng
+  **tập được đếm** mới là chỗ sai. Luật 1 canh phép tính; luật này canh MẪU SỐ.
+- **Luật 15** — một triệu chứng nhiều nguyên nhân đủ. Ở đây nặng hơn: triệu chứng **không
+  có thật**, nên mọi nguyên nhân tìm được đều là nguyên nhân của chuyện khác.
+
 ---
 
 ## Luật 9 — cổng phải được cho ăn bằng thứ đường THẬT cho nó ăn

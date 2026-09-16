@@ -118,11 +118,16 @@ export function CheckinClient({
         else toast.success(`${label} thành công lúc ${new Date().toLocaleTimeString("vi-VN")}`);
       } else {
         toast.error(res.error);
-        // VÉ ĐÃ BỊ TIÊU trước khi máy chủ kiểm vị trí — mọi lỗi ở bước này đều làm vé chết. Không
-        // khoá nút thì người bị chặn (đứng ngoài phạm vi) bấm lại và nhận thông báo SAI: "vé này
-        // đã dùng, quét lại mã QR", trong khi lý do thật là vị trí. Khoá nút và nói đúng việc
-        // cần làm.
-        setVeChet(true);
+        // ⚠️ ĐẢO 16/09/2026 — CHỈ khoá nút khi vé THẬT SỰ chết.
+        //
+        // Bản cũ khoá nút ở MỌI lỗi, vì lúc ấy vé bị tiêu trước khi máy chủ kiểm vị trí nên
+        // lỗi nào cũng làm vé chết thật. Nay máy chủ HOÀN VÉ ở nhánh từ chối
+        // (`hoanVe` trong `checkin-action`), và trả `veConDung` để màn biết.
+        //
+        // Giữ nguyên lý do khoá của bản cũ cho ca vé chết thật: không khoá thì người bấm lại
+        // sẽ nhận thông báo SAI — "vé này đã dùng, quét lại mã QR" — trong khi lý do thật là
+        // vị trí. Cờ `veConDung` phân biệt đúng hai ca ấy.
+        if (!res.veConDung) setVeChet(true);
       }
     });
   }
