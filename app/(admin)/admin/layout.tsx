@@ -20,6 +20,7 @@ import {
   isEvalV2Enabled,
   isRbacV2Enabled,
   isScormEnabled,
+  isZalocrmEnabled,
 } from "@/lib/flags";
 import { Sidebar } from "@/components/admin/sidebar";
 import { Topbar } from "@/components/admin/topbar";
@@ -121,6 +122,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           evalV2Enabled={isEvalV2Enabled()}
           scormEnabled={isScormEnabled()}
           classGroupEnabled={isClassGroupEnabled()}
+          zalocrmEnabled={isZalocrmEnabled()}
         />
       </div>
 

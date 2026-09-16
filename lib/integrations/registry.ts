@@ -10,6 +10,7 @@ import "server-only";
 import type { InboxChannel } from "@prisma/client";
 import { zaloOaProvider } from "@/lib/integrations/zalo-oa/provider";
 import { messengerProvider } from "@/lib/integrations/messenger/provider";
+import { zalocrmProvider } from "@/lib/integrations/zalocrm/provider";
 import type { ChannelProvider, ChannelSendOutcome } from "@/lib/integrations/types";
 
 /**
@@ -21,6 +22,10 @@ import type { ChannelProvider, ChannelSendOutcome } from "@/lib/integrations/typ
 const PROVIDERS: Partial<Record<InboxChannel, ChannelProvider>> = {
   ZALO_OA: zaloOaProvider,
   MESSENGER: messengerProvider,
+  // GĐ3 — gửi từ hộp thư Sata qua nick Zalo cá nhân (Public API của fork).
+  // Đợt 1-2 kênh này CHỈ NHẬN; adapter có mặt ở đây là lúc chiều gửi mở ra. Công tắc
+  // `inbox.zaloCaNhanLive` vẫn gác: chưa bật thì mọi lượt gửi là `SIMULATED`.
+  ZALO_CA_NHAN: zalocrmProvider,
 };
 
 export function getChannelProvider(channel: InboxChannel): ChannelProvider | null {

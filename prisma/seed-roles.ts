@@ -48,6 +48,10 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "inbox:view", scopeType: "GLOBAL" },
       { action: "inbox:reply", scopeType: "GLOBAL" },
       { action: "inbox:assign", scopeType: "GLOBAL" },
+      // Tích hợp ZaloCRM (S6). SUPER_ADMIN đã bypass toàn bộ quyền trong can() v2 nên
+      // dòng này KHÔNG đổi hành vi; khai để ma trận nói được ai mở được màn ZaloCRM,
+      // và để v1 (local/dev) khớp v2. GLOBAL — xem lý do ở CENTER_SALES_CSM.
+      { action: "zalocrm:use", scopeType: "GLOBAL" },
       { action: "leads:change-status", scopeType: "GLOBAL" },
       // C-01 — chỉ tiêu lead theo tháng × cơ sở. SUPER_ADMIN đã bypass toàn bộ quyền
       // trong can() v2 nên dòng này KHÔNG đổi hành vi; khai cho khớp v1 + rõ ý, và để
@@ -629,6 +633,11 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "inbox:view", scopeType: "GLOBAL" },
       { action: "inbox:reply", scopeType: "GLOBAL" },
       { action: "inbox:assign", scopeType: "GLOBAL" },
+      // ── Tích hợp ZaloCRM (S6): QL cơ sở mở màn nhúng để theo dõi + trực thay ──
+      // GLOBAL bắt buộc (cổng trang `/zalo-crm` gọi `checkPermission` trần). Cách ly
+      // cơ sở của module này KHÔNG do scope quyền lo — nó do chính ứng dụng ZaloCRM
+      // (mỗi cơ sở một `orgCode` riêng, quyết bởi claim trong token SSO).
+      { action: "zalocrm:use", scopeType: "GLOBAL" },
       { action: "parent-requests:manage", scopeType: "GLOBAL" },
       { action: "parent-feedback:view", scopeType: "GLOBAL" },
       { action: "media:view", scopeType: "GLOBAL" },
@@ -789,6 +798,14 @@ export const ROLE_SEED: RoleSeed[] = [
       // canStageToClass trong app/(admin)/admin/media/actions.ts.
       { action: "media:view", scopeType: "GLOBAL" },
       { action: "media:upload-draft", scopeType: "GLOBAL" },
+      // ⛔ ZaloCRM — Giáo vụ KHÔNG dùng (chủ dự án chốt 13/09/2026, đảo quyết định
+      // ngày 06/09). Bản đầu cấp `zalocrm:use` cho vai này và ánh xạ họ sang vai
+      // `admin` bên fork; mà `admin` ở đó BỎ QUA toàn bộ ma trận quyền (`settings` chứa
+      // khoá Public API, `permission_group`, `user`, `zalo_account`, `audit_log`). Một
+      // vai không nhắn khách bằng nick Zalo thì không có lý do cầm chừng ấy quyền.
+      // Gỡ quyền ở đây PHẢI đi kèm gỡ khỏi `VAI_ZALOCRM`
+      // (`lib/integrations/zalocrm/vai-tro.ts`) — còn quyền mà mất ánh xạ thì họ mở màn
+      // ra chỉ để đọc "vai của bạn chưa được ánh xạ".
       // --- Đào tạo nội bộ (EL-02 §3) --- tất cả GLOBAL: không ô nào của ma trận
       // mang scope khác, và cách ly cơ sở của module này đến từ dữ liệu lượt giao chứ
       // không từ scopeType (xem ghi chú R1 đầu file).
@@ -876,6 +893,25 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "inbox:view", scopeType: "GLOBAL" },
       { action: "inbox:reply", scopeType: "GLOBAL" },
       { action: "inbox:assign", scopeType: "GLOBAL" },
+      // ── Tích hợp ZaloCRM (S6) ─────────────────────────────────────────────
+      // Sale cơ sở là NGƯỜI DÙNG CHÍNH: nick Zalo cá nhân dùng để nhắn khách là nick
+      // của chính họ. Vai `HO_SALE` cố ý KHÔNG có (chốt 9.7 — Hội sở không dùng).
+      //
+      // GLOBAL là BẮT BUỘC, không phải nới tay — cùng bài học đã ghi ở cụm `inbox:*`
+      // ngay trên: cổng trang `/zalo-crm` gọi `checkPermission("zalocrm:use")` KHÔNG
+      // có target, mà `lib/auth/can.ts` nhánh `case "CENTER"` mở đầu bằng
+      // `if (!target?.centerId) return false` ⇒ seed CENTER/OWN sẽ trả FALSE trên prod
+      // (RBAC v2) trong khi local (v1 tĩnh, không có scope) vẫn xanh. Đúng bẫy "chạy
+      // máy tôi thì được", và lần này nó khoá cửa của toàn bộ người trực.
+      //
+      // Cách ly cơ sở của module này nằm NGOÀI repo: mỗi cơ sở là một `orgCode` riêng
+      // trong ZaloCRM, và `orgCode` đi vào claim của token SSO do server ký — người
+      // dùng không đổi được. `scopedDb` không liên quan (không bảng nào của repo này
+      // bị màn nhúng đọc).
+      //
+      // ⚠️ Sửa ở đây CHƯA có hiệu lực trên prod cho tới khi chạy workflow
+      // `seed-prod-roles.yml`; dev/test chạy tay `pnpm db:seed:roles`.
+      { action: "zalocrm:use", scopeType: "GLOBAL" },
       { action: "chat:read", scopeType: "OWN" },
       { action: "chat:send", scopeType: "OWN" },
       { action: "parent-requests:manage", scopeType: "GLOBAL" },

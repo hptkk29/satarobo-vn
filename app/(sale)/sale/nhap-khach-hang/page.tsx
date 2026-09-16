@@ -10,18 +10,28 @@
 // Chép logic sang đây là mở đường cho hai biểu mẫu trôi lệch nhau — đúng kiểu
 // hỏng đã gặp với hai màn nhận xét buổi học. Đường ghi vẫn là `ingestIntakeLead`,
 // không mở đường ghi lead thứ hai.
+//
+// `?phone=&name=` — điền sẵn khi tới từ khung chat (chốt 9.13/9.5 đợt ZaloCRM).
+// Sửa kèm bản admin trong CÙNG một lượt: đây đúng là chỗ hai biểu mẫu dễ trôi
+// lệch nhất, vì thiếu một dòng bên này thì liên kết chỉ im lặng không điền gì.
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { checkAnyPermission } from "@/lib/auth/check-permission";
 import { PAGE_GATES } from "@/lib/auth/page-gates";
 import { resolveActor } from "@/lib/auth/actor";
 import { loadIntakeCenterOptions } from "@/lib/lead/intake/center-options";
+import { docPrefillTuQuery } from "@/lib/lead/intake/prefill";
 import { QuickLeadForm } from "@/components/lead-intake/quick-lead-form";
 
 export const metadata = { title: "Nhập khách hàng | Tư vấn tuyển sinh" };
 export const dynamic = "force-dynamic";
 
-export default async function SaleNhapKhachHangPage() {
+export default async function SaleNhapKhachHangPage({
+  searchParams,
+}: {
+  // Next 16: `searchParams` là Promise, BẮT BUỘC await trước khi đọc.
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const session = await auth();
   if (!session?.user) redirect("/login?callbackUrl=%2Fsale%2Fnhap-khach-hang");
   // Layout site Sale đã gác đăng nhập + vai Sale thuần; đây là gate QUYỀN riêng
@@ -33,6 +43,7 @@ export default async function SaleNhapKhachHangPage() {
 
   const actor = await resolveActor(session.user.id);
   const centers = await loadIntakeCenterOptions(actor);
+  const prefill = docPrefillTuQuery(await searchParams);
 
   return (
     <div>
@@ -44,7 +55,7 @@ export default async function SaleNhapKhachHangPage() {
           cơ sở.
         </p>
       </div>
-      <QuickLeadForm centers={centers} />
+      <QuickLeadForm centers={centers} initial={prefill} />
     </div>
   );
 }

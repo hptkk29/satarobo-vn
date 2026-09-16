@@ -30,6 +30,33 @@ export const LY_DO_MO_COI: Record<
   NHIEU_LEAD_KHOP: "Nhiều phiếu khách cùng số — cần chọn tay.",
 };
 
+/** Mảnh `where` giới hạn ứng viên `Lead` theo đơn vị. `{}` = không lọc. */
+export type DieuKienDonViLead =
+  | Record<string, never>
+  | { OR: [{ orgUnitId: string }, { orgUnitId: null }] };
+
+/**
+ * Ứng viên `Lead` được phép nối cho một hội thoại đã biết đơn vị.
+ *
+ * 🔴 Vì sao phải lọc: `timLeadTheoSdt` vốn tra `Lead` không giới hạn cơ sở nào, nên
+ * một số điện thoại trùng giữa hai cơ sở (anh em ruột, phụ huynh chuyển cơ sở, số
+ * công ty) là đủ để hội thoại của CS1 chui vào hồ sơ của CS2. Nó im lặng: hai bên
+ * đều thấy màn hình bình thường, chỉ là dữ liệu của người khác.
+ *
+ * Hai lựa chọn cố ý ở đây:
+ *  • CHƯA biết đơn vị ⇒ KHÔNG lọc. Tin đầu tiên của người lạ luôn chưa biết cơ sở;
+ *    lọc bừa là biến "chưa biết" thành "không khớp phiếu nào" cho mọi hội thoại mới.
+ *  • Phiếu `orgUnitId = null` VẪN là ứng viên. Đó là phiếu cũ/chưa gán cơ sở — loại
+ *    nó ra thì đúng những phiếu tồn đọng lâu nhất là những phiếu không bao giờ khớp.
+ *    (Đổi lại: một số trùng giữa phiếu-chưa-gán và phiếu-cùng-cơ-sở cho ra HAI ứng
+ *    viên ⇒ `NHIEU_LEAD_KHOP` ⇒ mồ côi. Thà để người bấm tay.)
+ */
+export function dieuKienDonViLead(orgUnitId: string | null | undefined): DieuKienDonViLead {
+  const donVi = orgUnitId?.trim();
+  if (!donVi) return {};
+  return { OR: [{ orgUnitId: donVi }, { orgUnitId: null }] };
+}
+
 /**
  * Quyết định có tự nối không, dựa trên SĐT và DANH SÁCH ỨNG VIÊN đã tra sẵn.
  *

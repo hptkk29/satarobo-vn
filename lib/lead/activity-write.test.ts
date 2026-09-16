@@ -605,7 +605,14 @@ describe("[S-9] chỉ đường ghi chú của người-không-phụ-trách mớ
     // báo gì. Giữ danh sách chỗ dùng ngắn và tường minh.
     const boChuThich = (s: string) =>
       s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-    const duocPhep = new Set([path.join("app", "(admin)", "admin", "leads", "actions.ts")]);
+    const duocPhep = new Set([
+      path.join("app", "(admin)", "admin", "leads", "actions.ts"),
+      // S5/ZaloCRM — tin Sale gửi khách qua nick Zalo cá nhân. Cùng câu hỏi, cùng
+      // hàm luật (`duocLamMoiDongHoChamSoc`), chỉ khác chỗ vào: đường webhook
+      // KHÔNG có phiên đăng nhập nên `coQuyenDieuPhoi` được truyền vào chứ không
+      // hỏi được từ session. Xem `quyetDinhMocNhanTin` để biết bốn ca của luật.
+      path.join("lib", "integrations", "zalocrm", "lead-timeline.ts"),
+    ]);
     const pham: string[] = [];
     const di = (thuMuc: string) => {
       for (const m of fs.readdirSync(thuMuc, { withFileTypes: true })) {

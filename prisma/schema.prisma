@@ -9492,6 +9492,13 @@ model OutboundSpendCounter {
 
 enum InboxChannel {
   ZALO_OA
+  /// Nick Zalo CÁ NHÂN của Sale, đi qua ZaloCRM (tích hợp 09/2026). KÊNH RIÊNG chứ
+  /// không phải biến thể của ZALO_OA: khác ràng buộc nền tảng (nhắn được người chưa
+  /// "Quan tâm"), khác hạn mức, khác người chịu trách nhiệm khi nick bị khoá.
+  /// ⚠️ `accountId` của kênh này là `ZaloCrmNick.zcrmAccountId`, KHÔNG phải hằng
+  /// "zalocrm": khoá hội thoại là `[channel, accountId, externalThreadId]`, nên dùng
+  /// hằng thì một khách nhắn hai nick bị GỘP thành một hội thoại.
+  ZALO_CA_NHAN
   MESSENGER
   /// Chat trên website. Chưa có đường vào — khai trước để không phải migrate enum.
   LIVECHAT
@@ -9535,6 +9542,14 @@ enum InboxIdentityLinkSource {
   /// Khớp SĐT với đúng MỘT lead (`phoneVariants`). Nhiều hơn một thì KHÔNG tự nối.
   PHONE_MATCH
   MANUAL
+  /// Nối theo NHÃN NGOÀI do hệ khác gắn sẵn: ZaloCRM ghi `Contact.externalRef =
+  /// 'sata:lead:<id>'` nên danh tính về đã kèm số phiếu, không phải suy từ SĐT.
+  ///
+  /// ⚠️ CỐ Ý KHÔNG tái dùng `WEBHOOK_PROFILE` cho ca này. Giá trị đó là BẰNG CHỨNG
+  /// ĐỒNG Ý: nó chỉ được ghi khi khách tự bấm "Chia sẻ thông tin" (`user_submit_info`
+  /// của Zalo OA). Ghi một phép nối máy-với-máy vào đó là làm hỏng vết đồng ý — thứ
+  /// duy nhất chứng minh được là khách đã tự đưa số cho mình.
+  EXTERNAL_TAG
 }
 
 /// Một con người trên MỘT kênh. Sống độc lập với hội thoại: có danh tính chưa từng
@@ -9685,7 +9700,175 @@ model InboxMessage {
   @@index([orgUnitId])
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════════
+// ZALOCRM — HAI BẢNG ÁNH XẠ HẠ TẦNG (tích hợp 09/2026, kế hoạch §3.2 + S2/S3/S7)
+//
+// ZaloCRM là một hệ RIÊNG (fork, tự vận hành) cầm các nick Zalo cá nhân của Sale.
+// Hai bảng dưới đây KHÔNG chứa hội thoại và KHÔNG chứa tin — nội dung chat vẫn sống
+// ở `Inbox*`. Chúng chỉ trả lời hai câu hỏi mà `Inbox*` không trả lời được:
+//   • "Nick `<zcrmAccountId>` là của ai, ở cơ sở nào?"  → ZaloCrmNick
+//   • "Hội thoại `<zcrmConversationId>` thuộc phiếu lead nào?" → ZaloCrmThread
+//
+// ── VÌ SAO CÓ `centerId` (ngoại lệ CÓ CHỦ ĐÍCH với luật cứng Nền Hệ thống #3) ──
+// Luật #3 nói bảng mới theo đơn vị dùng `orgUnitId`, không thêm `centerId` mới. Hai
+// bảng này lệch luật, và lý do là chúng KHÔNG cùng loại với `Inbox*`:
+// chúng là bảng ÁNH XẠ HẠ TẦNG, cùng họ `FacebookPageMapping` (:799) và
+// `CallExtension` (:9850) — cả hai đều mang `centerId` + `orgUnitId`. Đi theo họ đó
+// thì được HAI lưới tự động canh sẵn: `[A0-04-T12-01]` (`lib/db-scope.test.ts`) bắt
+// model có `centerId` mà chưa phân loại, và `[US-07-IT-08b]` bắt bảng có đủ hai cột
+// mà chưa khai `BACKFILL_SPECS`. Đi đường "chỉ `orgUnitId`" thì KHÔNG có lưới nào
+// và phải viết thêm một bộ scope thủ công thứ hai (`lib/inbox/scope.ts` là bộ thứ
+// nhất) — nhiều mã hơn, ít lưới hơn.
+//
+// ── 🔴 `scopedDb` KHÔNG CÁCH LY HAI BẢNG NÀY ──────────────────────────────────
+// Chúng nằm ở `SCOPE_EXEMPT` (`lib/db-scope.ts`), tức `injectScope` thoát ngay ở
+// dòng đầu và trả nguyên `args`. Cách ly cơ sở là việc của nơi gọi:
+// `lib/integrations/zalocrm/nick-admin.ts` lọc TAY theo `actor.visibleCenterIds`
+// cho cả đường ĐỌC lẫn đường GHI. Đọc "đã khai vào db-scope" thành "đã được che" là
+// đúng cái bẫy mà chú thích này sinh ra để chặn.
+// Vì sao không cho vào `SCOPED_MODELS`: cùng lý do `CallExtension` được miễn — đây là
+// bảng TRA CỨU. Người trực đối soát ở CS1 vẫn phải tra nổi chủ của một nick CS2 thì
+// mới gán được hội thoại cho đúng người; cách ly nằm ở DỮ LIỆU (`Inbox*`, `Lead`),
+// không ở bảng tra cứu.
+//
+// ── KHÔNG CÓ KHOÁ NGOẠI ──────────────────────────────────────────────────────
+// Không FK sang `Lead`/`User`/`OrgUnit`/`Inbox*`, cùng lý do đã ghi ở cụm `Inbox*`:
+// đây là dữ liệu ĐẾN TỪ MỘT HỆ NGOÀI, nó không được quyền chặn thao tác dọn dẹp của
+// các bảng lõi. Toàn vẹn do tầng ứng dụng giữ.
+//
+// ── XOÁ MỀM, VÀ KHÔNG CÓ LƯỚI TỰ ĐỘNG ────────────────────────────────────────
+// ⚠️ Cả hai có `deletedAt` nhưng CỐ Ý không nằm trong `SOFT_DELETE_MODELS`
+// (`lib/soft-delete.ts` chỉ có Order/Payment/Receipt/Enrollment) — y hệt `Inbox*`.
+// Nghĩa là base `db` KHÔNG tự ẩn dòng đã xoá: MỌI truy vấn phải tự thêm
+// `deletedAt: null`. Quên là nick đã gỡ vẫn hiện trong danh sách và vẫn nhận tin.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Trạng thái kết nối của một nick, do ZaloCRM báo về (`zalo.connected` /
+/// `zalo.disconnected`). ENUM chứ không phải chuỗi tự do: cột này là đầu vào của
+/// cảnh báo "connected mà >N giờ không có sự kiện nào" — một giá trị gõ sai sẽ làm
+/// cảnh báo im lặng đúng lúc cần kêu.
+enum ZaloCrmNickStatus {
+  /// Chưa đồng bộ lần nào, hoặc ZaloCRM chưa báo gì. KHÔNG đồng nghĩa "hỏng".
+  UNKNOWN
+  CONNECTED
+  DISCONNECTED
+}
+
+/// MỘT NICK ZALO CÁ NHÂN do ZaloCRM cầm.
+///
+/// Đây là bảng CẤU HÌNH, không phải dữ liệu khách: không SĐT, không email, không tên
+/// phụ huynh. `displayName` là tên hồ sơ Zalo của chính NHÂN VIÊN.
+model ZaloCrmNick {
+  id String @id @default(cuid())
+
+  /// Định danh nick phía ZaloCRM (`ZaloAccount.id`). Khoá đối chiếu DUY NHẤT giữa
+  /// hai hệ, và chính là `InboxIdentity.accountId` / `InboxConversation.accountId`
+  /// của kênh `ZALO_CA_NHAN`.
+  zcrmAccountId String @unique
+  /// Mã Organization bên ZaloCRM. Một org = một nick = một cơ sở (chốt kiến trúc),
+  /// và cũng là đoạn `[org]` trên đường webhook `/api/webhooks/zalocrm/[org]`.
+  orgCode       String
+  /// `User.id` của Sale sở hữu nick. NULL = chưa gán chủ, hoặc chủ đã rời việc và
+  /// nick đang chờ Quản lý cơ sở nhận lại — trạng thái BÌNH THƯỜNG, không phải lỗi.
+  sataUserId    String?
+  displayName   String?
+
+  status ZaloCrmNickStatus @default(UNKNOWN)
+  /// Mốc sự kiện gần nhất nhận được từ nick này. NULL = chưa có sự kiện nào.
+  /// Cặp (`status`, `lastEventAt`) là đầu vào cảnh báo "báo connected nhưng im
+  /// > `zalocrm.idleAlertHours` giờ" — nick chết mà không ai biết là ca hỏng câm.
+  lastEventAt DateTime? @db.Timestamptz(6)
+
+  /// NULL = orgCode CHƯA ánh xạ được cơ sở (thiếu mục trong setting
+  /// `zalocrm.orgCodes`). Giữ NULL thay vì đoán: gán nhầm cơ sở kéo theo gán nhầm
+  /// đơn vị cho mọi hội thoại của nick đó. Xem `BACKFILL_SPECS`.
+  centerId  String?
+  /// P1 · US-07 — cột SONG SONG với centerId (ghi kép tới hết P4). Cột TRẦN, không FK.
+  orgUnitId String?
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+  /// Xoá MỀM. ⚠️ Không có lưới tự động — xem khối ghi chú đầu cụm.
+  deletedAt DateTime? @db.Timestamptz(6)
+
+  @@index([orgCode])
+  @@index([sataUserId])
+  @@index([centerId])
+  @@index([orgUnitId])
+  @@index([status, lastEventAt])
+}
+
+/// ÁNH XẠ MỘT HỘI THOẠI ZALOCRM ↔ MỘT PHIẾU LEAD.
+///
+/// Tồn tại vì hai chiều nối lead xảy ra ở hai THỜI ĐIỂM khác nhau:
+///  • Chiều lead → chat (S2): Sale bấm "Nhắn Zalo" trên phiếu lead. Lúc đó hội thoại
+///    bên ZaloCRM CHƯA TỒN TẠI, nên dòng "đặt trước" chỉ có `(orgCode, phone)` và
+///    `zcrmConversationId` còn NULL. Webhook đầu tiên về mới điền nốt.
+///  • Chiều chat → lead (S4): webhook mang sẵn `conversationId`, tra ngược ra lead.
+///
+/// ── VÌ SAO CÓ CỘT `phone` (khác luật của `Inbox*`) ────────────────────────────
+/// Ba bảng `Inbox*` CẤM cột liên hệ, và có test canh (`lib/inbox/cong-truy-cap.test.ts`).
+/// Bảng này buộc phải có, vì lúc "đặt trước" thì SĐT là THỨ DUY NHẤT đang cầm trong
+/// tay — chưa có `conversationId`, chưa có `zcrmContactId`, chưa có danh tính nào.
+/// Không có cột này thì chiều lead → chat không tra lại được và mọi hội thoại do Sale
+/// chủ động mở sẽ về hệ thống ở trạng thái mồ côi.
+/// Ràng buộc đi kèm, KHÔNG được nới:
+///   • chuẩn hoá `84XXXXXXXXX` (KHÔNG dấu `+`, không `0` đầu) — dùng `phoneVariants`
+///     khi tra, đừng so bằng: DB còn tồn tại cả hai dạng `0…` và `84…`;
+///   • KHÔNG có `email`, KHÔNG có tên phụ huynh, KHÔNG có nội dung tin — số ở đây chỉ
+///     để NỐI, không để hiển thị. Muốn hiện SĐT cho người dùng thì đọc `Lead` qua cổng
+///     `leads:view-pii` như mọi chỗ khác.
+model ZaloCrmThread {
+  id String @id @default(cuid())
+
+  /// Định danh hội thoại phía ZaloCRM = `InboxConversation.externalThreadId`.
+  /// NULLABLE có chủ đích: dòng "đặt trước" ra đời TRƯỚC khi hội thoại tồn tại.
+  /// `@unique` trên cột nullable — Postgres cho nhiều NULL cùng tồn tại, nên nhiều
+  /// dòng đặt trước KHÔNG va nhau, còn khi đã có id thì tra ngược là duy nhất.
+  zcrmConversationId String? @unique
+
+  orgCode String
+  /// Canonical `84XXXXXXXXX`. Xem khối ghi chú của model.
+  phone   String
+
+  /// Phiếu lead đã nối. NULL = chưa nối được (hội thoại mồ côi) — trạng thái BÌNH THƯỜNG.
+  leadId        String?
+  /// `Contact.id` phía ZaloCRM, để gọi `PUT /contacts/:id/external-ref` chiều ngược.
+  zcrmContactId String?
+
+  /// Chép từ nick khi biết. NULL = CHƯA khớp được cơ sở, giữ NULL thay vì đoán.
+  centerId  String?
+  /// P1 · US-07 — cột SONG SONG với centerId (ghi kép tới hết P4). Cột TRẦN, không FK.
+  orgUnitId String?
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+  /// Xoá MỀM. ⚠️ Không có lưới tự động — xem khối ghi chú đầu cụm.
+  deletedAt DateTime? @db.Timestamptz(6)
+
+  /// KHOÁ CỦA VẾ "ĐẶT TRƯỚC", và là quyết định đáng cân nhắc nhất của bảng này.
+  ///
+  /// Chọn UNIQUE (không phải chỉ index) vì dòng này là một ÁNH XẠ, không phải một
+  /// nhật ký: trong một org, một số điện thoại là một khách, là một phiếu. Có UNIQUE
+  /// thì đường ghi lúc bấm "Nhắn Zalo" là một `upsert` idempotent — bấm hai lần, hai
+  /// tab, hay webhook chạy song song đều không đẻ ra dòng thứ hai. Không có nó thì
+  /// tra `(orgCode, phone)` có thể trả về nhiều dòng, và "nhiều ứng viên" ở đây nghĩa
+  /// là nối hội thoại vào NHẦM phiếu — đúng loại lỗi mà `quyetDinhNoiTheoSdt` đã chọn
+  /// "thà mồ côi còn hơn đoán" để tránh.
+  ///
+  /// GIÁ PHẢI TRẢ, nói thẳng: nếu cùng một số THẬT SỰ có hai hội thoại ZaloCRM trong
+  /// cùng org (khách nhắn hai nick), chỉ hội thoại đầu ghi được vào đây. Đường webhook
+  /// vì thế TUYỆT ĐỐI không được đè `zcrmConversationId` đang khác NULL — hội thoại
+  /// thứ hai để mồ côi và cho người xử lý, đừng cướp ánh xạ của hội thoại thứ nhất.
+  ///
+  /// (UNIQUE này đã sinh sẵn index cho việc tra theo `(orgCode, phone)`; không khai
+  /// thêm `@@index` cùng cột — index trùng chỉ tốn ghi, không nhanh thêm.)
+  @@unique([orgCode, phone])
+  @@index([leadId])
+  @@index([zcrmContactId])
+  @@index([centerId])
+  @@index([orgUnitId])
+}// ═══════════════════════════════════════════════════════════════════════════
 // TRỤC GỌI ĐIỆN + GHI ÂM (OmiCall) — spec `plan/20-SPEC-TICH-HOP-...` §5.3
 //
 // Mô hình KẾ THỪA NGUYÊN 9 nhóm trường của `docs/ba-crm-hien-trang-va-misa.md:798-810`

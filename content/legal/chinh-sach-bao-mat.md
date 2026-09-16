@@ -1,6 +1,8 @@
 # CHÍNH SÁCH BẢO MẬT THÔNG TIN
 
-**Cập nhật lần cuối:** 11/05/2026
+**Cập nhật lần cuối:** 06/09/2026
+
+**Căn cứ pháp lý:** Luật Bảo vệ dữ liệu cá nhân số 91/2025/QH15 và Nghị định số 356/2025/NĐ-CP quy định chi tiết một số điều của Luật.
 
 ## 1. Phạm vi áp dụng
 
@@ -41,6 +43,17 @@ Chúng tôi sử dụng:
 - **Meta Pixel:** đo lường hiệu quả quảng cáo trên Facebook/Instagram
 - **Meta Conversions API + GA4 Measurement Protocol:** gửi sự kiện chuyển đổi từ server, giúp đo lường chính xác hơn
 
+### 2.4 Tin nhắn Anh/Chị gửi tới các kênh liên lạc của Sata Robo
+
+Khi Anh/Chị chủ động nhắn tin cho Chúng tôi qua **nick Zalo của công ty**, Zalo Official Account, trang Facebook, hoặc các kênh liên lạc khác do Sata Robo công bố:
+
+- **Nội dung tin nhắn được nhân viên phụ trách và quản lý của họ đọc, và được lưu lại trong hệ thống chăm sóc khách hàng của Chúng tôi** để tiếp nhận, trả lời và theo dõi yêu cầu của Anh/Chị. Đây không phải là kênh riêng tư giữa Anh/Chị và một cá nhân nhân viên: nhân viên phụ trách thay đổi (nghỉ phép, chuyển việc, chuyển cơ sở) thì người tiếp nhận mới và cấp quản lý vẫn đọc được lịch sử trao đổi, để Anh/Chị không phải kể lại từ đầu.
+- Chúng tôi lưu **nội dung tin nhắn, thời điểm gửi/nhận, tên hiển thị và mã định danh của tài khoản gửi** trên nền tảng đó. Số điện thoại và email chỉ được lưu khi chính Anh/Chị cung cấp.
+- Việc đọc và lưu này phục vụ chăm sóc khách hàng, xử lý khiếu nại và bảo đảm chất lượng dịch vụ. Chỉ nhân viên được uỷ quyền theo phân quyền của hệ thống mới truy cập được (xem mục 4.1).
+- Nếu Anh/Chị không muốn một nội dung nào đó được lưu, vui lòng đừng gửi qua các kênh trên; hoặc liên hệ Chúng tôi theo mục 5 để yêu cầu xoá.
+
+Lưu ý: bản thân nền tảng nhắn tin (Zalo, Facebook) vận hành theo chính sách riêng của nhà cung cấp nền tảng, nằm ngoài phạm vi Chính sách này.
+
 ## 3. Mục đích sử dụng thông tin
 
 - Tư vấn khoá học, sản phẩm, dịch vụ phù hợp với nhu cầu của Anh/Chị
@@ -62,6 +75,7 @@ Chúng tôi sử dụng:
 ### 4.2 Thời gian lưu trữ
 
 - Thông tin liên hệ phụ huynh: lưu trữ trong suốt quá trình Anh/Chị là khách hàng, và tối đa 2 năm sau khi ngừng sử dụng dịch vụ
+- Nội dung tin nhắn qua các kênh liên lạc (mục 2.4): lưu cùng thời hạn với thông tin liên hệ phụ huynh
 - Log truy cập kỹ thuật: 90 ngày
 - Dữ liệu marketing (UTM, cookie): tối đa 24 tháng
 
@@ -69,9 +83,9 @@ Chúng tôi sử dụng:
 
 Dữ liệu được lưu trữ tại máy chủ Supabase (region Singapore/Tokyo). Chúng tôi đảm bảo các đối tác hạ tầng (Supabase, Vercel, Resend) đều tuân thủ tiêu chuẩn bảo mật quốc tế (SOC 2, GDPR).
 
-## 5. Quyền của Anh/Chị theo NĐ 13/2023/NĐ-CP
+## 5. Quyền của Anh/Chị theo pháp luật bảo vệ dữ liệu cá nhân
 
-Theo Nghị định 13/2023/NĐ-CP về bảo vệ dữ liệu cá nhân, Anh/Chị có các quyền:
+Theo Luật Bảo vệ dữ liệu cá nhân số 91/2025/QH15 và Nghị định số 356/2025/NĐ-CP, Anh/Chị có các quyền:
 
 - **Quyền được biết:** biết về việc xử lý dữ liệu cá nhân của mình
 - **Quyền đồng ý:** rút lại sự đồng ý đã cho phép Chúng tôi xử lý dữ liệu
@@ -96,6 +110,7 @@ Chúng tôi chỉ chia sẻ dữ liệu trong các trường hợp:
 
 - Nhà cung cấp hạ tầng (Supabase, Vercel, Resend) — chỉ ở mức cần thiết để vận hành Website
 - Đối tác đo lường marketing (Meta, Google) — dữ liệu đã được hash bằng SHA-256
+- Nền tảng nhắn tin (Zalo, Facebook) — khi Anh/Chị chủ động nhắn tin cho Chúng tôi, nội dung đi qua hạ tầng của nền tảng đó theo điều khoản riêng của họ (xem mục 2.4)
 - Cơ quan nhà nước có thẩm quyền khi có yêu cầu hợp pháp
 
 ## 7. Trẻ em dưới 16 tuổi
@@ -120,4 +135,4 @@ Mọi câu hỏi, yêu cầu liên quan đến Chính sách Bảo mật, vui lò
 
 ---
 
-*Chính sách này có hiệu lực từ ngày 01/01/2026 và được cập nhật lần gần nhất vào 11/05/2026.*
+*Chính sách này có hiệu lực từ ngày 01/01/2026 và được cập nhật lần gần nhất vào 06/09/2026.*

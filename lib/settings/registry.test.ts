@@ -158,3 +158,68 @@ describe("[R6-A] resolve — Center → Global → default (US-R6A-2)", () => {
     // 999999 > max 100 → invalid → default
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ZaloCRM (đợt tích hợp 06/09/2026) — 3 tham số vận hành của trục ZaloCRM.
+//
+// Vì sao phải có test riêng cho việc "đã khai vào registry chưa": `getSetting`
+// **NÉM** `Unknown setting key: …` khi key vắng mặt (lib/settings/service.ts:63).
+// Lỗi đó không rơi vào một khối nhỏ — nó ném giữa Server Component ⇒ sập cả màn.
+// Quên khai một key mà không có lưới thì phát hiện bằng cách màn Tích hợp trắng
+// trên prod. Đây là lưới đó.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("[ZC-CFG] tham số vận hành ZaloCRM", () => {
+  it("[ZC-CFG-01] `zalocrm.orgCodes` có mặt trong registry — getSetting không ném Unknown setting key", () => {
+    // Mô phỏng đúng vế chặn của service: `const def = getSettingDef(key); if (!def) throw`.
+    expect(getSettingDef("zalocrm.orgCodes"), "chưa khai zalocrm.orgCodes").toBeTruthy();
+    expect(SETTING_KEYS).toContain("zalocrm.orgCodes");
+  });
+
+  it("[ZC-CFG-02] `zalocrm.orgCodes` mặc định RỖNG — chưa ánh xạ cơ sở nào thì không đoán bừa", () => {
+    expect(SETTINGS["zalocrm.orgCodes"].default).toEqual({});
+  });
+
+  it("[ZC-CFG-03] `zalocrm.orgCodes` nhận ánh xạ mã cơ sở → orgCode, chặn orgCode sai khuôn", () => {
+    expect(validateSettingValue("zalocrm.orgCodes", { CS1: "cs1", CS2: "cs2" }).ok).toBe(true);
+    // orgCode đi thẳng vào đường dẫn webhook `/api/webhooks/zalocrm/<org>` và bị
+    // chặn ở đó bằng /^[a-z0-9-]{1,32}$/. Khai sai khuôn ở đây = webhook 404 câm
+    // lúc 3 giờ sáng; chặn ngay tại ô cấu hình thì người khai biết mình gõ sai.
+    expect(validateSettingValue("zalocrm.orgCodes", { CS1: "CS1" }).ok).toBe(false);
+    expect(validateSettingValue("zalocrm.orgCodes", { CS1: "cs 1" }).ok).toBe(false);
+    expect(validateSettingValue("zalocrm.orgCodes", { CS1: "" }).ok).toBe(false);
+    expect(validateSettingValue("zalocrm.orgCodes", { CS1: 1 }).ok).toBe(false);
+    expect(validateSettingValue("zalocrm.orgCodes", "cs1").ok).toBe(false);
+  });
+
+  it("[ZC-CFG-04] `zalocrm.idleAlertHours` default = 2", () => {
+    expect(SETTINGS["zalocrm.idleAlertHours"].default).toBe(2);
+  });
+
+  it("[ZC-CFG-05] `zalocrm.idleAlertHours` chặn 0 / âm / số lẻ", () => {
+    // 0 giờ = mọi hội thoại vừa nhận đã cảnh báo ⇒ chuông kêu liên tục, người dùng
+    // tắt mắt với nó. Cùng bài học ngưỡng lead treo (C-05-T03).
+    expect(validateSettingValue("zalocrm.idleAlertHours", 0).ok).toBe(false);
+    expect(validateSettingValue("zalocrm.idleAlertHours", -1).ok).toBe(false);
+    expect(validateSettingValue("zalocrm.idleAlertHours", 1.5).ok).toBe(false);
+    expect(validateSettingValue("zalocrm.idleAlertHours", 1).ok).toBe(true);
+    expect(validateSettingValue("zalocrm.idleAlertHours", 72).ok).toBe(true);
+    expect(validateSettingValue("zalocrm.idleAlertHours", 73).ok).toBe(false);
+  });
+
+  it('[ZC-CFG-06] `inbox.zaloCaNhanLive` schema là z.boolean — chuỗi "true" KHÔNG hợp lệ', () => {
+    // Bẫy thật: `resolveSendMode` (lib/integrations/fail-safe.ts:37) kiểm kiểu CHẶT
+    // và trả `SETTING_UNREADABLE` cho mọi giá trị không phải boolean. Ghi chuỗi
+    // "true" vào ô này ⇒ công tắc trông như ĐANG BẬT trên màn cấu hình nhưng
+    // adapter vẫn chạy MÔ PHỎNG — khách không nhận được gì mà không ai báo lỗi.
+    expect(validateSettingValue("inbox.zaloCaNhanLive", true).ok).toBe(true);
+    expect(validateSettingValue("inbox.zaloCaNhanLive", false).ok).toBe(true);
+    expect(validateSettingValue("inbox.zaloCaNhanLive", "true").ok).toBe(false);
+    expect(validateSettingValue("inbox.zaloCaNhanLive", 1).ok).toBe(false);
+  });
+
+  it("[ZC-CFG-07] `inbox.zaloCaNhanLive` mặc định TẮT — nick cá nhân không tự gửi tin thật", () => {
+    expect(SETTINGS["inbox.zaloCaNhanLive"].default).toBe(false);
+    // Cùng khuôn hai công tắc kênh đã có: tắt = mô phỏng, không phải hỏng.
+    expect(SETTINGS["inbox.zaloCaNhanLive"].group).toBe(SETTINGS["inbox.zaloOaLive"].group);
+  });
+});

@@ -150,6 +150,34 @@ describe("A. admin host × role", () => {
     ).toEqual<RouteDecision>({ type: "redirectHost", host: "portal", path: "/", status: 307 });
   });
 
+  /**
+   * S1 (tích hợp ZaloCRM 06/09/2026) — màn Zalo CRM nhúng ở segment riêng `/zalo-crm`.
+   *
+   * Đây là lưới DUY NHẤT bắt được lỗi thiếu segment: trên localhost trang chạy hoàn hảo,
+   * chỉ `admin.satarobo.vn/zalo-crm` mới bị 308 sang host public rồi 404 — và 308 là
+   * permanent nên trình duyệt cache vĩnh viễn, sửa mã xong vẫn không tự khỏi. Danh sách
+   * `ADMIN_ROUTE_SEGMENTS` gõ tay, không quét thư mục, nên không thêm ca ở đây là không
+   * có gì canh (đã tái phát với /payments, /cong-no, /user-groups, /to-chuc).
+   *
+   * Ghim luôn dạng CÓ searchParams: nút "Nhắn Zalo" trên phiếu lead (S2) mở
+   * `/zalo-crm?compose=84…&lead=<id>`, và `firstSegment` chỉ đọc pathname — đổi cách
+   * tách segment là ca này đỏ ngay.
+   */
+  it("[S1] /zalo-crm là admin route — kể cả khi mang ?compose= của nút Nhắn Zalo", () => {
+    expect(isAdminRoute("/zalo-crm")).toBe(true);
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/zalo-crm", ...authed("SUPER_ADMIN") }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/admin/zalo-crm" });
+    // Tư vấn viên là người dùng chính của màn này.
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/zalo-crm", ...authed("SALES_CSM") }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/admin/zalo-crm" });
+    // Phụ huynh vẫn bị đá về portal — segment mới không mở thêm cửa nào.
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/zalo-crm", ...authed("PARENT") }),
+    ).toEqual<RouteDecision>({ type: "redirectHost", host: "portal", path: "/", status: 307 });
+  });
+
   it("PARENT vào admin route → redirectHost portal (lỗ hổng đã bịt)", () => {
     expect(
       decideRoute({ hostKind: "admin", pathname: "/dashboard", ...authed("PARENT") }),

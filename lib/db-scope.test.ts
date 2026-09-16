@@ -284,3 +284,27 @@ describe("[EL-14] mọi model Trn* được scope đều khai tiền tố quyề
     }
   });
 });
+
+// ── ZaloCRM (L1) — hai bảng ánh xạ hạ tầng ────────────────────────────────────
+// Bộ [A0-04-T12-01] ở trên đã bắt "model có centerId mà chưa phân loại", nhưng nó
+// chỉ nói "thiếu ai đó", không nói "xếp NHẦM chỗ". Xếp `ZaloCrmNick` vào
+// SCOPED_MODELS mà quên `getModelPrefixes` là NỚI quyền diện rộng (lỗi #04 đã mắc
+// thật với `Attendance`), nên chỗ nó thuộc về phải được ghim tường minh.
+describe("[ZC-DB-01] hai bảng ZaloCrm* nằm ở SCOPE_EXEMPT, KHÔNG ở SCOPED_MODELS", () => {
+  for (const model of ["ZaloCrmNick", "ZaloCrmThread"]) {
+    it(`${model} — SCOPE_EXEMPT có, SCOPED_MODELS không`, () => {
+      expect(SCOPE_EXEMPT.has(model), `${model} phải nằm trong SCOPE_EXEMPT`).toBe(true);
+      expect(SCOPED_MODELS.has(model), `${model} KHÔNG được nằm trong SCOPED_MODELS`).toBe(
+        false,
+      );
+    });
+
+    // Hệ quả PHẢI NHỚ của việc ở SCOPE_EXEMPT: `injectScope` thoát ngay ở dòng đầu,
+    // tức scopedDb KHÔNG lọc gì cho hai bảng này — cả đọc lẫn ghi phải tự gác theo
+    // `actor.visibleCenterIds` (`lib/integrations/zalocrm/nick-admin.ts`). Ghim lại ở
+    // đây để không ai đọc "đã khai vào db-scope" thành "đã được cách ly".
+    it(`${model} — scopedDb KHÔNG chèn điều kiện centerId nào`, () => {
+      expect(injectScope(model, {}, center)).toEqual({});
+    });
+  }
+});

@@ -15,6 +15,17 @@ export type ChannelSendInput = {
   /** Người nhận phía nhà cung cấp: `user_id` (Zalo) / `psid` (Messenger). */
   externalUserId: string;
   body: string;
+  /**
+   * Khoá GIÀNH CHỖ của lượt gửi (`InboxMessage.outboundKey`) — một cú bấm là một khoá.
+   *
+   * Adapter nào có đường chống-gửi-trùng ở phía nhà cung cấp thì chuyển tiếp khoá này.
+   * Vì sao cần: lớp trên đã chặn được hai cú bấm (UNIQUE ở DB), nhưng KHÔNG chặn được
+   * ca "gọi API xong thì mất phản hồi" — lúc đó tin có thể đã tới khách mà bên mình
+   * tưởng hỏng. Tin đã đi thì không thu hồi được, nên bên nhận phải nhận ra lượt lặp.
+   *
+   * Tuỳ chọn: adapter không dùng tới thì bỏ qua, không phải sửa gì.
+   */
+  outboundKey?: string;
 };
 
 /**

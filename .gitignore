@@ -99,3 +99,6 @@ full.txt
 .impeccable/live/*.png
 # impeccable-ignore-end
 shots-teacher/
+
+# ghi chép làm việc của agent (không commit)
+.zalocrm-work/

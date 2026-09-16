@@ -191,6 +191,19 @@ jobs:
       - name: Run lead-intake DB tests
         run: pnpm test:lead-intake
 
+      # S9-B5 (06/09/2026) — LẦN ĐẦU 14 ca HT-01…HT-14 (tests/inbox/hop-thu.spec.ts)
+      # thật sự chạy trong CI. Script `test:inbox-db` có trong package.json từ đợt hộp
+      # thư nhưng KHÔNG job nào gọi ⇒ ở job `unit-tests` (không Postgres) cổng
+      # `describe.skipIf(!RUN)` cho chúng SKIP SẠCH và CI vẫn xanh 100% dù logic hộp
+      # thư bị phá hoàn toàn — đúng kiểu "xanh giả" nguy hiểm hơn đỏ.
+      # Không cần job mới: job này đã có Postgres 16, `prisma migrate deploy` (dựng cả
+      # migration 20260827120000_hop_thu_da_kenh ⇒ cổng `CO_BANG` mở) và seed RoleDef.
+      # ⚠️ Bộ này KHÔNG gọi `resetDb()` — nó dọn theo tiền tố `HTDK_`. Giữ nguyên thói
+      # quen đó cho mọi spec thêm vào `tests/inbox`: 4 bộ trên dùng CHUNG một DB
+      # `ci_test` chạy tuần tự, một `resetDb()` lọt vào là xoá dữ liệu của bộ chạy sau.
+      - name: Run inbox DB tests
+        run: pnpm test:inbox-db
+
   e2e:
     name: E2E smoke (Playwright)
     runs-on: ubuntu-latest

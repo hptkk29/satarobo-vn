@@ -47,9 +47,21 @@ jobs:
           # `notifyStaff` với dedupeKey `sla:<rule>:<leadId>` và KHÔNG dùng `reopen`, nên
           # lượt sau chỉ chạm lại bản ghi cũ chứ không dội chuông lần hai. Cảnh báo SLA là
           # chuông NỘI BỘ cho Sale — không có email/ZNS nào bay ra ngoài.
+          #
+          # webhook-retention (S9-B7): thêm 06/09/2026. Cron này XOÁ dữ liệu, nên lần
+          # chạy thật đầu tiên của nó tuyệt đối không được là trên PROD — đó chính là
+          # tình huống mà dòng chú thích đầu file này cảnh báo. Bơm ở đây để nó chạy
+          # thật trên `test` trước, và để lượt dọn tồn đầu tiên (nặng nhất) xảy ra ở
+          # nơi có thể xem log.
+          # Bơm 5 phút/lần thay vì mỗi ngày như prod là AN TOÀN vì hàm idempotent:
+          # lượt đầu dọn hết dòng quá 30 ngày, mọi lượt sau tìm thấy 0 dòng và trả về
+          # 0/0. Nó KHÔNG đụng dòng mới, và KHÔNG đụng DomainEvent PENDING/FAILED.
+          # ⚠️ Nhớ: DB của environment `test` chính là DB dev — nên lượt đầu sẽ dọn cả
+          # dấu vết webhook cũ đang nằm ở đó. Đó là việc đúng của cron này, nhưng là
+          # thứ phải biết trước chứ không phải phát hiện sau.
           # shift-brief (chấm công v3): tin nhắc lịch ngày mai — route tự so giờ VN với setting,
           # dedupeKey shift.brief:<người>:<ngày> nên bơm 5′/lần vẫn chỉ một tin.
-          for p in dispatch-events email-queue chat-zns-notify trial-reminder sla-check shift-brief; do
+          for p in dispatch-events email-queue chat-zns-notify trial-reminder sla-check webhook-retention shift-brief; do
             code=$(curl -s -o /dev/null -w "%{http_code}" \
               -H "Authorization: Bearer ${{ secrets.TEST_CRON_SECRET }}" \
               "https://test.satarobo.vn/api/cron/$p")

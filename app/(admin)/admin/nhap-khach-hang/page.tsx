@@ -4,6 +4,7 @@ import { checkAnyPermission } from "@/lib/auth/check-permission";
 import { PAGE_GATES } from "@/lib/auth/page-gates";
 import { resolveActor } from "@/lib/auth/actor";
 import { loadIntakeCenterOptions } from "@/lib/lead/intake/center-options";
+import { docPrefillTuQuery } from "@/lib/lead/intake/prefill";
 import { QuickLeadForm } from "@/components/lead-intake/quick-lead-form";
 
 export const metadata = { title: "Nhập khách hàng | Sata Robo" };
@@ -29,8 +30,17 @@ export const dynamic = "force-dynamic";
  * ⚠️ Thân trang cố ý MỎNG: dữ liệu lấy qua `loadIntakeCenterOptions()`, giao
  * diện là `<QuickLeadForm>` dùng chung. Site Sale sau này dựng bản của mình
  * bằng đúng hai mảnh đó, không chép lại logic.
+ *
+ * `?phone=&name=` — điền sẵn khi tới từ khung chat (chốt 9.13/9.5 đợt ZaloCRM).
+ * Luật đọc query nằm ở `docPrefillTuQuery()`, dùng chung với bản site Sale; đừng
+ * viết biểu thức đọc query tại chỗ, hai trang sẽ trôi lệch.
  */
-export default async function NhapKhachHangPage() {
+export default async function NhapKhachHangPage({
+  searchParams,
+}: {
+  // Next 16: `searchParams` là Promise, BẮT BUỘC await trước khi đọc.
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const session = await auth();
   if (!session?.user) redirect("/login?callbackUrl=%2Fnhap-khach-hang");
   // Layout admin đã gác đăng nhập; đây là gate QUYỀN của riêng trang. Server
@@ -41,6 +51,7 @@ export default async function NhapKhachHangPage() {
 
   const actor = await resolveActor(session.user.id);
   const centers = await loadIntakeCenterOptions(actor);
+  const prefill = docPrefillTuQuery(await searchParams);
 
   return (
     <div>
@@ -52,7 +63,7 @@ export default async function NhapKhachHangPage() {
           cơ sở.
         </p>
       </div>
-      <QuickLeadForm centers={centers} />
+      <QuickLeadForm centers={centers} initial={prefill} />
     </div>
   );
 }
