@@ -16,6 +16,18 @@
  *   · và cả 12 dòng ấy mang `dayCreditEarned = 0.5` với `workedMinutes = 0`
  *     ⇒ **6 công được ghi cho những ngày chưa xảy ra**.
  *
+ * ⚠️ ĐỪNG VỘI KẾT LUẬN "engine ghi khống công". Đo tiếp ngày ĐÃ QUA: 19/19 dòng có cờ
+ * `KHONG_CO_LUOT` cũng nhận ĐỦ công (earned = expected). Tức công tính theo KẾ HOẠCH CA
+ * chứ không theo lượt quét — đúng cho cả ngày đã qua, và đó là luật đang chạy, không phải
+ * lỗi của riêng ngày tương lai. Mục 6 dưới đây in cả hai vế để người đọc sau không đi vá
+ * nhầm chỗ.
+ *
+ * ⇒ Ba cái SAI thật sự, tách bạch:
+ *   1. Cờ `KHONG_CO_LUOT` gắn cho ngày CHƯA DIỄN RA — không ai quét được cho ngày mai.
+ *   2. Thống kê gộp ngày chưa tới vào các số "đã xảy ra" (ngày có ca · chưa chấm ·
+ *      ngày cần xử lý), trong khi nhãn vẫn in "chưa gồm ngày chưa tới".
+ *   3. Nhãn gọi con số ấy là "Công THỰC TẾ" trong khi nó là công theo KẾ HOẠCH.
+ *
  * Nguyên do đọc được trong mã: `recomputeRange` (`recompute.ts:243`) lặp MỌI ngày từ
  * `from` tới `to` không có vế nào so với hôm nay, và `recomputeAttendanceDay` cũng không
  * có tham số "hôm nay". Kỳ đang chạy thì `periodRange(ky)` trả trọn tháng.
@@ -142,6 +154,35 @@ async function main() {
           ` cờ=[${d.flags.join(",")}]`,
       );
     }
+  }
+
+  // ── 6. VẾ ĐỐI CHỨNG — ngày ĐÃ QUA không quét thì có nhận công không? ──────
+  //
+  // Bắt buộc phải in vế này cạnh vế trên. Thiếu nó, người đọc thấy "ngày tương lai nhận
+  // công" rồi kết luận engine ghi khống, và đi vá chỗ không hỏng. Nếu ngày đã qua cũng
+  // nhận đủ công thì luật đang chạy là "công theo KẾ HOẠCH CA, cờ để quản lý xử lý" —
+  // lúc ấy việc phải bàn là NHÃN và PHẠM VI, không phải phép tính công.
+  const daQua = await db.staffAttendanceDay.findMany({
+    where: { workDate: { lte: homNay }, flags: { has: "KHONG_CO_LUOT" } },
+    select: { dayCreditExpected: true, dayCreditEarned: true, overrideUnits: true },
+  });
+  const duCong = daQua.filter(
+    (d) => d.dayCreditExpected > 0 && (d.overrideUnits ?? d.dayCreditEarned) === d.dayCreditExpected,
+  ).length;
+  const khongCong = daQua.filter((d) => (d.overrideUnits ?? d.dayCreditEarned) === 0).length;
+  tieu("6. ĐỐI CHỨNG — ngày ĐÃ QUA mà KHÔNG có lượt quét nào");
+  dong("Số dòng ngày đã qua mang cờ KHONG_CO_LUOT", daQua.length);
+  dong("  — trong đó nhận ĐỦ công (earned = expected)", duCong);
+  dong("  — trong đó KHÔNG nhận công (earned = 0)", khongCong);
+  console.log("");
+  if (daQua.length > 0 && duCong === daQua.length) {
+    console.log("  ⇒ Ngày đã qua không quét VẪN nhận đủ công. Vậy công tính theo KẾ HOẠCH CA,");
+    console.log("    không theo lượt quét — luật đang chạy, KHÔNG phải lỗi riêng của ngày mai.");
+    console.log("    Việc phải bàn là NHÃN (\"Công thực tế\"?) và PHẠM VI (có gộp ngày chưa tới?),");
+    console.log("    cộng với CỜ gắn oan — không phải phép tính công.");
+  } else if (daQua.length > 0) {
+    console.log("  ⇒ KHÔNG đồng nhất: ngày đã qua không quét thì có dòng mất công, có dòng không.");
+    console.log("    Đây là phát hiện RIÊNG, nặng hơn câu hỏi ban đầu — phải truy trước khi vá gì.");
   }
 
   console.log("");
