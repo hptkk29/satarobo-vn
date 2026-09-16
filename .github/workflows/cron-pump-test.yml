@@ -1,3 +1,13 @@
+# 🔴 16/09/2026 — BẪY HAI TẦNG, đọc trước khi thêm cron vào vòng `for` bên dưới.
+# GitHub chạy workflow theo lịch bằng bản ở NHÁNH MẶC ĐỊNH (`main`), bất kể lịch được khai
+# ở nhánh nào. Nên sửa danh sách bơm ở nhánh `test` là sửa vào chỗ KHÔNG chạy theo lịch:
+# nó chỉ có tác dụng khi ai đó kích tay `gh workflow run cron-pump-test.yml --ref test`
+# (thiếu `--ref test` thì `gh` lấy nhánh mặc định ⇒ chạy XANH mà vẫn bơm thiếu).
+# Đo hôm đó: `zalocrm-doi-soat` thêm vào bản `test`, lượt `--ref test` cho HTTP 200, còn
+# mọi lượt theo lịch (headBranch=main) không hề gọi tới nó.
+# ⇒ Cron mới chỉ thật sự sống khi nhánh `test` về được `main`. Tới lúc đó, đừng kết luận
+#   "cron hỏng" khi thấy nó không chạy trên test — kiểm nhánh trước.
+#
 # Q18d — Vercel Cron KHÔNG chạy trên custom environment → site test không có cron.
 # Workflow này bơm các cron SỐNG CÒN cho UAT: dispatch-events (DomainEvent outbox —
 # thiếu nó mọi side-effect đứng im), email-queue (worker gửi mail), chat-zns-notify,

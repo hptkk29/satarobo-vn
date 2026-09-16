@@ -116,31 +116,44 @@ curl -s -i -X POST https://test.satarobo.vn/api/webhooks/zalocrm/cs1 \
 - **Báo trước cho người nghiệm thu:** đây là **thay đổi hành vi có chủ đích** (vá B2 bịt rò
   chéo cơ sở), không phải lỗi mới.
 
-### ⑩ Cron tự cấp quyền nick — 5 phút chờ
+### ⑩ Cron tự cấp quyền nick — 2 phút
 
-> ⚠️ **Trên `test`, Vercel Cron KHÔNG chạy** (custom environment). Cron của ZaloCRM được
-> bơm bằng `.github/workflows/cron-pump-test.yml`, nhịp ~5 phút. **Không muốn chờ thì kích tay:**
+> 🔴 **Trên `test`, cron này KHÔNG tự chạy. Phải kích tay, và phải kèm `--ref test`.**
 >
 > ```bash
-> gh workflow run cron-pump-test.yml
+> gh workflow run cron-pump-test.yml --ref test
 > ```
 >
-> Lệnh này cũng chạy kèm job đối soát OrgUnit ban đêm — vô hại, nó idempotent.
-> (Nhắc để khỏi tưởng cron hỏng: trước 16/09/2026 `zalocrm-doi-soat` **không** nằm trong
-> danh sách bơm, nên mục ⑩ và ⑪ sẽ không bao giờ đạt trên `test`. Đã vá.)
+> **`--ref test` là bắt buộc, không phải tuỳ chọn.** Hai tầng lý do chồng lên nhau:
+> 1. Vercel Cron không chạy trên environment tuỳ biến ⇒ `test` phải nhờ
+>    `.github/workflows/cron-pump-test.yml` bơm hộ.
+> 2. **GitHub chạy workflow theo lịch bằng bản ở NHÁNH MẶC ĐỊNH (`main`)**, bất kể lịch
+>    được khai ở nhánh nào. Bản trên `main` bơm `dispatch-events email-queue
+>    chat-zns-notify trial-reminder shift-brief push-outbox` — **không có
+>    `zalocrm-doi-soat`**. Bản có nó nằm ở `test`, và chỉ được dùng khi ta chỉ đích danh
+>    nhánh. Gõ `gh workflow run cron-pump-test.yml` trống thì `gh` lấy nhánh mặc định ⇒
+>    chạy xanh, báo thành công, **mà vẫn không bơm `zalocrm-doi-soat`**.
+>
+> Đo 16/09/2026, lượt chạy `--ref test`: `zalocrm-doi-soat → HTTP 200` ✅
+> (lượt chạy theo lịch từ `main` cùng ngày: không có dòng nào cho endpoint này).
+>
+> Lệnh này chạy kèm job đối soát OrgUnit — vô hại, nó idempotent.
+>
+> **Hết hiệu lực khi nào:** sau khi `test` về được `main`. Từ lúc đó lịch 5 phút mới tự
+> bơm, và mục ⑩/⑪ chờ được thay vì phải kích.
 
 - **Làm gì:** lấy một Sale CS1 **chưa từng mở ZaloCRM**. Cho đăng nhập `test.satarobo.vn`, mở `/admin/zalo-crm`.
 - **Lần đầu có thể TRỐNG** — đúng như thiết kế, cron chưa chạy.
-- **Chờ tối đa 5 phút**, tải lại trang.
+- **Kích cron bằng lệnh ở khối trên**, chờ ~1 phút cho workflow chạy xong, tải lại trang.
 - **Đạt khi:** Sale đó thấy **đúng nick CS1** và **gửi được tin** trên nick đó.
-- *Hỏng thì xem đâu:* quá 5 phút vẫn trống ⇒ xem nhật ký cron `zalocrm-doi-soat`. Người đó
+- *Hỏng thì xem đâu:* kích cron rồi vẫn trống ⇒ **kiểm trước là lượt chạy có `--ref test` không** (xem khối cảnh báo trên), rồi mới xem nhật ký cron `zalocrm-doi-soat`. Người đó
   **chưa từng đăng nhập ZaloCRM** thì bên kia chưa có tài khoản — đếm vào `chuaCoTaiKhoan`,
   **không phải lỗi**, bảo họ mở `/admin/zalo-crm` một lần rồi chờ lượt cron sau.
 
-### ⑪ Vế GỠ quyền — 5 phút chờ *(mục dễ quên nhất, và hỏng câm)*
+### ⑪ Vế GỠ quyền — 2 phút *(mục dễ quên nhất, và hỏng câm)*
 - **Làm gì:** vào `/admin/nhan-su` gỡ Sale vừa thử ở ⑩ khỏi CS1 (đổi cơ sở, hoặc đặt ngày
   hết hiệu lực, hoặc khoá tài khoản).
-- **Chờ tối đa 5 phút.**
+- **Kích lại cron** (`gh workflow run cron-pump-test.yml --ref test`), chờ ~1 phút.
 - **Đạt khi:** Sale đó mở `/admin/zalo-crm` **không còn thấy nick CS1** và **gửi không được**.
 - **Vì sao phải bấm tay dù đã có test khoá hành vi:** cấp thì ai cũng nhớ, gỡ thì không —
   vì gỡ hỏng **không có triệu chứng**: mọi thứ vẫn chạy, chỉ là một người không còn phận sự
@@ -153,7 +166,7 @@ curl -s -i -X POST https://test.satarobo.vn/api/webhooks/zalocrm/cs1 \
 | # | Việc | Đạt khi |
 |---|---|---|
 | ⑫ | **F5 — nút "Tạo lead" trong chat.** Trong khung thông tin liên hệ bên phải của chat. | Sata nhảy sang trang nhập khách, **đã điền sẵn** số điện thoại + tên lấy từ hội thoại |
-| ⑬ | **Lưới bù tin.** Tắt đường hầm 2 phút, nhắn 1 tin, bật lại, chờ ≤5 phút (hoặc `gh workflow run cron-pump-test.yml`). | Tin tự về, không phải bấm gì |
+| ⑬ | **Lưới bù tin.** Tắt đường hầm 2 phút, nhắn 1 tin, bật lại, rồi `gh workflow run cron-pump-test.yml --ref test`. | Tin tự về, không phải bấm gì trong giao diện |
 | ⑭ | **Báo cáo phản hồi.** `/admin/bao-cao/phan-hoi-hop-thu`. | Có số liệu, không trống |
 
 ---
