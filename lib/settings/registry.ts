@@ -320,6 +320,112 @@ export const SETTINGS = {
     default: false,
     centerOverridable: false, // quyền không được lệch nhau giữa các cơ sở
   }),
+  // Web Push (08/09/2026) — CÔNG TẮC của kênh thông báo đẩy cho NHÂN VIÊN.
+  //
+  // Ở SystemSetting chứ không phải env, đúng nếp của MỌI kênh gửi ra ngoài trong repo này
+  // (`chat.znsNotifyEnabled`, `zalo.znsLive`): tắt kênh phải có hiệu lực trong ≤5 phút mà
+  // không cần deploy. Env chỉ giữ khoá bí mật (`VAPID_PRIVATE_KEY`).
+  //
+  // ✅ ĐÃ CÓ ĐƯỜNG ĐỌC TỪ ĐỢT 4: `chayLuotGuiPush` (lib/push/engine.ts) đọc key này ở dòng đầu
+  // mỗi lượt cron và THOÁT SẠCH khi tắt — không đọc bảng nào, không đánh dấu dòng nào. Vì thế
+  // hậu tố "CHƯA HOẠT ĐỘNG" trong `label` đã được gỡ.
+  //
+  // ⚠️ "≤5 phút" là con số ĐÚNG, đừng viết thành "ngay": `getSetting` cache `revalidate: 300`
+  // (lib/settings/service.ts — docstring ở đầu file đó ghi "60s" là SAI so với code), còn nhánh
+  // xoá cache theo tag chỉ chạy được trong Server Action. Màn /admin/cau-hinh-van-hanh sửa qua
+  // Server Action nên thường ăn ngay, nhưng một lượt cron đang giữ bản cache vẫn có thể gửi
+  // thêm trong tối đa 5 phút sau khi người vận hành gạt tắt.
+  //
+  // ⚠️ Bật công tắc KHÔNG đủ để kênh chạy: engine còn một cổng thứ hai là ba biến môi trường
+  // `NEXT_PUBLIC_VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT`. Thiếu hoặc sai hình
+  // dạng thì mỗi lượt trả `reason: "NO_VAPID"` và không dòng nào bị đụng.
+  //
+  // TẮT mặc định. DB trống ở mọi môi trường sẽ rơi về `default` (lib/settings/resolve.ts) nên
+  // `true` ở đây nghĩa là tự bật ở cả những nơi chưa ai cấu hình gì.
+  //
+  // Đặt tạm ở nhóm `system` chứ không mở nhóm `push` riêng: hiện chỉ có MỘT key, và thêm
+  // nhóm phải sửa union `SettingGroup` + nhãn ở `settings-editor.tsx`. Khoá cấu hình lưu
+  // theo `key` chứ không theo nhóm, nên chuyển sang nhóm riêng về sau là đổi code thuần,
+  // không migration. Chuyển khi có ≥3 key push (allowlist tiền tố, trần/ngày…).
+  "push.webPushEnabled": def({
+    key: "push.webPushEnabled",
+    group: "system",
+    label: "Bật thông báo đẩy (Web Push) cho nhân viên — cần khai khoá VAPID trước",
+    schema: z.boolean(),
+    default: false,
+    // Kênh bật/tắt toàn hệ: một cơ sở tự tắt thì nhân viên cơ sở đó im lặng mà không ai
+    // ở Hội sở biết — đúng loại lỗi câm mà module này sinh ra để tránh.
+    centerOverridable: false,
+  }),
+  // ── Loại thông báo nào được đẩy ───────────────────────────────────────────────────────
+  //
+  // Trước 13/09/2026 danh sách này là HẰNG SỐ trong `lib/push/allowlist.ts`, nên "đổi loại
+  // nào được rung máy" là một lần sửa mã + deploy. Nay nó là tham số vận hành: sửa ở
+  // `/admin/cau-hinh-van-hanh`, có lý do, có nhật ký kiểm toán, không cần deploy.
+  //
+  // ⚠️ VẪN LÀ DANH SÁCH TRẮNG — rỗng nghĩa là KHÔNG đẩy gì, không phải "đẩy tất". Toàn bộ lập
+  // luận vì sao trắng-chứ-không-đen nằm ở đầu `lib/push/allowlist.ts`; đừng đảo ở đây.
+  //
+  // Giá trị phải là TIỀN TỐ ĐÃ KHAI trong `lib/notifications/catalog.ts`. Cổng này quan trọng
+  // hơn vẻ ngoài: gõ sai một ký tự (`lead.moi` thiếu dấu hai chấm) thì `startsWith` vẫn khớp
+  // đúng loại đó nhưng có thể khớp LẤN sang loại khác sinh sau; còn gõ hẳn một khoá không tồn
+  // tại thì danh sách trông như đã bật mà thực tế không bao giờ khớp gì — màn hình nói dối,
+  // và không có lỗi nào được ném ra. Chặn ngay ở tầng validate là chỗ rẻ nhất.
+  "push.tienToDuocDay": def({
+    key: "push.tienToDuocDay",
+    group: "system",
+    label:
+      "Loại thông báo được đẩy Web Push — chọn ở màn Cấu hình thông báo đẩy, để trống = không đẩy loại nào",
+    // ⚠️ CỐ Ý không import `catalogPrefixes` để đối chiếu danh mục ở đây, dù đó mới là phép
+    // kiểm mạnh nhất. `lint:boundaries` (dependency-cruiser) bắt được 11 vòng import khi thử:
+    //     registry → notifications/catalog → notifications/pending-sync → pending-tasks
+    //     → settings/service · auth/actor · auth/permission-eval → … → registry
+    // `pending-sync` chỉ `import type` từ `pending-tasks` nên vòng đó không tồn tại lúc chạy,
+    // nhưng luật `no-circular` của repo không loại trừ import kiểu, và nới luật chung để hợp
+    // thức hoá một tính năng là đổi rào cho cả repo — không phải việc của đợt này.
+    //
+    // Nên chia đôi trách nhiệm: tầng này gác HÌNH DẠNG (thứ không cần biết catalog), còn phép
+    // đối chiếu "có thật trong danh mục không" nằm ở `luuLoaiDuocDayAction` — đường ghi DUY
+    // NHẤT mà giao diện dùng, và ở đó import catalog không tạo vòng nào.
+    schema: z
+      .array(z.string())
+      .max(200)
+      .superRefine((ds, ctx) => {
+        const daGap = new Set<string>();
+        ds.forEach((d, i) => {
+          // Chuỗi rỗng là ca CHẾT NGƯỜI: `"x".startsWith("")` luôn đúng ⇒ một phần tử rỗng
+          // biến danh sách trắng thành "đẩy tất cả 51 loại".
+          if (d.length === 0) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: [i],
+              message: "Chuỗi rỗng khớp MỌI loại thông báo — không được phép",
+            });
+          } else if (!d.endsWith(":")) {
+            // Dấu hai chấm là luật khớp dùng chung với `lib/notifications/catalog.ts`. Thiếu
+            // nó thì `lead.moi` khớp lấn sang `lead.moi_gi_do` sinh sau.
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: [i],
+              message: `"${d}" phải kết thúc bằng dấu hai chấm`,
+            });
+          }
+          if (daGap.has(d)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: [i],
+              message: `"${d}" bị khai hai lần`,
+            });
+          }
+          daGap.add(d);
+        });
+      }),
+    // ĐÚNG giá trị đang hardcode trước 13/09 ⇒ DB trống ở mọi môi trường vẫn ra hành vi cũ.
+    default: ["lead.moi:"],
+    // Cùng lý do với công tắc tổng: một cơ sở tự tắt một loại thì nhân viên cơ sở đó im lặng
+    // mà Hội sở không biết.
+    centerOverridable: false,
+  }),
   "student.birthdayZnsEnabled": def({
     key: "student.birthdayZnsEnabled",
     group: "student",
@@ -945,18 +1051,6 @@ export const SETTINGS = {
     centerOverridable: false,
   }),
   // ── Nhận lead từ nguồn ngoài (form Sale, quatang) ───────────────────────
-  // Đặt ở SystemSetting chứ KHÔNG ở env: theo QĐ-3 (16/08) MISA sẽ bị bỏ hẳn
-  // sau khi lead chảy về ổn định. Ngày đó chỉ cần tắt 1 nút, không phải deploy.
-  // Tắt = ngừng gửi bản sao sang MISA; Lead trong DB ta không đổi gì.
-  "intake.mirrorMisa": def({
-    key: "intake.mirrorMisa",
-    group: "crm",
-    label:
-      "Gửi kèm bản sao phiếu nhập của Sale sang MISA (giai đoạn chuyển tiếp — tắt khi bỏ MISA)",
-    schema: z.boolean(),
-    default: true, // app/api/public/lead-intake/sale-form/route.ts
-    centerOverridable: false,
-  }),
   "intake.saleFormRateLimitMax": def({
     key: "intake.saleFormRateLimitMax",
     group: "crm",

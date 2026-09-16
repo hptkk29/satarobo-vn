@@ -24,7 +24,14 @@ export async function loadBuoiDay(userIds: string[], from: Date, to: Date): Prom
   if (userIds.length === 0) return [];
   const denHet = new Date(to.getTime() + 86_400_000); // `ClassSession.date` có cả giờ
 
-  const [buoiLop, buoiTrial] = await Promise.all([
+  // Phân loại mặc định: buổi chưa gán `sessionCategoryId` được tính NHƯ dòng này. Đọc ở đây thay
+  // vì để `cong-day.ts` tự đoán — luật thuần không được biết tới DB, và "buổi chưa phân loại rơi
+  // vào dòng nào" là quyết định của người vận hành chứ không phải mặc định trong mã.
+  const [macDinh, buoiLop, buoiTrial] = await Promise.all([
+    db.sessionCategory.findFirst({
+      where: { isDefault: true, isActive: true },
+      select: { code: true },
+    }),
     // Chỉ buổi ĐÃ HOÀN TẤT — buổi chưa chốt thì chưa có công dạy, giống cách kỳ công đang đếm.
     db.classSession.findMany({
       where: {
@@ -44,6 +51,7 @@ export async function loadBuoiDay(userIds: string[], from: Date, to: Date): Prom
         substituteTeacherId: true,
         actualStartAt: true,
         actualEndAt: true,
+        sessionCategory: { select: { code: true, isActive: true } },
         class: { select: { teacherId: true, assistantId: true, startTime: true, endTime: true } },
       },
     }),
@@ -75,6 +83,9 @@ export async function loadBuoiDay(userIds: string[], from: Date, to: Date): Prom
       phutGiuaHaiMoc(s.actualStartAt, s.actualEndAt) ??
       phutGiuaHaiGio(s.class?.startTime, s.class?.endTime);
     const ymd = vnYmd(s.date);
+    // Phân loại đã TẮT thì coi như buổi chưa phân loại — rơi về mặc định. Nếu giữ nguyên mã đã
+    // tắt thì buổi ăn dòng bao sân, tức tắt một phân loại lại âm thầm đổi hệ số của buổi cũ.
+    const phanLoai = (s.sessionCategory?.isActive ? s.sessionCategory.code : null) ?? macDinh?.code ?? null;
 
     // Người ĐỨNG LỚP: đúng một người, theo thứ tự ưu tiên của cả module.
     const nguoiDay = s.actualTeacherId ?? s.substituteTeacherId ?? s.class?.teacherId ?? null;
@@ -95,6 +106,7 @@ export async function loadBuoiDay(userIds: string[], from: Date, to: Date): Prom
         role: laChinh ? "MAIN" : "SUBSTITUTE",
         ymd,
         minutes,
+        categoryCode: phanLoai,
       });
     }
 
@@ -103,7 +115,7 @@ export async function loadBuoiDay(userIds: string[], from: Date, to: Date): Prom
     // đổi trợ giảng giữa khoá sẽ quy lại cả buổi cũ. Loại TRO_GIANG mặc định KHÔNG cộng vào kỳ.
     const tg = s.class?.assistantId ?? null;
     if (tg && tg !== nguoiDay && quanTam.has(tg)) {
-      ra.push({ id: s.id, source: "CLASS", userId: tg, role: "ASSISTANT", ymd, minutes });
+      ra.push({ id: s.id, source: "CLASS", userId: tg, role: "ASSISTANT", ymd, minutes, categoryCode: phanLoai });
     }
   }
 
@@ -118,6 +130,9 @@ export async function loadBuoiDay(userIds: string[], from: Date, to: Date): Prom
       role: laChinh ? "MAIN" : "SUBSTITUTE",
       ymd: vnYmd(s.date),
       minutes: phutGiuaHaiGio(s.startTime, s.endTime),
+      // Buổi trải nghiệm KHÔNG mang phân loại: `TrialClassSession` không có cột đó, và nguồn
+      // TRIAL đã là chiều phân biệt riêng. null ⇒ luôn ăn dòng bao sân của nguồn TRIAL.
+      categoryCode: null,
     });
   }
 
@@ -126,7 +141,7 @@ export async function loadBuoiDay(userIds: string[], from: Date, to: Date): Prom
 
 /** Danh mục loại công dạy đang có, theo thứ tự hiển thị. */
 export async function loadLoaiCongDay() {
-  return db.teachingCreditType.findMany({
+  const rows = await db.teachingCreditType.findMany({
     orderBy: [{ displayOrder: "asc" }, { code: "asc" }],
     select: {
       code: true,
@@ -137,6 +152,8 @@ export async function loadLoaiCongDay() {
       factor: true,
       countsInPeriod: true,
       isActive: true,
+      category: { select: { code: true } },
     },
   });
+  return rows.map(({ category, ...r }) => ({ ...r, categoryCode: category?.code ?? null }));
 }

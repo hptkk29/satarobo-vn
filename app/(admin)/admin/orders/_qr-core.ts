@@ -38,7 +38,7 @@ import {
   isPayosConfigured,
 } from "@/lib/payments/payos";
 import {
-  getPaymentConfig,
+  resolveOrderPaymentConfig,
   buildVietQrImageUrl,
   transferContentForOrder,
   VIETQR_ADDINFO_MAX,
@@ -117,6 +117,8 @@ type LoadedRequest = {
     id: string;
     code: string;
     centerId: string | null;
+    /** Phương thức đã chọn trên đơn — quyết định tài khoản mã QR trỏ vào. */
+    paymentMethodId: string | null;
     /** 3 mảnh dựng nội dung CK dạng người đọc (chốt 20/08). */
     studentName: string;
     customerName: string;
@@ -145,6 +147,9 @@ async function loadScopedRequest(
           id: true,
           code: true,
           centerId: true,
+          // 31/08/2026 — tài khoản nhận tiền nay gắn vào PHƯƠNG THỨC của đơn, không còn
+          // theo cơ sở. Thiếu cột này là mã QR rơi về đường lùi và trỏ sai tài khoản.
+          paymentMethodId: true,
           customerName: true,
           customerPhone: true,
           student: { select: { name: true } },
@@ -169,6 +174,7 @@ async function loadScopedRequest(
       id: row.order.id,
       code: row.order.code,
       centerId: row.order.centerId,
+      paymentMethodId: row.order.paymentMethodId,
       studentName: row.order.student?.name ?? row.order.customerName,
       customerName: row.order.customerName,
       customerPhone: row.order.customerPhone,
@@ -376,7 +382,12 @@ async function buildQrPayload(
     }
   }
 
-  const cfg = await getPaymentConfig(req.order.centerId ?? req.centerId);
+  // 31/08/2026 — lấy tài khoản theo PHƯƠNG THỨC của đơn (lùi dần về phương thức chuyển
+  // khoản của cơ sở → dùng chung → kho VietQR cũ). Xem resolveOrderPaymentConfig.
+  const cfg = await resolveOrderPaymentConfig({
+    centerId: req.order.centerId ?? req.centerId,
+    paymentMethodId: req.order.paymentMethodId,
+  });
   const imageUrl = buildVietQrImageUrl(cfg, amount, addInfo);
   if (!imageUrl) return null;
   return { qrContent: imageUrl, checkoutUrl: null, providerOrderCode: null };

@@ -8,9 +8,23 @@ import { checkPermission, assertPermission } from "@/lib/auth/check-permission";
 import { PermissionError } from "@/lib/auth/can";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
+import {
+  METHOD_WRONG_CENTER_ERROR,
+  methodServesCenter,
+} from "@/lib/payments/method-scope";
+import { lookupMethodCenterByCode } from "@/lib/payments/method-lookup";
 import { maskNationalId, maskAddress } from "@/lib/finance/pii-mask";
 import { breakGlassSchema } from "@/lib/validators/audit";
 import { writeAudit } from "@/lib/audit/audit-log";
+// Phương án B (13/09/2026) — chọn khoản NHẬP LIỆU BAN ĐẦU đủ điều kiện xác nhận hàng
+// loạt. Luật THUẦN, ở một chỗ, và KHÔNG lách cổng nào của `confirmPayment`.
+import {
+  BACKFILL_PAYMENT_MARKER,
+} from "@/lib/finance/payment-markers";
+import {
+  lapKeHoachXacNhan,
+  type BackfillCandidate,
+} from "@/lib/finance/backfill-confirm";
 import { getAuditActor } from "@/lib/audit/log";
 import { getRequestMetadata } from "@/lib/audit/headers";
 // ─── lib/finance/* — parallel agent owns these. Combined typecheck resolves. ──
@@ -25,6 +39,7 @@ import {
   confirmPayment,
   rejectPayment,
   adjustPayment,
+  updatePendingPayment,
   refundPayment,
 } from "@/lib/finance/payment";
 
@@ -69,10 +84,30 @@ const recordSchema = z.object({
 const adjustSchema = z.object({
   paymentId: z.string().min(1),
   amount: z.coerce.number().int().positive("Số tiền phải > 0"),
-  method: z.string().trim().optional().nullable(),
-  note: z.string().max(1000).optional().nullable(),
+  // ⚠️ 30/08/2026 — `method` ĐÃ GỠ khỏi đây, có chủ đích.
+  //
+  // Nó là một ô GHI MỞ mà không giao diện nào dùng: `payments-client.tsx:747` chỉ gửi
+  // paymentId/amount/reason/expectedUpdatedAt. Nhưng Server Action là endpoint HTTP
+  // riêng — ai gọi thẳng vẫn đặt được `method: "BANK_CS2"` và `adjustPayment` ghi
+  // nguyên chuỗi đó vào bút toán điều chỉnh mới (lib/finance/payment.ts
+  // `method: params.method ?? original.method`), KHÔNG qua cổng cơ sở nào. Tức đây là
+  // đường ghi `Payment.method` thứ hai, và nó lách trọn cổng vừa dựng ở
+  // `recordPaymentAction`. Bỏ hẳn rẻ hơn và chặt hơn dựng cổng thứ hai: bút toán điều
+  // chỉnh nay luôn KẾ THỪA phương thức của khoản gốc (`params.method` = undefined →
+  // `?? original.method`), đúng hành vi mà giao diện vẫn đang có.
+  // `note` ĐÃ GỠ 07/09: bút toán điều chỉnh nay lưu chính LÝ DO vào `Payment.note` để
+  // cổng phụ huynh in được lý do cạnh con số, nên không còn chỗ cho một ghi chú thứ hai.
   reason: z.string().trim().min(5, "Lý do tối thiểu 5 ký tự"),
-  // FIX-H9 — optimistic lock: Payment.updatedAt (ISO) client đã thấy.
+  // Optimistic lock: Payment.updatedAt (ISO) client đã thấy. So sánh KHÔNG ghi đè —
+  // dòng gốc phải bất biến.
+  expectedUpdatedAt: z.string().optional().nullable(),
+});
+
+// Sửa khoản CÒN CHỜ DUYỆT — động từ khác hẳn "điều chỉnh", nên schema riêng.
+const updatePendingSchema = z.object({
+  paymentId: z.string().min(1),
+  amount: z.coerce.number().int().positive("Số tiền phải > 0"),
+  reason: z.string().trim().max(1000).optional().nullable(),
   expectedUpdatedAt: z.string().optional().nullable(),
 });
 
@@ -99,6 +134,18 @@ export type PaymentListRow = {
   updatedAt: string; // ISO
   saleStatus: string;
   accountantStatus: string;
+  /** LOẠI bút toán — phân biệt phiếu thu với dòng điều chỉnh. */
+  paymentType: string;
+  /**
+   * Giá trị HIỆN TẠI của phiếu thu = `amount` + Σ các bút toán điều chỉnh trỏ vào nó.
+   *
+   * Giao diện cần con số này để tính trước `delta` cho kế toán xem — nếu để client tự
+   * lấy `amount` thì sau lần điều chỉnh đầu tiên nó đã sai (amount là số GỐC, không phải
+   * số đang có hiệu lực).
+   */
+  hienTai: number;
+  /** Số bút toán điều chỉnh đã có trên phiếu này. */
+  soLanDieuChinh: number;
   orderCode: string | null;
   customerName: string | null;
   studentName: string | null; // tên bé
@@ -180,6 +227,25 @@ async function fetchPaymentRows(
     : [];
   const nameById = new Map(collectors.map((u) => [u.id, u.name]));
 
+  // Σ điều chỉnh theo TỪNG phiếu của trang — MỘT truy vấn gộp, không phải mỗi dòng một
+  // lượt. Dùng để tính "giá trị hiện tại" gửi xuống giao diện.
+  const dieuChinhTheoPhieu = await sdb.payment.groupBy({
+    by: ["adjustmentOfId"],
+    where: {
+      adjustmentOfId: { in: rows.map((r) => r.id) },
+      paymentType: "ADJUSTMENT",
+      deletedAt: null,
+    },
+    _sum: { amount: true },
+    _count: { _all: true },
+  });
+  const dieuChinhCua = new Map(
+    dieuChinhTheoPhieu.map((g) => [
+      g.adjustmentOfId as string,
+      { tong: g._sum.amount ?? 0, soLan: g._count._all },
+    ]),
+  );
+
   // Defense in depth: chỉ unmask khi caller THẬT SỰ có quyền. Không đủ quyền → im lặng
   // trả bản MASK (an toàn). wantUnmask chỉ true khi đã qua break-glass ở revealPaymentsPii.
   const unmask = wantUnmask && (await checkPermission("payments:view-pii"));
@@ -188,6 +254,7 @@ async function fetchPaymentRows(
     const activeReceipt = p.receipts.find((r) => r.status === "ACTIVE");
     const rawCccd = p.order?.student?.parentNationalId ?? null;
     const rawAddress = p.order?.student?.address ?? null;
+    const dc = dieuChinhCua.get(p.id);
     return {
       id: p.id,
       amount: p.amount,
@@ -196,6 +263,9 @@ async function fetchPaymentRows(
       updatedAt: p.updatedAt.toISOString(),
       saleStatus: p.saleStatus,
       accountantStatus: p.accountantStatus,
+      paymentType: p.paymentType,
+      hienTai: p.amount + (dc?.tong ?? 0),
+      soLanDieuChinh: dc?.soLan ?? 0,
       orderCode: p.order?.code ?? null,
       customerName: p.order?.customerName ?? null,
       studentName: p.order?.student?.name ?? null,
@@ -281,6 +351,32 @@ export async function revealPaymentsPii(
 }
 
 /** Đơn hàng gần đây trong scope — dùng cho select của form ghi nhận khoản. */
+/**
+ * Danh mục phương thức thanh toán để màn Ghi nhận khoản thu chọn.
+ *
+ * ⚠️ Trước 30/08/2026 danh sách này HARDCODE 5 dòng trong payments-client.tsx
+ * (`METHOD_OPTIONS`) — nên phương thức riêng của cơ sở khai ở /payment-methods không bao
+ * giờ hiện ra ở đây, và ngược lại người của cơ sở này thấy đủ 5 dòng của mọi cơ sở.
+ *
+ * Nay đọc từ DB qua scopedDb (PaymentMethod ∈ SCOPED_MODELS ∩ NULL_IS_GLOBAL_MODELS) ⇒
+ * người cấp cơ sở chỉ thấy phương thức của cơ sở mình + phương thức dùng chung. Client
+ * lọc thêm một lượt theo cơ sở của ĐƠN đang chọn.
+ */
+export async function loadPaymentMethodOptions() {
+  const session = await requireRecord();
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  // ⚠️ KHÔNG lọc `isActive` ở đây, có chủ đích. Danh sách này phục vụ HAI câu hỏi khác
+  // nhau trong payments-client.tsx: (a) dropdown CHỌN phương thức — chỉ dòng đang bật,
+  // client tự lọc; (b) bảng NHÃN dịch `Payment.method` của mọi khoản thu CŨ. Lọc ở tầng
+  // truy vấn là đúng cho (a) nhưng hỏng (b): tắt một phương thức riêng của cơ sở thì mọi
+  // khoản thu cũ ghi bằng mã đó rơi khỏi bảng nhãn và cột Phương thức in ra mã trần
+  // ("BANK_CS1") trước mắt kế toán.
+  return sdb.paymentMethod.findMany({
+    orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
+    select: { id: true, code: true, name: true, centerId: true, isActive: true },
+  });
+}
+
 export async function loadOrderOptions() {
   const session = await requireRecord();
   const sdb = scopedDb(await resolveActor(session.user.id));
@@ -318,15 +414,63 @@ export async function recordPaymentAction(input: unknown) {
   // Lấy order để (a) chống IDOR liên cơ sở, (b) suy centerId cho Payment, (c) auto-advance lead.
   const order = await sdb.order.findUnique({
     where: { id: data.orderId },
-    select: { id: true, centerId: true, leadId: true },
+    select: { id: true, centerId: true, leadId: true, studentId: true },
   });
   if (!order || !passesScope("Order", order, actor)) {
     return { ok: false as const, error: "Không tìm thấy đơn hàng" };
   }
 
+  // ⚠️ CỔNG SERVER cho ô "Enrollment ID" (06/09/2026).
+  //
+  // Ô đó là TEXT TỰ DO trên form, và `recordPayment` ghi thẳng giá trị nhận được vào
+  // `Payment.enrollmentId` — không nơi nào kiểm ghi danh ấy có thuộc đúng học viên của
+  // đơn này không. Gõ nhầm/dán nhầm một id là khoản thu về sổ của bé khác: công nợ bé A
+  // tụt xuống trên cổng phụ huynh dù nhà A chưa đóng đồng nào, còn nhà B đóng rồi vẫn
+  // thấy nợ. Tiền thật, hai gia đình, không có dấu vết nào ở giao diện.
+  //
+  // Ba điều kiện, cái nào hỏng cũng từ chối: ghi danh có thật · nằm trong tầm nhìn cơ sở
+  // của người ghi · thuộc ĐÚNG học viên của đơn hàng.
+  const enrollmentId = trimOrNull(data.enrollmentId);
+  if (enrollmentId) {
+    // Qua `sdb` (không phải db trần): ghi danh ngoài tầm nhìn cơ sở trả null ⇒ TỪ CHỐI.
+    // Ở đây "không thấy" phải dẫn tới CHẶN, nên hướng fail của scope là an toàn — khác
+    // hẳn cổng `lookupMethodCenterByCode` ngay dưới, nơi scope làm cổng mở toang.
+    const enr = await sdb.enrollment.findFirst({
+      where: { id: enrollmentId },
+      select: { id: true, centerId: true, studentId: true, deletedAt: true },
+    });
+    if (!enr || enr.deletedAt || !passesScope("Enrollment", enr, actor)) {
+      return { ok: false as const, error: "Không tìm thấy ghi danh tương ứng" };
+    }
+    if (order.studentId && enr.studentId !== order.studentId) {
+      return {
+        ok: false as const,
+        error: "Ghi danh này thuộc học viên khác — khoản thu sẽ vào sai sổ. Kiểm tra lại mã ghi danh.",
+      };
+    }
+  }
+
+  // ⚠️ CỔNG SERVER cho luật "cơ sở nào dùng phương thức của cơ sở đó" ở màn ghi nhận
+  // khoản thu. `Payment.method` là CHUỖI TỰ DO ở DB, nên không có ràng buộc nào khác
+  // chặn việc ghi mã phương thức của cơ sở khác vào sổ thu của cơ sở này — mà đó chính
+  // là con số kế toán mang đi đối chiếu với sao kê ngân hàng.
+  //
+  // Chỉ kiểm khi mã KHỚP một dòng trong danh mục: `Payment.method` còn mang dữ liệu cũ
+  // dạng nhãn thô ("auto", "COD"…) từ trước khi có danh mục — chặn cứng mọi chuỗi lạ là
+  // khoá luôn đường ghi nhận cho những khoản hợp lệ đã tồn tại.
+  //
+  // ⚠️ Tra qua `lookupMethodCenterByCode` (KHÔNG scope), TUYỆT ĐỐI không qua `sdb`:
+  // dùng `sdb` thì đúng mã cần chặn — mã của cơ sở khác — bị scope lọc mất, trả null,
+  // và cổng đọc null thành "mã lạ, cho qua" ⇒ cổng mở toang đúng lúc phải đóng.
+  // Xem ghi chú đầy đủ ở lib/payments/method-lookup.ts.
+  const pm = await lookupMethodCenterByCode(data.method);
+  if (pm.found && !methodServesCenter(pm, order.centerId)) {
+    return { ok: false as const, error: METHOD_WRONG_CENTER_ERROR };
+  }
+
   const res = await recordPayment({
     orderId: data.orderId,
-    enrollmentId: trimOrNull(data.enrollmentId),
+    enrollmentId,
     amount: data.amount,
     method: data.method,
     paidDate: new Date(data.paidDate),
@@ -422,9 +566,52 @@ export async function rejectPaymentAction(
   return { ok: true as const };
 }
 
+// ─── SỬA KHOẢN CHỜ DUYỆT (sửa tại chỗ, KHÔNG sinh bút toán) ─────────────
+/**
+ * Khoản chưa qua kế toán là BẢN NHÁP: sửa thẳng. Khác hẳn "Điều chỉnh" — xem
+ * `updatePendingPayment` trong lib/finance/payment.ts.
+ *
+ * Hai động từ khác nhau nên là hai đường khác nhau: sửa nháp KHÔNG sinh bút toán, còn
+ * "Điều chỉnh" thì luôn sinh, và không bao giờ đụng vào dòng đã xác nhận.
+ */
+export async function updatePendingPaymentAction(input: unknown) {
+  const session = await requireAccountant();
+  const parsed = updatePendingSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false as const,
+      error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ",
+    };
+  }
+  const data = parsed.data;
+  const scope = await loadScopedPayment(session.user.id, data.paymentId);
+  if (!scope.ok) return { ok: false as const, error: scope.error };
+
+  const res = await updatePendingPayment({
+    paymentId: data.paymentId,
+    actorId: scope.uid,
+    amount: data.amount,
+    reason: trimOrNull(data.reason) ?? undefined,
+    expectedUpdatedAt: data.expectedUpdatedAt || undefined,
+  });
+  if (!res.ok) return { ok: false as const, error: res.error };
+  revalidatePath("/payments");
+  revalidatePath("/cong-no");
+  return { ok: true as const };
+}
+
 // ─── ADJUST (Kế toán điều chỉnh — bút toán mới trỏ adjustmentOfId) ───────
 export async function adjustPaymentAction(input: unknown) {
+  // Cầu dao `ADJUST_PAYMENT_DISABLED` đã GỠ 07/09/2026 (Bước 7) sau khi bộ test Bước 6
+  // xanh: 24 ca trên Postgres thật + 25 ca thuần. Không còn `lib/finance/cau-dao-dieu-chinh.ts`.
   const session = await requireAccountant();
+  // Server Action là endpoint HTTP riêng — ẩn nút ở giao diện KHÔNG phải là cổng.
+  if (!(await checkPermission("payments:adjust"))) {
+    return {
+      ok: false as const,
+      error: "Bạn không có quyền điều chỉnh khoản thu.",
+    };
+  }
   const parsed = adjustSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -438,17 +625,16 @@ export async function adjustPaymentAction(input: unknown) {
 
   const res = await adjustPayment({
     paymentId: data.paymentId,
-    confirmedById: scope.uid,
-    amount: data.amount,
-    method: trimOrNull(data.method) ?? undefined,
-    note: trimOrNull(data.note),
+    // Ô nhập gửi SỐ ĐÚNG CUỐI CÙNG của dòng này; backend tự tính delta.
+    correctAmount: data.amount,
     reason: data.reason.trim(),
+    actorId: scope.uid,
     expectedUpdatedAt: data.expectedUpdatedAt || undefined,
   });
   if (!res.ok) return { ok: false as const, error: res.error };
   revalidatePath("/payments");
   revalidatePath("/cong-no");
-  return { ok: true as const, adjustmentId: res.adjustmentId };
+  return { ok: true as const, adjustmentId: res.adjustmentId, delta: res.delta };
 }
 
 // ─── REFUND (Kế toán hoàn — bút toán âm, không xoá gốc) ─────────────────
@@ -474,4 +660,119 @@ export async function refundPaymentAction(
   revalidatePath("/payments");
   revalidatePath("/cong-no");
   return { ok: true as const };
+}
+
+// ─── XÁC NHẬN HÀNG LOẠT khoản NHẬP LIỆU BAN ĐẦU (phương án B, 13/09/2026) ────
+//
+// VÌ SAO CÓ: học phí của khách chốt TRƯỚC 06/08 nhập từ sheet qua
+// `/leads/import/registered`. Nó tạo Order `CONFIRMED` + `Payment` mang dấu
+// `[backfill-import]` nhưng để `accountantStatus: PENDING`, mà doanh thu chỉ đếm
+// `CONFIRMED` ⇒ tiền cũ không vào doanh thu, và `confirmPaymentAction` là từng khoản một.
+//
+// ⚠️ KHÔNG lách cổng nào. Mỗi khoản vẫn đi qua ĐÚNG `confirmPayment` đang chạy (sinh
+// `Receipt`, ghi nhật ký), và cổng TÁCH NHIỆM VỤ ("người ghi nhận không tự xác nhận")
+// được giữ nguyên — thực thi ở `lapKeHoachXacNhan` rồi `confirmPayment` kiểm lại.
+//
+// ⚠️ ĐỘI NHỎ: nếu người bấm nút CHÍNH LÀ người đã nhập liệu thì MỌI khoản rơi vào
+// `TU_XAC_NHAN` và lượt này xác nhận 0 khoản. Đó không phải lỗi — hàm trả về số đếm
+// theo lý do để màn hiện ra, người vận hành đổi người xác nhận hoặc xin đổi luật.
+//
+// `xemThu: true` → chỉ TRẢ VỀ kế hoạch, KHÔNG ghi gì. Dùng cho màn xem trước.
+
+export async function bulkConfirmBackfillPaymentsAction(opts?: {
+  xemThu?: boolean;
+  /** Trần số khoản xử lý một lượt — tránh transaction dài trên prod. */
+  gioiHan?: number;
+}) {
+  const session = await requireAccountant();
+  const actorId = session.user.id as string;
+  const sdb = scopedDb(await resolveActor(actorId));
+  const gioiHan = Math.min(Math.max(1, Math.round(opts?.gioiHan ?? 200)), 500);
+
+  // scopedDb lọc theo tầm nhìn cơ sở (Payment ∈ SCOPED_MODELS) — người cấp cơ sở chỉ
+  // thấy khoản của cơ sở mình.
+  const rows = await sdb.payment.findMany({
+    where: {
+      deletedAt: null,
+      accountantStatus: "PENDING",
+      note: { contains: BACKFILL_PAYMENT_MARKER },
+    },
+    select: {
+      id: true,
+      note: true,
+      accountantStatus: true,
+      enrollmentId: true,
+      recordedById: true,
+      amount: true,
+    },
+    orderBy: { paidDate: "asc" },
+    take: gioiHan,
+  });
+
+  const plan = lapKeHoachXacNhan(rows as BackfillCandidate[], actorId);
+
+  if (opts?.xemThu) {
+    return {
+      ok: true as const,
+      xemThu: true as const,
+      // `quet` = số khoản backfill CHỜ KẾ TOÁN tìm được. Phải trả về để màn phân biệt
+      // "CHƯA CÓ khoản nào nhập từ sheet" (quet = 0) với "CÓ nhưng bị cổng bỏ qua"
+      // (quet > 0, soNhan = 0). Gộp hai thứ đó vào một câu là báo sai nguyên nhân.
+      quet: rows.length,
+      soNhan: plan.nhan.length,
+      tongNhan: plan.tongNhan,
+      soBo: plan.bo.length,
+      demTheoLyDo: plan.demTheoLyDo,
+    };
+  }
+
+  // Chạy TỪNG khoản qua `confirmPayment` — KHÔNG gộp một transaction lớn: một khoản
+  // hỏng không được kéo cả lượt về, và `confirmPayment` tự mở transaction riêng
+  // (sinh Receipt + publishEvent bên trong).
+  let thanhCong = 0;
+  const loi: { id: string; error: string }[] = [];
+  for (const p of plan.nhan) {
+    const res = await confirmPayment({ paymentId: p.id, confirmedById: actorId });
+    if (res.ok) thanhCong += 1;
+    else loi.push({ id: p.id, error: res.error });
+  }
+
+  await writeAudit({
+    actor: (() => {
+      const a = getAuditActor(session);
+      return { id: a.actorId, name: a.actorName };
+    })(),
+    module: "finance",
+    entityType: "Payment",
+    // Không có một khoản cụ thể — dùng id người bấm làm mốc của LƯỢT chạy.
+    entityId: `bulk-backfill-confirm:${actorId}`,
+    action: "CONFIRM",
+    newValues: {
+      quet: rows.length,
+      nhan: plan.nhan.length,
+      thanhCong,
+      loi: loi.length,
+      tongTien: plan.tongNhan,
+      demTheoLyDo: plan.demTheoLyDo,
+    },
+    reason: "Xác nhận hàng loạt khoản nhập liệu ban đầu (học phí chốt trước 06/08)",
+    ...(await getRequestMetadata()),
+  });
+
+  revalidatePath("/payments");
+  revalidatePath("/cong-no");
+  revalidatePath("/bao-cao/doanh-thu");
+  revalidatePath("/bao-cao/trung-tam");
+  revalidatePath("/dashboard");
+
+  return {
+    ok: true as const,
+    xemThu: false as const,
+    quet: rows.length,
+    thanhCong,
+    soBo: plan.bo.length,
+    demTheoLyDo: plan.demTheoLyDo,
+    loi,
+    tongTien: plan.tongNhan,
+  };
 }

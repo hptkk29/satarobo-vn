@@ -13,8 +13,17 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getSetting } from "@/lib/settings/service";
 import { vnDateAt, vnParts, vnWeekday, vnYmd } from "@/lib/time/vn";
-import { computeDay, type EngineAssignment, type EngineInput, type EngineLog, type EngineRules } from "./engine";
+import {
+  computeDay,
+  ketQuaNgayChuaDienRa,
+  type EngineAssignment,
+  type EngineInput,
+  type EngineLog,
+  type EngineRules,
+} from "./engine";
 import { resolveHomeCenter } from "./home-center";
+import { noiChiuCongCuaNgay } from "./noi-chiu-cong";
+import { orgUnitIdForCenter } from "../org/org-service";
 import type { ShiftSegment } from "./catalog";
 
 type Client = PrismaClient | Prisma.TransactionClient;
@@ -53,7 +62,14 @@ export type RecomputeResult =
 export async function recomputeAttendanceDay(
   userId: string,
   workDate: Date,
-  opts: { tx?: Prisma.TransactionClient } = {},
+  /**
+   * `now` — mốc "bây giờ" để biết `workDate` đã tới chưa. Mặc định đồng hồ thật.
+   *
+   * Có tham số này vì test KHÔNG được đọc đồng hồ (luật 19): ngày tuyệt đối trong fixture +
+   * một hàm rơi về `new Date()` = ca hẹn giờ nổ, mã không đổi mà tờ lịch đổi. Hàm đã có
+   * `now` thì ca test PHẢI truyền.
+   */
+  opts: { tx?: Prisma.TransactionClient; now?: Date } = {},
 ): Promise<RecomputeResult> {
   const client: Client = opts.tx ?? db;
   const home = await resolveHomeCenter(userId);
@@ -77,6 +93,7 @@ export async function recomputeAttendanceDay(
       templateCode: true,
       segments: true,
       attendanceMode: true,
+      soCapQuetKyVong: true,
       dayCredit: true,
       isLeave: true,
       nominalMinutes: true,
@@ -85,8 +102,19 @@ export async function recomputeAttendanceDay(
     },
   });
   const logs = await acceptedLogsOfDay(client, userId, workDate);
-  const centerId = assignment?.centerId ?? logs[0]?.centerId ?? home.centerId;
-  const orgUnitId = assignment?.orgUnitId ?? logs[0]?.orgUnitId ?? null;
+  // 🔴 Vá 13/09/2026 — NƠI CHỊU CÔNG là nơi TRỰC THUỘC / được xếp ca, KHÔNG phải nơi quét.
+  // Bản cũ: `?? logs[0]?.centerId ??` chen NƠI QUÉT vào giữa, nên ngày KHÔNG có ca xếp thì
+  // công của người Hội sở rơi vào cơ sở họ vừa ghé. Vế ấy chưa bao giờ cần: `resolveHomeCenter`
+  // luôn trả về một centerId. Luật + ca test ở `noi-chiu-cong.ts`.
+  const centerId = noiChiuCongCuaNgay({
+    centerIdCaDuocXep: assignment?.centerId ?? null,
+    centerIdNha: home.centerId,
+  });
+  // `orgUnitId` phải theo CÙNG nguồn với `centerId` — nó là thứ `loadEngineRules` và
+  // `getSetting("shift.weeklyOffDays")` đọc, nên lấy theo nơi quét là tính ngày công của
+  // người này bằng tham số vận hành của cơ sở khác. (Trả `null` cho Center("hoi-so") mồ côi
+  // là ĐÚNG: rơi về tham số toàn hệ thống, không mượn của ai.)
+  const orgUnitId = assignment?.orgUnitId ?? (await orgUnitIdForCenter(centerId));
 
   // Kỳ đã khoá ⇒ không tính lại (kể cả khi chưa có dòng — dòng mới sau khoá là sai).
   const periodKey = vnYmd(vnDateAt(workDate.getUTCFullYear(), workDate.getUTCMonth(), workDate.getUTCDate())).slice(0, 7);
@@ -121,6 +149,11 @@ export async function recomputeAttendanceDay(
         templateCode: assignment.templateCode,
         segments: ((assignment.segments as ShiftSegment[] | null) ?? []).map((s) => ({ start: s.start, end: s.end, kind: s.kind, place: s.place })),
         attendanceMode: assignment.attendanceMode,
+        // Ép về 0|1|2: cột DB là `Int` nên Prisma trả `number`. Giá trị lạ (ai đó gõ tay
+        // vào DB) rơi về 1 — chiều FAIL-CLOSED, cùng lý do với DEFAULT của migration.
+        soCapQuetKyVong: ([0, 1, 2] as const).includes(assignment.soCapQuetKyVong as 0 | 1 | 2)
+          ? (assignment.soCapQuetKyVong as 0 | 1 | 2)
+          : 1,
         dayCredit: assignment.dayCredit,
         isLeave: assignment.isLeave,
         nominalMinutes: assignment.nominalMinutes,
@@ -139,6 +172,19 @@ export async function recomputeAttendanceDay(
     isWeeklyOff: weeklyOff.includes(vnWeekday(vnDateAt(workDate.getUTCFullYear(), workDate.getUTCMonth(), workDate.getUTCDate(), 12))),
   });
 
+  // ── NGÀY CHƯA DIỄN RA: giữ kế hoạch, xoá mọi vế đã xảy ra ──────────────────────────
+  //
+  // `recomputeRange` lặp trọn kỳ kể cả kỳ ĐANG CHẠY, nên nút "Tính lại" giữa tháng vẫn đi
+  // qua đây cho ngày mai, ngày kia. Cổng đặt Ở ĐÂY chứ không ở `recomputeRange`: mọi đường
+  // ghi đều chụm về hàm này (cron dọn hàng đợi bẩn, nút Tính lại, `lockPeriod`, script), nên
+  // chặn ở một chỗ là chặn hết — chặn ở vòng lặp thì ba đường kia vẫn lọt.
+  //
+  // So theo NGÀY giờ VN, không so `Date` trực tiếp: `workDate` là `@db.Date` (UTC 00:00) còn
+  // `now` mang giờ thật, so thẳng là lệch đúng một ngày suốt buổi tối giờ VN.
+  const homNayYmd = vnYmd(opts.now ?? new Date());
+  const laNgayChuaToi = workDate.toISOString().slice(0, 10) > homNayYmd;
+  const rr = laNgayChuaToi ? ketQuaNgayChuaDienRa(r) : r;
+
   const keepOverride = existing?.overrideUnits != null;
   const data = {
     centerId,
@@ -146,28 +192,28 @@ export async function recomputeAttendanceDay(
     assignmentId: assignment?.id ?? null,
     templateCode: assignment?.templateCode ?? null,
     placeMode: assignment?.placeMode ?? null,
-    dayType: r.dayType,
-    expectedMinutes: r.expectedMinutes,
-    workedMinutes: r.workedMinutes,
-    paidBreakMinutes: r.paidBreakMinutes,
-    rawPairedMinutes: r.rawPairedMinutes,
-    amExpected: r.amExpected,
-    amWorked: r.amWorked,
-    pmExpected: r.pmExpected,
-    pmWorked: r.pmWorked,
-    lateMinutes: r.lateMinutes,
-    arrivalDeltaMinutes: r.arrivalDeltaMinutes,
-    earlyLeaveMinutes: r.earlyLeaveMinutes,
-    missedEarlyArrival: r.missedEarlyArrival,
-    dayCreditExpected: r.dayCreditExpected,
-    dayCreditEarned: r.dayCreditEarned,
-    hourCredit: r.hourCredit,
-    leaveUnits: r.leaveUnits,
-    holidayPaidUnits: r.holidayPaidUnits,
-    pairs: r.pairs as unknown as Prisma.InputJsonValue,
-    flags: r.flags,
+    dayType: rr.dayType,
+    expectedMinutes: rr.expectedMinutes,
+    workedMinutes: rr.workedMinutes,
+    paidBreakMinutes: rr.paidBreakMinutes,
+    rawPairedMinutes: rr.rawPairedMinutes,
+    amExpected: rr.amExpected,
+    amWorked: rr.amWorked,
+    pmExpected: rr.pmExpected,
+    pmWorked: rr.pmWorked,
+    lateMinutes: rr.lateMinutes,
+    arrivalDeltaMinutes: rr.arrivalDeltaMinutes,
+    earlyLeaveMinutes: rr.earlyLeaveMinutes,
+    missedEarlyArrival: rr.missedEarlyArrival,
+    dayCreditExpected: rr.dayCreditExpected,
+    dayCreditEarned: rr.dayCreditEarned,
+    hourCredit: rr.hourCredit,
+    leaveUnits: rr.leaveUnits,
+    holidayPaidUnits: rr.holidayPaidUnits,
+    pairs: rr.pairs as unknown as Prisma.InputJsonValue,
+    flags: rr.flags,
     status: keepOverride ? ("ADJUSTED" as const) : ("COMPUTED" as const),
-    ruleSnapshot: { ...r.ruleSnapshot, holiday, weeklyOff } as Prisma.InputJsonValue,
+    ruleSnapshot: { ...rr.ruleSnapshot, holiday, weeklyOff } as Prisma.InputJsonValue,
     computedBy: "ENGINE" as const,
     computedAt: new Date(),
     periodId: period?.id ?? existing?.periodId ?? null,
@@ -178,7 +224,7 @@ export async function recomputeAttendanceDay(
     update: data,
     select: { id: true },
   });
-  return { ok: true, dayId: row.id, flags: r.flags };
+  return { ok: true, dayId: row.id, flags: rr.flags };
 }
 
 export const ATTENDANCE_DAY_DIRTY = "hr.attendance_day_dirty";
@@ -221,12 +267,18 @@ export async function markAttendanceDaysDirtyMany(
 }
 
 /** Tính lại cả kỳ (chốt sổ / import): duyệt từng ngày, không tx bọc chung (mỗi ngày độc lập). */
-export async function recomputeRange(userIds: string[], from: Date, to: Date): Promise<{ days: number; locked: number }> {
+export async function recomputeRange(
+  userIds: string[],
+  from: Date,
+  to: Date,
+  /** Chuyển thẳng xuống `recomputeAttendanceDay` — xem chú thích `now` ở đó (luật 19). */
+  opts: { now?: Date } = {},
+): Promise<{ days: number; locked: number }> {
   let days = 0;
   let locked = 0;
   for (const userId of userIds) {
     for (let d = new Date(from); d <= to; d = new Date(d.getTime() + 86_400_000)) {
-      const r = await recomputeAttendanceDay(userId, d);
+      const r = await recomputeAttendanceDay(userId, d, { now: opts.now });
       if (r.skipped === "LOCKED") locked += 1;
       else days += 1;
     }

@@ -4,6 +4,7 @@ import { recordLeadStatusChange } from "@/lib/lead/status-trail-write";
 import { recordLeadActivity } from "@/lib/lead/activity-write";
 import { SYSTEM_ACTIVITY_META } from "@/lib/lead/activity-clock";
 import { assignmentWrite } from "@/lib/lead/assignment";
+import { baoLoLeadMoi, baoSaleCoLeadMoi, thuHoiChuongLeadCu } from "@/lib/lead/assign-lead";
 import { takeRotationTurn, takeRotationTurns } from "@/lib/lead/rotation";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
 import { LEAD_CLOSED_STATUSES } from "@/lib/leads/status";
@@ -200,6 +201,23 @@ export async function autoAssignLead(
     }
   });
 
+  // 15/09/2026 — đồng bộ chuông. Đây là đường MỘT lead (không hàng loạt) nên báo được cả hai
+  // đầu, đúng như `chiaChoLead` và `manualAssignLead` vẫn làm.
+  //
+  // Trước bản vá: đường này ghi `assignedToId` rồi im lặng — chủ mới không biết mình có lead,
+  // chủ cũ (nếu có) giữ lại một cái chuông trỏ tới lead đã mất.
+  await thuHoiChuongLeadCu({ chuCuId: lead.assignedToId, chuMoiId: target, leadId });
+  if (target !== lead.assignedToId) {
+    const ten = await db.lead.findUnique({ where: { id: leadId }, select: { parentName: true } });
+    await baoSaleCoLeadMoi({
+      ownerId: target,
+      leadId,
+      parentName: ten?.parentName ?? "",
+      // Máy rút theo sổ lượt, không phải người giao tay.
+      source: "AUTO",
+    });
+  }
+
   return { ok: true, assignedToId: target };
 }
 
@@ -284,6 +302,32 @@ export async function reassignOpenLeads(
         metadata: SYSTEM_ACTIVITY_META, // S-3 — dòng máy, xem ghi chú ở lượt chia trên.
       });
     }
+  });
+
+  // 15/09/2026 — THU HỒI chuông "Bạn có lead mới" của sale vừa nghỉ.
+  //
+  // Thiếu bước này thì mỗi lượt chia lại để lại ở người nghỉ đúng bằng số lead một đống chuông
+  // trỏ tới lead họ không còn giữ. Tài khoản đã khoá nên ít ai thấy — nhưng cùng một lỗ này
+  // cũng có ở đường bàn giao hàng loạt, nơi người cũ VẪN đang đi làm.
+  //
+  for (const [leadId, assigneeId] of dist) {
+    await thuHoiChuongLeadCu({ chuCuId: userId, chuMoiId: assigneeId, leadId });
+  }
+
+  // 15/09/2026 (đợt hai) — BÁO CHO NGƯỜI NHẬN, gộp theo từng người.
+  //
+  // Đường này chia VÒNG nên một lượt có thể rải cho nhiều người: ai nhận 1 lead thì được
+  // chuông thường (trỏ thẳng trang chi tiết), ai nhận từ 2 trở lên thì một tin gộp.
+  // `baoLoLeadMoi` tự chọn giùm — đừng tự đếm lại ở đây.
+  //
+  // MỘT mốc cho cả lượt: tính lại theo từng người là hai lượt chia cách nhau một nhịp đồng hồ
+  // cũng ra hai khoá, đúng thứ khoá chống trùng sinh ra để chặn.
+  const nguoiNghi = await db.user.findUnique({ where: { id: userId }, select: { name: true } });
+  await baoLoLeadMoi({
+    daChia: [...dist].map(([leadId, ownerId]) => ({ leadId, ownerId })),
+    nguon: { kieu: "sale_nghi", tuNguoi: nguoiNghi?.name ?? "tư vấn viên đã nghỉ" },
+    mocLuot: Date.now(),
+    boQuaNguoi: actor.actorId,
   });
 
   // Báo đúng số ĐÃ chia, không phải số lead tìm thấy — hai số này bằng nhau ở

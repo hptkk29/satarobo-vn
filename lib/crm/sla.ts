@@ -2,7 +2,7 @@
 // evaluateSla THUẦN (C6.1–C6.5) + runSlaCheck (cron → StaffNotification dedupeKey, C6.6).
 import type { LeadStatus } from "@prisma/client";
 import { db } from "@/lib/db";
-import { notifyStaff } from "@/lib/notifications/notify";
+import { broadcastNotificationBump, ghiThongBaoNhanSu } from "@/lib/notifications/notify";
 import { getSetting } from "@/lib/settings/service";
 
 export type SlaRule = "SLA-0" | "SLA-1" | "SLA-2" | "SLA-3" | "SLA-4";
@@ -154,6 +154,9 @@ export async function runSlaCheck(now = new Date()): Promise<{ violations: numbe
 
   let violations = 0;
   let notified = 0;
+  // Gom người cần rung chuông của CẢ lượt quét, bắn MỘT lần ở cuối (sự cố egress 05/09/2026:
+  // bản cũ bắn một POST broadcast cho từng vi phạm ⇒ ~1.800 POST/lượt × 96 lượt/ngày).
+  const canRung = new Set<string>();
   for (const lead of leads) {
     const rules = evaluateSla(slaInputFromLead(lead), now, thresholds);
     violations += rules.length;
@@ -162,7 +165,7 @@ export async function runSlaCheck(now = new Date()): Promise<{ violations: numbe
     for (const rule of rules) {
       // Không `reopen`: cron quét lại mỗi lượt, vi phạm vẫn còn nguyên chừng nào lead chưa
       // được chăm ⇒ kéo về chưa-đọc là dội chuông mỗi lượt cron cho cùng một việc.
-      await notifyStaff({
+      const kq = await ghiThongBaoNhanSu({
         userIds: [userId],
         dedupeKey: `sla:${rule}:${lead.id}`,
         category: "SLA",
@@ -171,6 +174,7 @@ export async function runSlaCheck(now = new Date()): Promise<{ violations: numbe
         href: `/leads/${lead.id}`,
         entityId: lead.id,
       });
+      for (const u of kq.canRung) canRung.add(u);
       notified++;
     }
 
@@ -178,7 +182,7 @@ export async function runSlaCheck(now = new Date()): Promise<{ violations: numbe
     if (isLeadIdle({ status: lead.status, lastActivityAt: lead.lastActivityAt, createdAt: lead.createdAt }, now, idleHours)) {
       const idleBody = `Lead chưa được xử lý quá ${idleHours} giờ`;
       const idleKey = `sla:idle24:${lead.id}`;
-      await notifyStaff({
+      const kq = await ghiThongBaoNhanSu({
         userIds: [userId],
         dedupeKey: idleKey,
         category: "SLA",
@@ -187,8 +191,10 @@ export async function runSlaCheck(now = new Date()): Promise<{ violations: numbe
         href: `/leads/${lead.id}`,
         entityId: lead.id,
       });
+      for (const u of kq.canRung) canRung.add(u);
       notified++;
     }
   }
+  await broadcastNotificationBump([...canRung]);
   return { violations, notified };
 }

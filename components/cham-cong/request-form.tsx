@@ -283,6 +283,7 @@ export function RequestForm({
                   aria-invalid={errors.fromDate ? true : undefined}
                   className={FIELD}
                 />
+                <DocNgay value={fromDate} />
               </Field>
               {kind === "SUB_TEACH" && (
                 <Field id={idOf("subTeacher")} label="Người dạy thay (tuỳ chọn)">
@@ -314,6 +315,7 @@ export function RequestForm({
                   aria-invalid={errors.fromDate ? true : undefined}
                   className={FIELD}
                 />
+                <DocNgay value={fromDate} />
               </Field>
               <Field id={idOf("newTemplateId")} label="Mã ca mới của tôi" required error={errors.newTemplateId}>
                 <select
@@ -377,6 +379,7 @@ export function RequestForm({
                   aria-invalid={errors.fromDate ? true : undefined}
                   className={FIELD}
                 />
+                <DocNgay value={fromDate} />
               </Field>
               {kind === "LATE_EARLY" && (
                 <Field id={idOf("lateType")} label="Hình thức">
@@ -464,6 +467,7 @@ export function RequestForm({
                   aria-invalid={errors.fromDate ? true : undefined}
                   className={FIELD}
                 />
+                <DocNgay value={fromDate} />
               </Field>
               <Field id={idOf("toDate")} label="Đến ngày">
                 {/* `min` = ngày bắt đầu: bộ chọn ngày của trình duyệt tự chặn khoảng ngược,
@@ -476,6 +480,7 @@ export function RequestForm({
                   onChange={(e) => setToDate(e.target.value)}
                   className={FIELD}
                 />
+                <DocNgay value={toDate} />
               </Field>
               {kind === "LEAVE" && (
                 <Field id={idOf("leaveTypeId")} label="Loại nghỉ">
@@ -570,6 +575,31 @@ export function RequestForm({
 }
 
 /** Nhãn + ô + dòng lỗi. Lỗi nằm NGAY DƯỚI ô nó nói tới — đó là điểm khác bản cũ (chỉ có toast). */
+/**
+ * Đọc lại ngày đã chọn theo dd/mm/yyyy, ngay dưới ô ngày.
+ *
+ * Vì sao (QA site GV vòng 1, BUG-035 — mang sang khi gộp `main` 07/09/2026):
+ * `<input type="date">` hiển thị theo locale của TRÌNH DUYỆT, nên máy đặt tiếng Anh
+ * ra "08/28/2026" kèm gợi ý "mm/dd/yyyy" giữa một ứng dụng toàn tiếng Việt. Người
+ * quen dd/mm rất dễ gõ 08/09 khi định nói "8 tháng 9" mà hệ hiểu là "9 tháng 8" —
+ * với đơn từ thì sai ngày là sai công.
+ *
+ * Bản vá gốc nằm ở `app/(teacher)/teacher/_components/ui/o-ngay.tsx`, gắn vào form
+ * đơn từ CŨ của site GV. Form đó đã bị thay bằng file này (dùng chung admin + GV),
+ * nên bản vá thành mồ côi — đây là chỗ nó phải sống tiếp.
+ *
+ * KHÔNG tự dựng lịch riêng: `type="date"` đọc được bằng bàn phím, có lịch hệ điều
+ * hành trên di động, và trình đọc màn hình hiểu sẵn.
+ */
+function DocNgay({ value }: { value: string }) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  return (
+    <p className="mt-1 text-xs text-muted-foreground">
+      {m ? `Ngày đã chọn: ${m[3]}/${m[2]}/${m[1]}` : "Chưa chọn ngày"}
+    </p>
+  );
+}
+
 function Field({
   id,
   label,

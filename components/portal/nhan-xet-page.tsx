@@ -128,16 +128,40 @@ function RatingStars({ rating }: { rating: number }) {
   );
 }
 
+/**
+ * Phiếu SESSION_EVAL (module Đánh giá dựng form) đã rút gọn thành dạng serialize được.
+ *
+ * 06/09 — bản v2 trước đây KHÔNG hiển thị nhóm phiếu này, trong khi bản v1 có. Trung
+ * tâm nào dùng module `/admin/evaluations` để chấm buổi thì phụ huynh mất hẳn phần đó
+ * kể từ ngày prod bật `PORTAL_V2_ENABLED`.
+ */
+export type PhieuDanhGiaBuoi = {
+  responseId: string;
+  tieuDe: string;
+  nhanNgay: string;
+  teacherName: string | null;
+  sessionTopic: string | null;
+  answers: {
+    questionId: string;
+    label: string;
+    stars: number | null;
+    options: string[] | null;
+    text: string | null;
+  }[];
+};
+
 export function NhanXetPageV2({
   kids,
   activeId,
   studentName,
   items,
+  phieuDanhGia = [],
 }: {
   kids: { id: string; name: string }[];
   activeId: string | null;
   studentName: string;
   items: FeedbackItem[];
+  phieuDanhGia?: PhieuDanhGiaBuoi[];
 }) {
   const [selId, setSelId] = useState(items[0]?.id ?? "");
   const [q, setQ] = useState("");
@@ -363,6 +387,63 @@ export function NhanXetPageV2({
             </div>
           )}
         </div>
+      )}
+
+      {/* Phiếu đánh giá buổi học từ module Đánh giá (SESSION_EVAL) — parity với bản v1.
+          Chỉ hiện khi trung tâm thực sự dùng module đó; im lặng khi không có. */}
+      {phieuDanhGia.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
+            Phiếu đánh giá buổi học
+          </h2>
+          <div className="space-y-3">
+            {phieuDanhGia.map((ev) => (
+              <div
+                key={ev.responseId}
+                className="rounded-2xl border border-border bg-card p-4"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-bold text-foreground">{ev.tieuDe}</p>
+                  <span className="text-xs tabular-nums text-muted-foreground">
+                    {ev.nhanNgay}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-xs font-medium text-muted-foreground">
+                  {[
+                    ev.teacherName && `GV ${ev.teacherName}`,
+                    ev.sessionTopic,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ") || "—"}
+                </p>
+                {ev.answers.length === 0 ? (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Phiếu chưa có nội dung.
+                  </p>
+                ) : (
+                  <dl className="mt-3 space-y-2">
+                    {ev.answers.map((a) => (
+                      <div key={a.questionId}>
+                        <dt className="text-xs font-semibold text-muted-foreground">
+                          {a.label}
+                        </dt>
+                        <dd className="text-sm text-foreground">
+                          {a.stars != null ? (
+                            <RatingStars rating={a.stars} />
+                          ) : (
+                            [a.options?.join(", "), a.text]
+                              .filter(Boolean)
+                              .join(" · ") || "—"
+                          )}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
       )}
     </div>
   );

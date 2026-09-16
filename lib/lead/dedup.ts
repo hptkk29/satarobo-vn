@@ -1,8 +1,8 @@
 import { db } from "@/lib/db";
 import { getSetting } from "@/lib/settings/service";
-import { phoneVariants } from "@/lib/phone";
 import { recordLeadActivity } from "@/lib/lead/activity-write";
 import { SYSTEM_ACTIVITY_META } from "@/lib/lead/activity-clock";
+import { formatPhoneVN, phoneVariants } from "@/lib/phone";
 
 // =============================================================================
 // LEAD DEDUP — chống trùng SĐT trong cửa sổ cấu hình được (Phase T1.3)

@@ -23,7 +23,15 @@ function permsOf(code: string): Map<string, string> {
   return new Map(role!.perms.map((p) => [p.action, p.scopeType]));
 }
 
-const VAI_GOP_ANH = ["HO_MARKETING", "CENTER_CLASS_MANAGER"] as const;
+/**
+ * 04/09/2026 — chủ dự án chốt THÊM `CENTER_SALES_CSM`: Sale vào xem chi tiết lớp
+ * thì chỉ xem, TRỪ điểm danh và úp ảnh. Chốt này đè lên tập 2 vai của 11/08.
+ *
+ * ⚠️ Bất biến mà test này bảo vệ KHÔNG đổi: cả ba vai chỉ GÓP ảnh vào kho, không
+ * `media:upload` (đăng thẳng tới phụ huynh) và không `media:approve` (duyệt) —
+ * bước giáo viên kiểm vẫn còn nguyên. Chỉ danh sách thành viên rộng ra.
+ */
+const VAI_GOP_ANH = ["HO_MARKETING", "CENTER_CLASS_MANAGER", "CENTER_SALES_CSM"] as const;
 
 describe("kho ảnh lớp — vai chỉ-góp-ảnh (v2 seed)", () => {
   it.each(VAI_GOP_ANH)(
@@ -56,13 +64,28 @@ describe("kho ảnh lớp — vai chỉ-góp-ảnh (v2 seed)", () => {
     expect(PERMISSIONS["media:upload-draft"]).not.toContain("TEACHER");
   });
 
-  it("ĐÓNG TẬP: đúng 2 RoleDef giữ media:upload-draft", () => {
-    // Assert theo TẬP chứ không theo từng vai — cấp nhầm cho vai thứ ba (vd
-    // CENTER_SALES_CSM) sẽ đỏ ở đây thay vì lọt im lặng lên prod.
+  it("ĐÓNG TẬP: đúng 3 RoleDef giữ media:upload-draft", () => {
+    // Assert theo TẬP chứ không theo từng vai — cấp nhầm cho vai thứ tư sẽ đỏ ở đây
+    // thay vì lọt im lặng lên prod. Mở rộng tập này phải là một quyết định có người
+    // chốt, không phải hệ quả phụ của việc khác.
     const holders = ROLE_SEED.filter((r) =>
       r.perms.some((p) => p.action === "media:upload-draft"),
     ).map((r) => r.code);
-    expect(holders.sort()).toEqual(["CENTER_CLASS_MANAGER", "HO_MARKETING"]);
+    expect(holders.sort()).toEqual([
+      "CENTER_CLASS_MANAGER",
+      "CENTER_SALES_CSM",
+      "HO_MARKETING",
+    ]);
+  });
+
+  it("ĐÓNG TẬP: KHÔNG vai góp-ảnh nào lọt media:upload hay media:approve", () => {
+    // Đây mới là bất biến thật của yêu cầu 11/08, và nó KHÔNG được nới cùng lúc với
+    // việc thêm vai: ảnh của ba vai này phải qua bước giáo viên chọn mới tới phụ huynh.
+    for (const code of VAI_GOP_ANH) {
+      const perms = permsOf(code);
+      expect(perms.has("media:upload"), `${code} KHÔNG được đăng thẳng tới PH`).toBe(false);
+      expect(perms.has("media:approve"), `${code} KHÔNG được duyệt ảnh`).toBe(false);
+    }
   });
 });
 

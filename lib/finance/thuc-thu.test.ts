@@ -59,24 +59,39 @@ describe("[B-02] tinhThucThu — có hoàn tiền", () => {
   });
 });
 
-describe("[B-02] tinhThucThu — có điều chỉnh giảm", () => {
-  it("bản điều chỉnh THAY THẾ bản gốc: không cộng đôi, không giữ số cũ", () => {
-    // adjustPayment() tạo bản MỚI (ADJUSTED) mang số đúng, bản gốc CONFIRMED giữ nguyên.
-    const rows = [bt("p1", 5_000_000, "CONFIRMED"), bt("a1", 3_000_000, "ADJUSTED", "p1")];
-    expect(tinhThucThu(rows)).toBe(3_000_000); // KHÔNG 8tr (cộng đôi), KHÔNG 5tr (số cũ)
-    expect(butToanThucThu(rows).map((r) => r.id)).toEqual(["a1"]);
+describe("[B-02] tinhThucThu — có điều chỉnh (mô hình DELTA)", () => {
+  // 🔴 ĐỔI MÔ HÌNH 07/09/2026 (`payment_type_tach_khoi_status`), áp khi hợp nhất
+  // `main` → `test` ngày 16/09/2026.
+  //
+  // TRƯỚC: `adjustPayment()` đẻ một bút toán trạng thái `ADJUSTED` mang SỐ ĐÚNG, bản
+  //   gốc giữ số cũ ⇒ phải LOẠI bản gốc, không thì cộng đôi. Bộ ca cũ ở đây đo đúng
+  //   luật đó ("bản điều chỉnh THAY THẾ bản gốc").
+  // NAY: `ADJUSTED` đã bị BỎ khỏi `PaymentAccountantStatus`. Bút toán điều chỉnh là
+  //   dòng `paymentType = "ADJUSTMENT"`, trạng thái vẫn `CONFIRMED`, và nó mang PHẦN
+  //   CHÊNH LỆCH. Bản gốc giữ số cũ, cộng CẢ HAI mới ra số đúng.
+  // ⇒ Loại bản gốc bây giờ là ĐẾM THIẾU đúng phần vừa sửa — ngược hẳn lỗi cũ.
+  //
+  // Luật này khai ở `lib/finance/debt.ts` ("KHÔNG lọc theo `paymentType`: bút toán
+  // ADJUSTMENT LUÔN được cộng"); file này chỉ đi theo.
+
+  it("điều chỉnh GIẢM: gốc + delta âm = số đúng, không loại bản nào", () => {
+    // Khách đóng 5tr, kế toán sửa xuống 3tr ⇒ dòng điều chỉnh mang −2tr.
+    const rows = [bt("p1", 5_000_000, "CONFIRMED"), bt("a1", -2_000_000, "CONFIRMED", "p1")];
+    expect(tinhThucThu(rows)).toBe(3_000_000);
+    // CẢ HAI dòng đều tham gia — không còn bước "loại bản gốc".
+    expect(butToanThucThu(rows).map((r) => r.id)).toEqual(["p1", "a1"]);
   });
 
-  it("điều chỉnh TĂNG cũng theo đúng bản mới", () => {
-    const rows = [bt("p1", 3_000_000, "CONFIRMED"), bt("a1", 5_000_000, "ADJUSTED", "p1")];
+  it("điều chỉnh TĂNG: gốc + delta dương", () => {
+    const rows = [bt("p1", 3_000_000, "CONFIRMED"), bt("a1", 2_000_000, "CONFIRMED", "p1")];
     expect(tinhThucThu(rows)).toBe(5_000_000);
   });
 
-  it("chuỗi điều chỉnh nhiều lần → chỉ bản cuối cùng được tính", () => {
+  it("điều chỉnh NHIỀU LẦN: cộng dồn mọi delta, không chỉ lấy bản cuối", () => {
     const rows = [
       bt("p1", 5_000_000, "CONFIRMED"),
-      bt("a1", 4_000_000, "ADJUSTED", "p1"),
-      bt("a2", 3_000_000, "ADJUSTED", "a1"),
+      bt("a1", -1_000_000, "CONFIRMED", "p1"),
+      bt("a2", -1_000_000, "CONFIRMED", "a1"),
     ];
     expect(tinhThucThu(rows)).toBe(3_000_000);
   });
@@ -84,32 +99,36 @@ describe("[B-02] tinhThucThu — có điều chỉnh giảm", () => {
   it("điều chỉnh giảm rồi hoàn nốt → 0", () => {
     const rows = [
       bt("p1", 5_000_000, "CONFIRMED"),
-      bt("a1", 3_000_000, "ADJUSTED", "p1"),
+      bt("a1", -2_000_000, "CONFIRMED", "p1"),
       bt("r1", -3_000_000, "REFUNDED", "a1"),
     ];
     expect(tinhThucThu(rows)).toBe(0);
   });
 
-  it("điều chỉnh trên khoản CHƯA xác nhận không kéo theo tiền ảo", () => {
-    // Gốc PENDING (chưa phải tiền thật) — bản ADJUSTED mới là số kế toán chốt.
-    const rows = [bt("p1", 5_000_000, "PENDING"), bt("a1", 3_000_000, "ADJUSTED", "p1")];
-    expect(tinhThucThu(rows)).toBe(3_000_000);
+  it("gốc CHƯA xác nhận thì không vào phép cộng — delta của nó cũng vậy", () => {
+    // PENDING chưa phải tiền thật. Dòng điều chỉnh treo trên nó cũng để PENDING;
+    // cả hai cùng đứng ngoài, không đẻ ra tiền ảo.
+    const rows = [bt("p1", 5_000_000, "PENDING"), bt("a1", -2_000_000, "PENDING", "p1")];
+    expect(tinhThucThu(rows)).toBe(0);
   });
 });
 
 describe("[B-02] hợp đồng where dùng chung", () => {
-  it("chỉ 3 trạng thái tham gia phép tính thực thu", () => {
-    expect([...TRANG_THAI_THUC_THU].sort()).toEqual(["ADJUSTED", "CONFIRMED", "REFUNDED"]);
+  it("chỉ HAI trạng thái tham gia phép tính thực thu", () => {
+    // `ADJUSTED` đã bị bỏ khỏi `PaymentAccountantStatus` (07/09/2026) — bút toán điều
+    // chỉnh nay mang trạng thái `CONFIRMED` và phân biệt bằng cột `paymentType`.
+    expect([...TRANG_THAI_THUC_THU].sort()).toEqual(["CONFIRMED", "REFUNDED"]);
   });
 
-  it("where chuẩn loại bản ghi xoá mềm VÀ loại bản gốc đã bị điều chỉnh thay thế", () => {
-    // Mảnh `where` này là bản dịch SQL của đúng luật mà butToanThucThu() cài đặt.
-    // Bỏ nhánh `adjustments.none` = bản gốc quay lại phép cộng ⇒ doanh thu phồng lại.
+  it("where chuẩn loại bản ghi xoá mềm và KHÔNG loại bản gốc (mô hình delta)", () => {
+    // 🔴 Đổi 16/09/2026 khi hợp nhất `main`: `ADJUSTED` đã bị bỏ khỏi trạng thái kế toán;
+    // bút toán điều chỉnh nay là `paymentType = "ADJUSTMENT"` mang PHẦN CHÊNH LỆCH. Bản
+    // gốc giữ số cũ và PHẢI được cộng. Khoá lại cả hai vế: không còn `adjustments`, và
+    // KHÔNG được thêm bộ lọc `paymentType` (xem `lib/finance/debt.ts`).
     expect(WHERE_THUC_THU.deletedAt).toBeNull();
     expect(WHERE_THUC_THU.accountantStatus).toEqual({ in: [...TRANG_THAI_THUC_THU] });
-    expect(WHERE_THUC_THU.adjustments).toEqual({
-      none: { accountantStatus: "ADJUSTED", deletedAt: null },
-    });
+    expect("adjustments" in WHERE_THUC_THU).toBe(false);
+    expect("paymentType" in WHERE_THUC_THU).toBe(false);
   });
 
   it("lọc theo where chuẩn rồi vẫn qua hàm thuần thì kết quả không đổi (idempotent)", () => {

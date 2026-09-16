@@ -14,15 +14,20 @@ import { checkAnyPermission, canViewLeadPii } from "@/lib/auth/check-permission"
 import { PAGE_GATES } from "@/lib/auth/page-gates";
 import { canViewParentContact } from "@/lib/auth/permissions";
 import { getSaleTrialRoster } from "@/lib/trial/sale-roster";
+import { cuaSoTrial, docPhamVi, moTaPhamVi } from "@/lib/trial/sale-window";
 import { SaleTrialList } from "./_components/trial-list";
+import { PhamViChips } from "./_components/pham-vi-chips";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Lớp trải nghiệm | Tư vấn tuyển sinh" };
 
-/** Cửa sổ mặc định: từ đầu hôm nay tới 21 ngày tới — đủ nhìn lịch sắp diễn ra. */
-const NGAY_TOI = 21;
-
-export default async function SaleTrialPage() {
+export default async function SaleTrialPage({
+  searchParams,
+}: {
+  // `pham_vi` đổi CỬA SỔ TRUY VẤN nên phải đọc ở server; lọc trong trình duyệt
+  // không giải được — buổi ngoài cửa sổ chưa bao giờ được tải về.
+  searchParams: Promise<{ pham_vi?: string }>;
+}) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   // Gác bằng bảng chung thay vì gõ action rời: thanh điều hướng đọc đúng mảng
@@ -32,12 +37,13 @@ export default async function SaleTrialPage() {
 
   const actor = await resolveActor(session.user.id);
 
-  const from = new Date();
-  from.setUTCHours(0, 0, 0, 0);
-  const to = new Date(from);
-  to.setUTCDate(to.getUTCDate() + NGAY_TOI);
+  // 03/09 — trước đây cửa sổ đóng cứng "hôm nay → +21 ngày", không có bộ lọc nào.
+  // Mà giáo viên chỉ chấm phiếu SAU khi buổi diễn ra ⇒ sang hôm sau buổi rơi khỏi
+  // bảng, mang theo luôn nút "Xem / Xuất PDF" — Sale không còn đường lấy phiếu.
+  const phamVi = docPhamVi((await searchParams).pham_vi);
+  const { tu, den } = cuaSoTrial(phamVi);
 
-  const roster = await getSaleTrialRoster(actor, from, to, {
+  const roster = await getSaleTrialRoster(actor, tu, den, {
     // Quyền tính ở tầng này rồi TRUYỀN xuống — hàm truy vấn không tự đoán quyền.
     //
     // ⚠️ S-1 (26/08/2026) — PHẢI qua CẢ HAI cổng. Cột "Phụ huynh" ở đây lấy từ
@@ -56,11 +62,13 @@ export default async function SaleTrialPage() {
     <div>
       <h1 className="text-2xl font-bold">Lớp trải nghiệm</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        Học viên trải nghiệm trong {NGAY_TOI} ngày tới, theo cơ sở của bạn.
+        {moTaPhamVi(phamVi)} Chỉ cơ sở của bạn.
       </p>
+      <PhamViChips current={phamVi} />
       <SaleTrialList
         slots={roster.slots.map((s) => ({ ...s, date: s.date.toISOString() }))}
         unassigned={roster.unassigned}
+        laPhamViMacDinh={phamVi === "sap-toi"}
       />
     </div>
   );

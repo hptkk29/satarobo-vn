@@ -14,6 +14,8 @@ import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission, canViewLeadPii } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
+// Cùng cổng giao diện với màn chốt bên admin — KHÔNG gõ điều kiện vai tại chỗ.
+import { canGrantFullScholarship } from "@/lib/crm/scholarship";
 import { scopedDb } from "@/lib/db-scope";
 import { isConvertV2Enabled } from "@/lib/flags";
 import { getMyLeadDetail } from "@/lib/lead/sale-leads";
@@ -132,6 +134,9 @@ export default async function SaleGhiDanhPage({
       ) : (
         <div className="mt-5">
           <ConvertForm
+            // 03/09 (theo `main`) — khối "Học phí" ĐÃ GỠ khỏi màn chốt; tiền chốt ở trang
+            // đơn hàng. Nên KHÔNG truyền `order` nữa.
+            canGrantScholarship={canGrantFullScholarship(actor)}
             leadId={lead.id}
             // S-1 — `lead` ở đây ĐÃ được `getMyLeadDetail` che theo `canViewPii`.
             // Điền bản che vào ô nhập là mời người dùng bấm Lưu và tạo ra một phụ
@@ -144,12 +149,23 @@ export default async function SaleGhiDanhPage({
             prefillStudents={
               lead.children.length > 0
                 ? lead.children.map((c) => ({
-                    leadChildId: c.id,
+                    leadChildId: c.id as string | null,
                     name: c.fullName,
                     dob: "",
+                    // `courseName` rỗng = CHƯA CHỌN khoá. Form tự điền khi người dùng chọn
+                    // lớp; ô này chỉ là giá trị khởi tạo. (Trường thêm 31/08 bên `main`.)
                     courseId: "",
+                    courseName: "",
                   }))
-                : [{ leadChildId: null, name: lead.childName ?? "", dob: "", courseId: "" }]
+                : [
+                    {
+                      leadChildId: null as string | null,
+                      name: lead.childName ?? "",
+                      dob: "",
+                      courseId: "",
+                      courseName: "",
+                    },
+                  ]
             }
             classes={lopMo.map((c) => ({
               id: c.id,
@@ -158,7 +174,6 @@ export default async function SaleGhiDanhPage({
               courseName: c.course?.name ?? "",
               listPrice: c.course?.price ?? 0,
             }))}
-            order={donHocPhi}
             // Ở LẠI site Sale sau khi chốt. Mặc định của form là clean-URL admin,
             // mà đường đó trên host sale sẽ đá sang host khác.
             backHref={`/sale/khach-cua-toi/${lead.id}`}

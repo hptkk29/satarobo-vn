@@ -89,6 +89,7 @@ export async function completeSessionAction(
     classComment: input.classComment ?? null,
     confirmNoAttendance: input.confirmNoAttendance ?? false,
     assignMode: input.assignMode ?? "NOW",
+    nguonChot: "TAY", // màn quản trị — có người bấm
     assignDueAt: toDate(input.assignDueAt),
     actorId,
     actorName,

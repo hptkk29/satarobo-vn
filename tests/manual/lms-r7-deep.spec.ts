@@ -18,7 +18,8 @@ async function login(page: Page) {
 }
 
 async function visit(page: Page, route: string, ti: TestInfo) {
-  let http = 0, onLogin = false, err = false, body = "";
+  // `body` được gán lại ở mọi nhánh — bỏ giá trị mồi vô dụng.
+  let http = 0, onLogin = false, err = false, body: string;
   try {
     const resp = await page.goto(route, { waitUntil: "domcontentloaded", timeout: 150_000 });
     await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => {});
@@ -89,12 +90,16 @@ test("deep A/B/D/H/J", async ({ page }, ti) => {
 
   // A — tạo lead __TEST__
   try {
-    await page.goto("/admin/leads/new", { waitUntil: "domcontentloaded", timeout: 150_000 });
-    await page.locator("form input:not([type='hidden'])").first().fill(`__TEST__ ${STAMP} Lead`, { timeout: 25_000 });
-    await page.getByPlaceholder("09xxxxxxxx").fill("0900000777");
-    await page.getByRole("button", { name: /Lưu|Tạo|Thêm/ }).first().click();
+    // 03/09/2026 — `/admin/leads/new` đã gỡ, chuyển sang `/nhap-khach-hang`.
+    await page.goto("/nhap-khach-hang", { waitUntil: "domcontentloaded", timeout: 150_000 });
+    await page.getByLabel("Tên phụ huynh").fill(`__TEST__ ${STAMP} Lead`, { timeout: 25_000 });
+    await page.getByLabel("SĐT phụ huynh").fill("0900000777");
+    await page.getByRole("button", { name: /Lưu và nhập phiếu tiếp/ }).click();
     await page.waitForTimeout(2500);
-    log(`[A.lead.create] url=${page.url()} rời/new=${!/leads\/new/.test(page.url())}`);
+    // Biểu mẫu ở lại trang sau khi lưu ⇒ đo bằng phiếu hiện trong danh sách,
+    // không đo bằng việc rời URL như màn cũ.
+    const daLuu = await page.getByText(`__TEST__ ${STAMP} Lead`).first().isVisible().catch(() => false);
+    log(`[A.lead.create] url=${page.url()} đãLưu=${daLuu}`);
   } catch (e) { log(`[A.lead.create] FLAG: ${String(e).slice(0, 100)}`); }
 
   log("[DEEP] done");

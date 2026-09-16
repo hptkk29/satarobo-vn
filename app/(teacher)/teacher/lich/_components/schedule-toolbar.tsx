@@ -58,7 +58,9 @@ export function ScheduleToolbar({
       else p.set(k, v);
     }
     const qs = p.toString();
-    router.push(qs ? `?${qs}` : "?");
+    // scroll:false — đổi bộ lọc là GIỮ NGUYÊN trang, chỉ đổi tham số truy vấn.
+    // Mặc định App Router cuộn vọt lên đầu sau mỗi lần cập nhật router state.
+    router.push(qs ? `?${qs}` : "?", { scroll: false });
   }
 
   return (

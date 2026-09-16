@@ -16,6 +16,7 @@
 //  6. Lễ (T-04): holidayPaidUnits = dayCreditExpected × coefficient, cột riêng, không cờ thiếu.
 //  7. Không sinh SAI_NOI_LAM cho ANY_CENTER / OFFSITE / ANYWHERE (§4.10) — cờ đó đặt ở lượt.
 //  8. Miễn công (T-02): trả `exempt: true`, không sinh dòng.
+import { coThieuCum, cumQuetKyVong } from "./cum-quet";
 import type { ShiftSegment } from "./catalog";
 import { toMinutes } from "./catalog";
 
@@ -32,6 +33,14 @@ export type EngineAssignment = {
   templateCode: string;
   segments: ShiftSegment[];
   attendanceMode: "REQUIRED" | "OPTIONAL" | "NONE";
+  /**
+   * Số CẶP QUÉT kỳ vọng — bản chụp từ mã ca lúc xếp (`ShiftAssignment.soCapQuetKyVong`).
+   *
+   * BẮT BUỘC, không mặc định: luật 7. Mặc định ở đây là cách chắc chắn để một đường gọi
+   * mới tính công bằng con số không ai chọn cho nó — và con số này quyết định có gắn cờ
+   * thiếu lượt hay không.
+   */
+  soCapQuetKyVong: 0 | 1 | 2;
   dayCredit: number;
   isLeave: boolean;
   nominalMinutes: number | null;
@@ -163,6 +172,53 @@ function isAm(seg: ShiftSegment): boolean {
   return toMinutes(seg.start) < 12 * 60;
 }
 
+/**
+ * Biến kết quả của một ngày CHƯA DIỄN RA về đúng nghĩa của nó: **giữ KẾ HOẠCH, xoá mọi vế
+ * ĐÃ XẢY RA**.
+ *
+ * ── Vì sao hàm này tồn tại (sự cố 16/09/2026) ──────────────────────────────────────────
+ *
+ * `recomputeRange` lặp mọi ngày của kỳ, kể cả kỳ ĐANG CHẠY, nên bấm "Tính lại" giữa tháng
+ * là sinh dòng ngày công cho những ngày chưa tới. `computeDay` xử chúng y như ngày đã khép:
+ * không có lượt quét nào ⇒ gắn `KHONG_CO_LUOT`, và vẫn ghi đủ `dayCreditEarned` (công tính
+ * theo KẾ HOẠCH CA chứ không theo lượt quét). Đo prod hôm ấy: **250 dòng ngày chưa diễn ra,
+ * 196 cờ oan, 185 công**.
+ *
+ * Hậu quả nhìn thấy được: màn in "Không có lượt" cho 17/09 → 30/09 kèm đường dẫn "Nộp đơn
+ * chỉnh công" — bảo người ta đi xin bổ sung giờ cho NGÀY MAI.
+ *
+ * ── Xoá những vế nào, và vì sao đúng những vế đó ───────────────────────────────────────
+ *
+ * Chủ dự án chốt 16/09: *"vẫn tạo dòng để giữ kế hoạch, nhưng không gắn cờ và không ghi
+ * công thực nhận."* Nên:
+ *
+ *   GIỮ  `dayType` · `templateCode` · `dayCreditExpected` · `expectedMinutes` · `amExpected`
+ *        · `pmExpected` — đây là KẾ HOẠCH, và màn Kỳ công cần nó để chốt sổ.
+ *   XOÁ  `flags` (mọi cờ đều là lời kể về việc ĐÃ xảy ra — rỗng hết chứ không lọc riêng
+ *        nhóm thiếu-quét, vì lọc từng cái là để ngỏ chỗ cho cái tiếp theo lọt)
+ *        `dayCreditEarned` · `hourCredit` · `leaveUnits` · `holidayPaidUnits` — cả bốn là
+ *        vế ĐÃ NHẬN. Chưa tới ngày thì chưa nhận gì.
+ *
+ * ⚠️ Xoá `leaveUnits`/`holidayPaidUnits` KHÔNG phải tiện tay: `buildPeriodSummary` của màn
+ * Kỳ công cộng thẳng hai cột ấy. Bỏ sót chúng là vá được màn cá nhân mà màn Kỳ công vẫn
+ * cộng ngày chưa tới — cùng một bug, chỗ khác. Ngược lại, xoá đủ bốn vế ở ĐÂY làm màn Kỳ
+ * công tự đúng mà không phải sửa một dòng nào bên đó.
+ *
+ * Các vế "đã làm" còn lại (`workedMinutes`, `lateMinutes`, `pairs`…) vốn đã bằng 0/rỗng vì
+ * ngày chưa tới thì không có lượt quét nào — không đụng, để nếu một ngày nào đó chúng KHÁC 0
+ * thì đó là tín hiệu thật (ai đó quét cho ngày tương lai) chứ không bị hàm này giấu đi.
+ */
+export function ketQuaNgayChuaDienRa(r: DayResult): DayResult {
+  return {
+    ...r,
+    flags: [],
+    dayCreditEarned: 0,
+    hourCredit: 0,
+    leaveUnits: 0,
+    holidayPaidUnits: 0,
+  };
+}
+
 export function computeDay(input: EngineInput): DayResult {
   const { assignment: a, rules } = input;
   const flags = new Set<string>();
@@ -286,15 +342,34 @@ export function computeDay(input: EngineInput): DayResult {
   const ins = kept.filter((l) => l.direction === "CHECK_IN").map((l) => l.minute);
   const outs = kept.filter((l) => l.direction === "CHECK_OUT").map((l) => l.minute);
   const hasAnyLog = kept.length > 0;
-  if (a.attendanceMode === "REQUIRED") {
+  // ── CỤM QUÉT KỲ VỌNG ──────────────────────────────────────────────────────────────
+  //
+  // Trước 15/09/2026 chỗ này lặp trên `planned` = `mergeIntervals(segs)`, tức nhóm cụm theo
+  // TÍNH LIỀN KỀ của đoạn WORK. Nó ra đúng kết quả nhưng VÌ LÝ DO KHÁC: khoảng nghỉ-không-
+  // tính không thuộc đoạn nào nên hai bên tự rời ra. Thêm `UNPAID_BREAK` (đợt sau) là khoảng
+  // ấy thành đoạn thật, `mergeIntervals` nối liền, và `ST` tụt từ 2 cụm xuống 1 mà không ca
+  // test nào đỏ. Nay số cụm do DANH MỤC KHAI (`soCapQuetKyVong`), không do hình dạng dữ liệu.
+  //
+  // `attendanceMode === "REQUIRED"` VẪN là cổng ngoài: nó nói "ngày này có đòi chấm không".
+  // `soCapQuetKyVong` nói "đòi MẤY cụm". Hai câu khác nhau — mã `NG` hôm nay OPTIONAL/0,
+  // và phần A đổi vế thứ hai trước, vế thứ nhất sau.
+  const cumKyVong = cumQuetKyVong(planned, a.soCapQuetKyVong);
+  if (a.attendanceMode === "REQUIRED" && cumKyVong.length > 0) {
     if (!hasAnyLog) flags.add("KHONG_CO_LUOT");
-    // Nhóm đoạn WORK thành các cụm liền nhau (CT 13:45–21:00 là 1; CS = 2 WORK + break = 1 cụm)
-    for (const blk of planned) {
+    for (const [iCum, blk] of cumKyVong.entries()) {
       const gap = rules.pairingMaxGapMinutes;
       const firstIn = ins.filter((m) => m >= blk.start - gap && m <= blk.end).sort((x, y) => x - y)[0];
       const covered = pairedIntervals.some((p) => overlap(p, blk) > 0);
       if (firstIn === undefined && !covered) {
-        if (hasAnyLog) flags.add(blk.start < 12 * 60 ? "THIEU_BUOI_SANG" : "THIEU_BUOI_CHIEU");
+        // "Thiếu CỤM THỨ N", không phải "thiếu buổi sáng/chiều theo mốc 12h". Ca `T`
+        // (17:15–21:00) chỉ có một cụm và nó nằm sau 12h — mốc cũ gắn `THIEU_BUOI_CHIEU`
+        // cho cụm DUY NHẤT của ca, đọc thành "thiếu buổi chiều" cho một ca không có buổi
+        // sáng nào. Tên cờ giữ nguyên (dữ liệu prod đang mang chúng) — xem `coThieuCum`.
+        // CHỈ gắn cờ khi ca có TỪ HAI CỤM. Bảng chốt nói thẳng: cờ này "chỉ có nghĩa khi
+        // soCapQuetKyVong ≥ 2". Ca một cụm mà không ai phủ thì đó KHÔNG phải "thiếu một
+        // buổi" — nó là về sớm / thiếu giờ / không có lượt, và ba cờ ấy đã nói đúng rồi.
+        // Bắn `THIEU_BUOI_SANG` cho ca `T` (17:15–21:00) là in ra một câu vô nghĩa.
+        if (hasAnyLog && cumKyVong.length >= 2) flags.add(coThieuCum(iCum));
         continue;
       }
       if (firstIn !== undefined) {
@@ -302,7 +377,7 @@ export function computeDay(input: EngineInput): DayResult {
         // khi đã vượt `lateGraceMinutes` (mặc định 30′), nên tự nó không trả lời được câu
         // "trễ quá 15 phút mấy lần" mà nội quy hỏi. Chỉ tính đoạn đầu: về trễ sau nghỉ trưa
         // là chuyện khác, gộp vào là đổi nghĩa của "đi trễ".
-        if (blk === planned[0] && firstIn > blk.start) {
+        if (iCum === 0 && firstIn > blk.start) {
           arrivalDeltaMinutes = firstIn - blk.start;
         }
         if (firstIn > blk.start + rules.lateGraceMinutes) {

@@ -1,4 +1,5 @@
 import { GraduationCap, Info, Download, CalendarCheck } from "lucide-react";
+import { reportCardPeriodDisplay } from "@/lib/lms/report-card";
 import type { ReportCardV2 } from "@/lib/portal/report-card-v2";
 import { PageHero, HeroMetric } from "@/components/portal/page-header";
 import { ChildSwitcher } from "@/components/portal/child-switcher";
@@ -49,6 +50,14 @@ function Ring({ value }: { value: number }) {
     </div>
   );
 }
+
+/** Nhãn mức đánh giá — cùng bảng với bản v1 (components/report-card/report-card-view). */
+const MUC_DANH_GIA: Record<number, string> = {
+  1: "Cần cố gắng",
+  2: "Đạt",
+  3: "Khá",
+  4: "Tốt",
+};
 
 export function HocBaPageV2({
   kids,
@@ -184,6 +193,60 @@ export function HocBaPageV2({
                   </div>
                 </div>
               )}
+
+              {/* ─── Ba khối NỘI DUNG của học bạ đã phát hành (bổ sung 06/09/2026) ───
+                  Bản v1 render đủ chúng; bản v2 — thứ prod đang chạy — không mang chúng
+                  trong kiểu dữ liệu, nên từ ngày bật cờ v2 phụ huynh mở học bạ ra là
+                  mất sạch phần đánh giá theo tiêu chí và nhận xét theo giai đoạn. */}
+              {data.scores.length > 0 && (
+                <>
+                  <div className="my-6 h-px bg-border" />
+                  <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    Đánh giá năng lực
+                  </h3>
+                  <ul className="divide-y divide-border rounded-2xl border border-border">
+                    {data.scores.map((sc) => (
+                      <li
+                        key={sc.criterionId}
+                        className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm"
+                      >
+                        <span className="font-medium text-foreground">{sc.name}</span>
+                        <span className="text-muted-foreground">
+                          {MUC_DANH_GIA[sc.level] ?? sc.level}
+                          {sc.note ? ` · ${sc.note}` : ""}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+
+              {data.periodComments.length > 0 && (
+                <>
+                  <div className="my-6 h-px bg-border" />
+                  <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    Nhận xét theo giai đoạn
+                  </h3>
+                  <ul className="space-y-2">
+                    {data.periodComments.map((pc, i) => (
+                      <li key={i} className="rounded-2xl bg-muted/40 p-4 text-sm">
+                        {/* Phụ huynh KHÔNG được thấy mã kỹ thuật SESSION_5/SESSION_12. */}
+                        <span className="font-bold text-foreground">
+                          {reportCardPeriodDisplay(pc.period)}:{" "}
+                        </span>
+                        <span className="text-muted-foreground">{pc.comment}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+
+              {data.completionStatus ? (
+                <p className="mt-6 text-sm">
+                  <span className="font-bold text-foreground">Kết quả: </span>
+                  <span className="text-muted-foreground">{data.completionStatus}</span>
+                </p>
+              ) : null}
 
               {data.finalComment ? (
                 <>

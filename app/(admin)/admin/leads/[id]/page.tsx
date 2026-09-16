@@ -13,7 +13,6 @@ import { AssignSelect } from "./_components/assign-select";
 import { TransferDialog } from "./_components/transfer-dialog";
 import { LeadChildrenManager } from "../_components/lead-children";
 import { TrialEnrollWidget } from "./_components/trial-enroll-widget";
-import { OrderKindSelect } from "./_components/order-kind-select";
 import { LeadPaymentCard } from "../_components/lead-payment-card";
 import { getLeadPaymentSummary } from "@/lib/payments/summary";
 import { maskFreeText, maskPersonName, maskLeadPiiFields } from "@/lib/lead/pii";
@@ -26,6 +25,9 @@ import { canSeeLead, leadSharingEnabled } from "@/lib/lead/sharing";
 import { canViewLeadPii } from "@/lib/auth/check-permission";
 import { ShareToggle } from "./_components/share-toggle";
 import { formatDateVN } from "@/lib/format/date";
+// 30/08 (từ `main`) — SĐT hiện theo nhóm 4-3-3 cho dễ đọc/dễ chép; `telHrefVN` giữ
+// nguyên chuỗi gốc cho liên kết gọi.
+import { formatPhoneVN, telHrefVN } from "@/lib/phone";
 import { hasSystemLines, splitLeadNote } from "@/lib/lead/note-view";
 import {
   canViewLeadAuditHistory,
@@ -231,7 +233,7 @@ export default async function LeadDetailPage({ params }: Props) {
   const paymentSummary = await getLeadPaymentSummary(sdb, lead.id);
 
   // R7-01 — options cho khối quản lý con (khoá quan tâm / cơ sở quan tâm).
-  const [childCenters, childCourses, expectedProducts, childClassRows] = await Promise.all([
+  const [childCenters, childCourses, childClassRows] = await Promise.all([
     sdb.center.findMany({
       where: { isActive: true },
       orderBy: { displayOrder: "asc" },
@@ -241,13 +243,6 @@ export default async function LeadDetailPage({ params }: Props) {
       where: { isActive: true, isTeachable: true },
       orderBy: { name: "asc" },
       select: { id: true, name: true, category: true, code: true },
-    }),
-    // G2 — sản phẩm dự kiến (loại đơn = Sản phẩm): chỉ KIT_ROBOT/SENSOR đang bán.
-    sdb.product.findMany({
-      where: { status: "ACTIVE", category: { in: ["KIT_ROBOT", "SENSOR"] } },
-      orderBy: { name: "asc" },
-      take: 200,
-      select: { id: true, sku: true, name: true },
     }),
     // G-01 — lớp cho ô "Lớp tại trung tâm" của từng con. Truy vấn KHÔNG lọc
     // `status`: danh sách này vừa để chọn vừa để TRA TÊN, mà lớp đã kết thúc thì
@@ -347,8 +342,8 @@ export default async function LeadDetailPage({ params }: Props) {
             {/* #11 T2 — non-holder: hiện SĐT mask + BỎ link tel: (href sẽ lộ số thật) */}
             {canViewPii ? (
               <span className="inline-flex flex-wrap items-center gap-2">
-                <a href={`tel:${lead.phone}`} className="font-medium text-primary">
-                  {piiLead.phone}
+                <a href={telHrefVN(lead.phone)} className="font-medium text-primary">
+                  {formatPhoneVN(piiLead.phone)}
                 </a>
                 {/* S2 — nút "Nhắn Zalo": chỉ là điều hướng nên dùng <Link> thuần, không
                     cần client component. `urlNhanZalo` đã gộp sẵn cả ba cổng (cờ, quyền
@@ -526,18 +521,10 @@ export default async function LeadDetailPage({ params }: Props) {
         )}
       </dl>
 
-      {/* LD1/G2 — loại đơn dự kiến (Khoá học / Sản phẩm) + item cụ thể theo loại */}
-      <div className="mb-6">
-        <OrderKindSelect
-          leadId={lead.id}
-          current={lead.orderKind}
-          currentCourseId={lead.expectedCourseId}
-          currentProductId={lead.expectedProductId}
-          courses={childCourses.map((c) => ({ id: c.id, name: c.name, code: c.code }))}
-          products={expectedProducts}
-          readOnly={!canTransfer || isSharedViewer}
-        />
-      </div>
+      {/* 30/08/2026 (theo `main`, PR #209) — khối "Loại đơn dự kiến" ĐÃ GỠ cùng component
+          `order-kind-select`. Nó tốn một vòng DB mỗi lượt mở phiếu cho một danh sách
+          không ai còn dùng; cột `orderKind`/`expectedCourseId`/`expectedProductId` giữ
+          nguyên trong DB theo nếp 2 pha. */}
 
       {/* R7-01 — danh sách con (LeadChild) + field phẳng cũ read-only */}
       <div className="mb-6">

@@ -4,7 +4,6 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Trash2, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
-import { MoneyInput } from '@/components/ui/money-input'
 import { HelpHint } from '@/components/admin/ui/help-hint'
 import { submitConvertV2 } from './actions'
 
@@ -16,13 +15,39 @@ type ClassOpt = {
   listPrice: number
 }
 
+/**
+ * ⚠️ 31/08/2026 — GỠ khung "Ưu đãi học phí" khỏi màn chốt.
+ *
+ * Trước đó mỗi em có một ô chọn NONE/FREE/PERCENT/AMOUNT + ô nhập mức + ô lý do, và
+ * KHÔNG vai nào bị chặn: ai chốt được lead là giảm học phí bao nhiêu tuỳ ý. Chủ dự án
+ * chốt bỏ hẳn giảm theo %/số tiền ở đây, chỉ giữ MỘT ô tick "miễn phí học bổng toàn
+ * phần" và chỉ Quản trị tối cao mới thấy.
+ *
+ * Ô tick vẫn là lối tắt của SCHOLARSHIP 100% — đúng ca mà trước đây không chốt nổi:
+ * tổng sau ưu đãi = 0 ⇒ guard tiền tự thoả, khỏi phải bịa một khoản thu để lách (khoản
+ * 0đ thì hệ thống chặn, khoản khống thì sai sổ).
+ */
+
 type StudentRow = {
   key: string
   leadChildId: string | null
   name: string
   dob: string
+  /**
+   * Khoá QUAN TÂM của em này (`LeadChild.interestedCourseId`). Rỗng = phiếu chưa
+   * ghi khoá nào, hoặc em được thêm tay ở màn này.
+   *
+   * Giữ trong hàng vì ô "Lớp đăng ký" lọc THEO TỪNG EM: hai em cùng một phiếu có
+   * thể quan tâm hai khoá khác nhau, nên không có một danh sách lớp chung nào đúng
+   * cho cả bảng.
+   */
+  courseId: string
+  /** Tên khoá quan tâm — chỉ để hiện trong câu báo khi khoá đó chưa có lớp nào. */
+  courseName: string
   classId: string
   consentMedia: boolean
+  /** Miễn phí học bổng toàn phần. Chỉ Quản trị tối cao thấy ô này (`canGrantScholarship`). */
+  scholarship: boolean
 }
 
 const inputCls =
@@ -39,11 +64,26 @@ export function ConvertForm({
   defaultParentPhone,
   prefillStudents,
   classes,
-  order,
+  canGrantScholarship,
   backHref,
   conflictHref,
 }: {
   leadId: string
+  /**
+   * Nơi quay về sau khi chốt xong. Mặc định `/leads/<id>` — đường CLEAN-URL của site
+   * admin. Site Sale (`app/(sale)/`) phải truyền đường của nó, không thì chốt xong là
+   * ném người dùng sang host khác, tức ra khỏi site của họ. (Giữ lại khi hợp nhất
+   * `main` → `test` 16/09/2026: bản `main` chưa có hai prop này.)
+   */
+  backHref?: string
+  /** Đường tới màn xử lý phiếu trùng; `null` ⇒ dùng đường mặc định của site admin. */
+  conflictHref?: string | null
+  /**
+   * Người đang chốt có phải Quản trị tối cao không (chốt 31/08/2026).
+   * `false` ⇒ KHÔNG vẽ ô "Miễn phí học bổng toàn phần". Đây chỉ là lớp giao diện —
+   * cổng thật nằm ở `submitConvertV2` (Server Action là endpoint HTTP riêng).
+   */
+  canGrantScholarship: boolean
   defaultParentName: string
   defaultParentEmail: string
   defaultParentPhone: string
@@ -52,40 +92,15 @@ export function ConvertForm({
     name: string
     dob: string
     courseId: string
+    courseName: string
   }[]
   classes: ClassOpt[]
   /** FL2-01 — đơn hàng học phí gắn lead (để chia 1/2 đợt). null = chưa có đơn. */
-  order: { id: string; totalAmount: number } | null
-  /**
-   * Nơi quay về sau khi chốt xong (và khi bấm Huỷ).
-   *
-   * Mặc định là clean-URL của host ADMIN. Site Sale mount lại chính form này
-   * nhưng `/leads/:id` bên đó không tồn tại — đá về admin host giữa lúc vừa chốt
-   * xong là ném người dùng ra khỏi site của họ. Truyền `backHref` để ở lại.
-   *
-   * Chọn thêm PROP thay vì nhân bản form: nghiệp vụ chốt lead là chỗ đắt nhất để
-   * có hai bản (idempotency, atomic-claim, tạo tài khoản PH), và hai bản là hai
-   * bản sẽ trôi khác nhau.
-   */
-  backHref?: string
-  /**
-   * Đường tới màn xử lý xung đột hồ sơ phụ huynh. `null` = KHÔNG vẽ liên kết —
-   * dùng cho site Sale, vì `/convert-conflicts` là màn của Super Admin/Quản lý:
-   * vẽ ra cho Sale là một liên kết bấm vào rồi bị đá ra.
-   *
-   * BẮT BUỘC, không có giá trị mặc định. Hai lý do: (1) chỗ gọi mới là chỗ biết
-   * khu của mình có màn đó hay không; (2) `components/admin/nav-coverage.test.ts`
-   * dò lối vào của mọi màn admin bằng cách QUÉT CHUỖI `href="..."` — chôn đường
-   * dẫn vào một biến mặc định ở đây là làm màn `/convert-conflicts` trông như
-   * mồ côi, dù nó vẫn hiện.
-   */
-  conflictHref: string | null
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
-  // Mặc định = hành vi admin trước 24/08, không đổi một hạt nào cho chỗ gọi cũ.
-  const veLai = backHref ?? `/leads/${leadId}`
   const [conflict, setConflict] = useState<string | null>(null)
+  const veLai = backHref ?? `/leads/${leadId}`
 
   const [parentName, setParentName] = useState(defaultParentName)
   const [parentEmail, setParentEmail] = useState(defaultParentEmail)
@@ -97,16 +112,11 @@ export function ConvertForm({
   const [parentCity, setParentCity] = useState('')
 
   // FL2-01 — kế hoạch học phí. Chỉ áp dụng khi có Order với tổng > 0.
-  const hasOrder = !!order && order.totalAmount > 0
-  const orderTotal = order?.totalAmount ?? 0
-  const [installPlan, setInstallPlan] = useState<'FULL' | 'TWO'>('FULL')
-  const [dot1Amount, setDot1Amount] = useState('')
-  const [dot2DueDate, setDot2DueDate] = useState('')
-  const dot1Num = Math.min(Math.max(0, Number.parseInt(dot1Amount || '0', 10) || 0), orderTotal)
-  const dot2Num = Math.max(0, orderTotal - dot1Num)
+
+  // Lý do ưu đãi — BẮT BUỘC khi có giảm (server chặn lại lần nữa, đây chỉ là chặn sớm).
 
   const [students, setStudents] = useState<StudentRow[]>(() =>
-    (prefillStudents.length ? prefillStudents : [{ leadChildId: null, name: '', dob: '', courseId: '' }]).map(
+    (prefillStudents.length ? prefillStudents : [{ leadChildId: null, name: '', dob: '', courseId: '', courseName: '' }]).map(
       (s) => {
         // Prefill class: nếu con có khoá quan tâm, chọn lớp đầu tiên của khoá đó.
         const cls = s.courseId ? classes.find((c) => c.courseId === s.courseId) : undefined
@@ -115,12 +125,43 @@ export function ConvertForm({
           leadChildId: s.leadChildId,
           name: s.name,
           dob: s.dob,
+          courseId: s.courseId,
+          courseName: s.courseName,
           classId: cls?.id ?? '',
           consentMedia: false,
+          scholarship: false,
         }
       },
     ),
   )
+
+  /**
+   * LỚP ĐƯỢC CHỌN CHO MỘT EM — chỉ lớp thuộc KHOÁ QUAN TÂM của em đó
+   * (chủ dự án chốt 03/09/2026).
+   *
+   * Trước đợt này ô lớp liệt kê MỌI lớp đang mở tại cơ sở, trong khi phần điền sẵn
+   * đã tự chọn lớp đúng khoá — nên chỉ cần lỡ tay đổi ô là ghi danh em vào một khoá
+   * khác hẳn khoá phụ huynh hỏi, và học phí lấy theo giá lớp mới. Sai kiểu đó không
+   * báo lỗi ở đâu cả: nó thành công nợ đúng số tiền của một khoá không ai đặt.
+   *
+   * Em CHƯA có khoá quan tâm (phiếu không ghi, hoặc em thêm tay ở màn này) thì hiện
+   * đủ mọi lớp — lọc về rỗng ở đây là chặn luôn việc chốt mà không nói vì sao.
+   */
+  const lopChoEm = (courseId: string) =>
+    courseId ? classes.filter((c) => c.courseId === courseId) : classes
+
+  const priceOf = (classId: string) => classes.find((c) => c.id === classId)?.listPrice ?? 0
+  const sumListPrice = students.reduce((n, r) => n + priceOf(r.classId), 0)
+  // Học bổng toàn phần = giảm ĐÚNG BẰNG giá lớp của em đó. Không còn %/số tiền nên
+  // không cần hàm ước tính riêng nữa.
+  const sumDiscount = students.reduce(
+    (n, r) => n + (r.scholarship ? priceOf(r.classId) : 0),
+    0,
+  )
+  const sumFinal = Math.max(0, sumListPrice - sumDiscount)
+  const hasDiscount = sumDiscount > 0
+  // Miễn phí toàn phần: tổng sau ưu đãi = 0 ⇒ guard tiền tự thoả, không cần khoản thu.
+  const allFree = hasDiscount && sumFinal === 0
 
   function patch(key: string, p: Partial<StudentRow>) {
     setStudents((rows) => rows.map((r) => (r.key === key ? { ...r, ...p } : r)))
@@ -129,7 +170,19 @@ export function ConvertForm({
   function addStudent() {
     setStudents((rows) => [
       ...rows,
-      { key: newKey(), leadChildId: null, name: '', dob: '', classId: '', consentMedia: false },
+      {
+        key: newKey(),
+        leadChildId: null,
+        name: '',
+        dob: '',
+        // Em thêm tay ở màn này không có khoá quan tâm trên phiếu ⇒ để trống, và
+        // ô lớp sẽ hiện đủ mọi lớp đang mở (xem `lopChoEm`).
+        courseId: '',
+        courseName: '',
+        classId: '',
+        consentMedia: false,
+        scholarship: false,
+      },
     ])
   }
 
@@ -145,10 +198,6 @@ export function ConvertForm({
     }
     if (students.some((s) => !s.name.trim() || !s.classId)) {
       toast.error('Mỗi học viên cần tên + lớp')
-      return
-    }
-    if (hasOrder && installPlan === 'TWO' && !dot2DueDate) {
-      toast.error('Chọn 2 đợt thì cần ngày hẹn đóng đợt 2')
       return
     }
     setConflict(null)
@@ -167,21 +216,14 @@ export function ConvertForm({
           dob: s.dob || '',
           classId: s.classId,
           consentMedia: s.consentMedia,
+          scholarship: s.scholarship,
         })),
-        // FL2-01 — chỉ gửi khi có đơn để chia; server đọc lại tổng từ Order.
-        installment: hasOrder
-          ? { plan: installPlan, dot1Amount: dot1Num, dot2DueDate: installPlan === 'TWO' ? dot2DueDate : '' }
-          : null,
       })
       if (res.ok) {
         toast.success(
           `Đã chuyển đổi: ${res.studentIds.length} học viên · ${res.enrollmentIds.length} đăng ký` +
             (res.deduped ? ' (đã xử lý trùng / idempotent)' : ''),
         )
-        if (res.installmentWarning) toast.warning(res.installmentWarning)
-        else if (res.installmentPendingApproval)
-          toast.info('Kế hoạch 2 đợt đã gửi — chờ quản lý cơ sở duyệt')
-        else if (res.installmentApplied) toast.success('Đã ghi kế hoạch học phí 2 đợt')
         router.push(veLai)
         router.refresh()
         return
@@ -193,7 +235,14 @@ export function ConvertForm({
         return
       }
       if (res.code === 'PAYMENT_REQUIRED') {
-        toast.error('Chưa đủ điều kiện: cần ghi nhận thanh toán trước khi chốt (PAYMENT_REQUIRED)')
+        // 31/08 — khối "Ưu đãi học phí" đã gỡ, nên câu hướng dẫn cũ (chỉ người dùng tới
+        // một khối không còn tồn tại) phải đổi. Hai đường ra khác nhau theo vai, nói
+        // đúng đường của người đang đọc.
+        toast.error(
+          canGrantScholarship
+            ? 'Chưa đủ điều kiện chốt: cần ghi nhận thanh toán trước. Nếu em này được cấp học bổng toàn phần, tick ô "Miễn phí học bổng toàn phần" của em đó rồi chốt lại.'
+            : 'Chưa đủ điều kiện chốt: cần ghi nhận thanh toán trước. Nếu em này được miễn học phí, nhờ Quản trị tối cao cấp học bổng toàn phần.',
+        )
         return
       }
       toast.error(res.error || 'Lỗi chuyển đổi')
@@ -208,15 +257,9 @@ export function ConvertForm({
           <div>
             <p className="font-semibold">Xung đột hồ sơ phụ huynh</p>
             <p>{conflict}</p>
-            {conflictHref ? (
-              <a href={conflictHref} className="mt-1 inline-block font-medium underline">
-                Mở màn xử lý xung đột →
-              </a>
-            ) : (
-              <p className="mt-1 font-medium">
-                Báo quản lý cơ sở xử lý — màn gộp hồ sơ nằm ở khu quản trị.
-              </p>
-            )}
+            <a href={conflictHref ?? "/convert-conflicts"} className="mt-1 inline-block font-medium underline">
+              Mở màn xử lý xung đột →
+            </a>
           </div>
         </div>
       )}
@@ -327,25 +370,67 @@ export function ConvertForm({
                   <span className="mb-1 block text-xs font-medium text-muted-foreground">
                     Lớp đăng ký *
                     <HelpHint>
-                      Danh sách chỉ có lớp đang mở tại cơ sở của lead. Chốt xong bé vào
-                      thẳng lớp này và học phí của lớp thành công nợ của phụ huynh — đổi
-                      lớp sau phải làm ở màn Lớp học.
+                      {s.courseId
+                        ? "Chỉ hiện lớp thuộc KHOÁ QUAN TÂM ghi trên phiếu của em này. Chốt xong bé vào thẳng lớp này và học phí của lớp thành công nợ của phụ huynh — đổi lớp sau phải làm ở màn Lớp học."
+                        : "Phiếu chưa ghi khoá quan tâm cho em này nên danh sách hiện đủ lớp đang mở tại cơ sở. Chốt xong bé vào thẳng lớp này và học phí của lớp thành công nợ của phụ huynh."}
                     </HelpHint>
                   </span>
                   <select
                     value={s.classId}
                     onChange={(e) => patch(s.key, { classId: e.target.value })}
                     className={inputCls}
+                    disabled={lopChoEm(s.courseId).length === 0}
                   >
                     <option value="">— Chọn lớp —</option>
-                    {classes.map((c) => (
+                    {lopChoEm(s.courseId).map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.label} · {c.courseName} ({c.listPrice.toLocaleString('vi-VN')}đ)
                       </option>
                     ))}
                   </select>
+                  {/* Ô rỗng mà không nói gì là chỗ người dùng đọc thành "hệ thống hỏng".
+                      Chỉ hiện khi CÓ lớp ở cơ sở nhưng không lớp nào đúng khoá — ca
+                      "chưa có lớp nào cả" đã có dòng cảnh báo chung ở cuối form. */}
+                  {s.courseId && classes.length > 0 && lopChoEm(s.courseId).length === 0 && (
+                    <span className="mt-1 block text-xs text-state-warning-ink">
+                      Cơ sở này chưa mở lớp nào thuộc khoá{" "}
+                      <strong>{s.courseName}</strong> — mở lớp ở mục Lớp học, hoặc
+                      sửa khoá quan tâm của em trên phiếu lead.
+                    </span>
+                  )}
                 </label>
               </div>
+              {/* ⚠️ 31/08/2026 — khung "Ưu đãi học phí" ĐÃ GỠ (ô chọn %/số tiền + ô lý do).
+                  Còn lại ĐÚNG một ô tick học bổng toàn phần, và chỉ Quản trị tối cao
+                  thấy. Vai khác không render gì ⇒ `s.scholarship` giữ nguyên `false`,
+                  payload gửi lên y hệt trước khi có tính năng này. */}
+              {canGrantScholarship && (
+                <label className="mt-3 flex items-start gap-2 rounded-lg border border-state-warning bg-state-warning-soft p-3 text-sm text-state-warning-ink">
+                  <input
+                    type="checkbox"
+                    checked={s.scholarship}
+                    onChange={(e) => patch(s.key, { scholarship: e.target.checked })}
+                    className="mt-0.5 h-4 w-4 rounded border-border"
+                  />
+                  <span>
+                    <strong>Miễn phí học bổng toàn phần</strong> — học phí của em này về 0đ.
+                    {s.classId && (
+                      <>
+                        {' '}Giá lớp{' '}
+                        <strong>{priceOf(s.classId).toLocaleString('vi-VN')}đ</strong>
+                        {s.scholarship && ' → 0đ'}.
+                      </>
+                    )}
+                    {s.scholarship && (
+                      <span className="mt-1 block text-xs">
+                        Chốt được ngay, không cần ghi nhận thanh toán. Tên bạn và thời điểm
+                        cấp được lưu vào nhật ký.
+                      </span>
+                    )}
+                  </span>
+                </label>
+              )}
+
               <label className="mt-3 flex items-start gap-2 text-sm text-foreground">
                 <input
                   type="checkbox"
@@ -377,108 +462,23 @@ export function ConvertForm({
         </p>
       )}
 
-      {/* FL2-01 — Học phí: 1 đợt (full) hoặc 2 đợt (đợt 1 đã thu + đợt 2 hẹn ngày). */}
-      {hasOrder && (
-        <div className="rounded-xl border border-border bg-card p-4">
-          <h2 className="mb-1 text-sm font-semibold text-foreground">
-            Học phí
-            <HelpHint className="ml-1">
-              Tổng lấy từ đơn hàng đã tạo cho lead này, không sửa được ở đây — muốn đổi
-              thì sửa đơn hàng rồi quay lại. Chọn &ldquo;đóng đủ 1 đợt&rdquo; khi phụ
-              huynh đóng hết ngay; chọn &ldquo;2 đợt&rdquo; khi còn nợ lại một phần.
-            </HelpHint>
-          </h2>
-          <p className="mb-3 text-xs text-muted-foreground">
-            Tổng đơn hàng: <strong>{orderTotal.toLocaleString('vi-VN')}đ</strong>
-          </p>
-          <div className="flex flex-wrap gap-4">
-            <label className="flex items-center gap-2 text-sm text-foreground">
-              <input
-                type="radio"
-                name="install-plan"
-                checked={installPlan === 'FULL'}
-                onChange={() => setInstallPlan('FULL')}
-                className="h-4 w-4"
-              />
-              Đóng đủ 1 đợt
-            </label>
-            <label className="flex items-center gap-2 text-sm text-foreground">
-              <input
-                type="radio"
-                name="install-plan"
-                checked={installPlan === 'TWO'}
-                onChange={() => setInstallPlan('TWO')}
-                className="h-4 w-4"
-              />
-              Chia 2 đợt
-            </label>
-          </div>
-
-          {installPlan === 'TWO' && (
-            <div className="mt-3 grid gap-3 sm:grid-cols-3">
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium text-muted-foreground">
-                  Đợt 1 — đã thu (VNĐ)
-                  <HelpHint>
-                    Số tiền phụ huynh ĐÃ đóng thật tại thời điểm chốt, không phải số dự
-                    kiến. Không được lớn hơn tổng đơn; phần còn lại tự thành đợt 2.
-                  </HelpHint>
-                </span>
-                {/* Ô tiền: gõ 10000000 → hiện 10.000.000. Vẫn giữ state dạng chuỗi để
-                    phép kẹp dot1Num (parseInt + clamp theo tổng đơn) không đổi. */}
-                <MoneyInput
-                  name="dot1Amount"
-                  min={0}
-                  max={orderTotal}
-                  value={dot1Amount}
-                  onValueChange={(v) => setDot1Amount(v === null ? '' : String(v))}
-                  placeholder="0"
-                  // suffix={null}: nhãn đã ghi "(VNĐ)", và `inputCls` mang px-3 nên nó ghi
-                  // đè phần lề phải mà MoneyInput chừa cho hậu tố ⇒ hậu tố đè lên chữ số.
-                  suffix={null}
-                  className={inputCls}
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium text-muted-foreground">
-                  Đợt 2 — còn lại
-                  <HelpHint>
-                    Tự tính = tổng đơn − đợt 1, không gõ tay được. Đây chính là khoản
-                    công nợ hệ thống sẽ nhắc phụ huynh trước hạn.
-                  </HelpHint>
-                </span>
-                <input
-                  value={`${dot2Num.toLocaleString('vi-VN')}đ`}
-                  readOnly
-                  className={`${inputCls} bg-muted text-muted-foreground`}
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium text-muted-foreground">
-                  Đợt 2 — ngày hẹn đóng *
-                  <HelpHint>
-                    Ngày phụ huynh hẹn đóng nốt. Hệ thống nhắc công nợ dựa vào ngày này,
-                    nên phải là ngày đã thống nhất với phụ huynh chứ không đặt đại.
-                  </HelpHint>
-                </span>
-                <input
-                  type="date"
-                  value={dot2DueDate}
-                  onChange={(e) => setDot2DueDate(e.target.value)}
-                  className={inputCls}
-                />
-              </label>
-            </div>
-          )}
-
-          {/* C4 — kế hoạch 2 đợt cần quản lý cơ sở duyệt trước khi đợt 2 được tính tiền. */}
-          {installPlan === 'TWO' && (
-            <p className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-state-warning-soft px-2.5 py-1.5 text-xs font-medium text-state-warning-ink">
-              <AlertTriangle className="h-3.5 w-3.5" /> Chờ quản lý cơ sở duyệt
-            </p>
-          )}
-        </div>
+      {/* ⚠️ 31/08/2026 — khung "Ưu đãi học phí" (tổng + ô lý do) ĐÃ GỠ theo chốt của chủ
+          dự án. Lý do ghi nhật ký nay do SERVER tự dựng kèm tên người cấp, không còn ô
+          để gõ. Giữ lại đúng MỘT dòng xác nhận khi toàn bộ học viên được miễn phí: đó là
+          thông tin quyết định việc bấm Chốt (không cần ghi nhận thanh toán), bỏ đi thì
+          người chốt không biết vì sao mình qua được cổng tiền. */}
+      {allFree && (
+        <p className="rounded-lg border border-state-success bg-state-success-soft px-3 py-2 text-sm font-medium text-state-success-ink">
+          ✓ Miễn phí học bổng toàn phần — chốt được ngay, không cần ghi nhận thanh toán.
+        </p>
       )}
+
+      {/* ⚠️ 31/08/2026 — khối "Học phí" (1 đợt / 2 đợt + số tiền đợt 1 + hạn đợt 2) ĐÃ GỠ.
+          Chốt của chủ dự án: học phí đã chốt ở TRANG ĐƠN HÀNG rồi, để lại đây là hỏi
+          cùng một câu ở hai chỗ. Năng lực không mất: `recordInstallmentPlan` và
+          `requestInstallmentApproval` vẫn chạy từ /orders (orders/_actions.ts:959 và
+          order-detail-client.tsx) — đó nay là NƠI DUY NHẤT khai kế hoạch đợt, nên không
+          còn chuyện hai màn ghi đè nhau. */}
 
       <div className="flex gap-2 border-t border-border pt-4">
         <button

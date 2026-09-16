@@ -10,9 +10,22 @@
 //   • CONFIRMED — kế toán đã xác nhận. Đây là tiền thật.        → cộng
 //   • REFUNDED  — refundPayment() ghi bút toán ÂM đối ứng,
 //                 KHÔNG xoá bản gốc.                            → cộng (số âm ⇒ trừ ra)
-//   • ADJUSTED  — adjustPayment() tạo bản MỚI mang số đúng và
-//                 KHÔNG sửa bản gốc ⇒ bản gốc phải bị LOẠI,
-//                 nếu không là cộng đôi.                        → cộng, và loại bản gốc
+//   • ĐIỀU CHỈNH — xem khối 🔴 ngay dưới: nay là DELTA, luôn được cộng, KHÔNG loại gốc.
+//
+// 🔴 ĐỔI MÔ HÌNH 07/09/2026 (migration `payment_type_tach_khoi_status`), áp khi hợp nhất
+//    `main` → `test` ngày 16/09/2026.
+//    TRƯỚC: `adjustPayment()` tạo một bút toán trạng thái `ADJUSTED` mang SỐ ĐÚNG, bản gốc
+//      giữ số cũ ⇒ phải LOẠI bản gốc, không thì cộng đôi. Đó là lý do `WHERE_THUC_THU` cũ
+//      có nhánh `adjustments.none` và `butToanThucThu()` có tập `daBiThayThe`.
+//    NAY: `ADJUSTED` ĐÃ BỊ BỎ khỏi `PaymentAccountantStatus`. Bút toán điều chỉnh là dòng
+//      `paymentType = "ADJUSTMENT"`, trạng thái vẫn `CONFIRMED`, và nó mang PHẦN CHÊNH
+//      LỆCH chứ không mang số đúng. Bản gốc giữ số cũ, cộng cả hai mới ra số đúng.
+//    ⇒ LOẠI bản gốc bây giờ là ĐẾM THIẾU đúng phần vừa được sửa — ngược hẳn lỗi cũ.
+//    Luật này khai ở `lib/finance/debt.ts` ("KHÔNG lọc theo `paymentType`: bút toán
+//    ADJUSTMENT LUÔN được cộng"); file này chỉ đi theo, không được nghĩ khác.
+//
+//    ⚠️ Con số "thực thu" sẽ ĐỔI so với bản cũ trên nhánh `test`. Đó là hệ quả bắt buộc
+//    của việc đổi mô hình, không phải lỗi phép cộng ở đây.
 //   • PENDING / REJECTED — chưa/không phải tiền thật.           → bỏ
 //
 // ⚠️ Số của kế toán và ROAS sẽ TỤT khi bản này lên prod — đó là mức phồng cũ bị gỡ,
@@ -29,21 +42,20 @@ export type ThucThuButToan = {
   adjustmentOfId: string | null;
 };
 
-/** Ba trạng thái kế toán tham gia phép tính thực thu. */
-export const TRANG_THAI_THUC_THU = ["CONFIRMED", "REFUNDED", "ADJUSTED"] as const;
+/** Trạng thái kế toán tham gia phép tính thực thu (xem khối 🔴 ở đầu file). */
+export const TRANG_THAI_THUC_THU = ["CONFIRMED", "REFUNDED"] as const;
 
 /**
  * Mảnh `where` chuẩn cho MỌI query thực thu (`aggregate` / `groupBy` / `findMany`).
  * Đây là bản dịch SQL của đúng luật mà `butToanThucThu()` cài đặt:
  *   - `deletedAt: null`   — bỏ bút toán đã xoá mềm;
- *   - `accountantStatus`  — chỉ 3 trạng thái trên;
- *   - `adjustments.none`  — LOẠI bản gốc đã bị một bản ADJUSTED thay thế.
- * Bỏ nhánh `adjustments.none` = bản gốc quay lại phép cộng ⇒ doanh thu phồng lại.
+ *   - `accountantStatus`  — chỉ hai trạng thái trên.
+ * KHÔNG còn nhánh `adjustments.none`, và KHÔNG được lọc `paymentType`: dòng điều chỉnh
+ * mang phần chênh lệch nên phải nằm trong phép cộng.
  */
 export const WHERE_THUC_THU = {
   deletedAt: null,
   accountantStatus: { in: [...TRANG_THAI_THUC_THU] },
-  adjustments: { none: { accountantStatus: "ADJUSTED", deletedAt: null } },
 } satisfies Prisma.PaymentWhereInput;
 
 /**
@@ -52,14 +64,10 @@ export const WHERE_THUC_THU = {
  * `WHERE_THUC_THU` thì không đổi kết quả — nó là lớp chắn, không phải bước thứ hai.
  */
 export function butToanThucThu<T extends ThucThuButToan>(rows: T[]): T[] {
-  // Bản gốc bị thay thế = có một bút toán ADJUSTED trỏ về nó. Chuỗi điều chỉnh
-  // nhiều lần (A ← B ← C) tự rụng dần: B trỏ về A, C trỏ về B ⇒ chỉ C sống.
-  const daBiThayThe = new Set<string>();
-  for (const r of rows) {
-    if (r.accountantStatus === "ADJUSTED" && r.adjustmentOfId) daBiThayThe.add(r.adjustmentOfId);
-  }
+  // KHÔNG còn bước "loại bản gốc đã bị thay thế" — xem khối 🔴 đầu file. Dòng điều chỉnh
+  // là DELTA nên bản gốc VẪN phải được cộng; loại nó đi là đếm thiếu.
   const hopLe: readonly string[] = TRANG_THAI_THUC_THU;
-  return rows.filter((r) => hopLe.includes(r.accountantStatus) && !daBiThayThe.has(r.id));
+  return rows.filter((r) => hopLe.includes(r.accountantStatus));
 }
 
 /** THUẦN — tổng thực thu của một mảng bút toán. */

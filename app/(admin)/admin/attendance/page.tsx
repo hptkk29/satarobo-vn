@@ -6,13 +6,6 @@
 //   /attendance?classId=<id>        → cấp 2: DANH SÁCH BUỔI của lớp đó
 //   /attendance?sessionId=<id>      → cấp 3: BẢNG ĐIỂM DANH của buổi
 //
-// E-01 (24/08) thêm CẤP 0, cũng bằng query string:
-//
-//   /attendance?dateFrom=…&dateTo=… → BUỔI CÒN THIẾU VIỆC của NHIỀU LỚP trong khoảng ngày
-//
-// Chốt kỹ thuật OQ-6: MỞ RỘNG màn này chứ không dựng trang thứ hai. Thiếu dateFrom/dateTo
-// ⇒ hành vi Y HỆT hôm nay, nên mọi link cũ trong hộp thông báo vẫn sống.
-//
 // Vì sao không tách thành 3 route: `?sessionId=` là đích của thông báo
 // (lib/notify/attendance.ts) và của nút ở /admin/sessions — đổi đường dẫn là gãy hết
 // link cũ đang nằm trong hộp thông báo của người dùng.
@@ -36,6 +29,7 @@ import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { getCenterOptions } from "@/lib/org/center-options";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { FEEDBACK_ATTENDED_STATUSES } from "@/lib/lms/session-feedback-roster";
 import {
@@ -51,13 +45,7 @@ import {
   sortAttendanceQueue,
   type SessionWorkInput,
 } from "@/lib/lms/attendance-queue";
-import {
-  listSessionGaps,
-  SESSION_GAP_PAGE_SIZE,
-} from "@/lib/dashboard/tuong-tac/session-gaps";
-import { resolveScopeFilters } from "@/lib/reports/filters";
 import { AttendanceGrid } from "./_components/attendance-grid";
-import { SessionGapList } from "./_components/session-gap-list";
 import {
   AttendanceList,
   type AttendanceListRow,
@@ -76,19 +64,7 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Điểm danh | Admin" };
 
 interface SearchParams {
-  searchParams: Promise<{
-    sessionId?: string;
-    classId?: string;
-    centerId?: string;
-    // E-01 · cấp 0 — tên tham số DÙNG CHUNG với bộ lọc phạm vi A-02 (`resolveScopeFilters`)
-    // để bấm từ dashboard sang đây không phải dịch lại bộ lọc. `center` lặp được
-    // (`?center=cs1&center=cs2`) nên Next trả `string[]` — đừng thu về `string`.
-    center?: string | string[];
-    dateFrom?: string | string[];
-    dateTo?: string | string[];
-    split?: string | string[];
-    page?: string;
-  }>;
+  searchParams: Promise<{ sessionId?: string; classId?: string; centerId?: string }>;
 }
 
 const TZ = "Asia/Ho_Chi_Minh";
@@ -108,12 +84,6 @@ const clockFmt = new Intl.DateTimeFormat("vi-VN", {
 
 function formatDateTime(d: Date): string {
   return `${dayFmt.format(d)} · ${clockFmt.format(d)}`;
-}
-
-/** Tham số lặp → lấy giá trị ĐẦU (khớp `URLSearchParams.get()`), rỗng → undefined. */
-function first(v: string | string[] | undefined): string | undefined {
-  const s = (Array.isArray(v) ? v[0] : v)?.trim();
-  return s && s.length > 0 ? s : undefined;
 }
 
 /** Trạng thái điểm danh tính là "đi học" — dùng chung hằng số với site GV. */
@@ -280,7 +250,7 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
         // Nhãn buổi lấy từ GIÁO TRÌNH của lớp: kế hoạch buổi ghim cho lớp này trước,
         // rồi mới tới tên bài của giáo án gốc (deriveSessionLabel).
         // `moduleCode` = học phần (HP1…) — thiếu nó thì nhãn rụng mất mảnh giữa.
-        plan: { select: { customTitle: true } },
+        plan: { select: { customTitle: true, order: true } },
         lesson: { select: { title: true, order: true, moduleCode: true } },
       },
     });
@@ -377,6 +347,7 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
           deriveSessionLabel({
             sessionNumber: numberOf.get(s.id) ?? null,
             planTitle: s.plan?.customTitle,
+            planOrder: s.plan?.order,
             lessonTitle: s.lesson?.title,
             lessonOrder: s.lesson?.order,
             moduleCode: s.lesson?.moduleCode,
@@ -411,6 +382,20 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
     })).map((e) => e.row);
 
     const canComplete = await checkPermission("sessions:edit");
+    // 04/09/2026 — NÚT "NHẬN XÉT" phải theo quyền (chủ dự án chốt).
+    //
+    // Trang đích `/sessions/[id]` cho vào khi `canManageSessionClass` (SUPER_ADMIN /
+    // quản lý ĐÚNG cơ sở / GV được phân lớp) HOẶC có `session-feedback:view-all`.
+    // Sale và Quản lý lớp học không thoả vế nào ⇒ server ĐÃ redirect họ ra. Nhưng nút
+    // vẫn hiện, nên họ bấm vào rồi bị đá về — một ngõ cụt, và trông như hệ thống lỗi.
+    //
+    // Cặp quyền dưới đây khớp đúng nhóm được vào: GV và quản lý cơ sở đều có CẢ HAI
+    // (seed-roles), SUPER_ADMIN đi đường bypass. Cố ý KHÔNG gác bằng
+    // `canManageSessionClass`: hàm đó xét theo VAI + lớp cụ thể, dùng ở đây sẽ chặt
+    // hơn server và giấu nút khỏi chính giáo viên đứng lớp.
+    const canFeedback =
+      (await checkPermission("sessions:edit")) ||
+      (await checkPermission("session-feedback:view-all"));
 
     return (
       <div>
@@ -446,6 +431,7 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
             classId={cls.id}
             className={cls.name}
             canComplete={canComplete}
+            canFeedback={canFeedback}
           />
         )}
       </div>
@@ -460,63 +446,6 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
     checkPermission("classes:view-all"),
     checkPermission("classes:view-own"),
   ]);
-  // ── Cấp 0: BUỔI CÒN THIẾU VIỆC theo KHOẢNG NGÀY (E-01) ────────────────────
-  //
-  // ⚠️ CỔNG QUYỀN: bảng này gộp NHIỀU LỚP, nên chỉ vai xem được mọi lớp mới vào. Không có
-  // cổng này thì một giáo viên chỉ cần gõ thêm `?dateFrom=…&dateTo=…` vào đường dẫn là
-  // đọc được lịch dạy + việc còn nợ của toàn bộ lớp trong cơ sở — nới quyền bằng một
-  // tham số truy vấn. Không đủ quyền ⇒ rơi xuống cấp 1 như hôm nay, không báo lỗi (một
-  // thông báo "bạn không được xem" ở đây chỉ nói cho người dò biết là có gì để dò).
-  const rangeFrom = first(sp.dateFrom);
-  const rangeTo = first(sp.dateTo);
-  if (rangeFrom && rangeTo && (actor.isSuperAdmin || canViewAllClasses)) {
-    const fc = await resolveScopeFilters(actor, {
-      center: sp.center,
-      dateFrom: rangeFrom,
-      dateTo: rangeTo,
-      split: sp.split,
-    });
-    const gaps = await listSessionGaps(actor, fc.filters, {
-      page: Number.parseInt(sp.page ?? "1", 10),
-      pageSize: SESSION_GAP_PAGE_SIZE,
-    });
-
-    // Chỉ bày tên của CƠ SỞ ĐANG LỌC — `fc.visibleCenters` là danh sách chọn được, còn
-    // `fc.filters.centerIds` là thứ đã áp dụng (giao với lựa chọn trên URL).
-    const applied = new Set(fc.filters.centerIds);
-    const centerNameOf = Object.fromEntries(
-      fc.visibleCenters.filter((c) => applied.has(c.id)).map((c) => [c.id, c.name]),
-    );
-
-    const hrefForPage = (page: number) => {
-      const qs = new URLSearchParams();
-      for (const id of fc.filters.centerIds) qs.append("center", id);
-      qs.set("dateFrom", fc.dateFromStr);
-      qs.set("dateTo", fc.dateToStr);
-      if (fc.filters.groupByCenter) qs.set("split", "1");
-      if (page > 1) qs.set("page", String(page));
-      return `/attendance?${qs.toString()}`;
-    };
-
-    return (
-      <div>
-        <BackToClasses />
-        <SessionGapList
-          rows={gaps.rows}
-          counts={gaps.counts}
-          byCenter={gaps.byCenter}
-          centerNameOf={centerNameOf}
-          total={gaps.total}
-          page={gaps.page}
-          pageCount={gaps.pageCount}
-          truncated={gaps.truncated}
-          rangeLabel={`${fc.dateFromStr} → ${fc.dateToStr}`}
-          hrefForPage={hrefForPage}
-        />
-      </div>
-    );
-  }
-
   const visibleStatuses = actor.isSuperAdmin
     ? [...TEACHING_STATUSES, ...UPCOMING_STATUSES, ...CLOSED_STATUSES]
     : canViewAllClasses
@@ -527,20 +456,10 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
   // đúng nhóm chủ dự án nêu (admin, đào tạo, hội sở). Suy từ cây tổ chức chứ không
   // liệt kê tên vai: mở cơ sở mới là thêm dữ liệu, không sửa code.
   const seesManyCenters = actor.isSuperAdmin || actor.isHoLevel || actor.visibleCenterIds.length > 1;
-  const centers = seesManyCenters
-    ? await sdb.center.findMany({
-        // Center ∈ SCOPE_EXEMPT (ranh giới tenant, không tự lọc theo chính nó) nên
-        // PHẢI tự chặn theo tầm nhìn actor — nếu không, quản lý CS1 thấy tên CS2.
-        where: {
-          isActive: true,
-          ...(actor.isSuperAdmin || actor.isHoLevel
-            ? {}
-            : { id: { in: actor.visibleCenterIds } }),
-        },
-        orderBy: { displayOrder: "asc" },
-        select: { id: true, name: true },
-      })
-    : [];
+  // Danh sách cơ sở đi qua helper chung: bản tự viết cũ vẫn bày Hội sở (không dạy
+  // học, chọn ra 0 lớp) và các dòng Center mồ côi của bộ test. Helper đã bỏ hai thứ
+  // đó + cơ sở đã tắt, và vẫn cắt theo tầm nhìn actor như đoạn cũ.
+  const centers = seesManyCenters ? await getCenterOptions(actor) : [];
 
   // Chỉ có quyền xem lớp CỦA MÌNH (giáo viên) → chặn thêm theo GV chính/trợ giảng.
   // Cùng luật với /admin/classes: chỉ siết khi có view-own mà KHÔNG có view-all — ai

@@ -6,11 +6,13 @@ import { checkPermission, canViewLeadPii } from '@/lib/auth/check-permission'
 import { maskLeadPiiFields } from '@/lib/lead/pii'
 import { scopedDb } from '@/lib/db-scope'
 import { resolveActor } from '@/lib/auth/actor'
+import { canGrantFullScholarship } from '@/lib/crm/scholarship'
 import { isConvertV2Enabled } from '@/lib/flags'
 import { LEAD_STATUS_LABEL } from '@/lib/leads/status'
 import { getLeadPaymentSummary } from '@/lib/payments/summary'
 import { LeadPaymentCard } from '../../_components/lead-payment-card'
 import { ConvertForm } from './convert-form'
+import { formatPhoneVN } from "@/lib/phone";
 
 export const metadata = { title: 'Chuyển đổi | Admin' }
 export const dynamic = 'force-dynamic'
@@ -32,7 +34,8 @@ export default async function ConvertV2Page({ params }: Props) {
     (await checkPermission('students:create')) && (await checkPermission('enrollments:create'))
   if (!canConvert) redirect(`/leads/${id}`)
 
-  const sdb = scopedDb(await resolveActor(session.user.id))
+  const actor = await resolveActor(session.user.id)
+  const sdb = scopedDb(actor)
   const lead = await sdb.lead.findFirst({
     where: { id, deletedAt: null },
     select: {
@@ -44,6 +47,9 @@ export default async function ConvertV2Page({ params }: Props) {
       centerId: true,
       assignedToId: true,
       childName: true,
+      // Khoá quan tâm ở CẤP LEAD — dùng làm mặc định cho em chưa tự khai (xem
+      // `khoaCuaEm` bên dưới).
+      courseId: true,
       children: {
         orderBy: { createdAt: 'asc' },
         select: { id: true, fullName: true, dob: true, interestedCourseId: true },
@@ -81,13 +87,9 @@ export default async function ConvertV2Page({ params }: Props) {
   // Tóm tắt thanh toán (đã nộp / tổng phải thu / còn thiếu) + điều kiện chốt.
   const paymentSummary = await getLeadPaymentSummary(sdb, lead.id)
 
-  // FL2-01 — đơn hàng học phí gắn lead (tạo trước ở /orders/new?leadId=...) để chia
-  // 1/2 đợt khi convert. Lấy đơn COURSE mới nhất của lead.
-  const courseOrder = await sdb.order.findFirst({
-    where: { leadId: lead.id, type: 'COURSE' },
-    orderBy: { createdAt: 'desc' },
-    select: { id: true, totalAmount: true },
-  })
+  // ⚠️ 31/08/2026 — truy vấn `courseOrder` ĐÃ GỠ cùng khối "Học phí" của form: nó chỉ
+  // phục vụ ô chia 1/2 đợt, mà việc đó nay chốt ở trang đơn hàng. Giữ lại là một câu
+  // query chạy mỗi lần mở trang cho một prop không ai đọc.
 
   // Lớp đang mở (ưu tiên cùng cơ sở lead) + giá khoá để snapshot.
   const classes = await sdb.class.findMany({
@@ -115,19 +117,68 @@ export default async function ConvertV2Page({ params }: Props) {
     listPrice: c.course?.price ?? 0,
   }))
 
+  // Tên khoá quan tâm của từng em. Phải tra RIÊNG vì `LeadChild.interestedCourseId`
+  // là tham chiếu lỏng, không có FK sang `Course` (xem schema.prisma:1606).
+  //
+  // Không lấy tên từ `classOptions` được: đúng ca cần nói tên nhất là ca khoá đó
+  // KHÔNG có lớp nào đang mở — lúc ấy `classOptions` rỗng khoá đó và câu báo sẽ
+  // trống chỗ tên khoá.
+  // Gồm CẢ khoá cấp lead: nó là mặc định cho em chưa tự khai, và câu báo "cơ sở
+  // chưa mở lớp nào thuộc khoá X" cần đúng tên khoá đó.
+  const khoaQuanTamIds = [
+    ...new Set(
+      [...lead.children.map((c) => c.interestedCourseId), lead.courseId].filter(
+        Boolean,
+      ) as string[],
+    ),
+  ]
+  const tenKhoaById = new Map(
+    khoaQuanTamIds.length
+      ? (
+          await sdb.course.findMany({
+            where: { id: { in: khoaQuanTamIds } },
+            select: { id: true, name: true },
+          })
+        ).map((c) => [c.id, c.name])
+      : [],
+  )
+
+  /**
+   * KHOÁ QUAN TÂM DÙNG ĐỂ LỌC LỚP của một em (chủ dự án chốt 03/09/2026).
+   *
+   * Ưu tiên khoá của CHÍNH EM (`LeadChild.interestedCourseId`) — hai em cùng phụ
+   * huynh thường hỏi hai khoá khác nhau theo tuổi. Em chưa tự khai thì rơi về
+   * khoá của LEAD (`Lead.courseId`).
+   *
+   * Vì sao cần vế rơi về: phần lớn lead thật chưa có khoá ở cấp con. Lead từ web
+   * mang khoá ở cấp lead (suy từ slug trang khách vào), lead nhập tay trước
+   * 03/09 cũng vậy. Không có vế này thì ô "Lớp đăng ký" của những em đó rơi về
+   * "hiện đủ mọi lớp" — tức bộ lọc vừa làm gần như không bao giờ chạy, và người
+   * chốt lại phải tự dò đúng lớp trong danh sách 33 lớp.
+   */
+  const khoaCuaEm = (interestedCourseId: string | null) =>
+    interestedCourseId ?? lead.courseId ?? ''
+
   const prefillStudents = (lead.children.length > 0
-    ? lead.children.map((c) => ({
-        leadChildId: c.id,
-        name: c.fullName,
-        dob: c.dob ? c.dob.toISOString().slice(0, 10) : '',
-        courseId: c.interestedCourseId ?? '',
-      }))
+    ? lead.children.map((c) => {
+        const khoa = khoaCuaEm(c.interestedCourseId)
+        return {
+          leadChildId: c.id,
+          name: c.fullName,
+          dob: c.dob ? c.dob.toISOString().slice(0, 10) : '',
+          courseId: khoa,
+          courseName: khoa ? (tenKhoaById.get(khoa) ?? '(khoá đã xoá)') : '',
+        }
+      })
     : [
         {
           leadChildId: null,
           name: lead.childName ?? '',
           dob: '',
-          courseId: '',
+          courseId: khoaCuaEm(null),
+          courseName: lead.courseId
+            ? (tenKhoaById.get(lead.courseId) ?? '(khoá đã xoá)')
+            : '',
         },
       ]
   )
@@ -144,7 +195,7 @@ export default async function ConvertV2Page({ params }: Props) {
       <div className="mb-6 border-b border-border pb-4">
         <h1 className="text-2xl font-bold text-foreground">Chuyển đổi</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {piiLead.parentName} · {piiLead.phone}
+          {piiLead.parentName} · {formatPhoneVN(piiLead.phone)}
           {piiLead.email ? ` · ${piiLead.email}` : ''} · Trạng thái:{' '}
           <span className="font-medium">{LEAD_STATUS_LABEL[lead.status] ?? lead.status}</span>
         </p>
@@ -173,13 +224,16 @@ export default async function ConvertV2Page({ params }: Props) {
 
       <ConvertForm
         conflictHref="/convert-conflicts"
+        // Ô "Miễn phí học bổng toàn phần" CHỈ hiện với Quản trị tối cao (chốt 31/08/2026).
+        // Đây là lớp giao diện; cổng thật ở `submitConvertV2` — Server Action là endpoint
+        // HTTP riêng nên giấu ô không phải là chặn.
+        canGrantScholarship={canGrantFullScholarship(actor)}
         leadId={lead.id}
         defaultParentName={dienSan.ten}
         defaultParentEmail={dienSan.email}
-        defaultParentPhone={dienSan.sdt}
+        defaultParentPhone={formatPhoneVN(dienSan.sdt)}
         prefillStudents={prefillStudents}
         classes={classOptions}
-        order={courseOrder}
       />
     </div>
   )

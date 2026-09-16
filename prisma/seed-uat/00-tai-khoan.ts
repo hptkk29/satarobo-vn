@@ -55,6 +55,14 @@ const DANH_SACH: TaiKhoan[] = [
   { local: "uat.giamdoc", ten: "UAT — Giám đốc cơ sở 1", legacy: "CENTER_MANAGER", roleCode: "CENTER_MANAGER", neo: "CS1", maNhanSu: "CS1.QL.001", chucDanh: "Giám đốc cơ sở", phongBan: "BAN_GIAM_DOC" },
   { local: "uat.sale1", ten: "UAT — Tư vấn viên CS1", legacy: "SALES_CSM", roleCode: "CENTER_SALES_CSM", neo: "CS1", maNhanSu: "CS1.TVV.001", chucDanh: "Tư vấn tuyển sinh", phongBan: "TUYEN_SINH" },
   { local: "uat.sale2", ten: "UAT — Tư vấn viên CS2", legacy: "SALES_CSM", roleCode: "CENTER_SALES_CSM", neo: "CS2", maNhanSu: "CS2.TVV.001", chucDanh: "Tư vấn tuyển sinh", phongBan: "TUYEN_SINH" },
+  // 30/08/2026 — thêm 4 tư vấn viên để màn "Quản lý chia lead" có POOL THẬT mà nghiệm
+  // thu. Một cơ sở một người thì không nhìn ra được thứ cần nhìn: chia có đều không,
+  // tắt một người thì lượt chạy đi đâu, bật lại có bị dồn không.
+  // Dồn 3 người vào CS1 (pool 4) và 1 người vào CS2 (pool 2) — cố ý lệch để so hai bên.
+  { local: "uat.sale3", ten: "UAT — Tư vấn viên CS1 (2)", legacy: "SALES_CSM", roleCode: "CENTER_SALES_CSM", neo: "CS1", maNhanSu: "CS1.TVV.002", chucDanh: "Tư vấn tuyển sinh", phongBan: "TUYEN_SINH" },
+  { local: "uat.sale4", ten: "UAT — Tư vấn viên CS1 (3)", legacy: "SALES_CSM", roleCode: "CENTER_SALES_CSM", neo: "CS1", maNhanSu: "CS1.TVV.003", chucDanh: "Tư vấn tuyển sinh", phongBan: "TUYEN_SINH" },
+  { local: "uat.sale5", ten: "UAT — Tư vấn viên CS1 (4)", legacy: "SALES_CSM", roleCode: "CENTER_SALES_CSM", neo: "CS1", maNhanSu: "CS1.TVV.004", chucDanh: "Tư vấn tuyển sinh", phongBan: "TUYEN_SINH" },
+  { local: "uat.sale6", ten: "UAT — Tư vấn viên CS2 (2)", legacy: "SALES_CSM", roleCode: "CENTER_SALES_CSM", neo: "CS2", maNhanSu: "CS2.TVV.002", chucDanh: "Tư vấn tuyển sinh", phongBan: "TUYEN_SINH" },
   // HO_SALE: xem lead phạm vi toàn hệ thống, KHÔNG sửa. Không có mã legacy.
   { local: "uat.saleho", ten: "UAT — Kinh doanh Hội sở", legacy: "SALES_CSM", roleCode: "HO_SALE", neo: "HO", maNhanSu: "HO.KD.001", chucDanh: "Chuyên viên kinh doanh", phongBan: "KINH_DOANH" },
   // CENTER_CLASS_MANAGER (giáo vụ): cũng không có mã legacy — mượn CENTER_MANAGER

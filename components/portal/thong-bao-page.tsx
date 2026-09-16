@@ -112,8 +112,9 @@ export function ThongBaoPageV2({
 
   return (
     <div className="portal-v2 mx-auto w-full max-w-6xl space-y-6">
-      {/* Chưa có bảng lưu trạng thái đã-đọc per-parent → chưa render nút "Đọc tất cả"
-          (thêm lại kèm Server Action khi có bảng NotificationRead). */}
+      {/* 04/09 — trạng thái đã-đọc nay CÓ THẬT (`PortalFeedRead`), đánh dấu tự động khi
+          mở trang (`DanhDauDaDoc` dựng từ page.tsx). Chưa làm nút "Đọc tất cả" vì mở
+          trang đã là đọc — thêm nút là bắt bấm cho việc vừa xảy ra. */}
       <PageHero
         icon={Bell}
         overline={overline}

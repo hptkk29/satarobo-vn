@@ -10,6 +10,9 @@ import "server-only";
 import type { Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { leadOwnershipWhere } from "@/lib/lead/ownership";
+// Trục B có ĐÚNG MỘT nhà — gõ tay lại điều kiện ở đây là mở đường cho hai màn
+// đếm hai kiểu (cổng `lib/finance/ghi-nhan.test.ts` chặn).
+import { KHOAN_DA_GHI_NHAN } from "@/lib/finance/ghi-nhan";
 
 export type SaleOrderRow = {
   id: string;
@@ -70,7 +73,7 @@ export async function getSaleLeadOrders(
         // Chỉ đếm khoản CHƯA bị xoá mềm và đang ở trạng thái đã ghi nhận —
         // cùng bộ lọc mà `getLeadPaymentSummary` dùng, để hai con số trên hai
         // màn không bao giờ chênh nhau.
-        where: { saleStatus: "RECORDED", deletedAt: null },
+        where: KHOAN_DA_GHI_NHAN,
         select: { amount: true },
       },
     },

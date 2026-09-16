@@ -6,9 +6,7 @@ import { scopedDb } from "@/lib/db-scope";
 import { znsProvider } from "@/lib/zalo/provider";
 import { getRateLimitBackend } from "@/lib/rate-limit";
 import { isMisaConfigured, isMisaLive, getMisaConfig } from "@/lib/misa/service";
-import { getPaymentConfigExact } from "@/lib/payments/vietqr";
 import { MisaControls } from "./_components/misa-controls";
-import { VietQrConfig, type VietQrCenterRow } from "./_components/vietqr-config";
 import { ZnsTest } from "./_components/zns-test";
 import { ZalocrmSection } from "./_components/zalocrm-section";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
@@ -103,18 +101,10 @@ export default async function IntegrationsPage() {
       })
     : [];
 
-  const vietqrRows: VietQrCenterRow[] = await Promise.all([
-    getPaymentConfigExact(null).then((current) => ({
-      centerId: null,
-      centerName: "Cấu hình chung (dùng khi cơ sở chưa đặt)",
-      current,
-    })),
-    ...centers.map(async (c) => ({
-      centerId: c.id,
-      centerName: c.name,
-      current: await getPaymentConfigExact(c.id),
-    })),
-  ]);
+  // 31/08/2026 (theo `main`) — khối VietQR theo cơ sở ĐÃ GỠ khỏi màn này. Tài khoản nhận
+  // tiền nay khai trong từng phương thức thanh toán loại "Chuyển khoản"
+  // (`/admin/payment-methods`). Giữ lại đường ghi cũ là giữ một CỬA GHI THỨ HAI vào kho
+  // `IntegrationConfig` khoá `VIETQR:*` — kho mà đường đọc chỉ còn dùng làm lối lùi.
 
   return (
     <div className="space-y-6 p-4">
@@ -195,8 +185,15 @@ export default async function IntegrationsPage() {
         </p>
       </section>
 
-      {/* BGĐ 31/07 — tài khoản nhận tiền theo TỪNG CƠ SỞ (fallback cấu hình chung). */}
-      <VietQrConfig canEdit={canEdit} rows={vietqrRows} />
+      {/* ⚠️ 31/08/2026 — khối "Tài khoản nhận tiền (VietQR)" ĐÃ GỠ khỏi màn này.
+          Tài khoản nhận tiền nay khai NGAY TRONG từng phương thức thanh toán loại
+          "Chuyển khoản" (/payment-methods), và mở nhanh từ trang Cơ sở → mục Thanh toán.
+          Lý do gộp: trước đó có HAI cửa cho cùng một việc (màn này khai theo CƠ SỞ, form
+          phương thức lại có 4 ô ngân hàng riêng không ai đọc) — người vận hành khai một
+          nơi rồi tưởng nơi kia cũng đổi theo.
+          Dữ liệu cũ ở IntegrationConfig khoá `VIETQR:*` vẫn được đọc như đường LÙI
+          (lib/payments/vietqr.ts:resolveOrderPaymentConfig); chuyển nốt sang phương thức
+          bằng `scripts/pttt-chuyen-tai-khoan-vietqr.ts`. */}
 
       <section className="rounded-xl border border-border bg-card p-4">
         <div className="flex items-center justify-between">

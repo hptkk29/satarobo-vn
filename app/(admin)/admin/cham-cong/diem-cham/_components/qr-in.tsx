@@ -43,7 +43,7 @@ export function QrIn({
   const inMa = () => {
     start(async () => {
       const res = await fetch(
-        `/api/admin/cham-cong/qr-token?centerId=${encodeURIComponent(centerId)}&workLocationId=${encodeURIComponent(workLocationId)}&tinh=1`,
+        `/api/admin/cham-cong/qr-token?centerId=${encodeURIComponent(centerId)}&workLocationId=${encodeURIComponent(workLocationId)}`,
         { cache: "no-store" },
       );
       if (!res.ok) {

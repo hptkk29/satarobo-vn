@@ -48,7 +48,7 @@ export default async function DuyetMediaPage({
         classId: true,
         date: true,
         topic: true,
-        plan: { select: { customTitle: true } },
+        plan: { select: { customTitle: true, order: true } },
         lesson: { select: { order: true, title: true, moduleCode: true } },
         class: { select: { name: true, classCode: true } },
       },
@@ -106,6 +106,7 @@ export default async function DuyetMediaPage({
       deriveSessionLabel({
         sessionNumber: buildSessionNumberMap(allOfClass).get(ses.id) ?? null,
         planTitle: ses.plan?.customTitle,
+        planOrder: ses.plan?.order,
         lessonTitle: ses.lesson?.title,
         lessonOrder: ses.lesson?.order,
         moduleCode: ses.lesson?.moduleCode,

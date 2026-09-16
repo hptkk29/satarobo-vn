@@ -110,12 +110,20 @@ describe("decideSepayAction", () => {
     expect(r.action).toBe("SKIP");
   });
 
-  it("giảm giá chưa duyệt → MANUAL (không vòng qua khâu duyệt)", () => {
+  // ⚠️ ĐẢO 14/09/2026 — ca này TRƯỚC ĐÂY khẳng định `MANUAL` ("không vòng qua khâu
+  // duyệt"). Luật đã đổi theo hai lẽ, không phải một:
+  //  (1) chủ dự án chốt bỏ hẳn cơ chế duyệt đơn hàng;
+  //  (2) kể cả không có (1) thì cổng đó vẫn phải gỡ — nó LÀM MẤT TIỀN. Ở webhook,
+  //      nhánh MANUAL có đơn chỉ ghi IntegrationLog rồi return: không BankTransaction,
+  //      không PaymentRequest/Allocation, không Payment. Tiền vào bank, ba sổ trống.
+  // Đừng khôi phục ca cũ khi thấy nó "an toàn hơn" — nó an toàn hơn ở chỗ không tự chốt
+  // đơn, và đắt hơn ở chỗ không ghi tiền vào đâu cả.
+  it("giảm giá chưa duyệt → CONFIRM (cổng duyệt đã gỡ; xem lib/orders/bo-duyet.test.ts)", () => {
     const r = decideSepayAction({
       payload: { id: 1, transferType: "in", transferAmount: 5_000_000 },
       order: { ...baseOrder, discountApprovalStatus: "PENDING_APPROVAL" },
     });
-    expect(r.action).toBe("MANUAL");
+    expect(r.action).toBe("CONFIRM");
   });
 
   it("trả THIẾU → MANUAL (người thật quyết định)", () => {

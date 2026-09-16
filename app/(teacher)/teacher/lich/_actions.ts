@@ -133,6 +133,11 @@ export async function completeSessionAction(
     actualTeacherId: loaded.userId, // GV đang đăng nhập là người thực dạy
     classComment: parsed.data.classComment ?? null,
     confirmNoAttendance: parsed.data.confirmNoAttendance ?? false,
+    // DEFER — khớp nút chốt tay và đường tự đóng buổi. Màn này (sau cờ
+    // SESSION_LIFECYCLE_V2, đang TẮT) không hỏi giáo viên về bài tập, nên để mặc định
+    // "NOW" cũ là im lặng giao bài + gửi tin cho phụ huynh mà không ai chọn điều đó.
+    assignMode: "DEFER",
+    nguonChot: "TAY", // giáo viên bấm hoàn tất trên màn Lịch
     now: new Date(),
   });
 

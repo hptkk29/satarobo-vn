@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useTransition } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { requestActivationOtp, activateAccount } from "./_actions";
@@ -12,6 +13,14 @@ export function ActivateForm() {
   const [identifier, setIdentifier] = useState("");
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
+  // ĐẶT MẬT KHẨU 2 BƯỚC (04/09, chủ dự án). Trước đó chỉ có MỘT ô password và
+  // không có cách nào nhìn lại đã gõ gì: phụ huynh gõ sai một ký tự là kích hoạt xong
+  // với mật khẩu mình không biết, phải đi đặt lại — mà mã OTP thì đã tiêu.
+  const [password2, setPassword2] = useState("");
+  // Mỗi ô MỘT con mắt riêng, bật/tắt độc lập (chủ dự án 04/09): mở ô trên để đọc
+  // lại chuỗi vừa đặt trong khi ô dưới vẫn che, hoặc ngược lại.
+  const [hienMk1, setHienMk1] = useState(false);
+  const [hienMk2, setHienMk2] = useState(false);
   const [cooldown, setCooldown] = useState(0);
 
   // Đếm ngược cooldown gửi lại.
@@ -49,6 +58,12 @@ export function ActivateForm() {
       } else toast.error(res.error ?? "Lỗi kích hoạt");
     });
   }
+
+  // Hai ô khớp nhau chưa — Tính Ở ĐÂY (không rải trong JSX) để nút bấm và dòng báo
+  // lỗi không thể nói ngược nhau.
+  const duMinh = password.length >= 8;
+  const khopNhau = password2.length > 0 && password === password2;
+  const lechMk = password2.length > 0 && password !== password2;
 
   const inputCls =
     "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-400 focus:outline-none";
@@ -128,17 +143,34 @@ export function ActivateForm() {
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-gray-500">Đặt mật khẩu (≥ 8 ký tự)</span>
-            <input
-              type="password"
+            <OMatKhau
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className={inputCls}
+              onChange={setPassword}
+              hien={hienMk1}
+              onToggle={() => setHienMk1((v) => !v)}
+              inputCls={inputCls}
             />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-gray-500">Nhập lại mật khẩu</span>
+            <OMatKhau
+              value={password2}
+              onChange={setPassword2}
+              hien={hienMk2}
+              onToggle={() => setHienMk2((v) => !v)}
+              inputCls={`${inputCls} ${lechMk ? "border-red-400" : ""}`}
+              invalid={lechMk}
+            />
+            {lechMk && (
+              <span className="mt-1 block text-xs text-red-600">
+                Hai lần nhập chưa giống nhau.
+              </span>
+            )}
           </label>
           <button
             type="button"
             onClick={activate}
-            disabled={pending || code.length !== 6 || password.length < 8}
+            disabled={pending || code.length !== 6 || !duMinh || !khopNhau}
             className="w-full rounded-lg bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-60"
           >
             {pending ? "Đang kích hoạt…" : "Kích hoạt & đặt mật khẩu"}
@@ -153,6 +185,51 @@ export function ActivateForm() {
           </button>
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * Ô mật khẩu kèm con mắt riêng của nó.
+ *
+ * Tách ra vì hai ô giống hệt nhau trừ trạng thái ẩn/hiện — chép hai lần thì lần sửa
+ * sau chỉ đụng một bản, đúng kiểu lệch mà người dùng không bao giờ báo vì nó chỉ
+ * là "ô kia không bấm được".
+ */
+function OMatKhau({
+  value,
+  onChange,
+  hien,
+  onToggle,
+  inputCls,
+  invalid,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  hien: boolean;
+  onToggle: () => void;
+  inputCls: string;
+  invalid?: boolean;
+}) {
+  return (
+    <div className="relative">
+      <input
+        type={hien ? "text" : "password"}
+        autoComplete="new-password"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        aria-invalid={invalid || undefined}
+        className={`${inputCls} pr-10`}
+      />
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-label={hien ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+        aria-pressed={hien}
+        className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-gray-400 hover:text-gray-600 focus-visible:outline-2 focus-visible:outline-orange-400"
+      >
+        {hien ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+      </button>
     </div>
   );
 }

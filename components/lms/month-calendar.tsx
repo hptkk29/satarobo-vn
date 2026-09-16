@@ -1,6 +1,11 @@
 import { monthGrid, WEEKDAY_LABELS } from "@/lib/lms/calendar";
+import { vnYmd } from "@/lib/time/vn";
+import { DayCellEvents } from "@/components/lms/day-cell-events";
 
-export type CalEvent = { iso: string; label: string; sublabel?: string };
+// Kiểu chuyển sang `lib/lms/cal-event.ts` — xuất lại ở đây để 5 nơi đang import từ
+// file này không phải sửa.
+export type { CalEvent } from "@/lib/lms/cal-event";
+import type { CalEvent } from "@/lib/lms/cal-event";
 
 const VN_MONTH = (m0: number) => `Tháng ${m0 + 1}`;
 
@@ -22,10 +27,9 @@ export function MonthCalendar({
     if (list) list.push(e);
     else byDay.set(e.iso, [e]);
   }
-  const todayIso = (() => {
-    const n = new Date();
-    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
-  })();
+  // 06/09 — "hôm nay" theo LỊCH VN. Đây là Server Component và Vercel chạy UTC, nên
+  // trong khoảng 00:00–07:00 giờ VN ô được tô cam là ngày HÔM QUA.
+  const todayIso = vnYmd(new Date());
 
   return (
     <div>
@@ -48,19 +52,9 @@ export function MonthCalendar({
               <div className={`text-right ${d.iso === todayIso ? "font-bold text-orange-600" : ""}`}>
                 {d.date.getDate()}
               </div>
-              <div className="space-y-0.5">
-                {evs.slice(0, 4).map((e, i) => (
-                  <div
-                    key={i}
-                    className="truncate rounded bg-orange-100 px-1 text-[10px] text-orange-800"
-                    title={`${e.label}${e.sublabel ? ` · ${e.sublabel}` : ""}`}
-                  >
-                    {e.sublabel ? `${e.sublabel} ` : ""}
-                    {e.label}
-                  </div>
-                ))}
-                {evs.length > 4 && <div className="text-[10px] text-neutral-400">+{evs.length - 4}</div>}
-              </div>
+              {/* 05/09 — bỏ dòng "+3" chết: nó không bấm được nên ngày đông lớp là ngày
+                  không xem được. Nay 5 lớp/trang + nút lật ở góc dưới phải của từng ô. */}
+              <DayCellEvents events={evs} />
             </div>
           );
         })}

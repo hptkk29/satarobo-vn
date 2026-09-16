@@ -166,7 +166,9 @@ export function StudentHomeV2({ data }: { data: StudentHome }) {
             <div className="overflow-x-auto pb-2">
               <div className="flex min-w-max items-start gap-1.5 px-1">
                 {data.journey.map((d) => (
-                  <Dot key={d.idx} dot={d} />
+                  // Khoá theo id buổi, không theo số buổi: con học 2 lớp thì có hai
+                  // chấm cùng số 1, cùng số 2… và khoá React sẽ trùng.
+                  <Dot key={d.id} dot={d} />
                 ))}
               </div>
             </div>
@@ -329,19 +331,34 @@ export function StudentHomeV2({ data }: { data: StudentHome }) {
   );
 }
 
+// 06/09 — hai trạng thái MỚI phải có hình riêng, nếu không chúng rơi vào nhánh cuối và
+// trông y hệt "chưa diễn ra": buổi ĐÃ HUỶ và buổi giáo viên CHƯA CHẤM.
+const DOT_CLS: Record<JourneyDot["status"], string> = {
+  today: "size-5 rounded-full bg-primary ring-2 ring-success ring-offset-2 ring-offset-card",
+  done: "size-5 rounded-full bg-primary",
+  makeup: "size-5 rounded-full bg-success",
+  absent: "size-5 rounded-full border-2 border-destructive bg-card",
+  "chua-cham": "size-5 rounded-full border-2 border-dashed border-caution bg-card",
+  "da-huy": "size-5 rounded-full border-2 border-muted-foreground/40 bg-muted",
+  future: "size-5 rounded-full border-2 border-border bg-card",
+};
+const DOT_TEN: Record<JourneyDot["status"], string> = {
+  today: "Hôm nay",
+  done: "Đã học",
+  makeup: "Đã học bù",
+  absent: "Vắng",
+  "chua-cham": "Chưa điểm danh",
+  "da-huy": "Buổi đã huỷ",
+  future: "Chưa diễn ra",
+};
+
 function Dot({ dot }: { dot: JourneyDot }) {
-  const cls =
-    dot.status === "today"
-      ? "size-5 rounded-full bg-primary ring-2 ring-success ring-offset-2 ring-offset-card"
-      : dot.status === "done"
-        ? "size-5 rounded-full bg-primary"
-        : dot.status === "makeup"
-          ? "size-5 rounded-full bg-success"
-          : dot.status === "absent"
-            ? "size-5 rounded-full border-2 border-destructive bg-card"
-            : "size-5 rounded-full border-2 border-border bg-card";
+  const cls = DOT_CLS[dot.status];
   const solid =
     dot.status === "done" || dot.status === "makeup" || dot.status === "today";
+  const nhan = [DOT_TEN[dot.status], dot.title, dot.className && `Lớp ${dot.className}`]
+    .filter(Boolean)
+    .join(" · ");
   return (
     <div className="flex w-9 flex-col items-center gap-1.5">
       {dot.status === "today" ? (
@@ -351,9 +368,9 @@ function Dot({ dot }: { dot: JourneyDot }) {
       ) : (
         <span className="mb-0.5 h-3.5" />
       )}
-      <span title={dot.title ?? undefined} className={cls} />
+      <span title={nhan} className={cls} />
       <span
-        className={`text-[10px] font-bold tabular-nums ${solid ? "text-foreground" : "text-muted-foreground"}`}
+        className={`text-[10px] font-bold tabular-nums ${solid ? "text-foreground" : "text-muted-foreground"} ${dot.status === "da-huy" ? "line-through" : ""}`}
       >
         {dot.idx}
       </span>

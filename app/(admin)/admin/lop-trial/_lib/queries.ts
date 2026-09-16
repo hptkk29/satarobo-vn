@@ -3,18 +3,14 @@
 // Mọi truy vấn ĐỌC của màn "Lớp Trial". Tất cả đi qua `scopedDb(actor)` để cách ly
 // cơ sở (CS1 không thấy lớp CS2). Hai hàm dựng `where` nằm ở ./filters — tách ra để
 // test được bằng vitest mà không phải nạp Prisma Client.
-//
-// ⚠️ S-1 (26/08/2026) — CÁCH LY CƠ SỞ KHÔNG PHẢI LÀ CHE PII. `scopedDb` chỉ trả
-// lời "lead này có thuộc cơ sở của bạn không", không trả lời "bạn có được đọc số
-// điện thoại của họ không". Màn này mở cho `trials:view` = Quản lý cơ sở + Sale +
-// **Giáo viên** + **Đào tạo**; trong đó chỉ Sale có `leads:view-pii`. Nên tên phụ
-// huynh + SĐT lấy từ `lead` phải qua `maskLeadPiiFields` NGAY Ở ĐÂY — che ở JSX
-// thì số thật vẫn xuống trình duyệt trong payload RSC.
-//
-// `canViewPii` truyền từ trang gọi (đã hỏi `canViewLeadPii()`), không tự hỏi tại
-// chỗ: file này là tầng truy vấn thuần, giữ nó không dính next-auth để còn test.
-import { scopedDb } from "@/lib/db-scope";
+// 🔴 S-1 — tên phụ huynh + SĐT lấy từ `lead` phải qua `maskLeadPiiFields` NGAY Ở ĐÂY,
+// không che ở JSX: tầng này còn phục vụ chỗ khác, che ở giao diện là che một chỗ và hở
+// mọi chỗ còn lại. `canViewPii` do TRANG GỌI truyền xuống (đã hỏi `canViewLeadPii()`),
+// tầng truy vấn không tự hỏi quyền.
+// (Cấy lại khi hợp nhất `main` → `test` ngày 16/09/2026 — nhánh `main` chưa có chốt S-1.)
 import { maskLeadPiiFields } from "@/lib/lead/pii";
+import { scopedDb } from "@/lib/db-scope";
+import { getCenterOptions } from "@/lib/org/center-options";
 import type { Actor } from "@/lib/auth/actor";
 import { vnParts } from "@/lib/time/vn";
 import { toVnInput } from "./schemas";
@@ -82,20 +78,23 @@ export async function layDanhSachLop(
 /** Cơ sở + phòng để đổ vào form tạo lớp. */
 export async function layLuaChonTaoLop(
   actor: Actor,
-): Promise<{ centers: (Option & { code: string | null })[]; courses: Option[] }> {
+): Promise<{
+  centers: (Option & { code: string | null })[];
+  courses: (Option & { slug: string })[];
+}> {
   const sdb = scopedDb(actor);
   const [centers, courses] = await Promise.all([
-    sdb.center.findMany({
-      where: { isActive: true },
-      // 28/08 — thêm `code` để form xem trước được tên lớp sẽ sinh ("CS1_Lớp trial …").
-      select: { id: true, name: true, code: true },
-      orderBy: { name: "asc" },
-    }),
+    // 03/09 — dùng helper chung: bản cũ (`center.findMany` trần) bày cả Hội sở, các
+    // dòng Center mồ côi (`ITLI_*`), và không cắt theo tầm nhìn actor nên người dùng
+    // chọn được cơ sở mình không quản. Helper vẫn trả `code` mà form cần để xem trước
+    // tên lớp ("CS2-sata4-Lớp trial …").
+    getCenterOptions(actor),
     // Khoá trải nghiệm = khoá quan tâm. `Course` không thuộc SCOPED_MODELS (danh mục
     // dùng chung toàn hệ) nên `sdb` chỉ pass-through.
     sdb.course.findMany({
       where: { isActive: true },
-      select: { id: true, name: true },
+      // 29/08 — `slug` là phần MÃ KHOÁ trong tên lớp; form cần nó để xem trước.
+      select: { id: true, name: true, slug: true },
       orderBy: { name: "asc" },
     }),
   ]);
@@ -294,17 +293,17 @@ export async function layChiTietLop(
         canViewPii,
       );
       return {
-        id: e.id,
-        leadChildId: e.leadChild?.id ?? null,
-        childName: e.leadChild?.fullName ?? "(không rõ)",
-        parentName: che.parentName ?? null,
-        phone: che.phone ?? null,
-        leadId: e.leadChild?.lead?.id ?? null,
-        status: e.status as EnrollmentRow["status"],
-        scheduledSessionId: e.scheduledSessionId,
-        gvDeXuatId: e.gvDeXuatId,
-        gvPhanCongId: e.gvPhanCongId,
-        rescheduleCount: e.rescheduleCount,
+      id: e.id,
+      leadChildId: e.leadChild?.id ?? null,
+      childName: e.leadChild?.fullName ?? "(không rõ)",
+      parentName: che.parentName ?? null,
+      phone: che.phone ?? null,
+      leadId: e.leadChild?.lead?.id ?? null,
+      status: e.status as EnrollmentRow["status"],
+      scheduledSessionId: e.scheduledSessionId,
+      gvDeXuatId: e.gvDeXuatId,
+      gvPhanCongId: e.gvPhanCongId,
+      rescheduleCount: e.rescheduleCount,
       };
     }),
   };
@@ -354,35 +353,26 @@ export async function layDanhSachHen(
   ]);
 
   const bookings: BookingRow[] = rows.map((t) => {
-    // ⚠️ Bất đối xứng CÓ CHỦ ĐÍCH với `layChiTietLop`: ở đây tên con đi qua tầng
-    // che (giống `/admin/leads` và `/sale/khach-cua-toi` — cùng loại màn "danh
-    // sách phiếu"), còn danh sách lớp bên kia thì KHÔNG. Lý do: bảng lớp là sổ
-    // điểm danh, giáo viên phải gọi đúng tên đứa trẻ đang ngồi trước mặt. Đừng
-    // "sửa cho đồng bộ" mà không đọc dòng này.
     const che = maskLeadPiiFields(
-      {
-        parentName: t.lead?.parentName ?? null,
-        phone: t.lead?.phone ?? null,
-        childName: t.lead?.children[0]?.fullName ?? t.lead?.childName ?? null,
-      },
+      { parentName: t.lead?.parentName ?? null, phone: t.lead?.phone ?? null },
       opts.canViewPii,
     );
     return {
-      id: t.id,
-      leadId: t.leadId,
-      parentName: che.parentName ?? null,
-      phone: che.phone ?? null,
-      childName: che.childName ?? null,
-      centerId: t.centerId,
-      centerName: t.center?.name ?? null,
-      status: t.status as BookingRow["status"],
-      // Server quy đổi sang đồng hồ VN — client KHÔNG tự tính (xem ghi chú ở types.ts).
-      scheduledAtVn: t.scheduledAt ? toVnInput(t.scheduledAt) : "",
-      teacherId: t.teacherId,
-      teacherName: t.teacher?.name ?? null,
-      roomId: t.roomId,
-      classId: t.classId,
-      notes: t.notes,
+    id: t.id,
+    leadId: t.leadId,
+    parentName: che.parentName ?? null,
+    phone: che.phone ?? null,
+    childName: t.lead?.children[0]?.fullName ?? t.lead?.childName ?? null,
+    centerId: t.centerId,
+    centerName: t.center?.name ?? null,
+    status: t.status as BookingRow["status"],
+    // Server quy đổi sang đồng hồ VN — client KHÔNG tự tính (xem ghi chú ở types.ts).
+    scheduledAtVn: t.scheduledAt ? toVnInput(t.scheduledAt) : "",
+    teacherId: t.teacherId,
+    teacherName: t.teacher?.name ?? null,
+    roomId: t.roomId,
+    classId: t.classId,
+    notes: t.notes,
     };
   });
 

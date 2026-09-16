@@ -23,9 +23,7 @@ import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { ingestIntakeLead } from "@/lib/lead/intake/ingest";
 import { mapInternalForm } from "@/lib/lead/intake/map-internal-form";
-import { mirrorInternalFormToMisa } from "@/lib/lead/intake/misa-mirror";
 import { getStaffIdentity } from "@/lib/lead/intake/staff-identity";
-import { logWebhookDelivery } from "@/lib/lead/webhook";
 import {
   hasAnyContent,
   internalLeadSchema,
@@ -76,6 +74,10 @@ export async function createInternalLeadAction(
     // NGƯỜI NHẬP — khác người CHĂM. Phiếu vẫn tự chia về Sale cơ sở như cũ;
     // cột này để chính người nhập theo được phiếu của mình (chủ dự án 23/08).
     createdByUserId: session.user.id,
+    // 29/08 — ĐƯỜNG VÀO "FORM": sale nhập phiếu cho ĐÚNG cơ sở của mình thì phiếu
+    // về tay chính họ và KHÔNG tiêu lượt (ca 1 của ma trận). Chọn cơ sở khác, hoặc
+    // người nhập không phải sale (Marketing/Sale Hội sở/QLCS) → chia tự động.
+    entryPoint: "FORM",
     ipAddress: h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
     userAgent: h.get("user-agent"),
     // Giữ NGUYÊN chuỗi cũ dù trang đã dời sang admin host: đây là nhãn nhận
@@ -88,50 +90,10 @@ export async function createInternalLeadAction(
 
   if (!res.ok) return { ok: false, error: res.error ?? "Không lưu được phiếu" };
 
-  // Bản sao sang MISA — Postgres đã ghi xong nên hỏng ở đây KHÔNG ảnh hưởng
-  // lead. Await để serverless không giết tiến trình giữa chừng.
-  //
-  // Hỏng thì phải để lại VẾT GỬI LẠI ĐƯỢC, không chỉ một dòng console: trong
-  // giai đoạn chuyển tiếp MISA vẫn là chỗ Sale làm việc, mà `console.error`
-  // không tới Sentry và không ai đọc log Vercel. Bài học SePay: 401 im lặng 6
-  // ngày nuốt 4 giao dịch vì không có chỗ nào nhìn thấy.
-  const misaInput = {
-    parentName: mapped.lead.parentName,
-    phone: mapped.lead.phone,
-    childName: mapped.lead.child?.fullName ?? null,
-    source: parsed.data.source,
-    facebookUrl: mapped.lead.facebookUrl ?? null,
-    centerCode: parsed.data.centerCode,
-    note: parsed.data.note,
-    employeeCode: staff.employeeCode,
-  };
-  const mirror = await mirrorInternalFormToMisa(misaInput);
-  if (mirror.status === "failed" || mirror.status === "misconfigured") {
-    console.error(`[nhap-khach-hang] mirror MISA: ${mirror.status}`, mirror);
-  }
-  // Thiếu env là lỗi cấu hình cố định — ghi vết MỘT lần cho mỗi tiến trình, đừng
-  // đẩy các dòng lỗi thật ra khỏi cửa sổ 100 dòng của màn Replay.
-  const shouldLog =
-    mirror.status === "failed" ||
-    (mirror.status === "misconfigured" && !mirror.alreadyReported);
-  if (shouldLog) {
-    await logWebhookDelivery({
-      // ⚠️ KHÁC "misa-mirror" của biểu mẫu tĩnh cũ: payload ở đây là dữ liệu
-      // NGHIỆP VỤ (parentName/phone/…), không phải bộ trường MISA thô. Dùng
-      // chung một tên nguồn là đường replay bên kia lọc sạch payload rồi gửi
-      // phiếu TRẮNG sang MISA và đóng bản ghi — mất luôn đường cứu.
-      source: "misa-mirror-app",
-      externalId: res.leadId ?? null,
-      payload: misaInput,
-      status: "FAILED",
-      errorMessage:
-        mirror.status === "misconfigured"
-          ? `Thiếu env: ${mirror.missing.join(", ")} — MISA không nhận được phiếu này.`
-          : `Gửi MISA thất bại (${mirror.reason}).`,
-    }).catch((err) =>
-      console.error("[nhap-khach-hang] không ghi được mirror log:", err),
-    );
-  }
+  // 29/08/2026 — GỠ bản sao sang MISA. Chủ dự án bỏ hẳn CRM của MISA, nên phiếu
+  // nhập ở đây dừng lại ở Postgres: không gọi mạng ra ngoài, không webform, không
+  // `WebhookDelivery` nguồn "misa-mirror-app" nào nữa. Đường replay tương ứng ở
+  // `lib/crm/webhook-replay.ts` cũng đã gỡ.
 
   // Đường THẬT trong app dir là `/admin/leads` (clean URL `/leads` chỉ do
   // `decideRoute` rewrite ở tầng host). `revalidatePath` khớp theo route của

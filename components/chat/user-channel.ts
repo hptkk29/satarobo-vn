@@ -261,6 +261,9 @@ export function createUserChannelHub(deps: {
      * "đóng rồi thôi": badge chưa đọc sẽ đứng im tới khi người dùng F5. Backoff nhân đôi,
      * kịch 30s, và chỉ nối lại khi còn người nghe.
      */
+    /** Kênh đã đứt ngoài ý muốn kể từ lần SUBSCRIBED gần nhất ⇒ lần SUBSCRIBED kế phải `resync`. */
+    let daDut = false;
+
     const scheduleReconnect = () => {
       if (gen !== generation || reconnectTimer !== null || listeners.size === 0) return;
       const delay = Math.min(RECONNECT_BASE_MS * 2 ** reconnectAttempt, RECONNECT_MAX_MS);
@@ -275,14 +278,27 @@ export function createUserChannelHub(deps: {
 
     const handleStatus = (status: string) => {
       if (gen !== generation) return;
-      // Chốt chặn: broadcast có thể rơi ⇒ mỗi lần (re)kết nối là một lần hỏi lại server.
+      // Chốt chặn: broadcast có thể rơi TRONG LÚC kênh đứt ⇒ nối lại được thì hỏi lại server.
+      // Chỉ sau khi ĐỨT (CLOSED/CHANNEL_ERROR/TIMED_OUT) — KHÔNG ở lần join đầu (số đã có từ
+      // RSC) và KHÔNG ở lần join lại do gia hạn vé (đóng-mở có chủ đích, không mất tín hiệu nào).
+      // Sự cố egress 05/09/2026: mỗi 4 phút gia hạn vé là mọi tab gọi lại summary + unread.
       if (status === "SUBSCRIBED") {
         reconnectAttempt = 0;
-        emit({ type: "resync" });
+        if (daDut) {
+          daDut = false;
+          emit({ type: "resync" });
+        }
         return;
       }
-      // CHANNEL_ERROR / TIMED_OUT có `rejoinTimer` của phoenix lo — chen vào là join đôi.
-      if (status === "CLOSED") scheduleReconnect();
+      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        // `rejoinTimer` của phoenix lo việc nối — chen vào là join đôi. Chỉ đánh dấu.
+        daDut = true;
+        return;
+      }
+      if (status === "CLOSED") {
+        daDut = true;
+        scheduleReconnect();
+      }
     };
 
     void (async () => {

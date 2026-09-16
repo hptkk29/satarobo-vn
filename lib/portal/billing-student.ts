@@ -1,15 +1,11 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { laKhoanDaXacNhan, tongDaXacNhan } from "@/lib/finance/debt";
 import { getParentConfirmedPayments, type ConfirmedPaymentRow } from "@/lib/portal/billing";
-import { tinhThucThu } from "@/lib/finance/thuc-thu";
-import { computeEnrollmentDebt } from "@/lib/finance/debt";
 
 // Portal v2 — học phí & công nợ của 1 con đang chọn (per-child).
-// Quy ước AC1: PENDING/REJECTED chỉ ĐẾM làm chỉ dấu trạng thái (D5/G.6) — KHÔNG lộ số tiền.
-// HT (27/08/2026): "đã thanh toán" đi qua `tinhThucThu` và công nợ qua
-// `computeEnrollmentDebt` — CÙNG công thức với `getParentBilling` và bảng công nợ admin.
-// Hai màn này phải cho cùng một số, nếu không phụ huynh thấy hai con số khác nhau cho
-// cùng một khoản tiền tuỳ chỗ họ bấm vào.
+// Quy ước AC1: chỉ tính Payment accountantStatus=CONFIRMED (giống getParentBilling).
+// PENDING/REJECTED chỉ ĐẾM làm chỉ dấu trạng thái (D5/G.6) — KHÔNG lộ số tiền.
 
 /** Công nợ theo TỪNG ghi danh (con học nhiều khóa → mỗi khóa một dòng, không gộp nhãn). */
 export type StudentBillingRow = {
@@ -19,6 +15,15 @@ export type StudentBillingRow = {
   finalPrice: number;
   paid: number;
   outstanding: number;
+  /**
+   * Ghi danh CHƯA CHỐT HỌC PHÍ (`finalPrice` và `tuition` đều rỗng) — thường là ghi danh
+   * tạo thẳng ở /admin/enrollments, không đi qua luồng convert.
+   *
+   * Phải nói ra thay vì in "0 đ": số 0 đọc như "khoá này miễn phí" hoặc "đã đóng đủ",
+   * cả hai đều sai. Trước 06/09 những dòng này bị lọc mất hẳn nên trang báo "Đã thanh
+   * toán đủ" ngay bên trên danh sách phiếu thu thật của chính ghi danh đó.
+   */
+  chuaChotGia: boolean;
 };
 
 export type StudentBilling = {
@@ -40,21 +45,21 @@ export type StudentBilling = {
 
 export async function getStudentBilling(studentId: string): Promise<StudentBilling> {
   const enrollments = await db.enrollment.findMany({
-    where: { studentId, finalPrice: { not: null }, deletedAt: null }, // FIX-C3
+    // 06/09 — BỎ `finalPrice: { not: null }`. Ghi danh tạo thẳng ở /admin/enrollments
+    // không đi qua luồng convert nên không bao giờ có `finalPrice`; lọc như cũ là cả
+    // dòng học phí biến mất, và trang báo "Đã thanh toán 0 đ · Công nợ 0 đ · Đã thanh
+    // toán đủ" ngay bên trên danh sách phiếu thu THẬT của chính ghi danh đó.
+    // Dòng dưới đã có sẵn `finalPrice ?? tuition ?? 0` nên không cần bộ lọc này.
+    where: { studentId, deletedAt: null }, // FIX-C3
     orderBy: { enrolledAt: "desc" },
     select: {
       id: true,
       finalPrice: true,
       tuition: true,
-      status: true,
       class: { select: { classCode: true } },
       course: { select: { name: true } },
       // FIX-C3: nested include không auto-scope → tự lọc payment đã xóa mềm.
-      // `id` + `adjustmentOfId` BẮT BUỘC cho `tinhThucThu` (bản gốc bị điều chỉnh thay thế).
-      payments: {
-        where: { deletedAt: null },
-        select: { id: true, accountantStatus: true, amount: true, adjustmentOfId: true },
-      },
+      payments: { where: { deletedAt: null }, select: { accountantStatus: true, amount: true } },
     },
   });
 
@@ -63,9 +68,9 @@ export async function getStudentBilling(studentId: string): Promise<StudentBilli
   let pendingCount = 0;
   let rejectedCount = 0;
   const rows: StudentBillingRow[] = enrollments.map((e) => {
+    const chuaChotGia = e.finalPrice == null && e.tuition == null;
     const finalPrice = e.finalPrice ?? e.tuition ?? 0;
-    const butToan = e.payments;
-    const rowPaid = tinhThucThu(butToan);
+    const rowPaid = tongDaXacNhan(e.payments.filter(laKhoanDaXacNhan));
     tuition += finalPrice;
     paid += rowPaid;
     pendingCount += e.payments.filter((p) => p.accountantStatus === "PENDING").length;
@@ -76,7 +81,8 @@ export async function getStudentBilling(studentId: string): Promise<StudentBilli
       className: e.class?.classCode ?? null,
       finalPrice,
       paid: rowPaid,
-      outstanding: Math.max(0, computeEnrollmentDebt(finalPrice, butToan, e.status)),
+      outstanding: chuaChotGia ? 0 : Math.max(0, finalPrice - rowPaid),
+      chuaChotGia,
     };
   });
   // Tổng công nợ = Σ clamp TỪNG DÒNG (khớp getParentBilling lib/portal/billing.ts):

@@ -9,6 +9,7 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { withFreshFonts } from "@/lib/pdf/brand";
+import { lookupMethodNameByCode } from "@/lib/payments/method-lookup";
 import { ReceiptPdf, type ReceiptPdfData } from "@/lib/pdf/receipt";
 
 export const dynamic = "force-dynamic";
@@ -98,6 +99,11 @@ export async function GET(
       : Promise.resolve(null),
   ]);
 
+  // 30/08/2026 — mã phương thức nay có thể là mã riêng của cơ sở ("BANK_CS1"), không
+  // nằm trong bảng nhãn cứng của lib/pdf/receipt.tsx. Tờ phiếu này đưa tận tay phụ
+  // huynh nên không được in mã nội bộ.
+  const methodLabel = await lookupMethodNameByCode(payment.method);
+
   const data: ReceiptPdfData = {
     receiptCode: receipt.code,
     centerName: center?.name ?? "Sata Robo",
@@ -109,6 +115,9 @@ export async function GET(
     courseName: payment.enrollment?.class?.course?.name ?? null,
     amount: payment.amount,
     method: payment.method,
+    // Tra nhãn từ DANH MỤC (không lọc isActive: phương thức đã tắt vẫn phải in đúng tên
+    // trên phiếu thu CŨ). Không tra được thì ReceiptPdf tự lùi về bảng cứng rồi về mã.
+    methodLabel,
     paidDate: fmtDate(payment.paidDate),
     collectedByName: collector?.name ?? null,
     orderCode: payment.order?.code ?? null,

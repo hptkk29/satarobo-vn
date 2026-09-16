@@ -107,17 +107,18 @@ describe("mapButToanHoaHong — ngày nào quyết định cái gì", () => {
     expect(bt!.refundOfPaymentId).toBeNull();
   });
 
-  it("bản ĐIỀU CHỈNH (ADJUSTED) giữ ngày của gốc ⇒ ở lại đúng kỳ gốc", () => {
-    // `adjustPayment()` chép `paidDate` của gốc sang bản mới — nên điều chỉnh KHÔNG
-    // nhảy kỳ. `WHERE_THUC_THU` đã loại bản gốc, nên ở đây chỉ còn bản đúng.
+  it("bút toán ĐIỀU CHỈNH giữ ngày của gốc ⇒ ở lại đúng kỳ gốc", () => {
+    // 🔴 Mô hình DELTA (07/09/2026): dòng điều chỉnh mang trạng thái `CONFIRMED` và
+    // PHẦN CHÊNH LỆCH, phân biệt bằng `paymentType`. `adjustPayment()` vẫn chép
+    // `paidDate` của gốc nên điều chỉnh KHÔNG nhảy kỳ — phần đó không đổi.
     const [bt] = mapButToanHoaHong([
-      hang({ id: "a1", amount: 4_000_000, accountantStatus: "ADJUSTED", adjustmentOfId: "p1", adjustmentOf: { paidDate: NGAY_GOC, confirmedAt: NGAY_GOC } }),
+      hang({ id: "a1", amount: -1_000_000, accountantStatus: "CONFIRMED", adjustmentOfId: "p1", adjustmentOf: { paidDate: NGAY_GOC, confirmedAt: NGAY_GOC } }),
     ]);
     expect(bt!.paidDate).toEqual(NGAY_GOC);
     expect(bt!.rateDate).toEqual(NGAY_GOC);
     // Bản điều chỉnh KHÔNG phải khoản hoàn — không được đánh dấu thu hồi.
     expect(bt!.refundOfPaymentId).toBeNull();
-    expect(bt!.amount).toBe(4_000_000);
+    expect(bt!.amount).toBe(-1_000_000);
   });
 });
 
@@ -134,15 +135,17 @@ describe("mapButToanHoaHong — tái tục", () => {
 });
 
 describe("mapButToanHoaHong — lớp chắn trạng thái kế toán", () => {
-  it("loại bản GỐC đã bị một bản ADJUSTED thay thế (chống cộng đôi)", () => {
-    // Đúng luật `butToanThucThu`: gốc `p1` bị `a1` thay ⇒ chỉ `a1` được tính.
-    // Bỏ lớp này là doanh thu VÀ hoa hồng cùng phồng.
+  it("GIỮ cả gốc lẫn delta — hoa hồng tính trên TỔNG sau điều chỉnh", () => {
+    // 🔴 Đảo so với luật cũ. Trước 07/09/2026 bản `ADJUSTED` mang SỐ ĐÚNG và thay thế
+    // bản gốc, nên phải loại gốc kẻo cộng đôi. Nay dòng điều chỉnh mang PHẦN CHÊNH
+    // LỆCH, nên LOẠI gốc mới là đếm thiếu — hoa hồng sẽ tính trên 4tr thay vì 5tr−1tr.
     const rows = [
       hang({ id: "p1", amount: 5_000_000, accountantStatus: "CONFIRMED" }),
-      hang({ id: "a1", amount: 4_000_000, accountantStatus: "ADJUSTED", adjustmentOfId: "p1", adjustmentOf: { paidDate: NGAY_GOC, confirmedAt: NGAY_GOC } }),
+      hang({ id: "a1", amount: -1_000_000, accountantStatus: "CONFIRMED", adjustmentOfId: "p1", adjustmentOf: { paidDate: NGAY_GOC, confirmedAt: NGAY_GOC } }),
     ];
-    const ids = mapButToanHoaHong(rows).map((b) => b.paymentId);
-    expect(ids).toEqual(["a1"]);
+    const bts = mapButToanHoaHong(rows);
+    expect(bts.map((b) => b.paymentId)).toEqual(["p1", "a1"]);
+    expect(bts.reduce((t, b) => t + b.amount, 0)).toBe(4_000_000);
   });
 
   it("loại PENDING và REJECTED — chưa/không phải tiền thật", () => {
@@ -219,7 +222,7 @@ describe("mapButToanHoaHong — MỐC XÁC NHẬN quyết định ai hưởng", 
       hang({
         id: "a1",
         amount: 4_000_000,
-        accountantStatus: "ADJUSTED",
+        accountantStatus: "CONFIRMED",
         adjustmentOfId: "p1",
         paidDate: T7,
         confirmedAt: new Date("2026-08-20T09:00:00+07:00"), // lúc bấm nút sửa

@@ -5,13 +5,38 @@
 //   1. Buổi này là BUỔI SỐ MẤY của lớp?  → buildSessionNumberMap
 //   2. Danh sách buổi phải xếp thế nào?  → sortSessionsForWork
 //
-// (1) Số buổi = HẠNG theo NGÀY tăng dần TRONG TỪNG LỚP (1-based), tính trên TOÀN BỘ
-// buổi của lớp — kể cả buổi đã huỷ, vì bỏ chúng ra sẽ làm mọi buổi sau đó tụt số và
-// "Buổi 7" hôm nay khác "Buổi 7" tuần trước. ⚠️ Vì thế caller PHẢI nạp đủ buổi của lớp
-// (chỉ cần id + classId + date) rồi mới dựng bảng tra; dựng từ một CỬA SỔ đã lọc
-// (`take: 60`, `date <= hôm nay`, …) sẽ ra số sai. Không lấy ClassSessionPlan.seq /
-// Lesson.order làm nguồn: hai cột đó rỗng ở lớp không ghim giáo trình và bị SetNull khi
-// dời/huỷ buổi, nên số sẽ khuyết đúng ở những lớp cần nhìn nhất.
+// ⚠️ 08/09/2026 — FILE NÀY TỪNG TRẢ LỜI HAI CÂU HỎI BẰNG MỘT CON SỐ. Đó là gốc của sự
+// cố "lệch tên bài" (xem `docs/dieu-tra-lech-bai-hoc.md`). Nay tách đôi:
+//
+//   · THỨ TỰ LỘ TRÌNH  → `soBuoiTheoLoTrinh`  — buổi này là BÀI thứ mấy của giáo trình.
+//                        Dùng để IN NHÃN.
+//   · THỨ TỰ THỜI GIAN → `soBuoiTheoLich`     — buổi này là buổi thứ mấy theo NGÀY.
+//                        Dùng để SẮP XẾP, và làm nấc CUỐI của nhãn.
+//
+// Hai thứ này KHÁC NHAU ngay khi một buổi bị dời ngày. Đo prod 08/09: lớp
+// `CS2.SATA6.26.001` có 6 buổi mang bài 43–48 bị dời lên tháng 6–7, nên nhãn ghép
+// "Buổi {hạng ngày}" với "{tên bài theo FK}" đọc ra "Buổi 2 — bài 43".
+//
+// ── VÌ SAO BẢN CŨ KHÔNG DÙNG plan.order, VÀ VÌ SAO NAY DÙNG ───────────────────────
+// Câu cũ ở đây là: *"Không lấy ClassSessionPlan.seq / Lesson.order làm nguồn: hai cột
+// đó rỗng ở lớp không ghim giáo trình và bị SetNull khi dời/huỷ buổi."*
+//
+// Câu đó nay SAI VỚI DỮ LIỆU nhưng VẪN ĐÚNG VỚI MÃ. Đo prod 08/09:
+//   · 16/16 lớp ghim giáo trình · 687/687 buổi có `planId`
+//   · 16/16 lớp `plan.order` liên tục 0..N-1, 0 lớp trùng, 0 lớp hổng
+//   · 0 buổi có `lessonId` khác lesson của plan chính nó
+// ⇒ `plan.order` phủ 100 % prod hôm nay.
+//
+// Nhưng hai đường vẫn còn đẻ ra buổi KHÔNG plan, nên fallback là BẮT BUỘC:
+//   · `lib/classes/generate.ts:169-199` — nhánh lớp chưa ghim giáo trình;
+//   · `ClassSession.planId` là `onDelete: SetNull` — xoá một plan là buổi mất plan
+//     trong im lặng.
+//
+// (1) `soBuoiTheoLich` = HẠNG theo NGÀY tăng dần TRONG TỪNG LỚP (1-based), tính trên
+// TOÀN BỘ buổi của lớp — kể cả buổi đã huỷ, vì bỏ chúng ra sẽ làm mọi buổi sau đó tụt số
+// và "Buổi 7" hôm nay khác "Buổi 7" tuần trước. ⚠️ Caller PHẢI nạp đủ buổi của lớp (chỉ
+// cần id + classId + date); dựng từ một CỬA SỔ đã lọc (`take: 60`, `date <= hôm nay`, …)
+// sẽ ra số sai.
 //
 // (2) Yêu cầu 21/08: buổi ĐÃ XONG VIỆC (điểm danh + nhận xét + ảnh) lùi xuống DƯỚI các
 // buổi chưa xong / sắp tới, để giáo viên mở tab ra là thấy ngay việc còn nợ. Trong mỗi
@@ -35,7 +60,17 @@ function timeOf(d: Date | string | number): number {
  * Bảng tra `sessionId → số buổi` (1-based), xếp theo ngày tăng dần trong từng lớp.
  * Tie-break theo `id` để hai buổi trùng ngày luôn ra cùng một số ở mọi lần render.
  */
-export function buildSessionNumberMap(rows: SessionRankRow[]): Map<string, number> {
+export function soBuoiTheoLich(rows: SessionRankRow[]): Map<string, number> {
+  return buildSessionNumberMap(rows);
+}
+
+/**
+ * @deprecated Tên cũ của `soBuoiTheoLich`. Giữ vì 20 nơi đang gọi — đổi dần từng đợt,
+ * đổi hết trong một PR là 20 file cùng lúc. Ý nghĩa KHÔNG đổi: hạng theo NGÀY.
+ */
+export function buildSessionNumberMap(
+  rows: SessionRankRow[],
+): Map<string, number> {
   const byClass = new Map<string, SessionRankRow[]>();
   for (const r of rows) {
     const key = r.classId ?? "";
@@ -56,6 +91,81 @@ export function buildSessionNumberMap(rows: SessionRankRow[]): Map<string, numbe
 /** Nhãn ngắn cho cột "Buổi": `Buổi 7`, hoặc `—` khi không tra được số. */
 export function sessionNumberLabel(n: number | null | undefined): string {
   return typeof n === "number" && n > 0 ? `Buổi ${n}` : "—";
+}
+
+// ─── THỨ TỰ LỘ TRÌNH (in nhãn) ──────────────────────────────────────────────
+
+/** Hai cột suy ra được số lộ trình, xếp theo độ tin cậy giảm dần. */
+export type NguonSoLoTrinh = {
+  /** `ClassSessionPlan.order` — 0-based. Nguồn TỐT NHẤT: đây là thứ tự lộ trình của lớp. */
+  planOrder?: number | null;
+  /** `Lesson.order` — 1-based. Nấc hai: lớp không có plan nhưng buổi vẫn gắn bài. */
+  lessonOrder?: number | null;
+};
+
+/**
+ * Buổi này là BÀI THỨ MẤY của giáo trình (1-based). `null` = không suy được.
+ *
+ * Thang: `plan.order + 1` → `Lesson.order` → `null`.
+ *
+ * ⚠️ KHÔNG lùi về hạng-theo-ngày ở đây. Hạng-theo-ngày là số THỜI GIAN, không phải số
+ * lộ trình; trộn hai thứ vào một hàm chính là lỗi mà file này vừa được tách ra để sửa.
+ * Nơi gọi tự quyết có in số theo lịch hay không — xem `nhanSoBuoi`.
+ */
+export function soBuoiTheoLoTrinh(src: NguonSoLoTrinh): number | null {
+  if (typeof src.planOrder === "number" && src.planOrder >= 0) return src.planOrder + 1;
+  if (typeof src.lessonOrder === "number" && src.lessonOrder > 0) return src.lessonOrder;
+  return null;
+}
+
+/**
+ * Nhãn số buổi, đủ ba nấc của thang fallback.
+ *
+ * Nấc cuối PHẢI nói rõ đó là số THEO LỊCH — nếu in trần `Buổi 7` thì người đọc tưởng đó
+ * là bài số 7 của giáo trình, mà nó chỉ là buổi thứ 7 tính theo ngày. Chính chỗ nhập
+ * nhằng đó đẻ ra sự cố 07/09.
+ */
+export function nhanSoBuoi(src: {
+  loTrinh: number | null | undefined;
+  lich: number | null | undefined;
+}): string {
+  if (typeof src.loTrinh === "number" && src.loTrinh > 0) return `Buổi ${src.loTrinh}`;
+  if (typeof src.lich === "number" && src.lich > 0) return `Buổi ${src.lich} (theo lịch)`;
+  return "—";
+}
+
+/**
+ * Nhãn cho nơi phải nói CẢ HAI con số — danh sách/ô chọn buổi sắp theo NGÀY.
+ *
+ * Đợt 1c. Ba màn quản lý lớp (ô chọn buổi ở tab Điểm danh và tab Nhận xét, danh sách quản
+ * lý buổi) xếp theo ngày, nên số đứng đầu dòng PHẢI là số theo lịch — in số lộ trình ở đó
+ * là danh sách nhảy cóc `1, 43, 2, 44…` và người dùng không dò được nữa. Nhưng chỉ in số
+ * theo lịch thì lại giấu mất bài đang dạy, đúng chỗ nhập nhằng đã đẻ ra sự cố lệch tên bài.
+ *
+ * Nên: in cả hai, và CHỈ khi chúng khác nhau.
+ *
+ *   lịch 2, lộ trình 43  →  `Buổi 2 · bài 43`   (lớp CS2.SATA6.26.001, buổi 25/06)
+ *   lịch 7, lộ trình 7   →  `Buổi 7`            (trùng nhau thì nói một lần cho gọn)
+ *   chỉ có lịch          →  `Buổi 7 (theo lịch)`
+ *   chỉ có lộ trình      →  `Bài 43`
+ *   không có gì          →  `—`
+ *
+ * Vì sao KHÔNG luôn in cả hai: 95 % buổi có hai số trùng nhau (đo prod 08/09 — chỉ lớp có
+ * buổi dời ngày mới lệch). In `Buổi 7 · bài 7` ở mọi dòng là rác, và rác thì người ta thôi
+ * đọc — rồi thôi đọc luôn dòng thật sự lệch.
+ */
+export function nhanSoBuoiVaBai(src: {
+  lich: number | null | undefined;
+  loTrinh: number | null | undefined;
+}): string {
+  const lich = typeof src.lich === "number" && src.lich > 0 ? src.lich : null;
+  const bai = typeof src.loTrinh === "number" && src.loTrinh > 0 ? src.loTrinh : null;
+  if (lich !== null && bai !== null) {
+    return lich === bai ? `Buổi ${lich}` : `Buổi ${lich} · bài ${bai}`;
+  }
+  if (lich !== null) return `Buổi ${lich} (theo lịch)`;
+  if (bai !== null) return `Bài ${bai}`;
+  return "—";
 }
 
 // ─── Thứ tự hiển thị: việc còn nợ lên trước ──────────────────────────────────
@@ -107,7 +217,10 @@ export function attendanceCoversRoster(
   markedStudentIds: Iterable<string>,
   rosterStudentIds: Iterable<string>,
 ): boolean {
-  const marked = markedStudentIds instanceof Set ? markedStudentIds : new Set(markedStudentIds);
+  const marked =
+    markedStudentIds instanceof Set
+      ? markedStudentIds
+      : new Set(markedStudentIds);
   const roster = [...rosterStudentIds];
   return roster.length > 0 && roster.every((id) => marked.has(id));
 }
@@ -133,7 +246,10 @@ export function buildSessionMediaCoverage(
   const out = new Map<string, SessionMediaCoverage>();
   for (const m of rows) {
     if (!m.classSessionId) continue; // ảnh không gắn buổi — không quy được về buổi nào
-    const cur = out.get(m.classSessionId) ?? { classWide: false, tagged: new Set<string>() };
+    const cur = out.get(m.classSessionId) ?? {
+      classWide: false,
+      tagged: new Set<string>(),
+    };
     if (m.isClassWide) cur.classWide = true;
     for (const t of m.tags) cur.tagged.add(t.studentId);
     out.set(m.classSessionId, cur);
@@ -186,17 +302,103 @@ export function mediaCoversAttendees(input: {
  *     lớp mới chưa xếp học viên) — sĩ số rỗng thì `attendanceCoversRoster` trả false cho
  *     MỌI buổi, và ở bảng gộp nhiều lớp cả lớp đã xong khoá sẽ nổi lên trên lớp đang chạy.
  */
+/**
+ * Các việc còn thiếu, dạng danh sách. Tách khỏi câu chữ để nút trên giao diện và câu
+ * server trả về nói CÙNG một thứ tiếng — trước D1 hai bên tự ghép chuỗi riêng và đã
+ * lệch chữ ("nhận xét" vs "nhận xét đủ học viên đi học").
+ */
+export function thieuDanhSach(work: {
+  attendanceDone: boolean;
+  feedbackDone: boolean;
+  photoDone: boolean;
+}): string[] {
+  return [
+    work.attendanceDone ? null : "điểm danh đủ lớp",
+    work.feedbackDone ? null : "nhận xét đủ học viên đi học",
+    work.photoDone ? null : "ảnh/video cho mọi học viên đi học",
+  ].filter((x): x is string => x !== null);
+}
+
+/** Câu báo thiếu việc mà server trả về. */
+export function thieuGi(work: {
+  attendanceDone: boolean;
+  feedbackDone: boolean;
+  photoDone: boolean;
+}): string {
+  return `Chưa hoàn tất: còn thiếu ${thieuDanhSach(work).join(", ")}.`;
+}
+
 export function isSessionSettled(input: {
   cancelled?: boolean;
   rosterEmpty?: boolean;
   work: SessionWorkState;
 }): boolean {
-  return Boolean(input.cancelled) || Boolean(input.rosterEmpty) || isSessionWorkComplete(input.work);
+  return (
+    Boolean(input.cancelled) ||
+    Boolean(input.rosterEmpty) ||
+    isSessionWorkComplete(input.work)
+  );
+}
+
+/**
+ * Nhãn trạng thái của MỘT buổi, đọc từ `ClassSession.status` — không suy ra.
+ *
+ * ── Vì sao có hàm này (D0, 07/09/2026) ──────────────────────────────────────
+ *
+ * Tab "Điểm danh" của Class Hub trước đây in nhãn xanh "Hoàn tất" ngay khi
+ * `isSessionWorkComplete` trả true, và CHE luôn pill trạng thái thật ở đúng ca đó.
+ * Nhưng làm xong ba việc KHÔNG đặt `status = COMPLETED` — chỉ nút chốt buổi mới đặt.
+ *
+ * Hậu quả đo trên prod ngày 07/09/2026: 2 buổi COMPLETED / 287 SCHEDULED trong 4
+ * tháng. Giáo viên KHÔNG quên bấm — màn hình đã nói với họ là xong. Suốt một tháng
+ * ai nhìn cũng tưởng buổi đã đóng, trong khi kỳ công, công dạy, học bạ và đề xuất
+ * hoàn tiền đều đọc `status` nên đều đọc ra 0.
+ *
+ * Luật từ đây: nguồn duy nhất của nhãn là `status`. Ba việc chỉ được nói tới như
+ * mức độ SẴN SÀNG chốt (`sanSangChot`), không bao giờ được đóng vai trạng thái.
+ *
+ * `daQuaNgay` tách "chưa tới giờ" khỏi "đã dạy nhưng chưa chốt": buổi tương lai còn
+ * SCHEDULED là bình thường, buổi đã qua ngày mà còn SCHEDULED mới là việc còn nợ.
+ */
+export type NhanTrangThaiBuoi =
+  /** status = COMPLETED. Đây là ca DUY NHẤT được hiện là đã xong. */
+  | { loai: "da-day" }
+  /** status = CANCELLED. */
+  | { loai: "da-huy" }
+  /** Buổi tương lai, chưa tới lượt làm gì. */
+  | { loai: "chua-toi-gio" }
+  /** Đã qua ngày, status vẫn chưa COMPLETED. `sanSangChot` = đủ ba việc, chỉ còn bấm chốt. */
+  | { loai: "chua-chot"; sanSangChot: boolean };
+
+export function nhanTrangThaiBuoi(input: {
+  status: string;
+  /** Buổi đã tới/qua ngày (≤ hết hôm nay giờ VN). */
+  daQuaNgay: boolean;
+  /** Đủ cả ba việc (isSessionWorkComplete). */
+  workDone: boolean;
+}): NhanTrangThaiBuoi {
+  if (input.status === "COMPLETED") return { loai: "da-day" };
+  if (input.status === "CANCELLED") return { loai: "da-huy" };
+  if (!input.daQuaNgay) return { loai: "chua-toi-gio" };
+  return { loai: "chua-chot", sanSangChot: input.workDone };
 }
 
 export type SessionOrderRow = {
-  /** Số buổi (buildSessionNumberMap). Không tra được → xếp cuối nhóm. */
-  number: number | null | undefined;
+  /**
+   * ⚠️ 08/09 — KHOÁ SẮP XẾP LÀ THỜI GIAN, không phải số buổi.
+   *
+   * Mốc thời gian của buổi (ms). Trước đây danh sách sắp theo SỐ BUỔI, mà số buổi lúc
+   * ấy chính là hạng-theo-ngày nên vô tình đúng. Từ khi nhãn chuyển sang số LỘ TRÌNH
+   * (`soBuoiTheoLoTrinh`), sắp theo nhãn là sai: lớp CS2.SATA6.26.001 có buổi ngày
+   * 25/06 mang nhãn "Buổi 43" — sắp theo nhãn thì nó rơi xuống SAU buổi ngày 12/09
+   * ("Buổi 19"), và danh sách việc còn nợ của giáo viên thôi theo thứ tự thời gian.
+   */
+  thoiGian?: number | null;
+  /**
+   * @deprecated Chỉ dùng khi KHÔNG có `thoiGian`. Giữ để các nơi gọi chuyển dần.
+   * Nếu truyền số LỘ TRÌNH vào đây thì danh sách sẽ sắp sai — xem ghi chú trên.
+   */
+  number?: number | null | undefined;
   /** Đã xong cả ba việc (isSessionWorkComplete). */
   complete: boolean;
 };
@@ -204,10 +406,19 @@ export type SessionOrderRow = {
 /**
  * So sánh 2 buổi cho danh sách "điểm danh"/"nhận xét":
  *   • buổi CHƯA hoàn thành (gồm cả buổi sắp tới, chưa tới) lên TRƯỚC;
- *   • trong mỗi nhóm: SỐ BUỔI tăng dần.
+ *   • trong mỗi nhóm: NGÀY tăng dần (`thoiGian`), KHÔNG phải số buổi.
  */
-export function compareSessionWorkOrder(a: SessionOrderRow, b: SessionOrderRow): number {
+export function compareSessionWorkOrder(
+  a: SessionOrderRow,
+  b: SessionOrderRow,
+): number {
   if (a.complete !== b.complete) return a.complete ? 1 : -1;
+  // THỜI GIAN thắng; chỉ khi cả hai đều thiếu mới lùi về `number`.
+  const at = a.thoiGian ?? null;
+  const bt = b.thoiGian ?? null;
+  if (at !== null && bt !== null) return at - bt;
+  if (at !== null) return -1;
+  if (bt !== null) return 1;
   const an = a.number ?? Number.MAX_SAFE_INTEGER;
   const bn = b.number ?? Number.MAX_SAFE_INTEGER;
   return an - bn;

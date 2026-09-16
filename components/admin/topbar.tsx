@@ -7,6 +7,7 @@ import {
   LogOut,
   ChevronDown,
   GraduationCap,
+  Menu,
   User,
   Search,
 } from "lucide-react";
@@ -39,6 +40,14 @@ interface TopbarProps {
    * cờ này gác cả đường định tuyến ở middleware, hai nguồn sự thật sẽ lệch nhau.
    */
   elearningUrl?: string | null;
+  /**
+   * Mở drawer điều hướng trên điện thoại. `undefined` ⇒ KHÔNG vẽ nút — dùng cho nơi nào
+   * render Topbar mà không có drawer đi kèm.
+   *
+   * Trước 13/09/2026 topbar không có nút này, mà sidebar thì `hidden md:flex` ⇒ dưới 768px
+   * cả 234 trang admin không điều hướng được. Xem `components/admin/admin-shell.tsx`.
+   */
+  onMenuClick?: () => void;
 }
 
 export function Topbar({
@@ -48,6 +57,7 @@ export function Topbar({
   roles = [],
   activeRole = null,
   elearningUrl = null,
+  onMenuClick,
 }: TopbarProps) {
   const router = useRouter();
   const initials = userName
@@ -60,7 +70,21 @@ export function Topbar({
     : "?";
 
   return (
-    <header className="flex h-16 items-center justify-between border-b border-border bg-card px-6">
+    <header className="flex h-16 items-center justify-between gap-2 border-b border-border bg-card px-4 md:px-6">
+      {/* Nút mở menu — CHỈ trên điện thoại (`md:hidden`), đúng ngưỡng mà thanh cố định
+          xuất hiện (`hidden md:flex` ở AdminShell). Hai ngưỡng phải bằng nhau, lệch một
+          bậc là có một khoảng bề ngang KHÔNG có thanh cố định LẪN nút mở. */}
+      {onMenuClick ? (
+        <button
+          type="button"
+          onClick={onMenuClick}
+          aria-label="Mở menu điều hướng"
+          className="-ml-1 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:hidden"
+        >
+          <Menu className="h-5 w-5" aria-hidden />
+        </button>
+      ) : null}
+
       {/* Search bar — Enter → trang kết quả /search?q= (tìm gộp lead/học viên/tin tức). */}
       <form action="/search" method="GET" className="hidden md:flex flex-1 max-w-md">
         <div className="relative w-full">

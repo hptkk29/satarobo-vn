@@ -1,0 +1,200 @@
+// lib/payments/ke-hoach-dot.test.ts — THANH TOÁN LINH HOẠT: 1/2/3/4 đợt thay cho "2 đợt".
+//
+// Chủ dự án chốt: "ở phần kế hoạch thanh toán 2 đợt thì bây giờ phải chuyển thành thanh
+// toán theo các chính sách và công văn mới nhất: đóng theo 1, 2, 3, 4 học phần".
+//
+// ⚠️ ĐO TRÊN CÔNG VĂN — mô hình "đóng theo học phần" là CHÍNH SÁCH MỚI, không phải thi
+// hành công văn, và điều đó phải nói ra vì chủ dự án yêu cầu "mọi chính sách dựa theo
+// công văn":
+//   · SR.QD.219 Điều 2: "đóng toàn bộ một lần hoặc đóng theo THÁNG (chia đều 12 tháng)"
+//     cho khoá 48 buổi Nhóm 2.
+//   · SR.QD.223 (Bậc thang chốt): "đóng theo đợt (có thể 2 ĐỢT CÁCH 30 NGÀY)".
+//   · Học phần chỉ là mốc HỌC: Điều 4 ghi chú 1 (48 buổi = 4 học phần × 12 buổi),
+//     Điều 7 (cuối mỗi 12 buổi tổ chức thuyết trình dự án).
+// Thứ CÓ văn bản là "cách 30 ngày" và "trần 12 kỳ" — nên bước hạn 30 ngày và trần 12
+// là bám văn bản, còn con số 4 là chính sách của chủ dự án (mặc định, chỉnh được).
+//
+// ⚠️ PHẦN LẺ: đo bảng giá thật — cả 5 khoá Sata3-7 chia 1/2/3/4 đều CHẴN TUYỆT ĐỐI
+// (mọi giá niêm yết = 48 × giá/buổi, giá/buổi là bội 10.000 nên chia hết cho mọi ước của
+// 48). Phần lẻ CÓ THẬT nhưng đến từ chỗ khác: Sata2 3.040.000÷3, Sata8 2.500.000÷3, và
+// quan trọng hơn — mọi đơn có `totalAmount ≠ giá niêm yết` (giảm giá kiểu SỐ TIỀN,
+// voucher, đơn nhiều học viên). Nên luật dồn lẻ vẫn phải có, chỉ là vì giảm giá chứ
+// không vì bảng giá.
+import { describe, it, expect } from "vitest";
+import {
+  chiaDotHocPhi,
+  hanChoDot,
+  kiemKeHoachDot,
+  phanBoGhiTheoDot,
+  TRAN_SO_DOT,
+} from "./ke-hoach-dot";
+
+describe("[KH-01] chia tiền theo số đợt — tổng LUÔN bằng tổng đơn", () => {
+  it("1 đợt = trả một lần", () => {
+    expect(chiaDotHocPhi(10_560_000, 1)).toEqual([10_560_000]);
+  });
+
+  it("khoá Sata3 (10.560.000) chia 2/3/4 đều CHẴN — số đo thật từ bảng giá", () => {
+    expect(chiaDotHocPhi(10_560_000, 2)).toEqual([5_280_000, 5_280_000]);
+    expect(chiaDotHocPhi(10_560_000, 3)).toEqual([3_520_000, 3_520_000, 3_520_000]);
+    expect(chiaDotHocPhi(10_560_000, 4)).toEqual([2_640_000, 2_640_000, 2_640_000, 2_640_000]);
+  });
+
+  it("có phần lẻ → DỒN VÀO ĐỢT CUỐI, các đợt đầu tròn số", () => {
+    // Sata3 giảm 500.000 rồi chia 3 — ca lẻ THẬT (giảm giá kiểu số tiền).
+    const r = chiaDotHocPhi(10_060_000, 3);
+    expect(r).toEqual([3_353_333, 3_353_333, 3_353_334]);
+    expect(r.reduce((a, b) => a + b, 0)).toBe(10_060_000);
+  });
+
+  it("bất biến tiền: tổng các đợt === tổng đơn, với mọi số đợt", () => {
+    for (const tong of [2_500_000, 3_040_000, 10_060_000, 9_999_999, 1]) {
+      for (const n of [1, 2, 3, 4, 12]) {
+        const r = chiaDotHocPhi(tong, n);
+        expect(r.reduce((a, b) => a + b, 0), `${tong} chia ${n}`).toBe(tong);
+        expect(r.length).toBe(n);
+        expect(r.every((x) => x >= 0)).toBe(true);
+      }
+    }
+  });
+
+  it("TỈ LỆ tuỳ chỉnh (đợt đầu đóng nhiều hơn) vẫn giữ bất biến tổng", () => {
+    const r = chiaDotHocPhi(10_000_000, 3, [50, 25, 25]);
+    expect(r.reduce((a, b) => a + b, 0)).toBe(10_000_000);
+    expect(r[0]).toBeGreaterThan(r[1]!);
+  });
+
+  it("ca biên: tổng 0 / số đợt 0 hoặc âm / không hữu hạn → không ném, không số âm", () => {
+    expect(chiaDotHocPhi(0, 4)).toEqual([0, 0, 0, 0]);
+    expect(chiaDotHocPhi(1_000_000, 0)).toEqual([]);
+    expect(chiaDotHocPhi(1_000_000, -3)).toEqual([]);
+    expect(chiaDotHocPhi(Number.NaN, 2)).toEqual([0, 0]);
+  });
+});
+
+describe("[KH-02] hạn từng đợt — bám 'cách 30 ngày' của SR.QD.223", () => {
+  const moc = new Date("2026-09-14T00:00:00.000Z");
+
+  it("đợt 1 đến hạn NGAY ngày lập, các đợt sau cách đều 30 ngày", () => {
+    const h = hanChoDot(moc, 4);
+    expect(h[0]!.toISOString().slice(0, 10)).toBe("2026-09-14");
+    expect(h[1]!.toISOString().slice(0, 10)).toBe("2026-10-14");
+    expect(h[2]!.toISOString().slice(0, 10)).toBe("2026-11-13");
+    expect(h[3]!.toISOString().slice(0, 10)).toBe("2026-12-13");
+  });
+
+  it("bước ngày cấu hình được (theo tháng = 30, theo học phần có thể dài hơn)", () => {
+    const h = hanChoDot(moc, 2, 45);
+    expect(h[1]!.toISOString().slice(0, 10)).toBe("2026-10-29");
+  });
+
+  it("KHÔNG đọc đồng hồ thật — mốc luôn phải truyền vào", () => {
+    // Luật 19: test đọc `new Date()` là bom hẹn giờ. Hàm bắt buộc nhận mốc.
+    expect(hanChoDot(moc, 1)).toHaveLength(1);
+  });
+});
+
+describe("[KH-03] kiểm kế hoạch trước khi ghi", () => {
+  const dot = (amount: number, daThu: boolean, dueDate: Date | null = new Date("2026-10-14")) => ({
+    amount,
+    daThu,
+    dueDate,
+  });
+
+  it("tổng các đợt phải BẰNG tổng đơn", () => {
+    const r = kiemKeHoachDot([dot(5_000_000, true, null), dot(4_000_000, false)], 10_000_000);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toContain("10.000.000");
+  });
+
+  it("đợt CHƯA thu bắt buộc có hạn — không hạn thì cron không nhắc được ai", () => {
+    const r = kiemKeHoachDot([dot(5_000_000, true, null), dot(5_000_000, false, null)], 10_000_000);
+    expect(r.ok).toBe(false);
+    // Thông báo nói "ngày hẹn đóng" chứ không nói "hạn" — giữ nguyên chữ của thông báo
+    // vì đó là chữ người dùng đọc; test bám theo thông báo, không bắt thông báo bám test.
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toContain("ngày hẹn đóng");
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toContain("Đợt 2");
+  });
+
+  it("đợt ĐÃ thu KHÔNG cần hạn", () => {
+    expect(kiemKeHoachDot([dot(10_000_000, true, null)], 10_000_000).ok).toBe(true);
+  });
+
+  it("kế hoạch hợp lệ 4 đợt", () => {
+    const d = [
+      dot(2_640_000, true, null),
+      dot(2_640_000, false),
+      dot(2_640_000, false),
+      dot(2_640_000, false),
+    ];
+    expect(kiemKeHoachDot(d, 10_560_000).ok).toBe(true);
+  });
+
+  it("KHÔNG đợt nào → từ chối (đơn phải có ít nhất một đợt)", () => {
+    expect(kiemKeHoachDot([], 10_000_000).ok).toBe(false);
+  });
+
+  it("vượt trần số đợt → từ chối", () => {
+    const d = Array.from({ length: TRAN_SO_DOT + 1 }, () => dot(1, false));
+    expect(kiemKeHoachDot(d, TRAN_SO_DOT + 1).ok).toBe(false);
+  });
+
+  it("đợt âm → từ chối", () => {
+    const r = kiemKeHoachDot([dot(-1, false), dot(10_000_001, false)], 10_000_000);
+    expect(r.ok).toBe(false);
+  });
+
+  it("kế hoạch 100% TRẢ SAU (không đợt nào đã thu) là HỢP LỆ — sale cấp tín dụng", () => {
+    // ⚠️ Ca này cố ý hợp lệ, và cố ý được nêu tên: trước đây nó bị cơ chế duyệt chặn.
+    // Điều kiện dùng cổng tiền phải là `some(!daThu)`, KHÔNG phải đếm số đợt — kế hoạch
+    // 1 đợt trả sau vẫn là 100% nợ, đếm đợt thì nó lọt.
+    const r = kiemKeHoachDot([dot(10_000_000, false)], 10_000_000);
+    expect(r.ok).toBe(true);
+    expect(r.coDotChuaThu).toBe(true);
+  });
+});
+
+describe("[KH-04] phân phần chênh Ledger-A cho TỪNG marker đợt", () => {
+  it("chưa có khoản nào → mỗi đợt đã thu ghi đúng số của nó", () => {
+    expect(phanBoGhiTheoDot([3_000_000, 2_000_000], 0)).toEqual([3_000_000, 2_000_000]);
+  });
+
+  it("đã có đủ tiền trong sổ (tiền cổng/backfill) → KHÔNG ghi thêm đồng nào", () => {
+    // Đây là R-01: ghi lại nguyên số là cộng đôi với tiền khách đã chuyển qua cổng.
+    expect(phanBoGhiTheoDot([3_000_000, 2_000_000], 5_000_000)).toEqual([0, 0]);
+  });
+
+  it("đã có MỘT PHẦN → chỉ ghi phần còn thiếu, đổ vào đợt ĐẦU trước", () => {
+    expect(phanBoGhiTheoDot([3_000_000, 2_000_000], 4_000_000)).toEqual([1_000_000, 0]);
+  });
+
+  it("phần thiếu lớn hơn đợt đầu → tràn sang đợt sau, mỗi đợt KHÔNG vượt số của nó", () => {
+    expect(phanBoGhiTheoDot([3_000_000, 2_000_000], 1_000_000)).toEqual([3_000_000, 1_000_000]);
+  });
+
+  it("sổ có NHIỀU hơn kế hoạch → không ra số âm", () => {
+    expect(phanBoGhiTheoDot([1_000_000], 9_000_000)).toEqual([0]);
+  });
+
+  it("không đợt nào đã thu → mảng rỗng", () => {
+    expect(phanBoGhiTheoDot([], 0)).toEqual([]);
+  });
+
+  it("bất biến: Σ phần ghi thêm === max(0, Σ đợt đã thu − đã có trong sổ)", () => {
+    for (const daCo of [0, 1, 999_999, 4_000_000, 5_000_000, 9_000_000]) {
+      const r = phanBoGhiTheoDot([3_000_000, 2_000_000], daCo);
+      expect(r.reduce((a, b) => a + b, 0), `daCo=${daCo}`).toBe(
+        Math.max(0, 5_000_000 - daCo),
+      );
+    }
+  });
+
+  it("số không hữu hạn → coi như 0", () => {
+    expect(phanBoGhiTheoDot([Number.NaN, 2_000_000], Number.NaN)).toEqual([0, 2_000_000]);
+  });
+});

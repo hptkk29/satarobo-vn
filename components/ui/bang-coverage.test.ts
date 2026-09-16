@@ -22,22 +22,33 @@ const GOC = ["app", "components"];
 const MIEN_TRU: Record<string, string> = {
   "components/ui/table.tsx":
     "primitive shadcn — mọi nơi GỌI nó đã bọc rồi, bọc thêm ở đây là hai thanh điều khiển chồng nhau",
-  "app/(admin)/admin/design-system-preview/client.tsx": "màn xem thử design system, chỉ dev dùng",
-  "app/(admin)/admin/huong-dan/_components/guide-markdown.tsx": "bảng trong tài liệu hướng dẫn",
-  "app/(portal)/portal/huong-dan/_components/guide-markdown.tsx": "bảng trong tài liệu hướng dẫn",
-  "app/(teacher)/teacher/huong-dan/_components/guide-markdown.tsx": "bảng trong tài liệu hướng dẫn",
-  "app/(public)/khoa-hoc/page.tsx": "bảng SO SÁNH hai khoá học — nội dung cố định, không phải danh sách",
+  "app/(admin)/admin/design-system-preview/client.tsx":
+    "màn xem thử design system, chỉ dev dùng",
+  "app/(admin)/admin/huong-dan/_components/guide-markdown.tsx":
+    "bảng trong tài liệu hướng dẫn",
+  "app/(portal)/portal/huong-dan/_components/guide-markdown.tsx":
+    "bảng trong tài liệu hướng dẫn",
+  "app/(teacher)/teacher/huong-dan/_components/guide-markdown.tsx":
+    "bảng trong tài liệu hướng dẫn",
+  "app/(public)/khoa-hoc/page.tsx":
+    "bảng SO SÁNH hai khoá học — nội dung cố định, không phải danh sách",
   "app/(public)/hoc-cu/page.tsx": "bảng so sánh gói học cụ — nội dung cố định",
-  "app/(admin)/admin/leads/so-luot/page.tsx":
-    "một bảng = MỘT cơ sở, số dòng = số tư vấn viên từng nhận lead ở cơ sở đó (thực tế 2). Phân trang một bảng 2 dòng là thêm thanh điều khiển vô nghĩa, mà đây lại đúng là bảng cần nhìn HẾT một lượt để tin là công bằng",
+  "app/(admin)/admin/quan-ly-chia-lead/lich-su/page.tsx":
+    "ĐÃ có phân trang, nhưng PHÍA SERVER (skip/take + link Trước/Sau) — nhật ký pool chỉ có thêm không bao giờ bớt, cắt trang trong trình duyệt là phải tải cả sổ về trước",
   "app/(admin)/admin/cham-cong/danh-muc-ca/_components/template-editor.tsx":
     "bảng ĐOẠN CA bên trong form sửa một mã (tối đa 6 dòng, là ô nhập chứ không phải danh sách) — phân trang một form là vô nghĩa",
-  "app/(admin)/admin/cham-cong/phan-ca/import/_components/result-diff-table.tsx":
-    "bảng đối chiếu 15–21 MÃ CA (Sheet vs hệ thống) sau khi áp — số dòng chặn bởi danh mục mã ca, và đây là bằng chứng \"khớp hay lệch\" phải đọc trọn vẹn một lần; phân trang một bảng đối chiếu là giấu mất dòng lệch",
   "app/(admin)/admin/cham-cong/phan-ca/import/_components/mapping-table.tsx":
     "bảng ánh xạ tên = số người trên Sheet (19–20 dòng, nhóm theo khối CS1/CS2/HO) — phải nhìn HẾT một lượt để xác nhận từng người và thấy ai CHƯA ánh xạ; cắt trang là giấu mất đúng thứ người dùng đang phải soát trước khi bấm Áp",
   "app/(admin)/admin/bao-cao/phan-hoi-hop-thu/page.tsx":
     "hai bảng GỘP SẴN: một dòng cho mỗi người phụ trách, một dòng cho mỗi đơn vị — số dòng chặn bởi quy mô đội, không theo lượng hội thoại. Đây lại đúng là bảng phải nhìn HẾT một lượt: cắt trang là giấu mất người đang tồn nhiều khách chờ, tức giấu đúng thứ bảng sinh ra để phơi",
+  "app/(admin)/admin/nhan-su/import/page.tsx":
+    "bảng CHẠY THỬ của lượt nhập nhân sự — dựng sau sự cố 08/09/2026 (file 9 cột xoá trắng 3 cột ngày trên 9 hồ sơ PROD). Nó tồn tại ĐỂ người vận hành nhìn HẾT trước khi bấm Ghi thật, và mỗi dòng đỏ là một ô sắp mất dữ liệu; cắt trang là giấu đúng thứ nó sinh ra để phơi bày. Số dòng chặn bởi số hồ sơ THỰC SỰ ĐỔI, không phải số dòng file",
+  "app/(admin)/admin/cham-cong/phan-ca/import/_components/result-diff-table.tsx":
+    'bảng đối chiếu 15–21 MÃ CA (Sheet vs hệ thống) sau khi áp — số dòng chặn bởi danh mục mã ca, và đây là bằng chứng "khớp hay lệch" phải đọc trọn vẹn một lần; phân trang một bảng đối chiếu là giấu mất dòng lệch',
+  "app/(admin)/admin/quan-ly-chia-lead/_components/pool-table.tsx":
+    "một bảng = MỘT cơ sở, số dòng = số sale của cơ sở đó (thực tế 2–5). Phân trang ở đây là thêm thanh điều khiển vô nghĩa, mà đây lại đúng là bảng cần nhìn HẾT một lượt để tin là công bằng — cắt trang là giấu mất người đang bị tắt",
+  "app/(admin)/admin/quan-ly-chia-lead/_components/so-chia.tsx":
+    "ĐÃ có phân trang, nhưng PHÍA SERVER (skip/take + link Trước/Sau) chứ không bọc `PhanTrangBang` — sổ chia lead chỉ có thêm không bao giờ bớt, cắt trang trong trình duyệt là phải tải cả sổ về trước",
   "components/legacy-laptrinhrobot/InternalAwards.tsx":
     "bảng giải thưởng trên landing cũ — danh sách chốt cứng trong code, không đọc từ DB",
   "app/(sale)/sale/trial/_components/trial-list.tsx":
@@ -59,7 +70,8 @@ function boChuThich(src: string): string {
   return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 }
 
-const TEN_TUONG_DOI = (f: string) => path.relative(ROOT, f).split(path.sep).join("/");
+const TEN_TUONG_DOI = (f: string) =>
+  path.relative(ROOT, f).split(path.sep).join("/");
 
 // Quét CÓ NHỚ: cả ba `it` đều gọi `fileCoBang()`, mà mỗi lượt là một lần duyệt đồng bộ
 // toàn bộ `app/` + `components/` rồi đọc từng file. Chạy riêng thì ~1s, nhưng trong cả bộ
@@ -82,7 +94,9 @@ function quetFileCoBang(): string[] {
       // Hai file ĐỊNH NGHĨA cỗ máy phân trang — chúng chứa `<table>` là đương nhiên.
       if (ten.endsWith("components/ui/bang-phan-trang.tsx")) return false;
       if (ten.endsWith("components/ui/phan-trang-bang.tsx")) return false;
-      return /<table[\s>]|<Table[\s>]/.test(boChuThich(fs.readFileSync(f, "utf8")));
+      return /<table[\s>]|<Table[\s>]/.test(
+        boChuThich(fs.readFileSync(f, "utf8")),
+      );
     })
     .map(TEN_TUONG_DOI);
 }
@@ -110,7 +124,10 @@ describe("Mọi bảng dữ liệu đều có phân trang", () => {
       const src = fs.readFileSync(path.join(ROOT, ten), "utf8");
       return /<PhanTrangBang|<BangPhanTrang/.test(src);
     });
-    expect(chet, `Dòng MIEN_TRU không còn cần thiết:\n  - ${chet.join("\n  - ")}\n`).toEqual([]);
+    expect(
+      chet,
+      `Dòng MIEN_TRU không còn cần thiết:\n  - ${chet.join("\n  - ")}\n`,
+    ).toEqual([]);
   });
 
   it("mỗi dòng miễn trừ đều có lý do viết ra", () => {
@@ -139,7 +156,9 @@ describe("Mọi bảng dữ liệu đều có phân trang", () => {
 // từng chỗ thì lần thêm bảng thứ mười một lại tái phát, nên khoá bằng luật tĩnh.
 describe("Vỏ bảng — không sinh ra 'mất góc bên phải'", () => {
   /** Dòng chứa `<PhanTrangBang`, kèm 3 dòng ngay trước để soi thẻ bọc. */
-  function khoiPhanTrang(src: string): { truoc: string; dong: string; sau: string }[] {
+  function khoiPhanTrang(
+    src: string,
+  ): { truoc: string; dong: string; sau: string }[] {
     const dong = src.split("\n");
     const ra: { truoc: string; dong: string; sau: string }[] = [];
     for (let i = 0; i < dong.length; i++) {
@@ -168,7 +187,10 @@ describe("Vỏ bảng — không sinh ra 'mất góc bên phải'", () => {
         const thePhamLoi = k.truoc
           .split("\n")
           .find(
-            (d) => /overflow-(?:x-)?auto/.test(d) && /rounded-/.test(d) && !/max-h-/.test(d),
+            (d) =>
+              /overflow-(?:x-)?auto/.test(d) &&
+              /rounded-/.test(d) &&
+              !/max-h-/.test(d),
           );
         if (thePhamLoi) xau.push(`${ten} — ${thePhamLoi.trim()}`);
       }
@@ -191,7 +213,8 @@ describe("Vỏ bảng — không sinh ra 'mất góc bên phải'", () => {
         const the = k.sau.match(/<table className="([^"]*)"/);
         if (!the) continue;
         const cls = the[1];
-        if (/min-w-\[/.test(cls) && !/\bw-full\b/.test(cls)) xau.push(`${ten} — <table className="${cls}">`);
+        if (/min-w-\[/.test(cls) && !/\bw-full\b/.test(cls))
+          xau.push(`${ten} — <table className="${cls}">`);
       }
     }
     expect(

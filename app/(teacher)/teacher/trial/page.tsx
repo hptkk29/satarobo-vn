@@ -81,6 +81,10 @@ export default async function TeacherTrialPage({
     // Buổi đang chấm quyết định CẢ biểu mẫu lẫn PDF — phải nói rõ trên URL, vì
     // `scheduledSessionId` của ca chỉ đổi khi dời lịch (xem ghi chú GĐ4 ở helper).
     const selected = ctx.trialClassSessionId;
+    const pdfHref = selected
+      ? `/teacher/trial/pdf/${ctx.enrollmentId}?sessionId=${selected}`
+      : `/teacher/trial/pdf/${ctx.enrollmentId}`;
+
     return (
       <div className="space-y-4">
         <BackLink href="?" label="Danh sách Trial" />
@@ -104,6 +108,10 @@ export default async function TeacherTrialPage({
                   <Link
                     key={s.id}
                     href={`?enrollmentId=${ctx.enrollmentId}&sessionId=${s.id}`}
+                    // Chọn buổi = đổi tham số truy vấn TRÊN CHÍNH màn phiếu này, không
+                    // phải sang trang khác → giữ nguyên vị trí cuộn (App Router mặc
+                    // định kéo về đầu sau mỗi lần cập nhật router state).
+                    scroll={false}
                     aria-current={active ? "true" : undefined}
                     className={cn(
                       "rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors",
@@ -146,10 +154,7 @@ export default async function TeacherTrialPage({
                 }
               : null
           }
-          /* 25/08 — chủ dự án gỡ nút "Xuất PDF" khỏi màn Trial của GV
-             (docs/site-giao-vien-2508.md §5). ĐƯỜNG PDF vẫn còn và vẫn nhận
-             `?sessionId=` của GĐ4 — site Sale in phiếu qua đó; chỉ cái nút ở
-             màn giáo viên là bỏ. Vì vậy `pdfHref` bên dưới không còn ai dùng. */
+          /* 25/08 — bỏ nút "Xuất PDF" khỏi màn Trial của GV. */
           pdfHref={null}
         />
       </div>
@@ -168,8 +173,9 @@ export default async function TeacherTrialPage({
     return {
       enrollmentId: r.enrollmentId,
       sessionId: r.sessionId,
-      dateLabel: r.date ? capitalize(dateShortFmt.format(r.date)) : "",
-      timeLabel: r.startTime && r.endTime ? `${r.startTime}–${r.endTime}` : "",
+      hocCaLop: r.hocCaLop,
+      dateLabel: capitalize(dateShortFmt.format(r.date)),
+      timeLabel: `${r.startTime}–${r.endTime}`,
       trialClassName: r.trialClassName,
       studentLabel: r.birthYear ? `${r.studentName} - ${r.birthYear}` : r.studentName,
       parentName: r.parentName,
@@ -179,9 +185,9 @@ export default async function TeacherTrialPage({
     };
   }
 
-  // HV chưa gắn buổi không có ngày để xếp, nên KHÔNG trộn vào bảng "sắp Trial" (bảng đó
-  // sắp theo ngày). Dồn xuống "Đã Trial" cũng sai — việc chưa xảy ra. Giữ nguyên khối
-  // riêng như trước để không ai tàng hình.
+  // 04/09 — mọi dòng nay ĐỀU có ngày giờ: ghi danh "học cả lớp" được suy buổi đại diện ở
+  // server (`chonBuoiDaiDien`), suy không ra thì bỏ hẳn. Nên không còn khối "chưa xếp
+  // buổi" nào, và cũng không còn dòng nào rơi nhầm xuống "Đã Trial" chỉ vì thiếu ngày.
   const upcoming = table.upcoming.map(toView);
   const done = table.done.map(toView);
 

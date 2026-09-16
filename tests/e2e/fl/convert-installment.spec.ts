@@ -15,7 +15,6 @@ import {
   recordInstallmentPlan,
   getOrderInstallments,
   markInstallmentPaid,
-  approveInstallmentPlan,
 } from "../../../lib/orders/installments";
 
 let seq = 0;
@@ -59,7 +58,9 @@ test.describe("[FL2-01] Convert v2 — học phí 1/2 đợt", () => {
     expect(insts[0]!.amount + insts[1]!.amount).toBe(order.totalAmount);
   });
 
-  // S5 / C4 — kế hoạch 2 đợt: đợt1 ghi Payment ngay; plan mặc định PENDING_APPROVAL.
+  // S5 — kế hoạch 2 đợt: đợt1 ghi Payment ngay. (Vế "plan mặc định PENDING_APPROVAL"
+  // của C4 đã GỠ 14/09/2026 cùng cơ chế duyệt đơn hàng — chú thích nói ngược mã là gài
+  // bẫy cho người đọc sau.)
   //
   // ⚠️ ĐẢO 13/09/2026 — tên cũ của ca này là "đợt2 cần CENTER_MANAGER duyệt mới ghi
   // Payment". Luật đó đã bị chủ dự án đảo: giữ nó nghĩa là khách quét QR đóng đợt 2 thì
@@ -70,7 +71,7 @@ test.describe("[FL2-01] Convert v2 — học phí 1/2 đợt", () => {
   // (`confirmSettledOrder`, `payos-ingest`), chứ không nằm ở đường nhận tiền nữa.
   // Ca này nay khoá đúng luật MỚI: đóng đợt 2 là ghi Payment ngay, không chờ duyệt;
   // và cổng QUYỀN duyệt (non-manager bị chặn) vẫn nguyên.
-  test("[SPINE-S5] đóng đợt2 ghi Payment NGAY; duyệt vẫn đòi CENTER_MANAGER", async () => {
+  test("[SPINE-S5] đóng đợt2 ghi Payment NGAY (Ledger-A khớp Ledger-B)", async () => {
     const order = await makeCourseOrder(10_000_000);
     const { dot1, dot2 } = computeInstallmentSplit(order.totalAmount, 6_000_000);
     await recordInstallmentPlan({
@@ -81,9 +82,12 @@ test.describe("[FL2-01] Convert v2 — học phí 1/2 đợt", () => {
       actorId: "sale-1",
     });
 
-    // Plan 2 đợt → PENDING_APPROVAL; đợt1 đã ghi 1 Payment(RECORDED).
+    // ⚠️ ĐẢO 14/09/2026 — trước đây kỳ vọng `PENDING_APPROVAL`. Cơ chế duyệt đơn hàng
+    // đã bỏ theo chốt của chủ dự án; lưu kế hoạch không còn sinh cờ chờ duyệt.
+    // Phần đáng giá của ca này KHÔNG mất: nó vẫn khoá "đợt 1 đã thu ghi ĐÚNG 1 Payment",
+    // và bên dưới vẫn khoá "đóng đợt 2 ghi Payment NGAY" — luật đảo 13/09.
     const ord1 = await db.order.findUnique({ where: { id: order.id }, select: { installmentApprovalStatus: true } });
-    expect(ord1?.installmentApprovalStatus).toBe("PENDING_APPROVAL");
+    expect(ord1?.installmentApprovalStatus).toBeNull();
     expect(await db.payment.count({ where: { orderId: order.id, saleStatus: "RECORDED" } })).toBe(1);
 
     // Đóng đợt2 khi CHƯA duyệt → đánh dấu PAID (Ledger-B) VÀ ghi Payment (Ledger-A).
@@ -93,25 +97,18 @@ test.describe("[FL2-01] Convert v2 — học phí 1/2 đợt", () => {
     await markInstallmentPaid(dot2Inst.id, "sale-1");
     expect(await db.payment.count({ where: { orderId: order.id, saleStatus: "RECORDED" } })).toBe(2);
 
-    // Non-manager duyệt → chặn (không có quyền).
-    const denied = await approveInstallmentPlan({
-      orderId: order.id,
-      actor: { id: "sale-1", name: "Sale", role: "SALES_CSM" },
-    });
-    expect(denied.ok).toBe(false);
-
-    // CENTER_MANAGER duyệt → APPROVED. Phần "ghi bù Payment đợt2" nay là NO-OP
-    // (idempotent theo marker — khoản đã ghi ngay lúc đóng ở trên), nên tổng vẫn 2.
-    // Giữ lại đường ghi bù đó có chủ đích: nó còn phục vụ ca REJECTED→APPROVED và dữ liệu cũ.
-    const ok = await approveInstallmentPlan({
-      orderId: order.id,
-      actor: { id: "cm-1", name: "CM", role: "CENTER_MANAGER" },
-      reason: "Khách uy tín",
-    });
-    expect(ok.ok).toBe(true);
-    const ord2 = await db.order.findUnique({ where: { id: order.id }, select: { installmentApprovalStatus: true } });
-    expect(ord2?.installmentApprovalStatus).toBe("APPROVED");
-    expect(await db.payment.count({ where: { orderId: order.id, saleStatus: "RECORDED" } })).toBe(2);
+    // ⚠️ ĐÃ CẮT 14/09/2026 — phần cuối ca này vốn kiểm "non-manager duyệt bị chặn" và
+    // "CENTER_MANAGER duyệt → APPROVED". Cơ chế duyệt đơn hàng đã bỏ theo chốt của chủ
+    // dự án, nên `approveInstallmentPlan` không còn gọi được trên đơn mới: nó đòi
+    // `installmentApprovalStatus != null`, mà đường sinh cờ đó đã gỡ.
+    //
+    // Hai hàm approve/reject VẪN GIỮ cho DỮ LIỆU CŨ (`applyInstallmentApproval` là đường
+    // ghi bù Ledger-A duy nhất cho đơn sinh dưới luật cũ) và được khoá ở
+    // `tests/e2e/r7/payment-request-lifecycle.spec.ts` ca [PR-06], nơi cờ được đặt thủ
+    // công để mô phỏng đơn cũ. Không mất lưới.
+    //
+    // Phần ĐÁNG GIÁ của ca này nằm ở trên và giữ nguyên: đợt 1 ghi ĐÚNG 1 Payment, và
+    // đóng đợt 2 ghi Payment NGAY (luật đảo 13/09) — tổng đúng 2.
   });
 
   // AC3 — 1 đợt (full): convert KHÔNG ghi installment (giữ flow hiện tại). Kiểm chứng:

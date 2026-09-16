@@ -68,10 +68,14 @@ describe("[N-2] tallyRevenueByChild — bổ dọc thực thu theo con", () => {
     expect(r.total).toBe(3_000_000);
   });
 
-  it("bản gốc bị ĐIỀU CHỈNH bị loại — không cộng đôi", () => {
+  it("điều chỉnh là DELTA — cộng cả gốc lẫn phần chênh, không loại bản nào", () => {
+    // 🔴 Đổi 16/09/2026 khi hợp nhất `main`: `ADJUSTED` đã bị bỏ khỏi trạng thái kế
+    // toán (07/09, `payment_type_tach_khoi_status`). Bút toán điều chỉnh nay là
+    // `paymentType = "ADJUSTMENT"`, trạng thái `CONFIRMED`, mang PHẦN CHÊNH LỆCH.
+    // Loại bản gốc như luật cũ bây giờ là ĐẾM THIẾU đúng phần vừa sửa.
     const goc = bt({ id: "goc", amount: 5_000_000 });
-    const moi = bt({ id: "moi", amount: 4_000_000, accountantStatus: "ADJUSTED", adjustmentOfId: "goc" });
-    const r = tallyRevenueByChild([goc, moi]);
+    const delta = bt({ id: "delta", amount: -1_000_000, adjustmentOfId: "goc" });
+    const r = tallyRevenueByChild([goc, delta]);
     expect(r.byChild.get("c1")).toBe(4_000_000);
     expect(r.total).toBe(4_000_000);
   });
@@ -123,10 +127,11 @@ describe("[N-2] splitChildRevenueByCenter — công tắc 'Tách theo cơ sở'"
     expect(tach.reduce((s, r) => s + r.unassigned, 0)).toBe(gop.unassigned);
   });
 
-  it("bản gốc bị điều chỉnh bị loại TRƯỚC khi chia cơ sở (không cộng đôi ở một cơ sở)", () => {
+  it("gốc + delta cùng vào một cơ sở, ra đúng số sau điều chỉnh", () => {
+    // Mô hình DELTA (xem chú thích ở ca trên): cộng cả hai dòng, không loại bản nào.
     const goc = bt({ id: "g", centerId: "cs1", amount: 5_000_000 });
-    const moi = bt({ id: "m", centerId: "cs1", amount: 4_000_000, accountantStatus: "ADJUSTED", adjustmentOfId: "g" });
-    const out = splitChildRevenueByCenter([goc, moi], ["cs1"]);
+    const delta = bt({ id: "m", centerId: "cs1", amount: -1_000_000, adjustmentOfId: "g" });
+    const out = splitChildRevenueByCenter([goc, delta], ["cs1"]);
     expect(out[0]!.total).toBe(4_000_000);
   });
 });

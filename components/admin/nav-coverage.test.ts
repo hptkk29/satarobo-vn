@@ -31,6 +31,20 @@ const ALLOWLIST: Record<string, string> = {
     "không, TRƯỚC khi cam kết bất kỳ mốc lịch nào cho trục gọi điện. CỐ Ý không có mục " +
     "menu: nó không phải tính năng, chỉ người chạy spike mở bằng URL. PHẢI XOÁ cả thư " +
     "mục app/(admin)/admin/_spike/ lẫn dòng này sau khi có kết luận (spec §5.2).",
+  "/leads/new":
+    "03/09 — stub chuyển hướng sang /nhap-khach-hang (chủ dự án chốt: nút \"+ Thêm lead\" " +
+    "nay trỏ thẳng sang đó). Biểu mẫu cũ tạo lead bằng `db.lead.create` trần, không qua " +
+    "`ingestIntakeLead` nên thiếu chống trùng SĐT và tự chia. Giữ route vì /leads/[id] là " +
+    "route động bên cạnh: xoá hẳn thì \"new\" rơi vào [id] và được hiểu là một id lead — " +
+    "trang trả 200 rỗng thay vì 404. Cùng lý do với /leads/so-luot.",
+  "/leads/so-luot":
+    "30/08 — stub chuyển hướng sang /quan-ly-chia-lead. Giữ route vì /leads/[id] là " +
+    "route động bên cạnh: xoá hẳn thì đường dẫn cũ rơi vào [id] và đi tra một lead " +
+    "có id \"so-luot\".",
+  "/leads/cau-hinh-chia": "30/08 — stub chuyển hướng sang /quan-ly-chia-lead. Cùng lý do với /leads/so-luot.",
+  "/quan-ly-chia-lead/lich-su":
+    "màn con của Quản lý chia lead — vào từ link trong tab Cấu hình pool. Không đặt " +
+    "mục sidebar riêng: đây là chỗ tra khi có tranh cãi, không phải việc hằng ngày.",
   "/cham-cong/man-hinh":
     "màn hình QR để MỞ TRÊN TV tại quầy — vào từ nút \"Màn hình QR\" trên Bảng công ngày, href kèm " +
     "centerId động nên máy quét không thấy; không đặt mục sidebar vì đây không phải màn làm việc hằng ngày.",
@@ -42,6 +56,7 @@ const ALLOWLIST: Record<string, string> = {
     "stub chuyển hướng sang /parent-requests (giữ cho link cũ không vỡ)",
   "/trials":
     "GĐ6 — stub chuyển hướng sang /lop-trial/lich-hen. Màn gộp vào Lớp Trial; route " +
+    "GĐ6 — stub chuyển hướng sang /lop-trial. Màn gộp vào Lớp Trial; route " +
     "giữ lại vì thông báo CŨ trong DB mang href \"/trials\" và không sửa hồi tố được, " +
     "còn tài liệu hướng dẫn sinh tự động cũng trỏ tới đó. Gỡ khi đo được là không còn " +
     "thông báo nào trỏ tới, đừng gỡ theo lịch.",

@@ -12,6 +12,8 @@ type PaymentRow = {
   amount: number;
   deletedAt: Date | null;
   centerId: string | null;
+  /** 06/09 — khoản thu tự động PHẢI gắn ghi danh, kẻo công nợ phụ huynh không tụt. */
+  enrollmentId: string | null;
 };
 
 type State = {
@@ -24,12 +26,11 @@ type State = {
   statusHistory: unknown[];
   activities: unknown[];
   audits: unknown[];
-  /** N-4 — đồng hồ "hoạt động gần nhất"; `null` = chưa ai chạm. */
-  leadLastActivityAt: Date | null;
+  /** Học viên của đơn (null = đơn chưa gắn học viên). */
+  orderStudentId: string | null;
+  /** Ghi danh còn hiệu lực của học viên đó. */
+  enrollmentIds: string[];
 };
-
-/** Mốc `createdAt` mà tx giả trả cho dòng hoạt động — cùng vai `now()` của Postgres. */
-const MOC_TX = new Date("2026-08-25T03:00:00.000Z");
 
 /** Tx giả in-memory — mô phỏng đúng phần ensureOrderPaymentRecorded chạm tới. */
 function fakeTx(state: State): Prisma.TransactionClient {
@@ -42,18 +43,33 @@ function fakeTx(state: State): Prisma.TransactionClient {
             p.deletedAt === null &&
             p.note.includes(args.where.note.contains),
         ) ?? null,
-      create: async (args: { data: { orderId: string; note: string; amount: number; centerId: string | null } }) => {
+      create: async (args: {
+        data: {
+          orderId: string;
+          note: string;
+          amount: number;
+          centerId: string | null;
+          enrollmentId: string | null;
+        };
+      }) => {
         const row: PaymentRow = {
           id: `p${state.payments.length + 1}`,
           orderId: args.data.orderId,
           note: args.data.note,
           amount: args.data.amount,
           centerId: args.data.centerId,
+          enrollmentId: args.data.enrollmentId ?? null,
           deletedAt: null,
         };
         state.payments.push(row);
         return { id: row.id };
       },
+    },
+    order: {
+      findUnique: async () => ({ studentId: state.orderStudentId }),
+    },
+    enrollment: {
+      findMany: async () => state.enrollmentIds.map((id) => ({ id })),
     },
     lead: {
       findUnique: async () => ({
@@ -66,16 +82,8 @@ function fakeTx(state: State): Prisma.TransactionClient {
         state.leadStatus = "DA_DANG_KY";
         return { count: 1 };
       },
-      // Một `lead.update` phục vụ HAI đường ghi cùng lúc:
-      //  • GĐ1 dời mốc `statusChangedAt` (sổ đếm);
-      //  • N-4 bump `Lead.lastActivityAt` (vết người đọc, cùng tx).
-      // Ghi nhận cả hai để test không mù một nửa.
-      update: async (args: { data: { lastActivityAt?: Date } }) => {
-        if (args.data.lastActivityAt !== undefined) {
-          state.leadLastActivityAt = args.data.lastActivityAt ?? null;
-        }
-        return { id: "l1" };
-      },
+      // GĐ1 — dời mốc `statusChangedAt`; test chỉ cần nó không nổ.
+      update: async (args: { data: unknown }) => args.data,
     },
     // GĐ1 — sổ đổi trạng thái lead.
     leadStatusHistory: {
@@ -87,9 +95,7 @@ function fakeTx(state: State): Prisma.TransactionClient {
     leadActivity: {
       create: async (args: { data: unknown }) => {
         state.activities.push(args.data);
-        // Trả `createdAt` như Prisma thật: đường ghi chung lấy đúng mốc này làm
-        // `lastActivityAt` (không lấy đồng hồ tiến trình) — xem `activity-write.ts`.
-        return { id: `a${state.activities.length}`, createdAt: MOC_TX };
+        return args.data;
       },
     },
     auditLog: {
@@ -109,7 +115,8 @@ const baseState = (): State => ({
   statusHistory: [],
   activities: [],
   audits: [],
-  leadLastActivityAt: null,
+  orderStudentId: "hv1",
+  enrollmentIds: ["e1"],
 });
 
 describe("ensureOrderPaymentRecorded (K3 — 1 khoản = 1 dòng ledger)", () => {
@@ -176,14 +183,61 @@ describe("ensureOrderPaymentRecorded (K3 — 1 khoản = 1 dòng ledger)", () =>
     await ensureOrderPaymentRecorded(fakeTx(state), { orderId: "o1", soDot: 1, amount: 1, leadId: "l1", actor: { id: "u1" } });
     expect(state.leadStatus).toBe("DA_DANG_KY");
     expect(state.activities).toHaveLength(1);
-    // N-4 — ghi nhận tiền là 1 trong 10 đường trước đây ghi hoạt động mà để
-    // nguyên đồng hồ. Mốc phải bằng đúng `createdAt` của dòng vừa ghi.
-    expect(state.leadLastActivityAt).toEqual(MOC_TX);
 
     const converted = baseState();
     converted.leadStatus = "CONVERTED";
     const moved = await maybeAdvanceLeadToRegistered(fakeTx(converted), { leadId: "l1", actor: { id: "u1" } });
     expect(moved).toBe(false);
     expect(converted.leadStatus).toBe("CONVERTED"); // không lùi/đụng status khác
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+describe("ensureOrderPaymentRecorded — gắn ghi danh cho khoản thu tự động", () => {
+  it("học viên có ĐÚNG MỘT ghi danh → khoản thu gắn thẳng vào đó", async () => {
+    // Vì sao quan trọng: cổng phụ huynh cộng tiền theo quan hệ `Enrollment.payments`.
+    // `enrollmentId = null` thì dù kế toán đã xác nhận, công nợ vẫn không tụt — phụ
+    // huynh đóng đợt 2 xong mở portal ra vẫn thấy nợ nguyên.
+    const state = baseState();
+    const r = await ensureOrderPaymentRecorded(fakeTx(state), {
+      orderId: "o1",
+      soDot: 2,
+      amount: 3_000_000,
+      leadId: "l1",
+      centerId: "c1",
+      actor: { id: "u1" },
+    });
+    expect(r).toMatchObject({ ok: true, created: true });
+    expect(state.payments[0]!.enrollmentId).toBe("e1");
+  });
+
+  it("học viên có NHIỀU ghi danh → để trống, KHÔNG đoán bừa", async () => {
+    // Đơn nhiều ghi danh phải chia theo finalPrice (phép chia của
+    // `linkRecordedPaymentsToEnrollments`). Gắn đại vào một cái là tiền vào sai sổ —
+    // tệ hơn hẳn việc để trống.
+    const state = { ...baseState(), enrollmentIds: ["e1", "e2"] };
+    await ensureOrderPaymentRecorded(fakeTx(state), {
+      orderId: "o1",
+      soDot: 1,
+      amount: 1_000_000,
+      leadId: "l1",
+      centerId: "c1",
+      actor: { id: "u1" },
+    });
+    expect(state.payments[0]!.enrollmentId).toBeNull();
+  });
+
+  it("đơn chưa gắn học viên → để trống, không nổ", async () => {
+    const state = { ...baseState(), orderStudentId: null, enrollmentIds: [] };
+    const r = await ensureOrderPaymentRecorded(fakeTx(state), {
+      orderId: "o1",
+      soDot: 1,
+      amount: 1_000_000,
+      leadId: "l1",
+      centerId: "c1",
+      actor: { id: "u1" },
+    });
+    expect(r).toMatchObject({ ok: true, created: true });
+    expect(state.payments[0]!.enrollmentId).toBeNull();
   });
 });

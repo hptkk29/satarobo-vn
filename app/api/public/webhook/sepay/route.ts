@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { KHOAN_DA_GHI_NHAN } from "@/lib/finance/ghi-nhan";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { ensureOrderPaymentRecorded } from "@/lib/finance/payment";
@@ -148,7 +149,7 @@ export async function POST(req: NextRequest) {
   // đúng con số mà QR đã in ra (lib/payments/due-now.ts) để đối khớp.
   const paidAgg = order
     ? await db.payment.aggregate({
-        where: { orderId: order.id, saleStatus: "RECORDED", deletedAt: null },
+        where: { orderId: order.id, ...KHOAN_DA_GHI_NHAN },
         _sum: { amount: true },
       })
     : null;
@@ -313,7 +314,7 @@ export async function POST(req: NextRequest) {
       // (đợt 2 sau đó sẽ cộng chồng lên). Đợt do markInstallmentPaid lo, ngoài tx.
       if (decision.soDot == null) {
         const recorded = await tx.payment.aggregate({
-          where: { orderId: decision.orderId, saleStatus: "RECORDED", deletedAt: null },
+          where: { orderId: decision.orderId, ...KHOAN_DA_GHI_NHAN },
           _count: { _all: true },
         });
         if (recorded._count._all === 0) {

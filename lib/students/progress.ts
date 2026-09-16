@@ -9,6 +9,7 @@
 // lấy số liệu thật + vị trí buổi theo LỊCH THỰC (ClassSession đã trừ/dời nghỉ).
 
 import { db } from "@/lib/db";
+import { vnEndOfDay } from "@/lib/time/vn";
 import {
   ABSENT_STATUSES,
   PRESENT_STATUSES,
@@ -104,8 +105,11 @@ export async function getStudentClassProgress(
   studentId: string,
   classId: string,
 ): Promise<StudentProgress> {
-  const now = new Date();
-  const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+  // 06/09 — HẾT NGÀY THEO LỊCH VN. Bản cũ `new Date(y, m, d, 23, 59, 59)` dựng mốc theo
+  // TZ của TIẾN TRÌNH: máy dev (+07) ra 23:59 giờ VN, còn Vercel (UTC) ra 23:59Z tức
+  // 06:59 sáng HÔM SAU giờ VN. Cùng một lớp, cùng một lúc, "buổi X/N" trên prod và trên
+  // máy lập trình viên lệch nhau đúng một buổi vào những ngày có lịch học.
+  const todayEnd = vnEndOfDay(new Date());
 
   const [totalLessons, sessionsHeld, attendances] = await Promise.all([
     getTotalLessons(classId),

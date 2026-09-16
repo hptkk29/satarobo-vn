@@ -7,7 +7,7 @@
  *      `useMemo` và thế là mọi công sắp bậc ở server bị đảo ngay khi gõ vào ô tìm.
  *   2. Buổi CHƯA TỚI GIỜ không bày 3 chip việc — chip xám ở một buổi tuần sau đọc
  *      như "đang thiếu", trong khi chưa tới lượt làm.
- *   3. Nút "Hoàn tất" chỉ sáng khi đủ CẢ BA việc. Nó là nút đổi trạng thái thật, bật
+ *   3. Nút "Chốt buổi" chỉ sáng khi đủ CẢ BA việc. Nó là nút đổi trạng thái thật, bật
  *      sớm là chốt nhầm một buổi còn dở.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -96,13 +96,14 @@ const ROWS: AttendanceListRow[] = [
   }),
 ];
 
-function mount(rows: AttendanceListRow[], canComplete = true) {
+function mount(rows: AttendanceListRow[], canComplete = true, canFeedback = true) {
   return render(
     <AttendanceList
       rows={rows}
       classId="c1"
       className="Sata 3 - CS1"
       canComplete={canComplete}
+      canFeedback={canFeedback}
     />,
   );
 }
@@ -208,9 +209,9 @@ describe("AttendanceList", () => {
     expect(screen.getByRole("button", { name: "Tải ảnh s-today" })).toBeInTheDocument();
   });
 
-  it("thiếu việc thì nút Hoàn tất bị khoá và nói rõ còn thiếu gì", () => {
+  it("thiếu việc thì nút Chốt buổi bị khoá và nói rõ còn thiếu gì", () => {
     mount([ROWS[0]]);
-    const btn = screen.getByRole("button", { name: /Hoàn tất/ });
+    const btn = screen.getByRole("button", { name: /Chốt buổi/ });
     expect(btn).toBeDisabled();
     expect(btn).toHaveAttribute("title", "Còn thiếu: ảnh/video (0/9 em)");
   });
@@ -218,16 +219,16 @@ describe("AttendanceList", () => {
   it("đủ ba việc thì bấm được, gọi action rồi làm mới trang", async () => {
     complete.mockResolvedValue({ ok: true });
     mount([row({ ...ROWS[3], completed: false })]);
-    fireEvent.click(screen.getByRole("button", { name: /Hoàn tất/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Chốt buổi/ }));
     await waitFor(() => expect(complete).toHaveBeenCalledWith("s-done"));
     await waitFor(() => expect(refresh).toHaveBeenCalled());
-    expect(toastSuccess).toHaveBeenCalledWith("Đã hoàn tất buổi");
+    expect(toastSuccess).toHaveBeenCalledWith("Đã chốt buổi");
   });
 
   it("action từ chối thì báo lỗi và KHÔNG làm mới trang", async () => {
     complete.mockResolvedValue({ ok: false, error: "Chưa hoàn tất: còn thiếu ảnh" });
     mount([row({ ...ROWS[3], completed: false })]);
-    fireEvent.click(screen.getByRole("button", { name: /Hoàn tất/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Chốt buổi/ }));
     await waitFor(() =>
       expect(toastError).toHaveBeenCalledWith("Chưa hoàn tất: còn thiếu ảnh"),
     );
@@ -253,5 +254,21 @@ describe("AttendanceList", () => {
       target: { value: "zzz-không-có" },
     });
     expect(screen.getByText("Không có buổi học nào khớp bộ lọc")).toBeInTheDocument();
+  });
+});
+
+describe("nút Nhận xét theo quyền (chủ dự án chốt 04/09/2026)", () => {
+  it("KHÔNG có quyền → nút biến mất, các nút còn lại giữ nguyên", () => {
+    // Sale / Quản lý lớp học: `/sessions/[id]` redirect họ ra, nên hiện nút là chỉ
+    // đường tới ngõ cụt — bấm vào bị đá về, trông như hệ thống lỗi.
+    // Điểm danh và Tải ảnh vẫn phải còn: đó đúng là hai việc họ ĐƯỢC làm.
+    mount([row({ id: "s-nx-1" })], true, false);
+    expect(screen.queryByRole("link", { name: /Nhận xét/ })).toBeNull();
+    expect(screen.getByRole("link", { name: /Điểm danh/ })).toBeTruthy();
+  });
+
+  it("CÓ quyền → nút hiện như cũ", () => {
+    mount([row({ id: "s-nx-2" })], true, true);
+    expect(screen.getByRole("link", { name: /Nhận xét/ })).toBeTruthy();
   });
 });

@@ -110,7 +110,7 @@ export async function loadClassSessionFeedback(
         date: true,
         topic: true,
         status: true,
-        plan: { select: { customTitle: true } },
+        plan: { select: { customTitle: true, order: true } },
         lesson: { select: { order: true, title: true, moduleCode: true } },
       },
     }),
@@ -247,7 +247,10 @@ export async function loadClassSessionFeedback(
         }),
       };
     }),
-    (r) => ({ number: r.seq, complete: r.done }),
+    // 08/09 — SẮP THEO NGÀY, không theo số buổi. Nhãn nay là số LỘ TRÌNH
+    // (`soBuoiTheoLoTrinh`), sắp theo nó thì buổi 25/06 mang nhãn "Buổi 43" rơi
+    // xuống sau buổi 12/09 "Buổi 19". Xem `lib/lms/session-order.ts`.
+    (r) => ({ thoiGian: new Date(r.row.dateISO).getTime(), complete: r.done }),
   ).map((r) => r.row);
 
   // 26/08 — tên dự án suy từ BUỔI cho mọi phiếu của buổi đó, thay vì đọc bản sao
@@ -258,6 +261,7 @@ export async function loadClassSessionFeedback(
       {
         sessionNumber: sessionNumberOf.get(s.id) ?? null,
         planTitle: s.plan?.customTitle,
+        planOrder: s.plan?.order,
         lessonTitle: s.lesson?.title,
         lessonOrder: s.lesson?.order,
         moduleCode: s.lesson?.moduleCode,

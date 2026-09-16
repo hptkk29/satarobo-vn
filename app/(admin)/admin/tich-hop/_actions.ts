@@ -1,5 +1,6 @@
 "use server";
 
+import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
@@ -7,14 +8,12 @@ import { resolveActor } from "@/lib/auth/actor";
 import { isZalocrmEnabled } from "@/lib/flags";
 import { dongBoNick } from "@/lib/integrations/zalocrm/nick-admin";
 import { setMisaEnabled, getMisaConfig, syncToMisa } from "@/lib/misa/service";
-import { setPaymentConfig } from "@/lib/payments/vietqr";
 import { canonicalPhone, formatPhoneVN } from "@/lib/phone";
 import { zaloOtpProvider } from "@/lib/zalo/otp-provider";
 import { znsProvider } from "@/lib/zalo/provider";
 import { rateLimit } from "@/lib/rate-limit";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { randomInt } from "crypto";
-import { z } from "zod";
 import { getSetting } from "@/lib/settings/service";
 
 // C6 — bật/tắt MISA + chạy thử sync. Gate settings:edit (SUPER_ADMIN).
@@ -100,29 +99,13 @@ export async function sendZnsTest(
   };
 }
 
-// Commit 4 — cấu hình tài khoản nhận tiền (VietQR). KHÔNG hardcode số tài khoản.
-const vietqrSchema = z.object({
-  bankBin: z.string().trim().regex(/^\d{6}$/, "Mã ngân hàng (BIN) gồm 6 chữ số"),
-  accountNumber: z.string().trim().min(6, "Số tài khoản không hợp lệ").max(30),
-  accountName: z.string().trim().min(2, "Tên chủ TK quá ngắn").max(120),
-  // BGĐ 31/07 — cấu hình cho TỪNG CƠ SỞ (null/rỗng = cấu hình chung, fallback).
-  centerId: z.string().trim().optional().nullable(),
-});
-
-export async function setVietQrConfig(input: unknown): Promise<{ ok: boolean; error?: string }> {
-  const session = await auth();
-  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!(await checkPermission("settings:edit"))) return { ok: false, error: "Không có quyền" };
-
-  const parsed = vietqrSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
-
-  const { centerId, ...cfg } = parsed.data;
-  await setPaymentConfig(cfg, centerId || null);
-  revalidatePath("/admin/tich-hop");
-  revalidatePath("/tich-hop");
-  return { ok: true };
-}
+// ⚠️ 31/08/2026 (theo `main`) — `setVietQrConfig` + `vietqrSchema` ĐÃ GỠ.
+//
+// Tài khoản nhận tiền nay khai trong từng phương thức thanh toán loại "Chuyển khoản"
+// (`/admin/payment-methods`). Giữ lại action là giữ một CỬA GHI THỨ HAI vào kho cũ
+// `IntegrationConfig` khoá `VIETQR:*` — kho mà đường đọc chỉ còn dùng làm lối LÙI. Ai gọi
+// lại nó sẽ tạo ra tài khoản mà không màn nào hiển thị, còn mã QR thì đã ưu tiên tài khoản
+// trên phương thức. (Bản trên nhánh `test` còn action này; hợp nhất 16/09 lấy theo `main`.)
 
 // ─── S7 (lô L9) — đồng bộ nick ZaloCRM ──────────────────────────────────────
 

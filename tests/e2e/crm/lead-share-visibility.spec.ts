@@ -182,7 +182,6 @@ test.describe("[#11-SHARE] Lead dùng chung (isSharedWithTeam) — phạm vi hi�
         phone: "0900002222",
         centerId: cs2,
         assignedToId: sale3.userId,
-        // "MOI" chứ không phải "NEW" — GĐ5 rút enum LeadStatus còn 10 giá trị.
         status: "MOI",
       },
       select: { id: true },

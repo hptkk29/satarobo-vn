@@ -10,7 +10,7 @@ export function buildPeriodWorkbook(input: { summary: PeriodSummary; centerLabel
   const headers = [
     "Mã NV", "Họ tên", "Chức danh", "Công chuẩn", "Công thực tế", "Công kế hoạch", "Nghỉ có lương (công)", "Lễ (công)",
     "Giờ hành chính (công giờ)", "Giờ làm (phút)", "Giờ kế hoạch (phút)", "Số lần đi muộn", "Số lần về sớm", "Ngày không lượt",
-    "Ngày ghi đè", "Ngày có cờ", "Buổi dạy",
+    "Ngày ghi đè", "Ngày có cờ", "Buổi dạy ở cơ sở",
   ];
   const rows = summary.rows.map((r) => [
     r.employeeCode ?? "", r.name, r.jobTitle ?? "", summary.standardUnits ?? "", r.units, r.expectedUnits, r.leaveUnits, r.holidayPaidUnits,
@@ -18,7 +18,7 @@ export function buildPeriodWorkbook(input: { summary: PeriodSummary; centerLabel
     r.overrideDays, r.flaggedDays, r.teachingSessions,
   ]);
   const title = [`BẢNG CÔNG ${summary.periodKey} — ${centerLabel}${locked ? " (ĐÃ CHỐT)" : " (BẢN TẠM — chưa chốt)"}`];
-  const ws1 = XLSX.utils.aoa_to_sheet([title, [], headers, ...rows, [], [`Tổng: ${summary.totals.people} người · ${summary.totals.units} công · ${summary.totals.teachingSessions} buổi dạy`]]);
+  const ws1 = XLSX.utils.aoa_to_sheet([title, [], headers, ...rows, [], [`Tổng: ${summary.totals.people} người · ${summary.totals.units} công · ${summary.totals.teachingSessions} buổi dạy ở cơ sở`]]);
   for (let i = 0; i < rows.length; i++) {
     const cell = ws1[XLSX.utils.encode_cell({ r: i + 3, c: 0 })];
     if (cell) { cell.t = "s"; cell.z = "@"; }

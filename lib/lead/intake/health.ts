@@ -37,8 +37,7 @@ import { vnParts, vnYmd } from "@/lib/time/vn";
  * ("Facebook Ads", "giới thiệu"…), không còn là tên kênh, nên gom theo `source`
  * là vô nghĩa. Đổi lại, kiểu hỏng mà nhánh IM LẶNG sinh ra để bắt (biểu mẫu ẩn
  * danh hỏng mà không ai hay) đã hết đường xảy ra: người nhập phải đăng nhập và
- * thấy ngay lỗi trên màn hình. Lỗi mirror MISA vẫn được bắt ở nhánh (1) qua
- * `WebhookDelivery` nguồn "misa-mirror-app".
+ * thấy ngay lỗi trên màn hình.
  */
 export const MONITORED_SOURCES = [
   "quatang",
@@ -47,7 +46,13 @@ export const MONITORED_SOURCES = [
   "google-form",
 ] as const;
 
-/** Nguồn `WebhookDelivery` không sinh Lead — chỉ theo dõi lỗi, không xét im lặng. */
+/**
+ * Nguồn `WebhookDelivery` không sinh Lead — chỉ theo dõi lỗi, không xét im lặng.
+ *
+ * 29/08/2026 — hai nguồn "misa-mirror" / "misa-mirror-app" GIỮ LẠI TRONG DANH SÁCH
+ * dù luồng MISA đã gỡ: bản ghi CŨ trên PROD vẫn còn, và bỏ chúng ra thì chúng rơi
+ * vào nhánh xét "im lặng" ⇒ đẻ cảnh báo cho một kênh đã ngừng dùng, mãi mãi.
+ */
 const DELIVERY_ONLY_SOURCES = new Set(["misa-mirror", "misa-mirror-app"]);
 
 export type IntakeAlert = {

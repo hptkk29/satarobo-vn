@@ -370,6 +370,15 @@ export function buildActor(input: {
       .map((g) => g.action),
   );
 
+  warnIfScopeConflict({
+    userId: input.userId,
+    isSuperAdmin,
+    isHoLevel,
+    visibleCenterIdCount: visible.size,
+    assignedClassCount: (input.assignedClassIds ?? []).length,
+    orgRoleCount: orgRoles.length,
+  });
+
   return {
     userId: input.userId,
     isSuperAdmin,
@@ -533,3 +542,60 @@ export async function resolveActorUncached(userId: string): Promise<Actor> {
 
 /** Resolve Actor cho 1 user — React.cache → 1 lần truy vấn/request (AC11). */
 export const resolveActor = cache(resolveActorUncached);
+
+
+/**
+ * Actor TỰ MÂU THUẪN: được phân lớp để dạy nhưng không nhìn thấy cơ sở nào.
+ *
+ * Xảy ra khi user có `Class.teacherId` trỏ tới mình nhưng KHÔNG có dòng `UserOrgRole`
+ * nào còn hiệu lực — `visibleCenterIds` dựng THUẦN từ `UserOrgRole`, không có đường lùi
+ * về `User.centerId`. Đây là sự cố có thật trên prod 07/08/2026, và cùng hình dạng với
+ * sự cố phụ huynh 10/08 (114 tài khoản PARENT / 0 dòng UserOrgRole).
+ *
+ * Hậu quả trước đây là hỏng CÂM: `Class` nằm trong SCOPED_MODELS nên scopedDb chèn
+ * `centerId IN ()` rỗng ⇒ khoảng 24 màn của site giáo viên trả rỗng, mỗi màn hỏng một
+ * kiểu riêng — bảng "x/0", lưới trắng, hoặc 404 "không thuộc lớp bạn phụ trách" — mà
+ * không màn nào ném lỗi. Người dùng báo "site hỏng", dev đi soi từng màn.
+ *
+ * Hàm này KHÔNG đổi cách ly (fail-closed vẫn là fail-closed, cố ý). Nó chỉ làm sự lệch
+ * NÓI RA ĐƯỢC, để một dòng log chỉ thẳng vào nguyên nhân thay vì phải suy từ triệu
+ * chứng. Cách chữa vẫn là gắn `UserOrgRole` cho user đó (xem docs/nen-he-thong).
+ *
+ * Tách hàm thuần để test được — đừng nhúng điều kiện này thẳng vào `buildActor`.
+ */
+export function detectActorScopeConflict(a: {
+  isSuperAdmin: boolean;
+  isHoLevel: boolean;
+  visibleCenterIdCount: number;
+  assignedClassCount: number;
+  orgRoleCount: number;
+}): "MISSING_ORG_ROLE" | "NO_VISIBLE_CENTER" | null {
+  // SUPER_ADMIN và vai cấp Hội sở đi nhánh cross-center riêng, không cần visibleCenterIds.
+  if (a.isSuperAdmin || a.isHoLevel) return null;
+  // Không được phân lớp nào thì không có gì mâu thuẫn (nhân sự văn phòng, phụ huynh…).
+  if (a.assignedClassCount === 0) return null;
+  if (a.visibleCenterIdCount > 0) return null;
+  return a.orgRoleCount === 0 ? "MISSING_ORG_ROLE" : "NO_VISIBLE_CENTER";
+}
+
+function warnIfScopeConflict(a: {
+  userId: string;
+  isSuperAdmin: boolean;
+  isHoLevel: boolean;
+  visibleCenterIdCount: number;
+  assignedClassCount: number;
+  orgRoleCount: number;
+}): void {
+  const kind = detectActorScopeConflict(a);
+  if (!kind) return;
+  const why =
+    kind === "MISSING_ORG_ROLE"
+      ? "user KHÔNG có dòng UserOrgRole nào còn hiệu lực"
+      : "có UserOrgRole nhưng không vai nào neo vào một cơ sở nhìn thấy được";
+  console.warn(
+    `[actor] Phạm vi tự mâu thuẫn: user ${a.userId} được phân ${a.assignedClassCount} lớp ` +
+      `nhưng visibleCenterIds rỗng — ${why}. Mọi màn đọc Class qua scopedDb sẽ trả RỖNG ` +
+      `(bảng x/0, lưới trắng, 404 "không thuộc lớp bạn phụ trách"). Chữa bằng cách gắn ` +
+      `UserOrgRole cho user này, KHÔNG nới cách ly.`,
+  );
+}

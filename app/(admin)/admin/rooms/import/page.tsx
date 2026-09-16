@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { precheckUpsert } from "@/components/admin/import-precheck";
 import { ExcelImporter, type ImportResult } from "@/components/admin/ExcelImporter";
+import { docLoiPhanHoi } from "@/lib/ui/loi-phan-hoi";
 
 interface RoomImportRow {
   name: string;
@@ -114,10 +115,12 @@ export default function ImportRoomsPage() {
             body: JSON.stringify({ rows }),
           });
           if (!res.ok) {
-            const err = (await res.json().catch(() => ({ error: "Unknown" }))) as {
+            // Route tra loi theo HAI hinh dang; `docLoiPhanHoi` doc du ca hai.
+            const than = (await res.json().catch(() => null)) as {
               error?: string;
-            };
-            throw new Error(err.error || "Import thất bại");
+              errors?: { row: number; error: string }[];
+            } | null;
+            throw new Error(docLoiPhanHoi(res.status, than));
           }
           const result = (await res.json()) as ImportResult;
           setTimeout(() => router.refresh(), 1000);

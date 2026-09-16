@@ -10,6 +10,10 @@ import { writeAudit } from "@/lib/audit/audit-log";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { setDayOverride } from "@/lib/cham-cong/period";
+import { chanSuaKyDaChot } from "@/lib/cham-cong/ky-gac";
+import { markAttendanceDayDirty } from "@/lib/cham-cong/recompute";
+import { dungDongChinhTay } from "@/lib/cham-cong/sua-gio-quet";
+import { HO_CENTER_ID, loadCenterMap } from "@/lib/cham-cong/home-center";
 
 type Res = { ok: true } | { ok: false; error: string };
 
@@ -123,6 +127,151 @@ export async function setDayAbsenceAction(input: unknown): Promise<Res> {
   });
   revalidatePath("/cham-cong");
   revalidatePath("/cham-cong/thong-ke");
+  revalidatePath("/cham-cong/ky-cong");
+  return { ok: true };
+}
+
+
+// ── SỬA GIỜ QUÉT NGOÀI LUỒNG ĐƠN (chốt chủ dự án 09/09/2026) ───────────────────────────────
+//
+// Quản lý sửa được giờ quét mà KHÔNG cần người lao động nộp đơn. Đổi lại: lý do BẮT BUỘC —
+// đó là thứ thay cho "đơn của người lao động làm căn cứ". Không có đơn thì phải có chữ.
+//
+// ⚠️ GHI THÊM, KHÔNG SỬA ĐÈ. Dòng quét gốc BẤT BIẾN; lượt sửa sinh dòng `StaffTimeLog` MỚI
+// mang `source: "MANUAL_ADJUST"`, đi qua ĐÚNG lõi dựng dòng mà đường duyệt đơn TIMESHEET_FIX
+// dùng (`lib/cham-cong/sua-gio-quet.ts`). Không mở đường mutate thứ hai.
+//
+// Cùng nguyên tắc với bút toán điều chỉnh thanh toán: sổ đã ghi thì không tẩy xoá, sai thì
+// ghi thêm dòng. Và nó giữ được câu "giờ quét THẬT là gì" trả lời được sau này.
+//
+// BỐN CỔNG, bỏ cái nào cũng mở một lỗ:
+//   1. quyền `hr_attendance:adjust` tại cơ sở CHỊU CÔNG của ngày đó (không phải cơ sở người bấm);
+//   2. lý do không rỗng;
+//   3. kỳ đã chốt — dùng lại `chanSuaKyDaChot`, đường vượt cấp Hội sở cùng khuôn
+//      `generateMonthAction` / `decideRequestAction`;
+//   4. AuditLog before/after.
+// Đây là đường ghi THỨ TƯ vào kỳ; ba đường kia đều đã có cổng 3.
+const suaGioSchema = z.object({
+  userId: z.string().min(1),
+  workDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  /** "HH:mm" giờ VN. null = không đụng mốc này. */
+  gioVao: z.string().trim().regex(/^\d{1,2}:\d{2}$/).nullable(),
+  gioRa: z.string().trim().regex(/^\d{1,2}:\d{2}$/).nullable(),
+  /** Căn cứ thay cho đơn — BẮT BUỘC, tối thiểu 5 ký tự. */
+  lyDo: z.string().trim().min(5, "Ghi lý do sửa giờ (tối thiểu 5 ký tự) — đây là căn cứ thay cho đơn").max(300),
+  /** Đường vượt cổng "kỳ đã chốt sổ" — chỉ cấp Hội sở. */
+  boQuaKyDaChot: z.boolean().optional(),
+});
+
+export async function suaGioQuetTayAction(input: unknown): Promise<Res> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  const p = suaGioSchema.safeParse(input);
+  if (!p.success) return { ok: false, error: p.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  if (!p.data.gioVao && !p.data.gioRa) return { ok: false, error: "Nhập ít nhất một mốc giờ (vào hoặc ra)" };
+
+  const [y, m, d] = p.data.workDate.split("-").map(Number);
+  const workDate = new Date(Date.UTC(y, m - 1, d));
+  const sdb = scopedDb(await resolveActor(session.user.id));
+
+  // ── Cơ sở CHỊU CÔNG của ngày đó ────────────────────────────────────────────────────
+  //
+  // Ưu tiên ô lưới (`ShiftAssignment`) vì nó mang cả `orgUnitId`; ngày chưa có ca thì rơi về
+  // dòng công đã tính. Không có cả hai ⇒ không xác định được cơ sở, và đoán bừa `centerId` là
+  // ghi một dòng vô hình với chính người cần thấy nó.
+  const [oLuoi, ngay] = await Promise.all([
+    sdb.shiftAssignment.findFirst({
+      where: { userId: p.data.userId, workDate, status: "ACTIVE" },
+      select: { centerId: true, orgUnitId: true },
+    }),
+    sdb.staffAttendanceDay.findUnique({
+      where: { userId_workDate: { userId: p.data.userId, workDate } },
+      select: { centerId: true, status: true },
+    }),
+  ]);
+  const centerId = oLuoi?.centerId ?? ngay?.centerId ?? null;
+  if (!centerId) {
+    return { ok: false, error: "Ngày này chưa có ca xếp và chưa được tính — chưa xác định được cơ sở chịu công" };
+  }
+  const map = await loadCenterMap();
+  // ⚠️ `eslint-disable-next-line` phủ ĐÚNG MỘT dòng kế tiếp — nên phép so phải nằm trọn
+  //    trên dòng ngay dưới nó. Tách xuống nhiều dòng là chú thích trượt và lint đỏ lại.
+  //
+  // TRA DỮ LIỆU, không phải kiểm quyền: tìm `orgUnitId` của cơ sở đã xác định ở trên.
+  // Cổng quyền là `checkPermission` ngay dưới, target là chính `centerId` này.
+  // eslint-disable-next-line no-restricted-syntax -- tra orgUnitId theo centerId, không phải cổng quyền
+  const ouTheoCoSo = Object.values(map.byCode).find((c) => c.centerId === centerId)?.orgUnitId ?? null;
+  const orgUnitId = oLuoi?.orgUnitId ?? ouTheoCoSo;
+
+  // ── CỔNG 1: quyền tại cơ sở chịu công ──────────────────────────────────────────────
+  // `scopedDb` KHÔNG che đường ghi — phải tự gác, và target phải là cơ sở THẬT của ngày đó.
+  if (!(await checkPermission("hr_attendance:adjust", { centerId }))) {
+    return { ok: false, error: "Không có quyền chỉnh công ở cơ sở này" };
+  }
+
+  // ── CỔNG 3: kỳ đã chốt ─────────────────────────────────────────────────────────────
+  const periodKey = p.data.workDate.slice(0, 7);
+  const kyChot = await sdb.attendancePeriod.findFirst({
+    where: { centerId, periodKey, status: "LOCKED" },
+    select: { periodKey: true, status: true },
+  });
+  if (kyChot) {
+    const loi = chanSuaKyDaChot({ status: kyChot.status, periodKey: kyChot.periodKey });
+    // Đường vượt cấp HỘI SỞ. Cơ sở tự vượt cổng chặn của chính mình thì cổng đó không tồn tại.
+    if (!p.data.boQuaKyDaChot) return { ok: false, error: loi! };
+    if (!(await checkPermission("hr_attendance:close-period", { centerId: HO_CENTER_ID }))) {
+      return { ok: false, error: "Chỉ cấp Hội sở mới sửa được giờ quét của kỳ đã chốt" };
+    }
+  }
+
+  // ── Dựng dòng qua LÕI DÙNG CHUNG ───────────────────────────────────────────────────
+  const now = new Date();
+  const dung = dungDongChinhTay({
+    userId: p.data.userId,
+    centerId,
+    orgUnitId,
+    workDate,
+    gioVao: p.data.gioVao,
+    gioRa: p.data.gioRa,
+    actorId: session.user.id,
+    now,
+    lyDo: p.data.lyDo,
+    canCu: { kieu: "SUA_TAY" },
+  });
+  if (!dung.ok) return { ok: false, error: dung.error };
+
+  // ── CỔNG 4: AuditLog before/after ──────────────────────────────────────────────────
+  //
+  // "Before" của một sổ GHI THÊM là BỨC TRANH lượt quét đang có, không phải một dòng bị đổi.
+  // Chụp nó TRƯỚC khi ghi — sau khi ghi thì không dựng lại được nữa.
+  const truoc = await sdb.staffTimeLog.findMany({
+    where: { userId: p.data.userId, workDate, result: "ACCEPTED" },
+    select: { direction: true, loggedAt: true, source: true, flags: true },
+    orderBy: { loggedAt: "asc" },
+  });
+
+  await sdb.staffTimeLog.createMany({ data: dung.rows });
+  await markAttendanceDayDirty(p.data.userId, workDate, { reason: "SUA_GIO_TAY" });
+
+  await writeAudit({
+    actor: { id: session.user.id, name: session.user.name ?? "" },
+    module: "hr_attendance",
+    entityType: "StaffTimeLog",
+    entityId: `${p.data.userId}:${p.data.workDate}`,
+    action: "MANUAL_TIME_ADJUST",
+    oldValues: {
+      luotQuetDangCo: truoc.map((t) => ({ dir: t.direction, luc: t.loggedAt.toISOString(), nguon: t.source, co: t.flags })),
+    },
+    newValues: {
+      themMoi: dung.rows.map((r) => ({ dir: r.direction, luc: (r.loggedAt as Date).toISOString(), nguon: "MANUAL_ADJUST" })),
+      // Ghi thẳng ra: lượt này KHÔNG đi kèm đơn nào. Đọc audit sau này phân biệt được ngay.
+      canCu: "SUA_TAY_KHONG_DON",
+      boQuaKyDaChot: kyChot ? true : false,
+    },
+    reason: p.data.lyDo,
+  });
+
+  revalidatePath("/cham-cong");
   revalidatePath("/cham-cong/ky-cong");
   return { ok: true };
 }

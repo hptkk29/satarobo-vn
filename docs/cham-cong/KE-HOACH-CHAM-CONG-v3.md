@@ -57,6 +57,12 @@
 
 ## PHẦN 0 — BA VIỆC ĐANG CHẢY MÁU TRÊN PROD (không đổi)
 
+> **Nghiệm thu trên `test.satarobo.vn` 05/09/2026 (deploy `41a5e168` + `4b12862a`), CI xanh toàn bộ:**
+> · `uat.giaovien` (GV thuần, neo CS1) quét mã CS1 → mở đúng `/teacher/cham-cong/checkin?c=&t=`, Check-in thành công 14:35, bấm lại báo "Hôm nay đã check-in rồi"; bảng admin `/cham-cong` hiện dòng đúng ngày 05/09 · quét mã CS2 → **bị từ chối** kèm tên cơ sở (0.3) · menu có mục "Chấm công" + trang hướng dẫn.
+> · `uat.giaovu` (CENTER_CLASS_MANAGER — vai vừa cấp) mở được màn check-in và Check-in thành công 14:50 (0.2; trước đây bị đá về Dashboard).
+> · `uat.giamdoc` xin mã QR của CS2 → `Forbidden` (scope CENTER của `hr_attendance:view` đúng).
+> · **Phát hiện kèm:** trên `test.satarobo.vn` host là `unknown` ⇒ proxy đi nhánh 3 như localhost, KHÔNG qua `decideRoute`; phải vá đối xứng ở `proxy.ts` nhánh 3 (`77eecba4`) thì bản vá 0.1 mới chạy trên test/dev. Và **DB của app test KHÔNG phải DB `mqvo…` mà `.env` máy dev trỏ tới** (dòng chấm công ghi trên test không thấy khi tra `mqvo…`).
+
 ### 0.1 🔴 Giáo viên thuần không chấm công được — từ 10/07/2026 → **ĐÃ VÁ 05/09**
 
 QR mã hoá `admin.satarobo.vn/cham-cong/checkin?c=…&t=…` (`api/admin/cham-cong/qr-token/route.ts:26`) → `decideRoute` đá GV thuần khỏi host admin **vô điều kiện** (`lib/auth/route-policy.ts`: `teacherSiteOn && isTeacherOnly → 307 sang giaovien.satarobo.vn`) → site GV **không có** `cham-cong` trong `TEACHER_ROUTE_SEGMENTS`. Quyền thì đủ.
@@ -406,6 +412,14 @@ Kế hoạch **không đánh giá** căn cứ trên là đủ hay không cho lo�
 
 - Branch protection `main`/`test` chỉ bắt buộc **Quality + Unit tests (Vitest)**; CI **không chạy r1..r6** (2 bộ test chấm công cũ chưa từng chạy); `include` của `vitest.config.ts:13-30` là bộ lọc **cứng**; R7 đang bão hoà (1680s).
 - **Quyết định:** test lõi → `tests/cham-cong/**` (Vitest) + khai `include` + bước trong job `chat-db-tests`; **chủ dự án thêm required check** cho job đó. Spec browser → `tests/e2e/a0`. Mock GPS: repo **chưa có ví dụ** — xây mới. Không viết AC "e2e chứng minh chặn fake GPS".
+- 🔴 **CÒN NỢ — đo lại 08/09/2026: việc "thêm required check" CHƯA LÀM.**
+  `gh api repos/hptkk29/satarobo-vn/branches/main/protection` trả `contexts` đúng hai mục
+  *Quality* + *Unit tests (Vitest)*; `chat-db-tests` **không có trong đó** trên cả `main`
+  lẫn `test`. Nghĩa là `tests/cham-cong/**` chạy đầy đủ 37 ca và báo đỏ đúng, nhưng
+  **không chặn được ai merge** — đúng luật 10.
+  Kèm hai cờ cũng chưa bật: `enforce_admins = false` (admin merge đè được cả hai cổng
+  đang có) và `strict = false` (PR xanh trên base cũ vẫn merge được). Chỉ chủ dự án đặt
+  được, ở GitHub Settings.
 - `grep workRequest tests/` = **0 hit** — ma trận duyệt (đúng/sai cơ sở, HO, đua duyệt, nộp muộn) phải có test đỏ **trước** khi sửa action (luật cứng #5).
 
 ---

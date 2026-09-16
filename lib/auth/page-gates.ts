@@ -91,6 +91,14 @@ export const PAGE_GATES = {
 
   /** Cảnh báo rủi ro HV. GV KHÔNG vào: trang không có lọc theo lớp, cho GV vào là
    *  mở toàn cơ sở — đúng thứ câu 19 cấm. */
+  /** Quản lý chia lead (29/08) — Quản trị + Quản lý cơ sở; QLCS chỉ thấy cơ sở mình. */
+  // `leads:rotation-view` thêm 16/09/2026 khi hợp nhất `main`: màn "Sổ lượt chia lead"
+  // (S-5, quyền CHỈ ĐỌC cho tổ Sale) đã nhập vào màn này từ 30/08, nên quyền đọc phải
+  // theo sang — không thì người giữ nó mất chỗ xem mà không có lỗi nào báo.
+  // An toàn vì mọi việc GHI ở đây tự gác riêng (`_actions.ts` gọi `checkPermission(perm)`),
+  // cổng trang chỉ quyết "mở được màn hay không".
+  "/quan-ly-chia-lead": ["lead_pool:manage", "leads:rotation-view"],
+
   "/canh-bao-rui-ro": ["parent-requests:manage"],
 
   /** Ghi chú chăm sóc HV. Cùng lý do /canh-bao-rui-ro. Sale vào bằng chính
@@ -130,7 +138,10 @@ export const PAGE_GATES = {
    * ⚠️ Vào được TRANG ≠ xem được mọi cơ sở: phạm vi do `rotationBoardScope`
    * (lib/lead/rotation.ts) chặn — Sale chỉ thấy sổ cơ sở mình.
    */
-  "/leads/so-luot": ["leads:view-all", "leads:rotation-view"],
+  // "/leads/so-luot" — GỠ 16/09/2026 khi hợp nhất `main`. Màn "Sổ lượt chia lead" đã
+  // nhập vào `/quan-ly-chia-lead` (chốt 30/08), đường cũ nay chỉ còn một dòng
+  // `redirect`. Giữ mục ở đây là bảng đòi một trang có cổng mà trang đó không còn gác
+  // gì — và `page-gates.test.ts` bắt đúng chỗ đó.
 
   /** G-D (21/08/2026) — nhập nhanh khách hàng, bản CÓ ĐĂNG NHẬP thay cho biểu mẫu
    *  công khai `sale.satarobo.vn`. Ai nhập được lead thì vào được: marketing,

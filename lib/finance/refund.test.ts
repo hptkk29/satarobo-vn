@@ -1,120 +1,161 @@
 // W3-1 / LMS-9 — computeRefund (THUẦN). Pure: Σ confirmed − buổi đã học × đơn giá, clamp ≥0.
-// HT (27/08/2026) — thêm `soTienConCoTheHoan`: mẫu số của computeRefund phải là số CÒN
-// LẠI THẬT, không phải số gộp. Trước khi vá, lần hoàn thứ hai đề xuất trên số gộp như
-// thể lần một chưa xảy ra — đó là đường hoàn dư.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, it, expect } from "vitest";
-import { computeRefund, soTienConCoTheHoan } from "@/lib/finance/refund";
+import { computeRefund } from "@/lib/finance/refund";
 
 describe("[W3-1] computeRefund", () => {
   it("đơn giá = round(finalPrice / sessionsTotal)", () => {
-    expect(computeRefund({ paidConfirmed: 0, finalPrice: 9_000_000, sessionsTotal: 24, sessionsLearned: 0 }).unitPrice).toBe(375_000);
+    expect(
+      computeRefund({
+        paidConfirmed: 0,
+        finalPrice: 9_000_000,
+        sessionsTotal: 24,
+        sessionsLearned: 0,
+      }).unitPrice,
+    ).toBe(375_000);
     // làm tròn
-    expect(computeRefund({ paidConfirmed: 0, finalPrice: 1_000_000, sessionsTotal: 3, sessionsLearned: 0 }).unitPrice).toBe(333_333);
+    expect(
+      computeRefund({
+        paidConfirmed: 0,
+        finalPrice: 1_000_000,
+        sessionsTotal: 3,
+        sessionsLearned: 0,
+      }).unitPrice,
+    ).toBe(333_333);
   });
 
   it("chưa học buổi nào → hoàn ≈ đã đóng", () => {
-    const r = computeRefund({ paidConfirmed: 9_000_000, finalPrice: 9_000_000, sessionsTotal: 24, sessionsLearned: 0 });
+    const r = computeRefund({
+      paidConfirmed: 9_000_000,
+      finalPrice: 9_000_000,
+      sessionsTotal: 24,
+      sessionsLearned: 0,
+    });
     expect(r.proposedAmount).toBe(9_000_000);
   });
 
   it("học giữa khoá → hoàn = đã đóng − buổi học × đơn giá", () => {
     // 9tr / 24 buổi = 375k. Đã đóng 9tr, học 8 buổi → 9tr − 8×375k = 6tr.
-    const r = computeRefund({ paidConfirmed: 9_000_000, finalPrice: 9_000_000, sessionsTotal: 24, sessionsLearned: 8 });
+    const r = computeRefund({
+      paidConfirmed: 9_000_000,
+      finalPrice: 9_000_000,
+      sessionsTotal: 24,
+      sessionsLearned: 8,
+    });
     expect(r.unitPrice).toBe(375_000);
     expect(r.proposedAmount).toBe(6_000_000);
   });
 
   it("học hết → hoàn 0", () => {
-    const r = computeRefund({ paidConfirmed: 9_000_000, finalPrice: 9_000_000, sessionsTotal: 24, sessionsLearned: 24 });
+    const r = computeRefund({
+      paidConfirmed: 9_000_000,
+      finalPrice: 9_000_000,
+      sessionsTotal: 24,
+      sessionsLearned: 24,
+    });
     expect(r.proposedAmount).toBe(0);
   });
 
   it("clamp ≥ 0 (học quá số buổi / đóng thiếu)", () => {
-    const r = computeRefund({ paidConfirmed: 1_000_000, finalPrice: 9_000_000, sessionsTotal: 24, sessionsLearned: 24 });
+    const r = computeRefund({
+      paidConfirmed: 1_000_000,
+      finalPrice: 9_000_000,
+      sessionsTotal: 24,
+      sessionsLearned: 24,
+    });
     expect(r.proposedAmount).toBe(0);
   });
 
   it("sessionsTotal = 0 → đơn giá 0, hoàn = đã đóng", () => {
-    const r = computeRefund({ paidConfirmed: 2_000_000, finalPrice: 9_000_000, sessionsTotal: 0, sessionsLearned: 0 });
+    const r = computeRefund({
+      paidConfirmed: 2_000_000,
+      finalPrice: 9_000_000,
+      sessionsTotal: 0,
+      sessionsLearned: 0,
+    });
     expect(r.unitPrice).toBe(0);
     expect(r.proposedAmount).toBe(2_000_000);
   });
 });
 
-describe("[HT-20] soTienConCoTheHoan — mẫu số của đề xuất hoàn", () => {
-  it("chưa hoàn lần nào → còn nguyên số thực thu", () => {
-    expect(soTienConCoTheHoan({ thucThu: 9_000_000, daDuyetHoan: 0, daGhiSoHoan: 0 })).toBe(
-      9_000_000,
+// ── Cầu dao tính năng (08/09/2026) ────────────────────────────────────────────
+//
+// `RefundRequest` = 0 dòng trên prod, NHƯNG đường ghi còn sống (2 caller: gỡ học viên
+// khỏi lớp, huỷ lớp) ⇒ bom hẹn giờ theo docs/luat-doc-so-va-ket-luan.md §Luật 1.
+//
+// Test này khoá HAI thứ: cầu dao đang bật, và nó chặn ở CỬA DUY NHẤT chứ không phải
+// rải ở từng caller.
+const doc = (f: string) => readFileSync(join(__dirname, f), "utf8");
+
+describe("cầu dao hoàn tiền", () => {
+  it("cầu dao ĐANG BẬT — xoá hằng này là mở lại đường ghi", async () => {
+    const { REFUND_REQUEST_DISABLED } = await import("./cau-dao-hoan-tien");
+    expect(REFUND_REQUEST_DISABLED).toBe(true);
+  });
+
+  it("chặn ở createRefundRequest — cửa DUY NHẤT, không rải ở từng caller", async () => {
+    const src = doc("refund.ts");
+    expect(src).toContain("REFUND_REQUEST_DISABLED");
+    // Cầu dao phải đứng TRƯỚC truy vấn đầu tiên: nó trả lời được mà không cần đọc gì,
+    // và đặt sau là "chặn nhưng vẫn đi hỏi DB".
+    expect(src.indexOf("if (REFUND_REQUEST_DISABLED)")).toBeLessThan(
+      src.indexOf("enrollment.findFirst"),
     );
   });
 
-  it("chưa thu đồng nào → 0 (không đẻ ra yêu cầu hoàn rỗng)", () => {
-    expect(soTienConCoTheHoan({ thucThu: 0, daDuyetHoan: 0, daGhiSoHoan: 0 })).toBe(0);
-  });
-
-  it("hoàn lần một ĐÃ ghi sổ → thực thu đã tự trừ, không trừ thêm lần nữa", () => {
-    // thucThu = 9tr − 4tr = 5tr; đề xuất đã duyệt 4tr và bút toán âm 4tr đã có.
-    expect(soTienConCoTheHoan({ thucThu: 5_000_000, daDuyetHoan: 4_000_000, daGhiSoHoan: 4_000_000 })).toBe(
-      5_000_000,
+  it("trả null chứ KHÔNG ném — hàm chạy trong transaction gỡ học viên", async () => {
+    // Ném ở đây là cuộn ngược cả việc gỡ: "không đề xuất được tiền" biến thành "không
+    // gỡ được học viên". Khoá lại bằng chữ, vì hành vi này là quyết định chứ không phải
+    // tiện tay.
+    const src = doc("refund.ts");
+    const than = src.slice(
+      src.indexOf("if (REFUND_REQUEST_DISABLED)"),
+      src.indexOf("const client: DbClient"),
     );
+    expect(than).toContain("return null");
+    expect(than).not.toContain("throw");
   });
 
-  it("đã DUYỆT nhưng kế toán CHƯA ghi bút toán âm → trừ phần đang chờ chi", () => {
-    // Cửa sổ chết người: approveRefund() chỉ đổi trạng thái yêu cầu, KHÔNG ghi Payment âm.
-    // Không trừ ở đây thì đề xuất lần hai vẫn đề nghị hoàn trọn 9tr.
-    expect(soTienConCoTheHoan({ thucThu: 9_000_000, daDuyetHoan: 4_000_000, daGhiSoHoan: 0 })).toBe(
-      5_000_000,
-    );
+  it("mỗi lần chạm cầu dao đều để lại dấu (AuditLog + console)", async () => {
+    const src = doc("cau-dao-hoan-tien.ts");
+    expect(src).toContain("REFUND_REQUEST_BLOCKED");
+    expect(src).toContain("writeAudit");
+    // Ghi log hỏng KHÔNG được làm hỏng lượt gỡ học viên.
+    expect(src).toContain("catch");
   });
 
-  it("kế toán ghi hoàn THẲNG, không qua đề xuất → không trừ âm hai lần", () => {
-    // daGhiSoHoan > daDuyetHoan ⇒ phần "chờ chi" clamp về 0, chứ không cộng ngược lên.
-    expect(soTienConCoTheHoan({ thucThu: 7_000_000, daDuyetHoan: 0, daGhiSoHoan: 2_000_000 })).toBe(
-      7_000_000,
-    );
-  });
-
-  it("đã duyệt hoàn nhiều hơn số còn lại → clamp về 0, không trả số âm", () => {
-    expect(soTienConCoTheHoan({ thucThu: 3_000_000, daDuyetHoan: 9_000_000, daGhiSoHoan: 0 })).toBe(0);
-  });
-
-  it("hoàn vượt số đã thu (sổ đã âm) → 0, không đề xuất hoàn tiếp", () => {
-    expect(soTienConCoTheHoan({ thucThu: -1_000_000, daDuyetHoan: 0, daGhiSoHoan: 0 })).toBe(0);
+  it("file cầu dao ghi ĐỦ 4 điều kiện gỡ", async () => {
+    // Cầu dao không có điều kiện gỡ là cầu dao ở lại vĩnh viễn.
+    const src = doc("cau-dao-hoan-tien.ts");
+    expect(src).toContain("ĐIỀU KIỆN GỠ");
+    for (const n of ["1.", "2.", "3.", "4."])
+      expect(src).toContain(`//   ${n}`);
   });
 });
 
-describe("[HT-21] computeRefund trên mẫu số đã vá — hoàn lần hai", () => {
-  // Ghi danh 9tr / 24 buổi, đã đóng đủ 9tr, học 8 buổi (đơn giá 375k).
-  const KHOA = { finalPrice: 9_000_000, sessionsTotal: 24, sessionsLearned: 8 };
-
-  it("lần một: đề xuất 6tr", () => {
-    const conLai = soTienConCoTheHoan({ thucThu: 9_000_000, daDuyetHoan: 0, daGhiSoHoan: 0 });
-    expect(computeRefund({ paidConfirmed: conLai, ...KHOA }).proposedAmount).toBe(6_000_000);
-  });
-
-  it("lần hai SAU khi đã hoàn 6tr và ghi sổ: đề xuất 0 — không hoàn dư", () => {
-    const conLai = soTienConCoTheHoan({
-      thucThu: 3_000_000, // 9tr − 6tr đã hoàn
-      daDuyetHoan: 6_000_000,
-      daGhiSoHoan: 6_000_000,
+// Vì sao phải chặn — giữ con số biết nói ngay cạnh cầu dao.
+describe("computeRefund — lý do dựng cầu dao", () => {
+  it("sessionsLearned = 0 vì status chưa đóng ⇒ đề xuất hoàn TOÀN BỘ học phí", () => {
+    // Lớp 20 buổi, đã dạy gần hết, phụ huynh đóng đủ 10.000.000.
+    // Prod 07/09: 2 COMPLETED / 287 SCHEDULED ⇒ sessionsLearned đọc ra 0.
+    const { proposedAmount } = computeRefund({
+      paidConfirmed: 10_000_000,
+      finalPrice: 10_000_000,
+      sessionsTotal: 20,
+      sessionsLearned: 0,
     });
-    expect(conLai).toBe(3_000_000);
-    // 3tr − 8×375k = 0 → clamp.
-    expect(computeRefund({ paidConfirmed: conLai, ...KHOA }).proposedAmount).toBe(0);
+    expect(proposedAmount).toBe(10_000_000); // 100% — đây chính là quả bom
   });
 
-  it("LỖI CŨ tái hiện: lấy số gộp làm mẫu số → đề xuất 6tr lần thứ hai (hoàn dư)", () => {
-    // Đây là hành vi trước khi vá — giữ lại làm mốc so sánh, KHÔNG phải hành vi mong muốn.
-    expect(computeRefund({ paidConfirmed: 9_000_000, ...KHOA }).proposedAmount).toBe(6_000_000);
-  });
-
-  it("lần hai KHI lần một đã duyệt mà chưa ghi sổ: cũng không đề xuất dư", () => {
-    const conLai = soTienConCoTheHoan({
-      thucThu: 9_000_000, // bút toán âm chưa được kế toán ghi
-      daDuyetHoan: 6_000_000,
-      daGhiSoHoan: 0,
+  it("cùng lớp đó, nếu status đúng (đã dạy 18/20) thì chỉ hoàn 1.000.000", () => {
+    const { proposedAmount } = computeRefund({
+      paidConfirmed: 10_000_000,
+      finalPrice: 10_000_000,
+      sessionsTotal: 20,
+      sessionsLearned: 18,
     });
-    expect(conLai).toBe(3_000_000);
-    expect(computeRefund({ paidConfirmed: conLai, ...KHOA }).proposedAmount).toBe(0);
+    expect(proposedAmount).toBe(1_000_000);
   });
 });

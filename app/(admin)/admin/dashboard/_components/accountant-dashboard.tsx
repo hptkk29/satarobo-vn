@@ -2,10 +2,26 @@ import Link from "next/link";
 import { safeCache } from "@/lib/cache/safe-cache";
 import { Wallet, AlertTriangle, TrendingUp } from "lucide-react";
 import { scopedDb } from "@/lib/db-scope";
+// R-13 — DÙNG LẠI bộ tổng hợp của /bao-cao/trung-tam, không viết công thức thứ 8.
+import { summarizeFinance, revenueByCenter } from "@/lib/reports/trung-tam";
 import type { Actor } from "@/lib/auth/actor";
 import { CACHE_TAGS } from "@/lib/cache/tags";
 import { actorScopeKey } from "@/lib/cache/scope-key";
-import { WHERE_THUC_THU } from "@/lib/finance/thuc-thu";
+
+// ⚠️ R-13 (13/09/2026) — GỠ `PAID_STATUSES`.
+//
+// Trước bản vá, CẢ NĂM con số tiền của màn này suy từ `Order.totalAmount` + `Order.status`,
+// KHÔNG chạm bảng `Payment` một lần nào. Công thức đó đúng bằng `paidOf`
+// (`lib/finance/debt.ts:14-16` — "status ∈ {CONFIRMED,COMPLETED} ⇒ đã trả TOÀN BỘ"), mà
+// chính repo đã ghi là thứ KHÔNG màn hình nào nên dùng (`scripts/shadow-compare-debt.ts:16-18`).
+//
+// Hệ quả: đơn đóng 90% vẫn bị tính nợ 100%; đơn CONFIRMED mà chưa ghi đủ khoản thì nợ = 0;
+// và màn Công nợ (`getDebtRows`) không bao giờ khớp được với màn này. Sắp tới có CỌC thì
+// sai nặng hơn — đóng 500.000đ mà ô "Đã thu" cộng đủ 7.920.000đ.
+//
+// Nay dùng lại ĐÚNG bộ tổng hợp đang chạy ở `/bao-cao/trung-tam`
+// (`lib/reports/trung-tam.ts` — thuần, có unit test, đã vá mù REFUNDED/ADJUSTED cùng lượt).
+// KHÔNG viết công thức mới: hệ đã có ≥7 định nghĩa "đã thu", thêm một cái nữa là thành 8.
 
 function vnd(n: number): string {
   return `${n.toLocaleString("vi-VN")}đ`;
@@ -19,25 +35,45 @@ async function getAccountantStats(actor: Actor) {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const overdueBefore = new Date(now.getTime() - 7 * 86400000); // PENDING_PAYMENT > 7 ngày
 
-  // FL0 — cách ly cơ sở: Order/Payment ∈ SCOPED_MODELS → scopedDb lọc theo tầm nhìn cơ sở.
+  // FL0 — cách ly cơ sở: Order + Payment ∈ SCOPED_MODELS → scopedDb lọc theo tầm nhìn.
+  // `aggregate`/`groupBy`/`findMany` đều nằm trong 7 method được bọc (`lib/db-scope.ts`).
   const sdb = scopedDb(actor);
-  // B-02 · quyết định B3 (24/08/2026) — "đã thu"/"doanh thu" là THỰC THU: Σ Payment kế
-  // toán đã xác nhận, ĐÃ trừ hoàn và ĐÃ thay bản gốc bằng bản điều chỉnh. Trước đây hai ô
-  // này cộng `Order.totalAmount` của đơn CONFIRMED/COMPLETED — tức giá trị hợp đồng, mà
-  // hoàn/điều chỉnh không bao giờ đụng tới ⇒ số phồng và phồng im lặng.
-  // Công nợ vẫn tính trên Order.PENDING_PAYMENT (không nằm trong quyết định B3).
-  const [paidAgg, debtAgg, revenueMonth, debtByCenter, overdueOrders, centers] = await Promise.all([
-    sdb.payment.aggregate({ where: WHERE_THUC_THU, _sum: { amount: true } }),
-    sdb.order.aggregate({ where: { status: "PENDING_PAYMENT" }, _sum: { totalAmount: true } }),
-    sdb.payment.aggregate({
-      where: { ...WHERE_THUC_THU, paidDate: { gte: monthStart } },
-      _sum: { amount: true },
+  const [paymentRows, enrollmentRows, overdueOrders, centers] = await Promise.all([
+    // R-13 — ĐỌC SỔ TIỀN. `id` + `adjustmentOfId` bắt buộc: thiếu chúng thì khoản đã bị
+    // ĐIỀU CHỈNH vẫn được đếm bằng số CŨ (xem `lib/reports/trung-tam.ts`).
+    sdb.payment.findMany({
+      where: { deletedAt: null },
+      select: {
+        id: true,
+        centerId: true,
+        amount: true,
+        accountantStatus: true,
+        paidDate: true,
+        adjustmentOfId: true,
+      },
+      take: 5000,
     }),
-    sdb.order.groupBy({
-      by: ["centerId"],
-      where: { status: "PENDING_PAYMENT" },
-      _sum: { totalAmount: true },
-    }),
+    // Phải thu bám GHI DANH (`Enrollment.finalPrice`) — cùng nguồn với `/bao-cao/trung-tam`.
+    // Enrollment KHÔNG thuộc SCOPED_MODELS nên lọc theo lớp đã scope, không lọc thẳng.
+    sdb.class
+      .findMany({ select: { id: true, centerId: true } })
+      .then(async (classes) => {
+        const byClass = new Map(classes.map((c) => [c.id, c.centerId]));
+        // `sdb` chứ không phải `db` trần: ESLint R6-F1 chặn, và `Enrollment` KHÔNG
+        // thuộc SCOPED_MODELS nên cách ly cơ sở đã được ép TAY bằng `classId in byClass`.
+        const rows = await sdb.enrollment.findMany({
+          where: { deletedAt: null, classId: { in: [...byClass.keys()] } },
+          select: { studentId: true, classId: true, finalPrice: true, tuition: true, enrolledAt: true },
+          take: 5000,
+        });
+        return rows.map((e) => ({
+          studentId: e.studentId,
+          centerId: byClass.get(e.classId) ?? null,
+          finalPrice: e.finalPrice,
+          tuition: e.tuition,
+          enrolledAt: e.enrolledAt,
+        }));
+      }),
     sdb.order.findMany({
       where: { status: "PENDING_PAYMENT", createdAt: { lt: overdueBefore } },
       orderBy: { createdAt: "asc" },
@@ -52,14 +88,19 @@ async function getAccountantStats(actor: Actor) {
   ]);
 
   const centerName = new Map(centers.map((c) => [c.id, c.name]));
+  const finance = summarizeFinance(paymentRows, enrollmentRows);
+  const byCenter = revenueByCenter(paymentRows, enrollmentRows);
+  const thangNay = paymentRows.filter((p) => p.paidDate >= monthStart);
   return {
-    paid: paidAgg._sum.amount ?? 0,
-    debt: debtAgg._sum.totalAmount ?? 0,
-    revenueMonth: revenueMonth._sum.amount ?? 0,
-    debtByCenter: debtByCenter.map((d) => ({
-      label: d.centerId ? centerName.get(d.centerId) ?? "—" : "Chưa gán cơ sở",
-      amount: d._sum.totalAmount ?? 0,
-    })),
+    paid: finance.confirmedRevenue,
+    debt: finance.debt,
+    revenueMonth: summarizeFinance(thangNay, []).confirmedRevenue,
+    debtByCenter: byCenter
+      .filter((c) => c.debt > 0)
+      .map((c) => ({
+        label: c.centerId === "—" ? "Chưa gán cơ sở" : centerName.get(c.centerId) ?? "—",
+        amount: c.debt,
+      })),
     overdueOrders: overdueOrders.map((o) => ({
       id: o.id,
       studentName: o.student?.name ?? "—",

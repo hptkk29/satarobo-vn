@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { discountFromPercent, needsDiscountApproval } from "./discount";
+import { discountFromPercent } from "./discount";
 
 // BGĐ 31/07 — giảm giá: % → tiền, và quy tắc "khi nào cần duyệt".
 
@@ -17,15 +17,7 @@ describe("discountFromPercent", () => {
   });
 });
 
-describe("needsDiscountApproval", () => {
-  // 03/08 — hệ mã khuyến mãi đã gỡ: KHÔNG còn ngoại lệ "giảm theo voucher thì
-  // miễn duyệt". Mọi giảm giá đều do nhân viên nhập tay ⇒ đều phải QLCS duyệt.
-  it("giảm giá > 0 → cần duyệt", () => {
-    expect(needsDiscountApproval({ discountAmount: 200_000 })).toBe(true);
-    expect(needsDiscountApproval({ discountAmount: 1 })).toBe(true);
-  });
-
-  it("không giảm → không cần duyệt", () => {
-    expect(needsDiscountApproval({ discountAmount: 0 })).toBe(false);
-  });
-});
+// ⚠️ ĐÃ XOÁ [14/09/2026] — bộ ca của `needsDiscountApproval`, cùng lượt với chính hàm
+// đó. Nó khẳng định "có giảm giá ⇒ cần duyệt", mà cơ chế duyệt đã bỏ; giữ lại là bắt CI
+// chạy mãi cho một luật không còn tồn tại. Luật THAY THẾ có lưới riêng:
+// `lib/orders/price-guard.test.ts` + `lib/orders/bo-duyet.test.ts`.

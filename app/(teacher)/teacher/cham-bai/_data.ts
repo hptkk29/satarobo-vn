@@ -7,7 +7,7 @@
 // khoá GV phụ trách (đề không gắn khoá hiện với mọi người — giữ hành vi cũ).
 import type { Prisma } from "@prisma/client";
 import type { scopedDb } from "@/lib/db-scope";
-import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
+import { rosterWhere } from "@/lib/enrollment-scope";
 import { deserializeQuestionRow } from "@/lib/assignments/question-content-db";
 import {
   assignmentWindow,
@@ -205,12 +205,10 @@ export async function loadTeacherAssignData(
             name: true,
             courseId: true,
             course: { select: { name: true } },
+            // Dialog "Giao bài" giữ "dang-hoc" — đây là sĩ số để chọn lớp giao bài
+            // MỚI, không phải mẫu số của bài đã giao.
             _count: {
-              select: {
-                enrollments: {
-                  where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
-                },
-              },
+              select: { enrollments: { where: rosterWhere("dang-hoc") } },
             },
           },
           orderBy: { name: "asc" },

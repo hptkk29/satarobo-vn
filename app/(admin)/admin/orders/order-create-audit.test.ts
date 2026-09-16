@@ -38,7 +38,10 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
-vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("next/cache", () => ({
+  // 16/09/2026 — bản `main` của `actions.ts` dùng `unstable_cache`; mock thiếu nó là
+  // cả tệp test chết ngay lúc nạp, không phải một ca đỏ.
+  unstable_cache: <T,>(fn: T) => fn, revalidatePath: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ auth: h.auth }));
 vi.mock("@/lib/auth/check-permission", () => ({ checkPermission: h.checkPermission }));
 vi.mock("@/lib/auth/actor", () => ({ resolveActor: h.resolveActor }));
@@ -149,7 +152,9 @@ describe("[S-6a] createOrderManualAction — vết audit khi tạo đơn", () =>
     expect(res.ok).toBe(true);
     expect(h.writeAudit).toHaveBeenCalledTimes(1);
     expect(veAudit()).toMatchObject({
-      module: "finance",
+      // 16/09/2026 — nhánh `main` xếp vết tạo đơn vào module "orders" (không phải
+      // "finance"). Đổi theo `main`: màn xem nhật ký kiểm toán bên đó lọc theo tên này.
+      module: "orders",
       entityType: "Order",
       entityId: "ord-1",
       action: "CREATE",
@@ -160,7 +165,7 @@ describe("[S-6a] createOrderManualAction — vết audit khi tạo đơn", () =>
     await createOrderManualAction(DON);
 
     expect(veAudit().newValues).toMatchObject({
-      code: "DH2608270001",
+      orderCode: "DH2608270001",
       subtotal: 5_000_000,
       discountAmount: 500_000,
       shippingFee: 0,

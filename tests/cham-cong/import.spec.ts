@@ -15,6 +15,18 @@ const isLocal = /(@|\/\/)(localhost|127\.0\.0\.1)[:/]/.test(DB_URL) && /satarobo
 const d = isLocal ? describe : describe.skip;
 if (!isLocal) console.warn(`[cham-cong/import] SKIP: DATABASE_URL không trỏ Postgres local satarobo_test`);
 
+/**
+ * ⚠️ LUẬT CỦA FILE NÀY: **mỗi ca tự dựng thứ nó cần.**
+ *
+ * `beforeAll`/`afterAll` chỉ dựng NGƯỜI + cơ sở + danh mục ca — không dựng lưới phân ca.
+ * Ca nào cần lưới thì tự gọi `applyImport`. KHÔNG được dựa vào lưới do ca trước để lại:
+ * làm vậy là (a) chạy riêng ca đó thì đỏ, (b) một ca chậm bị cắt giữa chừng sẽ đầu độc ca sau
+ * bằng một lỗi mang tên ca sau.
+ *
+ * Kiểm bằng cách chạy RIÊNG từng ca:
+ *   pnpm exec vitest run -c vitest.cham-cong.config.ts tests/cham-cong/import.spec.ts -t "<tên ca>"
+ * Cả bốn ca phải xanh khi chạy một mình.
+ */
 const FIXTURE = path.join(process.cwd(), "tests/fixtures/cham-cong/lich-phan-ca-2026-08-29.xlsx");
 const TAG = "cc-import";
 
@@ -109,6 +121,22 @@ d("applyImport — lưới T09/2026 từ Sheet thật", () => {
   });
 
   it("import lại y hệt → không tạo mới, không huỷ (idempotent); ca MANUAL được giữ", async () => {
+    // ── ARRANGE của CHÍNH ca này ───────────────────────────────────────────────
+    // 🔴 Trước 10/09/2026 ca này MƯỢN lưới do ca "áp T09" ở trên để lại. Hai hậu quả đo được:
+    //   1. Chạy riêng nó thì ĐỎ — `created` ra 486 thay vì 0 (đo bằng `-t "import lại y hệt"`).
+    //      Cách ly hỏng SẴN, không phải chỉ hỏng khi timeout.
+    //   2. Khi ca "áp T09" vượt trần, vitest báo nó fail nhưng KHÔNG huỷ được promise —
+    //      `applyImport` của nó vẫn ghi tiếp trong khi ca này bắt đầu. Hai lượt cùng đọc
+    //      `existing = null` rồi cùng `create` ⇒ `P2002` trên chỉ mục PARTIAL
+    //      `ShiftAssignment_user_date_active_key … WHERE status = 'ACTIVE'`.
+    //      Triệu chứng hiện ở ca NÀY, thủ phạm là ca TRƯỚC — loại lỗi tốn nhất để dò.
+    // Nâng trần chỉ làm (2) hiếm đi, không hết. Ca test phải tự dựng thứ nó cần.
+    // Chạy sau "áp T09" thì lượt này là no-op (mọi ô `unchanged`), trạng thái y hệt.
+    await applyImport(parsed, {
+      db, mapping, periodKeys: ["2026-09"], centerMap,
+      canWriteCenter: () => true, actorUserId: userIds[0], importKhungCa: false,
+    });
+
     const manualUser = mapping["Thầy Khôi"];
     const day = new Date(Date.UTC(2026, 8, 11)); // 11/9: Thầy Khôi có ca T (10/9 trống)
     await db.shiftAssignment.updateMany({ where: { userId: manualUser, workDate: day, status: "ACTIVE" }, data: { source: "MANUAL", templateCode: "SCT" } });
@@ -118,6 +146,46 @@ d("applyImport — lưới T09/2026 từ Sheet thật", () => {
     expect(r.assignments.keptManual).toBe(1);
     const kept = await db.shiftAssignment.findFirst({ where: { userId: manualUser, workDate: day, status: "ACTIVE" } });
     expect(kept?.templateCode).toBe("SCT");
+  });
+
+  it("người ĐÃ GỠ MỀM khỏi khối, nhập lại file ⇒ ô SỐNG LẠI (effectiveTo về null)", async () => {
+    // ── ARRANGE của CHÍNH ca này (luật 18) ─────────────────────────────────────
+    const u = mapping["Thầy Khôi"];
+    await applyImport(parsed, {
+      db, mapping, periodKeys: ["2026-09"], centerMap,
+      canWriteCenter: () => true, actorUserId: userIds[0],
+    });
+
+    // Gỡ MỀM đúng như `removePersonFromBlockAction` làm: chỉ đặt `effectiveTo`,
+    // KHÔNG đổi khoá duy nhất `(userId, centerId, weekday, effectiveFrom)`.
+    const denHet = new Date(Date.UTC(2026, 8, 1));
+    const soDong = await db.shiftWeeklyPattern.updateMany({
+      where: { userId: u, effectiveTo: null },
+      data: { effectiveTo: denHet },
+    });
+    expect(soDong.count, "phải gỡ mềm được ít nhất một ô").toBeGreaterThan(0);
+    expect(await db.shiftWeeklyPattern.count({ where: { userId: u, effectiveTo: null } })).toBe(0);
+
+    // ── ACT: nhập lại chính file đó ────────────────────────────────────────────
+    await applyImport(parsed, {
+      db, mapping, periodKeys: ["2026-09"], centerMap,
+      canWriteCenter: () => true, actorUserId: userIds[0],
+    });
+
+    // ── vế CHẶN: ô phải SỐNG LẠI ───────────────────────────────────────────────
+    // 🔴 Bug 13/09/2026: nhánh `update` của `applyImport` thiếu `effectiveTo: null`, nên
+    // `upsert` sửa ĐÚNG dòng đã đóng mà không mở lại — ghi xong ô vẫn TÀNG HÌNH (màn lọc
+    // `effectiveTo: null`, `generate.ts` bỏ dòng hết hiệu lực). Người dùng thấy "nhập xong
+    // mà người này vẫn không có khung ca". Đường admin đã vá tuần trước; đây là cửa còn lại.
+    const conSong = await db.shiftWeeklyPattern.count({ where: { userId: u, effectiveTo: null } });
+    expect(conSong, "nhập lại file phải mở lại ô đã gỡ mềm").toBeGreaterThan(0);
+
+    // ── vế CHO QUA (luật 16): KHÔNG đụng người khác ────────────────────────────
+    const khac = mapping["Ms Huệ"];
+    expect(
+      await db.shiftWeeklyPattern.count({ where: { userId: khac, effectiveTo: { not: null } } }),
+      "người không bị gỡ thì không được đụng tới",
+    ).toBe(0);
   });
 
   it("QLCS chỉ có quyền CS1 → hàng CS2 và HO bị bỏ qua, đếm riêng, không im lặng", async () => {

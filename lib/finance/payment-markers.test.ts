@@ -26,6 +26,7 @@ import {
   isGatewayNote,
   planOwnedNoteOr,
   phanConPhaiGhi,
+  dauDongSheet,
 } from "./payment-markers";
 
 describe("[MK-01] sổ đăng ký marker — ba HỌ, không trộn", () => {
@@ -167,5 +168,37 @@ describe("[MK-05] phanConPhaiGhi — vế R-01: ghi PHẦN CHÊNH, không ghi l�
     expect(phanConPhaiGhi(Number.NaN, 0)).toBe(0);
     expect(phanConPhaiGhi(3_000_000, Number.NaN)).toBe(3_000_000);
     expect(phanConPhaiGhi(-1, 0)).toBe(0);
+  });
+});
+
+describe("[MK-05] dấu định danh dòng sheet — chống nhập đôi", () => {
+  it("sinh dấu gọn, chỉ chữ và số", () => {
+    expect(dauDongSheet("Tháng 82026 CS1", 12)).toBe("[sheet:Thang82026CS1#12]");
+  });
+
+  it("hai dòng khác nhau ra hai dấu khác nhau", () => {
+    expect(dauDongSheet("Tháng 82026 CS1", 12)).not.toBe(dauDongSheet("Tháng 82026 CS1", 13));
+  });
+
+  it("hai sheet khác nhau ra hai dấu khác nhau", () => {
+    expect(dauDongSheet("Tháng 82026 CS1", 12)).not.toBe(dauDongSheet("Tháng 82026 CS2", 12));
+  });
+
+  it("KHÔNG phá dấu [backfill-import] mà mọi câu tra đang dựa vào", () => {
+    // Viết thành `[backfill-import:...]` là nút xác nhận hàng loạt ở /payments không
+    // thấy khoản nào nữa, và không có lỗi nào báo ra.
+    const note = `Nhập liệu ban đầu ${BACKFILL_PAYMENT_MARKER} ${dauDongSheet("Tháng 82026 CS1", 12)}`;
+    expect(note.includes(BACKFILL_PAYMENT_MARKER)).toBe(true);
+  });
+
+  it("dấu KHÔNG bị coi là khoản của kế hoạch đợt hay của cổng thanh toán", () => {
+    const note = `x ${BACKFILL_PAYMENT_MARKER} ${dauDongSheet("Tháng 82026 CS1", 12)}`;
+    expect(isPlanOwnedNote(note)).toBe(false);
+    expect(isGatewayNote(note)).toBe(false);
+  });
+
+  it("dấu dòng 1 KHÔNG khớp lem vào dòng 12 (contains là phép khớp con chuỗi)", () => {
+    const note = `x ${dauDongSheet("Tháng 82026 CS1", 12)}`;
+    expect(note.includes(dauDongSheet("Tháng 82026 CS1", 1))).toBe(false);
   });
 });

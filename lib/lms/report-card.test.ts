@@ -100,11 +100,11 @@ describe("[#17] recall-edit-by-role (câu 55): siết quyền sửa sau phát h�
 
 describe("[R7-15] số liệu (C1)", () => {
   it("chuyên cần 22/48 → 46%", () => {
-    expect(attendanceRatePercent({ total: 48, attended: 22, absent: 3, needMakeup: 1, madeUp: 2 })).toBe(46);
+    expect(attendanceRatePercent({ total: 48, daDienRa: 48, attended: 22, absent: 3, needMakeup: 1, madeUp: 2 })).toBe(46);
   });
 
   it("tổng 0 buổi → 0%", () => {
-    expect(attendanceRatePercent({ total: 0, attended: 0, absent: 0, needMakeup: 0, madeUp: 0 })).toBe(0);
+    expect(attendanceRatePercent({ total: 0, daDienRa: 0, attended: 0, absent: 0, needMakeup: 0, madeUp: 0 })).toBe(0);
   });
 
   it("điểm TB bài tập chuẩn hoá thang 10 + đếm passed; bỏ qua attempt chưa chấm", () => {
@@ -159,7 +159,7 @@ describe("[LMS-13] bài tập + kỹ năng (W4-a)", () => {
 
 describe("[R7-15] snapshot freeze (C5)", () => {
   const baseMetrics: ReportCardMetrics = {
-    attendance: { total: 48, attended: 22, absent: 3, needMakeup: 1, madeUp: 2, rate: 46 },
+    attendance: { total: 48, daDienRa: 48, attended: 22, absent: 3, needMakeup: 1, madeUp: 2, rate: 46 },
     exams: { count: 5, passed: 4, averageScore: 7.2 },
     computedAt: "2026-06-16T00:00:00.000Z",
   };

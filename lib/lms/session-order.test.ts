@@ -11,6 +11,7 @@ import {
   mediaCoversAttendees,
   compareSessionWorkOrder,
   isSessionWorkComplete,
+  nhanTrangThaiBuoi,
   sessionNumberLabel,
   sortSessionsForWork,
 } from "./session-order";
@@ -219,5 +220,58 @@ describe("buildSessionMediaCoverage", () => {
       { classSessionId: null, isClassWide: true, tags: [{ studentId: "a" }] },
     ]);
     expect(m.size).toBe(0);
+  });
+});
+
+// ── D0 (07/09/2026) — nhãn trạng thái buổi phải ĐỌC status, không suy ra ────────
+//
+// Bug đang khoá: tab Điểm danh in nhãn xanh "Hoàn tất" ngay khi xong ba việc, trong
+// khi `ClassSession.status` vẫn SCHEDULED. Đo trên prod: 2 COMPLETED / 287 SCHEDULED
+// trong 4 tháng — giáo viên không quên bấm, màn hình đã nói với họ là xong.
+describe("nhanTrangThaiBuoi — nguồn nhãn là status, ba việc chỉ là mức sẵn sàng", () => {
+  it("ĐỦ BA VIỆC mà status còn SCHEDULED thì KHÔNG BAO GIỜ là 'đã dạy'", () => {
+    const n = nhanTrangThaiBuoi({ status: "SCHEDULED", daQuaNgay: true, workDone: true });
+    expect(n.loai).toBe("chua-chot");
+    // Đây là dòng chặn bug D0. Nó đỏ nghĩa là nhãn suy-ra đã quay lại.
+    expect(n.loai).not.toBe("da-day");
+    expect(n).toEqual({ loai: "chua-chot", sanSangChot: true });
+  });
+
+  it("IN_PROGRESS đã qua ngày cũng là chưa chốt — không phải riêng SCHEDULED", () => {
+    expect(nhanTrangThaiBuoi({ status: "IN_PROGRESS", daQuaNgay: true, workDone: true })).toEqual({
+      loai: "chua-chot",
+      sanSangChot: true,
+    });
+  });
+
+  it("thiếu việc thì vẫn chưa chốt, nhưng KHÔNG sẵn sàng", () => {
+    expect(nhanTrangThaiBuoi({ status: "SCHEDULED", daQuaNgay: true, workDone: false })).toEqual({
+      loai: "chua-chot",
+      sanSangChot: false,
+    });
+  });
+
+  it("chỉ COMPLETED mới là 'đã dạy' — kể cả khi ba việc chưa xong", () => {
+    expect(nhanTrangThaiBuoi({ status: "COMPLETED", daQuaNgay: true, workDone: false })).toEqual({
+      loai: "da-day",
+    });
+  });
+
+  it("CANCELLED thắng mọi thứ khác", () => {
+    expect(nhanTrangThaiBuoi({ status: "CANCELLED", daQuaNgay: true, workDone: true })).toEqual({
+      loai: "da-huy",
+    });
+  });
+
+  it("buổi TƯƠNG LAI còn SCHEDULED là bình thường, không phải việc còn nợ", () => {
+    expect(nhanTrangThaiBuoi({ status: "SCHEDULED", daQuaNgay: false, workDone: false })).toEqual({
+      loai: "chua-toi-gio",
+    });
+  });
+
+  it("buổi tương lai đã huỷ vẫn là 'đã huỷ', không rơi về 'chưa tới giờ'", () => {
+    expect(nhanTrangThaiBuoi({ status: "CANCELLED", daQuaNgay: false, workDone: false })).toEqual({
+      loai: "da-huy",
+    });
   });
 });

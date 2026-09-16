@@ -1,7 +1,10 @@
 import Link from "next/link";
+import { KHOAN_DA_GHI_NHAN } from "@/lib/finance/ghi-nhan";
+import { congNoDon } from "@/lib/finance/cong-no-don";
 import { notFound, redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
+import { laKhoanDaXacNhan, tongDaXacNhan } from "@/lib/finance/debt";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
@@ -10,7 +13,7 @@ import { OrderDetailClient } from "../_components/order-detail-client";
 import { SendEmailModal } from "../_components/send-email-modal";
 import { ORDER_STATUS_LABEL, ORDER_TYPE_LABEL, deriveInstallmentBadge } from "@/lib/orders/status";
 import {
-  getPaymentConfig,
+  resolveOrderPaymentConfig,
   transferContentForOrder,
   transferPhonePart,
   buildVietQrImageUrl,
@@ -110,7 +113,14 @@ export default async function OrderDetailPage({ params }: Props) {
       // (b) PA-A 22/07 — trạng thái sổ kế toán (Payment.accountantStatus) hiển thị
       // read-only cạnh kế hoạch đợt: installment PAID = "Sale đã thu", tiền chỉ
       // "xong" khi kế toán CONFIRMED bên /payments.
+      // ⚠️ 07/09/2026 — PHẢI có `deletedAt: null`. Trước đó include này KHÔNG có
+      // `where` nào cả, mà bộ lọc duy nhất ở dưới (dòng ~355) chỉ soi
+      // `accountantStatus === "CONFIRMED"` ⇒ khoản đã XOÁ MỀM vẫn được cộng vào ô
+      // "Đã xác nhận" của màn chi tiết đơn. Tiền đã huỷ sổ vẫn hiện là tiền đã thu.
+      // (Đo 07/09: 0 dòng `deletedAt != null` ở local và dev/test ⇒ đang sai 0 đ,
+      // nhưng `softDeletePayment` là đường ghi có thật.)
       payments: {
+        where: { deletedAt: null },
         select: { amount: true, accountantStatus: true },
       },
     },
@@ -125,19 +135,20 @@ export default async function OrderDetailPage({ params }: Props) {
   const canViewPii = await checkPermission("orders:view-pii");
   // OD1b — duyệt kế hoạch trả góp 2 đợt tách khỏi orders:manage (ACCOUNTANT không có quyền duyệt).
   // order đã fetch có centerId → truyền target để scope-aware (CENTER nếu có role seed sau này).
-  const canApprove = await checkPermission("installments:approve", { centerId: order.centerId });
   // BGĐ 31/07 — duyệt giảm giá nhập tay (Quản lý cơ sở).
-  const canApproveDiscount = await checkPermission("discounts:approve", {
-    centerId: order.centerId,
-  });
 
   // Commit 4 — thanh toán 2 đợt + QR.
-  // BGĐ 31/07 — QR lấy tài khoản NHẬN TIỀN THEO CƠ SỞ của đơn (fallback cấu hình chung).
+  // BGĐ 31/07 — QR lấy tài khoản NHẬN TIỀN theo đơn. 31/08/2026: nguồn đổi từ "theo cơ
+  // sở" sang "theo PHƯƠNG THỨC đã chọn trên đơn" (lùi dần về phương thức chuyển khoản
+  // của cơ sở → dùng chung → kho VietQR cũ). Xem resolveOrderPaymentConfig.
   //
   // 20/08 — nội dung CK là `HoTenCon_SdtPH_TenKhoa` (không còn mã đơn). Tính MỘT LẦN
   // ở đây rồi truyền xuống cả khối QR mức đơn lẫn bảng phiếu thu theo đợt: ba chỗ in
   // ra phải là cùng một chuỗi, lệch nhau là sale đọc một đằng QR mã một nẻo.
-  const payCfg = await getPaymentConfig(order.centerId);
+  const payCfg = await resolveOrderPaymentConfig({
+    centerId: order.centerId,
+    paymentMethodId: order.paymentMethodId,
+  });
   // Bản ĐẦY ĐỦ — thứ duy nhất được nhúng vào ảnh QR.
   //
   // ⚠️ Trần ký tự lấy TỪ `VIETQR_ADDINFO_MAX` (lib/payments/vietqr.ts), KHÔNG khai
@@ -159,7 +170,7 @@ export default async function OrderDetailPage({ params }: Props) {
   // con số, lệch là QR in một đằng máy đối khớp một nẻo (khách trả đúng vẫn bị
   // xếp vào "trả thiếu → xử lý tay").
   const paidSoFar = await sdb.payment.aggregate({
-    where: { orderId: order.id, saleStatus: "RECORDED", deletedAt: null },
+    where: { orderId: order.id, ...KHOAN_DA_GHI_NHAN },
     _sum: { amount: true },
   });
   const dueNow = computeDueNow({
@@ -167,6 +178,17 @@ export default async function OrderDetailPage({ params }: Props) {
     paidAmount: paidSoFar._sum.amount ?? 0,
     installments: order.installments,
     installmentApprovalStatus: order.installmentApprovalStatus,
+  });
+  // Bộ số in ra khối "Công nợ đơn hàng" — TÁI DÙNG `paidSoFar` (trục B) đã tính ở
+  // trên cho mã QR, nên số trên màn và số trong QR không thể lệch nhau. Trục A lấy
+  // đúng bộ lọc mà công nợ + cổng phụ huynh dùng (`laKhoanDaXacNhan`).
+  //
+  // Trước bản này `paidSoFar` chỉ dùng cho QR rồi bị bỏ: trang tính được "còn thiếu"
+  // mà không in ra đâu cả.
+  const congNo = congNoDon({
+    totalAmount: order.totalAmount,
+    daGhiNhan: paidSoFar._sum.amount ?? 0,
+    daXacNhan: tongDaXacNhan(order.payments.filter(laKhoanDaXacNhan)),
   });
   // ⚠️ QR nhận bản ĐẦY ĐỦ (`transferContent`), KHÔNG phải bản che: mã phải mang đúng
   // nội dung phụ huynh sẽ chuyển, che ở đây là tiền không về được.
@@ -220,13 +242,20 @@ export default async function OrderDetailPage({ params }: Props) {
     : [];
 
   // G4 (3c) — danh sách phương thức để đổi PTTT (chỉ cần khi có quyền sửa).
+  // 30/08/2026 — lọc theo CƠ SỞ CỦA ĐƠN ngay tại nguồn: ở đây đã có `order.centerId`
+  // nên không cần đẩy cả danh mục xuống client rồi lọc lại. Phương thức dùng chung
+  // (centerId null) luôn nằm trong danh sách — bỏ chúng đi là đơn nào cũng mất tiền mặt.
   const paymentMethods = canManage
     ? await sdb.paymentMethod.findMany({
-        where: { isActive: true },
+        where: {
+          isActive: true,
+          OR: [{ centerId: null }, { centerId: order.centerId }],
+        },
         orderBy: { displayOrder: "asc" },
         select: {
           id: true,
           name: true,
+          centerId: true,
           canBuyCourse: true,
           canBuyPackage: true,
           canBuyExam: true,
@@ -311,8 +340,6 @@ export default async function OrderDetailPage({ params }: Props) {
               }
         }
         canManage={canManage}
-        canApprove={canApprove}
-        canApproveDiscount={canApproveDiscount}
         qrUrl={qrUrl}
         dueNow={dueNow}
         transferContent={transferContentShown}
@@ -328,10 +355,11 @@ export default async function OrderDetailPage({ params }: Props) {
         qrSessions={qrSessions}
         installmentPlanApproved={order.installmentApprovalStatus === "APPROVED"}
         paymentMethods={paymentMethods}
+        congNo={congNo}
         accounting={{
-          confirmed: order.payments
-            .filter((p) => p.accountantStatus === "CONFIRMED")
-            .reduce((s, p) => s + p.amount, 0),
+          // Trục A — dùng chung định nghĩa "khoản đã xác nhận" với công nợ và cổng
+          // phụ huynh (lib/finance/debt.ts). Bút toán ADJUSTMENT nằm trong đó.
+          confirmed: tongDaXacNhan(order.payments.filter(laKhoanDaXacNhan)),
           pending: order.payments
             .filter((p) => p.accountantStatus === "PENDING")
             .reduce((s, p) => s + p.amount, 0),

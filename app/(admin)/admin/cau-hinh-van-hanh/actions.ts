@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { setGlobalSetting, setCenterSetting, type SetResult } from "@/lib/settings/service";
+import { catalogPrefixesDayDuoc } from "@/lib/notifications/catalog";
 
 function actorName(user: { id: string; name?: string | null; email?: string | null }): string {
   return user.name ?? user.email ?? user.id;
@@ -45,6 +46,72 @@ export async function saveCenterSettingAction(input: {
     reason: input.reason,
     actorName: actorName(session.user),
   });
+  if (res.ok) revalidatePath("/admin/cau-hinh-van-hanh");
+  return res;
+}
+
+/**
+ * Lưu danh sách loại thông báo được đẩy Web Push (tab "Thông báo điện thoại").
+ *
+ * Chỉ SUPER_ADMIN — cổng nằm trong `setGlobalSetting`, KHÔNG lặp lại ở đây. Lặp lại là tạo ra
+ * hai nguồn sự thật cho cùng một câu hỏi, và nguồn ở tầng dưới mới là nguồn thật.
+ *
+ * ⚠️ Ghi CẢ DANH SÁCH chứ không ghi từng mục bật/tắt. Nghe thì thừa, nhưng đây là chỗ tránh
+ * một lớp lỗi thật: hai người cùng mở màn này, mỗi người bấm một công tắc khác nhau rồi lưu —
+ * với API "bật mục X" thì cả hai cùng thắng và ra một trạng thái chưa ai chọn. Ghi cả danh
+ * sách thì người lưu sau ghi đè người trước, và nhật ký kiểm toán có `oldValues` đủ để thấy
+ * chuyện gì vừa xảy ra.
+ */
+export async function luuLoaiDuocDayAction(input: {
+  tienTo: string[];
+  reason: string;
+}): Promise<SetResult> {
+  const session = await auth();
+  if (!session?.user) {
+    return { ok: false, error: { code: "AUTH", message: "Chưa đăng nhập" } };
+  }
+
+  // Chuẩn hoá TRƯỚC khi đưa xuống: bỏ trùng, bỏ rỗng, sắp theo đúng thứ tự khai trong catalog.
+  //
+  // Vì sao sắp lại: giá trị này nằm trong `oldValues`/`newValues` của nhật ký kiểm toán. Nếu
+  // thứ tự chạy theo thứ tự người dùng bấm thì hai lần lưu CÙNG một lựa chọn vẫn ra hai JSON
+  // khác nhau, và người đọc nhật ký sẽ đi tìm một thay đổi không tồn tại.
+  const thuTu = new Map(catalogPrefixesDayDuoc().map((p, i) => [p, i] as const));
+  const tienTo = [...new Set(input.tienTo.filter((t) => typeof t === "string" && t.length > 0))].sort(
+    (a, b) => (thuTu.get(a) ?? 9999) - (thuTu.get(b) ?? 9999) || a.localeCompare(b),
+  );
+
+  // ⚠️ ĐỐI CHIẾU DANH MỤC Ở ĐÂY, không ở registry — xem khối chú thích tại `push.tienToDuocDay`
+  // trong `lib/settings/registry.ts`: đặt phép kiểm đó ở tầng kia tạo 11 vòng import mà
+  // `lint:boundaries` chặn cứng.
+  //
+  // TỪ CHỐI chứ không lặng lẽ lọc bỏ. Lọc bỏ thì người dùng bấm Lưu, thấy báo thành công, rồi
+  // loại họ vừa chọn biến mất không dấu vết — màn hình nói dối đúng nghĩa. Một khoá lạ tới được
+  // đây nghĩa là giao diện và danh mục đã lệch nhau; đó là thứ phải nổ ra, không phải thứ để
+  // dọn dẹp im lặng.
+    // Danh sách HẸP: bỏ các loại của vòng quét — chúng không bao giờ đẩy được, nên lưu
+  // vào cấu hình cũng vô nghĩa. Xem `catalogPrefixesDayDuoc`.
+  const hopLe = new Set(catalogPrefixesDayDuoc());
+  const la = tienTo.filter((t) => !hopLe.has(t));
+  if (la.length > 0) {
+    return {
+      ok: false,
+      error: {
+        code: "VALIDATION",
+        message: `Không có loại thông báo nào mang mã ${la.join(", ")} — tải lại trang rồi thử lại`,
+        field: "push.tienToDuocDay",
+      },
+    };
+  }
+
+  const actor = await resolveActor(session.user.id);
+  const res = await setGlobalSetting(actor, {
+    key: "push.tienToDuocDay",
+    value: tienTo,
+    reason: input.reason,
+    actorName: session.user.name ?? session.user.email ?? session.user.id,
+  });
+
   if (res.ok) revalidatePath("/admin/cau-hinh-van-hanh");
   return res;
 }

@@ -146,7 +146,10 @@ export async function getStaffNotifications(
 ): Promise<{ items: StaffNotificationView[]; unread: number }> {
   const unread = await syncStaffNotifications(user);
   const rows = await db.staffNotification.findMany({
-    where: { userId: user.id },
+    // Lọc `state` (08/09/2026): mục đã THU HỒI phải biến mất ở CẢ hai đường đọc. Đường mới
+    // (`lib/notifications/service.ts`) đã lọc qua `conHieuLuc`; thiếu vế này thì cùng một
+    // endpoint chuông trả hai con số khác nhau, và chuông mồ côi vẫn hiện ở đường cũ.
+    where: { userId: user.id, state: "ACTIVE" },
     orderBy: [{ readAt: "asc" }, { createdAt: "desc" }],
     take: 20,
   });

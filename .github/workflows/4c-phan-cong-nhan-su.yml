@@ -1,0 +1,87 @@
+name: Gán phân công nhân sự — EmployeeOrgAssignment (prod)
+
+# =============================================================================
+# Ghi bản đồ `EmployeeOrgAssignment` đã duyệt 08/09/2026 lên Supabase PROD
+# (scripts/4c-gan-phan-cong-nhan-su.ts) — 6 người làm ở nhiều hơn một nơi, 12 dòng.
+#
+# ĐỊNH NGHĨA RANH GIỚI: docs/nen-he-thong/RANH-GIOI-PHAN-CONG-NHAN-SU.md
+# Đọc nó trước khi sửa BAN_DO trong script.
+#
+# ⚠️ BẢNG NÀY KHÔNG SINH QUYỀN. Quyền chỉ từ `UserOrgRole`. Chạy workflow này KHÔNG cho
+# ai thêm quyền xem gì, và cũng không thu hồi của ai — nên nó KHÔNG cần reset đồng hồ
+# shadow như `patch-rbac-staff`.
+#
+# MẶC ĐỊNH CHẠY THỬ — in ra sẽ ghi gì, không ghi. Muốn ghi thật phải chọn mode=apply VÀ
+# gõ đúng chuỗi xác nhận. Script idempotent: dòng đã có thì bỏ qua, chạy lại không đẻ
+# bản sao.
+#
+# Đã chạy đầu-cuối trên Postgres local trước khi lên đây: chạy thử → apply (12 dòng,
+# PRIMARY=5 SECONDARY=3 SHARED=2 SUPPORT=2, 12 AuditLog) → apply lần hai (bỏ qua 12,
+# ghi 0).
+#
+# SECRETS: PROD_DIRECT_URL (dùng chung deploy.yml).
+# =============================================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "chay-thu = chỉ in sẽ ghi gì · apply = ghi thật"
+        required: true
+        type: choice
+        default: chay-thu
+        options: [chay-thu, apply]
+      confirm:
+        description: 'Khi mode=apply: gõ đúng "GHI THAT VAO PROD"'
+        required: false
+        default: ""
+
+concurrency:
+  group: 4c-phan-cong-nhan-su
+  cancel-in-progress: false
+
+jobs:
+  gan:
+    name: phân công nhân sự (${{ inputs.mode }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Kiểm tra secret + chuỗi xác nhận
+        run: |
+          missing=0
+          [ -n "${{ secrets.PROD_DIRECT_URL }}" ] || { echo "::error::Thiếu secret PROD_DIRECT_URL"; missing=1; }
+          if [ "${{ inputs.mode }}" = "apply" ] && [ "${{ inputs.confirm }}" != "GHI THAT VAO PROD" ]; then
+            echo "::error::mode=apply nhưng chuỗi xác nhận sai — dừng, không ghi gì."
+            missing=1
+          fi
+          exit $missing
+
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      - name: Chạy
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.mode }}" = "apply" ]; then
+            pnpm exec tsx scripts/4c-gan-phan-cong-nhan-su.ts --apply | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            pnpm exec tsx scripts/4c-gan-phan-cong-nhan-su.ts | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+        env:
+          # Session pooler (:5432) cho CẢ HAI biến — `scriptDb()` đọc DIRECT_URL còn
+          # `createAssignment` đi qua `lib/db` (đọc DATABASE_URL). Trỏ lệch hai biến là
+          # đọc một DB rồi ghi sang DB khác.
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}

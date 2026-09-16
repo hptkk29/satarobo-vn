@@ -6,28 +6,20 @@ import { resolveActor } from '@/lib/auth/actor'
 import { checkPermission, checkPermissionDetail } from '@/lib/auth/check-permission'
 import { maskLeadPiiFields } from '@/lib/lead/pii'
 import { leadSharingEnabled } from '@/lib/lead/sharing'
-import { leadOwnershipWhere } from '@/lib/lead/ownership'
 import { splitLeadNote } from '@/lib/lead/note-view'
 import { canViewLeadPii } from '@/lib/auth/check-permission'
 import { LeadsTable } from './_components/leads-table'
+import { LeadsRefreshButton } from './_components/refresh-button'
 import type { LeadRow } from './_components/leads-table'
-import { ColumnPicker } from './_components/column-picker'
-import { LEAD_TABLE_COLUMNS, LEAD_TABLE_KEY } from '@/lib/tables/lead-columns'
-import { resolveColumnLayout } from '@/lib/tables/column-preference'
 import { LeadsKanban, type KanbanLead } from './_components/leads-kanban'
 import { ALL_LEAD_STATUSES } from '@/lib/leads/status'
 import type { LeadStatus, Prisma } from '@prisma/client'
 import { phoneSearchTerm } from '@/lib/phone'
 import { getNonEnrollableCenterIds } from '@/lib/enrollment-flow'
 import { docSoDong, docSoTheMoiCot } from '@/lib/ui/phan-trang'
+import { leadOwnershipWhere } from "@/lib/lead/ownership";
 
 const KANBAN_LIMIT = 500
-
-/** G-04 — bóc đúng phần màn chọn cột cần (khoá/nhãn/nhóm/cờ PII). Không đẩy cả
- *  `defaultOrder`/`defaultVisible` xuống client: đó là chuyện của tầng ghép. */
-function toPickerColumn(c: (typeof LEAD_TABLE_COLUMNS)[number]) {
-  return { key: c.key, label: c.label, group: c.group, pii: c.pii }
-}
 
 type SP = {
   page?: string
@@ -40,6 +32,8 @@ type SP = {
   source?: string
   dateFrom?: string
   dateTo?: string
+  /** 29/08 — 'moi_nhat' (mặc định) | 'nhap_lai' (theo lần nhập gần nhất). */
+  sort?: string
 }
 
 export const metadata = { title: 'Leads | Admin' }
@@ -114,13 +108,22 @@ export default async function LeadsPage({
     // SHARE T1 — sale view-own thấy lead của mình HOẶC lead team đã bật "dùng chung".
     // Gói trong AND để không đè key OR của search q bên dưới (2 OR sống chung).
     // Cách ly cơ sở vẫn do scopedDb inject centerId — share không xuyên cơ sở.
-    // S-8 (27/08) — mệnh đề "của tôi" KHÔNG còn gõ tay ở đây. Trang này, ô tìm
-    // toàn hệ thống và site Sale đều hỏi cùng `leadOwnershipWhere()`; ba bản
-    // chép tay trước đó đã trôi lệch thật (ô tìm thiếu hẳn vế "mình nhập" suốt
-    // 4 ngày, không ai thấy). Ai muốn đổi nghĩa "của tôi" thì sửa
-    // `lib/lead/ownership.ts` một lần, cả ba màn đổi theo.
-    // Không nới cho ai khác: người có `leads:view-all` không đi nhánh này.
-    ...(scopeToSelf ? { AND: [leadOwnershipWhere(session.user.id)] } : {}),
+    ...(scopeToSelf
+      ? {
+          AND: [
+            // S-8 — "khách của tôi" có ĐÚNG MỘT định nghĩa, ở `lib/lead/ownership.ts`.
+            // Chép tay mệnh đề này ra từng màn là cách chắc chắn để hai màn trả hai
+            // danh sách khác nhau cho cùng một người, và không ai phát hiện cho tới lúc
+            // đếm KPI. Site Sale (`/sale/khach-cua-toi`) gọi đúng hàm này.
+            //
+            // Nội dung nó gói lại: phiếu được GIAO cho mình, phiếu mình NHẬP (Sale Hội
+            // sở không bao giờ là assignee — thiếu vế này thì danh sách của họ trắng),
+            // và mệnh đề "dùng chung" vốn RỖNG theo mặc định từ Đợt E (22/08); đường
+            // quay lui là env `LEAD_SHARING_ENABLED="true"`.
+            leadOwnershipWhere(session.user.id),
+          ],
+        }
+      : {}),
     ...(filterAssignedTo && canViewAll
       ? { assignedToId: filterAssignedTo }
       : {}),
@@ -263,7 +266,7 @@ export default async function LeadsPage({
         />
         <LeadsKanban
           leads={kanbanLeads}
-          // Cùng tham số `?size=` với bảng, chỉ khác giá trị mặc định (10 thẻ/cột).
+          // Cùng tham số `?size=` với bảng, chỉ khác giá trị mặc định (5 thẻ/cột).
           soTheMoiCot={docSoTheMoiCot(params.size)}
           canUpdate={canUpdate}
           canCloseDeal={canCloseDeal}
@@ -275,6 +278,28 @@ export default async function LeadsPage({
   }
 
   // ── Table view ──
+  // 29/08 — SẮP XẾP theo LẦN NHẬP GẦN NHẤT.
+  //
+  // Vì sao đáng có: khách gọi lại / điền form lần nữa thì hệ thống KHÔNG đẻ lead mới
+  // (trùng SĐT), nó nâng `lastInboundAt`. Sắp theo `createdAt` thì phiếu vừa nóng lại
+  // nằm lẫn dưới đáy cùng phiếu nguội ba tháng — Sale không có cách nào biết để gọi trước.
+  //
+  // `nulls: "last"` bắt buộc: lead có TRƯỚC 29/08 mang `lastInboundAt` do migration
+  // backfill = `createdAt`, nhưng lead tạo bằng đường SQL thô thì vẫn null. Không khai
+  // thì Postgres xếp NULL lên đầu ở chiều `desc` — đúng nhóm cũ nhất lại nằm trên cùng.
+  const sapXep = params.sort === 'nhap_lai' ? 'nhap_lai' : 'moi_nhat'
+  // ⚠️ 07/09/2026 — MẶC ĐỊNH cũng sắp theo lần nhập gần nhất.
+  //
+  // Từ nay cột "Ngày nhận lead" IN ngày nhận hiệu lực (xem `leads-table.tsx`). Sắp
+  // theo `createdAt` trong khi in `lastInboundAt` là để phiếu hiện ngày hôm nay nằm
+  // ở vị trí của ba tháng trước — mũi tên sắp xếp ngay trên đầu cột nói dối. Hai thứ
+  // này phải đổi CÙNG NHAU.
+  //
+  // `nhap_lai` giữ lại cho đường dẫn ai đó đã lưu; nay nó cho ra CÙNG thứ tự.
+  const thuTuLead: Prisma.LeadOrderByWithRelationInput = {
+    lastInboundAt: { sort: 'desc', nulls: 'last' },
+  }
+
   const [rawLeads, total] = await Promise.all([
     sdb.lead.findMany({
       where,
@@ -283,34 +308,17 @@ export default async function LeadsPage({
         course: { select: { name: true } },
         assignedTo: { select: { name: true } },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: thuTuLead,
       skip: (page - 1) * soDong,
       take: soDong,
     }),
     sdb.lead.count({ where }),
   ])
 
-  const canUpdate = (await checkPermission('leads:edit'))
-  // 27/08 — chỉ Sale đẩy được lead trên phễu (chủ dự án chốt). Tách hẳn khỏi
-  // canUpdate: Quản lý cơ sở / Marketing vẫn sửa hồ sơ + ghi chú như cũ.
-  const canChangeStatus = (await checkPermission('leads:change-status'))
+  // 30/08 — bảng KHÔNG còn sửa gì tại chỗ (ngăn kéo đã gỡ, ô trạng thái thành nhãn),
+  // nên `leads:edit` / `leads:change-status` không còn cần ở đây. Hai quyền đó nay hỏi
+  // ở TRANG CHI TIẾT, đúng nơi thao tác thật xảy ra.
   const canDelete = (await checkPermission('leads:delete'))
-  // G-03/A-03 — quyền XUẤT tách khỏi quyền XEM. Trước 26/08 nút xuất hiện cho mọi
-  // người đọc được danh sách, và đường /api cũng chỉ gác bằng `leads:view-all` ⇒
-  // `leads:export` là khoá chết. Giấu nút chỉ là chuyện giao diện: route tự gác lại.
-  const canExport = (await checkPermission('leads:export'))
-
-  // G-04 — tuỳ chọn cột THEO TỪNG NGƯỜI. Đọc khoá cứng theo `session.user.id`; bảng
-  // UserTablePreference không mang centerId nên `scopedDb` là pass-through (cố ý —
-  // sở thích cá nhân không phải dữ liệu theo đơn vị, xem chú thích ở schema).
-  //
-  // ⚠️ Che PII KHÔNG phụ thuộc cấu hình này: dữ liệu đã qua `maskLeadPiiFields` ngay
-  // dưới đây, nên bật cột SĐT/email lên mà thiếu `leads:view-pii` thì vẫn ra bản che.
-  const columnPref = await sdb.userTablePreference.findUnique({
-    where: { userId_tableKey: { userId: session.user.id, tableKey: LEAD_TABLE_KEY } },
-    select: { columns: true },
-  })
-  const columnLayout = resolveColumnLayout(LEAD_TABLE_COLUMNS, columnPref?.columns)
 
   const leads: LeadRow[] = rawLeads.map((raw) => {
     // #11 T2 — mask PII (tên PH/SĐT/email/tên con/note) trước khi build payload client.
@@ -337,6 +345,8 @@ export default async function LeadsPage({
       userAgent: lead.userAgent,
       consentMarketing: lead.consentMarketing,
       createdAt: lead.createdAt.toISOString(),
+      lastInboundAt: lead.lastInboundAt?.toISOString() ?? null,
+      inboundCount: lead.inboundCount,
       center: lead.center,
       courseName: lead.course?.name ?? null,
       assignedTo: lead.assignedTo,
@@ -362,21 +372,12 @@ export default async function LeadsPage({
         total={total}
         page={page}
         pageSize={soDong}
-        canUpdate={canUpdate}
-        canChangeStatus={canChangeStatus}
+        sapXep={sapXep}
         canDelete={canDelete}
+        canExport={await checkPermission('leads:export')}
         currentStatus={statusFilter}
+        currentQ={q}
         currentUserId={session.user.id}
-        canExport={canExport}
-        columns={columnLayout.visible.map((c) => ({ key: c.key, label: c.label }))}
-        columnPicker={
-          <ColumnPicker
-            tableKey={LEAD_TABLE_KEY}
-            visible={columnLayout.visible.map(toPickerColumn)}
-            hidden={columnLayout.hidden.map(toPickerColumn)}
-            piiMasked={!canViewPii}
-          />
-        }
       />
     </div>
   )
@@ -425,15 +426,24 @@ function Header({
             : 'Chưa có lead nào'}
         </p>
       </div>
+      {/* 31/08/2026 — nạp lại NGAY TRÊN TRANG để thấy lead mới, khỏi F5. CHỈ vẽ ở
+          Kanban: chế độ Bảng đã có nút này trong hàng công cụ của bảng (cạnh "Cột hiển
+          thị" — chốt của chủ dự án), mà Kanban thì không có hàng công cụ đó. Vẽ cả hai
+          chỗ là màn Bảng mọc hai nút giống hệt nhau. */}
+      {view === 'kanban' && <LeadsRefreshButton />}
       <div className="inline-flex overflow-hidden rounded-lg border border-border">
+        {/* `scroll={false}`: đổi khung nhìn là ĐỔI THAM SỐ của chính trang này, không
+            phải sang trang khác — để Next tự cuộn lên đầu là người dùng mất chỗ đang xem. */}
         <Link
           href={qs('table')}
+          scroll={false}
           className={`px-3 py-1.5 text-sm font-medium ${ view === 'table' ? 'bg-primary text-white' : 'bg-card text-muted-foreground hover:bg-muted' }`}
         >
           Bảng
         </Link>
         <Link
           href={qs('kanban')}
+          scroll={false}
           className={`px-3 py-1.5 text-sm font-medium ${ view === 'kanban' ? 'bg-primary text-white' : 'bg-card text-muted-foreground hover:bg-muted' }`}
         >
           Kanban
@@ -462,8 +472,15 @@ function Header({
               Chốt hàng loạt
             </Link>
           )}
+          {/* 03/09/2026 — trỏ sang "Nhập khách hàng" thay vì `/leads/new` (chủ dự án chốt).
+              Không chỉ là đổi chỗ: `/nhap-khach-hang` đi qua đường nhận lead chung
+              (`ingestIntakeLead`) nên có sẵn CHỐNG TRÙNG SĐT và TỰ CHIA cho sale theo
+              vòng — hai thứ `/leads/new` không có, nên lead gõ tay ở đó nằm im không ai
+              nhận, và gõ trùng số thì đẻ phiếu thứ hai.
+              Cùng một quyền `leads:create` gác cả nút này lẫn trang đích
+              (`PAGE_GATES["/nhap-khach-hang"]`) ⇒ ai thấy nút là mở được trang. */}
           <Link
-            href="/leads/new"
+            href="/nhap-khach-hang"
             className="rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90"
           >
             + Thêm lead
@@ -508,10 +525,11 @@ function StatusTabs({
 
   return (
     <div className="mb-3 flex flex-wrap gap-2">
-      <Link href={qs(undefined)} className={tabCls(view === 'table' && !params.status)}>
+      {/* `scroll={false}`: tab preset chỉ đổi `?status=` của chính trang này. */}
+      <Link href={qs(undefined)} scroll={false} className={tabCls(view === 'table' && !params.status)}>
         Tất cả
       </Link>
-      <Link href={qs('DA_DANG_KY')} className={tabCls(isRegistered)}>
+      <Link href={qs('DA_DANG_KY')} scroll={false} className={tabCls(isRegistered)}>
         Đã đăng ký{' '}
         <span
           className={`ml-1 rounded-full px-1.5 py-0.5 text-xs font-semibold ${ isRegistered ? 'bg-white/20' : 'bg-primary-soft text-primary' }`}
@@ -630,8 +648,10 @@ function FilterBar({
       <button className="rounded bg-gray-800 px-3 py-1.5 text-sm font-medium text-white">
         Lọc
       </button>
+      {/* `scroll={false}`: xoá lọc = quay về chính trang này không tham số. */}
       <Link
         href={`/leads?view=${view}`}
+        scroll={false}
         className="rounded border border-border bg-card px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted"
       >
         Xoá lọc

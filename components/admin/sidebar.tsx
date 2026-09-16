@@ -4,12 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import {
-  // Trophy, // tạm ẩn cùng mục "Vinh danh" trong NAV_GROUPS (bật lại: bỏ comment)
+  // Trophy,
+  // tạm ẩn cùng mục "Vinh danh" trong NAV_GROUPS (bật lại: bỏ comment)
   AlertTriangle,
+  AlarmClock,
   ArrowLeftRight,
   Award,
   BarChart3,
-  BadgeCheck,
   Bell,
   BookMarked,
   BookOpen,
@@ -27,6 +28,7 @@ import {
   Coins,
   CreditCard,
   DoorOpen,
+  FileSpreadsheet,
   FileText,
   FlaskConical,
   Gauge,
@@ -35,8 +37,8 @@ import {
   IdCard,
   Image as ImageIcon,
   KeyRound,
-  ListOrdered,
   LayoutDashboard,
+  ListOrdered,
   Mail,
   MapPin,
   MessageCircle,
@@ -134,26 +136,25 @@ const NAV_GROUPS: NavGroup[] = [
       // để leads:import (Sale có leads:import nhưng KHÔNG có view-all → trang tự
       // redirect; đặt view-all ở đây để không hiện link chết cho Sale).
       { label: "Chốt hàng loạt", href: "/leads/bulk-convert", icon: Workflow, perm: ["leads:view-all"] },
-      { label: "Cấu hình chia lead", href: "/leads/cau-hinh-chia", icon: Settings, perm: ["leads:assign-config"] },
-      // Đợt D — sổ lượt luân phiên (chỉ đọc). Đặt cạnh Cấu hình chia lead vì hai
+      // 30/08 — gộp: hai màn cũ (Cấu hình chia lead · Sổ lượt) đã xoá, thay bằng
       // trang trả lời hai nửa của cùng một câu hỏi: chia KIỂU GÌ, và đã chia RA SAO.
       // perm rộng hơn cấu hình (không phải assign-config): người phải trả lời
       // "sao bạn kia nhiều lead hơn" là Quản lý cơ sở, không phải Super Admin.
-      // S-5: lấy THẲNG từ PAGE_GATES thay vì gõ lại — mục này vừa phải hiện cho tổ
-      // Sale (key mới `leads:rotation-view`), và gõ tay hai nơi là cách chắc chắn để
-      // menu lại lệch cổng trang lần nữa.
-      { label: "Sổ lượt chia lead", href: "/leads/so-luot", icon: ListOrdered, perm: [...PAGE_GATES["/leads/so-luot"]] },
+      // `leads:rotation-view` (S-5, chỉ đọc) đi kèm từ 16/09/2026: màn "Sổ lượt chia
+      // lead" đã nhập vào đây. Menu PHẢI khớp cổng trang — lệch là hoặc dead-link
+      // (thấy mục, bấm vào bị đá) hoặc hở-quyền-theo-URL (vào được mà không có mục).
+      { label: "Quản lý chia lead", href: "/quan-ly-chia-lead", icon: ListOrdered, perm: ["lead_pool:manage", "leads:rotation-view"] },
       { label: "Bàn giao lead", href: "/ban-giao-lead", icon: ArrowLeftRight, perm: ["leads:assign"] },
+      { label: "Lead lâu ngày chưa chăm", href: "/lead-nguoi", icon: AlarmClock, perm: ["leads:assign"] },
       { label: "Chuyển lead liên CS", href: "/leads/bao-cao-chuyen", icon: Workflow, perm: ["leads:assign"] },
       // BGĐ 31/07 — nguồn giới thiệu (affiliate): mã + link ?ref= + đối soát.
       { label: "Nguồn giới thiệu", href: "/affiliates", icon: Share2, perm: ["leads:view-all"] },
       // R1-01 — hội thoại Messenger của Page. Trang có thật từ lâu nhưng CHƯA BAO GIỜ
       // có lối vào: chỉ gõ URL mới tới (rà 11/08).
       { label: "Messenger CRM", href: "/crm/messenger", icon: MessagesSquare, perm: ["leads:view-all", "leads:view-own"] },
-      // 26/08 — GỘP hai hệ trial làm MỘT. Hai lối vào cũ ("Học thử" hệ V1 và "Lớp trải
-      // nghiệm" hệ V2) đã gỡ khỏi menu; `/trials` và `/trial-classes` nay đều chuyển
-      // hướng về đây (thông báo cũ trong DB và tài liệu hướng dẫn còn trỏ tới chúng),
-      // nhưng không còn là chỗ để người ta bấm vào và nhập liệu song song nữa.
+      // GĐ6 — hai lối vào cũ ĐÃ GỠ khỏi menu. Route /trials và /trial-classes vẫn sống
+      // dưới dạng chuyển hướng (thông báo cũ trong DB và tài liệu hướng dẫn còn trỏ tới
+      // đó), nhưng không còn là chỗ để người ta bấm vào và nhập liệu song song nữa.
       { label: "Lớp Trial", href: "/lop-trial", icon: FlaskConical, perm: ["trials:view"] },
     ],
   },
@@ -291,20 +292,17 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Tài chính",
     items: [
       { label: "Đơn hàng", href: "/orders", icon: ShoppingBag, perm: ["orders:view"] },
-      // 20/08/2026 — hàng chờ DUYỆT ĐƠN của quản lý cơ sở (một nút duyệt cho cả giảm
-      // giá lẫn kế hoạch thanh toán). Thiếu mục này thì trang chỉ tới được từ TRONG
-      // chi tiết một đơn đang chờ — tức phải tìm ra đơn rồi mới biết hàng chờ tồn tại.
-      // perm dùng OR: ai có MỘT trong hai quyền duyệt là thấy link.
-      {
-        label: "Duyệt đơn hàng",
-        href: "/orders/duyet",
-        icon: BadgeCheck,
-        perm: ["discounts:approve", "installments:approve"],
-      },
       // Ghi nhận khoản thu là việc của quầy (payments:record) — xem ghi chú trong
       // app/(admin)/admin/payments/page.tsx. Đừng thu lại còn mỗi payments:manage.
       { label: "Thanh toán", href: "/payments", icon: CreditCard, perm: ["payments:manage", "payments:record"] },
       { label: "Công nợ", href: "/cong-no", icon: Wallet, perm: ["payments:manage", "payments:view"] },
+      // Nhóm HV chốt hàng loạt mà chưa nhập tiền: có ghi danh nhưng KHÔNG có đơn/khoản thu
+      // (nhánh allowNoPayment của bulk-convert). Không màn nào khác nhìn thấy nhóm này.
+      { label: "Thiếu học phí", href: "/thieu-hoc-phi", icon: Wallet, perm: ["payments:view", "payments:manage"] },
+      // Đưa học phí đã đóng TRƯỚC khi lên hệ thống vào hồ sơ từng em — nếu không thì
+      // cổng phụ huynh hiện nợ nguyên dù nhà đã đóng đủ. Gác `payments:record` vì đây là
+      // đường GHI TIỀN, cùng cổng với màn Thanh toán.
+      { label: "Nhập giao dịch cũ", href: "/nhap-giao-dich-cu", icon: FileSpreadsheet, perm: ["payments:record", "payments:manage"] },
       // Đối soát tiền về từ SePay — nơi kiểm "máy đã tự xác nhận đúng chưa".
       { label: "Biến động số dư", href: "/bien-dong-so-du", icon: Wallet, perm: ["payments:manage", "payments:view"] },
       { label: "Hoàn tiền", href: "/hoan-tien", icon: Undo2, perm: ["payments:manage"] },
@@ -414,6 +412,7 @@ export function Sidebar({
   scormEnabled = false,
   classGroupEnabled = false,
   zalocrmEnabled = false,
+  onNavigate,
 }: {
   granted: string[];
   /** `User.id` — topic realtime `user:{id}` để badge "Tin nhắn" tự nhảy. */
@@ -426,6 +425,15 @@ export function Sidebar({
   classGroupEnabled?: boolean;
   /** S1 — mặc định false ⇒ mục "Zalo CRM" ẩn (cùng cờ với trang, xem lib/flags.ts). */
   zalocrmEnabled?: boolean;
+  /**
+   * Gọi khi người dùng bấm một mục — để bản DRAWER trên điện thoại tự đóng lại.
+   *
+   * `undefined` ở bản desktop (thanh cố định, không có gì để đóng). Thiếu nó thì trên điện
+   * thoại bấm một mục xong drawer vẫn che kín trang vừa mở — người dùng phải bấm ra ngoài
+   * một lần nữa mới thấy nội dung, và đó là kiểu chạm-hai-lần khiến người ta tưởng nút không
+   * ăn. Xem `components/admin/admin-shell.tsx`.
+   */
+  onNavigate?: () => void;
 }) {
   const pathname = usePathname();
 
@@ -496,6 +504,7 @@ export function Sidebar({
       <div className="flex h-16 items-center border-b border-border px-6">
         <Link
           href="/dashboard"
+          onClick={onNavigate}
           className="group text-xl font-bold transition-opacity hover:opacity-90"
         >
           {/* DESIGN.md §7 — KHÔNG gradient trong admin. Bản cũ tô "Sata" bằng gradient
@@ -544,6 +553,7 @@ export function Sidebar({
                       )}
                       <Link
                         href={item.href}
+                        onClick={onNavigate}
                         className={cn(
                           "flex items-center gap-3 px-6 py-2 text-sm font-medium transition-colors",
                           active

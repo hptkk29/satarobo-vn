@@ -29,7 +29,7 @@ export default async function EditSessionPage({ params, searchParams }: Props) {
       ? undefined
       : { centerId: { in: visibleClassCenters } };
 
-  const [session, classes, lessons] = await Promise.all([
+  const [session, classes, lessons, categories] = await Promise.all([
     sdb.classSession.findFirst({
       where: { id, ...(classScopeWhere ? { class: classScopeWhere } : {}) },
       include: { class: { select: { name: true } } },
@@ -57,6 +57,12 @@ export default async function EditSessionPage({ params, searchParams }: Props) {
       },
       take: 1000,
     }),
+    // Phân loại buổi đang dùng — danh mục dùng chung, KHÔNG scope theo cơ sở.
+    sdb.sessionCategory.findMany({
+      where: { isActive: true },
+      orderBy: [{ displayOrder: "asc" }, { code: "asc" }],
+      select: { id: true, name: true, isDefault: true },
+    }),
   ]);
 
   if (!session) notFound();
@@ -76,6 +82,7 @@ export default async function EditSessionPage({ params, searchParams }: Props) {
           notes: session.notes,
           lessonId: session.lessonId,
           lessonNotes: session.lessonNotes,
+          sessionCategoryId: session.sessionCategoryId,
         }}
         classes={classes.map((c) => ({
           id: c.id,
@@ -91,6 +98,7 @@ export default async function EditSessionPage({ params, searchParams }: Props) {
           curriculumName: l.curriculum.name,
           courseId: l.curriculum.courseId,
         }))}
+        categories={categories}
       />
     </div>
   );

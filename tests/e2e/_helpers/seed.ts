@@ -21,6 +21,26 @@ export function assertTestDb(): void {
   const url = process.env.DATABASE_URL ?? "";
   const isLocal = /(@|\/\/)(localhost|127\.0\.0\.1)[:/]/.test(url);
   const looksTest = /satarobo_test|ci_test/.test(url);
+
+  // 30/08/2026 — CHẶN CỨNG THEO TÊN DB, không chỉ theo host.
+  //
+  // Vì sao thêm: `resetDb()` TRUNCATE sạch mọi bảng, và vế `isLocal` ở trên cho qua
+  // MỌI database trên máy — kể cả cái mà dev server đang phục vụ. Đã xảy ra thật: chạy
+  // bộ test trong lúc chủ dự án đang xem localhost là xoá trắng 16 tài khoản UAT ngay
+  // dưới chân họ, và triệu chứng ném ra lại là "sai mật khẩu" chứ không phải "mất dữ
+  // liệu" — mất công dò.
+  //
+  // Nay: chỉ đúng `satarobo_test` / `ci_test` mới cho reset. DB của localhost
+  // (`satarobo_local`) và mọi tên khác bị TỪ CHỐI, dù nằm trên 127.0.0.1.
+  if (isLocal && !looksTest) {
+    const ten = url.split("/").pop()?.split("?")[0] ?? "<không đọc được>";
+    throw new Error(
+      `[test] TỪ CHỐI xoá dữ liệu: DATABASE_URL trỏ database "${ten}", không phải ` +
+        `"satarobo_test". Bộ test chỉ được reset DB test riêng của nó — DB của dev ` +
+        `server (satarobo_local) không bao giờ được đụng tới.`,
+    );
+  }
+
   if (!isLocal && !looksTest) {
     const host = (() => {
       try {
@@ -42,6 +62,29 @@ export function assertTestDb(): void {
  */
 export async function resetDb(): Promise<void> {
   assertTestDb();
+  // CỔNG THỨ HAI (04/09/2026) — địa chỉ ĐÚNG vẫn chưa đủ, phải đúng LÚC.
+  //
+  // `assertTestDb()` chỉ hỏi "URL có trỏ localhost / satarobo_test không" — mà DB làm
+  // việc hằng ngày ở máy dev ĐÚNG LÀ `127.0.0.1/satarobo_test`. Hệ quả: `pnpm test:unit`
+  // (gồm cả tests/chat, tests/nen, tests/lead-intake…) xoá sạch dữ liệu đang xem — 250
+  // học viên, 100 lớp, 609 buổi, 12 tài khoản `uat.*` bay hết, đăng nhập báo "sai tài
+  // khoản mật khẩu". Đã xảy ra thật.
+  //
+  // Chốt của chủ dự án: `pnpm test` KHÔNG được gọi resetDb, không được truncate.
+  // Xoá DB nay phải là lựa chọn có chủ đích: `pnpm test:chat-db` / `test:nen-db` /
+  // `test:lead-intake` / `test:elearning-db` / `test:inbox-db` (qua `vitest.db.config.ts`).
+  // CHẶN ĐÚNG CHỖ: chỉ khi chạy dưới VITEST. Playwright E2E là bộ gá dùng-rồi-bỏ,
+  // mọi spec của nó đều mở đầu bằng resetDb() và CI dựng Postgres riêng cho nó —
+  // chặn ở đó là giết 7 job E2E mà không cứu thêm được gì (đo ở PR #220: 7 job đỏ
+  // vì chính dòng này). Thứ cần chặn là `pnpm test:unit`, và đó là Vitest.
+  const duoiVitest = process.env.VITEST === "true";
+  if (duoiVitest && process.env.ALLOW_DB_RESET !== "1") {
+    throw new Error(
+      "[resetDb] Từ chối TRUNCATE: thiếu ALLOW_DB_RESET=1. " +
+        "Chạy `pnpm test:chat-db` (hoặc test:nen-db / test:lead-intake / test:elearning-db) " +
+        "thay vì `pnpm test:unit`. Xem tests/_helpers/db-gate.ts.",
+    );
+  }
   const tables = await db.$queryRaw<Array<{ tablename: string }>>`
     SELECT tablename FROM pg_tables
     WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'

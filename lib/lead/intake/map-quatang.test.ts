@@ -41,11 +41,13 @@ describe("mapQuatang — phiếu hợp lệ", () => {
   });
 
   it("con vào LeadChild kèm trường + lớp", () => {
-    expect(ok(payload()).child).toEqual({
-      fullName: "Nguyễn Bá Minh Anh",
-      schoolName: "Tiểu học Lê Văn Hiến",
-      gradeLevel: "Lớp 1",
-    });
+    expect(ok(payload()).children).toEqual([
+      {
+        fullName: "Nguyễn Bá Minh Anh",
+        schoolName: "Tiểu học Lê Văn Hiến",
+        gradeLevel: "Lớp 1",
+      },
+    ]);
   });
 
   it("cơ sở giữ chuỗi thô cho tầng ingest khớp với DB", () => {

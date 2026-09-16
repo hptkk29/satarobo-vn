@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import {
   Loader2,
   Plus,
@@ -54,16 +54,35 @@ import {
   confirmPaymentAction,
   rejectPaymentAction,
   adjustPaymentAction,
+  updatePendingPaymentAction,
   revealPaymentsPii,
   type PaymentRow,
 } from "../_actions";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
+import { filterMethodsForCenter } from "@/lib/payments/method-scope";
 
 type OrderOption = {
   id: string;
   code: string;
   customerName: string;
   totalAmount: number;
+  /** Cơ sở đứng tên đơn — quyết định phương thức nào chọn được. null = không gán. */
+  centerId: string | null;
+};
+
+/** Một dòng danh mục phương thức thanh toán (đọc từ DB, đã scope theo cơ sở). */
+export type MethodOption = {
+  id: string;
+  code: string;
+  name: string;
+  /** null = dùng chung mọi cơ sở. */
+  centerId: string | null;
+  /**
+   * Dòng đã tắt VẪN nằm trong danh sách này — cố ý. Nó bị loại khỏi dropdown CHỌN
+   * (lọc ở `availableMethods`) nhưng phải còn trong bảng NHÃN, kẻo khoản thu cũ ghi
+   * bằng mã đó in ra mã trần.
+   */
+  isActive: boolean;
 };
 
 const SALE_LABEL: Record<string, string> = {
@@ -80,26 +99,29 @@ const ACC_LABEL: Record<string, string> = {
   CONFIRMED: "Đã xác nhận",
   REJECTED: "Từ chối",
   REFUNDED: "Đã hoàn",
-  ADJUSTED: "Điều chỉnh",
 };
 const ACC_BADGE: Record<string, string> = {
   PENDING: "bg-state-warning-soft text-state-warning-ink hover:bg-state-warning-soft",
   CONFIRMED: "bg-state-success-soft text-state-success-ink hover:bg-state-success-soft",
   REJECTED: "bg-state-danger-soft text-state-danger-ink hover:bg-state-danger-soft",
   REFUNDED: "bg-primary-soft text-primary hover:bg-primary-soft",
-  ADJUSTED: "bg-primary-soft text-primary hover:bg-primary-soft",
 };
 
-const METHOD_OPTIONS = [
-  { value: "CASH", label: "Tiền mặt" },
-  { value: "BANK_TRANSFER", label: "Chuyển khoản" },
-  { value: "VNPAY", label: "VNPAY" },
-  { value: "TINGEE", label: "Tingee" },
-  { value: "COD", label: "COD" },
-];
-const METHOD_LABEL: Record<string, string> = Object.fromEntries(
-  METHOD_OPTIONS.map((m) => [m.value, m.label]),
-);
+// ⚠️ 30/08/2026 — đây KHÔNG còn là danh sách để CHỌN. Danh sách chọn nay đọc từ DB
+// (loadPaymentMethodOptions) và lọc theo cơ sở của đơn, vì phương thức riêng của từng cơ
+// sở khai ở /payment-methods chứ không nằm trong code.
+//
+// Bảng dưới đây chỉ còn một việc: dịch nhãn cho `Payment.method` CŨ trong sổ. Cột đó là
+// chuỗi tự do và đang chứa cả mã danh mục lẫn nhãn thô ("auto" do đường ghi tự động
+// sinh). Xoá bảng này là mọi khoản thu cũ hiện ra mã trần trước mắt kế toán.
+const LEGACY_METHOD_LABEL: Record<string, string> = {
+  CASH: "Tiền mặt",
+  BANK_TRANSFER: "Chuyển khoản",
+  VNPAY: "VNPAY",
+  TINGEE: "Tingee",
+  COD: "COD",
+  auto: "Tự động",
+};
 
 function vnd(n: number): string {
   return n.toLocaleString("vi-VN") + " đ";
@@ -112,21 +134,38 @@ function fmtDate(d: string | Date): string {
   }).format(new Date(d));
 }
 
+import { BulkBackfillConfirm } from "./bulk-backfill-confirm";
+
 export function PaymentsClient({
   initialRows,
   orders,
+  methods,
   canConfirm,
+  canAdjust,
   canRecord,
   canViewPii,
 }: {
   initialRows: PaymentRow[];
   orders: OrderOption[];
+  /** Danh mục phương thức đọc từ DB, đã lọc theo tầm nhìn cơ sở của người xem. */
+  methods: MethodOption[];
   canConfirm: boolean;
+  /** 07/09 — nút "Điều chỉnh" đang khoá; xem chú thích ở lib/auth/permissions.ts. */
+  canAdjust: boolean;
   canRecord: boolean;
   canViewPii: boolean;
 }) {
   const [rows, setRows] = useState<PaymentRow[]>(initialRows);
   const [showForm, setShowForm] = useState(false);
+  // Danh mục THẬT thắng nhãn cũ: phương thức riêng của cơ sở ("BANK_CS1") chỉ có tên
+  // trong DB. Nhãn cũ chỉ đỡ cho những giá trị không còn dòng danh mục nào.
+  const methodLabel = useMemo(
+    () => ({
+      ...LEGACY_METHOD_LABEL,
+      ...Object.fromEntries(methods.map((m) => [m.code, m.name])),
+    }),
+    [methods],
+  );
   // #15 — break-glass: mặc định che CCCD PH + địa chỉ; kế toán mở xem đầy đủ có kiểm soát.
   const revealed = rows.length > 0 ? !rows[0]!.piiMasked : false;
 
@@ -145,6 +184,9 @@ export function PaymentsClient({
 
   return (
     <div className="space-y-6">
+      {/* Xác nhận hàng loạt khoản nhập liệu ban đầu — chỉ hiện cho người có quyền xác
+          nhận (cùng cổng `payments:confirm` với nút xác nhận từng khoản). */}
+      {canConfirm && <BulkBackfillConfirm />}
       {canRecord && (
         <div>
           <Button
@@ -157,6 +199,7 @@ export function PaymentsClient({
           {showForm && (
             <RecordForm
               orders={orders}
+              methods={methods}
               onDone={() => setShowForm(false)}
             />
           )}
@@ -256,7 +299,7 @@ export function PaymentsClient({
                   <TableCell className="text-right font-semibold">
                     {vnd(p.amount)}
                   </TableCell>
-                  <TableCell className="text-xs">{METHOD_LABEL[p.method] ?? p.method}</TableCell>
+                  <TableCell className="text-xs">{methodLabel[p.method] ?? p.method}</TableCell>
                   <TableCell className="text-xs">{fmtDate(p.paidDate)}</TableCell>
                   <TableCell className="text-xs">{p.collectedByName ?? "—"}</TableCell>
                   <TableCell className="text-xs">{p.leadSource ?? "—"}</TableCell>
@@ -306,9 +349,34 @@ export function PaymentsClient({
                   </TableCell>
                   {canConfirm && (
                     <TableCell className="text-right">
-                      {p.accountantStatus === "PENDING" ? (
+                      {/* 07/09 — hai ĐỘNG TỪ, hai nhóm dòng khác nhau:
+                          · PENDING  → xác nhận / từ chối / SỬA tại chỗ (bản nháp);
+                          · CONFIRMED → ĐIỀU CHỈNH (sinh bút toán delta).
+                          Trước đây cụm nút chỉ hiện với PENDING, tức nút "Điều chỉnh"
+                          nằm đúng chỗ nó KHÔNG chạy được (adjustPayment đòi CONFIRMED).
+                          Dòng ADJUSTMENT không có thao tác nào: điều chỉnh luôn trỏ về
+                          phiếu thu gốc. */}
+                      {p.paymentType === "ADJUSTMENT" ? (
+                        <span className="text-xs text-muted-foreground">
+                          bút toán điều chỉnh
+                        </span>
+                      ) : p.accountantStatus === "CONFIRMED" ? (
+                        <RowActions
+                          paymentId={p.id}
+                          updatedAt={p.updatedAt}
+                          canAdjust={canAdjust}
+                          daXacNhan
+                          hienTai={p.hienTai}
+                        />
+                      ) : p.accountantStatus === "PENDING" ? (
                         p.enrollmentId ? (
-                          <RowActions paymentId={p.id} updatedAt={p.updatedAt} />
+                          <RowActions
+                            paymentId={p.id}
+                            updatedAt={p.updatedAt}
+                            canAdjust={canAdjust}
+                            daXacNhan={false}
+                            hienTai={p.hienTai}
+                          />
                         ) : (
                           // Đơn chưa convert → chưa gắn ghi danh → confirm sẽ lỗi. Chờ convert.
                           // Lời giải thích trước đây nằm ở `title=""` của trình duyệt:
@@ -459,15 +527,17 @@ function PiiRevealControl({
 // ─── RECORD FORM ─────────────────────────────────────────────────────
 function RecordForm({
   orders,
+  methods,
   onDone,
 }: {
   orders: OrderOption[];
+  methods: MethodOption[];
   onDone: () => void;
 }) {
   const [orderId, setOrderId] = useState("");
   const [enrollmentId, setEnrollmentId] = useState("");
   const [amount, setAmount] = useState("");
-  const [method, setMethod] = useState("CASH");
+  const [method, setMethod] = useState("");
   const [paidDate, setPaidDate] = useState(
     new Date().toISOString().slice(0, 10),
   );
@@ -475,9 +545,41 @@ function RecordForm({
   const [note, setNote] = useState("");
   const [pending, start] = useTransition();
 
+  // Phương thức chọn được = phương thức của CƠ SỞ ĐỨNG TÊN ĐƠN + phương thức dùng chung.
+  // Dùng chung một luật với cổng server trong recordPaymentAction, nên không có ca chọn
+  // được ở đây rồi bị từ chối lúc Lưu.
+  const selectedOrder = orders.find((o) => o.id === orderId) ?? null;
+  const availableMethods = useMemo(
+    () =>
+      filterMethodsForCenter(
+        methods.filter((m) => m.isActive),
+        selectedOrder?.centerId ?? null,
+      ),
+    [methods, selectedOrder],
+  );
+
+  // Đổi đơn sang cơ sở khác thì phương thức đang chọn có thể không còn hợp lệ. Bỏ ngay
+  // thay vì để nó nằm im: `Payment.method` là con số kế toán đối chiếu với sao kê, ghi
+  // nhầm mã của cơ sở khác là khoản treo không tìm ra tiền.
+  useEffect(() => {
+    if (method && !availableMethods.some((m) => m.code === method)) setMethod("");
+  }, [availableMethods, method]);
+
+  // ⚠️ `<Select>` dựng trên base-ui: `<SelectValue>` in GIÁ TRỊ THÔ, không tự tra nhãn từ
+  // `<SelectItem>`. Trước đây ô này chứa mã kiểu "CASH" nên đọc tạm được; nay mã có thể
+  // là "BANK_CS1" — thiếu map `items` là kế toán nhìn thấy mã nội bộ thay vì tên phương thức.
+  const methodItems = useMemo(
+    () => Object.fromEntries(availableMethods.map((m) => [m.code, m.name])),
+    [availableMethods],
+  );
+
   function submit() {
     if (!orderId) {
       toast.error("Chọn đơn hàng");
+      return;
+    }
+    if (!method) {
+      toast.error("Chọn phương thức");
       return;
     }
     start(async () => {
@@ -554,18 +656,24 @@ function RecordForm({
               ngân hàng), nên chọn sai là khoản treo không tìm ra tiền.
             </HelpHint>
           </Label>
-          <Select value={method} onValueChange={(v) => setMethod(v ?? "CASH")}>
+          <Select items={methodItems} value={method} onValueChange={(v) => setMethod(v ?? "")}>
             <SelectTrigger>
-              <SelectValue />
+              <SelectValue placeholder="Chọn phương thức" />
             </SelectTrigger>
             <SelectContent>
-              {METHOD_OPTIONS.map((m) => (
-                <SelectItem key={m.value} value={m.value}>
-                  {m.label}
+              {availableMethods.map((m) => (
+                <SelectItem key={m.id} value={m.code}>
+                  {m.name}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+          {orderId && availableMethods.length === 0 && (
+            <p className="text-xs text-state-warning-ink">
+              Cơ sở của đơn này chưa có phương thức thanh toán nào đang bật. Khai ở trang
+              Cơ sở → mục Thanh toán.
+            </p>
+          )}
         </div>
         <div className="space-y-1.5">
           <Label>
@@ -642,11 +750,19 @@ function handleStale(): void {
 function RowActions({
   paymentId,
   updatedAt,
+  canAdjust,
+  daXacNhan,
+  hienTai,
 }: {
   paymentId: string;
   updatedAt: string;
+  canAdjust: boolean;
+  /** Khoản đã CONFIRMED → chỉ ĐIỀU CHỈNH. Chưa → xác nhận / từ chối / sửa nháp. */
+  daXacNhan: boolean;
+  /** Giá trị hiện tại của phiếu (gốc + các điều chỉnh) — nền để tính delta. */
+  hienTai: number;
 }) {
-  const [mode, setMode] = useState<null | "reject" | "adjust">(null);
+  const [mode, setMode] = useState<null | "reject" | "adjust" | "sua">(null);
   const [reason, setReason] = useState("");
   const [amount, setAmount] = useState("");
   const [pending, start] = useTransition();
@@ -676,6 +792,23 @@ function RowActions({
     });
   }
 
+  function doSuaNhap() {
+    start(async () => {
+      const res = await updatePendingPaymentAction({
+        paymentId,
+        amount: Number(amount),
+        reason,
+        expectedUpdatedAt: updatedAt,
+      });
+      if (res.ok) {
+        toast.success("Đã sửa khoản");
+        setMode(null);
+      } else if (res.error === STALE_WRITE) {
+        handleStale();
+      } else toast.error(res.error ?? "Lỗi");
+    });
+  }
+
   function doAdjust() {
     start(async () => {
       const res = await adjustPaymentAction({
@@ -685,7 +818,9 @@ function RowActions({
         expectedUpdatedAt: updatedAt,
       });
       if (res.ok) {
-        toast.success("Đã điều chỉnh khoản");
+        toast.success(
+          `Đã điều chỉnh — bút toán ${res.delta > 0 ? "+" : ""}${res.delta.toLocaleString("vi-VN")} đ`,
+        );
         setMode(null);
       } else if (res.error === STALE_WRITE) {
         handleStale();
@@ -716,17 +851,76 @@ function RowActions({
     );
   }
 
-  if (mode === "adjust") {
+  if (mode === "sua") {
+    // Khoản CHƯA xác nhận = bản nháp → sửa thẳng, không sinh bút toán nào.
     return (
       <div className="flex flex-col items-end gap-1.5">
+        <MoneyInput
+          name="suaAmount"
+          min={0}
+          value={amount}
+          onValueChange={(v) => setAmount(v === null ? "" : String(v))}
+          placeholder="Số tiền đúng"
+          className="w-56"
+        />
+        <Textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          rows={2}
+          placeholder="Lý do sửa (không bắt buộc)"
+          className="w-56"
+        />
+        <p className="w-56 text-right text-[11px] text-muted-foreground">
+          Khoản chưa xác nhận — sửa trực tiếp, không sinh bút toán điều chỉnh.
+        </p>
+        <div className="flex gap-1.5">
+          <Button size="sm" variant="outline" onClick={() => setMode(null)}>
+            Huỷ
+          </Button>
+          <Button size="sm" onClick={doSuaNhap} disabled={pending}>
+            {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            Lưu
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (mode === "adjust") {
+    // Ô nhập là SỐ TUYỆT ĐỐI (số đúng của DÒNG NÀY), backend tự tính delta. Hiện trước
+    // delta để kế toán xác nhận: gõ "3.500.000" mà không thấy nó nghĩa là "−500.000" thì
+    // rất dễ nhầm số đúng của phiếu với tổng của cả ghi danh.
+    const soDung = amount === "" ? null : Number(amount);
+    const delta = soDung === null ? null : soDung - hienTai;
+    return (
+      <div className="flex flex-col items-end gap-1.5">
+        <p className="w-56 text-right text-[11px] text-muted-foreground">
+          Số đúng <b className="text-foreground">của phiếu thu này</b> (không phải tổng
+          của ghi danh). Hiện đang là <b className="text-foreground">{vnd(hienTai)}</b>.
+        </p>
         <MoneyInput
           name="adjustAmount"
           min={0}
           value={amount}
           onValueChange={(v) => setAmount(v === null ? "" : String(v))}
-          placeholder="Số tiền mới"
+          placeholder="Số tiền đúng của phiếu này"
           className="w-56"
         />
+        {delta !== null && (
+          <p
+            className={`w-56 text-right text-xs font-semibold ${
+              delta === 0
+                ? "text-muted-foreground"
+                : delta > 0
+                  ? "text-state-success-ink"
+                  : "text-state-danger-ink"
+            }`}
+          >
+            {delta === 0
+              ? "Bằng số hiện tại — không có gì để điều chỉnh"
+              : `Sẽ sinh bút toán ${delta > 0 ? "+" : "−"}${Math.abs(delta).toLocaleString("vi-VN")} đ`}
+          </p>
+        )}
         <Textarea
           value={reason}
           onChange={(e) => setReason(e.target.value)}
@@ -738,11 +932,37 @@ function RowActions({
           <Button size="sm" variant="outline" onClick={() => setMode(null)}>
             Huỷ
           </Button>
-          <Button size="sm" onClick={doAdjust} disabled={pending}>
+          <Button
+            size="sm"
+            onClick={doAdjust}
+            disabled={pending || delta === null || delta === 0}
+          >
             {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             Lưu
           </Button>
         </div>
+      </div>
+    );
+  }
+
+  // Khoản ĐÃ XÁC NHẬN: chỉ còn một đường — điều chỉnh bằng bút toán delta.
+  if (daXacNhan) {
+    return (
+      <div className="flex justify-end gap-1.5">
+        {/* Ẩn khi thiếu `payments:adjust` (v2: kế toán HO + kế toán cơ sở). Đây chỉ
+            là lớp ngoài — Server Action tự kiểm lại, vì endpoint gọi thẳng được. */}
+        {canAdjust ? (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setMode("adjust")}
+            title="Điều chỉnh"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        )}
       </div>
     );
   }
@@ -756,11 +976,13 @@ function RowActions({
           <Check className="h-3.5 w-3.5" />
         )}
       </Button>
+      {/* Khoản chưa xác nhận là BẢN NHÁP → sửa thẳng, không sinh bút toán. Đây là
+          động từ khác với "Điều chỉnh", nên là nút khác. */}
       <Button
         size="sm"
         variant="outline"
-        onClick={() => setMode("adjust")}
-        title="Điều chỉnh"
+        onClick={() => setMode("sua")}
+        title="Sửa khoản chờ duyệt"
       >
         <Pencil className="h-3.5 w-3.5" />
       </Button>

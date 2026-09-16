@@ -122,10 +122,15 @@ describe("[V-4 G-01b] chốt chặn nguồn — 3 màn phải cùng một loại
     for (const gt of propCenters(src)) expect(gt).not.toContain("orgUnitId");
   });
 
-  it("màn TẠO: truyền `centers` riêng cho khối con (không mượn danh sách đơn vị)", () => {
+  // 03/09/2026 — màn TẠO cũ (`/leads/new`) ĐÃ GỠ, chuyển hẳn sang `/nhap-khach-hang`
+  // (chủ dự án chốt; biểu mẫu cũ dựng lead bằng `db.lead.create` trần, không đi qua
+  // `ingestIntakeLead` nên thiếu chống trùng SĐT, tra cơ sở và tự chia cho sale).
+  // Ca này nay khoá đúng điều đó: màn cũ phải là một trang CHUYỂN HƯỚNG, không được
+  // ai dựng lại biểu mẫu ở đấy.
+  it("màn TẠO cũ đã gỡ — chỉ còn chuyển hướng, không dựng lại biểu mẫu", () => {
     const src = doc(TAO);
-    expect(src).toContain("leadChildCenterOptions");
-    expect(src).toMatch(/centers=\{/);
+    expect(src).toContain("redirect");
+    expect(src).not.toMatch(/centers=\{/);
   });
 
   it("biểu mẫu lead: `ChildFields` KHÔNG còn nhận thẳng `orgUnits`", () => {

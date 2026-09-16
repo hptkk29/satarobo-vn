@@ -15,6 +15,7 @@
 // Idempotent per-lead: idempotencyKey ổn định theo payload + atomic-claim của convert.
 import { createHash } from "node:crypto";
 import { db } from "@/lib/db";
+import { KHOAN_DA_GHI_NHAN } from "@/lib/finance/ghi-nhan";
 import type { AuditActor } from "@/lib/audit/audit-log";
 import { convertLeadV2, type ConvertV2Student } from "@/lib/crm/convert-lead-v2";
 import { BACKFILL_PAYMENT_MARKER, type BackfillPaymentInput } from "@/lib/crm/backfill-order";
@@ -189,7 +190,7 @@ export async function convertOneLeadBackfill(
   const paidAmount = input.paid ? Math.round(input.paid.amount) : 0;
   if (input.paid && paidAmount > 0) {
     const recordedCount = await db.payment.count({
-      where: { saleStatus: "RECORDED", deletedAt: null, order: { leadId: lead.id } },
+      where: { ...KHOAN_DA_GHI_NHAN, order: { leadId: lead.id } },
     });
     if (recordedCount > 0) {
       warning = "Lead đã có khoản ghi nhận trong hệ thống — bỏ qua số tiền nhập ở lô này";

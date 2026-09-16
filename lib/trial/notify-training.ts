@@ -34,44 +34,45 @@ export async function layNguoiDaoTao(centerId: string | null): Promise<string[]>
 }
 
 /**
- * Báo Đào tạo có ca trải nghiệm chờ phân công giáo viên.
+ * Báo Đào tạo có BUỔI trải nghiệm chưa có giáo viên.
  *
- * Non-fatal: hỏng chuông KHÔNG được làm hỏng việc xếp lịch. `dedupeKey` gắn theo ca
- * nên xếp đi xếp lại cùng một ca không dội chuông nhiều lần; `reopen` bật để lần dời
- * lịch sau kéo tin về chưa đọc (việc đã đổi, người ta cần thấy lại).
+ * ── VÌ SAO VIẾT LẠI 14/09/2026 ──────────────────────────────────────────────────────────
+ * Bản cũ nhận `trialEnrollmentId` và nói về "ca" của luồng GĐ3 — luồng đó đã bị gỡ 28/08, ba
+ * Server Action bọc nó không còn, và hàm này thành HÀM CHẾT: grep toàn repo không nơi nào gọi.
+ * Trong khi đó tiền tố `trial.cho-phan-cong:` vẫn nằm trong danh mục, nên màn cấu hình bày ra
+ * một công tắc không nối vào đâu.
+ *
+ * Nay nó phục vụ đúng cái lỗ CÓ THẬT: ô "Giáo viên" ở khối Thêm buổi học mặc định TRỐNG
+ * (`add-session-form.tsx`), lớp trải nghiệm thì sinh ra đã `teacherId: null` và không màn nào
+ * gán giáo viên cấp lớp — nên đường mặc định của người dùng là tạo ra một buổi KHÔNG AI DẠY,
+ * và trước đợt này việc đó im lặng hoàn toàn. Chủ dự án đã đi đúng vào đường ấy ngày 13/09.
+ *
+ * Non-fatal: hỏng chuông KHÔNG được làm hỏng việc xếp lịch. `dedupeKey` gắn theo BUỔI nên sửa
+ * đi sửa lại cùng một buổi không dội chuông nhiều lần; `reopen` bật để lần sửa sau kéo tin về
+ * chưa đọc (việc đã đổi, người ta cần thấy lại).
  */
-export async function baoDaoTaoChoPhanCong(params: {
-  trialEnrollmentId: string;
+export async function baoDaoTaoBuoiChuaCoGiaoVien(params: {
+  sessionId: string;
   centerId: string | null;
-  childName: string;
   className: string;
-  /** Buổi mới, dạng người đọc — vd "Buổi 2 · 05/09/2026 18:00". Bỏ trống thì không nhắc giờ. */
-  moTaBuoi?: string | null;
-  /** true = ca này vừa bị dời lịch (khác với ca mới xếp lần đầu). */
-  laDoiLich?: boolean;
+  /** Buổi, dạng người đọc — vd "05/09/2026 18:00–19:30". */
+  moTaBuoi: string;
 }): Promise<void> {
   try {
     const userIds = await layNguoiDaoTao(params.centerId);
     if (userIds.length === 0) return;
 
-    const dau = params.laDoiLich ? "Ca trải nghiệm vừa dời lịch" : "Ca trải nghiệm chờ phân công";
-    const than = params.laDoiLich
-      ? `${params.childName} (lớp ${params.className}) đã dời sang ${params.moTaBuoi ?? "buổi khác"} và MẤT phân công giáo viên. Cần phân công lại.`
-      : `${params.childName} vừa được xếp vào lớp ${params.className}${params.moTaBuoi ? ` — ${params.moTaBuoi}` : ""}. Cần phân công giáo viên.`;
-
     await notifyStaff({
       userIds,
-      // Mốc thời gian KHÔNG nằm trong khoá: một ca dời lịch nhiều lần vẫn là một việc
-      // cần làm, không phải nhiều việc. `reopen` lo phần "kéo về chưa đọc".
-      dedupeKey: `trial.cho-phan-cong:${params.trialEnrollmentId}`,
+      dedupeKey: `trial.cho-phan-cong:${params.sessionId}`,
       category: "TRIAL",
-      title: dau,
-      body: than,
+      title: "Buổi trải nghiệm chưa có giáo viên",
+      body: `Lớp ${params.className} — ${params.moTaBuoi}. Cần phân công giáo viên.`,
       href: "/lop-trial",
-      entityId: params.trialEnrollmentId,
+      entityId: params.sessionId,
       reopen: true,
     });
   } catch (e) {
-    console.error("[trial:baoDaoTaoChoPhanCong]", e);
+    console.error("[trial:baoDaoTaoBuoiChuaCoGiaoVien]", e);
   }
 }

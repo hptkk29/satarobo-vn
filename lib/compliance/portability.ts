@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { KHOAN_DA_XAC_NHAN } from "@/lib/finance/debt";
 
 // =============================================================================
 // C6 / NĐ13 — Quyền MANG THEO dữ liệu (DSAR): xuất toàn bộ dữ liệu cá nhân của 1
@@ -47,7 +48,7 @@ export async function exportStudentData(studentId: string): Promise<Record<strin
       select: { score: true, status: true, assignment: { select: { title: true } } },
     }),
     db.payment.findMany({
-      where: { enrollment: { studentId }, accountantStatus: "CONFIRMED", deletedAt: null },
+      where: { enrollment: { studentId }, ...KHOAN_DA_XAC_NHAN },
       select: { amount: true, method: true, paidDate: true },
     }),
     db.studentSkillAssessment.findMany({

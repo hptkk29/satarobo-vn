@@ -147,7 +147,7 @@ describe("buildLeadImportTemplate (vá file thật)", () => {
     expect(wb.SheetNames[0]).toBe("Lead");
     expect(wb.SheetNames.length).toBe(3); // Lead + 📖 HƯỚNG DẪN + ✅ VÍ DỤ
     const header = XLSX.utils.sheet_to_json<string[]>(wb.Sheets["Lead"]!, { header: 1 })[0];
-    expect(header?.slice(0, 9)).toEqual([...LEAD_IMPORT_COLUMNS]);
+    expect(header?.slice(0, 10)).toEqual([...LEAD_IMPORT_COLUMNS]);
   });
 
   it("[TPL-9] sheet ✅ VÍ DỤ giữ nguyên; sheet 📖 HƯỚNG DẪN giữ bố cục nhưng cập nhật luật mới", async () => {
