@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { KHOAN_DA_GHI_NHAN } from "@/lib/finance/ghi-nhan";
 import { congNoDon } from "@/lib/finance/cong-no-don";
+import { DON_SACH, donNhiemTheoDon } from "@/lib/orders/don-nhiem";
 import { notFound, redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
@@ -177,6 +178,22 @@ export default async function OrderDetailPage({ params }: Props) {
   //
   // Trước bản này `paidSoFar` chỉ dùng cho QR rồi bị bỏ: trang tính được "còn thiếu"
   // mà không in ra đâu cả.
+  /**
+   * ── BƯỚC A3 [16/09/2026]: ĐƠN CÓ DỮ LIỆU HỎNG THÌ NÓI RA NGAY ĐẦU TRANG ─────
+   *
+   * Chủ dự án: *"màn đơn hiện banner 'Đang chờ sửa dữ liệu'"*. Người mở đơn phải biết
+   * TRƯỚC KHI thao tác, chứ không phải bấm "Xuất QR" rồi mới ăn một câu từ chối.
+   *
+   * ⚠️ `bypass: true` — đây là cổng AN TOÀN, không phải cổng hiển thị. Đơn này người dùng
+   * đã qua scope ở trên rồi; nếu phép phán xét lại bị lọc theo tầm nhìn thì một đơn nhiễm
+   * nằm ngoài tầm nhìn sẽ hiện ra là SẠCH.
+   */
+  const nhiemMap = await donNhiemTheoDon(
+    scopedDb(actor, { bypass: true }),
+    [order.id],
+  );
+  const donNhiem = nhiemMap.get(order.id) ?? DON_SACH;
+
   const congNo = congNoDon({
     totalAmount: order.totalAmount,
     daGhiNhan: paidSoFar._sum.amount ?? 0,
@@ -314,6 +331,7 @@ export default async function OrderDetailPage({ params }: Props) {
         qrSessions={qrSessions}
         paymentMethods={paymentMethods}
         congNo={congNo}
+        donNhiem={donNhiem}
         accounting={{
           // Trục A — dùng chung định nghĩa "khoản đã xác nhận" với công nợ và cổng
           // phụ huynh (lib/finance/debt.ts). Bút toán ADJUSTMENT nằm trong đó.

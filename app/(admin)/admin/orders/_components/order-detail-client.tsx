@@ -47,6 +47,8 @@ import {
   trangThaiDon,
   type SacThaiTrangThai,
 } from "@/lib/orders/trang-thai-don";
+import type { DonNhiem } from "@/lib/orders/don-nhiem";
+import { BannerDonNhiem } from "./banner-don-nhiem";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 import { ThongTinHoaDon } from "./thong-tin-hoa-don";
 import {
@@ -231,6 +233,7 @@ export function OrderDetailClient({
   paymentMethods,
   accounting,
   congNo,
+  donNhiem,
   hanhDongPhu,
 }: {
   order: OrderWithIncludes;
@@ -251,6 +254,8 @@ export function OrderDetailClient({
   // (b) PA-A — tổng theo sổ kế toán (Payment) của đơn: CONFIRMED vs PENDING (chờ ✓).
   accounting: { confirmed: number; pending: number };
   congNo: CongNoDon;
+  /** Bước A3 — đơn có dữ liệu hỏng thì nói ra ngay đầu trang. */
+  donNhiem: DonNhiem;
   /**
    * Nút phụ của thanh tiêu đề (hiện là "Gửi email") — RSC truyền vào vì nó cần dữ liệu
    * mẫu email lấy từ DB. Để đây thay vì dựng một thanh tiêu đề thứ hai ở RSC: hai thanh
@@ -386,6 +391,10 @@ export function OrderDetailClient({
 
   return (
     <div className="space-y-5 lg:space-y-6">
+      {/* ⚠️ ĐỨNG TRÊN CẢ THANH TIÊU ĐỀ, có chủ đích: người mở đơn phải biết dữ liệu hỏng
+          TRƯỚC KHI thao tác, không phải sau khi bấm "Xuất QR" rồi ăn một câu từ chối. */}
+      <BannerDonNhiem d={donNhiem} />
+
       {/* ── THANH TIÊU ĐỀ ────────────────────────────────────────────────────
           Danh tính + tổng tiền + hành động, trong MỘT hàng ở màn rộng và xếp
           chồng ở màn hẹp.

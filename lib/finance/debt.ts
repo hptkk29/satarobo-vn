@@ -6,6 +6,7 @@ import { enqueueDebtReminder } from "@/lib/email/triggers";
 // TRỤC B — hằng điều kiện "đã ghi nhận". Import để KHÔNG gõ tay "RECORDED" ở đây:
 // mỗi lần gõ tay là một bản sao thứ hai của định nghĩa "đã thu".
 import { laKhoanDaGhiNhan } from "@/lib/finance/ghi-nhan";
+import { chanGuiRaNgoai, donNhiemTheoDon } from "@/lib/orders/don-nhiem";
 import type { ScopedDb } from "@/lib/actions/factory";
 
 // ĐỊNH NGHĨA dời sang `debt-pure.ts` (14/09/2026) vì file này import `@/lib/db`: mọi
@@ -281,9 +282,28 @@ export async function remindOverdueSingleOrders(
   const startOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const orders = await getOverdueOrders({ olderThanDays: opts.olderThanDays, now });
 
+  /**
+   * ── BƯỚC A3 [16/09/2026]: KHÔNG NHẮC NỢ TỪ ĐƠN MANG TÊN CON NHÀ KHÁC ─────────
+   *
+   * Chủ dự án: *"đơn nhiễm: không phát QR, không nhắc nợ ZNS… gửi ra ngoài là lộ thông
+   * tin."* Tin nhắc nợ đi THẲNG tới phụ huynh, nên nó cùng loại rủi ro với mã QR.
+   *
+   * Hỏi MỘT LẦN cho cả lô (`donNhiemTheoDon` nhận cả tập), không hỏi trong vòng lặp.
+   *
+   * ⚠️ `db` trần là ĐÚNG ở đây: cron chạy không có actor, và một cổng an toàn bị lọc theo
+   * tầm nhìn sẽ coi đơn nhiễm ngoài tầm nhìn là SẠCH.
+   *
+   * ⚠️ CHỈ chặn tiêu chí CON_NHÀ_KHÁC (`chanGuiRaNgoai`). Dữ liệu PROD 16/09: 18 đơn kẹt
+   * tiền (178.544.000đ) chỉ dính tiêu chí nhẹ — chặn theo `nhiem` là im lặng thôi nhắc nợ
+   * 18 khách vì một lỗi nội bộ, tức hệ thống tự bỏ đòi tiền mà không ai biết.
+   */
+  const nhiem = await donNhiemTheoDon(db, orders.map((o) => o.id));
+
   let sent = 0;
   let skipped = 0;
   for (const o of orders) {
+    const dn = nhiem.get(o.id);
+    if (dn && chanGuiRaNgoai(dn)) { skipped++; continue; }
     if (!o.customerEmail) { skipped++; continue; }
     const installmentCount = await db.orderInstallment.count({ where: { orderId: o.id } });
     if (installmentCount > 0) { skipped++; continue; } // trả góp → cron installment lo
@@ -343,10 +363,16 @@ export async function remindOverdueInstallments(
     },
   });
 
+  // Cùng cổng A3 với `remindOverdueSingleOrders` — chặn một cron mà để hở cron kia thì
+  // đơn nhiễm vẫn nhắn ra ngoài, chỉ đổi đường. Hỏi MỘT LẦN cho cả lô.
+  const nhiem = await donNhiemTheoDon(db, installments.map((i) => i.order.id));
+
   let found = 0;
   let sent = 0;
   let skipped = 0;
   for (const inst of installments) {
+    const dn = nhiem.get(inst.order.id);
+    if (dn && chanGuiRaNgoai(dn)) { skipped++; continue; }
     const days = effectiveReminderDays(inst.reminderDays, defaultDays);
     if (!isReminderDue(inst.dueDate, days, now)) continue; // chưa đến mốc nhắc
     found++;
