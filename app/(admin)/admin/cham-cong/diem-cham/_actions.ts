@@ -48,3 +48,53 @@ export async function saveWorkLocationAction(input: unknown): Promise<Res> {
   revalidatePath("/cham-cong/diem-cham");
   return { ok: true };
 }
+
+// ── Thu hồi mã QR đã in (đợt 2, 07/09/2026) ────────────────────────────────────────────
+//
+// Vì sao phải có nút này: mã QR nay là mã TĨNH in ra dán ở quầy. Tờ giấy đó mất, hoặc nhân
+// viên nghỉ việc còn giữ ảnh chụp, thì cách DUY NHẤT vô hiệu hoá nó là tăng `qrKeyVersion`.
+// Không có nút thì việc đó phải chạy SQL trên prod — mà theo luật dự án prod chỉ chạm được
+// qua workflow GitHub, tức lớp thu hồi duy nhất trên thực tế là không dùng được.
+//
+// Đổi khoá là hành động MỘT CHIỀU với người đang đứng ở quầy: mọi tờ cũ chết ngay lập tức.
+// Nên buộc nêu lý do (vào audit) và chỗ gọi phải hỏi lại trước khi bấm.
+const thuHoiSchema = z.object({
+  id: z.string().min(1),
+  reason: z.string().trim().min(5, "Nêu lý do thu hồi (mất tờ giấy, nhân viên nghỉ…)").max(300),
+});
+
+export async function revokeQrKeyAction(input: unknown): Promise<Res> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  const p = thuHoiSchema.safeParse(input);
+  if (!p.success) return { ok: false, error: p.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  const wl = await sdb.workLocation.findUnique({
+    where: { id: p.data.id },
+    select: { id: true, centerId: true, name: true, qrKeyVersion: true },
+  });
+  if (!wl) return { ok: false, error: "Không tìm thấy điểm chấm công" };
+  // `scopedDb` không che đường ghi — gác bằng target thật.
+  if (!(await checkPermission("hr_attendance:config", { centerId: wl.centerId }))) {
+    return { ok: false, error: "Thu hồi mã QR cần quyền cấu hình tại cơ sở này" };
+  }
+
+  await sdb.workLocation.update({
+    where: { id: wl.id },
+    data: { qrKeyVersion: { increment: 1 } },
+  });
+  await writeAudit({
+    actor: { id: session.user.id, name: session.user.name ?? "" },
+    module: "hr_attendance",
+    entityType: "WorkLocation",
+    entityId: wl.id,
+    action: "REVOKE_QR_KEY",
+    oldValues: { qrKeyVersion: wl.qrKeyVersion },
+    newValues: { qrKeyVersion: wl.qrKeyVersion + 1 },
+    reason: p.data.reason,
+  });
+  revalidatePath("/cham-cong/diem-cham");
+  revalidatePath("/cham-cong/man-hinh");
+  return { ok: true };
+}

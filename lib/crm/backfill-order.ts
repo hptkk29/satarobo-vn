@@ -11,7 +11,10 @@ import { generateOrderCode } from "@/lib/orders/code";
 
 type Tx = Prisma.TransactionClient;
 
-export const BACKFILL_PAYMENT_MARKER = "[backfill-import]";
+// 13/09/2026 — chuỗi dời sang SỔ ĐĂNG KÝ `lib/finance/payment-markers.ts`; re-export
+// ở đây để `lib/crm/bulk-convert.ts` và `tests/e2e/r7/bulk-convert.spec.ts` không phải sửa.
+export { BACKFILL_PAYMENT_MARKER } from "@/lib/finance/payment-markers";
+import { BACKFILL_PAYMENT_MARKER } from "@/lib/finance/payment-markers";
 
 export type BackfillPaymentInput = {
   amount: number;

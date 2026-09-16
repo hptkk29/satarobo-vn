@@ -1,6 +1,11 @@
 // lib/cham-cong/timelog.ts — GHI LƯỢT QUÉT (L4): vé 120s tiêu nguyên tử → StaffTimeLog → xếp hàng
-// tính lại ngày. Luật Q-07: GHI LUÔN + gắn cờ hậu kiểm (ngoài vùng, thiếu GPS, sai nơi làm, trùng,
-// vượt trần) — chỉ từ chối khi vé hỏng/hết hạn/đã dùng hoặc không có điểm chấm.
+// tính lại ngày. Luật Q-07: GHI LUÔN + gắn cờ hậu kiểm (thiếu GPS, sai nơi làm, trùng, vượt trần)
+// — chỉ từ chối khi vé hỏng/hết hạn/đã dùng hoặc không có điểm chấm.
+//
+// ⚠️ MỘT NGOẠI LỆ của Q-07, thêm 07/09/2026 cùng lúc chuyển sang QR TĨNH: điểm ĐÃ khai toạ độ và
+// ĐÃ bật định vị thì quét ngoài vùng bị TỪ CHỐI, không phải gắn cờ. Lý do: mã tĩnh in ra ai chụp
+// cũng quét được, nên định vị là lớp bảo vệ còn lại duy nhất — gắn cờ thôi thì mã tĩnh + cờ =
+// không chặn gì cả. Điểm CHƯA khai toạ độ vẫn chạy đúng luật cũ.
 // Không "use server": action ở app/ (auth + quyền) gọi vào.
 import { createHash, randomBytes } from "crypto";
 import type { Prisma } from "@prisma/client";
@@ -63,7 +68,7 @@ export type RecordTimeLogInput = {
 
 export type RecordTimeLogResult =
   | { ok: true; logId: string; flags: string[]; workDate: Date; centerId: string }
-  | { ok: false; error: string; rejectReason: "NO_WORKLOCATION" };
+  | { ok: false; error: string; rejectReason: "NO_WORKLOCATION" | "OUTSIDE_GEOFENCE" | "NO_GPS" };
 
 /** Ghi lượt (ACCEPTED + cờ) rồi xếp hàng tính lại ngày. */
 export async function recordTimeLog(input: RecordTimeLogInput): Promise<RecordTimeLogResult> {
@@ -95,6 +100,37 @@ export async function recordTimeLog(input: RecordTimeLogInput): Promise<RecordTi
     within = dist <= wl.radiusMeters;
     if (wl.geofenceEnabled && !within) flags.add("NGOAI_VUNG");
     if ((input.accuracyMeters ?? 0) > 200) flags.add("GPS_KEM_CHINH_XAC");
+  }
+
+  // ── CHẶN khi ngoài vùng (chốt chủ dự án 06/09, đi cùng QR TĨNH) ────────────────────────
+  //
+  // Đảo luật Q-07 cũ ("ghi luôn + gắn cờ") cho ĐÚNG một trường hợp, và chỉ vì QR đổi thiết kế:
+  // mã tĩnh in ra dán ở quầy thì ai chụp ảnh cũng quét được, nên định vị là lớp bảo vệ CÒN LẠI
+  // duy nhất. Gắn cờ thôi thì mã tĩnh + cờ = không chặn gì cả.
+  //
+  // CHẶN CÓ ĐIỀU KIỆN — chỉ ở điểm ĐÃ KHAI TOẠ ĐỘ và ĐÃ BẬT định vị. Chặn vô điều kiện là
+  // khoá cửa cả công ty: `geofenceEnabled` mặc định `false` và toạ độ mặc định `null`, nên
+  // điểm chưa đo thực địa sẽ từ chối mọi người. Điểm chưa khai vẫn chạy như cũ (ghi + cờ
+  // `CHUA_TOA_DO`), và màn Điểm chấm công nói rõ điểm nào chưa chặn được.
+  //
+  // Người bị chặn nhầm KHÔNG kẹt: đơn chỉnh công (`TIMESHEET_FIX`) là đường sửa có sẵn, quản lý
+  // duyệt là mốc giờ vào đúng chỗ.
+  if (wl.geofenceEnabled && wl.latitude != null && wl.longitude != null) {
+    if (input.latitude == null || input.longitude == null) {
+      return {
+        ok: false,
+        error: "Không lấy được vị trí. Bật định vị cho trình duyệt rồi quét lại — nếu vẫn không được, nộp đơn chỉnh công.",
+        rejectReason: "NO_GPS",
+      };
+    }
+    if (within === false) {
+      const xa = dist == null ? "" : ` (cách ${Math.round(dist)}m, cho phép ${wl.radiusMeters}m)`;
+      return {
+        ok: false,
+        error: `Bạn đang ở ngoài phạm vi ${wl.name}${xa}. Tới nơi rồi quét lại — nếu máy định vị sai, nộp đơn chỉnh công.`,
+        rejectReason: "OUTSIDE_GEOFENCE",
+      };
+    }
   }
   // Sai nơi làm (§4.10): chỉ khi ca hôm nay AT_UNITS và điểm chấm không thuộc đơn vị cho phép.
   if (assignment && assignment.placeMode === "AT_UNITS") {

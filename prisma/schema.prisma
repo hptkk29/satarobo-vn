@@ -10322,6 +10322,10 @@ model WorkLocation {
   longitude       Float?
   radiusMeters    Int      @default(100)
   geofenceEnabled Boolean  @default(false) // bật từng cơ sở sau khi đo toạ độ
+  /// Đời khoá của mã QR TĨNH in ra. Tăng lên 1 là mọi tờ đã in / mọi ảnh chụp cũ chết ngay.
+  /// Đây là cách DUY NHẤT thu hồi mã đã in mà không phải đổi `NEXTAUTH_SECRET` — khoá đó dùng
+  /// chung cho session, vé SCORM, cookie portal, OTP, đổi nó là đá sập cả hệ thống.
+  qrKeyVersion    Int      @default(1)
   ipAllowlist     String[] @default([])
   isActive        Boolean  @default(true)
   createdAt       DateTime @default(now()) @db.Timestamptz(6)
@@ -10376,45 +10380,63 @@ model StaffTimeLog {
 }
 
 /// Bảng công NGÀY — bảng quan trọng nhất. Ghi CHỈ qua recomputeAttendanceDay (upsert), LOCKED thì bỏ qua.
+/// Kết luận của QUẢN LÝ về một ngày vắng mặt. Thiếu (null) = chưa ai xem tới.
+enum AttendanceAbsenceStatus {
+  UNAUTHORISED // nghỉ không phép — vào diện trừ % nội quy
+  EXCUSED // có lý do chính đáng (quên quét, quầy hỏng, đi công tác) — KHÔNG trừ
+}
+
 model StaffAttendanceDay {
-  id                 String               @id @default(cuid())
-  userId             String
-  centerId           String
-  orgUnitId          String?
-  workDate           DateTime             @db.Date
-  assignmentId       String?
-  templateCode       String?
-  placeMode          ShiftPlaceMode?
-  dayType            AttendanceDayType    @default(UNSCHEDULED)
-  expectedMinutes    Int                  @default(0)
-  workedMinutes      Int                  @default(0)
-  paidBreakMinutes   Int                  @default(0)
-  rawPairedMinutes   Int                  @default(0)
-  amExpected         Int                  @default(0)
-  amWorked           Int                  @default(0)
-  pmExpected         Int                  @default(0)
-  pmWorked           Int                  @default(0)
-  lateMinutes        Int                  @default(0)
-  earlyLeaveMinutes  Int                  @default(0)
-  missedEarlyArrival Boolean              @default(false)
-  dayCreditExpected  Float                @default(0)
-  dayCreditEarned    Float                @default(0)
-  hourCredit         Float                @default(0)
-  leaveUnits         Float                @default(0)
-  holidayPaidUnits   Float                @default(0)
-  overrideUnits      Float?
-  overrideById       String?
-  overrideAt         DateTime?            @db.Timestamptz(6)
-  overrideNote       String?              @db.Text
-  pairs              Json?
-  flags              String[]             @default([])
-  status             AttendanceDayStatus  @default(COMPUTED)
-  ruleSnapshot       Json?
-  computedBy         AttendanceComputedBy @default(ENGINE)
-  computedAt         DateTime             @default(now()) @db.Timestamptz(6)
-  periodId           String?
-  createdAt          DateTime             @default(now()) @db.Timestamptz(6)
-  updatedAt          DateTime             @updatedAt @db.Timestamptz(6)
+  id                  String                   @id @default(cuid())
+  userId              String
+  centerId            String
+  orgUnitId           String?
+  workDate            DateTime                 @db.Date
+  assignmentId        String?
+  templateCode        String?
+  placeMode           ShiftPlaceMode?
+  dayType             AttendanceDayType        @default(UNSCHEDULED)
+  expectedMinutes     Int                      @default(0)
+  workedMinutes       Int                      @default(0)
+  paidBreakMinutes    Int                      @default(0)
+  rawPairedMinutes    Int                      @default(0)
+  amExpected          Int                      @default(0)
+  amWorked            Int                      @default(0)
+  pmExpected          Int                      @default(0)
+  pmWorked            Int                      @default(0)
+  lateMinutes         Int                      @default(0)
+  /// Số phút đến muộn so với giờ bắt đầu ĐOẠN ĐẦU của ca, ghi THÔ — khác `lateMinutes`
+  /// vốn chỉ cộng khi đã vượt dung sai `shift.lateGraceMinutes` (mặc định 30′). Không có
+  /// cột này thì người trễ 20′ lưu thành 0 và không đếm được theo bất kỳ ngưỡng nào < 30′.
+  arrivalDeltaMinutes Int                      @default(0)
+  earlyLeaveMinutes   Int                      @default(0)
+  missedEarlyArrival  Boolean                  @default(false)
+  dayCreditExpected   Float                    @default(0)
+  dayCreditEarned     Float                    @default(0)
+  hourCredit          Float                    @default(0)
+  leaveUnits          Float                    @default(0)
+  holidayPaidUnits    Float                    @default(0)
+  overrideUnits       Float?
+  overrideById        String?
+  overrideAt          DateTime?                @db.Timestamptz(6)
+  overrideNote        String?                  @db.Text
+  /// Quản lý XÁC NHẬN ngày này là nghỉ không phép / có lý do. Chủ dự án chốt 06/09: không
+  /// tự động trừ từ cờ `KHONG_CO_LUOT`, vì cờ đó còn do quên quét, quầy hỏng, đi công tác.
+  /// Bốn cột này do NGƯỜI ghi, không do engine — `recomputeAttendanceDay` liệt kê tường minh
+  /// các cột nó ghi nên chúng sống sót qua mỗi lần tính lại, y như cặp `override*` ở trên.
+  absenceStatus       AttendanceAbsenceStatus?
+  absenceById         String?
+  absenceAt           DateTime?                @db.Timestamptz(6)
+  absenceNote         String?                  @db.Text
+  pairs               Json?
+  flags               String[]                 @default([])
+  status              AttendanceDayStatus      @default(COMPUTED)
+  ruleSnapshot        Json?
+  computedBy          AttendanceComputedBy     @default(ENGINE)
+  computedAt          DateTime                 @default(now()) @db.Timestamptz(6)
+  periodId            String?
+  createdAt           DateTime                 @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime                 @updatedAt @db.Timestamptz(6)
 
   @@unique([userId, workDate])
   @@index([centerId, workDate])
@@ -10487,12 +10509,67 @@ model ShiftBriefNote {
 }
 
 /// Danh mục loại nghỉ (K-06 theo MISA) — màn CRUD, seed 8 dòng 1 lần.
+/// Cách quy một buổi dạy ra công: theo BUỔI hay theo GIỜ thực dạy.
+enum TeachingCreditBasis {
+  PER_SESSION
+  PER_HOUR
+}
+
+/// Buổi đến từ đâu. Lớp chính thức hay buổi trải nghiệm — hai model khác hẳn nhau.
+enum TeachingCreditSource {
+  CLASS
+  TRIAL
+}
+
+/// Vai của người trong buổi đó.
+enum TeachingRole {
+  MAIN
+  SUBSTITUTE
+  ASSISTANT
+}
+
+/// Danh mục LOẠI CÔNG DẠY — người vận hành tự bật/tắt và chỉnh hệ số, KHÔNG cần lập trình viên.
+///
+/// Vì sao khoá `@@unique([source, role])`: sáu tổ hợp (lớp/trải nghiệm × chính/thay/trợ giảng) là
+/// TOÀN BỘ những gì hệ thống tự nhận ra được từ dữ liệu buổi hiện có. Khoá lại thì mỗi buổi ứng
+/// đúng một loại — không cần thứ tự ưu tiên, không cần ngôn ngữ điều kiện, và không bao giờ có
+/// chuyện một buổi được đếm hai lần.
+///
+/// ⚠️ "Dạy bù" và "vượt giờ" CHƯA có ở đây vì dữ liệu chưa phân biệt được: không cột nào đánh dấu
+/// một `ClassSession` là buổi bù, và `actualStartAt/actualEndAt` gần như luôn rỗng nên không biết
+/// buổi nào vượt giờ. Thêm hai loại đó là thêm một ô luôn bằng 0 — cần chốt cách ghi nhận trước.
+model TeachingCreditType {
+  id             String               @id @default(cuid())
+  code           String               @unique
+  name           String
+  source         TeachingCreditSource
+  role           TeachingRole
+  basis          TeachingCreditBasis  @default(PER_SESSION)
+  /// Hệ số quy đổi. 1 = một buổi tính một công dạy; 0,5 = nửa; theo giờ thì nhân với số giờ.
+  factor         Float                @default(1)
+  /// Tắt = vẫn liệt kê để theo dõi nhưng KHÔNG cộng vào tổng công dạy của kỳ.
+  countsInPeriod Boolean              @default(true)
+  isActive       Boolean              @default(true)
+  displayOrder   Int                  @default(0)
+  createdAt      DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime             @updatedAt @db.Timestamptz(6)
+
+  @@unique([source, role])
+}
+
 model LeaveType {
   id             String   @id @default(cuid())
   code           String   @unique
   name           String
   paidRatio      Float    @default(1) // 1 = hưởng 100% · 0 = không lương
   maxDaysPerYear Int?
+  /// Số ngày phải báo trước cho loại nghỉ NÀY. null = không đòi báo trước.
+  ///
+  /// Vì sao theo LOẠI chứ không một số chung: ma chay, ốm (BHXH), thai sản về bản chất không
+  /// báo trước được. Một ngưỡng chung cho tất cả thì hoặc là vô hiệu với phép năm, hoặc là
+  /// biến ba loại kia thành "luôn vi phạm". Nộp muộn hơn ngưỡng KHÔNG bị chặn — nhưng phải
+  /// chỉ định người làm thay, đúng mục đích "để quản lý bố trí nhân sự hỗ trợ".
+  noticeDays     Int?
   countsAsWorked Boolean  @default(false)
   isActive       Boolean  @default(true)
   displayOrder   Int      @default(0)

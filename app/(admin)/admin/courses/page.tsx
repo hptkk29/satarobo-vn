@@ -73,8 +73,8 @@ export default async function CoursesPage() {
         </p>
       </PageHelp>
 
-      <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
-        <PhanTrangBang>
+      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+        <PhanTrangBang cuonNgang>
           <Table>
             <TableHeader>
               <TableRow>

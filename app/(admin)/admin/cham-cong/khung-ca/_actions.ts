@@ -89,6 +89,26 @@ export async function generateMonthAction(input: unknown): Promise<Res<GenerateR
     action: "GENERATE",
     newValues: { periodKey: p.data.periodKey, centerIds: [...allowed], ...result, restWarnings: result.restWarnings.length },
   });
+  // Làm giàu TÊN cho cảnh báo 7 ngày không nghỉ. Tầng lib cố ý không tra được tên
+  // (`GenerateDb` chỉ có 3 model, không có `user`), nên hộp thoại trước đây chỉ in được khoảng
+  // ngày rồi phải nói vòng "xem lưới bên dưới để biết là ai" — tự nó thừa nhận thiếu.
+  // `User` thuộc `SCOPE_EXEMPT` nên `sdb` vẫn tra được tên; rỗng thì bỏ hẳn truy vấn, đừng bắn
+  // `in: []`. Audit ở trên GIỮ NGUYÊN chỉ số đếm — đừng nhét tên người vào `newValues`.
+  const idCanhBao = [...new Set(result.restWarnings.map((w) => w.userId))];
+  const tenCua = idCanhBao.length
+    ? new Map(
+        (await sdb.user.findMany({ where: { id: { in: idCanhBao } }, select: { id: true, name: true, email: true } })).map(
+          (u) => [u.id, u.name ?? u.email ?? u.id],
+        ),
+      )
+    : new Map<string, string>();
+
   revalidatePath("/cham-cong/phan-ca");
-  return { ok: true, data: result };
+  return {
+    ok: true,
+    data: {
+      ...result,
+      restWarnings: result.restWarnings.map((w) => ({ ...w, name: tenCua.get(w.userId) ?? null })),
+    },
+  };
 }

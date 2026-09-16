@@ -9,6 +9,11 @@ import { issueReceipt } from "@/lib/finance/receipt";
 import { allocateByWeight } from "@/lib/finance/allocate";
 import { recordLeadStatusLedger } from "@/lib/leads/set-status";
 import { recordLeadStatusChange } from "@/lib/lead/status-trail-write";
+// Sổ đăng ký marker — MỘT chỗ định nghĩa chuỗi nhận dạng khoản tự sinh.
+import {
+  AUTO_ORDER_CONFIRM_MARKER,
+  installmentMarker,
+} from "@/lib/finance/payment-markers";
 
 type Tx = Prisma.TransactionClient;
 
@@ -51,9 +56,15 @@ export type EnsurePaymentActor = { id: string | null; name?: string | null; cent
 
 const AUTO_PAYMENT_METHOD = "auto";
 
-/** Khoá idempotency lưu trong Payment.note (Payment KHÔNG có cột soDot). */
+/**
+ * Khoá idempotency lưu trong Payment.note (Payment KHÔNG có cột soDot).
+ *
+ * ⚠️ 13/09/2026 — chuỗi nay lấy từ SỔ ĐĂNG KÝ `lib/finance/payment-markers.ts`, không
+ * ghép tay nữa. Trước đó hàm này ghép một đằng còn `installments.ts` dọn theo tiền tố
+ * `"[auto:"` một nẻo, và cái tiền tố đó quét luôn tiền thật từ ngân hàng (DS-03).
+ */
 function autoPaymentMarker(soDot?: number | null): string {
-  return soDot != null ? `[auto:order-installment:dot${soDot}]` : `[auto:order-confirm]`;
+  return soDot != null ? installmentMarker(soDot) : AUTO_ORDER_CONFIRM_MARKER;
 }
 
 /**

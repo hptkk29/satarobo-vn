@@ -139,8 +139,8 @@ export function BangLeadChuyenDoi({
           rơi vào bảng này, dù tiền của họ vẫn nằm trong tổng thực thu của kỳ.
         </p>
       ) : (
-        <div className="mt-3 overflow-x-auto rounded-lg border border-border">
-          <PhanTrangBang tenDonVi="học sinh" khoaGhiNho="qlcs-lead-chuyen-doi">
+        <div className="mt-3 overflow-hidden rounded-lg border border-border">
+          <PhanTrangBang cuonNgang tenDonVi="học sinh" khoaGhiNho="qlcs-lead-chuyen-doi">
             <table className="w-full text-sm">
               <thead className="bg-muted">
                 <tr className="text-left">

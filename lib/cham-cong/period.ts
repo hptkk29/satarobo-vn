@@ -17,6 +17,7 @@ import { getSetting } from "@/lib/settings/service";
 import { vnDateAt, vnWeekday } from "@/lib/time/vn";
 import { HO_CENTER_ID, loadCenterMap } from "./home-center";
 import { recomputeRange } from "./recompute";
+import { thongKeNguoi, type NoiQuyRules, type ThongKeNguoi } from "./noi-quy";
 
 export type PeriodKey = string; // "YYYY-MM"
 
@@ -112,6 +113,15 @@ export type PeriodPersonRow = {
   overrideDays: number;
   flaggedDays: number;
   teachingSessions: number;
+  /**
+   * Thống kê NỘI QUY của người này trong kỳ: ca thực tế / ca quy định, số lần trễ, ngày nghỉ
+   * không phép (đã xác nhận), ngày vắng chờ kết luận, và % bị trừ.
+   *
+   * CỐ Ý tách khỏi `units`/`expectedUnits` ngay bên trên: hai cột kia đếm công theo KẾ HOẠCH
+   * (luật T-01, engine không tự trừ) nên tỷ lệ giữa chúng luôn là 100%. Đây là đại lượng riêng,
+   * đếm từ bằng chứng có mặt, và không đụng tới cột công dùng để trả lương.
+   */
+  noiQuy: ThongKeNguoi;
   /** ngày → mã ca / "P" / "X" — lưới sheet 2 */
   grid: Record<string, string>;
   unitsByDay: Record<string, number>;
@@ -131,6 +141,15 @@ const WARN_FLAGS = new Set(["KHONG_CO_LUOT", "THIEU_LUOT_RA", "RA_KHONG_CO_VAO",
 
 export async function buildPeriodSummary(centerId: string, key: PeriodKey): Promise<PeriodSummary> {
   const { from, to, days: nDays } = periodRange(key);
+  // Ngưỡng và mức trừ là THAM SỐ VẬN HÀNH, đọc theo đơn vị. Hằng trong `noi-quy.ts` chỉ là
+  // mặc định cho hàm thuần — đường nào chạm DB thì phải đọc setting rồi truyền vào, kẻo người
+  // vận hành sửa ở màn Cấu hình mà bảng vẫn tính theo số cũ (đúng bài học của trần hoa hồng).
+  const orgUnitIdForRules = await orgUnitOf(centerId);
+  const noiQuyRules: NoiQuyRules = {
+    latePenaltyGraceMinutes: await getSetting("shift.latePenaltyGraceMinutes", { orgUnitId: orgUnitIdForRules }),
+    penaltyLatePercent: await getSetting("shift.penaltyLatePercent", { orgUnitId: orgUnitIdForRules }),
+    penaltyAbsentPercent: await getSetting("shift.penaltyAbsentPercent", { orgUnitId: orgUnitIdForRules }),
+  };
   const period = await db.attendancePeriod.findUnique({ where: { centerId_periodKey: { centerId, periodKey: key } }, select: { standardUnits: true } });
   const [dayRows, assignments] = await Promise.all([
     db.staffAttendanceDay.findMany({ where: { centerId, workDate: { gte: from, lte: to } } }),
@@ -172,6 +191,7 @@ export async function buildPeriodSummary(centerId: string, key: PeriodKey): Prom
       units: 0, expectedUnits: 0, leaveUnits: 0, holidayPaidUnits: 0, hourCredit: 0, workedMinutes: 0, expectedMinutes: 0,
       lateCount: 0, earlyLeaveCount: 0, missingTapDays: 0, overrideDays: 0, flaggedDays: 0,
       teachingSessions: teach.get(userId) ?? 0,
+      noiQuy: thongKeNguoi(mine, noiQuyRules),
       grid, unitsByDay,
     };
     for (const d of mine) {

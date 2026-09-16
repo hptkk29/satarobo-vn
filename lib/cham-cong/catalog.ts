@@ -268,13 +268,45 @@ export const LEAVE_TYPE_CATALOG: readonly {
   paidRatio: number;
   maxDaysPerYear: number | null;
   countsAsWorked: boolean;
+  /** Ngày phải báo trước. null = không đòi (việc đột xuất, không ai hẹn trước được). */
+  noticeDays: number | null;
 }[] = [
-  { code: "NGHI_PHEP", name: "Nghỉ phép năm", paidRatio: 1, maxDaysPerYear: null, countsAsWorked: false },
-  { code: "KHONG_LUONG", name: "Nghỉ không lương", paidRatio: 0, maxDaysPerYear: 10, countsAsWorked: false },
-  { code: "KET_HON", name: "Nghỉ kết hôn", paidRatio: 1, maxDaysPerYear: 7, countsAsWorked: false },
-  { code: "CON_KET_HON", name: "Nghỉ con kết hôn", paidRatio: 1, maxDaysPerYear: 3, countsAsWorked: false },
-  { code: "MA_CHAY", name: "Nghỉ ma chay", paidRatio: 1, maxDaysPerYear: 3, countsAsWorked: false },
-  { code: "BHXH", name: "Nghỉ hưởng BHXH (ốm)", paidRatio: 0, maxDaysPerYear: null, countsAsWorked: false },
-  { code: "THAI_SAN", name: "Nghỉ thai sản", paidRatio: 0, maxDaysPerYear: 180, countsAsWorked: false },
-  { code: "NGHI_BU", name: "Nghỉ bù", paidRatio: 1, maxDaysPerYear: null, countsAsWorked: true },
+  // `noticeDays` mặc định 1 ngày theo yêu cầu chủ dự án 06/09 ("phải xin nghỉ trước 1 ngày"),
+  // TRỪ ba loại về bản chất không báo trước được. Người vận hành sửa từng dòng ở màn Loại nghỉ.
+  { code: "NGHI_PHEP", name: "Nghỉ phép năm", paidRatio: 1, maxDaysPerYear: null, countsAsWorked: false, noticeDays: 1 },
+  { code: "KHONG_LUONG", name: "Nghỉ không lương", paidRatio: 0, maxDaysPerYear: 10, countsAsWorked: false, noticeDays: 1 },
+  { code: "KET_HON", name: "Nghỉ kết hôn", paidRatio: 1, maxDaysPerYear: 7, countsAsWorked: false, noticeDays: 7 },
+  { code: "CON_KET_HON", name: "Nghỉ con kết hôn", paidRatio: 1, maxDaysPerYear: 3, countsAsWorked: false, noticeDays: 7 },
+  // Ba loại dưới đây KHÔNG đặt hạn báo trước — người ta không hẹn trước được ngày mất, ngày ốm.
+  { code: "MA_CHAY", name: "Nghỉ ma chay", paidRatio: 1, maxDaysPerYear: 3, countsAsWorked: false, noticeDays: null },
+  { code: "BHXH", name: "Nghỉ hưởng BHXH (ốm)", paidRatio: 0, maxDaysPerYear: null, countsAsWorked: false, noticeDays: null },
+  { code: "THAI_SAN", name: "Nghỉ thai sản", paidRatio: 0, maxDaysPerYear: 180, countsAsWorked: false, noticeDays: null },
+  { code: "NGHI_BU", name: "Nghỉ bù", paidRatio: 1, maxDaysPerYear: null, countsAsWorked: true, noticeDays: 1 },
+];
+
+// ── Danh mục LOẠI CÔNG DẠY (đợt 2, 07/09/2026) ──────────────────────────────────────────
+//
+// Seed nền chạy MỘT LẦN rồi buông: sau đó nguồn sự thật là bảng `TeachingCreditType`, người
+// vận hành sửa hệ số và bật/tắt ở màn Công dạy — không cần lập trình viên. Chạy lại có
+// `--force` mới ghi đè.
+//
+// Giá trị mặc định giữ ĐÚNG hành vi đang chạy để bật tính năng không làm đổi số của ai:
+// chỉ lớp chính đang được đếm (`period.ts` đếm buổi COMPLETED quy về người dạy), nên ba loại
+// còn lại để `countsInPeriod: false` — vẫn liệt kê để theo dõi, chưa cộng vào tổng. BLĐ muốn
+// tính thì bật lên, đó chính là "dự phòng" mà chủ dự án yêu cầu.
+export const TEACHING_CREDIT_CATALOG: {
+  code: string;
+  name: string;
+  source: "CLASS" | "TRIAL";
+  role: "MAIN" | "SUBSTITUTE" | "ASSISTANT";
+  basis: "PER_SESSION" | "PER_HOUR";
+  factor: number;
+  countsInPeriod: boolean;
+}[] = [
+  { code: "LOP_CHINH", name: "Lớp chính — giáo viên đứng lớp", source: "CLASS", role: "MAIN", basis: "PER_SESSION", factor: 1, countsInPeriod: true },
+  { code: "DAY_THAY", name: "Lớp chính — dạy thay", source: "CLASS", role: "SUBSTITUTE", basis: "PER_SESSION", factor: 1, countsInPeriod: true },
+  { code: "TRO_GIANG", name: "Lớp chính — trợ giảng", source: "CLASS", role: "ASSISTANT", basis: "PER_SESSION", factor: 0.5, countsInPeriod: false },
+  { code: "TN_CHINH", name: "Trải nghiệm — người dạy", source: "TRIAL", role: "MAIN", basis: "PER_SESSION", factor: 1, countsInPeriod: false },
+  { code: "TN_THAY", name: "Trải nghiệm — dạy thay", source: "TRIAL", role: "SUBSTITUTE", basis: "PER_SESSION", factor: 1, countsInPeriod: false },
+  { code: "TN_TRO_GIANG", name: "Trải nghiệm — trợ giảng", source: "TRIAL", role: "ASSISTANT", basis: "PER_SESSION", factor: 0.5, countsInPeriod: false },
 ];

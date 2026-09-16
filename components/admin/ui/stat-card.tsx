@@ -39,6 +39,7 @@ export function StatCard({
   label,
   tone = "brand",
   hint,
+  wrapLabel = false,
   className,
 }: {
   icon?: LucideIcon;
@@ -48,6 +49,17 @@ export function StatCard({
   tone?: StatTone;
   /** Dòng phụ dưới nhãn: so sánh kỳ trước, số bản ghi liên quan… */
   hint?: string;
+  /**
+   * Cho NHÃN và dòng phụ xuống tối đa 2 dòng thay vì cắt bằng "…".
+   *
+   * Mặc định TẮT có chủ đích: `truncate` ở đây vá một lỗi thật (số tiền 9 chữ số tràn thẻ ở
+   * /dashboard, chụp 11/08) và mọi màn admin đang dựa vào nó. Bật cho lưới KPI 2 cột ở mobile,
+   * nơi thẻ chỉ còn ~150px và "Cờ cần rà" bị cắt thành "Cờ cần …" — một chỉ số không đọc được
+   * tên thì con số vô nghĩa.
+   *
+   * SỐ thì KHÔNG BAO GIỜ xuống dòng dù bật cờ này — đó chính là chỗ lỗi tràn thẻ.
+   */
+  wrapLabel?: boolean;
   className?: string;
 }) {
   return (
@@ -75,7 +87,12 @@ export function StatCard({
       {/* min-w-0: không có nó thì con `truncate` bên trong không bao giờ co lại,
           và thẻ nở ra ngoài lưới thay vì cắt chữ — đúng lỗi của bản cũ. */}
       <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-medium text-muted-foreground">
+        <p
+          className={cn(
+            "text-xs font-medium text-muted-foreground",
+            wrapLabel ? "line-clamp-2" : "truncate",
+          )}
+        >
           {label}
         </p>
         <p
@@ -87,7 +104,12 @@ export function StatCard({
           {value}
         </p>
         {hint && (
-          <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+          <p
+            className={cn(
+              "mt-0.5 text-[11px] text-muted-foreground",
+              wrapLabel ? "line-clamp-2" : "truncate",
+            )}
+          >
             {hint}
           </p>
         )}

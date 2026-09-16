@@ -97,8 +97,8 @@ export function BangLeadRot({
           chắc là không có ai bỏ cuộc — có thể chỉ là chưa ai đánh dấu.
         </p>
       ) : (
-        <div className="mt-3 overflow-x-auto rounded-lg border border-border">
-          <PhanTrangBang tenDonVi="học sinh" khoaGhiNho="qlcs-lead-rot">
+        <div className="mt-3 overflow-hidden rounded-lg border border-border">
+          <PhanTrangBang cuonNgang tenDonVi="học sinh" khoaGhiNho="qlcs-lead-rot">
             <table className="w-full text-sm">
               <thead className="bg-muted">
                 <tr className="text-left">

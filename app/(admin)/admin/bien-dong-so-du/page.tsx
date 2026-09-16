@@ -280,8 +280,8 @@ export default async function SepayLogPage({
             Không có khoản tiền thừa nào đang chờ xử lý.
           </p>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-border">
-            <PhanTrangBang>
+          <div className="overflow-hidden rounded-lg border border-border">
+            <PhanTrangBang cuonNgang>
               <table className="w-full min-w-[720px] text-sm">
                 <thead className="bg-muted text-left text-xs font-medium uppercase text-muted-foreground">
                   <tr>

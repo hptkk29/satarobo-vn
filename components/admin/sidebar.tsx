@@ -18,7 +18,6 @@ import {
   Cake,
   CalendarCheck,
   CalendarDays,
-  CalendarOff,
   CheckCheck,
   ChevronDown,
   ClipboardCheck,
@@ -66,6 +65,7 @@ import {
   Undo2,
   UserCog,
   UserPlus,
+  UserRound,
   Users,
   UsersRound,
   Wallet,
@@ -196,7 +196,9 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Học bù", href: "/hoc-bu", icon: RefreshCw, perm: ["parent-requests:manage"] },
       { label: "Cơ sở", href: "/centers", icon: MapPin, perm: ["centers:view"] },
       { label: "Phòng học", href: "/rooms", icon: DoorOpen, perm: ["rooms:view"] },
-      { label: "Lịch nghỉ", href: "/holidays", icon: CalendarOff, perm: ["holidays:view"] },
+      // "Lịch nghỉ" (/holidays) gỡ khỏi đây 06/09: nó đã là tab "Ngày lễ" trong ConfigTabs của
+      // Chấm công (components/admin/cham-cong/config-tabs.tsx), và ngày lễ chỉ được khai để
+      // tính công chuẩn — không phải việc hằng ngày của người xếp lớp.
     ],
   },
   {
@@ -254,22 +256,20 @@ const NAV_GROUPS: NavGroup[] = [
       // cùng cổng với cấu hình role (SUPER_ADMIN). Đặt ở nhóm Nhân sự vì đó là luồng
       // công việc thật: xem nhân sự → xếp vị trí → phân công.
       { label: "Vị trí công việc", href: "/nhan-su/vi-tri", icon: Briefcase, perm: [...PAGE_GATES["/nhan-su/vi-tri"]] },
+      // Module chấm công v3 — thiết kế lại 06/09/2026 (DESIGN-CHAM-CONG-ADMIN §1.1): sidebar
+      // rút 15 mục xuống 5. 10 màn còn lại (khung ca, import, ghi chú, mã ca, loại nghỉ, đối
+      // soát, điểm chấm, check-in, đơn của tôi, màn hình QR) KHÔNG mất lối vào — chúng vào qua
+      // ModuleNav / ConfigTabs / MeNav trong components/admin/cham-cong/* và nút ở màn cha.
+      // DỄ VỠ: nav-coverage.test.ts đòi mọi route tĩnh phải có literal đường dẫn ở đâu đó; gỡ
+      // thêm mục ở đây mà không còn nơi trỏ tới là CI đỏ. Route không đổi (href nằm trong DB).
+      // 06/09 (đợt 2, chủ dự án): rút tiếp 5 → 3. "Lịch phân ca" và "Kỳ công" đã là hai tab
+      // ĐẦU của ModuleNav ngay trong màn Chấm công, nên để ở sidebar là bày cùng một cửa hai
+      // lần — người dùng phải đoán hai đường đó khác nhau chỗ nào (thật ra không khác).
       { label: "Chấm công", href: "/cham-cong", icon: Clock, perm: ["hr_attendance:view"] },
-      // Module chấm công v3 (L1–L3, 09/2026) — lịch phân ca là DỮ LIỆU người vận hành tự quản (PHẦN 6b).
-      { label: "Lưới phân ca", href: "/cham-cong/phan-ca", icon: CalendarDays, perm: ["hr_attendance:assign", "hr_attendance:view"] },
-      { label: "Khung ca tuần", href: "/cham-cong/khung-ca", icon: CalendarCheck, perm: ["hr_attendance:assign", "hr_attendance:view"] },
-      { label: "Import lịch phân ca", href: "/cham-cong/phan-ca/import", icon: CalendarDays, perm: ["hr_attendance:assign"] },
-      { label: "Ghi chú lịch", href: "/cham-cong/ghi-chu", icon: ClipboardList, perm: ["hr_attendance:assign", "hr_attendance:view"] },
-      { label: "Kỳ công & chốt sổ", href: "/cham-cong/ky-cong", icon: CalendarCheck, perm: ["hr_attendance:view"] },
-      { label: "Danh mục mã ca", href: "/cham-cong/danh-muc-ca", icon: ClipboardEdit, perm: ["hr_attendance:config"] },
-      { label: "Loại nghỉ", href: "/cham-cong/loai-nghi", icon: ClipboardList, perm: ["hr_attendance:config", "hr_attendance:view"] },
-      { label: "Đối soát Sheet", href: "/cham-cong/doi-soat", icon: CalendarCheck, perm: ["hr_attendance:view"] },
-      { label: "Điểm chấm công", href: "/cham-cong/diem-cham", icon: Clock, perm: ["hr_attendance:config"] },
-      { label: "Điểm danh vào ca", href: "/cham-cong/checkin", icon: Clock, perm: ["hr_attendance:checkin"] },
-      { label: "Lịch ca của tôi", href: "/cham-cong/lich-ca", icon: CalendarDays, perm: ["hr_attendance:checkin"] },
       // BGĐ 31/07 — duyệt đơn GV (nghỉ dạy / dạy thay) — duyệt là cập nhật lịch thật.
       { label: "Duyệt đơn từ", href: "/don-tu", icon: ClipboardList, perm: ["hr_attendance:approve"] },
-      { label: "Đơn của tôi", href: "/don-tu/cua-toi", icon: ClipboardEdit, perm: ["hr_attendance:checkin"] },
+      // Cụm "Của tôi" của nhân viên: vào lịch ca rồi rẽ sang Đơn của tôi / Chấm công bằng MeNav.
+      { label: "Của tôi", href: "/cham-cong/lich-ca", icon: UserRound, perm: ["hr_attendance:checkin"] },
       // FL W0-NAV-2 hygiene: Tổng hợp công ca = view tổng hợp (quản lý/HR), ẩn khỏi Sale/KT (BA #07 3.C).
       { label: "Tuyển dụng", href: "/jobs", icon: Briefcase, perm: ["jobs:view"] },
       // Tạm ẩn khu Vinh danh khỏi admin (giữ code + dữ liệu). Bật lại: bỏ comment

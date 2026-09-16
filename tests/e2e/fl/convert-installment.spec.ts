@@ -59,9 +59,18 @@ test.describe("[FL2-01] Convert v2 — học phí 1/2 đợt", () => {
     expect(insts[0]!.amount + insts[1]!.amount).toBe(order.totalAmount);
   });
 
-  // S5 / C4 — kế hoạch 2 đợt: đợt1 ghi Payment ngay; plan mặc định PENDING_APPROVAL;
-  // đợt2 chỉ ghi Payment sau khi CENTER_MANAGER duyệt (non-manager bị chặn).
-  test("[SPINE-S5] đợt2 cần CENTER_MANAGER duyệt mới ghi Payment", async () => {
+  // S5 / C4 — kế hoạch 2 đợt: đợt1 ghi Payment ngay; plan mặc định PENDING_APPROVAL.
+  //
+  // ⚠️ ĐẢO 13/09/2026 — tên cũ của ca này là "đợt2 cần CENTER_MANAGER duyệt mới ghi
+  // Payment". Luật đó đã bị chủ dự án đảo: giữ nó nghĩa là khách quét QR đóng đợt 2 thì
+  // Ledger-B đánh PAID còn Ledger-A bỏ qua ⇒ **công nợ hiển thị KHÔNG GIẢM dù tiền đã vào
+  // tài khoản**. Xem `lib/payments/installment-plan.ts` + mục tương ứng trong CLAUDE.md.
+  //
+  // Cổng chống lách duyệt KHÔNG mất — nó chuyển sang đường TỰ CHỐT ĐƠN
+  // (`confirmSettledOrder`, `payos-ingest`), chứ không nằm ở đường nhận tiền nữa.
+  // Ca này nay khoá đúng luật MỚI: đóng đợt 2 là ghi Payment ngay, không chờ duyệt;
+  // và cổng QUYỀN duyệt (non-manager bị chặn) vẫn nguyên.
+  test("[SPINE-S5] đóng đợt2 ghi Payment NGAY; duyệt vẫn đòi CENTER_MANAGER", async () => {
     const order = await makeCourseOrder(10_000_000);
     const { dot1, dot2 } = computeInstallmentSplit(order.totalAmount, 6_000_000);
     await recordInstallmentPlan({
@@ -77,11 +86,12 @@ test.describe("[FL2-01] Convert v2 — học phí 1/2 đợt", () => {
     expect(ord1?.installmentApprovalStatus).toBe("PENDING_APPROVAL");
     expect(await db.payment.count({ where: { orderId: order.id, saleStatus: "RECORDED" } })).toBe(1);
 
-    // Đóng đợt2 khi CHƯA duyệt → đánh dấu PAID (Ledger-B) nhưng KHÔNG ghi Payment (gate).
+    // Đóng đợt2 khi CHƯA duyệt → đánh dấu PAID (Ledger-B) VÀ ghi Payment (Ledger-A).
+    // Trước đảo 13/09 chỗ này kỳ vọng 1 (bị gate chặn); nay là 2.
     const insts = await getOrderInstallments(order.id);
     const dot2Inst = insts.find((i) => i.soDot === 2)!;
     await markInstallmentPaid(dot2Inst.id, "sale-1");
-    expect(await db.payment.count({ where: { orderId: order.id, saleStatus: "RECORDED" } })).toBe(1);
+    expect(await db.payment.count({ where: { orderId: order.id, saleStatus: "RECORDED" } })).toBe(2);
 
     // Non-manager duyệt → chặn (không có quyền).
     const denied = await approveInstallmentPlan({
@@ -90,7 +100,9 @@ test.describe("[FL2-01] Convert v2 — học phí 1/2 đợt", () => {
     });
     expect(denied.ok).toBe(false);
 
-    // CENTER_MANAGER duyệt → APPROVED + ghi bù Payment đợt2.
+    // CENTER_MANAGER duyệt → APPROVED. Phần "ghi bù Payment đợt2" nay là NO-OP
+    // (idempotent theo marker — khoản đã ghi ngay lúc đóng ở trên), nên tổng vẫn 2.
+    // Giữ lại đường ghi bù đó có chủ đích: nó còn phục vụ ca REJECTED→APPROVED và dữ liệu cũ.
     const ok = await approveInstallmentPlan({
       orderId: order.id,
       actor: { id: "cm-1", name: "CM", role: "CENTER_MANAGER" },

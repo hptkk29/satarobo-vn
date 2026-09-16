@@ -60,8 +60,17 @@ describe("computeDueNow — đơn CHIA 2 ĐỢT (ca gãy trước bản vá)", (
     ).toBe(1);
   });
 
-  it("kế hoạch CHỜ DUYỆT → không dùng, quay về thu toàn bộ đơn", () => {
-    // Chưa duyệt mà cho quét QR đóng đợt 1 là mở đường lách duyệt trả góp.
+  it("[DUE-01] kế hoạch CHỜ DUYỆT → VẪN thu theo đợt (đảo luật 13/09/2026)", () => {
+    // Test cũ ở đây khoá hành vi ngược lại ("chưa duyệt → thu toàn bộ đơn") với lý do
+    // "mở đường lách duyệt trả góp". Lý do đó đến từ QĐ-1 bản ĐẦU, mà chủ dự án đã ĐẢO
+    // ngày 03/08/2026: `materializeInstallmentRequests` gỡ hẳn cái chặn "chưa APPROVED
+    // thì ném lỗi", vì "bấm Lưu kế hoạch là phiếu thu + QR theo đợt phải có NGAY, không
+    // bắt khách đứng ở quầy chờ quản lý duyệt mới quét được mã".
+    //
+    // File này không được đảo theo ⇒ trên prod: `PaymentRequest` đã có phiếu đợt 1
+    // 3.000.000đ, mà QR in ra 5.000.000đ. Đây là bug tiền thật, không phải cổng an toàn.
+    // Cổng thật vẫn còn nguyên ở chỗ khác: `confirmSettledOrder` +
+    // `payos-ingest.ts:1169-1181` vẫn từ chối TỰ CHỐT đơn khi giảm giá chưa duyệt.
     expect(
       computeDueNow({
         totalAmount: 5_000_000,
@@ -69,10 +78,10 @@ describe("computeDueNow — đơn CHIA 2 ĐỢT (ca gãy trước bản vá)", (
         installments: plan,
         installmentApprovalStatus: "PENDING_APPROVAL",
       }),
-    ).toEqual({ amount: 5_000_000, label: "Toàn bộ đơn", soDot: null });
+    ).toEqual({ amount: 3_000_000, label: "Đợt 1", soDot: 1 });
   });
 
-  it("kế hoạch ĐÃ DUYỆT → dùng bình thường", () => {
+  it("[DUE-02] kế hoạch ĐÃ DUYỆT → dùng bình thường", () => {
     expect(
       computeDueNow({
         totalAmount: 5_000_000,
@@ -81,6 +90,20 @@ describe("computeDueNow — đơn CHIA 2 ĐỢT (ca gãy trước bản vá)", (
         installmentApprovalStatus: "APPROVED",
       }).soDot,
     ).toBe(1);
+  });
+
+  it("[DUE-03] kế hoạch BỊ BÁC → quay về thu toàn bộ đơn", () => {
+    // Đây là ca DUY NHẤT loại kế hoạch, và không phải ngoại lệ tuỳ ý: khi QLCS bác,
+    // `rejectInstallmentPlan` gọi `revertInstallmentRequests` → VOID phiếu theo đợt +
+    // dựng lại phiếu "thu toàn đơn". Số tiền cần thu ngay phải khớp sổ phiếu đó.
+    expect(
+      computeDueNow({
+        totalAmount: 5_000_000,
+        paidAmount: 0,
+        installments: plan,
+        installmentApprovalStatus: "REJECTED",
+      }),
+    ).toEqual({ amount: 5_000_000, label: "Toàn bộ đơn", soDot: null });
   });
 
   it("đợt 0đ (đóng đủ 1 lần, dot2 = 0) bị bỏ qua, không sinh QR 0đ", () => {

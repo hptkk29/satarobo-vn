@@ -437,8 +437,8 @@ function DoanhThuTheoNgay({
       {/* Bảng đi kèm biểu đồ: biểu đồ cho HÌNH DẠNG, bảng cho con số chính xác.
           Phân trang chỉ cắt ở tầng hiển thị — biểu đồ phía trên vẫn vẽ đủ mọi ngày, nên
           không có chuyện "trang 2 mới thấy đỉnh". */}
-      <div className="mt-4 overflow-x-auto rounded-lg border border-border">
-        <PhanTrangBang tenDonVi="ngày" khoaGhiNho="qlcs-doanh-thu-ngay">
+      <div className="mt-4 overflow-hidden rounded-lg border border-border">
+        <PhanTrangBang cuonNgang tenDonVi="ngày" khoaGhiNho="qlcs-doanh-thu-ngay">
           <table className="w-full text-sm">
             <thead className="bg-muted">
               <tr className="text-left">

@@ -19,6 +19,9 @@ const schema = z.object({
   name: z.string().trim().min(1, "Thiếu tên").max(80),
   paidRatio: z.coerce.number().min(0).max(1),
   maxDaysPerYear: z.coerce.number().int().min(0).max(366).nullable().default(null),
+  // null = KHÔNG đòi báo trước. Ma chay / ốm / thai sản để trống — ép chúng theo một hạn
+  // chung là biến ba loại đó thành "luôn vi phạm".
+  noticeDays: z.coerce.number().int().min(0).max(60).nullable().default(null),
   countsAsWorked: z.coerce.boolean().default(false),
   isActive: z.coerce.boolean().default(true),
 });
@@ -37,7 +40,7 @@ export async function saveLeaveTypeAction(id: string | null, input: unknown): Pr
     const old = await sdb.leaveType.findUnique({ where: { id } });
     if (!old) return { ok: false, error: "Không tìm thấy loại nghỉ" };
     await sdb.leaveType.update({ where: { id }, data: p.data });
-    await writeAudit({ actor: { id: session.user.id, name: session.user.name ?? "" }, module: "hr_attendance", entityType: "LeaveType", entityId: id, action: "UPDATE", oldValues: { code: old.code, name: old.name, paidRatio: old.paidRatio, maxDaysPerYear: old.maxDaysPerYear, isActive: old.isActive }, newValues: p.data });
+    await writeAudit({ actor: { id: session.user.id, name: session.user.name ?? "" }, module: "hr_attendance", entityType: "LeaveType", entityId: id, action: "UPDATE", oldValues: { code: old.code, name: old.name, paidRatio: old.paidRatio, maxDaysPerYear: old.maxDaysPerYear, noticeDays: old.noticeDays, isActive: old.isActive }, newValues: p.data });
     revalidatePath("/cham-cong/loai-nghi");
     return { ok: true, id };
   }

@@ -132,6 +132,36 @@ export async function submitAttendanceRequest(input: SubmitRequestInput): Promis
   const noticeDays = await getSetting("shift.requestNoticeDays");
   const submittedLate = from ? isSubmittedLate(from, now, noticeDays) : false;
 
+  // ── Hạn báo trước THEO LOẠI NGHỈ (chốt 06/09/2026) ──────────────────────────────────
+  //
+  // Yêu cầu gốc: "phải xin nghỉ trước 1 ngày để quản lý nắm thông tin và bố trí nhân sự hỗ
+  // trợ". Thực hiện đúng ý đó nhưng KHÔNG chặn cửa, vì chặn không làm mất buổi nghỉ — người
+  // ốm vẫn nghỉ — mà chỉ làm mất DẤU VẾT: quản lý sẽ sửa thẳng ô trên lưới (`source: MANUAL`)
+  // và hệ thống thôi biết đó là ốm hay tang chế, `leaveUnits` không cộng, thống kê sai theo.
+  //
+  // Thay vào đó đòi đúng thứ câu yêu cầu nói tới: NGƯỜI LÀM THAY. Duyệt xong hệ thống ghi
+  // luôn ca cho người đó (`source: "SWAP"`, xem nhánh LEAVE trong `decide`), tức "bố trí nhân
+  // sự" thành dữ liệu thật chứ không phải một lời nhắc.
+  //
+  // Ngưỡng đi theo LOẠI (`LeaveType.noticeDays`) chứ không một số chung: ma chay, ốm, thai sản
+  // để `null` vì không ai hẹn trước được ngày; ép chúng theo một hạn chung là biến ba loại đó
+  // thành "luôn vi phạm".
+  if (input.kind === "LEAVE" && input.leaveTypeId && from && !input.targetUserId) {
+    const lt = await db.leaveType.findUnique({
+      where: { id: input.leaveTypeId },
+      select: { name: true, noticeDays: true },
+    });
+    if (lt?.noticeDays != null && isSubmittedLate(from, now, lt.noticeDays)) {
+      return {
+        ok: false,
+        error:
+          `“${lt.name}” cần báo trước ${lt.noticeDays} ngày. Nộp sát ngày thì phải chọn NGƯỜI LÀM THAY ` +
+          `để Quản lý bố trí kịp — hoặc chọn đúng loại nghỉ cho việc đột xuất (ma chay, ốm, thai sản ` +
+          `không đòi báo trước).`,
+      };
+    }
+  }
+
   // Kỳ đã khoá thì không nhận đơn hồi tố (chỉnh công/nghỉ) — sổ đã chốt, mở lại là việc SUPER_ADMIN.
   if (from && !isClassKind(input.kind)) {
     const locked = await db.attendancePeriod.findFirst({
