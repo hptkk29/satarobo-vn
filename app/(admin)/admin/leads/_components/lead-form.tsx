@@ -172,8 +172,7 @@ export function LeadForm({
           <select
             value={courseId}
             onChange={(e) => setCourseId(e.target.value)}
-            disabled={courseFromChildren}
-            className={`${inputCls} disabled:bg-muted disabled:text-muted-foreground`}
+            className={inputCls}
           >
             <option value="">— Chưa chọn —</option>
             {courseGroups.map((g) => (
@@ -185,8 +184,13 @@ export function LeadForm({
             ))}
           </select>
           {courseFromChildren && (
+            // ⚠️ Câu này phải nói ĐÚNG hành vi mới. Chủ dự án chốt 17/09/2026 mở ô ra
+            // ("làm hướng sửa được đi"), nên câu cũ — "Lấy theo khoá quan tâm của con — sửa
+            // ở khối Con của phụ huynh bên dưới" — nay vừa sai (sửa được ngay đây) vừa chỉ
+            // người dùng đi vòng một quãng không cần thiết.
             <p className="mt-1 text-xs text-muted-foreground">
-              Lấy theo khoá quan tâm của con — sửa ở khối &ldquo;Con của phụ huynh&rdquo; bên dưới.
+              Lead này có con. Sửa ở đây thì hệ thống <b className="text-foreground">giữ nguyên</b>{" "}
+              giá trị bạn chọn; để trống thì nó lấy theo khoá quan tâm của con.
             </p>
           )}
         </Field>
