@@ -98,6 +98,27 @@ Brand hub + admin CMS + portal phụ huynh + site giáo viên cho Sata Robo (Đ�
     ⇒ Hệ quả rộng hơn: **ca nghiệm thu chỉ khẳng định SỰ VẮNG MẶT luôn ĐẠT khi tính năng
     hỏng hoàn toàn.** Mọi ca "KHÔNG thấy X" phải kèm **đối chứng dương** ("vai kia THẤY X").
 
+12. ⚠️ **GIẢ ĐỊNH VỀ MÔI TRƯỜNG PHẢI KIỂM BẰNG LỆNH, TẠI THỜI ĐIỂM DÙNG — KHÔNG đọc từ
+    tài liệu.** DB nào · env nào · chạy ở đâu · cờ bật hay tắt: hỏi hệ thống, đừng hỏi
+    trang wiki. Tài liệu hạ tầng cũ đi mà **không ai biết nó đã cũ**, và một câu sai ở đó
+    không chỉ vô ích — nó **lái cuộc điều tra sang hướng sai và giữ ở đó**.
+    **Sự cố 17/09/2026:** câu "DB của env `test` CHÍNH LÀ DB dev" (chốt 01/08, nằm ngay
+    trong file này) làm tôi đo `getZaloScope` ba lượt trên **sai database**, rồi đi tìm
+    "`User.id` bị đổi" trong khi thứ thật sự xảy ra là **ba database khác nhau**. Mất
+    nhiều lượt mới quay lại được.
+    **Cách kiểm rẻ, dùng ngay:**
+    · DB nào đang được đọc → in ra chính nó: `select current_database()`, hoặc một
+      giá trị đặc trưng (`User.id` của một tài khoản seed) rồi so hai bên.
+    · Cờ tính năng trên một môi trường → gọi một đường có thật và đọc **mã trạng thái**
+      (bảng đo ở `docs/tich-hop-zalocrm/04-danh-sach-cho-nick-zalo.md`: `401`+JSON = route
+      có + cờ BẬT · `404`+JSON = cờ TẮT · `200`+HTML = sai đường dẫn).
+    · Commit nào đang chạy → đọc **bản ghi deploy thật** (`gh api …/deployments`), đừng
+      suy từ "vừa merge xong".
+    · Cron nào thật sự chạy → `gh run list` + đọc **nhánh** của lượt chạy (`schedule` luôn
+      dùng bản ở nhánh MẶC ĐỊNH — xem `NỢ-5`).
+    Đo xong mà lệch với tài liệu thì **sửa tài liệu ngay trong lượt đó**, đừng để lại cho
+    người sau vấp đúng chỗ mình vừa vấp.
+
 ## Project structure (FROZEN)
 
 ```
