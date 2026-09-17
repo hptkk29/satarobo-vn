@@ -33,7 +33,14 @@ import { extractVnPhoneCandidates } from "../lib/payments/sdt-trong-memo";
 import { phoneVariants } from "../lib/phone";
 import { locDonNhanTien } from "../lib/payments/don-nhan-tien";
 
-/** Số chủ dự án đã đo trên prod 16/09 — dùng để ĐỐI CHIẾU, không phải để tin. */
+/**
+ * Số chủ dự án đã ĐO TRỰC TIẾP trên prod — dùng để ĐỐI CHIẾU, không phải để tin.
+ *
+ * ⚠️ Mốc là thứ PHẢI ĐỔI theo thời gian, và đó là điểm của nó: một con số cứng trong mã buộc
+ * người đọc phải GIẢI THÍCH được vì sao nó lệch, thay vì lướt qua một bảng không ai đối chiếu.
+ * Lịch sử: A từ 24 (16/09) xuống 22 (17/09) — 2 giao dịch được gắn tay, 1 giao dịch SEPAY mới về.
+ */
+const MOC_GIAO_DICH_UNMATCHED = 22;
 const MOC_KHOAN_CHUA_GAN = 24;
 const MOC_TIEN_CHUA_GAN = 178_544_000;
 
@@ -112,6 +119,19 @@ async function phanA(tx: Tx): Promise<string[]> {
   in_(`## A · Giao dịch UNMATCHED — tiền đã về, chưa gắn đơn`);
   in_();
   in_(`Tổng: **${txn.length} giao dịch** · **${vnd(txn.reduce((s, t) => s + t.amount, 0))}đ**`);
+  in_();
+  // ĐỐI CHIẾU với số chủ dự án đo tay 17/09. Lệch thì NÓI RÕ, đừng im lặng.
+  if (txn.length === MOC_GIAO_DICH_UNMATCHED) {
+    in_(`✅ Khớp mốc đo 17/09: ${MOC_GIAO_DICH_UNMATCHED} giao dịch UNMATCHED.`);
+  } else {
+    in_(`⚠️ **LỆCH mốc đo 17/09** (${MOC_GIAO_DICH_UNMATCHED} giao dịch). Nay: ${txn.length}.`);
+    in_();
+    in_(`Các lý do có thể, theo thứ tự đáng ngờ giảm dần:`);
+    in_(`1. sale đã gắn thêm giao dịch tay ⇒ tập này hẹp lại (lành);`);
+    in_(`2. tiền mới về sau 17/09 chưa ai gắn ⇒ tập rộng ra (lành);`);
+    in_(`3. webhook đối khớp tự động đã chuyển một số giao dịch sang MATCHED;`);
+    in_(`4. một giao dịch bị đổi trạng thái tay mà không có bút toán đi kèm — đây là lý do DUY NHẤT không lành, soi \`AuditLog\` trước khi làm tiếp.`);
+  }
   in_();
   in_(`| # | Ngày | Cổng | Số tiền | SĐT trong CK | Đơn đề xuất | Cơ sở | Số con | Đợt NULL | Ghi chú |`);
   in_(`|---|---|---|---|---|---|---|---|---|---|`);
