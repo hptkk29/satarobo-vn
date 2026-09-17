@@ -44,40 +44,56 @@ lấy bản `main` là xoá luôn tích hợp ZaloCRM vừa nghiệm thu.
 ⇒ Đã **giữ bản `test`** (giữ cả hai). Gỡ VietQR là **một lượt riêng, thuần dọn dẹp** —
 không phải lỗi đang chạy.
 
-### NỢ-2 · MẤT PHỦ TEST: "hoàn tiền → công nợ" — PHẢI LÀM TRƯỚC PR `test` → `main`
+### NỢ-2 · MẤT PHỦ TEST "hoàn tiền → công nợ" — ✅ ĐÃ DỰNG LẠI 17/09/2026
 
-**Không phải đổi chỗ. Là mất.**
+`tests/e2e/r7/hoan-tien-cong-no.spec.ts` dựng lại theo mô hình DELTA: **11 ca**, trong đó
+7 xanh thật và 4 **ghim** (`test.fail`) vì chúng chỉ ra một lỗi đang có — xem `NỢ-4`.
 
-`tests/e2e/r7/hoan-tien-cong-no.spec.ts` (361 dòng, **8 ca**) bị xoá vì viết theo mô hình
-cũ `accountantStatus in [… ADJUSTED]` — không biên dịch được với schema sau
-`20260907090000_payment_type_tach_khoi_status`.
+Không dịch cú pháp: hai ca cũ `[HT-E3]`/`[HT-E3b]` đo đường **đề xuất hoàn**, mà đường ấy
+nay đã bị **cầu dao** `REFUND_REQUEST_DISABLED` (08/09/2026) tắt có chủ đích. Ghim chúng sẽ
+là **ghim giả** — chúng "đỏ" vì hàm trả `null` rồi deref, không phải vì phép tính sai. Nay:
+`[HT-E3]` đo **cầu dao có thật sự chặn không**, `[HT-E3b]` là **dây bẫy** — gỡ cầu dao thì
+nó đỏ, buộc người gỡ dựng lại hai ca chống phồng đề xuất (nguyên văn nằm trong chú thích).
 
-Bộ được coi là "thay thế", `tests/finance/dieu-chinh.test.ts` (435 dòng, 24 ca), nhắc
-`refund` / `hoàn tiền` / `REFUNDED` **ĐÚNG 0 LẦN**. Nó phủ cơ chế DELTA ở tầng sổ (hai
-trục A/B, xoá mềm, trần học phí, khoá lạc quan, AuditLog) — **không chạm đường hoàn tiền,
-không chạm màn phụ huynh**.
+Ca `[HT-E4]` (giao điểm hoàn tiền × điều chỉnh) tách làm hai: phần cơ chế delta ở cổng PH
+**xanh thật**, phần giao điểm với hoàn tiền **ghim**. Thêm `[HT-E1b]` — canh bản vá không
+được đẻ **nợ ma**.
 
-**Tám ca mất, ghi tên để dựng lại:**
+5/5 phép cấy lỗi làm lưới đổi trạng thái đúng ca; chi tiết trong commit message.
 
-| Ca | Phủ gì |
-|---|---|
-| `[HT-E1]` | hoàn TOÀN BỘ — PH thấy đã thu về 0, biên lai có dòng hoàn, **công nợ không đẻ nợ ma** |
-| `[HT-E2]` | hoàn MỘT PHẦN — trừ đúng phần đã trả lại trên **cả 3 màn PH** |
-| `[HT-E3]` | hoàn HAI LẦN liên tiếp — đề xuất lần hai KHÔNG tính lại trên số gộp |
-| `[HT-E3b]` | đã DUYỆT hoàn nhưng kế toán chưa ghi bút toán âm → đề xuất kế tiếp vẫn không phồng |
-| `[HT-E4]` | hoàn SAU KHI ĐÃ ĐIỀU CHỈNH — bản gốc bị loại, bút toán âm bị trừ |
-| `[HT-E5]` | ghi danh CHƯA THU ĐỒNG NÀO — mọi màn giữ nguyên, không tạo yêu cầu hoàn rỗng |
-| `[HT-E6]` | khoản `PENDING` vẫn KHÔNG hiện tiền cho PH (AC1 không bị đợt vá nới ra) |
-| `[HT-E7]` | màn ĐANG ĐÚNG không được đổi số — doanh thu thực thu khớp tổng PH thấy |
+⚠️ **Điểm yếu đã nói rõ trong file:** khẳng định "chưa thu đồng nào thì không đẻ yêu cầu
+rỗng" của `[HT-E5]` HIỆN không đo được gì — cầu dao trả `null` trước khi hàm chạm tới cổng
+ấy. Không phép cấy nào làm ca đó đổi trạng thái.
 
-**Phần còn được phủ ở nơi khác** (unit, tầng sổ — KHÔNG thay được 8 ca trên):
-`lib/finance/thuc-thu.test.ts` · `lib/finance/truc-a.test.ts` ·
-`lib/portal/trang-thai-ghi-danh.test.ts` · `lib/reports/revenue-*.test.ts`.
+### 🔴 NỢ-4 · HOÀN TIỀN KHÔNG TRỪ Ở CỔNG PH VÀ CÔNG NỢ — TÍNH NĂNG THỨ TÁM BỊ MẤT
 
-**Vì sao phải làm TRƯỚC khi lên prod:** đúng lượt này đổi cách ghi điều chỉnh
-(`ADJUSTMENT` mang DELTA, cộng dồn). Ca `[HT-E4]` là ca duy nhất từng canh giao điểm
-**hoàn tiền × điều chỉnh** — tức canh đúng chỗ vừa bị thay cơ chế. Bản dựng lại phải viết
-theo mô hình `paymentType`, không chép lại bản cũ.
+**Phát hiện 17/09/2026 khi dựng lại NỢ-2. Đây là lỗi TIỀN, đang sống.**
+
+Hai bộ lọc, hai kết quả khác nhau trên cùng một dữ liệu:
+
+| Đường đọc | Bộ lọc | Thấy dòng `REFUNDED`? |
+|---|---|---|
+| Doanh thu | `WHERE_THUC_THU` (`lib/finance/thuc-thu.ts`) | **CÓ** |
+| Cổng PH · công nợ · đề xuất hoàn | `KHOAN_DA_XAC_NHAN` (`lib/finance/debt.ts`) | **KHÔNG** |
+
+Đo được: phiếu 5tr, hoàn 2tr ⇒ doanh thu ra **3tr (đúng)**, cổng PH ra **5tr (sai)**.
+
+**Là hồi quy do lượt hợp nhất.** Bản `test` trước merge đọc `WHERE_THUC_THU` ngay trong
+`lib/portal/billing.ts` (`9202d782`, chú thích còn nguyên: *"KHÔNG còn lọc cứng
+CONFIRMED"*); bản `main` thắng khối xung đột và mang theo `KHOAN_DA_XAC_NHAN`. Spec duy
+nhất canh điều đó bị xoá **trong cùng lượt merge** — nên không gì đỏ lên.
+
+**Đang sống, không phải lý thuyết:** `refundPayment` được gọi từ `refundPaymentAction`
+(`app/(admin)/admin/payments/_actions.ts:653`), tức màn `/admin/payments` đang dùng.
+Hệ quả với người thật: phụ huynh đã nhận lại tiền vẫn thấy khoản đó là "đã đóng", và công
+nợ không tăng lại tương ứng.
+
+⚠️ **ĐỪNG VÁ NGÂY THƠ.** Đã thử: cho `KHOAN_DA_XAC_NHAN` nhận thêm `REFUNDED` làm cả 4 ca
+ghim lật xanh, **nhưng làm `[HT-E1b]` đỏ** — công nợ của em đã nghỉ nhảy lên nguyên học
+phí, một khoản không ai còn nợ. Bản vá đúng phải tách hai câu hỏi: *"PH đã đóng bao nhiêu"*
+(phải trừ dòng hoàn) khác *"ghi danh còn nợ bao nhiêu"* (không được phồng lên vì tiền đã
+trả lại). `KHOAN_DA_XAC_NHAN` là bộ lọc dùng chung của nhiều đường tiền ⇒ **đợt riêng**,
+cân từng nơi gọi.
 
 ### NỢ-3 · Bố cục cột bảng Lead — CHỜ CHỦ DỰ ÁN CHỐT
 Đã lấy bản `main` (lưu `localStorage`, mỗi người một bộ) và **gỡ tầng lưu theo người trong
