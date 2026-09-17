@@ -104,6 +104,24 @@ export type NoTheoConKetQua = {
    * mới** — đúng tập việc mà PHIÊN B sinh ra để dọn.
    */
   dotChuaGanCon: DotCuaDong[];
+  /**
+   * Còn nợ của **CẢ ĐƠN** = `tongPhaiThu − (tongDaThu + chuaGanCon)`.
+   *
+   * ⚠️ KHÁC `tongConNo`: `tongConNo` là Σ còn nợ từng con và **cố ý** không trừ khoản chưa
+   * gắn con (xem chú thích `chuaGanCon`). Số đó đúng cho câu *"bé này còn nợ bao nhiêu"* và
+   * SAI cho câu *"đơn này còn được phép thu thêm bao nhiêu"*. Hai câu hỏi khác nhau nên phải
+   * là hai con số khác nhau — gộp lại là chỗ bug tiền nằm.
+   *
+   * Có thể ÂM (đơn đã đóng thừa). Trả số thô.
+   */
+  conNoDon: number;
+  /**
+   * Σ `amountDue` của **mọi** đợt đang mở của đơn, **KỂ CẢ** đợt `orderItemId` NULL.
+   *
+   * ⚠️ Không phải `Σ con[].tongDotDangMo` — vế đó bỏ mất đợt của luồng cũ, mà đơn trước 16/09
+   * thì đợt nào cũng NULL. Dùng vế thiếu ấy làm cổng là mở toang đúng tập đơn cũ.
+   */
+  tongDotDangMoDon: number;
 };
 
 const tron = (n: number) => (Number.isFinite(n) ? Math.round(n) : 0);
@@ -165,17 +183,28 @@ export function tinhNoTheoCon(input: {
       return ha - hb || a.installmentNo - b.installmentNo;
     });
 
+  const tongPhaiThu = con.reduce((s, c) => s + c.phaiThu, 0);
+  const tongDaThu = con.reduce((s, c) => s + c.daThu, 0);
+  const chuaGanCon = input.khoanDaXacNhan.reduce(
+    (s, k) => (k.orderItemId == null ? s + tron(k.amount) : s),
+    0,
+  );
+
   return {
     con,
     dotChuaGanCon,
-    tongPhaiThu: con.reduce((s, c) => s + c.phaiThu, 0),
-    tongDaThu: con.reduce((s, c) => s + c.daThu, 0),
+    tongPhaiThu,
+    tongDaThu,
     tongChoXacNhan: con.reduce((s, c) => s + c.choXacNhan, 0),
     tongConNo: con.reduce((s, c) => s + c.conNo, 0),
-    chuaGanCon: input.khoanDaXacNhan.reduce(
-      (s, k) => (k.orderItemId == null ? s + tron(k.amount) : s),
-      0,
-    ),
+    chuaGanCon,
+    // Cả đơn: trừ CẢ khoản chưa gắn con. Đây là số duy nhất trả lời được "đơn còn được thu
+    // thêm bao nhiêu" — xem chú thích của trường.
+    conNoDon: tongPhaiThu - (tongDaThu + chuaGanCon),
+    // Mọi đợt đang mở của đơn = đợt của các con + đợt NULL (luồng cũ).
+    tongDotDangMoDon:
+      con.reduce((s, c) => s + c.tongDotDangMo, 0) +
+      dotChuaGanCon.reduce((s, x) => s + tron(x.amountDue), 0),
   };
 }
 
@@ -190,8 +219,23 @@ export type KiemTaoDot =
 /**
  * Tạo được một đợt số tiền này cho con này không.
  *
- * Luật (chủ dự án chốt): *"số tiền > 0 và ≤ còn nợ con − Σ đợt đang mở của con. Không bắt lên
- * lịch cả khoá, không trần số đợt."*
+ * Luật (chủ dự án chốt 17/09/2026 — **HAI VẾ**):
+ *
+ *     số tiền ≤ min( còn nợ con − Σ đợt mở của con ,
+ *                    còn nợ ĐƠN − Σ đợt mở của cả đơn )
+ *
+ * với *còn nợ đơn* = Σ học phí thực các con − Σ **mọi** Payment đã thu của đơn, **kể cả khoản
+ * chưa gắn con**. Không bắt lên lịch cả khoá, không trần số đợt.
+ *
+ * ⚠️ VẾ THỨ HAI THÊM 17/09 VÌ VẾ MỘT MÌNH KHÔNG ĐỦ — đo được, không phòng xa. `chuaGanCon` vốn
+ * đã được tính từ PHIÊN A nhưng **chỉ để hiển thị**: hai màn in nó ra như một việc cần làm, và
+ * không cổng nào đọc. Hệ quả trên đơn 2 con đã có 6.000.000đ vào mà chưa gắn bé nào: `conNo`
+ * của từng bé không biết gì về 6 triệu ấy, nên sale tạo được các đợt cộng lại bằng TRỌN học
+ * phí đơn, hệ thống phát QR đòi đủ số, và phụ huynh trả lần thứ hai phần họ đã trả.
+ *
+ * Đây là cùng một lớp lỗi với vế "Σ đợt đang mở" dưới đây: cổng đúng công thức nhưng **được
+ * cho ăn một con số hẹp hơn sự thật**. Sửa bằng cách đưa thêm số vào cổng, không phải bằng
+ * cách viết lại điều kiện ở chỗ gọi.
  *
  * ⚠️ Trừ **Σ đợt đang mở** chứ không chỉ so với còn nợ. Bỏ vế đó là sale tạo được hai đợt,
  * mỗi đợt bằng trọn số nợ — rồi hệ thống phát hai mã QR, mỗi mã đòi đủ tiền, và phụ huynh nào
@@ -207,14 +251,26 @@ export function kiemTaoDot(input: {
   conNo: number;
   tongDotDangMo: number;
   tenCon: string;
+  /**
+   * Còn nợ của CẢ ĐƠN — `NoTheoConKetQua.conNoDon`, đã trừ khoản chưa gắn con.
+   *
+   * ⚠️ BẮT BUỘC, không mặc định (luật 7). Một mặc định ở đây — kể cả
+   * `Number.POSITIVE_INFINITY` — biến vế đơn thành vế im lặng không bao giờ cắn, và không có
+   * gì báo cho người gọi biết họ vừa bỏ nó.
+   */
+  conNoDon: number;
+  /** Σ đợt đang mở của CẢ ĐƠN, kể cả đợt NULL — `NoTheoConKetQua.tongDotDangMoDon`. */
+  tongDotDangMoDon: number;
 }): KiemTaoDot {
   const vnd = (n: number) => tron(n).toLocaleString("vi-VN");
   const soTien = tron(input.soTien);
   if (!Number.isFinite(input.soTien) || soTien <= 0) {
     return { ok: false, loi: "Số tiền đợt phải lớn hơn 0" };
   }
-  const conLai = tron(input.conNo) - tron(input.tongDotDangMo);
-  if (conLai <= 0) {
+  const conLaiCon = tron(input.conNo) - tron(input.tongDotDangMo);
+  const conLaiDon = tron(input.conNoDon) - tron(input.tongDotDangMoDon);
+
+  if (conLaiCon <= 0) {
     return {
       ok: false,
       loi:
@@ -222,11 +278,32 @@ export function kiemTaoDot(input: {
         `(còn nợ ${vnd(input.conNo)}đ, đang mở ${vnd(input.tongDotDangMo)}đ)`,
     };
   }
-  if (soTien > conLai) {
+  // Vế ĐƠN phải báo lỗi bằng NGÔN NGỮ CỦA NGUYÊN NHÂN, không phải "tối đa X đồng". Sale nhìn
+  // số nợ của bé trên màn hình rồi gõ đúng số đó, nên một câu "tối đa 2.976.000đ" trong khi
+  // màn in "còn nợ 8.976.000đ" đọc như hệ thống bị lỗi. Phải nói ra chỗ tiền đang nằm.
+  if (conLaiDon <= 0) {
     return {
       ok: false,
       loi:
-        `${input.tenCon}: tối đa ${vnd(conLai)}đ ` +
+        `Cả đơn không còn phần được thu thêm (còn nợ đơn ${vnd(input.conNoDon)}đ, ` +
+        `đợt đang mở của đơn ${vnd(input.tongDotDangMoDon)}đ). ` +
+        `Kiểm khoản đã thu chưa gắn cho bé nào trước khi tạo đợt mới.`,
+    };
+  }
+  if (soTien > conLaiDon) {
+    return {
+      ok: false,
+      loi:
+        `Vượt phần còn được thu của CẢ ĐƠN: tối đa ${vnd(conLaiDon)}đ ` +
+        `(còn nợ đơn ${vnd(input.conNoDon)}đ − đợt đang mở của đơn ${vnd(input.tongDotDangMoDon)}đ). ` +
+        `Nếu số nợ của ${input.tenCon} trông lớn hơn, đơn đang có tiền đã thu chưa gắn cho bé nào.`,
+    };
+  }
+  if (soTien > conLaiCon) {
+    return {
+      ok: false,
+      loi:
+        `${input.tenCon}: tối đa ${vnd(conLaiCon)}đ ` +
         `(còn nợ ${vnd(input.conNo)}đ − đợt đang mở ${vnd(input.tongDotDangMo)}đ)`,
     };
   }

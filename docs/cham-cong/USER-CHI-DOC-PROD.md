@@ -288,17 +288,18 @@ ALTER ROLE satarobo_readonly WITH PASSWORD 'MAT_KHAU_MOI';
 
 ---
 
-## Ghi chú 17/09/2026 — vai thứ hai, và một việc còn nợ
+## Ghi chú 17/09/2026 — một việc còn nợ ở `_kiem-quyen.ts`
 
-**Vai đang dùng thật không tên `satarobo_readonly`.** Chủ dự án tạo `doisoat_ro` (SELECT toàn
-schema · `BYPASSRLS` · `default_transaction_read_only=on`) và đặt vào cùng secret
-`PROD_DATABASE_URL_RO`. Các câu SQL trên vẫn đúng khuôn — chỉ thay tên vai. Hai workflow
-chỉ-đọc (chấm công + `doi-soat-tien-prod-chi-doc.yml`) dùng CHUNG một secret này.
+Secret `PROD_DATABASE_URL_RO` trỏ vai **`satarobo_readonly`** — đúng như khuôn SQL ở trên, không
+có gì phải sửa. Hai workflow chỉ-đọc (chấm công + `doi-soat-tien-prod-chi-doc.yml`) dùng CHUNG
+một secret này.
 
-> `default_transaction_read_only=on` là một lớp khoá NỮA, nằm ở phía DB. Nó **không thay thế**
-> `SET TRANSACTION READ ONLY` trong script: một thuộc tính vai thì ai có quyền đều sửa
-> được bằng một câu `ALTER ROLE`, và không có gì trong repo nói cho ta biết điều đó đã
-> xảy ra. Hai lớp độc lập mới là hai lớp.
+> ⚠️ Sổ sự cố nhỏ, ghi lại vì nó là một lớp bài học chứ không phải một lần lỡ tay: ngày 17/09 tôi
+> đã sửa đoạn này thành "vai thật tên `doisoat_ro`" dựa trên lời kể, **trước khi** báo cáo đầu
+> tiên chạy được. Lượt chạy thật in ra `user satarobo_readonly` — tức tài liệu đã bị sửa cho
+> khớp một vai không được dùng. Chủ dự án xác nhận `doisoat_ro` là vai tạo thừa và sẽ xoá.
+> **Tên vai là thứ ĐỌC ĐƯỢC từ dòng tự khai của báo cáo** (`scripts/_kiem-quyen.ts`); đừng ghi
+> vào tài liệu theo trí nhớ của ai, kể cả của người tạo ra nó.
 
 ### NỢ: `_kiem-quyen.ts` đang hỏi quyền trên SAI BẢNG
 
@@ -308,11 +309,11 @@ bảng mình sắp đọc mới là quyền có ý nghĩa"*, nhưng báo cáo đ
 `BankTransaction` · `Payment` · `Order` · `PaymentRequest`, không đọc `ClassSession`.
 
 **Chưa vá vì nó vẫn bắt đúng ca cần bắt**: thứ phải phát hiện là *secret bị đặt nhầm sang
-chuỗi đầy quyền*, mà vai đầy quyền thì có `UPDATE` trên MỌI bảng — `ClassSession` đủ để lộ
-ra. Ngược lại, một vai `doisoat_ro` có `UPDATE` trên `BankTransaction` mà không có trên
-`ClassSession` là cấu hình không tồn tại thật.
+chuỗi đầy quyền*, mà vai đầy quyền thì có `UPDATE` trên MỌI bảng — `ClassSession` đủ để lộ ra.
+Ngược lại, một vai chỉ-đọc có `UPDATE` trên `BankTransaction` mà không có trên `ClassSession`
+là cấu hình không tồn tại thật.
 
-**Việc phải làm (đợt riêng):** thêm tham số bảng cho `kiemQuyen(db, bang)` — không đặt mặc
-định (luật 7: để `tsc` liệt kê cả hai chỗ gọi), rồi workflow tiền truyền `BankTransaction`,
-workflow chấm công truyền `ClassSession`. Chạm file dùng chung nên phải chạy lại cả hai
-workflow — đó là lý do nó không đi kèm đợt này.
+**Việc phải làm (đợt riêng):** thêm tham số bảng cho `kiemQuyen(db, bang)` — không đặt mặc định
+(luật 7: để `tsc` liệt kê cả hai chỗ gọi), rồi workflow tiền truyền `BankTransaction`, workflow
+chấm công truyền `ClassSession`. Chạm file dùng chung nên phải chạy lại cả hai workflow — đó là
+lý do nó không đi kèm đợt này.

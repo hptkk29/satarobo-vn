@@ -1,0 +1,77 @@
+# Chạy TAY — GẮN THẬT `Payment.orderItemId` cho khoản cũ của đơn MỘT CON. **WORKFLOW NÀY GHI.**
+#
+# Bản XEM TRƯỚC là workflow KHÁC: `backfill-orderitem-dry.yml` (secret chỉ-đọc, script không có
+# đường ghi). **Chạy bản xem trước và xin duyệt bảng TRƯỚC.**
+#
+# ── VÌ SAO AN TOÀN ────────────────────────────────────────────────────────────────────
+# Lệnh này chỉ điền một cột đang TRỐNG: `Payment.orderItemId` ra đời 16/09/2026 nên mọi khoản
+# cũ hơn đều NULL theo định nghĩa. Nó KHÔNG đụng `amount`, `accountantStatus`, `saleStatus`,
+# `enrollmentId`, `paidDate`, `deletedAt`. Điều kiện gắn: đơn có ĐÚNG MỘT dòng hàng ⇒ chỉ có
+# duy nhất một chỗ để gắn, không phải đoán. Chi tiết: `lib/finance/backfill-orderitem.ts`.
+#
+# ── BA CỔNG ───────────────────────────────────────────────────────────────────────────
+# 1. `xac_nhan` phải gõ đúng `BACKFILL-146`. Để trống ⇒ chỉ XEM TRƯỚC, không ghi.
+# 2. Script tự khai `user=… · ghi được: CÓ/KHÔNG` — GitHub không cho đọc lại secret.
+# 3. Script đếm lại ngay trước khi ghi và dừng nếu lệch mốc đã duyệt quá ngưỡng.
+#
+# ⚠️ Secret ở đây là `PROD_DIRECT_URL` — **ĐẦY QUYỀN**. Cố ý KHÔNG dùng `PROD_DATABASE_URL_RO`:
+# gán chuỗi đầy quyền vào một biến tên "readonly" là đặt tên nói dối, và tên nói dối thì lần
+# sau không ai đọc nữa.
+name: Backfill orderItemId · PROD · GHI THẬT
+
+on:
+  workflow_dispatch:
+    inputs:
+      xac_nhan:
+        description: 'Gõ đúng "BACKFILL-146" để GHI. Để trống = chỉ xem trước.'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  backfill:
+    name: Gắn orderItemId cho khoản cũ (PROD)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.ref == 'refs/heads/main'
+    env:
+      # Session pooler (5432), ĐẦY QUYỀN. Xem chú thích đầu file.
+      DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+      DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+    steps:
+      - name: Kiểm secret có mặt
+        run: |
+          [ -n "${{ secrets.PROD_DIRECT_URL }}" ] || { echo "::error::Thiếu secret PROD_DIRECT_URL."; exit 1; }
+
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prisma generate
+
+      # BƯỚC 1 chạy ở MỌI lượt, kể cả lượt có gõ chuỗi xác nhận: nó in kế hoạch vào log ngay
+      # trước khi ghi, nên log của lượt ghi tự mang theo bằng chứng "đã gắn đúng cái gì".
+      - name: 1) Xem trước — KHÔNG ghi gì
+        run: pnpm exec tsx scripts/backfill-orderitem-apply.ts
+
+      - name: 2) GẮN THẬT
+        if: inputs.xac_nhan == 'BACKFILL-146'
+        run: pnpm exec tsx scripts/backfill-orderitem-apply.ts --confirm=BACKFILL-146
+
+      - name: 2b) Bỏ qua bước ghi (không gõ chuỗi xác nhận)
+        if: inputs.xac_nhan != 'BACKFILL-146'
+        run: |
+          echo "::notice::Chỉ chạy XEM TRƯỚC. Muốn ghi thật thì chạy lại và gõ: BACKFILL-146"
+
+      # Nghiệm thu nằm TRONG script (nó tự quét lại và exit 1 nếu còn sót), nên ở đây chỉ cần
+      # nhắc chủ dự án chạy lại bản XEM TRƯỚC để đọc bảng phần B sau khi dọn.
+      - name: 3) Nhắc bước sau
+        if: inputs.xac_nhan == 'BACKFILL-146'
+        run: |
+          echo "::notice::Chạy workflow 'Đối soát tiền · PROD · ĐỌC' để đọc lại bảng phần B — CS2 phải chỉ còn các khoản của đơn ≥2 con."

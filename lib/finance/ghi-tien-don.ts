@@ -90,6 +90,10 @@ export async function taoDotChoCon(input: {
       conNo: con.conNo,
       tongDotDangMo: con.tongDotDangMo,
       tenCon: con.ten,
+      // Hai vế ĐƠN lấy thẳng từ `docSoTheoCon` — đọc TRONG transaction sau khi đã khoá đơn
+      // (`ghiTienChoDon`), nên hai lượt tạo đợt song song không cùng thấy một số cũ.
+      conNoDon: so.conNoDon,
+      tongDotDangMoDon: so.tongDotDangMoDon,
     });
     if (!kiem.ok) return { ok: false as const, error: kiem.loi };
 
