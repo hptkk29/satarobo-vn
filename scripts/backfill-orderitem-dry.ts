@@ -150,27 +150,49 @@ async function phanTachA(tx: Tx): Promise<void> {
   let motDon = 0;
   let dang84 = 0;
 
-  for (const t of txn) {
-    const sdt = extractVnPhoneCandidates(t.content);
-    // Dạng `84…`/`+84…` đếm THEO NỘI DUNG THÔ, không theo kết quả bóc: đây chính là tập mà
-    // MỤC 3 (chuẩn hoá SĐT) sẽ chạm tới.
+  // Bóc SĐT trước cho CẢ LÔ, rồi tra đơn bằng ĐÚNG MỘT câu.
+  //
+  // ⚠️ Bản đầu tra một câu `order.findMany` cho TỪNG giao dịch — 22 lượt round-trip sang
+  // Supabase nằm chung một transaction, và nó chết thật trên prod với `P2028`
+  // *"Transaction not found … or was open for longer than the timeout"* (trần mặc định 5 giây
+  // của transaction tương tác Prisma).
+  //
+  // Nâng trần là vá TRIỆU CHỨNG: N+1 vẫn còn, và nó sẽ chết lại vào ngày số giao dịch
+  // UNMATCHED tăng. Vá gốc là gộp thành một câu. (`scripts/bao-cao-doi-soat-tien.ts` còn nguyên
+  // hình dạng N+1 ấy — nó chạy được ở 22 dòng, nhưng đó là quả bom hẹn giờ cùng loại.)
+  const bocDuoc = txn.map((t) => {
     if (/(?:^|\D)\+?84\d{9}(?:\D|$)/.test(t.content ?? "")) dang84 += 1;
-    if (sdt.length === 0) {
-      khongBocDuoc += 1;
-      continue;
-    }
-    const bien = [...new Set(sdt.flatMap(phoneVariants))];
+    return extractVnPhoneCandidates(t.content);
+  });
+  const moiBien = bocDuoc.map((sdt) => [...new Set(sdt.flatMap(phoneVariants))]);
+  const tatCaBien = [...new Set(moiBien.flat())];
+
+  // Một câu cho mọi biến thể SĐT. `customerPhone` là một giá trị trên mỗi đơn, nên đếm theo
+  // SĐT rồi cộng theo biến thể của từng giao dịch cho ra đúng con số mà 22 câu kia cho ra.
+  const donTheoSdt = new Map<string, number>();
+  if (tatCaBien.length > 0) {
     const don = await tx.order.findMany({
       where: {
         ...locDonNhanTien(),
-        customerPhone: { in: bien },
+        customerPhone: { in: tatCaBien },
         paymentRequests: { some: { status: { in: ["PENDING", "PARTIAL"] } } },
       },
-      select: { id: true },
-      take: 2,
+      select: { customerPhone: true },
     });
-    if (don.length === 0) khongDonNao += 1;
-    else if (don.length > 1) nhieuDon += 1;
+    for (const d of don) {
+      if (!d.customerPhone) continue;
+      donTheoSdt.set(d.customerPhone, (donTheoSdt.get(d.customerPhone) ?? 0) + 1);
+    }
+  }
+
+  for (let i = 0; i < txn.length; i += 1) {
+    if (bocDuoc[i]!.length === 0) {
+      khongBocDuoc += 1;
+      continue;
+    }
+    const soDonKhop = moiBien[i]!.reduce((s, p) => s + (donTheoSdt.get(p) ?? 0), 0);
+    if (soDonKhop === 0) khongDonNao += 1;
+    else if (soDonKhop > 1) nhieuDon += 1;
     else motDon += 1;
   }
 
@@ -200,12 +222,23 @@ async function main() {
   // Transaction READ ONLY + NÉM để rollback. `return` KHÔNG rollback (CLAUDE.md mục 7).
   const KET = "__XEM_TRUOC_XONG__";
   try {
-    await db.$transaction(async (tx) => {
-      await tx.$executeRaw`SET TRANSACTION READ ONLY`;
-      await phanBackfill(tx);
-      await phanTachA(tx);
-      throw new Error(KET);
-    });
+    await db.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SET TRANSACTION READ ONLY`;
+        await phanBackfill(tx);
+        await phanTachA(tx);
+        throw new Error(KET);
+      },
+      // Trần mặc định của transaction TƯƠNG TÁC là 5 giây — tuỳ số hợp lý cho một transaction
+      // ghi ngắn, nhưng đây là một transaction ĐỌC để dựng báo cáo, quét 150+ khoản kèm quan hệ
+      // qua WAN sang Supabase. Nó không giữ tính nguyên tử cho ai; nó tồn tại để có READ ONLY +
+      // rollback.
+      //
+      // ⚠️ Con số này KHÔNG phải bản vá cho `P2028` đã gặp: nguyên nhân gốc là N+1 trong
+      // `phanTachA` và nó đã bị gộp thành MỘT câu (xem chú thích ở đó). Nâng trần mà giữ N+1 là
+      // vá triệu chứng — nó sẽ chết lại khi số giao dịch tăng.
+      { timeout: 120_000, maxWait: 15_000 },
+    );
   } catch (e) {
     if (!(e instanceof Error) || e.message !== KET) throw e;
   }
