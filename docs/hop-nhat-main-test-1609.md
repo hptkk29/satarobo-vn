@@ -65,35 +65,36 @@ Ca `[HT-E4]` (giao điểm hoàn tiền × điều chỉnh) tách làm hai: ph�
 rỗng" của `[HT-E5]` HIỆN không đo được gì — cầu dao trả `null` trước khi hàm chạm tới cổng
 ấy. Không phép cấy nào làm ca đó đổi trạng thái.
 
-### 🔴 NỢ-4 · HOÀN TIỀN KHÔNG TRỪ Ở CỔNG PH VÀ CÔNG NỢ — TÍNH NĂNG THỨ TÁM BỊ MẤT
+### NỢ-4 · HOÀN TIỀN KHÔNG TRỪ Ở CỔNG PH VÀ CÔNG NỢ — ✅ ĐÃ VÁ 17/09/2026
 
-**Phát hiện 17/09/2026 khi dựng lại NỢ-2. Đây là lỗi TIỀN, đang sống.**
+Tính năng thứ TÁM bị mất trong lượt hợp nhất, và là lỗi TIỀN đang sống. Cổng PH + công nợ
+đọc `KHOAN_DA_XAC_NHAN` (CHỈ `CONFIRMED`) nên dòng hoàn `REFUNDED` vô hình, trong khi doanh
+thu (`WHERE_THUC_THU`) thì thấy: phiếu 5tr hoàn 2tr ⇒ doanh thu **3tr đúng**, cổng PH
+**5tr sai**. Phụ huynh đã nhận lại tiền vẫn thấy khoản đó là "đã đóng".
 
-Hai bộ lọc, hai kết quả khác nhau trên cùng một dữ liệu:
+**Vá theo hướng TÁCH HAI BỘ LỌC** (không nhồi thêm trạng thái vào một bộ lọc). Trước khi
+sửa đã liệt kê đủ **13 đường đọc** và gán từng đường theo CÂU NÓ HỎI:
 
-| Đường đọc | Bộ lọc | Thấy dòng `REFUNDED`? |
+| Câu hỏi | Bộ lọc | Đường đọc |
 |---|---|---|
-| Doanh thu | `WHERE_THUC_THU` (`lib/finance/thuc-thu.ts`) | **CÓ** |
-| Cổng PH · công nợ · đề xuất hoàn | `KHOAN_DA_XAC_NHAN` (`lib/finance/debt.ts`) | **KHÔNG** |
+| **A · "PH đã đóng bao nhiêu"** (ròng, trừ dòng hoàn) | `KHOAN_DA_DONG` | cổng PH: danh sách biên lai · `paid` mỗi ghi danh · màn theo từng con · đề xuất hoàn (`paidConfirmed`) · trần học phí khi điều chỉnh · bản xuất dữ liệu học viên · báo cáo doanh thu · biểu đồ doanh thu 6 tháng |
+| **B · "ghi danh còn nợ bao nhiêu"** | `computeEnrollmentDebt(.., .., status)` | `getDebtRows` · `outstanding` cổng PH · `outstanding` theo con · công nợ tổng quan PH · công nợ từng con |
+| **Trục A** (đối soát, GỘP — cố ý khác A) | `KHOAN_DA_XAC_NHAN` | `sumConfirmed` · khối `congNoDon` + `accounting` ở trang chi tiết đơn |
 
-Đo được: phiếu 5tr, hoàn 2tr ⇒ doanh thu ra **3tr (đúng)**, cổng PH ra **5tr (sai)**.
+⚠️ **Ngoại lệ DUY NHẤT của câu B:** ghi danh đã RỜI LỚP (`WITHDREW`/`TRANSFERRED`/`CANCELLED`)
+thì KHÔNG trừ bút toán hoàn. Không có nó, em nghỉ-học-hoàn-đủ bỗng "nợ" đúng số vừa được
+hoàn — hệ thống đi đòi tiền một người vừa được trả lại tiền. Ngoại lệ KHÔNG áp cho bút toán
+ĐIỀU CHỈNH. `enrollmentStatus` là tham số **bắt buộc** nên quên truyền là `tsc` đỏ.
 
-**Là hồi quy do lượt hợp nhất.** Bản `test` trước merge đọc `WHERE_THUC_THU` ngay trong
-`lib/portal/billing.ts` (`9202d782`, chú thích còn nguyên: *"KHÔNG còn lọc cứng
-CONFIRMED"*); bản `main` thắng khối xung đột và mang theo `KHOAN_DA_XAC_NHAN`. Spec duy
-nhất canh điều đó bị xoá **trong cùng lượt merge** — nên không gì đỏ lên.
+⚠️ **Trang chi tiết đơn CỐ Ý giữ bộ lọc GỘP.** Đã thử đổi sang ròng rồi trả lại: `congNoDon`
+tính `choXacNhan = trục B − trục A`, mà trục B (`KHOAN_DA_GHI_NHAN`) không trừ hoàn — để A
+ròng còn B gộp thì sau mỗi lần hoàn màn báo "chờ xác nhận" một khoản không tồn tại, biến
+tín hiệu đối soát webhook thành báo động giả. **Hệ quả còn lại:** khối kế toán của trang đơn
+KHÔNG hiện bút toán hoàn; muốn hiện thì thêm một dòng riêng, đừng đổi trục A.
 
-**Đang sống, không phải lý thuyết:** `refundPayment` được gọi từ `refundPaymentAction`
-(`app/(admin)/admin/payments/_actions.ts:653`), tức màn `/admin/payments` đang dùng.
-Hệ quả với người thật: phụ huynh đã nhận lại tiền vẫn thấy khoản đó là "đã đóng", và công
-nợ không tăng lại tương ứng.
-
-⚠️ **ĐỪNG VÁ NGÂY THƠ.** Đã thử: cho `KHOAN_DA_XAC_NHAN` nhận thêm `REFUNDED` làm cả 4 ca
-ghim lật xanh, **nhưng làm `[HT-E1b]` đỏ** — công nợ của em đã nghỉ nhảy lên nguyên học
-phí, một khoản không ai còn nợ. Bản vá đúng phải tách hai câu hỏi: *"PH đã đóng bao nhiêu"*
-(phải trừ dòng hoàn) khác *"ghi danh còn nợ bao nhiêu"* (không được phồng lên vì tiền đã
-trả lại). `KHOAN_DA_XAC_NHAN` là bộ lọc dùng chung của nhiều đường tiền ⇒ **đợt riêng**,
-cân từng nơi gọi.
+**Nghiệm thu:** 4 ca ghim `[HT-E4b]` `[HT-E1]` `[HT-E2]` `[HT-E7b]` LẬT sang xanh và
+`[HT-E1b]` GIỮ xanh (lật 4 ca mà làm `[HT-E1b]` đỏ chính là bản vá ngây thơ đã bị loại).
+6/6 phép cấy làm đúng ca đổi trạng thái.
 
 ### NỢ-3 · Bố cục cột bảng Lead — CHỜ CHỦ DỰ ÁN CHỐT
 Đã lấy bản `main` (lưu `localStorage`, mỗi người một bộ) và **gỡ tầng lưu theo người trong

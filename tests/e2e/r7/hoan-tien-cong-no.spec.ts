@@ -17,26 +17,22 @@
  *   · HOÀN TIỀN — `refundPayment()` sinh dòng số ÂM, trạng thái `REFUNDED`,
  *     `adjustmentOfId` trỏ về gốc. Cơ chế này KHÔNG đổi ở lượt 07/09.
  *
- * ── 🔴 ĐIỀU BỘ NÀY ĐO ĐƯỢC NGAY KHI DỰNG LẠI (17/09/2026) ─────────────────────────────
- * Cổng phụ huynh và công nợ đọc `KHOAN_DA_XAC_NHAN` (`lib/finance/debt.ts`) = CHỈ
- * `accountantStatus: "CONFIRMED"`. Đường doanh thu đọc `WHERE_THUC_THU`
- * (`lib/finance/thuc-thu.ts`) = `CONFIRMED` **+ `REFUNDED`**.
+ * ── 🔴 LỖI BỘ NÀY ĐO RA, VÀ ĐÃ VÁ (17/09/2026 — NỢ-4) ────────────────────────────────
+ * Khi dựng lại, bộ này đo ra: cổng PH + công nợ đọc `KHOAN_DA_XAC_NHAN` (CHỈ `CONFIRMED`)
+ * nên dòng hoàn `REFUNDED` VÔ HÌNH, trong khi doanh thu (`WHERE_THUC_THU`) thì thấy —
+ * hoàn 2tr trên phiếu 5tr cho ra doanh thu 3tr (đúng) và cổng PH 5tr (sai). Hồi quy do
+ * lượt hợp nhất 16/09: bản `test` trước merge đọc `WHERE_THUC_THU` ngay trong
+ * `lib/portal/billing.ts` (`9202d782`), bản `main` thắng khối xung đột.
  *
- * ⇒ Dòng hoàn tiền VÔ HÌNH với cổng PH và công nợ, trong khi doanh thu thì thấy. Đo
- *   được: hoàn 2tr trên phiếu 5tr ⇒ doanh thu ra 3tr (đúng), cổng PH vẫn ra 5tr (sai).
- *   Bản `test` TRƯỚC merge đọc `WHERE_THUC_THU` ở chính `lib/portal/billing.ts`
- *   (`9202d782`, chú thích còn nguyên: *"KHÔNG còn lọc cứng CONFIRMED"*); bản `main`
- *   thắng khối xung đột và mang theo `KHOAN_DA_XAC_NHAN`.
+ * VÁ theo hướng TÁCH HAI BỘ LỌC, không nhồi thêm trạng thái vào một bộ lọc:
+ *   · câu A "PH đã đóng bao nhiêu"    → `KHOAN_DA_DONG` (ròng, trừ dòng hoàn);
+ *   · câu B "ghi danh còn nợ bao nhiêu" → `computeEnrollmentDebt(.., .., status)`, có
+ *     ngoại lệ: ghi danh ĐÃ RỜI LỚP thì KHÔNG trừ bút toán hoàn.
  *
- * Các ca phụ thuộc điều đó được GHIM bằng `test.fail` — xem chú thích tại từng ca. Vá
- * là một đợt RIÊNG: `KHOAN_DA_XAC_NHAN` là bộ lọc dùng chung của nhiều đường tiền, đổi
- * nó phải cân từng nơi gọi chứ không sửa một dòng.
- *
- * ⚠️ ĐÃ THỬ BẢN VÁ NGÂY THƠ — ĐỪNG LÀM THẾ. Cho `KHOAN_DA_XAC_NHAN` nhận thêm `REFUNDED`
- * làm **cả 4 ca ghim lật XANH**, nhưng ĐỒNG THỜI làm `[HT-E1b]` **ĐỎ**: công nợ của em
- * đã nghỉ nhảy lên NGUYÊN học phí — một khoản không ai còn nợ. Đo bằng phép cấy I2 ngày
- * 17/09/2026. Bản vá đúng phải tách hai câu hỏi: "PH đã đóng bao nhiêu" (phải trừ dòng
- * hoàn) khác "ghi danh còn nợ bao nhiêu" (không được phồng lên vì tiền đã trả lại).
+ * ⚠️ Vì sao cần ngoại lệ ấy — và vì sao bản vá một dòng là SAI: nhồi `REFUNDED` vào một
+ * bộ lọc chung trả lời đúng câu A nhưng làm câu B đẻ NỢ MA (em nghỉ-học-hoàn-đủ bỗng
+ * "nợ" đúng số vừa được hoàn). Đo được bằng phép cấy I2 ngày 17/09 — ca `[HT-E1b]` sinh
+ * ra để canh đúng điều đó, và nó ĐỎ dưới bản vá ngây thơ.
  *
  * ── VÌ SAO BỘ NÀY PHẢI CHẠM POSTGRES THẬT ────────────────────────────────────────────
  * Thứ nó phủ là những điều hàm thuần không trả lời được: bút toán do CHÍNH
@@ -63,11 +59,6 @@ import type { EnrollmentStatus } from "@prisma/client";
 
 const HOC_PHI = 9_000_000;
 const SA: RbacActor = { id: "seed-sa", name: "SA", role: "SUPER_ADMIN" };
-
-/** Lý do ghim, viết một lần — mọi ca ghim đều cùng một nguyên nhân. */
-const GHIM_HOAN =
-  "Nợ: cổng PH + công nợ đọc KHOAN_DA_XAC_NHAN (chỉ CONFIRMED) nên dòng REFUNDED " +
-  "không bị trừ. Vá ở lib/finance/debt.ts + lib/portal/billing.ts — đợt riêng.";
 
 /** Center id thật (OrgUnit "CS1" trỏ tới) — gán ở beforeEach. */
 let CENTER = "";
@@ -268,11 +259,6 @@ test.describe("HT — hoàn tiền vào công nợ & cổng phụ huynh", () => 
   });
 
   test("[HT-E4b] GIAO ĐIỂM hoàn tiền × điều chỉnh — delta VÀ dòng hoàn cùng phải được trừ", async () => {
-    // ⚠️ GHIM nằm TRONG thân ca (đặt ở cấp file thì nó đánh dấu mọi ca phía sau).
-    // Ca này ĐANG ĐỎ: đo được 3.000.000 (chỉ trừ delta) thay vì 2.000.000.
-    // Vá xong nó chuyển XANH và Playwright báo "expected to fail" ⇒ buộc gỡ ghim.
-    test.fail(true, GHIM_HOAN);
-
     const { nen, goc, acc } = await thuRoiDieuChinh("e4b");
 
     // Hoàn luôn trỏ vào PHIẾU THU gốc — dòng ADJUSTMENT là một hiệu số, không phải một
@@ -295,8 +281,6 @@ test.describe("HT — hoàn tiền vào công nợ & cổng phụ huynh", () => 
   });
 
   test("[HT-E1] hoàn TOÀN BỘ — PH thấy đã thu về 0, biên lai có dòng hoàn", async () => {
-    test.fail(true, GHIM_HOAN); // đo được 5.000.000 thay vì 0
-
     const nen = await seedNen("e1");
     const acc = await seedKeToan("e1");
     const goc = await thu(nen, 5_000_000);
@@ -337,8 +321,6 @@ test.describe("HT — hoàn tiền vào công nợ & cổng phụ huynh", () => 
   });
 
   test("[HT-E2] hoàn MỘT PHẦN — trừ đúng phần đã trả lại trên cả 3 màn PH", async () => {
-    test.fail(true, GHIM_HOAN); // đo được 5.000.000 thay vì 3.000.000
-
     const nen = await seedNen("e2");
     const acc = await seedKeToan("e2");
     const goc = await thu(nen, 5_000_000);
@@ -396,6 +378,9 @@ test.describe("HT — hoàn tiền vào công nợ & cổng phụ huynh", () => 
     //            12tr trên 9tr đã thu. ĐÂY LÀ ĐƯỜNG TIỀN RA — sai ở đây là mất tiền thật.
     //   [HT-E3b] đã DUYỆT 6tr nhưng kế toán CHƯA ghi bút toán âm ⇒ đề xuất kế tiếp vẫn
     //            phải thấy 3tr. Khoảng hở "đã duyệt / chưa chi" là có thật, kéo dài ngày.
+    //   [HT-E5c] ghi danh CHƯA THU ĐỒNG NÀO ⇒ KHÔNG đẻ yêu cầu hoàn rỗng. Ca này từng
+    //            nằm trong [HT-E5] nhưng xanh GIẢ (cầu dao trả null trước khi tới cổng
+    //            ấy), nên đã gỡ khỏi đó và dời yêu cầu về đây.
     //
     // Khi ai đó đủ 4 điều kiện gỡ (`lib/finance/cau-dao-hoan-tien.ts`) và xoá cầu dao,
     // ca này ĐỎ — buộc họ đọc đoạn trên và dựng lại hai ca ấy, thay vì để phần phủ biến
@@ -406,7 +391,7 @@ test.describe("HT — hoàn tiền vào công nợ & cổng phụ huynh", () => 
     ).toBe(true);
   });
 
-  test("[HT-E5] ghi danh CHƯA THU ĐỒNG NÀO — mọi màn giữ nguyên, không tạo yêu cầu hoàn rỗng", async () => {
+  test("[HT-E5] ghi danh CHƯA THU ĐỒNG NÀO — cổng PH và công nợ nói đúng học phí đầy đủ", async () => {
     const nen = await seedNen("e5", { soBuoi: 24, daHoc: 0 });
 
     const billing = await getParentBilling(nen.parentUserId);
@@ -417,18 +402,18 @@ test.describe("HT — hoàn tiền vào công nợ & cổng phụ huynh", () => 
     const rows = await getDebtRows(await sdbHoiSo());
     expect(rows.find((r) => r.enrollmentId === nen.enrollmentId)?.debt).toBe(HOC_PHI);
 
-    // ⚠️ NÓI THẲNG ĐIỂM YẾU: khẳng định dưới đây HIỆN KHÔNG ĐO ĐƯỢC GÌ. Cầu dao
-    // (`REFUND_REQUEST_DISABLED`) trả `null` trước khi hàm kịp chạm tới cổng
-    // "chưa thu đồng nào", nên nó xanh vì lý do KHÁC với lý do nó được viết ra. Đã kiểm:
-    // không phép cấy nào trong năm phép ngày 17/09 làm ca này đổi trạng thái.
-    // Giữ lại vì khi cầu dao được gỡ, nó lập tức đo thật trở lại — và `[HT-E3b]` là dây
-    // bẫy buộc người gỡ cầu dao phải quay lại đọc chỗ này.
-    const rr = await createRefundRequest({
-      enrollmentId: nen.enrollmentId,
-      trigger: "WITHDRAW",
-      reason: "nghỉ học",
-    });
-    expect(rr, "chưa thu đồng nào thì không đẻ yêu cầu hoàn rỗng").toBeNull();
+    // ⚠️ ĐÃ GỠ một khẳng định XANH GIẢ ở đây (17/09/2026). Bản dựng lại đầu tiên có
+    // `expect(createRefundRequest(...)).toBeNull()` kèm lời "chưa thu đồng nào thì không
+    // đẻ yêu cầu rỗng" — nhưng cầu dao `REFUND_REQUEST_DISABLED` trả `null` TRƯỚC khi hàm
+    // kịp chạm tới cổng ấy, nên nó xanh vì một lý do KHÁC hẳn lý do nó được viết ra. Đo
+    // để chắc: không phép cấy nào trong năm phép I1–I5 làm ca này đổi trạng thái.
+    //
+    // Một ca xanh giả tệ hơn không có ca: người sau đọc danh sách sẽ tưởng vùng đó đang
+    // được canh. Yêu cầu dựng lại nó nay nằm ở dây bẫy `[HT-E3b]`, cùng chỗ với hai ca
+    // chống phồng đề xuất — tất cả đều chỉ đo được khi cầu dao mở.
+    //
+    // Phần CÒN LẠI của ca này đo thật và đang canh: ghi danh chưa thu đồng nào thì cổng
+    // PH và công nợ phải nói đúng điều đó.
   });
 
   test("[HT-E6] khoản PENDING vẫn KHÔNG hiện tiền cho PH (AC1 không bị đợt vá nới ra)", async () => {
@@ -468,10 +453,6 @@ test.describe("HT — hoàn tiền vào công nợ & cổng phụ huynh", () => 
   });
 
   test("[HT-E7b] HAI ĐƯỜNG PHẢI GẶP NHAU — cổng PH khớp đúng doanh thu thực thu", async () => {
-    // ⚠️ Đây là ca chỉ thẳng vào chỗ hỏng: cùng một dữ liệu, hai đường đọc ra hai số.
-    // Đo được: doanh thu 3.000.000 (đúng) · cổng PH 5.000.000 (sai).
-    test.fail(true, GHIM_HOAN);
-
     const nen = await seedNen("e7b");
     const acc = await seedKeToan("e7b");
     const goc = await thu(nen, 5_000_000);

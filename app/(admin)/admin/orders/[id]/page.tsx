@@ -181,7 +181,8 @@ export default async function OrderDetailPage({ params }: Props) {
   });
   // Bộ số in ra khối "Công nợ đơn hàng" — TÁI DÙNG `paidSoFar` (trục B) đã tính ở
   // trên cho mã QR, nên số trên màn và số trong QR không thể lệch nhau. Trục A lấy
-  // đúng bộ lọc mà công nợ + cổng phụ huynh dùng (`laKhoanDaXacNhan`).
+  // Trục A ở đây CỐ Ý dùng bộ lọc GỘP (`laKhoanDaXacNhan`), KHÁC cổng phụ huynh —
+  // xem ghi chú dài ở khối `accounting` bên dưới.
   //
   // Trước bản này `paidSoFar` chỉ dùng cho QR rồi bị bỏ: trang tính được "còn thiếu"
   // mà không in ra đâu cả.
@@ -357,8 +358,18 @@ export default async function OrderDetailPage({ params }: Props) {
         paymentMethods={paymentMethods}
         congNo={congNo}
         accounting={{
-          // Trục A — dùng chung định nghĩa "khoản đã xác nhận" với công nợ và cổng
-          // phụ huynh (lib/finance/debt.ts). Bút toán ADJUSTMENT nằm trong đó.
+          // TRỤC A (GỘP) — KHÔNG phải con số "phụ huynh đã đóng" của cổng PH.
+          //
+          // ⚠️ 17/09/2026 — đã thử đổi sang bộ lọc RÒNG (`laKhoanDaDong`, trừ bút toán
+          // hoàn) rồi TRẢ LẠI: `congNoDon` tính `choXacNhan = trục B − trục A`, mà trục B
+          // (`KHOAN_DA_GHI_NHAN`, phân bổ PaymentRequest) KHÔNG trừ hoàn. Để A ròng còn B
+          // gộp thì sau mỗi lần hoàn, màn báo "chờ xác nhận" một khoản KHÔNG TỒN TẠI —
+          // biến tín hiệu đối soát webhook thành báo động giả. Trang này hỏi "hai trục
+          // lệch nhau bao nhiêu", KHÔNG hỏi "phụ huynh đã đóng bao nhiêu"; câu sau là
+          // việc của `lib/portal/billing.ts`. Hai câu hỏi — xem `lib/finance/debt.ts`.
+          //
+          // Hệ quả còn lại, ghi ra để không ai tưởng đã xong: khối này KHÔNG hiện bút
+          // toán hoàn. Muốn hiện thì thêm MỘT DÒNG RIÊNG, đừng đổi trục A.
           confirmed: tongDaXacNhan(order.payments.filter(laKhoanDaXacNhan)),
           pending: order.payments
             .filter((p) => p.accountantStatus === "PENDING")

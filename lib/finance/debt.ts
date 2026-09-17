@@ -1,4 +1,5 @@
 // lib/finance/debt.ts — R2-06 công nợ + R2-03 confirm payment (Doc 15 §4.9) + R7-04 công nợ đa chiều.
+import { WHERE_THUC_THU, TRANG_THAI_THUC_THU } from "@/lib/finance/thuc-thu";
 import type { Order } from "@prisma/client";
 import { db } from "@/lib/db";
 import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
@@ -69,7 +70,14 @@ export async function confirmOrderPayment(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Điều kiện `where` cho MỌI truy vấn cộng tiền đã xác nhận.
+ * TRỤC A THUẦN — CHỈ `CONFIRMED`, KHÔNG trừ bút toán hoàn.
+ *
+ * ⚠️ ĐÂY KHÔNG PHẢI bộ lọc trả lời "phụ huynh đã đóng bao nhiêu". Câu đó là
+ * `KHOAN_DA_DONG` (ròng). Bộ lọc này chỉ đúng cho MỘT câu hỏi: "kế toán đã xác nhận
+ * tổng bao nhiêu" — tức trục A trong phép so hai trục (`sumConfirmed`,
+ * `tests/finance/dieu-chinh.test.ts`). Dùng nó cho màn tiền của phụ huynh / công nợ /
+ * doanh thu là làm dòng hoàn tàng hình, đúng lỗi đã xảy ra ngày 16/09/2026.
+ *
  * Dùng thẳng trong `where` của Prisma, kể cả trong quan hệ lồng (`payments: { where }`).
  */
 export const KHOAN_DA_XAC_NHAN = {
@@ -94,14 +102,63 @@ export function tongDaXacNhan(confirmedPayments: { amount: number }[]): number {
 }
 
 /**
- * Công nợ 1 ghi danh = finalPrice − Σ amount(Payment CONFIRMED). THUẦN.
+ * Hai câu hỏi KHÁC NHAU, và chính chỗ lẫn chúng đã sinh ra lỗi ngày 16/09/2026.
+ *
+ *   A. "PHỤ HUYNH ĐÃ ĐÓNG BAO NHIÊU" -> `KHOAN_DA_DONG` (ròng). Bút toán hoàn là tiền
+ *      ĐÃ TRẢ LẠI, nên phải trừ ra: PH cầm lại 2tr thì họ không còn "đã đóng" 2tr ấy.
+ *   B. "GHI DANH CÒN NỢ BAO NHIÊU"  -> `computeEnrollmentDebt` (có NGOẠI LỆ, xem dưới).
+ *
+ * Nhồi `REFUNDED` vào một bộ lọc chung cho cả hai là bản vá NGÂY THƠ: nó trả lời đúng
+ * câu A nhưng làm câu B đẻ NỢ MA (đo được 17/09/2026 — phép cấy I2, ca `[HT-E1b]`).
+ */
+export const KHOAN_DA_DONG = WHERE_THUC_THU;
+
+/** Bản JS của `KHOAN_DA_DONG` — cho chỗ đã nạp sẵn danh sách rồi lọc trong bộ nhớ. */
+export function laKhoanDaDong(p: {
+  accountantStatus: string;
+  deletedAt?: Date | null;
+}): boolean {
+  return (TRANG_THAI_THUC_THU as readonly string[]).includes(p.accountantStatus) && !p.deletedAt;
+}
+
+/** Tong tien PH thuc su da dong (da tru but toan hoan). THUAN. */
+export function tongDaDong(rows: { amount: number }[]): number {
+  return rows.reduce((s, p) => s + p.amount, 0);
+}
+
+/**
+ * Ghi danh đã RỜI LỚP — nơi ngoại lệ của `computeEnrollmentDebt` áp dụng.
+ *
+ * COMPLETED KHÔNG nằm ở đây: học xong thì học phí vẫn phải đóng đủ.
+ */
+export const TRANG_THAI_ROI_LOP = ["WITHDREW", "TRANSFERRED", "CANCELLED"] as const;
+
+/**
+ * Công nợ 1 ghi danh = finalPrice − ĐÃ ĐÓNG. THUẦN.
  * Có thể ÂM (đóng thừa) — trả raw, caller tự bucket/hiển thị. finalPrice null → 0.
+ *
+ * ⚠️ MỘT NGOẠI LỆ, VÀ CHỈ MỘT: với ghi danh đã RỜI LỚP, bút toán HOÀN không được tính
+ * vào phép trừ. Vì sao — `getDebtRows` lọc `deletedAt: null` nhưng KHÔNG lọc `status`,
+ * nên ghi danh của học viên đã nghỉ vẫn nằm nguyên trong bảng công nợ. Lấy thẳng số
+ * ròng làm công nợ thì em nghỉ-học-hoàn-đủ bỗng "nợ" đúng số vừa được hoàn, và hệ thống
+ * đi đòi tiền một người vừa được trả lại tiền — ngay trên màn phụ huynh.
+ *
+ * Ngoại lệ KHÔNG áp cho bút toán ĐIỀU CHỈNH: sửa số ghi nhầm thì công nợ phải theo số
+ * đúng, dù học viên còn học hay đã nghỉ.
+ *
+ * `enrollmentStatus` là tham số BẮT BUỘC (không mặc định): quên truyền = TypeScript đỏ,
+ * chứ không phải âm thầm chạy nhánh sai (luật 7 — `docs/luat-doc-so-va-ket-luan.md`).
  */
 export function computeEnrollmentDebt(
   finalPrice: number | null,
-  confirmedPayments: { amount: number }[],
+  butToan: { amount: number; accountantStatus: string }[],
+  enrollmentStatus: string | null,
 ): number {
-  return (finalPrice ?? 0) - tongDaXacNhan(confirmedPayments);
+  const daRoiLop =
+    enrollmentStatus != null &&
+    (TRANG_THAI_ROI_LOP as readonly string[]).includes(enrollmentStatus);
+  const rows = daRoiLop ? butToan.filter((p) => p.accountantStatus !== "REFUNDED") : butToan;
+  return (finalPrice ?? 0) - tongDaDong(rows);
 }
 
 /**
@@ -189,13 +246,16 @@ export async function getDebtRows(
       course: { select: { name: true } },
       class: { select: { centerId: true } },
       // FIX-C3: nested include không auto-scope → tự lọc payment đã xóa.
-      payments: { where: KHOAN_DA_XAC_NHAN, select: { amount: true } },
+      status: true,
+      // Câu B — phải nạp `accountantStatus` để `computeEnrollmentDebt` áp được
+      // ngoại lệ "ghi danh đã rời lớp thì không trừ bút toán hoàn".
+      payments: { where: KHOAN_DA_DONG, select: { amount: true, accountantStatus: true } },
     },
   });
 
   return enrollments.map((e) => {
     const finalPrice = e.finalPrice ?? e.tuition ?? 0;
-    const confirmedPaid = tongDaXacNhan(e.payments);
+    const confirmedPaid = tongDaDong(e.payments);
     return {
       enrollmentId: e.id,
       studentId: e.studentId,
@@ -204,7 +264,10 @@ export async function getDebtRows(
       centerId: e.class?.centerId ?? null,
       finalPrice,
       confirmedPaid,
-      debt: finalPrice - confirmedPaid,
+      // Câu B — KHÔNG phải `finalPrice - confirmedPaid`: phép trừ thẳng bỏ qua ngoại
+      // lệ "ghi danh đã rời lớp thì không trừ bút toán hoàn" và đẻ NỢ MA đúng bằng
+      // số vừa hoàn cho học viên đã nghỉ. Đo được 17/09/2026 bằng ca `[HT-E1b]`.
+      debt: computeEnrollmentDebt(finalPrice, e.payments, e.status),
     };
   });
 }

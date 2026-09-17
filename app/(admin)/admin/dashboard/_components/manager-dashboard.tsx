@@ -34,7 +34,7 @@ import {
   computeAchievement,
 } from "@/lib/reports/revenue-target";
 import { getRevenueTargets } from "@/lib/reports/revenue-target-data";
-import { getDebtRows, KHOAN_DA_XAC_NHAN } from "@/lib/finance/debt";
+import { getDebtRows, KHOAN_DA_DONG } from "@/lib/finance/debt";
 import { giaoVienDuocQuyCong } from "@/lib/lms/session-ownership";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
@@ -140,7 +140,7 @@ async function getManagerStats(actor: Actor) {
     }),
     // Doanh thu THỰC = Σ Payment(accountantStatus=CONFIRMED) — 6 tháng gần nhất.
     sdb.payment.findMany({
-      where: { ...KHOAN_DA_XAC_NHAN, paidDate: { gte: sixMonthsAgo } },
+      where: { ...KHOAN_DA_DONG, paidDate: { gte: sixMonthsAgo } },
       select: { amount: true, centerId: true, paidDate: true },
       take: 50_000,
     }),
