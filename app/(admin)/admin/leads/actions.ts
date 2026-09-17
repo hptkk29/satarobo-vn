@@ -30,6 +30,7 @@ import { rejectHeadOffice } from '@/lib/enrollment-flow'
 import { normalizeFacebookUrl } from '@/lib/lead/intake/normalize'
 import { mergeLeadNote, splitLeadNote } from '@/lib/lead/note-view'
 import { loiOKhoa, noiThemGhiChu, oKhoaBiDung } from '@/lib/lead/quyen-sua-lead'
+import { dongBoKhoaTuCon } from '@/lib/lead/khoa-quan-tam'
 import {
   LEAD_DROP_STATUSES,
   LEAD_STATUS_LABEL,
@@ -1338,17 +1339,40 @@ function leadChildData(parsed: unknown) {
  * dùng vừa chọn cách đó hai giây — mất dữ liệu im lặng. Luật: chỉ đồng bộ khi con
  * THỰC SỰ chọn khoá, hoặc khi đang gỡ đúng cái khoá do chính con đó đặt.
  */
+/**
+ * Đồng bộ khoá quan tâm của lead theo con — NHƯNG KHÔNG ĐÈ giá trị người dùng đặt tay.
+ *
+ * ⚠️ 17/09/2026 — bản trước ghi đè VÔ ĐIỀU KIỆN. Điều đó đúng khi ô "Khoá quan tâm" trên
+ * màn sửa lead còn bị khoá (lead có con ⇒ `disabled`), vì khi ấy chỉ có MỘT nơi ghi. Chủ dự
+ * án chốt mở ô đó ra ("làm hướng sửa được đi"), nên nay có HAI nơi ghi — và ghi đè vô điều
+ * kiện biến ô vừa mở thành lời hứa suông: Sale gõ đúng, lưu, thấy đã lưu, rồi lần sau ai đó
+ * đụng vào một đứa con là giá trị biến mất, không thông báo, không dấu vết.
+ *
+ * Luật "khi nào con được ghi đè" nằm ở `lib/lead/khoa-quan-tam.ts` (hàm thuần, có test).
+ *
+ * `khoaConTruocKhiSua` = khoá của đứa con vừa sửa, GIÁ TRỊ TRƯỚC LƯỢT SỬA. Thiếu nó thì
+ * luồng thường gãy — xem chú thích của `DauVaoDongBoKhoa`.
+ */
 async function syncLeadCourseFromChildren(
   tx: Prisma.TransactionClient,
   leadId: string,
+  khoaConTruocKhiSua?: string | null,
 ): Promise<void> {
-  const kids = await tx.leadChild.findMany({
-    where: { leadId },
-    select: { interestedCourseId: true },
-    orderBy: { updatedAt: 'desc' },
+  const [kids, lead] = await Promise.all([
+    tx.leadChild.findMany({
+      where: { leadId },
+      select: { interestedCourseId: true },
+      orderBy: { updatedAt: 'desc' },
+    }),
+    tx.lead.findUnique({ where: { id: leadId }, select: { courseId: true } }),
+  ])
+  const quyet = dongBoKhoaTuCon({
+    khoaLead: lead?.courseId,
+    khoaCacCon: kids.map((k) => k.interestedCourseId),
+    khoaConTruocKhiSua,
   })
-  const picked = kids.find((k) => k.interestedCourseId)?.interestedCourseId ?? null
-  await tx.lead.update({ where: { id: leadId }, data: { courseId: picked } })
+  if (!quyet.doiKhoa) return
+  await tx.lead.update({ where: { id: leadId }, data: { courseId: quyet.khoaMoi } })
 }
 
 /** Thêm 1 con vào lead. `input` gồm `leadId` + các field con (leadChildSchema). */
@@ -1455,7 +1479,7 @@ export async function updateLeadChild(
       !!child.interestedCourseId &&
       child.lead?.courseId === child.interestedCourseId
     if (data.interestedCourseId || clearingCourseSetByThisChild) {
-      await syncLeadCourseFromChildren(tx, child.leadId)
+      await syncLeadCourseFromChildren(tx, child.leadId, child.interestedCourseId)
     }
 
     // KHÔNG .catch() nuốt lỗi ở đây nữa: query hỏng giữa transaction là tx đã toang,
@@ -1534,7 +1558,8 @@ export async function deleteLeadChild(
   await db.$transaction(async (txRaw) => {
     const tx = txRaw as unknown as Prisma.TransactionClient
     await tx.leadChild.delete({ where: { id: childId } })
-    if (courseCameFromThisChild) await syncLeadCourseFromChildren(tx, child.leadId)
+    if (courseCameFromThisChild)
+      await syncLeadCourseFromChildren(tx, child.leadId, child.interestedCourseId)
   })
 
   await logLeadAudit({
