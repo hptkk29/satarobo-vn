@@ -61,6 +61,12 @@ export function ZaloCrmFrame({
     // `min-w-[900px]` vượt ngưỡng 768 với biên an toàn; `overflow-x-auto` giữ cho phần
     // còn lại của trang admin KHÔNG bị đẩy ngang trên màn hẹp — chỉ ô này cuộn.
     // Gỡ hai lớp này là lỗi quay lại NGAY, và quay lại theo kiểu im lặng.
+    //
+    // ⚠️ ĐÂY LÀ NÉ, KHÔNG PHẢI SỬA. Đường mobile của fork vẫn không nạp danh sách nick —
+    // nó hỏng y hệt khi Sale mở trên ĐIỆN THOẠI, khi ai đó mở fork TRỰC TIẾP trên màn
+    // hẹp, hoặc khi thu nhỏ cửa sổ. Vá gốc nằm bên fork và phải build lại + restart
+    // (rớt nick đang `connected`), nên để dành cho đợt dựng org thứ hai.
+    // Chi tiết + chỗ sửa: `NỢ-7` trong `docs/hop-nhat-main-test-1609.md`.
     <div className="flex min-h-0 flex-1 overflow-x-auto">
     <iframe
       // Khoá lại theo `src`: đổi tab cơ sở là vé SSO khác ⇒ phải dựng khung mới, không

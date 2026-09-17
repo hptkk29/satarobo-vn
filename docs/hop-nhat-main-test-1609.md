@@ -184,6 +184,64 @@ Ba mắt xích đã đo (17/09/2026), để lần thi công không phải dò l�
 (2) trong đó lấy hội thoại `last_message_at` mới nhất; (3) vẫn còn nhiều hơn một thì
 **KHÔNG đoán** — mở `?compose=` để sale tự chọn, vì mở nhầm hội thoại là nhắn nhầm người.
 
+### 🔴 NỢ-7 · LAYOUT MOBILE CỦA FORK KHÔNG NẠP DANH SÁCH NICK — mới TRÁNH, chưa SỬA
+
+Bản vá 17/09 (PR #285) đặt `min-w-[900px]` cho khung nhúng để fork luôn khởi động ở chế độ
+desktop. Nó **TRÁNH đường mobile, KHÔNG SỬA đường mobile.** Đường ấy vẫn hỏng y hệt ở ba
+tình huống sẽ xảy ra:
+
+1. **Sale mở trên điện thoại** — chắc chắn xảy ra, chỉ là khi nào.
+2. **Ai đó mở fork trực tiếp** (`https://…trycloudflare.com/`) trên màn hẹp — không qua
+   khung Sata nên `min-w` không cứu được.
+3. **Thu nhỏ cửa sổ** xuống dưới 768px rồi tải lại trang.
+
+#### Đo được gì (17/09/2026)
+
+`frontend/src/composables/use-mobile.ts:5,13` — `MOBILE_BREAKPOINT = 768`,
+`isMobile = window.innerWidth < 768`. Không có đường vượt (không query param, không
+localStorage). Trong iframe, `innerWidth` là bề rộng **của khung**, không phải trình duyệt.
+
+`frontend/src/views/ChatView.vue:651-653` — **TOÀN BỘ lượt nạp nằm trong nhánh desktop**:
+
+| Nằm trong `if (!isMobile.value)` | Bản mobile có làm thay không |
+|---|---|
+| `fetchZaloAccounts()` | ❌ **KHÔNG** — đây là gốc của "Phạm vi xem 0 · 0" |
+| `restoreScope()` | ❌ không |
+| `fetchConversations()` | ✅ có — `MobileChatView.vue:111-112` tự gọi |
+| `fetchPriorityUnread()` · `fetchFollowingPairs()` | ❌ không |
+| tạo socket + gắn listener `chat:inbound-message`, `zalo-labels-synced` | ❌ không |
+
+`MobileChatView.vue` **không** `import useZaloAccounts`, **không** render
+`ConversationFilterSidebar` ⇒ không có bộ chọn nick, không có khối "Phạm vi xem".
+
+⚠️ **Hỏng nặng hơn khi khung LẬT từ mobile sang desktop:** `onMounted` chạy **một lần** và
+**không có `watch(isMobile)`** nạp bù. Mở lúc hẹp → `MobileChatView` nạp hội thoại; rộng ra
+sau đó → `MobileChatView` gỡ, giao diện desktop dựng lên với **mọi thứ rỗng** (không nick,
+không hội thoại, không socket). Đây chính là trạng thái chủ dự án nhìn thấy.
+
+Lưu ý để khỏi chẩn sai lần sau: danh sách hội thoại **có** được lọc theo quyền ở máy chủ
+(`backend/src/modules/chat/chat-routes.ts:150-157`, `zaloAccountId in displayableIds`), nên
+"mobile không thấy gì" **không** phải lỗi phân quyền.
+
+#### Sửa ở đâu (bên fork)
+
+- `frontend/src/views/ChatView.vue` — đưa lượt nạp dữ liệu RA NGOÀI guard `isMobile`
+  (nạp không phụ thuộc layout), hoặc thêm `watch(isMobile)` nạp bù khi lật sang desktop.
+- `frontend/src/views/MobileChatView.vue` — nạp `useZaloAccounts` và cho phép chọn nick,
+  hoặc nói rõ trên màn rằng bản mobile không có bộ chọn nick.
+- `frontend/src/composables/use-mobile.ts` — cân nhắc một đường vượt (`?desktop=1`) cho
+  ca nhúng trong iframe.
+
+#### Vì sao lượt này KHÔNG sửa
+
+Đụng fork = **build lại frontend + restart container `zalo-crm-app`**. Nick
+*Satarobo - Cô Liên* đang `connected` và phiên Zalo do tiến trình giữ ⇒ restart nhiều khả
+năng **rớt nick, phải quét QR lại**. Giữa lượt nghiệm thu thì cái giá đó không chấp nhận
+được, nên chủ dự án chốt phương án A (sửa bên Sata).
+
+**Gộp vào đợt nào:** làm cùng `NỢ-6` (dựng org thứ hai bên fork) — lúc đó dù sao cũng phải
+restart fork, nên trả giá một lần.
+
 ### NỢ-3 · Bố cục cột bảng Lead — CHỜ CHỦ DỰ ÁN CHỐT
 Đã lấy bản `main` (lưu `localStorage`, mỗi người một bộ) và **gỡ tầng lưu theo người trong
 DB** của `test`: `_column-actions.ts`, `column-picker.tsx`,
