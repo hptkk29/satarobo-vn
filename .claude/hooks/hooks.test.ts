@@ -28,6 +28,23 @@ const GOC = process.cwd();
 const HOOKS = join(GOC, ".claude", "hooks");
 
 /**
+ * Trần thời gian cho mọi ca CÓ SPAWN TIẾN TRÌNH.
+ *
+ * ⚠️ ĐẶT VÌ MỘT PHÉP ĐO (17/09/2026): chạy cả bộ `test:unit` năm lượt liên tiếp, bộ này đỏ
+ * 12/9/2/0/3 ca với `Test timed out in 5000ms` — trong khi chạy RIÊNG thì xanh sạch 31/31.
+ * Mỗi ca ở đây spawn một tiến trình `bash` (có ca spawn thêm `git`), và trên Windows mỗi lần
+ * spawn tốn hàng trăm ms; khi mươi worker vitest khác đang giành CPU thì 5s không đủ.
+ *
+ * ⚠️ ĐÂY KHÔNG PHẢI "nới trần cho test xanh". Thứ bộ này kiểm là MÃ THOÁT của hook, và mã
+ * thoát không phụ thuộc thời gian — nới trần không làm nó bỏ qua một hành vi nào. Ngược lại,
+ * một bộ test đỏ vì môi trường thì người ta học cách bỏ qua nó, rồi bỏ qua luôn lần nó đỏ
+ * THẬT (luật 6). Mà chính cổng này từng không chặn được gì suốt nhiều tháng mà không ai biết.
+ *
+ * Chạm 30s là tín hiệu THẬT (hook treo, `bash` không có trong PATH), không phải nhiễu.
+ */
+const TRAN_SPAWN_MS = 30_000;
+
+/**
  * Bỏ chú thích shell trước khi soi văn bản mã.
  *
  * ⚠️ Hai ca dưới đây ĐỎ ngay lần chạy đầu vì chính CHÚ THÍCH giải thích bản vá có nhắc
@@ -110,7 +127,7 @@ function chayTaiRepo(hook: string, command: string, thu: string): { ma: number; 
 /** 2 = CHẶN theo giao ước PreToolUse của Claude Code. */
 const CHAN = 2;
 
-describe("bộ đọc lệnh dùng chung", () => {
+describe("bộ đọc lệnh dùng chung", { timeout: TRAN_SPAWN_MS }, () => {
   it("lấy đúng `tool_input.command` từ JSON trên STDIN", () => {
     const ra = execFileSync(
       "bash",
@@ -145,7 +162,7 @@ describe("bộ đọc lệnh dùng chung", () => {
   });
 });
 
-describe("block-env-add.sh — chặn `git add .env*`", () => {
+describe("block-env-add.sh — chặn `git add .env*`", { timeout: TRAN_SPAWN_MS }, () => {
   it("CHẶN `git add .env`", () => {
     const r = chay("block-env-add.sh", "git add .env");
     expect(r.ma, "phải là 2 (CHẶN); 1 chỉ là lỗi không chặn").toBe(CHAN);
@@ -168,7 +185,7 @@ describe("block-env-add.sh — chặn `git add .env*`", () => {
   });
 });
 
-describe("block-destructive.sh — chặn lệnh phá dữ liệu", () => {
+describe("block-destructive.sh — chặn lệnh phá dữ liệu", { timeout: TRAN_SPAWN_MS }, () => {
   // Danh sách này là HỢP ĐỒNG: đổi mẫu chặn thì phải đổi ở đây, và người đọc thấy ngay
   // mình sắp bị chặn cái gì.
   const PHAI_CHAN: [string, string][] = [
@@ -216,7 +233,7 @@ describe("block-destructive.sh — chặn lệnh phá dữ liệu", () => {
   });
 });
 
-describe("chan-commit-khi-do.sh — chặn commit khi đỏ", () => {
+describe("chan-commit-khi-do.sh — chặn commit khi đỏ", { timeout: TRAN_SPAWN_MS }, () => {
   it("lệnh không phải commit ⇒ cho qua NGAY, không chạy typecheck", () => {
     // Nếu nó chạy typecheck cho mọi lệnh thì mỗi lượt gọi Bash tốn 40 giây.
     const t = Date.now();

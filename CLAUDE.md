@@ -294,6 +294,95 @@ không chặn merge của người khác); vá xong nó **đỏ**, buộc ngư�
 3. **Chunk** — commit từng feature rời, không big-bang.
 4. **Verify mỗi 3-5 files** — `pnpm typecheck` để bắt lỗi sớm.
 5. **Report** — liệt kê file thay đổi + cách test.
+6. ⛔ **CHẠM TIỀN THÌ PHẢI CHẠY R7 — bắt buộc, chốt 17/09/2026.**
+7. ⛔ **Trong callback `$transaction`, TỪ CHỐI = `throw`; mọi cổng đứng TRƯỚC phép ghi đầu tiên.**
+
+### Luật rollback — `return` KHÔNG rollback, chỉ `throw` mới rollback
+
+```ts
+// ❌ SAI — phép ghi ĐÃ COMMIT, người dùng nhận thông báo từ chối
+await db.$transaction(async (tx) => {
+  await tx.paymentAllocation.deleteMany({ where: { bankTransactionId } });
+  if (coPhieuThu) return { ok: false, error: "đã xuất phiếu thu" };   // ← xoá rồi!
+});
+
+// ✅ ĐÚNG — cổng đứng trước phép ghi đầu tiên
+await db.$transaction(async (tx) => {
+  if (coPhieuThu) return { ok: false, error: "đã xuất phiếu thu" };
+  await tx.paymentAllocation.deleteMany({ where: { bankTransactionId } });
+});
+
+// ✅ ĐÚNG — buộc phải từ chối sau khi đã ghi thì `throw`, đường gọi bắt và dịch
+if (khongDu) throw new StockError("PRODUCT_STOCK_INSUFFICIENT_RACE");
+```
+
+**Đo được, không phải phòng xa (17/09/2026).** Cổng *"đã xuất phiếu thu"* trong `goGanTheoCon`
+nằm SAU `deleteMany`, nên nó trả `{ ok: false }` cho người dùng TRONG KHI phân bổ đã bị xoá và
+commit — **chính cái cổng sinh ra để chặn gỡ nửa vời lại tạo ra một lượt gỡ nửa vời.** Ca
+`[GDC-c2]` bắt được, nhưng chỉ vì ca ấy tình cờ đếm số dòng phân bổ còn lại.
+
+**MỘT NGOẠI LỆ HỢP LỆ** — mẫu chống-đua của repo (FIX-H9):
+
+```ts
+const upd = await tx.payment.updateMany({ where: { id, updatedAt: expectedAt }, data: {…} });
+if (upd.count === 0) return { stale: true };   // ← ghi đổi 0 DÒNG, commit vô hại
+```
+
+Phép ghi ở đây là `updateMany` CÓ ĐIỀU KIỆN và nó đổi 0 dòng, nên commit không đổi gì. Đổi nó
+thành `update` (ném khi không thấy) hoặc bỏ điều kiện trong `where` là ngoại lệ hoá ra tha một
+phép ghi THẬT.
+
+**Cổng tự động:** `lib/finance/cong-truoc-phep-ghi.test.ts` quét mọi callback `$transaction` /
+`ghiTienChoDon` trong `lib/finance/**` · `lib/payments/**` · `app/(admin)/admin/{orders,payments,bien-dong-so-du}/**`
+· `app/api/public/webhook/**`, và đỏ khi thấy hình dạng từ chối (`return { ok: false`,
+`return fail(`, `return { loi:`) đứng sau phép ghi. Đã cấy thử 3 ca.
+
+### Luật R7 — bộ test duy nhất giữ các luật ĐỐI KHỚP TIỀN
+
+**Diff chạm bất kỳ đường nào dưới đây ⇒ PHẢI chạy bộ R7 TRƯỚC khi báo xong phiên, và DÁN
+KẾT QUẢ vào báo cáo:**
+
+- `lib/payments/**`
+- `lib/finance/**`
+- `app/api/public/webhook/**`
+- `prisma/migrations/**` có nhắc `Payment` / `Order` / `BankTransaction`
+
+```bash
+# Hai shard, HAI database khác nhau — CI chia đôi mỗi shard một container Postgres riêng,
+# chạy chung một DB là cấu hình CI KHÔNG dùng (spec này `resetDb()` xoá dữ liệu spec kia).
+# `assertTestDb` chỉ cho reset `satarobo_test` và `ci_test`, nên đúng hai cái đó.
+R7_SKIP_WEBSERVER=1 DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:5432/satarobo_test'   DIRECT_URL="$DATABASE_URL" pnpm exec playwright test -c playwright.r7.config.ts --shard=1/2
+R7_SKIP_WEBSERVER=1 DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:5432/ci_test'   DIRECT_URL="$DATABASE_URL" pnpm exec playwright test -c playwright.r7.config.ts --shard=2/2
+```
+
+**VÌ SAO LUẬT NÀY TỒN TẠI — đo 17/09/2026, không phải phòng xa.** Một nhánh duy nhất chứa
+**BỐN** ca R7 đỏ, cả bốn cùng một lớp: *test còn ghim luật đã bị ĐẢO, sống sót vì lượt đảo luật
+không chạy bộ R7.*
+
+| ca | luật đã bị đảo | đảo ở |
+|---|---|---|
+| `[PAY-BF-00]` | kế hoạch `PENDING_APPROVAL` VẪN có hiệu lực | `00131d18` (13/09) |
+| `[PAYOS-13b/13c]` | SĐT trong nội dung CK về dạng nội địa `0…` | `c95c6c25` (14/09) |
+| `[PR-02c]` | sửa `amountDue` của đợt ĐÃ THU ⇒ **từ chối** | vá A6 (15/09) |
+| `[QR-01/01b]` | nội dung CK mang `matchKey`, mỗi đợt một chuỗi | `361ea7d4` |
+
+Bốn lần đảo luật tiền trong bốn ngày, không lần nào chạy R7. `Quality` + `Unit tests` KHÔNG
+phủ nổi lớp này: luật đối khớp sống ở tầng tích hợp (webhook → resolve → allocate → recompute),
+và test thuần của nó xanh vĩnh viễn vì nó không chạm tầng đó.
+
+⚠️ **Ca nguy hiểm nhất không phải ca sai số, mà là ca mang LỜI DẶN CẤM SỬA cho một luật đã
+chết** — `[QR-01b]` dặn *"người sau đừng sửa nó thành mỗi đợt một chuỗi (sẽ vỡ đường đối khớp
+theo SĐT)"*, trong khi chính chủ dự án đã đảo luật ấy. Ai đọc nó như đặc tả sẽ gỡ khoá khỏi nội
+dung CK và xoá sổ cả bản vá, không lỗi nào báo.
+
+⚠️ **R7 KHÔNG nằm trong required check của `main`** (đo `gh api …/branches/main/protection`:
+chỉ `Quality` · `Unit tests` · `Chat DB invariants` · `E2E Phase R7 1/2` · `2/2` — hai shard R7
+CÓ trong đó). Nhưng required check chỉ gác lúc MERGE; luật này gác lúc BÁO XONG PHIÊN, sớm hơn
+một nhịp, và đó là chỗ rẻ nhất để sửa.
+
+⚠️ Chạy cả shard trên MỘT database ở local sẽ ra ca đỏ giả kèm `Unique constraint failed on
+(dedupeKey)`. Đã một lần chẩn đoán nhầm đúng triệu chứng đó và kết luận "nhiễu local" cho hai ca
+ĐỎ THẬT. **Đọc danh sách ca đỏ của CI, đừng đọc dòng lỗi nổi bật nhất ở máy.**
 
 ### Nhánh & môi trường (chốt 01/08/2026) — `main` KHÔNG còn là nơi nhận code mới
 

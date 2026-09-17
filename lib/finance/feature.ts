@@ -49,6 +49,30 @@ export async function laThuTienLinhHoatBat(orgUnitId?: string | null): Promise<b
 }
 
 /**
+ * Có CƠ SỞ NÀO trong tầm nhìn của người này đang bật không.
+ *
+ * ⚠️ Chỉ dùng cho AFFORDANCE — quyết định có VẼ nút ra hay không ở màn danh sách, nơi chưa
+ * biết tiền thuộc đơn nào nên chưa biết cơ sở nào. Cổng TIỀN vẫn phải hỏi
+ * `laThuTienLinhHoatBat(orgUnitId của ĐƠN)`; hàm này rộng hơn, và rộng hơn ở đường ghi là lỗ.
+ *
+ * ⚠️ KHÔNG ngắt sớm bằng công tắc toàn hệ. Ca "toàn hệ BẬT + cơ sở này TẮT" có thật (chốt
+ * 16/09: *"gỡ một cơ sở ra khi nó gặp sự cố"*), và ngắt sớm sẽ vẽ nút cho người của đúng cơ sở
+ * vừa bị gỡ — affordance nói dối (luật 12). Hỏi từng cơ sở; `getSetting` tự rơi về toàn hệ khi
+ * cơ sở không khai gì.
+ *
+ * Danh sách rỗng (người không neo ở cơ sở nào) ⇒ đọc công tắc toàn hệ.
+ */
+export async function coNoiNaoBatThuLinhHoat(
+  orgUnitIds: readonly string[],
+): Promise<boolean> {
+  if (orgUnitIds.length === 0) return laThuTienLinhHoatBat(null);
+  for (const id of orgUnitIds) {
+    if (await laThuTienLinhHoatBat(id)) return true;
+  }
+  return false;
+}
+
+/**
  * Phép giải công tắc, tách riêng để test được KHÔNG CẦN DB.
  *
  * `getSetting` đã làm đúng phép này, nhưng nó chạm DB nên mọi ca kiểm "bật/tắt thế nào" sẽ phải

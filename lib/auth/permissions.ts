@@ -72,6 +72,7 @@ export type Action =
   // Cấp `leads:edit` cho Sale Hội sở là mở toang cả chuỗi đó, trong khi chủ dự
   // án chốt họ chỉ được sửa đúng bộ ô mình đã gõ; Sale cơ sở mới toàn quyền.
   | "leads:edit-own-intake"
+  | "leads:overwrite"
   | "leads:assign"
   | "leads:assign-config" // 03/08 — tách riêng màn "Cấu hình chia lead" khỏi leads:assign
   | "lead_pool:manage" // 29/08 — màn "Quản lý chia lead": ai đang nhận lead
@@ -402,6 +403,14 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // /admin/users/[id]/org-roles). Để trống ngoài SUPER_ADMIN là ĐÚNG, không
   // phải sót: nơi nào còn enforce v1 thì tính năng này chưa có mặt.
   "leads:edit-own-intake": ["SUPER_ADMIN"],
+  // 17/09/2026 — quyền LÀM MẤT dữ liệu người khác đã ghi trên một lead ĐÃ CÓ:
+  // sửa tay ba ô khoá (SĐT · đơn vị · nguồn), bật cột "Đè" khi nhập Excel, và
+  // thay thế (thay vì nối thêm) ghi chú. Luật + danh sách ô ở `lib/lead/quyen-sua-lead.ts`.
+  //
+  // CỐ Ý KHÔNG có SALES_CSM và KHÔNG có MARKETING: chủ dự án chốt "chỉ quản lý cơ sở
+  // hoặc admin mới có quyền đè". Sale vẫn giữ `leads:edit` nên sửa được tên PH, email,
+  // tên con, tuổi con, khoá quan tâm, ghi chú — chỉ không đè được ba ô kia.
+  "leads:overwrite": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "leads:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING"],
   // CHỈ Sale (+ Quản trị hệ thống để còn gỡ kẹt). CỐ Ý KHÔNG có CENTER_MANAGER và
   // MARKETING — đó chính là thay đổi mà chủ dự án yêu cầu 27/08/2026.

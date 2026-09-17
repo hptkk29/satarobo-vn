@@ -36,11 +36,10 @@ import { ensureParentAccountForOrder } from "@/lib/parents/provision";
 import { ensureOrderPaymentRecorded } from "@/lib/finance/payment";
 import { ensureFullOrderRequest } from "@/lib/payments/payment-request";
 import { dotsGhiTuForm } from "@/lib/payments/ke-hoach-dot";
-import { thuTuRot } from "@/lib/payments/thu-tu-rot";
 import { laThuTienLinhHoatBat } from "@/lib/finance/feature";
-import { noTheoCon, kiemTaoDot, kiemHuyDot } from "@/lib/finance/debt";
 import { getRequestMetadata } from "@/lib/audit/headers";
 import { getAuditActor } from "@/lib/audit/log";
+import { taoDotChoCon, huyDotChoCon } from "@/lib/finance/ghi-tien-don";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { soatGiaDon } from "@/lib/orders/price-guard";
 import { congNoDon } from "@/lib/finance/cong-no-don";
@@ -1696,67 +1695,28 @@ export async function taoDotChoConAction(input: {
   if (!(await laThuTienLinhHoatBat(order.orgUnitId))) {
     return { ok: false as const, error: "Tính năng thu học phí linh hoạt chưa bật cho cơ sở này" };
   }
-  // Đơn đã huỷ/hoàn thì không tạo thêm khoản phải thu. Cùng danh sách trạng thái mà tầng đối
-  // khớp dùng để từ chối rót tiền — hai chỗ nói cùng một câu về "đơn còn sống".
-  if (["DRAFT", "CANCELLED", "REFUNDED"].includes(order.status)) {
-    return { ok: false as const, error: `Đơn đang ở trạng thái ${order.status} — không tạo đợt được` };
-  }
-
-  // Bỏ qua scope CÓ CHỦ Ý: con số công nợ phải giống nhau với mọi người xem (chốt của chủ
-  // dự án), và cổng "không vượt còn nợ" mà đọc qua scope thì một khoản ngoài tầm nhìn sẽ bị
-  // coi như không tồn tại ⇒ cổng cho tạo đợt VƯỢT quá số nợ thật. Đúng ca cấy (f) của `_qr-core`.
-  const bdb = scopedDb(actor, { bypass: true });
-  const so = await noTheoCon(input.orderId);
-  const con = so.con.find((c) => c.orderItemId === input.orderItemId);
-  if (!con) return { ok: false as const, error: "Dòng hàng không thuộc đơn này" };
-
-  const kiem = kiemTaoDot({
-    soTien: input.soTien,
-    conNo: con.conNo,
-    tongDotDangMo: con.tongDotDangMo,
-    tenCon: con.ten,
-  });
-  if (!kiem.ok) return { ok: false as const, error: kiem.loi };
 
   const han = input.dueDate ? new Date(input.dueDate) : null;
   if (han && Number.isNaN(han.getTime())) {
     return { ok: false as const, error: "Hạn đóng không hợp lệ" };
   }
 
-  // Số đợt kế tiếp CỦA RIÊNG CON NÀY (không phải của đơn) — khoá duy nhất từng phần là
-  // `[orderItemId, installmentNo] WHERE orderItemId IS NOT NULL`, nên hai con đếm độc lập.
-  const maxDot = await bdb.paymentRequest.aggregate({
-    where: { orderItemId: input.orderItemId },
-    _max: { installmentNo: true },
-  });
-  const soDot = (maxDot._max.installmentNo ?? 0) + 1;
-
-  await bdb.paymentRequest.create({
-    data: {
-      orderId: input.orderId,
-      orderItemId: input.orderItemId,
-      centerId: order.centerId,
-      installmentNo: soDot,
-      amountDue: kiem.soTien,
-      dueDate: han,
-      status: "PENDING",
-      // Thứ tự rót: DÒNG trước, ĐỢT sau (`lib/payments/thu-tu-rot.ts`). Không đặt thì hai
-      // con cùng "đợt 1" có cùng `sortOrder` và thứ tự rót rơi về so sánh cuid.
-      sortOrder: thuTuRot({
-        thuTuDong: so.con.findIndex((c) => c.orderItemId === input.orderItemId),
-        installmentNo: soDot,
-      }),
-    },
-  });
-
-  await writeAudit({
+  // PHIÊN B — toàn bộ phần TIỀN chuyển vào `taoDotChoCon`: nó đọc công nợ BÊN TRONG transaction
+  // đang giữ advisory lock của đơn. Bản PHIÊN A đọc `noTheoCon` ở ngay đây, ngoài khoá, nên hai
+  // sale bấm cùng lúc đều thấy "chưa có đợt nào" và cùng tạo một đợt bằng trọn số nợ.
+  //
+  // Cổng "đơn còn nhận tiền không" cũng bỏ khỏi đây: `taoDotChoCon` hỏi bằng `locDonNhanTien()`,
+  // đúng mảnh lọc mà tầng đối khớp dùng. Hai bản chép tay của một danh sách trạng thái là hai
+  // bản sẵn sàng lệch nhau.
+  const kq = await taoDotChoCon({
+    orderId: order.id,
+    orderItemId: input.orderItemId,
+    soTien: input.soTien,
+    dueDate: han,
+    centerId: order.centerId,
     actor: { id: actorId ?? "", name: actorName },
-    module: "finance",
-    entityType: "Order",
-    entityId: input.orderId,
-    action: "DOT_THEO_CON_CREATED",
-    newValues: { orderItemId: input.orderItemId, ten: con.ten, soTien: kiem.soTien, soDot },
   });
+  if (!kq.ok) return kq;
 
   revalidatePath(`/orders/${input.orderId}`);
   return { ok: true as const };
@@ -1780,39 +1740,13 @@ export async function huyDotChoConAction(input: { orderId: string; paymentReques
     return { ok: false as const, error: "Tính năng thu học phí linh hoạt chưa bật cho cơ sở này" };
   }
 
-  const bdb = scopedDb(actor, { bypass: true });
-  const phieu = await bdb.paymentRequest.findUnique({
-    where: { id: input.paymentRequestId },
-    select: { id: true, orderId: true, status: true, allocations: { select: { amount: true } } },
-  });
-  // So `orderId` chứ không tin tham số: người gọi có thể gửi id phiếu của đơn khác.
-  if (!phieu || phieu.orderId !== input.orderId) {
-    return { ok: false as const, error: "Không tìm thấy đợt thu" };
-  }
-
-  const kiem = kiemHuyDot({
-    trangThai: phieu.status,
-    daRot: phieu.allocations.reduce((s, a) => s + a.amount, 0),
-  });
-  if (!kiem.ok) return { ok: false as const, error: kiem.loi };
-
-  await bdb.$transaction(async (tx) => {
-    await tx.paymentRequest.update({ where: { id: phieu.id }, data: { status: "VOID" } });
-    // Mã QR của đợt vừa huỷ phải chết theo — affordance phải nói thật.
-    await tx.qrSession.updateMany({
-      where: { paymentRequestId: phieu.id, status: "ACTIVE" },
-      data: { status: "EXPIRED" },
-    });
-  });
-
-  await writeAudit({
+  const kq = await huyDotChoCon({
+    orderId: order.id,
+    paymentRequestId: input.paymentRequestId,
+    centerId: order.centerId,
     actor: { id: actorId ?? "", name: actorName },
-    module: "finance",
-    entityType: "Order",
-    entityId: input.orderId,
-    action: "DOT_THEO_CON_VOIDED",
-    newValues: { paymentRequestId: phieu.id },
   });
+  if (!kq.ok) return kq;
 
   revalidatePath(`/orders/${input.orderId}`);
   return { ok: true as const };

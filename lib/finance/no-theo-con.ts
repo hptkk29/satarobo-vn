@@ -92,6 +92,18 @@ export type NoTheoConKetQua = {
    * màn hình phải HIỆN nó ra như một việc cần làm.
    */
   chuaGanCon: number;
+  /**
+   * Đợt ĐANG MỞ mà `orderItemId` là NULL — đợt của LUỒNG CŨ (mọi đơn trước 16/09).
+   *
+   * ⚠️ Trường này thêm ở PHIÊN B sau khi đo ra một lỗ: `con[].dotDangMo` lọc theo
+   * `x.orderItemId === d.orderItemId`, nên đợt NULL KHÔNG thuộc bé nào và rơi khỏi kết quả
+   * HOÀN TOÀN. Màn gắn tiền dựng danh sách đợt từ `con[]` ⇒ đơn cũ hiện ra 0 đợt để chia, và
+   * cổng `kiemChiaTheoCon` từ chối chúng với câu "đợt không thuộc đơn này".
+   *
+   * Nghĩa là trước bản vá này, **24 giao dịch UNMATCHED của đơn cũ không gắn được bằng màn
+   * mới** — đúng tập việc mà PHIÊN B sinh ra để dọn.
+   */
+  dotChuaGanCon: DotCuaDong[];
 };
 
 const tron = (n: number) => (Number.isFinite(n) ? Math.round(n) : 0);
@@ -145,8 +157,17 @@ export function tinhNoTheoCon(input: {
     };
   });
 
+  const dotChuaGanCon = input.dot
+    .filter((x) => x.orderItemId == null && (x.trangThai === "PENDING" || x.trangThai === "PARTIAL"))
+    .sort((a, b) => {
+      const ha = a.dueDate?.getTime() ?? Number.POSITIVE_INFINITY;
+      const hb = b.dueDate?.getTime() ?? Number.POSITIVE_INFINITY;
+      return ha - hb || a.installmentNo - b.installmentNo;
+    });
+
   return {
     con,
+    dotChuaGanCon,
     tongPhaiThu: con.reduce((s, c) => s + c.phaiThu, 0),
     tongDaThu: con.reduce((s, c) => s + c.daThu, 0),
     tongChoXacNhan: con.reduce((s, c) => s + c.choXacNhan, 0),

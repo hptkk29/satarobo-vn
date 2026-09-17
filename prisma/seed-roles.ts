@@ -505,6 +505,17 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "leads:create", scopeType: "GLOBAL" },
       { action: "leads:edit", scopeType: "GLOBAL" },
       { action: "leads:assign", scopeType: "GLOBAL" },
+      // 17/09/2026 — quyền ĐÈ dữ liệu đã có trên một lead: sửa tay ba ô khoá (SĐT ·
+      // đơn vị · nguồn), bật cột "Đè" khi nhập Excel, và thay thế (thay vì nối thêm)
+      // ghi chú. Chủ dự án chốt "chỉ quản lý cơ sở hoặc admin mới có quyền đè".
+      //
+      // ⚠️ CENTER_SALES_CSM và HO_MARKETING CỐ Ý không có key này dù vẫn giữ
+      // `leads:edit` — xem `lib/lead/quyen-sua-lead.ts`.
+      //
+      // ⚠️ Thêm ở đây CHƯA có hiệu lực trên prod cho tới khi chạy seed-prod-roles.yml;
+      // dev/test phải chạy tay `pnpm db:seed:roles`. Cho tới lúc đó Quản lý cơ sở
+      // KHÔNG đè được (fail-closed — đúng chiều an toàn, nhưng phải chạy seed).
+      { action: "leads:overwrite", scopeType: "GLOBAL" },
       // 29/08 — điều hành vòng chia lead của CƠ SỞ MÌNH (bật/tắt người nhận lead).
       { action: "lead_pool:manage", scopeType: "GLOBAL" },
       { action: "leads:import", scopeType: "GLOBAL" },

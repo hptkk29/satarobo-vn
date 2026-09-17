@@ -28,7 +28,8 @@ import { assignmentWrite } from '@/lib/lead/assignment'
 import { centerIdForOrgUnit } from '@/lib/org/org-service'
 import { rejectHeadOffice } from '@/lib/enrollment-flow'
 import { normalizeFacebookUrl } from '@/lib/lead/intake/normalize'
-import { mergeLeadNote } from '@/lib/lead/note-view'
+import { mergeLeadNote, splitLeadNote } from '@/lib/lead/note-view'
+import { loiOKhoa, noiThemGhiChu, oKhoaBiDung } from '@/lib/lead/quyen-sua-lead'
 import {
   LEAD_DROP_STATUSES,
   LEAD_STATUS_LABEL,
@@ -468,7 +469,15 @@ export async function updateLeadNote(
   // 24/08 — ô ghi chú trên UI chỉ chứa phần NGƯỜI GÕ (dòng máy ghi đã bị bốc ra
   // khi hiển thị). Ghi thẳng chuỗi đó xuống là xoá mất dấu vết người nhập + cảnh
   // báo chia lead của phiếu cũ, nên phải ráp lại từ bản đang lưu.
-  const newNote = mergeLeadNote(note, before.note)
+  //
+  // 17/09 — ai KHÔNG có `leads:overwrite` thì ghi chú chỉ được NỐI THÊM: chủ dự án chốt
+  // "sửa ghi chú thì ghi bổ sung ở phía sau". Ô nhập nạp sẵn ghi chú cũ rồi gửi lại cả
+  // chuỗi, nên bôi đen xoá một đoạn của đồng nghiệp rồi bấm Lưu là mất vĩnh viễn mà không
+  // màn hình nào cảnh báo — nối ở SERVER là cách duy nhất chắc chắn.
+  const duocDe = await checkPermission('leads:overwrite')
+  const nguoiGoCu = splitLeadNote(before.note).human
+  const phanNguoi = duocDe ? note : (noiThemGhiChu(nguoiGoCu, note) ?? nguoiGoCu)
+  const newNote = mergeLeadNote(phanNguoi, before.note)
   const { actorId, actorName } = getAuditActor(session)
 
   await db.$transaction(async (tx) => {
@@ -840,9 +849,25 @@ export async function updateLeadFields(
   if (!before || !passesScope('Lead', before, actor)) {
     return { ok: false, error: 'Lead không tồn tại' }
   }
+  const duocDe = await checkPermission('leads:overwrite')
   if (canEditAll) {
     if (!(await actorMayMutateLead(session.user.id, before.assignedToId))) {
       return { ok: false, error: MUTATE_DENIED }
+    }
+    // 17/09/2026 — BA Ô KHOÁ (SĐT · đơn vị · nguồn) cần thêm `leads:overwrite`.
+    //
+    // Chủ dự án: "nguồn lead mặc định là nguồn đầu tiên khi vào hệ thống […] chỉ quản lý
+    // cơ sở hoặc admin mới có quyền đè […] các trường khác: sđt, đơn vị, nguồn, không
+    // được sửa nhé". Sale vẫn giữ `leads:edit` nên sửa được tên PH / email / tên con /
+    // tuổi con / khoá quan tâm / ghi chú — chỉ ba ô này là khoá.
+    //
+    // ⚠️ Chỉ chặn ô THỰC SỰ ĐỔI, không chặn theo "có mặt trong phiếu": biểu mẫu gửi cả
+    // phiếu nên `source` luôn có mặt dù người dùng không sờ tới. Chặn theo có-mặt là Sale
+    // không lưu nổi một lượt sửa tên con — đúng luật mà sai việc, và họ sẽ báo là màn
+    // hình hỏng chứ không báo là bị chặn. Phép so nằm ở `oKhoaBiDung` (hàm thuần, có test).
+    if (!duocDe) {
+      const viPham = oKhoaBiDung({ oGui: d as Record<string, unknown>, dangLuu: before })
+      if (viPham.length > 0) return { ok: false, error: loiOKhoa(viPham) }
     }
   } else {
     // Đường HẸP (người nhập). `actorMayMutateLead` không dùng được ở đây: nó cho
@@ -894,7 +919,18 @@ export async function updateLeadFields(
     ...(d.courseId !== undefined ? { courseId: d.courseId || null } : {}),
     ...(d.source !== undefined ? { source: d.source || null } : {}),
     // 24/08 — xem ghi chú ở updateLeadNote: ráp lại phần máy ghi, đừng đè trắng.
-    ...(d.note !== undefined ? { note: mergeLeadNote(d.note, before.note) } : {}),
+    // Ghi chú: người không có `leads:overwrite` chỉ được NỐI THÊM — xem `noiThemGhiChu`.
+    ...(d.note !== undefined
+      ? {
+          note: mergeLeadNote(
+            duocDe
+              ? d.note
+              : (noiThemGhiChu(splitLeadNote(before.note).human, d.note) ??
+                 splitLeadNote(before.note).human),
+            before.note,
+          ),
+        }
+      : {}),
     // 23/08 — ô "Link Facebook" CÓ trong biểu mẫu nhập khách nhưng action này
     // chưa bao giờ ghi được: sửa xong là mất im lặng. Thêm cho cả hai đường.
     ...(d.facebookUrl !== undefined ? { facebookUrl: d.facebookUrl || null } : {}),

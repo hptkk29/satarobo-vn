@@ -284,3 +284,35 @@ Chỉ đổi mật khẩu (không thu hồi quyền):
 ```sql
 ALTER ROLE satarobo_readonly WITH PASSWORD 'MAT_KHAU_MOI';
 ```
+
+
+---
+
+## Ghi chú 17/09/2026 — vai thứ hai, và một việc còn nợ
+
+**Vai đang dùng thật không tên `satarobo_readonly`.** Chủ dự án tạo `doisoat_ro` (SELECT toàn
+schema · `BYPASSRLS` · `default_transaction_read_only=on`) và đặt vào cùng secret
+`PROD_DATABASE_URL_RO`. Các câu SQL trên vẫn đúng khuôn — chỉ thay tên vai. Hai workflow
+chỉ-đọc (chấm công + `doi-soat-tien-prod-chi-doc.yml`) dùng CHUNG một secret này.
+
+> `default_transaction_read_only=on` là một lớp khoá NỮA, nằm ở phía DB. Nó **không thay thế**
+> `SET TRANSACTION READ ONLY` trong script: một thuộc tính vai thì ai có quyền đều sửa
+> được bằng một câu `ALTER ROLE`, và không có gì trong repo nói cho ta biết điều đó đã
+> xảy ra. Hai lớp độc lập mới là hai lớp.
+
+### NỢ: `_kiem-quyen.ts` đang hỏi quyền trên SAI BẢNG
+
+`scripts/_kiem-quyen.ts` hỏi `has_table_privilege(current_user, 'public."ClassSession"', 'UPDATE')`
+— tên bảng đó **đóng cứng**, từ đợt chấm công. Chính chú thích của nó nói *"quyền trên chính
+bảng mình sắp đọc mới là quyền có ý nghĩa"*, nhưng báo cáo đối soát tiền đọc
+`BankTransaction` · `Payment` · `Order` · `PaymentRequest`, không đọc `ClassSession`.
+
+**Chưa vá vì nó vẫn bắt đúng ca cần bắt**: thứ phải phát hiện là *secret bị đặt nhầm sang
+chuỗi đầy quyền*, mà vai đầy quyền thì có `UPDATE` trên MỌI bảng — `ClassSession` đủ để lộ
+ra. Ngược lại, một vai `doisoat_ro` có `UPDATE` trên `BankTransaction` mà không có trên
+`ClassSession` là cấu hình không tồn tại thật.
+
+**Việc phải làm (đợt riêng):** thêm tham số bảng cho `kiemQuyen(db, bang)` — không đặt mặc
+định (luật 7: để `tsc` liệt kê cả hai chỗ gọi), rồi workflow tiền truyền `BankTransaction`,
+workflow chấm công truyền `ClassSession`. Chạm file dùng chung nên phải chạy lại cả hai
+workflow — đó là lý do nó không đi kèm đợt này.
