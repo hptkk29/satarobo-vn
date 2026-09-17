@@ -98,6 +98,27 @@ Brand hub + admin CMS + portal phụ huynh + site giáo viên cho Sata Robo (Đ�
     ⇒ Hệ quả rộng hơn: **ca nghiệm thu chỉ khẳng định SỰ VẮNG MẶT luôn ĐẠT khi tính năng
     hỏng hoàn toàn.** Mọi ca "KHÔNG thấy X" phải kèm **đối chứng dương** ("vai kia THẤY X").
 
+12. ⚠️ **GIẢ ĐỊNH VỀ MÔI TRƯỜNG PHẢI KIỂM BẰNG LỆNH, TẠI THỜI ĐIỂM DÙNG — KHÔNG đọc từ
+    tài liệu.** DB nào · env nào · chạy ở đâu · cờ bật hay tắt: hỏi hệ thống, đừng hỏi
+    trang wiki. Tài liệu hạ tầng cũ đi mà **không ai biết nó đã cũ**, và một câu sai ở đó
+    không chỉ vô ích — nó **lái cuộc điều tra sang hướng sai và giữ ở đó**.
+    **Sự cố 17/09/2026:** câu "DB của env `test` CHÍNH LÀ DB dev" (chốt 01/08, nằm ngay
+    trong file này) làm tôi đo `getZaloScope` ba lượt trên **sai database**, rồi đi tìm
+    "`User.id` bị đổi" trong khi thứ thật sự xảy ra là **ba database khác nhau**. Mất
+    nhiều lượt mới quay lại được.
+    **Cách kiểm rẻ, dùng ngay:**
+    · DB nào đang được đọc → in ra chính nó: `select current_database()`, hoặc một
+      giá trị đặc trưng (`User.id` của một tài khoản seed) rồi so hai bên.
+    · Cờ tính năng trên một môi trường → gọi một đường có thật và đọc **mã trạng thái**
+      (bảng đo ở `docs/tich-hop-zalocrm/04-danh-sach-cho-nick-zalo.md`: `401`+JSON = route
+      có + cờ BẬT · `404`+JSON = cờ TẮT · `200`+HTML = sai đường dẫn).
+    · Commit nào đang chạy → đọc **bản ghi deploy thật** (`gh api …/deployments`), đừng
+      suy từ "vừa merge xong".
+    · Cron nào thật sự chạy → `gh run list` + đọc **nhánh** của lượt chạy (`schedule` luôn
+      dùng bản ở nhánh MẶC ĐỊNH — xem `NỢ-5`).
+    Đo xong mà lệch với tài liệu thì **sửa tài liệu ngay trong lượt đó**, đừng để lại cho
+    người sau vấp đúng chỗ mình vừa vấp.
+
 ## Project structure (FROZEN)
 
 ```
@@ -323,7 +344,23 @@ feature → PR → merge `test`  → test.satarobo.vn tự deploy → nghiệm t
 
 - **`test`** = nhánh tiền-prod thường trực. Vercel environment `test` bám nhánh này **vĩnh viễn** — KHÔNG trỏ tay sang nhánh feature nữa.
 - **`main`** = prod. Push/merge vào `main` là **prod đổi ngay** (Vercel Git integration) + `deploy.yml` chạy `prisma migrate deploy` lên Supabase prod. Chỉ merge từ `test` sau khi nghiệm thu xong.
-- **Migration**: `migrate-test.yml` chạy khi push `test` (secrets `TEST_DATABASE_URL`/`TEST_DIRECT_URL`, có bước chặn trỏ nhầm vào DB prod). ⚠️ **DB của env `test` CHÍNH LÀ DB dev** — chủ dự án xác nhận 01/08 là **cố ý** (dựng vậy từ đầu). Bằng chứng khớp: lần `migrate-test` xanh đầu tiên báo *"176 migrations found — No pending migrations to apply"*, tức migration vừa sinh ở máy local đã có sẵn ở đó. **Hệ quả phải nhớ: `test.satarobo.vn` và máy local DÙNG CHUNG một DB** — data nghịch ở local hiện trên test và ngược lại, và **migration DROP/RENAME sẽ xoá thẳng dữ liệu đang làm việc ở local**. Muốn tách thì tạo Supabase project riêng rồi đổi 2 secret; workflow không phải sửa. (Chỉ chắc chắn 1 điều: test ≠ prod — bước "Chặn trỏ nhầm vào DB PROD" trong workflow đã xanh.)
+- **Migration**: `migrate-test.yml` chạy khi push `test` (secrets `TEST_DATABASE_URL`/`TEST_DIRECT_URL`, có bước chặn trỏ nhầm vào DB prod). 🔴 **ĐÍNH CHÍNH 17/09/2026 — DB của env `test` là MỘT PROJECT RIÊNG, KHÔNG phải DB dev.**
+~~DB của env `test` CHÍNH LÀ DB dev — chủ dự án xác nhận 01/08 là cố ý~~ **[SAI]**. Đo
+17/09: vé SSO do `test.satarobo.vn` ký mang `User.id` thế hệ `cmtcd2…d755…`, trong khi
+Supabase DEV (`mqvojw…`) giữ thế hệ `cmtaew…x6d5…` và máy dev (`satarobo_local`) giữ
+`cmtorab…10l4…` — **ba database khác nhau**, xác nhận thêm bằng project-ref trên Vercel.
+Câu cũ đã làm lệch hướng một cuộc điều tra cả buổi (xem `NỢ-8`,
+`docs/hop-nhat-main-test-1609.md`).
+
+**Hệ quả phải nhớ — ĐẢO so với bản cũ:**
+· Data nghịch ở máy local **KHÔNG** hiện trên `test.satarobo.vn`, và ngược lại.
+· Migration DROP/RENAME chạy ở local **KHÔNG** đụng dữ liệu của `test` — nhưng vẫn đụng
+  `satarobo_local`, nơi dev server đang phục vụ.
+· Muốn xem dữ liệu mà `test.satarobo.vn` thật sự đọc thì phải nối bằng
+  `TEST_DATABASE_URL` (Vercel env `test`), **không** phải `.env` của máy.
+· Ba database, ba tập `User.id` khác nhau cho cùng một email — đó là gốc của `NỢ-8`.
+
+(Chỉ chắc chắn 1 điều: test ≠ prod — bước "Chặn trỏ nhầm vào DB PROD" trong workflow đã xanh.)
 - **Cron trên test**: Vercel Cron không chạy trên custom environment → `cron-pump-test.yml` bơm `dispatch-events` + `email-queue` mỗi 5 phút. Đỏ 401 = lệch `TEST_CRON_SECRET` với `CRON_SECRET` của env `test`.
 - ⚠️ **Điểm mù cố hữu: ZNS thật KHÔNG test được trên `test`.** Creds Zalo chỉ ở scope Production và **cấm nhân bản `ZALO_OA_REFRESH_TOKEN`** sang môi trường 2 (token xoay vòng mỗi lần refresh → hai môi trường giết token của nhau, OA chết phải OAuth lại tay). Trên test ZNS luôn `SIMULATED`; khâu gửi tin thật chỉ smoke được trên prod sau merge.
 - Preview `*.vercel.app` vô dụng: `proxy.ts:113` canonical-hoá về domain thật bằng 308.

@@ -27,7 +27,7 @@ Repo **không dùng Supabase Auth**: Auth.js v5 (Credentials, session JWT-JWE, s
   ```
   (join thẳng `ConversationParticipant.userId`, không cần join bảng `User`.)
 - Client subscribe bằng `supabase.realtime.setAuth(<jwt mint>)` + channel `private: true`.
-- **Env cần user cấp** (DEV `.env.local` + Vercel env `test`): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (2 key này đã có chỗ trống trong `.env.example:181-182`), `SUPABASE_JWT_SECRET`, `SUPABASE_SERVICE_ROLE_KEY`. ⚠️ DEV và test.satarobo.vn **dùng chung DB dev** → chung 1 project Supabase → chung bộ key; prod là project khác, key khác.
+- **Env cần user cấp** (DEV `.env.local` + Vercel env `test`): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (2 key này đã có chỗ trống trong `.env.example:181-182`), `SUPABASE_JWT_SECRET`, `SUPABASE_SERVICE_ROLE_KEY`. 🔴 **ĐÍNH CHÍNH 17/09/2026:** ~~DEV và test.satarobo.vn dùng chung DB dev → chung 1 project Supabase → chung bộ key~~ **[SAI]** — `test` là project RIÊNG. **BA** project, **BA** bộ key: dev · test · prod. Khai thiếu bộ nào thì Realtime của môi trường đó chết câm (xem CLAUDE.md, mục "Nhánh & môi trường").
 - Dependency mới cần cài: `@supabase/supabase-js` (client + broadcast server-side), `jose` (ký HS256 — hiện chỉ transitive).
 - Broadcast phía server: dùng REST endpoint broadcast hoặc supabase-js với service role key — **service role key SERVER ONLY**, cấm bundle client (canary CI: grep build output, `variables.md`).
 
