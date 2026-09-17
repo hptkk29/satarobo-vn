@@ -235,9 +235,21 @@ export async function notifyStaff(params: NotifyStaffParams): Promise<number> {
   //     Mất một push, giữ được thông báo — đúng thứ tự ưu tiên; đảo lại (ghi outbox trước) là
   //     đẩy push cho một mục chưa chắc tồn tại.
   //
-  // `ghiOutboxPush` cam kết KHÔNG NÉM (migration hai bảng push chưa chạy ở môi trường nào), nên
-  // không cần bọc thêm ở đây — nhưng cũng không được bỏ `await`: `void` trong Server Action là
-  // mất ngẫu nhiên theo tải trên Vercel.
+  // `ghiOutboxPush` cam kết KHÔNG NÉM, nên không cần bọc thêm ở đây.
+  //
+  // ⚠️ ĐÍNH CHÍNH 17/09/2026 — câu cũ ở đây giải thích cam kết đó bằng "migration hai bảng
+  // push chưa chạy ở môi trường nào". Câu ấy KHÔNG CÒN ĐÚNG: migration
+  // `20260908000000_web_push_ha_tang` vào repo ngày 08/09 (`cbf1ec71`) và lên `main` — tức
+  // lên prod — qua PR #246 merge 13/09. Hai bảng push CÓ THẬT ở mọi môi trường.
+  //
+  // Lý do KHÔNG bọc try/catch thì vẫn nguyên, và nó không phụ thuộc vào migration: cam kết
+  // "không ném" là THUỘC TÍNH của `ghiOutboxPush` (nó tự nuốt + log), và nó phải giữ nguyên
+  // như vậy vì `notifyStaff` là đường ghi DUY NHẤT của mọi thông báo nhân sự — một lỗi lọt
+  // ra từ dòng này làm hỏng điểm danh, giao bài, chuyển lead… mọi thứ có chuông. Bọc thêm
+  // một lớp ở đây chỉ che mất việc cam kết kia bị ai đó phá.
+  //
+  // Nhưng cũng không được bỏ `await`: `void` trong Server Action là mất ngẫu nhiên theo tải
+  // trên Vercel.
   await ghiOutboxPush({
     userIds: kq.canRung,
     dedupeKey: params.dedupeKey,
