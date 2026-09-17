@@ -37,6 +37,11 @@ const CONG_QUYEN: Record<string, Action> = {
   // đụng tới lịch dạy của giáo viên.
   updateLopTrialSessionAction: "trials:manage",
   cancelLopTrialSessionAction: "trials:manage",
+  // 17/09/2026 — đường ĐỌC "ai chọn được cho buổi này". Vẫn là `trials:manage`, CÙNG
+  // khoá với cửa GHI: nó trả tên giáo viên kèm trạng thái lịch dạy, và chính nó là thứ
+  // ô `<select>` ăn vào. Cho nó khoá rộng hơn cửa ghi là rò danh sách; cho nó khoá hẹp
+  // hơn là ô chọn trống với đúng những người được phép xếp.
+  layGvChoBuoiAction: "trials:manage",
   enrollLeadChildLopTrialAction: "trials:manage",
   searchLopTrialCandidatesAction: "trials:manage",
   unenrollLeadChildLopTrialAction: "trials:manage",
@@ -71,7 +76,23 @@ describe("Lớp Trial — cổng quyền của Server Action", () => {
     "%s gác bằng checkPermission(%s)",
     (ten, khoa) => {
       const than = thanHam(ten);
-      expect(than).toContain(`checkPermission("${khoa}")`);
+      // 17/09/2026 — nhận CẢ HAI dạng gọi: `checkPermission("khoa")` và
+      // `checkPermission("khoa", { centerId })`. Bản cũ khoá cứng dấu `)` ngay sau khoá,
+      // tức là nó CẤM dạng KÈM PHẠM VI — dạng CHẶT HƠN. Một cổng test không được phép
+      // phạt người viết chặt hơn nó.
+      //
+      // Vẫn neo hẹp: ký tự sau dấu nháy đóng phải là `)` hoặc `,`, nên
+      // `checkPermission("trials:manage-gi-do")` KHÔNG khớp nhầm.
+      //
+      // Khớp bằng CHUỖI chứ không bằng RegExp: khoá quyền chứa `:` và `-`, và bản viết
+      // bằng `new RegExp` đã tự bắn vào chân một lần ở đây (dấu `(` trong template
+      // literal không được escape ⇒ `Unterminated group`, 11 ca đỏ cùng lúc).
+      const tran = `checkPermission("${khoa}")`; // không kèm phạm vi
+      const kemTarget = `checkPermission("${khoa}",`; // kèm `{ centerId }`
+      expect(
+        than.includes(tran) || than.includes(kemTarget),
+        `${ten} không gác bằng checkPermission("${khoa}")`,
+      ).toBe(true);
     },
   );
 
@@ -98,6 +119,26 @@ describe("Lớp Trial — cổng quyền của Server Action", () => {
     }
   });
 
+  it("hai cửa GHI đều gác id giáo viên — lọc ở trang là lọc TRANG TRÍ", () => {
+    // `<select>` chỉ là gợi ý: ai cũng POST thẳng được một `teacherId` bất kỳ. Không có
+    // cổng này thì `addTrialSession` nhận mọi `User.id` — gán một tài khoản phụ huynh
+    // làm giáo viên buổi trải nghiệm là việc làm được, và nó hỏng CÂM.
+    //
+    // Neo HẸP + khẳng định SỐ LẦN (luật 11): chuỗi `gvXepDuoc(` xuất hiện đúng 1 lần
+    // trong mỗi thân hàm. Đếm số lần là thứ bắt được ca "chú thích nhắc tên hàm" — bản
+    // vá trong repo này đã ba lần khớp nhầm vào chính chú thích giải thích nó.
+    for (const ten of ["addLopTrialSessionAction", "updateLopTrialSessionAction"]) {
+      const than = thanHam(ten);
+      const soLan = than.split("await gvXepDuoc(").length - 1;
+      expect(soLan, `${ten} phải gọi gvXepDuoc đúng 1 lần, đang là ${soLan}`).toBe(1);
+      // Và kết quả phải được DÙNG để chặn, không phải gọi rồi bỏ.
+      expect(
+        than.includes("!(await gvXepDuoc("),
+        `${ten} gọi gvXepDuoc nhưng không chặn theo kết quả`,
+      ).toBe(true);
+    }
+  });
+
   it("vượt sĩ số là quyền RIÊNG — không đi nhờ trials:manage", () => {
     // Cờ `allowOverride` đi thẳng từ client; thiếu cổng riêng thì bất kỳ ai xếp được
     // học viên cũng nhồi được lớp quá sức chứa.
@@ -116,12 +157,22 @@ describe("Lớp Trial — v1 (matrix tĩnh) và v2 (seed vai) phải khớp", ()
   // HO_SALE, CENTER_CLASS_MANAGER, ASSISTANT_TEACHER, AUDITOR không có vai v1 nào ánh
   // xạ tới. Bắt hai chiều bằng nhau là đòi v2 phải nghèo đi bằng v1 — sai hướng, và
   // sẽ đỏ mỗi lần ai đó cấp quyền cho một vai chỉ-có-ở-v2.
+  //
+  // Danh sách dưới là KHAI TAY, cùng lý do với `CONG_QUYEN`: suy từ mã nguồn thì
+  // luôn xanh. `Object.values(CONG_QUYEN)` cho phần khoá gác Server Action; bốn khoá
+  // còn lại gác TRANG hoặc NÚT nên không xuất hiện trong bảng trên.
   const KHOA_TRIAL = [
     ...new Set<Action>([
       ...Object.values(CONG_QUYEN),
       "trials:view",
       "trials:feedback",
       "trials:override-capacity",
+      // 17/09/2026 — tầng QUẢN LÝ CƠ SỞ của việc xếp GV cho buổi trải nghiệm.
+      // Khoá này chỉ có nghĩa khi CẢ HAI bảng cùng cấp cho `CENTER_MANAGER`: v1 cấp
+      // mà seed v2 quên thì ở local/dev (v1) màn xếp GV chạy đúng ba tầng, còn trên
+      // prod (v2 đang enforce) Quản lý cơ sở rơi về tầng Sale — đúng lớp lỗi mà bài
+      // này sinh ra để bắt, và là lớp lỗi KHÔNG bao giờ hiện ở máy dev.
+      "trials:assign-teacher-center",
     ]),
   ];
 

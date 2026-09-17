@@ -542,6 +542,15 @@ export const ROLE_SEED: RoleSeed[] = [
       // GĐ3 (25/08/2026) — `trials:assign-teacher` ĐÃ GỠ khỏi vai này, chuyển sang
       // Đào tạo theo chốt câu 2. Quản lý cơ sở vẫn giữ trials:manage/feedback/config
       // và vẫn override được sĩ số; chỉ riêng việc CHỐT giáo viên là của Đào tạo.
+      // ⚠️ 17/09/2026 — KHÔNG phải đảo lại GĐ3. Khoá dưới là khoá KHÁC
+      // (`trials:assign-teacher-center`): xếp GV cho buổi trải nghiệm của CƠ SỞ MÌNH,
+      // tầng giữa trong ba tầng chủ dự án chốt (Đào tạo FULL · QL cơ sở → GV cơ sở
+      // mình · Sale → chỉ GV có ca phủ trọn khung giờ). Không có nó thì màn xếp GV
+      // không tách nổi QL cơ sở khỏi Sale — hai vai đang mang bộ `trials:*` giống hệt.
+      // GLOBAL, KHÔNG phải CENTER: call-site gọi kèm `{ centerId }` nhưng phạm vi thật
+      // do `visibleCenterIds` + `scopedDb` quyết (nếp R1 của mọi màn theo cơ sở). Đặt
+      // non-GLOBAL ở đây là mời `rbac-scope.test` đỏ ngay khi có call-site trần.
+      { action: "trials:assign-teacher-center", scopeType: "GLOBAL" },
       { action: "trials:feedback", scopeType: "GLOBAL" },
       // GĐ4 — Quản lý cơ sở giữ CẢ HAI (điểm danh lẫn nộp phiếu) để còn trực thay khi
       // Sale hoặc giáo viên vắng. Vai chuyên trách mới là người làm thường ngày.

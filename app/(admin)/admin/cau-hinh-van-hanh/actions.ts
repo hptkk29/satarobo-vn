@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
+import { checkPermission } from "@/lib/auth/check-permission";
+import { getAssignableTeachers } from "@/lib/teachers/assignable";
 import { SETTINGS } from "@/lib/settings/registry";
 import { kiemChinhSach, type ChinhSachHoaHong } from "@/lib/crm/chinh-sach-hoa-hong";
 import {
@@ -122,6 +124,114 @@ export async function luuLoaiDuocDayAction(input: {
     value: tienTo,
     reason: input.reason,
     actorName: session.user.name ?? session.user.email ?? session.user.id,
+  });
+
+  if (res.ok) revalidatePath("/admin/cau-hinh-van-hanh");
+  return res;
+}
+
+/**
+ * Lưu danh sách giáo viên LUÔN HIỆN khi xếp buổi học thử (key `trial.gvMienLocTheoCa`).
+ *
+ * Khuôn giống `luuLoaiDuocDayAction` ngay trên — ghi CẢ DANH SÁCH chứ không ghi từng người
+ * bật/tắt, vì cùng một lý do: với API "bật người X" thì hai người cùng mở màn, mỗi người gạt
+ * một công tắc rồi lưu, và cả hai cùng thắng ra một trạng thái chưa ai chọn.
+ *
+ * ── MỘT CHỖ KHÁC `luuLoaiDuocDayAction`, CÓ CHỦ ĐÍCH: CỔNG QUYỀN ĐỨNG TRƯỚC ───────────────
+ * Bên kia đối chiếu với một danh mục HẰNG trong mã, nên để `setGlobalSetting` gác quyền ở
+ * tầng dưới là đủ. Action này thì đi HỎI DB bằng chính những mã người dùng gửi lên, rồi trả
+ * lời "mã này không phải giáo viên". Không gác trước thì bất kỳ ai đăng nhập cũng dò được
+ * danh sách người bằng cách đọc thông báo lỗi, và mỗi lần dò là một truy vấn.
+ *
+ * Cổng ở tầng dưới VẪN nguyên (`setGlobalSetting` kiểm `isSuperAdmin`) — đây là lớp thứ hai,
+ * không phải bản sao của luật: quyền vẫn hỏi qua `checkPermission`, không so vai inline.
+ */
+export async function luuGvMienTruAction(input: {
+  userIds: string[];
+  reason: string;
+}): Promise<SetResult> {
+  const session = await auth();
+  if (!session?.user) {
+    return { ok: false, error: { code: "AUTH", message: "Chưa đăng nhập" } };
+  }
+  if (!(await checkPermission("settings:edit"))) {
+    return {
+      ok: false,
+      error: {
+        code: "FORBIDDEN",
+        message: "Chỉ quản trị cấp cao nhất được sửa cấu hình toàn hệ thống",
+      },
+    };
+  }
+
+  const parsed = z
+    .object({
+      // `.max(50)` khớp trần của registry — chặn ở đây để câu báo lỗi nói được "quá 50
+      // người" thay vì một thông điệp Zod chung chung từ tầng dưới.
+      userIds: z.array(z.string()).max(50, "Tối đa 50 giáo viên được miễn"),
+      reason: z.string().trim().min(1, "Nhập lý do thay đổi"),
+    })
+    .safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: {
+        code: "VALIDATION",
+        message: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ",
+        field: "trial.gvMienLocTheoCa",
+      },
+    };
+  }
+
+  // Bỏ TRÙNG và sắp thứ tự ỔN ĐỊNH (theo mã, không theo tên).
+  //
+  // Bỏ trùng thì im lặng được: công tắc không sinh ra được hai lần cùng một người, nên trùng
+  // chỉ đến từ lời gọi tay và nó vẫn mang đúng một lựa chọn.
+  //
+  // Sắp theo MÃ chứ không theo tên: giá trị này nằm trong `oldValues`/`newValues` của nhật ký
+  // kiểm toán. Sắp theo tên thì một người đổi tên là cả danh sách đảo thứ tự, và lần lưu sau
+  // đẻ ra một dòng nhật ký trông như có thay đổi trong khi không ai được thêm hay bớt.
+  const userIds = [...new Set(parsed.data.userIds)].sort();
+
+  // Dòng TRỐNG bị bắt riêng, vì nếu để nó rơi xuống phép đối chiếu bên dưới thì câu báo lỗi
+  // sẽ là "Không có giáo viên nào mang mã " — một câu cụt không nói được gì.
+  if (userIds.some((id) => id.trim().length === 0)) {
+    return {
+      ok: false,
+      error: {
+        code: "VALIDATION",
+        message: "Có dòng trống trong danh sách — tải lại trang rồi thử lại",
+        field: "trial.gvMienLocTheoCa",
+      },
+    };
+  }
+
+  // ⚠️ ĐỐI CHIẾU DANH SÁCH GIÁO VIÊN Ở ĐÂY, không ở registry — xem khối chú thích tại
+  // `trial.gvMienLocTheoCa` trong `lib/settings/registry.ts`: registry là tầng thấp nhất,
+  // kéo `lib/teachers/assignable` (→ `lib/db`) vào đó là đẻ vòng import.
+  //
+  // TỪ CHỐI chứ không lặng lẽ lọc bỏ. Lọc bỏ thì người dùng bấm Lưu, thấy báo thành công, rồi
+  // người họ vừa chọn biến mất không dấu vết — màn hình nói dối đúng nghĩa. Một mã lạ tới
+  // được đây nghĩa là giao diện và dữ liệu đã lệch nhau; đó là thứ phải nổ ra.
+  const hopLe = new Set((await getAssignableTeachers({})).map((g) => g.id));
+  const la = userIds.filter((id) => !hopLe.has(id));
+  if (la.length > 0) {
+    return {
+      ok: false,
+      error: {
+        code: "VALIDATION",
+        message: `Không có giáo viên nào mang mã ${la.join(", ")} — tải lại trang rồi thử lại`,
+        field: "trial.gvMienLocTheoCa",
+      },
+    };
+  }
+
+  const actor = await resolveActor(session.user.id);
+  const res = await setGlobalSetting(actor, {
+    key: "trial.gvMienLocTheoCa",
+    value: userIds,
+    reason: parsed.data.reason,
+    actorName: actorName(session.user),
   });
 
   if (res.ok) revalidatePath("/admin/cau-hinh-van-hanh");

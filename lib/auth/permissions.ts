@@ -94,6 +94,16 @@ export type Action =
   | "trials:attendance"
   // --- Trial class V2 (R7-02) ---
   | "trials:assign-teacher"
+  // 17/09/2026 — TẦNG QUẢN LÝ CƠ SỞ của việc xếp giáo viên buổi trải nghiệm.
+  // Vì sao phải có khoá RIÊNG chứ không tái dùng `trials:assign-teacher`: chủ dự án
+  // chốt ba tầng (Đào tạo → FULL · Quản lý cơ sở → GV của cơ sở mình · Sale → lọc
+  // theo ca). Trước khoá này, CENTER_MANAGER và SALES_CSM mang BỘ `trials:*` GIỐNG
+  // NHAU ở phần dùng được (view/manage/attendance/override-capacity) ⇒ màn xếp GV
+  // KHÔNG phân biệt nổi hai tầng, mà đọc thẳng `session.user.role` thì vi phạm luật
+  // cứng #1 (mọi kiểm quyền qua `can()`).
+  // KHÔNG mở rộng `trials:assign-teacher` cho CENTER_MANAGER: khoá đó là tầng Đào tạo
+  // (FULL, mọi cơ sở) — GĐ3 đã cố ý GỠ nó khỏi Quản lý cơ sở, trả lại là đảo quyết định.
+  | "trials:assign-teacher-center"
   | "trials:override-capacity"
   | "training:manage"
   | "reports:training"
@@ -439,6 +449,12 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // GĐ3 (chủ dự án chốt câu 2, 25/08/2026): CHỐT giáo viên là việc của Đào tạo.
   // Sale chỉ ĐỀ XUẤT; Quản lý cơ sở giữ mọi việc trial còn lại.
   "trials:assign-teacher": ["SUPER_ADMIN", "TRAINING"],
+  // 17/09/2026 — tầng Quản lý cơ sở (xem chú thích ở union `Action`). Đúng HAI vai:
+  // thêm SALES_CSM vào đây là xoá luôn ranh giới mà khoá này sinh ra để vẽ.
+  // ⚠️ Dòng map này KHÔNG được quên: `ALL_ACTIONS = Object.keys(PERMISSIONS)` và
+  // `buildActor()` lọc mọi grant theo đúng tập đó — khai ở union mà thiếu ở đây thì
+  // khoá VÔ HÌNH với cả `PermissionGrant` lẫn `UserPermissionGrant`.
+  "trials:assign-teacher-center": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "trials:override-capacity": ["SUPER_ADMIN", "CENTER_MANAGER", "TRAINING"],
   // FL W0 (QĐ-T1): cấu hình đào tạo/LMS = TRAINING (Đào tạo). CENTER_MANAGER chỉ xem nội dung LMS.
   "training:manage": ["SUPER_ADMIN", "TRAINING"],

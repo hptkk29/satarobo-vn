@@ -75,6 +75,15 @@ export const crmModule: ModuleDecl = {
     },
     { key: "trials:assign-teacher", action: "assign-teacher" },
     {
+      key: "trials:assign-teacher-center",
+      action: "assign-teacher-center",
+      // 17/09/2026 — tầng Quản lý cơ sở của việc xếp GV cho buổi trải nghiệm, TÁCH
+      // khỏi `trials:assign-teacher` (tầng Đào tạo, toàn hệ thống). Phạm vi thật vẫn
+      // do `visibleCenterIds` + `scopedDb` quyết, nên seed để GLOBAL (xem seed-roles.ts).
+      description:
+        "Xếp giáo viên cho buổi trải nghiệm của CƠ SỞ MÌNH. Khác trials:assign-teacher (Đào tạo, toàn hệ thống).",
+    },
+    {
       key: "trials:override-capacity",
       action: "override-capacity",
       description: "Xếp lớp trải nghiệm vượt sĩ số tối đa.",

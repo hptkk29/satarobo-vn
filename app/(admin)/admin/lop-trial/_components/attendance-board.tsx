@@ -15,6 +15,14 @@ import {
   updateLopTrialSessionAction,
   cancelLopTrialSessionAction,
 } from "../_actions";
+import {
+  CanhBaoGiaoVien,
+  GiaiThichLuatGv,
+  OChonGiaoVien,
+  useGvChoBuoi,
+  type NguonGvBuoi,
+} from "./chon-gv-buoi";
+import type { CheDoChonGv } from "../_lib/che-do-gv";
 import type {
   EnrollmentRow,
   Option,
@@ -103,11 +111,29 @@ function SuaBuoiForm({
   session,
   teachers,
   rooms,
+  nguonGv,
+  cheDoChonGv,
+  locGvTheoCa,
+  soGvMienLoc,
   onXong,
 }: {
   session: SessionRow;
   teachers: Option[];
   rooms: RoomOption[];
+  /**
+   * Nguồn danh sách giáo viên — hook nằm ở COMPONENT CHA, không ở đây.
+   *
+   * Vì sao: form này phải có danh sách NGAY KHI MỞ (người dùng hoàn toàn có thể chỉ đổi
+   * mỗi GIÁO VIÊN, không đụng ngày/giờ — và đó vẫn là một đường tạo trùng lịch). Nạp
+   * lúc mở mà đặt hook ở đây thì phải `useEffect`, thứ repo cấm cho việc lấy dữ liệu.
+   * Đặt ở cha thì lượt nạp treo vào ĐÚNG cú bấm "Sửa buổi học" — một sự kiện thật.
+   */
+  nguonGv: NguonGvBuoi & {
+    tai: (date: string, startTime: string, endTime: string) => void;
+  };
+  cheDoChonGv: CheDoChonGv;
+  locGvTheoCa: boolean;
+  soGvMienLoc: number;
   onXong: () => void;
 }) {
   const router = useRouter();
@@ -122,6 +148,18 @@ function SuaBuoiForm({
   const [teacherId, setTeacherId] = useState(session.teacherId ?? "");
   const [lyDo, setLyDo] = useState("");
   const [choHuy, setChoHuy] = useState(false);
+
+  // 17/09 — CỬA THỨ HAI của cùng một việc. Nó đổi được cả NGÀY, GIỜ lẫn GIÁO VIÊN nên là
+  // đường DỄ tạo trùng lịch nhất, mà tới hôm nay nó không có một cảnh báo nào. Dùng
+  // CHUNG hook + CHUNG markup với khối "Thêm buổi học".
+
+  /** Đổi một trong ba ô ngày/giờ ⇒ hỏi lại danh sách. Truyền giá trị MỚI (setState chưa kịp). */
+  function doiKhung(d: string, s: string, e: string) {
+    setDate(d);
+    setStartTime(s);
+    setEndTime(e);
+    nguonGv.tai(d, s, e);
+  }
 
   function luu() {
     startTransition(async () => {
@@ -168,7 +206,7 @@ function SuaBuoiForm({
           <input
             type="date"
             value={date}
-            onChange={(e) => setDate(e.target.value)}
+            onChange={(e) => doiKhung(e.target.value, startTime, endTime)}
             disabled={pending}
             className="rounded-md border border-border bg-card px-2 py-1.5 text-sm text-foreground disabled:opacity-50"
           />
@@ -178,7 +216,7 @@ function SuaBuoiForm({
           <input
             type="time"
             value={startTime}
-            onChange={(e) => setStartTime(e.target.value)}
+            onChange={(e) => doiKhung(date, e.target.value, endTime)}
             disabled={pending}
             className="rounded-md border border-border bg-card px-2 py-1.5 text-sm text-foreground disabled:opacity-50"
           />
@@ -188,7 +226,7 @@ function SuaBuoiForm({
           <input
             type="time"
             value={endTime}
-            onChange={(e) => setEndTime(e.target.value)}
+            onChange={(e) => doiKhung(date, startTime, e.target.value)}
             disabled={pending}
             className="rounded-md border border-border bg-card px-2 py-1.5 text-sm text-foreground disabled:opacity-50"
           />
@@ -209,23 +247,27 @@ function SuaBuoiForm({
             ))}
           </select>
         </label>
-        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-          Giáo viên
-          <select
-            value={teacherId}
-            onChange={(e) => setTeacherId(e.target.value)}
-            disabled={pending}
-            className="rounded-md border border-border bg-card px-2 py-1.5 text-sm text-foreground disabled:opacity-50"
-          >
-            <option value="">— chưa xếp giáo viên —</option>
-            {teachers.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        <OChonGiaoVien
+          teachers={teachers}
+          nguon={nguonGv}
+          value={teacherId}
+          onChange={setTeacherId}
+          disabled={pending}
+          // Chỉ để biết CÓ bộ lọc nào đang chạy hay không (vẽ công tắc "Hiện tất cả" hay
+          // không) — không gác gì. Quyền hỏi ở server, mỗi lượt.
+          cheDo={cheDoChonGv}
+          batLoc={locGvTheoCa}
+          nho
+        />
       </div>
+
+      <CanhBaoGiaoVien nguon={nguonGv} value={teacherId} />
+      <GiaiThichLuatGv
+        batLoc={locGvTheoCa}
+        cheDo={cheDoChonGv}
+        soGvMien={soGvMienLoc}
+        hienTatCa={nguonGv.hienTatCa}
+      />
 
       <label className="mt-2 flex flex-col gap-1 text-xs text-muted-foreground">
         Lý do dời / huỷ *
@@ -276,13 +318,19 @@ function SuaBuoiForm({
 }
 
 export function AttendanceBoard({
+  trialClassId,
   sessions,
   enrollments,
   canMark,
   canManage,
   teachers,
   rooms,
+  cheDoChonGv,
+  locGvTheoCa,
+  soGvMienLoc,
 }: {
+  /** Cần cho khối "Sửa buổi": Server Action lọc giáo viên gác theo cơ sở CỦA LỚP. */
+  trialClassId: string;
   sessions: SessionRow[];
   enrollments: EnrollmentRow[];
   canMark: boolean;
@@ -290,6 +338,10 @@ export function AttendanceBoard({
   canManage: boolean;
   teachers: Option[];
   rooms: RoomOption[];
+  /** Ba prop dưới chỉ để NÓI RA luật đang chạy ở ô Giáo viên — không dùng để gác. */
+  cheDoChonGv: CheDoChonGv;
+  locGvTheoCa: boolean;
+  soGvMienLoc: number;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -326,6 +378,17 @@ export function AttendanceBoard({
   const [draft, setDraft] = useState<Record<string, DraftRow>>({});
   const sessionKey = selectedSessionId;
   const [moSuaBuoi, setMoSuaBuoi] = useState(false);
+
+  // Hook đặt Ở ĐÂY (không ở `SuaBuoiForm`) để lượt nạp treo vào đúng cú bấm "Sửa buổi
+  // học" — xem chú thích prop `nguonGv`.
+  //
+  // `excludeSessionId` phải là buổi ĐANG CHỌN: không loại chính nó thì mở form ra chỉ để
+  // sửa ô lý do cũng thấy note đỏ "trùng lịch" với chính mình, và người dùng học cách bỏ
+  // qua note đỏ — hỏng đúng thứ vừa dựng lên.
+  const nguonGv = useGvChoBuoi({
+    trialClassId,
+    excludeSessionId: selectedSessionId || null,
+  });
 
   const tenGv = useMemo(
     () => new Map(teachers.map((t) => [t.id, t.name])),
@@ -459,7 +522,13 @@ export function AttendanceBoard({
             <button
               key={s.id}
               type="button"
-              onClick={() => setSelectedSessionId(s.id)}
+              onClick={() => {
+                setSelectedSessionId(s.id);
+                // Đổi buổi ⇒ ĐÓNG khối sửa. Giữ nó mở thì danh sách giáo viên đang hiện
+                // là của buổi TRƯỚC (khác ngày, khác `excludeSessionId`) — một cái note
+                // đỏ đúng cho buổi khác còn tệ hơn không có note nào.
+                setMoSuaBuoi(false);
+              }}
               aria-pressed={active}
               className={`rounded-lg border px-3 py-1.5 text-xs ${
                 active
@@ -502,7 +571,21 @@ export function AttendanceBoard({
               {canManage && selectedSession.status === "SCHEDULED" && (
                 <button
                   type="button"
-                  onClick={() => setMoSuaBuoi((v) => !v)}
+                  onClick={() => {
+                    const mo = !moSuaBuoi;
+                    setMoSuaBuoi(mo);
+                    // Nạp NGAY khi mở: người dùng có thể chỉ đổi mỗi giáo viên, không
+                    // đụng ngày/giờ — mà đó vẫn là một đường tạo trùng lịch. Đợi họ chạm
+                    // vào ô ngày mới lọc là để ngỏ đúng ca hay gặp nhất.
+                    if (mo) {
+                      nguonGv.tai(
+                        // `date` là UTC-midnight của ngày VN → 10 ký tự đầu là "YYYY-MM-DD".
+                        selectedSession.date.slice(0, 10),
+                        selectedSession.startTime,
+                        selectedSession.endTime,
+                      );
+                    }
+                  }}
                   disabled={pending}
                   className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted disabled:opacity-50"
                 >
@@ -529,6 +612,10 @@ export function AttendanceBoard({
               session={selectedSession}
               teachers={teachers}
               rooms={rooms}
+              nguonGv={nguonGv}
+              cheDoChonGv={cheDoChonGv}
+              locGvTheoCa={locGvTheoCa}
+              soGvMienLoc={soGvMienLoc}
               onXong={() => setMoSuaBuoi(false)}
             />
           )}

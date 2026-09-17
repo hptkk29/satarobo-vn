@@ -145,3 +145,46 @@ export const cancelSessionSchema = z.object({
   sessionId: z.string().trim().min(1, "Thiếu buổi học"),
   reason: z.string().trim().min(3, "Ghi rõ lý do huỷ buổi (ít nhất 3 ký tự)").max(500),
 });
+
+/**
+ * Đầu vào của `layGvChoBuoiAction` — đường ĐỌC, nhưng vẫn phải gác HÌNH DẠNG.
+ *
+ * ⚠️ Vì sao một đường đọc cũng cần zod, dù chữ ký TypeScript của action đã khai đủ kiểu:
+ * kiểu của một Server Action là lời hứa của TRÌNH BIÊN DỊCH với các chỗ gọi TRONG repo,
+ * không phải một cái cổng. Trình duyệt POST thẳng vào endpoint đó được, với payload bất
+ * kỳ. Và ở đây payload bẩn không rơi vào nhánh `{ ok: false }` gọn gàng — nó NÉM:
+ * `ngayVnSangUtc(input.date)` gọi `.trim()`, còn `date: 123` thì `.trim` không tồn tại.
+ * Một action NÉM thì client nhận promise bị từ chối chứ không nhận `error`, nên chỗ gọi
+ * đọc thành "không có gì đổi" và ô chọn giáo viên giữ nguyên danh sách CŨ — sai mà không
+ * một dòng chữ nào hiện ra (đúng lớp lỗi luật 12). Bốn action ghi cùng tệp đều đã
+ * `safeParse`; đây là cái duy nhất sót.
+ *
+ * `endTime > startTime` khoá cùng luật với `addSessionSchema`/`updateSessionSchema`: thiếu
+ * vế này thì khung giờ ngược đời đi lọt tới `caPhuTronKhungGio`, ra `KHONG_PHU` cho TẤT
+ * CẢ, và người dùng đọc được đúng một câu "không ai có ca phủ trọn 19:30–18:00" — câu đó
+ * đổ lỗi cho lưới ca trong khi lỗi nằm ở hai ô giờ họ vừa gõ.
+ */
+export const gvChoBuoiSchema = z
+  .object({
+    trialClassId: z.string().trim().min(1, "Thiếu lớp trải nghiệm"),
+    date: z.string().regex(YMD, "Ngày buổi học không hợp lệ"),
+    startTime: z.string().regex(HHMM, "Giờ bắt đầu không hợp lệ"),
+    endTime: z.string().regex(HHMM, "Giờ kết thúc không hợp lệ"),
+    /** Buổi ĐANG SỬA — loại khỏi phép so trùng. Bỏ trống khi đang THÊM buổi mới. */
+    excludeSessionId: z.string().trim().min(1).nullable().optional(),
+    /**
+     * Công tắc "Hiện tất cả giáo viên" — trạng thái UI của MỘT lượt chọn, không phải
+     * cấu hình và không phải quyền.
+     *
+     * `.default(false)` là CÓ CHỦ ĐÍCH và không mâu thuẫn luật 7: luật đó cấm mặc định
+     * nguy hiểm, và mặc định ở đây là vế ĐANG LỌC (hẹp), tức fail-closed. Đây là endpoint
+     * — payload thiếu khoá đến từ một máy khách bất kỳ, và nó KHÔNG được tự mở bộ lọc.
+     * Vế bắt-buộc-viết-ra nằm ở chữ ký TS của `layGvChoBuoiAction`, nơi `tsc` liệt kê
+     * được call site; ở đây thì không có call site nào để liệt kê.
+     */
+    hienTatCa: z.boolean().default(false),
+  })
+  .refine((d) => d.endTime > d.startTime, {
+    message: "Giờ kết thúc phải sau giờ bắt đầu",
+    path: ["endTime"],
+  });

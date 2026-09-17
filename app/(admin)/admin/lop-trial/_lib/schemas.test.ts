@@ -11,6 +11,7 @@ import {
   addSessionSchema,
   updateBookingSchema,
   attendanceSchema,
+  gvChoBuoiSchema,
 } from "./schemas";
 
 describe("[LT-U-04] chuỗi giờ VN đi và về", () => {
@@ -170,5 +171,65 @@ describe("zod điểm danh", () => {
         records: [{ trialEnrollmentId: "e1", status: "LATE" }],
       }).success,
     ).toBe(false);
+  });
+});
+
+// 17/09/2026 — cổng HÌNH DẠNG của đường ĐỌC `layGvChoBuoiAction`.
+//
+// Vì sao một đường đọc cũng đáng một khối test: bốn action GHI trong cùng tệp đều
+// `safeParse`, riêng đường này lúc đầu chỉ có chữ ký TypeScript. Kiểu của Server Action
+// là lời hứa với `tsc`, không phải cổng — trình duyệt POST thẳng payload bất kỳ vào
+// được, và payload bẩn ở đây KHÔNG rơi vào nhánh `{ ok: false }`: `ngayVnSangUtc` gọi
+// `.trim()` nên `date: 123` làm action NÉM. Action ném thì client nhận promise bị từ
+// chối, ô chọn giáo viên đứng im với danh sách cũ, không một dòng chữ nào hiện ra.
+describe("zod lọc giáo viên theo khung giờ (17/09)", () => {
+  const hopLe = {
+    trialClassId: "lop-1",
+    date: "2026-09-19",
+    startTime: "18:00",
+    endTime: "19:30",
+  };
+
+  it("khung giờ hợp lệ đi qua, `excludeSessionId` bỏ trống được", () => {
+    const r = gvChoBuoiSchema.safeParse(hopLe);
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.excludeSessionId).toBeUndefined();
+  });
+
+  it("`excludeSessionId: null` (cửa THÊM buổi) đi qua", () => {
+    expect(gvChoBuoiSchema.safeParse({ ...hopLe, excludeSessionId: null }).success).toBe(true);
+  });
+
+  it("ngày KHÔNG phải chuỗi bị chặn — đây là payload làm action NÉM", () => {
+    // Ca chịu lực. `123` không có `.trim`, nên thiếu cổng này là TypeError chứ không
+    // phải một `error` gọn gàng trả về client.
+    const r = gvChoBuoiSchema.safeParse({ ...hopLe, date: 123 });
+    expect(r.success).toBe(false);
+  });
+
+  it("ngày sai định dạng bị chặn kèm câu người đọc được", () => {
+    const r = gvChoBuoiSchema.safeParse({ ...hopLe, date: "19/09/2026" });
+    expect(r.success).toBe(false);
+    if (!r.success) expect(r.error.issues[0]?.message).toBe("Ngày buổi học không hợp lệ");
+  });
+
+  it("giờ sai định dạng bị chặn", () => {
+    expect(gvChoBuoiSchema.safeParse({ ...hopLe, startTime: "25:00" }).success).toBe(false);
+    expect(gvChoBuoiSchema.safeParse({ ...hopLe, endTime: "7h30" }).success).toBe(false);
+  });
+
+  it("thiếu lớp bị chặn — không cho hỏi danh sách giáo viên mà không nói lớp nào", () => {
+    expect(gvChoBuoiSchema.safeParse({ ...hopLe, trialClassId: "  " }).success).toBe(false);
+  });
+
+  it("giờ kết thúc KHÔNG sau giờ bắt đầu bị chặn, cùng luật với hai schema ghi", () => {
+    // Thiếu vế này thì khung ngược đời lọt tới `caPhuTronKhungGio`, ra KHONG_PHU cho TẤT
+    // CẢ, và màn hình đổ lỗi cho lưới ca ("không ai có ca phủ trọn 19:30–18:00") trong
+    // khi lỗi nằm ở hai ô giờ người dùng vừa gõ.
+    const r = gvChoBuoiSchema.safeParse({ ...hopLe, startTime: "19:30", endTime: "18:00" });
+    expect(r.success).toBe(false);
+    if (!r.success) expect(r.error.issues[0]?.message).toBe("Giờ kết thúc phải sau giờ bắt đầu");
+    expect(gvChoBuoiSchema.safeParse({ ...hopLe, startTime: "18:00", endTime: "18:00" }).success)
+      .toBe(false);
   });
 });

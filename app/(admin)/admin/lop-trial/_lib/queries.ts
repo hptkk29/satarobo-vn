@@ -6,9 +6,13 @@
 import { scopedDb } from "@/lib/db-scope";
 import { getCenterOptions } from "@/lib/org/center-options";
 import type { Actor } from "@/lib/auth/actor";
-import { vnParts } from "@/lib/time/vn";
+// Module soát trùng DUY NHẤT của LỚP CHÍNH (T4.2). Dùng lại `rowsToSlots` thay vì tự
+// suy `substitute ?? actual ?? class.teacherId` — bản thứ hai của một luật là bản sẽ lệch.
+import { rowsToSlots } from "@/lib/lms/schedule-conflict";
+import type { BuoiBanCuaGv } from "@/lib/trial/gv-kha-dung";
+import { vnAddDays, vnParts, vnStartOfDay, vnYmd } from "@/lib/time/vn";
 import { toVnInput } from "./schemas";
-import { buildClassListWhere, buildBookingListWhere } from "./filters";
+import { buildClassListWhere, buildBookingListWhere, ngayVnSangUtc } from "./filters";
 import type {
   BookingRow,
   ClassRow,
@@ -113,65 +117,180 @@ export type ChiTietLop = {
   enrollments: EnrollmentRow[];
 };
 
-/** Một buổi ĐÃ CHIẾM chỗ của giáo viên — đủ để client tự đối chiếu khung giờ. */
-export type BuoiBan = {
-  /** "YYYY-MM-DD" theo ngày VN, khớp giá trị của `<input type="date">`. */
-  date: string;
-  startTime: string;
-  endTime: string;
-  /** Hiện trong chú thích cảnh báo, vd "Lớp trải nghiệm 12". */
-  label: string;
-};
+// ─── Lịch đã kín của giáo viên — nguồn của note ĐỎ "trùng lịch" (chốt V2-b) ────
+//
+// ĐÚNG HAI NGUỒN, không hơn: buổi của lớp TRIAL khác + buổi LỚP CHÍNH (`ClassSession`).
+//
+// ⛔ KHÔNG tính trùng với ca làm trong lưới chấm công. Chủ dự án 17/09 nói thẳng:
+// "ca hành chính của Kiệt và Toại thì cả 2 người đều trial bình thường, không cần note
+// đỏ." Ca làm trả lời câu "người này CÓ MẶT không" (luật PHỦ TRỌN, ở
+// `lib/trial/gv-kha-dung.ts`); trùng lịch trả lời câu "người này ĐÃ NHẬN việc khác
+// chưa". Trộn hai câu là biến mọi người đang đi làm thành người bận.
 
 /**
- * Lịch đã kín của từng giáo viên trong một cơ sở — nguồn cho việc ĐÁNH DẤU (không lọc)
- * giáo viên khi thêm buổi.
+ * Nhãn CHUNG, cố ý không mang tên lớp / tên học viên.
  *
- * Chủ dự án 28/08: "ca làm là cố định nên không phải đăng ký nữa, hiện tất cả nhưng
- * đánh dấu". Nên đây KHÔNG phải bộ lọc: mọi giáo viên của cơ sở vẫn chọn được, chỉ
- * kèm cảnh báo ai đang vướng buổi khác. Lọc cứng là tự khoá mình những hôm phải xếp
- * gấp.
+ * ⚠️ ĐÂY LÀ MỘT CỔNG, không phải lười đặt tên. Hai truy vấn dưới **cố ý bỏ khoá
+ * `centerId`** (giáo viên là nguồn lực chung từ 06/08 — người của CS2 được điều sang dạy
+ * CS1, và phép soát trùng phải thấy cả hai phía), nên dòng trả về có thể thuộc cơ sở mà
+ * người đang xem KHÔNG được đọc dữ liệu. In tên lớp ra là rò rỉ đúng thứ `scopedDb` sinh
+ * ra để chặn: người CS1 đọc được tên lớp CS2 qua một cái note đỏ.
  *
- * ⚠️ GIỚI HẠN ĐÃ BIẾT: chỉ tính buổi LỚP TRẢI NGHIỆM. Buổi lớp chính (`ClassSession`)
- * không có cột `startTime`/`endTime` riêng — giờ nằm trong `date` và người dạy phải suy
- * qua `lib/lms/session-teacher.ts` (có dạy thay). Ghép vào đây là một đợt riêng; ghi ra
- * để không ai tưởng cảnh báo này đã phủ hết lịch của giáo viên.
+ * Giờ + nguồn là đủ để người xếp lịch quyết định ("18:00–19:30 đã có buổi lớp chính");
+ * muốn biết lớp nào thì hỏi người phụ trách cơ sở đó — đúng quy trình.
  */
-export async function layLichBanGiaoVien(
+const NHAN_TRIAL = "buổi lớp trải nghiệm" as const;
+const NHAN_LOP_CHINH = "buổi lớp chính" as const;
+
+/**
+ * `BuoiBanCuaGv` (hợp đồng dùng chung) KHÔNG mang `teacherId` — ở đó nó đã được gom
+ * theo người rồi. Hai hàm truy vấn dưới trả danh sách PHẲNG nên phải kèm khoá người,
+ * và `layLichBanGiaoVien` mới là chỗ gom lại đúng hình dạng hợp đồng.
+ */
+type BuoiBanKemGv = BuoiBanCuaGv & { teacherId: string };
+
+/** "HH:mm" theo đồng hồ VN của một mốc thời gian THẬT. */
+function gioVn(d: Date): string {
+  const p = vnParts(d);
+  return `${String(p.hour).padStart(2, "0")}:${String(p.minute).padStart(2, "0")}`;
+}
+
+/** Buổi trial khác đã chiếm chỗ của giáo viên trong NGÀY `ymd`. */
+async function buoiTrialDaChiem(
   actor: Actor,
-  centerId: string,
-): Promise<Record<string, BuoiBan[]>> {
+  opts: { ymd: string; excludeSessionId: string | null },
+): Promise<BuoiBanKemGv[]> {
   const sdb = scopedDb(actor);
-  const homQua = new Date(vnTodayUtc().getTime() - 24 * 3_600_000);
+  const ngay = ngayVnSangUtc(opts.ymd);
+  if (!ngay) return [];
+
   const rows = await sdb.trialClassSession.findMany({
     where: {
       status: "SCHEDULED",
       teacherId: { not: null },
-      date: { gte: homQua },
-      trialClass: { centerId, status: { not: "CANCELLED" } },
+      // Cột `@db.Date` — so BẰNG với nửa đêm UTC của ngày VN. KHÔNG dùng khoảng
+      // `gte/lt` như `ClassSession` ngay dưới: cột này không mang giờ.
+      date: ngay,
+      // 17/09 — BỎ khoá `centerId`. `TrialClassSession` KHÔNG thuộc `SCOPED_MODELS`
+      // (xem `_lib/guards.ts`) nên không có lưới nào chèn lại — đó chính là lý do nhãn
+      // phải là chuỗi chung ở trên.
+      trialClass: { status: { not: "CANCELLED" } },
+      // Sửa một buổi thì phải LOẠI chính nó, nếu không đổi mỗi ô ghi chú cũng tự báo
+      // "trùng lịch" với bản thân và người dùng học cách bỏ qua note đỏ.
+      ...(opts.excludeSessionId ? { id: { not: opts.excludeSessionId } } : {}),
     },
-    select: {
-      teacherId: true,
-      date: true,
-      startTime: true,
-      endTime: true,
-      trialClass: { select: { name: true } },
-    },
-    orderBy: { date: "asc" },
+    select: { teacherId: true, startTime: true, endTime: true },
     take: 500,
   });
 
-  const out: Record<string, BuoiBan[]> = {};
+  const out: BuoiBanKemGv[] = [];
   for (const r of rows) {
     if (!r.teacherId) continue;
-    (out[r.teacherId] ??= []).push({
-      // Cột `@db.Date` là UTC-midnight của ngày VN → cắt 10 ký tự đầu là ra đúng
-      // "YYYY-MM-DD" mà `<input type="date">` dùng. Đừng đổi múi giờ ở đây.
-      date: r.date.toISOString().slice(0, 10),
+    out.push({
+      teacherId: r.teacherId,
+      ymd: opts.ymd,
       startTime: r.startTime,
       endTime: r.endTime,
-      label: r.trialClass.name,
+      nhan: NHAN_TRIAL,
+      nguon: "TRIAL",
     });
+  }
+  return out;
+}
+
+/**
+ * Buổi LỚP CHÍNH đã chiếm chỗ của giáo viên trong NGÀY `ymd`.
+ *
+ * ⚠️ HAI CỘT `date` CÙNG TÊN, KHÁC NGHĨA — khớp theo tên cột ở đây là sai:
+ *   · `TrialClassSession.date` là `@db.Date` — nửa đêm UTC, KHÔNG mang giờ.
+ *   · `ClassSession.date`      là `@db.Timestamptz(6)` — MANG GIỜ THẬT của buổi.
+ * Nên ngày của lớp chính phải lọc bằng KHOẢNG `[00:00 VN, 00:00 VN hôm sau)`, quy đổi
+ * tường minh qua `lib/time/vn.ts`. Lọc bằng một mốc UTC-midnight sẽ khớp đúng các buổi
+ * 07:00 giờ VN và bỏ sót tất cả buổi còn lại.
+ *
+ * ⚠️ Người dạy KHÔNG tự suy — `substitute ?? actual ?? class.teacherId` là luật của
+ * `lib/lms/schedule-conflict.ts`, module soát trùng DUY NHẤT của lớp chính. Chép lại
+ * luật đó ở đây là đẻ bản thứ hai, và bản thứ hai sẽ trôi lệch (đó đúng là lý do bản cũ
+ * `findScheduleConflicts` đã bị gỡ bỏ).
+ */
+async function buoiLopChinhDaChiem(
+  actor: Actor,
+  opts: { ymd: string },
+): Promise<BuoiBanKemGv[]> {
+  const sdb = scopedDb(actor);
+  const moc = ngayVnSangUtc(opts.ymd);
+  if (!moc) return [];
+  const dauNgay = vnStartOfDay(moc);
+  const cuoiNgay = vnAddDays(dauNgay, 1);
+
+  // `ClassSession` ∈ SCOPED_MODELS ⇒ `scopedDb` tự chèn `centerId IN visibleCenterIds`.
+  // GIỚI HẠN ĐÃ BIẾT, cố ý giữ: với người cấp cơ sở, buổi lớp chính ở cơ sở ngoài tầm
+  // nhìn KHÔNG sinh note đỏ (fail-closed — thà thiếu cảnh báo còn hơn rò dữ liệu, và
+  // gỡ lưới ở đây là mở một đường đọc `ClassSession` liên cơ sở không ai gác).
+  const rows = await sdb.classSession.findMany({
+    where: {
+      status: { not: "CANCELLED" },
+      date: { gte: dauNgay, lt: cuoiNgay },
+      class: { deletedAt: null },
+    },
+    // ĐÚNG bộ cột mà `rowsToSlots` đọc — thiếu một cột là nó suy sai người dạy hoặc
+    // sai khung giờ, im lặng. Giữ nguyên hình dạng, đừng rút gọn.
+    select: {
+      id: true,
+      date: true,
+      roomId: true,
+      actualRoomId: true,
+      actualTeacherId: true,
+      substituteRoomId: true,
+      substituteTeacherId: true,
+      class: {
+        select: { roomId: true, teacherId: true, startTime: true, endTime: true },
+      },
+    },
+    take: 500,
+  });
+
+  const out: BuoiBanKemGv[] = [];
+  for (const slot of rowsToSlots(rows)) {
+    if (!slot.teacherId) continue;
+    out.push({
+      teacherId: slot.teacherId,
+      // Ngày lấy từ CHÍNH mốc bắt đầu của buổi (đã quy về đồng hồ VN), không lấy lại
+      // `opts.ymd`: một buổi 23:30–01:00 nằm vắt qua nửa đêm thì hai giá trị khác nhau,
+      // và hàm lọc trùng so khớp theo `ymd`.
+      ymd: vnYmd(slot.startAt),
+      startTime: gioVn(slot.startAt),
+      endTime: gioVn(slot.endAt),
+      nhan: NHAN_LOP_CHINH,
+      nguon: "LOP_CHINH",
+    });
+  }
+  return out;
+}
+
+/**
+ * Lịch đã kín của TỪNG giáo viên trong một ngày — gom cả hai nguồn, gom theo `teacherId`.
+ *
+ * Trả về đúng hình dạng `banTheoGv` mà `locGiaoVienChoBuoi` ăn vào. Người gọi KHÔNG phải
+ * biết có mấy nguồn.
+ */
+export async function layLichBanGiaoVien(
+  actor: Actor,
+  opts: { ymd: string; excludeSessionId: string | null },
+): Promise<Record<string, BuoiBanCuaGv[]>> {
+  const [trial, lopChinh] = await Promise.all([
+    buoiTrialDaChiem(actor, opts),
+    buoiLopChinhDaChiem(actor, { ymd: opts.ymd }),
+  ]);
+
+  const out: Record<string, BuoiBanCuaGv[]> = {};
+  for (const b of [...trial, ...lopChinh]) {
+    (out[b.teacherId] ??= []).push(b);
+  }
+  // Sắp theo giờ bắt đầu: note đỏ chỉ in buổi ĐẦU TIÊN khớp (xem `timTrungLich`), nên
+  // không sắp thì người dùng thấy buổi nào là do thứ tự DB trả về — đổi giữa hai lần bấm.
+  for (const ds of Object.values(out)) {
+    ds.sort((a, b) => a.startTime.localeCompare(b.startTime));
   }
   return out;
 }

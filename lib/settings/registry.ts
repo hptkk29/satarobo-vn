@@ -952,6 +952,79 @@ export const SETTINGS = {
     default: 24, // lib/teachers/load.ts OVERLOAD_HOURS_PER_WEEK
     centerOverridable: true,
   }),
+  // ── Xếp giáo viên cho buổi học thử (17/09/2026) ────────────────────────────────────────
+  //
+  // Chủ dự án chốt: ô "Giáo viên" ở khối Thêm buổi học của lớp trải nghiệm chỉ được hiện
+  // người có ca làm PHỦ TRỌN khung giờ buổi đó. Hai khoá dưới đây là hai nút vặn của luật ấy
+  // — một cái bật/tắt luật, một cái khai ngoại lệ.
+  //
+  // ⚠️ CỜ TẮT, KHÔNG PHẢI CỜ BẬT. `default: false` nghĩa là ngày deploy KHÔNG có gì đổi:
+  // dropdown vẫn hiện đúng danh sách như hôm trước, và người vận hành tự bật khi đã xem
+  // bảng ca của tháng. Đây cũng là NÚT RÚT DÂY nếu lặp lại sự cố 28/08/2026 (một bản lọc
+  // làm dropdown rỗng trên prod): tắt cờ là mọi giáo viên hiện lại ngay, không cần deploy,
+  // không cần ai sửa mã.
+  "trial.locGvTheoCaLamViec": def({
+    key: "trial.locGvTheoCaLamViec",
+    group: "teacher",
+    label:
+      "Lọc giáo viên theo ca làm khi xếp buổi học thử — TẮT thì hiện mọi giáo viên như trước",
+    schema: z.boolean(),
+    default: false,
+    // Một cơ sở tự bật/tắt riêng thì cùng một thao tác ra hai kết quả khác nhau tuỳ người
+    // đang đứng ở đâu, và không ai ở Hội sở biết. Luật xếp người phải giống nhau toàn hệ.
+    centerOverridable: false,
+  }),
+  // ── Ngoại lệ: ai LUÔN hiện dù hôm đó không có ca ───────────────────────────────────────
+  //
+  // Chủ dự án 17/09: hai người điều hành đào tạo phải chọn được mọi lúc. Khai bằng CẤU HÌNH
+  // chứ không hardcode tên trong mã — người rời đi, người mới vào, và một danh sách tên nằm
+  // trong mã nguồn thì mỗi lần đổi là một lần deploy.
+  //
+  // ⚠️ CỐ Ý không import danh sách người dùng vào đây để đối chiếu "mã này có phải giáo viên
+  // không", dù đó mới là phép kiểm mạnh nhất — cùng lý do đã ghi ở `push.tienToDuocDay`:
+  // registry là tầng THẤP NHẤT, kéo `lib/teachers/assignable` (→ `lib/db`) vào là đẻ vòng
+  // import mà `lint:boundaries` chặn cứng. Tầng này gác HÌNH DẠNG; phép đối chiếu với danh
+  // sách giáo viên THẬT nằm ở `luuGvMienTruAction` — đường ghi duy nhất mà giao diện dùng.
+  "trial.gvMienLocTheoCa": def({
+    key: "trial.gvMienLocTheoCa",
+    group: "teacher",
+    label:
+      "Giáo viên luôn hiện khi xếp buổi học thử dù hôm đó không có ca — chọn bằng bảng tên " +
+      "ở cuối tab Lớp & giáo viên",
+    schema: z
+      .array(z.string())
+      .max(50)
+      .superRefine((ds, ctx) => {
+        const daGap = new Set<string>();
+        ds.forEach((d, i) => {
+          // Chuỗi rỗng KHÔNG khớp được ai, nên nhìn thì vô hại — nhưng nó làm con số trên
+          // màn hình ("3 người được miễn") lệch với số người thật, và bất kỳ chỗ nào so bằng
+          // `mien.has(gv.id ?? "")` sẽ biến MỌI giáo viên chưa có mã thành được miễn. Một
+          // dòng rỗng trong danh sách ngoại lệ là thứ không ai đọc ra được bằng mắt.
+          if (d.trim().length === 0) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: [i],
+              message: "Có dòng trống trong danh sách — không khớp được giáo viên nào",
+            });
+          }
+          if (daGap.has(d)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: [i],
+              message: `"${d}" bị khai hai lần`,
+            });
+          }
+          daGap.add(d);
+        });
+      }),
+    // RỖNG = không ai được miễn. Đúng hành vi trước khi có tính năng này, nên DB trống ở mọi
+    // môi trường vẫn ra kết quả cũ.
+    default: [],
+    // Cùng lý do với cờ ngay trên: ngoại lệ lệch giữa các cơ sở là cùng một người chọn được
+    // ở đây mà không chọn được ở kia, không ai giải thích nổi.
+    centerOverridable: false,
+  }),
   "lms.mediaSignedUrlTtl": def({
     key: "lms.mediaSignedUrlTtl",
     group: "lms",

@@ -174,3 +174,76 @@ describe("[PUSH-D7-T22] push.tienToDuocDay — chặn khoá gõ sai ngay ở t�
     expect(SETTINGS["push.tienToDuocDay"].centerOverridable).toBe(false);
   });
 });
+
+describe("[TRIAL-GV-T01] hai nút vặn của luật xếp giáo viên buổi học thử", () => {
+  it("cờ lọc mặc định TẮT — ngày deploy không có gì đổi", () => {
+    // Đây là điều kiện để đưa luật mới lên mà không ai nhận ra: dropdown giáo viên hôm sau
+    // vẫn đúng như hôm trước, và người vận hành tự bật khi đã xem bảng ca của tháng.
+    //
+    // Cũng là NÚT RÚT DÂY: nếu bản lọc làm dropdown rỗng trên prod (đúng hình dạng sự cố
+    // 28/08/2026) thì tắt cờ là mọi giáo viên hiện lại ngay, không cần deploy.
+    expect(SETTINGS["trial.locGvTheoCaLamViec"].default).toBe(false);
+  });
+
+  it("cờ lọc chỉ nhận bật/tắt", () => {
+    expect(validateSettingValue("trial.locGvTheoCaLamViec", true).ok).toBe(true);
+    expect(validateSettingValue("trial.locGvTheoCaLamViec", false).ok).toBe(true);
+    for (const v of ["true", 1, null, [], {}]) {
+      expect(validateSettingValue("trial.locGvTheoCaLamViec", v).ok, JSON.stringify(v)).toBe(
+        false,
+      );
+    }
+  });
+
+  it("danh sách miễn trừ mặc định RỖNG — không ai được miễn khi DB trống", () => {
+    expect(SETTINGS["trial.gvMienLocTheoCa"].default).toEqual([]);
+  });
+
+  it("nhận danh sách mã người dùng, và nhận cả danh sách RỖNG", () => {
+    expect(validateSettingValue("trial.gvMienLocTheoCa", ["u_kiet", "u_toai"]).ok).toBe(true);
+    expect(validateSettingValue("trial.gvMienLocTheoCa", []).ok).toBe(true);
+  });
+
+  it("TỪ CHỐI dòng trống — nó không khớp được ai mà vẫn làm lệch con số đếm", () => {
+    // Một dòng rỗng nằm trong danh sách ngoại lệ là thứ không đọc ra được bằng mắt: màn hình
+    // báo "3 người được miễn" trong khi chỉ có 2 người thật.
+    const r = validateSettingValue("trial.gvMienLocTheoCa", ["u_kiet", "   "]);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toContain("trống");
+    expect(validateSettingValue("trial.gvMienLocTheoCa", [""]).ok).toBe(false);
+  });
+
+  it("TỪ CHỐI mã khai hai lần", () => {
+    expect(validateSettingValue("trial.gvMienLocTheoCa", ["u_kiet", "u_kiet"]).ok).toBe(false);
+  });
+
+  it("TỪ CHỐI quá 50 người", () => {
+    const nhieu = Array.from({ length: 51 }, (_, i) => `u_${i}`);
+    expect(validateSettingValue("trial.gvMienLocTheoCa", nhieu).ok).toBe(false);
+    expect(validateSettingValue("trial.gvMienLocTheoCa", nhieu.slice(0, 50)).ok).toBe(true);
+  });
+
+  it("TỪ CHỐI thứ không phải mảng chuỗi", () => {
+    for (const v of ["u_kiet", 1, null, { a: 1 }, [1, 2], [null]]) {
+      expect(validateSettingValue("trial.gvMienLocTheoCa", v).ok, JSON.stringify(v)).toBe(false);
+    }
+  });
+
+  it("tầng này KHÔNG đối chiếu danh sách giáo viên — đó là việc của đường ghi", () => {
+    // ⚠️ Ca này khoá một ĐÁNH ĐỔI CÓ CHỦ ĐÍCH, không phải lỗ hổng bị bỏ quên. Đối chiếu ở đây
+    // cần `import { getAssignableTeachers }` → `lib/db`, tức registry (tầng thấp nhất) kéo cả
+    // Prisma vào; `lint:boundaries` chặn cứng, và đó cũng chính là lý do `push.tienToDuocDay`
+    // phải dời phép đối chiếu của nó xuống action.
+    //
+    // Phép đối chiếu nằm ở `luuGvMienTruAction` và có ca test riêng. Ai dời nó về đây thì ca
+    // này đỏ, và buộc đọc lý do trước khi sửa.
+    expect(validateSettingValue("trial.gvMienLocTheoCa", ["khong_ton_tai"]).ok).toBe(true);
+  });
+
+  it("KHÔNG cho override theo cơ sở — luật xếp người phải giống nhau toàn hệ", () => {
+    // Lệch giữa các cơ sở là cùng một người chọn được ở đây mà không chọn được ở kia, và
+    // không ai giải thích nổi vì sao.
+    expect(SETTINGS["trial.locGvTheoCaLamViec"].centerOverridable).toBe(false);
+    expect(SETTINGS["trial.gvMienLocTheoCa"].centerOverridable).toBe(false);
+  });
+});

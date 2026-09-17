@@ -248,6 +248,56 @@ describe("permissions matrix — FL W0-NAV-2 QĐ-T3b (CM giữ trial-config + du
   });
 });
 
+// 17/09/2026 — ba tầng xếp giáo viên cho buổi trải nghiệm (chủ dự án chốt):
+//   Đào tạo      → FULL, mọi cơ sở            → `trials:assign-teacher`
+//   Quản lý cơ sở → GV của cơ sở mình          → `trials:assign-teacher-center`  ← khoá MỚI
+//   Sale          → chỉ GV có ca phủ trọn giờ  → không khoá riêng (mặc định của màn)
+//
+// Vì sao khoá này phải tồn tại: trước nó, `PERMISSIONS` cấp cho CENTER_MANAGER và
+// SALES_CSM CÙNG bộ `trials:*` dùng được (view · manage · attendance · override-capacity)
+// ⇒ không có khoá nào để hỏi "người này là tầng cơ sở hay tầng Sale?", và cách duy nhất
+// còn lại là `if (role === "CENTER_MANAGER")` — đúng thứ luật cứng #1 cấm (lint
+// `no-inline-authz` = build fail).
+describe("permissions matrix — 17/09 tầng QL cơ sở của việc xếp GV buổi trải nghiệm", () => {
+  it("trials:assign-teacher-center = ĐÚNG hai vai {SUPER_ADMIN, CENTER_MANAGER}", () => {
+    // So cả TẬP (không chỉ can() từng vai): thêm vai thứ ba vào map là xoá đúng ranh
+    // giới mà khoá này sinh ra để vẽ — và một bài `can(X)===false` rời rạc sẽ không
+    // bắt được vai mới nào đó chưa ai nghĩ tới.
+    expect([...PERMISSIONS["trials:assign-teacher-center"]].sort()).toEqual([
+      "CENTER_MANAGER",
+      "SUPER_ADMIN",
+    ]);
+  });
+
+  it("khoá phải nằm trong ALL_ACTIONS — nếu không thì mọi grant mang nó bị vứt IM LẶNG", () => {
+    // `ALL_ACTIONS = Object.keys(PERMISSIONS)` và `buildActor()` lọc grant theo tập đó.
+    // Khai ở union `Action` mà quên dòng map = khoá vô hình, không lỗi, không cảnh báo.
+    expect(ALL_ACTIONS).toContain("trials:assign-teacher-center");
+  });
+
+  it("hai tầng KHÔNG giao nhau: Đào tạo giữ khoá toàn hệ thống, QL cơ sở giữ khoá cơ sở", () => {
+    // Đào tạo: FULL (GĐ3 chốt câu 2) — và KHÔNG được cấp thêm khoá tầng cơ sở, vì
+    // `trials:assign-teacher` đã bao trùm; cấp cả hai là làm khoá mới mất nghĩa.
+    expect(can("TRAINING", "trials:assign-teacher")).toBe(true);
+    expect(can("TRAINING", "trials:assign-teacher-center")).toBe(false);
+    // Quản lý cơ sở: NGƯỢC LẠI. GĐ3 đã cố ý gỡ `trials:assign-teacher` khỏi vai này;
+    // dòng dưới ghim việc đó để không ai "tiện tay" trả lại khi thêm khoá mới.
+    expect(can("CENTER_MANAGER", "trials:assign-teacher-center")).toBe(true);
+    expect(can("CENTER_MANAGER", "trials:assign-teacher")).toBe(false);
+  });
+
+  it("Sale/GV/Kế toán KHÔNG có khoá tầng cơ sở", () => {
+    // SALES_CSM là vai quan trọng nhất trong bài này: nó có ĐỦ `trials:manage` +
+    // `trials:attendance` + `trials:override-capacity` giống CENTER_MANAGER, nên nếu
+    // ai đó cấp nhầm khoá mới cho Sale thì hai tầng lại dính làm một như trước 17/09.
+    expect(can("SALES_CSM", "trials:assign-teacher-center")).toBe(false);
+    expect(can("TEACHER", "trials:assign-teacher-center")).toBe(false);
+    expect(can("ACCOUNTANT", "trials:assign-teacher-center")).toBe(false);
+    expect(can("MARKETING", "trials:assign-teacher-center")).toBe(false);
+    expect(can("PARENT", "trials:assign-teacher-center")).toBe(false);
+  });
+});
+
 describe("permissions matrix — FL W0-NAV-2 role hygiene (BA #07 3.C)", () => {
   it("SALES_CSM bỏ module dư (Buổi học/Điểm danh/Phòng học/Khoá dạy/Tuyển dụng/Tin tức)", () => {
     expect(can("SALES_CSM", "sessions:view")).toBe(false);
