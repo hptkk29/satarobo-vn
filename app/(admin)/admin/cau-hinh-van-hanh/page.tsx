@@ -3,7 +3,8 @@ import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { SETTINGS } from "@/lib/settings/registry";
 import { getResolvedSettings } from "@/lib/settings/service";
-import { TAB_CAU_HINH, keyCuaTab, nhanCuaKey } from "@/lib/settings/nhan-van-hanh";
+import { TAB_CAU_HINH, keyCuaTab, nhanCuaKey, type TabId } from "@/lib/settings/nhan-van-hanh";
+import { getAssignableTeachers } from "@/lib/teachers/assignable";
 import { catalogEntries } from "@/lib/notifications/catalog";
 import { kiemVapid, MO_TA_LOI_VAPID } from "@/lib/push/cau-hinh-vapid";
 import { PageHelp } from "@/components/admin/ui/page-help";
@@ -12,6 +13,7 @@ import type { ChinhSachHoaHong } from "@/lib/crm/chinh-sach-hoa-hong";
 import { BangChinhSachHoaHong } from "./_components/bang-chinh-sach-hoa-hong";
 import { TabPhuongThucThanhToan } from "./_components/tab-phuong-thuc-tt";
 import { KhungCauHinh, type TabView } from "./_components/khung-cau-hinh";
+import { ChonGvMienTru } from "./_components/chon-gv-mien-tru";
 import type { CanhBaoKenh } from "./_components/chon-loai-thong-bao";
 
 export const dynamic = "force-dynamic";
@@ -33,6 +35,22 @@ const KHOA_DO_BANG_CONG_TAC_LO = "push.tienToDuocDay";
  * tab "Hoa hồng". Để nó hiện thành ô nhập JSON nữa là hai chỗ cùng sửa một giá trị.
  */
 const KHOA_DO_BANG_HOA_HONG = "crm.commissionPolicies";
+
+/**
+ * Tab mang thêm bảng chọn giáo viên luôn hiện khi xếp buổi học thử.
+ *
+ * Khai kiểu `TabId` chứ không để chuỗi trần: đổi tên id tab trong `nhan-van-hanh.ts` mà quên
+ * chỗ này thì bảng lặng lẽ rơi khỏi mọi tab — `khoiThem` tra theo id, không khớp thì không
+ * dựng gì và cũng không báo gì. Gắn kiểu vào là `tsc` nói ngay.
+ */
+const TAB_LOP_GV: TabId = "lop-gv";
+
+/**
+ * Cùng lý do với hai khoá trên: danh sách giáo viên được miễn là một MẢNG MÃ NGƯỜI DÙNG.
+ * Để nó hiện thành ô nhập JSON là bắt người vận hành gõ tay `cmf3k9x0a0001…`, và gõ sai thì
+ * danh sách trông như đã khai mà không khớp ai. Chọn bằng bảng TÊN ở cuối tab Lớp & giáo viên.
+ */
+const KHOA_DO_BANG_CHON_GV = "trial.gvMienLocTheoCa";
 
 export default async function OperationalSettingsPage({
   searchParams,
@@ -64,12 +82,26 @@ export default async function OperationalSettingsPage({
   // Vai có thật, kèm TÊN TIẾNG VIỆT — ô chọn vai nhận hoa hồng không được in mã máy.
   const vai = await layVaiNhanHoaHong();
 
+  // Giáo viên có thật, kèm TÊN — cùng lý do với dòng ngay trên. `getAssignableTeachers` là
+  // nguồn DUY NHẤT của câu "ai là giáo viên phân lớp được" (`lib/teachers/assignable.ts`);
+  // chép lại điều kiện lọc ở đây là đẻ bản thứ hai, và hai bản sẽ lệch nhau.
+  //
+  // KHÔNG truyền `centerIds`: đây là cấu hình TOÀN HỆ THỐNG và chỉ quản trị cấp cao nhất sửa
+  // được, nên danh sách phải là mọi cơ sở. Lọc theo cơ sở của người đang xem thì hai quản
+  // trị viên mở cùng màn sẽ thấy hai danh sách khác nhau cho cùng một giá trị.
+  const giaoVien = (await getAssignableTeachers({})).map((g) => ({ id: g.id, ten: g.name }));
+
   const tabs: TabView[] = keyTheoTab.map(({ tab, keys }) => ({
     id: tab.id,
     ten: tab.ten,
     moTa: tab.moTa,
     rows: keys
-      .filter((k) => k !== KHOA_DO_BANG_CONG_TAC_LO && k !== KHOA_DO_BANG_HOA_HONG)
+      .filter(
+        (k) =>
+          k !== KHOA_DO_BANG_CONG_TAC_LO &&
+          k !== KHOA_DO_BANG_HOA_HONG &&
+          k !== KHOA_DO_BANG_CHON_GV,
+      )
       .map((key) => ({
         key,
         // `resolved` trả giá trị đã hoà (cơ sở → toàn hệ → mặc định). Thiếu thì lấy mặc định
@@ -111,6 +143,18 @@ export default async function OperationalSettingsPage({
       choSua: "Bấm Lưu một lần ở bảng dưới là dọn xong.",
     });
   }
+
+  // ── Dữ liệu riêng của bảng chọn giáo viên luôn hiện ───────────────────────────────────
+  //
+  // `resolved` đã mang hai khoá này (chúng có nhãn ở tab `lop-gv` nên nằm trong `moiKey`);
+  // chỉ khoá `trial.gvMienLocTheoCa` bị lọc khỏi DANH SÁCH Ô NHẬP, không phải khỏi lần đọc.
+  const thoGvMien = resolved[KHOA_DO_BANG_CHON_GV];
+  const gvMienDangChon = Array.isArray(thoGvMien)
+    ? thoGvMien.filter((x): x is string => typeof x === "string")
+    : [];
+  // `=== true` chứ không ép kiểu: một giá trị hỏng trong DB phải rơi về TẮT (fail-closed),
+  // và bảng bên dưới sẽ nói "việc lọc đang tắt" — đúng thứ đang xảy ra.
+  const locGvDangBat = resolved["trial.locGvTheoCaLamViec"] === true;
 
   return (
     // CĂN GIỮA + trần theo bậc màn. Bản đầu để `max-w-4xl` không `mx-auto`, và đo thật trên
@@ -160,6 +204,19 @@ export default async function OperationalSettingsPage({
         loaiDangBat={loaiDangBat}
         canhBaoKenh={canhBaoKenh}
         tabBanDau={sp.tab}
+        // ⚠️ `khoiThem`, KHÔNG phải `noiDungRieng`: tab "Lớp & giáo viên" có 5 ô cấu hình
+        // phải giữ nguyên. `noiDungRieng` THAY bảng ô cấu hình — dùng nhầm nó ở đây là xoá
+        // trắng 5 dòng đang chạy khỏi màn hình, không lỗi, không cảnh báo.
+        khoiThem={{
+          [TAB_LOP_GV]: (
+            <ChonGvMienTru
+              giaoVien={giaoVien}
+              dangChon={gvMienDangChon}
+              choSua={canEditGlobal}
+              locDangBat={locGvDangBat}
+            />
+          ),
+        }}
         noiDungRieng={{
           "phuong-thuc-tt": (
             <TabPhuongThucThanhToan centerIdFilter={sp.centerId?.trim() || null} />

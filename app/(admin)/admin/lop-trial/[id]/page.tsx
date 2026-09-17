@@ -7,7 +7,8 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { getAssignableTeachers } from "@/lib/teachers/assignable";
 import { getSetting } from "@/lib/settings/service";
-import { layChiTietLop, layLichBanGiaoVien, layPhongTheoCoSo } from "../_lib/queries";
+import { layChiTietLop, layPhongTheoCoSo } from "../_lib/queries";
+import { quyRaCheDo } from "../_lib/che-do-gv";
 import { AddSessionForm } from "../_components/add-session-form";
 import { EnrollPanel } from "../_components/enroll-panel";
 import { RosterList } from "../_components/roster-list";
@@ -44,14 +45,33 @@ export default async function ChiTietLopTrialPage({
   // layChiTietLop đã lọc theo scopedDb → ngoài cơ sở là 404, không phải "cấm truy cập".
   if (!cls) notFound();
 
-  // 28/08 — KHÔNG còn kiểm `trials:assign-teacher` ở màn này: ô "Đề xuất GV" và
-  // "Phân công (Đào tạo)" theo từng học viên đã gỡ. Giáo viên nay đặt ở TỪNG BUỔI, và
-  // sửa buổi là quyền quản lý (`trials:manage`). Quyền `trials:assign-teacher` vẫn còn
-  // trong ma trận cho các đường khác — chỉ màn này thôi dùng.
-  const [isManager, canAttendance] = await Promise.all([
-    checkPermission("trials:manage", { centerId: cls.centerId }),
-    checkPermission("trials:attendance", { centerId: cls.centerId }),
-  ]);
+  // ~~28/08 — KHÔNG còn kiểm `trials:assign-teacher` ở màn này~~ **[ĐẢO 17/09/2026]**
+  // Câu trên đúng cho giai đoạn 28/08–16/09 (ô "Đề xuất GV" và "Phân công (Đào tạo)"
+  // theo từng học viên đã gỡ; quyền GHI của buổi vẫn là `trials:manage`, KHÔNG đổi).
+  // Từ 17/09 khoá `trials:assign-teacher` quay lại màn này với vai trò KHÁC: nó không
+  // còn quyết định ĐƯỢC GHI HAY KHÔNG, mà quyết định THẤY BAO NHIÊU NGƯỜI trong ô chọn.
+  //
+  // BA TẦNG chọn giáo viên (chốt V1-d, 17/09/2026) — hỏi quyền MỘT lần ở đây, rồi quy
+  // ra tầng bằng hàm THUẦN `quyRaCheDo`. KHÔNG `if (role === …)` ở bất kỳ đâu (luật #1).
+  //
+  //   `trials:assign-teacher`        → Đào tạo, toàn hệ thống ⇒ hỏi TRẦN.
+  //   `trials:assign-teacher-center` → Quản lý cơ sở ⇒ hỏi KÈM cơ sở của chính lớp này.
+  //
+  // ⚠️ Phạm vi cơ sở của tầng giữa lấy từ `cls.centerId` (một lớp ⇒ đúng một cơ sở),
+  // KHÔNG lấy `actor.visibleCenterIds`: chỉ cần MỘT dòng `UserOrgRole` neo tại Hội sở là
+  // tập đó nở thành "mọi cơ sở" và câu "cơ sở mình nắm" mất nghĩa — im lặng, không lỗi.
+  const [isManager, canAttendance, gvToanHe, gvTheoCoSo, locGvTheoCa, gvMienLoc] =
+    await Promise.all([
+      checkPermission("trials:manage", { centerId: cls.centerId }),
+      checkPermission("trials:attendance", { centerId: cls.centerId }),
+      checkPermission("trials:assign-teacher"),
+      checkPermission("trials:assign-teacher-center", { centerId: cls.centerId }),
+      // Hai khoá cấu hình vận hành. `getSetting` có cache 300s ⇒ đổi ở
+      // /admin/cau-hinh-van-hanh ăn trong ≤5 PHÚT, không tức thì.
+      getSetting("trial.locGvTheoCaLamViec"),
+      getSetting("trial.gvMienLocTheoCa"),
+    ]);
+  const cheDoChonGv = quyRaCheDo({ toanHe: gvToanHe, theoCoSo: gvTheoCoSo });
   // GĐ4 — điểm danh là việc của Sale phụ trách khách (`trials:attendance`), tách khỏi
   // `trials:feedback` của giáo viên. Trước GĐ4 hai việc dùng chung một cờ nên ai điểm
   // danh được thì cũng chấm được và ngược lại — ngược hẳn quy trình đã chốt.
@@ -98,14 +118,16 @@ export default async function ChiTietLopTrialPage({
   });
   const teacherOptions = teachers.map((t) => ({ id: t.id, name: t.name ?? "(không tên)" }));
 
-  // 28/08 — dữ liệu cho ô "Giáo viên" và "Phòng" của form THÊM BUỔI.
-  // `busyByTeacher` chỉ để ĐÁNH DẤU, không lọc (chốt 28/08): ca làm nay cố định nên
-  // không còn bảng đăng ký ca để tra "ai đi làm hôm đó"; thứ tra được và thật sự hữu
-  // ích là "ai đang vướng buổi khác đúng khung giờ này".
-  const [roomOptions, busyByTeacher] = await Promise.all([
-    layPhongTheoCoSo(actor, cls.centerId),
-    layLichBanGiaoVien(actor, cls.centerId),
-  ]);
+  // Phòng của form THÊM BUỔI. ~~kèm `busyByTeacher` để ĐÁNH DẤU giáo viên đang vướng
+  // buổi khác~~ **[ĐẢO 17/09/2026]** — prop đó ĐÃ GỠ.
+  //
+  // Vì sao gỡ: nó bơm sẵn cả lịch bận của giáo viên xuống client để client tự đối chiếu.
+  // Cách đó chỉ đủ khi luật chỉ có "ai vướng buổi khác"; từ 17/09 luật còn phải đọc LƯỚI
+  // CA, mà ngày/giờ buổi thì người dùng chọn TỰ DO — bơm sẵn nghĩa là bơm cả bảng chấm
+  // công của mọi người mọi ngày vào bundle trình duyệt. Nay hỏi qua Server Action
+  // `layGvChoBuoiAction` mỗi khi đủ ba ô ngày+giờ, và đó cũng chính là đường mà cửa GHI
+  // dùng để tự gác — hai bên không thể lệch luật.
+  const roomOptions = await layPhongTheoCoSo(actor, cls.centerId);
 
   const activeUsed = cls.enrollments.filter((e) => e.status === "ACTIVE").length;
   // 28/08 — `capacity === null` là KHÔNG giới hạn sĩ số, không phải sức chứa 0.
@@ -178,9 +200,11 @@ export default async function ChiTietLopTrialPage({
             trialClassId={cls.id}
             teachers={teacherOptions}
             rooms={roomOptions}
-            busyByTeacher={busyByTeacher}
             defaultStartTime={cls.startTime ?? "18:00"}
             defaultEndTime={cls.endTime ?? "19:30"}
+            cheDoChonGv={cheDoChonGv}
+            locGvTheoCa={locGvTheoCa}
+            soGvMienLoc={gvMienLoc.length}
           />
         </section>
       )}
@@ -218,12 +242,16 @@ export default async function ChiTietLopTrialPage({
       <section className="rounded-xl border border-border bg-card p-4">
         <h3 className="mb-3 text-sm font-semibold text-foreground">Buổi học &amp; điểm danh</h3>
         <AttendanceBoard
+          trialClassId={cls.id}
           sessions={cls.sessions}
           enrollments={cls.enrollments}
           canMark={canDiemDanh}
           canManage={isManager}
           teachers={teacherOptions}
           rooms={roomOptions}
+          cheDoChonGv={cheDoChonGv}
+          locGvTheoCa={locGvTheoCa}
+          soGvMienLoc={gvMienLoc.length}
         />
       </section>
 

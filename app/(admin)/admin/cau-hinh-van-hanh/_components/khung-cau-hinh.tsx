@@ -31,6 +31,7 @@ export function KhungCauHinh({
   loaiDangBat,
   canhBaoKenh,
   noiDungRieng,
+  khoiThem,
   tabBanDau,
 }: {
   tabs: readonly TabView[];
@@ -52,6 +53,26 @@ export function KhungCauHinh({
    * đi hỏi gì thêm, đúng như nó vẫn làm với mọi tab khác.
    */
   noiDungRieng?: Readonly<Record<string, ReactNode>>;
+  /**
+   * Khối bày THÊM ở CUỐI một tab, DƯỚI bảng ô cấu hình: `tabId → khối JSX`.
+   *
+   * ⚠️ ĐỪNG NHẦM VỚI `noiDungRieng` NGAY TRÊN — hai prop trông giống hệt nhau (cùng kiểu
+   * `Record<string, ReactNode>`) nhưng làm hai việc NGƯỢC nhau:
+   *
+   *   · `noiDungRieng` THAY bảng ô cấu hình. Dùng nhầm nó cho một tab đang có tham số là
+   *     XOÁ TRẮNG mọi dòng cấu hình của tab đó khỏi màn hình — không lỗi, không cảnh báo,
+   *     người vận hành chỉ thấy tham số của mình biến mất.
+   *   · `khoiThem` GIỮ bảng và bày thêm bên dưới. Đây là thứ cần cho tab vừa có tham số
+   *     vừa có một bảng khai riêng.
+   *
+   * Người dùng đầu tiên là tab "Lớp & giáo viên": nó có 5 ô cấu hình PHẢI giữ nguyên, cộng
+   * bảng chọn giáo viên luôn hiện khi xếp buổi học thử (`trial.gvMienLocTheoCa` — một mảng
+   * mã người dùng, không gõ tay được).
+   *
+   * Cùng khuôn với bảng loại thông báo ngay dưới, chỉ khác là bày theo `tabId` thay vì một
+   * prop riêng — khung này không phải biết bên trong khối là gì.
+   */
+  khoiThem?: Readonly<Record<string, ReactNode>>;
   /**
    * Tab mở sẵn — trang đọc từ `?tab=` rồi truyền xuống.
    *
@@ -157,6 +178,10 @@ export function KhungCauHinh({
         {/* Tab có nội dung riêng thì KHÔNG dựng bảng ô cấu hình — không phải để gọn, mà
             vì bảng đó sẽ rỗng và một bảng rỗng nằm trên đầu trang trông y hệt lỗi tải. */}
         {noiDungRieng?.[tab.id] ?? <BangCauHinhTab rows={tab.rows} choSua={choSua} />}
+
+        {/* THÊM, không thay — xem khối chú thích của prop `khoiThem`. Đứng sau bảng ô cấu
+            hình vì nó là phần phụ của tab, không phải thứ đầu tiên người ta tới đây để tìm. */}
+        {khoiThem?.[tab.id]}
 
         {tab.id === tabThongBao && (
           <ChonLoaiThongBao

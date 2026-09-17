@@ -365,6 +365,23 @@ const N: Readonly<Record<SettingKey, NhanVanHanh>> = {
     giaiThich:
       "Tắt thì phụ huynh vẫn thấy con đã nộp bài hay chưa, chỉ không thấy điểm số.",
   },
+  "trial.locGvTheoCaLamViec": {
+    tab: "lop-gv",
+    ten: "Chỉ hiện giáo viên có ca làm trùm hết buổi học thử",
+    giaiThich:
+      "Bật thì khi xếp một buổi học thử, ô chọn giáo viên chỉ còn những người mà ca làm hôm " +
+      "đó trùm hết khung giờ của buổi — ai vào muộn hơn hoặc về sớm hơn đều không hiện. Tắt " +
+      "thì hiện mọi giáo viên như trước. Đổi xong có thể chờ tới 5 phút mới ăn ở mọi máy.",
+    canThan: true,
+  },
+  "trial.gvMienLocTheoCa": {
+    tab: "lop-gv",
+    ten: "Giáo viên luôn hiện dù hôm đó không có ca",
+    giaiThich:
+      "Ngoại lệ cho mục ngay bên trên: những người này luôn chọn được, kể cả ngày họ không " +
+      "đăng ký ca nào. Chọn bằng bảng tên ở cuối tab này. Đổi xong có thể chờ tới 5 phút mới " +
+      "ăn ở mọi máy.",
+  },
   "lms.mediaSignedUrlTtl": {
     tab: "lop-gv",
     ten: "Đường xem ảnh/video của lớp còn mở trong",

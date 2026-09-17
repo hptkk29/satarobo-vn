@@ -378,3 +378,71 @@ describe("[CFG-K05] tab sống sót khi rời trang rồi quay lui", () => {
     // lùi từng tab một.
   });
 });
+
+describe("[CFG-T20] `khoiThem` THÊM khối, `noiDungRieng` THAY bảng — hai prop trông giống nhau", () => {
+  /**
+   * ⚠️ BẪY CÓ THẬT, và đây là cổng canh nó.
+   *
+   * Hai prop cùng kiểu `Record<string, ReactNode>`, cùng tra theo `tabId`, đặt cạnh nhau
+   * trong cùng một lời gọi — nhưng `noiDungRieng` đứng ở vế `??` nên nó THAY bảng ô cấu
+   * hình. Dùng nhầm nó cho một tab đang có tham số là xoá trắng mọi dòng cấu hình của tab
+   * đó khỏi màn hình: không lỗi, không cảnh báo, console sạch, và chỉ người vận hành đi tìm
+   * tham số của mình mới biết (luật 12).
+   *
+   * Tab "Lớp & giáo viên" là ca thật: 5 ô cấu hình PHẢI giữ nguyên, cộng bảng chọn giáo
+   * viên luôn hiện khi xếp buổi học thử.
+   */
+  const KHOI = <p>KHỐI PHỤ CỦA TAB</p>;
+
+  it("khối thêm hiện CÙNG bảng ô cấu hình, không nuốt nó", () => {
+    render(
+      <KhungCauHinh
+        tabs={TABS}
+        choSua
+        tabThongBao="thong-bao-day"
+        danhMucThongBao={DANH_MUC}
+        loaiDangBat={[]}
+        canhBaoKenh={[]}
+        khoiThem={{ "cham-cong": KHOI }}
+        tabBanDau="cham-cong"
+      />,
+    );
+    expect(screen.getByText(/Chấm công lệch trong khoảng này/)).toBeTruthy();
+    expect(screen.getByText("KHỐI PHỤ CỦA TAB")).toBeTruthy();
+  });
+
+  it("khối thêm chỉ nằm ở tab của nó", () => {
+    render(
+      <KhungCauHinh
+        tabs={TABS}
+        choSua
+        tabThongBao="thong-bao-day"
+        danhMucThongBao={DANH_MUC}
+        loaiDangBat={[]}
+        canhBaoKenh={[]}
+        khoiThem={{ "cham-cong": KHOI }}
+        tabBanDau="cong-ty"
+      />,
+    );
+    expect(screen.queryByText("KHỐI PHỤ CỦA TAB")).toBeNull();
+  });
+
+  it("⚠️ đối chứng: `noiDungRieng` cùng vị trí đó thì NUỐT bảng ô cấu hình", () => {
+    // Ca này không canh tính năng — nó khoá SỰ KHÁC BIỆT. Ai gộp hai prop làm một, hoặc đổi
+    // `khoiThem` sang vế `??`, sẽ thấy ca trên đỏ; ai đổi ngược lại thì thấy ca này đỏ.
+    render(
+      <KhungCauHinh
+        tabs={TABS}
+        choSua
+        tabThongBao="thong-bao-day"
+        danhMucThongBao={DANH_MUC}
+        loaiDangBat={[]}
+        canhBaoKenh={[]}
+        noiDungRieng={{ "cham-cong": KHOI }}
+        tabBanDau="cham-cong"
+      />,
+    );
+    expect(screen.getByText("KHỐI PHỤ CỦA TAB")).toBeTruthy();
+    expect(screen.queryByText(/Chấm công lệch trong khoảng này/)).toBeNull();
+  });
+});
