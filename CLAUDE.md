@@ -213,6 +213,69 @@ prisma/
 - ⚠️ **Cờ `PAYMENT_LEDGER_V2` là cờ CHẾT — đừng lấy nó làm cổng quyết định [đo 13/09/2026].** `isPaymentLedgerV2Enabled()` có **0 đường gọi** trong mã chạy thật (`lib/flags.ts:168` là định nghĩa duy nhất, còn lại chỉ `lib/flags.test.ts`), và biến env **không tồn tại** trong 40 biến Production. Bật nó KHÔNG đổi hành vi gì — muốn cutover thì phải viết phần "nối cờ" (chuyển `lib/finance/debt.ts` + `lib/portal/billing-student.ts` + `lib/portal/dashboard.ts` + màn `/orders/[id]`, `/cong-no` sang đọc `PaymentRequest`) trước, đó là dự án riêng. Đo prod bằng workflow chỉ-đọc `shadow-compare-cong-no.yml` (`payments:shadow-compare` chạy ở máy dev là đo DB DEV, **không nói gì về prod**).
 - ❌ KHÔNG gõ tay tên bài vào `Lesson` để "sửa tên dự án". Nguồn tên buổi/dự án là 2 file marketing (`components/legacy-laptrinhrobot/_data/roadmap-5-years.ts` + `exam-roadmap.ts`) → `lib/lms/curriculum-sata.ts` → `prisma/seed-curriculum-sata.ts`; lần seed sau ghi đè. Nhãn buổi/tên gửi PH đi qua `deriveSessionLabel`/`deriveSessionProjectName`, đừng tự ghép chuỗi.
 
+- ⚠️ **CỔNG TẠO ĐỢT có HAI VẾ, và vế thứ hai là vế dễ bị gỡ [chốt 18/09/2026].**
+  ```
+  số tiền đợt ≤ min( còn nợ con − Σ đợt mở của con ,
+                     còn nợ ĐƠN − Σ đợt mở của cả đơn )
+  ```
+  với *còn nợ đơn* = Σ học phí thực các con − Σ **mọi** `Payment` đã thu, **kể cả khoản chưa
+  gắn con** (`orderItemId IS NULL`). Một chỗ duy nhất: `kiemTaoDot` trong
+  `lib/finance/no-theo-con.ts`; hai số vào cổng là `conNoDon` + `tongDotDangMoDon`, do
+  `tinhNoTheoCon` tính, **BẮT BUỘC** truyền (luật 7 — `tsc` liệt kê chỗ gọi).
+  · **Vì sao có vế hai:** `chuaGanCon` tồn tại từ PHIÊN A nhưng **chỉ để hiển thị** — đo
+    `git grep chuaGanCon ed5a884c^` ra 9 dòng, **0 dòng là điều kiện chặn**. Trên đơn 2 con đã
+    có 6.000.000đ vào mà chưa gắn bé nào, sale tạo được các đợt cộng lại bằng **trọn** học phí
+    đơn, hệ thống phát QR đòi đủ số, và **phụ huynh trả lần thứ hai phần đã trả**.
+  · `tongDotDangMoDon` phải cộng **cả đợt `orderItemId` NULL**. Đơn trước 16/09 thì đợt nào
+    cũng NULL, nên dùng `Σ con[].tongDotDangMo` làm cổng là **mở toang đúng tập đơn cũ** — tập
+    đang giữ tiền thật.
+  · `tongConNo` (Σ còn nợ từng con) **cố ý KHÁC** `conNoDon`: số đầu trả lời *"bé này còn nợ
+    bao nhiêu"*, số sau trả lời *"đơn còn được thu thêm bao nhiêu"*. Gộp hai câu hỏi thành một
+    con số là chỗ bug tiền nằm.
+  · Câu lỗi vế ĐƠN nói bằng **ngôn ngữ của nguyên nhân** ("đơn đang có tiền đã thu chưa gắn cho
+    bé nào"), không chỉ "tối đa X đồng": sale đọc số nợ của bé trên màn rồi gõ đúng số đó, nên
+    một câu "tối đa 2.976.000đ" trong khi màn in "còn nợ 8.976.000đ" đọc như hệ thống bị lỗi —
+    rồi người ta học cách bỏ qua cổng.
+  · **Hệ quả phải biết:** đơn có bé ĐÓNG THỪA nay bị vế đơn siết (`conNoDon` âm ⇒ chặn mọi đợt
+    mới). Đúng luật, không phải hệ quả phụ vô hình — ca `[NTC-02b]` ghim.
+  · Cổng: `tests/finance/cong-tao-dot.test.ts` (`[CTD-01..07]`, bộ `test:finance-db`) +
+    `lib/finance/no-theo-con.test.ts` (`[NTC-02b]`, `[NTC-02c]`). Ca `[CTD-01]` kiểm chính
+    FIXTURE — thiếu nó thì mọi ca dưới xanh vì cổng không thấy tiền, và bộ test vô dụng mà
+    trông vẫn xanh.
+
+- ⚠️ **NỢ ĐANG GHIM: `goiYDon` trong `bao-cao-doi-soat-tien.ts` là N+1, và nó CHẠY ĐƯỢC [đo 17/09/2026].**
+  Nó tra một câu `order.findMany` cho **từng** giao dịch UNMATCHED. Hôm nay 22 dòng ⇒ 22
+  round-trip sang Supabase, vẫn chạy xong. **Đó chính là chỗ nguy hiểm:** một lỗi chỉ lộ ra
+  khi dữ liệu lớn hơn thì không ai đi tìm.
+  · Bản sao cùng hình dạng ở `scripts/backfill-orderitem-dry.ts` **đã chết thật** với
+    `P2028 — Transaction … open for longer than the timeout` ngay lượt chạy prod đầu tiên
+    (trần transaction tương tác của Prisma là **5 giây**), và đã được gộp thành MỘT câu.
+  · **Chưa sửa `bao-cao-doi-soat-tien.ts` là có chủ đích:** nó đang là **nguồn của con số 146 /
+    887.313.000đ** mà chủ dự án đã duyệt cho lệnh backfill. Đổi nó là đổi cái thước ngay lúc
+    đang đo. Sửa SAU khi backfill xong, và khi sửa thì phải đo lại số trước/sau.
+  · Cách gộp: bóc SĐT cả lô → gom mọi biến thể → **một** `findMany` → đếm theo `customerPhone`.
+    Cho ra đúng phân loại 0 / 1 / >1 vì mỗi đơn chỉ có một `customerPhone`.
+  · ⚠️ **Nâng `timeout` KHÔNG phải bản vá** — N+1 còn thì nó chết lại khi số giao dịch tăng.
+    Trần chỉ để một transaction ĐỌC quét vài trăm dòng qua WAN không bị cắt giữa đường.
+
+- ⚠️ **NỢ ĐANG GHIM: `scripts/_kiem-quyen.ts` hỏi quyền trên SAI BẢNG [đo 17/09/2026].**
+  Nó hỏi `has_table_privilege(current_user, 'public."ClassSession"', 'UPDATE')` — tên bảng
+  **đóng cứng** từ đợt chấm công. Chính chú thích của nó nói *"quyền trên chính bảng mình sắp
+  đọc mới là quyền có ý nghĩa"*, nhưng báo cáo đối soát tiền đọc `BankTransaction` · `Payment`
+  · `Order` · `PaymentRequest`, không đọc `ClassSession`.
+  · **Chưa vá vì nó vẫn bắt đúng ca cần bắt:** thứ phải phát hiện là *secret bị đặt nhầm sang
+    chuỗi đầy quyền*, mà vai đầy quyền có `UPDATE` trên MỌI bảng ⇒ `ClassSession` đủ để lộ ra.
+    Ngược lại, một vai chỉ-đọc có `UPDATE` trên `BankTransaction` mà không có trên
+    `ClassSession` là cấu hình không tồn tại thật.
+  · Vá đúng = thêm tham số bảng cho `kiemQuyen(db, bang)`, **không đặt mặc định** (luật 7: để
+    `tsc` liệt kê cả hai chỗ gọi). Chạm file dùng chung ⇒ phải chạy lại CẢ workflow chấm công.
+
+- ⚠️ **Tên vai chỉ-đọc của prod là `satarobo_readonly`, KHÔNG phải `doisoat_ro` [đo 17/09/2026].**
+  Đã một lần sửa `docs/cham-cong/USER-CHI-DOC-PROD.md` theo **lời kể** rồi phải hoàn lại: lượt
+  chạy báo cáo đầu tiên in ra `user satarobo_readonly`. **Tên vai là thứ ĐỌC ĐƯỢC từ dòng tự
+  khai của báo cáo** (`scripts/_kiem-quyen.ts` in `[quyen] user=… · …`) — đừng ghi vào tài liệu
+  theo trí nhớ của ai, kể cả của người tạo ra nó.
+
 - ⚠️ **NỢ ĐANG GHIM: `amountDue` của phiếu thu ĐÃ CÓ TIỀN vẫn bị ghi đè [đo 14/09/2026].**
   `materializeInstallmentRequests` THA VOID cho phiếu đang có phân bổ
   (`lib/payments/payment-request.ts:309` — `allocated > 0 → continue`) nhưng vòng UPSERT ở
