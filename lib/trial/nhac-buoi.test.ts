@@ -30,6 +30,7 @@ const h = vi.hoisted(() => {
         startTime: "18:00",
         seq: 2,
         teacherId: "u_gv" as string | null,
+        trialClassId: "tc1",
         trialClass: { name: "Lớp trải nghiệm T7", centerId: "cs1" } as {
           name: string;
           centerId: string | null;
@@ -45,9 +46,26 @@ const h = vi.hoisted(() => {
     nguoiDaoTao: [{ id: "u_daotao" }] as { id: string }[],
   };
 
-  function caHocThu(id: string, ten: string, saleId: string) {
+  /**
+   * ⚠️ `scheduledSessionId` MẶC ĐỊNH `null` vì đó là HÌNH DẠNG THẬT trên prod, không phải
+   * cho tiện. Từ 28/08 cả hai màn xếp chỗ bên admin đều cố ý không truyền `sessionId`, nên
+   * `lib/trial/service.ts:381` ghi null, và null ở bảng này nghĩa là **học TOÀN BỘ buổi của
+   * lớp** chứ không phải "chưa xếp buổi".
+   *
+   * Fixture cũ KHÔNG có hai cột này, và mock thì bỏ qua `where` — cộng lại thành một bộ test
+   * xanh 12/12 trong khi mã sản xuất không nhắc nổi một ai. Dữ liệu tròn trịa trong test là
+   * dữ liệu không kiểm được gì.
+   */
+  function caHocThu(
+    id: string,
+    ten: string,
+    saleId: string,
+    ghim: { scheduledSessionId?: string | null; trialClassId?: string } = {},
+  ) {
     return {
       id,
+      scheduledSessionId: ghim.scheduledSessionId ?? null,
+      trialClassId: ghim.trialClassId ?? "tc1",
       leadChild: {
         fullName: ten,
         lead: {
@@ -93,7 +111,32 @@ const h = vi.hoisted(() => {
     return out;
   }
 
-  type ThamSoTruyVan = { select?: Record<string, unknown> } | undefined;
+  type ThamSoTruyVan = { select?: Record<string, unknown>; where?: Record<string, unknown> } | undefined;
+
+  /**
+   * Mock của `trialEnrollment.findMany` phải TÔN TRỌNG `where`.
+   *
+   * ⚠️ Đây là bản vá của một bộ test MÙ (17/09/2026). Bản cũ trả thẳng cả ba ca bất kể
+   * `where`, nên nó khẳng định "giáo viên được nhắc" trong khi câu truy vấn thật lọc
+   * `scheduledSessionId: s.id` — không bao giờ khớp `null` — và trên prod thì KHÔNG AI được
+   * nhắc, cả Sale lẫn giáo viên, im lặng từ 28/08. Mock rộng hơn truy vấn thật thì nó tự vá
+   * giúp mã đang hỏng.
+   *
+   * Chỉ hiểu đúng hình dạng `where` mà mã sản xuất dùng: `status` + `OR[]` của hai vế bằng.
+   * Cố ý KHÔNG dựng một bộ máy so khớp tổng quát — bộ máy đó sẽ lại rộng hơn truy vấn thật.
+   */
+  function khopWhere(row: Record<string, unknown>, where?: Record<string, unknown>): boolean {
+    if (!where) return true;
+    for (const [khoa, dieu] of Object.entries(where)) {
+      if (khoa === "OR") {
+        const nhanh = dieu as Record<string, unknown>[];
+        if (!nhanh.some((n) => khopWhere(row, n))) return false;
+        continue;
+      }
+      if (row[khoa] !== dieu) return false;
+    }
+    return true;
+  }
 
   const notifyStaff = vi.fn(async (_p: Record<string, unknown>) => 1);
   const mockDb = {
@@ -104,7 +147,9 @@ const h = vi.hoisted(() => {
     },
     trialEnrollment: {
       findMany: vi.fn(async (a: ThamSoTruyVan) =>
-        trangThai.cas.map((r) => chieuTheoSelect(r as unknown as Record<string, unknown>, a?.select)),
+        trangThai.cas
+          .filter((r) => khopWhere({ ...(r as unknown as Record<string, unknown>), status: "ACTIVE" }, a?.where))
+          .map((r) => chieuTheoSelect(r as unknown as Record<string, unknown>, a?.select)),
       ),
     },
     user: {

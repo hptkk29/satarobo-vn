@@ -73,6 +73,9 @@ export async function chayNhacTrial({ now }: { now: Date }): Promise<KetQuaNhacT
       // không có gì để bám. Giáo viên nằm ở TỪNG BUỔI chứ không ở lớp (xem schema
       // `TrialClassSession.teacherId`), và nó nullable — đó là đường mặc định của form.
       teacherId: true,
+      // 17/09 — BẮT BUỘC cho nhánh (b) của câu tra ghi danh bên dưới. Thiếu cột này thì
+      // không cách nào hỏi "em nào học cả lớp", và đó là ca thường gặp nhất.
+      trialClassId: true,
       trialClass: { select: { name: true, centerId: true } },
     },
   });
@@ -96,8 +99,30 @@ export async function chayNhacTrial({ now }: { now: Date }): Promise<KetQuaNhacT
     if (!moc) continue;
 
     // Ca ĐANG HỌC được xếp vào buổi này. Ca đã gỡ/đã xong thì không nhắc nữa.
+    //
+    // ⚠️ HAI DIỆN, KHÔNG PHẢI MỘT — vá 17/09/2026, lỗi này có sẵn trên `main` từ 28/08.
+    //
+    // Bản cũ chỉ hỏi `scheduledSessionId: s.id`. Nhưng từ 28/08 gỡ auto-gán buổi thì CẢ HAI
+    // màn xếp chỗ bên admin đều CỐ Ý không truyền `sessionId` (`enroll-panel.tsx`,
+    // `trial-enroll-widget.tsx`), nên `lib/trial/service.ts:381` ghi `scheduledSessionId = null`
+    // và null ở bảng này KHÔNG có nghĩa "chưa xếp buổi" — nó nghĩa là **học TOÀN BỘ buổi của
+    // lớp**. Lọc bằng `= s.id` không bao giờ khớp null ⇒ `cas` rỗng ⇒ cron đếm 0 ca ⇒ KHÔNG
+    // nhắc ai, cho cả Sale lẫn giáo viên, và `ok: true` với `buoiQuet` dương nên hỏng CÂM.
+    // Chỉ ghi danh ĐÃ DỜI LỊCH (`service.ts:927`) mới mang giá trị non-null — đủ để thỉnh
+    // thoảng có một buổi chạy và trông như tính năng vẫn sống.
+    //
+    // Khuôn dưới đây chép từ `lib/lms/teacher-schedule.ts:757-771`, nơi repo ĐÃ vá đúng bẫy
+    // này ngày 04/09 và tự chú nhánh (b) là "ca THƯỜNG GẶP NHẤT". Đừng thu lại còn một vế.
     const cas = await db.trialEnrollment.findMany({
-      where: { scheduledSessionId: s.id, status: "ACTIVE" },
+      where: {
+        status: "ACTIVE",
+        OR: [
+          // (a) xếp riêng đúng buổi này (ghi danh đã dời lịch).
+          { scheduledSessionId: s.id },
+          // (b) học CẢ LỚP — đường mặc định của mọi lượt xếp chỗ từ 28/08.
+          { scheduledSessionId: null, trialClassId: s.trialClassId },
+        ],
+      },
       select: {
         id: true,
         leadChild: {
