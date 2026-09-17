@@ -119,6 +119,23 @@ Brand hub + admin CMS + portal phụ huynh + site giáo viên cho Sata Robo (Đ�
     Đo xong mà lệch với tài liệu thì **sửa tài liệu ngay trong lượt đó**, đừng để lại cho
     người sau vấp đúng chỗ mình vừa vấp.
 
+13. ⚠️ **VÁ GẤP CŨNG ĐI QUA `test` — rồi CHERRY-PICK lên `main`. KHÔNG vá thẳng `main`.**
+    (Chủ dự án chốt 17/09/2026, phương án A.)
+    Luồng: `hotfix → PR vào test → CI xanh → merge test → cherry-pick commit ấy lên main`.
+    Chậm hơn ~20 phút CI, và đổi lại `test` **luôn là tập cha** của `main`, nên PR
+    `test → main` không bao giờ phải gộp hai chiều.
+    **Vì sao — giá đo được, và nó KHÔNG tuyến tính:**
+    · 16/09/2026 — để phân kỳ tích lại **463 commit / 215 file xung đột**. Lượt hợp nhất
+      suýt làm mất **BẢY tính năng**, ba trong số đó là bảo mật (S-9 đồng hồ SLA, S-1 che
+      PII ở 6 màn, `canSearchPhone`). Không cái nào bị phát hiện bằng mắt — **chỉ test bắt
+      được**, và chỉ vì có test.
+    · 17/09/2026 — bốn PR vá thẳng `main` trong MỘT ngày ⇒ lại **94 commit** phân kỳ,
+      phần lớn đụng đúng vùng vừa gỡ xung đột (Lớp trial, lead).
+    Hai lượt cách nhau một ngày. Mỗi lần vá thẳng `main` là mua thêm một lượt hợp nhất
+    hai chiều, và chi phí của nó tăng theo độ lệch chứ không theo số lần vá.
+    **Nếu buộc phải vá thẳng `main`** (prod đang hỏng, không chờ được CI): mở PR
+    `main → test` **ngay trong ngày**, đừng để sang hôm sau.
+
 ## Project structure (FROZEN)
 
 ```

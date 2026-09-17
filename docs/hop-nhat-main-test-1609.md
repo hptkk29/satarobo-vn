@@ -349,6 +349,62 @@ khác dựa vào cùng giả định, phải rà cùng lúc:
 
 **CHƯA sửa** — chờ chủ dự án đối chiếu project-ref rồi mới sửa hoặc xác nhận lại.
 
+### 🔴 NỢ-9 · NGƯỜI SSO LẦN ĐẦU KHÔNG ĐỌC ĐƯỢC NICK NÀO CHO TỚI LƯỢT ĐỐI SOÁT KẾ TIẾP
+
+**Đo 17/09/2026, tái hiện hai lần, có đối chứng dương.**
+
+Tài khoản fork chỉ sinh ra ở **lần SSO đầu tiên** của một người. `capQuyenNickZalocrm` thì
+đẩy quyền theo danh sách `externalIds` — fork bỏ qua id nào nó chưa biết (bộ đếm
+`unknown` / `chuaCoTaiKhoan` trong `capQuyenMotOrg`). Nên:
+
+> **Ai đăng nhập lần đầu SAU lượt cron gần nhất sẽ không có quyền đọc nick nào cho tới
+> lượt cron KẾ TIẾP.**
+
+Bằng chứng đo được:
+
+| | mốc | quyền |
+|---|---|---|
+| cron chạy | 10:41:24 | — |
+| `uat.giamdoc` SSO lần đầu ⇒ fork tạo tài khoản | **16:39:58** (sau 6 tiếng) | **0 nick** |
+| cron chạy lại | 17:0x | **2 nick** ✅ |
+| *(đối chứng dương)* `uat.sale1`, tài khoản có TRƯỚC lượt 10:41 | — | 2 nick suốt |
+
+Không phải lỗi phân quyền: `CENTER_MANAGER` **có** trong `VAI_DUOC_CAP_NICK`, và `role`
+`member` bên fork là **đúng thiết kế** — tầm nhìn của QLCS đến từ `ZaloAccountAccess`.
+
+#### Vì sao phải xử trước khi Sale dùng thật
+
+Trên prod cron chạy 5 phút một lượt ⇒ độ trễ **tới 5 phút**. Nghe nhỏ, nhưng hình dạng của
+nó rất xấu: **Sale mới vào ca mở hộp thư ra thấy TRỐNG, không một dòng chữ giải thích.**
+Họ sẽ báo hỏng, và người trực sẽ đi truy đúng cái đã tốn của chúng ta cả buổi 17/09 —
+`getZaloScope`, `zalo_account_access`, vai, cơ sở — trong khi chỉ cần đợi.
+
+Trên `test` còn tệ hơn: cron **không chạy theo lịch** (`NỢ-5`) nên độ trễ là **vô hạn**,
+phải có người bấm tay.
+
+#### Ba cách xử — chờ chủ dự án chốt
+
+**1 · Cấp quyền NGAY trong luồng mở màn, không chờ cron**
+Trang `/zalo-crm` (Sata) gọi `capQuyenNickZalocrm` cho cơ sở của người đang mở, **không
+chặn màn** (fire-and-forget hoặc timeout ngắn), có tiết chế (mỗi người tối đa 1 lượt/giờ).
+· Được: **xoá hẳn khoảng trễ**, kể cả trên `test` nơi cron không chạy.
+· Mất: thêm một lượt gọi mạng sang fork mỗi lần mở màn (đã tiết chế thì không đáng kể);
+  và phải **fail-safe** — fork chết thì màn vẫn mở bình thường, tuyệt đối không để lượt
+  gọi phụ này làm hỏng đường chính.
+· Phạm vi: **chỉ bên Sata**, không build lại fork.
+
+**2 · Giữ cron, nhưng NÓI RÕ trên màn**
+Thay khung rỗng im lặng bằng *"Đang thiết lập quyền truy cập, thử lại sau ít phút"*.
+· Được: người dùng biết chuyện gì đang xảy ra, không báo hỏng.
+· Mất: **không xoá** khoảng trễ, chỉ giải thích nó. Và chữ nằm trong giao diện fork ⇒
+  phải sửa fork ⇒ build lại + restart ⇒ **rủi ro rớt nick đang `connected`**.
+· Phạm vi: bên fork.
+
+**3 · Cả hai** — (1) xoá khoảng trễ ở đường thường, (2) là lưới hứng cho ca (1) hỏng.
+
+Khuyến nghị: **(1) làm trước** vì nằm gọn bên Sata và xoá được vấn đề; **(2) gộp vào đợt
+dựng org** (`NỢ-6`/`NỢ-8`) khi dù sao cũng phải restart fork.
+
 ### NỢ-3 · Bố cục cột bảng Lead — CHỜ CHỦ DỰ ÁN CHỐT
 Đã lấy bản `main` (lưu `localStorage`, mỗi người một bộ) và **gỡ tầng lưu theo người trong
 DB** của `test`: `_column-actions.ts`, `column-picker.tsx`,

@@ -64,9 +64,18 @@ test. Nếu anh phải tạo tài khoản mới thì ghi lại để xoá sau �
 | **ĐẠT** | **Cùng nick** và **cùng danh sách hội thoại** như mục ①. |
 | **KHÔNG ĐẠT** | Thấy nick khác, danh sách rỗng, hoặc *"Bạn chưa được gán cơ sở nào"*. |
 
-> Quyền đọc nick đến từ bảng `ZaloAccountAccess`, do cron 5 phút
-> (`/api/cron/zalocrm-doi-soat` → `capQuyenNickZalocrm`) cấp. Tài khoản **vừa tạo** có thể
-> phải đợi tới 5 phút. Nếu quá 5 phút vẫn rỗng → ghi KHÔNG ĐẠT.
+> 🔴 **ĐÍNH CHÍNH 17/09/2026 — câu cũ đúng với PROD, SAI với `test`.**
+> ~~Tài khoản vừa tạo có thể phải đợi tới 5 phút~~ — trên `test` cron **KHÔNG chạy theo
+> lịch** (`NỢ-5`: lịch GitHub dùng bản workflow ở nhánh MẶC ĐỊNH, mà `main` thiếu khe
+> `zalocrm-doi-soat`), nên độ trễ là **VÔ HẠN**, không phải 5 phút.
+>
+> Quyền đọc nick đến từ `ZaloAccountAccess`, do `capQuyenNickZalocrm` cấp. Tài khoản fork
+> chỉ sinh ra ở **lần SSO đầu tiên**, và cron bỏ qua id nó chưa biết ⇒ **ai đăng nhập lần
+> đầu SAU lượt cron gần nhất sẽ thấy RỖNG** (xem `NỢ-9`).
+>
+> ⇒ **Trên `test`, trước khi chạy ca này: bấm tay một lượt**
+> `gh workflow run cron-pump-test.yml --ref test`, đợi `completed success`, rồi mới tải
+> lại trang. Thấy rỗng **sau** lượt đó mới ghi KHÔNG ĐẠT.
 
 ## ③ Vai QLCS — vào được, nhưng KHÔNG chạm được phần quản trị
 
