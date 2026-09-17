@@ -78,7 +78,11 @@ jobs:
           echo "Chuỗi đúng hình dạng."
 
       - uses: actions/checkout@v4
+      # `version` PHẢI pin: `package.json` của repo KHÔNG có khoá `packageManager`, nên thiếu dòng
+      # này là action chết ngay với "No pnpm version is specified" — đã xảy ra ở lượt chạy đầu
+      # tiên 17/09. 25 workflow khác đều pin `11`; lưỡi canh ở `lib/finance/bao-cao-chi-doc.test.ts`.
       - uses: pnpm/action-setup@v3
+        with: { version: 11 }
       - uses: actions/setup-node@v4
         with:
           node-version: 22
