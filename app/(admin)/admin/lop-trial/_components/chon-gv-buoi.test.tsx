@@ -11,6 +11,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 import type { DongGv } from "@/lib/trial/gv-kha-dung";
+import type { CheDoChonGv } from "../_lib/che-do-gv";
 
 // `chon-gv-buoi.tsx` là client component và nó import `../_actions` (Server Action) —
 // kéo theo cả `next-auth`, thứ không nạp được ngoài Next. Mock đúng khuôn của
@@ -19,7 +20,7 @@ vi.mock("../_actions", () => ({ layGvChoBuoiAction: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
-import { hauToGv } from "./chon-gv-buoi";
+import { coCongTacHienTatCa, hauToGv } from "./chon-gv-buoi";
 
 function dong(over: Partial<DongGv>): DongGv {
   return { id: "u1", name: "GV", phu: "PHU_TRON", muc: "KHONG", nhan: "", ...over };
@@ -58,5 +59,36 @@ describe("hauToGv — ô chọn nói ĐÚNG thứ tầng thuần đã quyết đ
       "CHUA_CO_LUOI",
     ];
     expect(moi.map((p) => hauToGv(dong({ phu: p, nhan: "" })))).toEqual(["", "", "", "", "", ""]);
+  });
+});
+
+describe("công tắc \"Hiện tất cả giáo viên\" — Sale KHÔNG có (chốt 18/09/2026)", () => {
+  // Luật nằm ở một biểu thức trong component, nên khoá nó bằng chính biểu thức đó viết ra
+  // ở đây: tầng nào được thấy công tắc. Ba tầng, ba câu trả lời, đọc một lượt.
+  //
+  // Vì sao Sale không có: chốt hôm trước là "không có người thì sale báo cho đào tạo hoặc
+  // quản lý xếp người của cs khác". Một đường thoát mở cho Sale là một đường để quy trình
+  // đó không bao giờ chạy — bấm công tắc nhanh hơn nhắn tin.
+  // ⚠️ GỌI HÀM THẬT. Bản đầu chép biểu thức vào đây; cấy lỗi vào component ra 0 ĐỎ — test
+  // kiểm bản sao của chính nó. Đo lại sau khi export: cấy lỗi ⇒ ĐỎ.
+  const coCongTac = (cheDo: CheDoChonGv, batLoc: boolean) =>
+    coCongTacHienTatCa({ cheDo, batLoc });
+
+  it("Sale (LOC_THEO_CA) KHÔNG thấy công tắc, dù cờ lọc đang bật", () => {
+    expect(coCongTac("LOC_THEO_CA", true)).toBe(false);
+  });
+
+  it("Quản lý cơ sở (THEO_CO_SO) CÓ công tắc — họ là người Sale sẽ nhờ", () => {
+    expect(coCongTac("THEO_CO_SO", true)).toBe(true);
+  });
+
+  it("Đào tạo (TAT_CA) không có — vốn đã không bị lọc, nút sẽ không làm gì", () => {
+    expect(coCongTac("TAT_CA", true)).toBe(false);
+  });
+
+  it("cờ lọc TẮT ⇒ không tầng nào có công tắc (không dựng nút vô nghĩa)", () => {
+    for (const c of ["LOC_THEO_CA", "THEO_CO_SO", "TAT_CA"] as CheDoChonGv[]) {
+      expect(coCongTac(c, false), c).toBe(false);
+    }
   });
 });

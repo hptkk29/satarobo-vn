@@ -274,7 +274,16 @@ export async function layGvChoBuoiAction(input: {
     // ĐƯỜNG THOÁT của người dùng. CHỈ tắt bộ lọc HIỂN THỊ — mọi câu đọc ở trên vẫn đi qua
     // `scopedDb(ctx.actor)`, và cửa GHI (`gvXepDuoc`) không đọc cờ này. Xem chú thích của
     // `hienTatCa` trong `lib/trial/gv-kha-dung.ts` về việc vì sao đây không phải nới quyền.
-    hienTatCa: data.hienTatCa,
+    //
+    // ⚠️ SALE KHÔNG ĐƯỢC dùng công tắc này (chốt 18/09/2026) — và phải chặn Ở ĐÂY, không
+    // chỉ ẩn ô tích. Ẩn ở giao diện chỉ giấu cái NÚT; cờ vẫn nằm trong payload của một
+    // Server Action, nên POST thẳng `hienTatCa: true` là xem được nguyên danh sách. Đúng
+    // lớp lỗi "lọc ở trang là lọc trang trí" mà màn này đã dính một lần.
+    //
+    // Không ném lỗi, chỉ BỎ QUA: người dùng hợp lệ không bao giờ gửi cờ này (ô tích đã
+    // không được vẽ), nên gửi tới đây nghĩa là payload dựng tay — trả về đúng thứ họ được
+    // phép thấy là phản ứng đủ, và không dạy người dò biết mình vừa chạm phải cái gì.
+    hienTatCa: cheDo === "LOC_THEO_CA" ? false : data.hienTatCa,
     // Che LÝ DO, KHÔNG che người: thiếu khoá chấm công thì ba nhãn nói về lịch nghỉ/lịch
     // làm cá nhân gộp về một chữ trung tính. Xem `duocXemLyDoNghi` ở `gv-kha-dung.ts`.
     duocXemLyDoNghi: xemLichCa,
