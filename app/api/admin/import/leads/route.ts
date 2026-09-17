@@ -90,7 +90,20 @@ export async function POST(req: NextRequest) {
   // Mặc định RỖNG — không tick gì thì không đè gì. Fail-closed có chủ đích: body
   // dị dạng, gõ sai tên khoá, hay một bản client cũ đều rơi về luật 15/09 (giữ giá
   // trị đang lưu), chứ không rơi vào nhánh xoá dữ liệu.
-  const ghiDeRaw = (body as { ghiDe?: unknown })?.ghiDe;
+  //
+  // ⚠️ 17/09/2026 — CẦN THÊM QUYỀN `leads:overwrite`.
+  //
+  // Chủ dự án: "role sale nhập chỉ thêm vào ghi chú nếu trùng […] khi sale nhập =
+  // excel cũng vậy luôn nhé, không có chức năng ghi đè dành cho sale". Màn hình đã
+  // ẩn cột Đè cho người không có quyền, NHƯNG ẩn ở giao diện không phải là chặn:
+  // `POST /api/admin/import/leads` là một endpoint riêng, gọi thẳng bằng `curl` kèm
+  // `ghiDe: [0,1,2]` là đè được hết. Cổng thật nằm ở đây.
+  //
+  // Bỏ QUA IM LẮNG chứ không trả 403: người không có quyền vẫn được nhập bình thường
+  // (trùng thì nối ghi chú — đúng chốt), nên chặn cả lượt là hỏng việc của họ vì
+  // một cái cờ mà màn hình của họ còn không bày ra.
+  const duocDe = await checkPermission("leads:overwrite");
+  const ghiDeRaw = duocDe ? (body as { ghiDe?: unknown })?.ghiDe : null;
   const ghiDeIdx = new Set<number>(
     Array.isArray(ghiDeRaw)
       ? ghiDeRaw.filter(

@@ -37,10 +37,24 @@ export function LeadForm({
   courses,
   initial,
   courseFromChildren = false,
+  duocDe = false,
 }: {
   orgUnits: Option[];
   courses: TeachableCourse[];
   initial?: LeadFormInitial;
+  /**
+   * Người dùng có `leads:overwrite` không (đến từ SERVER, xem trang gọi).
+   *
+   * Chốt 17/09/2026: SĐT · Đơn vị · Nguồn của một lead ĐÃ CÓ chỉ Quản lý cơ sở / Quản trị
+   * hệ thống sửa được — "nguồn lead mặc định là nguồn đầu tiên khi vào hệ thống".
+   *
+   * ⚠️ CHỈ khoá ở chế độ SỬA. Lúc TẠO thì chính người nhập đang đặt ra nguồn đầu tiên, nên
+   * khoá ở đó là chặn đúng việc mà luật này sinh ra để bảo vệ.
+   *
+   * ⚠️ Và đây chỉ là khoá ở GIAO DIỆN. Cổng thật nằm ở `updateLeadFields` — một form bị
+   * disable không chặn được ai gọi thẳng Server Action.
+   */
+  duocDe?: boolean;
   /**
    * Lead đã có ít nhất 1 con ⇒ "Khoá quan tâm" của lead do khối con quyết định
    * (24/08/2026). Khoá ô lại thay vì để hai nơi cùng ghi một giá trị.
@@ -50,6 +64,8 @@ export function LeadForm({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const isEdit = !!initial?.id;
+  /** Ba ô khoá: chỉ chặn khi ĐANG SỬA và người dùng không có quyền đè. */
+  const khoaO = isEdit && !duocDe;
   const courseGroups = groupTeachableCourses(courses);
 
   const [parentName, setParentName] = useState(initial?.parentName ?? "");
@@ -119,7 +135,15 @@ export function LeadForm({
           <input value={parentName} onChange={(e) => setParentName(e.target.value)} className={inputCls} />
         </Field>
         <Field label="SĐT *">
-          <input value={phone} onChange={(e) => setPhone(e.target.value)} className={inputCls} placeholder="09xxxxxxxx" />
+          <input
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            readOnly={khoaO}
+            aria-readonly={khoaO}
+            className={`${inputCls} ${khoaO ? "cursor-not-allowed bg-muted text-muted-foreground" : ""}`}
+            placeholder="09xxxxxxxx"
+          />
+          {khoaO && <ChuKhoa />}
         </Field>
         <Field label="Email">
           <input value={email} onChange={(e) => setEmail(e.target.value)} className={inputCls} />
@@ -131,12 +155,18 @@ export function LeadForm({
           <input type="number" min={3} max={18} value={childAge} onChange={(e) => setChildAge(e.target.value)} className={inputCls} />
         </Field>
         <Field label="Đơn vị">
-          <select value={orgUnitId} onChange={(e) => setOrgUnitId(e.target.value)} className={inputCls}>
+          <select
+            value={orgUnitId}
+            onChange={(e) => setOrgUnitId(e.target.value)}
+            disabled={khoaO}
+            className={`${inputCls} disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground`}
+          >
             <option value="">Chưa xác định (tự chia đều theo cơ sở)</option>
             {orgUnits.map((o) => (
               <option key={o.id} value={o.id}>{o.name}</option>
             ))}
           </select>
+          {khoaO && <ChuKhoa />}
         </Field>
         <Field label="Khoá quan tâm">
           <select
@@ -161,11 +191,25 @@ export function LeadForm({
           )}
         </Field>
         <Field label="Nguồn">
-          <input value={source} onChange={(e) => setSource(e.target.value)} className={inputCls} placeholder="Sự kiện, walk-in…" />
+          <input
+            value={source}
+            onChange={(e) => setSource(e.target.value)}
+            readOnly={khoaO}
+            aria-readonly={khoaO}
+            className={`${inputCls} ${khoaO ? "cursor-not-allowed bg-muted text-muted-foreground" : ""}`}
+            placeholder="Sự kiện, walk-in…"
+          />
+          {khoaO && <ChuKhoa nguon />}
         </Field>
       </div>
       <Field label="Ghi chú">
         <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} className={inputCls} />
+        {khoaO && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            Phần bạn gõ thêm sẽ được <b className="text-foreground">nối xuống dưới</b>; ghi chú
+            của người khác không bị thay thế.
+          </p>
+        )}
       </Field>
 
       {/* R7-01 — khai báo con (chỉ ở chế độ tạo mới; sửa thì quản lý ở trang chi tiết) */}
@@ -219,6 +263,23 @@ export function LeadForm({
         {pending ? "Đang lưu…" : isEdit ? "Lưu thay đổi" : "Tạo lead"}
       </button>
     </div>
+  );
+}
+
+/**
+ * Câu giải thích dưới một ô bị khoá.
+ *
+ * ⚠️ Ô xám mà không nói vì sao là affordance nói dối kiểu khác: người dùng tưởng màn hình
+ * hỏng, đi báo lỗi, và mất một vòng hỏi đáp cho một thứ vốn đúng ý (luật 12).
+ */
+function ChuKhoa({ nguon = false }: { nguon?: boolean }) {
+  return (
+    <p className="mt-1 text-xs text-muted-foreground">
+      {nguon
+        ? "Nguồn giữ theo lần đầu lead vào hệ thống."
+        : "Ô này khoá với lead đã có."}{" "}
+      Cần đổi thì nhờ Quản lý cơ sở hoặc Quản trị hệ thống.
+    </p>
   );
 }
 
