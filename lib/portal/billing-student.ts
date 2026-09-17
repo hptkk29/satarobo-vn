@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { laKhoanDaXacNhan, tongDaXacNhan } from "@/lib/finance/debt";
+import { laKhoanDaDong, tongDaDong, computeEnrollmentDebt } from "@/lib/finance/debt";
 import { getParentConfirmedPayments, type ConfirmedPaymentRow } from "@/lib/portal/billing";
 
 // Portal v2 — học phí & công nợ của 1 con đang chọn (per-child).
@@ -54,6 +54,7 @@ export async function getStudentBilling(studentId: string): Promise<StudentBilli
     orderBy: { enrolledAt: "desc" },
     select: {
       id: true,
+      status: true,
       finalPrice: true,
       tuition: true,
       class: { select: { classCode: true } },
@@ -70,7 +71,8 @@ export async function getStudentBilling(studentId: string): Promise<StudentBilli
   const rows: StudentBillingRow[] = enrollments.map((e) => {
     const chuaChotGia = e.finalPrice == null && e.tuition == null;
     const finalPrice = e.finalPrice ?? e.tuition ?? 0;
-    const rowPaid = tongDaXacNhan(e.payments.filter(laKhoanDaXacNhan));
+    const daDong = e.payments.filter(laKhoanDaDong);
+    const rowPaid = tongDaDong(daDong);
     tuition += finalPrice;
     paid += rowPaid;
     pendingCount += e.payments.filter((p) => p.accountantStatus === "PENDING").length;
@@ -81,7 +83,7 @@ export async function getStudentBilling(studentId: string): Promise<StudentBilli
       className: e.class?.classCode ?? null,
       finalPrice,
       paid: rowPaid,
-      outstanding: chuaChotGia ? 0 : Math.max(0, finalPrice - rowPaid),
+      outstanding: chuaChotGia ? 0 : Math.max(0, computeEnrollmentDebt(finalPrice, daDong, e.status)),
       chuaChotGia,
     };
   });

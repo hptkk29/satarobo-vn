@@ -21,7 +21,7 @@ import {
   AUTO_ORDER_CONFIRM_MARKER,
   installmentMarker,
 } from "@/lib/finance/payment-markers";
-import { KHOAN_DA_XAC_NHAN } from "@/lib/finance/debt";
+import { KHOAN_DA_DONG } from "@/lib/finance/debt";
 
 type Tx = Prisma.TransactionClient;
 
@@ -705,7 +705,7 @@ export async function adjustPayment(params: {
     });
     const tran = ghiDanh?.finalPrice ?? ghiDanh?.tuition ?? null;
     const daThu = await tx.payment.aggregate({
-      where: { enrollmentId, ...KHOAN_DA_XAC_NHAN },
+      where: { enrollmentId, ...KHOAN_DA_DONG },
       _sum: { amount: true },
     });
     const tongSau = (daThu._sum.amount ?? 0) + delta;

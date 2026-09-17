@@ -24,18 +24,61 @@ describe("[R2-06] debt calc (C6.1)", () => {
 });
 
 describe("[R7-04] computeEnrollmentDebt (AC6)", () => {
-  it("finalPrice - Σ confirmed", () => {
-    expect(computeEnrollmentDebt(9_000_000, [{ amount: 5_000_000 }])).toBe(4_000_000);
+  /** Phiếu thu đã xác nhận. */
+  const thu = (amount: number) => ({ amount, accountantStatus: "CONFIRMED" });
+  /** Bút toán hoàn (số ÂM). */
+  const hoan = (amount: number) => ({ amount, accountantStatus: "REFUNDED" });
+  /** Bút toán điều chỉnh mang DELTA — vẫn là `CONFIRMED`. */
+  const dieuChinh = (delta: number) => ({ amount: delta, accountantStatus: "CONFIRMED" });
+  const DANG_HOC = "STUDYING";
+
+  it("finalPrice - Σ đã đóng", () => {
+    expect(computeEnrollmentDebt(9_000_000, [thu(5_000_000)], DANG_HOC)).toBe(4_000_000);
     expect(
-      computeEnrollmentDebt(9_000_000, [{ amount: 5_000_000 }, { amount: 4_000_000 }]),
+      computeEnrollmentDebt(9_000_000, [thu(5_000_000), thu(4_000_000)], DANG_HOC),
     ).toBe(0);
   });
   it("đóng thừa → ÂM (trả raw, không clamp)", () => {
-    expect(computeEnrollmentDebt(9_000_000, [{ amount: 10_000_000 }])).toBe(-1_000_000);
+    expect(computeEnrollmentDebt(9_000_000, [thu(10_000_000)], DANG_HOC)).toBe(-1_000_000);
   });
   it("finalPrice null → 0; không có khoản → finalPrice", () => {
-    expect(computeEnrollmentDebt(null, [{ amount: 1_000 }])).toBe(-1_000);
-    expect(computeEnrollmentDebt(9_000_000, [])).toBe(9_000_000);
+    expect(computeEnrollmentDebt(null, [thu(1_000)], DANG_HOC)).toBe(-1_000);
+    expect(computeEnrollmentDebt(9_000_000, [], DANG_HOC)).toBe(9_000_000);
+  });
+
+  // ── Ngoại lệ "đã rời lớp" (17/09/2026 — NỢ-4) ───────────────────────────────────
+  it("CÒN HỌC: hoàn tiền LÀM TĂNG công nợ — tiền đã trả lại thì vẫn còn phải đóng", () => {
+    // Đóng 5tr rồi được hoàn 2tr ⇒ thực đóng 3tr ⇒ còn nợ 6tr.
+    expect(computeEnrollmentDebt(9_000_000, [thu(5_000_000), hoan(-2_000_000)], DANG_HOC)).toBe(
+      6_000_000,
+    );
+  });
+  it.each(["WITHDREW", "TRANSFERRED", "CANCELLED"])(
+    "ĐÃ RỜI LỚP (%s): KHÔNG trừ bút toán hoàn — không đòi tiền người vừa được trả lại",
+    (trangThai) => {
+      // Cùng dữ liệu như ca trên. Nếu tính ròng thì em này "nợ" 9tr — đúng số vừa được
+      // hoàn cộng phần chưa đóng — và hệ thống đi đòi một người đã nghỉ. Đó là NỢ MA.
+      expect(
+        computeEnrollmentDebt(9_000_000, [thu(5_000_000), hoan(-5_000_000)], trangThai),
+      ).toBe(4_000_000);
+    },
+  );
+  it("ngoại lệ KHÔNG áp cho bút toán ĐIỀU CHỈNH — sửa số ghi nhầm thì nợ phải theo số đúng", () => {
+    // Ghi nhầm 5tr, sửa xuống 3tr (delta −2tr). Dù đã nghỉ, công nợ vẫn phải tính trên
+    // 3tr thật chứ không phải 5tr ghi nhầm.
+    expect(
+      computeEnrollmentDebt(9_000_000, [thu(5_000_000), dieuChinh(-2_000_000)], "WITHDREW"),
+    ).toBe(6_000_000);
+  });
+  it("COMPLETED KHÔNG phải 'rời lớp' — học xong vẫn phải đóng đủ", () => {
+    expect(
+      computeEnrollmentDebt(9_000_000, [thu(5_000_000), hoan(-2_000_000)], "COMPLETED"),
+    ).toBe(6_000_000);
+  });
+  it("status null → coi như còn học (fail-closed: không tự cho ngoại lệ)", () => {
+    expect(computeEnrollmentDebt(9_000_000, [thu(5_000_000), hoan(-2_000_000)], null)).toBe(
+      6_000_000,
+    );
   });
 });
 

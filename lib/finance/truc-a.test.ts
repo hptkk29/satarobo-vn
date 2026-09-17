@@ -32,6 +32,8 @@ const NGOAI_LE: Record<string, string> = {
   "lib/crm/commission-run.test.ts": "TEST: dựng bút toán mẫu cho kỳ hoa hồng",
   "lib/reports/revenue-by-child.test.ts": "TEST: dựng bút toán mẫu cho bổ dọc theo con",
   "lib/reports/revenue-daily.test.ts": "TEST: dựng bút toán mẫu cho doanh thu theo ngày",
+  "lib/finance/debt.test.ts":
+    "TEST: dựng bút toán mẫu (thu / hoàn / điều chỉnh) cho computeEnrollmentDebt — NỢ-4",
 };
 
 function duyet(thuMuc: string, ra: string[]): void {
