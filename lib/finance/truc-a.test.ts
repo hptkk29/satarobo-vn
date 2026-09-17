@@ -32,6 +32,8 @@ const NGOAI_LE: Record<string, string> = {
   "lib/crm/commission-run.test.ts": "TEST: dựng bút toán mẫu cho kỳ hoa hồng",
   "lib/reports/revenue-by-child.test.ts": "TEST: dựng bút toán mẫu cho bổ dọc theo con",
   "lib/reports/revenue-daily.test.ts": "TEST: dựng bút toán mẫu cho doanh thu theo ngày",
+  "scripts/do-so-cu-moi-no4.ts":
+    "SCRIPT ĐO chỉ-đọc: CỐ Ý gõ tay bộ lọc CŨ (chỉ CONFIRMED) để in số TRƯỚC bản vá NỢ-4 cạnh số SAU. Bộ lọc cũ không còn tồn tại dưới dạng hằng nên không import được — và đây không phải một đường đọc thứ hai.",
   "lib/finance/debt.test.ts":
     "TEST: dựng bút toán mẫu (thu / hoàn / điều chỉnh) cho computeEnrollmentDebt — NỢ-4",
 };

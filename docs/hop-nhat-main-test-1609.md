@@ -96,6 +96,94 @@ KHÔNG hiện bút toán hoàn; muốn hiện thì thêm một dòng riêng, đ�
 `[HT-E1b]` GIỮ xanh (lật 4 ca mà làm `[HT-E1b]` đỏ chính là bản vá ngây thơ đã bị loại).
 6/6 phép cấy làm đúng ca đổi trạng thái.
 
+### 🔴 NỢ-5 · BA CRON CÓ BẢN VÁ ĐÚNG NHƯNG KHÔNG BAO GIỜ CHẠY TRÊN `test`
+
+**Lớp lỗi, không phải một ca lẻ.** Lịch `schedule:` của GitHub **luôn chạy bản workflow ở
+NHÁNH MẶC ĐỊNH** (`main`). Vá `cron-pump-test.yml` trên nhánh `test` nên **không có tác
+dụng gì** cho tới khi bản vá ấy lên `main` — mà triệu chứng là "cron không chạy", rất dễ bị
+chẩn nhầm thành lỗi của chính cron.
+
+Đo 17/09/2026, vòng `for p in …`:
+
+| Khe | `test` | `main` (bản THẬT SỰ chạy) | Hệ quả trên `test.satarobo.vn` |
+|---|---|---|---|
+| `zalocrm-doi-soat` | có | **THIẾU** | không ai được cấp quyền nick ⇒ vai `member` thấy hộp thư RỖNG |
+| `sla-check` | có | **THIẾU** | không có chuông SLA cho Sale — nghiệm thu S-7 không chạy được |
+| `webhook-retention` | có | **THIẾU** | dấu vết webhook cũ không được dọn, phình dần |
+
+Chiều ngược lại (`main` có mà `test` thiếu): **không có**.
+
+`vercel.json` (điều khiển cron trên PROD) thiếu 2 khe so với `test`: `webhook-retention`,
+`zalocrm-doi-soat` — hai khe này **sẽ có** khi `test` → `main`, nên không phải nợ đứng.
+
+**Bằng chứng lịch chạy bản `main`:** 6/6 lượt gần nhất của `cron-pump-test` đều `ref=main`.
+
+**Cách đóng:** ba khe đã nằm sẵn trên nhánh `test` ⇒ tự đóng khi `test` → `main`. **Trước
+khi merge**, muốn chạy tay một lượt trên test thì `gh workflow run cron-pump-test.yml --ref test`
+(dispatch dùng đúng bản của nhánh được chỉ định, khác `schedule`).
+
+⚠️ **Cảnh báo kèm theo:** `capQuyenNickZalocrm` đẩy quyền bằng `PUT …/access` **THAY CẢ
+TẬP** — ai không nằm trong danh sách tính ra sẽ **bị GỠ**, kể cả quyền gán tay trong giao
+diện ZaloCRM, miễn là tài khoản đó có `externalId` (tức đến từ Sata). Nên lượt chạy tay đầu
+tiên là phép thử: quyền gán tay còn giữ ⇒ chính sách phủ đúng; mất ⇒ thiếu vai hoặc thiếu cơ sở.
+
+### 🔴 NỢ-6 · CHƯA CÓ ORG THỨ HAI BÊN FORK — mục ⑤⑥ nghiệm thu không chạy được
+
+Đo fork 17/09/2026: **đúng 1 tổ chức** `e4b4b2ff "Sata Robo"`, **1 khoá `public_api_key`**,
+cả 2 nick và 5 user đều thuộc org đó. Thiết kế giả định **ba org (CS1, CS2, TEST)**.
+
+Hệ quả: CS1 và CS2 phải ánh xạ về cùng một `orgCode`; `chonCoSoZaloCrm` khử trùng theo
+`orgCode` và thanh chọn chỉ hiện khi `danhSach.length > 1` ⇒ **hộp chọn cơ sở không hiện**,
+và `?org=cs2` không có đích để rơi về. Hai mục nghiệm thu ⑤ (đổi cơ sở) và ⑥ (cách ly) vì
+thế ghi **"CHƯA KIỂM ĐƯỢC — thiếu org thứ hai bên fork"**, KHÔNG phải ĐẠT.
+
+**Việc hạ tầng GĐ0 — các bước để chạy một lượt:**
+
+1. **Fork** — tạo tổ chức thứ hai (ví dụ tên `Sata Robo — CS2`). Ghi lại `organizations.id`.
+2. **Fork** — sinh khoá Public API cho org mới: thêm dòng `app_settings` với
+   `setting_key = 'public_api_key'`, `org_id = <id org mới>`, `value_plain = <khoá mới>`.
+   *(Kiểm: `select count(distinct org_id) from app_settings where setting_key='public_api_key';`
+   phải ra 2.)*
+3. **Fork** — nối một nick Zalo vào org mới, hoặc chuyển bớt một nick sang. Không có nick thì
+   `capQuyenNickZalocrm` trả `CHUA_CO_NICK` và bỏ qua org đó.
+4. **Vercel (env `test`)** — thêm khoá mới vào `ZALOCRM_API_KEYS` (JSON theo `orgCode`,
+   ví dụ `{"cs1":"zcrm_…","cs2":"zcrm_…"}`) và thêm bí mật HMAC cho org mới vào
+   `ZALOCRM_WEBHOOK_SECRETS`. **Redeploy.**
+5. **Sata** — sửa tham số vận hành `zalocrm.orgCodes` thành hai dòng, ví dụ
+   `{"CS1":"cs1","CS2":"cs2"}` (khoá = `Center.code`, giá trị khớp `KHUON_ORG_CODE`
+   `^[a-z0-9-]{1,32}$`).
+6. **Kiểm** — tài khoản neo cả hai cơ sở mở `/zalo-crm` phải thấy hộp chọn 2 mục; tài khoản
+   chỉ neo CS1 mở `?org=cs2` phải rơi về CS1 kèm băng vàng. Rồi mở lại mục ⑤⑥ ở
+   [`tich-hop-zalocrm/05-nghiem-thu-vai-tren-test.md`](tich-hop-zalocrm/05-nghiem-thu-vai-tren-test.md).
+
+⚠️ Nhắc: tunnel hiện là `trycloudflare` **tạm** — dựng lại máy chủ là đổi địa chỉ, phải sửa
+`ZALOCRM_APP_URL` + `ZALOCRM_BASE_URL` trên Vercel **và** `APP_URL` bên fork. Làm hạ tầng
+org thứ hai là dịp tốt để chuyển sang tên miền cố định.
+
+### CHỐT 17/09/2026 · F5 "Mở lead" — nhánh phụ huynh CHƯA TỪNG NHẮN
+
+Chủ dự án chốt: **giữ `?compose=<SĐT>`**, **không tự động tra số**, **không thêm màn cảnh báo**.
+
+Vì sao đây là giới hạn chứ không phải lỗi: nick Zalo CÁ NHÂN không có hội thoại với người
+chưa từng liên hệ, nên không có gì để mở. Và mỗi lượt tra số là một `PhoneSearchEvent` tính
+vào hạn mức Zalo của **cả công ty** — tra tự động biến mỗi cú bấm thành một lượt đốt hạn mức
+cho một người có thể không dùng Zalo; hạn mức cạn thì mọi cơ sở mất khả năng tra.
+
+Ba mắt xích đã đo (17/09/2026), để lần thi công không phải dò lại:
+
+| Hỏi | Trả lời |
+|---|---|
+| Sata đã gọi `PUT /contacts/:id/external-ref` chưa? | **CHƯA** — `datKhoaPhieuZalocrm` có ở `lib/integrations/zalocrm/client.ts:240` nhưng **0 đường gọi** ⇒ `Contact.externalRef` rỗng toàn bộ |
+| Fork tra được theo gì? | `GET /api/public/contacts?search=<chuỗi>` khớp `fullName`/`phone`/`email` bằng `contains`. **Không** lọc theo `externalRef`. `GET /api/public/conversations` chỉ nhận `limit`/`since` |
+| Màn chat nhận tham số URL? | **CÓ, đã có sẵn** — `?contactId=` (`frontend/src/views/ChatView.vue:629-640`) tự tra ra `convId` rồi `router.replace` sang `/chat/:convId`; `?compose=<SĐT>` mở hộp soạn tin điền sẵn |
+
+⇒ **Không cần sửa fork.** Việc còn lại nằm bên Sata: tra `contact.id` theo SĐT rồi dựng
+`?contactId=`, không có thì giữ nguyên `?compose=`.
+
+**Một SĐT khớp nhiều contact** — thứ tự: (1) contact thuộc đúng nick của cơ sở phiếu;
+(2) trong đó lấy hội thoại `last_message_at` mới nhất; (3) vẫn còn nhiều hơn một thì
+**KHÔNG đoán** — mở `?compose=` để sale tự chọn, vì mở nhầm hội thoại là nhắn nhầm người.
+
 ### NỢ-3 · Bố cục cột bảng Lead — CHỜ CHỦ DỰ ÁN CHỐT
 Đã lấy bản `main` (lưu `localStorage`, mỗi người một bộ) và **gỡ tầng lưu theo người trong
 DB** của `test`: `_column-actions.ts`, `column-picker.tsx`,
