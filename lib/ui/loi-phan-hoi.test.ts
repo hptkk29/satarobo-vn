@@ -115,7 +115,7 @@ describe("[LOI-T13] ⚠️ MỌI màn nhập phải đi qua hàm này", () => {
   // Hàm thuần đúng không chứng minh được gì nếu màn hình không gọi. Đo 16/09: TÁM màn cùng
   // viết `err.error || "Import thất bại"` — vá một chỗ là còn bảy chỗ vẫn nuốt lý do.
   const MAN = [
-    "app/(admin)/admin/leads/import/page.tsx",
+    "app/(admin)/admin/leads/import/_components/man-nhap-lead.tsx",
     "app/(admin)/admin/centers/import/page.tsx",
     "app/(admin)/admin/classes/import/page.tsx",
     "app/(admin)/admin/holidays/import/page.tsx",
@@ -146,7 +146,12 @@ describe("[LOI-T13] ⚠️ MỌI màn nhập phải đi qua hàm này", () => {
 
   it("màn nhập LEAD đọc lý do qua đường có kiểm cả `errors`", () => {
     // Màn lead viết tay (có thêm khối chú thích về hai hình dạng) — canh nó đọc `errors`.
-    const s = doc("app/(admin)/admin/leads/import/page.tsx");
+    //
+    // ⚠️ 17/09/2026 — ĐỔI ĐƯỜNG DẪN. `page.tsx` nay chỉ còn là vỏ SERVER hỏi quyền
+    // `leads:overwrite`; thân màn dời sang `_components/man-nhap-lead.tsx`. Cổng này đỏ
+    // ngay lúc dời — đúng việc nó sinh ra: một lưới ghim mã nguồn phải ĐỎ khi mã đi chỗ
+    // khác, chứ không lặng lẽ soi một tệp rỗng rồi xanh mãi.
+    const s = doc("app/(admin)/admin/leads/import/_components/man-nhap-lead.tsx");
     expect(s).toContain("errors");
     expect(s).toContain("res.status");
   });
