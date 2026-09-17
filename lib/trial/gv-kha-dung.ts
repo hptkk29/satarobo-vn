@@ -391,6 +391,20 @@ const PHU_LO_LICH_CA_NHAN: readonly KetQuaPhuCa[] = [
  * `if` sinh ra nó).
  */
 export function nhanChoDong(phu: KetQuaPhuCa, duocXemLyDoNghi: boolean): string {
+  // ⚠️ `CHUA_VAO_LUOI` KHÔNG BAO GIỜ thành chữ — kể cả khi người xem có đủ quyền, kể cả
+  // khi họ vừa bật công tắc "Hiện tất cả".
+  //
+  // Khác mọi trạng thái còn lại ở một điểm quyết định: nó được suy từ một phép đếm đi qua
+  // `scopedDb`, nên nó KHÔNG phân biệt nổi "người này chưa từng được xếp ca" với "người
+  // này cả tháng làm ở cơ sở mà bạn không được nhìn". Hai chuyện đó ngược hẳn nhau về ý
+  // nghĩa vận hành, và một dòng chữ chỉ được phép nói thứ nó thật sự biết (luật 12).
+  //
+  // Đo prod 17/09: Tư vấn CS2 thấy đúng 4 người CS2 sạch nhãn, còn 4 người CS1 + 2 người
+  // Hội sở — gồm cả hai người có 48 ô mã `HC` — đều bị dán "CHƯA VÀO LƯỚI CA". Nhãn ấy
+  // đang vẽ lại ranh giới CƠ SỞ và gọi nó bằng tên của lưới ca.
+  //
+  // Trạng thái vẫn giữ (nó điều khiển việc ẨN, và test đọc nó); chỉ phần đem ra nói là bỏ.
+  if (phu === "CHUA_VAO_LUOI") return "";
   if (!duocXemLyDoNghi && PHU_LO_LICH_CA_NHAN.includes(phu)) return NHAN_AN_LY_DO;
   return NHAN_THEO_PHU[phu];
 }
@@ -434,13 +448,30 @@ function duocGiu(input: {
   // cho MỌI buổi — người dùng chỉ thấy "không có giáo viên nào" và không có cách nào biết
   // vì sao. Cổng im lặng khi hạ tầng chưa sẵn còn tệ hơn không có cổng.
   if (input.phu === "CHUA_CO_LUOI") return true;
-  // ⚠️ Người CHƯA CÓ MẶT trong lưới tháng ⇒ GIỮ, cùng lý do fail-open ở dòng trên nhưng ở
-  // quy mô MỘT NGƯỜI: đây là DỮ LIỆU THIẾU về họ, không phải câu trả lời về họ. Giáo viên
-  // mới tuyển chưa được xếp ca lần nào mà bị ẩn thì họ vô hình cho tới khi có người tình
-  // cờ phát hiện — và triệu chứng (một cái tên không có trong `<select>`) không ném lỗi,
-  // không làm đỏ test nào, console vẫn sạch (luật 12). Nhãn `CHUA_VAO_LUOI` đi kèm nói
-  // thẳng ra là hệ thống chưa biết gì, để người xếp lịch tự cân chứ không bị giấu.
-  if (input.phu === "CHUA_VAO_LUOI") return true;
+  // ⚠️ ĐẢO 17/09/2026 — `CHUA_VAO_LUOI` nay **ẨN**, trước đó GIỮ kèm nhãn.
+  //
+  // Bản trước fail-open với lý do "dữ liệu thiếu về họ, không phải câu trả lời về họ". Lý
+  // do ấy đúng trên giấy và SAI trên màn hình, vì một chuyện không lường: phép đếm
+  // ô-trong-tháng đi qua `scopedDb` (`sdb.shiftAssignment.groupBy` —
+  // `gv-kha-dung-db.ts`), nên nó KHÔNG trả lời "người này có được xếp ca chưa" mà trả lời
+  // **"tôi có nhìn thấy ca của người này không"**.
+  //
+  // Ảnh chụp prod 17/09, Tư vấn CS2 mở lớp CS2, danh sách 10 giáo viên:
+  //   · 4 người CS2 (Bích Trà · Đức Tuấn · Bảo Thư · Thanh Hiền) → không nhãn;
+  //   · 4 người CS1 (Lê Khôi · Trà My · Hoàng Anh · Mai Uyên) → "CHƯA VÀO LƯỚI CA";
+  //   · 2 người Hội sở (Kiệt · Toại) → "CHƯA VÀO LƯỚI CA" — dù cả hai có 48 ô mã `HC`.
+  // Tức nhãn ấy chỉ đang vẽ lại ranh giới CƠ SỞ và gọi nó bằng một cái tên sai. Đúng loại
+  // affordance nói dối mà luật 12 cấm, chỉ khác là lần này lời nói dối nằm trong một dòng
+  // chữ chứ không nằm trong một mũi tên.
+  //
+  // Chủ dự án chốt: "nếu chưa có trong lưới thì ẩn luôn". Giữ `CHUA_VAO_LUOI` là một
+  // TRẠNG THÁI riêng (còn dùng để rẽ nhánh + test), nhưng nó không bao giờ còn là NHÃN.
+  //
+  // ⚠️ Hệ quả phải biết, KHÔNG được quên khi đọc lại: ở tầng `LOC_THEO_CA`, người dùng cấp
+  // cơ sở sẽ KHÔNG còn thấy giáo viên của cơ sở khác — vì ca của những người đó nằm ngoài
+  // tầm nhìn nên luôn ra `CHUA_VAO_LUOI`. Đó là hành vi chủ dự án yêu cầu; lối ra khi cần
+  // điều người từ cơ sở khác là công tắc "Hiện tất cả giáo viên", và danh sách miễn trừ.
+  if (input.phu === "CHUA_VAO_LUOI") return false;
   // ⚠️ Mã KHÔNG MANG GIỜ (`LD`, `LDGV`, `D1`, `D2`) ⇒ **LOẠI**, không phải "giữ kèm cảnh báo".
   //
   // Bản đầu giữ lại với lý do "không kết luận được thì đừng loại người đang đi làm". Chủ dự
@@ -499,20 +530,34 @@ export function locGiaoVienChoBuoi(input: ThamSoLocGv): KetQuaLocGv {
     });
     const trung = timTrungLich(input.banTheoGv[gv.id] ?? [], input.khung);
 
-    // `CHUA_VAO_LUOI` mang mức CẢNH, ngang `KHONG_GIO`: người này đang hiện ra vì hệ
-    // thống KHÔNG BIẾT, không phải vì hệ thống đã kiểm và thấy rảnh. Cho nó mức
-    // "KHONG" là dựng một lời hứa suông ngay cạnh tên họ.
+    // ⚠️ NHÃN VỀ CA chỉ được nói khi LUẬT CA ĐANG THẬT SỰ ÁP CHO DÒNG NÀY (17/09/2026).
+    //
+    // Ba đường làm nó KHÔNG áp, và cả ba trước đây vẫn in nhãn:
+    //   · `batLoc === false` — banner ngay trên ô đã ghi "chưa bật lọc, hiện mọi giáo
+    //     viên", mà từng dòng lại dán "CHƯA VÀO LƯỚI CA". Hai câu trên cùng một màn nói
+    //     ngược nhau thì người dùng tin câu ở gần tên người hơn;
+    //   · `cheDo` là `TAT_CA`/`THEO_CO_SO` — hai tầng đó không lọc theo ca, nên một nhãn
+    //     về ca ở đó là thông tin của luật KHÁC;
+    //   · người trong `mienLuat`/`luonGiu` — họ được MIỄN luật ca, nên phán xét họ theo
+    //     đúng luật vừa miễn là tự mâu thuẫn. Đây là lỗi chủ dự án báo 17/09: khai Kiệt &
+    //     Toại "luôn hiện" rồi vẫn thấy hai người bị dán "CHƯA VÀO LƯỚI CA".
+    //
+    // Note đỏ TRÙNG LỊCH nằm NGOÀI luật này và không bao giờ bị tắt: nó nói về BUỔI DẠY
+    // (việc của trung tâm, người xếp lịch cần biết), không nói về ca của ai. Che nó là bỏ
+    // đi thứ đắt nhất của cả màn này.
+    const mienLuatCa = input.mienLuat.has(gv.id) || input.luonGiu.has(gv.id);
+    const luatCaDangAp = input.batLoc && input.cheDo === "LOC_THEO_CA" && !mienLuatCa;
+
     const muc: MucCanhBao = trung
       ? "DO"
-      : phu === "KHONG_GIO" || phu === "CHUA_VAO_LUOI"
+      : luatCaDangAp && phu === "KHONG_GIO"
         ? "CANH"
         : "KHONG";
-    // Note đỏ trùng lịch KHÔNG bị che: nó nói về BUỔI DẠY (việc của trung tâm, và chính
-    // người xếp lịch là người cần biết), không nói về ngày nghỉ của ai. Che nó là bỏ đi
-    // thứ đắt nhất của cả màn này.
     const nhan = trung
       ? `TRÙNG LỊCH: ${trung.nhan} ${trung.startTime}–${trung.endTime}`
-      : nhanChoDong(phu, input.duocXemLyDoNghi);
+      : luatCaDangAp
+        ? nhanChoDong(phu, input.duocXemLyDoNghi)
+        : "";
 
     const dong: DongGv = { id: gv.id, name: gv.name, phu, muc, nhan };
     tatCa.push(dong);
@@ -526,8 +571,12 @@ export function locGiaoVienChoBuoi(input: ThamSoLocGv): KetQuaLocGv {
     // CHẾT: đo bằng cách cấy lỗi — gỡ `input.hienTatCa ||` khỏi dòng này cho ra **0 ĐỎ /
     // 240 xanh**, tức không ca nào chạm tới nó. Hai cơ chế cho một luật là hai chỗ để
     // chúng trôi lệch, và cái không ai kiểm được sẽ là cái trôi.
-    const mien = input.mienLuat.has(gv.id) || input.luonGiu.has(gv.id);
-    if (mien || duocGiu({ cheDo: input.cheDo, batLoc: input.batLoc, phu, ca, coSoChoPhep: input.coSoChoPhep })) {
+    // Dùng lại `mienLuatCa` tính ở trên — CÙNG một câu hỏi ("người này có được miễn luật
+    // ca không") thì phải có CÙNG một câu trả lời. Trước đây hai chỗ tự tính riêng, và hai
+    // biểu thức giống hệt nhau đặt cách nhau 40 dòng là hai chỗ để chúng trôi lệch: sửa
+    // một chỗ thì người được miễn hiện ra nhưng vẫn mang nhãn của luật vừa miễn — đúng lỗi
+    // chủ dự án báo 17/09.
+    if (mienLuatCa || duocGiu({ cheDo: input.cheDo, batLoc: input.batLoc, phu, ca, coSoChoPhep: input.coSoChoPhep })) {
       giuLai.push(dong);
     }
   }
