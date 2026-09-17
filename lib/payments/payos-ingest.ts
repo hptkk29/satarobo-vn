@@ -1194,11 +1194,31 @@ export async function allocateToOrder(params: {
             })),
           );
 
+          // ─────────────────────────────────────────────────────────────────
+          // PHIÊN B — ĐƠN MỘT CON thì gắn luôn `orderItemId`.
+          //
+          // Đơn có đúng MỘT dòng hàng ⇒ tiền không thể của ai khác, không có gì để đoán.
+          // Đơn từ HAI dòng trở lên (khớp bằng mã đời cũ `ORD…D<số>`, thứ không nói con nào)
+          // thì để NULL và màn công nợ hiện "chưa chia con" — sale chia ở
+          // `/admin/bien-dong-so-du`. Đoán hộ ở đây là bé A hết nợ còn bé B vẫn bị gọi đòi
+          // tiền, và không có dấu vết nào để lần ra vì sao.
+          //
+          // `take: 2` chứ không `findMany` đủ: chỉ cần biết "có nhiều hơn một hay không".
+          // Lấy 1 là biến ca mơ hồ thành ca chắc chắn — đúng lỗi mà `chonGhiDanhChoKhoan`
+          // ngay trên được dựng ra để tránh.
+          const dongCuaDon = await tx.orderItem.findMany({
+            where: { orderId: order.id },
+            select: { id: true },
+            take: 2,
+          });
+          const dongDuyNhat = dongCuaDon.length === 1 ? (dongCuaDon[0]?.id ?? null) : null;
+
           await tx.payment.create({
             data: {
               orderId: order.id,
               // null khi mơ hồ — xem khối chú thích ngay trên.
               enrollmentId: chonGhiDanh.ghiDanhId,
+              orderItemId: dongDuyNhat,
               amount: allocated,
               method: provider.toLowerCase(),
               paidDate: new Date(),

@@ -14,6 +14,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 import { XuLyGiaoDich } from "./xu-ly-giao-dich";
+import { GoGanGiaoDich } from "./go-gan-giao-dich";
 
 export type AllocationView = {
   paymentRequestId: string;
@@ -62,10 +63,13 @@ function requestLabel(a: AllocationView): string {
 export function BankTxnClient({
   items,
   canManage = false,
+  canGan = false,
 }: {
   items: BankTxnItem[];
-  /** `payments:manage` — chỉ người này mới thấy nút. Server vẫn kiểm lại. */
+  /** `payments:manage` — BỎ QUA + GỠ GẮN, chỉ kế toán. Server vẫn kiểm lại. */
   canManage?: boolean;
+  /** `payments:record` (hoặc hơn) — GẮN tiền vào đơn. Sale có quyền này. */
+  canGan?: boolean;
 }) {
   const [q, setQ] = useState("");
 
@@ -107,13 +111,13 @@ export function BankTxnClient({
                 <th className="w-32 px-3 py-2">Cổng</th>
                 <th className="w-32 px-3 py-2">Trạng thái</th>
                 <th className="px-3 py-2">Rót vào phiếu thu</th>
-                {canManage && <th className="w-44 px-3 py-2">Xử lý</th>}
+                {(canGan || canManage) && <th className="w-44 px-3 py-2">Xử lý</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={canManage ? 7 : 6} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={canGan || canManage ? 7 : 6} className="px-3 py-8 text-center text-muted-foreground">
                     {items.length === 0
                       ? "Chưa có giao dịch nào — chưa bật webhook cổng thanh toán hoặc chưa có tiền về."
                       : "Không có giao dịch khớp bộ lọc."}
@@ -156,7 +160,7 @@ export function BankTxnClient({
                     <td className="px-3 py-2 align-top">
                       {i.allocations.length === 0 ? (
                         <span className="text-xs text-state-warning-ink">
-                          Chưa rót vào phiếu nào{canManage ? " — dùng nút bên phải" : ""}
+                          Chưa rót vào phiếu nào{canGan ? " — dùng nút bên phải" : ""}
                         </span>
                       ) : (
                         <ul className="space-y-1">
@@ -198,14 +202,17 @@ export function BankTxnClient({
                         </ul>
                       )}
                     </td>
-                    {canManage && (
+                    {(canGan || canManage) && (
                       <td className="px-3 py-2 align-top">
-                        {i.status === "UNMATCHED" ? (
+                        {i.status === "UNMATCHED" && canGan ? (
                           <XuLyGiaoDich
                             bankTransactionId={i.id}
                             amount={i.amount}
                             goiY={i.content}
+                            laKeToan={canManage}
                           />
+                        ) : i.status === "MATCHED" && canManage ? (
+                          <GoGanGiaoDich bankTransactionId={i.id} amount={i.amount} />
                         ) : (
                           <span className="text-xs text-muted-foreground">—</span>
                         )}

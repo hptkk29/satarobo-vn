@@ -380,13 +380,24 @@ describe("[NTC-05] ba lỗ đã bịt — luật về hình dạng đường ghi
     // Chủ dự án: *"KHÔNG lọc theo scopedDb/cơ sở của người xem."* `Payment` nằm trong
     // `SCOPED_MODELS` và KHÔNG nằm trong `NULL_IS_GLOBAL_MODELS`, nên đọc qua `scopedDb` là
     // con số "đã thu" KHÁC NHAU tuỳ ai mở màn — và không lỗi nào báo.
+    // ⚠️ SỬA 17/09/2026 — PHIÊN B tách thân thật ra `docSoTheoCon(doc, orderId)` để đường GHI
+    // đọc được BÊN TRONG transaction đang giữ khoá của đơn. `noTheoCon` nay chỉ còn là cửa
+    // ĐỌC-HIỂN-THỊ và uỷ quyền với `db` TRẦN. Luật không đổi một chữ; chỗ phải soi thì đổi.
     const src = docMa("lib/finance/debt.ts");
-    const than = /export async function noTheoCon\([\s\S]*?\n\}/.exec(src)?.[0] ?? "";
+    expect(src).toMatch(
+      /export async function noTheoCon\(orderId: string\): Promise<NoTheoConKetQua> \{\s*return docSoTheoCon\(db, orderId\);/,
+    );
+    const than = /export async function docSoTheoCon\([\s\S]*?\n\}/.exec(src)?.[0] ?? "";
     expect(than).not.toBe("");
     expect(than).not.toMatch(/\bsdb\./);
     expect(than).not.toContain("scopedDb");
-    // Và nó phải thật sự đọc ba bảng bằng `db.` — nếu không thì phép khẳng định trên là rỗng.
-    for (const bang of ["db.orderItem.findMany", "db.payment.findMany", "db.paymentRequest.findMany"]) {
+    // Và nó phải thật sự đọc ba bảng qua client ĐƯỢC TRUYỀN VÀO — nếu không thì phép khẳng
+    // định trên là rỗng.
+    for (const bang of [
+      "doc.orderItem.findMany",
+      "doc.payment.findMany",
+      "doc.paymentRequest.findMany",
+    ]) {
       expect(than, bang).toContain(bang);
     }
   });
@@ -424,5 +435,56 @@ describe("[NTC-06] CÔNG TẮC — tắt thì luồng cũ y nguyên", () => {
   it("phép giải công tắc vẫn đúng cả hai chiều (nhắc lại từ `feature.test.ts`)", () => {
     expect(giaiCongTac({ toanHe: false, coSo: true })).toBe(true);
     expect(giaiCongTac({ toanHe: true, coSo: false })).toBe(false);
+  });
+});
+
+describe("[NTC-07] đợt CHƯA GẮN CON — đơn cũ không được rơi khỏi kết quả", () => {
+  // ⚠️ Nhóm này thêm 17/09. Trước đó `tinhNoTheoCon` lọc đợt theo `x.orderItemId === d.orderItemId`
+  // nên đợt NULL không thuộc bé nào và BIẾN MẤT khỏi kết quả — màn gắn dựng danh sách từ `con[]`
+  // nên đơn trước 16/09 hiện ra 0 đợt để chia.
+  const dotChung = (installmentNo: number, amountDue: number, x: Partial<DotCuaDong> = {}) =>
+    ({ ...dot("", installmentNo, amountDue, x), orderItemId: null }) as DotCuaDong;
+
+  it("đợt NULL đang mở ra `dotChuaGanCon`, KHÔNG lẫn vào bé nào", () => {
+    const r = tinhNoTheoCon({
+      dong: dong(),
+      khoanDaXacNhan: [],
+      khoanChoXacNhan: [],
+      dot: [dot(AN, 1, 3_000_000), dotChung(1, 5_000_000)],
+    });
+    expect(r.dotChuaGanCon.map((d) => d.amountDue)).toEqual([5_000_000]);
+    // Không bé nào nhận đợt chung — nếu lẫn vào, `tongDotDangMo` của bé đó phình lên và cổng
+    // tạo đợt sẽ chặn oan.
+    expect(r.con.find((c) => c.orderItemId === AN)!.tongDotDangMo).toBe(3_000_000);
+    expect(r.con.find((c) => c.orderItemId === BINH)!.tongDotDangMo).toBe(0);
+  });
+
+  it("chỉ đợt ĐANG MỞ — VOID/PAID không vào danh sách", () => {
+    const r = tinhNoTheoCon({
+      dong: dong(),
+      khoanDaXacNhan: [],
+      khoanChoXacNhan: [],
+      dot: [
+        dotChung(1, 1_000_000, { trangThai: "PENDING" }),
+        dotChung(2, 2_000_000, { trangThai: "PARTIAL" }),
+        dotChung(3, 3_000_000, { trangThai: "PAID" }),
+        dotChung(4, 4_000_000, { trangThai: "VOID" }),
+      ],
+    });
+    expect(r.dotChuaGanCon.map((d) => d.installmentNo)).toEqual([1, 2]);
+  });
+
+  it("xếp theo hạn rồi tới số đợt; đợt KHÔNG hạn xuống cuối", () => {
+    const r = tinhNoTheoCon({
+      dong: dong(),
+      khoanDaXacNhan: [],
+      khoanChoXacNhan: [],
+      dot: [
+        dotChung(3, 1_000_000),
+        dotChung(1, 1_000_000, { dueDate: new Date("2026-12-01") }),
+        dotChung(2, 1_000_000, { dueDate: new Date("2026-10-01") }),
+      ],
+    });
+    expect(r.dotChuaGanCon.map((d) => d.installmentNo)).toEqual([2, 1, 3]);
   });
 });

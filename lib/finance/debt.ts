@@ -1,5 +1,5 @@
 // lib/finance/debt.ts — R2-06 công nợ + R2-03 confirm payment (Doc 15 §4.9) + R7-04 công nợ đa chiều.
-import type { Order } from "@prisma/client";
+import type { Order, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
 import { enqueueDebtReminder } from "@/lib/email/triggers";
@@ -437,9 +437,27 @@ export type { NoCuaCon, NoTheoConKetQua } from "@/lib/finance/no-theo-con";
  *   · `choXacNhan` = TRỤC B trừ đi trục A — đã ghi nhận nhưng kế toán chưa xác nhận
  * Lý do chọn trục A cho `conNo`: xem đầu `lib/finance/no-theo-con.ts`.
  */
-export async function noTheoCon(orderId: string): Promise<NoTheoConKetQua> {
+/**
+ * Client tối thiểu để đọc ba bảng của công nợ theo con. `db` trần HOẶC một `tx` đang mở.
+ *
+ * ⚠️ Tồn tại vì PHIÊN B: đường GHI phải đọc lại công nợ **bên trong** transaction đang giữ
+ * advisory lock của đơn, nếu không thì hai lệnh song song cùng đọc một con số cũ rồi cùng ghi.
+ */
+export type DocSoTheoCon = Pick<Prisma.TransactionClient, "orderItem" | "payment" | "paymentRequest">;
+
+/**
+ * Thân thật của `noTheoCon`, nhận client làm THAM SỐ BẮT BUỘC.
+ *
+ * Không đặt mặc định `= db` (luật 7): mặc định ở đây là "đọc ngoài khoá", đúng cái sai mà
+ * PHIÊN B sinh ra để sửa. Bắt buộc truyền ⇒ `tsc` liệt kê đủ chỗ gọi, mắt thấy 1 thì trình
+ * biên dịch thấy hết.
+ */
+export async function docSoTheoCon(
+  doc: DocSoTheoCon,
+  orderId: string,
+): Promise<NoTheoConKetQua> {
   const [dong, khoan, dot] = await Promise.all([
-    db.orderItem.findMany({
+    doc.orderItem.findMany({
       where: { orderId },
       select: {
         id: true,
@@ -450,11 +468,11 @@ export async function noTheoCon(orderId: string): Promise<NoTheoConKetQua> {
       },
       orderBy: { createdAt: "asc" },
     }),
-    db.payment.findMany({
+    doc.payment.findMany({
       where: { orderId, deletedAt: null },
       select: { orderItemId: true, amount: true, accountantStatus: true, saleStatus: true },
     }),
-    db.paymentRequest.findMany({
+    doc.paymentRequest.findMany({
       where: { orderId },
       select: {
         id: true,
@@ -495,4 +513,20 @@ export async function noTheoCon(orderId: string): Promise<NoTheoConKetQua> {
       }),
     ),
   });
+}
+
+/**
+ * Công nợ theo từng con của một đơn — bản dùng cho ĐỌC HIỂN THỊ.
+ *
+ * ⚠️ `db` TRẦN, không `scopedDb`, theo chốt của chủ dự án: *"cùng một đơn, ai mở cũng ra cùng
+ * con số"*. `Payment` ∈ `SCOPED_MODELS` và ∉ `NULL_IS_GLOBAL_MODELS`, nên đọc qua `scopedDb` là
+ * một khoản mang `centerId` khác — hoặc NULL — bị LỌC MẤT với người cấp cơ sở, và con số "đã
+ * thu" của cùng một đơn khác nhau tuỳ ai mở màn, không lỗi nào báo. Cách ly cơ sở ép ở CỬA VÀO
+ * (`orders:view` + `scopedDb` khi tra chính cái đơn).
+ *
+ * ⚠️ KHÔNG dùng hàm này ở đường GHI — nó đọc ngoài transaction. Đường ghi gọi `docSoTheoCon(tx, …)`
+ * bên trong `ghiTienChoDon` (`lib/finance/ghi-tien-don.ts`).
+ */
+export async function noTheoCon(orderId: string): Promise<NoTheoConKetQua> {
+  return docSoTheoCon(db, orderId);
 }
