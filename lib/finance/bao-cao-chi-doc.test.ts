@@ -11,7 +11,7 @@
 // Lưới này là LỚP THỨ NHẤT trong bốn lớp (xem đầu `doi-soat-tien-prod-chi-doc.yml`). Ba lớp kia
 // — `SET TRANSACTION READ ONLY`, user chỉ-đọc, script tự khai quyền — độc lập với nó.
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 
 const SCRIPT = "scripts/bao-cao-doi-soat-tien.ts";
@@ -147,5 +147,56 @@ describe("[BCD-03] workflow — bốn lớp khoá còn nguyên", () => {
 
   it("artifact giữ đúng 3 ngày", () => {
     expect(wf).toMatch(/retention-days:\s*3/);
+  });
+});
+describe("[BCD-04] mọi workflow dùng pnpm PHẢI pin `version`", () => {
+  // ⚠️ LƯỚI NÀY SINH RA TỪ MỘT LƯỢT ĐỎ THẬT (17/09/2026).
+  //
+  // Lượt chạy đầu tiên của `doi-soat-tien-prod-chi-doc.yml` trên prod chết ở bước thứ hai:
+  // `Error: No pnpm version is specified.` — `package.json` của repo KHÔNG có khoá
+  // `packageManager`, nên `pnpm/action-setup` không có gì để suy ra. 25 workflow khác đều pin
+  // `version: 11`; workflow mới là cái DUY NHẤT thiếu.
+  //
+  // Điều đáng nhận ra hơn cả lỗi: `[BCD-03]` canh đủ bốn lớp khoá bên TRONG workflow
+  // (dispatch-only · main-only · tên secret · artifact 3 ngày) nhưng KHÔNG canh việc workflow
+  // có KHỞI ĐỘNG NỔI hay không. Một báo cáo không chạy được thì mọi lớp khoá bên trong nó đều
+  // vô nghĩa — và lỗ ấy không nằm trong file script, nên không phép kiểm nào về script thấy nó.
+  //
+  // Luật là TOÀN REPO chứ không riêng workflow này, nên lưới quét cả thư mục. Nó đặt ở đây vì
+  // đây là nơi lỗi lộ ra; dọn sang chỗ chung hơn thì cứ dọn, đừng xoá.
+  const THU_MUC = ".github/workflows";
+
+  it("không workflow nào gọi `pnpm/action-setup` mà thiếu `version`", () => {
+    const ten = readdirSync(resolve(process.cwd(), THU_MUC)).filter((f) => f.endsWith(".yml"));
+    expect(ten.length, "không đọc được workflow nào — lưới đang soi nhầm chỗ").toBeGreaterThan(20);
+
+    const thieu: string[] = [];
+    for (const f of ten) {
+      const dong = doc(`${THU_MUC}/${f}`).split(/\r?\n/);
+      for (let i = 0; i < dong.length; i += 1) {
+        if (!/^\s*-?\s*uses:\s*pnpm\/action-setup@/.test(dong[i]!)) continue;
+        // `version` đi kèm ở hai dạng: `with: { version: 11 }` cùng dòng, hoặc `with:` rồi
+        // `version:` ở dòng sau ⇒ soi ĐÚNG ba dòng.
+        //
+        // ⚠️ PHẢI SIẾT HAI LẦN, cả hai lần đều do BƯỚC CẤY chỉ ra — bản đầu LỌT sạch đúng ca
+        // quan trọng nhất (gỡ `version: 11` khỏi workflow mà lưới vẫn xanh):
+        //  1. `\bversion:` khớp luôn **`node-version: 22`** của `actions/setup-node` đứng ngay
+        //     dưới — dấu `-` là ký tự không-từ nên `\b` khớp ở GIỮA từ. Phải `(?<![\w-])`.
+        //  2. cửa sổ 4 dòng đủ rộng để với tới step KẾ. Siết về 3.
+        // Luật 11 đúng y nguyên: neo chuỗi HẸP NHẤT, và chưa cấy thử thì coi như vô dụng.
+        const ke = dong.slice(i, i + 3).join("\n");
+        if (!/(?<![\w-])version:\s*\d/.test(ke)) thieu.push(`${f}:${i + 1}`);
+      }
+    }
+    expect(
+      thieu,
+      `Thiếu \`version\` cho pnpm/action-setup (action chết "No pnpm version is specified"): ${thieu.join(", ")}`,
+    ).toEqual([]);
+  });
+
+  it("`package.json` vẫn KHÔNG có `packageManager` — nên luật trên mới cần", () => {
+    // Nếu một ngày ai đó thêm `packageManager` vào `package.json` thì ca này ĐỎ, và đó là lúc
+    // đọc lại xem còn cần pin ở 26 chỗ nữa không. Ca đỏ ở đây là một TIN TỨC, không phải lỗi.
+    expect(JSON.parse(doc("package.json"))).not.toHaveProperty("packageManager");
   });
 });
