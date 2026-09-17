@@ -39,6 +39,11 @@ import { locDonNhanTien } from "../lib/payments/don-nhan-tien";
  * ⚠️ Mốc là thứ PHẢI ĐỔI theo thời gian, và đó là điểm của nó: một con số cứng trong mã buộc
  * người đọc phải GIẢI THÍCH được vì sao nó lệch, thay vì lướt qua một bảng không ai đối chiếu.
  * Lịch sử: A từ 24 (16/09) xuống 22 (17/09) — 2 giao dịch được gắn tay, 1 giao dịch SEPAY mới về.
+ *
+ * Mốc B vẫn là số đo 16/09 và **nhiều khả năng đã cũ** — hai giao dịch gắn tay ấy cũng rút khỏi
+ * tập B nếu chúng được gắn kèm `orderItemId`. Chủ dự án chốt 17/09: **lệch giải thích được
+ * thì không phải lỗi** — in số mới kèm lý do, đừng báo đỏ. Đó là lý do khối đối chiếu phân biệt
+ * rõ lý do LÀNH với lý do KHÔNG lành, thay vì cảnh báo đều một giọng.
  */
 const MOC_GIAO_DICH_UNMATCHED = 22;
 const MOC_KHOAN_CHUA_GAN = 24;
@@ -322,11 +327,15 @@ async function phanB(tx: Tx): Promise<string[]> {
         `Nay: ${khoan.length} khoản / ${vnd(tong)}đ.`,
     );
     in_();
-    in_(`Các lý do có thể, theo thứ tự đáng ngờ giảm dần:`);
-    in_(`1. webhook đã gắn \`orderItemId\` cho đơn 1 con từ khi PHIÊN B lên prod — khoản rời khỏi tập này;`);
-    in_(`2. tiền mới về sau 16/09 làm tập này rộng ra;`);
-    in_(`3. đơn đổi trạng thái sang DRAFT/CANCELLED/REFUNDED ⇒ bị \`locDonNhanTien()\` loại khỏi báo cáo;`);
-    in_(`4. khoản bị xoá mềm hoặc đã có bút toán đảo.`);
+    in_(`Lệch KHÔNG phải lỗi — lệch KHÔNG GIẢI THÍCH ĐƯỢC mới là. Bốn lý do, ba đầu là LÀNH:`);
+    in_(`1. sale đã gắn tay một số giao dịch sau 16/09 (đã biết: ít nhất 2) ⇒ tập hẹp lại — **lành**;`);
+    in_(`2. webhook gắn \`orderItemId\` cho đơn 1 con từ khi PHIÊN B lên prod ⇒ khoản rời khỏi tập — **lành**;`);
+    in_(`3. tiền mới về sau 16/09 làm tập rộng ra — **lành**;`);
+    in_(
+      `4. đơn rơi sang DRAFT/CANCELLED/REFUNDED (bị \`locDonNhanTien()\` loại), hoặc khoản bị xoá mềm / đã có ` +
+        `bút toán đảo — **đây là lý do duy nhất KHÔNG lành**: tiền đã về mà đơn không còn nhận được nữa. ` +
+        `Soi \`AuditLog\` của đơn trước khi làm tiếp.`,
+    );
     in_();
     in_(`**Chưa đối chiếu được nguyên nhân thì đừng chạy \`--apply\` của script gắn con.**`);
   }
