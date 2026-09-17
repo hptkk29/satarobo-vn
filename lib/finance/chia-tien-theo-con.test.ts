@@ -12,6 +12,7 @@ import { describe, it, expect } from "vitest";
 import {
   kiemChiaTheoCon,
   dungDotDeChia,
+  NHAN_DOT_CHUNG,
   type DotDeChia,
   type TranCuaCon,
 } from "./chia-tien-theo-con";
@@ -229,21 +230,95 @@ describe("[CTC-03] Σ phải ĐÚNG BẰNG số tiền giao dịch — bất bi�
 
 describe("[CTC-04] dungDotDeChia — màn hình và đường ghi dùng CHUNG một phép dựng", () => {
   it("conLai = amountDue − daRot, kẹp ở 0", () => {
-    const r = dungDotDeChia([
-      {
-        orderItemId: AN,
-        ten: "An",
-        dotDangMo: [
-          { id: "p1", installmentNo: 1, amountDue: 3_000_000, daRot: 1_000_000 },
-          { id: "p2", installmentNo: 2, amountDue: 2_000_000, daRot: 0 },
-          // Rót QUÁ (dung sai/ghi tay) — `conLai` không được ra số ÂM, kẻo nó kéo tụt
-          // phép so tổng ở chỗ khác.
-          { id: "p3", installmentNo: 3, amountDue: 1_000_000, daRot: 1_500_000 },
-        ],
-      },
-    ]);
+    const r = dungDotDeChia({
+      con: [
+        {
+          orderItemId: AN,
+          ten: "An",
+          dotDangMo: [
+            { id: "p1", installmentNo: 1, amountDue: 3_000_000, daRot: 1_000_000 },
+            { id: "p2", installmentNo: 2, amountDue: 2_000_000, daRot: 0 },
+            // Rót QUÁ (dung sai/ghi tay) — `conLai` không được ra số ÂM, kẻo nó kéo tụt
+            // phép so tổng ở chỗ khác.
+            { id: "p3", installmentNo: 3, amountDue: 1_000_000, daRot: 1_500_000 },
+          ],
+        },
+      ],
+      dotChuaGanCon: [],
+    });
     expect(r.map((x) => x.conLai)).toEqual([2_000_000, 2_000_000, 0]);
     expect(r.every((x) => x.orderItemId === AN)).toBe(true);
     expect(r.every((x) => x.tenCon === "An")).toBe(true);
+  });
+});
+
+describe("[CTC-05] ĐƠN CŨ — đợt `orderItemId = NULL` vẫn phải chia được", () => {
+  // ⚠️ Nhóm này thêm 17/09 sau khi đo ra một lỗ: bản đầu của `dungDotDeChia` chỉ nhận `con[]`,
+  // nên đợt NULL (mọi đơn trước 16/09) KHÔNG BAO GIỜ vào danh sách. Màn gắn hiện 0 đợt cho đơn
+  // cũ, và cổng từ chối chúng bằng câu "đợt không thuộc đơn này" — tức 24 giao dịch UNMATCHED
+  // của đơn cũ không gắn được bằng màn mới, đúng tập việc PHIÊN B sinh ra để dọn.
+  const nenDotChung = {
+    con: [],
+    dotChuaGanCon: [
+      { id: "pr-chung-1", installmentNo: 1, amountDue: 3_000_000, daRot: 0 },
+      { id: "pr-chung-2", installmentNo: 2, amountDue: 2_000_000, daRot: 500_000 },
+    ],
+  };
+
+  it("đợt NULL vào được danh sách, mang `orderItemId: null` và nhãn đợt chung", () => {
+    const r = dungDotDeChia(nenDotChung);
+    expect(r).toHaveLength(2);
+    expect(r.every((x) => x.orderItemId === null)).toBe(true);
+    expect(r.every((x) => x.tenCon === NHAN_DOT_CHUNG)).toBe(true);
+    expect(r.map((x) => x.conLai)).toEqual([3_000_000, 1_500_000]);
+  });
+
+  it("chia vào đợt NULL → QUA, và KHÔNG bị trần theo con chặn", () => {
+    // `tranCon` rỗng vì đơn chưa chia con nào. Trần theo con phải BỎ QUA dòng NULL — nếu nó
+    // đòi tìm `tranCon` cho `orderItemId: null` thì mọi đơn cũ bị chặn sạch.
+    const r = kiemChiaTheoCon({
+      soTienGiaoDich: 3_000_000,
+      dong: [{ paymentRequestId: "pr-chung-1", soTien: 3_000_000 }],
+      dot: dungDotDeChia(nenDotChung),
+      tranCon: [],
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it("trần theo ĐỢT vẫn cắn trên đợt NULL", () => {
+    const r = kiemChiaTheoCon({
+      soTienGiaoDich: 2_000_000,
+      dong: [{ paymentRequestId: "pr-chung-2", soTien: 2_000_000 }],
+      dot: dungDotDeChia(nenDotChung),
+      tranCon: [],
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.loi).toContain("1.500.000");
+  });
+
+  it("ĐƠN LAI — vừa có đợt theo con, vừa có đợt chung: chia được cho CẢ HAI", () => {
+    // Ca thật: đơn cũ đã có đợt toàn-đơn, rồi sale tạo thêm đợt cho một bé sau khi bật cờ.
+    const lai = {
+      con: [
+        {
+          orderItemId: AN,
+          ten: "An",
+          dotDangMo: [{ id: "pr-an-1", installmentNo: 1, amountDue: 1_000_000, daRot: 0 }],
+        },
+      ],
+      dotChuaGanCon: [{ id: "pr-chung-1", installmentNo: 1, amountDue: 2_000_000, daRot: 0 }],
+    };
+    const dot = dungDotDeChia(lai);
+    expect(dot).toHaveLength(2);
+    const r = kiemChiaTheoCon({
+      soTienGiaoDich: 3_000_000,
+      dong: [
+        { paymentRequestId: "pr-an-1", soTien: 1_000_000 },
+        { paymentRequestId: "pr-chung-1", soTien: 2_000_000 },
+      ],
+      dot,
+      tranCon: [tran(AN, "An", 1_000_000)],
+    });
+    expect(r.ok).toBe(true);
   });
 });

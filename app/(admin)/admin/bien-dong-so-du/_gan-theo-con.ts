@@ -21,8 +21,9 @@ import { scopedDb, passesScope } from "@/lib/db-scope";
 import { getAuditActor } from "@/lib/audit/log";
 import { noTheoCon } from "@/lib/finance/debt";
 import { ganTienTheoCon, goGanTheoCon, taoDotChoCon } from "@/lib/finance/ghi-tien-don";
-import { dungDotDeChia, type DongChia } from "@/lib/finance/chia-tien-theo-con";
+import type { DongChia } from "@/lib/finance/chia-tien-theo-con";
 import { ensureParentAccountForOrder } from "@/lib/parents/provision";
+import { laThuTienLinhHoatBat } from "@/lib/finance/feature";
 
 export type DotTrenMan = {
   paymentRequestId: string;
@@ -42,6 +43,14 @@ export type ConTrenMan = {
 export type ChiTietDonDeGan = {
   orderId: string;
   code: string;
+  /**
+   * Cơ sở giữ đơn này có bật thu học phí linh hoạt không.
+   *
+   * `false` ⇒ màn phải hiện đúng luồng TRƯỚC PHIÊN B (rót toàn đơn, chỉ kế toán). Cờ là cờ
+   * của CƠ SỞ GIỮ ĐƠN, không phải của người bấm — hai sale cùng màn, mở hai đơn khác cơ sở,
+   * thấy hai luồng khác nhau, và đó là đúng.
+   */
+  kieuMoi: boolean;
   con: ConTrenMan[];
   /** Đợt của luồng CŨ (thu toàn đơn, `orderItemId` NULL) — vẫn gắn được, chỉ không thuộc bé nào. */
   dotChungChuaChiaCon: DotTrenMan[];
@@ -67,9 +76,14 @@ type KetQua = { ok: true; message: string } | { ok: false; error: string };
 async function congGanVaoDon(orderId: string) {
   const session = await auth();
   if (!session?.user) return { ok: false as const, error: "Chưa đăng nhập" };
-  if (!(await checkPermission("payments:record"))) {
+  // Hỏi CẢ HAI quyền ngay đây: vế nào cần thì phụ thuộc vào CÔNG TẮC CỦA ĐƠN, mà đơn thì chưa
+  // tra. Cửa ngoài mở cho ai có một trong hai; cửa trong siết lại bên dưới.
+  const coRecord = await checkPermission("payments:record");
+  const coManage = await checkPermission("payments:manage");
+  if (!coRecord && !coManage) {
     return { ok: false as const, error: "Không có quyền ghi nhận tiền" };
   }
+
   const actor = await resolveActor(session.user.id);
   const order = await scopedDb(actor).order.findUnique({
     where: { id: orderId },
@@ -80,7 +94,25 @@ async function congGanVaoDon(orderId: string) {
     // ở cơ sở khác đã là một mẩu thông tin không nên rò.
     return { ok: false as const, error: "Không tìm thấy đơn hàng" };
   }
-  return { ok: true as const, session, actor, order };
+
+  // ⚠️ CÔNG TẮC THEO CƠ SỞ GIỮ ĐƠN — chủ dự án chốt 17/09.
+  //
+  // Cờ TẮT ⇒ quyền y như TRƯỚC PHIÊN B: chỉ `payments:manage`. Nghĩa là merge vào `main` không
+  // đổi một chút quyền nào trên prod trong khi cờ còn tắt — sale không mở thêm được cửa nào.
+  //
+  // Đọc theo `orgUnitId` của ĐƠN, không theo người bấm: cùng một sale mở hai đơn ở hai cơ sở
+  // thì phải thấy hai luồng khác nhau. Đọc theo người bấm là pilot một cơ sở hoá ra bật cho
+  // mọi đơn mà người của cơ sở đó chạm vào.
+  const kieuMoi = await laThuTienLinhHoatBat(order.orgUnitId);
+  if (!kieuMoi && !coManage) {
+    return {
+      ok: false as const,
+      error:
+        "Cơ sở của đơn này chưa bật thu học phí linh hoạt — chỉ kế toán mới gắn được giao dịch",
+    };
+  }
+
+  return { ok: true as const, session, actor, order, kieuMoi };
 }
 
 function lamMoi(orderId: string) {
@@ -102,7 +134,6 @@ export async function taiChiTietDonDeGan(
   if (!cong.ok) return { error: cong.error };
 
   const so = await noTheoCon(orderId);
-  const dot = dungDotDeChia(so.con);
   const dotCuaCon = new Map<string, DotTrenMan[]>();
   for (const c of so.con) {
     dotCuaCon.set(
@@ -119,6 +150,7 @@ export async function taiChiTietDonDeGan(
   return {
     orderId,
     code: cong.order.code,
+    kieuMoi: cong.kieuMoi,
     con: so.con.map((c) => ({
       orderItemId: c.orderItemId,
       ten: c.ten,
@@ -126,13 +158,17 @@ export async function taiChiTietDonDeGan(
       conNo: c.conNo,
       dot: dotCuaCon.get(c.orderItemId) ?? [],
     })),
-    // Đợt luồng cũ không thuộc bé nào — `dungDotDeChia` chỉ đi qua `so.con` nên chúng không
-    // lọt vào đó; tra riêng để màn hình vẫn gắn được tiền cho đơn chưa chia con.
-    dotChungChuaChiaCon: dot.filter((d) => d.orderItemId == null).map((d) => ({
+    // ⚠️ SỬA 17/09 — bản đầu lọc `dungDotDeChia(so.con)` để tìm đợt `orderItemId = NULL`, mà
+    // hàm đó chỉ đi qua `so.con` nên nó KHÔNG BAO GIỜ sinh ra dòng NULL: danh sách này luôn
+    // RỖNG, và mọi đơn trước 16/09 hiện ra 0 đợt để chia. Chú thích cũ nói "tra riêng" nhưng
+    // thực ra lọc lại đúng cái danh sách vừa dựng — một câu chú thích ĐÚNG Ý mà SAI MÃ.
+    //
+    // Nay đọc từ `so.dotChuaGanCon`, trường mà `tinhNoTheoCon` lộ ra riêng cho việc này.
+    dotChungChuaChiaCon: so.dotChuaGanCon.map((d) => ({
       paymentRequestId: d.id,
       installmentNo: d.installmentNo,
-      conLai: d.conLai,
-      hanDong: null,
+      conLai: Math.max(0, d.amountDue - d.daRot),
+      hanDong: d.dueDate ? d.dueDate.toISOString() : null,
     })),
     chuaGanCon: so.chuaGanCon,
   };

@@ -197,3 +197,99 @@ describe("[QDS-03] khoá theo đơn — MỘT công thức, dùng chung với đ
     expect(ghi).not.toMatch(/noTheoCon\(/);
   });
 });
+
+describe("[QDS-05] CÔNG TẮC THEO CƠ SỞ — cờ tắt thì prod y như TRƯỚC merge", () => {
+  // Chủ dự án chốt 17/09: *"Màn gắn kiểu mới + quyền sale phải SAU CỜ theo cơ sở của đơn. Cờ
+  // tắt → màn và quyền y như trước merge (chỉ payments:manage)."*
+  //
+  // ⚠️ Ba khẳng định dưới đây là về DÂY NỐI (cổng nào đọc cờ nào, nhánh nào còn sống), nên
+  // chúng là lưới ghim mã nguồn. Phần HÀNH VI của phép giải cờ đã có test thuần riêng ở
+  // `lib/finance/feature.test.ts` — ca này không dựng lại phép giải đó.
+
+  it("cổng gắn đọc cờ theo `orgUnitId` của ĐƠN, không theo người bấm", () => {
+    const gan = docMa("app/(admin)/admin/bien-dong-so-du/_gan-theo-con.ts");
+    const khoi = than(gan, "congGanVaoDon");
+    expect(khoi).not.toBe("");
+    // Cờ của CƠ SỞ GIỮ ĐƠN. Đọc theo người bấm là pilot một cơ sở hoá ra bật cho mọi đơn mà
+    // người của cơ sở đó chạm vào.
+    expect(khoi).toMatch(/const kieuMoi = await laThuTienLinhHoatBat\(order\.orgUnitId\);/);
+    // Và cờ TẮT thì phải đòi `payments:manage` — tức đúng quyền trước merge.
+    expect(khoi).toMatch(/if \(!kieuMoi && !coManage\) \{/);
+    // Hỏi CẢ HAI quyền, vì vế nào cần thì phụ thuộc vào cờ mà cờ thì chưa biết lúc mở cửa.
+    expect(khoi).toMatch(/checkPermission\("payments:record"\)/);
+    expect(khoi).toMatch(/checkPermission\("payments:manage"\)/);
+  });
+
+  it("đường gắn CŨ (rót toàn đơn) vẫn còn sống và vẫn gác `payments:manage`", () => {
+    // ⚠️ PHIÊN B đã XOÁ hàm này. Xoá là merge vào `main` đổi hành vi prod NGAY trong khi công
+    // tắc vẫn tắt — đúng thứ công tắc sinh ra để tránh. Nay nó là nhánh CỜ-TẮT.
+    const act = docMa("app/(admin)/admin/bien-dong-so-du/_actions.ts");
+    expect(act).toMatch(
+      /export async function ganGiaoDichVaoDon\([\s\S]{0,300}?await gateKeToan\(\)/,
+    );
+    // Nó phải đi qua `allocateToOrder` — tức CÙNG đường ghi mà webhook dùng, kèm đủ
+    // side-effect sau commit. Viết lại waterfall ở đây là bản thứ hai của phép rót tiền.
+    expect(act).toMatch(/await allocateToOrder\(\{/);
+  });
+
+  it("màn hình VẼ NÚT theo cờ: không nơi nào bật ⇒ `canGan` rơi về đúng `canManage`", () => {
+    const page = docMa("app/(admin)/admin/bien-dong-so-du/page.tsx");
+    // Affordance phải nói thật (luật 12): sale không được thấy nút nếu chẳng cơ sở nào bật.
+    expect(page).toMatch(
+      /const canGan = canManagePayments \|\| \(canRecordPayments && coNoiBatCo\);/,
+    );
+    expect(page).toMatch(
+      /const coNoiBatCo = await coNoiNaoBatThuLinhHoat\(actor\.visibleOrgUnitIds\);/,
+    );
+    // Và màn phải BIẾT đơn đang ở luồng nào để vẽ đúng khối.
+    const gan = docMa("app/(admin)/admin/bien-dong-so-du/_gan-theo-con.ts");
+    expect(gan).toMatch(/kieuMoi: cong\.kieuMoi,/);
+    const man = docMa("app/(admin)/admin/bien-dong-so-du/_components/xu-ly-giao-dich.tsx");
+    expect(man).toMatch(/if \(chiTiet && !chiTiet\.kieuMoi\) \{/);
+    expect(man).toMatch(/ganGiaoDichVaoDon\(bankTransactionId, chiTiet\.orderId\)/);
+  });
+
+  it("`coNoiNaoBatThuLinhHoat` KHÔNG ngắt sớm bằng công tắc toàn hệ", () => {
+    // Ca "toàn hệ BẬT + cơ sở này TẮT" có thật (chốt 16/09: *gỡ một cơ sở ra khi nó gặp sự
+    // cố*). Ngắt sớm ở công tắc toàn hệ sẽ vẽ nút cho người của đúng cơ sở vừa bị gỡ.
+    const src = docMa("lib/finance/feature.ts");
+    const khoi = than(src, "coNoiNaoBatThuLinhHoat");
+    expect(khoi).not.toBe("");
+    // Chỉ đọc toàn hệ khi KHÔNG có cơ sở nào để hỏi.
+    expect(khoi).toMatch(/if \(orgUnitIds\.length === 0\) return laThuTienLinhHoatBat\(null\);/);
+    expect(khoi).toMatch(/for \(const id of orgUnitIds\)/);
+  });
+
+  it("đợt `orderItemId = NULL` PHẢI vào được danh sách chia — đơn cũ không bị bỏ rơi", () => {
+    // ⚠️ Bản đầu lọc `dungDotDeChia(so.con)` để tìm đợt NULL, mà hàm đó chỉ đi qua `con[]` nên
+    // danh sách LUÔN RỖNG: mọi đơn trước 16/09 hiện 0 đợt để chia. Một chú thích ĐÚNG Ý mà
+    // SAI MÃ — nó nói "tra riêng" trong khi thực ra lọc lại đúng danh sách vừa dựng.
+    const gan = docMa("app/(admin)/admin/bien-dong-so-du/_gan-theo-con.ts");
+    expect(gan).toMatch(/dotChungChuaChiaCon: so\.dotChuaGanCon\.map\(/);
+    expect(gan).not.toMatch(/dungDotDeChia\(so\.con\)/);
+
+    const ghi = docMa("lib/finance/ghi-tien-don.ts");
+    // Đường GHI cũng phải nhận cả hai nguồn, nếu không màn hiện đợt mà cổng từ chối nó.
+    expect(ghi).toMatch(/const dotDeChia = dungDotDeChia\(so\);/);
+    // Và đơn MỘT con thì nâng đợt NULL lên đúng bé đó.
+    expect(ghi).toMatch(/const conDuyNhat = dongCuaDon\.length === 1 \?/);
+    expect(ghi).toMatch(/conSuyRa\.set\(d\.paymentRequestId, conDuyNhat\);/);
+  });
+
+  it("gỡ gắn chụp ĐỦ cột trước khi xoá, và ghi id bút toán đảo", () => {
+    const ghi = docMa("lib/finance/ghi-tien-don.ts");
+    const khoi = than(ghi, "goGanTheoCon");
+    expect(khoi).not.toBe("");
+    // Hai cột KHÔNG suy ra được từ phần còn lại sau khi phân bổ bị xoá.
+    expect(khoi).toMatch(/createdAt: true,/);
+    expect(khoi).toMatch(/orderItemId: true,/);
+    // Người gắn chỉ còn trong nhật ký lượt gắn — phải tra ngược để ảnh chụp tự đủ.
+    expect(khoi).toMatch(/action: "TXN_CHIA_THEO_CON"/);
+    expect(khoi).toMatch(/nguoiGan: vetGan/);
+    expect(khoi).toMatch(/idButToanDao,/);
+    expect(khoi).toMatch(/trangThaiDotSauGo:/);
+    // Cùng MỘT transaction: `writeAudit` phải nhận `tx`, kẻo nhật ký sống sót một lượt
+    // rollback và kể một chuyện chưa từng xảy ra.
+    expect(khoi).toMatch(/await writeAudit\(\{\s*tx,/);
+  });
+});

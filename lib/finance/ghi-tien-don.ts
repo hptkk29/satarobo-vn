@@ -233,7 +233,7 @@ export async function ganTienTheoCon(input: {
       };
     }
 
-    const dotDeChia = dungDotDeChia(so.con);
+    const dotDeChia = dungDotDeChia(so);
     const kiem = kiemChiaTheoCon({
       soTienGiaoDich: txn.amount,
       dong: input.dong,
@@ -244,6 +244,46 @@ export async function ganTienTheoCon(input: {
 
     // Đợt nào của con nào — cần cho `Payment.orderItemId`, tức cho công nợ theo con.
     const dotTheoId = new Map(dotDeChia.map((d) => [d.id, d]));
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // ĐƠN CŨ · ĐƠN MỘT CON — nâng đợt `orderItemId = NULL` lên đúng bé đó.
+    //
+    // Đơn trước 16/09 có đợt không thuộc bé nào. Đơn ấy mà chỉ có MỘT dòng hàng thì tiền
+    // không thể của ai khác, nên không có gì để đoán: lúc gắn tiền là lúc thích hợp nhất để
+    // đóng luôn khoảng trống dữ liệu.
+    //
+    // ⚠️ Nâng cả `PaymentRequest` chứ không chỉ `Payment`: để đợt ở NULL trong khi tiền của
+    // nó đã ghi tên bé là hai màn nói hai chuyện — `con[].dotDangMo` không nhận đợt đó, nên
+    // nó ở lại khối "Đợt chung (chưa chia con)" mãi, dù chẳng còn gì chưa chia.
+    //
+    // ⚠️ VÀ CÓ MỘT CA KHÔNG NÂNG ĐƯỢC: khoá duy nhất từng phần
+    // `(orderItemId, installmentNo) WHERE NOT NULL` sẽ đụng nếu bé đó ĐÃ có đợt cùng số.
+    // Ca đó thì chỉ ghi `Payment.orderItemId` (tiền vẫn về đúng bé) và để đợt nguyên NULL —
+    // thà một màn hiện thừa một dòng còn hơn transaction ném và cả lượt gắn rollback.
+    const dongCuaDon = await tx.orderItem.findMany({
+      where: { orderId: input.orderId },
+      select: { id: true },
+      take: 2,
+    });
+    const conDuyNhat = dongCuaDon.length === 1 ? (dongCuaDon[0]?.id ?? null) : null;
+    /** Đợt NULL → bé nào, sau khi đã nâng (hoặc chỉ suy ra được cho phần tiền). */
+    const conSuyRa = new Map<string, string>();
+    if (conDuyNhat) {
+      for (const d of kiem.dong) {
+        const dot = dotTheoId.get(d.paymentRequestId);
+        if (!dot || dot.orderItemId != null) continue;
+        conSuyRa.set(d.paymentRequestId, conDuyNhat);
+        const dungSo = await tx.paymentRequest.count({
+          where: { orderItemId: conDuyNhat, installmentNo: dot.installmentNo },
+        });
+        if (dungSo === 0) {
+          await tx.paymentRequest.update({
+            where: { id: d.paymentRequestId },
+            data: { orderItemId: conDuyNhat },
+          });
+        }
+      }
+    }
 
     for (const d of kiem.dong) {
       await tx.paymentAllocation.create({
@@ -265,7 +305,8 @@ export async function ganTienTheoCon(input: {
     const congTheoCon = new Map<string, number>();
     for (const d of kiem.dong) {
       const dot = dotTheoId.get(d.paymentRequestId);
-      const khoa = dot?.orderItemId ?? "";
+      // Đợt NULL của đơn MỘT con ⇒ tiền vẫn ghi tên bé đó (xem khối "ĐƠN CŨ" ở trên).
+      const khoa = dot?.orderItemId ?? conSuyRa.get(d.paymentRequestId) ?? "";
       congTheoCon.set(khoa, (congTheoCon.get(khoa) ?? 0) + d.soTien);
     }
 
@@ -315,7 +356,10 @@ export async function ganTienTheoCon(input: {
         tong: kiem.tong,
         dong: kiem.dong.map((d) => ({
           paymentRequestId: d.paymentRequestId,
-          orderItemId: dotTheoId.get(d.paymentRequestId)?.orderItemId ?? null,
+          orderItemId:
+            dotTheoId.get(d.paymentRequestId)?.orderItemId ??
+            conSuyRa.get(d.paymentRequestId) ??
+            null,
           soTien: d.soTien,
         })),
       },
@@ -366,13 +410,31 @@ export async function goGanTheoCon(input: {
       };
     }
 
+    // ẢNH CHỤP ĐỦ trước khi xoá — chủ dự án chốt 17/09.
+    //
+    // ⚠️ `PaymentAllocation` bị XOÁ thật, nên sau lượt gỡ thì DB không còn bằng chứng nào về
+    // việc "tiền này từng rót vào đợt kia". Thiếu một cột trong ảnh chụp là cột đó mất VĨNH
+    // VIỄN — không có đường dựng lại. Vì thế chụp cả `createdAt` (rót lúc nào) và
+    // `orderItemId` của phiếu (rót cho bé nào): hai thứ không suy ra được từ phần còn lại.
     const phanBo = await tx.paymentAllocation.findMany({
       where: { bankTransactionId: txn.id },
       select: {
         id: true,
+        bankTransactionId: true,
         paymentRequestId: true,
         amount: true,
-        paymentRequest: { select: { orderId: true } },
+        roundingWaived: true,
+        centerId: true,
+        createdAt: true,
+        paymentRequest: {
+          select: {
+            orderId: true,
+            orderItemId: true,
+            installmentNo: true,
+            amountDue: true,
+            status: true,
+          },
+        },
       },
     });
     if (phanBo.length === 0) {
@@ -384,8 +446,25 @@ export async function goGanTheoCon(input: {
       return { ok: false as const, error: "Giao dịch này rót vào đơn khác — mở đúng đơn đó để gỡ" };
     }
 
+    // NGƯỜI GẮN: `PaymentAllocation` không có cột actor, nên dấu vết ấy chỉ còn trong nhật ký
+    // của lượt GẮN. Tra ngược ngay đây để ảnh chụp tự đủ — người đọc nhật ký gỡ không phải đi
+    // tìm tiếp một bản ghi khác mới biết ai đã gắn.
+    const vetGan = await tx.auditLog.findFirst({
+      where: { entityType: "BankTransaction", entityId: txn.id, action: "TXN_CHIA_THEO_CON" },
+      orderBy: { createdAt: "desc" },
+      select: { actorId: true, actorName: true, createdAt: true },
+    });
+
     await tx.paymentAllocation.deleteMany({ where: { bankTransactionId: txn.id } });
     await recomputeRequestStatuses(tx, input.orderId);
+
+    // Trạng thái đợt SAU khi gỡ — ghi vào nhật ký làm bằng chứng "nợ con đã quay lại".
+    // KHÔNG tự suy ra PENDING: `deriveStatus` mới là nơi quyết, và một đợt còn tiền của giao
+    // dịch KHÁC thì phải là PARTIAL.
+    const dotSau = await tx.paymentRequest.findMany({
+      where: { id: { in: phanBo.map((x) => x.paymentRequestId) } },
+      select: { id: true, installmentNo: true, status: true, orderItemId: true },
+    });
 
     const marker = markerGanTay(txn.id);
     const goc = await tx.payment.findMany({
@@ -409,13 +488,15 @@ export async function goGanTheoCon(input: {
 
     let tienDao = 0;
     let soDongDao = 0;
+    const idButToanDao: string[] = [];
     for (const g of goc) {
       // Đã có bút toán đảo cho dòng này rồi thì thôi — gỡ hai lần không được trừ hai lần.
       const daDao = await tx.payment.count({
         where: { adjustmentOfId: g.id, paymentType: "ADJUSTMENT", deletedAt: null },
       });
       if (daDao > 0) continue;
-      await tx.payment.create({
+      const dao = await tx.payment.create({
+        select: { id: true },
         data: {
           orderId: input.orderId,
           orderItemId: g.orderItemId,
@@ -431,6 +512,7 @@ export async function goGanTheoCon(input: {
           centerId: g.centerId,
         },
       });
+      idButToanDao.push(dao.id);
       tienDao += g.amount;
       soDongDao += 1;
     }
@@ -449,9 +531,38 @@ export async function goGanTheoCon(input: {
       action: "TXN_GO_GAN",
       oldValues: {
         orderId: input.orderId,
-        phanBo: phanBo.map((p) => ({ paymentRequestId: p.paymentRequestId, amount: p.amount })),
+        // Ảnh chụp ĐỦ — xem khối chú thích ở chỗ tra `phanBo`.
+        phanBo: phanBo.map((p) => ({
+          id: p.id,
+          bankTransactionId: p.bankTransactionId,
+          paymentRequestId: p.paymentRequestId,
+          orderItemId: p.paymentRequest.orderItemId,
+          installmentNo: p.paymentRequest.installmentNo,
+          amount: p.amount,
+          roundingWaived: p.roundingWaived,
+          centerId: p.centerId,
+          createdAt: p.createdAt.toISOString(),
+        })),
+        nguoiGan: vetGan
+          ? {
+              actorId: vetGan.actorId,
+              actorName: vetGan.actorName,
+              luc: vetGan.createdAt.toISOString(),
+            }
+          : null,
       },
-      newValues: { status: "UNMATCHED", soDongDao, tienDao },
+      newValues: {
+        status: "UNMATCHED",
+        soDongDao,
+        tienDao,
+        idButToanDao,
+        trangThaiDotSauGo: dotSau.map((d) => ({
+          paymentRequestId: d.id,
+          installmentNo: d.installmentNo,
+          orderItemId: d.orderItemId,
+          status: d.status,
+        })),
+      },
       reason: input.lyDo,
       orgUnitId: txn.centerId,
     });

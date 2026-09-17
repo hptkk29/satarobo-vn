@@ -135,26 +135,48 @@ export function kiemChiaTheoCon(input: {
   return { ok: true, dong: dong.map((d) => ({ ...d, soTien: tron(d.soTien) })), tong };
 }
 
+/** Nhãn cho đợt của luồng CŨ, khi chưa biết tiền là của bé nào. */
+export const NHAN_DOT_CHUNG = "Đợt chung (chưa chia con)";
+
 /**
  * Dựng danh sách đợt để chia từ kết quả `tinhNoTheoCon`.
  *
  * Tách riêng để màn hình và đường ghi dùng CHUNG một phép dựng — hai bản chép tay là hai cơ
  * hội để màn hiện `conLai` một kiểu còn cổng tính một kiểu khác.
+ *
+ * ⚠️ NHẬN CẢ `dotChuaGanCon`, và nhận cả KẾT QUẢ thay vì chỉ `con[]` — bản đầu của PHIÊN B chỉ
+ * nhận `con[]` nên đợt `orderItemId = NULL` (mọi đơn trước 16/09) không bao giờ vào danh sách:
+ * màn gắn hiện 0 đợt cho đơn cũ, và cổng từ chối chúng với câu "đợt không thuộc đơn này".
+ * Đổi chữ ký thay vì thêm tham số thứ hai có mặc định, để `tsc` liệt kê đủ chỗ gọi (luật 7).
  */
-export function dungDotDeChia(
+export function dungDotDeChia(input: {
   con: readonly {
     orderItemId: string;
     ten: string;
     dotDangMo: readonly { id: string; installmentNo: number; amountDue: number; daRot: number }[];
-  }[],
-): DotDeChia[] {
-  return con.flatMap((c) =>
+  }[];
+  dotChuaGanCon: readonly {
+    id: string;
+    installmentNo: number;
+    amountDue: number;
+    daRot: number;
+  }[];
+}): DotDeChia[] {
+  const theoCon = input.con.flatMap((c) =>
     c.dotDangMo.map((d) => ({
       id: d.id,
-      orderItemId: c.orderItemId,
+      orderItemId: c.orderItemId as string | null,
       installmentNo: d.installmentNo,
       conLai: Math.max(0, tron(d.amountDue) - tron(d.daRot)),
       tenCon: c.ten,
     })),
   );
+  const dotChung = input.dotChuaGanCon.map((d) => ({
+    id: d.id,
+    orderItemId: null,
+    installmentNo: d.installmentNo,
+    conLai: Math.max(0, tron(d.amountDue) - tron(d.daRot)),
+    tenCon: NHAN_DOT_CHUNG,
+  }));
+  return [...theoCon, ...dotChung];
 }

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
+import { coNoiNaoBatThuLinhHoat } from "@/lib/finance/feature";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { extractOrderCode } from "@/lib/payments/sepay";
@@ -79,6 +80,18 @@ export default async function SepayLogPage({
 
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
+
+  // ⚠️ AFFORDANCE THEO CÔNG TẮC — chủ dự án chốt 17/09: *"cờ tắt → màn và quyền y như trước
+  // merge (chỉ payments:manage)"*.
+  //
+  // Nút "Gắn vào đơn" là nút của SALE, và sale chỉ được vẽ nút khi có cơ sở nào trong tầm nhìn
+  // của họ đã bật cờ. Không nơi nào bật ⇒ `canGan` rơi về đúng `canManage`, tức prod sau merge
+  // giống hệt prod trước merge.
+  //
+  // Đây CHỈ là affordance. Cổng tiền hỏi cờ của CƠ SỞ GIỮ ĐƠN (`congGanVaoDon` trong
+  // `_gan-theo-con.ts`) — ở đây chưa biết tiền của đơn nào nên không thể hỏi câu hẹp hơn.
+  const coNoiBatCo = await coNoiNaoBatThuLinhHoat(actor.visibleOrgUnitIds);
+  const canGan = canManagePayments || (canRecordPayments && coNoiBatCo);
 
   // ── Nguồn chính: giao dịch tiền về (mọi provider) ────────────────────────────
   // BankTransaction ∈ SCOPED_MODELS + NULL_IS_GLOBAL_MODELS → centerId null (tiền vừa
@@ -264,7 +277,7 @@ export default async function SepayLogPage({
       <BankTxnClient
         items={txnItems}
         canManage={canManagePayments}
-        canGan={canManagePayments || canRecordPayments}
+        canGan={canGan}
       />
 
       <p className="mt-3 text-xs text-muted-foreground">

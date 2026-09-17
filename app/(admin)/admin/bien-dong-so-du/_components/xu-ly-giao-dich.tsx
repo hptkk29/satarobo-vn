@@ -20,7 +20,12 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { timDonDeGan, boQuaGiaoDich, type DonUngVien } from "../_actions";
+import {
+  timDonDeGan,
+  boQuaGiaoDich,
+  ganGiaoDichVaoDon,
+  type DonUngVien,
+} from "../_actions";
 import {
   taiChiTietDonDeGan,
   ganGiaoDichTheoConAction,
@@ -110,6 +115,28 @@ export function XuLyGiaoDich({
     });
   }
 
+  /**
+   * Nhánh CỜ TẮT: rót toàn bộ vào phiếu mở sớm nhất, y như trước PHIÊN B.
+   *
+   * ⚠️ Không phải "phiên bản rút gọn" của màn chia — nó là ĐƯỜNG GHI KHÁC
+   * (`allocateToOrder` + waterfall + side-effect sau commit). Giữ nguyên để cờ tắt thì prod
+   * không đổi một hành vi nào.
+   */
+  function ganToanDon() {
+    if (!chiTiet) return;
+    batDau(async () => {
+      const res = await ganGiaoDichVaoDon(bankTransactionId, chiTiet.orderId);
+      if (res.ok) {
+        toast.success(res.message);
+        setMo(null);
+        setChiTiet(null);
+        router.refresh();
+      } else {
+        toast.error(res.error);
+      }
+    });
+  }
+
   function boQua() {
     batDau(async () => {
       const res = await boQuaGiaoDich(bankTransactionId, lyDo);
@@ -183,6 +210,54 @@ export function XuLyGiaoDich({
           <button
             type="button"
             onClick={() => setMo(null)}
+            className="rounded border border-border px-2.5 py-1 text-xs text-muted-foreground hover:bg-muted"
+          >
+            Huỷ
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Đã chọn đơn, CỜ TẮT → luồng CŨ: rót toàn đơn ────────────────────────────
+  if (chiTiet && !chiTiet.kieuMoi) {
+    return (
+      <div className="w-[min(92vw,340px)] space-y-2 rounded-md border border-border bg-card p-2.5">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="truncate font-mono text-xs font-semibold text-foreground">
+              {chiTiet.code}
+            </div>
+            <div className="text-[11px] text-muted-foreground">Rót {fmt(amount)}đ vào đơn này</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setChiTiet(null)}
+            className="shrink-0 text-xs text-muted-foreground hover:text-foreground"
+          >
+            ← Đổi đơn
+          </button>
+        </div>
+        <p className="rounded bg-muted px-2 py-1 text-[11px] leading-snug text-muted-foreground">
+          Cơ sở của đơn này chưa bật thu học phí linh hoạt, nên tiền rót vào phiếu thu mở sớm
+          nhất rồi tràn dần sang các đợt sau. Muốn chia đích danh cho từng con thì bật công tắc
+          cho cơ sở đó trước.
+        </p>
+        <div className="flex gap-1.5">
+          <button
+            type="button"
+            disabled={dangChay}
+            onClick={ganToanDon}
+            className="rounded bg-primary px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
+          >
+            {dangChay ? "Đang rót…" : "Rót vào đơn"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMo(null);
+              setChiTiet(null);
+            }}
             className="rounded border border-border px-2.5 py-1 text-xs text-muted-foreground hover:bg-muted"
           >
             Huỷ

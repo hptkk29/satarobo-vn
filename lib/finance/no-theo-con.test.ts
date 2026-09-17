@@ -437,3 +437,54 @@ describe("[NTC-06] CÔNG TẮC — tắt thì luồng cũ y nguyên", () => {
     expect(giaiCongTac({ toanHe: true, coSo: false })).toBe(false);
   });
 });
+
+describe("[NTC-07] đợt CHƯA GẮN CON — đơn cũ không được rơi khỏi kết quả", () => {
+  // ⚠️ Nhóm này thêm 17/09. Trước đó `tinhNoTheoCon` lọc đợt theo `x.orderItemId === d.orderItemId`
+  // nên đợt NULL không thuộc bé nào và BIẾN MẤT khỏi kết quả — màn gắn dựng danh sách từ `con[]`
+  // nên đơn trước 16/09 hiện ra 0 đợt để chia.
+  const dotChung = (installmentNo: number, amountDue: number, x: Partial<DotCuaDong> = {}) =>
+    ({ ...dot("", installmentNo, amountDue, x), orderItemId: null }) as DotCuaDong;
+
+  it("đợt NULL đang mở ra `dotChuaGanCon`, KHÔNG lẫn vào bé nào", () => {
+    const r = tinhNoTheoCon({
+      dong: dong(),
+      khoanDaXacNhan: [],
+      khoanChoXacNhan: [],
+      dot: [dot(AN, 1, 3_000_000), dotChung(1, 5_000_000)],
+    });
+    expect(r.dotChuaGanCon.map((d) => d.amountDue)).toEqual([5_000_000]);
+    // Không bé nào nhận đợt chung — nếu lẫn vào, `tongDotDangMo` của bé đó phình lên và cổng
+    // tạo đợt sẽ chặn oan.
+    expect(r.con.find((c) => c.orderItemId === AN)!.tongDotDangMo).toBe(3_000_000);
+    expect(r.con.find((c) => c.orderItemId === BINH)!.tongDotDangMo).toBe(0);
+  });
+
+  it("chỉ đợt ĐANG MỞ — VOID/PAID không vào danh sách", () => {
+    const r = tinhNoTheoCon({
+      dong: dong(),
+      khoanDaXacNhan: [],
+      khoanChoXacNhan: [],
+      dot: [
+        dotChung(1, 1_000_000, { trangThai: "PENDING" }),
+        dotChung(2, 2_000_000, { trangThai: "PARTIAL" }),
+        dotChung(3, 3_000_000, { trangThai: "PAID" }),
+        dotChung(4, 4_000_000, { trangThai: "VOID" }),
+      ],
+    });
+    expect(r.dotChuaGanCon.map((d) => d.installmentNo)).toEqual([1, 2]);
+  });
+
+  it("xếp theo hạn rồi tới số đợt; đợt KHÔNG hạn xuống cuối", () => {
+    const r = tinhNoTheoCon({
+      dong: dong(),
+      khoanDaXacNhan: [],
+      khoanChoXacNhan: [],
+      dot: [
+        dotChung(3, 1_000_000),
+        dotChung(1, 1_000_000, { dueDate: new Date("2026-12-01") }),
+        dotChung(2, 1_000_000, { dueDate: new Date("2026-10-01") }),
+      ],
+    });
+    expect(r.dotChuaGanCon.map((d) => d.installmentNo)).toEqual([2, 1, 3]);
+  });
+});

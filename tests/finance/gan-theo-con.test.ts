@@ -405,3 +405,298 @@ describe.skipIf(!RUN_DB_TESTS)("[GTC] gắn giao dịch chia theo con — DB th�
     expect(tong).toBe(4_000_000);
   });
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// ĐƠN CŨ — đợt `orderItemId = NULL` (mọi đơn trước 16/09/2026)
+//
+// ⚠️ Nhóm này thêm 17/09 sau khi đo ra một lỗ: `dungDotDeChia` bản đầu chỉ đi qua `con[]` nên
+// đợt NULL không bao giờ vào danh sách ⇒ màn gắn hiện 0 đợt cho đơn cũ, cổng từ chối chúng với
+// câu "đợt không thuộc đơn này". Tức 24 giao dịch UNMATCHED của đơn cũ KHÔNG gắn được bằng màn
+// mới — đúng tập việc mà PHIÊN B sinh ra để dọn.
+// ═════════════════════════════════════════════════════════════════════════════
+
+const TC = "fx-gtc-cu-";
+const DON_CU = `${TC}don`;
+const ITEM_CU_A = `${TC}item-a`;
+const ITEM_CU_B = `${TC}item-b`;
+const PR_CHUNG = `${TC}pr-chung`;
+const PR_A = `${TC}pr-a`;
+
+async function donCu() {
+  await db.paymentAllocation.deleteMany({ where: { bankTransactionId: { startsWith: TC } } });
+  await db.payment.deleteMany({ where: { orderId: DON_CU } });
+  await db.paymentRequest.deleteMany({ where: { orderId: DON_CU } });
+  await db.bankTransaction.deleteMany({ where: { id: { startsWith: TC } } });
+  await db.orderItem.deleteMany({ where: { orderId: DON_CU } });
+  await db.order.deleteMany({ where: { id: DON_CU } });
+}
+
+/**
+ * Đơn kiểu CŨ: một đợt thu `orderItemId = NULL`.
+ * `soCon = 1` ⇒ đơn một con (suy ra được); `2` ⇒ phải để sale chia.
+ */
+async function dungDonCu(soCon: 1 | 2, opts: { themDotCuaCon?: boolean } = {}) {
+  await donCu();
+  await db.order.create({
+    data: {
+      id: DON_CU,
+      code: "ORD-269903-000001",
+      type: "COURSE",
+      status: "PENDING_PAYMENT",
+      customerName: "Phụ huynh đơn cũ",
+      customerPhone: "0999000222",
+      totalAmount: soCon === 1 ? 3_000_000 : 6_000_000,
+    },
+  });
+  const ten = [
+    [ITEM_CU_A, "Lê Văn A"],
+    [ITEM_CU_B, "Lê Thị B"],
+  ] as const;
+  for (const [id, n] of ten.slice(0, soCon)) {
+    await db.orderItem.create({
+      data: {
+        id,
+        orderId: DON_CU,
+        type: "COURSE_ENROLLMENT",
+        itemName: n,
+        quantity: 1,
+        unitPrice: 3_000_000,
+        totalPrice: 3_000_000,
+      },
+    });
+  }
+  // Đợt của LUỒNG CŨ — không thuộc bé nào.
+  await db.paymentRequest.create({
+    data: {
+      id: PR_CHUNG,
+      orderId: DON_CU,
+      orderItemId: null,
+      installmentNo: 1,
+      amountDue: 2_000_000,
+      status: "PENDING",
+      sortOrder: 1,
+    },
+  });
+  if (opts.themDotCuaCon) {
+    await db.paymentRequest.create({
+      data: {
+        id: PR_A,
+        orderId: DON_CU,
+        orderItemId: ITEM_CU_A,
+        installmentNo: 1,
+        amountDue: 1_000_000,
+        status: "PENDING",
+        sortOrder: 1,
+      },
+    });
+  }
+  await db.bankTransaction.create({
+    data: {
+      id: `${TC}txn`,
+      provider: "SEPAY",
+      providerTxnId: `${TC}txn`,
+      amount: opts.themDotCuaCon ? 3_000_000 : 2_000_000,
+      transferredAt: new Date("2699-03-01T03:00:00Z"),
+      status: "UNMATCHED",
+    },
+  });
+}
+
+describe.skipIf(!RUN_DB_TESTS)("[GTC-CU] đơn cũ — đợt không thuộc bé nào", () => {
+  afterAll(donCu);
+
+  it("[GTC-10] đơn MỘT con: gắn vào đợt NULL → tiền ghi tên bé, và ĐỢT được nâng luôn", async () => {
+    await dungDonCu(1);
+    const r = await ganTienTheoCon({
+      bankTransactionId: `${TC}txn`,
+      orderId: DON_CU,
+      dong: [{ paymentRequestId: PR_CHUNG, soTien: 2_000_000 }],
+      actor: ACTOR,
+    });
+    expect(r.ok).toBe(true);
+
+    // Tiền mang tên bé — đây là thứ công nợ theo con đọc.
+    const khoan = await db.payment.findMany({
+      where: { orderId: DON_CU, deletedAt: null },
+      select: { orderItemId: true, amount: true },
+    });
+    expect(khoan).toHaveLength(1);
+    expect(khoan[0]!.orderItemId).toBe(ITEM_CU_A);
+
+    // Và đợt cũng được nâng: để nó ở NULL trong khi tiền đã ghi tên bé là hai màn nói hai
+    // chuyện — nó sẽ ở lại khối "Đợt chung (chưa chia con)" mãi.
+    const pr = await db.paymentRequest.findUniqueOrThrow({ where: { id: PR_CHUNG } });
+    expect(pr.orderItemId).toBe(ITEM_CU_A);
+    expect(pr.status).toBe("PAID");
+
+    const so = await noTheoCon(DON_CU);
+    expect(so.dotChuaGanCon).toHaveLength(0);
+  });
+
+  it("[GTC-11] đơn HAI con: gắn vào đợt NULL → vẫn gắn được, nhưng KHÔNG đoán bé nào", async () => {
+    await dungDonCu(2);
+    const r = await ganTienTheoCon({
+      bankTransactionId: `${TC}txn`,
+      orderId: DON_CU,
+      dong: [{ paymentRequestId: PR_CHUNG, soTien: 2_000_000 }],
+      actor: ACTOR,
+    });
+    expect(r.ok).toBe(true);
+
+    // ⚠️ `orderItemId` phải là NULL. Đoán bừa là bé A hết nợ còn bé B vẫn bị gọi đòi tiền, và
+    // không có dấu vết nào để lần ra vì sao.
+    const khoan = await db.payment.findMany({
+      where: { orderId: DON_CU, deletedAt: null },
+      select: { orderItemId: true, amount: true },
+    });
+    expect(khoan).toHaveLength(1);
+    expect(khoan[0]!.orderItemId).toBeNull();
+
+    const pr = await db.paymentRequest.findUniqueOrThrow({ where: { id: PR_CHUNG } });
+    expect(pr.orderItemId).toBeNull();
+
+    // Không bé nào bị cộng tiền vào.
+    const so = await noTheoCon(DON_CU);
+    expect(so.con.every((c) => c.daThu === 0)).toBe(true);
+  });
+
+  it("[GTC-12] đơn LAI: chia CÙNG LÚC cho đợt của bé và đợt chung", async () => {
+    // Ca thật: đơn cũ đã có đợt toàn-đơn, rồi sale tạo thêm đợt cho một bé sau khi bật cờ.
+    await dungDonCu(2, { themDotCuaCon: true });
+    const r = await ganTienTheoCon({
+      bankTransactionId: `${TC}txn`,
+      orderId: DON_CU,
+      dong: [
+        { paymentRequestId: PR_A, soTien: 1_000_000 },
+        { paymentRequestId: PR_CHUNG, soTien: 2_000_000 },
+      ],
+      actor: ACTOR,
+    });
+    expect(r.ok).toBe(true);
+
+    const khoan = await db.payment.findMany({
+      where: { orderId: DON_CU, deletedAt: null },
+      select: { orderItemId: true, amount: true },
+      orderBy: { amount: "asc" },
+    });
+    // HAI dòng: một mang tên bé A, một để NULL — không gộp, vì hai thứ khác nhau về nghĩa.
+    expect(khoan).toHaveLength(2);
+    expect(khoan.map((k) => [k.orderItemId, k.amount])).toEqual([
+      [ITEM_CU_A, 1_000_000],
+      [null, 2_000_000],
+    ]);
+  });
+});
+
+describe.skipIf(!RUN_DB_TESTS)("[GTC-GO] gỡ gắn — nhật ký phải tự đủ để dựng lại", () => {
+  beforeEach(async () => {
+    await dungFixture();
+  });
+  afterAll(don);
+
+  it("[GTC-13] AuditLog giữ ẢNH CHỤP ĐỦ của phân bổ đã xoá + id bút toán đảo", async () => {
+    await ganTienTheoCon({
+      bankTransactionId: `${T}txn1`,
+      orderId: DON,
+      dong: [
+        { paymentRequestId: prAn, soTien: 2_508_000 },
+        { paymentRequestId: prBinh, soTien: 2_508_000 },
+      ],
+      actor: ACTOR,
+    });
+    const r = await goGanTheoCon({
+      bankTransactionId: `${T}txn1`,
+      orderId: DON,
+      lyDo: "Gắn nhầm sang đơn của bé khác",
+      actor: ACTOR,
+    });
+    expect(r.ok).toBe(true);
+
+    const nk = await db.auditLog.findFirstOrThrow({
+      where: { entityType: "BankTransaction", entityId: `${T}txn1`, action: "TXN_GO_GAN" },
+      orderBy: { createdAt: "desc" },
+    });
+    const cu = nk.oldValues as unknown as {
+      phanBo: Record<string, unknown>[];
+      nguoiGan: unknown;
+    };
+    const moi = nk.newValues as unknown as {
+      idButToanDao: string[];
+      trangThaiDotSauGo: Record<string, unknown>[];
+    };
+
+    // ⚠️ `PaymentAllocation` bị XOÁ THẬT — thiếu cột nào trong ảnh chụp là cột đó mất vĩnh
+    // viễn. Ca này liệt kê TỪNG CỘT, không dùng một phép so lỏng.
+    expect(cu.phanBo).toHaveLength(2);
+    for (const pb of cu.phanBo) {
+      for (const cot of [
+        "id",
+        "bankTransactionId",
+        "paymentRequestId",
+        "orderItemId",
+        "installmentNo",
+        "amount",
+        "roundingWaived",
+        "centerId",
+        "createdAt",
+      ]) {
+        expect(Object.keys(pb), cot).toContain(cot);
+      }
+      expect(pb.bankTransactionId).toBe(`${T}txn1`);
+      expect(typeof pb.createdAt).toBe("string");
+    }
+    expect((cu.phanBo.map((p) => p.orderItemId) as string[]).sort()).toEqual([AN, BINH].sort());
+    // Người GẮN — tra ngược từ nhật ký lượt gắn, vì bảng phân bổ không có cột actor.
+    expect(cu.nguoiGan).toMatchObject({ actorId: ACTOR.id, actorName: ACTOR.name });
+    // Lý do bắt buộc, và nó nằm ở cột `reason` chứ không lẫn vào payload.
+    expect(nk.reason).toContain("Gắn nhầm");
+
+    // Bút toán đảo: có id, và id ấy trỏ đúng dòng ADJUSTMENT trong DB.
+    expect(moi.idButToanDao).toHaveLength(2);
+    const dao = await db.payment.findMany({ where: { id: { in: moi.idButToanDao } } });
+    expect(dao).toHaveLength(2);
+    expect(dao.every((d) => d.paymentType === "ADJUSTMENT" && d.amount < 0)).toBe(true);
+
+    // Trạng thái đợt SAU gỡ, ghi lại làm bằng chứng "nợ con đã quay lại".
+    expect(moi.trangThaiDotSauGo.map((d) => d.status)).toEqual(["PENDING", "PENDING"]);
+  });
+
+  it("[GTC-14] sau gỡ, GẮN LẠI cùng giao dịch vào cùng đợt → ĐƯỢC", async () => {
+    // Nếu phân bổ chỉ bị đánh dấu thay vì xoá, khoá `@@unique([bankTransactionId,
+    // paymentRequestId])` sẽ chặn lượt gắn lại — và người dùng mắc kẹt với một giao dịch đã gỡ
+    // mà không gắn đi đâu được.
+    const goi = () =>
+      ganTienTheoCon({
+        bankTransactionId: `${T}txn1`,
+        orderId: DON,
+        dong: [
+          { paymentRequestId: prAn, soTien: 2_508_000 },
+          { paymentRequestId: prBinh, soTien: 2_508_000 },
+        ],
+        actor: ACTOR,
+      });
+
+    expect((await goi()).ok).toBe(true);
+    await goGanTheoCon({
+      bankTransactionId: `${T}txn1`,
+      orderId: DON,
+      lyDo: "thử lại",
+      actor: ACTOR,
+    });
+
+    const dotSauGo = await db.paymentRequest.findMany({
+      where: { orderId: DON },
+      select: { status: true },
+    });
+    expect(dotSauGo.every((d) => d.status === "PENDING")).toBe(true);
+
+    expect((await goi()).ok).toBe(true);
+    const agg = await db.paymentAllocation.aggregate({
+      where: { bankTransactionId: `${T}txn1` },
+      _sum: { amount: true },
+    });
+    expect(agg._sum.amount).toBe(TIEN_HAI_CON);
+    const txn = await db.bankTransaction.findUniqueOrThrow({ where: { id: `${T}txn1` } });
+    expect(txn.status).toBe("MATCHED");
+  });
+});

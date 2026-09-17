@@ -23,7 +23,7 @@ import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
-import { extractVnPhoneCandidates } from "@/lib/payments/payos-ingest";
+import { allocateToOrder, extractVnPhoneCandidates } from "@/lib/payments/payos-ingest";
 import { phoneVariants } from "@/lib/phone";
 
 export type DonUngVien = {
@@ -175,6 +175,106 @@ export async function timDonDeGan(tuKhoa: string): Promise<DonUngVien[]> {
       },
     ];
   });
+}
+
+/**
+ * GẮN TOÀN ĐƠN — nhánh CỜ TẮT, tức hành vi y như TRƯỚC PHIÊN B.
+ *
+ * ⚠️ TRẢ LẠI CÓ CHỦ ĐÍCH (chủ dự án chốt 17/09): *"Màn gắn kiểu mới + quyền sale phải SAU CỜ
+ * theo cơ sở của đơn. Cờ tắt → màn và quyền y như trước merge (chỉ payments:manage)."*
+ *
+ * PHIÊN B đã XOÁ hàm này và thay bằng `ganGiaoDichTheoConAction` — nghĩa là merge vào `main` sẽ
+ * đổi hành vi prod NGAY, trong khi công tắc vẫn TẮT. Đó là đúng thứ công tắc sinh ra để tránh.
+ *
+ * Nó rót toàn bộ số tiền vào phiếu mở SỚM NHẤT rồi để `allocateToOrder` lo waterfall + mọi
+ * side-effect sau commit (CreditBalance, chốt đơn, cấp tài khoản phụ huynh, biên nhận). Với đơn
+ * MỘT con thì không khác gì nhánh mới; với đơn nhiều con thì nó ĐOÁN — và đó chính là lý do
+ * nhánh mới tồn tại. Cả hai cùng sống cho tới khi cờ bật ở mọi cơ sở.
+ *
+ * Cổng: `payments:manage` (chỉ kế toán) — giữ nguyên như trước merge.
+ */
+export async function ganGiaoDichVaoDon(
+  bankTransactionId: string,
+  orderId: string,
+): Promise<KetQua> {
+  const ctx = await gateKeToan();
+  if (!ctx.ok) return { ok: false, error: ctx.error };
+  const sdb = scopedDb(ctx.actor);
+
+  const txn = await sdb.bankTransaction.findUnique({
+    where: { id: bankTransactionId },
+    select: {
+      id: true,
+      status: true,
+      amount: true,
+      provider: true,
+      providerTxnId: true,
+      content: true,
+    },
+  });
+  if (!txn) return { ok: false, error: "Không tìm thấy giao dịch" };
+  if (txn.status === "MATCHED") return { ok: false, error: "Giao dịch này đã được rót rồi" };
+
+  const order = await sdb.order.findUnique({
+    where: { id: orderId },
+    select: {
+      id: true,
+      code: true,
+      status: true,
+      centerId: true,
+      orgUnitId: true,
+      studentId: true,
+      student: { select: { id: true, parentUserId: true } },
+      paymentRequests: {
+        where: { status: { in: ["PENDING", "PARTIAL"] } },
+        orderBy: [{ sortOrder: "asc" }, { installmentNo: "asc" }],
+        take: 1,
+        select: { id: true },
+      },
+    },
+  });
+  if (!order) return { ok: false, error: "Không tìm thấy đơn hàng" };
+  const phieu = order.paymentRequests[0];
+  if (!phieu) return { ok: false, error: "Đơn này không còn phiếu thu nào đang chờ" };
+
+  const { actorId, actorName } = getAuditActor(ctx.session);
+  const ketQua = await allocateToOrder({
+    bankTransactionId,
+    order,
+    amount: txn.amount,
+    provider: txn.provider,
+    providerTxnId: txn.providerTxnId,
+    target: { paymentRequestId: phieu.id, orderId: order.id, via: "manual" },
+    data: {
+      description: txn.content ?? undefined,
+      amount: txn.amount,
+      reference: txn.providerTxnId,
+    },
+  });
+
+  if (ketQua.status !== "MATCHED" && ketQua.status !== "DUPLICATE") {
+    const lyDo = "reason" in ketQua ? ketQua.reason : "Không rót được";
+    return { ok: false, error: lyDo };
+  }
+
+  await writeAudit({
+    actor: { id: actorId ?? "", name: actorName },
+    module: "finance",
+    entityType: "BankTransaction",
+    entityId: bankTransactionId,
+    action: "TXN_MATCHED_MANUAL",
+    newValues: { orderId: order.id, orderCode: order.code, amount: txn.amount },
+    orgUnitId: order.centerId,
+  });
+
+  lamMoi();
+  return {
+    ok: true,
+    message:
+      ketQua.status === "DUPLICATE"
+        ? "Giao dịch đã được rót trước đó — không ghi thêm lần nào."
+        : `Đã rót ${txn.amount.toLocaleString("vi-VN")}đ vào đơn ${order.code}.`,
+  };
 }
 
 /**
