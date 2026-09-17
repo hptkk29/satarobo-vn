@@ -149,19 +149,31 @@ describe("[NTC-01] công nợ tách theo con — tiền của bé này không đ
 });
 
 describe("[NTC-02] cổng TẠO ĐỢT", () => {
+  /**
+   * Vế ĐƠN rộng rãi — dùng cho các ca chỉ muốn kiểm vế CON.
+   *
+   * ⚠️ Cố ý KHÔNG viết thành mặc định của `kiemTaoDot` (luật 7). Ở đây là fixture của test;
+   * ở đó là một vế cổng không bao giờ cắn mà không ai biết.
+   */
+  const donThoai = { conNoDon: 999_000_000, tongDotDangMoDon: 0 };
+
   it("An 4.320.000 và Bình 6.000.000 — tạo được", () => {
-    expect(kiemTaoDot({ soTien: 4_320_000, conNo: 8_640_000, tongDotDangMo: 0, tenCon: "An" })).toEqual({
-      ok: true,
-      soTien: 4_320_000,
-    });
-    expect(kiemTaoDot({ soTien: 6_000_000, conNo: 12_000_000, tongDotDangMo: 0, tenCon: "Bình" })).toEqual({
-      ok: true,
-      soTien: 6_000_000,
-    });
+    expect(
+      kiemTaoDot({ soTien: 4_320_000, conNo: 8_640_000, tongDotDangMo: 0, tenCon: "An", ...donThoai }),
+    ).toEqual({ ok: true, soTien: 4_320_000 });
+    expect(
+      kiemTaoDot({ soTien: 6_000_000, conNo: 12_000_000, tongDotDangMo: 0, tenCon: "Bình", ...donThoai }),
+    ).toEqual({ ok: true, soTien: 6_000_000 });
   });
 
   it("VƯỢT còn nợ ⇒ chặn, và câu lỗi nói TÊN CON + SỐ TỐI ĐA", () => {
-    const r = kiemTaoDot({ soTien: 8_640_001, conNo: 8_640_000, tongDotDangMo: 0, tenCon: "An" });
+    const r = kiemTaoDot({
+      soTien: 8_640_001,
+      conNo: 8_640_000,
+      tongDotDangMo: 0,
+      tenCon: "An",
+      ...donThoai,
+    });
     expect(r.ok).toBe(false);
     expect(r.ok === false && r.loi).toContain("An");
     expect(r.ok === false && r.loi).toContain("8.640.000");
@@ -171,27 +183,40 @@ describe("[NTC-02] cổng TẠO ĐỢT", () => {
     // Đây là lỗi tiền im lặng: không cổng nào khác canh, và nó chỉ lộ ra khi khách đã chuyển
     // gấp đôi. An còn nợ 8.640.000 nhưng đã có một đợt mở 4.320.000 ⇒ tối đa còn 4.320.000.
     expect(
-      kiemTaoDot({ soTien: 4_320_000, conNo: 8_640_000, tongDotDangMo: 4_320_000, tenCon: "An" }).ok,
+      kiemTaoDot({
+        soTien: 4_320_000,
+        conNo: 8_640_000,
+        tongDotDangMo: 4_320_000,
+        tenCon: "An",
+        ...donThoai,
+      }).ok,
     ).toBe(true);
     const vuot = kiemTaoDot({
       soTien: 4_320_001,
       conNo: 8_640_000,
       tongDotDangMo: 4_320_000,
       tenCon: "An",
+      ...donThoai,
     });
     expect(vuot.ok).toBe(false);
     expect(vuot.ok === false && vuot.loi).toContain("4.320.000");
   });
 
   it("đợt đang mở đã phủ hết nợ ⇒ chặn với lý do RIÊNG, không phải 'vượt'", () => {
-    const r = kiemTaoDot({ soTien: 1, conNo: 8_640_000, tongDotDangMo: 8_640_000, tenCon: "An" });
+    const r = kiemTaoDot({
+      soTien: 1,
+      conNo: 8_640_000,
+      tongDotDangMo: 8_640_000,
+      tenCon: "An",
+      ...donThoai,
+    });
     expect(r.ok === false && r.loi).toContain("đã phủ hết");
   });
 
   it("số tiền ≤ 0 hoặc rác ⇒ chặn", () => {
     for (const x of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
       expect(
-        kiemTaoDot({ soTien: x, conNo: 8_640_000, tongDotDangMo: 0, tenCon: "An" }).ok,
+        kiemTaoDot({ soTien: x, conNo: 8_640_000, tongDotDangMo: 0, tenCon: "An", ...donThoai }).ok,
         String(x),
       ).toBe(false);
     }
@@ -202,10 +227,187 @@ describe("[NTC-02] cổng TẠO ĐỢT", () => {
     // hoạch trả góp cũ (trần 12 đợt).
     let daMo = 0;
     for (let i = 0; i < 40; i++) {
-      const r = kiemTaoDot({ soTien: 100_000, conNo: 8_640_000, tongDotDangMo: daMo, tenCon: "An" });
+      const r = kiemTaoDot({
+        soTien: 100_000,
+        conNo: 8_640_000,
+        tongDotDangMo: daMo,
+        tenCon: "An",
+        // Vế đơn phải đi theo, kẻo ca này hoá thành ca kiểm vế đơn: 40 × 100.000 = 4.000.000.
+        conNoDon: 999_000_000,
+        tongDotDangMoDon: daMo,
+      });
       expect(r.ok, `đợt thứ ${i + 1}`).toBe(true);
       daMo += 100_000;
     }
+  });
+});
+
+describe("[NTC-02b] cổng TẠO ĐỢT — vế CẢ ĐƠN (khoản chưa gắn con)", () => {
+  // ⚠️ CA NÀY LÀ LÝ DO VẾ THỨ HAI TỒN TẠI. Chủ dự án chốt 17/09/2026:
+  //
+  //     số tiền ≤ min( còn nợ con − Σ đợt mở của con ,
+  //                    còn nợ ĐƠN − Σ đợt mở của cả đơn )
+  //
+  // Trước bản vá, cổng chỉ hỏi vế CON. `chuaGanCon` được tính từ PHIÊN A nhưng CHỈ để hiển
+  // thị — hai màn in nó ra như một việc cần làm và không cổng nào đọc.
+
+  it("đơn 2 con · 6.000.000 đã thu CHƯA GẮN CON ⇒ tạo đợt vượt còn nợ ĐƠN bị CHẶN", () => {
+    // Hai bé, mỗi bé học phí 6.000.000 ⇒ đơn phải thu 12.000.000.
+    // 6.000.000 đã vào đơn nhưng chưa gắn bé nào.
+    //   · vế CON : bé An `conNo` = 6.000.000 (không biết gì về 6 triệu kia)
+    //   · vế ĐƠN : 12.000.000 − 6.000.000 = 6.000.000 còn được thu
+    // Tạo cho An 6.000.000 thì vế CON cho qua, nên nếu chỉ có vế CON thì sale tạo tiếp cho
+    // Bình 6.000.000 nữa — tổng QR 12.000.000 trong khi đơn chỉ còn thiếu 6.000.000.
+    const choAn = kiemTaoDot({
+      soTien: 6_000_000,
+      conNo: 6_000_000,
+      tongDotDangMo: 0,
+      tenCon: "An",
+      conNoDon: 6_000_000,
+      tongDotDangMoDon: 0,
+    });
+    expect(choAn.ok, "đợt đầu vẫn phải tạo được — nó nằm trong phần đơn còn thiếu").toBe(true);
+
+    // Đợt thứ hai cho Bình: vế CON vẫn thoải mái (Bình còn nợ 6.000.000, chưa có đợt nào),
+    // nhưng vế ĐƠN đã bị đợt của An chiếm hết.
+    const choBinh = kiemTaoDot({
+      soTien: 6_000_000,
+      conNo: 6_000_000,
+      tongDotDangMo: 0,
+      tenCon: "Bình",
+      conNoDon: 6_000_000,
+      tongDotDangMoDon: 6_000_000,
+    });
+    expect(choBinh.ok).toBe(false);
+    expect(choBinh.ok === false && choBinh.loi).toContain("đơn");
+  });
+
+  it("câu lỗi vế ĐƠN phải NÓI RA chỗ tiền đang nằm, không chỉ 'tối đa X'", () => {
+    // Sale đọc số nợ của bé trên màn rồi gõ đúng số đó. Một câu "tối đa 2.976.000đ" trong khi
+    // màn in "còn nợ 8.976.000đ" đọc như hệ thống bị lỗi — rồi người ta bỏ qua cổng.
+    const r = kiemTaoDot({
+      soTien: 8_976_000,
+      conNo: 8_976_000,
+      tongDotDangMo: 0,
+      tenCon: "An",
+      conNoDon: 2_976_000,
+      tongDotDangMoDon: 0,
+    });
+    expect(r.ok).toBe(false);
+    expect(r.ok === false && r.loi).toContain("2.976.000");
+    expect(r.ok === false && r.loi).toContain("chưa gắn cho bé nào");
+  });
+
+  it("vế ĐƠN đã bị phủ hết ⇒ lý do RIÊNG, và nó chỉ thẳng sang khoản chưa gắn con", () => {
+    const r = kiemTaoDot({
+      soTien: 1,
+      conNo: 8_976_000,
+      tongDotDangMo: 0,
+      tenCon: "An",
+      conNoDon: 0,
+      tongDotDangMoDon: 0,
+    });
+    expect(r.ok).toBe(false);
+    expect(r.ok === false && r.loi).toContain("Cả đơn không còn phần được thu thêm");
+    expect(r.ok === false && r.loi).toContain("chưa gắn cho bé nào");
+  });
+
+  it("đơn ĐÓNG THỪA (còn nợ đơn ÂM) ⇒ chặn mọi đợt mới", () => {
+    const r = kiemTaoDot({
+      soTien: 100_000,
+      conNo: 5_000_000,
+      tongDotDangMo: 0,
+      tenCon: "An",
+      conNoDon: -2_000_000,
+      tongDotDangMoDon: 0,
+    });
+    expect(r.ok).toBe(false);
+  });
+
+  it("vế CON vẫn cắn trước khi vế ĐƠN cắn — thứ tự lỗi không đảo", () => {
+    // Bé đã có đợt phủ hết nợ riêng, trong khi đơn còn chỗ. Câu lỗi phải là câu của BÉ, vì đó
+    // là thứ sale sửa được ngay (bé này không còn gì để tạo đợt).
+    const r = kiemTaoDot({
+      soTien: 1,
+      conNo: 3_000_000,
+      tongDotDangMo: 3_000_000,
+      tenCon: "An",
+      conNoDon: 50_000_000,
+      tongDotDangMoDon: 3_000_000,
+    });
+    expect(r.ok).toBe(false);
+    expect(r.ok === false && r.loi).toContain("An");
+    expect(r.ok === false && r.loi).toContain("đã phủ hết");
+  });
+
+  it("đơn KHÔNG có khoản chưa gắn con ⇒ vế ĐƠN không đổi hành vi cũ", () => {
+    // Quan trọng: bản vá này không được làm hẹp đường đi của đơn sạch. Một con, học phí
+    // 8.640.000, chưa thu gì, chưa có đợt ⇒ tạo trọn số vẫn phải được.
+    expect(
+      kiemTaoDot({
+        soTien: 8_640_000,
+        conNo: 8_640_000,
+        tongDotDangMo: 0,
+        tenCon: "An",
+        conNoDon: 8_640_000,
+        tongDotDangMoDon: 0,
+      }).ok,
+    ).toBe(true);
+  });
+});
+
+describe("[NTC-02c] `tinhNoTheoCon` phải TỰ tính hai vế của đơn", () => {
+  // Cổng chỉ đúng nếu nó được cho ăn bằng đường THẬT cho nó ăn (luật 9). Hai trường này do
+  // `tinhNoTheoCon` sinh ra, nên chúng phải được kiểm ở đây — không phải ở test của cổng.
+  //
+  // Dùng dòng gõ tay (không phải `dong()`) vì ca này cần hai bé BẰNG NHAU 6.000.000 để phép
+  // tính đọc ra ngay bằng mắt; bộ số 8.640.000/12.000.000 của `dong()` che mất điều đó.
+  const haiBe: DongDon[] = [
+    { orderItemId: AN, ten: "An", khoa: "Sata3", tamTinh: 6_000_000, giam: 0 },
+    { orderItemId: BINH, ten: "Bình", khoa: "Sata5", tamTinh: 6_000_000, giam: 0 },
+  ];
+
+  it("`conNoDon` TRỪ khoản chưa gắn con, còn `tongConNo` thì KHÔNG", () => {
+    const r = tinhNoTheoCon({
+      dong: haiBe,
+      khoanDaXacNhan: [{ orderItemId: null, amount: 6_000_000 }],
+      khoanChoXacNhan: [],
+      dot: [],
+    });
+    expect(r.tongPhaiThu).toBe(12_000_000);
+    expect(r.chuaGanCon).toBe(6_000_000);
+    // Hai câu hỏi khác nhau ⇒ hai con số khác nhau. Gộp lại là chỗ bug tiền nằm.
+    expect(r.tongConNo, "Σ còn nợ TỪNG CON — cố ý không trừ khoản chưa gắn").toBe(12_000_000);
+    expect(r.conNoDon, "còn nợ CẢ ĐƠN — có trừ").toBe(6_000_000);
+  });
+
+  it("`tongDotDangMoDon` cộng CẢ đợt `orderItemId` NULL của luồng cũ", () => {
+    // Đơn trước 16/09 thì đợt nào cũng NULL. Lấy `Σ con[].tongDotDangMo` làm cổng là bỏ sạch
+    // chúng — tức mở toang đúng tập đơn cũ.
+    const r = tinhNoTheoCon({
+      dong: haiBe,
+      khoanDaXacNhan: [],
+      khoanChoXacNhan: [],
+      dot: [dot(AN, 1, 1_000_000), { ...dot(AN, 2, 2_000_000), orderItemId: null }],
+    });
+    expect(r.con[0]!.tongDotDangMo, "vế CON chỉ thấy đợt của bé").toBe(1_000_000);
+    expect(r.tongDotDangMoDon, "vế ĐƠN thấy cả đợt NULL").toBe(3_000_000);
+  });
+
+  it("đợt NULL đã VOID/PAID thì KHÔNG vào `tongDotDangMoDon`", () => {
+    // "Đang mở" là PENDING/PARTIAL. Một đợt cũ đã VOID không được chiếm chỗ của đợt mới —
+    // nếu nó chiếm, đơn cũ nào từng huỷ đợt sẽ không tạo được đợt nào nữa.
+    const r = tinhNoTheoCon({
+      dong: haiBe,
+      khoanDaXacNhan: [],
+      khoanChoXacNhan: [],
+      dot: [
+        { ...dot(AN, 1, 5_000_000, { trangThai: "VOID" }), orderItemId: null },
+        { ...dot(AN, 2, 4_000_000, { trangThai: "PAID" }), orderItemId: null },
+        { ...dot(AN, 3, 1_000_000, { trangThai: "PARTIAL" }), orderItemId: null },
+      ],
+    });
+    expect(r.tongDotDangMoDon).toBe(1_000_000);
   });
 });
 
