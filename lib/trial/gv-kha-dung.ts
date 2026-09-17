@@ -358,7 +358,18 @@ const NHAN_THEO_PHU: Record<KetQuaPhuCa, string> = {
   // "chưa THẤY", không phải "chưa ĐƯỢC XẾP": phép đếm đi qua `scopedDb` nên với người
   // cấp cơ sở, giáo viên cả tháng làm ở cơ sở khác cũng rơi vào đây. Viết "chưa được xếp
   // ca" là hứa một điều người đọc không có dữ liệu để kiểm (luật 12).
-  CHUA_VAO_LUOI: "chưa thấy ô ca nào trong lưới tháng này",
+  // ⚠️ RỖNG, và đây là NGUỒN DUY NHẤT của việc đó (gộp 18/09/2026).
+  //
+  // Chủ dự án chốt: "bỏ chữ chưa vào lưới ca (tất cả role)". Trước đó chuỗi vẫn nằm ở đây
+  // và bị chặn bằng một nhánh `if` riêng trong `nhanChoDong` — tức lại là HAI cơ chế cho
+  // một luật, đúng cái vừa làm nhãn này lọt ra prod một lần. Xoá thẳng chuỗi thì không còn
+  // gì để lọt: không nhánh nào phải nhớ chặn, và ai muốn hiện lại phải gõ chữ mới (lúc đó
+  // họ sẽ đọc chú thích này).
+  //
+  // Vì sao trạng thái này không được nói: phép đếm ô-trong-tháng đi qua `scopedDb`, nên nó
+  // không phân biệt nổi "chưa từng được xếp ca" với "cả tháng làm ở cơ sở bạn không nhìn
+  // thấy". Đo prod 17/09: Kiệt & Toại có 48 ô mã `HC` vẫn bị dán nhãn ấy.
+  CHUA_VAO_LUOI: "",
   CHUA_CO_LUOI: "chưa sinh lưới ca tháng này",
 };
 
@@ -380,7 +391,10 @@ const NHAN_AN_LY_DO = "không nhận buổi này";
 const PHU_LO_LICH_CA_NHAN: readonly KetQuaPhuCa[] = [
   "NGHI",
   "KHONG_CO_CA",
-  "CHUA_VAO_LUOI",
+  // ⚠️ `CHUA_VAO_LUOI` CỐ Ý KHÔNG có ở đây (18/09/2026) — nhãn của nó đã RỖNG, nên đưa
+  // vào danh sách che là biến một dòng trống thành chữ "không nhận buổi này", tức nói
+  // ngược lại chốt "bỏ chữ chưa vào lưới ca (tất cả role)". Danh sách này chỉ dành cho
+  // trạng thái CÓ chữ và chữ đó khai ra lịch cá nhân.
 ];
 
 /**
@@ -404,7 +418,6 @@ export function nhanChoDong(phu: KetQuaPhuCa, duocXemLyDoNghi: boolean): string 
   // đang vẽ lại ranh giới CƠ SỞ và gọi nó bằng tên của lưới ca.
   //
   // Trạng thái vẫn giữ (nó điều khiển việc ẨN, và test đọc nó); chỉ phần đem ra nói là bỏ.
-  if (phu === "CHUA_VAO_LUOI") return "";
   if (!duocXemLyDoNghi && PHU_LO_LICH_CA_NHAN.includes(phu)) return NHAN_AN_LY_DO;
   return NHAN_THEO_PHU[phu];
 }

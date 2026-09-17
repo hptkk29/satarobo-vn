@@ -381,10 +381,16 @@ describe("AddSessionForm — ô Giáo viên lọc theo ca", () => {
     );
   });
 
-  // ── VÁ (A) — giáo viên chưa vào lưới ca phải HIỆN, và phải hiện KÈM NHÃN ──────────
-  it("GV chưa vào lưới ca ⇒ nhãn · CHƯA VÀO LƯỚI CA, KHÔNG phải trùng lịch", async () => {
-    // Hiện ra mà không dán nhãn thì họ nằm lẫn với người ĐÃ được kiểm và thấy rảnh —
-    // hai thứ rất khác nhau đứng cạnh nhau không lời giải thích nào.
+  // ── ĐẢO 17/09/2026 — ca này trước đây đòi ô chọn IN ra "· CHƯA VÀO LƯỚI CA" ─────────
+  //
+  // Chủ dự án báo hai lần, lần sau kèm ảnh prod: nhãn ấy nói SAI. Phép đếm ô-trong-tháng
+  // đi qua `scopedDb` nên nó không phân biệt nổi "chưa được xếp ca" với "cả tháng làm ở
+  // cơ sở bạn không nhìn thấy" — Kiệt & Toại có 48 ô mã `HC` vẫn bị dán nhãn đó.
+  //
+  // Nay tầng thuần trả `nhan: ""` cho trạng thái này, và ô chọn phải IM THEO. Ca này
+  // khoá đúng vế "im theo": nó là vế đã trôi lệch lần trước — `hauToGv` tự suy lại từ
+  // `phu` nên bản vá ở tầng thuần không chạm tới, và prod vẫn in nguyên chữ cũ.
+  it("GV chưa vào lưới ca ⇒ hiện TÊN TRẦN, không nhãn nào (nhan rỗng ⇒ ô chọn im)", async () => {
     h.layGv.mockResolvedValue({
       ok: true,
       ds: [
@@ -392,8 +398,8 @@ describe("AddSessionForm — ô Giáo viên lọc theo ca", () => {
           id: "gv-lan",
           name: "Lê Thị Lan",
           phu: "CHUA_VAO_LUOI",
-          muc: "CANH",
-          nhan: "chưa thấy ô ca nào trong lưới tháng này",
+          muc: "KHONG",
+          nhan: "",
         }),
       ],
       lyDoRong: null,
@@ -401,10 +407,10 @@ describe("AddSessionForm — ô Giáo viên lọc theo ca", () => {
 
     dung();
     await chonNgay();
-    await screen.findByText("Lê Thị Lan · CHƯA VÀO LƯỚI CA");
+    await screen.findByText("Lê Thị Lan");
+    expect(screen.queryByText(/CHƯA VÀO LƯỚI CA/)).toBeNull();
 
     fireEvent.change(oGiaoVien(), { target: { value: "gv-lan" } });
-    // CANH không phải DO ⇒ không được dựng khối đỏ.
     expect(screen.queryByRole("alert")).toBeNull();
     expect(oGiaoVien().getAttribute("aria-invalid")).toBe("false");
   });
@@ -423,13 +429,18 @@ describe("AddSessionForm — ô Giáo viên lọc theo ca", () => {
 //     phản ánh trong cùng lượt xử lý sự kiện nên đọc state thay vì ref là gửi giá trị CŨ.
 // ═══════════════════════════════════════════════════════════════════════════════════
 
+// ⚠️ Từ đây xuống, mọi lượt dựng dùng tầng `THEO_CO_SO` (Quản lý cơ sở) — ĐỔI 18/09/2026.
+// Chủ dự án chốt "bỏ luôn tick hiện tất cả giáo viên khỏi site sale", nên tầng `LOC_THEO_CA`
+// KHÔNG còn vẽ công tắc và không thể dùng để thử hành vi của nó nữa. Tầng giữ công tắc là
+// Quản lý cơ sở — cũng chính là người Sale sẽ nhờ khi danh sách rỗng.
+// Ca khoá "tầng nào được thấy công tắc" nằm ở `chon-gv-buoi.test.tsx`.
 describe("Công tắc 'Hiện tất cả giáo viên'", () => {
   // ⚠️ CA NÀY CŨNG SỬA 17/09/2026, cùng lý do với ca câu-luật ở trên: bản cũ khẳng định ô
   // tích in "· đang lọc theo ca" NGAY KHI MỞ MÀN, lúc chưa có lượt lọc nào chạy. Hai cửa
   // trên CÙNG một màn hình (câu luật + chữ cạnh ô tích) cùng hứa một điều cho một danh
   // sách chưa lọc — vá một cửa mà để nguyên cửa kia thì người dùng vẫn đọc ra lời hứa cũ.
   it("có mặt ở tầng LOC_THEO_CA, mặc định TẮT; nói 'chưa lọc' trước, 'đang lọc' sau khi có ngày", async () => {
-    dung();
+    dung({ cheDoChonGv: "THEO_CO_SO" });
     const o = congTac();
     expect(o).not.toBeNull();
     expect(o!.checked).toBe(false);
@@ -442,7 +453,7 @@ describe("Công tắc 'Hiện tất cả giáo viên'", () => {
   });
 
   it("xoá ngày ⇒ ô tích quay lại 'chưa lọc' (không dính lại lời hứa của lượt trước)", async () => {
-    dung();
+    dung({ cheDoChonGv: "THEO_CO_SO" });
     await chonNgay();
     expect(screen.getByText("· đang lọc theo ca")).toBeTruthy();
 
@@ -469,13 +480,13 @@ describe("Công tắc 'Hiện tất cả giáo viên'", () => {
     expect(congTac()).toBeNull();
     a.unmount();
 
-    dung({ locGvTheoCa: false });
+    dung({ cheDoChonGv: "THEO_CO_SO", locGvTheoCa: false });
     expect(congTac()).toBeNull();
   });
 
   // ⭐ CA KHOÁ: cờ phải THẬT SỰ tới server, ngay lượt bấm ĐẦU TIÊN.
   it("bấm BẬT ⇒ hỏi lại server với hienTatCa=true, đúng khung giờ đang chọn", async () => {
-    dung();
+    dung({ cheDoChonGv: "THEO_CO_SO" });
     await chonNgay();
     expect(h.layGv).toHaveBeenCalledTimes(1);
 
@@ -492,7 +503,7 @@ describe("Công tắc 'Hiện tất cả giáo viên'", () => {
   });
 
   it("bấm TẮT lại ⇒ hỏi lại với hienTatCa=false (quay về đang lọc)", async () => {
-    dung();
+    dung({ cheDoChonGv: "THEO_CO_SO" });
     await chonNgay();
     fireEvent.click(congTac()!);
     await waitFor(() => expect(h.layGv).toHaveBeenCalledTimes(2));
@@ -507,7 +518,7 @@ describe("Công tắc 'Hiện tất cả giáo viên'", () => {
     // Cờ nằm ở ref của hook chứ không ở tham số của `tai`, nên đây là chỗ nó dễ rơi mất:
     // rơi mất thì bộ lọc tự bật lại giữa chừng và danh sách co lại mà người dùng không
     // hề bấm gì — công tắc trông như "tự tắt".
-    dung();
+    dung({ cheDoChonGv: "THEO_CO_SO" });
     await chonNgay();
     fireEvent.click(congTac()!);
     await waitFor(() => expect(h.layGv).toHaveBeenCalledTimes(2));
@@ -525,17 +536,20 @@ describe("Công tắc 'Hiện tất cả giáo viên'", () => {
     // ⚠️ `chonNgay()` thêm 17/09/2026: bản cũ bấm công tắc khi CHƯA chọn ngày, nên câu
     // XUẤT PHÁT mà nó khẳng định ("ca phủ TRỌN…") chính là câu nói dối đang được vá. Nay
     // ca này đi từ một trạng thái CÓ THẬT: đã lọc cho một khung giờ, rồi mới bỏ lọc.
-    dung();
+    // 18/09 — tầng thử là `THEO_CO_SO` (Sale không còn công tắc), nên câu XUẤT PHÁT là câu
+    // lọc theo CƠ SỞ, không phải câu lọc theo ca. Khẳng định đúng câu đang hiện, đừng
+    // khẳng định câu của tầng khác — đó lại là một lời hứa suông, chỉ nằm trong test.
+    dung({ cheDoChonGv: "THEO_CO_SO" });
     await chonNgay();
     expect(screen.getByText(/Note đỏ đối chiếu buổi/).textContent).toContain(
-      "ca phủ TRỌN khung giờ buổi",
+      "lọc theo cơ sở",
     );
 
     fireEvent.click(congTac()!);
     await waitFor(() => expect(congTac()!.checked).toBe(true));
     const cau = screen.getByText(/Note đỏ đối chiếu buổi/).textContent ?? "";
     expect(cau).toContain("HIỆN TẤT CẢ");
-    expect(cau).not.toContain("ca phủ TRỌN khung giờ buổi");
+    expect(cau).not.toContain("lọc theo cơ sở");
     expect(screen.getByText("· đang BỎ lọc theo ca")).toBeTruthy();
   });
 
@@ -554,7 +568,7 @@ describe("Công tắc 'Hiện tất cả giáo viên'", () => {
       lyDoRong: "Đang HIỆN TẤT CẢ giáo viên — luật ca tạm bỏ cho lượt chọn này.",
     } satisfies KetQua);
 
-    dung();
+    dung({ cheDoChonGv: "THEO_CO_SO" });
     await chonNgay();
     fireEvent.click(congTac()!);
     await screen.findByText(/Nguyễn Tuấn Kiệt · TRÙNG LỊCH/);
@@ -570,7 +584,7 @@ describe("Công tắc 'Hiện tất cả giáo viên'", () => {
   });
 
   it("chưa chọn ngày mà bấm công tắc ⇒ KHÔNG gọi server (chưa đủ ba ô thì không có gì để hỏi)", () => {
-    dung();
+    dung({ cheDoChonGv: "THEO_CO_SO" });
     fireEvent.click(congTac()!);
     expect(h.layGv).not.toHaveBeenCalled();
     // Nhưng trạng thái công tắc vẫn phải ghi nhận, nếu không nó "tự bật lại" khi người
@@ -579,7 +593,7 @@ describe("Công tắc 'Hiện tất cả giáo viên'", () => {
   });
 
   it("bấm TRƯỚC rồi chọn ngày SAU ⇒ lượt hỏi đầu tiên đã mang cờ", async () => {
-    dung();
+    dung({ cheDoChonGv: "THEO_CO_SO" });
     fireEvent.click(congTac()!);
     await chonNgay();
     expect(h.layGv.mock.calls[0][0].hienTatCa).toBe(true);
@@ -616,7 +630,7 @@ describe("dòng người đang chọn mà không có trong danh sách vừa lọ
   it("đang LỌC và người đó CÓ trong danh sách đầy đủ ⇒ đúng là bộ lọc loại họ", async () => {
     // Vế đối chứng: chữ "NGOÀI DANH SÁCH LỌC" vẫn phải còn ở đúng cảnh nó nói thật.
     chiConLan();
-    dung();
+    dung({ cheDoChonGv: "THEO_CO_SO" });
     fireEvent.change(oGiaoVien(), { target: { value: "gv-kiet" } });
     await chonNgay();
 
@@ -627,7 +641,7 @@ describe("dòng người đang chọn mà không có trong danh sách vừa lọ
   // ⭐ CA KHOÁ (1): công tắc BẬT thì không có bộ lọc nào để đổ lỗi.
   it("công tắc 'Hiện tất cả' BẬT ⇒ KHÔNG được dùng chữ 'ngoài danh sách lọc'", async () => {
     chiConLan();
-    dung();
+    dung({ cheDoChonGv: "THEO_CO_SO" });
     fireEvent.change(oGiaoVien(), { target: { value: "gv-kiet" } });
     await chonNgay();
     fireEvent.click(congTac()!);

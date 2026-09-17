@@ -12,6 +12,7 @@
 // log và audit sẽ có hai bộ action làm việc giống nhau — trùng tên là nguồn nhầm lẫn.
 import { revalidatePath } from "next/cache";
 import { checkPermission } from "@/lib/auth/check-permission";
+import { laLeadCuaToi, leadCuaToiOrClause } from "@/lib/lead/sharing";
 import type { Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { leadStatusLabel } from "@/lib/leads/status";
@@ -273,7 +274,16 @@ export async function layGvChoBuoiAction(input: {
     // ĐƯỜNG THOÁT của người dùng. CHỈ tắt bộ lọc HIỂN THỊ — mọi câu đọc ở trên vẫn đi qua
     // `scopedDb(ctx.actor)`, và cửa GHI (`gvXepDuoc`) không đọc cờ này. Xem chú thích của
     // `hienTatCa` trong `lib/trial/gv-kha-dung.ts` về việc vì sao đây không phải nới quyền.
-    hienTatCa: data.hienTatCa,
+    //
+    // ⚠️ SALE KHÔNG ĐƯỢC dùng công tắc này (chốt 18/09/2026) — và phải chặn Ở ĐÂY, không
+    // chỉ ẩn ô tích. Ẩn ở giao diện chỉ giấu cái NÚT; cờ vẫn nằm trong payload của một
+    // Server Action, nên POST thẳng `hienTatCa: true` là xem được nguyên danh sách. Đúng
+    // lớp lỗi "lọc ở trang là lọc trang trí" mà màn này đã dính một lần.
+    //
+    // Không ném lỗi, chỉ BỎ QUA: người dùng hợp lệ không bao giờ gửi cờ này (ô tích đã
+    // không được vẽ), nên gửi tới đây nghĩa là payload dựng tay — trả về đúng thứ họ được
+    // phép thấy là phản ứng đủ, và không dạy người dò biết mình vừa chạm phải cái gì.
+    hienTatCa: cheDo === "LOC_THEO_CA" ? false : data.hienTatCa,
     // Che LÝ DO, KHÔNG che người: thiếu khoá chấm công thì ba nhãn nói về lịch nghỉ/lịch
     // làm cá nhân gộp về một chữ trung tính. Xem `duocXemLyDoNghi` ở `gv-kha-dung.ts`.
     duocXemLyDoNghi: xemLichCa,
@@ -559,6 +569,24 @@ export async function enrollLeadChildLopTrialAction(input: {
   const cls = await loadScopedTrialClass(ctx.actor, input.trialClassId);
   if (!cls) return { ok: false, error: KHONG_THAY_LOP };
 
+  // CỬA GHI của luật "Sale chỉ thêm học viên thuộc lead của mình" (chốt 17/09/2026).
+  //
+  // ⚠️ Lọc ở ô TÌM là lọc TRANG TRÍ — `searchLopTrialCandidatesAction` chỉ gợi ý, còn đây
+  // là endpoint riêng và ai cũng POST thẳng một `leadChildId` bất kỳ vào được. Hai cửa
+  // phải dùng CÙNG một định nghĩa "của tôi", nếu không thì cửa hẹp hơn là cửa không ai đi.
+  if (!(await checkPermission("leads:view-all", { centerId: cls.centerId }))) {
+    const con = await scopedDb(ctx.actor).leadChild.findUnique({
+      where: { id: input.leadChildId },
+      select: { lead: { select: { assignedToId: true, createdById: true, isSharedWithTeam: true } } },
+    });
+    if (!con?.lead || !laLeadCuaToi(con.lead, ctx.session.user.id)) {
+      return {
+        ok: false,
+        error: "Chỉ xếp được học viên thuộc lead bạn phụ trách — nhờ Quản lý cơ sở hoặc Đào tạo xếp hộ",
+      };
+    }
+  }
+
   // Buổi được chọn phải thuộc ĐÚNG lớp đang xếp — chống POST thẳng buổi của lớp khác.
   if (input.sessionId) {
     const ses = await scopedDb(ctx.actor).trialClassSession.findUnique({
@@ -615,9 +643,20 @@ export async function searchLopTrialCandidatesAction(input: {
   // Chỉ con CHƯA ở lớp ACTIVE nào (partial-unique cho phép đúng 1 lớp ACTIVE / con).
   const childFree = { trialEnrollments: { none: { status: "ACTIVE" as const } } };
 
+  // Chốt 17/09/2026 — Sale chỉ thêm được học viên thuộc LEAD CỦA MÌNH.
+  //
+  // Diễn đạt bằng QUYỀN, không so vai (luật cứng #1): `leads:view-all` đã tồn tại và đã
+  // đúng tập vai cần phân biệt — HO_MARKETING · TRAINING · CENTER_MANAGER giữ nó,
+  // CENTER_SALES_CSM thì không. Không cần thêm khoá mới.
+  //
+  // `leadCuaToiOrClause` là định nghĩa DÙNG CHUNG với `/admin/leads` và `/admin/search`;
+  // đừng chép ba vế của nó ra đây (xem chú thích tại hàm).
+  const xemMoiLead = await checkPermission("leads:view-all", { centerId: cls.centerId });
+
   const leads = await sdb.lead.findMany({
     where: {
       centerId: cls.centerId,
+      ...(xemMoiLead ? {} : { OR: leadCuaToiOrClause(ctx.session.user.id) }),
       // GĐ5 — bốn giá trị cũ gộp còn hai: ENROLLED+REGISTERED → DA_DANG_KY,
       // LOST+DUPLICATE → DA_MAT. Tập lead bị loại khỏi danh sách ứng viên KHÔNG đổi.
       status: { notIn: ["DA_DANG_KY", "DA_MAT"] },

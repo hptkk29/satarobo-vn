@@ -189,13 +189,46 @@ export function useGvChoBuoi(input: {
  * "TRÙNG LỊCH" mà không trùng, hoặc trùng mà không nhãn, đều không ném lỗi và console
  * vẫn sạch.
  */
+/**
+ * Tầng nào được thấy công tắc "Hiện tất cả giáo viên".
+ *
+ * ⚠️ EXPORT để ca test gọi ĐÚNG HÀM NÀY. Bản đầu của bộ test chép lại biểu thức vào chính
+ * tệp test — cấy lỗi vào component cho ra **0 ĐỎ / 9 xanh**, tức nó đang kiểm một BẢN SAO
+ * chứ không kiểm mã chạy thật. Đúng lớp lỗi luật 11, và là lần thứ ba trong hai ngày repo
+ * này trả giá cho "hai bản của một luật".
+ *
+ * Luật: KHÔNG vẽ nút khi không có gì để nút ấy tắt (`TAT_CA` vốn không lọc; cờ lọc tắt thì
+ * cũng vậy) — nút không làm gì là affordance nói dối theo chiều "hứa có tác dụng".
+ * Và SALE (`LOC_THEO_CA`) KHÔNG có nút, chốt 18/09/2026: chủ dự án đã chọn quy trình "hết
+ * người thì báo Đào tạo hoặc Quản lý", mà một đường thoát mở cho Sale là đường khiến quy
+ * trình đó không bao giờ chạy.
+ */
+export function coCongTacHienTatCa(i: { cheDo: CheDoChonGv; batLoc: boolean }): boolean {
+  const dangLoc = i.batLoc && i.cheDo !== "TAT_CA";
+  return dangLoc && i.cheDo !== "LOC_THEO_CA";
+}
+
 export function hauToGv(d: DongGv): string {
   if (d.muc === "DO") return " · TRÙNG LỊCH";
+
+  // ⚠️ BÁM THEO `d.nhan`, KHÔNG tự suy lại từ `d.phu` — vá 17/09/2026 (lần hai).
+  //
+  // Bản trước đọc thẳng `d.phu` nên nó là CƠ CHẾ SINH NHÃN THỨ HAI, chạy song song với
+  // `nhanChoDong` ở `lib/trial/gv-kha-dung.ts`. Hệ quả đo được trên prod: bản vá gỡ
+  // "CHƯA VÀO LƯỚI CA" khỏi `nhan` đã merge và deploy, nhưng ô chọn VẪN in nguyên chữ đó
+  // — vì `<option>` chưa bao giờ đọc `nhan`. Chủ dự án báo lại đúng một lỗi đã báo.
+  //
+  // Đây chính là thứ chú thích ở `gv-kha-dung.ts` cảnh báo: "hai cơ chế cho một luật là
+  // hai chỗ để chúng trôi lệch, và cái không ai kiểm được sẽ là cái trôi". Lần này cái
+  // trôi là cái NGƯỜI DÙNG NHÌN THẤY, còn cái được vá thì nằm trong khối cảnh báo mà
+  // đường mặc định không bao giờ mở tới.
+  //
+  // Nay MỘT quyết định: tầng thuần đã cân đủ ngữ cảnh (cờ lọc bật chưa · tầng nào · người
+  // này có được miễn không) rồi kết luận có nói gì về ca hay không. `nhan` rỗng nghĩa là
+  // "không nói" — và ô chọn phải im theo, không được tự nói thêm.
+  if (!d.nhan) return "";
+
   if (d.phu === "KHONG_GIO") return " · CA LINH ĐỘNG";
-  // Người đang hiện ra vì hệ thống KHÔNG BIẾT gì về ca của họ (giáo viên mới, hoặc cả
-  // tháng làm ở cơ sở ngoài tầm nhìn). Không dán nhãn thì họ nằm lẫn với người đã được
-  // kiểm và thấy rảnh — hai thứ rất khác nhau đứng cạnh nhau không lời giải thích.
-  if (d.phu === "CHUA_VAO_LUOI") return " · CHƯA VÀO LƯỚI CA";
   return "";
 }
 
@@ -265,11 +298,8 @@ export function OChonGiaoVien({
   const { ds } = nguon;
   const doTrung = dongDangChon(ds, value)?.muc === "DO";
 
-  // Công tắc chỉ hiện khi THẬT SỰ có bộ lọc để tắt. Vẽ nó ở tầng Đào tạo (`TAT_CA`) hoặc
-  // khi cờ `trial.locGvTheoCaLamViec` đang tắt là dựng một cái nút không làm gì: bấm vào,
-  // danh sách y nguyên, và người dùng học được rằng các công tắc ở màn này vô nghĩa —
-  // đúng loại affordance nói dối mà luật 12 nói tới, lần này theo chiều "hứa có tác dụng".
-  const dangLoc = batLoc && cheDo !== "TAT_CA";
+  // Luật "tầng nào thấy công tắc" nằm ở `coCongTacHienTatCa` (export, có test gọi thẳng).
+  const coCongTac = coCongTacHienTatCa({ cheDo, batLoc });
 
   // Người đang được chọn mà KHÔNG có trong danh sách đã lọc thì phải chèn lại, nếu không
   // `<select>` tự nhảy sang giá trị khác và lưu đè một giáo viên người dùng chưa từng
@@ -344,7 +374,7 @@ export function OChonGiaoVien({
           Nó KHÔNG phải cấu hình (không ghi xuống đâu cả, tắt lại khi đóng form) và KHÔNG
           nới quyền: server vẫn `checkPermission("trials:manage")` mỗi lượt, mọi câu đọc
           vẫn qua `scopedDb`, và cửa GHI không đọc cờ này. */}
-      {dangLoc && (
+      {coCongTac && (
         <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
           <input
             type="checkbox"
