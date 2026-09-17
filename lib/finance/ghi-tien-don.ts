@@ -187,8 +187,20 @@ export async function huyDotChoCon(input: {
 // 3 · GẮN MỘT GIAO DỊCH NGÂN HÀNG, CHIA ĐÍCH DANH THEO ĐỢT
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Marker trong `Payment.note` để tìm lại đúng các dòng do một lần gắn tay sinh ra. */
+/** Marker trong `Payment.note` để tìm lại đúng các dòng do một lần GẮN TAY sinh ra. */
 export const markerGanTay = (bankTransactionId: string) => `[gan-tay:${bankTransactionId}]`;
+
+/**
+ * Marker của đường WEBHOOK (`allocateToOrder`) — họ marker ĐỜI CŨ.
+ *
+ * ⚠️ Phải khớp TỪNG KÝ TỰ với chuỗi mà `payos-ingest.ts` ghi ra:
+ * `` `[auto:${provider.toLowerCase()}:${providerTxnId}]` ``. Lệch một ký tự là `goGanTheoCon`
+ * không tìm thấy dòng gốc nào — và hậu quả KHÔNG phải một lỗi, mà là một lượt gỡ NỬA VỜI:
+ * `PaymentAllocation` bị xoá (Ledger-B mất dấu) trong khi `Payment` còn nguyên (Ledger-A vẫn
+ * tính là đã thu). Giao dịch quay về hàng chờ, công nợ vẫn báo đã đóng, và không lỗi nào báo.
+ */
+export const markerWebhook = (provider: string, providerTxnId: string) =>
+  `[auto:${provider.toLowerCase()}:${providerTxnId}]`;
 
 export async function ganTienTheoCon(input: {
   bankTransactionId: string;
@@ -400,7 +412,15 @@ export async function goGanTheoCon(input: {
   return ghiTienChoDon(input.orderId, async (tx) => {
     const txn = await tx.bankTransaction.findUnique({
       where: { id: input.bankTransactionId },
-      select: { id: true, status: true, amount: true, centerId: true },
+      select: {
+        id: true,
+        status: true,
+        amount: true,
+        centerId: true,
+        // Cần cho marker ĐỜI CŨ `[auto:<provider>:<txnId>]` — xem `markerWebhook`.
+        provider: true,
+        providerTxnId: true,
+      },
     });
     if (!txn) return { ok: false as const, error: "Không tìm thấy giao dịch" };
     if (txn.status !== "MATCHED") {
@@ -455,24 +475,25 @@ export async function goGanTheoCon(input: {
       select: { actorId: true, actorName: true, createdAt: true },
     });
 
-    await tx.paymentAllocation.deleteMany({ where: { bankTransactionId: txn.id } });
-    await recomputeRequestStatuses(tx, input.orderId);
-
-    // Trạng thái đợt SAU khi gỡ — ghi vào nhật ký làm bằng chứng "nợ con đã quay lại".
-    // KHÔNG tự suy ra PENDING: `deriveStatus` mới là nơi quyết, và một đợt còn tiền của giao
-    // dịch KHÁC thì phải là PARTIAL.
-    const dotSau = await tx.paymentRequest.findMany({
-      where: { id: { in: phanBo.map((x) => x.paymentRequestId) } },
-      select: { id: true, installmentNo: true, status: true, orderItemId: true },
-    });
-
-    const marker = markerGanTay(txn.id);
+    // ─────────────────────────────────────────────────────────────────────────
+    // TÌM DÒNG GỐC — HAI HỌ MARKER, và bỏ sót họ thứ hai là một lỗ TIỀN
+    //
+    // ⚠️ Bản đầu chỉ tìm `[gan-tay:…]`. Nhưng gỡ gắn KHÔNG nằm sau công tắc, nên ngay khi merge
+    // nó chạy được trên MỌI phân bổ đang có trên prod — mà phân bổ trên prod hôm nay đều do
+    // WEBHOOK sinh, và chúng mang marker `[auto:<provider>:<txnId>]`.
+    //
+    // Hậu quả của bản đầu, nếu để nguyên: kế toán bấm "Gỡ gắn" một giao dịch đời cũ ⇒
+    // `PaymentAllocation` bị xoá, `Payment` KHÔNG có bút toán đảo nào (vì không tìm thấy dòng
+    // gốc) ⇒ giao dịch về hàng chờ trong khi công nợ vẫn báo ĐÃ ĐÓNG. Hai sổ nói hai chuyện,
+    // và không lỗi nào báo.
+    const markerTay = markerGanTay(txn.id);
+    const markerCu = markerWebhook(txn.provider, txn.providerTxnId);
     const goc = await tx.payment.findMany({
       where: {
         orderId: input.orderId,
         deletedAt: null,
         paymentType: "PAYMENT",
-        note: { contains: marker },
+        OR: [{ note: { contains: markerTay } }, { note: { contains: markerCu } }],
       },
       select: {
         id: true,
@@ -483,7 +504,53 @@ export async function goGanTheoCon(input: {
         centerId: true,
         accountantStatus: true,
         saleStatus: true,
+        note: true,
+        receipts: {
+          where: { status: "ACTIVE", deletedAt: null },
+          select: { id: true, code: true },
+        },
       },
+    });
+
+    // ⚠️ CHẶN khi khoản đã XUẤT PHIẾU THU — không gỡ nửa vời.
+    //
+    // `Receipt` là chứng từ ĐÃ GIAO cho phụ huynh, và `Receipt.paymentId` mang `onDelete:
+    // Restrict`. Đảo tiền trong khi tờ phiếu vẫn đứng là để lại một chứng từ nói rằng khoản
+    // này đã thu, cho một khoản vừa bị gỡ. Bút toán đảo chữa được SỔ, nó không chữa được tờ
+    // giấy đang nằm trong tay khách.
+    //
+    // KHÔNG chặn chỉ vì khoản có `enrollmentId`: bút toán đảo mang đúng `enrollmentId` đó và
+    // trái dấu, nên tổng theo ghi danh về 0 — học bạ và công nợ ghi danh không lệch. Thứ lệch
+    // được là tờ phiếu thu, và đó là thứ ca này canh.
+    const daXuatPhieu = goc.filter((g) => g.receipts.length > 0);
+    if (daXuatPhieu.length > 0) {
+      const ma = daXuatPhieu.flatMap((g) => g.receipts.map((r) => r.code)).join(", ");
+      return {
+        ok: false as const,
+        error:
+          `Khoản thu của giao dịch này đã xuất phiếu thu (${ma}) — không gỡ được. ` +
+          `Kế toán phải huỷ hoặc hoàn phiếu thu đó trước, rồi mới gỡ.`,
+      };
+    }
+
+    // ⚠️⚠️ MỌI CỔNG TỪ CHỐI PHẢI NẰM TRÊN DÒNG NÀY.
+    //
+    // Trong Prisma, `return` từ callback của `$transaction` **KHÔNG rollback** — chỉ `throw`
+    // mới rollback. Một cổng `return { ok: false }` đặt SAU một phép ghi là: phép ghi ấy
+    // ĐƯỢC COMMIT, còn người dùng nhận thông báo từ chối.
+    //
+    // Đã đo, không phải phòng xa: bản đầu đặt cổng "đã xuất phiếu thu" sau `deleteMany`.
+    // Ca `[GDC-c2]` bắt được — giao dịch báo "không gỡ được" trong khi phân bổ đã xoá sạch.
+    // Tức chính cái cổng sinh ra để chặn gỡ nửa vời lại TẠO RA một lượt gỡ nửa vời.
+    await tx.paymentAllocation.deleteMany({ where: { bankTransactionId: txn.id } });
+    await recomputeRequestStatuses(tx, input.orderId);
+
+    // Trạng thái đợt SAU khi gỡ — ghi vào nhật ký làm bằng chứng "nợ con đã quay lại".
+    // KHÔNG tự suy ra PENDING: `deriveStatus` mới là nơi quyết, và một đợt còn tiền của giao
+    // dịch KHÁC thì phải là PARTIAL.
+    const dotSau = await tx.paymentRequest.findMany({
+      where: { id: { in: phanBo.map((x) => x.paymentRequestId) } },
+      select: { id: true, installmentNo: true, status: true, orderItemId: true },
     });
 
     let tienDao = 0;
@@ -504,7 +571,7 @@ export async function goGanTheoCon(input: {
           amount: -g.amount,
           method: g.method,
           paidDate: new Date(),
-          note: `Đảo bút toán gắn tay ${marker} — ${input.lyDo}`,
+          note: `Đảo bút toán ${markerTay} — ${input.lyDo}`,
           paymentType: "ADJUSTMENT",
           adjustmentOfId: g.id,
           saleStatus: g.saleStatus,
