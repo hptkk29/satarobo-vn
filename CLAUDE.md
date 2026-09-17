@@ -295,6 +295,47 @@ không chặn merge của người khác); vá xong nó **đỏ**, buộc ngư�
 4. **Verify mỗi 3-5 files** — `pnpm typecheck` để bắt lỗi sớm.
 5. **Report** — liệt kê file thay đổi + cách test.
 6. ⛔ **CHẠM TIỀN THÌ PHẢI CHẠY R7 — bắt buộc, chốt 17/09/2026.**
+7. ⛔ **Trong callback `$transaction`, TỪ CHỐI = `throw`; mọi cổng đứng TRƯỚC phép ghi đầu tiên.**
+
+### Luật rollback — `return` KHÔNG rollback, chỉ `throw` mới rollback
+
+```ts
+// ❌ SAI — phép ghi ĐÃ COMMIT, người dùng nhận thông báo từ chối
+await db.$transaction(async (tx) => {
+  await tx.paymentAllocation.deleteMany({ where: { bankTransactionId } });
+  if (coPhieuThu) return { ok: false, error: "đã xuất phiếu thu" };   // ← xoá rồi!
+});
+
+// ✅ ĐÚNG — cổng đứng trước phép ghi đầu tiên
+await db.$transaction(async (tx) => {
+  if (coPhieuThu) return { ok: false, error: "đã xuất phiếu thu" };
+  await tx.paymentAllocation.deleteMany({ where: { bankTransactionId } });
+});
+
+// ✅ ĐÚNG — buộc phải từ chối sau khi đã ghi thì `throw`, đường gọi bắt và dịch
+if (khongDu) throw new StockError("PRODUCT_STOCK_INSUFFICIENT_RACE");
+```
+
+**Đo được, không phải phòng xa (17/09/2026).** Cổng *"đã xuất phiếu thu"* trong `goGanTheoCon`
+nằm SAU `deleteMany`, nên nó trả `{ ok: false }` cho người dùng TRONG KHI phân bổ đã bị xoá và
+commit — **chính cái cổng sinh ra để chặn gỡ nửa vời lại tạo ra một lượt gỡ nửa vời.** Ca
+`[GDC-c2]` bắt được, nhưng chỉ vì ca ấy tình cờ đếm số dòng phân bổ còn lại.
+
+**MỘT NGOẠI LỆ HỢP LỆ** — mẫu chống-đua của repo (FIX-H9):
+
+```ts
+const upd = await tx.payment.updateMany({ where: { id, updatedAt: expectedAt }, data: {…} });
+if (upd.count === 0) return { stale: true };   // ← ghi đổi 0 DÒNG, commit vô hại
+```
+
+Phép ghi ở đây là `updateMany` CÓ ĐIỀU KIỆN và nó đổi 0 dòng, nên commit không đổi gì. Đổi nó
+thành `update` (ném khi không thấy) hoặc bỏ điều kiện trong `where` là ngoại lệ hoá ra tha một
+phép ghi THẬT.
+
+**Cổng tự động:** `lib/finance/cong-truoc-phep-ghi.test.ts` quét mọi callback `$transaction` /
+`ghiTienChoDon` trong `lib/finance/**` · `lib/payments/**` · `app/(admin)/admin/{orders,payments,bien-dong-so-du}/**`
+· `app/api/public/webhook/**`, và đỏ khi thấy hình dạng từ chối (`return { ok: false`,
+`return fail(`, `return { loi:`) đứng sau phép ghi. Đã cấy thử 3 ca.
 
 ### Luật R7 — bộ test duy nhất giữ các luật ĐỐI KHỚP TIỀN
 
