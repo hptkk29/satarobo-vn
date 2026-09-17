@@ -25,7 +25,8 @@ import "server-only";
 // trong `_moc.ts` để biết vì sao (so theo tên thì mốc GV mới rơi vào nhánh Sale, và triệu
 // chứng hiện ra ở người KHÔNG liên quan).
 import { db } from "@/lib/db";
-import { notifyStaff } from "@/lib/notifications/notify";
+import { notifyStaff, notifyStaffChiTiet } from "@/lib/notifications/notify";
+import { vnYmd } from "@/lib/time/vn";
 import { layNguoiDaoTao } from "@/lib/trial/notify-training";
 import {
   chonMoc,
@@ -38,7 +39,13 @@ export interface KetQuaNhacTrial {
   buoiQuet: number;
   /** Số chuông đã gửi cho SALE (một chuông / một CA học thử). */
   daNhac: number;
-  /** Số chuông đã gửi cho GIÁO VIÊN (một chuông / một BUỔI). */
+  /**
+   * Số chuông THẬT SỰ gửi cho GIÁO VIÊN (một chuông / một BUỔI / một NGÀY).
+   *
+   * "Thật sự" = có người rơi vào `canRung`. Lượt cron thứ hai trở đi trong cùng cửa sổ
+   * chạm lại đúng bản ghi cũ và KHÔNG gửi gì, nên nó đếm 0 — khác `daNhac` của nhánh Sale,
+   * vốn vẫn đếm theo lượt gọi (nhánh đó GIỮ NGUYÊN, không sửa trong đợt này).
+   */
   daNhacGv: number;
   /** Số buổi tới mốc GV mà chưa ai dạy ⇒ leo thang cho Đào tạo. */
   leoThang: number;
@@ -243,16 +250,45 @@ async function nhacGiaoVien(p: {
     return;
   }
 
-  await notifyStaff({
+  const kq = await notifyStaffChiTiet({
     userIds: [s.teacherId],
     // Khoá theo BUỔI (không theo ca): một buổi = một việc dạy. Kèm tên mốc để sau này
     // thêm mốc GV thứ hai không đè lên mốc này.
-    dedupeKey: `trial.reminder-gv:${mocTen}:${s.id}`,
+    //
+    // ── VÌ SAO KÈM CẢ MỐC NGÀY (vá 17/09/2026) ────────────────────────────────────────
+    // Bản cũ khoá đúng `<mocTen>:<sessionId>`, và `@@unique([userId, dedupeKey])` biến nó
+    // thành khoá VĨNH VIỄN cho cặp (người, buổi). Đường hỏng đo được: buổi 14/11 18:00 đã
+    // bắn chuông; Sale dời sang 15/11 18:00 (status vẫn `SCHEDULED`, `sessionId` không
+    // đổi); hôm sau lượt cron tới mốc lại dựng ĐÚNG khoá đó ⇒ `ghiThongBaoNhanSu` chỉ
+    // `update` nội dung, `canRung` rỗng ⇒ KHÔNG broadcast, KHÔNG Web Push, `readAt` giữ
+    // nguyên "đã đọc". Giáo viên không được nhắc cho NGÀY MỚI, và màn hình không có gì
+    // khác thường để ai nhận ra.
+    // Dời lịch là một VIỆC NHẮC KHÁC, không phải cùng một việc — nên khoá phải mang ngày.
+    //
+    // ⚠️ Vì sao KHÔNG dùng `reopen: true` thay cho việc này: `reopen` kéo bản ĐÃ ĐỌC về
+    // chưa đọc mỗi khi nội dung đổi, tức mỗi lần sửa là một lần `canRung` ⇒ một lần đẩy
+    // push (`lib/push/allowlist.ts` liệt đúng 4 nơi đang bật cờ đó là mìn). Ở đây nội
+    // dung đổi cả khi chỉ sửa tên lớp, nên `reopen` là mở đường cho push lặp. Khoá theo
+    // ngày thì hẹp và tự hết: một buổi một ngày, tối đa một chuông.
+    //
+    // `vnYmd(batDau)` — KHÔNG dựng chuỗi ngày riêng: `batDau` cũng là mốc sinh ra chữ
+    // `${ngay}` trong tiêu đề, nên khoá và nội dung không bao giờ nói hai ngày khác nhau.
+    //
+    // GIỚI HẠN CÒN LẠI, nói thẳng: dời trong CÙNG MỘT NGÀY (18:00 → 20:00) vẫn ra cùng
+    // khoá ⇒ nội dung được `update` đúng giờ mới (panel đọc ra giờ đúng) nhưng KHÔNG có
+    // push mới. Đổi giờ trong ngày thì chuông "1 tiếng trước" của ngày đó thường còn
+    // chưa phát; ca đã phát rồi mới dời trong ngày là ca hiếm và đã có tin
+    // `trial-session.updated:` của đường sửa buổi lo.
+    dedupeKey: `trial.reminder-gv:${mocTen}:${s.id}:${vnYmd(batDau)}`,
     category: "TRIAL",
     title: `Sắp tới giờ dạy trải nghiệm ${gio} ngày ${ngay}`,
     body: `Lớp ${tenLop} — buổi ${s.seq} bắt đầu lúc ${gio} ngày ${ngay}.`,
     href: "/lop-trial",
     entityId: s.id,
   });
-  stats.daNhacGv++;
+  // Chỉ đếm khi THẬT SỰ có người được đánh động. `canRung` = ai vừa có mục MỚI hoặc vừa
+  // được mở lại; danh sách người nhận (`soNguoi`) thì luôn là 1 ở đây, kể cả những lượt
+  // quét chạm lại đúng bản ghi cũ và không gửi gì. Đếm theo `soNguoi` là để nhật ký cron
+  // báo "đã nhắc" ở mọi lượt trong cửa sổ 1,1 giờ — một con số không kiểm được gì.
+  if (kq.canRung.length > 0) stats.daNhacGv++;
 }

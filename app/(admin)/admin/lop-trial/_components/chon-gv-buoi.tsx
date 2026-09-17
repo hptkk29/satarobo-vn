@@ -35,6 +35,23 @@ export type NguonGvBuoi = {
   hienTatCa: boolean;
   /** Bật/tắt công tắc — hỏi LẠI server ngay với cùng khung giờ. */
   doiHienTatCa: (v: boolean) => void;
+  /**
+   * Về "chưa biết gì" NGAY LẬP TỨC: `ds` và `lyDoRong` cùng về `null`, lượt đang bay bị
+   * huỷ hiệu lực. Gọi khi ĐỔI NGỮ CẢNH, TRƯỚC `tai()` — hôm nay đúng một chỗ gọi: nút bật/
+   * tắt "Sửa buổi học" (`attendance-board.tsx`), chạy cho cả lượt mở lẫn lượt đóng.
+   *
+   * ⚠️ VÌ SAO PHẢI CÓ (vá 17/09/2026): hook sống ở `AttendanceBoard`, không ở `SuaBuoiForm`
+   * (xem prop `nguonGv` bên đó), nên `ds` TỒN TẠI QUA mọi lần đóng/mở form. Bấm "Sửa buổi
+   * học" cho một buổi KHÁC thì `tai()` bắn đi, nhưng cho tới khi server trả lời — vài trăm
+   * ms tới hơn một giây — `ds` vẫn là kết quả của buổi CŨ: note ĐỎ `role="alert"` của buổi
+   * cũ hiện nguyên văn kèm khung giờ của buổi khác, ngay cạnh một ô ngày ghi ngày mới.
+   * Không ném, không đỏ test nào, console sạch (luật 12).
+   *
+   * ⚠️ KHÔNG dựa vào cờ `dangTai` để che: `dangTai` chỉ nói "đang có lượt bay", nó không
+   * làm dữ liệu cũ biến đi, và mọi khối chữ bên dưới vẫn đọc `ds`. Chú thích ở
+   * `attendance-board.tsx` (chỗ đổi chip buổi) đã cảnh báo đúng chuyện này từ trước.
+   */
+  xoa: () => void;
 };
 
 /**
@@ -147,7 +164,22 @@ export function useGvChoBuoi(input: {
     [taiVoi],
   );
 
-  return { ds, lyDoRong, dangTai, hienTatCa, doiHienTatCa, tai };
+  /**
+   * ĐỔI NGỮ CẢNH ⇒ quên sạch kết quả cũ. Xem `xoa` trong `NguonGvBuoi`.
+   *
+   * Ba việc, và thiếu việc đầu là hỏng: tăng bộ đếm lượt để kết quả ĐANG BAY của ngữ cảnh
+   * cũ không kịp rơi xuống sau khi đã xoá (nó sẽ thấy `cua !== luot.current` và tự bỏ).
+   * `khungCuoi` cũng phải reset, nếu không công tắc "Hiện tất cả" bấm ngay sau đó sẽ hỏi
+   * lại bằng khung giờ của buổi TRƯỚC.
+   */
+  const xoa = useCallback(() => {
+    luot.current += 1;
+    khungCuoi.current = { d: "", s: "", e: "" };
+    setDs(null);
+    setLyDoRong(null);
+  }, []);
+
+  return { ds, lyDoRong, dangTai, hienTatCa, doiHienTatCa, xoa, tai };
 }
 
 /**
@@ -171,6 +203,34 @@ export function hauToGv(d: DongGv): string {
 export function dongDangChon(ds: DongGv[] | null, teacherId: string): DongGv | null {
   if (!ds || !teacherId) return null;
   return ds.find((d) => d.id === teacherId) ?? null;
+}
+
+/**
+ * Hậu tố của dòng "người đang được chọn nhưng không có trong danh sách vừa lọc".
+ *
+ * ── VÌ SAO KHÔNG PHẢI LÚC NÀO CŨNG LÀ "NGOÀI DANH SÁCH LỌC" (vá 17/09/2026) ────────────
+ * Chữ đó hàm ý "bộ lọc đã xét người này và loại ra". Có HAI cảnh nó nói sai:
+ *
+ *  1. Công tắc "Hiện tất cả" đang BẬT. Màn hình vừa tuyên bố mọi luật lọc đã tạm bỏ (câu
+ *     `lyDoRong` + chữ "· đang BỎ lọc theo ca"), mà dòng này lại bảo có bộ lọc đang loại
+ *     người — hai câu trên CÙNG một màn hình nói ngược nhau.
+ *  2. Người đó KHÔNG có cả trong danh sách đầy đủ (`teachers`). Khi ấy chẳng bộ lọc nào
+ *     loại họ cả: `getAssignableTeachers` AND `deletedAt: null` với MỌI nhánh, kể cả nhánh
+ *     cứu hộ `includeIds` — nên tài khoản đã XOÁ MỀM không bao giờ có mặt ở đâu để mà bị
+ *     lọc (khối bằng chứng đầy đủ ở `_lib/gv-hop-le.ts`). Họ đơn giản là không còn chọn
+ *     được nữa, và câu đúng phải nói đúng như vậy.
+ *
+ * Chữ trung tính KHÔNG đổ lỗi cho bộ lọc, và vẫn đủ để người dùng hiểu vì sao dòng này
+ * đứng riêng. THUẦN + export vì đây đúng là loại chữ hứa suông mà chỉ đọc lại tập chuỗi
+ * mới bắt được (luật 12).
+ */
+export function hauToNguoiNgoaiDs(input: {
+  /** Người đang chọn có trong danh sách ĐẦY ĐỦ (prop `teachers`) không. */
+  coTrongDsDay: boolean;
+  hienTatCa: boolean;
+}): string {
+  if (input.hienTatCa || !input.coTrongDsDay) return " · KHÔNG CÒN TRONG DANH SÁCH CHỌN";
+  return " · NGOÀI DANH SÁCH LỌC";
 }
 
 /**
@@ -217,9 +277,19 @@ export function OChonGiaoVien({
   // vế này lo nốt người vừa được chọn TAY trên màn hình, server chưa biết.)
   const thieuNguoiDangChon =
     ds !== null && value !== "" && !ds.some((d) => d.id === value);
+  // Tra TÊN THẬT ở danh sách đầy đủ trước: prop `teachers` do trang dựng đã kèm
+  // `includeIds` (giáo viên đang gán ở từng buổi + từng ca), nên người bị bộ lọc ca loại
+  // ra vẫn còn tên ở đó. "(không rõ tên)" chỉ còn là lối cuối cho tài khoản đã xoá mềm —
+  // `getAssignableTeachers` AND `deletedAt: null` lên cả nhánh `includeIds` nên không
+  // danh sách nào bên client cầm được tên họ, và đó CŨNG là ca phải dùng chữ trung tính.
+  const nguoiTrongDsDay = teachers.find((t) => t.id === value) ?? null;
   const tenNgoaiDs = thieuNguoiDangChon
-    ? (teachers.find((t) => t.id === value)?.name ?? "(không rõ tên)")
+    ? (nguoiTrongDsDay?.name ?? "(không rõ tên)")
     : null;
+  const hauToNgoaiDs = hauToNguoiNgoaiDs({
+    coTrongDsDay: nguoiTrongDsDay !== null,
+    hienTatCa: nguon.hienTatCa,
+  });
 
   const bo = nho ? "rounded-md" : "rounded-lg";
 
@@ -256,7 +326,10 @@ export function OChonGiaoVien({
                 </option>
               ))}
           {tenNgoaiDs !== null && (
-            <option value={value}>{tenNgoaiDs} · NGOÀI DANH SÁCH LỌC</option>
+            <option value={value}>
+              {tenNgoaiDs}
+              {hauToNgoaiDs}
+            </option>
           )}
         </select>
       </label>
@@ -282,9 +355,18 @@ export function OChonGiaoVien({
           />
           Hiện tất cả giáo viên
           {/* Ô tích tự nó chỉ nói "bật/tắt", không nói bật thì ĐANG THẤY GÌ. Câu trạng
-              thái này là thứ người dùng đọc được mà không phải suy. */}
+              thái này là thứ người dùng đọc được mà không phải suy.
+
+              ⚠️ Ba trạng thái, không phải hai (vá 17/09/2026): lúc chưa đủ ngày+giờ thì
+              KHÔNG có lượt lọc nào từng chạy (`ds === null`) và `<select>` đang vẽ NGUYÊN
+              danh sách đầy đủ — in "· đang lọc theo ca" ở đó là nói dối đúng lúc người
+              dùng lướt danh sách và kết luận "cả 25 người này đều rảnh". */}
           <span className={nguon.hienTatCa ? "font-semibold text-state-danger-ink" : ""}>
-            {nguon.hienTatCa ? "· đang BỎ lọc theo ca" : "· đang lọc theo ca"}
+            {nguon.hienTatCa
+              ? "· đang BỎ lọc theo ca"
+              : ds === null
+                ? "· chưa lọc (chọn ngày & giờ)"
+                : "· đang lọc theo ca"}
           </span>
         </label>
       )}
@@ -359,6 +441,7 @@ export function GiaiThichLuatGv({
   cheDo,
   soGvMien,
   hienTatCa,
+  daLoc,
 }: {
   batLoc: boolean;
   cheDo: CheDoChonGv;
@@ -372,16 +455,36 @@ export function GiaiThichLuatGv({
    * sạch (luật 12). Để `tsc` bắt mọi cửa phải truyền, đừng cho nó mặc định.
    */
   hienTatCa: boolean;
+  /**
+   * Đã có kết quả lọc cho MỘT khung giờ cụ thể chưa (`nguon.ds !== null`).
+   *
+   * ⚠️ VÌ SAO BẮT BUỘC (vá 17/09/2026): lúc mở màn `date === ""` nên hook chưa hỏi server
+   * lần nào, `ds === null`, và `<select>` vẽ NGUYÊN danh sách đầy đủ — trong khi câu bên
+   * dưới vẫn in "Danh sách chỉ hiện giáo viên có ca phủ TRỌN khung giờ buổi". Sale đọc
+   * câu đó, lướt 25 cái tên và kết luận cả 25 người đều rảnh vào khung giờ họ chưa hề
+   * chọn. Đó là lời hứa suông nguy hiểm nhất của màn này: nó KHÔNG sai về mặt cấu hình
+   * (luật ĐÓ có thật), nó chỉ sai về thứ đang hiện ra ngay bên trên nó.
+   *
+   * Không cho mặc định, cùng lý do với `hienTatCa`: cửa thứ ba sau này phải bị `tsc` bắt
+   * viết ra, chứ không được im lặng rơi về vế "đang lọc".
+   */
+  daLoc: boolean;
 }) {
+  // Thứ tự là HỢP ĐỒNG. `hienTatCa` đứng đầu (người dùng vừa bấm — câu phải nói về thao
+  // tác của họ); hai vế "không có bộ lọc nào cả" đứng trước `daLoc` vì chúng đúng ở MỌI
+  // lúc, kể cả khi chưa chọn ngày; `daLoc` chỉ chặn đúng hai câu CUỐI — hai câu duy nhất
+  // hứa về một danh sách ĐÃ được lọc theo khung giờ.
   const luat = hienTatCa
     ? "Đang HIỆN TẤT CẢ giáo viên — luật ca tạm bỏ cho lượt chọn này."
     : !batLoc
       ? "Chưa bật lọc giáo viên theo ca làm — danh sách hiện mọi giáo viên."
       : cheDo === "TAT_CA"
         ? "Bạn xếp được mọi giáo viên (quyền Đào tạo) — danh sách không lọc theo ca."
-        : cheDo === "THEO_CO_SO"
-          ? "Danh sách lọc theo cơ sở của lớp này."
-          : "Danh sách chỉ hiện giáo viên có ca phủ TRỌN khung giờ buổi.";
+        : !daLoc
+          ? "Chọn ngày và giờ để lọc theo ca làm việc. Hiện đang xem tất cả giáo viên."
+          : cheDo === "THEO_CO_SO"
+            ? "Danh sách lọc theo cơ sở của lớp này."
+            : "Danh sách chỉ hiện giáo viên có ca phủ TRỌN khung giờ buổi.";
   return (
     <p className="mt-2 text-[11px] text-muted-foreground">
       {luat} Note đỏ đối chiếu buổi <strong>lớp trải nghiệm</strong> và buổi{" "}

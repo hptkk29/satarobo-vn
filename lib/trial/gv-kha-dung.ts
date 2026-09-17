@@ -187,6 +187,30 @@ export type ThamSoLocGv = {
    * ⚠️ Luật 7 — **BẮT BUỘC**, không mặc định: đây là tham số MỞ RỘNG PHẠM VI NHÌN.
    */
   hienTatCa: boolean;
+  /**
+   * Người đang xem có được biết **VÌ SAO** một giáo viên không nhận buổi này không.
+   *
+   * ── VÌ SAO CÓ THAM SỐ NÀY (vá 17/09/2026) ───────────────────────────────────────────
+   * Ô chọn giáo viên mở cho CẢ Sale (`trials:manage`), mà Sale **cố ý không có**
+   * `hr_attendance:view`: màn `/admin/cham-cong` khoá sau đúng khoá đó
+   * (`lib/cham-cong/module-scope.ts`), và khối "ai nghỉ 7 ngày tới" ở dashboard còn gác
+   * chặt hơn (`hr_attendance:approve`). Nhưng hàm này tính `nhan` cho MỌI dòng rồi trả
+   * xuống client, và ba trong số các nhãn đó là chính lịch nghỉ/lịch làm của người ta
+   * ("ngày nghỉ", "chưa xếp ca ngày này", "chưa thấy ô ca nào trong lưới tháng này").
+   * Gọi lặp endpoint theo từng ngày là dựng lại lịch nghỉ cả tháng của mọi giáo viên
+   * trong tầm nhìn — không ném lỗi, không cảnh báo, chỉ là một trường trong payload.
+   *
+   * `false` ⇒ ba trạng thái đó gộp về MỘT chữ trung tính (`NHAN_AN_LY_DO`): **vẫn đủ để
+   * người xếp lịch làm việc** (họ biết ai nhận được buổi), chỉ không nói người ta nghỉ
+   * vì gì. ⛔ KHÔNG giấu NGƯỜI — Sale phải dùng được ô chọn, đó là tầng 3 của đặc tả; và
+   * KHÔNG đổi `phu`/`muc`, vì hai trường đó là thứ giữ cho `luonGiu`/`mienLuat`/note đỏ
+   * chạy đúng, và client cần `phu` để dán nhãn "CHƯA VÀO LƯỚI CA".
+   *
+   * ⚠️ Luật 7 — **BẮT BUỘC**, không mặc định. Mặc định `true` là rò im lặng ở mọi cửa
+   * quên truyền; mặc định `false` thì một ngày nào đó người CÓ quyền mất thông tin mà
+   * không ai biết vì sao. Bắt buộc ⇒ `tsc` liệt kê đủ call site.
+   */
+  duocXemLyDoNghi: boolean;
 };
 
 export type KetQuaLocGv = {
@@ -338,6 +362,39 @@ const NHAN_THEO_PHU: Record<KetQuaPhuCa, string> = {
   CHUA_CO_LUOI: "chưa sinh lưới ca tháng này",
 };
 
+/**
+ * Nhãn dùng chung khi người xem KHÔNG được biết lý do — xem `duocXemLyDoNghi`.
+ *
+ * Nói "không nhận buổi này" chứ không nói "bận": "bận" là một khẳng định về lịch của
+ * người ta, và đó đúng là thứ đang phải giấu. Câu này chỉ nói về BUỔI ĐANG XẾP.
+ */
+const NHAN_AN_LY_DO = "không nhận buổi này";
+
+/**
+ * Ba trạng thái KHAI RA lịch nghỉ / lịch làm cá nhân, nên phải gộp khi thiếu quyền.
+ *
+ * Ba cái còn lại thì không: `PHU_TRON` rỗng, `KHONG_PHU`/`KHONG_GIO` chỉ nói ca HÔM ĐÓ
+ * không hợp với ĐÚNG khung giờ đang xếp (người này vẫn đang đi làm — không phải thông
+ * tin nghỉ phép), và `CHUA_CO_LUOI` nói về LƯỚI của cả trung tâm chứ không về một ai.
+ */
+const PHU_LO_LICH_CA_NHAN: readonly KetQuaPhuCa[] = [
+  "NGHI",
+  "KHONG_CO_CA",
+  "CHUA_VAO_LUOI",
+];
+
+/**
+ * Chú thích của MỘT dòng, đã áp luật che lý do.
+ *
+ * Export để test đọc lại được TOÀN BỘ tập nhãn có thể phát ra (luật 12: cách duy nhất
+ * biết một chuỗi chữ có nói dối hay không là đọc hết tập chuỗi, không phải đọc nhánh
+ * `if` sinh ra nó).
+ */
+export function nhanChoDong(phu: KetQuaPhuCa, duocXemLyDoNghi: boolean): string {
+  if (!duocXemLyDoNghi && PHU_LO_LICH_CA_NHAN.includes(phu)) return NHAN_AN_LY_DO;
+  return NHAN_THEO_PHU[phu];
+}
+
 /** Buổi đầu tiên (theo thứ tự người gọi đưa vào) ĐÈ lên khung giờ, cùng ngày. */
 function timTrungLich(
   ban: readonly BuoiBanCuaGv[],
@@ -417,6 +474,8 @@ function duocGiu(input: {
  *     (`KHONG_GIO` = mã không mang giờ: `LD` `LDGV` `D1` `D2` — xem `duocGiu`.)
  *   · `mienLuat` (Kiệt & Toại — khai bằng cấu hình, KHÔNG hardcode tên) và `luonGiu`
  *     (GV đang chọn sẵn) LUÔN giữ, bỏ qua mọi luật lọc — nhưng **vẫn tính trùng lịch**.
+ *   · `duocXemLyDoNghi === false` ⇒ vẫn trả ĐỦ người và đủ `phu`/`muc`, chỉ gộp nhãn của
+ *     `NGHI`/`KHONG_CO_CA`/`CHUA_VAO_LUOI` về một chữ trung tính (xem `nhanChoDong`).
  *   · `hienTatCa` (công tắc của người dùng cho MỘT lượt chọn) ⇒ không lọc ai, và NÓI RA
  *     bằng `lyDoRong` — một bộ lọc đang tắt mà màn hình im lặng thì lần sau người dùng
  *     không biết mình đang nhìn danh sách nào.
@@ -448,9 +507,12 @@ export function locGiaoVienChoBuoi(input: ThamSoLocGv): KetQuaLocGv {
       : phu === "KHONG_GIO" || phu === "CHUA_VAO_LUOI"
         ? "CANH"
         : "KHONG";
+    // Note đỏ trùng lịch KHÔNG bị che: nó nói về BUỔI DẠY (việc của trung tâm, và chính
+    // người xếp lịch là người cần biết), không nói về ngày nghỉ của ai. Che nó là bỏ đi
+    // thứ đắt nhất của cả màn này.
     const nhan = trung
       ? `TRÙNG LỊCH: ${trung.nhan} ${trung.startTime}–${trung.endTime}`
-      : NHAN_THEO_PHU[phu];
+      : nhanChoDong(phu, input.duocXemLyDoNghi);
 
     const dong: DongGv = { id: gv.id, name: gv.name, phu, muc, nhan };
     tatCa.push(dong);

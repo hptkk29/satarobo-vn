@@ -22,9 +22,11 @@ import {
   gopDoanCa,
   khoangThangChua,
   locGiaoVienChoBuoi,
+  nhanChoDong,
   type BuoiBanCuaGv,
   type CaNgay,
   type GiaoVienChon,
+  type KetQuaPhuCa,
   type ThamSoLocGv,
 } from "@/lib/trial/gv-kha-dung";
 
@@ -82,6 +84,10 @@ function thamSo(over: Partial<ThamSoLocGv>): ThamSoLocGv {
     luoiDaSinh: true,
     batLoc: true,
     hienTatCa: false,
+    // Nền là NGƯỜI CÓ QUYỀN xem lịch chấm công, để mọi ca cũ vẫn đọc được đủ tập nhãn
+    // ("ngày nghỉ", "chưa xếp ca ngày này"…) — chúng đang canh đúng những chuỗi đó. Vế
+    // CHE nhãn có khối describe riêng ở cuối tệp, khai `duocXemLyDoNghi: false` tường minh.
+    duocXemLyDoNghi: true,
   };
   const ra = { ...nen, ...over };
   if (!over.coTrongLuoi) ra.coTrongLuoi = new Set(ra.giaoVien.map((g) => g.id));
@@ -696,5 +702,189 @@ describe("lưới ca THẬT × khung trial THẬT (chốt 17/09/2026)", () => {
       expect(aiChonDuoc("cs2", "T7", "17:30", "21:00")).toEqual([]);
       expect(aiChonDuoc("cs2", "CN", "17:30", "21:00")).toEqual([]);
     });
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════════════
+// VÁ 17/09/2026 (C) — CHE LÝ DO, KHÔNG CHE NGƯỜI
+//
+// Ô chọn giáo viên mở cho CẢ Sale (`trials:manage`), mà Sale CỐ Ý không có
+// `hr_attendance:view`: màn `/admin/cham-cong` khoá sau đúng khoá đó
+// (`lib/cham-cong/module-scope.ts`), khối "ai nghỉ 7 ngày tới" ở dashboard còn gác bằng
+// `hr_attendance:approve`. Nhưng hàm này tính `nhan` cho MỌI dòng rồi trả xuống client, và
+// ba nhãn trong đó CHÍNH LÀ lịch nghỉ/lịch làm cá nhân. Gọi lặp endpoint theo từng ngày là
+// dựng lại lịch nghỉ cả tháng của mọi giáo viên trong tầm nhìn — không ném, không cảnh báo,
+// chỉ là một trường trong payload mà không ai nhìn.
+//
+// Bộ này canh HAI chiều, và chiều thứ hai quan trọng ngang chiều thứ nhất:
+//   · che rồi thì KHÔNG còn chữ nào nói về nghỉ/ca của một người;
+//   · che rồi thì DANH SÁCH NGƯỜI, `phu`, `muc` và note đỏ KHÔNG ĐỔI một dòng nào.
+//
+// ── CẤY LẠI LỖI (luật 15) — đã chạy THẬT, số đo chứ không phải dự đoán ────────────────
+//   · `nhanChoDong` bỏ hẳn vế che (trả thẳng `NHAN_THEO_PHU[phu]`) → **3 ĐỎ / 64**;
+//   · che QUÁ TAY (thêm `KHONG_PHU`/`KHONG_GIO`/`CHUA_CO_LUOI` vào `PHU_LO_LICH_CA_NHAN`)
+//     → **2 ĐỎ / 64** — ranh giới của bản vá cũng được canh, không chỉ chiều rò;
+//   · che luôn note ĐỎ trùng lịch (`trung && input.duocXemLyDoNghi`) → **1 ĐỎ / 64**.
+// ═════════════════════════════════════════════════════════════════════════════════════
+
+describe("duocXemLyDoNghi — che LÝ DO, không che NGƯỜI", () => {
+  const BA_CANH: readonly GiaoVienChon[] = [
+    { id: "u-nghi", name: "Người xin nghỉ" },
+    { id: "u-trong", name: "Người không xếp ca hôm nay" },
+    { id: "u-moi", name: "Giáo viên mới tuyển" },
+  ];
+
+  /**
+   * Ba người rơi vào ĐÚNG ba trạng thái khai ra lịch cá nhân: NGHI · KHONG_CO_CA ·
+   * CHUA_VAO_LUOI.
+   *
+   * ⚠️ `batLoc: false` là HÌNH DẠNG THẬT đang chạy, không phải cho tiện: cờ
+   * `trial.locGvTheoCaLamViec` mặc định TẮT, và đó chính là lý do cờ đó KHÔNG cứu được
+   * chỗ rò này — hàm vẫn tính `phu`/`nhan` cho MỌI dòng rồi trả hết xuống client.
+   * Ba đường khác cũng đẩy đủ nhãn ra ngoài (fail-open khi lọc sạch · `mienLuat`/`luonGiu`
+   * luôn giữ · công tắc "Hiện tất cả") — có ca riêng ở dưới cho đường fail-open.
+   */
+  function baCanh(duocXem: boolean, over: Partial<ThamSoLocGv> = {}) {
+    return locGiaoVienChoBuoi(
+      thamSo({
+        giaoVien: BA_CANH,
+        caTheoGv: {
+          "u-nghi": caTuDanhMuc("X", "cs1"), // mã nghỉ THẬT trong danh mục
+          "u-trong": null,
+          "u-moi": null,
+        },
+        coTrongLuoi: new Set(["u-nghi", "u-trong"]), // `u-moi` vắng ⇒ CHUA_VAO_LUOI
+        batLoc: false,
+        ...over,
+        duocXemLyDoNghi: duocXem,
+      }),
+    );
+  }
+
+  // ⭐ CA KHOÁ. Đọc lại TOÀN BỘ chuỗi nhãn, không đọc từng nhánh `if` sinh ra chúng.
+  it("KHÔNG có quyền chấm công ⇒ ba nhãn gộp về MỘT chữ trung tính, không chữ nào nói 'nghỉ'", () => {
+    const r = baCanh(false);
+    expect(r.ds.map((d) => d.nhan)).toEqual([
+      "không nhận buổi này",
+      "không nhận buổi này",
+      "không nhận buổi này",
+    ]);
+    // Đọc lại toàn bộ chữ phát ra trong lượt này — nhãn dòng LẪN lý do danh sách.
+    const moiChu = `${r.ds.map((d) => d.nhan).join(" ")} ${r.lyDoRong ?? ""}`.toLowerCase();
+    for (const cam of ["nghỉ", "xếp ca", "lưới tháng"]) {
+      expect(moiChu).not.toContain(cam);
+    }
+  });
+
+  it("CÓ quyền ⇒ ba nhãn vẫn KHÁC NHAU và nói đúng lý do", () => {
+    // Vế đối chứng: nếu bản vá che nhầm cả người có quyền thì ca này đỏ, và nó phải đỏ —
+    // người chấm công mất thông tin cũng là một lỗi, chỉ ngược chiều.
+    expect(baCanh(true).ds.map((d) => d.nhan)).toEqual([
+      "ngày nghỉ",
+      "chưa xếp ca ngày này",
+      "chưa thấy ô ca nào trong lưới tháng này",
+    ]);
+  });
+
+  // ⭐ CA KHOÁ thứ hai: che CHỮ, không che CƠ CHẾ.
+  it("che nhãn KHÔNG đổi danh sách người, KHÔNG đổi `phu`/`muc`", () => {
+    const co = baCanh(true);
+    const khong = baCanh(false);
+    expect(khong.ds.map((d) => d.id)).toEqual(co.ds.map((d) => d.id));
+    expect(khong.ds.map((d) => d.phu)).toEqual(co.ds.map((d) => d.phu));
+    expect(khong.ds.map((d) => d.muc)).toEqual(co.ds.map((d) => d.muc));
+    // Và `phu` vẫn là sự thật, không bị "tô hồng" thành PHU_TRON để giấu.
+    expect(khong.ds.map((d) => d.phu)).toEqual(["NGHI", "KHONG_CO_CA", "CHUA_VAO_LUOI"]);
+  });
+
+  it("đường FAIL-OPEN (lọc sạch, trả ĐỦ danh sách) cũng phải che — đây là đường rò rộng nhất", () => {
+    // Tầng Sale + cờ lọc BẬT: hai người đầu bị loại, `u-moi` được giữ… nên danh sách
+    // KHÔNG rỗng và đây chưa phải fail-open. Bỏ `u-moi` đi thì lọc còn 0 người ⇒ hợp đồng
+    // bắt trả ĐỦ danh sách kèm lý do — tức cả hai nhãn nghỉ/không-ca đều ra ngoài.
+    const r = locGiaoVienChoBuoi(
+      thamSo({
+        giaoVien: [BA_CANH[0], BA_CANH[1]],
+        caTheoGv: { "u-nghi": caTuDanhMuc("X", "cs1"), "u-trong": null },
+        coTrongLuoi: new Set(["u-nghi", "u-trong"]),
+        batLoc: true,
+        duocXemLyDoNghi: false,
+      }),
+    );
+    expect(r.ds.map((d) => d.id)).toEqual(["u-nghi", "u-trong"]); // fail-open: đủ người
+    expect(r.lyDoRong).not.toBeNull();
+    expect(r.ds.map((d) => d.nhan)).toEqual(["không nhận buổi này", "không nhận buổi này"]);
+  });
+
+  it("note ĐỎ trùng lịch KHÔNG bị che — nó nói về buổi dạy, không về ngày nghỉ", () => {
+    const r = baCanh(false, {
+      banTheoGv: {
+        "u-nghi": [
+          { ymd: YMD, startTime: "18:30", endTime: "20:00", nhan: "Lớp Sata 5 B", nguon: "LOP_CHINH" },
+        ],
+      },
+    });
+    const dong = r.ds.find((d) => d.id === "u-nghi");
+    expect(dong?.muc).toBe("DO");
+    expect(dong?.nhan).toBe("TRÙNG LỊCH: Lớp Sata 5 B 18:30–20:00");
+  });
+
+  it("KHONG_PHU / KHONG_GIO / CHUA_CO_LUOI KHÔNG bị che — chúng không nói về nghỉ phép", () => {
+    // Ranh giới của bản vá, viết ra để lần sau ai nới/thu cũng thấy ngay: ba trạng thái
+    // này nói về ca HÔM ĐÓ so với ĐÚNG khung giờ đang xếp (người vẫn đang đi làm), hoặc
+    // nói về LƯỚI của cả trung tâm — không cái nào là thông tin nghỉ phép của một người.
+    const r = locGiaoVienChoBuoi(
+      thamSo({
+        giaoVien: [
+          { id: "u-c", name: "Ca chiều" },
+          { id: "u-ld", name: "Linh động" },
+        ],
+        caTheoGv: {
+          "u-c": caTuDanhMuc("C", "cs1"),
+          "u-ld": caTuDanhMuc("LD", "cs1"),
+        },
+        duocXemLyDoNghi: false,
+      }),
+    );
+    expect(r.ds.map((d) => d.nhan)).toEqual([
+      "ca không phủ trọn giờ buổi",
+      "ca không nhận thêm buổi",
+    ]);
+
+    const chuaLuoi = locGiaoVienChoBuoi(
+      thamSo({ giaoVien: GV, luoiDaSinh: false, duocXemLyDoNghi: false }),
+    );
+    expect(chuaLuoi.ds[0].nhan).toBe("chưa sinh lưới ca tháng này");
+  });
+
+  it("nhanChoDong — bảng nhãn đầy đủ của CẢ HAI phía, đọc một lượt", () => {
+    // Bảng này là hợp đồng. Thêm một `KetQuaPhuCa` mới mà quên xếp nó vào đúng phía thì
+    // ca này đỏ ngay, thay vì im lặng rò một chuỗi mới.
+    const moi: KetQuaPhuCa[] = [
+      "PHU_TRON",
+      "KHONG_PHU",
+      "NGHI",
+      "KHONG_GIO",
+      "KHONG_CO_CA",
+      "CHUA_VAO_LUOI",
+      "CHUA_CO_LUOI",
+    ];
+    expect(moi.map((p) => nhanChoDong(p, false))).toEqual([
+      "",
+      "ca không phủ trọn giờ buổi",
+      "không nhận buổi này",
+      "ca không nhận thêm buổi",
+      "không nhận buổi này",
+      "không nhận buổi này",
+      "chưa sinh lưới ca tháng này",
+    ]);
+    expect(moi.map((p) => nhanChoDong(p, true))).toEqual([
+      "",
+      "ca không phủ trọn giờ buổi",
+      "ngày nghỉ",
+      "ca không nhận thêm buổi",
+      "chưa xếp ca ngày này",
+      "chưa thấy ô ca nào trong lưới tháng này",
+      "chưa sinh lưới ca tháng này",
+    ]);
   });
 });

@@ -138,7 +138,26 @@ const h = vi.hoisted(() => {
     return true;
   }
 
-  const notifyStaff = vi.fn(async (_p: Record<string, unknown>) => 1);
+  /**
+   * MỌI tin đã gửi trong lượt chạy, theo thứ tự, gộp CẢ HAI cửa ghi.
+   *
+   * ⚠️ Vì sao phải gộp (17/09/2026): nhánh GV nay đi qua `notifyStaffChiTiet` (nó cần
+   * `canRung` để biết có THẬT SỰ gửi hay không), nhánh Sale và nhánh leo thang Đào tạo
+   * vẫn đi `notifyStaff`. Đếm theo MỘT mock là đếm sót: ca "đúng một chuông cho một buổi"
+   * sẽ xanh vì nhìn nhầm cửa, chứ không phải vì mã đúng.
+   */
+  const daGui: Record<string, unknown>[] = [];
+  /** Kết quả `ghiThongBaoNhanSu` mà cửa chi tiết trả về — ca nào cần thì sửa tại chỗ. */
+  const ketQuaGhi = { soNguoi: 1, canRung: ["u_gv"] as string[] };
+
+  const notifyStaff = vi.fn(async (p: Record<string, unknown>) => {
+    daGui.push(p);
+    return 1;
+  });
+  const notifyStaffChiTiet = vi.fn(async (p: Record<string, unknown>) => {
+    daGui.push(p);
+    return { soNguoi: ketQuaGhi.soNguoi, canRung: [...ketQuaGhi.canRung] };
+  });
   const mockDb = {
     trialClassSession: {
       findMany: vi.fn(async (a: ThamSoTruyVan) =>
@@ -158,11 +177,14 @@ const h = vi.hoisted(() => {
       ),
     },
   };
-  return { trangThai, caHocThu, notifyStaff, mockDb };
+  return { trangThai, caHocThu, notifyStaff, notifyStaffChiTiet, daGui, ketQuaGhi, mockDb };
 });
 
 vi.mock("@/lib/db", () => ({ db: h.mockDb }));
-vi.mock("@/lib/notifications/notify", () => ({ notifyStaff: h.notifyStaff }));
+vi.mock("@/lib/notifications/notify", () => ({
+  notifyStaff: h.notifyStaff,
+  notifyStaffChiTiet: h.notifyStaffChiTiet,
+}));
 
 import { chayNhacTrial } from "./nhac-buoi";
 
@@ -174,9 +196,14 @@ const NOW_MOC_GV = new Date("2026-09-20T10:00:00.000Z");
 /** Còn đúng 2,0h ⇒ rơi vào cửa sổ "2-gio" [1.5, 2.5) — mốc của SALE. */
 const NOW_MOC_SALE = new Date("2026-09-20T09:00:00.000Z");
 
-/** Mọi tham số đã truyền cho `notifyStaff` trong lượt chạy. */
+/** Mọi tham số đã truyền cho CỬA GHI (cả hai cửa), theo đúng thứ tự gọi. */
 function moiTin(): Record<string, unknown>[] {
-  return h.notifyStaff.mock.calls.map((c) => c[0] as Record<string, unknown>);
+  return h.daGui;
+}
+
+/** Số chuông đã gửi trong lượt chạy — gộp cả hai cửa ghi. */
+function soTin(): number {
+  return h.daGui.length;
 }
 
 function khoa(): string[] {
@@ -190,6 +217,11 @@ function moiNguoiNhan(): string[] {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // `vi.clearAllMocks()` KHÔNG đụng tới mảng dùng chung — quên dòng này là ca sau đọc
+  // được tin của ca trước và cả bộ chỉ xanh nhờ thứ tự chạy hiện tại (luật 18).
+  h.daGui.length = 0;
+  h.ketQuaGhi.soNguoi = 1;
+  h.ketQuaGhi.canRung = ["u_gv"];
   // Dựng lại TOÀN BỘ trạng thái ở mỗi ca (luật 18: mỗi ca phải xanh khi chạy MỘT MÌNH).
   // `h.trangThai.*` là đối tượng dùng chung giữa các ca, nên thiếu chỗ này là ca sau mượn
   // trạng thái ca trước và cả bộ chỉ xanh nhờ thứ tự chạy hiện tại.
@@ -202,7 +234,12 @@ beforeEach(() => {
     h.caHocThu("te3", "Bé Chi", "u_sale_3"),
   ];
   h.trangThai.nguoiDaoTao = [{ id: "u_daotao" }];
-  h.notifyStaff.mockResolvedValue(1);
+  // ⚠️ KHÔNG `h.notifyStaff.mockResolvedValue(1)` ở đây nữa. `mockResolvedValue` THAY
+  // hiện thực của mock, tức xoá luôn dòng `daGui.push(p)` — và `vi.clearAllMocks()` chỉ
+  // xoá lịch sử gọi chứ không phục hồi hiện thực gốc, nên lượt sau vẫn dùng bản đã thay.
+  // Đo thật: để lại dòng đó thì ca leo thang Đào tạo và ca mốc 2 tiếng đọc được danh sách
+  // tin RỖNG (2 ĐỎ) — một bộ test mù đúng kiểu, vì mã sản xuất vẫn gửi đủ.
+  h.trangThai.buoi[0]!.date = new Date("2026-09-20T00:00:00.000Z");
 });
 
 describe("[TRIAL-T50] mốc 1 tiếng — nhắc GIÁO VIÊN", () => {
@@ -212,8 +249,8 @@ describe("[TRIAL-T50] mốc 1 tiếng — nhắc GIÁO VIÊN", () => {
     // mỗi ca sinh một khoá khác nhau.
     const kq = await chayNhacTrial({ now: NOW_MOC_GV });
 
-    expect(h.notifyStaff).toHaveBeenCalledTimes(1);
-    expect(khoa()).toEqual(["trial.reminder-gv:1-gio:ts1"]);
+    expect(soTin()).toBe(1);
+    expect(khoa()).toEqual(["trial.reminder-gv:1-gio:ts1:2026-09-20"]);
     expect(moiTin()[0]!.userIds).toEqual(["u_gv"]);
     expect(kq.daNhacGv).toBe(1);
     expect(kq.daNhac).toBe(0);
@@ -253,7 +290,7 @@ describe("[TRIAL-T50] mốc 1 tiếng — nhắc GIÁO VIÊN", () => {
     h.trangThai.nguoiDaoTao = [];
     const kq = await chayNhacTrial({ now: NOW_MOC_GV });
 
-    expect(h.notifyStaff).not.toHaveBeenCalled();
+    expect(soTin()).toBe(0);
     expect(kq.boQua).toBe(1);
   });
 
@@ -261,7 +298,7 @@ describe("[TRIAL-T50] mốc 1 tiếng — nhắc GIÁO VIÊN", () => {
     h.trangThai.cas = [];
     const kq = await chayNhacTrial({ now: NOW_MOC_GV });
 
-    expect(h.notifyStaff).not.toHaveBeenCalled();
+    expect(soTin()).toBe(0);
     expect(kq.daNhacGv).toBe(0);
     expect(kq.leoThang).toBe(0);
   });
@@ -305,7 +342,7 @@ describe("[TRIAL-T51] hai nhánh KHÔNG rò sang nhau", () => {
 describe("[TRIAL-T52] ngoài mọi cửa sổ", () => {
   it("còn 6 tiếng ⇒ không mốc nào khớp ⇒ im", async () => {
     const kq = await chayNhacTrial({ now: new Date(BAT_DAU.getTime() - 6 * 3_600_000) });
-    expect(h.notifyStaff).not.toHaveBeenCalled();
+    expect(soTin()).toBe(0);
     expect(kq.buoiQuet).toBe(1);
   });
 
@@ -313,16 +350,93 @@ describe("[TRIAL-T52] ngoài mọi cửa sổ", () => {
     // Hệ quả đã biết và đã ghi trong `_moc.ts`: buổi tạo muộn hơn ~24 phút trước giờ dạy
     // KHÔNG BAO GIỜ nhận chuông của mốc này.
     const kq = await chayNhacTrial({ now: new Date(BAT_DAU.getTime() - 20 * 60_000) });
-    expect(h.notifyStaff).not.toHaveBeenCalled();
+    expect(soTin()).toBe(0);
     expect(kq.daNhacGv).toBe(0);
   });
 
   it("giờ bắt đầu hỏng ⇒ bỏ qua buổi, không đoán, không ném", async () => {
     h.trangThai.buoi[0]!.startTime = "18h00";
     const kq = await chayNhacTrial({ now: NOW_MOC_GV });
-    expect(h.notifyStaff).not.toHaveBeenCalled();
+    expect(soTin()).toBe(0);
     expect(kq.boQua).toBe(1);
     // Không dọn ở đây: `beforeEach` mới là chỗ dựng lại trạng thái. Dọn ở cuối ca thì
     // một assertion ném là ca sau thừa hưởng dữ liệu hỏng (luật 18).
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════════════
+// VÁ 17/09/2026 — DỜI BUỔI SAU KHI CHUÔNG ĐÃ PHÁT
+//
+// `dedupeKey` có `@@unique([userId, dedupeKey])`, nên khoá `<mocTen>:<sessionId>` là khoá
+// VĨNH VIỄN cho cặp (giáo viên, buổi). Đường hỏng: buổi 14/11 18:00 đã bắn chuông; Sale
+// dời sang 15/11 18:00 (status vẫn SCHEDULED, `sessionId` KHÔNG đổi); hôm sau lượt cron
+// tới mốc dựng lại ĐÚNG khoá đó ⇒ `ghiThongBaoNhanSu` chỉ `update` nội dung, `canRung`
+// rỗng ⇒ KHÔNG broadcast, KHÔNG Web Push, `readAt` giữ nguyên "đã đọc". Giáo viên không
+// được nhắc cho NGÀY MỚI, và `stats.daNhacGv` vẫn đếm 1 nên nhật ký cron báo "đã nhắc".
+//
+// Hai vế của bản vá, canh riêng:
+//   1. khoá mang MỐC NGÀY ⇒ dời sang ngày khác là một việc nhắc KHÁC;
+//   2. `daNhacGv` chỉ tăng khi `canRung` KHÔNG rỗng ⇒ con số trên nhật ký kiểm được.
+//
+// ── CẤY LẠI LỖI (luật 15) — đã chạy THẬT ────────────────────────────────────────────
+//   · bỏ `:${vnYmd(batDau)}` khỏi khoá                      → **4 ĐỎ / 17**
+//   · đổi lại thành `stats.daNhacGv++` vô điều kiện         → **1 ĐỎ / 17**
+// ═════════════════════════════════════════════════════════════════════════════════════
+
+describe("[TRIAL-T53] dời buổi ⇒ chuông MỚI, không chạm lại khoá cũ", () => {
+  /** Cùng buổi `ts1`, nhưng lịch đã dời sang 21/09. Mốc GV = 1 tiếng trước 18:00 VN. */
+  const NGAY_MOI = new Date("2026-09-21T00:00:00.000Z");
+  const NOW_MOC_GV_NGAY_MOI = new Date("2026-09-21T10:00:00.000Z");
+
+  // ⭐ CA KHOÁ: hai lượt chạy, cùng `sessionId`, hai khoá KHÁC NHAU.
+  it("dời từ 20/09 sang 21/09 ⇒ khoá đổi theo NGÀY, không đè lên chuông đã đọc", async () => {
+    await chayNhacTrial({ now: NOW_MOC_GV });
+    const khoaCu = khoa();
+
+    // Sale dời lịch: chỉ cột `date` đổi, `id` và `status` giữ nguyên — đúng hình dạng
+    // mà `updateLopTrialSessionAction` ghi xuống.
+    h.daGui.length = 0;
+    h.trangThai.buoi[0]!.date = NGAY_MOI;
+    await chayNhacTrial({ now: NOW_MOC_GV_NGAY_MOI });
+
+    expect(khoaCu).toEqual(["trial.reminder-gv:1-gio:ts1:2026-09-20"]);
+    expect(khoa()).toEqual(["trial.reminder-gv:1-gio:ts1:2026-09-21"]);
+    expect(khoa()[0]).not.toBe(khoaCu[0]);
+  });
+
+  it("khoá và TIÊU ĐỀ không bao giờ nói hai ngày khác nhau", () => {
+    // Cả hai cùng sinh từ `batDau`, nên ca này canh việc không ai tách chúng ra sau này.
+    return chayNhacTrial({ now: NOW_MOC_GV }).then(() => {
+      const tin = moiTin()[0]!;
+      expect(String(tin.dedupeKey)).toContain("2026-09-20");
+      expect(String(tin.title)).toContain("20/09");
+    });
+  });
+
+  it("chạy LẠI đúng buổi đó trong cùng cửa sổ ⇒ vẫn đúng MỘT khoá (không đẻ chuông mới)", async () => {
+    // Mốc "1-gio" rộng 1,1 giờ nên một buổi lọt vào nhiều lượt cron liên tiếp. Ngày không
+    // đổi ⇒ khoá không đổi ⇒ `dedupeKey` làm đúng việc của nó. Vế này phải giữ, nếu không
+    // bản vá biến thành "mỗi lượt cron một chuông".
+    await chayNhacTrial({ now: NOW_MOC_GV });
+    await chayNhacTrial({ now: new Date(BAT_DAU.getTime() - 30 * 60_000) });
+    expect(new Set(khoa())).toEqual(new Set(["trial.reminder-gv:1-gio:ts1:2026-09-20"]));
+  });
+});
+
+describe("[TRIAL-T54] daNhacGv đếm CHUÔNG ĐÃ GỬI, không đếm lượt quét", () => {
+  // ⭐ CA KHOÁ: cửa ghi nhận đúng một người nhận nhưng KHÔNG ai được đánh động (bản ghi y
+  // nguyên từ lượt trước) ⇒ con số phải là 0. Đây là hình dạng của mọi lượt cron thứ hai
+  // trở đi trong cùng cửa sổ 1,1 giờ.
+  it("canRung RỖNG (bản ghi y nguyên) ⇒ daNhacGv = 0, dù vẫn gọi cửa ghi", async () => {
+    h.ketQuaGhi.canRung = [];
+    const kq = await chayNhacTrial({ now: NOW_MOC_GV });
+
+    expect(soTin()).toBe(1); // vẫn gọi — `dedupeKey` là thứ quyết định gửi hay không
+    expect(kq.daNhacGv).toBe(0);
+  });
+
+  it("canRung có người ⇒ daNhacGv = 1", async () => {
+    const kq = await chayNhacTrial({ now: NOW_MOC_GV });
+    expect(kq.daNhacGv).toBe(1);
   });
 });

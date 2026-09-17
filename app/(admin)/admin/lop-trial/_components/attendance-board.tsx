@@ -267,6 +267,9 @@ function SuaBuoiForm({
         cheDo={cheDoChonGv}
         soGvMien={soGvMienLoc}
         hienTatCa={nguonGv.hienTatCa}
+        // Cửa này mở là `tai()` bắn ngay, nhưng `ds` chỉ có sau khi server trả lời —
+        // trong khoảng đó câu luật phải nói "chưa lọc", không được hứa đã lọc.
+        daLoc={nguonGv.ds !== null}
       />
 
       <label className="mt-2 flex flex-col gap-1 text-xs text-muted-foreground">
@@ -528,6 +531,23 @@ export function AttendanceBoard({
                 // là của buổi TRƯỚC (khác ngày, khác `excludeSessionId`) — một cái note
                 // đỏ đúng cho buổi khác còn tệ hơn không có note nào.
                 setMoSuaBuoi(false);
+                // ⚠️ CỐ Ý KHÔNG gọi `nguonGv.xoa()` ở đây, dù đọc thì thấy nó "thuộc về"
+                // chỗ này. Bấm chip là ĐÓNG khối sửa, và khi khối đóng thì KHÔNG GÌ đọc
+                // `ds` (hook chỉ được truyền vào `SuaBuoiForm`); mọi đường MỞ LẠI đều đi
+                // qua nút "Sửa buổi học", nơi `xoa()` chạy TRƯỚC `tai()`.
+                //
+                // Đo bằng cách cấy lỗi (17/09/2026) — HAI cấu hình, đừng đọc nhầm số:
+                //   · Cấu hình BA chỗ gọi (chip + nút bật/tắt + `onXong`), tức bản nháp
+                //     đầu: gỡ `xoa()` khỏi ĐÂY → **0 ĐỎ / 7**; gỡ khỏi `onXong` →
+                //     **0 ĐỎ / 7** — không ca nào chạm tới hai chỗ đó. Gỡ khỏi nút bật/
+                //     tắt khi ấy chỉ **1 ĐỎ / 7**, vì hai dòng kia còn đang đỡ cho nó.
+                //   · Cấu hình HIỆN TẠI (một chỗ gọi duy nhất, sau khi gỡ hai dòng chết):
+                //     gỡ `xoa()` khỏi nút bật/tắt → **3 ĐỎ / 7**; để nó chạy SAU `tai()`
+                //     thay vì TRƯỚC → **5 ĐỎ / 7**. ⭐ Đây mới là số của mã đang đọc.
+                //
+                // Con số 1 ĐỎ ở trên chính là bằng chứng cho luận điểm: khi ba chỗ cùng
+                // làm một việc, gỡ một chỗ gần như không ai thấy. Hai cơ chế cho một luật
+                // là hai chỗ để chúng trôi lệch, và cái không ai kiểm được sẽ là cái trôi.
               }}
               aria-pressed={active}
               className={`rounded-lg border px-3 py-1.5 text-xs ${
@@ -574,6 +594,20 @@ export function AttendanceBoard({
                   onClick={() => {
                     const mo = !moSuaBuoi;
                     setMoSuaBuoi(mo);
+                    // ⭐ CHỖ DUY NHẤT quên kết quả cũ (vá 17/09/2026) — và nó phải chạy
+                    // TRƯỚC `tai()`, không phải sau.
+                    //
+                    // Hook sống ở component NÀY (xem prop `nguonGv` của `SuaBuoiForm`), nên
+                    // `ds` sống sót qua mọi lần đóng/mở và mọi lần đổi buổi. Bấm "Sửa buổi
+                    // học" cho một buổi KHÁC thì `tai()` bắn đi, nhưng tới lúc server trả
+                    // lời — vài trăm ms tới hơn một giây — màn hình vẫn vẽ kết quả buổi CŨ:
+                    // note ĐỎ `role="alert"` kèm khung giờ của buổi khác, ngay cạnh ô ngày
+                    // ghi ngày mới. Không ném, không đỏ test nào, console sạch (luật 12).
+                    //
+                    // ⚠️ KHÔNG che bằng cờ `dangTai`: cờ đó chỉ nói "đang có lượt bay", nó
+                    // không làm dữ liệu cũ biến đi, và mọi khối chữ bên dưới vẫn đọc `ds`.
+                    // Chạy vô điều kiện (cả lượt MỞ lẫn lượt ĐÓNG) để không phải nhớ nhánh.
+                    nguonGv.xoa();
                     // Nạp NGAY khi mở: người dùng có thể chỉ đổi mỗi giáo viên, không
                     // đụng ngày/giờ — mà đó vẫn là một đường tạo trùng lịch. Đợi họ chạm
                     // vào ô ngày mới lọc là để ngỏ đúng ca hay gặp nhất.
@@ -616,6 +650,9 @@ export function AttendanceBoard({
               cheDoChonGv={cheDoChonGv}
               locGvTheoCa={locGvTheoCa}
               soGvMienLoc={soGvMienLoc}
+              // Đóng bằng nút "Đóng" / sau khi Lưu / sau khi Huỷ buổi: chỉ đóng, KHÔNG
+              // tự xoá — cùng lý do với chip đổi buổi ở trên; phép đo (0 ĐỎ / 7, ở cấu
+              // hình ba chỗ gọi) ghi đầy đủ trong khối chú thích của chip.
               onXong={() => setMoSuaBuoi(false)}
             />
           )}

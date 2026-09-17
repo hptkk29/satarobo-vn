@@ -43,6 +43,7 @@ import {
   attendanceSchema,
   createClassSchema,
   gvChoBuoiSchema,
+  ngoaiCuaSoNgayGvBuoi,
 } from "./_lib/schemas";
 import { ngayVnSangUtc } from "./_lib/filters";
 import { quyRaCheDo } from "./_lib/che-do-gv";
@@ -209,14 +210,29 @@ export async function layGvChoBuoiAction(input: {
   const workDate = ngayVnSangUtc(data.date);
   if (!workDate) return { ok: false, error: "Ngày buổi học không hợp lệ" };
 
+  // ⚠️ CỬA SỔ NGÀY (vá 17/09/2026) — zod chỉ kiểm HÌNH DẠNG `YYYY-MM-DD`, không buộc ngày
+  // dính vào buổi nào của lớp. Endpoint này trả trạng thái ca của TỪNG giáo viên cho ngày
+  // được hỏi, nên gọi lặp theo từng ngày là dựng lại lưới ca nhiều năm. Luật nằm ở hàm
+  // THUẦN `ngoaiCuaSoNgayGvBuoi` (phép tính hai con số ghi ở đó); `now` truyền từ ĐÂY —
+  // đây là ranh giới được phép đọc đồng hồ, hàm thuần thì không (luật 19).
+  if (ngoaiCuaSoNgayGvBuoi({ ymd: data.date, now: new Date() })) {
+    return { ok: false, error: "Ngày buổi học nằm ngoài khoảng xếp lịch cho phép" };
+  }
+
   // BA TẦNG (V1-d) — hỏi quyền, rồi quy ra tầng bằng hàm THUẦN. Không `if (role === …)`.
   // `trials:assign-teacher` hỏi TRẦN (khoá của Đào tạo, phạm vi toàn hệ thống);
   // `trials:assign-teacher-center` hỏi KÈM cơ sở của chính lớp này.
-  const [toanHe, theoCoSo, batLoc, gvMien] = await Promise.all([
+  //
+  // `hr_attendance:view` là khoá của MODULE CHẤM CÔNG (`lib/cham-cong/module-scope.ts`),
+  // hỏi KÈM cơ sở của lớp y như màn chấm công hỏi theo từng khối. Nó KHÔNG gác endpoint
+  // này — Sale cố ý không có khoá đó mà vẫn phải xếp được giáo viên (tầng 3 của đặc tả).
+  // Nó chỉ quyết định có được biết LÝ DO một người không nhận buổi hay không.
+  const [toanHe, theoCoSo, batLoc, gvMien, xemLichCa] = await Promise.all([
     checkPermission("trials:assign-teacher"),
     checkPermission("trials:assign-teacher-center", { centerId: cls.centerId }),
     getSetting("trial.locGvTheoCaLamViec"),
     getSetting("trial.gvMienLocTheoCa"),
+    checkPermission("hr_attendance:view", { centerId: cls.centerId }),
   ]);
   const cheDo = quyRaCheDo({ toanHe, theoCoSo });
 
@@ -258,6 +274,9 @@ export async function layGvChoBuoiAction(input: {
     // `scopedDb(ctx.actor)`, và cửa GHI (`gvXepDuoc`) không đọc cờ này. Xem chú thích của
     // `hienTatCa` trong `lib/trial/gv-kha-dung.ts` về việc vì sao đây không phải nới quyền.
     hienTatCa: data.hienTatCa,
+    // Che LÝ DO, KHÔNG che người: thiếu khoá chấm công thì ba nhãn nói về lịch nghỉ/lịch
+    // làm cá nhân gộp về một chữ trung tính. Xem `duocXemLyDoNghi` ở `gv-kha-dung.ts`.
+    duocXemLyDoNghi: xemLichCa,
   });
 
   return { ok: true, ds, lyDoRong };

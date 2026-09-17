@@ -15,6 +15,8 @@
  *     (ca "không GV nào có ca" · ca "server trả lỗi" · ca "xoá ngày").
  *   · đổi `hauToGv` trả `""` cho `muc === "DO"` → **1 ĐỎ / 9** (ca nhãn TRÙNG LỊCH).
  *   · bỏ `aria-invalid={doTrung}` trên `<select>` → **1 ĐỎ / 9** (cùng ca đó).
+ *   · (VÁ 17/09 — câu luật nói dối lúc chưa chọn ngày) bỏ vế `!daLoc` khỏi `GiaiThichLuatGv`
+ *     → **2 ĐỎ / 26**; bỏ vế `ds === null` khỏi chữ cạnh ô tích → **2 ĐỎ / 26**.
  *   · bỏ vế `if (!date || !startTime || !endTime)` trong `useGvChoBuoi.tai` →
  *     **1 ĐỎ / 9**, và nó đỏ ở ca "xoá ngày" chứ KHÔNG phải ca "chưa chọn ngày".
  *     Ghi ra vì chỗ này dễ đoán sai: lúc dựng component `tai` chưa hề được gọi (ngày
@@ -68,6 +70,7 @@ vi.mock("sonner", () => ({
 }));
 
 import { AddSessionForm } from "./add-session-form";
+import { hauToNguoiNgoaiDs } from "./chon-gv-buoi";
 
 const GIAO_VIEN = [
   { id: "gv-kiet", name: "Nguyễn Tuấn Kiệt" },
@@ -325,14 +328,57 @@ describe("AddSessionForm — ô Giáo viên lọc theo ca", () => {
     ]);
   });
 
-  it("nói rõ luật đang chạy, và nói rõ KHÔNG tính ca chấm công", () => {
-    // Câu này là thứ duy nhất ngăn người dùng tin nhầm rằng note đỏ đã phủ hết lịch.
+  // ⚠️ CA NÀY ĐÃ SỬA 17/09/2026 — bản cũ ĐÓNG ĐINH MỘT LỜI HỨA SAI.
+  //
+  // Bản cũ chỉ gọi `dung()` (KHÔNG chọn ngày) rồi khẳng định câu luật phải chứa "ca phủ
+  // TRỌN khung giờ buổi". Nhưng lúc đó `date === ""` nên hook chưa hỏi server lần nào,
+  // `ds === null`, và `<select>` đang vẽ NGUYÊN danh sách đầy đủ — chính ca test ở đầu
+  // tệp này khẳng định điều đó ("chưa chọn ngày thì KHÔNG hỏi server, và hiện ĐỦ danh
+  // sách giáo viên"). Tức bộ test đang BẢO VỆ tình trạng: màn hình in "danh sách chỉ hiện
+  // giáo viên có ca phủ TRỌN" ngay dưới một danh sách chưa hề được lọc. Sale đọc câu đó,
+  // lướt các tên, và kết luận cả danh sách đều rảnh vào khung giờ họ chưa chọn (luật 12).
+  //
+  // Nay tách làm HAI ca, vì đó thật sự là hai trạng thái khác nhau.
+  it("CHƯA chọn ngày ⇒ câu luật KHÔNG được hứa đã lọc, phải bảo người dùng chọn ngày/giờ", () => {
     dung();
+    const cau = screen.getByText(/Note đỏ đối chiếu buổi/);
+    expect(cau.textContent).toContain("Chọn ngày và giờ để lọc theo ca làm việc");
+    expect(cau.textContent).toContain("đang xem tất cả giáo viên");
+    expect(cau.textContent).not.toContain("ca phủ TRỌN khung giờ buổi");
+    // Và câu đó phải nói đúng thứ `<select>` ĐANG vẽ — đối chiếu hai cửa, không đọc lại
+    // cùng một biến.
+    expect(cacLuaChon()).toEqual(["Nguyễn Tuấn Kiệt", "Trần Văn Toại", "Lê Thị Lan"]);
+  });
+
+  it("ĐÃ chọn ngày ⇒ nói rõ luật đang chạy, và nói rõ KHÔNG tính ca chấm công", async () => {
+    // Câu này là thứ duy nhất ngăn người dùng tin nhầm rằng note đỏ đã phủ hết lịch.
+    h.layGv.mockResolvedValue({
+      ok: true,
+      ds: [dong({ id: "gv-lan", name: "Lê Thị Lan" })],
+      lyDoRong: null,
+    } satisfies KetQua);
+    dung();
+    await chonNgay();
+
     const cau = screen.getByText(/Note đỏ đối chiếu buổi/);
     expect(cau.textContent).toContain("ca phủ TRỌN khung giờ buổi");
     expect(cau.textContent).toContain("không");
     expect(cau.textContent).toContain("bảng chấm công");
     expect(cau.textContent).toContain("2 giáo viên được khai luôn hiện");
+  });
+
+  it("tầng TAT_CA / cờ lọc TẮT ⇒ câu luật GIỮ NGUYÊN dù chưa chọn ngày (không có gì để lọc)", () => {
+    // Ranh giới của bản vá, viết ra để lần sau ai nới/thu cũng thấy ngay: hai câu này
+    // đúng ở MỌI lúc vì chúng nói "không có bộ lọc nào", chứ không hứa một danh sách đã
+    // lọc. Kéo chúng vào nhánh "chưa chọn ngày" là sửa nhầm hai câu đang nói thật.
+    const a = dung({ cheDoChonGv: "TAT_CA" });
+    expect(screen.getByText(/Note đỏ đối chiếu buổi/).textContent).toContain("quyền Đào tạo");
+    a.unmount();
+
+    dung({ locGvTheoCa: false });
+    expect(screen.getByText(/Note đỏ đối chiếu buổi/).textContent).toContain(
+      "Chưa bật lọc giáo viên theo ca làm",
+    );
   });
 
   // ── VÁ (A) — giáo viên chưa vào lưới ca phải HIỆN, và phải hiện KÈM NHÃN ──────────
@@ -378,12 +424,33 @@ describe("AddSessionForm — ô Giáo viên lọc theo ca", () => {
 // ═══════════════════════════════════════════════════════════════════════════════════
 
 describe("Công tắc 'Hiện tất cả giáo viên'", () => {
-  it("có mặt ở tầng LOC_THEO_CA, mặc định TẮT, và nói rõ đang lọc", () => {
+  // ⚠️ CA NÀY CŨNG SỬA 17/09/2026, cùng lý do với ca câu-luật ở trên: bản cũ khẳng định ô
+  // tích in "· đang lọc theo ca" NGAY KHI MỞ MÀN, lúc chưa có lượt lọc nào chạy. Hai cửa
+  // trên CÙNG một màn hình (câu luật + chữ cạnh ô tích) cùng hứa một điều cho một danh
+  // sách chưa lọc — vá một cửa mà để nguyên cửa kia thì người dùng vẫn đọc ra lời hứa cũ.
+  it("có mặt ở tầng LOC_THEO_CA, mặc định TẮT; nói 'chưa lọc' trước, 'đang lọc' sau khi có ngày", async () => {
     dung();
     const o = congTac();
     expect(o).not.toBeNull();
     expect(o!.checked).toBe(false);
+    expect(screen.getByText("· chưa lọc (chọn ngày & giờ)")).toBeTruthy();
+    expect(screen.queryByText("· đang lọc theo ca")).toBeNull();
+
+    await chonNgay();
     expect(screen.getByText("· đang lọc theo ca")).toBeTruthy();
+    expect(screen.queryByText("· chưa lọc (chọn ngày & giờ)")).toBeNull();
+  });
+
+  it("xoá ngày ⇒ ô tích quay lại 'chưa lọc' (không dính lại lời hứa của lượt trước)", async () => {
+    dung();
+    await chonNgay();
+    expect(screen.getByText("· đang lọc theo ca")).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Ngày *"), { target: { value: "" } });
+    expect(screen.getByText("· chưa lọc (chọn ngày & giờ)")).toBeTruthy();
+    expect(screen.getByText(/Note đỏ đối chiếu buổi/).textContent).toContain(
+      "Chọn ngày và giờ để lọc theo ca làm việc",
+    );
   });
 
   it("KHÔNG vẽ ở tầng TAT_CA và khi cờ lọc đang tắt — không dựng nút vô nghĩa", () => {
@@ -454,7 +521,12 @@ describe("Công tắc 'Hiện tất cả giáo viên'", () => {
   it("BẬT ⇒ câu giải thích luật phải ĐỔI, không được còn hứa 'chỉ hiện GV có ca phủ TRỌN'", async () => {
     // Câu mô tả luật mà không đổi theo luật là lời hứa suông ngay giữa màn hình: không
     // ném, không đỏ, console sạch — chỉ sai.
+    //
+    // ⚠️ `chonNgay()` thêm 17/09/2026: bản cũ bấm công tắc khi CHƯA chọn ngày, nên câu
+    // XUẤT PHÁT mà nó khẳng định ("ca phủ TRỌN…") chính là câu nói dối đang được vá. Nay
+    // ca này đi từ một trạng thái CÓ THẬT: đã lọc cho một khung giờ, rồi mới bỏ lọc.
     dung();
+    await chonNgay();
     expect(screen.getByText(/Note đỏ đối chiếu buổi/).textContent).toContain(
       "ca phủ TRỌN khung giờ buổi",
     );
@@ -511,5 +583,85 @@ describe("Công tắc 'Hiện tất cả giáo viên'", () => {
     fireEvent.click(congTac()!);
     await chonNgay();
     expect(h.layGv.mock.calls[0][0].hienTatCa).toBe(true);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════════════
+// VÁ 17/09/2026 — NHÃN CỦA NGƯỜI KHÔNG CÓ TRONG DANH SÁCH VỪA LỌC
+//
+// Dòng chèn thêm cho "người đang được chọn nhưng không nằm trong `ds`" trước đây LUÔN dán
+// " · NGOÀI DANH SÁCH LỌC" — một câu quy trách nhiệm cho bộ lọc. Hai cảnh nó nói sai:
+//   1. công tắc "Hiện tất cả" đang BẬT — màn hình vừa nói mọi luật lọc đã tạm bỏ, mà dòng
+//      này lại bảo có bộ lọc đang loại người (hai câu ngược nhau trên cùng màn hình);
+//   2. người đó KHÔNG có cả trong danh sách đầy đủ — `getAssignableTeachers` AND
+//      `deletedAt: null` lên cả nhánh `includeIds`, nên tài khoản đã xoá mềm không bao giờ
+//      có mặt ở đâu để mà bị lọc (bằng chứng ở `_lib/gv-hop-le.ts`).
+//
+// ── CẤY LẠI LỖI (luật 15) — đã chạy THẬT ────────────────────────────────────────────
+//   · `hauToNguoiNgoaiDs` trả thẳng " · NGOÀI DANH SÁCH LỌC"     → **2 ĐỎ / 26**
+//   · bỏ vế `!input.coTrongDsDay` (chỉ còn xét `hienTatCa`)      → **1 ĐỎ / 26**
+//   · bỏ phép tra tên ở `teachers` (luôn "(không rõ tên)")       → **3 ĐỎ / 26**
+// ═════════════════════════════════════════════════════════════════════════════════════
+
+describe("dòng người đang chọn mà không có trong danh sách vừa lọc", () => {
+  /** Danh sách lọc chỉ còn một người khác — người đang chọn rơi ra ngoài. */
+  function chiConLan() {
+    h.layGv.mockResolvedValue({
+      ok: true,
+      ds: [dong({ id: "gv-lan", name: "Lê Thị Lan" })],
+      lyDoRong: null,
+    } satisfies KetQua);
+  }
+
+  it("đang LỌC và người đó CÓ trong danh sách đầy đủ ⇒ đúng là bộ lọc loại họ", async () => {
+    // Vế đối chứng: chữ "NGOÀI DANH SÁCH LỌC" vẫn phải còn ở đúng cảnh nó nói thật.
+    chiConLan();
+    dung();
+    fireEvent.change(oGiaoVien(), { target: { value: "gv-kiet" } });
+    await chonNgay();
+
+    await screen.findByText(/Nguyễn Tuấn Kiệt · NGOÀI DANH SÁCH LỌC/);
+    expect(oGiaoVien().value).toBe("gv-kiet");
+  });
+
+  // ⭐ CA KHOÁ (1): công tắc BẬT thì không có bộ lọc nào để đổ lỗi.
+  it("công tắc 'Hiện tất cả' BẬT ⇒ KHÔNG được dùng chữ 'ngoài danh sách lọc'", async () => {
+    chiConLan();
+    dung();
+    fireEvent.change(oGiaoVien(), { target: { value: "gv-kiet" } });
+    await chonNgay();
+    fireEvent.click(congTac()!);
+    await waitFor(() => expect(congTac()!.checked).toBe(true));
+
+    // Tên THẬT phải còn, chỉ hậu tố đổi.
+    await screen.findByText(/Nguyễn Tuấn Kiệt · KHÔNG CÒN TRONG DANH SÁCH CHỌN/);
+    expect(screen.queryByText(/NGOÀI DANH SÁCH LỌC/)).toBeNull();
+    expect(oGiaoVien().value).toBe("gv-kiet");
+  });
+
+  // ⭐ CA KHOÁ (2) — tài khoản đã XOÁ MỀM — nằm ở `attendance-board.test.tsx`, KHÔNG ở đây.
+  //
+  // Lý do (luật 9): cổng phải được cho ăn bằng thứ đường THẬT cho nó ăn. Cửa "Thêm buổi"
+  // luôn mở với `teacherId = ""`, nên muốn dựng cảnh "người đang gán không có trong danh
+  // sách đầy đủ" ở đây thì phải gõ tay `value` vào component — tức kiểm cái cổng chứ không
+  // kiểm hệ thống. Đường THẬT của cảnh đó là cửa SỬA BUỔI: `SuaBuoiForm` khởi tạo
+  // `teacherId` từ `session.teacherId`, và giáo viên đã xoá mềm thì không có trong
+  // `teachers` (điều kiện `deletedAt: null` đè cả nhánh `includeIds` —
+  // xem `_lib/gv-hop-le.ts`). Ca đó tên là "buổi cũ đang gán một tài khoản đã xoá mềm…".
+
+  it("hauToNguoiNgoaiDs — bảng đầy đủ bốn ô, đọc một lượt", () => {
+    // Hàm THUẦN nên canh được cả bốn tổ hợp, kể cả ô mà giao diện khó dựng.
+    expect(hauToNguoiNgoaiDs({ coTrongDsDay: true, hienTatCa: false })).toBe(
+      " · NGOÀI DANH SÁCH LỌC",
+    );
+    expect(hauToNguoiNgoaiDs({ coTrongDsDay: true, hienTatCa: true })).toBe(
+      " · KHÔNG CÒN TRONG DANH SÁCH CHỌN",
+    );
+    expect(hauToNguoiNgoaiDs({ coTrongDsDay: false, hienTatCa: false })).toBe(
+      " · KHÔNG CÒN TRONG DANH SÁCH CHỌN",
+    );
+    expect(hauToNguoiNgoaiDs({ coTrongDsDay: false, hienTatCa: true })).toBe(
+      " · KHÔNG CÒN TRONG DANH SÁCH CHỌN",
+    );
   });
 });

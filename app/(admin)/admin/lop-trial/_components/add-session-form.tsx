@@ -196,6 +196,9 @@ export function AddSessionForm({
         cheDo={cheDoChonGv}
         soGvMien={soGvMienLoc}
         hienTatCa={nguonGv.hienTatCa}
+        // `ds !== null` = ĐÃ có một lượt lọc cho khung giờ đang chọn. Chưa có thì câu
+        // luật không được hứa danh sách đang lọc — xem prop `daLoc`.
+        daLoc={nguonGv.ds !== null}
       />
     </div>
   );
