@@ -7,6 +7,26 @@
 > **Môi trường:** `test.satarobo.vn`, commit `9b78397d` (deploy Vercel môi trường `test`
 > báo `success` lúc 2026-09-17T03:38Z). Fork ZaloCRM: `https://echo-hong-except-quest.trycloudflare.com`.
 
+## 🔴 Rà lại sau bản vá dây nối sidebar (17/09/2026, PR #282)
+
+Trước bản vá, `zalocrmEnabled` không được truyền từ `layout.tsx` xuống nên mục "Zalo CRM"
+**ẩn với MỌI vai**. Câu hỏi phải đặt cho từng ca: *"kết quả này có phụ thuộc vào việc menu
+hiện hay không?"*
+
+| Ca | Phụ thuộc menu? | Trạng thái |
+|---|---|---|
+| ① SALE vào `/zalo-crm` | **Không** — mở bằng URL | kết quả cũ **giữ nguyên giá trị** |
+| ② SALE thứ hai | **Không** — mở bằng URL | giữ nguyên |
+| ③ QLCS | **Không** — mở bằng URL; phần chặn đo bên trong khung fork | giữ nguyên |
+| ④ Giáo vụ | **CÓ** ở vế menu | 🔴 **vế a KHÔNG HỢP LỆ, chạy lại**; vế b (URL) giữ nguyên |
+| ⑤⑥ | — | CHƯA KIỂM ĐƯỢC (thiếu org thứ hai) |
+| ⑦ nút "Nhắn Zalo" | **Không** — nút đọc `isZalocrmEnabled()` thẳng trong trang phiếu | giữ nguyên |
+| ⑧ đường lùi | **CÓ** ở dòng Sidebar | 🔴 **dòng Sidebar KHÔNG HỢP LỆ**; ba dòng còn lại giữ nguyên |
+
+**Bài học chung, áp cho mọi ca "KHÔNG thấy X":** một ca chỉ khẳng định *sự vắng mặt* thì
+luôn ĐẠT khi tính năng hỏng hoàn toàn. Phải có **đối chứng dương** đi kèm — ở đây là "vai
+SALE **thấy** mục đó" — nếu không, ca ấy không phân biệt được "chặn đúng" với "hỏng cả cụm".
+
 ## Trước khi bắt đầu
 
 | Cần gì | Ghi chú |
@@ -70,12 +90,24 @@ test. Nếu anh phải tạo tài khoản mới thì ghi lại để xoá sau �
 
 ## ④ Vai GIÁO VỤ — không thấy mục Zalo CRM
 
+> 🔴 **KẾT QUẢ CŨ KHÔNG HỢP LỆ — PHẢI CHẠY LẠI** (sau bản vá 17/09/2026, PR #282).
+>
+> Vế menu trước đây ĐẠT **vì lý do sai**: `zalocrmEnabled` không được truyền từ
+> `layout.tsx` xuống nên mục "Zalo CRM" **ẩn với MỌI vai**, không riêng Giáo vụ. Ca này
+> chỉ đo được điều nó định đo sau khi dây nối đã vá.
+
 Đăng nhập **CENTER_CLASS_MANAGER**.
 
-| | Thấy gì |
-|---|---|
-| **ĐẠT** | Sidebar **không có** mục "Zalo CRM". Gõ thẳng `/zalo-crm` → bị đá về `/dashboard?error=unauthorized`. |
-| **KHÔNG ĐẠT** | Thấy mục trong menu, hoặc vào được `/zalo-crm`. |
+| Vế | ĐẠT | KHÔNG ĐẠT |
+|---|---|---|
+| **a. Menu** *(phải chạy lại)* | Sidebar **không có** mục "Zalo CRM" — trong khi vai SALE/QLCS thì **CÓ** | Giáo vụ thấy mục, hoặc **không vai nào thấy** (dây nối lại đứt) |
+| **b. Gõ thẳng URL** *(kết quả cũ vẫn dùng được)* | `/zalo-crm` đá về `/dashboard?error=unauthorized` | vào được màn |
+
+⚠️ Vế **a** chỉ có nghĩa khi **đối chứng dương**: phải xác nhận vai SALE **thấy** mục đó.
+Không có đối chứng thì "Giáo vụ không thấy" lại rơi đúng vào cái bẫy vừa rồi.
+
+Vế **b** không liên quan dây nối menu — nó đo cổng trang (`PAGE_GATES["/zalo-crm"]`), nên
+kết quả cũ giữ nguyên giá trị.
 
 ## ⑤ Đổi cơ sở · ⑥ Cách ly `?org=` — **CHƯA KIỂM ĐƯỢC — thiếu org thứ hai bên fork**
 
@@ -125,7 +157,8 @@ Sau khi deploy xong:
 
 | Kiểm | ĐẠT | KHÔNG ĐẠT |
 |---|---|---|
-| Sidebar | **không còn** mục "Zalo CRM" với mọi vai | vẫn còn |
+| Sidebar ⚠️ **KẾT QUẢ CŨ KHÔNG HỢP LỆ** | **không còn** mục "Zalo CRM" với mọi vai | vẫn còn |
+| ↳ *vì sao* | Trước bản vá 17/09 mục này **luôn ẩn**, nên tắt cờ chẳng đổi gì — ô này ĐẠT dù hệ thống hỏng. Chỉ đo được sau khi đã xác nhận ở ca ④ rằng vai SALE **thấy** mục khi cờ BẬT. | |
 | `/zalo-crm` gõ thẳng | trang 404 | 500 hoặc khung trắng |
 | Nút "Nhắn Zalo" trên phiếu lead | **biến mất** | vẫn hiện (bấm vào là vào 404) |
 | Chi tiết phiếu · danh sách lead · hộp thư · dashboard | **mở bình thường, không vỡ** | bất kỳ màn nào lỗi |

@@ -75,6 +75,28 @@ Brand hub + admin CMS + portal phụ huynh + site giáo viên cho Sata Robo (Đ�
      thoát được, nhưng thói quen gõ nó là thói quen đi vòng qua cổng — bỏ hẳn.
    - File nghi ngờ nhạy cảm → ASK user, don't commit.
 9. **Verify trước khi báo PASS** — `pnpm typecheck && pnpm lint && pnpm build` PASS. UI changes: smoke test localhost + mobile viewport 375px.
+10. ⚠️ **PR có BẤT KỲ tệp `.ts`/`.tsx` nào ⇒ chạy ĐỦ BỐN CỔNG** (`typecheck` · `lint` ·
+    `test:unit` · bộ e2e liên quan). **KHÔNG xét PR "thuộc loại gì".** Nhãn "chỉ tài liệu"
+    chỉ đúng khi `git diff --name-only` ra **toàn `.md`** — kiểm bằng lệnh đó, đừng kiểm
+    bằng trí nhớ về việc mình vừa làm gì.
+    **Vì sao (17/09/2026):** PR #282 mở ra với nhãn "chỉ tài liệu" nhưng kèm một script
+    `.ts` chỉ-đọc; tôi bỏ `test:unit`. Lưới `lib/finance/truc-a.test.ts` quét **toàn cây
+    mã nguồn** nên bắt ngay, và CI đỏ — phát hiện muộn hơn nửa tiếng. Các lưới quét cây
+    (`truc-a`, `nav-coverage`, `affordance-coverage`, `bang-coverage`, `dang-ky-cron`)
+    **không quan tâm bạn sửa file nào**; chúng đỏ vì một tệp MỚI xuất hiện.
+11. ⚠️ **Prop cờ tính năng có mặc định `false` mà KHÔNG AI TRUYỀN = lỗi CÂM.** Không lỗi
+    biên dịch (prop tuỳ chọn), không ca test nào đỏ, và triệu chứng là "mục menu biến mất"
+    — trông y hệt lỗi phân quyền vì cổng `perm` nằm ngay cạnh trong cùng khai báo mục.
+    **Thêm một mục sidebar gắn `flag:` thì PHẢI kèm ĐỦ DÂY NỐI**
+    `app/(admin)/admin/layout.tsx` → `components/admin/admin-shell.tsx` →
+    `components/admin/sidebar.tsx`, **và một lưới ghim cho chính dây nối đó**.
+    Lưới đang có: `components/admin/sidebar-flag-wiring.test.ts` (`[SB-FLAG]`) — nó soi
+    **mọi** cờ, nên thêm cờ mới mà quên nối là đỏ ngay; đừng gỡ nó.
+    **Vì sao (17/09/2026):** mục "Zalo CRM" khai `flag: "zalocrm"` từ 06/09 và **chưa từng
+    hiện được với bất kỳ ai** — `layout.tsx` truyền ba cờ, bỏ sót cờ thứ tư. Nó còn làm ca
+    nghiệm thu "Giáo vụ KHÔNG thấy mục Zalo CRM" **ĐẠT vì lý do sai**.
+    ⇒ Hệ quả rộng hơn: **ca nghiệm thu chỉ khẳng định SỰ VẮNG MẶT luôn ĐẠT khi tính năng
+    hỏng hoàn toàn.** Mọi ca "KHÔNG thấy X" phải kèm **đối chứng dương** ("vai kia THẤY X").
 
 ## Project structure (FROZEN)
 
