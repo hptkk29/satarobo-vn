@@ -600,11 +600,29 @@ export function locGiaoVienChoBuoi(input: ThamSoLocGv): KetQuaLocGv {
     };
   }
   if (giuLai.length === 0) {
+    // ⚠️ ĐẢO 17/09/2026 — lọc sạch thì trả **RỖNG**, trước đó trả ĐỦ danh sách.
+    //
+    // Luật cũ ("không bao giờ rỗng") sinh ra để chống ô chọn trống CÂM, và vế CÂM vẫn
+    // đúng — nhưng nó đã chống nhầm bằng cách bịa ra một danh sách. Chủ dự án chốt:
+    // "ẩn luôn không cần hiện đối với role sale, khi nào không có người thì sale sẽ báo
+    // cho đào tạo hoặc quản lý xếp người của cs khác".
+    //
+    // Đó là một QUY TRÌNH, và quy trình ấy chỉ chạy được khi màn hình nói thật là KHÔNG
+    // CÒN AI. Trả đủ danh sách ở đây là mời Sale tự xếp một người mà hệ thống vừa kết
+    // luận là không rảnh — tức phá đúng cái luật vừa dựng, ở đúng lúc nó có việc.
+    //
+    // Rỗng nhưng KHÔNG CÂM: `lyDoRong` nói rõ vì sao và phải làm gì tiếp. Giao diện in nó
+    // trong khối `aria-live`, nên luật 12 vẫn được giữ — thứ bị bỏ là danh sách bịa.
+    //
+    // ⚠️ Nhánh này KHÔNG chạm hai đường fail-open phía trên, và đó là chủ ý: `coFailOpen`
+    // (chưa sinh lưới ca tháng) là HẠ TẦNG CHƯA CÓ — lúc đó hệ thống không biết gì để mà
+    // kết luận "không còn ai", nên vẫn phải hiện đủ. Gộp hai thứ đó làm một là đem một sự
+    // cố vận hành ra nói với người dùng như thể là câu trả lời về giáo viên.
     const ly =
       input.cheDo === "THEO_CO_SO"
-        ? "Không giáo viên nào thuộc cơ sở bạn phụ trách — đang hiện tất cả để bạn tự chọn."
-        : `Không giáo viên nào có ca phủ trọn ${input.khung.startTime}–${input.khung.endTime} ngày ${input.khung.ymd} — đang hiện tất cả để bạn tự chọn.`;
-    return { ds: tatCa, lyDoRong: ly };
+        ? "Không giáo viên nào thuộc cơ sở bạn phụ trách rảnh khung giờ này. Báo Đào tạo hoặc Quản lý để xếp người từ cơ sở khác."
+        : `Không giáo viên nào có ca phủ trọn ${input.khung.startTime}–${input.khung.endTime} ngày ${input.khung.ymd}. Báo Đào tạo hoặc Quản lý cơ sở để xếp người.`;
+    return { ds: [], lyDoRong: ly };
   }
   return { ds: giuLai, lyDoRong: null };
 }

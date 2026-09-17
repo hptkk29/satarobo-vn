@@ -285,17 +285,24 @@ describe("locGiaoVienChoBuoi — ba tầng, miễn trừ, và không bao giờ r
   });
 
   // [14b] Lọc xong còn 0 người ⇒ vẫn trả đủ + nói vì sao.
-  it("lọc còn 0 người ⇒ trả ĐỦ danh sách kèm lyDoRong, không rỗng câm", () => {
+  // ⚠️ ĐẢO 17/09/2026 — trước đây ca này khẳng định "lọc còn 0 người ⇒ trả ĐỦ danh sách".
+  // Chủ dự án chốt: "ẩn luôn không cần hiện đối với role sale, khi nào không có người thì
+  // sale sẽ báo cho đào tạo hoặc quản lý xếp người của cs khác". Đó là một QUY TRÌNH, và
+  // nó chỉ chạy được khi màn hình nói thật là KHÔNG CÒN AI — trả đủ danh sách là mời Sale
+  // tự xếp đúng người hệ thống vừa kết luận là không rảnh.
+  // Vế CÂM vẫn được giữ: rỗng nhưng `lyDoRong` phải nói vì sao VÀ phải làm gì tiếp.
+  it("lọc còn 0 người ⇒ danh sách RỖNG, kèm lý do và việc cần làm — không rỗng câm", () => {
     const r = locGiaoVienChoBuoi(
       thamSo({
         giaoVien: GV,
         caTheoGv: { "u-kiet": caTuDanhMuc("S", "cs1"), "u-nam": caTuDanhMuc("C", "cs1") },
       }),
     );
-    expect(r.ds).toHaveLength(2);
-    expect(r.ds.every((d) => d.phu === "KHONG_PHU")).toBe(true);
+    expect(r.ds).toEqual([]);
     expect(r.lyDoRong).not.toBeNull();
     expect(r.lyDoRong).toContain("18:00–19:30");
+    // Không được dừng ở "không có ai" — phải chỉ ĐƯỜNG RA, đúng quy trình đã chốt.
+    expect(r.lyDoRong).toContain("Đào tạo");
   });
 
   // ⚠️ ĐẢO 17/09/2026 — trước đây ca này khẳng định `LOC_THEO_CA` GIỮ mã không-giờ.
@@ -339,10 +346,18 @@ describe("locGiaoVienChoBuoi — ba tầng, miễn trừ, và không bao giờ r
         },
       }),
     );
-    // Lọc hết sạch ⇒ fail-open trả ĐỦ danh sách, nhưng phải kèm lý do — không bao giờ rỗng câm.
-    expect(r.ds.map((d) => d.id)).toEqual(["u-khoi"]);
-    expect(r.ds[0].phu).toBe("KHONG_GIO");
+    // Lọc hết sạch ⇒ danh sách RỖNG kèm lý do (chốt 17/09) — không còn fail-open ở đây.
+    expect(r.ds).toEqual([]);
     expect(r.lyDoRong).not.toBeNull();
+    // Trạng thái vẫn phải tính đúng, chỉ là không ai lọt qua bộ lọc.
+    const r2 = locGiaoVienChoBuoi(
+      thamSo({
+        giaoVien: [{ id: "u-khoi", name: "Lê Khôi" }],
+        caTheoGv: { "u-khoi": { ma: "LDGV", kind: "FLEXIBLE", centerId: "cs1", segments: [] } },
+        hienTatCa: true,
+      }),
+    );
+    expect(r2.ds[0].phu).toBe("KHONG_GIO");
   });
 
   // ⚠️ ĐẢO 17/09/2026 — ca này trước đây khẳng định `nhan === "ngày nghỉ"` khi `batLoc:
@@ -805,9 +820,9 @@ describe("duocXemLyDoNghi — che LÝ DO, không che NGƯỜI", () => {
   });
 
   it("cờ lọc BẬT + KHÔNG quyền chấm công ⇒ nhãn gộp về MỘT chữ trung tính", () => {
-    const r = baCanh(false, { batLoc: true });
-    // Cả ba đều rớt luật ca ⇒ lọc sạch ⇒ fail-open trả ĐỦ danh sách. Đó chính là đường rò
-    // rộng nhất, và nó phải được che.
+    // Cả ba đều rớt luật ca ⇒ lọc sạch ⇒ danh sách RỖNG (chốt 17/09). Nên đường còn đẩy
+    // nhãn ra ngoài là CÔNG TẮC "Hiện tất cả" — bật nó lên mới đọc được tập nhãn.
+    const r = baCanh(false, { batLoc: true, hienTatCa: true });
     expect(r.ds.map((d) => d.nhan)).toEqual([
       "không nhận buổi này",
       "không nhận buổi này",
@@ -823,7 +838,7 @@ describe("duocXemLyDoNghi — che LÝ DO, không che NGƯỜI", () => {
 
   it("cờ lọc BẬT + CÓ quyền ⇒ ba nhãn vẫn KHÁC NHAU và nói đúng lý do", () => {
     // Vế đối chứng: che nhầm cả người có quyền cũng là lỗi, chỉ ngược chiều.
-    expect(baCanh(true, { batLoc: true }).ds.map((d) => d.nhan)).toEqual([
+    expect(baCanh(true, { batLoc: true, hienTatCa: true }).ds.map((d) => d.nhan)).toEqual([
       "ngày nghỉ",
       "chưa xếp ca ngày này",
       // Có quyền chấm công cũng KHÔNG mở được chữ cho `CHUA_VAO_LUOI`: vấn đề của nó
@@ -845,19 +860,20 @@ describe("duocXemLyDoNghi — che LÝ DO, không che NGƯỜI", () => {
   });
 
   it("đường FAIL-OPEN (lọc sạch, trả ĐỦ danh sách) cũng phải che — đây là đường rò rộng nhất", () => {
-    // Tầng Sale + cờ lọc BẬT: hai người đầu bị loại, `u-moi` được giữ… nên danh sách
-    // KHÔNG rỗng và đây chưa phải fail-open. Bỏ `u-moi` đi thì lọc còn 0 người ⇒ hợp đồng
-    // bắt trả ĐỦ danh sách kèm lý do — tức cả hai nhãn nghỉ/không-ca đều ra ngoài.
+    // ⚠️ ĐẢO 17/09 — đường fail-open "lọc sạch ⇒ trả đủ danh sách" ĐÃ BỊ GỠ, nên đường rò
+    // rộng nhất bây giờ là CÔNG TẮC "Hiện tất cả giáo viên": người dùng tự bấm, và nó trả
+    // nguyên danh sách kèm đủ nhãn. Vế che vẫn phải đứng ở đó.
     const r = locGiaoVienChoBuoi(
       thamSo({
         giaoVien: [BA_CANH[0], BA_CANH[1]],
         caTheoGv: { "u-nghi": caTuDanhMuc("X", "cs1"), "u-trong": null },
         coTrongLuoi: new Set(["u-nghi", "u-trong"]),
         batLoc: true,
+        hienTatCa: true,
         duocXemLyDoNghi: false,
       }),
     );
-    expect(r.ds.map((d) => d.id)).toEqual(["u-nghi", "u-trong"]); // fail-open: đủ người
+    expect(r.ds.map((d) => d.id)).toEqual(["u-nghi", "u-trong"]);
     expect(r.lyDoRong).not.toBeNull();
     expect(r.ds.map((d) => d.nhan)).toEqual(["không nhận buổi này", "không nhận buổi này"]);
   });
@@ -889,6 +905,8 @@ describe("duocXemLyDoNghi — che LÝ DO, không che NGƯỜI", () => {
           "u-c": caTuDanhMuc("C", "cs1"),
           "u-ld": caTuDanhMuc("LD", "cs1"),
         },
+        // Cả hai đều rớt luật ca ⇒ danh sách rỗng; bật công tắc để đọc được tập nhãn.
+        hienTatCa: true,
         duocXemLyDoNghi: false,
       }),
     );
