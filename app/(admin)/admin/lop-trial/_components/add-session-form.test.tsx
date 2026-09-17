@@ -381,10 +381,16 @@ describe("AddSessionForm — ô Giáo viên lọc theo ca", () => {
     );
   });
 
-  // ── VÁ (A) — giáo viên chưa vào lưới ca phải HIỆN, và phải hiện KÈM NHÃN ──────────
-  it("GV chưa vào lưới ca ⇒ nhãn · CHƯA VÀO LƯỚI CA, KHÔNG phải trùng lịch", async () => {
-    // Hiện ra mà không dán nhãn thì họ nằm lẫn với người ĐÃ được kiểm và thấy rảnh —
-    // hai thứ rất khác nhau đứng cạnh nhau không lời giải thích nào.
+  // ── ĐẢO 17/09/2026 — ca này trước đây đòi ô chọn IN ra "· CHƯA VÀO LƯỚI CA" ─────────
+  //
+  // Chủ dự án báo hai lần, lần sau kèm ảnh prod: nhãn ấy nói SAI. Phép đếm ô-trong-tháng
+  // đi qua `scopedDb` nên nó không phân biệt nổi "chưa được xếp ca" với "cả tháng làm ở
+  // cơ sở bạn không nhìn thấy" — Kiệt & Toại có 48 ô mã `HC` vẫn bị dán nhãn đó.
+  //
+  // Nay tầng thuần trả `nhan: ""` cho trạng thái này, và ô chọn phải IM THEO. Ca này
+  // khoá đúng vế "im theo": nó là vế đã trôi lệch lần trước — `hauToGv` tự suy lại từ
+  // `phu` nên bản vá ở tầng thuần không chạm tới, và prod vẫn in nguyên chữ cũ.
+  it("GV chưa vào lưới ca ⇒ hiện TÊN TRẦN, không nhãn nào (nhan rỗng ⇒ ô chọn im)", async () => {
     h.layGv.mockResolvedValue({
       ok: true,
       ds: [
@@ -392,8 +398,8 @@ describe("AddSessionForm — ô Giáo viên lọc theo ca", () => {
           id: "gv-lan",
           name: "Lê Thị Lan",
           phu: "CHUA_VAO_LUOI",
-          muc: "CANH",
-          nhan: "chưa thấy ô ca nào trong lưới tháng này",
+          muc: "KHONG",
+          nhan: "",
         }),
       ],
       lyDoRong: null,
@@ -401,10 +407,10 @@ describe("AddSessionForm — ô Giáo viên lọc theo ca", () => {
 
     dung();
     await chonNgay();
-    await screen.findByText("Lê Thị Lan · CHƯA VÀO LƯỚI CA");
+    await screen.findByText("Lê Thị Lan");
+    expect(screen.queryByText(/CHƯA VÀO LƯỚI CA/)).toBeNull();
 
     fireEvent.change(oGiaoVien(), { target: { value: "gv-lan" } });
-    // CANH không phải DO ⇒ không được dựng khối đỏ.
     expect(screen.queryByRole("alert")).toBeNull();
     expect(oGiaoVien().getAttribute("aria-invalid")).toBe("false");
   });

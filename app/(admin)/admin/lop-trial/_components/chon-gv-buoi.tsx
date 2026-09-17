@@ -191,11 +191,25 @@ export function useGvChoBuoi(input: {
  */
 export function hauToGv(d: DongGv): string {
   if (d.muc === "DO") return " · TRÙNG LỊCH";
+
+  // ⚠️ BÁM THEO `d.nhan`, KHÔNG tự suy lại từ `d.phu` — vá 17/09/2026 (lần hai).
+  //
+  // Bản trước đọc thẳng `d.phu` nên nó là CƠ CHẾ SINH NHÃN THỨ HAI, chạy song song với
+  // `nhanChoDong` ở `lib/trial/gv-kha-dung.ts`. Hệ quả đo được trên prod: bản vá gỡ
+  // "CHƯA VÀO LƯỚI CA" khỏi `nhan` đã merge và deploy, nhưng ô chọn VẪN in nguyên chữ đó
+  // — vì `<option>` chưa bao giờ đọc `nhan`. Chủ dự án báo lại đúng một lỗi đã báo.
+  //
+  // Đây chính là thứ chú thích ở `gv-kha-dung.ts` cảnh báo: "hai cơ chế cho một luật là
+  // hai chỗ để chúng trôi lệch, và cái không ai kiểm được sẽ là cái trôi". Lần này cái
+  // trôi là cái NGƯỜI DÙNG NHÌN THẤY, còn cái được vá thì nằm trong khối cảnh báo mà
+  // đường mặc định không bao giờ mở tới.
+  //
+  // Nay MỘT quyết định: tầng thuần đã cân đủ ngữ cảnh (cờ lọc bật chưa · tầng nào · người
+  // này có được miễn không) rồi kết luận có nói gì về ca hay không. `nhan` rỗng nghĩa là
+  // "không nói" — và ô chọn phải im theo, không được tự nói thêm.
+  if (!d.nhan) return "";
+
   if (d.phu === "KHONG_GIO") return " · CA LINH ĐỘNG";
-  // Người đang hiện ra vì hệ thống KHÔNG BIẾT gì về ca của họ (giáo viên mới, hoặc cả
-  // tháng làm ở cơ sở ngoài tầm nhìn). Không dán nhãn thì họ nằm lẫn với người đã được
-  // kiểm và thấy rảnh — hai thứ rất khác nhau đứng cạnh nhau không lời giải thích.
-  if (d.phu === "CHUA_VAO_LUOI") return " · CHƯA VÀO LƯỚI CA";
   return "";
 }
 
