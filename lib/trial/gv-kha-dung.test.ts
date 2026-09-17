@@ -285,17 +285,24 @@ describe("locGiaoVienChoBuoi — ba tầng, miễn trừ, và không bao giờ r
   });
 
   // [14b] Lọc xong còn 0 người ⇒ vẫn trả đủ + nói vì sao.
-  it("lọc còn 0 người ⇒ trả ĐỦ danh sách kèm lyDoRong, không rỗng câm", () => {
+  // ⚠️ ĐẢO 17/09/2026 — trước đây ca này khẳng định "lọc còn 0 người ⇒ trả ĐỦ danh sách".
+  // Chủ dự án chốt: "ẩn luôn không cần hiện đối với role sale, khi nào không có người thì
+  // sale sẽ báo cho đào tạo hoặc quản lý xếp người của cs khác". Đó là một QUY TRÌNH, và
+  // nó chỉ chạy được khi màn hình nói thật là KHÔNG CÒN AI — trả đủ danh sách là mời Sale
+  // tự xếp đúng người hệ thống vừa kết luận là không rảnh.
+  // Vế CÂM vẫn được giữ: rỗng nhưng `lyDoRong` phải nói vì sao VÀ phải làm gì tiếp.
+  it("lọc còn 0 người ⇒ danh sách RỖNG, kèm lý do và việc cần làm — không rỗng câm", () => {
     const r = locGiaoVienChoBuoi(
       thamSo({
         giaoVien: GV,
         caTheoGv: { "u-kiet": caTuDanhMuc("S", "cs1"), "u-nam": caTuDanhMuc("C", "cs1") },
       }),
     );
-    expect(r.ds).toHaveLength(2);
-    expect(r.ds.every((d) => d.phu === "KHONG_PHU")).toBe(true);
+    expect(r.ds).toEqual([]);
     expect(r.lyDoRong).not.toBeNull();
     expect(r.lyDoRong).toContain("18:00–19:30");
+    // Không được dừng ở "không có ai" — phải chỉ ĐƯỜNG RA, đúng quy trình đã chốt.
+    expect(r.lyDoRong).toContain("Đào tạo");
   });
 
   // ⚠️ ĐẢO 17/09/2026 — trước đây ca này khẳng định `LOC_THEO_CA` GIỮ mã không-giờ.
@@ -339,25 +346,40 @@ describe("locGiaoVienChoBuoi — ba tầng, miễn trừ, và không bao giờ r
         },
       }),
     );
-    // Lọc hết sạch ⇒ fail-open trả ĐỦ danh sách, nhưng phải kèm lý do — không bao giờ rỗng câm.
-    expect(r.ds.map((d) => d.id)).toEqual(["u-khoi"]);
-    expect(r.ds[0].phu).toBe("KHONG_GIO");
+    // Lọc hết sạch ⇒ danh sách RỖNG kèm lý do (chốt 17/09) — không còn fail-open ở đây.
+    expect(r.ds).toEqual([]);
     expect(r.lyDoRong).not.toBeNull();
+    // Trạng thái vẫn phải tính đúng, chỉ là không ai lọt qua bộ lọc.
+    const r2 = locGiaoVienChoBuoi(
+      thamSo({
+        giaoVien: [{ id: "u-khoi", name: "Lê Khôi" }],
+        caTheoGv: { "u-khoi": { ma: "LDGV", kind: "FLEXIBLE", centerId: "cs1", segments: [] } },
+        hienTatCa: true,
+      }),
+    );
+    expect(r2.ds[0].phu).toBe("KHONG_GIO");
   });
 
-  it("batLoc=false và cheDo=TAT_CA đều KHÔNG lọc ai, nhưng vẫn tính muc/nhan", () => {
+  // ⚠️ ĐẢO 17/09/2026 — ca này trước đây khẳng định `nhan === "ngày nghỉ"` khi `batLoc:
+  // false`. Sai, và chủ dự án báo đúng chỗ: banner trên ô ghi "chưa bật lọc, hiện mọi giáo
+  // viên" trong khi từng dòng vẫn dán nhãn của luật ca. Nhãn về CA chỉ được nói khi luật ca
+  // đang THẬT SỰ áp cho dòng đó — `phu` thì vẫn tính đủ (nó là sự thật, chỉ không đem khoe).
+  it("batLoc=false và cheDo=TAT_CA: KHÔNG lọc ai và KHÔNG dán nhãn ca, nhưng `phu` vẫn tính", () => {
     const vao = {
       giaoVien: GV,
       caTheoGv: { "u-kiet": caTuDanhMuc("X", "cs1"), "u-nam": caTuDanhMuc("C", "cs1") },
     };
     const tat = locGiaoVienChoBuoi(thamSo({ ...vao, batLoc: false }));
     expect(tat.ds.map((d) => d.id)).toEqual(["u-kiet", "u-nam"]);
-    expect(tat.ds[0].phu).toBe("NGHI");
-    expect(tat.ds[0].nhan).toBe("ngày nghỉ");
+    expect(tat.ds[0].phu).toBe("NGHI"); // sự thật vẫn được tính…
+    expect(tat.ds[0].nhan).toBe(""); // …nhưng KHÔNG phát ra chữ nào
+    expect(tat.ds[0].muc).toBe("KHONG");
     expect(tat.lyDoRong).toBeNull();
 
+    // Tầng Đào tạo cũng không lọc theo ca ⇒ cũng không dán nhãn ca.
     const daoTao = locGiaoVienChoBuoi(thamSo({ ...vao, cheDo: "TAT_CA" }));
     expect(daoTao.ds.map((d) => d.id)).toEqual(["u-kiet", "u-nam"]);
+    expect(daoTao.ds.every((d) => d.nhan === "")).toBe(true);
   });
 
   it("THEO_CO_SO lọc theo cơ sở và KHÔNG áp luật ca — GV ca chiều của CS1 vẫn hiện", () => {
@@ -466,28 +488,45 @@ describe("CHUA_VAO_LUOI — dữ liệu THIẾU thì fail-OPEN, kèm nhãn", () 
     );
   }
 
-  // ⭐ CA KHOÁ. Hai người, cùng `ca: null`, hai số phận ngược nhau.
-  it("GV chưa vào lưới thì GIỮ; GV có trong lưới mà hôm nay trống thì LOẠI", () => {
+  // ⭐ CA KHOÁ — ĐẢO 17/09/2026. Trước đây ca này khẳng định `u-moi` (chưa vào lưới) được
+  // GIỮ kèm nhãn, với lý do fail-open "dữ liệu thiếu về họ, không phải câu trả lời về họ".
+  //
+  // Đo trên prod bác lý do đó: phép đếm ô-trong-tháng đi qua `scopedDb`, nên nó trả lời
+  // "tôi có NHÌN THẤY ca của người này không" chứ không phải "người này đã được xếp ca
+  // chưa". Ảnh chụp 17/09 (Tư vấn CS2): 4 người CS2 không nhãn, 4 người CS1 và 2 người Hội
+  // sở đều bị dán "CHƯA VÀO LƯỚI CA" — kể cả Kiệt & Toại vốn có 48 ô mã `HC`. Nhãn ấy chỉ
+  // đang vẽ lại ranh giới CƠ SỞ dưới một cái tên sai.
+  // Chủ dự án chốt: "nếu chưa có trong lưới thì ẩn luôn".
+  it("GV chưa vào lưới bị LOẠI, y như GV có trong lưới mà hôm nay trống", () => {
     const r = baNguoi();
-    expect(r.ds.map((d) => d.id)).toEqual(["u-moi", "u-toi"]);
-    // Và danh sách vẫn là danh sách ĐÃ LỌC — không phải fail-open cả cụm.
+    expect(r.ds.map((d) => d.id)).toEqual(["u-toi"]);
+    // Vẫn là danh sách ĐÃ LỌC — còn người nên không rơi vào fail-open cả cụm.
     expect(r.lyDoRong).toBeNull();
   });
 
-  it("nhãn nói 'chưa THẤY ô ca', KHÔNG hứa 'chưa được xếp ca'", () => {
-    const dong = baNguoi().ds.find((d) => d.id === "u-moi");
-    expect(dong?.phu).toBe("CHUA_VAO_LUOI");
-    // Mức CẢNH, không phải KHÔNG: người này hiện ra vì hệ thống KHÔNG BIẾT, chứ không
-    // phải vì đã kiểm và thấy rảnh. Để mức KHONG là dựng lời hứa suông cạnh tên họ.
-    expect(dong?.muc).toBe("CANH");
-    expect(dong?.nhan).toBe("chưa thấy ô ca nào trong lưới tháng này");
-    // Phép đếm đi qua scopedDb nên câu chữ không được khẳng định điều người đọc không có
-    // dữ liệu để kiểm — "chưa được xếp ca" là đúng loại khẳng định đó.
-    expect(dong?.nhan).not.toContain("chưa được xếp");
+  it("CHUA_VAO_LUOI vẫn là TRẠNG THÁI riêng, chỉ thôi làm NHÃN", () => {
+    // Tách khỏi `KHONG_CO_CA` là có ích cho người đọc mã và cho test; cái bị gỡ là việc
+    // đem nó ra nói với người dùng như một sự thật về họ.
+    const r = baNguoi({ hienTatCa: true });
+    const moi = r.ds.find((d) => d.id === "u-moi");
+    expect(moi?.phu).toBe("CHUA_VAO_LUOI");
+    expect(moi?.nhan).toBe("");
+    expect(moi?.muc).toBe("KHONG");
   });
 
-  it("GV chưa vào lưới VẪN bị note đỏ khi trùng buổi dạy — fail-open không tắt cảnh báo", () => {
+  it("người ĐƯỢC MIỄN luật ca thì hiện, và KHÔNG bị dán nhãn của luật vừa miễn", () => {
+    // Đúng lỗi chủ dự án báo 17/09: khai Kiệt & Toại "luôn hiện" rồi vẫn thấy hai người
+    // mang chữ "CHƯA VÀO LƯỚI CA" ngay cạnh tên.
+    const r = baNguoi({ mienLuat: new Set(["u-moi"]) });
+    const moi = r.ds.find((d) => d.id === "u-moi");
+    expect(moi).toBeDefined();
+    expect(moi?.nhan).toBe("");
+    expect(moi?.muc).toBe("KHONG");
+  });
+
+  it("người ĐƯỢC MIỄN vẫn bị note ĐỎ khi trùng buổi dạy — miễn luật ca KHÔNG phải miễn cảnh báo", () => {
     const r = baNguoi({
+      mienLuat: new Set(["u-moi"]),
       banTheoGv: {
         "u-moi": [
           { ymd: YMD, startTime: "18:30", endTime: "20:00", nhan: "Lớp Sata 5 B", nguon: "LOP_CHINH" },
@@ -761,28 +800,51 @@ describe("duocXemLyDoNghi — che LÝ DO, không che NGƯỜI", () => {
     );
   }
 
-  // ⭐ CA KHOÁ. Đọc lại TOÀN BỘ chuỗi nhãn, không đọc từng nhánh `if` sinh ra chúng.
-  it("KHÔNG có quyền chấm công ⇒ ba nhãn gộp về MỘT chữ trung tính, không chữ nào nói 'nghỉ'", () => {
-    const r = baCanh(false);
+  // ⭐ CA KHOÁ — mạnh hơn bản trước, và mạnh hơn một cách ngoài dự tính.
+  //
+  // `baCanh` chạy với `batLoc: false`, tức ĐÚNG hình dạng đang chạy trên prod (cờ
+  // `trial.locGvTheoCaLamViec` mặc định TẮT). Bản vá 17/09 — "nhãn ca chỉ nói khi luật ca
+  // đang thật sự áp" — làm chỗ rò này đóng NGAY TẠI NGUỒN chứ không còn phải che chữ:
+  // không nhãn nào được sinh ra thì không có gì để rò.
+  //
+  // Vế `duocXemLyDoNghi` KHÔNG thừa: nó là lớp thứ hai, cho lúc cờ lọc BẬT (ca dưới).
+  it("cờ lọc TẮT (mặc định prod) ⇒ KHÔNG nhãn nào phát ra, bất kể có quyền chấm công hay không", () => {
+    for (const coQuyen of [false, true]) {
+      const r = baCanh(coQuyen);
+      expect(r.ds.map((d) => d.nhan)).toEqual(["", "", ""]);
+      const moiChu = `${r.ds.map((d) => d.nhan).join(" ")} ${r.lyDoRong ?? ""}`.toLowerCase();
+      for (const cam of ["nghỉ", "xếp ca", "lưới tháng"]) {
+        expect(moiChu, `coQuyen=${coQuyen}`).not.toContain(cam);
+      }
+    }
+  });
+
+  it("cờ lọc BẬT + KHÔNG quyền chấm công ⇒ nhãn gộp về MỘT chữ trung tính", () => {
+    // Cả ba đều rớt luật ca ⇒ lọc sạch ⇒ danh sách RỖNG (chốt 17/09). Nên đường còn đẩy
+    // nhãn ra ngoài là CÔNG TẮC "Hiện tất cả" — bật nó lên mới đọc được tập nhãn.
+    const r = baCanh(false, { batLoc: true, hienTatCa: true });
     expect(r.ds.map((d) => d.nhan)).toEqual([
       "không nhận buổi này",
       "không nhận buổi này",
-      "không nhận buổi này",
+      // `CHUA_VAO_LUOI` KHÔNG có chữ — trạng thái đó bị nhiễu bởi phạm vi nhìn nên không
+      // bao giờ đáng tin để đem nói (xem `nhanChoDong`).
+      "",
     ]);
-    // Đọc lại toàn bộ chữ phát ra trong lượt này — nhãn dòng LẪN lý do danh sách.
     const moiChu = `${r.ds.map((d) => d.nhan).join(" ")} ${r.lyDoRong ?? ""}`.toLowerCase();
     for (const cam of ["nghỉ", "xếp ca", "lưới tháng"]) {
       expect(moiChu).not.toContain(cam);
     }
   });
 
-  it("CÓ quyền ⇒ ba nhãn vẫn KHÁC NHAU và nói đúng lý do", () => {
-    // Vế đối chứng: nếu bản vá che nhầm cả người có quyền thì ca này đỏ, và nó phải đỏ —
-    // người chấm công mất thông tin cũng là một lỗi, chỉ ngược chiều.
-    expect(baCanh(true).ds.map((d) => d.nhan)).toEqual([
+  it("cờ lọc BẬT + CÓ quyền ⇒ ba nhãn vẫn KHÁC NHAU và nói đúng lý do", () => {
+    // Vế đối chứng: che nhầm cả người có quyền cũng là lỗi, chỉ ngược chiều.
+    expect(baCanh(true, { batLoc: true, hienTatCa: true }).ds.map((d) => d.nhan)).toEqual([
       "ngày nghỉ",
       "chưa xếp ca ngày này",
-      "chưa thấy ô ca nào trong lưới tháng này",
+      // Có quyền chấm công cũng KHÔNG mở được chữ cho `CHUA_VAO_LUOI`: vấn đề của nó
+      // không phải quyền, mà là bản thân phép đếm không phân biệt nổi "chưa xếp ca" với
+      // "làm ở cơ sở bạn không nhìn thấy".
+      "",
     ]);
   });
 
@@ -798,19 +860,20 @@ describe("duocXemLyDoNghi — che LÝ DO, không che NGƯỜI", () => {
   });
 
   it("đường FAIL-OPEN (lọc sạch, trả ĐỦ danh sách) cũng phải che — đây là đường rò rộng nhất", () => {
-    // Tầng Sale + cờ lọc BẬT: hai người đầu bị loại, `u-moi` được giữ… nên danh sách
-    // KHÔNG rỗng và đây chưa phải fail-open. Bỏ `u-moi` đi thì lọc còn 0 người ⇒ hợp đồng
-    // bắt trả ĐỦ danh sách kèm lý do — tức cả hai nhãn nghỉ/không-ca đều ra ngoài.
+    // ⚠️ ĐẢO 17/09 — đường fail-open "lọc sạch ⇒ trả đủ danh sách" ĐÃ BỊ GỠ, nên đường rò
+    // rộng nhất bây giờ là CÔNG TẮC "Hiện tất cả giáo viên": người dùng tự bấm, và nó trả
+    // nguyên danh sách kèm đủ nhãn. Vế che vẫn phải đứng ở đó.
     const r = locGiaoVienChoBuoi(
       thamSo({
         giaoVien: [BA_CANH[0], BA_CANH[1]],
         caTheoGv: { "u-nghi": caTuDanhMuc("X", "cs1"), "u-trong": null },
         coTrongLuoi: new Set(["u-nghi", "u-trong"]),
         batLoc: true,
+        hienTatCa: true,
         duocXemLyDoNghi: false,
       }),
     );
-    expect(r.ds.map((d) => d.id)).toEqual(["u-nghi", "u-trong"]); // fail-open: đủ người
+    expect(r.ds.map((d) => d.id)).toEqual(["u-nghi", "u-trong"]);
     expect(r.lyDoRong).not.toBeNull();
     expect(r.ds.map((d) => d.nhan)).toEqual(["không nhận buổi này", "không nhận buổi này"]);
   });
@@ -842,6 +905,8 @@ describe("duocXemLyDoNghi — che LÝ DO, không che NGƯỜI", () => {
           "u-c": caTuDanhMuc("C", "cs1"),
           "u-ld": caTuDanhMuc("LD", "cs1"),
         },
+        // Cả hai đều rớt luật ca ⇒ danh sách rỗng; bật công tắc để đọc được tập nhãn.
+        hienTatCa: true,
         duocXemLyDoNghi: false,
       }),
     );
@@ -874,7 +939,7 @@ describe("duocXemLyDoNghi — che LÝ DO, không che NGƯỜI", () => {
       "không nhận buổi này",
       "ca không nhận thêm buổi",
       "không nhận buổi này",
-      "không nhận buổi này",
+      "", // CHUA_VAO_LUOI — không bao giờ thành chữ, cả hai phía quyền
       "chưa sinh lưới ca tháng này",
     ]);
     expect(moi.map((p) => nhanChoDong(p, true))).toEqual([
@@ -883,8 +948,19 @@ describe("duocXemLyDoNghi — che LÝ DO, không che NGƯỜI", () => {
       "ngày nghỉ",
       "ca không nhận thêm buổi",
       "chưa xếp ca ngày này",
-      "chưa thấy ô ca nào trong lưới tháng này",
+      "", // CHUA_VAO_LUOI — quyền KHÔNG mở được chữ cho nó, xem dưới
       "chưa sinh lưới ca tháng này",
     ]);
+  });
+
+  // ⭐ CA KHOÁ của bản vá 17/09 — đọc CẢ HAI phía quyền trong MỘT khẳng định.
+  it("CHUA_VAO_LUOI câm ở CẢ HAI phía quyền — nó không phải chuyện quyền", () => {
+    expect(nhanChoDong("CHUA_VAO_LUOI", false)).toBe("");
+    expect(nhanChoDong("CHUA_VAO_LUOI", true)).toBe("");
+    // Vì sao không gộp nó vào nhóm "che vì thiếu quyền": người CÓ quyền chấm công cũng
+    // không nên đọc chuỗi đó, vì chuỗi đó SAI với họ luôn. Phép đếm sinh ra trạng thái này
+    // đi qua `scopedDb`, nên nó nói "tôi không nhìn thấy ca của người này" chứ không nói
+    // "người này chưa được xếp ca" — và hai câu đó ngược nghĩa nhau về vận hành.
+    // Chốt của chủ dự án 17/09 sau khi thấy Kiệt & Toại (48 ô mã `HC`) bị dán nhãn ấy.
   });
 });
