@@ -67,19 +67,43 @@ export type KhoanCanGan = {
   centerId: string | null;
 };
 
+/** Một khoản bị loại, kèm đủ thứ để người đọc tự tra lại. */
+export type KhoanBiLoai = {
+  paymentId: string;
+  orderCode: string;
+  trangThaiDon: string;
+  amount: number;
+};
+
 export type KetQuaQuet = {
   khoan: KhoanCanGan[];
   /** Σ `amount` của `khoan`. */
   tongTien: number;
   /** Số ĐƠN riêng biệt trong `khoan`. */
   soDon: number;
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // BA NHÓM DƯỚI ĐÂY LÀ **TẬP ĐỐI CHIẾU** của chủ dự án (SQL 18/09/2026):
+  //   đơn có ĐÚNG 1 `OrderItem` · `Payment.orderItemId IS NULL` · Payment chưa xoá mềm,
+  //   **KHÔNG lọc trạng thái đơn, KHÔNG lọc đơn xoá mềm**.
+  // Bởi vậy:  khoan + biLoaiTrangThai + biLoaiXoaMem  =  147 khoản / 896.289.000đ.
+  // Ba nhóm còn lại (đơn ≥2 con · đơn 0 dòng · bút toán khác) nằm NGOÀI tập ấy.
+  // ───────────────────────────────────────────────────────────────────────────
+  /** Đơn 1 dòng hàng nhưng trạng thái DRAFT/CANCELLED/REFUNDED. */
+  biLoaiTrangThai: { soKhoan: number; tongTien: number; danhSach: KhoanBiLoai[] };
+  /** Đơn 1 dòng hàng nhưng đơn đã XOÁ MỀM. */
+  biLoaiXoaMem: { soKhoan: number; tongTien: number; danhSach: KhoanBiLoai[] };
+
   /** Khoản NULL thuộc đơn ≥2 con — KHÔNG backfill, sale tự chia. */
   donNhieuCon: { soKhoan: number; tongTien: number; soDon: number };
   /** Khoản NULL thuộc đơn KHÔNG có dòng hàng nào — không có gì để gắn. */
   donKhongCoDong: { soKhoan: number; tongTien: number };
-  /** Khoản NULL bị `locDonNhanTien()` loại (DRAFT/CANCELLED/REFUNDED/xoá mềm). */
-  ngoaiLocDonNhanTien: { soKhoan: number; tongTien: number };
-  /** Bút toán ĐIỀU CHỈNH/HOÀN (`paymentType !== "PAYMENT"`) — ngoài số 146 đã duyệt. */
+  /**
+   * Bút toán ĐIỀU CHỈNH/HOÀN (`paymentType !== "PAYMENT"`).
+   *
+   * ⚠️ SQL đối chiếu của chủ dự án KHÔNG lọc `paymentType`. Nếu tổng ba nhóm trên lệch 147
+   * đúng bằng con số này thì đây là lý do — không phải dữ liệu đổi.
+   */
   butToanKhac: { soKhoan: number; tongTien: number };
 };
 
@@ -117,8 +141,9 @@ export async function quetKhoanCanGan(doc: Doc): Promise<KetQuaQuet> {
   const khoan: KhoanCanGan[] = [];
   const nhieuCon = { soKhoan: 0, tongTien: 0, don: new Set<string>() };
   const khongDong = { soKhoan: 0, tongTien: 0 };
-  const ngoai = { soKhoan: 0, tongTien: 0 };
   const khac = { soKhoan: 0, tongTien: 0 };
+  const loaiTrangThai: KhoanBiLoai[] = [];
+  const loaiXoaMem: KhoanBiLoai[] = [];
 
   for (const k of khoanNull) {
     const d = k.order;
@@ -127,11 +152,12 @@ export async function quetKhoanCanGan(doc: Doc): Promise<KetQuaQuet> {
       khac.tongTien += k.amount;
       continue;
     }
-    if (d.deletedAt !== null || cam.has(d.status)) {
-      ngoai.soKhoan += 1;
-      ngoai.tongTien += k.amount;
-      continue;
-    }
+    // ⚠️ THỨ TỰ PHÂN NHÓM: số dòng hàng XÉT TRƯỚC trạng thái đơn.
+    //
+    // Tập đối chiếu của chủ dự án là "đơn có ĐÚNG 1 OrderItem", không lọc trạng thái. Nếu loại
+    // theo trạng thái trước thì một đơn CANCELLED có 3 con sẽ rơi vào nhóm `biLoaiTrangThai`,
+    // và phép cộng `khoan + biLoaiTrangThai + biLoaiXoaMem` không còn là tập ấy nữa — nó sẽ
+    // lệch 147 mà không ai biết vì sao.
     if (d.items.length === 0) {
       khongDong.soKhoan += 1;
       khongDong.tongTien += k.amount;
@@ -141,6 +167,21 @@ export async function quetKhoanCanGan(doc: Doc): Promise<KetQuaQuet> {
       nhieuCon.soKhoan += 1;
       nhieuCon.tongTien += k.amount;
       nhieuCon.don.add(k.orderId);
+      continue;
+    }
+    // Từ đây: đơn có ĐÚNG MỘT dòng hàng ⇒ nằm trong tập đối chiếu.
+    const bl: KhoanBiLoai = {
+      paymentId: k.id,
+      orderCode: d.code,
+      trangThaiDon: d.status,
+      amount: k.amount,
+    };
+    if (d.deletedAt !== null) {
+      loaiXoaMem.push(bl);
+      continue;
+    }
+    if (cam.has(d.status)) {
+      loaiTrangThai.push(bl);
       continue;
     }
     khoan.push({
@@ -153,70 +194,121 @@ export async function quetKhoanCanGan(doc: Doc): Promise<KetQuaQuet> {
     });
   }
 
+  const gop = (ds: KhoanBiLoai[]) => ({
+    soKhoan: ds.length,
+    tongTien: ds.reduce((s, x) => s + x.amount, 0),
+    danhSach: ds,
+  });
+
   return {
     khoan,
     tongTien: khoan.reduce((s, x) => s + x.amount, 0),
     soDon: new Set(khoan.map((x) => x.orderId)).size,
+    biLoaiTrangThai: gop(loaiTrangThai),
+    biLoaiXoaMem: gop(loaiXoaMem),
     donNhieuCon: { soKhoan: nhieuCon.soKhoan, tongTien: nhieuCon.tongTien, soDon: nhieuCon.don.size },
     donKhongCoDong: khongDong,
-    ngoaiLocDonNhanTien: ngoai,
     butToanKhac: khac,
   };
 }
 
 /**
- * GHI — gắn `orderItemId` cho các khoản của MỘT đơn, trong MỘT transaction.
+ * GHI — MỘT câu `UPDATE` duy nhất cho toàn bộ lô, tự kiểm lại MỌI điều kiện TRONG CÙNG CÂU.
  *
- * ⚠️ MỘT TRANSACTION MỖI ĐƠN, cố ý không phải một transaction cho cả 120 đơn:
- *   · một transaction dài trên prod giữ khoá lâu và chặn đường ghi thật của sale;
- *   · lệnh này **idempotent** nên cắt giữa đường không để lại trạng thái nửa vời — chạy lại
- *     chỉ thấy phần còn lại. Đổi lấy tính nguyên tử toàn cục không mang thêm an toàn nào.
+ * Chủ dự án chốt 18/09/2026: *"Một câu UPDATE duy nhất, chỉ đổi cột orderItemId, WHERE kiểm
+ * lại TRONG CÙNG CÂU (không tin danh sách từ bước xem trước)."*
  *
- * ⚠️ `updateMany` có `orderItemId: null` TRONG `where` — không phải `update` theo id. Nếu
- * trong lúc này sale vừa gắn tay khoản ấy thì phép ghi đổi **0 dòng** và ta bỏ qua, thay vì
- * đè lên lựa chọn của con người. Đây đúng là mẫu chống-đua được nêu là ngoại lệ hợp lệ của
- * luật rollback (CLAUDE.md mục 7): ghi có điều kiện, đổi 0 dòng, commit vô hại.
+ * ⚠️ VÌ SAO KHÔNG TIN DANH SÁCH TỪ BƯỚC XEM TRƯỚC — đây là điểm khác quan trọng nhất so với
+ * bản đầu (vòng lặp `updateMany` theo từng `paymentId` đã quét ở bước trước). Giữa lúc quét và
+ * lúc ghi, đơn có thể bị huỷ, bị xoá mềm, hoặc được thêm dòng hàng thứ hai. Một danh sách id
+ * đọc trước đó là một ẢNH CHỤP; ghi theo ảnh chụp là ghi theo một sự thật đã hết hạn. Câu
+ * dưới đây không nhận id nào từ bên ngoài — nó tự tìm lại tập cần gắn ngay tại thời điểm ghi.
+ *
+ * Năm điều kiện, đúng những gì chủ dự án liệt kê:
+ *   1. `Payment.orderItemId IS NULL`
+ *   2. `Payment.deletedAt IS NULL`
+ *   3. `Order.deletedAt IS NULL`
+ *   4. `Order.status NOT IN ('DRAFT','CANCELLED','REFUNDED')`
+ *   5. đơn có ĐÚNG 1 `OrderItem`
+ * Cộng thêm `Payment.paymentType = 'PAYMENT'` — không phải điều kiện của chủ dự án, mà là điều
+ * kiện của con số 146 (báo cáo lọc nó). Bút toán điều chỉnh/hoàn để lượt sau, có chủ đích.
+ *
+ * ⚠️ `SET "orderItemId" = <dòng hàng duy nhất>` — KHÔNG đụng cột nào khác. Không `amount`,
+ * không `accountantStatus`, không `saleStatus`, không `enrollmentId`, không `updatedAt` bằng
+ * tay. Đó là toàn bộ lý do lệnh này an toàn, nên nó được viết ra thành SQL để đọc bằng mắt
+ * thay vì tin một `data: {}` của ORM.
+ *
+ * Trả về từng dòng đã đổi (`RETURNING`) để tầng trên ghi AuditLog 1 dòng/đơn — và để so số
+ * dòng bị ảnh hưởng với con số đã duyệt. So KHÔNG khớp thì tầng trên NÉM ⇒ rollback.
  */
-export async function ganOrderItemChoDon(
+export async function ganOrderItemMotCau(
   tx: Tx,
-  input: { orderId: string; orderCode: string; khoan: readonly KhoanCanGan[]; actor: AuditActor },
-): Promise<{ daGan: number; boQua: number }> {
-  let daGan = 0;
-  let boQua = 0;
-  const xong: { paymentId: string; orderItemId: string; amount: number }[] = [];
+): Promise<{ paymentId: string; orderId: string; orderCode: string; orderItemId: string; amount: number }[]> {
+  // `$queryRaw` (không phải `$executeRaw`) vì cần `RETURNING`. Tham số hoá bằng Prisma.sql —
+  // không nội suy chuỗi, không `$queryRawUnsafe` (bị cấm toàn repo).
+  return tx.$queryRaw<
+    { paymentId: string; orderId: string; orderCode: string; orderItemId: string; amount: number }[]
+  >`
+    WITH mot_dong AS (
+      SELECT "orderId", MIN("id") AS "itemId"
+      FROM "OrderItem"
+      GROUP BY "orderId"
+      HAVING COUNT(*) = 1
+    ),
+    can_gan AS (
+      SELECT p."id" AS "paymentId", o."id" AS "orderId", o."code" AS "orderCode",
+             m."itemId" AS "orderItemId", p."amount" AS "amount"
+      FROM "Payment" p
+      JOIN "Order" o ON o."id" = p."orderId"
+      JOIN mot_dong m ON m."orderId" = o."id"
+      WHERE p."orderItemId" IS NULL
+        AND p."deletedAt" IS NULL
+        AND p."paymentType" = 'PAYMENT'
+        AND o."deletedAt" IS NULL
+        AND o."status" NOT IN ('DRAFT', 'CANCELLED', 'REFUNDED')
+    )
+    UPDATE "Payment" p
+    SET "orderItemId" = c."orderItemId"
+    FROM can_gan c
+    WHERE p."id" = c."paymentId"
+    RETURNING c."paymentId", c."orderId", c."orderCode", c."orderItemId", c."amount"
+  `;
+}
 
-  for (const k of input.khoan) {
-    const r = await tx.payment.updateMany({
-      where: { id: k.paymentId, orderItemId: null, deletedAt: null },
-      data: { orderItemId: k.orderItemId },
-    });
-    if (r.count === 0) {
-      boQua += 1;
-      continue;
-    }
-    daGan += r.count;
-    xong.push({ paymentId: k.paymentId, orderItemId: k.orderItemId, amount: k.amount });
+/**
+ * Ghi AuditLog — MỘT dòng cho MỘT đơn (chủ dự án chốt), không phải một dòng mỗi khoản.
+ *
+ * Người đọc log sau này muốn biết *"đơn này bị backfill lúc nào"*; chi tiết từng khoản nằm
+ * trong `newValues`. Gọi SAU câu UPDATE, TRONG CÙNG transaction — nên nếu audit ném thì cả
+ * lượt ghi rollback theo, và không có phép đổi tiền nào tồn tại mà không có dấu.
+ */
+export async function ghiAuditBackfill(
+  tx: Tx,
+  input: {
+    dong: readonly { paymentId: string; orderId: string; orderCode: string; orderItemId: string; amount: number }[];
+    actor: AuditActor;
+  },
+): Promise<number> {
+  const theoDon = new Map<string, { code: string; khoan: { paymentId: string; orderItemId: string; amount: number }[] }>();
+  for (const d of input.dong) {
+    const cum = theoDon.get(d.orderId) ?? { code: d.orderCode, khoan: [] };
+    cum.khoan.push({ paymentId: d.paymentId, orderItemId: d.orderItemId, amount: d.amount });
+    theoDon.set(d.orderId, cum);
   }
-
-  // MỘT dòng AuditLog cho MỘT đơn (chủ dự án chốt), không phải một dòng mỗi khoản: người đọc
-  // log sau này muốn biết "đơn này bị backfill lúc nào", còn chi tiết từng khoản nằm trong
-  // `newValues`. Không ghi dòng nào khi không gắn được gì — một dòng audit không có thay đổi
-  // nào đi kèm là rác làm loãng chính cái log.
-  if (daGan > 0) {
+  for (const [orderId, cum] of theoDon) {
     await writeAudit({
       tx,
       actor: input.actor,
       module: "finance",
       entityType: "Order",
-      entityId: input.orderId,
+      entityId: orderId,
       action: "PAYMENT_ORDER_ITEM_BACKFILLED",
       changedFields: ["orderItemId"],
-      newValues: { orderCode: input.orderCode, soKhoan: daGan, khoan: xong },
+      newValues: { orderCode: cum.code, soKhoan: cum.khoan.length, khoan: cum.khoan },
       reason:
         "Backfill orderItemId cho khoản cũ của đơn MỘT con — cột ra đời 16/09/2026 nên mọi " +
-        "khoản cũ hơn đều NULL. Chỉ ghi cột orderItemId.",
+        "khoản cũ hơn đều NULL. Một câu UPDATE, chỉ ghi cột orderItemId.",
     });
   }
-
-  return { daGan, boQua };
+  return theoDon.size;
 }

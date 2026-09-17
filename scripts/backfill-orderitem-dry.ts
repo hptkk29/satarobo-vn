@@ -28,9 +28,23 @@ import { extractVnPhoneCandidates } from "../lib/payments/sdt-trong-memo";
 import { phoneVariants } from "../lib/phone";
 import { locDonNhanTien } from "../lib/payments/don-nhan-tien";
 
-/** Số chủ dự án duyệt từ bảng đối soát 17/09 — dùng để ĐỐI CHIẾU, không phải để tin. */
-const MOC_KHOAN = 146;
-const MOC_TIEN = 887_313_000;
+/**
+ * Mốc ĐỐI CHIẾU — dùng để so, không phải để tin.
+ *
+ * `MOC_TAP_*` là số chủ dự án đo ĐỘC LẬP bằng SQL trên prod 18/09/2026, trên tập:
+ * đơn có ĐÚNG 1 `OrderItem` · `Payment.orderItemId IS NULL` · Payment chưa xoá mềm,
+ * **KHÔNG lọc trạng thái đơn**. Nó gồm cả `ORD-260913-000047` (CANCELLED, 8.976.000đ).
+ *
+ * `MOC_SE_GAN*` là phần trừ đơn ấy ra — tức đúng tập mà lệnh backfill sẽ chạm.
+ *
+ * ⚠️ Hai mốc, không phải một, và đó là chủ ý: một con số thì không phân biệt được
+ * "dữ liệu đổi" với "hai bên đang đo hai tập khác nhau". Đúng bài học của lần lệch
+ * 24 → 150 hôm 17/09.
+ */
+const MOC_TAP_SO = 147;
+const MOC_TAP_TIEN = 896_289_000;
+const MOC_SE_GAN = 146;
+const MOC_SE_GAN_TIEN = 887_313_000;
 
 const vnd = (n: number) => n.toLocaleString("vi-VN");
 
@@ -52,38 +66,96 @@ async function phanBackfill(tx: Tx): Promise<void> {
 
   in_(`## 1 · Kế hoạch backfill \`Payment.orderItemId\``);
   in_();
-  in_(`**SẼ GẮN: ${q.khoan.length} khoản / ${q.soDon} đơn / ${vnd(q.tongTien)}đ**`);
+
+  // ─── BA DÒNG TỔNG (chủ dự án chốt 18/09) ────────────────────────────────────
+  in_(`### Ba dòng tổng`);
   in_();
-  if (q.khoan.length === MOC_KHOAN && q.tongTien === MOC_TIEN) {
-    in_(`✅ Khớp mốc bảng đối soát 17/09: ${MOC_KHOAN} khoản / ${vnd(MOC_TIEN)}đ.`);
+  in_(`1. **SẼ GẮN: ${q.khoan.length} khoản · ${vnd(q.tongTien)}đ · ${q.soDon} đơn**`);
+  in_(
+    `2. **Bị loại theo TRẠNG THÁI ĐƠN (DRAFT/CANCELLED/REFUNDED): ` +
+      `${q.biLoaiTrangThai.soKhoan} khoản · ${vnd(q.biLoaiTrangThai.tongTien)}đ**`,
+  );
+  if (q.biLoaiTrangThai.danhSach.length > 0) {
+    for (const x of q.biLoaiTrangThai.danhSach) {
+      in_(`   - \`${x.orderCode}\` · ${x.trangThaiDon} · ${vnd(x.amount)}đ`);
+    }
+  } else {
+    in_(`   - (không có)`);
+  }
+  in_(
+    `3. **Bị loại vì ĐƠN XOÁ MỀM: ${q.biLoaiXoaMem.soKhoan} khoản · ` +
+      `${vnd(q.biLoaiXoaMem.tongTien)}đ**`,
+  );
+  if (q.biLoaiXoaMem.danhSach.length > 0) {
+    for (const x of q.biLoaiXoaMem.danhSach) {
+      in_(`   - \`${x.orderCode}\` · ${x.trangThaiDon} · ${vnd(x.amount)}đ`);
+    }
+  } else {
+    in_(`   - (không có)`);
+  }
+
+  // ─── ĐỐI CHIẾU với SQL độc lập của chủ dự án ────────────────────────────────
+  // SQL ấy: đơn có ĐÚNG 1 OrderItem · `Payment.orderItemId IS NULL` · đơn chưa xoá mềm,
+  // KHÔNG lọc trạng thái đơn ⇒ ba nhóm trên cộng lại phải bằng nó.
+  const tapSo = q.khoan.length + q.biLoaiTrangThai.soKhoan + q.biLoaiXoaMem.soKhoan;
+  const tapTien = q.tongTien + q.biLoaiTrangThai.tongTien + q.biLoaiXoaMem.tongTien;
+  in_();
+  in_(`### Đối chiếu SQL độc lập (chủ dự án đo 18/09)`);
+  in_();
+  in_(`Tập đối chiếu = **đơn có ĐÚNG 1 dòng hàng**, không lọc trạng thái đơn.`);
+  in_();
+  in_(`\`sẽ gắn\` + \`bị loại trạng thái\` + \`bị loại xoá mềm\` = **${tapSo} khoản · ${vnd(tapTien)}đ**`);
+  in_();
+  if (tapSo === MOC_TAP_SO && tapTien === MOC_TAP_TIEN) {
+    in_(`✅ Khớp tuyệt đối mốc SQL: ${MOC_TAP_SO} khoản / ${vnd(MOC_TAP_TIEN)}đ.`);
   } else {
     in_(
-      `⚠️ **LỆCH mốc 17/09** (${MOC_KHOAN} khoản / ${vnd(MOC_TIEN)}đ). ` +
-        `Nay: ${q.khoan.length} khoản / ${vnd(q.tongTien)}đ.`,
+      `⚠️ **LỆCH mốc SQL** (${MOC_TAP_SO} khoản / ${vnd(MOC_TAP_TIEN)}đ). ` +
+        `Nay: ${tapSo} khoản / ${vnd(tapTien)}đ.`,
     );
     in_();
-    in_(`Lệch KHÔNG phải lỗi — lệch KHÔNG GIẢI THÍCH ĐƯỢC mới là. Bốn lý do, ba đầu LÀNH:`);
-    in_(`1. sale đã gắn tay vài khoản sau 17/09 ⇒ tập hẹp lại — **lành**;`);
-    in_(`2. tiền mới về + đơn mới tạo sau 17/09 ⇒ tập rộng ra — **lành**;`);
-    in_(`3. một đơn được thêm dòng hàng thứ hai ⇒ rời sang nhóm "đơn ≥2 con" — **lành**;`);
+    in_(`Lệch KHÔNG phải lỗi — lệch KHÔNG GIẢI THÍCH ĐƯỢC mới là. Năm lý do, bốn đầu LÀNH:`);
+    in_(`1. tiền mới về / đơn mới tạo sau 18/09 ⇒ tập rộng ra — **lành**;`);
+    in_(`2. sale đã gắn tay vài khoản sau 18/09 ⇒ tập hẹp lại — **lành**;`);
     in_(
-      `4. đơn rơi sang DRAFT/CANCELLED/REFUNDED hoặc bị xoá mềm ⇒ rời sang nhóm ` +
-        `"ngoài lọc đơn nhận tiền" — **lý do DUY NHẤT không lành**, vì tiền đã về mà đơn ` +
-        `không còn nhận được nữa. Soi \`AuditLog\` của đơn trước khi chạy thật.`,
+      `3. một đơn 1 con được thêm dòng hàng thứ hai ⇒ rời sang nhóm "đơn ≥2 con", tức RA KHỎI ` +
+        `tập đối chiếu — **lành**;`,
+    );
+    in_(
+      `4. SQL của chủ dự án KHÔNG lọc \`paymentType\`, báo cáo thì có. Nếu lệch đúng bằng ` +
+        `**${q.butToanKhac.soKhoan} khoản / ${vnd(q.butToanKhac.tongTien)}đ** (nhóm bút toán ` +
+        `điều chỉnh/hoàn dưới đây) thì đây là lý do — **lành**, chỉ là hai thước khác nhau;`,
+    );
+    in_(
+      `5. một khoản bị XOÁ MỀM sau 18/09 ⇒ rơi khỏi cả ba nhóm (câu tra lọc ` +
+        `\`Payment.deletedAt IS NULL\`) — **lý do DUY NHẤT không lành**, vì tiền đã về mà dòng ` +
+        `sổ thì bị bỏ đi. Soi \`AuditLog\` trước khi chạy thật.`,
     );
     in_();
     in_(`**Chưa đối chiếu được nguyên nhân thì ĐỪNG gõ chuỗi xác nhận.**`);
   }
 
+  // Mốc "sẽ gắn" riêng — đây là con số đi vào `--expect` của bản GHI.
   in_();
-  in_(`### Bốn nhóm KHÔNG backfill — liệt kê để không có cap im lặng`);
+  if (q.khoan.length === MOC_SE_GAN && q.tongTien === MOC_SE_GAN_TIEN) {
+    in_(`✅ "Sẽ gắn" khớp mốc đã duyệt: ${MOC_SE_GAN} khoản / ${vnd(MOC_SE_GAN_TIEN)}đ.`);
+  } else {
+    in_(
+      `⚠️ "Sẽ gắn" LỆCH mốc đã duyệt (${MOC_SE_GAN} / ${vnd(MOC_SE_GAN_TIEN)}đ) — ` +
+        `nay ${q.khoan.length} / ${vnd(q.tongTien)}đ.`,
+    );
+  }
+  in_();
+  in_(
+    `> Con số đi vào bản GHI: \`--expect=${q.khoan.length}\`. Bản GHI so số dòng bị ảnh hưởng ` +
+      `với đúng số này và **ROLLBACK** nếu lệch.`,
+  );
+
+  in_();
+  in_(`### Ba nhóm NGOÀI tập đối chiếu — liệt kê để không có cap im lặng`);
   in_();
   in_(`| Nhóm | Số khoản | Tổng tiền | Vì sao không gắn |`);
   in_(`|---|---|---|---|`);
-  in_(
-    `| bút toán ĐIỀU CHỈNH/HOÀN | ${q.butToanKhac.soKhoan} | ${vnd(q.butToanKhac.tongTien)}đ | ` +
-      `\`paymentType ≠ PAYMENT\` — ngoài số 146 đã duyệt, **để lượt sau** |`,
-  );
   in_(
     `| đơn ≥2 con | ${q.donNhieuCon.soKhoan} (${q.donNhieuCon.soDon} đơn) | ` +
       `${vnd(q.donNhieuCon.tongTien)}đ | phải đoán bé nào ⇒ **sale tự chia** trên màn biến động số dư |`,
@@ -93,8 +165,8 @@ async function phanBackfill(tx: Tx): Promise<void> {
       `không có chỗ nào để gắn |`,
   );
   in_(
-    `| ngoài \`locDonNhanTien()\` | ${q.ngoaiLocDonNhanTien.soKhoan} | ` +
-      `${vnd(q.ngoaiLocDonNhanTien.tongTien)}đ | đơn DRAFT/CANCELLED/REFUNDED hoặc xoá mềm |`,
+    `| bút toán ĐIỀU CHỈNH/HOÀN | ${q.butToanKhac.soKhoan} | ${vnd(q.butToanKhac.tongTien)}đ | ` +
+      `\`paymentType ≠ PAYMENT\` — ngoài số đã duyệt, **để lượt sau** |`,
   );
 
   // Tổng theo CƠ SỞ — chủ dự án dùng để biết backfill dọn xong thì mỗi cơ sở còn lại gì.
@@ -209,6 +281,173 @@ async function phanTachA(tx: Tx): Promise<void> {
   in_(`| nội dung CK chứa SĐT dạng \`84…\`/\`+84…\` | ${dang84} |`);
 }
 
+/**
+ * Phần 3 — CHỈ ĐỌC, cho kế toán: khoản PENDING trên một đơn đã HUỶ.
+ *
+ * Chủ dự án hỏi 18/09: `Payment` PENDING 8.976.000đ trên `ORD-260913-000047` (đơn CANCELLED) —
+ * có `PaymentAllocation`/`BankTransaction` THẬT nào trỏ tới không, `method` là gì, ai tạo.
+ * Kết luận phải là một trong hai: **tiền thật đã về** hay **dòng tự sinh lúc tạo đơn**.
+ *
+ * ⚠️ KHÔNG có FK từ `Payment` sang `BankTransaction` trong schema này. Ledger-A (`Payment`) và
+ * Ledger-B (`PaymentRequest` + `PaymentAllocation` + `BankTransaction`) là hai sổ song song.
+ * Nên bằng chứng "tiền thật" phải tìm ở BA nơi độc lập, và một nơi có là đủ để kết luận:
+ *   1. `PaymentAllocation` trỏ vào một `PaymentRequest` CỦA ĐƠN NÀY ⇒ có giao dịch ngân hàng
+ *      thật đã được rót vào đơn;
+ *   2. marker trong `Payment.note` — `[auto:<cổng>:<id>]` (webhook tự khớp) hoặc
+ *      `[gan-tay:<id>]` (kế toán gắn tay). Cả hai đều mang id giao dịch thật;
+ *   3. `Payment.evidenceUrl` — ảnh chứng từ do người nhập đính kèm.
+ *
+ * Không nơi nào có ⇒ dòng ấy do đường TẠO ĐƠN tự sinh, chưa từng có tiền đi kèm.
+ */
+async function phanSoiDonHuy(tx: Tx): Promise<void> {
+  const MA_DON = "ORD-260913-000047";
+
+  in_();
+  in_(`## 3 · CHỈ ĐỌC — khoản PENDING trên đơn đã huỷ \`${MA_DON}\``);
+  in_();
+
+  const don = await tx.order.findFirst({
+    where: { code: MA_DON },
+    select: {
+      id: true,
+      code: true,
+      status: true,
+      deletedAt: true,
+      totalAmount: true,
+      createdAt: true,
+      items: { select: { id: true } },
+      payments: {
+        select: {
+          id: true,
+          amount: true,
+          method: true,
+          accountantStatus: true,
+          saleStatus: true,
+          paymentType: true,
+          orderItemId: true,
+          enrollmentId: true,
+          evidenceUrl: true,
+          note: true,
+          paidDate: true,
+          createdAt: true,
+          recordedById: true,
+          deletedAt: true,
+        },
+        orderBy: { createdAt: "asc" },
+      },
+      paymentRequests: {
+        select: {
+          id: true,
+          installmentNo: true,
+          amountDue: true,
+          status: true,
+          allocations: {
+            select: {
+              amount: true,
+              createdAt: true,
+              bankTransaction: {
+                select: { id: true, provider: true, providerTxnId: true, amount: true, status: true, transferredAt: true },
+              },
+            },
+          },
+        },
+        orderBy: { installmentNo: "asc" },
+      },
+    },
+  });
+
+  if (!don) {
+    in_(`⚠️ Không tìm thấy đơn \`${MA_DON}\` trên prod.`);
+    return;
+  }
+
+  in_(
+    `**Đơn:** \`${don.code}\` · trạng thái **${don.status}**` +
+      `${don.deletedAt ? " · **ĐÃ XOÁ MỀM**" : ""} · tổng ${vnd(don.totalAmount)}đ · ` +
+      `${don.items.length} dòng hàng · tạo ${don.createdAt.toISOString().slice(0, 10)}`,
+  );
+  in_();
+
+  // Người tạo — tra tên riêng, KHÔNG in email/SĐT.
+  const ids = [...new Set(don.payments.map((p) => p.recordedById).filter((x): x is string => !!x))];
+  const ten = new Map<string, string>();
+  if (ids.length > 0) {
+    const u = await tx.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } });
+    for (const x of u) ten.set(x.id, x.name ?? "(không tên)");
+  }
+
+  in_(`### Các dòng \`Payment\` của đơn`);
+  in_();
+  in_(`| # | Số tiền | method | kế toán | sale | loại | gắn con | ghi danh | có chứng từ | ai tạo | ngày |`);
+  in_(`|---|---|---|---|---|---|---|---|---|---|---|`);
+  don.payments.forEach((p, i) => {
+    in_(
+      `| ${i + 1} | ${vnd(p.amount)}đ | \`${p.method}\` | ${p.accountantStatus} | ${p.saleStatus} | ` +
+        `${p.paymentType} | ${p.orderItemId ? "CÓ" : "—"} | ${p.enrollmentId ? "CÓ" : "—"} | ` +
+        `${p.evidenceUrl ? "CÓ" : "—"} | ${p.recordedById ? (ten.get(p.recordedById) ?? "(không rõ)") : "**(không ai — hệ thống)**"} | ` +
+        `${p.paidDate.toISOString().slice(0, 10)} |`,
+    );
+  });
+
+  in_();
+  in_(`### Ledger-B — phiếu thu và giao dịch ngân hàng ĐÃ RÓT vào đơn`);
+  in_();
+  const tongRot = don.paymentRequests.reduce(
+    (s, r) => s + r.allocations.reduce((t, a) => t + a.amount, 0),
+    0,
+  );
+  if (don.paymentRequests.length === 0) {
+    in_(`- Không có phiếu thu nào.`);
+  } else {
+    for (const r of don.paymentRequests) {
+      const rot = r.allocations.reduce((t, a) => t + a.amount, 0);
+      in_(
+        `- phiếu đợt ${r.installmentNo} · phải thu ${vnd(r.amountDue)}đ · **${r.status}** · ` +
+          `đã rót ${vnd(rot)}đ · ${r.allocations.length} phân bổ`,
+      );
+      for (const a of r.allocations) {
+        const b = a.bankTransaction;
+        in_(
+          `  - ${vnd(a.amount)}đ ← \`${b.provider}\` giao dịch \`${b.providerTxnId}\` · ` +
+            `${vnd(b.amount)}đ · ${b.status} · ${b.transferredAt.toISOString().slice(0, 10)}`,
+        );
+      }
+    }
+  }
+
+  // ─── KẾT LUẬN ─────────────────────────────────────────────────────────────
+  const coMarker = don.payments.some((p) => /\[(?:auto:[^\]]+|gan-tay:[^\]]+)\]/.test(p.note ?? ""));
+  const coChungTu = don.payments.some((p) => !!p.evidenceUrl);
+  const coRot = tongRot > 0;
+
+  in_();
+  in_(`### Kết luận`);
+  in_();
+  in_(`| Bằng chứng tiền thật | Có? |`);
+  in_(`|---|---|`);
+  in_(`| \`PaymentAllocation\` từ giao dịch ngân hàng vào phiếu của đơn | ${coRot ? `**CÓ** — ${vnd(tongRot)}đ` : "không"} |`);
+  in_(`| marker \`[auto:…]\` / \`[gan-tay:…]\` trong \`Payment.note\` | ${coMarker ? "**CÓ**" : "không"} |`);
+  in_(`| \`Payment.evidenceUrl\` (ảnh chứng từ) | ${coChungTu ? "**CÓ**" : "không"} |`);
+  in_();
+  if (coRot || coMarker || coChungTu) {
+    in_(
+      `⚠️ **TIỀN THẬT ĐÃ VỀ.** Đơn đang CANCELLED mà vẫn có bằng chứng tiền — đây là việc của ` +
+        `kế toán, không phải việc của lệnh backfill. Backfill **không chạm** đơn này (bị loại ` +
+        `theo trạng thái), nên nó vẫn nằm nguyên đó chờ xử lý.`,
+    );
+  } else {
+    in_(
+      `✅ **DÒNG TỰ SINH LÚC TẠO ĐƠN** — không phân bổ ngân hàng, không marker giao dịch, ` +
+        `không ảnh chứng từ. Không có tiền thật nào đi kèm dòng này.`,
+    );
+    in_();
+    in_(
+      `Nó vô hại với công nợ hôm nay: \`accountantStatus = PENDING\` nên nó KHÔNG vào "đã thu" ` +
+        `(trục A), và đơn CANCELLED thì bị \`locDonNhanTien()\` loại khỏi mọi đường nhận tiền.`,
+    );
+  }
+}
+
 async function main() {
   in_(`# Xem trước backfill \`Payment.orderItemId\` — CHỈ ĐỌC`);
   in_();
@@ -227,6 +466,7 @@ async function main() {
         await tx.$executeRaw`SET TRANSACTION READ ONLY`;
         await phanBackfill(tx);
         await phanTachA(tx);
+        await phanSoiDonHuy(tx);
         throw new Error(KET);
       },
       // Trần mặc định của transaction TƯƠNG TÁC là 5 giây — tuỳ số hợp lý cho một transaction

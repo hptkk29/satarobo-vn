@@ -8,28 +8,33 @@
 // workflow chỉ-đọc gọi tệp có sẵn đường ghi là một lớp khoá chỉ còn trên giấy.
 //
 // ─────────────────────────────────────────────────────────────────────────────
-// BA CỔNG TRƯỚC KHI GHI — bỏ cổng nào cũng mở lại một đường sai
+// BỐN CỔNG TRƯỚC KHI COMMIT — bỏ cổng nào cũng mở lại một đường sai
 //
 //  1. `--confirm=BACKFILL-146` gõ tay. Không có ⇒ **không ghi gì**, chỉ in kế hoạch.
-//  2. Script tự khai `user=… · ghi được: CÓ/KHÔNG`. GitHub không cho đọc lại secret, nên đây
+//  2. `--expect=<N>` gõ tay, lấy từ bảng xem trước chủ dự án ĐÃ DUYỆT. Không có ⇒ không ghi.
+//     Đây là thứ buộc lượt ghi khớp với đúng cái BẢNG ĐƯỢC DUYỆT, chứ không phải với "bất cứ
+//     gì DB đang có lúc này".
+//  3. Script tự khai `user=… · ghi được: CÓ/KHÔNG`. GitHub không cho đọc lại secret, nên đây
 //     là cách DUY NHẤT thấy được nó đang nối vào đâu.
-//  3. Đếm lại ngay trước khi ghi và **so với mốc đã duyệt**. Lệch quá ngưỡng ⇒ DỪNG: bảng mà
-//     chủ dự án duyệt không còn mô tả dữ liệu hiện tại, nên sự duyệt ấy không còn giá trị.
+//  4. **SỐ DÒNG BỊ ẢNH HƯỞNG ≠ SỐ ĐÃ DUYỆT ⇒ NÉM ⇒ ROLLBACK.** Cổng này nằm TRONG
+//     transaction, sau câu UPDATE và trước commit. `return` KHÔNG rollback — chỉ `throw` mới
+//     rollback (CLAUDE.md mục 7).
 //
-// ⚠️ Cổng 3 dùng NGƯỠNG chứ không đòi khớp tuyệt đối, và đó là chủ ý: giữa lúc duyệt bảng và
-// lúc chạy, sale vẫn đang làm việc — tiền mới về, đơn mới tạo. Đòi khớp tuyệt đối là một cổng
-// không bao giờ qua được, và một cổng không bao giờ qua được sẽ bị người ta tắt.
+// ⚠️ ĐÃ BỎ "NGƯỠNG LỆCH". Bản trước cho lệch tới 25 khoản, lý do *"sale vẫn đang làm việc giữa
+// lúc duyệt và lúc chạy"*. Chủ dự án chốt 18/09: **khớp tuyệt đối, lệch thì ROLLBACK** — và
+// điều đó đúng hơn lập luận cũ của tôi: transaction rollback được, nên một lượt bị chặn không
+// tốn gì ngoài một lần chạy lại, còn một lượt ghi lệch bảng-đã-duyệt thì không ai biết nó lệch
+// cái gì. Lập luận "cổng quá chặt sẽ bị người ta tắt" chỉ đúng với cổng KHÔNG rollback được.
 import { currentDbHost } from "./_load-env";
 import { db } from "../lib/db";
 import { kiemQuyen, inQuyen } from "./_kiem-quyen";
-import { quetKhoanCanGan, ganOrderItemChoDon, type KhoanCanGan } from "../lib/finance/backfill-orderitem";
+import {
+  quetKhoanCanGan,
+  ganOrderItemMotCau,
+  ghiAuditBackfill,
+} from "../lib/finance/backfill-orderitem";
 
 const MA_XAC_NHAN = "BACKFILL-146";
-
-/** Mốc chủ dự án duyệt 17/09. */
-const MOC_KHOAN = 146;
-/** Lệch quá bấy nhiêu khoản thì DỪNG — xem chú thích cổng 3. */
-const NGUONG_LECH = 25;
 
 const vnd = (n: number) => n.toLocaleString("vi-VN");
 const log = (s: string) => {
@@ -41,80 +46,97 @@ const ACTOR = {
   name: "Backfill orderItemId (workflow)",
 };
 
+/** Lỗi canh sẵn để rollback — xem cổng 4. */
+const LOI_LECH = "__SO_DONG_LECH__";
+
+/** `null` = không truyền; `NaN` = truyền nhưng không phải số nguyên ≥ 0. */
+function docSoDuyet(): number | null {
+  const a = process.argv.find((x) => x.startsWith("--expect="));
+  if (!a) return null;
+  const n = Number(a.slice("--expect=".length));
+  return Number.isInteger(n) && n >= 0 ? n : Number.NaN;
+}
+
 async function main() {
-  const apply = process.argv.includes(`--confirm=${MA_XAC_NHAN}`);
+  const coMa = process.argv.includes(`--confirm=${MA_XAC_NHAN}`);
+  const soDuyet = docSoDuyet();
 
   const quyen = await kiemQuyen(db);
   log(`Đích: ${currentDbHost()}`);
-  inQuyen(quyen, apply);
-  if (apply && quyen.ghiDuoc === false) {
-    log("::error::Đã gõ chuỗi xác nhận nhưng kết nối CHỈ ĐỌC — workflow đang dùng sai secret.");
-    process.exit(1);
-  }
+  inQuyen(quyen, coMa);
   log("");
 
+  // ── XEM TRƯỚC (luôn chạy, kể cả ở lượt ghi) ───────────────────────────────
+  // In kế hoạch vào log ngay trước khi ghi, nên log của lượt ghi tự mang theo bằng chứng
+  // "đã gắn đúng cái gì".
   const q = await quetKhoanCanGan(db);
   log(`SẼ GẮN: ${q.khoan.length} khoản / ${q.soDon} đơn / ${vnd(q.tongTien)}đ`);
   log(
-    `KHÔNG gắn: đơn ≥2 con ${q.donNhieuCon.soKhoan} khoản (${vnd(q.donNhieuCon.tongTien)}đ) · ` +
-      `đơn không có dòng hàng ${q.donKhongCoDong.soKhoan} · ` +
-      `ngoài lọc đơn nhận tiền ${q.ngoaiLocDonNhanTien.soKhoan}`,
+    `Bị loại — trạng thái đơn: ${q.biLoaiTrangThai.soKhoan} khoản ` +
+      `(${vnd(q.biLoaiTrangThai.tongTien)}đ)` +
+      (q.biLoaiTrangThai.danhSach.length > 0
+        ? `: ${q.biLoaiTrangThai.danhSach.map((x) => `${x.orderCode}/${x.trangThaiDon}`).join(", ")}`
+        : ""),
   );
+  log(`Bị loại — đơn xoá mềm: ${q.biLoaiXoaMem.soKhoan} khoản (${vnd(q.biLoaiXoaMem.tongTien)}đ)`);
+  log(
+    `Ngoài tập đối chiếu — đơn ≥2 con: ${q.donNhieuCon.soKhoan} khoản ` +
+      `(${vnd(q.donNhieuCon.tongTien)}đ) · đơn 0 dòng: ${q.donKhongCoDong.soKhoan} · ` +
+      `bút toán khác: ${q.butToanKhac.soKhoan}`,
+  );
+  log("");
 
-  const lech = Math.abs(q.khoan.length - MOC_KHOAN);
-  if (lech > NGUONG_LECH) {
-    log(
-      `::error::Lệch mốc đã duyệt quá xa: nay ${q.khoan.length} khoản, mốc ${MOC_KHOAN} ` +
-        `(lệch ${lech} > ngưỡng ${NGUONG_LECH}). Chạy lại bản XEM TRƯỚC, đối chiếu nguyên nhân, ` +
-        `rồi xin duyệt bảng mới. KHÔNG ghi gì.`,
-    );
+  if (Number.isNaN(soDuyet)) {
+    log("::error::`--expect` không phải số nguyên ≥ 0. KHÔNG ghi gì.");
     process.exit(1);
   }
-  if (lech > 0) log(`(lệch ${lech} khoản so với mốc ${MOC_KHOAN} — trong ngưỡng ${NGUONG_LECH})`);
-
-  if (!apply) {
-    log("");
-    log(`XEM TRƯỚC — không ghi gì. Muốn ghi thật: truyền --confirm=${MA_XAC_NHAN}`);
+  if (coMa && soDuyet === null) {
+    log("::error::Có `--confirm` nhưng THIẾU `--expect=<số khoản của bảng đã duyệt>`. KHÔNG ghi gì.");
+    process.exit(1);
+  }
+  if (!coMa) {
+    log("XEM TRƯỚC — không ghi gì.");
+    log(`Muốn ghi thật: --confirm=${MA_XAC_NHAN} --expect=<số khoản của bảng đã duyệt>`);
     return;
   }
-
-  // Gom theo ĐƠN: một transaction mỗi đơn, một dòng AuditLog mỗi đơn.
-  const theoDon = new Map<string, { code: string; khoan: KhoanCanGan[] }>();
-  for (const k of q.khoan) {
-    const cum = theoDon.get(k.orderId) ?? { code: k.orderCode, khoan: [] };
-    cum.khoan.push(k);
-    theoDon.set(k.orderId, cum);
+  if (quyen.ghiDuoc === false) {
+    log("::error::Đã gõ chuỗi xác nhận nhưng kết nối CHỈ ĐỌC — workflow đang dùng sai secret.");
+    process.exit(1);
   }
 
-  log("");
-  log(`Bắt đầu ghi — ${theoDon.size} đơn.`);
-  let tongGan = 0;
-  let tongBoQua = 0;
-  let donLoi = 0;
+  // ── GHI ───────────────────────────────────────────────────────────────────
+  log(`Bắt đầu ghi. Số đã duyệt: ${soDuyet}.`);
+  let kq: { daGan: number; soDon: number } | undefined;
+  try {
+    kq = await db.$transaction(
+      async (tx) => {
+        // MỘT câu UPDATE, tự kiểm lại NĂM điều kiện trong cùng câu. Nó KHÔNG nhận id nào từ
+        // bước quét ở trên — bước ấy chỉ để IN RA và để lấy con số so sánh.
+        const dong = await ganOrderItemMotCau(tx);
 
-  for (const [orderId, cum] of theoDon) {
-    try {
-      const r = await db.$transaction((tx) =>
-        ganOrderItemChoDon(tx, { orderId, orderCode: cum.code, khoan: cum.khoan, actor: ACTOR }),
-      );
-      tongGan += r.daGan;
-      tongBoQua += r.boQua;
-      if (r.boQua > 0) {
-        // Bỏ qua là LÀNH: `updateMany` có `orderItemId: null` trong `where`, nên 0 dòng đổi
-        // nghĩa là ai đó vừa gắn tay khoản ấy. Ta không đè lên lựa chọn của con người.
-        log(`  ${cum.code}: gắn ${r.daGan}, bỏ qua ${r.boQua} (đã được gắn trước đó)`);
-      }
-    } catch (e) {
-      // MỘT đơn lỗi không được giết cả lượt: lệnh này idempotent nên phần đã ghi vẫn đúng và
-      // chạy lại chỉ nhặt phần còn lại. Dừng cả lượt vì một đơn là biến một sự cố nhỏ thành
-      // một lượt chạy dở dang mà không ai biết đã tới đâu.
-      donLoi += 1;
-      log(`::warning::${cum.code}: LỖI — ${e instanceof Error ? e.message : String(e)}`);
-    }
+        // CỔNG 4 — nằm TRONG transaction, sau UPDATE, TRƯỚC commit.
+        if (dong.length !== soDuyet) {
+          log(
+            `::error::Số dòng bị ảnh hưởng (${dong.length}) ≠ số đã duyệt (${soDuyet}). ` +
+              `ROLLBACK — không ghi gì. Chạy lại bản XEM TRƯỚC và xin duyệt bảng mới.`,
+          );
+          throw new Error(LOI_LECH);
+        }
+
+        const don = await ghiAuditBackfill(tx, { dong, actor: ACTOR });
+        return { daGan: dong.length, soDon: don };
+      },
+      // Transaction tương tác mặc định cắt ở 5 giây. Đây là một câu UPDATE trên ~150 dòng cộng
+      // ~120 dòng AuditLog qua WAN sang Supabase — trần mặc định quá ngắn, và bị cắt giữa
+      // đường thì ta mất chính cái transaction đang bảo vệ mình.
+      { timeout: 120_000, maxWait: 15_000 },
+    );
+  } catch (e) {
+    if (e instanceof Error && e.message === LOI_LECH) process.exit(1);
+    throw e;
   }
 
-  log("");
-  log(`XONG: gắn ${tongGan} khoản · bỏ qua ${tongBoQua} · đơn lỗi ${donLoi}`);
+  log(`XONG: gắn ${kq.daGan} khoản trên ${kq.soDon} đơn (AuditLog 1 dòng/đơn).`);
 
   // Nghiệm thu ngay trong cùng lượt: quét lại, nhóm "sẽ gắn" phải về 0.
   const sau = await quetKhoanCanGan(db);
@@ -124,11 +146,7 @@ async function main() {
       `(${vnd(sau.donNhieuCon.tongTien)}đ) — phần này SALE tự chia.`,
   );
   if (sau.khoan.length !== 0) {
-    log("::error::Vẫn còn khoản của đơn MỘT con chưa gắn — xem log từng đơn ở trên.");
-    process.exit(1);
-  }
-  if (donLoi > 0) {
-    log("::error::Có đơn lỗi — xem ::warning:: ở trên. Chạy lại lượt nữa (idempotent).");
+    log("::error::Vẫn còn khoản của đơn MỘT con chưa gắn — xem log ở trên.");
     process.exit(1);
   }
 }

@@ -26,6 +26,10 @@ on:
         description: 'Gõ đúng "BACKFILL-146" để GHI. Để trống = chỉ xem trước.'
         required: false
         type: string
+      so_da_duyet:
+        description: 'Số khoản "SẼ GẮN" của bảng XEM TRƯỚC đã được duyệt (vd 146). Lệch ⇒ ROLLBACK.'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -60,9 +64,14 @@ jobs:
       - name: 1) Xem trước — KHÔNG ghi gì
         run: pnpm exec tsx scripts/backfill-orderitem-apply.ts
 
+      # Hai thứ gõ tay, và `so_da_duyet` là thứ buộc lượt ghi khớp với đúng cái BẢNG ĐƯỢC
+      # DUYỆT — không phải với "bất cứ gì DB đang có lúc này". Script so số dòng UPDATE thật
+      # với số này TRONG transaction rồi NÉM nếu lệch ⇒ rollback.
       - name: 2) GẮN THẬT
         if: inputs.xac_nhan == 'BACKFILL-146'
-        run: pnpm exec tsx scripts/backfill-orderitem-apply.ts --confirm=BACKFILL-146
+        run: |
+          [ -n "${{ inputs.so_da_duyet }}" ] || { echo "::error::Thiếu input so_da_duyet."; exit 1; }
+          pnpm exec tsx scripts/backfill-orderitem-apply.ts             --confirm=BACKFILL-146 --expect=${{ inputs.so_da_duyet }}
 
       - name: 2b) Bỏ qua bước ghi (không gõ chuỗi xác nhận)
         if: inputs.xac_nhan != 'BACKFILL-146'
