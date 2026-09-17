@@ -137,6 +137,12 @@ Hệ quả: CS1 và CS2 phải ánh xạ về cùng một `orgCode`; `chonCoSoZa
 và `?org=cs2` không có đích để rơi về. Hai mục nghiệm thu ⑤ (đổi cơ sở) và ⑥ (cách ly) vì
 thế ghi **"CHƯA KIỂM ĐƯỢC — thiếu org thứ hai bên fork"**, KHÔNG phải ĐẠT.
 
+🔴 **ĐỌC `NỢ-8` TRƯỚC KHI LÀM PHẦN NÀY (17/09/2026).** Kế hoạch 6 bước dưới đây tách org
+theo **CƠ SỞ** (cs1/cs2). Sau khi phát hiện nhiều môi trường Sata cùng bắn vé vào một org,
+việc tách phải tính **theo MÔI TRƯỜNG trước** (`test` / `prod` / `local`), rồi mới tới cơ sở.
+Dựng theo kế hoạch cũ rồi phải làm lại là nhân bản tài khoản thêm một lượt nữa. Hai nợ này
+**thi công CHUNG một lượt** — kế hoạch gộp nằm ở `NỢ-8`.
+
 **Việc hạ tầng GĐ0 — các bước để chạy một lượt:**
 
 1. **Fork** — tạo tổ chức thứ hai (ví dụ tên `Sata Robo — CS2`). Ghi lại `organizations.id`.
@@ -241,6 +247,107 @@ năng **rớt nick, phải quét QR lại**. Giữa lượt nghiệm thu thì c�
 
 **Gộp vào đợt nào:** làm cùng `NỢ-6` (dựng org thứ hai bên fork) — lúc đó dù sao cũng phải
 restart fork, nên trả giá một lần.
+
+### 🔴 NỢ-8 · NHIỀU MÔI TRƯỜNG SATA BẮN VÉ SSO VÀO **MỘT** ORG FORK — phải xử TRƯỚC KHI LÊN PROD
+
+**Chốt phương án: A′ — mỗi môi trường một org riêng bên fork. KHÔNG đụng lõi SSO.**
+
+#### Nguyên nhân THẬT (đo 17/09/2026)
+
+Fork ghép người theo `externalId = claims.sub = User.id` **bên Sata**
+(`backend/src/modules/auth/sata-sso-service.ts:191`). Mà `User.id` chỉ **duy nhất trong
+phạm vi MỘT database**. Một org fork nhận vé từ nhiều môi trường ⇒ **cùng một người thành
+nhiều tài khoản**.
+
+Ba thế hệ id cho cùng hai tài khoản, đo được:
+
+| Thế hệ | `uat.admin` | `uat.sale1` | Nguồn | Tài khoản fork |
+|---|---|---|---|---|
+| vân `10l4` | `cmtorabag00031…` | `cmtorabb5000b1…` | **`satarobo_local`** (đã xác nhận) | tạo 07–08/09 |
+| vân `d755` | `cmtcd2f6f0003d…` | `cmtcd2idk000bd…` | **DB của env `test`** *(chưa chốt — xem dưới)* | tạo 16–17/09 |
+| vân `x6d5` | `cmtaew99p0003…` | `cmtaewc1n000b…` | Supabase DEV `mqvojw…` | **chưa từng** vào fork |
+
+Bộ đếm giữa **giống hệt** ở cả ba (`0003` admin, `000b` sale1) — cùng thứ tự seed; chỉ vân
+máy khác. Tức **ba lượt seed trên ba database**, KHÔNG phải `User.id` bị đổi.
+
+⚠️ **Giả thuyết đầu của tôi SAI và đã bị loại bằng mã:** seed UAT dùng
+`upsert({ where: { email } })` (`prisma/seed-uat/00-tai-khoan.ts:127-128`) nên chạy lại seed
+**giữ nguyên `id`**. "Reseed sinh cuid mới" là kết luận sai.
+
+#### Câu còn mở — phải chốt trước khi thi công
+
+Vân `d755` đến từ đâu: **DB của env `test`**, hay **PROD**? Fork cho phép nhúng từ cả hai
+(`frame-ancestors … https://admin.satarobo.vn https://test.satarobo.vn`). Nếu là PROD thì
+**người dùng thật đã SSO vào cùng org này rồi**, và mức khẩn cấp cao hơn hẳn.
+
+Cách chốt: Vercel → env `test` → `DATABASE_URL` → so **project-ref** với `mqvojwccdhqbagfnjhfo`.
+Khác ⇒ `d755` là DB của `test`. Giống ⇒ `d755` chỉ có thể là PROD.
+
+#### 🔴 Điều kiện xảy ra trên PROD
+
+**Prod sẽ là môi trường THỨ TƯ bắn vé vào cùng org fork nếu không tách org trước.** Hậu quả
+với dữ liệu thật, không phải giả định:
+
+- Mỗi nhân viên có **hai tài khoản fork** — một từ `test`, một từ prod — và fork không biết
+  đó là một người.
+- Email trùng ⇒ tài khoản thứ hai sinh ra **KHÔNG CÓ EMAIL**
+  (`sata-sso-service.ts:283-285`), nên trên màn quản lý nick nó hiện là một dòng trống,
+  người vận hành **gán quyền nhầm tài khoản** — đúng chuyện đã xảy ra ngày 17/09.
+- `capQuyenNickZalocrm` đẩy quyền theo `externalIds` của **một** môi trường ⇒ mỗi lượt cron
+  từ môi trường này sẽ **GỠ** quyền mà môi trường kia vừa cấp (`PUT …/access` thay cả tập).
+  Hai môi trường cùng chạy cron = quyền **lật qua lật lại**, Sale mất quyền đọc nick giữa
+  ca làm việc.
+- Hội thoại và tin nhắn thật gắn vào tài khoản nào thì nằm ở đó; đổi môi trường là **mất
+  lịch sử phân công** dù dữ liệu vẫn còn.
+
+**Phải dựng xong TRƯỚC ngày Sale dùng thật** — xem kế hoạch gộp bên dưới.
+
+#### Tình trạng mồ côi hiện tại (đo 17/09, ĐỪNG XOÁ)
+
+7 tài khoản fork; **4 nghi mồ côi** (2 bản `uat.*` cũ từ `satarobo_local`, 2 bản
+`@chat-us05.test.local`). **Không** tài khoản nào giữ hội thoại / contact / tin nhắn —
+toàn bộ dữ liệu thật (479 contact, 3 nick) thuộc tài khoản `owner`, vốn **không** sinh từ
+SSO. Bốn tài khoản kia chỉ mang `activity_logs` (`uat.admin` cũ: 639 dòng).
+
+⇒ **Không xoá.** Xoá là mất dấu vết kiểm toán mà không thu lại gì. Xử lý đúng là **bỏ mặc
+chúng ở org cũ** sau khi tách org.
+
+#### Kế hoạch thi công — GỘP với `NỢ-6`
+
+Cả hai đều cần dựng org bên fork, nên làm **một lượt**, một lần restart:
+
+1. **Fork** — dựng org theo MÔI TRƯỜNG, không theo cơ sở nữa. Tối thiểu:
+   `sata-test` và `sata-prod`. (Nếu vẫn muốn tách CS1/CS2 như `NỢ-6` thì thành
+   `test-cs1`, `test-cs2`, `prod-cs1`, `prod-cs2` — quyết định trước khi tạo, đổi sau là
+   nhân bản thêm một lượt nữa.)
+2. **Fork** — mỗi org một `app_settings.public_api_key` riêng.
+   Kiểm: `select count(distinct org_id) from app_settings where setting_key='public_api_key';`
+3. **Fork** — nối nick vào đúng org của môi trường sẽ dùng nó. Org không nick thì
+   `capQuyenNickZalocrm` trả `CHUA_CO_NICK` và bỏ qua — vô hại.
+4. **Vercel env `test`** — `ZALOCRM_API_KEYS` + `ZALOCRM_WEBHOOK_SECRETS` trỏ org `test`.
+   **Vercel env Production** — trỏ org `prod`, **khoá và bí mật KHÁC**.
+5. **Sata** — `zalocrm.orgCodes` khai theo từng môi trường (tham số vận hành nằm trong DB
+   nên mỗi môi trường tự có bản riêng — kiểm lại cả hai sau khi đổi).
+6. **Máy dev** — hoặc trỏ về org `test`, hoặc dựng org `local` riêng. Đừng để localhost
+   bắn vé vào org của `test`: đó chính là cách bốn tài khoản mồ côi hiện nay ra đời.
+7. **Kiểm sau khi dựng** — đăng nhập cùng một người từ `test` và từ prod, xác nhận fork
+   sinh **hai tài khoản ở HAI org khác nhau** và cron của môi trường này **không gỡ** quyền
+   của môi trường kia.
+
+#### Việc kèm theo — rà lại tài liệu
+
+Phát hiện này mâu thuẫn với một câu đang nằm trong `CLAUDE.md:326`:
+*"DB của env `test` CHÍNH LÀ DB dev"*. Câu đó đã làm lệch hướng điều tra một lượt. Bốn chỗ
+khác dựa vào cùng giả định, phải rà cùng lúc:
+
+| Chỗ | Rủi ro nếu giả định sai |
+|---|---|
+| `CLAUDE.md:326` | gốc của giả định |
+| `docs/chat-realtime/04-migrate-chat-cu.md:105` | *"chạy `--apply` ở local là đổi luôn dữ liệu trên test"* — **thao tác**, sai là chạy nhầm DB |
+| `docs/chat-realtime/00-dieu-chinh-cho-repo.md:30` | *"chung 1 project Supabase → chung bộ key"* — sai là cấu hình Realtime hỏng |
+| `Document/4-test/huong-dan-quy-trinh-theo-role.md:3, :316` | *"site test (DB dev đã seed full)"* — sai là hướng dẫn nghiệm thu trỏ nhầm DB |
+
+**CHƯA sửa** — chờ chủ dự án đối chiếu project-ref rồi mới sửa hoặc xác nhận lại.
 
 ### NỢ-3 · Bố cục cột bảng Lead — CHỜ CHỦ DỰ ÁN CHỐT
 Đã lấy bản `main` (lưu `localStorage`, mỗi người một bộ) và **gỡ tầng lưu theo người trong
