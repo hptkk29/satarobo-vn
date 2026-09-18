@@ -14,6 +14,7 @@ import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { passesScope, scopedDb } from "@/lib/db-scope";
 import { crossCenterError } from "@/lib/enrollment-flow";
 import { syncConversationMembership } from "@/lib/chat/sync-membership";
+import { ghiTuongTacLeadBoQuaLoi, layNguCanhGhiDanh } from "@/lib/lead/tuong-tac/ghi";
 
 type Sdb = ReturnType<typeof scopedDb>;
 
@@ -478,6 +479,11 @@ export async function deleteEnrollmentAction(
 
   const { actorId, actorName } = getAuditActor(session);
 
+  // ĐỌC TRƯỚC khi xoá. Soft-delete không làm mất dòng nên đọc sau vẫn ra, nhưng chuỗi tra
+  // đi qua `student`/`class`/`leadChild` — đọc trước là không phụ thuộc vào việc lượt xoá
+  // có kéo theo quan hệ nào hay không.
+  const nguCanh = await layNguCanhGhiDanh(id);
+
   try {
     await sdb.$transaction(async (txRaw) => {
       const tx = txRaw as unknown as Prisma.TransactionClient;
@@ -503,6 +509,21 @@ export async function deleteEnrollmentAction(
     }, { timeout: 30_000, maxWait: 10_000 });
   } catch {
     return { ok: false, error: "Không thể xoá đăng ký này" };
+  }
+
+  if (nguCanh) {
+    await ghiTuongTacLeadBoQuaLoi({
+      leadId: nguCanh.leadId,
+      actorId,
+      actorName,
+      moc: new Date(),
+      sk: {
+        viec: "ghi-danh.go",
+        tenCon: nguCanh.tenCon,
+        tenLop: nguCanh.tenLop,
+        lyDo: null,
+      },
+    });
   }
 
   revalidatePath("/enrollments");
@@ -726,6 +747,21 @@ export async function enrollStudent(
       await syncConversationMembership(tx, classId);
       return created.id;
     });
+
+    // Dòng lịch sử trên hồ sơ lead — SAU transaction, cửa BỎ QUA LỖI (đường này chạm
+    // tiền: ghi danh là gốc của công nợ). `layNguCanhGhiDanh` trả null cho học viên chưa
+    // từng đi qua convert, và null là câu trả lời ĐÚNG: không có lead nào để kể.
+    const nguCanh = await layNguCanhGhiDanh(enrollmentId);
+    if (nguCanh) {
+      await ghiTuongTacLeadBoQuaLoi({
+        leadId: nguCanh.leadId,
+        actorId,
+        actorName,
+        moc: new Date(),
+        sk: { viec: "ghi-danh.them", tenCon: nguCanh.tenCon, tenLop: nguCanh.tenLop },
+      });
+    }
+
     revalidatePath("/enrollments");
     revalidatePath(`/classes/${classId}/edit`);
     return { ok: true, data: { enrollmentId } };
@@ -885,6 +921,24 @@ export async function changeEnrollmentStatus(
     };
   }
 
+  {
+    const nguCanh = await layNguCanhGhiDanh(data.enrollmentId);
+    if (nguCanh) {
+      await ghiTuongTacLeadBoQuaLoi({
+        leadId: nguCanh.leadId,
+        ...getAuditActor(session),
+        moc: new Date(),
+        sk: {
+          viec: "ghi-danh.doi-trang-thai",
+          tenCon: nguCanh.tenCon,
+          tenLop: nguCanh.tenLop,
+          tu: enrollment.status as EnrollmentStatus,
+          den: data.newStatus as EnrollmentStatus,
+        },
+      });
+    }
+  }
+
   revalidatePath("/enrollments");
   revalidatePath(`/enrollments/${data.enrollmentId}/edit`);
   revalidatePath(`/classes/${enrollment.classId}/edit`);
@@ -957,6 +1011,8 @@ export async function transferEnrollment(
     where: { id: data.targetClassId, deletedAt: null },
     select: {
       id: true,
+      // Tên lớp ĐÍCH cho dòng lịch sử ("Chuyển An từ lớp A sang lớp B").
+      name: true,
       courseId: true,
       centerId: true,
       maxStudents: true,
@@ -1107,6 +1163,25 @@ export async function transferEnrollment(
 
       return newEnrollment.id;
     });
+
+    // Đọc ngữ cảnh từ ghi danh CŨ: nó mang `leadChildId` (nếu có), còn ghi danh mới thì
+    // không — `tx.enrollment.create` ở trên không set cột đó, và CỐ Ý không set (xem
+    // `layNguCanhGhiDanh`). Lớp MỚI lấy từ `targetClass`, đã đọc sẵn ở trên.
+    const nguCanh = await layNguCanhGhiDanh(oldEnrollment.id);
+    if (nguCanh) {
+      await ghiTuongTacLeadBoQuaLoi({
+        leadId: nguCanh.leadId,
+        actorId,
+        actorName,
+        moc: new Date(),
+        sk: {
+          viec: "ghi-danh.chuyen-lop",
+          tenCon: nguCanh.tenCon,
+          lopCu: nguCanh.tenLop,
+          lopMoi: targetClass.name,
+        },
+      });
+    }
 
     revalidatePath("/enrollments");
     revalidatePath(`/classes/${oldEnrollment.classId}/edit`);

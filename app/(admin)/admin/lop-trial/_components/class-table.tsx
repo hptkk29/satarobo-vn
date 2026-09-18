@@ -62,8 +62,9 @@ export function ClassTable({
             <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="px-4 py-3 font-semibold">Lớp</th>
+                <th className="px-4 py-3 font-semibold">Sale</th>
+                <th className="px-4 py-3 font-semibold">Học viên</th>
                 <th className="px-4 py-3 font-semibold">Buổi kế tiếp</th>
-                <th className="px-4 py-3 font-semibold">Sĩ số</th>
                 <th className="px-4 py-3 font-semibold">Số buổi</th>
                 <th className="px-4 py-3 font-semibold">Trạng thái</th>
                 <th className="px-4 py-3 font-semibold">Thao tác</th>
@@ -73,7 +74,7 @@ export function ClassTable({
               {rows.length === 0 && (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={7}
                     className="px-4 py-8 text-center text-muted-foreground"
                   >
                     Chưa có lớp trải nghiệm nào.
@@ -81,10 +82,6 @@ export function ClassTable({
                 </tr>
               )}
               {rows.map((r) => {
-                // 28/08 — `capacity === null` là lớp KHÔNG giới hạn sĩ số, không
-                // phải lớp sức chứa 0. So `>= null` trong JS ra `false` một cách tình
-                // cờ đúng, nhưng dựa vào đó là để bẫy lại cho người sau.
-                const full = r.capacity !== null && r.activeUsed >= r.capacity;
                 const dongRoi = TRANG_THAI_DA_DONG.has(r.status);
                 return (
                   <tr key={r.id} className="hover:bg-muted">
@@ -99,6 +96,59 @@ export function ClassTable({
                         {r.code}
                       </div>
                     </td>
+                    <td className="px-4 py-3">
+                      {r.sale ? (
+                        <>
+                          <span className="text-foreground">{r.sale.ten}</span>
+                          {r.sale.soSaleKhac > 0 && (
+                            <span className="text-muted-foreground">
+                              {" "}
+                              +{r.sale.soSaleKhac}
+                            </span>
+                          )}
+                          {/*
+                            Lớp tạo trước 18/09/2026 không có người tạo, tên ở đây là SUY
+                            từ Sale phụ trách lead của các con trong lớp. Nói ra chứ không
+                            để người đọc tưởng đó là người tạo lớp (luật 12).
+                          */}
+                          {r.sale.suyTuLead && (
+                            <div
+                              className="text-xs text-muted-foreground"
+                              title="Lớp tạo trước 18/09/2026 nên không lưu người tạo — tên này suy từ Sale phụ trách lead của các con trong lớp."
+                            >
+                              theo lead
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {r.hocVien.length === 0 ? (
+                        <span className="text-muted-foreground">Chưa có</span>
+                      ) : (
+                        <>
+                          {/*
+                            Hiện 2 tên + "và N con nữa": cột này THAY cột "Sĩ số" nên phải
+                            còn đọc ra được SỐ, mà không để một lớp 12 con đẩy bảng giãn
+                            ngang trên điện thoại. `title` giữ đủ tên cho người cần tra.
+                          */}
+                          <span className="text-foreground" title={r.hocVien.join(", ")}>
+                            {r.hocVien.slice(0, 2).join(", ")}
+                          </span>
+                          {r.hocVien.length > 2 && (
+                            <span
+                              className="text-muted-foreground"
+                              title={r.hocVien.join(", ")}
+                            >
+                              {" "}
+                              và {r.hocVien.length - 2} con nữa
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </td>
                     <td className="whitespace-nowrap px-4 py-3">
                       {r.nextSessionDate ? (
                         <span className="text-foreground">
@@ -109,18 +159,6 @@ export function ClassTable({
                           Chưa xếp buổi
                         </span>
                       )}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3">
-                      <span
-                        className={
-                          full
-                            ? "font-semibold text-state-danger-ink"
-                            : "text-foreground"
-                        }
-                      >
-                        {r.activeUsed}
-                        {r.capacity === null ? "" : `/${r.capacity}`}
-                      </span>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-foreground">
                       {r.sessionCount}

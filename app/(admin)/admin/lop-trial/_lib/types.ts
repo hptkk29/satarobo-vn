@@ -28,10 +28,26 @@ export type ClassRow = {
   /** 28/08 — giờ ở CẤP LỚP đã thôi dùng; giờ thật nằm ở từng buổi. `null` = lớp mới. */
   startTime: string | null;
   endTime: string | null;
-  /** `null` = KHÔNG giới hạn sĩ số (mặc định từ 28/08). */
-  capacity: number | null;
-  /** Số ghi danh còn ACTIVE — mẫu số hiển thị "n/capacity". */
-  activeUsed: number;
+  /**
+   * Tên các con đang xếp trong lớp (ghi danh còn ACTIVE), theo thứ tự xếp vào.
+   *
+   * 18/09/2026 — chủ dự án: "sau khi add học viên thì hiển thị ra 1 cột học viên nào,
+   * bỏ cột sĩ số đi". Cột này THAY cột "Sĩ số": `hocVien.length` đã là sĩ số, nên hai
+   * cột cạnh nhau chỉ là một con số nói hai lần. `capacity`/`activeUsed` gỡ khỏi type
+   * luôn — để `tsc` chỉ ra ngay nếu còn chỗ nào đọc, chứ không để lại trường chết.
+   */
+  hocVien: string[];
+  /**
+   * Sale phụ trách lớp. `null` = không suy ra được (lớp cũ, chưa có con nào xếp vào).
+   *
+   * `suyTuLead = true` nghĩa là tên này KHÔNG phải người tạo lớp (lớp tạo trước
+   * 18/09/2026 nên `createdById` là NULL) mà suy từ Sale phụ trách lead của các con
+   * trong lớp. Panel PHẢI nói rõ điều đó — nhãn không được nhận vơ (luật 12).
+   *
+   * `soSaleKhac` > 0 khi lớp chứa con của NHIỀU Sale khác nhau (chỉ xảy ra ở nhánh suy
+   * từ lead). Hiện một tên và im về những người còn lại là nói dối bằng cách bỏ bớt.
+   */
+  sale: { ten: string; suyTuLead: boolean; soSaleKhac: number } | null;
   sessionCount: number;
   configName: string | null;
   /**

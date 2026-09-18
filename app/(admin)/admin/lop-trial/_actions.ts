@@ -31,6 +31,13 @@ import {
   notifyTrialTeacherAssigned,
 } from "@/lib/trial/service";
 import { getSetting } from "@/lib/settings/service";
+import { getAuditActor } from "@/lib/audit/log";
+import {
+  ghiTuongTacNhieuLead,
+  ghiTuongTacTheoConLead,
+  layConTheoGhiDanhTrial,
+  layLeadTrongLopTrial,
+} from "@/lib/lead/tuong-tac/ghi";
 import {
   actorCanUseCenter,
   loadScopedTrialClass,
@@ -117,6 +124,8 @@ export async function createLopTrialClassAction(
   const res = await createTrialClass({
     centerId: data.centerId,
     courseId: data.courseId ?? null,
+    // Tên do người dùng gõ; bỏ trống ⇒ server sinh theo quy ước (xem `createTrialClass`).
+    name: data.name ?? null,
     configId: null,
     // QĐ-R2-1 — lớp là slot tái sử dụng, KHÔNG gắn ngày khai giảng. Buổi tạo ad-hoc.
     startDate: null,
@@ -451,6 +460,29 @@ export async function updateLopTrialSessionAction(
     },
   });
 
+  // Dòng lịch sử cho các lead có con trong lớp — CHỈ khi lịch thật sự dời. `doiLich` đã
+  // được tính ở trên cho việc gửi thông báo giáo viên; dùng lại chính nó, vì lượt sửa chỉ
+  // đổi phòng/giáo viên/ghi chú thì phụ huynh không phải đi đâu và không có gì để kể.
+  if (doiLich) {
+    const lopCuaBuoi = await loadScopedTrialClass(ctx.actor, ses.trialClassId);
+    await ghiTuongTacNhieuLead({
+      // Đọc SAU `update` là được: `update` đổi ngày/giờ của BUỔI, không đụng trạng thái
+      // ghi danh, nên danh sách lead trong lớp không thay đổi vì lượt này.
+      leadIds: await layLeadTrongLopTrial(ses.trialClassId),
+      ...getAuditActor(ctx.session),
+      moc: new Date(),
+      sk: {
+        viec: "trial.doi-lich",
+        tenLop: lopCuaBuoi?.name ?? "(không rõ lớp)",
+        ngayTruoc: ses.date,
+        gioTruoc: `${ses.startTime}–${ses.endTime}`,
+        ngaySau: date,
+        gioSau: `${data.startTime}–${data.endTime}`,
+        lyDo: data.reason,
+      },
+    });
+  }
+
   const moTa = `Buổi ${ses.seq} · ${nhanNgayVn(date)} ${data.startTime}–${data.endTime}`;
   // Người CŨ bị thay: báo là buổi không còn của họ nữa.
   if (ses.teacherId && ses.teacherId !== gvMoi) {
@@ -508,6 +540,24 @@ export async function cancelLopTrialSessionAction(
     where: { id: data.sessionId },
     data: { status: "CANCELLED" },
   });
+
+  {
+    // Huỷ BUỔI không đụng trạng thái ghi danh (khác huỷ LỚP), nên đọc sau `update` vẫn ra
+    // đủ lead. Phụ huynh có con trong lớp là người trực tiếp bị ảnh hưởng — buổi biến
+    // khỏi lịch, nên hồ sơ lead phải kể lại việc đó.
+    const lopCuaBuoi = await loadScopedTrialClass(ctx.actor, ses.trialClassId);
+    await ghiTuongTacNhieuLead({
+      leadIds: await layLeadTrongLopTrial(ses.trialClassId),
+      ...getAuditActor(ctx.session),
+      moc: new Date(),
+      sk: {
+        viec: "trial.huy-buoi",
+        tenLop: lopCuaBuoi?.name ?? "(không rõ lớp)",
+        ngay: ses.date,
+        lyDo: data.reason,
+      },
+    });
+  }
 
   if (ses.teacherId) {
     await notifyTrialTeacherAssigned({
@@ -614,6 +664,16 @@ export async function enrollLeadChildLopTrialAction(input: {
       overCapacity: res?.overCapacity === true,
     };
   }
+
+  // Dòng lịch sử trên hồ sơ lead. `enrollLeadChild` đã commit nên đây là đường BỎ QUA LỖI
+  // (xem `ghi.ts`): một lỗi ghi lịch sử không được biến lượt xếp chỗ ĐÃ THÀNH CÔNG thành
+  // thông báo thất bại, vì người dùng sẽ bấm xếp lại và lần đó mới sinh dữ liệu sai.
+  await ghiTuongTacTheoConLead({
+    leadChildId: input.leadChildId,
+    ...getAuditActor(ctx.session),
+    moc: new Date(),
+    sk: (tenCon) => ({ viec: "trial.xep-lop", tenCon, tenLop: cls.name }),
+  });
 
   lamMoi(input.trialClassId);
   return { ok: true };
@@ -725,6 +785,13 @@ export async function unenrollLeadChildLopTrialAction(input: {
   });
   if (!res?.ok) return { ok: false, error: res?.error ?? "Gỡ học viên thất bại" };
 
+  await ghiTuongTacTheoConLead({
+    leadChildId: input.leadChildId,
+    ...getAuditActor(ctx.session),
+    moc: new Date(),
+    sk: (tenCon) => ({ viec: "trial.go-lop", tenCon, tenLop: cls.name }),
+  });
+
   lamMoi(input.trialClassId);
   return { ok: true };
 }
@@ -761,8 +828,21 @@ export async function cancelLopTrialClassAction(
   const cls = await loadScopedTrialClass(ctx.actor, trialClassId);
   if (!cls) return { ok: false, error: KHONG_THAY_LOP };
 
+  // ĐỌC TRƯỚC KHI HUỶ. `cancelTrialClass` đẩy mọi ghi danh sang CANCELLED, nên đọc sau
+  // là ra danh sách RỖNG và không lead nào biết vì sao con mình rơi khỏi lớp — lỗ hoàn
+  // toàn im lặng (không lỗi, không dòng nào, panel vẫn hiện bình thường).
+  const leadIds = await layLeadTrongLopTrial(trialClassId);
+
   const res = await cancelTrialClass({ trialClassId, actorId: ctx.session.user.id });
   if (!res?.ok) return { ok: false, error: res?.error ?? "Huỷ lớp thất bại" };
+
+  // Ghi SAU khi huỷ thành công: huỷ lỗi mà đã ghi thì lịch sử kể một việc không xảy ra.
+  await ghiTuongTacNhieuLead({
+    leadIds,
+    ...getAuditActor(ctx.session),
+    moc: new Date(),
+    sk: { viec: "trial.huy-lop", tenLop: cls.name, lyDo: null },
+  });
 
   lamMoi(trialClassId);
   return { ok: true };
@@ -808,6 +888,32 @@ export async function markLopTrialAttendanceAction(
       actorId: ctx.session.user.id,
     });
     if (!res?.ok) return { ok: false, error: res?.error ?? "Điểm danh thất bại" };
+  }
+
+  // Dòng lịch sử cho từng lead có con trong buổi. Vòng lặp trên có thể dừng giữa đường
+  // (chú thích ngay trên: không atomic cả buổi) — nhưng nếu dừng thì nó `return` ngay
+  // nên chỗ này chỉ chạy khi CẢ buổi đã ghi xong. Đừng dời nó vào trong vòng lặp: điểm
+  // danh lại một học viên là chuyện thường, và mỗi lượt sửa sẽ đẻ thêm một dòng.
+  const lopCuaBuoi = await loadScopedTrialClass(ctx.actor, ses.trialClassId);
+  const conTheoGhiDanh = await layConTheoGhiDanhTrial(
+    parsed.data.records.map((r) => r.trialEnrollmentId),
+  );
+  const nguoiGhi = getAuditActor(ctx.session);
+  for (const r of parsed.data.records) {
+    const con = conTheoGhiDanh.get(r.trialEnrollmentId);
+    if (!con) continue;
+    await ghiTuongTacNhieuLead({
+      leadIds: [con.leadId],
+      ...nguoiGhi,
+      moc: new Date(),
+      sk: {
+        viec: "trial.diem-danh",
+        tenCon: con.tenCon,
+        tenLop: lopCuaBuoi?.name ?? "(không rõ lớp)",
+        coMat: r.status === "PRESENT",
+        ngay: ses.date,
+      },
+    });
   }
 
   lamMoi(ses.trialClassId);

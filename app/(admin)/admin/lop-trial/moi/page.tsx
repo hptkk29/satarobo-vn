@@ -36,7 +36,12 @@ export default async function TaoLopTrialPage() {
         thêm buổi, vì lớp chưa có buổi thì không xếp được học viên.
       </p>
 
-      <CreateForm centers={centers} courses={courses} />
+      {/* `coSoCuaToi` — cơ sở của CHÍNH người đang mở màn, để form đặt mặc định.
+          Chủ dự án 18/09: "set mặc định cơ sở là cơ sở của sale đó nhưng vẫn có thể chọn
+          cơ sở khác". Bản cũ mặc định `centers[0]` — với Sale một cơ sở thì trùng nhau
+          nên không ai thấy, nhưng với người nhìn được nhiều cơ sở (Hội sở / Quản trị) thì
+          đó là cơ sở ĐẦU BẢNG CHỮ CÁI, không phải cơ sở của họ. */}
+      <CreateForm centers={centers} courses={courses} coSoCuaToi={session.user.centerId ?? null} />
     </div>
   );
 }

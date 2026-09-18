@@ -39,6 +39,7 @@ import { dotsGhiTuForm } from "@/lib/payments/ke-hoach-dot";
 import { laThuTienLinhHoatBat } from "@/lib/finance/feature";
 import { getRequestMetadata } from "@/lib/audit/headers";
 import { getAuditActor } from "@/lib/audit/log";
+import { ghiTuongTacLeadBoQuaLoi } from "@/lib/lead/tuong-tac/ghi";
 import { taoDotChoCon, huyDotChoCon } from "@/lib/finance/ghi-tien-don";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { soatGiaDon } from "@/lib/orders/price-guard";
@@ -892,6 +893,23 @@ export async function createOrderManualAction(input: unknown) {
     revalidatePath(`/orders/${created.id}`);
   }
 
+  // Dòng lịch sử trên hồ sơ lead — chỉ khi đơn có gắn lead (đơn bán lẻ tạo tay thì
+  // `leadId` là null và không có hồ sơ nào để kể).
+  //
+  // ⚠️ ĐẶT SAU TRANSACTION và dùng cửa BỎ QUA LỖI: đây là đường CHẠM TIỀN. Nhét lời gọi
+  // này vào trong `$transaction` ở trên là để một lỗi ghi LỊCH SỬ cuộn lại cả cái ĐƠN,
+  // cả phiếu thu, cả trừ kho — luật rollback của repo: `throw` trong callback là cuộn
+  // toàn bộ. Lịch sử không bao giờ được quyền giết nghiệp vụ tiền.
+  if (data.leadId) {
+    await ghiTuongTacLeadBoQuaLoi({
+      leadId: data.leadId,
+      actorId,
+      actorName,
+      moc: new Date(),
+      sk: { viec: "don.tao", maDon: created.code, tongTien: totalAmount },
+    });
+  }
+
   revalidatePath("/orders");
   if (productSnapshot) {
     revalidatePath("/products");
@@ -970,6 +988,9 @@ export async function changeOrderStatusAction(
     where: { id: orderId },
     select: {
       id: true,
+      // Mã đơn cho dòng lịch sử trên hồ sơ lead — người đọc cần biết ĐƠN NÀO đổi trạng
+      // thái, `id` (cuid) thì không nói gì với họ.
+      code: true,
       status: true,
       centerId: true,
       leadId: true,
@@ -1096,6 +1117,20 @@ export async function changeOrderStatusAction(
   revalidatePath(`/orders/${orderId}`);
   // S6 — đồng bộ trang lead/convert (đổi trạng thái đơn ảnh hưởng "đủ điều kiện chốt").
   if (order.leadId) {
+    // Dòng lịch sử — SAU transaction, cửa BỎ QUA LỖI (đường chạm tiền: transaction trên
+    // vừa ghi `Payment`, VOID phiếu thu, hết hạn mã QR).
+    await ghiTuongTacLeadBoQuaLoi({
+      leadId: order.leadId,
+      actorId,
+      actorName,
+      moc: new Date(),
+      sk: {
+        viec: "don.doi-trang-thai",
+        maDon: order.code,
+        tu: order.status,
+        den: parsed.data.toStatus,
+      },
+    });
     revalidatePath(`/leads/${order.leadId}`);
     revalidatePath(`/leads/${order.leadId}/convert`);
   }
@@ -1160,7 +1195,8 @@ export async function updateOrderNoteAction(
   const sdb = scopedDb(actor);
   const order = await sdb.order.findUnique({
     where: { id: orderId },
-    select: { id: true, centerId: true },
+    // `leadId` + `code` cho dòng lịch sử trên hồ sơ lead.
+    select: { id: true, centerId: true, leadId: true, code: true },
   });
   if (!order || !passesScope("Order", order, actor)) {
     return { ok: false as const, error: "Không tìm thấy đơn hàng" };
@@ -1173,6 +1209,15 @@ export async function updateOrderNoteAction(
     data: { internalNote: internalNote.trim() || null },
   });
   if (upd.count === 0) return { ok: false as const, error: "STALE_WRITE" };
+
+  if (order.leadId) {
+    await ghiTuongTacLeadBoQuaLoi({
+      leadId: order.leadId,
+      ...getAuditActor(session),
+      moc: new Date(),
+      sk: { viec: "don.sua-ghi-chu", maDon: order.code },
+    });
+  }
 
   revalidatePath(`/orders/${orderId}`);
   return { ok: true as const };
