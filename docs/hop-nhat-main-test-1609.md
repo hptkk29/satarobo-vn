@@ -349,6 +349,142 @@ khác dựa vào cùng giả định, phải rà cùng lúc:
 
 **CHƯA sửa** — chờ chủ dự án đối chiếu project-ref rồi mới sửa hoặc xác nhận lại.
 
+### NỢ-9 · NGƯỜI SSO LẦN ĐẦU KHÔNG ĐỌC ĐƯỢC NICK NÀO — ✅ ĐÃ VÁ 18/09/2026 (PR #299)
+
+**Đo 17/09/2026, tái hiện hai lần, có đối chứng dương.**
+
+Tài khoản fork chỉ sinh ra ở **lần SSO đầu tiên** của một người. `capQuyenNickZalocrm` thì
+đẩy quyền theo danh sách `externalIds` — fork bỏ qua id nào nó chưa biết (bộ đếm
+`unknown` / `chuaCoTaiKhoan` trong `capQuyenMotOrg`). Nên:
+
+> **Ai đăng nhập lần đầu SAU lượt cron gần nhất sẽ không có quyền đọc nick nào cho tới
+> lượt cron KẾ TIẾP.**
+
+Bằng chứng đo được:
+
+| | mốc | quyền |
+|---|---|---|
+| cron chạy | 10:41:24 | — |
+| `uat.giamdoc` SSO lần đầu ⇒ fork tạo tài khoản | **16:39:58** (sau 6 tiếng) | **0 nick** |
+| cron chạy lại | 17:0x | **2 nick** ✅ |
+| *(đối chứng dương)* `uat.sale1`, tài khoản có TRƯỚC lượt 10:41 | — | 2 nick suốt |
+
+Không phải lỗi phân quyền: `CENTER_MANAGER` **có** trong `VAI_DUOC_CAP_NICK`, và `role`
+`member` bên fork là **đúng thiết kế** — tầm nhìn của QLCS đến từ `ZaloAccountAccess`.
+
+#### Vì sao phải xử trước khi Sale dùng thật
+
+Trên prod cron chạy 5 phút một lượt ⇒ độ trễ **tới 5 phút**. Nghe nhỏ, nhưng hình dạng của
+nó rất xấu: **Sale mới vào ca mở hộp thư ra thấy TRỐNG, không một dòng chữ giải thích.**
+Họ sẽ báo hỏng, và người trực sẽ đi truy đúng cái đã tốn của chúng ta cả buổi 17/09 —
+`getZaloScope`, `zalo_account_access`, vai, cơ sở — trong khi chỉ cần đợi.
+
+Trên `test` còn tệ hơn: cron **không chạy theo lịch** (`NỢ-5`) nên độ trễ là **vô hạn**,
+phải có người bấm tay.
+
+#### Ba cách xử — chờ chủ dự án chốt
+
+**1 · Cấp quyền NGAY trong luồng mở màn, không chờ cron**
+Trang `/zalo-crm` (Sata) gọi `capQuyenNickZalocrm` cho cơ sở của người đang mở, **không
+chặn màn** (fire-and-forget hoặc timeout ngắn), có tiết chế (mỗi người tối đa 1 lượt/giờ).
+· Được: **xoá hẳn khoảng trễ**, kể cả trên `test` nơi cron không chạy.
+· Mất: thêm một lượt gọi mạng sang fork mỗi lần mở màn (đã tiết chế thì không đáng kể);
+  và phải **fail-safe** — fork chết thì màn vẫn mở bình thường, tuyệt đối không để lượt
+  gọi phụ này làm hỏng đường chính.
+· Phạm vi: **chỉ bên Sata**, không build lại fork.
+
+**2 · Giữ cron, nhưng NÓI RÕ trên màn**
+Thay khung rỗng im lặng bằng *"Đang thiết lập quyền truy cập, thử lại sau ít phút"*.
+· Được: người dùng biết chuyện gì đang xảy ra, không báo hỏng.
+· Mất: **không xoá** khoảng trễ, chỉ giải thích nó. Và chữ nằm trong giao diện fork ⇒
+  phải sửa fork ⇒ build lại + restart ⇒ **rủi ro rớt nick đang `connected`**.
+· Phạm vi: bên fork.
+
+**3 · Cả hai** — (1) xoá khoảng trễ ở đường thường, (2) là lưới hứng cho ca (1) hỏng.
+
+Khuyến nghị: **(1) làm trước** vì nằm gọn bên Sata và xoá được vấn đề; **(2) gộp vào đợt
+dựng org** (`NỢ-6`/`NỢ-8`) khi dù sao cũng phải restart fork.
+
+#### ✅ CHỐT 17/09/2026 — phương án (1). Đã làm, PR #299.
+
+`capQuyenKhiMoMan` (`lib/integrations/zalocrm/cap-quyen-nick.ts`), gọi từ
+`app/(admin)/admin/zalo-crm/page.tsx` **sau** khi `src` đã dựng xong.
+
+**Hai ràng buộc chủ dự án đặt, mỗi cái một lưới khoá — không phải lời hứa trong chú thích:**
+
+**① FAIL-SAFE** — *"fork chết, chậm, hay trả lỗi thì màn vẫn mở; cấp quyền không được là
+điều kiện để vào hộp thư"*. Repo **không có** `@vercel/functions`/`waitUntil` (thêm phụ
+thuộc là quyết định riêng), nên "fire-and-forget" đúng nghĩa không có sẵn. Thay vào đó
+fail-safe được định nghĩa lại thành hai câu ĐO ĐƯỢC — **không bao giờ ném, không bao giờ
+treo** (trần `HAN_MO_MAN_MS = 1500` bằng `Promise.race`, mọi nhánh nuốt lỗi) — nhờ vậy
+trang `await` được mà vẫn an toàn. Khoá bằng `[ZC-CQ-01a…d]`: fork trả lỗi HTTP · fork
+treo · tiết chế hỏng · chạm tiết chế. Bốn ca vì bịt một kiểu hỏng không bịt ba kiểu kia.
+
+**② MỘT ĐƯỜNG CHÍNH SÁCH** — *"dùng ĐÚNG chính sách mà `capQuyenNickZalocrm` dùng, không
+viết đường thứ hai"*. `PUT …/access` **thay cả tập**, nên hai đường tính khác nhau là
+chúng gỡ quyền của nhau mỗi 5 phút. Khoá bằng `[ZC-CQ-02]`, và nó là **lưới HÀNH VI,
+không phải lưới ghim mã nguồn**: chặn `fetch`, so **thân yêu cầu thật** với
+`nguoiDuocDungNick`, cả tập lẫn SỐ LƯỢNG.
+
+> 🔴 Vì sao không ghim bằng regex: chủ dự án chỉ ra một đường lách mà lưới ghim không
+> thấy — **giữ nguyên lời gọi `nguoiDuocDungNick` nhưng lọc lại kết quả trước khi gửi**.
+> Một `.filter(...)` chen vào giữa lời gọi và thân yêu cầu thì mọi regex vẫn xanh.
+> Phép cấy I5 (`.slice(0,1)`) chứng minh lưới hành vi bắt được ca đó.
+
+> ⚠️ Lưới ② có **hai vế**, nếu không là tautology: so thân yêu cầu với chính hàm chính
+> sách chỉ chứng minh "một đường", KHÔNG chứng minh đường ấy đúng — làm hỏng
+> `nguoiDuocDungNick` thì cả hai vế sai bằng nhau và lưới vẫn xanh. Vế 2 neo
+> `nguoiDuocDungNick` vào tập người đã dựng, với bốn kiểu người KHÔNG đủ điều kiện
+> (sai vai · tài khoản khoá · hết nhiệm kỳ · cơ sở khác). Phép cấy I6 (bỏ lọc `isActive`)
+> đỏ **chỉ nhờ vế 2**.
+
+**TIẾT CHẾ — ở đâu, và mất thì sao.** `lib/rate-limit.ts`: Upstash nếu có khoá, **không
+thì `Map` trong bộ nhớ TỪNG INSTANCE**. Khoá `zalocrm:capquyen:<userId>`, 1 lượt/giờ/người.
+Cấp theo **cơ sở** (giống cron) nên người thứ hai vào ca không phải chờ lượt của mình.
+**Mất tiết chế KHÔNG gây sai lệch** — vì ràng buộc ②, tập gửi đi luôn giống hệt, nên chạy
+1 lần hay 50 lần đều ra một trạng thái; nó chỉ tốn lượt gọi mạng. Vì vậy tiết chế hỏng thì
+**cứ chạy tiếp**, tuyệt đối không biến nó thành cổng chặn (`[ZC-CQ-01c]` khoá đúng điều
+đó). Nền tiết chế (`upstash` hay `memory`) ghi nhật ký **một lần mỗi tiến trình**, không
+mỗi lượt (`[ZC-CQ-03]`) — 288 lượt/ngày × số instance là cách nhanh nhất khiến người vận
+hành ngừng đọc nhật ký rồi bỏ lỡ dòng thật.
+
+**Cấy lại lỗi: 8/8 phép cấy làm lưới ĐỎ ĐÚNG CA** (không chỉ exit 1 — kịch bản so TẬP MÃ
+CA đỏ với tập mong đợi). Ngưỡng 5s của `[ZC-CQ-01b]` đặt **giữa hai trần** có chủ đích:
+trần riêng của `goiZalocrm` là 10s, nên khẳng định lỏng kiểu "< 30s" vẫn xanh cả khi gỡ
+hết `Promise.race` — tức không đo gì.
+
+**Phương án (2) — chữ "đang thiết lập quyền" trên màn — vẫn CHƯA làm**, và nay là lưới
+hứng chứ không còn là đường chính. Gộp vào đợt dựng org (`NỢ-6`/`NỢ-8`) khi dù sao cũng
+phải build lại fork.
+
+### NỢ-10 · VÁ GẤP ĐI THẲNG `main` LÀM `test` VÀ `main` PHÂN KỲ HAI CHIỀU
+
+**Chốt 17/09/2026 — phương án A** (đã thành **luật 13** trong `CLAUDE.md`).
+
+Luồng bắt buộc từ nay: `hotfix → PR vào test → CI xanh → merge test → cherry-pick lên main`.
+Chậm hơn ~20 phút CI, đổi lại `test` **luôn là tập cha** của `main`, nên PR `test → main`
+không bao giờ phải gộp hai chiều.
+
+**Giá đã đo, và nó KHÔNG tuyến tính theo số lần vá:**
+
+| ngày | chuyện gì | phân kỳ phải gỡ |
+|---|---|---|
+| 16/09 | để phân kỳ tích lại | **463 commit / 215 file xung đột** — suýt mất **7 tính năng**, 3 trong đó là bảo mật (S-9 đồng hồ SLA · S-1 che PII 6 màn · `canSearchPhone`) |
+| 17/09 | **bốn PR vá thẳng `main` trong MỘT ngày** | lại **94 commit**, phần lớn đụng đúng vùng vừa gỡ xung đột (Lớp trial, lead) |
+
+Hai lượt cách nhau **một ngày**. Không tính năng nào trong bảy cái suýt mất được phát hiện
+bằng mắt — **chỉ test bắt được**, và chỉ vì tình cờ có test. Đó mới là lý do luật này tồn
+tại: chi phí thật không phải thời gian gỡ xung đột, mà là **xác suất một tính năng biến
+mất im lặng**, và xác suất đó tăng theo độ lệch.
+
+**Ngoại lệ có kỷ luật:** prod đang hỏng và không chờ được CI thì cứ vá thẳng `main` — rồi
+mở PR `main → test` **ngay trong ngày**, đừng để sang hôm sau.
+
+**Việc còn phải làm của chính NỢ này:** gộp **94 commit** `main` → `test` (nhánh riêng,
+`git merge-file --diff3` từng tệp, bốn cổng + r7 hai shard), và **rà chủ động** S-1 · S-9 ·
+`canSearchPhone` · `[ZC-DN-01/02]` · `[SB-FLAG]` · `[ZC-KHUNG]` cùng mọi thứ ZaloCRM chưa
+có lưới khoá. Union add/add là SAI — bài học 16/09.
+
 ### NỢ-3 · Bố cục cột bảng Lead — CHỜ CHỦ DỰ ÁN CHỐT
 Đã lấy bản `main` (lưu `localStorage`, mỗi người một bộ) và **gỡ tầng lưu theo người trong
 DB** của `test`: `_column-actions.ts`, `column-picker.tsx`,
