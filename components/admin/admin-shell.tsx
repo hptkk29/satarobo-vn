@@ -41,6 +41,9 @@ import { Sidebar } from "@/components/admin/sidebar";
 import { Topbar } from "@/components/admin/topbar";
 import { cn } from "@/lib/utils";
 
+/** Khoá localStorage cho trạng thái thu gọn thanh điều hướng. */
+const KHOA_THU_GON = "satarobo:sidebar:thu-gon";
+
 export function AdminShell({
   granted,
   chatUserId,
@@ -103,6 +106,35 @@ export function AdminShell({
     };
   }, [drawerOpen]);
 
+  // ── THU GỌN THANH ĐIỀU HƯỚNG (17/09/2026) ─────────────────────────────────────────────
+  //
+  // Trạng thái nằm Ở ĐÂY, không nằm trong `Sidebar`: shell dựng `Sidebar` HAI LẦN (thanh cố
+  // định + drawer), nên state trong Sidebar là hai bản độc lập — thu gọn bản này, bản kia
+  // không biết, và lần mở drawer sau lại đọc localStorage ra một giá trị thứ ba.
+  //
+  // ⚠️ Nạp từ localStorage trong `useEffect`, KHÔNG trong khởi tạo `useState`: server render
+  // không có localStorage nên đọc sớm là lệch hydrate. Đổi lại có một nhịp thanh hiện rộng
+  // rồi co lại — đúng nếp mà trạng thái thu gọn TỪNG NHÓM trong `Sidebar` đang dùng.
+  const [thuGon, setThuGon] = useState(false);
+  useEffect(() => {
+    try {
+      setThuGon(localStorage.getItem(KHOA_THU_GON) === "1");
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  function doiThuGon() {
+    setThuGon((truoc) => {
+      const sau = !truoc;
+      try {
+        localStorage.setItem(KHOA_THU_GON, sau ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      return sau;
+    });
+  }
+
   const sidebarProps = {
     granted,
     userId: chatUserId,
@@ -116,7 +148,7 @@ export function AdminShell({
     <div className="admin-scope flex h-screen overflow-hidden bg-muted">
       {/* Thanh cố định — desktop. Giữ nguyên ngưỡng `md` của bản cũ. */}
       <div className="hidden md:flex md:shrink-0">
-        <Sidebar {...sidebarProps} />
+        <Sidebar {...sidebarProps} thuGon={thuGon} onDoiThuGon={doiThuGon} />
       </div>
 
       {/* Drawer — điện thoại. `md:hidden` để nó KHÔNG bao giờ chồng lên thanh cố định. */}

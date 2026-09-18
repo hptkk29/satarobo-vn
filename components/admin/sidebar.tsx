@@ -21,6 +21,7 @@ import {
   CalendarDays,
   CheckCheck,
   ChevronDown,
+  PanelLeftClose,
   ClipboardCheck,
   ClipboardEdit,
   ClipboardList,
@@ -378,6 +379,8 @@ export function Sidebar({
   scormEnabled = false,
   classGroupEnabled = false,
   onNavigate,
+  thuGon = false,
+  onDoiThuGon,
 }: {
   granted: string[];
   /** `User.id` — topic realtime `user:{id}` để badge "Tin nhắn" tự nhảy. */
@@ -388,6 +391,22 @@ export function Sidebar({
   scormEnabled?: boolean;
   /** Cờ GỠ — mặc định false ⇒ mục "Nhóm lớp" ẩn. */
   classGroupEnabled?: boolean;
+  /**
+   * Thu gọn thành DẢI CHỈ-BIỂU-TƯỢNG (rộng 64px). Trạng thái do `AdminShell` giữ.
+   *
+   * ⚠️ Mặc định `false`, và bản DRAWER trên điện thoại KHÔNG BAO GIỜ nhận `true`: drawer
+   * vốn đã rộng 256px và mở ra rồi đóng lại, thu gọn ở đó không giải quyết vấn đề gì mà
+   * lại bỏ hết chữ — đúng thứ `[ADMIN-NAV-T01]` sinh ra để canh ("drawer mở ⇒ CÓ mục menu
+   * thật để bấm, không phải một tấm rỗng").
+   */
+  thuGon?: boolean;
+  /**
+   * Bấm nút thu gọn/mở. `undefined` ⇒ KHÔNG dựng nút.
+   *
+   * Đây là cách bản drawer không có nút: nó không nhận hàm này. Rẻ hơn thêm một cờ
+   * `anNutThuGon` thứ hai rồi phải nhớ hai cờ luôn đi cùng nhau.
+   */
+  onDoiThuGon?: () => void;
   /**
    * Gọi khi người dùng bấm một mục — để bản DRAWER trên điện thoại tự đóng lại.
    *
@@ -462,43 +481,112 @@ export function Sidebar({
   }
 
   return (
-    <aside className="flex h-full w-64 flex-col border-r border-border bg-card">
-      <div className="flex h-16 items-center border-b border-border px-6">
-        <Link
-          href="/dashboard"
-          onClick={onNavigate}
-          className="group text-xl font-bold transition-opacity hover:opacity-90"
-        >
-          {/* DESIGN.md §7 — KHÔNG gradient trong admin. Bản cũ tô "Sata" bằng gradient
-              cam→tím và "Robo" bằng tím→cam, tức hai chữ chạy NGƯỢC CHIỀU nhau: chỗ nối
-              đổi màu đột ngột, và ở cỡ 20px chữ mảnh bị bệt. Gradient chữ thuộc site
-              public. Ở đây dùng hai màu ĐẶC của thương hiệu — vẫn nhận ra lockup mà đọc
-              rõ ở mọi cỡ. */}
-          <span className="text-[color:var(--accent)]">Sata</span>
-          <span className="text-[color:var(--primary)]">Robo</span>
-          <span className="ml-1.5 text-xs font-normal text-muted-foreground">Admin</span>
-        </Link>
+    <aside
+      className={cn(
+        // `transition-[width]` chứ không `transition-all`: hoạt ảnh admin chỉ được là
+        // CSS transition (DESIGN.md §7) và `all` thì kéo theo cả màu/viền của mọi lượt
+        // đổi trạng thái khác — mục đang chọn sẽ "trôi" màu mỗi lần điều hướng.
+        "flex h-full flex-col border-r border-border bg-card transition-[width] duration-200",
+        thuGon ? "w-16" : "w-64",
+      )}
+      data-thu-gon={thuGon ? "1" : "0"}
+    >
+      {/* ĐẦU THANH.
+          Thu gọn: bề ngang chỉ 64px, đủ cho ĐÚNG MỘT nút 44px. Nên ở chế độ đó header chỉ
+          còn nút thu gọn — lockup "SataRobo" là trang trí, còn nút là chức năng, và đường
+          về Dashboard vẫn còn nguyên ở mục đầu tiên của nav ("luôn hiện"). Nhồi cả hai vào
+          64px là được một nút bấm 20px và một chữ bị cắt. */}
+      <div
+        className={cn(
+          "flex h-16 items-center border-b border-border",
+          thuGon ? "justify-center px-0" : "gap-2 px-6",
+        )}
+      >
+        {!thuGon && (
+          <Link
+            href="/dashboard"
+            onClick={onNavigate}
+            aria-label="Sata Robo Admin — về Dashboard"
+            className="group min-w-0 flex-1 truncate text-xl font-bold transition-opacity hover:opacity-90"
+          >
+            {/* DESIGN.md §7 — KHÔNG gradient trong admin. Bản cũ tô "Sata" bằng gradient
+                cam→tím và "Robo" bằng tím→cam, tức hai chữ chạy NGƯỢC CHIỀU nhau: chỗ nối
+                đổi màu đột ngột, và ở cỡ 20px chữ mảnh bị bệt. Gradient chữ thuộc site
+                public. Ở đây dùng hai màu ĐẶC của thương hiệu. */}
+            <span className="text-[color:var(--accent)]">Sata</span>
+            <span className="text-[color:var(--primary)]">Robo</span>
+            <span className="ml-1.5 text-xs font-normal text-muted-foreground">Admin</span>
+          </Link>
+        )}
+        {/* Nút chỉ tồn tại khi có người truyền `onDoiThuGon` — bản drawer thì không. Rẻ hơn
+            thêm một cờ thứ hai rồi phải nhớ hai cờ luôn đi cùng nhau.
+            44px theo DESIGN.md §2: ngưỡng `md` của thanh cố định gồm cả máy tính bảng, nơi
+            người dùng bấm bằng ngón tay chứ không phải trỏ chuột. */}
+        {onDoiThuGon && (
+          <button
+            type="button"
+            onClick={onDoiThuGon}
+            aria-label={thuGon ? "Mở rộng thanh điều hướng" : "Thu gọn thanh điều hướng"}
+            title={thuGon ? "Mở rộng thanh điều hướng" : "Thu gọn thanh điều hướng"}
+            aria-expanded={!thuGon}
+            className={cn(
+              "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors",
+              "hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            )}
+          >
+            <PanelLeftClose
+              className={cn("h-5 w-5 transition-transform", thuGon && "rotate-180")}
+              aria-hidden
+            />
+          </button>
+        )}
       </div>
 
       <nav className="flex-1 overflow-y-auto py-4">
-        {visibleGroups.map((group) => {
-          const isCollapsed = collapsed.has(group.label);
+        {visibleGroups.map((group, gIdx) => {
+          // ⚠️ Ở chế độ DẢI, bỏ qua trạng thái thu gọn từng nhóm và hiện HẾT mục.
+          //
+          // Dải chỉ có biểu tượng, không có chỗ cho nhãn nhóm lẫn mũi tên. Một nhóm đang
+          // thu gọn trong dải là một vùng chết: không nhãn để đọc, không mũi tên để bấm,
+          // và mục bên trong biến mất không dấu vết. Cái giá là dải dài hơn — đổi lại nó
+          // làm đúng việc của mình (bấm nhanh), và người cần lọc bớt thì mở rộng ra.
+          const isCollapsed = !thuGon && collapsed.has(group.label);
           return (
-            <div key={group.label} className="mb-1">
-              <button
-                type="button"
-                onClick={() => toggleGroup(group.label)}
-                className="flex w-full items-center justify-between px-6 py-1 text-[10px] uppercase tracking-widest font-semibold text-muted-foreground hover:text-muted-foreground"
-                aria-expanded={!isCollapsed}
-              >
-                <span>{group.label}</span>
-                <ChevronDown
+            <div key={group.label} className={thuGon ? "" : "mb-3"}>
+              {thuGon ? (
+                // Nhóm vẫn phải NHÌN RA ĐƯỢC khi không có chữ — thay nhãn bằng một vạch.
+                // Bỏ hẳn dấu phân nhóm thì dải thành một cột 40 biểu tượng liền khối.
+                gIdx > 0 && <div className="mx-3 my-2 border-t border-border" role="presentation" />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(group.label)}
                   className={cn(
-                    "h-3.5 w-3.5 transition-transform",
-                    isCollapsed && "-rotate-90",
+                    // ── VIỆC 2: TÊN DANH MỤC PHẢI NỔI HƠN MỤC THƯỜNG ──────────────────
+                    // Bản cũ: `text-[10px] text-muted-foreground` — NHỎ HƠN và CÙNG MÀU
+                    // với mục con (`text-sm text-muted-foreground`), nên tiêu đề nhóm
+                    // LÙI XUỐNG dưới thứ nó đang gán nhãn. Phân cấp ngược.
+                    //
+                    // Nay tách bằng ba đòn cùng chiều: màu ĐẦY (`text-foreground` vs mục
+                    // con `text-muted-foreground`), `font-bold`, và một vạch trên mỗi
+                    // nhóm. Cỡ chữ chỉ nhích 10→11px — thứ tạo ra phân cấp là ĐỘ TƯƠNG
+                    // PHẢN, không phải kích thước; nhích to nữa sẽ lấn cỡ của mục con.
+                    "flex w-full items-center justify-between px-6 py-1.5 text-[11px] font-bold uppercase tracking-wider",
+                    "text-foreground transition-colors hover:text-primary",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    gIdx > 0 && "mt-1 border-t border-border pt-3",
                   )}
-                />
-              </button>
+                  aria-expanded={!isCollapsed}
+                >
+                  <span className="min-w-0 truncate">{group.label}</span>
+                  <ChevronDown
+                    className={cn(
+                      "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform",
+                      isCollapsed && "-rotate-90",
+                    )}
+                  />
+                </button>
+              )}
               {!isCollapsed &&
                 group.items.map((item, idx) => {
                   const Icon = item.icon;
@@ -508,26 +596,59 @@ export function Sidebar({
                     !!item.cluster && item.cluster !== group.items[idx - 1]?.cluster;
                   return (
                     <Fragment key={item.href}>
-                      {showCluster && (
-                        <div className="px-6 pb-0.5 pt-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                      {/* Nhãn CỤM CON. Bản cũ gần y hệt nhãn nhóm (`text-[10px] uppercase
+                          tracking-wider text-muted-foreground`) nên hai tầng khác nhau
+                          trông như một. Nay: KHÔNG in hoa, chữ nhạt hơn, và THỤT VÀO
+                          thẳng hàng với nhãn mục (28px = biểu tượng 16 + khe 12) — đọc một
+                          nhịp là biết nó thuộc về nhóm bên trên chứ không ngang hàng.
+
+                          ⚠️ ĐO 18/09/2026: HIỆN KHÔNG item nào khai `cluster`
+                          (`grep -c "cluster:"` → 0), nên nhánh này CHƯA render lần nào.
+                          Kiểu dữ liệu và luật R3 vẫn giữ, và lớp CSS trên đã sửa cho đúng
+                          phân cấp — nhưng nó CHƯA được xem trên màn hình thật. Ai bật lại
+                          `cluster` thì nhớ chụp lại: một tầng chữ chưa ai nhìn là một tầng
+                          chữ chưa ai kiểm. */}
+                      {showCluster && !thuGon && (
+                        <div className="pb-0.5 pl-[3.25rem] pr-6 pt-2 text-[11px] font-medium text-muted-foreground/70">
                           {item.cluster}
                         </div>
                       )}
                       <Link
                         href={item.href}
                         onClick={onNavigate}
+                        // ⚠️ `title` + `aria-label` CHỈ khi thu gọn, và chúng không phải
+                        // trang trí: ở dải thì nhãn bị ẩn, nên một biểu tượng không tên là
+                        // lời hứa không đọc được (luật 12). `aria-label` lo trình đọc màn
+                        // hình, `title` lo chuột.
+                        //
+                        // Giới hạn còn lại, nói thẳng: `title` KHÔNG hiện khi đi bằng bàn
+                        // phím. Người chỉ dùng bàn phím ở chế độ dải vẫn phải đoán. Vá
+                        // đúng là Tooltip của shadcn cho cả ~40 mục — đợt riêng, và khi
+                        // làm thì phải đo cả phần tiêu điểm.
+                        {...(thuGon ? { title: item.label, "aria-label": item.label } : {})}
                         className={cn(
-                          "flex items-center gap-3 px-6 py-2 text-sm font-medium transition-colors",
+                          "flex items-center text-sm font-medium transition-colors",
+                          thuGon ? "relative justify-center px-0 py-2.5" : "gap-3 px-6 py-2",
                           active
-                            ? "bg-primary-soft text-primary border-l-2 border-primary"
+                            ? thuGon
+                              ? "bg-primary-soft text-primary"
+                              : "bg-primary-soft text-primary border-l-2 border-primary"
                             : "text-muted-foreground hover:bg-muted hover:text-foreground",
                         )}
                       >
                         <Icon className="h-4 w-4 shrink-0" />
-                        <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                        {!thuGon && <span className="min-w-0 flex-1 truncate">{item.label}</span>}
                         {item.badge === "chat" && chatCount > 0 && (
+                          // Thu gọn: badge đổi thành dấu góc trên biểu tượng. Bỏ nó đi ở
+                          // dải là người dùng mất hẳn tín hiệu "có tin chưa đọc" — đúng
+                          // thứ badge sinh ra để nói.
                           <span
-                            className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-state-danger px-1 text-[10px] font-bold text-white"
+                            className={cn(
+                              "inline-flex items-center justify-center rounded-full bg-state-danger font-bold text-white",
+                              thuGon
+                                ? "absolute right-2 top-1.5 h-4 min-w-4 px-0.5 text-[9px]"
+                                : "h-5 min-w-5 shrink-0 px-1 text-[10px]",
+                            )}
                             aria-label={`${chatCount} tin chưa đọc`}
                           >
                             {chatCount > 9 ? "9+" : chatCount}
@@ -542,9 +663,24 @@ export function Sidebar({
         })}
       </nav>
 
-      <div className="border-t border-border p-4 text-xs text-muted-foreground">
-        <p className="font-medium">Sata Robo Admin</p>
-        <p>v4.UI.FINAL · 2026</p>
+      {/* Chân thanh: thu gọn thì chỉ còn số phiên bản. Hai dòng chữ trong 64px sẽ bị
+          xuống dòng thành bốn dòng vụn — mà đây là khối ít quan trọng nhất của thanh. */}
+      <div
+        className={cn(
+          "border-t border-border text-xs text-muted-foreground",
+          thuGon ? "px-1 py-3 text-center" : "p-4",
+        )}
+      >
+        {thuGon ? (
+          <p className="tabular-nums" title="Sata Robo Admin · v4.UI.FINAL · 2026">
+            v4
+          </p>
+        ) : (
+          <>
+            <p className="font-medium">Sata Robo Admin</p>
+            <p>v4.UI.FINAL · 2026</p>
+          </>
+        )}
       </div>
     </aside>
   );
