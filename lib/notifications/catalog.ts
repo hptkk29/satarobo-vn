@@ -336,6 +336,30 @@ const BY_PREFIX: Readonly<Record<string, NotiDef>> = {
     group: "due_date", priority: 2, entity: "trial",
     recipients: "Sale phụ trách lead (không có thì admin lead)", target: "/leads/<leadId>",
   },
+  // V2-d (17/09) — nhắc GIÁO VIÊN ~1 tiếng trước giờ dạy trải nghiệm. Nhóm "due_date" chứ
+  // không phải "new_task": việc đã được giao từ lúc xếp buổi (`trial-session.assigned:`),
+  // đây là chuông HẠN của chính việc đó. Mức 1 vì quá mốc là lớp không có người đứng.
+  //
+  // ⚠️ Khai ở đây KHÔNG phải thủ tục giấy tờ: `catalogEntries()` là nguồn DUY NHẤT dựng màn
+  // cấu hình đẩy, nên thiếu dòng này thì công tắc không bày ra và KHÔNG AI BẬT ĐƯỢC push —
+  // đúng sự cố 13/09 (ba khoá `trial-session.*` sinh thật nhưng chưa khai, sổ `WebPushOutbox`
+  // prod ghi SKIPPED). Thông báo trong ứng dụng vẫn chạy, nên hỏng này HOÀN TOÀN CÂM.
+  "trial.reminder-gv:": {
+    label: "Sắp tới giờ dạy buổi trải nghiệm",
+    group: "due_date", priority: 1, entity: "trial",
+    recipients: "Giáo viên được phân buổi trải nghiệm", target: "/lop-trial",
+  },
+  // V2-d (17/09) — tới mốc nhắc mà buổi VẪN chưa có giáo viên ⇒ leo thang cho Đào tạo.
+  // Tiền tố RIÊNG, không dùng lại `trial.cho-phan-cong:` của lúc tạo buổi: `dedupeKey` có
+  // `@@unique([userId, dedupeKey])` nên trùng khoá là ĐÈ mất tin gốc — người nhận không còn
+  // thấy việc này đã treo từ lúc nào. Khớp tiền tố DÀI NHẤT nên hai khoá không nuốt nhau
+  // (`trial.cho-phan-cong-gap:` không bắt đầu bằng `trial.cho-phan-cong:` — sau chữ "cong"
+  // là "-" chứ không phải ":").
+  "trial.cho-phan-cong-gap:": {
+    label: "GẤP: buổi trải nghiệm sắp bắt đầu mà chưa có giáo viên",
+    group: "due_date", priority: 1, entity: "trial",
+    recipients: "Bộ phận Đào tạo (buổi còn ~1 tiếng, chưa phân công)", target: "/lop-trial",
+  },
   // Vi phạm SLA chăm lead — theo PRD đây là "đã trễ", không phải "việc mới".
   "sla:": {
     label: "Vi phạm SLA chăm lead",

@@ -45,6 +45,10 @@ export const SCOPED_MODELS = new Set<string>([
   "PaymentAllocation",
   "QrSession",
   "CreditBalance",
+  // 16/09 — phiếu gộp (1 QR cho cả gia đình). `PaymentBillLine` KHÔNG vào đây: nó không
+  // có cột đơn vị (dòng chi tiết của phiếu, như OrderItem với Order), và khai một model
+  // không có `centerId` vào SCOPED_MODELS là chèn `where` trên cột không tồn tại.
+  "PaymentBill",
   // ⚠️ BankTransaction: centerId NULL = giao dịch CHƯA khớp được về cơ sở nào
   // (tiền vừa về, chưa biết của đơn nào) → xem NULL_IS_GLOBAL_MODELS. Ẩn nhóm này
   // khỏi người đối soát chính là làm mất đúng thứ họ cần xử lý.
@@ -340,6 +344,7 @@ export function getModelPrefixes(model: string): string[] {
     case "Payment":
     case "PaymentRequest":
     case "PaymentAllocation":
+    case "PaymentBill":
     case "QrSession":
     case "BankTransaction":
     case "CreditBalance":

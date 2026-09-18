@@ -325,7 +325,12 @@ export function ChildFields({
  * useTransition rồi router.refresh().
  *
  * - `readOnly` (lead LOST/đã chốt…): chỉ hiển thị, không cho sửa.
- * - Field phẳng cũ (childName/childAge) hiển thị read-only + nút "Tạo LeadChild mới".
+ * - Field phẳng cũ (childName/childAge) hiển thị read-only + nút "Đưa vào danh sách con".
+ *
+ * ⚠️ Nhãn nút KHÔNG được mang tên bảng. Chủ dự án 16/09: *"sửa chữ tạo leadchild mới thành
+ * ngôn ngữ user luôn đi"*. "LeadChild" là tên MODEL — người bán không biết và không cần
+ * biết; thứ họ thấy là "con của khách". Nút này lấy thông tin con kiểu cũ (hai ô phẳng
+ * `childName`/`childAge` của lead đời đầu) rồi mở form thêm con đã điền sẵn.
  */
 export function LeadChildrenManager({
   leadId,
@@ -498,7 +503,8 @@ export function LeadChildrenManager({
         )}
       </div>
 
-      {/* Field phẳng cũ (read-only) + nút tạo LeadChild từ dữ liệu cũ */}
+      {/* Thông tin con kiểu CŨ (hai ô phẳng trên chính bản ghi lead) — chỉ đọc, kèm nút
+          đưa nó thành một hồ sơ con thật trong danh sách bên dưới. */}
       {showLegacy && (
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed border-border bg-muted px-3 py-2">
           <p className="text-xs text-muted-foreground">
@@ -517,7 +523,7 @@ export function LeadChildrenManager({
               }
               className="inline-flex items-center gap-1 rounded-md border border-primary px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary-soft"
             >
-              <Plus size={12} /> Tạo LeadChild mới
+              <Plus size={12} /> Đưa vào danh sách con
             </button>
           )}
         </div>

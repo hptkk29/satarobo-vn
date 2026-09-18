@@ -46,6 +46,11 @@ export type GiaoDichSheet = {
   coSo: string | null;
   tinhTrang: string;
   ghiChu: string;
+  /**
+   * Tên SALE ghi trong cột "Sales" — dạng tên gọi ("Diệu", "Nhật Hạ"), không phải tài
+   * khoản. Người nhập map 6 tên này sang tài khoản ở màn nhập; xem lib/finance/khop-sale-sheet.ts.
+   */
+  sale: string | null;
 };
 
 /**
@@ -99,6 +104,87 @@ export function chuanTenSoSanh(v: unknown): string {
     .replace(/đ/g, "d")
     .replace(/Đ/g, "D");
   return s.replace(/\s+/g, " ").trim().toUpperCase();
+}
+
+/**
+ * Tên sheet → NGÀY 1 của tháng nó nói tới. `null` nếu không đọc được.
+ *
+ * Dùng làm mốc lùi cho 23 dòng thiếu ngày. Vì sao không `new Date()`: báo cáo doanh thu
+ * theo tháng, danh sách đơn và cron đều xếp theo `Order.createdAt`; để đồng hồ thật thì
+ * học phí tháng 5 hiện thành doanh thu tháng 9. Tháng là dữ liệu CÓ THẬT trong file (tên
+ * sheet), ngày trong tháng thì không — nên lấy ngày 1 và nói ra, đừng đoán ngày.
+ *
+ * "4 số CUỐI là năm": "Tháng 52026" là 5/2026, "Tháng 122026" là 12/2026 — tách kiểu
+ * khác thì tháng 12 thành tháng 1.
+ */
+export function thangCuaSheet(sheet: string): Date | null {
+  const s = chuanTenSoSanh(sheet);
+  const m = /THANG\s*(\d{1,2})(\d{4})/.exec(s);
+  if (!m) return null;
+  const thang = Number(m[1]);
+  const nam = Number(m[2]);
+  if (!Number.isInteger(thang) || thang < 1 || thang > 12) return null;
+  if (!Number.isInteger(nam) || nam < 2000 || nam > 2100) return null;
+  return new Date(nam, thang - 1, 1);
+}
+
+/**
+ * Ô "Ngày" của sheet → `Date`, hoặc `null`. KHÔNG BAO GIỜ để `new Date(chuỗi)` tự đoán.
+ *
+ * ⚠️ ĐO 14/09/2026 trên file thật (136 dòng dùng được): chỉ **59** ô là `Date`; **54** ô
+ * là CHUỖI (49 dạng `"13/06/2026"`, 5 dạng `"29/08"` không có năm) và **23** ô trống thật.
+ * Bản đầu làm `new Date(String(v))` ⇒ `"13/06/2026"` ra **Invalid Date** ⇒ 54 ngày THẬT
+ * bị vứt lặng, màn nhập báo "77 dòng thiếu ngày" trong khi file chỉ trống 23.
+ *
+ * ⚠️ VÀ NÓ CÒN NGUY HƠN VẺ NGOÀI. Lần này 49/49 chuỗi có ngày > 12 nên JS ném Invalid —
+ * rơi một cách THẤY ĐƯỢC. File tháng sau có `"01/07/2026"` thì `new Date` đọc trôi chảy
+ * thành **7 tháng 1**: không lỗi, không cảnh báo, học phí tháng 7 nhảy sang tháng 1. Đó
+ * là lý do phải TỰ TÁCH `dd/mm/yyyy` — người Việt gõ ngày trước, JS đọc tháng trước.
+ *
+ * `sheet` dùng để vớt NĂM cho dạng `"29/08"`. Năm là dữ liệu CÓ THẬT ở tên sheet; tên
+ * sheet không có năm thì trả `null` chứ KHÔNG lấy năm hiện tại (luật 19 — hàm rơi về
+ * đồng hồ thật là ca hẹn giờ nổ).
+ */
+export function docNgaySheet(v: unknown, sheet: string): Date | null {
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : v;
+
+  // Số sê-ri Excel (phòng khi `cellDates` không bắt được ô). Mốc 30/12/1899 là quy ước
+  // của Excel, kể cả lỗi năm nhuận 1900 mà nó cố tình giữ.
+  if (typeof v === "number" && Number.isFinite(v) && v > 0 && v < 100_000) {
+    const d = new Date(Date.UTC(1899, 11, 30) + Math.round(v) * 86_400_000);
+    return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  }
+
+  const s = String(v ?? "").trim();
+  if (!s) return null;
+
+  const dung = (nam: number, thang: number, ngay: number): Date | null => {
+    // `new Date(2026, 12, 32)` KHÔNG ném — nó trả 01/01/2027. Im lặng và sai, nên phải
+    // kiểm khoảng TRƯỚC khi dựng.
+    if (thang < 1 || thang > 12 || ngay < 1 || ngay > 31) return null;
+    if (nam < 2000 || nam > 2100) return null;
+    const d = new Date(nam, thang - 1, ngay);
+    // Chốt lại: 31/02 lọt qua kiểm khoảng nhưng cuộn sang tháng 3.
+    return d.getMonth() === thang - 1 && d.getDate() === ngay ? d : null;
+  };
+
+  // ISO `yyyy-mm-dd` — không mơ hồ, đọc thẳng.
+  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
+  if (iso) return dung(Number(iso[1]), Number(iso[2]), Number(iso[3]));
+
+  // `dd/mm/yyyy` · `dd-mm-yyyy` · `dd.mm.yyyy`
+  const dmy = /^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/.exec(s);
+  if (dmy) return dung(Number(dmy[3]), Number(dmy[2]), Number(dmy[1]));
+
+  // `dd/mm` — năm lấy từ TÊN SHEET.
+  const dm = /^(\d{1,2})[/\-.](\d{1,2})$/.exec(s);
+  if (dm) {
+    const moc = thangCuaSheet(sheet);
+    if (!moc) return null;
+    return dung(moc.getFullYear(), Number(dm[2]), Number(dm[1]));
+  }
+
+  return null;
 }
 
 function chuoi(v: unknown): string {
@@ -157,13 +243,7 @@ export function docDongGiaoDich(
 
   if (laDongTong({ maHV, hoTen, tinhTrang, hocPhi })) return null;
 
-  const ngayRaw = o(d, "ngày");
-  let ngay: Date | null = null;
-  if (ngayRaw instanceof Date) ngay = ngayRaw;
-  else if (ngayRaw != null) {
-    const t = new Date(String(ngayRaw));
-    if (!Number.isNaN(t.getTime())) ngay = t;
-  }
+  const ngay = docNgaySheet(o(d, "ngày"), sheet);
 
   return {
     sheet,
@@ -180,6 +260,8 @@ export function docDongGiaoDich(
     coSo: chuoi(o(d, "cơ sở", "minh")) || null,
     tinhTrang,
     ghiChu: chuoi(o(d, "ghi chú")),
+    // Đo 14/09/2026: mọi sheet học phí đều có cột nhãn đúng "Sales", 0/136 dòng để trống.
+    sale: chuoi(o(d, "sales", "sale")) || null,
   };
 }
 
@@ -230,6 +312,16 @@ export type HocVienGop = {
   soDot: number;
   /** Thiếu SĐT ⇒ không khớp tự động được, phải có người chỉ đúng em. */
   canNguoiXem: boolean;
+  /**
+   * Sale của ĐỢT ĐẦU — đơn là một, nên người phụ trách cũng phải là một.
+   * `null` khi mọi dòng của em đều bỏ trống cột Sales.
+   */
+  sale: string | null;
+  /**
+   * Các đợt của em ghi TÊN SALE KHÁC NHAU. Không tự chọn hộ — hiện ra để người nhập
+   * biết mình đang gán cả lô cho ai; im lặng lấy dòng đầu là cướp công của người kia.
+   */
+  saleKhac: boolean;
   giaoDich: GiaoDichSheet[];
 };
 
@@ -268,6 +360,11 @@ export function gopTheoHocVien(gd: GiaoDichSheet[]): HocVienGop[] {
       cu.giaoDich.push(g);
       cu.hoTen = cu.hoTen ?? g.hoTen;
       cu.maHV = cu.maHV ?? g.maHV;
+      const saleMoi = g.sale?.trim() || null;
+      if (saleMoi) {
+        if (!cu.sale) cu.sale = saleMoi;
+        else if (chuanTenSoSanh(cu.sale) !== chuanTenSoSanh(saleMoi)) cu.saleKhac = true;
+      }
     } else {
       map.set(khoa, {
         maHV: g.maHV,
@@ -276,6 +373,8 @@ export function gopTheoHocVien(gd: GiaoDichSheet[]): HocVienGop[] {
         tongTien: g.hocPhi,
         soDot: 1,
         canNguoiXem: g.sdt == null,
+        sale: g.sale?.trim() || null,
+        saleKhac: false,
         giaoDich: [g],
       });
     }

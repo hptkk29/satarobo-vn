@@ -13,25 +13,51 @@ const TAG = "cc-req";
 const utc = (y: number, m: number, dd: number) => new Date(Date.UTC(y, m - 1, dd));
 
 describe("requests — thuần", () => {
-  it("isSubmittedLate: dưới N ngày báo trước = muộn, hồi tố = muộn, đủ ngày = không", async () => {
-    const { isSubmittedLate } = await import("../../lib/cham-cong/requests");
+  /**
+   * Nạp module MỘT LẦN ở hook, KHÔNG nạp trong thân từng ca.
+   *
+   * ── Vì sao (chẩn 15/09/2026) ──
+   * Ba ca dưới đây là hàm THUẦN, nhưng `lib/cham-cong/requests` kéo theo `@/lib/db`
+   * (Prisma singleton) + `getSetting` + 9 module khác. Trước bản này mỗi ca tự
+   * `await import(...)`, nên CA ĐẦU TIÊN gánh toàn bộ chi phí nạp cây đó — và gánh nó
+   * TRONG ngân sách 5s mặc định vốn dành cho PHÉP KHẲNG ĐỊNH.
+   *
+   * Đo thật: máy rảnh → ca đầu **388ms**, hai ca sau 0ms/1ms (module đã vào cache —
+   * chính bằng chứng cho thấy ca đầu trả tiền hộ). Máy đang tải (dev server + vừa xong
+   * cả bộ test) → **5016ms** ⇒ ĐỎ với "Test timed out", không phải với một khẳng định
+   * nào sai. Phồng 13×, cùng hình dạng luật 19. Xoá sạch cache vite rồi đo lại vẫn
+   * 388ms ⇒ KHÔNG phải chuyện cold-cache.
+   *
+   * ⚠️ ĐỪNG VÁ BẰNG CÁCH NỚI TRẦN CỦA CA. Trần của một ca là để đo phép khẳng định;
+   * nới nó vì chi phí nạp module là bỏ luôn khả năng phát hiện một khẳng định THẬT SỰ
+   * treo. Dời chi phí về `beforeAll` là đặt nó vào chỗ sở hữu nó — hook có ngân sách
+   * riêng (`hookTimeout`), và ba ca kia quay về 0ms.
+   *
+   * Cách tốt hơn nhưng đắt hơn: tách ba hàm thuần này ra module không chạm `db`. Đó là
+   * việc của module chấm công, không phải của một bản vá test — ghi lại đây để ai vào
+   * sửa `requests.ts` biết có lý do chính đáng để tách.
+   */
+  let R: typeof import("../../lib/cham-cong/requests");
+  beforeAll(async () => {
+    R = await import("../../lib/cham-cong/requests");
+  });
+
+  it("isSubmittedLate: dưới N ngày báo trước = muộn, hồi tố = muộn, đủ ngày = không", () => {
     const now = new Date("2026-09-10T03:00:00Z"); // 10:00 VN 10/09
-    expect(isSubmittedLate(utc(2026, 9, 11), now, 2)).toBe(true);
-    expect(isSubmittedLate(utc(2026, 9, 12), now, 2)).toBe(false);
-    expect(isSubmittedLate(utc(2026, 9, 9), now, 2)).toBe(true);
-    expect(isSubmittedLate(utc(2026, 9, 10), now, 0)).toBe(false);
+    expect(R.isSubmittedLate(utc(2026, 9, 11), now, 2)).toBe(true);
+    expect(R.isSubmittedLate(utc(2026, 9, 12), now, 2)).toBe(false);
+    expect(R.isSubmittedLate(utc(2026, 9, 9), now, 2)).toBe(true);
+    expect(R.isSubmittedLate(utc(2026, 9, 10), now, 0)).toBe(false);
   });
-  it("vnTimeOn: 'HH:mm' giờ VN trên ngày công → mốc UTC đúng; giờ sai → null", async () => {
-    const { vnTimeOn } = await import("../../lib/cham-cong/requests");
-    expect(vnTimeOn(utc(2026, 9, 8), "07:45")?.toISOString()).toBe("2026-09-08T00:45:00.000Z");
-    expect(vnTimeOn(utc(2026, 9, 8), "01:00")?.toISOString()).toBe("2026-09-07T18:00:00.000Z");
-    expect(vnTimeOn(utc(2026, 9, 8), "25:00")).toBeNull();
-    expect(vnTimeOn(utc(2026, 9, 8), "abc")).toBeNull();
+  it("vnTimeOn: 'HH:mm' giờ VN trên ngày công → mốc UTC đúng; giờ sai → null", () => {
+    expect(R.vnTimeOn(utc(2026, 9, 8), "07:45")?.toISOString()).toBe("2026-09-08T00:45:00.000Z");
+    expect(R.vnTimeOn(utc(2026, 9, 8), "01:00")?.toISOString()).toBe("2026-09-07T18:00:00.000Z");
+    expect(R.vnTimeOn(utc(2026, 9, 8), "25:00")).toBeNull();
+    expect(R.vnTimeOn(utc(2026, 9, 8), "abc")).toBeNull();
   });
-  it("periodKeysBetween gom đúng các tháng của khoảng ngày", async () => {
-    const { periodKeysBetween } = await import("../../lib/cham-cong/requests");
-    expect(periodKeysBetween(utc(2026, 9, 29), utc(2026, 10, 2))).toEqual(["2026-09", "2026-10"]);
-    expect(periodKeysBetween(utc(2026, 9, 1), utc(2026, 9, 1))).toEqual(["2026-09"]);
+  it("periodKeysBetween gom đúng các tháng của khoảng ngày", () => {
+    expect(R.periodKeysBetween(utc(2026, 9, 29), utc(2026, 10, 2))).toEqual(["2026-09", "2026-10"]);
+    expect(R.periodKeysBetween(utc(2026, 9, 1), utc(2026, 9, 1))).toEqual(["2026-09"]);
   });
 });
 

@@ -141,20 +141,35 @@ export type DesiredRequest = {
 };
 
 /**
- * Kế hoạch 2 đợt CHỈ có hiệu lực khi đã DUYỆT (`installmentApprovalStatus=APPROVED`).
- * Mọi ca còn lại (không trả góp, chờ duyệt, bị từ chối, duyệt rồi nhưng không có dòng
- * đợt nào) → 1 phiếu toàn đơn `installmentNo = 0`.
+ * Đơn có KẾ HOẠCH ĐỢT còn hiệu lực → phiếu theo từng đợt; còn lại → 1 phiếu toàn đơn
+ * `installmentNo = 0`.
  *
- * ⚠️ Cố ý KHÁC `computeDueNow` (lib/payments/due-now.ts) — hàm đó coi
- * `installmentApprovalStatus == null` là kế hoạch CÒN hiệu lực. Đơn có dòng
- * OrderInstallment mà `installmentApprovalStatus = null` vì thế sẽ lệch giữa hai
- * cách hiểu; shadow-compare gắn cờ ca này thay vì tự chọn hộ.
+ * ⚠️ SỬA 14/09/2026 — BỎ ĐIỀU KIỆN `installmentApprovalStatus === "APPROVED"`.
+ * Điều kiện đó mã hoá một cổng KHÔNG CÒN TỒN TẠI: cơ chế duyệt kế hoạch đã bị gỡ hẳn
+ * (`approveInstallmentPlan` / `rejectInstallmentPlan` nay 0 lời gọi trong mã chạy), và
+ * từ 13/09 luật chốt là "CHỈ `REJECTED` làm kế hoạch mất hiệu lực" — hỏi ở MỘT chỗ:
+ * `isInstallmentPlanActive` (lib/payments/installment-plan.ts).
+ *
+ * Hậu quả đo được của bản cũ, trên chính DB đang nghiệm thu: `ORD-260913-000001` có
+ * 4 phiếu đợt (1tr + 3tr + 2tr + 2tr = 8tr) và `installmentApprovalStatus = null` ⇒
+ * rơi xuống nhánh toàn đơn ⇒ dry-run định tạo THÊM một phiếu 8.000.000đ và rót
+ * 1.000.000đ vào đó, để 4 phiếu đợt nằm không. Đơn 8tr hoá ra **16tr phải thu**.
+ * Đó đúng loại lệch mà cả đợt rà soát này sinh ra để dọn.
+ *
+ * ⚠️ Và KHÔNG tạo phiếu toàn đơn khi đơn ĐÃ CÓ phiếu đợt còn sống — mirror đúng luật
+ * của `ensureFullOrderRequest` (lib/payments/payment-request.ts): hàm đó trả `null`
+ * không làm gì trong ca này. Script tạo thẳng nên phải tự mang luật theo, nếu không nó
+ * là đường vòng qua chính cổng mà mã thật dựng lên.
  */
-export function planRequests(order: OrderForPlan): DesiredRequest[] {
-  const approved = order.installmentApprovalStatus === "APPROVED";
+export function planRequests(
+  order: OrderForPlan,
+  /** Đơn này đã có phiếu đợt (`installmentNo > 0`) còn sống chưa. */
+  daCoPhieuDot = false,
+): DesiredRequest[] {
+  const conHieuLuc = order.installmentApprovalStatus !== "REJECTED";
   const plan = [...order.installments].sort((a, b) => a.soDot - b.soDot);
 
-  if (approved && plan.length > 0) {
+  if (conHieuLuc && plan.length > 0) {
     return plan.map((i) => ({
       installmentNo: i.soDot,
       amountDue: i.amount,
@@ -163,6 +178,11 @@ export function planRequests(order: OrderForPlan): DesiredRequest[] {
       matchKey: requestMatchKey(order.code, i.soDot),
     }));
   }
+
+  // Đã có phiếu đợt sống mà kế hoạch lại rỗng/bị từ chối: KHÔNG dựng phiếu toàn đơn
+  // đè lên. Dọn phiếu đợt thừa là việc của `materializeInstallmentRequests` ở đường
+  // chạy thật, không phải của một script backfill chạy tay.
+  if (daCoPhieuDot) return [];
 
   return [
     {
@@ -180,8 +200,10 @@ export function planRequests(order: OrderForPlan): DesiredRequest[] {
 export type BackfillReport = {
   apply: boolean;
   ordersScanned: number;
-  /** Phiếu thu sẽ tạo (dry-run) / đã tạo (apply). */
+  /** Phiếu thu sẽ tạo (dry-run) / ĐÃ TẠO THẬT (apply — đếm theo kết quả createMany). */
   requestsCreated: number;
+  /** Phiếu không tạo được vì `matchKey` đã thuộc đơn khác (mã đơn bóc dấu bị trùng). */
+  matchKeyCollisions: number;
   requestsExisting: number;
   bankTxnCreated: number;
   allocationsCreated: number;
@@ -203,6 +225,7 @@ function emptyReport(apply: boolean): BackfillReport {
     apply,
     ordersScanned: 0,
     requestsCreated: 0,
+    matchKeyCollisions: 0,
     requestsExisting: 0,
     bankTxnCreated: 0,
     allocationsCreated: 0,
@@ -303,15 +326,19 @@ async function processOrder(
   log: (line: string) => void,
 ): Promise<void> {
   // ── 1. Phiếu thu ────────────────────────────────────────────────────────────
-  const desired = planRequests(order);
+  // Phiếu ĐỢT còn sống — quyết định script có được dựng phiếu toàn đơn hay không.
+  // `status` của phiếu đã nạp sẵn trong `LoadedOrder`, không tốn thêm truy vấn.
+  const daCoPhieuDot = order.paymentRequests.some(
+    (r) => r.installmentNo > 0 && r.status !== "VOID",
+  );
+  const desired = planRequests(order, daCoPhieuDot);
   const existingByNo = new Map(order.paymentRequests.map((r) => [r.installmentNo, r]));
   const toCreate = desired.filter((d) => !existingByNo.has(d.installmentNo));
 
   report.requestsExisting += order.paymentRequests.length;
-  report.requestsCreated += toCreate.length;
 
   if (apply && toCreate.length > 0) {
-    await db.paymentRequest.createMany({
+    const ra = await db.paymentRequest.createMany({
       data: toCreate.map((d) => ({
         orderId: order.id,
         centerId: order.centerId, // SCOPED_MODEL — create PHẢI set centerId
@@ -324,6 +351,34 @@ async function processOrder(
       })),
       skipDuplicates: true,
     });
+    // ⚠️ ĐẾM THEO KẾT QUẢ THẬT, KHÔNG THEO Ý ĐỊNH [sửa 14/09/2026].
+    //
+    // Bản trước cộng `toCreate.length` — tức số phiếu ĐỊNH tạo. Với `skipDuplicates`,
+    // số thật có thể NHỎ HƠN mà không lỗi nào báo. Đo trên `satarobo_local`: script in
+    // "Phiếu thu đã tạo: 493" trong khi DB chỉ có 382 ⇒ **111 phiếu hụt im lặng**, và
+    // 117 đơn (531.440.000đ) ở lại không có phiếu nào. Một script backfill báo cáo sai
+    // số nó vừa ghi thì còn tệ hơn script không chạy: người ta tin nó rồi đi làm việc khác.
+    report.requestsCreated += ra.count;
+
+    const hut = toCreate.length - ra.count;
+    if (hut > 0) {
+      // Nguyên nhân đã đo được: `matchKey` @unique bị ĐỤNG. `paymentMatchKey` bóc hết
+      // ký tự không phải chữ/số, nên `ORD--CS1--12-4` và `ORD--CS1-1-2-4` cùng ra
+      // `ORDCS1124`. Trên DB nghiệm thu có 234 đơn (117 cặp) đụng nhau như vậy.
+      // KHÔNG phải rủi ro của prod: mã đơn thật theo khuôn `ORD-260913-000001`
+      // (schema.prisma:4012) nên bóc dấu xong không thể đụng — đo được 3/496 đơn ở DB
+      // này dùng đúng khuôn đó, 493 còn lại là mã seed. Nhưng KHÔNG cổng nào ép khuôn
+      // ấy, nên cứ nói to ra mỗi lần nó xảy ra.
+      report.matchKeyCollisions += hut;
+      log(
+        `  ⚠️ ${order.code}: ${hut} phiếu KHÔNG tạo được — matchKey đã thuộc đơn khác ` +
+          `(mã đơn bóc dấu bị trùng). Đơn này sẽ không có phiếu thu, không xuất được QR.`,
+      );
+    }
+  } else {
+    // Dry-run: chưa ghi nên không có số thật để đếm — giữ nguyên ý định, và chính vì
+    // vậy con số dry-run có thể LỚN HƠN số sẽ ghi được. Nói rõ ở phần tổng kết.
+    report.requestsCreated += toCreate.length;
   }
 
   // ── 2. Dựng danh sách phiếu đang làm việc + mốc đã phân bổ ──────────────────
@@ -498,6 +553,15 @@ async function main(): Promise<void> {
   console.log(`\n── Kết quả ──`);
   console.log(`Đơn quét:                ${r.ordersScanned}`);
   console.log(`Phiếu thu ${apply ? "đã tạo" : "sẽ tạo"}:        ${r.requestsCreated} (đã có sẵn: ${r.requestsExisting})`);
+  if (r.matchKeyCollisions > 0) {
+    console.log(
+      `⚠️ KHÔNG tạo được:        ${r.matchKeyCollisions} phiếu — matchKey đã thuộc đơn khác.
+` +
+        `   Những đơn đó KHÔNG có phiếu thu ⇒ không xuất được QR, không đối khớp được tiền về.
+` +
+        `   Nguyên nhân: mã đơn bóc hết dấu bị trùng nhau (vd ORD--CS1--12-4 và ORD--CS1-1-2-4).`,
+    );
+  }
   console.log(`Giao dịch tổng hợp:      ${r.bankTxnCreated}`);
   console.log(`Dòng phân bổ:            ${r.allocationsCreated} · ${fmt(r.allocatedAmount)}đ`);
   console.log(`Khoản bỏ qua (đã làm):   ${r.paymentsSkipped}`);

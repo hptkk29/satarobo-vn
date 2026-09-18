@@ -6,6 +6,7 @@ import { CheckCheck, Loader2, FileSpreadsheet, ShieldAlert } from "lucide-react"
 import { Button } from "@/components/ui/button";
 
 import { bulkConfirmBackfillPaymentsAction } from "../_actions";
+import { KhoanBiBo } from "./khoan-bi-bo";
 
 /**
  * Xác nhận HÀNG LOẠT khoản NHẬP LIỆU BAN ĐẦU (học phí chốt trước 06/08, nhập từ sheet).
@@ -191,6 +192,10 @@ export function BulkBackfillConfirm() {
                   </li>
                 ))}
               </ul>
+              {/* Đếm theo lý do là CHƯA ĐỦ: chủ dự án 14/09 — "bấm xem thử xong chỉ xem
+                  và không có thao tác gì nữa à?". Khối dưới bày từng khoản và cho SỬA
+                  đúng những ca sửa được. */}
+              <KhoanBiBo />
             </div>
           )}
 

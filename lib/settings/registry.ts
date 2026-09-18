@@ -12,6 +12,11 @@
  * finance.debtReminderDaysBefore=14 (QĐ-O7), enrollment.suspendMaxMonths=6 (TBD-4).
  */
 import { z } from "zod";
+
+// Bộ chính sách hoa hồng chép từ SR.QD.208 — dùng làm GIÁ TRỊ MẶC ĐỊNH khi DB chưa có gì.
+// `chinh-sach-hoa-hong.ts` là file THUẦN (không Prisma, không DB) nên import được vào đây
+// mà không kéo theo gì.
+import { CHINH_SACH_MAC_DINH } from "@/lib/crm/chinh-sach-hoa-hong";
 import { internalAwards } from "@/components/legacy-laptrinhrobot/_data/awards";
 import { gifts } from "@/components/legacy-laptrinhrobot/_data/gifts";
 import { commitments } from "@/components/legacy-laptrinhrobot/_data/commitments";
@@ -62,6 +67,44 @@ const hotlineSchema = z.array(
     code: z.string().min(1),
     label: z.string().min(1),
     phone: z.string().min(1),
+  }),
+);
+
+/**
+ * Chính sách hoa hồng do người vận hành khai (SR.QD.208).
+ *
+ * ⚠️ `vaiNhan` là CHUỖI TỰ DO, cố ý: chủ dự án 14/09/2026 yêu cầu "thêm bớt các role
+ * nhận hoa hồng riêng chứ không khoá cứng". Ràng vào enum là mỗi vai mới lại phải sửa mã.
+ *
+ * ⚠️ Zod ở đây chỉ kiểm HÌNH DẠNG. Luật nghiệp vụ — trần tổng theo từng rổ, tỉ lệ 0..1,
+ * kiểu "thưởng theo bậc" phải có bậc — nằm ở `kiemChinhSach` trong
+ * `lib/crm/chinh-sach-hoa-hong.ts`, và đường ghi phải gọi nó. Nhét luật đó vào đây thì
+ * `registry.ts` phải biết trần, mà trần lại chính là một key khác trong cùng registry.
+ */
+const chinhSachHoaHongSchema = z.array(
+  z.object({
+    ma: z.string().min(1).max(60),
+    ten: z.string().min(1).max(200),
+    suKien: z.enum(["HOC_VIEN_MOI", "TAI_TUC", "CHUYEN_TRUNG_TAM", "BAN_THIET_BI"]),
+    loaiDon: z.enum(["TAT_CA", "COURSE", "PRODUCT"]),
+    kieuTinh: z.enum(["PHAN_TRAM", "SO_TIEN_CO_DINH", "THUONG_THEO_BAC"]),
+    // MỘT chính sách mang NHIỀU khoản (vai × giá trị) — gom "học viên mới" từ 5 dòng
+    // rời thành 1 quyết định. Tỉ lệ nằm trên TỪNG khoản vì công văn cho mỗi vai một mức.
+    khoan: z
+      .array(z.object({ vaiNhan: z.string().min(1).max(60), giaTri: z.number().min(0) }))
+      .max(30),
+    bac: z
+      .array(
+        z.object({
+          nguong: z.number().min(0),
+          thuong: z.number().min(0),
+          danhHieu: z.string().max(40).optional(),
+        }),
+      )
+      .optional(),
+    nguon: z.string().max(300).optional(),
+    ghiChu: z.string().max(2000).optional(),
+    bat: z.boolean(),
   }),
 );
 
@@ -198,6 +241,33 @@ export const SETTINGS = {
     },
     centerOverridable: false,
   }),
+  // 15/09/2026 — TRẦN % GIẢM GIÁ cho MỘT khoản trên một dòng đơn. Chủ dự án:
+  // "quy định lại mức giảm % tối đa là 50% và phần này cũng nên set ở trong cấu hình
+  // vận hành luôn."
+  //
+  // ⚠️ Đây là CẤU HÌNH, không phải hằng số — cùng bài học với
+  // `crm.commissionMaxTotalRate` (27/08): hằng `TRAN_PHAN_TRAM_MAC_DINH` trong
+  // `lib/orders/giam-gia-dong.ts` chỉ còn là mặc định cho code THUẦN. Mọi đường chạm
+  // DB được PHẢI `getSetting` rồi TRUYỀN VÀO `tienDon`/`gopGiamGia` — không thì người
+  // vận hành nới trần ở màn này mà đường ghi vẫn chặn theo số cũ, và không lỗi nào báo.
+  // Tham số ấy cố ý KHÔNG có mặc định để `tsc` liệt kê hết chỗ gọi (luật 7).
+  //
+  // ⚠️ KHÔNG `centerOverridable`: đây là mức TRẦN quản trị, không phải một chương trình
+  // khuyến mãi. Cho mỗi cơ sở tự nới trần là mỗi cơ sở một mức bớt tối đa, và kế toán
+  // không còn MỘT con số để đối. Ưu đãi khác nhau theo cơ sở thì khai ở từng khoản
+  // giảm trên dòng đơn — chỗ đó vốn đã tự do.
+  //
+  // Chặn dưới 1%: trần 0 nghĩa là MỌI khoản % âm thầm thành 0đ, người bán gõ 10% mà
+  // khách không được bớt gì. Muốn cấm hẳn giảm theo % thì đó là một quyết định khác,
+  // cần một cái công tắc nói đúng tên nó, không phải hạ trần về 0.
+  "orders.maxDiscountPercent": def({
+    key: "orders.maxDiscountPercent",
+    group: "finance",
+    label: "Trần % giảm giá mỗi khoản trên dòng đơn",
+    schema: z.number().int().min(1).max(100),
+    default: 50,
+    centerOverridable: false,
+  }),
   "finance.debtReminderDaysBefore": def({
     key: "finance.debtReminderDaysBefore",
     group: "finance",
@@ -229,6 +299,27 @@ export const SETTINGS = {
     schema: z.number().int().min(1).max(1440),
     default: 10,
     centerOverridable: false,
+  }),
+  // ── CÔNG TẮC thu học phí linh hoạt (module đơn nhiều con) ───────────────────────────
+  //
+  // Chủ dự án chốt 16/09/2026: *"nên để bật cho toàn hệ thống đồng loạt, nhưng sẽ có công tắc
+  // riêng cho từng cs."* Đó đúng là hình dạng `SystemSetting` + `CenterSetting` đang có: giá
+  // trị GLOBAL là công tắc chính, `centerOverridable` cho phép một cơ sở lệch.
+  //
+  // ⚠️ Vì sao KHÔNG dùng biến môi trường (dù đã có `PAYMENT_PER_CHILD_ENABLED`): cờ env
+  // `PAYMENT_LEDGER_V2` là tiền lệ đã đo — nó có trong mã, **không có trong 40 biến env của
+  // prod**, và 0 đường gọi thật. Bật nó không đổi hành vi gì. Cờ trong DB thì người vận hành
+  // bật được, thấy được, và có `AuditLog` ghi ai bật lúc nào.
+  //
+  // ⚠️ BẬT RỒI TẮT LẠI KHÔNG VÔ HẠI: phiếu thu đã sinh theo con vẫn nằm đó khi cờ tắt. Đường
+  // lùi là tắt cho đơn MỚI rồi xử lý tay số đơn đã lỡ sinh, không phải "tắt là như chưa có gì".
+  "billing.flexV1Enabled": def({
+    key: "billing.flexV1Enabled",
+    group: "finance",
+    label: "Thu học phí linh hoạt: công nợ theo từng con, phiếu gộp một QR cho cả nhà",
+    schema: z.boolean(),
+    default: false,
+    centerOverridable: true,
   }),
   "enrollment.suspendMaxMonths": def({
     key: "enrollment.suspendMaxMonths",
@@ -490,6 +581,24 @@ export const SETTINGS = {
     schema: z.number().min(0.08).max(0.2),
     default: 0.09,
     centerOverridable: false,
+  }),
+  /**
+   * TOÀN BỘ chính sách hoa hồng — người vận hành tự thêm/bớt, dev không phải code.
+   *
+   * Mặc định là bộ chép nguyên văn SR.QD.208 (`CHINH_SACH_MAC_DINH`). Từ lần lưu đầu
+   * tiên trở đi, bản trong DB thắng — file mã nguồn chỉ còn là giá trị khởi đầu.
+   *
+   * ⚠️ `centerOverridable: true`: PL08 Điều 4 nói "doanh thu ghi nhận tại Trung tâm nào
+   * thì chi phí hoa hồng hạch toán tại Trung tâm đó", nên từng cơ sở phải đè được. Mở cơ
+   * sở mới = khai dữ liệu, không sửa mã — đúng nguyên tắc của PRODUCT.md.
+   */
+  "crm.commissionPolicies": def({
+    key: "crm.commissionPolicies",
+    group: "crm",
+    label: "Chính sách hoa hồng (theo SR.QD.208)",
+    schema: chinhSachHoaHongSchema,
+    default: CHINH_SACH_MAC_DINH,
+    centerOverridable: true,
   }),
   "crm.trialMaxSessions": def({
     key: "crm.trialMaxSessions",
@@ -982,6 +1091,79 @@ export const SETTINGS = {
     schema: z.number().int().min(1).max(80),
     default: 24, // lib/teachers/load.ts OVERLOAD_HOURS_PER_WEEK
     centerOverridable: true,
+  }),
+  // ── Xếp giáo viên cho buổi học thử (17/09/2026) ────────────────────────────────────────
+  //
+  // Chủ dự án chốt: ô "Giáo viên" ở khối Thêm buổi học của lớp trải nghiệm chỉ được hiện
+  // người có ca làm PHỦ TRỌN khung giờ buổi đó. Hai khoá dưới đây là hai nút vặn của luật ấy
+  // — một cái bật/tắt luật, một cái khai ngoại lệ.
+  //
+  // ⚠️ CỜ TẮT, KHÔNG PHẢI CỜ BẬT. `default: false` nghĩa là ngày deploy KHÔNG có gì đổi:
+  // dropdown vẫn hiện đúng danh sách như hôm trước, và người vận hành tự bật khi đã xem
+  // bảng ca của tháng. Đây cũng là NÚT RÚT DÂY nếu lặp lại sự cố 28/08/2026 (một bản lọc
+  // làm dropdown rỗng trên prod): tắt cờ là mọi giáo viên hiện lại ngay, không cần deploy,
+  // không cần ai sửa mã.
+  "trial.locGvTheoCaLamViec": def({
+    key: "trial.locGvTheoCaLamViec",
+    group: "teacher",
+    label:
+      "Lọc giáo viên theo ca làm khi xếp buổi học thử — TẮT thì hiện mọi giáo viên như trước",
+    schema: z.boolean(),
+    default: false,
+    // Một cơ sở tự bật/tắt riêng thì cùng một thao tác ra hai kết quả khác nhau tuỳ người
+    // đang đứng ở đâu, và không ai ở Hội sở biết. Luật xếp người phải giống nhau toàn hệ.
+    centerOverridable: false,
+  }),
+  // ── Ngoại lệ: ai LUÔN hiện dù hôm đó không có ca ───────────────────────────────────────
+  //
+  // Chủ dự án 17/09: hai người điều hành đào tạo phải chọn được mọi lúc. Khai bằng CẤU HÌNH
+  // chứ không hardcode tên trong mã — người rời đi, người mới vào, và một danh sách tên nằm
+  // trong mã nguồn thì mỗi lần đổi là một lần deploy.
+  //
+  // ⚠️ CỐ Ý không import danh sách người dùng vào đây để đối chiếu "mã này có phải giáo viên
+  // không", dù đó mới là phép kiểm mạnh nhất — cùng lý do đã ghi ở `push.tienToDuocDay`:
+  // registry là tầng THẤP NHẤT, kéo `lib/teachers/assignable` (→ `lib/db`) vào là đẻ vòng
+  // import mà `lint:boundaries` chặn cứng. Tầng này gác HÌNH DẠNG; phép đối chiếu với danh
+  // sách giáo viên THẬT nằm ở `luuGvMienTruAction` — đường ghi duy nhất mà giao diện dùng.
+  "trial.gvMienLocTheoCa": def({
+    key: "trial.gvMienLocTheoCa",
+    group: "teacher",
+    label:
+      "Giáo viên luôn hiện khi xếp buổi học thử dù hôm đó không có ca — chọn bằng bảng tên " +
+      "ở cuối tab Lớp & giáo viên",
+    schema: z
+      .array(z.string())
+      .max(50)
+      .superRefine((ds, ctx) => {
+        const daGap = new Set<string>();
+        ds.forEach((d, i) => {
+          // Chuỗi rỗng KHÔNG khớp được ai, nên nhìn thì vô hại — nhưng nó làm con số trên
+          // màn hình ("3 người được miễn") lệch với số người thật, và bất kỳ chỗ nào so bằng
+          // `mien.has(gv.id ?? "")` sẽ biến MỌI giáo viên chưa có mã thành được miễn. Một
+          // dòng rỗng trong danh sách ngoại lệ là thứ không ai đọc ra được bằng mắt.
+          if (d.trim().length === 0) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: [i],
+              message: "Có dòng trống trong danh sách — không khớp được giáo viên nào",
+            });
+          }
+          if (daGap.has(d)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: [i],
+              message: `"${d}" bị khai hai lần`,
+            });
+          }
+          daGap.add(d);
+        });
+      }),
+    // RỖNG = không ai được miễn. Đúng hành vi trước khi có tính năng này, nên DB trống ở mọi
+    // môi trường vẫn ra kết quả cũ.
+    default: [],
+    // Cùng lý do với cờ ngay trên: ngoại lệ lệch giữa các cơ sở là cùng một người chọn được
+    // ở đây mà không chọn được ở kia, không ai giải thích nổi.
+    centerOverridable: false,
   }),
   "lms.mediaSignedUrlTtl": def({
     key: "lms.mediaSignedUrlTtl",

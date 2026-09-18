@@ -12,10 +12,15 @@
 // log và audit sẽ có hai bộ action làm việc giống nhau — trùng tên là nguồn nhầm lẫn.
 import { revalidatePath } from "next/cache";
 import { checkPermission, canViewLeadPii } from "@/lib/auth/check-permission";
+import { laLeadCuaToi, leadCuaToiOrClause } from "@/lib/lead/sharing";
+import type { Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { leadStatusLabel } from "@/lib/leads/status";
 import { phoneSearchTerm } from "@/lib/phone";
 import { maskLeadPiiFields } from "@/lib/lead/pii";
+import { getAssignableTeachers } from "@/lib/teachers/assignable";
+import { locGiaoVienChoBuoi, type DongGv } from "@/lib/trial/gv-kha-dung";
+import { layCaCuaNhieuNguoi } from "@/lib/trial/gv-kha-dung-db";
 import {
   createTrialClass,
   addTrialSession,
@@ -39,8 +44,13 @@ import {
   cancelSessionSchema,
   attendanceSchema,
   createClassSchema,
+  gvChoBuoiSchema,
+  ngoaiCuaSoNgayGvBuoi,
 } from "./_lib/schemas";
 import { ngayVnSangUtc } from "./_lib/filters";
+import { quyRaCheDo } from "./_lib/che-do-gv";
+import { gvXepDuocTheoDanhSach } from "./_lib/gv-hop-le";
+import { layLichBanGiaoVien } from "./_lib/queries";
 import type { ActionResult, Candidate } from "./_lib/types";
 
 const CHUA_DANG_NHAP = "Chưa đăng nhập" as const;
@@ -120,8 +130,210 @@ export async function createLopTrialClassAction(
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// 2b) Danh sách giáo viên chọn được cho MỘT khung giờ (chốt 17/09/2026)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Giáo viên đang được gán ở BẤT KỲ buổi nào của lớp — luôn phải giữ trong ô chọn.
+ *
+ * Không có vế này thì người đã nghỉ việc (hoặc hôm nay không có ca) bị lọc mất khỏi
+ * `<select>` trong khi tên họ vẫn in ở thẻ bên cạnh, và lần lưu kế tiếp `<select>` âm
+ * thầm đổi sang người khác. Đó đúng là gốc của bug "gán từ trang Giáo viên nhưng Lớp
+ * học hiện trống" đã gặp hai lần.
+ */
+async function gvDangGanTrongLop(
+  actor: Actor,
+  trialClassId: string,
+): Promise<string[]> {
+  const rows = await scopedDb(actor).trialClassSession.findMany({
+    where: { trialClassId, teacherId: { not: null } },
+    select: { teacherId: true },
+    take: 200,
+  });
+  return rows.map((r) => r.teacherId).filter((id): id is string => Boolean(id));
+}
+
+/**
+ * Ai chọn được cho buổi trải nghiệm ngày `date`, khung `startTime`–`endTime`.
+ *
+ * Vì sao là Server Action chứ không phải prop bơm sẵn từ trang: ngày và giờ do người
+ * dùng chọn TỰ DO, nên bơm sẵn nghĩa là bơm cả lưới ca của mọi giáo viên mọi ngày xuống
+ * trình duyệt — vừa nặng vừa là dữ liệu chấm công của người khác nằm trong bundle.
+ *
+ * ⚠️ Đây là đường ĐỌC nhưng vẫn gác bằng `trials:manage`, CÙNG khoá với cửa ghi: nó trả
+ * về tên người kèm trạng thái lịch dạy, và nó là thứ cửa ghi dùng để tự gác. Hai bên
+ * lệch khoá là hoặc rò danh sách, hoặc lọc trang trí.
+ *
+ * Thứ tự cố ý: `requireActor` → `loadScopedTrialClass` (lọc theo tầm nhìn, ngoài phạm vi
+ * là "không tìm thấy") → `checkPermission` KÈM `centerId` của lớp. Nạp lớp trước chỉ để
+ * có `centerId` thật mà hỏi quyền — và nó đã bị `scopedDb` cắt theo tầm nhìn nên không
+ * mở thêm đường dò id nào.
+ */
+export async function layGvChoBuoiAction(input: {
+  trialClassId: string;
+  /** "YYYY-MM-DD" theo lịch VN — đúng giá trị của `<input type="date">`. */
+  date: string;
+  startTime: string;
+  endTime: string;
+  /** Buổi ĐANG SỬA, loại khỏi phép so trùng. `null`/bỏ trống khi đang THÊM buổi mới. */
+  excludeSessionId?: string | null;
+  /**
+   * Công tắc "Hiện tất cả giáo viên" của lượt chọn này.
+   *
+   * ⚠️ **BẮT BUỘC trong chữ ký TS** (luật 7) để `tsc` liệt kê mọi chỗ gọi — mắt thấy hai
+   * cửa (thêm buổi / sửa buổi), và cả hai đi qua CÙNG một hook, nhưng chữ ký là thứ duy
+   * nhất bảo đảm cửa thứ ba sau này không lặng lẽ bỏ trống.
+   *
+   * Zod thì ngược lại, `.default(false)`: đây là endpoint, payload thiếu khoá đến từ
+   * ngoài phải rơi về vế ĐANG LỌC, không phải vế mở.
+   */
+  hienTatCa: boolean;
+}): Promise<ActionResult<{ ds: DongGv[]; lyDoRong: string | null }>> {
+  const ctx = await requireActor();
+  if (!ctx) return { ok: false, error: CHUA_DANG_NHAP };
+
+  // Chữ ký ở trên là lời hứa của `tsc` với hai chỗ gọi TRONG repo, KHÔNG phải cổng: đây
+  // là endpoint, ai cũng POST payload bất kỳ vào được. Không `safeParse` thì `date: 123`
+  // làm `ngayVnSangUtc` gọi `.trim()` trên số ⇒ action NÉM ⇒ client nhận promise bị từ
+  // chối chứ không nhận `error`, và ô chọn giáo viên đứng im với danh sách CŨ (luật 12).
+  const parsed = gvChoBuoiSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  }
+  const data = parsed.data;
+
+  const cls = await loadScopedTrialClass(ctx.actor, data.trialClassId);
+  if (!cls) return { ok: false, error: KHONG_THAY_LOP };
+
+  if (!(await checkPermission("trials:manage", { centerId: cls.centerId }))) {
+    return { ok: false, error: "Không có quyền xếp giáo viên cho buổi trải nghiệm" };
+  }
+
+  const workDate = ngayVnSangUtc(data.date);
+  if (!workDate) return { ok: false, error: "Ngày buổi học không hợp lệ" };
+
+  // ⚠️ CỬA SỔ NGÀY (vá 17/09/2026) — zod chỉ kiểm HÌNH DẠNG `YYYY-MM-DD`, không buộc ngày
+  // dính vào buổi nào của lớp. Endpoint này trả trạng thái ca của TỪNG giáo viên cho ngày
+  // được hỏi, nên gọi lặp theo từng ngày là dựng lại lưới ca nhiều năm. Luật nằm ở hàm
+  // THUẦN `ngoaiCuaSoNgayGvBuoi` (phép tính hai con số ghi ở đó); `now` truyền từ ĐÂY —
+  // đây là ranh giới được phép đọc đồng hồ, hàm thuần thì không (luật 19).
+  if (ngoaiCuaSoNgayGvBuoi({ ymd: data.date, now: new Date() })) {
+    return { ok: false, error: "Ngày buổi học nằm ngoài khoảng xếp lịch cho phép" };
+  }
+
+  // BA TẦNG (V1-d) — hỏi quyền, rồi quy ra tầng bằng hàm THUẦN. Không `if (role === …)`.
+  // `trials:assign-teacher` hỏi TRẦN (khoá của Đào tạo, phạm vi toàn hệ thống);
+  // `trials:assign-teacher-center` hỏi KÈM cơ sở của chính lớp này.
+  //
+  // `hr_attendance:view` là khoá của MODULE CHẤM CÔNG (`lib/cham-cong/module-scope.ts`),
+  // hỏi KÈM cơ sở của lớp y như màn chấm công hỏi theo từng khối. Nó KHÔNG gác endpoint
+  // này — Sale cố ý không có khoá đó mà vẫn phải xếp được giáo viên (tầng 3 của đặc tả).
+  // Nó chỉ quyết định có được biết LÝ DO một người không nhận buổi hay không.
+  const [toanHe, theoCoSo, batLoc, gvMien, xemLichCa] = await Promise.all([
+    checkPermission("trials:assign-teacher"),
+    checkPermission("trials:assign-teacher-center", { centerId: cls.centerId }),
+    getSetting("trial.locGvTheoCaLamViec"),
+    getSetting("trial.gvMienLocTheoCa"),
+    checkPermission("hr_attendance:view", { centerId: cls.centerId }),
+  ]);
+  const cheDo = quyRaCheDo({ toanHe, theoCoSo });
+
+  // ⛔ KHÔNG truyền `centerIds` cho `getAssignableTeachers` — đó đúng là bug prod 28/08
+  // ("lớp CS1 KHÔNG hiện ai"): bộ lọc đó đọc `User.centerId`, cột trống hoặc trỏ Hội sở ở
+  // phần lớn tài khoản giáo viên. Phạm vi cơ sở áp ở tầng LUẬT (`coSoChoPhep`), nơi nó
+  // đọc cơ sở LÀM VIỆC HÔM ĐÓ trên lưới ca chứ không đọc cơ sở biên chế.
+  const luonGiu = await gvDangGanTrongLop(ctx.actor, cls.id);
+  const teachers = await getAssignableTeachers({ includeIds: luonGiu });
+  const ids = teachers.map((t) => t.id);
+
+  const [{ theoNguoi, luoiDaSinh, coTrongLuoi }, banTheoGv] = await Promise.all([
+    layCaCuaNhieuNguoi(ctx.actor, ids, workDate),
+    layLichBanGiaoVien(ctx.actor, {
+      ymd: data.date,
+      excludeSessionId: data.excludeSessionId ?? null,
+    }),
+  ]);
+
+  const { ds, lyDoRong } = locGiaoVienChoBuoi({
+    giaoVien: teachers.map((t) => ({ id: t.id, name: t.name ?? "(không tên)" })),
+    caTheoGv: theoNguoi,
+    banTheoGv,
+    khung: { ymd: data.date, startTime: data.startTime, endTime: data.endTime },
+    // Ai đã có mặt trong lưới THÁNG — thiếu ở đây là `CHUA_VAO_LUOI`, tức GIỮ kèm nhãn
+    // thay vì ẩn câm. Giáo viên mới tuyển đi qua đúng đường này.
+    coTrongLuoi,
+    mienLuat: new Set(gvMien),
+    luonGiu: new Set(luonGiu),
+    // Phạm vi cơ sở lấy từ CHÍNH lớp (luôn đúng một cơ sở), KHÔNG lấy
+    // `actor.visibleCenterIds`: chỉ cần MỘT dòng `UserOrgRole` neo tại Hội sở là tập đó
+    // nở ra thành "mọi cơ sở" và câu "cơ sở mình nắm" mất nghĩa — im lặng.
+    // Tầng Đào tạo mới được `null` (= mọi cơ sở), và phải viết ra chữ `null` (luật 7).
+    coSoChoPhep: cheDo === "TAT_CA" ? null : new Set([cls.centerId]),
+    cheDo,
+    luoiDaSinh,
+    batLoc,
+    // ĐƯỜNG THOÁT của người dùng. CHỈ tắt bộ lọc HIỂN THỊ — mọi câu đọc ở trên vẫn đi qua
+    // `scopedDb(ctx.actor)`, và cửa GHI (`gvXepDuoc`) không đọc cờ này. Xem chú thích của
+    // `hienTatCa` trong `lib/trial/gv-kha-dung.ts` về việc vì sao đây không phải nới quyền.
+    //
+    // ⚠️ SALE KHÔNG ĐƯỢC dùng công tắc này (chốt 18/09/2026) — và phải chặn Ở ĐÂY, không
+    // chỉ ẩn ô tích. Ẩn ở giao diện chỉ giấu cái NÚT; cờ vẫn nằm trong payload của một
+    // Server Action, nên POST thẳng `hienTatCa: true` là xem được nguyên danh sách. Đúng
+    // lớp lỗi "lọc ở trang là lọc trang trí" mà màn này đã dính một lần.
+    //
+    // Không ném lỗi, chỉ BỎ QUA: người dùng hợp lệ không bao giờ gửi cờ này (ô tích đã
+    // không được vẽ), nên gửi tới đây nghĩa là payload dựng tay — trả về đúng thứ họ được
+    // phép thấy là phản ứng đủ, và không dạy người dò biết mình vừa chạm phải cái gì.
+    hienTatCa: cheDo === "LOC_THEO_CA" ? false : data.hienTatCa,
+    // Che LÝ DO, KHÔNG che người: thiếu khoá chấm công thì ba nhãn nói về lịch nghỉ/lịch
+    // làm cá nhân gộp về một chữ trung tính. Xem `duocXemLyDoNghi` ở `gv-kha-dung.ts`.
+    duocXemLyDoNghi: xemLichCa,
+  });
+
+  return { ok: true, ds, lyDoRong };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // 3) Thêm buổi
 // ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Cổng GHI cho ô "Giáo viên": id gửi lên có phải một giáo viên THẬT không.
+ *
+ * Lọc ở trang là lọc TRANG TRÍ — `<select>` chỉ là gợi ý, ai cũng POST thẳng được một
+ * `teacherId` bất kỳ. Trước cổng này, `addTrialSession` nhận mọi `User.id`: gán một tài
+ * khoản phụ huynh làm giáo viên buổi trải nghiệm là việc làm được, và nó hỏng CÂM (buổi
+ * ra đời bình thường, chỉ có người không bao giờ tới lớp).
+ *
+ * ⚠️ CỐ Ý **không** chặn theo lịch ca, và cũng **không** chặn theo cơ sở:
+ *   · Theo ca — chủ dự án 17/09 viết rõ "chỉ HIỂN THỊ" và "note đỏ lên để BIẾT". Form
+ *     vốn cố ý không chặn: người xếp lịch biết điều hệ thống không biết.
+ *   · Theo cơ sở — cột dùng để suy cơ sở của một giáo viên là `User.centerId`, và nó
+ *     trống hoặc trỏ Hội sở ở phần lớn tài khoản GV (đo trên prod 28/08). Chặn ghi bằng
+ *     cột đó là dựng lại đúng bug "lớp CS1 không xếp được ai", lần này ở cửa GHI nên
+ *     người dùng không có đường vòng nào. Giáo viên là nguồn lực chung từ 06/08.
+ *
+ * @param giuThem giáo viên đang gán sẵn trên buổi — luôn coi là hợp lệ, nếu không thì
+ *   người đã nghỉ việc làm cho mọi lượt sửa buổi cũ bị từ chối.
+ */
+async function gvXepDuoc(
+  teacherId: string,
+  giuThem: (string | null)[],
+): Promise<boolean> {
+  const ds = await getAssignableTeachers({ includeIds: giuThem });
+  // Luật quyết định nằm ở hàm THUẦN `_lib/gv-hop-le.ts` — ở đó nó kiểm được bằng vitest,
+  // và ở đó có khối bằng chứng vì sao `ds` KHÔNG đáng tin cho câu hỏi "giữ nguyên được
+  // không" (vá 17/09/2026: `deletedAt: null` của `getAssignableTeachers` AND đè cả nhánh
+  // `includeIds`, nên tài khoản đã xoá mềm khoá cứng mọi lượt sửa buổi cũ).
+  return gvXepDuocTheoDanhSach({
+    teacherId,
+    dsChonDuoc: ds.map((t) => t.id),
+    giuThem,
+  });
+}
+
+const GV_KHONG_HOP_LE =
+  "Người được chọn không phải giáo viên đang hoạt động — chọn lại trong danh sách" as const;
 
 export async function addLopTrialSessionAction(
   input: unknown,
@@ -140,6 +352,12 @@ export async function addLopTrialSessionAction(
 
   const cls = await loadScopedTrialClass(ctx.actor, data.trialClassId);
   if (!cls) return { ok: false, error: KHONG_THAY_LOP };
+
+  // Cổng GHI cho ô "Giáo viên" — xem chú thích của `gvXepDuoc`. `undefined` = kế thừa
+  // GV của lớp (service tự lo), `null` = cố ý bỏ trống; chỉ id THẬT mới phải kiểm.
+  if (data.teacherId != null && !(await gvXepDuoc(data.teacherId, []))) {
+    return { ok: false, error: GV_KHONG_HOP_LE };
+  }
 
   // Cột `date` là `@db.Date` → lưu UTC 00:00 của NGÀY VN. Không dùng `new Date(str)`:
   // hàm đó đọc múi giờ tiến trình, Vercel chạy UTC còn máy dev +07 nên lệch một ngày.
@@ -208,6 +426,12 @@ export async function updateLopTrialSessionAction(
 
   const date = ngayVnSangUtc(data.date);
   if (!date) return { ok: false, error: "Ngày buổi học không hợp lệ" };
+
+  // Cổng GHI cho ô "Giáo viên". `giuThem` mang người ĐANG gán trên buổi: lượt sửa chỉ
+  // đổi ghi chú của một buổi cũ không được vỡ vì giáo viên hôm nay đã nghỉ việc.
+  if (data.teacherId != null && !(await gvXepDuoc(data.teacherId, [ses.teacherId]))) {
+    return { ok: false, error: GV_KHONG_HOP_LE };
+  }
 
   const gvMoi = data.teacherId === undefined ? ses.teacherId : data.teacherId;
   const doiLich =
@@ -346,6 +570,24 @@ export async function enrollLeadChildLopTrialAction(input: {
   const cls = await loadScopedTrialClass(ctx.actor, input.trialClassId);
   if (!cls) return { ok: false, error: KHONG_THAY_LOP };
 
+  // CỬA GHI của luật "Sale chỉ thêm học viên thuộc lead của mình" (chốt 17/09/2026).
+  //
+  // ⚠️ Lọc ở ô TÌM là lọc TRANG TRÍ — `searchLopTrialCandidatesAction` chỉ gợi ý, còn đây
+  // là endpoint riêng và ai cũng POST thẳng một `leadChildId` bất kỳ vào được. Hai cửa
+  // phải dùng CÙNG một định nghĩa "của tôi", nếu không thì cửa hẹp hơn là cửa không ai đi.
+  if (!(await checkPermission("leads:view-all", { centerId: cls.centerId }))) {
+    const con = await scopedDb(ctx.actor).leadChild.findUnique({
+      where: { id: input.leadChildId },
+      select: { lead: { select: { assignedToId: true, createdById: true, isSharedWithTeam: true } } },
+    });
+    if (!con?.lead || !laLeadCuaToi(con.lead, ctx.session.user.id)) {
+      return {
+        ok: false,
+        error: "Chỉ xếp được học viên thuộc lead bạn phụ trách — nhờ Quản lý cơ sở hoặc Đào tạo xếp hộ",
+      };
+    }
+  }
+
   // Buổi được chọn phải thuộc ĐÚNG lớp đang xếp — chống POST thẳng buổi của lớp khác.
   if (input.sessionId) {
     const ses = await scopedDb(ctx.actor).trialClassSession.findUnique({
@@ -407,9 +649,20 @@ export async function searchLopTrialCandidatesAction(input: {
   // Chỉ con CHƯA ở lớp ACTIVE nào (partial-unique cho phép đúng 1 lớp ACTIVE / con).
   const childFree = { trialEnrollments: { none: { status: "ACTIVE" as const } } };
 
+  // Chốt 17/09/2026 — Sale chỉ thêm được học viên thuộc LEAD CỦA MÌNH.
+  //
+  // Diễn đạt bằng QUYỀN, không so vai (luật cứng #1): `leads:view-all` đã tồn tại và đã
+  // đúng tập vai cần phân biệt — HO_MARKETING · TRAINING · CENTER_MANAGER giữ nó,
+  // CENTER_SALES_CSM thì không. Không cần thêm khoá mới.
+  //
+  // `leadCuaToiOrClause` là định nghĩa DÙNG CHUNG với `/admin/leads` và `/admin/search`;
+  // đừng chép ba vế của nó ra đây (xem chú thích tại hàm).
+  const xemMoiLead = await checkPermission("leads:view-all", { centerId: cls.centerId });
+
   const leads = await sdb.lead.findMany({
     where: {
       centerId: cls.centerId,
+      ...(xemMoiLead ? {} : { OR: leadCuaToiOrClause(ctx.session.user.id) }),
       // GĐ5 — bốn giá trị cũ gộp còn hai: ENROLLED+REGISTERED → DA_DANG_KY,
       // LOST+DUPLICATE → DA_MAT. Tập lead bị loại khỏi danh sách ứng viên KHÔNG đổi.
       status: { notIn: ["DA_DANG_KY", "DA_MAT"] },

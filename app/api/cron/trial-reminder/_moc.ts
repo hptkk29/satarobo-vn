@@ -24,13 +24,25 @@ export function mocBatDau(date: Date, startTime: string): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-export type TenMoc = "1-ngay" | "2-gio";
+export type TenMoc = "1-ngay" | "2-gio" | "1-gio";
+
+/**
+ * Ai là người nhận chuông của mốc này.
+ *
+ * ⚠️ ĐÂY LÀ TRƯỜNG RẼ NHÁNH, và nó là TRƯỜNG DỮ LIỆU chứ không phải tên mốc — có chủ đích.
+ * Nơi chạy phải hỏi `moc.nhan`, TUYỆT ĐỐI không so `moc.ten === "1-gio"`. Lý do: so theo tên
+ * thì thêm một mốc GV thứ hai (vd "30-phut") là lập tức rơi vào nhánh Sale, và triệu chứng là
+ * Sale ăn thêm một chuông lạ chứ không phải GV mất chuông — tức lỗi hiện ra ở NGƯỜI KHÔNG LIÊN
+ * QUAN, đúng loại mất công dò nhất.
+ */
+export type NhanMoc = "sale" | "giao-vien";
 
 /** Cửa sổ nhắc, tính bằng GIỜ còn lại tới lúc buổi bắt đầu: `[tuGio, denGio)`. */
 export interface Moc {
   ten: TenMoc;
   tuGio: number;
   denGio: number;
+  nhan: NhanMoc;
 }
 
 /**
@@ -49,10 +61,42 @@ export interface Moc {
  *
  * Hệ quả có chủ đích: một buổi có thể lọt vào cửa sổ ở HAI lần chạy liên tiếp. Không sao —
  * `dedupeKey` gồm cả tên mốc nên lần thứ hai chỉ chạm lại bản ghi cũ, không kêu hai lần.
+ *
+ * ── MỐC "1-gio" (V2-d, 17/09/2026) — NHẮC GIÁO VIÊN, KHÔNG NHẮC SALE ───────────────────
+ * PHÉP TÍNH ra đúng hai con số `[0.4, 1.5)`, ghi lại ở đây để lần sau đừng ai "làm tròn
+ * cho đẹp" thành `[0.5, 1.5)` (= 60′, hụt) hay `[1, 2)` (= chồng mốc "2-gio"):
+ *
+ *   1. Bề rộng TỐI THIỂU. Lưới lấy mẫu là các lượt cron. Nhịp danh nghĩa 60′, nhưng Vercel
+ *      Cron trễ vài phút KHÔNG ĐỀU, nên khoảng cách giữa HAI LƯỢT LIÊN TIẾP có thể tới
+ *      ~65′. Một cửa sổ nửa mở rộng W phút chắc chắn bắt được ≥1 lượt khi và chỉ khi
+ *      W ≥ khoảng cách lớn nhất giữa hai lượt ⇒ **W ≥ 65′**. Cửa sổ 60′ là KHÔNG ĐỦ:
+ *      đo được pha trượt hẳn (xem ca "phủ kín lưới" trong `_moc.test.ts`, mốc lệch 0,4h).
+ *
+ *   2. Mép TRÊN bị chặn CỨNG ở 1.5 — không phải chọn, mà là ràng buộc. `chonMoc` dùng
+ *      `.find`, tức trả mốc ĐẦU TIÊN khớp theo THỨ TỰ MẢNG, và "2-gio" (mép dưới 1.5)
+ *      đứng trước. Nới "1-gio" LÊN quá 1.5 ⇒ mọi lượt trong phần chồng bị "2-gio" nuốt và
+ *      mốc mới không bao giờ bắn — hỏng CÂM, vì cả hai mốc đều "vẫn chạy".
+ *
+ *   3. Nên phải nới XUỐNG DƯỚI: 1.5 − 65/60 = 1.4167 ⇒ lấy **0.4** cho tròn số người đọc
+ *      được. Bề rộng thật = 1.1h = **66′ ≥ 65′**, dư đúng 1 phút.
+ *
+ * HỆ QUẢ, NÓI THẲNG (đây là đánh đổi, không phải chi tiết kỹ thuật):
+ *   · Tên mốc là "1 tiếng trước" nhưng đó là MỤC TIÊU TRUNG BÌNH. Trường hợp xấu nhất —
+ *     lượt cron rơi sát mép dưới — giáo viên chỉ được báo trước **~24 phút** (0.4h).
+ *     Muốn chặt hơn thì phải đổi nhịp cron trong `vercel.json`, và chủ dự án đã chốt
+ *     KHÔNG đổi.
+ *   · Buổi được TẠO khi chỉ còn dưới 24 phút thì **KHÔNG BAO GIỜ** nhận chuông của mốc
+ *     này: lượt cron kế tiếp thấy nó đã dưới mép dưới, `chonMoc` trả `undefined`, và
+ *     không có mốc nào ở dưới nữa. Không im lặng hoàn toàn — người xếp buổi vẫn nhận
+ *     chuông "được phân buổi trải nghiệm" ngay lúc tạo (`trial-session.assigned:`).
  */
 export const MOC: readonly Moc[] = [
-  { ten: "1-ngay", tuGio: 23, denGio: 25 },
-  { ten: "2-gio", tuGio: 1.5, denGio: 2.5 },
+  { ten: "1-ngay", tuGio: 23, denGio: 25, nhan: "sale" },
+  { ten: "2-gio", tuGio: 1.5, denGio: 2.5, nhan: "sale" },
+  // Đặt CUỐI mảng là an toàn (ba cửa sổ đôi một rời nhau nên thứ tự không đổi kết quả),
+  // nhưng đừng dựa vào điều đó: ca "đôi một không chồng" trong `_moc.test.ts` mới là thứ
+  // giữ cho `.find` không nuốt mốc nào.
+  { ten: "1-gio", tuGio: 0.4, denGio: 1.5, nhan: "giao-vien" },
 ];
 
 /** Mốc khớp với số giờ còn lại, hoặc `undefined` nếu buổi chưa/đã qua cửa sổ. */

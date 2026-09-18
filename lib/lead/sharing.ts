@@ -57,3 +57,42 @@ export function leadSharingEnabled(): boolean {
 export function leadSharedOrClause(): { isSharedWithTeam: true }[] {
   return isLeadSharingEnabled() ? [{ isSharedWithTeam: true }] : [];
 }
+
+/**
+ * Mệnh đề `OR` cho "LEAD CỦA TÔI" — nguồn ĐỊNH NGHĨA DUY NHẤT của cụm từ đó.
+ *
+ * ── VÌ SAO LÀ HÀM DÙNG CHUNG, KHÔNG CHÉP TẠI CHỖ (17/09/2026) ─────────────────────────
+ * "Của tôi" có BA vế và không vế nào bỏ được:
+ *   · `assignedToId` — Sale cơ sở: phiếu được GIAO cho mình;
+ *   · `createdById`  — Sale Hội sở: phiếu mình NHẬP. Phiếu đó tự chia về cơ sở nên họ
+ *     KHÔNG BAO GIỜ là assignee; thiếu vế này thì danh sách của họ rỗng trắng;
+ *   · lead dùng chung — theo chính sách `LEAD_SHARING_ENABLED`, tắt thì mảng rỗng.
+ *
+ * Ba vế đó đã được cân ở màn `/admin/leads` và `/admin/search`. Chép lần thứ tư sang màn
+ * Lớp Trial là dựng bản thứ tư để trôi lệch — và cùng ngày hôm nay repo vừa trả giá đúng
+ * một lần cho lỗi ấy (hai đường sinh nhãn giáo viên: vá một, cái còn lại vẫn in ra prod).
+ *
+ * ⚠️ Chỉ dùng cho người KHÔNG có `leads:view-all`. Người có khoá đó đi nhánh khác — gọi
+ * hàm này cho họ là tự siết quyền của chính mình.
+ */
+export function leadCuaToiOrClause(
+  userId: string,
+): ({ assignedToId: string } | { createdById: string } | { isSharedWithTeam: true })[] {
+  return [{ assignedToId: userId }, { createdById: userId }, ...leadSharedOrClause()];
+}
+
+/**
+ * Bản THUẦN của `leadCuaToiOrClause`, dùng cho CỬA GHI.
+ *
+ * Cửa đọc lọc bằng mệnh đề Prisma; cửa ghi đã cầm sẵn bản ghi nên chỉ cần so. Hai vế phải
+ * nói CÙNG một điều — tách hai hàm nhưng đặt cạnh nhau, cùng một chú thích, để ai sửa một
+ * vế thấy ngay vế kia. Thêm/bớt một vế ở đây mà quên vế trên là lọc một đằng, chặn một nẻo.
+ */
+export function laLeadCuaToi(
+  lead: { assignedToId: string | null; createdById: string | null; isSharedWithTeam: boolean },
+  userId: string,
+): boolean {
+  if (lead.assignedToId === userId) return true;
+  if (lead.createdById === userId) return true;
+  return isLeadSharingEnabled() && lead.isSharedWithTeam;
+}

@@ -121,3 +121,8 @@ var/
 # lưới chặn ở nơi KHÔNG phụ thuộc vào một file do công cụ khác quản lý: xoá nhầm file con
 # thì vẫn còn dòng này. Chủ dự án chốt 15/09/2026.
 .codegraph/
+
+# Báo cáo đối soát tiền sinh ra từ prod (workflow chỉ-đọc). SĐT đã che nhưng mã đơn là thật
+# — nó vẫn là ảnh chụp dữ liệu sống, không vào repo. Bản chính thức sống ở artifact của
+# workflow, giữ 3 ngày.
+bao-cao-doi-soat-tien.md

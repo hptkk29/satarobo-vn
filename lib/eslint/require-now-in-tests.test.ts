@@ -12,7 +12,7 @@
  * này kiểm THÊM một điều mà `RuleTester` không kiểm được: rule có được **cắm đúng phạm vi**
  * trong `eslint.config.mjs` hay không.
  */
-import { describe, it, expect } from "vitest";
+import { beforeAll, describe, it, expect } from "vitest";
 import { ESLint } from "eslint";
 
 const RULE = "thoigian/require-now-in-tests";
@@ -29,6 +29,25 @@ async function loi(filePath: string, code: string) {
 }
 
 describe(RULE, () => {
+  /**
+   * LÀM NÓNG ESLint một lần ở hook — KHÔNG để ca đầu tiên trả tiền hộ.
+   *
+   * ── Vì sao (chẩn 15/09/2026) ──
+   * `new ESLint()` ở trên rẻ; đắt là LẦN `lintText` ĐẦU TIÊN, vì lúc đó ESLint mới đi
+   * phân giải flat-config của repo (typescript-eslint + toàn bộ plugin + parser).
+   *
+   * Đo thật: ca đầu **1177ms**, tám ca sau 2–6ms. Dưới tải máy (dev server + vừa xong
+   * cả bộ test) ca đầu thành **7433ms** ⇒ vượt trần 5s ⇒ ĐỎ với "Test timed out",
+   * không phải vì rule sai. Cùng hình dạng với `tests/cham-cong/requests.spec.ts` đã vá
+   * cùng ngày: chi phí KHỞI TẠO MỘT LẦN bị tính vào ngân sách của phép khẳng định.
+   *
+   * ⚠️ ĐỪNG nới trần của ca. Trần là để đo rule; nới nó vì chi phí nạp cấu hình là bỏ
+   * luôn khả năng thấy một rule thật sự chạy lâu. Hook có ngân sách riêng.
+   */
+  beforeAll(async () => {
+    await eslint.lintText("", { filePath: TRONG_PHAM_VI });
+  });
+
   it("[CAY-LAI] bắt ĐÚNG lời gọi đã gây đỏ 13/09/2026", async () => {
     // Nguyên văn hình dạng cũ của `requests.spec.ts > LEAVE 2 ngày duyệt`.
     const ms = await loi(

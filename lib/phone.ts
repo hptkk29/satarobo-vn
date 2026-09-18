@@ -129,7 +129,23 @@ export function phoneVariants(raw: unknown): string[] {
     const s = stripFormatting(raw);
     return s ? [s] : [];
   }
-  return [c, `0${c.slice(2)}`];
+  return [c, nationalPhone(c) ?? c];
+}
+
+/**
+ * Dạng NỘI ĐỊA `0XXXXXXXXX` — thứ người Việt đọc, viết và gõ.
+ *
+ * `canonicalPhone` trả `84…` vì đó là dạng LƯU TRỮ (một số một cách viết, so sánh
+ * được). Nhưng mọi chỗ CON NGƯỜI đọc thì phải là `0…`: chủ dự án 14/09 — "sđt trong
+ * nội dung ck là 0987654321 chứ không dùng 84987654321".
+ *
+ * Tách thành hàm có tên thay vì `\`0${c.slice(2)}\`` rải rác: phép cắt hai ký tự đầu
+ * chỉ đúng khi chuỗi CHẮC CHẮN là canonical, và một chỗ chép tay sai là ra số điện
+ * thoại thiếu đầu mà không ai thấy.
+ */
+export function nationalPhone(raw: unknown): string | null {
+  const c = canonicalPhone(raw);
+  return c ? `0${c.slice(2)}` : null;
 }
 
 /** `phoneVariants` cho cả danh sách — dùng với `where: { phone: { in: … } }`. */

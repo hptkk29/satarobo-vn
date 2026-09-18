@@ -8,8 +8,19 @@
 // đúng loại hỏng câm khó phát hiện nhất. Cột `roles` có ở cả hai chế độ.
 //
 // Đổi lại, ai được nhận tin phụ thuộc cột `roles` chứ không phụ thuộc bảng quyền động.
-// Đó là đánh đổi có chủ đích: thông báo là tiện ích nhắc việc, không phải cổng bảo mật —
-// cổng bảo mật vẫn là `checkPermission("trials:assign-teacher")` ở action.
+// Đó là đánh đổi có chủ đích: thông báo là tiện ích nhắc việc, không phải cổng bảo mật.
+//
+// ⚠️ ĐÍNH CHÍNH 17/09/2026 — câu cũ ở đây chỉ sai chỗ: "cổng bảo mật vẫn là
+// `checkPermission("trials:assign-teacher")` ở action". KHÔNG action nào gọi khoá đó (grep
+// toàn repo: khoá này chỉ còn trong ma trận quyền `lib/auth/permissions.ts`, registry và
+// `prisma/seed-roles.ts`). Màn `/lop-trial/[id]` đã CỐ Ý thôi dùng nó từ 28/08 khi giáo viên
+// chuyển từ cấp học viên xuống TỪNG BUỔI.
+//
+// Cổng THẬT của đường ghi này là `checkPermission("trials:manage")` ở
+// `app/(admin)/admin/lop-trial/_actions.ts` (`addLopTrialSessionAction`), cộng
+// `loadScopedTrialClass` gác cách ly cơ sở. Ghi sai tên cổng nguy hiểm hơn không ghi: người
+// rà quyền đi kiểm `trials:assign-teacher`, thấy nó có người giữ, rồi kết luận đường này đã
+// được gác — trong khi cổng thật nằm ở khoá khác.
 import { db } from "@/lib/db";
 import { notifyStaff } from "@/lib/notifications/notify";
 

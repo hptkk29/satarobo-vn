@@ -60,8 +60,14 @@ const KHOA_DANG_CHAY: ReadonlyArray<[key: string, file: string]> = [
   ["attendance.edited:s1", "lib/notify/attendance.ts"],
   ["birthday:g1", "lib/students/birthday-notify.ts"],
   // GĐ6 — nhắc Sale trước buổi trải nghiệm (2 mốc: 1 ngày và 2 giờ).
-  ["trial.reminder:1-ngay:e1:s1", "app/api/cron/trial-reminder/route.ts"],
-  ["trial.reminder:2-gio:e1:s1", "app/api/cron/trial-reminder/route.ts"],
+  ["trial.reminder:1-ngay:e1:s1", "lib/trial/nhac-buoi.ts"],
+  ["trial.reminder:2-gio:e1:s1", "lib/trial/nhac-buoi.ts"],
+  // V2-d (17/09) — mốc thứ ba nhắc GIÁO VIÊN (~1 tiếng trước), và nhánh leo thang khi tới
+  // mốc mà buổi vẫn chưa ai dạy. Hai tiền tố RIÊNG: `trial.reminder-gv:` không được để rơi
+  // vào `trial.reminder:` (khác người nhận, khác nội dung), và `trial.cho-phan-cong-gap:`
+  // không được trùng `trial.cho-phan-cong:` (trùng là ĐÈ mất tin gốc lúc tạo buổi).
+  ["trial.reminder-gv:1-gio:s1", "lib/trial/nhac-buoi.ts"],
+  ["trial.cho-phan-cong-gap:s1", "lib/trial/nhac-buoi.ts"],
 ];
 
 describe("catalog — phủ hết nguồn sinh đang chạy", () => {
@@ -136,6 +142,15 @@ describe("catalog — quy tắc nâng mức khi quá hạn", () => {
 describe("catalog — khớp tiền tố dài nhất", () => {
   it("payment-reconcile:unmatched: không bị nuốt bởi tiền tố ngắn hơn", () => {
     expect(classifyNotification("payment-reconcile:unmatched:2026-08-19").entityType).toBe("payment");
+  });
+
+  it("hai cặp tiền tố trial gần giống nhau KHÔNG nuốt nhau", () => {
+    // Chúng phân biệt nhau ở một ký tự: sau "reminder"/"cong" là "-" chứ không phải ":".
+    // Ca này canh đúng chỗ dễ hỏng nếu sau này ai đổi tên khoá cho "gọn".
+    expect(classifyNotification("trial.reminder-gv:1-gio:s1").priority).toBe(1);
+    expect(classifyNotification("trial.reminder:2-gio:e1:s1").priority).toBe(2);
+    expect(classifyNotification("trial.cho-phan-cong-gap:s1").groupKey).toBe("due_date");
+    expect(classifyNotification("trial.cho-phan-cong:s1").groupKey).toBe("new_task");
   });
 
   it("danh sách tiền tố được sắp dài trước", () => {

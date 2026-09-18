@@ -99,13 +99,26 @@ thứ chép sang, đối chiếu từ `.github/workflows/ci.yml`:
 | Biến | Đặt trong `.env.test`? | Vì sao |
 |---|---|---|
 | `DATABASE_URL`, `DIRECT_URL` | **CÓ** | Postgres local |
-| `NEXTAUTH_SECRET` | **CÓ** | `lib/security/signing-key.ts` **NÉM LỖI** nếu thiếu hoặc <32 ký tự. Đây là biến đã gây 9 ca đỏ |
+| `NEXTAUTH_SECRET` | **CÓ, ≥32 KÝ TỰ** | `lib/security/signing-key.ts` **NÉM LỖI** nếu thiếu **hoặc <32 ký tự**. Đây là biến đã gây 9 ca đỏ |
 | `AUTH_SECRET` | **CÓ** | `signing-key.ts` đọc `NEXTAUTH_SECRET ?? AUTH_SECRET`; đặt cả hai cho khớp mọi đường |
 | `NEXTAUTH_URL`, `NEXT_PUBLIC_APP_URL` | **CÓ** (cổng 3100) | cần cho bộ CÓ dựng Next: a0 · smoke · site GV · e-learning |
 | `BASE_URL` | **KHÔNG** | mỗi bộ một cổng (smoke 3000, a0/r7 3100) và mọi config đã có mặc định. Đặt chung là bẻ bộ còn lại |
 | `*_SKIP_WEBSERVER` (A0/R1–R7/CRM/FL/ELEARNING/TEACHER) | **KHÔNG** | cờ TĂNG TỐC bật theo từng lượt. Đặt cứng ⇒ bộ cần trình duyệt mất webserver và đỏ vì lý do chẳng liên quan |
 | `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | **KHÔNG** | cấu hình container của CI, không phải biến ứng dụng |
 | `CI_DATABASE_URL` | **KHÔNG** | bí danh chỉ dùng trong `ci.yml` |
+
+> 🔴 **TÁI PHÁT 17/09/2026, ở dạng khó thấy hơn.** Lần này tệp env của bộ test **CÓ**
+> `NEXTAUTH_SECRET` — nên bảng trên coi như đạt — nhưng nó dài **26 ký tự**, dưới ngưỡng 32,
+> và `AUTH_SECRET` thì thiếu. Bộ R7 ra **176 xanh / 9 đỏ**; sửa đúng hai biến ⇒ **185 xanh /
+> 0 đỏ**. 176 + 9 = 185, khớp chính xác như lần 09/09.
+>
+> Bài học thêm vào: **"có biến" KHÔNG phải "đủ dài"**. Cổng của `signing-key.ts` có HAI vế
+> (`!s || s.length < 32`) và vế thứ hai mới là vế cắn. Kiểm bằng ĐỘ DÀI, đừng kiểm bằng sự
+> có mặt — một lệnh `awk` in ra độ dài của hai biến ấy là đủ, và đừng in giá trị.
+>
+> Và 9 ca đỏ ấy nằm ở `offline-activation-code.spec.ts` + `parent-phone-change.spec.ts` —
+> hai spec OTP, **không liên quan gì tới thứ đang sửa**. Đó chính là hình dạng nguy hiểm:
+> ca đỏ trông như hồi quy của người khác, nên phản xạ đầu tiên là đi soi diff của họ.
 
 Giá trị mẫu cho hai khoá ký — **chuỗi TEST, vô hại**, cố ý trùng giá trị CI dùng để hành vi
 ở hai nơi giống nhau:

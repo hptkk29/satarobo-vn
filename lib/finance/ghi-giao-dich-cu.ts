@@ -5,6 +5,7 @@ import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
 import { generateOrderCode } from "@/lib/orders/code";
 import { BACKFILL_PAYMENT_MARKER, dauDongSheet } from "@/lib/finance/payment-markers";
 import type { GiaoDichSheet } from "@/lib/finance/nhap-giao-dich-sheet";
+import { thangCuaSheet } from "@/lib/finance/khop-sale-sheet";
 
 type Tx = Prisma.TransactionClient;
 
@@ -50,12 +51,24 @@ export type KetQuaGhiMotEm = {
 export async function ghiGiaoDichCuChoHocVienInTx(
   tx: Tx,
   params: {
+    /** NGƯỜI BẤM NÚT — đi vào AuditLog để truy trách nhiệm thao tác. */
     actor: AuditActor;
     hocVienId: string;
     giaoDich: GiaoDichSheet[];
+    /**
+     * SALE PHỤ TRÁCH lấy từ cột "Sales" của sheet, đã được người nhập map sang tài khoản.
+     *
+     * ⚠️ Đây là thứ đi vào `Order.createdById`, KHÔNG phải người bấm nút. Chủ dự án chốt
+     * 14/09/2026: "người tạo phải gán cho sale". Danh sách đơn và mọi báo cáo đọc
+     * `createdById` để biết ai bán — để nguyên người bấm thì 136 đơn đều mang tên một
+     * người, và hoa hồng/thành tích của 6 sale biến mất.
+     *
+     * `null` = chưa map được ⇒ lùi về người bấm, và điều đó phải HIỆN RA trên màn.
+     */
+    saleUserId: string | null;
   },
 ): Promise<KetQuaGhiMotEm | { loi: string }> {
-  const { actor, hocVienId, giaoDich } = params;
+  const { actor, hocVienId, giaoDich, saleUserId } = params;
 
   const hv = await tx.student.findUnique({
     where: { id: hocVienId },
@@ -116,10 +129,19 @@ export async function ghiGiaoDichCuChoHocVienInTx(
   const tongTien = canGhi.reduce((s, g) => s + Math.max(0, Math.round(g.hocPhi)), 0);
   const tenKhoa = canGhi.find((g) => g.khoa)?.khoa ?? "Học phí (nhập liệu ban đầu)";
   // Ngày sớm nhất trong lô — đơn phải mang mốc thời gian của tiền, không phải của lượt nhập.
-  const ngaySom = canGhi
-    .map((g) => g.ngay)
-    .filter((d): d is Date => d instanceof Date)
-    .sort((a, b) => a.getTime() - b.getTime())[0] ?? new Date();
+  //
+  // ⚠️ MỐC LÙI KHI SHEET BỎ TRỐNG NGÀY (đo thật: 23/136 dòng) là NGÀY 1 CỦA THÁNG TRONG
+  // TÊN SHEET, không phải `new Date()`. Báo cáo doanh thu theo tháng và danh sách đơn đều
+  // xếp theo `Order.createdAt`; để đồng hồ thật thì học phí tháng 5 hiện thành doanh thu
+  // tháng 9. Tháng là dữ liệu CÓ THẬT trong file; ngày trong tháng thì không — nên lấy
+  // ngày 1 và để màn nhập nói ra, đừng đoán ngày.
+  const ngaySom =
+    canGhi
+      .map((g) => g.ngay)
+      .filter((d): d is Date => d instanceof Date)
+      .sort((a, b) => a.getTime() - b.getTime())[0] ??
+    canGhi.map((g) => thangCuaSheet(g.sheet)).find((d): d is Date => d instanceof Date) ??
+    new Date();
 
   const order = await tx.order.create({
     data: {
@@ -130,7 +152,14 @@ export async function ghiGiaoDichCuChoHocVienInTx(
       customerPhone: hv.parentPhone ?? "",
       studentId: hv.id,
       centerId: hv.centerId,
-      createdById: actor.id ?? null,
+      // SALE phụ trách, không phải người bấm nút. Người bấm nằm ở AuditLog bên dưới.
+      createdById: saleUserId ?? actor.id ?? null,
+      // ⚠️ NGÀY THẬT TRONG SHEET, không phải lúc bấm nút. Chủ dự án chốt: "lúc tạo phải
+      // lấy đúng ngày trong sheet". `Order.createdAt` có `@default(now())` nhưng Prisma
+      // cho truyền giá trị — và phải truyền, vì báo cáo doanh thu theo tháng, danh sách
+      // đơn và cron đều xếp theo cột này. Để now() là 136 đơn của 5 tháng dồn hết vào
+      // hôm nay.
+      createdAt: ngaySom,
       subtotal: tongTien,
       discountAmount: 0,
       // Xem chú thích (2) đầu file: đây là BIÊN LAI GOM, không phải hợp đồng.

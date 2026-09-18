@@ -98,10 +98,14 @@ const DON = {
       itemName: "Lập trình Robot Sata 1",
       quantity: 1,
       unitPrice: 5_000_000,
+      // Giảm giá khai theo TỪNG DÒNG từ 14/09/2026 (`items[].discounts`). Khuôn cũ ở
+      // cấp ĐƠN bị Zod từ chối CÓ TIẾNG — cố ý, để một người gọi cũ không mất tiền im
+      // lặng. Fixture đi theo cổng, không nới cổng cho fixture.
+      discounts: [
+        { kieu: "SO_TIEN" as const, giaTri: 500_000, lyDo: "Ưu đãi anh chị em nội bộ" },
+      ],
     },
   ],
-  discountAmount: 500_000,
-  discountReason: "Ưu đãi anh chị em nội bộ",
   shippingFee: 0,
 };
 

@@ -31,6 +31,7 @@ import type { Actor } from "@/lib/auth/actor";
 import { can } from "@/lib/auth/can";
 import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
 import { scopedDb } from "@/lib/db-scope";
+import { chanGuiRaNgoai, donNhiemTheoDon } from "@/lib/orders/don-nhiem";
 import { outstandingOf, type RequestStatus } from "@/lib/payments/allocation";
 import {
   createPaymentLink,
@@ -43,6 +44,7 @@ import {
   transferContentForOrder,
   VIETQR_ADDINFO_MAX,
 } from "@/lib/payments/vietqr";
+import { noiDungCkCoKhoa } from "@/lib/payments/noi-dung-ck";
 import { getSetting } from "@/lib/settings/service";
 
 /** Một phiên QR đã "phẳng hoá" cho client component (Date → ISO). */
@@ -315,7 +317,7 @@ export async function loadActiveQrSessions(
  * in ra màn hình TRÙNG chuỗi nằm trong QR.
  */
 function addInfoFor(req: LoadedRequest): string {
-  return transferContentForOrder(
+  const nguoiDoc = transferContentForOrder(
     {
       studentName: req.order.studentName,
       customerName: req.order.customerName,
@@ -324,6 +326,15 @@ function addInfoFor(req: LoadedRequest): string {
     },
     VIETQR_ADDINFO_MAX,
   );
+  // 14/09/2026 — GẮN KHOÁ ĐỐI KHỚP LÊN ĐẦU. Đo đầy đủ ở `lib/payments/noi-dung-ck.ts`;
+  // tóm tắt: BA trong BỐN nhánh đối khớp của `payos-ingest` đang chết với mã QR này,
+  // và nhánh sống sót phải ĐOÁN theo SĐT + tên, lại không biết tiền thuộc ĐỢT nào
+  // (chú thích ngay trên đã tự ghi nhận "đợt 1 và đợt 2 ra CÙNG một chuỗi"). Có khoá
+  // thì nhánh (a) khớp bằng MỘT truy vấn trên cột @unique, đúng đợt — đó là câu trả
+  // lời cho "làm sao xác nhận thật nhanh".
+  //
+  // `matchKey` null (phiếu cũ chưa sinh khoá) ⇒ trả đúng chuỗi cũ, không đổi gì.
+  return noiDungCkCoKhoa(req.matchKey, nguoiDoc, VIETQR_ADDINFO_MAX);
 }
 
 /**
@@ -400,6 +411,41 @@ function guardIssuable(req: LoadedRequest): string | null {
   return null;
 }
 
+/**
+ * ── BƯỚC A3 [16/09/2026]: ĐƠN MANG TÊN CON NHÀ KHÁC THÌ KHÔNG PHÁT QR ──────────
+ *
+ * Chủ dự án: *"đơn nhiễm: không phát QR… đơn đang mang tên con nhà khác, gửi ra ngoài là
+ * lộ thông tin."*
+ *
+ * Mã QR KHÔNG phải một con số vô danh: nội dung chuyển khoản mang TÊN CON và SĐT phụ
+ * huynh (`lib/payments/noi-dung-ck.ts`). Phát QR từ một đơn đang ghi tên con của gia đình
+ * khác là gửi tên đứa trẻ đó cho một nhà không liên quan — cùng loại rủi ro với việc gửi
+ * nhầm email, và nó đi ra ngoài hệ thống nên không rút lại được.
+ *
+ * ⚠️ CHỈ chặn tiêu chí CON_NHÀ_KHÁC, KHÔNG chặn "tiền chưa gắn ghi danh" — xem
+ * `chanGuiRaNgoai`. Dữ liệu PROD 16/09 xác nhận lựa chọn đó: 18 đơn kẹt tiền
+ * (178.544.000đ) đều CHỈ dính tiêu chí nhẹ; khoá QR theo `nhiem` là chặn đúng 18 phụ
+ * huynh đang muốn trả tiền, vì một lỗi hoàn toàn nội bộ của kế toán.
+ *
+ * ⚠️ Dùng `scopedDb(actor, { bypass: true })`, KHÔNG phải `scopedDb(actor)`: đây là cổng
+ * AN TOÀN, không phải cổng hiển thị. Người dùng đã qua `loadScopedRequest` (CÓ scope) ở
+ * trên rồi; nếu phép phán xét lại bị lọc theo tầm nhìn thì một đơn nhiễm nằm ngoài tầm
+ * nhìn sẽ được coi là SẠCH — cổng an toàn mà fail-open theo phạm vi nhìn là không phải cổng.
+ *
+ * (Bản đầu tôi viết `db` trần và ESLint `no-restricted-imports` chặn đúng — luật R6-F1 của
+ * repo, và nó còn chỉ sẵn cách đúng. Ghi lại vì đây là chỗ dễ với tay sai.)
+ */
+async function chanNeuDonNhiem(actor: Actor, orderId: string): Promise<string | null> {
+  const m = await donNhiemTheoDon(scopedDb(actor, { bypass: true }), [orderId]);
+  const d = m.get(orderId);
+  if (!d || !chanGuiRaNgoai(d)) return null;
+  return (
+    `Đơn đang ghi tên con của gia đình khác (${d.conNhaKhac.join(", ")}) — ` +
+    `không phát mã QR vì nội dung chuyển khoản mang tên học viên. ` +
+    `Sửa lại học viên trên đơn rồi xuất QR.`
+  );
+}
+
 async function createSession(
   actor: Actor,
   auditActor: AuditActor,
@@ -462,6 +508,9 @@ export async function issueQrForRequestCore(
   const blocked = guardIssuable(req);
   if (blocked) return { ok: false, error: blocked };
 
+  const nhiem = await chanNeuDonNhiem(actor, req.order.id);
+  if (nhiem) return { ok: false, error: nhiem };
+
   const live = await scopedDb(actor).qrSession.findFirst({
     where: { paymentRequestId: req.id, status: "ACTIVE", expiresAt: { gt: new Date() } },
     orderBy: { createdAt: "desc" },
@@ -514,6 +563,11 @@ export async function regenerateQrCore(
 
   const blocked = guardIssuable(req);
   if (blocked) return { ok: false, error: blocked };
+
+  // Cùng cổng với `issueQrForRequestCore`: tạo lại QR cũng là phát ra một mã mang tên con.
+  // Chặn một cửa mà để hở cửa kia là không chặn gì.
+  const nhiem = await chanNeuDonNhiem(actor, req.order.id);
+  if (nhiem) return { ok: false, error: nhiem };
 
   // updateMany KHÔNG được scopedDb che — an toàn vì `where` neo vào phiếu đã qua
   // findUnique có scope ở trên (không nhận centerId/where từ client).

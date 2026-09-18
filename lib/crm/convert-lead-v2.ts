@@ -3,6 +3,7 @@
 // regression (flag CONVERT_V2_ENABLED). Side-effect (notify) đi DomainEvent SAU commit.
 import { db } from "@/lib/db";
 import { KHOAN_DA_GHI_NHAN } from "@/lib/finance/ghi-nhan";
+import { chanGuiRaNgoai, donNhiemTheoDon } from "@/lib/orders/don-nhiem";
 import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
 import { publishEvent } from "@/lib/events/publish";
 import { recordLeadStatusChange } from "@/lib/lead/status-trail-write";
@@ -169,6 +170,47 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
   if (!guard.ok && !backfillNoPayment) {
     return { ok: false, error: { code: "PAYMENT_REQUIRED", message: "Cần ghi nhận khoản thanh toán trước khi chốt" } };
   }
+  /**
+   * ── BƯỚC A3 [16/09/2026]: KHÔNG XẾP LỚP TỪ ĐƠN GHI TÊN CON NHÀ KHÁC ─────────
+   *
+   * Chủ dự án: *"đơn nhiễm: … không cho xếp lớp từ đơn đó"*.
+   *
+   * Chốt lead là lúc hệ thống ĐÚC ra `Student` + `Enrollment` + xếp lớp từ những gì đơn
+   * đang nói. Đơn đang ghi tên con của gia đình khác mà cho chốt thì cái sai thôi nằm yên
+   * trong một bản ghi đơn — nó biến thành ghi danh, thành suất lớp, thành học bạ, và mỗi
+   * bước sau lại khó gỡ hơn bước trước.
+   *
+   * Chặn Ở ĐÂY chứ không chỉ ở màn tạo đơn, vì đơn nhiễm đã tồn tại sẵn trên DB từ trước
+   * khi cổng tạo đơn ra đời — cổng mới không hồi tố.
+   */
+  const donCuaLead = await db.order.findMany({
+    where: { leadId: lead.id, deletedAt: null },
+    select: { id: true, code: true },
+  });
+  if (donCuaLead.length > 0) {
+    const nhiem = await donNhiemTheoDon(db, donCuaLead.map((o) => o.id));
+    const ban = donCuaLead.filter((o) => {
+      const d = nhiem.get(o.id);
+      return d ? chanGuiRaNgoai(d) : false;
+    });
+    if (ban.length > 0) {
+      const ten = [
+        ...new Set(ban.flatMap((o) => nhiem.get(o.id)?.conNhaKhac ?? [])),
+      ];
+      return {
+        ok: false,
+        error: {
+          code: "DON_NHIEM_DU_LIEU",
+          message:
+            `Đơn ${ban.map((o) => o.code).join(", ")} đang ghi tên con của gia đình khác` +
+            (ten.length ? ` (${ten.join(", ")})` : "") +
+            ". Sửa lại học viên trên đơn rồi mới chốt — chốt bây giờ là đúc cái sai " +
+            "thành ghi danh và suất lớp.",
+        },
+      };
+    }
+  }
+
   const scholarshipFull = guard.ok ? guard.scholarshipFull : false;
   // Lý do ưu đãi chỉ có nghĩa khi CÓ ưu đãi thật (Σ discountAmount > 0) — không để
   // chuỗi rác của caller bám vào audit của lead chốt giá đầy đủ.
@@ -493,10 +535,27 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
     // ghi danh) các khoản RECORDED của đơn vào ghi danh → confirmPayment sinh Receipt được →
     // getDebtRows phản ánh. Nhiều ghi danh: chia theo finalPrice (bất biến tổng). KHÔNG
     // auto-confirm ở đây (giữ tách vai kế toán). weights ↔ enrollmentIds cùng thứ tự students.
+    // `studentIds` / `enrollmentIds` / `prices` cùng thứ tự `input.students` — gộp lại
+    // thành MỘT danh sách để hàm chia biết khoản của đơn nào thuộc về em nào.
+    //
+    // KHOÁ HỌC CỦA LỚP là móc nối CHÍNH, không phải phụ: đơn lập từ `/orders/new?leadId=…`
+    // có `OrderItem.studentId` = NULL ở mọi dòng (học viên chỉ ra đời ở chính bước này),
+    // nên nếu chỉ khớp theo học viên thì phép chia rơi hết vào đường lui và tiền lại chảy
+    // sang em khác — đo được 15/09/2026, xem `lib/finance/chia-khoan-theo-don.ts`.
+    const lopCuaGhiDanh = await tx.class.findMany({
+      where: { id: { in: [...new Set(input.students.map((s) => s.classId))] } },
+      select: { id: true, courseId: true },
+    });
+    const khoaTheoLop = new Map(lopCuaGhiDanh.map((c) => [c.id, c.courseId]));
+
     await linkRecordedPaymentsToEnrollments(tx, {
       leadId: lead.id,
-      enrollmentIds,
-      weights: prices.map((p) => p.finalPrice),
+      ghiDanh: enrollmentIds.map((enrollmentId, i) => ({
+        enrollmentId,
+        studentId: studentIds[i]!,
+        courseId: khoaTheoLop.get(input.students[i]!.classId) ?? null,
+        finalPrice: prices[i]!.finalPrice,
+      })),
       actor,
     });
 

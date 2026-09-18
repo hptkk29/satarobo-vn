@@ -50,7 +50,22 @@ describe("[CFG-T01] mọi tham số đều có chỗ đứng trên giao diện",
 
   it("không tab nào rỗng", () => {
     // Tab rỗng là một nút bấm vào không có gì — người dùng sẽ tưởng trang hỏng.
-    const rong = ID_TAB.filter((id) => keyCuaTab(id).length === 0);
+    //
+    // NGOẠI LỆ: tab có NỘI DUNG RIÊNG thay vì danh sách ô cấu hình. Chúng không rỗng —
+    // chỉ là thứ chúng bày ra không phải một key trong registry. `page.tsx` truyền nội
+    // dung cho chúng qua `noiDungRieng`, và `khung-cau-hinh.tsx` dựng nội dung đó thay
+    // cho bảng ô. Mỗi dòng dưới đây phải nêu bày cái gì.
+    const CO_NOI_DUNG_RIENG: Record<string, string> = {
+      "phuong-thuc-tt":
+        "bảng danh mục phương thức thanh toán (gộp từ /payment-methods 14/09/2026) — " +
+        "dữ liệu nằm ở bảng `PaymentMethod`, không phải SystemSetting",
+      "hoa-hong":
+        "bảng khai chính sách hoa hồng — key `crm.commissionPolicies` CÓ trong registry " +
+        "nhưng cố ý không hiện thành ô nhập JSON (nó là một danh sách, sửa bằng bảng riêng)",
+    };
+    const rong = ID_TAB.filter(
+      (id) => keyCuaTab(id).length === 0 && !CO_NOI_DUNG_RIENG[id],
+    );
     expect(rong, `Tab rỗng: ${rong.join(", ")}`).toEqual([]);
   });
 

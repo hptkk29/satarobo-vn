@@ -90,6 +90,22 @@ export const CO_CANH_BAO = new Set([
   "THIEU_BUOI_SANG",
   "THIEU_BUOI_CHIEU",
   "NGOAI_VUNG",
+  // ⚠️ THÊM 16/09/2026, và nó là điều kiện của một bản vá khác.
+  //
+  // Cùng ngày, `recordTimeLog` thôi TỪ CHỐI lượt quét thiếu toạ độ và chuyển sang gắn cờ
+  // `THIEU_GPS` (đo prod: 53 lượt bị chặn, đang xảy ra hằng ngày). Nhưng gỡ chặn mà cờ
+  // không ai đếm thì là đổi một lỗi ồn ào lấy một lỗ hổng im lặng — người ta chấm được,
+  // không ai biết lượt ấy không có vị trí.
+  //
+  // Chốt của chủ dự án: *"Cờ THIEU_GPS phải có NGƯỜI ĐỌC và CHỖ ĐỌC (luật 10): hiện trên
+  // bảng công ngày và trong danh sách 'ngày có cờ' của quản lý. Cờ không ai rà thì bằng
+  // không có."* Đây chính là "chỗ đọc" thứ hai — tập này là thứ `buildPeriodSummary` dùng
+  // để đếm `flaggedDays`, tức con số "Ngày có cờ" trên màn Kỳ công.
+  //
+  // CỐ Ý KHÔNG thêm vào `CO_CAN_XU_LY` (tập của site GV): tập ấy là "việc người đi làm tự
+  // xử lý được bằng một cái đơn", mà thiếu GPS thì họ không xử được — ngày vẫn có công, và
+  // việc cần làm là của Quản lý lẫn người dựng hệ.
+  "THIEU_GPS",
   "SAI_NOI_LAM",
   "THIEU_GIO",
   "DI_MUON",

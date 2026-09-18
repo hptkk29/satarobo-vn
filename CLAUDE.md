@@ -293,6 +293,81 @@ prisma/
 - ⚠️ **Cờ `PAYMENT_LEDGER_V2` là cờ CHẾT — đừng lấy nó làm cổng quyết định [đo 13/09/2026].** `isPaymentLedgerV2Enabled()` có **0 đường gọi** trong mã chạy thật (`lib/flags.ts:168` là định nghĩa duy nhất, còn lại chỉ `lib/flags.test.ts`), và biến env **không tồn tại** trong 40 biến Production. Bật nó KHÔNG đổi hành vi gì — muốn cutover thì phải viết phần "nối cờ" (chuyển `lib/finance/debt.ts` + `lib/portal/billing-student.ts` + `lib/portal/dashboard.ts` + màn `/orders/[id]`, `/cong-no` sang đọc `PaymentRequest`) trước, đó là dự án riêng. Đo prod bằng workflow chỉ-đọc `shadow-compare-cong-no.yml` (`payments:shadow-compare` chạy ở máy dev là đo DB DEV, **không nói gì về prod**).
 - ❌ KHÔNG gõ tay tên bài vào `Lesson` để "sửa tên dự án". Nguồn tên buổi/dự án là 2 file marketing (`components/legacy-laptrinhrobot/_data/roadmap-5-years.ts` + `exam-roadmap.ts`) → `lib/lms/curriculum-sata.ts` → `prisma/seed-curriculum-sata.ts`; lần seed sau ghi đè. Nhãn buổi/tên gửi PH đi qua `deriveSessionLabel`/`deriveSessionProjectName`, đừng tự ghép chuỗi.
 
+- ⚠️ **MỤC "chuẩn hoá SĐT `84…`/`+84…`" — ĐÃ HUỶ khỏi kế hoạch [chốt 18/09/2026].**
+  Làm lại **khi nào đo được dòng `84…` THẬT**, không làm trước.
+  · **Vì sao huỷ:** đo prod 17/09 — trong 22 giao dịch UNMATCHED, số nội dung CK chứa SĐT dạng
+    `84…`/`+84…` là **0**. Giả định "hoãn chuẩn hoá SĐT đang chặn phần A" (của chính tôi) **SAI**,
+    và bảng đối soát chứng minh điều đó. Nút thắt thật nằm chỗ khác: SĐT người chuyển ≠ SĐT đăng
+    ký, hoặc đơn không còn phiếu `PENDING/PARTIAL` — xem mục **A2** của
+    `scripts/bao-cao-doi-soat-tien.ts`.
+  · **Cách biết đã tới lúc làm:** mục A2 của báo cáo in dòng *"nội dung CK chứa SĐT dạng `84…`"*.
+    Số đó > 0 thì mới mở lại ticket.
+  · Bài học chung: **một tối ưu cho tập rỗng là một tối ưu không đo được** — nó không sai, nó chỉ
+    không chứng minh được là đúng, và mọi bug nó gây ra sẽ không có ca test nào bắt.
+
+- ⚠️ **CỔNG TẠO ĐỢT có HAI VẾ, và vế thứ hai là vế dễ bị gỡ [chốt 18/09/2026].**
+  ```
+  số tiền đợt ≤ min( còn nợ con − Σ đợt mở của con ,
+                     còn nợ ĐƠN − Σ đợt mở của cả đơn )
+  ```
+  với *còn nợ đơn* = Σ học phí thực các con − Σ **mọi** `Payment` đã thu, **kể cả khoản chưa
+  gắn con** (`orderItemId IS NULL`). Một chỗ duy nhất: `kiemTaoDot` trong
+  `lib/finance/no-theo-con.ts`; hai số vào cổng là `conNoDon` + `tongDotDangMoDon`, do
+  `tinhNoTheoCon` tính, **BẮT BUỘC** truyền (luật 7 — `tsc` liệt kê chỗ gọi).
+  · **Vì sao có vế hai:** `chuaGanCon` tồn tại từ PHIÊN A nhưng **chỉ để hiển thị** — đo
+    `git grep chuaGanCon ed5a884c^` ra 9 dòng, **0 dòng là điều kiện chặn**. Trên đơn 2 con đã
+    có 6.000.000đ vào mà chưa gắn bé nào, sale tạo được các đợt cộng lại bằng **trọn** học phí
+    đơn, hệ thống phát QR đòi đủ số, và **phụ huynh trả lần thứ hai phần đã trả**.
+  · `tongDotDangMoDon` phải cộng **cả đợt `orderItemId` NULL**. Đơn trước 16/09 thì đợt nào
+    cũng NULL, nên dùng `Σ con[].tongDotDangMo` làm cổng là **mở toang đúng tập đơn cũ** — tập
+    đang giữ tiền thật.
+  · `tongConNo` (Σ còn nợ từng con) **cố ý KHÁC** `conNoDon`: số đầu trả lời *"bé này còn nợ
+    bao nhiêu"*, số sau trả lời *"đơn còn được thu thêm bao nhiêu"*. Gộp hai câu hỏi thành một
+    con số là chỗ bug tiền nằm.
+  · Câu lỗi vế ĐƠN nói bằng **ngôn ngữ của nguyên nhân** ("đơn đang có tiền đã thu chưa gắn cho
+    bé nào"), không chỉ "tối đa X đồng": sale đọc số nợ của bé trên màn rồi gõ đúng số đó, nên
+    một câu "tối đa 2.976.000đ" trong khi màn in "còn nợ 8.976.000đ" đọc như hệ thống bị lỗi —
+    rồi người ta học cách bỏ qua cổng.
+  · **Hệ quả phải biết:** đơn có bé ĐÓNG THỪA nay bị vế đơn siết (`conNoDon` âm ⇒ chặn mọi đợt
+    mới). Đúng luật, không phải hệ quả phụ vô hình — ca `[NTC-02b]` ghim.
+  · Cổng: `tests/finance/cong-tao-dot.test.ts` (`[CTD-01..07]`, bộ `test:finance-db`) +
+    `lib/finance/no-theo-con.test.ts` (`[NTC-02b]`, `[NTC-02c]`). Ca `[CTD-01]` kiểm chính
+    FIXTURE — thiếu nó thì mọi ca dưới xanh vì cổng không thấy tiền, và bộ test vô dụng mà
+    trông vẫn xanh.
+
+- ⚠️ **NỢ ĐANG GHIM: `goiYDon` trong `bao-cao-doi-soat-tien.ts` là N+1, và nó CHẠY ĐƯỢC [đo 17/09/2026].**
+  Nó tra một câu `order.findMany` cho **từng** giao dịch UNMATCHED. Hôm nay 22 dòng ⇒ 22
+  round-trip sang Supabase, vẫn chạy xong. **Đó chính là chỗ nguy hiểm:** một lỗi chỉ lộ ra
+  khi dữ liệu lớn hơn thì không ai đi tìm.
+  · Bản sao cùng hình dạng ở `scripts/backfill-orderitem-dry.ts` **đã chết thật** với
+    `P2028 — Transaction … open for longer than the timeout` ngay lượt chạy prod đầu tiên
+    (trần transaction tương tác của Prisma là **5 giây**), và đã được gộp thành MỘT câu.
+  · **Chưa sửa `bao-cao-doi-soat-tien.ts` là có chủ đích:** nó đang là **nguồn của con số 146 /
+    887.313.000đ** mà chủ dự án đã duyệt cho lệnh backfill. Đổi nó là đổi cái thước ngay lúc
+    đang đo. Sửa SAU khi backfill xong, và khi sửa thì phải đo lại số trước/sau.
+  · Cách gộp: bóc SĐT cả lô → gom mọi biến thể → **một** `findMany` → đếm theo `customerPhone`.
+    Cho ra đúng phân loại 0 / 1 / >1 vì mỗi đơn chỉ có một `customerPhone`.
+  · ⚠️ **Nâng `timeout` KHÔNG phải bản vá** — N+1 còn thì nó chết lại khi số giao dịch tăng.
+    Trần chỉ để một transaction ĐỌC quét vài trăm dòng qua WAN không bị cắt giữa đường.
+
+- ⚠️ **NỢ ĐANG GHIM: `scripts/_kiem-quyen.ts` hỏi quyền trên SAI BẢNG [đo 17/09/2026].**
+  Nó hỏi `has_table_privilege(current_user, 'public."ClassSession"', 'UPDATE')` — tên bảng
+  **đóng cứng** từ đợt chấm công. Chính chú thích của nó nói *"quyền trên chính bảng mình sắp
+  đọc mới là quyền có ý nghĩa"*, nhưng báo cáo đối soát tiền đọc `BankTransaction` · `Payment`
+  · `Order` · `PaymentRequest`, không đọc `ClassSession`.
+  · **Chưa vá vì nó vẫn bắt đúng ca cần bắt:** thứ phải phát hiện là *secret bị đặt nhầm sang
+    chuỗi đầy quyền*, mà vai đầy quyền có `UPDATE` trên MỌI bảng ⇒ `ClassSession` đủ để lộ ra.
+    Ngược lại, một vai chỉ-đọc có `UPDATE` trên `BankTransaction` mà không có trên
+    `ClassSession` là cấu hình không tồn tại thật.
+  · Vá đúng = thêm tham số bảng cho `kiemQuyen(db, bang)`, **không đặt mặc định** (luật 7: để
+    `tsc` liệt kê cả hai chỗ gọi). Chạm file dùng chung ⇒ phải chạy lại CẢ workflow chấm công.
+
+- ⚠️ **Tên vai chỉ-đọc của prod là `satarobo_readonly`, KHÔNG phải `doisoat_ro` [đo 17/09/2026].**
+  Đã một lần sửa `docs/cham-cong/USER-CHI-DOC-PROD.md` theo **lời kể** rồi phải hoàn lại: lượt
+  chạy báo cáo đầu tiên in ra `user satarobo_readonly`. **Tên vai là thứ ĐỌC ĐƯỢC từ dòng tự
+  khai của báo cáo** (`scripts/_kiem-quyen.ts` in `[quyen] user=… · …`) — đừng ghi vào tài liệu
+  theo trí nhớ của ai, kể cả của người tạo ra nó.
+
 - ⚠️ **NỢ ĐANG GHIM: `amountDue` của phiếu thu ĐÃ CÓ TIỀN vẫn bị ghi đè [đo 14/09/2026].**
   `materializeInstallmentRequests` THA VOID cho phiếu đang có phân bổ
   (`lib/payments/payment-request.ts:309` — `allocated > 0 → continue`) nhưng vòng UPSERT ở
@@ -313,6 +388,29 @@ prisma/
   · Vá là đợt RIÊNG: phải đo cả **3 đường gọi** `materializeInstallmentRequests`
     (`lib/orders/installments.ts:332`, `:500`, `lib/crm/backfill-order.ts:153`) — lỗ có sẵn
     từ trước đợt gỡ duyệt, không do nó sinh ra.
+
+- ⚠️ **NỢ ĐANG GHIM: bán Coach 1-1/1-2/1-4 thì TRỤC GHI DANH vẫn giữ GIÁ NHÓM [đo 14/09/2026].**
+  Hình thức lớp (SR.QD.219 Điều 5) nay khai được trên dòng đơn
+  (`OrderItem.metadata.coachFormat`, xem `lib/orders/hinh-thuc-lop.ts`), nhưng số tiền mà
+  **công nợ · cổng phụ huynh · hoàn tiền · hoa hồng GV Trial** đọc là
+  `Enrollment.finalPrice`, và cột đó do các đường convert ghi bằng
+  `computeEnrollmentPrice({ listPrice: Course.price })` — tức **giá LỚP NHÓM**.
+  Đo với Coach 1-1 Sata3 (đơn 10.400.000đ, ghi danh 5.200.000đ):
+  · ZNS học phí gửi `order.totalAmount` ⇒ phụ huynh nhận tin **~10,4tr**
+    (`lib/notify/order.ts`);
+  · `/portal/hoc-phi` in **5,2tr** (`lib/portal/billing-student.ts`);
+  · `/cong-no` ra **−5.200.000đ** ("đóng thừa") — `lib/finance/debt.ts`;
+  · hoàn tiền học 6/12 buổi chi **dư ~2.600.002đ** (`lib/finance/refund.ts`).
+  · **Ghim** ở `lib/orders/hinh-thuc-lop.test.ts` ca **`[HTL-09]`** bằng `it.fails`.
+  · **Vá là đợt RIÊNG**: `/orders/new` KHÔNG tạo `Enrollment`, nên phải chạm cả **4 đường
+    tạo đơn** (`orders/_actions.ts`, `lib/crm/convert-lead.ts`, `lib/crm/backfill-order.ts`,
+    `lib/finance/ghi-giao-dich-cu.ts`) **lẫn đường tạo ghi danh**. Sửa nửa sổ là sửa đúng
+    nửa KHÔNG giữ tiền ra.
+  · ⛔ **ĐỪNG "vá" bằng cách đưa hình thức lớp vào `giaNiemYet` của `soatGiaDon`.**
+    Hôm nay `giaNiemYet` là `Course.price` tra từ DB nên client không chạm được; còn
+    `coachFormat`/`soBuoi` nằm trong `items[].metadata` tức PAYLOAD CLIENT — làm vậy là
+    để client cầm **cả hai vế** của phép so, khai `soBuoi` nhỏ là mọi đơn bán rẻ thành
+    "khớp". Lý do đầy đủ + 5 lỗ tiền khác ở đầu `lib/orders/hinh-thuc-lop.ts`.
 
 ## Mẫu test: LƯỚI GHIM MÃ NGUỒN [13/09/2026]
 
@@ -351,6 +449,95 @@ không chặn merge của người khác); vá xong nó **đỏ**, buộc ngư�
 3. **Chunk** — commit từng feature rời, không big-bang.
 4. **Verify mỗi 3-5 files** — `pnpm typecheck` để bắt lỗi sớm.
 5. **Report** — liệt kê file thay đổi + cách test.
+6. ⛔ **CHẠM TIỀN THÌ PHẢI CHẠY R7 — bắt buộc, chốt 17/09/2026.**
+7. ⛔ **Trong callback `$transaction`, TỪ CHỐI = `throw`; mọi cổng đứng TRƯỚC phép ghi đầu tiên.**
+
+### Luật rollback — `return` KHÔNG rollback, chỉ `throw` mới rollback
+
+```ts
+// ❌ SAI — phép ghi ĐÃ COMMIT, người dùng nhận thông báo từ chối
+await db.$transaction(async (tx) => {
+  await tx.paymentAllocation.deleteMany({ where: { bankTransactionId } });
+  if (coPhieuThu) return { ok: false, error: "đã xuất phiếu thu" };   // ← xoá rồi!
+});
+
+// ✅ ĐÚNG — cổng đứng trước phép ghi đầu tiên
+await db.$transaction(async (tx) => {
+  if (coPhieuThu) return { ok: false, error: "đã xuất phiếu thu" };
+  await tx.paymentAllocation.deleteMany({ where: { bankTransactionId } });
+});
+
+// ✅ ĐÚNG — buộc phải từ chối sau khi đã ghi thì `throw`, đường gọi bắt và dịch
+if (khongDu) throw new StockError("PRODUCT_STOCK_INSUFFICIENT_RACE");
+```
+
+**Đo được, không phải phòng xa (17/09/2026).** Cổng *"đã xuất phiếu thu"* trong `goGanTheoCon`
+nằm SAU `deleteMany`, nên nó trả `{ ok: false }` cho người dùng TRONG KHI phân bổ đã bị xoá và
+commit — **chính cái cổng sinh ra để chặn gỡ nửa vời lại tạo ra một lượt gỡ nửa vời.** Ca
+`[GDC-c2]` bắt được, nhưng chỉ vì ca ấy tình cờ đếm số dòng phân bổ còn lại.
+
+**MỘT NGOẠI LỆ HỢP LỆ** — mẫu chống-đua của repo (FIX-H9):
+
+```ts
+const upd = await tx.payment.updateMany({ where: { id, updatedAt: expectedAt }, data: {…} });
+if (upd.count === 0) return { stale: true };   // ← ghi đổi 0 DÒNG, commit vô hại
+```
+
+Phép ghi ở đây là `updateMany` CÓ ĐIỀU KIỆN và nó đổi 0 dòng, nên commit không đổi gì. Đổi nó
+thành `update` (ném khi không thấy) hoặc bỏ điều kiện trong `where` là ngoại lệ hoá ra tha một
+phép ghi THẬT.
+
+**Cổng tự động:** `lib/finance/cong-truoc-phep-ghi.test.ts` quét mọi callback `$transaction` /
+`ghiTienChoDon` trong `lib/finance/**` · `lib/payments/**` · `app/(admin)/admin/{orders,payments,bien-dong-so-du}/**`
+· `app/api/public/webhook/**`, và đỏ khi thấy hình dạng từ chối (`return { ok: false`,
+`return fail(`, `return { loi:`) đứng sau phép ghi. Đã cấy thử 3 ca.
+
+### Luật R7 — bộ test duy nhất giữ các luật ĐỐI KHỚP TIỀN
+
+**Diff chạm bất kỳ đường nào dưới đây ⇒ PHẢI chạy bộ R7 TRƯỚC khi báo xong phiên, và DÁN
+KẾT QUẢ vào báo cáo:**
+
+- `lib/payments/**`
+- `lib/finance/**`
+- `app/api/public/webhook/**`
+- `prisma/migrations/**` có nhắc `Payment` / `Order` / `BankTransaction`
+
+```bash
+# Hai shard, HAI database khác nhau — CI chia đôi mỗi shard một container Postgres riêng,
+# chạy chung một DB là cấu hình CI KHÔNG dùng (spec này `resetDb()` xoá dữ liệu spec kia).
+# `assertTestDb` chỉ cho reset `satarobo_test` và `ci_test`, nên đúng hai cái đó.
+R7_SKIP_WEBSERVER=1 DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:5432/satarobo_test'   DIRECT_URL="$DATABASE_URL" pnpm exec playwright test -c playwright.r7.config.ts --shard=1/2
+R7_SKIP_WEBSERVER=1 DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:5432/ci_test'   DIRECT_URL="$DATABASE_URL" pnpm exec playwright test -c playwright.r7.config.ts --shard=2/2
+```
+
+**VÌ SAO LUẬT NÀY TỒN TẠI — đo 17/09/2026, không phải phòng xa.** Một nhánh duy nhất chứa
+**BỐN** ca R7 đỏ, cả bốn cùng một lớp: *test còn ghim luật đã bị ĐẢO, sống sót vì lượt đảo luật
+không chạy bộ R7.*
+
+| ca | luật đã bị đảo | đảo ở |
+|---|---|---|
+| `[PAY-BF-00]` | kế hoạch `PENDING_APPROVAL` VẪN có hiệu lực | `00131d18` (13/09) |
+| `[PAYOS-13b/13c]` | SĐT trong nội dung CK về dạng nội địa `0…` | `c95c6c25` (14/09) |
+| `[PR-02c]` | sửa `amountDue` của đợt ĐÃ THU ⇒ **từ chối** | vá A6 (15/09) |
+| `[QR-01/01b]` | nội dung CK mang `matchKey`, mỗi đợt một chuỗi | `361ea7d4` |
+
+Bốn lần đảo luật tiền trong bốn ngày, không lần nào chạy R7. `Quality` + `Unit tests` KHÔNG
+phủ nổi lớp này: luật đối khớp sống ở tầng tích hợp (webhook → resolve → allocate → recompute),
+và test thuần của nó xanh vĩnh viễn vì nó không chạm tầng đó.
+
+⚠️ **Ca nguy hiểm nhất không phải ca sai số, mà là ca mang LỜI DẶN CẤM SỬA cho một luật đã
+chết** — `[QR-01b]` dặn *"người sau đừng sửa nó thành mỗi đợt một chuỗi (sẽ vỡ đường đối khớp
+theo SĐT)"*, trong khi chính chủ dự án đã đảo luật ấy. Ai đọc nó như đặc tả sẽ gỡ khoá khỏi nội
+dung CK và xoá sổ cả bản vá, không lỗi nào báo.
+
+⚠️ **R7 KHÔNG nằm trong required check của `main`** (đo `gh api …/branches/main/protection`:
+chỉ `Quality` · `Unit tests` · `Chat DB invariants` · `E2E Phase R7 1/2` · `2/2` — hai shard R7
+CÓ trong đó). Nhưng required check chỉ gác lúc MERGE; luật này gác lúc BÁO XONG PHIÊN, sớm hơn
+một nhịp, và đó là chỗ rẻ nhất để sửa.
+
+⚠️ Chạy cả shard trên MỘT database ở local sẽ ra ca đỏ giả kèm `Unique constraint failed on
+(dedupeKey)`. Đã một lần chẩn đoán nhầm đúng triệu chứng đó và kết luận "nhiễu local" cho hai ca
+ĐỎ THẬT. **Đọc danh sách ca đỏ của CI, đừng đọc dòng lỗi nổi bật nhất ở máy.**
 
 ### Nhánh & môi trường (chốt 01/08/2026) — `main` KHÔNG còn là nơi nhận code mới
 
