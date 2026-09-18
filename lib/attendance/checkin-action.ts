@@ -14,7 +14,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { consumeTicket, recordRejectedLog, recordTimeLog } from "@/lib/cham-cong/timelog";
+import { consumeTicket, hoanVe, recordRejectedLog, recordTimeLog } from "@/lib/cham-cong/timelog";
 
 const schema = z.object({
   ticketId: z.string().min(1),
@@ -26,7 +26,16 @@ const schema = z.object({
 });
 
 export type RecordCheckinInput = z.input<typeof schema>;
-export type RecordCheckinResult = { ok: true; flags: string[]; warning?: string } | { ok: false; error: string };
+export type RecordCheckinResult =
+  | { ok: true; flags: string[]; warning?: string }
+  /**
+   * `veConDung` — vé CHƯA bị tiêu, bấm lại được ngay, không phải quét mã mới.
+   *
+   * Màn hình dựa vào cờ này để quyết định có khoá nút hay không. Thiếu nó thì mọi lỗi đều
+   * khoá nút, và người bị từ chối vì một lý do sửa được tại chỗ (đứng sai chỗ) vẫn phải đi
+   * xin quét mã mới — đúng cái bẫy chủ dự án chốt gỡ 16/09.
+   */
+  | { ok: false; error: string; veConDung?: boolean };
 
 const FLAG_TEXT: Record<string, string> = {
   NGOAI_VUNG: "ngoài bán kính cơ sở",
@@ -78,7 +87,16 @@ export async function recordCheckin(input: RecordCheckinInput): Promise<RecordCh
       reason: r.rejectReason,
       ip,
     });
-    return { ok: false, error: r.error };
+    // ⚠️ HOÀN VÉ (chốt 16/09/2026): không có gì được ghi thì vé không được phép mất.
+    //
+    // Chủ dự án: *"Vé chỉ bị tiêu khi lượt quét được GHI. Từ chối mà vẫn tiêu vé là cái bẫy
+    // nặng nhất trong cả chuyện này."* Trước bản này, người đứng ngoài vùng bấm một lần là
+    // vé chết, phải đi xin quét mã mới — trong khi việc họ cần làm chỉ là bước vào trong.
+    //
+    // Không nới bảo vệ: bấm lại bao nhiêu lần mà vẫn ngoài vùng thì vẫn bị từ chối bấy nhiêu
+    // lần, và mỗi lần vẫn để lại một dòng `REJECTED` cho quản lý rà.
+    const conDung = await hoanVe(d.ticketId);
+    return { ok: false, error: r.error, veConDung: conDung };
   }
   revalidatePath("/cham-cong");
   const warn = r.flags.filter((f) => f !== "CHUA_TOA_DO").map((f) => FLAG_TEXT[f] ?? f);

@@ -1,10 +1,11 @@
 import "server-only";
-import type { InstallmentApprovalStatus, Prisma, Role } from "@prisma/client";
+import type { InstallmentApprovalStatus, OrderStatus, Prisma, Role } from "@prisma/client";
 import { db } from "@/lib/db";
 import { assertCan } from "@/lib/auth/permissions";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { ensureOrderPaymentRecorded } from "@/lib/finance/payment";
 import { KHOAN_DA_GHI_NHAN } from "@/lib/finance/ghi-nhan";
+import { laThuTienLinhHoatBat } from "@/lib/finance/feature";
 // 03/08 — SỔ MỚI (PaymentRequest) chạy SONG SONG sổ cũ (OrderInstallment).
 // Sổ cũ giữ nguyên hành vi (đợt 1 = PAID) để không phá công nợ đang chạy; sổ mới
 // ⚠️ 03/08 luật ĐÃ ĐỔI: phiếu theo đợt sinh NGAY khi lưu kế hoạch (không chờ duyệt),
@@ -21,6 +22,9 @@ import { isInstallmentPlanActive } from "@/lib/payments/installment-plan";
 import { planOwnedNoteOr } from "@/lib/finance/payment-markers";
 // R-02 — cổng chặn việc lưu kế hoạch làm mất dấu tiền khách đã đóng (thuần).
 import { keHoachLamMatTien } from "@/lib/payments/plan-money-guard";
+// R-03 — cổng chặn lời khai "đã thu" vượt sổ của đơn (thuần). KHÁC R-02: R-02 canh tiền
+// SẮP MẤT DẤU, cổng này canh tiền SẮP ĐƯỢC ĐÚC THÊM. Xem lib/payments/khai-da-thu.ts.
+import { khaiDaThuVuotSo } from "@/lib/payments/khai-da-thu";
 import {
   kiemKeHoachDot,
   phanBoGhiTheoDot,
@@ -42,47 +46,88 @@ export async function getOrderInstallments(orderId: string) {
   });
 }
 
-/** Tính lại Order.paidAt/status từ tổng các đợt đã PAID. */
-async function recomputeOrder(orderId: string): Promise<void> {
-  const order = await db.order.findUnique({ where: { id: orderId }, select: { totalAmount: true } });
+/**
+ * Tính lại Order.paidAt/status từ tổng các đợt đã PAID.
+ *
+ * ⚠️ CHỈ ĐỘNG VÀO BA TRẠNG THÁI [sửa 14/09/2026]. Trước bản này câu ghi là
+ * `db.order.update({ where: { id: orderId } })` KHÔNG lọc trạng thái hiện tại, nên nó:
+ *  · kéo đơn `CANCELLED` / `REFUNDED` ngược về `CONFIRMED` (lưu kế hoạch trên đơn đã huỷ
+ *    là đơn sống lại, kèm `paidAt` mới);
+ *  · đẩy đơn `COMPLETED` (đã bàn giao, đã ghi danh) ngược về `PENDING_PAYMENT` chỉ vì
+ *    kế hoạch vừa thêm một đợt chưa thu.
+ * Cả hai đều KHÔNG để lại dấu vết nào: hàm này cũng không ghi `OrderStatusHistory` lẫn
+ * `AuditLog`, trong khi `updateOrderStatusAction` (`orders/_actions.ts:720`) thì có.
+ *
+ * Khuôn lấy từ `recomputeRequestStatuses` (`lib/payments/payment-request.ts:452`):
+ * `canConfirm = status === "PENDING_PAYMENT" || status === "DRAFT"`. Thêm `CONFIRMED` vào
+ * tập ĐƯỢC CHẠM vì đó là trạng thái chính hàm này đặt ra — sửa kế hoạch xuống dưới tổng
+ * đơn thì đơn phải quay về chờ thu, nếu không `CONFIRMED` thành một chiều không quay lại.
+ *
+ * `COMPLETED` / `CANCELLED` / `REFUNDED` thì KHÔNG chạm gì — kể cả `paidAt`. Đặt
+ * `paidAt: null` trên một đơn đã hoàn tiền cũng là xoá một sự thật, chỉ lặng lẽ hơn.
+ */
+const TRANG_THAI_RECOMPUTE_DUOC_CHAM = ["DRAFT", "PENDING_PAYMENT", "CONFIRMED"] as const;
+
+async function recomputeOrder(orderId: string, actorId: string | null): Promise<void> {
+  const order = await db.order.findUnique({
+    where: { id: orderId },
+    select: { totalAmount: true, status: true },
+  });
   if (!order) return;
+  if (!(TRANG_THAI_RECOMPUTE_DUOC_CHAM as readonly string[]).includes(order.status)) return;
+
   const paid = await db.orderInstallment.aggregate({
     where: { orderId, status: "PAID" },
     _sum: { amount: true },
     _max: { paidAt: true },
   });
   const paidTotal = paid._sum.amount ?? 0;
+  const duTien = paidTotal >= order.totalAmount;
+  const trangThaiMoi: OrderStatus = duTien ? "CONFIRMED" : "PENDING_PAYMENT";
+
   await db.order.update({
     where: { id: orderId },
     data: {
-      paidAt: paidTotal >= order.totalAmount ? paid._max.paidAt ?? new Date() : null,
-      status: paidTotal >= order.totalAmount ? "CONFIRMED" : "PENDING_PAYMENT",
+      paidAt: duTien ? paid._max.paidAt ?? new Date() : null,
+      status: trangThaiMoi,
     },
   });
+
+  // Đổi trạng thái đơn phải có dấu vết — cùng bảng mà màn `/orders/<id>` đang đọc
+  // (`orders/[id]/page.tsx:96`), nên không cần bảng mới và không cần nới quyền nào.
+  // Chỉ ghi khi THẬT SỰ đổi: `recomputeOrder` chạy sau mỗi lần lưu kế hoạch và mỗi lần
+  // đánh dấu đợt đã đóng, ghi cả lượt không đổi là chôn dòng có ý nghĩa dưới nhiễu.
+  if (trangThaiMoi !== order.status) {
+    await db.orderStatusHistory.create({
+      data: {
+        orderId,
+        fromStatus: order.status,
+        toStatus: trangThaiMoi,
+        changedByUserId: actorId,
+        // Không phải người bấm nút đổi trạng thái — đây là hệ quả của việc sửa kế hoạch
+        // đợt. Nói thẳng ra trong tên để người đọc nhật ký không đi tìm một cú bấm
+        // không tồn tại.
+        changedByName: "Tự động — tính lại theo kế hoạch đợt",
+        reason: duTien
+          ? `Tổng các đợt đã thu ${paidTotal.toLocaleString("vi-VN")}đ ≥ tổng đơn`
+          : `Tổng các đợt đã thu ${paidTotal.toLocaleString("vi-VN")}đ < tổng đơn`,
+      },
+    });
+  }
 }
 
 /**
  * Ghi/ghi đè kế hoạch 2 đợt. dot1Amount đã thu (PAID ngay), dot2 còn lại (PENDING,
  * dueDate hẹn). Nếu dot2Amount=0 → chỉ 1 đợt (đã đóng đủ).
  */
-/**
- * R-02 — ném khi lưu kế hoạch sẽ làm mất dấu tiền khách đã đóng.
- *
- * PHẢI là `throw`, KHÔNG được trả cờ: cả ba chỗ gọi `materializeInstallmentRequests`
- * đều BỎQUA giá trị trả về, và quan trọng hơn: khi cổng bật thì `orderInstallment.deleteMany`
- * + xoá mềm `Payment` ở trên ĐÃ chạy trong cùng transaction. Trả cờ thì transaction
- * vẫn COMMIT phần phá hoại — chỉ `throw` mới rollback được.
- */
-export class InstallmentMoneyBlocked extends Error {
-  readonly code = "INSTALLMENT_MONEY_BLOCKED" as const;
-  constructor(
-    message: string,
-    readonly soTien: number,
-  ) {
-    super(message);
-    this.name = "InstallmentMoneyBlocked";
-  }
-}
+// `InstallmentMoneyBlocked` ĐÃ DỜI sang `lib/payments/plan-money-guard.ts` [15/09/2026]
+// — cổng A6 phải ném cùng lớp lỗi này từ `materializeInstallmentRequests`, mà tệp đó
+// không nhập ngược được vào đây (vòng nhập). Xuất lại để mọi chỗ gọi cũ không đổi.
+// ⚠️ NHẬP rồi XUẤT LẠI, không dùng `export … from`: dạng đó tái xuất được nhưng KHÔNG
+// đưa tên vào phạm vi cục bộ, mà tệp này còn `throw new InstallmentMoneyBlocked(...)`
+// ở bốn chỗ (tsc báo đúng bốn lỗi khi thử).
+import { InstallmentMoneyBlocked } from "@/lib/payments/plan-money-guard";
+export { InstallmentMoneyBlocked };
 
 export type DotGhi = {
   amount: number;
@@ -139,7 +184,7 @@ export async function recordInstallmentPlan(params: {
 
   const order = await db.order.findUnique({
     where: { id: orderId },
-    select: { code: true, totalAmount: true, centerId: true, leadId: true },
+    select: { code: true, totalAmount: true, centerId: true, orgUnitId: true, leadId: true },
   });
   if (!order) return { ok: false, error: "Không tìm thấy đơn" };
 
@@ -162,6 +207,15 @@ export async function recordInstallmentPlan(params: {
   const coDotChuaThu = kiem.coDotChuaThu;
 
   const now = new Date();
+
+  // PHIÊN A (16/09/2026) — đọc CÔNG TẮC trước transaction. `getSetting` có câu tra DB riêng;
+  // gọi nó BÊN TRONG transaction là giữ transaction mở trong lúc chờ một truy vấn không liên
+  // quan, và transaction của đường ghi tiền là thứ phải ngắn nhất có thể.
+  //
+  // Đọc theo `orgUnitId` của CƠ SỞ GIỮ ĐƠN, không theo người đang bấm: một đơn của cơ sở đã
+  // bật luồng mới phải được bảo vệ kể cả khi người bấm thuộc cơ sở khác.
+  const batLuongMoi = await laThuTienLinhHoatBat(order.orgUnitId);
+
   const chan = await db.$transaction(async (tx) => {
     await tx.orderInstallment.deleteMany({ where: { orderId } });
     // S1-fix (double-write) — kế hoạch 2 đợt là NGUỒN SỰ THẬT về tiền của đơn:
@@ -194,6 +248,20 @@ export async function recordInstallmentPlan(params: {
     //
     // Quét cả `TRAN_SO_DOT` đợt chứ không chỉ số đợt lần này: kế hoạch trước có thể
     // nhiều đợt hơn kế hoạch mới, và khoản nháp của đợt bị bỏ phải được dọn.
+    // ⚠️ PHIÊN A — CÔNG TẮC BẬT ⇒ TUYỆT ĐỐI KHÔNG CHẠM `Payment`.
+    //
+    // Chủ dự án chốt: *"'Lưu kế hoạch' đang xoá mềm Payment → cấm. Lưu/sửa đợt không bao giờ
+    // chạm dòng Payment đã có."*
+    //
+    // Phép xoá mềm dưới đây sinh ra cho luồng CŨ, nơi kế hoạch đợt TỰ ĐẺ dòng Ledger-A
+    // (`ensureOrderPaymentRecorded`) và vì thế phải tự dọn bản nháp của chính nó. Luồng MỚI
+    // (đợt theo con) KHÔNG đẻ dòng `Payment` nào — tiền chỉ vào sổ khi có giao dịch ngân hàng
+    // thật — nên không có gì để dọn, và mọi dòng `Payment` đang có đều là TIỀN THẬT.
+    //
+    // Cổng đặt Ở ĐÂY chứ không ở đường gọi, vì có BA đường gọi (`installments.ts:332`, `:500`,
+    // `crm/backfill-order.ts:153`). Gác ở đường gọi là gác một cửa rồi để hai cửa mở — đúng bài
+    // học của cổng A6 ngay phía trên.
+    if (!batLuongMoi) {
     const soDotCuaKeHoach = Array.from({ length: TRAN_SO_DOT }, (_, i) => i + 1);
     await tx.payment.updateMany({
       where: {
@@ -206,6 +274,7 @@ export async function recordInstallmentPlan(params: {
       },
       data: { deletedAt: now },
     });
+    }
     // Dựng đủ n đợt. `soDot` đánh số từ 1 theo thứ tự trong `dots` — đó cũng là thứ tự
     // hạn đóng, và là thứ tự `computeDueNow` chọn "đợt chưa thu sớm nhất".
     //
@@ -259,6 +328,52 @@ export async function recordInstallmentPlan(params: {
       _sum: { amount: true },
     });
     const chiSoDaThu = dots.map((d, i) => ({ d, i })).filter((x) => x.d.daThu);
+
+    // ── R-03 ── LỜI KHAI "ĐÃ THU" KHÔNG ĐƯỢC VƯỢT SỔ CỦA ĐƠN.
+    //
+    // ⚠️ VỊ TRÍ LÀ TOÀN BỘ GIÁ TRỊ CỦA CỔNG NÀY: ngay SAU `daCoAgg` và ngay TRƯỚC vòng
+    // `ensureOrderPaymentRecorded`. Đặt nó xuống dưới vòng ghi thì vòng ghi vừa tạo đúng
+    // phần còn thiếu ⇒ `daCoTrongSo === tienDaThuTheoKeHoach` ⇒ cổng KHÔNG BAO GIỜ nổ,
+    // mà vẫn trông y hệt một cổng đang làm việc. Lưới `[KDT-10]` khoá thứ tự này.
+    //
+    // Vì sao R-02 ở dưới không thay được: R-02 nằm trong nhánh `if (coDotChuaThu)`, mà ca
+    // hỏng nhất — kế hoạch MỘT đợt "đã thu đủ" — có `coDotChuaThu = false` nên nhánh đó
+    // không chạy. Và cả khi chạy, nhánh (b) của R-02 CỐ Ý tha ca `khai > recordedPaid`
+    // (đo thật: `keHoachLamMatTien({0, 3tr, 0, 10tr})` → `{chan:false}`) để không khoá
+    // cứng nghiệp vụ sale thu tiền mặt. R-02 không hở — nó canh việc KHÁC.
+    const tienDaThuTheoKeHoach = chiSoDaThu.reduce(
+      (sum, x) => sum + Math.max(0, Math.round(x.d.amount)),
+      0,
+    );
+    const khaiKhong = khaiDaThuVuotSo({
+      tienCacDotDaThu: tienDaThuTheoKeHoach,
+      daCoTrongSo: daCoAgg._sum.amount ?? 0,
+    });
+    if (khaiKhong.chan) {
+      // ⚠️ Nhật ký này RỚT THEO transaction khi `throw` bên dưới rollback — hệt R-02 ở
+      // cuối hàm. Giữ để hai cổng đọc giống nhau; muốn nhật ký sống sót thì phải ghi
+      // NGOÀI transaction, và đó là việc chung của cả hai cổng, không phải của lượt này.
+      await writeAudit({
+        actor: { id: actorId, name: "" },
+        module: "finance",
+        entityType: "Order",
+        entityId: orderId,
+        action: "INSTALLMENT_DECLARED_PAID_BLOCKED",
+        newValues: {
+          soTien: khaiKhong.soTien ?? 0,
+          tienDaThuTheoKeHoach,
+          // Tên khoá KHÁC tên tham số của cổng là CÓ CHỦ ĐÍCH: `[KDT-10]` neo vào chuỗi
+          // `daCoTrongSo: daCoAgg…` để chứng minh cổng đo bằng chính `daCoAgg`, và một
+          // bản sao trong payload nhật ký sẽ làm phép đếm của lưới vô nghĩa (luật 11).
+          soTrongSo: daCoAgg._sum.amount ?? 0,
+          lyDo: khaiKhong.lyDo ?? "",
+        },
+        orgUnitId: order.centerId,
+        tx,
+      });
+      throw new InstallmentMoneyBlocked(khaiKhong.lyDo ?? "", khaiKhong.soTien ?? 0);
+    }
+
     const phanGhi = phanBoGhiTheoDot(
       chiSoDaThu.map((x) => x.d.amount),
       daCoAgg._sum.amount ?? 0,
@@ -345,7 +460,7 @@ export async function recordInstallmentPlan(params: {
     throw e;
   });
   if (chan instanceof InstallmentMoneyBlocked) return { ok: false, error: chan.message };
-  await recomputeOrder(orderId);
+  await recomputeOrder(orderId, actorId);
   return { ok: true };
 }
 
@@ -412,7 +527,7 @@ export async function markInstallmentPaid(
       });
     }
   });
-  await recomputeOrder(inst.orderId);
+  await recomputeOrder(inst.orderId, actorId);
   return { ok: true };
 }
 

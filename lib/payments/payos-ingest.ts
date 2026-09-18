@@ -6,7 +6,11 @@ import { ensureParentAccountForOrder } from "@/lib/parents/provision";
 import { sendEmailForTrigger } from "@/lib/email/trigger";
 import { notifyOrderByZnsIfNoEmail } from "@/lib/notify/order";
 import { extractOrderCode, normalizeContent } from "@/lib/payments/sepay";
-import { canonicalPhone, phoneVariants } from "@/lib/phone";
+import { qrConRotDuocTien, locDonNhanTien } from "@/lib/payments/don-nhan-tien";
+// Quy tắc "khoản này thuộc ghi danh nào" — MỘT chỗ duy nhất, dùng chung với màn sửa tay
+// ở /admin/payments. Xem khối chú thích tại chỗ gọi (ghi sổ cũ) để biết vì sao.
+import { chonGhiDanhChoKhoan } from "@/lib/finance/gan-ghi-danh-khoan";
+import { phoneVariants } from "@/lib/phone";
 import {
   transferContentPartsForOrder,
   MAX_TRANSFER_CONTENT,
@@ -142,6 +146,19 @@ export function collectMatchKeyCandidates(data: PayosWebhookData): string[] {
   if (desc) {
     push(desc);
     for (const tok of desc.split(/[^A-Za-z0-9_-]+/)) push(tok, 6);
+    // Vòng tách THỨ HAI, rộng hơn — cắt cả `_` và `-` [14/09/2026].
+    //
+    // VÌ SAO: nội dung CK nay mang `matchKey` lên đầu (lib/payments/noi-dung-ck.ts)
+    // để nhánh (a) sống lại. Mã QR nối bằng KHOẢNG TRẮNG nên vòng trên đủ, nhưng
+    // phụ huynh GÕ TAY theo bản sale đọc rất hay gõ `ORD260913000001D1_NguyenV` —
+    // mà `/[^A-Za-z0-9_-]+/` KHÔNG tách `_`, nên cả cụm ra MỘT token 25 ký tự,
+    // không bằng `matchKey` nào, và tiền rơi xuống nhánh đoán y như cũ.
+    //
+    // An toàn vì `matchKey` là @unique và tra bằng SO BẰNG: thêm ứng viên chỉ tăng
+    // cơ hội tìm ĐÚNG khoá; một mảnh tên người muốn khớp nhầm thì phải TRÙNG KHÍT
+    // matchKey của phiếu khác. Thêm vòng chứ không SỬA vòng cũ: `virtualAccount`
+    // và `reference` của cổng có thể mang `-`/`_` trong chính mã.
+    for (const tok of desc.split(/[^A-Za-z0-9]+/)) push(tok, 6);
   }
   return [...new Set(out)];
 }
@@ -195,71 +212,16 @@ export type ResolveOutcome = {
   note?: string;
 };
 
-/**
- * Bóc SĐT phụ huynh ra khỏi nội dung CK (THUẦN).
- *
- * 20/08 — nội dung CK đổi sang dạng người đọc `HoTenCon_SdtPH_TenKhoa`, nên SĐT
- * trở thành đường đối khớp. Nhận `84XXXXXXXXX` (11 số) và `0XXXXXXXXX` (10 số),
- * trả canonical `84XXXXXXXXX`.
- *
- * ⚠️ Hai vòng dò, KHÔNG gộp làm một:
- *  1. Theo BIÊN TOKEN (tách ở mọi ký tự không phải số) — đây là ca thường, và nó
- *     không thể cắt bừa giữa hai cụm số dính nhau.
- *  2. Chỉ khi (1) trượt mới quét cửa sổ trượt trên chuỗi số ĐÃ GỘP: có ngân hàng
- *     dán số tiền/mã tham chiếu dính liền SĐT.
- * Cửa sổ 11 dò trước 10 để "84…" không bị đọc nhầm thành mảnh của số khác.
- *
- * KHÔNG nhận dạng 9 số trần (Excel nuốt số 0) như `canonicalPhone`: quét chuỗi tự
- * do mà nhận 9 số thì mọi số tài khoản đều thành "SĐT".
- */
-export function extractVnPhoneCandidates(content: string | null | undefined): string[] {
-  // ⚠️ GỠ MÃ ĐƠN TRƯỚC KHI DÒ. `ORD260820000001` là 12 chữ số dính liền nhau, và
-  // cửa sổ trượt ở vòng (2) đẻ ra "SĐT" hợp lệ GIẢ từ chính nó — đo được:
-  // "ORD260820000001D1" → 84820000001. Mã đơn đã có nhánh (c) lo, ở đây nó chỉ là
-  // rác gây nhiễu.
-  const raw = String(content ?? "").replace(/ORD[\s.\-_]*\d{6}[\s.\-_]*\d{6}/gi, " ");
-  if (!raw) return [];
-
-  const out: string[] = [];
-  const push = (hit: string | null) => {
-    if (hit && !out.includes(hit)) out.push(hit);
-  };
-
-  for (const token of raw.split(/[^0-9]+/)) push(phoneFromDigits(token));
-  // ⚠️ Cửa sổ trượt CHỈ chạy khi vòng token trắng tay — giữ nguyên ngữ nghĩa cũ.
-  // Chạy luôn cả hai vòng thì mọi nội dung "sạch" cũng đẻ thêm số ứng viên rác từ
-  // các cụm số dính nhau, mà từ 20/08 nhiều ứng viên = NHẬP NHẰNG = không rót ⇒
-  // ta tự tay biến ca đang chạy tốt thành đối soát tay.
-  if (out.length === 0) {
-    const digits = raw.replace(/\D/g, "");
-    for (const len of [11, 10]) {
-      for (let i = 0; i + len <= digits.length; i++) {
-        push(phoneFromDigits(digits.slice(i, i + len)));
-      }
-    }
-  }
-  // Trần an toàn: nội dung có 6 số điện thoại là rác/quảng cáo, đã chắc chắn phải
-  // xử lý tay — không cần dò DB cho từng số.
-  return out.slice(0, 5);
-}
-
-/**
- * Bản 1-số giữ cho đường gọi cũ (test hồi quy, log). ⚠️ ĐỪNG dùng nó cho việc
- * ĐỐI KHỚP: lấy số đầu tiên chính là con bug "bà ngoại chuyển hộ" — ngân hàng ghi
- * "CT tu 0912345678 NGUYEN THI B chuyen tien TranMinhAnh_84905111222_Sata2" thì số
- * đầu tiên là số NGƯỜI GỬI, không phải phụ huynh. Đối khớp dùng
- * `extractVnPhoneCandidates` + bằng chứng phụ (tên con / tên khoá).
- */
-export function extractVnPhone(content: string | null | undefined): string | null {
-  return extractVnPhoneCandidates(content)[0] ?? null;
-}
-
-/** Chỉ đúng 2 dạng người ta gõ vào nội dung CK; chuẩn hoá vẫn nhờ lib/phone.ts. */
-function phoneFromDigits(digits: string): string | null {
-  if (digits.length === 11 && digits.startsWith("84")) return canonicalPhone(digits);
-  if (digits.length === 10 && digits.startsWith("0")) return canonicalPhone(digits);
-  return null;
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// Phép bóc SĐT khỏi nội dung CK nay sống ở `lib/payments/sdt-trong-memo.ts` — module THUẦN,
+// không `server-only`, nên script chạy ngoài Next dùng lại được ĐÚNG phép bóc này thay vì
+// chép một bản thứ hai. Xuất lại ở đây để mọi đường gọi cũ (và mọi ca test cũ) giữ nguyên
+// chỗ import.
+import {
+  extractVnPhoneCandidates,
+  extractVnPhone,
+} from "@/lib/payments/sdt-trong-memo";
+export { extractVnPhoneCandidates, extractVnPhone };
 
 /**
  * (d) Đối khớp theo SĐT phụ huynh — nhánh SINH RA CÙNG định dạng nội dung CK mới.
@@ -345,13 +307,15 @@ async function findPendingOrdersByPhone(phone: string): Promise<PhoneCandidate[]
   const variants = phoneVariants(phone);
   return db.order.findMany({
     where: {
-      deletedAt: null,
       // Đơn đã huỷ/hoàn tiền không phải đích rót tự động. DRAFT cũng KHÔNG: đó là
       // đơn sale ĐANG SOẠN DỞ (vẫn kịp có phiếu thu PENDING) — rót tiền vào đó là
       // chốt giùm một đơn chưa ai duyệt, và đơn thật của khách vẫn nợ. Nếu đơn bị
       // loại là ứng viên DUY NHẤT thì ta ra 0 đơn → UNMATCHED → kế toán quyết,
       // đúng ý đồ.
-      status: { notIn: ["DRAFT", "CANCELLED", "REFUNDED"] },
+      //
+      // PHIÊN B — trước đây nhánh này gõ tay `["DRAFT", "CANCELLED", "REFUNDED"]`, tức bản
+      // sao thứ hai của danh sách. Nay dùng chung mảnh lọc với nhánh (a) và (c).
+      ...locDonNhanTien(),
       paymentRequests: { some: { status: { in: ["PENDING", "PARTIAL"] } } },
       OR: [
         { customerPhone: { in: variants } },
@@ -646,7 +610,14 @@ export async function resolvePaymentTargetDetailed(
   const candidates = collectMatchKeyCandidates(data);
   if (candidates.length > 0) {
     const rows = await db.paymentRequest.findMany({
-      where: { matchKey: { in: candidates } },
+      // PHIÊN A — hai vế lọc THÊM so với bản cũ, và cả hai đều là tiền:
+      //  · phiếu VOID không còn là đích rót (huỷ đợt xong mà QR cũ vẫn khớp là rót vào chỗ đã bỏ);
+      //  · đơn DRAFT/CANCELLED/REFUNDED không nhận tiền tự động — xem hằng ở trên.
+      where: {
+        matchKey: { in: candidates },
+        status: { not: "VOID" },
+        order: locDonNhanTien(),
+      },
       select: { id: true, orderId: true, matchKey: true },
     });
     for (const c of candidates) {
@@ -661,9 +632,24 @@ export async function resolvePaymentTargetDetailed(
   if (orderCode) {
     const session = await db.qrSession.findUnique({
       where: { providerOrderCode: orderCode },
-      select: { id: true, paymentRequest: { select: { id: true, orderId: true } } },
+      select: {
+        id: true,
+        paymentRequest: {
+          select: {
+            id: true,
+            orderId: true,
+            status: true,
+            order: { select: { status: true, deletedAt: true } },
+          },
+        },
+      },
     });
-    if (session?.paymentRequest) {
+    // PHIÊN A — cùng hai vế lọc như nhánh (a). Ở đây phải lọc SAU khi tra (không phải trong
+    // `where`) vì `findUnique` khoá theo `providerOrderCode`; thêm điều kiện vào `where` của
+    // `findUnique` là lỗi kiểu, không phải lựa chọn.
+    const phieuCuaQr = session?.paymentRequest ?? null;
+    const qrConHieuLuc = qrConRotDuocTien(phieuCuaQr);
+    if (session && phieuCuaQr && qrConHieuLuc) {
       return {
         target: {
           paymentRequestId: session.paymentRequest.id,
@@ -682,8 +668,20 @@ export async function resolvePaymentTargetDetailed(
   for (const c of collectMatchKeyCandidates(data)) {
     const code = extractOrderCode(c);
     if (!code) continue;
-    const order = await db.order.findUnique({
-      where: { code },
+    // PHIÊN B — `findFirst` chứ không `findUnique`, chỉ để CHỖ NÀY nhận thêm được mảnh lọc
+    // (`findUnique` chỉ nhận đúng khoá). `code` vẫn là cột `@unique` nên kết quả không đổi
+    // nghĩa: vẫn là "đơn mang mã này", chỉ thêm "và đơn ấy còn nhận tiền tự động được".
+    //
+    // TRƯỚC BẢN VÁ: nhánh này tra mã đơn rồi rót vào phiếu chưa đóng sớm nhất, KHÔNG hỏi đơn
+    // đang ở trạng thái nào — đơn DRAFT (sale soạn dở, đã kịp có phiếu PENDING), đơn CANCELLED
+    // và đơn REFUNDED đều hút được tiền. Đây là nhánh của nội dung CK đời cũ `ORD…D<số>`, tức
+    // nhánh mà dữ liệu thật đang đi qua nhiều nhất, và PHIÊN A đã bỏ sót đúng nó.
+    //
+    // (Đơn XOÁ MỀM thì chưa bao giờ lọt ở đây: `Order` ∈ `SOFT_DELETE_MODELS` nên tầng base của
+    // `lib/db.ts` tự chèn `deletedAt: null`. Vế ấy trong `locDonNhanTien()` giữ cho câu `where`
+    // tự nói đủ luật — nhánh (a) mới là chỗ nó thật sự gánh việc.)
+    const order = await db.order.findFirst({
+      where: { code, ...locDonNhanTien() },
       select: {
         id: true,
         paymentRequests: {
@@ -1041,9 +1039,131 @@ export async function allocateToOrder(params: {
           select: { id: true },
         });
         if (!dup) {
+          // ── GẮN GHI DANH cho khoản tiền về (14/09/2026) ───────────────────────
+          //
+          // ĐO ĐƯỢC: `confirmPayment` (lib/finance/payment.ts) mở đầu bằng
+          // `if (!existing.enrollmentId) return fail(...)`. Khoản do webhook sinh ra
+          // trước đây KHÔNG mang `enrollmentId` (grep `enrollmentId` trong tệp này ra
+          // 0 kết quả) ⇒ kế toán KHÔNG BAO GIỜ xác nhận được nó ⇒ TRỤC A
+          // (`accountantStatus: CONFIRMED`) không bao giờ cộng ⇒ `/cong-no` và cổng
+          // phụ huynh KHÔNG giảm nợ cho MỌI đồng tiền về qua QR. Tiền thật đã vào tài
+          // khoản mà màn hình vẫn báo nợ nguyên.
+          //
+          // Thêm tầng thứ hai: cổng phụ huynh cộng tiền theo QUAN HỆ
+          // `Enrollment.payments` (lib/portal/billing-student.ts, dashboard.ts) — khoản
+          // `enrollmentId = null` thì dù có xác nhận được cũng không trừ vào công nợ
+          // của ghi danh nào.
+          //
+          // ⚠️ KHÔNG gọi `ensureOrderPaymentRecorded` để "dùng lại sẵn": hàm đó đóng
+          // dấu `[auto:order-confirm]` / `[auto:order-installment:dotN]`, mà
+          // `lib/orders/installments.ts` XOÁ MỀM đúng hai họ marker đó mỗi lần ai bấm
+          // "Lưu kế hoạch" ⇒ tiền ngân hàng sẽ bị xoá mềm ở lần lưu kế hoạch kế tiếp.
+          // Marker riêng `[auto:<provider>:<txn>]` ở dưới GIỮ NGUYÊN — chỉ CHÉP QUY
+          // TẮC gắn ghi danh, không chép marker.
+          //
+          // ── HAI NGUỒN ỨNG VIÊN, THEO THỨ TỰ CHẮC CHẮN GIẢM DẦN ────────────────
+          //
+          // (1) Ghi danh mà CHÍNH ĐƠN NÀY trỏ tới (`OrderItem.enrollmentId`). Đây là
+          //     bằng chứng TRỰC TIẾP — bản thân đơn khai nó đang thu tiền cho ghi danh
+          //     nào — chứ không phải suy đoán.
+          // (2) Lùi về luật của `ensureOrderPaymentRecorded` (lib/finance/payment.ts):
+          //     học viên của đơn có ĐÚNG MỘT ghi danh còn sống. Giữ nhánh này để hai
+          //     đường ghi vào cùng bảng `Payment` quy kết giống nhau cho đơn không có
+          //     dòng ghi danh nào.
+          //
+          // ⚠️ VÌ SAO KHÔNG CHỈ DÙNG NGUỒN (2) — ĐO TRÊN satarobo_local 14/09/2026,
+          //    496 đơn còn sống:
+          //      · nguồn (2) một mình:  32 đơn gắn được ·   3 đơn không có học viên ·
+          //                            461 đơn MƠ HỒ (6,5% gắn được)
+          //      · nguồn (1) trước:    493 đơn gắn được ·   0 đơn trỏ ≥2 ghi danh ·
+          //                              3 đơn không có dòng ghi danh (99,4%)
+          //    Phân bố ghi danh/học viên nói rõ vì sao: 168/250 em có ≥2 ghi danh còn
+          //    sống, đa số vì `COMPLETED` KHÔNG bị xoá mềm (191 dòng) — học xong Sata1
+          //    rồi lên Sata2 là đã "mơ hồ" theo nguồn (2). Chỉ chép nguồn (2) là vá
+          //    xong mà 93% tiền về qua QR vẫn không xác nhận được, tức chưa vá.
+          //    Kiểm chéo an toàn của nguồn (1): 0 đơn có item trỏ ghi danh của em KHÁC,
+          //    0 đơn có item trỏ ghi danh đã xoá mềm.
+          //
+          // MƠ HỒ THÌ ĐỂ NULL. Bốn ca biên, cả hai nguồn đều đi qua đúng một luật ở
+          // `lib/finance/gan-ghi-danh-khoan.ts` (dùng lại, không viết hàm thứ hai):
+          //  · đơn KHÔNG có `studentId` (đơn tạo ở /orders/new) → nguồn (1) vẫn tra
+          //    được theo dòng hàng; hết dòng thì nguồn (2) không chạy (không biết em
+          //    nào) → để null.
+          //  · học viên có ≥2 ghi danh còn sống (combo / học lại / hai khoá) → nguồn
+          //    (2) trả về 2 ⇒ null. Chia tiền cho nhiều ghi danh phải theo `finalPrice`
+          //    (đúng phép chia của `linkRecordedPaymentsToEnrollments`); đoán hộ ở đây
+          //    là cộng tiền vào công nợ của khoá khác và KHÔNG AI BIẾT.
+          //  · ghi danh đã `deletedAt` → bị loại ở `where` của CẢ HAI nguồn.
+          //  · đơn có nhiều `OrderItem` trỏ nhiều ghi danh → nguồn (1) trả ≥2 ⇒ null,
+          //    và KHÔNG lùi sang (2) (lùi là lấy một ghi danh mà đơn còn chưa chọn nổi).
+          //
+          // Nguồn (1) khoá thêm theo `order.studentId` khi đơn có: item trỏ ghi danh
+          // của em KHÁC thì đó là dữ liệu hỏng, và gắn vào là rót tiền sang sổ nhà khác.
+          const dongHangCoGhiDanh = await tx.orderItem.findMany({
+            where: {
+              orderId: order.id,
+              enrollmentId: { not: null },
+              enrollment: {
+                deletedAt: null,
+                ...(order.studentId ? { studentId: order.studentId } : {}),
+              },
+            },
+            select: { enrollmentId: true },
+          });
+          // Gộp trùng: đơn hay có nhiều dòng hàng cùng trỏ MỘT ghi danh (học phí +
+          // giáo cụ). Không gộp thì đơn chắc chắn nhất lại bị đếm thành "≥2" ⇒ null.
+          const idTheoDon = [...new Set(dongHangCoGhiDanh.map((d) => d.enrollmentId!))];
+
+          // `take: 2` chứ không phải `take: 1`: chỉ cần biết "có nhiều hơn một hay
+          // không". Lấy 1 là biến ca mơ hồ thành ca chắc chắn và gắn bừa vào ghi danh
+          // đầu bảng.
+          const ungVienGhiDanh =
+            idTheoDon.length > 0
+              ? idTheoDon.map((id) => ({ id }))
+              : order.studentId
+                ? await tx.enrollment.findMany({
+                    where: { studentId: order.studentId, deletedAt: null },
+                    select: { id: true },
+                    take: 2,
+                  })
+                : [];
+          const chonGhiDanh = chonGhiDanhChoKhoan(
+            ungVienGhiDanh.map((e) => ({
+              id: e.id,
+              // Ba trường dưới chỉ phục vụ MÀN CHỌN TAY (hiện tên lớp cho người bấm).
+              // Đường webhook không có người bấm nên không tra thêm — tra thêm là gánh
+              // hai join nữa bên trong transaction đang giữ advisory lock của đơn.
+              tenLop: null,
+              tenKhoa: null,
+              finalPrice: null,
+            })),
+          );
+
+          // ─────────────────────────────────────────────────────────────────
+          // PHIÊN B — ĐƠN MỘT CON thì gắn luôn `orderItemId`.
+          //
+          // Đơn có đúng MỘT dòng hàng ⇒ tiền không thể của ai khác, không có gì để đoán.
+          // Đơn từ HAI dòng trở lên (khớp bằng mã đời cũ `ORD…D<số>`, thứ không nói con nào)
+          // thì để NULL và màn công nợ hiện "chưa chia con" — sale chia ở
+          // `/admin/bien-dong-so-du`. Đoán hộ ở đây là bé A hết nợ còn bé B vẫn bị gọi đòi
+          // tiền, và không có dấu vết nào để lần ra vì sao.
+          //
+          // `take: 2` chứ không `findMany` đủ: chỉ cần biết "có nhiều hơn một hay không".
+          // Lấy 1 là biến ca mơ hồ thành ca chắc chắn — đúng lỗi mà `chonGhiDanhChoKhoan`
+          // ngay trên được dựng ra để tránh.
+          const dongCuaDon = await tx.orderItem.findMany({
+            where: { orderId: order.id },
+            select: { id: true },
+            take: 2,
+          });
+          const dongDuyNhat = dongCuaDon.length === 1 ? (dongCuaDon[0]?.id ?? null) : null;
+
           await tx.payment.create({
             data: {
               orderId: order.id,
+              // null khi mơ hồ — xem khối chú thích ngay trên.
+              enrollmentId: chonGhiDanh.ghiDanhId,
+              orderItemId: dongDuyNhat,
               amount: allocated,
               method: provider.toLowerCase(),
               paidDate: new Date(),

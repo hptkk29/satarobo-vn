@@ -41,6 +41,17 @@ export const crmModule: ModuleDecl = {
         "Đổi trạng thái lead trên phễu (kéo thẻ Kanban / chọn ở bảng). Chỉ Sale.",
     },
     {
+      key: "leads:overwrite",
+      action: "overwrite",
+      // 17/09/2026 — chủ dự án chốt: "chỉ quản lý cơ sở hoặc admin mới có quyền đè".
+      // Tách khỏi `leads:edit` vì Sale VẪN cần sửa tên PH / email / tên con / tuổi con /
+      // khoá quan tâm / ghi chú; chỉ ba ô SĐT · đơn vị · nguồn là khoá. Gộp chung là
+      // hoặc khoá nhầm cả biểu mẫu, hoặc mở nhầm đúng ba ô vừa cấm.
+      description:
+        "Ghi đè dữ liệu đã có trên lead: sửa SĐT / đơn vị / nguồn, bật cột Đè khi nhập " +
+        "Excel, và thay thế (thay vì nối thêm) ghi chú. Quản lý cơ sở + Quản trị hệ thống.",
+    },
+    {
       key: "leads:edit-own-intake",
       action: "edit-own-intake",
       description:
@@ -156,6 +167,15 @@ export const crmModule: ModuleDecl = {
         "Sale điểm danh buổi trải nghiệm. Tách khỏi trials:feedback vì điểm danh là việc của Sale phụ trách khách, nộp phiếu đánh giá là việc của giáo viên.",
     },
     { key: "trials:assign-teacher", action: "assign-teacher" },
+    {
+      key: "trials:assign-teacher-center",
+      action: "assign-teacher-center",
+      // 17/09/2026 — tầng Quản lý cơ sở của việc xếp GV cho buổi trải nghiệm, TÁCH
+      // khỏi `trials:assign-teacher` (tầng Đào tạo, toàn hệ thống). Phạm vi thật vẫn
+      // do `visibleCenterIds` + `scopedDb` quyết, nên seed để GLOBAL (xem seed-roles.ts).
+      description:
+        "Xếp giáo viên cho buổi trải nghiệm của CƠ SỞ MÌNH. Khác trials:assign-teacher (Đào tạo, toàn hệ thống).",
+    },
     {
       key: "trials:override-capacity",
       action: "override-capacity",

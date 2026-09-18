@@ -142,7 +142,13 @@ const MAN_ADMIN: { ten: string; file: string }[] = [
 
 describe("[S-1] màn admin in SĐT lead phải đi qua tầng che duy nhất", () => {
   it.each(MAN_ADMIN)("$ten: dùng maskLeadPiiFields", ({ file }) => {
-    expect(nguon(file)).toContain("maskLeadPiiFields");
+    // ⚠️ NEO THEO LỜI GỌI, KHÔNG THEO TÊN TRẦN (siết 18/09/2026, luật 11).
+    // Bản cũ hỏi `toContain("maskLeadPiiFields")` — dòng `import` cũng chứa đúng chuỗi
+    // đó, nên gỡ HẲN lời gọi mà quên gỡ import thì lưới VẪN XANH. Đo được trong lượt rà
+    // sau hợp nhất: cấy `const piiLead = lead;` ⇒ 42/42 ca vẫn xanh. Một lưới xanh trên
+    // mã đã hỏng là thứ tệ hơn không có lưới.
+    const soLoiGoi = (nguon(file).match(/maskLeadPiiFields\(/g) ?? []).length;
+    expect(soLoiGoi, `${file}: không thấy LỜI GỌI maskLeadPiiFields(`).toBeGreaterThan(0);
   });
 
   it.each(MAN_ADMIN)("$ten: quyết định che bằng canViewLeadPii, không suy từ vai", ({ file }) => {

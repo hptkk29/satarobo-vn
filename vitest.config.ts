@@ -66,6 +66,11 @@ export default defineConfig({
       // `include` là bộ lọc CỨNG, không khai thì `vitest run tests/finance` báo
       // "No test files found" và CI vẫn XANH dù test viết đúng.
       "tests/finance/**/*.{test,spec}.ts",
+      // Script chạy tay có phần THUẦN quyết định hình dạng sổ tiền (vd `planRequests`
+      // của backfill phiếu thu). Cùng lý do phải khai ở đây như các dòng trên: `include`
+      // là bộ lọc CỨNG — không khai thì `vitest run scripts` báo "No test files found"
+      // và CI vẫn XANH dù test viết đúng.
+      "scripts/**/*.{test,spec}.ts",
       // Hook an toàn (luật 14): lưới phải có test của chính nó. `include` là bộ lọc
       // CỨNG — không khai ở đây thì `vitest` báo "No test files found" và CI vẫn XANH
       // dù test viết đúng; đúng loại hỏng câm đã giết hai hook suốt nhiều tháng.

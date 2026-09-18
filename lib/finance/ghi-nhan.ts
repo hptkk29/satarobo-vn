@@ -32,7 +32,38 @@
 // `saleStatus`, nên trục B cộng cả 4tr lẫn 3tr = 7tr — nhân đôi tiền ngay tại chỗ quyết
 // định số in trên mã QR và chỗ đối khớp tiền về.)
 // ─────────────────────────────────────────────────────────────────────────────
+import type { PaymentSaleStatus } from "@prisma/client";
 import { db } from "@/lib/db";
+
+/**
+ * Hai trạng thái CÙNG nghĩa "sale đã ghi nhận tiền", theo đúng enum trong schema:
+ *
+ *   RECORDED          — Sale ghi nhận đã thu
+ *   COLLECT_CONFIRMED — Sale xác nhận thực thu (chuẩn bị bàn giao kế toán)
+ *
+ * ⚠️ VÌ SAO PHẢI LÀ CẢ HAI [vá 14/09/2026]. `COLLECT_CONFIRMED` là bước ĐI SAU
+ * `RECORDED` — một lời khẳng định MẠNH HƠN. Nhưng bản trước lọc BẰNG `"RECORDED"`, nên
+ * khoản nào tiến lên trạng thái mạnh hơn là **rơi khỏi trục B**. Xác nhận đã thu mà làm
+ * tiền BIẾN MẤT khỏi sổ "đã ghi nhận" là ngược đời, và nó tắt lặng lẽ đúng bốn thứ trục
+ * B nuôi: số tiền in trên mã QR · đối khớp webhook SePay · tin ZNS học phí · cổng chốt
+ * lead thành ghi danh.
+ *
+ * ĐO ĐƯỢC trên `satarobo_local`: 379/380 khoản mang `COLLECT_CONFIRMED`, 1 khoản
+ * `RECORDED` ⇒ trục B đọc ra **1.000.000đ** trong khi trục A là **1.361.044.000đ**. Mọi
+ * màn đọc trục B (kể cả ô "Đã thu" trên màn đơn) vì thế sai gần như mọi đơn.
+ *
+ * Trên PROD hôm nay chưa lộ: `grep COLLECT_CONFIRMED` cho thấy chỉ `prisma/seed-lms/
+ * crm.ts:397` và `prisma/seed-uat/04-tai-chinh.ts:102` ghi giá trị đó — không đường chạy
+ * thật nào. Nhưng enum có, nhãn UI có ("Đã xác nhận thu",
+ * `payments-client.tsx:90`), nên ngày ai đó nối bước chuyển trạng thái ấy là tiền rụng
+ * khỏi trục B mà không lỗi nào báo. Vá bây giờ vừa sửa UAT vừa gỡ mìn.
+ */
+// ⚠️ KHÔNG `as const`: Prisma đòi mảng KHẢ BIẾN cho `in`, mảng `readonly` bị từ chối ở
+// tầng kiểu (và lỗi nó in ra dài 8 dòng, rất khó đọc). Kiểu tường minh đã đủ khoá giá trị.
+export const SALE_STATUS_DA_GHI_NHAN: PaymentSaleStatus[] = [
+  "RECORDED",
+  "COLLECT_CONFIRMED",
+];
 
 /**
  * Điều kiện `where` cho MỌI truy vấn cộng tiền đã ghi nhận.
@@ -41,9 +72,28 @@ import { db } from "@/lib/db";
  * điểm khác biệt với trục A, đừng "sửa cho giống".
  */
 export const KHOAN_DA_GHI_NHAN = {
-  saleStatus: "RECORDED",
+  saleStatus: { in: SALE_STATUS_DA_GHI_NHAN },
   deletedAt: null,
-} as const;
+};
+
+/**
+ * Bản JS của cùng điều kiện — cho chỗ đã nạp sẵn cả danh sách rồi lọc trong bộ nhớ.
+ * Đối xứng với `laKhoanDaXacNhan` của trục A (lib/finance/debt.ts).
+ *
+ * ⚠️ BẮT BUỘC dùng hàm này thay cho `p.saleStatus === KHOAN_DA_GHI_NHAN.saleStatus`.
+ * Từ khi `saleStatus` thành `{ in: [...] }`, phép so đó đem một CHUỖI so với một ĐỐI
+ * TƯỢNG ⇒ luôn `false` ⇒ cột "đã ghi nhận" của `/cong-no` im lặng về 0 cho mọi dòng.
+ * Không lỗi, không cảnh báo — đúng lớp bug mà cả file này được viết ra để chặn.
+ */
+export function laKhoanDaGhiNhan(p: {
+  saleStatus: string;
+  deletedAt?: Date | null;
+}): boolean {
+  return (
+    (SALE_STATUS_DA_GHI_NHAN as readonly string[]).includes(p.saleStatus) &&
+    !p.deletedAt
+  );
+}
 
 /** Σ tiền đã ghi nhận của MỘT đơn hàng. */
 export async function sumRecorded(orderId: string): Promise<number> {

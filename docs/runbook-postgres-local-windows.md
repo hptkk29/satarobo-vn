@@ -34,6 +34,80 @@ trình khác trùng số là nó báo "đang chạy". `pg_isready` bắt tay th�
 
 Tức là từ 25/08 tới nay **chưa lần nào máy chủ được tắt tử tế**.
 
+> **Lần thứ CHÍN — 18/09/2026, giữa lượt hợp nhất `main` → `test`.** Đáng ghi vì nó cho
+> thấy cái giá thật của lớp lỗi này: `pnpm build` đỏ ở trang `/vinh-danh/tat-ca` với
+> `PrismaClientInitializationError`, và **một cổng đỏ giữa lượt gộp trông y hệt một lượt
+> gộp làm hỏng mã**. Tôi đã sắp đi tìm nguyên nhân trong chính bản gộp.
+>
+> Thứ cắt ngắn chuyện đó là **hỏi đúng câu**: `pg_isready` trả `no response` trong khi
+> `pg_ctl status` vẫn khẳng định *"server is running (PID 19040)"* — đúng **bẫy thứ ba**
+> ở mục 1. Mất 30 giây thay vì nửa tiếng.
+>
+> ⇒ **Cổng đỏ mà lỗi nhắc tới `127.0.0.1:5432`: chạy `pg_isready` TRƯỚC khi đọc diff.**
+> Và đừng tin `pg_ctl status` — nó đọc `postmaster.pid`, không hỏi máy chủ.
+>
+> **BẪY THỨ TƯ, phát hiện cùng lần này: hồi phục sau chết bẩn MẤT NHIỀU PHÚT và trông y
+> hệt treo.** `pg_isready` trả `rejecting connections` (KHÁC `no response` — nghĩa là máy
+> chủ đã sống, đang chạy crash recovery), còn nhật ký đổ liên tục
+> `FATAL: the database system is starting up` cho mọi lượt kết nối. Cảnh đó dễ bị đọc
+> thành "hỏng tiếp, giết đi khởi động lại" — và giết giữa chừng là quay lại vạch xuất
+> phát, lần sau còn lâu hơn.
+>
+> **Cách phân biệt TIẾN với TREO — đọc dòng `syncing data directory (fsync)`:**
+> ```
+> LOG:  syncing data directory (fsync), elapsed time: 170.00 s, current path: ./base/16384/12991747
+> LOG:  syncing data directory (fsync), elapsed time: 180.01 s, current path: ./base/16384/13000971
+> ```
+> Nó in mỗi 10 giây. **`current path` đổi ⇒ đang TIẾN, cứ chờ.** Đứng yên nhiều lượt mới
+> là treo thật. Đo 18/09: qua mốc 200s vẫn đang fsync — DB này có vài trăm nghìn tệp nhánh.
+> ⇒ Đặt đồng hồ chờ theo PHÚT, đừng theo giây, và **đừng `pg_ctl restart` khi path còn đổi**.
+>
+> **Hồi phục có HAI PHA, mỗi pha một dòng tiến độ RIÊNG** — hết pha một mà vẫn
+> `rejecting connections` KHÔNG phải là treo:
+> ```
+> LOG:  syncing data directory (fsync), elapsed time: … , current path: ./base/…   ← pha 1
+> LOG:  redo in progress,               elapsed time: … , current LSN:  2/9540D500 ← pha 2
+> ```
+> Pha 1 nhìn `current path`, pha 2 nhìn `current LSN`. Đo 18/09: pha 1 mất **~12 phút**,
+> pha 2 thêm vài phút nữa.
+>
+> ### ⚠️ MỘT CON SỐ TÔI ĐÃ GHI SAI VÀO CHÍNH MỤC NÀY — và cách nó suýt thành "nguyên nhân gốc"
+>
+> Trong lúc chờ hồi phục 18/09, tôi đếm tệp rồi ghi vào đây: *"`base/` có 642.475 tệp,
+> một database giữ 626.626 — 97,5%"*, kèm kết luận **nguyên nhân gốc là tệp quan hệ mồ
+> côi tích lại**. Nghe rất khớp: nó giải thích cả fsync 12 phút lẫn chuỗi chết bẩn.
+>
+> **Cả hai con số đều SAI.** Đếm lại sau khi máy chủ lên hẳn:
+>
+> | đo | số THẬT |
+> |---|---|
+> | tổng tệp trong `data/base` | **20.018** |
+> | `satarobo_test` (OID 16384, DB lớn nhất) | **4.177** |
+> | `pg_class` của DB đó | 2.558 quan hệ (1710 index · 366 bảng · 337 toast · 145 view) |
+>
+> 4.177 tệp cho 2.558 quan hệ là **hoàn toàn bình thường** (mỗi quan hệ thêm `_fsm`/`_vm`).
+> **Không có tệp mồ côi nào.** Giả thuyết "nguyên nhân gốc" ⇒ **RÚT LẠI**.
+>
+> **Vì sao phép đo sai:** tôi chạy `find` **trong lúc máy chủ đang fsync/redo**, tức đang
+> quét chính thư mục đó. Cùng một lệnh, chạy lại sau khi DB lên, trả `4177` thay vì
+> `626626`. Tôi không dựng lại được cơ chế chính xác — và **không bịa một cơ chế nghe
+> hợp lý** để lấp chỗ đó.
+>
+> **BA BÀI HỌC, và cái thứ ba là cái đắt nhất:**
+> 1. **Đừng đo một hệ thống đang ở giữa chừng.** Số đọc trong lúc hồi phục không phải số
+>    của hệ thống ở trạng thái nghỉ. Chờ `database system is ready` rồi hãy đếm.
+> 2. **Một con số vừa lạ vừa khớp quá đẹp với giả thuyết là lúc phải nghi NÓ, không phải
+>    lúc mừng.** 626k tệp cho một DB 79 MB là ~130 byte/tệp — vô lý ngay từ đầu, và tôi
+>    đã đi tiếp thay vì dừng lại ở chỗ vô lý ấy.
+> 3. **Tôi đã kịp GHI nó vào runbook trước khi kiểm.** Đó đúng là lớp lỗi mà luật 12
+>    (`CLAUDE.md`) mô tả: một câu sai trong tài liệu hạ tầng không chỉ vô ích — nó lái
+>    người đọc sau sang hướng sai và giữ ở đó. Suýt nữa người kế tiếp đi xoá database test
+>    để "dọn tệp mồ côi" không hề tồn tại.
+>
+> ⇒ **Vì sao pha 1 lâu: CHƯA BIẾT.** 20.018 tệp không giải thích được 12 phút; nghi hướng
+> fsync từng tệp trên NTFS + phần mềm bảo vệ quét theo tệp, nhưng **chưa đo**. Để mở, và
+> để ngỏ đúng như nó đang là — mục 3 (hết hạn mức commit) vẫn là phần đã có bằng chứng.
+
 **Chữ ký lỗi, đếm trên toàn nhật ký:**
 
 | Dấu vết | Số lần | Nghĩa thật |

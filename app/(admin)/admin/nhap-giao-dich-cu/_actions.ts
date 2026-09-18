@@ -13,6 +13,7 @@ import { getAuditActor } from "@/lib/audit/log";
 import { khopHocVien, MUC_KHOP, type HoSoHocVien, type MucKhop } from "@/lib/finance/doi-chieu-hoc-vien";
 import { ghiGiaoDichCuChoHocVienInTx } from "@/lib/finance/ghi-giao-dich-cu";
 import { phanLoaiTrung, type MucTrung } from "@/lib/finance/trung-giao-dich-cu";
+import { getAssignableSales } from "@/lib/sales/assignable";
 import { KHOAN_DA_GHI_NHAN } from "@/lib/finance/ghi-nhan";
 import type { GiaoDichSheet } from "@/lib/finance/nhap-giao-dich-sheet";
 
@@ -41,6 +42,16 @@ const giaoDichSchema = z.object({
   coSo: z.string().max(200).nullable(),
   tinhTrang: z.string().max(120),
   ghiChu: z.string().max(500),
+  /**
+   * Tên sale ghi trong cột "Sales" của sheet — dạng tên gọi ("Diệu", "Nhật Hạ").
+   * `.transform` về `null`: `GiaoDichSheet.sale` là `string | null`, để `undefined` lọt
+   * qua là mỗi chỗ đọc phải tự nhớ ba trạng thái thay vì hai.
+   */
+  sale: z
+    .string()
+    .max(120)
+    .nullish()
+    .transform((v) => v ?? null),
 });
 
 const emSchema = z.object({
@@ -73,6 +84,22 @@ export type DongDoiChieu = {
   nenNhap: boolean;
 };
 
+/**
+ * Danh sách TÀI KHOẢN SALE mà lượt nhập này được phép gán.
+ *
+ * Dùng chung cho CẢ màn xem thử (đổ vào ô chọn) lẫn đường ghi (gác id client gửi lên).
+ * Hai danh sách khác nhau thì màn hiện một người mà server từ chối đúng người đó.
+ *
+ * ⚠️ `centerIds: []` trong `getAssignableSales` nghĩa là MỌI CƠ SỞ, không phải "không cơ
+ * sở nào" — nên người cấp cơ sở mà `visibleCenterIds` rỗng phải trả về TẬP RỖNG tại chỗ,
+ * đừng rơi vào nhánh `[]` (fail-closed, luật 7 · docs/luat-doc-so-va-ket-luan.md).
+ */
+async function dsSaleGanDuoc(actor: Awaited<ReturnType<typeof resolveActor>>) {
+  const toanHeThong = actor.isSuperAdmin || actor.isHoLevel;
+  if (!toanHeThong && actor.visibleCenterIds.length === 0) return [];
+  return getAssignableSales({ centerIds: toanHeThong ? [] : actor.visibleCenterIds });
+}
+
 async function gacQuyen() {
   const session = await auth();
   if (!session?.user) redirect("/login");
@@ -101,6 +128,8 @@ export async function xemThuNhapGiaoDichAction(input: unknown) {
 
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
+  // Ô chọn "gán cho sale" đổ từ đây — cùng nguồn với cổng gác ở đường ghi.
+  const taiKhoanSale = await dsSaleGanDuoc(actor);
 
   // Tra MỘT lần cho mọi SĐT thay vì mỗi em một câu — 115 em là 115 lượt đi DB.
   const dsSdt = [...new Set(parsed.data.ds.map((e) => e.sdt).filter((s): s is string => !!s))];
@@ -222,6 +251,7 @@ export async function xemThuNhapGiaoDichAction(input: unknown) {
   return {
     ok: true as const,
     rows,
+    taiKhoanSale,
     tomTat: {
       tongEm: rows.length,
       khop: rows.filter((r) => r.muc === MUC_KHOP.KHOP).length,
@@ -247,6 +277,14 @@ const ghiSchema = z.object({
         /** Do client gửi: em đã khớp tự động, hoặc người vừa chọn tay. */
         hocVienId: z.string().min(1),
         giaoDich: z.array(giaoDichSchema).min(1).max(50),
+        /**
+         * Tài khoản SALE mà người nhập đã map từ tên trong sheet. `null` = chưa map.
+         *
+         * Server TỰ GÁC: id phải là một sale hợp lệ (`getAssignableSales`). Client gửi id
+         * bất kỳ mà server tin là gán đơn cho người không phải sale, và hoa hồng/thành
+         * tích chạy sai chỗ.
+         */
+        saleUserId: z.string().min(1).nullish(),
       }),
     )
     .min(1)
@@ -273,6 +311,9 @@ export async function ghiNhapGiaoDichAction(input: unknown) {
   const sdb = scopedDb(actor);
   const au = getAuditActor(session);
 
+  // Tra MỘT LẦN cho cả lượt — 115 em là 115 lượt đi DB nếu tra trong vòng lặp.
+  const saleHopLe = new Set((await dsSaleGanDuoc(actor)).map((s) => s.id));
+
   let thanhCong = 0;
   let tongTien = 0;
   let boQuaDaCo = 0;
@@ -290,12 +331,21 @@ export async function ghiNhapGiaoDichAction(input: unknown) {
       continue;
     }
 
+    // Sale phải là sale THẬT trong hệ thống — client gửi id bất kỳ thì đơn gán cho người
+    // không phải sale, và hoa hồng/thành tích chạy sai chỗ. Danh sách hợp lệ tra MỘT LẦN
+    // ở ngoài vòng lặp (`saleHopLe`).
+    const saleUserId = em.saleUserId && saleHopLe.has(em.saleUserId) ? em.saleUserId : null;
+    if (em.saleUserId && !saleUserId) {
+      loi.push(`${hv.name}: sale được chọn không hợp lệ — đơn ghi theo người nhập`);
+    }
+
     try {
       const kq = await sdb.$transaction((txRaw) =>
         ghiGiaoDichCuChoHocVienInTx(txRaw as unknown as Prisma.TransactionClient, {
           actor: { id: au.actorId, name: au.actorName },
           hocVienId: hv.id,
           giaoDich: em.giaoDich.map(veGiaoDich),
+          saleUserId,
         }),
       );
       if ("loi" in kq) {

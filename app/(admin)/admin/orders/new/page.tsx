@@ -3,10 +3,12 @@ import { redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { provinces } from "vietnam-address-data";
 import { auth } from "@/lib/auth";
+import { getSetting } from "@/lib/settings/service";
 import { checkPermission, canViewLeadPii } from "@/lib/auth/check-permission";
 import { maskLeadPiiFields } from "@/lib/lead/pii";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { nationalPhone } from "@/lib/phone";
 import { loadCreateOrderFormData } from "../_actions";
 import { OrderCreateForm } from "../_components/order-create-form";
 
@@ -28,20 +30,30 @@ export default async function NewOrderPage({
   const canManageAll = await checkPermission("orders:manage");
 
   const data = await loadCreateOrderFormData();
+  // Trần % giảm — THAM SỐ VẬN HÀNH (`orders.maxDiscountPercent`, mặc định 50). Đọc ở đây
+  // rồi truyền xuống form: client không gọi được `getSetting`, và một hằng cứng ở client
+  // là con số thứ hai sống song song với cấu hình. Server action đọc LẠI độc lập — đây
+  // chỉ là lớp trải nghiệm, không phải lớp bảo vệ.
+  const tranPhanTram = await getSetting("orders.maxDiscountPercent");
 
   // convert-v2: tạo đơn GẮN lead (từ trang convert). Đọc lead trong tầm nhìn cơ sở
   // actor (scopedDb) — ngoài scope/không tồn tại → bỏ qua leadId (đơn walk-in thường).
   const { leadId } = await searchParams;
   let lead: { id: string; parentName: string; phone: string; email: string | null; centerId: string | null } | null = null;
   let leadAssignedToId: string | null = null;
-  // N-2 · quyết định B4 — con của phiếu, để người tạo đơn quy đơn về đúng một đứa.
-  let leadChildren: { id: string; fullName: string }[] = [];
+  // CON KHAI TRONG LEAD — nguồn sự thật "con của phụ huynh này" khi lead chưa chốt.
+  // Tên biến theo `main` (`conLead`) vì biểu mẫu lấy bản của `main` và prop tên vậy.
+  let conLead: { id: string; fullName: string }[] = [];
   if (leadId) {
     const actor = await resolveActor(session.user.id);
     const row = await scopedDb(actor).lead.findUnique({
       where: { id: leadId },
       select: {
         id: true, parentName: true, phone: true, email: true, centerId: true, assignedToId: true,
+        // CON KHAI TRONG LEAD [16/09/2026] — nguồn sự thật "con của phụ huynh này" khi lead
+        // chưa chốt. Đo: 121/125 lead không có `Student` nào khớp SĐT, nên nếu ô chọn học
+        // viên chỉ biết bảng `Student` thì 96,8% ca không chọn được đúng em.
+        //
         // Đọc kèm trong CÙNG lượt đọc phiếu (phiếu đã qua scope) — không đọc thẳng
         // `LeadChild`: bảng đó không có `centerId` nên `scopedDb` là pass-through.
         children: { select: { id: true, fullName: true }, orderBy: { createdAt: "asc" } },
@@ -51,7 +63,7 @@ export default async function NewOrderPage({
       const { assignedToId, children, ...rest } = row;
       lead = rest;
       leadAssignedToId = assignedToId;
-      leadChildren = children;
+      conLead = children;
     }
   }
 
@@ -83,7 +95,10 @@ export default async function NewOrderPage({
       : undefined;
 
   return (
-    <div className="max-w-4xl">
+    /* Trần 104rem (1664px) thay cho `max-w-4xl` (896px) cũ. Form nay hai cột nên cần
+       bề ngang thật; vẫn phải CÓ trần vì ở 4k/8k một form trải hết màn thì mắt phải
+       quét cả mét giữa nhãn và ô nhập. Cùng con số với màn chi tiết đơn. */
+    <div className="mx-auto w-full max-w-[104rem]">
       <Link
         href={lead ? `/leads/${lead.id}/convert` : "/orders"}
         className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
@@ -98,7 +113,7 @@ export default async function NewOrderPage({
       <p className="mb-6 text-sm text-muted-foreground">
         {piiLead
           ? `Đơn gắn với lead "${piiLead.parentName}" — sau khi ghi nhận thanh toán sẽ đủ điều kiện chốt (convert).`
-          : "Dùng cho khách walk-in tại trung tâm hoặc nhập tay đơn đã thoả thuận offline."}
+          : "Dùng cho khách walk-in tại trung tâm hoặc nhập tay đơn đã thoả thuận offline. Một đơn nhận NHIỀU dòng — phụ huynh có hai con học hai khoá thì vẫn là một đơn, một công nợ, một mã QR."}
       </p>
 
       {lead && !canViewPii && (
@@ -115,14 +130,16 @@ export default async function NewOrderPage({
         courses={data.courses}
         products={data.products}
         centers={data.centers}
+        students={data.students}
+        conLeadBanDau={conLead}
         provinces={provinces.map((p) => ({ value: p.id, label: p.name }))}
         leadId={lead?.id ?? null}
-        leadChildren={leadChildren}
         defaultCustomer={khachDienSan}
         defaultCenterId={lead?.centerId ?? null}
         // Sale (không có `orders:manage`) KHÔNG đổi được cơ sở: cổng server đã ép theo
         // cơ sở của lead, nên để ô mở là cho họ chọn một thứ sẽ bị vứt im lặng.
         lockCenter={!canManageAll}
+        tranPhanTram={tranPhanTram}
       />
     </div>
   );

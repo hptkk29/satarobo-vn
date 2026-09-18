@@ -607,6 +607,17 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "leads:create", scopeType: "GLOBAL" },
       { action: "leads:edit", scopeType: "GLOBAL" },
       { action: "leads:assign", scopeType: "GLOBAL" },
+      // 17/09/2026 — quyền ĐÈ dữ liệu đã có trên một lead: sửa tay ba ô khoá (SĐT ·
+      // đơn vị · nguồn), bật cột "Đè" khi nhập Excel, và thay thế (thay vì nối thêm)
+      // ghi chú. Chủ dự án chốt "chỉ quản lý cơ sở hoặc admin mới có quyền đè".
+      //
+      // ⚠️ CENTER_SALES_CSM và HO_MARKETING CỐ Ý không có key này dù vẫn giữ
+      // `leads:edit` — xem `lib/lead/quyen-sua-lead.ts`.
+      //
+      // ⚠️ Thêm ở đây CHƯA có hiệu lực trên prod cho tới khi chạy seed-prod-roles.yml;
+      // dev/test phải chạy tay `pnpm db:seed:roles`. Cho tới lúc đó Quản lý cơ sở
+      // KHÔNG đè được (fail-closed — đúng chiều an toàn, nhưng phải chạy seed).
+      { action: "leads:overwrite", scopeType: "GLOBAL" },
       // 29/08 — điều hành vòng chia lead của CƠ SỞ MÌNH (bật/tắt người nhận lead).
       { action: "lead_pool:manage", scopeType: "GLOBAL" },
       { action: "leads:import", scopeType: "GLOBAL" },
@@ -658,6 +669,15 @@ export const ROLE_SEED: RoleSeed[] = [
       // GĐ3 (25/08/2026) — `trials:assign-teacher` ĐÃ GỠ khỏi vai này, chuyển sang
       // Đào tạo theo chốt câu 2. Quản lý cơ sở vẫn giữ trials:manage/feedback/config
       // và vẫn override được sĩ số; chỉ riêng việc CHỐT giáo viên là của Đào tạo.
+      // ⚠️ 17/09/2026 — KHÔNG phải đảo lại GĐ3. Khoá dưới là khoá KHÁC
+      // (`trials:assign-teacher-center`): xếp GV cho buổi trải nghiệm của CƠ SỞ MÌNH,
+      // tầng giữa trong ba tầng chủ dự án chốt (Đào tạo FULL · QL cơ sở → GV cơ sở
+      // mình · Sale → chỉ GV có ca phủ trọn khung giờ). Không có nó thì màn xếp GV
+      // không tách nổi QL cơ sở khỏi Sale — hai vai đang mang bộ `trials:*` giống hệt.
+      // GLOBAL, KHÔNG phải CENTER: call-site gọi kèm `{ centerId }` nhưng phạm vi thật
+      // do `visibleCenterIds` + `scopedDb` quyết (nếp R1 của mọi màn theo cơ sở). Đặt
+      // non-GLOBAL ở đây là mời `rbac-scope.test` đỏ ngay khi có call-site trần.
+      { action: "trials:assign-teacher-center", scopeType: "GLOBAL" },
       { action: "trials:feedback", scopeType: "GLOBAL" },
       // GĐ4 — Quản lý cơ sở giữ CẢ HAI (điểm danh lẫn nộp phiếu) để còn trực thay khi
       // Sale hoặc giáo viên vắng. Vai chuyên trách mới là người làm thường ngày.

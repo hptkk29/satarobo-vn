@@ -208,6 +208,62 @@ vế `FOR ROLE postgres`. Chạy lại bước 4 + 5 của khối SQL — cả h
 
 ---
 
+## ⚠️ LUẬT: script đo in MÃ NV, KHÔNG in TÊN
+
+> Chốt của chủ dự án 16/09/2026: *"Thói quen in MÃ NV chứ không in TÊN trong mọi script đo,
+> vì log Actions của repo public đọc được. Ghi thành luật, cạnh luật về user chỉ-đọc."*
+
+**Repo này PUBLIC.** Log của GitHub Actions vì thế ai cũng đọc được, không cần đăng nhập,
+và **không xoá đi được** một cách đáng tin — log còn nằm trong lịch sử run, trong cache, và
+trong bất cứ thứ gì đã kịp lập chỉ mục nó.
+
+Mà đầu ra của một phép đo chấm công thì đúng là hồ sơ nhân sự: ai đi muộn mấy lần, ai nghỉ
+mấy ngày, ai không quét thẻ. Đó là thứ **không được rời khỏi hệ thống**.
+
+### Được in
+
+| In | Vì sao |
+|---|---|
+| `employeeCode` (`SR.NV.007`) | Chuỗi nội bộ, vô nghĩa với người ngoài. Nhân sự tra ra người ngay trên `/admin/nhan-su` |
+| `userId` (cuid) | Vô nghĩa với người ngoài; dán thẳng vào ô `user_id` của workflow được |
+| Phòng ban · mã ca · cờ · ngày · số đếm | Không chỉ vào cá nhân nào |
+
+### KHÔNG được in
+
+| Cấm | Vì sao |
+|---|---|
+| `User.name` / `Employee.fullName` | Tên thật. Đây là vế chính của luật |
+| `User.email` | **Tệ hơn cả tên** — nó vừa định danh vừa là địa chỉ liên lạc |
+| `AuditLog.actorName` | Ảnh chụp tên thật, rất dễ lọt vì nó nằm sẵn trong dòng audit |
+| Số điện thoại · địa chỉ · ngày sinh | Khỏi bàn |
+
+### Cách làm cho luật tự giữ mình
+
+Đừng `select` cột tên **ngay từ truy vấn**, đừng lấy về rồi nhớ đừng in. Lấy về là sớm muộn
+có người `console.log(row)` cả object:
+
+```ts
+const thieu = await db.employee.findMany({
+  where: { … },
+  // KHÔNG `select` name/email — repo PUBLIC, xem docs/cham-cong/USER-CHI-DOC-PROD.md
+  select: { employeeCode: true, department: true },
+});
+```
+
+### Sổ sự cố
+
+| Ngày | Chuyện gì |
+|---|---|
+| 15/09/2026 | `tinh-lai-mot-ngay.ts` in `name ?? email ?? id`. Chạy trên prod là **email nhân sự nằm trong một log công khai**. Vá bằng cách bỏ hẳn `name`/`email` khỏi `select`, không phải bằng cách đổi thứ tự — xem `docs/cham-cong/VE-TEN-THAT-TRONG-LOG-ACTIONS.md` |
+| 15/09/2026 | `do-noi-chiu-cong-lech.ts` in tên trong bảng "tham số để bấm nút". Vá: chỉ in `userId` |
+| 16/09/2026 | `do-cong-ngay-khong-quet.ts` viết mới — in `employeeCode` + phòng ban ngay từ đầu, không phải vá sau |
+
+⚠️ Luật này áp cho **mọi script trong `scripts/`**, không riêng script chấm công, và cho cả
+bước `run: echo …` trong workflow. Cổng duy nhất hiện nay là **người viết nhớ** — chưa có
+lint hay test nào canh. Nếu thấy một script sắp in tên, sửa ngay tại chỗ.
+
+---
+
 ## Thu hồi
 
 Hết dùng, hoặc nghi mật khẩu lộ:
@@ -228,3 +284,36 @@ Chỉ đổi mật khẩu (không thu hồi quyền):
 ```sql
 ALTER ROLE satarobo_readonly WITH PASSWORD 'MAT_KHAU_MOI';
 ```
+
+
+---
+
+## Ghi chú 17/09/2026 — một việc còn nợ ở `_kiem-quyen.ts`
+
+Secret `PROD_DATABASE_URL_RO` trỏ vai **`satarobo_readonly`** — đúng như khuôn SQL ở trên, không
+có gì phải sửa. Hai workflow chỉ-đọc (chấm công + `doi-soat-tien-prod-chi-doc.yml`) dùng CHUNG
+một secret này.
+
+> ⚠️ Sổ sự cố nhỏ, ghi lại vì nó là một lớp bài học chứ không phải một lần lỡ tay: ngày 17/09 tôi
+> đã sửa đoạn này thành "vai thật tên `doisoat_ro`" dựa trên lời kể, **trước khi** báo cáo đầu
+> tiên chạy được. Lượt chạy thật in ra `user satarobo_readonly` — tức tài liệu đã bị sửa cho
+> khớp một vai không được dùng. Chủ dự án xác nhận `doisoat_ro` là vai tạo thừa và sẽ xoá.
+> **Tên vai là thứ ĐỌC ĐƯỢC từ dòng tự khai của báo cáo** (`scripts/_kiem-quyen.ts`); đừng ghi
+> vào tài liệu theo trí nhớ của ai, kể cả của người tạo ra nó.
+
+### NỢ: `_kiem-quyen.ts` đang hỏi quyền trên SAI BẢNG
+
+`scripts/_kiem-quyen.ts` hỏi `has_table_privilege(current_user, 'public."ClassSession"', 'UPDATE')`
+— tên bảng đó **đóng cứng**, từ đợt chấm công. Chính chú thích của nó nói *"quyền trên chính
+bảng mình sắp đọc mới là quyền có ý nghĩa"*, nhưng báo cáo đối soát tiền đọc
+`BankTransaction` · `Payment` · `Order` · `PaymentRequest`, không đọc `ClassSession`.
+
+**Chưa vá vì nó vẫn bắt đúng ca cần bắt**: thứ phải phát hiện là *secret bị đặt nhầm sang
+chuỗi đầy quyền*, mà vai đầy quyền thì có `UPDATE` trên MỌI bảng — `ClassSession` đủ để lộ ra.
+Ngược lại, một vai chỉ-đọc có `UPDATE` trên `BankTransaction` mà không có trên `ClassSession`
+là cấu hình không tồn tại thật.
+
+**Việc phải làm (đợt riêng):** thêm tham số bảng cho `kiemQuyen(db, bang)` — không đặt mặc định
+(luật 7: để `tsc` liệt kê cả hai chỗ gọi), rồi workflow tiền truyền `BankTransaction`, workflow
+chấm công truyền `ClassSession`. Chạm file dùng chung nên phải chạy lại cả hai workflow — đó là
+lý do nó không đi kèm đợt này.

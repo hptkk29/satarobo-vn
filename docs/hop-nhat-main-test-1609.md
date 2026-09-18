@@ -485,6 +485,105 @@ mở PR `main → test` **ngay trong ngày**, đừng để sang hôm sau.
 `canSearchPhone` · `[ZC-DN-01/02]` · `[SB-FLAG]` · `[ZC-KHUNG]` cùng mọi thứ ZaloCRM chưa
 có lưới khoá. Union add/add là SAI — bài học 16/09.
 
+### 🔴 NỢ-11 · ĐỀ XUẤT HOÀN TIỀN KHÔNG TRỪ PHẦN ĐÃ DUYỆT NHƯNG CHƯA CHI
+
+**Đo 18/09/2026, ghim bằng `[HT-E3b]` (`test.fail` đặt TRONG thân ca).**
+
+`createRefundRequest` tính `paidConfirmed` từ bảng `Payment` (bộ lọc `KHOAN_DA_DONG`).
+Một yêu cầu hoàn **đã DUYỆT** nhưng kế toán chưa ghi bút toán âm thì **chưa có dòng
+`Payment` nào** ⇒ lượt đề xuất kế tiếp vẫn đọc ra số GỘP.
+
+Kịch bản: thu 9tr, học 8/24 buổi ⇒ đề xuất hoàn 6tr, **duyệt**. Trong lúc chờ chi, một
+đề xuất khác (trigger khác) đọc `paidConfirmed = 9tr` thay vì 3tr ⇒ có thể đề xuất hoàn
+**chồng lên** phần đang treo.
+
+· Khoảng hở "đã duyệt / chưa chi" là có thật và kéo dài ngày — không phải ca hiếm.
+· Chưa gây thiệt hại đo được: `RefundRequest` còn 0 dòng trên prod; và đề xuất sinh ra
+  vẫn ở `PENDING`, phải qua `approveRefund` mới thành tiền, nên còn một lớp người nữa.
+· Vá đúng = trừ Σ `approvedAmount` của các yêu cầu `APPROVED` chưa có bút toán đối ứng.
+  Đụng đường TIỀN RA nên là đợt riêng, có dry-run.
+
+### 🔴 NỢ-12 · HAI THƯ VIỆN CHO MỘT KHÁI NIỆM "LEAD CỦA TÔI"
+
+Hợp nhất 18/09 để lại **hai** nơi định nghĩa cùng một mệnh đề:
+
+| nơi | đến từ | có vế `isSharedWithTeam` |
+|---|---|---|
+| `lib/lead/ownership.ts` | `test` | không |
+| `leadCuaToiOrClause` / `laLeadCuaToi` trong `lib/lead/sharing.ts` | `main` | **có** (sau cờ `LEAD_SHARING_ENABLED`) |
+
+Lưới `[S-8]` vẫn giữ đúng điều nó sinh ra để giữ — **không màn nào tự suy lấy** — nhưng
+vế "một nguồn duy nhất" thì đã mất. Hai bản **KHÔNG cùng luật**, nên gộp phải đo từng nơi
+gọi chứ không xoá một bên; đó là đợt riêng.
+
+### NỢ-13 · "ĐƠN NÀY CỦA CON NÀO" — ✅ CHỐT 18/09/2026 THEO `main` (theo DÒNG)
+
+Hai nhánh hiện thực cùng một tính năng theo hai mô hình loại trừ nhau:
+
+| | `test` (N-2) | `main` (đang chạy PROD) |
+|---|---|---|
+| cấp | **ĐƠN** — một ô chọn đầu form | **DÒNG** — mỗi dòng hàng một con |
+| lưu ở | `Order.leadChildId` | `metadata.leadChildId` + `Enrollment.leadChildId` |
+| server | `resolveOrderLeadChildId` (+ lưới `lead-child-link.test.ts`) | `conLeadTrenDong` |
+| phát biểu | *"một đơn chỉ gắn một con; hai anh em thì hai đơn"* | một đơn phục vụ **nhiều** con |
+
+Hai phát biểu **đá nhau**, nên bày cả hai ô chọn là bày hai lời hứa mâu thuẫn cho người
+bán. Lượt hợp nhất lấy **giao diện của `main`** (rộng hơn, và đang chạy thật) và **giữ
+nguyên phần server của `test`** — không xoá `resolveOrderLeadChildId` lẫn lưới của nó.
+
+#### ✅ CHỮ KÝ — chủ dự án, 18/09/2026
+
+> *"Gắn con theo DÒNG. Một phụ huynh đăng ký cho hai con trong cùng một đơn là chuyện
+> thường ở đây, và module thu học phí linh hoạt vốn đã tính theo từng con. Phát biểu
+> 'một đơn một con' sai với thực tế, không chỉ sai với `main`."*
+
+Đây là **ĐẢO** phát biểu N-2 · quyết định B4 (24/08/2026). Chú thích trong
+`lib/orders/lead-child-link.ts` đã sửa theo, không để hai câu đá nhau trong cùng tệp.
+
+#### Đính chính một câu tôi báo sai
+
+Bản ghi trước viết *"`Order.leadChildId` không còn ai ghi"*. **SAI** — đo lại bằng mã:
+khối `resolveOrderLeadChildId` trong `createOrderManualAction` sống sót qua lượt hợp nhất.
+Cái thật sự xảy ra hẹp hơn nhưng vẫn là bug: ô chọn cấp đơn bị gỡ ⇒ `data.leadChildId`
+luôn rỗng ⇒ mọi đơn rơi về nhánh **suy-từ-phiếu**, mà nhánh đó chỉ quy được khi phiếu có
+**đúng một** con. Phiếu hai con ⇒ `null` — tức mất quy kết đúng ở **ca mà chủ dự án vừa
+nói là ca THƯỜNG**.
+
+#### Đã xử (cùng PR)
+
+**Đường ghi** — `requestedLeadChildId` nay lấy từ **CÁC DÒNG** qua `conDonTuCacDong`
+(`lib/orders/lead-child-link.ts`): mọi dòng có khai con đều trỏ CÙNG một đứa ⇒ đứa đó;
+hai đứa trở lên ⇒ `null`, **không đoán**. Đoán bừa là chuyển doanh thu em này sang em kia
+— tổng vẫn khớp nên không ai phát hiện.
+
+**Mọi nơi ĐỌC cột, và mỗi nơi hiện gì khi cột rỗng:**
+
+| nơi đọc | đọc để làm gì | khi cột rỗng thì hiện gì |
+|---|---|---|
+| `lib/reports/revenue-by-child.ts` (`getRevenueByLeadChild`) | bổ dọc doanh thu theo con | **KÊU** — khoản rơi vào ô `unassigned`, và ô này đi đường `aggregate` RIÊNG nên không bao giờ nói dối tổng |
+| `lib/reports/converted-leads.ts` | giá trị hợp đồng theo con (gọi lại hàm trên) | thừa hưởng đúng ô `unassigned` ở trên |
+| `app/(admin)/admin/dashboard-qlcs/_tabs/kinh-doanh.tsx` | hiển thị | in thành dòng *"chưa quy được về con"*, không giấu |
+| `scripts/n02-ra-soat-order-lead-child.ts` | rà đơn cũ, `--apply` ghi phần suy được | in ba nhóm: suy được / phải rà tay / không bao giờ quy được |
+
+⇒ **Không nơi nào im lặng trả về rỗng.** Ô `unassigned` là thiết kế có sẵn từ N-2, và nó
+đúng là cái "phải KÊU" mà chủ dự án yêu cầu.
+
+**Lưới khoá** — `lib/orders/order-lead-child-write-path.test.ts` (`[OLC-01..04]`): còn nơi
+ĐỌC `Order.leadChildId` mà đường GHI biến mất ⇒ **đỏ**. Cấy lại 4/4 đỏ đúng ca, trong đó
+có phép cấy tái hiện **đúng lỗi của lượt hợp nhất** (quay về ô chọn cấp đơn đã gỡ).
+
+#### 🔴 CÒN TREO — NỢ-14: báo cáo vẫn bổ dọc theo ĐƠN, chưa theo DÒNG
+
+Cột `Order.leadChildId` **không diễn tả nổi** đơn hai con — mà theo chốt mới thì đó là ca
+thường. Nên nhóm `unassigned` sẽ **phình theo thời gian**: con số vẫn đúng và vẫn kêu,
+nhưng phần bổ dọc mất dần ý nghĩa.
+
+Vá đúng = chia mỗi `Payment` cho các **dòng** của đơn theo tỷ trọng `OrderItem.totalPrice`
+rồi quy về con của từng dòng. Đây là **quyết định về TIỀN**, không phải việc dọn dẹp: phải
+chốt luật làm tròn phần dư (repo đã có `allocateByWeight` và `chia-khoan-theo-don.ts` cho
+đúng lớp bài toán này), và phải sửa cả hai truy vấn `aggregate` vốn đang là đường "không
+bao giờ nói dối". ⇒ đợt riêng, có đối chứng số cũ/số mới trên dữ liệu thật trước khi đổi.
+
 ### NỢ-3 · Bố cục cột bảng Lead — CHỜ CHỦ DỰ ÁN CHỐT
 Đã lấy bản `main` (lưu `localStorage`, mỗi người một bộ) và **gỡ tầng lưu theo người trong
 DB** của `test`: `_column-actions.ts`, `column-picker.tsx`,

@@ -1,19 +1,27 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { QrCode, BadgeCheck, CalendarClock } from "lucide-react";
 import { QrZoom } from "./qr-zoom";
+import type { PaymentRequestRow } from "./payment-requests-section";
 import { recordOrderInstallmentsAction, markOrderInstallmentPaidAction } from "../_actions";
 import { formatDateVN } from "@/lib/format/date";
-import { MoneyInput } from "@/components/ui/money-input";
 import { HelpHint } from "@/components/admin/ui/help-hint";
+// KHỐI NHẬP KẾ HOẠCH dùng chung với TRANG TẠO ĐƠN [15/09/2026]. Luật chia đợt (chia đều ·
+// chèn cọc · giữ đợt đã khoá · kiểm Σ) nằm hết trong `useKeHoachDot` — tệp này chỉ còn
+// phần RIÊNG của trang chi tiết: bảng đọc, nút đánh dấu đã đóng, và đường GHI.
 import {
-  chiaDotHocPhi,
-  hanChoDot,
-  TRAN_SO_DOT,
-} from "@/lib/payments/ke-hoach-dot";
+  KeHoachDotEditor,
+  useKeHoachDot,
+  type DotForm,
+} from "./ke-hoach-dot-editor";
+// Mặc định ô "đã thu" SUY TỪ TIỀN THẬT — thuần, dùng chung luật với cổng ở đường ghi.
+import { dotsBanDauTuTien } from "@/lib/payments/khai-da-thu";
+import { NGAY_NHAC_MAC_DINH } from "@/lib/payments/ke-hoach-don-moi";
+// MỘT câu trả lời cho một đợt, suy từ CẢ HAI SỔ — xem chú thích đầu tệp đó.
+import { trangThaiDot } from "@/lib/payments/trang-thai-dot";
 
 type Installment = {
   id: string;
@@ -30,24 +38,35 @@ function vnd(n: number) {
   return n.toLocaleString("vi-VN") + "đ";
 }
 
-/** Một dòng đợt trên form. `dueDate` là chuỗi `yyyy-mm-dd` vì `<input type="date">`. */
-type DotForm = {
-  amount: number;
-  daThu: boolean;
-  dueDate: string;
-  reminderDays: number;
-};
-
 /**
  * Dựng trạng thái ban đầu của form từ kế hoạch ĐÃ LƯU.
  *
- * Chưa có kế hoạch → một đợt, bằng cả đơn, đánh dấu ĐÃ THU. Đó là hiện trạng mặc định
- * của một đơn vừa tạo (sale thu đủ tại quầy), và cũng là thứ khiến bấm "Lưu" mà không
- * đổi gì thì không sinh ra khoản nợ ma.
+ * ⚠️ ĐÃ SỬA [14/09/2026] — chưa có kế hoạch thì KHÔNG còn mặc định "đã thu cả đơn".
+ *
+ * Chú thích cũ ở đây nói mặc định đó "khiến bấm Lưu mà không đổi gì thì không sinh ra
+ * khoản nợ ma". Nó sinh ra thứ NGƯỢC LẠI và tệ hơn: TIỀN MA. Đo trên `satarobo_local`,
+ * đơn `ORD-260913-000001` (8.000.000đ, sổ có đúng 1.000.000đ): mở đơn, không đổi gì,
+ * bấm "Lưu" ⇒ một `Payment` 7.000.000đ khống + đơn lật `CONFIRMED` + màn in "còn thiếu
+ * 0đ". 193/496 đơn đang ở đúng hình dạng đó.
+ *
+ * Nay hỏi `dotsBanDauTuTien` (thuần, `lib/payments/khai-da-thu.ts` — có test + có phần
+ * giải thích vì sao chọn TRỤC B). Ba ô UI thuần (`dueDate`/`reminderDays`/`laCoc`) gắn ở
+ * đây chứ không ở hàm thuần: hàm đó cố ý không biết "hôm nay" là ngày nào (luật 19), và
+ * bịa một cái hạn cũng là bịa, chỉ khó thấy hơn bịa tiền.
  */
-function dotsBanDau(installments: Installment[], totalAmount: number): DotForm[] {
+function dotsBanDau(
+  installments: Installment[],
+  totalAmount: number,
+  daThuTheoSo: number,
+): DotForm[] {
   if (installments.length === 0) {
-    return [{ amount: totalAmount, daThu: true, dueDate: "", reminderDays: 14 }];
+    return dotsBanDauTuTien({ totalAmount, daThuTheoSo }).map((d) => ({
+      amount: d.amount,
+      daThu: d.daThu,
+      dueDate: "",
+      reminderDays: NGAY_NHAC_MAC_DINH,
+      laCoc: false,
+    }));
   }
   return [...installments]
     .sort((a, b) => a.soDot - b.soDot)
@@ -55,7 +74,10 @@ function dotsBanDau(installments: Installment[], totalAmount: number): DotForm[]
       amount: i.amount,
       daThu: i.status === "PAID",
       dueDate: i.dueDate?.slice(0, 10) ?? "",
-      reminderDays: i.reminderDays ?? 14,
+      reminderDays: i.reminderDays ?? NGAY_NHAC_MAC_DINH,
+      // Kế hoạch đã lưu: đợt 1 mang số tiền nhỏ hơn phần chia đều là dấu hiệu có cọc,
+      // nhưng ĐOÁN ở đây là sai. Giữ false; người dùng tích lại nếu muốn đổi.
+      laCoc: false,
     }));
 }
 
@@ -68,6 +90,8 @@ export function OrderInstallmentPlan({
   canManage,
   installments,
   accounting,
+  daThuTheoSo,
+  paymentRequests,
 }: {
   orderId: string;
   totalAmount: number;
@@ -76,45 +100,80 @@ export function OrderInstallmentPlan({
   // (b) PA-A 22/07 — tổng theo sổ kế toán (Payment): tiền chỉ "xong" khi kế toán
   // CONFIRMED ở /payments. Đợt PAID nghĩa là SALE đã thu, không phải kế toán đã ✓.
   accounting: { confirmed: number; pending: number };
+  /**
+   * TRỤC B — Σ `Payment` còn sống `saleStatus = RECORDED` của đơn (`congNo.daThu` ở
+   * trang cha). Nguồn của mặc định ô "đã thu".
+   *
+   * ⚠️ BẮT BUỘC, KHÔNG CÓ MẶC ĐỊNH (luật 7: tham số có mặc định nguy hiểm thì bỏ mặc
+   * định — để `tsc` liệt kê call site thay vì để một chỗ gọi quên rồi im lặng bịa tiền).
+   *
+   * ⚠️ ĐỪNG suy nó từ `accounting.confirmed + accounting.pending`. Hai bộ lọc KHÁC NHAU
+   * (`accountantStatus` ∈ {CONFIRMED, PENDING} vs `saleStatus = RECORDED`) và chênh lệch
+   * KHÔNG lý thuyết: đo 14/09 trên `satarobo_local` có 379/380 khoản mang
+   * `saleStatus = COLLECT_CONFIRMED` ⇒ trục B ≈ 0 trong khi tổng `accounting` là toàn bộ
+   * số tiền. Dựng mặc định bằng một trục rồi để đường ghi (`recordInstallmentPlan` đo
+   * `KHOAN_DA_GHI_NHAN`) gác bằng trục kia là hai con số không bao giờ gặp nhau — đúng
+   * con bug đang vá, chỉ nhỏ hơn.
+   */
+  daThuTheoSo: number;
+  /**
+   * Phiếu thu theo đợt kèm TIỀN THẬT đã rót (`allocated`) — nguồn để KHOÁ đợt đã thu.
+   *
+   * ⚠️ KHÔNG suy từ `OrderInstallment.status`: cột đó là KẾ HOẠCH (sale tự đánh dấu),
+   * còn `PaymentAllocation` là SỔ TIỀN. Tiền về qua QR làm phiếu thành PAID mà cột kế
+   * hoạch vẫn PENDING — khoá theo cột kế hoạch là để sale sửa được một đợt đã có tiền,
+   * đúng thứ cổng A6 vừa chặn ở server (`doiTienDotDaThu`).
+   */
+  paymentRequests: PaymentRequestRow[];
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
 
+  /**
+   * Đợt nào đã có TIỀN THẬT rót vào ⇒ số tiền của nó BẤT BIẾN (A6).
+   *
+   * `installmentNo > 0` loại phiếu thu toàn đơn (số 0) — nó không phải một đợt.
+   */
+  const daRotTheoDot = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const r of paymentRequests) {
+      if (r.installmentNo > 0 && r.allocated > 0) m.set(r.installmentNo, r.allocated);
+    }
+    return m;
+  }, [paymentRequests]);
+
   // ── TRẠNG THÁI: MỘT MẢNG ĐỢT, không phải dot1/dot2 ────────────────────────────
   // Trần "2 đợt" cũ nằm ở đây chứ không ở DB: hai biến `dot1`/`dot2`, đợt 2 tự tính,
   // một ô ngày. Nay là mảng — thêm đợt là thêm phần tử.
-  const [dots, setDots] = useState<DotForm[]>(() => dotsBanDau(installments, totalAmount));
+  //
+  // ⚠️ TRẠNG THÁI + LUẬT CHIA ĐỢT nay ở `useKeHoachDot`, DÙNG CHUNG với trang tạo đơn
+  // (15/09/2026). Đừng dựng lại ở đây: chia đợt là phép chia TIỀN, và hai bản cài đặt sẽ
+  // lệch nhau ở lần sửa thứ nhất mà KHÔNG test nào đỏ — cả `lech` lẫn `thieuHan` chỉ
+  // CHẶN LƯU, nên bản lệch chỉ hiện ra thành "không lưu được đơn, không rõ vì sao".
+  const kh = useKeHoachDot({
+    totalAmount,
+    dots0: () => dotsBanDau(installments, totalAmount, daThuTheoSo),
+    daRotTheoDot,
+    // `theoTong` để MẶC ĐỊNH (false) — `Order.totalAmount` của đơn ĐÃ TẠO là bất động, và
+    // một effect "tổng đổi thì chia lại" chạy ở đây sẽ ghi đè kế hoạch kế toán vừa đặt.
+  });
+  const { dots, soDotHocPhi, lech, thieuHan } = kh;
 
-  const tongCacDot = dots.reduce((s, d) => s + d.amount, 0);
-  const lech = tongCacDot - totalAmount;
-  const thieuHan = dots.findIndex((d) => !d.daThu && !d.dueDate);
-
-  /** Chọn số đợt → chia đều + sinh hạn cách 30 ngày. Người dùng sửa lại từng dòng được. */
-  function chonSoDot(n: number) {
-    const tien = chiaDotHocPhi(totalAmount, n);
-    // Mốc hạn = HÔM NAY. `hanChoDot` cố ý không tự đọc đồng hồ (luật 19) nên mốc truyền
-    // từ đây — chỗ duy nhất thật sự có quyền biết "hôm nay".
-    const han = hanChoDot(new Date(), n);
-    setDots(
-      tien.map((amount, i) => ({
-        amount,
-        // Giữ nguyên "đã thu" của các đợt cũ còn trong tầm — đổi số đợt không được âm
-        // thầm biến tiền đã thu thành chưa thu.
-        daThu: dots[i]?.daThu ?? i === 0,
-        dueDate: han[i]!.toISOString().slice(0, 10),
-        reminderDays: dots[i]?.reminderDays ?? 14,
-      })),
-    );
-  }
-
-  function suaDot(i: number, thayDoi: Partial<DotForm>) {
-    setDots((cu) => cu.map((d, k) => (k === i ? { ...d, ...thayDoi } : d)));
-  }
+  /**
+   * THU GỌN khối sửa kế hoạch khi kế hoạch ĐÃ CÓ (15/09/2026).
+   *
+   * Chủ dự án: *"thu gọn lại và có nút sửa nếu có nhu cầu sửa"*. Từ đợt này kế hoạch
+   * được lập NGAY ở trang tạo đơn, nên trên trang đơn nó gần như luôn chỉ để ĐỌC —
+   * bày cả form nhập ra mặc định là mời người ta sửa một thứ đang đúng.
+   *
+   * Chưa có kế hoạch ⇒ MỞ SẴN: lúc đó lập kế hoạch đúng là việc cần làm.
+   */
+  const [moSua, setMoSua] = useState(installments.length === 0);
 
   function save() {
     if (lech !== 0) {
       toast.error(
-        `Tổng ${dots.length} đợt phải bằng ${vnd(totalAmount)} — đang lệch ${vnd(Math.abs(lech))}`,
+        `Tổng các phiếu phải bằng ${vnd(totalAmount)} — đang lệch ${vnd(Math.abs(lech))}`,
       );
       return;
     }
@@ -123,6 +182,11 @@ export function OrderInstallmentPlan({
       return;
     }
     start(async () => {
+      // ⚠️ HẠN CHẾ ĐÃ BIẾT: cờ `laCoc` KHÔNG được lưu xuống DB — `OrderInstallment` không
+      // có cột cho nó, và thêm cột chỉ để hiện một cái nhãn là không đáng một migration
+      // trên bảng có dữ liệu prod. Hệ quả: sau khi lưu, bảng phía trên hiện "Đợt 1" thay
+      // vì "Cọc". Tiền và QR thì ĐÚNG — cọc là một phiếu thu riêng, có QR riêng, và đã
+      // được trừ khỏi đợt sau.
       const res = await recordOrderInstallmentsAction({
         orderId,
         dots: dots.map((d) => ({
@@ -134,7 +198,7 @@ export function OrderInstallmentPlan({
         })),
       });
       if (res.ok) {
-        toast.success(`Đã lưu kế hoạch ${dots.length} đợt`);
+        toast.success(`Đã lưu kế hoạch ${dots[0]?.laCoc ? "cọc + " : ""}${soDotHocPhi} đợt`);
         router.refresh();
       } else toast.error(res.error ?? "Lỗi");
     });
@@ -171,30 +235,64 @@ export function OrderInstallmentPlan({
             <span className="min-w-0">
               <b className="font-semibold">Đợt {i.soDot}</b> · {vnd(i.amount)}
               {i.dueDate ? ` · hẹn ${formatDateVN(i.dueDate)}` : ""}
+              {/* TIỀN THẬT đã về phiếu của đợt này (15/09/2026).
+
+                  Nhãn bên phải đọc `OrderInstallment.status` — cột KẾ HOẠCH, do sale
+                  tự đánh dấu. Tiền về qua QR thì phiếu thành PAID mà cột đó vẫn
+                  PENDING, nên hàng hiện "Chờ đóng" trong lúc khối QR ngay trên hiện
+                  "Đã đủ" — hai con số cho cùng một đợt. Dòng này in SỔ TIỀN
+                  (`PaymentAllocation`), thứ duy nhất nói được khách đã trả bao nhiêu. */}
+              {(daRotTheoDot.get(i.soDot) ?? 0) > 0 && (
+                <span className="ml-1 whitespace-nowrap text-xs font-semibold text-state-success-ink">
+                  · đã nhận {vnd(daRotTheoDot.get(i.soDot) ?? 0)}
+                </span>
+              )}
             </span>
-            {i.status === "PAID" ? (
-              // PA-A: PAID = Sale đã thu; chỉ ghi "KT đã xác nhận" khi đơn không còn khoản
-              // PENDING và kế toán đã ✓ (mapping đợt↔khoản là mức ĐƠN, không per-đợt).
-              accounting.pending === 0 && accounting.confirmed > 0 ? (
-                <span className="inline-flex items-center gap-1 whitespace-nowrap text-xs font-semibold text-state-success-ink">
-                  <BadgeCheck className="h-4 w-4" aria-hidden /> Sale đã thu · KT đã xác nhận
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 whitespace-nowrap text-xs font-semibold text-state-warning-ink">
-                  <BadgeCheck className="h-4 w-4" aria-hidden /> Sale đã thu — chờ kế toán
-                </span>
-              )
-            ) : canManage ? (
-              <button
-                onClick={() => markPaid(i.id)}
-                disabled={pending}
-                className="rounded bg-state-success-ink px-2 py-0.5 text-xs font-semibold text-white transition-opacity duration-150 disabled:opacity-50"
-              >
-                Đánh dấu đã đóng
-              </button>
-            ) : (
-              <span className="whitespace-nowrap text-xs text-state-warning-ink">Chờ đóng</span>
-            )}
+            {/* ── NHÃN ĐỢT ĐỌC CẢ HAI SỔ [15/09/2026] ──────────────────────────
+                Trước bản này nhãn chỉ đọc `OrderInstallment.status`, nên đợt mà TIỀN ĐÃ
+                VỀ qua QR vẫn bày nút "Đánh dấu đã đóng" — trong khi bảng Phiếu thu ngay
+                trên đã ghi "Đã đủ". Hai giọng cho một đợt, và giọng sai lại là giọng có
+                nút bấm. Luật ở `trangThaiDot`. */}
+            {(() => {
+              const tt = trangThaiDot({
+                soDot: i.soDot,
+                amountDue: i.amount,
+                daRot: daRotTheoDot.get(i.soDot) ?? 0,
+                keHoachDaThu: i.status === "PAID",
+              });
+              if (tt.ma === "DA_THU") {
+                // PA-A: đã thu ≠ kế toán đã ✓. Chỉ ghi "KT đã xác nhận" khi đơn không còn
+                // khoản PENDING và kế toán đã ✓ (mapping đợt↔khoản là mức ĐƠN).
+                const ktXong = accounting.pending === 0 && accounting.confirmed > 0;
+                return (
+                  <span
+                    className={`inline-flex items-center gap-1 whitespace-nowrap text-xs font-semibold ${
+                      ktXong ? "text-state-success-ink" : "text-state-warning-ink"
+                    }`}
+                  >
+                    <BadgeCheck className="h-4 w-4" aria-hidden />
+                    {tt.nguon === "SALE_THU_TAY" ? "Sale đã thu" : "Tiền đã về"}
+                    {ktXong ? " · KT đã xác nhận" : " — chờ kế toán"}
+                  </span>
+                );
+              }
+              if (!canManage) {
+                return (
+                  <span className="whitespace-nowrap text-xs text-state-warning-ink">
+                    {tt.ma === "MOT_PHAN" ? "Thu một phần" : "Chờ đóng"}
+                  </span>
+                );
+              }
+              return (
+                <button
+                  onClick={() => markPaid(i.id)}
+                  disabled={pending}
+                  className="rounded bg-state-success-ink px-2 py-0.5 text-xs font-semibold text-white transition-opacity duration-150 disabled:opacity-50"
+                >
+                  {tt.ma === "MOT_PHAN" ? "Đánh dấu thu đủ" : "Đánh dấu đã đóng"}
+                </button>
+              );
+            })()}
           </div>
         ))}
         {installments.length === 0 && (
@@ -230,133 +328,54 @@ export function OrderInstallmentPlan({
         </div>
       </div>
 
-      {canManage && (
+      {/* ── THU GỌN KHỐI SỬA [15/09/2026] ───────────────────────────────────────
+          Chủ dự án: *"thu gọn lại và có nút sửa nếu có nhu cầu sửa"*. Từ đợt này kế
+          hoạch được lập NGAY ở trang tạo đơn, nên trên trang đơn nó gần như luôn chỉ
+          để ĐỌC — bày cả form nhập ra mặc định là mời người ta sửa một thứ đang đúng.
+
+          Nút nói rõ trạng thái hai chiều, KHÔNG dùng một mũi tên trơ: người bán phải
+          biết bấm vào sẽ được gì (luật 12). */}
+      {canManage && !moSua && (
+        <button
+          type="button"
+          onClick={() => setMoSua(true)}
+          className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border bg-background px-3 text-sm font-medium text-foreground hover:bg-muted"
+        >
+          <CalendarClock className="h-4 w-4" aria-hidden />
+          {installments.length === 0 ? "Thiết lập kế hoạch" : "Sửa kế hoạch thanh toán"}
+        </button>
+      )}
+
+      {canManage && moSua && (
         <div className="space-y-3 rounded-lg border border-border p-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-semibold text-muted-foreground">Chia thành</span>
-            {[1, 2, 3, 4].map((n) => (
-              <button
-                key={n}
-                type="button"
-                onClick={() => chonSoDot(n)}
-                aria-pressed={dots.length === n}
-                className={`min-h-9 whitespace-nowrap rounded-md border px-3 text-sm font-semibold transition-colors duration-150 ${
-                  dots.length === n
-                    ? "border-primary bg-primary text-white"
-                    : "border-border bg-background text-foreground hover:bg-muted"
-                }`}
-              >
-                {n === 1 ? "1 lần" : `${n} học phần`}
-              </button>
-            ))}
-            <label className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
-              hoặc
-              <input
-                type="number"
-                min={1}
-                max={TRAN_SO_DOT}
-                value={dots.length}
-                onChange={(e) => {
-                  const n = Math.min(TRAN_SO_DOT, Math.max(1, Number(e.target.value) || 1));
-                  chonSoDot(n);
-                }}
-                aria-label="Số đợt tuỳ chọn"
-                className="w-16 rounded-md border border-border px-2 py-1.5 text-sm tabular-nums"
-              />
-              đợt
-            </label>
-          </div>
-
-          <div className="space-y-2">
-            {dots.map((d, i) => (
-              <div
-                key={i}
-                className="grid grid-cols-2 items-end gap-2 rounded-lg border border-border bg-background p-2 sm:grid-cols-[auto_1fr_1fr_auto]"
-              >
-                <span className="self-center whitespace-nowrap text-xs font-semibold text-muted-foreground">
-                  Đợt {i + 1}
-                </span>
-                <label className="block text-sm">
-                  <span className="text-xs text-muted-foreground">Số tiền (đ)</span>
-                  <MoneyInput
-                    name={`dot-${i}-amount`}
-                    min={0}
-                    value={d.amount}
-                    onValueChange={(v) => suaDot(i, { amount: Math.max(0, v ?? 0) })}
-                    suffix={null}
-                    className="mt-0.5 rounded-md px-2 py-1.5"
-                  />
-                </label>
-                <label className="block text-sm">
-                  <span className="text-xs text-muted-foreground">
-                    {d.daThu ? "Đã thu — không cần hạn" : "Hẹn đóng"}
-                  </span>
-                  <input
-                    type="date"
-                    value={d.dueDate}
-                    onChange={(e) => suaDot(i, { dueDate: e.target.value })}
-                    disabled={d.daThu}
-                    className="mt-0.5 w-full rounded-md border border-border px-2 py-1.5 text-sm disabled:bg-muted"
-                  />
-                </label>
-                <label className="flex items-center gap-1.5 self-center whitespace-nowrap text-xs text-muted-foreground">
-                  <input
-                    type="checkbox"
-                    checked={d.daThu}
-                    onChange={(e) => suaDot(i, { daThu: e.target.checked })}
-                    className="h-4 w-4"
-                  />
-                  đã thu
-                </label>
-              </div>
-            ))}
-          </div>
-
-          {/* Tổng phải khớp — nói ra NGAY khi gõ, không đợi bấm Lưu rồi nhận toast. */}
-          <div
-            className={`flex flex-wrap items-center justify-between gap-2 rounded-md px-3 py-2 text-xs ${
-              lech === 0
-                ? "bg-muted text-muted-foreground"
-                : "bg-state-danger-soft text-state-danger-ink"
-            }`}
-          >
-            <span className="whitespace-nowrap font-semibold tabular-nums">
-              Tổng {dots.length} đợt: {vnd(tongCacDot)} / {vnd(totalAmount)}
-            </span>
-            {lech !== 0 && (
-              <span className="whitespace-nowrap font-semibold tabular-nums">
-                {lech > 0 ? "Thừa" : "Thiếu"} {vnd(Math.abs(lech))}
+          {installments.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Sửa kế hoạch
               </span>
-            )}
-          </div>
+              <button
+                type="button"
+                onClick={() => setMoSua(false)}
+                className="text-xs font-medium text-muted-foreground underline hover:text-foreground"
+              >
+                Thu gọn
+              </button>
+            </div>
+          )}
 
-          <label className="block text-sm">
-            <span className="text-xs text-muted-foreground">
-              Nhắc công nợ trước (ngày){" "}
-              <HelpHint>
-                Áp cho MỌI đợt chưa thu. Cron nhắc nợ nay quét mọi đợt chưa thu — trước đây
-                nó lọc cứng đợt 2, nên kế hoạch 3-4 đợt thì đợt 3 và 4 không bao giờ được
-                nhắc.
-              </HelpHint>
-            </span>
-            <input
-              type="number"
-              min={0}
-              value={dots.find((d) => !d.daThu)?.reminderDays ?? 14}
-              onChange={(e) => {
-                const v = Math.max(0, Number(e.target.value) || 0);
-                setDots((cu) => cu.map((d) => (d.daThu ? d : { ...d, reminderDays: v })));
-              }}
-              className="mt-0.5 w-full rounded-md border border-border px-2 py-1.5 text-sm tabular-nums"
-            />
-          </label>
+          {/* `choKhaiDaThu` = true: đơn ở đây ĐÃ TỒN TẠI, và "cọc đã đóng trước khi lên
+              hệ thống" là ca thật. Đây là chỗ DUY NHẤT còn khai được đã-thu — trang tạo
+              đơn đã tắt. */}
+          <KeHoachDotEditor kh={kh} totalAmount={totalAmount} choKhaiDaThu />
 
           <button
             onClick={save}
             disabled={pending || lech !== 0 || thieuHan >= 0}
             className="min-h-11 w-full rounded-md bg-primary-dark px-3 py-2 text-sm font-semibold text-white transition-opacity duration-150 disabled:opacity-50"
           >
-            {pending ? "Đang lưu…" : `Lưu kế hoạch ${dots.length} đợt`}
+            {pending
+              ? "Đang lưu…"
+              : `Lưu kế hoạch ${dots[0]?.laCoc ? "cọc + " : ""}${soDotHocPhi} đợt`}
           </button>
         </div>
       )}
@@ -389,9 +408,13 @@ export function OrderQrSection({
       <h2 className="mb-4 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-foreground">
         <QrCode className="h-4 w-4 text-primary" /> Thanh toán & QR
       </h2>
-      <div className="max-w-sm">
+      {/* `max-w-sm` cũ ép ảnh QR + toàn bộ chữ vào một cột 24rem, nên trong cột trái
+          rộng ~44rem của bản dựng lại thì hơn nửa khối là khoảng trắng. Từ `sm` trở lên
+          xếp NGANG: ảnh trái, số tiền + nội dung CK phải — và chữ căn trái, dễ đọc hơn
+          căn giữa. Dưới `sm` giữ nguyên một cột căn giữa. */}
+      <div>
         {qrUrl ? (
-          <div className="flex flex-col items-center gap-2">
+          <div className="flex flex-col items-center gap-3 sm:flex-row sm:items-start sm:gap-5">
             {/* Ảnh QR public từ img.vietqr.io — không cần API key. Bấm để phóng to. */}
             <QrZoom
               src={qrUrl}
@@ -403,15 +426,23 @@ export function OrderQrSection({
             {/* Nói rõ QR đang thu bao nhiêu — khách đóng 2 đợt dễ tưởng phải
                 chuyển cả tổng đơn. Nội dung CK bên dưới là dạng người đọc
                 (`HoTenCon_SdtPH_TenKhoa`, chốt 20/08), sale đọc thẳng cho khách. */}
-            <p className="text-center text-sm font-semibold text-foreground">
-              {dueNow.label}: {dueNow.amount.toLocaleString("vi-VN")}đ
-            </p>
-            <p className="text-center text-xs text-muted-foreground">
-              Nội dung CK: <span className="font-mono font-semibold text-foreground">{transferContent}</span>
-            </p>
-            <p className="text-center text-xs text-muted-foreground">
-              Chuyển đúng số tiền + giữ nguyên nội dung → hệ thống tự xác nhận đơn.
-            </p>
+            <div className="min-w-0 space-y-2 text-center sm:text-left">
+              <p className="text-sm font-semibold text-foreground">
+                {dueNow.label}:{" "}
+                <span className="tabular-nums">
+                  {dueNow.amount.toLocaleString("vi-VN")}đ
+                </span>
+              </p>
+              <div className="text-xs text-muted-foreground">
+                Nội dung CK:{" "}
+                <span className="break-all font-mono font-semibold text-foreground">
+                  {transferContent}
+                </span>
+              </div>
+              <p className="max-w-prose text-xs text-muted-foreground">
+                Chuyển đúng số tiền + giữ nguyên nội dung → hệ thống tự xác nhận đơn.
+              </p>
+            </div>
           </div>
         ) : (
           <div className="flex h-56 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-muted p-4 text-center">
