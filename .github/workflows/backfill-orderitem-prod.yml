@@ -9,10 +9,12 @@
 # `enrollmentId`, `paidDate`, `deletedAt`. Điều kiện gắn: đơn có ĐÚNG MỘT dòng hàng ⇒ chỉ có
 # duy nhất một chỗ để gắn, không phải đoán. Chi tiết: `lib/finance/backfill-orderitem.ts`.
 #
-# ── BA CỔNG ───────────────────────────────────────────────────────────────────────────
+# ── BỐN CỔNG ──────────────────────────────────────────────────────────────────────────
 # 1. `xac_nhan` phải gõ đúng `BACKFILL-146`. Để trống ⇒ chỉ XEM TRƯỚC, không ghi.
-# 2. Script tự khai `user=… · ghi được: CÓ/KHÔNG` — GitHub không cho đọc lại secret.
-# 3. Script đếm lại ngay trước khi ghi và dừng nếu lệch mốc đã duyệt quá ngưỡng.
+# 2. `so_da_duyet` — số khoản của BẢNG ĐÃ DUYỆT, gõ tay. Thiếu ⇒ không ghi.
+# 3. Script tự khai `user=… · ghi được: CÓ/KHÔNG` — GitHub không cho đọc lại secret.
+# 4. Số dòng UPDATE thật ≠ `so_da_duyet` ⇒ script NÉM ⇒ **ROLLBACK**. Khớp tuyệt đối, KHÔNG
+#    có ngưỡng lệch: transaction rollback được, nên một lượt bị chặn chỉ tốn một lần chạy lại.
 #
 # ⚠️ Secret ở đây là `PROD_DIRECT_URL` — **ĐẦY QUYỀN**. Cố ý KHÔNG dùng `PROD_DATABASE_URL_RO`:
 # gán chuỗi đầy quyền vào một biến tên "readonly" là đặt tên nói dối, và tên nói dối thì lần

@@ -213,6 +213,18 @@ prisma/
 - ⚠️ **Cờ `PAYMENT_LEDGER_V2` là cờ CHẾT — đừng lấy nó làm cổng quyết định [đo 13/09/2026].** `isPaymentLedgerV2Enabled()` có **0 đường gọi** trong mã chạy thật (`lib/flags.ts:168` là định nghĩa duy nhất, còn lại chỉ `lib/flags.test.ts`), và biến env **không tồn tại** trong 40 biến Production. Bật nó KHÔNG đổi hành vi gì — muốn cutover thì phải viết phần "nối cờ" (chuyển `lib/finance/debt.ts` + `lib/portal/billing-student.ts` + `lib/portal/dashboard.ts` + màn `/orders/[id]`, `/cong-no` sang đọc `PaymentRequest`) trước, đó là dự án riêng. Đo prod bằng workflow chỉ-đọc `shadow-compare-cong-no.yml` (`payments:shadow-compare` chạy ở máy dev là đo DB DEV, **không nói gì về prod**).
 - ❌ KHÔNG gõ tay tên bài vào `Lesson` để "sửa tên dự án". Nguồn tên buổi/dự án là 2 file marketing (`components/legacy-laptrinhrobot/_data/roadmap-5-years.ts` + `exam-roadmap.ts`) → `lib/lms/curriculum-sata.ts` → `prisma/seed-curriculum-sata.ts`; lần seed sau ghi đè. Nhãn buổi/tên gửi PH đi qua `deriveSessionLabel`/`deriveSessionProjectName`, đừng tự ghép chuỗi.
 
+- ⚠️ **MỤC "chuẩn hoá SĐT `84…`/`+84…`" — ĐÃ HUỶ khỏi kế hoạch [chốt 18/09/2026].**
+  Làm lại **khi nào đo được dòng `84…` THẬT**, không làm trước.
+  · **Vì sao huỷ:** đo prod 17/09 — trong 22 giao dịch UNMATCHED, số nội dung CK chứa SĐT dạng
+    `84…`/`+84…` là **0**. Giả định "hoãn chuẩn hoá SĐT đang chặn phần A" (của chính tôi) **SAI**,
+    và bảng đối soát chứng minh điều đó. Nút thắt thật nằm chỗ khác: SĐT người chuyển ≠ SĐT đăng
+    ký, hoặc đơn không còn phiếu `PENDING/PARTIAL` — xem mục **A2** của
+    `scripts/bao-cao-doi-soat-tien.ts`.
+  · **Cách biết đã tới lúc làm:** mục A2 của báo cáo in dòng *"nội dung CK chứa SĐT dạng `84…`"*.
+    Số đó > 0 thì mới mở lại ticket.
+  · Bài học chung: **một tối ưu cho tập rỗng là một tối ưu không đo được** — nó không sai, nó chỉ
+    không chứng minh được là đúng, và mọi bug nó gây ra sẽ không có ca test nào bắt.
+
 - ⚠️ **CỔNG TẠO ĐỢT có HAI VẾ, và vế thứ hai là vế dễ bị gỡ [chốt 18/09/2026].**
   ```
   số tiền đợt ≤ min( còn nợ con − Σ đợt mở của con ,
