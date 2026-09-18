@@ -17,6 +17,7 @@ import {
   SCHOLARSHIP_FORBIDDEN,
 } from '@/lib/crm/scholarship'
 import { phoneVn } from '@/lib/validators/phone'
+import { ghiTuongTacLeadBoQuaLoi } from '@/lib/lead/tuong-tac/ghi'
 
 // ─── R7-05 — wiring Convert v2 vào Server Action (UI → service đã có) ──────────
 // KHÔNG nhân đôi logic convert: chỉ chuẩn hoá input từ form → gọi convertLeadV2.
@@ -301,6 +302,16 @@ export async function submitConvertV2(
   // Năng lực KHÔNG mất: `recordInstallmentPlan` (orders/_actions.ts:959) và
   // `requestInstallmentApproval` (orders/_components/_installment-request-actions.ts)
   // vẫn là đường chính thức, nay là đường DUY NHẤT.
+
+  // Dòng lịch sử: chốt lead. SAU khi `convertLeadV2` đã commit, cửa BỎ QUA LỖI — đây là
+  // đường chạm tiền (đơn + ghi danh + phiếu thu), lịch sử không được quyền làm nó đổ.
+  await ghiTuongTacLeadBoQuaLoi({
+    leadId,
+    actorId,
+    actorName,
+    moc: new Date(),
+    sk: { viec: 'chuyen-doi', tenCon: students.map((s) => s.name) },
+  })
 
   revalidatePath('/leads')
   revalidatePath(`/leads/${leadId}`)

@@ -11,10 +11,21 @@ import {
   ArrowLeftRight,
   ChevronDown,
   ChevronRight,
+  FlaskConical,
+  Receipt,
+  GraduationCap,
+  UserCog,
+  ListChecks,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { Prisma, LeadStatus } from "@prisma/client";
 import { LEAD_STATUS_LABEL } from "@/lib/leads/status";
+import {
+  docMaViec,
+  laDongHeThong,
+  NHAN_VIEC,
+  type MaViec,
+} from "@/lib/lead/tuong-tac/su-kien";
 import { addLeadActivity } from "../../actions";
 
 type Activity = {
@@ -48,6 +59,21 @@ const ACTIVITY_ICON: Record<string, typeof Phone> = {
   STATUS_CHANGE: RefreshCw,
   HANDOVER: ArrowLeftRight,
 };
+
+/**
+ * Biểu tượng cho dòng HỆ THỐNG ghi, chọn theo NHÓM việc (tiền tố của mã).
+ *
+ * Chọn theo tiền tố chứ không liệt kê 23 mã: thêm một việc mới vào nhóm cũ thì không phải
+ * sửa ở đây. Nhãn thì KHÔNG làm vậy — nhãn phải khai từng mã ở `NHAN_VIEC` để `tsc` bắt
+ * được việc quên đặt tên, vì một biểu tượng sai chỉ khó nhìn còn một nhãn sai là nói dối.
+ */
+function bieuTuongViec(m: MaViec): typeof Phone {
+  if (m.startsWith("trial.")) return FlaskConical;
+  if (m.startsWith("don.") || m === "chuyen-doi") return Receipt;
+  if (m.startsWith("ghi-danh.")) return GraduationCap;
+  if (m.startsWith("viec.")) return ListChecks;
+  return UserCog; // ho-so.sua · con.*
+}
 
 const ACTIVITY_LABEL: Record<string, string> = {
   CALL: "Gọi điện",
@@ -453,7 +479,20 @@ export function LeadActivityPanel({
           ) : (
             <ol className="mt-3 space-y-3">
               {activities.map((a) => {
-                const Icon = ACTIVITY_ICON[a.type] ?? StickyNote;
+                // Dòng do HỆ THỐNG ghi mang `metadata.viec`. Nó lưu dưới `type: "NOTE"`
+                // (chủ dự án chốt dùng lại loại có sẵn, không thêm giá trị enum), nên nếu
+                // cứ đọc `ACTIVITY_LABEL[a.type]` thì một lượt xếp lớp trải nghiệm hiện ra
+                // với nhãn "Ghi chú" — nhãn đó nói rằng có người gõ tay, tức nói dối
+                // (luật 12). Nhận ra mã việc thì lấy nhãn riêng + đánh dấu "tự động".
+                const maViec = docMaViec(a.metadata);
+                // Dòng cũ của auto-chia lead mang `metadata.system` chứ không có `viec`:
+                // nó cũng là dòng tự động và cũng đang đội nhãn "Ghi chú". Gắn dấu cho cả
+                // hai loại, còn NHÃN thì chỉ đổi khi nhận ra mã việc (dòng cũ không có
+                // tên việc nào để mà đặt).
+                const tuDong = laDongHeThong(a.metadata);
+                const Icon = maViec
+                  ? bieuTuongViec(maViec)
+                  : (ACTIVITY_ICON[a.type] ?? StickyNote);
                 return (
                   <li key={a.id} className="flex gap-3">
                     <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
@@ -462,8 +501,13 @@ export function LeadActivityPanel({
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-baseline gap-x-2">
                         <span className="text-xs font-bold text-foreground">
-                          {ACTIVITY_LABEL[a.type] ?? a.type}
+                          {maViec ? NHAN_VIEC[maViec] : (ACTIVITY_LABEL[a.type] ?? a.type)}
                         </span>
+                        {tuDong && (
+                          <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                            tự động
+                          </span>
+                        )}
                         <span className="text-xs text-muted-foreground">
                           {a.actorName} · {fmtDateTime(a.createdAt)}
                         </span>
