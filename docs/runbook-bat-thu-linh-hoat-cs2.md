@@ -59,7 +59,12 @@ của cơ sở không có tác dụng mà không lỗi nào báo.
 
 ### 1.3 — Ghi override BẬT cho CS2
 
-Câu này tự tra `OrgUnit.id` nên không phải chép id bằng tay:
+Câu này tự tra `OrgUnit.id` nên không phải chép id bằng tay.
+
+> **Đã đối chiếu 18/09/2026** (chủ dự án kiểm hộ trên prod): `OrgUnit` CS2 =
+> `cmraivxqv000dxb0jmfx2r700`, `code = 'CS2'`, `centerId = 'co-so-hoang-dieu'`.
+> Câu dưới dùng `ou.code = 'CS2'` nên ra đúng dòng đó — **không sửa thành id gõ tay**: id gõ
+> tay đúng hôm nay và sai vào ngày ai đó dựng lại cây OrgUnit, còn `code` thì không.
 
 ```sql
 INSERT INTO "CenterSetting" ("orgUnitId", "key", "valueJson", "updatedByName", "updatedAt")
@@ -70,7 +75,8 @@ WHERE ou.code = 'CS2'
 ON CONFLICT ("orgUnitId", "key")
 DO UPDATE SET "valueJson" = 'true'::jsonb,
               "updatedByName" = EXCLUDED."updatedByName",
-              "updatedAt" = now();
+              "updatedAt" = now()
+RETURNING "orgUnitId", "key", "valueJson", "updatedAt";
 ```
 
 Ba chi tiết **không được bỏ**:
@@ -80,6 +86,31 @@ Ba chi tiết **không được bỏ**:
   `@updatedAt` ở tầng app, không ở tầng DB). Thiếu nó là câu INSERT sập.
 - `"updatedByName"` — vì SQL tay **không ghi AuditLog**, cột này là dấu vết duy nhất còn lại.
   Ghi rõ "SQL tay" để lần sau không ai tưởng nó do màn cấu hình ghi.
+
+#### 1.3b — KIỂM NGAY: phải ghi được ĐÚNG MỘT DÒNG
+
+| Nơi chạy | Kết quả ĐÚNG | Kết quả SAI |
+|---|---|---|
+| `psql` / terminal | `INSERT 0 1` | `INSERT 0 0` |
+| Supabase SQL Editor | **1 dòng trả về** (nhờ `RETURNING`) | **0 dòng / "No rows returned"** |
+
+> ⛔ **Ra `INSERT 0 0` (hoặc 0 dòng) ⇒ KHÔNG CÓ DÒNG NÀO ĐƯỢC GHI. DỪNG LẠI. ĐỪNG GỌI SALE.**
+>
+> Cờ vẫn đang TẮT — sale vào sẽ không thấy nút, rồi báo "hệ thống lỗi", và ta mất một lượt thử
+> vì một việc chưa làm xong.
+>
+> Nguyên nhân gần như chắc chắn: **câu `SELECT` không tìm ra `OrgUnit`** nào có `code = 'CS2'`
+> (viết thường `cs2`? cây OrgUnit vừa bị dựng lại?). `ON CONFLICT DO UPDATE` **không bao giờ**
+> cho ra 0 dòng khi `SELECT` có dữ liệu — kể cả khi dòng đã tồn tại, nó vẫn báo 1. Nên 0 dòng
+> chỉ có một nghĩa: **không có gì để ghi**.
+>
+> Cách chữa: chạy lại câu **1.2** (`SELECT id, code, name, path FROM "OrgUnit" WHERE code='CS2'`).
+> Nó cũng phải ra 1 dòng. Không ra thì sai `code`, không phải sai câu INSERT.
+
+⚠️ Vì sao thêm `RETURNING`: **Supabase SQL Editor không in mã lệnh `INSERT 0 1`** như `psql` —
+nó chỉ báo thành công chung. Không có `RETURNING` thì phép kiểm "ghi được mấy dòng" **không quan
+sát được ở đúng nơi ta đang chạy**, tức một phép kiểm chỉ tồn tại trên giấy. `RETURNING` làm nó
+hiện ra thành dữ liệu thật.
 
 ---
 
@@ -115,11 +146,27 @@ ORDER BY ou.code;
 "CenterSetting"` sẽ ra một dòng CS2 và trông như "đúng rồi", mà không nói được CS1 có bị bật
 lây hay không. Muốn kiểm "chỉ đúng một nơi bật" thì phải thấy cả những nơi KHÔNG bật.
 
-**Chờ tới 5 phút** rồi mới thử trên giao diện (cache 300s ở mục 0).
+**Chờ HƠN 5 phút** rồi mới thử trên giao diện (cache 300s — mục 0). Cảnh báo đầy đủ cho
+người thao tác nằm ở đầu mục 3, **cố ý đặt ngay cạnh bước bấm** chứ không ở ghi chú cuối:
+một điều kiện đặt ở chỗ không ai đọc thì bằng không có.
 
 ---
 
 ## 3 · Checklist cho SALE — thử trên `ORD-260917-000001`
+
+> # ⏳ ĐỢI HƠN 5 PHÚT SAU KHI CHẠY INSERT, RỒI SALE MỚI THAO TÁC
+>
+> Cờ đọc qua cache **300 giây** (`revalidate: 300`). SQL tay **không xoá cache**, nên trong
+> **5 phút đầu** hệ thống vẫn đang trả giá trị CŨ.
+>
+> **Nút gắn chưa hiện trong 5 phút đầu là BÌNH THƯỜNG — KHÔNG phải lỗi.** Đừng báo sự cố,
+> đừng bấm lại nhiều lần, đừng chạy lại INSERT. Chỉ cần **đợi**.
+>
+> Cách làm đúng: chạy INSERT (mục 1.3) → **xem đồng hồ, chờ đủ 5 phút** → chạy SQL kiểm
+> (mục 2) → **rồi** mới gọi sale vào làm.
+>
+> Người giao việc nên nói câu này cho sale TRƯỚC khi họ mở máy. Một người được bảo "vào thử
+> đi" rồi thấy không có nút sẽ kết luận tính năng hỏng — và kết luận ấy khó gỡ hơn 5 phút chờ.
 
 Đơn này ở **CS2**, **2 con**, có **4 khoản đã thu chưa gắn con**:
 `1.188.000 · 1.230.000 · 1.188.000 · 1.230.000` = **4.836.000đ**.
@@ -133,8 +180,10 @@ Người làm cần quyền `payments:record` (gắn + chia + tạo đợt). G�
 3. Phải thấy **2 dòng con**, mỗi dòng có: học phí thực · đã thu · chờ xác nhận · còn nợ.
 4. Phải thấy dòng nhắc **"Có 4.836.000đ đã vào đơn nhưng chưa gắn cho bé nào"**.
 
-> ⛔ **DỪNG nếu:** khối "Công nợ theo con" **không hiện**. Nghĩa là cờ chưa ăn — chờ hết 5 phút
-> cache, rồi chạy lại SQL mục 2. Đừng thử tiếp bằng cách khác.
+> ⛔ **DỪNG nếu:** khối "Công nợ theo con" **không hiện**. Kiểm theo ĐÚNG THỨ TỰ này:
+>   1. đã đủ **5 phút** từ lúc chạy INSERT chưa? Chưa ⇒ **đợi**, không phải lỗi;
+>   2. đủ 5 phút rồi ⇒ chạy lại SQL **mục 2**, xem CS2 có ra `BẬT (riêng cơ sở)` không;
+>   3. SQL đúng mà màn vẫn không hiện ⇒ **báo lại**, đừng thử tiếp bằng cách khác.
 
 ### Bước 2 — Mở màn biến động số dư
 5. Vào `admin.satarobo.vn/admin/bien-dong-so-du`.
