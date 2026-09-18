@@ -13,6 +13,7 @@ import type { BuoiBanCuaGv } from "@/lib/trial/gv-kha-dung";
 import { vnAddDays, vnParts, vnStartOfDay, vnYmd } from "@/lib/time/vn";
 import { toVnInput } from "./schemas";
 import { buildClassListWhere, buildBookingListWhere, ngayVnSangUtc } from "./filters";
+import { suySaleCuaLop } from "./sale-cua-lop";
 import type {
   BookingRow,
   ClassRow,
@@ -44,13 +45,44 @@ export async function layDanhSachLop(
     take: 200,
     include: {
       config: { select: { name: true, sessionCount: true } },
-      enrollments: { where: { status: "ACTIVE" }, select: { id: true } },
+      enrollments: {
+        where: { status: "ACTIVE" },
+        // Thứ tự xếp vào — để cột "Học viên" và cột "Sale" cùng ổn định giữa hai lần tải.
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true,
+          // 18/09 — cột "Học viên" + nhánh SUY "Sale của lớp" cho lớp cũ chưa có
+          // `createdById`. `lead.assignedTo` là Sale đang CHĂM lead (khác
+          // `createdById` của lead là người NHẬP phiếu).
+          leadChild: {
+            select: {
+              fullName: true,
+              lead: { select: { assignedTo: { select: { name: true } } } },
+            },
+          },
+        },
+      },
       sessions: {
         select: { date: true, status: true },
         orderBy: { date: "asc" },
       },
     },
   });
+
+  // Tên người tạo lớp: tra RIÊNG một lượt cho cả trang, vì `createdById` cố ý KHÔNG ràng
+  // FK sang `User` (giống `teacherId`/`assistantId` cùng bảng) nên không `include` được.
+  // `User` không thuộc SCOPED_MODELS ⇒ `sdb.user` chỉ là đường đi qua, không bị chèn
+  // `where` — nhưng vẫn đi qua `sdb` để không phá luật cấm import `@/lib/db` trần ở
+  // `app/(admin)/**`.
+  const idNguoiTao = [...new Set(rows.map((r) => r.createdById).filter((x): x is string => !!x))];
+  const tenTheoId = new Map<string, string>();
+  if (idNguoiTao.length > 0) {
+    const us = await sdb.user.findMany({
+      where: { id: { in: idNguoiTao } },
+      select: { id: true, name: true },
+    });
+    for (const u of us) if (u.name) tenTheoId.set(u.id, u.name);
+  }
 
   const today = vnTodayUtc();
   return rows.map((r) => {
@@ -64,8 +96,11 @@ export async function layDanhSachLop(
       status: r.status as TrialClassStatusV2,
       startTime: r.startTime,
       endTime: r.endTime,
-      capacity: r.capacity,
-      activeUsed: r.enrollments.length,
+      hocVien: r.enrollments.map((e) => e.leadChild?.fullName ?? "(không rõ tên)"),
+      sale: suySaleCuaLop({
+        tenNguoiTao: r.createdById ? (tenTheoId.get(r.createdById) ?? null) : null,
+        saleTheoCon: r.enrollments.map((e) => e.leadChild?.lead?.assignedTo?.name ?? null),
+      }),
       sessionCount: r.sessionCount,
       configName: r.config?.name ?? null,
       nextSessionDate: next ? next.date.toISOString().slice(0, 10) : null,

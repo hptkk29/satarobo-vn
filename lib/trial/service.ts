@@ -174,6 +174,10 @@ export async function createTrialClass(params: {
           roomId: null,
           configId: params.configId ?? null,
           sessionCount,
+          // 18/09 — Sale/người TẠO lớp, để bảng danh sách trả lời được "lớp của ai".
+          // Lớp tạo trước hôm nay để NULL và màn danh sách rơi về suy từ Sale phụ trách
+          // lead của các con trong lớp (`_lib/sale-cua-lop.ts`).
+          createdById: params.actorId,
         },
         select: { id: true },
       });
