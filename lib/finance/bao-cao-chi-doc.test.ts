@@ -200,3 +200,41 @@ describe("[BCD-04] mọi workflow dùng pnpm PHẢI pin `version`", () => {
     expect(JSON.parse(doc("package.json"))).not.toHaveProperty("packageManager");
   });
 });
+
+describe("[BCD-05] phần A2 — phân nhóm giao dịch UNMATCHED", () => {
+  const src = docMa(SCRIPT);
+
+  it("in ra ĐƯỢC — dùng `in_` toàn cục, không khai `ra` cục bộ", () => {
+    // ⚠️ CA NÀY SINH RA TỪ MỘT LỖI THẬT: bản đầu của `phanA2` khai `const ra: string[] = []`
+    // và `const in_` CỤC BỘ rồi `return ra`. `main()` ghi file từ `ra` TOÀN CỤC, nên toàn bộ
+    // mục A2 biến mất — báo cáo vẫn "chạy xong", không ném, không đỏ, chỉ THIẾU một mục.
+    // Không phép kiểm hành vi nào bắt được: script chạy đúng, file sinh ra đúng, chỉ ngắn hơn.
+    const than = src.slice(src.indexOf("async function phanA2"), src.indexOf("async function goiYDon"));
+    expect(than.length, "không tách được thân phanA2 — lưới soi nhầm chỗ").toBeGreaterThan(200);
+    expect(than, "KHÔNG được khai `ra` cục bộ").not.toMatch(/const ra:\s*string\[\]\s*=/);
+    expect(than, "KHÔNG được khai `in_` cục bộ").not.toMatch(/const in_\s*=/);
+    expect(than, "phải thật sự in ra").toMatch(/in_\(/);
+  });
+
+  it("che SĐT bằng `cheSdt`, KHÔNG viết bản thứ hai của phép che", () => {
+    // Hai bản che là hai cơ hội để một bản quên che.
+    const than = src.slice(src.indexOf("async function phanA2"), src.indexOf("async function goiYDon"));
+    expect(than).toMatch(/cheSdt\(/);
+    // Không có chuỗi bullet dựng tay + slice(-4) — hình dạng của một bản che chép lại.
+    expect(than).not.toMatch(/•+\$\{/);
+  });
+
+  it("MỘT câu tra cho cả lô — không N+1 trong vòng lặp", () => {
+    // `goiYDon` ngay dưới còn là N+1 (nợ ghim ở CLAUDE.md) và bản sao của nó đã chết `P2028`
+    // thật trên prod. Phần mới KHÔNG được thêm một cái nữa.
+    const than = src.slice(src.indexOf("async function phanA2"), src.indexOf("async function goiYDon"));
+    const vongLap = than.slice(than.indexOf("for (let i = 0"));
+    expect(vongLap, "vòng lặp không được `await` truy vấn nào").not.toMatch(/await tx\./);
+  });
+
+  it("transaction của báo cáo có trần thời gian", () => {
+    // Thêm A2 làm transaction nặng hơn; trần mặc định 5 giây là chỗ `P2028` đã cắn ở script
+    // backfill. Trần này KHÔNG phải bản vá cho N+1 — chỉ để một transaction ĐỌC không bị cắt.
+    expect(src).toMatch(/timeout:\s*120_000/);
+  });
+});

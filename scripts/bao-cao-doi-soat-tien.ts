@@ -31,7 +31,7 @@ import { kiemQuyen } from "./_kiem-quyen";
 // `sdt-trong-memo.ts` chính vì script không import được `payos-ingest` (server-only).
 import { extractVnPhoneCandidates } from "../lib/payments/sdt-trong-memo";
 import { phoneVariants } from "../lib/phone";
-import { locDonNhanTien } from "../lib/payments/don-nhan-tien";
+import { locDonNhanTien, TRANG_THAI_DON_KHONG_NHAN_TIEN } from "../lib/payments/don-nhan-tien";
 
 /**
  * Số chủ dự án đã ĐO TRỰC TIẾP trên prod — dùng để ĐỐI CHIẾU, không phải để tin.
@@ -86,13 +86,22 @@ async function main() {
   // ⚠️ READ ONLY + ROLLBACK. `$transaction` của Prisma rollback khi callback NÉM; ta ném một lỗi
   // canh sẵn ở cuối để không lượt chạy nào commit được, kể cả khi ai đó lỡ thêm phép ghi.
   const KET = "__BAO_CAO_XONG__";
-  let ketQua: { A: string[]; B: string[] } | null = null;
+  let ketQua: { A: string[]; A2: string[]; B: string[] } | null = null;
   try {
-    await db.$transaction(async (tx) => {
-      await tx.$executeRaw`SET TRANSACTION READ ONLY`;
-      ketQua = { A: await phanA(tx), B: await phanB(tx) };
-      throw new Error(KET);
-    });
+    await db.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SET TRANSACTION READ ONLY`;
+        ketQua = { A: await phanA(tx), A2: await phanA2(tx), B: await phanB(tx) };
+        throw new Error(KET);
+      },
+      // Trần mặc định của transaction TƯƠNG TÁC là 5 giây. Báo cáo này quét vài trăm dòng qua
+      // WAN sang Supabase và `goiYDon` còn là N+1 (nợ đang ghim ở CLAUDE.md).
+      //
+      // ⚠️ Con số này KHÔNG phải bản vá cho N+1 — nâng trần mà giữ N+1 là vá TRIỆU CHỨNG.
+      // Nó chỉ để một transaction ĐỌC không bị cắt giữa đường. Bản sao N+1 ở
+      // `backfill-orderitem-dry.ts` đã chết `P2028` thật vì thiếu đúng thứ này CỘNG với N+1.
+      { timeout: 120_000, maxWait: 15_000 },
+    );
   } catch (e) {
     if (!(e instanceof Error) || e.message !== KET) throw e;
   }
@@ -181,6 +190,150 @@ async function phanA(tx: Tx): Promise<string[]> {
     in_(`| ${coSo} | ${c.so} | ${vnd(c.tien)}đ | ${c.nhieuCon} |`);
   }
   in_();
+  return ra;
+}
+
+/**
+ * PHẦN A2 — phân nhóm các giao dịch UNMATCHED **có SĐT nhưng KHÔNG ra đơn nào đang chờ thu**.
+ *
+ * Chủ dự án hỏi 18/09/2026: 11 dòng ấy hỏng ở đâu? Ba nhóm, kiểm THEO THỨ TỰ:
+ *   1. SĐT có khớp `Order` nào **không kể trạng thái** không ⇒ khớp, nhưng đơn
+ *      PAID/CANCELLED/DRAFT/REFUNDED. In trạng thái ra.
+ *   2. khớp một đơn đang nhận tiền được, nhưng đơn ấy **không còn phiếu PENDING/PARTIAL**.
+ *   3. không khớp **bất kỳ** `Order` / `Lead` / `Student` nào ⇒ nhiều khả năng **SĐT người
+ *      chuyển ≠ SĐT đăng ký**. Đây là tập sale phải tra TAY.
+ *
+ * ⚠️ Thứ tự kiểm là một phần của định nghĩa, không phải chi tiết cài đặt: một giao dịch có thể
+ * thoả nhiều nhóm (SĐT khớp cả đơn CANCELLED lẫn đơn PAID). Xếp nó vào nhóm ĐẦU TIÊN thoả, và
+ * nói rõ thứ tự ra, thì ba con số cộng lại đúng bằng tổng — không nhóm nào đếm hai lần.
+ *
+ * ⚠️ MỘT CÂU TRA CHO CẢ LÔ, không N+1. Bản N+1 của `goiYDon` ngay dưới đã làm
+ * `backfill-orderitem-dry.ts` chết `P2028` trên prod (xem CLAUDE.md, nợ đang ghim).
+ *
+ * CHE DỮ LIỆU: mã giao dịch + số tiền + SĐT che 4 số cuối. KHÔNG tên, KHÔNG nội dung CK.
+ */
+async function phanA2(tx: Tx): Promise<string[]> {
+  // ⚠️ Dùng `in_`/`ra` TOÀN CỤC, y như `phanA`/`phanB`. Bản đầu khai một `ra` cục bộ và trả
+  // về nó — chữ in ra KHÔNG BAO GIỜ tới file, vì `main()` ghi từ `ra` toàn cục. Báo cáo vẫn
+  // "chạy xong" và vẫn thiếu nguyên một mục: đúng loại lỗi không ném, không đỏ, chỉ mất.
+  const txn = await tx.bankTransaction.findMany({
+    where: { status: "UNMATCHED" },
+    select: { id: true, providerTxnId: true, amount: true, content: true, transferredAt: true },
+    orderBy: { transferredAt: "asc" },
+  });
+
+  // Bóc SĐT cả lô, gom mọi biến thể — MỘT lần.
+  const bien = txn.map((t) => [...new Set(extractVnPhoneCandidates(t.content).flatMap(phoneVariants))]);
+  const tatCa = [...new Set(bien.flat())];
+
+  // Ba câu tra cho CẢ LÔ (không phải cho từng giao dịch).
+  const [donMoiTrangThai, leadKhop, hocVienKhop] = await Promise.all([
+    tatCa.length === 0
+      ? Promise.resolve([] as { customerPhone: string | null; code: string; status: string; coPhieuMo: boolean }[])
+      : tx.order
+          .findMany({
+            where: { customerPhone: { in: tatCa }, deletedAt: null },
+            select: {
+              customerPhone: true,
+              code: true,
+              status: true,
+              paymentRequests: { where: { status: { in: ["PENDING", "PARTIAL"] } }, select: { id: true }, take: 1 },
+            },
+          })
+          .then((ds) =>
+            ds.map((d) => ({
+              customerPhone: d.customerPhone,
+              code: d.code,
+              status: d.status as string,
+              coPhieuMo: d.paymentRequests.length > 0,
+            })),
+          ),
+    tatCa.length === 0
+      ? Promise.resolve([] as { phone: string | null }[])
+      : tx.lead.findMany({ where: { phone: { in: tatCa } }, select: { phone: true } }),
+    tatCa.length === 0
+      ? Promise.resolve([] as { parentPhone: string | null }[])
+      : tx.student.findMany({ where: { parentPhone: { in: tatCa } }, select: { parentPhone: true } }),
+  ]);
+
+  const donTheoSdt = new Map<string, typeof donMoiTrangThai>();
+  for (const d of donMoiTrangThai) {
+    if (!d.customerPhone) continue;
+    const cum = donTheoSdt.get(d.customerPhone) ?? [];
+    cum.push(d);
+    donTheoSdt.set(d.customerPhone, cum);
+  }
+  const sdtCoLead = new Set(leadKhop.map((x) => x.phone).filter((x): x is string => !!x));
+  const sdtCoHocVien = new Set(hocVienKhop.map((x) => x.parentPhone).filter((x): x is string => !!x));
+
+  type Dong = { ma: string; tien: number; sdt: string; ghiChu: string };
+  const nhom1: Dong[] = []; // khớp đơn nhưng trạng thái không nhận tiền
+  const nhom2: Dong[] = []; // khớp đơn nhận tiền được, nhưng hết phiếu mở
+  const nhom3: Dong[] = []; // không khớp đơn/lead/học viên nào
+
+  const CAM = new Set<string>(TRANG_THAI_DON_KHONG_NHAN_TIEN);
+
+  for (let i = 0; i < txn.length; i += 1) {
+    const t = txn[i]!;
+    const bs = bien[i]!;
+    if (bs.length === 0) continue; // "không bóc được SĐT" — đã đếm ở phần A, không thuộc 11 dòng này
+    const don = bs.flatMap((p) => donTheoSdt.get(p) ?? []);
+    if (don.some((d) => d.coPhieuMo)) continue; // ra đơn đang chờ thu ⇒ không thuộc 11 dòng này
+
+    // Dùng LẠI `cheSdt` — đừng viết bản thứ hai của phép che. Hai bản là hai cơ hội để một
+    // bản quên che.
+    const che = cheSdt(bs[0]!);
+    const dong: Dong = { ma: t.providerTxnId, tien: t.amount, sdt: che, ghiChu: "" };
+
+    // THỨ TỰ KIỂM — xem chú thích đầu hàm.
+    const donCam = don.filter((d) => CAM.has(d.status));
+    if (donCam.length > 0) {
+      dong.ghiChu = [...new Set(donCam.map((d) => `${d.code}/${d.status}`))].join(" · ");
+      nhom1.push(dong);
+      continue;
+    }
+    if (don.length > 0) {
+      dong.ghiChu = [...new Set(don.map((d) => `${d.code}/${d.status}`))].join(" · ");
+      nhom2.push(dong);
+      continue;
+    }
+    const coLead = bs.some((p) => sdtCoLead.has(p));
+    const coHV = bs.some((p) => sdtCoHocVien.has(p));
+    dong.ghiChu = coLead || coHV ? `có ${[coLead ? "lead" : "", coHV ? "học viên" : ""].filter(Boolean).join("+")} nhưng KHÔNG đơn nào` : "không khớp đơn/lead/học viên nào";
+    nhom3.push(dong);
+  }
+
+  const tong = (ds: Dong[]) => ds.reduce((s, x) => s + x.tien, 0);
+
+  in_(`## A2 · Vì sao "có SĐT nhưng không ra đúng một đơn"`);
+  in_();
+  in_(`Kiểm THEO THỨ TỰ, mỗi dòng xếp vào nhóm ĐẦU TIÊN thoả ⇒ ba nhóm cộng lại không đếm trùng.`);
+  in_();
+  in_(`| Nhóm | Số giao dịch | Tổng tiền |`);
+  in_(`|---|---|---|`);
+  in_(`| 1 · khớp đơn nhưng đơn DRAFT/CANCELLED/REFUNDED | ${nhom1.length} | ${vnd(tong(nhom1))}đ |`);
+  in_(`| 2 · khớp đơn nhận tiền được, nhưng **hết phiếu PENDING/PARTIAL** | ${nhom2.length} | ${vnd(tong(nhom2))}đ |`);
+  in_(`| 3 · **không khớp đơn/lead/học viên nào** → SALE TRA TAY | ${nhom3.length} | ${vnd(tong(nhom3))}đ |`);
+  in_();
+
+  for (const [ten, ds] of [
+    ["1 · khớp đơn nhưng trạng thái không nhận tiền", nhom1],
+    ["2 · khớp đơn, hết phiếu đang mở", nhom2],
+    ["3 · KHÔNG khớp gì — sale tra tay", nhom3],
+  ] as const) {
+    in_(`### Nhóm ${ten} — ${ds.length} giao dịch · ${vnd(tong(ds))}đ`);
+    in_();
+    if (ds.length === 0) {
+      in_(`- (không có)`);
+      in_();
+      continue;
+    }
+    in_(`| Mã giao dịch | Số tiền | SĐT | Ghi chú |`);
+    in_(`|---|---|---|---|`);
+    for (const d of ds) in_(`| \`${d.ma}\` | ${vnd(d.tien)}đ | ${d.sdt} | ${d.ghiChu} |`);
+    in_();
+  }
+
   return ra;
 }
 
