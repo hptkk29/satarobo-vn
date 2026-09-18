@@ -15,7 +15,7 @@
  *     thành "một tấm rỗng", đúng thứ `[ADMIN-NAV-T01]` sinh ra để canh.
  *  4. Tên danh mục NỔI HƠN mục thường — và "nổi hơn" phải đo được, không phải cảm tính.
  */
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import fs from "node:fs";
 import path from "node:path";
@@ -38,6 +38,40 @@ vi.mock("@/components/admin/role-switcher", () => ({ RoleSwitcher: () => null })
 import { AdminShell } from "./admin-shell";
 
 afterEach(cleanup);
+
+/**
+ * ⚠️ TỰ DỰNG `localStorage` CHO MỖI CA — đừng dùng bản của môi trường.
+ *
+ * Trạng thái thu gọn được lưu vào `localStorage`, nên nó là TRẠNG THÁI DÙNG CHUNG giữa các
+ * ca trong cùng tệp. Bản đầu của bộ này không dọn, và hậu quả đúng là lớp lỗi luật 18:
+ *
+ *   · máy dev: `localStorage` HỎNG HOÀN TOÀN (vitest ở đây cảnh báo `--localstorage-file
+ *     was provided without a valid path`; đo thử thì `setItem` rồi `getItem` cũng thất
+ *     bại). Ghi không được ⇒ không rò rỉ ⇒ 16/16 XANH.
+ *   · CI: `localStorage` chạy thật ⇒ ca đầu bấm thu gọn, ca sau mount đã ở trạng thái thu
+ *     gọn ⇒ không tìm thấy nút "Thu gọn" ⇒ 9 ca ĐỎ.
+ *
+ * Tức MÁY DEV LÀ CÁI HỎNG, và nó che đúng khuyết điểm của bộ test. Bài học không phải "nhớ
+ * dọn localStorage" mà là: một bộ test phụ thuộc trạng thái dùng chung của MÔI TRƯỜNG thì
+ * kết quả của nó nói về môi trường, không nói về mã. Nên ở đây cắm hẳn một bản trong bộ
+ * nhớ — xanh/đỏ giống nhau ở mọi máy, và ca "nhớ trạng thái" mới kiểm được thật.
+ */
+beforeEach(() => {
+  const kho = new Map<string, string>();
+  Object.defineProperty(window, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (k: string) => kho.get(k) ?? null,
+      setItem: (k: string, v: string) => void kho.set(k, String(v)),
+      removeItem: (k: string) => void kho.delete(k),
+      clear: () => kho.clear(),
+      key: (i: number) => [...kho.keys()][i] ?? null,
+      get length() {
+        return kho.size;
+      },
+    },
+  });
+});
 
 /** Quyền đủ rộng để nav dựng nhiều nhóm — bộ này không kiểm quyền. */
 const GRANTED = [
@@ -106,6 +140,24 @@ describe("[SB-T10] nút thu gọn CÓ TÁC DỤNG", () => {
     expect(nutThuGon().getAttribute("aria-expanded")).toBe("true");
     fireEvent.click(nutThuGon());
     expect(nutMoRong().getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("⚠️ NHỚ trạng thái qua lần tải trang sau", () => {
+    // Trước đó việc này chỉ được đo bằng trình duyệt (F5 vẫn 64px). Ở bộ unit nó KHÔNG
+    // kiểm được, vì `localStorage` của máy dev hỏng — đúng chỗ mà bản vá `beforeEach` bên
+    // trên mở ra.
+    localStorage.setItem("satarobo:sidebar:thu-gon", "1");
+    dung();
+    expect(thanhCoDinh().dataset.thuGon).toBe("1");
+    expect(thanhCoDinh().className).toContain("w-16");
+  });
+
+  it("mỗi ca bắt đầu từ trạng thái MỞ — không mượn trạng thái ca trước", () => {
+    // Ca này là cái bẫy chuột: nó ĐỎ ngay nếu ai gỡ `beforeEach`, kể cả trên máy có
+    // `localStorage` hỏng thì cũng không cứu được (vì ca trên vừa ghi vào).
+    expect(localStorage.getItem("satarobo:sidebar:thu-gon")).toBeNull();
+    dung();
+    expect(thanhCoDinh().dataset.thuGon).toBe("0");
   });
 
   it("vùng bấm ≥44px theo DESIGN.md §2 — ngưỡng `md` gồm cả máy tính bảng", () => {
