@@ -46,8 +46,17 @@ import { locDonNhanTien, TRANG_THAI_DON_KHONG_NHAN_TIEN } from "../lib/payments/
  * rõ lý do LÀNH với lý do KHÔNG lành, thay vì cảnh báo đều một giọng.
  */
 const MOC_GIAO_DICH_UNMATCHED = 22;
-const MOC_KHOAN_CHUA_GAN = 24;
-const MOC_TIEN_CHUA_GAN = 178_544_000;
+// ⚠️ MỐC NÀY ĐÃ ĐỔI 18/09/2026 — backfill đã TIÊU THỤ mốc cũ.
+//
+// Mốc cũ là **24 khoản / 178.544.000đ** (đo 16/09). Sau khi lệnh backfill
+// (`scripts/backfill-orderitem-apply.ts`, run 35296161114) gắn 146 khoản / 119 đơn, tập này
+// co lại còn đúng phần **đơn ≥2 con** — thứ mà backfill cố ý KHÔNG chạm vì phải đoán bé nào.
+//
+// Giữ mốc cũ thì báo cáo in ⚠️ "LỆCH" ở **mọi lượt chạy từ nay**, và lệch ấy do chính lệnh
+// mình vừa chạy sinh ra — tức một cảnh báo đúng hình thức mà sai nội dung. Một cảnh báo luôn kêu
+// là một cảnh báo sắp bị bỏ qua, kể cả lần nó kêu đúng.
+const MOC_KHOAN_CHUA_GAN = 4;
+const MOC_TIEN_CHUA_GAN = 4_836_000;
 
 const vnd = (n: number) => n.toLocaleString("vi-VN");
 
@@ -473,17 +482,17 @@ async function phanB(tx: Tx): Promise<string[]> {
   // ĐỐI CHIẾU với con số chủ dự án đã đo 16/09. Lệch thì NÓI RÕ, đừng im lặng.
   in_();
   if (khoan.length === MOC_KHOAN_CHUA_GAN && tong === MOC_TIEN_CHUA_GAN) {
-    in_(`✅ Khớp mốc đo 16/09: ${MOC_KHOAN_CHUA_GAN} khoản / ${vnd(MOC_TIEN_CHUA_GAN)}đ.`);
+    in_(`✅ Khớp mốc SAU BACKFILL 18/09: ${MOC_KHOAN_CHUA_GAN} khoản / ${vnd(MOC_TIEN_CHUA_GAN)}đ (đơn ≥2 con).`);
   } else {
     in_(
-      `⚠️ **LỆCH mốc đo 16/09** (${MOC_KHOAN_CHUA_GAN} khoản / ${vnd(MOC_TIEN_CHUA_GAN)}đ). ` +
+      `⚠️ **LỆCH mốc sau backfill 18/09** (${MOC_KHOAN_CHUA_GAN} khoản / ${vnd(MOC_TIEN_CHUA_GAN)}đ). ` +
         `Nay: ${khoan.length} khoản / ${vnd(tong)}đ.`,
     );
     in_();
     in_(`Lệch KHÔNG phải lỗi — lệch KHÔNG GIẢI THÍCH ĐƯỢC mới là. Bốn lý do, ba đầu là LÀNH:`);
-    in_(`1. sale đã gắn tay một số giao dịch sau 16/09 (đã biết: ít nhất 2) ⇒ tập hẹp lại — **lành**;`);
-    in_(`2. webhook gắn \`orderItemId\` cho đơn 1 con từ khi PHIÊN B lên prod ⇒ khoản rời khỏi tập — **lành**;`);
-    in_(`3. tiền mới về sau 16/09 làm tập rộng ra — **lành**;`);
+    in_(`1. sale đã chia tay các khoản của đơn ≥2 con ⇒ tập hẹp lại — **lành, đó là mục tiêu**;`)
+    in_(`2. webhook gắn \`orderItemId\` cho đơn 1 con ⇒ khoản rời khỏi tập — **lành**;`);
+    in_(`3. đơn MỚI có ≥2 con vừa nhận tiền ⇒ tập rộng ra — **lành, và đúng việc sale phải chia**;`)
     in_(
       `4. đơn rơi sang DRAFT/CANCELLED/REFUNDED (bị \`locDonNhanTien()\` loại), hoặc khoản bị xoá mềm / đã có ` +
         `bút toán đảo — **đây là lý do duy nhất KHÔNG lành**: tiền đã về mà đơn không còn nhận được nữa. ` +
