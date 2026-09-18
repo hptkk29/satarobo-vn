@@ -70,6 +70,24 @@ vi.mock("@/lib/orders/installments", () => ({
   recordInstallmentPlan: vi.fn(),
   markInstallmentPaid: vi.fn(),
 }));
+// 🔴 PHỤ THUỘC DB DO LƯỢT GỘP MANG SANG (18/09/2026) — không nhánh nào tự bắt được.
+//
+// Bộ ca này do nhánh `test` viết, và `_actions.ts` bên `test` KHÔNG đọc cấu hình vận
+// hành. Nhánh `main` thì có: `getSetting("orders.maxDiscountPercent")` cho trần % giảm
+// giá theo dòng. Gộp hai bên lại là bộ ca cũ gặp lời gọi DB mới — mà job `Unit tests`
+// của CI **không dựng Postgres**.
+//
+// ⚠️ TRIỆU CHỨNG RẤT DỄ ĐỌC NHẦM: ở máy có Postgres chạy sẵn thì `getSetting` thành
+// công và CẢ NĂM ca XANH; trên CI thì `db.systemSetting.findUnique` ném và cả năm ca
+// ĐỎ — nhưng thông báo lỗi nói về Prisma, không nói gì về audit, nên trông như hạ tầng
+// hỏng chứ không như thiếu một mock. Tái hiện đúng CI bằng cách trỏ `DATABASE_URL` vào
+// cổng không có ai nghe, đừng tin lượt chạy ở máy mình.
+//
+// Mock trả ĐÚNG mặc định trong `lib/settings/registry.ts` (50) — không bịa số, để ngày
+// ai đó đổi mặc định thì chỗ này còn đối chiếu được.
+vi.mock("@/lib/settings/service", () => ({
+  getSetting: vi.fn(async () => 50),
+}));
 vi.mock("@/lib/parents/provision", () => ({ ensureParentAccountForOrder: vi.fn() }));
 vi.mock("@/lib/finance/payment", () => ({ ensureOrderPaymentRecorded: vi.fn() }));
 vi.mock("@/lib/payments/payment-request", () => ({

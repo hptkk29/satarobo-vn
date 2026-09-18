@@ -74,6 +74,21 @@ Direct connection `db.<ref>.supabase.co:5432` chỉ có **IPv6 AAAA record** —
   pnpm test:chat-db && pnpm test:nen-db && pnpm test:lead-intake
   ```
   Thấy `SKIP` trong log là **chưa kiểm được gì**, không phải "xanh".
+- 🔴 **CHIỀU NGƯỢC LẠI, và nó tinh vi hơn: bộ THUẦN XANH Ở MÁY BẠN *VÌ* MÁY BẠN CÓ
+  POSTGRES.** Job `Unit tests` của CI **không dựng Postgres**. Một ca trong bộ thuần lỡ
+  chạm đường DB (thiếu một `vi.mock`) sẽ **xanh ở local và đỏ trên CI** — ngược hẳn với
+  bẫy ở trên, nên đọc log xong dễ kết luận nhầm là "CI hỏng hạ tầng".
+  **Sự cố 18/09/2026, và nó chỉ sinh ra Ở LƯỢT GỘP:** `order-create-audit.test.ts` do
+  nhánh `test` viết, mock đủ mọi thứ mà `_actions.ts` bên `test` chạm tới. Nhánh `main`
+  thêm `getSetting("orders.maxDiscountPercent")` vào cùng hàm ấy. **Không nhánh nào tự
+  bắt được** — mỗi bên đều xanh; chỉ bản gộp mới có "bộ ca cũ × lời gọi DB mới", và cả
+  NĂM ca đỏ với thông báo nói về Prisma chứ không nói gì về audit.
+  **Cách tái hiện đúng job CI ở local — trỏ vào cổng không có ai nghe:**
+  ```bash
+  DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:59999/khong_ton_tai'   DIRECT_URL="$DATABASE_URL" pnpm test:unit -- --run
+  ```
+  Rẻ hơn tắt Postgres thật, và **bắt buộc chạy sau mỗi lượt gộp nhánh** — đây đúng là
+  lớp lỗi mà luật 14 (`CLAUDE.md`) bảo phải đi tìm bằng cách cấy, không bằng đọc diff.
 - **Env riêng cho test:** `.env.test` (đã `.gitignore`, KHÔNG commit):
   ```
   DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/satarobo_test"
