@@ -19,7 +19,7 @@ import {
 } from "@/lib/validators/order";
 import { generateOrderCode, withUniqueRetry } from "@/lib/orders/code";
 import { checkOrderCreateOwnership } from "@/lib/orders/create-guard";
-import { resolveOrderLeadChildId } from "@/lib/orders/lead-child-link";
+import { conDonTuCacDong, resolveOrderLeadChildId } from "@/lib/orders/lead-child-link";
 import { canTransition } from "@/lib/orders/status";
 import { recordInstallmentPlan, markInstallmentPaid } from "@/lib/orders/installments";
 import { getSetting } from "@/lib/settings/service";
@@ -302,9 +302,20 @@ export async function createOrderManualAction(input: unknown) {
         select: { id: true, children: { select: { id: true, leadId: true } } },
       })
     : null;
+  // NỢ-13 (chốt 18/09/2026) — NGUỒN LÀ CÁC DÒNG, không phải ô chọn cấp đơn.
+  //
+  // Ô "Học sinh của đơn" ở đầu biểu mẫu đã GỠ khi hợp nhất `main`: mỗi dòng hàng nay tự
+  // chọn con của nó. Nếu để `requestedLeadChildId: data.leadChildId` thì trường đó luôn
+  // rỗng ⇒ mọi đơn rơi về nhánh suy-từ-phiếu ⇒ phiếu có hai con là `null`, và doanh thu
+  // của cả hai em rơi vào ô "chưa quy được về con" của `lib/reports/revenue-by-child.ts`.
+  // Ca đó KHÔNG hiếm — chủ dự án: *"một phụ huynh đăng ký cho hai con trong cùng một đơn
+  // là chuyện thường ở đây"*.
+  //
+  // `conDonTuCacDong` chỉ trả về con khi MỌI dòng có khai đều trỏ cùng một đứa; đơn hai
+  // con vẫn ra `null` — thành thật, và báo cáo có ô riêng để nói ra.
   const childLink = resolveOrderLeadChildId({
     leadId: leadIdChoCon,
-    requestedLeadChildId: data.leadChildId,
+    requestedLeadChildId: conDonTuCacDong(data.items),
     children: leadChoCon?.children ?? [],
   });
   if (!childLink.ok) return { ok: false as const, error: childLink.message };

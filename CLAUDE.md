@@ -136,6 +136,42 @@ Brand hub + admin CMS + portal phụ huynh + site giáo viên cho Sata Robo (Đ�
     **Nếu buộc phải vá thẳng `main`** (prod đang hỏng, không chờ được CI): mở PR
     `main → test` **ngay trong ngày**, đừng để sang hôm sau.
 
+14. ⚠️ **LƯỚI PHẢI ĐƯỢC CẤY LẠI ĐỊNH KỲ, KHÔNG CHỈ LÚC VIẾT RA. Một lưới chưa bao
+    giờ đỏ là một lưới CHƯA ĐƯỢC CHỨNG MINH.** (Chốt 18/09/2026.)
+    Lưới xanh có hai nghĩa — "mã đúng" và "lưới không chạm tới mã" — và chúng trông
+    **y hệt nhau** trong log CI. Khác biệt chỉ lộ ra khi cấy lỗi vào.
+    **Sự cố sinh ra luật này** — lượt rà sau hợp nhất 18/09 cấy 8 phép, tìm ra **HAI
+    lưới đã chết mà vẫn xanh, cả hai là cổng PII**:
+    · **S-1** (`lib/lead/lead-pii-callsites.test.ts`) hỏi
+      `toContain("maskLeadPiiFields")` — chuỗi đó có mặt trong **dòng `import`**, nên
+      gỡ HẲN lời gọi mà quên gỡ import thì lưới VẪN XANH. Đo được: cấy
+      `const piiLead = lead;` ⇒ **42/42 ca xanh** trên mã đã hỏng. Vá: neo theo **lời
+      gọi** `maskLeadPiiFields(`.
+    · **`canSearchPhone`** (`app/(admin)/admin/lop-trial/_lib/filters.test.ts`) chỉ
+      thử nhánh `true`. Cổng `opts.canSearchPhone === true ? … : []` có trong mã nhưng
+      **không có khoá**: cấy `true ?` (ai cũng tìm được theo SĐT) không làm ca nào đỏ.
+      Vá: thêm `[LOC-PII]` đo CẢ hai đầu vào (không khai, và `false`).
+    Cả hai đã sống nhiều tuần trong một repo có kỷ luật "cấy thử trước khi tin", vì
+    kỷ luật ấy chỉ áp **lúc viết lưới**. Lưới không mục theo thời gian — **mã quanh nó
+    đổi**, và lượt đổi làm lưới mất răng thường không đụng vào tệp lưới.
+    **Cách làm định kỳ — chọn một, đừng bỏ trống cả hai:**
+    · **Mỗi lượt GỘP NHÁNH** (`main` ↔ `test`) chạy một lượt cấy cho các cổng bảo
+      mật/tiền: S-1 · S-9 · `canSearchPhone` · cổng PII khác · đường tiền ra. Đây là
+      lúc rẻ nhất, vì đang phải rà rồi — và cũng là lúc mã quanh lưới vừa đổi nhiều
+      nhất. Khuôn kịch bản: đọc tệp → cấy → chạy → **khôi phục byte-exact** → so TẬP
+      MÃ CA đỏ với tập mong đợi.
+    · **Hoặc một job riêng chạy hằng tuần** trên `test`, đỏ thì mở issue. Đắt hơn để
+      dựng, nhưng không phụ thuộc vào việc có ai nhớ hay không.
+    ⚠️ **Ba điều kiện để phép cấy nói thật** (cả ba đều đã trả giá):
+    (a) **khôi phục byte-exact** — đọc/ghi `newline=""`, rồi `assert` nội dung bằng
+        bản gốc; python mặc định dịch CRLF và "khôi phục" thành SỬA TỆP;
+    (b) **đòi ≥1 dòng đỏ THẬT**, đừng tin mã thoát — chạy sai cwd cũng exit 1 và
+        trông y hệt đỏ thật;
+    (c) **so ĐÚNG TẬP MÃ CA** đỏ với tập mong đợi. "Đỏ cả bộ" không chứng minh lưới
+        nào đang làm việc. Và nếu bộ so khớp của bạn sai thì nó báo "lưới đã chết"
+        cho một lưới đang khoẻ — đã xảy ra hai lần trong ngày 18/09, nên **đọc kỹ
+        danh sách ca đỏ in ra trước khi kết luận**.
+
 ## Project structure (FROZEN)
 
 ```
