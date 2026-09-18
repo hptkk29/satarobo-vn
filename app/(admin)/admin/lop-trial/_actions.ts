@@ -117,6 +117,8 @@ export async function createLopTrialClassAction(
   const res = await createTrialClass({
     centerId: data.centerId,
     courseId: data.courseId ?? null,
+    // Tên do người dùng gõ; bỏ trống ⇒ server sinh theo quy ước (xem `createTrialClass`).
+    name: data.name ?? null,
     configId: null,
     // QĐ-R2-1 — lớp là slot tái sử dụng, KHÔNG gắn ngày khai giảng. Buổi tạo ad-hoc.
     startDate: null,

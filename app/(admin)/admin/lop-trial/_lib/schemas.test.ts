@@ -55,7 +55,10 @@ describe("[LT-U-04] chuỗi giờ VN đi và về", () => {
 describe("[LT-U-05] zod tạo lớp", () => {
   // 28/08 — form tạo lớp RÚT còn CƠ SỞ + KHOÁ. Bộ cũ khoá sĩ số / giờ / số buổi / tên;
   // bốn thứ đó nay không còn đi qua đây nữa:
-  //   · tên  → server tự sinh (`tenLopTrial`), client gửi lên cũng bị bỏ qua;
+  //   · tên  → ~~server tự sinh (`tenLopTrial`), client gửi lên cũng bị bỏ qua~~
+  //            **[ĐẢO 18/09/2026]** chủ dự án chốt "được sửa và tự do điều chỉnh tên lớp".
+  //            Schema NAY NHẬN `name` (tuỳ chọn, trần 120 ký tự); bỏ trống ⇒ server vẫn
+  //            sinh theo quy ước. Xem `lib/trial/service.ts`.
   //   · giờ  → thuộc tính của TỪNG BUỔI (`addSessionSchema` vẫn khoá, xem describe dưới);
   //   · sĩ số → bỏ hẳn, `capacity = null` nghĩa là không giới hạn;
   //   · số buổi → nay là số buổi ĐÃ THÊM, không phải con số khai trước.
@@ -85,16 +88,41 @@ describe("[LT-U-05] zod tạo lớp", () => {
   it("trường cũ gửi kèm KHÔNG làm hỏng: zod bỏ qua khoá lạ", () => {
     // Bản client cũ còn nằm trong tab đang mở của ai đó vẫn POST đủ 6 trường. Chặn ở
     // đây là họ nhận lỗi khó hiểu; bỏ qua là lớp vẫn tạo đúng theo luật mới.
+    //
+    // ⚠️ ĐỔI 18/09/2026: `name` KHÔNG còn là "khoá lạ". Bản trước của ca này khẳng định
+    // `"name" in r.data === false`, tức nó KHOÁ ĐÚNG CHỐT VỪA BỊ ĐẢO — để nguyên thì ai
+    // đọc nó như đặc tả sẽ gỡ luôn tính năng vừa mở. Ba trường kia vẫn bị bỏ qua.
     const r = createClassSchema.safeParse({
       ...hopLe,
-      name: "Tên gõ tay",
       capacity: 8,
       startTime: "18:00",
       endTime: "19:30",
       sessionCount: 8,
     });
     expect(r.success).toBe(true);
-    if (r.success) expect("name" in r.data).toBe(false);
+    if (r.success) {
+      expect("capacity" in r.data).toBe(false);
+      expect("sessionCount" in r.data).toBe(false);
+    }
+  });
+
+  it("⚠️ TÊN LỚP nay được NHẬN (đảo chốt 28/08)", () => {
+    const r = createClassSchema.safeParse({ ...hopLe, name: "Lớp thử T5 chiều" });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.name).toBe("Lớp thử T5 chiều");
+  });
+
+  it("tên lớp bỏ trống vẫn qua — server sinh theo quy ước", () => {
+    expect(createClassSchema.safeParse(hopLe).success).toBe(true);
+    expect(createClassSchema.safeParse({ ...hopLe, name: null }).success).toBe(true);
+  });
+
+  it("⚠️ tên lớp DÀI QUÁ bị chặn, kèm thông điệp người đọc hiểu", () => {
+    // Tên này đi thẳng vào phiếu gửi phụ huynh và vào cột bảng; một chuỗi 5.000 ký tự
+    // không bị gì chặn thì nó phá mọi màn đọc nó.
+    const r = createClassSchema.safeParse({ ...hopLe, name: "x".repeat(121) });
+    expect(r.success).toBe(false);
+    if (!r.success) expect(r.error.issues[0]?.message).toBe("Tên lớp tối đa 120 ký tự");
   });
 });
 
