@@ -29,6 +29,7 @@ import {
   duongDanNhungZaloCrm,
   mintSsoToken,
 } from "@/lib/integrations/zalocrm/sso";
+import { capQuyenKhiMoMan } from "@/lib/integrations/zalocrm/cap-quyen-nick";
 import { datTruocLuongZalo } from "@/lib/integrations/zalocrm/dat-truoc";
 import { maVaiCuaNguoiDung, vaiZaloCrm } from "@/lib/integrations/zalocrm/vai-tro";
 import { chonCoSoZaloCrm } from "./_lib/co-so";
@@ -165,6 +166,26 @@ export default async function ZaloCrmPage({
           ? e.message
           : "Không cấp được phiên đăng nhập Zalo CRM. Vui lòng thử lại.";
     }
+
+    // NỢ-9 — CẤP QUYỀN ĐỌC NICK NGAY, không chờ cron 5 phút.
+    //
+    // Tài khoản bên fork chỉ sinh ra ở LẦN SSO ĐẦU TIÊN, mà `capQuyenNickZalocrm` bỏ qua
+    // `externalId` fork chưa biết ⇒ người đăng nhập lần đầu SAU lượt cron gần nhất mở hộp
+    // thư ra RỖNG, không một dòng giải thích. Trên prod là tới 5 phút; trên `test` là vô
+    // hạn (NỢ-5). Đo được 17/09: `uat.giamdoc` vào lúc 16:39, cron gần nhất 10:41 ⇒ 0 nick.
+    //
+    // ĐẶT Ở ĐÂY, SAU khi `src` đã dựng xong, là có chủ đích: tới dòng này thì phần quyết
+    // định "màn có mở được không" đã xong hẳn. `capQuyenKhiMoMan` **không bao giờ ném và
+    // không bao giờ treo** (trần 1,5s, mọi nhánh nuốt lỗi) nên `await` ở đây vẫn an toàn —
+    // fork chết hay chậm thì màn vẫn mở. Khoá bằng `[ZC-CQ-01*]`.
+    //
+    // ⚠️ ĐỪNG "dọn" dòng này lên trước `mintSsoToken`/`duongDanNhungZaloCrm`: làm vậy là
+    // biến một việc phụ thành điều kiện để vào hộp thư — đúng thứ ràng buộc fail-safe cấm.
+    await capQuyenKhiMoMan({
+      userId: session.user.id,
+      centerCode: dangChon.centerCode,
+      orgCode: dangChon.orgCode,
+    });
   }
 
   return (

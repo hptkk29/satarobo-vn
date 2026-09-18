@@ -26,6 +26,7 @@ import { getSetting } from "@/lib/settings/service";
 import { docKhoaApi, datQuyenNickZalocrm } from "@/lib/integrations/zalocrm/client";
 import { ghiNhatKyZalocrm } from "@/lib/integrations/zalocrm/log";
 import { VAI_DUOC_CAP_NICK } from "@/lib/integrations/zalocrm/vai-tro";
+import { rateLimit, getRateLimitBackend } from "@/lib/rate-limit";
 
 export type KetQuaCapQuyenOrg = {
   orgCode: string;
@@ -72,6 +73,102 @@ export async function capQuyenNickZalocrm(): Promise<{
     { capMoi: 0, daGo: 0, loi: 0 },
   );
   return { tong, theoOrg };
+}
+
+/**
+ * Trần thời gian cho lượt cấp quyền chạy kèm lúc MỞ MÀN. Hết hạn thì bỏ, không đợi thêm.
+ *
+ * 1,5 giây là mức chịu được cho một lượt tải trang, và nó chỉ phải trả **tối đa một lần
+ * mỗi giờ mỗi người** nhờ tiết chế bên dưới. Lượt gọi ngầm phía dưới vẫn chạy nốt theo
+ * trần riêng của `goiZalocrm` — ta chỉ thôi ĐỢI nó, không huỷ nó.
+ */
+const HAN_MO_MAN_MS = 1_500;
+
+/** Một giờ — trùng với ý "mỗi người tối đa một lượt/giờ". */
+const CUA_SO_TIET_CHE_MS = 3_600_000;
+
+let daGhiNenTietChe = false;
+
+/**
+ * Ghi nền tiết chế MỘT LẦN mỗi tiến trình.
+ *
+ * Trên Vercel "một lần mỗi tiến trình" = một lần mỗi instance mỗi lần khởi động nguội —
+ * vài dòng/ngày, đủ để biết đang chạy `upstash` hay `memory` mà không thành rác. Ghi ở
+ * MỖI LƯỢT thì 288 lượt/ngày × số instance, đúng thứ không ai đọc nữa.
+ */
+function ghiNenTietCheMotLan(): void {
+  if (daGhiNenTietChe) return;
+  daGhiNenTietChe = true;
+  console.info(`[zalocrm] tiết chế cấp quyền khi mở màn: nền ${getRateLimitBackend()}`);
+}
+
+export type KetQuaMoMan = "da-cap" | "bo-qua-tiet-che" | "qua-han" | "loi";
+
+/**
+ * NỢ-9 — CẤP QUYỀN NGAY LÚC MỞ MÀN, không chờ cron.
+ *
+ * 🔴 VÌ SAO CÓ: tài khoản bên fork chỉ sinh ra ở LẦN SSO ĐẦU TIÊN, còn
+ * `capQuyenNickZalocrm` thì bỏ qua `externalId` mà fork chưa biết (bộ đếm
+ * `chuaCoTaiKhoan`). Nên ai đăng nhập lần đầu SAU lượt cron gần nhất sẽ mở hộp thư ra
+ * **RỖNG** cho tới lượt cron kế tiếp — trên prod là tới 5 phút, trên `test` là vô hạn vì
+ * cron không chạy theo lịch (NỢ-5). Đo được 17/09/2026: `uat.giamdoc` đăng nhập lúc
+ * 16:39, cron gần nhất 10:41 ⇒ 0 nick; chạy cron lại ⇒ 2 nick.
+ *
+ * ── HAI RÀNG BUỘC CỨNG (chủ dự án chốt) ─────────────────────────────────────────────
+ *
+ * 1. **FAIL-SAFE — hàm này KHÔNG BAO GIỜ NÉM và KHÔNG BAO GIỜ TREO.** Fork chết, chậm,
+ *    hay trả lỗi thì màn vẫn mở. Cấp quyền KHÔNG phải điều kiện để vào hộp thư. Đây là
+ *    lý do mọi nhánh đều nuốt lỗi và có trần thời gian — nơi gọi `await` được mà vẫn an
+ *    toàn. Khoá bằng `[ZC-CQ-01*]`.
+ *
+ * 2. **MỘT ĐƯỜNG CHÍNH SÁCH DUY NHẤT.** Nó gọi đúng `capQuyenMotOrg` mà cron gọi, nên
+ *    tập người gửi sang fork do đúng `nguoiDuocDungNick` tính ra. TUYỆT ĐỐI không lọc
+ *    lại, cắt bớt, hay tự dựng danh sách: `PUT …/access` **thay cả tập**, nên hai đường
+ *    tính khác nhau là chúng GỠ QUYỀN CỦA NHAU mỗi lượt. Khoá bằng `[ZC-CQ-02]`, và
+ *    lưới ấy so THÂN YÊU CẦU THẬT với `nguoiDuocDungNick` — nó bắt được cả kiểu "giữ
+ *    nguyên lời gọi nhưng lọc lại kết quả", thứ mà lưới ghim mã nguồn không thấy.
+ *
+ * ── TIẾT CHẾ ─────────────────────────────────────────────────────────────────────────
+ * Dùng `lib/rate-limit.ts` sẵn có (Upstash nếu có khoá, không thì Map trong bộ nhớ theo
+ * từng instance). **Mất tiết chế KHÔNG gây sai lệch** — chỉ tốn thêm lượt gọi mạng: vì
+ * ràng buộc 2, tập gửi đi luôn giống hệt, nên chạy 1 lần hay 50 lần đều ra một trạng
+ * thái. Vì vậy tiết chế hỏng thì **cứ chạy tiếp**, không được biến nó thành cổng chặn.
+ *
+ * Cấp theo CƠ SỞ chứ không theo người (giống cron): một người mở màn là cả cơ sở của họ
+ * được cấp, nên người thứ hai vào ca không phải chờ lượt của chính mình.
+ */
+export async function capQuyenKhiMoMan(input: {
+  /** Chỉ dùng làm khoá tiết chế. */
+  userId: string;
+  centerCode: string;
+  orgCode: string;
+}): Promise<KetQuaMoMan> {
+  try {
+    const tc = await rateLimit({
+      key: `zalocrm:capquyen:${input.userId}`,
+      max: 1,
+      windowMs: CUA_SO_TIET_CHE_MS,
+    });
+    if (!tc.success) return "bo-qua-tiet-che";
+  } catch {
+    // Tiết chế hỏng (Redis chết) KHÔNG được chặn việc cấp quyền — xem ghi chú ở trên.
+  }
+  ghiNenTietCheMotLan();
+
+  try {
+    return await Promise.race<KetQuaMoMan>([
+      capQuyenMotOrg({ centerCode: input.centerCode, orgCode: input.orgCode }).then(
+        (kq): KetQuaMoMan => (kq.loi > 0 ? "loi" : "da-cap"),
+      ),
+      new Promise<KetQuaMoMan>((giaiQuyet) => {
+        setTimeout(() => giaiQuyet("qua-han"), HAN_MO_MAN_MS).unref?.();
+      }),
+    ]);
+  } catch {
+    // `capQuyenMotOrg` vốn không ném, nhưng KHÔNG dựa vào lời hứa đó: đây là hàng rào
+    // cuối của ràng buộc 1, và nó rẻ.
+    return "loi";
+  }
 }
 
 async function capQuyenMotOrg(input: {
