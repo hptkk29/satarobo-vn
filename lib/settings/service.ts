@@ -1,7 +1,7 @@
 /**
  * R6-A — Service cấu hình 2 tầng (DB + cache + audit + guard quyền).
  *
- * - getSetting(key, { orgUnitId? }) → resolve Center → Global → default (cache TTL 60s).
+ * - getSetting(key, { orgUnitId? }) → resolve Center → Global → default (cache TTL 300s).
  * - setGlobalSetting(actor, …) → chỉ SUPER_ADMIN (US-R6A-1 AC1).
  * - setCenterSetting(actor, …) → CENTER_MANAGER của cơ sở đó / SUPER_ADMIN (AC2),
  *   chỉ cho key centerOverridable.
@@ -27,7 +27,7 @@ export type SettingValue<K extends SettingKey> = (typeof SETTINGS)[K]["default"]
 // ── Cache (REQ-12) ─────────────────────────────────────────────────────────
 // safeCache = unstable_cache cross-request/instance + invalidate qua tag (thay Map
 // per-process cũ — clearSettingsCache trước chỉ xoá 1 instance serverless → instance
-// khác stale ≤60s). safeCache fallback gọi thẳng khi ngoài request context (test/script)
+// khác stale ≤300s). safeCache fallback gọi thẳng khi ngoài request context (test/script)
 // → không ném incrementalCache. Cache GIÁ TRỊ ĐÃ RESOLVE (JSON) để tránh serialize Date.
 const getResolvedSettingCached = safeCache(
   async (key: string, orgUnitId: string | null): Promise<unknown> => {
@@ -42,6 +42,12 @@ const getResolvedSettingCached = safeCache(
     return resolveSettingValue({ def, centerRow, globalRow });
   },
   ["setting-resolve"],
+  // ⚠️ 300 GIÂY, không phải 60 — hai chú thích ở đầu file này từng ghi "60s" và cả hai ĐỀU SAI
+  // (sửa 18/09/2026). Con số này là thứ quyết định **bao lâu một cờ mới ăn**: sửa `SystemSetting`
+  // / `CenterSetting` bằng SQL tay thì KHÔNG xoá cache, nên hiệu lực trễ tới 5 PHÚT. Với một cờ
+  // tiền đang pilot thì đó là 5 phút sale vẫn bấm được sau khi ai đó tưởng đã tắt.
+  // Đường đi qua `setCenterSetting` thì xoá cache ngay + ghi AuditLog — dùng nó khi có giao diện.
+  // Runbook: `docs/runbook-bat-thu-linh-hoat-cs2.md`.
   { tags: [CACHE_TAGS.settings], revalidate: 300 },
 );
 
