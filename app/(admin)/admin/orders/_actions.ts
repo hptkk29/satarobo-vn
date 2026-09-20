@@ -45,6 +45,7 @@ import {
   huyDotChoCon,
   ganKhoanDaThuChoCon,
   boGanKhoanKhoiCon,
+  tachKhoanChoCon,
 } from "@/lib/finance/ghi-tien-don";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { soatGiaDon } from "@/lib/orders/price-guard";
@@ -1855,9 +1856,9 @@ async function congDuongB(orderId: string, quyen: "payments:record" | "payments:
 /**
  * ĐƯỜNG B — gắn MỘT khoản đã thu cho MỘT bé.
  *
- * ⚠️ Một khoản gắn cho ĐÚNG MỘT bé. Chia một khoản cho hai bé **chưa hỗ trợ** — lý do đầy đủ
- * ở đầu mục 4 của `lib/finance/ghi-tien-don.ts`. Màn hình phải nói thẳng điều đó, đừng để
- * người dùng bấm rồi mới biết.
+ * ⚠️ Một khoản gắn cho ĐÚNG MỘT bé. Chia một khoản cho nhiều bé đi đường RIÊNG —
+ * `tachKhoanChoConAction` ngay dưới (mục 6 của `lib/finance/ghi-tien-don.ts`). Hàm này KHÔNG
+ * bao giờ được chia tiền: "chỉ điền một cột đang trống" là toàn bộ lý do nó an toàn.
  */
 export async function ganKhoanChoConAction(input: {
   orderId: string;
@@ -1898,4 +1899,51 @@ export async function boGanKhoanChoConAction(input: {
 
   revalidatePath(`/orders/${input.orderId}`);
   return { ok: true as const, soTien: kq.soTien };
+}
+
+/**
+ * ĐƯỜNG B · TÁCH — chia MỘT khoản đã thu cho NHIỀU bé [20/09/2026].
+ *
+ * ⚠️ QUYỀN: `payments:record`, **cùng quyền với "Gắn cho bé…"**, không phải `payments:manage`.
+ *
+ * Cân nhắc đã làm, vì lệnh này CÓ sinh một bút toán `ADJUSTMENT` — thứ trước nay chỉ kế toán
+ * tạo. Nhưng bút toán ấy **đúng bằng −số tiền dòng gốc và trỏ thẳng vào dòng gốc**: nó không
+ * đổi tổng tiền của đơn một đồng nào (`tongDaVe` trước = sau), và không tồn tại đầu vào nào
+ * khiến nó đổi. Nó là CƠ CHẾ của phép ghi, không phải một quyết định về giá trị.
+ *
+ * Việc thật mà người bấm đang làm vẫn là ATTRIBUTION — *"9.530.000đ này của bé nào"* — đúng
+ * việc thường ngày của sale, và là lý do chủ dự án đặt "Gắn cho bé…" ở `payments:record`.
+ * Bắt nó lên `payments:manage` nghĩa là mỗi đơn hai con phải chờ kế toán mới nhập được tiền.
+ *
+ * Nếu sau này muốn siết: đổi MỘT chuỗi ở dòng `congDuongB(...)` dưới đây. Cổng đã tách sẵn.
+ */
+export async function tachKhoanChoConAction(input: {
+  orderId: string;
+  paymentId: string;
+  phan: { orderItemId: string; soTien: number }[];
+}) {
+  const cong = await congDuongB(input.orderId, "payments:record");
+  if (!cong.ok) return { ok: false as const, error: cong.error };
+
+  // Chuẩn hoá đầu vào TRƯỚC khi đưa vào cổng. `kiemTachKhoan` đã chặn `NaN`/`Infinity` bằng
+  // `tron()`, nhưng một `phan` không phải mảng sẽ ném ở `.filter` bên trong và biến một lỗi
+  // dữ liệu thành lỗi 500 — người dùng nhận trang lỗi thay vì một câu tiếng Việt.
+  if (!Array.isArray(input.phan) || input.phan.length === 0) {
+    return { ok: false as const, error: "Chưa nhập số tiền cho bé nào" };
+  }
+  const phan = input.phan.map((p) => ({
+    orderItemId: String(p?.orderItemId ?? ""),
+    soTien: Number(p?.soTien ?? 0),
+  }));
+
+  const kq = await tachKhoanChoCon({
+    orderId: cong.order.id,
+    paymentId: input.paymentId,
+    phan,
+    actor: cong.actor,
+  });
+  if (!kq.ok) return kq;
+
+  revalidatePath(`/orders/${input.orderId}`);
+  return { ok: true as const, soTien: kq.soTien, soPhan: kq.soPhan, tenCon: kq.tenCon };
 }

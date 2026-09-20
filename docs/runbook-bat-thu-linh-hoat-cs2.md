@@ -172,16 +172,23 @@ một điều kiện đặt ở chỗ không ai đọc thì bằng không có.
 
 | Đơn | Hiện trạng | Thử việc gì |
 |---|---|---|
-| `ORD-260917-000001` | 2 con · **4 khoản đã thu chưa gắn con**, **không** có giao dịch ngân hàng phía sau | **Gắn khoản đã thu cho từng bé** (đường mới) |
-| `ORD-260918-000001` | 2 con · 1 khoản 9.530.000đ · **3 đợt cũ đang mở 15.228.000đ** | **Cổng tạo đợt** — kiểm nó CHẶN đúng lúc phải chặn |
+| `ORD-260917-000001` | 2 con · **4 khoản** đã thu chưa gắn con (mỗi lần chuyển một khoản), **không** có giao dịch ngân hàng phía sau | **Gắn** từng khoản cho từng bé |
+| `ORD-260918-000001` | 2 con · **MỘT** khoản 9.530.000đ cho cả hai · đợt đang mở 9.478.000đ | **B1 ·** cổng tạo đợt (phải CHẶN) — rồi **B2 · TÁCH** khoản cho hai bé |
+
+> ⛔ **B2 ĐANG TẠM DỪNG**: khoản 9.530.000đ lệch **26.000đ** so với hai nửa học phí và **chưa ai giải thích được** khoản chênh ấy. Phải hỏi phụ huynh / kế toán rồi mới tách — chi tiết ở mục **B2** bên dưới. **Đừng tự dồn 26.000đ vào bé nào.**
 
 Quyền — **ba việc, ba quyền khác nhau**:
 
 | Việc | Quyền |
 |---|---|
-| Gắn khoản cho bé | `payments:record` |
+| Gắn khoản cho bé · **Tách khoản cho nhiều bé** | `payments:record` |
 | Bỏ gắn (kế toán) | `payments:manage` |
 | Tạo / huỷ đợt | `orders:manage` |
+
+> ⚠️ **TÁCH cố ý dùng chung quyền với GẮN**, dù nó có sinh một bút toán đảo bên trong. Bút
+> toán ấy đúng bằng −số tiền dòng gốc và trỏ thẳng vào dòng gốc, nên nó **không đổi tổng tiền
+> của đơn một đồng nào** — nó là cơ chế của phép ghi, không phải một quyết định về giá trị.
+> Việc thật mà người bấm đang làm vẫn là *"9.530.000đ này của bé nào"*, đúng việc của sale.
 
 > ⚠️ Bản runbook trước ghi *"`payments:record` (gắn + chia + tạo đợt)"* — **sai ở vế cuối**.
 > `taoDotChoConAction` gác bằng `requireOrdersManage()`, tức `orders:manage`. Người chỉ có
@@ -245,27 +252,118 @@ Quyền — **ba việc, ba quyền khác nhau**:
 
 ---
 
-### ĐƠN B · `ORD-260918-000001` — kiểm cổng tạo đợt CÓ CHẶN không
+### ĐƠN B · `ORD-260918-000001` — HAI việc: cổng tạo đợt, rồi TÁCH KHOẢN
 
-Đơn này tổng **20.064.000đ**, phụ huynh đã chuyển **9.530.000đ** (kế toán chưa xác nhận), và
-đang có **3 đợt cũ mở 15.228.000đ**.
+> ⚠️ **Số của đơn này đã ĐÍNH CHÍNH theo lượt pilot 20/09.** Bản runbook trước ghi tổng
+> 20.064.000đ / 3 đợt mở 15.228.000đ — đó là ảnh chụp cũ. Số ĐÚNG, do chính chủ dự án đọc ra
+> từ câu lỗi của cổng:
+
+| | |
+|---|---|
+| tổng đơn | **19.008.000đ** = 8.976.000 (bé A) + 10.032.000 (bé B) |
+| phụ huynh đã chuyển | **9.530.000đ** — MỘT lần, cho CẢ HAI con, kế toán chưa xác nhận |
+| đợt đang mở | **9.478.000đ** (= 19.008.000 − 9.530.000) |
+
+---
+
+#### B1 · Cổng tạo đợt — kết quả ĐÚNG là BỊ CHẶN
 
 10. Mở đơn, xem khối **"Công nợ theo con"**.
 11. Thử **tạo một đợt** cho một bé, số tiền bất kỳ (kể cả **1đ**).
 
-**Kết quả ĐÚNG là BỊ CHẶN**, với câu lỗi nhắc tới **ĐƠN** — *"Cả đơn không còn phần được thu
-thêm"* hoặc *"Vượt phần còn được thu của CẢ ĐƠN"*.
+**Phải BỊ CHẶN**, câu lỗi nhắc tới **ĐƠN** — lượt pilot 20/09 nhận đúng câu *"còn nợ đơn
+9.478.000đ, đợt đang mở 9.478.000đ"*.
 
-> **Vì sao chặn mới là đúng:** `20.064.000 − 9.530.000 = 10.534.000đ` là phần đơn còn được
-> thu, mà 3 đợt đang mở đã chiếm **15.228.000đ** — đơn đang phát QR đòi **nhiều hơn** phần
-> còn thiếu. Cổng từ chối mở thêm chính là nó đang giữ cho phụ huynh khỏi trả lần thứ hai
-> phần đã trả.
+> **Vì sao chặn mới là đúng:** đơn còn được thu 9.478.000đ, mà số đó đã bị các đợt đang mở
+> chiếm trọn. Mở thêm một đợt nữa là phát QR đòi phần phụ huynh vừa chuyển.
 >
-> ⛔ **Nếu nó CHO TẠO ⇒ cổng hai vế không ăn. DỪNG PILOT, báo ngay.** Đó đúng là con bug mà
-> bản vá 18/09 sinh ra để chặn, và nếu nó còn sống thì mọi đơn nhiều con đều có thể đòi thừa.
+> ⛔ **Nếu nó CHO TẠO ⇒ cổng hai vế không ăn. DỪNG PILOT, báo ngay.**
 
 12. Muốn đơn này thu thêm cho đúng thì phải **huỷ bớt đợt cũ** rồi mới tạo đợt theo con. Việc
     đó cần `orders:manage` — **kế toán làm, không phải sale**.
+
+---
+
+#### B2 · TÁCH KHOẢN 9.530.000đ cho hai bé  ⭐ việc chính của lượt này
+
+Đơn này là ca CHÍNH của module: **một lần chuyển, hai con**. Khoản 9.530.000đ đang nằm ở khối
+vàng *"chưa gắn cho con nào"*.
+
+> # ⛔ CHƯA TÁCH ĐƯỢC — CÒN 26.000đ CHƯA AI GIẢI THÍCH ĐƯỢC
+>
+> **Đọc mục này trước khi mở màn hình. Đừng bấm "Tách" rồi mới đọc.**
+>
+> Hai nửa học phí của hai bé cộng lại **không bằng** số phụ huynh đã chuyển:
+>
+> ```
+>   4.488.000  (nửa học phí bé A — 8.976.000 ÷ 2)
+> + 5.016.000  (nửa học phí bé B — 10.032.000 ÷ 2)
+> ───────────
+>   9.504.000
+>   9.530.000  ← tiền thật đã vào tài khoản
+> ───────────
+>      26.000  ← CHÊNH, chưa ai giải thích được
+> ```
+>
+> **26.000đ ấy là tiền thật.** Nó có thể là phụ huynh làm tròn, có thể là số học phí ghi sai,
+> có thể là một khoản phụ phí — **hiện chưa ai biết**.
+>
+> ### Luật của lượt này
+>
+> **KHÔNG tự dồn 26.000đ vào bé nào.** Không sale, không kế toán, không hệ thống.
+>
+> Hệ thống cố ý **không gợi ý** cách chia: nó chỉ từ chối và in ra *"còn THIẾU 26.000đ"*.
+> Runbook này cũng **không in cặp số nào** để chép — vì chép một cặp số là chốt hộ một quyết
+> định nghiệp vụ mà chưa ai ra quyết định.
+>
+> ### Phải làm gì
+>
+> 1. **HỎI phụ huynh / kế toán** 26.000đ ấy là gì.
+> 2. Chờ **chủ dự án đưa cặp số đúng**.
+> 3. **Rồi mới** làm bước 13–16 dưới đây.
+>
+> Trong lúc chờ: **đừng tách đơn này**. Ô đếm ngược trên màn hình sẽ khoá nút "Tách" cho tới
+> khi tổng khớp — đó đúng là chỗ buộc người dùng dừng lại và đi hỏi, không phải lỗi giao diện.
+
+---
+
+**Khi đã có cặp số đúng thì làm như sau:**
+
+13. Trên dòng khoản **9.530.000đ**, bấm **"Tách cho nhiều bé…"** (nút nằm cạnh *"Gắn cho bé…"*).
+14. Nhập số tiền cho **từng bé**. Màn hình in **"tối đa …"** cho mỗi bé và một dòng đếm
+    **"Đã chia … · còn THIẾU …"** ngay dưới.
+15. Nút **"Tách"** chỉ sáng khi **đã chia ĐÚNG BẰNG 9.530.000đ** và có **từ hai bé trở lên**.
+16. Bấm **"Tách"**.
+
+**Kiểm ngay trên màn — bốn điều:**
+- khối vàng *"chưa gắn cho con nào"* **biến mất**;
+- Σ hai ô **"Chờ xác nhận"** = **9.530.000đ** (bằng đúng cặp số vừa nhập);
+- ô **"Đã thu"** của hai bé **vẫn 0đ** — ĐÚNG, kế toán chưa xác nhận;
+- tổng đơn, *"còn nợ"* của đơn **KHÔNG ĐỔI** — tách là đổi cách ghi tên chủ của tiền, không
+  phải thu thêm.
+
+> ⛔ **DỪNG NGAY nếu:** Σ hai ô "Chờ xác nhận" ≠ 9.530.000đ · một bé có **"Còn nợ" ÂM** ·
+> khối vàng vẫn còn tiền · *"còn nợ đơn"* đổi số.
+
+> ⚠️ **TÁCH RỒI KHÔNG GỘP LẠI ĐƯỢC.** Không có nút hoàn tác, và đó là chủ đích: sau khi tách,
+> hai phần là hai khoản bình thường mà kế toán có thể đã xác nhận / từ chối / xuất phiếu thu.
+>
+> Nhập nhầm số thì đường sửa là: **kế toán bỏ gắn từng phần** (`payments:manage`, bắt buộc ghi
+> lý do) → rồi **gắn hoặc tách lại**. Tổng tiền không đổi ở bất kỳ bước nào.
+>
+> Cái không lấy lại được: sau khi bỏ gắn, khối vàng hiện **hai dòng** chứ không phải một dòng
+> 9.530.000đ như ban đầu.
+
+**Đây là lý do phải hỏi cho ra 26.000đ TRƯỚC khi tách**, chứ không phải tách đại rồi sửa sau.
+
+#### Sau khi tách — việc của KẾ TOÁN
+
+Hai phần nay là hai khoản riêng, nên kế toán **xác nhận / từ chối từng phần độc lập**, và
+**mỗi bé có phiếu thu riêng**. Xác nhận phần của bé A trong khi từ chối phần của bé B là hợp
+lệ: nợ bé A giảm thật, nợ bé B quay lại đủ.
+
+⚠️ Phần của một bé **chưa có ghi danh** thì kế toán chưa xác nhận được (hệ thống cần ghi danh
+để phát phiếu thu). Gắn ghi danh trước ở màn nhân sự/lớp, rồi xác nhận.
 
 ---
 
@@ -308,13 +406,15 @@ JOIN "Order" o ON o.id = p."orderId"
 WHERE o.code = 'ORD-260917-000001' AND p."deletedAt" IS NULL;
 ```
 
-### Còn `ORD-260918-000001` thì kiểm bằng gì
+### Còn `ORD-260918-000001` — HAI phép kiểm, cho HAI việc
 
-**Khi cổng làm đúng việc, đơn B KHÔNG để lại dấu vết nào trong DB** — không đợt mới, không
-`Payment` mới. Bằng chứng "cổng có chặn" nằm ở **câu lỗi trên màn hình**, không ở SQL.
+#### B1 · cổng tạo đợt: đơn phải KHÔNG CÓ ĐỢT NÀO MỚI
 
-Nên câu SQL dưới đây kiểm điều ngược lại: **đơn B phải KHÔNG CÓ GÌ MỚI**. Chạy nó
-**HAI lần — ngay trước khi sale thử, và ngay sau** — rồi so hai kết quả với nhau.
+**Khi cổng làm đúng việc, bước B1 KHÔNG để lại dấu vết nào trong DB.** Bằng chứng "cổng có
+chặn" nằm ở **câu lỗi trên màn hình**, không ở SQL.
+
+Nên câu SQL dưới đây kiểm điều ngược lại. Chạy nó **HAI lần — ngay trước khi sale thử, và
+ngay sau** — rồi so hai kết quả với nhau.
 
 ```sql
 SELECT COUNT(*)                          AS so_dot_dang_mo,
@@ -328,10 +428,54 @@ WHERE o.code = 'ORD-260918-000001'
 - **Hai lượt ra cùng số** ⇒ cổng đã chặn. Đạt.
 - **`so_dot_dang_mo` tăng** ⇒ cổng đã cho tạo. **Báo ngay**, đó là con bug cần chặn.
 
-> ⚠️ **Đừng đóng cứng con số 3 vào phép kiểm.** Lúc viết runbook (18/09/2026) đơn này có 3
-> đợt mở / 15.228.000đ, nhưng kế toán có thể huỷ bớt đợt trong lúc chờ pilot. Một câu
+> ⚠️ **Đừng đóng cứng số đợt vào phép kiểm.** Lúc pilot (20/09/2026) đơn này đang đòi
+> 9.478.000đ, nhưng kế toán có thể huỷ bớt đợt bất cứ lúc nào. Một câu
 > `CASE WHEN COUNT(*) = 3` sẽ báo đỏ vì lý do chẳng liên quan — và một cổng báo đỏ sai là
-> cổng người ta học cách bỏ qua. Thứ phải bằng nhau là **trước và sau**, không phải bằng 3.
+> cổng người ta học cách bỏ qua. Thứ phải bằng nhau là **trước và sau**.
+
+#### B2 · tách khoản: bốn dòng, tổng KHÔNG ĐỔI
+
+Sau khi tách, khoản 9.530.000đ nở thành **4 dòng**: dòng gốc (giữ nguyên) · một bút toán
+**đảo** `−9.530.000` · và **hai phần** mang tên hai bé. Cộng lại vẫn đúng 9.530.000đ.
+
+```sql
+SELECT p.id,
+       p.amount,
+       p."paymentType",
+       p."accountantStatus",
+       oi."itemName"      AS con,
+       p."adjustmentOfId"
+FROM "Payment" p
+JOIN "Order" o ON o.id = p."orderId"
+LEFT JOIN "OrderItem" oi ON oi.id = p."orderItemId"
+WHERE o.code = 'ORD-260918-000001' AND p."deletedAt" IS NULL
+ORDER BY p."createdAt";
+```
+
+Một câu gộp trả lời cả cụm, `ket_qua` phải là `ĐẠT`:
+
+```sql
+SELECT COUNT(*)                                                  AS so_dong,
+       COUNT(*) FILTER (WHERE p."paymentType" = 'ADJUSTMENT')    AS so_but_toan_dao,
+       COUNT(*) FILTER (WHERE p."orderItemId" IS NOT NULL)       AS so_phan_da_gan_be,
+       COUNT(DISTINCT p."orderItemId")                           AS so_be_nhan,
+       SUM(p.amount)                                             AS tong_tien,
+       CASE WHEN SUM(p.amount) = 9530000
+             AND COUNT(*) FILTER (WHERE p."paymentType" = 'ADJUSTMENT') = 1
+             AND COUNT(*) FILTER (WHERE p."orderItemId" IS NOT NULL) = 2
+            THEN 'ĐẠT' ELSE 'KHÔNG ĐẠT — soi từng dòng bằng câu trên' END AS ket_qua
+FROM "Payment" p
+JOIN "Order" o ON o.id = p."orderId"
+WHERE o.code = 'ORD-260918-000001' AND p."deletedAt" IS NULL;
+```
+
+> ⚠️ **`tong_tien` là con số phải nhìn trước tiên.** Nó phải bằng **đúng 9.530.000** — y hệt
+> trước khi tách. Tách là đổi cách ghi tên chủ của tiền, không phải thu thêm. `tong_tien` mà
+> khác đi thì **dừng ngay**, đừng tách thêm đơn nào nữa.
+>
+> ⚠️ Thấy một dòng **`−9.530.000`** là BÌNH THƯỜNG, không phải tiền bị trừ mất: nó là bút
+> toán đảo đi kèm dòng gốc, và cặp gốc/đảo cộng lại bằng 0. Đó là cách cuốn sổ ghi "dòng này
+> đã được chia lại" mà không sửa dòng gốc.
 
 ---
 
@@ -374,7 +518,8 @@ mới chạy SQL.
 | Mã QR đã in theo đợt của con | **VẪN QUÉT ĐƯỢC** — QR nằm ngoài cờ |
 | Màn "Công nợ theo con" | **ẨN** |
 | Nút gắn theo con trên biến động số dư | **ẨN** — quay về đường gắn cả đơn (`ganGiaoDichVaoDon`) |
-| Nút **"Gắn cho bé…"** / **"Bỏ gắn"** trên trang đơn | **ẨN**. Khoản đã gắn vẫn gắn — chỉ mất đường sửa |
+| Nút **"Gắn cho bé…"** / **"Tách cho nhiều bé…"** / **"Bỏ gắn"** trên trang đơn | **ẨN**. Khoản đã gắn vẫn gắn, khoản đã tách vẫn tách — chỉ mất đường sửa |
+| Khoản đã **TÁCH** | **GIỮ NGUYÊN** cả 4 dòng (gốc · bút toán đảo · hai phần). Tắt cờ KHÔNG gộp chúng lại |
 
 ⇒ **Tắt cờ = dừng tạo cái MỚI, không phải hoàn cái CŨ.** Đúng như `lib/settings/registry.ts:308`
 đã dặn: *"BẬT RỒI TẮT LẠI KHÔNG VÔ HẠI: phiếu thu đã sinh theo con vẫn nằm đó khi cờ tắt.
