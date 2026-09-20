@@ -480,6 +480,80 @@ mất im lặng**, và xác suất đó tăng theo độ lệch.
 **Ngoại lệ có kỷ luật:** prod đang hỏng và không chờ được CI thì cứ vá thẳng `main` — rồi
 mở PR `main → test` **ngay trong ngày**, đừng để sang hôm sau.
 
+#### 🔴 ĐẾM LẠI 20/09/2026 — luật 13 bị phá **BA LẦN trong BỐN NGÀY**
+
+| ngày | chuyện | phân kỳ sinh ra |
+|---|---|---|
+| **16/09** | để tích luỹ (không phải phá luật — luật chưa có) | **463 commit / 215 tệp xung đột**; suýt mất **7 tính năng**, 3 trong đó là bảo mật |
+| **17/09** | **4 PR vào thẳng `main`** trong MỘT ngày | **94 commit** |
+| **18/09** | luật 13 được viết vào `CLAUDE.md` | — |
+| **20/09** | **3 PR nữa vào thẳng `main`** (#301 · #312 · #313) | **3 commit**, đụng đúng `lib/finance/debt.ts` vừa tái cấu trúc |
+
+**Luật viết ra ngày 18/09 và bị phá ngay ngày 20/09.** Đó không phải chuyện kỷ luật cá
+nhân — đó là **thiếu cơ chế cưỡng chế**. Một luật chỉ sống trong tài liệu thì nó là lời
+khuyên, và lời khuyên thua sự tiện.
+
+Giá đã trả cho lượt 20/09, dù chỉ 3 commit: phải merge thêm một lượt, và lượt đó **tìm ra
+hai lỗ phủ test thật** (`confirmedPaid` không ai khoá · `recordedPaid` không ai khoá) —
+tức phân kỳ không chỉ tốn thời gian, nó **giấu lỗ**.
+
+#### Cơ chế cưỡng chế — ĐỀ XUẤT, chờ chủ dự án chốt
+
+**Cấu hình `main` hiện tại** (đọc bằng `gh api repos/…/branches/main/protection`, không
+trích tài liệu):
+
+| | |
+|---|---|
+| required checks | 5 (`Quality` · `Unit tests` · `Chat DB invariants` · `R7 1/2` · `R7 2/2`) |
+| `enforce_admins` | **true** |
+| `allow_force_pushes` / `allow_deletions` | false / false |
+| yêu cầu review | **KHÔNG có** |
+| **chặn PR nhắm thẳng `main`** | **KHÔNG có** ← đây là lỗ |
+
+Cổng hiện tại canh **chất lượng** (test phải xanh) nhưng không canh **nguồn** (đến từ
+nhánh nào). Ba PR vừa rồi đều xanh và đều hợp lệ theo cấu hình.
+
+**Đề xuất: thêm một required check `Nguồn phải là nhánh test`.**
+
+Một workflow nhỏ chạy trên `pull_request` nhắm `main`, ĐẠT khi `head_ref == "test"`, TRƯỢT
+khi khác — và có **cửa thoát CÓ GHI VẾT**: nhãn `hotfix-thang-main` trên PR thì cho qua.
+
+```yaml
+# .github/workflows/nguon-vao-main.yml  (bản phác — chưa tạo)
+on: { pull_request: { branches: [main], types: [opened, synchronize, reopened, labeled, unlabeled] } }
+jobs:
+  nguon:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Nhánh nguồn phải là `test`
+        run: |
+          if [ "${{ github.head_ref }}" = "test" ]; then exit 0; fi
+          if ${{ contains(github.event.pull_request.labels.*.name, 'hotfix-thang-main') }}; then
+            echo "::warning::Vá gấp đi thẳng main — NHỚ mở PR main → test TRONG NGÀY (luật 13)"; exit 0
+          fi
+          echo "::error::PR vào main phải đến từ nhánh \`test\` (luật 13). Vá gấp: gắn nhãn hotfix-thang-main."
+          exit 1
+```
+
+Rồi thêm `Nguồn phải là nhánh test` vào danh sách required checks.
+
+**ĐÁNH ĐỔI — nói thẳng cả hai chiều:**
+
+| được | mất |
+|---|---|
+| Luật 13 thành **cổng**, không còn là lời khuyên | Vá gấp thật sự tốn thêm **một cú bấm** (gắn nhãn) |
+| Cửa thoát **để lại vết**: nhãn nằm trên PR, `gh pr list --label` đếm được → lần sau có số để nói chuyện, thay vì cảm giác | `enforce_admins: true` nên **chính chủ dự án cũng bị chặn** — muốn qua phải gắn nhãn, không bấm tắt được |
+| Rẻ: một workflow ~10 dòng, không đụng mã sản phẩm | Cấu hình sai là **chặn cả PR `test → main` hợp lệ** ⇒ phải thử trên một PR nháp trước khi đưa vào required |
+
+**Hai đường thay thế đã cân nhắc và loại:**
+· *Chỉ dựa vào review bắt buộc* — người duyệt vẫn duyệt PR nhắm `main`; nó canh người,
+  không canh nguồn.
+· *`required_linear_history` / `strict: true`* — bắt nhánh phải cập nhật so với base,
+  giúp giảm xung đột nhưng **không** ngăn PR nhắm `main`. Sai bài toán.
+
+⚠️ **Tôi chưa tạo workflow này** — nó đổi cổng merge của cả repo, là quyết định của chủ
+dự án. Chốt thì tôi làm, kèm một PR nháp để kiểm cổng trước khi đưa vào danh sách required.
+
 **Việc còn phải làm của chính NỢ này:** gộp **94 commit** `main` → `test` (nhánh riêng,
 `git merge-file --diff3` từng tệp, bốn cổng + r7 hai shard), và **rà chủ động** S-1 · S-9 ·
 `canSearchPhone` · `[ZC-DN-01/02]` · `[SB-FLAG]` · `[ZC-KHUNG]` cùng mọi thứ ZaloCRM chưa

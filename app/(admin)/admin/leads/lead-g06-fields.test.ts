@@ -34,6 +34,7 @@ const h = vi.hoisted(() => ({
   childFindMany: vi.fn(),
   logLeadAudit: vi.fn(),
   transaction: vi.fn(),
+  leadActivityCreate: vi.fn(),
   centerIdForOrgUnit: vi.fn(),
   rejectHeadOffice: vi.fn(),
   autoAssignNewLead: vi.fn(),
@@ -63,6 +64,7 @@ vi.mock("@/lib/db", () => ({
       findUnique: h.childFindUnique,
       findMany: h.childFindMany,
     },
+    leadActivity: { create: h.leadActivityCreate },
     $transaction: h.transaction,
   },
 }));
@@ -157,6 +159,11 @@ beforeEach(() => {
         update: h.childUpdate,
         findMany: h.childFindMany,
       },
+      // Hợp nhất 20/09: `addLeadChild` nay gọi `ghiTuongTacLead(tx, …)` (cửa ghi lịch
+      // sử tương tác do `main` dựng ở #301). Thiếu `leadActivity` trong `tx` giả thì
+      // lỗi là `Cannot read properties of undefined (reading 'create')` — đọc như mã
+      // hỏng chứ không như bộ giả thiếu một bảng.
+      leadActivity: { create: h.leadActivityCreate },
     }),
   );
   h.centerIdForOrgUnit.mockResolvedValue("cs1");

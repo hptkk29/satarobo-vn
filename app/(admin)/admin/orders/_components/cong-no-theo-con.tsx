@@ -8,7 +8,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { NoTheoConKetQua } from "@/lib/finance/no-theo-con";
 
-import { huyDotChoConAction, taoDotChoConAction } from "../_actions";
+import {
+  boGanKhoanChoConAction,
+  ganKhoanChoConAction,
+  huyDotChoConAction,
+  tachKhoanChoConAction,
+  taoDotChoConAction,
+} from "../_actions";
 
 /**
  * KHỐI "CÔNG NỢ THEO CON" — trang chi tiết đơn [PHIÊN A, 16/09/2026].
@@ -187,15 +193,383 @@ function NutHuyDot({
   );
 }
 
+/**
+ * FORM TÁCH MỘT KHOẢN CHO NHIỀU BÉ [20/09/2026].
+ *
+ * Ca thật: `ORD-260918-000001` — một khoản 9.530.000đ cho hai bé. Trước bản này màn hình chỉ
+ * có câu "chưa hỗ trợ".
+ *
+ * ── Vì sao có Ô ĐẾM NGƯỢC, và vì sao nút khoá khi chưa khớp ──
+ * Luật là Σ **đúng bằng** số tiền khoản. Đo trên chính đơn pilot: hai nửa học phí là
+ * 4.488.000 + 5.016.000 = 9.504.000, mà khoản là 9.530.000 ⇒ **lệch 26.000đ**. Người nhập
+ * hai con số "đúng" ấy rồi bấm sẽ ăn một câu từ chối mà không hiểu vì sao — nên phần còn
+ * thiếu / còn thừa phải hiện NGAY khi họ gõ, và nút khoá cho tới khi khớp. Câu từ chối của
+ * server vẫn là thẩm quyền cuối, nhưng nó không nên là nơi người ta học luật.
+ *
+ * ── "tối đa" lấy từ `conCoTheNhan`, KHÔNG phải `conNo` ──
+ * Trần của cổng là tập RỘNG (trừ cả tiền chờ xác nhận). Ô "Còn nợ" phía trên in trục A. Hai
+ * số lệch nhau khi bé đã có tiền chờ duyệt — nên form phải in ĐÚNG con số mà cổng dùng, kẻo
+ * màn nói một đằng cổng chặn một nẻo (bài học của cổng tạo đợt).
+ */
+function FormTachKhoan({
+  orderId,
+  paymentId,
+  soTienKhoan,
+  con,
+  dong,
+}: {
+  orderId: string;
+  paymentId: string;
+  soTienKhoan: number;
+  con: NoTheoConKetQua["con"];
+  dong: () => void;
+}) {
+  const [oTien, datOTien] = useState<Record<string, string>>({});
+  const [dangChay, batDau] = useTransition();
+
+  const so = (id: string) => Number((oTien[id] ?? "").replace(/\D/g, "")) || 0;
+  const daChia = con.reduce((s, c) => s + so(c.orderItemId), 0);
+  const conLai = soTienKhoan - daChia;
+  const soBeDaNhap = con.filter((c) => so(c.orderItemId) > 0).length;
+  const khop = conLai === 0 && soBeDaNhap >= 2;
+
+  const gui = () => {
+    batDau(async () => {
+      const r = await tachKhoanChoConAction({
+        orderId,
+        paymentId,
+        phan: con
+          .map((c) => ({ orderItemId: c.orderItemId, soTien: so(c.orderItemId) }))
+          .filter((p) => p.soTien > 0),
+      });
+      if (!r.ok) {
+        toast.error(r.error);
+        return;
+      }
+      toast.success(`Đã tách ${vnd(r.soTien)} cho ${r.tenCon.filter(Boolean).join(" · ")}`);
+      dong();
+    });
+  };
+
+  return (
+    <div className="mt-2 rounded-lg border border-border bg-background p-3">
+      <p className="text-xs text-muted-foreground">
+        Chia <b className="tabular-nums text-foreground">{vnd(soTienKhoan)}</b> cho từng bé.
+        Tổng phải <b>đúng bằng</b> số này.
+      </p>
+
+      <div className="mt-2 space-y-2">
+        {con.map((c) => (
+          <label key={c.orderItemId} className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+            <span className="min-w-0 flex-1 truncate text-sm">
+              {c.ten}
+              <span className="ml-2 text-xs text-muted-foreground">
+                tối đa {vnd(c.conCoTheNhan)}
+              </span>
+            </span>
+            <Input
+              inputMode="numeric"
+              className="h-9 tabular-nums sm:w-44"
+              placeholder="0"
+              value={oTien[c.orderItemId] ?? ""}
+              onChange={(e) =>
+                datOTien((cu) => ({ ...cu, [c.orderItemId]: e.target.value }))
+              }
+              aria-label={`Số tiền tách cho ${c.ten}`}
+            />
+          </label>
+        ))}
+      </div>
+
+      {/* Ô đếm ngược — thứ duy nhất trên màn này nói cho người nhập biết họ còn thiếu bao nhiêu. */}
+      <p className="mt-2 text-xs">
+        Đã chia <b className="tabular-nums">{vnd(daChia)}</b>
+        {conLai === 0 ? (
+          <span className="ml-2 font-semibold text-state-success-ink">· khớp</span>
+        ) : conLai > 0 ? (
+          <span className="ml-2 font-semibold text-state-danger-ink">
+            · còn THIẾU {vnd(conLai)}
+          </span>
+        ) : (
+          <span className="ml-2 font-semibold text-state-danger-ink">
+            · chia THỪA {vnd(-conLai)}
+          </span>
+        )}
+      </p>
+      {conLai === 0 && soBeDaNhap < 2 && (
+        <p className="mt-1 text-xs text-state-warning-ink">
+          Tách là chia cho từ hai bé trở lên — một bé thì dùng “Gắn cho bé…”.
+        </p>
+      )}
+
+      <div className="mt-2 flex flex-wrap gap-2">
+        <Button size="sm" disabled={dangChay || !khop} onClick={gui}>
+          {dangChay ? "Đang tách…" : "Tách"}
+        </Button>
+        <Button size="sm" variant="ghost" disabled={dangChay} onClick={dong}>
+          Thôi
+        </Button>
+      </div>
+
+      <p className="mt-2 text-xs text-muted-foreground">
+        Tách rồi thì <b>không gộp lại được</b>. Sửa nhầm: kế toán bỏ gắn từng phần rồi gắn
+        hoặc tách lại.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * KHỐI "KHOẢN ĐÃ THU CHƯA GẮN CON" — đường B [18/09/2026].
+ *
+ * ⚠️ Trước bản này chỗ đây là một dòng chữ tĩnh *"Gắn ở màn Thanh toán"* — và câu ấy KHÔNG
+ * ĐÚNG với đơn nhiều con: màn biến động số dư chỉ thao tác trên `BankTransaction` đang
+ * `UNMATCHED`, còn 4 khoản của `ORD-260917-000001` là `Payment` nhập tay, không có giao dịch
+ * nào phía sau. Người đọc dòng ấy sẽ đi sang màn kia và không tìm thấy gì.
+ * Affordance phải nói thật (luật 12) — nên nút nằm ở đây, ngay cạnh con số.
+ *
+ * ⚠️ **[ĐẢO 20/09/2026]** Câu "chưa tách được một khoản cho hai bé" ĐÃ HẾT ĐÚNG — nút
+ * "Tách cho nhiều bé…" nằm ngay cạnh "Gắn cho bé…". Giữ lại vế còn đúng: MỘT lần bấm "Gắn"
+ * vẫn cho đúng MỘT bé; muốn chia thì bấm nút kia.
+ */
+function KhoiKhoanChoGan({
+  orderId,
+  khoan,
+  con,
+  duocGan,
+}: {
+  orderId: string;
+  khoan: NoTheoConKetQua["khoanDaVeChiTiet"];
+  con: NoTheoConKetQua["con"];
+  duocGan: boolean;
+}) {
+  const [dangChon, datDangChon] = useState<string | null>(null);
+  const [beDaChon, datBeDaChon] = useState<string>("");
+  /** Khoản nào đang mở form TÁCH. Rời với `dangChon` — hai việc, hai form, không chồng nhau. */
+  const [dangTach, datDangTach] = useState<string | null>(null);
+  const [dangChay, batDau] = useTransition();
+
+  if (khoan.length === 0) return null;
+  const tong = khoan.reduce((s, k) => s + k.amount, 0);
+
+  const gan = (paymentId: string) => {
+    if (!beDaChon) {
+      toast.error("Chọn bé trước đã");
+      return;
+    }
+    batDau(async () => {
+      const r = await ganKhoanChoConAction({ orderId, paymentId, orderItemId: beDaChon });
+      if (!r.ok) {
+        toast.error(r.error);
+        return;
+      }
+      toast.success(`Đã gắn ${vnd(r.soTien)} cho ${r.tenCon}`);
+      datDangChon(null);
+      datBeDaChon("");
+    });
+  };
+
+  return (
+    <div className="mb-4 rounded-lg border border-state-warning-ink/25 bg-state-warning-soft p-3">
+      <p className="text-sm text-state-warning-ink">
+        Có <b className="tabular-nums">{vnd(tong)}</b> đã vào đơn nhưng{" "}
+        <b>chưa gắn cho con nào</b> — công nợ từng con chưa trừ khoản này.
+      </p>
+
+      <ul className="mt-2 space-y-2">
+        {khoan.map((k) => {
+          const moChon = dangChon === k.id;
+          return (
+            <li key={k.id} className="rounded-md bg-background/70 px-3 py-2">
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                <span className="min-w-0 text-sm">
+                  <b className="tabular-nums">{vnd(k.amount)}</b>
+                  {k.trangThaiKeToan !== "CONFIRMED" && (
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      kế toán chưa xác nhận
+                    </span>
+                  )}
+                </span>
+                {duocGan && !moChon && dangTach !== k.id && (
+                  <span className="flex shrink-0 gap-2">
+                    <Button size="sm" variant="outline" onClick={() => datDangChon(k.id)}>
+                      Gắn cho bé…
+                    </Button>
+                    {/* Chỉ mời TÁCH khi đơn có từ hai bé — một bé thì tách vô nghĩa và cổng
+                        sẽ từ chối. Đừng vẽ nút rồi để cổng nói không (luật 12). */}
+                    {con.length >= 2 && (
+                      <Button size="sm" variant="outline" onClick={() => datDangTach(k.id)}>
+                        Tách cho nhiều bé…
+                      </Button>
+                    )}
+                  </span>
+                )}
+              </div>
+
+              {moChon && (
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {/* `select` thuần chứ không phải shadcn `Select`: danh sách chỉ 2-3 bé và
+                      `SelectValue` của base-ui hiện GIÁ TRỊ THÔ chứ không tra nhãn — một bẫy
+                      đã ghi trong sổ repo. */}
+                  <select
+                    aria-label="Chọn bé để gắn khoản này"
+                    className="h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-sm"
+                    value={beDaChon}
+                    onChange={(e) => datBeDaChon(e.target.value)}
+                  >
+                    <option value="">— chọn bé —</option>
+                    {con.map((c) => (
+                      <option key={c.orderItemId} value={c.orderItemId}>
+                        {c.ten}
+                      </option>
+                    ))}
+                  </select>
+                  <Button size="sm" disabled={dangChay} onClick={() => gan(k.id)}>
+                    Gắn
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={dangChay}
+                    onClick={() => {
+                      datDangChon(null);
+                      datBeDaChon("");
+                    }}
+                  >
+                    Thôi
+                  </Button>
+                </div>
+              )}
+
+              {dangTach === k.id && (
+                <FormTachKhoan
+                  orderId={orderId}
+                  paymentId={k.id}
+                  soTienKhoan={k.amount}
+                  con={con}
+                  dong={() => datDangTach(null)}
+                />
+              )}
+            </li>
+          );
+        })}
+      </ul>
+
+      <p className="mt-2 text-xs text-state-warning-ink/80">
+        Một lần bấm <b>“Gắn cho bé…”</b> cho đúng một bé. Phụ huynh chuyển một lần cho nhiều
+        con thì bấm <b>“Tách cho nhiều bé…”</b> — tổng các phần phải đúng bằng số tiền khoản,
+        và <b>tách rồi không gộp lại được</b>.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Các khoản ĐÃ gắn cho một bé, kèm nút bỏ gắn (kế toán).
+ *
+ * Bỏ gắn BẮT BUỘC ghi lý do — đây là đường sửa quyết định của người khác, nên nó phải để lại
+ * câu trả lời cho "vì sao". Ô lý do mở TẠI CHỖ, không hộp thoại: cùng lối với form tạo đợt
+ * ngay dưới, và việc này không cần ngắt mạch người dùng.
+ */
+function KhoanCuaCon({
+  orderId,
+  khoan,
+  duocBoGan,
+}: {
+  orderId: string;
+  khoan: NoTheoConKetQua["khoanDaVeChiTiet"];
+  duocBoGan: boolean;
+}) {
+  const [dangMo, datDangMo] = useState<string | null>(null);
+  const [lyDo, datLyDo] = useState("");
+  const [dangChay, batDau] = useTransition();
+
+  if (khoan.length === 0) return null;
+
+  const boGan = (paymentId: string) => {
+    if (!lyDo.trim()) {
+      toast.error("Ghi lý do bỏ gắn");
+      return;
+    }
+    batDau(async () => {
+      const r = await boGanKhoanChoConAction({ orderId, paymentId, lyDo });
+      if (!r.ok) {
+        toast.error(r.error);
+        return;
+      }
+      toast.success(`Đã bỏ gắn ${vnd(r.soTien)}`);
+      datDangMo(null);
+      datLyDo("");
+    });
+  };
+
+  return (
+    <ul className="mt-2 space-y-1">
+      {khoan.map((k) => (
+        <li key={k.id} className="rounded-md bg-muted/40 px-2 py-1.5 text-xs">
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-1">
+            <span className="min-w-0 text-muted-foreground">
+              Khoản <b className="tabular-nums text-foreground">{vnd(k.amount)}</b>
+              {k.trangThaiKeToan !== "CONFIRMED" && " · kế toán chưa xác nhận"}
+            </span>
+            {/* Bút toán ĐẢO (số âm) không phải khoản để bỏ gắn — bỏ gắn nó là đưa một dòng
+                đối ứng ra khỏi bé trong khi dòng nó đối ứng vẫn ở đó. Ẩn nút thay vì để cổng
+                từ chối sau khi bấm (luật 12). */}
+            {duocBoGan && k.loaiButToan === "PAYMENT" && dangMo !== k.id && (
+              <button
+                type="button"
+                className="text-xs text-muted-foreground underline-offset-2 transition-colors duration-150 hover:text-state-danger-ink hover:underline"
+                onClick={() => datDangMo(k.id)}
+              >
+                Bỏ gắn bé
+              </button>
+            )}
+          </div>
+          {dangMo === k.id && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+              <Input
+                className="h-8 min-w-0 flex-1 text-xs"
+                placeholder="Lý do bỏ gắn (bắt buộc)"
+                value={lyDo}
+                onChange={(e) => datLyDo(e.target.value)}
+              />
+              <Button size="sm" variant="destructive" disabled={dangChay} onClick={() => boGan(k.id)}>
+                Bỏ gắn
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={dangChay}
+                onClick={() => {
+                  datDangMo(null);
+                  datLyDo("");
+                }}
+              >
+                Thôi
+              </Button>
+            </div>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function CongNoTheoCon({
   orderId,
   so,
   duocSua,
+  duocGan,
+  duocBoGan,
 }: {
   orderId: string;
   so: NoTheoConKetQua;
   /** Người xem có quyền tạo/huỷ đợt không. Ẩn nút KHÔNG phải kiểm quyền — action tự kiểm. */
   duocSua: boolean;
+  /** `payments:record` — gắn một khoản đã thu cho một bé (đường B). */
+  duocGan: boolean;
+  /** `payments:manage` — bỏ gắn. Kế toán. */
+  duocBoGan: boolean;
 }) {
   const [dangMoForm, datDangMoForm] = useState<string | null>(null);
 
@@ -238,15 +612,32 @@ export function CongNoTheoCon({
         </p>
       </div>
 
-      {so.chuaGanCon > 0 && (
-        // Đây là 24 khoản / 178.544.000đ của prod: tiền đã vào đơn mà chưa gắn con nào. KHÔNG
-        // cộng vào "đã thu" của bất kỳ bé nào — cộng vào là tổng đơn trông đúng trong khi từng
-        // con vẫn sai, đúng kiểu số liệu khiến người ta tin nhầm.
-        <p className="mb-4 rounded-lg border border-state-warning-ink/25 bg-state-warning-soft px-3 py-2 text-sm text-state-warning-ink">
-          Có <b className="tabular-nums">{vnd(so.chuaGanCon)}</b> đã vào đơn nhưng{" "}
-          <b>chưa gắn cho con nào</b> — công nợ từng con chưa trừ khoản này. Gắn ở màn Thanh toán.
-        </p>
-      )}
+      {/* Tiền đã vào đơn mà chưa gắn con nào. KHÔNG cộng vào "đã thu" của bất kỳ bé nào —
+          cộng vào là tổng đơn trông đúng trong khi từng con vẫn sai.
+
+          ⚠️ Lọc từ `khoanDaVeChiTiet` (tập RỘNG) chứ KHÔNG dùng `so.chuaGanCon > 0` như bản
+          cũ: `chuaGanCon` chỉ cộng trục A, nên với 4 khoản `PENDING` của
+          `ORD-260917-000001` nó ra 0 và cả khối này BIẾN MẤT — tiền có thật mà màn hình câm.
+          Đo được 18/09, không phải phòng xa. */}
+      {/* ⚠️ Lọc thêm HAI vế kể từ phép TÁCH [20/09/2026]. Tách để lại dòng gốc + một bút
+          toán đảo, CẢ HAI mang `orderItemId = NULL`; không lọc thì khối này liệt kê một dòng
+          `+9.530.000` và một dòng `−9.530.000`, mỗi dòng một nút "Gắn cho bé…" — tổng in ra
+          đúng (0đ) mà danh sách thì vô nghĩa, và bấm vào đâu cũng sai.
+
+          · `loaiButToan === "PAYMENT"` — bút toán đảo không phải tiền để gắn;
+          · `!daDao`                    — dòng đã bị đảo thì phần tiền của nó nay nằm ở n dòng
+                                          mới, gắn nó lần nữa là gắn một khoản đã tiêu.
+
+          Hai trường này KHÔNG đụng vào phép cộng nào (xem `KhoanDaVe`) — chúng chỉ quyết
+          định màn hình mời bấm cái gì. */}
+      <KhoiKhoanChoGan
+        orderId={orderId}
+        khoan={so.khoanDaVeChiTiet.filter(
+          (k) => k.orderItemId == null && k.loaiButToan === "PAYMENT" && !k.daDao,
+        )}
+        con={so.con}
+        duocGan={duocGan}
+      />
 
       <ul className="space-y-3">
         {so.con.map((c) => {
@@ -280,6 +671,14 @@ export function CongNoTheoCon({
                   tone={c.conNo > 0 ? "danger" : "ok"}
                 />
               </div>
+
+              {/* Khoản ĐÃ gắn cho chính bé này — chỗ duy nhất bỏ gắn được. Đặt ngay dưới
+                  hàng số liệu của bé, vì người bỏ gắn cần thấy "đã thu" của bé đổi theo. */}
+              <KhoanCuaCon
+                orderId={orderId}
+                khoan={so.khoanDaVeChiTiet.filter((k) => k.orderItemId === c.orderItemId)}
+                duocBoGan={duocBoGan}
+              />
 
               {c.dotDangMo.length > 0 && (
                 <ul className="mt-3 space-y-1.5 border-t border-border pt-3">

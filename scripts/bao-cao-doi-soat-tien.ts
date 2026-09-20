@@ -402,6 +402,17 @@ async function phanB(tx: Tx): Promise<string[]> {
       orderItemId: null,
       deletedAt: null,
       paymentType: "PAYMENT",
+      // ⚠️ BỎ dòng đã bị ĐẢO — thêm 20/09/2026 cùng phép TÁCH KHOẢN.
+      //
+      // `tachKhoanChoCon` để dòng gốc NGUYÊN VẸN (`orderItemId` vẫn NULL, `paymentType` vẫn
+      // `PAYMENT`) rồi thêm một bút toán đảo + n dòng mang tên từng bé. Không có bộ lọc này
+      // thì một đơn ĐÃ CHIA XONG vẫn nằm trong "khoản chưa gắn con", và người đọc báo cáo
+      // sẽ kết luận tính năng không chạy — đúng lúc nó vừa chạy.
+      //
+      // ⚠️ HÔM NAY BỘ LỌC NÀY KHÔNG ĐỔI MỘT CON SỐ NÀO: prod chưa có dòng nào bị đảo. Nó
+      // chỉ giữ cho thước đo khỏi sai KỂ TỪ lượt tách đầu tiên. (Luật "đừng đổi cái thước
+      // ngay lúc đang đo" vẫn được tôn trọng — phép đo trước/sau ra cùng kết quả.)
+      adjustments: { none: { paymentType: "ADJUSTMENT", deletedAt: null } },
       order: locDonNhanTien(),
     },
     select: {

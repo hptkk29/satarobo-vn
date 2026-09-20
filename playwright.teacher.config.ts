@@ -11,9 +11,9 @@
  * TEACHER_SKIP_WEBSERVER=1 → dùng server ngoài (phải tự bật với TEACHER_SITE_ENABLED=true).
  */
 import { defineConfig, devices } from "@playwright/test";
-import dotenv from "dotenv";
+import { napEnvTest } from "./tests/e2e/_helpers/nap-env";
 
-dotenv.config({ path: ".env.test", override: true });
+napEnvTest("teacher");
 
 const PORT = process.env.TEACHER_E2E_PORT ?? "3131";
 const BASE = `http://localhost:${PORT}`;

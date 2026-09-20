@@ -170,8 +170,21 @@ describe("[QDS-03] khoá theo đơn — MỘT công thức, dùng chung với đ
     // "Failed to deserialize column of type 'void'" (bug PR #76).
     expect(ghi).not.toMatch(/\$queryRaw`SELECT pg_advisory_xact_lock/);
     // Và mọi phép ghi tiền của tệp này đi qua `ghiTienChoDon`, tức luôn nằm dưới khoá.
-    // 4 lời gọi (tạo đợt · huỷ đợt · gắn · gỡ). Khai báo là `ghiTienChoDon<T>(` nên không đếm.
-    expect(ghi.match(/ghiTienChoDon\(/g) ?? []).toHaveLength(4);
+    //
+    // **7** lời gọi. Khai báo là `ghiTienChoDon<T>(` nên không đếm.
+    //   1. `taoDotChoCon`          — tạo đợt cho một bé
+    //   2. `huyDotChoCon`          — huỷ đợt chưa có tiền
+    //   3. `ganTienTheoCon`        — gắn một GIAO DỊCH ngân hàng, chia theo đợt
+    //   4. `ganKhoanDaThuChoCon`   — đường B: gắn một KHOẢN đã thu cho một bé  [18/09/2026]
+    //   5. `boGanKhoanKhoiCon`     — đường B: bỏ gắn                            [18/09/2026]
+    //   6. `goGanTheoCon`          — gỡ gắn giao dịch, sinh bút toán đảo
+    //   7. `tachKhoanChoCon`       — đường B: TÁCH một khoản cho n bé          [20/09/2026]
+    //
+    // ⚠️ Con số này ĐẾM CÓ CHỦ ĐÍCH, đừng đổi thành `toBeGreaterThan`. Nó bắt đúng một thứ:
+    // ai đó thêm một đường ghi tiền mới mà **quên bọc khoá** thì tổng không tăng, và ca này
+    // đỏ. Nới thành "≥" là gỡ luôn khả năng ấy. Thêm hàm mới thì SỬA SỐ và thêm một dòng vào
+    // danh sách trên — vài giây, và nó buộc người thêm phải đọc lại vì sao có khoá.
+    expect(ghi.match(/ghiTienChoDon\(/g) ?? []).toHaveLength(7);
   });
 
   it("đường webhook dùng ĐÚNG công thức khoá ấy — hai đường phải giẫm lên nhau được", () => {
@@ -291,5 +304,140 @@ describe("[QDS-05] CÔNG TẮC THEO CƠ SỞ — cờ tắt thì prod y như TR�
     // Cùng MỘT transaction: `writeAudit` phải nhận `tx`, kẻo nhật ký sống sót một lượt
     // rollback và kể một chuyện chưa từng xảy ra.
     expect(khoi).toMatch(/await writeAudit\(\{\s*tx,/);
+  });
+});
+
+describe("[QDB-*] ĐƯỜNG B — gắn khoản đã thu vào con, trên màn ĐƠN", () => {
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Chủ dự án chốt 18/09/2026: *"payments:record để gắn, payments:manage để bỏ gắn."*
+  // Và: *"Sau cờ (billing.flexV1Enabled), cờ tắt thì nút không hiện."*
+  //
+  // ⚠️ VÌ SAO LÀ LƯỚI MÃ NGUỒN CHỨ KHÔNG PHẢI TEST HÀNH VI — cùng lý do với `[QDS-*]` ở trên:
+  // cổng thật nằm trong Server Action và nó gọi `auth()` + `checkPermission()`. Dựng hành vi
+  // cho nó phải giả `auth()`, dựng session, dựng `RoleDef` trong DB cho từng vai — và khi đó
+  // ca test kiểm `checkPermission`, thứ đã có test riêng, chứ KHÔNG kiểm điều đang cần: rằng
+  // ĐÚNG cổng ấy được cắm vào ĐÚNG action ấy.
+  //
+  // Phần HÀNH VI của đường B (gắn / bỏ gắn / chặn chéo đơn / chỉ đụng một cột) nằm ở
+  // `tests/finance/gan-khoan-cho-con.test.ts`, chạy trên Postgres thật.
+  // ─────────────────────────────────────────────────────────────────────────────
+  const ACT = "app/(admin)/admin/orders/_actions.ts";
+
+  it("gắn đòi `payments:record`, bỏ gắn đòi `payments:manage` — KHÔNG dùng lại `orders:manage`", () => {
+    const src = docMa(ACT);
+    const gan = than(src, "ganKhoanChoConAction");
+    const bo = than(src, "boGanKhoanChoConAction");
+    expect(gan, "không tách được thân action gắn").not.toBe("");
+    expect(bo, "không tách được thân action bỏ gắn").not.toBe("");
+
+    expect(gan).toMatch(/congDuongB\(input\.orderId, "payments:record"\)/);
+    expect(bo).toMatch(/congDuongB\(input\.orderId, "payments:manage"\)/);
+
+    // ⚠️ `requireOrdersManage()` gác bằng `orders:manage` VÀ `redirect()` khi thiếu quyền.
+    // Đường B cố ý không dùng nó: gắn một khoản ĐÃ THU cho đúng bé là việc thường ngày của
+    // sale, và đá người dùng sang /dashboard giữa lúc đang gắn tiền là mất luôn thao tác dở.
+    expect(gan).not.toMatch(/requireOrdersManage/);
+    expect(bo).not.toMatch(/requireOrdersManage/);
+  });
+
+  it("cổng chung kiểm ĐỦ BA VẾ: quyền · phạm vi cơ sở · công tắc CỦA ĐƠN", () => {
+    const cong = than(docMa(ACT), "congDuongB");
+    expect(cong, "không tách được thân cổng").not.toBe("");
+
+    expect(cong, "vế 1 — quyền").toMatch(/await checkPermission\(quyen\)/);
+    expect(cong, "vế 2 — phạm vi cơ sở").toMatch(/passesScope\("Order", order, actor\)/);
+    // ⚠️ Vế 3 đọc theo `order.orgUnitId` — cơ sở GIỮ ĐƠN, KHÔNG phải cơ sở người bấm. Đọc
+    // theo người bấm là pilot một cơ sở hoá ra bật cho mọi đơn mà người đó chạm vào.
+    expect(cong, "vế 3 — công tắc của ĐƠN").toMatch(
+      /laThuTienLinhHoatBat\(order\.orgUnitId\)/,
+    );
+  });
+
+  it("cờ TẮT ⇒ action TỪ CHỐI (không chỉ ẩn nút)", () => {
+    const cong = than(docMa(ACT), "congDuongB");
+    // Phải có nhánh phủ định của cờ và nó trả về lỗi — ẩn nút không phải là kiểm quyền.
+    expect(cong).toMatch(/if \(!\(await laThuTienLinhHoatBat\(order\.orgUnitId\)\)\)/);
+    expect(cong).toMatch(/chưa bật cho cơ sở này/);
+  });
+
+  it("màn đơn truyền HAI cờ quyền riêng, không tái dùng `canManage`", () => {
+    const page = docMa("app/(admin)/admin/orders/[id]/page.tsx");
+    expect(page).toMatch(/const canRecordPayments = await checkPermission\("payments:record"\)/);
+    expect(page).toMatch(/const canManagePayments = await checkPermission\("payments:manage"\)/);
+    expect(page).toMatch(/duocGan=\{canRecordPayments\}/);
+    expect(page).toMatch(/duocBoGan=\{canManagePayments\}/);
+    // `duocSua` (tạo/huỷ đợt) VẪN là `canManage` — ba quyền, ba việc.
+    expect(page).toMatch(/duocSua=\{canManage\}/);
+  });
+
+  it("khối khoản chờ gắn lọc từ tập RỘNG + bỏ bút toán đảo và dòng đã đảo", () => {
+    // ⚠️ Hai con bug, hai thời điểm, cùng một dòng mã:
+    //
+    //   18/09 — gác bằng `so.chuaGanCon > 0` (trục A) ⇒ với 4 khoản `PENDING` của
+    //           `ORD-260917-000001` nó ra 0 và cả khối BIẾN MẤT: tiền có thật, màn hình câm.
+    //
+    //   20/09 — phép TÁCH để lại dòng gốc + một bút toán đảo, CẢ HAI `orderItemId = NULL`.
+    //           Không lọc thêm thì khối liệt kê `+9.530.000` và `−9.530.000`, mỗi dòng một
+    //           nút "Gắn cho bé…" — tổng in ra đúng (0đ) mà bấm vào đâu cũng sai.
+    const ui = docMa("app/(admin)/admin/orders/_components/cong-no-theo-con.tsx");
+    expect(ui).toMatch(
+      /\(k\) => k\.orderItemId == null && k\.loaiButToan === "PAYMENT" && !k\.daDao,/,
+    );
+    expect(ui, "không được quay lại gác bằng `so.chuaGanCon > 0`").not.toMatch(
+      /so\.chuaGanCon > 0 &&/,
+    );
+    // Và nút "Bỏ gắn bé" cũng không được mời trên một bút toán ĐẢO: bỏ gắn nó là đưa một
+    // dòng đối ứng ra khỏi bé trong khi dòng nó đối ứng vẫn ở đó.
+    expect(ui).toMatch(/duocBoGan && k\.loaiButToan === "PAYMENT" && dangMo !== k\.id/);
+  });
+
+  it("giới hạn của TỪNG NÚT được NÓI RA trên màn — [ĐẢO LUẬT 20/09/2026]", () => {
+    // ⚠️ CA NÀY TỪNG KHẲNG ĐỊNH ĐIỀU NGƯỢC LẠI. Bản 18/09 đòi màn hình có chữ
+    // *"chưa hỗ trợ"* — giới hạn "không tách được một khoản cho hai bé". Giới hạn ấy **đã
+    // được gỡ**: `tachKhoanChoCon` (mục 6 của `ghi-tien-don.ts`) làm đúng việc đó.
+    //
+    // Giữ chữ "chưa hỗ trợ" lại sẽ là ca nguy hiểm nhất mà CLAUDE.md mô tả: một lời dặn CẤM
+    // SỬA cho một luật đã chết. Nên nay ca này canh HAI giới hạn CÒN SỐNG:
+    //   · một lần bấm "Gắn" cho đúng MỘT bé (muốn chia thì có nút khác);
+    //   · tách rồi KHÔNG gộp lại được — người dùng phải biết trước khi bấm, không phải sau.
+    const ui = docMa("app/(admin)/admin/orders/_components/cong-no-theo-con.tsx");
+    expect(ui).toMatch(/đúng một bé/);
+    expect(ui).toMatch(/không gộp lại được/);
+    expect(ui, "câu 'chưa hỗ trợ' nay là lời dặn cho một luật đã chết").not.toMatch(
+      /chưa hỗ trợ/,
+    );
+  });
+
+  it("[QDB-08] TÁCH: cùng quyền với GẮN, và nó là lựa chọn CÓ Ý THỨC", () => {
+    // `payments:record`, KHÔNG phải `payments:manage` — lý do đầy đủ ở đầu
+    // `tachKhoanChoConAction`. Ca này ghim để lần đổi sau phải là một lần đổi CÓ CHỦ ĐÍCH,
+    // không phải một lần sao chép nhầm dòng trên.
+    const tach = than(docMa(ACT), "tachKhoanChoConAction");
+    expect(tach).toMatch(/congDuongB\(input\.orderId, "payments:record"\)/);
+    // Và nó KHÔNG đi qua `requireOrdersManage` (hàm đó `redirect()` — mất ngữ cảnh đang nhập).
+    expect(tach).not.toMatch(/requireOrdersManage/);
+  });
+
+  it("[QDB-09] TÁCH: mọi cổng đứng TRƯỚC phép ghi đầu tiên", () => {
+    // Luật rollback (CLAUDE.md mục 7): trong callback `$transaction`, `return` KHÔNG rollback.
+    // Ca này đo bằng VỊ TRÍ: chỉ số của phép `create` đầu tiên phải LỚN HƠN chỉ số của câu
+    // từ chối cuối cùng.
+    const than6 = than(docMa("lib/finance/ghi-tien-don.ts"), "tachKhoanChoCon");
+    const ghiDau = than6.indexOf("tx.payment.create");
+    const tuChoiCuoi = than6.lastIndexOf("return { ok: false as const, error:");
+    expect(ghiDau, "phải tìm thấy phép ghi").toBeGreaterThan(0);
+    expect(tuChoiCuoi, "phải tìm thấy câu từ chối").toBeGreaterThan(0);
+    expect(tuChoiCuoi, "cổng cuối cùng phải đứng TRƯỚC phép ghi đầu tiên").toBeLessThan(ghiDau);
+  });
+
+  it("[QDB-10] TÁCH: các phần CHÉP `note` của gốc — dây nối sang sổ ngân hàng", () => {
+    // ⚠️ `Payment` KHÔNG có cột `bankTransactionId`. Dây duy nhất là MARKER trong `note`
+    // (`[gan-tay:…]` / `[auto:…]`), và `goGanTheoCon` tìm dòng gốc bằng chính marker ấy.
+    // Không chép `note` ⇒ gỡ gắn xoá `PaymentAllocation` mà không đảo phần nào ⇒ giao dịch
+    // về hàng chờ trong khi công nợ vẫn báo đã đóng. Hành vi được phủ ở `[TKD-09]`; ca này
+    // canh chính dòng mã, vì một lần "dọn dẹp" note là đủ để mở lại lỗ đó mà test hành vi
+    // của người khác không chạm tới.
+    const than6 = than(docMa("lib/finance/ghi-tien-don.ts"), "tachKhoanChoCon");
+    expect(than6).toMatch(/note: `\$\{khoan\.note \?\? ""\} \$\{marker\}`\.trim\(\),/);
   });
 });

@@ -575,6 +575,24 @@ một nhịp, và đó là chỗ rẻ nhất để sửa.
 (dedupeKey)`. Đã một lần chẩn đoán nhầm đúng triệu chứng đó và kết luận "nhiễu local" cho hai ca
 ĐỎ THẬT. **Đọc danh sách ca đỏ của CI, đừng đọc dòng lỗi nổi bật nhất ở máy.**
 
+⚠️ **VẾ THỨ HAI, đo 18/09/2026: ĐỪNG CHẠY HAI SHARD CÙNG LÚC, kể cả trên HAI database.**
+Hai database riêng là ĐỦ cho `resetDb()` nhưng KHÔNG đủ cho thời gian: hai shard tranh CPU
+trên một máy Windows ⇒ ca chậm lại ⇒ **timeout** ⇒ ca đó `return` giữa đường và để lại
+trạng thái cho ca sau (đúng cơ chế luật 18). Số đo:
+
+| lượt chạy | shard 1/2 | shard 2/2 |
+|---|---|---|
+| hai shard SONG SONG | 181 xanh / **4 đỏ** | 181 xanh / **3 đỏ** |
+| mỗi shard chạy MỘT MÌNH | **185 xanh / 0 đỏ** | **184 xanh / 0 đỏ** |
+
+Cùng commit, cùng database, chỉ khác chỗ có chạy song song hay không.
+
+⚠️ **Triệu chứng KHÁC vế thứ nhất, đừng nhận nhầm:** lỗi nổ ở FIXTURE
+(`center.create({ code: "CS2" })`, `seedOrg`, `seedRoles`), không phải ở `dedupeKey` — và
+dòng `Unique constraint failed on (dedupeKey)` **có mặt cả trong lượt XANH** (ca idempotency
+cố ý gây ra nó), nên lấy nó làm bằng chứng là chẩn đoán sai chỗ. Cách phân biệt rẻ nhất:
+**chạy riêng đúng mấy spec đỏ**; xanh hết thì đó là phụ thuộc thứ tự, không phải hồi quy.
+
 ### Nhánh & môi trường (chốt 01/08/2026) — `main` KHÔNG còn là nơi nhận code mới
 
 ```

@@ -18,6 +18,7 @@ import {
   SCHOLARSHIP_FORBIDDEN,
 } from '@/lib/crm/scholarship'
 import { scopedDb } from '@/lib/db-scope'
+import { ghiTuongTacLeadBoQuaLoi } from '@/lib/lead/tuong-tac/ghi'
 import { getAuditActor } from '@/lib/audit/log'
 import {
   convertOneLeadBackfill,
@@ -190,9 +191,8 @@ export async function bulkConvertLeadsAction(input: unknown): Promise<BulkConver
     }
 
     try {
-      results.push(
-        await convertOneLeadBackfill(auditActor, {
-          leadId: item.leadId,
+      const kq = await convertOneLeadBackfill(auditActor, {
+        leadId: item.leadId,
           students: item.students.map((s) => ({
             leadChildId: s.leadChildId || null,
             name: s.name,
@@ -211,8 +211,21 @@ export async function bulkConvertLeadsAction(input: unknown): Promise<BulkConver
                   note: item.paid.note || null,
                 }
               : null,
-        }),
-      )
+      })
+      results.push(kq)
+
+      // Dòng lịch sử — CHỈ khi lead đó chốt thành công. Lô 50 lead thì mỗi lead nhận
+      // dòng của riêng mình; một lead vỡ không được làm mất dòng của 49 lead còn lại,
+      // nên cửa BỎ QUA LỖI (và cũng vì đây là đường chạm tiền, đã commit xong).
+      if (kq.ok) {
+        await ghiTuongTacLeadBoQuaLoi({
+          leadId: item.leadId,
+          actorId: auditActor.id,
+          actorName: auditActor.name,
+          moc: new Date(),
+          sk: { viec: 'chuyen-doi', tenCon: item.students.map((s) => s.name) },
+        })
+      }
     } catch (err) {
       // 1 lead vỡ không được kéo cả lô — ghi lỗi dòng rồi đi tiếp.
       console.error('[bulk-convert] lead failed', item.leadId, err)

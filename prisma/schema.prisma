@@ -7070,6 +7070,10 @@ model TrialClassV2 {
   configId     String?
   config       TrialProgramConfig? @relation(fields: [configId], references: [id], onDelete: SetNull)
   sessionCount Int // snapshot lúc tạo (lớp cũ giữ N cũ khi config đổi)
+  // 18/09/2026 — Sale/người TẠO lớp. NULL với lớp tạo trước hôm nay: màn danh sách rơi
+  // về suy Sale từ lead của các con đang xếp trong lớp. Không FK cứng (giống
+  // `teacherId`/`assistantId` cùng bảng) để xoá tài khoản cũ không kéo sập bản ghi lớp.
+  createdById  String?
   createdAt    DateTime            @default(now()) @db.Timestamptz(6)
   updatedAt    DateTime            @updatedAt @db.Timestamptz(6)
 
@@ -7079,6 +7083,7 @@ model TrialClassV2 {
 
   @@index([centerId, status])
   @@index([orgUnitId])
+  @@index([createdById])
 }
 
 /// FL-R2 (E2-TRIAL / item 6) — lịch sử "đã từng học thử" của 1 con. Giữ lại kể cả khi

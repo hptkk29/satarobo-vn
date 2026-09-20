@@ -7,9 +7,9 @@
  *   pnpm test:e2e:fl
  */
 import { defineConfig, devices } from "@playwright/test";
-import dotenv from "dotenv";
+import { napEnvTest } from "./tests/e2e/_helpers/nap-env";
 
-dotenv.config({ path: ".env.test", override: true });
+napEnvTest("fl");
 
 export default defineConfig({
   testDir: "./tests/e2e/fl",
