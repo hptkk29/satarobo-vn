@@ -432,7 +432,19 @@ describe("[N-4] chốt chặn nguồn — mọi đường ghi hoạt động đi
           continue;
         }
         if (!/\.tsx?$/.test(e.name) || /\.(test|spec)\.tsx?$/.test(e.name)) continue;
+        // HAI CỬA GHI, cả hai là THƯ VIỆN — miễn trừ 20/09/2026 khi hợp nhất `main`.
+        //
+        // 🔴 NỢ-15: `main` (#301, "Lead: lịch sử tương tác đầy đủ") dựng cửa thứ hai
+        // `lib/lead/tuong-tac/ghi.ts`, trong khi `test` có lưới này nói "chỉ một cửa".
+        // Hai bản KHÔNG cùng ngữ nghĩa lỗi — `activity-write` vs `ghiTuongTacLead`
+        // (NÉM, dùng trong transaction) vs `ghiTuongTacLeadBoQuaLoi` (nuốt lỗi, dùng
+        // sau commit) — nên gộp phải đo từng nơi gọi, là một đợt riêng.
+        //
+        // Lưới này GIỮ ĐÚNG điều nó sinh ra để giữ: **không màn/action nào tự tay
+        // `leadActivity.create`**. Vế "một nguồn duy nhất" thì đã mất — ghi ra đây để
+        // người đọc sau không tưởng là đã dọn xong.
         if (con.endsWith("lib/lead/activity-write.ts")) continue;
+        if (con.endsWith("lib/lead/tuong-tac/ghi.ts")) continue;
         const than = boChuThich(fs.readFileSync(path.join(goc, con), "utf8"));
         if (/\bleadActivity\.(create|createMany|upsert)\b/.test(than)) viPham.push(con);
       }

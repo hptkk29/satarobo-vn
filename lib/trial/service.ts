@@ -107,6 +107,25 @@ export async function createTrialClass(params: {
   centerId: string;
   /** Khoá trải nghiệm (= khoá quan tâm của khách). */
   courseId?: string | null;
+  /**
+   * Tên lớp do người dùng GÕ. Bỏ trống ⇒ sinh theo quy ước `tenLopTrial`.
+   *
+   * ── ĐẢO CHỐT 28/08/2026 (chủ dự án chốt lại 18/09) ────────────────────────────────
+   * Chốt cũ: "Tên lớp KHÔNG nhận từ client… Cho client gửi tên là mời hai lớp trùng tên
+   * và mời lệch khỏi quy ước". Nay chủ dự án yêu cầu "được sửa và tự do điều chỉnh tên
+   * lớp", và nếp repo là quyết định ra SAU thắng.
+   *
+   * Hai lo ngại của chốt cũ được xử lý chứ không bỏ qua:
+   *  · LỆCH QUY ƯỚC — ô nhập ĐIỀN SẴN tên theo quy ước, nên ai không quan tâm thì bấm
+   *    lưu là ra đúng tên cũ. Chỉ người CỐ Ý sửa mới lệch, và đó là điều được yêu cầu.
+   *  · TRÙNG TÊN — đã đo: `TrialClassV2.name` KHÔNG `@unique`, chỉ `code` mới unique
+   *    (`prisma/schema.prisma`). Nên trùng tên là chuyện KHÓ NHÌN, không phá dữ liệu:
+   *    định danh thật của lớp vẫn là `code`, và `code` vẫn do server cấp trong
+   *    transaction cùng bộ đếm như trước. KHÔNG thêm ràng buộc unique ở đợt này —
+   *    ALTER trên bảng có dữ liệu prod là việc riêng, và chặn cứng tên trùng sẽ cản
+   *    đúng thứ vừa được mở ra.
+   */
+  name?: string | null;
   // FL-R2 (QĐ-R2-1): slot tái sử dụng — startDate tuỳ chọn (null = không gắn ngày cố định).
   startDate?: Date | null;
   configId?: string | null;
@@ -141,7 +160,9 @@ export async function createTrialClass(params: {
           code,
           // Tên theo quy ước `Cơ sở-Khoá-Lớp trial số`, dùng CHÍNH số thứ tự đã cấp
           // cho `code` — hai thứ đi cùng một bộ đếm nên không bao giờ lệch nhau.
-          name: tenLopTrial(cc, khoa?.slug ?? null, seq),
+          // Người gõ thì lấy tên họ gõ; bỏ trống thì về quy ước cũ (cùng bộ đếm với
+          // `code` nên số thứ tự không bao giờ lệch).
+          name: params.name?.trim() || tenLopTrial(cc, khoa?.slug ?? null, seq),
           centerId: params.centerId,
           courseId: params.courseId ?? null,
           startDate: params.startDate ?? null,
@@ -153,6 +174,10 @@ export async function createTrialClass(params: {
           roomId: null,
           configId: params.configId ?? null,
           sessionCount,
+          // 18/09 — Sale/người TẠO lớp, để bảng danh sách trả lời được "lớp của ai".
+          // Lớp tạo trước hôm nay để NULL và màn danh sách rơi về suy từ Sale phụ trách
+          // lead của các con trong lớp (`_lib/sale-cua-lop.ts`).
+          createdById: params.actorId,
         },
         select: { id: true },
       });

@@ -58,6 +58,14 @@ export function parseVnInput(value: string): Date | null {
 export const createClassSchema = z.object({
   centerId: z.string().trim().min(1, "Chọn cơ sở"),
   courseId: z.string().trim().min(1).nullable().optional(),
+  /**
+   * Tên lớp — ĐẢO chốt 28/08 theo yêu cầu chủ dự án 18/09 ("được sửa và tự do điều
+   * chỉnh tên lớp"). Bỏ trống ⇒ server sinh theo quy ước, y như trước.
+   *
+   * Có TRẦN 120 ký tự: tên này đi thẳng vào phiếu gửi phụ huynh và vào cột bảng; một
+   * chuỗi 5.000 ký tự dán vào đây không bị gì chặn thì nó sẽ phá mọi màn đọc nó.
+   */
+  name: z.string().trim().min(1).max(120, "Tên lớp tối đa 120 ký tự").nullable().optional(),
 });
 
 export const addSessionSchema = z

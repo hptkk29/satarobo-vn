@@ -554,7 +554,17 @@ export async function docSoTheoCon(
     }),
     doc.payment.findMany({
       where: { orderId, deletedAt: null },
-      select: { orderItemId: true, amount: true, accountantStatus: true, saleStatus: true },
+      select: {
+        id: true,
+        orderItemId: true,
+        amount: true,
+        accountantStatus: true,
+        saleStatus: true,
+        // Hai cột dưới CHỈ phục vụ `KhoanDaVe.loaiButToan` / `.daDao` — tức chỉ để màn hình
+        // biết dòng nào còn mời bấm được. Chúng KHÔNG vào phép cộng nào; xem `KhoanDaVe`.
+        paymentType: true,
+        adjustmentOfId: true,
+      },
     }),
     doc.paymentRequest.findMany({
       where: { orderId },
@@ -570,10 +580,37 @@ export async function docSoTheoCon(
     }),
   ]);
 
-  // Lọc TRONG BỘ NHỚ bằng đúng hai hàm chuẩn của hai trục, thay vì hai câu `where` riêng:
-  // một câu tra thì không có cách nào để hai tập lệch định nghĩa nhau.
+  // Lọc TRONG BỘ NHỚ bằng đúng các hàm chuẩn, thay vì nhiều câu `where` riêng: một câu tra
+  // thì không có cách nào để các tập lệch định nghĩa nhau.
   const daXacNhan = khoan.filter((k) => laKhoanDaXacNhan(k));
   const choXacNhan = khoan.filter((k) => laKhoanDaGhiNhan(k) && !laKhoanDaXacNhan(k));
+  /**
+   * Tập RỘNG cho VẾ ĐƠN của cổng tạo đợt — xem `KhoanDaVe` trong `no-theo-con.ts`.
+   *
+   * Câu tra ở trên đã lọc `deletedAt: null`, nên ở đây chỉ còn đúng MỘT điều kiện: bỏ khoản
+   * kế toán đã TỪ CHỐI. `REFUNDED` thì GIỮ (hoàn tiền là một dòng âm riêng, cộng vào là tự
+   * triệt tiêu); `paymentType` không lọc (bút toán đảo mang số âm và phải được trừ ra).
+   *
+   * ⚠️ Cố ý KHÔNG dùng `KHOAN_DA_GHI_NHAN` của trục B: trục B **đếm cả khoản `REJECTED`**
+   * (nợ đã đo, ghim `[HT-05]` bằng `it.fails`, chưa vá vì nó nuôi 4 đường tiền khác). Đây là
+   * chỗ DUY NHẤT trong repo lọc đúng, và nó chỉ nuôi một cái cổng — không đổi hành vi gì
+   * khác.
+   */
+  const daVe = khoan.filter((k) => k.accountantStatus !== "REJECTED");
+
+  /**
+   * Dòng nào ĐÃ bị một bút toán đảo còn sống trỏ vào.
+   *
+   * Tính TRONG BỘ NHỚ từ chính tập vừa tra, không thêm một câu SQL nào: `khoan` đã là toàn
+   * bộ `Payment` chưa xoá mềm của đơn, nên mọi bút toán đảo của đơn đều nằm trong đó.
+   *
+   * ⚠️ Quét trên `khoan` (ĐỦ) chứ không trên `daVe` (đã lọc `REJECTED`): một bút toán đảo bị
+   * kế toán từ chối vẫn là bằng chứng rằng dòng gốc đã được đảo một lần. Lọc trước rồi mới
+   * quét là để sót, và hậu quả là màn hình lại mời gắn một dòng đã đảo.
+   */
+  const daBiDao = new Set(
+    khoan.filter((k) => k.paymentType === "ADJUSTMENT" && k.adjustmentOfId).map((k) => k.adjustmentOfId as string),
+  );
 
   return tinhNoTheoCon({
     dong: dong.map((d) => ({
@@ -585,6 +622,14 @@ export async function docSoTheoCon(
     })),
     khoanDaXacNhan: daXacNhan.map((k) => ({ orderItemId: k.orderItemId, amount: k.amount })),
     khoanChoXacNhan: choXacNhan.map((k) => ({ orderItemId: k.orderItemId, amount: k.amount })),
+    khoanDaVe: daVe.map((k) => ({
+      id: k.id,
+      orderItemId: k.orderItemId,
+      amount: k.amount,
+      trangThaiKeToan: k.accountantStatus,
+      loaiButToan: k.paymentType,
+      daDao: daBiDao.has(k.id),
+    })),
     dot: dot.map(
       (r): DotCuaDong => ({
         id: r.id,

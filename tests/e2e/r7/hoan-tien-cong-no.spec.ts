@@ -453,6 +453,66 @@ test.describe("HT — hoàn tiền vào công nợ & cổng phụ huynh", () => 
     expect(await db.refundRequest.count(), "không được đẻ dòng rỗng").toBe(0);
   });
 
+  test("[HT-E8] BA TRỤC KHÔNG ĐƯỢC GỘP — `confirmedPaid` giữ GỘP, `debt` mới RÒNG", async () => {
+    // 🔴 LỖ PHỦ TEST, tìm thấy 20/09/2026 bằng PHÉP CẤY (không phải bằng đọc diff).
+    //
+    // Lượt hợp nhất 18/09 để BA TRỤC cùng sống trong `getDebtRows`:
+    //   A `daXacNhan` → `confirmedPaid`  — kế toán đã xác nhận (GỘP, KHÔNG trừ hoàn)
+    //   B `daGhiNhan` → `recordedPaid`   — sale đã ghi nhận
+    //   RÒNG `daDong` → `debt`           — PH thực đóng (ĐÃ trừ hoàn)
+    //
+    // `debt.ts` có hẳn một khối chú thích cấm "sửa `confirmedPaid` thành ròng cho gọn".
+    // Nhưng cấy thử `tongDaXacNhan(daXacNhan)` → `tongDaXacNhan(daDong)` ⇒ **12/12 ca
+    // VẪN XANH**. Chú thích không phải bằng chứng — đúng bài học của repo.
+    //
+    // VÌ SAO PHẢI KHOÁ: màn `/cong-no` đặt `confirmedPaid` (cột "đã xác nhận") cạnh
+    // `recordedPaid` (cột "đã ghi nhận") để ra số CHỜ XÁC NHẬN = B − A. Làm A ròng còn
+    // B gộp là đẻ **báo động giả "chờ xác nhận âm"** trên MỌI ghi danh từng hoàn tiền —
+    // và kế toán sẽ đi tìm một khoản thất lạc không tồn tại.
+    const nen = await seedNen("e8");
+    const acc = await seedKeToan("e8");
+    const goc = await thu(nen, 5_000_000);
+    await refundPayment({ paymentId: goc, confirmedById: acc, reason: "thu nhầm", amount: 2_000_000 });
+
+    const rows = await getDebtRows(await sdbHoiSo());
+    const dong = rows.find((r) => r.enrollmentId === nen.enrollmentId);
+    expect(dong, "không thấy dòng công nợ của ghi danh vừa dựng").toBeTruthy();
+
+    // TRỤC A — GỘP. Đây là vế mà phép cấy đi lọt.
+    expect(
+      dong!.confirmedPaid,
+      "`confirmedPaid` là TRỤC A: kế toán đã xác nhận 5tr, KHÔNG trừ 2tr đã hoàn",
+    ).toBe(5_000_000);
+
+    // RÒNG — và nó phải KHÁC trục A, nếu không thì hai trục đã bị gộp làm một.
+    expect(
+      dong!.debt,
+      "`debt` là số RÒNG: PH còn để lại 3tr nên nợ = học phí − 3tr",
+    ).toBe(HOC_PHI - 3_000_000);
+    expect(
+      HOC_PHI - dong!.confirmedPaid,
+      "nếu `debt` bằng đúng `học phí − confirmedPaid` thì hai trục đã bị gộp",
+    ).not.toBe(dong!.debt);
+
+    // TRỤC B — cột "đã ghi nhận" của bảng đối soát. Phải có SỐ, không được về 0.
+    //
+    // 🔴 Vế này bịt một lỗ thứ HAI tìm thấy cùng lượt cấy 20/09: đổi
+    // `filter(laKhoanDaGhiNhan)` thành `filter(() => false)` ⇒ `recordedPaid` về 0 cho
+    // MỌI dòng, và **13/13 ca vẫn xanh**.
+    //
+    // Đây KHÔNG phải lỗi giả định: `main` đã dính đúng bug này một lần rồi — khi
+    // `KHOAN_DA_GHI_NHAN.saleStatus` đổi thành `{ in: [...] }`, phép so chuỗi-với-đối-
+    // tượng luôn false và cột "đã ghi nhận" im lặng về 0. Lần ấy vá bằng CHÚ THÍCH,
+    // không có lưới — nên lần sau vẫn đi lọt y như vậy.
+    //
+    // `Payment.saleStatus` mặc định `RECORDED` (schema) nên khoản `thu()` seed ra đã
+    // thuộc trục B; không phải dựng thêm gì.
+    expect(
+      dong!.recordedPaid,
+      "cột 'đã ghi nhận' về 0 ⇒ trục B đọc sai — bảng đối soát mất một vế, im lặng",
+    ).toBeGreaterThan(0);
+  });
+
   test("[HT-E5] ghi danh CHƯA THU ĐỒNG NÀO — cổng PH và công nợ nói đúng học phí đầy đủ", async () => {
     const nen = await seedNen("e5", { soBuoi: 24, daHoc: 0 });
 

@@ -36,6 +36,12 @@ import { normalizeFacebookUrl } from '@/lib/lead/intake/normalize'
 import { mergeLeadNote, splitLeadNote } from '@/lib/lead/note-view'
 import { loiOKhoa, noiThemGhiChu, oKhoaBiDung } from '@/lib/lead/quyen-sua-lead'
 import { dongBoKhoaTuCon } from '@/lib/lead/khoa-quan-tam'
+import { ghiTuongTacLead, ghiTuongTacLeadBoQuaLoi } from '@/lib/lead/tuong-tac/ghi'
+import {
+  NHAN_TRUONG_CON,
+  NHAN_TRUONG_LEAD,
+  truongDaDoi,
+} from '@/lib/lead/tuong-tac/truong-doi'
 import {
   LEAD_DROP_STATUSES,
   LEAD_STATUS_LABEL,
@@ -439,7 +445,16 @@ export async function addLeadTask(input: {
         dueAt: due,
       },
     })
-    await tx.lead.update({ where: { id: input.leadId }, data: { lastActivityAt: new Date() } })
+    // 18/09 — dòng lịch sử tương tác. Trong CÙNG tx vì đây là dữ liệu của chính lead,
+    // không chạm tiền: lịch sử lệch với việc vừa tạo thì tệ hơn là cuộn lại cả hai.
+    // `ghiTuongTacLead` tự đẩy `lastActivityAt` nên không cần `lead.update` riêng nữa.
+    await ghiTuongTacLead(tx, {
+      leadId: input.leadId,
+      actorId,
+      actorName,
+      moc: new Date(),
+      sk: { viec: 'viec.tao', tieuDe: title, hanChot: due },
+    })
   })
 
   revalidatePath(`/leads/${input.leadId}`)
@@ -457,7 +472,9 @@ export async function completeLeadTask(
 
   const task = await db.leadTask.findUnique({
     where: { id: taskId },
-    select: { leadId: true, lead: { select: { centerId: true, assignedToId: true } } },
+    // `title` cho dòng lịch sử ("Hoàn thành việc \"…\"") — không có nó thì câu chỉ còn
+    // "Hoàn thành việc" và người đọc không biết việc nào.
+    select: { leadId: true, title: true, lead: { select: { centerId: true, assignedToId: true } } },
   })
   const actor = await resolveActor(session.user.id)
   if (!task || !passesScope('Lead', { centerId: task.lead?.centerId ?? null }, actor)) {
@@ -467,6 +484,7 @@ export async function completeLeadTask(
     return { ok: false, error: MUTATE_DENIED }
   }
 
+  const { actorId, actorName } = getAuditActor(session)
   await db.$transaction(async (tx) => {
     await tx.leadTask.update({
       where: { id: taskId },
@@ -474,8 +492,20 @@ export async function completeLeadTask(
         ? { status: 'DONE', completedAt: new Date() }
         : { status: 'OPEN', completedAt: null },
     })
-    // AC4 — hoàn tất việc là hoạt động → reset đồng hồ SLA idle.
-    await tx.lead.update({ where: { id: task.leadId }, data: { lastActivityAt: new Date() } })
+    // AC4 — hoàn tất việc là hoạt động → reset đồng hồ SLA idle (nay `ghiTuongTacLead`
+    // đẩy hộ). Chỉ ghi lịch sử khi ĐÁNH XONG: bỏ tick là sửa lại một lượt ghi nhầm, ghi
+    // nó vào lịch sử chỉ làm dày dòng mà không thêm thông tin nào.
+    if (done) {
+      await ghiTuongTacLead(tx, {
+        leadId: task.leadId,
+        actorId,
+        actorName,
+        moc: new Date(),
+        sk: { viec: 'viec.xong', tieuDe: task.title },
+      })
+    } else {
+      await tx.lead.update({ where: { id: task.leadId }, data: { lastActivityAt: new Date() } })
+    }
   })
 
   revalidatePath(`/leads/${task.leadId}`)
@@ -1116,6 +1146,30 @@ export async function updateLeadFields(
   // ngoài giao dịch — đúng cái lỗi mà V-6 sinh ra để bịt. Giữ phép tính `noteDoi`, đưa
   // `lastActivityAt` vào đúng lượt ghi bên dưới.
 
+  // Dòng lịch sử tương tác — chỉ khi CÓ ô thật sự đổi.
+  //
+  // Dùng `truongDaDoi` chứ không dùng `changedFields` ngay dưới: cái đó so bằng `!==`
+  // trần nên `null` (DB) khác `""` (biểu mẫu), và một lượt bấm Lưu suông trên hồ sơ có ô
+  // trống sẽ hiện ra như một lượt sửa. Hai phép so cùng tồn tại là có chủ đích — nhật ký
+  // kiểm toán cần ĐÚNG TỪNG BYTE, còn lịch sử cần ĐÚNG VIỆC NGƯỜI LÀM.
+  const oDaDoi = truongDaDoi(
+    before as Record<string, unknown>,
+    updateData as Record<string, unknown>,
+    NHAN_TRUONG_LEAD,
+  )
+  if (oDaDoi.length > 0) {
+    const { actorId, actorName } = getAuditActor(session)
+    // BỎ QUA LỖI: phép ghi chính (`lead.update` ở trên) đã commit. Ném ở đây là báo lỗi
+    // cho một lượt lưu ĐÃ THÀNH CÔNG, và người dùng sẽ bấm lưu lại.
+    await ghiTuongTacLeadBoQuaLoi({
+      leadId,
+      actorId,
+      actorName,
+      moc: new Date(),
+      sk: { viec: 'ho-so.sua', truong: oDaDoi },
+    })
+  }
+
   // P2-1: ghi nhật ký kiểm toán — chỉ field thực sự đổi.
   //
   // G-01 — `Date` phải so theo MỐC THỜI GIAN, không theo tham chiếu. Từ khi có
@@ -1684,6 +1738,13 @@ export async function addLeadChild(
     // đúng là trạng thái mà người dùng báo lỗi. Con không chọn khoá thì KHÔNG đụng
     // đến khoá của lead (xem cảnh báo ở `syncLeadCourseFromChildren`).
     if (data.interestedCourseId) await syncLeadCourseFromChildren(tx, leadId)
+    await ghiTuongTacLead(tx, {
+      leadId,
+      actorId,
+      actorName,
+      moc: new Date(),
+      sk: { viec: 'con.them', tenCon: created.fullName },
+    })
     return created
   })
 
@@ -1717,6 +1778,16 @@ export async function updateLeadChild(
       leadId: true,
       fullName: true,
       interestedCourseId: true,
+      // Đủ 9 ô mà `leadChildData` ghi — để dòng lịch sử kể ĐÚNG ô nào đổi. Thiếu ô nào
+      // thì ô đó luôn bị coi là đã sửa (`truongDaDoi` so `undefined` với giá trị mới ⇒
+      // luôn "khác"), nên phải lấy đủ chứ không lấy vài ô cho nhanh.
+      dob: true,
+      ageYears: true,
+      gender: true,
+      schoolName: true,
+      gradeLevel: true,
+      interestedCenterId: true,
+      note: true,
       lead: { select: { centerId: true, courseId: true } },
     },
   })
@@ -1773,6 +1844,20 @@ export async function updateLeadChild(
         actor: { id: actorId, name: actorName },
       })
       syncedStudentIds = res.studentIds
+    }
+
+    // Dòng lịch sử — chỉ ghi khi CÓ ô thật sự đổi. Form gửi lên toàn bộ ô mỗi lần lưu,
+    // nên bấm Lưu suông cũng đi vào đây; ghi vô điều kiện là đẻ dòng "đã sửa" giả.
+    // Tên con lấy tên MỚI: đó là tên mà người đọc lịch sử sẽ thấy ở hồ sơ.
+    const daDoi = truongDaDoi(child, data, NHAN_TRUONG_CON)
+    if (daDoi.length > 0) {
+      await ghiTuongTacLead(tx, {
+        leadId: child.leadId,
+        actorId,
+        actorName,
+        moc: new Date(),
+        sk: { viec: 'con.sua', tenCon: data.fullName, truong: daDoi },
+      })
     }
   })
 
@@ -2009,6 +2094,16 @@ export async function deleteLeadChild(
     await tx.leadChild.delete({ where: { id: childId } })
     if (courseCameFromThisChild)
       await syncLeadCourseFromChildren(tx, child.leadId, child.interestedCourseId)
+    // Ghi TRƯỚC khi ra khỏi tx: xoá con là việc không lấy lại được, nên dòng lịch sử
+    // phải sống hoặc chết cùng nó. Tên con đã cầm sẵn từ lượt đọc ở trên — sau khi
+    // `delete` thì không còn chỗ nào tra ra tên nữa.
+    await ghiTuongTacLead(tx, {
+      leadId: child.leadId,
+      actorId,
+      actorName,
+      moc: new Date(),
+      sk: { viec: 'con.go', tenCon: child.fullName },
+    })
   })
 
   await logLeadAudit({
