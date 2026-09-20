@@ -45,6 +45,73 @@ export type KhoanCuaDong = {
   amount: number;
 };
 
+/**
+ * Một khoản **ĐÃ VỀ** của đơn — tập dùng cho VẾ ĐƠN của cổng tạo đợt.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * VÌ SAO TẬP NÀY RỘNG HƠN TRỤC A, VÀ VÌ SAO HAI VẾ CỦA CỔNG DÙNG HAI ĐỊNH NGHĨA
+ *
+ * Chủ dự án chốt 18/09/2026: *"cổng này chỉ giới hạn số tiền được ĐÒI THÊM, nên đếm rộng;
+ * đòi thiếu còn thu lại được, đòi thừa là phụ huynh mất tiền."*
+ *
+ * Hai vế trả lời hai câu hỏi khác nhau, nên **cố ý** đếm hai tập khác nhau:
+ *
+ *   · **Vế CON** — *"bé này còn nợ bao nhiêu?"* → **TRỤC A** (`accountantStatus = CONFIRMED`).
+ *     Con số này sale đọc cho phụ huynh nghe. Một khoản kế toán chưa xác nhận có thể bị TỪ
+ *     CHỐI, và khi đó nợ tăng lại — nói với phụ huynh "hết nợ rồi" xong gọi lại đòi tiếp là
+ *     thứ không sửa được bằng một bản vá. Vế con **giữ nguyên trục A**.
+ *
+ *   · **Vế ĐƠN** — *"đơn này còn được phép ĐÒI THÊM bao nhiêu?"* → **tập RỘNG** dưới đây.
+ *     Tiền đã về tài khoản thì nó đã về, bất kể kế toán đã đối soát chưa. Không trừ nó ra là
+ *     hệ thống in QR đòi lại phần phụ huynh vừa chuyển.
+ *
+ * Hai vế lệch nhau KHÔNG phải mâu thuẫn — sai số giữa chúng chính là "tiền đã về mà chưa
+ * xác nhận", và đó là một trạng thái có thật của nghiệp vụ, không phải lỗi làm tròn.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * LỌC GÌ, VÀ VÌ SAO ĐÚNG BA ĐIỀU KIỆN ĐÓ
+ *
+ *   1. `deletedAt IS NULL`      — khoản xoá mềm không còn là tiền.
+ *   2. **KHÔNG lọc `accountantStatus`** (PENDING vẫn tính) — đó là điểm khác trục A.
+ *   3. **TRỪ `REJECTED`** — kế toán đã từ chối thì tiền ấy không về (séc trượt / chuyển nhầm
+ *      / khai khống). Còn là nợ thật, nên KHÔNG được trừ vào phần đòi thêm.
+ *
+ * ⚠️ **`REFUNDED` thì VẪN TÍNH, và đó không phải sơ suất.** `refundPayment` tạo một dòng
+ * `amount` ÂM riêng (`lib/payments/payment.ts:1075`) chứ không sửa dòng gốc, nên cộng cả hai
+ * lại là tự triệt tiêu — đúng. Loại `REFUNDED` ra sẽ bỏ mất dòng gốc mà giữ dòng âm, tức
+ * khoản hoàn bị tính HAI lần. Ghi chú gốc ở `lib/finance/hai-truc-theo-don.ts`.
+ *
+ * ⚠️ **KHÔNG lọc `paymentType`** — bút toán `ADJUSTMENT` (bản đảo của `goGanTheoCon`) mang
+ * `amount` âm và phải được trừ ra. Lọc nó đi là giữ lại tiền đã bị gỡ.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * QUAN HỆ VỚI TRỤC B (`KHOAN_DA_GHI_NHAN`) — GẦN GIỐNG, KHÔNG PHẢI MỘT
+ *
+ * Trục B lọc `saleStatus IN (RECORDED, COLLECT_CONFIRMED)` + `deletedAt IS NULL`. Enum
+ * `PaymentSaleStatus` chỉ có ĐÚNG HAI giá trị ấy, nên vế `saleStatus` là phép so luôn đúng
+ * ⇒ trục B thực chất = `deletedAt IS NULL`, **kể cả khoản `REJECTED`**. Đó là nợ đã đo và
+ * ghim ở `lib/finance/hai-truc-theo-don.test.ts` ca `[HT-05]` (`it.fails`), cố ý CHƯA vá vì
+ * trục B còn nuôi bốn đường tiền khác (QR · ngưỡng SePay · ZNS học phí · cổng chốt lead).
+ *
+ * ⚠️ Nên **tập này và trục B lệch nhau đúng bằng Σ khoản `REJECTED`** — và tôi KHÔNG sửa
+ * trục B ở đây. Hệ quả phải biết: khi đơn có khoản `REJECTED`, khối *"Công nợ đơn hàng"*
+ * (trục B) sẽ báo "còn thiếu" ÍT HƠN cổng này cho phép đòi. Cổng đúng, khối kia là cái nợ
+ * `[HT-05]`. Đừng "sửa cho hai chỗ giống nhau" bằng cách nới cổng.
+ */
+export type KhoanDaVe = {
+  /**
+   * `Payment.id`.
+   *
+   * Cần vì tập này còn ra thẳng `khoanDaVeChiTiet` — danh sách màn đơn dùng để GẮN / BỎ GẮN
+   * từng khoản. Không có id thì màn hình có số mà không có thứ để bấm.
+   */
+  id: string;
+  orderItemId: string | null;
+  amount: number;
+  /** `Payment.accountantStatus` — CHỈ để hiển thị, KHÔNG tham gia phép cộng nào. */
+  trangThaiKeToan: string;
+};
+
 /** Một đợt thu của dòng. */
 export type DotCuaDong = {
   id: string;
@@ -122,6 +189,32 @@ export type NoTheoConKetQua = {
    * thì đợt nào cũng NULL. Dùng vế thiếu ấy làm cổng là mở toang đúng tập đơn cũ.
    */
   tongDotDangMoDon: number;
+  /**
+   * Σ **tiền đã về** của đơn — định nghĩa RỘNG, xem `KhoanDaVe`.
+   *
+   * Đây là số trừ vào `conNoDon`. Nó KHÁC `tongDaThu` (trục A, theo con) và KHÁC
+   * `chuaGanCon` (trục A, phần không thuộc con nào) — ba con số, ba câu hỏi.
+   */
+  tongDaVe: number;
+  /**
+   * TỪNG khoản đã về của đơn — chi tiết đứng sau `tongDaVe`.
+   *
+   * Màn đơn dùng nó cho CẢ HAI việc, tự lọc theo `orderItemId`:
+   *   · `== null` ⇒ khoản chờ gắn, hiện nút "Gắn cho bé…";
+   *   · `!= null` ⇒ khoản của bé đó, hiện nút "Bỏ gắn".
+   *
+   * ⚠️ MỘT danh sách, không phải hai. Tách thành `khoanChoGan` + `khoanCuaCon` là hai trường
+   * cùng mô tả một tập — và hai trường thì có ngày lệch nhau.
+   *
+   * ⚠️ Lấy từ tập RỘNG, không phải trục A. Đó là điểm mấu chốt: 4 khoản của
+   * `ORD-260917-000001` đều `PENDING`, nên nếu lọc trục A thì danh sách này RỖNG và màn hình
+   * không có gì để gắn — đúng tình trạng trước bản vá này, khi tiền có thật trong DB mà
+   * không đường nào chạm tới được.
+   *
+   * ⚠️ KHÁC `chuaGanCon` (một con SỐ, trục A) và khác `dotChuaGanCon` (danh sách ĐỢT). Ba
+   * thứ tên gần giống nhau vì chúng nói cùng một vấn đề ở ba tầng: tiền · số · phiếu.
+   */
+  khoanDaVeChiTiet: KhoanDaVe[];
 };
 
 const tron = (n: number) => (Number.isFinite(n) ? Math.round(n) : 0);
@@ -139,6 +232,14 @@ export function tinhNoTheoCon(input: {
   dong: readonly DongDon[];
   khoanDaXacNhan: readonly KhoanCuaDong[];
   khoanChoXacNhan: readonly KhoanCuaDong[];
+  /**
+   * Tập RỘNG cho vế ĐƠN của cổng — xem `KhoanDaVe`. **BẮT BUỘC**, không mặc định.
+   *
+   * ⚠️ Không đặt `= []`: một mặc định rỗng ở đây làm `conNoDon` = trọn học phí đơn, tức vế
+   * đơn nới hết cỡ và **không bao giờ cắn** — đúng cái lỗ mà trường này sinh ra để vá. Luật
+   * 7: để `tsc` liệt kê mọi chỗ gọi thay vì để một chỗ quên rồi im lặng.
+   */
+  khoanDaVe: readonly KhoanDaVe[];
   dot: readonly DotCuaDong[];
 }): NoTheoConKetQua {
   const cong = (ds: readonly KhoanCuaDong[], id: string) =>
@@ -189,6 +290,9 @@ export function tinhNoTheoCon(input: {
     (s, k) => (k.orderItemId == null ? s + tron(k.amount) : s),
     0,
   );
+  // Cộng TOÀN BỘ tập rộng, không lọc theo con: vế đơn hỏi "đơn còn đòi thêm được bao nhiêu",
+  // nên tiền của bé nào cũng trừ như nhau — kể cả tiền chưa biết của bé nào.
+  const tongDaVe = input.khoanDaVe.reduce((s, k) => s + tron(k.amount), 0);
 
   return {
     con,
@@ -198,9 +302,16 @@ export function tinhNoTheoCon(input: {
     tongChoXacNhan: con.reduce((s, c) => s + c.choXacNhan, 0),
     tongConNo: con.reduce((s, c) => s + c.conNo, 0),
     chuaGanCon,
-    // Cả đơn: trừ CẢ khoản chưa gắn con. Đây là số duy nhất trả lời được "đơn còn được thu
-    // thêm bao nhiêu" — xem chú thích của trường.
-    conNoDon: tongPhaiThu - (tongDaThu + chuaGanCon),
+    tongDaVe,
+    khoanDaVeChiTiet: [...input.khoanDaVe],
+    // Cả đơn: trừ MỌI tiền đã về (định nghĩa rộng — `KhoanDaVe`), không phải chỉ trục A.
+    //
+    // ⚠️ Bản 18/09 sáng dùng `tongPhaiThu − (tongDaThu + chuaGanCon)`, tức cả hai vế đều
+    // trục A. Đo trên đơn thật `ORD-260917-000001`: 4 khoản `PENDING` ⇒ cả hai vế = 0 ⇒
+    // `conNoDon` = trọn 20.064.000đ, trong khi phụ huynh đã chuyển 4.836.000đ. Cổng cho tạo
+    // thêm đúng 4.836.000đ ⇒ tổng đợt mở thành trọn đơn ⇒ QR đòi lại phần đã trả. Cùng một
+    // kịch bản mà vế đơn sinh ra để chặn, chỉ khác đường vào.
+    conNoDon: tongPhaiThu - tongDaVe,
     // Mọi đợt đang mở của đơn = đợt của các con + đợt NULL (luồng cũ).
     tongDotDangMoDon:
       con.reduce((s, c) => s + c.tongDotDangMo, 0) +

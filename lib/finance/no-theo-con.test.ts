@@ -57,7 +57,7 @@ const dot = (
 
 describe("[NTC-01] công nợ tách theo con — tiền của bé này không đụng bé kia", () => {
   it("chưa thu gì ⇒ mỗi con nợ đúng học phí thực của mình", () => {
-    const r = tinhNoTheoCon({ dong: dong(), khoanDaXacNhan: [], khoanChoXacNhan: [], dot: [] });
+    const r = tinhNoTheoCon({ dong: dong(), khoanDaXacNhan: [], khoanChoXacNhan: [], khoanDaVe: [], dot: [] });
     expect(r.con.map((c) => c.phaiThu)).toEqual([8_640_000, 12_000_000]);
     expect(r.con.map((c) => c.conNo)).toEqual([8_640_000, 12_000_000]);
     expect(r.tongPhaiThu).toBe(20_640_000);
@@ -70,6 +70,7 @@ describe("[NTC-01] công nợ tách theo con — tiền của bé này không đ
       dong: dong(),
       khoanDaXacNhan: [{ orderItemId: AN, amount: 4_320_000 }],
       khoanChoXacNhan: [],
+      khoanDaVe: [{ id: "pay-1", orderItemId: AN, amount: 4_320_000, trangThaiKeToan: "CONFIRMED" }],
       dot: [],
     });
     expect(r.con[0]!.daThu).toBe(4_320_000);
@@ -85,6 +86,7 @@ describe("[NTC-01] công nợ tách theo con — tiền của bé này không đ
       dong: dong(),
       khoanDaXacNhan: [],
       khoanChoXacNhan: [{ orderItemId: AN, amount: 4_320_000 }],
+      khoanDaVe: [{ id: "pay-2", orderItemId: AN, amount: 4_320_000, trangThaiKeToan: "CONFIRMED" }],
       dot: [],
     });
     expect(r.con[0]!.choXacNhan).toBe(4_320_000);
@@ -97,6 +99,7 @@ describe("[NTC-01] công nợ tách theo con — tiền của bé này không đ
       dong: dong(),
       khoanDaXacNhan: [{ orderItemId: null, amount: 5_000_000 }],
       khoanChoXacNhan: [],
+      khoanDaVe: [{ id: "pay-3", orderItemId: null, amount: 5_000_000, trangThaiKeToan: "CONFIRMED" }],
       dot: [],
     });
     expect(r.chuaGanCon).toBe(5_000_000);
@@ -110,6 +113,7 @@ describe("[NTC-01] công nợ tách theo con — tiền của bé này không đ
       dong: dong(),
       khoanDaXacNhan: [{ orderItemId: AN, amount: 9_000_000 }],
       khoanChoXacNhan: [],
+      khoanDaVe: [{ id: "pay-4", orderItemId: AN, amount: 9_000_000, trangThaiKeToan: "CONFIRMED" }],
       dot: [],
     });
     expect(r.con[0]!.conNo).toBe(-360_000);
@@ -120,6 +124,7 @@ describe("[NTC-01] công nợ tách theo con — tiền của bé này không đ
       dong: dong(),
       khoanDaXacNhan: [],
       khoanChoXacNhan: [],
+      khoanDaVe: [],
       dot: [
         dot(AN, 1, 4_320_000),
         dot(AN, 2, 1_000_000, { trangThai: "VOID" }),
@@ -138,6 +143,7 @@ describe("[NTC-01] công nợ tách theo con — tiền của bé này không đ
       dong: dong(),
       khoanDaXacNhan: [],
       khoanChoXacNhan: [],
+      khoanDaVe: [],
       dot: [
         dot(AN, 1, 1_000_000, { dueDate: null }),
         dot(AN, 2, 1_000_000, { dueDate: new Date("2026-12-01T00:00:00Z") }),
@@ -372,6 +378,7 @@ describe("[NTC-02c] `tinhNoTheoCon` phải TỰ tính hai vế của đơn", () 
       dong: haiBe,
       khoanDaXacNhan: [{ orderItemId: null, amount: 6_000_000 }],
       khoanChoXacNhan: [],
+      khoanDaVe: [{ id: "pay-5", orderItemId: null, amount: 6_000_000, trangThaiKeToan: "CONFIRMED" }],
       dot: [],
     });
     expect(r.tongPhaiThu).toBe(12_000_000);
@@ -388,6 +395,7 @@ describe("[NTC-02c] `tinhNoTheoCon` phải TỰ tính hai vế của đơn", () 
       dong: haiBe,
       khoanDaXacNhan: [],
       khoanChoXacNhan: [],
+      khoanDaVe: [],
       dot: [dot(AN, 1, 1_000_000), { ...dot(AN, 2, 2_000_000), orderItemId: null }],
     });
     expect(r.con[0]!.tongDotDangMo, "vế CON chỉ thấy đợt của bé").toBe(1_000_000);
@@ -401,6 +409,7 @@ describe("[NTC-02c] `tinhNoTheoCon` phải TỰ tính hai vế của đơn", () 
       dong: haiBe,
       khoanDaXacNhan: [],
       khoanChoXacNhan: [],
+      khoanDaVe: [],
       dot: [
         { ...dot(AN, 1, 5_000_000, { trangThai: "VOID" }), orderItemId: null },
         { ...dot(AN, 2, 4_000_000, { trangThai: "PAID" }), orderItemId: null },
@@ -439,6 +448,8 @@ describe("[NTC-04] tổng đơn = Σ các con", () => {
         { orderItemId: BINH, amount: 6_000_000 },
       ],
       khoanChoXacNhan: [],
+      khoanDaVe: [{ id: "pay-6", orderItemId: AN, amount: 4_320_000, trangThaiKeToan: "CONFIRMED" },
+        { id: "pay-7", orderItemId: BINH, amount: 6_000_000, trangThaiKeToan: "CONFIRMED" },],
       dot: [],
     });
     expect(r.tongDaThu).toBe(10_320_000);
@@ -652,6 +663,7 @@ describe("[NTC-07] đợt CHƯA GẮN CON — đơn cũ không được rơi kh�
       dong: dong(),
       khoanDaXacNhan: [],
       khoanChoXacNhan: [],
+      khoanDaVe: [],
       dot: [dot(AN, 1, 3_000_000), dotChung(1, 5_000_000)],
     });
     expect(r.dotChuaGanCon.map((d) => d.amountDue)).toEqual([5_000_000]);
@@ -666,6 +678,7 @@ describe("[NTC-07] đợt CHƯA GẮN CON — đơn cũ không được rơi kh�
       dong: dong(),
       khoanDaXacNhan: [],
       khoanChoXacNhan: [],
+      khoanDaVe: [],
       dot: [
         dotChung(1, 1_000_000, { trangThai: "PENDING" }),
         dotChung(2, 2_000_000, { trangThai: "PARTIAL" }),
@@ -681,6 +694,7 @@ describe("[NTC-07] đợt CHƯA GẮN CON — đơn cũ không được rơi kh�
       dong: dong(),
       khoanDaXacNhan: [],
       khoanChoXacNhan: [],
+      khoanDaVe: [],
       dot: [
         dotChung(3, 1_000_000),
         dotChung(1, 1_000_000, { dueDate: new Date("2026-12-01") }),
