@@ -70,12 +70,31 @@ const HOC_PHI_A = 8_976_000;
 const HOC_PHI_B = 10_032_000;
 const TONG_DON = 19_008_000;
 const KHOAN = 9_530_000;
-/** Nửa học phí từng bé — cặp số phụ huynh muốn chia. Σ = 9.504.000, THIẾU 26.000đ. */
+/**
+ * Nửa học phí từng bé. Σ = 9.504.000 — **THIẾU 26.000đ** so với khoản thật.
+ *
+ * ⚠️ CHỈ dùng ở `[TKD-14]`, tức ca CHẶN. Đừng mượn chúng làm cặp hợp lệ ở đâu khác.
+ */
 const NUA_A = 4_488_000;
 const NUA_B = 5_016_000;
-/** Cặp số CHIA ĐƯỢC: 26.000đ dư cộng vào bé B. */
-const PHAN_A = NUA_A;
-const PHAN_B = KHOAN - NUA_A; // 5.042.000
+
+/**
+ * Cặp số TRUNG TÍNH để chạy các ca "tách thành công".
+ *
+ * ⚠️ **CỐ Ý KHÔNG PHẢI cặp số đề xuất cho `ORD-260918-000001`** — chủ dự án chốt 20/09/2026:
+ *
+ *   *"26.000đ chênh là tiền thật chưa ai giải thích được — có thể PH làm tròn, có thể số
+ *   học phí sai, có thể phụ phí. Hệ thống KHÔNG được tự dồn nó vào một bé."*
+ *
+ * Bản đầu của tệp này dùng `4.488.000 + 5.042.000` (nửa học phí bé A, rồi dồn trọn 26.000đ
+ * vào bé B). Cặp ấy ĐÃ BỊ GỠ: một con số nằm trong test là một con số người ta sẽ chép, và
+ * chép nó đi nghĩa là chốt một quyết định nghiệp vụ mà không ai ra quyết định.
+ *
+ * Hai số dưới đây cộng đúng 9.530.000đ và nằm dưới trần của cả hai bé — **chỉ có thế**.
+ * Chúng không mang ý nghĩa nghiệp vụ nào và không được đọc như một gợi ý.
+ */
+const PHAN_A = 3_777_000;
+const PHAN_B = 5_753_000;
 
 const PROVIDER = "SEPAY";
 const TXN_ID = "FT269918";
@@ -324,8 +343,13 @@ describe.skipIf(!RUN_DB_TESTS)("[TKD] tách khoản cho nhiều con — DB thậ
     // **phụ huynh chuyển DƯ 26.000đ**. Cổng Σ-đúng-bằng chặn đúng cặp số ấy, và đó là hành
     // vi ĐÚNG: 26.000đ là tiền thật đã vào đơn, nó phải thuộc về một bé chứ không bốc hơi.
     //
-    // Người nhập cộng phần dư vào một bé — đúng cặp `[TKD-02]` dùng. Ca này để không ai
-    // phải phát hiện lại phép trừ ấy bằng tay giữa lúc pilot.
+    // ⚠️ VÀ HỆ THỐNG KHÔNG TỰ DỒN 26.000đ VÀO BÉ NÀO. Chủ dự án chốt 20/09: khoản chênh ấy
+    // là tiền thật CHƯA AI GIẢI THÍCH ĐƯỢC (phụ huynh làm tròn? số học phí sai? phụ phí?),
+    // nên phải HỎI phụ huynh / kế toán rồi mới tách. Không test nào, không runbook nào được
+    // in ra một cặp số "chữa cháy" — in ra là chốt hộ một quyết định nghiệp vụ.
+    //
+    // Việc của ca này chỉ là: chứng minh cổng CHẶN, và ghim phép trừ để không ai phải tính
+    // lại bằng tay giữa lúc pilot.
     expect(NUA_A + NUA_B).toBe(9_504_000);
     expect(KHOAN - (NUA_A + NUA_B), "phần chuyển DƯ").toBe(26_000);
 
@@ -527,7 +551,7 @@ describe.skipIf(!RUN_DB_TESTS)("[TKD] tách khoản cho nhiều con — DB thậ
         id: KHOAN_2,
         orderId: DON,
         orderItemId: null,
-        amount: NUA_A,
+        amount: PHAN_A,
         method: "sepay",
         paidDate: new Date("2699-09-17T02:00:00Z"),
         accountantStatus: "PENDING",
@@ -550,25 +574,25 @@ describe.skipIf(!RUN_DB_TESTS)("[TKD] tách khoản cho nhiều con — DB thậ
     expect(so.con[0]!.conNo, "TRỤC A không thấy khoản PENDING ⇒ còn nợ KHÔNG đổi").toBe(
       HOC_PHI_A,
     );
-    expect(so.con[0]!.daVe).toBe(NUA_A);
+    expect(so.con[0]!.daVe).toBe(PHAN_A);
     expect(so.con[0]!.conCoTheNhan, "trần thì ĐÃ trừ — đây là chỗ hai số tách nhau").toBe(
-      HOC_PHI_A - NUA_A,
+      HOC_PHI_A - PHAN_A,
     );
 
     const r = await tachKhoanChoCon({
       orderId: DON,
       paymentId: GOC,
       phan: [
-        // 5.000.000 < conNo (8.976.000) nhưng > conCoTheNhan (4.488.000).
-        { orderItemId: A, soTien: 5_000_000 },
-        { orderItemId: B, soTien: KHOAN - 5_000_000 },
+        // 6.000.000 < conNo (8.976.000) nhưng > conCoTheNhan (5.199.000).
+        { orderItemId: A, soTien: 6_000_000 },
+        { orderItemId: B, soTien: KHOAN - 6_000_000 },
       ],
       actor: ACTOR,
     });
     expect(r.ok, "lấy `conNo` làm trần thì ca này LỌT").toBe(false);
-    expect(!r.ok && r.error).toContain("tối đa 4.488.000đ");
+    expect(!r.ok && r.error).toContain(`tối đa ${(HOC_PHI_A - PHAN_A).toLocaleString("vi-VN")}đ`);
     expect(!r.ok && r.error, "và nói VÌ SAO trần nhỏ hơn số trên màn").toContain(
-      "đã có 4.488.000đ vào đơn rồi",
+      `đã có ${PHAN_A.toLocaleString("vi-VN")}đ vào đơn rồi`,
     );
   });
 

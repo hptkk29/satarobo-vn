@@ -839,10 +839,15 @@ export async function goGanTheoCon(input: {
 //
 //     gốc   +9.530.000  orderItemId = NULL   (KHÔNG đụng tới)
 //     đảo   −9.530.000  orderItemId = NULL   adjustmentOfId = gốc
-//     phần  +4.488.000  orderItemId = bé A
-//     phần  +5.042.000  orderItemId = bé B
+//     phần        +X    orderItemId = bé A
+//     phần        +Y    orderItemId = bé B     (X + Y = 9.530.000, ĐÚNG BẰNG)
 //                       ─────────────────────
 //     mọi phép cộng      +9.530.000   (y như trước khi tách)
+//
+// ⚠️ X và Y để ngỏ CÓ CHỦ ĐÍCH. Hai nửa học phí của đơn này là 4.488.000 + 5.016.000 =
+// 9.504.000, tức **chênh 26.000đ** so với khoản thật — và chủ dự án chốt 20/09/2026 rằng
+// khoản chênh ấy *"là tiền thật chưa ai giải thích được"*, nên **hệ thống không được tự dồn
+// nó vào một bé**. Cổng chỉ từ chối và nói còn thiếu bao nhiêu; người vận hành đi hỏi.
 //
 // Ba cách đã cân, và hai cách kia THUA vì lý do cụ thể:
 //

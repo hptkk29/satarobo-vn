@@ -4,9 +4,13 @@
 // không) nằm ở `tests/finance/tach-khoan-cho-con.test.ts` — bộ `test:finance-db`. Ở đây chỉ
 // có phép chia, và nó phải đúng trước khi bàn tới chuyện ghi.
 //
-// SỐ DÙNG TRONG CẢ TỆP là số THẬT của `ORD-260918-000001` (chủ dự án cấp 20/09/2026), không
-// phải số tròn tự nghĩ: học phí 8.976.000 + 10.032.000, khoản 9.530.000, và hai nửa học phí
-// 4.488.000 + 5.016.000. Fixture tròn trịa là fixture không kiểm được gì.
+// SỐ NỀN của cả tệp là số THẬT của `ORD-260918-000001` (chủ dự án cấp 20/09/2026), không
+// phải số tròn tự nghĩ: học phí 8.976.000 + 10.032.000, khoản 9.530.000. Fixture tròn trịa là
+// fixture không kiểm được gì.
+//
+// ⚠️ NHƯNG CẶP SỐ CHIA thì TRUNG TÍNH, cố ý — xem `PHAN_A`/`PHAN_B`. Khoản 9.530.000đ trừ đi
+// hai nửa học phí còn dư 26.000đ mà **chưa ai giải thích được**, nên tệp này KHÔNG in ra một
+// cặp "chữa cháy" cho đơn ấy. Cặp số thật sẽ do chủ dự án chốt sau khi hỏi phụ huynh/kế toán.
 import { describe, it, expect } from "vitest";
 import { kiemTachKhoan, type TranNhanCuaCon } from "./tach-khoan";
 
@@ -16,9 +20,25 @@ const B = "item-b";
 const HOC_PHI_A = 8_976_000;
 const HOC_PHI_B = 10_032_000;
 const KHOAN = 9_530_000;
-/** Nửa học phí từng bé — cặp số phụ huynh thật sự muốn chia. */
+/**
+ * Nửa học phí từng bé. Σ = 9.504.000 — **THIẾU 26.000đ** so với khoản thật.
+ * ⚠️ CHỈ dùng ở `[TKP-07]`, tức ca CHẶN.
+ */
 const NUA_A = 4_488_000;
 const NUA_B = 5_016_000;
+
+/**
+ * Cặp số TRUNG TÍNH cho các ca "chia hợp lệ".
+ *
+ * ⚠️ **CỐ Ý KHÔNG PHẢI cặp số đề xuất cho `ORD-260918-000001`.** Chủ dự án chốt 20/09/2026:
+ * 26.000đ chênh là tiền thật CHƯA AI GIẢI THÍCH ĐƯỢC, và *"hệ thống KHÔNG được tự dồn nó
+ * vào một bé"*. Bản đầu của tệp này dùng `4.488.000 + 5.042.000` — dồn trọn phần dư sang bé
+ * B — và cặp ấy đã bị gỡ: một con số nằm trong test là một con số người ta sẽ chép.
+ *
+ * Hai số dưới cộng đúng 9.530.000đ và nằm dưới trần của cả hai bé. Chỉ có thế.
+ */
+const PHAN_A = 3_777_000;
+const PHAN_B = 5_753_000;
 
 /** Hai bé chưa nhận đồng nào ⇒ `conCoTheNhan` = trọn học phí. */
 const traiTim: TranNhanCuaCon[] = [
@@ -31,22 +51,22 @@ describe("[TKP] phép chia của tách khoản", () => {
     const r = kiemTachKhoan({
       soTienKhoan: KHOAN,
       phan: [
-        { orderItemId: A, soTien: NUA_A },
-        { orderItemId: B, soTien: KHOAN - NUA_A },
+        { orderItemId: A, soTien: PHAN_A },
+        { orderItemId: B, soTien: PHAN_B },
       ],
       tranCon: traiTim,
     });
     expect(r.ok).toBe(true);
     expect(r.ok && r.tong).toBe(KHOAN);
-    expect(r.ok && r.phan.map((p) => p.soTien)).toEqual([NUA_A, 5_042_000]);
+    expect(r.ok && r.phan.map((p) => p.soTien)).toEqual([PHAN_A, PHAN_B]);
   });
 
   it("[TKP-02] Σ THIẾU 1đ ⇒ CHẶN, và câu lỗi nói ĐÚNG phần thiếu", () => {
     const r = kiemTachKhoan({
       soTienKhoan: KHOAN,
       phan: [
-        { orderItemId: A, soTien: NUA_A },
-        { orderItemId: B, soTien: KHOAN - NUA_A - 1 },
+        { orderItemId: A, soTien: PHAN_A },
+        { orderItemId: B, soTien: PHAN_B - 1 },
       ],
       tranCon: traiTim,
     });
@@ -59,8 +79,8 @@ describe("[TKP] phép chia của tách khoản", () => {
     const r = kiemTachKhoan({
       soTienKhoan: KHOAN,
       phan: [
-        { orderItemId: A, soTien: NUA_A },
-        { orderItemId: B, soTien: KHOAN - NUA_A + 1 },
+        { orderItemId: A, soTien: PHAN_A },
+        { orderItemId: B, soTien: PHAN_B + 1 },
       ],
       tranCon: traiTim,
     });
@@ -84,25 +104,26 @@ describe("[TKP] phép chia của tách khoản", () => {
   });
 
   it("[TKP-05] trần đã bị tiền CŨ ăn mất ⇒ câu lỗi nói VÌ SAO, không chỉ 'tối đa X'", () => {
-    // ⚠️ Đây là chỗ `conCoTheNhan` tách khỏi `conNo`. Bé A đã có 4.488.000đ vào đơn (PENDING,
-    // trục A chưa thấy) nên màn hình vẫn in "Còn nợ 8.976.000". Một câu "tối đa 4.488.000đ"
+    // ⚠️ Đây là chỗ `conCoTheNhan` tách khỏi `conNo`. Bé A đã có 3.777.000đ vào đơn (PENDING,
+    // trục A chưa thấy) nên màn hình vẫn in "Còn nợ 8.976.000". Một câu "tối đa 5.199.000đ"
     // trần trụi đọc như hệ thống lỗi — rồi người ta học cách bỏ qua cổng. Bài học của cổng
     // tạo đợt, CLAUDE.md.
     const r = kiemTachKhoan({
       soTienKhoan: KHOAN,
       phan: [
-        { orderItemId: A, soTien: 5_000_000 },
-        { orderItemId: B, soTien: KHOAN - 5_000_000 },
+        // 6.000.000 < conNo của A (8.976.000) nhưng > conCoTheNhan (5.199.000).
+        { orderItemId: A, soTien: 6_000_000 },
+        { orderItemId: B, soTien: KHOAN - 6_000_000 },
       ],
       tranCon: [
-        { orderItemId: A, ten: "Bé A", conCoTheNhan: HOC_PHI_A - NUA_A, daVe: NUA_A },
+        { orderItemId: A, ten: "Bé A", conCoTheNhan: HOC_PHI_A - PHAN_A, daVe: PHAN_A },
         { orderItemId: B, ten: "Bé B", conCoTheNhan: HOC_PHI_B, daVe: 0 },
       ],
     });
     expect(r.ok).toBe(false);
-    expect(!r.ok && r.loi).toContain("tối đa 4.488.000đ");
+    expect(!r.ok && r.loi).toContain("tối đa 5.199.000đ");
     expect(!r.ok && r.loi, "phải nói tiền cũ, không chỉ nói trần").toContain(
-      "đã có 4.488.000đ vào đơn rồi",
+      "đã có 3.777.000đ vào đơn rồi",
     );
   });
 
@@ -137,8 +158,10 @@ describe("[TKP] phép chia của tách khoản", () => {
     // đúng cặp số ấy, và **đó là hành vi đúng**: 26.000đ là tiền thật đã vào đơn, nó phải
     // thuộc về một bé nào đó chứ không được bốc hơi.
     //
-    // Người nhập cộng nó vào một bé (4.488.000 + 5.042.000 — `[TKP-01]`). Trần "≤ còn nợ của
-    // bé" thừa chỗ: 5.042.000 < 10.032.000.
+    // ⚠️ VÀ HỆ THỐNG KHÔNG TỰ DỒN 26.000đ VÀO BÉ NÀO — chủ dự án chốt 20/09/2026. Khoản
+    // chênh ấy CHƯA AI GIẢI THÍCH ĐƯỢC (phụ huynh làm tròn? học phí ghi sai? phụ phí?), nên
+    // phải HỎI phụ huynh / kế toán rồi mới tách. Không test nào và không runbook nào được in
+    // ra một cặp số "chữa cháy" — in ra là chốt hộ một quyết định nghiệp vụ.
     //
     // Ca này tồn tại để không ai phải phát hiện lại phép trừ ấy bằng tay giữa lúc pilot.
     // ─────────────────────────────────────────────────────────────────────────
@@ -163,8 +186,8 @@ describe("[TKP] phép chia của tách khoản", () => {
     const r = kiemTachKhoan({
       soTienKhoan: KHOAN,
       phan: [
-        { orderItemId: "item-cua-don-khac", soTien: NUA_A },
-        { orderItemId: B, soTien: NUA_B },
+        { orderItemId: "item-cua-don-khac", soTien: PHAN_A },
+        { orderItemId: B, soTien: PHAN_B },
       ],
       tranCon: traiTim,
     });
@@ -176,8 +199,8 @@ describe("[TKP] phép chia của tách khoản", () => {
     const r = kiemTachKhoan({
       soTienKhoan: KHOAN,
       phan: [
-        { orderItemId: A, soTien: NUA_A },
-        { orderItemId: A, soTien: KHOAN - NUA_A },
+        { orderItemId: A, soTien: PHAN_A },
+        { orderItemId: A, soTien: PHAN_B },
       ],
       tranCon: traiTim,
     });
@@ -191,8 +214,8 @@ describe("[TKP] phép chia của tách khoản", () => {
     const r = kiemTachKhoan({
       soTienKhoan: KHOAN,
       phan: [
-        { orderItemId: A, soTien: NUA_A },
-        { orderItemId: B, soTien: KHOAN - NUA_A },
+        { orderItemId: A, soTien: PHAN_A },
+        { orderItemId: B, soTien: PHAN_B },
         { orderItemId: "item-c", soTien: 0 },
       ],
       tranCon: [...traiTim, { orderItemId: "item-c", ten: "Bé C", conCoTheNhan: 1, daVe: 0 }],
@@ -221,8 +244,8 @@ describe("[TKP] phép chia của tách khoản", () => {
     const r = kiemTachKhoan({
       soTienKhoan: -KHOAN,
       phan: [
-        { orderItemId: A, soTien: -NUA_A },
-        { orderItemId: B, soTien: -NUA_B },
+        { orderItemId: A, soTien: -PHAN_A },
+        { orderItemId: B, soTien: -PHAN_B },
       ],
       tranCon: traiTim,
     });

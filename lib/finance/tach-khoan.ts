@@ -28,10 +28,16 @@
 //     lệch                                                                26.000
 //
 // Hai nửa học phí khít tuyệt đối, nhưng phụ huynh chuyển DƯ 26.000đ. Nên đúng cặp số ấy sẽ
-// **BỊ CHẶN** với câu *"Còn THIẾU 26.000đ"*. Đó là hành vi ĐÚNG, không phải lỗi: 26.000đ là
-// tiền thật đã vào đơn và nó phải thuộc về một bé nào đó. Người nhập chọn bé để cộng thêm
-// vào (4.488.000 + 5.042.000 chẳng hạn) — trần "≤ còn nợ của bé" thừa chỗ cho nó.
-// Ca `[TKP-07]` ghim đúng phép trừ này để không ai phải tính lại bằng tay.
+// **BỊ CHẶN** với câu *"Còn THIẾU 26.000đ"*. Đó là hành vi ĐÚNG, không phải lỗi.
+//
+// ⚠️ VÀ HÀM NÀY KHÔNG TỰ DỒN PHẦN DƯ VÀO BÉ NÀO — chủ dự án chốt 20/09/2026:
+//
+//   *"26.000đ chênh là tiền thật chưa ai giải thích được — có thể PH làm tròn, có thể số học
+//   phí sai, có thể phụ phí. Hệ thống KHÔNG được tự dồn nó vào một bé."*
+//
+// Đó là lý do cổng chỉ biết TỪ CHỐI và nói rõ còn thiếu bao nhiêu. Việc "26.000đ này của ai"
+// là một câu hỏi nghiệp vụ — hỏi phụ huynh / kế toán, đừng để một dòng mã trả lời hộ. Ca
+// `[TKP-07]` ghim phép trừ để không ai phải tính lại bằng tay; nó **không** gợi ý cặp số nào.
 //
 // ─────────────────────────────────────────────────────────────────────────────
 // TRẦN CỦA MỘT BÉ: `conCoTheNhan`, KHÔNG PHẢI `conNo`

@@ -175,6 +175,8 @@ một điều kiện đặt ở chỗ không ai đọc thì bằng không có.
 | `ORD-260917-000001` | 2 con · **4 khoản** đã thu chưa gắn con (mỗi lần chuyển một khoản), **không** có giao dịch ngân hàng phía sau | **Gắn** từng khoản cho từng bé |
 | `ORD-260918-000001` | 2 con · **MỘT** khoản 9.530.000đ cho cả hai · đợt đang mở 9.478.000đ | **B1 ·** cổng tạo đợt (phải CHẶN) — rồi **B2 · TÁCH** khoản cho hai bé |
 
+> ⛔ **B2 ĐANG TẠM DỪNG**: khoản 9.530.000đ lệch **26.000đ** so với hai nửa học phí và **chưa ai giải thích được** khoản chênh ấy. Phải hỏi phụ huynh / kế toán rồi mới tách — chi tiết ở mục **B2** bên dưới. **Đừng tự dồn 26.000đ vào bé nào.**
+
 Quyền — **ba việc, ba quyền khác nhau**:
 
 | Việc | Quyền |
@@ -287,47 +289,55 @@ Quyền — **ba việc, ba quyền khác nhau**:
 Đơn này là ca CHÍNH của module: **một lần chuyển, hai con**. Khoản 9.530.000đ đang nằm ở khối
 vàng *"chưa gắn cho con nào"*.
 
+> # ⛔ CHƯA TÁCH ĐƯỢC — CÒN 26.000đ CHƯA AI GIẢI THÍCH ĐƯỢC
+>
+> **Đọc mục này trước khi mở màn hình. Đừng bấm "Tách" rồi mới đọc.**
+>
+> Hai nửa học phí của hai bé cộng lại **không bằng** số phụ huynh đã chuyển:
+>
+> ```
+>   4.488.000  (nửa học phí bé A — 8.976.000 ÷ 2)
+> + 5.016.000  (nửa học phí bé B — 10.032.000 ÷ 2)
+> ───────────
+>   9.504.000
+>   9.530.000  ← tiền thật đã vào tài khoản
+> ───────────
+>      26.000  ← CHÊNH, chưa ai giải thích được
+> ```
+>
+> **26.000đ ấy là tiền thật.** Nó có thể là phụ huynh làm tròn, có thể là số học phí ghi sai,
+> có thể là một khoản phụ phí — **hiện chưa ai biết**.
+>
+> ### Luật của lượt này
+>
+> **KHÔNG tự dồn 26.000đ vào bé nào.** Không sale, không kế toán, không hệ thống.
+>
+> Hệ thống cố ý **không gợi ý** cách chia: nó chỉ từ chối và in ra *"còn THIẾU 26.000đ"*.
+> Runbook này cũng **không in cặp số nào** để chép — vì chép một cặp số là chốt hộ một quyết
+> định nghiệp vụ mà chưa ai ra quyết định.
+>
+> ### Phải làm gì
+>
+> 1. **HỎI phụ huynh / kế toán** 26.000đ ấy là gì.
+> 2. Chờ **chủ dự án đưa cặp số đúng**.
+> 3. **Rồi mới** làm bước 13–16 dưới đây.
+>
+> Trong lúc chờ: **đừng tách đơn này**. Ô đếm ngược trên màn hình sẽ khoá nút "Tách" cho tới
+> khi tổng khớp — đó đúng là chỗ buộc người dùng dừng lại và đi hỏi, không phải lỗi giao diện.
+
+---
+
+**Khi đã có cặp số đúng thì làm như sau:**
+
 13. Trên dòng khoản **9.530.000đ**, bấm **"Tách cho nhiều bé…"** (nút nằm cạnh *"Gắn cho bé…"*).
 14. Nhập số tiền cho **từng bé**. Màn hình in **"tối đa …"** cho mỗi bé và một dòng đếm
     **"Đã chia … · còn THIẾU …"** ngay dưới.
 15. Nút **"Tách"** chỉ sáng khi **đã chia ĐÚNG BẰNG 9.530.000đ** và có **từ hai bé trở lên**.
-
-> # ⚠️ CẶP SỐ "ĐẸP" 4.488.000 + 5.016.000 SẼ **KHÔNG** BẤM ĐƯỢC — ĐÂY KHÔNG PHẢI LỖI
->
-> Hai số đó là **nửa học phí** của từng bé (8.976.000÷2 và 10.032.000÷2) và chúng khít tuyệt
-> đối. Nhưng cộng lại chỉ ra **9.504.000đ**, trong khi phụ huynh chuyển **9.530.000đ**:
->
-> ```
->   4.488.000  (nửa học phí bé A)
-> + 5.016.000  (nửa học phí bé B)
-> ───────────
->   9.504.000
->   9.530.000  ← tiền thật đã vào
-> ───────────
->      26.000  ← phụ huynh chuyển DƯ
-> ```
->
-> **26.000đ ấy là tiền thật và nó phải thuộc về một bé.** Hệ thống không cho nó bốc hơi —
-> đó là toàn bộ lý do luật "Σ đúng bằng" tồn tại.
->
-> **Cách làm:** cộng 26.000đ vào MỘT bé. Ví dụ dùng cho lượt pilot:
->
-> | Bé | Học phí | Nhập |
-> |---|---|---|
-> | Bé A | 8.976.000 | **4.488.000** |
-> | Bé B | 10.032.000 | **5.042.000** (= 5.016.000 + 26.000) |
-> | | **Σ** | **9.530.000** ✅ |
->
-> Đợt sau của bé B chỉ còn phải thu ít hơn 26.000đ — không mất đi đâu cả.
->
-> Ai muốn đặt 26.000đ vào bé A cũng được; cổng chỉ đòi Σ đúng và mỗi phần ≤ phần bé đó còn
-> có thể nhận.
-
 16. Bấm **"Tách"**.
 
 **Kiểm ngay trên màn — bốn điều:**
 - khối vàng *"chưa gắn cho con nào"* **biến mất**;
-- ô **"Chờ xác nhận"** của bé A = **4.488.000đ**, của bé B = **5.042.000đ**;
+- Σ hai ô **"Chờ xác nhận"** = **9.530.000đ** (bằng đúng cặp số vừa nhập);
 - ô **"Đã thu"** của hai bé **vẫn 0đ** — ĐÚNG, kế toán chưa xác nhận;
 - tổng đơn, *"còn nợ"* của đơn **KHÔNG ĐỔI** — tách là đổi cách ghi tên chủ của tiền, không
   phải thu thêm.
@@ -341,8 +351,10 @@ vàng *"chưa gắn cho con nào"*.
 > Nhập nhầm số thì đường sửa là: **kế toán bỏ gắn từng phần** (`payments:manage`, bắt buộc ghi
 > lý do) → rồi **gắn hoặc tách lại**. Tổng tiền không đổi ở bất kỳ bước nào.
 >
-> Cái không lấy lại được: sau khi bỏ gắn, khối vàng hiện **hai dòng** (4.488.000 + 5.042.000)
-> chứ không phải một dòng 9.530.000đ như ban đầu.
+> Cái không lấy lại được: sau khi bỏ gắn, khối vàng hiện **hai dòng** chứ không phải một dòng
+> 9.530.000đ như ban đầu.
+
+**Đây là lý do phải hỏi cho ra 26.000đ TRƯỚC khi tách**, chứ không phải tách đại rồi sửa sau.
 
 #### Sau khi tách — việc của KẾ TOÁN
 
