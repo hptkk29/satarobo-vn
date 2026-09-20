@@ -107,3 +107,86 @@ describe("[ZC-DN-02] dây nối cấp quyền nick — route cron 5 phút", () =
     ).toBeLessThan(iTin);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// [ZC-CRON] CỜ TẮT ⇒ CRON KHÔNG LÀM GÌ — lưới HÀNH VI, không phải ghim mã nguồn
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 🔴 VÌ SAO, và vì sao PHẢI là lưới hành vi:
+//
+// Trên prod, khe cron này chạy **5 phút một lượt ngay khi merge vào `main`** — trong khi
+// `ZALOCRM_ENABLED` còn TẮT. Trước bản vá 20/09/2026, route gọi thẳng hai hàm việc và
+// chỉ "im lặng" nhờ VẮNG CẤU HÌNH (`zalocrm.orgCodes` rỗng ⇒ vòng lặp không chạy).
+//
+// Chỗ dựa đó sai hai lần: (a) vẫn đọc DB 2 lượt × 288 lần/ngày để rồi không làm gì;
+// (b) `zalocrm.orgCodes` khai được từ màn Cấu hình vận hành **không cần deploy**, nên
+// một người khai nhầm là cron gọi thẳng sang fork dù cờ vẫn tắt.
+//
+// Lưới ghim mã nguồn KHÔNG đủ ở đây: một regex thấy `isZalocrmEnabled()` có mặt, nhưng
+// không thấy nó được đặt SAU hai lời gọi việc, hay kết quả của nó bị bỏ qua. Nên hai ca
+// dưới GỌI THẬT handler và đếm xem hai hàm việc có bị chạm không.
+import { describe as describeCron, it as itCron, expect as expectCron, vi, beforeEach, afterEach } from "vitest";
+
+const hCron = vi.hoisted(() => ({
+  capQuyen: vi.fn(async () => ({ tong: { capMoi: 0, daGo: 0, loi: 0 }, theoOrg: [] })),
+  doiSoat: vi.fn(async () => ({ tong: { napBu: 0, daCo: 0, loi: 0 }, theoOrg: [] })),
+}));
+
+vi.mock("@/lib/integrations/zalocrm/cap-quyen-nick", () => ({
+  capQuyenNickZalocrm: hCron.capQuyen,
+}));
+vi.mock("@/lib/integrations/zalocrm/doi-soat", () => ({
+  doiSoatZalocrm: hCron.doiSoat,
+}));
+// `withCron` bọc xác thực CRON_SECRET; ở đây ta đo THÂN HÀM, không đo cổng xác thực
+// (cổng ấy có test riêng). Trả thẳng handler để gọi được.
+vi.mock("@/lib/cron/handler", () => ({
+  withCron: (_ten: string, handler: (req: unknown) => Promise<unknown>) => handler,
+}));
+
+describeCron("[ZC-CRON] cờ ZALOCRM_ENABLED là công tắc THẬT của khe cron", () => {
+  const cu = process.env.ZALOCRM_ENABLED;
+
+  beforeEach(() => {
+    hCron.capQuyen.mockClear();
+    hCron.doiSoat.mockClear();
+    vi.resetModules();
+  });
+  afterEach(() => {
+    if (cu === undefined) delete process.env.ZALOCRM_ENABLED;
+    else process.env.ZALOCRM_ENABLED = cu;
+  });
+
+  itCron("[ZC-CRON-01] cờ TẮT ⇒ KHÔNG chạm hàm việc nào (không gọi mạng, không đọc DB)", async () => {
+    delete process.env.ZALOCRM_ENABLED; // đúng trạng thái prod khi mới lên main
+    const { GET } = await import("@/app/api/cron/zalocrm-doi-soat/route");
+    const kq = (await GET({} as never)) as { ok: boolean; data?: { boQua?: string } };
+
+    expectCron(
+      hCron.capQuyen,
+      "cờ tắt mà vẫn gọi cấp quyền nick — cron sẽ nói chuyện với fork trên prod",
+    ).not.toHaveBeenCalled();
+    expectCron(
+      hCron.doiSoat,
+      "cờ tắt mà vẫn gọi đối soát tin — cron sẽ nói chuyện với fork trên prod",
+    ).not.toHaveBeenCalled();
+    // Vẫn trả 200 có cấu trúc, KHÔNG ném: một khe cron đỏ mỗi 5 phút là rác cảnh báo.
+    expectCron(kq.ok).toBe(true);
+    expectCron(kq.data?.boQua, "phải nói RÕ vì sao bỏ qua, để người đọc log không đoán").toBeTruthy();
+  });
+
+  itCron('[ZC-CRON-02] cờ BẬT ("true") ⇒ chạy đủ hai việc, đúng thứ tự', async () => {
+    process.env.ZALOCRM_ENABLED = "true";
+    const { GET } = await import("@/app/api/cron/zalocrm-doi-soat/route");
+    await GET({} as never);
+
+    // Đối chứng DƯƠNG cho ca trên: thiếu nó thì `[ZC-CRON-01]` vẫn ĐẠT khi ai đó xoá
+    // hẳn hai lời gọi — ca chỉ khẳng định sự VẮNG MẶT luôn đạt khi tính năng chết hẳn.
+    expectCron(hCron.capQuyen).toHaveBeenCalledTimes(1);
+    expectCron(hCron.doiSoat).toHaveBeenCalledTimes(1);
+    expectCron(
+      hCron.capQuyen.mock.invocationCallOrder[0]!,
+      "cấp quyền phải chạy TRƯỚC đối soát tin",
+    ).toBeLessThan(hCron.doiSoat.mock.invocationCallOrder[0]!);
+  });
+});

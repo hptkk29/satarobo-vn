@@ -61,6 +61,8 @@
     "test:e2e:teacher": "playwright test -c playwright.teacher.config.ts",
     "test:e2e:elearning": "playwright test -c playwright.elearning.config.ts",
     "test:phase": "pnpm test:unit -- --run && pnpm test:e2e:a0",
+    "pg:stop": "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/pg-local-tat-tu-te.ps1",
+    "pg:check": "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/pg-local-hoi-phuc.ps1 -ChiKiemTra",
     "db:test:up": "docker compose -f docker-compose.test.yml up -d --wait",
     "db:test:down": "docker compose -f docker-compose.test.yml down -v",
     "test": "pnpm test:unit -- --run && pnpm test:e2e",

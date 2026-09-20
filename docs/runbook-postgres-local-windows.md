@@ -217,7 +217,16 @@ Script `scripts/pg-local-hoi-phuc.ps1` làm đúng thứ tự đã bàn:
 
 ---
 
-## 5. Đề xuất phòng ngừa — **cần chủ máy quyết, tôi chưa làm**
+## 5. Phòng ngừa — ✅ CHỦ MÁY ĐÃ CHỐT 20/09/2026
+
+> **Chốt:** làm **5.1** (pagefile cố định) — phần cần quyền admin do chủ máy tự làm.
+> **5.5** (tắt tử tế) làm ngay, không cần admin, đã có script trong repo.
+> **Dự phòng:** nếu sau **hai tuần** vẫn còn chết bẩn thì chuyển sang **Docker Desktop**
+> (Postgres Linux trong container không dính lớp lỗi commit-limit của Windows) — đổi lại
+> cần quyền admin cho WSL2/Hyper-V và ~2 GB RAM thường trực.
+> ⛔ **KHÔNG** chuyển bộ test sang Postgres từ xa: `resetDb()` TRUNCATE mọi bảng, và luật
+> cứng của repo là test không bao giờ trỏ Supabase — đổi là gỡ đúng cái chốt dựng ra sau
+> lần mất DB 04/09.
 
 ### 5.1 Đặt pagefile cố định ≥ 32 GB *(khuyến nghị mạnh nhất — bịt 8/9 sự cố)*
 
@@ -258,6 +267,63 @@ nếu không cần (WSL2 `vmmem` giữ commit rất lớn), và cân nhắc hạ
 - ❌ **Đừng tin `pg_ctl status`.** Xem mục 1.
 
 ---
+
+### 5.5 Tắt TỬ TẾ trước khi tắt máy ✅ *(đã làm 20/09 — không cần admin)*
+
+**Con số biện hộ cho việc này:** 25/08 → 18/09 có **9 lần khởi động, 8 lần chết bẩn**.
+Tức chưa lần nào máy chủ được tắt đúng cách. Và cái đắt **không phải** lần chết — mà là
+**hồi phục**: đo 18/09, pha `syncing data directory` ~12 phút + pha `redo` vài phút nữa.
+Trong quãng đó `pnpm build` và mọi bộ chạm DB đều đỏ, **trông y hệt mã hỏng**.
+
+⚠️ Việc này **không chữa nguyên nhân gốc** (xem mục 3) — nó cắt phần lớn CHI PHÍ. Chết
+bẩn do crash thì script không tránh được; chết bẩn do *"tắt máy lúc Postgres đang chạy"*
+thì tránh được hoàn toàn, và đó là phần lớn của 8 lần.
+
+| tệp | dùng khi |
+|---|---|
+| `scripts/pg-local-tat-tu-te.ps1` | từ terminal — hoặc `pnpm pg:stop` |
+| `scripts/Tat-Postgres-Truoc-Khi-Tat-May.cmd` | **bấm đúp** — dành cho lúc sắp tắt máy |
+
+**Script làm đúng ba việc, và mỗi việc có lý do:**
+
+1. Hỏi `pg_isready` chứ không `pg_ctl status` — bẫy thứ ba ở mục 1.
+2. Phân biệt **"đã tắt rồi"** với **"đang hồi phục"**. Mã thoát `3` = ĐANG HỒI PHỤC,
+   kèm câu *"ĐỪNG tắt máy lúc này"*. Tắt máy giữa lúc crash recovery là quay lại vạch
+   xuất phát và lần sau còn lâu hơn — đây là cái bẫy dễ mắc nhất khi đang vội.
+3. Dùng `-m fast`. **Đừng đổi sang `immediate`** dù nó nhanh hơn: `immediate` bỏ
+   checkpoint ⇒ lần khởi động sau CHẾT BẨN ⇒ tự tay tạo ra đúng thứ đang tránh.
+   `smart` cũng sai: nó chờ mọi phiên tự đóng, một tab `psql` quên đóng là treo mãi,
+   rồi người ta sốt ruột tắt máy.
+
+Và nó **kiểm lại bằng cổng**, không tin mã thoát của `pg_ctl` — cùng lý do với bước 1.
+
+#### Gắn vào đâu — ba mức, chọn theo mức anh chịu được
+
+| mức | cách | thật sự đáng tin tới đâu |
+|---|---|---|
+| **A. Bấm đúp** *(khuyến nghị)* | Chuột phải `Tat-Postgres-Truoc-Khi-Tat-May.cmd` → *Send to → Desktop*, rồi kéo lối tắt vào **taskbar** hoặc **Start**. Bấm nó trước khi tắt máy. | **Chắc chắn chạy xong** — cửa sổ tự báo "tắt máy được rồi". Nhược: phải nhớ. |
+| **B. Gõ lệnh** | `pnpm pg:stop` | Cùng độ tin cậy với A; hợp nếu anh vốn ở trong terminal. |
+| **C. Tự động lúc shutdown** | Task Scheduler → *Create Task* → Trigger **On an event**: log `System`, nguồn `User32`, **Event ID 1074** → Action chạy tệp `.cmd`. | ⚠️ **Tôi không khuyến nghị làm cái này là chỗ dựa duy nhất.** Windows chỉ cho tác vụ shutdown một khoảng rất ngắn rồi giết; nếu Postgres đang bận, checkpoint chưa xong là **vẫn chết bẩn** — mà lần đó anh lại tưởng đã tắt tử tế. Muốn dùng thì dùng KÈM A, đừng thay A. |
+
+> Cách duy nhất khiến A không bị quên: để lối tắt **ngay cạnh chỗ anh bấm Shut down**.
+> Đây là vấn đề thói quen, không phải vấn đề kỹ thuật — và tôi không giả vờ script giải
+> quyết được nó.
+
+#### Đối chứng: làm sao biết nó có tác dụng
+
+Lần khởi động **kế tiếp** sau khi tắt bằng script, nhật ký **KHÔNG** được có dòng:
+
+```
+LOG:  database system was not properly shut down; automatic recovery in progress
+```
+
+```powershell
+Select-String -Path "$env:USERPROFILE\scooppps\postgresql\current\pg.log" `
+  -Pattern "was not properly shut down" | Select-Object -Last 3
+```
+
+Còn dòng đó sau một lượt tắt bằng script ⇒ script **không** được chạy, hoặc chạy mà
+chưa xong. Đừng ghi nhận là "đã khắc phục" khi chưa thấy đối chứng này.
 
 ## 6. Liên quan
 

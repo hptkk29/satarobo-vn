@@ -1,4 +1,5 @@
 import { withCron } from "@/lib/cron/handler";
+import { isZalocrmEnabled } from "@/lib/flags";
 import { doiSoatZalocrm } from "@/lib/integrations/zalocrm/doi-soat";
 import { capQuyenNickZalocrm } from "@/lib/integrations/zalocrm/cap-quyen-nick";
 
@@ -33,6 +34,27 @@ export const dynamic = "force-dynamic";
 // Quyền chạy TRƯỚC: nạp bù tin cho một nick mà người ta chưa có quyền đọc thì tin về
 // nằm đó không ai thấy.
 export const GET = withCron("zalocrm-doi-soat", async () => {
+  // ── CỜ TẮT ⇒ NO-OP TUYỆT ĐỐI ────────────────────────────────────────────────
+  //
+  // 🔴 THÊM 20/09/2026, TRƯỚC KHI ĐƯA LÊN PROD. Trên prod bộ này chạy theo lịch
+  // **5 phút một lượt ngay khi merge vào `main`** — trong khi `ZALOCRM_ENABLED` còn TẮT
+  // và sẽ còn tắt tới khi chủ dự án bật.
+  //
+  // Trước bản vá, route gọi thẳng hai hàm việc. Nó "im lặng" chỉ vì VẮNG CẤU HÌNH:
+  // `getSetting("zalocrm.orgCodes")` rỗng ⇒ vòng lặp không chạy. Hai điều sai với chỗ
+  // dựa đó:
+  //   · nó vẫn đọc DB **2 lượt mỗi lần × 288 lần/ngày** để rồi không làm gì;
+  //   · và nó dựa vào một thứ KHÔNG PHẢI công tắc. Ai đó khai `zalocrm.orgCodes` trên
+  //     prod (màn Cấu hình vận hành, không cần deploy) là cron **gọi thẳng sang fork**
+  //     dù cờ vẫn tắt — tức công tắc tính năng không điều khiển được đường chạy nền.
+  //
+  // Cổng đúng phải là CHÍNH CÁI CỜ, cùng một cờ mà trang · nút · webhook đang dùng.
+  // Khoá bằng `[ZC-CRON-01/02]` (`lib/integrations/zalocrm/day-noi.test.ts`) — lưới
+  // HÀNH VI: gọi thật handler và khẳng định hai hàm việc KHÔNG được chạm tới.
+  if (!isZalocrmEnabled()) {
+    return { ok: true, data: { boQua: "ZALOCRM_ENABLED tắt — không gọi mạng, không đọc DB" } };
+  }
+
   const quyen = await capQuyenNickZalocrm();
   const tin = await doiSoatZalocrm();
   return { ok: true, data: { quyenNick: quyen.tong, doiSoatTin: tin.tong, chiTiet: { quyen: quyen.theoOrg, tin: tin.theoOrg } } };
