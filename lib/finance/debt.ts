@@ -470,7 +470,17 @@ export async function docSoTheoCon(
     }),
     doc.payment.findMany({
       where: { orderId, deletedAt: null },
-      select: { id: true, orderItemId: true, amount: true, accountantStatus: true, saleStatus: true },
+      select: {
+        id: true,
+        orderItemId: true,
+        amount: true,
+        accountantStatus: true,
+        saleStatus: true,
+        // Hai cột dưới CHỈ phục vụ `KhoanDaVe.loaiButToan` / `.daDao` — tức chỉ để màn hình
+        // biết dòng nào còn mời bấm được. Chúng KHÔNG vào phép cộng nào; xem `KhoanDaVe`.
+        paymentType: true,
+        adjustmentOfId: true,
+      },
     }),
     doc.paymentRequest.findMany({
       where: { orderId },
@@ -504,6 +514,20 @@ export async function docSoTheoCon(
    */
   const daVe = khoan.filter((k) => k.accountantStatus !== "REJECTED");
 
+  /**
+   * Dòng nào ĐÃ bị một bút toán đảo còn sống trỏ vào.
+   *
+   * Tính TRONG BỘ NHỚ từ chính tập vừa tra, không thêm một câu SQL nào: `khoan` đã là toàn
+   * bộ `Payment` chưa xoá mềm của đơn, nên mọi bút toán đảo của đơn đều nằm trong đó.
+   *
+   * ⚠️ Quét trên `khoan` (ĐỦ) chứ không trên `daVe` (đã lọc `REJECTED`): một bút toán đảo bị
+   * kế toán từ chối vẫn là bằng chứng rằng dòng gốc đã được đảo một lần. Lọc trước rồi mới
+   * quét là để sót, và hậu quả là màn hình lại mời gắn một dòng đã đảo.
+   */
+  const daBiDao = new Set(
+    khoan.filter((k) => k.paymentType === "ADJUSTMENT" && k.adjustmentOfId).map((k) => k.adjustmentOfId as string),
+  );
+
   return tinhNoTheoCon({
     dong: dong.map((d) => ({
       orderItemId: d.id,
@@ -519,6 +543,8 @@ export async function docSoTheoCon(
       orderItemId: k.orderItemId,
       amount: k.amount,
       trangThaiKeToan: k.accountantStatus,
+      loaiButToan: k.paymentType,
+      daDao: daBiDao.has(k.id),
     })),
     dot: dot.map(
       (r): DotCuaDong => ({

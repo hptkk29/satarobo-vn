@@ -22,8 +22,26 @@ import {
   tinhNoTheoCon,
   type DotCuaDong,
   type DongDon,
+  type KhoanDaVe,
 } from "./no-theo-con";
 import { giaiCongTac } from "./feature";
+
+/**
+ * Dựng một `KhoanDaVe` cho test thuần.
+ *
+ * ⚠️ Mặc định `loaiButToan: "PAYMENT"` + `daDao: false` là AN TOÀN **ở đây và chỉ ở đây**:
+ * hai trường ấy KHÔNG tham gia phép cộng nào — chúng chỉ quyết định màn hình có mời bấm
+ * "Gắn cho bé…" hay không (xem `KhoanDaVe`). Ca nào kiểm chính hai trường đó thì truyền tay,
+ * đừng nhờ mặc định.
+ *
+ * Trường tham gia PHÉP CỘNG (`amount`, `orderItemId`) vẫn bắt buộc — luật 7 giữ nguyên hiệu
+ * lực cho chúng.
+ */
+const kdv = (k: Omit<KhoanDaVe, "loaiButToan" | "daDao"> & Partial<KhoanDaVe>): KhoanDaVe => ({
+  loaiButToan: "PAYMENT",
+  daDao: false,
+  ...k,
+});
 import {
   donNhanTienTuDong,
   locDonNhanTien,
@@ -70,7 +88,7 @@ describe("[NTC-01] công nợ tách theo con — tiền của bé này không đ
       dong: dong(),
       khoanDaXacNhan: [{ orderItemId: AN, amount: 4_320_000 }],
       khoanChoXacNhan: [],
-      khoanDaVe: [{ id: "pay-1", orderItemId: AN, amount: 4_320_000, trangThaiKeToan: "CONFIRMED" }],
+      khoanDaVe: [kdv({ id: "pay-1", orderItemId: AN, amount: 4_320_000, trangThaiKeToan: "CONFIRMED" })],
       dot: [],
     });
     expect(r.con[0]!.daThu).toBe(4_320_000);
@@ -86,7 +104,7 @@ describe("[NTC-01] công nợ tách theo con — tiền của bé này không đ
       dong: dong(),
       khoanDaXacNhan: [],
       khoanChoXacNhan: [{ orderItemId: AN, amount: 4_320_000 }],
-      khoanDaVe: [{ id: "pay-2", orderItemId: AN, amount: 4_320_000, trangThaiKeToan: "CONFIRMED" }],
+      khoanDaVe: [kdv({ id: "pay-2", orderItemId: AN, amount: 4_320_000, trangThaiKeToan: "CONFIRMED" })],
       dot: [],
     });
     expect(r.con[0]!.choXacNhan).toBe(4_320_000);
@@ -99,7 +117,7 @@ describe("[NTC-01] công nợ tách theo con — tiền của bé này không đ
       dong: dong(),
       khoanDaXacNhan: [{ orderItemId: null, amount: 5_000_000 }],
       khoanChoXacNhan: [],
-      khoanDaVe: [{ id: "pay-3", orderItemId: null, amount: 5_000_000, trangThaiKeToan: "CONFIRMED" }],
+      khoanDaVe: [kdv({ id: "pay-3", orderItemId: null, amount: 5_000_000, trangThaiKeToan: "CONFIRMED" })],
       dot: [],
     });
     expect(r.chuaGanCon).toBe(5_000_000);
@@ -113,7 +131,7 @@ describe("[NTC-01] công nợ tách theo con — tiền của bé này không đ
       dong: dong(),
       khoanDaXacNhan: [{ orderItemId: AN, amount: 9_000_000 }],
       khoanChoXacNhan: [],
-      khoanDaVe: [{ id: "pay-4", orderItemId: AN, amount: 9_000_000, trangThaiKeToan: "CONFIRMED" }],
+      khoanDaVe: [kdv({ id: "pay-4", orderItemId: AN, amount: 9_000_000, trangThaiKeToan: "CONFIRMED" })],
       dot: [],
     });
     expect(r.con[0]!.conNo).toBe(-360_000);
@@ -378,7 +396,7 @@ describe("[NTC-02c] `tinhNoTheoCon` phải TỰ tính hai vế của đơn", () 
       dong: haiBe,
       khoanDaXacNhan: [{ orderItemId: null, amount: 6_000_000 }],
       khoanChoXacNhan: [],
-      khoanDaVe: [{ id: "pay-5", orderItemId: null, amount: 6_000_000, trangThaiKeToan: "CONFIRMED" }],
+      khoanDaVe: [kdv({ id: "pay-5", orderItemId: null, amount: 6_000_000, trangThaiKeToan: "CONFIRMED" })],
       dot: [],
     });
     expect(r.tongPhaiThu).toBe(12_000_000);
@@ -448,8 +466,8 @@ describe("[NTC-04] tổng đơn = Σ các con", () => {
         { orderItemId: BINH, amount: 6_000_000 },
       ],
       khoanChoXacNhan: [],
-      khoanDaVe: [{ id: "pay-6", orderItemId: AN, amount: 4_320_000, trangThaiKeToan: "CONFIRMED" },
-        { id: "pay-7", orderItemId: BINH, amount: 6_000_000, trangThaiKeToan: "CONFIRMED" },],
+      khoanDaVe: [kdv({ id: "pay-6", orderItemId: AN, amount: 4_320_000, trangThaiKeToan: "CONFIRMED" }),
+        kdv({ id: "pay-7", orderItemId: BINH, amount: 6_000_000, trangThaiKeToan: "CONFIRMED" }),],
       dot: [],
     });
     expect(r.tongDaThu).toBe(10_320_000);

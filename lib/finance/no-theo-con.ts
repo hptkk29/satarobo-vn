@@ -110,6 +110,30 @@ export type KhoanDaVe = {
   amount: number;
   /** `Payment.accountantStatus` — CHỈ để hiển thị, KHÔNG tham gia phép cộng nào. */
   trangThaiKeToan: string;
+  /**
+   * `Payment.paymentType` — `PAYMENT` | `ADJUSTMENT`. CHỈ để hiển thị + lọc AFFORDANCE.
+   *
+   * ⚠️ **KHÔNG tham gia phép cộng nào**, và đừng dùng nó để lọc `tongDaVe`. Bút toán
+   * `ADJUSTMENT` mang `amount` ÂM và phải được trừ ra — lọc nó đi là giữ lại tiền đã bị gỡ
+   * (chú thích đầu tệp, mục "KHÔNG lọc `paymentType`").
+   *
+   * Việc DUY NHẤT của trường này: màn đơn không được mời người dùng "Gắn cho bé…" một bút
+   * toán đảo. Một cái nút hứa điều nó không làm được là một lời hứa suông (luật 12).
+   */
+  loaiButToan: string;
+  /**
+   * Dòng này ĐÃ CÓ bút toán đảo còn sống trỏ vào (`adjustmentOfId = id`, chưa xoá mềm).
+   *
+   * Sinh ra cùng phép TÁCH KHOẢN [20/09/2026]: tách để lại dòng gốc NGUYÊN VẸN + một bút
+   * toán đảo + n dòng mới. Cặp gốc/đảo cộng lại bằng 0 nên mọi TỔNG vẫn đúng, nhưng cả hai
+   * vẫn mang `orderItemId = NULL` ⇒ nếu màn hình không biết trường này thì khối "chưa gắn
+   * cho con nào" sẽ liệt kê một dòng `+9.530.000` và một dòng `−9.530.000`, kèm nút "Gắn cho
+   * bé…" trên cả hai. Tổng in ra đúng (0đ) mà danh sách thì vô nghĩa.
+   *
+   * ⚠️ Cũng KHÔNG tham gia phép cộng nào. Lọc dòng đã bị đảo ra khỏi `tongDaVe` mà vẫn giữ
+   * dòng đảo là trừ tiền HAI lần.
+   */
+  daDao: boolean;
 };
 
 /** Một đợt thu của dòng. */
@@ -137,6 +161,28 @@ export type NoCuaCon = {
   choXacNhan: number;
   /** `phaiThu − daThu`. Có thể ÂM (đóng thừa) — trả số thô, màn hình tự diễn giải. */
   conNo: number;
+  /**
+   * Σ tiền ĐÃ VỀ của riêng bé này, theo tập RỘNG (`KhoanDaVe`) — tức gồm cả khoản kế toán
+   * chưa xác nhận, và KHÔNG gồm khoản đã bị TỪ CHỐI.
+   *
+   * ⚠️ Con số THỨ BA về "bé này đã đóng bao nhiêu", bên cạnh `daThu` (trục A) và
+   * `choXacNhan` (B trừ A). Ba con số vì có ba câu hỏi khác nhau, không phải vì trùng lặp:
+   *   · `daThu`      — kế toán đã xác nhận bao nhiêu (số nói với phụ huynh);
+   *   · `choXacNhan` — đã về mà chưa đối soát (việc nội bộ);
+   *   · `daVe`       — đã về, chấm hết (dùng để chặn ATTRIBUTION, xem `conCoTheNhan`).
+   * `daVe` KHÁC `daThu + choXacNhan` đúng bằng Σ khoản `REJECTED` của bé — nợ `[HT-05]`.
+   */
+  daVe: number;
+  /**
+   * `max(0, phaiThu − daVe)` — bé này còn có thể NHẬN THÊM bao nhiêu tiền đã thu.
+   *
+   * Trần của phép TÁCH KHOẢN (`kiemTachKhoan`). Cố ý KHÁC `conNo`: `conNo` đo theo trục A
+   * nên tách hai lần cho cùng một bé thì lần nào cũng thấy trần còn nguyên. Lý do đầy đủ ở
+   * đầu `lib/finance/tach-khoan.ts`.
+   *
+   * ⚠️ Không âm — bé đóng thừa thì trần là 0, tức không nhận thêm được đồng nào.
+   */
+  conCoTheNhan: number;
   /** Các đợt CHƯA đóng xong của con (PENDING/PARTIAL), theo hạn rồi tới số đợt. */
   dotDangMo: DotCuaDong[];
   /** Σ `amountDue` của các đợt đang mở — dùng cho cổng "tạo đợt không vượt còn nợ". */
@@ -249,6 +295,12 @@ export function tinhNoTheoCon(input: {
     const phaiThu = Math.max(0, tron(d.tamTinh) - tron(d.giam));
     const daThu = cong(input.khoanDaXacNhan, d.orderItemId);
     const choXacNhan = cong(input.khoanChoXacNhan, d.orderItemId);
+    // Tập RỘNG, lọc theo chính bé này. Cộng CẢ bút toán đảo (âm) — một phần tách bị gỡ sau
+    // này thì trần của bé phải mở lại đúng bằng phần đã gỡ.
+    const daVe = input.khoanDaVe.reduce(
+      (s, k) => (k.orderItemId === d.orderItemId ? s + tron(k.amount) : s),
+      0,
+    );
     const dotDangMo = input.dot
       .filter(
         (x) =>
@@ -271,6 +323,8 @@ export function tinhNoTheoCon(input: {
       daThu,
       choXacNhan,
       conNo: phaiThu - daThu,
+      daVe,
+      conCoTheNhan: Math.max(0, phaiThu - daVe),
       dotDangMo,
       tongDotDangMo: dotDangMo.reduce((s, x) => s + tron(x.amountDue), 0),
     };

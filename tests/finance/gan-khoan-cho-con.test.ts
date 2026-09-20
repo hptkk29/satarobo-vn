@@ -14,9 +14,14 @@
 // — **không có `BankTransaction` nào phía sau**, nên không có gì để gỡ và không có gì để gắn.
 // 4.836.000đ nằm trong DB mà không đường nào — giao diện hay script — chạm tới được.
 //
-// ⚠️ GIỚI HẠN CÓ CHỦ ĐÍCH: một khoản gắn cho ĐÚNG MỘT bé. Không tách một khoản cho hai bé —
-// tách nghĩa là sửa `amount`, mà "không đụng `amount`" chính là thứ làm đường này kiểm được.
-// Lý do đầy đủ ở đầu mục 4 của `lib/finance/ghi-tien-don.ts`.
+// ⚠️ GIỚI HẠN CÓ CHỦ ĐÍCH: một khoản gắn cho ĐÚNG MỘT bé. Hàm này KHÔNG bao giờ chia tiền —
+// "chỉ điền một cột đang trống" chính là thứ làm nó kiểm được.
+//
+// ⚠️ **[ĐẢO 20/09/2026 — phần "không tách được một khoản cho hai bé" ĐÃ HẾT ĐÚNG.]** Việc ấy
+// nay có đường riêng: `tachKhoanChoCon` (mục 6 của `ghi-tien-don.ts`, bộ
+// `tests/finance/tach-khoan-cho-con.test.ts`), và nó KHÔNG sửa `amount` của dòng nào — nó đảo
+// dòng gốc rồi đẻ n dòng mới. Câu trên vẫn đúng cho CHÍNH hàm này, đừng đọc nó như một lệnh
+// cấm cho cả module.
 import { describe, it, expect, beforeEach, afterAll } from "vitest";
 import { db } from "@/lib/db";
 import { RUN_DB_TESTS, LY_DO_BO_QUA } from "@/tests/_helpers/db-gate";
