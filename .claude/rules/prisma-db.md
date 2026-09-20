@@ -74,6 +74,21 @@ Direct connection `db.<ref>.supabase.co:5432` chỉ có **IPv6 AAAA record** —
   pnpm test:chat-db && pnpm test:nen-db && pnpm test:lead-intake
   ```
   Thấy `SKIP` trong log là **chưa kiểm được gì**, không phải "xanh".
+- 🔴 **CHIỀU NGƯỢC LẠI, và nó tinh vi hơn: bộ THUẦN XANH Ở MÁY BẠN *VÌ* MÁY BẠN CÓ
+  POSTGRES.** Job `Unit tests` của CI **không dựng Postgres**. Một ca trong bộ thuần lỡ
+  chạm đường DB (thiếu một `vi.mock`) sẽ **xanh ở local và đỏ trên CI** — ngược hẳn với
+  bẫy ở trên, nên đọc log xong dễ kết luận nhầm là "CI hỏng hạ tầng".
+  **Sự cố 18/09/2026, và nó chỉ sinh ra Ở LƯỢT GỘP:** `order-create-audit.test.ts` do
+  nhánh `test` viết, mock đủ mọi thứ mà `_actions.ts` bên `test` chạm tới. Nhánh `main`
+  thêm `getSetting("orders.maxDiscountPercent")` vào cùng hàm ấy. **Không nhánh nào tự
+  bắt được** — mỗi bên đều xanh; chỉ bản gộp mới có "bộ ca cũ × lời gọi DB mới", và cả
+  NĂM ca đỏ với thông báo nói về Prisma chứ không nói gì về audit.
+  **Cách tái hiện đúng job CI ở local — trỏ vào cổng không có ai nghe:**
+  ```bash
+  DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:59999/khong_ton_tai'   DIRECT_URL="$DATABASE_URL" pnpm test:unit -- --run
+  ```
+  Rẻ hơn tắt Postgres thật, và **bắt buộc chạy sau mỗi lượt gộp nhánh** — đây đúng là
+  lớp lỗi mà luật 14 (`CLAUDE.md`) bảo phải đi tìm bằng cách cấy, không bằng đọc diff.
 - **Env riêng cho test:** `.env.test` (đã `.gitignore`, KHÔNG commit):
   ```
   DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/satarobo_test"
@@ -99,13 +114,26 @@ thứ chép sang, đối chiếu từ `.github/workflows/ci.yml`:
 | Biến | Đặt trong `.env.test`? | Vì sao |
 |---|---|---|
 | `DATABASE_URL`, `DIRECT_URL` | **CÓ** | Postgres local |
-| `NEXTAUTH_SECRET` | **CÓ** | `lib/security/signing-key.ts` **NÉM LỖI** nếu thiếu hoặc <32 ký tự. Đây là biến đã gây 9 ca đỏ |
+| `NEXTAUTH_SECRET` | **CÓ, ≥32 KÝ TỰ** | `lib/security/signing-key.ts` **NÉM LỖI** nếu thiếu **hoặc <32 ký tự**. Đây là biến đã gây 9 ca đỏ |
 | `AUTH_SECRET` | **CÓ** | `signing-key.ts` đọc `NEXTAUTH_SECRET ?? AUTH_SECRET`; đặt cả hai cho khớp mọi đường |
 | `NEXTAUTH_URL`, `NEXT_PUBLIC_APP_URL` | **CÓ** (cổng 3100) | cần cho bộ CÓ dựng Next: a0 · smoke · site GV · e-learning |
 | `BASE_URL` | **KHÔNG** | mỗi bộ một cổng (smoke 3000, a0/r7 3100) và mọi config đã có mặc định. Đặt chung là bẻ bộ còn lại |
 | `*_SKIP_WEBSERVER` (A0/R1–R7/CRM/FL/ELEARNING/TEACHER) | **KHÔNG** | cờ TĂNG TỐC bật theo từng lượt. Đặt cứng ⇒ bộ cần trình duyệt mất webserver và đỏ vì lý do chẳng liên quan |
 | `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | **KHÔNG** | cấu hình container của CI, không phải biến ứng dụng |
 | `CI_DATABASE_URL` | **KHÔNG** | bí danh chỉ dùng trong `ci.yml` |
+
+> 🔴 **TÁI PHÁT 17/09/2026, ở dạng khó thấy hơn.** Lần này tệp env của bộ test **CÓ**
+> `NEXTAUTH_SECRET` — nên bảng trên coi như đạt — nhưng nó dài **26 ký tự**, dưới ngưỡng 32,
+> và `AUTH_SECRET` thì thiếu. Bộ R7 ra **176 xanh / 9 đỏ**; sửa đúng hai biến ⇒ **185 xanh /
+> 0 đỏ**. 176 + 9 = 185, khớp chính xác như lần 09/09.
+>
+> Bài học thêm vào: **"có biến" KHÔNG phải "đủ dài"**. Cổng của `signing-key.ts` có HAI vế
+> (`!s || s.length < 32`) và vế thứ hai mới là vế cắn. Kiểm bằng ĐỘ DÀI, đừng kiểm bằng sự
+> có mặt — một lệnh `awk` in ra độ dài của hai biến ấy là đủ, và đừng in giá trị.
+>
+> Và 9 ca đỏ ấy nằm ở `offline-activation-code.spec.ts` + `parent-phone-change.spec.ts` —
+> hai spec OTP, **không liên quan gì tới thứ đang sửa**. Đó chính là hình dạng nguy hiểm:
+> ca đỏ trông như hồi quy của người khác, nên phản xạ đầu tiên là đi soi diff của họ.
 
 Giá trị mẫu cho hai khoá ký — **chuỗi TEST, vô hại**, cố ý trùng giá trị CI dùng để hành vi
 ở hai nơi giống nhau:

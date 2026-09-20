@@ -7,7 +7,7 @@
 //
 // File này THUẦN (không chạm DB, không server-only) để test được bằng vitest.
 import { z } from "zod";
-import { vnDateAt, vnParts } from "@/lib/time/vn";
+import { vnDateAt, vnParts, vnYmd } from "@/lib/time/vn";
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
@@ -145,3 +145,93 @@ export const cancelSessionSchema = z.object({
   sessionId: z.string().trim().min(1, "Thiếu buổi học"),
   reason: z.string().trim().min(3, "Ghi rõ lý do huỷ buổi (ít nhất 3 ký tự)").max(500),
 });
+
+/**
+ * Đầu vào của `layGvChoBuoiAction` — đường ĐỌC, nhưng vẫn phải gác HÌNH DẠNG.
+ *
+ * ⚠️ Vì sao một đường đọc cũng cần zod, dù chữ ký TypeScript của action đã khai đủ kiểu:
+ * kiểu của một Server Action là lời hứa của TRÌNH BIÊN DỊCH với các chỗ gọi TRONG repo,
+ * không phải một cái cổng. Trình duyệt POST thẳng vào endpoint đó được, với payload bất
+ * kỳ. Và ở đây payload bẩn không rơi vào nhánh `{ ok: false }` gọn gàng — nó NÉM:
+ * `ngayVnSangUtc(input.date)` gọi `.trim()`, còn `date: 123` thì `.trim` không tồn tại.
+ * Một action NÉM thì client nhận promise bị từ chối chứ không nhận `error`, nên chỗ gọi
+ * đọc thành "không có gì đổi" và ô chọn giáo viên giữ nguyên danh sách CŨ — sai mà không
+ * một dòng chữ nào hiện ra (đúng lớp lỗi luật 12). Bốn action ghi cùng tệp đều đã
+ * `safeParse`; đây là cái duy nhất sót.
+ *
+ * `endTime > startTime` khoá cùng luật với `addSessionSchema`/`updateSessionSchema`: thiếu
+ * vế này thì khung giờ ngược đời đi lọt tới `caPhuTronKhungGio`, ra `KHONG_PHU` cho TẤT
+ * CẢ, và người dùng đọc được đúng một câu "không ai có ca phủ trọn 19:30–18:00" — câu đó
+ * đổ lỗi cho lưới ca trong khi lỗi nằm ở hai ô giờ họ vừa gõ.
+ */
+export const gvChoBuoiSchema = z
+  .object({
+    trialClassId: z.string().trim().min(1, "Thiếu lớp trải nghiệm"),
+    date: z.string().regex(YMD, "Ngày buổi học không hợp lệ"),
+    startTime: z.string().regex(HHMM, "Giờ bắt đầu không hợp lệ"),
+    endTime: z.string().regex(HHMM, "Giờ kết thúc không hợp lệ"),
+    /** Buổi ĐANG SỬA — loại khỏi phép so trùng. Bỏ trống khi đang THÊM buổi mới. */
+    excludeSessionId: z.string().trim().min(1).nullable().optional(),
+    /**
+     * Công tắc "Hiện tất cả giáo viên" — trạng thái UI của MỘT lượt chọn, không phải
+     * cấu hình và không phải quyền.
+     *
+     * `.default(false)` là CÓ CHỦ ĐÍCH và không mâu thuẫn luật 7: luật đó cấm mặc định
+     * nguy hiểm, và mặc định ở đây là vế ĐANG LỌC (hẹp), tức fail-closed. Đây là endpoint
+     * — payload thiếu khoá đến từ một máy khách bất kỳ, và nó KHÔNG được tự mở bộ lọc.
+     * Vế bắt-buộc-viết-ra nằm ở chữ ký TS của `layGvChoBuoiAction`, nơi `tsc` liệt kê
+     * được call site; ở đây thì không có call site nào để liệt kê.
+     */
+    hienTatCa: z.boolean().default(false),
+  })
+  .refine((d) => d.endTime > d.startTime, {
+    message: "Giờ kết thúc phải sau giờ bắt đầu",
+    path: ["endTime"],
+  });
+
+// ─── Cửa sổ ngày hợp lệ của `layGvChoBuoiAction` ─────────────────────────────
+
+/**
+ * Bao nhiêu ngày TRƯỚC hôm nay còn hỏi được. 60 = hai tháng.
+ *
+ * PHÉP TÍNH: thứ duy nhất cần hỏi về QUÁ KHỨ là sửa lại một buổi đã diễn ra (đổi giáo
+ * viên cho đúng người thật sự đã dạy). Kỳ công đóng theo THÁNG, nên ca xa nhất còn thực
+ * tế là sửa buổi của tháng trước trong lúc chốt công — cùng lắm ~45 ngày. Lấy 60 cho có
+ * biên, không lấy 365: mỗi ngày mở thêm là một ngày lịch ca đọc được bằng cách gọi lặp.
+ */
+export const GV_BUOI_LUI_TOI_DA_NGAY = 60;
+
+/**
+ * Bao nhiêu ngày SAU hôm nay còn hỏi được. 180 = sáu tháng.
+ *
+ * PHÉP TÍNH: buổi trải nghiệm được đặt trước xa nhất là theo đợt tuyển sinh — hết một
+ * học kỳ, ~4–5 tháng. Lấy 180 để không chặn nhầm người đang xếp lịch hè từ mùa xuân.
+ * Lưới ca chấm công cũng chỉ sinh trước vài tháng, nên xa hơn nữa thì câu trả lời của
+ * hàm lọc cũng chỉ còn là `CHUA_CO_LUOI`.
+ */
+export const GV_BUOI_TOI_TOI_DA_NGAY = 180;
+
+/**
+ * Ngày `ymd` có nằm ngoài cửa sổ hợp lý quanh `now` không.
+ *
+ * ── VÌ SAO PHẢI CHẶN (vá 17/09/2026) ─────────────────────────────────────────────────
+ * `gvChoBuoiSchema` chỉ kiểm HÌNH DẠNG `YYYY-MM-DD`, không buộc ngày phải dính vào buổi
+ * nào của lớp — mà endpoint thì trả về trạng thái ca của TỪNG giáo viên cho ngày đó. Gọi
+ * lặp theo từng ngày là dựng lại được lưới ca nhiều năm. Che nhãn (`duocXemLyDoNghi`) bịt
+ * phần CHỮ; cửa sổ này bịt phần KHỐI LƯỢNG — thiếu một trong hai vế thì vế kia vẫn rò.
+ *
+ * ⚠️ Hàm THUẦN, `now` là THAM SỐ BẮT BUỘC (luật 19). Tự gọi `new Date()` ở đây là biến
+ * mọi ca test thành ca hẹn giờ nổ: mã không đổi, tờ lịch đổi thì đỏ.
+ *
+ * So bằng CHUỖI "YYYY-MM-DD" theo lịch VN (`vnYmd`), không so bằng mốc `Date`: hai mép
+ * cửa sổ chỉ có nghĩa theo NGÀY, và so mốc thì lệch múi giờ đúng một ngày ở hai đầu.
+ * Sai định dạng ⇒ `true` (ngoài cửa sổ) — fail-closed; nhánh đó đã bị zod chặn trước,
+ * nên đây chỉ là lưới thứ hai.
+ */
+export function ngoaiCuaSoNgayGvBuoi(input: { ymd: string; now: Date }): boolean {
+  if (!YMD.test(input.ymd.trim())) return true;
+  const ngay = input.ymd.trim();
+  const som = vnYmd(new Date(input.now.getTime() - GV_BUOI_LUI_TOI_DA_NGAY * 86_400_000));
+  const muon = vnYmd(new Date(input.now.getTime() + GV_BUOI_TOI_TOI_DA_NGAY * 86_400_000));
+  return ngay < som || ngay > muon;
+}

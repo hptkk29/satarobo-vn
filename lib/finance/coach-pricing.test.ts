@@ -11,6 +11,8 @@ import {
   giaCoachMoiBuoi,
   tinhHocPhiTheoBuoi,
   type CoachFormat,
+  CoachKhongApDung,
+  laKhoaLoaiTruCoach,
 } from "./coach-pricing";
 
 describe("[CO-01] hệ số đúng công văn Mục 5.2", () => {
@@ -183,5 +185,65 @@ describe("[CO-08] mọi hình thức đều có tên đọc được cho màn h�
   it("4 hình thức, không thiếu cái nào", () => {
     const ds: CoachFormat[] = ["GROUP", "ONE_ON_ONE", "ONE_ON_TWO", "ONE_ON_FOUR"];
     for (const f of ds) expect(HE_SO_COACH[f]).toBeGreaterThan(0);
+  });
+});
+
+describe("[CO-09] khoá bị công văn LOẠI TRỪ khỏi Coach — nhận ra bằng gì", () => {
+  // Ghi chú Điều 5: "Sata8 KHÔNG áp dụng Coach" (gói cam kết 5 buổi, giá cố định Điều 3).
+  //
+  // ⚠️ ĐÂY LÀ MỘT PHÉP ĐOÁN THEO TÊN, VÀ NÓ ĐƯỢC KHAI RA ĐÚNG CHỖ NÀY.
+  // `Course` không có cột "được Coach hay không", và thêm cột là ALTER trên bảng có dữ
+  // liệu prod (luật cứng #4 — phải là story riêng có dry-run). Nên đường nhận dạng tạm
+  // thời là slug/code/tên. Hệ quả phải biết: đặt tên khoá mới kiểu "Sata 8 nâng cao" thì
+  // nó cũng bị loại khỏi Coach, và đó là hướng sai AN TOÀN (chặn nhầm còn hơn bán nhầm
+  // một hình thức công văn cấm).
+  it("slug sata-8 → loại trừ", () => {
+    expect(laKhoaLoaiTruCoach({ slug: "sata-8", code: null, name: "Sata 8" })).toBe(true);
+  });
+
+  it("tên có 'Sata 8' (có khoảng trắng) → loại trừ", () => {
+    expect(
+      laKhoaLoaiTruCoach({ slug: null, code: null, name: "Sata 8 — Gói cam kết" }),
+    ).toBe(true);
+  });
+
+  it("code SATA8 → loại trừ", () => {
+    expect(laKhoaLoaiTruCoach({ slug: null, code: "SATA8", name: null })).toBe(true);
+  });
+
+  it("Sata 1–4 và combo KHÔNG bị loại trừ", () => {
+    for (const x of [
+      { slug: "sata-1", code: null, name: "Sata 1 — Nhập môn Robotics" },
+      { slug: "sata-4", code: null, name: "Sata 4 — Lập trình khối" },
+      { slug: "combo-1-2", code: null, name: "Combo Sata 1 & 2" },
+    ]) {
+      expect(laKhoaLoaiTruCoach(x)).toBe(false);
+    }
+  });
+
+  it("KHÔNG khớp nhầm 'Sata 18' / 'Sata 80'", () => {
+    // Khớp lỏng theo "chứa 'sata8'" thì mọi khoá đánh số bắt đầu bằng 8 đều bị chặn.
+    expect(laKhoaLoaiTruCoach({ slug: "sata-18", code: null, name: "Sata 18" })).toBe(false);
+    expect(laKhoaLoaiTruCoach({ slug: "sata-80", code: null, name: "Sata 80" })).toBe(false);
+  });
+
+  it("khoá rỗng / thiếu cả ba trường → KHÔNG loại trừ", () => {
+    // Fail-open có chủ đích: chặn Coach vì không đọc được tên là chặn một việc bán hàng
+    // hợp lệ. Hướng an toàn của ca này ngược với ca "Sata 8 nâng cao" ở trên, và đó là
+    // lý do nó được viết ra chứ không suy.
+    expect(laKhoaLoaiTruCoach({ slug: null, code: null, name: null })).toBe(false);
+  });
+
+  it("nối được với tinhHocPhiTheoBuoi: khoá loại trừ + Coach → NÉM", () => {
+    expect(() =>
+      tinhHocPhiTheoBuoi({
+        giaNiemYet: 3_000_000,
+        tongSoBuoi: 5,
+        soBuoiMua: 5,
+        coachFormat: "ONE_ON_ONE",
+        giamGia: null,
+        khoaKhongApDungCoach: laKhoaLoaiTruCoach({ slug: "sata-8", code: null, name: null }),
+      }),
+    ).toThrow(CoachKhongApDung);
   });
 });

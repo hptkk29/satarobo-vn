@@ -52,6 +52,34 @@ export async function consumeTicket(input: { ticketId: string; nonce: string; us
   return { ok: true, workLocationId: t.workLocationId };
 }
 
+/**
+ * TRẢ LẠI VÉ đã tiêu, khi lượt quét bị TỪ CHỐI nên rốt cuộc không có gì được ghi.
+ *
+ * ── Vì sao có hàm này (chốt chủ dự án 16/09/2026) ─────────────────────────────────────
+ *
+ * *"Vé chỉ bị tiêu khi lượt quét được GHI. Từ chối mà vẫn tiêu vé là cái bẫy nặng nhất
+ * trong cả chuyện này — hỏng một lần là phải đi xin mã mới."*
+ *
+ * `consumeTicket` chạy TRƯỚC `recordTimeLog` và phải thế: nó là cổng chống quét lại, và cổng
+ * ấy chỉ đứng vững khi việc đánh dấu là một lệnh nguyên tử xảy ra trước mọi thứ khác. Nhưng
+ * hệ quả là một lượt bị từ chối vẫn ăn mất vé. Nên thay vì đảo thứ tự (làm thủng cổng), ta
+ * HOÀN lại vé ở đúng nhánh từ chối.
+ *
+ * ⚠️ Hoàn vé KHÔNG nới lỏng bảo vệ: người bị từ chối vì ngoài vùng có bấm lại bao nhiêu lần
+ * cũng vẫn ngoài vùng và vẫn bị từ chối. Thứ duy nhất đổi là họ không phải đi xin mã mới.
+ *
+ * Trả `true` nếu vé được hoàn thật. `updateMany` có điều kiện `consumedAt: { not: null }` để
+ * hai lượt gọi chồng nhau không hoàn hai lần.
+ */
+export async function hoanVe(ticketId: string | null | undefined): Promise<boolean> {
+  if (!ticketId) return false;
+  const r = await db.attendanceTicket.updateMany({
+    where: { id: ticketId, consumedAt: { not: null } },
+    data: { consumedAt: null },
+  });
+  return r.count === 1;
+}
+
 export type RecordTimeLogInput = {
   userId: string;
   /**
@@ -140,14 +168,23 @@ export async function recordTimeLog(input: RecordTimeLogInput): Promise<RecordTi
   //
   // Người bị chặn nhầm KHÔNG kẹt: đơn chỉnh công (`TIMESHEET_FIX`) là đường sửa có sẵn, quản lý
   // duyệt là mốc giờ vào đúng chỗ.
+  //
+  // ⚠️ ĐẢO 16/09/2026 — THIẾU TOẠ ĐỘ thôi bị TỪ CHỐI, nay chỉ gắn cờ.
+  //
+  // Đo prod 16/09: **53 lượt bị từ chối vì `NO_GPS`**, đang xảy ra hằng ngày (12 lượt riêng
+  // hôm ấy). Người bị chặn không chấm được, mà vé thì đã tiêu — hỏng một lần là phải đi xin
+  // quét mã mới.
+  //
+  // Lý lẽ của chủ dự án, và nó dứt điểm: *"Không mất lớp bảo vệ nào: kẻ gian lận có toạ độ
+  // (giả) chứ không thiếu toạ độ."* Đúng — lớp bảo vệ thật nằm ở vế `OUTSIDE_GEOFENCE` ngay
+  // dưới, và vế ấy GIỮ NGUYÊN. Chặn người KHÔNG có toạ độ chỉ chặn được người trung thực
+  // đứng chỗ sóng kém; kẻ muốn gian lận thì gửi lên một cặp toạ độ bịa, và cặp ấy sẽ bị vế
+  // dưới chặn chứ không phải vế này.
+  //
+  // Nay: ghi lượt, gắn `THIEU_GPS`, để quản lý rà. Cờ ấy PHẢI có người đọc — nó hiện ở bảng
+  // công ngày và ở danh sách "ngày có cờ" của quản lý; cờ không ai rà thì bằng không có
+  // (luật 10).
   if (wl != null && wl.geofenceEnabled && wl.latitude != null && wl.longitude != null) {
-    if (input.latitude == null || input.longitude == null) {
-      return {
-        ok: false,
-        error: "Không lấy được vị trí. Bật định vị cho trình duyệt rồi quét lại — nếu vẫn không được, nộp đơn chỉnh công.",
-        rejectReason: "NO_GPS",
-      };
-    }
     if (within === false) {
       const xa = dist == null ? "" : ` (cách ${Math.round(dist)}m, cho phép ${wl.radiusMeters}m)`;
       return {

@@ -45,9 +45,17 @@ describe("[CG-LUOI] tạo đơn để lại dấu vết giá", () => {
   it("action ghi AuditLog CREATE cho Order, và ghi TRONG transaction", () => {
     const s = src();
     // Mã TRƯỚC bản vá: `grep writeAudit` trên file này ra 0 dòng.
-    // Trần ký tự nới 1200 -> 3000 ngày 16/09/2026: khối `writeAudit` dài thêm sau khi
-    // hợp nhất `main` (thêm leadChildId, shippingFee, customerPhone, ip, userAgent kèm
-    // chú thích). Đây là phép quét NGUỒN, trần chỉ để regex không nuốt cả tệp.
+    //
+    // ⚠️ TRẦN KÝ TỰ ĐÃ NỚI 1200 → 2400 [15/09/2026] → 3000 [18/09/2026], và đây là bài
+    // học về chính lưới này. Đợt "giảm giá theo từng dòng" thêm `giamTungDong[]` vào thân
+    // `writeAudit` ⇒ thân dài 1521 ký tự ⇒ regex KHÔNG khớp nữa ⇒ ca đỏ với thông báo
+    // "không thấy lời gọi writeAudit", trong khi lời gọi vẫn còn nguyên và vẫn đúng. Một
+    // lưới báo SAI nguyên nhân còn tệ hơn lưới không có: người đọc đi tìm một lời gọi bị
+    // xoá mà không ai xoá cả. Lần nới thứ hai (18/09) là vì hợp nhất `main` cộng thêm
+    // `leadChildId` · `shippingFee` · `customerPhone` · `ip` · `userAgent` vào cùng thân.
+    //
+    // Thứ THẬT SỰ chặn phạm vi là NEO ĐÓNG (đúng bốn dấu cách) cộng dấu `?` không tham.
+    // Con số chỉ là lưới an toàn phòng khi ai đó xoá mất neo đóng.
     const goi = /await writeAudit\(\{[\s\S]{0,3000}?\n {4}\}\);/.exec(s);
     expect(goi, "không thấy lời gọi writeAudit trong _actions.ts").not.toBeNull();
     const than = goi![0];

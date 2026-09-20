@@ -170,6 +170,22 @@ export function isPaymentLedgerV2Enabled(): boolean {
 }
 
 /**
+ * ⛔ CÔNG TẮC thu học phí linh hoạt KHÔNG ở đây — nó ở DB.
+ *
+ * Sáng 16/09/2026 tôi khai `PAYMENT_PER_CHILD_ENABLED` ở file này. Chiều cùng ngày chủ dự án
+ * chốt: *"nên để bật cho toàn hệ thống đồng loạt, nhưng sẽ có công tắc riêng cho từng cs"* — và
+ * `SystemSetting` + `CenterSetting` làm đúng được việc đó, còn env thì không (env không có
+ * chiều cơ sở, và bật nó phải qua dev + redeploy).
+ *
+ * Nên cờ env đã GỠ, và chỗ duy nhất đọc công tắc là `laThuTienLinhHoatBat()` ở
+ * `lib/finance/feature.ts` (khoá `billing.flexV1Enabled`). Có lưới `[FEAT-03]` đếm số chỗ đọc
+ * khoá đó ngoài file ấy = 0.
+ *
+ * ⚠️ ĐỪNG khai lại cờ ở đây "cho nhanh". Hai công tắc là hai nơi quyết định nghĩa của "bật", và
+ * tắt một cái sẽ tắt được 9 chỗ trong 10 — đúng hình dạng sự cố `PAYMENT_LEDGER_V2`.
+ */
+
+/**
  * 20/08/2026 — TẮT tính năng NHÓM LỚP theo yêu cầu chủ dự án ("ẩn nhóm lớp,
  * disable tính năng nhóm lớp ở sidebar luôn").
  *

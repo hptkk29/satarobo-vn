@@ -1943,7 +1943,9 @@ model Student {
   auditLogs StudentAuditLog[] @relation("StudentAuditLogs")
 
   // Phase 5.6 — Order
-  orders Order[] @relation("StudentOrders")
+  orders     Order[]     @relation("StudentOrders")
+  /// Dòng hàng mua CHO em này — đơn nhiều con (15/09/2026).
+  orderItems OrderItem[] @relation("StudentOrderItems")
 
   // Phase 5.9 — Reserve history
   reserves StudentReserve[] @relation("StudentReserves")
@@ -4235,6 +4237,25 @@ model Order {
   customerCity    String?
   customerCccd    String? // FIX lead→payment→enroll (M0) — CCCD người mua (snapshot đơn)
 
+  // ─── Hoá đơn GTGT (14/09/2026) — khối "người mua" của mẫu hoá đơn ───
+  // ĐỀU NULLABLE và KHÔNG có default: để trống = "chưa khai", đường đọc tự rơi về cột
+  // `customer*` tương ứng (`lib/finance/hoa-don/nguoi-mua.ts`). Đặt default kiểu copy
+  // `customerName` là biến "chưa khai" thành "đã khai đúng bằng tên người đặt" — sai im
+  // lặng trên một tờ giấy pháp lý.
+  //
+  // ⚠️ KHÔNG có cột thuế suất / pháp nhân ở đây: đó là CẤU HÌNH vận hành, không phải
+  // thuộc tính của đơn. Chốt vào đơn là mỗi lần BGĐ đổi mức thuế lại phải chạy migration.
+  /// Người ĐỨNG TÊN hoá đơn — có thể khác người đặt đơn (1C26MNV-13: người mua "Phan Thị
+  /// Hồng", học viên "Nguyễn Đức Huy Hoàng"). Trống ⇒ dùng `customerName`.
+  invoiceBuyerName   String?
+  /// Ô "Tên đơn vị" khi khách xuất hoá đơn cho công ty.
+  invoiceCompanyName String?
+  /// "MST/CCCD chủ hộ" của NGƯỜI MUA — khác mã số thuế của pháp nhân BÁN.
+  invoiceTaxCode     String?
+  /// Nơi nhận hoá đơn điện tử. Tách khỏi `customerEmail`: email nhận hoá đơn thường là
+  /// email kế toán của khách, không phải email liên hệ. Trống ⇒ dùng `customerEmail`.
+  invoiceEmail       String?
+
   // Optional links
   studentId String?
   student   Student? @relation("StudentOrders", fields: [studentId], references: [id])
@@ -4328,6 +4349,8 @@ model Order {
   // 03/08 — sổ thu theo ĐỢT (PaymentRequest) + sổ phân bổ. Chạy SONG SONG với
   // OrderInstallment/Payment cho tới khi shadow-compare sạch (cờ PAYMENT_LEDGER_V2).
   paymentRequests PaymentRequest[]
+  /// 16/09 — phiếu gộp: MỘT mã QR cho cả gia đình, chia về từng con theo thứ tự dòng.
+  paymentBills    PaymentBill[]
 
   @@index([code])
   @@index([status])
@@ -4408,6 +4431,18 @@ model OrderItem {
   productId String?
   product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
 
+  /// Dòng hàng này mua cho CON NÀO (15/09/2026 — đơn nhiều con).
+  ///
+  /// Lúc tạo đơn thủ công thì `Enrollment` CHƯA tồn tại (convert-lead sinh sau), nên
+  /// `enrollmentId` luôn null và không có gì phân biệt hai dòng của hai đứa trẻ. Cột này
+  /// là chỗ đó.
+  ///
+  /// NULL là giá trị HỢP LỆ, không phải thiếu dữ liệu: đơn sản phẩm không thuộc học viên
+  /// nào, và khách vãng lai thì con chưa có bản ghi `Student` (tên con nằm ở `itemName`).
+  /// `SetNull` theo đúng nếp `productId`: xoá học viên không được kéo theo sổ tiền.
+  studentId String?
+  student   Student? @relation("StudentOrderItems", fields: [studentId], references: [id], onDelete: SetNull)
+
   // Item display snapshot (immutable)
   itemName        String
   itemDescription String? @db.Text
@@ -4415,12 +4450,61 @@ model OrderItem {
   // Pricing (VND, Int)
   quantity   Int @default(1)
   unitPrice  Int
+  /// TẠM TÍNH của dòng — `unitPrice * quantity`, TRƯỚC giảm giá.
+  ///
+  /// Cố ý giữ nguyên nghĩa GỘP: `Order.subtotal` = Σ cột này, và chân bảng sản phẩm
+  /// trừ giảm giá ở một dòng riêng. Đổi cột này thành số sau-giảm là làm lệch âm thầm
+  /// ba đường ghi khác đang đặt nó bằng giá gộp (`backfill-order`, `ghi-giao-dich-cu`).
   totalPrice Int
+
+  /// Giảm giá của RIÊNG dòng này (15/09/2026 — "tách riêng theo từng dòng").
+  ///
+  /// Ưu đãi thật gần như luôn bám vào MỘT em (anh chị em học cùng, học bổng), nên gộp
+  /// thành một số ở cấp đơn là mất thông tin đúng lúc sau này phải trả lời: hoàn tiền
+  /// cho một em thì trừ bao nhiêu.
+  ///
+  /// ⚠️ KHÔNG hạ `unitPrice` để thay cho cột này — `lib/orders/price-guard.ts` so
+  /// `unitPrice` với giá niêm yết, nhét phần giảm vào đó là làm mù cổng soát giá.
+  /// Cùng khuôn với `Enrollment` (listPrice + discountAmount + finalPrice).
+  ///
+  /// Thành tiền sau giảm = `totalPrice - discountAmount` (xem `lib/orders/giam-gia-dong.ts`).
+  discountAmount  Int     @default(0)
+  /// % đã gõ, giữ lại ý định của người bán. NULL = nhập theo số tiền tuyệt đối.
+  discountPercent Int?
+  /// Giải trình của RIÊNG dòng — dấu vết thay cho cơ chế duyệt đã gỡ 14/09/2026.
+  discountReason  String? @db.Text
+
+  /// CÁC KHOẢN giảm của dòng này, theo thứ tự người bán gõ (15/09/2026 — "làm flex").
+  ///
+  /// Ưu đãi thật chồng lên nhau: anh chị em học cùng + đóng sớm cả khoá + học bổng
+  /// riêng. Một ô duy nhất làm mất TÊN của từng khoản — và đó đúng là thứ kế toán hỏi
+  /// sáu tháng sau ("500.000đ này là chương trình nào").
+  ///
+  /// `[{ kieu: "SO_TIEN"|"PHAN_TRAM", giaTri: number, giam: number, lyDo: string|null }]`
+  ///
+  /// Cột JSON (thay vì bảng `OrderItemDiscount` riêng) và luật `discountPercent = NULL
+  /// khi nhiều khoản` là hai đề xuất của người viết mã, chủ dự án đã PHÊ 15/09/2026
+  /// ("bạn tự đề xuất rồi tự quyết đi"). Lý do đầy đủ ở đầu migration
+  /// `20260915170000_order_item_nhieu_giam_gia`.
+  ///
+  /// ⚠️ KHÔNG phải sổ tiền thứ hai. Số tiền của dòng vẫn là `discountAmount` (Int) và
+  /// `Order.discountAmount` = Σ cột đó; mảng này là BẢN GIẢI THÍCH của con số ấy. Ai
+  /// cộng tiền thì cộng `discountAmount`, không duyệt JSON.
+  ///
+  /// ⚠️ `giaTri` (số đã gõ) và `giam` (số thực sự trừ được sau khi kẹp vào tạm tính của
+  /// dòng) cố ý tách đôi: lưu một trong hai là hoặc bảng hiển thị cộng không ra tổng,
+  /// hoặc mất dấu việc khoản cuối đã bị cắt bớt.
+  discounts Json?
 
   metadata Json?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  /// 16/09 — phiếu thu của RIÊNG dòng này ("công nợ theo CON").
+  paymentRequests PaymentRequest[]
+  /// 16/09 — khoản tiền đã vào RIÊNG dòng này. Xem chú thích `Payment.orderItemId`.
+  payments        Payment[]
 
   @@index([orderId])
   @@index([type])
@@ -4428,6 +4512,7 @@ model OrderItem {
   @@index([packageId])
   @@index([examAttemptId])
   @@index([productId])
+  @@index([studentId])
 }
 
 model OrderStatusHistory {
@@ -6314,11 +6399,29 @@ model Payment {
   order        Order       @relation("OrderPayments", fields: [orderId], references: [id], onDelete: Restrict) // FIX-C3
   enrollmentId String?
   enrollment   Enrollment? @relation("EnrollmentPayments", fields: [enrollmentId], references: [id], onDelete: SetNull) // FIX-C3: liên kết mềm, giữ SetNull
-  amount       Int
-  method       String // tiền mặt / chuyển khoản / ... (id hoặc nhãn)
-  paidDate     DateTime    @db.Timestamptz(6)
-  evidenceUrl  String?
-  note         String?     @db.Text
+
+  /// Khoản này của DÒNG HÀNG nào — tức của CON nào [16/09/2026, phiên A].
+  ///
+  /// ⚠️ KHÔNG thay `enrollmentId`, hai cột sống chung và có vai khác nhau:
+  ///   · `orderItemId`  — con nào trên ĐƠN. Có NGAY từ lúc tạo đơn. Hạt của công nợ theo con.
+  ///   · `enrollmentId` — ghi danh nào. Chỉ có SAU khi chốt lead. Hạt của học bạ, hoàn tiền.
+  ///
+  /// Vì sao cần: `/orders/new` không tạo `Enrollment` nào (convert-lead đúc sau), nên suốt
+  /// quãng "đơn đã tạo, chưa chốt lead" — đúng quãng phụ huynh chuyển đợt 1 — không có gì để
+  /// gắn tiền vào một đứa trẻ. Đo trên prod 16/09: **18 đơn / 24 khoản / 178.544.000đ** đang
+  /// kẹt ở đúng tình trạng đó (`enrollmentId IS NULL`).
+  ///
+  /// `Restrict` (khác `SetNull` của `enrollmentId` ngay trên, và khác có chủ ý): xoá ghi danh
+  /// là việc học vụ nên không được kéo sổ tiền theo; còn dòng hàng thì không có đường xoá nào
+  /// trong mã chạy thật, nên `Restrict` không chặn ai mà vẫn bảo đảm tiền không mất dấu con.
+  orderItemId String?
+  orderItem   OrderItem? @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+
+  amount      Int
+  method      String // tiền mặt / chuyển khoản / ... (id hoặc nhãn)
+  paidDate    DateTime @db.Timestamptz(6)
+  evidenceUrl String?
+  note        String?  @db.Text
 
   saleStatus       PaymentSaleStatus       @default(RECORDED)
   accountantStatus PaymentAccountantStatus @default(PENDING)
@@ -6350,6 +6453,7 @@ model Payment {
 
   @@index([orderId])
   @@index([enrollmentId])
+  @@index([orderItemId])
   @@index([centerId])
   @@index([accountantStatus])
   @@index([orgUnitId])
@@ -6386,14 +6490,26 @@ enum PaymentRequestStatus {
 /// (đơn không trả góp / kế hoạch chưa duyệt). Phiếu theo đợt (1,2,…) CHỈ được
 /// sinh bởi đường duyệt kế hoạch trả góp — xem lib/payments/payment-request.ts.
 model PaymentRequest {
-  id        String  @id @default(cuid())
-  orderId   String
-  order     Order   @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  centerId  String? // cách ly cơ sở (scopedDb)
+  id          String     @id @default(cuid())
+  orderId     String
+  order       Order      @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  /// Phiếu này thu tiền cho DÒNG HÀNG nào — tức cho CON nào [16/09/2026, bước B].
+  ///
+  /// NULL = luồng CŨ (phiếu "thu toàn đơn", hoặc mọi phiếu sinh trước 16/09). Là giá trị
+  /// HỢP LỆ với dữ liệu cũ, KHÔNG phải thiếu dữ liệu — đó là thứ giữ cho migration
+  /// additive. Luồng MỚI thì bắt buộc có, và cổng đó nằm ở tầng mã chứ không phải
+  /// NOT NULL ở DB (chủ dự án: *"luồng mới BẮT BUỘC có, không có đợt NULL/đợt chung"*).
+  ///
+  /// `Restrict`: phiếu thu là sổ tiền. Xoá dòng hàng mà kéo phiếu theo là mất dấu khoản
+  /// đã thu; để phiếu ở lại với `orderItemId = NULL` thì nó lặng lẽ tụt về luồng cũ và
+  /// tiền của một em hoá tiền chung. Con nghỉ học thì HUỶ dòng, không xoá dòng.
+  orderItemId String?
+  orderItem   OrderItem? @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  centerId    String? // cách ly cơ sở (scopedDb)
   // P1 · US-07 — cột SONG SONG với centerId (ghi kép tới hết P4).
   // Cột TRẦN, không FK — giống 28 bảng của PR-A. Ý nghĩa của NULL theo
   // từng bảng: xem BACKFILL_SPECS trong lib/org/center-bridge.ts.
-  orgUnitId String?
+  orgUnitId   String?
 
   installmentNo Int // 0 = toàn đơn; 1,2,… = số thứ tự đợt
   amountDue     Int
@@ -6411,11 +6527,109 @@ model PaymentRequest {
 
   qrSessions  QrSession[]
   allocations PaymentAllocation[]
+  billLines   PaymentBillLine[]
 
-  @@unique([orderId, installmentNo])
+  // ⛔ KHÔNG khai lại `@@unique([orderId, installmentNo])` ở đây.
+  //
+  // [16/09/2026] Khoá đó nay CHIA ĐÔI theo luồng và là hai chỉ mục TỪNG PHẦN (partial
+  // unique) viết tay trong `20260916120000_payment_request_theo_con`:
+  //   · ("orderId","installmentNo")     WHERE "orderItemId" IS NULL      — luồng CŨ;
+  //   · ("orderItemId","installmentNo") WHERE "orderItemId" IS NOT NULL  — luồng MỚI.
+  //
+  // Prisma không có cú pháp cho mệnh đề WHERE của chỉ mục, nên chỗ này BẮT BUỘC trống.
+  // Thêm `@@unique` lại là `migrate dev` sinh câu dựng lại khoá ĐẦY ĐỦ ⇒ đơn nhiều con
+  // hết tạo được phiếu đợt 2 ngay lúc chạy migration, và không lỗi nào báo trước.
+  //
+  // ⚠️ Và đây là chỗ dễ yên tâm nhầm, ĐÃ ĐO 16/09: `migrate diff` **KHÔNG** kêu gì cả —
+  // Prisma bỏ qua hẳn chỉ mục có mệnh đề WHERE, nên hai khoá trên vô hình với nó. Nghĩa
+  // là **không cổng tự động nào canh chúng**: xoá nhầm hai dòng `CREATE UNIQUE INDEX`
+  // trong migration thì DB mất sạch lưới chống phiếu trùng mà mọi phép kiểm vẫn xanh.
+  // Lưới duy nhất là ca `[BTC-05]`/`[BTC-06]` trong `lib/payments/thu-theo-con.bat-bien.test.ts`
+  // (đọc thẳng văn bản migration) — đừng gỡ chúng.
+  @@index([orderItemId])
   @@index([centerId, status])
   @@index([status, dueDate])
   @@index([orgUnitId])
+}
+
+/// PHIẾU GỘP — MỘT mã QR cho cả gia đình, chia về từng con [16/09/2026, bước B].
+///
+/// Chủ dự án chốt: *"công nợ theo CON, QR theo ĐƠN"*. Phụ huynh hai con không nên phải
+/// quét hai mã và nhớ chuyển đúng số cho đúng em — họ chuyển MỘT lần, hệ thống chia.
+///
+/// Webhook khớp `matchKey` của phiếu gộp → rót vào các `PaymentRequest` của dòng theo
+/// `PaymentBillLine.sortOrder` tăng dần: thiếu thì lấp dần từ dòng đầu, thừa thì phần dư
+/// vào ví gia đình (`CreditBalance`). KHÔNG chia theo tỷ lệ.
+///
+/// ⚠️ Phiếu gộp KHÔNG phải sổ tiền thứ tư. Tiền vẫn chỉ nằm ở `PaymentAllocation`
+/// (BankTransaction → PaymentRequest). Phiếu gộp là cái PHONG BÌ: nó nói "lần thu này
+/// gồm những phiếu nào, theo thứ tự nào". Ai cộng tiền thì cộng `PaymentAllocation`.
+model PaymentBill {
+  id        String  @id @default(cuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  centerId  String? // cách ly cơ sở (scopedDb)
+  // P1 · US-07 — cột SONG SONG với centerId (ghi kép tới hết P4).
+  orgUnitId String?
+
+  /// Σ số tiền các dòng, CHỤP LẠI lúc phát phiếu. Không tính lại khi đọc: mã QR khách
+  /// đang cầm in số của lúc phát, và đối khớp phải so với đúng số đã in ra.
+  amountDue Int
+  status    PaymentBillStatus @default(OPEN)
+  /// Định danh đối khớp của phiếu gộp (VA / mã tham chiếu tĩnh) — cùng vai trò
+  /// `PaymentRequest.matchKey` nhưng ở cấp GIA ĐÌNH.
+  matchKey  String?           @unique
+  createdAt DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime          @updatedAt @db.Timestamptz(6)
+
+  lines PaymentBillLine[]
+
+  // ⛔ "Mỗi đơn tối đa MỘT phiếu OPEN" là chỉ mục TỪNG PHẦN viết tay
+  // (`PaymentBill_orderId_open_key ... WHERE "status" = 'OPEN'`), không khai được ở đây.
+  // Luật đó PHẢI do DB gác: đếm phiếu OPEN ở tầng mã rồi mới tạo thì hai lượt bấm đồng
+  // thời cùng đọc thấy 0 và cùng ghi ⇒ hai mã QR cùng sống cho một gia đình.
+  @@index([orderId])
+  @@index([centerId, status])
+  @@index([orgUnitId])
+}
+
+/// Một dòng của phiếu gộp = "phần này của lần thu là của phiếu thu kia".
+model PaymentBillLine {
+  id               String         @id @default(cuid())
+  billId           String
+  bill             PaymentBill    @relation(fields: [billId], references: [id], onDelete: Cascade)
+  paymentRequestId String
+  paymentRequest   PaymentRequest @relation(fields: [paymentRequestId], references: [id], onDelete: Restrict)
+
+  /// Thứ tự RÓT trong phiếu gộp. Sao lại `PaymentRequest.sortOrder` (xem
+  /// `lib/payments/thu-tu-rot.ts`) LÚC PHÁT PHIẾU, để thứ tự đã hứa với khách không đổi
+  /// khi ai đó sửa kế hoạch giữa chừng.
+  sortOrder Int      @default(0)
+  /// Phần của phiếu gộp dành cho dòng này. Σ cột này = `PaymentBill.amountDue`.
+  amount    Int
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([billId, paymentRequestId])
+  @@index([paymentRequestId])
+}
+
+enum PaymentBillStatus {
+  /// Đang chờ tiền. Mỗi đơn tối đa MỘT phiếu ở trạng thái này (DB gác).
+  OPEN
+
+  /// ⛔ KHÔNG dùng ở luồng mới [chốt 16/09/2026 chiều].
+  ///
+  /// Sinh ra cho ý tưởng "đóng phiếu khi đã nhận một phần" (`CLOSED_PARTIAL` của bản thiết
+  /// kế). Luật mới là ĐƯỢC ĂN CẢ HOẶC KHÔNG ĂN GÌ — một phiếu gộp không bao giờ được lấp một
+  /// phần, nên trạng thái này không còn nghĩa. Giữ giá trị để không phá enum (Postgres không
+  /// bỏ được giá trị enum), nhưng KHÔNG đường ghi nào được đặt nó.
+  CLOSED
+
+  /// Đã thu ĐỦ, tiền đã chia đích danh theo dòng.
+  PAID
+
+  /// Huỷ — phát lại phiếu khác. Mã QR của phiếu VOID không được đối khớp nữa.
+  VOID
 }
 
 enum QrSessionStatus {

@@ -51,7 +51,7 @@ import { getStudentBilling } from "../../../lib/portal/billing-student";
 import { getParentDashboard } from "../../../lib/portal/dashboard";
 import { getDebtRows } from "../../../lib/finance/debt";
 import { createRefundRequest } from "../../../lib/finance/refund";
-import { REFUND_REQUEST_DISABLED } from "../../../lib/finance/cau-dao-hoan-tien";
+import { approveRefund } from "../../../lib/finance/refund";
 import { refundPayment, adjustPayment } from "../../../lib/finance/payment";
 import { WHERE_THUC_THU } from "../../../lib/finance/thuc-thu";
 import { scopedDb } from "../../../lib/db-scope";
@@ -343,52 +343,114 @@ test.describe("HT — hoàn tiền vào công nợ & cổng phụ huynh", () => 
   });
 
   // ───────────────────────────────────────────────────────────────────────────────────
-  // E3 / E3b — CẦU DAO. Bản gốc đo "đề xuất hoàn lần hai không phồng trên số gộp". Đường
-  // ấy nay ĐANG TẮT có chủ đích (`REFUND_REQUEST_DISABLED`, 08/09/2026): trên prod
-  // `ClassSession.status` không phản ánh thực tế đã dạy (2 COMPLETED / 287 SCHEDULED),
-  // nên `sessionsLearned` đọc ra 0 và hệ thống đề xuất hoàn 100% học phí.
+  // E3 / E3b / E5c — ĐƯỜNG TIỀN RA. Dựng lại 18/09/2026 sau khi `main` (67c7a7fe) GỠ CẦU
+  // DAO `REFUND_REQUEST_DISABLED`; ca `[HT-E3b]` cũ là DÂY BẪY đặt sẵn cho đúng ngày này.
   //
-  // ⇒ Viết lại cho đúng thứ đang chạy: đo CẦU DAO CÓ THẬT SỰ CHẶN KHÔNG. Ghim `test.fail`
-  //   cho hai ca cũ ở đây sẽ là GHIM GIẢ — chúng "đỏ" vì hàm trả `null` rồi deref, không
-  //   phải vì phép tính sai.
+  // Cổng nay KHÔNG còn là cầu dao tắt cả tính năng mà là lưới hẹp `canhBaoSoBuoi`: lớp
+  // còn buổi ĐÃ QUA NGÀY mà chưa chốt thì TỪ CHỐI đề xuất (hướng an toàn), vì
+  // `sessionsLearned` đếm `status = COMPLETED` và trên prod cột đó không phản ánh thực
+  // tế đã dạy (2 COMPLETED / 287 SCHEDULED, đo 07/09).
+  //
+  // ⚠️ LUẬT 19 — mọi ca dưới đây TRUYỀN `now`, không đọc đồng hồ thật. Buổi học seed vào
+  // tháng 6/2026; để đồng hồ thật chạy thì 16 buổi SCHEDULED quá hạn làm lưới từ chối
+  // mọi đề xuất, và ca sẽ "xanh" hay "đỏ" tuỳ tờ lịch chứ không tuỳ mã.
   // ───────────────────────────────────────────────────────────────────────────────────
 
-  test("[HT-E3] cầu dao hoàn tiền ĐANG TẮT — không đẻ yêu cầu nào, kể cả khi đã thu đủ", async () => {
+  /** Mốc đo: 09/06/2026 — 8 buổi đầu đã qua ngày và ĐỀU đã chốt ⇒ không còn buổi treo. */
+  const MOC = new Date("2026-06-09T00:00:00.000Z");
+
+  test("[HT-E3] đề xuất LẦN HAI không phồng trên số GỘP — đường tiền ra", async () => {
+    // Đây là ca ĐẮT NHẤT của tệp: sai ở đây là chi ra 12tr trên 9tr đã thu.
     const nen = await seedNen("e3", { soBuoi: 24, daHoc: 8 });
+    const acc = await seedKeToan("e3");
+    const goc = await thu(nen, HOC_PHI);
+
+    // Lượt 1: đã học 8/24 ⇒ dùng hết 8 × 375.000 = 3.000.000 ⇒ đề xuất hoàn 6.000.000.
+    const lan1 = await createRefundRequest({
+      enrollmentId: nen.enrollmentId,
+      trigger: "WITHDRAW",
+      reason: "nghỉ học",
+      now: MOC,
+    });
+    expect(lan1, "lưới buổi chưa chốt phải CHO QUA ở mốc này").not.toBeNull();
+    expect(lan1!.paidConfirmed).toBe(HOC_PHI);
+    expect(lan1!.proposedAmount, "9tr đã thu − 3tr đã dùng").toBe(6_000_000);
+
+    // Kế toán chi thật: bút toán hoàn 6tr.
+    await refundPayment({
+      paymentId: goc,
+      confirmedById: acc,
+      reason: "hoàn theo yêu cầu",
+      amount: 6_000_000,
+    });
+
+    // Lượt 2 (trigger KHÁC nên không rơi vào nhánh idempotent): phải đọc số RÒNG.
+    const lan2 = await createRefundRequest({
+      enrollmentId: nen.enrollmentId,
+      trigger: "MANUAL",
+      reason: "rà lại",
+      now: MOC,
+    });
+    expect(lan2, "vẫn còn 3tr nên vẫn sinh được đề xuất").not.toBeNull();
+    expect(
+      lan2!.paidConfirmed,
+      "PH chỉ còn để lại 3tr — đọc 9tr ở đây là đề xuất hoàn lần hai trên số GỘP",
+    ).toBe(3_000_000);
+    expect(lan2!.proposedAmount, "3tr còn lại ĐÚNG BẰNG phần đã dùng ⇒ không hoàn thêm").toBe(0);
+  });
+
+  test("[HT-E3b] ĐÃ DUYỆT nhưng CHƯA chi — đề xuất kế tiếp có trừ phần đang treo không", async () => {
+    // Khoảng hở "đã duyệt / chưa chi" là có thật và kéo dài nhiều ngày: quản lý bấm
+    // duyệt, kế toán chưa ghi bút toán âm. Trong khoảng đó, `Payment` chưa có dòng hoàn
+    // nào nên `paidConfirmed` vẫn đọc số GỘP.
+    const nen = await seedNen("e3b", { soBuoi: 24, daHoc: 8 });
+    const acc = await seedKeToan("e3b");
     await thu(nen, HOC_PHI);
+
+    const lan1 = await createRefundRequest({
+      enrollmentId: nen.enrollmentId,
+      trigger: "WITHDRAW",
+      reason: "nghỉ học",
+      now: MOC,
+    });
+    expect(lan1).not.toBeNull();
+    await approveRefund(lan1!.id, acc, 6_000_000);
+
+    const lan2 = await createRefundRequest({
+      enrollmentId: nen.enrollmentId,
+      trigger: "MANUAL",
+      reason: "rà lại",
+      now: MOC,
+    });
+
+    // 🔴 GHIM BUG — đặt `test.fail` TRONG THÂN CA (đặt ở cấp file thì nó đánh dấu mọi ca
+    // phía sau; đã trả giá cho chuyện đó ở `[PR-02d]`). Vá xong ca này XANH và Playwright
+    // báo lỗi, buộc người vá gỡ ghim.
+    test.fail(
+      true,
+      "NỢ-11: `paidConfirmed` chỉ đọc `Payment`, không trừ phần hoàn ĐÃ DUYỆT chưa chi ⇒ " +
+        "đề xuất kế tiếp vẫn thấy 9tr và có thể đề xuất hoàn chồng lên phần đang treo.",
+    );
+    expect(lan2).not.toBeNull();
+    expect(
+      lan2!.paidConfirmed,
+      "6tr đã duyệt đang chờ chi — số còn có thể hoàn chỉ là 3tr",
+    ).toBe(3_000_000);
+  });
+
+  test("[HT-E5c] CHƯA THU ĐỒNG NÀO ⇒ KHÔNG đẻ yêu cầu hoàn rỗng", async () => {
+    // Ca này từng nằm trong `[HT-E5]` nhưng XANH GIẢ: cầu dao trả `null` trước khi hàm
+    // kịp chạm tới cổng `paidConfirmed <= 0`. Cầu dao đã gỡ ⇒ nay nó đo đúng thứ nó nói.
+    const nen = await seedNen("e5c", { soBuoi: 24, daHoc: 8 });
 
     const rr = await createRefundRequest({
       enrollmentId: nen.enrollmentId,
       trigger: "WITHDRAW",
       reason: "nghỉ học",
+      now: MOC,
     });
-    expect(rr, "cầu dao tắt ⇒ trả null").toBeNull();
-
-    // `null` phải đi kèm KHÔNG GHI GÌ — cầu dao trả null chứ không ném, nên nếu nó lỡ
-    // ghi nửa chừng thì không ai thấy.
-    expect(await db.refundRequest.count(), "không được đẻ dòng nào").toBe(0);
-  });
-
-  test("[HT-E3b] DÂY BẪY — gỡ cầu dao thì PHẢI dựng lại hai ca chống phồng đề xuất", async () => {
-    // Ca này không đo nghiệp vụ; nó là DÂY BẪY. Bản gốc 27/08 có hai ca mà không bộ nào
-    // khác phủ, và cả hai chỉ chạy được khi cầu dao mở:
-    //
-    //   [HT-E3]  hoàn 6tr trên 9tr đã thu ⇒ đề xuất LẦN HAI phải thấy paidConfirmed=3tr
-    //            và proposedAmount=0. Nếu vẫn đọc 9tr thì đề xuất lại ra 6tr ⇒ tổng chi
-    //            12tr trên 9tr đã thu. ĐÂY LÀ ĐƯỜNG TIỀN RA — sai ở đây là mất tiền thật.
-    //   [HT-E3b] đã DUYỆT 6tr nhưng kế toán CHƯA ghi bút toán âm ⇒ đề xuất kế tiếp vẫn
-    //            phải thấy 3tr. Khoảng hở "đã duyệt / chưa chi" là có thật, kéo dài ngày.
-    //   [HT-E5c] ghi danh CHƯA THU ĐỒNG NÀO ⇒ KHÔNG đẻ yêu cầu hoàn rỗng. Ca này từng
-    //            nằm trong [HT-E5] nhưng xanh GIẢ (cầu dao trả null trước khi tới cổng
-    //            ấy), nên đã gỡ khỏi đó và dời yêu cầu về đây.
-    //
-    // Khi ai đó đủ 4 điều kiện gỡ (`lib/finance/cau-dao-hoan-tien.ts`) và xoá cầu dao,
-    // ca này ĐỎ — buộc họ đọc đoạn trên và dựng lại hai ca ấy, thay vì để phần phủ biến
-    // mất lần thứ hai. Lần thứ nhất nó biến mất trong lượt hợp nhất 16/09.
-    expect(
-      REFUND_REQUEST_DISABLED,
-      "Cầu dao hoàn tiền đã được gỡ ⇒ DỰNG LẠI hai ca [HT-E3]/[HT-E3b] chống phồng đề xuất (đọc chú thích trong ca này), rồi mới xoá dây bẫy.",
-    ).toBe(true);
+    expect(rr, "chưa thu đồng nào thì không có gì để hoàn").toBeNull();
+    expect(await db.refundRequest.count(), "không được đẻ dòng rỗng").toBe(0);
   });
 
   test("[HT-E5] ghi danh CHƯA THU ĐỒNG NÀO — cổng PH và công nợ nói đúng học phí đầy đủ", async () => {

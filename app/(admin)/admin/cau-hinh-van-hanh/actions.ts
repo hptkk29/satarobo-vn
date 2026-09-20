@@ -1,9 +1,23 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
-import { setGlobalSetting, setCenterSetting, type SetResult } from "@/lib/settings/service";
+import { checkPermission } from "@/lib/auth/check-permission";
+import { getAssignableTeachers } from "@/lib/teachers/assignable";
+import { SETTINGS } from "@/lib/settings/registry";
+import { kiemChinhSach, type ChinhSachHoaHong } from "@/lib/crm/chinh-sach-hoa-hong";
+import {
+  getSetting,
+  setGlobalSetting,
+  setCenterSetting,
+  type SetResult,
+} from "@/lib/settings/service";
+// ⚠️ GỘP main 16/09: `main` KHÔNG đổi tên `catalogPrefixes` — nó THÊM
+// `catalogPrefixesDayDuoc` (cả hai vẫn export ở `lib/notifications/catalog.ts`, dòng 487 và
+// 524). Thân tệp sau gộp dùng bản `…DayDuoc` ở cả hai chỗ (:92 và :107), nên bản import
+// `catalogPrefixes` của nhánh này thành mồ côi và bị bỏ — KHÔNG phải mất tính năng.
 import { catalogPrefixesDayDuoc } from "@/lib/notifications/catalog";
 
 function actorName(user: { id: string; name?: string | null; email?: string | null }): string {
@@ -114,4 +128,170 @@ export async function luuLoaiDuocDayAction(input: {
 
   if (res.ok) revalidatePath("/admin/cau-hinh-van-hanh");
   return res;
+}
+
+/**
+ * Lưu danh sách giáo viên LUÔN HIỆN khi xếp buổi học thử (key `trial.gvMienLocTheoCa`).
+ *
+ * Khuôn giống `luuLoaiDuocDayAction` ngay trên — ghi CẢ DANH SÁCH chứ không ghi từng người
+ * bật/tắt, vì cùng một lý do: với API "bật người X" thì hai người cùng mở màn, mỗi người gạt
+ * một công tắc rồi lưu, và cả hai cùng thắng ra một trạng thái chưa ai chọn.
+ *
+ * ── MỘT CHỖ KHÁC `luuLoaiDuocDayAction`, CÓ CHỦ ĐÍCH: CỔNG QUYỀN ĐỨNG TRƯỚC ───────────────
+ * Bên kia đối chiếu với một danh mục HẰNG trong mã, nên để `setGlobalSetting` gác quyền ở
+ * tầng dưới là đủ. Action này thì đi HỎI DB bằng chính những mã người dùng gửi lên, rồi trả
+ * lời "mã này không phải giáo viên". Không gác trước thì bất kỳ ai đăng nhập cũng dò được
+ * danh sách người bằng cách đọc thông báo lỗi, và mỗi lần dò là một truy vấn.
+ *
+ * Cổng ở tầng dưới VẪN nguyên (`setGlobalSetting` kiểm `isSuperAdmin`) — đây là lớp thứ hai,
+ * không phải bản sao của luật: quyền vẫn hỏi qua `checkPermission`, không so vai inline.
+ */
+export async function luuGvMienTruAction(input: {
+  userIds: string[];
+  reason: string;
+}): Promise<SetResult> {
+  const session = await auth();
+  if (!session?.user) {
+    return { ok: false, error: { code: "AUTH", message: "Chưa đăng nhập" } };
+  }
+  if (!(await checkPermission("settings:edit"))) {
+    return {
+      ok: false,
+      error: {
+        code: "FORBIDDEN",
+        message: "Chỉ quản trị cấp cao nhất được sửa cấu hình toàn hệ thống",
+      },
+    };
+  }
+
+  const parsed = z
+    .object({
+      // `.max(50)` khớp trần của registry — chặn ở đây để câu báo lỗi nói được "quá 50
+      // người" thay vì một thông điệp Zod chung chung từ tầng dưới.
+      userIds: z.array(z.string()).max(50, "Tối đa 50 giáo viên được miễn"),
+      reason: z.string().trim().min(1, "Nhập lý do thay đổi"),
+    })
+    .safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: {
+        code: "VALIDATION",
+        message: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ",
+        field: "trial.gvMienLocTheoCa",
+      },
+    };
+  }
+
+  // Bỏ TRÙNG và sắp thứ tự ỔN ĐỊNH (theo mã, không theo tên).
+  //
+  // Bỏ trùng thì im lặng được: công tắc không sinh ra được hai lần cùng một người, nên trùng
+  // chỉ đến từ lời gọi tay và nó vẫn mang đúng một lựa chọn.
+  //
+  // Sắp theo MÃ chứ không theo tên: giá trị này nằm trong `oldValues`/`newValues` của nhật ký
+  // kiểm toán. Sắp theo tên thì một người đổi tên là cả danh sách đảo thứ tự, và lần lưu sau
+  // đẻ ra một dòng nhật ký trông như có thay đổi trong khi không ai được thêm hay bớt.
+  const userIds = [...new Set(parsed.data.userIds)].sort();
+
+  // Dòng TRỐNG bị bắt riêng, vì nếu để nó rơi xuống phép đối chiếu bên dưới thì câu báo lỗi
+  // sẽ là "Không có giáo viên nào mang mã " — một câu cụt không nói được gì.
+  if (userIds.some((id) => id.trim().length === 0)) {
+    return {
+      ok: false,
+      error: {
+        code: "VALIDATION",
+        message: "Có dòng trống trong danh sách — tải lại trang rồi thử lại",
+        field: "trial.gvMienLocTheoCa",
+      },
+    };
+  }
+
+  // ⚠️ ĐỐI CHIẾU DANH SÁCH GIÁO VIÊN Ở ĐÂY, không ở registry — xem khối chú thích tại
+  // `trial.gvMienLocTheoCa` trong `lib/settings/registry.ts`: registry là tầng thấp nhất,
+  // kéo `lib/teachers/assignable` (→ `lib/db`) vào đó là đẻ vòng import.
+  //
+  // TỪ CHỐI chứ không lặng lẽ lọc bỏ. Lọc bỏ thì người dùng bấm Lưu, thấy báo thành công, rồi
+  // người họ vừa chọn biến mất không dấu vết — màn hình nói dối đúng nghĩa. Một mã lạ tới
+  // được đây nghĩa là giao diện và dữ liệu đã lệch nhau; đó là thứ phải nổ ra.
+  const hopLe = new Set((await getAssignableTeachers({})).map((g) => g.id));
+  const la = userIds.filter((id) => !hopLe.has(id));
+  if (la.length > 0) {
+    return {
+      ok: false,
+      error: {
+        code: "VALIDATION",
+        message: `Không có giáo viên nào mang mã ${la.join(", ")} — tải lại trang rồi thử lại`,
+        field: "trial.gvMienLocTheoCa",
+      },
+    };
+  }
+
+  const actor = await resolveActor(session.user.id);
+  const res = await setGlobalSetting(actor, {
+    key: "trial.gvMienLocTheoCa",
+    value: userIds,
+    reason: parsed.data.reason,
+    actorName: actorName(session.user),
+  });
+
+  if (res.ok) revalidatePath("/admin/cau-hinh-van-hanh");
+  return res;
+}
+
+/**
+ * Lưu TOÀN BỘ chính sách hoa hồng (key `crm.commissionPolicies`).
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * VÌ SAO CÓ ACTION RIÊNG, KHÔNG DÙNG `saveGlobalSettingAction`
+ *
+ * Vì luật nghiệp vụ phải chạy TRƯỚC khi ghi, và luật đó cần MỘT KEY KHÁC trong cùng
+ * registry: trần `crm.commissionMaxTotalRate`. `setGlobalSetting` chỉ kiểm zod của chính
+ * key đang ghi, nên nó không thể biết tổng tỉ lệ có vượt trần hay không.
+ *
+ * Đây cũng đúng khuôn mà `savePushTopicsAction` ngay trên đã dùng: phép kiểm cần dữ liệu
+ * NGOÀI key đó thì đặt ở tầng action, không nhét vào registry — nhét vào là đẻ vòng import
+ * mà `lint:boundaries` chặn cứng (11 vòng, đã gỡ ở `45fc7225`).
+ *
+ * ⚠️ Màn cũng chạy `kiemChinhSach` để người khai thấy lỗi ngay khi gõ. Điều đó KHÔNG thay
+ * được cổng ở đây: Server Action là endpoint HTTP riêng — gọi thẳng nó thì màn không đứng
+ * chắn được. Hai nơi, MỘT hàm, không chép luật.
+ *
+ * ⚠️ Trần đọc từ CẤU HÌNH, không dùng hằng `MAX_TOTAL_RATE` trong mã: đúng bài học
+ * `crm.commissionMaxTotalRate` đã ghi ở CLAUDE.md — người vận hành nới trần ở màn mà đường
+ * ghi vẫn chặn theo số cũ thì trần thành đồ trang trí.
+ */
+export async function luuChinhSachHoaHongAction(input: {
+  chinhSach: ChinhSachHoaHong[];
+  lyDo: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+
+  const parsed = z
+    .object({
+      chinhSach: SETTINGS["crm.commissionPolicies"].schema,
+      lyDo: z.string().trim().min(5, "Nhập lý do thay đổi (tối thiểu 5 ký tự)").max(500),
+    })
+    .safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  }
+
+  const tran = await getSetting("crm.commissionMaxTotalRate");
+  const loi = kiemChinhSach(parsed.data.chinhSach as ChinhSachHoaHong[], {
+    tranTongTiLe: typeof tran === "number" ? tran : 0.09,
+  });
+  if (loi.length > 0) return { ok: false, error: loi.join(" · ") };
+
+  const actor = await resolveActor(session.user.id);
+  const res = await setGlobalSetting(actor, {
+    key: "crm.commissionPolicies",
+    value: parsed.data.chinhSach,
+    reason: parsed.data.lyDo,
+    actorName: session.user.name ?? session.user.email ?? session.user.id,
+  });
+  if (!res.ok) return { ok: false, error: res.error.message };
+
+  revalidatePath("/admin/cau-hinh-van-hanh");
+  return { ok: true };
 }

@@ -28,8 +28,20 @@ type State = {
   audits: unknown[];
   /** Học viên của đơn (null = đơn chưa gắn học viên). */
   orderStudentId: string | null;
-  /** Ghi danh còn hiệu lực của học viên đó. */
-  enrollmentIds: string[];
+  /**
+   * 15/09/2026 — ĐỔI HÌNH DẠNG. Trước đây chỉ là `enrollmentIds: string[]`, khớp với bản
+   * 06/09 vốn chỉ hỏi "học viên của đơn có đúng một ghi danh không".
+   *
+   * Bản đó chưa từng chạy trong luồng lead: đơn lập từ `/orders/new?leadId=…` để
+   * `Order.studentId` NULL, nên nhánh ấy không bao giờ vào. Luật mới khớp theo DÒNG ĐƠN
+   * (`studentId`, rồi `metadata.courseId`) nên fixture phải mang đủ những thứ đó — fixture
+   * thiếu trường là fixture kiểm được ít hơn nó tỏ ra.
+   */
+  orderCustomerPhone: string | null;
+  orderItems: { studentId: string | null; courseId: string | null; thanhTien: number }[];
+  /** Học viên tra theo SĐT phụ huynh của đơn. */
+  studentsCuaPhuHuynh: string[];
+  ghiDanh: { id: string; studentId: string; courseId: string | null; finalPrice: number }[];
 };
 
 /** Tx giả in-memory — mô phỏng đúng phần ensureOrderPaymentRecorded chạm tới. */
@@ -64,12 +76,43 @@ function fakeTx(state: State): Prisma.TransactionClient {
         state.payments.push(row);
         return { id: row.id };
       },
+      // ── Đường GẮN GHI DANH SAU CONVERT (15/09/2026) ───────────────────────
+      findMany: async (args: { where: { orderId: string } }) =>
+        state.payments.filter(
+          (p) => p.orderId === args.where.orderId && p.deletedAt === null && p.enrollmentId === null,
+        ),
+      update: async (args: { where: { id: string }; data: { enrollmentId: string; amount: number } }) => {
+        const row = state.payments.find((p) => p.id === args.where.id);
+        if (row) {
+          row.enrollmentId = args.data.enrollmentId;
+          row.amount = args.data.amount;
+        }
+        return row ?? null;
+      },
     },
     order: {
-      findUnique: async () => ({ studentId: state.orderStudentId }),
+      findUnique: async () => ({
+        studentId: state.orderStudentId,
+        customerPhone: state.orderCustomerPhone,
+        items: state.orderItems.map((it) => ({
+          studentId: it.studentId,
+          totalPrice: it.thanhTien,
+          discountAmount: 0,
+          metadata: it.courseId ? { courseId: it.courseId } : null,
+        })),
+      }),
+    },
+    student: {
+      findMany: async () => state.studentsCuaPhuHuynh.map((id) => ({ id })),
     },
     enrollment: {
-      findMany: async () => state.enrollmentIds.map((id) => ({ id })),
+      findMany: async () =>
+        state.ghiDanh.map((g) => ({
+          id: g.id,
+          studentId: g.studentId,
+          finalPrice: g.finalPrice,
+          class: { courseId: g.courseId },
+        })),
     },
     lead: {
       findUnique: async () => ({
@@ -116,7 +159,10 @@ const baseState = (): State => ({
   activities: [],
   audits: [],
   orderStudentId: "hv1",
-  enrollmentIds: ["e1"],
+  orderCustomerPhone: "0905123456",
+  orderItems: [{ studentId: "hv1", courseId: "khoa-1", thanhTien: 6_000_000 }],
+  studentsCuaPhuHuynh: ["hv1"],
+  ghiDanh: [{ id: "e1", studentId: "hv1", courseId: "khoa-1", finalPrice: 6_000_000 }],
 });
 
 describe("ensureOrderPaymentRecorded (K3 — 1 khoản = 1 dòng ledger)", () => {
@@ -211,11 +257,55 @@ describe("ensureOrderPaymentRecorded — gắn ghi danh cho khoản thu tự đ�
     expect(state.payments[0]!.enrollmentId).toBe("e1");
   });
 
-  it("học viên có NHIỀU ghi danh → để trống, KHÔNG đoán bừa", async () => {
-    // Đơn nhiều ghi danh phải chia theo finalPrice (phép chia của
-    // `linkRecordedPaymentsToEnrollments`). Gắn đại vào một cái là tiền vào sai sổ —
-    // tệ hơn hẳn việc để trống.
-    const state = { ...baseState(), enrollmentIds: ["e1", "e2"] };
+  it("PH NHIỀU CON, đơn chỉ bán cho MỘT con → gắn đúng con đó, KHÔNG rải sang con kia", async () => {
+    // ⚠️ CA NÀY THAY CA CŨ "nhiều ghi danh → để trống, KHÔNG đoán bừa" [15/09/2026].
+    //
+    // Ca cũ ghim đúng bản 06/09: chỉ gắn khi học viên CỦA ĐƠN có đúng một ghi danh, còn
+    // lại để trống. Nguyên tắc "thà trống hơn gắn sai" là đúng và được GIỮ — nhưng "để
+    // trống" hoá ra không hề vô hại: `confirmPayment` cần `enrollmentId`, nên khoản trống
+    // là khoản kế toán KHÔNG BAO GIỜ chốt được, màn hiện "Chờ convert" vĩnh viễn. Đo
+    // 15/09 trên hai đơn thật: 13.920.000đ / 22.080.000đ (63%) kẹt như vậy.
+    //
+    // Nay có cách gắn KHÔNG PHẢI đoán: dòng đơn nói rõ học viên, hoặc nói khoá học mà em
+    // đó đang học. Mơ hồ thật thì vẫn để trống (ca dưới).
+    const state = {
+      ...baseState(),
+      orderStudentId: null, // đơn từ lead: cột này NULL
+      orderItems: [{ studentId: null, courseId: "khoa-1", thanhTien: 6_000_000 }],
+      studentsCuaPhuHuynh: ["hv1", "hv2"],
+      ghiDanh: [
+        { id: "e1", studentId: "hv1", courseId: "khoa-1", finalPrice: 6_000_000 },
+        { id: "e2", studentId: "hv2", courseId: "khoa-2", finalPrice: 9_000_000 },
+      ],
+    };
+    await ensureOrderPaymentRecorded(fakeTx(state), {
+      orderId: "o1",
+      soDot: 1,
+      amount: 1_000_000,
+      leadId: "l1",
+      centerId: "c1",
+      actor: { id: "u1" },
+    });
+    const conSong = state.payments.filter((p) => p.deletedAt === null);
+    expect(conSong).toHaveLength(1);
+    expect(conSong[0]!.enrollmentId).toBe("e1");
+    expect(conSong[0]!.amount).toBe(1_000_000); // KHÔNG bị xé cho e2
+  });
+
+  it("MƠ HỒ THẬT (dòng đơn không nói học viên lẫn khoá) → để trống, KHÔNG đoán bừa", async () => {
+    // Nguyên tắc cũ giữ nguyên ở đúng chỗ của nó: gắn bừa còn tệ hơn để trống. Hàm chia
+    // có "đường lui" chia đều cho mọi ghi danh, nhưng đường đó CHỈ dùng lúc convert —
+    // ngoài convert thì bỏ qua.
+    const state = {
+      ...baseState(),
+      orderStudentId: null,
+      orderItems: [{ studentId: null, courseId: null, thanhTien: 6_000_000 }],
+      studentsCuaPhuHuynh: ["hv1", "hv2"],
+      ghiDanh: [
+        { id: "e1", studentId: "hv1", courseId: "khoa-1", finalPrice: 6_000_000 },
+        { id: "e2", studentId: "hv2", courseId: "khoa-2", finalPrice: 9_000_000 },
+      ],
+    };
     await ensureOrderPaymentRecorded(fakeTx(state), {
       orderId: "o1",
       soDot: 1,
@@ -227,8 +317,8 @@ describe("ensureOrderPaymentRecorded — gắn ghi danh cho khoản thu tự đ�
     expect(state.payments[0]!.enrollmentId).toBeNull();
   });
 
-  it("đơn chưa gắn học viên → để trống, không nổ", async () => {
-    const state = { ...baseState(), orderStudentId: null, enrollmentIds: [] };
+  it("chưa có ghi danh nào (lead chưa convert) → để trống, không nổ", async () => {
+    const state = { ...baseState(), orderStudentId: null, studentsCuaPhuHuynh: [], ghiDanh: [] };
     const r = await ensureOrderPaymentRecorded(fakeTx(state), {
       orderId: "o1",
       soDot: 1,

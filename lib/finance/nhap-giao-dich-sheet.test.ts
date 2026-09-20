@@ -205,7 +205,13 @@ describe("[NGD-06] gộp theo học viên — khoá là SĐT PHỤ HUYNH + HỌ 
   // Đo trên file thật: 102 SĐT riêng biệt, trong đó 9 SĐT dùng cho 2 em (anh chị em thật:
   // HOANG VINH KHANG + HOANG BAO THANH cùng 0905167198). ⇒ SĐT MỘT MÌNH KHÔNG ĐỦ.
   // Và 0 ca tên trùng nhau mà khác SĐT ⇒ cặp (SĐT, tên) đủ phân biệt: ra đúng 115 em.
-  const gd = (sdt: string | null, hoTen: string, hocPhi: number, ghiChu = "") => ({
+  const gd = (
+    sdt: string | null,
+    hoTen: string,
+    hocPhi: number,
+    ghiChu = "",
+    sale: string | null = null,
+  ) => ({
     sheet: "x",
     dong: 1,
     maHV: "CS9.HV.9999", // mã của sheet — cố ý KHÁC hệ thống, không được dùng làm khoá
@@ -217,6 +223,7 @@ describe("[NGD-06] gộp theo học viên — khoá là SĐT PHỤ HUYNH + HỌ 
     coSo: null,
     tinhTrang: "Đã thanh toán",
     ghiChu,
+    sale,
   });
 
   it("ba đợt của MỘT em cộng lại, giữ nguyên từng đợt để soi lại", () => {
@@ -262,9 +269,137 @@ describe("[NGD-06] gộp theo học viên — khoá là SĐT PHỤ HUYNH + HỌ 
     expect(gopTheoHocVien([gd("84905000001", "A B", 1_000)])[0]!.canNguoiXem).toBe(false);
   });
 
+  it("SALE của em lấy ở ĐỢT ĐẦU — đơn là một thì người phụ trách cũng là một", () => {
+    const r = gopTheoHocVien([
+      gd("84905000001", "A B", 1_000, "", "Diệu"),
+      gd("84905000001", "A B", 2_000, "", "Diệu"),
+    ]);
+    expect(r[0]!.sale).toBe("Diệu");
+    expect(r[0]!.saleKhac).toBe(false);
+  });
+
+  it("hai đợt GHI HAI SALE KHÁC NHAU → nêu ra, không im lặng lấy dòng đầu", () => {
+    // Im lặng chọn dòng đầu là cướp công của người kia mà không ai thấy: đơn vẫn tạo
+    // thành công, chỉ có `createdById` sai.
+    const r = gopTheoHocVien([
+      gd("84905000001", "A B", 1_000, "", "Diệu"),
+      gd("84905000001", "A B", 2_000, "", "Liên"),
+    ]);
+    expect(r[0]!.sale).toBe("Diệu");
+    expect(r[0]!.saleKhac).toBe(true);
+  });
+
+  it("đợt đầu bỏ trống Sales thì lấy đợt sau, KHÔNG coi là lệch", () => {
+    const r = gopTheoHocVien([
+      gd("84905000001", "A B", 1_000, "", null),
+      gd("84905000001", "A B", 2_000, "", "Liên"),
+    ]);
+    expect(r[0]!.sale).toBe("Liên");
+    expect(r[0]!.saleKhac).toBe(false);
+  });
+
   it("thứ tự đầu vào không đổi kết quả (ổn định)", () => {
     const a = gopTheoHocVien([gd("84905000002", "B", 2), gd("84905000001", "A", 1)]);
     const b = gopTheoHocVien([gd("84905000001", "A", 1), gd("84905000002", "B", 2)]);
     expect(a.map((x) => x.hoTen)).toEqual(b.map((x) => x.hoTen));
+  });
+});
+
+describe("[NGS-10] NGÀY trong sheet — 54/136 ô là CHUỖI, không phải Date", () => {
+  // ─────────────────────────────────────────────────────────────────────────
+  // ĐO 14/09/2026 trên file thật, 136 dòng dùng được:
+  //   · 59 ô là Date thật (Excel date-formatted)
+  //   · 54 ô là CHUỖI — 49 dạng "13/06/2026", 5 dạng "29/08" (không có năm)
+  //   · 23 ô trống thật
+  //
+  // Bản đầu của `docDongGiaoDich` làm `new Date(String(v))` cho mọi thứ không phải Date.
+  // Với "13/06/2026" JS trả **Invalid Date** ⇒ 54 ngày THẬT bị vứt lặng, và màn nhập
+  // báo "77 dòng thiếu ngày" trong khi file chỉ trống 23.
+  //
+  // ⚠️ VÀ NÓ CÒN NGUY HƠN VẺ NGOÀI: lần này 49/49 chuỗi có NGÀY > 12 nên JS ném Invalid
+  // — tức là rơi một cách THẤY ĐƯỢC. File tháng sau có "01/07/2026" thì `new Date` đọc
+  // trôi chảy thành **7 tháng 1**, không lỗi, không cảnh báo: học phí tháng 7 nhảy sang
+  // tháng 1. Đó là lý do phải TỰ TÁCH dd/mm/yyyy chứ không được để `new Date` đoán.
+  // ─────────────────────────────────────────────────────────────────────────
+  const o = (ngay: unknown) => ({
+    "Mã học viên": "CS1.HV.0001",
+    "Họ và Tên học viên": "Nguyễn Văn A",
+    "Số điện thoại": "0905000111",
+    "Học phí": 4_400_000,
+    "Tình trạng": "Đã thanh toán",
+    Ngày: ngay,
+  });
+
+  it('chuỗi "13/06/2026" → 13 tháng 6 (KHÔNG phải Invalid)', () => {
+    const g = docDongGiaoDich(o("13/06/2026"), "Tháng 62026", 5)!;
+    expect(g.ngay).toBeInstanceOf(Date);
+    expect(g.ngay!.getDate()).toBe(13);
+    expect(g.ngay!.getMonth()).toBe(5);
+    expect(g.ngay!.getFullYear()).toBe(2026);
+  });
+
+  it('"01/07/2026" là 1 THÁNG 7 — không được đọc thành 7 tháng 1', () => {
+    // Ca này chính là con bug ẩn: `new Date("01/07/2026")` trả 7 tháng 1 mà không kêu.
+    const g = docDongGiaoDich(o("01/07/2026"), "Tháng 72026 CS1", 9)!;
+    expect(g.ngay!.getDate()).toBe(1);
+    expect(g.ngay!.getMonth()).toBe(6);
+  });
+
+  it('"29/08" (thiếu năm) lấy năm từ TÊN SHEET', () => {
+    // 5 dòng thật trong file. Năm là dữ liệu CÓ THẬT ở tên sheet, không phải đoán.
+    const g = docDongGiaoDich(o("29/08"), "Tháng 82026 CS1", 12)!;
+    expect(g.ngay!.getDate()).toBe(29);
+    expect(g.ngay!.getMonth()).toBe(7);
+    expect(g.ngay!.getFullYear()).toBe(2026);
+  });
+
+  it('"13/09" trong sheet tháng 9 — ngày và tháng KHÔNG bị đảo', () => {
+    const g = docDongGiaoDich(o("13/09"), "Tháng 92026 CS1", 3)!;
+    expect(g.ngay!.getDate()).toBe(13);
+    expect(g.ngay!.getMonth()).toBe(8);
+  });
+
+  it("thiếu năm mà tên sheet cũng không có năm → null, KHÔNG lấy năm hiện tại", () => {
+    // Luật 19: hàm rơi về đồng hồ thật là ca hẹn giờ nổ — sang năm cùng file ra kết quả khác.
+    expect(docDongGiaoDich(o("29/08"), "Linh tinh", 1)!.ngay).toBeNull();
+  });
+
+  it("Date thật đi thẳng qua", () => {
+    const d = new Date(2026, 4, 20);
+    expect(docDongGiaoDich(o(d), "Tháng 52026", 2)!.ngay!.getTime()).toBe(d.getTime());
+  });
+
+  it("số sê-ri Excel → đúng ngày (phòng khi cellDates không bắt được ô)", () => {
+    // 45778 = 01/05/2025 theo hệ sê-ri của Excel (mốc 30/12/1899). Số này ĐO bằng
+    // `(date(2025,5,1) - date(1899,12,30)).days`, không phải gõ ước chừng — lần đầu tôi
+    // gõ 45810 và nó là 02/06/2025.
+    const g = docDongGiaoDich(o(45778), "Tháng 52026", 2)!;
+    expect(g.ngay!.getFullYear()).toBe(2025);
+    expect(g.ngay!.getMonth()).toBe(4);
+    expect(g.ngay!.getDate()).toBe(1);
+  });
+
+  it("ISO yyyy-mm-dd vẫn đọc được", () => {
+    const g = docDongGiaoDich(o("2026-06-13"), "Tháng 62026", 5)!;
+    expect(g.ngay!.getDate()).toBe(13);
+    expect(g.ngay!.getMonth()).toBe(5);
+  });
+
+  it("ngày/tháng ngoài khoảng → null, không cuộn vòng sang tháng sau", () => {
+    // `new Date(2026, 12, 32)` KHÔNG ném — nó trả 01/01/2027. Im lặng và sai.
+    expect(docDongGiaoDich(o("32/06/2026"), "Tháng 62026", 5)!.ngay).toBeNull();
+    expect(docDongGiaoDich(o("13/13/2026"), "Tháng 62026", 5)!.ngay).toBeNull();
+    expect(docDongGiaoDich(o("00/06/2026"), "Tháng 62026", 5)!.ngay).toBeNull();
+  });
+
+  it("rác → null, không ném", () => {
+    for (const v of ["", "   ", "NHẬP TAB THÁNG 8", "abc", null, undefined, {}]) {
+      expect(docDongGiaoDich(o(v), "Tháng 62026", 5)!.ngay).toBeNull();
+    }
+  });
+
+  it("dấu phân cách - và . cũng chấp nhận", () => {
+    expect(docDongGiaoDich(o("13-06-2026"), "Tháng 62026", 5)!.ngay!.getDate()).toBe(13);
+    expect(docDongGiaoDich(o("13.06.2026"), "Tháng 62026", 5)!.ngay!.getMonth()).toBe(5);
   });
 });

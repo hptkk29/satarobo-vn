@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
+import { coNoiNaoBatThuLinhHoat } from "@/lib/finance/feature";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { extractOrderCode } from "@/lib/payments/sepay";
@@ -57,17 +58,40 @@ export default async function SepayLogPage({
   // Cùng quyền với sổ thu chi — người đối soát tiền mới cần trang này.
   // 03/08 — thêm `payments:view` (chỉ xem) cho Quản lý cơ sở: màn này vốn CHỈ ĐỌC
   // (đối soát tiền về từ SePay), không có thao tác ghi nào.
-  const [canManagePayments, canViewPayments] = await Promise.all([
+  //
+  // PHIÊN B — thêm `payments:record` (SALE). Chủ dự án chốt 17/09: sale phải GẮN được tiền
+  // vào đơn, mà sale chỉ có `payments:record`. Ba quyền, ba mức, KHÔNG gộp:
+  //   · `payments:view`   → nhìn;
+  //   · `payments:record` → nhìn + GẮN tiền vào đơn (trong phạm vi cơ sở của mình);
+  //   · `payments:manage` → thêm BỎ QUA và GỠ GẮN (chỉ kế toán).
+  //
+  // ⚠️ Danh sách UNMATCHED KHÔNG lọc theo cơ sở: giao dịch chưa gắn thì chưa biết của cơ sở
+  // nào, lọc nó đi là giấu mất tiền của chính người đang tìm. Cách ly cơ sở áp ở ĐƠN —
+  // `congGanVaoDon` trong `_gan-theo-con.ts`.
+  const [canManagePayments, canRecordPayments, canViewPayments] = await Promise.all([
     checkPermission("payments:manage"),
+    checkPermission("payments:record"),
     checkPermission("payments:view"),
   ]);
-  if (!canManagePayments && !canViewPayments) redirect("/dashboard");
+  if (!canManagePayments && !canRecordPayments && !canViewPayments) redirect("/dashboard");
 
   const { status } = await searchParams;
   const filter = status === "unmatched" || status === "matched" ? status : "all";
 
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
+
+  // ⚠️ AFFORDANCE THEO CÔNG TẮC — chủ dự án chốt 17/09: *"cờ tắt → màn và quyền y như trước
+  // merge (chỉ payments:manage)"*.
+  //
+  // Nút "Gắn vào đơn" là nút của SALE, và sale chỉ được vẽ nút khi có cơ sở nào trong tầm nhìn
+  // của họ đã bật cờ. Không nơi nào bật ⇒ `canGan` rơi về đúng `canManage`, tức prod sau merge
+  // giống hệt prod trước merge.
+  //
+  // Đây CHỈ là affordance. Cổng tiền hỏi cờ của CƠ SỞ GIỮ ĐƠN (`congGanVaoDon` trong
+  // `_gan-theo-con.ts`) — ở đây chưa biết tiền của đơn nào nên không thể hỏi câu hẹp hơn.
+  const coNoiBatCo = await coNoiNaoBatThuLinhHoat(actor.visibleOrgUnitIds);
+  const canGan = canManagePayments || (canRecordPayments && coNoiBatCo);
 
   // ── Nguồn chính: giao dịch tiền về (mọi provider) ────────────────────────────
   // BankTransaction ∈ SCOPED_MODELS + NULL_IS_GLOBAL_MODELS → centerId null (tiền vừa
@@ -250,7 +274,11 @@ export default async function SepayLogPage({
         </div>
       </div>
 
-      <BankTxnClient items={txnItems} canManage={canManagePayments} />
+      <BankTxnClient
+        items={txnItems}
+        canManage={canManagePayments}
+        canGan={canGan}
+      />
 
       <p className="mt-3 text-xs text-muted-foreground">
         Chỉ hiện 200 giao dịch gần nhất. Bảng trống nghĩa là chưa có tiền về qua cổng (webhook

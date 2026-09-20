@@ -11,46 +11,16 @@
 //
 // ⚠️ KHÔNG CHẶN khi không lấy được vị trí. "Người ở chỗ sóng kém mà không chấm được là hỏng
 // đúng mục đích." Lấy được thì gửi kèm; không thì gửi null và server gắn cờ `THIEU_GPS`.
+//
+// ⚠️ NHƯNG PHẢI NÓI ĐÚNG VÌ SAO KHÔNG LẤY ĐƯỢC (sự cố 16/09/2026). Bản đầu gộp mọi thất bại
+// thành một câu "KHÔNG lấy được vị trí" — nghe như lỗi sóng, nên người dùng đi ra chỗ thoáng
+// trong khi thứ cần làm là bấm ổ khoá cạnh thanh địa chỉ. Phân biệt nằm ở
+// `lib/cham-cong/xin-vi-tri.ts`; ở đây chỉ in ra.
 import { useState, useTransition } from "react";
 import { LogIn, LogOut, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { chamCongTac } from "@/lib/cham-cong/cong-tac-action";
-
-/** Chờ toạ độ tối đa 8 giây rồi đi tiếp KHÔNG có toạ độ — không để người dùng đứng chờ mãi. */
-const HAN_CHO_VI_TRI_MS = 8_000;
-
-type ViTri = { latitude: number; longitude: number; accuracyMeters: number | null };
-
-function xinViTri(): Promise<ViTri | null> {
-  if (typeof navigator === "undefined" || !navigator.geolocation) return Promise.resolve(null);
-  return new Promise((resolve) => {
-    let xong = false;
-    const tra = (v: ViTri | null) => {
-      if (xong) return;
-      xong = true;
-      resolve(v);
-    };
-    // Hẹn giờ RIÊNG chứ không chỉ dựa `timeout` của API: trên vài trình duyệt, người dùng
-    // bỏ lửng hộp thoại quyền thì callback KHÔNG BAO GIỜ chạy — không có hẹn giờ này thì nút
-    // quay mãi và người ta tưởng hệ thống treo.
-    const h = setTimeout(() => tra(null), HAN_CHO_VI_TRI_MS);
-    navigator.geolocation.getCurrentPosition(
-      (p) => {
-        clearTimeout(h);
-        tra({
-          latitude: p.coords.latitude,
-          longitude: p.coords.longitude,
-          accuracyMeters: Number.isFinite(p.coords.accuracy) ? p.coords.accuracy : null,
-        });
-      },
-      () => {
-        clearTimeout(h);
-        tra(null);
-      },
-      { enableHighAccuracy: true, timeout: HAN_CHO_VI_TRI_MS, maximumAge: 0 },
-    );
-  });
-}
+import { xinViTri } from "@/lib/cham-cong/xin-vi-tri";
 
 export function NutCongTac({
   daVao,
@@ -62,6 +32,9 @@ export function NutCongTac({
 }) {
   const [dangChay, batDau] = useTransition();
   const [chieu, setChieu] = useState<"CHECK_IN" | "CHECK_OUT" | null>(null);
+  // Toast tự tắt, mà `cachSua` là mấy bước phải làm theo — nên giữ lại một khối DÍNH trên màn
+  // cho tới lượt bấm sau. Lời hướng dẫn biến mất trước khi người ta làm xong là vô dụng.
+  const [loiViTri, setLoiViTri] = useState<string | null>(null);
 
   const bam = (type: "CHECK_IN" | "CHECK_OUT") => {
     setChieu(type);
@@ -69,9 +42,9 @@ export function NutCongTac({
       const v = await xinViTri();
       const r = await chamCongTac({
         type,
-        latitude: v?.latitude ?? null,
-        longitude: v?.longitude ?? null,
-        accuracyMeters: v?.accuracyMeters ?? null,
+        latitude: v.ok ? v.latitude : null,
+        longitude: v.ok ? v.longitude : null,
+        accuracyMeters: v.ok ? v.accuracyMeters : null,
       });
       setChieu(null);
       if (!r.ok) {
@@ -79,8 +52,17 @@ export function NutCongTac({
         return;
       }
       const nhan = type === "CHECK_IN" ? "Đã Check in" : "Đã Check out";
-      // Nói rõ CÓ hay KHÔNG có vị trí — người bấm phải biết cái gì vừa được lưu về mình.
-      toast.success(v ? `${nhan}, có kèm vị trí.` : `${nhan} — KHÔNG lấy được vị trí, vẫn ghi nhận.`);
+      if (v.ok) {
+        toast.success(`${nhan}, có kèm vị trí.`);
+      } else {
+        // Lượt chấm VẪN ĐƯỢC GHI — nói điều đó trước, rồi mới tới lý do, kẻo người ta tưởng
+        // hỏng và bấm lại. `duration` dài hơn mặc định vì `cachSua` là một câu phải đọc hết.
+        toast.warning(`${nhan} — chưa kèm được vị trí. ${v.loi}`, {
+          description: v.cachSua ?? undefined,
+          duration: 12_000,
+        });
+        setLoiViTri(v.cachSua ? `${v.loi} ${v.cachSua}` : v.loi);
+      }
       if (r.warning) toast.warning(r.warning);
     });
   };
@@ -108,6 +90,12 @@ export function NutCongTac({
           {dangChay && chieu === "CHECK_OUT" ? "Đang ghi…" : "Check out"}
         </button>
       </div>
+
+      {loiViTri && (
+        <p className="rounded-lg bg-state-warning-soft px-3 py-2 text-xs leading-relaxed text-state-warning-ink">
+          <strong>Chưa kèm được vị trí.</strong> {loiViTri}
+        </p>
+      )}
 
       {/* Trạng thái hôm nay — nói THẲNG đã bấm gì, đừng để người ta bấm lại vì không chắc. */}
       <dl className="grid grid-cols-2 gap-2 text-sm">

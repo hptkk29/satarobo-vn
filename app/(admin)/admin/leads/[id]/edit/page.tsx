@@ -123,7 +123,11 @@ export default async function EditLeadPage({ params }: { params: Promise<{ id: s
         <ChevronLeft className="h-4 w-4" /> Chi tiết lead
       </Link>
       <h1 className="mb-4 text-2xl font-bold text-foreground">Sửa thông tin lead</h1>
+      {/* `leads:overwrite` hỏi ở SERVER rồi truyền xuống — client không gọi `can()` được,
+          và tự suy từ role trong session là đúng thứ `no-inline-authz` cấm. Form chỉ KHOÁ
+          Ô; cổng chặn thật nằm ở `updateLeadFields`. */}
       <LeadForm
+        duocDe={await checkPermission("leads:overwrite")}
         orgUnits={orgUnits.map((o) => ({ id: o.orgUnitId, name: o.name }))}
         // Chế độ SỬA không hiện khối con trong form (quản lý ở `LeadChildrenManager`
         // bên dưới) nhưng vẫn truyền đúng danh sách: prop bắt buộc để không ai

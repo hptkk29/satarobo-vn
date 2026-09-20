@@ -1,4 +1,14 @@
-// lib/orders/lead-child-link.ts — N-2 · quyết định B4 (24/08/2026): MỘT ĐƠN – MỘT CON.
+// lib/orders/lead-child-link.ts — con của đơn.
+//
+// 🔴 PHÁT BIỂU CŨ ĐÃ BỊ ĐẢO [18/09/2026]. ~~N-2 · quyết định B4 (24/08/2026): MỘT ĐƠN –
+// MỘT CON~~ — chủ dự án chốt ngược: *"một phụ huynh đăng ký cho hai con trong cùng một
+// đơn là chuyện thường ở đây, và module thu học phí linh hoạt vốn đã tính theo từng con.
+// Phát biểu 'một đơn một con' SAI VỚI THỰC TẾ."*
+//
+// Nguồn sự thật "khoản này của ai" nay là **DÒNG ĐƠN** (`items[].leadChildId`). Cột
+// `Order.leadChildId` tụt xuống thành số SUY RA cho ca một con — tiện cho báo cáo hiện
+// tại, và `null` một cách thành thật khi đơn phục vụ nhiều con. Xem `NỢ-13`/`NỢ-14`
+// trong `docs/hop-nhat-main-test-1609.md`.
 //
 // VÌ SAO CÓ FILE NÀY: đơn vị sinh doanh thu là ĐỨA TRẺ, không phải phụ huynh. Trước N-2
 // `Order` chỉ có `leadId` (cấp phụ huynh) nên mọi phép "doanh thu theo học sinh", "lead
@@ -40,6 +50,33 @@ export function inferLeadChildIdFromChildren(
   children: readonly OrderLeadChildRef[],
 ): string | null {
   return children.length === 1 ? children[0]!.id : null;
+}
+
+/**
+ * Con của ĐƠN suy từ CÁC DÒNG — chốt 18/09/2026 (NỢ-13).
+ *
+ * 🔴 ĐẢO MỘT PHÁT BIỂU CŨ. Chú thích đầu tệp viết "MỘT ĐƠN – MỘT CON" và ô chọn cấp đơn
+ * từng là nguồn duy nhất. Chủ dự án chốt ngược: *"một phụ huynh đăng ký cho hai con
+ * trong cùng một đơn là chuyện thường ở đây, và module thu học phí linh hoạt vốn đã tính
+ * theo từng con"*. Nên nguồn sự thật nay là **DÒNG ĐƠN** (`items[].leadChildId`), còn cột
+ * `Order.leadChildId` tụt xuống thành **số suy ra cho ca một con** — tiện cho báo cáo, và
+ * `null` một cách THÀNH THẬT khi đơn phục vụ nhiều con.
+ *
+ * Luật suy, vẫn là "chỉ suy khi KHÔNG THỂ SAI":
+ *   • mọi dòng có khai con đều trỏ CÙNG một đứa → đứa đó;
+ *   • không dòng nào khai            → `null` (nơi gọi rơi về nhánh suy-từ-phiếu);
+ *   • hai đứa trở lên                → `null`. **KHÔNG ĐOÁN**, và đây nay là ca THƯỜNG
+ *     chứ không còn là ngoại lệ hiếm.
+ *
+ * Trả `null` chứ không ném: đơn hai con là HỢP LỆ, không phải lỗi người dùng.
+ */
+export function conDonTuCacDong(
+  items: readonly { leadChildId?: string | null }[],
+): string | null {
+  const ids = [
+    ...new Set(items.map((it) => it.leadChildId?.trim()).filter((v): v is string => !!v)),
+  ];
+  return ids.length === 1 ? ids[0]! : null;
 }
 
 /**

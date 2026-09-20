@@ -213,8 +213,27 @@ export async function broadcastNotificationBump(userIds: readonly string[]): Pro
   }
 }
 
-/** Ghi thông báo cho nhiều người + bắn tín hiệu realtime cho ai cần. Trả về số người nhận. */
-export async function notifyStaff(params: NotifyStaffParams): Promise<number> {
+/**
+ * Ghi thông báo cho nhiều người + bắn tín hiệu realtime cho ai cần.
+ *
+ * ── VÌ SAO CÓ BẢN "CHI TIẾT" (17/09/2026) ─────────────────────────────────────────────
+ * `notifyStaff` trả `soNguoi` = SỐ NGƯỜI TRONG DANH SÁCH NHẬN, và con số đó **không** trả
+ * lời được câu "lượt này có thật sự báo cho ai không". Bản ghi y nguyên từ lượt trước ⇒
+ * `ghiThongBaoNhanSu` cố ý KHÔNG ghi, KHÔNG rung, KHÔNG đẩy push — nhưng `soNguoi` vẫn là
+ * 1. Nơi gọi nào ĐẾM SỐ CHUÔNG ĐÃ GỬI (cron nhắc buổi trải nghiệm: `stats.daNhacGv`) mà
+ * đọc `soNguoi` sẽ báo "đã nhắc" ở mọi lượt quét trong cửa sổ, kể cả những lượt không gửi
+ * gì — con số trên nhật ký cron không còn kiểm được điều gì.
+ *
+ * `canRung` mới là "ai vừa có mục MỚI hoặc vừa được mở lại", tức đúng tập người thật sự
+ * được đánh động. Bản này trả nguyên kết quả đó cho nơi cần đếm THẬT.
+ *
+ * ⚠️ Không đổi hành vi: `notifyStaff` chỉ còn là lớp mỏng lấy `soNguoi` của hàm này, nên
+ * mọi nơi gọi cũ giữ nguyên từng chữ. Và vẫn chỉ có MỘT đường ghi — đừng thêm đường thứ
+ * ba, đừng gọi thẳng `ghiThongBaoNhanSu` + tự broadcast/push ở nơi khác.
+ */
+export async function notifyStaffChiTiet(
+  params: NotifyStaffParams,
+): Promise<GhiThongBaoKetQua> {
   const kq = await ghiThongBaoNhanSu(params);
   await broadcastNotificationBump(kq.canRung);
   // Dòng thứ ba: ghi việc-cần-đẩy Web Push (US-14b Đợt 4). Ba điều kiện của chỗ móc này:
@@ -235,13 +254,30 @@ export async function notifyStaff(params: NotifyStaffParams): Promise<number> {
   //     Mất một push, giữ được thông báo — đúng thứ tự ưu tiên; đảo lại (ghi outbox trước) là
   //     đẩy push cho một mục chưa chắc tồn tại.
   //
-  // `ghiOutboxPush` cam kết KHÔNG NÉM (migration hai bảng push chưa chạy ở môi trường nào), nên
-  // không cần bọc thêm ở đây — nhưng cũng không được bỏ `await`: `void` trong Server Action là
-  // mất ngẫu nhiên theo tải trên Vercel.
+  // `ghiOutboxPush` cam kết KHÔNG NÉM, nên không cần bọc thêm ở đây.
+  //
+  // ⚠️ ĐÍNH CHÍNH 17/09/2026 — câu cũ ở đây giải thích cam kết đó bằng "migration hai bảng
+  // push chưa chạy ở môi trường nào". Câu ấy KHÔNG CÒN ĐÚNG: migration
+  // `20260908000000_web_push_ha_tang` vào repo ngày 08/09 (`cbf1ec71`) và lên `main` — tức
+  // lên prod — qua PR #246 merge 13/09. Hai bảng push CÓ THẬT ở mọi môi trường.
+  //
+  // Lý do KHÔNG bọc try/catch thì vẫn nguyên, và nó không phụ thuộc vào migration: cam kết
+  // "không ném" là THUỘC TÍNH của `ghiOutboxPush` (nó tự nuốt + log), và nó phải giữ nguyên
+  // như vậy vì `notifyStaff` là đường ghi DUY NHẤT của mọi thông báo nhân sự — một lỗi lọt
+  // ra từ dòng này làm hỏng điểm danh, giao bài, chuyển lead… mọi thứ có chuông. Bọc thêm
+  // một lớp ở đây chỉ che mất việc cam kết kia bị ai đó phá.
+  //
+  // Nhưng cũng không được bỏ `await`: `void` trong Server Action là mất ngẫu nhiên theo tải
+  // trên Vercel.
   await ghiOutboxPush({
     userIds: kq.canRung,
     dedupeKey: params.dedupeKey,
     expiresAt: params.expiresAt ?? null,
   });
-  return kq.soNguoi;
+  return kq;
+}
+
+/** Như `notifyStaffChiTiet` nhưng chỉ trả SỐ NGƯỜI NHẬN — chữ ký cũ, ~180 nơi gọi. */
+export async function notifyStaff(params: NotifyStaffParams): Promise<number> {
+  return (await notifyStaffChiTiet(params)).soNguoi;
 }

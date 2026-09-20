@@ -1,0 +1,86 @@
+# Chạy TAY — XEM TRƯỚC backfill `Payment.orderItemId`. ĐỌC PROD, KHÔNG GHI GÌ.
+#
+# Sinh bảng để chủ dự án duyệt TRƯỚC khi chạy workflow ghi
+# (`backfill-orderitem-prod.yml`). Hai workflow, hai script, hai secret — cố ý.
+#
+# ── BỐN LỚP KHOÁ, ĐỘC LẬP NHAU ────────────────────────────────────────────────────────
+# 1. KHÔNG CÓ CHẾ ĐỘ GHI. `scripts/backfill-orderitem-dry.ts` không chứa một lời gọi ghi nào —
+#    không `create`/`update`/`delete`/`upsert`, không `process.argv`. Đường ghi ở MỘT TỆP KHÁC.
+# 2. TRANSACTION READ ONLY + ROLLBACK (script ném một lỗi canh sẵn ở cuối).
+# 3. USER CHỈ-ĐỌC. File này CỐ Ý KHÔNG đọc `PROD_DATABASE_URL` / `PROD_DIRECT_URL`.
+# 4. SCRIPT TỰ KHAI `user=… · ghi được: CÓ/KHÔNG` ở dòng đầu bản kê.
+#
+# Lưới canh cả bốn: `lib/finance/backfill-chi-doc.test.ts`.
+#
+# Bản kê KHÔNG in tên phụ huynh/con, KHÔNG in nội dung CK. Artifact giữ 3 ngày.
+name: Backfill orderItemId · PROD · XEM TRƯỚC (chỉ đọc)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  xem:
+    name: Xem trước (không ghi)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Chỉ `main` — bảng này để QUYẾT ĐỊNH, nên phải đọc bằng đúng mã đang chạy trên prod.
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Kiểm secret chỉ-đọc
+        env:
+          U: ${{ secrets.PROD_DATABASE_URL_RO }}
+        run: |
+          if [ -z "$U" ]; then
+            echo "::error::Thiếu secret PROD_DATABASE_URL_RO (chuỗi session pooler của user chỉ-đọc)."
+            echo "::error::Cách tạo user: docs/cham-cong/USER-CHI-DOC-PROD.md"
+            exit 1
+          fi
+          rest="${U#*://}"; user="${rest%@*}"; user="${user%%:*}"
+          hostport="${rest##*@}"; port="${hostport##*:}"; port="${port%%/*}"
+          ok=1
+          case "$user" in
+            *.*) ;;
+            *) echo "::error::Tên user THIẾU hậu tố '.<mã dự án>' — Supavisor định tuyến theo mã dự án trong tên user."; ok=0 ;;
+          esac
+          if [ "$port" != "5432" ]; then
+            echo "::error::Cổng đang là '$port' — phải là 5432 (tab 'Session pooler')."; ok=0
+          fi
+          [ $ok -eq 1 ] || { echo "::error::Sửa secret rồi chạy lại. Không bước nào chạm DB."; exit 1; }
+          echo "Chuỗi đúng hình dạng."
+
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prisma generate
+
+      - name: Dựng bản kê (chỉ đọc)
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+        run: pnpm exec tsx scripts/backfill-orderitem-dry.ts
+
+      - name: Đưa bản kê lên job summary
+        if: always()
+        run: |
+          if [ -f bao-cao-backfill-orderitem.md ]; then
+            cat bao-cao-backfill-orderitem.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error::Script không sinh được bản kê — xem log bước trên."
+          fi
+
+      - name: Lưu artifact (3 ngày)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bao-cao-backfill-orderitem
+          path: bao-cao-backfill-orderitem.md
+          retention-days: 3
+          if-no-files-found: warn
