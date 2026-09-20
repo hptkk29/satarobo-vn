@@ -441,3 +441,106 @@ describe("[QDB-*] ĐƯỜNG B — gắn khoản đã thu vào con, trên màn Đ
     expect(than6).toMatch(/note: `\$\{khoan\.note \?\? ""\} \$\{marker\}`\.trim\(\),/);
   });
 });
+
+describe("[QPG] PHIÊN C — phiếu gộp: quyền, thứ tự móc, và hai luật không được gỡ", () => {
+  // `ACT` của khối trên nằm trong phạm vi của khối đó — khai lại ở đây thay vì nâng lên biến
+  // toàn tệp, để hai khối đọc được độc lập.
+  const ACT = "app/(admin)/admin/orders/_actions.ts";
+
+  it("[QPG-01] quyền HAI MỨC, và ranh giới là 'phiếu đã nhận tiền chưa'", () => {
+    // Phát/huỷ phiếu chưa nhận đồng nào KHÔNG đổi một đồng nào trong sổ ⇒ việc của sale.
+    // ĐÓNG phiếu đã nhận một phần là phán quyết về tiền đã vào ⇒ việc của kế toán.
+    const act = docMa(ACT);
+    expect(than(act, "taoPhieuGopAction")).toMatch(
+      /congDuongB\(input\.orderId, "payments:record"\)/,
+    );
+    expect(than(act, "huyPhieuGopAction")).toMatch(
+      /congDuongB\(input\.orderId, "payments:record"\)/,
+    );
+    expect(than(act, "dongPhieuGopAction")).toMatch(
+      /congDuongB\(input\.orderId, "payments:manage"\)/,
+    );
+  });
+
+  it("[QPG-02] MÓC đặt TRƯỚC mọi phép suy đoán của đường cũ", () => {
+    // ⚠️ Đây là thứ phiên C thật sự thêm vào, và nó là thứ dễ bị đẩy xuống dưới nhất khi ai
+    // đó "dọn lại luồng". Mã 5 ký tự nói THẲNG phiếu nào; đặt nó sau `resolvePaymentTargetDetailed`
+    // là cho một phép đoán theo SĐT cơ hội cướp một giao dịch đã biết đích.
+    //
+    // Đo bằng VỊ TRÍ, không bằng sự có mặt: có mặt mà đứng sau thì vô dụng y như không có.
+    // ⚠️ Phải cắt THÂN `ingestPayosWebhook` trước. Tìm trên cả tệp thì
+    // `resolvePaymentTargetDetailed` khớp trúng lời gọi trong `resolvePaymentTarget` — một
+    // hàm ĐỨNG TRƯỚC trong tệp — và ca này đỏ vì lý do chẳng liên quan. (Đã mắc, 20/09.)
+    const than1 = than(docMa("lib/payments/payos-ingest.ts"), "ingestPayosWebhook");
+    const moc = than1.indexOf("await thuTheoPhieuGop(");
+    const cu = than1.indexOf("await resolvePaymentTargetDetailed(");
+    expect(moc, "phải có lời gọi `thuTheoPhieuGop`").toBeGreaterThan(0);
+    expect(cu, "phải có lời gọi đường cũ").toBeGreaterThan(0);
+    expect(moc, "móc phiếu gộp phải đứng TRƯỚC đường cũ").toBeLessThan(cu);
+  });
+
+  it("[QPG-03] `thuTheoPhieuGop` KHÔNG hỏi cờ — mã đã phát là mã bất biến", () => {
+    // ⚠️ Hỏi cờ ở đây nghĩa là tắt cờ = mọi tờ QR ĐÃ phát hoá giấy lộn, và tiền về rơi xuống
+    // UNMATCHED hàng loạt. Cờ chỉ được gác ở đường PHÁT HÀNH (action) và ở `memoPhatHanh`.
+    const pg = docMa("lib/finance/phieu-gop.ts");
+    expect(pg, "đường NHẬN tiền không được hỏi công tắc").not.toMatch(/laThuTienLinhHoatBat/);
+    // Còn đường PHÁT thì có — qua `congDuongB`, đã phủ ở `[QPG-01]`.
+  });
+
+  it("[QPG-04] NHƯỜNG khi không tra ra phiếu — không tự nuốt giao dịch đời cũ", () => {
+    // Checksum lọc 26/27 khối rác chứ không lọc hết: một memo ĐỜI CŨ vẫn có ~1/27 cơ hội chứa
+    // khối 5 ký tự qua checksum. Nuốt ca đó là đẩy ~1/27 giao dịch đời cũ xuống UNMATCHED
+    // không lý do — triệu chứng sẽ trông như "SePay thỉnh thoảng lỗi".
+    //
+    // Hành vi đã phủ ở `[PG-09]` (DB thật). Ca này canh chính hai dòng mã, vì một lượt "dọn
+    // dẹp" đổi `return { xuLy: false }` thành một nhánh UNMATCHED là đủ mở lại lỗ đó mà không
+    // test hành vi nào của người khác chạm tới.
+    const than3 = than(docMa("lib/finance/phieu-gop.ts"), "thuTheoPhieuGop");
+    expect(than3).toMatch(/if \(memo\.ungVien\.length === 0\) return \{ xuLy: false \};/);
+    expect(than3).toMatch(/if \(!so\) return \{ xuLy: false \};/);
+  });
+
+  it("[QPG-05] KHÔNG ghi phần THA vào phân bổ của phiếu gộp", () => {
+    // ⚠️ PHẠM VI HẸP, nói thẳng để không ai tin quá: ca này canh ĐÚNG HAI hình dạng —
+    // `roundingWaived: 0` còn nguyên, và đường này không đọc cấu hình dung sai. Nó **KHÔNG**
+    // canh được mọi cách thêm dung sai: cấy thử 20/09 bằng một phép kẹp `lech <= 5_000` viết
+    // thẳng số vào mã thì ca này VẪN XANH.
+    //
+    // Thứ bắt được lượt cấy ấy là HÀNH VI: `[PG-03]` (thừa 1đ) và `[PG-04]` (thiếu 1đ) trong
+    // `tests/finance/phieu-gop.test.ts`. Luật 11 — ưu tiên khẳng định hành vi; lưới văn bản
+    // chỉ là lớp thứ hai, và phải tự khai nó chặn được cái gì.
+    const than3 = than(docMa("lib/finance/phieu-gop.ts"), "thuTheoPhieuGop");
+    expect(than3).toMatch(/roundingWaived: 0,/);
+    expect(than3, "không được đọc cấu hình dung sai ở đường này").not.toMatch(
+      /roundingToleranceVnd/,
+    );
+  });
+
+  it("[QPG-06] `Payment` của phiếu gộp mang MARKER — dây duy nhất để gỡ gắn tìm lại", () => {
+    // `Payment` KHÔNG có cột `bankTransactionId`; marker trong `note` là dây duy nhất, và
+    // `goGanTheoCon` tìm dòng gốc bằng chính nó. Mất marker ⇒ gỡ gắn xoá phân bổ mà không đảo
+    // dòng nào ⇒ giao dịch về hàng chờ trong khi công nợ vẫn báo đã đóng.
+    const than3 = than(docMa("lib/finance/phieu-gop.ts"), "thuTheoPhieuGop");
+    expect(than3).toMatch(/\[auto:\$\{input\.provider\.toLowerCase\(\)\}:\$\{input\.providerTxnId\}\]/);
+    expect(than3, "và `note` của từng dòng phải CHỞ marker ấy").toMatch(/\$\{marker\}`,/);
+  });
+
+  it("[QPG-07] màn đơn: QR nhận bản ĐẦY ĐỦ, phần hiển thị mới che", () => {
+    // Nhúng chuỗi ĐÃ CHE vào ảnh QR là mã hỏng — tiền không về được. Đây là cùng một cái bẫy
+    // mà khối QR mức đơn đã phải ghi chú một lần.
+    const page = docMa("app/(admin)/admin/orders/[id]/page.tsx");
+    expect(page).toMatch(/buildVietQrImageUrl\(payCfg, phieuMo\.tongTien, memo\.noiDung\)/);
+    expect(page).toMatch(/maskPhoneInTransferContent\(memo\.noiDung, order\.customerPhone\)/);
+    expect(page, "phiếu phải được truyền xuống khối công nợ theo con").toMatch(
+      /phieu=\{phieuGop\}/,
+    );
+  });
+
+  it("[QPG-08] số in trên QR là CÒN PHẢI THU của phiếu, không phải `amountDue` đã chụp", () => {
+    // Một dòng của phiếu có thể đã được lấp từ đường khác sau lúc phát; khi đó QR phải in số
+    // NHỎ HƠN. In `PaymentBill.amountDue` là đòi cả phần đã trả, và vì cổng đối khớp so với
+    // `conPhaiThuCuaPhieu` nên khách chuyển đúng số trên QR sẽ bị từ chối — mọi lần.
+    const doc = than(docMa("lib/finance/phieu-gop.ts"), "docPhieuGopDangMo");
+    expect(doc).toMatch(/tongTien: conPhaiThuCuaPhieu\(dongChia\),/);
+  });
+});

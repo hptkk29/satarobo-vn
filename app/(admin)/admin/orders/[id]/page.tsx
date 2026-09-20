@@ -24,7 +24,9 @@ import { loadActiveQrSessions } from "../_qr-core";
 import { maskPhone, maskEmail } from "@/lib/utils";
 import { laThuTienLinhHoatBat } from "@/lib/finance/feature";
 import { noTheoCon } from "@/lib/finance/debt";
-import { CongNoTheoCon } from "../_components/cong-no-theo-con";
+import { CongNoTheoCon, type PhieuGopView } from "../_components/cong-no-theo-con";
+import { docPhieuGopDangMo } from "@/lib/finance/phieu-gop";
+import { memoPhatHanh } from "@/lib/payments/memo-phat-hanh";
 
 export const metadata = { title: "Chi tiết đơn hàng | Admin" };
 export const dynamic = "force-dynamic";
@@ -215,6 +217,32 @@ export default async function OrderDetailPage({ params }: Props) {
   const batThuTheoCon = await laThuTienLinhHoatBat(order.orgUnitId);
   const soTheoCon = batThuTheoCon ? await noTheoCon(order.id) : null;
 
+  // ── PHIÊN C · phiếu gộp đang mở [20/09/2026] ────────────────────────────────
+  //
+  // Cùng công tắc với khối "Công nợ theo con": tắt thì KHÔNG thêm một truy vấn nào.
+  const phieuMo = batThuTheoCon ? await docPhieuGopDangMo(order.id) : null;
+  let phieuGop: PhieuGopView | null = null;
+  if (phieuMo) {
+    // Nội dung CK lấy từ `memoPhatHanh` — CHỖ DUY NHẤT quyết định khuôn mới hay cũ. Dựng
+    // chuỗi tại đây bằng tay là đẻ ra một khuôn thứ hai, và khuôn thứ hai thì có ngày lệch.
+    const memo = await memoPhatHanh({
+      orgUnitId: order.orgUnitId,
+      hoTen: order.student?.name ?? order.customerName,
+      sdt: order.customerPhone,
+      maMoi: phieuMo.ma,
+      tran: VIETQR_ADDINFO_MAX,
+    });
+    phieuGop = {
+      ...phieuMo,
+      // ⚠️ QR nhận bản ĐẦY ĐỦ, phần HIỂN THỊ mới che — y hệt khối QR mức đơn ở dưới. Nhúng
+      // bản che vào ảnh QR là mã hỏng, tiền không về được.
+      qrUrl: canViewPii ? buildVietQrImageUrl(payCfg, phieuMo.tongTien, memo.noiDung) : null,
+      noiDungCk: canViewPii
+        ? memo.noiDung
+        : maskPhoneInTransferContent(memo.noiDung, order.customerPhone),
+    };
+  }
+
   const congNo = congNoDon({
     totalAmount: order.totalAmount,
     daGhiNhan: paidSoFar._sum.amount ?? 0,
@@ -317,6 +345,7 @@ export default async function OrderDetailPage({ params }: Props) {
             duocSua={canManage}
             duocGan={canRecordPayments}
             duocBoGan={canManagePayments}
+            phieu={phieuGop}
           />
         </div>
       )}
