@@ -47,6 +47,7 @@ import {
   boGanKhoanKhoiCon,
   tachKhoanChoCon,
 } from "@/lib/finance/ghi-tien-don";
+import { taoPhieuGop, huyPhieuGop, dongPhieuGop } from "@/lib/finance/phieu-gop";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { soatGiaDon } from "@/lib/orders/price-guard";
 import { congNoDon } from "@/lib/finance/cong-no-don";
@@ -1946,4 +1947,94 @@ export async function tachKhoanChoConAction(input: {
 
   revalidatePath(`/orders/${input.orderId}`);
   return { ok: true as const, soTien: kq.soTien, soPhan: kq.soPhan, tenCon: kq.tenCon };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PHIÊN C · PHIẾU GỘP — phát hành / huỷ / đóng  [20/09/2026]
+//
+// ⚠️ QUYỀN: **hai mức, không phải một**, và ranh giới là "phiếu đã nhận đồng nào chưa".
+//
+//   · phát hành + huỷ phiếu CHƯA nhận tiền  → `payments:record`  (việc thường ngày của sale)
+//   · đóng phiếu ĐÃ nhận một phần           → `payments:manage`  (kế toán)
+//
+// Phát một tờ QR và huỷ nó khi chưa ai chuyển gì là việc không đổi một đồng nào trong sổ —
+// bắt nó lên `payments:manage` nghĩa là mỗi lần sale tick nhầm một đợt phải chờ kế toán.
+// Còn ĐÓNG phiếu là nói "phần đã nhận cứ để đó, đừng thu tiếp bằng tờ này" — đó là một phán
+// quyết về tiền đã vào, và nó thuộc kế toán.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Phát MỘT phiếu gộp cho các đợt sale tick.
+ *
+ * ⚠️ Không kiểm "đơn đã có phiếu OPEN chưa" ở đây: `PaymentBill_orderId_open_key` (chỉ mục
+ * partial unique) gác việc đó, và nó là thứ duy nhất gác được khi hai người bấm cùng lúc.
+ * `taoPhieuGop` bắt lỗi unique rồi dịch sang tiếng Việt.
+ */
+export async function taoPhieuGopAction(input: {
+  orderId: string;
+  paymentRequestIds: string[];
+}) {
+  const cong = await congDuongB(input.orderId, "payments:record");
+  if (!cong.ok) return { ok: false as const, error: cong.error };
+
+  if (!Array.isArray(input.paymentRequestIds) || input.paymentRequestIds.length === 0) {
+    return { ok: false as const, error: "Chưa chọn đợt nào" };
+  }
+
+  const kq = await taoPhieuGop({
+    orderId: cong.order.id,
+    paymentRequestIds: input.paymentRequestIds.map((x) => String(x)),
+    actor: cong.actor,
+  });
+  if (!kq.ok) return kq;
+
+  // ⚠️ Cảnh báo cạn kho mã đi ra NHẬT KÝ MÁY CHỦ, không ra toast của sale: người bấm không
+  // làm gì được với nó, còn người vận hành thì không ngồi xem toast. Ngưỡng 50% là lời nhắc
+  // SỚM — kho còn hơn 200.000 mã, nên đây không phải việc gấp, chỉ là việc đừng để quên.
+  if (kq.canhBaoKho) console.warn(`[phieu-gop] CẠN KHO MÃ: ${kq.canhBaoKho}`);
+
+  revalidatePath(`/orders/${input.orderId}`);
+  return { ok: true as const, billId: kq.billId, ma: kq.ma, tongTien: kq.tongTien, soDong: kq.soDong };
+}
+
+/** HUỶ một phiếu CHƯA nhận đồng nào — `payments:record`. Mã của phiếu VOID hết khớp được. */
+export async function huyPhieuGopAction(input: {
+  orderId: string;
+  billId: string;
+  lyDo: string;
+}) {
+  const cong = await congDuongB(input.orderId, "payments:record");
+  if (!cong.ok) return { ok: false as const, error: cong.error };
+
+  const kq = await huyPhieuGop({
+    orderId: cong.order.id,
+    billId: input.billId,
+    lyDo: input.lyDo,
+    actor: cong.actor,
+  });
+  if (!kq.ok) return kq;
+
+  revalidatePath(`/orders/${input.orderId}`);
+  return { ok: true as const };
+}
+
+/** ĐÓNG một phiếu ĐÃ nhận một phần — CHỈ kế toán (`payments:manage`), bắt buộc ghi lý do. */
+export async function dongPhieuGopAction(input: {
+  orderId: string;
+  billId: string;
+  lyDo: string;
+}) {
+  const cong = await congDuongB(input.orderId, "payments:manage");
+  if (!cong.ok) return { ok: false as const, error: cong.error };
+
+  const kq = await dongPhieuGop({
+    orderId: cong.order.id,
+    billId: input.billId,
+    lyDo: input.lyDo,
+    actor: cong.actor,
+  });
+  if (!kq.ok) return kq;
+
+  revalidatePath(`/orders/${input.orderId}`);
+  return { ok: true as const, daNhan: kq.daNhan };
 }

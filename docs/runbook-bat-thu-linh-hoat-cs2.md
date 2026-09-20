@@ -539,6 +539,76 @@ cả hai đường gỡ đều cần `payments:manage` — nhưng chúng **khôn
 
 ---
 
+## 6 · PHIẾU GỘP + QR TỰ KHỚP  ⭐ mới, PHIÊN C 20/09/2026
+
+> **Đây là bước làm cho tiền vào ĐÚNG CON tự động.** Sale không phải gắn tay nữa — quét đúng
+> số thì hệ thống tự chia cho từng bé, tự phát phiếu thu cho từng bé.
+
+### 6.1 · Sale làm gì
+
+1. Mở đơn → khối **"Công nợ theo con"**.
+2. **Tick** các đợt đang mở muốn thu chung — của **một hay nhiều con đều được**.
+3. Thanh dưới hiện **"Đã chọn N đợt · tổng X"**. Bấm **"In QR X"**.
+4. Màn hình hiện khối phiếu: **mã 5 ký tự** (chữ to, tách ký tự), tổng tiền, từng dòng
+   *"Tên bé · số tiền"*, ảnh **QR**, và **nội dung chuyển khoản** dạng chữ.
+5. Gửi ảnh QR cho phụ huynh. Ai không quét được thì **đọc nội dung chuyển khoản** cho họ gõ tay.
+
+> ⚠️ **Mã đọc qua điện thoại được — bảng chữ đã bỏ 9 ký tự dễ nhầm** (`O 0 I 1 L B 8 S 5`).
+> Nên không bao giờ phải nói *"chữ O không phải số không"*. Nếu thấy mã có những ký tự đó thì
+> **báo lại** — nghĩa là có gì đó sai.
+
+### 6.2 · Phụ huynh chuyển tiền — ba kết cục, và chỉ MỘT là tự động
+
+| Phụ huynh chuyển | Hệ thống làm gì |
+|---|---|
+| **ĐÚNG số trên QR** | ✅ Tự chia cho từng bé · phiếu thành **Đã thu đủ** · mỗi bé một khoản có tên |
+| **THỪA dù 1đ** | ⛔ **Không phân bổ đồng nào**, giao dịch về *Chưa khớp* ở `/admin/bien-dong-so-du` |
+| **THIẾU dù 1đ** | ⛔ **Không phân bổ đồng nào**, giao dịch về *Chưa khớp* |
+
+> ⚠️ **"Ăn cả hoặc không ăn gì" là luật, không phải lỗi.** Thiếu 1.000đ thì **không đợt nào**
+> được ghi nhận — kế toán hoàn cả khoản rồi thu lại. Nghe khắc nghiệt, nhưng nới ra là phải
+> xây cả một cái ví trung gian + màn chia ví + quyền + báo cáo, để dọn hậu quả của việc chấp
+> nhận một khoản lệch số.
+>
+> **Việc của sale là làm cho phụ huynh chuyển ĐÚNG SỐ.** QR đã in sẵn số nên phần lớn ca là
+> tự động; ca gõ tay thì nhắc họ nhập đúng số trên màn.
+
+> ⚠️ **Quét LẠI một QR đã thu đủ** cũng về *Chưa khớp*, với lý do ghi rõ *"phiếu đang ĐÃ THU
+> ĐỦ"* — không phải *"lệch số"*. Đọc đúng lý do thì biết ngay là khách quét nhầm QR cũ, khỏi
+> đi tìm một khoản lệch không tồn tại.
+
+### 6.3 · Huỷ hay Đóng — hai nút, và màn hình chỉ hiện nút dùng được
+
+| Tình trạng phiếu | Nút hiện | Ai làm |
+|---|---|---|
+| **chưa nhận đồng nào** | **Huỷ phiếu** — mã cũ hết khớp, phát lại mã mới | sale (`payments:record`) |
+| **đã nhận một phần từ đường khác** | **Đóng phiếu** — ngừng thu bằng tờ này, giữ dấu vết phần đã nhận | kế toán (`payments:manage`) |
+
+> ⚠️ **Mỗi đơn chỉ MỘT phiếu đang chờ tiền.** Muốn đổi danh sách đợt thì **huỷ phiếu cũ rồi
+> phát lại** — không sửa phiếu đang có. Mã đã phát hành **không bao giờ đổi**: phụ huynh đang
+> giữ tờ QR ấy trong điện thoại.
+>
+> Trong lúc đang có phiếu mở, ô tick **biến mất** — đó là cách màn hình nói luật đó, không
+> phải lỗi.
+
+### 6.4 · Nếu tiền về *Chưa khớp*
+
+Vào `/admin/bien-dong-so-du`. Cột ghi chú nói **mã phiếu · số cần · số về · lệch bao nhiêu** —
+đủ để gọi cho phụ huynh ngay, không phải tự dò.
+
+Xử lý: **kế toán hoàn tiền có chứng từ** rồi thu lại cho đúng. **Không có** đường phân bổ tay
+số lệch trong bản này — cố ý.
+
+### 6.5 · Đường CŨ không đổi
+
+Đơn chưa phát phiếu gộp thì tiền về vẫn đi đường cũ (mã đơn / tài khoản ảo / SĐT) y như trước.
+Phiếu gộp chỉ nhận trách nhiệm khi **tra ra đúng một phiếu có thật**.
+
+> ⚠️ Và cờ `billing.flexV1Enabled` **tắt đi cũng không làm hỏng phiếu đã phát**: mã vẫn khớp
+> được, tiền vẫn về đúng bé. Tắt cờ chỉ làm **không phát được phiếu mới**.
+
+---
+
 ## Việc còn treo, KHÔNG thuộc runbook này
 
 - **7 giao dịch / 28.472.000đ** khớp đơn `CONFIRMED` đã hết phiếu mở →
