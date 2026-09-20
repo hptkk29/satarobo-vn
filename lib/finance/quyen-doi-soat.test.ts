@@ -170,8 +170,20 @@ describe("[QDS-03] khoá theo đơn — MỘT công thức, dùng chung với đ
     // "Failed to deserialize column of type 'void'" (bug PR #76).
     expect(ghi).not.toMatch(/\$queryRaw`SELECT pg_advisory_xact_lock/);
     // Và mọi phép ghi tiền của tệp này đi qua `ghiTienChoDon`, tức luôn nằm dưới khoá.
-    // 4 lời gọi (tạo đợt · huỷ đợt · gắn · gỡ). Khai báo là `ghiTienChoDon<T>(` nên không đếm.
-    expect(ghi.match(/ghiTienChoDon\(/g) ?? []).toHaveLength(4);
+    //
+    // **6** lời gọi. Khai báo là `ghiTienChoDon<T>(` nên không đếm.
+    //   1. `taoDotChoCon`          — tạo đợt cho một bé
+    //   2. `huyDotChoCon`          — huỷ đợt chưa có tiền
+    //   3. `ganTienTheoCon`        — gắn một GIAO DỊCH ngân hàng, chia theo đợt
+    //   4. `ganKhoanDaThuChoCon`   — đường B: gắn một KHOẢN đã thu cho một bé  [18/09/2026]
+    //   5. `boGanKhoanKhoiCon`     — đường B: bỏ gắn                            [18/09/2026]
+    //   6. `goGanTheoCon`          — gỡ gắn giao dịch, sinh bút toán đảo
+    //
+    // ⚠️ Con số này ĐẾM CÓ CHỦ ĐÍCH, đừng đổi thành `toBeGreaterThan`. Nó bắt đúng một thứ:
+    // ai đó thêm một đường ghi tiền mới mà **quên bọc khoá** thì tổng không tăng, và ca này
+    // đỏ. Nới thành "≥" là gỡ luôn khả năng ấy. Thêm hàm mới thì SỬA SỐ và thêm một dòng vào
+    // danh sách trên — vài giây, và nó buộc người thêm phải đọc lại vì sao có khoá.
+    expect(ghi.match(/ghiTienChoDon\(/g) ?? []).toHaveLength(6);
   });
 
   it("đường webhook dùng ĐÚNG công thức khoá ấy — hai đường phải giẫm lên nhau được", () => {
@@ -291,5 +303,87 @@ describe("[QDS-05] CÔNG TẮC THEO CƠ SỞ — cờ tắt thì prod y như TR�
     // Cùng MỘT transaction: `writeAudit` phải nhận `tx`, kẻo nhật ký sống sót một lượt
     // rollback và kể một chuyện chưa từng xảy ra.
     expect(khoi).toMatch(/await writeAudit\(\{\s*tx,/);
+  });
+});
+
+describe("[QDB-*] ĐƯỜNG B — gắn khoản đã thu vào con, trên màn ĐƠN", () => {
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Chủ dự án chốt 18/09/2026: *"payments:record để gắn, payments:manage để bỏ gắn."*
+  // Và: *"Sau cờ (billing.flexV1Enabled), cờ tắt thì nút không hiện."*
+  //
+  // ⚠️ VÌ SAO LÀ LƯỚI MÃ NGUỒN CHỨ KHÔNG PHẢI TEST HÀNH VI — cùng lý do với `[QDS-*]` ở trên:
+  // cổng thật nằm trong Server Action và nó gọi `auth()` + `checkPermission()`. Dựng hành vi
+  // cho nó phải giả `auth()`, dựng session, dựng `RoleDef` trong DB cho từng vai — và khi đó
+  // ca test kiểm `checkPermission`, thứ đã có test riêng, chứ KHÔNG kiểm điều đang cần: rằng
+  // ĐÚNG cổng ấy được cắm vào ĐÚNG action ấy.
+  //
+  // Phần HÀNH VI của đường B (gắn / bỏ gắn / chặn chéo đơn / chỉ đụng một cột) nằm ở
+  // `tests/finance/gan-khoan-cho-con.test.ts`, chạy trên Postgres thật.
+  // ─────────────────────────────────────────────────────────────────────────────
+  const ACT = "app/(admin)/admin/orders/_actions.ts";
+
+  it("gắn đòi `payments:record`, bỏ gắn đòi `payments:manage` — KHÔNG dùng lại `orders:manage`", () => {
+    const src = docMa(ACT);
+    const gan = than(src, "ganKhoanChoConAction");
+    const bo = than(src, "boGanKhoanChoConAction");
+    expect(gan, "không tách được thân action gắn").not.toBe("");
+    expect(bo, "không tách được thân action bỏ gắn").not.toBe("");
+
+    expect(gan).toMatch(/congDuongB\(input\.orderId, "payments:record"\)/);
+    expect(bo).toMatch(/congDuongB\(input\.orderId, "payments:manage"\)/);
+
+    // ⚠️ `requireOrdersManage()` gác bằng `orders:manage` VÀ `redirect()` khi thiếu quyền.
+    // Đường B cố ý không dùng nó: gắn một khoản ĐÃ THU cho đúng bé là việc thường ngày của
+    // sale, và đá người dùng sang /dashboard giữa lúc đang gắn tiền là mất luôn thao tác dở.
+    expect(gan).not.toMatch(/requireOrdersManage/);
+    expect(bo).not.toMatch(/requireOrdersManage/);
+  });
+
+  it("cổng chung kiểm ĐỦ BA VẾ: quyền · phạm vi cơ sở · công tắc CỦA ĐƠN", () => {
+    const cong = than(docMa(ACT), "congDuongB");
+    expect(cong, "không tách được thân cổng").not.toBe("");
+
+    expect(cong, "vế 1 — quyền").toMatch(/await checkPermission\(quyen\)/);
+    expect(cong, "vế 2 — phạm vi cơ sở").toMatch(/passesScope\("Order", order, actor\)/);
+    // ⚠️ Vế 3 đọc theo `order.orgUnitId` — cơ sở GIỮ ĐƠN, KHÔNG phải cơ sở người bấm. Đọc
+    // theo người bấm là pilot một cơ sở hoá ra bật cho mọi đơn mà người đó chạm vào.
+    expect(cong, "vế 3 — công tắc của ĐƠN").toMatch(
+      /laThuTienLinhHoatBat\(order\.orgUnitId\)/,
+    );
+  });
+
+  it("cờ TẮT ⇒ action TỪ CHỐI (không chỉ ẩn nút)", () => {
+    const cong = than(docMa(ACT), "congDuongB");
+    // Phải có nhánh phủ định của cờ và nó trả về lỗi — ẩn nút không phải là kiểm quyền.
+    expect(cong).toMatch(/if \(!\(await laThuTienLinhHoatBat\(order\.orgUnitId\)\)\)/);
+    expect(cong).toMatch(/chưa bật cho cơ sở này/);
+  });
+
+  it("màn đơn truyền HAI cờ quyền riêng, không tái dùng `canManage`", () => {
+    const page = docMa("app/(admin)/admin/orders/[id]/page.tsx");
+    expect(page).toMatch(/const canRecordPayments = await checkPermission\("payments:record"\)/);
+    expect(page).toMatch(/const canManagePayments = await checkPermission\("payments:manage"\)/);
+    expect(page).toMatch(/duocGan=\{canRecordPayments\}/);
+    expect(page).toMatch(/duocBoGan=\{canManagePayments\}/);
+    // `duocSua` (tạo/huỷ đợt) VẪN là `canManage` — ba quyền, ba việc.
+    expect(page).toMatch(/duocSua=\{canManage\}/);
+  });
+
+  it("khối khoản chờ gắn lọc từ tập RỘNG, KHÔNG từ `chuaGanCon` (trục A)", () => {
+    // ⚠️ Đây là con bug đã đo: `chuaGanCon` chỉ cộng trục A, nên với 4 khoản `PENDING` của
+    // `ORD-260917-000001` nó ra 0 và cả khối BIẾN MẤT — tiền có thật mà màn hình câm.
+    const ui = docMa("app/(admin)/admin/orders/_components/cong-no-theo-con.tsx");
+    expect(ui).toMatch(/khoan=\{so\.khoanDaVeChiTiet\.filter\(\(k\) => k\.orderItemId == null\)\}/);
+    expect(ui, "không được quay lại gác bằng `so.chuaGanCon > 0`").not.toMatch(
+      /so\.chuaGanCon > 0 &&/,
+    );
+  });
+
+  it("giới hạn 'một khoản một bé' được NÓI RA trên màn, không giấu trong mã", () => {
+    // Affordance phải nói thật (luật 12): người dùng phải biết TRƯỚC khi bấm rằng không chia
+    // được một khoản cho hai bé, chứ không phát hiện sau.
+    const ui = docMa("app/(admin)/admin/orders/_components/cong-no-theo-con.tsx");
+    expect(ui).toMatch(/chưa hỗ trợ/);
+    expect(ui).toMatch(/đúng một bé/);
   });
 });

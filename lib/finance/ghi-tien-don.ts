@@ -387,7 +387,182 @@ export async function ganTienTheoCon(input: {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4 · GỠ GẮN — BÚT TOÁN ĐẢO, KHÔNG XOÁ
+// 4 · GẮN MỘT KHOẢN ĐÃ THU VÀO MỘT BÉ  ("đường B")
+//
+// ⚠️ VÌ SAO PHẢI CÓ ĐƯỜNG NÀY, VÀ NÓ KHÁC `ganTienTheoCon` CHỖ NÀO
+//
+// `ganTienTheoCon` (mục 3) đi từ một `BankTransaction` đang `UNMATCHED`: nó TẠO ra các dòng
+// `Payment` mới, mỗi bé một dòng. Đó là đường cho tiền ĐANG VÀO.
+//
+// Nhưng tiền ĐÃ VÀO thì không đi qua đó được. Đo trên prod 18/09/2026, đơn
+// `ORD-260917-000001`: 4 dòng `Payment` (`method = sepay`, `PENDING`) mang `orderItemId = NULL`
+// — người vận hành nhập tay để khớp với số phụ huynh đã chuyển, nên **không có
+// `BankTransaction` nào phía sau**. `ganTienTheoCon` đòi `bankTransactionId` và từ chối giao
+// dịch `MATCHED`, nên cả hai cửa đều đóng: 4.836.000đ nằm trong DB mà không đường nào —
+// giao diện hay script — gắn được cho bé nào.
+//
+// Đường B lấp đúng chỗ đó: **không tạo tiền, không đụng tiền, chỉ điền một cột đang trống.**
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// GIỚI HẠN — NÓI THẲNG, KHÔNG LÀM NỬA VỜI
+//
+// **MỘT khoản gắn cho ĐÚNG MỘT bé.** Không tách một khoản ra cho hai bé.
+//
+// Vì sao không làm: tách khoản nghĩa là sửa `amount` của dòng gốc rồi đẻ dòng mới — mà "không
+// đụng `amount`" chính là điều làm cho đường này an toàn và kiểm được. Một lệnh vừa chia tiền
+// vừa điền cột là một lệnh phải chứng minh nhiều thứ hơn hẳn, và nó sẽ nằm cùng chỗ với đường
+// tạo bút toán chứ không nằm ở đây.
+//
+// Thực tế chưa cần: 4 khoản của `ORD-260917-000001` vốn đã là bốn lần chuyển riêng
+// (1.188.000 · 1.230.000 · 1.188.000 · 1.230.000), gắn mỗi khoản cho một bé là đủ. Ngày nào
+// gặp một khoản thật sự phải xé đôi thì đó là một đợt riêng, và câu trả lời hôm nay là
+// **"chưa hỗ trợ"** chứ không phải một nút gắn được một nửa.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Gắn một `Payment` ĐÃ CÓ vào một dòng hàng (một bé) của CHÍNH đơn đó.
+ *
+ * ⚠️ CHỈ ghi cột `orderItemId`. Không `amount`, không `accountantStatus`, không `saleStatus`,
+ * không `enrollmentId`, không `paidDate`, không `deletedAt`. Đó là toàn bộ lý do lệnh này an
+ * toàn — và là thứ ca `[GKC-*]` + lưới mã nguồn canh.
+ *
+ * Bốn cổng, TẤT CẢ đứng TRƯỚC phép ghi đầu tiên (luật rollback — CLAUDE.md mục 7):
+ *   1. khoản phải thuộc CHÍNH đơn này và chưa xoá mềm;
+ *   2. khoản phải đang TRỐNG (`orderItemId IS NULL`) — đã gắn rồi thì bỏ gắn trước, để một
+ *      lượt bấm nhầm không âm thầm chuyển tiền từ bé này sang bé kia;
+ *   3. dòng hàng phải thuộc CHÍNH đơn này — chặn gắn tiền của đơn A cho con của đơn B;
+ *   4. khoản không được ở trạng thái `REJECTED` — kế toán đã từ chối thì nó không phải tiền,
+ *      gắn cho một bé là làm công nợ bé ấy giảm bằng một khoản không tồn tại.
+ */
+export async function ganKhoanDaThuChoCon(input: {
+  orderId: string;
+  paymentId: string;
+  orderItemId: string;
+  actor: AuditActor;
+}): Promise<KetQuaGhi<{ soTien: number; tenCon: string }>> {
+  return ghiTienChoDon(input.orderId, async (tx, so) => {
+    const con = so.con.find((c) => c.orderItemId === input.orderItemId);
+    // CỔNG 3 — dòng hàng phải thuộc đơn này. `so.con` dựng từ `OrderItem` CỦA ĐƠN NÀY, nên
+    // không tìm thấy nghĩa là dòng hàng thuộc đơn khác (hoặc không tồn tại).
+    if (!con) return { ok: false as const, error: "Dòng hàng không thuộc đơn này" };
+
+    const khoan = await tx.payment.findFirst({
+      where: { id: input.paymentId, orderId: input.orderId, deletedAt: null },
+      select: { id: true, amount: true, orderItemId: true, accountantStatus: true },
+    });
+    // CỔNG 1 — câu tra đã khoá cả `orderId` lẫn `deletedAt`, nên `null` gộp hai ca: không có
+    // khoản ấy, hoặc nó thuộc đơn khác. Câu chữ cố ý không phân biệt — biết một khoản tồn tại
+    // ở đơn khác đã là một mẩu thông tin không nên rò.
+    if (!khoan) return { ok: false as const, error: "Không tìm thấy khoản thu của đơn này" };
+
+    // CỔNG 2
+    if (khoan.orderItemId !== null) {
+      return {
+        ok: false as const,
+        error: "Khoản này đã gắn cho một bé rồi — bỏ gắn trước nếu muốn đổi",
+      };
+    }
+    // CỔNG 4
+    if (khoan.accountantStatus === "REJECTED") {
+      return {
+        ok: false as const,
+        error: "Kế toán đã từ chối khoản này — không gắn cho bé nào được",
+      };
+    }
+
+    // ⚠️ `updateMany` + `orderItemId: null` TRONG `where`, KHÔNG phải `update` theo id. Hai
+    // người cùng bấm thì người vào sau đổi 0 dòng và ta từ chối, thay vì đè lên lựa chọn của
+    // người trước. `count === 0` ở đây là ghi có điều kiện đổi 0 dòng — commit vô hại, đúng
+    // ngoại lệ hợp lệ của luật rollback.
+    const upd = await tx.payment.updateMany({
+      where: { id: khoan.id, orderId: input.orderId, orderItemId: null, deletedAt: null },
+      data: { orderItemId: input.orderItemId },
+    });
+    // ⚠️ MỘT DÒNG, đúng khuôn ngoại lệ của luật rollback (CLAUDE.md mục 7) — và lưới
+    // `cong-truoc-phep-ghi.test.ts` nhận diện khuôn ấy theo HÌNH DẠNG `if (x.count === 0)
+    // return`. Viết thành khối `{ … }` là lưới báo "từ chối sau phép ghi" (đã xảy ra, 18/09).
+    // Sửa mã cho khớp khuôn, ĐỪNG nới lưới: ngoại lệ mà nới ra thì có ngày nuốt một ca thật.
+    if (upd.count === 0) return { ok: false as const, error: "Khoản vừa được gắn — tải lại trang" };
+
+    await writeAudit({
+      tx,
+      actor: input.actor,
+      module: "finance",
+      entityType: "Order",
+      entityId: input.orderId,
+      action: "KHOAN_GAN_CHO_CON",
+      changedFields: ["orderItemId"],
+      oldValues: { paymentId: khoan.id, orderItemId: null },
+      newValues: {
+        paymentId: khoan.id,
+        orderItemId: input.orderItemId,
+        ten: con.ten,
+        soTien: khoan.amount,
+      },
+      reason: `Gắn khoản đã thu ${khoan.amount} cho ${con.ten}`,
+    });
+
+    return { ok: true as const, soTien: khoan.amount, tenCon: con.ten };
+  });
+}
+
+/**
+ * BỎ GẮN — đưa `Payment.orderItemId` về `NULL`. Quyền kế toán (`payments:manage`).
+ *
+ * ⚠️ KHÁC `goGanTheoCon` (mục 5) và cố ý không dùng lại nó: `goGanTheoCon` gỡ cả một
+ * `BankTransaction` — nó xoá `PaymentAllocation`, sinh bút toán ĐẢO, và đẩy giao dịch về
+ * `UNMATCHED`. Ở đây **không có giao dịch nào**, cũng không có phân bổ nào; tiền vẫn nằm
+ * nguyên trong đơn. Việc duy nhất phải hoàn là **một cột**.
+ *
+ * Gọi `goGanTheoCon` cho ca này sẽ tạo một bút toán đảo cho khoản tiền KHÔNG hề bị gỡ khỏi
+ * đơn ⇒ công nợ đơn tụt đi một lần nữa. Hai việc nghe giống nhau, hậu quả ngược nhau.
+ *
+ * `lyDo` BẮT BUỘC và không rỗng: đây là đường sửa một quyết định của người khác, nên nó phải
+ * để lại câu trả lời cho "vì sao".
+ */
+export async function boGanKhoanKhoiCon(input: {
+  orderId: string;
+  paymentId: string;
+  lyDo: string;
+  actor: AuditActor;
+}): Promise<KetQuaGhi<{ soTien: number }>> {
+  return ghiTienChoDon(input.orderId, async (tx) => {
+    if (!input.lyDo.trim()) return { ok: false as const, error: "Phải ghi lý do bỏ gắn" };
+
+    const khoan = await tx.payment.findFirst({
+      where: { id: input.paymentId, orderId: input.orderId, deletedAt: null },
+      select: { id: true, amount: true, orderItemId: true },
+    });
+    if (!khoan) return { ok: false as const, error: "Không tìm thấy khoản thu của đơn này" };
+    if (khoan.orderItemId === null) {
+      return { ok: false as const, error: "Khoản này chưa gắn cho bé nào" };
+    }
+
+    const upd = await tx.payment.updateMany({
+      where: { id: khoan.id, orderId: input.orderId, orderItemId: khoan.orderItemId },
+      data: { orderItemId: null },
+    });
+    if (upd.count === 0) return { ok: false as const, error: "Khoản vừa đổi — tải lại trang" };
+
+    await writeAudit({
+      tx,
+      actor: input.actor,
+      module: "finance",
+      entityType: "Order",
+      entityId: input.orderId,
+      action: "KHOAN_BO_GAN_CON",
+      changedFields: ["orderItemId"],
+      oldValues: { paymentId: khoan.id, orderItemId: khoan.orderItemId },
+      newValues: { paymentId: khoan.id, orderItemId: null },
+      reason: input.lyDo.trim(),
+    });
+
+    return { ok: true as const, soTien: khoan.amount };
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 5 · GỠ GẮN GIAO DỊCH NGÂN HÀNG — BÚT TOÁN ĐẢO, KHÔNG XOÁ
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
