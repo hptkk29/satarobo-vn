@@ -125,6 +125,14 @@ export default async function OrderDetailPage({ params }: Props) {
 
   // orders:manage chỉ HO_ACCOUNTANT (GLOBAL) — không cần target.
   const canManage = await checkPermission("orders:manage");
+  // ĐƯỜNG B — quyền RIÊNG, không dùng lại `orders:manage`. Chủ dự án chốt 18/09/2026:
+  // `payments:record` để gắn khoản đã thu cho một bé, `payments:manage` để bỏ gắn.
+  //
+  // ⚠️ Hai cờ này chỉ quyết định VẼ NÚT hay không. Cổng thật nằm trong action
+  // (`congDuongB`), và nó hỏi lại cả ba vế: quyền · phạm vi cơ sở · công tắc của ĐƠN.
+  // Ẩn nút không phải là kiểm quyền.
+  const canRecordPayments = await checkPermission("payments:record");
+  const canManagePayments = await checkPermission("payments:manage");
   // Che liên hệ khách trên PHẦN HIỂN THỊ nếu thiếu quyền. QR (nội dung CK) + gửi email
   // vẫn dùng `order` GỐC ở server (chức năng), chỉ bản `displayOrder` xuống client bị che
   // → không leak qua RSC payload.
@@ -302,7 +310,13 @@ export default async function OrderDetailPage({ params }: Props) {
 
       {soTheoCon && (
         <div className="mb-4">
-          <CongNoTheoCon orderId={order.id} so={soTheoCon} duocSua={canManage} />
+          <CongNoTheoCon
+            orderId={order.id}
+            so={soTheoCon}
+            duocSua={canManage}
+            duocGan={canRecordPayments}
+            duocBoGan={canManagePayments}
+          />
         </div>
       )}
 

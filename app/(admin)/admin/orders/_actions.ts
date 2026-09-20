@@ -40,7 +40,12 @@ import { laThuTienLinhHoatBat } from "@/lib/finance/feature";
 import { getRequestMetadata } from "@/lib/audit/headers";
 import { getAuditActor } from "@/lib/audit/log";
 import { ghiTuongTacLeadBoQuaLoi } from "@/lib/lead/tuong-tac/ghi";
-import { taoDotChoCon, huyDotChoCon } from "@/lib/finance/ghi-tien-don";
+import {
+  taoDotChoCon,
+  huyDotChoCon,
+  ganKhoanDaThuChoCon,
+  boGanKhoanKhoiCon,
+} from "@/lib/finance/ghi-tien-don";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { soatGiaDon } from "@/lib/orders/price-guard";
 import { congNoDon } from "@/lib/finance/cong-no-don";
@@ -1795,4 +1800,102 @@ export async function huyDotChoConAction(input: { orderId: string; paymentReques
 
   revalidatePath(`/orders/${input.orderId}`);
   return { ok: true as const };
+}
+
+/**
+ * Cổng chung cho ĐƯỜNG B (gắn / bỏ gắn khoản đã thu vào một bé).
+ *
+ * ⚠️ QUYỀN Ở ĐÂY KHÁC `taoDotChoConAction` NGAY TRÊN, và đó là chủ ý của chủ dự án
+ * (chốt 18/09/2026): *"payments:record để gắn, payments:manage để bỏ gắn."*
+ *
+ * `taoDotChoConAction` gác bằng `requireOrdersManage()` (`orders:manage`, chỉ HO_ACCOUNTANT).
+ * Đường B **không** dùng lại nó: tạo một khoản phải thu là việc của kế toán, còn gắn một
+ * khoản ĐÃ THU cho đúng bé là việc thường ngày của sale — nó không sinh thêm nghĩa vụ tiền
+ * nào, chỉ nói rõ tiền có sẵn thuộc về ai.
+ *
+ * ⚠️ `requireOrdersManage` còn `redirect()` khi thiếu quyền. Đường B **trả `{ ok: false }`**
+ * chứ không redirect: nó được gọi từ một nút trong trang đang mở, và đá người dùng ra
+ * `/dashboard` giữa lúc họ đang gắn tiền là mất luôn ngữ cảnh lẫn thao tác dở.
+ *
+ * Ba vế, thiếu vế nào cũng từ chối:
+ *   1. quyền (`payments:record` để gắn / `payments:manage` để bỏ gắn);
+ *   2. đơn nằm trong phạm vi cơ sở của người bấm (`passesScope`);
+ *   3. **công tắc BẬT cho cơ sở GIỮ ĐƠN** — không phải cơ sở của người bấm. Cùng một sale mở
+ *      hai đơn ở hai cơ sở thì phải thấy hai luồng khác nhau; đọc theo người bấm là pilot một
+ *      cơ sở hoá ra bật cho mọi đơn mà người đó chạm vào.
+ */
+async function congDuongB(orderId: string, quyen: "payments:record" | "payments:manage") {
+  const session = await auth();
+  if (!session?.user) return { ok: false as const, error: "Chưa đăng nhập" };
+  if (!(await checkPermission(quyen))) {
+    return { ok: false as const, error: "Không có quyền" };
+  }
+
+  const actor = await resolveActor(session.user.id);
+  const order = await scopedDb(actor).order.findUnique({
+    where: { id: orderId },
+    select: { id: true, centerId: true, orgUnitId: true },
+  });
+  if (!order || !passesScope("Order", order, actor)) {
+    // Câu chữ cố ý KHÔNG phân biệt "không có" với "không thuộc cơ sở bạn".
+    return { ok: false as const, error: "Không tìm thấy đơn hàng" };
+  }
+
+  if (!(await laThuTienLinhHoatBat(order.orgUnitId))) {
+    return {
+      ok: false as const,
+      error: "Tính năng thu học phí linh hoạt chưa bật cho cơ sở này",
+    };
+  }
+
+  const { actorId, actorName } = getAuditActor(session);
+  return { ok: true as const, order, actor: { id: actorId ?? "", name: actorName } };
+}
+
+/**
+ * ĐƯỜNG B — gắn MỘT khoản đã thu cho MỘT bé.
+ *
+ * ⚠️ Một khoản gắn cho ĐÚNG MỘT bé. Chia một khoản cho hai bé **chưa hỗ trợ** — lý do đầy đủ
+ * ở đầu mục 4 của `lib/finance/ghi-tien-don.ts`. Màn hình phải nói thẳng điều đó, đừng để
+ * người dùng bấm rồi mới biết.
+ */
+export async function ganKhoanChoConAction(input: {
+  orderId: string;
+  paymentId: string;
+  orderItemId: string;
+}) {
+  const cong = await congDuongB(input.orderId, "payments:record");
+  if (!cong.ok) return { ok: false as const, error: cong.error };
+
+  const kq = await ganKhoanDaThuChoCon({
+    orderId: cong.order.id,
+    paymentId: input.paymentId,
+    orderItemId: input.orderItemId,
+    actor: cong.actor,
+  });
+  if (!kq.ok) return kq;
+
+  revalidatePath(`/orders/${input.orderId}`);
+  return { ok: true as const, soTien: kq.soTien, tenCon: kq.tenCon };
+}
+
+/** ĐƯỜNG B — bỏ gắn. CHỈ kế toán (`payments:manage`), và BẮT BUỘC ghi lý do. */
+export async function boGanKhoanChoConAction(input: {
+  orderId: string;
+  paymentId: string;
+  lyDo: string;
+}) {
+  const cong = await congDuongB(input.orderId, "payments:manage");
+  if (!cong.ok) return { ok: false as const, error: cong.error };
+
+  const kq = await boGanKhoanKhoiCon({
+    orderId: cong.order.id,
+    paymentId: input.paymentId,
+    lyDo: input.lyDo,
+    actor: cong.actor,
+  });
+  if (!kq.ok) return kq;
+
+  revalidatePath(`/orders/${input.orderId}`);
+  return { ok: true as const, soTien: kq.soTien };
 }
