@@ -31,6 +31,22 @@ name: Nguồn vào main
 # ⚠️ Vá gấp xong thì mở PR `main` → `test` **NGAY TRONG NGÀY** (luật 13). Không thì
 # lượt sau lại là một lượt hợp nhất hai chiều.
 #
+# ── 🔴 THỬ CỔNG NÀY BẰNG MỘT COMMIT VỨT ĐI, ĐỪNG THỬ BẰNG COMMIT SẼ DÙNG THẬT ───────
+# Bài học trả giá ngay lượt dựng cổng (20/09/2026).
+#
+# Tôi mở PR nháp từ chính nhánh `ci/nguon-vao-main` vào `main` để thử cổng. Cổng chạy
+# đúng cả ba chiều. Nhưng **check run gắn với SHA, không gắn với PR** — nên mọi dấu của
+# lượt thử ấy đi theo commit sang PR thật.
+#
+# Và nó KHÔNG chỉ là chuyện hiển thị: `pull_request` chạy CI trên **merge của head vào
+# BASE**. Base lúc thử là `main`, vốn có những thay đổi mà nhánh này chưa có ⇒ bộ
+# `Unit tests` ĐỎ 7 ca — rồi dấu đỏ đó bám vào SHA và **chặn luôn PR vào `test`**, vì
+# `test` cũng có `Unit tests` trong danh sách required.
+#
+# ⇒ Lần sau: thử cổng bằng một nhánh rác (`git commit --allow-empty`), đóng PR nháp, rồi
+#   mới mang thay đổi thật đi. Hoặc chấp nhận phải đẩy thêm một commit để lấy SHA sạch —
+#   đó đúng là việc commit này đang làm.
+#
 # ── LƯU Ý KHI SỬA ───────────────────────────────────────────────────────────────────
 # Tên job dưới đây là **tên required check** đăng ký ở branch protection. Đổi tên job là
 # check cũ biến mất khỏi PR và mọi PR vào `main` kẹt ở "Expected — Waiting for status".
