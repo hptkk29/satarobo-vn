@@ -71,6 +71,27 @@ const DOT_DANG_MO = ["PENDING", "PARTIAL"] as const;
 /** Số lần thử lại khi mã vừa cấp đụng `@unique`. */
 const SO_LAN_THU_MA = 5;
 
+/**
+ * Từ chối SAU khi đã có phép ghi trong callback `$transaction` — phải NÉM, không `return`.
+ *
+ * ⚠️ Luật rollback (CLAUDE.md mục 7): `return` trong callback KHÔNG rollback. Bản đầu của
+ * `taoPhieuGop` trả `{ ok: false }` từ trong khối `catch` của `tx.paymentBill.create` — và
+ * lưới `cong-truoc-phep-ghi.test.ts` đỏ đúng chỗ đó. Nó đúng, vì hai lẽ:
+ *
+ *   · hình dạng ấy là hình dạng của một lượt "ghi rồi mới từ chối", và lưới không thể (và
+ *     không nên) đoán rằng phép ghi này vừa NÉM nên chưa ghi được gì;
+ *   · Postgres đã đánh dấu transaction là FAILED khi câu lệnh ném, nên `return` bình thường
+ *     ở đó là mời Prisma đi COMMIT một transaction đã hỏng.
+ *
+ * Nên: ném lỗi này ở trong, bắt và dịch ở ngoài. Đúng khuôn `StockError` mà CLAUDE.md nêu.
+ */
+class LoiPhatPhieu extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "LoiPhatPhieu";
+  }
+}
+
 function laLoiTrungKhoa(err: unknown, tenChiMuc: string): boolean {
   if (typeof err !== "object" || err === null) return false;
   const e = err as { code?: unknown; meta?: { target?: unknown } };
@@ -108,166 +129,175 @@ export async function taoPhieuGop(input: {
 }): Promise<
   KetQuaGhi<{ billId: string; ma: string; tongTien: number; soDong: number; canhBaoKho: string | null }>
 > {
-  return db.$transaction(async (tx) => {
-    await khoaDonTrongTx(tx, input.orderId);
+  // ⚠️ `try` bọc NGOÀI `$transaction`: mọi lời từ chối phát sinh SAU phép ghi đầu tiên đi ra
+  // bằng `throw` (xem `LoiPhatPhieu`), và chỗ duy nhất dịch nó sang `{ ok: false }` là đây.
+  try {
+    return await db.$transaction(async (tx) => {
+      await khoaDonTrongTx(tx, input.orderId);
 
-    const ids = [...new Set(input.paymentRequestIds ?? [])];
-    // CỔNG 1 + 2 — `Set` đã gộp trùng; so độ dài để nói thẳng thay vì im lặng gộp hộ.
-    if (ids.length === 0) return { ok: false as const, error: "Chưa chọn đợt nào" };
-    if (ids.length !== (input.paymentRequestIds ?? []).length) {
-      return { ok: false as const, error: "Có đợt bị chọn hai lần — tải lại trang" };
-    }
-
-    // CỔNG 3 — cùng một luật với tầng đối khớp tự động. Phát QR cho đơn không nhận tiền là
-    // phát một tờ giấy mà webhook sẽ từ chối, và phụ huynh là người phát hiện ra.
-    const don = await tx.order.findFirst({
-      where: { id: input.orderId, ...locDonNhanTien() },
-      select: { id: true, code: true, centerId: true },
-    });
-    if (!don) {
-      return {
-        ok: false as const,
-        error: "Đơn này không nhận tiền được (nháp / đã huỷ / đã hoàn / đã xoá)",
-      };
-    }
-
-    const dot = await tx.paymentRequest.findMany({
-      where: { id: { in: ids } },
-      select: {
-        id: true,
-        orderId: true,
-        orderItemId: true,
-        installmentNo: true,
-        amountDue: true,
-        status: true,
-        sortOrder: true,
-        allocations: { select: { amount: true } },
-        orderItem: { select: { itemName: true } },
-      },
-      orderBy: { sortOrder: "asc" },
-    });
-
-    // CỔNG 4 — `findMany` bỏ im lặng id không tồn tại, nên so SỐ LƯỢNG mới thấy.
-    if (dot.length !== ids.length) {
-      return { ok: false as const, error: "Có đợt không tồn tại — tải lại trang" };
-    }
-    if (dot.some((d) => d.orderId !== input.orderId)) {
-      return { ok: false as const, error: "Có đợt không thuộc đơn này — tải lại trang" };
-    }
-    // CỔNG 5
-    const dong = dot.find((d) => !DOT_DANG_MO.includes(d.status as (typeof DOT_DANG_MO)[number]));
-    if (dong) {
-      return {
-        ok: false as const,
-        error: `Đợt ${dong.installmentNo} đang ở trạng thái ${dong.status}, không gộp được`,
-      };
-    }
-
-    const dongPhieu = dot.map((d) => {
-      const daRot = d.allocations.reduce((s, a) => s + a.amount, 0);
-      return {
-        paymentRequestId: d.id,
-        sortOrder: d.sortOrder,
-        // Phần CÒN THIẾU, không phải `amountDue`. Xem chú thích hàm.
-        amount: Math.max(0, d.amountDue - daRot),
-        amountDue: d.amountDue,
-        daRot,
-        tenCon: d.orderItem?.itemName ?? null,
-      };
-    });
-    const tongTien = dongPhieu.reduce((s, d) => s + d.amount, 0);
-    // CỔNG 6
-    if (tongTien <= 0) {
-      return { ok: false as const, error: "Các đợt đã chọn không còn phải thu đồng nào" };
-    }
-
-    // ── HẾT CỔNG. Từ đây trở xuống là phép ghi. ──────────────────────────────
-
-    let billId: string | null = null;
-    let ma = "";
-    let canhBaoKho: string | null = null;
-    let loiCuoi: unknown = null;
-
-    for (let lan = 0; lan < SO_LAN_THU_MA; lan++) {
-      const cap = await capPhatMaPhieu(tx);
-      try {
-        const bill = await tx.paymentBill.create({
-          data: {
-            orderId: input.orderId,
-            centerId: don.centerId,
-            amountDue: tongTien,
-            status: "OPEN",
-            matchKey: cap.ma,
-            lines: {
-              create: dongPhieu.map((d) => ({
-                paymentRequestId: d.paymentRequestId,
-                sortOrder: d.sortOrder,
-                amount: d.amount,
-              })),
-            },
-          },
-          select: { id: true },
-        });
-        billId = bill.id;
-        ma = cap.ma;
-        canhBaoKho = cap.kho.canhBao ? cap.kho.moTa : null;
-        break;
-      } catch (err) {
-        loiCuoi = err;
-        // ⚠️ Chỉ thử lại khi đụng đúng chỉ mục MÃ. Đụng `PaymentBill_orderId_open_key` là đơn
-        // đã có phiếu OPEN — thử lại bao nhiêu lần cũng đụng, và người dùng cần nghe điều đó
-        // chứ không phải đợi năm vòng rồi nhận một câu lỗi khác.
-        if (laLoiTrungKhoa(err, "matchKey")) continue;
-        if (laLoiTrungKhoa(err, "orderId")) {
-          return {
-            ok: false as const,
-            error: "Đơn này đã có một phiếu gộp đang mở — huỷ hoặc đóng phiếu đó trước",
-          };
-        }
-        throw err;
+        const ids = [...new Set(input.paymentRequestIds ?? [])];
+      // CỔNG 1 + 2 — `Set` đã gộp trùng; so độ dài để nói thẳng thay vì im lặng gộp hộ.
+      if (ids.length === 0) return { ok: false as const, error: "Chưa chọn đợt nào" };
+      if (ids.length !== (input.paymentRequestIds ?? []).length) {
+        return { ok: false as const, error: "Có đợt bị chọn hai lần — tải lại trang" };
       }
-    }
 
-    if (billId == null) {
-      // Năm lần liên tiếp đụng mã đã tồn tại. Sequence là đơn điệu nên ca này chỉ xảy ra khi
-      // ai đó đã reset sequence hoặc chèn mã bằng tay — tức một sự cố vận hành, không phải
-      // xui. Ném để nó nổi lên nhật ký thay vì trả một câu lỗi êm ái.
-      throw new Error(
-        `Không cấp được mã phiếu sau ${SO_LAN_THU_MA} lần thử (đơn ${don.code})`,
-        { cause: loiCuoi },
-      );
-    }
+      // CỔNG 3 — cùng một luật với tầng đối khớp tự động. Phát QR cho đơn không nhận tiền là
+      // phát một tờ giấy mà webhook sẽ từ chối, và phụ huynh là người phát hiện ra.
+      const don = await tx.order.findFirst({
+        where: { id: input.orderId, ...locDonNhanTien() },
+        select: { id: true, code: true, centerId: true },
+      });
+      if (!don) {
+        return {
+          ok: false as const,
+          error: "Đơn này không nhận tiền được (nháp / đã huỷ / đã hoàn / đã xoá)",
+        };
+      }
 
-    await writeAudit({
-      tx,
-      actor: input.actor,
-      module: "finance",
-      entityType: "Order",
-      entityId: input.orderId,
-      action: "PHIEU_GOP_CREATED",
-      newValues: {
+      const dot = await tx.paymentRequest.findMany({
+        where: { id: { in: ids } },
+        select: {
+          id: true,
+          orderId: true,
+          orderItemId: true,
+          installmentNo: true,
+          amountDue: true,
+          status: true,
+          sortOrder: true,
+          allocations: { select: { amount: true } },
+          orderItem: { select: { itemName: true } },
+        },
+        orderBy: { sortOrder: "asc" },
+      });
+
+      // CỔNG 4 — `findMany` bỏ im lặng id không tồn tại, nên so SỐ LƯỢNG mới thấy.
+      if (dot.length !== ids.length) {
+        return { ok: false as const, error: "Có đợt không tồn tại — tải lại trang" };
+      }
+      if (dot.some((d) => d.orderId !== input.orderId)) {
+        return { ok: false as const, error: "Có đợt không thuộc đơn này — tải lại trang" };
+      }
+      // CỔNG 5
+      const dong = dot.find((d) => !DOT_DANG_MO.includes(d.status as (typeof DOT_DANG_MO)[number]));
+      if (dong) {
+        return {
+          ok: false as const,
+          error: `Đợt ${dong.installmentNo} đang ở trạng thái ${dong.status}, không gộp được`,
+        };
+      }
+
+      const dongPhieu = dot.map((d) => {
+        const daRot = d.allocations.reduce((s, a) => s + a.amount, 0);
+        return {
+          paymentRequestId: d.id,
+          sortOrder: d.sortOrder,
+          // Phần CÒN THIẾU, không phải `amountDue`. Xem chú thích hàm.
+          amount: Math.max(0, d.amountDue - daRot),
+          amountDue: d.amountDue,
+          daRot,
+          tenCon: d.orderItem?.itemName ?? null,
+        };
+      });
+      const tongTien = dongPhieu.reduce((s, d) => s + d.amount, 0);
+      // CỔNG 6
+      if (tongTien <= 0) {
+        return { ok: false as const, error: "Các đợt đã chọn không còn phải thu đồng nào" };
+      }
+
+      // ── HẾT CỔNG. Từ đây trở xuống là phép ghi. ──────────────────────────────
+
+      let billId: string | null = null;
+      let ma = "";
+      let canhBaoKho: string | null = null;
+      let loiCuoi: unknown = null;
+
+      for (let lan = 0; lan < SO_LAN_THU_MA; lan++) {
+        const cap = await capPhatMaPhieu(tx);
+        try {
+          const bill = await tx.paymentBill.create({
+            data: {
+              orderId: input.orderId,
+              centerId: don.centerId,
+              amountDue: tongTien,
+              status: "OPEN",
+              matchKey: cap.ma,
+              lines: {
+                create: dongPhieu.map((d) => ({
+                  paymentRequestId: d.paymentRequestId,
+                  sortOrder: d.sortOrder,
+                  amount: d.amount,
+                })),
+              },
+            },
+            select: { id: true },
+          });
+          billId = bill.id;
+          ma = cap.ma;
+          canhBaoKho = cap.kho.canhBao ? cap.kho.moTa : null;
+          break;
+        } catch (err) {
+          loiCuoi = err;
+          // ⚠️ Chỉ thử lại khi đụng đúng chỉ mục MÃ. Đụng `PaymentBill_orderId_open_key` là đơn
+          // đã có phiếu OPEN — thử lại bao nhiêu lần cũng đụng, và người dùng cần nghe điều đó
+          // chứ không phải đợi năm vòng rồi nhận một câu lỗi khác.
+          if (laLoiTrungKhoa(err, "matchKey")) continue;
+          if (laLoiTrungKhoa(err, "orderId")) {
+            // NÉM, không `return` — xem `LoiPhatPhieu`. Đường gọi ngay dưới bắt và dịch.
+            throw new LoiPhatPhieu(
+              "Đơn này đã có một phiếu gộp đang mở — huỷ hoặc đóng phiếu đó trước",
+            );
+          }
+          throw err;
+        }
+      }
+
+      if (billId == null) {
+        // Năm lần liên tiếp đụng mã đã tồn tại. Sequence là đơn điệu nên ca này chỉ xảy ra khi
+        // ai đó đã reset sequence hoặc chèn mã bằng tay — tức một sự cố vận hành, không phải
+        // xui. Ném để nó nổi lên nhật ký thay vì trả một câu lỗi êm ái.
+        throw new Error(
+          `Không cấp được mã phiếu sau ${SO_LAN_THU_MA} lần thử (đơn ${don.code})`,
+          { cause: loiCuoi },
+        );
+      }
+
+      await writeAudit({
+        tx,
+        actor: input.actor,
+        module: "finance",
+        entityType: "Order",
+        entityId: input.orderId,
+        action: "PHIEU_GOP_CREATED",
+        newValues: {
+          billId,
+          ma,
+          tongTien,
+          dong: dongPhieu.map((d) => ({
+            paymentRequestId: d.paymentRequestId,
+            ten: d.tenCon,
+            soTien: d.amount,
+          })),
+        },
+        reason: `Phát phiếu gộp ${ma} — ${dongPhieu.length} đợt, ${tongTien}`,
+        orgUnitId: don.centerId,
+      });
+
+      return {
+        ok: true as const,
         billId,
         ma,
         tongTien,
-        dong: dongPhieu.map((d) => ({
-          paymentRequestId: d.paymentRequestId,
-          ten: d.tenCon,
-          soTien: d.amount,
-        })),
-      },
-      reason: `Phát phiếu gộp ${ma} — ${dongPhieu.length} đợt, ${tongTien}`,
-      orgUnitId: don.centerId,
+        soDong: dongPhieu.length,
+        canhBaoKho,
+      };
     });
-
-    return {
-      ok: true as const,
-      billId,
-      ma,
-      tongTien,
-      soDong: dongPhieu.length,
-      canhBaoKho,
-    };
-  });
+  } catch (err) {
+    // Chỉ dịch lỗi CỦA MÌNH. Mọi lỗi khác (mất kết nối, vi phạm khoá ngoài…) phải nổi lên
+    // nhật ký nguyên vẹn — nuốt chúng thành một câu tiếng Việt êm ái là giấu sự cố hạ tầng.
+    if (err instanceof LoiPhatPhieu) return { ok: false as const, error: err.message };
+    throw err;
+  }
 }
 
 /**
