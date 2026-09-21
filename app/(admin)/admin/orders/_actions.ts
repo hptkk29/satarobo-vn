@@ -32,6 +32,7 @@ import {
   loiVuotTran,
   tienDon,
   type KieuGiam,
+  docLoaiGiam,
 } from "@/lib/orders/giam-gia-dong";
 import { ensureParentAccountForOrder } from "@/lib/parents/provision";
 import { ensureOrderPaymentRecorded } from "@/lib/finance/payment";
@@ -567,6 +568,9 @@ export async function createOrderManualAction(input: unknown) {
       kieu: k.kieu as KieuGiam,
       giaTri: k.giaTri,
       lyDo: k.lyDo ?? null,
+      // PHIÊN E — NHÃN loại ưu đãi, chở nguyên sang `discounts` JSON. `gopGiamGia` không
+      // đọc nó để quyết một đồng nào; validator đã kẹp vào `MA_LOAI_GIAM`.
+      loai: docLoaiGiam(k.loai),
     })),
   }));
 

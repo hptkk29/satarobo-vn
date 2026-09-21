@@ -47,6 +47,7 @@ import {
 import { doiTrangThaiPhieuTrongTx, phieuGopCuaConTrongTx } from "@/lib/finance/phieu-gop";
 import { taoYeuCauHoanTuDungHoc } from "@/lib/finance/refund";
 import { recomputeRequestStatuses } from "@/lib/payments/payment-request";
+import { soiUuDaiAnhEm, type KhoanGiamDaLuu } from "@/lib/orders/uu-dai-anh-em";
 import { syncConversationMembership } from "@/lib/chat/sync-membership";
 import { ketThucMotGhiDanh } from "@/lib/students/ket-thuc-ghi-danh";
 
@@ -108,6 +109,19 @@ export type XemTruocDungHoc = {
   phieuGop: { billId: string; daNhan: number; hanhDong: "HUY" | "DONG" } | null;
   /** Các bé CÒN LẠI của đơn, kèm trần nhận. */
   conConLai: { orderItemId: string; ten: string; conNo: number }[];
+
+  /**
+   * ĐƠN CÓ ƯU ĐÃI ANH CHỊ EM — chỉ để NHẮC, `null` khi không có [PHIÊN E, 21/09/2026].
+   *
+   * ⚠️ **KHÔNG đổi một đồng nào.** Chủ dự án chốt: bé còn lại GIỮ nguyên ưu đãi đã chốt
+   * trên đơn; thu hồi (nếu BGĐ muốn) là thao tác TAY có quyền QLCS, việc sau. Trường này
+   * cố ý tách khỏi `canhBao` ở trên — `canhBao` đến từ phép quyết toán TIỀN
+   * (`tinhQuyetToan`), còn đây là một lời nhắc chính sách. Trộn hai thứ vào một mảng là
+   * ngày nào đó có người đọc lời nhắc này như một cảnh báo về số tiền.
+   */
+  canhBaoUuDaiAnhEm: string | null;
+  /** Dòng nào mang dấu vết ưu đãi anh em — để người vận hành tự kiểm. */
+  dauVetUuDaiAnhEm: { orderItemId: string; ten: string; theoNhan: boolean }[];
 };
 
 /**
@@ -142,6 +156,22 @@ export async function xemTruocDungHoc(input: {
     },
   });
   if (!dong) return { ok: false as const, error: "Dòng hàng không thuộc đơn này" };
+
+  // PHIÊN E — soi CẢ ĐƠN, không chỉ dòng đang dừng: ưu đãi anh em theo bản chất nằm trên
+  // bé THỨ HAI, nên soi mỗi dòng đang dừng là bỏ sót đúng ca thường gặp nhất.
+  const moiDong = await db.orderItem.findMany({
+    where: { orderId: input.orderId },
+    select: { id: true, itemName: true, discounts: true, discountReason: true },
+    orderBy: { createdAt: "asc" },
+  });
+  const uuDai = soiUuDaiAnhEm(
+    moiDong.map((d) => ({
+      orderItemId: d.id,
+      ten: d.itemName,
+      khoanGiam: Array.isArray(d.discounts) ? (d.discounts as KhoanGiamDaLuu[]) : null,
+      lyDoGop: d.discountReason,
+    })),
+  );
   if (dong.status === "STOPPED") {
     return { ok: false as const, error: "Bé này đã dừng học rồi" };
   }
@@ -221,6 +251,8 @@ export async function xemTruocDungHoc(input: {
       conConLai: so.con
         .filter((c) => c.orderItemId !== dong.id)
         .map((c) => ({ orderItemId: c.orderItemId, ten: c.ten, conNo: c.conNo })),
+      canhBaoUuDaiAnhEm: uuDai.canhBao,
+      dauVetUuDaiAnhEm: uuDai.dauVet,
     },
   };
 }

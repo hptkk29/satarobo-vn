@@ -26,6 +26,64 @@ export const KIEU_GIAM = {
 export type KieuGiam = (typeof KIEU_GIAM)[keyof typeof KIEU_GIAM];
 
 /**
+ * LOẠI ƯU ĐÃI — nhãn CÓ CẤU TRÚC cho một khoản giảm [PHIÊN E · 21/09/2026].
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * VÌ SAO CÓ, VÀ NÓ KHÔNG LÀM GÌ VỚI TIỀN
+ *
+ * Trước hôm nay, thứ duy nhất nói được "khoản bớt này là chương trình nào" là `lyDo` —
+ * một ô text gõ tay. Hỏi *"đơn này có ưu đãi anh chị em không"* thì chỉ trả lời được bằng
+ * mắt, không bằng truy vấn. Chủ dự án chốt 21/09: thêm loại có cấu trúc, **chỉ để đánh
+ * dấu**.
+ *
+ * ⚠️ **KHÔNG đường tính tiền nào đọc trường này.** `gopGiamGia` chở nó qua y nguyên như
+ * một nhãn; số tiền vẫn hoàn toàn do `kieu` + `giaTri` quyết. Biến nó thành đầu vào của
+ * phép tính (vd "ANH_EM thì tự trừ 15%") là mở một đường ghi tiền thứ hai mà không cổng
+ * nào đang canh.
+ *
+ * ⚠️ **TUỲ CHỌN, không bắt buộc.** Hai lý do, cả hai đều có giá:
+ *   · dữ liệu CŨ không có trường này và **cố ý không đoán ngược từ `lyDo`** (chốt 21/09:
+ *     *"BỎ QUA, không đoán từ chữ, không gán tay hàng loạt"*);
+ *   · bắt buộc là chặn sale lưu đơn vì một nhãn thống kê — cái giá lớn hơn cái lợi.
+ *   Đổi lại: nhãn này **không đủ tin để đếm**. Chỗ nào cần con số thật phải nói rõ là nó
+ *   chỉ đếm được đơn tạo TỪ 21/09/2026 trở đi, và có nhãn.
+ *
+ * Danh sách bám đúng ba "ưu đãi cộng thêm" của trang khoá học
+ * (`components/legacy-laptrinhrobot/_data/promotions.ts`) + học bổng + đóng sớm.
+ */
+export const LOAI_GIAM = {
+  /** Gói Anh/Chị/Em — gia đình có từ 2 con đăng ký. */
+  ANH_EM: "ANH_EM",
+  /** Referral — người được giới thiệu. */
+  GIOI_THIEU: "GIOI_THIEU",
+  /** Gói đội thi 2 HV. */
+  DOI_THI: "DOI_THI",
+  HOC_BONG: "HOC_BONG",
+  DONG_SOM: "DONG_SOM",
+  KHAC: "KHAC",
+} as const;
+export type LoaiGiam = (typeof LOAI_GIAM)[keyof typeof LOAI_GIAM];
+
+export const MA_LOAI_GIAM = Object.values(LOAI_GIAM) as readonly LoaiGiam[];
+
+/** Nhãn tiếng Việt cho từng loại — dùng chung form nhập và màn đọc. */
+export const NHAN_LOAI_GIAM: Record<LoaiGiam, string> = {
+  ANH_EM: "Anh/chị/em học cùng",
+  GIOI_THIEU: "Giới thiệu (referral)",
+  DOI_THI: "Gói đội thi",
+  HOC_BONG: "Học bổng",
+  DONG_SOM: "Đóng sớm",
+  KHAC: "Khác",
+};
+
+/** Ép một giá trị bất kỳ về `LoaiGiam`, `null` nếu không thuộc danh sách. */
+export function docLoaiGiam(v: unknown): LoaiGiam | null {
+  return typeof v === "string" && (MA_LOAI_GIAM as readonly string[]).includes(v)
+    ? (v as LoaiGiam)
+    : null;
+}
+
+/**
  * Trần số khoản giảm trên MỘT dòng.
  *
  * Không phải giới hạn kỹ thuật — là giới hạn để người đọc đơn còn hiểu được. Sáu khoản
@@ -72,6 +130,13 @@ export type KhaiGiam = {
   giaTri: number;
   /** Giải trình của RIÊNG khoản này. */
   lyDo?: string | null;
+  /**
+   * Loại ưu đãi — NHÃN, không tham gia phép tính nào. Xem `LOAI_GIAM`.
+   *
+   * `null`/bỏ trống là HỢP LỆ: mọi khoản tạo trước 21/09/2026 đều không có, và người bán
+   * cũng không bị bắt chọn.
+   */
+  loai?: LoaiGiam | null;
 };
 
 /** Một khoản giảm SAU KHI đã tính và đã kẹp — đây là thứ ghi vào `OrderItem.discounts`. */
@@ -84,6 +149,8 @@ export type GiamDaAp = {
   /** Số THỰC SỰ trừ được sau khi kẹp vào phần còn lại của dòng (SỐ THẬT). */
   giam: number;
   lyDo: string | null;
+  /** Loại ưu đãi — chở qua y nguyên từ `KhaiGiam`. KHÔNG tham gia phép tính nào. */
+  loai: LoaiGiam | null;
   /**
    * Khoản này gõ % VƯỢT trần cấu hình.
    *
@@ -176,6 +243,8 @@ export function gopGiamGia(
       phanTram: pct,
       giam,
       lyDo: k.lyDo?.trim() || null,
+      // Chở qua y nguyên. `gopGiamGia` KHÔNG được phép đọc nhãn này để quyết một đồng nào.
+      loai: k.loai ?? null,
       vuotTran,
     });
   }
