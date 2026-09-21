@@ -26,6 +26,8 @@ const NGOAI_LE: Record<string, string> = {
   "lib/finance/truc-a.test.ts": "TEST: chính cổng này — khẳng định hình dạng hằng",
   "lib/finance/payment.ts":
     "GHI: confirmPayment đổi trạng thái + adjustPayment tạo bút toán + AuditLog.newValues",
+  "lib/finance/ghi-tien-don.ts":
+    "GHI: chuyenTienGiuaConTrongTx (PHIÊN D, 21/09/2026) đẻ CẶP bút toán −/+ chuyển tiền giữa hai con cùng đơn. Cả hai dòng PHẢI mang CONFIRMED: chỉ phần đã xác nhận mới được chuyển, và nếu hai dòng khác trục thì tổng của trục kia không về 0 ⇒ công nợ một trong hai bé lệch vĩnh viễn. Đây là phép GHI, không phải một định nghĩa ĐỌC thứ hai. ⚠️ Hệ quả của ngoại lệ này: một điều kiện ĐỌC gõ tay trong chính tệp đó sẽ lọt lưới — tệp này là đường GHI tiền của cả module, nên mọi phép ĐỌC trong nó phải đi qua `docSoTheoCon`.",
   // Ba tệp dưới đây là TEST của nhánh `test`, khai nhận khi hợp nhất 16/09/2026. Chúng
   // DỰNG DỮ LIỆU MẪU mang trạng thái đó rồi mới gọi hàm thuần — không phải một đường
   // đọc thứ hai, nên không thuộc thứ cổng này sinh ra để chặn.

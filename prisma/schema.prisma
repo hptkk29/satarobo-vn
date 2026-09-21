@@ -178,6 +178,25 @@ enum OrderItemType {
   PRODUCT // link tới Product (Sprint 5.10, nullable for now)
 }
 
+/// PHIÊN D [21/09/2026] — một CON trên đơn còn đang học hay đã dừng.
+///
+/// Ở mức DÒNG ĐƠN chứ không mức đơn: đơn hai con thì một bé nghỉ, một bé học tiếp, và
+/// `Order.status` không diễn đạt được điều đó.
+enum OrderItemStatus {
+  ACTIVE
+  /// Đã quyết toán theo số buổi đã dùng. Công nợ của bé này đọc `usedValue`, KHÔNG đọc
+  /// `totalPrice − discountAmount` nữa.
+  STOPPED
+}
+
+/// Vì sao con này dừng học. `TRUNG_TAM_HUY` KHÔNG phải một nhãn hiển thị — nó ĐỔI PHÉP
+/// TÍNH: trung tâm huỷ thì phí bằng 0 và toàn bộ đã thu thành khoản dư (chốt 21/09/2026).
+enum OrderItemStopReason {
+  PH_CHU_DONG
+  TRUNG_TAM_HUY
+  KHAC
+}
+
 // ─── Phase 5.7 — Voucher enums ────────────────────────────────────────────
 
 enum VoucherType {
@@ -4498,16 +4517,57 @@ model OrderItem {
 
   metadata Json?
 
+  // ── PHIÊN D · QUYẾT TOÁN KHI CON NÀY DỪNG HỌC [21/09/2026] ─────────────────
+  //
+  // ⚠️ KHÔNG sửa `totalPrice` / `discountAmount` ở trên. Hai cột đó là lời khai lúc BÁN
+  // (`Order.subtotal` = Σ `totalPrice`; cổng soát giá so `unitPrice` với giá niêm yết).
+  // "Rốt cuộc bé này phải trả bao nhiêu" là một sự kiện KHÁC xảy ra sau, nên nó có chỗ
+  // riêng — và giữ cả hai con số là giữ được câu trả lời cho "đã bớt cho bé bao nhiêu vì
+  // nghỉ giữa chừng".
+  status          OrderItemStatus @default(ACTIVE)
+  stoppedAt       DateTime?       @db.Timestamptz(6)
+  /// Ai bấm dừng. Cột TRẦN, không quan hệ — theo nếp `Order.createdById`: nhân sự nghỉ
+  /// việc không được kéo theo hay chặn sổ tiền.
+  stoppedById     String?
+  /// Ngày BUỔI CUỐI mà sale xác nhận bé có học. Mốc đếm buổi đã dùng, và là ngày hiệu
+  /// lực của `Enrollment.endedAt`.
+  lastSessionDate DateTime?       @db.Timestamptz(6)
+  /// Số buổi đã dùng — đếm `ClassSession` của lớp có `date ≤ lastSessionDate`, KHÔNG đếm
+  /// theo `status` (đo prod: buổi quá khứ phần lớn còn `SCHEDULED`; xem
+  /// `lib/finance/lop-chua-chot-buoi.ts`). Sale xác nhận con số này bằng mắt.
+  usedSessions    Int?
+  /// SNAPSHOT `Course.totalSessions` lúc dừng — số buổi CAM KẾT của khoá.
+  ///
+  /// ⚠️ Chụp lại, cố ý KHÔNG đọc lại `Course` về sau (chủ dự án chốt 21/09): admin sửa số
+  /// buổi cam kết sang năm không được làm đổi một khoản quyết toán đã chốt hôm nay.
+  committedSessions Int?
+  /// SNAPSHOT đơn giá một buổi = `(totalPrice − discountAmount) ÷ committedSessions`, làm
+  /// tròn XUỐNG tới 1.000đ. Phần lẻ dồn vào buổi cuối — xem `lib/finance/dung-hoc.ts`.
+  ///
+  /// ⚠️ Tiền tố `stop` vì `OrderItem.unitPrice` ĐÃ tồn tại và là giá bán một đơn vị của
+  /// dòng. Hai con số khác hẳn nhau; trùng tên là chỗ bug tiền nằm (`prisma format` bắt
+  /// được lần đầu, nhưng đừng trông vào nó).
+  stopUnitPrice     Int?
+  /// Số tiền bé này rốt cuộc phải trả. **Công nợ của bé đọc cột này khi `status = STOPPED`.**
+  /// `TRUNG_TAM_HUY` ⇒ luôn 0.
+  usedValue         Int?
+  stopReason        OrderItemStopReason?
+  /// BẮT BUỘC khi sale sửa số buổi hệ thống gợi ý, và khi lý do là `KHAC`.
+  stopNote          String?              @db.Text
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   /// 16/09 — phiếu thu của RIÊNG dòng này ("công nợ theo CON").
   paymentRequests PaymentRequest[]
+  /// PHIÊN D — yêu cầu hoàn tiền sinh từ lượt dừng học của bé này.
+  refundRequests  RefundRequest[]
   /// 16/09 — khoản tiền đã vào RIÊNG dòng này. Xem chú thích `Payment.orderItemId`.
   payments        Payment[]
 
   @@index([orderId])
   @@index([type])
+  @@index([status])
   @@index([enrollmentId])
   @@index([packageId])
   @@index([examAttemptId])
@@ -6794,9 +6854,29 @@ enum RefundStatus {
 }
 
 model RefundRequest {
-  id           String     @id @default(cuid())
-  enrollmentId String
-  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
+  id String @id @default(cuid())
+
+  // ── PHIÊN D [21/09/2026] — MỘT TRONG HAI đầu mối, không bắt buộc cả hai ────
+  //
+  // Trước hôm nay `enrollmentId` là NOT NULL. Nới ra vì phần DƯ sau khi dừng học phải
+  // được phân HẾT, mà một dòng đơn CHƯA gắn ghi danh (đơn tạo tay trước lúc convert lead)
+  // không có `Enrollment` nào để treo yêu cầu hoàn vào ⇒ khoản dư không có cửa ra.
+  //
+  // ⚠️ MẤT CẢ HAI = dòng tiền mồ côi. CHECK ở tầng DB gác
+  // (`RefundRequest_co_nguon_check`) — Prisma không model được CHECK nên nó chỉ sống
+  // trong migration `20260921160000_dung_hoc_mot_con`.
+  //
+  // ⚠️ `RefundRequest` nằm trong danh sách KHÔNG auto-scope của `lib/db-scope.ts`, lý do
+  // ghi rõ *"scope qua quan hệ enrollment→class"*. Dòng không có ghi danh thì KHÔNG CÒN
+  // đường đó — tầm nhìn của nó đi qua `orderItem.order`, ép TAY trong
+  // `listRefundRequests`. Bỏ nhánh ấy là yêu cầu hoàn tàng hình với kế toán, và tàng hình
+  // thì không ai báo lỗi.
+  enrollmentId String?
+  enrollment   Enrollment? @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
+  /// Dòng đơn (một CON) mà khoản hoàn này thuộc về. `Restrict` giống `Payment.orderItemId`:
+  /// xoá dòng đơn không được kéo theo sổ tiền.
+  orderItemId  String?
+  orderItem    OrderItem?  @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
   centerId     String?
   // P1 · US-07 — cột SONG SONG với centerId (ghi kép tới hết P4).
   // Cột TRẦN, không FK — giống 28 bảng của PR-A. Ý nghĩa của NULL theo
@@ -6821,6 +6901,7 @@ model RefundRequest {
   updatedAt       DateTime      @updatedAt @db.Timestamptz(6)
 
   @@index([enrollmentId])
+  @@index([orderItemId])
   @@index([status])
   @@index([centerId])
   @@index([orgUnitId])

@@ -49,6 +49,7 @@ import {
   tachKhoanChoCon,
 } from "@/lib/finance/ghi-tien-don";
 import { taoPhieuGop, huyPhieuGop, dongPhieuGop } from "@/lib/finance/phieu-gop";
+import { dungHocMotCon, xemTruocDungHoc } from "@/lib/finance/dung-hoc-con";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { soatGiaDon } from "@/lib/orders/price-guard";
 import { congNoDon } from "@/lib/finance/cong-no-don";
@@ -2096,4 +2097,94 @@ export async function dongPhieuGopAction(input: {
 
   revalidatePath(`/orders/${input.orderId}`);
   return { ok: true as const, daNhan: kq.daNhan };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PHIÊN D · DỪNG HỌC MỘT CON  [21/09/2026]
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Cổng chung cho hai action dừng học.
+ *
+ * ⚠️ Quyền `orders:manage`, nhưng **KHÔNG** dùng `requireOrdersManage()` ngay trên: hàm đó
+ * `redirect("/dashboard")` khi thiếu quyền, mà hai action này được gọi từ một hộp thoại
+ * trong trang đơn đang mở — đá người dùng ra giữa lúc họ đang quyết toán tiền là mất cả
+ * ngữ cảnh lẫn thao tác dở. Cùng lý lẽ với `congDuongB`.
+ *
+ * Ba vế, thiếu vế nào cũng từ chối: quyền · đơn trong tầm nhìn cơ sở · **công tắc bật cho
+ * cơ sở GIỮ ĐƠN** (không phải cơ sở của người bấm).
+ */
+async function congDungHoc(orderId: string) {
+  const session = await auth();
+  if (!session?.user) return { ok: false as const, error: "Chưa đăng nhập" };
+  if (!(await checkPermission("orders:manage"))) {
+    return { ok: false as const, error: "Không có quyền" };
+  }
+
+  const actor = await resolveActor(session.user.id);
+  const order = await scopedDb(actor).order.findUnique({
+    where: { id: orderId },
+    select: { id: true, centerId: true, orgUnitId: true },
+  });
+  if (!order || !passesScope("Order", order, actor)) {
+    return { ok: false as const, error: "Không tìm thấy đơn hàng" };
+  }
+  if (!(await laThuTienLinhHoatBat(order.orgUnitId))) {
+    return {
+      ok: false as const,
+      error: "Tính năng thu học phí linh hoạt chưa bật cho cơ sở này",
+    };
+  }
+
+  const { actorId, actorName } = getAuditActor(session);
+  return { ok: true as const, order, actor: { id: actorId ?? "", name: actorName } };
+}
+
+/** Màn XEM TRƯỚC — chỉ đọc, không ghi một dòng nào. */
+export async function xemTruocDungHocAction(input: {
+  orderId: string;
+  orderItemId: string;
+  lyDo: "PH_CHU_DONG" | "TRUNG_TAM_HUY" | "KHAC";
+  buoiCuoiId?: string | null;
+}) {
+  const cong = await congDungHoc(input.orderId);
+  if (!cong.ok) return { ok: false as const, error: cong.error };
+
+  return xemTruocDungHoc({
+    orderId: input.orderId,
+    orderItemId: input.orderItemId,
+    lyDo: input.lyDo,
+    ...(input.buoiCuoiId !== undefined ? { buoiCuoiId: input.buoiCuoiId } : {}),
+  });
+}
+
+/** Xác nhận dừng học — ghi thật. Mọi cổng nằm trong `dungHocMotCon`. */
+export async function dungHocConAction(input: {
+  orderId: string;
+  orderItemId: string;
+  lyDo: "PH_CHU_DONG" | "TRUNG_TAM_HUY" | "KHAC";
+  buoiCuoiId: string | null;
+  ghiChu: string | null;
+  phanDu: { kieu: "CHUYEN"; orderItemId: string; soTien: number }[] | { kieu: "HOAN"; soTien: number }[];
+}) {
+  const cong = await congDungHoc(input.orderId);
+  if (!cong.ok) return { ok: false as const, error: cong.error };
+
+  const kq = await dungHocMotCon({
+    orderId: cong.order.id,
+    orderItemId: input.orderItemId,
+    lyDo: input.lyDo,
+    buoiCuoiId: input.buoiCuoiId,
+    ghiChu: input.ghiChu,
+    phanDu: input.phanDu ?? [],
+    actor: cong.actor,
+  });
+  if (!kq.ok) return kq;
+
+  revalidatePath(`/orders/${input.orderId}`);
+  // Bé vừa rời lớp ⇒ roster của lớp đó đổi. Không revalidate thì màn lớp còn in tên bé và
+  // giáo viên vẫn điểm danh — affordance nói dối bằng dữ liệu cũ.
+  revalidatePath("/classes");
+  revalidatePath("/hoan-tien");
+  return kq;
 }

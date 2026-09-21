@@ -24,6 +24,7 @@ import { loadActiveQrSessions } from "../_qr-core";
 import { maskPhone, maskEmail } from "@/lib/utils";
 import { laThuTienLinhHoatBat } from "@/lib/finance/feature";
 import { noTheoCon } from "@/lib/finance/debt";
+import { docTrangThaiDungHoc } from "@/lib/finance/dung-hoc-con";
 import { CongNoTheoCon, type PhieuGopView } from "../_components/cong-no-theo-con";
 import { docPhieuGopDangMo } from "@/lib/finance/phieu-gop";
 import { memoPhatHanh } from "@/lib/payments/memo-phat-hanh";
@@ -216,6 +217,9 @@ export default async function OrderDetailPage({ params }: Props) {
   // `scopedDb` đã cho phép đọc chính cái đơn này.
   const batThuTheoCon = await laThuTienLinhHoatBat(order.orgUnitId);
   const soTheoCon = batThuTheoCon ? await noTheoCon(order.id) : null;
+  // PHIÊN D — trạng thái dừng học của từng dòng. Cùng công tắc: tắt thì không thêm một
+  // truy vấn nào.
+  const trangThaiDungHoc = batThuTheoCon ? await docTrangThaiDungHoc(order.id) : undefined;
 
   // ── PHIÊN C · phiếu gộp đang mở [20/09/2026] ────────────────────────────────
   //
@@ -345,6 +349,7 @@ export default async function OrderDetailPage({ params }: Props) {
             duocSua={canManage}
             duocGan={canRecordPayments}
             duocBoGan={canManagePayments}
+            dungHoc={trangThaiDungHoc}
             phieu={phieuGop}
           />
         </div>
