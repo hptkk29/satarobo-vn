@@ -12,8 +12,6 @@ Từ ngày __/__/2026, ba chỗ trên hệ thống sẽ hiện số khác trư�
 
 Lý do chính: trước đây tiền hoàn lại cho phụ huynh không được trừ khỏi số đã thu, nên phần đã trả lại vẫn nằm trong doanh thu. Từ nay khoản hoàn được trừ đúng.
 
-Thay đổi thứ hai chỉ là cách hiển thị: khi điều chỉnh số tiền một phiếu thu, trước đây hệ thống thay phiếu cũ bằng phiếu mới mang số đúng; nay giữ phiếu gốc và thêm một dòng ghi phần chênh lệch. Tổng của khoản đó không đổi.
-
 Tiền thật đã thu và đã chi không thay đổi. Số chỉ giảm ở những khoản từng có hoàn tiền; mọi khoản khác giữ nguyên.
 
 Nhờ anh/chị đối chiếu giúp trong tuần đầu. Thấy chỗ nào lệch sổ, báo [TÊN — SĐT] kèm mã phiếu thu để tra đúng dòng.
@@ -22,9 +20,31 @@ Nhờ anh/chị đối chiếu giúp trong tuần đầu. Thấy chỗ nào lệ
 
 ## Ghi chú cho người gửi (KHÔNG gửi phần này)
 
-### ✅ Đã KIỂM BẰNG MÃ: "Tổng của khoản đó không đổi" — ĐÚNG
+### Vì sao KHÔNG còn đoạn "Thay đổi thứ hai" (cách hiển thị điều chỉnh)
 
-Kiểm ngày 21/09/2026, ba đường độc lập, không đường nào suy từ tài liệu:
+Bản nháp trước có thêm một đoạn giải thích *"nay giữ phiếu gốc và thêm một dòng ghi phần
+chênh lệch"*. **Đã bỏ hẳn, chủ dự án chốt 21/09/2026** — vì đoạn ấy đúng nghiệp vụ nhưng
+**sai thời điểm**: việc đó **đã lên prod từ 07/09/2026**, không phải từ ngày merge này.
+
+Bằng chứng: commit `fbefcb8e` *"Bước 2 — tách LOẠI bút toán ra khỏi TRẠNG THÁI kế toán"* +
+migration `20260907090000_payment_type_tach_khoi_status`, cả hai là **tổ tiên của
+`origin/main`**. Màn phiếu của PH trên `main` đã đọc sẵn `paymentType` + `adjustmentOfId`
+và đã in lý do điều chỉnh.
+
+Đối chiếu diff `main...test` của đúng ba nơi đọc số: thay đổi **duy nhất** là
+`KHOAN_DA_XAC_NHAN` → `KHOAN_DA_DONG`, tức **chỉ thêm việc trừ khoản hoàn**. Không một
+dòng nào đổi cách hiển thị điều chỉnh.
+
+⇒ Ngày merge **chỉ có MỘT thay đổi số**, và tin nhắn nay nói đúng một điều đó. Kế toán mở
+sổ từ ngày ấy đi tìm "hai dòng thay vì một" sẽ thấy nó đã có từ hai tuần trước — đúng kiểu
+nhầm lẫn mà bản sửa này muốn tránh.
+
+### ✅ ĐÃ KIỂM BẰNG MÃ: "khoản điều chỉnh tổng KHÔNG ĐỔI" — ĐÚNG
+
+Giữ lại bằng chứng ở đây dù câu ấy không còn trong tin nhắn: nếu kế toán **tự hỏi** về một
+khoản điều chỉnh, đây là câu trả lời, và nó đã được kiểm chứ không phải suy.
+
+Kiểm 21/09/2026, ba đường độc lập, không đường nào đọc từ tài liệu:
 
 **1. Đường GHI** — `adjustPayment` (`lib/finance/payment.ts`, có trên `origin/main`):
 
@@ -34,7 +54,7 @@ const delta = correctAmount - hienTai;
 ```
 
 Phiếu gốc **không bị chạm**; dòng mới mang **hiệu**, không mang số đúng. Theo định nghĩa
-thì `gốc + Σ delta = correctAmount` — tức đúng con số mà mô hình cũ ghi vào phiếu thay thế.
+thì `gốc + Σ delta = correctAmount` — đúng con số mà mô hình cũ ghi vào phiếu thay thế.
 
 **2. Đường ĐỌC** — mọi phép cộng lấy **cả hai dòng**, không loại dòng nào:
 
@@ -47,7 +67,7 @@ thì `gốc + Σ delta = correctAmount` — tức đúng con số mà mô hình 
 Dòng điều chỉnh mang `accountantStatus = "CONFIRMED"`, nên nó **nằm trong cả hai cột** của
 bảng trên. Khoản chỉ điều chỉnh (không hoàn tiền) ⇒ tập được cộng **y hệt nhau** trước và
 sau ⇒ tổng bằng nhau. Chỉ khoản có `REFUNDED` mới đổi, và dòng hoàn mang số **âm** nên
-luôn **giảm**.
+luôn **giảm** — đúng như câu cuối của tin nhắn.
 
 **3. Hai ca test ghim đúng bất biến này:**
 
@@ -57,36 +77,15 @@ luôn **giảm**.
 - `[HH-TT-6]` (`tests/e2e/r1/commission-tien-thu.spec.ts`) — sửa 10tr → 6tr, chú thích ghi
   thẳng: *"Con số hoa hồng KHÔNG đổi (240k); thứ đổi là SỐ BÚT TOÁN."*
 
-⇒ Câu trong tin nhắn **giữ nguyên, không sửa**.
+### ⚠️ Hai câu SAI của bản nháp đầu — đừng viết lại
 
-### 🔴 MỘT CHỖ NGƯỜI GỬI PHẢI QUYẾT — đoạn "Thay đổi thứ hai" lệch NGÀY
-
-Câu ấy **đúng về nghiệp vụ** nhưng **sai về thời điểm**: việc "giữ phiếu gốc + thêm dòng
-chênh lệch" **đã lên prod từ 07/09/2026**, không phải từ ngày merge này.
-
-Bằng chứng: commit `fbefcb8e` *"Bước 2 — tách LOẠI bút toán ra khỏi TRẠNG THÁI kế toán"* +
-migration `20260907090000_payment_type_tach_khoi_status`, cả hai là **tổ tiên của
-`origin/main`** (`git merge-base --is-ancestor` → đúng). Màn phiếu của PH trên `main` đã
-đọc sẵn `paymentType` + `adjustmentOfId` và đã in lý do điều chỉnh.
-
-Đối chiếu diff `main...test` của đúng ba nơi đọc số: thay đổi **duy nhất** là
-`KHOAN_DA_XAC_NHAN` → `KHOAN_DA_DONG`, tức **chỉ thêm việc trừ khoản hoàn**. Không có
-dòng nào đổi cách hiển thị điều chỉnh.
-
-**Hệ quả nếu gửi nguyên văn:** kế toán mở sổ từ ngày merge để tìm "hai dòng thay vì một"
-sẽ thấy nó **đã có từ hai tuần trước** — đúng kiểu nhầm lẫn mà chính bản sửa này đang muốn
-tránh.
-
-**Ba cách xử, chủ dự án chọn:**
-
-1. **Bỏ hẳn đoạn "Thay đổi thứ hai"** — ngày merge chỉ có MỘT thay đổi số là khoản hoàn.
-   Ngắn nhất, đúng nhất với những gì kế toán sẽ thấy vào ngày đó.
-2. **Giữ, đổi mốc thời gian** — ví dụ *"Từ đầu tháng 9, khi điều chỉnh số tiền một phiếu
-   thu, hệ thống giữ phiếu gốc và thêm một dòng ghi phần chênh lệch; tổng của khoản đó
-   không đổi."* Có ích nếu kế toán chưa từng được báo việc này.
-3. **Giữ nguyên văn** — chấp nhận sai lệch hai tuần, coi như một lần báo muộn.
-
-*Chưa tự sửa — theo đúng yêu cầu "đừng sửa câu cho khớp theo ý mình".*
+1. ~~*"hệ thống sửa đè lên phiếu cũ, không còn dấu vết"*~~ — **SAI.** Repo **cố ý không
+   chạm phiếu gốc**: mô hình cũ tạo phiếu MỚI mang số đúng, mô hình nay tạo dòng mang phần
+   CHÊNH LỆCH. Cả hai đều giữ phiếu gốc. (`lib/reports/trung-tam.ts`: *"repo CỐ Ý không sửa
+   bản gốc khi điều chỉnh / hoàn tiền — nó tạo DÒNG MỚI"*.)
+2. ~~*"giảm ở những khoản từng có hoàn tiền **hoặc từng điều chỉnh**"*~~ — **SAI, và sai
+   theo chiều nguy hiểm:** kế toán dò một khoản điều chỉnh, thấy tổng KHÔNG giảm, sẽ mở
+   phiếu lỗi ngược.
 
 ### Vì sao không kèm bảng số cũ/mới
 
