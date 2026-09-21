@@ -39,6 +39,12 @@ export function WithdrawModal({
       const result = await withdrawStudentAction({ studentId, reason });
       if (result.ok) {
         toast.success("Đã đánh dấu nghỉ học");
+        // PHIÊN D — ghi danh đã quyết toán qua "Dừng học" KHÔNG sinh đề xuất hoàn lần hai.
+        // Phải nói ra: một đề xuất hoàn vắng mặt trong im lặng đọc y hệt một lượt bỏ sót,
+        // và kế toán là người phải phân biệt được hai thứ đó.
+        for (const bq of result.boQuaHoanTien ?? []) {
+          toast.info(`Không tạo đề xuất hoàn: ${bq.lyDo}`, { duration: 8000 });
+        }
         onClose();
         router.refresh();
       } else {

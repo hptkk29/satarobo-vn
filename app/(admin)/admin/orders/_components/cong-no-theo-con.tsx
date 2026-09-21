@@ -7,7 +7,9 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { NoTheoConKetQua } from "@/lib/finance/no-theo-con";
+import type { TrangThaiDungHocCuaCon } from "@/lib/finance/dung-hoc-con";
 import { QrZoom } from "./qr-zoom";
+import { NutDungHoc } from "./dung-hoc-dialog";
 
 import {
   boGanKhoanChoConAction,
@@ -794,6 +796,7 @@ export function CongNoTheoCon({
   duocSua,
   duocGan,
   duocBoGan,
+  dungHoc,
   phieu = null,
 }: {
   orderId: string;
@@ -804,6 +807,15 @@ export function CongNoTheoCon({
   duocGan: boolean;
   /** `payments:manage` — bỏ gắn, đóng phiếu đã nhận tiền. Kế toán. */
   duocBoGan: boolean;
+  /**
+   * PHIÊN D — trạng thái dừng học + tình hình hoàn tiền của TỪNG dòng, khoá theo
+   * `orderItemId`. Dựng ở server bằng `docTrangThaiDungHoc`.
+   *
+   * ⚠️ Dòng thiếu khoá trong map này được coi là CÒN HỌC. Mặc định fail-safe theo hướng
+   * "chưa dừng": hiện nhầm một bé đã dừng thành còn học thì người ta thấy ngay và bấm lại;
+   * hiện nhầm chiều ngược lại là giấu mất nút của một bé đang học.
+   */
+  dungHoc?: Record<string, TrangThaiDungHocCuaCon>;
   /** Phiếu gộp ĐANG MỞ của đơn, `null` khi chưa phát. Dựng ở server — xem `PhieuGopView`. */
   phieu?: PhieuGopView | null;
 }) {
@@ -915,6 +927,7 @@ export function CongNoTheoCon({
         {so.con.map((c) => {
           const conLaiTaoDot = c.conNo - c.tongDotDangMo;
           const moForm = dangMoForm === c.orderItemId;
+          const tt = dungHoc?.[c.orderItemId];
           return (
             <li
               key={c.orderItemId}
@@ -930,7 +943,10 @@ export function CongNoTheoCon({
               </div>
 
               <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
-                <O nhan="Học phí" giaTri={vnd(c.phaiThu)} />
+                {/* Nhãn phải NÓI THẬT (luật 12): sau khi dừng, con số này là giá trị quyết
+                    toán chứ không còn là học phí của khoá. Giữ nguyên chữ "Học phí" là một
+                    cái nhãn nói dối, và nó nói dối đúng về tiền. */}
+                <O nhan={tt?.daDung ? "Phải trả (quyết toán)" : "Học phí"} giaTri={vnd(c.phaiThu)} />
                 <O nhan="Đã thu" giaTri={vnd(c.daThu)} tone="ok" />
                 <O
                   nhan="Chờ xác nhận"
@@ -943,6 +959,48 @@ export function CongNoTheoCon({
                   tone={c.conNo > 0 ? "danger" : "ok"}
                 />
               </div>
+
+              {/* PHIÊN D — bé ĐÃ DỪNG: nói rõ quyết toán ra số nào, và khoản dư đang nằm
+                  ở đâu. Đặt NGAY DƯỚI hàng số liệu vì "Học phí" của bé vừa đổi nghĩa (nó là
+                  giá trị quyết toán, không còn là học phí gốc) — không giải thích ngay cạnh
+                  thì con số ấy đọc như một lỗi. */}
+              {tt?.daDung && (
+                <div className="mt-3 rounded-lg bg-muted/40 p-3 text-xs">
+                  <p className="font-medium text-foreground">
+                    Đã dừng học
+                    {tt.stoppedAt && ` ${new Date(tt.stoppedAt).toLocaleDateString("vi-VN")}`}
+                    {tt.stopReason === "TRUNG_TAM_HUY" && " · trung tâm huỷ, không thu phí"}
+                  </p>
+                  <p className="mt-0.5 text-muted-foreground">
+                    Dùng <b className="tabular-nums text-foreground">{tt.usedSessions ?? 0}</b>
+                    {tt.committedSessions != null && `/${tt.committedSessions}`} buổi
+                    {tt.stopUnitPrice != null && tt.stopUnitPrice > 0 && (
+                      <> · đơn giá {vnd(tt.stopUnitPrice)}/buổi</>
+                    )}
+                    {tt.lastSessionDate && (
+                      <> · buổi cuối {new Date(tt.lastSessionDate).toLocaleDateString("vi-VN")}</>
+                    )}
+                  </p>
+                  {tt.stopNote && (
+                    <p className="mt-1 text-muted-foreground">Ghi chú: {tt.stopNote}</p>
+                  )}
+                  {tt.choHoan > 0 && (
+                    <p className="mt-1.5 text-state-warning-ink">
+                      Chờ kế toán hoàn: <b className="tabular-nums">{vnd(tt.choHoan)}</b>
+                    </p>
+                  )}
+                  {/* Kế toán TỪ CHỐI yêu cầu hoàn mà bé vẫn còn dư ⇒ khoản đó quay về "chưa
+                      ai xử". Không nói ra thì nó hiện như "đóng thừa" vô cớ, và không ai đi
+                      tìm — đúng cái chết câm chủ dự án cấm. */}
+                  {tt.choHoan === 0 && c.conNo < 0 && (
+                    <p className="mt-1.5 text-state-danger-ink">
+                      Dư <b className="tabular-nums">{vnd(-c.conNo)}</b> CHƯA xử lý
+                      {tt.coHoanBiTuChoi && " (kế toán đã từ chối yêu cầu hoàn)"} — chọn lại:
+                      chuyển sang bé khác hoặc tạo yêu cầu hoàn mới.
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Khoản ĐÃ gắn cho chính bé này — chỗ duy nhất bỏ gắn được. Đặt ngay dưới
                   hàng số liệu của bé, vì người bỏ gắn cần thấy "đã thu" của bé đổi theo. */}
@@ -1001,6 +1059,13 @@ export function CongNoTheoCon({
                     </li>
                   ))}
                 </ul>
+              )}
+
+              {/* Bé đã dừng thì KHÔNG còn nút "Dừng học" và KHÔNG tạo đợt mới được —
+                  phần còn nợ (nếu học lố) vẫn tạo đợt được như thường, nên cổng nằm ở
+                  `conLaiTaoDot` chứ không ở đây. */}
+              {duocSua && !tt?.daDung && (
+                <NutDungHoc orderId={orderId} orderItemId={c.orderItemId} tenCon={c.ten} />
               )}
 
               {duocSua &&

@@ -26,26 +26,16 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   retries: process.env.CI ? 2 : 0,
   workers: 1,
-  // 🔴 NỢ-16 (21/09/2026) — `list` PHẢI đứng đầu trong CI, đừng gỡ.
+  // ⚠️ `["line"]` KHÔNG phải để cho đẹp — nó là thứ duy nhất PHÁT TIẾN TRÌNH trong lúc
+  // chạy [21/09/2026]. `html` ghi lúc kết thúc, `github` chỉ in chú giải lúc kết thúc, nên
+  // trước hôm nay một lượt CI treo để lại **đúng 0 dòng** về việc nó treo ở đâu: log nhảy
+  // từ "Running N tests" thẳng tới "##[error]The operation was canceled" sau 15 phút im
+  // lặng. Bốn job cần trình duyệt treo suốt từ 21/09 và không ai truy được vì lý do đó.
   //
-  // Trước đây CI chỉ có `html` + `github`. CẢ HAI chỉ xuất kết quả **khi lượt chạy kết
-  // thúc**: `html` ghi tệp ở cuối, `github` gom annotation ở cuối. Nên lượt nào bị cắt
-  // giữa chừng là **mất sạch kết quả** — không đọc được ca nào đã pass, cũng không biết
-  // nó dừng ở đâu.
-  //
-  // Đo thật 21/09: bốn job dựng webServer (smoke · A0 · site GV · e-learning) treo SAU
-  // khi chạy xong ca cuối và bị `timeout-minutes` cắt. A0 có **156 ca chạy qua** mà log
-  // không in nổi một dòng kết quả nào — chẩn đoán phải đi vòng qua log `[WebServer]` và
-  // dấu thời gian mới suy ra được là nó treo ở lúc THOÁT chứ không phải lúc chạy test.
-  //
-  // `list` in MỖI CA NGAY KHI XONG, nên kể cả bị cắt vẫn còn lại toàn bộ phần đã chạy —
-  // và chính dòng cuối cùng in ra là chỗ để bắt đầu truy.
-  //
-  // ⚠️ Đây KHÔNG phải bản vá cho việc treo. Nó là cái đèn để soi. Bản vá là chuyện
-  // webServer không chịu tắt — xem NỢ-16 trong docs/hop-nhat-main-test-1609.md.
-  // ⛔ Và KHÔNG nâng `timeout-minutes`: trần không phải chỗ hỏng.
+  // `line` in một dòng cho MỖI ca xong — đủ để biết ca cuối cùng chạy là ca nào, và rẻ
+  // (một dòng/ca, không phải log đầy).
   reporter: process.env.CI
-    ? [["list"], ["html", { open: "never" }], ["github"]]
+    ? [["html", { open: "never" }], ["github"], ["line"]]
     : [["html", { open: "never" }], ["list"]],
 
   use: {
@@ -61,7 +51,22 @@ export default defineConfig({
   webServer: process.env.TEACHER_SKIP_WEBSERVER
     ? undefined
     : {
-        command: process.env.CI ? `pnpm start -p ${PORT}` : `pnpm dev -p ${PORT}`,
+        // ⚠️ CI gọi THẲNG `next`, KHÔNG qua `pnpm` [21/09/2026].
+        //
+        // `pnpm start` đẻ ra chuỗi `sh → node(pnpm) → sh → next-server`. Playwright giết
+        // NHÓM tiến trình của lệnh nó spawn, nhưng pnpm tách nhóm cho tiến trình con, nên
+        // `next-server` SỐNG SÓT ⇒ lượt dọn webServer chờ cổng được nhả ⇒ **treo vĩnh
+        // viễn**, và `onEnd` của reporter không bao giờ chạy (không có dòng "N passed").
+        //
+        // Đo 21/09 trên run 35619508725: cả BỐN job đều đứng im ở ca CUỐI rồi bị giết, và
+        // GitHub phải tự dọn — `Terminate orphan process: … (next-server (v16.2.6))`,
+        // **5 tiến trình mồ côi mỗi job**. Gọi thẳng `next` là một tiến trình, cùng nhóm,
+        // chết chắc.
+        //
+        // ⚠️ Nhánh KHÔNG-CI giữ `pnpm dev`: trên Windows `node_modules/.bin/next` không
+        // chạy được qua shell của Playwright (đã thử, exit 1) — và máy dev không có con
+        // treo này vì người ta Ctrl-C.
+        command: process.env.CI ? `node_modules/.bin/next start -p ${PORT}` : `pnpm dev -p ${PORT}`,
         url: `${BASE}/login`,
         reuseExistingServer: false,
         timeout: 240_000,

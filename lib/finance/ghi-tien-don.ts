@@ -1110,3 +1110,111 @@ export async function tachKhoanChoCon(input: {
     return { ok: true as const, soTien: kiem.tong, soPhan: kiem.phan.length, tenCon };
   });
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 7 · CHUYỂN TIỀN GIỮA HAI CON CỦA CÙNG MỘT ĐƠN
+//
+// Sinh ra ở PHIÊN D [21/09/2026] cho bước "phân hết khoản dư" của lượt dừng học. PHIÊN F1
+// sẽ mở cùng phép này thành một thao tác đứng riêng — nên nó viết ở đây, tx-level, chứ
+// không giấu trong `dung-hoc-con.ts`.
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// HAI DÒNG, CÙNG MỘT MÃ NGHIỆP VỤ
+//
+//     −X  orderItemId = bé CHO    paymentType ADJUSTMENT   note …[chuyen:<id>]
+//     +X  orderItemId = bé NHẬN   paymentType PAYMENT      note …[chuyen:<id>]
+//                                 ─────────────────────────
+//     tổng tiền của ĐƠN            không đổi một đồng
+//
+// ⚠️ CHỈ chuyển phần `CONFIRMED` (chủ dự án chốt). Khoản kế toán chưa xác nhận có thể bị
+// TỪ CHỐI, và lúc đó ta đã chuyển sang bé khác một số tiền chưa bao giờ về — bé nhận hết
+// nợ bằng tiền không tồn tại. Cổng ấy nằm ở tầng gọi (số `du` tính từ trục A), ở đây chỉ
+// ghi cho đúng: **cả hai dòng mang `accountantStatus: "CONFIRMED"`**.
+//
+// ⚠️ Dòng −X **KHÔNG** set `adjustmentOfId`. `adjustmentOfId` nghĩa là "đảo ĐÚNG dòng thu
+// kia"; phần dư ở đây có thể gom từ nhiều khoản thu khác nhau, nên trỏ vào một dòng bất kỳ
+// là một lời khai sai. Hệ quả có lợi kèm theo: `docSoTheoCon` tính `daBiDao` từ
+// `adjustmentOfId`, nên không dòng thu nào bị đánh dấu "đã đảo" oan và mất nút trên màn.
+//
+// ⚠️ Dòng +X là `PAYMENT`, không phải `ADJUSTMENT`. Nó phải trông như một khoản thu bình
+// thường của bé nhận để kế toán xuất phiếu thu được (`confirmPayment` phát `Receipt` theo
+// `Payment`), và để màn đơn hiển thị nó trong khối của bé ấy.
+
+/** Marker trong `Payment.note` để tìm lại đúng cặp dòng do MỘT lượt chuyển sinh ra. */
+export const markerChuyen = (id: string) => `[chuyen:${id}]`;
+
+export type PhanChuyen = { orderItemId: string; soTien: number };
+
+/**
+ * Ghi cặp bút toán chuyển tiền từ một bé sang n bé khác của CÙNG đơn.
+ *
+ * ⚠️ Gọi BÊN TRONG `ghiTienChoDon` (transaction đang giữ khoá của đơn). Hàm này KHÔNG tự
+ * lấy khoá và KHÔNG kiểm trần — người gọi đã kiểm bằng `kiemPhanDu`, và kiểm lại ở đây
+ * bằng một con số đọc lại sẽ là hai cổng cho cùng một luật, tức hai cổng sẵn sàng lệch.
+ */
+export async function chuyenTienGiuaConTrongTx(
+  tx: Tx,
+  input: {
+    orderId: string;
+    /** Bé CHO tiền — dòng `−X` ghi tên bé này. */
+    tuOrderItemId: string;
+    phan: readonly PhanChuyen[];
+    centerId: string | null;
+    /** Câu giải trình đi vào `note` của cả hai dòng và vào nhật ký. */
+    lyDo: string;
+    /** Mã nghiệp vụ dùng chung cho cả lượt — thường là `OrderItem.id` của bé cho. */
+    maNghiepVu: string;
+  },
+): Promise<{ tong: number; idDong: string[] }> {
+  const marker = markerChuyen(input.maNghiepVu);
+  const tong = input.phan.reduce((s, p) => s + Math.round(p.soTien), 0);
+  const idDong: string[] = [];
+
+  // `enrollmentId` suy từ DÒNG HÀNG, không chép từ đâu khác — cùng lý lẽ với
+  // `tachKhoanChoCon` (mục 6): dòng hàng trỏ đúng một ghi danh, và `confirmPayment` TỪ CHỐI
+  // khoản không có `enrollmentId` ("không thể sinh phiếu thu").
+  const dongHang = await tx.orderItem.findMany({
+    where: { id: { in: [input.tuOrderItemId, ...input.phan.map((p) => p.orderItemId)] } },
+    select: { id: true, enrollmentId: true },
+  });
+  const ghiDanhTheoDong = new Map(dongHang.map((d) => [d.id, d.enrollmentId]));
+
+  const raKhoi = await tx.payment.create({
+    select: { id: true },
+    data: {
+      orderId: input.orderId,
+      orderItemId: input.tuOrderItemId,
+      enrollmentId: ghiDanhTheoDong.get(input.tuOrderItemId) ?? null,
+      amount: -tong,
+      method: "chuyen-noi-bo",
+      paidDate: new Date(),
+      note: `Chuyển cho bé khác cùng đơn — ${input.lyDo} ${marker}`,
+      paymentType: "ADJUSTMENT",
+      saleStatus: "RECORDED",
+      accountantStatus: "CONFIRMED",
+      centerId: input.centerId,
+    },
+  });
+  idDong.push(raKhoi.id);
+
+  for (const p of input.phan) {
+    const vao = await tx.payment.create({
+      select: { id: true },
+      data: {
+        orderId: input.orderId,
+        orderItemId: p.orderItemId,
+        enrollmentId: ghiDanhTheoDong.get(p.orderItemId) ?? null,
+        amount: Math.round(p.soTien),
+        method: "chuyen-noi-bo",
+        paidDate: new Date(),
+        note: `Nhận từ bé khác cùng đơn — ${input.lyDo} ${marker}`,
+        saleStatus: "RECORDED",
+        accountantStatus: "CONFIRMED",
+        centerId: input.centerId,
+      },
+    });
+    idDong.push(vao.id);
+  }
+
+  return { tong, idDong };
+}
