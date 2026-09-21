@@ -13,9 +13,9 @@
 | DNS `satarobo.vn` | NS = `owen.ns.cloudflare.com`, `khloe.ns.cloudflare.com` | ✅ **đang trên Cloudflare** |
 | `zalocrm.satarobo.vn` | NXDOMAIN | ✅ trống, dùng được |
 | `cloudflared` | 2026.9.1 (scoop, user-scope) | ✅ đã cài |
-| `~/.cloudflared/cert.pem` | **không có** | ⛔ **chưa đăng nhập Cloudflare** |
-| Tunnel hiện tại | `echo-hong-except-quest.trycloudflare.com` | ⛔ tạm, đổi tên mỗi lần chạy lại |
-| Tiến trình `cloudflared.exe` | **4 tiến trình** | ⚠️ tunnel tạm chồng nhau, dọn sau khi có tunnel tên |
+| `~/.cloudflared/cert.pem` | **đã có** (21/09 12:28Z) | ✅ đã đăng nhập Cloudflare |
+| Tunnel | **`zalocrm` → `zalocrm.satarobo.vn`** (id `c6098078…`) | ✅ có tên, cố định |
+| Tiến trình `cloudflared.exe` | 4 cũ (**HAI** tunnel tạm, từ 16/09) + 2 mới | ⚠️ cửa cũ **vẫn mở**, xem 2.6 |
 | Stack fork | 6 container, `Up 5 days` | ✅ |
 | `restart` policy | **cả 6 = `unless-stopped`** | ✅ không phải làm gì |
 | Docker Desktop | nằm trong `HKCU\...\Run` | ⚠️ **chỉ chạy khi có người đăng nhập** |
@@ -262,3 +262,50 @@ môi trường trên một địa chỉ còn đổi mỗi ngày là làm lại l
 | 9 | NỢ-6 + NỢ-8 | tôi |
 
 **Chưa khai env production. Chưa bật cờ.**
+
+---
+
+## 🔴 TIẾN ĐỘ THỰC — cập nhật 21/09/2026 19:45
+
+### ✅ Đã xong
+
+| # | Việc | Bằng chứng |
+|---|---|---|
+| 1 | DNS trên Cloudflare | `owen`/`khloe.ns.cloudflare.com` |
+| 2.1 | `cloudflared tunnel login` | `cert.pem` ghi lúc 12:28Z |
+| 2.2 | tunnel `zalocrm` + CNAME | `Added CNAME zalocrm.satarobo.vn` → `c6098078-03e3-450d-b6f5-59d6115821ca` |
+| 2.3 | `config.yml` | `cloudflared tunnel ingress validate` → **OK**; rule #0 → `http://localhost:3080` |
+| 2.4 | tunnel chạy + gọi được | **HTTP 200**, 4 kết nối (hkg01/09/10/13). Thân trang **giống hệt từng byte** `localhost:3080`, `<title>Sata CRM` ⇒ đúng container fork |
+| 2.5a | `APP_URL` của fork | `…trycloudflare.com` → `https://zalocrm.satarobo.vn`; xác nhận trong container đang chạy |
+| 2.5b | env `test` | `ZALOCRM_APP_URL` + `ZALOCRM_BASE_URL` → địa chỉ mới; vẫn đủ 6 biến trên `test`, **0 trên production** |
+| 2.5c | deploy lại `test` | `dpl_CYMZrQRH1SKcJkkhDtrV44nFn1Vy`, target `test`, alias `test.satarobo.vn` — **đúng bản mà `test.satarobo.vn` đang phục vụ** |
+| 4 | sao lưu 14 bản + thử khôi phục | bảng đối chiếu ở mục 4 |
+| 5 | sleep/hibernate | đã tắt sẵn (`0`/`0`, máy không pin) |
+
+### ⛔ CÒN LẠI — và trạng thái hiện tại là TẠM
+
+1. 🔴 **Tunnel đang do MỘT TIẾN TRÌNH NỀN giữ**, không phải dịch vụ. Phiên làm việc kết
+   thúc hoặc máy khởi động lại là **`zalocrm.satarobo.vn` chết**. Cần:
+   ```
+   # PowerShell QUYỀN ADMIN
+   cloudflared service install
+   Start-Service cloudflared
+   ```
+2. 🔴 **Bật tự đăng nhập Windows** (`netplwiz`) — nếu không, mục 3.4 chắc chắn trượt.
+3. **Nghiệm thu đầu-cuối**: đăng nhập `test.satarobo.vn` → mở `/zalo-crm` → khung nhúng
+   phải trỏ `zalocrm.satarobo.vn` và nick còn `connected`. Chỉ người có phiên đăng nhập
+   mới đo được.
+4. **Khởi động lại máy thật** rồi đo ba dấu hiệu (mục 3.4).
+
+### ⚠️ HAI CỬA CÔNG KHAI — chưa đóng, CÓ CHỦ ĐÍCH
+
+Đo 21/09: **hai** tunnel tạm chạy từ 16/09 (4 tiến trình, `tunnel --url …:3080`), và
+`echo-hong-except-quest.trycloudflare.com` **vẫn trả HTTP 200** — tức fork đang có một cửa
+công khai thứ hai mà không ai quản.
+
+**Chưa đóng vì nó đang là ĐƯỜNG LÙI**: nếu bước nghiệm thu (3) cho thấy tunnel mới hỏng,
+cửa cũ là thứ đưa fork về trạng thái chạy được. Đóng trước khi nghiệm thu là bỏ đường lùi
+đúng lúc cần nó nhất.
+
+⇒ **Đóng NGAY SAU khi nghiệm thu đạt**, bằng cách kết thúc 4 tiến trình cũ (PID đo lại lúc
+làm — **đừng** giết 2 tiến trình `tunnel run zalocrm`).
