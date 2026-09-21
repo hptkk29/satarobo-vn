@@ -7,6 +7,20 @@
 //
 // File THUẦN: không import Prisma/auth, client component kéo theo được.
 
+/**
+ * Khoá bảng có namespace — bảng thứ hai (học viên, đơn hàng…) chỉ cần khai danh mục
+ * riêng và thêm khoá vào `TABLE_KEYS`, KHÔNG phải đổi schema.
+ *
+ * (G-04, `20260825235000_g04_add_user_table_preference`. Giữ lại khi hợp nhất `main` →
+ * `test` ngày 16/09/2026: nhánh `main` chưa có tính năng lưu bố cục bảng theo người, nên
+ * bản `lead-columns.ts` bên đó không khai hai hằng này — mà `lib/validators/table-preference.ts`
+ * thì cần. Bỏ đi là màn Lead mất bộ cột riêng của từng người.)
+ */
+export const LEAD_TABLE_KEY = "admin.leads.list";
+
+export const TABLE_KEYS = [LEAD_TABLE_KEY] as const;
+export type TableKey = (typeof TABLE_KEYS)[number];
+
 export type LeadColumn = {
   key: string;
   label: string;

@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, MessageSquareText } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
+import { LEAD_STATUS_LABEL, LEAD_STATUS_BADGE } from "@/lib/leads/status";
 import type { LeadStatus } from "@prisma/client";
 import { LeadActivityPanel } from "./_components/lead-activity-panel";
-import { LeadStatusSelect } from "../_components/status-select";
 import { ReassignButton } from "./_components/reassign-button";
 import { AssignSelect } from "./_components/assign-select";
 import { TransferDialog } from "./_components/transfer-dialog";
@@ -15,17 +15,38 @@ import { LeadChildrenManager } from "../_components/lead-children";
 import { TrialEnrollWidget } from "./_components/trial-enroll-widget";
 import { LeadPaymentCard } from "../_components/lead-payment-card";
 import { getLeadPaymentSummary } from "@/lib/payments/summary";
-// 30/08 — SĐT HIỂN THỊ dạng `0987654321`, không phải `84987654321`. Dạng `84…` là
-// quy ước LƯU TRỮ (QĐ-4, để so khớp và gửi ZNS); người Việt đọc/đọc-cho-nhau bằng số
-// 0 đầu, và sale hay chép từ màn hình ra để gọi. `formatPhoneVN` trả nguyên chuỗi khi
-// không chuẩn hoá được, nên giá trị đã bị che PII vẫn hiện đúng bản che.
-import { formatPhoneVN, telHrefVN } from "@/lib/phone";
 import { maskFreeText, maskPersonName, maskLeadPiiFields } from "@/lib/lead/pii";
+import {
+  LEAD_CHILD_CLASS_FIND_ARGS,
+  leadChildClassOptions,
+} from "@/lib/lead/child-class-options";
+import { formatVnAddress } from "@/lib/address/vn-address";
 import { canSeeLead, leadSharingEnabled } from "@/lib/lead/sharing";
 import { canViewLeadPii } from "@/lib/auth/check-permission";
 import { ShareToggle } from "./_components/share-toggle";
-import { formatDateTimeVNZoned } from "@/lib/format/date";
-import { boDongMaNguoiNhap, hasSystemLines, splitLeadNote } from "@/lib/lead/note-view";
+import { formatDateVN } from "@/lib/format/date";
+// 30/08 (từ `main`) — SĐT hiện theo nhóm 4-3-3 cho dễ đọc/dễ chép; `telHrefVN` giữ
+// nguyên chuỗi gốc cho liên kết gọi.
+import { formatPhoneVN, telHrefVN } from "@/lib/phone";
+import { hasSystemLines, splitLeadNote } from "@/lib/lead/note-view";
+import {
+  canViewLeadAuditHistory,
+  getLeadAuditHistory,
+  getLeadStatusHistory,
+  maskLeadAuditValues,
+} from "@/lib/lead/audit-history";
+import { LeadAuditHistory } from "./_components/lead-audit-history";
+import { LeadStatusTrail } from "./_components/lead-status-trail";
+import { isZalocrmEnabled } from "@/lib/flags";
+import { duongDanNhanZalo, orgCodeCuaCoSo } from "@/lib/integrations/zalocrm/compose-url";
+import { getSetting } from "@/lib/settings/service";
+
+/** G-01 — nhãn tiếng Việt cho `Gender`. Khoá "" để phiếu chưa khai trả về null. */
+const GIOI_TINH_PH_NHAN: Record<string, string> = {
+  MALE: "Nam",
+  FEMALE: "Nữ",
+  OTHER: "Khác",
+};
 
 export const metadata = { title: "Chi tiết Lead | Admin" };
 export const dynamic = "force-dynamic";
@@ -51,7 +72,8 @@ export default async function LeadDetailPage({ params }: Props) {
   const lead = await sdb.lead.findFirst({
     where: { id, deletedAt: null },
     include: {
-      center: { select: { name: true } },
+      // `code` để suy ra `?org=` cho nút "Nhắn Zalo" (xem chỗ dựng `urlNhanZalo`).
+      center: { select: { name: true, code: true } },
       course: { select: { name: true } },
       assignedTo: { select: { id: true, name: true } },
       // BGĐ 31/07 — người giới thiệu (affiliate) ra lead này.
@@ -101,7 +123,10 @@ export default async function LeadDetailPage({ params }: Props) {
       sharingEnabled: leadSharingEnabled(),
     })
   ) {
-    redirect("/leads?view=kanban");
+    // `view=table` chứ không phải kanban — chủ dự án yêu cầu 25/08: rời trang chi
+    // tiết thì về danh sách ở chế độ BẢNG. Giữ đúng một chế độ cho mọi đường quay
+    // lại, kẻo bấm "Quay lại" ra bảng còn bị đá ra thì ra kanban.
+    redirect("/leads?view=table");
   }
 
   // #11 T1 Q2 — actor chỉ vào được NHỜ "dùng chung" → read-only về UX: ẩn nút
@@ -120,6 +145,10 @@ export default async function LeadDetailPage({ params }: Props) {
       email: lead.email,
       childName: lead.childName,
       note: lead.note,
+      // G-01 — ngày sinh PH là PII: đi qua ĐÚNG tầng che này, không đọc thẳng
+      // `lead.parentDob` ở phần vẽ bên dưới. Non-holder nhận null ⇒ giá trị
+      // không xuống client qua RSC payload, không chỉ bị giấu ở giao diện.
+      parentDob: lead.parentDob,
     },
     canViewPii,
   );
@@ -130,26 +159,34 @@ export default async function LeadDetailPage({ params }: Props) {
   // này — xem prisma/seed-roles.ts — nên đúng là thứ phân biệt cần tìm, và không
   // phải đẻ thêm permission key mới rồi seed lại 2 môi trường).
   // Tách trên chuỗi THÔ rồi mới mask, để phần người gõ vẫn được che đúng luật PII.
-  // ⚠️ 05/09/2026 — MÃ NHÂN VIÊN PHẢI TRA THEO QUAN HỆ, KHÔNG ĐỌC TỪ `note`.
-  // Dòng "Nhân viên nhập: SR.NV.02" trong `note` là ẢNH CHỤP lúc nhập phiếu: đổi mã
-  // nhân viên thì mọi lead cũ vẫn in mã cũ mãi mãi (chủ dự án báo). `createdById`
-  // (có từ 23/08) mới là danh tính thật — tra ra mã hiện hành thì đổi mã là mọi
-  // phiếu cũ theo ngay, không cần đụng tới dữ liệu.
-  //
-  // Phiếu CŨ hoặc phiếu vào từ webhook có `createdById = null`: lúc đó dòng chữ là
-  // dấu vết DUY NHẤT, nên GIỮ nguyên nó thay vì xoá trắng thông tin.
-  const nguoiNhap = lead.createdById
-    ? await sdb.user.findFirst({
-        where: { id: lead.createdById },
-        select: { name: true, employee: { select: { employeeCode: true } } },
-      })
-    : null;
-  const maNguoiNhap = nguoiNhap?.employee?.employeeCode ?? null;
-  const noteThoView = splitLeadNote(lead.note);
-  // Bỏ dòng ảnh chụp CHỈ khi đã có nguồn sống để thay — không thì màn hình hiện hai
-  // mã khác nhau của cùng một người.
-  const noteView = maNguoiNhap ? boDongMaNguoiNhap(noteThoView) : noteThoView;
+  const noteView = splitLeadNote(lead.note);
   const humanNote = canViewPii ? noteView.human : maskFreeText(noteView.human);
+
+  // S2 — nút "Nhắn Zalo" cạnh SĐT. BA cổng, mỗi cổng đóng một cách hỏng khác nhau:
+  //  1. `isZalocrmEnabled()` — cờ TẮT thì `/zalo-crm` gọi `notFound()`, nút sẽ là một
+  //     link dẫn thẳng vào trang 404. Đặt cờ ĐẦU TIÊN để mặc định (OFF) không tốn thêm
+  //     một lượt chấm quyền cho mọi phiếu lead của mọi người.
+  //  2. `zalocrm:use` — quyền mở màn ZaloCRM, hỏi bằng ĐÚNG key mà `PAGE_GATES` gác và
+  //     KHÔNG truyền target (seed GLOBAL, y như cổng trang). Thiếu nhánh này thì Sale
+  //     Hội sở và Marketing — hai vai CÓ `leads:view-pii` nhưng KHÔNG có `zalocrm:use` —
+  //     thấy nút rồi bấm vào là bị đá về `/dashboard?error=unauthorized`.
+  //  3. `canViewPii` — SĐT là PII và ở đây nó đi vào QUERY STRING (nằm lại trong lịch sử
+  //     trình duyệt, Referer, log proxy). Số đưa đi lấy từ `lead.phone` THÔ chứ không
+  //     phải `piiLead.phone`: bản che `090xxxx456` không chuẩn hoá được nên chỉ làm hộp
+  //     soạn tin mở trống — an toàn vì nằm gọn trong nhánh này.
+  // `duongDanNhanZalo` trả `null` khi SĐT rỗng/không hợp lệ ⇒ KHÔNG render nút (lead
+  // quảng cáo Facebook chỉ có link FB: mỗi cú bấm là một lượt tra số đốt hạn mức Zalo).
+  const duocMoZaloCrm = isZalocrmEnabled() && (await checkPermission("zalocrm:use"));
+  // Mang theo CƠ SỞ CỦA CHÍNH PHIẾU NÀY. Không có nó thì màn nhúng mở cơ sở đầu bảng
+  // chữ cái, nên Sale kiêm CS1+CS2 bấm từ phiếu CS2 sẽ nhắn bằng nick CS1 và dòng "đặt
+  // trước" bị từ chối vì lệch cơ sở ⇒ hội thoại không tự nối vào phiếu.
+  // Chỉ đọc tham số khi nút thật sự sắp hiện: lối vào thường ngày (cờ tắt, hoặc người
+  // không được xem PII) không phải chạm DB thêm một lượt vì một cái nút không render.
+  const orgCodesZalo = canViewPii && duocMoZaloCrm ? await getSetting("zalocrm.orgCodes") : null;
+  const urlNhanZalo =
+    canViewPii && duocMoZaloCrm
+      ? duongDanNhanZalo(lead.phone, lead.id, orgCodeCuaCoSo(lead.center?.code, orgCodesZalo))
+      : null;
 
   const canAssign = (await checkPermission("leads:assign", { centerId: lead.centerId }));
   const canCloseDeal =
@@ -174,11 +211,6 @@ export default async function LeadDetailPage({ params }: Props) {
 
   // PHẦN 3 — chuyển lead: sale tự chuyển (cần leads:edit). Mọi cơ sở + mọi sale.
   const canTransfer = (await checkPermission("leads:edit", { centerId: lead.centerId }));
-  // 27/08 — quyền RIÊNG, chỉ Sale đẩy được lead trên phễu. KHÁC `leads:edit`: Quản lý
-  // cơ sở / Marketing vẫn sửa hồ sơ + ghi chú, chỉ không đổi bậc.
-  const canChangeStatus = await checkPermission("leads:change-status", {
-    centerId: lead.centerId,
-  });
   const [transferCenters, transferSales] = canTransfer
     ? await Promise.all([
         sdb.center.findMany({ where: { isActive: true }, orderBy: { displayOrder: "asc" }, select: { id: true, name: true } }),
@@ -201,9 +233,7 @@ export default async function LeadDetailPage({ params }: Props) {
   const paymentSummary = await getLeadPaymentSummary(sdb, lead.id);
 
   // R7-01 — options cho khối quản lý con (khoá quan tâm / cơ sở quan tâm).
-  // 30/08 — bỏ truy vấn `product` (chỉ phục vụ ô "Loại đơn dự kiến" đã gỡ): một
-  // vòng DB mỗi lượt mở lead, cho một danh sách không ai còn nhìn.
-  const [childCenters, childCourses] = await Promise.all([
+  const [childCenters, childCourses, childClassRows] = await Promise.all([
     sdb.center.findMany({
       where: { isActive: true },
       orderBy: { displayOrder: "asc" },
@@ -214,8 +244,14 @@ export default async function LeadDetailPage({ params }: Props) {
       orderBy: { name: "asc" },
       select: { id: true, name: true, category: true, code: true },
     }),
+    // G-01 — lớp cho ô "Lớp tại trung tâm" của từng con. Truy vấn KHÔNG lọc
+    // `status`: danh sách này vừa để chọn vừa để TRA TÊN, mà lớp đã kết thúc thì
+    // vẫn phải hiện được tên (xem lib/lead/child-class-options.ts).
+    sdb.class.findMany(LEAD_CHILD_CLASS_FIND_ARGS),
   ]);
+  const childClasses = leadChildClassOptions(childClassRows);
   // Lead ĐÃ MẤT (hoặc không có quyền sửa / chỉ xem nhờ "dùng chung") → con read-only.
+  // "DA_MAT" chứ không "LOST": GĐ5 rút enum LeadStatus còn 10 giá trị tiếng Việt.
   const childrenReadOnly = !canTransfer || status === "DA_MAT" || isSharedViewer;
 
   // R7-02 — lớp trải nghiệm đang mở (cùng cơ sở lead) để xếp con vào.
@@ -260,12 +296,28 @@ export default async function LeadDetailPage({ params }: Props) {
     : [];
   const sessionById = new Map(scheduledSessions.map((s) => [s.id, s]));
 
+  // V-6 · G-02 — "Lịch sử thay đổi": vết sửa 3 ô định danh (Tên PH · SĐT PH ·
+  // Tên HS) phải ĐỌC ĐƯỢC bởi người có thẩm quyền, chứ không chỉ nằm im trong
+  // bảng AuditLog sau quyền `audit-logs:view` mà mỗi SUPER_ADMIN có.
+  //
+  // ⚠️ Đây là màn HẸP, KHÔNG phải cửa vào nhật ký chung: `getLeadAuditHistory`
+  // lọc CỨNG `entityType: "Lead"` + `entityId` của đúng lead đang mở, không nhận
+  // bộ lọc nào từ URL. AuditLog không thuộc SCOPED_MODELS nên `sdb` không lọc hộ
+  // — cách ly đã xong ở trên (lead đọc qua scopedDb + canSeeLead), và mở rộng
+  // truy vấn ở đây là mở nhật ký toàn hệ, kể cả module ngoài lead.
+  const canViewAudit = await checkPermission("audit-logs:view");
+  const showAuditHistory = canViewLeadAuditHistory({
+    canViewAllLeads: canViewAll,
+    canViewAuditLogs: canViewAudit,
+  });
+  const auditRows = showAuditHistory ? await getLeadAuditHistory(sdb, lead.id) : [];
+  // C-07 — "Mốc trạng thái" đọc truy vấn RIÊNG chứ không lọc lại `auditRows`:
+  // lead bị sửa nhiều thì 50 dòng gần nhất toàn lượt sửa hồ sơ, mốc phễu rơi hết
+  // ra ngoài — đúng lúc cần soi thì bảng trống.
+  const statusRows = showAuditHistory ? await getLeadStatusHistory(sdb, lead.id) : [];
+
   return (
-    // `max-w-6xl` (1152px) là nếp chung của các trang admin, giữ nguyên tới 2xl.
-    // Nới thêm ở màn ≥1536px: trên monitor 1920 thì bản cũ bỏ trống ~40% bề ngang
-    // trong khi cột phải chỉ được 314px — mà đây là màn người trực lead mở cả ngày.
-    // Không nới vô hạn: quá rộng thì dòng chữ dài quá tầm đọc và mắt phải quét ngang.
-    <div className="max-w-6xl p-6 2xl:max-w-[1400px]">
+    <div className="max-w-6xl p-6">
       <Link
         href="/leads?view=table"
         className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
@@ -276,18 +328,39 @@ export default async function LeadDetailPage({ params }: Props) {
       {/* Header */}
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
         <div>
-          {/* 30/08 — GỠ nhãn trạng thái ở tiêu đề. Ô ĐỔI trạng thái nay đứng ngay
-              bên phải cùng hàng; để thêm một nhãn chỉ-đọc nữa là hai chỗ nói cùng
-              một điều, và lúc đổi thì hai chỗ đó lệch nhau trong khoảnh khắc. */}
-          <h1 className="text-2xl font-bold text-foreground">{piiLead.parentName}</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-bold text-foreground">
+              {piiLead.parentName}
+            </h1>
+            <span
+              className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${LEAD_STATUS_BADGE[status]}`}
+            >
+              {LEAD_STATUS_LABEL[status]}
+            </span>
+          </div>
           <div className="mt-1 text-sm text-muted-foreground">
             {/* #11 T2 — non-holder: hiện SĐT mask + BỎ link tel: (href sẽ lộ số thật) */}
             {canViewPii ? (
-              <a href={telHrefVN(lead.phone)} className="font-medium text-primary">
-                {formatPhoneVN(piiLead.phone)}
-              </a>
+              <span className="inline-flex flex-wrap items-center gap-2">
+                <a href={telHrefVN(lead.phone)} className="font-medium text-primary">
+                  {formatPhoneVN(piiLead.phone)}
+                </a>
+                {/* S2 — nút "Nhắn Zalo": chỉ là điều hướng nên dùng <Link> thuần, không
+                    cần client component. `urlNhanZalo` đã gộp sẵn cả ba cổng (cờ, quyền
+                    `zalocrm:use`, PII) lẫn phép chuẩn hoá SĐT — ở đây KHÔNG so vai, không
+                    so centerId (ESLint no-inline-authz). */}
+                {urlNhanZalo && (
+                  <Link
+                    href={urlNhanZalo}
+                    className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-medium text-foreground hover:bg-muted"
+                    title="Mở Zalo CRM và soạn tin cho số này"
+                  >
+                    <MessageSquareText className="h-3.5 w-3.5" /> Nhắn Zalo
+                  </Link>
+                )}
+              </span>
             ) : (
-              <span className="font-medium text-primary">{formatPhoneVN(piiLead.phone)}</span>
+              <span className="font-medium text-primary">{piiLead.phone}</span>
             )}
             {piiLead.email && <span> · {piiLead.email}</span>}
           </div>
@@ -304,24 +377,11 @@ export default async function LeadDetailPage({ params }: Props) {
               sharedAt={lead.sharedAt ? lead.sharedAt.toISOString() : null}
             />
           )}
-          {/* 30/08 — ĐỔI TRẠNG THÁI chuyển về đây, cạnh nút Sửa (chủ dự án chốt).
-              Bảng danh sách nay chỉ hiển thị nhãn: đổi bậc phễu là quyết định cần
-              nhìn cả hồ sơ, làm được ngay trên một dòng bảng thì dễ bấm nhầm — mà
-              bấm nhầm ở đây là lead rơi khỏi phễu.
-              Shared-viewer chỉ xem + ghi chú nên không có ô này. */}
-          {!isSharedViewer && (
-            <LeadStatusSelect
-              leadId={lead.id}
-              status={lead.status}
-              parentName={piiLead.parentName}
-              canChangeStatus={canChangeStatus}
-            />
-          )}
           {/* #11 T1 Q2 — shared-viewer: ẩn nút sửa/chuyển (chỉ xem + ghi chú) */}
           {canTransfer && !isSharedViewer && (
             <Link
               href={`/leads/${lead.id}/edit`}
-              className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
             >
               Sửa
             </Link>
@@ -342,7 +402,12 @@ export default async function LeadDetailPage({ params }: Props) {
               currentSaleId={lead.assignedToId}
             />
           )}
-          {canAssign && <ReassignButton leadId={lead.id} />}
+          {canAssign && (
+            <ReassignButton
+              leadId={lead.id}
+              daCoNguoiPhuTrach={Boolean(lead.assignedToId)}
+            />
+          )}
         </div>
       </div>
 
@@ -357,45 +422,8 @@ export default async function LeadDetailPage({ params }: Props) {
         </div>
       )}
 
-      {/* ─── BỐ CỤC 7:3 (chủ dự án chốt 30/08/2026) ────────────────────────────
-          CỘT TRÁI (7) — hồ sơ: thông tin khách · con của phụ huynh · đơn & thanh toán.
-          CỘT PHẢI (3) — ghi nhanh hoạt động + lịch sử tương tác.
-
-          Vì sao tách vậy: cột trái là thứ ĐỌC (tra cứu, thỉnh thoảng sửa), cột phải là
-          thứ GHI và người trực lead lặp lại nhiều lần nhất trong một cuộc gọi. Trước
-          đợt này khối ghi nằm tận cuối trang, dưới bốn khối hồ sơ — mỗi lần muốn ghi
-          một dòng phải cuộn qua toàn bộ hồ sơ.
-
-          Vì sao 7:3 chứ không 1:1 (đảo bố cục chia đôi sáng 30/08): chia đôi làm mỗi ô
-          trong bảng thông tin chỉ còn ~1/4 bề ngang trang, mà giá trị ở đây là tiếng
-          Việt DÀI — "Trụ sở chính - Nguyễn Hữu Thọ" xuống 2–3 dòng, chiều cao các ô
-          so le nhau và bảng mất nhịp. Cột phải thì ngược lại: nó là một ô nhập hẹp
-          cộng một danh sách dòng ngắn, cho nó nửa màn hình là bỏ trống nửa màn hình.
-
-          CHIA CỘT TỪ `xl` (1280px), KHÔNG PHẢI `lg`. Đo thật trên dev server: ở
-          1024px khung nội dung chỉ còn 720px (thanh bên admin ăn ~300px), 3/10 của
-          nó là **185px** — hẹp hơn cả một ô nhập, cột phải thành một dải không dùng
-          được. Ở 1280px cột phải được 262px, ở 1440px được 310px. Dưới `xl` thì xếp
-          dọc: một cột rộng vẫn hơn hai cột không cột nào dùng được.
-
-          `items-start` để hai cột không bị kéo cao bằng nhau. */}
-      <div className="mb-6 grid items-start gap-6 xl:grid-cols-10">
-        {/* `@container`: các khối bên trong đo theo BỀ NGANG CỘT NÀY, không theo bề
-            ngang cửa sổ. Bắt buộc ở admin — thanh bên chiếm ~300px nên `sm:`/`lg:`
-            (vốn hỏi cửa sổ) luôn nói dối về chỗ thật sự còn lại. */}
-        <div className="@container space-y-5 xl:col-span-7">
-      {/* Khối THÔNG TIN KHÁCH HÀNG.
-          · Có `h2` như mọi khối anh em ("Con của phụ huynh", "Thanh toán", "Ghi nhanh
-            hoạt động"). Trước đợt này nó là khối DUY NHẤT không tên — mở trang ra là
-            một mảng chữ trôi nổi, không nói mình là nhóm gì.
-          · Hai cột CHỈ KHI CỘT NÀY đủ rộng (`@xl` = 576px), không phải khi cửa sổ đủ
-            rộng. Bản trước dùng `sm:` (hỏi cửa sổ) nên ở 768px và 1024px vẫn bung 2
-            cột trong khi cột chỉ rộng 416–463px: mỗi ô ~210px, "Trụ sở chính -
-            Nguyễn Hữu Thọ" và "16:14 30/08/2026" đều xuống 2 dòng, các ô cao so le.
-            Tiếng Việt dài là mặc định ở hệ này, không phải ca biên. */}
-      <section className="rounded-xl border border-border bg-card p-4">
-      <h2 className="mb-3 text-sm font-semibold text-foreground">Thông tin khách hàng</h2>
-      <dl className="grid grid-cols-1 gap-4 @xl:grid-cols-2">
+      {/* Info grid */}
+      <dl className="mb-6 grid grid-cols-2 gap-4 rounded-xl border border-border bg-card p-4 sm:grid-cols-4">
         <Info label="Tên con" value={piiLead.childName} />
         <Info label="Tuổi" value={lead.childAge?.toString() ?? null} />
         {/* 24/08 — KHÔNG fallback sang `source` nữa. "Nguồn" (Facebook, walk-in…)
@@ -438,43 +466,51 @@ export default async function LeadDetailPage({ params }: Props) {
             value={`${lead.affiliate.name} (${lead.affiliate.code})`}
           />
         )}
+        {/* ─── G-01 (26/08/2026) — 5 ô mới ở cấp phụ huynh ────────────────────
+            Giới tính/ngày sinh ở đây là CỦA PHỤ HUYNH. Của từng con nằm trong
+            khối "Con của phụ huynh" bên dưới. */}
+        <Info label="Giới tính PH" value={GIOI_TINH_PH_NHAN[lead.parentGender ?? ""] ?? null} />
+        <Info
+          label="Ngày sinh PH"
+          // PII — lấy từ bản ĐÃ mask (`piiLead`), không đọc `lead.parentDob`.
+          // Không có quyền ⇒ `piiLead.parentDob` là null ⇒ ô hiện "—", đúng như
+          // ngày sinh của con (đã giấu hẳn từ trước).
+          value={piiLead.parentDob ? formatDateVN(piiLead.parentDob) : null}
+        />
+        {/* Địa chỉ KHÔNG phải PII (dữ liệu địa bàn để lọc/xuất) — trước G-01 nó
+            bị nhét vào `note` nên bị che lây theo `note`, đó chính là nợ N-1. Ba
+            mẩu gộp thành một dòng đọc được; trống hết thì ẩn hẳn ô. */}
+        <Info
+          label="Địa chỉ"
+          value={formatVnAddress({
+            addressLine: lead.addressLine,
+            ward: lead.ward,
+            city: lead.city,
+          })}
+        />
+        {/* ─── G-06 (26/08/2026) — mã campaign + ngày hẹn kế tiếp ──────────────
+            Không phải PII (không chỉ đích danh ai) ⇒ hiện nguyên cho mọi vai đọc
+            được phiếu; Marketing cần đúng hai thứ này để đo CPL/CPA mà vai đó
+            KHÔNG có `leads:view-pii`. Mã campaign theo quy ước SR.QD.232 — cùng
+            khuôn với tên campaign bên Meta (lib/ads/campaign-code.ts). */}
+        <Info label="Mã campaign" value={lead.campaignName} />
+        <Info
+          label="ID quảng cáo (Meta)"
+          value={[lead.campaignId, lead.adsetId, lead.adId].filter(Boolean).join(" / ") || null}
+        />
+        <Info
+          label="Hẹn liên hệ kế tiếp"
+          value={lead.nextFollowUpAt ? formatDateVN(lead.nextFollowUpAt) : null}
+        />
         <Info label="Sale phụ trách" value={lead.assignedTo?.name ?? "Chưa gán"} />
-        {/* 30/08 — GỌI CÙNG TÊN với cột trên bảng danh sách ("Ngày nhận lead"). Hai
-            màn gọi cùng một mốc bằng hai tên là cách nhanh nhất để người dùng tưởng
-            đó là hai mốc khác nhau. */}
         <Info
-          label="Ngày nhận lead"
-          value={formatDateTimeVNZoned(lead.createdAt)}
+          label="Ngày tạo"
+          value={formatDateVN(lead.createdAt)}
         />
-        {/* 29/08 — LẦN NHẬP GẦN NHẤT.
-            Khách gọi lại / điền form lần nữa thì hệ thống KHÔNG đẻ lead mới (trùng
-            SĐT), nó nâng mốc này và ghi một dòng nguồn DUPLICATE vào sổ chia lead.
-            Không hiện ra thì phiếu vừa nóng lại trông y hệt phiếu nguội ba tháng.
-            `inboundCount > 1` mới nói thêm số lần — bằng 1 thì con số đó là nhiễu. */}
-        <Info
-          label="Lần nhập gần nhất"
-          value={
-            lead.lastInboundAt
-              ? `${formatDateTimeVNZoned(lead.lastInboundAt)}${
-                  lead.inboundCount > 1 ? ` · ${lead.inboundCount} lần` : ""
-                }`
-              : "—"
-          }
-        />
-        {/* Chữ tự do — cho trọn bề ngang, không nhốt vào nửa cột như các ô một dòng. */}
-        <div className="@xl:col-span-2">
-          <Info label="Ghi chú" value={humanNote} />
-        </div>
-        {/* Người nhập phiếu — mã tra theo QUAN HỆ nên đổi mã nhân viên là đổi theo. */}
-        {canViewAll && nguoiNhap && (
-          <Info
-            label="Nhân viên nhập"
-            value={[nguoiNhap.name, maNguoiNhap].filter(Boolean).join(" · ") || null}
-          />
-        )}
+        <Info label="Ghi chú" value={humanNote} />
         {/* Dấu vết máy ghi — chỉ quản lý/quản trị (`leads:view-all`) đọc. */}
         {canViewAll && hasSystemLines(noteView) && (
-          <div className="@xl:col-span-2">
+          <div className="col-span-2 sm:col-span-4">
             <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Nhật ký phiếu (chỉ quản trị)
             </dt>
@@ -484,10 +520,14 @@ export default async function LeadDetailPage({ params }: Props) {
           </div>
         )}
       </dl>
-      </section>
+
+      {/* 30/08/2026 (theo `main`, PR #209) — khối "Loại đơn dự kiến" ĐÃ GỠ cùng component
+          `order-kind-select`. Nó tốn một vòng DB mỗi lượt mở phiếu cho một danh sách
+          không ai còn dùng; cột `orderKind`/`expectedCourseId`/`expectedProductId` giữ
+          nguyên trong DB theo nếp 2 pha. */}
 
       {/* R7-01 — danh sách con (LeadChild) + field phẳng cũ read-only */}
-      <div>
+      <div className="mb-6">
         <LeadChildrenManager
           leadId={lead.id}
           childrenList={lead.children.map((c) => ({
@@ -502,8 +542,17 @@ export default async function LeadDetailPage({ params }: Props) {
             gradeLevel: c.gradeLevel,
             interestedCourseId: c.interestedCourseId,
             interestedCenterId: c.interestedCenterId,
+            classId: c.classId,
             note: canViewPii ? c.note : maskFreeText(c.note),
+            // G-06 — giá trị hợp đồng ĐÃ KÝ + mốc chốt. KHÔNG đi qua cổng PII:
+            // `sensitiveFields` của `leads:view-pii` là tên/SĐT/email/ngày sinh/ghi
+            // chú tư vấn — con số hợp đồng và một cái mốc thời gian không nằm trong
+            // đó, và Marketing (vai không có PII) cần đúng hai thứ này để đo CPA.
+            contractValue: c.contractValue,
+            closedAt: c.closedAt ? c.closedAt.toISOString() : null,
             trialStatus: c.trialStatus,
+            // C-06 — trạng thái phễu riêng của con (null = phiếu cũ, chưa phân loại).
+            status: c.status,
             trialHistory: c.trialHistory
               .filter((h) => h.attendedCount > 0)
               .map((h) => ({
@@ -516,15 +565,20 @@ export default async function LeadDetailPage({ params }: Props) {
           }))}
           centers={childCenters}
           courses={childCourses}
+          classes={childClasses}
           readOnly={childrenReadOnly}
           legacyChildName={piiLead.childName}
           legacyChildAge={lead.childAge}
+          // C-06 — lý do rớt là văn bản do Sale gõ ⇒ che theo đúng cổng PII của trang,
+          // y như `note` của con ngay trên.
+          lostNote={canViewPii ? lead.lostNote : maskFreeText(lead.lostNote)}
+          lostAt={lead.lostAt ? lead.lostAt.toISOString() : null}
         />
       </div>
 
       {/* R7-02 — xếp con vào lớp trải nghiệm (shared-viewer: ẩn — chỉ xem + ghi chú) */}
       {canTrialManage && !isSharedViewer && lead.children.length > 0 && (
-        <div>
+        <div className="mb-6">
           <TrialEnrollWidget
             children={lead.children.map((c) => {
               const enr = c.trialEnrollments[0];
@@ -573,7 +627,7 @@ export default async function LeadDetailPage({ params }: Props) {
 
       {/* E2-LEAD (item 2) — khối thanh toán: đã nộp / tổng phải thu / còn thiếu + điều kiện chốt. */}
       {(paymentSummary.hasOrder || dealClosable) && (
-        <div>
+        <div className="mb-6">
           <LeadPaymentCard
             leadId={lead.id}
             summary={paymentSummary}
@@ -585,7 +639,7 @@ export default async function LeadDetailPage({ params }: Props) {
       {/* Chốt deal — R7 (quyết định): Convert v2 là entry point DUY NHẤT
           (per-child, guard payment CONFIRMED, dedupe, consent). Bỏ flow gộp lead cũ. */}
       {dealClosable && !isSharedViewer && (
-        <div>
+        <div className="mb-6">
           <Link
             href={`/leads/${lead.id}/convert`}
             className="inline-flex items-center gap-1.5 rounded-lg bg-state-success-ink px-3 py-2 text-sm font-semibold text-white hover:bg-state-success-ink-hover"
@@ -595,35 +649,53 @@ export default async function LeadDetailPage({ params }: Props) {
         </div>
       )}
 
-        </div>
-
-        {/* CỘT PHẢI (3/10) — chỗ GHI. `xl:sticky` để khi cuộn đọc hồ sơ dài, ô ghi
-            nhanh vẫn nằm trong tầm mắt: không dính thì mỗi lần ghi một dòng lại phải
-            cuộn ngược lên đầu trang. Chỉ dính khi ĐÃ chia cột — lúc xếp dọc mà dính
-            thì nó đè lên phần hồ sơ ngay dưới. */}
-        <div className="@container xl:sticky xl:top-4 xl:col-span-3">
-          <LeadActivityPanel
-            leadId={lead.id}
-            activities={lead.activities.map((a) => ({
-              id: a.id,
-              type: a.type,
-              // #11 T2 — nội dung tư vấn là PII (Q7): non-holder → mask content + BỎ
-              // metadata (JSON chứa notes/recipient... raw) NGAY Ở SERVER; panel gặp
-              // metadata null sẽ tự fallback render `content` (đã mask).
-              content: canViewPii ? a.content : (maskFreeText(a.content) ?? ""),
-              metadata: canViewPii ? a.metadata : null,
-              actorName: a.actorName,
-              createdAt: a.createdAt.toISOString(),
-            }))}
-          />
-        </div>
-      </div>
-
       {/* 28/08 — GỠ khối "Buổi học thử" (hệ V1, `TrialClass`).
           Tính năng lịch hẹn học thử đã bị gỡ khỏi hệ thống: không còn màn nào quản lý
           nó, nên in một danh sách chỉ-đọc ở đây là chỉ đường tới một cánh cửa đã khoá.
           Bảng `TrialClass` giữ trong DB theo nếp 2 pha, chưa drop. */}
 
+      {/* C-07 — "Mốc trạng thái": ai đổi · lúc nào · TỪ trạng thái nào. Đặt TRƯỚC
+          mục "Lịch sử thay đổi" vì đây là thứ QLCS mở trang để soi; mục kia trộn
+          mọi lượt sửa hồ sơ nên mốc phễu chìm mất trong đó. */}
+      {showAuditHistory && (
+        <LeadStatusTrail
+          piiMasked={!canViewPii}
+          rows={statusRows.map((r) => ({
+            ...r,
+            oldValues: maskLeadAuditValues(r.oldValues, canViewPii),
+            newValues: maskLeadAuditValues(r.newValues, canViewPii),
+          }))}
+        />
+      )}
+
+      {/* V-6 · G-02 — vết sửa hồ sơ. Che PII bằng CÙNG cổng `canViewPii` của
+          trang: nội dung vết chứa nguyên văn tên PH/tên HS/SĐT, bày ra không che
+          là mở lại đúng cái cửa #11 T2 vừa đóng, chỉ khác đường đi. */}
+      {showAuditHistory && (
+        <LeadAuditHistory
+          piiMasked={!canViewPii}
+          rows={auditRows.map((r) => ({
+            ...r,
+            oldValues: maskLeadAuditValues(r.oldValues, canViewPii),
+            newValues: maskLeadAuditValues(r.newValues, canViewPii),
+          }))}
+        />
+      )}
+
+      <LeadActivityPanel
+        leadId={lead.id}
+        activities={lead.activities.map((a) => ({
+          id: a.id,
+          type: a.type,
+          // #11 T2 — nội dung tư vấn là PII (Q7): non-holder → mask content + BỎ
+          // metadata (JSON chứa notes/recipient... raw) NGAY Ở SERVER; panel gặp
+          // metadata null sẽ tự fallback render `content` (đã mask).
+          content: canViewPii ? a.content : (maskFreeText(a.content) ?? ""),
+          metadata: canViewPii ? a.metadata : null,
+          actorName: a.actorName,
+          createdAt: a.createdAt.toISOString(),
+        }))}
+      />
     </div>
   );
 }

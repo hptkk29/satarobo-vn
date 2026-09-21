@@ -80,11 +80,29 @@ function thanCallback(src: string, tu: number): { dau: number; cuoi: number } | 
 type Callback = { tep: string; dong: number; than: string };
 
 function moiCallback(): Callback[] {
-  const tep = execFileSync("git", ["ls-files", "--", ...THU_MUC], {
-    cwd: process.cwd(),
-    encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024,
-  })
+  // ⚠️ `--others --exclude-standard` KHÔNG phải để cho đủ cờ — thiếu nó là một LỖ THẬT, đo
+  // được 20/09/2026.
+  //
+  // `git ls-files` trần chỉ liệt kê tệp ĐÃ TRACK. Một tệp ghi tiền VỪA ĐƯỢC TẠO thì còn
+  // untracked cho tới lúc `git add`, nên lưới này KHÔNG NHÌN THẤY NÓ — và `pnpm test:unit` ở
+  // máy xanh suốt quãng viết mã. Nó chỉ đỏ sau khi commit, tức trên CI, tức sau khi người
+  // viết đã tin rằng mình xanh.
+  //
+  // Đã xảy ra đúng như vậy với `lib/finance/phieu-gop.ts` (PHIÊN C): cổng "đã có phiếu gộp
+  // đang mở" trả `{ ok: false }` từ trong `catch` của một phép `create` — đúng hình dạng lưới
+  // này sinh ra để chặn — mà ba lượt `test:unit` liên tiếp ở máy vẫn báo xanh.
+  //
+  // `--exclude-standard` giữ cho `--others` không quét `node_modules`/`.next`: nó tôn trọng
+  // `.gitignore`. Và phạm vi vốn đã bị `THU_MUC` bó lại.
+  const tep = execFileSync(
+    "git",
+    ["ls-files", "--cached", "--others", "--exclude-standard", "--", ...THU_MUC],
+    {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    },
+  )
     .split(/\r?\n/)
     .filter((d) => /\.tsx?$/.test(d))
     .filter((d) => !/\.(test|spec)\.tsx?$/.test(d));

@@ -15,10 +15,23 @@ export class CommissionStmtError extends Error {
   }
 }
 
-/** Ghi/đè dòng hoa hồng cho 1 kỳ. APPROVED → khóa (C10.6). */
+/**
+ * Ghi/đè dòng hoa hồng cho 1 kỳ. APPROVED → khóa (C10.6).
+ *
+ * ⚠️ ĐÂY LÀ CHỖ CHỐNG GHI TRÙNG CỦA 4 TẦNG SALE — không phải khoá unique.
+ * `@@unique([statementId, tier, recipientId, enrollmentId])` KHÔNG che đường này: dòng
+ * 4 tầng Sale để `enrollmentId = NULL`, mà NULL không bằng NULL trong UNIQUE của
+ * Postgres ⇒ `createMany` chạy 10 lần thì có 10 bộ dòng. Thứ giữ cho "chốt lại kỳ"
+ * không cộng đôi là cặp `deleteMany` + `createMany` NẰM TRONG CÙNG MỘT transaction ở
+ * dưới. Đừng tách hai lệnh đó ra, và đừng đổi sang `createMany` đơn lẻ.
+ */
 export async function setStatementLines(
   actor: AuditActor,
-  input: { period: string; lines: (ComputedLine & { leadId?: string })[]; reason?: string },
+  input: {
+    period: string;
+    lines: (ComputedLine & { leadId?: string | null; note?: string | null })[];
+    reason?: string;
+  },
 ): Promise<CommissionStatement> {
   const existing = await db.commissionStatement.findUnique({ where: { period: input.period } });
   if (existing && existing.status === "APPROVED") {
@@ -44,6 +57,7 @@ export async function setStatementLines(
         amount: l.amount,
         isClawback: l.isClawback ?? false,
         leadId: l.leadId ?? null,
+        note: l.note ?? null,
       })),
     }),
   ]);

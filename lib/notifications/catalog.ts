@@ -461,6 +461,39 @@ const BY_PREFIX: Readonly<Record<string, NotiDef>> = {
     group: "new_task", priority: 2, entity: "timesheet",
     recipients: "Người nộp đơn (và người nhận ca/làm thay nếu có)", target: "/don-tu/cua-toi",
   },
+  // ── Khoá CHỈ CÓ trên nhánh `test`, bổ sung khi hợp nhất 16/09/2026 ──
+  //    `label` viết thêm ở đây: kiểu `NotiDef` bên `main` đòi trường này.
+  // F-21 — CẢNH BÁO ĐẨY, khác hẳn `media_approval:` ở trên (đó là nhóm việc tồn, chỉ sinh
+  // ra khi chính người đó mở chuông). Khoá dạng `media_review.overdue:<folder>:<ngày VN>`
+  // nên KHÔNG rơi vào phạm vi vòng đồng bộ việc tồn — cố ý, xem `pending-sync.ts`.
+  "media_review.overdue:": {
+    label: "Ảnh buổi học quá hạn duyệt",
+    group: "due_date", priority: 1, entity: "media",
+    recipients: "Quản lý cơ sở CÓ ảnh đang treo", target: "/media",
+  },
+  // ── GĐ3 — luồng giáo viên theo TỪNG CA (không phải theo lớp) ────────────────
+  "trial-case.assigned:": {
+    label: "Được phân ca trải nghiệm",
+    group: "new_task", priority: 2, entity: "trial",
+    recipients: "Giáo viên được Đào tạo phân công một ca trải nghiệm", target: "/lop-trial",
+  },
+  // Lịch bị dời ⇒ giáo viên MẤT ca đang cầm. Ưu tiên cao hơn tin "được phân công":
+  // biết muộn là tới lớp thừa hoặc bỏ trống ca đã hẹn với phụ huynh.
+  "trial-case.rescheduled:": {
+    label: "Ca trải nghiệm bị dời lịch",
+    group: "new_task", priority: 3, entity: "trial",
+    recipients: "Giáo viên vừa bị gỡ phân công do dời lịch", target: "/lop-trial",
+  },
+  "trial-class.assigned:": {
+    label: "Được phân lớp học thử",
+    group: "new_task", priority: 2, entity: "trial",
+    recipients: "Giáo viên được phân lớp học thử", target: "/lop-trial",
+  },
+  "trial-v1.assigned:": {
+    label: "Được phân buổi học thử",
+    group: "new_task", priority: 2, entity: "trial",
+    recipients: "Giáo viên được phân buổi học thử", target: "/lop-trial/lich-hen",
+  },
 };
 
 /** Danh sách tiền tố đã sắp DÀI TRƯỚC — khớp tiền tố dài nhất, tính sẵn một lần. */

@@ -66,6 +66,14 @@ export default async function CongNoPage() {
   const actor = await resolveActor(uid);
   const sdb = scopedDb(actor);
 
+  // ⚠️ SỐ `debt` NAY LÀ SỐ RÒNG (NỢ-4, hợp nhất 18/09/2026). `getDebtRows` tính công nợ
+  // bằng `computeEnrollmentDebt` — trừ bút toán HOÀN, và có ngoại lệ "ghi danh đã RỜI LỚP
+  // thì không trừ hoàn" để không đẻ nợ ma cho học viên đã nghỉ. Trước bản vá, màn này
+  // cộng gộp nên tiền đã hoàn vẫn nằm trong "đã thu".
+  //
+  // Hai cột của bảng đối soát bên dưới thì KHÔNG ròng, và đó là chủ đích: `daXacNhan`
+  // (trục A) đặt cạnh `daGhiNhan` (trục B) để ra số CHỜ XÁC NHẬN. Ròng một vế là báo
+  // động giả. Xem khối ghi chú trong `lib/finance/debt.ts`.
   // ── Debt rows (CHỈ Payment CONFIRMED) — lib getDebtRows. Cast tránh so kiểu
   // sâu giữa Prisma client mở rộng và DebtScopedDb hẹp của lib. ──
   //
@@ -132,7 +140,7 @@ export default async function CongNoPage() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Công nợ</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Nợ học phí (đã xác nhận thu) &amp; phân nhóm tuổi nợ quá hạn
+            Nợ học phí (đã trừ hoàn tiền) &amp; phân nhóm tuổi nợ quá hạn
           </p>
         </div>
       </div>

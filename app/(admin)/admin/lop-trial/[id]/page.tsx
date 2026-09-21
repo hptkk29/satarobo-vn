@@ -5,6 +5,7 @@ import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
+import { canViewLeadPii } from "@/lib/auth/check-permission";
 import { getAssignableTeachers } from "@/lib/teachers/assignable";
 import { getSetting } from "@/lib/settings/service";
 import { layChiTietLop, layPhongTheoCoSo } from "../_lib/queries";
@@ -41,7 +42,8 @@ export default async function ChiTietLopTrialPage({
 
   const { id } = await params;
   const actor = await resolveActor(session.user.id);
-  const cls = await layChiTietLop(actor, id);
+  const canViewPii = await canViewLeadPii();
+  const cls = await layChiTietLop(actor, id, canViewPii);
   // layChiTietLop đã lọc theo scopedDb → ngoài cơ sở là 404, không phải "cấm truy cập".
   if (!cls) notFound();
 

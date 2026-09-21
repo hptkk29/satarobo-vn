@@ -83,6 +83,8 @@ describe("A. admin host × role", () => {
       "otp-logs",
       "user-groups",
       "hoi-thoai",
+      // A-02 (25/08/2026) — dashboard QLCS 4 tab.
+      "dashboard-qlcs",
     ]) {
       expect(isAdminRoute(`/${seg}`)).toBe(true);
       expect(
@@ -120,6 +122,60 @@ describe("A. admin host × role", () => {
         ...authed("SUPER_ADMIN"),
       }),
     ).toEqual<RouteDecision>({ type: "rewrite", path: "/admin/user-groups/abc123" });
+  });
+
+  /**
+   * A-02 — dashboard QLCS 4 tab nằm ở segment RIÊNG `/dashboard-qlcs`, không dùng lại
+   * `/dashboard` (màn tiếp đất chung của cả 9 vai). Hai điều phải giữ:
+   *  1. Segment mới được nhận là admin route KỂ CẢ khi mang searchParams của bộ lọc —
+   *     `firstSegment` chỉ đọc path, nhưng pin lại để đổi cách tách segment là đỏ ngay.
+   *  2. `/dashboard` CŨ không bị segment mới nuốt (prefix `dashboard` là con của nó).
+   */
+  it("[A-02] /dashboard-qlcs là admin route và KHÔNG đụng /dashboard cũ", () => {
+    expect(isAdminRoute("/dashboard-qlcs")).toBe(true);
+    expect(isAdminRoute("/dashboard")).toBe(true);
+    expect(
+      decideRoute({
+        hostKind: "admin",
+        pathname: "/dashboard-qlcs",
+        ...authed("CENTER_MANAGER"),
+      }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/admin/dashboard-qlcs" });
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/dashboard", ...authed("CENTER_MANAGER") }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/admin/dashboard" });
+    // Phụ huynh vẫn bị đá về portal — segment mới không mở thêm cửa nào.
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/dashboard-qlcs", ...authed("PARENT") }),
+    ).toEqual<RouteDecision>({ type: "redirectHost", host: "portal", path: "/", status: 307 });
+  });
+
+  /**
+   * S1 (tích hợp ZaloCRM 06/09/2026) — màn Zalo CRM nhúng ở segment riêng `/zalo-crm`.
+   *
+   * Đây là lưới DUY NHẤT bắt được lỗi thiếu segment: trên localhost trang chạy hoàn hảo,
+   * chỉ `admin.satarobo.vn/zalo-crm` mới bị 308 sang host public rồi 404 — và 308 là
+   * permanent nên trình duyệt cache vĩnh viễn, sửa mã xong vẫn không tự khỏi. Danh sách
+   * `ADMIN_ROUTE_SEGMENTS` gõ tay, không quét thư mục, nên không thêm ca ở đây là không
+   * có gì canh (đã tái phát với /payments, /cong-no, /user-groups, /to-chuc).
+   *
+   * Ghim luôn dạng CÓ searchParams: nút "Nhắn Zalo" trên phiếu lead (S2) mở
+   * `/zalo-crm?compose=84…&lead=<id>`, và `firstSegment` chỉ đọc pathname — đổi cách
+   * tách segment là ca này đỏ ngay.
+   */
+  it("[S1] /zalo-crm là admin route — kể cả khi mang ?compose= của nút Nhắn Zalo", () => {
+    expect(isAdminRoute("/zalo-crm")).toBe(true);
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/zalo-crm", ...authed("SUPER_ADMIN") }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/admin/zalo-crm" });
+    // Tư vấn viên là người dùng chính của màn này.
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/zalo-crm", ...authed("SALES_CSM") }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/admin/zalo-crm" });
+    // Phụ huynh vẫn bị đá về portal — segment mới không mở thêm cửa nào.
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/zalo-crm", ...authed("PARENT") }),
+    ).toEqual<RouteDecision>({ type: "redirectHost", host: "portal", path: "/", status: 307 });
   });
 
   it("PARENT vào admin route → redirectHost portal (lỗ hổng đã bịt)", () => {
@@ -1509,5 +1565,70 @@ describe("EL-01 · AC10. Bất biến cấu trúc khu e-learning", () => {
       elearning,
       "isElearningPath phải nằm SAU mốc BRANCH 3 — đặt trong BRANCH 1 là nhánh chết",
     ).toBeGreaterThan(branch3);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Đợt B — CHIỀU RA của site Sale (27/08/2026)
+// ─────────────────────────────────────────────────────────────────────────────
+// Chiều VÀO (`hostKind: "sale"`) đã có từ trước. Thiếu chiều RA thì bật cờ xong site
+// hẹp chỉ là TUỲ CHỌN: tư vấn viên thuần mở admin.satarobo.vn bằng dấu trang cũ vẫn ở
+// nguyên đó với đủ menu admin.
+describe("Đợt B. Sale THUẦN trên admin host → đá sang site Sale", () => {
+  const SALE_ON = { saleSiteEnabled: true } as const;
+  const SALE_OFF = { saleSiteEnabled: false } as const;
+
+  it("cờ ON: Sale thuần vào admin host → chuyển sang host sale", () => {
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/leads", ...authed("SALES_CSM"), ...SALE_ON }),
+    ).toEqual<RouteDecision>({ type: "redirectHost", host: "sale", path: "/", status: 307 });
+  });
+
+  it("🔴 cờ OFF: KHÔNG đụng gì — hai pha, Sale vẫn làm việc trên admin", () => {
+    // Bỏ điều kiện cờ là đá người dùng sang một site chưa bật, tức chặn họ làm việc.
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/leads", ...authed("SALES_CSM"), ...SALE_OFF }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/admin/leads" });
+  });
+
+  it("🔴 KIÊM NHIỆM không bị đá — nhốt họ vào site hẹp là lấy mất phần quản lý", () => {
+    expect(
+      decideRoute({
+        hostKind: "admin",
+        pathname: "/leads",
+        role: "CENTER_MANAGER",
+        roles: ["CENTER_MANAGER", "SALES_CSM"],
+        sessionValid: true,
+        ...SALE_ON,
+      }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/admin/leads" });
+  });
+
+  it("vai PARENT đi kèm không phá điều kiện 'thuần'", () => {
+    // `isSaleOnly` cố ý bỏ qua PARENT: nhân viên có con học ở trung tâm vẫn là Sale thuần.
+    expect(
+      decideRoute({
+        hostKind: "admin",
+        pathname: "/leads",
+        role: "SALES_CSM",
+        roles: ["SALES_CSM", "PARENT"],
+        sessionValid: true,
+        ...SALE_ON,
+      }),
+    ).toEqual<RouteDecision>({ type: "redirectHost", host: "sale", path: "/", status: 307 });
+  });
+
+  it("chưa đăng nhập thì không đá — `isSaleOnly` đòi có phiên hợp lệ", () => {
+    const d = decideRoute({ hostKind: "admin", pathname: "/leads", role: null, roles: [], sessionValid: false, ...SALE_ON });
+    expect(d.type).not.toBe("redirectHost");
+  });
+
+  it("vai khác không ảnh hưởng", () => {
+    for (const role of ["CENTER_MANAGER", "HR", "ACCOUNTANT", "MARKETING"] as const) {
+      expect(
+        decideRoute({ hostKind: "admin", pathname: "/leads", ...authed(role), ...SALE_ON }),
+        role,
+      ).toEqual<RouteDecision>({ type: "rewrite", path: "/admin/leads" });
+    }
   });
 });

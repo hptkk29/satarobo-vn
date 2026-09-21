@@ -1,0 +1,95 @@
+name: Nguồn vào main
+
+# CƯỠNG CHẾ LUẬT 13 — `main` chỉ nhận code TỪ NHÁNH `test`.
+#
+# 🔴 VÌ SAO CÓ WORKFLOW NÀY — luật 13 viết vào `CLAUDE.md` ngày 18/09/2026 và **bị phá
+# ngay ngày 20/09** (PR #301 · #312 · #313 vào thẳng `main`). Trước đó 17/09 đã bốn PR.
+# Ba lần trong bốn ngày.
+#
+# Đó KHÔNG phải chuyện kỷ luật cá nhân. Đo cấu hình thật bằng
+# `gh api repos/…/branches/main/protection`: `main` có 5 required check và
+# `enforce_admins: true` — tức cổng canh **CHẤT LƯỢNG** (test phải xanh) rất chặt, nhưng
+# **KHÔNG canh NGUỒN** (đến từ nhánh nào). Ba PR kia đều xanh và **đều hợp lệ** theo cấu
+# hình. Một luật chỉ sống trong tài liệu là một lời khuyên, và lời khuyên thua sự tiện.
+#
+# GIÁ ĐÃ TRẢ, đo được:
+#   16/09 — 463 commit / 215 tệp xung đột, suýt mất 7 tính năng (3 là bảo mật)
+#   17/09 — 94 commit
+#   20/09 — 3 commit, và lượt hợp nhất ấy tìm ra HAI lỗ phủ test thật
+#           (`confirmedPaid` và `recordedPaid` không ai khoá)
+# ⇒ phân kỳ không chỉ tốn thời gian gỡ xung đột, nó **giấu lỗ**.
+#
+# ── CỬA THOÁT, CÓ GHI VẾT ────────────────────────────────────────────────────────────
+# Prod đang hỏng mà không chờ được CI thì vẫn vá thẳng `main` được: gắn nhãn
+# `hotfix-thang-main` lên PR. Cổng cho qua và in cảnh báo.
+#
+# Cố ý để cửa thoát là một NHÃN chứ không phải một nút tắt:
+#   · nhãn nằm trên PR vĩnh viễn ⇒ `gh pr list --label hotfix-thang-main` đếm được;
+#   · lần sau bàn chuyện này sẽ có SỐ, không phải cảm giác;
+#   · và nó buộc người vá phải nói ra "đây là ngoại lệ", thay vì im lặng đi đường tắt.
+#
+# ⚠️ Vá gấp xong thì mở PR `main` → `test` **NGAY TRONG NGÀY** (luật 13). Không thì
+# lượt sau lại là một lượt hợp nhất hai chiều.
+#
+# ── 🔴 THỬ CỔNG NÀY BẰNG MỘT COMMIT VỨT ĐI, ĐỪNG THỬ BẰNG COMMIT SẼ DÙNG THẬT ───────
+# Bài học trả giá ngay lượt dựng cổng (20/09/2026).
+#
+# Tôi mở PR nháp từ chính nhánh `ci/nguon-vao-main` vào `main` để thử cổng. Cổng chạy
+# đúng cả ba chiều. Nhưng **check run gắn với SHA, không gắn với PR** — nên mọi dấu của
+# lượt thử ấy đi theo commit sang PR thật.
+#
+# Và nó KHÔNG chỉ là chuyện hiển thị: `pull_request` chạy CI trên **merge của head vào
+# BASE**. Base lúc thử là `main`, vốn có những thay đổi mà nhánh này chưa có ⇒ bộ
+# `Unit tests` ĐỎ 7 ca — rồi dấu đỏ đó bám vào SHA và **chặn luôn PR vào `test`**, vì
+# `test` cũng có `Unit tests` trong danh sách required.
+#
+# ⇒ Lần sau: thử cổng bằng một nhánh rác (`git commit --allow-empty`), đóng PR nháp, rồi
+#   mới mang thay đổi thật đi. Hoặc chấp nhận phải đẩy thêm một commit để lấy SHA sạch —
+#   đó đúng là việc commit này đang làm.
+#
+# ── LƯU Ý KHI SỬA ───────────────────────────────────────────────────────────────────
+# Tên job dưới đây là **tên required check** đăng ký ở branch protection. Đổi tên job là
+# check cũ biến mất khỏi PR và mọi PR vào `main` kẹt ở "Expected — Waiting for status".
+# Đổi tên thì phải cập nhật danh sách required TRONG CÙNG lượt.
+on:
+  pull_request:
+    branches: [main]
+    # `labeled`/`unlabeled` BẮT BUỘC có: thiếu chúng thì gắn nhãn cửa thoát xong cổng
+    # KHÔNG chạy lại, PR kẹt đỏ, và người ta sẽ tưởng cửa thoát hỏng.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+# Không cần quyền ghi gì — chỉ đọc ngữ cảnh PR.
+permissions:
+  contents: read
+
+jobs:
+  nguon:
+    name: Nguồn phải là nhánh test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kiểm nhánh nguồn
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          CO_NHAN: ${{ contains(github.event.pull_request.labels.*.name, 'hotfix-thang-main') }}
+        run: |
+          echo "Nhánh nguồn: $HEAD_REF"
+          if [ "$HEAD_REF" = "test" ]; then
+            echo "✅ Đúng luồng: test → main."
+            exit 0
+          fi
+          if [ "$CO_NHAN" = "true" ]; then
+            echo "::warning title=Vá gấp đi thẳng main::Đã dùng cửa thoát 'hotfix-thang-main'. NHỚ mở PR main → test NGAY TRONG NGÀY (luật 13) — nếu không, lượt hợp nhất sau lại là hai chiều."
+            exit 0
+          fi
+          echo "::error title=Sai luồng (luật 13)::PR vào 'main' phải đến từ nhánh 'test'. Nhánh hiện tại: '$HEAD_REF'."
+          echo ""
+          echo "Luồng đúng:  feature → PR vào test → CI xanh → merge test → PR test → main"
+          echo ""
+          echo "Vá gấp thật sự (prod đang hỏng, không chờ được CI):"
+          echo "  gắn nhãn 'hotfix-thang-main' lên PR này, rồi chạy lại cổng."
+          echo "  Sau đó mở PR main → test NGAY TRONG NGÀY."
+          echo ""
+          echo "Vì sao chặn: 16/09 để phân kỳ tích lại 463 commit / 215 tệp xung đột và"
+          echo "suýt mất 7 tính năng, 3 trong đó là bảo mật. Xem NỢ-10 trong"
+          echo "docs/hop-nhat-main-test-1609.md."
+          exit 1

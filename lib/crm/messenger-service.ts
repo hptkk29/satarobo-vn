@@ -102,7 +102,21 @@ export async function recordIncomingMessage(input: {
   return { conversation, message, deduped: false };
 }
 
-/** Ghi 1 tin nhắn ĐI (reply CRM). Set respondedAt ở message OUT đầu (C1.3). */
+/**
+ * Ghi 1 tin nhắn ĐI (reply CRM). Set respondedAt ở message OUT đầu (C1.3).
+ *
+ * ⚠️ HÀM NÀY CHỈ GHI SỔ — NÓ KHÔNG GỬI GÌ RA META.
+ * Đúng chỗ này từng là lỗi đang sống: `replyAction` gọi thẳng nó rồi trả `{ ok: true }`,
+ * giao diện bắn toast "Đã gửi", còn khách không nhận được gì. Tệ hơn, nó set
+ * `MessengerConversation.respondedAt` — cột mà `lib/crm/sla.ts:71` dùng để bật cảnh báo
+ * SLA-0 "chậm phản hồi" — nên mỗi lần bấm là tắt cảnh báo của một khách chưa ai trả lời.
+ *
+ * ⇒ Muốn TRẢ LỜI KHÁCH thì dùng `guiTraLoiMessenger()` (`lib/crm/messenger-send.ts`):
+ * nó kiểm cửa sổ 24h, gọi Meta Send API thật, ghi trạng thái gửi, và chỉ chạm
+ * `respondedAt` khi có `mid` xác nhận tin đã đi.
+ * Hàm này giữ lại cho việc ghi lại một tin ĐÃ ĐI BẰNG ĐƯỜNG KHÁC (nhân viên trả lời
+ * thẳng trên Trang Facebook, nhập bù lịch sử) và cho bộ e2e mô hình dữ liệu.
+ */
 export async function recordOutgoingMessage(input: {
   conversationId: string;
   text?: string | null;

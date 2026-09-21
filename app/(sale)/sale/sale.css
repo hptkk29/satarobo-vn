@@ -1,0 +1,100 @@
+/* Site Sale (sale.satarobo.vn) — token màu riêng, S-10 (27/08/2026).
+ *
+ * ⚠️ BA SITE, BA MÀU — CÓ CHỦ ĐÍCH, ĐỪNG "thống nhất" lại:
+ *     khu quản trị  #610B8A (tím sẫm)  ·  site giáo viên #C2410C (cam)
+ *     site Sale     #7C3AED (tím violet-600) ← file này
+ *   Người làm ở Sata Robo thường mở hai site cùng lúc; nhìn màu là biết đang
+ *   đứng ở đâu. Chốt QĐ-2 của tài liệu yêu cầu FINAL 16/07
+ *   (Document/0-yeucau/2-ba-phan-tich/09-ui-ux-site-sale-tuyensinh.md §0.3):
+ *   "Tím #7C3AED (violet-600) — màu thương hiệu thứ 2 của repo (cam+tím), GV đã
+ *   lấy cam nên tím rảnh; tránh teal dễ lẫn thang blue=info của StatusPill."
+ *
+ * ⚠️ VÌ SAO FILE NÀY RA ĐỜI MUỘN HƠN CLASS CỦA NÓ. `app/(sale)/sale/layout.tsx`
+ *   gắn `className="sale-root"` từ 23/08, nhưng không file CSS nào định nghĩa
+ *   `.sale-root` — một class chết. Hệ quả: mọi `bg-primary` trong site Sale rơi
+ *   về `:root` của `app/globals.css`, tức site nghiệp vụ nội bộ này suốt bốn
+ *   ngày mang màu CAM của trang tiếp thị công khai. Không hỏng gì nên không ai
+ *   báo. Test `[S-10] site Sale mang màu tím thương hiệu` nay đòi cả ba mảnh
+ *   (file CSS · import ở layout · giá trị token) khớp nhau.
+ *
+ * ⚠️ SỐ ĐO TƯƠNG PHẢN (WCAG AA), vì đây là chỗ dễ chọn màu bằng mắt rồi trượt:
+ *     #7C3AED trên nền trắng, CHỮ TRẮNG đè lên  → 5,70:1  ✅ (ngưỡng 4,5)
+ *     #6D28D9 (mực) trên nền trắng             → 7,10:1  ✅
+ *     #6D28D9 (mực) trên nền tint 10% tím      → 6,15:1  ✅
+ *   Nên `--primary` (NỀN nút) và `--primary-ink` (CHỮ/ICON) là hai giá trị khác
+ *   nhau: chữ còn phải đọc được TRÊN NỀN TINT chứ không chỉ trên nền trắng —
+ *   cùng bài học đã ghi ở đầu `app/(teacher)/teacher/teacher.css`.
+ *
+ * ⚠️ CHỈ CÓ CHẾ ĐỘ SÁNG, và đó là chủ đích chứ không phải bỏ sót. Chế độ Tối của
+ *   site giáo viên đến từ `TeacherThemeRoot` — một provider tự gắn class `.dark`
+ *   lên chính `.teacher-root`. Site Sale chưa có provider nào như vậy, nên viết
+ *   sẵn khối `.sale-root.dark` ở đây là CSS chết: không đường nào gắn được class
+ *   đó. Lúc nào dựng nút chuyển Sáng/Tối thì thêm cả hai cùng lúc.
+ *
+ * Mọi thứ scoped dưới `.sale-root`, KHÔNG đụng `:root` trong app/globals.css →
+ * public / admin / portal / site GV giữ nguyên nhận diện.
+ */
+
+.sale-root {
+  --background: hsl(250 30% 98%); /* canvas ngả tím rất nhạt, #faf9fd */
+  --foreground: hsl(224 47% 11%);
+
+  --card: hsl(0 0% 100%);
+  --card-foreground: hsl(224 47% 11%);
+
+  --popover: hsl(0 0% 100%);
+  --popover-foreground: hsl(224 47% 11%);
+
+  --primary: #7c3aed; /* violet-600 — QĐ-2, xem số đo đầu file */
+  --primary-foreground: #ffffff;
+  --primary-dark: #6d28d9; /* violet-700 */
+  --primary-darker: #5b21b6; /* violet-800 */
+  --primary-soft: rgba(124, 58, 237, 0.1);
+  --primary-soft-hover: rgba(124, 58, 237, 0.18);
+  /* MỰC tách khỏi NỀN nút: đậm hơn một nhịp để còn đọc được trên nền tint. */
+  --primary-ink: #6d28d9;
+  --primary-ink-hover: #5b21b6;
+
+  --secondary: hsl(250 20% 96%);
+  --secondary-foreground: hsl(224 47% 11%);
+
+  --muted: hsl(250 20% 96%);
+  /* 44% chứ không phải 47% (slate-500): trên canvas #faf9fd, slate-500 chỉ đo
+     được 4,4:1 — trượt AA, mà đây là màu chữ phụ dùng nhiều nhất site. */
+  --muted-foreground: hsl(224 14% 44%);
+
+  /* `--accent` ở shadcn là lớp wash cho HOVER (menu, item danh sách) — KHÔNG
+     phải màu CTA. Wash rất nhạt nên dùng chính tím, độ đục thấp. */
+  --accent: rgba(124, 58, 237, 0.08);
+  --accent-foreground: #5b21b6;
+
+  --destructive: hsl(0 84% 60%);
+
+  --border: hsl(250 20% 90%);
+  --input: hsl(250 20% 90%);
+  --ring: #7c3aed;
+
+  --radius: 0.75rem;
+
+  background: var(--background);
+  color: var(--foreground);
+}
+
+/* Thanh cuộn mảnh + vệt chọn theo tông tím — scoped để không rò sang site khác. */
+.sale-root ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.sale-root ::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sale-root ::-webkit-scrollbar-thumb {
+  background: rgba(124, 58, 237, 0.22);
+  border-radius: 9999px;
+}
+.sale-root ::-webkit-scrollbar-thumb:hover {
+  background: rgba(124, 58, 237, 0.36);
+}
+.sale-root ::selection {
+  background: rgba(124, 58, 237, 0.22);
+}
