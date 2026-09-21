@@ -12,6 +12,7 @@
  * import file này không kéo Prisma client vào process.
  */
 import { expect, type Page } from "@playwright/test";
+import { HEADER_IP_E2E } from "../../../lib/security/client-ip";
 import type { SeedUserInput } from "./seed";
 import { TEST_PASSWORD } from "./fixtures";
 
@@ -75,7 +76,16 @@ export async function login(
   // ⚠️ Vế thứ hai (`login:id:` — 5 lượt/phút theo ĐỊNH DANH) KHÔNG chữa được bằng IP. Spec
   // nào đăng nhập hơn 5 lần/phút bằng CÙNG một email vẫn dính, và đó là hành vi ĐÚNG. Cách
   // đi đúng của spec ấy là mỗi ca một email, không phải nới trần.
-  await page.setExtraHTTPHeaders({ "x-forwarded-for": ipRiengChoLuotDangNhap() });
+  // ⚠️ `x-e2e-client-ip`, KHÔNG phải `x-forwarded-for` [sửa 21/09/2026 sau rà bảo mật].
+  //
+  // Bản đầu của tôi đặt `x-forwarded-for` — chạy được, nhưng nó DỰA VÀO chính cái lỗ đang
+  // phải vá: server tin một header mà client gửi được. Vá xong `ipChoRateLimit` (lấy phần
+  // tử CUỐI thay vì ĐẦU) thì mẹo ấy hết tác dụng — và đúng ra là phải hết.
+  //
+  // Cửa cho test nay là một header RIÊNG, **chỉ tồn tại ngoài production**
+  // (`laProductionThat`). Trên prod, đặt header này KHÔNG đổi được khoá chặn tần suất; ca
+  // `[CIP-05]` ghim điều đó.
+  await page.setExtraHTTPHeaders({ [HEADER_IP_E2E]: ipRiengChoLuotDangNhap() });
 
   const url = creds.callbackUrl
     ? `/login?callbackUrl=${encodeURIComponent(creds.callbackUrl)}`

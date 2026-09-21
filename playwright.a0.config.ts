@@ -51,7 +51,22 @@ export default defineConfig({
   webServer: process.env.A0_SKIP_WEBSERVER
     ? undefined
     : {
-        command: process.env.CI ? "pnpm start -p 3100" : "pnpm dev -p 3100",
+        // ⚠️ CI gọi THẲNG `next`, KHÔNG qua `pnpm` [21/09/2026].
+        //
+        // `pnpm start` đẻ ra chuỗi `sh → node(pnpm) → sh → next-server`. Playwright giết
+        // NHÓM tiến trình của lệnh nó spawn, nhưng pnpm tách nhóm cho tiến trình con, nên
+        // `next-server` SỐNG SÓT ⇒ lượt dọn webServer chờ cổng được nhả ⇒ **treo vĩnh
+        // viễn**, và `onEnd` của reporter không bao giờ chạy (không có dòng "N passed").
+        //
+        // Đo 21/09 trên run 35619508725: cả BỐN job đều đứng im ở ca CUỐI rồi bị giết, và
+        // GitHub phải tự dọn — `Terminate orphan process: … (next-server (v16.2.6))`,
+        // **5 tiến trình mồ côi mỗi job**. Gọi thẳng `next` là một tiến trình, cùng nhóm,
+        // chết chắc.
+        //
+        // ⚠️ Nhánh KHÔNG-CI giữ `pnpm dev`: trên Windows `node_modules/.bin/next` không
+        // chạy được qua shell của Playwright (đã thử, exit 1) — và máy dev không có con
+        // treo này vì người ta Ctrl-C.
+        command: process.env.CI ? "node_modules/.bin/next start -p 3100" : "pnpm dev -p 3100",
         url: "http://localhost:3100",
         // Dựng server test mới với env test — KHÔNG tái dùng dev server có sẵn.
         reuseExistingServer: false,
