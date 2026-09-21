@@ -776,6 +776,68 @@ describe.skipIf(!RUN_DB_TESTS)("[DHC] dừng học một con — DB thật", () 
     expect(so.con.find((c) => c.orderItemId === B)?.daThu).toBe(DU_SAU_BUOI_20);
   });
 
+  it("[DHC-16] PHIÊN E — đơn có ưu đãi ANH_EM ⇒ CẢNH BÁO, và KHÔNG đồng nào đổi", async () => {
+    // Chủ dự án chốt 21/09/2026: *"KHÔNG tự động tăng nợ bé còn lại… Không đổi số tiền
+    // nào."* Ca này canh CẢ HAI vế — có cảnh báo, và công nợ bé còn lại y nguyên.
+    await db.orderItem.update({
+      where: { id: B },
+      data: {
+        discounts: [
+          { kieu: "PHAN_TRAM", giaTri: 15, giam: 1_800_000, lyDo: "con thứ hai", loai: "ANH_EM" },
+        ],
+        // ⚠️ KHÔNG đụng `discountAmount`: nhãn là nhãn, tiền là tiền. Đặt cả hai trong
+        // một ca là ca không còn phân biệt được "nhãn làm đổi tiền" với "fixture đổi tiền".
+      },
+    });
+
+    const truoc = await noTheoCon(DON);
+    const conBTruoc = truoc.con.find((c) => c.orderItemId === B)!;
+
+    const xem = await xemTruocDungHoc({
+      orderId: DON,
+      orderItemId: A,
+      lyDo: "PH_CHU_DONG",
+      now: new Date(Date.UTC(2699, 0, 5 + 19 * 7, 23, 0, 0)),
+    });
+    expect(xem.ok).toBe(true);
+    if (!xem.ok) return;
+    expect(xem.data.canhBaoUuDaiAnhEm).toContain("Muốn thu hồi, báo QLCS");
+    expect(xem.data.dauVetUuDaiAnhEm).toEqual([
+      { orderItemId: B, ten: "Bé B DHC", theoNhan: true },
+    ]);
+
+    const r = await dungSauBuoi20({
+      phanDu: [{ kieu: "CHUYEN", orderItemId: B, soTien: DU_SAU_BUOI_20 }],
+    });
+    expect(r.ok, `ok=false: ${!r.ok ? r.error : ""}`).toBe(true);
+
+    const sau = await noTheoCon(DON);
+    const conBSau = sau.con.find((c) => c.orderItemId === B)!;
+    // Bé còn lại GIỮ NGUYÊN học phí phải thu. Chỉ `daThu` tăng đúng phần dư vừa chuyển —
+    // đó là phép chuyển tiền của PHIÊN D, không phải phép thu hồi ưu đãi.
+    expect(conBSau.phaiThu, "phải thu của bé còn lại KHÔNG được đổi").toBe(conBTruoc.phaiThu);
+    expect(conBSau.daThu - conBTruoc.daThu).toBe(DU_SAU_BUOI_20);
+    const dongB = await db.orderItem.findUnique({
+      where: { id: B },
+      select: { discountAmount: true, totalPrice: true, status: true },
+    });
+    expect(dongB?.discountAmount, "giảm giá của bé còn lại y nguyên").toBe(0);
+    expect(dongB?.status, "bé còn lại KHÔNG bị dừng theo").toBe("ACTIVE");
+  });
+
+  it("[DHC-16b] đơn KHÔNG có ưu đãi anh em ⇒ KHÔNG cảnh báo", async () => {
+    const xem = await xemTruocDungHoc({
+      orderId: DON,
+      orderItemId: A,
+      lyDo: "PH_CHU_DONG",
+      now: new Date(Date.UTC(2699, 0, 5 + 19 * 7, 23, 0, 0)),
+    });
+    expect(xem.ok).toBe(true);
+    if (!xem.ok) return;
+    expect(xem.data.canhBaoUuDaiAnhEm).toBeNull();
+    expect(xem.data.dauVetUuDaiAnhEm).toEqual([]);
+  });
+
   it("[DHC-15] XEM TRƯỚC không ghi một dòng nào", async () => {
     const truocDong = await db.orderItem.findUnique({
       where: { id: A },

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { AlertTriangle, CircleStop, Loader2 } from "lucide-react";
+import { AlertTriangle, CircleStop, Info, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -303,6 +303,31 @@ function HopThoai({
               Bé còn <b className="tabular-nums">{vnd(xem.choXacNhan)}</b> kế toán chưa xác
               nhận — khoản đó KHÔNG chuyển được, và không nằm trong phép tính trên.
             </p>
+          )}
+
+          {/* PHIÊN E — LỜI NHẮC CHÍNH SÁCH, tách khỏi cảnh báo tiền ở trên.
+              Chủ dự án chốt 21/09: bé còn lại GIỮ nguyên ưu đãi; không đổi số nào.
+              Dùng tông `info`, KHÔNG dùng `warning` như khối trên — màu cũng là một lời
+              hứa (luật 12), và hứa "có chuyện với tiền" ở đây là hứa sai. */}
+          {xem?.canhBaoUuDaiAnhEm && (
+            <div className="rounded-lg bg-muted/40 p-3 text-xs">
+              <p className="flex items-start gap-1.5 text-foreground">
+                <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                <span>{xem.canhBaoUuDaiAnhEm}</span>
+              </p>
+              {xem.dauVetUuDaiAnhEm.length > 0 && (
+                <ul className="mt-1.5 space-y-0.5 pl-5 text-muted-foreground">
+                  {xem.dauVetUuDaiAnhEm.map((d) => (
+                    <li key={d.orderItemId} className="min-w-0 truncate">
+                      {d.ten}
+                      {/* Nói rõ nguồn: nhãn thì tin được, đoán từ chữ thì không. Giấu sự
+                          khác biệt đó là mời người ta tin một phép đoán. */}
+                      {d.theoNhan ? " — có nhãn ưu đãi anh/chị/em" : " — đoán từ giải trình"}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           )}
 
           {xem?.canhBao.map((c) => (
