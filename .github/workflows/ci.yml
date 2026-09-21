@@ -318,6 +318,28 @@ jobs:
           NEXTAUTH_SECRET: "ci-build-only-secret-do-not-use-in-prod-32chars"
           NEXTAUTH_URL: "http://localhost:3000"
           NEXT_PUBLIC_APP_URL: "http://localhost:3000"
+          # ── CỔNG CHẶN BRUTE-FORCE ĐĂNG NHẬP, TẮT TRONG MÔI TRƯỜNG TEST [21/09/2026] ──
+          #
+          # `lib/auth.ts:132` chặn 10 lượt/phút theo IP và **5 lượt/phút theo ĐỊNH DANH**;
+          # bộ đếm nằm trong BỘ NHỚ TIẾN TRÌNH server nên `resetDb()` không xoá được. Bộ
+          # E2E qua trình duyệt đăng nhập lại nhiều lần bằng vài tài khoản ⇒ vượt trần ⇒
+          # `authorize()` trả `null`, trang Ở LẠI `/login` **không ném lỗi nào**, và mỗi ca
+          # hết 30 giây mới chịu thua. Với hàng chục ca × retry, job chạm `timeout-minutes`
+          # và bị GIẾT. Đó là lý do bốn job cần trình duyệt treo suốt từ 21/09.
+          #
+          # ⚠️ Đây KHÔNG phải nâng trần thời gian — nguyên nhân đã đo được, và đây là cửa
+          # thoát mà chính `lib/auth.ts:128` khai ra cho đúng tình huống này. Prod KHÔNG đổi
+          # một dòng nào.
+          #
+          # ⚠️ Vế IP đã được chữa ĐÚNG CÁCH ở `tests/e2e/_helpers/auth.ts` (mỗi lượt đăng
+          # nhập một IP riêng — cùng tiền lệ `forgot-password.spec.ts`). Thứ CÒN LẠI buộc
+          # phải tắt là vế ĐỊNH DANH: nó chỉ chữa được bằng cách cho mỗi ca một email, mà
+          # làm vậy cho ~20 spec đang có là một đợt riêng.
+          #
+          # ⚠️ Mẫu KHÔNG cần cửa thoát này đã có: `tests/e2e/a0/thu-tien-theo-con.spec.ts`
+          # cho mỗi ca một email và chạy 3 lượt liên tiếp 5/5 xanh **với cổng chặn BẬT**.
+          # Spec mới nên theo mẫu đó; ngày nào ~20 spec cũ theo hết thì gỡ dòng dưới đây.
+          LOGIN_RATELIMIT_DISABLED: "1"
 
       - name: Run Playwright smoke tests
         run: pnpm test:e2e
@@ -328,6 +350,28 @@ jobs:
           NEXTAUTH_SECRET: "ci-build-only-secret-do-not-use-in-prod-32chars"
           NEXTAUTH_URL: "http://localhost:3000"
           NEXT_PUBLIC_APP_URL: "http://localhost:3000"
+          # ── CỔNG CHẶN BRUTE-FORCE ĐĂNG NHẬP, TẮT TRONG MÔI TRƯỜNG TEST [21/09/2026] ──
+          #
+          # `lib/auth.ts:132` chặn 10 lượt/phút theo IP và **5 lượt/phút theo ĐỊNH DANH**;
+          # bộ đếm nằm trong BỘ NHỚ TIẾN TRÌNH server nên `resetDb()` không xoá được. Bộ
+          # E2E qua trình duyệt đăng nhập lại nhiều lần bằng vài tài khoản ⇒ vượt trần ⇒
+          # `authorize()` trả `null`, trang Ở LẠI `/login` **không ném lỗi nào**, và mỗi ca
+          # hết 30 giây mới chịu thua. Với hàng chục ca × retry, job chạm `timeout-minutes`
+          # và bị GIẾT. Đó là lý do bốn job cần trình duyệt treo suốt từ 21/09.
+          #
+          # ⚠️ Đây KHÔNG phải nâng trần thời gian — nguyên nhân đã đo được, và đây là cửa
+          # thoát mà chính `lib/auth.ts:128` khai ra cho đúng tình huống này. Prod KHÔNG đổi
+          # một dòng nào.
+          #
+          # ⚠️ Vế IP đã được chữa ĐÚNG CÁCH ở `tests/e2e/_helpers/auth.ts` (mỗi lượt đăng
+          # nhập một IP riêng — cùng tiền lệ `forgot-password.spec.ts`). Thứ CÒN LẠI buộc
+          # phải tắt là vế ĐỊNH DANH: nó chỉ chữa được bằng cách cho mỗi ca một email, mà
+          # làm vậy cho ~20 spec đang có là một đợt riêng.
+          #
+          # ⚠️ Mẫu KHÔNG cần cửa thoát này đã có: `tests/e2e/a0/thu-tien-theo-con.spec.ts`
+          # cho mỗi ca một email và chạy 3 lượt liên tiếp 5/5 xanh **với cổng chặn BẬT**.
+          # Spec mới nên theo mẫu đó; ngày nào ~20 spec cũ theo hết thì gỡ dòng dưới đây.
+          LOGIN_RATELIMIT_DISABLED: "1"
 
       - name: Upload Playwright report
         # ⚠️ `always()`, KHÔNG `failure()` [21/09/2026]. Một job bị GIẾT vì chạm
@@ -374,6 +418,28 @@ jobs:
       # A0 webServer chạy cổng 3100 (xem playwright.a0.config.ts).
       NEXTAUTH_URL: "http://localhost:3100"
       NEXT_PUBLIC_APP_URL: "http://localhost:3100"
+      # ── CỔNG CHẶN BRUTE-FORCE ĐĂNG NHẬP, TẮT TRONG MÔI TRƯỜNG TEST [21/09/2026] ──
+      #
+      # `lib/auth.ts:132` chặn 10 lượt/phút theo IP và **5 lượt/phút theo ĐỊNH DANH**;
+      # bộ đếm nằm trong BỘ NHỚ TIẾN TRÌNH server nên `resetDb()` không xoá được. Bộ
+      # E2E qua trình duyệt đăng nhập lại nhiều lần bằng vài tài khoản ⇒ vượt trần ⇒
+      # `authorize()` trả `null`, trang Ở LẠI `/login` **không ném lỗi nào**, và mỗi ca
+      # hết 30 giây mới chịu thua. Với hàng chục ca × retry, job chạm `timeout-minutes`
+      # và bị GIẾT. Đó là lý do bốn job cần trình duyệt treo suốt từ 21/09.
+      #
+      # ⚠️ Đây KHÔNG phải nâng trần thời gian — nguyên nhân đã đo được, và đây là cửa
+      # thoát mà chính `lib/auth.ts:128` khai ra cho đúng tình huống này. Prod KHÔNG đổi
+      # một dòng nào.
+      #
+      # ⚠️ Vế IP đã được chữa ĐÚNG CÁCH ở `tests/e2e/_helpers/auth.ts` (mỗi lượt đăng
+      # nhập một IP riêng — cùng tiền lệ `forgot-password.spec.ts`). Thứ CÒN LẠI buộc
+      # phải tắt là vế ĐỊNH DANH: nó chỉ chữa được bằng cách cho mỗi ca một email, mà
+      # làm vậy cho ~20 spec đang có là một đợt riêng.
+      #
+      # ⚠️ Mẫu KHÔNG cần cửa thoát này đã có: `tests/e2e/a0/thu-tien-theo-con.spec.ts`
+      # cho mỗi ca một email và chạy 3 lượt liên tiếp 5/5 xanh **với cổng chặn BẬT**.
+      # Spec mới nên theo mẫu đó; ngày nào ~20 spec cũ theo hết thì gỡ dòng dưới đây.
+      LOGIN_RATELIMIT_DISABLED: "1"
       BASE_URL: "http://localhost:3100"
 
     steps:
@@ -812,6 +878,28 @@ jobs:
       NEXTAUTH_SECRET: "ci-build-only-secret-do-not-use-in-prod-32chars"
       NEXTAUTH_URL: "http://localhost:3131"
       NEXT_PUBLIC_APP_URL: "http://localhost:3131"
+      # ── CỔNG CHẶN BRUTE-FORCE ĐĂNG NHẬP, TẮT TRONG MÔI TRƯỜNG TEST [21/09/2026] ──
+      #
+      # `lib/auth.ts:132` chặn 10 lượt/phút theo IP và **5 lượt/phút theo ĐỊNH DANH**;
+      # bộ đếm nằm trong BỘ NHỚ TIẾN TRÌNH server nên `resetDb()` không xoá được. Bộ
+      # E2E qua trình duyệt đăng nhập lại nhiều lần bằng vài tài khoản ⇒ vượt trần ⇒
+      # `authorize()` trả `null`, trang Ở LẠI `/login` **không ném lỗi nào**, và mỗi ca
+      # hết 30 giây mới chịu thua. Với hàng chục ca × retry, job chạm `timeout-minutes`
+      # và bị GIẾT. Đó là lý do bốn job cần trình duyệt treo suốt từ 21/09.
+      #
+      # ⚠️ Đây KHÔNG phải nâng trần thời gian — nguyên nhân đã đo được, và đây là cửa
+      # thoát mà chính `lib/auth.ts:128` khai ra cho đúng tình huống này. Prod KHÔNG đổi
+      # một dòng nào.
+      #
+      # ⚠️ Vế IP đã được chữa ĐÚNG CÁCH ở `tests/e2e/_helpers/auth.ts` (mỗi lượt đăng
+      # nhập một IP riêng — cùng tiền lệ `forgot-password.spec.ts`). Thứ CÒN LẠI buộc
+      # phải tắt là vế ĐỊNH DANH: nó chỉ chữa được bằng cách cho mỗi ca một email, mà
+      # làm vậy cho ~20 spec đang có là một đợt riêng.
+      #
+      # ⚠️ Mẫu KHÔNG cần cửa thoát này đã có: `tests/e2e/a0/thu-tien-theo-con.spec.ts`
+      # cho mỗi ca một email và chạy 3 lượt liên tiếp 5/5 xanh **với cổng chặn BẬT**.
+      # Spec mới nên theo mẫu đó; ngày nào ~20 spec cũ theo hết thì gỡ dòng dưới đây.
+      LOGIN_RATELIMIT_DISABLED: "1"
       BASE_URL: "http://localhost:3131"
 
     steps:
@@ -915,6 +1003,28 @@ jobs:
       NEXTAUTH_SECRET: "ci-build-only-secret-do-not-use-in-prod-32chars"
       NEXTAUTH_URL: "http://localhost:3141"
       NEXT_PUBLIC_APP_URL: "http://localhost:3141"
+      # ── CỔNG CHẶN BRUTE-FORCE ĐĂNG NHẬP, TẮT TRONG MÔI TRƯỜNG TEST [21/09/2026] ──
+      #
+      # `lib/auth.ts:132` chặn 10 lượt/phút theo IP và **5 lượt/phút theo ĐỊNH DANH**;
+      # bộ đếm nằm trong BỘ NHỚ TIẾN TRÌNH server nên `resetDb()` không xoá được. Bộ
+      # E2E qua trình duyệt đăng nhập lại nhiều lần bằng vài tài khoản ⇒ vượt trần ⇒
+      # `authorize()` trả `null`, trang Ở LẠI `/login` **không ném lỗi nào**, và mỗi ca
+      # hết 30 giây mới chịu thua. Với hàng chục ca × retry, job chạm `timeout-minutes`
+      # và bị GIẾT. Đó là lý do bốn job cần trình duyệt treo suốt từ 21/09.
+      #
+      # ⚠️ Đây KHÔNG phải nâng trần thời gian — nguyên nhân đã đo được, và đây là cửa
+      # thoát mà chính `lib/auth.ts:128` khai ra cho đúng tình huống này. Prod KHÔNG đổi
+      # một dòng nào.
+      #
+      # ⚠️ Vế IP đã được chữa ĐÚNG CÁCH ở `tests/e2e/_helpers/auth.ts` (mỗi lượt đăng
+      # nhập một IP riêng — cùng tiền lệ `forgot-password.spec.ts`). Thứ CÒN LẠI buộc
+      # phải tắt là vế ĐỊNH DANH: nó chỉ chữa được bằng cách cho mỗi ca một email, mà
+      # làm vậy cho ~20 spec đang có là một đợt riêng.
+      #
+      # ⚠️ Mẫu KHÔNG cần cửa thoát này đã có: `tests/e2e/a0/thu-tien-theo-con.spec.ts`
+      # cho mỗi ca một email và chạy 3 lượt liên tiếp 5/5 xanh **với cổng chặn BẬT**.
+      # Spec mới nên theo mẫu đó; ngày nào ~20 spec cũ theo hết thì gỡ dòng dưới đây.
+      LOGIN_RATELIMIT_DISABLED: "1"
       BASE_URL: "http://localhost:3141"
 
     steps:

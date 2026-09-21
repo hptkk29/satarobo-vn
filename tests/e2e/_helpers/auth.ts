@@ -24,6 +24,22 @@ import { TEST_PASSWORD } from "./fixtures";
  * giá trị CÒN DÍNH (hydration muộn vẫn có thể wipe sau "load") — bị wipe thì
  * toPass() điền lại tới khi ổn định.
  */
+/**
+ * Một IP khác nhau cho mỗi lượt gọi `login`.
+ *
+ * Dải `10.90.x.y` là địa chỉ RIÊNG (RFC 1918) nên không đụng gì thật. Bộ đếm chỉ quan tâm
+ * chuỗi key, nên chỉ cần KHÁC nhau — không cần hợp lệ về định tuyến.
+ */
+let demLuotDangNhap = 0;
+function ipRiengChoLuotDangNhap(): string {
+  demLuotDangNhap += 1;
+  // Bọc vòng ở 255×255 — quá con số đó thì trùng lại, nhưng 65.025 lượt đăng nhập trong
+  // MỘT phút là con số không bộ test nào chạm tới.
+  const a = 1 + Math.floor(demLuotDangNhap / 255) % 255;
+  const b = 1 + (demLuotDangNhap % 255);
+  return `10.90.${a}.${b}`;
+}
+
 export async function login(
   page: Page,
   creds: {
@@ -34,6 +50,33 @@ export async function login(
     timeout?: number;
   },
 ): Promise<void> {
+  // ── MỖI LƯỢT ĐĂNG NHẬP MỘT IP RIÊNG  [21/09/2026] ────────────────────────
+  //
+  // `lib/auth.ts:132` chặn brute-force: **10 lượt/phút theo IP**, 5 lượt/phút theo định
+  // danh. Bộ đếm nằm trong BỘ NHỚ TIẾN TRÌNH của server (`rateLimit` fail-soft về memory
+  // khi không có Upstash), nên `resetDb()` KHÔNG xoá được nó.
+  //
+  // Hệ quả đo được 21/09: bộ E2E qua trình duyệt đăng nhập bằng CHUNG một IP (localhost),
+  // nên từ lượt thứ 11 trong một phút, `authorize()` trả `null` — trang **ở lại `/login`**,
+  // không một lỗi nào được ném, và mỗi ca sau đó hết 30 giây rồi mới chịu thua. Với 26 ca
+  // × retry, job chạm trần thời gian và bị GIẾT. Đó là lý do bốn job cần trình duyệt treo
+  // suốt từ 21/09 — không phải mã hỏng, không phải runner.
+  //
+  // Cách chữa đi theo đúng TIỀN LỆ ĐÃ CÓ trong repo: `forgot-password.spec.ts` gặp y hệt
+  // (cùng một câu "bộ đếm nằm trong bộ nhớ tiến trình… các ca sau bị rate-limit của các ca
+  // trước chặn") và giải bằng cách TÁCH IP. Ở đây cũng vậy, chỉ khác là làm một lần cho
+  // MỌI suite thay vì từng spec.
+  //
+  // ⚠️ KHÔNG tắt cổng chặn (`LOGIN_RATELIMIT_DISABLED=1`). Tắt là bỏ một lưới an ninh thật
+  // khỏi môi trường test để chữa một vấn đề của giàn thử. Tách IP mô phỏng đúng thực tế —
+  // nhiều người dùng khác nhau — và **giữ cổng sống**: ca nào muốn khẳng định cái trần ấy
+  // vẫn hoạt động thì cứ cố tình dùng chung một IP, y như `[P6-C6]` đang làm.
+  //
+  // ⚠️ Vế thứ hai (`login:id:` — 5 lượt/phút theo ĐỊNH DANH) KHÔNG chữa được bằng IP. Spec
+  // nào đăng nhập hơn 5 lần/phút bằng CÙNG một email vẫn dính, và đó là hành vi ĐÚNG. Cách
+  // đi đúng của spec ấy là mỗi ca một email, không phải nới trần.
+  await page.setExtraHTTPHeaders({ "x-forwarded-for": ipRiengChoLuotDangNhap() });
+
   const url = creds.callbackUrl
     ? `/login?callbackUrl=${encodeURIComponent(creds.callbackUrl)}`
     : "/login";
