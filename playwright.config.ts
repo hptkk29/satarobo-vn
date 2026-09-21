@@ -40,8 +40,26 @@ export default defineConfig({
   workers: 1,
 
   // Reporter
+  // 🔴 NỢ-16 (21/09/2026) — `list` PHẢI đứng đầu trong CI, đừng gỡ.
+  //
+  // Trước đây CI chỉ có `html` + `github`. CẢ HAI chỉ xuất kết quả **khi lượt chạy kết
+  // thúc**: `html` ghi tệp ở cuối, `github` gom annotation ở cuối. Nên lượt nào bị cắt
+  // giữa chừng là **mất sạch kết quả** — không đọc được ca nào đã pass, cũng không biết
+  // nó dừng ở đâu.
+  //
+  // Đo thật 21/09: bốn job dựng webServer (smoke · A0 · site GV · e-learning) treo SAU
+  // khi chạy xong ca cuối và bị `timeout-minutes` cắt. A0 có **156 ca chạy qua** mà log
+  // không in nổi một dòng kết quả nào — chẩn đoán phải đi vòng qua log `[WebServer]` và
+  // dấu thời gian mới suy ra được là nó treo ở lúc THOÁT chứ không phải lúc chạy test.
+  //
+  // `list` in MỖI CA NGAY KHI XONG, nên kể cả bị cắt vẫn còn lại toàn bộ phần đã chạy —
+  // và chính dòng cuối cùng in ra là chỗ để bắt đầu truy.
+  //
+  // ⚠️ Đây KHÔNG phải bản vá cho việc treo. Nó là cái đèn để soi. Bản vá là chuyện
+  // webServer không chịu tắt — xem NỢ-16 trong docs/hop-nhat-main-test-1609.md.
+  // ⛔ Và KHÔNG nâng `timeout-minutes`: trần không phải chỗ hỏng.
   reporter: process.env.CI
-    ? [["html"], ["github"]]
+    ? [["list"], ["html"], ["github"]]
     : [["html", { open: "never" }], ["list"]],
 
   use: {
