@@ -36,7 +36,7 @@ import {
   REMOVABLE_ENROLLMENT_STATUSES,
   type RemovedEnrollment,
 } from "@/lib/students/remove-from-classes";
-import { withdrawStudentFromAllClasses } from "@/lib/students/withdraw";
+import { nghiHocHan, type GhiDanhBoQuaHoanTien } from "@/lib/students/withdraw";
 import { STUDYING_ENROLLMENT_STATUSES } from "@/lib/enrollment-status";
 import {
   syncConversationMembership,
@@ -944,6 +944,10 @@ export async function withdrawStudentAction(input: {
 
   const { actorId, actorName } = getAuditActor(session);
   let removedEnrollments: RemovedEnrollment[] = [];
+  // PHIÊN D — ghi danh đã quyết toán qua "Dừng học" thì KHÔNG sinh đề xuất hoàn lần hai.
+  // Phải trả lên màn: "không có đề xuất hoàn" mà im lặng thì ba tháng sau không ai phân
+  // biệt được nó với một lượt bỏ sót.
+  let boQuaHoanTien: GhiDanhBoQuaHoanTien[] = [];
 
   await sdb.$transaction(async (txRaw) => {
     const tx = txRaw as unknown as Prisma.TransactionClient;
@@ -997,7 +1001,7 @@ export async function withdrawStudentAction(input: {
     // `lib/students/withdraw.ts`, dùng chung `REMOVABLE_ENROLLMENT_STATUSES` với
     // `deleteStudent`, và có test hồi quy riêng — đừng chép danh sách status về lại đây.
     // (sync nhóm chat nằm trong removeStudentFromClasses, cùng transaction.)
-    removedEnrollments = await withdrawStudentFromAllClasses({
+    const kqNghi = await nghiHocHan({
       tx,
       studentId: input.studentId,
       actorId,
@@ -1005,6 +1009,8 @@ export async function withdrawStudentAction(input: {
       reason: `Học viên nghỉ học: ${input.reason.trim()}`,
       orgUnitId: student.centerId,
     });
+    removedEnrollments = kqNghi.daGo;
+    boQuaHoanTien = kqNghi.boQuaHoanTien;
   }, { timeout: 30_000, maxWait: 10_000 });
 
   revalidatePath("/students");
@@ -1048,7 +1054,7 @@ export async function withdrawStudentAction(input: {
     });
   }
 
-  return { ok: true as const };
+  return { ok: true as const, boQuaHoanTien };
 }
 
 // ═══════════════════════════════════════════════════════════════════

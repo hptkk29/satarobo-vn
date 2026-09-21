@@ -444,8 +444,36 @@ async function doiTrangThaiPhieu(
   dich: "VOID" | "CLOSED",
 ): Promise<KetQuaGhi<{ daNhan: number }>> {
   return db.$transaction(async (tx) => {
-    if (!input.lyDo.trim()) return { ok: false as const, error: "Phải ghi lý do" };
     await khoaDonTrongTx(tx, input.orderId);
+    return doiTrangThaiPhieuTrongTx(tx, input, dich);
+  });
+}
+
+/**
+ * Bản chạy TRONG transaction + khoá đơn của người gọi.
+ *
+ * ⚠️ Tách ra ở PHIÊN D [21/09/2026] vì lượt DỪNG HỌC phải đóng/huỷ phiếu gộp **cùng một
+ * transaction** với phép quyết toán. Mở một `$transaction` lồng trong `ghiTienChoDon` là
+ * hoặc deadlock trên chính khoá của mình, hoặc — tệ hơn — một phép ghi commit riêng rồi ở
+ * lại khi transaction ngoài cuộn ngược.
+ *
+ * ⚠️ Người gọi PHẢI đã giữ `khoaDonTrongTx(tx, orderId)`. Hàm này KHÔNG tự lấy khoá: lấy
+ * lại một advisory lock mình đang giữ thì không lỗi gì (nó tái nhập được), nhưng viết vậy
+ * là che mất yêu cầu thật — rằng phép đọc `daNhanCuaPhieu` bên dưới chỉ đúng khi đơn đang
+ * bị khoá.
+ */
+export async function doiTrangThaiPhieuTrongTx(
+  tx: Tx,
+  input: {
+    orderId: string;
+    billId: string;
+    lyDo: string;
+    actor: AuditActor;
+  },
+  dich: "VOID" | "CLOSED",
+): Promise<KetQuaGhi<{ daNhan: number }>> {
+  {
+    if (!input.lyDo.trim()) return { ok: false as const, error: "Phải ghi lý do" };
 
     const phieu = await docPhieu(tx, input.billId);
     if (!phieu || phieu.orderId !== input.orderId) {
@@ -493,7 +521,45 @@ async function doiTrangThaiPhieu(
     });
 
     return { ok: true as const, daNhan };
+  }
+}
+
+/**
+ * Phiếu gộp đang mở của đơn có dòng thuộc con này không, và đã nhận bao nhiêu.
+ *
+ * PHIÊN D dùng để quyết: chưa nhận đồng nào → HUỶ (phát lại mã mới cho phần còn lại); đã
+ * nhận một phần → ĐÓNG (ngừng thu tiếp mà giữ dấu vết).
+ *
+ * ⚠️ Trả cả phiếu KHÔNG chứa dòng của bé này (`coDongCuaCon: false`). Người gọi cần biết
+ * điều đó để **không** đụng vào một phiếu đang thu cho những bé khác.
+ */
+export async function phieuGopCuaConTrongTx(
+  tx: Tx,
+  orderId: string,
+  orderItemId: string,
+): Promise<{ billId: string; daNhan: number; coDongCuaCon: boolean } | null> {
+  const phieu = await tx.paymentBill.findFirst({
+    where: { orderId, status: "OPEN" },
+    select: {
+      id: true,
+      lines: {
+        select: {
+          paymentRequest: {
+            select: { orderItemId: true, allocations: { select: { amount: true } } },
+          },
+        },
+      },
+    },
   });
+  if (!phieu) return null;
+  return {
+    billId: phieu.id,
+    daNhan: phieu.lines.reduce(
+      (s, l) => s + l.paymentRequest.allocations.reduce((t, a) => t + a.amount, 0),
+      0,
+    ),
+    coDongCuaCon: phieu.lines.some((l) => l.paymentRequest.orderItemId === orderItemId),
+  };
 }
 
 /** HUỶ một phiếu chưa nhận đồng nào. Mã của phiếu VOID không đối khớp được nữa. */

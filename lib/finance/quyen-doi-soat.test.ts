@@ -544,3 +544,97 @@ describe("[QPG] PHIÊN C — phiếu gộp: quyền, thứ tự móc, và hai lu
     expect(doc).toMatch(/tongTien: conPhaiThuCuaPhieu\(dongChia\),/);
   });
 });
+
+describe("[QDH-*] PHIÊN D — dừng học một con: quyền · công tắc · dây nối", () => {
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Chủ dự án chốt 21/09/2026: quyền `orders:manage`, và *"sau cờ
+  // `billing.flexV1Enabled`; cờ tắt → nút ẩn + action từ chối"*.
+  //
+  // ⚠️ Cùng lý do "không phải test hành vi" với `[QDB-*]` ngay trên: cổng thật nằm trong
+  // Server Action và gọi `auth()` + `checkPermission()`. Phần HÀNH VI của dừng học (19 buổi,
+  // quyết toán, phân dư, VOID đợt, hoàn tiền…) nằm ở `tests/finance/dung-hoc-mot-con.test.ts`,
+  // chạy trên Postgres thật — 18 ca.
+  // ─────────────────────────────────────────────────────────────────────────────
+  const ACT = "app/(admin)/admin/orders/_actions.ts";
+
+  it("cả HAI action đi qua `congDungHoc` — không action nào tự gác lấy", () => {
+    const src = docMa(ACT);
+    for (const ten of ["xemTruocDungHocAction", "dungHocConAction"]) {
+      const t = than(src, ten);
+      expect(t, `không tách được thân ${ten}`).not.toBe("");
+      expect(t, `${ten} phải đi qua cổng chung`).toMatch(
+        /const cong = await congDungHoc\(input\.orderId\);/,
+      );
+      expect(t, `${ten} phải trả lỗi, KHÔNG redirect`).not.toMatch(/requireOrdersManage/);
+    }
+  });
+
+  it("cổng kiểm ĐỦ BA VẾ: quyền `orders:manage` · phạm vi cơ sở · công tắc CỦA ĐƠN", () => {
+    const cong = than(docMa(ACT), "congDungHoc");
+    expect(cong, "không tách được thân cổng").not.toBe("");
+    expect(cong, "vế 1 — quyền").toMatch(/await checkPermission\("orders:manage"\)/);
+    expect(cong, "vế 2 — phạm vi cơ sở").toMatch(/passesScope\("Order", order, actor\)/);
+    // ⚠️ Vế 3 đọc `order.orgUnitId` — cơ sở GIỮ ĐƠN, không phải cơ sở người bấm.
+    expect(cong, "vế 3 — công tắc của ĐƠN").toMatch(/laThuTienLinhHoatBat\(order\.orgUnitId\)/);
+  });
+
+  it("cờ TẮT ⇒ action TỪ CHỐI (không chỉ ẩn nút)", () => {
+    const cong = than(docMa(ACT), "congDungHoc");
+    expect(cong).toMatch(/if \(!\(await laThuTienLinhHoatBat\(order\.orgUnitId\)\)\)/);
+    expect(cong).toMatch(/chưa bật cho cơ sở này/);
+  });
+
+  it("nút chỉ VẼ khi có quyền VÀ bé chưa dừng — và khối chỉ dựng khi cờ bật", () => {
+    // Affordance phải nói thật (luật 12): vẽ nút "Dừng học" cho một bé đã dừng là mời người
+    // ta bấm một thứ chắc chắn bị từ chối.
+    const ui = docMa("app/(admin)/admin/orders/_components/cong-no-theo-con.tsx");
+    expect(ui).toMatch(/\{duocSua && !tt\?\.daDung && \(/);
+    expect(ui).toMatch(/<NutDungHoc orderId=\{orderId\} orderItemId=\{c\.orderItemId\}/);
+
+    // Cả khối công nợ theo con chỉ dựng khi `batThuTheoCon` — tức cờ tắt thì không có nút
+    // nào để mà ẩn, và trang không tốn thêm một truy vấn nào.
+    const trang = docMa("app/(admin)/admin/orders/[id]/page.tsx");
+    expect(trang).toMatch(/batThuTheoCon \? await docTrangThaiDungHoc\(order\.id\) : undefined/);
+  });
+
+  it("CỔNG ĐỨNG TRƯỚC PHÉP GHI: 7 cổng của `dungHocMotCon` nằm trên phép ghi đầu tiên", () => {
+    // Luật rollback (CLAUDE.md mục 7): `return` trong callback `$transaction` KHÔNG rollback.
+    // Lưới chung `cong-truoc-phep-ghi.test.ts` quét hình dạng; ca này neo thêm THỨ TỰ cụ thể
+    // của hàm này, vì phép ghi đầu tiên của nó nằm trong một hàm phụ (`huyDotKhiDungHoc`) mà
+    // lưới chung không nhìn vào.
+    const src = docMa("lib/finance/dung-hoc-con.ts");
+    const viTriCongCuoi = src.indexOf("} else if (input.phanDu.length > 0) {");
+    const viTriGhiDau = src.indexOf("const soDotDaHuy = await huyDotKhiDungHoc(");
+    expect(viTriCongCuoi, "không thấy cổng 7").toBeGreaterThan(0);
+    expect(viTriGhiDau, "không thấy phép ghi đầu tiên").toBeGreaterThan(0);
+    expect(viTriGhiDau, "phép ghi đầu tiên phải nằm SAU cổng cuối cùng").toBeGreaterThan(
+      viTriCongCuoi,
+    );
+  });
+
+  it("ngoại lệ huỷ đợt có TÊN RIÊNG và không ai ngoài đường dừng học gọi được", () => {
+    const src = docMa("lib/finance/dung-hoc-con.ts");
+    // Không `export` ⇒ ngoài tệp không gọi được. Đây là vế "chỉ gọi được từ đường dừng học".
+    expect(src).toMatch(/\nasync function huyDotKhiDungHoc\(/);
+    expect(src, "KHÔNG được export ngoại lệ này").not.toMatch(
+      /export async function huyDotKhiDungHoc/,
+    );
+    // Và luật cũ không bị nới: `kiemHuyDot` vẫn từ chối đợt đã có tiền.
+    const cu = docMa("lib/finance/no-theo-con.ts");
+    expect(cu).toMatch(/if \(tron\(dot\.daRot\) > 0\) \{/);
+  });
+
+  it("phần KHÔNG-TIỀN tách ra rồi, và đường 'Nghỉ học hẳn' KHÔNG đổi hành vi", () => {
+    const tach = docMa("lib/students/ket-thuc-ghi-danh.ts");
+    // Tệp phần-không-tiền TUYỆT ĐỐI không được chạm sổ tiền.
+    for (const cam of ["createRefundRequest", "payment.", "paymentRequest.", "refundRequest."]) {
+      expect(tach, `phần KHÔNG-TIỀN không được nhắc \`${cam}\``).not.toContain(cam);
+    }
+    // Đường cũ gọi hàm mới mà KHÔNG truyền `endedAt` ⇒ cột đó vẫn nguyên như trước.
+    const cu = docMa("lib/students/remove-from-classes.ts");
+    expect(cu).toMatch(/await ketThucMotGhiDanh\(\{/);
+    expect(cu, "truyền `endedAt` ở đây là đổi hành vi báo cáo churn").not.toMatch(/endedAt/);
+    // Phần TIỀN vẫn ở đúng chỗ cũ — ngoài hàm không-tiền.
+    expect(docMa("lib/students/withdraw.ts")).toMatch(/await createRefundRequest\(\{/);
+  });
+});

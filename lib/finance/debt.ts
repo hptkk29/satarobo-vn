@@ -548,6 +548,11 @@ export async function docSoTheoCon(
         itemName: true,
         totalPrice: true,
         discountAmount: true,
+        // PHIÊN D — bé đã dừng học thì phải thu đọc `usedValue`. `status` phải lấy CÙNG
+        // câu tra: suy "đã dừng" từ `usedValue != null` là tin vào một cột phụ, và cột phụ
+        // thì có ngày được ghi vì lý do khác.
+        status: true,
+        usedValue: true,
         enrollment: { select: { class: { select: { course: { select: { name: true } } } } } },
       },
       orderBy: { createdAt: "asc" },
@@ -619,6 +624,9 @@ export async function docSoTheoCon(
       khoa: d.enrollment?.class?.course?.name ?? null,
       tamTinh: d.totalPrice,
       giam: d.discountAmount,
+      // Chỉ dòng ĐÃ DỪNG mới đưa `usedValue` vào. Dòng còn học mà cột này lỡ có số (dữ
+      // liệu rác / một đường ghi tương lai) thì KHÔNG được làm tụt phải thu của bé.
+      daDung: d.status === "STOPPED" ? (d.usedValue ?? 0) : null,
     })),
     khoanDaXacNhan: daXacNhan.map((k) => ({ orderItemId: k.orderItemId, amount: k.amount })),
     khoanChoXacNhan: choXacNhan.map((k) => ({ orderItemId: k.orderItemId, amount: k.amount })),
