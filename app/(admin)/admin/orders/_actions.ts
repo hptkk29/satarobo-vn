@@ -48,6 +48,7 @@ import {
   ganKhoanDaThuChoCon,
   boGanKhoanKhoiCon,
   tachKhoanChoCon,
+  chuyenTienGiuaCon,
 } from "@/lib/finance/ghi-tien-don";
 import { taoPhieuGop, huyPhieuGop, dongPhieuGop } from "@/lib/finance/phieu-gop";
 import { dungHocMotCon, xemTruocDungHoc } from "@/lib/finance/dung-hoc-con";
@@ -2190,5 +2191,42 @@ export async function dungHocConAction(input: {
   // giáo viên vẫn điểm danh — affordance nói dối bằng dữ liệu cũ.
   revalidatePath("/classes");
   revalidatePath("/hoan-tien");
+  return kq;
+}
+
+/**
+ * F1 — CHUYỂN TIỀN GIỮA HAI CON của cùng một đơn.
+ *
+ * ⚠️ Quyền `payments:manage` (kế toán), KHÔNG phải `payments:record` của sale.
+ *
+ * Chọn theo TIỀN LỆ ĐÃ CÓ, không theo cảm tính: `boGanKhoanChoConAction` — đường "sửa một
+ * quyết định đã ghi về chủ của tiền" — cũng gác bằng `payments:manage` và cũng bắt buộc
+ * ghi lý do. Chuyển tiền giữa hai bé LÀ đúng việc ấy, chỉ gọn hơn một bước.
+ *
+ * Còn `ganKhoanChoConAction` để ở `payments:record` vì nó chỉ ĐIỀN một cột đang trống —
+ * không đổi quyết định của ai.
+ */
+export async function chuyenTienGiuaConAction(input: {
+  orderId: string;
+  tuOrderItemId: string;
+  denOrderItemId: string;
+  soTien: number;
+  lyDo: string;
+}) {
+  const cong = await congDuongB(input.orderId, "payments:manage");
+  if (!cong.ok) return { ok: false as const, error: cong.error };
+
+  const kq = await chuyenTienGiuaCon({
+    orderId: cong.order.id,
+    tuOrderItemId: input.tuOrderItemId,
+    denOrderItemId: input.denOrderItemId,
+    soTien: input.soTien,
+    lyDo: input.lyDo,
+    centerId: cong.order.centerId,
+    actor: cong.actor,
+  });
+  if (!kq.ok) return kq;
+
+  revalidatePath(`/orders/${input.orderId}`);
   return kq;
 }
