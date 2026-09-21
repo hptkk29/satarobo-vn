@@ -330,7 +330,12 @@ jobs:
           NEXT_PUBLIC_APP_URL: "http://localhost:3000"
 
       - name: Upload Playwright report
-        if: failure()
+        # ⚠️ `always()`, KHÔNG `failure()` [21/09/2026]. Một job bị GIẾT vì chạm
+        # `timeout-minutes` kết thúc với trạng thái **cancelled**, mà `failure()` KHÔNG
+        # đúng với cancelled ⇒ bước này bị bỏ qua ⇒ **không artifact nào được để lại**.
+        # Hệ quả đo được: bốn job cần trình duyệt treo suốt từ 21/09 và bước điều tra số
+        # một ("đọc report của Playwright") không thực hiện được — không có gì để đọc.
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
@@ -430,7 +435,12 @@ jobs:
         run: pnpm test:e2e:a0
 
       - name: Upload A0 Playwright report
-        if: failure()
+        # ⚠️ `always()`, KHÔNG `failure()` [21/09/2026]. Một job bị GIẾT vì chạm
+        # `timeout-minutes` kết thúc với trạng thái **cancelled**, mà `failure()` KHÔNG
+        # đúng với cancelled ⇒ bước này bị bỏ qua ⇒ **không artifact nào được để lại**.
+        # Hệ quả đo được: bốn job cần trình duyệt treo suốt từ 21/09 và bước điều tra số
+        # một ("đọc report của Playwright") không thực hiện được — không có gì để đọc.
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-a0
@@ -763,7 +773,12 @@ jobs:
         run: pnpm test:e2e:fl
 
       - name: Upload FL Playwright report
-        if: failure()
+        # ⚠️ `always()`, KHÔNG `failure()` [21/09/2026]. Một job bị GIẾT vì chạm
+        # `timeout-minutes` kết thúc với trạng thái **cancelled**, mà `failure()` KHÔNG
+        # đúng với cancelled ⇒ bước này bị bỏ qua ⇒ **không artifact nào được để lại**.
+        # Hệ quả đo được: bốn job cần trình duyệt treo suốt từ 21/09 và bước điều tra số
+        # một ("đọc report của Playwright") không thực hiện được — không có gì để đọc.
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-fl
@@ -861,7 +876,12 @@ jobs:
         run: pnpm test:e2e:teacher
 
       - name: Upload teacher Playwright report
-        if: failure()
+        # ⚠️ `always()`, KHÔNG `failure()` [21/09/2026]. Một job bị GIẾT vì chạm
+        # `timeout-minutes` kết thúc với trạng thái **cancelled**, mà `failure()` KHÔNG
+        # đúng với cancelled ⇒ bước này bị bỏ qua ⇒ **không artifact nào được để lại**.
+        # Hệ quả đo được: bốn job cần trình duyệt treo suốt từ 21/09 và bước điều tra số
+        # một ("đọc report của Playwright") không thực hiện được — không có gì để đọc.
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-teacher
@@ -959,7 +979,12 @@ jobs:
         run: pnpm test:e2e:elearning
 
       - name: Upload e-learning Playwright report
-        if: failure()
+        # ⚠️ `always()`, KHÔNG `failure()` [21/09/2026]. Một job bị GIẾT vì chạm
+        # `timeout-minutes` kết thúc với trạng thái **cancelled**, mà `failure()` KHÔNG
+        # đúng với cancelled ⇒ bước này bị bỏ qua ⇒ **không artifact nào được để lại**.
+        # Hệ quả đo được: bốn job cần trình duyệt treo suốt từ 21/09 và bước điều tra số
+        # một ("đọc report của Playwright") không thực hiện được — không có gì để đọc.
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-elearning
