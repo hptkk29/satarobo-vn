@@ -309,3 +309,156 @@ cửa cũ là thứ đưa fork về trạng thái chạy được. Đóng trư�
 
 ⇒ **Đóng NGAY SAU khi nghiệm thu đạt**, bằng cách kết thúc 4 tiến trình cũ (PID đo lại lúc
 làm — **đừng** giết 2 tiến trình `tunnel run zalocrm`).
+
+---
+
+## 🔴 KẾT QUẢ PHÉP THỬ KHỞI ĐỘNG LẠI — 21/09/2026, và ba thứ nó bắt được
+
+Khởi động lại **hai lần**. Không lần nào suy luận đoán trước được kết quả.
+
+### Lần 1 (21:07) — TRƯỢT ở Docker
+
+| dấu hiệu | kết quả |
+|---|---|
+| tự đăng nhập | ✅ phiên `admin` Active lúc 21:07 |
+| dịch vụ `cloudflared` | ✅ `Running` · `Automatic` |
+| **Docker Desktop** | 🔴 **không chạy** — 0/6 container |
+| hai tunnel tạm cũ | ✅ chết hẳn (`530`), không tự quay lại |
+
+**Nguyên nhân:** mục `Run` của Docker Desktop **có tồn tại nhưng bị vô hiệu hoá**
+(`StartupApproved\Run` byte0 = 3) **và** `settings-store.json` có `AutoStart: false`.
+
+⚠️ **Bài học 1 — tồn tại ≠ có hiệu lực.** Tôi đọc thấy khoá `Run` rồi kết luận "sẽ chạy khi
+đăng nhập". Sai. Cùng họ với `Status: Running` của dịch vụ (ảnh chụp giữa hai lần chết) và
+với "4 job CI cancelled" sáng cùng ngày. Ba lần một ngày, cùng một hình dạng.
+
+**Bảng mã byte đầu của `StartupApproved\Run` — đo từ chính máy này:**
+
+| byte0 | nghĩa | chứng cứ trên máy |
+|---|---|---|
+| **chẵn** (0, 2) | BẬT | `Zalo` byte0=2, đã tự chạy sau khi khởi động |
+| **lẻ** (1, 3) | TẮT | `OneDrive`/`Teams` byte0=3, không chạy |
+
+⚠️ **Bật ở Windows Settings là CHƯA ĐỦ cho Docker.** Thao tác đó đổi byte `3` thành `1` —
+vẫn lẻ, vẫn tắt. Chỉ khi bật trong **chính Docker Desktop** (Settings → General → *Start
+Docker Desktop when you sign in*) nó mới ghi đồng thời `AutoStart: true` **và** byte `00`.
+Sửa một trong hai chỗ thì registry trông như đã đổi mà thực tế vẫn tắt.
+
+### Lần 2 (21:19) — hai dấu hiệu đầu ĐẠT
+
+```
+zalo-crm-{app,backup,minio,redis,db,clamav}   6/6  Up 27-28 giây
+zalocrm.satarobo.vn                           HTTP 200, <title>Sata CRM
+trycloudflare cũ                              530 (đã chết)
+tiến trình cloudflared                        ĐÚNG MỘT, của SYSTEM
+```
+
+Toàn chuỗi tự dựng lại trong **~30 giây**, không thao tác nào của người.
+
+### 🔴 Nhưng dấu hiệu 3 TRƯỢT — và đây là phát hiện đắt nhất
+
+Khung `/zalo-crm` lên bình thường, 100 hội thoại còn nguyên, nhưng
+**`ALL — Toàn bộ · 0 online · 2 offline`** — hai nick Zalo mất kết nối.
+
+Log app:
+
+```
+[21:20:29.031] [ERROR] Failed to load accounts for reconnect:
+               the database system is not yet accepting connections
+```
+
+**Giờ khởi động thật của bốn container trong lượt đó:**
+
+```
+zalo-crm-minio  14:20:21.485
+zalo-crm-db     14:20:21.566
+zalo-crm-redis  14:20:21.732
+zalo-crm-app    14:20:21.798   <- sau db ĐÚNG 0,23 giây
+```
+
+Trong khi `zalo-crm-db` mãi **14:29:55** mới báo `healthy` — **9,5 phút sau**.
+
+#### ⛔ `depends_on: condition: service_healthy` BỊ BỎ QUA khi máy khởi động lại
+
+`docker-compose.yml` khai đầy đủ: app `depends_on` db/redis/minio với
+`condition: service_healthy`, và db có healthcheck `pg_isready`. Vậy mà bốn container khởi
+động **cách nhau 0,3 giây**.
+
+Lý do: **`depends_on` là khái niệm của `docker compose up`, KHÔNG phải của Docker engine.**
+Khi máy khởi động lại, engine dựng lại mọi container mang `restart: unless-stopped` và dựng
+**song song** — nó không đọc `depends_on`.
+
+⚠️ **Bài học 2:** bảo đảm thứ tự mà ai cũng tưởng mình có **không tồn tại ở đúng kịch bản
+cần nó nhất**. Và nó chỉ lộ ra khi khởi động lại máy THẬT — `docker compose up` không bao
+giờ tái hiện được.
+
+⚠️ **Bài học 3:** đếm container KHÔNG phát hiện được. `6/6 Up` vẫn đúng — chúng lên đủ, chỉ
+**lên sai thứ tự, im lặng**. Suýt nữa đã kết luận "mục 3 đạt" chỉ dựa vào con số đó.
+
+Nối tiếp: fork **chỉ thử reconnect MỘT LẦN, không thử lại** ⇒ nick nằm offline vĩnh viễn cho
+tới khi có người quét QR. Với vai trò máy chủ, đây là kiểu hỏng tệ nhất: Windows Update khởi
+động lại lúc 3h sáng thì CRM mất kết nối Zalo tới khi có người phát hiện.
+
+#### Phiên Zalo VẪN CÒN DÙNG ĐƯỢC — không phải hết hạn
+
+`docker restart zalo-crm-app` khi DB đã sẵn sàng:
+
+```
+21:32:30.702  Attempting reconnect for 2 Zalo account(s)
+21:32:31.518  [zalo:686ea147...] Listener connected
+21:32:31.560  [zalo:5505371a...] Listener connected
+21:32:36.844  friend-sync trigger=connect  live=222  upserted=222  errors=0
+21:32:37.032  friend-sync trigger=connect  live=234  upserted=234  errors=0
+```
+
+Cả hai nick nối lại trong ~1 giây, **không cần quét QR**. Tức vấn đề thuần tuý là **thứ tự
+khởi động**, không phải phiên hỏng.
+
+## 3.5 Bọc ngoài đang chạy — tác vụ nối lại nick lúc đăng nhập
+
+`E:\zalocrm\ops\noi-lai-nick-sau-khoi-dong.ps1`, đăng ký thành tác vụ
+**"ZaloCRM - noi lai nick sau khi khoi dong"** (`State: Ready`, kích hoạt lúc đăng nhập,
+trễ 1 phút, chạy dưới `DESKTOP-2R840DI\ADMIN`).
+
+Bốn việc nó làm: đợi Docker engine → đợi `zalo-crm-db` báo `healthy` (trần 20 phút, vì đã đo
+được 9,5 phút thật) → **chỉ restart khi CÓ bằng chứng** chuỗi `Failed to load accounts for
+reconnect` xuất hiện → sau restart **kiểm lại bằng hành vi** (đếm `Attempting reconnect` và
+`Listener connected`), ghi log ra `E:\zalocrm\ops\logs\khoi-dong.log`.
+
+Chạy thử thật:
+
+```
+DB healthy sau 10 giay.
+PHAT HIEN duong reconnect da that bai luc khoi dong -> restart zalo-crm-app.
+Sau restart: 'Attempting reconnect'=1  'Listener connected'=2
+=== KET THUC: nick da noi lai ===   (ma thoat 0)
+```
+
+⚠️ **Cố ý KHÔNG restart mù quáng mỗi lần khởi động.** Restart vô điều kiện không sai, nhưng
+nó **giấu mất** thông tin "lần này có hỏng không" — mà đó đúng là thứ cần biết để một ngày
+nào đó bỏ được cái bọc ngoài này đi.
+
+⚠️ **Hai bẫy khi sửa kịch bản:**
+· Đừng viết `2>&1` trực tiếp trên lệnh native trong PowerShell 5.1 — nó bọc stderr thành
+  `NativeCommandError`, gặp `$ErrorActionPreference = "Stop"` là dừng kịch bản giữa chừng
+  (đã dính ngay lần chạy thử đầu). Đẩy phép chuyển hướng ra `cmd /c "... 2>&1"`.
+· Giữ kịch bản **không dấu** — PowerShell 5.1 đọc `.ps1` thiếu BOM theo ANSI, chữ có dấu
+  làm vỡ tệp.
+
+## 🔴 NỢ-17 — vá GỐC: fork phải THỬ LẠI khi nối nick
+
+Tác vụ ở 3.5 là **bọc ngoài**, không phải bản vá.
+
+Chỗ hỏng thật nằm ở fork: `loadAccountsForReconnect` chạy **một lần duy nhất** lúc khởi
+động, thất bại là thôi. Kể cả khi thứ tự khởi động đúng, một cú nghẽn DB thoáng qua cũng đủ
+làm mất cả hai nick mà không có cảnh báo nào.
+
+**Cần làm:** thêm vòng thử lại có lùi dần (vài lần, giãn dần tới khoảng 2 phút) quanh đường
+nạp tài khoản, ghi log rõ từng lần thử. Vá xong thì **gỡ tác vụ 3.5** — và cách biết đã gỡ
+được là log `khoi-dong.log` liên tục báo *"KHONG can restart"*.
+
+## ⚠️ Việc cần đo riêng — DB mất 9,5 phút mới `healthy`
+
+Đo được ở lần khởi động 21:19. Chưa rõ là phục hồi sau lần tắt máy đột ngột, hay healthcheck
+đang đo sai. Nếu **mỗi** lần khởi động đều mất 9 phút thì đó là vấn đề độc lập, cần xử riêng
+— và nó cũng là lý do trần chờ trong kịch bản 3.5 đặt tới 20 phút.
