@@ -109,20 +109,15 @@ Kiểm sau khi đổi: `test` vẫn đủ **6** biến `ZALOCRM_*`, **production
 
 Đã deploy lại môi trường `test` để env mới có hiệu lực.
 
-## 🔴 CÒN LẠI — việc của chủ dự án
+## Còn lại
 
-### Một ô cấu hình trên `test` (30 giây)
+### ✅ Ô cấu hình trên `test` — ĐÃ XONG 22/09/2026
 
 `test.satarobo.vn/admin/cau-hinh-van-hanh` → tab **Nâng cao** → ô
-**"Ánh xạ cơ sở sang mã tổ chức ZaloCRM"** → đặt:
+**"Ánh xạ cơ sở sang mã tổ chức ZaloCRM"** → `{"CS1": "test-cs1"}`.
 
-```json
-{"CS1": "test-cs1"}
-```
-
-Ô này nằm **trong DB của từng môi trường**, không phải biến env, nên tôi không đổi hộ được.
-Chưa đổi thì `test` gọi vào org `cs1` — cái tên đã không còn tồn tại — và **fail-closed**
-(webhook 404, client `CHUA_CAU_HINH`). Vô hại vì `test-cs1` vốn rỗng, nhưng phải đóng lại.
+Ô này nằm **trong DB của từng môi trường**, không phải biến env — nên mỗi môi trường phải
+đặt riêng, và không ai đặt hộ môi trường khác được. Xác minh bằng hành vi ở mục dưới.
 
 ### Ngày bật cờ trên prod — soạn sẵn, CHƯA khai
 
@@ -142,6 +137,23 @@ select s.setting_key, s.value_plain
   from app_settings s join organizations o on o.id = s.org_id
  where o.code = 'prod-cs1' and s.setting_key in ('public_api_key','webhook_secret');
 ```
+
+## ✅ Đã xác minh bằng HÀNH VI — 22/09/2026
+
+Sau khi chủ dự án đặt `{"CS1": "test-cs1"}` trên `test`, gọi thật ba đường webhook:
+
+| gọi trên `test.satarobo.vn` | kết quả | nghĩa |
+|---|---|---|
+| `…/zalocrm/test-cs1` | **401** `"Chữ ký không hợp lệ"` | org **đã khai** — đi tới được bước kiểm chữ ký |
+| `…/zalocrm/cs1` | **404** `"Not found"` | tên org cũ **không còn tồn tại** |
+| `…/zalocrm/prod-cs1` | **404** `"Not found"` | **`test` KHÔNG với tới được org của prod** |
+
+Dòng thứ ba là bằng chứng quan trọng nhất: `test` **bị chặn khỏi** org prod, chứ không chỉ
+"đang trỏ đi chỗ khác". Một cấu hình trỏ sai vẫn có thể vô tình gọi đúng org cũ; 404 ở đây
+nói rằng đường đó đã đóng.
+
+⚠️ Đây là phép đo **một chiều** (Sata → fork, đường webhook). Chiều còn lại — fork ghép
+người theo vé SSO của từng môi trường — vẫn chưa đo được, xem ngay dưới.
 
 ## Phép kiểm cuối — CHƯA CHẠY ĐƯỢC
 
