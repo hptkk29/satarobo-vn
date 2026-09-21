@@ -31,6 +31,7 @@ import { huyDotChoCon, taoDotChoCon } from "@/lib/finance/ghi-tien-don";
 import { taoPhieuGop, docPhieuGopDangMo } from "@/lib/finance/phieu-gop";
 import { recomputeRequestStatuses } from "@/lib/payments/payment-request";
 import { createRefundRequest, listRefundRequests } from "@/lib/finance/refund";
+import { nghiHocHan } from "@/lib/students/withdraw";
 
 if (!RUN_DB_TESTS) console.warn(`[DHC] BỎ QUA bộ chạm DB: ${LY_DO_BO_QUA}`);
 
@@ -44,6 +45,10 @@ const HS_A = `${T}hs-a`;
 const HS_B = `${T}hs-b`;
 const GD_A = `${T}gd-a`;
 const GD_B = `${T}gd-b`;
+/** Lớp + ghi danh THỨ HAI của bé A — để kiểm "nghỉ học hẳn" không bị chặn cả thao tác. */
+const KHOA2 = `${T}khoa2`;
+const LOP2 = `${T}lop2`;
+const GD_A2 = `${T}gd-a2`;
 const DON = `${T}don`;
 const A = `${T}item-a`;
 const B = `${T}item-b`;
@@ -67,6 +72,18 @@ const NGAY_BUOI = (i: number) => new Date(Date.UTC(2699, 0, 5 + i * 7, 12, 30, 0
 const BUOI = (i: number) => `${T}buoi-${i}`;
 
 async function don() {
+  // ⚠️ DỌN CẢ `AuditLog`. Bỏ bảng này ra khỏi phép dọn là một lỗ CÁCH LY thật, và nó đã
+  // bị bắt bằng phép cấy: gỡ `writeAudit` của lượt bỏ qua hoàn tiền vẫn cho **0 ca đỏ**,
+  // vì dòng nhật ký của lượt chạy TRƯỚC còn nằm đó và ca `[DHC-09c]` tìm thấy nó. Luật 18:
+  // mỗi ca phải xanh khi chạy một mình — và ở đây "một mình" gồm cả "trên DB sạch".
+  await db.auditLog.deleteMany({
+    where: {
+      OR: [
+        { actorId: ACTOR.id },
+        { entityId: { in: [DON, A, B, GD_A, GD_B, GD_A2] } },
+      ],
+    },
+  });
   await db.refundRequest.deleteMany({ where: { orderItem: { orderId: DON } } });
   await db.refundRequest.deleteMany({ where: { enrollmentId: { in: [GD_A, GD_B] } } });
   await db.paymentAllocation.deleteMany({ where: { paymentRequest: { orderId: DON } } });
@@ -78,11 +95,15 @@ async function don() {
   await db.paymentRequest.deleteMany({ where: { orderId: DON } });
   await db.orderItem.deleteMany({ where: { orderId: DON } });
   await db.order.deleteMany({ where: { id: DON } });
-  await db.enrollmentAuditLog.deleteMany({ where: { enrollmentId: { in: [GD_A, GD_B] } } });
-  await db.enrollment.deleteMany({ where: { id: { in: [GD_A, GD_B] } } });
-  await db.classSession.deleteMany({ where: { classId: LOP } });
-  await db.class.deleteMany({ where: { id: LOP } });
-  await db.course.deleteMany({ where: { id: KHOA } });
+  await db.refundRequest.deleteMany({ where: { enrollmentId: GD_A2 } });
+  await db.enrollmentAuditLog.deleteMany({
+    where: { enrollmentId: { in: [GD_A, GD_B, GD_A2] } },
+  });
+  await db.payment.deleteMany({ where: { enrollmentId: GD_A2 } });
+  await db.enrollment.deleteMany({ where: { id: { in: [GD_A, GD_B, GD_A2] } } });
+  await db.classSession.deleteMany({ where: { classId: { in: [LOP, LOP2] } } });
+  await db.class.deleteMany({ where: { id: { in: [LOP, LOP2] } } });
+  await db.course.deleteMany({ where: { id: { in: [KHOA, KHOA2] } } });
   await db.student.deleteMany({ where: { id: { in: [HS_A, HS_B] } } });
   await db.center.deleteMany({ where: { id: CENTER } });
 }
@@ -534,7 +555,7 @@ describe.skipIf(!RUN_DB_TESTS)("[DHC] dừng học một con — DB thật", () 
     expect(cua[0]!.orderCode).toBe("ORD-269905-000001");
   });
 
-  it("[DHC-09] CHỐNG HOÀN KÉP: dừng học xong thì 'Nghỉ học hẳn' KHÔNG sinh yêu cầu thứ hai", async () => {
+  it("[DHC-09] LƯỚI CUỐI: gọi thẳng `createRefundRequest` cho ghi danh đã quyết toán ⇒ NÉM", async () => {
     const r = await dungSauBuoi20({
       phanDu: [{ kieu: "CHUYEN", orderItemId: B, soTien: DU_SAU_BUOI_20 }],
     });
@@ -551,6 +572,140 @@ describe.skipIf(!RUN_DB_TESTS)("[DHC] dừng học một con — DB thật", () 
     ).rejects.toThrow(/quyết toán/i);
 
     expect(await db.refundRequest.count({ where: { enrollmentId: GD_A } })).toBe(0);
+  });
+
+  it("[DHC-09b] 'NGHỈ HỌC HẲN' vẫn CHẠY: rời cả hai lớp, chỉ bỏ qua phần TIỀN của ghi danh đã quyết toán", async () => {
+    // ⚠️ Ca này ghim bản SỬA của chủ dự án (21/09, sau khi duyệt PR #322): bản đầu để
+    // `createRefundRequest` ném mà không ai bắt ⇒ một học viên có MỘT dòng đơn đã STOPPED
+    // thì **không bao giờ** cho nghỉ hẳn được nữa, kể cả khi em còn ghi danh khoá khác chưa
+    // ai đụng tới. Cổng đúng chỗ, sai TẦM.
+    //
+    // Bé A có ghi danh THỨ HAI ở một khoá khác, đã đóng đủ tiền và sổ buổi ĐÃ CHỐT (để
+    // `createRefundRequest` thật sự sinh được đề xuất — nếu không, ca sẽ xanh vì lý do sai:
+    // "0 đề xuất" do lưới sổ-buổi chặn chứ không do đường tiền chạy đúng).
+    await db.course.create({
+      data: { id: KHOA2, name: "Sata 4 fixture", slug: `${T}sata-4`, totalSessions: 10 },
+    });
+    await db.class.create({ data: { id: LOP2, name: "Lớp fixture DHC 2", courseId: KHOA2 } });
+    await db.classSession.createMany({
+      data: Array.from({ length: 10 }, (_, i) => ({
+        id: `${T}buoi2-${i + 1}`,
+        classId: LOP2,
+        date: new Date(Date.UTC(2699, 0, 6 + i * 7, 12, 30, 0)),
+        status: "COMPLETED" as const,
+      })),
+    });
+    await db.enrollment.create({
+      data: {
+        id: GD_A2,
+        studentId: HS_A,
+        classId: LOP2,
+        courseId: KHOA2,
+        status: "ACTIVE",
+        finalPrice: 5_000_000,
+      },
+    });
+    await db.payment.create({
+      data: {
+        id: `${T}pay-a2`,
+        orderId: DON,
+        enrollmentId: GD_A2,
+        amount: 5_000_000,
+        method: "BANK_TRANSFER",
+        accountantStatus: "CONFIRMED",
+        paidDate: new Date("2699-01-06T03:00:00Z"),
+        centerId: CENTER,
+      },
+    });
+
+    const r = await dungSauBuoi20({
+      phanDu: [{ kieu: "CHUYEN", orderItemId: B, soTien: DU_SAU_BUOI_20 }],
+    });
+    expect(r.ok, `dừng học hỏng: ${!r.ok ? r.error : ""}`).toBe(true);
+
+    const kq = await db.$transaction(async (tx) =>
+      nghiHocHan({
+        tx,
+        studentId: HS_A,
+        actorId: ACTOR.id,
+        actorName: ACTOR.name,
+        reason: "Học viên nghỉ học: chuyển trường",
+        orgUnitId: CENTER,
+        // Mốc đóng băng: sau buổi cuối của CẢ HAI lớp (luật 19).
+        now: new Date(Date.UTC(2699, 2, 20, 0, 0, 0)),
+      }),
+    );
+
+    // 1 · THAO TÁC CHẠY ĐƯỢC — đây là toàn bộ điểm của bản sửa.
+    // Ghi danh 1 đã WITHDREW từ lượt dừng học nên không còn "sống"; ghi danh 2 rời lớp ở
+    // lượt này. Cả hai đều KHÔNG còn nằm trong lớp — đó mới là điều cần khẳng định.
+    expect(kq.daGo.map((x) => x.id)).toEqual([GD_A2]);
+    for (const id of [GD_A, GD_A2]) {
+      const e = await db.enrollment.findUnique({ where: { id }, select: { status: true } });
+      expect(e?.status, `ghi danh ${id} phải đã rời lớp`).toBe("WITHDREW");
+    }
+
+    // 2 · Ghi danh CÒN LẠI vẫn tính hoàn như cũ.
+    const cuaA2 = await db.refundRequest.findMany({ where: { enrollmentId: GD_A2 } });
+    expect(cuaA2, "ghi danh chưa quyết toán vẫn phải có đề xuất hoàn").toHaveLength(1);
+    expect(cuaA2[0]!.status).toBe("PENDING");
+
+    // 3 · Ghi danh ĐÃ quyết toán: KHÔNG có đề xuất thứ hai.
+    expect(await db.refundRequest.count({ where: { enrollmentId: GD_A } })).toBe(0);
+
+    // ⚠️ Và `boQuaHoanTien` ở lượt này RỖNG — đó không phải thiếu sót, đó là phép đo:
+    // lượt dừng học đã đẩy ghi danh sang `WITHDREW`, nên nó KHÔNG còn nằm trong
+    // `REMOVABLE_ENROLLMENT_STATUSES` và **không bao giờ vào tới vòng lặp tiền**.
+    //
+    // Nghĩa là con "throw chặn cả thao tác" của bản đầu hiếm khi cắn qua đúng đường này —
+    // nhưng "hiếm" không phải "không", và ca `[DHC-09c]` ngay dưới dựng đúng lúc nó cắn.
+    expect(kq.boQuaHoanTien).toHaveLength(0);
+  });
+
+  it("[DHC-09c] ghi danh đã quyết toán mà bị KÍCH HOẠT LẠI ⇒ bỏ qua phần tiền, KHÔNG im lặng", async () => {
+    // Đây là lúc đường bỏ qua thật sự cắn: admin mở `/admin/enrollments/<id>/edit` và đưa
+    // ghi danh về `ACTIVE` sau khi nó đã được quyết toán. Ghi danh quay lại tập "còn sống"
+    // ⇒ lượt "Nghỉ học hẳn" sau đó sẽ đi qua vòng lặp tiền và gặp một dòng đơn STOPPED.
+    //
+    // Bản ĐẦU của PHIÊN D ném ở đây và cuốn ngược cả transaction ⇒ **không cho bé nghỉ**.
+    // Chủ dự án chốt 21/09: chặn hoàn KÉP, không chặn cho bé nghỉ.
+    const r = await dungSauBuoi20({
+      phanDu: [{ kieu: "CHUYEN", orderItemId: B, soTien: DU_SAU_BUOI_20 }],
+    });
+    expect(r.ok).toBe(true);
+    await db.enrollment.update({ where: { id: GD_A }, data: { status: "ACTIVE" } });
+
+    const kq = await db.$transaction(async (tx) =>
+      nghiHocHan({
+        tx,
+        studentId: HS_A,
+        actorId: ACTOR.id,
+        actorName: ACTOR.name,
+        reason: "Học viên nghỉ học: chuyển trường",
+        orgUnitId: CENTER,
+        now: new Date(Date.UTC(2699, 2, 20, 0, 0, 0)),
+      }),
+    );
+
+    // Thao tác CHẠY ĐƯỢC và bé rời lớp.
+    expect(kq.daGo.map((x) => x.id)).toEqual([GD_A]);
+    expect(
+      (await db.enrollment.findUnique({ where: { id: GD_A }, select: { status: true } }))?.status,
+    ).toBe("WITHDREW");
+
+    // Không đề xuất hoàn thứ hai — và nói ra vì sao.
+    expect(await db.refundRequest.count({ where: { enrollmentId: GD_A } })).toBe(0);
+    expect(kq.boQuaHoanTien).toHaveLength(1);
+    expect(kq.boQuaHoanTien[0]!.enrollmentId).toBe(GD_A);
+    expect(kq.boQuaHoanTien[0]!.lyDo).toContain("Đã quyết toán khi dừng học");
+    expect(kq.boQuaHoanTien[0]!.orderCode).toBe("ORD-269905-000001");
+
+    // Vết trong nhật ký — "không có đề xuất hoàn" phải trả lời được "vì sao", kẻo ba tháng
+    // sau không ai phân biệt nó với một lượt bỏ sót.
+    const vet = await db.auditLog.findFirst({
+      where: { entityType: "Enrollment", entityId: GD_A, action: "REFUND_REQUEST_SKIPPED" },
+    });
+    expect(vet, "phải ghi AuditLog cho lượt bỏ qua").not.toBeNull();
   });
 
   it("[DHC-10] GHI DANH rời lớp, ngày hiệu lực = NGÀY BUỔI CUỐI (không phải lúc bấm nút)", async () => {

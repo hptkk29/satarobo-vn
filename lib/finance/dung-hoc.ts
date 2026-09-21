@@ -20,7 +20,8 @@
 //     ⚠️ Hệ quả PHẢI biết: đơn giá ở đây **có thể khác** đơn giá mà `/admin/hoan-tien` in
 //     ra cho cùng một bé (`computeRefund` chia cho số buổi đã xếp). Hai con số, hai câu
 //     hỏi — nhưng nếu ai đó gộp chúng lại sau này thì phải gộp có chủ đích, không phải vì
-//     tưởng chúng vốn là một.
+//     tưởng chúng vốn là một. Ticket + cách đo TRƯỚC/SAU:
+//     `docs/no-thong-nhat-don-gia-hoan-tien.md` (chủ dự án chốt 21/09: giữ tách).
 //
 // 2 · **Khoá chưa khai `totalSessions` ⇒ TỪ CHỐI dừng học**, không đoán. Cùng lý lẽ với
 //     `lib/finance/lop-chua-chot-buoi.ts`: chia cho một con số không ai khai là chi tiền

@@ -15,12 +15,51 @@ import "server-only";
 //
 // Nay chỉ còn MỘT nguồn sự thật: `REMOVABLE_ENROLLMENT_STATUSES`, dùng chung với
 // `deleteStudent`. Có test hồi quy ở `tests/e2e/r7/withdraw-student-legacy-active.spec.ts`.
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// GHI DANH ĐÃ QUYẾT TOÁN QUA "DỪNG HỌC" — BỎ QUA PHẦN TIỀN, KHÔNG CHẶN CẢ THAO TÁC
+//
+// Chủ dự án chốt 21/09/2026 (sửa lại bản đầu của PHIÊN D):
+//
+//   *"'Nghỉ học hẳn' KHÔNG được throw cả thao tác. Mục đích là chặn hoàn tiền KÉP, không
+//   chặn cho bé nghỉ (bé có thể còn ghi danh khoá khác)."*
+//
+// Bản đầu để `createRefundRequest` ném và không ai bắt ⇒ một học viên có MỘT dòng đơn đã
+// STOPPED thì **không bao giờ** cho nghỉ hẳn được nữa, kể cả khi em còn ba ghi danh khác
+// chưa ai đụng tới. Cổng đúng chỗ, sai tầm: nó chặn một việc KHÁC với việc nó muốn chặn.
+//
+// Nay:
+//   · phần KHÔNG-TIỀN chạy cho **mọi** ghi danh (gỡ lớp, đổi trạng thái, sync nhóm chat);
+//   · phần TIỀN **bỏ qua** đúng những ghi danh đã quyết toán, và NÓI RA (trả về danh sách
+//     + ghi `AuditLog`) thay vì im lặng;
+//   · `createRefundRequest` **vẫn ném** — nó là lưới CUỐI cho đường nào quên hỏi.
+//
+// ⚠️ Điều kiện "đã quyết toán" hỏi ở MỘT chỗ: `dongDonDaQuyetToan` (`lib/finance/refund.ts`).
+// Chép tay `status: "STOPPED"` về đây là hai cổng cho cùng một luật, và hai cổng thì có
+// ngày lệch — đúng lớp lỗi mà chính tệp này ra đời để chấm dứt.
 import type { Prisma } from "@prisma/client";
-import { createRefundRequest } from "@/lib/finance/refund";
+import { writeAudit } from "@/lib/audit/audit-log";
+import { createRefundRequest, dongDonDaQuyetToan } from "@/lib/finance/refund";
 import {
   removeStudentFromClasses,
   type RemovedEnrollment,
 } from "@/lib/students/remove-from-classes";
+
+/** Một ghi danh đã rời lớp nhưng KHÔNG sinh đề xuất hoàn — kèm lý do người đọc hiểu được. */
+export type GhiDanhBoQuaHoanTien = {
+  enrollmentId: string;
+  classId: string;
+  orderItemId: string;
+  orderCode: string | null;
+  /** Câu hiển thị thẳng lên màn, không phải mã lỗi. */
+  lyDo: string;
+};
+
+export type KetQuaNghiHocHan = {
+  daGo: RemovedEnrollment[];
+  /** Rỗng là bình thường. Có dòng ⇒ màn hình PHẢI in ra, đừng nuốt. */
+  boQuaHoanTien: GhiDanhBoQuaHoanTien[];
+};
 
 /**
  * Gọi BÊN TRONG transaction đã đổi `Student.status = INACTIVE` — gỡ lớp, hoàn tiền và
@@ -49,6 +88,26 @@ export async function withdrawStudentFromAllClasses(params: {
    */
   now?: Date;
 }): Promise<RemovedEnrollment[]> {
+  const kq = await nghiHocHan(params);
+  return kq.daGo;
+}
+
+/**
+ * Bản ĐẦY ĐỦ — trả cả danh sách ghi danh bị bỏ qua phần tiền.
+ *
+ * ⚠️ `withdrawStudentFromAllClasses` ở trên giữ nguyên chữ ký cũ (trả mảng ghi danh) để
+ * ba chỗ gọi hiện có + hai spec R7 không phải đổi một dòng nào. Màn nào muốn NÓI cho người
+ * dùng biết vì sao một ghi danh không có đề xuất hoàn thì gọi hàm này.
+ */
+export async function nghiHocHan(params: {
+  tx: Prisma.TransactionClient;
+  studentId: string;
+  actorId: string | null;
+  actorName: string;
+  reason: string;
+  orgUnitId?: string | null;
+  now?: Date;
+}): Promise<KetQuaNghiHocHan> {
   const removed = await removeStudentFromClasses({
     tx: params.tx,
     studentId: params.studentId,
@@ -58,7 +117,41 @@ export async function withdrawStudentFromAllClasses(params: {
     orgUnitId: params.orgUnitId ?? null,
   });
 
+  const boQuaHoanTien: GhiDanhBoQuaHoanTien[] = [];
+
   for (const enr of removed) {
+    // Hỏi TRƯỚC, bỏ qua phần tiền của riêng ghi danh này — không ném, không dừng vòng lặp.
+    const daQuyetToan = await dongDonDaQuyetToan(params.tx, enr.id);
+    if (daQuyetToan) {
+      const lyDo = `Đã quyết toán khi dừng học trên đơn ${daQuyetToan.orderCode ?? daQuyetToan.id} — không hoàn lại`;
+      boQuaHoanTien.push({
+        enrollmentId: enr.id,
+        classId: enr.classId,
+        orderItemId: daQuyetToan.id,
+        orderCode: daQuyetToan.orderCode,
+        lyDo,
+      });
+      // Ghi vết: "không có đề xuất hoàn" phải có câu trả lời cho "vì sao", kẻo ba tháng sau
+      // không ai phân biệt được nó với một lượt bỏ sót.
+      await writeAudit({
+        tx: params.tx,
+        actor: { id: params.actorId, name: params.actorName },
+        module: "finance",
+        entityType: "Enrollment",
+        entityId: enr.id,
+        action: "REFUND_REQUEST_SKIPPED",
+        newValues: {
+          boQuaDeXuatHoanTien: true,
+          orderItemId: daQuyetToan.id,
+          orderCode: daQuyetToan.orderCode,
+          lyDo,
+        },
+        reason: lyDo,
+        orgUnitId: params.orgUnitId ?? null,
+      });
+      continue;
+    }
+
     // W3-1 / LMS-9 — HS nghỉ học → yêu cầu hoàn tiền (PENDING) cho ghi danh còn sống,
     // trong cùng transaction. Idempotent + chỉ tạo khi đã có khoản thu xác nhận.
     await createRefundRequest({
@@ -72,5 +165,5 @@ export async function withdrawStudentFromAllClasses(params: {
     });
   }
 
-  return removed;
+  return { daGo: removed, boQuaHoanTien };
 }

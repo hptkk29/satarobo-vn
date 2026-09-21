@@ -49,6 +49,43 @@ export class RefundError extends Error {
 }
 
 /**
+ * Ghi danh này đã được QUYẾT TOÁN qua "Dừng học" (PHIÊN D) chưa.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * NGUỒN SỰ THẬT DUY NHẤT cho câu hỏi "có được sinh đề xuất hoàn cho ghi danh này không".
+ *
+ * Dùng ở HAI chỗ, và đó là chủ đích — chép tay điều kiện ở chỗ thứ hai là hai cổng sẵn
+ * sàng lệch nhau:
+ *   · `withdrawStudentFromAllClasses` hỏi TRƯỚC để **bỏ qua** phần tiền của riêng ghi
+ *     danh đó (chủ dự án chốt 21/09: *"không chặn cho bé nghỉ"*);
+ *   · `createRefundRequest` hỏi lại làm **lưới cuối** và NÉM — cho mọi đường quên hỏi.
+ *
+ * Vì sao phải chặn: PHIÊN D quyết toán theo số buổi ĐÃ DÙNG (đếm theo NGÀY, người xác
+ * nhận) rồi phân HẾT phần dư. `createRefundRequest` thì tính LẠI bằng số buổi `COMPLETED`
+ * — một con số KHÁC cho cùng một khoản tiền. Hai đề xuất chồng nhau trên một ghi danh là
+ * đường ngắn nhất tới chi tiền hai lần.
+ */
+export async function dongDonDaQuyetToan(
+  client: DbClient,
+  enrollmentId: string,
+): Promise<{ id: string; orderCode: string | null } | null> {
+  const dong = await client.orderItem.findFirst({
+    where: { enrollmentId, status: "STOPPED" },
+    select: { id: true, order: { select: { code: true } } },
+  });
+  return dong ? { id: dong.id, orderCode: dong.order?.code ?? null } : null;
+}
+
+/** Câu lỗi dùng chung cho lưới cuối — một chỗ, để nó không nói hai kiểu. */
+export function loiDaQuyetToan(dong: { id: string; orderCode: string | null }): RefundError {
+  return new RefundError(
+    "ALREADY_SETTLED",
+    `Ghi danh này đã được quyết toán qua "Dừng học" trên đơn ${dong.orderCode ?? dong.id} — ` +
+      `không tạo đề xuất hoàn thứ hai. Phần dư (nếu còn) xử ở màn đơn hàng.`,
+  );
+}
+
+/**
  * Tạo yêu cầu hoàn tiền (PENDING) cho 1 ghi danh. Snapshot:
  *   - paidConfirmed = Σ amount(Payment accountantStatus=CONFIRMED, chưa xóa) của ghi danh.
  *   - sessionsTotal  = số ClassSession của lớp (loại CANCELLED).
@@ -114,37 +151,12 @@ export async function createRefundRequest(input: {
   });
   if (!enrollment) return null;
 
-  // ── CỔNG CHỐNG HOÀN TIỀN HAI LẦN  [PHIÊN D · 21/09/2026] ───────────────────
+  // ── LƯỚI CUỐI CHỐNG HOÀN TIỀN HAI LẦN  [PHIÊN D · 21/09/2026] ──────────────
   //
-  // Chủ dự án chốt: *"`createRefundRequest` (và đường 'Nghỉ học hẳn') phải THROW nếu
-  // `OrderItem` của ghi danh đã STOPPED qua PHIÊN D — quyết toán đã làm rồi."*
-  //
-  // Vì sao không thể để chạy tiếp: PHIÊN D quyết toán theo số buổi ĐÃ DÙNG (đếm theo
-  // NGÀY, người xác nhận) rồi phân HẾT phần dư — có thể đã chuyển sang bé khác, đã sinh
-  // một `RefundRequest` đúng số. `createRefundRequest` thì tính LẠI bằng số buổi
-  // `COMPLETED`, tức một con số KHÁC, cho cùng một khoản tiền. Hai đề xuất hoàn chồng
-  // nhau trên một ghi danh là đường ngắn nhất tới chi tiền hai lần.
-  //
-  // ⚠️ THROW, không `return null`. `return null` ở đây sẽ im lặng đúng vào lúc cần ồn ào
-  // nhất — và mọi đường gọi hiện có đều đã quen bỏ qua `null` (nó nghĩa là "không cần
-  // hoàn"). Hai tình huống khác hẳn nhau thì không được dùng chung một tín hiệu.
-  //
-  // ⚠️ HỆ QUẢ PHẢI BIẾT: học viên có dòng đơn đã STOPPED thì nút "Nghỉ học hẳn" sẽ BÁO
-  // LỖI và không chạy. Đó là hệ quả trực tiếp của chốt "phải throw", không phải tác dụng
-  // phụ vô tình. Muốn nút ấy vẫn chạy mà chỉ BỎ QUA phần hoàn thì đổi chỗ này thành một
-  // tín hiệu riêng và bắt ở `withdrawStudentFromAllClasses` — một dòng.
-  const dongDaQuyetToan = await client.orderItem.findFirst({
-    where: { enrollmentId, status: "STOPPED" },
-    select: { id: true, order: { select: { code: true } } },
-  });
-  if (dongDaQuyetToan) {
-    throw new RefundError(
-      "ALREADY_SETTLED",
-      `Ghi danh này đã được quyết toán qua "Dừng học" trên đơn ` +
-        `${dongDaQuyetToan.order?.code ?? dongDaQuyetToan.id} — không tạo đề xuất hoàn thứ hai. ` +
-        `Phần dư (nếu còn) xử ở màn đơn hàng.`,
-    );
-  }
+  // Đường gọi ĐÚNG phải hỏi `dongDonDaQuyetToan` TRƯỚC rồi bỏ qua phần tiền (xem
+  // `withdrawStudentFromAllClasses`). Cổng ở đây là lưới CUỐI cho đường nào quên hỏi.
+  const dongDaQuyetToan = await dongDonDaQuyetToan(client, enrollmentId);
+  if (dongDaQuyetToan) throw loiDaQuyetToan(dongDaQuyetToan);
 
   // Idempotent: 1 PENDING / (enrollment, trigger).
   const existing = await client.refundRequest.findFirst({
