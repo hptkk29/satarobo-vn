@@ -222,6 +222,7 @@ export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
   // P1 · US-05 AC4 — màn cây tổ chức. Thiếu segment ở đây là proxy 308 link
   // /to-chuc về public rồi 404, dù page tồn tại (đúng tiền lệ /user-groups ở US-03).
   "to-chuc",
+  "tra-cuu",
   "trial-classes",
   "trials",
   // US-03 (Nền Hệ thống P0) — nhóm người dùng; thiếu segment ở đây thì link

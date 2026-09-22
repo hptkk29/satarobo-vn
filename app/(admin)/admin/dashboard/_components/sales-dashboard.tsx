@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { safeCache } from "@/lib/cache/safe-cache";
-import { Users, CheckSquare, FlaskConical, TrendingUp, GraduationCap } from "lucide-react";
+import { Users, CheckSquare, FlaskConical, TrendingUp, GraduationCap, AlertTriangle, CalendarClock, PhoneOff } from "lucide-react";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import {
@@ -14,6 +14,9 @@ import { groupByWeek, type LeadReportRecord } from "@/lib/reports/lead";
 import { BarChart } from "@/components/charts/bar-chart";
 import { CACHE_TAGS } from "@/lib/cache/tags";
 import { formatDateVN } from "@/lib/format/date";
+import { getSaleBoard, type ViecItem } from "@/lib/crm/sale-board";
+import { canViewLeadPii } from "@/lib/auth/check-permission";
+import { maskLeadPiiFields, maskPersonName } from "@/lib/lead/pii";
 
 // REQ-04: số liệu tổng hợp dashboard sale. Data THEO USER (assignedToId=userId) → cache
 // key = userId. Output PRIMITIVE (countByStatus là object, weeklyBars {string,number},
@@ -74,6 +77,26 @@ export async function SalesDashboard({ userId, name, embedded = false }: { userI
   // Live (KHÔNG cache — có Date so sánh/hiển thị): việc cần làm (dueAt) + học thử sắp tới.
   const actor = await resolveActor(userId);
   const sdb = scopedDb(actor);
+
+  // ① Hàng đợi SLA — chuyển từ "Bảng việc hôm nay" của site Sale về đây (22/09/2026).
+  // KHÔNG cache: `getSaleBoard` so mốc thời gian (quá hạn / đến hạn hôm nay) nên một
+  // bản cache 60 giây là một bảng việc nói sai giờ.
+  const canViewPii = await canViewLeadPii();
+  const board = await getSaleBoard(actor, userId);
+  // S-1 — CẢ HAI khối đều in tên phụ huynh. Che ở SERVER, cùng một cổng: nửa che
+  // nửa không trên cùng một màn là kiểu rò khó thấy nhất.
+  const cheViec = (ds: ViecItem[]): ViecItem[] =>
+    ds.map((v) => ({ ...v, tenKhach: canViewPii ? v.tenKhach : maskPersonName(v.tenKhach) }));
+  const viecQuaHan = cheViec(board.viec.quaHan);
+  const viecHomNay = cheViec(board.viec.homNay);
+  const canCham = board.canCham.map((c) => {
+    const m = maskLeadPiiFields({ phone: c.phone }, canViewPii);
+    return {
+      ...c,
+      tenKhach: canViewPii ? c.tenKhach : maskPersonName(c.tenKhach),
+      phone: m.phone ?? null,
+    };
+  });
   const visibleLeadCenters = getModelVisibleCenterIds("Lead", actor);
   const leadTaskScope =
     visibleLeadCenters === "ALL" ? {} : { lead: { centerId: { in: visibleLeadCenters } } };
@@ -189,6 +212,99 @@ export async function SalesDashboard({ userId, name, embedded = false }: { userI
         </p>
       </section>
 
+      {/* ═══ Việc hôm nay (hàng đợi SLA) ════════════════════════════════════
+          Chuyển từ "Bảng việc hôm nay" của site Sale về đây — chủ dự án chốt
+          22/09/2026 gỡ site Sale, phần nào cần thì dựng ở admin.
+
+          Đặt NGAY DƯỚI bốn ô "Việc của tôi" có chủ đích: bốn ô kia là CON SỐ,
+          khối này là DANH SÁCH TÊN đứng sau con số đó. Tách hai thứ ra hai màn
+          là bắt người ta bấm thêm một lần để biết "quá hạn 3" là ba ai.
+
+          Đường dẫn trỏ `/leads/<id>` — màn lead của admin, KHÔNG phải
+          `/sale/khach-cua-toi/<id>` như bản cũ. */}
+      <section className="space-y-4">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+          Việc hôm nay
+        </h2>
+
+        {viecQuaHan.length > 0 && (
+          <div className="rounded-xl border border-amber-500/40 bg-card p-5">
+            <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold text-amber-600 dark:text-amber-500">
+              <AlertTriangle className="h-4 w-4" /> Quá hạn ({viecQuaHan.length})
+            </h3>
+            <ul>
+              {viecQuaHan.map((v) => (
+                <DongViec key={v.id} v={v} />
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div className="rounded-xl border border-border bg-card p-5">
+          <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold">
+            <CalendarClock className="h-4 w-4 text-primary" /> Đến hạn hôm nay ({viecHomNay.length})
+          </h3>
+          {viecHomNay.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Không có việc nào đến hạn hôm nay.</p>
+          ) : (
+            <ul>
+              {viecHomNay.map((v) => (
+                <DongViec key={v.id} v={v} />
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-border bg-card p-5">
+          <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold">
+            <PhoneOff className="h-4 w-4 text-primary" /> Khách cần chạm ({canCham.length})
+          </h3>
+          {/* Nói rõ vì sao khách có mặt ở đây — một danh sách không giải thích được
+              thì người dùng sẽ nghi nó sai rồi bỏ qua. */}
+          <p className="mb-2 text-xs text-muted-foreground">
+            Khách đã nhận mà chưa liên hệ, hoặc đã im lặng quá lâu. Người im lâu nhất
+            xếp trên. Ngưỡng lấy từ cấu hình vận hành, không phải số cứng.
+          </p>
+          {canCham.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Không khách nào đang chờ — mọi người đều đã được chạm trong ngưỡng.
+            </p>
+          ) : (
+            <ul>
+              {canCham.map((c) => (
+                <li
+                  key={c.id}
+                  className="flex flex-wrap items-baseline justify-between gap-2 border-b border-border/50 py-2 last:border-0"
+                >
+                  <div>
+                    <Link href={`/leads/${c.id}`} className="font-medium text-primary hover:underline">
+                      {c.tenKhach || "(chưa có tên)"}
+                    </Link>
+                    {c.phone ? (
+                      <span className="ml-2 text-xs tabular-nums text-muted-foreground">{c.phone}</span>
+                    ) : null}
+                    <div className="text-xs text-amber-600 dark:text-amber-500">{c.vi.join(" · ")}</div>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {c.lastActivityAt ? `chạm ${formatDateVN(c.lastActivityAt)}` : "chưa chạm lần nào"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {board.viec.sapToi.length > 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Còn {board.viec.sapToi.length} việc có hạn sau hôm nay —{" "}
+            <Link href="/leads?view=kanban" className="text-primary hover:underline">
+              xem ở Danh sách khách
+            </Link>
+            .
+          </p>
+        ) : null}
+      </section>
+
       {/* ⚠️ KHỐI NÀY NẰM NGOÀI "Việc của tôi" — CÓ CHỦ ĐÍCH.
           `getNearingEndEnrollments()` gọi KHÔNG tham số ⇒ nó đếm học viên sắp hết
           khoá của MỌI cơ sở: không lọc theo người được giao, cũng không lọc theo cơ
@@ -282,6 +398,21 @@ export async function SalesDashboard({ userId, name, embedded = false }: { userI
         </section>
       </div>
     </div>
+  );
+}
+
+/** Một dòng việc đến hạn. Tên khách ĐÃ được che ở server trước khi tới đây. */
+function DongViec({ v }: { v: ViecItem }) {
+  return (
+    <li className="flex flex-wrap items-baseline justify-between gap-2 border-b border-border/50 py-2 last:border-0">
+      <div>
+        <Link href={`/leads/${v.leadId}`} className="font-medium text-primary hover:underline">
+          {v.tenKhach || "(chưa có tên)"}
+        </Link>
+        <span className="text-foreground"> — {v.title}</span>
+      </div>
+      <span className="text-xs text-muted-foreground">{formatDateVN(v.dueAt)}</span>
+    </li>
   );
 }
 
