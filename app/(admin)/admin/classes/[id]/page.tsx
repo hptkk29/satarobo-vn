@@ -15,6 +15,11 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ClassForm, type ClassFormValue } from "../_components/class-form";
 import { ClassApprovalActions } from "./_components/class-approval-actions";
 import { ClassReschedule } from "./_components/class-reschedule";
+import { ClassComplete } from "./_components/class-complete";
+import {
+  CLASS_CLOSE_ENROLLMENT_STATUSES,
+  splitEnrollmentsForCompletion,
+} from "@/lib/classes/complete-class";
 import { ClassCurriculum } from "./_components/class-curriculum";
 import type { PhaseFormValue } from "@/lib/classes/phase-form";
 import { loadClassPhases, loadHolidayKeys } from "@/lib/classes/phases-service";
@@ -277,6 +282,20 @@ export default async function ClassDetailPage({ params }: Props) {
     .map((r) => ({ id: r.id, label: `${r.code} — ${r.name}` }));
 
   const canEdit = await checkPermission("classes:edit", { centerId: cls.centerId });
+  // Ghi danh còn thuộc lớp → hộp xác nhận "Hoàn thành lớp" nói trước con số sẽ đổi.
+  // Dùng chung `splitEnrollmentsForCompletion` với `completeClassAction` để màn và
+  // lượt ghi không bao giờ đếm khác nhau.
+  const liveEnrollmentStatuses = canEdit
+    ? await sdb.enrollment.findMany({
+        where: {
+          classId: cls.id,
+          deletedAt: null,
+          status: { in: CLASS_CLOSE_ENROLLMENT_STATUSES },
+        },
+        select: { status: true },
+      })
+    : [];
+  const completionSplit = splitEnrollmentsForCompletion(liveEnrollmentStatuses);
   const canApproveClass =
     actor.isSuperAdmin ||
     (actor.orgRoles.some((r) => r.roleCode === "CENTER_MANAGER") &&
@@ -505,6 +524,14 @@ export default async function ClassDetailPage({ params }: Props) {
             )}
             canApprove={canApproveClass}
             approvedByName={cls.approvedByName}
+          />
+          <ClassComplete
+            classId={cls.id}
+            className={cls.name}
+            status={cls.status}
+            completableCount={completionSplit.eligible.length}
+            skipped={completionSplit.skipped}
+            canEdit={canEdit}
           />
           <ClassReschedule
             classId={cls.id}

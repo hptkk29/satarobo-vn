@@ -40,6 +40,12 @@ import { createSessionPlansForClass } from "@/lib/classes/snapshot";
 import { generateAssignmentsFromTemplates } from "@/lib/lms/assignment";
 import { publishEvent } from "@/lib/events/publish";
 import { createRefundRequest } from "@/lib/finance/refund";
+import { completeCourse } from "@/lib/completion/service";
+import {
+  CLASS_CLOSE_ENROLLMENT_STATUSES,
+  splitEnrollmentsForCompletion,
+  type SkippedGroup,
+} from "@/lib/classes/complete-class";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { passesScope, scopedDb } from "@/lib/db-scope";
 import { formatDateVN } from "@/lib/format/date";
@@ -652,6 +658,18 @@ export async function updateClass(
     return {
       error:
         'Không đổi trạng thái "Huỷ" trực tiếp — dùng nút "Hủy lớp" (có rút ghi danh, hủy buổi và hoàn tiền).',
+    };
+  }
+
+  // 22/09/2026 — Y HỆT lý do trên, cho nhánh HOÀN THÀNH. Cổng này thiếu suốt từ
+  // 21/07: dropdown vẫn chọn được "Hoàn thành", `updateClass` chỉ set cờ, và lớp
+  // xong rồi mà học viên vẫn "Đang học" (lỗi prod 22/09). Hoàn thành lớp nay bắt
+  // buộc đi qua `completeClassAction` — nó chuyển ghi danh sang Hoàn thành, cấp
+  // chứng chỉ và gửi email phụ huynh.
+  if (input.status === "COMPLETED" && before.status !== "COMPLETED") {
+    return {
+      error:
+        'Không đổi trạng thái "Hoàn thành" trực tiếp — dùng nút "Hoàn thành lớp" (có chuyển ghi danh sang Hoàn thành, cấp chứng chỉ và báo phụ huynh).',
     };
   }
 
@@ -1546,4 +1564,242 @@ export async function cancelClassAction(
   revalidatePath("/sessions");
   revalidatePath("/dashboard");
   return { ok: true };
+}
+
+// ─── HOÀN THÀNH LỚP ──────────────────────────────────────────────────────────
+//
+// 22/09/2026 — cùng LỚP LỖI với "Huỷ lớp" hồi QA 21/07 (B4), chỉ khác cái cờ.
+// "Hoàn thành" là một mục trong dropdown trạng thái của <ClassForm> → chạy
+// `updateClass` → hàm đó CHỈ đổi `Class.status` và không đụng gì tới `Enrollment`.
+// Trên prod: bấm hoàn thành lớp xong, học viên vẫn nằm "Đang học".
+//
+// Lỗ THỨ HAI, cùng họ, nằm ở đường "đúng quy trình": `completeCourse`
+// (`lib/completion/service.ts`) — tức cả /hoan-thanh-khoa đơn lẻ, bản hàng loạt
+// theo lớp, lẫn duyệt đề xuất của giáo viên — tạo CourseCompletion + mã chứng chỉ
+// + email PH + care task nhưng CŨNG KHÔNG ghi `Enrollment.status`. Nên kể cả đi
+// đúng đường cấp chứng chỉ, em vẫn hiện "Đang học". Chỗ duy nhất trong repo đặt
+// Enrollment → COMPLETED là dialog đổi trạng thái thủ công ở /admin/enrollments.
+//
+// Hàm này đóng CẢ HAI: một cổng duy nhất làm trọn gói (chốt 22/09/2026) —
+// ghi danh → COMPLETED, cấp chứng chỉ, gửi email PH, tạo care task tái tục.
+// Dropdown không còn chọn được "Hoàn thành" (xem guard trong `updateClass`).
+
+/** Kết quả trả về đủ chi tiết để câu thông báo nói THẬT em nào được/không được. */
+export type CompleteClassResult =
+  | {
+      ok: true;
+      /** Số ghi danh vừa chuyển sang "Hoàn thành". */
+      completed: number;
+      /** Nhóm bị bỏ qua (bảo lưu / chưa vào học), gộp theo trạng thái. */
+      skipped: SkippedGroup[];
+      /** Chứng chỉ mới cấp trong lượt này. */
+      certIssued: number;
+      /** Em đã có chứng chỉ khoá này từ trước → bỏ qua, KHÔNG gửi lại email. */
+      certAlready: number;
+    }
+  | { ok: false; error: string };
+
+export async function completeClassAction(classId: string): Promise<CompleteClassResult> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+
+  // HAI cổng, không phải một. Hành động này vừa ĐÓNG LỚP (`classes:edit`) vừa CẤP
+  // CHỨNG CHỈ + GỬI EMAIL PHỤ HUYNH (`completions:manage`) — đúng hai quyền mà form
+  // sửa lớp và /hoan-thanh-khoa đang gác riêng lẻ. Fail-closed vì hai quyền này
+  // KHÔNG trùng vai: Đào tạo (TRAINING) có `classes:edit` nhưng KHÔNG có
+  // `completions:manage`; Giáo viên thì ngược lại. Thiếu một bên mà vẫn chạy là
+  // hoặc đóng lớp không chứng chỉ, hoặc phát chứng chỉ cho lớp mình không quản.
+  const [canEditClass, canIssueCert] = await Promise.all([
+    checkPermission("classes:edit"),
+    checkPermission("completions:manage"),
+  ]);
+  if (!canEditClass) return { ok: false, error: "Không có quyền hoàn thành lớp" };
+  if (!canIssueCert) {
+    return {
+      ok: false,
+      error:
+        "Hoàn thành lớp sẽ cấp chứng chỉ và gửi email phụ huynh — cần quyền xác nhận hoàn thành khoá. Nhờ quản lý cơ sở thực hiện.",
+    };
+  }
+
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
+  const cls = await sdb.class.findFirst({
+    where: { id: classId, deletedAt: null },
+    select: { id: true, name: true, status: true, centerId: true },
+  });
+  if (!cls) return { ok: false, error: "Lớp không tồn tại" };
+
+  // Cách ly cơ sở: chỉ đóng lớp trong tầm nhìn actor (chống IDOR cascade liên cơ sở).
+  if (!passesScope("Class", { centerId: cls.centerId }, actor)) {
+    return { ok: false, error: "Lớp không tồn tại" };
+  }
+
+  if (cls.status === "COMPLETED") return { ok: false, error: "Lớp đã hoàn thành" };
+  if (cls.status === "CANCELLED") {
+    return { ok: false, error: "Lớp đã huỷ — không thể hoàn thành" };
+  }
+  // Duyệt lớp là một cổng có chữ ký (`approvedById`). Cho lớp đang chờ duyệt nhảy
+  // thẳng sang "Hoàn thành" là đi vòng qua cổng đó và để lại lớp xong-mà-chưa-ai-duyệt.
+  if (cls.status === "PENDING_APPROVAL") {
+    return {
+      ok: false,
+      error:
+        "Lớp đang chờ duyệt — duyệt (hoặc trả lại) ở khối Phê duyệt lớp trước khi hoàn thành.",
+    };
+  }
+
+  const rows = await sdb.enrollment.findMany({
+    where: {
+      classId,
+      deletedAt: null,
+      status: { in: CLASS_CLOSE_ENROLLMENT_STATUSES },
+    },
+    select: {
+      id: true,
+      status: true,
+      studentId: true,
+      courseId: true,
+      student: { select: { name: true } },
+    },
+  });
+
+  const { eligible, skipped } = splitEnrollmentsForCompletion(rows);
+
+  // ── Bước 1: CHỨNG CHỈ TRƯỚC, đổi trạng thái SAU ─────────────────────────────
+  //
+  // Thứ tự này KHÔNG tuỳ tiện — nó quyết định lượt chạy hỏng nửa chừng có tự chữa
+  // được không.
+  //   · Đổi trạng thái trước rồi cấp chứng chỉ: em nào lỗi sẽ mang `COMPLETED` mà
+  //     không có chứng chỉ, VÀ biến mất khỏi /hoan-thanh-khoa (trang đó chỉ liệt kê
+  //     ghi danh còn active — `ENROLLMENT_ACTIVE_STATUS_LIST`, page.tsx:172). Hỏng
+  //     câm, không còn đường sửa bằng giao diện.
+  //   · Cấp chứng chỉ trước: lỗi ở bước này thì CHƯA có gì đổi — lớp vẫn đang dạy,
+  //     em vẫn "Đang học", /hoan-thanh-khoa vẫn thấy đủ, bấm lại là chạy tiếp.
+  //     `completeCourse` idempotent theo `studentId_courseId` nên lượt sau bỏ qua em
+  //     đã có chứng chỉ (không gửi lại email).
+  //
+  // Và vì thế: MỘT em lỗi là DỪNG CẢ LƯỢT, không đóng lớp. Đóng lớp rồi mới báo
+  // "3 em chưa có chứng chỉ" là đúng cái bẫy vừa mô tả.
+  let certIssued = 0;
+  let certAlready = 0;
+
+  for (const enr of eligible) {
+    const who = enr.student?.name ?? enr.studentId;
+    try {
+      // `CourseCompletion` KHÔNG thuộc SCOPED_MODELS (chỉ `CourseCompletionRequest`
+      // có), nên findUnique ở đây không bị lọc hậu kỳ theo cơ sở — đọc được đúng
+      // bản ghi đã có. Bỏ kiểm này là `completeCourse` đi nhánh update của upsert và
+      // GỬI LẠI email chúc mừng cho phụ huynh em đã nhận chứng chỉ từ lâu.
+      const existing = await sdb.courseCompletion.findUnique({
+        where: { studentId_courseId: { studentId: enr.studentId, courseId: enr.courseId } },
+        select: { id: true },
+      });
+      if (existing) {
+        certAlready += 1;
+        continue;
+      }
+      const res = await completeCourse({
+        studentId: enr.studentId,
+        courseId: enr.courseId,
+        classId,
+        createdById: session.user.id,
+      });
+      if (!res.ok) {
+        return {
+          ok: false,
+          error: `Chưa đóng lớp — lỗi cấp chứng chỉ cho ${who}: ${res.error ?? "lỗi không rõ"}. Đã cấp ${certIssued} em; xử lý xong rồi bấm lại (em đã có chứng chỉ sẽ được bỏ qua).`,
+        };
+      }
+      certIssued += 1;
+    } catch (err) {
+      return {
+        ok: false,
+        error: `Chưa đóng lớp — lỗi cấp chứng chỉ cho ${who}: ${err instanceof Error ? err.message : "Unknown"}. Đã cấp ${certIssued} em; bấm lại để chạy tiếp.`,
+      };
+    }
+  }
+
+  // ── Bước 2: đóng lớp + chuyển ghi danh, ATOMIC ──────────────────────────────
+  const { actorId, actorName } = getAuditActor(session);
+  const changedByUserId = session.user.id ?? null;
+  const changedByName = session.user.name ?? session.user.email ?? session.user.id;
+  const now = new Date();
+  const completeReason = `[Hoàn thành lớp] ${cls.name}`;
+
+  try {
+    await sdb.$transaction(async (txRaw) => {
+      const tx = txRaw as unknown as Prisma.TransactionClient;
+
+      // a) Lớp → COMPLETED.
+      await tx.class.update({ where: { id: classId }, data: { status: "COMPLETED" } });
+
+      // b) Ghi danh đang học → COMPLETED (guard state machine như nhánh huỷ lớp).
+      for (const enr of eligible) {
+        // `canTransition` luôn true với STUDYING/ACTIVE → COMPLETED; ca [CLC-04]
+        // giữ cho COMPLETABLE_ENROLLMENT_STATUSES không lệch khỏi bảng chuyển.
+        if (!canTransition(enr.status as EnrollmentStatus, "COMPLETED")) continue;
+
+        await tx.enrollment.update({
+          where: { id: enr.id },
+          data: { status: "COMPLETED", endedAt: now },
+        });
+
+        await tx.enrollmentAuditLog.create({
+          data: {
+            enrollmentId: enr.id,
+            fromStatus: enr.status,
+            toStatus: "COMPLETED",
+            changedByUserId,
+            changedByName,
+            reason: completeReason,
+          },
+        });
+        // AuditLog hợp nhất cho viewer chung (atomic).
+        await writeAudit({
+          actor: { id: actorId, name: actorName },
+          module: "enrollment",
+          entityType: "Enrollment",
+          entityId: enr.id,
+          action: "STATUS_CHANGE",
+          oldValues: { status: enr.status },
+          newValues: { status: "COMPLETED" },
+          reason: completeReason,
+          orgUnitId: cls.centerId,
+          tx,
+        });
+      }
+
+      // c) Audit cho chính lớp.
+      await logClassAudit({
+        classId,
+        action: "UPDATE",
+        actorId,
+        actorName,
+        oldValues: { status: cls.status },
+        newValues: { status: "COMPLETED" },
+        changedFields: ["status"],
+        reason: completeReason,
+        tx,
+      });
+
+      // US-03 chat — lớp COMPLETED → nhóm lớp archive, cùng transaction (như updateClass).
+      await syncConversationMembership(tx, classId);
+    }, { timeout: 30_000, maxWait: 10_000 });
+  } catch (err) {
+    return {
+      ok: false,
+      error: `Lỗi hoàn thành lớp: ${err instanceof Error ? err.message : "Unknown"}`,
+    };
+  }
+
+  revalidatePath("/classes");
+  revalidatePath(`/classes/${classId}`);
+  revalidatePath(`/classes/${classId}/edit`);
+  revalidatePath("/enrollments");
+  revalidatePath("/hoan-thanh-khoa");
+  revalidatePath("/students");
+  revalidatePath("/dashboard");
+  return { ok: true, completed: eligible.length, skipped, certIssued, certAlready };
 }

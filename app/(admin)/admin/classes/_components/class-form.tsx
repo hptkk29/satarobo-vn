@@ -87,15 +87,19 @@ export interface CurriculumOption {
 // QA 21/07 (B4): "Huỷ" cũng KHÔNG cho chọn tay — hủy lớp phải qua nút "Hủy lớp"
 // (cancelClassAction: rút ghi danh + hủy buổi + hoàn tiền); đổi cờ trần tạo
 // trạng thái mâu thuẫn (lớp Huỷ nhưng HS vẫn Đang học).
+// 22/09/2026: "Hoàn thành" GỠ NỐT, cùng lý do — nó là nửa còn lại của chính bài học
+// trên mà hồi 21/07 chỉ vá một nửa. Bấm hoàn thành ở dropdown chỉ set cờ, nên lớp
+// đã xong mà học viên vẫn "Đang học" (lỗi prod 22/09). Nay đi qua nút "Hoàn thành
+// lớp" (completeClassAction: chuyển ghi danh + cấp chứng chỉ + báo phụ huynh).
 const STATUS_OPTIONS = [
   { value: "PLANNED", label: "Đang lên KH" },
   { value: "RECRUITING", label: "Tuyển sinh" },
   { value: "ACTIVE", label: "Đang dạy" },
-  { value: "COMPLETED", label: "Hoàn thành" },
 ] as const;
 
 const PENDING_OPTION = { value: "PENDING_APPROVAL", label: "Chờ duyệt" } as const;
 const CANCELLED_OPTION = { value: "CANCELLED", label: "Huỷ" } as const;
+const COMPLETED_OPTION = { value: "COMPLETED", label: "Hoàn thành" } as const;
 
 function toDateInput(d: Date | null): string {
   if (!d) return "";
@@ -381,12 +385,17 @@ export function ClassForm({
               name="status"
               defaultValue={cls?.status ?? "PLANNED"}
               required
+              // Ba trạng thái "không chọn tay" vẫn phải CÓ MẶT khi lớp đang ở đó —
+              // nếu không, <select> mất defaultValue, hiện sai nhãn và lần Cập nhật
+              // kế tiếp gửi lên một trạng thái khác hẳn.
               options={
                 cls?.status === "PENDING_APPROVAL"
                   ? [PENDING_OPTION, ...STATUS_OPTIONS]
                   : cls?.status === "CANCELLED"
                     ? [CANCELLED_OPTION, ...STATUS_OPTIONS]
-                    : [...STATUS_OPTIONS]
+                    : cls?.status === "COMPLETED"
+                      ? [COMPLETED_OPTION, ...STATUS_OPTIONS]
+                      : [...STATUS_OPTIONS]
               }
             />
           </Grid>
