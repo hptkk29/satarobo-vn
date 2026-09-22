@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, MessageSquareText } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
@@ -26,6 +26,17 @@ import { canViewLeadPii } from "@/lib/auth/check-permission";
 import { ShareToggle } from "./_components/share-toggle";
 import { formatDateTimeVNZoned } from "@/lib/format/date";
 import { boDongMaNguoiNhap, hasSystemLines, splitLeadNote } from "@/lib/lead/note-view";
+import {
+  canViewLeadAuditHistory,
+  getLeadAuditHistory,
+  getLeadStatusHistory,
+  maskLeadAuditValues,
+} from "@/lib/lead/audit-history";
+import { LeadAuditHistory } from "./_components/lead-audit-history";
+import { LeadStatusTrail } from "./_components/lead-status-trail";
+import { isZalocrmEnabled } from "@/lib/flags";
+import { duongDanNhanZalo, orgCodeCuaCoSo } from "@/lib/integrations/zalocrm/compose-url";
+import { getSetting } from "@/lib/settings/service";
 
 export const metadata = { title: "Chi tiết Lead | Admin" };
 export const dynamic = "force-dynamic";
@@ -51,7 +62,8 @@ export default async function LeadDetailPage({ params }: Props) {
   const lead = await sdb.lead.findFirst({
     where: { id, deletedAt: null },
     include: {
-      center: { select: { name: true } },
+      // `code` để suy ra `?org=` cho nút "Nhắn Zalo" (xem chỗ dựng `urlNhanZalo`).
+      center: { select: { name: true, code: true } },
       course: { select: { name: true } },
       assignedTo: { select: { id: true, name: true } },
       // BGĐ 31/07 — người giới thiệu (affiliate) ra lead này.
@@ -150,6 +162,18 @@ export default async function LeadDetailPage({ params }: Props) {
   // mã khác nhau của cùng một người.
   const noteView = maNguoiNhap ? boDongMaNguoiNhap(noteThoView) : noteThoView;
   const humanNote = canViewPii ? noteView.human : maskFreeText(noteView.human);
+
+  // S2 — nút "Nhắn Zalo". Ba cổng gộp vào MỘT biến, để JSX không phải so vai:
+  //  1. cờ `zalocrm`  2. quyền `zalocrm:use`  3. `canViewPii` (SĐT đi vào query string).
+  // `duongDanNhanZalo` trả null khi SĐT rỗng/không hợp lệ ⇒ KHÔNG render nút.
+  const duocMoZaloCrm = isZalocrmEnabled() && (await checkPermission("zalocrm:use"));
+  // Mang CƠ SỞ CỦA CHÍNH PHIẾU NÀY, nếu không màn nhúng mở cơ sở đầu bảng chữ cái.
+  // Chỉ chạm DB khi nút thật sự sắp hiện.
+  const orgCodesZalo = canViewPii && duocMoZaloCrm ? await getSetting("zalocrm.orgCodes") : null;
+  const urlNhanZalo =
+    canViewPii && duocMoZaloCrm
+      ? duongDanNhanZalo(lead.phone, lead.id, orgCodeCuaCoSo(lead.center?.code, orgCodesZalo))
+      : null;
 
   const canAssign = (await checkPermission("leads:assign", { centerId: lead.centerId }));
   const canCloseDeal =
@@ -260,6 +284,20 @@ export default async function LeadDetailPage({ params }: Props) {
     : [];
   const sessionById = new Map(scheduledSessions.map((s) => [s.id, s]));
 
+  // V-6 · G-02 — vết sửa 3 ô định danh (Tên PH · SĐT PH · Tên HS) phải ĐỌC ĐƯỢC
+  // bởi người có thẩm quyền, chứ không nằm im sau quyền `audit-logs:view`.
+  // Màn HẸP: `getLeadAuditHistory` lọc CỨNG entityType "Lead" + đúng lead đang mở,
+  // không nhận bộ lọc nào từ URL. Cách ly đã xong ở trên (scopedDb + canSeeLead).
+  const canViewAudit = await checkPermission("audit-logs:view");
+  const showAuditHistory = canViewLeadAuditHistory({
+    canViewAllLeads: canViewAll,
+    canViewAuditLogs: canViewAudit,
+  });
+  const auditRows = showAuditHistory ? await getLeadAuditHistory(sdb, lead.id) : [];
+  // C-07 — "Mốc trạng thái" đọc truy vấn RIÊNG chứ không lọc lại `auditRows`: lead
+  // bị sửa nhiều thì 50 dòng gần nhất toàn lượt sửa hồ sơ, mốc phễu rơi hết ra ngoài.
+  const statusRows = showAuditHistory ? await getLeadStatusHistory(sdb, lead.id) : [];
+
   return (
     // `max-w-6xl` (1152px) là nếp chung của các trang admin, giữ nguyên tới 2xl.
     // Nới thêm ở màn ≥1536px: trên monitor 1920 thì bản cũ bỏ trống ~40% bề ngang
@@ -288,6 +326,17 @@ export default async function LeadDetailPage({ params }: Props) {
               </a>
             ) : (
               <span className="font-medium text-primary">{formatPhoneVN(piiLead.phone)}</span>
+            )}
+            {/* S2 — chỉ điều hướng nên <Link> thuần. `urlNhanZalo` đã gộp sẵn cả ba
+                cổng lẫn phép chuẩn hoá SĐT — ở đây KHÔNG so vai (ESLint no-inline-authz). */}
+            {urlNhanZalo && (
+              <Link
+                href={urlNhanZalo}
+                className="ml-2 inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-medium text-foreground hover:bg-muted"
+                title="Mở Zalo CRM và soạn tin cho số này"
+              >
+                <MessageSquareText className="h-3.5 w-3.5" /> Nhắn Zalo
+              </Link>
             )}
             {piiLead.email && <span> · {piiLead.email}</span>}
           </div>
@@ -626,6 +675,35 @@ export default async function LeadDetailPage({ params }: Props) {
           />
         </div>
       </div>
+
+      {/* C-07 — "Mốc trạng thái": ai đổi · lúc nào · TỪ trạng thái nào. Đặt TRƯỚC
+          "Lịch sử thay đổi" vì đây là thứ QLCS mở trang để soi; mục kia trộn mọi
+          lượt sửa hồ sơ nên mốc phễu chìm mất trong đó.
+          Đặt NGOÀI lưới 7:3 (full width) — hai bảng này nhiều cột, nhét vào cột 3/10
+          là vỡ. */}
+      {showAuditHistory && (
+        <LeadStatusTrail
+          piiMasked={!canViewPii}
+          rows={statusRows.map((r) => ({
+            ...r,
+            oldValues: maskLeadAuditValues(r.oldValues, canViewPii),
+            newValues: maskLeadAuditValues(r.newValues, canViewPii),
+          }))}
+        />
+      )}
+
+      {/* V-6 · G-02 — vết sửa hồ sơ. Che PII bằng CÙNG cổng `canViewPii` của trang:
+          nội dung vết chứa nguyên văn tên PH/tên HS/SĐT. */}
+      {showAuditHistory && (
+        <LeadAuditHistory
+          piiMasked={!canViewPii}
+          rows={auditRows.map((r) => ({
+            ...r,
+            oldValues: maskLeadAuditValues(r.oldValues, canViewPii),
+            newValues: maskLeadAuditValues(r.newValues, canViewPii),
+          }))}
+        />
+      )}
 
       {/* 28/08 — GỠ khối "Buổi học thử" (hệ V1, `TrialClass`).
           Tính năng lịch hẹn học thử đã bị gỡ khỏi hệ thống: không còn màn nào quản lý
