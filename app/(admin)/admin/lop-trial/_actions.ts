@@ -37,6 +37,7 @@ import {
   khungChoNgay,
   kiemCaseTrongLop,
   kiemKhungLop,
+  sinhNgayTheoThu,
   TEN_THU,
   THU_KHOA,
   type CauHinhKhung,
@@ -60,6 +61,7 @@ import {
   cancelSessionSchema,
   attendanceSchema,
   createClassSchema,
+  taoTheoThuSchema,
   gvChoBuoiSchema,
   ngoaiCuaSoNgayGvBuoi,
 } from "./_lib/schemas";
@@ -189,6 +191,78 @@ export async function createLopTrialClassAction(
 
   lamMoi();
   return { ok: true, id: res.trialClassId };
+}
+
+/**
+ * Mở lớp cho CẢ KỲ theo thứ — "sinh theo thứ" (chủ dự án 22/09/2026).
+ *
+ * Mỗi ngày khớp thứ sẽ mở ĐÚNG các khung đã cấu hình của thứ đó, nên thứ 7 tự ra hai
+ * lớp (sáng + chiều). Không nhận giờ từ client: xem lý do ở `taoTheoThuSchema`.
+ *
+ * Tạo TUẦN TỰ, không `Promise.all` — `createTrialClass` lấy mã lớp từ bộ đếm dùng chung
+ * (`nextSeq`) trong transaction, chạy song song là tranh nhau cùng một khoá đếm.
+ */
+export async function taoLopTrialTheoThuAction(
+  input: unknown,
+): Promise<ActionResult<{ daTao?: number; boQua?: string[] }>> {
+  const ctx = await requireActor();
+  if (!ctx) return { ok: false, error: CHUA_DANG_NHAP };
+  if (!(await checkPermission("trials:create-class"))) {
+    return { ok: false, error: "Chỉ Quản lý cơ sở hoặc Đào tạo mở được lớp trải nghiệm" };
+  }
+
+  const parsed = taoTheoThuSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  }
+  const data = parsed.data;
+
+  if (!actorCanUseCenter(ctx.actor, data.centerId)) {
+    return { ok: false, error: "Bạn không có quyền tạo lớp tại cơ sở này" };
+  }
+
+  const tu = ngayVnSangUtc(data.tu);
+  const den = ngayVnSangUtc(data.den);
+  if (!tu || !den) return { ok: false, error: "Khoảng ngày không hợp lệ" };
+
+  const ngays = sinhNgayTheoThu({ tu, den, thu: data.thu });
+  if (!ngays.ok) return { ok: false, error: ngays.loi };
+
+  const cauHinh = await layCauHinhKhung();
+  const boQua: string[] = [];
+  let daTao = 0;
+
+  for (const ngay of ngays.ngay) {
+    const khung = khungChoNgay(ngay, cauHinh);
+    if (!khung.ok) {
+      boQua.push(`${vnYmd(ngay)}: ${khung.loi}`);
+      continue;
+    }
+    if (khung.giaTri.length === 0) {
+      // Thứ không mở (mặc định là thứ 2). Nói ra chứ không im lặng bỏ: người dùng tick
+      // thứ 2 rồi thấy số lớp ít hơn mong đợi sẽ tưởng hệ thống lỗi.
+      const thu = TEN_THU[THU_KHOA[vnWeekday(ngay)]!] ?? "Ngày này";
+      boQua.push(`${vnYmd(ngay)}: ${thu} không mở lớp trải nghiệm`);
+      continue;
+    }
+    for (const k of khung.giaTri) {
+      const res = await createTrialClass({
+        centerId: data.centerId,
+        courseId: data.courseId ?? null,
+        name: null, // để server đặt theo quy ước — mở hàng loạt thì tên tay không có nghĩa
+        configId: null,
+        startDate: ngay,
+        startTime: k.startTime,
+        endTime: k.endTime,
+        actorId: ctx.session.user.id,
+      });
+      if (res?.ok) daTao += 1;
+      else boQua.push(`${vnYmd(ngay)} ${k.startTime}–${k.endTime}: ${res?.error ?? "tạo thất bại"}`);
+    }
+  }
+
+  lamMoi();
+  return { ok: true, daTao, boQua };
 }
 
 /**

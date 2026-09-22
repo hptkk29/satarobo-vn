@@ -34,6 +34,9 @@ const CONG_QUYEN: Record<string, Action> = {
   // `trials:manage` (để thêm case + xếp học viên), nên giữ cổng cũ ở đây là KHÔNG
   // chặn được ai — phải là khoá riêng. Xem `trials:create-class` trong seed-roles.
   createLopTrialClassAction: "trials:create-class",
+  // Mở lớp cho CẢ KỲ theo thứ — cùng khoá với mở một lớp. Cho nó khoá rộng hơn là
+  // mỞ một cửa sau: không bấm được "Tạo lớp" nhưng mở được 60 lớp một lượt.
+  taoLopTrialTheoThuAction: "trials:create-class",
   addLopTrialSessionAction: "trials:manage",
   // 28/08 — sửa / huỷ MỘT buổi. Cùng cổng `trials:manage` với thêm buổi: ba thao tác
   // này là một việc (xếp lịch lớp), tách cổng chỉ đẻ ra ma trận không ai nhớ nổi.

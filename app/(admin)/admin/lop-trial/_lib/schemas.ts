@@ -82,6 +82,27 @@ export const createClassSchema = z.object({
   endTime: z.string().regex(HHMM, "Giờ kết thúc không hợp lệ"),
 });
 
+/**
+ * Mở lớp cho CẢ KỲ theo THỨ (chủ dự án 22/09/2026: "Tạo lớp Trial theo ngày, thứ…").
+ *
+ * KHÔNG nhận giờ: mỗi ngày khớp thứ sẽ mở ĐÚNG các khung đã cấu hình của thứ đó — nên
+ * thứ 7 tự ra HAI lớp (sáng + chiều) đúng như "sáng chiều ngày thứ 7, cn". Cho gõ giờ
+ * tự do ở đây là mời một khung duy nhất áp cho cả T3 lẫn T7, trùm qua giờ nghỉ trưa.
+ */
+export const taoTheoThuSchema = z
+  .object({
+    centerId: z.string().trim().min(1, "Chọn cơ sở"),
+    courseId: z.string().trim().min(1).nullable().optional(),
+    tu: z.string().regex(YMD, "Chọn ngày bắt đầu"),
+    den: z.string().regex(YMD, "Chọn ngày kết thúc"),
+    /** `vnWeekday`: 0=CN … 6=T7. */
+    thu: z.array(z.number().int().min(0).max(6)).min(1, "Chọn ít nhất một thứ"),
+  })
+  .refine((d) => d.den >= d.tu, {
+    message: "Ngày kết thúc phải sau ngày bắt đầu",
+    path: ["den"],
+  });
+
 export const addSessionSchema = z
   .object({
     trialClassId: z.string().trim().min(1, "Thiếu lớp trải nghiệm"),
