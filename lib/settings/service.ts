@@ -192,3 +192,60 @@ export async function setCenterSetting(
   clearSettingsCache();
   return { ok: true };
 }
+
+/**
+ * GỠ override của một cơ sở ⇒ cơ sở ấy quay về THEO TOÀN HỆ. [PHIÊN H · 22/09/2026]
+ *
+ * ⚠️ Vì sao cần một hàm riêng chứ không "ghi giá trị rỗng": ba trạng thái của một cơ sở là
+ * **theo toàn hệ** (không có dòng) · **bật riêng** (dòng `true`) · **tắt riêng** (dòng
+ * `false`). Chúng là BA, không phải hai — và trạng thái thứ nhất chỉ diễn đạt được bằng
+ * việc KHÔNG có dòng. Không có đường gỡ thì một cơ sở lỡ cài riêng sẽ mắc kẹt ở đó mãi:
+ * quản trị đổi mức toàn hệ mà cơ sở ấy không đổi theo, và không ai hiểu vì sao.
+ *
+ * ⚠️ Gỡ KHÔNG PHẢI "tắt". Tắt riêng là một quyết định (`false` ghi vào sổ, có lý do, có
+ * nhật ký); gỡ là rút lại quyết định ấy. Gộp hai thứ vào một nút là người vận hành tưởng
+ * mình vừa tắt trong khi thật ra vừa trả cơ sở về theo mức toàn hệ — mà mức toàn hệ có thể
+ * đang BẬT.
+ *
+ * Cùng cổng quyền, cùng đòi lý do, cùng ghi `AuditLog`, cùng xoá cache như `setCenterSetting`.
+ */
+export async function clearCenterSetting(
+  actor: Actor,
+  params: { orgUnitId: string; key: string; reason: string; actorName: string },
+): Promise<SetResult> {
+  const allowed =
+    actor.isSuperAdmin ||
+    actor.orgRoles.some(
+      (r) => r.orgUnitId === params.orgUnitId && MANAGER_ROLE_CODES.has(r.roleCode),
+    );
+  if (!allowed) {
+    return fail("FORBIDDEN", "Không có quyền sửa cấu hình cơ sở này");
+  }
+  if (!params.reason?.trim()) {
+    return fail("VALIDATION", "Lý do thay đổi là bắt buộc", "reason");
+  }
+
+  const old = await db.centerSetting.findUnique({
+    where: { orgUnitId_key: { orgUnitId: params.orgUnitId, key: params.key } },
+  });
+  // Không có gì để gỡ ⇒ coi là XONG, không phải lỗi. Hai người cùng bấm thì người sau
+  // không được nhận một câu lỗi cho một trạng thái đã đúng ý họ.
+  if (!old) return { ok: true };
+
+  await db.centerSetting.delete({
+    where: { orgUnitId_key: { orgUnitId: params.orgUnitId, key: params.key } },
+  });
+  await writeAudit({
+    actor: { id: actor.userId, name: params.actorName },
+    module: "settings",
+    entityType: "CenterSetting",
+    entityId: `${params.orgUnitId}:${params.key}`,
+    action: "DELETE",
+    oldValues: { value: old.valueJson },
+    newValues: null,
+    reason: params.reason,
+    orgUnitId: params.orgUnitId,
+  });
+  clearSettingsCache();
+  return { ok: true };
+}

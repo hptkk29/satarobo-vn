@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { SETTINGS } from "@/lib/settings/registry";
 import { getResolvedSettings } from "@/lib/settings/service";
+import { docCaiRiengTheoCoSo } from "@/lib/settings/co-so-cau-hinh";
 import { TAB_CAU_HINH, keyCuaTab, nhanCuaKey, type TabId } from "@/lib/settings/nhan-van-hanh";
 import { getAssignableTeachers } from "@/lib/teachers/assignable";
 import { catalogEntries } from "@/lib/notifications/catalog";
@@ -79,6 +80,15 @@ export default async function OperationalSettingsPage({
     "crm.commissionPolicies",
     "crm.commissionMaxTotalRate",
   ]);
+  // PHIÊN H — cơ sở + giá trị cài riêng, cho khối "Cài riêng theo cơ sở" ở từng dòng.
+  //
+  // ⚠️ `docCaiRiengTheoCoSo` trả về map CHỈ chứa khoá `centerOverridable` (đo 22/09/2026:
+  // 47 khoá cho / 72 khoá không). Khoá không cho cài riêng thì vắng mặt khỏi map ⇒ dòng đó
+  // không mang `coSo` ⇒ không vẽ khối. Đừng "vá" bằng cách truyền mảng rỗng: mảng rỗng và
+  // vắng mặt trông giống nhau ở đây, nhưng vắng mặt là điều MAP nói, còn mảng rỗng là điều
+  // ta tự bịa ra.
+  const caiRieng = await docCaiRiengTheoCoSo(moiKey);
+
   // Vai có thật, kèm TÊN TIẾNG VIỆT — ô chọn vai nhận hoa hồng không được in mã máy.
   const vai = await layVaiNhanHoaHong();
 
@@ -109,6 +119,7 @@ export default async function OperationalSettingsPage({
         // là chuỗi rỗng" và người dùng sẽ bấm lưu đè lên một con số đang chạy.
         value: resolved[key] ?? SETTINGS[key].default,
         nhan: nhanCuaKey(key),
+        coSo: caiRieng[key],
       })),
   }));
 
@@ -185,8 +196,11 @@ export default async function OperationalSettingsPage({
           sửa.
         </p>
         <p className="mt-2">
-          Các thiết lập ở đây áp cho <strong>toàn hệ thống</strong>, không tách riêng theo từng
-          cơ sở.
+          Mặc định các thiết lập ở đây áp cho <strong>toàn hệ thống</strong>. Dòng nào có dòng
+          chữ <strong>Cài riêng theo cơ sở</strong> bên dưới thì mở ra được để đặt mức khác cho
+          một cơ sở — mỗi cơ sở hiện rõ đang <em>theo toàn hệ</em>, <em>bật riêng</em> hay{" "}
+          <em>tắt riêng</em>. Bấm <strong>Trả về theo toàn hệ</strong> là gỡ mức riêng ấy đi,
+          không phải tắt nó.
         </p>
       </PageHelp>
 
