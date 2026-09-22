@@ -52,7 +52,6 @@ const CO_SO = [
   { id: "cs1", name: "CS1 — 211 Nguyễn Hữu Thọ", code: "CS1" },
   { id: "cs2", name: "CS2 — 114 Hoàng Diệu", code: "CS2" },
 ];
-const KHOA = [{ id: "kh1", name: "Sata 4", slug: "sata4" }];
 
 // 22/09/2026 — lớp nay có NGÀY + KHUNG GIỜ. Dùng ngày TUYỆT ĐỐI (luật 19):
 // 22/09/2026 là THỨ 3 ⇒ khung tối 17:30–21:00.
@@ -71,7 +70,6 @@ function dung(coSoCuaToi: string | null = null) {
   return render(
     <CreateForm
       centers={CO_SO}
-      courses={KHOA}
       coSoCuaToi={coSoCuaToi}
       cauHinhKhung={KHUNG}
       homNay={HOM_NAY}

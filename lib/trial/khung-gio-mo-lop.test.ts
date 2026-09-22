@@ -13,7 +13,9 @@ import { describe, expect, it } from "vitest";
 import { vnWeekday } from "@/lib/time/vn";
 import {
   docKhungGio,
+  goiYQuyTac,
   keKhung,
+  khungChungChoThu,
   khungChoNgay,
   kiemCaseTrongLop,
   kiemKhungLop,
@@ -283,5 +285,65 @@ describe("[KGM-07] câu kể khung đọc được", () => {
         { startTime: "14:00", endTime: "17:30" },
       ]),
     ).toBe("08:00–11:30 hoặc 14:00–17:30");
+  });
+});
+
+describe("[KGM-08] khung dùng chung cho một NHÓM THỨ = GIAO, không phải hợp", () => {
+  it("T3–T6 cùng khung tối ⇒ giao là chính khung đó", () => {
+    expect(khungChungChoThu([2, 3, 4, 5], KHUNG_MAC_DINH)).toEqual([
+      { startTime: "17:30", endTime: "21:00" },
+    ]);
+  });
+
+  it("T7 + CN ⇒ giao là cả hai khung sáng và chiều", () => {
+    expect(khungChungChoThu([6, 0], KHUNG_MAC_DINH)).toHaveLength(2);
+  });
+
+  it("⚠️ T3 + T7 ⇒ RỖNG, vì hai nhóm giờ khác hẳn nhau", () => {
+    // Lấy HỢP ở đây là bày khung 17:30–21:00 cho thứ 7 rồi để server từ chối. Rỗng là
+    // câu trả lời đúng, và nó chính là thứ đẩy người dùng tách thành hai tuỳ chọn.
+    expect(khungChungChoThu([2, 6], KHUNG_MAC_DINH)).toEqual([]);
+  });
+
+  it("có thứ KHÔNG mở (T2) trong nhóm ⇒ rỗng — ở CẢ HAI vị trí", () => {
+    // ⚠️ Phải kiểm cả khi thứ đóng đứng CUỐI. Bản đầu chỉ có `[1, 2]` và nó XANH GIẢ:
+    // cấy lỗi "thứ không mở thì bỏ qua, giữ nguyên giao" vẫn qua, vì T2 đứng đầu nên
+    // `giao` khi đó còn `null` ⇒ vẫn ra rỗng do tình cờ. Với `[2, 1]` thì lỗi lộ ra.
+    expect(khungChungChoThu([1, 2], KHUNG_MAC_DINH)).toEqual([]);
+    expect(khungChungChoThu([2, 1], KHUNG_MAC_DINH), "thứ đóng ở cuối bị bỏ qua").toEqual([]);
+    expect(khungChungChoThu([6, 0, 1], KHUNG_MAC_DINH)).toEqual([]);
+  });
+
+  it("chưa chọn thứ nào ⇒ rỗng", () => {
+    expect(khungChungChoThu([], KHUNG_MAC_DINH)).toEqual([]);
+  });
+});
+
+describe("[KGM-09] bộ tuỳ chọn gợi ý dựng từ cấu hình", () => {
+  it("⚠️ cấu hình mặc định sinh đúng BA tuỳ chọn như ví dụ của chủ dự án", () => {
+    // "lịch t3-t6 và lịch t7-cn riêng biệt" — và T7/CN tách thành sáng + chiều vì một
+    // tuỳ chọn chỉ mang MỘT khung.
+    const r = goiYQuyTac(KHUNG_MAC_DINH);
+    expect(r).toHaveLength(3);
+    expect(r[0]).toEqual({ thu: [2, 3, 4, 5], startTime: "17:30", endTime: "21:00" });
+    expect(r[1]).toEqual({ thu: [6, 0], startTime: "08:00", endTime: "11:30" });
+    expect(r[2]).toEqual({ thu: [6, 0], startTime: "14:00", endTime: "17:30" });
+  });
+
+  it("thứ KHÔNG mở không xuất hiện trong tuỳ chọn nào", () => {
+    const r = goiYQuyTac(KHUNG_MAC_DINH);
+    expect(r.flatMap((x) => x.thu)).not.toContain(1);
+  });
+
+  it("cấu hình rỗng hoàn toàn ⇒ không gợi ý gì (không ném)", () => {
+    const rong = { cn: "", t2: "", t3: "", t4: "", t5: "", t6: "", t7: "" };
+    expect(goiYQuyTac(rong)).toEqual([]);
+  });
+
+  it("cấu hình hỏng một thứ ⇒ bỏ qua thứ đó, không làm hỏng cả bộ", () => {
+    // `t4` nằm ở CHỈ SỐ 3 của `THU_KHOA` (= `vnWeekday` 3 = Thứ 4), không phải 4.
+    // Bản đầu của ca này kỳ vọng `[2, 3, 5]` — tôi đếm nhầm, mã đúng.
+    const r = goiYQuyTac({ ...KHUNG_MAC_DINH, t4: "bậy" });
+    expect(r[0]!.thu).toEqual([2, 4, 5]);
   });
 });

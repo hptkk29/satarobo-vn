@@ -27,6 +27,8 @@ Song song, không có chỗ nào trả lời được câu **"Sale nào chốt t
 | # | Quyết định | ✅ Đã chốt | Căn cứ / lý do |
 |---|---|---|---|
 | **QĐ-A1** | Cách tạo lớp | **Cả hai**: form tạo từng ngày **và** nút "mở lớp cho cả kỳ theo thứ", cộng import Excel (mỗi dòng 1 ngày) | Chủ dự án chọn khi được hỏi. Xếp lịch đầu tháng cần sinh hàng loạt; ngoại lệ một ngày vẫn phải làm được mà không dựng file. |
+| **QĐ-A6** | Hình dạng của "mở cho cả kỳ" | **Một khoảng ngày (từ → đến) + N tuỳ chọn**, mỗi tuỳ chọn = *một nhóm thứ + MỘT khung giờ*. Tối đa 10 tuỳ chọn một lượt | Chủ dự án 22/09 (vòng 2), nguyên văn: *"chọn từ ngày đến ngày rồi phải chọn thêm giờ của kỳ đó, và có thể + thêm tuỳ chọn khác, ví dụ: tạo kỳ 22/09-30/09 lịch t3-t6 và lịch t7-cn riêng biệt"*. ĐẢO bản đầu (chỉ tick thứ, không nhận giờ — tự sinh **mọi** khung của thứ đó). |
+| **QĐ-A7** | Ô "Khoá trải nghiệm" khi mở lớp | **GỠ khỏi cả hai form** (một ngày và cả kỳ); lớp sinh ra mang `courseId = null` | Chủ dự án 22/09 (vòng 2): *"qlcs không biết khung giờ đó sẽ có học viên trải nghiệm nào nên cũng không biết khoá trải nghiệm nào"*. Khách đến sau khi lớp đã mở, nên bắt chọn khoá lúc mở lớp là bắt đoán. **Cột `courseId` GIỮ nguyên trên DB** — đường import Excel vẫn nhận `courseSlug` tuỳ chọn, và lớp cũ đã gắn khoá không bị động tới. |
 | **QĐ-A2** | Nguồn khung giờ | **Cấu hình sửa được** (không đóng cứng, không suy từ ca làm GV): T3–T6 `17:30-21:00`; T7 & CN `08:00-11:30, 14:00-17:30`; T2 để trống = không mở | Chủ dự án chọn. Suy từ ca làm GV thì ngày nào chưa xếp ca là không mở được lớp — chặn nghiệp vụ vì một dữ liệu thuộc module khác. |
 | **QĐ-A3** | Ai được mở lớp | **Quản lý cơ sở + Đào tạo + Quản trị tối cao**. Sale **KHÔNG**. | Chủ dự án chọn. Đào tạo vốn đã giữ `trials:manage` và quản toàn bộ LMS. |
 | **QĐ-A4** | Khung lớp phải nằm trọn trong **MỘT** khung cho phép | Lớp `11:00–15:00` thứ 7 bị **TỪ CHỐI** dù nằm giữa 08:00 và 17:30 | Thứ 7 mở hai khung tách nhau bởi giờ nghỉ trưa. Kiểm kiểu "nằm giữa giờ mở sớm nhất và giờ đóng muộn nhất" cho lọt đúng ca này, và nó chỉ lộ ra khi có người xếp GV vào giờ nghỉ. |
@@ -99,18 +101,25 @@ Song song, không có chỗ nào trả lời được câu **"Sale nào chốt t
 - AC4: Given lớp **cũ** (không có khung), When Sale thêm case giờ bất kỳ, Then **vẫn được** *(QĐ-A5)*.
 - Truy vết: `lib/trial/khung-gio-mo-lop.test.ts` `[KGM-04]` · cổng ở `app/(admin)/admin/lop-trial/_actions.ts` (`addLopTrialSessionAction`).
 
-**US-TRIAL-13** · Là **Quản lý cơ sở**, tôi muốn **mở lớp cho cả kỳ bằng một thao tác hoặc bằng file Excel** để **xếp lịch tháng không phải bấm 30 lần**.
-- Ưu tiên: P1 · Loại: FR
-- AC1: Given khoảng 21/09–27/09 và tick T3–T6, When bấm "Mở lớp cho cả kỳ", Then sinh đúng 4 lớp (mỗi ngày một khung tối).
-- AC2: Given tick T7, Then ngày thứ 7 sinh **HAI** lớp (sáng và chiều) — đúng "sáng chiều ngày thứ 7, cn".
-- AC3: Given có ngày bị bỏ qua (thứ không mở), Then màn hình **liệt kê ra** những ngày đó, không nuốt.
-- AC4: Given không mở được lớp nào, Then báo **LỖI**, không báo thành công.
-- AC5: Given file Excel có dòng lệch khung giờ, When nhập, Then dòng đó bị từ chối kèm lý do, **các dòng còn lại vẫn vào**.
-- Truy vết: `lib/trial/khung-gio-mo-lop.test.ts` `[KGM-05]` (sinh ngày theo thứ) · route `app/api/admin/import/trial-classes/route.ts`.
+**US-TRIAL-13** · Là **Quản lý cơ sở**, tôi muốn **mở lớp cho cả một kỳ bằng một thao tác hoặc bằng file Excel** để **xếp lịch tháng không phải bấm 30 lần**.
+- Ưu tiên: P1 · Loại: FR · Truy vết quyết định: **QĐ-A6**
+- AC1: Given kỳ 22/09–30/09, tuỳ chọn 1 = *T3–T6 · 17:30–21:00*, When bấm "Mở lớp cho cả kỳ", Then sinh đúng một lớp cho **mỗi** ngày T3–T6 trong khoảng, khung `17:30–21:00`.
+- AC2: Given thêm tuỳ chọn 2 = *T7+CN · 08:00–11:30* và tuỳ chọn 3 = *T7+CN · 14:00–17:30*, When bấm, Then mỗi ngày T7/CN sinh **HAI** lớp — đúng "sáng chiều ngày thứ 7, cn". *(Một tuỳ chọn mang đúng MỘT khung; muốn cả sáng lẫn chiều thì là hai tuỳ chọn — đó là lý do nút "+ Thêm tuỳ chọn khác" tồn tại.)*
+- AC3: Given mở form lần đầu, Then đã có sẵn bộ tuỳ chọn **suy từ cấu hình** — với cấu hình mặc định là đúng ba dòng ở AC1+AC2, tức đúng ví dụ chủ dự án đưa ra.
+- AC4: Given một tuỳ chọn tick **cả T3 lẫn T7** (hai thứ không có khung nào dùng chung), Then màn hình nói thẳng là phải tách thành hai tuỳ chọn, **không** bày một khung rồi để server từ chối sau.
+- AC5: Given thứ không mở lớp (T2 theo cấu hình mặc định), Then nút thứ đó bị **khoá** kèm lý do, không cho tick rồi im lặng bỏ qua *(luật 12 — affordance phải nói thật)*.
+- AC6: Given có ngày bị bỏ qua, Then màn hình **liệt kê ra** những ngày đó, không nuốt.
+- AC7: Given không mở được lớp nào, Then báo **LỖI**, không báo thành công.
+- AC8: Given hai tuỳ chọn trùng nhau (cùng thứ, cùng khung), Then ngày đó chỉ sinh **MỘT** lớp — không nhân đôi.
+- AC9: Given file Excel có dòng lệch khung giờ, When nhập, Then dòng đó bị từ chối kèm lý do, **các dòng còn lại vẫn vào**.
+- Truy vết: `lib/trial/khung-gio-mo-lop.test.ts` `[KGM-05]` (sinh ngày theo thứ) · `[KGM-08]` (khung chung của một nhóm thứ) · `[KGM-09]` (bộ tuỳ chọn gợi ý) · route `app/api/admin/import/trial-classes/route.ts`.
+
+> ⚠️ **BẢN ĐẦU CỦA US này ĐÃ BỊ ĐẢO.** Nó từng ghi: ~~"form cả kỳ **KHÔNG nhận giờ** — chỉ tick thứ, mỗi ngày tự sinh đủ **mọi** khung của thứ đó"~~. Đảo ngày 22/09/2026 theo **QĐ-A6**: sinh đủ mọi khung là quyết hộ người dùng rằng cả sáng lẫn chiều T7 đều mở, trong khi thực tế có tuần chỉ mở buổi sáng — và mở dư lớp thì Sale nhìn thấy khung trống rồi hẹn khách vào đúng khung không có GV.
 
 ### 1.4 Tác động dữ liệu
 
 - **Không migration mới** cho hạng mục này. Dùng lại `TrialClassV2.startDate` / `startTime` / `endTime` (đã có, nullable).
+- **`TrialClassV2.courseId` GIỮ NGUYÊN** dù hai form không còn gửi nó (QĐ-A7). Không drop cột: lớp cũ đang gắn khoá, và đường import Excel vẫn nhận `courseSlug` tuỳ chọn. Lớp mở từ 22/09 mang `courseId = null`.
 - **Cấu hình mới:** 7 khoá `trial.khungGio.<cn|t2|t3|t4|t5|t6|t7>` (`lib/settings/registry.ts`), nhóm `teacher`, tab **"Lớp & giáo viên"** của Cấu hình vận hành. Kiểu **chuỗi**, ví dụ `"08:00-11:30, 14:00-17:30"`; để trống = ngày đó không mở.
 - **Quyền mới:** `trials:create-class` — `lib/auth/permissions.ts:115` (union) + `:478` (matrix v1); seed v2 tại `prisma/seed-roles.ts:396` (TRAINING) và `:560` (CENTER_MANAGER).
 
@@ -120,7 +129,7 @@ Song song, không có chỗ nào trả lời được câu **"Sale nào chốt t
 
 ### 2.1 Một cổng khung giờ cho BA đường mở lớp
 
-Form một ngày · "mở cho cả kỳ theo thứ" · import Excel — cả ba gọi **cùng** `khungChoNgay` + `kiemKhungLop` (`lib/trial/khung-gio-mo-lop.ts`). Import là đường đẻ ra nhiều lớp nhất một lúc, nên cũng là đường mà một bản kiểm thứ hai sẽ nhân lỗi lên nhiều nhất.
+Form một ngày · "mở cho cả kỳ" (khoảng ngày × N tuỳ chọn) · import Excel — cả ba gọi **cùng** `khungChoNgay` + `kiemKhungLop` (`lib/trial/khung-gio-mo-lop.ts`). Import là đường đẻ ra nhiều lớp nhất một lúc, nên cũng là đường mà một bản kiểm thứ hai sẽ nhân lỗi lên nhiều nhất.
 
 ### 2.2 "Trọn trong MỘT khung", không phải "nằm giữa hai đầu"
 
