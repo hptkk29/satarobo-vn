@@ -157,6 +157,11 @@ const NAV_GROUPS: NavGroup[] = [
       // dưới dạng chuyển hướng (thông báo cũ trong DB và tài liệu hướng dẫn còn trỏ tới
       // đó), nhưng không còn là chỗ để người ta bấm vào và nhập liệu song song nữa.
       { label: "Lớp Trial", href: "/lop-trial", icon: FlaskConical, perm: ["trials:view"] },
+      // Tra cứu (22/09/2026) — bảng giá khoá + học cụ + lớp còn chỗ, CHỈ ĐỌC. Chuyển
+      // từ site Sale (`/sale/tra-cuu`) về admin: màn này dùng TRƯỚC MẶT KHÁCH nên
+      // giá trị của nó là tra được ngay, không phải mở ba màn quản trị.
+      // `perm` lấy thẳng từ PAGE_GATES — mục menu và cổng trang không được lệch nhau.
+      { label: "Tra cứu", href: "/tra-cuu", icon: BookMarked, perm: [...PAGE_GATES["/tra-cuu"]] },
     ],
   },
   {

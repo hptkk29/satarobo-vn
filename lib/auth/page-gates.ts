@@ -183,6 +183,10 @@ export const PAGE_GATES = {
    *  trong hai; trang tự quyết khối nào hiện, không đá ai ra vì thiếu một quyền. */
   "/sale/tra-cuu": ["products:view", "classes:view-all"],
 
+  /** Tra cứu (admin) — CÙNG bộ quyền với bản Sale cũ: vào được bằng MỘT trong hai,
+   *  trang tự quyết khối nào hiện. Đừng khai quyền mới cho màn chỉ-đọc này. */
+  "/tra-cuu": ["products:view", "classes:view-all"],
+
   /** Chốt đơn — tạo đơn cho khách của mình. `orders:create` là action HẸP mở ở
    *  Đợt 0 (G-A), KHÔNG phải `orders:manage` (mở/huỷ/hoàn toàn hệ thống).
    *  Phạm vi "chỉ đơn gắn khách của mình" do `checkOrderCreateOwnership()` gác
