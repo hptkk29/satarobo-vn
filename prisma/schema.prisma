@@ -7866,6 +7866,38 @@ model ChatPolicyAcceptance {
   @@index([version, acceptedAt])
 }
 
+/// [Hồ sơ Bộ Công Thương · mục 4] Sổ ĐỒNG Ý CHÍNH SÁCH WEBSITE của phụ huynh.
+///
+/// Đặt ngay cạnh `ChatPolicyAcceptance` có chủ đích: hai sổ đồng ý cùng một hình dạng,
+/// người đi tìm "repo ghi consent ở đâu" thấy cả hai trong một màn hình.
+///
+/// Append-only — KHÔNG bao giờ UPDATE hay DELETE một dòng. Mỗi dòng là bằng chứng
+/// "người này, lúc nào, đồng ý với BẢN NÀO". Nâng version ⇒ phụ huynh phải tích lại,
+/// dòng cũ giữ nguyên.
+model SitePolicyAcceptance {
+  id String @id @default(uuid())
+
+  /// User.id (cuid) — KHÔNG relation: FK kèm cascade sẽ xoá bằng chứng cùng tài khoản.
+  userId String
+
+  /// SITE_POLICY_KEY (lib/legal/site-policy-content.ts). Có cột này để sau còn thêm ô
+  /// tích cho một chính sách thứ hai mà không phải đụng bảng đang có dữ liệu prod.
+  policyKey String
+
+  /// SITE_POLICY_VERSION tại thời điểm bấm đồng ý, dạng ngày phát hành "2026-09-21".
+  version String
+
+  acceptedAt DateTime @default(now())
+
+  /// Bằng chứng phụ, nullable: đường gọi ngoài request vẫn ghi được.
+  ip        String?
+  userAgent String?
+
+  @@unique([userId, policyKey, version])
+  /// Báo cáo "bao nhiêu phụ huynh đã đồng ý bản đang phát hành".
+  @@index([policyKey, version, acceptedAt])
+}
+
 // [Nền Hệ thống P1 · US-07 AC3] Nhật ký đối soát đêm centerId ↔ orgUnitId.
 //
 // Có bảng RUN riêng vì nếu chỉ ghi bảng LỆCH thì "đêm sạch" và "job không chạy" trông
