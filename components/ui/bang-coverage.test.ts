@@ -30,6 +30,8 @@ const MIEN_TRU: Record<string, string> = {
     "bảng trong tài liệu hướng dẫn",
   "app/(teacher)/teacher/huong-dan/_components/guide-markdown.tsx":
     "bảng trong tài liệu hướng dẫn",
+  "components/blog/markdown-renderer.tsx":
+    'bảng trong VĂN BẢN markdown (bài viết + 10 trang chính sách nộp Bộ Công Thương) — nội dung cố định do người soạn viết, không phải danh sách đọc từ DB. Thẻ <table> ở đây thêm 21/09/2026 CHỈ để bọc `overflow-x-auto`: `prose` không có wrapper cuộn ngang nên bảng "mức hoàn trả" 2 cột đẩy tràn cả trang ở 375px. Phân trang một bảng 4 dòng của văn bản pháp lý là giấu mất mức hoàn tiền',
   "app/(public)/khoa-hoc/page.tsx":
     "bảng SO SÁNH hai khoá học — nội dung cố định, không phải danh sách",
   "app/(public)/hoc-cu/page.tsx": "bảng so sánh gói học cụ — nội dung cố định",
