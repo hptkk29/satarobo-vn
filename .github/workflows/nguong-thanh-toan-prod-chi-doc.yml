@@ -1,0 +1,126 @@
+# Chạy TAY (workflow_dispatch) — ĐỌC PROD, KHÔNG GHI GÌ.
+#
+# Đo 4 con số quyết định thiết kế đợt "quy trình thanh toán" (kế hoạch:
+# `docs/quy-trinh-thanh-toan-2209.md`, mục "GĐ 0 — ĐO TRƯỚC KHI CODE"):
+#   ① đơn đang mở có bao nhiêu ĐỢT      → quy mô hàng chờ khi hạ trần 12 → 4
+#   ② dòng đơn có bao nhiêu KHOẢN GIẢM  → quy mô hàng chờ khi hạ trần 5 → 1
+#   ③ đơn treo `PENDING_APPROVAL`       → tập phải ĐÓNG SỔ trước khi bật lại màn duyệt
+#   ④ khoản thu nào suy được người thu  → quy mô backfill `Payment.collectedById`
+#
+# ── BỐN LỚP KHOÁ, ĐỘC LẬP NHAU (chép khuôn `doi-soat-tien-prod-chi-doc.yml`) ───────────
+# 1. KHÔNG CÓ CHẾ ĐỘ GHI. `scripts/bao-cao-nguong-thanh-toan.ts` KHÔNG chứa một lời gọi ghi nào
+#    — không `create`/`update`/`delete`/`upsert`, không đọc tham số dòng lệnh, không cờ bật ghi.
+#    Một cờ thì lật được; một tệp không chứa lệnh ghi thì không. Ca `[NTT-01]`
+#    (`lib/finance/bao-cao-nguong-thanh-toan.test.ts`) quét chính tệp đó.
+# 2. TRANSACTION READ ONLY + ROLLBACK. Script bọc mọi truy vấn trong `SET TRANSACTION READ ONLY`
+#    rồi ném một lỗi canh sẵn để không lượt nào commit được — kể cả phép ghi do một `import` nào
+#    đó kéo theo. (`return` KHÔNG rollback, chỉ `throw` mới rollback — luật ở CLAUDE.md.)
+# 3. USER CHỈ-ĐỌC. File này CỐ Ý KHÔNG đọc `PROD_DATABASE_URL` / `PROD_DIRECT_URL` (hai secret
+#    đầy quyền). Nó chỉ biết `PROD_DATABASE_URL_RO`. Gõ nhầm một dòng `run` thành lệnh ghi thì
+#    Postgres vẫn từ chối. Cách tạo user: `docs/cham-cong/USER-CHI-DOC-PROD.md`.
+# 4. SCRIPT TỰ KHAI. Dòng đầu báo cáo in `user=… · ghi được: CÓ/KHÔNG`, và báo cáo này còn tự
+#    kiểm quyền SELECT trên ĐÚNG 6 bảng nó đọc (`Order`, `OrderItem`, `Payment`,
+#    `PaymentRequest`, `OrderInstallment`, `Lead`) — vì `scripts/_kiem-quyen.ts` dùng chung hỏi
+#    quyền trên `ClassSession`, bảng mà báo cáo này KHÔNG đọc. GitHub không cho đọc lại secret
+#    để đối chiếu, nên dòng tự khai là cách DUY NHẤT thấy được secret bị đặt nhầm.
+#
+# ── CHE DỮ LIỆU CÁ NHÂN ───────────────────────────────────────────────────────────────
+# Báo cáo đi vào job summary + artifact, tức nó RỜI KHỎI vòng kiểm soát của DB. Script này
+# KHÔNG đọc và KHÔNG in một cột cá nhân nào: không tên phụ huynh/con, không SĐT, không email,
+# không nội dung CK. Mã đơn + trạng thái + số tiền là đủ để quyết định.
+#
+# Artifact giữ 3 ngày — đủ để đọc và quyết, không đủ để thành một bản sao dữ liệu sống lâu.
+#
+# Dùng chuỗi SESSION POOLER (:5432), không phải transaction pooler (:6543): pgbouncer không giữ
+# prepared statement giữa các câu lệnh — xem `scripts/_script-db.ts`.
+name: Ngưỡng thanh toán · PROD · ĐỌC (chỉ đọc — không ghi gì)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  doc:
+    name: Đo 4 con số (không ghi)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Chỉ chạy trên `main` — báo cáo này để QUYẾT ĐỊNH, nên nó phải đọc prod bằng đúng
+    # `schema.prisma` đang chạy trên prod. Chạy từ nhánh feature có migration chưa lên là
+    # Prisma ném `P2022` giữa chừng (đã xảy ra 07/09 với `ClassSession.rosterSize`).
+    if: github.ref == 'refs/heads/main'
+    steps:
+      # Kiểm HÌNH DẠNG chuỗi trước khi tốn 40 giây cài đặt rồi mới chết ở Prisma.
+      # KHÔNG in giá trị secret ra log — chỉ nói chỗ nào sai.
+      - name: Kiểm secret chỉ-đọc
+        env:
+          U: ${{ secrets.PROD_DATABASE_URL_RO }}
+        run: |
+          if [ -z "$U" ]; then
+            echo "::error::Thiếu secret PROD_DATABASE_URL_RO (chuỗi session pooler của user chỉ-đọc)."
+            echo "::error::Cách tạo user + lấy chuỗi: docs/cham-cong/USER-CHI-DOC-PROD.md"
+            echo "::error::KHÔNG đặt PROD_DATABASE_URL / PROD_DIRECT_URL vào đây — chúng đầy quyền."
+            exit 1
+          fi
+          rest="${U#*://}"
+          proto="${U%%://*}"
+          userinfo="${rest%@*}"
+          user="${userinfo%%:*}"
+          hostport="${rest##*@}"
+          port="${hostport##*:}"; port="${port%%/*}"
+          ok=1
+          case "$proto" in
+            postgresql|postgres) ;;
+            *) echo "::error::Chuỗi phải bắt đầu bằng postgresql:// — đang là '$proto://'"; ok=0 ;;
+          esac
+          case "$user" in
+            *.*) ;;
+            *) echo "::error::Tên user THIẾU hậu tố '.<mã dự án>' — Supavisor định tuyến theo mã dự án nằm TRONG tên user."; ok=0 ;;
+          esac
+          if [ "$port" != "5432" ]; then
+            echo "::error::Cổng đang là '$port' — phải là 5432 (tab 'Session pooler'). Cổng 6543 là Transaction pooler: nó không giữ prepared statement nên script chạy nhiều truy vấn liên tiếp sẽ chết giữa chừng."
+            ok=0
+          fi
+          [ $ok -eq 1 ] || { echo "::error::Sửa secret rồi chạy lại. Không có bước nào chạm DB."; exit 1; }
+          echo "Chuỗi đúng hình dạng."
+
+      - uses: actions/checkout@v4
+      # `version` PHẢI pin: `package.json` của repo KHÔNG có khoá `packageManager`, nên thiếu dòng
+      # này là action chết ngay với "No pnpm version is specified". Lưỡi canh toàn repo ở
+      # `lib/finance/bao-cao-chi-doc.test.ts` ca `[BCD-04]`.
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # `prisma generate` chỉ sinh mã client vào node_modules của runner — không chạm DB.
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      - name: Dựng báo cáo (chỉ đọc)
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+        run: pnpm exec tsx scripts/bao-cao-nguong-thanh-toan.ts
+
+      - name: Đưa báo cáo lên job summary
+        if: always()
+        run: |
+          if [ -f bao-cao-nguong-thanh-toan.md ]; then
+            cat bao-cao-nguong-thanh-toan.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error::Script không sinh được báo cáo — xem log bước trên."
+          fi
+
+      - name: Lưu artifact (3 ngày)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bao-cao-nguong-thanh-toan
+          path: bao-cao-nguong-thanh-toan.md
+          retention-days: 3
+          if-no-files-found: warn
