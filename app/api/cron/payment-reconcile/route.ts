@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { notifyStaff } from "@/lib/notifications/notify";
 import { withCron } from "@/lib/cron/handler";
 import { PERMISSIONS } from "@/lib/auth/permissions";
+import { locDotCuaConDangBaoLuu } from "@/lib/finance/bao-luu-tien";
 
 export const dynamic = "force-dynamic";
 
@@ -107,6 +108,8 @@ type ReconcileResult = {
   unmatchedTxns: number;
   unmatchedAmount: number;
   overduePartial: number;
+  /** F2 — số phiếu quá hạn ĐƯỢC THA vì con đang bảo lưu. Nói ra, đừng lọc im lặng. */
+  thaViBaoLuu: number;
   overdueOutstanding: number;
   recipients: number;
   notified: number;
@@ -125,10 +128,29 @@ async function runPaymentReconcile(now: Date = new Date()): Promise<ReconcileRes
   const unmatchedAmount = unmatched.reduce((s, t) => s + t.amount, 0);
 
   // 2. Phiếu thu trả thiếu ĐÃ quá hạn.
-  const partial = await db.paymentRequest.findMany({
+  const partialTho = await db.paymentRequest.findMany({
     where: { status: "PARTIAL", dueDate: { not: null, lt: now } },
-    select: { id: true, amountDue: true, allocations: { select: { amount: true } } },
+    select: {
+      id: true,
+      orderItemId: true,
+      amountDue: true,
+      allocations: { select: { amount: true } },
+    },
   });
+
+  // F2 · US-18 AC2 vế hai — *"không có đợt nào của con đó thành QUA_HAN trong thời gian
+  // PAUSED"*. Chỗ này là ĐƯỜNG DUY NHẤT trong repo đọc `PaymentRequest.dueDate` để kết
+  // luận quá hạn (đo 22/09/2026: `overdueBucket` + `remindOverdueInstallments` của
+  // `lib/finance/debt.ts` đọc `OrderInstallment` — SỔ KHÁC). Ai thêm một đường quá hạn mới
+  // cho `PaymentRequest` thì phải gọi `locDotCuaConDangBaoLuu` ở đó nữa: phép tha này
+  // KHÔNG tự lan sang chỗ khác.
+  //
+  // ⚠️ Lọc ở TẦNG MÃ chứ không nhồi vào `where`: điều kiện thật có HAI vế
+  // (`reserve.enrollmentId IS NULL` ⇒ bảo lưu cả học viên, hoặc `= orderItem.enrollmentId`
+  // ⇒ đúng một ghi danh) và Prisma không diễn đạt được cặp ấy trong một filter lồng. Viết
+  // nửa điều kiện vào `where` là tha quá hạn cho cả khoá mà bé VẪN ĐANG HỌC.
+  const thaViBaoLuu = await locDotCuaConDangBaoLuu(db, partialTho);
+  const partial = partialTho.filter((r) => !thaViBaoLuu.has(r.id));
   const overdueOutstanding = partial.reduce(
     (s, r) => s + Math.max(0, r.amountDue - r.allocations.reduce((x, a) => x + a.amount, 0)),
     0,
@@ -139,6 +161,7 @@ async function runPaymentReconcile(now: Date = new Date()): Promise<ReconcileRes
       unmatchedTxns: 0,
       unmatchedAmount: 0,
       overduePartial: 0,
+      thaViBaoLuu: thaViBaoLuu.size,
       overdueOutstanding: 0,
       recipients: 0,
       notified: 0,
@@ -171,6 +194,7 @@ async function runPaymentReconcile(now: Date = new Date()): Promise<ReconcileRes
     unmatchedTxns: unmatched.length,
     unmatchedAmount,
     overduePartial: partial.length,
+    thaViBaoLuu: thaViBaoLuu.size,
     overdueOutstanding,
     recipients: recipients.length,
     notified,

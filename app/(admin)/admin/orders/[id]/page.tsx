@@ -25,6 +25,7 @@ import { maskPhone, maskEmail } from "@/lib/utils";
 import { laThuTienLinhHoatBat } from "@/lib/finance/feature";
 import { noTheoCon } from "@/lib/finance/debt";
 import { docTrangThaiDungHoc } from "@/lib/finance/dung-hoc-con";
+import { docBaoLuuCuaDon } from "@/lib/finance/bao-luu-tien";
 import { CongNoTheoCon, type PhieuGopView } from "../_components/cong-no-theo-con";
 import { docPhieuGopDangMo } from "@/lib/finance/phieu-gop";
 import { memoPhatHanh } from "@/lib/payments/memo-phat-hanh";
@@ -220,6 +221,12 @@ export default async function OrderDetailPage({ params }: Props) {
   // PHIÊN D — trạng thái dừng học của từng dòng. Cùng công tắc: tắt thì không thêm một
   // truy vấn nào.
   const trangThaiDungHoc = batThuTheoCon ? await docTrangThaiDungHoc(order.id) : undefined;
+  // F2 — con nào đang bảo lưu + hạn đợt đã dời bao nhiêu ngày. Hỏi RIÊNG ở trang, cố ý
+  // KHÔNG nhồi vào `noTheoCon`: hàm đó chạy trong transaction của mọi phép ghi tiền nên mỗi
+  // câu tra thêm ở đó là thêm thời gian nằm dưới khoá đơn cho một thông tin chỉ để hiển thị.
+  const baoLuuTheoCon = batThuTheoCon
+    ? Object.fromEntries(await docBaoLuuCuaDon(order.id))
+    : undefined;
 
   // ── PHIÊN C · phiếu gộp đang mở [20/09/2026] ────────────────────────────────
   //
@@ -350,6 +357,7 @@ export default async function OrderDetailPage({ params }: Props) {
             duocGan={canRecordPayments}
             duocBoGan={canManagePayments}
             dungHoc={trangThaiDungHoc}
+            baoLuu={baoLuuTheoCon}
             phieu={phieuGop}
           />
         </div>
