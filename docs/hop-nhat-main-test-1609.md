@@ -782,3 +782,47 @@ nó"*). Bộ test đỏ giả ăn mòn cổng nhanh hơn bộ test không có.
 - Trên `103cd5ea` (bản lên prod): **KHÔNG có bằng chứng pass** — chỉ **SUY RA** từ chỗ nó
   hơn `5ec29d01` đúng 1 tài liệu + 2 `migration.sql`, và hai lượt chạy giống hệt tới cùng
   một mốc. **Không được viết "đã pass trên mã này".**
+
+---
+
+### 🔴 NỢ-18 · XOAY MẬT KHẨU SUPABASE **DEV** — việc bảo mật chưa ai ghi lại
+
+**Ghi ngày 22/09/2026.** Trước đó việc này **chỉ tồn tại trong một cuộc trò chuyện** — tức
+phiên đóng là mất. Một việc bảo mật không được phép sống ở đó.
+
+#### Vì sao
+
+Chuỗi kết nối Supabase **DEV** đã bị lộ ra trong một phiên làm việc. Chưa có bằng chứng nó
+bị dùng sai, nhưng "chưa có bằng chứng" không phải "an toàn" — và chi phí xoay thấp hơn hẳn
+chi phí phải điều tra một lần rò rỉ.
+
+⚠️ **Chỉ DEV.** Prod và `test` là hai project Supabase **khác** (đã đo 17/09 — xem `NỢ-8`),
+không đụng tới.
+
+#### Ai làm
+
+**Chủ dự án.** Việc này chạm thông tin đăng nhập nên trợ lý không làm và cũng không cần
+biết giá trị mới.
+
+#### Các bước
+
+1. Supabase → project **DEV** (`mqvojw…`) → **Settings → Database → Reset database password**.
+2. Cập nhật **mọi nơi đang giữ chuỗi cũ**, đừng sót — sót một chỗ là một lỗi "không kết nối
+   được" xuất hiện vài ngày sau ở nơi chẳng liên quan:
+   - `.env` trên máy dev (khoá `DATABASE_URL`, `DIRECT_URL`)
+   - Vercel env **Preview** nếu đang trỏ DEV (xem
+     `reference_vercel_preview_db` — Preview cố ý dùng DEV, không dùng prod)
+   - bất kỳ secret nào trong GitHub Actions trỏ DEV
+3. Kiểm lại bằng **hành vi**, không bằng cảm giác:
+   ```bash
+   pnpm exec prisma migrate status      # với env DEV
+   ```
+   Phải ra danh sách migration, không phải `P1000/P1001`.
+
+#### Kiểm chéo: chuỗi cũ đã CHẾT chưa
+
+Xoay xong mà chuỗi cũ vẫn dùng được thì chưa xong. Thử lại đúng chuỗi cũ **một lần** — phải
+ra `P1000 Authentication failed`. Đây là **đối chứng dương** của cả việc này: không có nó
+thì "đã xoay" chỉ là niềm tin.
+
+⚠️ Đừng dán chuỗi cũ hay mới vào chat, ticket, hay commit. Kiểm rồi xoá khỏi lịch sử lệnh.
