@@ -1,6 +1,6 @@
 import { marked } from 'marked'
 import { HR_CONTACT } from '@/lib/data/job-options'
-import { SATA_ROBO_CONTACT, SATA_ROBO_LOCATIONS } from '@/lib/locations'
+import { SATA_ROBO_CONTACT, SATA_ROBO_LOCATIONS, OPENING_HOURS_SCHEMA } from '@/lib/locations'
 
 const BASE_URL = 'https://satarobo.vn'
 
@@ -25,6 +25,10 @@ export function organizationJsonLd() {
     '@context': 'https://schema.org',
     '@type': 'EducationalOrganization',
     name: SATA_ROBO_CONTACT.shortName,
+    // Hồ sơ BCT mục 2. `legalName` là thuộc tính schema.org dành riêng cho tên pháp nhân;
+    // trước 21/09/2026 tên đầy đủ chỉ nằm ở `alternateName` (chỗ dành cho tên gọi khác),
+    // nên bộ máy đọc được "Sata Robo" mà không đọc được pháp nhân nào đứng sau.
+    legalName: SATA_ROBO_CONTACT.legalNameUpper,
     alternateName: SATA_ROBO_CONTACT.companyName,
     url: BASE_URL,
     logo: `${BASE_URL}/brand/logo-satarobo.jpg`,
@@ -56,7 +60,10 @@ export function organizationJsonLd() {
       addressLocality: loc.district,
       addressRegion: 'Đà Nẵng',
       addressCountry: 'VN',
-      name: loc.isHQ ? `${loc.name} - Trụ sở chính` : loc.name,
+      // Trước 21/09/2026 dòng này nối thêm " - Trụ sở chính" khi isHQ, tức TRANG CHỦ
+      // phát chuỗi bị hướng dẫn BCT cấm ở dạng MÁY ĐỌC ĐƯỢC. Kiểm bằng view-source +
+      // grep "Trụ sở", đừng kiểm bằng mắt trên màn hình.
+      name: loc.name,
     })),
     sameAs: [
       SATA_ROBO_CONTACT.facebook,
@@ -116,7 +123,11 @@ export function localBusinessJsonLd(center: CenterInput) {
     telephone: center.phone ?? undefined,
     email: center.email ?? undefined,
     url: BASE_URL,
-    openingHours: 'Mo-Su 08:00-21:00',
+    // Sinh từ `workingHours` của chính cơ sở, KHÔNG gõ tay. Trước 21/09/2026 dòng này
+    // đóng cứng 'Mo-Su 08:00-21:00' trong khi /lien-he in "T2 - T7: 8:00 - 20:00" ngay
+    // phía trên — hai con số khác nhau cho cùng một cơ sở, trên cùng một trang, một cái
+    // cho người đọc và một cái cho máy đọc.
+    openingHours: OPENING_HOURS_SCHEMA,
     image: `${BASE_URL}/brand/logo-satarobo.jpg`,
   }
 }
@@ -252,7 +263,9 @@ export function jobPostingJsonLd(job: JobForJsonLd) {
     employmentType: EMPLOYMENT_TYPE_MAP[job.type ?? ''] ?? 'OTHER',
     hiringOrganization: {
       '@type': 'Organization',
-      name: 'Công ty Cổ phần Công nghệ Giáo dục Sata Robo',
+      // Đọc từ hằng, không gõ tay: bản sao ở đây từng là chuỗi literal thứ hai của tên
+      // pháp nhân, và hai bản sao thì sớm muộn cũng lệch.
+      name: SATA_ROBO_CONTACT.companyName,
       sameAs: BASE_URL,
       logo: `${BASE_URL}/brand/logo-satarobo.jpg`,
     },

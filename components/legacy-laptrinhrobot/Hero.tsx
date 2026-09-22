@@ -13,7 +13,7 @@ interface Center {
 }
 
 const centers: Center[] = [
-  { icon: Building2, name: "Trụ sở chính - Nguyễn Hữu Thọ", address: "211 Nguyễn Hữu Thọ, Đà Nẵng" },
+  { icon: Building2, name: "Cơ sở Nguyễn Hữu Thọ", address: "211 Nguyễn Hữu Thọ, Đà Nẵng" },
   { icon: MapPin, name: "Cơ sở Hoàng Diệu", address: "114 Hoàng Diệu, Đà Nẵng" },
 ];
 

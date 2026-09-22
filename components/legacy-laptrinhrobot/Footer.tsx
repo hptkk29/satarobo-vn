@@ -5,6 +5,8 @@
 import Image from "next/image";
 import { Clock, Mail, MapPin, MessageCircle, Phone } from "lucide-react";
 import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
+import { LEGAL_PAGES, LEGAL_INDEX_SLUG, legalHref } from "@/lib/legal-pages";
+import { CongTyBlock } from "@/components/public/cong-ty-block";
 
 // Inline SVG icons — Facebook + Youtube not exported by this lucide-react version
 function Facebook({ className }: { className?: string }) {
@@ -113,8 +115,11 @@ export default function Footer() {
               &ldquo;Khơi Nguồn Sáng Tạo<br />Chắp Cánh Tương Lai&rdquo;
             </p>
             <p className="text-xs text-gray-400 leading-relaxed">
-              Công ty Cổ phần Công nghệ Giáo dục Sata Robo. Tiên phong Robotics giáo dục tại Đà Nẵng.
+              Tiên phong Robotics giáo dục tại Đà Nẵng.
             </p>
+            {/* Khối pháp nhân đầy đủ theo hướng dẫn BCT mục 2 (tên HOA · mã số doanh nghiệp
+                kèm cơ quan cấp + ngày cấp · địa chỉ đầy đủ · 2 số điện thoại · email). */}
+            <CongTyBlock className="mt-4 text-gray-400" />
             <div className="flex gap-3 mt-5">
               <a href="https://facebook.com/Satarobo" target="_blank" rel="noopener noreferrer" aria-label="Facebook"
                 className="w-9 h-9 rounded-lg bg-white/10 hover:bg-primary-orange flex items-center justify-center transition">
@@ -185,14 +190,42 @@ export default function Footer() {
           </div>
         </div>
 
-        <div className="border-t border-white/10 pt-4 sm:pt-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-gray-400">
+        {/* 10 chính sách bắt buộc của hồ sơ BCT — HÀNG RIÊNG full-width, không nhét vào
+            hàng copyright bên dưới: hàng đó là `justify-between` một dòng và KHÔNG có
+            `flex-wrap`, nên 10 link sẽ tràn ngang cả desktop lẫn điện thoại.
+            Chân trang này có hai cây markup (mobile/desktop) nhưng dải đáy dùng chung,
+            nên đặt ở đây là sửa MỘT chỗ. */}
+        <nav
+          aria-label="Chính sách của website"
+          className="border-t border-white/10 pt-4 sm:pt-6"
+        >
+          <ul className="grid grid-cols-1 gap-x-6 gap-y-2 text-xs text-gray-400 sm:grid-cols-2 lg:grid-cols-3">
+            {LEGAL_PAGES.map((p) => (
+              <li key={p.slug}>
+                <a href={legalHref(p.slug)} className="hover:text-primary-orange transition">
+                  {p.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+
+        <div className="border-t border-white/10 mt-4 pt-4 sm:pt-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-gray-400">
           <div>
-            © 2026 <strong className="text-white">Công ty CP Công nghệ Giáo dục Sata Robo</strong>.
+            © 2026{" "}
+            <strong className="text-white">
+              Công ty Cổ phần Công nghệ Giáo dục Sata Robo
+            </strong>
+            .
           </div>
           <div className="flex items-center gap-3">
-            <a href="/chinh-sach-bao-mat" className="hover:text-primary-orange transition">Bảo Mật</a>
+            <a href={legalHref(LEGAL_INDEX_SLUG)} className="hover:text-primary-orange transition">
+              Chính sách của website
+            </a>
             <span>|</span>
-            <a href="/dieu-khoan-su-dung" className="hover:text-primary-orange transition">Điều Khoản</a>
+            <a href="/dieu-khoan-su-dung" className="hover:text-primary-orange transition">
+              Điều khoản sử dụng
+            </a>
           </div>
         </div>
       </div>

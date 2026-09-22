@@ -46,6 +46,7 @@ import {
 import { PortalAppearanceProvider } from "@/components/portal/appearance-provider";
 import { PortalThemeToggle } from "@/components/portal/theme-toggle";
 import { useChatUnread } from "@/components/chat/use-chat-unread";
+import { DaiLinkPhapLy } from "@/components/public/dai-link-phap-ly";
 
 // Portal v2 (merge SataUI) — shell Cổng phụ huynh: sidebar coral + topbar profile chip.
 // Nav map sang route /portal/* của main. Bọc .portal-v2 để accent coral.
@@ -398,6 +399,13 @@ export function PortalV2Shell({
         <main className="min-w-0 flex-1 overflow-x-clip p-4 sm:p-6">
           {children}
         </main>
+
+        {/* Dải link pháp lý — hồ sơ BCT đòi chính sách phải tới được từ nơi người mua đang
+            đứng, mà cổng phụ huynh trước 21/09/2026 có 0 liên kết pháp lý nào.
+            Đặt SAU </main> và TRƯỚC bottom-nav sticky để nav không che nó trên điện thoại. */}
+        <div className="border-t border-border px-4 py-3 lg:px-6">
+          <DaiLinkPhapLy />
+        </div>
 
         {/* Bottom nav (mobile): 4 mục đầu + menu "Thêm" chứa các mục còn lại */}
         <nav className="sticky bottom-0 z-40 flex items-center justify-around border-t border-border bg-card px-1 py-1.5 lg:hidden">

@@ -452,11 +452,7 @@ export default function VeChungToiPage() {
                   >
                     <MapPin className="h-5 w-5" />
                   </span>
-                  {loc.isHQ && (
-                    <span className="rounded-full bg-gradient-to-r from-orange-500 to-amber-500 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-sm">
-                      HQ · Trụ sở chính
-                    </span>
-                  )}
+                  {/* Badge "HQ · Trụ sở chính" đã gỡ theo hướng dẫn BCT. Cờ isHQ giữ nguyên. */}
                 </div>
                 <h4 className="text-base font-bold text-neutral-900">
                   {loc.name}
