@@ -171,7 +171,7 @@ describe("[QDS-03] khoá theo đơn — MỘT công thức, dùng chung với đ
     expect(ghi).not.toMatch(/\$queryRaw`SELECT pg_advisory_xact_lock/);
     // Và mọi phép ghi tiền của tệp này đi qua `ghiTienChoDon`, tức luôn nằm dưới khoá.
     //
-    // **7** lời gọi. Khai báo là `ghiTienChoDon<T>(` nên không đếm.
+    // **8** lời gọi. Khai báo là `ghiTienChoDon<T>(` nên không đếm.
     //   1. `taoDotChoCon`          — tạo đợt cho một bé
     //   2. `huyDotChoCon`          — huỷ đợt chưa có tiền
     //   3. `ganTienTheoCon`        — gắn một GIAO DỊCH ngân hàng, chia theo đợt
@@ -179,12 +179,13 @@ describe("[QDS-03] khoá theo đơn — MỘT công thức, dùng chung với đ
     //   5. `boGanKhoanKhoiCon`     — đường B: bỏ gắn                            [18/09/2026]
     //   6. `goGanTheoCon`          — gỡ gắn giao dịch, sinh bút toán đảo
     //   7. `tachKhoanChoCon`       — đường B: TÁCH một khoản cho n bé          [20/09/2026]
+    //   8. `chuyenTienGiuaCon`     — chuyển tiền giữa hai bé CÙNG ĐƠN         [22/09/2026]
     //
     // ⚠️ Con số này ĐẾM CÓ CHỦ ĐÍCH, đừng đổi thành `toBeGreaterThan`. Nó bắt đúng một thứ:
     // ai đó thêm một đường ghi tiền mới mà **quên bọc khoá** thì tổng không tăng, và ca này
     // đỏ. Nới thành "≥" là gỡ luôn khả năng ấy. Thêm hàm mới thì SỬA SỐ và thêm một dòng vào
     // danh sách trên — vài giây, và nó buộc người thêm phải đọc lại vì sao có khoá.
-    expect(ghi.match(/ghiTienChoDon\(/g) ?? []).toHaveLength(7);
+    expect(ghi.match(/ghiTienChoDon\(/g) ?? []).toHaveLength(8);
   });
 
   it("đường webhook dùng ĐÚNG công thức khoá ấy — hai đường phải giẫm lên nhau được", () => {

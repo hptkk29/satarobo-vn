@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { CalendarClock, Plus, Users, X } from "lucide-react";
+import { ArrowLeftRight, CalendarClock, Plus, Users, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { NutDungHoc } from "./dung-hoc-dialog";
 
 import {
   boGanKhoanChoConAction,
+  chuyenTienGiuaConAction,
   dongPhieuGopAction,
   ganKhoanChoConAction,
   huyDotChoConAction,
@@ -321,6 +322,128 @@ function FormTachKhoan({
         Tách rồi thì <b>không gộp lại được</b>. Sửa nhầm: kế toán bỏ gắn từng phần rồi gắn
         hoặc tách lại.
       </p>
+    </div>
+  );
+}
+
+/**
+ * F1 — CHUYỂN TIỀN từ bé này sang bé khác CÙNG ĐƠN [22/09/2026].
+ *
+ * ⚠️ Mở TẠI CHỖ, không hộp thoại — cùng lối với "Tạo đợt" và "Tách khoản": người bấm cần
+ * nhìn thấy con số "đã thu" và "còn nợ" của cả hai bé ngay lúc gõ. Chỉ "Dừng học" mới
+ * dùng hộp thoại, vì nó không hoàn tác được.
+ */
+function FormChuyenTien({
+  orderId,
+  cho,
+  con,
+  dong,
+}: {
+  orderId: string;
+  cho: NoTheoConKetQua["con"][number];
+  con: NoTheoConKetQua["con"];
+  dong: () => void;
+}) {
+  const conLai = con.filter((c) => c.orderItemId !== cho.orderItemId);
+  const [den, datDen] = useState(conLai[0]?.orderItemId ?? "");
+  const [oTien, datOTien] = useState("");
+  const [lyDo, datLyDo] = useState("");
+  const [dangChay, batDau] = useTransition();
+
+  const beNhan = conLai.find((c) => c.orderItemId === den);
+  const soTien = Number((oTien || "").replace(/\D/g, "")) || 0;
+  // Gợi ý = nhỏ hơn giữa hai trần. CHỈ là gợi ý — cổng thật nằm ở máy chủ.
+  const toiDa = beNhan ? Math.min(Math.max(0, cho.daThu), Math.max(0, beNhan.conNo)) : 0;
+  const hopLe = soTien > 0 && soTien <= toiDa && !!lyDo.trim() && !!beNhan;
+
+  const gui = () => {
+    batDau(async () => {
+      const r = await chuyenTienGiuaConAction({
+        orderId,
+        tuOrderItemId: cho.orderItemId,
+        denOrderItemId: den,
+        soTien,
+        lyDo: lyDo.trim(),
+      });
+      if (!r.ok) {
+        toast.error(r.error);
+        return;
+      }
+      toast.success(`Đã chuyển ${vnd(r.soTien)} từ ${r.tenCho} sang ${r.tenNhan}`);
+      dong();
+    });
+  };
+
+  return (
+    <div className="mt-3 rounded-lg border border-border bg-background p-3">
+      <p className="text-xs text-muted-foreground">
+        Chuyển phần <b className="text-foreground">kế toán ĐÃ XÁC NHẬN</b> của {cho.ten}
+        {" "}sang một bé khác cùng đơn. Tối đa {vnd(Math.max(0, cho.daThu))} (phần đã xác nhận
+        của {cho.ten}), và không vượt phần còn nợ của bé nhận.
+      </p>
+
+      <div className="mt-2 space-y-2">
+        <label className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+          <span className="min-w-0 flex-1 text-sm">Chuyển sang</span>
+          <select
+            aria-label="Chọn bé nhận tiền"
+            className="h-9 min-w-0 rounded-md border border-input bg-background px-2 text-sm sm:w-56"
+            value={den}
+            onChange={(e) => datDen(e.target.value)}
+          >
+            {conLai.map((c) => (
+              <option key={c.orderItemId} value={c.orderItemId}>
+                {c.ten} — còn nợ {vnd(Math.max(0, c.conNo))}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+          <span className="min-w-0 flex-1 text-sm">
+            Số tiền
+            <span className="ml-2 text-xs text-muted-foreground">tối đa {vnd(toiDa)}</span>
+          </span>
+          <Input
+            inputMode="numeric"
+            className="tabular-nums sm:w-56"
+            placeholder="0"
+            value={oTien}
+            onChange={(e) => datOTien(e.target.value)}
+            aria-label={`Số tiền chuyển từ ${cho.ten}`}
+          />
+        </label>
+
+        <label className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+          <span className="min-w-0 flex-1 text-sm">Lý do *</span>
+          <Input
+            className="sm:w-56"
+            placeholder="VD: gắn nhầm bé lúc đối soát"
+            value={lyDo}
+            onChange={(e) => datLyDo(e.target.value)}
+            aria-label="Lý do chuyển tiền"
+          />
+        </label>
+      </div>
+
+      {/* Nút bị vô hiệu thì phải NÓI VÌ SAO (luật 12) — nếu không, người vận hành đọc nó
+          như hệ thống hỏng và đi tìm nhầm chỗ. Ca thật: mọi bé còn lại đều hết nợ. */}
+      {toiDa <= 0 && (
+        <p className="mt-2 text-xs text-amber-700 dark:text-amber-500">
+          {beNhan
+            ? `${beNhan.ten} không còn nợ đồng nào — chuyển sang là làm bé đó đóng thừa.`
+            : "Đơn không còn bé nào khác để nhận."}
+        </p>
+      )}
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button type="button" size="sm" disabled={!hopLe || dangChay} onClick={gui}>
+          Chuyển
+        </Button>
+        <Button type="button" size="sm" variant="ghost" disabled={dangChay} onClick={dong}>
+          Huỷ
+        </Button>
+      </div>
     </div>
   );
 }
@@ -820,6 +943,8 @@ export function CongNoTheoCon({
   phieu?: PhieuGopView | null;
 }) {
   const [dangMoForm, datDangMoForm] = useState<string | null>(null);
+  /** F1 — bé nào đang mở form chuyển tiền. Một lúc chỉ một. */
+  const [dangMoChuyen, datDangMoChuyen] = useState<string | null>(null);
   /**
    * Các đợt sale đang tick để gộp thành MỘT phiếu.
    *
@@ -928,6 +1053,7 @@ export function CongNoTheoCon({
           const conLaiTaoDot = c.conNo - c.tongDotDangMo;
           const moForm = dangMoForm === c.orderItemId;
           const tt = dungHoc?.[c.orderItemId];
+          const moChuyen = dangMoChuyen === c.orderItemId;
           return (
             <li
               key={c.orderItemId}
@@ -1064,6 +1190,31 @@ export function CongNoTheoCon({
               {/* Bé đã dừng thì KHÔNG còn nút "Dừng học" và KHÔNG tạo đợt mới được —
                   phần còn nợ (nếu học lố) vẫn tạo đợt được như thường, nên cổng nằm ở
                   `conLaiTaoDot` chứ không ở đây. */}
+              {/* F1 — chuyển tiền sang bé khác. Chỉ vẽ khi CÓ bé khác và bé này CÓ tiền
+                  đã xác nhận để chuyển: một nút dẫn thẳng tới câu từ chối là lời hứa suông
+                  (luật 12). */}
+              {duocBoGan && so.con.length >= 2 && c.daThu > 0 && (
+                moChuyen ? (
+                  <FormChuyenTien
+                    orderId={orderId}
+                    cho={c}
+                    con={so.con}
+                    dong={() => datDangMoChuyen(null)}
+                  />
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-3"
+                    onClick={() => datDangMoChuyen(c.orderItemId)}
+                  >
+                    <ArrowLeftRight className="size-4" aria-hidden />
+                    Chuyển tiền sang bé khác
+                  </Button>
+                )
+              )}
+
               {duocSua && !tt?.daDung && (
                 <NutDungHoc orderId={orderId} orderItemId={c.orderItemId} tenCon={c.ten} />
               )}

@@ -29,6 +29,7 @@ import { docSoTheoCon } from "@/lib/finance/debt";
 import { kiemTaoDot, kiemHuyDot, type NoTheoConKetQua } from "@/lib/finance/no-theo-con";
 import { kiemChiaTheoCon, dungDotDeChia, type DongChia } from "@/lib/finance/chia-tien-theo-con";
 import { kiemTachKhoan, type PhanTach } from "@/lib/finance/tach-khoan";
+import { kiemChuyenTien } from "@/lib/finance/chuyen-tien-con";
 import { locDonNhanTien } from "@/lib/payments/don-nhan-tien";
 import { recomputeRequestStatuses } from "@/lib/payments/payment-request";
 import { thuTuRot } from "@/lib/payments/thu-tu-rot";
@@ -1217,4 +1218,93 @@ export async function chuyenTienGiuaConTrongTx(
   }
 
   return { tong, idDong };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 8 · CHUYỂN TIỀN GIỮA HAI CON — THAO TÁC ĐỨNG RIÊNG  [PHIÊN F1 · 22/09/2026]
+//
+// Mục 7 (`chuyenTienGiuaConTrongTx`) là phép GHI, sinh ra cho bước "phân hết khoản dư"
+// của lượt dừng học. Mục này mở đúng phép ấy thành thao tác dùng được BẤT KỲ LÚC NÀO —
+// ca thật: phụ huynh chuyển một khoản, sale gắn nhầm cho bé A, phát hiện ra sau.
+//
+// ⚠️ KHÔNG dùng lại `boGanKhoanKhoiCon` + `ganKhoanDaThuChoCon` cho việc này, dù nghe
+// tương đương. Ba lý do, mỗi cái đều đủ:
+//   · "bỏ gắn rồi gắn lại" chỉ chuyển được TRỌN một khoản; ca thật thường là chuyển MỘT
+//     PHẦN (phụ huynh đóng chung 9.530.000đ, chia nhầm 6/3.5 thay vì 5/4.5);
+//   · nó đi qua hai lượt ghi rời, nên có một khoảnh khắc tiền không thuộc bé nào — và
+//     nếu lượt hai hỏng thì nó ở lại đó;
+//   · nhật ký ra hai dòng không liên quan, thay vì một cặp −/+ mang chung mã nghiệp vụ.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function chuyenTienGiuaCon(input: {
+  orderId: string;
+  tuOrderItemId: string;
+  denOrderItemId: string;
+  soTien: number;
+  lyDo: string;
+  centerId: string | null;
+  actor: AuditActor;
+}): Promise<KetQuaGhi<{ soTien: number; tenCho: string; tenNhan: string }>> {
+  return ghiTienChoDon(input.orderId, async (tx, so) => {
+    // Cổng 1 — giải trình BẮT BUỘC. Đây là đường sửa một quyết định đã ghi vào sổ tiền,
+    // nên nó phải để lại câu trả lời cho "vì sao" (cùng luật với `boGanKhoanKhoiCon`).
+    if (!input.lyDo.trim()) {
+      return { ok: false as const, error: "Phải ghi lý do chuyển tiền giữa hai bé" };
+    }
+
+    // Cổng 2 — phép kiểm THUẦN, ăn con số đọc TRONG transaction đang giữ khoá đơn.
+    const kiem = kiemChuyenTien({
+      tuOrderItemId: input.tuOrderItemId,
+      denOrderItemId: input.denOrderItemId,
+      soTien: input.soTien,
+      con: so.con.map((c) => ({
+        orderItemId: c.orderItemId,
+        ten: c.ten,
+        daThu: c.daThu,
+        conNo: c.conNo,
+      })),
+    });
+    if (!kiem.ok) return { ok: false as const, error: kiem.loi };
+
+    // ── HẾT CỔNG. Từ đây là phép ghi. ────────────────────────────────────────
+
+    const kq = await chuyenTienGiuaConTrongTx(tx, {
+      orderId: input.orderId,
+      tuOrderItemId: input.tuOrderItemId,
+      phan: [{ orderItemId: input.denOrderItemId, soTien: kiem.soTien }],
+      centerId: input.centerId,
+      lyDo: input.lyDo.trim(),
+      // Mã nghiệp vụ theo LƯỢT, không theo bé: hai lượt chuyển khác nhau giữa cùng cặp bé
+      // phải phân biệt được trong nhật ký. `cuid()` của dòng đầu tiên là thứ sẵn có và duy
+      // nhất; dùng `orderItemId` như mục 7 thì mọi lượt trùng marker.
+      maNghiepVu: `${input.tuOrderItemId}-${Date.now()}`,
+    });
+
+    await writeAudit({
+      tx,
+      actor: input.actor,
+      module: "finance",
+      entityType: "Order",
+      entityId: input.orderId,
+      action: "CHUYEN_TIEN_GIUA_CON",
+      oldValues: {
+        tuOrderItemId: input.tuOrderItemId,
+        tenCho: kiem.tenCho,
+        daThuTruoc: so.con.find((c) => c.orderItemId === input.tuOrderItemId)?.daThu ?? 0,
+        denOrderItemId: input.denOrderItemId,
+        tenNhan: kiem.tenNhan,
+        conNoNhanTruoc: so.con.find((c) => c.orderItemId === input.denOrderItemId)?.conNo ?? 0,
+      },
+      newValues: { soTien: kiem.soTien, idDong: kq.idDong },
+      reason: input.lyDo.trim(),
+      orgUnitId: input.centerId,
+    });
+
+    return {
+      ok: true as const,
+      soTien: kiem.soTien,
+      tenCho: kiem.tenCho,
+      tenNhan: kiem.tenNhan,
+    };
+  });
 }
