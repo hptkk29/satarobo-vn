@@ -1,13 +1,21 @@
-// Tra cứu danh mục — giá khoá học, giá học cụ, lớp còn chỗ.
+// app/(admin)/admin/tra-cuu/page.tsx — TRA CỨU DANH MỤC: giá khoá, giá học cụ, lớp còn chỗ.
 //
-// Màn CHỈ ĐỌC. Mục đích hẹp: đang ngồi với phụ huynh thì tra được ngay, không
-// phải quay về khu quản trị hay hỏi miệng đồng nghiệp. Không có nút nào ghi dữ
-// liệu, và cũng không nên có — bảng giá là việc của Đào tạo/Kế toán.
+// Màn CHỈ ĐỌC. Mục đích hẹp: đang ngồi (hoặc đang nghe điện) với phụ huynh thì tra
+// được ngay, không phải quay về khu quản trị hay hỏi miệng đồng nghiệp. Không có nút
+// nào ghi dữ liệu, và cũng không nên có — bảng giá là việc của Đào tạo/Kế toán.
 //
-// Ba khối lọc theo quyền: ai có quyền nào thấy khối đó. Không ai bị đá ra vì
-// thiếu một quyền — trang vẫn mở với phần mình được xem.
+// ═══ THIẾT KẾ LẠI 22/09/2026 ════════════════════════════════════════════════════
+// Bản cũ: ba thẻ xếp chồng, mỗi thẻ một bảng, không có ô tìm — muốn xem lớp thì phải
+// cuộn qua hết bảng giá khoá và bảng học cụ, muốn tra một cái tên thì dò bằng mắt.
+// Bản này: MỘT ô tìm + MỘT bảng, chuyển danh mục bằng chip có mang SỐ KẾT QUẢ.
+// Xem `_components/tra-cuu-workspace.tsx` cho phần lý do đầy đủ.
+//
+// Trang chỉ lo DỮ LIỆU và QUYỀN: nạp đúng khối người xem được phép, định dạng sẵn mọi
+// chuỗi (tiền/ngày/nhãn) và ghép sẵn chuỗi tìm đã bỏ dấu. Component không tự đọc gì.
+//
+// Ba khối lọc theo quyền: ai có quyền nào thấy khối đó. Không ai bị đá ra vì thiếu
+// một quyền — trang vẫn mở với phần mình được xem.
 import { redirect } from "next/navigation";
-import { BookOpen, Boxes, School } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission, checkAnyPermission } from "@/lib/auth/check-permission";
 import { PAGE_GATES } from "@/lib/auth/page-gates";
@@ -15,7 +23,10 @@ import { resolveActor } from "@/lib/auth/actor";
 import { getSaleCatalog } from "@/lib/catalog/sale-catalog";
 import { formatVndPlain } from "@/lib/format/money";
 import { formatDateVN } from "@/lib/format/date";
-import { BangTraCuu } from "./_components/bang-tra-cuu";
+import { PageHeader } from "@/components/admin/ui/page-header";
+import { NoPermission } from "@/components/admin/ui/states";
+import { boDau } from "@/lib/ui/bo-dau";
+import { TraCuuWorkspace, type KhoiTraCuu } from "./_components/tra-cuu-workspace";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Tra cứu | Admin" };
@@ -51,112 +62,108 @@ export default async function TraCuuPage() {
   const actor = await resolveActor(session.user.id);
   const dm = await getSaleCatalog(actor, { xemHocCu, xemLop, xemKhoaHoc });
 
+  // Thứ tự khối = thứ tự hỏi của phụ huynh: giá khoá trước, rồi lớp nào học được,
+  // học cụ sau cùng (câu hỏi phát sinh chứ ít khi mở đầu).
+  const khoi: KhoiTraCuu[] = [];
+
+  if (xemKhoaHoc) {
+    khoi.push({
+      ma: "khoa",
+      nhan: "Khoá học",
+      donVi: "khoá",
+      khiRong: "Chưa có khoá nào đang mở bán.",
+      cot: [{ ten: "Khoá học", rong: true }, { ten: "Mã", anMobile: true }, { ten: "Giá", phai: true }],
+      dong: dm.khoaHoc.map((k) => ({
+        key: k.id,
+        tim: boDau(`${k.name} ${k.code ?? ""}`),
+        o: [k.name, k.code ?? "—", k.price == null ? "—" : formatVndPlain(k.price)],
+      })),
+    });
+  }
+
+  if (xemLop) {
+    khoi.push({
+      ma: "lop",
+      nhan: "Lớp đang mở",
+      donVi: "lớp",
+      khiRong: "Cơ sở của bạn chưa có lớp nào đang mở.",
+      cot: [
+        { ten: "Lớp" },
+        { ten: "Khoá", anMobile: true },
+        { ten: "Cơ sở", anMobile: true },
+        { ten: "Lịch", rong: true, anMobile: true },
+        { ten: "Khai giảng", anMobile: true },
+        { ten: "Trạng thái", anMobile: true },
+        { ten: "Còn chỗ", phai: true },
+      ],
+      // Lớp hết chỗ vẫn hiện, nhưng nhạt đi: sale cần biết nó tồn tại để trả lời
+      // "lớp đó đầy rồi", chứ không phải để giấu.
+      dong: dm.lop.map((l) => ({
+        key: l.id,
+        mo: l.conTrong === 0,
+        tim: boDau(`${l.ten} ${l.tenKhoa} ${l.tenCoSo ?? ""} ${l.lich ?? ""}`),
+        o: [
+          l.ten,
+          l.tenKhoa,
+          l.tenCoSo ?? "—",
+          l.lich ?? "—",
+          l.batDau ? formatDateVN(l.batDau) : "chưa định",
+          { t: TRANG_THAI_LOP_VI[l.status] ?? l.status, pill: "info" as const },
+          l.conTrong === 0
+            ? { t: "hết chỗ", pill: "muted" as const }
+            : { t: `${l.conTrong}/${l.sucChua}`, pill: "success" as const },
+        ],
+      })),
+    });
+  }
+
+  if (xemHocCu) {
+    khoi.push({
+      ma: "hoc-cu",
+      nhan: "Học cụ",
+      donVi: "mặt hàng",
+      khiRong: "Chưa có học cụ nào đang bán.",
+      // Nói thẳng vì sao không có cột tồn kho — không thì người dùng nghĩ là thiếu
+      // sót rồi đi hỏi.
+      luuY:
+        "Không hiện tồn kho: số lượng còn lại do bộ phận kho nắm — hỏi quản lý cơ sở trước khi hứa giao hàng với khách.",
+      cot: [
+        { ten: "Tên", rong: true },
+        { ten: "Mã", anMobile: true },
+        { ten: "Nhóm", anMobile: true },
+        { ten: "Giá bán", phai: true },
+      ],
+      dong: dm.hocCu.map((h) => ({
+        key: h.id,
+        tim: boDau(`${h.name} ${h.sku} ${NHOM_HOC_CU_VI[h.category] ?? h.category}`),
+        o: [
+          h.name,
+          h.sku,
+          NHOM_HOC_CU_VI[h.category] ?? h.category,
+          formatVndPlain(h.salePrice),
+        ],
+      })),
+    });
+  }
+
   return (
     <div>
-      <h1 className="text-2xl font-bold text-foreground">Tra cứu</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Bảng giá và lớp đang mở. Trang chỉ để xem — sửa giá hay mở lớp là việc của
-        Đào tạo và Quản lý cơ sở.
-      </p>
+      <PageHeader
+        title="Tra cứu"
+        subtitle="Bảng giá và lớp đang mở. Trang chỉ để xem — sửa giá hay mở lớp là việc của Đào tạo và Quản lý cơ sở."
+      />
 
-      <div className="mt-5 space-y-4">
-        {xemKhoaHoc ? (
-          <section className="rounded-xl border border-border bg-card p-4">
-            <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
-              <BookOpen className="h-4 w-4 text-primary" /> Khoá học ({dm.khoaHoc.length})
-            </h2>
-            {dm.khoaHoc.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Chưa có khoá nào đang mở bán.</p>
-            ) : (
-              <BangTraCuu
-                khoaGhiNho="tra-cuu-khoa"
-                tenDonVi="khoá"
-                cot={["Khoá học", "Mã", "Giá"]}
-                canPhai={[false, false, true]}
-                dong={dm.khoaHoc.map((k) => ({
-                  key: k.id,
-                  o: [k.name, k.code ?? "—", k.price == null ? "—" : formatVndPlain(k.price)],
-                }))}
-              />
-            )}
-          </section>
-        ) : null}
-
-        {xemHocCu ? (
-          <section className="rounded-xl border border-border bg-card p-4">
-            <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
-              <Boxes className="h-4 w-4 text-primary" /> Học cụ ({dm.hocCu.length})
-            </h2>
-            {/* Nói thẳng vì sao không có cột tồn kho — không thì người dùng nghĩ
-                là thiếu sót rồi đi hỏi. */}
-            <p className="mb-2 text-xs text-muted-foreground">
-              Không hiện tồn kho: số lượng còn lại do bộ phận kho nắm, hỏi quản lý cơ
-              sở trước khi hứa giao hàng với khách.
-            </p>
-            {dm.hocCu.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Chưa có học cụ nào đang bán.</p>
-            ) : (
-              <BangTraCuu
-                khoaGhiNho="tra-cuu-hoc-cu"
-                tenDonVi="mặt hàng"
-                cot={["Tên", "Mã", "Nhóm", "Giá bán"]}
-                canPhai={[false, false, false, true]}
-                dong={dm.hocCu.map((h) => ({
-                  key: h.id,
-                  o: [
-                    h.name,
-                    h.sku,
-                    NHOM_HOC_CU_VI[h.category] ?? h.category,
-                    formatVndPlain(h.salePrice),
-                  ],
-                }))}
-              />
-            )}
-          </section>
-        ) : null}
-
-        {xemLop ? (
-          <section className="rounded-xl border border-border bg-card p-4">
-            <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
-              <School className="h-4 w-4 text-primary" /> Lớp đang mở ({dm.lop.length})
-            </h2>
-            {dm.lop.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Cơ sở của bạn chưa có lớp nào đang mở.
-              </p>
-            ) : (
-              <BangTraCuu
-                khoaGhiNho="tra-cuu-lop"
-                tenDonVi="lớp"
-                cot={["Lớp", "Khoá", "Cơ sở", "Lịch", "Khai giảng", "Còn chỗ"]}
-                canPhai={[false, false, false, false, false, true]}
-                dong={dm.lop.map((l) => ({
-                  key: l.id,
-                  // Lớp hết chỗ vẫn hiện, nhưng nhạt đi: sale cần biết nó tồn tại
-                  // để trả lời "lớp đó đầy rồi", chứ không phải để giấu.
-                  mo: l.conTrong === 0,
-                  o: [
-                    l.ten,
-                    l.tenKhoa,
-                    l.tenCoSo ?? "—",
-                    l.lich ?? "—",
-                    l.batDau ? formatDateVN(l.batDau) : "chưa định",
-                    l.conTrong === 0
-                      ? "hết chỗ"
-                      : `${l.conTrong}/${l.sucChua} · ${TRANG_THAI_LOP_VI[l.status] ?? l.status}`,
-                  ],
-                }))}
-              />
-            )}
-          </section>
-        ) : null}
-
-        {!xemKhoaHoc && !xemHocCu && !xemLop ? (
-          <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-            Tài khoản của bạn chưa được cấp quyền xem danh mục nào.
-          </p>
-        ) : null}
-      </div>
+      {khoi.length === 0 ? (
+        // Trạng thái thứ tư của DESIGN.md §5: nói rõ THIẾU QUYỀN NÀO và HỎI AI.
+        // Vào được trang (cổng dùng phép HOẶC) mà không khối nào mở được là chuyện
+        // có thật khi ai đó được cấp đúng một quyền rồi quyền đó bị gỡ.
+        <NoPermission
+          what="danh mục nào"
+          permission="products:view · classes:view-all · orders:create"
+        />
+      ) : (
+        <TraCuuWorkspace khoi={khoi} />
+      )}
     </div>
   );
 }
