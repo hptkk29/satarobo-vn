@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { ArrowLeftRight, CalendarClock, Plus, Users, X } from "lucide-react";
+import { ArrowLeftRight, CalendarClock, HandCoins, Plus, Users, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import { NutDoiKhoa, type LopChon } from "./doi-khoa-dialog";
 import {
   boGanKhoanChoConAction,
   chuyenTienGiuaConAction,
+  mienGiamNoAction,
   dongPhieuGopAction,
   ganKhoanChoConAction,
   huyDotChoConAction,
@@ -323,6 +324,96 @@ function FormTachKhoan({
         Tách rồi thì <b>không gộp lại được</b>. Sửa nhầm: kế toán bỏ gắn từng phần rồi gắn
         hoặc tách lại.
       </p>
+    </div>
+  );
+}
+
+/**
+ * G1 · US-22 — MIỄN GIẢM một phần nợ của một bé [22/09/2026].
+ *
+ * ⚠️ Mở TẠI CHỖ, không hộp thoại: người bấm cần nhìn con số "còn nợ" của bé ngay lúc gõ, và
+ * trần của ô nhập CHÍNH LÀ con số ấy.
+ *
+ * ⚠️ Nút chỉ vẽ khi bé CÒN NỢ. Miễn giảm cho một bé hết nợ (hoặc đang đóng thừa) là thao tác
+ * mà máy chủ luôn từ chối — vẽ nút ở đó là lời hứa suông (luật 12).
+ */
+function FormMienGiam({
+  orderId,
+  con,
+  dong,
+}: {
+  orderId: string;
+  con: NoTheoConKetQua["con"][number];
+  dong: () => void;
+}) {
+  const [oTien, datOTien] = useState("");
+  const [lyDo, datLyDo] = useState("");
+  const [dangChay, batDau] = useTransition();
+
+  const soTien = Number((oTien || "").replace(/\D/g, "")) || 0;
+  const toiDa = Math.max(0, con.conNo);
+  const hopLe = soTien > 0 && soTien <= toiDa && !!lyDo.trim();
+
+  const gui = () => {
+    batDau(async () => {
+      const r = await mienGiamNoAction({
+        orderId,
+        orderItemId: con.orderItemId,
+        soTien,
+        lyDo: lyDo.trim(),
+      });
+      if (!r.ok) {
+        toast.error(r.error);
+        return;
+      }
+      toast.success(
+        `Đã miễn ${vnd(r.soTien)} cho ${r.tenCon}` +
+          (r.soDotDaDoi > 0 ? ` — ${r.soDotDaDoi} đợt được tạo lại` : ""),
+      );
+      dong();
+    });
+  };
+
+  return (
+    <div className="mt-3 rounded-lg border border-state-warning-soft bg-state-warning-soft/20 p-3">
+      <p className="text-xs text-muted-foreground">
+        Miễn một phần nợ của <b className="text-foreground">{con.ten}</b>. Đây là tiền
+        {" "}<b className="text-foreground">KHÔNG BAO GIỜ về</b> — không có bước duyệt nào phía
+        sau và không hoàn tác được. Tối đa {vnd(toiDa)} (đúng phần bé còn nợ).
+      </p>
+
+      <div className="mt-2 space-y-2">
+        <label className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+          <span className="min-w-0 flex-1 text-sm">Số tiền miễn</span>
+          <Input
+            inputMode="numeric"
+            className="tabular-nums sm:w-56"
+            placeholder="0"
+            value={oTien}
+            onChange={(e) => datOTien(e.target.value)}
+            aria-label={`Số tiền miễn giảm cho ${con.ten}`}
+          />
+        </label>
+        <label className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+          <span className="min-w-0 flex-1 text-sm">Lý do *</span>
+          <Input
+            className="sm:w-56"
+            placeholder="VD: hoàn cảnh gia đình, QLCS duyệt"
+            value={lyDo}
+            onChange={(e) => datLyDo(e.target.value)}
+            aria-label="Lý do miễn giảm"
+          />
+        </label>
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button type="button" size="sm" disabled={!hopLe || dangChay} onClick={gui}>
+          Miễn giảm
+        </Button>
+        <Button type="button" size="sm" variant="ghost" disabled={dangChay} onClick={dong}>
+          Huỷ
+        </Button>
+      </div>
     </div>
   );
 }
@@ -971,6 +1062,8 @@ export function CongNoTheoCon({
   const [dangMoForm, datDangMoForm] = useState<string | null>(null);
   /** F1 — bé nào đang mở form chuyển tiền. Một lúc chỉ một. */
   const [dangMoChuyen, datDangMoChuyen] = useState<string | null>(null);
+  /** G1 — bé nào đang mở form miễn giảm. Một lúc một. */
+  const [dangMoMien, datDangMoMien] = useState<string | null>(null);
   /**
    * Các đợt sale đang tick để gộp thành MỘT phiếu.
    *
@@ -1087,6 +1180,7 @@ export function CongNoTheoCon({
           const tt = dungHoc?.[c.orderItemId];
           const bl = baoLuu?.[c.orderItemId];
           const moChuyen = dangMoChuyen === c.orderItemId;
+          const moMien = dangMoMien === c.orderItemId;
           return (
             <li
               key={c.orderItemId}
@@ -1253,6 +1347,27 @@ export function CongNoTheoCon({
               {/* F1 — chuyển tiền sang bé khác. Chỉ vẽ khi CÓ bé khác và bé này CÓ tiền
                   đã xác nhận để chuyển: một nút dẫn thẳng tới câu từ chối là lời hứa suông
                   (luật 12). */}
+              {/* G1 · US-22 — MIỄN GIẢM. Chỉ vẽ khi bé CÒN NỢ: máy chủ luôn từ chối miễn cho
+                  bé hết nợ hoặc đang đóng thừa, nên nút ở đó là lời hứa suông (luật 12).
+                  Quyền: `orders:manage` (QLCS + kế toán Hội sở) — sale KHÔNG có, và action
+                  tự từ chối chứ không chỉ ẩn nút. */}
+              {duocSua && c.conNo > 0 && (
+                moMien ? (
+                  <FormMienGiam orderId={orderId} con={c} dong={() => datDangMoMien(null)} />
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-3"
+                    onClick={() => datDangMoMien(c.orderItemId)}
+                  >
+                    <HandCoins className="size-4" aria-hidden />
+                    Miễn giảm nợ…
+                  </Button>
+                )
+              )}
+
               {duocBoGan && so.con.length >= 2 && c.daThu > 0 && (
                 moChuyen ? (
                   <FormChuyenTien
