@@ -646,8 +646,12 @@ export function LichSuLead({
         ) : (
           <ol className="mt-3 space-y-3">
             {muc.map((m) => {
-              const maViec = m.loai === "HOAT_DONG" ? docMaViec(m.hd.metadata) : null;
-              const tuDong = m.loai === "HOAT_DONG" ? laDongHeThong(m.hd.metadata) : false;
+              // Bản hoạt động của mục này (null nếu mục là trạng thái / sửa hồ sơ).
+              // Đặt tên `a` có chủ đích: phần nhận dạng dòng hệ thống bên dưới đọc y
+              // hệt bản trước khi gộp, và [GHI-13] ghim đúng hai lời gọi đó.
+              const a = m.loai === "HOAT_DONG" ? m.hd : null;
+              const maViec = a ? docMaViec(a.metadata) : null;
+              const tuDong = a ? laDongHeThong(a.metadata) : false;
               const Icon =
                 m.loai === "TRANG_THAI"
                   ? RefreshCw
