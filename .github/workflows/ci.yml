@@ -342,8 +342,50 @@ jobs:
           LOGIN_RATELIMIT_DISABLED: "1"
 
       - name: Run Playwright smoke tests
-        run: pnpm test:e2e
+        # ── NỢ-16: CHỤP CÂY TIẾN TRÌNH ĐÚNG LÚC ĐANG TREO ──────────────────────
+        # Bốn job dựng `webServer` treo SAU khi chạy xong ca cuối rồi bị `timeout-minutes`
+        # (20 phút) giết — và runner giết sạch luôn mọi chứng cứ. Reporter `line` cho
+        # biết ca cuối là ca nào, nhưng KHÔNG nói được vì sao tiến trình không thoát.
+        #
+        # Chó canh dưới đây in cây tiến trình ở phút 12 — lúc đó đã biết chắc là treo,
+        # mà job còn sống nên log vẫn ra được. Nó CHỈ ĐỌC: không gửi tín hiệu nào cho bộ
+        # test, nên không làm sai lệch chính thứ đang đo.
+        #
+        # Dấu vết đã có: runner phải "Terminate orphan process: (sh)" và
+        # "(next-server (v16.2.6))" ở bước dọn dẹp ⇒ chuỗi
+        # `pnpm start` → sh → next start → next-server để lọt tiến trình cháu.
+        # Cây tiến trình sẽ cho thấy CHÍNH XÁC cái nào còn sống và cha nó là ai.
+        #
+        # `DEBUG=pw:webserver` để Playwright tự kể nó gửi tín hiệu gì, lúc nào.
+        # ⛔ KHÔNG nâng `timeout-minutes` — trần không phải chỗ hỏng.
+        run: |
+          (
+            # NGỦ THÀNH TỪNG GIÂY, không `sleep 12m` một phát. `trap` chỉ giết được
+            # SUBSHELL, còn `sleep` là CON của nó nên sống sót và GIỮ STDOUT đã thừa kế
+            # => runner ngồi chờ hết ngần ấy phút dù bộ test xong từ lâu. Đo thật: bản
+            # `sleep 5` làm một lệnh 1 giây mất 5 giây. Ngủ từng giây thì mất mát tối đa
+            # là MỘT giây.
+            for _ in $(seq 1 720); do sleep 1; done
+            echo "::warning title=NỢ-16::Đã 12 phút — bộ test chưa thoát. Chụp cây tiến trình."
+            echo "──────── ps -ef --forest ────────"
+            ps -ef --forest 2>/dev/null | tail -60 || ps -ef | tail -60
+            echo "──────── cổng đang nghe ────────"
+            (ss -ltnp 2>/dev/null || netstat -ltnp 2>/dev/null) | head -20
+            echo "────────────────────────────────"
+          ) &
+          CHO_CANH=$!
+          # BẮT BUỘC dùng `trap`, không phải một dòng `kill` ở cuối: GitHub chạy khối này
+          # bằng `bash -e`, nên lệnh test ĐỎ là kịch bản thoát NGAY và dòng `kill` phía dưới
+          # không bao giờ chạy. Khi đó `sleep` còn sống sẽ GIỮ STDOUT MỞ và runner ngồi chờ
+          # hết 12/16 phút — biến một job 5 phút thành job chạm trần. Tức cái đèn tự gây ra
+          # đúng thứ nó sinh ra để soi.
+          trap 'kill "$CHO_CANH" 2>/dev/null || true' EXIT
+          pnpm test:e2e
+          MA=$?
+          kill "$CHO_CANH" 2>/dev/null || true
+          exit $MA
         env:
+          DEBUG: pw:webserver
           BASE_URL: "http://localhost:3000"
           DATABASE_URL: ${{ env.CI_DATABASE_URL }}
           DIRECT_URL: ${{ env.CI_DATABASE_URL }}
@@ -498,7 +540,50 @@ jobs:
 
       - name: Run Phase A0 e2e
         # playwright.a0.config.ts: .env.test vắng ở CI → giữ env CI ở trên (localhost).
-        run: pnpm test:e2e:a0
+        # ── NỢ-16: CHỤP CÂY TIẾN TRÌNH ĐÚNG LÚC ĐANG TREO ──────────────────────
+        # Bốn job dựng `webServer` treo SAU khi chạy xong ca cuối rồi bị `timeout-minutes`
+        # (20 phút) giết — và runner giết sạch luôn mọi chứng cứ. Reporter `line` cho
+        # biết ca cuối là ca nào, nhưng KHÔNG nói được vì sao tiến trình không thoát.
+        #
+        # Chó canh dưới đây in cây tiến trình ở phút 12 — lúc đó đã biết chắc là treo,
+        # mà job còn sống nên log vẫn ra được. Nó CHỈ ĐỌC: không gửi tín hiệu nào cho bộ
+        # test, nên không làm sai lệch chính thứ đang đo.
+        #
+        # Dấu vết đã có: runner phải "Terminate orphan process: (sh)" và
+        # "(next-server (v16.2.6))" ở bước dọn dẹp ⇒ chuỗi
+        # `pnpm start` → sh → next start → next-server để lọt tiến trình cháu.
+        # Cây tiến trình sẽ cho thấy CHÍNH XÁC cái nào còn sống và cha nó là ai.
+        #
+        # `DEBUG=pw:webserver` để Playwright tự kể nó gửi tín hiệu gì, lúc nào.
+        # ⛔ KHÔNG nâng `timeout-minutes` — trần không phải chỗ hỏng.
+        run: |
+          (
+            # NGỦ THÀNH TỪNG GIÂY, không `sleep 12m` một phát. `trap` chỉ giết được
+            # SUBSHELL, còn `sleep` là CON của nó nên sống sót và GIỮ STDOUT đã thừa kế
+            # => runner ngồi chờ hết ngần ấy phút dù bộ test xong từ lâu. Đo thật: bản
+            # `sleep 5` làm một lệnh 1 giây mất 5 giây. Ngủ từng giây thì mất mát tối đa
+            # là MỘT giây.
+            for _ in $(seq 1 720); do sleep 1; done
+            echo "::warning title=NỢ-16::Đã 12 phút — bộ test chưa thoát. Chụp cây tiến trình."
+            echo "──────── ps -ef --forest ────────"
+            ps -ef --forest 2>/dev/null | tail -60 || ps -ef | tail -60
+            echo "──────── cổng đang nghe ────────"
+            (ss -ltnp 2>/dev/null || netstat -ltnp 2>/dev/null) | head -20
+            echo "────────────────────────────────"
+          ) &
+          CHO_CANH=$!
+          # BẮT BUỘC dùng `trap`, không phải một dòng `kill` ở cuối: GitHub chạy khối này
+          # bằng `bash -e`, nên lệnh test ĐỎ là kịch bản thoát NGAY và dòng `kill` phía dưới
+          # không bao giờ chạy. Khi đó `sleep` còn sống sẽ GIỮ STDOUT MỞ và runner ngồi chờ
+          # hết 12/16 phút — biến một job 5 phút thành job chạm trần. Tức cái đèn tự gây ra
+          # đúng thứ nó sinh ra để soi.
+          trap 'kill "$CHO_CANH" 2>/dev/null || true' EXIT
+          pnpm test:e2e:a0
+          MA=$?
+          kill "$CHO_CANH" 2>/dev/null || true
+          exit $MA
+        env:
+          DEBUG: pw:webserver
 
       - name: Upload A0 Playwright report
         # ⚠️ `always()`, KHÔNG `failure()` [21/09/2026]. Một job bị GIẾT vì chạm
@@ -961,7 +1046,50 @@ jobs:
           exit 1
 
       - name: Run teacher-site browser e2e
-        run: pnpm test:e2e:teacher
+        # ── NỢ-16: CHỤP CÂY TIẾN TRÌNH ĐÚNG LÚC ĐANG TREO ──────────────────────
+        # Bốn job dựng `webServer` treo SAU khi chạy xong ca cuối rồi bị `timeout-minutes`
+        # (25 phút) giết — và runner giết sạch luôn mọi chứng cứ. Reporter `line` cho
+        # biết ca cuối là ca nào, nhưng KHÔNG nói được vì sao tiến trình không thoát.
+        #
+        # Chó canh dưới đây in cây tiến trình ở phút 16 — lúc đó đã biết chắc là treo,
+        # mà job còn sống nên log vẫn ra được. Nó CHỈ ĐỌC: không gửi tín hiệu nào cho bộ
+        # test, nên không làm sai lệch chính thứ đang đo.
+        #
+        # Dấu vết đã có: runner phải "Terminate orphan process: (sh)" và
+        # "(next-server (v16.2.6))" ở bước dọn dẹp ⇒ chuỗi
+        # `pnpm start` → sh → next start → next-server để lọt tiến trình cháu.
+        # Cây tiến trình sẽ cho thấy CHÍNH XÁC cái nào còn sống và cha nó là ai.
+        #
+        # `DEBUG=pw:webserver` để Playwright tự kể nó gửi tín hiệu gì, lúc nào.
+        # ⛔ KHÔNG nâng `timeout-minutes` — trần không phải chỗ hỏng.
+        run: |
+          (
+            # NGỦ THÀNH TỪNG GIÂY, không `sleep 16m` một phát. `trap` chỉ giết được
+            # SUBSHELL, còn `sleep` là CON của nó nên sống sót và GIỮ STDOUT đã thừa kế
+            # => runner ngồi chờ hết ngần ấy phút dù bộ test xong từ lâu. Đo thật: bản
+            # `sleep 5` làm một lệnh 1 giây mất 5 giây. Ngủ từng giây thì mất mát tối đa
+            # là MỘT giây.
+            for _ in $(seq 1 960); do sleep 1; done
+            echo "::warning title=NỢ-16::Đã 16 phút — bộ test chưa thoát. Chụp cây tiến trình."
+            echo "──────── ps -ef --forest ────────"
+            ps -ef --forest 2>/dev/null | tail -60 || ps -ef | tail -60
+            echo "──────── cổng đang nghe ────────"
+            (ss -ltnp 2>/dev/null || netstat -ltnp 2>/dev/null) | head -20
+            echo "────────────────────────────────"
+          ) &
+          CHO_CANH=$!
+          # BẮT BUỘC dùng `trap`, không phải một dòng `kill` ở cuối: GitHub chạy khối này
+          # bằng `bash -e`, nên lệnh test ĐỎ là kịch bản thoát NGAY và dòng `kill` phía dưới
+          # không bao giờ chạy. Khi đó `sleep` còn sống sẽ GIỮ STDOUT MỞ và runner ngồi chờ
+          # hết 12/16 phút — biến một job 5 phút thành job chạm trần. Tức cái đèn tự gây ra
+          # đúng thứ nó sinh ra để soi.
+          trap 'kill "$CHO_CANH" 2>/dev/null || true' EXIT
+          pnpm test:e2e:teacher
+          MA=$?
+          kill "$CHO_CANH" 2>/dev/null || true
+          exit $MA
+        env:
+          DEBUG: pw:webserver
 
       - name: Upload teacher Playwright report
         # ⚠️ `always()`, KHÔNG `failure()` [21/09/2026]. Một job bị GIẾT vì chạm
@@ -1086,7 +1214,50 @@ jobs:
           exit 1
 
       - name: Run e-learning browser e2e
-        run: pnpm test:e2e:elearning
+        # ── NỢ-16: CHỤP CÂY TIẾN TRÌNH ĐÚNG LÚC ĐANG TREO ──────────────────────
+        # Bốn job dựng `webServer` treo SAU khi chạy xong ca cuối rồi bị `timeout-minutes`
+        # (25 phút) giết — và runner giết sạch luôn mọi chứng cứ. Reporter `line` cho
+        # biết ca cuối là ca nào, nhưng KHÔNG nói được vì sao tiến trình không thoát.
+        #
+        # Chó canh dưới đây in cây tiến trình ở phút 16 — lúc đó đã biết chắc là treo,
+        # mà job còn sống nên log vẫn ra được. Nó CHỈ ĐỌC: không gửi tín hiệu nào cho bộ
+        # test, nên không làm sai lệch chính thứ đang đo.
+        #
+        # Dấu vết đã có: runner phải "Terminate orphan process: (sh)" và
+        # "(next-server (v16.2.6))" ở bước dọn dẹp ⇒ chuỗi
+        # `pnpm start` → sh → next start → next-server để lọt tiến trình cháu.
+        # Cây tiến trình sẽ cho thấy CHÍNH XÁC cái nào còn sống và cha nó là ai.
+        #
+        # `DEBUG=pw:webserver` để Playwright tự kể nó gửi tín hiệu gì, lúc nào.
+        # ⛔ KHÔNG nâng `timeout-minutes` — trần không phải chỗ hỏng.
+        run: |
+          (
+            # NGỦ THÀNH TỪNG GIÂY, không `sleep 16m` một phát. `trap` chỉ giết được
+            # SUBSHELL, còn `sleep` là CON của nó nên sống sót và GIỮ STDOUT đã thừa kế
+            # => runner ngồi chờ hết ngần ấy phút dù bộ test xong từ lâu. Đo thật: bản
+            # `sleep 5` làm một lệnh 1 giây mất 5 giây. Ngủ từng giây thì mất mát tối đa
+            # là MỘT giây.
+            for _ in $(seq 1 960); do sleep 1; done
+            echo "::warning title=NỢ-16::Đã 16 phút — bộ test chưa thoát. Chụp cây tiến trình."
+            echo "──────── ps -ef --forest ────────"
+            ps -ef --forest 2>/dev/null | tail -60 || ps -ef | tail -60
+            echo "──────── cổng đang nghe ────────"
+            (ss -ltnp 2>/dev/null || netstat -ltnp 2>/dev/null) | head -20
+            echo "────────────────────────────────"
+          ) &
+          CHO_CANH=$!
+          # BẮT BUỘC dùng `trap`, không phải một dòng `kill` ở cuối: GitHub chạy khối này
+          # bằng `bash -e`, nên lệnh test ĐỎ là kịch bản thoát NGAY và dòng `kill` phía dưới
+          # không bao giờ chạy. Khi đó `sleep` còn sống sẽ GIỮ STDOUT MỞ và runner ngồi chờ
+          # hết 12/16 phút — biến một job 5 phút thành job chạm trần. Tức cái đèn tự gây ra
+          # đúng thứ nó sinh ra để soi.
+          trap 'kill "$CHO_CANH" 2>/dev/null || true' EXIT
+          pnpm test:e2e:elearning
+          MA=$?
+          kill "$CHO_CANH" 2>/dev/null || true
+          exit $MA
+        env:
+          DEBUG: pw:webserver
 
       - name: Upload e-learning Playwright report
         # ⚠️ `always()`, KHÔNG `failure()` [21/09/2026]. Một job bị GIẾT vì chạm
