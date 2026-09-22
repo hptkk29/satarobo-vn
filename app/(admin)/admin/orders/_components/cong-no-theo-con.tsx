@@ -10,6 +10,7 @@ import type { NoTheoConKetQua } from "@/lib/finance/no-theo-con";
 import type { TrangThaiDungHocCuaCon } from "@/lib/finance/dung-hoc-con";
 import { QrZoom } from "./qr-zoom";
 import { NutDungHoc } from "./dung-hoc-dialog";
+import { NutDoiKhoa, type LopChon } from "./doi-khoa-dialog";
 
 import {
   boGanKhoanChoConAction,
@@ -922,6 +923,7 @@ export function CongNoTheoCon({
   dungHoc,
   baoLuu,
   themCon = null,
+  lopDoiKhoa = [],
   phieu = null,
 }: {
   orderId: string;
@@ -958,6 +960,11 @@ export function CongNoTheoCon({
    * một danh sách hầu như không đổi.
    */
   themCon?: React.ReactNode;
+  /**
+   * F4 — lớp chọn được khi đổi khoá. Rỗng ⇒ KHÔNG vẽ nút (luật 12: nút dẫn thẳng tới một
+   * danh sách trống là lời hứa suông).
+   */
+  lopDoiKhoa?: LopChon[];
   /** Phiếu gộp ĐANG MỞ của đơn, `null` khi chưa phát. Dựng ở server — xem `PhieuGopView`. */
   phieu?: PhieuGopView | null;
 }) {
@@ -1270,6 +1277,18 @@ export function CongNoTheoCon({
 
               {duocSua && !tt?.daDung && (
                 <NutDungHoc orderId={orderId} orderItemId={c.orderItemId} tenCon={c.ten} />
+              )}
+
+              {/* F4 — đổi khoá / đổi lớp. Cạnh "Dừng học" vì cùng họ: cả hai kết thúc khoá
+                  hiện tại của bé. Khác nhau ở chỗ đổi khoá thì bé HỌC TIẾP, nên tiền dư đi
+                  theo chứ không ra khỏi nhà. Bé đã dừng thì không còn gì để đổi. */}
+              {duocSua && !tt?.daDung && lopDoiKhoa.length > 0 && (
+                <NutDoiKhoa
+                  orderId={orderId}
+                  orderItemId={c.orderItemId}
+                  tenCon={c.ten}
+                  lop={lopDoiKhoa}
+                />
               )}
 
               {duocSua &&

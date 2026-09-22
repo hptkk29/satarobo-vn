@@ -14,6 +14,7 @@ import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { passesScope, scopedDb } from "@/lib/db-scope";
 import { crossCenterError } from "@/lib/enrollment-flow";
 import { syncConversationMembership } from "@/lib/chat/sync-membership";
+import { chuyenLopTrongTx, ChuyenLopError } from "@/lib/enrollments/chuyen-lop";
 import { ghiTuongTacLeadBoQuaLoi, layNguCanhGhiDanh } from "@/lib/lead/tuong-tac/ghi";
 
 type Sdb = ReturnType<typeof scopedDb>;
@@ -766,6 +767,11 @@ export async function enrollStudent(
     revalidatePath(`/classes/${classId}/edit`);
     return { ok: true, data: { enrollmentId } };
   } catch (err) {
+    if (err instanceof ChuyenLopError) {
+      // Câu của `chuyenLopTrongTx` đã viết cho người dùng đọc — chở thẳng ra, đừng bọc
+      // thêm "Transfer thất bại:" vào trước.
+      return { ok: false, error: err.message };
+    }
     if (err instanceof EnrollmentWorkflowError) {
       return { ok: false, error: err.message };
     }
@@ -1053,115 +1059,26 @@ export async function transferEnrollment(
     };
   }
 
-  const auditor = {
-    userId: session.user.id ?? null,
-    name: session.user.name ?? session.user.email ?? session.user.id,
-  };
   const { actorId, actorName } = getAuditActor(session);
 
   try {
-    // FIX-C4 — re-check sĩ số lớp đích trong CÙNG tx (Serializable) chống TOCTOU.
+    // ⚠️ Thân phép chuyển lớp ĐÃ DỜI sang `lib/enrollments/chuyen-lop.ts` [F4 · 22/09/2026].
+    //
+    // Lý do: F4 ("đổi khoá / đổi lớp") cần ĐÚNG phép này nhưng phải chạy TRONG transaction
+    // tiền (`ghiTienChoDon`), vì `confirmPayment` từ chối khoản chưa gắn ghi danh — tiền
+    // chuyển sang dòng mới mà dòng ấy chưa có ghi danh là khoản KHÔNG BAO GIỜ xuất được
+    // phiếu thu. Chép luật sang chỗ thứ hai thì có ngày hai bản lệch nhau; tách ra thì chỉ
+    // còn một chỗ để vá.
+    //
+    // Vẫn `runSerializable`: kiểm sĩ số lớp đích chống TOCTOU nằm bên trong hàm được tách.
     const newId = await runSerializable(sdb, async (tx) => {
-      const activeCount = await tx.enrollment.count({
-        where: {
-          classId: data.targetClassId,
-          status: { in: [...CAPACITY_COUNT_STATUSES] },
-          deletedAt: null, // FIX-C3 (B2a)
-        },
-      });
-      if (activeCount >= targetClass.maxStudents) {
-        throw new EnrollmentWorkflowError("CLASS_FULL");
-      }
-
-      const newEnrollment = await tx.enrollment.create({
-        data: {
-          student: { connect: { id: oldEnrollment.studentId } },
-          class: { connect: { id: data.targetClassId } },
-          course: { connect: { id: targetClass.courseId } },
-          centerId: targetClass.centerId, // FL3-02 — denormalize từ lớp đích cho scopedDb
-          status: "CONFIRMED",
-          confirmedAt: new Date(),
-          notes: `Chuyển từ enrollment ${oldEnrollment.id}`,
-        },
-        select: { id: true },
-      });
-
-      await tx.enrollment.update({
-        where: { id: oldEnrollment.id },
-        data: {
-          status: "TRANSFERRED",
-          transferredToId: newEnrollment.id,
-          transferReason: data.reason,
-          endedAt: new Date(),
-        },
-      });
-
-      await tx.enrollmentAuditLog.create({
-        data: {
-          enrollmentId: oldEnrollment.id,
-          fromStatus: oldEnrollment.status,
-          toStatus: "TRANSFERRED",
-          changedByUserId: auditor.userId,
-          changedByName: auditor.name,
-          reason: data.reason,
-          extraData: {
-            transferredToId: newEnrollment.id,
-            targetClassId: data.targetClassId,
-          },
-        },
-      });
-      await tx.enrollmentAuditLog.create({
-        data: {
-          enrollmentId: newEnrollment.id,
-          fromStatus: "—",
-          toStatus: "CONFIRMED",
-          changedByUserId: auditor.userId,
-          changedByName: auditor.name,
-          reason: `Chuyển từ lớp cũ: ${data.reason}`,
-          extraData: {
-            transferredFromId: oldEnrollment.id,
-            sourceClassId: oldEnrollment.classId,
-          },
-        },
-      });
-
-      // P3 (additive): cũng ghi vào AuditLog hợp nhất cho viewer chung.
-      await writeAudit({
-        actor: { id: actorId, name: actorName },
-        module: "enrollment",
-        entityType: "Enrollment",
-        entityId: oldEnrollment.id,
-        action: "STATUS_CHANGE",
-        oldValues: { status: oldEnrollment.status },
-        newValues: { status: "TRANSFERRED", transferredToId: newEnrollment.id },
+      const kq = await chuyenLopTrongTx(tx as unknown as Prisma.TransactionClient, {
+        oldEnrollmentId: oldEnrollment.id,
+        targetClassId: data.targetClassId,
         reason: data.reason,
-        orgUnitId: oldEnrollment.class?.centerId ?? null,
-        tx,
-      });
-      await writeAudit({
         actor: { id: actorId, name: actorName },
-        module: "enrollment",
-        entityType: "Enrollment",
-        entityId: newEnrollment.id,
-        action: "CREATE",
-        newValues: {
-          studentId: oldEnrollment.studentId,
-          classId: data.targetClassId,
-          courseId: targetClass.courseId,
-          status: "CONFIRMED",
-          transferredFromId: oldEnrollment.id,
-        },
-        reason: `Chuyển từ lớp cũ: ${data.reason}`,
-        orgUnitId: targetClass.centerId,
-        tx,
       });
-
-      // US-03 chat / TS-05 — chuyển lớp: PH rời nhóm cũ + vào nhóm mới + SYSTEM message
-      // ở cả hai nhóm, TRONG CÙNG transaction (rollback → không sync nửa vời).
-      await syncConversationMembership(tx, oldEnrollment.classId);
-      await syncConversationMembership(tx, data.targetClassId);
-
-      return newEnrollment.id;
+      return kq.newEnrollmentId;
     });
 
     // Đọc ngữ cảnh từ ghi danh CŨ: nó mang `leadChildId` (nếu có), còn ghi danh mới thì

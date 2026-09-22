@@ -44,6 +44,7 @@ import {
   ghiTienChoDon,
   type KetQuaGhi,
 } from "@/lib/finance/ghi-tien-don";
+import type { NoTheoConKetQua } from "@/lib/finance/no-theo-con";
 import { doiTrangThaiPhieuTrongTx, phieuGopCuaConTrongTx } from "@/lib/finance/phieu-gop";
 import { taoYeuCauHoanTuDungHoc } from "@/lib/finance/refund";
 import { recomputeRequestStatuses } from "@/lib/payments/payment-request";
@@ -300,7 +301,53 @@ export async function dungHocMotCon(input: {
   actor: AuditActor;
   now?: Date;
 }): Promise<KetQuaGhi<KetQuaDungHoc>> {
-  return ghiTienChoDon(input.orderId, async (tx, so) => {
+  // Đường "Dừng học" của màn đơn: bé nghỉ thật ⇒ kết thúc ghi danh. Hành vi y như trước
+  // khi thân hàm được tách (F4).
+  return ghiTienChoDon(input.orderId, (tx, so) =>
+    dungHocTrongTx(tx, so, { ...input, ketThucGhiDanh: true }),
+  );
+}
+
+/**
+ * Thân của `dungHocMotCon`, chạy TRONG transaction của người gọi. [Tách ở F4 · 22/09/2026]
+ *
+ * ⚠️ Tách ra vì F4 ("đổi khoá / đổi lớp") phải làm ba việc trong MỘT transaction: dừng dòng
+ * cũ · tạo dòng mới · chuyển dư sang dòng mới. `ghiTienChoDon` không lồng được (khoá advisory
+ * + transaction của Prisma), nên hoặc tách thân ra, hoặc chép lại toàn bộ phép dừng học sang
+ * chỗ thứ hai. Chép lại là hai bản luật tiền song song — thứ repo này đã trả giá vài lần.
+ *
+ * ⚠️ `so` là ảnh chụp công nợ theo con, đọc DƯỚI KHOÁ. Người gọi phải truyền ảnh chụp ĐÚNG
+ * THỜI ĐIỂM: F4 tạo dòng mới TRƯỚC rồi mới dừng dòng cũ, nên nó phải đọc lại `docSoTheoCon`
+ * sau khi tạo — cổng phân dư (`kiemPhanDu`) lấy trần nhận từ `so.con`, và dòng chưa có trong
+ * ảnh chụp thì bị từ chối với câu "không thuộc đơn này".
+ *
+ * Hành vi KHÔNG đổi so với bản cũ — 22 ca `[DHC-*]` là bằng chứng của phép tách này.
+ */
+export async function dungHocTrongTx(
+  tx: Tx,
+  so: NoTheoConKetQua,
+  input: {
+    orderId: string;
+    orderItemId: string;
+    lyDo: LyDoDungHoc;
+    buoiCuoiId: string | null;
+    ghiChu: string | null;
+    phanDu: readonly PhanDu[];
+    actor: AuditActor;
+    now?: Date;
+    /**
+     * Có kết thúc ghi danh của bé không (bước 6).
+     *
+     * ⚠️ BẮT BUỘC, KHÔNG mặc định (luật 7) — để `tsc` liệt kê đủ chỗ gọi. Mặc định ở đây
+     * nguy hiểm theo chiều ĐÓNG: F4 ("đổi khoá") đã CHUYỂN ghi danh sang lớp mới trước khi
+     * gọi hàm này, nên kết thúc nó nữa là đẩy một ghi danh đang `TRANSFERRED` sang
+     * `WITHDREW` — bé trông như đã nghỉ học trong khi em vừa chuyển lớp. Đo được: ca
+     * `[DKD-03]` đỏ với `WITHDREW` ở bản đầu.
+     */
+    ketThucGhiDanh: boolean;
+  },
+): Promise<KetQuaGhi<KetQuaDungHoc>> {
+  {
     // ── CỔNG 1 ──────────────────────────────────────────────────────────────
     const dong = await tx.orderItem.findFirst({
       where: { id: input.orderItemId, orderId: input.orderId, order: { deletedAt: null } },
@@ -502,7 +549,11 @@ export async function dungHocMotCon(input: {
 
     // 6 · phần KHÔNG-TIỀN của việc rời lớp. Dòng đơn chưa gắn ghi danh thì bỏ qua — chốt
     // của chủ dự án 21/09 ("chỉ quyết toán tiền").
-    if (dong.enrollment) {
+    //
+    // ⚠️ `ketThucGhiDanh === false` khi người gọi ĐÃ định đoạt ghi danh theo cách khác —
+    // F4 chuyển nó sang lớp mới. Kết thúc thêm lần nữa là ghi đè `TRANSFERRED` bằng
+    // `WITHDREW`, tức sổ học vụ nói bé đã nghỉ trong khi em vừa chuyển lớp.
+    if (input.ketThucGhiDanh && dong.enrollment) {
       await ketThucMotGhiDanh({
         tx,
         ghiDanh: {
@@ -573,7 +624,7 @@ export async function dungHocMotCon(input: {
       daDatHoan,
       refundRequestId,
     };
-  });
+  }
 }
 
 /**

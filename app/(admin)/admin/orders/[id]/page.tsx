@@ -27,6 +27,7 @@ import { noTheoCon } from "@/lib/finance/debt";
 import { docTrangThaiDungHoc } from "@/lib/finance/dung-hoc-con";
 import { docBaoLuuCuaDon } from "@/lib/finance/bao-luu-tien";
 import { NutThemCon } from "../_components/them-con-dialog";
+import type { LopChon } from "../_components/doi-khoa-dialog";
 import { CongNoTheoCon, type PhieuGopView } from "../_components/cong-no-theo-con";
 import { docPhieuGopDangMo } from "@/lib/finance/phieu-gop";
 import { memoPhatHanh } from "@/lib/payments/memo-phat-hanh";
@@ -227,6 +228,33 @@ export default async function OrderDetailPage({ params }: Props) {
   // câu tra thêm ở đó là thêm thời gian nằm dưới khoá đơn cho một thông tin chỉ để hiển thị.
   // F3 — khoá học chọn được khi thêm con. Chỉ khoá ĐANG BÁN và ĐÃ CÓ GIÁ: khoá chưa khai
   // giá thì cổng soát giá ở máy chủ từ chối, nên mời chọn nó là một lời hứa suông (luật 12).
+  // F4 — lớp chọn được khi đổi khoá. Chỉ lớp CÒN NHẬN học sinh và khoá ĐÃ CÓ GIÁ: lớp đã
+  // huỷ/kết thúc thì `chuyenLopTrongTx` từ chối, khoá chưa khai giá thì cổng soát giá từ
+  // chối — mời chọn chúng là lời hứa suông (luật 12).
+  const lopChonDuoc: LopChon[] = batThuTheoCon
+    ? (
+        await sdb.class.findMany({
+          where: {
+            deletedAt: null,
+            status: { notIn: ["CANCELLED", "COMPLETED"] },
+            course: { isActive: true, price: { gt: 0 } },
+          },
+          select: {
+            id: true,
+            name: true,
+            course: { select: { name: true, price: true } },
+          },
+          orderBy: { name: "asc" },
+          take: 200,
+        })
+      ).map((l) => ({
+        id: l.id,
+        name: l.name,
+        courseName: l.course?.name ?? "",
+        coursePrice: l.course?.price ?? null,
+      }))
+    : [];
+
   const khoaChonDuoc = batThuTheoCon
     ? await sdb.course.findMany({
         where: { isActive: true, price: { gt: 0 } },
@@ -370,6 +398,7 @@ export default async function OrderDetailPage({ params }: Props) {
             dungHoc={trangThaiDungHoc}
             baoLuu={baoLuuTheoCon}
             themCon={khoaChonDuoc.length > 0 ? <NutThemCon orderId={order.id} khoa={khoaChonDuoc} /> : null}
+            lopDoiKhoa={lopChonDuoc}
             phieu={phieuGop}
           />
         </div>
