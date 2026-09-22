@@ -89,6 +89,8 @@ export const CO_CANH_BAO = new Set([
   "RA_KHONG_CO_VAO",
   "THIEU_BUOI_SANG",
   "THIEU_BUOI_CHIEU",
+  // THÊM cùng đợt HC → 2 cặp quét: cờ mới phải có CHỖ ĐỌC, kẻo bằng không có (luật 10).
+  "THIEU_LUOT_GIUA_CA",
   "NGOAI_VUNG",
   // ⚠️ THÊM 16/09/2026, và nó là điều kiện của một bản vá khác.
   //

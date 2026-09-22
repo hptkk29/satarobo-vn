@@ -8,6 +8,8 @@ const ENGINE_FLAGS = [
   "RA_KHONG_CO_VAO",
   "THIEU_BUOI_SANG",
   "THIEU_BUOI_CHIEU",
+  // 22/09/2026 — cùng đợt HC đảo sang 2 cặp quét (`cum-quet.khongQuetGiuaCa`).
+  "THIEU_LUOT_GIUA_CA",
   "DI_MUON",
   "VE_SOM",
   "THIEU_GIO",
