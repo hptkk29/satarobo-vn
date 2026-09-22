@@ -1,8 +1,5 @@
 import { db } from "@/lib/db";
 import { logLeadAudit } from "@/lib/audit/log";
-import { recordLeadStatusChange } from "@/lib/lead/status-trail-write";
-import { recordLeadActivity } from "@/lib/lead/activity-write";
-import { SYSTEM_ACTIVITY_META } from "@/lib/lead/activity-clock";
 import { assignmentWrite } from "@/lib/lead/assignment";
 import { baoLoLeadMoi, baoSaleCoLeadMoi, thuHoiChuongLeadCu } from "@/lib/lead/assign-lead";
 import { takeRotationTurn, takeRotationTurns } from "@/lib/lead/rotation";
@@ -169,36 +166,16 @@ export async function autoAssignLead(
       changedFields: ["assignedToId"],
       tx,
     });
-    await recordLeadActivity({
-      tx,
-      leadId,
-      actorId: actor.actorId,
-      actorName: actor.actorName,
-      type: "NOTE",
-      content: `Phân công cho ${targetUser?.name ?? target} (luân phiên đều lượt)`,
-      // S-3 — DÒNG MÁY: điều phối lead, không phải một lần chạm khách. Thiếu dấu
-      // này thì lượt chia tự tay đóng luôn mốc "đã liên hệ lần đầu".
-      metadata: { ...SYSTEM_ACTIVITY_META, assignedToId: target } as Prisma.InputJsonValue,
-    });
-    // C-07 — lượt chia LẬT LUÔN trạng thái `MỚI → ĐÃ PHÂN CÔNG` ngay trên dòng
-    // `tx.lead.update` ở trên, nhưng vết duy nhất của nó là dòng audit `ASSIGN`
-    // chỉ mang `assignedToId`. Tức mốc đầu tiên của mọi phễu KHÔNG được ghi vào
-    // bảng nào — không lần ra được "lead nằm ở MỚI bao lâu, ai đẩy nó đi".
-    //
-    // ⚠️ Điều kiện phải TRÙNG KHÍT với điều kiện lật trạng thái ở trên: lead đang
-    // ở bước sau (vd Đang tư vấn) được chia lại thì trạng thái KHÔNG đổi — ghi vết
-    // vô điều kiện là bịa ra một lượt "Đang tư vấn → Đã phân công" chưa từng xảy ra.
-    if (lead.status === "MOI") {
-      await recordLeadStatusChange({
-        tx,
+    await tx.leadActivity.create({
+      data: {
         leadId,
         actorId: actor.actorId,
         actorName: actor.actorName,
-        from: "NEW",
-        to: "ASSIGNED",
-        source: "ASSIGN",
-      });
-    }
+        type: "NOTE",
+        content: `Phân công cho ${targetUser?.name ?? target} (luân phiên đều lượt)`,
+        metadata: { assignedToId: target } as Prisma.InputJsonValue,
+      },
+    });
   });
 
   // 15/09/2026 — đồng bộ chuông. Đây là đường MỘT lead (không hàng loạt) nên báo được cả hai
@@ -292,14 +269,14 @@ export async function reassignOpenLeads(
         changedFields: ["assignedToId"],
         tx,
       });
-      await recordLeadActivity({
-        tx,
-        leadId,
-        actorId: actor.actorId,
-        actorName: actor.actorName,
-        type: "NOTE",
-        content: `Chia lại lead → ${nameMap.get(assigneeId) ?? assigneeId} (sale cũ nghỉ)`,
-        metadata: SYSTEM_ACTIVITY_META, // S-3 — dòng máy, xem ghi chú ở lượt chia trên.
+      await tx.leadActivity.create({
+        data: {
+          leadId,
+          actorId: actor.actorId,
+          actorName: actor.actorName,
+          type: "NOTE",
+          content: `Chia lại lead → ${nameMap.get(assigneeId) ?? assigneeId} (sale cũ nghỉ)`,
+        },
       });
     }
   });

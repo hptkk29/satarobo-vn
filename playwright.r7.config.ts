@@ -5,9 +5,9 @@
  * Mọi spec R7 test service/action trực tiếp (DB) → đặt R7_SKIP_WEBSERVER=1 bỏ dev server.
  */
 import { defineConfig, devices } from "@playwright/test";
-import { napEnvTest } from "./tests/e2e/_helpers/nap-env";
+import dotenv from "dotenv";
 
-napEnvTest("r7");
+dotenv.config({ path: ".env.test", override: true });
 
 export default defineConfig({
   testDir: "./tests/e2e/r7",

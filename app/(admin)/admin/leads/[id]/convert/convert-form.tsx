@@ -65,19 +65,8 @@ export function ConvertForm({
   prefillStudents,
   classes,
   canGrantScholarship,
-  backHref,
-  conflictHref,
 }: {
   leadId: string
-  /**
-   * Nơi quay về sau khi chốt xong. Mặc định `/leads/<id>` — đường CLEAN-URL của site
-   * admin. Site Sale (`app/(sale)/`) phải truyền đường của nó, không thì chốt xong là
-   * ném người dùng sang host khác, tức ra khỏi site của họ. (Giữ lại khi hợp nhất
-   * `main` → `test` 16/09/2026: bản `main` chưa có hai prop này.)
-   */
-  backHref?: string
-  /** Đường tới màn xử lý phiếu trùng; `null` ⇒ dùng đường mặc định của site admin. */
-  conflictHref?: string | null
   /**
    * Người đang chốt có phải Quản trị tối cao không (chốt 31/08/2026).
    * `false` ⇒ KHÔNG vẽ ô "Miễn phí học bổng toàn phần". Đây chỉ là lớp giao diện —
@@ -100,7 +89,6 @@ export function ConvertForm({
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [conflict, setConflict] = useState<string | null>(null)
-  const veLai = backHref ?? `/leads/${leadId}`
 
   const [parentName, setParentName] = useState(defaultParentName)
   const [parentEmail, setParentEmail] = useState(defaultParentEmail)
@@ -224,7 +212,7 @@ export function ConvertForm({
           `Đã chuyển đổi: ${res.studentIds.length} học viên · ${res.enrollmentIds.length} đăng ký` +
             (res.deduped ? ' (đã xử lý trùng / idempotent)' : ''),
         )
-        router.push(veLai)
+        router.push(`/leads/${leadId}`)
         router.refresh()
         return
       }
@@ -257,7 +245,7 @@ export function ConvertForm({
           <div>
             <p className="font-semibold">Xung đột hồ sơ phụ huynh</p>
             <p>{conflict}</p>
-            <a href={conflictHref ?? "/convert-conflicts"} className="mt-1 inline-block font-medium underline">
+            <a href="/convert-conflicts" className="mt-1 inline-block font-medium underline">
               Mở màn xử lý xung đột →
             </a>
           </div>
@@ -491,7 +479,7 @@ export function ConvertForm({
         </button>
         <button
           type="button"
-          onClick={() => router.push(veLai)}
+          onClick={() => router.push(`/leads/${leadId}`)}
           className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
         >
           Hủy

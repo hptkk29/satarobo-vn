@@ -5,7 +5,7 @@ import { scopedDb } from '@/lib/db-scope'
 import { resolveActor } from '@/lib/auth/actor'
 import { checkPermission, checkPermissionDetail } from '@/lib/auth/check-permission'
 import { maskLeadPiiFields } from '@/lib/lead/pii'
-import { leadSharingEnabled } from '@/lib/lead/sharing'
+import { leadSharedOrClause, leadSharingEnabled } from '@/lib/lead/sharing'
 import { splitLeadNote } from '@/lib/lead/note-view'
 import { canViewLeadPii } from '@/lib/auth/check-permission'
 import { LeadsTable } from './_components/leads-table'
@@ -17,7 +17,6 @@ import type { LeadStatus, Prisma } from '@prisma/client'
 import { phoneSearchTerm } from '@/lib/phone'
 import { getNonEnrollableCenterIds } from '@/lib/enrollment-flow'
 import { docSoDong, docSoTheMoiCot } from '@/lib/ui/phan-trang'
-import { leadOwnershipWhere } from "@/lib/lead/ownership";
 
 const KANBAN_LIMIT = 500
 
@@ -111,16 +110,21 @@ export default async function LeadsPage({
     ...(scopeToSelf
       ? {
           AND: [
-            // S-8 — "khách của tôi" có ĐÚNG MỘT định nghĩa, ở `lib/lead/ownership.ts`.
-            // Chép tay mệnh đề này ra từng màn là cách chắc chắn để hai màn trả hai
-            // danh sách khác nhau cho cùng một người, và không ai phát hiện cho tới lúc
-            // đếm KPI. Site Sale (`/sale/khach-cua-toi`) gọi đúng hàm này.
-            //
-            // Nội dung nó gói lại: phiếu được GIAO cho mình, phiếu mình NHẬP (Sale Hội
-            // sở không bao giờ là assignee — thiếu vế này thì danh sách của họ trắng),
-            // và mệnh đề "dùng chung" vốn RỖNG theo mặc định từ Đợt E (22/08); đường
-            // quay lui là env `LEAD_SHARING_ENABLED="true"`.
-            leadOwnershipWhere(session.user.id),
+            {
+              // Đợt E (22/08) — lead ĐỘC QUYỀN: mệnh đề "dùng chung" nay RỖNG
+              // theo mặc định. Đường quay lui: env LEAD_SHARING_ENABLED="true".
+              //
+              // 23/08 — thêm `createdById`: "của tôi" có HAI nghĩa và cả hai đều
+              // đúng. Sale cơ sở = phiếu được GIAO cho mình; Sale Hội sở = phiếu
+              // mình NHẬP (phiếu đó tự chia về cơ sở nên họ không bao giờ là
+              // assignee — thiếu vế này thì danh sách của họ rỗng trắng).
+              // Không nới cho ai khác: người có `leads:view-all` không đi nhánh này.
+              OR: [
+                { assignedToId: session.user.id },
+                { createdById: session.user.id },
+                ...leadSharedOrClause(),
+              ],
+            },
           ],
         }
       : {}),

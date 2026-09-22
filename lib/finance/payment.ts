@@ -11,21 +11,14 @@ import {
   chiaKhoanTheoDon,
   type GhiDanhCuaLead,
 } from "@/lib/finance/chia-khoan-theo-don";
+import { KHOAN_DA_XAC_NHAN } from "@/lib/finance/debt";
 import { expandPhoneVariants } from "@/lib/phone";
-// HAI SỔ, HAI HÀM, TRÙNG TÊN — hợp nhất 16/09/2026 kéo cả hai vào file này:
-//  · `recordLeadStatusLedger` (bí danh của `recordLeadStatusChange` trong
-//    `@/lib/leads/set-status`) — sổ ĐẾM phễu, nhận `LeadStatusSource` chữ thường;
-//  · `recordLeadStatusChange` (`@/lib/lead/status-trail-write`) — vết NGƯỜI ĐỌC,
-//    dựng dòng "Lịch sử thay đổi" ở trang chi tiết lead.
-// Đặt bí danh để hai câu hỏi khác nhau không đội chung một cái tên.
-import { recordLeadStatusChange as recordLeadStatusLedger } from "@/lib/leads/set-status";
-import { recordLeadStatusChange } from "@/lib/lead/status-trail-write";
+import { recordLeadStatusChange } from "@/lib/leads/set-status";
 // Sổ đăng ký marker — MỘT chỗ định nghĩa chuỗi nhận dạng khoản tự sinh.
 import {
   AUTO_ORDER_CONFIRM_MARKER,
   installmentMarker,
 } from "@/lib/finance/payment-markers";
-import { KHOAN_DA_DONG } from "@/lib/finance/debt";
 
 type Tx = Prisma.TransactionClient;
 
@@ -193,13 +186,8 @@ export async function maybeAdvanceLeadToRegistered(
     data: { status: "DA_DANG_KY" },
   });
   if (upd.count === 0) return false;
-  // HAI SỔ (xem ghi chú đầu `lib/leads/set-status.ts`):
-  //  1. sổ ĐẾM phễu — `updateMany` ở trên là lượt claim atomic, giữ nguyên, chỉ nối sổ;
-  //  2. vết NGƯỜI ĐỌC — C-07: trước đây chỗ này CHỈ tạo `LeadActivity`, không có dòng
-  //     `AuditLog` nào ⇒ mốc "tiền vào → Đã đăng ký" biến mất khỏi mục "Lịch sử thay
-  //     đổi" của trang chi tiết lead (thứ QLCS xem), trong khi đường đổi tay thì có.
-  // Giá trị trạng thái là bộ 10 của GĐ5, KHÔNG phải AWAITING_DECISION/REGISTERED cũ.
-  await recordLeadStatusLedger({
+  // GĐ1 — `updateMany` ở trên là lượt claim atomic, giữ nguyên; chỉ nối thêm sổ.
+  await recordLeadStatusChange({
     tx,
     leadId: params.leadId,
     from: "CHO_QUYET_DINH",
@@ -208,14 +196,15 @@ export async function maybeAdvanceLeadToRegistered(
     actorId: params.actor.id,
     actorName: params.actor.name ?? null,
   });
-  await recordLeadStatusChange({
-    tx,
-    leadId: params.leadId,
-    actorId: params.actor.id,
-    actorName: params.actor.name ?? "Hệ thống",
-    from: "CHO_QUYET_DINH",
-    to: "DA_DANG_KY",
-    source: "PAYMENT",
+  await tx.leadActivity.create({
+    data: {
+      leadId: params.leadId,
+      actorId: params.actor.id,
+      actorName: params.actor.name ?? "Hệ thống",
+      type: "STATUS_CHANGE",
+      content: "Tự động: Chờ quyết định → Đã đăng ký (đã ghi nhận thanh toán)",
+      metadata: { from: "CHO_QUYET_DINH", to: "DA_DANG_KY", auto: true },
+    },
   });
   return true;
 }
@@ -892,7 +881,7 @@ export async function adjustPayment(params: {
     });
     const tran = ghiDanh?.finalPrice ?? ghiDanh?.tuition ?? null;
     const daThu = await tx.payment.aggregate({
-      where: { enrollmentId, ...KHOAN_DA_DONG },
+      where: { enrollmentId, ...KHOAN_DA_XAC_NHAN },
       _sum: { amount: true },
     });
     const tongSau = (daThu._sum.amount ?? 0) + delta;

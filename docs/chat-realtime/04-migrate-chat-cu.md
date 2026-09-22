@@ -102,13 +102,7 @@ pnpm exec tsx scripts/migrate-chat-cu-sang-moi.ts --classes id1,id2
 
 Dòng đầu output luôn in `DB host` và `DB target`. **Đọc kỹ 2 dòng đó.**
 
-> 🔴 **ĐÍNH CHÍNH 17/09/2026.** ~~DB của môi trường `test` CHÍNH LÀ DB dev… chạy `--apply`
-> ở máy local là đổi luôn dữ liệu trên `test.satarobo.vn`~~ **[SAI]** — `test` là project
-> RIÊNG (xem CLAUDE.md, mục "Nhánh & môi trường").
->
-> Câu đúng: `--apply` ở máy local đổi dữ liệu của **`satarobo_local`** (DB dev server đang
-> phục vụ), **KHÔNG** đụng `test.satarobo.vn`. Muốn di trú dữ liệu của `test` thì phải
-> chạy với `TEST_DATABASE_URL`, và đó là một lượt RIÊNG, có rủi ro riêng.
+> ⚠️ **DB của môi trường `test` CHÍNH LÀ DB dev** (CLAUDE.md, mục "Nhánh & môi trường"). Chạy `--apply` ở máy local là đổi luôn dữ liệu đang hiện trên `test.satarobo.vn`.
 
 ### 4.2. Apply (ghi thật)
 

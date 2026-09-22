@@ -27,11 +27,7 @@ const h = vi.hoisted(() => {
   const transaction = vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => {
     thuTu.push("tx:mo");
     const r = await cb({
-      // `updateMany` — thêm 16/09/2026 khi hợp nhất: `transferLead` nay ghi dòng hoạt
-      // động qua `recordLeadActivity` (cổng N-4), và hàm đó đóng mốc `firstContactAt`
-      // bằng `updateMany` có điều kiện "chỉ khi còn trống". Thiếu khoá này trong mock là
-      // cả tệp đổ với `input.tx.lead.updateMany is not a function`.
-      lead: { update: vi.fn(async () => ({})), updateMany: vi.fn(async () => ({ count: 0 })) },
+      lead: { update: vi.fn(async () => ({})) },
       leadActivity: { create: vi.fn(async () => ({})) },
       leadTransfer: { create: vi.fn(async () => ({})) },
     });
@@ -80,10 +76,7 @@ vi.mock("@/lib/db-scope", () => ({
   passesScope: vi.fn(() => true),
   scopedDb: vi.fn(() => h.mockDb),
 }));
-vi.mock("next/cache", () => ({
-  // 16/09/2026 — bản `main` của `actions.ts` dùng `unstable_cache`; mock thiếu nó là
-  // cả tệp test chết ngay lúc nạp, không phải một ca đỏ.
-  unstable_cache: <T,>(fn: T) => fn, revalidatePath: vi.fn() }));
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/audit/log", () => ({
   logLeadAudit: vi.fn(async () => undefined),
   getAuditActor: vi.fn(() => ({ actorId: "usr_ql", actorName: "QL" })),

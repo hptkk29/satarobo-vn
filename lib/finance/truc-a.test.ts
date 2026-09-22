@@ -26,16 +26,6 @@ const NGOAI_LE: Record<string, string> = {
   "lib/finance/truc-a.test.ts": "TEST: chính cổng này — khẳng định hình dạng hằng",
   "lib/finance/payment.ts":
     "GHI: confirmPayment đổi trạng thái + adjustPayment tạo bút toán + AuditLog.newValues",
-  // Ba tệp dưới đây là TEST của nhánh `test`, khai nhận khi hợp nhất 16/09/2026. Chúng
-  // DỰNG DỮ LIỆU MẪU mang trạng thái đó rồi mới gọi hàm thuần — không phải một đường
-  // đọc thứ hai, nên không thuộc thứ cổng này sinh ra để chặn.
-  "lib/crm/commission-run.test.ts": "TEST: dựng bút toán mẫu cho kỳ hoa hồng",
-  "lib/reports/revenue-by-child.test.ts": "TEST: dựng bút toán mẫu cho bổ dọc theo con",
-  "lib/reports/revenue-daily.test.ts": "TEST: dựng bút toán mẫu cho doanh thu theo ngày",
-  "scripts/do-so-cu-moi-no4.ts":
-    "SCRIPT ĐO chỉ-đọc: CỐ Ý gõ tay bộ lọc CŨ (chỉ CONFIRMED) để in số TRƯỚC bản vá NỢ-4 cạnh số SAU. Bộ lọc cũ không còn tồn tại dưới dạng hằng nên không import được — và đây không phải một đường đọc thứ hai.",
-  "lib/finance/debt.test.ts":
-    "TEST: dựng bút toán mẫu (thu / hoàn / điều chỉnh) cho computeEnrollmentDebt — NỢ-4",
 };
 
 function duyet(thuMuc: string, ra: string[]): void {

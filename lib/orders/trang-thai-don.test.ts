@@ -201,10 +201,7 @@ describe("[TTD-DON-06] hai đường đọc còn suy tiền từ Order.status", 
   const docMa = (duongDan: string) =>
     boChuThich(readFileSync(resolve(process.cwd(), duongDan), "utf8"));
 
-  // ✅ ĐÃ VÁ — gỡ ghim 18/09/2026 (lượt hợp nhất `main` → `test`). `main` chuyển
-  // đường đọc doanh thu funnel sang sổ `Payment`; ghim `it.fails` lập tức báo
-  // "Expect test to fail", đúng cơ chế mà chú thích ở trên mô tả. Nay là ca THẬT.
-  it("doanh thu funnel KHÔNG được = Σ totalAmount của đơn CONFIRMED/COMPLETED", () => {
+  it.fails("doanh thu funnel KHÔNG được = Σ totalAmount của đơn CONFIRMED/COMPLETED", () => {
     // ĐO 16/09/2026 trên satarobo_local: 384 đơn CONFIRMED/COMPLETED có Σ totalAmount
     // 1.785.608.000đ, nhưng kế toán chỉ xác nhận 1.400.301.000đ ⇒ funnel khai thừa
     // 385.307.000đ. Tiền chưa về được báo là doanh thu.

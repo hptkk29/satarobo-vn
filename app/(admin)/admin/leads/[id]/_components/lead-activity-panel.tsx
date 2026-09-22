@@ -312,16 +312,7 @@ export function LeadActivityPanel({
       const res = await addLeadActivity({ leadId, type: actType, content, metadata });
       if (res.ok) {
         resetForm();
-        // S-9 — nói ra khi ghi chú đã lưu mà mốc SLA không đổi. Báo "Đã ghi"
-        // trơn thì người ghi tưởng mình vừa xử lý xong phiếu và bỏ đi.
-        if (res.dongHoKhongDoi) {
-          toast.success("Đã ghi hoạt động", {
-            description:
-              "Bạn không phụ trách khách này nên đồng hồ nhắc chăm sóc giữ nguyên — người phụ trách vẫn được nhắc.",
-          });
-        } else {
-          toast.success("Đã ghi hoạt động");
-        }
+        toast.success("Đã ghi hoạt động");
         router.refresh();
       } else {
         toast.error(res.error ?? "Lỗi");
