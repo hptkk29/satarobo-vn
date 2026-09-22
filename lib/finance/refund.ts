@@ -10,7 +10,7 @@ import type {
   RefundTrigger,
 } from "@prisma/client";
 import { db } from "@/lib/db";
-import { KHOAN_DA_DONG } from "@/lib/finance/debt";
+import { KHOAN_DA_XAC_NHAN } from "@/lib/finance/debt";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { canhBaoSoBuoi, soBuoiChuaChot } from "@/lib/finance/lop-chua-chot-buoi";
 import type { ScopedDb } from "@/lib/actions/factory";
@@ -122,9 +122,7 @@ export async function createRefundRequest(input: {
 
   // Σ Payment đã xác nhận (CONFIRMED) — loại soft-deleted.
   const agg = await client.payment.aggregate({
-    // Câu A: hoàn được bao nhiêu thì đo bằng tiền PH ĐANG ĐỂ LẠI, tức đã trừ những
-    // lần hoàn trước. Dùng bộ lọc gross ở đây là đề xuất hoàn lần hai trên số gộp.
-    where: { enrollmentId, ...KHOAN_DA_DONG },
+    where: { enrollmentId, ...KHOAN_DA_XAC_NHAN },
     _sum: { amount: true },
   });
   const paidConfirmed = agg._sum.amount ?? 0;

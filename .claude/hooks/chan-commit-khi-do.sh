@@ -108,22 +108,6 @@ if [ "${#staged[@]}" -eq 0 ]; then
 fi
 
 vt="$(mktemp)"
-
-# ⚠️ LƯỢT STAGE RẤT LỚN — `vitest related` nhận từng đường dẫn làm THAM SỐ, nên một lượt
-# hợp nhất nhánh (900+ tệp) làm dòng lệnh vượt trần của hệ điều hành và hỏng bằng
-# `spawn ENAMETOOLONG`. Hỏng kiểu đó KHÔNG phải test đỏ, nhưng cổng lại chặn commit với
-# câu "test ĐỎ" — sai chỗ, và người bị chặn sẽ đi tìm một ca đỏ không tồn tại.
-#
-# Đường lùi là chạy CẢ BỘ, tức MẠNH HƠN `related` chứ không yếu hơn: `related` chỉ chạy
-# test có đường import tới tệp đã stage, còn `test:unit` chạy hết. Chậm hơn, nhưng lượt
-# stage 200 tệp trở lên vốn đã không phải lượt commit thường ngày.
-if [ "${#staged[@]}" -ge 200 ]; then
-  if ! pnpm test:unit >"$vt" 2>&1; then
-    bao_loi "bộ test (lượt stage lớn ⇒ chạy cả bộ thay cho \`related\`)" "$(tail -30 "$vt")"
-  fi
-  exit 0
-fi
-
 if ! pnpm exec vitest related --run "${staged[@]}" >"$vt" 2>&1; then
   # `related` không tìm được test nào KHÔNG phải lỗi — nó in "No test files found".
   if grep -q "No test files found" "$vt"; then

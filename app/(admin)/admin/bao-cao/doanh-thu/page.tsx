@@ -1,9 +1,8 @@
 import { redirect } from "next/navigation";
-import { KHOAN_DA_DONG } from "@/lib/finance/debt";
+import { KHOAN_DA_XAC_NHAN } from "@/lib/finance/debt";
 import { safeCache } from "@/lib/cache/safe-cache";
 import { auth } from "@/lib/auth";
-import { checkAnyPermission, checkPermission } from "@/lib/auth/check-permission";
-import { PAGE_GATES } from "@/lib/auth/page-gates";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { CACHE_TAGS } from "@/lib/cache/tags";
@@ -66,7 +65,7 @@ async function computeRevenueRows(actor: Actor, filters: ReportFilters) {
   const [payments, targetRows] = await Promise.all([
     sdb.payment.findMany({
       where: {
-        ...KHOAN_DA_DONG,
+        ...KHOAN_DA_XAC_NHAN,
         ...(filters.centerId ? { centerId: filters.centerId } : {}),
         ...(dateWhere ? { paidDate: dateWhere } : {}),
       },
@@ -97,11 +96,7 @@ async function computeRevenueRows(actor: Actor, filters: ReportFilters) {
 export default async function RevenueTargetReportPage({ searchParams }: SearchParams) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  // B-01 — cổng TRANG đọc thẳng từ `PAGE_GATES`, không khai lại danh sách action ở đây.
-  // Khai rời là menu và cổng trang nói hai câu khác nhau: `PAGE_GATES` cũng cho
-  // `revenue_targets:manage` vào màn này (Marketing Hội sở đặt chỉ tiêu), mà bản gõ tay
-  // chỉ nhận `payments:manage` ⇒ họ thấy mục menu rồi bấm vào là bị đá ra.
-  if (!(await checkAnyPermission(PAGE_GATES["/bao-cao/doanh-thu"]))) {
+  if (!(await checkPermission("payments:manage"))) {
     redirect("/dashboard?error=unauthorized");
   }
 

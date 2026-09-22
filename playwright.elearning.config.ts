@@ -17,9 +17,9 @@
  * Xem `.github/workflows/ci.yml` job `e2e-elearning`.
  */
 import { defineConfig, devices } from "@playwright/test";
-import { napEnvTest } from "./tests/e2e/_helpers/nap-env";
+import dotenv from "dotenv";
 
-napEnvTest("elearning");
+dotenv.config({ path: ".env.test", override: true });
 
 const PORT = process.env.ELEARNING_E2E_PORT ?? "3141";
 const BASE = `http://localhost:${PORT}`;

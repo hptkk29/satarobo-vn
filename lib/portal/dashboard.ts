@@ -12,7 +12,7 @@ import {
   courseProgressPercent,
 } from "@/lib/lms/report-card-core";
 import { getParentNotificationCount } from "@/lib/portal/notifications";
-import { computeEnrollmentDebt, KHOAN_DA_DONG } from "@/lib/finance/debt";
+import { computeEnrollmentDebt, KHOAN_DA_XAC_NHAN } from "@/lib/finance/debt";
 import type { AttendanceSummary } from "@/lib/attendance/summary";
 
 // =============================================================================
@@ -62,12 +62,11 @@ export async function getParentDashboard(parentUserId: string): Promise<ParentDa
       db.enrollment.findMany({
         where: { studentId: { in: childIds }, deletedAt: null }, // FIX-C3
         select: {
-          status: true,
           finalPrice: true,
           tuition: true,
           payments: {
-            where: KHOAN_DA_DONG, // FIX-C3
-            select: { amount: true, accountantStatus: true },
+            where: KHOAN_DA_XAC_NHAN, // FIX-C3
+            select: { amount: true },
           },
         },
       }),
@@ -90,7 +89,7 @@ export async function getParentDashboard(parentUserId: string): Promise<ParentDa
   const totalDebt = enrollments.reduce((sum, e) => {
     const finalPrice = e.finalPrice ?? e.tuition ?? null;
     if (finalPrice == null) return sum; // ghi danh chưa chốt giá → bỏ qua
-    const debt = computeEnrollmentDebt(finalPrice, e.payments, e.status);
+    const debt = computeEnrollmentDebt(finalPrice, e.payments);
     return debt > 0 ? sum + debt : sum; // chỉ cộng phần còn nợ (đóng thừa không trừ)
   }, 0);
 
@@ -206,12 +205,11 @@ export async function getParentChildrenOverview(
         db.enrollment.findMany({
           where: { studentId: c.id, deletedAt: null }, // FIX-C3 — chống "nợ ma" từ ghi danh xóa mềm
           select: {
-            status: true,
             finalPrice: true,
             tuition: true,
             payments: {
-              where: KHOAN_DA_DONG, // FIX-C3
-              select: { amount: true, accountantStatus: true },
+              where: KHOAN_DA_XAC_NHAN, // FIX-C3
+              select: { amount: true },
             },
           },
         }),
@@ -254,7 +252,7 @@ export async function getParentChildrenOverview(
       const debt = enrollments.reduce((sum, e) => {
         const finalPrice = e.finalPrice ?? e.tuition ?? null;
         if (finalPrice == null) return sum;
-        const d = computeEnrollmentDebt(finalPrice, e.payments, e.status);
+        const d = computeEnrollmentDebt(finalPrice, e.payments);
         return d > 0 ? sum + d : sum;
       }, 0);
 

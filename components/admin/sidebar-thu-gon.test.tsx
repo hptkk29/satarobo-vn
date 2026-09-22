@@ -97,7 +97,6 @@ function dung() {
       evalV2Enabled={false}
       scormEnabled={false}
       classGroupEnabled={false}
-      zalocrmEnabled={false}
     >
       <p>noi dung</p>
     </AdminShell>,

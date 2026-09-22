@@ -10,7 +10,6 @@ import { qrConRotDuocTien, locDonNhanTien } from "@/lib/payments/don-nhan-tien";
 // Quy tắc "khoản này thuộc ghi danh nào" — MỘT chỗ duy nhất, dùng chung với màn sửa tay
 // ở /admin/payments. Xem khối chú thích tại chỗ gọi (ghi sổ cũ) để biết vì sao.
 import { chonGhiDanhChoKhoan } from "@/lib/finance/gan-ghi-danh-khoan";
-import { thuTheoPhieuGop } from "@/lib/finance/phieu-gop";
 import { phoneVariants } from "@/lib/phone";
 import {
   transferContentPartsForOrder,
@@ -799,54 +798,6 @@ export async function ingestPayosWebhook(
     }
   }
   const bankTransactionId = txn.id;
-
-  // ── Bước 3½: THỬ ĐƯỜNG PHIẾU GỘP TRƯỚC  [PHIÊN C · 20/09/2026] ────────────
-  //
-  // Mã 5 ký tự trong nội dung CK nói thẳng "phiếu nào", nên nó phải được hỏi TRƯỚC mọi phép
-  // suy đoán của đường cũ (orderCode / VA / SĐT). Hỏi sau là để một phép đoán theo SĐT có cơ
-  // hội cướp một giao dịch đã biết đích.
-  //
-  // ⚠️ `thuTheoPhieuGop` NHƯỜNG (`xuLy: false`) khi không tra ra phiếu gộp nào — kể cả khi
-  // memo có một khối 5 ký tự qua checksum. Checksum lọc 26/27 khối rác chứ không lọc hết, nên
-  // một memo ĐỜI CŨ vẫn có ~1/27 cơ hội chứa khối qua checksum; nuốt ca đó là đẩy ~1/27 giao
-  // dịch đời cũ xuống UNMATCHED không lý do. Lý lẽ đầy đủ ở đầu hàm.
-  const gop = await thuTheoPhieuGop({
-    bankTransactionId,
-    provider,
-    providerTxnId,
-    noiDung: typeof data.description === "string" ? data.description : null,
-    soTienVe: amount,
-  });
-  if (gop.xuLy) {
-    if (gop.ketQua === "TRUNG") {
-      await logPayos({ provider, action: "INGEST_TXN", status: "SKIPPED", payload: data, error: "Đã ghi nhận" });
-      return { status: "DUPLICATE", bankTransactionId };
-    }
-    if (gop.ketQua === "CHUA_CHIA") {
-      await logPayos({ provider, action: "MATCH_TXN", status: "FAILED", payload: data, error: gop.ghiChu });
-      return { status: "UNMATCHED", bankTransactionId, reason: gop.ghiChu };
-    }
-    await logPayos({ provider, action: "MATCH_TXN", status: "SUCCESS", payload: data });
-    // ⚠️ `paymentRequestId` là ĐÍCH ĐẦU TIÊN của phiếu — một phiếu thu CÓ THẬT vừa nhận tiền,
-    // không phải số giả. Phiếu gộp có n đích, nên ai cần đủ thì đọc `billId` rồi tra
-    // `PaymentBillLine`. Nới `IngestOutcome` thành mảng sẽ chạm mọi đường gọi đời cũ mà không
-    // đường nào trong số đó đọc trường này.
-    //
-    // `settled: false` · `orderConfirmed: false` là SỰ THẬT, không phải giá trị mặc định cho
-    // xong: đường phiếu gộp CỐ Ý không tự chốt đơn. Chốt đơn là quyết định của `confirmSettledOrder`
-    // với cổng "giảm giá chưa duyệt", và nó thuộc đường cũ. Phiên này chỉ đưa tiền vào đúng con.
-    return {
-      status: "MATCHED",
-      bankTransactionId,
-      orderId: gop.orderId,
-      paymentRequestId: gop.paymentRequestIds[0] ?? "",
-      allocated: gop.tong,
-      credit: 0,
-      waived: 0,
-      settled: false,
-      orderConfirmed: false,
-    };
-  }
 
   // ── Bước 4: tra đích phân bổ ──────────────────────────────────────────────
   const resolved = await resolvePaymentTargetDetailed(data);

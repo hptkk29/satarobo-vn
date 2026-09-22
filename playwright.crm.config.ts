@@ -6,9 +6,9 @@
  *   pnpm test:e2e:crm   (CRM_SKIP_WEBSERVER=1 pnpm test:e2e:crm để chạy nhanh, không dev server)
  */
 import { defineConfig, devices } from "@playwright/test";
-import { napEnvTest } from "./tests/e2e/_helpers/nap-env";
+import dotenv from "dotenv";
 
-napEnvTest("crm");
+dotenv.config({ path: ".env.test", override: true });
 
 export default defineConfig({
   testDir: "./tests/e2e/crm",

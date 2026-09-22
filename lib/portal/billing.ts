@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { KHOAN_DA_DONG, laKhoanDaDong, tongDaDong, computeEnrollmentDebt } from "@/lib/finance/debt";
+import { KHOAN_DA_XAC_NHAN, laKhoanDaXacNhan, tongDaXacNhan } from "@/lib/finance/debt";
 import { xepPhieuThuVaDieuChinh } from "@/lib/portal/phieu-thu";
 
 // =============================================================================
@@ -166,7 +166,7 @@ export async function getParentConfirmedPayments(
 
   const payments = await client.payment.findMany({
     where: {
-      ...KHOAN_DA_DONG,
+      ...KHOAN_DA_XAC_NHAN,
       enrollment: { studentId: { in: childIds }, deletedAt: null },
     },
     select: {
@@ -283,8 +283,7 @@ export async function getParentBilling(parentUserId: string): Promise<ParentBill
 
   const rows: EnrollmentBillingRow[] = enrollments.map((e) => {
     const finalPrice = e.finalPrice ?? e.tuition ?? 0;
-    const daDong = e.payments.filter(laKhoanDaDong);
-    const confirmedPaid = tongDaDong(daDong);
+    const confirmedPaid = tongDaXacNhan(e.payments.filter(laKhoanDaXacNhan));
     const pendingCount = e.payments.filter((p) => p.accountantStatus === "PENDING").length;
     const rejectedCount = e.payments.filter((p) => p.accountantStatus === "REJECTED").length;
     return {
@@ -294,7 +293,7 @@ export async function getParentBilling(parentUserId: string): Promise<ParentBill
       className: e.class?.name ?? null,
       finalPrice,
       confirmedPaid,
-      outstanding: computeEnrollmentDebt(finalPrice, daDong, e.status),
+      outstanding: finalPrice - confirmedPaid,
       pendingCount,
       rejectedCount,
     };

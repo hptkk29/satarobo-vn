@@ -20,7 +20,6 @@ import {
   isEvalV2Enabled,
   isRbacV2Enabled,
   isScormEnabled,
-  isZalocrmEnabled,
 } from "@/lib/flags";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { Toaster } from "@/components/ui/sonner";
@@ -143,7 +142,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         evalV2Enabled={isEvalV2Enabled()}
         scormEnabled={isScormEnabled()}
         classGroupEnabled={isClassGroupEnabled()}
-        zalocrmEnabled={isZalocrmEnabled()}
         userId={session.user.id}
         userName={session.user.name}
         userRole={activeRole ?? session.user.role}

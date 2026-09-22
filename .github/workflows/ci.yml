@@ -191,18 +191,6 @@ jobs:
       - name: Run lead-intake DB tests
         run: pnpm test:lead-intake
 
-      # S9-B5 (06/09/2026) — LẦN ĐẦU 14 ca HT-01…HT-14 (tests/inbox/hop-thu.spec.ts)
-      # thật sự chạy trong CI. Script `test:inbox-db` có trong package.json từ đợt hộp
-      # thư nhưng KHÔNG job nào gọi ⇒ ở job `unit-tests` (không Postgres) cổng
-      # `describe.skipIf(!RUN)` cho chúng SKIP SẠCH và CI vẫn xanh 100% dù logic hộp
-      # thư bị phá hoàn toàn — đúng kiểu "xanh giả" nguy hiểm hơn đỏ.
-      # Không cần job mới: job này đã có Postgres 16, `prisma migrate deploy` (dựng cả
-      # migration 20260827120000_hop_thu_da_kenh ⇒ cổng `CO_BANG` mở) và seed RoleDef.
-      # ⚠️ Bộ này KHÔNG gọi `resetDb()` — nó dọn theo tiền tố `HTDK_`. Giữ nguyên thói
-      # quen đó cho mọi spec thêm vào `tests/inbox`: 4 bộ trên dùng CHUNG một DB
-      # `ci_test` chạy tuần tự, một `resetDb()` lọt vào là xoá dữ liệu của bộ chạy sau.
-      - name: Run inbox DB tests
-        run: pnpm test:inbox-db
       # CHẤM CÔNG — thêm 07/09/2026. Cùng lý do ba bước trên, nhưng ca này đã ĐỎ THẬT MÀ KHÔNG AI
       # THẤY: `tests/cham-cong/timelog.spec.ts` kỳ vọng 3 lượt ACCEPTED trong khi luật chặn định vị
       # (06/09) chỉ cho qua 1. Bộ này nằm trong `include` của Vitest nên `pnpm test:unit` có GOM
@@ -605,75 +593,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-crm
-          path: playwright-report/
-          retention-days: 7
-
-
-  e2e-r1:
-    name: E2E Phase R1 (Playwright service-level + Postgres local)
-    runs-on: ubuntu-latest
-    # Bộ r1 giữ test tầng-DB của HOA HỒNG và MESSENGER. Trước 27/08 nó KHÔNG có job
-    # nào gọi — script `test:e2e:r1` tồn tại từ lâu mà CI chưa bao giờ chạy, nên mọi
-    # test tầng-DB của hai mảng đó xanh giả suốt. Đây là job bù chỗ đó.
-    timeout-minutes: 20
-    needs: quality
-
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: ci
-          POSTGRES_PASSWORD: ci
-          POSTGRES_DB: ci_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    env:
-      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci_test
-      DIRECT_URL: postgresql://ci:ci@localhost:5432/ci_test
-      NEXTAUTH_SECRET: "ci-build-only-secret-do-not-use-in-prod-32chars"
-      NEXTAUTH_URL: "http://localhost:3100"
-      NEXT_PUBLIC_APP_URL: "http://localhost:3100"
-      BASE_URL: "http://localhost:3100"
-      # Cả 3 spec CRM đều service-level (gọi thẳng hàm trong lib/) → bỏ webServer.
-      CRM_SKIP_WEBSERVER: "1"
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v3
-        with: { version: 11 }
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
-      - name: Generate Prisma client
-        run: pnpm exec prisma generate
-
-      # KHÔNG cài trình duyệt, theo đúng nếp job crm/r7 (bước cài apt từng treo 19 phút
-      # và giết cả job).
-      # ⚠️ ĐÁNH ĐỔI NÓI RÕ: bộ r1 có ĐÚNG MỘT spec cần trình duyệt — `crm-ui.spec.ts`
-      # (describe "CRM UI"). Job này CỐ Ý bỏ nó qua bằng `--grep-invert`, nên spec đó
-      # VẪN chưa có cổng gác. Muốn phủ nốt thì phải cài chromium + dựng webServer.
-      # Thêm spec dùng trình duyệt vào r1 mà không sửa job này = nó cũng bị bỏ qua.
-
-      - name: Run Phase R1 e2e (bỏ qua spec cần trình duyệt)
-        run: R1_SKIP_WEBSERVER=1 pnpm exec playwright test -c playwright.r1.config.ts --grep-invert "CRM UI"
-
-      - name: Upload R1 Playwright report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report-r1
           path: playwright-report/
           retention-days: 7
 

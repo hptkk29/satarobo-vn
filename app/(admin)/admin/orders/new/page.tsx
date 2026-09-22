@@ -4,8 +4,7 @@ import { ChevronLeft } from "lucide-react";
 import { provinces } from "vietnam-address-data";
 import { auth } from "@/lib/auth";
 import { getSetting } from "@/lib/settings/service";
-import { checkPermission, canViewLeadPii } from "@/lib/auth/check-permission";
-import { maskLeadPiiFields } from "@/lib/lead/pii";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { nationalPhone } from "@/lib/phone";
@@ -41,8 +40,6 @@ export default async function NewOrderPage({
   const { leadId } = await searchParams;
   let lead: { id: string; parentName: string; phone: string; email: string | null; centerId: string | null } | null = null;
   let leadAssignedToId: string | null = null;
-  // CON KHAI TRONG LEAD — nguồn sự thật "con của phụ huynh này" khi lead chưa chốt.
-  // Tên biến theo `main` (`conLead`) vì biểu mẫu lấy bản của `main` và prop tên vậy.
   let conLead: { id: string; fullName: string }[] = [];
   if (leadId) {
     const actor = await resolveActor(session.user.id);
@@ -53,9 +50,6 @@ export default async function NewOrderPage({
         // CON KHAI TRONG LEAD [16/09/2026] — nguồn sự thật "con của phụ huynh này" khi lead
         // chưa chốt. Đo: 121/125 lead không có `Student` nào khớp SĐT, nên nếu ô chọn học
         // viên chỉ biết bảng `Student` thì 96,8% ca không chọn được đúng em.
-        //
-        // Đọc kèm trong CÙNG lượt đọc phiếu (phiếu đã qua scope) — không đọc thẳng
-        // `LeadChild`: bảng đó không có `centerId` nên `scopedDb` là pass-through.
         children: { select: { id: true, fullName: true }, orderBy: { createdAt: "asc" } },
       },
     });
@@ -80,20 +74,6 @@ export default async function NewOrderPage({
     }
   }
 
-  // S-1 (26/08/2026) — `orders:create` KHÔNG kéo theo quyền đọc liên hệ khách.
-  // Vai giữ nó: SUPER_ADMIN, Quản lý cơ sở (mất `leads:view-pii` từ Q9), **Kế
-  // toán** (chưa bao giờ có), Sale (có). Trước S-1, mở
-  // `/orders/new?leadId=…` là đọc được nguyên tên + SĐT của phiếu.
-  const canViewPii = await canViewLeadPii();
-  const piiLead = lead ? maskLeadPiiFields(lead, canViewPii) : null;
-  // Ô điền sẵn: thiếu quyền thì để TRỐNG, KHÔNG điền bản che. `customerPhone` có
-  // lưới đỡ (`phoneVn` từ chối chuỗi đã đục) nhưng `customerName` thì không —
-  // điền sẵn tên che là mời người dùng bấm Lưu và tạo đơn mang tên "Nguyễn T. L.".
-  const khachDienSan =
-    lead && canViewPii
-      ? { name: lead.parentName, phone: lead.phone, email: lead.email ?? "" }
-      : undefined;
-
   return (
     /* Trần 104rem (1664px) thay cho `max-w-4xl` (896px) cũ. Form nay hai cột nên cần
        bề ngang thật; vẫn phải CÓ trần vì ở 4k/8k một form trải hết màn thì mắt phải
@@ -111,19 +91,10 @@ export default async function NewOrderPage({
         Tạo đơn hàng thủ công
       </h1>
       <p className="mb-6 text-sm text-muted-foreground">
-        {piiLead
-          ? `Đơn gắn với lead "${piiLead.parentName}" — sau khi ghi nhận thanh toán sẽ đủ điều kiện chốt (convert).`
+        {lead
+          ? `Đơn gắn với lead "${lead.parentName}" — sau khi ghi nhận thanh toán sẽ đủ điều kiện chốt (convert).`
           : "Dùng cho khách walk-in tại trung tâm hoặc nhập tay đơn đã thoả thuận offline. Một đơn nhận NHIỀU dòng — phụ huynh có hai con học hai khoá thì vẫn là một đơn, một công nợ, một mã QR."}
       </p>
-
-      {lead && !canViewPii && (
-        <p className="mb-6 rounded-xl border border-amber-500/40 bg-card p-4 text-sm text-muted-foreground">
-          <strong className="text-amber-600 dark:text-amber-500">
-            Bạn không có quyền xem liên hệ của khách
-          </strong>
-          {" — "}ô Tên và SĐT người mua để trống, xin khách đọc rồi nhập tay.
-        </p>
-      )}
 
       <OrderCreateForm
         paymentMethods={data.paymentMethods}
@@ -134,7 +105,23 @@ export default async function NewOrderPage({
         conLeadBanDau={conLead}
         provinces={provinces.map((p) => ({ value: p.id, label: p.name }))}
         leadId={lead?.id ?? null}
-        defaultCustomer={khachDienSan}
+        defaultCustomer={
+          lead
+            ? {
+                name: lead.parentName,
+                // DẠNG NỘI ĐỊA (`09…`), không phải chuỗi thô trong DB.
+                //
+                // `Lead.phone` lưu cả `84…` lẫn `0…` (di sản 6 hàm chuẩn hoá cũ) — đo
+                // trên `satarobo_local`: lead mẫu mang `84930000001`, và trước bản này ô
+                // SĐT hiện đúng chuỗi đó. Không sai về tiền (`phoneVn` nhận cả hai và
+                // chuẩn hoá lại) nhưng LỆCH với đường kia: chọn lead từ gợi ý SĐT thì
+                // `chonLead` đã đổi về `09…`. Hai đường vào cùng một ô mà hiện hai kiểu
+                // là thứ người bán sẽ hỏi, và là thứ không ai trả lời được.
+                phone: nationalPhone(lead.phone) ?? lead.phone,
+                email: lead.email ?? "",
+              }
+            : undefined
+        }
         defaultCenterId={lead?.centerId ?? null}
         // Sale (không có `orders:manage`) KHÔNG đổi được cơ sở: cổng server đã ép theo
         // cơ sở của lead, nên để ô mở là cho họ chọn một thứ sẽ bị vứt im lặng.

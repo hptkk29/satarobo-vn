@@ -2,8 +2,7 @@ import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { ChevronLeft } from 'lucide-react'
 import { auth } from '@/lib/auth'
-import { checkPermission, canViewLeadPii } from '@/lib/auth/check-permission'
-import { maskLeadPiiFields } from '@/lib/lead/pii'
+import { checkPermission } from '@/lib/auth/check-permission'
 import { scopedDb } from '@/lib/db-scope'
 import { resolveActor } from '@/lib/auth/actor'
 import { canGrantFullScholarship } from '@/lib/crm/scholarship'
@@ -62,27 +61,6 @@ export default async function ConvertV2Page({ params }: Props) {
   if (!(await checkPermission('leads:view-all', { centerId: lead.centerId })) && lead.assignedToId !== session.user.id) {
     redirect('/leads?view=kanban')
   }
-
-  // S-1 — che PII trước khi dựng giao diện. Cổng vào đây là `students:create` +
-  // `enrollments:create`, mà Quản lý cơ sở có CẢ HAI trong khi KHÔNG còn
-  // `leads:view-pii` (Q9) ⇒ trước S-1 màn này in nguyên tên + SĐT khách.
-  const canViewPii = await canViewLeadPii()
-  const piiLead = maskLeadPiiFields(lead, canViewPii)
-
-  // ⚠️ Ô ĐIỀN SẴN thì để TRỐNG, KHÔNG điền bản che.
-  //
-  // Đây là chỗ dễ làm sai nhất của cả việc này. `submitConvertV2` nhận thẳng
-  // `parentName`/`parentPhone` từ trình duyệt. SĐT còn có lưới đỡ — schema validate
-  // bằng `phoneVn` (canonical) nên "090xxxx456" bị từ chối. TÊN thì KHÔNG có lưới
-  // nào: điền sẵn "Nguyễn T. L." rồi bấm Lưu là tạo ra một phụ huynh mang đúng cái
-  // tên đã đục, im lặng, và không ai phát hiện cho tới lúc gọi tên khách.
-  //
-  // Để trống là hỏng SỚM và hỏng TO: form chặn ngay ("Nhập đủ tên và SĐT phụ
-  // huynh"). Người chốt đang ngồi với khách nên hỏi miệng là có — họ mất quyền đọc
-  // SĐT trong CRM, không mất khả năng nghe khách đọc số.
-  const dienSan = canViewPii
-    ? { ten: lead.parentName, email: lead.email ?? '', sdt: lead.phone }
-    : { ten: '', email: '', sdt: '' }
 
   // Tóm tắt thanh toán (đã nộp / tổng phải thu / còn thiếu) + điều kiện chốt.
   const paymentSummary = await getLeadPaymentSummary(sdb, lead.id)
@@ -195,8 +173,8 @@ export default async function ConvertV2Page({ params }: Props) {
       <div className="mb-6 border-b border-border pb-4">
         <h1 className="text-2xl font-bold text-foreground">Chuyển đổi</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {piiLead.parentName} · {formatPhoneVN(piiLead.phone)}
-          {piiLead.email ? ` · ${piiLead.email}` : ''} · Trạng thái:{' '}
+          {lead.parentName} · {formatPhoneVN(lead.phone)}
+          {lead.email ? ` · ${lead.email}` : ''} · Trạng thái:{' '}
           <span className="font-medium">{LEAD_STATUS_LABEL[lead.status] ?? lead.status}</span>
         </p>
       </div>
@@ -210,28 +188,15 @@ export default async function ConvertV2Page({ params }: Props) {
         />
       </div>
 
-      {/* `conflictHref` truyền tường minh: màn gộp hồ sơ trùng là của khu quản
-          trị, và chỗ gọi mới là chỗ biết khu mình có màn đó hay không. */}
-      {!canViewPii && (
-        <p className="mb-4 rounded-xl border border-amber-500/40 bg-card p-4 text-sm text-muted-foreground">
-          <strong className="text-amber-600 dark:text-amber-500">
-            Bạn không có quyền xem liên hệ của khách
-          </strong>
-          {' — '}ô Tên và SĐT phụ huynh để trống, xin khách đọc rồi nhập tay. Đừng
-          chép lại chuỗi đã che ở dòng trên: nó không phải thông tin thật.
-        </p>
-      )}
-
       <ConvertForm
-        conflictHref="/convert-conflicts"
         // Ô "Miễn phí học bổng toàn phần" CHỈ hiện với Quản trị tối cao (chốt 31/08/2026).
         // Đây là lớp giao diện; cổng thật ở `submitConvertV2` — Server Action là endpoint
         // HTTP riêng nên giấu ô không phải là chặn.
         canGrantScholarship={canGrantFullScholarship(actor)}
         leadId={lead.id}
-        defaultParentName={dienSan.ten}
-        defaultParentEmail={dienSan.email}
-        defaultParentPhone={formatPhoneVN(dienSan.sdt)}
+        defaultParentName={lead.parentName}
+        defaultParentEmail={lead.email ?? ''}
+        defaultParentPhone={formatPhoneVN(lead.phone)}
         prefillStudents={prefillStudents}
         classes={classOptions}
       />
