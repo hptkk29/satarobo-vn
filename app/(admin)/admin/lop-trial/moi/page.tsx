@@ -27,7 +27,9 @@ export default async function TaoLopTrialPage() {
   const actor = await resolveActor(session.user.id);
   // 28/08 — form chỉ còn CƠ SỞ + KHOÁ. Không nạp giáo viên/phòng/cấu hình số buổi nữa:
   // ba thứ đó chuyển xuống khối "Thêm buổi học" ở trang chi tiết lớp.
-  const { centers, courses } = await layLuaChonTaoLop(actor);
+  // `courses` KHÔNG còn dùng: ô "Khoá trải nghiệm" đã gỡ khỏi cả hai form theo chốt
+  // 22/09/2026 vòng 2 (QLCS mở lớp chưa biết học viên nào sẽ vào, nên chưa biết khoá).
+  const { centers } = await layLuaChonTaoLop(actor);
   // Khung giờ đọc ở SERVER rồi truyền xuống — ô chọn trên form phải bày đúng thứ server
   // sẽ nhận. "Hôm nay" cũng tính ở server theo lịch VN: để client đọc đồng hồ máy là máy
   // đặt sai múi giờ sẽ mở lớp nhầm ngày.
@@ -56,7 +58,6 @@ export default async function TaoLopTrialPage() {
           đó là cơ sở ĐẦU BẢNG CHỮ CÁI, không phải cơ sở của họ. */}
       <CreateForm
         centers={centers}
-        courses={courses}
         coSoCuaToi={session.user.centerId ?? null}
         cauHinhKhung={cauHinhKhung}
         homNay={homNay}
@@ -70,7 +71,6 @@ export default async function TaoLopTrialPage() {
         </p>
         <BulkForm
           centers={centers}
-          courses={courses}
           coSoMacDinh={
             (session.user.centerId && centers.some((c) => c.id === session.user.centerId)
               ? session.user.centerId

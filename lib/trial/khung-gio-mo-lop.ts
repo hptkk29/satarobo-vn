@@ -217,3 +217,67 @@ export function sinhNgayTheoThu(input: {
   if (ra.length === 0) return { ok: false, loi: "Khoảng ngày đã chọn không có thứ nào khớp" };
   return { ok: true, ngay: ra };
 }
+
+/**
+ * Một TUỲ CHỌN của lượt mở lớp theo kỳ: các thứ + một khung giờ.
+ *
+ * Chủ dự án 22/09/2026 (vòng 2): "chọn từ ngày đến ngày rồi phải chọn thêm giờ của kỳ
+ * đó, và có thể + thêm tuỳ chọn khác, ví dụ: tạo kỳ 22/09-30/09 lịch t3-t6 và lịch
+ * t7-cn riêng biệt".
+ */
+export type QuyTacKy = { thu: number[]; startTime: string; endTime: string };
+
+/**
+ * Khung giờ dùng được cho MỘT NHÓM THỨ — giao của các khung, không phải hợp.
+ *
+ * Chọn T3 (tối) cùng T7 (sáng + chiều) thì giao là RỖNG, và đó là câu trả lời đúng:
+ * một tuỳ chọn chỉ mang MỘT khung, nên hai nhóm giờ khác nhau phải tách thành hai tuỳ
+ * chọn. Lấy hợp ở đây là bày ra khung `17:30–21:00` cho thứ 7 rồi để server từ chối.
+ */
+export function khungChungChoThu(
+  thu: readonly number[],
+  cauHinh: CauHinhKhung,
+): KhungGio[] {
+  if (thu.length === 0) return [];
+  let giao: KhungGio[] | null = null;
+  for (const t of thu) {
+    const khoa = THU_KHOA[t];
+    const doc = khoa ? docKhungGio(cauHinh[khoa]) : { ok: false as const, loi: "" };
+    const ds = doc.ok ? doc.giaTri : [];
+    giao =
+      giao === null
+        ? ds
+        : giao.filter((a) => ds.some((b) => a.startTime === b.startTime && a.endTime === b.endTime));
+    if (giao.length === 0) return [];
+  }
+  return giao ?? [];
+}
+
+/**
+ * Bộ tuỳ chọn GỢI Ý dựng từ cấu hình: gom các thứ có CÙNG khung vào một tuỳ chọn.
+ *
+ * Với cấu hình mặc định, hàm này sinh đúng ba dòng — T3–T6 tối, T7+CN sáng, T7+CN chiều
+ * — tức đúng ví dụ chủ dự án đưa ra. Người dùng mở form là thấy sẵn, sửa hoặc xoá bớt.
+ */
+export function goiYQuyTac(cauHinh: CauHinhKhung): QuyTacKy[] {
+  // Khoá gom = "start-end"; giá trị = các thứ có khung đó. `Map` giữ thứ tự chèn nên
+  // khung xuất hiện sớm hơn (duyệt theo thứ tự thứ 2 → CN) đứng trước.
+  const theoKhung = new Map<string, { khung: KhungGio; thu: number[] }>();
+  for (const t of [1, 2, 3, 4, 5, 6, 0]) {
+    const khoa = THU_KHOA[t];
+    if (!khoa) continue;
+    const doc = docKhungGio(cauHinh[khoa]);
+    if (!doc.ok) continue;
+    for (const k of doc.giaTri) {
+      const khoaGom = `${k.startTime}-${k.endTime}`;
+      const cu = theoKhung.get(khoaGom);
+      if (cu) cu.thu.push(t);
+      else theoKhung.set(khoaGom, { khung: k, thu: [t] });
+    }
+  }
+  return [...theoKhung.values()].map((v) => ({
+    thu: v.thu,
+    startTime: v.khung.startTime,
+    endTime: v.khung.endTime,
+  }));
+}

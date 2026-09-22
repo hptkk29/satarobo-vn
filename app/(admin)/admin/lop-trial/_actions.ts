@@ -226,39 +226,54 @@ export async function taoLopTrialTheoThuAction(
   const den = ngayVnSangUtc(data.den);
   if (!tu || !den) return { ok: false, error: "Khoảng ngày không hợp lệ" };
 
-  const ngays = sinhNgayTheoThu({ tu, den, thu: data.thu });
-  if (!ngays.ok) return { ok: false, error: ngays.loi };
-
-  const cauHinh = await layCauHinhKhung();
   const boQua: string[] = [];
   let daTao = 0;
 
-  for (const ngay of ngays.ngay) {
-    const khung = khungChoNgay(ngay, cauHinh);
-    if (!khung.ok) {
-      boQua.push(`${vnYmd(ngay)}: ${khung.loi}`);
+  // Khử trùng theo (ngày, giờ bắt đầu, giờ kết thúc): hai tuỳ chọn chồng nhau (ví dụ một
+  // dòng tick T7 và một dòng tick cả tuần, cùng khung sáng) sẽ ra hai lớp y hệt cho cùng
+  // một ngày — Sale nhìn vào không biết chọn cái nào.
+  const daMo = new Set<string>();
+
+  for (const qt of data.quyTac) {
+    const ngays = sinhNgayTheoThu({ tu, den, thu: qt.thu });
+    if (!ngays.ok) {
+      boQua.push(`${qt.startTime}–${qt.endTime}: ${ngays.loi}`);
       continue;
     }
-    if (khung.giaTri.length === 0) {
-      // Thứ không mở (mặc định là thứ 2). Nói ra chứ không im lặng bỏ: người dùng tick
-      // thứ 2 rồi thấy số lớp ít hơn mong đợi sẽ tưởng hệ thống lỗi.
-      const thu = TEN_THU[THU_KHOA[vnWeekday(ngay)]!] ?? "Ngày này";
-      boQua.push(`${vnYmd(ngay)}: ${thu} không mở lớp trải nghiệm`);
-      continue;
-    }
-    for (const k of khung.giaTri) {
+    for (const ngay of ngays.ngay) {
+      const khoa = `${vnYmd(ngay)}|${qt.startTime}|${qt.endTime}`;
+      if (daMo.has(khoa)) continue;
+
+      // Cổng khung giờ chạy cho TỪNG NGÀY, không phải một lần cho cả tuỳ chọn: cùng một
+      // khung có thể hợp lệ ở thứ 3 mà không hợp lệ ở thứ 7.
+      const kiem = await kiemKhungLopTheoCauHinh({
+        ngay,
+        startTime: qt.startTime,
+        endTime: qt.endTime,
+      });
+      if (!kiem.ok) {
+        boQua.push(`${vnYmd(ngay)} ${qt.startTime}–${qt.endTime}: ${kiem.loi}`);
+        continue;
+      }
+
       const res = await createTrialClass({
         centerId: data.centerId,
-        courseId: data.courseId ?? null,
-        name: null, // để server đặt theo quy ước — mở hàng loạt thì tên tay không có nghĩa
+        // KHÔNG nhận khoá trải nghiệm (chủ dự án 22/09 vòng 2): "qlcs không biết khung giờ
+        // đó sẽ có học viên trải nghiệm nào nên cũng không biết khoá trải nghiệm nào".
+        courseId: null,
+        name: null, // mở hàng loạt thì tên tay không có nghĩa — để server đặt theo quy ước
         configId: null,
         startDate: ngay,
-        startTime: k.startTime,
-        endTime: k.endTime,
+        startTime: qt.startTime,
+        endTime: qt.endTime,
         actorId: ctx.session.user.id,
       });
-      if (res?.ok) daTao += 1;
-      else boQua.push(`${vnYmd(ngay)} ${k.startTime}–${k.endTime}: ${res?.error ?? "tạo thất bại"}`);
+      if (res?.ok) {
+        daTao += 1;
+        daMo.add(khoa);
+      } else {
+        boQua.push(`${vnYmd(ngay)} ${qt.startTime}–${qt.endTime}: ${res?.error ?? "tạo thất bại"}`);
+      }
     }
   }
 

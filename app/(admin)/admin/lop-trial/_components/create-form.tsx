@@ -2,7 +2,7 @@
 
 // app/(admin)/admin/lop-trial/_components/create-form.tsx
 //
-// Form tạo lớp trải nghiệm — 28/08/2026: chỉ còn CƠ SỞ + KHOÁ TRẢI NGHIỆM.
+// Form tạo lớp trải nghiệm — 22/09/2026: CƠ SỞ + NGÀY + KHUNG GIỜ (tên tự đặt được).
 //
 // ── TÊN LỚP: SỬA ĐƯỢC (đảo chốt 28/08, chủ dự án chốt lại 18/09) ──────────────────────
 // Chốt cũ: "Tên lớp KHÔNG có ô nhập… Cho người gõ tên là mời hai lớp trùng tên và mời
@@ -17,6 +17,11 @@
 //
 // ⚠️ Số thứ tự vẫn do SERVER cấp trong transaction. Ô nhập bày "…" ở chỗ con số để không
 // hứa một số mà client không biết — client đoán số là chắc chắn có lúc đoán sai.
+//
+// ĐÃ GỠ Ô "KHOÁ TRẢI NGHIỆM" (chủ dự án 22/09/2026, vòng 2):
+// "qlcs không biết khung giờ đó sẽ có học viên trải nghiệm nào nên cũng không biết khoá
+// trải nghiệm nào". Cột `TrialClassV2.courseId` GIỮ NGUYÊN (nullable, dữ liệu cũ còn giá
+// trị) — bỏ cột trên bảng có dữ liệu prod là việc của một đợt drop riêng.
 //
 // Giờ · phòng · giáo viên · sĩ số ĐÃ RỜI khỏi đây: chúng là thuộc tính của TỪNG BUỔI
 // (một lớp là slot tái sử dụng, hai buổi khác ngày có thể khác giờ và khác người dạy).
@@ -40,15 +45,12 @@ import type { Option } from "../_lib/types";
 
 export function CreateForm({
   centers,
-  courses,
   coSoCuaToi = null,
   cauHinhKhung,
   homNay,
 }: {
   /** `code` để xem trước tên lớp sẽ sinh ra; thiếu thì rơi về `name`. */
   centers: (Option & { code?: string | null })[];
-  /** `slug` là phần MÃ KHOÁ trong tên lớp (`CS2-sata4-…`), không phải `name`. */
-  courses: (Option & { slug?: string | null })[];
   /**
    * Cơ sở của CHÍNH người đang mở màn — dùng làm mặc định.
    *
@@ -76,10 +78,9 @@ export function CreateForm({
     () =>
       (coSoCuaToi && centers.some((c) => c.id === coSoCuaToi) ? coSoCuaToi : centers[0]?.id) ?? "",
   );
-  const [courseId, setCourseId] = useState("");
   /**
    * Tên lớp người dùng tự gõ. `null` = CHƯA gõ ⇒ ô hiện tên theo quy ước và tự đổi theo
-   * cơ sở/khoá. Vừa gõ một chữ là chuyển sang "của người dùng" và thôi tự đổi — nếu không
+   * cơ sở. Vừa gõ một chữ là chuyển sang "của người dùng" và thôi tự đổi — nếu không
    * thì đổi cơ sở sẽ xoá mất tên họ vừa đặt.
    */
   const [tenTuGo, setTenTuGo] = useState<string | null>(null);
@@ -102,12 +103,11 @@ export function CreateForm({
       : (khungHopLe[0] ?? null);
 
   const center = centers.find((c) => c.id === centerId);
-  const course = courses.find((c) => c.id === courseId);
-  // Chỉ XEM TRƯỚC phần mã cơ sở + mã khoá: số thứ tự do server cấp trong transaction
+  // Chỉ XEM TRƯỚC phần mã cơ sở: số thứ tự do server cấp trong transaction
   // (cùng bộ đếm với mã lớp), client đoán số là chắc chắn có lúc đoán sai.
-  const xemTruocTen = center
-    ? tenLopTrial(center.code ?? center.name, course?.slug ?? null, 0)
-    : "";
+  // Tên xem trước KHÔNG còn mang mã khoá (`CS1-Lớp trial …` thay vì `CS1-sata4-Lớp trial …`):
+  // ô chọn khoá đã gỡ theo chốt 22/09 vòng 2 — xem lý do ở khối chú thích đầu tệp.
+  const xemTruocTen = center ? tenLopTrial(center.code ?? center.name, null, 0) : "";
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -130,7 +130,6 @@ export function CreateForm({
     startTransition(async () => {
       const res = await createLopTrialClassAction({
         centerId,
-        courseId: courseId || undefined,
         // Chỉ gửi khi người dùng THỰC SỰ gõ. Gửi cả tên xem-trước là gửi lên một chuỗi
         // có dấu "…" ở chỗ con số — server sẽ lưu nguyên cái dấu đó vào tên lớp.
         name: tenTuGo?.trim() ? tenTuGo.trim() : undefined,
@@ -168,7 +167,7 @@ export function CreateForm({
         <span className="text-[11px]">
           {tenTuGo === null ? (
             <>
-              Đang theo quy ước <strong>Cơ sở-Khoá-Lớp trial số</strong>; số thứ tự do hệ
+              Đang theo quy ước <strong>Cơ sở-Lớp trial số</strong>; số thứ tự do hệ
               thống cấp khi lưu. Gõ vào ô trên để tự đặt tên khác.
             </>
           ) : (
@@ -261,24 +260,6 @@ export function CreateForm({
             </option>
           ))}
         </select>
-      </label>
-
-      <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-        Khoá trải nghiệm
-        <select
-          value={courseId}
-          onChange={(e) => setCourseId(e.target.value)}
-          disabled={pending}
-          className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground disabled:opacity-50"
-        >
-          <option value="">— chưa chọn khoá —</option>
-          {courses.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-        <span className="text-[11px]">Chính là &quot;khoá quan tâm&quot; của khách.</span>
       </label>
 
       <button

@@ -57,6 +57,14 @@ export function parseVnInput(value: string): Date | null {
  */
 export const createClassSchema = z.object({
   centerId: z.string().trim().min(1, "Chọn cơ sở"),
+  /**
+   * ⚠️ HAI FORM TRÊN MÀN KHÔNG CÒN GỬI TRƯỜNG NÀY (chốt 22/09/2026):
+   * "qlcs không biết khung giờ đó sẽ có học viên trải nghiệm nào nên cũng không biết
+   * khoá trải nghiệm nào". Lớp mở từ form mang `courseId = null`.
+   *
+   * Trường VẪN ở lại vì đường **import Excel** vẫn nhận `courseSlug` tuỳ chọn — file
+   * do người dựng thì họ biết mình khai gì. Đừng gỡ nó đi vì "form không dùng nữa".
+   */
   courseId: z.string().trim().min(1).nullable().optional(),
   /**
    * Tên lớp — ĐẢO chốt 28/08 theo yêu cầu chủ dự án 18/09 ("được sửa và tự do điều
@@ -83,25 +91,43 @@ export const createClassSchema = z.object({
 });
 
 /**
- * Mở lớp cho CẢ KỲ theo THỨ (chủ dự án 22/09/2026: "Tạo lớp Trial theo ngày, thứ…").
+ * Mở lớp cho CẢ KỲ — một khoảng ngày + NHIỀU TUỲ CHỌN.
  *
- * KHÔNG nhận giờ: mỗi ngày khớp thứ sẽ mở ĐÚNG các khung đã cấu hình của thứ đó — nên
- * thứ 7 tự ra HAI lớp (sáng + chiều) đúng như "sáng chiều ngày thứ 7, cn". Cho gõ giờ
- * tự do ở đây là mời một khung duy nhất áp cho cả T3 lẫn T7, trùm qua giờ nghỉ trưa.
+ * Chủ dự án 22/09/2026 (vòng 2): "chọn từ ngày đến ngày rồi phải chọn thêm giờ của kỳ
+ * đó, và có thể + thêm tuỳ chọn khác, ví dụ: tạo kỳ 22/09-30/09 lịch t3-t6 và lịch t7-cn
+ * riêng biệt".
+ *
+ * ~~Bản đầu không nhận giờ, mỗi ngày tự mở đúng các khung đã cấu hình~~ **[ĐẢO 22/09
+ * vòng 2]** — yêu cầu mới đòi chọn giờ, và đòi tách lịch T3–T6 với lịch T7–CN. CỔNG
+ * KHUNG GIỜ KHÔNG ĐỔI: mỗi tuỳ chọn vẫn phải nằm trọn trong một khung cho phép của TẪT
+ * CẢ các thứ nó nhắm tới — kiểm từng NGÀY ở server.
+ *
+ * Một tuỳ chọn mang ĐÚNG MỘT khung: T7 muốn cả sáng lẫn chiều thì là HAI tuỳ chọn —
+ * đó cũng là lý do nút "+ Thêm tuỳ chọn" tồn tại.
  */
 export const taoTheoThuSchema = z
   .object({
     centerId: z.string().trim().min(1, "Chọn cơ sở"),
-    courseId: z.string().trim().min(1).nullable().optional(),
     tu: z.string().regex(YMD, "Chọn ngày bắt đầu"),
     den: z.string().regex(YMD, "Chọn ngày kết thúc"),
-    /** `vnWeekday`: 0=CN … 6=T7. */
-    thu: z.array(z.number().int().min(0).max(6)).min(1, "Chọn ít nhất một thứ"),
+    quyTac: z
+      .array(
+        z.object({
+          /** `vnWeekday`: 0=CN … 6=T7. */
+          thu: z.array(z.number().int().min(0).max(6)).min(1, "Mỗi tuỳ chọn phải có ít nhất một thứ"),
+          startTime: z.string().regex(HHMM, "Giờ bắt đầu không hợp lệ"),
+          endTime: z.string().regex(HHMM, "Giờ kết thúc không hợp lệ"),
+        }),
+      )
+      .min(1, "Thêm ít nhất một tuỳ chọn")
+      // Trần 10: một kỳ có 7 thứ × vài khung là cùng; hơn thế gần như luôn là bấm nhầm.
+      .max(10, "Tối đa 10 tuỳ chọn một lượt"),
   })
   .refine((d) => d.den >= d.tu, {
     message: "Ngày kết thúc phải sau ngày bắt đầu",
     path: ["den"],
   });
+
 
 export const addSessionSchema = z
   .object({
