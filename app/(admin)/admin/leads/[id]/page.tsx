@@ -6,7 +6,7 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import type { LeadStatus } from "@prisma/client";
-import { LeadActivityPanel } from "./_components/lead-activity-panel";
+import { LeadActivityPanel, LichSuLead } from "./_components/lead-activity-panel";
 import { LeadStatusSelect } from "../_components/status-select";
 import { ReassignButton } from "./_components/reassign-button";
 import { AssignSelect } from "./_components/assign-select";
@@ -32,8 +32,6 @@ import {
   getLeadStatusHistory,
   maskLeadAuditValues,
 } from "@/lib/lead/audit-history";
-import { LeadAuditHistory } from "./_components/lead-audit-history";
-import { LeadStatusTrail } from "./_components/lead-status-trail";
 import { isZalocrmEnabled } from "@/lib/flags";
 import { duongDanNhanZalo, orgCodeCuaCoSo } from "@/lib/integrations/zalocrm/compose-url";
 import { getSetting } from "@/lib/settings/service";
@@ -659,51 +657,46 @@ export default async function LeadDetailPage({ params }: Props) {
             cuộn ngược lên đầu trang. Chỉ dính khi ĐÃ chia cột — lúc xếp dọc mà dính
             thì nó đè lên phần hồ sơ ngay dưới. */}
         <div className="@container xl:sticky xl:top-4 xl:col-span-3">
-          <LeadActivityPanel
-            leadId={lead.id}
-            activities={lead.activities.map((a) => ({
-              id: a.id,
-              type: a.type,
-              // #11 T2 — nội dung tư vấn là PII (Q7): non-holder → mask content + BỎ
-              // metadata (JSON chứa notes/recipient... raw) NGAY Ở SERVER; panel gặp
-              // metadata null sẽ tự fallback render `content` (đã mask).
-              content: canViewPii ? a.content : (maskFreeText(a.content) ?? ""),
-              metadata: canViewPii ? a.metadata : null,
-              actorName: a.actorName,
-              createdAt: a.createdAt.toISOString(),
-            }))}
-          />
+          <LeadActivityPanel leadId={lead.id} />
         </div>
       </div>
 
-      {/* C-07 — "Mốc trạng thái": ai đổi · lúc nào · TỪ trạng thái nào. Đặt TRƯỚC
-          "Lịch sử thay đổi" vì đây là thứ QLCS mở trang để soi; mục kia trộn mọi
-          lượt sửa hồ sơ nên mốc phễu chìm mất trong đó.
-          Đặt NGOÀI lưới 7:3 (full width) — hai bảng này nhiều cột, nhét vào cột 3/10
-          là vỡ. */}
-      {showAuditHistory && (
-        <LeadStatusTrail
-          piiMasked={!canViewPii}
-          rows={statusRows.map((r) => ({
-            ...r,
-            oldValues: maskLeadAuditValues(r.oldValues, canViewPii),
-            newValues: maskLeadAuditValues(r.newValues, canViewPii),
-          }))}
-        />
-      )}
+      {/* ─── LỊCH SỬ (GỘP — chủ dự án chốt 22/09/2026) ────────────────────────
+          MỘT dòng thời gian duy nhất thay cho ba mục rời trước đây: "Lịch sử
+          tương tác", "Mốc trạng thái" (C-07), "Lịch sử thay đổi" (V-6 · G-02).
 
-      {/* V-6 · G-02 — vết sửa hồ sơ. Che PII bằng CÙNG cổng `canViewPii` của trang:
-          nội dung vết chứa nguyên văn tên PH/tên HS/SĐT. */}
-      {showAuditHistory && (
-        <LeadAuditHistory
-          piiMasked={!canViewPii}
-          rows={auditRows.map((r) => ({
-            ...r,
-            oldValues: maskLeadAuditValues(r.oldValues, canViewPii),
-            newValues: maskLeadAuditValues(r.newValues, canViewPii),
-          }))}
-        />
-      )}
+          Đặt NGOÀI lưới 7:3 (full width) và KHÔNG nhét lại vào cột phải: vết sửa
+          hồ sơ bày "cũ → mới" theo từng ô, cột 3/10 chỉ còn ~262px ở 1280 nên
+          mỗi dòng xuống 3–4 hàng. Cột phải nay giữ đúng ô GHI (Ghi nhanh hoạt
+          động), phần ĐỌC nằm dưới toàn bề ngang.
+
+          Che PII làm Ở ĐÂY, trước khi dữ liệu xuống client — cả ba nguồn đi qua
+          CÙNG một cổng `canViewPii` của trang. Component không tự đọc gì. */}
+      <LichSuLead
+        piiMasked={!canViewPii}
+        showAudit={showAuditHistory}
+        activities={lead.activities.map((a) => ({
+          id: a.id,
+          type: a.type,
+          // #11 T2 — nội dung tư vấn là PII (Q7): non-holder → mask content + BỎ
+          // metadata (JSON chứa notes/recipient... raw) NGAY Ở SERVER; component
+          // gặp metadata null sẽ tự fallback render `content` (đã mask).
+          content: canViewPii ? a.content : (maskFreeText(a.content) ?? ""),
+          metadata: canViewPii ? a.metadata : null,
+          actorName: a.actorName,
+          createdAt: a.createdAt.toISOString(),
+        }))}
+        statusRows={statusRows.map((r) => ({
+          ...r,
+          oldValues: maskLeadAuditValues(r.oldValues, canViewPii),
+          newValues: maskLeadAuditValues(r.newValues, canViewPii),
+        }))}
+        auditRows={auditRows.map((r) => ({
+          ...r,
+          oldValues: maskLeadAuditValues(r.oldValues, canViewPii),
+          newValues: maskLeadAuditValues(r.newValues, canViewPii),
+        }))}
+      />
 
       {/* 28/08 — GỠ khối "Buổi học thử" (hệ V1, `TrialClass`).
           Tính năng lịch hẹn học thử đã bị gỡ khỏi hệ thống: không còn màn nào quản lý

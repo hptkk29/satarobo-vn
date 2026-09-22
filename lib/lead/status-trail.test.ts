@@ -603,11 +603,14 @@ describe("[C-07] chốt chặn nguồn — không còn đường đổi trạng 
     ).toBe(true);
   });
 
-  it("trang chi tiết lead có bày mục 'Mốc trạng thái' và nạp bằng truy vấn riêng", () => {
+  it("trang chi tiết lead có bày mốc trạng thái (trong mục Lịch sử gộp) và nạp bằng truy vấn riêng", () => {
     const trang = boChuThich(doc("app/(admin)/admin/leads/[id]/page.tsx"));
 
     expect(trang).toContain("getLeadStatusHistory");
-    expect(trang).toContain("LeadStatusTrail");
+    // 22/09/2026 — ba mục lịch sử GỘP làm một (`LichSuLead`). Lưới vẫn canh đúng
+    // việc cũ: trang phải NẠP vết trạng thái bằng truy vấn riêng và BÀY nó ra. Chỉ
+    // tên component đổi; bỏ dòng này đi là mất luôn phép canh.
+    expect(trang).toContain("LichSuLead");
     // Vết mang tên con (PII) — phải che bằng CÙNG cổng `canViewPii` của trang.
     expect(trang).toContain("maskLeadAuditValues");
   });

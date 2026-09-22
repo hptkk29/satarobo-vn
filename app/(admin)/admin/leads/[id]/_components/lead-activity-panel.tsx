@@ -16,6 +16,7 @@ import {
   GraduationCap,
   UserCog,
   ListChecks,
+  ArrowRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { Prisma, LeadStatus } from "@prisma/client";
@@ -26,6 +27,16 @@ import {
   NHAN_VIEC,
   type MaViec,
 } from "@/lib/lead/tuong-tac/su-kien";
+import {
+  selectLeadStatusTrail,
+  type LeadStatusTrailRow,
+} from "@/lib/lead/status-trail";
+import {
+  LEAD_AUDIT_ACTION_LABEL,
+  LEAD_AUDIT_FIELD_LABEL,
+  formatLeadAuditFieldValue,
+  type LeadAuditRow,
+} from "@/lib/lead/audit-history";
 import { addLeadActivity } from "../../actions";
 
 type Activity = {
@@ -197,10 +208,8 @@ function fmtDateTime(iso: string): string {
 
 export function LeadActivityPanel({
   leadId,
-  activities,
 }: {
   leadId: string;
-  activities: Activity[];
   // LD6 — nhận nhưng KHÔNG dùng (optional). Để page.tsx ngừng truyền ở Wave 2.
   tasks?: Task[];
 }) {
@@ -228,7 +237,6 @@ export function LeadActivityPanel({
   // 30/08 — MỞ SẴN (chủ dự án chốt). Khối này nay đứng ngay cạnh hồ sơ khách, và
   // thứ người trực lead cần thấy đầu tiên là "đã ai gọi chưa, gọi lúc nào" — đóng lại
   // thì phải bấm thêm một lần cho mọi lượt mở lead.
-  const [historyOpen, setHistoryOpen] = useState(true);
 
   function resetForm() {
     setCallCaller("");
@@ -466,69 +474,241 @@ export function LeadActivityPanel({
         </button>
       </div>
 
-      {/* LD5 — Lịch sử thành nút bấm mở/đóng (mặc định đóng) */}
-      <div className="rounded-xl border border-border bg-card p-4">
-        <button
-          type="button"
-          onClick={() => setHistoryOpen((v) => !v)}
-          aria-expanded={historyOpen}
-          className="flex w-full items-center justify-between gap-2 text-left text-sm font-bold text-foreground"
-        >
-          <span>Lịch sử tương tác của Lead ({activities.length})</span>
-          {historyOpen ? (
-            <ChevronDown size={16} className="flex-shrink-0 text-muted-foreground" />
-          ) : (
-            <ChevronRight size={16} className="flex-shrink-0 text-muted-foreground" />
-          )}
-        </button>
-
-        {historyOpen &&
-          (activities.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">Chưa có hoạt động nào.</p>
-          ) : (
-            <ol className="mt-3 space-y-3">
-              {activities.map((a) => {
-                // Dòng do HỆ THỐNG ghi mang `metadata.viec`. Nó lưu dưới `type: "NOTE"`
-                // (chủ dự án chốt dùng lại loại có sẵn, không thêm giá trị enum), nên nếu
-                // cứ đọc `ACTIVITY_LABEL[a.type]` thì một lượt xếp lớp trải nghiệm hiện ra
-                // với nhãn "Ghi chú" — nhãn đó nói rằng có người gõ tay, tức nói dối
-                // (luật 12). Nhận ra mã việc thì lấy nhãn riêng + đánh dấu "tự động".
-                const maViec = docMaViec(a.metadata);
-                // Dòng cũ của auto-chia lead mang `metadata.system` chứ không có `viec`:
-                // nó cũng là dòng tự động và cũng đang đội nhãn "Ghi chú". Gắn dấu cho cả
-                // hai loại, còn NHÃN thì chỉ đổi khi nhận ra mã việc (dòng cũ không có
-                // tên việc nào để mà đặt).
-                const tuDong = laDongHeThong(a.metadata);
-                const Icon = maViec
-                  ? bieuTuongViec(maViec)
-                  : (ACTIVITY_ICON[a.type] ?? StickyNote);
-                return (
-                  <li key={a.id} className="flex gap-3">
-                    <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                      <Icon size={15} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-baseline gap-x-2">
-                        <span className="text-xs font-bold text-foreground">
-                          {maViec ? NHAN_VIEC[maViec] : (ACTIVITY_LABEL[a.type] ?? a.type)}
-                        </span>
-                        {tuDong && (
-                          <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-                            tự động
-                          </span>
-                        )}
-                        <span className="text-xs text-muted-foreground">
-                          {a.actorName} · {fmtDateTime(a.createdAt)}
-                        </span>
-                      </div>
-                      <ActivityBody activity={a} />
-                    </div>
-                  </li>
-                );
-              })}
-            </ol>
-          ))}
-      </div>
     </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LỊCH SỬ LEAD — MỘT dòng thời gian duy nhất (chủ dự án chốt 22/09/2026)
+
+   Gộp ba mục vốn nằm rời trên trang: "Lịch sử tương tác của Lead", "Mốc trạng
+   thái" (C-07) và "Lịch sử thay đổi" (V-6 · G-02). Ba nguồn dữ liệu khác nhau,
+   nhưng người mở trang chỉ có MỘT câu hỏi: phiếu này đã xảy ra chuyện gì, theo
+   thứ tự nào. Ba hộp rời bắt họ tự trộn ba dòng thời gian trong đầu — và hai
+   trong ba hộp nằm tít cuối trang nên thực tế không ai đối chiếu.
+
+   🔴 KHỬ TRÙNG — ĐỪNG GỠ. Mỗi lượt đổi trạng thái ghi vào HAI chỗ: một
+   `LeadActivity` kiểu STATUS_CHANGE (xem `status-trail-write.ts`) và một vết
+   trong AuditLog. Trộn thẳng là mỗi lượt đổi hiện HAI dòng liền nhau, cùng giờ,
+   cùng người — trông như lỗi dữ liệu.
+     · Có quyền đọc vết (`showAudit`) → BỎ bản LeadActivity, giữ bản vết: nó
+       giàu hơn (từ → đến, nguồn, tên con, lý do).
+     · Không có quyền → GIỮ bản LeadActivity, để người xem vẫn thấy đã có lượt
+       đổi xảy ra thay vì một khoảng trống không giải thích.
+
+   Che PII làm ở SERVER trước khi tới đây (`page.tsx` truyền bản đã che).
+   Component này KHÔNG tự đọc dữ liệu nào và KHÔNG so vai.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+type MucLichSu =
+  | { loai: "HOAT_DONG"; id: string; at: string; hd: Activity }
+  | { loai: "TRANG_THAI"; id: string; at: string; tt: LeadStatusTrailRow }
+  | { loai: "SUA_HO_SO"; id: string; at: string; sh: LeadAuditRow };
+
+const NHAN_LOAI: Record<MucLichSu["loai"], string> = {
+  HOAT_DONG: "Tương tác",
+  TRANG_THAI: "Trạng thái",
+  SUA_HO_SO: "Sửa hồ sơ",
+};
+
+function VienLoai({ loai }: { loai: MucLichSu["loai"] }) {
+  const mau =
+    loai === "TRANG_THAI"
+      ? "bg-state-info-soft text-state-info-ink"
+      : loai === "SUA_HO_SO"
+        ? "bg-state-warning-soft text-state-warning-ink"
+        : "bg-muted text-muted-foreground";
+  return (
+    <span className={"rounded-full px-2 py-0.5 text-[11px] font-semibold " + mau}>
+      {NHAN_LOAI[loai]}
+    </span>
+  );
+}
+
+/** Một mốc đổi trạng thái: từ → đến, kèm nguồn và lý do nếu có. */
+function DongTrangThai({ r }: { r: LeadStatusTrailRow }) {
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+        <span className="text-muted-foreground">{r.fromLabel ?? "Chưa có"}</span>
+        <ArrowRight className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" aria-hidden />
+        <span className="font-semibold text-foreground">{r.toLabel}</span>
+        {r.isChild && (
+          <span className="rounded-full bg-state-info-soft px-2 py-0.5 text-[11px] font-semibold text-state-info-ink">
+            Học sinh{r.childName ? ": " + r.childName : ""}
+          </span>
+        )}
+      </div>
+      {r.sourceLabel && <p className="mt-0.5 text-xs text-muted-foreground">{r.sourceLabel}</p>}
+      {r.reason && <p className="mt-0.5 text-xs text-muted-foreground">Lý do: {r.reason}</p>}
+    </>
+  );
+}
+
+/** Một vết sửa hồ sơ: liệt kê từng ô đổi, cũ gạch ngang → mới in đậm. */
+function DongSuaHoSo({ r }: { r: LeadAuditRow }) {
+  return (
+    <>
+      {r.changedFields.length > 0 ? (
+        <ul className="space-y-1">
+          {r.changedFields.map((f) => (
+            <li key={f} className="text-sm text-foreground">
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {LEAD_AUDIT_FIELD_LABEL[f] ?? f}
+              </span>
+              <span className="ml-2 break-words text-muted-foreground line-through">
+                {formatLeadAuditFieldValue(f, r.oldValues?.[f])}
+              </span>
+              <span className="mx-1 text-muted-foreground">→</span>
+              <span className="break-words font-medium">
+                {formatLeadAuditFieldValue(f, r.newValues?.[f])}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          {LEAD_AUDIT_ACTION_LABEL[r.action] ?? r.action}
+        </p>
+      )}
+      {r.reason && <p className="mt-0.5 text-xs text-muted-foreground">Lý do: {r.reason}</p>}
+    </>
+  );
+}
+
+export function LichSuLead({
+  activities,
+  statusRows,
+  auditRows,
+  showAudit,
+  piiMasked,
+}: {
+  activities: Activity[];
+  /** Vết ĐỔI TRẠNG THÁI — truy vấn riêng, đã che PII ở server. */
+  statusRows: LeadAuditRow[];
+  /** Vết SỬA HỒ SƠ — đã che PII ở server. */
+  auditRows: LeadAuditRow[];
+  /** Người xem có quyền đọc vết không (`canViewLeadAuditHistory`). */
+  showAudit: boolean;
+  piiMasked: boolean;
+}) {
+  const [moRong, setMoRong] = useState(true);
+
+  const moc = showAudit ? selectLeadStatusTrail(statusRows) : [];
+
+  const muc: MucLichSu[] = [
+    ...activities
+      // Khử trùng — xem khối chú thích đầu mục.
+      .filter((a) => !(showAudit && a.type === "STATUS_CHANGE"))
+      .map((a) => ({ loai: "HOAT_DONG" as const, id: "hd:" + a.id, at: a.createdAt, hd: a })),
+    ...moc.map((r) => ({ loai: "TRANG_THAI" as const, id: "tt:" + r.id, at: r.createdAt, tt: r })),
+    ...(showAudit ? auditRows : []).map((r) => ({
+      loai: "SUA_HO_SO" as const,
+      id: "sh:" + r.id,
+      at: r.createdAt,
+      sh: r,
+    })),
+  ].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+
+  return (
+    <section className="mb-6 rounded-xl border border-border bg-card p-4">
+      <button
+        type="button"
+        onClick={() => setMoRong((v) => !v)}
+        aria-expanded={moRong}
+        className="flex w-full items-center justify-between gap-2 text-left text-sm font-bold text-foreground"
+      >
+        <span>
+          Lịch sử ({muc.length})
+          {!showAudit && (
+            <span className="ml-2 text-xs font-normal text-muted-foreground">
+              · chỉ tương tác — bạn không có quyền đọc vết sửa hồ sơ
+            </span>
+          )}
+          {piiMasked && (
+            <span className="ml-2 text-xs font-normal text-muted-foreground">
+              · thông tin cá nhân đã che
+            </span>
+          )}
+        </span>
+        {moRong ? (
+          <ChevronDown size={16} className="flex-shrink-0 text-muted-foreground" />
+        ) : (
+          <ChevronRight size={16} className="flex-shrink-0 text-muted-foreground" />
+        )}
+      </button>
+
+      {moRong &&
+        (muc.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            Chưa ghi nhận gì trên hồ sơ này.
+          </p>
+        ) : (
+          <ol className="mt-3 space-y-3">
+            {muc.map((m) => {
+              const maViec = m.loai === "HOAT_DONG" ? docMaViec(m.hd.metadata) : null;
+              const tuDong = m.loai === "HOAT_DONG" ? laDongHeThong(m.hd.metadata) : false;
+              const Icon =
+                m.loai === "TRANG_THAI"
+                  ? RefreshCw
+                  : m.loai === "SUA_HO_SO"
+                    ? UserCog
+                    : maViec
+                      ? bieuTuongViec(maViec)
+                      : (ACTIVITY_ICON[m.hd.type] ?? StickyNote);
+              const tieuDe =
+                m.loai === "TRANG_THAI"
+                  ? "Đổi trạng thái"
+                  : m.loai === "SUA_HO_SO"
+                    ? (LEAD_AUDIT_ACTION_LABEL[m.sh.action] ?? m.sh.action)
+                    : maViec
+                      ? NHAN_VIEC[maViec]
+                      : (ACTIVITY_LABEL[m.hd.type] ?? m.hd.type);
+              const nguoi =
+                m.loai === "TRANG_THAI"
+                  ? m.tt.actorName
+                  : m.loai === "SUA_HO_SO"
+                    ? m.sh.actorName
+                    : m.hd.actorName;
+
+              return (
+                <li key={m.id} className="flex gap-3">
+                  <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                    <Icon size={15} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                      <span className="text-xs font-bold text-foreground">{tieuDe}</span>
+                      <VienLoai loai={m.loai} />
+                      {m.loai === "SUA_HO_SO" && m.sh.touchesIdentity && (
+                        <span className="rounded-full bg-state-warning-soft px-2 py-0.5 text-[11px] font-semibold text-state-warning-ink">
+                          Ô định danh
+                        </span>
+                      )}
+                      {tuDong && (
+                        <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                          tự động
+                        </span>
+                      )}
+                      <span className="text-xs text-muted-foreground">
+                        {nguoi} · {fmtDateTime(m.at)}
+                      </span>
+                    </div>
+                    <div className="mt-1">
+                      {m.loai === "HOAT_DONG" ? (
+                        <ActivityBody activity={m.hd} />
+                      ) : m.loai === "TRANG_THAI" ? (
+                        <DongTrangThai r={m.tt} />
+                      ) : (
+                        <DongSuaHoSo r={m.sh} />
+                      )}
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        ))}
+    </section>
   );
 }
