@@ -26,6 +26,7 @@ import { laThuTienLinhHoatBat } from "@/lib/finance/feature";
 import { noTheoCon } from "@/lib/finance/debt";
 import { docTrangThaiDungHoc } from "@/lib/finance/dung-hoc-con";
 import { docBaoLuuCuaDon } from "@/lib/finance/bao-luu-tien";
+import { NutThemCon } from "../_components/them-con-dialog";
 import { CongNoTheoCon, type PhieuGopView } from "../_components/cong-no-theo-con";
 import { docPhieuGopDangMo } from "@/lib/finance/phieu-gop";
 import { memoPhatHanh } from "@/lib/payments/memo-phat-hanh";
@@ -224,6 +225,16 @@ export default async function OrderDetailPage({ params }: Props) {
   // F2 — con nào đang bảo lưu + hạn đợt đã dời bao nhiêu ngày. Hỏi RIÊNG ở trang, cố ý
   // KHÔNG nhồi vào `noTheoCon`: hàm đó chạy trong transaction của mọi phép ghi tiền nên mỗi
   // câu tra thêm ở đó là thêm thời gian nằm dưới khoá đơn cho một thông tin chỉ để hiển thị.
+  // F3 — khoá học chọn được khi thêm con. Chỉ khoá ĐANG BÁN và ĐÃ CÓ GIÁ: khoá chưa khai
+  // giá thì cổng soát giá ở máy chủ từ chối, nên mời chọn nó là một lời hứa suông (luật 12).
+  const khoaChonDuoc = batThuTheoCon
+    ? await sdb.course.findMany({
+        where: { isActive: true, price: { gt: 0 } },
+        select: { id: true, name: true, price: true },
+        orderBy: { name: "asc" },
+      })
+    : [];
+
   const baoLuuTheoCon = batThuTheoCon
     ? Object.fromEntries(await docBaoLuuCuaDon(order.id))
     : undefined;
@@ -358,6 +369,7 @@ export default async function OrderDetailPage({ params }: Props) {
             duocBoGan={canManagePayments}
             dungHoc={trangThaiDungHoc}
             baoLuu={baoLuuTheoCon}
+            themCon={khoaChonDuoc.length > 0 ? <NutThemCon orderId={order.id} khoa={khoaChonDuoc} /> : null}
             phieu={phieuGop}
           />
         </div>
