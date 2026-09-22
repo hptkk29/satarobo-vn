@@ -6579,11 +6579,22 @@ model PaymentRequest {
   /// rơi đúng đợt (bất biến #3).
   matchKey      String?              @unique
   /// TÍNH LẠI từ PaymentAllocation, không set tay.
+  /// F2 · US-18 AC2 — lượt `StudentReserve` ĐÃ dời hạn đợt này. Khoá chống dời HAI LẦN.
+  ///
+  /// Cột TRẦN, KHÔNG FK (nếp "actor snapshots — no FK (defensive)"): đây là DẤU VẾT trên sổ
+  /// tiền. `StudentReserve` bị xoá cascade theo `Student` thì phép dời hạn vẫn đã xảy ra
+  /// thật, và một `ON DELETE SET NULL` sẽ âm thầm gỡ khoá chống dời hai lần của đợt ấy.
+  pauseShiftReserveId String?
+  /// Tổng số ngày đợt này đã bị dời vì bảo lưu — CỘNG DỒN qua nhiều lượt. Để màn hình nói
+  /// thật ("hạn 22/11, đã dời 30 ngày do bảo lưu") chứ không chỉ in một cái hạn lạ.
+  pauseShiftDays      Int?
   status        PaymentRequestStatus @default(PENDING)
   /// Thứ tự rót waterfall (mặc định = installmentNo).
   sortOrder     Int                  @default(0)
   createdAt     DateTime             @default(now()) @db.Timestamptz(6)
   updatedAt     DateTime             @updatedAt @db.Timestamptz(6)
+
+  @@index([pauseShiftReserveId])
 
   qrSessions  QrSession[]
   allocations PaymentAllocation[]

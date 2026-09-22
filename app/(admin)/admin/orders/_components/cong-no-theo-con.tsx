@@ -920,6 +920,7 @@ export function CongNoTheoCon({
   duocGan,
   duocBoGan,
   dungHoc,
+  baoLuu,
   phieu = null,
 }: {
   orderId: string;
@@ -939,6 +940,15 @@ export function CongNoTheoCon({
    * hiện nhầm chiều ngược lại là giấu mất nút của một bé đang học.
    */
   dungHoc?: Record<string, TrangThaiDungHocCuaCon>;
+  /**
+   * F2 — con nào ĐANG BẢO LƯU, khoá theo `orderItemId`. Dựng ở server bằng
+   * `docBaoLuuCuaDon` (`lib/finance/bao-luu-tien.ts`).
+   *
+   * ⚠️ Chỉ để HIỂN THỊ. Màn này KHÔNG có nút bảo lưu, và đó là chủ đích: cửa bảo lưu ở
+   * màn học viên (`/students/<id>/edit`) vì bảo lưu là việc học vụ (dừng lịch học, dừng
+   * giao bài) mà tiền chỉ đi theo. Thêm nút thứ hai ở đây là hai cửa cho một trạng thái.
+   */
+  baoLuu?: Record<string, { reserveId: string; startedAt: Date | string; expectedEndAt: Date | string | null; soNgayDaDoiHan: number | null }>;
   /** Phiếu gộp ĐANG MỞ của đơn, `null` khi chưa phát. Dựng ở server — xem `PhieuGopView`. */
   phieu?: PhieuGopView | null;
 }) {
@@ -1053,6 +1063,7 @@ export function CongNoTheoCon({
           const conLaiTaoDot = c.conNo - c.tongDotDangMo;
           const moForm = dangMoForm === c.orderItemId;
           const tt = dungHoc?.[c.orderItemId];
+          const bl = baoLuu?.[c.orderItemId];
           const moChuyen = dangMoChuyen === c.orderItemId;
           return (
             <li
@@ -1085,6 +1096,33 @@ export function CongNoTheoCon({
                   tone={c.conNo > 0 ? "danger" : "ok"}
                 />
               </div>
+
+              {/* F2 · US-18 — bé ĐANG BẢO LƯU. Phải nói ra ở đây, cạnh con số, vì hạn các
+                  đợt của bé vừa bị dời: một cái hạn 22/11 không lời giải thích đọc như
+                  người nhập sai ngày. Và bé bảo lưu KHÔNG bị báo quá hạn — nói luôn, kẻo
+                  kế toán đi tìm xem vì sao nó biến khỏi danh sách đối soát. */}
+              {bl && (
+                <div className="mt-3 rounded-lg border border-state-warning-soft bg-state-warning-soft/40 p-3 text-xs">
+                  <p className="font-medium text-foreground">
+                    Đang bảo lưu
+                    {` từ ${new Date(bl.startedAt).toLocaleDateString("vi-VN")}`}
+                    {bl.expectedEndAt
+                      ? ` · dự kiến học lại ${new Date(bl.expectedEndAt).toLocaleDateString("vi-VN")}`
+                      : " · CHƯA khai ngày học lại"}
+                  </p>
+                  <p className="mt-0.5 text-muted-foreground">
+                    {bl.soNgayDaDoiHan != null && bl.soNgayDaDoiHan > 0
+                      ? `Hạn các đợt chưa tới hạn đã dời ${bl.soNgayDaDoiHan} ngày.`
+                      : bl.expectedEndAt
+                        // Có ngày học lại mà không đợt nào dời: hoặc đợt đều đã quá hạn từ
+                        // trước (không dời — đúng luật), hoặc phép dời chưa chạy được. Hai
+                        // ca khác nhau nên câu chữ không được khẳng định ca nào.
+                        ? "Chưa có đợt nào được dời hạn (đợt đã quá hạn từ trước thì không dời)."
+                        : "Không khai ngày học lại thì không dời được hạn đợt nào."}
+                    {" "}Trong thời gian bảo lưu, đợt của bé không bị tính quá hạn.
+                  </p>
+                </div>
+              )}
 
               {/* PHIÊN D — bé ĐÃ DỪNG: nói rõ quyết toán ra số nào, và khoản dư đang nằm
                   ở đâu. Đặt NGAY DƯỚI hàng số liệu vì "Học phí" của bé vừa đổi nghĩa (nó là
