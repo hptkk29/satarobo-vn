@@ -1,70 +1,74 @@
-# CHÍNH SÁCH HOÀN TRẢ HỌC PHÍ
+# CHÍNH SÁCH ĐỔI TRẢ HÀNG VÀ HOÀN TIỀN
 
-**Cập nhật lần cuối:** 11/05/2026
+**Cập nhật lần cuối:** 21/09/2026
+
+> Chính sách này áp dụng cho **hàng hóa** (học cụ, bộ kit). Việc chấm dứt **khóa học, dịch vụ** và hoàn học phí được quy định tại [Chính sách chấm dứt dịch vụ và hoàn tiền](/chinh-sach-cham-dut-dich-vu).
 
 ## 1. Phạm vi áp dụng
 
-Chính sách này áp dụng cho tất cả các dịch vụ của Sata Robo:
+Chính sách này áp dụng đối với các sản phẩm được mua thông qua website Satarobo.vn.
 
-- **Lập trình Robot:** Khoá học Robotics offline cho học sinh lớp 1-8 tại 2 cơ sở Đà Nẵng
-- **Luyện thi RoboSim:** Khoá luyện thi online + coaching 1-1 trên platform mô phỏng
-- **Học cụ / Kit:** Bộ kit robot, linh kiện, thiết bị học tập
+## 2. Điều kiện về hàng hóa được đổi trả và hoàn tiền
 
-## 2. Chính sách hoàn trả khoá học
+Sata Robo chấp nhận đổi hoặc trả sản phẩm trong các trường hợp sau:
 
-### 2.1 Điều kiện hoàn trả 100%
+- Giao sai sản phẩm;
+- Sản phẩm có lỗi từ nhà sản xuất được Sata Robo xác nhận;
+- Thiếu sản phẩm hoặc phụ kiện đi kèm.
 
-Phụ huynh được hoàn lại **100% học phí đã đóng** trong các trường hợp:
+Với sản phẩm có lỗi do nhà sản xuất, khách hàng được yêu cầu đổi mới trong vòng 30 ngày kể từ khi nhận hàng.
 
-- Sata Robo **không thể khai giảng** lớp đúng lịch đã cam kết (trễ hơn 14 ngày làm việc)
-- Sata Robo **thay đổi cơ sở/địa điểm** học mà phụ huynh không đồng ý
-- Học sinh **có chống chỉ định y tế** được xác nhận bằng văn bản của bác sĩ
-- Sata Robo **vi phạm nghiêm trọng** cam kết chất lượng đã ký trong hợp đồng
+Khách hàng có thể đổi sang các sản phẩm cùng loại hoặc các sản phẩm có giá trị bằng hoặc cao hơn so với sản phẩm đã mua. Mỗi hóa đơn chỉ được đổi một lần. Khách hàng thanh toán phần chi phí chênh lệch khi đổi sang sản phẩm có giá trị cao hơn.
 
-### 2.2 Hoàn trả theo tiến độ học
+## 3. Các trường hợp không áp dụng đổi trả hàng hóa
 
-Trường hợp phụ huynh chủ động rút học:
+Chúng tôi không áp dụng đổi trả hoặc hoàn tiền trong các trường hợp sau:
 
-| Thời điểm rút học | Mức hoàn trả |
-|---|---|
-| Trước khi khai giảng (≥ 3 ngày làm việc) | **100%** học phí |
-| Đã học < 25% tổng số buổi | **70%** học phí còn lại |
-| Đã học 25% – 50% tổng số buổi | **50%** học phí còn lại |
-| Đã học > 50% tổng số buổi | **Không hoàn trả** |
+- Sản phẩm đã qua sử dụng, bị thay đổi hoặc không còn nguyên trạng ban đầu.
+- Sản phẩm đã tháo lắp, có dấu hiệu sử dụng hoặc hư hỏng do người dùng.
+- Yêu cầu đổi trả hàng hóa được gửi sau thời gian quy định.
+- Không chấp nhận đổi hàng hoặc thanh toán đối với các sản phẩm được giảm giá hoặc nằm trong chương trình khuyến mãi.
 
-> **Ví dụ:** Phụ huynh rút học sau khi đã học 4/20 buổi (20% lộ trình) → được hoàn **70%** học phí còn lại theo bảng trên.
+## 4. Chính sách hoàn tiền
 
-### 2.3 Trường hợp không được hoàn trả
+Khách hàng được hoàn tiền trong các trường hợp:
 
-- Phụ huynh tự ý nghỉ học không thông báo trước
-- Vi phạm nội quy trung tâm dẫn đến bị đình chỉ
-- Hoàn trả sau 30 ngày kể từ ngày học sinh nghỉ buổi cuối
+- Sản phẩm thuộc trường hợp được đổi trả nhưng Sata Robo không còn sản phẩm thay thế;
+- Khách hàng được hoàn 100% sản phẩm trong 7 ngày kể từ khi nhận hàng, nếu sản phẩm còn nguyên seal, chưa mở hộp.
+- Các trường hợp khác theo thỏa thuận giữa Sata Robo và Khách hàng hoặc theo quy định của pháp luật.
 
-## 3. Chính sách hoàn trả học cụ / kit
+## 5. Chi phí hoàn trả
 
-- **Trong 7 ngày đầu nhận hàng:** Hoàn trả 100% nếu sản phẩm còn nguyên seal, chưa mở hộp
-- **Sản phẩm lỗi do nhà sản xuất:** Đổi mới trong vòng 30 ngày, không tính vận chuyển
-- **Không hoàn trả** nếu sản phẩm đã tháo lắp, có dấu hiệu sử dụng hoặc hư hỏng do người dùng
+- Trường hợp lỗi thuộc về Sata Robo, chúng tôi chịu toàn bộ chi phí vận chuyển phát sinh liên quan đến việc đổi trả hoặc hoàn tiền.
+- Trường hợp đổi trả không xuất phát từ lỗi của Sata Robo và được Sata Robo chấp thuận, Khách hàng chịu các chi phí vận chuyển và chi phí phát sinh liên quan.
 
-## 4. Quy trình yêu cầu hoàn trả
+## 6. Quy trình tiếp nhận, xử lý yêu cầu đổi trả hàng và hoàn tiền
 
-1. **Gửi yêu cầu** bằng văn bản qua email hoặc nhắn tin Zalo cho nhân viên phụ trách
-2. **Xác nhận** — Sata Robo phản hồi trong vòng **24 giờ làm việc**
-3. **Xác minh** — Kiểm tra điều kiện, xác nhận số buổi đã học
-4. **Hoàn tiền** — Chuyển khoản vào tài khoản phụ huynh trong **5-7 ngày làm việc**
+**Bước 1:** Khách hàng gửi yêu cầu đổi trả và hoàn tiền qua các kênh hỗ trợ được công bố trên website, kèm theo thông tin mã đơn hàng trong thời hạn nêu trên.
 
-> Sata Robo không hoàn tiền bằng tiền mặt trực tiếp tại trung tâm.
+**Bước 2:** Cung cấp lý do và bằng chứng (nếu có).
 
-## 5. Liên hệ yêu cầu hoàn trả
+**Bước 3:** Sata Robo xem xét và phản hồi trong vòng 3 ngày làm việc.
 
-- 📧 Email: cskh@satarobo.vn
-- 📞 Hotline CS1 (Nguyễn Hữu Thọ): 0818.823.720 · CS2 (Hoàng Diệu): 0702.193.933 (Thứ 2 – Thứ 7, 8:00 – 20:00)
-- 🏢 Trực tiếp tại cơ sở: 211 Nguyễn Hữu Thọ, Hải Châu, Đà Nẵng (Trụ sở chính)
+## 7. Phương thức đổi trả và hoàn tiền
 
-## 6. Ghi chú
+Sau khi yêu cầu đổi trả/hoàn tiền được chấp thuận, Khách hàng gửi sản phẩm về địa chỉ do Sata Robo hướng dẫn và thông tin tài khoản ngân hàng nhận số tiền hoàn lại.
 
-Chính sách này có thể được cập nhật. Phiên bản áp dụng là phiên bản đang hiển thị tại trang này tại thời điểm yêu cầu hoàn trả. Mọi trường hợp đặc biệt sẽ do Ban Giám đốc Sata Robo xem xét và quyết định.
+Sata Robo sẽ kiểm tra tình trạng sản phẩm được gửi lại. Nếu sản phẩm đáp ứng điều kiện:
+
+- **Đối với đổi sản phẩm:** Chúng tôi sẽ gửi sản phẩm thay thế trong thời gian sớm nhất sau khi yêu cầu được chấp thuận. Trường hợp yêu cầu đổi trả không thuộc phạm vi áp dụng của chính sách này, khách hàng sẽ chịu các chi phí phát sinh (nếu có).
+- **Đối với hoàn tiền:** Khoản tiền hoàn sẽ được thực hiện theo phương thức thanh toán chuyển khoản từ 07 - 15 ngày làm việc kể từ ngày yêu cầu được chấp thuận.
+
+Chúng tôi luôn trân trọng sự tin tưởng của quý khách và cam kết không ngừng nâng cao chất lượng sản phẩm cũng như dịch vụ. Mỗi phản hồi của khách hàng đều là cơ sở để chúng tôi hoàn thiện quy trình phục vụ, mang đến những trải nghiệm an tâm, chuyên nghiệp và hài lòng hơn trong mỗi lần mua sắm.
+
+## 8. Thông tin liên hệ
+
+- 🏢 CÔNG TY CỔ PHẦN CÔNG NGHỆ GIÁO DỤC SATA ROBO
+- 🏢 Mã số doanh nghiệp: 0402301783 do Sở Tài chính Thành phố Đà Nẵng cấp ngày 02/10/2025
+- 📍 Địa chỉ: 211 Nguyễn Hữu Thọ, Phường Hòa Cường, Thành phố Đà Nẵng, Việt Nam
+- 📞 Số điện thoại: 0818.823.720 – 0702.193.933
+- 📧 Email: thongtin@satarobo.vn
 
 ---
 
-*Chính sách này có hiệu lực từ ngày 01/01/2026 và được cập nhật lần gần nhất vào 11/05/2026.*
+*Chính sách này có hiệu lực kể từ ngày đăng tải trên website satarobo.vn.*
