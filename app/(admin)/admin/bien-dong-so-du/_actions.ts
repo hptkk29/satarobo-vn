@@ -224,6 +224,10 @@ export async function ganGiaoDichVaoDon(
       centerId: true,
       orgUnitId: true,
       studentId: true,
+      // I-1 — cần cho cổng "tiền vào ⇒ lead lên Đã đăng ký" trong `allocateToOrder`.
+      // Đường gán TAY của kế toán cũng là tiền về, nên nó phải đẩy phễu y như webhook;
+      // `AllocationOrder.leadId` khai BẮT BUỘC chính để `tsc` chỉ ra dòng này.
+      leadId: true,
       student: { select: { id: true, parentUserId: true } },
       paymentRequests: {
         where: { status: { in: ["PENDING", "PARTIAL"] } },
