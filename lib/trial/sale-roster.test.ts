@@ -138,17 +138,12 @@ describe("[S-7] nhãn phải ở module THUẦN — không kéo Prisma xuống t
     expect(src).not.toMatch(/^\s*import\s/m);
   });
 
-  it("trial-list.tsx chỉ import KIỂU từ sale-roster, không import giá trị", () => {
-    const src = readFileSync(
-      join(process.cwd(), "app", "(sale)", "sale", "trial", "_components", "trial-list.tsx"),
-      "utf8",
-    );
-    const dong = src
-      .split(/\r?\n/)
-      .filter((l) => l.includes("@/lib/trial/sale-roster"));
-    expect(dong.length).toBe(1);
-    expect(dong[0]).toMatch(/^import type /);
-  });
+  // ⚠️ 22/09/2026 — `app/(sale)/sale/trial/_components/trial-list.tsx` GỠ cùng site
+  // Sale, nên ca "chỉ import KIỂU, không import giá trị" mất file để soi. Bất biến
+  // gốc vẫn đúng và vẫn cần: `sale-roster.ts` kéo Prisma, nên component client nào
+  // import GIÁ TRỊ từ nó là kéo Prisma xuống trình duyệt. Dựng lại màn trải nghiệm
+  // ở admin thì dán lại ca này, trỏ vào file mới.
+
 });
 
 describe("[S-7] canh gác: đường sinh hoa hồng Sale phải có ĐÚNG MỘT cửa", () => {

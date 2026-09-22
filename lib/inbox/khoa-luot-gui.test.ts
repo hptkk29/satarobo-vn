@@ -11,11 +11,8 @@
 // CÙNG một khoá ⇒ một dòng) giữ nguyên — đó vẫn là lưới chống bấm đúp / hai tab. Cái đổi
 // là NGUỒN của khoá: một nonce cho mỗi LƯỢT SOẠN thay vì băm nội dung.
 import { describe, it, expect, vi, afterEach } from "vitest";
-import fs from "node:fs";
-import path from "node:path";
-import { taoKhoaLuotGui, nonceLuotGui } from "@/components/sale/hop-thu/khoa-luot-gui";
+import { taoKhoaLuotGui, nonceLuotGui } from "@/lib/inbox/khoa-luot-gui";
 
-const ROOT = process.cwd();
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -55,16 +52,15 @@ describe("[B1] khoá giành chỗ một lượt gửi", () => {
   });
 });
 
-describe("[B1] ô soạn trả lời KHÔNG còn băm nội dung vào khoá", () => {
-  it("[B1-06] hop-thu-workspace.tsx dùng taoKhoaLuotGui và không còn hashNhanh", () => {
-    // Lưới đọc-mã-nguồn: hai hằng số này sống ở hai file khác nhau, không có kiểu nào
-    // buộc chúng khớp. Nếu ai đó "khôi phục cho gọn" cách dựng khoá cũ thì bộ DB
-    // `[HT-11b]` vẫn xanh (nó gọi thẳng hàm thuần), chỉ màn hình thật là hỏng lại.
-    const src = fs.readFileSync(
-      path.join(ROOT, "components/sale/hop-thu/hop-thu-workspace.tsx"),
-      "utf8",
-    );
-    expect(src, "ô soạn phải dựng khoá bằng taoKhoaLuotGui").toContain("taoKhoaLuotGui(");
-    expect(src, "nội dung KHÔNG được tham gia vào outboundKey").not.toContain("hashNhanh");
-  });
-});
+// ⚠️ 22/09/2026 — Ô SOẠN ĐÃ GỠ, LƯỚI NÀY MẤT CHỖ BÁM.
+//
+// Ở đây từng có ca `[B1-06]` đọc `components/sale/hop-thu/hop-thu-workspace.tsx` và
+// đòi nó dựng khoá bằng `taoKhoaLuotGui(` chứ không băm nội dung (`hashNhanh`). Lưới
+// đó tồn tại vì hai hằng số sống ở hai file, không kiểu nào buộc chúng khớp: dựng lại
+// cách cũ thì bộ DB `[HT-11b]` vẫn xanh (nó gọi thẳng hàm thuần), chỉ màn hình thật
+// hỏng lại — lặng lẽ, theo kiểu "một câu chỉ gửi được một lần trong đời hội thoại".
+//
+// Màn hộp thư gỡ cùng site Sale; ĐỘNG CƠ thì còn (webhook ZaloCRM vẫn ghi qua
+// `lib/inbox/send.ts`, và `@@unique([conversationId, outboundKey])` vẫn đứng đó).
+// Dựng lại ô soạn ở đâu — admin hay trong khung ZaloCRM — thì DÁN LẠI ca này, trỏ vào
+// file mới. Đừng bỏ qua: đây đúng là lỗi không ai báo được.

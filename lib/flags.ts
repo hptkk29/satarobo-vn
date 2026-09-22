@@ -244,33 +244,6 @@ export function isLeadIntakeAuthRequired(): boolean {
 }
 
 /**
- * Đợt B (21/08/2026) — site Sale riêng `sale.satarobo.vn` (route group thứ 6
- * `app/(sale)/`). Chốt Q11: Sale Hub là **site riêng**, còn biểu mẫu nhập khách
- * hiện ở host này sẽ dời sang `satarobo.vn/nhap-khach-hang`.
- *
- * Khuôn `=== "true"` (mặc định OFF) — cố ý ngược khuôn `isTeacherSiteEnabled()`
- * vốn mặc định ON vì đã qua kỳ flip 10/07/2026.
- *
- * OFF: host `sale` hành xử **y hệt hôm nay** — phục vụ 2 trang HTML tĩnh công
- * khai, bỏ qua đăng nhập. 0 byte giao diện site Sale được phục vụ.
- *
- * ⚠️ ĐIỀU KIỆN BẬT — bật sớm là **cắt đường nhập liệu của marketing**:
- *   1. Biểu mẫu nhập khách đã dời sang `satarobo.vn/nhap-khach-hang` và chạy thật.
- *   2. Marketing / sale-admin đã được thông báo.
- *   3. Đã rà mọi nơi còn trỏ `sale.satarobo.vn` (QR, quảng cáo, chữ ký email).
- *
- * ⚠️ KHÔNG bật `AUTH_COOKIE_DOMAIN` kèm theo: `.env.example` ghi rõ thứ tự bắt
- * buộc là **tách sale khỏi zone trước**, vì bật khi host này còn phục vụ trang
- * tĩnh công khai = lộ cookie phiên sang host công khai. Site Sale dùng cổng đăng
- * nhập riêng trên chính host của nó — chạy được, chỉ tốn một lần đăng nhập.
- *
- * Rollback = đổi env + redeploy, không revert code.
- */
-export function isSaleSiteEnabled(): boolean {
-  return process.env.SALE_SITE_ENABLED === "true"; // mặc định OFF
-}
-
-/**
  * Đợt E (22/08/2026) — chính sách CHIA SẺ LEAD trong cơ sở (`Lead.isSharedWithTeam`).
  *
  * Chủ dự án chốt Q8 (21/08): **lead độc quyền tuyệt đối**, bỏ tính năng dùng chung.
@@ -363,7 +336,13 @@ export function isZalocrmEnabled(): boolean {
 }
 
 /**
- * INBOX (S9-B4) — hộp thư đa kênh (`app/(sale)/sale/hop-thu`, `lib/inbox/*`).
+ * INBOX (S9-B4) — hộp thư đa kênh (`lib/inbox/*`).
+ *
+ * ⚠️ Màn hộp thư (`app/(sale)/sale/hop-thu`) đã GỠ cùng site Sale 22/09/2026.
+ * ĐỘNG CƠ thì còn và đang chạy thật: webhook ZaloCRM nạp tin qua
+ * `lib/integrations/zalocrm/nap-su-kien.ts` → `lib/inbox/*`, và báo cáo phản hồi
+ * ở `/admin/bao-cao/phan-hoi-hop-thu` đọc từ đó. Cờ này vẫn là đường lùi cho
+ * phần động cơ ấy.
  *
  * ⚠️ **Cờ này đã được NHẮC TỚI trước khi tồn tại.** `lib/settings/registry.ts`
  * ghi "cờ 2-phase bật/tắt cả tính năng (`INBOX_ENABLED` trong lib/flags.ts)" từ
@@ -376,16 +355,16 @@ export function isZalocrmEnabled(): boolean {
  * này đều KHÔNG đổi hành vi. Cố ý (khuôn `isPaymentLedgerV2Enabled`): khai cờ
  * trước, nối sau, để đường lùi nằm trong code từ đầu.
  *
- * OFF (mặc định) sẽ nghĩa là: route `/sale/hop-thu` 404, adapter kênh không được
- * nạp, webhook kênh ngoài không ghi vào `Inbox*`. Dữ liệu đã có giữ nguyên.
+ * OFF (mặc định) sẽ nghĩa là: adapter kênh không được nạp, webhook kênh ngoài
+ * không ghi vào `Inbox*`. Dữ liệu đã có giữ nguyên.
  *
  * Dùng `=== "true"` cùng lý do như `isZalocrmEnabled` ngay trên.
  *
- * 🔴 **Lưu ý cho người NỐI cờ này về sau**: hộp thư hiện phục vụ sau
- * `SALE_SITE_ENABLED` (cũng mặc định OFF), nên thêm gate ở đây là thêm tầng khoá
- * thứ hai — nếu tới lúc đó site Sale đã bật trên prod, hãy khai
- * `INBOX_ENABLED="true"` cho prod TRƯỚC khi merge phần nối, kẻo đóng hộp thư
- * ngay dưới chân người đang trực chat.
+ * 🔴 **Lưu ý cho người NỐI cờ này về sau**: trước 22/09/2026 hộp thư còn nấp sau
+ * `SALE_SITE_ENABLED` nên cờ này chỉ là tầng khoá thứ hai. Cờ kia đã GỠ cùng site
+ * Sale ⇒ từ nay `INBOX_ENABLED` là khoá DUY NHẤT. Nối nó vào đường nạp webhook mà
+ * quên khai `INBOX_ENABLED="true"` cho prod là **đóng luôn đường ghi tin đang chạy
+ * thật**, không còn tầng nào đỡ.
  */
 export function isInboxEnabled(): boolean {
   return process.env.INBOX_ENABLED === "true"; // mặc định OFF
