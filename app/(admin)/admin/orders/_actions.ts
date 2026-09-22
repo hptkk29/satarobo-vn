@@ -54,6 +54,7 @@ import { taoPhieuGop, huyPhieuGop, dongPhieuGop } from "@/lib/finance/phieu-gop"
 import { dungHocMotCon, xemTruocDungHoc } from "@/lib/finance/dung-hoc-con";
 import { themConVaoDon, xemTruocThemCon } from "@/lib/finance/them-con-vao-don";
 import { doiKhoaChoCon, xemTruocDoiKhoa } from "@/lib/finance/doi-khoa-db";
+import { mienGiamNoChoCon } from "@/lib/finance/mien-giam-db";
 import { docChinhSachUuDai } from "@/lib/finance/uu-dai-setting";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { soatGiaDon } from "@/lib/orders/price-guard";
@@ -2400,5 +2401,48 @@ export async function doiKhoaChoConAction(input: {
   revalidatePath("/cong-no");
   revalidatePath("/hoan-tien");
   revalidatePath("/enrollments");
+  return kq;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// G1 · US-22 — MIỄN GIẢM NỢ CỦA MỘT CON
+//
+// ⚠️ Cổng `congDungHoc` = `orders:manage` + cách ly cơ sở + cờ thu linh hoạt. Đo
+// `prisma/seed-roles.ts` 22/09/2026: CENTER_MANAGER (QLCS) và HO_ACCOUNTANT CÓ key này;
+// CENTER_SALES_CSM thì KHÔNG — đúng AC3 ("sale gọi trực tiếp action → từ chối"), và từ chối
+// ở ACTION chứ không chỉ ẩn nút.
+//
+// ⚠️ BA khai quyền `billing:waive`. Key đó KHÔNG TỒN TẠI trong repo; tự chế một key mới là
+// dựng một màn hình không vai nào mở được (bài học `audit-logs:view`). Lý lẽ đầy đủ ở đầu
+// `lib/finance/mien-giam.ts`.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function mienGiamNoAction(input: {
+  orderId: string;
+  orderItemId: string;
+  soTien: number;
+  lyDo: string;
+}) {
+  const cong = await congDungHoc(input.orderId);
+  if (!cong.ok) return { ok: false as const, error: cong.error };
+
+  const [hapThu, tranPhanTram] = await Promise.all([
+    docChinhSachUuDai(cong.order.orgUnitId).then((cs) => cs.hapThu),
+    getSetting("orders.maxDiscountPercent", { orgUnitId: cong.order.orgUnitId }),
+  ]);
+
+  const kq = await mienGiamNoChoCon({
+    orderId: cong.order.id,
+    orderItemId: input.orderItemId,
+    soTien: input.soTien,
+    lyDo: input.lyDo,
+    hapThu,
+    tranPhanTram,
+    actor: cong.actor,
+  });
+  if (!kq.ok) return kq;
+
+  revalidatePath(`/orders/${input.orderId}`);
+  revalidatePath("/cong-no");
   return kq;
 }
