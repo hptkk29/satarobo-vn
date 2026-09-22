@@ -38,6 +38,15 @@ export type ClassRow = {
    */
   hocVien: string[];
   /**
+   * NGÀY mở lớp, dạng "YYYY-MM-DD" — `null` với lớp tạo TRƯỚC 22/09/2026.
+   *
+   * Sale chọn lớp THEO NGÀY hẹn khách, nên đây là cột họ đọc đầu tiên. Lớp cũ hiện
+   * gạch chứ không ẩn đi: chúng vẫn đang chạy và vẫn xếp học viên được.
+   */
+  ngayMo: string | null;
+  /** Khung giờ lớp mở, ví dụ "17:30–21:00". `null` với lớp cũ. */
+  khungGio: string | null;
+  /**
    * Sale phụ trách lớp. `null` = không suy ra được (lớp cũ, chưa có con nào xếp vào).
    *
    * `suyTuLead = true` nghĩa là tên này KHÔNG phải người tạo lớp (lớp tạo trước

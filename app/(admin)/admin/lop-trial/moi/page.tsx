@@ -6,6 +6,9 @@ import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { layLuaChonTaoLop } from "../_lib/queries";
+import { layCauHinhKhung } from "@/lib/trial/khung-gio-db";
+import { vnTodayUtc } from "@/lib/trial/service";
+import { vnYmd } from "@/lib/time/vn";
 import { CreateForm } from "../_components/create-form";
 
 export const dynamic = "force-dynamic";
@@ -14,12 +17,21 @@ export default async function TaoLopTrialPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   // Trang này CHỈ để ghi → gác bằng quyền ghi, không phải trials:view.
-  if (!(await checkPermission("trials:manage"))) redirect("/lop-trial");
+  //
+  // 22/09/2026 — đổi sang `trials:create-class`: Sale vẫn có `trials:manage` (họ cần nó để
+  // thêm case + xếp học viên), nên cổng cũ ở đây không chặn được ai. Gác CẢ TRANG chứ
+  // không chỉ giấu nút: trên thanh địa chỉ ai cũng gõ được `/lop-trial/moi`.
+  if (!(await checkPermission("trials:create-class"))) redirect("/lop-trial");
 
   const actor = await resolveActor(session.user.id);
   // 28/08 — form chỉ còn CƠ SỞ + KHOÁ. Không nạp giáo viên/phòng/cấu hình số buổi nữa:
   // ba thứ đó chuyển xuống khối "Thêm buổi học" ở trang chi tiết lớp.
   const { centers, courses } = await layLuaChonTaoLop(actor);
+  // Khung giờ đọc ở SERVER rồi truyền xuống — ô chọn trên form phải bày đúng thứ server
+  // sẽ nhận. "Hôm nay" cũng tính ở server theo lịch VN: để client đọc đồng hồ máy là máy
+  // đặt sai múi giờ sẽ mở lớp nhầm ngày.
+  const cauHinhKhung = await layCauHinhKhung();
+  const homNay = vnYmd(vnTodayUtc());
 
   return (
     <div className="space-y-4">
@@ -32,8 +44,8 @@ export default async function TaoLopTrialPage() {
 
       <h2 className="text-lg font-semibold text-foreground">Tạo lớp trải nghiệm</h2>
       <p className="text-sm text-muted-foreground">
-        Lớp là một khung giờ dùng lại nhiều lần, không gắn ngày khai giảng. Tạo xong nhớ
-        thêm buổi, vì lớp chưa có buổi thì không xếp được học viên.
+        Mỗi lớp là MỘT NGÀY và MỘT KHUNG GIỜ. Sale chọn lớp theo ngày hẹn khách, rồi thêm
+        case trong đúng khung giờ này và chọn giáo viên có ca làm phủ trọn khung đó.
       </p>
 
       {/* `coSoCuaToi` — cơ sở của CHÍNH người đang mở màn, để form đặt mặc định.
@@ -41,7 +53,13 @@ export default async function TaoLopTrialPage() {
           cơ sở khác". Bản cũ mặc định `centers[0]` — với Sale một cơ sở thì trùng nhau
           nên không ai thấy, nhưng với người nhìn được nhiều cơ sở (Hội sở / Quản trị) thì
           đó là cơ sở ĐẦU BẢNG CHỮ CÁI, không phải cơ sở của họ. */}
-      <CreateForm centers={centers} courses={courses} coSoCuaToi={session.user.centerId ?? null} />
+      <CreateForm
+        centers={centers}
+        courses={courses}
+        coSoCuaToi={session.user.centerId ?? null}
+        cauHinhKhung={cauHinhKhung}
+        homNay={homNay}
+      />
     </div>
   );
 }

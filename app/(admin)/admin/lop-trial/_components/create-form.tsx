@@ -28,12 +28,22 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createLopTrialClassAction } from "../_actions";
 import { tenLopTrial } from "@/lib/trial/lop-moi";
+import {
+  keKhung,
+  khungChoNgay,
+  TEN_THU,
+  THU_KHOA,
+  type CauHinhKhung,
+} from "@/lib/trial/khung-gio-mo-lop";
+import { vnWeekday } from "@/lib/time/vn";
 import type { Option } from "../_lib/types";
 
 export function CreateForm({
   centers,
   courses,
   coSoCuaToi = null,
+  cauHinhKhung,
+  homNay,
 }: {
   /** `code` để xem trước tên lớp sẽ sinh ra; thiếu thì rơi về `name`. */
   centers: (Option & { code?: string | null })[];
@@ -48,6 +58,16 @@ export function CreateForm({
    * về rỗng và người dùng thấy "Cơ sở *" trống trơn.
    */
   coSoCuaToi?: string | null;
+  /**
+   * Bảy khoá `trial.khungGio.<thu>` đã đọc sẵn ở server.
+   *
+   * Truyền xuống thay vì đóng cứng trong client: ô chọn khung phải bày ĐÚNG thứ server
+   * sẽ nhận, nếu không thì người dùng chọn xong mới bị từ chối — ô chọn hứa một việc
+   * không làm được (luật 12).
+   */
+  cauHinhKhung: CauHinhKhung;
+  /** Hôm nay theo lịch VN, dạng "YYYY-MM-DD" — server tính, client không đọc đồng hồ máy. */
+  homNay: string;
 }): JSX.Element {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -64,6 +84,23 @@ export function CreateForm({
    */
   const [tenTuGo, setTenTuGo] = useState<string | null>(null);
 
+  // ── NGÀY + KHUNG GIỜ (22/09/2026) ──────────────────────────────────────────────────
+  const [ngay, setNgay] = useState(homNay);
+
+  // `new Date("YYYY-MM-DD")` ra nửa đêm UTC; `vnWeekday` cộng +7 rồi đọc ngày ⇒ vẫn đúng
+  // thứ VN. Đừng đổi sang `getDay()`: hàm đó đọc múi giờ MÁY NGƯỜI DÙNG.
+  const mocNgay = ngay ? new Date(`${ngay}T00:00:00.000Z`) : null;
+  const docKhung = mocNgay ? khungChoNgay(mocNgay, cauHinhKhung) : null;
+  const khungHopLe = docKhung?.ok ? docKhung.giaTri : [];
+  const tenThu = mocNgay ? (TEN_THU[THU_KHOA[vnWeekday(mocNgay)]!] ?? "") : "";
+
+  // Khung đang chọn — mặc định khung ĐẦU TIÊN của ngày đó. `null` = ngày không mở.
+  const [gio, setGio] = useState<{ startTime: string; endTime: string } | null>(null);
+  const khungDung =
+    gio && khungHopLe.some((k) => k.startTime <= gio.startTime && gio.endTime <= k.endTime)
+      ? gio
+      : (khungHopLe[0] ?? null);
+
   const center = centers.find((c) => c.id === centerId);
   const course = courses.find((c) => c.id === courseId);
   // Chỉ XEM TRƯỚC phần mã cơ sở + mã khoá: số thứ tự do server cấp trong transaction
@@ -78,6 +115,18 @@ export function CreateForm({
       toast.error("Chọn cơ sở");
       return;
     }
+    if (!ngay) {
+      toast.error("Chọn ngày mở lớp");
+      return;
+    }
+    if (!khungDung) {
+      toast.error(
+        docKhung && !docKhung.ok
+          ? docKhung.loi
+          : `${tenThu} không mở lớp trải nghiệm — chọn ngày khác hoặc sửa ở Cấu hình vận hành`,
+      );
+      return;
+    }
     startTransition(async () => {
       const res = await createLopTrialClassAction({
         centerId,
@@ -85,6 +134,9 @@ export function CreateForm({
         // Chỉ gửi khi người dùng THỰC SỰ gõ. Gửi cả tên xem-trước là gửi lên một chuỗi
         // có dấu "…" ở chỗ con số — server sẽ lưu nguyên cái dấu đó vào tên lớp.
         name: tenTuGo?.trim() ? tenTuGo.trim() : undefined,
+        date: ngay,
+        startTime: khungDung.startTime,
+        endTime: khungDung.endTime,
       });
       if (res.ok) {
         toast.success("Đã tạo lớp trải nghiệm");
@@ -132,6 +184,66 @@ export function CreateForm({
             </>
           )}
         </span>
+      </label>
+
+      {/* ── NGÀY + KHUNG GIỜ (22/09/2026) ──────────────────────────────────────────────
+          Chủ dự án: "Tạo lớp Trial theo ngày, thứ, và khung thời gian có GV đi làm".
+          Ô chọn khung dựng từ CHÍNH cấu hình mà server sẽ kiểm, nên không bao giờ bày
+          ra một khung rồi bị server từ chối. */}
+      <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+        Ngày mở lớp *
+        <input
+          type="date"
+          value={ngay}
+          onChange={(e) => {
+            setNgay(e.target.value);
+            // Đổi ngày ⇒ bỏ khung đã chọn: khung của thứ 3 không có nghĩa gì ở thứ 7, và
+            // giữ lại là để người dùng lưu một khung mà server sẽ từ chối.
+            setGio(null);
+          }}
+          disabled={pending}
+          required
+          aria-label="Ngày mở lớp"
+          className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground disabled:opacity-50"
+        />
+        {tenThu ? <span className="text-[11px]">{tenThu}</span> : null}
+      </label>
+
+      <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+        Khung giờ *
+        {khungHopLe.length > 0 ? (
+          <select
+            value={khungDung ? `${khungDung.startTime}-${khungDung.endTime}` : ""}
+            onChange={(e) => {
+              const [bd, kt] = e.target.value.split("-");
+              setGio(bd && kt ? { startTime: bd, endTime: kt } : null);
+            }}
+            disabled={pending}
+            aria-label="Khung giờ"
+            className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground disabled:opacity-50"
+          >
+            {khungHopLe.map((k) => (
+              <option key={`${k.startTime}-${k.endTime}`} value={`${k.startTime}-${k.endTime}`}>
+                {k.startTime}–{k.endTime}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <span
+            role="alert"
+            className="rounded-lg border border-state-warning-soft bg-state-warning-soft px-3 py-2 text-xs text-state-warning-ink"
+          >
+            {docKhung && !docKhung.ok
+              ? docKhung.loi
+              : `${tenThu || "Ngày này"} không mở lớp trải nghiệm. Chọn ngày khác, hoặc sửa khung giờ của thứ này ở Cấu hình vận hành → tab "Lớp & giáo viên".`}
+          </span>
+        )}
+        {khungHopLe.length > 0 ? (
+          <span className="text-[11px]">
+            {tenThu} mở {keKhung(khungHopLe)}. Sale thêm case trong lớp này chỉ chọn được
+            giờ nằm trong khung đã chọn.
+          </span>
+        ) : null}
       </label>
 
       <label className="flex flex-col gap-1 text-xs text-muted-foreground">

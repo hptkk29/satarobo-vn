@@ -62,10 +62,34 @@ describe("[LT-U-05] zod tạo lớp", () => {
   //   · giờ  → thuộc tính của TỪNG BUỔI (`addSessionSchema` vẫn khoá, xem describe dưới);
   //   · sĩ số → bỏ hẳn, `capacity = null` nghĩa là không giới hạn;
   //   · số buổi → nay là số buổi ĐÃ THÊM, không phải con số khai trước.
-  const hopLe = { centerId: "cs1" };
+  //   · giờ  → ~~chuyển xuống TỪNG BUỔI, lớp là slot tái sử dụng không gắn ngày~~
+  //            **[ĐẢO 22/09/2026]** chủ dự án chốt "Tạo lớp Trial theo ngày, thứ, và khung
+  //            thời gian có GV đi làm". Lớp NAY BẮT BUỘC có `date` + `startTime` + `endTime`
+  //            — đó là KHUNG BAO để Sale chọn chỗ hẹn khách; giờ cụ thể của từng case
+  //            VẪN nằm ở `TrialClassSession`. Hai thứ khác nhau, đừng gộp.
+  const hopLe = { centerId: "cs1", date: "2026-09-22", startTime: "17:30", endTime: "21:00" };
 
-  it("chỉ cần cơ sở là qua", () => {
+  it("đủ cơ sở + ngày + khung giờ là qua", () => {
     expect(createClassSchema.safeParse(hopLe).success).toBe(true);
+  });
+
+  it("⚠️ THIẾU ngày hoặc khung giờ thì BỊ CHẶN (đảo chốt 28/08)", () => {
+    // Lớp không ngày thì Sale không chọn được "lớp trial ngày 22/09" như yêu cầu, và
+    // cổng "case phải nằm trong khung lớp" không có gì để so ⇒ im lặng cho qua mọi giờ.
+    expect(createClassSchema.safeParse({ centerId: "cs1" }).success).toBe(false);
+    const { date: _bo, ...thieuNgay } = hopLe;
+    expect(createClassSchema.safeParse(thieuNgay).success).toBe(false);
+    const { startTime: _bo2, ...thieuGio } = hopLe;
+    expect(createClassSchema.safeParse(thieuGio).success).toBe(false);
+  });
+
+  it("ngày sai dạng bị chặn", () => {
+    expect(createClassSchema.safeParse({ ...hopLe, date: "22/09/2026" }).success).toBe(false);
+  });
+
+  it("giờ sai dạng bị chặn", () => {
+    expect(createClassSchema.safeParse({ ...hopLe, startTime: "17h30" }).success).toBe(false);
+    expect(createClassSchema.safeParse({ ...hopLe, endTime: "25:00" }).success).toBe(false);
   });
 
   it("khoá trải nghiệm là tuỳ chọn", () => {
@@ -80,7 +104,7 @@ describe("[LT-U-05] zod tạo lớp", () => {
   it("cơ sở là chuỗi rỗng bị chặn, kèm thông điệp người đọc hiểu", () => {
     // Lớp không cơ sở là lớp KHÔNG AI THẤY: `scopedDb` lọc theo `centerId`, nên nó tàng
     // hình với mọi tài khoản cấp cơ sở mà chẳng có thông báo nào.
-    const r = createClassSchema.safeParse({ centerId: "   " });
+    const r = createClassSchema.safeParse({ ...hopLe, centerId: "   " });
     expect(r.success).toBe(false);
     if (!r.success) expect(r.error.issues[0]?.message).toBe("Chọn cơ sở");
   });
@@ -92,17 +116,18 @@ describe("[LT-U-05] zod tạo lớp", () => {
     // ⚠️ ĐỔI 18/09/2026: `name` KHÔNG còn là "khoá lạ". Bản trước của ca này khẳng định
     // `"name" in r.data === false`, tức nó KHOÁ ĐÚNG CHỐT VỪA BỊ ĐẢO — để nguyên thì ai
     // đọc nó như đặc tả sẽ gỡ luôn tính năng vừa mở. Ba trường kia vẫn bị bỏ qua.
+    // ⚠️ ĐỔI 22/09/2026 lần hai: `startTime`/`endTime` cũng KHÔNG còn là "khoá lạ" —
+    // chúng là KHUNG BAO của lớp và nay bắt buộc. Chỉ `capacity`/`sessionCount` còn bị bỏ.
     const r = createClassSchema.safeParse({
       ...hopLe,
       capacity: 8,
-      startTime: "18:00",
-      endTime: "19:30",
       sessionCount: 8,
     });
     expect(r.success).toBe(true);
     if (r.success) {
       expect("capacity" in r.data).toBe(false);
       expect("sessionCount" in r.data).toBe(false);
+      expect(r.data.startTime).toBe("17:30");
     }
   });
 

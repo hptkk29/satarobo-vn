@@ -29,7 +29,11 @@ const SRC = readFileSync(
  * luôn xanh dù cổng bị đổi sai, tức là không kiểm gì cả.
  */
 const CONG_QUYEN: Record<string, Action> = {
-  createLopTrialClassAction: "trials:manage",
+  // ~~`trials:manage`~~ **[ĐẢO 22/09/2026]** — chủ dự án: "chỉ cho QL tạo và sale chỉ
+  // vào chọn lớp trial theo ngày đặt lịch và add học viên". Sale VẪN phải có
+  // `trials:manage` (để thêm case + xếp học viên), nên giữ cổng cũ ở đây là KHÔNG
+  // chặn được ai — phải là khoá riêng. Xem `trials:create-class` trong seed-roles.
+  createLopTrialClassAction: "trials:create-class",
   addLopTrialSessionAction: "trials:manage",
   // 28/08 — sửa / huỷ MỘT buổi. Cùng cổng `trials:manage` với thêm buổi: ba thao tác
   // này là một việc (xếp lịch lớp), tách cổng chỉ đẻ ra ma trận không ai nhớ nổi.
