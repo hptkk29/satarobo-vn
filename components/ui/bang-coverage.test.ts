@@ -58,8 +58,6 @@ const MIEN_TRU: Record<string, string> = {
     "chặn bởi số con trong một gia đình, không theo lượng dữ liệu. Và đây đúng là bảng phải " +
     "nhìn HẾT một lượt trước khi bấm: nó nói con nào được giảm, con nào bị sửa đợt thu — cắt " +
     "trang là giấu đúng thứ màn này sinh ra để phơi.",
-  "app/(sale)/sale/trial/_components/trial-list.tsx":
-    "một bảng = MỘT khung giờ, số dòng chặn bởi sức chứa lớp trải nghiệm (6–8 bé). Phân trang trong một buổi 6 bé là thêm thanh điều khiển vô nghĩa; lượng dữ liệu cả trang đã chặn bằng cửa sổ 21 ngày + take:200 ở lib/trial/sale-roster.ts",
 };
 
 function walk(dir: string, out: string[] = []): string[] {

@@ -1,11 +1,12 @@
-// components/sale/hop-thu/khoa-luot-gui.ts — dựng khoá GIÀNH CHỖ cho một lượt gửi.
+// lib/inbox/khoa-luot-gui.ts — dựng khoá GIÀNH CHỖ cho một lượt gửi.
 //
-// ĐỂ RIÊNG MỘT FILE vì hai lý do, không phải cho gọn:
-//  1. `hop-thu-workspace.tsx` là `"use client"` và kéo theo Server Action —
-//     không import được vào bộ test tầng DB (`tests/inbox/hop-thu.spec.ts`).
-//     Luật khoá phải kiểm được BẰNG CHÍNH hàm mà ô soạn dùng, chứ không phải bằng
-//     một bản chép lại trong test (bản chép lại luôn xanh, kể cả khi màn hình hỏng).
-//  2. Đây là THUẦN — không state, không DOM — nên nó thuộc về một module thuần.
+// DỜI VỀ ĐÂY 22/09/2026 khi gỡ site Sale. Trước ở `components/sale/hop-thu/` vì
+// ô soạn của Hộp thư sống ở đó; màn hình ấy đã gỡ, còn LUẬT KHOÁ thì không —
+// nó là hợp đồng với `sendInboxReply` (`lib/inbox/send.ts`) chứ không phải với
+// một cái nút. Đây là THUẦN (không state, không DOM) nên nó thuộc về `lib/inbox/`
+// cùng phần động cơ, và bộ test tầng DB (`tests/inbox/hop-thu.spec.ts`) vẫn kiểm
+// được BẰNG CHÍNH hàm mà đường gửi dùng, chứ không bằng một bản chép lại trong
+// test (bản chép lại luôn xanh, kể cả khi đường thật hỏng).
 //
 // ── HỢP ĐỒNG VỚI SERVER (không đổi) ─────────────────────────────────────────
 // `InboxMessage` có `@@unique([conversationId, outboundKey])` và `sendInboxReply`

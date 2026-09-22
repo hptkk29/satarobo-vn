@@ -332,7 +332,7 @@ describe.skipIf(!CO_BANG)("hộp thư đa kênh — tầng DB", () => {
       const { ingestInboundMessage } = await import("@/lib/inbox/ingest");
       const { sendInboxReply } = await import("@/lib/inbox/send");
       const { taoKhoaLuotGui, nonceLuotGui } = await import(
-        "@/components/sale/hop-thu/khoa-luot-gui"
+        "@/lib/inbox/khoa-luot-gui"
       );
 
       const r = await ingestInboundMessage({
