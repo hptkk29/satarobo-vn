@@ -264,6 +264,54 @@ describe("mã không giờ, nghỉ, lễ, miễn công", () => {
   });
 });
 
+// ══ HC CHẤM SÁNG/CHIỀU RIÊNG (chốt 22/09/2026) ═══════════════════════════════════════════
+//
+// `HC` đảo `soCapQuetKyVong` 1 → 2. Ba ca dưới đo ĐÚNG ba đường ra của một ngày HC, vì đặt
+// `2` MỘT MÌNH không bịt được lỗ: cổng `covered` tha cặp dài phủ chồng cả hai cụm.
+describe("HC 2 cặp quét — đòi đủ 4 lượt", () => {
+  it("mã HC mang 2 cặp quét (đọc từ DANH MỤC, không gõ tay)", () => {
+    // Neo vào nguồn: ca dưới vô nghĩa nếu ai đó lặng lẽ hạ HC về 1.
+    expect(catalogByCode("HC")!.soCapQuetKyVong).toBe(2);
+  });
+
+  it("quét đủ 4 lượt ⇒ SẠCH cờ, đủ 450′", () => {
+    const r = run("HC", [IN("08:00"), OUT("11:30"), IN("13:30"), OUT("17:30")]);
+    expect(r.flags).toEqual([]);
+    expect(r.workedMinutes).toBe(450);
+  });
+
+  it("làm thẳng qua trưa, chỉ 2 lượt ⇒ THIEU_LUOT_GIUA_CA (đây là lỗ cũ)", () => {
+    // TRƯỚC bản vá 22/09 ca này ra `flags: []` — `soCapQuetKyVong: 2` không đủ, vì cặp
+    // [08:00, 17:30] phủ chồng cụm chiều nên `covered` bỏ qua nó.
+    const r = run("HC", [IN("08:00"), OUT("17:30")]);
+    expect(r.flags).toContain("THIEU_LUOT_GIUA_CA");
+    // KHÔNG mượn cờ "thiếu nửa ngày": họ có mặt cả hai buổi. `noi-quy.thieuNuaNgay()` đọc
+    // hai cờ đó để loại ngày khỏi `caThucTe` — mượn là phạt sai người.
+    expect(r.flags).not.toContain("THIEU_BUOI_SANG");
+    expect(r.flags).not.toContain("THIEU_BUOI_CHIEU");
+    // Engine CHỈ gắn cờ, không tự trừ (luật §5 đầu file) — công và giờ giữ nguyên.
+    expect(r.workedMinutes).toBe(450);
+    expect(r.dayCreditEarned).toBe(r.dayCreditExpected);
+  });
+
+  it("quét sáng rồi về luôn ⇒ THIEU_BUOI_CHIEU, và KHÔNG chồng cờ mới", () => {
+    const r = run("HC", [IN("08:00"), OUT("11:30")]);
+    expect(r.flags).toContain("THIEU_BUOI_CHIEU");
+    expect(r.flags).not.toContain("THIEU_LUOT_GIUA_CA");
+  });
+
+  it("cờ mới có CHỖ ĐỌC: nằm trong cả tập admin và tập site GV (luật 10)", async () => {
+    const { CO_CANH_BAO } = await import("./tong-hop-cong");
+    const { CO_CAN_XU_LY } = await import("./bang-cong-gv");
+    const { flagInfo, countsAsIssue } = await import("./flag-labels");
+    expect(CO_CANH_BAO.has("THIEU_LUOT_GIUA_CA")).toBe(true);
+    expect(CO_CAN_XU_LY.has("THIEU_LUOT_GIUA_CA")).toBe(true);
+    // Có nhãn tiếng Việt thật, không in ra mã trần cho người dùng đọc.
+    expect(flagInfo("THIEU_LUOT_GIUA_CA").text).toBe("Thiếu lượt giữa ca");
+    expect(countsAsIssue("THIEU_LUOT_GIUA_CA")).toBe(true);
+  });
+});
+
 describe("cờ chuyển tiếp + trần lượt (GC-07)", () => {
   it("cờ NGOAI_VUNG trên lượt được đưa lên ngày", () => {
     expect(run("S", [IN("07:43", ["NGOAI_VUNG"]), OUT("11:30")]).flags).toContain("NGOAI_VUNG");

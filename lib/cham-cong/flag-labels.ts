@@ -15,6 +15,7 @@ export const FLAG_LABEL: Record<string, FlagInfo> = {
   RA_KHONG_CO_VAO: { text: "Ra không có vào", tone: "warn" },
   THIEU_BUOI_SANG: { text: "Thiếu buổi sáng", tone: "warn" },
   THIEU_BUOI_CHIEU: { text: "Thiếu buổi chiều", tone: "warn" },
+  THIEU_LUOT_GIUA_CA: { text: "Thiếu lượt giữa ca", tone: "warn" },
   DI_MUON: { text: "Đi muộn", tone: "warn" },
   VE_SOM: { text: "Về sớm", tone: "warn" },
   THIEU_GIO: { text: "Thiếu giờ", tone: "warn" },

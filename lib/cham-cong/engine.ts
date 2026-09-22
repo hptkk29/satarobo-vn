@@ -16,7 +16,7 @@
 //  6. Lễ (T-04): holidayPaidUnits = dayCreditExpected × coefficient, cột riêng, không cờ thiếu.
 //  7. Không sinh SAI_NOI_LAM cho ANY_CENTER / OFFSITE / ANYWHERE (§4.10) — cờ đó đặt ở lượt.
 //  8. Miễn công (T-02): trả `exempt: true`, không sinh dòng.
-import { coThieuCum, cumQuetKyVong } from "./cum-quet";
+import { coThieuCum, cumQuetKyVong, khongQuetGiuaCa } from "./cum-quet";
 import type { ShiftSegment } from "./catalog";
 import { toMinutes } from "./catalog";
 
@@ -356,6 +356,13 @@ export function computeDay(input: EngineInput): DayResult {
   const cumKyVong = cumQuetKyVong(planned, a.soCapQuetKyVong);
   if (a.attendanceMode === "REQUIRED" && cumKyVong.length > 0) {
     if (!hasAnyLog) flags.add("KHONG_CO_LUOT");
+    // Làm thẳng qua nghỉ giữa ca, không quét ra/vào. Cổng `covered` bên dưới CỐ Ý tha ca
+    // này (một cặp dài phủ chồng cả hai cụm), nên nếu không hỏi riêng ở đây thì mã khai 2
+    // cặp vẫn không đòi được 4 lượt — xem đầy đủ lý do ở `khongQuetGiuaCa`.
+    //
+    // Cờ RIÊNG, không mượn `THIEU_BUOI_*`: hai cờ ấy bị `noi-quy.ts thieuNuaNgay()` dùng để
+    // loại ngày khỏi `caThucTe`, và người làm trọn ngày không được chịu hình phạt đó.
+    if (khongQuetGiuaCa(pairedIntervals, cumKyVong)) flags.add("THIEU_LUOT_GIUA_CA");
     for (const [iCum, blk] of cumKyVong.entries()) {
       const gap = rules.pairingMaxGapMinutes;
       const firstIn = ins.filter((m) => m >= blk.start - gap && m <= blk.end).sort((x, y) => x - y)[0];

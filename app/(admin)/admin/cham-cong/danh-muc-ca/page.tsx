@@ -92,6 +92,11 @@ export default async function DanhMucCaPage({
     isLeave: t.isLeave,
     nominalMinutes: t.nominalMinutes,
     payMode: t.payMode,
+    // Cột DB là Int (`@default(1)`); form chỉ nhận 0/1/2. Giá trị lạ (ai sửa tay DB) rơi về 1
+    // — cùng chiều FAIL-CLOSED với schema, chứ không im lặng thành 0 = thôi kiểm quét.
+    soCapQuetKyVong: ([0, 1, 2] as const).includes(t.soCapQuetKyVong as 0 | 1 | 2)
+      ? (t.soCapQuetKyVong as 0 | 1 | 2)
+      : 1,
     note: t.note,
     isActive: t.isActive,
     centerId: t.centerId,
