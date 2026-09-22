@@ -11,7 +11,8 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { writeAudit } from "@/lib/audit/audit-log";
-import { validateSegments, type ShiftSegment } from "@/lib/cham-cong/catalog";
+import { toMinutes, validateSegments, type ShiftSegment } from "@/lib/cham-cong/catalog";
+import { khaiDuocHaiCap } from "@/lib/cham-cong/cum-quet";
 import { HO_CENTER_ID } from "@/lib/cham-cong/home-center";
 
 type Res = { ok: true; id: string } | { ok: false; error: string };
@@ -34,6 +35,14 @@ const schema = z.object({
   isLeave: z.coerce.boolean().default(false),
   nominalMinutes: z.coerce.number().int().min(0).max(24 * 60).nullable().default(null),
   payMode: z.enum(["SHIFT", "ADMIN_HOURS", "NONE"]),
+  /**
+   * Số CẶP quét đòi trong ngày — 0 / 1 / 2. Đưa lên màn 22/09/2026 cùng đợt HC đảo 1 → 2.
+   *
+   * KHÔNG `.default()`: trường này quyết định có gắn cờ thiếu lượt hay không (luật 7 — tham
+   * số có mặc định nguy hiểm thì bỏ mặc định, để `tsc` liệt kê call site). Cột DB có
+   * `@default(1)` cho dữ liệu cũ; đường GHI thì phải nói rõ.
+   */
+  soCapQuetKyVong: z.union([z.literal(0), z.literal(1), z.literal(2)]),
   scopeUserIds: z.array(z.string()).default([]),
   note: z.string().trim().max(500).nullable().default(null),
   isActive: z.coerce.boolean().default(true),
@@ -48,6 +57,17 @@ function parse(input: unknown): { ok: true; data: z.infer<typeof schema> } | { o
   const issues = validateSegments(p.data.segments as ShiftSegment[]);
   if (issues.length) return { ok: false, error: `Đoạn ca ${issues[0].index + 1}: ${issues[0].message}` };
   if (p.data.kind === "TIMED" && p.data.segments.length === 0) return { ok: false, error: "Mã có giờ phải có ít nhất một đoạn ca" };
+  // Khai 2 cặp quét cho một ca không có khoảng hở nào là danh mục SAI: `cumQuetKyVong` sẽ
+  // trả về MỘT cụm (nó cố ý không bịa cụm thứ hai), nên người vận hành chọn "2 lần" rồi
+  // tưởng đã siết, mà hành vi không đổi gì. Nói thẳng ở đây thay vì để nó im lặng vô hiệu.
+  if (p.data.soCapQuetKyVong === 2) {
+    const work = (p.data.segments as ShiftSegment[])
+      .filter((x) => x.kind === "WORK")
+      .map((x) => ({ start: toMinutes(x.start), end: toMinutes(x.end) }));
+    if (!khaiDuocHaiCap(work)) {
+      return { ok: false, error: "Chọn 2 lần chấm thì ca phải có nghỉ giữa giờ KHÔNG tính công (hai đoạn làm việc rời nhau) — VD 08:00–11:30 và 13:30–17:30" };
+    }
+  }
   if ((p.data.kind === "OFF" || p.data.kind === "LEAVE") && p.data.dayCredit !== 0) return { ok: false, error: "Mã nghỉ phải có số công = 0" };
   return { ok: true, data: p.data };
 }

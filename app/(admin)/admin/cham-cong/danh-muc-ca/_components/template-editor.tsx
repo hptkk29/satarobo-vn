@@ -32,6 +32,7 @@ export type TemplateEditorValue = {
   isLeave: boolean;
   nominalMinutes: number | null;
   payMode: "SHIFT" | "ADMIN_HOURS" | "NONE";
+  soCapQuetKyVong: 0 | 1 | 2;
   note: string | null;
   isActive: boolean;
   centerId: string | null;
@@ -50,6 +51,8 @@ const EMPTY: TemplateEditorValue = {
   isLeave: false,
   nominalMinutes: null,
   payMode: "SHIFT",
+  // Mặc định 1 = chiều FAIL-CLOSED của schema: quên khai thì hệ KIỂM THỪA, không KIỂM THIẾU.
+  soCapQuetKyVong: 1,
   note: null,
   isActive: true,
   centerId: null,
@@ -150,6 +153,9 @@ export function TemplateEditor({
       dayCredit: isRest ? 0 : v.dayCredit,
       isLeave: v.kind === "LEAVE",
       attendanceMode: isRest ? "NONE" : v.attendanceMode,
+      // Ô bị ẩn khi mã nghỉ / không chấm ⇒ phải gửi 0, kẻo lưu một con số người dùng không
+      // thấy và không chọn (mã nghỉ mang 1 thì engine đi đòi lượt quét của ngày nghỉ).
+      soCapQuetKyVong: isRest || v.attendanceMode === "NONE" ? 0 : v.soCapQuetKyVong,
       nominalMinutes: v.nominalMinutes === null || Number.isNaN(v.nominalMinutes) ? null : v.nominalMinutes,
     };
     start(async () => {
@@ -240,6 +246,23 @@ export function TemplateEditor({
                 <option value="REQUIRED">Phải quét QR</option>
                 <option value="OPTIONAL">Quét thì ghi giờ, không quét vẫn có công</option>
                 <option value="NONE">Không chấm</option>
+              </select>
+            </Field>
+          )}
+          {!isRest && v.attendanceMode !== "NONE" && (
+            <Field
+              label="Số lần chấm trong ngày"
+              hint="Chọn 2 lần khi ca phải quét ra nghỉ giữa giờ rồi quét vào lại — VD giờ hành chính: sáng và chiều riêng."
+              wide
+            >
+              <select
+                className={cn(FIELD, "w-full")}
+                value={String(v.soCapQuetKyVong)}
+                onChange={(e) => set("soCapQuetKyVong", Number(e.target.value) as 0 | 1 | 2)}
+              >
+                <option value="1">1 lần — vào đầu ca, ra cuối ca</option>
+                <option value="2">2 lần — sáng và chiều riêng (4 lượt quét)</option>
+                <option value="0">Không kiểm số lượt quét</option>
               </select>
             </Field>
           )}

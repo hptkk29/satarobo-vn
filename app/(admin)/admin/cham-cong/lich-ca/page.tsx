@@ -50,7 +50,7 @@ export const dynamic = "force-dynamic";
 const WD = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
 const SOURCES = new Set<string>(["PATTERN", "IMPORT", "MANUAL", "SWAP", "LEAVE", "HOLIDAY"]);
 /** Cờ nói "thiếu mốc quét" ⇒ việc của người này là nộp đơn chỉnh công, không phải chờ ai. */
-const MISSING_TAP = new Set(["KHONG_CO_LUOT", "THIEU_LUOT_RA", "RA_KHONG_CO_VAO", "THIEU_BUOI_SANG", "THIEU_BUOI_CHIEU"]);
+const MISSING_TAP = new Set(["KHONG_CO_LUOT", "THIEU_LUOT_RA", "RA_KHONG_CO_VAO", "THIEU_BUOI_SANG", "THIEU_BUOI_CHIEU", "THIEU_LUOT_GIUA_CA"]);
 
 const fmtMin = (m: number) => (m ? `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}` : "—");
 const pad = (n: number) => String(n).padStart(2, "0");

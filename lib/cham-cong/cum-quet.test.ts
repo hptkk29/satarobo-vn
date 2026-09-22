@@ -5,7 +5,7 @@
  * thật mới phơi ra được ranh giới thật (fixture tròn trịa không kiểm được gì).
  */
 import { describe, expect, it } from "vitest";
-import { cumQuetKyVong, coThieuCum, type Doan } from "./cum-quet";
+import { cumQuetKyVong, coThieuCum, khaiDuocHaiCap, khongQuetGiuaCa, type Doan } from "./cum-quet";
 
 /** "HH:mm" → phút. Giữ ca test đọc được như bảng chốt. */
 const p = (hhmm: string): number => {
@@ -85,5 +85,105 @@ describe("coThieuCum", () => {
   it("giữ NGUYÊN tên cờ cũ — dữ liệu prod đang mang chúng", () => {
     expect(coThieuCum(0)).toBe("THIEU_BUOI_SANG");
     expect(coThieuCum(1)).toBe("THIEU_BUOI_CHIEU");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// khongQuetGiuaCa — "làm thẳng qua nghỉ giữa ca, không quét ra/vào"
+//
+// Đây là lỗ mà `soCapQuetKyVong: 2` MỘT MÌNH không bịt được, và nó là lý do hàm này tồn
+// tại. Cổng ở `engine.ts:363` là
+//     const covered = pairedIntervals.some((p) => overlap(p, blk) > 0);
+//     if (firstIn === undefined && !covered) → gắn cờ
+// nên MỘT cặp dài `08:00 → 17:30` PHỦ CHỒNG cả hai cụm ⇒ `covered = true` ⇒ sạch cờ, dù
+// người ấy chưa từng quét ở nghỉ trưa. Đo thật trước bản vá: HC 2 cụm + cặp đơn ấy ra
+// `flags: []`.
+//
+// Vì sao KHÔNG siết `covered` mà thêm cờ riêng — hai lý do, cái thứ hai mới là cái nặng:
+//  1. Gắn `THIEU_BUOI_SANG`/`CHIEU` cho người làm trọn ngày là NÓI SAI: họ có mặt cả hai
+//     buổi, thứ họ thiếu là mốc quét GIỮA ca.
+//  2. `noi-quy.ts:130 thieuNuaNgay()` đọc đúng hai cờ ấy để LOẠI ngày khỏi `caThucTe`.
+//     Mượn chúng là kéo tỷ lệ đạt nội quy của người làm trọn ngày xuống như thể họ bỏ
+//     nửa ngày — phạt sai người, và phạt im lặng.
+describe("khongQuetGiuaCa", () => {
+  const cumHC = cumQuetKyVong(HC, 2); // [08:00–11:30, 13:30–17:30]
+
+  it("cặp ĐƠN trùm cả nghỉ trưa ⇒ ĐÚNG là thiếu lượt giữa ca", () => {
+    expect(khongQuetGiuaCa([d("08:00", "17:30")], cumHC)).toBe(true);
+  });
+
+  it("quét đủ 4 lượt (ra 11:30, vào 13:30) ⇒ KHÔNG cờ", () => {
+    expect(khongQuetGiuaCa([d("08:00", "11:30"), d("13:30", "17:30")], cumHC)).toBe(false);
+  });
+
+  it("về muộn hơn giờ nghỉ nhưng CÓ quét (ra 11:35, vào 11:36) ⇒ KHÔNG cờ", () => {
+    // Ranh giới thật: họ đã quét trong khoảng nghỉ. Muộn 5′ là việc của DI_MUON/VE_SOM,
+    // không phải của cờ này — cờ này chỉ hỏi "có quét giữa ca hay không".
+    expect(khongQuetGiuaCa([d("08:00", "11:35"), d("11:36", "17:30")], cumHC)).toBe(false);
+  });
+
+  it("ở lại quá trưa rồi mới quét ra 14:00 ⇒ VẪN là thiếu lượt giữa ca", () => {
+    // Cặp [08:00, 14:00] phủ TRỌN khoảng nghỉ 11:30–13:30 ⇒ suốt cả giờ nghỉ họ vẫn đang
+    // "đã vào". Đó đúng là điều cờ này nói.
+    expect(khongQuetGiuaCa([d("08:00", "14:00"), d("14:01", "17:30")], cumHC)).toBe(true);
+  });
+
+  it("chỉ quét buổi sáng rồi về ⇒ KHÔNG phải cờ NÀY (đã có THIEU_BUOI_CHIEU)", () => {
+    // Quan trọng: hai cờ không được chồng lên nhau, kẻo một ngày vắng nửa buổi bị đếm hai lần.
+    expect(khongQuetGiuaCa([d("08:00", "11:30")], cumHC)).toBe(false);
+  });
+
+  it("ca MỘT cụm (khai 1) ⇒ không bao giờ có cờ, dù quét thế nào", () => {
+    // Đây là vế giữ cho mọi mã còn lại của danh mục KHÔNG đổi hành vi sau bản vá.
+    expect(khongQuetGiuaCa([d("08:00", "17:30")], cumQuetKyVong(HC, 1))).toBe(false);
+    expect(khongQuetGiuaCa([d("13:45", "21:00")], cumQuetKyVong(CT, 1))).toBe(false);
+    expect(khongQuetGiuaCa([d("07:45", "11:30")], cumQuetKyVong(S, 1))).toBe(false);
+  });
+
+  it("ST (ca sáng + tối) cùng hình dạng ⇒ cùng luật", () => {
+    const cumST = cumQuetKyVong(ST, 2);
+    expect(khongQuetGiuaCa([d("07:45", "21:00")], cumST)).toBe(true);
+    expect(khongQuetGiuaCa([d("07:45", "11:30"), d("17:15", "21:00")], cumST)).toBe(false);
+  });
+
+  it("không cặp nào ⇒ không cờ (ngày đó là KHONG_CO_LUOT, việc của cờ khác)", () => {
+    expect(khongQuetGiuaCa([], cumHC)).toBe(false);
+  });
+
+  it("hai cụm DÍNH nhau (không có khoảng hở) ⇒ không đòi lượt giữa ca", () => {
+    // Danh mục khai 2 cho một ca liền mạch là danh mục SAI — `cumQuetKyVong` đã trả về một
+    // cụm cho ca một đoạn, nhưng hàm này cũng phải tự đứng được nếu người gọi dựng tay.
+    const dinh = [{ start: p("08:00"), end: p("12:00") }, { start: p("12:00"), end: p("17:00") }];
+    expect(khongQuetGiuaCa([d("08:00", "17:00")], dinh)).toBe(false);
+  });
+});
+
+describe("khaiDuocHaiCap — cổng của màn Danh mục mã ca", () => {
+  it("HC / ST có nghỉ giữa giờ KHÔNG tính công ⇒ khai 2 được", () => {
+    expect(khaiDuocHaiCap(HC)).toBe(true);
+    expect(khaiDuocHaiCap(ST)).toBe(true);
+  });
+
+  it("ca MỘT đoạn ⇒ KHÔNG khai 2 được (kẻo lặng lẽ chạy như 1)", () => {
+    // Đây là lý do cổng tồn tại: `cumQuetKyVong(S, 2)` trả về MỘT cụm, nên khai 2 cho ca này
+    // không đổi hành vi gì — người vận hành thấy "đã lưu" mà tưởng đã siết.
+    expect(khaiDuocHaiCap(S)).toBe(false);
+    expect(cumQuetKyVong(S, 2)).toHaveLength(1); // neo vào lý do, không chỉ vào kết luận
+  });
+
+  it("hai đoạn LIỀN NHAU (nghỉ CÓ tính công đã gộp) ⇒ KHÔNG khai 2 được", () => {
+    expect(khaiDuocHaiCap([d("13:45", "17:30"), d("17:30", "21:00")])).toBe(false);
+  });
+
+  it("CT: nghỉ 16:30–17:30 VẪN tính công nên hai đoạn WORK rời nhau — cổng CHO qua", () => {
+    // Ghi lại giới hạn có chủ đích: cổng chỉ soi HÌNH DẠNG đoạn WORK, không biết khoảng giữa
+    // là PAID_BREAK. Người gọi phải truyền ĐÚNG đoạn WORK; `CT` khai 1 là quyết định của bảng
+    // chốt, không phải việc của cổng này.
+    expect(khaiDuocHaiCap(CT)).toBe(true);
+  });
+
+  it("không đoạn nào / đoạn ngược ⇒ false, không ném", () => {
+    expect(khaiDuocHaiCap([])).toBe(false);
+    expect(khaiDuocHaiCap([d("11:30", "08:00")])).toBe(false);
   });
 });
