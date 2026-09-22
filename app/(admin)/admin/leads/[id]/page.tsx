@@ -502,6 +502,14 @@ export default async function LeadDetailPage({ params }: Props) {
             gradeLevel: c.gradeLevel,
             interestedCourseId: c.interestedCourseId,
             interestedCenterId: c.interestedCenterId,
+            // 22/09 — hai trường G-01/G-06 mà `LeadChildrenManager` bản `test` ĐÒI (kiểu
+            // `ChildView`). Trang này lấy lại bố cục cũ nhưng KHÔNG hạ cấp được component
+            // đó: `edit/page.tsx` và `lead-form.tsx` cùng dùng nó và đang truyền hai trường
+            // này — hạ cấp là vỡ lan sang hai màn kia.
+            // Dữ liệu có sẵn: truy vấn children dùng `include` nên mọi cột vô hướng của
+            // `LeadChild` đã về, không phải sửa câu truy vấn.
+            classId: c.classId,
+            contractValue: c.contractValue,
             note: canViewPii ? c.note : maskFreeText(c.note),
             trialStatus: c.trialStatus,
             trialHistory: c.trialHistory
