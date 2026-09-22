@@ -218,6 +218,9 @@ export const CO_CAN_XU_LY = new Set([
   "KHONG_CO_LUOT",
   "THIEU_LUOT_RA",
   "RA_KHONG_CO_VAO",
+  // Quên quét ra/vào giữa ca — cùng họ với THIEU_LUOT_RA: người đi làm tự nộp đơn
+  // chỉnh công là xong, không phải chờ ai kết luận.
+  "THIEU_LUOT_GIUA_CA",
   "SAI_NOI_LAM",
 ]);
 // ⚠️ CỐ Ý KHÔNG gồm: THIEU_GIO · NGOAI_VUNG · CHAM_NGOAI_LICH · VUOT_TRAN. Chúng nằm trong

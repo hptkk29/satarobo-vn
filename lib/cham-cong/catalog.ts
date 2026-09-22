@@ -166,7 +166,17 @@ const RAW_CATALOG: CatalogEntry[] = [
     displayOrder: 0,
   },
   timed("HC", "Giờ hành chính", [W("08:00", "11:30", "ASSIGNED"), W("13:30", "17:30", "ASSIGNED")], {
-    soCapQuetKyVong: 1,
+    // ĐẢO 1 → 2 ngày 22/09/2026 theo chốt của chủ dự án: giờ hành chính chấm SÁNG và CHIỀU
+    // RIÊNG (quét ra nghỉ trưa, quét vào đầu giờ chiều). Trước đó khai 1 ⇒ mọi đoạn WORK gom
+    // một cụm, vào = 08:00, ra = 17:30, và nghỉ trưa không bị đòi mốc nào.
+    //
+    // ⚠️ Con số này còn phải khớp cột "Cặp quét" của `docs/cham-cong/BANG-MA-CA-CHOT.md` —
+    // `catalog.test.ts` đối chiếu từng mã, sửa một bên là đỏ (đúng ý đồ của cổng đó).
+    //
+    // ⚠️ `12` `21` `2C` cùng hình dạng giờ nhưng VẪN khai 1 — cố ý, chủ dự án chỉ chốt HC.
+    // `12`/`21` đổi cơ sở giữa ngày nên chúng là ứng viên rõ ràng của lượt sau; đừng đổi kèm
+    // mà không hỏi, vì nó đổi cách tính công của người đang chạy kỳ.
+    soCapQuetKyVong: 2,
     defaultPlace: "ASSIGNED",
     payMode: "ADMIN_HOURS",
     note: "Nơi làm theo phân công (HO)",
