@@ -641,4 +641,94 @@ test.describe("[PAYOS] webhook ghi nhận + phân bổ tiền", () => {
     expect(res.status).toBe("UNMATCHED");
     expect(await db.paymentAllocation.count()).toBe(0);
   });
+
+  // ── I-1 · TIỀN VÀO ⇒ LEAD LÊN "ĐÃ ĐĂNG KÝ" ──────────────────────────────────
+  //
+  // Đo ở phiên I (`docs/thanh-toan-linh-hoat/i-ai-doc-so-nao.md`): cổng phễu chỉ có ở
+  // `ensureOrderPaymentRecorded` và `recordPayment` (ghi TAY). Đường tiền TỰ ĐỘNG —
+  // đường mà MỌI giao dịch thật đi qua từ 20/08, khi nội dung CK bỏ mã đơn — không gọi
+  // nó: `grep -i lead lib/payments/payos-ingest.ts` ra 0 dòng.
+  //
+  // ⚠️ Bốn ca dưới đây đo ĐÚNG hai thứ hỏng, và KHÔNG đo thứ không hỏng: nó KHÔNG chặn
+  // việc chốt lead (convert khoá theo `convertedAt`, không theo trạng thái). Thứ hỏng là
+  // **sổ đếm phễu** và **vết trong nhật ký**.
+
+  /** Lead ở một bậc phễu cho trước, gắn vào đơn. */
+  async function seedLeadForOrder(
+    orderId: string,
+    centerId: string,
+    status: "CHO_QUYET_DINH" | "DANG_TU_VAN",
+  ) {
+    const lead = await db.lead.create({
+      data: { parentName: "PH phễu", phone: `09${uniq()}`.slice(0, 10), status, centerId },
+    });
+    await db.order.update({ where: { id: orderId }, data: { leadId: lead.id } });
+    return lead;
+  }
+
+  const bacPheu = async (id: string) =>
+    (await db.lead.findUniqueOrThrow({ where: { id }, select: { status: true } })).status;
+
+  const soDongPheu = (leadId: string) =>
+    db.leadStatusHistory.count({ where: { leadId, source: "payment" } });
+
+  test("[PAYOS-17] tiền về → lead CHỜ QUYẾT ĐỊNH lên ĐÃ ĐĂNG KÝ, có vết nguồn `payment`", async () => {
+    const { order, requests, center } = await seedOrderWithRequests([3_000_000]);
+    const lead = await seedLeadForOrder(order.id, center.id, "CHO_QUYET_DINH");
+
+    const res = await ingestPayosWebhook(
+      payload({ amount: 3_000_000, description: `CK ${requests[0]!.matchKey}` }),
+    );
+    expect(res.status).toBe("MATCHED");
+
+    expect(await bacPheu(lead.id)).toBe("DA_DANG_KY");
+    // Vế thứ hai mới là vế QLCS đọc: không có dòng này thì mốc "tiền vào → Đã đăng ký"
+    // biến khỏi mục "Lịch sử thay đổi" của trang lead, và không ai lần ra vì sao bậc phễu
+    // đổi. Đúng lỗ mà C-07 dựng ra để bịt — nhưng nó chỉ bịt cho đường ĐỔI TAY.
+    expect(await soDongPheu(lead.id)).toBe(1);
+  });
+
+  test("[PAYOS-17b] ĐỐI CHỨNG ÂM — lead ở bậc KHÁC thì tiền về KHÔNG đụng tới", async () => {
+    // Cổng là `updateMany` có guard `status = CHO_QUYET_DINH`. Gỡ guard đi thì mọi lead
+    // đều bị kéo lên "Đã đăng ký" khi tiền về — kể cả lead đang tư vấn cho đứa con THỨ HAI
+    // trong khi đứa đầu đóng tiền. Ca `[PAYOS-17]` một mình KHÔNG bắt được chuyện đó.
+    const { order, requests, center } = await seedOrderWithRequests([3_000_000]);
+    const lead = await seedLeadForOrder(order.id, center.id, "DANG_TU_VAN");
+
+    const res = await ingestPayosWebhook(
+      payload({ amount: 3_000_000, description: `CK ${requests[0]!.matchKey}` }),
+    );
+    expect(res.status).toBe("MATCHED");
+
+    expect(await bacPheu(lead.id)).toBe("DANG_TU_VAN");
+    expect(await soDongPheu(lead.id)).toBe(0);
+  });
+
+  test("[PAYOS-17c] tiền về LẦN HAI cùng đơn → không sinh dòng phễu thứ hai", async () => {
+    // Cổng được hỏi ở MỌI lượt rót (nằm ngoài `if (!dup)`), nên nó phải idempotent thật
+    // chứ không idempotent nhờ may. Hai giao dịch KHÁC NHAU vào cùng một đơn là ca thật:
+    // phụ huynh đóng đợt 1 rồi đóng đợt 2.
+    const { order, requests, center } = await seedOrderWithRequests([3_000_000, 2_000_000]);
+    const lead = await seedLeadForOrder(order.id, center.id, "CHO_QUYET_DINH");
+
+    await ingestPayosWebhook(payload({ amount: 3_000_000, description: `CK ${requests[0]!.matchKey}` }));
+    await ingestPayosWebhook(payload({ amount: 2_000_000, description: `CK ${requests[1]!.matchKey}` }));
+
+    expect(await bacPheu(lead.id)).toBe("DA_DANG_KY");
+    expect(await soDongPheu(lead.id)).toBe(1);
+    expect(await statusOf(requests[0]!.id)).toBe("PAID");
+    expect(await statusOf(requests[1]!.id)).toBe("PAID");
+  });
+
+  test("[PAYOS-17d] đơn KHÔNG gắn lead → tiền vẫn rót bình thường, không lỗi", async () => {
+    // Đơn tạo thẳng ở /orders/new không có lead. Cổng phải im lặng bỏ qua, không ném.
+    const { requests } = await seedOrderWithRequests([3_000_000]);
+
+    const res = await ingestPayosWebhook(
+      payload({ amount: 3_000_000, description: `CK ${requests[0]!.matchKey}` }),
+    );
+
+    expect(res.status).toBe("MATCHED");
+    expect(await statusOf(requests[0]!.id)).toBe("PAID");
+  });
 });
