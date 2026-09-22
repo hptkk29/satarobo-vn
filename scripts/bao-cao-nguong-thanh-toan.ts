@@ -60,6 +60,20 @@ import { writeFileSync } from "node:fs";
 import { db } from "../lib/db";
 import { kiemQuyen } from "./_kiem-quyen";
 import { locDonNhanTien } from "../lib/payments/don-nhan-tien";
+// ⚠️ `KHOAN_DA_XAC_NHAN` / `tongDaXacNhan` — điều kiện "khoản đã xác nhận" KHÔNG được gõ tay.
+//
+// Bản đầu của tệp này gõ tay, và cổng `[BUOC-6]` (`lib/finance/truc-a.test.ts`) bắt được trên
+// CI: *"trục A chỉ có MỘT nhà"*. Nó quét TOÀN REPO và chỉ tha các tệp khai trong `NGOAI_LE`,
+// mà mọi dòng NGOAI_LE đều là đường GHI hoặc test dựng dữ liệu mẫu — báo cáo này là đường ĐỌC,
+// tức đúng thứ cổng sinh ra để chặn. Xin vào NGOAI_LE là gỡ lưới thay vì sửa.
+//
+// ⚠️ VÀ BẢN VÁ ĐẦU TIÊN CŨNG ĐỎ: chú thích này thoạt đầu TRÍCH NGUYÊN chuỗi bị cấm để giải
+// thích, mà `[BUOC-6]` đọc tệp THÔ (không bóc chú thích) ⇒ lời giải thích về luật vi phạm
+// chính luật ấy. Đúng bẫy CLAUDE.md đã ghi ba lần. Nên ở đây gọi tên nó bằng tiếng Việt.
+//
+// Cùng một lý do với `locDonNhanTien()` ngay trên: định nghĩa "khoản nào tính vào trục A" chỉ
+// được có MỘT bản. Hằng này còn mang sẵn `deletedAt: null` — vế mà bản gõ tay dễ quên.
+import { KHOAN_DA_XAC_NHAN, tongDaXacNhan } from "../lib/finance/debt";
 import { TRAN_SO_DOT } from "../lib/payments/ke-hoach-dot";
 import { TRAN_KHOAN_GIAM_MOI_DONG } from "../lib/orders/giam-gia-dong";
 
@@ -407,7 +421,8 @@ async function phan3(tx: Tx): Promise<void> {
   in_(
     `**Phép tính:** \`Order.discountApprovalStatus = PENDING_APPROVAL\` **hoặc** ` +
       `\`Order.installmentApprovalStatus = PENDING_APPROVAL\`, \`deletedAt IS NULL\`. ` +
-      `Cột "đã thu" = Σ \`Payment.amount\` có \`accountantStatus = CONFIRMED\` và chưa xoá mềm.`,
+      `Cột "đã thu" = trục A (\`KHOAN_DA_XAC_NHAN\` + \`tongDaXacNhan\` của \`lib/finance/debt\`), ` +
+      `cộng cả bút toán điều chỉnh ÂM.`,
   );
   in_();
 
@@ -427,7 +442,7 @@ async function phan3(tx: Tx): Promise<void> {
       discountApprovalStatus: true,
       installmentApprovalStatus: true,
       payments: {
-        where: { accountantStatus: "CONFIRMED", deletedAt: null },
+        where: KHOAN_DA_XAC_NHAN,
         select: { amount: true },
       },
     },
@@ -458,8 +473,10 @@ async function phan3(tx: Tx): Promise<void> {
   in_(`**Tổng ${treo.length} đơn đang treo.**`);
   in_();
 
+  // `tongDaXacNhan` chứ không `reduce` tay: nó cộng được dòng ÂM (delta của bút toán điều
+  // chỉnh giảm). Tự cộng thì hôm nay ra đúng, nhưng nó là bản thứ hai của một phép tính tiền.
   const kem = treo
-    .map((o) => ({ ...o, daThu: o.payments.reduce((s, p) => s + p.amount, 0) }))
+    .map((o) => ({ ...o, daThu: tongDaXacNhan(o.payments) }))
     .sort((a, b) => b.daThu - a.daThu);
   const soThuDu = kem.filter((o) => o.totalAmount > 0 && o.daThu >= o.totalAmount).length;
 
