@@ -44,11 +44,20 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import type { NhanVanHanh } from "@/lib/settings/nhan-van-hanh";
 import { saveGlobalSettingAction } from "../actions";
+import { CaiRiengTheoCoSo, type CoSoCauHinh } from "./cai-rieng-theo-co-so";
 
 export type SettingRowView = {
   key: string;
   value: unknown;
   nhan: NhanVanHanh;
+  /**
+   * PHIÊN H — danh sách cơ sở kèm giá trị cài riêng, CHỈ có ở khoá `centerOverridable`.
+   *
+   * Bỏ trống ⇒ khoá này chỉ cấu hình ở cấp toàn hệ, và khối cài riêng không được vẽ. Đó
+   * không phải chuyện gọn mắt: `setCenterSetting` từ chối thẳng khoá không cho cài riêng,
+   * nên một khối hiện ra ở đó là một khối mà mọi lần bấm đều báo lỗi (luật 12).
+   */
+  coSo?: readonly CoSoCauHinh[];
 };
 
 /**
@@ -300,6 +309,19 @@ function HangCauHinh({ row, choSua }: { row: SettingRowView; choSua: boolean }) 
             {dangLuu ? "Đang lưu…" : "Lưu"}
           </Button>
         </div>
+      )}
+
+      {/* PHIÊN H — cài riêng cho từng cơ sở. Đặt SAU khung lưu toàn hệ và TRƯỚC mục kỹ
+          thuật: thứ tự đọc là "mức chung trước, ngoại lệ sau". Khối tự gấp lại, nên 47 khoá
+          cho cài riêng không biến trang thành một bảng tính. */}
+      {row.coSo && row.coSo.length > 0 && (
+        <CaiRiengTheoCoSo
+          settingKey={row.key}
+          nhan={row.nhan}
+          giaTriToanHe={row.value}
+          coSo={row.coSo}
+          choSua={choSua}
+        />
       )}
 
       <details className="mt-2">

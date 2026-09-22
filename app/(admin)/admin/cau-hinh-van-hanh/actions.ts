@@ -11,6 +11,7 @@ import { kiemChinhSach, type ChinhSachHoaHong } from "@/lib/crm/chinh-sach-hoa-h
 import {
   getSetting,
   setGlobalSetting,
+  clearCenterSetting,
   setCenterSetting,
   type SetResult,
 } from "@/lib/settings/service";
@@ -57,6 +58,30 @@ export async function saveCenterSettingAction(input: {
     orgUnitId: input.orgUnitId,
     key: input.key,
     value: input.value,
+    reason: input.reason,
+    actorName: actorName(session.user),
+  });
+  if (res.ok) revalidatePath("/admin/cau-hinh-van-hanh");
+  return res;
+}
+
+/**
+ * PHIÊN H — GỠ override của một cơ sở ⇒ cơ sở quay về THEO TOÀN HỆ.
+ *
+ * ⚠️ KHÁC "tắt riêng". Tắt riêng ghi `false` vào sổ (một quyết định); gỡ là rút lại quyết
+ * định ấy, và mức toàn hệ có thể đang BẬT. Lý lẽ đầy đủ ở `clearCenterSetting`.
+ */
+export async function xoaCenterSettingAction(input: {
+  orgUnitId: string;
+  key: string;
+  reason: string;
+}): Promise<SetResult> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: { code: "AUTH", message: "Chưa đăng nhập" } };
+  const actor = await resolveActor(session.user.id);
+  const res = await clearCenterSetting(actor, {
+    orgUnitId: input.orgUnitId,
+    key: input.key,
     reason: input.reason,
     actorName: actorName(session.user),
   });
