@@ -921,6 +921,7 @@ export function CongNoTheoCon({
   duocBoGan,
   dungHoc,
   baoLuu,
+  themCon = null,
   phieu = null,
 }: {
   orderId: string;
@@ -949,6 +950,14 @@ export function CongNoTheoCon({
    * giao bài) mà tiền chỉ đi theo. Thêm nút thứ hai ở đây là hai cửa cho một trạng thái.
    */
   baoLuu?: Record<string, { reserveId: string; startedAt: Date | string; expectedEndAt: Date | string | null; soNgayDaDoiHan: number | null }>;
+  /**
+   * F3 — nút "Thêm con vào đơn…" (hộp thoại riêng, dựng ở trang vì nó cần danh sách khoá học).
+   *
+   * ⚠️ Nhận sẵn phần tử chứ không nhận `khoa[]` rồi tự vẽ: khối này là client component và
+   * danh sách khoá học là một câu tra DB. Đẩy câu tra xuống client là một lượt đi về nữa cho
+   * một danh sách hầu như không đổi.
+   */
+  themCon?: React.ReactNode;
   /** Phiếu gộp ĐANG MỞ của đơn, `null` khi chưa phát. Dựng ở server — xem `PhieuGopView`. */
   phieu?: PhieuGopView | null;
 }) {
@@ -999,16 +1008,22 @@ export function CongNoTheoCon({
           <Users className="size-4 text-muted-foreground" aria-hidden />
           Công nợ theo con
         </h2>
-        <p className="text-xs text-muted-foreground">
-          Tổng{" "}
-          <span className="font-semibold tabular-nums text-foreground">
-            {vnd(so.tongPhaiThu)}
-          </span>{" "}
-          · còn nợ{" "}
-          <span className="font-semibold tabular-nums text-state-danger-ink">
-            {vnd(so.tongConNo)}
-          </span>
-        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-xs text-muted-foreground">
+            Tổng{" "}
+            <span className="font-semibold tabular-nums text-foreground">
+              {vnd(so.tongPhaiThu)}
+            </span>{" "}
+            · còn nợ{" "}
+            <span className="font-semibold tabular-nums text-state-danger-ink">
+              {vnd(so.tongConNo)}
+            </span>
+          </p>
+          {/* F3 — "Thêm con vào đơn…" đặt ở ĐẦU khối, cạnh con số tổng: nó là thao tác trên
+              CẢ ĐƠN (đổi tổng đơn, có thể đổi ưu đãi của mọi bé), không phải thao tác của
+              một dòng. Đặt nó dưới một bé cụ thể là nói sai phạm vi của nó. */}
+          {duocSua && themCon}
+        </div>
       </div>
 
       {/* Tiền đã vào đơn mà chưa gắn con nào. KHÔNG cộng vào "đã thu" của bất kỳ bé nào —

@@ -51,6 +51,11 @@ const MIEN_TRU: Record<string, string> = {
     "ĐÃ có phân trang, nhưng PHÍA SERVER (skip/take + link Trước/Sau) chứ không bọc `PhanTrangBang` — sổ chia lead chỉ có thêm không bao giờ bớt, cắt trang trong trình duyệt là phải tải cả sổ về trước",
   "components/legacy-laptrinhrobot/InternalAwards.tsx":
     "bảng giải thưởng trên landing cũ — danh sách chốt cứng trong code, không đọc từ DB",
+  "app/(admin)/admin/orders/_components/them-con-dialog.tsx":
+    "bảng XEM TRƯỚC của lượt thêm con — một dòng cho MỖI CON của đơn, tức 2–4 dòng. Số dòng " +
+    "chặn bởi số con trong một gia đình, không theo lượng dữ liệu. Và đây đúng là bảng phải " +
+    "nhìn HẾT một lượt trước khi bấm: nó nói con nào được giảm, con nào bị sửa đợt thu — cắt " +
+    "trang là giấu đúng thứ màn này sinh ra để phơi.",
   "app/(sale)/sale/trial/_components/trial-list.tsx":
     "một bảng = MỘT khung giờ, số dòng chặn bởi sức chứa lớp trải nghiệm (6–8 bé). Phân trang trong một buổi 6 bé là thêm thanh điều khiển vô nghĩa; lượng dữ liệu cả trang đã chặn bằng cửa sổ 21 ngày + take:200 ở lib/trial/sale-roster.ts",
 };

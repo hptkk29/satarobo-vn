@@ -17,6 +17,11 @@ import { z } from "zod";
 // `chinh-sach-hoa-hong.ts` là file THUẦN (không Prisma, không DB) nên import được vào đây
 // mà không kéo theo gì.
 import { CHINH_SACH_MAC_DINH } from "@/lib/crm/chinh-sach-hoa-hong";
+import {
+  CACH_HAP_THU,
+  CHINH_SACH_MAC_DINH as UU_DAI_MAC_DINH,
+  DOI_TUONG_UU_DAI,
+} from "@/lib/orders/chinh-sach-uu-dai";
 import { internalAwards } from "@/components/legacy-laptrinhrobot/_data/awards";
 import { gifts } from "@/components/legacy-laptrinhrobot/_data/gifts";
 import { commitments } from "@/components/legacy-laptrinhrobot/_data/commitments";
@@ -319,6 +324,75 @@ export const SETTINGS = {
     label: "Thu học phí linh hoạt: công nợ theo từng con, phiếu gộp một QR cho cả nhà",
     schema: z.boolean(),
     default: false,
+    centerOverridable: true,
+  }),
+  // ── ƯU ĐÃI ANH EM — QUẢN LÝ TỰ CÀI [PHIÊN F3 · 22/09/2026] ─────────────────────────
+  //
+  // Chủ dự án chốt khi tôi hỏi "phần giảm muộn trừ vào đợt nào": *"làm cho quản lý tự cài
+  // đặt cho phần này trên hệ thống"*. Nên sáu khoá dưới đây là TOÀN BỘ chính sách ưu đãi
+  // anh em — không còn con số nào nằm trong mã.
+  //
+  // Hình dạng + phép tính ở `lib/orders/chinh-sach-uu-dai.ts` (thuần). `default` ở đây lấy
+  // đúng hằng của tệp đó, nên DB trống KHÔNG đổi hành vi (additive).
+  //
+  // ⚠️ `centerOverridable: true` cho CẢ SÁU. Hai cơ sở có thể chạy hai chính sách ưu đãi
+  // khác nhau (CS1 khuyến mãi mùa hè, CS2 không), và đó là ca vận hành thật — không phải
+  // sự tuỳ tiện. Ánh xạ khoá là `OrgUnit.id`, KHÔNG phải `Center.id`.
+  "billing.siblingAutoEnabled": def({
+    key: "billing.siblingAutoEnabled",
+    group: "finance",
+    label: "Tự tính ưu đãi anh chị em học cùng",
+    schema: z.boolean(),
+    default: UU_DAI_MAC_DINH.tuDong,
+    centerOverridable: true,
+  }),
+  "billing.siblingPercentSecond": def({
+    key: "billing.siblingPercentSecond",
+    group: "finance",
+    label: "Mức giảm cho con thứ hai (%)",
+    schema: z.number().int().min(0).max(100),
+    default: UU_DAI_MAC_DINH.phanTramConThu2,
+    centerOverridable: true,
+  }),
+  "billing.siblingPercentThird": def({
+    key: "billing.siblingPercentThird",
+    group: "finance",
+    label: "Mức giảm cho con thứ ba trở lên (%)",
+    schema: z.number().int().min(0).max(100),
+    default: UU_DAI_MAC_DINH.phanTramConThu3,
+    centerOverridable: true,
+  }),
+  // Chuỗi ⇒ màn cấu hình vẽ DANH SÁCH CHỌN (`chon` trong nhãn vận hành), không phải ô chữ
+  // trắng. Ô chữ trắng cho một giá trị chỉ nhận 2 khả năng là mời người ta gõ sai rồi đọc
+  // một câu lỗi kỹ thuật.
+  "billing.siblingTarget": def({
+    key: "billing.siblingTarget",
+    group: "finance",
+    label: "Ưu đãi anh chị em áp cho con nào",
+    schema: z.enum([DOI_TUONG_UU_DAI.HOC_PHI_THAP_HON, DOI_TUONG_UU_DAI.GHI_DANH_SAU]),
+    default: UU_DAI_MAC_DINH.doiTuong,
+    centerOverridable: true,
+  }),
+  "billing.siblingStacksFullPay": def({
+    key: "billing.siblingStacksFullPay",
+    group: "finance",
+    label: "Cho cộng dồn ưu đãi anh chị em với ưu đãi đóng trọn khoá",
+    schema: z.boolean(),
+    default: UU_DAI_MAC_DINH.congDonDongFull,
+    centerOverridable: true,
+  }),
+  // ⚠️ Khoá NGUY HIỂM NHẤT của cụm, và nguy hiểm theo cách không nhìn thấy: nó quyết định
+  // đợt thu nào bị SỬA SỐ sau khi phụ huynh đã nhận mã QR và tin nhắn cho đợt ấy.
+  "billing.lateDiscountAbsorb": def({
+    key: "billing.lateDiscountAbsorb",
+    group: "finance",
+    label: "Giảm giá phát sinh muộn thì trừ vào đợt thu nào",
+    schema: z.enum([
+      CACH_HAP_THU.DOT_XA_NHAT,
+      CACH_HAP_THU.CHIA_DEU,
+      CACH_HAP_THU.DOT_GAN_NHAT,
+    ]),
+    default: UU_DAI_MAC_DINH.hapThu,
     centerOverridable: true,
   }),
   "enrollment.suspendMaxMonths": def({

@@ -475,7 +475,15 @@ describe("[GGD] PHIÊN E — NHÃN loại ưu đãi: chở qua, KHÔNG đụng t
     // ⚠️ Lưới VĂN BẢN (luật 11) — neo chuỗi hẹp nhất và đếm số lần khớp. Nếu ai đó viết
     // `loai: k.loai` thì một mã rác từ client đi thẳng vào `discounts` JSON, và mọi đường
     // đọc sau này phải tự phòng thủ.
-    expect((action.match(/loai: docLoaiGiam\(k\.loai\),/g) ?? []).length).toBe(1);
+    // **BA** lời gọi [F3 · 22/09/2026]:
+    //   1. `createOrderManualAction`   — tạo đơn
+    //   2. `xemTruocThemConAction`     — xem trước thêm con vào đơn đang học
+    //   3. `themConVaoDonAction`       — ghi thật
+    //
+    // ⚠️ Con số này ĐẾM CÓ CHỦ ĐÍCH, đừng đổi thành `toBeGreaterThan`. Nó bắt đúng một thứ:
+    // ai đó thêm một đường nhận khoản giảm từ client mà chép thẳng `loai: k.loai` thì tổng
+    // KHÔNG tăng, và ca này đỏ. Nới thành "≥" là gỡ luôn khả năng ấy.
+    expect((action.match(/loai: docLoaiGiam\(k\.loai\),/g) ?? []).length).toBe(3);
     expect(action).not.toMatch(/\bloai: k\.loai,/);
   });
 

@@ -119,6 +119,18 @@ export interface NhanVanHanh {
   donVi?: string;
   /** true = đổi sai gây hậu quả rộng hoặc tốn tiền ⇒ giao diện gắn dấu nhắc. */
   canThan?: boolean;
+  /**
+   * Tham số chỉ nhận MỘT TRONG VÀI giá trị định trước ⇒ màn cấu hình vẽ danh sách chọn.
+   *
+   * ⚠️ Vì sao cần: trình sửa suy kiểu ô nhập từ GIÁ TRỊ (`kieuCuaGiaTri`), nên một tham số
+   * dạng chữ ra ô chữ TRẮNG. Với `billing.siblingTarget` thì đó là mời quản lý gõ tay một
+   * mã như `HOC_PHI_THAP_HON` rồi đọc một câu lỗi kỹ thuật khi gõ sai — affordance nói dối
+   * (luật 12). Có danh sách thì không gõ sai được, và mỗi lựa chọn nói luôn hệ quả của nó.
+   *
+   * `giaTri` phải KHỚP KHÍT với `z.enum` của khoá trong registry. Lưới `[CFG-T05]` canh
+   * việc đó — khai lệch một chữ là quản lý chọn xong rồi bị máy chủ từ chối.
+   */
+  chon?: readonly { giaTri: string; nhan: string; hauQua?: string }[];
 }
 
 const N: Readonly<Record<SettingKey, NhanVanHanh>> = {
@@ -741,6 +753,100 @@ const N: Readonly<Record<SettingKey, NhanVanHanh>> = {
       "tiền không được ghi nhận và kế toán hoàn lại. Có thể bật riêng cho từng cơ sở.",
     canThan: true,
   },
+
+  // ── Ưu đãi anh chị em: quản lý tự cài [F3 · 22/09/2026] ────────────────────────────
+  "billing.siblingAutoEnabled": {
+    tab: "tien",
+    ten: "Tự tính ưu đãi anh chị em học cùng",
+    giaiThich:
+      "Bật thì khi một nhà có từ hai con học, hệ thống tự trừ học phí cho con thứ hai trở " +
+      "đi theo các mức bên dưới. Tắt thì người bán vẫn gõ tay từng khoản giảm như trước — " +
+      "tắt KHÔNG xoá những khoản đã giảm cho các đơn cũ.",
+    canThan: true,
+  },
+  "billing.siblingPercentSecond": {
+    tab: "tien",
+    ten: "Mức giảm cho con thứ hai",
+    giaiThich:
+      "Trừ bao nhiêu phần trăm học phí của con được xếp là con thứ hai trong nhà. Đặt 0 là " +
+      "con thứ hai không được giảm gì.",
+    donVi: "%",
+    canThan: true,
+  },
+  "billing.siblingPercentThird": {
+    tab: "tien",
+    ten: "Mức giảm cho con thứ ba trở lên",
+    giaiThich:
+      "Trừ bao nhiêu phần trăm học phí của con thứ ba và các con sau nữa. Nhà có hai con thì " +
+      "mức này không dùng tới.",
+    donVi: "%",
+    canThan: true,
+  },
+  "billing.siblingTarget": {
+    tab: "tien",
+    ten: "Ưu đãi anh chị em áp cho con nào",
+    giaiThich:
+      "Trong một nhà, ai được xếp là con thứ hai. Đổi mục này là đổi xem NHÀ NÀO được giảm " +
+      "bao nhiêu, nên hãy xem lại vài đơn đang chạy sau khi đổi.",
+    canThan: true,
+    chon: [
+      {
+        giaTri: "HOC_PHI_THAP_HON",
+        nhan: "Con có học phí thấp hơn",
+        hauQua:
+          "Nhà giảm ít tiền hơn. Thêm một con học khoá đắt hơn thì ưu đãi CHUYỂN sang con " +
+          "đang học, tức con cũ bỗng được giảm thêm.",
+      },
+      {
+        giaTri: "GHI_DANH_SAU",
+        nhan: "Con đăng ký sau",
+        hauQua:
+          "Con vào sau luôn là con được giảm; các con đang học không bao giờ bị tính lại. " +
+          "Nhà giảm nhiều tiền hơn khi con vào sau học khoá đắt.",
+      },
+    ],
+  },
+  "billing.siblingStacksFullPay": {
+    tab: "tien",
+    ten: "Cho cộng dồn với ưu đãi đóng trọn khoá",
+    giaiThich:
+      "Bật thì một con vừa được giảm vì có anh chị em, vừa được giảm vì đóng trọn khoá. Tắt " +
+      "thì con đã có ưu đãi đóng trọn khoá sẽ không nhận thêm ưu đãi anh chị em.",
+    canThan: true,
+  },
+  "billing.lateDiscountAbsorb": {
+    tab: "tien",
+    ten: "Giảm giá phát sinh muộn thì trừ vào đợt thu nào",
+    giaiThich:
+      "Khi thêm một con làm con đang học được giảm thêm, phần giảm đó phải trừ vào các đợt " +
+      "chưa thu. Đợt nào ĐÃ nhận tiền thì không bao giờ bị sửa. Lưu ý đợt gần nhất thường " +
+      "đã phát mã QR và đã nhắn cho phụ huynh — sửa số của nó là phải nói lại với họ.",
+    canThan: true,
+    chon: [
+      {
+        giaTri: "DOT_XA_NHAT",
+        nhan: "Đợt có hạn muộn nhất, trừ dần về trước",
+        hauQua:
+          "Đợt gần nhất giữ nguyên số phụ huynh đã nhận, nên không phải giải thích lại. " +
+          "Phụ huynh hưởng ưu đãi ở lần đóng sau.",
+      },
+      {
+        giaTri: "CHIA_DEU",
+        nhan: "Chia đều theo tỷ lệ các đợt chưa thu",
+        hauQua:
+          "Mọi đợt chưa thu đều giảm một phần. Đổi lại, đợt gần nhất cũng đổi số nên phải " +
+          "nhắn lại cho phụ huynh.",
+      },
+      {
+        giaTri: "DOT_GAN_NHAT",
+        nhan: "Đợt có hạn sớm nhất, trừ dần về sau",
+        hauQua:
+          "Phụ huynh hưởng ngay lần đóng tới. Đổi lại, đúng cái đợt vừa phát mã QR bị sửa " +
+          "số, nên chắc chắn phải nhắn lại.",
+      },
+    ],
+  },
+
   "orgScope.cutoverEnabled": {
     tab: "nang-cao",
     ten: "Chuyển cách phân chia dữ liệu sang sơ đồ tổ chức mới",

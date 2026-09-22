@@ -52,6 +52,8 @@ import {
 } from "@/lib/finance/ghi-tien-don";
 import { taoPhieuGop, huyPhieuGop, dongPhieuGop } from "@/lib/finance/phieu-gop";
 import { dungHocMotCon, xemTruocDungHoc } from "@/lib/finance/dung-hoc-con";
+import { themConVaoDon, xemTruocThemCon } from "@/lib/finance/them-con-vao-don";
+import { docChinhSachUuDai } from "@/lib/finance/uu-dai-setting";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { soatGiaDon } from "@/lib/orders/price-guard";
 import { congNoDon } from "@/lib/finance/cong-no-don";
@@ -2228,5 +2230,95 @@ export async function chuyenTienGiuaConAction(input: {
   if (!kq.ok) return kq;
 
   revalidatePath(`/orders/${input.orderId}`);
+  return kq;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// F3 · US-19 — THÊM CON VÀO ĐƠN ĐANG HỌC
+//
+// ⚠️ Dùng LẠI `congDungHoc` làm cổng, không viết cổng thứ hai. Luật gác y hệt nhau
+// (`orders:manage` + cách ly cơ sở + cờ `billing.flexV1Enabled` của CƠ SỞ ĐƠN), và một bản
+// chép tay thứ hai của cùng một luật thì vá được một bản là chuyện thường — đúng bài học
+// `lib/payments/don-nhan-tien.ts` đã ghi sau khi ba nhánh tra đơn lệch nhau.
+//
+// ⚠️ Chính sách ưu đãi + trần % đọc từ THAM SỐ VẬN HÀNH của cơ sở đơn, rồi TRUYỀN VÀO. Đây
+// là chỗ luật `crm.commissionMaxTotalRate` áp: hàm thuần không có mặc định, nên quên truyền
+// là lỗi biên dịch chứ không phải một lượt tính theo số cũ.
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function chinhSachChoDon(orgUnitId: string | null) {
+  const [chinhSach, tranPhanTram] = await Promise.all([
+    docChinhSachUuDai(orgUnitId),
+    getSetting("orders.maxDiscountPercent", { orgUnitId }),
+  ]);
+  return { chinhSach, tranPhanTram };
+}
+
+/** Màn XEM TRƯỚC — chỉ đọc, không ghi một dòng nào (US-19 AC5). */
+export async function xemTruocThemConAction(input: {
+  orderId: string;
+  conMoi: {
+    itemName: string;
+    courseId: string;
+    quantity: number;
+    unitPrice: number;
+    giam?: { kieu: "SO_TIEN" | "PHAN_TRAM"; giaTri: number; lyDo?: string | null; loai?: string | null }[];
+  };
+}) {
+  const cong = await congDungHoc(input.orderId);
+  if (!cong.ok) return { ok: false as const, error: cong.error };
+
+  const cs = await chinhSachChoDon(cong.order.orgUnitId);
+  return xemTruocThemCon({
+    orderId: cong.order.id,
+    conMoi: {
+      ...input.conMoi,
+      giam: (input.conMoi.giam ?? []).map((k) => ({
+        kieu: k.kieu,
+        giaTri: k.giaTri,
+        lyDo: k.lyDo ?? null,
+        loai: docLoaiGiam(k.loai),
+      })),
+    },
+    ...cs,
+  });
+}
+
+export async function themConVaoDonAction(input: {
+  orderId: string;
+  conMoi: {
+    itemName: string;
+    courseId: string;
+    quantity: number;
+    unitPrice: number;
+    giam?: { kieu: "SO_TIEN" | "PHAN_TRAM"; giaTri: number; lyDo?: string | null; loai?: string | null }[];
+    studentId?: string | null;
+    enrollmentId?: string | null;
+  };
+  lyDo: string;
+}) {
+  const cong = await congDungHoc(input.orderId);
+  if (!cong.ok) return { ok: false as const, error: cong.error };
+
+  const cs = await chinhSachChoDon(cong.order.orgUnitId);
+  const kq = await themConVaoDon({
+    orderId: cong.order.id,
+    conMoi: {
+      ...input.conMoi,
+      giam: (input.conMoi.giam ?? []).map((k) => ({
+        kieu: k.kieu,
+        giaTri: k.giaTri,
+        lyDo: k.lyDo ?? null,
+        loai: docLoaiGiam(k.loai),
+      })),
+    },
+    lyDo: input.lyDo,
+    actor: cong.actor,
+    ...cs,
+  });
+  if (!kq.ok) return kq;
+
+  revalidatePath(`/orders/${input.orderId}`);
+  revalidatePath("/cong-no");
   return kq;
 }
