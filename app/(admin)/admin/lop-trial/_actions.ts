@@ -31,6 +31,16 @@ import {
   notifyTrialTeacherAssigned,
 } from "@/lib/trial/service";
 import { getSetting } from "@/lib/settings/service";
+import { layCauHinhKhung } from "@/lib/trial/khung-gio-db";
+import { vnWeekday, vnYmd } from "@/lib/time/vn";
+import {
+  khungChoNgay,
+  kiemCaseTrongLop,
+  kiemKhungLop,
+  TEN_THU,
+  THU_KHOA,
+  type CauHinhKhung,
+} from "@/lib/trial/khung-gio-mo-lop";
 import { getAuditActor } from "@/lib/audit/log";
 import {
   ghiTuongTacNhieuLead,
@@ -62,6 +72,31 @@ import type { ActionResult, Candidate } from "./_lib/types";
 const CHUA_DANG_NHAP = "Chưa đăng nhập" as const;
 const KHONG_THAY_LOP = "Không tìm thấy lớp trải nghiệm" as const;
 
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 2b) Danh sách giáo viên chọn được cho MỘT khung giờ (chốt 17/09/2026)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Giáo viên đang được gán ở BẤT KỲ buổi nào của lớp — luôn phải giữ trong ô chọn.
+ *
+ * Không có vế này thì người đã nghỉ việc (hoặc hôm nay không có ca) bị lọc mất khỏi
+ * `<select>` trong khi tên họ vẫn in ở thẻ bên cạnh, và lần lưu kế tiếp `<select>` âm
+ * thầm đổi sang người khác. Đó đúng là gốc của bug "gán từ trang Giáo viên nhưng Lớp
+ * học hiện trống" đã gặp hai lần.
+ */
+async function gvDangGanTrongLop(
+  actor: Actor,
+  trialClassId: string,
+): Promise<string[]> {
+  const rows = await scopedDb(actor).trialClassSession.findMany({
+    where: { trialClassId, teacherId: { not: null } },
+    select: { teacherId: true },
+    take: 200,
+  });
+  return rows.map((r) => r.teacherId).filter((id): id is string => Boolean(id));
+}
+
 /**
  * Ai được điểm danh / hoàn tất một buổi trải nghiệm.
  *
@@ -90,13 +125,11 @@ async function duocThaoTacBuoi(ses: {
  *
  * Giai đoạn chạy song song hai màn đã kết thúc ở GĐ6a: `/trial-classes` và `/trials`
  * nay chỉ là `redirect()`, làm mới chúng là làm mới một trang không có gì để làm mới.
- * Ba dòng đó đã gỡ đúng như chú thích cũ hứa.
  */
 function lamMoi(trialClassId?: string): void {
   revalidatePath("/lop-trial");
   if (trialClassId) revalidatePath(`/lop-trial/${trialClassId}`);
 }
-
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 2) Tạo lớp
@@ -107,8 +140,17 @@ export async function createLopTrialClassAction(
 ): Promise<ActionResult<{ id?: string }>> {
   const ctx = await requireActor();
   if (!ctx) return { ok: false, error: CHUA_DANG_NHAP };
-  if (!(await checkPermission("trials:manage"))) {
-    return { ok: false, error: "Không có quyền tạo lớp trải nghiệm" };
+  // 22/09/2026 — cổng ĐỔI từ `trials:manage` sang `trials:create-class`.
+  //
+  // Chủ dự án: "chỉ cho QL tạo và sale chỉ vào chọn lớp trial theo ngày đặt lịch và add
+  // học viên". Sale VẪN giữ `trials:manage` (họ cần nó để thêm case + xếp học viên), nên
+  // giữ cổng cũ ở đây là không chặn được ai — phải là khoá riêng.
+  if (!(await checkPermission("trials:create-class"))) {
+    return {
+      ok: false,
+      error:
+        "Chỉ Quản lý cơ sở hoặc Đào tạo mở được lớp trải nghiệm — bạn chọn lớp đã mở rồi thêm case",
+    };
   }
 
   const parsed = createClassSchema.safeParse(input);
@@ -121,14 +163,26 @@ export async function createLopTrialClassAction(
     return { ok: false, error: "Bạn không có quyền tạo lớp tại cơ sở này" };
   }
 
+  const ngay = ngayVnSangUtc(data.date);
+  if (!ngay) return { ok: false, error: "Ngày mở lớp không hợp lệ" };
+
+  const kiem = await kiemKhungLopTheoCauHinh({
+    ngay,
+    startTime: data.startTime,
+    endTime: data.endTime,
+  });
+  if (!kiem.ok) return { ok: false, error: kiem.loi };
+
   const res = await createTrialClass({
     centerId: data.centerId,
     courseId: data.courseId ?? null,
     // Tên do người dùng gõ; bỏ trống ⇒ server sinh theo quy ước (xem `createTrialClass`).
     name: data.name ?? null,
     configId: null,
-    // QĐ-R2-1 — lớp là slot tái sử dụng, KHÔNG gắn ngày khai giảng. Buổi tạo ad-hoc.
-    startDate: null,
+    // ĐẢO QĐ-R2-1: lớp nay CÓ ngày + khung giờ (xem `createClassSchema`).
+    startDate: ngay,
+    startTime: data.startTime,
+    endTime: data.endTime,
     actorId: ctx.session.user.id,
   });
   if (!res?.ok) return { ok: false, error: res?.error ?? "Tạo lớp thất bại" };
@@ -137,28 +191,32 @@ export async function createLopTrialClassAction(
   return { ok: true, id: res.trialClassId };
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 2b) Danh sách giáo viên chọn được cho MỘT khung giờ (chốt 17/09/2026)
-// ═══════════════════════════════════════════════════════════════════════════
-
 /**
- * Giáo viên đang được gán ở BẤT KỲ buổi nào của lớp — luôn phải giữ trong ô chọn.
+ * Cổng khung giờ dùng chung cho MỌI đường mở lớp: form một ngày, sinh theo thứ, và
+ * import Excel.
  *
- * Không có vế này thì người đã nghỉ việc (hoặc hôm nay không có ca) bị lọc mất khỏi
- * `<select>` trong khi tên họ vẫn in ở thẻ bên cạnh, và lần lưu kế tiếp `<select>` âm
- * thầm đổi sang người khác. Đó đúng là gốc của bug "gán từ trang Giáo viên nhưng Lớp
- * học hiện trống" đã gặp hai lần.
+ * Gom vào một hàm vì ba đường mà ba bản kiểm là ba chỗ để lệch — và đường dễ quên nhất
+ * (import Excel) lại là đường đẻ ra nhiều lớp nhất một lúc.
+ *
+ * KHÔNG `export`: tệp này mang `"use server"`, nên export ra là đẻ thêm một endpoint mà
+ * bảng cổng quyền phải khai. Đây là hàm nội bộ của chính tệp.
  */
-async function gvDangGanTrongLop(
-  actor: Actor,
-  trialClassId: string,
-): Promise<string[]> {
-  const rows = await scopedDb(actor).trialClassSession.findMany({
-    where: { trialClassId, teacherId: { not: null } },
-    select: { teacherId: true },
-    take: 200,
+async function kiemKhungLopTheoCauHinh(p: {
+  ngay: Date;
+  startTime: string;
+  endTime: string;
+}): Promise<{ ok: true } | { ok: false; loi: string }> {
+  const cauHinh = await layCauHinhKhung();
+  const khung = khungChoNgay(p.ngay, cauHinh);
+  if (!khung.ok) return { ok: false, loi: khung.loi };
+  const thu = TEN_THU[THU_KHOA[vnWeekday(p.ngay)]!];
+  const r = kiemKhungLop({
+    khungHopLe: khung.giaTri,
+    startTime: p.startTime,
+    endTime: p.endTime,
+    tenThu: thu ?? "Ngày này",
   });
-  return rows.map((r) => r.teacherId).filter((id): id is string => Boolean(id));
+  return r.ok ? { ok: true } : { ok: false, loi: r.loi };
 }
 
 /**
@@ -371,6 +429,35 @@ export async function addLopTrialSessionAction(
   // hàm đó đọc múi giờ tiến trình, Vercel chạy UTC còn máy dev +07 nên lệch một ngày.
   const date = ngayVnSangUtc(data.date);
   if (!date) return { ok: false, error: "Ngày buổi học không hợp lệ" };
+
+  // ── CỔNG KHUNG GIỜ (22/09/2026) ─────────────────────────────────────────────────────
+  // Chủ dự án: Sale "tạo case trial (chỉ chọn giờ trong khung giờ của qly tạo)".
+  //
+  // Gác ở SERVER chứ không chỉ giới hạn ô `<input type="time">` trên form: action này là
+  // endpoint riêng, ai cũng POST thẳng một khung giờ bất kỳ vào được — đúng bài học của
+  // cửa "Sale chỉ thêm học viên thuộc lead của mình" ngay dưới ("lọc ở ô TÌM là lọc
+  // TRANG TRÍ").
+  //
+  // Lớp CŨ (`startTime` null) KHÔNG bị chặn: khoá hồi tố là khoá cứng mọi lớp đang chạy dở.
+  const khungLop =
+    cls.startTime && cls.endTime
+      ? { startTime: cls.startTime, endTime: cls.endTime }
+      : null;
+  const trongKhung = kiemCaseTrongLop({
+    lop: khungLop,
+    startTime: data.startTime,
+    endTime: data.endTime,
+  });
+  if (!trongKhung.ok) return { ok: false, error: trongKhung.loi };
+
+  // Lớp CÓ ngày thì case phải đúng ngày đó. Cho lệch ngày là để một "lớp trial ngày
+  // 22/09" chứa case ngày 30/09 — Sale chọn lớp theo ngày, nên cái tên lớp sẽ nói dối.
+  if (cls.startDate && vnYmd(cls.startDate) !== data.date) {
+    return {
+      ok: false,
+      error: `Lớp này mở ngày ${vnYmd(cls.startDate)} — chọn lớp của ngày ${data.date} hoặc nhờ Quản lý cơ sở mở lớp cho ngày đó`,
+    };
+  }
 
   const res = await addTrialSession({
     trialClassId: data.trialClassId,

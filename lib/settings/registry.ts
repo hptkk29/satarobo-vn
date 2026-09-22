@@ -17,6 +17,13 @@ import { z } from "zod";
 // `chinh-sach-hoa-hong.ts` là file THUẦN (không Prisma, không DB) nên import được vào đây
 // mà không kéo theo gì.
 import { CHINH_SACH_MAC_DINH } from "@/lib/crm/chinh-sach-hoa-hong";
+import {
+  docKhungGio,
+  KHUNG_MAC_DINH,
+  TEN_THU,
+  THU_KHOA,
+  type ThuKhoa,
+} from "@/lib/trial/khung-gio-mo-lop";
 import { internalAwards } from "@/components/legacy-laptrinhrobot/_data/awards";
 import { gifts } from "@/components/legacy-laptrinhrobot/_data/gifts";
 import { commitments } from "@/components/legacy-laptrinhrobot/_data/commitments";
@@ -54,6 +61,48 @@ export interface SettingDef<T = unknown> {
 
 function def<T>(d: SettingDef<T>): SettingDef<T> {
   return d;
+}
+
+/**
+ * Bảy khoá `trial.khungGio.<thu>` — khung giờ mở lớp trải nghiệm của từng thứ.
+ *
+ * Sinh bằng vòng lặp chứ không gõ tay bảy khối: bảy khối gần giống nhau là bảy chỗ để
+ * lệch, và `TEN_THU`/`KHUNG_MAC_DINH` đã là nguồn duy nhất của tên thứ lẫn giá trị mặc
+ * định. Khoá khai TƯỜNG MINH ở kiểu trả về để `tsc` vẫn biết đủ bảy khoá.
+ */
+function khungGioTheoThu(): {
+  [K in ThuKhoa as `trial.khungGio.${K}`]: SettingDef<string>;
+} {
+  const ra = {} as Record<string, SettingDef<string>>;
+  for (const thu of THU_KHOA) {
+    ra[`trial.khungGio.${thu}`] = def<string>({
+      key: `trial.khungGio.${thu}`,
+      group: "teacher",
+      label:
+        `Khung giờ mở lớp trải nghiệm — ${TEN_THU[thu]} ` +
+        `(dạng "17:30-21:00", nhiều khung ngăn bằng dấu phẩy; để TRỐNG là ngày đó không mở)`,
+      schema: z
+        .string()
+        .trim()
+        .max(120)
+        .superRefine((chuoi, ctx) => {
+          const doc = docKhungGio(chuoi);
+          if (!doc.ok) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: doc.loi });
+          }
+        }),
+      default: KHUNG_MAC_DINH[thu],
+      // KHÔNG cho ghi đè theo cơ sở — cùng lý do đã ghi ở `trial.locGvTheoCaLamViec`:
+      // đây là LUẬT mở lớp, một cơ sở tự đặt khung riêng thì cùng một thao tác ra hai kết
+      // quả tuỳ người đang đứng ở đâu.
+      //
+      // Còn một lý do KỸ THUẬT quan trọng không kém: form tạo lớp dựng ô chọn khung ở
+      // CLIENT từ chính bảy khoá này. Cho ghi đè theo cơ sở là client bày một khung mà
+      // server sẽ từ chối ngay sau đó — ô chọn hứa một việc không làm được (luật 12).
+      centerOverridable: false,
+    });
+  }
+  return ra as { [K in ThuKhoa as `trial.khungGio.${K}`]: SettingDef<string> };
 }
 
 const hotlineSchema = z.array(
@@ -1025,6 +1074,21 @@ export const SETTINGS = {
     // ở đây mà không chọn được ở kia, không ai giải thích nổi.
     centerOverridable: false,
   }),
+  // ── KHUNG GIỜ MỞ LỚP TRẢI NGHIỆM, theo THỨ (chủ dự án 22/09/2026) ──────────────────────
+  //
+  // "Tạo lớp Trial theo ngày, thứ, và khung thời gian có GV đi làm (từ 17h30 - 21h từ t3-t6
+  // & sáng chiều ngày thứ 7, cn)" — và chủ dự án chọn để nó SỬA ĐƯỢC, không đóng cứng.
+  //
+  // ⚠️ BẢY KHOÁ CHUỖI, KHÔNG PHẢI MỘT KHOÁ JSON — có lý do, đừng "dọn" lại thành một:
+  // màn Cấu hình vận hành dựng ô nhập theo KIỂU GIÁ TRỊ (`settings-editor.tsx`: chuỗi ⇒ ô
+  // chữ), nên bảy khoá này hiện ra thành bảy ô gõ được ngay, không phải viết thêm editor.
+  // Gộp thành một khoá JSON là rơi vào đúng thứ repo đã ba lần từ chối ("bắt người vận hành
+  // gõ tay… gõ sai thì trông như đã khai mà không khớp ai").
+  //
+  // Bộ kiểm gọi THẲNG `docKhungGio` của `lib/trial/khung-gio-mo-lop` — một luật, một chỗ.
+  // An toàn về vòng import: `khung-gio-mo-lop` chỉ kéo `lib/time/vn` + `lib/trial/lop-moi`,
+  // và cả hai tệp đó KHÔNG import gì (đã đo), nên không chạm `lib/db` như cảnh báo ở trên.
+  ...khungGioTheoThu(),
   "lms.mediaSignedUrlTtl": def({
     key: "lms.mediaSignedUrlTtl",
     group: "lms",

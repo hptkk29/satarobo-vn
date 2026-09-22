@@ -127,7 +127,12 @@ export async function createTrialClass(params: {
    */
   name?: string | null;
   // FL-R2 (QĐ-R2-1): slot tái sử dụng — startDate tuỳ chọn (null = không gắn ngày cố định).
+  // ĐẢO 22/09/2026: đường tạo lớp của màn quản trị NAY LUÔN truyền ngày + khung giờ
+  // (xem `createClassSchema`). Giữ `null` được vì còn đường seed/test gọi không ngày.
   startDate?: Date | null;
+  /** Khung giờ LỚP mở (bao ngoài mọi case). `null` = lớp cũ, không chặn case theo khung. */
+  startTime?: string | null;
+  endTime?: string | null;
   configId?: string | null;
   actorId: string;
 }): Promise<{ ok: boolean; error?: string; trialClassId?: string }> {
@@ -166,9 +171,11 @@ export async function createTrialClass(params: {
           centerId: params.centerId,
           courseId: params.courseId ?? null,
           startDate: params.startDate ?? null,
-          // 28/08 — giờ/sĩ số/GV/phòng để null: chúng là thuộc tính của TỪNG BUỔI.
-          startTime: null,
-          endTime: null,
+          // 28/08 — sĩ số/GV/phòng để null: chúng là thuộc tính của TỪNG BUỔI.
+          // 22/09 — riêng GIỜ thì ĐẢO: lớp mang KHUNG BAO để Sale chọn chỗ hẹn khách, còn
+          // giờ cụ thể của từng case vẫn nằm ở `TrialClassSession`. Hai thứ khác nhau.
+          startTime: params.startTime ?? null,
+          endTime: params.endTime ?? null,
           capacity: null,
           teacherId: null,
           roomId: null,

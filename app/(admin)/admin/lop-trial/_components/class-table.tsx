@@ -62,6 +62,10 @@ export function ClassTable({
             <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="px-4 py-3 font-semibold">Lớp</th>
+                {/* 22/09/2026 — Sale chọn lớp THEO NGÀY hẹn khách, nên cột này đứng ngay
+                    sau tên lớp. Gộp ngày + khung giờ vào MỘT cột (hai dòng) thay vì hai
+                    cột: bảng đã 8 cột, tách nữa là đẩy mọi thứ ra ngoài màn điện thoại. */}
+                <th className="px-4 py-3 font-semibold">Ngày &amp; khung giờ</th>
                 <th className="px-4 py-3 font-semibold">Sale</th>
                 <th className="px-4 py-3 font-semibold">Học viên</th>
                 <th className="px-4 py-3 font-semibold">Buổi kế tiếp</th>
@@ -74,7 +78,7 @@ export function ClassTable({
               {rows.length === 0 && (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="px-4 py-8 text-center text-muted-foreground"
                   >
                     Chưa có lớp trải nghiệm nào.
@@ -95,6 +99,23 @@ export function ClassTable({
                       <div className="text-xs text-muted-foreground">
                         {r.code}
                       </div>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      {r.ngayMo ? (
+                        <>
+                          <div className="font-medium text-foreground">{ngayVN(r.ngayMo)}</div>
+                          {r.khungGio ? (
+                            <div className="text-xs text-muted-foreground">{r.khungGio}</div>
+                          ) : null}
+                        </>
+                      ) : (
+                        <span
+                          className="text-muted-foreground"
+                          title="Lớp tạo trước 22/09/2026 — khi đó lớp là slot dùng lại nhiều lần, không gắn ngày. Vẫn xếp học viên bình thường."
+                        >
+                          — lớp cũ
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       {r.sale ? (

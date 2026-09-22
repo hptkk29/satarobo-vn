@@ -23,6 +23,11 @@ export default async function LopTrialPage({
 
   const { status, q } = await searchParams;
   const canManage = await checkPermission("trials:manage");
+  // 22/09/2026 — MỞ LỚP là khoá RIÊNG: Sale có `trials:manage` (thêm case, xếp học viên)
+  // nhưng KHÔNG được mở lớp. Giấu nút theo đúng khoá mà trang `/lop-trial/moi` đang gác
+  // — giấu theo khoá khác là nút biến mất với người được phép, hoặc còn đó với người
+  // bấm vào sẽ bị đá ra (luật 12 — nút là một lời hứa).
+  const canCreate = await checkPermission("trials:create-class");
 
   const actor = await resolveActor(session.user.id);
   const rows = await layDanhSachLop(actor, status, q);
@@ -36,7 +41,7 @@ export default async function LopTrialPage({
           bỏ cột trên bảng có dữ liệu prod là việc của đợt drop riêng, luật cứng #4). */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <ClassFilterChips current={status} q={q} />
-        {canManage && (
+        {canCreate && (
           <Link
             href="/lop-trial/moi"
             className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-dark"

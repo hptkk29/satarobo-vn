@@ -32,6 +32,14 @@ export type ScopedClass = {
   teacherId: string | null;
   status: string;
   name: string;
+  /**
+   * NGÀY + KHUNG GIỜ lớp mở (22/09/2026). `null` với lớp tạo TRƯỚC ngày đó — chốt 28/08
+   * để ba cột này trống có chủ đích, nên `null` ở đây là "lớp cũ", không phải dữ liệu
+   * hỏng, và cổng khung giờ cố ý KHÔNG chặn lớp cũ.
+   */
+  startDate: Date | null;
+  startTime: string | null;
+  endTime: string | null;
 };
 
 /** Lấy lớp trải nghiệm trong tầm nhìn của actor. null = ngoài phạm vi hoặc không có. */
@@ -42,7 +50,18 @@ export async function loadScopedTrialClass(
   const sdb = scopedDb(actor);
   const row = await sdb.trialClassV2.findUnique({
     where: { id: trialClassId },
-    select: { id: true, centerId: true, teacherId: true, status: true, name: true },
+    // 22/09/2026 — thêm NGÀY + KHUNG GIỜ của lớp: cổng "case phải nằm trong khung lớp"
+    // đọc từ đây. Thiếu ba cột này thì cổng không có gì để so và im lặng cho qua.
+    select: {
+      id: true,
+      centerId: true,
+      teacherId: true,
+      status: true,
+      name: true,
+      startDate: true,
+      startTime: true,
+      endTime: true,
+    },
   });
   if (!row || !passesScope("TrialClassV2", row, actor)) return null;
   return row;

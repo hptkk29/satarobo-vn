@@ -390,6 +390,10 @@ export const ROLE_SEED: RoleSeed[] = [
       // KHÔNG kèm `trials:config` (cấu hình số buổi — màn khác, QLCS giữ theo QĐ-T3b)
       // và KHÔNG kèm `trials:feedback` (chấm phiếu nằm trọn ở site giáo viên).
       { action: "trials:manage", scopeType: "GLOBAL" },
+      // 22/09/2026 — MỞ LỚP trải nghiệm (chọn ngày + khung giờ). Tách khỏi
+      // `trials:manage` vì Sale bắt buộc phải giữ `trials:manage` để xếp học viên,
+      // nên không có cách nào chặn Sale tạo lớp nếu không tách khoá riêng.
+      { action: "trials:create-class", scopeType: "GLOBAL" },
       { action: "trials:attendance", scopeType: "GLOBAL" },
       { action: "trials:override-capacity", scopeType: "GLOBAL" },
       // 03/08 — checkin là self-action của mọi nhân viên; sót từ khi thêm TRAINING
@@ -550,6 +554,10 @@ export const ROLE_SEED: RoleSeed[] = [
       // ── Trải nghiệm · phụ huynh · media ──
       { action: "trials:view", scopeType: "GLOBAL" },
       { action: "trials:manage", scopeType: "GLOBAL" },
+      // 22/09/2026 — MỞ LỚP trải nghiệm (chọn ngày + khung giờ). Tách khỏi
+      // `trials:manage` vì Sale bắt buộc phải giữ `trials:manage` để xếp học viên,
+      // nên không có cách nào chặn Sale tạo lớp nếu không tách khoá riêng.
+      { action: "trials:create-class", scopeType: "GLOBAL" },
       // GĐ3 (25/08/2026) — `trials:assign-teacher` ĐÃ GỠ khỏi vai này, chuyển sang
       // Đào tạo theo chốt câu 2. Quản lý cơ sở vẫn giữ trials:manage/feedback/config
       // và vẫn override được sĩ số; chỉ riêng việc CHỐT giáo viên là của Đào tạo.

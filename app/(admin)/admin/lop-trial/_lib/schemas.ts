@@ -66,6 +66,20 @@ export const createClassSchema = z.object({
    * chuỗi 5.000 ký tự dán vào đây không bị gì chặn thì nó sẽ phá mọi màn đọc nó.
    */
   name: z.string().trim().min(1).max(120, "Tên lớp tối đa 120 ký tự").nullable().optional(),
+  /**
+   * NGÀY + KHUNG GIỜ của lớp — ĐẢO chốt 28/08 theo yêu cầu chủ dự án 22/09/2026
+   * ("Tạo lớp Trial theo ngày, thứ, và khung thời gian có GV đi làm").
+   *
+   * Chốt 28/08 đẩy giờ xuống TỪNG BUỔI và để ba cột này null ("lớp là slot tái sử dụng").
+   * Nay lớp mang lại ngày + khung, vì đó là thứ Sale nhìn vào để chọn chỗ hẹn khách.
+   * KHÔNG đảo phần giờ của BUỔI: lớp chỉ là KHUNG BAO, case vẫn có giờ riêng.
+   *
+   * BẮT BUỘC với lớp mới (không `.optional()`): lớp không ngày thì Sale không chọn
+   * được "lớp trial ngày 22/09" như yêu cầu, và cổng khung giờ không có gì để so.
+   */
+  date: z.string().regex(YMD, "Chọn ngày mở lớp"),
+  startTime: z.string().regex(HHMM, "Giờ bắt đầu không hợp lệ"),
+  endTime: z.string().regex(HHMM, "Giờ kết thúc không hợp lệ"),
 });
 
 export const addSessionSchema = z

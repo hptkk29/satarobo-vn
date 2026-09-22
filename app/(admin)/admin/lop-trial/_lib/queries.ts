@@ -97,6 +97,10 @@ export async function layDanhSachLop(
       startTime: r.startTime,
       endTime: r.endTime,
       hocVien: r.enrollments.map((e) => e.leadChild?.fullName ?? "(không rõ tên)"),
+      // `startDate` là `@db.Date` ⇒ đọc ra UTC 00:00 của ngày VN; `toISOString().slice(0,10)`
+      // lấy đúng ngày đó. Đừng đổi sang `toLocaleDateString` — hàm đó đọc múi giờ tiến trình.
+      ngayMo: r.startDate ? r.startDate.toISOString().slice(0, 10) : null,
+      khungGio: r.startTime && r.endTime ? `${r.startTime}–${r.endTime}` : null,
       sale: suySaleCuaLop({
         tenNguoiTao: r.createdById ? (tenTheoId.get(r.createdById) ?? null) : null,
         saleTheoCon: r.enrollments.map((e) => e.leadChild?.lead?.assignedTo?.name ?? null),

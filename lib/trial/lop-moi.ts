@@ -55,7 +55,7 @@ export function tenLopTrial(
 export type KhungGio = { startTime: string; endTime: string };
 
 /** "HH:MM" → phút. `null` nếu không đúng định dạng. */
-function phut(hhmm: string): number | null {
+export function phutTuHhmm(hhmm: string): number | null {
   const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm ?? "");
   if (!m) return null;
   const h = Number(m[1]);
@@ -75,10 +75,10 @@ function phut(hhmm: string): number | null {
  * quả đúng của dữ liệu hỏng là "không đánh dấu được", không phải "cả form chết".
  */
 export function trungKhungGio(a: KhungGio, b: KhungGio): boolean {
-  const a1 = phut(a.startTime);
-  const a2 = phut(a.endTime);
-  const b1 = phut(b.startTime);
-  const b2 = phut(b.endTime);
+  const a1 = phutTuHhmm(a.startTime);
+  const a2 = phutTuHhmm(a.endTime);
+  const b1 = phutTuHhmm(b.startTime);
+  const b2 = phutTuHhmm(b.endTime);
   if (a1 === null || a2 === null || b1 === null || b2 === null) return false;
   return a1 < b2 && b1 < a2;
 }
