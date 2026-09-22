@@ -358,7 +358,7 @@ export default async function HocCuPage() {
               href="/lien-he?subject=tu-van-hoc-cu"
               className="inline-flex items-center gap-2 bg-purple-700 text-white font-bold px-6 py-3 rounded-xl hover:bg-purple-800 transition-colors shadow-lg"
             >
-              Tư vấn bộ học cụ hoặc đặt mua học cụ
+              Tư vấn chọn bộ học cụ
               <ArrowRight className="w-5 h-5" />
             </Link>
           </div>
