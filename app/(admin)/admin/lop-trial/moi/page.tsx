@@ -10,6 +10,7 @@ import { layCauHinhKhung } from "@/lib/trial/khung-gio-db";
 import { vnTodayUtc } from "@/lib/trial/service";
 import { vnYmd } from "@/lib/time/vn";
 import { CreateForm } from "../_components/create-form";
+import { BulkForm } from "../_components/bulk-form";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +61,25 @@ export default async function TaoLopTrialPage() {
         cauHinhKhung={cauHinhKhung}
         homNay={homNay}
       />
+
+      <div className="space-y-2 pt-2">
+        <h3 className="text-base font-semibold text-foreground">Hoặc mở lớp cho cả kỳ</h3>
+        <p className="text-sm text-muted-foreground">
+          Chọn khoảng ngày và các thứ — hệ thống mở lớp cho mọi ngày khớp, theo đúng khung
+          giờ đã cấu hình của từng thứ. Dùng khi xếp lịch đầu tháng.
+        </p>
+        <BulkForm
+          centers={centers}
+          courses={courses}
+          coSoMacDinh={
+            (session.user.centerId && centers.some((c) => c.id === session.user.centerId)
+              ? session.user.centerId
+              : centers[0]?.id) ?? ""
+          }
+          cauHinhKhung={cauHinhKhung}
+          homNay={homNay}
+        />
+      </div>
     </div>
   );
 }
