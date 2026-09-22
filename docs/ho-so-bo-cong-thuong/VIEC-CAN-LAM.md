@@ -7,6 +7,11 @@
 > **82 việc còn sống: 29 CHẶN HỒ SƠ · 36 CẦN SỬA · 17 NÊN SỬA.**
 > (65 từ 7 chiều rà soát + 17 do critic bổ sung.)
 
+> 
+> 📋 **Checklist nghiệm thu trên `test.satarobo.vn`:**
+> [`CHECKLIST-NGHIEM-THU.md`](CHECKLIST-NGHIEM-THU.md) — viết cho người nghiệm thu, không
+> cho người viết mã: mỗi dòng ghi "mở ở đâu" + "phải thấy gì", có ô tích và ô ghi chú.
+
 ## Quyết định của Ban lãnh đạo — 22/09/2026 (Hồ Đắc Phúc), ĐÃ THỰC HIỆN
 
 | # | Quyết định | Đã làm |
@@ -27,6 +32,32 @@
 **Nghiệm thu sau khi áp quyết định:** typecheck sạch · lint 0 error · build xanh (200/200)
 · `pnpm test:unit` **8425 xanh / 0 đỏ** · **R7 shard 1/2 = 185 xanh, shard 2/2 = 184 xanh, 0 đỏ**
 (bắt buộc vì QĐ #5 chạm `lib/finance/**`; chạy TUẦN TỰ trên hai DB `satarobo_test` + `ci_test`).
+
+**ĐO LẠI sau khi rebase lên `origin/test`** (nhánh đi trước 277 commit, trong đó có F4 đổi
+khoá/đổi lớp cũng chạm `lib/finance/**`) — số cũ ở trên là số của nền CŨ, giữ lại để đối chiếu:
+typecheck sạch · lint 0 error · build xanh · `pnpm test:unit` **10.829 xanh / 17 expected fail**
+· **R7 shard 1/2 = 195 xanh, shard 2/2 = 187 xanh, 0 đỏ** (mỗi shard một DB riêng, chạy tuần tự).
+
+⚠️ **Lượt chạy shard 2/2 ĐẦU ra 186 xanh / 1 đỏ, và ca đỏ đó KHÔNG phải hồi quy — ghi lại
+cách phân biệt:** `[#08-T1]` ném `40P01 deadlock detected` ngay tại `TRUNCATE … CASCADE`
+trong `resetDb()` (`tests/e2e/_helpers/seed.ts:94`), tức chết ở FIXTURE chứ không ở phép
+khẳng định nào. Hai phép đo tách nó khỏi "mã hỏng":
+· chạy RIÊNG đúng spec đó → **3/3 xanh**;
+· chạy LẠI cả shard → **187 xanh / 0 đỏ**, cùng commit, cùng database.
+Một `TRUNCATE` chỉ deadlock khi có client THỨ HAI giữ khoá trên cùng DB — máy này có 8
+worktree song song. Bài học: **đọc CHỖ ném lỗi trước khi đọc tên ca**; lỗi ở fixture nói về
+môi trường, lỗi ở `expect` mới nói về mã.
+
+⚠️ **Một ca ĐỎ CHẬP CHỜN của nhánh `test`, KHÔNG phải của đợt này — đã đo:**
+`lib/lead/ownership.test.ts` (và 4 tệp cùng họ) là **lưới quét mã nguồn**: chúng đi hết cây
+`app/` + `lib/` + `scripts/` rồi `readFileSync` từng tệp, trong một ca có trần **5 giây**.
+· Chạy MỘT MÌNH: 15 ca xanh, **2,51 s** — tức đã ăn hết một nửa trần khi máy rảnh.
+· Chạy trong cả bộ: đỏ vì **timeout**, và **tập ca đỏ đổi mỗi lượt** (lượt 1: 7 ca ở 5 tệp;
+  lượt 2: 2 ca; lượt 3: 1 ca) — dấu hiệu của tranh CPU, không phải hồi quy.
+· Đợt này góp thêm **13 tệp** vào cây bị quét (2.125 → 2.138, +0,6%). Phần trăm đó không tạo
+  ra lỗi, nhưng nó **thu hẹp một khoảng dư vốn đã mỏng**.
+· Vá đúng không phải nâng trần (nâng trần là vá triệu chứng): 5 tệp ấy đọc lại **cùng một
+  cây tệp 5 lần**. Gom thành một lượt đọc dùng chung là việc riêng, ghi vào nợ.
 
 **Hai bẫy lộ ra khi kiểm bằng HTTP thật, đã vá:**
 
@@ -49,7 +80,7 @@ tay. Đây là **một dự án riêng** cần lập kế hoạch, không nằm 
 | 2 | 11 trang chính sách (8 mới + 2 viết lại + trang mục lục `/chinh-sach`) + sitemap sinh từ registry | ✅ XONG |
 | 3 | 3 chân trang + dải link ở cổng phụ huynh & nhóm auth + gỡ nhãn "Trụ sở chính" ở 8 nơi công khai | ✅ XONG |
 | 4 | Ô tích đồng ý Chính sách bảo mật × 4 biểu mẫu + cổng server | ✅ XONG |
-| 5 | Công khai giá 2 thẻ khoá học · ẩn 9 trang Sata + 3 bộ học cụ · sửa FAQ | ✅ XONG |
+| 5 | Công khai giá **mọi** khoá (2 thẻ + 9 trang chi tiết — QĐ #11 đảo lượt ẩn) · ẩn 3 bộ học cụ · sửa FAQ | ✅ XONG |
 | 6 | Dọn mâu thuẫn còn lại (email chết, mốc thời gian, JSON-LD, cookie banner, Apps Script) | ✅ XONG (trừ nhóm D) |
 | 4b | Ô tích "Chính sách hoạt động" — xác nhận một lần lưu DB ở cổng phụ huynh | ✅ XONG (chờ chạy migration trên prod) |
 
@@ -76,6 +107,10 @@ quyết định nghiệp vụ, không phải việc sửa mã.
 `tran ngang 0/23`. Tương phản 119 chỗ — **thấp hơn** mốc ~121 mà chính spec ghi là cố ý giữ,
 tức không phát sinh hồi quy màu.
 
+**[CẬP NHẬT 22/09] Luật R7 ĐÃ bị kích hoạt** bởi QĐ #5 (`lib/finance/hoa-don/phap-nhan.ts`) —
+đã chạy, số ở mục quyết định trên. Câu dưới là kết luận của đợt 4b lúc CHƯA có QĐ #5, giữ lại
+vì phép đo của nó vẫn đúng cho phạm vi đó:
+
 **Luật R7 KHÔNG bị kích hoạt** — đo bằng đường dẫn: 0 file thuộc `lib/payments/**`,
 `lib/finance/**`, `app/api/public/webhook/**`; migration mới không nhắc
 `Payment`/`Order`/`BankTransaction`. Đợt này chặn TRUY CẬP trang học phí, không đụng phép
@@ -87,7 +122,7 @@ tính tiền nào.
 |---|---|---|
 | `/khoa-hoc` | 200 | thẻ in giá bằng SỐ, 0 chuỗi "Liên hệ tư vấn" |
 | `/khoa-hoc/laptrinhrobot` · `/luyenthirobosim` | 200 | xác nhận route `(legacy)` KHÔNG bị layout ẩn chạm |
-| `/khoa-hoc/sata1` · `/combo-luyen-thi` | **404** | đã ẩn |
+| `/khoa-hoc/sata1` · `/combo-luyen-thi` | 200 | **QĐ #11 đảo lượt ẩn** — nay công khai, có in học phí |
 | `/hoc-cu` | **404** | đã ẩn |
 | `/chinh-sach` | 200 | mục lục 10 chính sách |
 
