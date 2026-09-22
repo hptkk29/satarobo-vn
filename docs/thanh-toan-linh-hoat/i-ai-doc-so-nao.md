@@ -73,6 +73,8 @@ Hình dạng này **giống hệt** bug tiền thật đã đo ngày 13/09 (`Pay
 3.000.000đ mà `computeDueNow` in QR cả 5.000.000đ học phí) — lần đó nguyên nhân là điều kiện
 "kế hoạch còn hiệu lực" bị đảo, và đã vá. Lần này nguyên nhân khác: **đọc sai bảng**.
 
+> ⛔ **ĐỪNG VÁ TỪ ĐÂY — phiên khác đang làm** (chủ dự án chốt 22/09/2026). Xem đợt I-2.
+
 **Chưa kết luận là đang gây thiệt hại**, vì sale được hướng dẫn xuất QR **từ phiếu thu**
 (đường số 5 ở bảng trên, đọc đúng sổ) chứ không từ khối QR của trang đơn. Đo xem khối QR trang
 đơn có còn được dùng không là **việc của người vận hành**, không suy từ mã được.
@@ -129,9 +131,18 @@ của lượt tra đơn — hôm nay nó không select cột đó).
   **và** có dòng `LeadStatusLedger source="payment"`. Kèm **đối chứng dương/âm**: lead ở trạng
   thái khác KHÔNG bị đụng.
 
-### Đợt I-2 · Quyết định SỐ PHẬN của khối QR ở trang đơn  ⟵ **quyết định nghiệp vụ, không phải kỹ thuật**
+### Đợt I-2 · Khối QR ở trang đơn — ⛔ **ĐANG CÓ PHIÊN KHÁC LÀM, ĐỪNG ĐỤNG**
 
-Hai lựa chọn, và phải chọn một chứ không để cả hai cùng sống:
+> **Chủ dự án 22/09/2026:** *"chỗ QR thì phiên khác đang fix, bỏ qua đi kẻo bị conflict."*
+>
+> ⇒ **KHÔNG sửa `lib/payments/due-now.ts`, `app/(admin)/admin/orders/[id]/page.tsx`, hay bất
+> cứ đường nào tính số tiền in lên mã QR** từ tài liệu này. Phần đo bên dưới giữ lại để người
+> làm phiên đó có sẵn con số, KHÔNG phải để ai khác đi vá.
+
+Lỗ đã đo (mục 2): đơn đi luồng linh hoạt có `order.installments` rỗng ⇒ `computeDueNow` rơi về
+nhánh "còn thiếu của cả đơn" ⇒ QR trang đơn in toàn bộ số nợ thay vì đợt vừa hẹn.
+
+Hai hướng đã cân nhắc, **để lại cho phiên đang làm quyết định**:
 
 **(a) GỠ khối QR khỏi trang đơn**, để mã QR chỉ phát từ phiếu thu. Đơn giản nhất, đúng hướng
 đi của PHIÊN C, và xoá hẳn lỗ số một. Cái giá: đơn **chưa có phiếu thu nào** thì không còn chỗ
@@ -141,8 +152,10 @@ nào phát QR — phải kiểm xem ca đó có thật không.
 Giữ được cả hai đường, nhưng đẻ ra một hàm phải hiểu **ba** bảng, và mọi bản vá sau này phải
 sửa đúng cả ba — đúng hình dạng đã sinh ra bug 13/09.
 
-> **Cần chủ dự án chốt.** Đây là *"mã QR ở trang đơn có còn dùng không"*, và câu trả lời nằm ở
-> chỗ sale đang bấm gì, không nằm trong mã nguồn.
+⚠️ **Hệ quả cho đợt I-3 bên dưới:** điều kiện mở của nó có nhắc "I-2 đã xong". Nay đọc là
+*"phiên QR đã merge"*, và phải **đo lại mục 1 của tài liệu này** sau khi phiên ấy vào `test` —
+bảng "ai đọc sổ nào" có thể đã đổi, và một bảng đo cũ dùng làm căn cứ cho đợt sau là đúng thứ
+luật 12 (CLAUDE.md) cấm.
 
 ### Đợt I-3 · Cutover đường ĐỌC công nợ  ⟵ **to nhất, làm sau cùng**
 
