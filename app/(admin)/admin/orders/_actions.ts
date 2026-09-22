@@ -53,6 +53,7 @@ import {
 import { taoPhieuGop, huyPhieuGop, dongPhieuGop } from "@/lib/finance/phieu-gop";
 import { dungHocMotCon, xemTruocDungHoc } from "@/lib/finance/dung-hoc-con";
 import { themConVaoDon, xemTruocThemCon } from "@/lib/finance/them-con-vao-don";
+import { doiKhoaChoCon, xemTruocDoiKhoa } from "@/lib/finance/doi-khoa-db";
 import { docChinhSachUuDai } from "@/lib/finance/uu-dai-setting";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { soatGiaDon } from "@/lib/orders/price-guard";
@@ -2320,5 +2321,84 @@ export async function themConVaoDonAction(input: {
 
   revalidatePath(`/orders/${input.orderId}`);
   revalidatePath("/cong-no");
+  return kq;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// F4 · US-20 — ĐỔI KHOÁ / ĐỔI LỚP CHO MỘT CON
+//
+// ⚠️ Dùng LẠI `congDungHoc` làm cổng (orders:manage + cách ly cơ sở + cờ thu linh hoạt của
+// CƠ SỞ ĐƠN), như đường dừng học và đường thêm con. Đây đúng là họ thao tác ấy: nó dừng một
+// dòng, tạo một dòng, và chuyển tiền giữa hai dòng.
+//
+// ⚠️ Nhưng gác THÊM một quyền nữa: `enrollments:transfer`. Thao tác này CHUYỂN GHI DANH sang
+// lớp khác — đúng việc mà `transferEnrollment` gác bằng quyền ấy. Bỏ vế này là mở một cửa
+// sau: ai có `orders:manage` mà KHÔNG có `enrollments:transfer` vẫn chuyển được lớp, chỉ cần
+// đi vòng qua màn đơn hàng.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function xemTruocDoiKhoaAction(input: {
+  orderId: string;
+  orderItemId: string;
+  targetClassId: string;
+  buoiCuoiId?: string | null;
+  unitPriceMoi: number;
+}) {
+  const cong = await congDungHoc(input.orderId);
+  if (!cong.ok) return { ok: false as const, error: cong.error };
+  if (!(await checkPermission("enrollments:transfer"))) {
+    return { ok: false as const, error: "Không có quyền chuyển lớp" };
+  }
+
+  const tranPhanTram = await getSetting("orders.maxDiscountPercent", {
+    orgUnitId: cong.order.orgUnitId,
+  });
+  return xemTruocDoiKhoa({
+    orderId: cong.order.id,
+    orderItemId: input.orderItemId,
+    targetClassId: input.targetClassId,
+    buoiCuoiId: input.buoiCuoiId ?? null,
+    unitPriceMoi: input.unitPriceMoi,
+    tranPhanTram,
+  });
+}
+
+export async function doiKhoaChoConAction(input: {
+  orderId: string;
+  orderItemId: string;
+  targetClassId: string;
+  buoiCuoiId?: string | null;
+  unitPriceMoi: number;
+  hanDotConThieu?: string | null;
+  lyDo: string;
+  ghiChu?: string | null;
+}) {
+  const cong = await congDungHoc(input.orderId);
+  if (!cong.ok) return { ok: false as const, error: cong.error };
+  if (!(await checkPermission("enrollments:transfer"))) {
+    return { ok: false as const, error: "Không có quyền chuyển lớp" };
+  }
+
+  const tranPhanTram = await getSetting("orders.maxDiscountPercent", {
+    orgUnitId: cong.order.orgUnitId,
+  });
+  const kq = await doiKhoaChoCon({
+    orderId: cong.order.id,
+    orderItemId: input.orderItemId,
+    targetClassId: input.targetClassId,
+    buoiCuoiId: input.buoiCuoiId ?? null,
+    unitPriceMoi: input.unitPriceMoi,
+    hanDotConThieu: input.hanDotConThieu ? new Date(input.hanDotConThieu) : null,
+    lyDo: input.lyDo,
+    ghiChu: input.ghiChu ?? null,
+    tranPhanTram,
+    actor: cong.actor,
+  });
+  if (!kq.ok) return kq;
+
+  revalidatePath(`/orders/${input.orderId}`);
+  revalidatePath("/cong-no");
+  revalidatePath("/hoan-tien");
+  revalidatePath("/enrollments");
   return kq;
 }

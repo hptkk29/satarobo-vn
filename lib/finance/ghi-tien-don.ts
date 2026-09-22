@@ -83,7 +83,33 @@ export async function taoDotChoCon(input: {
   centerId: string | null;
   actor: AuditActor;
 }): Promise<KetQuaGhi<{ paymentRequestId: string; installmentNo: number }>> {
-  return ghiTienChoDon(input.orderId, async (tx, so) => {
+  return ghiTienChoDon(input.orderId, (tx, so) => taoDotChoConTrongTx(tx, so, input));
+}
+
+/**
+ * Thân của `taoDotChoCon`, chạy TRONG transaction của người gọi. [Tách ở F4 · 22/09/2026]
+ *
+ * ⚠️ Cùng lý do với `dungHocTrongTx` và `chuyenLopTrongTx`: F4 ("đổi khoá") phải tạo đợt cho
+ * phần còn thiếu của khoá mới trong CÙNG transaction đã dừng dòng cũ và chuyển tiền —
+ * `ghiTienChoDon` không lồng được. Chép lại cổng tạo đợt sang chỗ thứ hai là hai bản luật
+ * tiền song song.
+ *
+ * ⚠️ `so` phải là ảnh chụp ĐỌC SAU khi dòng mới đã tồn tại: cổng `kiemTaoDot` lấy còn-nợ của
+ * con và của đơn TỪ ẢNH CHỤP.
+ */
+export async function taoDotChoConTrongTx(
+  tx: Tx,
+  so: NoTheoConKetQua,
+  input: {
+    orderId: string;
+    orderItemId: string;
+    soTien: number;
+    dueDate: Date | null;
+    centerId: string | null;
+    actor: AuditActor;
+  },
+): Promise<KetQuaGhi<{ paymentRequestId: string; installmentNo: number }>> {
+  {
     const con = so.con.find((c) => c.orderItemId === input.orderItemId);
     if (!con) return { ok: false as const, error: "Dòng hàng không thuộc đơn này" };
 
@@ -138,7 +164,7 @@ export async function taoDotChoCon(input: {
     });
 
     return { ok: true as const, paymentRequestId: phieu.id, installmentNo: soDot };
-  });
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
