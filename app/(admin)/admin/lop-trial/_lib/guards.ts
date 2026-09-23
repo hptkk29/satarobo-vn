@@ -40,6 +40,8 @@ export type ScopedClass = {
   startDate: Date | null;
   startTime: string | null;
   endTime: string | null;
+  /** 23/09 — lớp theo khung hay lớp cũ (lib/trial/nghia-null.ts). KHÔNG đoán từ giờ. */
+  theoKhung: boolean;
 };
 
 /** Lấy lớp trải nghiệm trong tầm nhìn của actor. null = ngoài phạm vi hoặc không có. */
@@ -61,6 +63,7 @@ export async function loadScopedTrialClass(
       startDate: true,
       startTime: true,
       endTime: true,
+      theoKhung: true,
     },
   });
   if (!row || !passesScope("TrialClassV2", row, actor)) return null;

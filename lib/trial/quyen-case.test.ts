@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { quyenSuaCase, quyenGoHocVien, quyenXoaCase } from "./quyen-case";
+import { quyenSuaCase, quyenGoHocVien, quyenXoaCase, quyenDoiGioCase, quyenChuyenCase } from "./quyen-case";
 
 const SALE_1 = "user-sale-1";
 const SALE_2 = "user-sale-2";
@@ -144,5 +144,43 @@ describe("[QC-04] xoá case — cổng THỨ HAI cho học viên của người 
     });
     const s = quyenSuaCase({ nguoiTaoId: SALE_2, userId: SALE_1, laQuanLy: false });
     expect(r).toEqual(s);
+  });
+});
+
+describe("[QC-05] dời giờ case — cổng khách của người khác", () => {
+  const suaDuoc = { duoc: true } as const;
+
+  it("case của mình, không có khách người khác ⇒ dời được", () => {
+    expect(quyenDoiGioCase({ sua: suaDuoc, soHocVienNguoiKhac: 0 }).duoc).toBe(true);
+  });
+
+  it("[QC-05b] case của mình NHƯNG giữ khách Sale khác ⇒ KHÔNG dời giờ được", () => {
+    // Cửa chuyển case và cửa huỷ case đã chặn đúng việc này; để cửa sửa mở là để chủ case
+    // đổi giờ hẹn của khách người khác qua một lối vòng.
+    const r = quyenDoiGioCase({ sua: suaDuoc, soHocVienNguoiKhac: 1 });
+    expect(r.duoc).toBe(false);
+    if (r.duoc) throw new Error("phải từ chối");
+    expect(r.lyDo).toContain("1 học viên của Sale khác");
+    // Nói rõ vế CÒN làm được — không để người dùng tưởng cả form bị khoá.
+    expect(r.lyDo).toContain("phòng / giáo viên");
+  });
+
+  it("không sửa được case ⇒ trả NGUYÊN lý do của quyenSuaCase, không đẻ câu thứ hai", () => {
+    const sua = quyenSuaCase({ nguoiTaoId: SALE_2, userId: SALE_1, laQuanLy: false });
+    expect(quyenDoiGioCase({ sua, soHocVienNguoiKhac: 3 })).toEqual(sua);
+  });
+});
+
+describe("[QC-06] chuyển case — cùng luật với gỡ, KHÁC câu chữ", () => {
+  it("chủ lead chuyển được, Sale khác thì không", () => {
+    expect(quyenChuyenCase({ lead: leadCuaSale2, userId: SALE_2, laQuanLy: false }).duoc).toBe(true);
+    expect(quyenChuyenCase({ lead: leadCuaSale2, userId: SALE_1, laQuanLy: false }).duoc).toBe(false);
+  });
+  it("[QC-06b] câu lý do nói về CHUYỂN, không mượn câu \"gắn thêm được\" của nút gỡ", () => {
+    const r = quyenChuyenCase({ lead: leadCuaSale2, userId: SALE_1, laQuanLy: false, tenSale: "Trần Thị B" });
+    if (r.duoc) throw new Error("phải từ chối");
+    expect(r.lyDo).toContain("Chuyển case");
+    expect(r.lyDo).toContain("Trần Thị B");
+    expect(r.lyDo).not.toContain("gắn thêm");
   });
 });

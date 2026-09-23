@@ -263,6 +263,42 @@ export async function layLeadTrongLopTrial(trialClassId: string): Promise<string
 }
 
 /**
+ * Lead có bé TRONG MỘT CASE — dùng cho việc ở cấp CASE (đổi giờ case, huỷ case).
+ *
+ * 23/09/2026 — tách khỏi `layLeadTrongLopTrial`: một lớp trải nghiệm nay chứa nhiều case
+ * của nhiều Sale, nên ghi "đổi lịch" của MỘT case vào hồ sơ của CẢ LỚP là báo giờ mới
+ * cho phụ huynh ở case khác. "Bé trong case" theo đúng `thuocCase` của
+ * `lib/trial/nghia-null.ts`: ở lớp CŨ, bé NULL học cả lớp nên cũng thuộc case này.
+ *
+ * `lopTheoKhung` KHÔNG có mặc định (luật 7): mặc định sai về phía nào cũng là ghi lịch
+ * sử nhầm người mà không ai thấy.
+ */
+export async function layLeadTrongCaseTrial(opts: {
+  sessionId: string;
+  trialClassId: string;
+  lopTheoKhung: boolean;
+}): Promise<string[]> {
+  try {
+    const ds = await db.trialEnrollment.findMany({
+      where: {
+        status: "ACTIVE",
+        OR: [
+          { scheduledSessionId: opts.sessionId },
+          ...(opts.lopTheoKhung
+            ? []
+            : [{ scheduledSessionId: null, trialClassId: opts.trialClassId }]),
+        ],
+      },
+      select: { leadChild: { select: { leadId: true } } },
+    });
+    return [...new Set(ds.map((e) => e.leadChild?.leadId).filter((x): x is string => !!x))];
+  } catch (e) {
+    console.error("[lich-su-tuong-tac] khong doc duoc lead cua case trial", opts.sessionId, e);
+    return [];
+  }
+}
+
+/**
  * Ghi CÙNG MỘT dòng cho nhiều lead — dùng cho việc ở cấp LỚP (huỷ lớp, đổi lịch, huỷ buổi).
  *
  * Một lớp chứa con của nhiều lead, và huỷ lớp thì TẤT CẢ những lead đó đều bị ảnh hưởng.

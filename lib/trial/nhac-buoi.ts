@@ -28,6 +28,7 @@ import { db } from "@/lib/db";
 import { notifyStaff, notifyStaffChiTiet } from "@/lib/notifications/notify";
 import { vnYmd } from "@/lib/time/vn";
 import { layNguoiDaoTao } from "@/lib/trial/notify-training";
+import { LOP_CU_WHERE } from "@/lib/trial/nghia-null";
 import {
   chonMoc,
   mocBatDau,
@@ -126,8 +127,15 @@ export async function chayNhacTrial({ now }: { now: Date }): Promise<KetQuaNhacT
         OR: [
           // (a) xếp riêng đúng buổi này (ghi danh đã dời lịch).
           { scheduledSessionId: s.id },
-          // (b) học CẢ LỚP — đường mặc định của mọi lượt xếp chỗ từ 28/08.
-          { scheduledSessionId: null, trialClassId: s.trialClassId },
+          // (b) học CẢ LỚP — đường mặc định của mọi lượt xếp chỗ từ 28/08, NHƯNG chỉ ở
+          //     lớp slot CŨ. 23/09/2026: ở lớp theo khung, NULL là "chưa xếp case"
+          //     (`lib/trial/nghia-null.ts`); đếm bé đó vào MỌI case là Sale nhận N chuông
+          //     với N giờ khác nhau cho cùng một bé, và case không có ai vẫn nhắc GV.
+          {
+            scheduledSessionId: null,
+            trialClassId: s.trialClassId,
+            trialClass: LOP_CU_WHERE,
+          },
         ],
       },
       select: {

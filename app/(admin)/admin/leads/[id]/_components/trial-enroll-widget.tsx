@@ -22,8 +22,21 @@ type Child = {
   currentTrial: {
     classId: string;
     className: string;
-    /** Buổi đang được xếp riêng. `null` = học TOÀN BỘ buổi của lớp (mặc định từ 28/08). */
-    session?: { seq: number; date: string; startTime: string; endTime: string } | null;
+    /** Lớp theo khung (mô hình case) — quyết định nghĩa của `session = null` bên dưới. */
+    theoKhung: boolean;
+    /**
+     * Buổi/case đang được xếp riêng. `null` nghĩa là GÌ tuỳ loại lớp
+     * (`lib/trial/nghia-null.ts`): lớp cũ = học TOÀN BỘ buổi (chốt 28/08); lớp theo
+     * khung = CHƯA XẾP CASE.
+     */
+    session?: {
+      seq: number;
+      date: string;
+      startTime: string;
+      endTime: string;
+      /** Case/buổi đã HUỶ — không phải lịch hẹn còn hiệu lực (bé "chưa xếp case"). */
+      daHuy?: boolean;
+    } | null;
   } | null;
 };
 type TrialClass = {
@@ -33,9 +46,11 @@ type TrialClass = {
   /** `null` = KHÔNG giới hạn sĩ số (từ 28/08) — hiện "n" thay vì "n/cap". */
   capacity: number | null;
   used: number;
+  /** Lớp theo khung (mô hình case, từ 22/09/2026) hay lớp slot cũ. */
+  theoKhung: boolean;
   /**
-   * ĐÃ THÔI DÙNG để chọn buổi (28/08 — xếp con là học CẢ LỚP). Giữ lại vì trang lead
-   * vẫn truyền xuống và số buổi là thông tin người dùng muốn thấy trước khi chọn lớp.
+   * Các buổi SCHEDULED. Lớp cũ: chỉ để hiển thị (xếp con là học CẢ LỚP, chốt 28/08).
+   * Lớp theo khung: đây là các CASE — BẮT BUỘC chọn một khi xếp (23/09/2026).
    */
   sessions: TrialSession[];
 };
@@ -73,6 +88,9 @@ export function TrialEnrollWidget({
       children.filter((c) => c.currentTrial).map((c) => [c.id, c.currentTrial!.classId]),
     ),
   );
+  // Case đã chọn theo từng con — chỉ dùng khi lớp đã chọn là lớp THEO KHUNG.
+  const [pickedCase, setPickedCase] = useState<Record<string, string>>({});
+  const lopTheoId = new Map(openClasses.map((cl) => [cl.id, cl]));
 
   function enroll(childId: string, allowOverride: boolean) {
     const trialClassId = picked[childId];
@@ -80,14 +98,24 @@ export function TrialEnrollWidget({
       toast.error("Chọn lớp trải nghiệm trước");
       return;
     }
+    // ~~KHÔNG gửi `sessionId`: xếp con vào lớp là con học TOÀN BỘ buổi của lớp đó (chốt
+    // 28/08).~~ **[ĐẢO 23/09/2026 cho lớp THEO KHUNG]** Một lớp theo khung chứa nhiều
+    // case song song của nhiều Sale; "học toàn bộ buổi" ở đó nghĩa là dự cả case của
+    // người khác. Không gửi case thì bé rơi vào khối "Chưa xếp case" — đo được 23/09:
+    // ô này là nguồn sinh bé "chưa xếp" MỚI mỗi ngày, trong khi banner của chính nó
+    // vẫn in "học toàn bộ buổi của lớp". Lớp CŨ giữ nguyên hành vi 28/08.
+    const lop = lopTheoId.get(trialClassId);
+    const sessionId = lop?.theoKhung ? (pickedCase[childId] ?? "") : "";
+    if (lop?.theoKhung && !sessionId) {
+      toast.error("Lớp này chia theo case — chọn case (giờ) cho bé trước");
+      return;
+    }
     startTransition(async () => {
-      // KHÔNG gửi `sessionId`: xếp con vào lớp là con học TOÀN BỘ buổi của lớp đó
-      // (chốt 28/08). Chọn riêng một buổi vẫn làm được, nhưng ở màn chi tiết lớp —
-      // đó là thao tác của người xếp lịch, không phải của người vừa nhận khách.
       const res = await enrollLeadChildLopTrialAction({
         trialClassId,
         leadChildId: childId,
         allowOverride,
+        ...(sessionId ? { sessionId } : {}),
       });
       if (res.ok) {
         toast.success("Đã xếp con vào lớp trải nghiệm");
@@ -138,9 +166,36 @@ export function TrialEnrollWidget({
                       <span className="font-normal text-muted-foreground">
                         {" "}
                         ·{" "}
-                        {c.currentTrial.session
-                          ? `xếp riêng ${fmtSession(c.currentTrial.session)}`
-                          : "học toàn bộ buổi của lớp"}
+                        {/* 23/09 — case ĐÃ HUỶ không phải lịch hẹn: in nó như "xếp riêng
+                            Buổi 3 · 15:30" là bảo Sale báo phụ huynh một giờ không còn diễn
+                            ra (đo được). Hai ca "chưa có case" kèm LINK sang màn lớp — câu
+                            bảo "mở màn lớp" mà không có đường đi thì người dùng phải tự tìm. */}
+                        {c.currentTrial.session?.daHuy ? (
+                          <>
+                            case {c.currentTrial.session.startTime}–{c.currentTrial.session.endTime} đã
+                            huỷ — chưa xếp case ·{" "}
+                            <a
+                              href={`/lop-trial/${c.currentTrial.classId}`}
+                              className="font-semibold text-primary underline"
+                            >
+                              mở màn lớp để xếp lại
+                            </a>
+                          </>
+                        ) : c.currentTrial.session ? (
+                          `xếp riêng ${fmtSession(c.currentTrial.session)}`
+                        ) : c.currentTrial.theoKhung ? (
+                          <>
+                            chưa xếp case ·{" "}
+                            <a
+                              href={`/lop-trial/${c.currentTrial.classId}`}
+                              className="font-semibold text-primary underline"
+                            >
+                              mở màn lớp để xếp
+                            </a>
+                          </>
+                        ) : (
+                          "học toàn bộ buổi của lớp"
+                        )}
                       </span>
                     </span>
                   ) : (
@@ -178,10 +233,64 @@ export function TrialEnrollWidget({
                       </option>
                     ))}
                   </select>
+                  {(() => {
+                    const lop = picked[c.id] ? lopTheoId.get(picked[c.id]!) : undefined;
+                    if (!lop?.theoKhung) return null;
+                    // 23/09 — bé ĐÃ Ở chính lớp này: đổi case là việc của màn lớp (có luật chuyển
+                    // case + báo giáo viên). Bày ô case + nút "Sửa lớp" ở đây là hứa suông —
+                    // server luôn trả "đang ở lớp trải nghiệm khác" vì bé đã có ghi danh ACTIVE.
+                    if (c.currentTrial?.classId === lop.id) {
+                      return (
+                        <a
+                          href={`/lop-trial/${lop.id}`}
+                          className="text-xs font-semibold text-primary underline"
+                        >
+                          Mở màn lớp để xếp / đổi case
+                        </a>
+                      );
+                    }
+                    if (lop.sessions.length === 0) {
+                      return (
+                        <span role="note" className="text-xs text-state-warning-ink">
+                          Lớp chưa có case nào —{" "}
+                          <a href={`/lop-trial/${lop.id}`} className="font-semibold underline">
+                            mở lớp để thêm case
+                          </a>
+                        </span>
+                      );
+                    }
+                    return (
+                      <select
+                        value={pickedCase[c.id] ?? ""}
+                        onChange={(e) =>
+                          setPickedCase((p) => ({ ...p, [c.id]: e.target.value }))
+                        }
+                        disabled={pending}
+                        aria-label={`Chọn case cho ${c.fullName}`}
+                        className="min-w-[9rem] rounded-md border border-border px-2 py-1.5 text-sm disabled:opacity-50"
+                      >
+                        <option value="">— chọn case —</option>
+                        {lop.sessions.map((se) => (
+                          <option key={se.id} value={se.id}>
+                            {se.startTime}–{se.endTime}
+                          </option>
+                        ))}
+                      </select>
+                    );
+                  })()}
                   <button
                     type="button"
                     onClick={() => enroll(c.id, false)}
-                    disabled={pending || !picked[c.id]}
+                    disabled={
+                      pending ||
+                      !picked[c.id] ||
+                      Boolean(lopTheoId.get(picked[c.id] ?? "")?.theoKhung && !pickedCase[c.id]) ||
+                      // Cùng lớp theo khung ⇒ đổi case ở màn lớp (link bên cạnh), không ở đây.
+                      Boolean(
+                        lopTheoId.get(picked[c.id] ?? "")?.theoKhung &&
+                          c.currentTrial?.classId === picked[c.id],
+                      )
+                    }
                     className="rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-dark disabled:opacity-50"
                   >
                     {daXep ? "Sửa lớp" : "Xếp vào lớp"}

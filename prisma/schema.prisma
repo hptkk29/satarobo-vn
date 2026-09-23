@@ -7152,6 +7152,12 @@ model TrialClassV2 {
   endTime      String?
   /// `null` = KHÔNG giới hạn sĩ số (mặc định từ 28/08). `isOverCapacity` hiểu null là
   /// không bao giờ vượt — đừng "vá" bằng cách coi null là 0.
+  /// 23/09/2026 — lop THEO KHUNG (mo hinh case: mot ngay x mot khung, nhieu case song
+  /// song cua nhieu Sale) hay lop slot CU. Quyet dinh nghia cua
+  /// `TrialEnrollment.scheduledSessionId = NULL`: theo khung = "chua xep case", cu = "hoc
+  /// ca lop" (xem lib/trial/nghia-null.ts). KHONG suy tu startTime/endTime: lop truoc
+  /// 28/08 van mang gio o cap lop. Chi `createTrialClass` ghi true (du ngay + khung).
+  theoKhung    Boolean             @default(false)
   capacity     Int?
   teacherId    String?
   /// Khoá trải nghiệm của lớp (= "khoá quan tâm" của khách). Cột TRẦN, không FK —

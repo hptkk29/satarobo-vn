@@ -204,8 +204,26 @@ export async function getSaleTrialRoster(
       a.date.getTime() - b.date.getTime() || a.startTime.localeCompare(b.startTime),
   );
 
+  // 23/09 — bé trỏ vào case ĐÃ HUỶ cũng là "chưa gắn buổi" (lib/trial/nghia-null.ts).
+  // Trước đây bé đó biến khỏi CẢ slot (buổi huỷ bị lọc) LẪN nhóm chưa gắn (vì có id).
+  const idGhim = [
+    ...new Set(allEnrollments.map((e) => e.scheduledSessionId).filter((x): x is string => !!x)),
+  ];
+  const idHuy = new Set(
+    (idGhim.length
+      ? await sdb.trialClassSession.findMany({
+          where: { id: { in: idGhim }, status: "CANCELLED" },
+          select: { id: true },
+        })
+      : []
+    ).map((x) => x.id),
+  );
   const unassigned = allEnrollments
-    .filter((e) => !e.scheduledSessionId && e.status !== "WITHDRAWN")
+    .filter(
+      (e) =>
+        (!e.scheduledSessionId || idHuy.has(e.scheduledSessionId)) &&
+        e.status !== "WITHDRAWN",
+    )
     .map((e) => ({ ...toStudent(e), trialClassName: e.className }));
 
   return { slots, unassigned };

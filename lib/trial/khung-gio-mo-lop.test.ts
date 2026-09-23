@@ -11,7 +11,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { vnWeekday } from "@/lib/time/vn";
-import {
+import { kiemCaseThuocLop,
   docKhungGio,
   goiYQuyTac,
   keKhung,
@@ -345,5 +345,51 @@ describe("[KGM-09] bộ tuỳ chọn gợi ý dựng từ cấu hình", () => {
     // Bản đầu của ca này kỳ vọng `[2, 3, 5]` — tôi đếm nhầm, mã đúng.
     const r = goiYQuyTac({ ...KHUNG_MAC_DINH, t4: "bậy" });
     expect(r[0]!.thu).toEqual([2, 4, 5]);
+  });
+});
+
+describe("[KGM-10] case thuộc lớp — khung + NGÀY, dùng chung cho cửa THÊM và cửa SỬA", () => {
+  // Lớp A của ví dụ chủ dự án: T4 23/09/2026, khung 17:30–21:00.
+  const LOP = {
+    theoKhung: true,
+    startDate: new Date("2026-09-23T00:00:00.000Z"), // @db.Date = nửa đêm UTC của ngày VN
+    startTime: "17:30",
+    endTime: "21:00",
+  };
+  const LOP_CU = { theoKhung: false, startDate: null, startTime: null, endTime: null };
+  /** Lớp tạo TRƯỚC 28/08: vẫn mang ngày + giờ cấp lớp, nhưng KHÔNG phải lớp theo khung. */
+  const LOP_TRUOC_2808 = {
+    theoKhung: false,
+    startDate: new Date("2026-08-11T00:00:00.000Z"),
+    startTime: "14:00",
+    endTime: "19:00",
+  };
+
+  it("đúng ngày, trong khung ⇒ nhận", () => {
+    expect(kiemCaseThuocLop(LOP, { date: "2026-09-23", startTime: "18:00", endTime: "19:00" }).ok).toBe(true);
+  });
+
+  it("[KGM-10b] ngoài khung ⇒ từ chối — đúng ca đo được ở cửa SỬA (22:00)", () => {
+    const r = kiemCaseThuocLop(LOP, { date: "2026-09-23", startTime: "22:00", endTime: "23:00" });
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("phải từ chối");
+    expect(r.error).toContain("17:30–21:00");
+  });
+
+  it("[KGM-10c] đúng giờ nhưng SAI NGÀY ⇒ từ chối, câu lỗi nêu ngày của lớp", () => {
+    const r = kiemCaseThuocLop(LOP, { date: "2026-09-30", startTime: "18:00", endTime: "19:00" });
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("phải từ chối");
+    expect(r.error).toContain("2026-09-23");
+  });
+
+  it("lớp CŨ (không ngày, không khung) ⇒ không chặn hồi tố", () => {
+    expect(kiemCaseThuocLop(LOP_CU, { date: "2026-12-01", startTime: "06:00", endTime: "23:00" }).ok).toBe(true);
+  });
+
+  it("[KGM-10d] lớp tạo TRƯỚC 28/08 (vẫn mang giờ cấp lớp) ⇒ KHÔNG chặn", () => {
+    // Buổi 2 của lớp này ngày 18/08, lúc 08:30 — ngoài "khung" 14:00–19:00 và khác
+    // ngày 11/08. Gác theo giờ cấp lớp là khoá cứng cả việc đổi giáo viên của buổi đó.
+    expect(kiemCaseThuocLop(LOP_TRUOC_2808, { date: "2026-08-18", startTime: "08:30", endTime: "10:00" }).ok).toBe(true);
   });
 });

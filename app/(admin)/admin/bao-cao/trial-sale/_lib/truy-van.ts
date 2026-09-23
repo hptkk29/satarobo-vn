@@ -97,10 +97,14 @@ export async function layCaseTrial(actor: Actor, loc: BoLoc): Promise<KetQua> {
   const buoi = idBuoi.length
     ? await sdb.trialClassSession.findMany({
         where: { id: { in: idBuoi } },
-        select: { id: true, teacherId: true },
+        select: { id: true, teacherId: true, status: true },
       })
     : [];
-  const gvTheoBuoi = new Map(buoi.map((b) => [b.id, b.teacherId]));
+  // Case ĐÃ HUỶ không dạy ai — bé trỏ vào đó là "chưa xếp case" (lib/trial/nghia-null.ts),
+  // nên cột giáo viên phải về "chưa xếp" chứ không in người của buổi không diễn ra.
+  const gvTheoBuoi = new Map(
+    buoi.filter((b) => b.status !== "CANCELLED").map((b) => [b.id, b.teacherId]),
+  );
   const idGv = [
     ...new Set(
       cat
