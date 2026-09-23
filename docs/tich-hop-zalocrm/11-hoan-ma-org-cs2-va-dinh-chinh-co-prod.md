@@ -300,7 +300,7 @@ thì để rỗng — không ảnh hưởng gì tới CS2.
 | webhook fork → prod | ✅ `POST /api/webhooks/zalocrm/prod-cs2` → **200** |
 | cron prod → fork | ✅ `zalocrm-doi-soat` nạp được tin |
 | 7 tài khoản UAT trong org dữ liệu thật | ✅ đã tắt (mục 2b) |
-| mục 5b — phép kiểm SSO | ⏳ chờ người đăng nhập |
+| mục 5b — phép kiểm SSO | ✅ **ĐẠT** — xem dưới |
 
 **Cách khai (dùng lại được):** giá trị đi **thẳng từ DB fork qua ống** vào `vercel env add`
 — `json_object_agg` dựng JSON ngay trong Postgres — nên không giá trị nào qua màn hình hay
@@ -333,4 +333,48 @@ Và mã thoát của kịch bản rình là `0` ở **cả hai** nhánh (thấy 
 không phân biệt được — đúng cảnh báo *"đừng tin mã thoát, đòi dòng THẬT"*.
 
 ⇒ **Muốn biết prod có gọi fork không thì đọc `vercel logs`, đừng đọc log fork.**
+
+### ✅ Mục 5b — ĐẠT, 23/09 lúc 17:20
+
+Ảnh chụp **trước** (17:01): `prod-cs1` 0 tài khoản · `prod-cs2` 8 · `test-cs1` 2 · `test-cs2` 1.
+Chủ dự án đăng nhập `admin.satarobo.vn/zalo-crm`, đổi qua lại hai cơ sở. **Sau:**
+
+```
+prod-cs1 | Hoàng Phan Tuấn Kiệt | admin | cmrd3q46700029xkdr2m3py9q | 17:20:20
+prod-cs2 | Hoàng Phan Tuấn Kiệt | admin | cmrd3q46700029xkdr2m3py9q | 17:20:49
+```
+
+**Ba điều kiện ĐẠT cả ba:**
+
+1. **Cùng một `external_id`, hai org khác nhau** — đúng khuôn runbook đòi.
+2. **Tiền tố `cmrd3q4` là thế hệ HOÀN TOÀN MỚI** trong fork — không phải `cmtcd2` (test),
+   không phải `cmtorab` (máy dev). Đó là `User.id` của **production**, lần đầu xuất hiện.
+3. 🔴 **`test-cs1` vẫn 2 · `test-cs2` vẫn 1 — không tăng dòng nào.** Vé do prod ký KHÔNG
+   rơi vào org của test. **`NỢ-8` ĐÓNG.**
+
+Thêm một điều chứng minh được: **đổi ô chọn cơ sở thì vé đi theo** — hai tài khoản sinh ra
+ở hai org đúng, cách nhau 29 giây, khớp đúng thứ tự người dùng bấm.
+
+### ⚠️ Tiêu đề khung nhúng BỊ CŨ — đo được, không còn là nghi ngờ
+
+Ảnh màn hình lúc đó: ô chọn cơ sở = **CS1**, tiêu đề khung = **"Sata Robo - PROD (CS2)"**,
+danh sách = **0 hội thoại**.
+
+Phép đo giải quyết dứt điểm:
+
+| | |
+|---|---|
+| vai của tài khoản mới | `admin` |
+| `getOwnerScope` với `admin` | `canViewAll: true` (`backend/src/modules/rbac/owner-scope.ts:42`) |
+| hội thoại trong `prod-cs2` | **205** |
+| hội thoại trong `prod-cs1` | **0** |
+| màn hình hiện | **0** |
+
+Admin thấy mọi hội thoại trong org của mình ⇒ nếu phiên nằm ở `prod-cs2` thì màn phải hiện
+205. Nó hiện 0 ⇒ **phiên đang ở `prod-cs1`, ĐÚNG cơ sở đã chọn. Chỉ DÒNG TIÊU ĐỀ là cũ.**
+
+⇒ **Đây là vi phạm luật 12 (affordance phải nói thật)**, dù chỉ ở một nhãn: một cái nhãn sai
+trên màn đang hiển thị hội thoại khách hàng là thứ khiến người làm việc hai cơ sở tin nhầm
+mình đang đứng ở đâu. Dữ liệu thì đúng, nhãn thì không — và nhãn suông không ném lỗi, không
+làm ca test nào đỏ. **Việc còn nợ ở phía fork**, chưa lên lịch.
 
