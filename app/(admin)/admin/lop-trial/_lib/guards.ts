@@ -85,6 +85,8 @@ export type ScopedSession = {
   roomId: string | null;
   teacherId: string | null;
   status: "SCHEDULED" | "COMPLETED" | "CANCELLED";
+  /** 23/09 — ai TAO case nay. `null` = buoi truoc 23/09/2026 (cot khong backfill). */
+  createdById: string | null;
 };
 
 /**
@@ -108,6 +110,9 @@ export async function loadScopedTrialSession(
       roomId: true,
       teacherId: true,
       status: true,
+      // 23/09 — dau vao cua `quyenSuaCase`. Thieu cot nay thi cong sua/xoa case khong
+      // co gi de tua vao va se cho qua tat ca.
+      createdById: true,
       trialClass: { select: { centerId: true, teacherId: true } },
     },
   });
@@ -125,6 +130,7 @@ export async function loadScopedTrialSession(
     roomId: ses.roomId,
     teacherId: ses.teacherId,
     status: ses.status,
+    createdById: ses.createdById,
   };
 }
 

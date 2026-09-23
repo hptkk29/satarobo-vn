@@ -9,11 +9,9 @@ import { getAssignableTeachers } from "@/lib/teachers/assignable";
 import { getSetting } from "@/lib/settings/service";
 import { layChiTietLop, layPhongTheoCoSo } from "../_lib/queries";
 import { quyRaCheDo } from "../_lib/che-do-gv";
-import { AddSessionForm } from "../_components/add-session-form";
-import { EnrollPanel } from "../_components/enroll-panel";
-import { RosterList } from "../_components/roster-list";
-import { AttendanceBoard } from "../_components/attendance-board";
+import { BangCase } from "../_components/bang-case";
 import { CancelClassButton } from "../_components/cancel-class-button";
+import { vnYmd } from "@/lib/time/vn";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +39,22 @@ export default async function ChiTietLopTrialPage({
 
   const { id } = await params;
   const actor = await resolveActor(session.user.id);
-  const cls = await layChiTietLop(actor, id);
+
+  // ⚠️ Hai câu hỏi quyền này phải hỏi TRƯỚC khi nạp chi tiết lớp: `layChiTietLop` quy
+  // chúng ra `quyenSua`/`quyenXoa`/`quyenGo` của từng dòng. Hỏi KÈM cơ sở thì phải biết
+  // cơ sở, mà cơ sở nằm trong chính bản ghi lớp — nên vòng đầu hỏi KHÔNG kèm cơ sở và
+  // vòng sau (dưới) hỏi lại kèm cơ sở để gác đúng. Ở đây chỉ dùng cho HIỂN THỊ; cửa GHI
+  // tự hỏi lại kèm `centerId` trong `_actions.ts`, nên một lượt hỏi rộng ở đây không nới
+  // quyền thật của ai.
+  const [quanLyLopSoBo, quanLyLeadSoBo] = await Promise.all([
+    checkPermission("trials:create-class"),
+    checkPermission("leads:view-all"),
+  ]);
+  const cls = await layChiTietLop(actor, id, {
+    userId: session.user.id,
+    laQuanLyLop: quanLyLopSoBo,
+    laQuanLyLead: quanLyLeadSoBo,
+  });
   // layChiTietLop đã lọc theo scopedDb → ngoài cơ sở là 404, không phải "cấm truy cập".
   if (!cls) notFound();
 
@@ -60,7 +73,18 @@ export default async function ChiTietLopTrialPage({
   // ⚠️ Phạm vi cơ sở của tầng giữa lấy từ `cls.centerId` (một lớp ⇒ đúng một cơ sở),
   // KHÔNG lấy `actor.visibleCenterIds`: chỉ cần MỘT dòng `UserOrgRole` neo tại Hội sở là
   // tập đó nở thành "mọi cơ sở" và câu "cơ sở mình nắm" mất nghĩa — im lặng, không lỗi.
-  const [isManager, canAttendance, gvToanHe, gvTheoCoSo, locGvTheoCa, gvMienLoc] =
+  const [
+    isManager,
+    canAttendance,
+    gvToanHe,
+    gvTheoCoSo,
+    locGvTheoCa,
+    gvMienLoc,
+    // 23/09 — khoá MỞ LỚP nay cũng là khoá ĐÓNG LỚP. Trước hôm nay nút huỷ lớp hiện
+    // với mọi người có `trials:manage`, tức mọi Sale — và bấm vào là đẩy TOÀN BỘ ghi
+    // danh của mọi Sale trong lớp sang CANCELLED.
+    canHuyLop,
+  ] =
     await Promise.all([
       checkPermission("trials:manage", { centerId: cls.centerId }),
       checkPermission("trials:attendance", { centerId: cls.centerId }),
@@ -70,6 +94,7 @@ export default async function ChiTietLopTrialPage({
       // /admin/cau-hinh-van-hanh ăn trong ≤5 PHÚT, không tức thì.
       getSetting("trial.locGvTheoCaLamViec"),
       getSetting("trial.gvMienLocTheoCa"),
+      checkPermission("trials:create-class", { centerId: cls.centerId }),
     ]);
   const cheDoChonGv = quyRaCheDo({ toanHe: gvToanHe, theoCoSo: gvTheoCoSo });
   // GĐ4 — điểm danh là việc của Sale phụ trách khách (`trials:attendance`), tách khỏi
@@ -134,6 +159,14 @@ export default async function ChiTietLopTrialPage({
   const full = cls.capacity !== null && activeUsed >= cls.capacity;
   const daKetThuc = cls.status === "COMPLETED" || cls.status === "CANCELLED";
 
+  // Khung giờ + ngày của LỚP — ràng buộc mà mọi case bên trong phải nằm trọn trong đó.
+  // `null` với lớp tạo trước 22/09/2026; đường đọc phải chịu được null và KHÔNG bịa.
+  const khungLop =
+    cls.startTime && cls.endTime
+      ? { startTime: cls.startTime, endTime: cls.endTime }
+      : null;
+  const ngayLop = cls.startDate ? vnYmd(cls.startDate) : null;
+
   // 27/08 — khối "Phiếu đánh giá buổi học" (hệ SESSION_EVAL) ĐÃ GỠ khỏi màn này.
   //
   // Nó là CỬA THỨ HAI cho cùng một việc, và là cửa sai: giáo viên thật sự chấm bằng
@@ -145,8 +178,12 @@ export default async function ChiTietLopTrialPage({
   // Component `TrialSessionEvalFill` KHÔNG xoá — site giáo viên còn dùng
   // (`lib/lms/teacher-schedule.ts`).
 
+  // Trần 1600px cho cả màn: khung admin KHÔNG có trần bề ngang nào (đo
+  // `app/(admin)/admin/layout.tsx`), nên trên màn siêu rộng bảng kéo hết cỡ và mắt phải
+  // quét cả mét để ghép tên bé ở cột đầu với nút ở cột cuối. Đặt ở ĐÂY chứ không sửa
+  // layout chung — đổi layout là đổi mọi màn admin cùng lúc, cần một lượt rà riêng.
   return (
-    <div className="space-y-5">
+    <div className="mx-auto w-full max-w-[1600px] space-y-5">
       <Link
         href="/lop-trial"
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
@@ -168,93 +205,77 @@ export default async function ChiTietLopTrialPage({
             </span>
           </div>
           <p className="mt-1 font-mono text-xs text-muted-foreground">{cls.code}</p>
-          {/* 28/08 — KHÔNG in giờ ở đây nữa: giờ là thuộc tính của TỪNG BUỔI, mỗi
-              buổi có thể khác nhau. In một khung giờ cấp lớp là nói sai về lớp. */}
-          <p className="mt-1 text-sm text-muted-foreground">
-            Sĩ số{" "}
-            <span className={full ? "font-semibold text-red-600" : "font-semibold"}>
-              {activeUsed}
-              {cls.capacity === null ? "" : `/${cls.capacity}`}
-            </span>{" "}
-            · {cls.sessions.length} buổi
+          {/* ~~28/08 — KHÔNG in giờ ở đây nữa: giờ là thuộc tính của TỪNG BUỔI.~~
+              **[ĐẢO 22/09/2026]** Lớp nay LÀ một ngày × một khung giờ do Quản lý cơ sở
+              mở, và mọi case bên trong phải nằm trong khung đó. Không in ra thì người
+              dùng không biết mình đang bị ràng buộc bởi cái gì. Lớp CŨ (`startTime`
+              null) thì không in — đừng bịa một khung cho nó. */}
+          <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-muted-foreground">
+            {khungLop && (
+              <span className="whitespace-nowrap font-semibold text-foreground tabular-nums">
+                {ngayLop ? `${ngayLop} · ` : ""}
+                {khungLop.startTime}–{khungLop.endTime}
+              </span>
+            )}
+            <span className="whitespace-nowrap">
+              Sĩ số{" "}
+              <span
+                className={
+                  full ? "font-semibold text-state-danger-ink" : "font-semibold text-foreground"
+                }
+              >
+                {activeUsed}
+                {cls.capacity === null ? "" : `/${cls.capacity}`}
+              </span>
+            </span>
+            <span className="whitespace-nowrap">· {cls.sessions.length} case</span>
           </p>
         </div>
-        {isManager && !daKetThuc && <CancelClassButton trialClassId={cls.id} />}
+        {/* 23/09 — cổng đổi từ `trials:manage` sang `trials:create-class`. Nút này
+            từng hiện với MỌI Sale, và bấm vào là đẩy toàn bộ ghi danh của mọi Sale
+            trong lớp sang CANCELLED. Cửa GHI cũng đã đổi theo (`_actions.ts`) — khoá
+            nút mà không khoá action là khoá cái cửa đang mở toang. */}
+        {canHuyLop && !daKetThuc && <CancelClassButton trialClassId={cls.id} />}
       </div>
 
       {full && (
-        <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+        <p className="rounded-lg border border-state-warning-soft bg-state-warning-soft px-3 py-2 text-sm text-state-warning-ink">
           Lớp đã đủ sĩ số. Xếp thêm học viên cần quyền vượt sĩ số.
         </p>
       )}
 
-      {/* 28/08 — GỠ khối "Giáo viên phụ trách" ở CẤP LỚP.
-          Giáo viên nay chọn khi THÊM BUỔI: một lớp trải nghiệm là slot tái sử dụng,
-          hai buổi khác ngày hoàn toàn có thể do hai người dạy. Giữ một ô GV cấp lớp
-          bên cạnh ô GV cấp buổi là hai nguồn sự thật cho cùng một câu hỏi "ai dạy". */}
+      {/* 23/09/2026 — BA KHỐI CŨ ("Thêm buổi học" · "Học viên" · "Buổi học & điểm danh")
+          gộp làm một. Hình cũ giấu mất đúng quan hệ người dùng cần đọc: CASE NÀO CÓ AI.
+          Danh sách học viên là danh sách PHẲNG cấp lớp, còn buổi là một khối riêng, nên
+          muốn biết bé nào ở case nào thì phải bấm từng chip buổi rồi đọc lại bảng.
 
-      {isManager && (
-        <section className="rounded-xl border border-border bg-card p-4">
-          <h3 className="mb-3 text-sm font-semibold text-foreground">Thêm buổi học</h3>
-          <AddSessionForm
-            trialClassId={cls.id}
-            teachers={teacherOptions}
-            rooms={roomOptions}
-            defaultStartTime={cls.startTime ?? "18:00"}
-            defaultEndTime={cls.endTime ?? "19:30"}
-            cheDoChonGv={cheDoChonGv}
-            locGvTheoCa={locGvTheoCa}
-            soGvMienLoc={gvMienLoc.length}
-          />
-        </section>
-      )}
-
-      {cls.sessions.length === 0 && (
-        <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          Lớp chưa có buổi nào. Phải thêm buổi trước, vì chưa có buổi thì không xếp được
-          học viên và giáo viên cũng không thấy gì để điểm danh.
-        </p>
-      )}
-
-      <section className="rounded-xl border border-border bg-card p-4">
-        <h3 className="mb-3 text-sm font-semibold text-foreground">Học viên</h3>
-        <EnrollPanel
-          trialClassId={cls.id}
-          canManage={isManager}
-          canOverride={await checkPermission("trials:override-capacity", {
-            centerId: cls.centerId,
-          })}
-          full={full}
-          // Trần số buổi học thử đọc ở cấp GLOBAL — khớp NGUYÊN chỗ server action
-          // kiểm (lop-trial/_actions.ts). Ô nhập chặn khác server là đẩy người dùng
-          // vào cảnh gõ hợp lệ ở client rồi bị từ chối ở server.
-          maxSessions={await getSetting("crm.trialMaxSessions")}
-        />
-        <div className="mt-3">
-          <RosterList
-            trialClassId={cls.id}
-            enrollments={cls.enrollments}
-            canManage={isManager}
-          />
-        </div>
-      </section>
-
-      <section className="rounded-xl border border-border bg-card p-4">
-        <h3 className="mb-3 text-sm font-semibold text-foreground">Buổi học &amp; điểm danh</h3>
-        <AttendanceBoard
-          trialClassId={cls.id}
-          sessions={cls.sessions}
-          enrollments={cls.enrollments}
-          canMark={canDiemDanh}
-          canManage={isManager}
-          teachers={teacherOptions}
-          rooms={roomOptions}
-          cheDoChonGv={cheDoChonGv}
-          locGvTheoCa={locGvTheoCa}
-          soGvMienLoc={gvMienLoc.length}
-        />
-      </section>
-
+          `RosterList` không còn được màn này dùng — nó vẽ đúng cái danh sách phẳng đó.
+          Component vẫn ở lại repo, chưa xoá: gỡ một component khỏi một màn KHÁC với xoá
+          nó khỏi repo, và việc thứ hai cần một lượt rà riêng. */}
+      <BangCase
+        trialClassId={cls.id}
+        khungLop={khungLop}
+        ngayLop={ngayLop}
+        sessions={cls.sessions}
+        enrollments={cls.enrollments}
+        teachers={teacherOptions}
+        rooms={roomOptions}
+        meId={session.user.id}
+        canMark={canDiemDanh}
+        canManage={isManager}
+        canThemCase={isManager}
+        canOverride={await checkPermission("trials:override-capacity", {
+          centerId: cls.centerId,
+        })}
+        full={full}
+        // Trần số buổi học thử đọc ở cấp GLOBAL — khớp NGUYÊN chỗ server action kiểm
+        // (`lop-trial/_actions.ts`). Ô nhập chặn khác server là đẩy người dùng vào cảnh
+        // gõ hợp lệ ở client rồi bị từ chối ở server.
+        maxSessions={await getSetting("crm.trialMaxSessions")}
+        cheDoChonGv={cheDoChonGv}
+        locGvTheoCa={locGvTheoCa}
+        soGvMienLoc={gvMienLoc.length}
+      />
     </div>
   );
 }
