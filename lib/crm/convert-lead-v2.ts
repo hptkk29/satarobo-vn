@@ -9,6 +9,11 @@ import { publishEvent } from "@/lib/events/publish";
 import { recordLeadStatusChange } from "@/lib/lead/status-trail-write";
 import { genStudentCodeV2 } from "@/lib/codegen";
 import { computeEnrollmentPrice } from "@/lib/finance/pricing";
+// HTL-09 — giá ghi danh lấy từ DÒNG ĐƠN (chủ dự án chốt 23/09/2026). Xem lý lẽ đầy đủ ở
+// `lib/finance/gia-tu-dong-don.ts`: thay ĐẦU VÀO `listPrice`, không thay công thức, nên
+// giảm giá/học bổng khai lúc convert vẫn áp bình thường.
+import { listPriceChoGhiDanh } from "@/lib/finance/gia-tu-dong-don";
+import { dongDonCuaLead } from "@/lib/finance/dong-don-cua-lead";
 import { linkRecordedPaymentsToEnrollments } from "@/lib/finance/payment";
 import { findParentMatch, findExistingStudent } from "@/lib/crm/dedupe";
 import { canonicalPhone } from "@/lib/phone";
@@ -151,8 +156,19 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
 
   // 2) Guard PAYMENT_REQUIRED (R7-05-C2): ≥1 Payment Sale ghi nhận
   //    (saleStatus=RECORDED) trên order của lead, hoặc Σ finalPrice = 0.
+  // HTL-09 — ĐỌC MỘT LẦN cho cả lượt convert, không tra theo từng em (đơn của một lead
+  // đếm bằng đơn vị, nhưng N+1 trong một transaction tiền là thứ chỉ lộ ra khi dữ liệu
+  // lớn hơn — đúng bài học `goiYDon` đang ghim).
+  const dongDon = await dongDonCuaLead(lead.id);
   const prices = input.students.map((s) =>
-    computeEnrollmentPrice({ listPrice: s.listPrice, discount: s.discount ?? null }),
+    computeEnrollmentPrice({
+      listPrice: listPriceChoGhiDanh(
+        dongDon,
+        { leadChildId: s.leadChildId, courseId: s.courseId },
+        s.listPrice,
+      ),
+      discount: s.discount ?? null,
+    }),
   );
   const totalFinalPrice = prices.reduce((sum, p) => sum + p.finalPrice, 0);
   // 07/09 — thêm `deletedAt: null` cho khớp `lib/crm/bulk-convert.ts:191` (vốn đã có).
