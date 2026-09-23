@@ -17,7 +17,7 @@ import { PAGE_GATES } from "@/lib/auth/page-gates";
 import { getSetting } from "@/lib/settings/service";
 import { canViewLeadPii } from "@/lib/auth/check-permission";
 import { maskPhone } from "@/lib/utils";
-import { StudentStatus, type Prisma } from "@prisma/client";
+import { StudentStatus, type EnrollmentStatus, type Prisma } from "@prisma/client";
 import { phoneSearchTerm } from "@/lib/phone";
 import { getCenterOptions } from "@/lib/org/center-options";
 import {
@@ -28,6 +28,7 @@ import {
   LIFECYCLE_VIEWS,
   type LifecycleView,
 } from "@/lib/students/lifecycle";
+import { tinhTinhTrangHoc } from "@/lib/students/tinh-trang-hoc";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Học viên | Admin" };
@@ -87,6 +88,7 @@ type StudentRow = {
   preferredCenter: { name: string } | null;
   center: { name: string } | null;
   _count: { enrollments: number };
+  enrollments: Array<{ status: EnrollmentStatus }>;
   reserves: Array<{
     id: string;
     startedAt: Date;
@@ -109,6 +111,13 @@ const STUDENT_LIST_SELECT = {
   preferredCenter: { select: { name: true } },
   center: { select: { name: true } },
   _count: { select: { enrollments: true } },
+  // 22/09 — nguồn cho cột "Tình trạng học" (`tinhTinhTrangHoc`). Chỉ lấy đúng cột
+  // `status` của ghi danh CÒN SỐNG: `deletedAt` phải có trong `where`, không thì ghi
+  // danh đã xoá mềm vẫn được tính và em bị gắn nhãn theo một lớp không còn tồn tại.
+  enrollments: {
+    where: { deletedAt: null },
+    select: { status: true },
+  },
   reserves: {
     where: { isActive: true },
     select: {
@@ -458,8 +467,11 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
                 <th className="whitespace-nowrap px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Khoá
                 </th>
+                {/* "Tình trạng học" chứ không phải "Trạng thái": cột này suy từ ghi danh
+                    (đang học / hoàn thành khoá / chờ xếp lớp), khác ô "Trạng thái" trong
+                    form sửa học viên — ô đó là `Student.status` do người vận hành đặt. */}
                 <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Trạng thái
+                  Tình trạng học
                 </th>
                 <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Ngày tạo
@@ -483,10 +495,15 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
                 </tr>
               ) : (
                 students.map((s) => {
-                  const statusInfo = STATUS_INFO[s.status] ?? {
-                    label: s.status,
-                    color: "bg-muted text-muted-foreground",
-                  };
+                  // 22/09 — cột này in TÌNH TRẠNG HỌC (suy từ ghi danh), KHÔNG phải
+                  // `Student.status` trần. Xem `lib/students/tinh-trang-hoc.ts` để biết
+                  // vì sao hai thứ đó khác nhau và vì sao không ghi GRADUATED vào DB.
+                  // `STATUS_INFO` vẫn dùng cho bộ lọc trạng thái phía trên — đó là ô lọc
+                  // theo ĐÚNG `Student.status`, không được trộn với cột này.
+                  const statusInfo = tinhTinhTrangHoc({
+                    status: s.status,
+                    enrollmentStatuses: s.enrollments.map((e) => e.status),
+                  });
                   const reserve = s.reserves[0];
                   return (
                     <tr key={s.id} className="hover:bg-muted/60">
