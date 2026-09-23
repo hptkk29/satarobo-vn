@@ -136,6 +136,28 @@ describe("[NTT-03] KHÔNG đọc một cột cá nhân nào", () => {
     // `name: true` trong `select` là đường lôi tên người/tên con lên báo cáo.
     expect(src).not.toMatch(/\bname:\s*true/);
   });
+
+  it("`Payment.note` được ĐỌC nhưng KHÔNG BAO GIỜ in ra", () => {
+    // `note` là chuỗi TỰ DO do người nhập gõ ⇒ có thể lẫn thông tin khách. Báo cáo đọc nó
+    // CHỈ để dò dấu `[backfill-import]`, và cái đi vào báo cáo là một CON ĐẾM, không phải
+    // nội dung. Cùng khuôn `[BCD-02]` canh `content` của báo cáo đối soát.
+    //
+    // ⚠️ Soi các ô nội suy `${…}`, không soi mọi chỗ chạm: `note: true` trong `select` và
+    // `k.note?.includes(...)` đều hợp lệ và không in gì.
+    expect(src, "không còn đọc `note` — lưới đang soi nhầm chỗ").toMatch(/\bnote:\s*true/);
+    const oInRa = [...src.matchAll(/\$\{([^}]*(?:\{[^}]*\}[^}]*)*)\}/g)].map((m) => m[1]!);
+    for (const o of oInRa) {
+      expect(o, `in \`note\` trần ra báo cáo: \${${o}}`).not.toMatch(/\.note\b/);
+    }
+  });
+
+  it("dùng lại HẰNG dấu backfill, không gõ lại chuỗi", () => {
+    // Gõ lại `[backfill-import]` là bản thứ hai của một quy ước — nó lệch đi lần đầu ai đó
+    // đổi dấu, và không lỗi nào báo: phép đếm chỉ lặng lẽ ra 0.
+    expect(src).toContain('from "../lib/finance/payment-markers"');
+    expect(src).toContain("BACKFILL_PAYMENT_MARKER");
+    expect(src, "đang gõ tay chuỗi dấu thay vì dùng hằng").not.toContain("[backfill-import]");
+  });
 });
 
 describe("[NTT-04] DÙNG LẠI luật `đơn nào được tính`, không chép bản thứ hai", () => {
