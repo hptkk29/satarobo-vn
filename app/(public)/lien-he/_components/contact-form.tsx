@@ -39,6 +39,7 @@ import {
   useFormField,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import { OTichChinhSach } from '@/components/public/o-tich-chinh-sach'
 import {
   Select,
   SelectContent,
@@ -120,6 +121,13 @@ const contactSchema = z.object({
   lop: optionalText('Lớp không hợp lệ.'),
   tinh: z.string().min(1, 'Vui lòng chọn tỉnh/thành phố.').optional(),
   website: z.string().max(0).optional().or(z.literal('')),
+  // Hồ sơ BCT mục 3 — ô tích đồng ý Chính sách bảo mật.
+  // `z.literal(true)` chứ KHÔNG phải `z.boolean()`: literal làm chính zodResolver chặn
+  // submit và tự hiện lỗi dưới ô, khỏi phải thêm điều kiện rời ở nút gửi (một cổng, một
+  // chỗ). `z.boolean()` sẽ cho `false` đi qua.
+  dongYCsbm: z.literal(true, {
+    message: 'Vui lòng đọc và đồng ý với Chính sách bảo mật.',
+  }),
 })
 
 type ContactFormValues = z.infer<typeof contactSchema>
@@ -254,6 +262,8 @@ function ContactFormInner() {
       lop: '',
       tinh: VN_PROVINCE_DEFAULT,
       website: '',
+      // Mặc định CHƯA tích — ảnh minh hoạ của hướng dẫn BCT vẽ ô vuông rỗng.
+      dongYCsbm: false as unknown as true,
     },
   })
 
@@ -381,7 +391,11 @@ function ContactFormInner() {
       eventId,
       timeOnPage,
       website: values.website ?? '',
-      consentMarketing: true,
+      // BLĐ chốt 22/09/2026 — khách đồng ý MỘT LƯỢT: tích ô Chính sách bảo mật là đồng ý
+      // cả việc nhận tin tư vấn/ưu đãi (đã ghi vào mục 3 của Chính sách bảo mật).
+      // Trước đó ô này đóng cứng `true`, tức khai khống một sự đồng ý chưa ai cho.
+      consentMarketing: values.dongYCsbm,
+      dongYChinhSachBaoMat: values.dongYCsbm,
       landingPage: typeof window !== 'undefined' ? window.location.href : undefined,
       referrer: typeof document !== 'undefined' ? document.referrer || undefined : undefined,
       // Tham số trên URL HIỆN TẠI ưu tiên; thiếu thì lấy bản đã giữ từ lúc khách
@@ -424,6 +438,8 @@ function ContactFormInner() {
         lop: '',
         tinh: VN_PROVINCE_DEFAULT,
         website: '',
+        // Reset về CHƯA tích: lượt gửi sau là một lượt đồng ý mới, không thừa kế lượt trước.
+        dongYCsbm: false as unknown as true,
       })
       setExtraOpen(false)
     } catch (err) {
@@ -679,6 +695,17 @@ function ContactFormInner() {
             Xong
           </button>
         </div>
+
+        {/* Hồ sơ BCT mục 3. Trước 21/09/2026 chỗ này chỉ có đoạn <p> "Gửi thông tin đồng
+            nghĩa bạn đồng ý…" ngay dưới nút — đó là DÒNG CHỮ, không phải ô tích, và hồ sơ
+            đòi ô tích. Nút gửi KHÔNG cần thêm điều kiện: `z.literal(true)` trong
+            `contactSchema` đã khiến zodResolver chặn submit và hiện lỗi dưới ô. */}
+        <OTichChinhSach
+          {...form.register('dongYCsbm')}
+          loi={form.formState.errors.dongYCsbm?.message ?? null}
+          disabled={isSubmitting}
+          wrapperClassName="text-text-muted"
+        />
 
         <button
           type="submit"

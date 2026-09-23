@@ -7,6 +7,7 @@ import { useState, useEffect, useRef } from "react";
 import { X, Phone, Loader2 } from "lucide-react";
 import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
 import { toast } from "sonner";
+import { OTichChinhSach } from "@/components/public/o-tich-chinh-sach";
 
 type ConsultModalProps = {
   open: boolean;
@@ -28,7 +29,9 @@ export function ConsultModal({
   const [email, setEmail] = useState("");
   const [childName, setChildName] = useState("");
   const [preferredTime, setPreferredTime] = useState("");
-  const [consent, setConsent] = useState(true);
+  // Hồ sơ BCT mục 3 — ô tích RIÊNG cho Chính sách bảo mật. Phải tách khỏi ô marketing
+  // ở trên: hai ô trả lời hai câu hỏi khác nhau, gộp là bắt người dùng đánh đổi.
+  const [dongYCsbm, setDongYCsbm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [honeypot, setHoneypot] = useState(""); // bot trap
   const openTimestamp = useRef<number>(0);
@@ -42,7 +45,7 @@ export function ConsultModal({
       setEmail("");
       setChildName("");
       setPreferredTime("");
-      setConsent(true);
+      setDongYCsbm(false);
       setHoneypot("");
     }
   }, [open]);
@@ -102,7 +105,9 @@ export function ConsultModal({
       childName: childName.trim() || undefined,
       source: courseSlug,
       note,
-      consentMarketing: consent,
+      // Một lượt đồng ý: tích ô Chính sách bảo mật là đồng ý cả việc nhận tin tư vấn.
+      consentMarketing: dongYCsbm,
+      dongYChinhSachBaoMat: dongYCsbm as true,
       eventId,
       landingPage:
         typeof window !== "undefined" ? window.location.href : undefined,
@@ -294,23 +299,20 @@ export function ConsultModal({
             />
           </div>
 
-          <label className="flex cursor-pointer items-start gap-2 pt-1 text-xs text-gray-600">
-            <input
-              type="checkbox"
-              checked={consent}
-              onChange={(e) => setConsent(e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
-              disabled={submitting}
-            />
-            <span>
-              Tôi đồng ý nhận thông tin tư vấn và ưu đãi từ Sata Robo qua điện
-              thoại/email.
-            </span>
-          </label>
+          {/* Ô tích marketing RIÊNG đã gỡ (BLĐ chốt 22/09/2026): khách đồng ý MỘT LƯỢT.
+              Việc nhận tin tư vấn/ưu đãi nay nằm trong nội dung Chính sách bảo mật mà ô
+              tích dưới đây trỏ tới — xem mục 3 của `content/legal/chinh-sach-bao-mat.md`.
+              Giữ hai ô là bắt khách trả lời hai lần cho một lần đồng ý. */}
+          <OTichChinhSach
+            checked={dongYCsbm}
+            onChange={(e) => setDongYCsbm(e.target.checked)}
+            disabled={submitting}
+            wrapperClassName="text-gray-600"
+          />
 
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || !dongYCsbm}
             className="cta-pulse cta-shine mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-3.5 text-base font-bold text-white transition hover:from-orange-600 hover:to-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {submitting ? (

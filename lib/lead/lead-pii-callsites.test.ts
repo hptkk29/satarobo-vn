@@ -185,16 +185,6 @@ const MAN_CHOT = [
     tienTo: "defaultParent",
   },
   {
-    ten: "Ghi danh (site Sale)",
-    file: "app/(sale)/sale/ghi-danh/[leadId]/page.tsx",
-    tienTo: "defaultParent",
-  },
-  {
-    ten: "Tạo đơn (site Sale)",
-    file: "app/(sale)/sale/chot-don/[leadId]/page.tsx",
-    tienTo: "defaultCustomer",
-  },
-  {
     ten: "Tạo đơn (admin)",
     file: "app/(admin)/admin/orders/new/page.tsx",
     tienTo: "defaultCustomer",
@@ -241,21 +231,25 @@ describe("[S-1] buildBookingListWhere — ô tìm buổi hẹn học thử", () 
   });
 });
 
-describe("[S-1] site Sale — ô tìm 'Khách của tôi' gác bằng quyền xem SĐT", () => {
+// 22/09/2026 — site Sale GỠ. Hai ca dưới đây trước trỏ vào `app/(sale)/…`; giữ
+// nguyên BẤT BIẾN, chỉ đổi sang màn đã thay thế trong admin. Bỏ hẳn hai ca này là
+// mất lưới đúng lúc màn đổi chủ — chính là lúc dễ rơi nhất.
+describe("[S-1] ô tìm khách gác bằng quyền xem SĐT", () => {
   it("getMyLeads nhận cờ và chỉ thêm mệnh đề phone khi cờ bật", () => {
     const s = nguon("lib/lead/sale-leads.ts");
     expect(s).toMatch(/canSearchPhone/);
   });
 
-  it("trang Khách của tôi TRUYỀN cờ xuống — tính rồi bỏ quên là y như không gác", () => {
-    const s = nguon("app/(sale)/sale/khach-cua-toi/page.tsx");
+  it("trang Danh sách khách TRUYỀN cờ xuống — tính rồi bỏ quên là y như không gác", () => {
+    const s = nguon("app/(admin)/admin/leads/page.tsx");
     expect(s).toMatch(/canSearchPhone/);
   });
 
-  it("bảng việc site Sale che tên khách theo cùng một tầng", () => {
-    const s = nguon("app/(sale)/sale/page.tsx");
-    // Danh sách "việc đến hạn" in tên phụ huynh; trước S-1 chỉ khối 'cần chạm'
-    // được che, khối việc thì không.
+  it("hàng đợi trên bảng điều khiển Sale che tên khách theo cùng một tầng", () => {
+    // Trước ở `app/(sale)/sale/page.tsx` ("Bảng việc hôm nay"). Màn đó nay là khối
+    // "Hàng đợi hôm nay" + "Khách cần chạm" trong bảng điều khiển của admin — cả hai
+    // in tên phụ huynh, nên cả hai phải che ở SERVER qua cùng một cổng.
+    const s = nguon("app/(admin)/admin/dashboard/_components/sales-dashboard.tsx");
     expect(s).toMatch(/tenKhach: canViewPii \? [\w.]+ : maskPersonName\(/);
   });
 });
@@ -263,14 +257,17 @@ describe("[S-1] site Sale — ô tìm 'Khách của tôi' gác bằng quyền xe
 // ─────────────────────────────────────────────────────────────────────────────
 // 4) Ô tìm ứng viên xếp lớp trải nghiệm (Server Action)
 // ─────────────────────────────────────────────────────────────────────────────
-describe("[S-1] /sale/trial — cột Phụ huynh là SĐT của PHIẾU, không phải của HV đã ghi danh", () => {
-  it("gác bằng CẢ canViewParentContact lẫn canViewLeadPii", () => {
-    const s = nguon("app/(sale)/sale/trial/page.tsx");
-    // `canViewParentContact` một mình vẫn cho Quản lý cơ sở + Kế toán đi qua —
-    // hai vai không có `leads:view-pii`. Phải là phép VÀ.
-    expect(s).toMatch(/canViewParentContact\(session\.user\) && \(await canViewLeadPii\(\)\)/);
-  });
-});
+// ⚠️ NỢ ĐÃ BIẾT — 22/09/2026, gỡ site Sale.
+//
+// Ở đây từng có ca khoá màn `/sale/trial`: cột Phụ huynh phải gác bằng phép VÀ của
+// `canViewParentContact` VÀ `canViewLeadPii`, vì `canViewParentContact` một mình
+// vẫn cho Quản lý cơ sở + Kế toán đi qua — hai vai KHÔNG có `leads:view-pii`.
+//
+// Màn đó gỡ cùng site. Màn trải nghiệm của admin (`/admin/lop-trial`) gác bằng
+// `canViewPii` truyền xuống `buildBookingListWhere`, tức KHÁC hình dạng — không
+// dán lại ca cũ vào đó được, và bịa một ca khớp hình dạng mới mà chưa đọc kỹ màn
+// ấy thì chỉ là một dòng xanh giả. Ghi lại để người rà màn trải nghiệm admin lần
+// tới dựng lưới cho đúng chỗ, thay vì im lặng bỏ đi.
 
 describe("[S-1] searchLopTrialCandidatesAction — ô tìm ứng viên", () => {
   it("mệnh đề phone gác bằng quyền xem SĐT, không đứng trần", () => {

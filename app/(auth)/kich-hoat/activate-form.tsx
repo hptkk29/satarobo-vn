@@ -4,6 +4,7 @@ import { useState, useEffect, useTransition } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { OTichChinhSach } from "@/components/public/o-tich-chinh-sach";
 import { requestActivationOtp, activateAccount } from "./_actions";
 
 export function ActivateForm() {
@@ -22,6 +23,8 @@ export function ActivateForm() {
   const [hienMk1, setHienMk1] = useState(false);
   const [hienMk2, setHienMk2] = useState(false);
   const [cooldown, setCooldown] = useState(0);
+  // Hồ sơ BCT mục 3 — mặc định CHƯA tích (ảnh minh hoạ vẽ ô vuông rỗng).
+  const [dongYCsbm, setDongYCsbm] = useState(false);
 
   // Đếm ngược cooldown gửi lại.
   useEffect(() => {
@@ -108,10 +111,19 @@ export function ActivateForm() {
 
       {step === "identify" && (
         <>
+          {/* Hồ sơ BCT mục 3 — ảnh minh hoạ chụp ĐÚNG màn này.
+              Đặt ở BƯỚC 1 (không phải bước nhập mã) vì dữ liệu cá nhân của phụ huynh bắt
+              đầu rời trình duyệt ngay khi bấm "Gửi mã kích hoạt". */}
+          <OTichChinhSach
+            checked={dongYCsbm}
+            onChange={(e) => setDongYCsbm(e.target.checked)}
+            disabled={pending}
+            wrapperClassName="text-gray-500"
+          />
           <button
             type="button"
             onClick={sendOtp}
-            disabled={pending || !identifier}
+            disabled={pending || !identifier || !dongYCsbm}
             className="w-full rounded-lg bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-60"
           >
             {pending ? "Đang gửi…" : "Gửi mã kích hoạt"}

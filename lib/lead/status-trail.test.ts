@@ -571,7 +571,15 @@ describe("[C-07] chốt chặn nguồn — không còn đường đổi trạng 
     // danh → "Đang học thử" vẫn còn và vẫn được canh — nó nằm ở `lib/trial/service.ts`
     // ngay dưới. Giữ tệp trong danh sách này khi nó không còn đổi trạng thái là bắt nó
     // phải nhắc tên một hàm không dùng, tức biến bài canh thành nghi thức.
-    "lib/finance/payment.ts", // ghi nhận tiền → Đã đăng ký
+    // I-1 (22/09/2026) — ĐỔI CHỖ, không phải bỏ canh. Phép đổi bậc "ghi nhận tiền →
+    // Đã đăng ký" đã DỜI khỏi `lib/finance/payment.ts` sang tệp dưới, để đường tiền TỰ
+    // ĐỘNG (`lib/payments/payos-ingest.ts`) gọi được mà không vi phạm lưới `[GGW-04]`
+    // (lưới đó cấm tệp webhook import bất cứ thứ gì từ `@/lib/finance/payment`).
+    //
+    // `payment.ts` nay chỉ RE-EXPORT, không còn dòng đổi trạng thái nào — giữ nó trong
+    // danh sách này là bắt nó nhắc tên một hàm nó không gọi, tức biến bài canh thành
+    // nghi thức (đúng lý lẽ đã dùng khi gỡ `lop-trial/_actions.ts` ở trên).
+    "lib/leads/tien-vao-day-pheu.ts", // ghi nhận tiền → Đã đăng ký (MỌI đường tiền)
     "lib/trial/service.ts", // điểm danh học thử → Đang học thử / Chờ quyết định
     "lib/lead/assign.ts", // ĐƯỜNG TỰ CHIA (1)
     "lib/lead/auto-assign.ts", // ĐƯỜNG TỰ CHIA (2) + gán tay
@@ -603,11 +611,14 @@ describe("[C-07] chốt chặn nguồn — không còn đường đổi trạng 
     ).toBe(true);
   });
 
-  it("trang chi tiết lead có bày mục 'Mốc trạng thái' và nạp bằng truy vấn riêng", () => {
+  it("trang chi tiết lead có bày mốc trạng thái (trong mục Lịch sử gộp) và nạp bằng truy vấn riêng", () => {
     const trang = boChuThich(doc("app/(admin)/admin/leads/[id]/page.tsx"));
 
     expect(trang).toContain("getLeadStatusHistory");
-    expect(trang).toContain("LeadStatusTrail");
+    // 22/09/2026 — ba mục lịch sử GỘP làm một (`LichSuLead`). Lưới vẫn canh đúng
+    // việc cũ: trang phải NẠP vết trạng thái bằng truy vấn riêng và BÀY nó ra. Chỉ
+    // tên component đổi; bỏ dòng này đi là mất luôn phép canh.
+    expect(trang).toContain("LichSuLead");
     // Vết mang tên con (PII) — phải che bằng CÙNG cổng `canViewPii` của trang.
     expect(trang).toContain("maskLeadAuditValues");
   });

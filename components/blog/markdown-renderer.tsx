@@ -52,6 +52,18 @@ const mdComponents: Components = {
       {children}
     </blockquote>
   ),
+  // Bảng GFM render được sẵn (remarkGfm + rehypeSanitize giữ thẻ table), nhưng `prose` KHÔNG
+  // bọc wrapper cuộn ngang ⇒ bảng có ô dài đẩy tràn cả trang ở 375px. Chính sách chấm dứt
+  // dịch vụ có bảng 2 cột với ô "Trước khi khai giảng (≥ 3 ngày làm việc)" — đúng ca đó.
+  //
+  // ⚠️ Phải đè Ở ĐÂY, không đè bằng `prose-table:*` ở `components/public/legal-page.tsx`:
+  //    trang đó mở một <article class="prose"> rồi component này mở <article class="prose">
+  //    LỒNG BÊN TRONG, nên lớp trong ghi đè lớp ngoài.
+  table: ({ children }) => (
+    <div className="my-6 overflow-x-auto">
+      <table className="my-0">{children}</table>
+    </div>
+  ),
 }
 
 interface MarkdownRendererProps {

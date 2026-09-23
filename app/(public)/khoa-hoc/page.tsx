@@ -22,6 +22,7 @@ import {
   SectionLead,
 } from "@/components/design-system/sections/section-primitives";
 import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
+import { giaHienThi } from "@/lib/gia-cong-khai";
 
 const BASE_URL = "https://satarobo.vn";
 
@@ -71,11 +72,10 @@ const COMPARISON = [
     laptrinhrobot: "Nền tảng Robotics + tư duy lập trình",
     luyenthirobosim: "Pass vòng loại Sáng tạo Robotics (RoboSim)",
   },
-  {
-    label: "Giá",
-    laptrinhrobot: "Chỉ từ 1.485.000đ",
-    luyenthirobosim: "Chỉ từ 490.000đ",
-  },
+  // ⚠️ Hàng "Giá" KHÔNG nằm ở đây nữa. Trước 21/09/2026 nó là hằng gõ tay
+  // ("Chỉ từ 1.485.000đ" / "Chỉ từ 490.000đ") trong khi thẻ khoá học cách đó ~190 dòng
+  // in chuỗi cứng "Liên hệ" — cùng một trang, hai con số khác nhau cho cùng một khoá.
+  // Nay nó được chèn trong `CoursesPage` từ cùng nguồn với thẻ (`giaHienThi`).
 ];
 
 const COMMITMENTS = [
@@ -99,6 +99,7 @@ export default async function CoursesPage() {
         code: true,
         shortDescription: true,
         description: true,
+        price: true,
         priceDisplay: true,
         durationDisplay: true,
         studentCount: true,
@@ -106,6 +107,22 @@ export default async function CoursesPage() {
       },
     })
     .catch(() => []);
+
+  // Hàng "Giá" của bảng so sánh — dựng từ CÙNG hàm với thẻ khoá học ở trên, để hai chỗ
+  // trên cùng một trang không thể in hai con số khác nhau (lỗi đã có trước 21/09/2026).
+  // `find` theo slug vì bảng so sánh cố định hai cột laptrinhrobot / luyenthirobosim.
+  const giaTheoSlug = (slug: string) => {
+    const c = courses.find((x) => x.slug === slug);
+    return c ? giaHienThi(c) : giaHienThi({ slug });
+  };
+  const bangSoSanh = [
+    ...COMPARISON,
+    {
+      label: "Giá",
+      laptrinhrobot: giaTheoSlug("laptrinhrobot"),
+      luyenthirobosim: giaTheoSlug("luyenthirobosim"),
+    },
+  ];
 
   const itemListData = courses.map((c, i) => ({
     position: i + 1,
@@ -266,7 +283,7 @@ export default async function CoursesPage() {
 
                       <div className="flex items-center justify-between">
                         <span className="text-xl font-bold text-orange-600">
-                          Liên hệ
+                          {giaHienThi(c)}
                         </span>
                         <span className="ml-auto inline-flex items-center gap-1.5 text-sm font-bold text-purple-700 group-hover:gap-2.5 transition-all">
                           Xem chi tiết
@@ -304,7 +321,7 @@ export default async function CoursesPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-100">
-                  {COMPARISON.map((row) => (
+                  {bangSoSanh.map((row) => (
                     <tr key={row.label} className="hover:bg-neutral-50/60">
                       <td className="px-5 py-4 font-semibold text-neutral-700">
                         {row.label}

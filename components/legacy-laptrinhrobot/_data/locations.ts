@@ -32,7 +32,7 @@ export const locations: Location[] = [
     mapLat: 16.045,
     mapLng: 108.22,
     isHQ: true,
-    note: "Trụ sở chính - Phòng Lab lớn, đầy đủ trang thiết bị",
+    note: "Phòng Lab lớn, đầy đủ trang thiết bị",
   },
   {
     id: 2,

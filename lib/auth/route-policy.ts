@@ -2,7 +2,6 @@ import type { Role } from "@prisma/client";
 import {
   isTeacherSiteEnabled,
   isCommonLoginAtRootEnabled,
-  isSaleSiteEnabled,
   isElearningEnabled,
 } from "@/lib/flags";
 
@@ -78,12 +77,6 @@ export interface RouteInput {
    * (mặc định OFF). Test truyền tường minh để không phụ thuộc env.
    */
   teacherSiteEnabled?: boolean;
-  /**
-   * Đợt B — cờ site Sale riêng. Bỏ trống → đọc env `SALE_SITE_ENABLED`
-   * (mặc định OFF → host `sale` giữ nguyên hành vi phục vụ biểu mẫu tĩnh).
-   * Test truyền tường minh để không phụ thuộc env.
-   */
-  saleSiteEnabled?: boolean;
   /**
    * F4 (Q41) — cổng login chung ở public host. Bỏ trống → đọc env
    * `COMMON_LOGIN_AT_ROOT` (mặc định OFF → giữ 308 sang admin). Test truyền tường minh.
@@ -222,6 +215,7 @@ export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
   // P1 · US-05 AC4 — màn cây tổ chức. Thiếu segment ở đây là proxy 308 link
   // /to-chuc về public rồi 404, dù page tồn tại (đúng tiền lệ /user-groups ở US-03).
   "to-chuc",
+  "tra-cuu",
   "trial-classes",
   "trials",
   // US-03 (Nền Hệ thống P0) — nhóm người dùng; thiếu segment ở đây thì link
@@ -388,14 +382,6 @@ const TEACHER_HOME = "/"; // clean URL trên teacher host (rewrite nội bộ �
  */
 const INTAKE_PATH = "/nhap-khach-hang";
 
-/** Đường dẫn cũ của biểu mẫu tĩnh — nay chỉ còn để đá về địa chỉ mới. */
-const RETIRED_SALE_PATHS: ReadonlySet<string> = new Set([
-  "/sale/nhap-lieu.html",
-  "/sale/thank-you.html",
-  "/thank-you",
-  "/thank-you/",
-]);
-
 export function isIntakePath(p: string): boolean {
   return p === INTAKE_PATH || p === `${INTAKE_PATH}/`;
 }
@@ -437,14 +423,6 @@ export function decideRoute(input: RouteInput): RouteDecision {
     isTeacher &&
     effectiveRoles.filter((r) => r !== null && r !== "PARENT").every((r) => r === "TEACHER");
   const teacherSiteOn = input.teacherSiteEnabled ?? isTeacherSiteEnabled();
-  // Đợt B — Sale THUẦN: vai nhân sự DUY NHẤT là SALES_CSM. Kiêm nhiệm (QLCS kiêm
-  // Sale…) KHÔNG bị nhốt trong site hẹp — nhốt là họ mất toàn bộ quyền quản lý.
-  // Soi chiếu `isTeacherOnly` ở trên, cùng lý do (QĐ-3, 16/07/2026).
-  const isSaleOnly =
-    authed &&
-    effectiveRoles.includes("SALES_CSM") &&
-    effectiveRoles.filter((r) => r !== null && r !== "PARENT").every((r) => r === "SALES_CSM");
-  const saleSiteOn = input.saleSiteEnabled ?? isSaleSiteEnabled();
   const elearningOn = input.elearningEnabled ?? isElearningEnabled();
   const loginAtRoot = input.commonLoginAtRoot ?? isCommonLoginAtRootEnabled();
 
@@ -716,110 +694,25 @@ export function decideRoute(input: RouteInput): RouteDecision {
     return { type: "rewrite", path: "/teacher" + pathname };
   }
 
-  // ── Sale host (sale.satarobo.vn) — form nhập liệu Sale → MISA AMIS CRM ───
-  // Biểu mẫu tĩnh công khai + trang cảm ơn đã XOÁ (22/08/2026). Mấy đường dẫn
-  // cũ giữ lại trong RETIRED_SALE_PATHS chỉ để đá về địa chỉ mới, KHÔNG phải
-  // vì còn trang nào ở đó — quảng cáo/QR cũ và RedirectURL cũ của MISA vẫn có
-  // thể trỏ vào, 404 thì người nhập không biết đi đâu.
+  // ── Sale host (sale.satarobo.vn) — ĐÃ NGHỈ ──────────────────────────────
+  //
+  // Site Sale gỡ hẳn 22/09/2026 (chủ dự án chốt): phần nào cần thì đã dựng ở
+  // admin — "Việc hôm nay" trên `/dashboard`, "Tra cứu" ở `/tra-cuu`, nút nhắn
+  // Zalo ngay trên màn chi tiết lead.
+  //
+  // ⚠️ GIỮ host này trong `HostKind` và GIỮ nhánh này, ĐỪNG xoá cho gọn:
+  // `sale.satarobo.vn` còn sống trong quảng cáo cũ, mã QR đã in, chữ ký email, và
+  // `RedirectURL` của MISA (`/thank-you`). Bỏ `hostKind === "sale"` là mọi đường đó
+  // rơi xuống nhánh host CÔNG KHAI — người nhập liệu bấm vào nhận về trang
+  // marketing chứ không phải biểu mẫu, và không ai báo lỗi vì trang vẫn mở.
+  //
+  // Mọi đường trên host này — không trừ đường nào, kể cả hai đường tĩnh đã nghỉ —
+  // đá về biểu mẫu nhập khách ở admin. 307 chứ KHÔNG 308: đây là quyết định vận
+  // hành, còn 308 bị trình duyệt và CDN nhớ vĩnh viễn nên đảo lại cũng không gỡ ra
+  // được (đúng vết xe `/login` đã ghi ở nhánh host công khai).
   if (hostKind === "sale") {
     if (isInfraPath(pathname)) return { type: "next" };
-
-    // ✅ 23/08/2026 — site Sale ĐÃ CÓ biểu mẫu của riêng nó tại
-    // `/sale/nhap-khach-hang`, nên đường trần `/nhap-khach-hang` trên host này
-    // đá NỘI BỘ sang đó thay vì ném người dùng sang host admin.
-    //
-    // Trước đó nhánh này 307 sang admin — tư vấn viên muốn nhập một khách là bị
-    // đá khỏi site của mình rồi phải bấm quay lại. Hai bản dùng CHUNG
-    // `loadIntakeCenterOptions()` + `<QuickLeadForm>` + `quickLeadSubmit`, không
-    // nhân bản logic, nên không có chuyện hai biểu mẫu trôi lệch nhau.
-    //
-    // Vẫn phải bắt ở đây: thiếu nó thì `/nhap-khach-hang` rơi vào luật rewrite
-    // chung → `/sale/nhap-khach-hang` — vô tình đúng đích, nhưng bằng đường
-    // rewrite nên thanh địa chỉ giữ URL cũ và mục điều hướng không sáng đúng chỗ.
-    if (isIntakePath(pathname)) {
-      return { type: "redirectPath", path: `/sale${INTAKE_PATH}` };
-    }
-
-    // ⛔ 22/08/2026 — BIỂU MẪU TĨNH CÔNG KHAI ĐÃ NGHỈ.
-    // Hai file `public/sale/*.html` đã xoá; địa chỉ mới là
-    // `satarobo.vn/nhap-khach-hang` (có đăng nhập). Mọi đường cũ — kể cả
-    // `/thank-you` mà `RedirectURL` của MISA còn trỏ tới — đá về địa chỉ mới.
-    //
-    // 307 chứ KHÔNG 308: đây là quyết định vận hành (khoá biểu mẫu ẩn danh), có
-    // thể phải đảo lại. 308 permanent bị trình duyệt/CDN nhớ vĩnh viễn nên đảo
-    // xong máy khách cũ vẫn đá sang trang mới — đúng vết xe `/login` đã ghi ở
-    // nhánh public host.
-    if (RETIRED_SALE_PATHS.has(pathname)) {
-      return { type: "redirectHost", host: "admin", path: INTAKE_PATH, status: 307 };
-    }
-
-    // ── Cờ TẮT (mặc định): host này không còn gì để phục vụ ──────────────
-    // Trước đây nó phục vụ 2 file tĩnh. Nay biểu mẫu đã dời đi ⇒ mọi đường về
-    // địa chỉ mới, thay vì trả trang trắng hay 404.
-    if (!saleSiteOn) {
-      return { type: "redirectHost", host: "admin", path: INTAKE_PATH, status: 307 };
-    }
-
-    // ── Cờ BẬT: site Sale có đăng nhập ───────────────────────────────────
-    // ⚠️ KHÔNG có luật "mọi /sale/* đi thẳng": route group `app/(sale)/sale/`
-    // sinh ra `/sale/leads`, `/sale/trial`… — luật rộng kiểu đó (di sản thời còn
-    // 2 file tĩnh cùng tiền tố) là mở toang toàn bộ trang app cho người chưa
-    // đăng nhập.
-
-    // Đứng TRƯỚC cổng auth, nếu không là vòng lặp chuyển hướng vô tận —
-    // repo đã dính đúng lỗi này với `/dang-xuat`.
-    if (pathname === "/login") {
-      if (isSaleOnly) return { type: "redirectPath", path: "/" };
-      if (isStaff) {
-        return { type: "redirectHost", host: "admin", path: STAFF_HOME, status: 307 };
-      }
-      if (isParent) {
-        return { type: "redirectHost", host: "portal", path: "/", status: 307 };
-      }
-      return { type: "next" }; // chưa login → form login
-    }
-
-    // Trang OTP công khai (kích hoạt / quên mật khẩu) — chưa login vẫn vào.
-    if (isPublicOtpPath(pathname)) {
-      if (isSaleOnly) return { type: "redirectPath", path: "/" };
-      if (isStaff) {
-        return { type: "redirectHost", host: "admin", path: STAFF_HOME, status: 307 };
-      }
-      if (isParent) {
-        return { type: "redirectHost", host: "portal", path: "/", status: 307 };
-      }
-      return { type: "next" };
-    }
-
-    // Trang đổi mật khẩu bắt buộc — cần login, phục vụ tại chỗ (không rewrite).
-    if (pathname === "/doi-mat-khau") {
-      if (!authed) {
-        return { type: "redirectPath", path: "/login", reason: invalidReason };
-      }
-      return { type: "next" };
-    }
-
-    if (!authed) {
-      return {
-        type: "redirectPath",
-        path: "/login",
-        callbackUrl: sanitizeCallbackUrl(pathname),
-        reason: invalidReason,
-      };
-    }
-
-    // Đã login nhưng không phải Sale thuần → về đúng khu của họ.
-    if (!isSaleOnly) {
-      if (isStaff) {
-        return { type: "redirectHost", host: "admin", path: STAFF_HOME, status: 307 };
-      }
-      return { type: "redirectHost", host: "portal", path: "/", status: 307 };
-    }
-
-    // Sale thuần: clean URL → rewrite vào route group.
-    if (pathname === "/sale" || pathname.startsWith("/sale/")) return { type: "next" };
-    if (pathname === "/") return { type: "rewrite", path: "/sale" };
-    return { type: "rewrite", path: "/sale" + pathname };
+    return { type: "redirectHost", host: "admin", path: INTAKE_PATH, status: 307 };
   }
 
   // ── Admin host (admin.satarobo.vn) — clean URLs, internal rewrite ────────
@@ -852,23 +745,6 @@ export function decideRoute(input: RouteInput): RouteDecision {
         path: isTeacherCleanUrl(pathname) ? pathname : "/",
         status: 307,
       };
-    }
-
-    // Đợt B — CHIỀU RA của site Sale, soi chiếu luật GV ngay trên.
-    //
-    // Thiếu nhánh này thì bật cờ xong site hẹp chỉ là TUỲ CHỌN: tư vấn viên thuần mở
-    // admin.satarobo.vn bằng dấu trang cũ vẫn ở nguyên đó với đủ menu admin, và cái
-    // "hẹp" của site Sale không còn là ràng buộc nào cả.
-    //
-    // Kiêm nhiệm KHÔNG bị đá (`isSaleOnly` đòi vai nhân sự DUY NHẤT là SALES_CSM) —
-    // nhốt một người vừa quản lý cơ sở vừa bán hàng vào site hẹp là lấy mất phần
-    // quản lý của họ.
-    //
-    // ⚠️ `AUTH_COOKIE_DOMAIN` đang để trống (cookie host-only) ⇒ người bị đá sang
-    // host sale phải ĐĂNG NHẬP THÊM MỘT LẦN. Đã chấp nhận ở `lib/flags.ts`, nhưng
-    // phải báo trước cho tổ Sale, không thì họ tưởng mất tài khoản.
-    if (saleSiteOn && isSaleOnly) {
-      return { type: "redirectHost", host: "sale", path: "/", status: 307 };
     }
 
     if (pathname === "/") {

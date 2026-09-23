@@ -29,6 +29,7 @@ import { docSoTheoCon } from "@/lib/finance/debt";
 import { kiemTaoDot, kiemHuyDot, type NoTheoConKetQua } from "@/lib/finance/no-theo-con";
 import { kiemChiaTheoCon, dungDotDeChia, type DongChia } from "@/lib/finance/chia-tien-theo-con";
 import { kiemTachKhoan, type PhanTach } from "@/lib/finance/tach-khoan";
+import { kiemChuyenTien } from "@/lib/finance/chuyen-tien-con";
 import { locDonNhanTien } from "@/lib/payments/don-nhan-tien";
 import { recomputeRequestStatuses } from "@/lib/payments/payment-request";
 import { thuTuRot } from "@/lib/payments/thu-tu-rot";
@@ -82,7 +83,33 @@ export async function taoDotChoCon(input: {
   centerId: string | null;
   actor: AuditActor;
 }): Promise<KetQuaGhi<{ paymentRequestId: string; installmentNo: number }>> {
-  return ghiTienChoDon(input.orderId, async (tx, so) => {
+  return ghiTienChoDon(input.orderId, (tx, so) => taoDotChoConTrongTx(tx, so, input));
+}
+
+/**
+ * Thân của `taoDotChoCon`, chạy TRONG transaction của người gọi. [Tách ở F4 · 22/09/2026]
+ *
+ * ⚠️ Cùng lý do với `dungHocTrongTx` và `chuyenLopTrongTx`: F4 ("đổi khoá") phải tạo đợt cho
+ * phần còn thiếu của khoá mới trong CÙNG transaction đã dừng dòng cũ và chuyển tiền —
+ * `ghiTienChoDon` không lồng được. Chép lại cổng tạo đợt sang chỗ thứ hai là hai bản luật
+ * tiền song song.
+ *
+ * ⚠️ `so` phải là ảnh chụp ĐỌC SAU khi dòng mới đã tồn tại: cổng `kiemTaoDot` lấy còn-nợ của
+ * con và của đơn TỪ ẢNH CHỤP.
+ */
+export async function taoDotChoConTrongTx(
+  tx: Tx,
+  so: NoTheoConKetQua,
+  input: {
+    orderId: string;
+    orderItemId: string;
+    soTien: number;
+    dueDate: Date | null;
+    centerId: string | null;
+    actor: AuditActor;
+  },
+): Promise<KetQuaGhi<{ paymentRequestId: string; installmentNo: number }>> {
+  {
     const con = so.con.find((c) => c.orderItemId === input.orderItemId);
     if (!con) return { ok: false as const, error: "Dòng hàng không thuộc đơn này" };
 
@@ -137,7 +164,7 @@ export async function taoDotChoCon(input: {
     });
 
     return { ok: true as const, paymentRequestId: phieu.id, installmentNo: soDot };
-  });
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1108,5 +1135,202 @@ export async function tachKhoanChoCon(input: {
     });
 
     return { ok: true as const, soTien: kiem.tong, soPhan: kiem.phan.length, tenCon };
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 7 · CHUYỂN TIỀN GIỮA HAI CON CỦA CÙNG MỘT ĐƠN
+//
+// Sinh ra ở PHIÊN D [21/09/2026] cho bước "phân hết khoản dư" của lượt dừng học. PHIÊN F1
+// sẽ mở cùng phép này thành một thao tác đứng riêng — nên nó viết ở đây, tx-level, chứ
+// không giấu trong `dung-hoc-con.ts`.
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// HAI DÒNG, CÙNG MỘT MÃ NGHIỆP VỤ
+//
+//     −X  orderItemId = bé CHO    paymentType ADJUSTMENT   note …[chuyen:<id>]
+//     +X  orderItemId = bé NHẬN   paymentType PAYMENT      note …[chuyen:<id>]
+//                                 ─────────────────────────
+//     tổng tiền của ĐƠN            không đổi một đồng
+//
+// ⚠️ CHỈ chuyển phần `CONFIRMED` (chủ dự án chốt). Khoản kế toán chưa xác nhận có thể bị
+// TỪ CHỐI, và lúc đó ta đã chuyển sang bé khác một số tiền chưa bao giờ về — bé nhận hết
+// nợ bằng tiền không tồn tại. Cổng ấy nằm ở tầng gọi (số `du` tính từ trục A), ở đây chỉ
+// ghi cho đúng: **cả hai dòng mang `accountantStatus: "CONFIRMED"`**.
+//
+// ⚠️ Dòng −X **KHÔNG** set `adjustmentOfId`. `adjustmentOfId` nghĩa là "đảo ĐÚNG dòng thu
+// kia"; phần dư ở đây có thể gom từ nhiều khoản thu khác nhau, nên trỏ vào một dòng bất kỳ
+// là một lời khai sai. Hệ quả có lợi kèm theo: `docSoTheoCon` tính `daBiDao` từ
+// `adjustmentOfId`, nên không dòng thu nào bị đánh dấu "đã đảo" oan và mất nút trên màn.
+//
+// ⚠️ Dòng +X là `PAYMENT`, không phải `ADJUSTMENT`. Nó phải trông như một khoản thu bình
+// thường của bé nhận để kế toán xuất phiếu thu được (`confirmPayment` phát `Receipt` theo
+// `Payment`), và để màn đơn hiển thị nó trong khối của bé ấy.
+
+/** Marker trong `Payment.note` để tìm lại đúng cặp dòng do MỘT lượt chuyển sinh ra. */
+export const markerChuyen = (id: string) => `[chuyen:${id}]`;
+
+export type PhanChuyen = { orderItemId: string; soTien: number };
+
+/**
+ * Ghi cặp bút toán chuyển tiền từ một bé sang n bé khác của CÙNG đơn.
+ *
+ * ⚠️ Gọi BÊN TRONG `ghiTienChoDon` (transaction đang giữ khoá của đơn). Hàm này KHÔNG tự
+ * lấy khoá và KHÔNG kiểm trần — người gọi đã kiểm bằng `kiemPhanDu`, và kiểm lại ở đây
+ * bằng một con số đọc lại sẽ là hai cổng cho cùng một luật, tức hai cổng sẵn sàng lệch.
+ */
+export async function chuyenTienGiuaConTrongTx(
+  tx: Tx,
+  input: {
+    orderId: string;
+    /** Bé CHO tiền — dòng `−X` ghi tên bé này. */
+    tuOrderItemId: string;
+    phan: readonly PhanChuyen[];
+    centerId: string | null;
+    /** Câu giải trình đi vào `note` của cả hai dòng và vào nhật ký. */
+    lyDo: string;
+    /** Mã nghiệp vụ dùng chung cho cả lượt — thường là `OrderItem.id` của bé cho. */
+    maNghiepVu: string;
+  },
+): Promise<{ tong: number; idDong: string[] }> {
+  const marker = markerChuyen(input.maNghiepVu);
+  const tong = input.phan.reduce((s, p) => s + Math.round(p.soTien), 0);
+  const idDong: string[] = [];
+
+  // `enrollmentId` suy từ DÒNG HÀNG, không chép từ đâu khác — cùng lý lẽ với
+  // `tachKhoanChoCon` (mục 6): dòng hàng trỏ đúng một ghi danh, và `confirmPayment` TỪ CHỐI
+  // khoản không có `enrollmentId` ("không thể sinh phiếu thu").
+  const dongHang = await tx.orderItem.findMany({
+    where: { id: { in: [input.tuOrderItemId, ...input.phan.map((p) => p.orderItemId)] } },
+    select: { id: true, enrollmentId: true },
+  });
+  const ghiDanhTheoDong = new Map(dongHang.map((d) => [d.id, d.enrollmentId]));
+
+  const raKhoi = await tx.payment.create({
+    select: { id: true },
+    data: {
+      orderId: input.orderId,
+      orderItemId: input.tuOrderItemId,
+      enrollmentId: ghiDanhTheoDong.get(input.tuOrderItemId) ?? null,
+      amount: -tong,
+      method: "chuyen-noi-bo",
+      paidDate: new Date(),
+      note: `Chuyển cho bé khác cùng đơn — ${input.lyDo} ${marker}`,
+      paymentType: "ADJUSTMENT",
+      saleStatus: "RECORDED",
+      accountantStatus: "CONFIRMED",
+      centerId: input.centerId,
+    },
+  });
+  idDong.push(raKhoi.id);
+
+  for (const p of input.phan) {
+    const vao = await tx.payment.create({
+      select: { id: true },
+      data: {
+        orderId: input.orderId,
+        orderItemId: p.orderItemId,
+        enrollmentId: ghiDanhTheoDong.get(p.orderItemId) ?? null,
+        amount: Math.round(p.soTien),
+        method: "chuyen-noi-bo",
+        paidDate: new Date(),
+        note: `Nhận từ bé khác cùng đơn — ${input.lyDo} ${marker}`,
+        saleStatus: "RECORDED",
+        accountantStatus: "CONFIRMED",
+        centerId: input.centerId,
+      },
+    });
+    idDong.push(vao.id);
+  }
+
+  return { tong, idDong };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 8 · CHUYỂN TIỀN GIỮA HAI CON — THAO TÁC ĐỨNG RIÊNG  [PHIÊN F1 · 22/09/2026]
+//
+// Mục 7 (`chuyenTienGiuaConTrongTx`) là phép GHI, sinh ra cho bước "phân hết khoản dư"
+// của lượt dừng học. Mục này mở đúng phép ấy thành thao tác dùng được BẤT KỲ LÚC NÀO —
+// ca thật: phụ huynh chuyển một khoản, sale gắn nhầm cho bé A, phát hiện ra sau.
+//
+// ⚠️ KHÔNG dùng lại `boGanKhoanKhoiCon` + `ganKhoanDaThuChoCon` cho việc này, dù nghe
+// tương đương. Ba lý do, mỗi cái đều đủ:
+//   · "bỏ gắn rồi gắn lại" chỉ chuyển được TRỌN một khoản; ca thật thường là chuyển MỘT
+//     PHẦN (phụ huynh đóng chung 9.530.000đ, chia nhầm 6/3.5 thay vì 5/4.5);
+//   · nó đi qua hai lượt ghi rời, nên có một khoảnh khắc tiền không thuộc bé nào — và
+//     nếu lượt hai hỏng thì nó ở lại đó;
+//   · nhật ký ra hai dòng không liên quan, thay vì một cặp −/+ mang chung mã nghiệp vụ.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function chuyenTienGiuaCon(input: {
+  orderId: string;
+  tuOrderItemId: string;
+  denOrderItemId: string;
+  soTien: number;
+  lyDo: string;
+  centerId: string | null;
+  actor: AuditActor;
+}): Promise<KetQuaGhi<{ soTien: number; tenCho: string; tenNhan: string }>> {
+  return ghiTienChoDon(input.orderId, async (tx, so) => {
+    // Cổng 1 — giải trình BẮT BUỘC. Đây là đường sửa một quyết định đã ghi vào sổ tiền,
+    // nên nó phải để lại câu trả lời cho "vì sao" (cùng luật với `boGanKhoanKhoiCon`).
+    if (!input.lyDo.trim()) {
+      return { ok: false as const, error: "Phải ghi lý do chuyển tiền giữa hai bé" };
+    }
+
+    // Cổng 2 — phép kiểm THUẦN, ăn con số đọc TRONG transaction đang giữ khoá đơn.
+    const kiem = kiemChuyenTien({
+      tuOrderItemId: input.tuOrderItemId,
+      denOrderItemId: input.denOrderItemId,
+      soTien: input.soTien,
+      con: so.con.map((c) => ({
+        orderItemId: c.orderItemId,
+        ten: c.ten,
+        daThu: c.daThu,
+        conNo: c.conNo,
+      })),
+    });
+    if (!kiem.ok) return { ok: false as const, error: kiem.loi };
+
+    // ── HẾT CỔNG. Từ đây là phép ghi. ────────────────────────────────────────
+
+    const kq = await chuyenTienGiuaConTrongTx(tx, {
+      orderId: input.orderId,
+      tuOrderItemId: input.tuOrderItemId,
+      phan: [{ orderItemId: input.denOrderItemId, soTien: kiem.soTien }],
+      centerId: input.centerId,
+      lyDo: input.lyDo.trim(),
+      // Mã nghiệp vụ theo LƯỢT, không theo bé: hai lượt chuyển khác nhau giữa cùng cặp bé
+      // phải phân biệt được trong nhật ký. `cuid()` của dòng đầu tiên là thứ sẵn có và duy
+      // nhất; dùng `orderItemId` như mục 7 thì mọi lượt trùng marker.
+      maNghiepVu: `${input.tuOrderItemId}-${Date.now()}`,
+    });
+
+    await writeAudit({
+      tx,
+      actor: input.actor,
+      module: "finance",
+      entityType: "Order",
+      entityId: input.orderId,
+      action: "CHUYEN_TIEN_GIUA_CON",
+      oldValues: {
+        tuOrderItemId: input.tuOrderItemId,
+        tenCho: kiem.tenCho,
+        daThuTruoc: so.con.find((c) => c.orderItemId === input.tuOrderItemId)?.daThu ?? 0,
+        denOrderItemId: input.denOrderItemId,
+        tenNhan: kiem.tenNhan,
+        conNoNhanTruoc: so.con.find((c) => c.orderItemId === input.denOrderItemId)?.conNo ?? 0,
+      },
+      newValues: { soTien: kiem.soTien, idDong: kq.idDong },
+      reason: input.lyDo.trim(),
+      orgUnitId: input.centerId,
+    });
+
+    return {
+      ok: true as const,
+      soTien: kiem.soTien,
+      tenCho: kiem.tenCho,
+      tenNhan: kiem.tenNhan,
+    };
   });
 }

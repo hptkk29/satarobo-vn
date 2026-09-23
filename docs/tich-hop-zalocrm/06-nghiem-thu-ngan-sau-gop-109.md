@@ -125,6 +125,32 @@ mà `main` đã vá — nếu tái hiện thì bản vá không sống sót lư�
 
 ---
 
+## ✅ KẾT QUẢ ĐÃ CHẠY — 21/09/2026 (bản `9cb28cf9` trên `test`)
+
+| ca | kết quả |
+|---|---|
+| **A** — menu "Zalo CRM" đúng vai | **ĐẠT** — SALE **thấy** mục, Giáo vụ **không thấy**. Có đủ đối chứng dương, nên lần này ca nói đúng điều nó nói (khác 17/09, khi nó đạt vì menu ẩn với mọi vai) |
+| **B** — mở `/zalo-crm` có nick ngay | **CHƯA KIỂM ĐƯỢC** — không có tài khoản sạch; FAIL-SAFE đạt (màn mở bình thường, 2 nick, 100 hội thoại). Phép thử đầu-cuối dời sang ngày bật cờ trên prod, theo phép kiểm 2 của runbook `07`. |
+| **C · D · E** | chưa chạy — phần tài chính, chủ dự án xếp làm sau |
+
+#### Vì sao ca B KHÔNG được ghi ĐẠT
+
+Tài khoản đã dùng là `uat.giamdoc` — **chính tài khoản đã đo ra `NỢ-9` hôm 17/09**, tức nó
+đã vào `/zalo-crm` từ trước và bên fork đã có sẵn tài khoản, đã được cron cấp quyền.
+
+Hai nick nhìn thấy vì thế chứng minh **quyền vẫn còn**, KHÔNG chứng minh
+`capQuyenKhiMoMan` đã xoá khoảng trễ lần-đăng-nhập-đầu. Bước 1 của ca đòi *"tài khoản
+chưa từng vào bao giờ"* đúng vì lý do này.
+
+Ghi ĐẠT ở đây là lặp lại đúng bẫy của ca ④ hôm 17/09 — **đạt vì lý do sai** (luật 11).
+
+#### Một thứ được xác nhận NGOÀI DỰ KIẾN
+
+Ảnh chụp cho thấy khung nhúng chạy **chế độ desktop** và nạp đủ 100 hội thoại. Đó chính là
+triệu chứng của `NỢ-7`: trước bản vá `min-w-[900px]`, fork khởi động ở chế độ mobile và
+**không bao giờ** gọi `fetchZaloAccounts`, nên khối PHẠM VI XEM sẽ là `0 online · 0 offline`.
+⇒ lưới `[ZC-KHUNG]` nay có **đối chứng trên bản đã deploy**, không chỉ trên mã nguồn.
+
 ## Ghi kết quả
 
 Với mỗi ca: **ĐẠT** / **HỎNG** + chụp màn nếu hỏng. Ca B nếu không có tài khoản phù hợp

@@ -37,6 +37,21 @@ export type DongDon = {
   tamTinh: number;
   /** Giảm giá của RIÊNG dòng (`OrderItem.discountAmount`). */
   giam: number;
+  /**
+   * GIÁ TRỊ QUYẾT TOÁN khi bé này đã DỪNG HỌC — `OrderItem.usedValue` [PHIÊN D, 21/09/2026].
+   *
+   * `null` = bé còn đang học ⇒ phải thu vẫn là `tamTinh − giam` như trước. Có số ⇒ **phải
+   * thu của bé là ĐÚNG số này**, vì bé chỉ còn phải trả phần đã dùng.
+   *
+   * ⚠️ Đây là cột DUY NHẤT làm đổi `phaiThu`, và nó cố ý KHÔNG sửa `tamTinh`/`giam`: hai số
+   * kia là lời khai lúc BÁN (`Order.subtotal` = Σ `totalPrice`, cổng soát giá so `unitPrice`
+   * với giá niêm yết). Giữ cả ba là giữ được câu trả lời cho *"đã bớt cho bé bao nhiêu vì
+   * nghỉ giữa chừng"* — một phép trừ, không phải một cuộc khảo cổ.
+   *
+   * ⚠️ `0` KHÁC `null`: `TRUNG_TAM_HUY` cho ra đúng `0` (bé không phải trả gì), và nó phải
+   * đè lên học phí gốc chứ không được rơi về nó. Dùng `??` chứ đừng dùng `||`.
+   */
+  daDung?: number | null;
 };
 
 /** Một khoản tiền đã gắn vào dòng. Người gọi đã lọc theo tập trạng thái. */
@@ -292,7 +307,12 @@ export function tinhNoTheoCon(input: {
     ds.reduce((s, k) => (k.orderItemId === id ? s + tron(k.amount) : s), 0);
 
   const con: NoCuaCon[] = input.dong.map((d) => {
-    const phaiThu = Math.max(0, tron(d.tamTinh) - tron(d.giam));
+    // PHIÊN D — bé đã dừng học thì phải thu là GIÁ TRỊ QUYẾT TOÁN, không phải học phí gốc.
+    // `?? ` chứ không `||`: `TRUNG_TAM_HUY` ra đúng 0 và 0 phải thắng.
+    const phaiThu =
+      d.daDung != null
+        ? Math.max(0, tron(d.daDung))
+        : Math.max(0, tron(d.tamTinh) - tron(d.giam));
     const daThu = cong(input.khoanDaXacNhan, d.orderItemId);
     const choXacNhan = cong(input.khoanChoXacNhan, d.orderItemId);
     // Tập RỘNG, lọc theo chính bé này. Cộng CẢ bút toán đảo (âm) — một phần tách bị gỡ sau

@@ -123,7 +123,7 @@ export function RefundTable({
                       {r.studentName ?? "(Không rõ HV)"}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {r.className ?? r.enrollmentId.slice(0, 8)}
+                      {r.className ?? r.orderCode ?? r.enrollmentId?.slice(0, 8) ?? "—"}
                     </div>
                   </TableCell>
                   <TableCell>

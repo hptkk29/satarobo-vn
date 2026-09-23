@@ -11,7 +11,7 @@
  * Ca đầu tiên dưới đây bịt đúng lỗ đó, và nó là lý do chính bộ này tồn tại.
  */
 import { describe, expect, it } from "vitest";
-import { SETTING_KEYS, SETTINGS } from "./registry";
+import { SETTING_KEYS, SETTINGS, validateSettingValue } from "./registry";
 import { NHAN_VAN_HANH, TAB_CAU_HINH, keyCuaTab, nhanCuaKey } from "./nhan-van-hanh";
 
 const ID_TAB = TAB_CAU_HINH.map((t) => t.id);
@@ -172,5 +172,58 @@ describe("[CFG-T04] hai khoá của thông báo đẩy nằm cùng một tab", (
     // tab khác vẫn tắt.
     expect(nhanCuaKey("push.webPushEnabled").tab).toBe("thong-bao-day");
     expect(nhanCuaKey("push.tienToDuocDay").tab).toBe("thong-bao-day");
+  });
+});
+
+describe("[CFG-T05] danh sách chọn khớp KHÍT với giá trị mà máy chủ nhận", () => {
+  // ⚠️ Lưới này sinh ra cùng lúc với `chon` và nó canh một lỗi CÂM: quản lý chọn một mục
+  // trong danh sách, máy chủ từ chối, và người ta kết luận "màn cấu hình hỏng". Khai lệch
+  // một chữ giữa nhãn và `z.enum` là đủ để ra đúng cảnh đó.
+  const coChon = SETTING_KEYS.filter((k) => nhanCuaKey(k).chon);
+
+  it("có ít nhất một tham số dùng danh sách chọn", () => {
+    // Ca chống TAUTOLOGY: hai ca dưới quét `coChon`, nên danh sách rỗng là chúng xanh vĩnh
+    // viễn mà không kiểm gì. Đã đo: xoá hết `chon` thì chỉ ca này đỏ.
+    expect(coChon.length).toBeGreaterThan(0);
+  });
+
+  it("mọi giá trị trong danh sách chọn đều được máy chủ CHẤP NHẬN", () => {
+    const hong: string[] = [];
+    for (const k of coChon) {
+      for (const c of nhanCuaKey(k).chon!) {
+        const kq = validateSettingValue(k, c.giaTri);
+        if (!kq.ok) hong.push(`${k} → "${c.giaTri}"`);
+      }
+    }
+    expect(hong, `Máy chủ từ chối giá trị mà màn hình mời chọn:\n  - ${hong.join("\n  - ")}`).toEqual([]);
+  });
+
+  it("không giá trị nào của máy chủ BỊ BỎ SÓT khỏi danh sách chọn", () => {
+    // Chiều ngược lại, và nó mới là chiều âm thầm: thêm một lựa chọn vào `z.enum` mà quên
+    // khai nhãn thì quản lý KHÔNG BAO GIỜ chọn được nó, và tính năng coi như không tồn tại.
+    const thieu: string[] = [];
+    for (const k of coChon) {
+      const schema = SETTINGS[k].schema as unknown as { options?: readonly string[] };
+      const cuaMay = schema.options;
+      if (!cuaMay) {
+        thieu.push(`${k}: khai \`chon\` nhưng schema không phải danh sách giá trị cố định`);
+        continue;
+      }
+      const cuaMan = new Set(nhanCuaKey(k).chon!.map((c) => c.giaTri));
+      for (const v of cuaMay) if (!cuaMan.has(v)) thieu.push(`${k} → thiếu "${v}"`);
+    }
+    expect(thieu, `Thiếu nhãn cho lựa chọn:\n  - ${thieu.join("\n  - ")}`).toEqual([]);
+  });
+
+  it("mỗi lựa chọn nói được HỆ QUẢ của nó, không chỉ cái tên", () => {
+    // Một danh sách gồm "Con có học phí thấp hơn" / "Con đăng ký sau" không giúp quản lý
+    // quyết định gì: hai cái đều nghe hợp lý. Thứ giúp họ chọn là câu nói ra cái GIÁ.
+    const cut: string[] = [];
+    for (const k of coChon) {
+      for (const c of nhanCuaKey(k).chon!) {
+        if ((c.hauQua ?? "").trim().length < 25) cut.push(`${k} → "${c.nhan}"`);
+      }
+    }
+    expect(cut, `Lựa chọn chưa nói hệ quả:\n  - ${cut.join("\n  - ")}`).toEqual([]);
   });
 });

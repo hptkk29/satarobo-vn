@@ -8,13 +8,31 @@
 
 ## 0 · Hai điều phải biết TRƯỚC khi bật
 
-### KHÔNG có màn nào bật riêng cho một cơ sở
+### ĐÃ CÓ MÀN bật riêng cho một cơ sở  ⭐ đổi 22/09/2026 (PHIÊN H)
 
-Màn `/admin/cau-hinh-van-hanh` (tab **Tiền**) **chỉ ghi công tắc TOÀN HỆ** — nó gọi
-`saveGlobalSettingAction`. Server Action cho override theo cơ sở **có tồn tại**
-(`saveCenterSettingAction`) nhưng **0 component nào gọi nó**, tức chưa có giao diện.
+~~Màn `/admin/cau-hinh-van-hanh` chỉ ghi công tắc TOÀN HỆ; `saveCenterSettingAction` có tồn
+tại nhưng 0 component nào gọi nó ⇒ bật riêng CS2 **phải bằng SQL**.~~ **[ĐẢO]**
 
-⇒ Bật riêng CS2 **phải bằng SQL**. Đó là hiện trạng, không phải lựa chọn thiết kế.
+Nay mỗi dòng tham số cho cài riêng đều có mục gấp **"Cài riêng theo cơ sở"** ngay dưới nó
+(`/admin/cau-hinh-van-hanh`, tab **Tiền**, dòng *"Thu học phí linh hoạt theo từng con"*). Mở
+ra là danh sách cơ sở, mỗi cơ sở một nhãn nói rõ nó đang ở trạng thái nào:
+
+| Nhãn trên màn | Nghĩa trong dữ liệu | Đổi mức toàn hệ thì sao |
+|---|---|---|
+| **Theo toàn hệ (đang bật/tắt)** | KHÔNG có dòng `CenterSetting` | cơ sở **đổi theo** |
+| **Bật riêng** | dòng `true` | **không** đổi theo |
+| **Tắt riêng** | dòng `false` | **không** đổi theo |
+
+Ba nút/thao tác: đổi công tắc + ghi lý do + **Cài riêng** (ghi mức riêng) · **Trả về theo toàn
+hệ** (GỠ dòng, chỉ hiện khi cơ sở đang có mức riêng).
+
+⚠️ **"Trả về theo toàn hệ" KHÔNG phải "tắt".** Tắt riêng là ghi một quyết định vào sổ; trả về
+là rút lại quyết định ấy — và mức toàn hệ lúc đó có thể đang **BẬT**. Đây đúng là cái bẫy mà
+mục 5 dưới đây đã cảnh báo cho đường SQL, nay màn hình nói rõ nó ra.
+
+⇒ **Đường SQL ở mục 1 và mục 5 vẫn đúng và vẫn chạy được, nhưng nó KHÔNG còn là đường chính** —
+giữ lại làm đường lùi cho ca không mở được trang admin. Dùng màn hình thì có AuditLog và có
+hiệu lực NGAY (xem bảng ngay dưới).
 
 ### Cờ đọc qua CACHE 300 GIÂY — sửa bằng SQL KHÔNG có tác dụng tức thì
 
@@ -29,7 +47,10 @@ Màn `/admin/cau-hinh-van-hanh` (tab **Tiền**) **chỉ ghi công tắc TOÀN H
 
 ---
 
-## 1 · BẬT cho CS2
+## 1 · BẬT cho CS2 — ĐƯỜNG LÙI bằng SQL
+
+> ⭐ **Đường chính nay là màn hình** — xem mục 0. Phần SQL dưới đây giữ lại cho ca không mở
+> được trang admin, và để đối chiếu khi nghi ngờ màn hình ghi sai dòng.
 
 Chạy trên **Supabase SQL Editor** (prod). Ba câu, chạy lần lượt.
 
@@ -501,11 +522,18 @@ công tắc toàn hệ**. Hôm nay toàn hệ đang tắt nên hai cách trông 
 ⚠️ **Tắt toàn hệ KHÔNG gỡ được CS2.** Override của cơ sở **thắng** công tắc toàn hệ (cả hai
 chiều). Đặt `SystemSetting` về `false` mà CS2 vẫn khai `true` thì CS2 **vẫn bật**.
 
-### Hiệu lực: tới 5 PHÚT, không tức thì
+### Hiệu lực: tới 5 PHÚT với SQL — NGAY nếu tắt trên màn hình
 
 Cache `revalidate: 300`. **Đây là điểm yếu thật của đường SQL, không phải chi tiết nhỏ** — trong
-5 phút đó sale vẫn gắn được tiền. Nếu cần chặn NGAY thì chặn ở **người**: bảo sale dừng bấm, rồi
-mới chạy SQL.
+5 phút đó sale vẫn gắn được tiền.
+
+⭐ **Từ 22/09/2026 có đường tắt NHANH hơn:** mở `/admin/cau-hinh-van-hanh` → tab **Tiền** →
+dòng *"Thu học phí linh hoạt theo từng con"* → **Cài riêng theo cơ sở** → gạt công tắc của CS2
+về tắt → ghi lý do → **Cài riêng**. Đường này ghi đúng dòng `false` mà mục trên yêu cầu, **xoá
+cache ngay**, và để lại một dòng `AuditLog` nói ai tắt và vì sao. Chỉ khi không mở được trang
+admin mới dùng SQL.
+
+Nếu cần chặn NGAY mà cả hai đường đều chậm thì chặn ở **người**: bảo sale dừng bấm trước.
 
 ### Đơn đã tạo đợt / đã gắn tiền thì sao
 

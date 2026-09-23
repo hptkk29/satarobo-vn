@@ -163,61 +163,21 @@ export const PAGE_GATES = {
    *  thấy nút "Duyệt tất cả" mà bấm vào là bị Server Action từ chối. */
   "/duyet-media": ["media:approve"],
 
-  // ── Site Sale (sale.satarobo.vn) ────────────────────────────────────────
-  // Khai ở ĐÂY chứ không để mỗi trang tự gõ action: thanh điều hướng của site
-  // Sale đọc thẳng bảng này làm `perm`, nên menu và cổng trang không thể lệch.
-  // Trang nằm ở `app/(sale)/sale/...` nên `page-gates.test.ts` cần một dòng
-  // `PAGE_DIR_OVERRIDE` cho mỗi route — bảng này mặc định tìm trong `(admin)`.
+  // ── Việc của tư vấn viên (site Sale ĐÃ GỠ 22/09/2026) ───────────────────
+  // Sáu route `/sale/*` gỡ cùng site. Phần việc còn cần thì đã nằm trong admin:
+  // "Việc hôm nay" gộp vào `/dashboard`, "Tra cứu" thành `/tra-cuu`, hộp thư còn
+  // ĐỘNG CƠ (`lib/inbox/*`, webhook ZaloCRM) nhưng không còn màn.
   //
-  // ⚠️ Cả hai action dưới đây đều GLOBAL ở mọi RoleDef giữ chúng (đã có test
-  // riêng khoá bất biến đó): gate cấp trang gọi `checkAnyPermission` KHÔNG có
-  // target, action seed scope CENTER/OWN sẽ trả FALSE trên prod trong khi máy
-  // dev vẫn xanh. Cách ly cơ sở do `scopedDb` lo, không do gate.
+  // ⚠️ Action dưới đây phải GLOBAL ở mọi RoleDef giữ nó (có test riêng khoá bất
+  // biến đó): gate cấp trang gọi `checkAnyPermission` KHÔNG có target, nên action
+  // seed scope CENTER/OWN sẽ trả FALSE trên prod trong khi máy dev vẫn xanh.
+  // Cách ly cơ sở do `scopedDb` lo, không do gate.
 
-  /** Lớp trải nghiệm — Sale xem lịch, xem phiếu đánh giá của GV, xuất PDF.
-   *  `trials:view` là quyền Sale vốn đã có; không mở thêm gì. */
-  "/sale/trial": ["trials:view"],
+  /** Tra cứu — bảng giá khoá/học cụ + lớp còn chỗ. CHỈ ĐỌC. Vào được bằng MỘT
+   *  trong hai quyền; trang tự quyết khối nào hiện, không đá ai ra vì thiếu một
+   *  quyền. Đừng khai quyền mới cho màn chỉ-đọc này. */
+  "/tra-cuu": ["products:view", "classes:view-all"],
 
-  /** Tra cứu danh mục — bảng giá khoá/học cụ + lớp còn chỗ. CHỈ ĐỌC.
-   *  Hai action đều là quyền Sale vốn đã có và đều GLOBAL. Vào được bằng MỘT
-   *  trong hai; trang tự quyết khối nào hiện, không đá ai ra vì thiếu một quyền. */
-  "/sale/tra-cuu": ["products:view", "classes:view-all"],
-
-  /** Chốt đơn — tạo đơn cho khách của mình. `orders:create` là action HẸP mở ở
-   *  Đợt 0 (G-A), KHÔNG phải `orders:manage` (mở/huỷ/hoàn toàn hệ thống).
-   *  Phạm vi "chỉ đơn gắn khách của mình" do `checkOrderCreateOwnership()` gác
-   *  trong chính action — gate trang chỉ chặn sớm cho đỡ phí một vòng gọi. */
-  "/sale/chot-don": ["orders:create"],
-
-  /** Khách của tôi — danh sách + chi tiết + ghi hoạt động + việc follow-up.
-   *  `leads:view-own` là quyền Sale vốn đã có. KHÔNG dùng `leads:view-all`: đó
-   *  là quyền của quản lý, và trang này cố ý chỉ trả lời "khách nào của tôi". */
-  "/sale/khach-cua-toi": ["leads:view-own"],
-
-  /**
-   * Hộp thư đa kênh — hội thoại của khách trên Zalo OA / Messenger.
-   *
-   * `inbox:view` là KEY MỚI, cố ý không mượn key sẵn có:
-   *  • `chat:read` seed non-GLOBAL (OWN cho Sale, ASSIGNED cho GV, CENTER cho QLCS)
-   *    nên cổng trang gọi trần sẽ luôn FALSE trên prod — đúng bẫy đã suýt khoá cửa
-   *    /tin-nhan. Và nó là chat NỘI BỘ, khác hẳn hội thoại với khách ngoài hệ.
-   *  • `leads:view-own` thì mở cửa cho đúng người nhưng nói sai việc: hộp thư có
-   *    hội thoại MỒ CÔI chưa gắn lead nào, tức có nội dung nằm ngoài phạm vi "lead
-   *    của tôi". Mượn key đó là để lộ một tập dữ liệu mà cái tên quyền không mô tả.
-   *
-   * ⚠️ Key MỚI ⇒ sau khi merge `test` → `main` PHẢI chạy `seed-prod-roles.yml`,
-   * nếu không người mở trang trên prod bị đá ra, KHÔNG kèm lỗi, và không tái hiện
-   * được ở local (local chạy RBAC v1 tĩnh).
-   * ⚠️ Vào được TRANG ≠ thấy mọi cơ sở: phạm vi do `inboxOrgScopeWhere`
-   * (`lib/inbox/scope.ts`) chặn — `scopedDb` KHÔNG che ba bảng này.
-   */
-  "/sale/hop-thu": ["inbox:view"],
-
-  /** Biểu mẫu nhập khách hàng, bản đứng TRÊN site Sale.
-   *  Cùng action với bản `/nhap-khach-hang` bên admin — cùng một việc, cùng một
-   *  đường ghi (`ingestIntakeLead`), chỉ khác chỗ đứng. Trước 23/08 Sale gõ địa
-   *  chỉ này bị 307 sang admin host, tức nhập khách là bị đá khỏi site của mình. */
-  "/sale/nhap-khach-hang": ["leads:create"],
 
   /** Ba báo cáo đào tạo. BGĐ chốt 10/07: "báo cáo của chức năng nào thì role chức năng
    *  đó xem". Trước đây gác `classes:view-all` ∨ `training:manage` ⇒ HR/Kế toán/Marketing
@@ -306,22 +266,12 @@ export const PAGE_GATES = {
 export type GatedHref = keyof typeof PAGE_GATES;
 
 /**
- * CHƯA đưa vào bảng — gate và menu vẫn lệch, có chủ đích. Rỗng từ L5 chấm công v3 (06/09/2026):
- * `/cham-cong/lich-ca-nhan-vien` đã bị gỡ cùng 4 màn ShiftRegistration cũ;
- * còn lại `/sale/ghi-danh` (lý do bên dưới).
+ * CHƯA đưa vào bảng — gate và menu vẫn lệch, có chủ đích.
+ *
+ * RỖNG từ 22/09/2026: mục cuối cùng là `/sale/ghi-danh`, gỡ cùng site Sale.
+ * (Màn chốt lead của admin đi đường khác — `submitConvertV2` tự kiểm phép VÀ của
+ * `students:create` + `enrollments:create`, chứ không qua bảng HOẶC này.)
+ *
  * Thêm route mới vào đây phải kèm lý do, không được im lặng.
  */
-export const GATE_MISMATCH_ALLOWLIST: readonly string[] = [
-  // Ghi danh trên site Sale (`app/(sale)/sale/ghi-danh/[leadId]`).
-  //
-  // Bảng trên dùng phép HOẶC (`checkAnyPermission`), mà chốt lead đòi CẢ HAI
-  // quyền: `students:create` VÀ `enrollments:create`. Hai quyền đó tách nhau có
-  // chủ đích — Marketing giữ một mà không giữ cái kia — nên gộp vào bảng bằng
-  // phép HOẶC sẽ MỞ CỬA cho người chỉ có một nửa. `submitConvertV2` cũng kiểm
-  // đúng phép VÀ đó, nên trang và action nói cùng một câu; cái lệch duy nhất là
-  // với BẢNG, và đó là lệch có chủ đích.
-  //
-  // Không có mục menu nào cho route này (vào từ hồ sơ khách) nên cũng không có
-  // nguy cơ menu-và-cổng nói khác nhau — thứ mà bảng sinh ra để chặn.
-  "/sale/ghi-danh",
-];
+export const GATE_MISMATCH_ALLOWLIST: readonly string[] = [];

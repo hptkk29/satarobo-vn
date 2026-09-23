@@ -4,10 +4,12 @@ import { join } from "node:path";
 import {
   isAuthPhoneProvisioningEnabled,
   isPaymentLedgerV2Enabled,
-  isSaleSiteEnabled,
   isZalocrmEnabled,
   isInboxEnabled,
 } from "./flags";
+
+/** `.env.example` đọc MỘT lần — nhiều bộ dưới đây soi nó. */
+const ENV_EXAMPLE = readFileSync(join(process.cwd(), ".env.example"), "utf8");
 
 // AUTH-SĐT P5 — cờ ngắt đường TỰ ĐỘNG cấp tài khoản phụ huynh theo SĐT.
 // Doc phase đã từng ghi cờ `AUTH_PHONE_PROVISIONING` ở hàng "Feature flag" và ở
@@ -85,42 +87,13 @@ describe("isPaymentLedgerV2Enabled", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// S-7 (26/08/2026) — cờ site Sale phải CÓ MẶT trong `.env.example`.
+// Cờ `SALE_SITE_ENABLED` — GỠ 22/09/2026 cùng site Sale.
 //
-// `.env.example` là thứ duy nhất người dựng môi trường mới đọc. Cờ không có ở đó
-// thì nó vô hình: không ai biết `sale.satarobo.vn` có công tắc, và cách duy nhất
-// phát hiện là đọc `lib/flags.ts`. Đúng cái đầu file `.env.example` cảnh báo —
-// "THIẾU FEATURE FLAG = tính năng tự tắt trên bản deploy dù localhost vẫn thấy".
+// Bộ test cũ khoá hai thứ: cờ phải có mặt trong `.env.example`, và chỉ đúng chuỗi
+// "true" mới bật. Cả hai mất nghĩa khi không còn cờ. Host `sale.satarobo.vn` nay
+// luôn 307 về biểu mẫu nhập khách của admin — ràng buộc đó khoá ở
+// `lib/auth/route-policy.test.ts`, không phải ở đây.
 // ─────────────────────────────────────────────────────────────────────────────
-const SALE_KEY = "SALE_SITE_ENABLED";
-const ENV_EXAMPLE = readFileSync(join(process.cwd(), ".env.example"), "utf8");
-
-describe("isSaleSiteEnabled", () => {
-  afterEach(() => {
-    delete process.env[SALE_KEY];
-  });
-
-  it("`.env.example` có khai cờ — người dựng môi trường mới nhìn thấy nó", () => {
-    expect(
-      new RegExp(`^${SALE_KEY}=`, "m").test(ENV_EXAMPLE),
-      "thiếu dòng SALE_SITE_ENABLED trong .env.example",
-    ).toBe(true);
-  });
-
-  it("mặc định TẮT khi không khai env — site Sale không tự mở", () => {
-    delete process.env[SALE_KEY];
-    expect(isSaleSiteEnabled()).toBe(false);
-  });
-
-  it('CHỈ đúng chuỗi "true" mới bật — gõ gần đúng là VẪN TẮT', () => {
-    process.env[SALE_KEY] = "true";
-    expect(isSaleSiteEnabled()).toBe(true);
-    for (const v of ["TRUE", "True", "1", "yes", "on", " true ", "", "false"]) {
-      process.env[SALE_KEY] = v;
-      expect(isSaleSiteEnabled(), `giá trị ${JSON.stringify(v)}`).toBe(false);
-    }
-  });
-});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ZaloCRM (đợt tích hợp 06/09/2026) — hai cờ 2-phase: `ZALOCRM_ENABLED` (S1) và

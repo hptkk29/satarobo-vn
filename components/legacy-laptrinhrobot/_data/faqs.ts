@@ -32,15 +32,20 @@ export const faqs: FAQ[] = [
       "Website hiện có 2 nhóm khóa: khóa luyện thi ngắn hạn và khóa chuyên sâu 48 buổi.",
       {
         type: "list",
+        // Học phí NIÊM YẾT, đo từ /admin/courses ngày 21/09/2026. Trước đó mọi dòng đều
+        // ghi "vui lòng liên hệ" — đúng khối mà hướng dẫn BCT chụp ảnh và yêu cầu xử lý
+        // (mục 4: không công khai giá + không đặt hàng được).
+        // ⚠️ Số ở đây phải khớp `Course.price` trên DB. Nguồn KHÔNG phải
+        // `_data/courses-pricing.ts` — file đó đang lệch DB ở Sata1 và Combo.
         items: [
-          "Sata1 Robosim Master: học phí ưu đãi — vui lòng liên hệ.",
-          "Sata2 Đấu trường Robot: học phí ưu đãi — vui lòng liên hệ.",
-          "Combo Sata1 + Sata2: học phí combo tiết kiệm — vui lòng liên hệ.",
-          "Sata8 Vé Vàng Chung Kết: giá cố định, cam kết hoàn tiền 100% — vui lòng liên hệ.",
-          "Sata3-Sata7: học phí ưu đãi theo từng khóa, hỗ trợ trả góp 0%.",
+          "Sata1 Robosim Master: 2.400.000đ.",
+          "Sata2 Đấu trường Robot: 3.040.000đ.",
+          "Combo Sata1 + Sata2: 5.440.000đ (tiết kiệm so với mua lẻ).",
+          "Sata8 Vé Vàng Chung Kết: 2.500.000đ — giá cố định, cam kết hoàn tiền 100%.",
+          "Sata3–Sata7 (khóa chuyên sâu 48 buổi): từ 10.560.000đ đến 14.400.000đ tùy khối lớp, hỗ trợ trả góp 0%.",
         ],
       },
-      "Phụ huynh để lại thông tin trong form đăng ký hoặc liên hệ Zalo để được tư vấn học phí, số buổi, thiết bị và thời lượng chi tiết.",
+      "Giá đã bao gồm thuế GTGT. Phụ huynh để lại thông tin trong form đăng ký hoặc liên hệ Zalo để được tư vấn số buổi, thiết bị, thời lượng và chương trình ưu đãi đang áp dụng.",
     ],
   },
   {
@@ -69,7 +74,7 @@ export const faqs: FAQ[] = [
       {
         type: "list",
         items: [
-          "Trụ sở chính: 211 Nguyễn Hữu Thọ, Đà Nẵng.",
+          "Cơ sở Nguyễn Hữu Thọ: 211 Nguyễn Hữu Thọ, Đà Nẵng.",
           "Cơ sở Hoàng Diệu: 114 Hoàng Diệu, Đà Nẵng (Hải Châu).",
         ],
       },

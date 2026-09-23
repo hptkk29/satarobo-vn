@@ -723,3 +723,106 @@ test, dây nối thì không". **ĐÃ BỊT (17/09/2026):**
 
 Cả hai lưới đều đã **cấy lại lỗi để chứng minh đỏ** (5/5 và 3/3 phép cấy), không chỉ xanh
 trên mã đang đúng. Chi tiết output đỏ nằm trong commit message của từng lưới.
+
+---
+
+### 🔴 NỢ-16 · BỐN JOB E2E TREO SAU KHI CHẠY XONG TEST — ƯU TIÊN CAO, LÀM NGAY SAU LƯỢT LÊN PROD
+
+**Phát hiện 21/09/2026**, ngay trước khi merge `test` → `main` (PR #321).
+
+`E2E smoke` · `E2E Phase A0` · `E2E site GV #06` · `E2E đào tạo nội bộ EL-07` đều bị cắt
+đúng mốc `timeout-minutes` (20/20/25/25 phút). **Không ca nào đỏ** — cả bốn chạy hết test
+rồi **im hẳn SAU ca cuối cùng**; bản tổng kết không bao giờ in ra.
+
+Đúng bốn job này dính vì chúng là bốn job duy nhất dựng `webServer`. R7 · CRM · R1 · FL
+chạy `*_SKIP_WEBSERVER=1` nên không có server để tắt, và thoát bình thường.
+
+#### Đã tách nguyên nhân: HẠ TẦNG CI, không phải mã
+
+Chạy lại CI trên **đúng SHA `5ec29d01`** — không đổi một byte:
+
+| cùng một mã | lần 1 — 20/09 19:43 | lần 2 — 21/09 07:40 |
+|---|---|---|
+| `E2E Phase A0` | **8′21″ ✅ `156 passed (4.1m)`** | 20′15″ ❌ chạm trần |
+| `E2E smoke` | **4′57″ ✅ `26 passed (51.5s)`** | 20′16″ ❌ chạm trần |
+
+Ảnh máy runner giống hệt (`ubuntu24/20260907.300`). Hai lượt trùng khít tới dòng log cuối
+và tới từng giây (A0: dòng `[WebServer]` cuối ở +3′56″ so với +3′58″).
+
+⇒ **Phép đối chứng dùng lại được:** nghi CI hỏng thì **chạy lại một lượt CŨ ĐÃ XANH**. Nó
+tách "mã đổi" khỏi "môi trường đổi" trong một lượt, và rẻ hơn mọi cách đoán. Tôi đã chỉ
+nhầm vào #319 trước khi làm phép này — commit liền trước chỗ hỏng là nghi phạm *thuận
+tiện*, không phải nghi phạm *đã chứng minh*.
+
+#### 🔴 VÌ SAO ƯU TIÊN CAO, KHÔNG PHẢI NỢ ĐỂ ĐÓ
+
+Bốn job này **không nằm trong danh sách required**. Nên từ nay **mọi PR sẽ mang bốn dấu
+đỏ**, và người ta sẽ quen bỏ qua chúng — rồi bỏ qua luôn lần chúng đỏ THẬT.
+
+Đó đúng là cơ chế của **luật 10** (*"một ca đỏ mà không ai bị chặn thì bằng không có ca"*)
+và của sự cố `.env.test` 09/09 (*"một bộ test đỏ vì môi trường thì người ta học cách bỏ qua
+nó"*). Bộ test đỏ giả ăn mòn cổng nhanh hơn bộ test không có.
+
+#### Ba việc, làm ngay sau lượt lên prod
+
+1. **Tìm vì sao `webServer` không tắt.** Nghi trước: handle còn mở (pool Prisma / kết nối
+   Postgres chưa đóng) · tiến trình con `next-server` không nhận SIGTERM · cổng 3100 còn
+   bị giữ. Dấu vết có sẵn: log job in `Terminate orphan process: pid (…) (next-server
+   (v16.2.6))` ở bước dọn dẹp — tức runner phải giết nó bằng tay.
+2. **Đổi reporter của bốn bộ sang dạng in TỪNG CA ngay khi xong** (`list`/`line`). Hiện
+   reporter chỉ in ở cuối, nên **treo là mất sạch kết quả** — 156 ca chạy qua mà không ai
+   thấy ca nào. Đổi xong thì kể cả lúc treo vẫn đọc được ca nào đã pass, và biết nó treo ở
+   đâu. Đây là việc rẻ nhất trong ba việc và nên làm TRƯỚC.
+3. ⛔ **KHÔNG nâng `timeout-minutes`.** Trần không phải chỗ hỏng — nâng lên chỉ là chờ lâu
+   hơn rồi vẫn treo, và đúng thứ repo gọi là vá TRIỆU CHỨNG.
+
+#### Mức bằng chứng đã ghi vào PR #321
+
+- Trên `5ec29d01`: bốn bộ **ĐÃ PASS**, có bản tổng kết làm bằng.
+- Trên `103cd5ea` (bản lên prod): **KHÔNG có bằng chứng pass** — chỉ **SUY RA** từ chỗ nó
+  hơn `5ec29d01` đúng 1 tài liệu + 2 `migration.sql`, và hai lượt chạy giống hệt tới cùng
+  một mốc. **Không được viết "đã pass trên mã này".**
+
+---
+
+### 🔴 NỢ-18 · XOAY MẬT KHẨU SUPABASE **DEV** — việc bảo mật chưa ai ghi lại
+
+**Ghi ngày 22/09/2026.** Trước đó việc này **chỉ tồn tại trong một cuộc trò chuyện** — tức
+phiên đóng là mất. Một việc bảo mật không được phép sống ở đó.
+
+#### Vì sao
+
+Chuỗi kết nối Supabase **DEV** đã bị lộ ra trong một phiên làm việc. Chưa có bằng chứng nó
+bị dùng sai, nhưng "chưa có bằng chứng" không phải "an toàn" — và chi phí xoay thấp hơn hẳn
+chi phí phải điều tra một lần rò rỉ.
+
+⚠️ **Chỉ DEV.** Prod và `test` là hai project Supabase **khác** (đã đo 17/09 — xem `NỢ-8`),
+không đụng tới.
+
+#### Ai làm
+
+**Chủ dự án.** Việc này chạm thông tin đăng nhập nên trợ lý không làm và cũng không cần
+biết giá trị mới.
+
+#### Các bước
+
+1. Supabase → project **DEV** (`mqvojw…`) → **Settings → Database → Reset database password**.
+2. Cập nhật **mọi nơi đang giữ chuỗi cũ**, đừng sót — sót một chỗ là một lỗi "không kết nối
+   được" xuất hiện vài ngày sau ở nơi chẳng liên quan:
+   - `.env` trên máy dev (khoá `DATABASE_URL`, `DIRECT_URL`)
+   - Vercel env **Preview** nếu đang trỏ DEV (xem
+     `reference_vercel_preview_db` — Preview cố ý dùng DEV, không dùng prod)
+   - bất kỳ secret nào trong GitHub Actions trỏ DEV
+3. Kiểm lại bằng **hành vi**, không bằng cảm giác:
+   ```bash
+   pnpm exec prisma migrate status      # với env DEV
+   ```
+   Phải ra danh sách migration, không phải `P1000/P1001`.
+
+#### Kiểm chéo: chuỗi cũ đã CHẾT chưa
+
+Xoay xong mà chuỗi cũ vẫn dùng được thì chưa xong. Thử lại đúng chuỗi cũ **một lần** — phải
+ra `P1000 Authentication failed`. Đây là **đối chứng dương** của cả việc này: không có nó
+thì "đã xoay" chỉ là niềm tin.
+
+⚠️ Đừng dán chuỗi cũ hay mới vào chat, ticket, hay commit. Kiểm rồi xoá khỏi lịch sử lệnh.

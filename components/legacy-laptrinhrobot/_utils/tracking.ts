@@ -27,6 +27,22 @@ export interface LeadData {
   timeOnPage?: number;
 }
 
+/**
+ * Payload của đường GỬI LEAD — khác `LeadData` ở đúng một trường.
+ *
+ * Vì sao tách: `LeadData` dùng chung cho cả payload pixel (`trackFacebookLead`,
+ * `trackGA4Lead`) lẫn payload gửi lead. Bắt buộc trường đồng ý trên `LeadData` sẽ ép
+ * hai hàm tracking phải khai một thứ chúng không liên quan — `tsc` đã chỉ đúng 4 chỗ đó.
+ *
+ * Trường này CỐ Ý không optional và không có mặc định: để `tsc` liệt kê mọi đường gửi
+ * thay vì để một đường quên truyền rồi lặng lẽ gửi lead không có đồng ý. Server
+ * (`leadCreateSchema`) chặn bằng `z.literal(true)`, nên gửi `false` bị từ chối — đó là
+ * ý đồ, không phải lỗi.
+ */
+export interface LeadSubmitData extends LeadData {
+  dongYChinhSachBaoMat: boolean;
+}
+
 export function trackFacebookLead(data: LeadData = {}): void {
   if (typeof window !== "undefined" && typeof window.fbq === "function") {
     try {
@@ -106,7 +122,7 @@ export async function submitLeadToSheet(formData: LeadData): Promise<{ success: 
   }
 }
 
-async function submitLeadToApi(formData: LeadData): Promise<void> {
+async function submitLeadToApi(formData: LeadSubmitData): Promise<void> {
   // Phase 4.UI.RESET.2 PART D1 — write to internal Lead table alongside Google Sheet.
   // Errors do NOT break form submit, but we now CHECK response.ok and log
   // payload + status so silent 400/429 failures surface in browser console.
@@ -145,7 +161,9 @@ async function submitLeadToApi(formData: LeadData): Promise<void> {
     referrer:
       typeof document !== "undefined" ? document.referrer || undefined : undefined,
     note: note || undefined,
-    consentMarketing: true,
+    // Một lượt đồng ý (BLĐ 22/09/2026) — xem chú thích ở /lien-he.
+    consentMarketing: formData.dongYChinhSachBaoMat,
+    dongYChinhSachBaoMat: formData.dongYChinhSachBaoMat,
     // Nguồn khách giữ từ lúc vào site (?ref= affiliate + UTM + click-id) — landing
     // này cũng nhận link giới thiệu qua domain cũ laptrinhrobot.vn (proxy.ts).
     ...readAttribution(),
@@ -178,14 +196,27 @@ async function submitLeadToApi(formData: LeadData): Promise<void> {
   }
 }
 
-export async function handleLeadSubmission(formData: LeadData) {
-  const sheetResult = await submitLeadToSheet(formData);
+export async function handleLeadSubmission(formData: LeadSubmitData) {
+  // ⚠️ ĐÃ NGỪNG gửi sang Google Sheet (21/09/2026) — hồ sơ Bộ Công Thương.
+  //
+  // `submitLeadToSheet` đẩy 9 trường sang một Google Apps Script đóng cứng URL, trong đó
+  // có **tên con, trường, lớp** của học sinh. Google Apps Script KHÔNG nằm trong danh
+  // sách "tổ chức, cá nhân có thể được tiếp cận thông tin cá nhân" ở mục 6 của Chính
+  // sách bảo mật sắp đăng ⇒ để nguyên là công bố một đằng, làm một nẻo.
+  //
+  // KHÔNG mất dữ liệu: `submitLeadToApi` ngay dưới vẫn ghi Lead vào DB nội bộ, và DB mới
+  // là nguồn sự thật (bản Sheet còn nuốt số 0 đầu số điện thoại).
+  //
+  // Bật lại = bỏ comment dòng dưới, NHƯNG phải khai Google là bên thứ ba trong mục 6 của
+  // `content/legal/chinh-sach-bao-mat.md` TRƯỚC.
+  // const sheetResult = await submitLeadToSheet(formData);
+
   // Await Lead API so any 400/429/500 failures surface in console immediately
   // (still non-blocking via the surrounding try/catch — submit success not gated).
   await submitLeadToApi(formData);
   trackFacebookLead({ course: formData.course, center: formData.center });
   trackGA4Lead({ course: formData.course, center: formData.center });
-  return sheetResult;
+  return { success: true } as const;
 }
 
 // AUTH-SĐT P1 — bản regex viết tay thứ 3 đã gỡ; dùng chung `lib/phone.ts`.

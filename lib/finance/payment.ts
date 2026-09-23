@@ -12,14 +12,11 @@ import {
   type GhiDanhCuaLead,
 } from "@/lib/finance/chia-khoan-theo-don";
 import { expandPhoneVariants } from "@/lib/phone";
-// HAI SỔ, HAI HÀM, TRÙNG TÊN — hợp nhất 16/09/2026 kéo cả hai vào file này:
-//  · `recordLeadStatusLedger` (bí danh của `recordLeadStatusChange` trong
-//    `@/lib/leads/set-status`) — sổ ĐẾM phễu, nhận `LeadStatusSource` chữ thường;
-//  · `recordLeadStatusChange` (`@/lib/lead/status-trail-write`) — vết NGƯỜI ĐỌC,
-//    dựng dòng "Lịch sử thay đổi" ở trang chi tiết lead.
-// Đặt bí danh để hai câu hỏi khác nhau không đội chung một cái tên.
-import { recordLeadStatusChange as recordLeadStatusLedger } from "@/lib/leads/set-status";
-import { recordLeadStatusChange } from "@/lib/lead/status-trail-write";
+// Cổng "tiền vào ⇒ lead lên Đã đăng ký". Thân hàm DỜI sang `@/lib/leads/tien-vao-day-pheu`
+// ở I-1 (22/09/2026) để đường tiền tự động gọi được mà không vi phạm lưới `[GGW-04]` — xem
+// khối chú thích ở chỗ re-export bên dưới. Hai sổ lead (sổ ĐẾM phễu + vết NGƯỜI ĐỌC) nay
+// nằm trong tệp đó, không còn import ở đây.
+import { maybeAdvanceLeadToRegistered } from "@/lib/leads/tien-vao-day-pheu";
 // Sổ đăng ký marker — MỘT chỗ định nghĩa chuỗi nhận dạng khoản tự sinh.
 import {
   AUTO_ORDER_CONFIRM_MARKER,
@@ -180,45 +177,18 @@ export async function ensureOrderPaymentRecorded(
 }
 
 /**
- * S3 — auto-advance lead CHO_QUYET_DINH → DA_DANG_KY khi đã ghi nhận thanh toán.
- * updateMany có guard (status=CHO_QUYET_DINH) → idempotent, không lùi/đụng status khác.
- * Trả true nếu vừa nâng cấp (để call-site biết có đổi).
+ * S3 — TIỀN VÀO ⇒ lead CHỜ QUYẾT ĐỊNH lên ĐÃ ĐĂNG KÝ.
+ *
+ * ⚠️ THÂN HÀM ĐÃ DỜI sang `@/lib/leads/tien-vao-day-pheu` [I-1 · 22/09/2026]. Ở đây chỉ còn
+ * lối vào cũ để không phải sửa chỗ gọi và bộ test đang neo vào tệp này.
+ *
+ * Vì sao dời: đường tiền TỰ ĐỘNG (`lib/payments/payos-ingest.ts`) cũng phải gọi cổng này,
+ * mà lưới `[GGW-04]` CẤM tệp đó import bất cứ thứ gì `from "@/lib/finance/payment"` — lệnh
+ * cấm đúng, vì nó canh chuyện đường webhook lỡ dùng marker của `ensureOrderPaymentRecorded`
+ * rồi bị `lib/orders/installments.ts` xoá mềm tiền ngân hàng. Lời giải là đừng với tay vào
+ * đây, không phải nới lưới. Lý lẽ đầy đủ nằm trong tệp mới.
  */
-export async function maybeAdvanceLeadToRegistered(
-  tx: Tx,
-  params: { leadId: string; actor: EnsurePaymentActor },
-): Promise<boolean> {
-  const upd = await tx.lead.updateMany({
-    where: { id: params.leadId, status: "CHO_QUYET_DINH", deletedAt: null },
-    data: { status: "DA_DANG_KY" },
-  });
-  if (upd.count === 0) return false;
-  // HAI SỔ (xem ghi chú đầu `lib/leads/set-status.ts`):
-  //  1. sổ ĐẾM phễu — `updateMany` ở trên là lượt claim atomic, giữ nguyên, chỉ nối sổ;
-  //  2. vết NGƯỜI ĐỌC — C-07: trước đây chỗ này CHỈ tạo `LeadActivity`, không có dòng
-  //     `AuditLog` nào ⇒ mốc "tiền vào → Đã đăng ký" biến mất khỏi mục "Lịch sử thay
-  //     đổi" của trang chi tiết lead (thứ QLCS xem), trong khi đường đổi tay thì có.
-  // Giá trị trạng thái là bộ 10 của GĐ5, KHÔNG phải AWAITING_DECISION/REGISTERED cũ.
-  await recordLeadStatusLedger({
-    tx,
-    leadId: params.leadId,
-    from: "CHO_QUYET_DINH",
-    to: "DA_DANG_KY",
-    source: "payment",
-    actorId: params.actor.id,
-    actorName: params.actor.name ?? null,
-  });
-  await recordLeadStatusChange({
-    tx,
-    leadId: params.leadId,
-    actorId: params.actor.id,
-    actorName: params.actor.name ?? "Hệ thống",
-    from: "CHO_QUYET_DINH",
-    to: "DA_DANG_KY",
-    source: "PAYMENT",
-  });
-  return true;
-}
+export { maybeAdvanceLeadToRegistered } from "@/lib/leads/tien-vao-day-pheu";
 
 // ─── FIN-01 (Q1=A) — Gắn/chia khoản RECORDED của đơn vào Enrollment lúc convert ───
 /**

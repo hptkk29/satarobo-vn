@@ -1,16 +1,21 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { CalendarClock, Plus, Users, X } from "lucide-react";
+import { ArrowLeftRight, CalendarClock, HandCoins, Plus, Users, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { NoTheoConKetQua } from "@/lib/finance/no-theo-con";
+import type { TrangThaiDungHocCuaCon } from "@/lib/finance/dung-hoc-con";
 import { QrZoom } from "./qr-zoom";
+import { NutDungHoc } from "./dung-hoc-dialog";
+import { NutDoiKhoa, type LopChon } from "./doi-khoa-dialog";
 
 import {
   boGanKhoanChoConAction,
+  chuyenTienGiuaConAction,
+  mienGiamNoAction,
   dongPhieuGopAction,
   ganKhoanChoConAction,
   huyDotChoConAction,
@@ -319,6 +324,218 @@ function FormTachKhoan({
         Tách rồi thì <b>không gộp lại được</b>. Sửa nhầm: kế toán bỏ gắn từng phần rồi gắn
         hoặc tách lại.
       </p>
+    </div>
+  );
+}
+
+/**
+ * G1 · US-22 — MIỄN GIẢM một phần nợ của một bé [22/09/2026].
+ *
+ * ⚠️ Mở TẠI CHỖ, không hộp thoại: người bấm cần nhìn con số "còn nợ" của bé ngay lúc gõ, và
+ * trần của ô nhập CHÍNH LÀ con số ấy.
+ *
+ * ⚠️ Nút chỉ vẽ khi bé CÒN NỢ. Miễn giảm cho một bé hết nợ (hoặc đang đóng thừa) là thao tác
+ * mà máy chủ luôn từ chối — vẽ nút ở đó là lời hứa suông (luật 12).
+ */
+function FormMienGiam({
+  orderId,
+  con,
+  dong,
+}: {
+  orderId: string;
+  con: NoTheoConKetQua["con"][number];
+  dong: () => void;
+}) {
+  const [oTien, datOTien] = useState("");
+  const [lyDo, datLyDo] = useState("");
+  const [dangChay, batDau] = useTransition();
+
+  const soTien = Number((oTien || "").replace(/\D/g, "")) || 0;
+  const toiDa = Math.max(0, con.conNo);
+  const hopLe = soTien > 0 && soTien <= toiDa && !!lyDo.trim();
+
+  const gui = () => {
+    batDau(async () => {
+      const r = await mienGiamNoAction({
+        orderId,
+        orderItemId: con.orderItemId,
+        soTien,
+        lyDo: lyDo.trim(),
+      });
+      if (!r.ok) {
+        toast.error(r.error);
+        return;
+      }
+      toast.success(
+        `Đã miễn ${vnd(r.soTien)} cho ${r.tenCon}` +
+          (r.soDotDaDoi > 0 ? ` — ${r.soDotDaDoi} đợt được tạo lại` : ""),
+      );
+      dong();
+    });
+  };
+
+  return (
+    <div className="mt-3 rounded-lg border border-state-warning-soft bg-state-warning-soft/20 p-3">
+      <p className="text-xs text-muted-foreground">
+        Miễn một phần nợ của <b className="text-foreground">{con.ten}</b>. Đây là tiền
+        {" "}<b className="text-foreground">KHÔNG BAO GIỜ về</b> — không có bước duyệt nào phía
+        sau và không hoàn tác được. Tối đa {vnd(toiDa)} (đúng phần bé còn nợ).
+      </p>
+
+      <div className="mt-2 space-y-2">
+        <label className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+          <span className="min-w-0 flex-1 text-sm">Số tiền miễn</span>
+          <Input
+            inputMode="numeric"
+            className="tabular-nums sm:w-56"
+            placeholder="0"
+            value={oTien}
+            onChange={(e) => datOTien(e.target.value)}
+            aria-label={`Số tiền miễn giảm cho ${con.ten}`}
+          />
+        </label>
+        <label className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+          <span className="min-w-0 flex-1 text-sm">Lý do *</span>
+          <Input
+            className="sm:w-56"
+            placeholder="VD: hoàn cảnh gia đình, QLCS duyệt"
+            value={lyDo}
+            onChange={(e) => datLyDo(e.target.value)}
+            aria-label="Lý do miễn giảm"
+          />
+        </label>
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button type="button" size="sm" disabled={!hopLe || dangChay} onClick={gui}>
+          Miễn giảm
+        </Button>
+        <Button type="button" size="sm" variant="ghost" disabled={dangChay} onClick={dong}>
+          Huỷ
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * F1 — CHUYỂN TIỀN từ bé này sang bé khác CÙNG ĐƠN [22/09/2026].
+ *
+ * ⚠️ Mở TẠI CHỖ, không hộp thoại — cùng lối với "Tạo đợt" và "Tách khoản": người bấm cần
+ * nhìn thấy con số "đã thu" và "còn nợ" của cả hai bé ngay lúc gõ. Chỉ "Dừng học" mới
+ * dùng hộp thoại, vì nó không hoàn tác được.
+ */
+function FormChuyenTien({
+  orderId,
+  cho,
+  con,
+  dong,
+}: {
+  orderId: string;
+  cho: NoTheoConKetQua["con"][number];
+  con: NoTheoConKetQua["con"];
+  dong: () => void;
+}) {
+  const conLai = con.filter((c) => c.orderItemId !== cho.orderItemId);
+  const [den, datDen] = useState(conLai[0]?.orderItemId ?? "");
+  const [oTien, datOTien] = useState("");
+  const [lyDo, datLyDo] = useState("");
+  const [dangChay, batDau] = useTransition();
+
+  const beNhan = conLai.find((c) => c.orderItemId === den);
+  const soTien = Number((oTien || "").replace(/\D/g, "")) || 0;
+  // Gợi ý = nhỏ hơn giữa hai trần. CHỈ là gợi ý — cổng thật nằm ở máy chủ.
+  const toiDa = beNhan ? Math.min(Math.max(0, cho.daThu), Math.max(0, beNhan.conNo)) : 0;
+  const hopLe = soTien > 0 && soTien <= toiDa && !!lyDo.trim() && !!beNhan;
+
+  const gui = () => {
+    batDau(async () => {
+      const r = await chuyenTienGiuaConAction({
+        orderId,
+        tuOrderItemId: cho.orderItemId,
+        denOrderItemId: den,
+        soTien,
+        lyDo: lyDo.trim(),
+      });
+      if (!r.ok) {
+        toast.error(r.error);
+        return;
+      }
+      toast.success(`Đã chuyển ${vnd(r.soTien)} từ ${r.tenCho} sang ${r.tenNhan}`);
+      dong();
+    });
+  };
+
+  return (
+    <div className="mt-3 rounded-lg border border-border bg-background p-3">
+      <p className="text-xs text-muted-foreground">
+        Chuyển phần <b className="text-foreground">kế toán ĐÃ XÁC NHẬN</b> của {cho.ten}
+        {" "}sang một bé khác cùng đơn. Tối đa {vnd(Math.max(0, cho.daThu))} (phần đã xác nhận
+        của {cho.ten}), và không vượt phần còn nợ của bé nhận.
+      </p>
+
+      <div className="mt-2 space-y-2">
+        <label className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+          <span className="min-w-0 flex-1 text-sm">Chuyển sang</span>
+          <select
+            aria-label="Chọn bé nhận tiền"
+            className="h-9 min-w-0 rounded-md border border-input bg-background px-2 text-sm sm:w-56"
+            value={den}
+            onChange={(e) => datDen(e.target.value)}
+          >
+            {conLai.map((c) => (
+              <option key={c.orderItemId} value={c.orderItemId}>
+                {c.ten} — còn nợ {vnd(Math.max(0, c.conNo))}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+          <span className="min-w-0 flex-1 text-sm">
+            Số tiền
+            <span className="ml-2 text-xs text-muted-foreground">tối đa {vnd(toiDa)}</span>
+          </span>
+          <Input
+            inputMode="numeric"
+            className="tabular-nums sm:w-56"
+            placeholder="0"
+            value={oTien}
+            onChange={(e) => datOTien(e.target.value)}
+            aria-label={`Số tiền chuyển từ ${cho.ten}`}
+          />
+        </label>
+
+        <label className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+          <span className="min-w-0 flex-1 text-sm">Lý do *</span>
+          <Input
+            className="sm:w-56"
+            placeholder="VD: gắn nhầm bé lúc đối soát"
+            value={lyDo}
+            onChange={(e) => datLyDo(e.target.value)}
+            aria-label="Lý do chuyển tiền"
+          />
+        </label>
+      </div>
+
+      {/* Nút bị vô hiệu thì phải NÓI VÌ SAO (luật 12) — nếu không, người vận hành đọc nó
+          như hệ thống hỏng và đi tìm nhầm chỗ. Ca thật: mọi bé còn lại đều hết nợ. */}
+      {toiDa <= 0 && (
+        <p className="mt-2 text-xs text-amber-700 dark:text-amber-500">
+          {beNhan
+            ? `${beNhan.ten} không còn nợ đồng nào — chuyển sang là làm bé đó đóng thừa.`
+            : "Đơn không còn bé nào khác để nhận."}
+        </p>
+      )}
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button type="button" size="sm" disabled={!hopLe || dangChay} onClick={gui}>
+          Chuyển
+        </Button>
+        <Button type="button" size="sm" variant="ghost" disabled={dangChay} onClick={dong}>
+          Huỷ
+        </Button>
+      </div>
     </div>
   );
 }
@@ -794,6 +1011,10 @@ export function CongNoTheoCon({
   duocSua,
   duocGan,
   duocBoGan,
+  dungHoc,
+  baoLuu,
+  themCon = null,
+  lopDoiKhoa = [],
   phieu = null,
 }: {
   orderId: string;
@@ -804,10 +1025,45 @@ export function CongNoTheoCon({
   duocGan: boolean;
   /** `payments:manage` — bỏ gắn, đóng phiếu đã nhận tiền. Kế toán. */
   duocBoGan: boolean;
+  /**
+   * PHIÊN D — trạng thái dừng học + tình hình hoàn tiền của TỪNG dòng, khoá theo
+   * `orderItemId`. Dựng ở server bằng `docTrangThaiDungHoc`.
+   *
+   * ⚠️ Dòng thiếu khoá trong map này được coi là CÒN HỌC. Mặc định fail-safe theo hướng
+   * "chưa dừng": hiện nhầm một bé đã dừng thành còn học thì người ta thấy ngay và bấm lại;
+   * hiện nhầm chiều ngược lại là giấu mất nút của một bé đang học.
+   */
+  dungHoc?: Record<string, TrangThaiDungHocCuaCon>;
+  /**
+   * F2 — con nào ĐANG BẢO LƯU, khoá theo `orderItemId`. Dựng ở server bằng
+   * `docBaoLuuCuaDon` (`lib/finance/bao-luu-tien.ts`).
+   *
+   * ⚠️ Chỉ để HIỂN THỊ. Màn này KHÔNG có nút bảo lưu, và đó là chủ đích: cửa bảo lưu ở
+   * màn học viên (`/students/<id>/edit`) vì bảo lưu là việc học vụ (dừng lịch học, dừng
+   * giao bài) mà tiền chỉ đi theo. Thêm nút thứ hai ở đây là hai cửa cho một trạng thái.
+   */
+  baoLuu?: Record<string, { reserveId: string; startedAt: Date | string; expectedEndAt: Date | string | null; soNgayDaDoiHan: number | null }>;
+  /**
+   * F3 — nút "Thêm con vào đơn…" (hộp thoại riêng, dựng ở trang vì nó cần danh sách khoá học).
+   *
+   * ⚠️ Nhận sẵn phần tử chứ không nhận `khoa[]` rồi tự vẽ: khối này là client component và
+   * danh sách khoá học là một câu tra DB. Đẩy câu tra xuống client là một lượt đi về nữa cho
+   * một danh sách hầu như không đổi.
+   */
+  themCon?: React.ReactNode;
+  /**
+   * F4 — lớp chọn được khi đổi khoá. Rỗng ⇒ KHÔNG vẽ nút (luật 12: nút dẫn thẳng tới một
+   * danh sách trống là lời hứa suông).
+   */
+  lopDoiKhoa?: LopChon[];
   /** Phiếu gộp ĐANG MỞ của đơn, `null` khi chưa phát. Dựng ở server — xem `PhieuGopView`. */
   phieu?: PhieuGopView | null;
 }) {
   const [dangMoForm, datDangMoForm] = useState<string | null>(null);
+  /** F1 — bé nào đang mở form chuyển tiền. Một lúc chỉ một. */
+  const [dangMoChuyen, datDangMoChuyen] = useState<string | null>(null);
+  /** G1 — bé nào đang mở form miễn giảm. Một lúc một. */
+  const [dangMoMien, datDangMoMien] = useState<string | null>(null);
   /**
    * Các đợt sale đang tick để gộp thành MỘT phiếu.
    *
@@ -852,16 +1108,22 @@ export function CongNoTheoCon({
           <Users className="size-4 text-muted-foreground" aria-hidden />
           Công nợ theo con
         </h2>
-        <p className="text-xs text-muted-foreground">
-          Tổng{" "}
-          <span className="font-semibold tabular-nums text-foreground">
-            {vnd(so.tongPhaiThu)}
-          </span>{" "}
-          · còn nợ{" "}
-          <span className="font-semibold tabular-nums text-state-danger-ink">
-            {vnd(so.tongConNo)}
-          </span>
-        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-xs text-muted-foreground">
+            Tổng{" "}
+            <span className="font-semibold tabular-nums text-foreground">
+              {vnd(so.tongPhaiThu)}
+            </span>{" "}
+            · còn nợ{" "}
+            <span className="font-semibold tabular-nums text-state-danger-ink">
+              {vnd(so.tongConNo)}
+            </span>
+          </p>
+          {/* F3 — "Thêm con vào đơn…" đặt ở ĐẦU khối, cạnh con số tổng: nó là thao tác trên
+              CẢ ĐƠN (đổi tổng đơn, có thể đổi ưu đãi của mọi bé), không phải thao tác của
+              một dòng. Đặt nó dưới một bé cụ thể là nói sai phạm vi của nó. */}
+          {duocSua && themCon}
+        </div>
       </div>
 
       {/* Tiền đã vào đơn mà chưa gắn con nào. KHÔNG cộng vào "đã thu" của bất kỳ bé nào —
@@ -915,6 +1177,10 @@ export function CongNoTheoCon({
         {so.con.map((c) => {
           const conLaiTaoDot = c.conNo - c.tongDotDangMo;
           const moForm = dangMoForm === c.orderItemId;
+          const tt = dungHoc?.[c.orderItemId];
+          const bl = baoLuu?.[c.orderItemId];
+          const moChuyen = dangMoChuyen === c.orderItemId;
+          const moMien = dangMoMien === c.orderItemId;
           return (
             <li
               key={c.orderItemId}
@@ -930,7 +1196,10 @@ export function CongNoTheoCon({
               </div>
 
               <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
-                <O nhan="Học phí" giaTri={vnd(c.phaiThu)} />
+                {/* Nhãn phải NÓI THẬT (luật 12): sau khi dừng, con số này là giá trị quyết
+                    toán chứ không còn là học phí của khoá. Giữ nguyên chữ "Học phí" là một
+                    cái nhãn nói dối, và nó nói dối đúng về tiền. */}
+                <O nhan={tt?.daDung ? "Phải trả (quyết toán)" : "Học phí"} giaTri={vnd(c.phaiThu)} />
                 <O nhan="Đã thu" giaTri={vnd(c.daThu)} tone="ok" />
                 <O
                   nhan="Chờ xác nhận"
@@ -943,6 +1212,75 @@ export function CongNoTheoCon({
                   tone={c.conNo > 0 ? "danger" : "ok"}
                 />
               </div>
+
+              {/* F2 · US-18 — bé ĐANG BẢO LƯU. Phải nói ra ở đây, cạnh con số, vì hạn các
+                  đợt của bé vừa bị dời: một cái hạn 22/11 không lời giải thích đọc như
+                  người nhập sai ngày. Và bé bảo lưu KHÔNG bị báo quá hạn — nói luôn, kẻo
+                  kế toán đi tìm xem vì sao nó biến khỏi danh sách đối soát. */}
+              {bl && (
+                <div className="mt-3 rounded-lg border border-state-warning-soft bg-state-warning-soft/40 p-3 text-xs">
+                  <p className="font-medium text-foreground">
+                    Đang bảo lưu
+                    {` từ ${new Date(bl.startedAt).toLocaleDateString("vi-VN")}`}
+                    {bl.expectedEndAt
+                      ? ` · dự kiến học lại ${new Date(bl.expectedEndAt).toLocaleDateString("vi-VN")}`
+                      : " · CHƯA khai ngày học lại"}
+                  </p>
+                  <p className="mt-0.5 text-muted-foreground">
+                    {bl.soNgayDaDoiHan != null && bl.soNgayDaDoiHan > 0
+                      ? `Hạn các đợt chưa tới hạn đã dời ${bl.soNgayDaDoiHan} ngày.`
+                      : bl.expectedEndAt
+                        // Có ngày học lại mà không đợt nào dời: hoặc đợt đều đã quá hạn từ
+                        // trước (không dời — đúng luật), hoặc phép dời chưa chạy được. Hai
+                        // ca khác nhau nên câu chữ không được khẳng định ca nào.
+                        ? "Chưa có đợt nào được dời hạn (đợt đã quá hạn từ trước thì không dời)."
+                        : "Không khai ngày học lại thì không dời được hạn đợt nào."}
+                    {" "}Trong thời gian bảo lưu, đợt của bé không bị tính quá hạn.
+                  </p>
+                </div>
+              )}
+
+              {/* PHIÊN D — bé ĐÃ DỪNG: nói rõ quyết toán ra số nào, và khoản dư đang nằm
+                  ở đâu. Đặt NGAY DƯỚI hàng số liệu vì "Học phí" của bé vừa đổi nghĩa (nó là
+                  giá trị quyết toán, không còn là học phí gốc) — không giải thích ngay cạnh
+                  thì con số ấy đọc như một lỗi. */}
+              {tt?.daDung && (
+                <div className="mt-3 rounded-lg bg-muted/40 p-3 text-xs">
+                  <p className="font-medium text-foreground">
+                    Đã dừng học
+                    {tt.stoppedAt && ` ${new Date(tt.stoppedAt).toLocaleDateString("vi-VN")}`}
+                    {tt.stopReason === "TRUNG_TAM_HUY" && " · trung tâm huỷ, không thu phí"}
+                  </p>
+                  <p className="mt-0.5 text-muted-foreground">
+                    Dùng <b className="tabular-nums text-foreground">{tt.usedSessions ?? 0}</b>
+                    {tt.committedSessions != null && `/${tt.committedSessions}`} buổi
+                    {tt.stopUnitPrice != null && tt.stopUnitPrice > 0 && (
+                      <> · đơn giá {vnd(tt.stopUnitPrice)}/buổi</>
+                    )}
+                    {tt.lastSessionDate && (
+                      <> · buổi cuối {new Date(tt.lastSessionDate).toLocaleDateString("vi-VN")}</>
+                    )}
+                  </p>
+                  {tt.stopNote && (
+                    <p className="mt-1 text-muted-foreground">Ghi chú: {tt.stopNote}</p>
+                  )}
+                  {tt.choHoan > 0 && (
+                    <p className="mt-1.5 text-state-warning-ink">
+                      Chờ kế toán hoàn: <b className="tabular-nums">{vnd(tt.choHoan)}</b>
+                    </p>
+                  )}
+                  {/* Kế toán TỪ CHỐI yêu cầu hoàn mà bé vẫn còn dư ⇒ khoản đó quay về "chưa
+                      ai xử". Không nói ra thì nó hiện như "đóng thừa" vô cớ, và không ai đi
+                      tìm — đúng cái chết câm chủ dự án cấm. */}
+                  {tt.choHoan === 0 && c.conNo < 0 && (
+                    <p className="mt-1.5 text-state-danger-ink">
+                      Dư <b className="tabular-nums">{vnd(-c.conNo)}</b> CHƯA xử lý
+                      {tt.coHoanBiTuChoi && " (kế toán đã từ chối yêu cầu hoàn)"} — chọn lại:
+                      chuyển sang bé khác hoặc tạo yêu cầu hoàn mới.
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Khoản ĐÃ gắn cho chính bé này — chỗ duy nhất bỏ gắn được. Đặt ngay dưới
                   hàng số liệu của bé, vì người bỏ gắn cần thấy "đã thu" của bé đổi theo. */}
@@ -1001,6 +1339,71 @@ export function CongNoTheoCon({
                     </li>
                   ))}
                 </ul>
+              )}
+
+              {/* Bé đã dừng thì KHÔNG còn nút "Dừng học" và KHÔNG tạo đợt mới được —
+                  phần còn nợ (nếu học lố) vẫn tạo đợt được như thường, nên cổng nằm ở
+                  `conLaiTaoDot` chứ không ở đây. */}
+              {/* F1 — chuyển tiền sang bé khác. Chỉ vẽ khi CÓ bé khác và bé này CÓ tiền
+                  đã xác nhận để chuyển: một nút dẫn thẳng tới câu từ chối là lời hứa suông
+                  (luật 12). */}
+              {/* G1 · US-22 — MIỄN GIẢM. Chỉ vẽ khi bé CÒN NỢ: máy chủ luôn từ chối miễn cho
+                  bé hết nợ hoặc đang đóng thừa, nên nút ở đó là lời hứa suông (luật 12).
+                  Quyền: `orders:manage` (QLCS + kế toán Hội sở) — sale KHÔNG có, và action
+                  tự từ chối chứ không chỉ ẩn nút. */}
+              {duocSua && c.conNo > 0 && (
+                moMien ? (
+                  <FormMienGiam orderId={orderId} con={c} dong={() => datDangMoMien(null)} />
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-3"
+                    onClick={() => datDangMoMien(c.orderItemId)}
+                  >
+                    <HandCoins className="size-4" aria-hidden />
+                    Miễn giảm nợ…
+                  </Button>
+                )
+              )}
+
+              {duocBoGan && so.con.length >= 2 && c.daThu > 0 && (
+                moChuyen ? (
+                  <FormChuyenTien
+                    orderId={orderId}
+                    cho={c}
+                    con={so.con}
+                    dong={() => datDangMoChuyen(null)}
+                  />
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-3"
+                    onClick={() => datDangMoChuyen(c.orderItemId)}
+                  >
+                    <ArrowLeftRight className="size-4" aria-hidden />
+                    Chuyển tiền sang bé khác
+                  </Button>
+                )
+              )}
+
+              {duocSua && !tt?.daDung && (
+                <NutDungHoc orderId={orderId} orderItemId={c.orderItemId} tenCon={c.ten} />
+              )}
+
+              {/* F4 — đổi khoá / đổi lớp. Cạnh "Dừng học" vì cùng họ: cả hai kết thúc khoá
+                  hiện tại của bé. Khác nhau ở chỗ đổi khoá thì bé HỌC TIẾP, nên tiền dư đi
+                  theo chứ không ra khỏi nhà. Bé đã dừng thì không còn gì để đổi. */}
+              {duocSua && !tt?.daDung && lopDoiKhoa.length > 0 && (
+                <NutDoiKhoa
+                  orderId={orderId}
+                  orderItemId={c.orderItemId}
+                  tenCon={c.ten}
+                  lop={lopDoiKhoa}
+                />
               )}
 
               {duocSua &&

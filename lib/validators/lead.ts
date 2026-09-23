@@ -64,6 +64,21 @@ export const leadCreateSchema = z.object({
   ref: z.string().max(32).optional(),
   eventId: z.string().min(8),
   consentMarketing: z.boolean().default(false),
+  // ─── Hồ sơ BCT mục 3 — ĐỒNG Ý CHÍNH SÁCH BẢO MẬT ───────────────────────────
+  // `z.literal(true)` chứ KHÔNG phải `z.boolean()`: thiếu trường hoặc gửi `false` đều
+  // phải bị TỪ CHỐI. Ô tích ở trình duyệt chỉ là affordance — ai cũng gọi thẳng API
+  // được, nên cổng SERVER mới là cổng.
+  //
+  // ⚠️ Phạm vi: schema này CHỈ được `app/api/leads/route.ts` dùng (đã đo). Ba đường
+  // công khai gọi nó đều đã có ô tích: /lien-he, modal tư vấn khoá học, và form đăng ký
+  // landing (qua `_utils/tracking.ts`). Các nguồn lead khác (webhook quatang, form sale,
+  // nhập nội bộ) đi qua `lib/lead/intake/*` và KHÔNG chạm schema này — siết ở đây không
+  // làm vỡ chúng.
+  //
+  // KHÔNG đặt `.default(true)`: mặc định đúng-sẵn biến cổng thành lời trang trí.
+  dongYChinhSachBaoMat: z.literal(true, {
+    message: 'Vui lòng đọc và đồng ý với Chính sách bảo mật.',
+  }),
   note: z.string().max(500).optional(),
   // Honeypot — bot sẽ fill, người thật để trống
   website: z.string().max(0).optional().or(z.literal('')),

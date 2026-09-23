@@ -36,7 +36,8 @@ import {
   REMOVABLE_ENROLLMENT_STATUSES,
   type RemovedEnrollment,
 } from "@/lib/students/remove-from-classes";
-import { withdrawStudentFromAllClasses } from "@/lib/students/withdraw";
+import { nghiHocHan, type GhiDanhBoQuaHoanTien } from "@/lib/students/withdraw";
+import { apDungDoiHanBaoLuu } from "@/lib/finance/bao-luu-tien";
 import { STUDYING_ENROLLMENT_STATUSES } from "@/lib/enrollment-status";
 import {
   syncConversationMembership,
@@ -624,9 +625,11 @@ export async function reserveStudentAction(input: {
 
   const { actorId, actorName } = getAuditActor(session);
 
-  await sdb.$transaction(async (txRaw) => {
+  // F2 — cần `id` của lượt bảo lưu vừa tạo để áp phần TIỀN sau khi commit. Trước bản này
+  // `create` không `select` gì và transaction không trả gì.
+  const reserveIdVuaTao = await sdb.$transaction(async (txRaw) => {
     const tx = txRaw as unknown as Prisma.TransactionClient;
-    await tx.studentReserve.create({
+    const luot = await tx.studentReserve.create({
       data: {
         studentId: input.studentId,
         enrollmentId: input.enrollmentId ?? null,
@@ -638,6 +641,7 @@ export async function reserveStudentAction(input: {
         createdByName: actorName,
         isActive: true,
       },
+      select: { id: true },
     });
 
     if (student.status === "ACTIVE") {
@@ -719,7 +723,37 @@ export async function reserveStudentAction(input: {
         tx,
       });
     }
+
+    return luot.id;
   });
+
+  // ── F2 · US-18 AC2 — phần TIỀN của lượt bảo lưu ────────────────────────────
+  //
+  // Dời hạn các đợt CHƯA TỚI HẠN của con. Chạy SAU khi bảo lưu đã commit, KHÔNG nằm trong
+  // transaction trên: mọi phép ghi lên sổ tiền của đơn phải đi qua `ghiTienChoDon` (khoá
+  // advisory theo `orderId`), và một lượt bảo lưu có thể chạm NHIỀU đơn — lồng nhiều khoá
+  // đơn vào transaction học vụ là mời deadlock.
+  //
+  // ⚠️ Hỏng ở đây KHÔNG được làm hỏng lượt bảo lưu: bé đã bảo lưu là việc học vụ đã xong.
+  // Hỏng thì hạn giữ nguyên, và con VẪN KHÔNG bị báo quá hạn (phép tha đọc `StudentReserve`
+  // chứ không đọc kết quả hàm này — xem `locDotCuaConDangBaoLuu`). Nên nó trả về một CẢNH
+  // BÁO cho người bấm, không ném; và `apDungDoiHanBaoLuu` an toàn khi gọi lại.
+  let canhBaoTien: string | undefined;
+  if (reserveIdVuaTao) {
+    try {
+      const tien = await apDungDoiHanBaoLuu({
+        reserveId: reserveIdVuaTao,
+        actor: { id: actorId, name: actorName },
+      });
+      if (!tien.ok) canhBaoTien = `Chưa dời được hạn đợt thu: ${tien.error}`;
+      else if (tien.soDotDaDoi > 0) {
+        for (const orderId of tien.donDaCham) revalidatePath(`/orders/${orderId}`);
+      }
+    } catch (err) {
+      console.error("[bao-luu] dời hạn đợt thất bại:", err);
+      canhBaoTien = "Đã bảo lưu, nhưng CHƯA dời được hạn các đợt thu — nhờ kế toán kiểm lại.";
+    }
+  }
 
   revalidatePath("/students");
   revalidatePath(`/students/${input.studentId}/edit`);
@@ -752,7 +786,9 @@ export async function reserveStudentAction(input: {
     });
   }
 
-  return { ok: true as const };
+  // `canhBaoTien` CHỈ có khi phần tiền hỏng. Người bấm phải thấy nó — bảo lưu xong mà hạn
+  // chưa dời là một việc còn phải làm, và một `{ ok: true }` trơn nói ngược điều đó.
+  return { ok: true as const, canhBaoTien };
 }
 
 // ─── RESUME RESERVE ─────────────────────────────────────────────────
@@ -944,6 +980,10 @@ export async function withdrawStudentAction(input: {
 
   const { actorId, actorName } = getAuditActor(session);
   let removedEnrollments: RemovedEnrollment[] = [];
+  // PHIÊN D — ghi danh đã quyết toán qua "Dừng học" thì KHÔNG sinh đề xuất hoàn lần hai.
+  // Phải trả lên màn: "không có đề xuất hoàn" mà im lặng thì ba tháng sau không ai phân
+  // biệt được nó với một lượt bỏ sót.
+  let boQuaHoanTien: GhiDanhBoQuaHoanTien[] = [];
 
   await sdb.$transaction(async (txRaw) => {
     const tx = txRaw as unknown as Prisma.TransactionClient;
@@ -997,7 +1037,7 @@ export async function withdrawStudentAction(input: {
     // `lib/students/withdraw.ts`, dùng chung `REMOVABLE_ENROLLMENT_STATUSES` với
     // `deleteStudent`, và có test hồi quy riêng — đừng chép danh sách status về lại đây.
     // (sync nhóm chat nằm trong removeStudentFromClasses, cùng transaction.)
-    removedEnrollments = await withdrawStudentFromAllClasses({
+    const kqNghi = await nghiHocHan({
       tx,
       studentId: input.studentId,
       actorId,
@@ -1005,6 +1045,8 @@ export async function withdrawStudentAction(input: {
       reason: `Học viên nghỉ học: ${input.reason.trim()}`,
       orgUnitId: student.centerId,
     });
+    removedEnrollments = kqNghi.daGo;
+    boQuaHoanTien = kqNghi.boQuaHoanTien;
   }, { timeout: 30_000, maxWait: 10_000 });
 
   revalidatePath("/students");
@@ -1048,7 +1090,7 @@ export async function withdrawStudentAction(input: {
     });
   }
 
-  return { ok: true as const };
+  return { ok: true as const, boQuaHoanTien };
 }
 
 // ═══════════════════════════════════════════════════════════════════

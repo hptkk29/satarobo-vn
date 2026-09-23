@@ -82,7 +82,7 @@ Sata Robo không chịu trách nhiệm cho:
 - Thông tin không chính xác từ bên thứ ba (link external, đối tác)
 - Thiệt hại do người dùng sử dụng sai mục đích
 
-Sata Robo cam kết duy trì Website hoạt động ổn định ≥ 99.5% thời gian (trừ bảo trì định kỳ được thông báo trước).
+Sata Robo nỗ lực duy trì Website hoạt động ổn định và an toàn. Website có thể tạm ngừng hoặc gián đoạn khi bảo trì, nâng cấp, gặp sự cố kỹ thuật hoặc xảy ra sự kiện bất khả kháng; trong các trường hợp đó Sata Robo sẽ thông báo cho Khách hàng trong thời gian sớm nhất. Chi tiết tại [Các điều kiện và hạn chế trong việc giao hàng và cung cấp dịch vụ](/cac-dieu-kien-va-han-che).
 
 ## 7. Luật áp dụng và giải quyết tranh chấp
 
@@ -102,5 +102,5 @@ Mọi câu hỏi về Điều khoản:
 
 - 📧 Email: thongtin@satarobo.vn
 - 📞 Hotline CS1 (Nguyễn Hữu Thọ): 0818.823.720 · CS2 (Hoàng Diệu): 0702.193.933
-- 🏢 Trụ sở: 211 Nguyễn Hữu Thọ, Hải Châu, Đà Nẵng
-- 🆔 Mã số thuế: 0402301783
+- 📍 Địa chỉ: 211 Nguyễn Hữu Thọ, Phường Hòa Cường, Thành phố Đà Nẵng, Việt Nam
+- 🏢 Mã số doanh nghiệp: 0402301783 do Sở Tài chính Thành phố Đà Nẵng cấp ngày 02/10/2025

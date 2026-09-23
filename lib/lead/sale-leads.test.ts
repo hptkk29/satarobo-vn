@@ -205,16 +205,10 @@ describe("[S-4] chốt chặn nguồn — truy vấn phải ĐẾM tổng, trang
     expect(s).toContain("moTaCatDanhSach(rows.length, tong)");
   });
 
-  it("trang 'Khách của tôi' truyền cảnh báo cắt xuống bảng", () => {
-    // Tính ra rồi bỏ quên thì y như không tính.
-    const s = doc("app/(sale)/sale/khach-cua-toi/page.tsx");
-    expect(s).toContain("canhBaoCat");
-    expect(s).toMatch(/canhBaoCat=\{canhBaoCat\}/);
-  });
+  // ⚠️ 22/09/2026 — site Sale GỠ, hai ca "trang truyền cảnh báo xuống bảng" và
+  // "bảng hiển thị cảnh báo đó" mất chỗ bám (`khach-cua-toi/page.tsx` +
+  // `lead-table.tsx`). Bất biến TẦNG TRUY VẤN ngay trên vẫn khoá phần quan trọng:
+  // `getMyLeads` phải ĐẾM tổng và trả cờ cắt. Phần hiển thị cảnh báo chưa có màn
+  // nào trong admin nhận lại — ghi ra đây để không tưởng là đã phủ.
 
-  it("bảng hiển thị cảnh báo đó", () => {
-    expect(doc("app/(sale)/sale/khach-cua-toi/_components/lead-table.tsx")).toContain(
-      "canhBaoCat",
-    );
-  });
 });

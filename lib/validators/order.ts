@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { OrderType, OrderStatus, OrderItemType } from "@prisma/client";
 import { phoneVn } from "@/lib/validators/phone";
-import { TRAN_KHOAN_GIAM_MOI_DONG } from "@/lib/orders/giam-gia-dong";
+import { TRAN_KHOAN_GIAM_MOI_DONG, MA_LOAI_GIAM } from "@/lib/orders/giam-gia-dong";
 import { TRAN_SO_DOT } from "@/lib/payments/ke-hoach-dot";
 
 // AUTH-SĐT P1 — regex riêng đã gỡ; nguồn duy nhất ở `lib/phone.ts`.
@@ -66,6 +66,18 @@ const orderItemSchema = z.object({
         // chặn ở đây bằng một con số cứng là đoán hộ giá bán.
         giaTri: z.number().int().min(1),
         lyDo: z.string().max(1000).optional().nullable(),
+        /**
+         * LOẠI ưu đãi — nhãn có cấu trúc [PHIÊN E, 21/09/2026]. Xem `LOAI_GIAM`.
+         *
+         * ⚠️ `optional().nullable()` là CHỦ ĐÍCH, không phải quên: chủ dự án chốt chỉ áp
+         * cho ưu đãi tạo mới, không đoán ngược dữ liệu cũ, và không chặn sale lưu đơn vì
+         * một nhãn thống kê. Đổi lại nhãn này KHÔNG đủ tin để đếm.
+         *
+         * ⚠️ Danh sách lấy từ `MA_LOAI_GIAM`, KHÔNG gõ lại chuỗi ở đây — gõ lại là hai
+         * danh sách sẵn sàng lệch nhau, và cái lệch sẽ im lặng (zod từ chối một mã mà
+         * form vừa cho chọn).
+         */
+        loai: z.enum(MA_LOAI_GIAM as unknown as [string, ...string[]]).optional().nullable(),
       }).refine((k) => k.kieu !== "PHAN_TRAM" || k.giaTri <= 100, {
         message: "Giảm theo % phải trong khoảng 1–100",
         path: ["giaTri"],
