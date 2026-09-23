@@ -74,6 +74,9 @@ import { locDonNhanTien } from "../lib/payments/don-nhan-tien";
 // Cùng một lý do với `locDonNhanTien()` ngay trên: định nghĩa "khoản nào tính vào trục A" chỉ
 // được có MỘT bản. Hằng này còn mang sẵn `deletedAt: null` — vế mà bản gõ tay dễ quên.
 import { KHOAN_DA_XAC_NHAN, tongDaXacNhan } from "../lib/finance/debt";
+// Dấu của đường nhập sổ cũ — DÙNG LẠI hằng, KHÔNG gõ lại chuỗi dấu.
+// Gõ lại là bản thứ hai của một quy ước, và nó lệch đi lần đầu ai đó đổi dấu.
+import { BACKFILL_PAYMENT_MARKER } from "../lib/finance/payment-markers";
 import { TRAN_SO_DOT } from "../lib/payments/ke-hoach-dot";
 import { TRAN_KHOAN_GIAM_MOI_DONG } from "../lib/orders/giam-gia-dong";
 
@@ -549,6 +552,9 @@ async function phan4(tx: Tx): Promise<void> {
     select: {
       amount: true,
       recordedById: true,
+      // `note` đọc lên CHỈ để dò dấu nhập-sổ-cũ — KHÔNG in ra. Nó là chuỗi tự do do
+      // người nhập gõ, tức có thể lẫn thông tin khách; báo cáo này không in cột cá nhân nào.
+      note: true,
       order: {
         select: {
           leadId: true,
@@ -577,7 +583,7 @@ async function phan4(tx: Tx): Promise<void> {
     [
       ["(a) suy được từ `Lead.assignedToId`", String(suyDuoc), pct(suyDuoc), "backfill ĐƯỢC"],
       ["(b) có lead nhưng lead chưa có sale", String(leadKhongSale), pct(leadKhongSale), "không suy được — để trống"],
-      ["(c) đơn KHÔNG có lead", String(khongLead), pct(khongLead), "cần quy tắc fallback"],
+      ["(c) đơn KHÔNG có lead", String(khongLead), pct(khongLead), "tách (c1)/(c2) bên dưới"],
     ],
     ["nhóm", "số khoản", "tỉ lệ", "xử lý"],
   );
@@ -603,10 +609,56 @@ async function phan4(tx: Tx): Promise<void> {
       `(đơn tạo trước 31/08/2026 để NULL vĩnh viễn — \`schema.prisma\` tự khai: không nguồn nào suy ngược).`,
   );
   in_();
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // (c1)/(c2) — `Order.createdById` MANG HAI NGHĨA, và chúng phân biệt được bằng DẤU.
+  //
+  // Đường nhập sổ cũ đặt `createdById: saleUserId ?? actor.id` (`ghi-giao-dich-cu.ts:156`),
+  // theo đúng chốt của chủ dự án 14/09/2026: *"người tạo phải gán cho sale"* — vì để nguyên
+  // người bấm nút thì 136 đơn đều mang tên MỘT người và thành tích của 6 sale biến mất.
+  // ⇒ Với nhóm đó, `createdById` ĐÃ LÀ SALE, dùng làm người thu là ĐÚNG.
+  //
+  // Với đơn tạo tay ở `/orders/new`, `createdById` là người bấm nút — có thể là admin/quản lý,
+  // tức đúng cái sai chủ dự án đang bảo sửa. Fallback ở đây là SAI.
+  //
+  // Dấu phân biệt: `BACKFILL_PAYMENT_MARKER` nằm trong `Payment.note`
+  // (`lib/finance/payment-markers.ts`). Dùng lại HẰNG, không gõ lại chuỗi — gõ lại là bản thứ
+  // hai của một quy ước, và nó sẽ lệch đi lần đầu ai đó đổi dấu.
+  //
+  // ⚠️ Hiệu số giữa hai nhóm này CHÍNH LÀ hiệu số giữa "142 khoản có tên người thu" và
+  // "142 khoản để trống" — nên nó đáng một phép đếm, không đáng một phỏng đoán.
+  const c1 = c.filter((k) => k.note?.includes(BACKFILL_PAYMENT_MARKER));
+  const c2 = c.filter((k) => !k.note?.includes(BACKFILL_PAYMENT_MARKER));
+  const pctC = (n: number): string => (c.length === 0 ? "—" : `${Math.round((n / c.length) * 1000) / 10}%`);
+
+  bang(
+    [
+      [
+        `(c1) có dấu \`${BACKFILL_PAYMENT_MARKER}\``,
+        String(c1.length),
+        pctC(c1.length),
+        "`createdById` **ĐÃ LÀ SALE** (chốt 14/09) ⇒ dùng được",
+      ],
+      [
+        "(c2) không có dấu",
+        String(c2.length),
+        pctC(c2.length),
+        "`createdById` = người bấm nút ⇒ **để trống**",
+      ],
+    ],
+    ["nhóm con", "số khoản", "tỉ lệ trong (c)", "xử lý"],
+  );
+  in_();
   in_(
-    `⚠️ **Đừng fallback IM LẶNG về \`createdById\`** — đó chính là cái sai đang phải sửa ` +
-      `(admin tạo đơn thành "người thu"), chỉ khác là núp dưới một cái tên mới. Nếu dùng, ` +
-      `nhãn trên màn phải NÓI THẬT (luật 12 — affordance phải nói thật).`,
+    `**Kiểm cộng:** ${c1.length} + ${c2.length} = **${c1.length + c2.length}** ` +
+      `${c1.length + c2.length === c.length ? "✓" : "✗ LỆCH"} (nhóm (c) = ${c.length}).`,
+  );
+  in_();
+  in_(
+    `⚠️ **Đừng fallback IM LẶNG về \`createdById\` cho nhóm (c2)** — đó chính là cái sai đang ` +
+      `phải sửa (admin tạo đơn thành "người thu"), chỉ khác là núp dưới một cái tên mới. ` +
+      `Nhóm (c1) thì ngược lại: fallback ở đó là ĐÚNG, và không fallback mới là mất tên của ` +
+      `6 sale. Nhãn trên màn phải NÓI THẬT cho cả hai (luật 12).`,
   );
   in_();
 }
