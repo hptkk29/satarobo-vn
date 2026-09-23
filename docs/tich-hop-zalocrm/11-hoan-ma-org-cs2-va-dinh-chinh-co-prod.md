@@ -64,6 +64,10 @@ Ra `503` ⇒ **đã qua cổng cờ**. Và một org **không tồn tại** cũn
 
 ### Hiện trạng production, nói thẳng
 
+> ✅ **ĐÃ XỬ LÝ cùng ngày 23/09** — chủ dự án chốt *"khai đi"*. Bảng ngay dưới là hiện
+> trạng **lúc phát hiện**, giữ lại làm bệnh án. Trạng thái CUỐI ở **mục 5** cuối tệp:
+> 6/6 biến đã khai, redeploy xong, webhook thật đang chảy vào.
+
 | | |
 |---|---|
 | cờ `ZALOCRM_ENABLED` | ✅ **BẬT** (7 ngày) |
@@ -283,3 +287,50 @@ thì để rỗng — không ảnh hưởng gì tới CS2.
 - `10-no17-healthcheck-va-phep-kiem-hai-moi-truong.md` — cách ly đo bằng hành vi
 - `07-runbook-bat-co-tren-prod.md` — ngày bật cờ (mục 5b)
 - `04-danh-sach-cho-nick-zalo.md` — bảng mã trạng thái `401`/`404`/`200`/`503`
+
+---
+
+## 5. Trạng thái CUỐI ngày 23/09 — đã go-live
+
+| | |
+|---|---|
+| biến env trên production | **6/6** |
+| deploy | `709abbd4` → `satarobo-pitubcgfr`, aliased |
+| `zalocrm.orgCodes` trên prod | `{"CS1":"prod-cs1","CS2":"prod-cs2"}` ✅ |
+| webhook fork → prod | ✅ `POST /api/webhooks/zalocrm/prod-cs2` → **200** |
+| cron prod → fork | ✅ `zalocrm-doi-soat` nạp được tin |
+| 7 tài khoản UAT trong org dữ liệu thật | ✅ đã tắt (mục 2b) |
+| mục 5b — phép kiểm SSO | ⏳ chờ người đăng nhập |
+
+**Cách khai (dùng lại được):** giá trị đi **thẳng từ DB fork qua ống** vào `vercel env add`
+— `json_object_agg` dựng JSON ngay trong Postgres — nên không giá trị nào qua màn hình hay
+lịch sử shell. `ZALOCRM_SSO_SECRET` xác minh bằng `cmp` **byte-exact** với biến container
+fork đang chạy, không so bằng mắt.
+
+**Kiểm bằng hành vi, CẢ HAI chiều, mỗi chiều có đối chứng âm:**
+
+```
+trên prod :  prod-cs1 401 · prod-cs2 401 · test-cs1 404 · local-cs1 404 · org bịa 404
+trên test :  test-cs1 401 · test-cs2 401 · prod-cs1 404 · prod-cs2 404 · org bịa 404
+```
+
+### ⚠️ `prisma:error` trong log KHÔNG phải lỗi
+
+`Unique constraint failed on (channel, channelMessageId)` xuất hiện đều đặn ở cả webhook
+lẫn cron. Đó là **idempotency đúng thiết kế**: `taoTinNeuChuaCo`
+(`lib/inbox/ingest.ts:189`) cố ý dựa vào UNIQUE ở tầng DB thay vì "tra trước rồi ghi" —
+hai lượt webhook song song đều tra thấy chưa có rồi cùng ghi, đúng cái đua mà UNIQUE sinh
+ra để chặn. Hàm bắt `P2002` trả `duplicate: true`; logger của Prisma in **trước** khối
+`catch`. Cả hai đường đều trả `200`, không mất tin nào.
+
+### 🔴 Một phép đo của tôi đã SAI — ghi lại để không ai lặp
+
+Tôi rình log fork 13 phút rồi kết luận *"cron chưa chạm tới fork"*. **Sai.** Đối chứng
+dương lật nó: tôi gọi fork, nhận `HTTP 200`, mà log fork ghi **0 dòng** ⇒ **fork không ghi
+log lượt gọi public API thành công**. Tôi rình một thứ chưa bao giờ được ghi.
+
+Và mã thoát của kịch bản rình là `0` ở **cả hai** nhánh (thấy và không thấy), nên nó cũng
+không phân biệt được — đúng cảnh báo *"đừng tin mã thoát, đòi dòng THẬT"*.
+
+⇒ **Muốn biết prod có gọi fork không thì đọc `vercel logs`, đừng đọc log fork.**
+
