@@ -54,11 +54,11 @@ Sắp theo số ca (nhiều ca = nhiều cặp có thể mượn nhau = ưu tiê
 | 14 | `tests/chat/list-and-admin-search.spec.ts` | chưa đo |
 | 11 | `tests/cham-cong/requests.spec.ts` | chưa đo |
 | 9 | `tests/chat/dm-f5-sale.spec.ts` | chưa đo |
-| 8 | `tests/nen/position-permission.spec.ts` | chưa đo — **đã từng đỏ một lần 08/09**, sổ quan sát ghi *"chưa loại trừ: rò trạng thái giữa hai lượt"*. Đây là ứng viên số 1 |
+| 8 | `tests/nen/position-permission.spec.ts` | ✅ đo 23/09 — **CÓ LỖ, đã vá**. Nhưng KHÔNG phải cơ chế mà sổ quan sát đoán: xem mục "Lỗ thứ hai" dưới |
 | 6 | `tests/cham-cong/period.spec.ts` | chưa đo |
 | 6 | `tests/cham-cong/timelog.spec.ts` | chưa đo · 2 `beforeAll` |
 | 5 | `tests/cham-cong/recompute.spec.ts` | chưa đo |
-| 5 | `tests/nen/work-scope.spec.ts` | chưa đo |
+| 5 | `tests/nen/work-scope.spec.ts` | ✅ đo 23/09 — **CÓ LỖ, cùng nguyên nhân với `position-permission`**, đã vá |
 | 4 | `tests/cham-cong/import.spec.ts` | ✅ đo rồi — **có 1 lỗ**, đã vá |
 | 4 | `tests/chat/parent-permission.spec.ts` | chưa đo |
 | 2 | `tests/nen/import-nhan-su-va.spec.ts` | chưa đo |
@@ -69,6 +69,58 @@ Sắp theo số ca (nhiều ca = nhiều cặp có thể mượn nhau = ưu tiê
 ⚠️ Bộ lọc để lập danh sách này **đã sai một lần**: bản đầu lọc theo chuỗi `PrismaClient` và
 **bỏ sót đúng `permission-matrix.spec.ts`** — file duy nhất lúc đó đã biết là có lỗ — vì nó
 lấy `db` từ helper. Danh sách "sạch" của một bộ lọc hẹp chỉ nói lên bộ lọc.
+
+---
+
+## Lỗ thứ hai — KHÔNG nằm trong file test, nằm trong HELPER DÙNG CHUNG [23/09/2026]
+
+**Sổ quan sát đoán sai cơ chế, và cái đoán sai ấy suýt làm mất công đo.** Nó ghi
+*"chưa loại trừ: rò trạng thái giữa hai lượt"* — tức nghi ca này mượn của ca kia **trong cùng
+file**. Đo ra thì không phải: ba ca đỏ (`position-permission [AC2]` + 2 ca `work-scope`)
+**đỏ ngay cả khi chạy MỘT MÌNH trên database trắng**, và xanh chỉ khi một bộ KHÁC đã chạy
+trước đó trong cùng database.
+
+### Nguyên nhân
+
+`seedOrgUnits` (`prisma/seed-orgunit.ts`) **TRA** `Center` theo mã để gán `OrgUnit.centerId`;
+nó không tạo `Center` — và đúng là không nên, vì trên prod danh mục cơ sở do người vận hành
+giữ. Đường seed thật tôn trọng thứ tự đó (`prisma/seed.ts` dựng `Center` ở mục đầu rồi mới
+gọi `seedOrgUnits`).
+
+Nhưng helper test `seedOrg` thì gọi thẳng `seedOrgUnits`. Trên database TRẮNG:
+
+```
+seedOrg(["HO","CS1","CS2"])  →  OrgUnit CS1/CS2 có centerId = null
+⇒ buildActor → visibleCenterIds: []   ⇒ 3 ca ĐỎ
+```
+
+Nó **xanh trên CI** vì `test:nen-db` chạy SAU `test:chat-db` trong cùng job, mà bộ chat có
+dựng `Center`. Tức bộ này mượn trạng thái của **một bộ khác**, không phải của ca khác.
+
+### Vá
+
+`seedOrg` upsert `Center` cho các cơ sở được xin **trước** khi gọi `seedOrgUnits`, lấy dữ
+liệu từ chính `CENTERS` của `seed-orgunit` (export thêm — không chép danh sách thứ hai), rồi
+**cổng FAIL-LOUD**: OrgUnit cơ sở nào còn `centerId = null` thì ném ngay tại tầng seed. Không
+có cổng đó thì một lần lệch mã lại cho ra fixture hỏng âm thầm, và ta quay về đúng chỗ vừa
+thoát ra — triệu chứng ở tầng phân quyền, nguyên nhân ở tầng seed.
+
+Đo sau vá: `tests/nen` **30/30 ngay lượt đầu** trên DB trắng tinh; **từng spec chạy một mình**
+trên DB mới tạo cũng xanh (5/5 file); 5 bộ DB chạy đúng thứ tự CI đều xanh. Cấy lại (gỡ phần
+dựng `Center`) ⇒ đỏ đúng ba ca ban đầu.
+
+### Bài học thêm vào phép đo ở mục "Cách đo"
+
+Phép đo hiện tại (chạy từng ca, xem có mượn nhau không) **không bắt được lớp này**, vì nó giả
+định thủ phạm nằm trong cùng file. Thêm một bước rẻ:
+
+> **Chạy cả FILE một mình trên một database VỪA TẠO** (không phải database đã dùng), trước
+> khi đi vào từng ca. Đỏ ở bước này nghĩa là fixture thiếu thứ gì đó mà bộ khác vẫn dựng hộ —
+> và thủ phạm sẽ nằm ở HELPER, không nằm trong file.
+
+Hình dạng nhận biết: **chạy một mình thì đỏ, chạy cả bộ thì xanh** — NGƯỢC với hình dạng mà
+luật 18 mô tả (*"cấy vào thì chạy 1 ca ĐỎ, cả bộ XANH"*). Hai hình dạng, hai thủ phạm khác
+nhau, và cùng một triệu chứng "CI xanh mà máy đỏ".
 
 ---
 

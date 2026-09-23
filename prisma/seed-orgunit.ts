@@ -53,7 +53,12 @@ const SPINE: UnitSpec[] = [
   },
 ];
 
-const CENTERS: UnitSpec[] = [
+/**
+ * Các đơn vị CƠ SỞ. Export để **bộ test không phải chép lại danh sách** — nó cần biết cơ sở
+ * nào đòi một dòng `Center` tương ứng (xem `seedOrg` trong `tests/e2e/_helpers/seed.ts`).
+ * Chép tay ở đó là đẻ bản thứ hai, và hai bản sẽ lệch nhau vào ngày mở CS3.
+ */
+export const CENTERS: UnitSpec[] = [
   {
     code: "CS1",
     type: "CENTER",
