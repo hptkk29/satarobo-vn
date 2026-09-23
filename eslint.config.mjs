@@ -232,27 +232,13 @@ export default tseslint.config(
     },
   },
 
-  // app/(sale)/** — Đợt B site Sale: cùng luật với site giáo viên (shadcn THUẦN
-  // + db block). Site MỚI đi `scopedDb` từ đầu, KHÔNG grandfather.
-  //
-  // ⚠️ Route group mới KHÔNG tự thừa hưởng khối nào ở trên — thiếu khối này là
-  // `import { db } from "@/lib/db"` hợp lệ trong toàn bộ site Sale, cổng cách ly
-  // cơ sở thủng mà không ai báo.
-  {
-    files: ['app/(sale)/**/*.{ts,tsx}'],
-    rules: {
-      'no-restricted-imports': [
-        'error',
-        {
-          patterns: [
-            ...adminBlockedImports.patterns,
-            ...clientBlockedImports.patterns,
-            ...dbBlockedImports.patterns,
-          ],
-        },
-      ],
-    },
-  },
+  // ⚠️ KHÔNG CÒN khối `app/(sale)/**` và `components/sale/**` (gỡ 22/09/2026 cùng
+  // site Sale). Hai khối đó tồn tại vì cấu hình flat gắn luật theo GLOB chứ không
+  // thừa hưởng theo cây: một route group mới KHÔNG tự chịu luật nào, nên thiếu
+  // khối là `import { db } from "@/lib/db"` trần trở thành HỢP LỆ và cổng cách ly
+  // cơ sở thủng mà lint vẫn xanh (đúng chỗ `components/sale/` đã thủng tới S-6,
+  // 27/08/2026). Dựng lại site Sale hay bất kỳ route group nào khác thì phải khai
+  // khối cho nó — cả `app/(...)/**` LẪN thư mục `components/` mà nó dùng.
 
   // components/lead-intake/** — biểu mẫu nhập khách DÙNG CHUNG.
   //

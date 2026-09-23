@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { ChevronRight, Phone, Mail, MapPin, Clock, Star } from "lucide-react";
+import { ChevronRight, Phone, Mail, MapPin, Clock } from "lucide-react";
 import { contactPageJsonLd, localBusinessJsonLd, breadcrumbJsonLd, jsonLdScript } from '@/lib/seo/jsonld';
 import { ContactForm } from "./_components/contact-form";
 import { SocialLinks } from "./_components/social-links";
@@ -48,7 +48,7 @@ const QUICK_INFO = [
   { icon: Mail, label: "Email", value: SATA_ROBO_CONTACT.emails.general, href: `mailto:${SATA_ROBO_CONTACT.emails.general}` },
   {
     icon: MapPin,
-    label: "Trụ sở",
+    label: "Địa chỉ",
     value: hqLocation.address,
     href: `https://maps.google.com/?q=${encodeURIComponent(hqLocation.address)}`,
   },
@@ -184,12 +184,9 @@ export default async function ContactPage() {
                 loc.isHQ ? "border-orange-300" : "border-purple-300"
               } p-6 shadow-lg hover:shadow-xl transition-shadow`}
             >
-              {loc.isHQ && (
-                <div className="absolute -top-3 -right-3 inline-flex items-center gap-1 bg-orange-500 text-white text-xs font-bold px-3 py-1 rounded-full">
-                  <Star className="w-3 h-3 fill-current" />
-                  Trụ sở chính
-                </div>
-              )}
+              {/* Badge "Trụ sở chính" đã gỡ theo hướng dẫn BCT (cấm chú thích nhãn đó
+                  sau địa chỉ kinh doanh). Cờ `loc.isHQ` GIỮ NGUYÊN — nó còn dùng để chọn
+                  cơ sở mặc định ở :39 và ở contact-form.tsx:78. */}
               <div className="flex items-start gap-3 mb-4">
                 <div
                   className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${

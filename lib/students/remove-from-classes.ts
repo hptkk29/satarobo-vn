@@ -9,9 +9,25 @@
 // CHÍNH" (schema.prisma) và bị lọc bởi soft-delete extension ⇒ set nó sẽ rút khoản phải
 // thu khỏi công nợ (`lib/finance/debt.ts` lọc `deletedAt: null`, KHÔNG lọc status) và
 // làm lệch phân bổ thanh toán. Đổi status giữ nguyên sổ sách, chỉ gỡ khỏi danh sách lớp.
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// PHIÊN D [21/09/2026] — phần ĐỔI TRẠNG THÁI MỘT GHI DANH dời sang
+// `lib/students/ket-thuc-ghi-danh.ts`, và hàm này nay GỌI nó trong vòng lặp.
+//
+// Vì sao: PHIÊN D dừng học ĐÚNG MỘT bé trên đúng một dòng đơn, nên nó cần cửa vào cấp
+// ghi-danh; hàm này thì quét mọi lớp của học viên. Chép tay một bản thứ hai của phép đổi
+// trạng thái + hai dòng nhật ký là hai bản sẵn sàng lệch nhau — và lệch ở đây nghĩa là
+// một đường gỡ bé khỏi lớp mà KHÔNG có `EnrollmentAuditLog`.
+//
+// ⚠️ Hành vi của hàm này KHÔNG ĐỔI một li: nó không truyền `endedAt`, nên cột đó vẫn
+// nguyên như trước (báo cáo churn vẫn rơi về `updatedAt`). Ca `[KTGD-03]` ghim điều đó.
 import type { EnrollmentStatus, Prisma } from "@prisma/client";
-import { writeAudit } from "@/lib/audit/audit-log";
 import { syncConversationMembership } from "@/lib/chat/sync-membership";
+import {
+  ketThucMotGhiDanh,
+  removalTargetStatus,
+  type GhiDanhDaKetThuc,
+} from "@/lib/students/ket-thuc-ghi-danh";
 
 /**
  * Ghi danh còn "sống" — học viên vẫn thuộc lớp. Rộng hơn `ENROLLMENT_ACTIVE_STATUS_LIST`
@@ -25,22 +41,12 @@ export const REMOVABLE_ENROLLMENT_STATUSES: EnrollmentStatus[] = [
   "PAUSED",
 ];
 
-/**
- * Trạng thái đích khi gỡ HV khỏi lớp. `PENDING` chưa từng được xếp lớp nên đi
- * `CANCELLED`; các trạng thái còn lại đi `WITHDREW`. Khớp state machine
- * `ENROLLMENT_TRANSITIONS` (`lib/enrollments/status.ts`) — PENDING KHÔNG có đích WITHDREW.
- */
-export function removalTargetStatus(from: EnrollmentStatus): EnrollmentStatus {
-  return from === "PENDING" ? "CANCELLED" : "WITHDREW";
-}
+// Tái xuất để mọi chỗ đang `import { removalTargetStatus } from ".../remove-from-classes"`
+// không phải đổi — luật sống ở `ket-thuc-ghi-danh.ts`, đây chỉ là cửa cũ.
+export { removalTargetStatus };
 
-export type RemovedEnrollment = {
-  id: string;
-  /** Lớp mà ghi danh này vừa bị gỡ ra — caller dùng để revalidate màn roster lớp đó. */
-  classId: string;
-  fromStatus: EnrollmentStatus;
-  toStatus: EnrollmentStatus;
-};
+/** Giữ tên cũ cho mọi nơi đang dùng; kiểu thật nằm ở `ket-thuc-ghi-danh.ts`. */
+export type RemovedEnrollment = GhiDanhDaKetThuc;
 
 /**
  * Chuyển mọi ghi danh còn sống của học viên sang trạng thái kết thúc, kèm
@@ -77,44 +83,18 @@ export async function removeStudentFromClasses(params: {
 
   const removed: RemovedEnrollment[] = [];
   for (const enr of live) {
-    const toStatus = removalTargetStatus(enr.status);
-
-    await tx.enrollment.update({
-      where: { id: enr.id },
-      data: { status: toStatus },
-    });
-
-    await tx.enrollmentAuditLog.create({
-      data: {
-        enrollmentId: enr.id,
-        fromStatus: enr.status,
-        toStatus,
-        changedByUserId: params.actorId,
-        changedByName: params.actorName,
+    removed.push(
+      await ketThucMotGhiDanh({
+        tx,
+        ghiDanh: enr,
+        actorId: params.actorId,
+        actorName: params.actorName,
         reason: params.reason,
-      },
-    });
-
-    await writeAudit({
-      actor: { id: params.actorId, name: params.actorName },
-      module: "students",
-      entityType: "Enrollment",
-      entityId: enr.id,
-      action: "STATUS_CHANGE",
-      oldValues: { status: enr.status },
-      newValues: { status: toStatus },
-      changedFields: ["status"],
-      reason: params.reason,
-      orgUnitId: params.orgUnitId ?? null,
-      tx,
-    });
-
-    removed.push({
-      id: enr.id,
-      classId: enr.classId,
-      fromStatus: enr.status,
-      toStatus,
-    });
+        orgUnitId: params.orgUnitId ?? null,
+        // ⚠️ KHÔNG truyền `endedAt` — xem khối chú thích đầu tệp. Truyền vào là đổi hành
+        // vi của đường "Nghỉ học hẳn" đang chạy, trong một lượt tách vốn phải im lặng.
+      }),
+    );
   }
 
   // US-03 chat — HV rời các lớp → sync nhóm lớp từng lớp (PH rời nếu hết con trong

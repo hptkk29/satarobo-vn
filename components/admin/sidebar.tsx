@@ -44,7 +44,10 @@ import {
   MapPin,
   MessageCircle,
   MessageSquarePlus,
+  MessageSquareText,
+  Clock3,
   MessagesSquare,
+  Megaphone,
   Network,
   Newspaper,
   NotebookPen,
@@ -60,6 +63,7 @@ import {
   ShoppingBag,
   SlidersHorizontal,
   Star,
+  Target,
   type LucideIcon,
   Undo2,
   UserCog,
@@ -88,8 +92,12 @@ type NavItem = {
    *
    * ⚠️ "classGroup" là cờ GỠ, không phải cờ mở: mặc định TẮT nên mục biến mất,
    * env `CLASS_GROUP_ENABLED="true"` mới hiện lại. Xem lib/flags.ts.
+   *
+   * "zalocrm" (S1, 06/09/2026) là cờ MỞ 2 pha: mặc định TẮT cho tới khi máy chủ ZaloCRM
+   * chạy thật. Cùng cờ đó cũng làm trang `/zalo-crm` trả 404, nên menu và trang bật/tắt
+   * đồng bộ — không có cảnh bấm menu ra 404.
    */
-  flag?: "eval" | "scorm" | "classGroup";
+  flag?: "eval" | "scorm" | "classGroup" | "zalocrm";
   /**
    * R3: nhãn cụm con (sub-section) trong 1 NavGroup. Các item liền kề cùng `cluster`
    * được gom dưới 1 nhãn nhỏ — render trước item ĐẦU TIÊN hiển thị của cụm (robust với
@@ -105,6 +113,11 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Tổng quan",
     items: [
       { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard }, // luôn hiện
+      // 27/08 — GỠ mục "Dashboard QLCS" khỏi menu (chủ dự án chốt). Bốn khối của nó nay
+      // nằm THẲNG trong "Dashboard" cho Quản lý cơ sở + Quản trị hệ thống, không phân tab
+      // nữa: hai vai đó đăng nhập là thấy ngay số của mình, khỏi phải biết có màn thứ hai.
+      // Route /dashboard-qlcs GIỮ NGUYÊN (đường dẫn cũ đã gửi đi, và gate trang vẫn cần)
+      // nên nó nằm trong ALLOWLIST của components/admin/nav-coverage.test.ts.
       { label: "CRM", href: "/crm", icon: BarChart3, perm: ["leads:view-all"] },
     ],
   },
@@ -126,9 +139,12 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Chốt hàng loạt", href: "/leads/bulk-convert", icon: Workflow, perm: ["leads:view-all"] },
       // 30/08 — gộp: hai màn cũ (Cấu hình chia lead · Sổ lượt) đã xoá, thay bằng
       // trang trả lời hai nửa của cùng một câu hỏi: chia KIỂU GÌ, và đã chia RA SAO.
-      // perm rộng hơn cấu hình (view-all thay vì assign-config): người phải trả lời
+      // perm rộng hơn cấu hình (không phải assign-config): người phải trả lời
       // "sao bạn kia nhiều lead hơn" là Quản lý cơ sở, không phải Super Admin.
-      { label: "Quản lý chia lead", href: "/quan-ly-chia-lead", icon: ListOrdered, perm: ["lead_pool:manage"] },
+      // `leads:rotation-view` (S-5, chỉ đọc) đi kèm từ 16/09/2026: màn "Sổ lượt chia
+      // lead" đã nhập vào đây. Menu PHẢI khớp cổng trang — lệch là hoặc dead-link
+      // (thấy mục, bấm vào bị đá) hoặc hở-quyền-theo-URL (vào được mà không có mục).
+      { label: "Quản lý chia lead", href: "/quan-ly-chia-lead", icon: ListOrdered, perm: ["lead_pool:manage", "leads:rotation-view"] },
       { label: "Bàn giao lead", href: "/ban-giao-lead", icon: ArrowLeftRight, perm: ["leads:assign"] },
       { label: "Lead lâu ngày chưa chăm", href: "/lead-nguoi", icon: AlarmClock, perm: ["leads:assign"] },
       { label: "Chuyển lead liên CS", href: "/leads/bao-cao-chuyen", icon: Workflow, perm: ["leads:assign"] },
@@ -141,6 +157,11 @@ const NAV_GROUPS: NavGroup[] = [
       // dưới dạng chuyển hướng (thông báo cũ trong DB và tài liệu hướng dẫn còn trỏ tới
       // đó), nhưng không còn là chỗ để người ta bấm vào và nhập liệu song song nữa.
       { label: "Lớp Trial", href: "/lop-trial", icon: FlaskConical, perm: ["trials:view"] },
+      // Tra cứu (22/09/2026) — bảng giá khoá + học cụ + lớp còn chỗ, CHỈ ĐỌC. Chuyển
+      // từ site Sale (`/sale/tra-cuu`) về admin: màn này dùng TRƯỚC MẶT KHÁCH nên
+      // giá trị của nó là tra được ngay, không phải mở ba màn quản trị.
+      // `perm` lấy thẳng từ PAGE_GATES — mục menu và cổng trang không được lệch nhau.
+      { label: "Tra cứu", href: "/tra-cuu", icon: BookMarked, perm: [...PAGE_GATES["/tra-cuu"]] },
     ],
   },
   {
@@ -210,6 +231,10 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       // FL W0-NAV-2 hygiene: Tin nhắn (CSKH) gate CSKH+GV — ẩn khỏi KT (BA #07 3.C) + MKT/HR/Training.
       { label: "Tin nhắn", href: "/tin-nhan", icon: MessageCircle, perm: [...PAGE_GATES["/tin-nhan"]], badge: "chat" },
+      // S1 (tích hợp ZaloCRM) — nhắn khách bằng nick Zalo CÁ NHÂN, qua giao diện fork
+      // ZaloCRM nhúng iframe. Đặt cạnh "Tin nhắn" vì cùng một việc dưới mắt Sale: trả lời
+      // khách. Cờ `zalocrm` mặc định TẮT ⇒ mục ẩn cho tới khi máy chủ ZaloCRM chạy thật.
+      { label: "Zalo CRM", href: "/zalo-crm", icon: MessageSquareText, perm: [...PAGE_GATES["/zalo-crm"]], flag: "zalocrm" },
       // US-15 — tra cứu có lý do + khoá hội thoại. `chat:admin` CHỈ SUPER_ADMIN có
       // (AC5: QLCS không vào được), và nó seed scope GLOBAL nên dùng làm gate cấp trang
       // được — khác chat:read/chat:send (CENTER/ASSIGNED), xem lib/auth/page-gates.ts.
@@ -292,6 +317,15 @@ const NAV_GROUPS: NavGroup[] = [
       // `/payment-methods` chuyển hướng về đó. Lối vào duy nhất là
       // `app/(admin)/admin/cau-hinh-van-hanh/_components/config-tabs.tsx`.
       { label: "Hoa hồng", href: "/crm/commission", icon: Coins, perm: ["payments:manage"] },
+      // 27/08 — khai QC / quản lý phụ trách cơ sở (nguồn hoa hồng QC 1% + QL TT 2%).
+      // Quyền RIÊNG, không phải `payments:manage`: kế toán duyệt và chi, nhưng người
+      // chỉ định AI ĐƯỢC NHẬN là chủ dự án (chỉ SUPER_ADMIN).
+      {
+        label: "Người hưởng hoa hồng",
+        href: "/crm/commission/nguoi-huong",
+        icon: Coins,
+        perm: ["commission-assignee:manage"],
+      },
     ],
   },
   {
@@ -359,11 +393,19 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Hiệu suất giáo viên", href: "/bao-cao/hieu-suat-gv", icon: GraduationCap, perm: [...PAGE_GATES["/bao-cao/hieu-suat-gv"]] },
       { label: "Cohort tiến độ", href: "/bao-cao/cohort", icon: Users, perm: [...PAGE_GATES["/bao-cao/cohort"]] },
       { label: "Churn / rời bỏ", href: "/bao-cao/churn", icon: BarChart3, perm: ["enrollments:view-all"] },
-      { label: "Doanh thu vs mục tiêu", href: "/bao-cao/doanh-thu", icon: Coins, perm: ["payments:manage"] },
+      // B-01: đọc thẳng bảng gate — menu và cổng trang không thể lệch nhau.
+      { label: "Doanh thu vs mục tiêu", href: "/bao-cao/doanh-thu", icon: Coins, perm: [...PAGE_GATES["/bao-cao/doanh-thu"]] },
+      // C-01: màn đặt chỉ tiêu lead (số học sinh) theo tháng × cơ sở.
+      { label: "Chỉ tiêu lead", href: "/bao-cao/muc-tieu-lead", icon: Target, perm: [...PAGE_GATES["/bao-cao/muc-tieu-lead"]] },
+      // D-02: màn đặt chỉ tiêu ngân sách quảng cáo (VNĐ) theo tháng × cơ sở.
+      { label: "Chỉ tiêu ngân sách QC", href: "/bao-cao/ngan-sach-quang-cao", icon: Megaphone, perm: [...PAGE_GATES["/bao-cao/ngan-sach-quang-cao"]] },
       // US-16 AC4 — đo pilot chat (kích hoạt TK + đọc thông báo đầu ≤48h) theo từng lớp.
       // `chat:admin` khớp ĐÚNG gate của trang (chỉ SUPER_ADMIN) — không mượn PAGE_GATES vì
       // route này cố ý không khai ở đó.
       { label: "Đo pilot chat", href: "/bao-cao/chat-pilot", icon: MessagesSquare, perm: ["chat:admin"] },
+      // GĐ3 tích hợp ZaloCRM — ai đang theo kịp khách, ai không. `inbox:view` khớp ĐÚNG
+      // gate của trang; cách ly cơ sở nằm trong truy vấn nên Sale CS1 chỉ thấy số CS1.
+      { label: "Phản hồi hộp thư", href: "/bao-cao/phan-hoi-hop-thu", icon: Clock3, perm: ["inbox:view"] },
     ],
   },
 ];
@@ -381,6 +423,7 @@ export function Sidebar({
   evalV2Enabled = false,
   scormEnabled = false,
   classGroupEnabled = false,
+  zalocrmEnabled = false,
   onNavigate,
   thuGon = false,
   onDoiThuGon,
@@ -394,6 +437,8 @@ export function Sidebar({
   scormEnabled?: boolean;
   /** Cờ GỠ — mặc định false ⇒ mục "Nhóm lớp" ẩn. */
   classGroupEnabled?: boolean;
+  /** S1 — mặc định false ⇒ mục "Zalo CRM" ẩn (cùng cờ với trang, xem lib/flags.ts). */
+  zalocrmEnabled?: boolean;
   /**
    * Thu gọn thành DẢI CHỈ-BIỂU-TƯỢNG (rộng 64px). Trạng thái do `AdminShell` giữ.
    *
@@ -437,11 +482,12 @@ export function Sidebar({
           (!it.flag ||
             (it.flag === "eval" && evalV2Enabled) ||
             (it.flag === "scorm" && scormEnabled) ||
-            (it.flag === "classGroup" && classGroupEnabled)) &&
+            (it.flag === "classGroup" && classGroupEnabled) ||
+            (it.flag === "zalocrm" && zalocrmEnabled)) &&
           (!it.perm || it.perm.some((p) => grantedSet.has(p))),
       ),
     })).filter((g) => g.items.length > 0);
-  }, [grantedSet, evalV2Enabled, scormEnabled, classGroupEnabled]);
+  }, [grantedSet, evalV2Enabled, scormEnabled, classGroupEnabled, zalocrmEnabled]);
 
   // Nhóm đang chứa trang hiện tại (deterministic SSR + client → không hydration mismatch).
   const activeGroupLabel = useMemo(() => {

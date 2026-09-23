@@ -23,6 +23,8 @@ export type CenterFormValue = {
   googleMapUrl: string | null;
   workingHours: string | null;
   managerName: string | null;
+  /** 27/08 — TÀI KHOẢN quản lý (nguồn hoa hồng QL_TT 2%), khác `managerName` là chuỗi chữ. */
+  managerUserId: string | null;
   logoUrl: string | null;
   bannerUrl: string | null;
   description: string | null;
@@ -52,11 +54,17 @@ export type CenterPaymentView = {
   canManage: boolean;
 };
 
+/** 27/08/2026 — tài khoản có thể gán làm quản lý cơ sở (nguồn hoa hồng QL_TT 2%). */
+export type NguoiChonQuanLy = { id: string; name: string; email: string | null };
+
 export function CenterForm({
   center,
   payment,
+  nguoiChon = [],
 }: {
   center?: CenterFormValue;
+  /** Danh sách tài khoản cho ô "Tài khoản quản lý cơ sở" (xem `NguoiChonQuanLy`). */
+  nguoiChon?: NguoiChonQuanLy[];
   /**
    * Mục "Thanh toán". `null` = người xem không có quyền (RSC quyết định) ⇒ không vẽ gì.
    *
@@ -168,6 +176,42 @@ export function CenterForm({
             placeholder="Nguyễn Văn A"
           />
         </Grid>
+        {/*
+          27/08 — TÀI KHOẢN quản lý cơ sở. Khác hẳn ô "Quản lý cơ sở" ngay trên: ô kia là
+          CHUỖI CHỮ cho trang liên hệ, còn ô này là thứ hệ thống dùng để trả hoa hồng
+          Quản lý trung tâm 2%. Bắt buộc khi TẠO cơ sở mới — cơ sở không có tài khoản
+          quản lý thì 2% doanh thu của nó treo mỗi kỳ mà không ai để ý.
+
+          ⚠️ Ô này ĐÃ RƠI MẤT một lần khi hợp nhất `main` → `test` ngày 16/09: bản
+          `center-form.tsx` bên `main` không có nó (nhánh đó chưa nhận đợt 27/08).
+        */}
+        <label className="block text-sm">
+          <span className="mb-1 block font-medium text-foreground">
+            Tài khoản quản lý cơ sở{!isEdit ? " *" : ""}
+          </span>
+          <select
+            name="managerUserId"
+            defaultValue={center?.managerUserId ?? ""}
+            required={!isEdit}
+            className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+          >
+            <option value="">— Chưa gán —</option>
+            {nguoiChon.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.email ? `${u.name} · ${u.email}` : u.name}
+              </option>
+            ))}
+          </select>
+          <span className="mt-1 block text-xs text-muted-foreground">
+            Dùng để trả hoa hồng <strong>Quản lý trung tâm 2%</strong>. Đổi người ở đây sẽ ghi một
+            dòng mới vào sổ phân công có hiệu lực <strong>từ hôm nay</strong> — hoa hồng các kỳ đã
+            tính GIỮ NGUYÊN. Muốn đặt hiệu lực lùi/tới ngày khác thì khai ở{" "}
+            <Link href="/crm/commission/nguoi-huong" className="underline">
+              Người hưởng hoa hồng theo cơ sở
+            </Link>
+            .
+          </span>
+        </label>
         {isEdit && (
           // Ô "Giờ làm việc" ở trên là CHỮ HIỂN THỊ trên trang công khai — hệ thống không
           // đọc được nó. Giờ mà hệ thống thật sự dùng (tính hạn xử lý, giờ gửi thông báo)

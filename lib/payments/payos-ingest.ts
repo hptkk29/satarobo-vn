@@ -10,6 +10,13 @@ import { qrConRotDuocTien, locDonNhanTien } from "@/lib/payments/don-nhan-tien";
 // Quy tắc "khoản này thuộc ghi danh nào" — MỘT chỗ duy nhất, dùng chung với màn sửa tay
 // ở /admin/payments. Xem khối chú thích tại chỗ gọi (ghi sổ cũ) để biết vì sao.
 import { chonGhiDanhChoKhoan } from "@/lib/finance/gan-ghi-danh-khoan";
+// Cổng "tiền vào ⇒ lead lên Đã đăng ký" — MỘT chỗ duy nhất, dùng chung với đường ghi tay
+// của kế toán (`recordPayment`) và đường xác nhận đơn (`ensureOrderPaymentRecorded`).
+// Ở `@/lib/leads/**`, KHÔNG phải `@/lib/finance/payment` — lưới `[GGW-04]` cấm tệp này
+// import module đó, và lệnh cấm ấy đúng; xem đầu tệp mới để biết vì sao.
+// Xem khối chú thích tại chỗ gọi để biết vì sao đường tiền TỰ ĐỘNG trước đây không có nó.
+import { maybeAdvanceLeadToRegistered } from "@/lib/leads/tien-vao-day-pheu";
+import { thuTheoPhieuGop } from "@/lib/finance/phieu-gop";
 import { phoneVariants } from "@/lib/phone";
 import {
   transferContentPartsForOrder,
@@ -799,6 +806,54 @@ export async function ingestPayosWebhook(
   }
   const bankTransactionId = txn.id;
 
+  // ── Bước 3½: THỬ ĐƯỜNG PHIẾU GỘP TRƯỚC  [PHIÊN C · 20/09/2026] ────────────
+  //
+  // Mã 5 ký tự trong nội dung CK nói thẳng "phiếu nào", nên nó phải được hỏi TRƯỚC mọi phép
+  // suy đoán của đường cũ (orderCode / VA / SĐT). Hỏi sau là để một phép đoán theo SĐT có cơ
+  // hội cướp một giao dịch đã biết đích.
+  //
+  // ⚠️ `thuTheoPhieuGop` NHƯỜNG (`xuLy: false`) khi không tra ra phiếu gộp nào — kể cả khi
+  // memo có một khối 5 ký tự qua checksum. Checksum lọc 26/27 khối rác chứ không lọc hết, nên
+  // một memo ĐỜI CŨ vẫn có ~1/27 cơ hội chứa khối qua checksum; nuốt ca đó là đẩy ~1/27 giao
+  // dịch đời cũ xuống UNMATCHED không lý do. Lý lẽ đầy đủ ở đầu hàm.
+  const gop = await thuTheoPhieuGop({
+    bankTransactionId,
+    provider,
+    providerTxnId,
+    noiDung: typeof data.description === "string" ? data.description : null,
+    soTienVe: amount,
+  });
+  if (gop.xuLy) {
+    if (gop.ketQua === "TRUNG") {
+      await logPayos({ provider, action: "INGEST_TXN", status: "SKIPPED", payload: data, error: "Đã ghi nhận" });
+      return { status: "DUPLICATE", bankTransactionId };
+    }
+    if (gop.ketQua === "CHUA_CHIA") {
+      await logPayos({ provider, action: "MATCH_TXN", status: "FAILED", payload: data, error: gop.ghiChu });
+      return { status: "UNMATCHED", bankTransactionId, reason: gop.ghiChu };
+    }
+    await logPayos({ provider, action: "MATCH_TXN", status: "SUCCESS", payload: data });
+    // ⚠️ `paymentRequestId` là ĐÍCH ĐẦU TIÊN của phiếu — một phiếu thu CÓ THẬT vừa nhận tiền,
+    // không phải số giả. Phiếu gộp có n đích, nên ai cần đủ thì đọc `billId` rồi tra
+    // `PaymentBillLine`. Nới `IngestOutcome` thành mảng sẽ chạm mọi đường gọi đời cũ mà không
+    // đường nào trong số đó đọc trường này.
+    //
+    // `settled: false` · `orderConfirmed: false` là SỰ THẬT, không phải giá trị mặc định cho
+    // xong: đường phiếu gộp CỐ Ý không tự chốt đơn. Chốt đơn là quyết định của `confirmSettledOrder`
+    // với cổng "giảm giá chưa duyệt", và nó thuộc đường cũ. Phiên này chỉ đưa tiền vào đúng con.
+    return {
+      status: "MATCHED",
+      bankTransactionId,
+      orderId: gop.orderId,
+      paymentRequestId: gop.paymentRequestIds[0] ?? "",
+      allocated: gop.tong,
+      credit: 0,
+      waived: 0,
+      settled: false,
+      orderConfirmed: false,
+    };
+  }
+
   // ── Bước 4: tra đích phân bổ ──────────────────────────────────────────────
   const resolved = await resolvePaymentTargetDetailed(data);
   const target = resolved.target;
@@ -827,6 +882,7 @@ export async function ingestPayosWebhook(
       centerId: true,
       orgUnitId: true,
       studentId: true,
+      leadId: true,
       student: { select: { id: true, parentUserId: true } },
     },
   });
@@ -861,6 +917,15 @@ export type AllocationOrder = {
   orgUnitId: string | null;
   studentId: string | null;
   student: { id: string; parentUserId: string | null } | null;
+  /**
+   * Lead của đơn — cần để đẩy phễu lên "Đã đăng ký" khi tiền về.
+   *
+   * ⚠️ BẮT BUỘC, cố ý không cho `?`. Đây là luật 7 của repo (CLAUDE.md): trường tuỳ chọn ở
+   * đây nghĩa là chỗ gọi nào quên `select: { leadId: true }` thì nhận `undefined`, cổng phễu
+   * im lặng không chạy, và KHÔNG lỗi nào báo — đúng lớp lỗi câm mà cả phiên I sinh ra để vá.
+   * Để nó bắt buộc thì `tsc` liệt kê đủ chỗ gọi: mắt thấy 1, trình biên dịch thấy 2.
+   */
+  leadId: string | null;
 };
 
 /**
@@ -1171,6 +1236,54 @@ export async function allocateToOrder(params: {
               saleStatus: "RECORDED",
               accountantStatus: "PENDING",
               recordedById: null,
+              centerId: order.centerId,
+            },
+          });
+        }
+
+        // ── TIỀN VÀO ⇒ LEAD LÊN "ĐÃ ĐĂNG KÝ" [I-1 · 22/09/2026] ─────────────────
+        //
+        // ĐO ĐƯỢC (phiên I, `docs/thanh-toan-linh-hoat/i-ai-doc-so-nao.md`): cổng này chỉ
+        // có ở HAI đường — `ensureOrderPaymentRecorded` và `recordPayment` (kế toán ghi
+        // TAY). Đường tiền TỰ ĐỘNG không gọi nó: `grep -i lead lib/payments/payos-ingest.ts`
+        // ra **0 dòng**.
+        //
+        // Vì sao nhánh cũ không cứu được: webhook SePay chỉ đi nhánh CONFIRM (nơi có
+        // `ensureOrderPaymentRecorded`) khi tra ra đơn theo MÃ ĐƠN trong nội dung CK — mà
+        // nội dung CK **bỏ mã đơn từ 20/08/2026** (`lib/payments/vietqr.ts`, chủ dự án đảo
+        // quy ước). Nên `extractOrderCode` luôn `null` với giao dịch thật ⇒ nhánh ấy không
+        // chạy ⇒ cổng phễu chưa từng nổ cho một đồng tiền nào về qua QR.
+        //
+        // ⚠️ Việc này KHÔNG chặn chốt lead và đừng mô tả nó như vậy: cả `convertLead` lẫn
+        // `convertLeadV2` khoá theo `convertedAt IS NULL`, KHÔNG theo trạng thái (chú thích
+        // "mở khoá convert" ở `lib/finance/payment.ts` đã lỗi thời từ GĐ5). Thứ hỏng là
+        // **sổ đếm phễu** — gia đình đã chuyển tiền mà lead vẫn nằm ở "Chờ quyết định" — và
+        // **vết trong nhật ký**: không có dòng `source: "payment"` nào để QLCS lần ra.
+        //
+        // ĐẶT Ở ĐÂY, trong `if (allocated > 0)` và TRONG transaction:
+        //  · `allocated > 0` = tiền THẬT SỰ rót được vào phiếu của đơn. Tiền rơi hết sang
+        //    ví (`allocated === 0 && credit > 0`) nghĩa là mọi phiếu đã PAID từ trước, tức
+        //    gia đình đã trả xong trước đó và cổng này đã nổ ở lượt ấy rồi.
+        //  · NGOÀI `if (!dup)` — nhưng ĐỪNG TIN đây là chỗ bám của một lỗi: **đo bằng phép
+        //    cấy 22/09 thì hai cách đặt CHO RA CÙNG MỘT HÀNH VI**, không ca nào đỏ. Lý do:
+        //    `dup` chỉ khác null khi cùng một `providerTxnId` vào lần hai, mà lượt ấy đã bị
+        //    chặn sớm hơn ở phép đọc lại `BankTransaction.status` trong khoá (trả
+        //    `DUPLICATE` trước khi tới đây). Nên đặt ngoài là PHÒNG XA cho ngày ai đó nới
+        //    cổng `fresh`, không phải đang sửa một lỗ. Ghi ra để người sau không đi tìm một
+        //    ca test canh chuyện này — nó không tồn tại, và một phép cấy không cắn được thì
+        //    nói lên điều đó chứ không nói mã sai.
+        //  · TRONG transaction, cùng khoá với phép rót tiền: trạng thái phễu và số tiền
+        //    phải cùng sống hoặc cùng chết, y như `ensureOrderPaymentRecorded` vẫn làm.
+        //
+        // Actor là `id: null` + tên nói RÕ NGUYÊN NHÂN. Đường gán tay của kế toán cũng đi
+        // qua đây, nhưng thứ đẩy lead lên là TIỀN VỀ chứ không phải cú bấm — ghi tên người
+        // bấm vào đây là để lại một vết nói sai chuyện đã xảy ra.
+        if (order.leadId) {
+          await maybeAdvanceLeadToRegistered(tx, {
+            leadId: order.leadId,
+            actor: {
+              id: null,
+              name: `Tiền về qua ${provider}`,
               centerId: order.centerId,
             },
           });

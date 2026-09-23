@@ -62,7 +62,13 @@ test.describe("[R6-E1] Học phí 2 đợt + công nợ", () => {
       actorId: "acc-1",
     });
     expect(res.ok).toBe(false);
-    expect(res.error).toContain("Tổng 2 đợt");
+    // ⚠️ Neo vào PHẦN BẤT BIẾN của câu lỗi, không neo vào con số đợt.
+    //
+    // Bản cũ ghim đúng chuỗi `"Tổng 2 đợt"`, và nó ĐỎ từ `1b8113ca` ("kế hoạch n đợt thay
+    // cho '2 đợt' cứng") — câu lỗi nay là *"Tổng các đợt phải bằng học phí (…), đang là …"*.
+    // Không ai thấy vì bộ R6 KHÔNG nằm trong required check của `test`/`main` — đúng luật 10
+    // của repo: một ca đỏ mà không ai bị chặn thì bằng không có ca.
+    expect(res.error).toContain("phải bằng học phí");
     // atomic: không tạo installment nào.
     expect(await getOrderInstallments(order.id)).toHaveLength(0);
   });

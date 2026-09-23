@@ -5,6 +5,7 @@ import { mapSaleForm, SALE_FORM_FIELDS } from "../../lib/lead/intake/map-sale-fo
 import { mapQuatang, quatangClientMeta } from "../../lib/lead/intake/map-quatang";
 import { mapInternalForm } from "../../lib/lead/intake/map-internal-form";
 import type { MappedLead } from "../../lib/lead/intake/types";
+import { RUN_DB_TESTS } from "../_helpers/db-gate";
 
 // =============================================================================
 // LEAD INTAKE · tầng DB thật (Postgres LOCAL)
@@ -18,9 +19,13 @@ import type { MappedLead } from "../../lib/lead/intake/types";
 // =============================================================================
 
 const DB_URL = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL ?? "";
-const RUN =
-  /(@|\/\/)(localhost|127\.0\.0\.1)[:/]/.test(DB_URL) ||
-  /satarobo_test|ci_test/.test(DB_URL);
+// 16/09/2026 — dùng CỔNG DUY NHẤT `RUN_DB_TESTS` (tests/_helpers/db-gate.ts) thay cho
+// biểu thức chép tay. Bản chép tay chỉ hỏi "URL có trỏ Postgres cục bộ không" nên BỎ MẤT
+// cờ `ALLOW_DB_RESET` — đúng cái chốt dựng sau sự cố mất DB 04/09/2026. Hệ quả đo được:
+// trên máy dev (DATABASE_URL = 127.0.0.1/satarobo_local) các bộ này CHẠY THẬT trên DB
+// đang làm việc, nên `pnpm test:unit` lúc xanh lúc đỏ tuỳ thứ tự, còn `assertTestDb()`
+// thì từ chối dọn ⇒ đỏ câm không liên quan gì tới mã.
+const RUN = RUN_DB_TESTS;
 
 if (!RUN) {
   console.warn(

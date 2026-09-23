@@ -12,7 +12,9 @@ const NAV_LINKS = [
   { label: "Trang chủ", href: "/" },
   { label: "Về chúng tôi", href: "/ve-chung-toi" },
   { label: "Khoá học", href: "/khoa-hoc" },
-  { label: "Học cụ", href: "/hoc-cu" },
+  // Ẩn tạm theo hồ sơ BCT mục 4 (sản phẩm không công khai giá + không đặt hàng được) —
+  // trang 404 bằng app/(public)/hoc-cu/layout.tsx. Bỏ comment khi bật lại.
+  // { label: "Học cụ", href: "/hoc-cu" },
   { label: "Tin tức", href: "/tin-tuc" },
   // Hidden temporarily — re-enable along with /vinh-danh pages when ready.
   // { label: "Vinh danh", href: "/vinh-danh" },

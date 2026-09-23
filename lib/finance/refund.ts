@@ -10,7 +10,7 @@ import type {
   RefundTrigger,
 } from "@prisma/client";
 import { db } from "@/lib/db";
-import { KHOAN_DA_XAC_NHAN } from "@/lib/finance/debt";
+import { KHOAN_DA_DONG } from "@/lib/finance/debt";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { canhBaoSoBuoi, soBuoiChuaChot } from "@/lib/finance/lop-chua-chot-buoi";
 import type { ScopedDb } from "@/lib/actions/factory";
@@ -46,6 +46,43 @@ export class RefundError extends Error {
     this.name = "RefundError";
     this.code = code;
   }
+}
+
+/**
+ * Ghi danh này đã được QUYẾT TOÁN qua "Dừng học" (PHIÊN D) chưa.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * NGUỒN SỰ THẬT DUY NHẤT cho câu hỏi "có được sinh đề xuất hoàn cho ghi danh này không".
+ *
+ * Dùng ở HAI chỗ, và đó là chủ đích — chép tay điều kiện ở chỗ thứ hai là hai cổng sẵn
+ * sàng lệch nhau:
+ *   · `withdrawStudentFromAllClasses` hỏi TRƯỚC để **bỏ qua** phần tiền của riêng ghi
+ *     danh đó (chủ dự án chốt 21/09: *"không chặn cho bé nghỉ"*);
+ *   · `createRefundRequest` hỏi lại làm **lưới cuối** và NÉM — cho mọi đường quên hỏi.
+ *
+ * Vì sao phải chặn: PHIÊN D quyết toán theo số buổi ĐÃ DÙNG (đếm theo NGÀY, người xác
+ * nhận) rồi phân HẾT phần dư. `createRefundRequest` thì tính LẠI bằng số buổi `COMPLETED`
+ * — một con số KHÁC cho cùng một khoản tiền. Hai đề xuất chồng nhau trên một ghi danh là
+ * đường ngắn nhất tới chi tiền hai lần.
+ */
+export async function dongDonDaQuyetToan(
+  client: DbClient,
+  enrollmentId: string,
+): Promise<{ id: string; orderCode: string | null } | null> {
+  const dong = await client.orderItem.findFirst({
+    where: { enrollmentId, status: "STOPPED" },
+    select: { id: true, order: { select: { code: true } } },
+  });
+  return dong ? { id: dong.id, orderCode: dong.order?.code ?? null } : null;
+}
+
+/** Câu lỗi dùng chung cho lưới cuối — một chỗ, để nó không nói hai kiểu. */
+export function loiDaQuyetToan(dong: { id: string; orderCode: string | null }): RefundError {
+  return new RefundError(
+    "ALREADY_SETTLED",
+    `Ghi danh này đã được quyết toán qua "Dừng học" trên đơn ${dong.orderCode ?? dong.id} — ` +
+      `không tạo đề xuất hoàn thứ hai. Phần dư (nếu còn) xử ở màn đơn hàng.`,
+  );
 }
 
 /**
@@ -114,6 +151,13 @@ export async function createRefundRequest(input: {
   });
   if (!enrollment) return null;
 
+  // ── LƯỚI CUỐI CHỐNG HOÀN TIỀN HAI LẦN  [PHIÊN D · 21/09/2026] ──────────────
+  //
+  // Đường gọi ĐÚNG phải hỏi `dongDonDaQuyetToan` TRƯỚC rồi bỏ qua phần tiền (xem
+  // `withdrawStudentFromAllClasses`). Cổng ở đây là lưới CUỐI cho đường nào quên hỏi.
+  const dongDaQuyetToan = await dongDonDaQuyetToan(client, enrollmentId);
+  if (dongDaQuyetToan) throw loiDaQuyetToan(dongDaQuyetToan);
+
   // Idempotent: 1 PENDING / (enrollment, trigger).
   const existing = await client.refundRequest.findFirst({
     where: { enrollmentId, trigger, status: "PENDING" },
@@ -122,7 +166,9 @@ export async function createRefundRequest(input: {
 
   // Σ Payment đã xác nhận (CONFIRMED) — loại soft-deleted.
   const agg = await client.payment.aggregate({
-    where: { enrollmentId, ...KHOAN_DA_XAC_NHAN },
+    // Câu A: hoàn được bao nhiêu thì đo bằng tiền PH ĐANG ĐỂ LẠI, tức đã trừ những
+    // lần hoàn trước. Dùng bộ lọc gross ở đây là đề xuất hoàn lần hai trên số gộp.
+    where: { enrollmentId, ...KHOAN_DA_DONG },
     _sum: { amount: true },
   });
   const paidConfirmed = agg._sum.amount ?? 0;
@@ -238,6 +284,116 @@ export async function createRefundRequest(input: {
   return created;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PHIÊN D · YÊU CẦU HOÀN SINH TỪ LƯỢT DỪNG HỌC  [21/09/2026]
+//
+// ⚠️ KHÁC `createRefundRequest` ở trên về BẢN CHẤT, không chỉ về tham số:
+//
+//   · `createRefundRequest` TỰ TÍNH số tiền (`computeRefund` theo buổi `COMPLETED`) và
+//     tự từ chối khi sổ buổi chưa chốt. Nó đoán hộ, nên nó phải thận trọng.
+//   · Hàm này KHÔNG tính gì cả. Số tiền đến từ phép quyết toán mà NGƯỜI VẬN HÀNH vừa xác
+//     nhận trên màn xem trước (`lib/finance/dung-hoc.ts`), và phần dư đã được phân hết
+//     ngay tại đó. Việc của nó là ghi lại đúng con số ấy.
+//
+// ⚠️ **KHÔNG chi tiền.** Chốt của chủ dự án 21/09: lượt dừng học chỉ ĐẶT một yêu cầu; kế
+// toán duyệt rồi chi ở `/admin/hoan-tien` bằng đúng đường `refundPayment` hiện có (dòng
+// `Payment` âm mang `REFUNDED`). Đừng viết đường ghi thứ hai cho việc chi.
+//
+// ⚠️ BA CỘT SNAPSHOT MANG NGHĨA KHÁC ở dòng do hàm này sinh ra, và bảng
+// `/admin/hoan-tien` in chúng chung một cột với dòng cũ:
+//     `sessionsTotal`   = số buổi **CAM KẾT của khoá** (`Course.totalSessions`),
+//                         KHÔNG phải số buổi đã xếp lịch như dòng của `createRefundRequest`;
+//     `sessionsLearned` = số buổi **đã dùng theo NGÀY**, không phải số buổi `COMPLETED`;
+//     `unitPrice`       = đơn giá đã làm tròn xuống tới 1.000đ.
+// Đây là cố ý: thêm ba cột nữa chỉ để phân biệt nguồn là làm bảng kế toán rộng gấp đôi cho
+// một khác biệt mà `orderCode` đã nói rồi. Nhưng ai đi CỘNG hai nhóm dòng lại để ra một
+// con số thì phải biết điều này trước.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Đặt một yêu cầu hoàn (PENDING) cho phần dư của một dòng đơn vừa dừng học.
+ *
+ * Gọi BÊN TRONG transaction của lượt dừng học — yêu cầu hoàn và phép quyết toán phải cùng
+ * sống cùng chết.
+ */
+export async function taoYeuCauHoanTuDungHoc(input: {
+  tx: Prisma.TransactionClient;
+  orderItemId: string;
+  /** `null` là HỢP LỆ — dòng đơn chưa gắn ghi danh. Xem model `RefundRequest`. */
+  enrollmentId: string | null;
+  centerId: string | null;
+  trigger: RefundTrigger;
+  /** Số tiền hoàn — người vận hành đã chốt ở màn xem trước. */
+  soTien: number;
+  reason: string;
+  /** Σ `Payment` CONFIRMED của dòng đơn, chụp lại để bảng kế toán giải thích được số. */
+  paidConfirmed: number;
+  soBuoiCamKet: number;
+  soBuoiDaDung: number;
+  donGiaBuoi: number;
+  requestedById: string | null;
+  actorName: string;
+}): Promise<RefundRequest> {
+  const soTien = Math.round(input.soTien);
+  if (!Number.isFinite(input.soTien) || soTien <= 0) {
+    throw new RefundError("VALIDATION", "Số tiền hoàn phải lớn hơn 0");
+  }
+
+  // "Mỗi dòng đơn tối đa 1 RefundRequest PENDING từ dừng học" — chủ dự án chốt 21/09.
+  // Cổng `OrderItem.status = STOPPED` ở tầng trên đã chặn lượt dừng thứ hai, nhưng kiểm
+  // bằng DỮ LIỆU thay vì tin vào suy luận: cột này rẻ, và nó còn gác cả đường script.
+  const dangCho = await input.tx.refundRequest.findFirst({
+    where: { orderItemId: input.orderItemId, status: "PENDING" },
+    select: { id: true },
+  });
+  if (dangCho) {
+    throw new RefundError(
+      "DUPLICATE",
+      "Dòng đơn này đã có một yêu cầu hoàn đang chờ kế toán — xử nó trước",
+    );
+  }
+
+  const created = await input.tx.refundRequest.create({
+    data: {
+      enrollmentId: input.enrollmentId,
+      orderItemId: input.orderItemId,
+      centerId: input.centerId,
+      trigger: input.trigger,
+      reason: input.reason,
+      paidConfirmed: Math.round(input.paidConfirmed),
+      sessionsTotal: Math.max(0, Math.trunc(input.soBuoiCamKet)),
+      sessionsLearned: Math.max(0, Math.trunc(input.soBuoiDaDung)),
+      unitPrice: Math.max(0, Math.round(input.donGiaBuoi)),
+      proposedAmount: soTien,
+      status: "PENDING",
+      requestedById: input.requestedById,
+    },
+  });
+
+  await writeAudit({
+    tx: input.tx,
+    actor: { id: input.requestedById, name: input.actorName },
+    module: "finance",
+    entityType: "RefundRequest",
+    entityId: created.id,
+    action: "CREATE",
+    newValues: {
+      nguon: "DUNG_HOC",
+      orderItemId: input.orderItemId,
+      enrollmentId: input.enrollmentId,
+      trigger: input.trigger,
+      proposedAmount: soTien,
+      soBuoiCamKet: input.soBuoiCamKet,
+      soBuoiDaDung: input.soBuoiDaDung,
+      donGiaBuoi: input.donGiaBuoi,
+    },
+    reason: input.reason,
+    orgUnitId: input.centerId,
+  });
+
+  return created;
+}
+
 /** Duyệt yêu cầu hoàn tiền → APPROVED. approvedAmount mặc định = proposedAmount. */
 export async function approveRefund(
   id: string,
@@ -334,7 +490,16 @@ export async function rejectRefund(
 
 export type RefundRow = {
   id: string;
-  enrollmentId: string;
+  /**
+   * ⚠️ NULLABLE từ 21/09/2026 (PHIÊN D). Yêu cầu hoàn sinh từ lượt DỪNG HỌC của một dòng
+   * đơn chưa gắn ghi danh không có `Enrollment` nào — xem khối chú thích ở
+   * `prisma/schema.prisma` model `RefundRequest`.
+   */
+  enrollmentId: string | null;
+  /** PHIÊN D — dòng đơn (một CON) mà khoản hoàn này thuộc về. */
+  orderItemId: string | null;
+  /** Mã đơn, chỉ có khi khoản hoàn đi đường dòng-đơn. Để kế toán tra được nó ở đâu ra. */
+  orderCode: string | null;
   studentName: string | null;
   className: string | null;
   centerId: string | null;
@@ -355,6 +520,27 @@ export type RefundRow = {
  * Liệt kê yêu cầu hoàn tiền cho admin — cách ly cơ sở qua scopedDb (lọc theo lớp
  * NẰM TRONG scope của actor; RefundRequest không tự-scope nên lái theo Class scoped).
  */
+/**
+ * Danh sách yêu cầu hoàn tiền trong tầm nhìn của người đang xem.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * ⚠️ HAI NHÁNH TẦM NHÌN, VÀ NHÁNH THỨ HAI LÀ THỨ GIỮ CHO TIỀN KHÔNG BIẾN MẤT
+ *
+ * `RefundRequest` nằm trong danh sách **KHÔNG auto-scope** của `lib/db-scope.ts`, lý do ghi
+ * nguyên văn ở đó: *"scope qua quan hệ enrollment→class"*. Đúng chừng nào mọi dòng đều có
+ * ghi danh — mà từ PHIÊN D (21/09/2026) thì không còn đúng nữa.
+ *
+ * Bộ lọc quan hệ `enrollment: { classId: { in } }` **không bao giờ khớp** dòng
+ * `enrollmentId IS NULL`. Giữ nguyên một nhánh nghĩa là: lượt dừng học sinh ra một yêu cầu
+ * hoàn đúng số tiền, ghi vào DB thành công, **và kế toán không bao giờ nhìn thấy nó**. Không
+ * lỗi nào báo, không ca test nào đỏ — đúng kiểu chết câm mà chủ dự án cấm
+ * (*"không được im lặng mất dấu"*).
+ *
+ * Nhánh hai đi qua `orderItem.order.centerId`. Dùng `Order` chứ không dùng
+ * `RefundRequest.centerId` trần vì `centerId` ở đây là **snapshot nullable** (HO tạo đơn thì
+ * null), mà `centerId IN (...)` trần sẽ ẩn mất đúng nhóm đó — cùng cái bẫy đã viết trong
+ * `db-scope.ts` cho `LeadTarget`/`AdsBudgetTarget`.
+ */
 export async function listRefundRequests(
   scopedDbClient: ScopedDb,
   filter?: { status?: RefundRequest["status"] },
@@ -364,17 +550,26 @@ export async function listRefundRequests(
     select: { id: true },
   });
   const classIds = scopedClasses.map((c) => c.id);
-  if (classIds.length === 0) return [];
+
+  // Đơn trong tầm nhìn — `Order` cũng là SCOPED_MODEL, nên cùng một phép inject.
+  const scopedOrders = await scopedDbClient.order.findMany({ select: { id: true } });
+  const orderIds = scopedOrders.map((o) => o.id);
+
+  if (classIds.length === 0 && orderIds.length === 0) return [];
 
   const rows = await db.refundRequest.findMany({
     where: {
       ...(filter?.status ? { status: filter.status } : {}),
-      enrollment: { classId: { in: classIds } },
+      OR: [
+        ...(classIds.length > 0 ? [{ enrollment: { classId: { in: classIds } } }] : []),
+        ...(orderIds.length > 0 ? [{ orderItem: { orderId: { in: orderIds } } }] : []),
+      ],
     },
     orderBy: { createdAt: "desc" },
     select: {
       id: true,
       enrollmentId: true,
+      orderItemId: true,
       centerId: true,
       trigger: true,
       reason: true,
@@ -393,13 +588,24 @@ export async function listRefundRequests(
           class: { select: { name: true } },
         },
       },
+      // Dòng đơn là đầu mối DỰ PHÒNG khi không có ghi danh: `itemName` chính là tên bé mà
+      // sale gõ lúc bán, và mã đơn cho kế toán chỗ để tra ngược.
+      orderItem: {
+        select: {
+          itemName: true,
+          order: { select: { code: true } },
+        },
+      },
     },
   });
 
   return rows.map((r) => ({
     id: r.id,
     enrollmentId: r.enrollmentId,
-    studentName: r.enrollment?.student?.name ?? null,
+    orderItemId: r.orderItemId,
+    orderCode: r.orderItem?.order?.code ?? null,
+    // Ưu tiên tên học viên THẬT; rơi về tên trên dòng đơn khi chưa có ghi danh.
+    studentName: r.enrollment?.student?.name ?? r.orderItem?.itemName ?? null,
     className: r.enrollment?.class?.name ?? null,
     centerId: r.centerId,
     trigger: r.trigger,

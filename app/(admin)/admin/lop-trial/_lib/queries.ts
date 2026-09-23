@@ -3,6 +3,12 @@
 // Mọi truy vấn ĐỌC của màn "Lớp Trial". Tất cả đi qua `scopedDb(actor)` để cách ly
 // cơ sở (CS1 không thấy lớp CS2). Hai hàm dựng `where` nằm ở ./filters — tách ra để
 // test được bằng vitest mà không phải nạp Prisma Client.
+// 🔴 S-1 — tên phụ huynh + SĐT lấy từ `lead` phải qua `maskLeadPiiFields` NGAY Ở ĐÂY,
+// không che ở JSX: tầng này còn phục vụ chỗ khác, che ở giao diện là che một chỗ và hở
+// mọi chỗ còn lại. `canViewPii` do TRANG GỌI truyền xuống (đã hỏi `canViewLeadPii()`),
+// tầng truy vấn không tự hỏi quyền.
+// (Cấy lại khi hợp nhất `main` → `test` ngày 16/09/2026 — nhánh `main` chưa có chốt S-1.)
+import { maskLeadPiiFields } from "@/lib/lead/pii";
 import { scopedDb } from "@/lib/db-scope";
 import { getCenterOptions } from "@/lib/org/center-options";
 import type { Actor } from "@/lib/auth/actor";
@@ -421,6 +427,8 @@ export async function layChiTietLop(
     /** Có `leads:view-all` — quyết định gỡ được học viên của Sale khác. */
     laQuanLyLead: boolean;
   },
+  /** Được xem SĐT/tên phụ huynh đầy đủ (`canViewLeadPii()` — trang gọi hỏi sẵn). */
+  canViewPii: boolean,
 ): Promise<ChiTietLop | null> {
   const sdb = scopedDb(actor);
   const cls = await sdb.trialClassV2.findUnique({
@@ -599,12 +607,20 @@ export async function layChiTietLop(
       ),
       danhGia: phieuTheoBuoi.get(s.id) ?? {},
     })),
-    enrollments: cls.enrollments.map((e) => ({
+    enrollments: cls.enrollments.map((e) => {
+      const che = maskLeadPiiFields(
+        {
+          parentName: e.leadChild?.lead?.parentName ?? null,
+          phone: e.leadChild?.lead?.phone ?? null,
+        },
+        canViewPii,
+      );
+      return {
       id: e.id,
       leadChildId: e.leadChild?.id ?? null,
       childName: e.leadChild?.fullName ?? "(không rõ)",
-      parentName: e.leadChild?.lead?.parentName ?? null,
-      phone: e.leadChild?.lead?.phone ?? null,
+      parentName: che.parentName ?? null,
+      phone: che.phone ?? null,
       leadId: e.leadChild?.lead?.id ?? null,
       status: e.status as EnrollmentRow["status"],
       scheduledSessionId: e.scheduledSessionId,
@@ -629,7 +645,8 @@ export async function layChiTietLop(
         laQuanLy: nguoiXem.laQuanLyLead,
         tenSale: e.leadChild?.lead?.assignedTo?.name ?? null,
       }),
-    })),
+      };
+    }),
   };
 }
 
@@ -637,12 +654,14 @@ export async function layChiTietLop(
 export async function layDanhSachHen(
   actor: Actor,
   status: string | undefined,
-  opts: { ownTeacherId?: string | null; q?: string },
+  // `canViewPii` cai QUẢN CẢ HAI việc: che cột hiển thị VÀ cho phép ô tìm quét cột
+  // SĐT. Hai việc đó phải cùng một cờ — che cột mà vẫn cho tìm là vẫn dò ra số.
+  opts: { ownTeacherId?: string | null; q?: string; canViewPii: boolean },
 ): Promise<{ bookings: BookingRow[]; rooms: RoomOption[]; classes: Option[] }> {
   const sdb = scopedDb(actor);
   const [rows, rooms, classes] = await Promise.all([
     sdb.trialClass.findMany({
-      where: buildBookingListWhere(status, opts),
+      where: buildBookingListWhere(status, { ...opts, canSearchPhone: opts.canViewPii }),
       orderBy: [{ status: "asc" }, { scheduledAt: "asc" }],
       take: 200,
       include: {
@@ -674,11 +693,16 @@ export async function layDanhSachHen(
     }),
   ]);
 
-  const bookings: BookingRow[] = rows.map((t) => ({
+  const bookings: BookingRow[] = rows.map((t) => {
+    const che = maskLeadPiiFields(
+      { parentName: t.lead?.parentName ?? null, phone: t.lead?.phone ?? null },
+      opts.canViewPii,
+    );
+    return {
     id: t.id,
     leadId: t.leadId,
-    parentName: t.lead?.parentName ?? null,
-    phone: t.lead?.phone ?? null,
+    parentName: che.parentName ?? null,
+    phone: che.phone ?? null,
     childName: t.lead?.children[0]?.fullName ?? t.lead?.childName ?? null,
     centerId: t.centerId,
     centerName: t.center?.name ?? null,
@@ -690,7 +714,8 @@ export async function layDanhSachHen(
     roomId: t.roomId,
     classId: t.classId,
     notes: t.notes,
-  }));
+    };
+  });
 
   return { bookings, rooms, classes };
 }

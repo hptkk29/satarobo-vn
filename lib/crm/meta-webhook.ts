@@ -40,10 +40,17 @@ export function parseMessengerEvents(body: unknown): MessengerEvent[] {
       const m = mRaw as {
         sender?: { id?: string };
         timestamp?: number;
-        message?: { mid?: string; text?: string };
+        message?: { mid?: string; text?: string; is_echo?: boolean };
       };
       const psid = m.sender?.id;
       if (!psid || !m.message) continue; // bỏ qua event không phải tin nhắn (delivery/read...)
+      // S-2b (27/08/2026) — BỎ QUA ECHO CỦA CHÍNH MÌNH.
+      // Từ khi hệ thống gửi được tin ra Meta (`lib/crm/messenger-send.ts`), Meta bắn lại
+      // mỗi tin ta gửi dưới dạng `message.is_echo = true`, và trong event đó `sender.id`
+      // là PAGE ID chứ không phải PSID khách. Nhận nó vào sẽ đẻ một hội thoại ma mang
+      // `psid = pageId`, set `firstMessageAt` cho nó, rồi `lib/crm/sla.ts` bật cảnh báo
+      // SLA-0 "chưa ai trả lời" cho một hội thoại không có khách nào.
+      if (m.message.is_echo) continue;
       out.push({
         pageId,
         psid,

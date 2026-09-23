@@ -171,7 +171,7 @@ describe("[QDS-03] khoá theo đơn — MỘT công thức, dùng chung với đ
     expect(ghi).not.toMatch(/\$queryRaw`SELECT pg_advisory_xact_lock/);
     // Và mọi phép ghi tiền của tệp này đi qua `ghiTienChoDon`, tức luôn nằm dưới khoá.
     //
-    // **7** lời gọi. Khai báo là `ghiTienChoDon<T>(` nên không đếm.
+    // **8** lời gọi. Khai báo là `ghiTienChoDon<T>(` nên không đếm.
     //   1. `taoDotChoCon`          — tạo đợt cho một bé
     //   2. `huyDotChoCon`          — huỷ đợt chưa có tiền
     //   3. `ganTienTheoCon`        — gắn một GIAO DỊCH ngân hàng, chia theo đợt
@@ -179,12 +179,13 @@ describe("[QDS-03] khoá theo đơn — MỘT công thức, dùng chung với đ
     //   5. `boGanKhoanKhoiCon`     — đường B: bỏ gắn                            [18/09/2026]
     //   6. `goGanTheoCon`          — gỡ gắn giao dịch, sinh bút toán đảo
     //   7. `tachKhoanChoCon`       — đường B: TÁCH một khoản cho n bé          [20/09/2026]
+    //   8. `chuyenTienGiuaCon`     — chuyển tiền giữa hai bé CÙNG ĐƠN         [22/09/2026]
     //
     // ⚠️ Con số này ĐẾM CÓ CHỦ ĐÍCH, đừng đổi thành `toBeGreaterThan`. Nó bắt đúng một thứ:
     // ai đó thêm một đường ghi tiền mới mà **quên bọc khoá** thì tổng không tăng, và ca này
     // đỏ. Nới thành "≥" là gỡ luôn khả năng ấy. Thêm hàm mới thì SỬA SỐ và thêm một dòng vào
     // danh sách trên — vài giây, và nó buộc người thêm phải đọc lại vì sao có khoá.
-    expect(ghi.match(/ghiTienChoDon\(/g) ?? []).toHaveLength(7);
+    expect(ghi.match(/ghiTienChoDon\(/g) ?? []).toHaveLength(8);
   });
 
   it("đường webhook dùng ĐÚNG công thức khoá ấy — hai đường phải giẫm lên nhau được", () => {
@@ -439,5 +440,202 @@ describe("[QDB-*] ĐƯỜNG B — gắn khoản đã thu vào con, trên màn Đ
     // của người khác không chạm tới.
     const than6 = than(docMa("lib/finance/ghi-tien-don.ts"), "tachKhoanChoCon");
     expect(than6).toMatch(/note: `\$\{khoan\.note \?\? ""\} \$\{marker\}`\.trim\(\),/);
+  });
+});
+
+describe("[QPG] PHIÊN C — phiếu gộp: quyền, thứ tự móc, và hai luật không được gỡ", () => {
+  // `ACT` của khối trên nằm trong phạm vi của khối đó — khai lại ở đây thay vì nâng lên biến
+  // toàn tệp, để hai khối đọc được độc lập.
+  const ACT = "app/(admin)/admin/orders/_actions.ts";
+
+  it("[QPG-01] quyền HAI MỨC, và ranh giới là 'phiếu đã nhận tiền chưa'", () => {
+    // Phát/huỷ phiếu chưa nhận đồng nào KHÔNG đổi một đồng nào trong sổ ⇒ việc của sale.
+    // ĐÓNG phiếu đã nhận một phần là phán quyết về tiền đã vào ⇒ việc của kế toán.
+    const act = docMa(ACT);
+    expect(than(act, "taoPhieuGopAction")).toMatch(
+      /congDuongB\(input\.orderId, "payments:record"\)/,
+    );
+    expect(than(act, "huyPhieuGopAction")).toMatch(
+      /congDuongB\(input\.orderId, "payments:record"\)/,
+    );
+    expect(than(act, "dongPhieuGopAction")).toMatch(
+      /congDuongB\(input\.orderId, "payments:manage"\)/,
+    );
+  });
+
+  it("[QPG-02] MÓC đặt TRƯỚC mọi phép suy đoán của đường cũ", () => {
+    // ⚠️ Đây là thứ phiên C thật sự thêm vào, và nó là thứ dễ bị đẩy xuống dưới nhất khi ai
+    // đó "dọn lại luồng". Mã 5 ký tự nói THẲNG phiếu nào; đặt nó sau `resolvePaymentTargetDetailed`
+    // là cho một phép đoán theo SĐT cơ hội cướp một giao dịch đã biết đích.
+    //
+    // Đo bằng VỊ TRÍ, không bằng sự có mặt: có mặt mà đứng sau thì vô dụng y như không có.
+    // ⚠️ Phải cắt THÂN `ingestPayosWebhook` trước. Tìm trên cả tệp thì
+    // `resolvePaymentTargetDetailed` khớp trúng lời gọi trong `resolvePaymentTarget` — một
+    // hàm ĐỨNG TRƯỚC trong tệp — và ca này đỏ vì lý do chẳng liên quan. (Đã mắc, 20/09.)
+    const than1 = than(docMa("lib/payments/payos-ingest.ts"), "ingestPayosWebhook");
+    const moc = than1.indexOf("await thuTheoPhieuGop(");
+    const cu = than1.indexOf("await resolvePaymentTargetDetailed(");
+    expect(moc, "phải có lời gọi `thuTheoPhieuGop`").toBeGreaterThan(0);
+    expect(cu, "phải có lời gọi đường cũ").toBeGreaterThan(0);
+    expect(moc, "móc phiếu gộp phải đứng TRƯỚC đường cũ").toBeLessThan(cu);
+  });
+
+  it("[QPG-03] `thuTheoPhieuGop` KHÔNG hỏi cờ — mã đã phát là mã bất biến", () => {
+    // ⚠️ Hỏi cờ ở đây nghĩa là tắt cờ = mọi tờ QR ĐÃ phát hoá giấy lộn, và tiền về rơi xuống
+    // UNMATCHED hàng loạt. Cờ chỉ được gác ở đường PHÁT HÀNH (action) và ở `memoPhatHanh`.
+    const pg = docMa("lib/finance/phieu-gop.ts");
+    expect(pg, "đường NHẬN tiền không được hỏi công tắc").not.toMatch(/laThuTienLinhHoatBat/);
+    // Còn đường PHÁT thì có — qua `congDuongB`, đã phủ ở `[QPG-01]`.
+  });
+
+  it("[QPG-04] NHƯỜNG khi không tra ra phiếu — không tự nuốt giao dịch đời cũ", () => {
+    // Checksum lọc 26/27 khối rác chứ không lọc hết: một memo ĐỜI CŨ vẫn có ~1/27 cơ hội chứa
+    // khối 5 ký tự qua checksum. Nuốt ca đó là đẩy ~1/27 giao dịch đời cũ xuống UNMATCHED
+    // không lý do — triệu chứng sẽ trông như "SePay thỉnh thoảng lỗi".
+    //
+    // Hành vi đã phủ ở `[PG-09]` (DB thật). Ca này canh chính hai dòng mã, vì một lượt "dọn
+    // dẹp" đổi `return { xuLy: false }` thành một nhánh UNMATCHED là đủ mở lại lỗ đó mà không
+    // test hành vi nào của người khác chạm tới.
+    const than3 = than(docMa("lib/finance/phieu-gop.ts"), "thuTheoPhieuGop");
+    expect(than3).toMatch(/if \(memo\.ungVien\.length === 0\) return \{ xuLy: false \};/);
+    expect(than3).toMatch(/if \(!so\) return \{ xuLy: false \};/);
+  });
+
+  it("[QPG-05] KHÔNG ghi phần THA vào phân bổ của phiếu gộp", () => {
+    // ⚠️ PHẠM VI HẸP, nói thẳng để không ai tin quá: ca này canh ĐÚNG HAI hình dạng —
+    // `roundingWaived: 0` còn nguyên, và đường này không đọc cấu hình dung sai. Nó **KHÔNG**
+    // canh được mọi cách thêm dung sai: cấy thử 20/09 bằng một phép kẹp `lech <= 5_000` viết
+    // thẳng số vào mã thì ca này VẪN XANH.
+    //
+    // Thứ bắt được lượt cấy ấy là HÀNH VI: `[PG-03]` (thừa 1đ) và `[PG-04]` (thiếu 1đ) trong
+    // `tests/finance/phieu-gop.test.ts`. Luật 11 — ưu tiên khẳng định hành vi; lưới văn bản
+    // chỉ là lớp thứ hai, và phải tự khai nó chặn được cái gì.
+    const than3 = than(docMa("lib/finance/phieu-gop.ts"), "thuTheoPhieuGop");
+    expect(than3).toMatch(/roundingWaived: 0,/);
+    expect(than3, "không được đọc cấu hình dung sai ở đường này").not.toMatch(
+      /roundingToleranceVnd/,
+    );
+  });
+
+  it("[QPG-06] `Payment` của phiếu gộp mang MARKER — dây duy nhất để gỡ gắn tìm lại", () => {
+    // `Payment` KHÔNG có cột `bankTransactionId`; marker trong `note` là dây duy nhất, và
+    // `goGanTheoCon` tìm dòng gốc bằng chính nó. Mất marker ⇒ gỡ gắn xoá phân bổ mà không đảo
+    // dòng nào ⇒ giao dịch về hàng chờ trong khi công nợ vẫn báo đã đóng.
+    const than3 = than(docMa("lib/finance/phieu-gop.ts"), "thuTheoPhieuGop");
+    expect(than3).toMatch(/\[auto:\$\{input\.provider\.toLowerCase\(\)\}:\$\{input\.providerTxnId\}\]/);
+    expect(than3, "và `note` của từng dòng phải CHỞ marker ấy").toMatch(/\$\{marker\}`,/);
+  });
+
+  it("[QPG-07] màn đơn: QR nhận bản ĐẦY ĐỦ, phần hiển thị mới che", () => {
+    // Nhúng chuỗi ĐÃ CHE vào ảnh QR là mã hỏng — tiền không về được. Đây là cùng một cái bẫy
+    // mà khối QR mức đơn đã phải ghi chú một lần.
+    const page = docMa("app/(admin)/admin/orders/[id]/page.tsx");
+    expect(page).toMatch(/buildVietQrImageUrl\(payCfg, phieuMo\.tongTien, memo\.noiDung\)/);
+    expect(page).toMatch(/maskPhoneInTransferContent\(memo\.noiDung, order\.customerPhone\)/);
+    expect(page, "phiếu phải được truyền xuống khối công nợ theo con").toMatch(
+      /phieu=\{phieuGop\}/,
+    );
+  });
+
+  it("[QPG-08] số in trên QR là CÒN PHẢI THU của phiếu, không phải `amountDue` đã chụp", () => {
+    // Một dòng của phiếu có thể đã được lấp từ đường khác sau lúc phát; khi đó QR phải in số
+    // NHỎ HƠN. In `PaymentBill.amountDue` là đòi cả phần đã trả, và vì cổng đối khớp so với
+    // `conPhaiThuCuaPhieu` nên khách chuyển đúng số trên QR sẽ bị từ chối — mọi lần.
+    const doc = than(docMa("lib/finance/phieu-gop.ts"), "docPhieuGopDangMo");
+    expect(doc).toMatch(/tongTien: conPhaiThuCuaPhieu\(dongChia\),/);
+  });
+});
+
+describe("[QDH-*] PHIÊN D — dừng học một con: quyền · công tắc · dây nối", () => {
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Chủ dự án chốt 21/09/2026: quyền `orders:manage`, và *"sau cờ
+  // `billing.flexV1Enabled`; cờ tắt → nút ẩn + action từ chối"*.
+  //
+  // ⚠️ Cùng lý do "không phải test hành vi" với `[QDB-*]` ngay trên: cổng thật nằm trong
+  // Server Action và gọi `auth()` + `checkPermission()`. Phần HÀNH VI của dừng học (19 buổi,
+  // quyết toán, phân dư, VOID đợt, hoàn tiền…) nằm ở `tests/finance/dung-hoc-mot-con.test.ts`,
+  // chạy trên Postgres thật — 18 ca.
+  // ─────────────────────────────────────────────────────────────────────────────
+  const ACT = "app/(admin)/admin/orders/_actions.ts";
+
+  it("cả HAI action đi qua `congDungHoc` — không action nào tự gác lấy", () => {
+    const src = docMa(ACT);
+    for (const ten of ["xemTruocDungHocAction", "dungHocConAction"]) {
+      const t = than(src, ten);
+      expect(t, `không tách được thân ${ten}`).not.toBe("");
+      expect(t, `${ten} phải đi qua cổng chung`).toMatch(
+        /const cong = await congDungHoc\(input\.orderId\);/,
+      );
+      expect(t, `${ten} phải trả lỗi, KHÔNG redirect`).not.toMatch(/requireOrdersManage/);
+    }
+  });
+
+  it("cổng kiểm ĐỦ BA VẾ: quyền `orders:manage` · phạm vi cơ sở · công tắc CỦA ĐƠN", () => {
+    const cong = than(docMa(ACT), "congDungHoc");
+    expect(cong, "không tách được thân cổng").not.toBe("");
+    expect(cong, "vế 1 — quyền").toMatch(/await checkPermission\("orders:manage"\)/);
+    expect(cong, "vế 2 — phạm vi cơ sở").toMatch(/passesScope\("Order", order, actor\)/);
+    // ⚠️ Vế 3 đọc `order.orgUnitId` — cơ sở GIỮ ĐƠN, không phải cơ sở người bấm.
+    expect(cong, "vế 3 — công tắc của ĐƠN").toMatch(/laThuTienLinhHoatBat\(order\.orgUnitId\)/);
+  });
+
+  it("cờ TẮT ⇒ action TỪ CHỐI (không chỉ ẩn nút)", () => {
+    const cong = than(docMa(ACT), "congDungHoc");
+    expect(cong).toMatch(/if \(!\(await laThuTienLinhHoatBat\(order\.orgUnitId\)\)\)/);
+    expect(cong).toMatch(/chưa bật cho cơ sở này/);
+  });
+
+  it("nút chỉ VẼ khi có quyền VÀ bé chưa dừng — và khối chỉ dựng khi cờ bật", () => {
+    // Affordance phải nói thật (luật 12): vẽ nút "Dừng học" cho một bé đã dừng là mời người
+    // ta bấm một thứ chắc chắn bị từ chối.
+    const ui = docMa("app/(admin)/admin/orders/_components/cong-no-theo-con.tsx");
+    expect(ui).toMatch(/\{duocSua && !tt\?\.daDung && \(/);
+    expect(ui).toMatch(/<NutDungHoc orderId=\{orderId\} orderItemId=\{c\.orderItemId\}/);
+
+    // Cả khối công nợ theo con chỉ dựng khi `batThuTheoCon` — tức cờ tắt thì không có nút
+    // nào để mà ẩn, và trang không tốn thêm một truy vấn nào.
+    const trang = docMa("app/(admin)/admin/orders/[id]/page.tsx");
+    expect(trang).toMatch(/batThuTheoCon \? await docTrangThaiDungHoc\(order\.id\) : undefined/);
+  });
+
+  it("CỔNG ĐỨNG TRƯỚC PHÉP GHI: 7 cổng của `dungHocMotCon` nằm trên phép ghi đầu tiên", () => {
+    // Luật rollback (CLAUDE.md mục 7): `return` trong callback `$transaction` KHÔNG rollback.
+    // Lưới chung `cong-truoc-phep-ghi.test.ts` quét hình dạng; ca này neo thêm THỨ TỰ cụ thể
+    // của hàm này, vì phép ghi đầu tiên của nó nằm trong một hàm phụ (`huyDotKhiDungHoc`) mà
+    // lưới chung không nhìn vào.
+    const src = docMa("lib/finance/dung-hoc-con.ts");
+    const viTriCongCuoi = src.indexOf("} else if (input.phanDu.length > 0) {");
+    const viTriGhiDau = src.indexOf("const soDotDaHuy = await huyDotKhiDungHoc(");
+    expect(viTriCongCuoi, "không thấy cổng 7").toBeGreaterThan(0);
+    expect(viTriGhiDau, "không thấy phép ghi đầu tiên").toBeGreaterThan(0);
+    expect(viTriGhiDau, "phép ghi đầu tiên phải nằm SAU cổng cuối cùng").toBeGreaterThan(
+      viTriCongCuoi,
+    );
+  });
+
+  it("ngoại lệ huỷ đợt có TÊN RIÊNG và không ai ngoài đường dừng học gọi được", () => {
+    const src = docMa("lib/finance/dung-hoc-con.ts");
+    // Không `export` ⇒ ngoài tệp không gọi được. Đây là vế "chỉ gọi được từ đường dừng học".
+    expect(src).toMatch(/\nasync function huyDotKhiDungHoc\(/);
+    expect(src, "KHÔNG được export ngoại lệ này").not.toMatch(
+      /export async function huyDotKhiDungHoc/,
+    );
+    // Và luật cũ không bị nới: `kiemHuyDot` vẫn từ chối đợt đã có tiền.
+    const cu = docMa("lib/finance/no-theo-con.ts");
+    expect(cu).toMatch(/if \(tron\(dot\.daRot\) > 0\) \{/);
+  });
+
+  it("phần KHÔNG-TIỀN tách ra rồi, và đường 'Nghỉ học hẳn' KHÔNG đổi hành vi", () => {
+    const tach = docMa("lib/students/ket-thuc-ghi-danh.ts");
+    // Tệp phần-không-tiền TUYỆT ĐỐI không được chạm sổ tiền.
+    for (const cam of ["createRefundRequest", "payment.", "paymentRequest.", "refundRequest."]) {
+      expect(tach, `phần KHÔNG-TIỀN không được nhắc \`${cam}\``).not.toContain(cam);
+    }
+    // Đường cũ gọi hàm mới mà KHÔNG truyền `endedAt` ⇒ cột đó vẫn nguyên như trước.
+    const cu = docMa("lib/students/remove-from-classes.ts");
+    expect(cu).toMatch(/await ketThucMotGhiDanh\(\{/);
+    expect(cu, "truyền `endedAt` ở đây là đổi hành vi báo cáo churn").not.toMatch(/endedAt/);
+    // Phần TIỀN vẫn ở đúng chỗ cũ — ngoài hàm không-tiền.
+    expect(docMa("lib/students/withdraw.ts")).toMatch(/await createRefundRequest\(\{/);
   });
 });

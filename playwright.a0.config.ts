@@ -8,10 +8,10 @@
  *   pnpm db:test:up && pnpm test:e2e:a0
  */
 import { defineConfig, devices } from "@playwright/test";
-import dotenv from "dotenv";
+import { napEnvTest } from "./tests/e2e/_helpers/nap-env";
 
 // Nạp .env.test TRƯỚC mọi thứ — workers + webServer kế thừa process.env này.
-dotenv.config({ path: ".env.test", override: true });
+napEnvTest("a0");
 
 export default defineConfig({
   testDir: "./tests/e2e/a0",
@@ -20,8 +20,16 @@ export default defineConfig({
   expect: { timeout: 5_000 },
   retries: process.env.CI ? 2 : 0,
   workers: 1, // serial: nhiều spec share resetDb/seed chung 1 DB test
+  // ⚠️ `["line"]` KHÔNG phải để cho đẹp — nó là thứ duy nhất PHÁT TIẾN TRÌNH trong lúc
+  // chạy [21/09/2026]. `html` ghi lúc kết thúc, `github` chỉ in chú giải lúc kết thúc, nên
+  // trước hôm nay một lượt CI treo để lại **đúng 0 dòng** về việc nó treo ở đâu: log nhảy
+  // từ "Running N tests" thẳng tới "##[error]The operation was canceled" sau 15 phút im
+  // lặng. Bốn job cần trình duyệt treo suốt từ 21/09 và không ai truy được vì lý do đó.
+  //
+  // `line` in một dòng cho MỖI ca xong — đủ để biết ca cuối cùng chạy là ca nào, và rẻ
+  // (một dòng/ca, không phải log đầy).
   reporter: process.env.CI
-    ? [["html", { open: "never" }], ["github"]]
+    ? [["html", { open: "never" }], ["github"], ["line"]]
     : [["html", { open: "never" }], ["list"]],
 
   // Cổng RIÊNG (3100) để KHÔNG đụng dev server thường (3000, có thể đang trỏ
@@ -43,7 +51,22 @@ export default defineConfig({
   webServer: process.env.A0_SKIP_WEBSERVER
     ? undefined
     : {
-        command: process.env.CI ? "pnpm start -p 3100" : "pnpm dev -p 3100",
+        // ⚠️ CI gọi THẲNG `next`, KHÔNG qua `pnpm` [21/09/2026].
+        //
+        // `pnpm start` đẻ ra chuỗi `sh → node(pnpm) → sh → next-server`. Playwright giết
+        // NHÓM tiến trình của lệnh nó spawn, nhưng pnpm tách nhóm cho tiến trình con, nên
+        // `next-server` SỐNG SÓT ⇒ lượt dọn webServer chờ cổng được nhả ⇒ **treo vĩnh
+        // viễn**, và `onEnd` của reporter không bao giờ chạy (không có dòng "N passed").
+        //
+        // Đo 21/09 trên run 35619508725: cả BỐN job đều đứng im ở ca CUỐI rồi bị giết, và
+        // GitHub phải tự dọn — `Terminate orphan process: … (next-server (v16.2.6))`,
+        // **5 tiến trình mồ côi mỗi job**. Gọi thẳng `next` là một tiến trình, cùng nhóm,
+        // chết chắc.
+        //
+        // ⚠️ Nhánh KHÔNG-CI giữ `pnpm dev`: trên Windows `node_modules/.bin/next` không
+        // chạy được qua shell của Playwright (đã thử, exit 1) — và máy dev không có con
+        // treo này vì người ta Ctrl-C.
+        command: process.env.CI ? "node_modules/.bin/next start -p 3100" : "pnpm dev -p 3100",
         url: "http://localhost:3100",
         // Dựng server test mới với env test — KHÔNG tái dùng dev server có sẵn.
         reuseExistingServer: false,

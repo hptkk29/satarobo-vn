@@ -38,9 +38,17 @@ const RESOURCE_LABELS: Record<string, string> = {
   // Phase 5.6 — Financial
   payments: "Phương thức thanh toán",
   orders: "Đơn hàng",
+  // 27/08 — khai QC / quản lý phụ trách cơ sở (người hưởng hoa hồng QC 1% + QL TT 2%).
+  "commission-assignee": "Người hưởng hoa hồng theo cơ sở",
   // Phase 5.7 — Vouchers
   // Chat realtime (US-05)
   chat: "Tin nhắn (chat)",
+  // Hộp thư đa kênh — hội thoại với KHÁCH ngoài hệ (khác `chat` nội bộ).
+  inbox: "Hộp thư đa kênh",
+  // Ứng dụng ZaloCRM nhúng (nick Zalo CÁ NHÂN) — khác cả `inbox` (Zalo OA của công ty)
+  // lẫn `chat` (nội bộ). Nhãn phải nói rõ "Zalo CRM" chứ không phải "Zalo", kẻo người
+  // cấp quyền tưởng đang mở/đóng hộp thư Zalo OA.
+  zalocrm: "Zalo CRM (nick cá nhân)",
   media: "Ảnh lớp học",
 };
 
@@ -52,6 +60,7 @@ const VERB_LABELS: Record<string, string> = {
   "view-personal": "Xem thông tin cá nhân",
   "view-financial": "Xem tài chính",
   "view-own-class": "Xem lớp của mình",
+  reply: "Trả lời",
   create: "Tạo mới",
   edit: "Chỉnh sửa",
   delete: "Xoá",
@@ -82,6 +91,10 @@ const VERB_LABELS: Record<string, string> = {
   announce: "Gửi thông báo",
   moderate: "Gỡ tin vi phạm",
   admin: "Quản trị hội thoại",
+  // Tích hợp ZaloCRM (S6). Verb `use` gộp cả mở màn lẫn nhắn khách — bên trong iframe
+  // là ứng dụng ngoài, repo này không gác được từng thao tác, nên tách `view`/`reply`
+  // sẽ là quyền GIẢ. Nhãn nói đúng phạm vi đó để người cấp quyền không hiểu là "chỉ xem".
+  use: "Sử dụng (mở màn + nhắn khách)",
 };
 
 export function getActionMeta(action: string): {

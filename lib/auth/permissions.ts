@@ -75,10 +75,27 @@ export type Action =
   | "leads:overwrite"
   | "leads:assign"
   | "leads:assign-config" // 03/08 — tách riêng màn "Cấu hình chia lead" khỏi leads:assign
+  // S-5 — XEM sổ lượt chia lead (`/leads/so-luot`). Key ĐỌC riêng, cố ý tách khỏi
+  // `leads:view-all`: sổ lượt là màn kiểm chứng viết CHO tổ Sale (plan/15 §5), mà
+  // `leads:view-all` là quyền quản lý gác ~8 màn khác — nới nó để Sale xem được sổ
+  // là mở kèm cả chùm. Cũng KHÔNG mượn `leads:assign-config` (chỉ SUPER_ADMIN, và
+  // đó là quyền SỬA cách chia — sổ này chỉ đọc).
+  | "leads:rotation-view"
   | "lead_pool:manage" // 29/08 — màn "Quản lý chia lead": ai đang nhận lead
   | "leads:delete"
   | "leads:export"
   | "leads:import" // Task #07 — import danh sách "khách đã đăng ký" từ Excel (Lead REGISTERED + LeadChild)
+  // C-01 — đặt/sửa chỉ tiêu SỐ HỌC SINH theo tháng × cơ sở (bảng LeadTarget).
+  // Key RIÊNG theo chốt kỹ thuật 24/08/2026 (OQ-C5) — KHÔNG dùng lại `leads:assign-config`,
+  // vì key đó đang gác màn "Cấu hình chia lead tự động": cấp cho QLCS để họ gõ một con số
+  // là mở kèm một năng lực khác hẳn mà không ai định trao.
+  | "lead_targets:manage"
+  // D-02 — đặt/sửa chỉ tiêu NGÂN SÁCH QUẢNG CÁO theo tháng × cơ sở (bảng AdsBudgetTarget).
+  // Key RIÊNG, đúng tiền lệ `revenue_targets:manage` (B-01) + `lead_targets:manage` (C-01).
+  // KHÔNG mượn `leads:view-all` (key đang gác /admin/marketing/funnel — mượn là mở màn ĐẶT
+  // chỉ tiêu cho QLCS lẫn Sale), và KHÔNG lan thêm call-site cho `canEditAds`
+  // (lib/crm/ads-insights.ts so roleCode bằng tay — vi phạm luật Nền Hệ thống #1).
+  | "ads_budget_targets:manage"
   // #11 T2 (OI-4) — xem PII lead: SĐT/email/tên PH-HS/ghi chú tư vấn.
   // ⚠️ MARKETING **CÓ** quyền này (user chốt 21/07, ĐẢO quyết định "che PII cho
   // MARKETING" ngày 10-20/07 — lý do đầy đủ ở ma trận bên dưới). Comment cũ ghi
@@ -292,6 +309,18 @@ export type Action =
   // #05 — break-glass: xem đầy đủ PII (bỏ mask) trong audit viewer, kèm reason + log riêng.
   | "audit-logs:view-pii"
 
+  // --- Dashboard QLCS 4 tab (A-02) ---
+  // Cổng VÀO màn `/dashboard-qlcs`. Key RIÊNG theo chốt kỹ thuật 24/08/2026 (E/OQ-4),
+  // vì mọi key sẵn có đều sai một trong hai kiểu:
+  //  • `chat:read` (ứng viên đầu cho tab E) seed scope CENTER/ASSIGNED ⇒ gate cấp trang
+  //    gọi KHÔNG target luôn trả false trên prod (v2) trong khi local (v1) vẫn xanh —
+  //    đúng loại "chạy máy tôi thì được". Bất biến này có test: page-gates.test.ts.
+  //  • `payments:*` / `leads:*` gác được đúng MỘT tab, mượn làm cổng chung là hoặc khoá
+  //    cửa của người chỉ cần tab kia, hoặc mở kèm năng lực không ai định trao.
+  // Cách ly cơ sở KHÔNG đến từ đây — nó đến từ `resolveScopeFilters()` (giao
+  // visibleCenterIds × cơ sở chọn trong URL) + `scopedDb` ở từng hàm số liệu.
+  | "dashboard:view"
+
   // --- Settings / system (NEW) ---
   | "settings:view"
   | "settings:edit"
@@ -307,6 +336,14 @@ export type Action =
   | "payments:confirm" // R7-04 — Kế toán xác nhận (tách nhiệm vụ)
   | "payments:adjust" // 07/09 — ĐIỀU CHỈNH khoản thu (bút toán delta). Vai nghiệp vụ nhận ở v2
   | "payments:view-pii" // #15 (câu 32) — break-glass xem đầy đủ CCCD PH + địa chỉ (reason + audit)
+  | "revenue_targets:manage" // B-01 — đặt mục tiêu doanh thu tháng × cơ sở (KHÔNG phải quyền thao tác tiền)
+  | "commission_periods:manage" // 27/08 — CHỐT/DUYỆT/MỞ LẠI kỳ hoa hồng (việc toàn hệ, tách khỏi payments:manage)
+  // 27/08 — khai "QC nào / quản lý nào phụ trách cơ sở nào" cho hoa hồng QC 1% + QL TT 2%.
+  // Key RIÊNG, KHÔNG mượn `payments:manage`: quyền đó là của KẾ TOÁN (mở/huỷ/hoàn tiền,
+  // duyệt bảng kê). Người TRẢ tiền không nên đồng thời là người chỉ định AI ĐƯỢC NHẬN —
+  // và cũng không mượn `centers:edit` (sửa địa chỉ/giờ mở cửa), vì nới quyền sửa cơ sở
+  // về sau sẽ vô tình nới luôn quyền chuyển hướng tiền hoa hồng.
+  | "commission-assignee:manage"
   | "installments:approve" // FIX lead→payment→enroll (C4) — duyệt kế hoạch trả góp 2 đợt
   | "discounts:approve" // BGĐ 31/07 — duyệt giảm giá nhập tay (kèm giải trình)
   | "orders:view"
@@ -331,6 +368,14 @@ export type Action =
   | "chat:moderate"
   | "chat:admin"
 
+  // --- Trục gọi điện + ghi âm (OmiCall — ma trận `docs/ba-crm-hien-trang-va-misa.md:1380`) ---
+  | "calls:make"
+  | "calls:view-own"
+  | "calls:view-all"
+  | "calls:listen-recording"
+  | "calls:export"
+  | "calls:assign"
+
   // --- Đào tạo nội bộ (EL-02 — lib/permissions/registry/elearning.ts) ---
   // Key 3 đoạn, khác 2 đoạn của mọi key cũ. Có chủ đích: `resource:verb` không đủ chỗ
   // cho một module 17 quyền trải trên 8 nhóm đối tượng. Test parity (b) trong
@@ -351,7 +396,36 @@ export type Action =
   | "elearning:exam:unlock"
   | "elearning:certificate:issue"
   | "elearning:certificate:revoke"
-  | "elearning:report:export";
+  | "elearning:report:export"
+
+  // --- Hộp thư đa kênh (Zalo OA / Messenger) — hội thoại với KHÁCH ngoài hệ ---
+  // ⚠️ CỐ Ý KHÔNG mượn `chat:*`. Hai thứ khác hẳn nhau và trộn là hỏng cả hai:
+  //   • `chat:*` là chat NỘI BỘ giữa người CÓ TÀI KHOẢN (GV ↔ PH), quyền theo
+  //     tư cách thành viên hội thoại, seed scope OWN/ASSIGNED/CENTER.
+  //   • `inbox:*` là hội thoại với người NGOÀI hệ (khách trên Zalo/Facebook),
+  //     phạm vi theo đơn vị, và người trực không phải là "thành viên" của gì cả.
+  // Thêm nữa `chat:read` seed non-GLOBAL nên không dùng làm cổng trang được —
+  // đúng cái bẫy đã suýt khoá cửa /tin-nhan của cả GV lẫn QLCS trên prod.
+  | "inbox:view"
+  | "inbox:reply"
+  | "inbox:assign"
+
+  // --- Tích hợp ZaloCRM (nick Zalo CÁ NHÂN, màn nhúng qua SSO) ---
+  // ⚠️ CỐ Ý KHÔNG mượn `inbox:*`. Ba thứ dễ lẫn nhau, tách rạch ròi mới đúng:
+  //   • `chat:*`    — chat NỘI BỘ giữa người CÓ TÀI KHOẢN (GV ↔ PH).
+  //   • `inbox:*`   — hộp thư đa kênh của CHÍNH repo này (Zalo OA / Messenger),
+  //                   dữ liệu nằm ở ba bảng `Inbox*`, người trực là Sale.
+  //   • `zalocrm:*` — màn của một ỨNG DỤNG NGOÀI nhúng bằng iframe + SSO, nói chuyện
+  //                   qua nick Zalo cá nhân của nhân viên. Không phải Zalo OA, không
+  //                   chung hạn mức, không chung dữ liệu, và có thể tắt/bật độc lập
+  //                   bằng cờ `ZALOCRM_ENABLED` mà hộp thư vẫn chạy.
+  // Gộp vào `inbox:view` thì không còn cách nào cho một cơ sở dùng hộp thư mà không
+  // dùng ZaloCRM — mà đó đúng là trạng thái lúc bật dần từng cơ sở.
+  //
+  // MỘT quyền cho cả "mở màn" lẫn "nhắn khách": bên trong iframe là app ngoài, repo
+  // này không chặn được từng thao tác, nên tách `view`/`reply` sẽ là quyền GIẢ —
+  // hứa một lớp gác không tồn tại.
+  | "zalocrm:use";
 
 // =============================================================================
 // MATRIX — Mỗi action liệt kê rõ những role được phép.
@@ -427,6 +501,13 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "leads:change-status": ["SUPER_ADMIN", "SALES_CSM"],
   "leads:assign": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "leads:assign-config": ["SUPER_ADMIN"],
+  // S-5 — XEM sổ lượt chia lead. SALES_CSM có mặt ở đây là CẢ ĐIỂM của ticket:
+  // trước đó màn kiểm chứng gác bằng `leads:view-all` nên chính tổ Sale — người
+  // mà bằng chứng viết cho — là người duy nhất không mở được.
+  // Phạm vi CƠ SỞ do `rotationBoardScope` (lib/lead/rotation.ts) chặn, không do
+  // key này: Sale chỉ thấy sổ của cơ sở mình. Sale Hội sở CỐ Ý không có — phiếu họ
+  // tự nhập không tiêu lượt nên họ không đứng trong vòng luân phiên nào.
+  "leads:rotation-view": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING", "SALES_CSM"],
   // Quản lý cơ sở điều hành được vòng chia của CƠ SỞ MÌNH (chủ dự án 29/08). Cách ly
   // cơ sở KHÔNG nằm ở đây mà ở truy vấn — xem ghi chú trong registry.
   "lead_pool:manage": ["SUPER_ADMIN", "CENTER_MANAGER"],
@@ -439,8 +520,31 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // user 07/07/2026 (Sale là người giữ danh sách đăng ký thật — câu 33 phiếu Sale).
   // v2: đã seed CENTER scope cho CENTER_SALES_CSM trong seed-roles.ts cùng ngày.
   "leads:import": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
+  // C-01 — chỉ tiêu lead theo tháng × cơ sở. Chỉ QLCS + Admin (chốt 24/08/2026, OQ-C5).
+  // Sale KHÔNG có: chỉ tiêu là thứ người ta bị đo, không phải thứ tự đặt cho mình.
+  // Cách ly cơ sở KHÔNG đến từ đây — `LeadTarget` ∈ SCOPE_EXEMPT nên `scopedDb` là
+  // pass-through; luật "chỉ cơ sở mình quản" ép TAY trong action bằng
+  // `checkRevenueTargetScope` (lib/reports/revenue-target-scope.ts, có test).
+  "lead_targets:manage": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  // D-02 — chỉ tiêu ngân sách quảng cáo theo tháng × cơ sở. Marketing + Admin.
+  //
+  // ⚠️ KHÁC C-01 ở đúng một vai: **KHÔNG có CENTER_MANAGER**. PRD CDB-dashboard §D.4
+  // chia đôi rành mạch — Marketing ĐẶT chỉ tiêu ngân sách, QLCS XEM chi phí + CPL + CPA
+  // của riêng cơ sở mình. Tiền quảng cáo tiêu từ tài khoản ads của Hội sở, QLCS không
+  // cầm ví đó; cho họ tự khai chỉ tiêu là để D-03 ("% thực tế / chỉ tiêu") tự chấm điểm
+  // mình. Nới thêm vai sau này là một dòng seed; thu lại vai đã cấp thì phải đi hỏi
+  // từng người xem ai đã đặt số gì — nên mặc định đi hướng đóng.
+  //
+  // Cách ly cơ sở KHÔNG đến từ đây — `AdsBudgetTarget` ∈ SCOPE_EXEMPT nên `scopedDb` là
+  // pass-through; luật "chỉ cơ sở mình quản" ép TAY trong action bằng
+  // `checkRevenueTargetScope` (lib/reports/revenue-target-scope.ts, có test).
+  "ads_budget_targets:manage": ["SUPER_ADMIN", "MARKETING"],
 
   // --- Trial classes (Phase T1.4) ---
+  // TRAINING phải có `trials:view`, nếu không thì cấp `trials:assign-teacher` cho họ
+  // là vô nghĩa: cả ba trang của màn Lớp Trial đều gác bằng `trials:view`, nên Đào tạo
+  // bị đá về /dashboard trước khi thấy được nút phân công. GĐ3 và bản 23/08 của main
+  // sửa CÙNG dòng này một cách độc lập — giữ lời giải thích, dòng thì y hệt nhau.
   // GĐ3 — TRAINING phải có `trials:view`, nếu không thì cấp `trials:assign-teacher`
   // cho họ là vô nghĩa: cả ba trang của màn Lớp Trial đều gác bằng `trials:view`, nên
   // Đào tạo bị đá về /dashboard trước khi thấy được nút phân công. Seed v2 đã có, đây
@@ -721,6 +825,20 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "audit-logs:view": ["SUPER_ADMIN"],
   "audit-logs:view-pii": ["SUPER_ADMIN"],
 
+  // --- Dashboard QLCS 4 tab (A-02) ---
+  // Chốt 24/08/2026: `SUPER_ADMIN` + `CENTER_MANAGER` + vai Hội sở.
+  // Enum `Role` của v1 không có tầng HO/CENTER, nên hai vai HO đại diện được ở đây là
+  // ACCOUNTANT (→ HO_ACCOUNTANT) và MARKETING (→ HO_MARKETING) — đúng ánh xạ
+  // LEGACY_TO_V2 của rbac-parity.test.ts. `HO_HR` chỉ tồn tại ở v2 nên được seed thẳng
+  // trong prisma/seed-roles.ts; KHÔNG thêm "HR" vào đây, vì HR ở v1 ánh xạ sang
+  // **CENTER_HR** (nhân sự CƠ SỞ) — thêm là parity đòi cấp cho cả vai cấp cơ sở đó.
+  // `HO_SALE` cố ý KHÔNG có: vai đó là "phiếu mình nhập" (RoleDef ghi rõ), cho họ màn
+  // tổng quan toàn cơ sở là ngược hẳn phạm vi vai. Mở thêm sau = một dòng seed.
+  //
+  // ⚠️ Vào được TRANG ≠ xem được mọi tab. Gate từng tab (B → payments:view ·
+  // C → leads:view-all · D/E → dashboard:view — chốt 24/08) đi kèm nội dung tab.
+  "dashboard:view": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT", "MARKETING"],
+
   // --- Settings / system ---
   "settings:view": ["SUPER_ADMIN"],
   "settings:edit": ["SUPER_ADMIN"],
@@ -757,6 +875,33 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // ≥10 ký tự + audit) chỉ cho kế toán + admin. v2: HO_ACCOUNTANT GLOBAL,
   // CENTER_ACCOUNTANT CENTER (prisma/seed-roles.ts). KHÔNG mở cho CENTER_MANAGER.
   "payments:view-pii": ["SUPER_ADMIN", "ACCOUNTANT"],
+  // B-01 — đặt mục tiêu doanh thu theo tháng × cơ sở. Key RIÊNG, KHÔNG mượn
+  // `payments:manage`: quyền đó là mở/huỷ/hoàn tiền + cấu hình phương thức thanh toán +
+  // hoa hồng toàn hệ, cố ý không nằm ở Quản lý cơ sở (#09, giữ nguyên sau đảo 03/08).
+  // Cũng KHÔNG mượn `payments:view` — đó là quyền ĐỌC đối soát, mượn nó để GHI thì mọi
+  // vai chỉ-đọc về sau tự nhiên ghi được. Cách ly cơ sở KHÔNG đến từ đây: `RevenueTarget`
+  // ∈ SCOPE_EXEMPT nên scopedDb pass-through — luật "chỉ cơ sở mình quản" ép TAY trong
+  // action qua `checkRevenueTargetScope` (lib/reports/revenue-target-scope.ts).
+  "revenue_targets:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
+  // 27/08/2026 — CHỐT / DUYỆT / MỞ LẠI kỳ hoa hồng. Key RIÊNG, tách khỏi
+  // `payments:manage` vì bảng kê hoa hồng là bảng KỲ TOÀN HỆ THỐNG
+  // (`CommissionStatement.period` @unique, KHÔNG có `centerId`) ⇒ đường GHI không có
+  // gì cắt theo cơ sở, mà `payments:manage` thì cả `CENTER_ACCOUNTANT` cũng đang giữ
+  // ở scope GLOBAL. Hệ quả trước khi tách: kế toán MỘT cơ sở bấm chốt được kỳ hoa
+  // hồng của CẢ CÔNG TY.
+  // Không gỡ `payments:manage` của kế toán cơ sở (họ còn thu/chi hằng ngày), cũng
+  // không hạ nó xuống scope CENTER (mọi call-site gọi trần ⇒ `can()` v2 trả false ⇒
+  // mất sạch quyền tiền). Tiền lệ tách key: `revenue_targets:manage` (B-01),
+  // `ads_budget_targets:manage` (D-02).
+  // v2: seed CHỈ cho HO_ACCOUNTANT (prisma/seed-roles.ts) — legacy `ACCOUNTANT` ánh
+  // xạ sang HO_ACCOUNTANT, nên hai tầng khớp nhau.
+  "commission_periods:manage": ["SUPER_ADMIN", "ACCOUNTANT"],
+  // 27/08 — CHỈ SUPER_ADMIN. Đây là quyết định "ai được nhận 3% doanh thu", chủ dự án
+  // tự nhập. Vì chỉ SUPER_ADMIN, key này KHÔNG cần chạy `seed-prod-roles.yml`: v2
+  // (`lib/auth/can.ts:52`) cho SUPER_ADMIN đi thẳng, không tra `RoleDef` trong DB.
+  // ⚠️ Muốn mở cho vai khác thì PHẢI seed v2 — nếu không, người đó qua được gate v1 ở
+  // local mà bị chặn câm trên prod (prod đang enforce v2).
+  "commission-assignee:manage": ["SUPER_ADMIN"],
   // C4 — duyệt kế hoạch trả góp 2 đợt: chỉ quản lý cơ sở + admin (audit + reason bắt buộc khi từ chối).
   // #09 (09/07): v2 chuyển quyền này sang HO_ACCOUNTANT (de-xuat-scope §3.3 "tiền tập
   // trung"). `lib/orders/installments.ts` gate bằng matrix v1 (không theo cờ) làm lớp
@@ -810,6 +955,57 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "chat:moderate": ["SUPER_ADMIN", "TEACHER"],
   // /admin/hoi-thoai + khoá hội thoại + tra cứu F-AUDIT — chỉ Admin HO (US-15 AC5).
   "chat:admin": ["SUPER_ADMIN"],
+
+  // --- Hộp thư đa kênh ---
+  // Sale là người trực hộp thư; Quản lý cơ sở theo dõi và gán việc.
+  // MARKETING cố ý KHÔNG có: họ chạy chiến dịch, không trực khách. Cần thì cấp
+  // riêng ở RBAC v2, đừng nới ở đây.
+  "inbox:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
+  "inbox:reply": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
+  // Gán người phụ trách + nối hội thoại mồ côi vào phiếu khách. Gộp hai việc vào
+  // một quyền vì cả hai đều là "phân loại việc", và tách ra thì màn hàng đợi mồ
+  // côi có người mở được mà không xử lý được gì.
+  "inbox:assign": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
+
+  // --- Tích hợp ZaloCRM (S6) ---
+  // Cùng bộ vai với hộp thư: Sale là người trực, Quản lý cơ sở theo dõi + trực thay.
+  // Vai thứ tư là Giáo vụ (`CENTER_CLASS_MANAGER`) — KHÔNG BIỂU DIỄN ĐƯỢC ở đây vì
+  // enum `Role` của Prisma chỉ có 9 giá trị và không có nó; Giáo vụ chỉ tồn tại ở
+  // RoleDef v2 (`prisma/seed-roles.ts`). Hệ quả phải nhớ: ở local/dev/CI (chạy v1)
+  // Giáo vụ KHÔNG vào được /zalo-crm dù prod (chạy v2) vào được — KHÔNG phải bug,
+  // đừng "vá" bằng cách mượn một vai v1 khác.
+  //
+  // MARKETING và HO_SALE cố ý KHÔNG có: Marketing chạy chiến dịch chứ không trực
+  // khách, còn Sale Hội sở bị loại theo chốt 9.7 (nick Zalo cá nhân thuộc về người
+  // trực TẠI cơ sở, Hội sở không dùng).
+  //
+  // Khai ở đây KHÔNG phải vì bảng này là nguồn sự thật (nguồn là `RoleDef` +
+  // `RolePermission` trong DB, v2 đang enforce trên prod) mà vì hai lý do kỹ thuật:
+  // `ALL_ACTIONS = Object.keys(PERMISSIONS)` nên bỏ qua đây là local/dev/CI luôn
+  // deny — không ai test được tính năng; và `buildActor()` LỌC grant theo đúng tập
+  // đó nên mọi `UserPermissionGrant` mang key này bị vứt IM LẶNG, không lỗi.
+  "zalocrm:use": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
+
+  // --- Trục gọi điện + ghi âm (OmiCall) ---
+  // Ma trận nguồn: `docs/ba-crm-hien-trang-va-misa.md:1380`. Vai v1 tương ứng:
+  // SA→SUPER_ADMIN · QLCS→CENTER_MANAGER · Sale→SALES_CSM.
+  //
+  // ⚠️ Khai ở đây KHÔNG phải vì bảng này là nguồn sự thật (nguồn là `RoleDef` +
+  // `RolePermission` trong DB, v2 đang enforce trên prod) mà vì một lý do kỹ thuật
+  // dễ quên: `ALL_ACTIONS = Object.keys(PERMISSIONS)` và `buildActor()` LỌC grant
+  // theo đúng tập đó — không khai thì mọi `PermissionGrant` mang key `calls:*` bị
+  // vứt IM LẶNG, không lỗi, không cảnh báo.
+  "calls:make": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
+  "calls:view-own": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
+  "calls:view-all": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  // 🔴 BM-2 — TÁCH RIÊNG, KHÔNG mặc định cho Sale. Mỗi lượt nghe ghi audit (QT-36).
+  // Và thiết kế bằng ALLOW: `can()` v2 KHÔNG có nhánh DENY nên một grant DENY bị bỏ
+  // qua IM LẶNG — chặn ai thì gỡ `UserOrgRole`/`RolePermission`, đừng cấp DENY.
+  "calls:listen-recording": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  // Xuất dữ liệu cuộc gọi kèm SĐT phụ huynh ⇒ phải đóng dấu người tải + audit (BM-5).
+  "calls:export": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  // Gán chủ cho cuộc gọi mồ côi (OC-12).
+  "calls:assign": ["SUPER_ADMIN", "CENTER_MANAGER"],
 
   // --- Đào tạo nội bộ (EL-02) ---
   // ⚠️ BẢNG NÀY KHÔNG PHẢI nguồn sự thật của quyền e-learning. Nguồn là `RoleDef` +

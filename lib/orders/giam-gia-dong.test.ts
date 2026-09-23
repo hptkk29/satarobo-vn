@@ -4,6 +4,9 @@ import { resolve } from "node:path";
 
 import {
   KIEU_GIAM,
+  LOAI_GIAM,
+  MA_LOAI_GIAM,
+  docLoaiGiam,
   TRAN_KHOAN_GIAM_MOI_DONG,
   discountFromPercent,
   dongThieuGiaiTrinh,
@@ -419,5 +422,80 @@ describe("[GGD] lưới ghim: tiền của đơn phải do server tính lại", 
     expect(form).toMatch(/tienDon\(/);
     // Form KHÔNG còn state giảm giá cấp đơn (chốt sáng nay).
     expect(form).not.toMatch(/const \[discountAmount, setDiscountAmount\]/);
+  });
+});
+
+describe("[GGD] PHIÊN E — NHÃN loại ưu đãi: chở qua, KHÔNG đụng tiền", () => {
+  // Chủ dự án chốt 21/09/2026: thêm loại có cấu trúc, **chỉ để đánh dấu**. Cụm ca này có
+  // đúng một việc: chứng minh cái nhãn không bao giờ chạm vào phép tính.
+  const action = readFileSync(
+    resolve(process.cwd(), "app/(admin)/admin/orders/_actions.ts"),
+    "utf8",
+  );
+
+  it("[GGD-30] `gopGiamGia` chở `loai` sang y nguyên", () => {
+    const ra = gopGiamGia(
+      10_000_000,
+      [
+        { kieu: KIEU_GIAM.PHAN_TRAM, giaTri: 15, lyDo: "con thứ hai", loai: LOAI_GIAM.ANH_EM },
+        { kieu: KIEU_GIAM.SO_TIEN, giaTri: 500_000, lyDo: "đóng sớm" },
+      ],
+      50,
+    );
+    expect(ra.map((k) => k.loai)).toEqual([LOAI_GIAM.ANH_EM, null]);
+  });
+
+  it("[GGD-31] ĐỔI NHÃN KHÔNG ĐỔI MỘT ĐỒNG NÀO", () => {
+    // Đây là ca đắt giá nhất của cụm: chạy CÙNG một phép tính với mọi nhãn có thể, và
+    // đòi kết quả tiền GIỐNG HỆT. Ngày nào có người nhét `if (loai === "ANH_EM")` vào
+    // đường tính tiền, ca này đỏ ngay — mà đó đúng là thứ chủ dự án cấm.
+    const khai = (loai: (typeof MA_LOAI_GIAM)[number] | null) => [
+      { kieu: KIEU_GIAM.PHAN_TRAM, giaTri: 15, lyDo: "x", loai },
+      { kieu: KIEU_GIAM.SO_TIEN, giaTri: 500_000, lyDo: "y", loai },
+    ];
+    const tien = (r: ReturnType<typeof gopGiamGia>) =>
+      r.map((k) => ({ giam: k.giam, phanTram: k.phanTram, vuotTran: k.vuotTran }));
+
+    const moc = tien(gopGiamGia(10_000_000, khai(null), 50));
+    for (const loai of MA_LOAI_GIAM) {
+      expect(tien(gopGiamGia(10_000_000, khai(loai), 50)), `nhãn ${loai} làm đổi tiền`).toEqual(
+        moc,
+      );
+    }
+  });
+
+  it("[GGD-32] mã LẠ bị ép về null ở cửa ghi — `docLoaiGiam` gác", () => {
+    expect(docLoaiGiam("ANH_EM")).toBe(LOAI_GIAM.ANH_EM);
+    for (const rac of ["anh_em", "ANH EM", "", 1, null, undefined, {}, []]) {
+      expect(docLoaiGiam(rac), `phải từ chối: ${JSON.stringify(rac)}`).toBeNull();
+    }
+  });
+
+  it("[GGD-33] action ĐI QUA `docLoaiGiam`, không chép thẳng giá trị client", () => {
+    // ⚠️ Lưới VĂN BẢN (luật 11) — neo chuỗi hẹp nhất và đếm số lần khớp. Nếu ai đó viết
+    // `loai: k.loai` thì một mã rác từ client đi thẳng vào `discounts` JSON, và mọi đường
+    // đọc sau này phải tự phòng thủ.
+    // **BA** lời gọi [F3 · 22/09/2026]:
+    //   1. `createOrderManualAction`   — tạo đơn
+    //   2. `xemTruocThemConAction`     — xem trước thêm con vào đơn đang học
+    //   3. `themConVaoDonAction`       — ghi thật
+    //
+    // ⚠️ Con số này ĐẾM CÓ CHỦ ĐÍCH, đừng đổi thành `toBeGreaterThan`. Nó bắt đúng một thứ:
+    // ai đó thêm một đường nhận khoản giảm từ client mà chép thẳng `loai: k.loai` thì tổng
+    // KHÔNG tăng, và ca này đỏ. Nới thành "≥" là gỡ luôn khả năng ấy.
+    expect((action.match(/loai: docLoaiGiam\(k\.loai\),/g) ?? []).length).toBe(3);
+    expect(action).not.toMatch(/\bloai: k\.loai,/);
+  });
+
+  it("[GGD-34] danh sách mã của validator lấy từ `MA_LOAI_GIAM`, không gõ lại", () => {
+    // Gõ lại là hai danh sách sẵn sàng lệch, và cái lệch sẽ im lặng: form cho chọn một mã
+    // mà zod từ chối, người bán chỉ thấy "dữ liệu không hợp lệ" không rõ ở đâu.
+    const validator = readFileSync(resolve(process.cwd(), "lib/validators/order.ts"), "utf8");
+    expect(validator).toMatch(/loai: z\.enum\(MA_LOAI_GIAM as unknown as \[string, \.\.\.string\[\]\]\)/);
+    for (const ma of MA_LOAI_GIAM) {
+      expect(validator, `validator không được gõ lại mã "${ma}"`).not.toMatch(
+        new RegExp(`"${ma}"`),
+      );
+    }
   });
 });

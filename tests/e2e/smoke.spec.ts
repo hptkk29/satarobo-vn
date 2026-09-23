@@ -83,7 +83,7 @@ test.describe("API health", () => {
   test("/api/leads POST rate limit", async ({ request }) => {
     // Payload phải pass leadCreateSchema để vượt qua validation gate
     // (parentName ≥2, phone match VN regex, source ≥1, eventId ≥8,
-    // timeOnPage ≥3). Spam 7 requests — RATE_LIMIT_MAX = 5/phút →
+    // timeOnPage ≥3, dongYChinhSachBaoMat === true). Spam 7 requests — RATE_LIMIT_MAX = 5/phút →
     // ít nhất 1 request trả 429.
     //
     // Lưu ý: ~5 request đầu sẽ tạo lead thật trong DB với source
@@ -94,6 +94,9 @@ test.describe("API health", () => {
       source: "e2e-smoke-rate-limit",
       eventId: "e2e-smoke-event-id",
       consentMarketing: false,
+      // Hồ sơ BCT mục 3 — cổng server là `z.literal(true)`; thiếu trường này thì mọi
+      // request trả 400 và ca rate-limit không bao giờ chạm tới nhánh 429.
+      dongYChinhSachBaoMat: true,
       timeOnPage: 10,
     };
     const responses = await Promise.all(

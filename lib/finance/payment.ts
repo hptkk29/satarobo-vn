@@ -11,14 +11,18 @@ import {
   chiaKhoanTheoDon,
   type GhiDanhCuaLead,
 } from "@/lib/finance/chia-khoan-theo-don";
-import { KHOAN_DA_XAC_NHAN } from "@/lib/finance/debt";
 import { expandPhoneVariants } from "@/lib/phone";
-import { recordLeadStatusChange } from "@/lib/leads/set-status";
+// Cổng "tiền vào ⇒ lead lên Đã đăng ký". Thân hàm DỜI sang `@/lib/leads/tien-vao-day-pheu`
+// ở I-1 (22/09/2026) để đường tiền tự động gọi được mà không vi phạm lưới `[GGW-04]` — xem
+// khối chú thích ở chỗ re-export bên dưới. Hai sổ lead (sổ ĐẾM phễu + vết NGƯỜI ĐỌC) nay
+// nằm trong tệp đó, không còn import ở đây.
+import { maybeAdvanceLeadToRegistered } from "@/lib/leads/tien-vao-day-pheu";
 // Sổ đăng ký marker — MỘT chỗ định nghĩa chuỗi nhận dạng khoản tự sinh.
 import {
   AUTO_ORDER_CONFIRM_MARKER,
   installmentMarker,
 } from "@/lib/finance/payment-markers";
+import { KHOAN_DA_DONG } from "@/lib/finance/debt";
 
 type Tx = Prisma.TransactionClient;
 
@@ -173,41 +177,18 @@ export async function ensureOrderPaymentRecorded(
 }
 
 /**
- * S3 — auto-advance lead CHO_QUYET_DINH → DA_DANG_KY khi đã ghi nhận thanh toán.
- * updateMany có guard (status=CHO_QUYET_DINH) → idempotent, không lùi/đụng status khác.
- * Trả true nếu vừa nâng cấp (để call-site biết có đổi).
+ * S3 — TIỀN VÀO ⇒ lead CHỜ QUYẾT ĐỊNH lên ĐÃ ĐĂNG KÝ.
+ *
+ * ⚠️ THÂN HÀM ĐÃ DỜI sang `@/lib/leads/tien-vao-day-pheu` [I-1 · 22/09/2026]. Ở đây chỉ còn
+ * lối vào cũ để không phải sửa chỗ gọi và bộ test đang neo vào tệp này.
+ *
+ * Vì sao dời: đường tiền TỰ ĐỘNG (`lib/payments/payos-ingest.ts`) cũng phải gọi cổng này,
+ * mà lưới `[GGW-04]` CẤM tệp đó import bất cứ thứ gì `from "@/lib/finance/payment"` — lệnh
+ * cấm đúng, vì nó canh chuyện đường webhook lỡ dùng marker của `ensureOrderPaymentRecorded`
+ * rồi bị `lib/orders/installments.ts` xoá mềm tiền ngân hàng. Lời giải là đừng với tay vào
+ * đây, không phải nới lưới. Lý lẽ đầy đủ nằm trong tệp mới.
  */
-export async function maybeAdvanceLeadToRegistered(
-  tx: Tx,
-  params: { leadId: string; actor: EnsurePaymentActor },
-): Promise<boolean> {
-  const upd = await tx.lead.updateMany({
-    where: { id: params.leadId, status: "CHO_QUYET_DINH", deletedAt: null },
-    data: { status: "DA_DANG_KY" },
-  });
-  if (upd.count === 0) return false;
-  // GĐ1 — `updateMany` ở trên là lượt claim atomic, giữ nguyên; chỉ nối thêm sổ.
-  await recordLeadStatusChange({
-    tx,
-    leadId: params.leadId,
-    from: "CHO_QUYET_DINH",
-    to: "DA_DANG_KY",
-    source: "payment",
-    actorId: params.actor.id,
-    actorName: params.actor.name ?? null,
-  });
-  await tx.leadActivity.create({
-    data: {
-      leadId: params.leadId,
-      actorId: params.actor.id,
-      actorName: params.actor.name ?? "Hệ thống",
-      type: "STATUS_CHANGE",
-      content: "Tự động: Chờ quyết định → Đã đăng ký (đã ghi nhận thanh toán)",
-      metadata: { from: "CHO_QUYET_DINH", to: "DA_DANG_KY", auto: true },
-    },
-  });
-  return true;
-}
+export { maybeAdvanceLeadToRegistered } from "@/lib/leads/tien-vao-day-pheu";
 
 // ─── FIN-01 (Q1=A) — Gắn/chia khoản RECORDED của đơn vào Enrollment lúc convert ───
 /**
@@ -881,7 +862,7 @@ export async function adjustPayment(params: {
     });
     const tran = ghiDanh?.finalPrice ?? ghiDanh?.tuition ?? null;
     const daThu = await tx.payment.aggregate({
-      where: { enrollmentId, ...KHOAN_DA_XAC_NHAN },
+      where: { enrollmentId, ...KHOAN_DA_DONG },
       _sum: { amount: true },
     });
     const tongSau = (daThu._sum.amount ?? 0) + delta;

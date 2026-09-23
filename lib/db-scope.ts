@@ -54,6 +54,14 @@ export const SCOPED_MODELS = new Set<string>([
   // khỏi người đối soát chính là làm mất đúng thứ họ cần xử lý.
   "BankTransaction",
 
+  // TRỤC GỌI ĐIỆN (OmiCall) — một cuộc gọi thuộc cơ sở của người gọi. `centerId`
+  // NULL ở đây nghĩa là "CHƯA đối khớp được cơ sở" (máy nhánh chưa ánh xạ, số lạ
+  // gọi vào) — cùng ngữ nghĩa `BankTransaction`, nên xem cả NULL_IS_GLOBAL_MODELS.
+  // ⚠️ `CallExtension` (ánh xạ máy nhánh) CỐ Ý ở SCOPE_EXEMPT, không ở đây: scope nó
+  // theo cơ sở thì CDR của máy nhánh CS2 về mà người xử lý ở CS1 không tra nổi chủ
+  // máy nhánh ⇒ không gán được cuộc gọi. `CallDoNotCall` không có cột cơ sở nào.
+  "CallLog",
+
   // EL-03 — đào tạo nội bộ. ĐÚnG 4 model mang cột đơn vị; 8 bảng còn lại của module là
   // bảng CON (scope theo bảng cha) hoặc ngoại lệ nhịp ghi cao (TrnVideoSession).
   // ⚠️ Ba trong bốn model này có NULL = TOÀN CÔNG TY ⇒ xem NULL_IS_GLOBAL_MODELS ngay dưới.
@@ -77,6 +85,45 @@ export const SCOPED_MODELS = new Set<string>([
   // ⚠️ Đây là DỮ LIỆU CÁ NHÂN — đưa vào NULL_IS_GLOBAL_MODELS là biến "chưa biết cơ sở"
   // thành "ai cũng thấy", tức rò rỉ, không phải tiện lợi.
   "TrnDataSubjectRequest",
+  // EL-13 — cờ nghi ngờ học đối phó. `BAT_BUOC`: một cờ luôn thuộc cơ sở của
+  // người bị gắn cờ.
+  // ⚠️ TUYỆT ĐỐI KHÔNG đưa vào NULL_IS_GLOBAL_MODELS. Đây là dữ liệu quan hệ lao
+  // động của một cá nhân; coi "chưa backfill" là "ai cũng thấy" ở đây không phải
+  // tiện lợi mà là rò rỉ — và rò đúng loại thông tin gây tổn hại nhất.
+  "TrnWatchFlag",
+  // EL-14 — khảo thí. Ba bảng mang cột đơn vị; bốn bảng con (`TrnChoice`,
+  // `TrnExamQuestion`, `TrnExamAnswer`, `TrnExamUnlock`) KHÔNG mang, và cách ly
+  // của chúng đến từ bảng cha — khai thừa ở đây là `[US-07-IT-08c]` đỏ.
+  "TrnQuestion",
+  "TrnExam",
+  // ⚠️ `TrnExamAttempt` KHÔNG vào NULL_IS_GLOBAL_MODELS: một lượt thi luôn thuộc
+  // cơ sở của người thi. NULL ở đây = chưa backfill, không phải "ai cũng thấy".
+  "TrnExamAttempt",
+  // EL-15 — bài tập chấm tay. HAI bảng mang cột đơn vị; hai bảng con
+  // (`TrnRubricCriterion`, `TrnRubricScore`) KHÔNG mang, và cách ly của chúng đến
+  // từ bảng cha — khai thừa ở đây là `[US-07-IT-08c]` đỏ.
+  "TrnRubric",
+  // ⚠️ `TrnSubmission` KHÔNG vào NULL_IS_GLOBAL_MODELS: một lượt nộp luôn thuộc cơ
+  // sở của người nộp. Và nội dung của nó là bài làm của một con người — kèm video
+  // lớp học và ghi âm hội thoại phụ huynh (§13.3) — nên coi "chưa biết cơ sở" là
+  // "ai cũng thấy" ở đây là rò rỉ, không phải tiện lợi.
+  "TrnSubmission",
+  // MEDIA-REVIEW (26/08) — ảnh/video buổi học + kết luận duyệt của từng buổi.
+  // Cả hai `BAT_BUOC` mang centerId: một tấm ảnh / một kết luận LUÔN thuộc đúng một cơ
+  // sở. KHÔNG vào NULL_IS_GLOBAL_MODELS — coi "chưa biết cơ sở" là "ai cũng thấy" ở đây
+  // là để ảnh học viên cơ sở này lọt sang QLCS cơ sở kia.
+  // ⚠️ scopedDb KHÔNG che WRITE: mọi `create` phải tự set `centerId`, quên là dòng vô
+  // hình với chính QLCS cơ sở đó (tức ảnh không bao giờ được duyệt).
+  "MediaAsset",
+  "SessionMediaReview",
+  // 27/08 — sổ "ai phụ trách cơ sở nào" cho hoa hồng QC 1% + Quản lý TT 2%.
+  // `centerId` NOT NULL: một phân công LUÔN thuộc đúng một cơ sở ⇒ KHÔNG vào
+  // NULL_IS_GLOBAL_MODELS. Đây là dữ liệu ai-nhận-tiền, coi "chưa biết cơ sở" thành
+  // "ai cũng thấy" là để người cơ sở này đọc bảng lương hoa hồng của cơ sở kia.
+  // ⚠️ Engine chốt kỳ (`lib/crm/commission-run.ts`) đọc bảng này qua `db` TRẦN, cố ý:
+  // chốt kỳ là việc TOÀN HỆ (`CommissionStatement.period` @unique, không có centerId),
+  // lọc theo tầm nhìn của người bấm nút sẽ đẻ ra bảng kê thiếu dòng cho cơ sở khác.
+  "CenterCommissionAssignee",
   // MEDIA-REVIEW (26/08) — anh/video buoi hoc + ket luan duyet cua tung buoi.
   // Ca hai `BAT_BUOC` mang centerId: mot tam anh / mot ket luan LUON thuoc dung mot co
   // so. KHONG vao NULL_IS_GLOBAL_MODELS — coi "chua biet co so" la "ai cung thay" o day
@@ -138,6 +185,14 @@ export const NULL_IS_GLOBAL_MODELS = new Set<string>([
   // Khớp xong thì centerId được điền, từ đó bị scope bình thường.
   "BankTransaction",
 
+  // Trục gọi điện — `centerId = NULL` là "cuộc gọi CHƯA đối khớp được cơ sở", và đó
+  // CHÍNH LÀ hàng đợi "Cuộc gọi mồ côi" (OC-12) mà Quản lý phải nhìn thấy để gán tay.
+  // Ẩn nhóm này khỏi chính người phải xử lý nó là làm mất đúng thứ họ cần — y hệt bài
+  // học `BankTransaction`. Gán xong thì `centerId` được điền và bị scope bình thường.
+  // ⚠️ Đổi dòng này thành "ẩn" là im lặng phá QT-39 ("cấm loại bỏ dữ liệu cuộc gọi"):
+  // bản ghi vẫn còn trong DB nhưng không ai thấy, tức bị vứt trên thực tế.
+  "CallLog",
+
   // EL-03 — chương trình / khoá / yêu cầu đào tạo dùng chung toàn công ty thì KHÔNG gắn cơ sở nào.
   // Đây là nghiệp vụ bình thường của module chứ không phải dữ liệu thiếu: khoá "An toàn thông tin"
   // áp cho cả công ty, không thuộc CS1 hay CS2.
@@ -148,6 +203,15 @@ export const NULL_IS_GLOBAL_MODELS = new Set<string>([
   "TrnCourse",
   "TrnRequirement",
   "TrnEvalLinkConfig",
+  // EL-14 — ngân hàng câu hỏi và đề thi DÙNG CHUNG toàn công ty là chuyện thường
+  // (an toàn lao động, phòng cháy…). Quên hai dòng này thì kho câu hỏi chung TÀNG
+  // HÌNH với mọi người dùng cấp cơ sở, và không gì báo lỗi — họ chỉ thấy kho rỗng.
+  "TrnQuestion",
+  "TrnExam",
+  // EL-15 — khung chấm DÙNG CHUNG toàn công ty là chuyện thường (khung ngạch giáo
+  // viên, khung quy trình tư vấn). Quên dòng này thì khung chung TÀNG HÌNH với mọi
+  // người dùng cấp cơ sở, và không gì báo lỗi — họ chỉ thấy danh sách rỗng.
+  "TrnRubric",
 ]);
 
 // FIX-C3 (B1) — soft-delete đã chuyển lên TẦNG base `db` (lib/soft-delete.ts + lib/db.ts)
@@ -161,10 +225,45 @@ export const SCOPE_EXEMPT = new Set<string>([
   "LeadAssignmentConfig", // config, centerId null = quy tắc toàn hệ thống
   "SataCoinRule", // config, centerId null = áp mọi cơ sở
   "FacebookPageMapping", // mapping Page→center (cấu hình hạ tầng, không phải dữ liệu nghiệp vụ)
+  // Ánh xạ máy nhánh → nhân viên → cơ sở (OC-9). Cùng loại với FacebookPageMapping:
+  // hạ tầng, không phải dữ liệu nghiệp vụ. Scope nó theo cơ sở là tự bắn chân —
+  // CDR của máy nhánh CS2 về, người trực đối soát ở CS1 sẽ không tra nổi chủ máy
+  // nhánh nên không gán được cuộc gọi cho ai. Cách ly nằm ở dữ liệu (`CallLog`),
+  // không ở bảng tra cứu.
+  "CallExtension",
+  // ZaloCRM (09/2026) — HAI BẢNG ÁNH XẠ HẠ TẦNG, cùng loại FacebookPageMapping và
+  // CallExtension ở trên: chúng trả lời "nick này của ai, ở cơ sở nào" và "hội thoại
+  // này thuộc phiếu nào", chứ không chứa hội thoại hay tin nào (nội dung sống ở Inbox*).
+  //
+  // Vì sao MIỄN scope, cùng lý do CallExtension: đây là bảng TRA CỨU. Người trực đối
+  // soát ở CS1 vẫn phải tra nổi chủ của một nick CS2 thì mới gán được hội thoại cho
+  // đúng người; cách ly nằm ở DỮ LIỆU (Inbox*, Lead), không ở bảng tra cứu. Thêm nữa
+  // `centerId` ở đây NULL được (orgCode chưa ánh xạ cơ sở) nên inject `centerId IN (…)`
+  // trần sẽ ẩn đúng nhóm cần người xử lý khỏi chính người phải xử lý nó.
+  //
+  // 🔴 ĐỔI LẠI: `scopedDb` KHÔNG che gì cho hai bảng này — `injectScope` thoát ngay ở
+  // dòng đầu. AI GÁC THAY: `lib/integrations/zalocrm/nick-admin.ts` lọc TAY theo
+  // `actor.visibleCenterIds`, cho CẢ đường đọc lẫn đường ghi (SCOPE_EXEMPT nghĩa là
+  // cả `passesScope` cũng trả true, không có lưới nào ở tầng query).
+  // Đọc "đã khai vào db-scope" thành "đã được cách ly" là đúng cái bẫy dòng này chặn.
+  "ZaloCrmNick",
+  "ZaloCrmThread",
   "WorkShiftConfig", // R6-B2 — cấu hình ca per-center, centerId null = mặc định toàn hệ thống
   // LMS-16 — RevenueTarget là config mục tiêu KPI; centerId null = mục tiêu toàn hệ
   // thống; scope tay qua getRevenueTargets. (Trước đây khai báo lặp 2 lần — đã dọn.)
   "RevenueTarget",
+  // C-01 — LeadTarget: song sinh của RevenueTarget, đo SỐ HỌC SINH thay vì tiền. Cùng
+  // lý do miễn scope: centerId null = chỉ tiêu TOÀN HỆ THỐNG, mà `injectScope` chèn
+  // `centerId IN (...)` trần (:277-279) nên dòng đó sẽ tàng hình với chính người vừa
+  // đặt nó. Đổi lại `scopedDb` KHÔNG chặn giúp ⇒ tầm nhìn ép TAY bằng
+  // `leadTargetListWhere` và quyền ghi bằng `checkRevenueTargetScope` (đều có test).
+  "LeadTarget",
+  // D-02 — AdsBudgetTarget: bảng chỉ tiêu thứ ba, đo TIỀN CHI cho quảng cáo. Cùng lý do
+  // miễn scope với hai bảng trên: centerId null = chỉ tiêu TOÀN HỆ THỐNG, mà `injectScope`
+  // chèn `centerId IN (...)` trần (:277-279) nên dòng đó sẽ tàng hình với chính người vừa
+  // đặt nó. Đổi lại `scopedDb` KHÔNG chặn giúp ⇒ tầm nhìn ép TAY bằng
+  // `adsBudgetTargetListWhere` và quyền ghi bằng `checkRevenueTargetScope` (đều có test).
+  "AdsBudgetTarget",
   // (#03 Pha B, 10/07 — ReportCard / EvaluationRound / ConversationMessage đã rời khỏi đây
   //  sang SCOPED_MODELS sau khi PROD xác nhận 0 dòng centerId NULL.)
   // W3-1 — RefundRequest scope qua quan hệ enrollment→class (Class là SCOPED_MODEL);
@@ -343,6 +442,12 @@ export function getModelPrefixes(model: string): string[] {
       return ["notifications:"];
     case "SataCoinTransaction":
       return ["satacoin:"];
+    // Trục gọi điện. Thiếu nhánh này thì `getModelPrefixes` trả mảng rỗng và tầm
+    // nhìn rơi về `isHoLevel` DIỆN RỘNG: bất kỳ ai có MỘT vai neo tại Hội sở — kể cả
+    // vai chẳng liên quan gì tới bán hàng — nghe được ghi âm và đọc được SĐT phụ
+    // huynh của MỌI cơ sở. Đúng lỗi #04 đã mắc với `Attendance`.
+    case "CallLog":
+      return ["calls:"];
     case "Survey":
     case "SurveyResponse":
       return ["parent-feedback:", "khao-sat:"];
@@ -359,14 +464,27 @@ export function getModelPrefixes(model: string): string[] {
     case "TrnAssignment":
     case "TrnEnrollment":
     case "TrnDataSubjectRequest":
+    case "TrnWatchFlag":
+    case "TrnQuestion":
+    case "TrnExam":
+    case "TrnExamAttempt":
+    case "TrnRubric":
+    case "TrnSubmission":
       return ["elearning:"];
-    // MEDIA-REVIEW (26/08) — anh buoi hoc + ket luan duyet. Thieu nhanh nay thi
-    // `getModelPrefixes` tra rong va tam nhin roi ve `isHoLevel` DIEN RONG: bat ky ai
-    // co MOT vai neo tai Hoi so, ke ca vai chang lien quan, doc duoc anh hoc vien cua
-    // MOI co so. Day la anh tre em, khong phai so lieu.
+    // MEDIA-REVIEW (26/08) — ảnh buổi học + kết luận duyệt. Thiếu nhánh này thì
+    // `getModelPrefixes` trả rỗng và tầm nhìn rơi về `isHoLevel` DIỆN RỘNG: bất kỳ ai
+    // có MỘT vai neo tại Hội sở — kể cả vai chẳng liên quan — đọc được ảnh học viên của
+    // MỌI cơ sở. Đây là ảnh trẻ em, không phải số liệu.
     case "MediaAsset":
     case "SessionMediaReview":
       return ["media:"];
+    // 27/08 — phân công người hưởng hoa hồng theo cơ sở. Thiếu nhánh này thì
+    // `getModelPrefixes` trả rỗng và tầm nhìn rơi về `isHoLevel` DIỆN RỘNG: bất kỳ ai
+    // có MỘT vai neo tại Hội sở — kể cả vai chẳng liên quan tiền — đọc được ai đang ăn
+    // hoa hồng ở MỌI cơ sở. Đúng lỗi đã mắc với `Attendance` (#04) và đã có test chặn.
+    // Bám `payments:` (đây là dữ liệu tiền) + `centers:` (đơn vị đo là cơ sở).
+    case "CenterCommissionAssignee":
+      return ["payments:", "centers:"];
     default:
       return [];
   }

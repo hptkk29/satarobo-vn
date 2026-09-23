@@ -44,11 +44,20 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import type { NhanVanHanh } from "@/lib/settings/nhan-van-hanh";
 import { saveGlobalSettingAction } from "../actions";
+import { CaiRiengTheoCoSo, type CoSoCauHinh } from "./cai-rieng-theo-co-so";
 
 export type SettingRowView = {
   key: string;
   value: unknown;
   nhan: NhanVanHanh;
+  /**
+   * PHIÊN H — danh sách cơ sở kèm giá trị cài riêng, CHỈ có ở khoá `centerOverridable`.
+   *
+   * Bỏ trống ⇒ khoá này chỉ cấu hình ở cấp toàn hệ, và khối cài riêng không được vẽ. Đó
+   * không phải chuyện gọn mắt: `setCenterSetting` từ chối thẳng khoá không cho cài riêng,
+   * nên một khối hiện ra ở đó là một khối mà mọi lần bấm đều báo lỗi (luật 12).
+   */
+  coSo?: readonly CoSoCauHinh[];
 };
 
 /**
@@ -62,7 +71,21 @@ const VUNG_BAM_RONG =
   "relative after:absolute after:-inset-x-3 after:-inset-y-3 after:content-['']";
 
 /** Kiểu ô nhập suy từ GIÁ TRỊ, không cần đưa schema Zod qua ranh giới client. */
-type KieuO = "batTat" | "so" | "chu" | "phucTap";
+type KieuO = "batTat" | "so" | "chu" | "chon" | "phucTap";
+
+/**
+ * Kiểu ô của một dòng.
+ *
+ * ⚠️ `chon` suy từ NHÃN, không từ giá trị — và đó là điểm cốt yếu. Giá trị của
+ * `billing.siblingTarget` là một chuỗi, nên `kieuCuaGiaTri` xếp nó vào `chu` và vẽ ô chữ
+ * TRẮNG: quản lý phải tự gõ `HOC_PHI_THAP_HON`, gõ sai thì máy chủ trả một câu lỗi kỹ
+ * thuật. Chỉ có tầng nhãn (`lib/settings/nhan-van-hanh.ts`) biết danh sách hợp lệ, vì
+ * schema Zod là thứ của máy chủ và không nên kéo qua ranh giới client (F3 · 22/09/2026).
+ */
+function kieuCuaDong(row: SettingRowView): KieuO {
+  if (row.nhan.chon && row.nhan.chon.length > 0) return "chon";
+  return kieuCuaGiaTri(row.value);
+}
 
 function kieuCuaGiaTri(v: unknown): KieuO {
   if (typeof v === "boolean") return "batTat";
@@ -72,7 +95,7 @@ function kieuCuaGiaTri(v: unknown): KieuO {
 }
 
 function HangCauHinh({ row, choSua }: { row: SettingRowView; choSua: boolean }) {
-  const kieu = kieuCuaGiaTri(row.value);
+  const kieu = kieuCuaDong(row);
   const [thoNhap, setThoNhap] = useState(() =>
     kieu === "phucTap" ? JSON.stringify(row.value, null, 2) : String(row.value ?? ""),
   );
@@ -89,7 +112,7 @@ function HangCauHinh({ row, choSua }: { row: SettingRowView; choSua: boolean }) 
       }
       return { ok: true, v: n };
     }
-    if (kieu === "chu") return { ok: true, v: thoNhap };
+    if (kieu === "chu" || kieu === "chon") return { ok: true, v: thoNhap };
     try {
       return { ok: true, v: JSON.parse(thoNhap) };
     } catch {
@@ -161,7 +184,7 @@ function HangCauHinh({ row, choSua }: { row: SettingRowView; choSua: boolean }) 
           </p>
         </div>
 
-        {kieu !== "phucTap" && (
+        {kieu !== "phucTap" && kieu !== "chon" && (
           <div className="flex shrink-0 items-center gap-2.5 lg:w-72 lg:justify-end">
             {kieu === "batTat" ? (
               <>
@@ -202,6 +225,48 @@ function HangCauHinh({ row, choSua }: { row: SettingRowView; choSua: boolean }) 
           </div>
         )}
       </div>
+
+      {/* F3 — DANH SÁCH CHỌN. Vẽ nguyên khối dưới tên thay vì nhét vào cột phải: mỗi lựa
+          chọn còn kéo theo một câu HỆ QUẢ, và một câu hai dòng nhồi vào cột 288px thì
+          không đọc được. Dùng `<select>` gốc, KHÔNG dùng `Select` của shadcn: bản đó là
+          base-ui và `SelectValue` in ra GIÁ TRỊ THÔ chứ không tra nhãn (ghi chép dự án),
+          nên nó sẽ hiện đúng cái mã kỹ thuật mà khối này sinh ra để giấu đi. */}
+      {kieu === "chon" && (
+        <div className="mt-3 max-w-2xl">
+          <select
+            id={idO}
+            value={thoNhap}
+            onChange={(e) => setThoNhap(e.target.value)}
+            disabled={!choSua || dangLuu}
+            className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm pointer-coarse:h-11 sm:w-96"
+            aria-label={row.nhan.ten}
+          >
+            {row.nhan.chon!.map((c) => (
+              <option key={c.giaTri} value={c.giaTri}>
+                {c.nhan}
+              </option>
+            ))}
+          </select>
+          {/* Hệ quả của ĐÚNG mục đang chọn. Liệt kê hệ quả của mọi mục cùng lúc là bắt
+              người đọc tự đối chiếu; hiện một câu theo lựa chọn hiện tại thì họ thấy ngay
+              cái giá mình vừa chọn, kể cả khi chỉ đang thử đổi qua đổi lại. */}
+          {row.nhan.chon!.find((c) => c.giaTri === thoNhap)?.hauQua && (
+            <p className="mt-1.5 max-w-[72ch] text-xs leading-relaxed text-muted-foreground">
+              <b className="text-foreground">Chọn mục này nghĩa là: </b>
+              {row.nhan.chon!.find((c) => c.giaTri === thoNhap)!.hauQua}
+            </p>
+          )}
+          {/* Giá trị đang lưu KHÔNG nằm trong danh sách ⇒ nói ra. Ca thật: ai đó ghi tay
+              một giá trị cũ vào cơ sở dữ liệu, hoặc lựa chọn bị gỡ khỏi danh sách. Im lặng
+              thì ô hiện mục ĐẦU TIÊN và người đọc tin rằng đó là giá trị đang chạy. */}
+          {!row.nhan.chon!.some((c) => c.giaTri === row.value) && (
+            <p className="mt-1.5 text-xs text-state-warning-ink">
+              Giá trị đang lưu ({String(row.value)}) không còn trong danh sách — chọn lại một
+              mục rồi lưu.
+            </p>
+          )}
+        </div>
+      )}
 
       {kieu === "phucTap" && (
         // Trần bề ngang cho ô nhiều dòng: ở 4K khung nội dung rộng 1360px, mà nội dung thật
@@ -244,6 +309,19 @@ function HangCauHinh({ row, choSua }: { row: SettingRowView; choSua: boolean }) 
             {dangLuu ? "Đang lưu…" : "Lưu"}
           </Button>
         </div>
+      )}
+
+      {/* PHIÊN H — cài riêng cho từng cơ sở. Đặt SAU khung lưu toàn hệ và TRƯỚC mục kỹ
+          thuật: thứ tự đọc là "mức chung trước, ngoại lệ sau". Khối tự gấp lại, nên 47 khoá
+          cho cài riêng không biến trang thành một bảng tính. */}
+      {row.coSo && row.coSo.length > 0 && (
+        <CaiRiengTheoCoSo
+          settingKey={row.key}
+          nhan={row.nhan}
+          giaTriToanHe={row.value}
+          coSo={row.coSo}
+          choSua={choSua}
+        />
       )}
 
       <details className="mt-2">

@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import type { Actor } from "@/lib/auth/actor";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { getSetting } from "@/lib/settings/service";
+import { apDungDoiHanBaoLuu } from "@/lib/finance/bao-luu-tien";
 
 export type ReserveResult =
   | { ok: true; reserveId: string }
@@ -175,6 +176,24 @@ export async function approveReserveRequest(
     });
     return reserve.id;
   });
+
+  // F2 · US-18 AC2 — phần TIỀN: dời hạn các đợt CHƯA TỚI HẠN của con vừa bảo lưu.
+  //
+  // ⚠️ Cửa bảo lưu thứ HAI. Nối ở CẢ HAI cửa, không chỉ màn quản trị: yêu cầu bảo lưu do
+  // phụ huynh gửi rồi được duyệt cũng là một lượt bảo lưu thật, và bỏ cửa này là đúng con
+  // đó bị báo quá hạn trong lúc đang nghỉ — ca mà AC2 sinh ra để chặn.
+  //
+  // Ngoài transaction (khoá đơn phải do `ghiTienChoDon` giữ) và KHÔNG ném: duyệt yêu cầu là
+  // việc học vụ đã xong. `apDungDoiHanBaoLuu` an toàn khi gọi lại, nên lượt hỏng vá được.
+  try {
+    const tien = await apDungDoiHanBaoLuu({
+      reserveId,
+      actor: { id: actor.userId, name: params.actorName },
+    });
+    if (!tien.ok) console.error("[bao-luu] dời hạn đợt bị từ chối:", tien.error);
+  } catch (err) {
+    console.error("[bao-luu] dời hạn đợt thất bại:", err);
+  }
 
   return { ok: true, reserveId };
 }

@@ -39,7 +39,10 @@ const NAV_ITEMS: NavItem[] = [
       { label: "Tất cả khoá học", href: "/khoa-hoc" },
     ],
   },
-  { label: "Học cụ", href: "/hoc-cu" },
+  // Ẩn tạm theo hồ sơ BCT mục 4 — trang 404 bằng app/(public)/hoc-cu/layout.tsx.
+  // Bỏ comment CÙNG LÚC với mục tương ứng ở components/public/header.tsx, nếu không ca
+  // [PUBLIC-NAV-T02] sẽ đỏ vì hai cây điều hướng lệch nhau.
+  // { label: "Học cụ", href: "/hoc-cu" },
   { label: "Tin tức", href: "/tin-tuc" },
   { label: "Tuyển dụng", href: "/tuyen-dung" },
   { label: "Liên hệ", href: "/lien-he" },

@@ -26,6 +26,7 @@ export const FREQUENT_ABSENT_WINDOW = 5;
 export type LifecycleView =
   | "all"
   | "active"
+  | "vua-hoan-thanh"
   | "waiting"
   | "reserved"
   | "frequent-absent"
@@ -35,6 +36,7 @@ export type LifecycleView =
 export const LIFECYCLE_VIEWS: LifecycleView[] = [
   "all",
   "active",
+  "vua-hoan-thanh",
   "waiting",
   "reserved",
   "frequent-absent",
@@ -45,6 +47,7 @@ export const LIFECYCLE_VIEWS: LifecycleView[] = [
 export const LIFECYCLE_VIEW_LABEL: Record<LifecycleView, string> = {
   all: "Tất cả",
   active: "Đang học",
+  "vua-hoan-thanh": "Hoàn thành khoá",
   waiting: "Chờ xếp lớp",
   reserved: "Bảo lưu",
   "frequent-absent": "Vắng nhiều",
@@ -55,11 +58,45 @@ export const LIFECYCLE_VIEW_LABEL: Record<LifecycleView, string> = {
 export const LIFECYCLE_VIEW_DESCRIPTION: Record<LifecycleView, string> = {
   all: "Tất cả học viên (active)",
   active: "Có ít nhất 1 lớp đang học",
-  waiting: "Đang học ở trung tâm nhưng chưa ngồi lớp nào (chờ xếp / vừa bị gỡ khỏi lớp)",
+  "vua-hoan-thanh":
+    "Đã học xong khoá, chưa đăng ký khoá tiếp — nhóm cần gọi tư vấn tái đăng ký",
+  waiting: "Chưa ngồi lớp nào: mới tạo hồ sơ, đã đăng ký chờ xếp lớp, hoặc vừa bị gỡ khỏi lớp",
   reserved: "Đang bảo lưu (tạm dừng học)",
   "frequent-absent": `Vắng ≥${FREQUENT_ABSENT_THRESHOLD} buổi trong ${FREQUENT_ABSENT_WINDOW} buổi gần nhất`,
   renewal: `Hoàn thành khoá cũ + đăng ký mới trong ${RENEWAL_WINDOW_DAYS} ngày`,
   withdrawn: "Đã nghỉ học hẳn",
+};
+
+/**
+ * "VỪA HOÀN THÀNH KHOÁ" — một định nghĩa DUY NHẤT, dùng ở HAI chỗ: tab cùng tên (nhận
+ * nhóm này) và tab "Chờ xếp lớp" (loại nhóm này ra). Viết rời hai bản là bảo đảm có
+ * ngày chúng lệch nhau, và triệu chứng sẽ là **một em hiện ở cả hai tab** (tổng các tab
+ * lớn hơn số học viên, Sale gọi điện hai lần cho cùng một người).
+ *
+ * KHÔNG kèm `status: "ACTIVE"` ở đây: tab "vua-hoan-thanh" tự thêm, còn tab "waiting"
+ * đã có sẵn điều kiện đó — nhét vào mảnh dùng chung là nhánh `NOT` bên waiting hoá ra
+ * cũng loại luôn theo `status`, tức loại nhầm.
+ *
+ * Ba vế, thiếu vế nào cũng sai:
+ *   · CÓ ghi danh COMPLETED           — thật sự đã học xong, không phải bị gỡ khỏi lớp;
+ *   · KHÔNG còn lớp đang học          — còn lớp thì em vẫn "Đang học";
+ *   · KHÔNG có ghi danh chờ xếp lớp   — đã đăng ký khoá tiếp thì việc cần làm là XẾP LỚP,
+ *                                       không phải gọi bán; em đó thuộc tab "Chờ xếp lớp".
+ */
+export const VUA_HOAN_THANH_WHERE: Prisma.StudentWhereInput = {
+  AND: [
+    { enrollments: { some: { status: "COMPLETED", deletedAt: null } } },
+    {
+      enrollments: {
+        none: { status: { in: STUDYING_ENROLLMENT_STATUSES }, deletedAt: null },
+      },
+    },
+    {
+      enrollments: {
+        none: { status: { in: ["PENDING", "CONFIRMED"] }, deletedAt: null },
+      },
+    },
+  ],
 };
 
 /**
@@ -93,6 +130,14 @@ export function buildLifecycleWhere(
         ],
       };
 
+    case "vua-hoan-thanh":
+      // 22/09 — nguồn thứ TƯ của "không ngồi lớp nào", và là nguồn MỚI: bản vá
+      // `completeClassAction` chuyển ghi danh sang COMPLETED khi đóng lớp, nên từ nay
+      // có một nhóm học viên "đã học xong, chưa có lớp mới". Trước đó nhóm này không
+      // tồn tại (hoàn thành lớp chưa bao giờ đụng tới ghi danh), nên tab "Chờ xếp lớp"
+      // không được thiết kế cho họ và cái tên của nó không mô tả đúng họ.
+      return { AND: [base, { status: "ACTIVE" }, VUA_HOAN_THANH_WHERE] };
+
     case "waiting":
       // "Chờ xếp lớp" = còn đang học ở trung tâm nhưng KHÔNG ngồi trong lớp nào.
       // Ba nguồn đổ vào tab này:
@@ -102,6 +147,7 @@ export function buildLifecycleWhere(
       //      WITHDREW/CANCELLED nhưng học viên VẪN đang học ⇒ chờ xếp lớp lại.
       // Nhánh (1) nằm gọn trong nhánh (3): không có ghi danh nào thì cũng không có
       // ghi danh nào đang giữ chỗ.
+      // (4) "vừa hoàn thành khoá" CỐ Ý bị loại — có tab riêng từ 22/09; xem NOT dưới.
       return {
         AND: [
           base,
@@ -111,6 +157,10 @@ export function buildLifecycleWhere(
               none: { status: { in: STUDYING_ENROLLMENT_STATUSES }, deletedAt: null },
             },
           },
+          // Không có vế này thì em vừa xong khoá khớp CẢ hai tab: `COMPLETED` không nằm
+          // trong `IN_CLASS_ENROLLMENT_STATUSES` nên nhánh "none in-class" ngay dưới
+          // nhận họ vào. Đếm đôi — ca [TTH-09] canh.
+          { NOT: VUA_HOAN_THANH_WHERE },
           {
             OR: [
               {

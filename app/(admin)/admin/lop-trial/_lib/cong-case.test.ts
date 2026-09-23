@@ -122,10 +122,13 @@ describe("[CC-05] lô điểm danh kiểm CẢ LÔ trước khi ghi bé nào", (
 
 describe("[CC-06] ô tìm học viên CHE SĐT khi không có quyền xem PII lead", () => {
   // Đào tạo nay vào được ô tìm (quản lý khách trong lớp) nhưng KHÔNG có `leads:view-pii`.
-  it("searchLopTrialCandidatesAction hỏi leads:view-pii và che bằng maskPhone", () => {
+  it("searchLopTrialCandidatesAction hỏi canViewLeadPii và che bằng maskLeadPiiFields", () => {
+    // Gộp main 24/09: cách che của main (che CẢ SĐT lẫn tên phụ huynh qua helper dùng
+    // chung `lib/lead/pii.ts`) thay bản `maskPhone` riêng của nhánh này — cùng mục đích.
     const than = thanHam("searchLopTrialCandidatesAction");
-    expect(dem(than, '"leads:view-pii"')).toBe(1);
-    expect(dem(than, "maskPhone(")).toBe(1);
+    expect(dem(than, "await canViewLeadPii()")).toBe(1);
+    expect(dem(than, "maskLeadPiiFields(")).toBe(1);
+    expect(dem(than, ", canViewPii)")).toBeGreaterThanOrEqual(1);
   });
 });
 

@@ -13,6 +13,7 @@ import { isEvalV2Enabled, isPortalV2Enabled } from "@/lib/flags";
 import { SiteSwitcher } from "./_components/site-switcher";
 import { PortalNav } from "./_components/portal-nav";
 import { PortalV2Shell } from "@/components/portal/v2-shell";
+import { DaiLinkPhapLy } from "@/components/public/dai-link-phap-ly";
 
 export const dynamic = "force-dynamic";
 
@@ -141,6 +142,14 @@ export default async function PortalLayout({
           <main className="min-w-0 flex-1">{children}</main>
         </div>
       )}
+
+      {/* Dải link pháp lý cho shell v1. Đặt NGOÀI nhánh điều kiện ở trên để nó hiện cả ở
+          trạng thái "chưa liên kết học viên".
+          ⚠️ Shell v2 (`components/portal/v2-shell.tsx`) có dải RIÊNG của nó — prod đang chạy
+          v2 (`PORTAL_V2_ENABLED="true"`), nên sửa một chỗ là chưa đủ. */}
+      <div className="border-t border-border px-4 py-3">
+        <DaiLinkPhapLy />
+      </div>
     </div>
   );
 }

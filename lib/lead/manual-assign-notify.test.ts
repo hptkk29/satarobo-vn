@@ -199,6 +199,13 @@ describe("[LEAD-GANTAY-T04] chuông hỏng KHÔNG cuốn theo lượt gán", () 
     h.notifyStaff.mockRejectedValueOnce(new Error("mạng chập"));
     const kq = await manualAssignLead("lead_1", "usr_sale", ACTOR);
     expect(kq).toEqual({ ok: true });
-    expect(h.leadUpdate).toHaveBeenCalledTimes(1);
+    // Đo NỘI DUNG, không đếm lượt: từ 16/09/2026 lượt gán còn ghi một dòng hoạt động qua
+    // `recordLeadActivity` (cổng N-4), và hàm đó cũng chạm `lead.update` để dời đồng hồ.
+    // Đếm lượt là khoá vào chi tiết cài đặt; thứ ca này thật sự hỏi là "lead ĐÃ đổi chủ
+    // và không bị cuốn theo lỗi chuông".
+    const luotGan = (h.leadUpdate.mock.calls as unknown[][]).filter((c) =>
+      JSON.stringify(c[0] ?? {}).includes("usr_sale"),
+    );
+    expect(luotGan.length).toBeGreaterThan(0);
   });
 });

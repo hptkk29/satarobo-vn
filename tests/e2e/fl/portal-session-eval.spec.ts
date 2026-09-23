@@ -137,4 +137,82 @@ test.describe("[FL4-02] Portal SESSION_EVAL", () => {
     await revokeMediaConsent(con.id);
     expect((await getSessionMediaForStudent(con.id, [sess.id])).size).toBe(0);
   });
+
+  /**
+   * F-04 — KÊNH ẢNH THỨ HAI. Ảnh đính TRONG PHIẾU (câu hỏi loại PHOTO, URL nằm ở
+   * EvalAnswer.valueOptions) trước đây đi thẳng tới phụ huynh: không có bản ghi
+   * ClassSessionMedia nào nên không cổng duyệt nào chạm tới. Case này khoá cả 3 nước:
+   * chờ duyệt → ẩn · đã duyệt → hiện · ảnh cũ không có bản ghi → giữ nguyên (điều
+   * khoản chuyển tiếp, xem lib/eval/session-eval-photo-gate.ts).
+   */
+  test("[F-04-C4] ảnh trong phiếu nhận xét chỉ tới phụ huynh khi ĐÃ DUYỆT", async () => {
+    await seedCenter("CS1");
+    const { sess, con } = await seedClassSession("CS1");
+    const classId = (
+      await db.classSession.findUniqueOrThrow({
+        where: { id: sess.id },
+        select: { classId: true },
+      })
+    ).classId;
+
+    const form = await db.evalForm.create({
+      data: {
+        title: "Phiếu buổi có ảnh",
+        scope: "SESSION_EVAL",
+        status: "ACTIVE",
+        questions: { create: [{ type: "PHOTO", label: "Ảnh dự án", required: false, order: 0 }] },
+      },
+      include: { questions: true },
+    });
+    const round = await db.evaluationRound.create({
+      data: { formId: form.id, name: "Đợt có ảnh", scope: "SESSION_EVAL", status: "OPEN" },
+    });
+    const qPhoto = form.questions[0]!;
+
+    const CHO_DUYET = "https://example/cho-duyet.jpg";
+    const DA_DUYET = "https://example/da-duyet.jpg";
+    const ANH_CU = "https://example/anh-cu.jpg";
+
+    await db.evalResponse.create({
+      data: {
+        roundId: round.id,
+        classSessionId: sess.id,
+        studentId: con.id,
+        answers: {
+          create: [{ questionId: qPhoto.id, valueOptions: [CHO_DUYET, DA_DUYET, ANH_CU] }],
+        },
+      },
+    });
+    // Bản sao trong hàng duyệt: 1 chờ duyệt, 1 đã duyệt. ANH_CU CỐ Ý không có bản ghi
+    // (mô phỏng ảnh lưu trước bản vá — phụ huynh đang xem, không được biến mất).
+    await db.classSessionMedia.createMany({
+      data: [
+        { classId, classSessionId: sess.id, fileUrl: CHO_DUYET, status: "PENDING", isClassWide: false },
+        { classId, classSessionId: sess.id, fileUrl: DA_DUYET, status: "APPROVED", isClassWide: false },
+      ],
+    });
+
+    await grantMediaConsent(con.id);
+    const cards = await getStudentSessionEvals(con.id);
+    expect(cards).toHaveLength(1);
+    const photos = cards[0]!.answers.find((a) => a.type === "PHOTO")?.photos ?? [];
+    expect(photos).toEqual([DA_DUYET, ANH_CU]);
+    expect(photos).not.toContain(CHO_DUYET);
+
+    // QLCS duyệt nốt → ảnh xuất hiện, không cần GV lưu lại phiếu.
+    await db.classSessionMedia.updateMany({
+      where: { fileUrl: CHO_DUYET },
+      data: { status: "APPROVED" },
+    });
+    const sau = await getStudentSessionEvals(con.id);
+    expect(sau[0]!.answers.find((a) => a.type === "PHOTO")?.photos).toContain(CHO_DUYET);
+
+    // Từ chối → biến mất khỏi cổng phụ huynh.
+    await db.classSessionMedia.updateMany({
+      where: { fileUrl: DA_DUYET },
+      data: { status: "REJECTED" },
+    });
+    const cuoi = await getStudentSessionEvals(con.id);
+    expect(cuoi[0]!.answers.find((a) => a.type === "PHOTO")?.photos).not.toContain(DA_DUYET);
+  });
 });

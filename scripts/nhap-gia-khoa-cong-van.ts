@@ -198,6 +198,12 @@ async function main() {
         // khoá ở màn tạo đơn. Thiếu cờ này là khoá không xuất hiện ở đâu cả.
         isTeachable: true,
         isActive: true,
+        // ⚠️ PHẢI khai `isPublished: false` — cột này `@default(true)` trong schema, nên
+        // trước 21/09/2026 một lượt chạy script là thêm 9 THẺ KHOÁ HỌC CÔNG KHAI lên
+        // `/khoa-hoc`, mà trang chi tiết của chúng đang bị ẩn (hồ sơ BCT mục 4) ⇒ bấm vào
+        // ra 404. Chín khoá này là khoá DẠY (dùng ở màn tạo đơn), không phải khoá bán lẻ
+        // trên web — `isTeachable` mới là cờ chúng cần.
+        isPublished: false,
         type: "OFFLINE" as CourseType,
         displayOrder: i + 1,
         description: k.ghiChu ?? null,

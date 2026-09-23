@@ -8,7 +8,7 @@
  * Không có gì nổ, không log nào báo.
  */
 import { describe, it, expect } from "vitest";
-import { operationalLocations } from "./locations";
+import { operationalLocations, OPENING_HOURS_SCHEMA } from "./locations";
 
 const centerLabel = (name: string, address: string) =>
   `${name.split(" - ")[0] ?? name} - ${address}`;
@@ -39,5 +39,38 @@ describe("cơ sở vận hành (danh sách tĩnh cho site công khai)", () => {
     for (const c of ds) {
       expect(centerLabel(c.name, c.address)).toContain(c.name.split(" - ")[0]);
     }
+  });
+});
+
+/**
+ * Giờ mở cửa: bản cho NGƯỜI ĐỌC và bản cho MÁY ĐỌC phải nói cùng một điều.
+ *
+ * Trước 21/09/2026 hai bản lệch nhau ở CẢ HAI đầu: `/lien-he` in "T2 - T7: 8:00 - 20:00"
+ * ngay phía trên, trong khi JSON-LD của chính trang đó phát `'Mo-Su 08:00-21:00'` — thừa
+ * Chủ nhật và thừa một tiếng. Không ai thấy, vì một bản chỉ máy đọc.
+ */
+describe("giờ mở cửa — bản chữ và bản schema.org", () => {
+  const THU: Record<string, string> = {
+    T2: "Mo", T3: "Tu", T4: "We", T5: "Th", T6: "Fr", T7: "Sa", CN: "Su",
+  };
+
+  it("[GIO-01] OPENING_HOURS_SCHEMA suy ra đúng từ workingHours của cơ sở", () => {
+    for (const c of operationalLocations()) {
+      // "T2 - T7: 8:00 - 20:00" → ["T2","T7","8","00","20","00"]
+      const m = c.workingHours.match(
+        /^(T\d|CN)\s*-\s*(T\d|CN):\s*(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})$/,
+      );
+      expect(m, `không đọc được workingHours của ${c.code}: "${c.workingHours}"`).not.toBeNull();
+      if (!m) continue;
+      const [, tuThu, denThu, gioMo, phutMo, gioDong, phutDong] = m;
+      const mong =
+        `${THU[tuThu!]}-${THU[denThu!]} ` +
+        `${gioMo!.padStart(2, "0")}:${phutMo}-${gioDong!.padStart(2, "0")}:${phutDong}`;
+      expect(OPENING_HOURS_SCHEMA, `lệch với ${c.code}`).toBe(mong);
+    }
+  });
+
+  it("[GIO-02] KHÔNG khai mở cửa Chủ nhật — cơ sở nghỉ CN", () => {
+    expect(OPENING_HOURS_SCHEMA).not.toContain("Su");
   });
 });

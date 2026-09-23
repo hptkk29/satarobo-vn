@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { LeadChildTrialStatus } from '@prisma/client'
 import { phoneVn } from '@/lib/validators/phone'
 import { LEAD_STATUS_VALUES } from '@/lib/leads/status'
+import { parseContractValue } from '@/lib/lead/contract-value'
 
 // AUTH-SĐT P1 — regex riêng đã bị gỡ; nguồn duy nhất là `PHONE_VN_RE` trong
 // `lib/phone.ts`. Re-export để call-site cũ còn import được.
@@ -63,6 +64,21 @@ export const leadCreateSchema = z.object({
   ref: z.string().max(32).optional(),
   eventId: z.string().min(8),
   consentMarketing: z.boolean().default(false),
+  // ─── Hồ sơ BCT mục 3 — ĐỒNG Ý CHÍNH SÁCH BẢO MẬT ───────────────────────────
+  // `z.literal(true)` chứ KHÔNG phải `z.boolean()`: thiếu trường hoặc gửi `false` đều
+  // phải bị TỪ CHỐI. Ô tích ở trình duyệt chỉ là affordance — ai cũng gọi thẳng API
+  // được, nên cổng SERVER mới là cổng.
+  //
+  // ⚠️ Phạm vi: schema này CHỈ được `app/api/leads/route.ts` dùng (đã đo). Ba đường
+  // công khai gọi nó đều đã có ô tích: /lien-he, modal tư vấn khoá học, và form đăng ký
+  // landing (qua `_utils/tracking.ts`). Các nguồn lead khác (webhook quatang, form sale,
+  // nhập nội bộ) đi qua `lib/lead/intake/*` và KHÔNG chạm schema này — siết ở đây không
+  // làm vỡ chúng.
+  //
+  // KHÔNG đặt `.default(true)`: mặc định đúng-sẵn biến cổng thành lời trang trí.
+  dongYChinhSachBaoMat: z.literal(true, {
+    message: 'Vui lòng đọc và đồng ý với Chính sách bảo mật.',
+  }),
   note: z.string().max(500).optional(),
   // Honeypot — bot sẽ fill, người thật để trống
   website: z.string().max(0).optional().or(z.literal('')),
@@ -86,7 +102,25 @@ export const leadChildSchema = z.object({
   gradeLevel: nullableStr,
   interestedCourseId: nullableStr,
   interestedCenterId: nullableStr,
+  // G-01 — lớp con ĐANG HỌC tại trung tâm (tham chiếu Class). Không ràng FK cứng,
+  // cùng kiểu với hai ô ngay trên; lớp bị xoá thì giao diện hiện "—".
+  classId: nullableStr,
   note: nullableStr,
+  // G-06 — GIÁ TRỊ HỢP ĐỒNG ĐÃ KÝ (VND). 🔴 KHÔNG phải doanh thu: doanh thu lấy từ
+  // `Payment` đã xác nhận (quyết định B3). Luật đọc/chặn nằm ở một chỗ duy nhất
+  // (`lib/lead/contract-value.ts`) để ô nhập, API và file nhập liệu cùng một hành vi.
+  //
+  // `z.unknown()` chứ không `z.coerce.number()`: form gửi chuỗi "5.000.000 đ" (người
+  // ta gõ y như trên hợp đồng) mà `coerce` sẽ ra NaN rồi rơi về null — nuốt mất lượt
+  // nhập trong khi người nhập tưởng đã lưu.
+  contractValue: z.unknown().optional().transform((v, ctx) => {
+    const r = parseContractValue(v)
+    if (!r.ok) {
+      ctx.addIssue({ code: 'custom', message: r.message })
+      return z.NEVER
+    }
+    return r.value
+  }),
   trialStatus: z.nativeEnum(LeadChildTrialStatus).default(LeadChildTrialStatus.NONE),
 })
 
