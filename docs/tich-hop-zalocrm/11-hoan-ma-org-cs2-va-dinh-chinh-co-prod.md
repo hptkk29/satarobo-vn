@@ -193,6 +193,43 @@ hai mã đảo ngược.
 
 ---
 
+## 2b. 🔴 7 tài khoản UAT/test nằm trong org giữ dữ liệu khách thật — ĐÃ TẮT
+
+Lộ ra khi chụp ảnh "trước" cho mục 5b, không phải thứ đi tìm.
+
+Org `prod-cs2` giữ **201 hội thoại · 629 contact** thật, và chứa 8 tài khoản. Bảy trong
+số đó là tàn dư từ **trước lúc tách org**, khi mọi môi trường đổ chung một org:
+
+| tài khoản | vai | nguồn (đọc từ `external_id`) | từng đăng nhập |
+|---|---|---|---|
+| `hoangphantuankiet.sr@satarobo.vn` | **owner** | tạo tay ở fork | ✅ 17/09 — **GIỮ** |
+| `uat.admin@satarobo.vn` | **admin** | vé **máy dev** | ❌ |
+| *(email rỗng)* UAT — Quản trị hệ thống | **admin** | vé **test** | ❌ |
+| `uat.sale1@satarobo.vn` | member | vé **máy dev** | ❌ |
+| `uat.giamdoc@satarobo.vn` | member | vé **test** | ❌ |
+| *(email rỗng)* UAT — Tư vấn viên CS1 | member | vé **test** | ❌ |
+| `sale1@chat-us05.test.local` | member | vé test | ❌ |
+| `ql1@chat-us05.test.local` | member | vé test | ❌ |
+
+Cả 7 đều **có mật khẩu** và **`is_active = true`**, hai mang vai `admin`.
+
+**`external_id` là thứ nói ra môi trường đã ký vé** — mỗi database một thế hệ `User.id`
+(luật 12): `cmtcd2…` = test · `cmtorab…` = máy dev. Đây là cách rẻ nhất để đọc lịch sử
+một tài khoản fork mà không cần log.
+
+**Đã làm (chủ dự án chốt "tất cả 7"):** hạ `is_active`, **không xoá** — xoá là mất dấu vết
+ai từng được tạo ở đây. Kịch bản `ops/tat-tai-khoan-uat-prod-cs2.sql`, lùi bằng
+`ops/lui-tat-tai-khoan-uat-20260923.sql` (7 dòng `UPDATE` ghim theo `id`).
+
+· **Mốc chọn là `last_login_at IS NULL`, không phải danh sách email.** Liệt kê tay thì gõ
+  nhầm một chuỗi là tắt nhầm người; mốc này tự mô tả và tự đúng.
+· **Cấy lỗi:** bỏ điều kiện đó khỏi mệnh đề `UPDATE` (quét cả 8) ⇒ cổng 2.1 nổ —
+  `Phai con DUNG 1 tai khoan bat, dang con 0`.
+· **Cổng đóng chặt hơn tưởng:** `isActive` được kiểm trong `buildAccessPayload`
+  (`backend/src/modules/auth/auth-service.ts:39`) — hàm cấp **mọi** access token, cả lúc
+  đăng nhập lẫn lúc **xoay refresh token**. Nên phiên đang sống cũng chết ở lượt xoay kế
+  tiếp, không chỉ chặn đăng nhập mới.
+
 ## 3. Năm org hiện có
 
 | org | dùng cho | nick | dữ liệu |
