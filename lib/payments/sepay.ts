@@ -86,16 +86,53 @@ export type SepayMatchResult =
  *  - Giảm giá chưa được duyệt → MANUAL (không tự xác nhận vòng qua khâu duyệt).
  *  - Số tiền < tổng đơn → MANUAL (trả thiếu/đặt cọc: người thật quyết định).
  */
-export function decideSepayAction(input: SepayMatchInput): SepayMatchResult {
-  const { payload, order } = input;
+/**
+ * TIỀN THẬT CÓ VÀO TÀI KHOẢN KHÔNG — câu hỏi về THỰC TẾ, không về cách ta phân loại.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * VÌ SAO TÁCH RA (23/09/2026)
+ *
+ * `decideSepayAction` trả lời "xử lý giao dịch này thế nào". Webhook cần trả lời thêm một
+ * câu KHÁC và ĐỨNG TRƯỚC: "có tiền thật vào không" — vì tiền vào thì PHẢI để lại dấu trong
+ * sổ, bất kể ta quyết định gì sau đó.
+ *
+ * Trước bản vá, cửa ghi sổ của webhook hỏi nhầm câu: `decision.action === "MANUAL" && !order`.
+ * Vế `!order` từng gần như luôn đúng (memo không mang mã đơn), nên lập luận "ca có đơn đã rõ
+ * ràng, để người quyết" đứng vững. Ngày 14/09 memo đổi sang mang `matchKey` (`ORD…D1`), và
+ * `extractOrderCode` khớp đúng chuỗi ấy ⇒ vế `!order` hoá SAI THƯỜNG XUYÊN. Không ai sửa dòng
+ * đó, nhưng ý nghĩa của nó đã đổi — và ba lớp ca rơi ra ngoài sổ:
+ *   · trả thiếu / đặt cọc có mã đơn;
+ *   · đợt 2 của đơn đã bị đường cũ chốt CONFIRMED ở đợt 1 (`order.status !== PENDING_PAYMENT`);
+ *   · đợt theo CON — `dueNow` tính từ `OrderInstallment` (Ledger-A, KHÔNG có `orderItemId`)
+ *     nên mọi lần trả theo đợt của con đều trông như trả thiếu.
+ *
+ * Trả về kiểu PHÂN BIỆT (ok + amount / lý do) chứ không trả boolean: `decideSepayAction` cần
+ * chính hai câu lý do ấy cho nhánh SKIP của nó, nên nếu đây là boolean thì hai lý do phải được
+ * gõ lại ở chỗ khác — tức bản thứ hai của cùng một luật.
+ */
+export type TienVaoSepay = { ok: true; amount: number } | { ok: false; reason: string };
 
+export function docTienVao(payload: SepayWebhookPayload): TienVaoSepay {
   if ((payload.transferType ?? "in").toLowerCase() !== "in") {
-    return { action: "SKIP", reason: "Không phải giao dịch tiền vào" };
+    return { ok: false, reason: "Không phải giao dịch tiền vào" };
   }
   const amount = Number(payload.transferAmount ?? 0);
   if (!Number.isFinite(amount) || amount <= 0) {
-    return { action: "SKIP", reason: "Số tiền không hợp lệ" };
+    return { ok: false, reason: "Số tiền không hợp lệ" };
   }
+  return { ok: true, amount };
+}
+
+export function decideSepayAction(input: SepayMatchInput): SepayMatchResult {
+  const { payload, order } = input;
+
+  // Hai ca "không phải tiền" dùng CHUNG `docTienVao` với cửa ghi sổ của webhook — một định
+  // nghĩa, hai chỗ đọc. Gõ lại ở đây là để hai nơi trôi khác nhau rồi sổ hở đúng lúc cần kín.
+  const tien = docTienVao(payload);
+  if (!tien.ok) {
+    return { action: "SKIP", reason: tien.reason };
+  }
+  const amount = tien.amount;
   if (!order) {
     return { action: "MANUAL", reason: "Không khớp mã đơn trong nội dung chuyển khoản" };
   }

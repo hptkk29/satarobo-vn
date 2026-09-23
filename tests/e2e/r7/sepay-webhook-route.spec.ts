@@ -50,7 +50,9 @@ import {
   VIETQR_ADDINFO_MAX,
   givenNamePart,
 } from "../../../lib/payments/vietqr";
-import { normalizeContent } from "../../../lib/payments/sepay";
+import { normalizeContent, extractOrderCode } from "../../../lib/payments/sepay";
+import { paymentMatchKey } from "../../../lib/payments/payment-request";
+import { noiDungCkCoKhoa } from "../../../lib/payments/noi-dung-ck";
 
 const API_KEY = "sepay-test-key";
 
@@ -439,5 +441,135 @@ test.describe("[SEPAY-ROUTE] nhật ký webhook SePay", () => {
     expect(
       await db.integrationLog.count({ where: { provider: "SEPAY", action: "MANUAL_REVIEW" } }),
     ).toBe(0);
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // [SEPAY-ROUTE-07..09] — CỬA GHI SỔ HỎI "CÓ TIỀN THẬT VÀO KHÔNG", KHÔNG HỎI "CÓ ĐƠN KHÔNG"
+  //
+  // Ba ca dưới đây phủ đúng lỗ vá ngày 23/09. Điều kiện cũ của cửa ghi sổ là
+  // `decision.action === "MANUAL" && !order`. Vế `!order` viết 12/08, khi memo KHÔNG mang mã
+  // đơn nên nó gần như luôn đúng. Ngày 14/09 memo đổi sang mang `matchKey` (`ORD…D1`) mà
+  // `extractOrderCode` khớp đúng chuỗi ấy ⇒ vế `!order` hoá SAI THƯỜNG XUYÊN, và tiền thật
+  // rơi ra ngoài CẢ BA sổ (BankTransaction · PaymentRequest/Allocation · Payment), chỉ còn
+  // một dòng nhật ký kỹ thuật.
+  //
+  // ⚠️ VÌ SAO CÁC CA CŨ KHÔNG BẮT ĐƯỢC: [SEPAY-ROUTE-01..06] đều dựng memo dạng NGƯỜI ĐỌC
+  // (`HoTenCon_SdtPH_TenKhoa`) ⇒ `extractOrderCode` trả null ⇒ chúng đi nhánh `!order` và
+  // xanh suốt thời gian lỗ tồn tại. Fixture ở đây CỐ Ý dùng memo mang khoá — đúng chuỗi
+  // `_qr-core.ts` phát ra hôm nay — nên nó là fixture mang hình dạng dữ liệu THẬT.
+  //
+  // Dùng `paymentMatchKey(order.code, 1)` + `noiDungCkCoKhoa(...)` thay vì gõ tay chuỗi:
+  // gõ tay là tự nhốt ca test vào một khuôn memo cụ thể, và nó sẽ xanh giả khi khuôn đổi.
+
+  /** Seed đơn có memo MANG KHOÁ — đúng đường QR hệ thống phát hôm nay. */
+  async function seedOrderCoKhoa(input: SeedInput & { trangThaiDon?: "PENDING_PAYMENT" | "CONFIRMED" }) {
+    const s = await seedOrder(input);
+    const khoa = paymentMatchKey(s.order.code, 1);
+    await db.paymentRequest.update({ where: { id: s.request.id }, data: { matchKey: khoa } });
+    if (input.trangThaiDon && input.trangThaiDon !== "PENDING_PAYMENT") {
+      await db.order.update({ where: { id: s.order.id }, data: { status: input.trangThaiDon } });
+    }
+    return { ...s, khoa, noiDung: noiDungCkCoKhoa(khoa, s.qrParts.content, VIETQR_ADDINFO_MAX) };
+  }
+
+  test("[SEPAY-ROUTE-07] TRẢ THIẾU + memo mang mã đơn (đường QR thật) → tiền VẪN vào sổ, phiếu PARTIAL", async () => {
+    const a = await seedOrderCoKhoa({
+      studentName: "Lê Gia Bảo",
+      parentName: "Lê Văn Nam",
+      parentPhone: "0905111222",
+      courseName: "Sata3 — Lập Trình Robot",
+      amountDue: 5_000_000,
+    });
+
+    // Bảo hiểm fixture: memo PHẢI tra ra đơn, nếu không ca này lại rơi về nhánh `!order`
+    // và nó sẽ xanh vì lý do sai — đúng cái đã xảy ra với [SEPAY-ROUTE-01..06].
+    expect(extractOrderCode(a.noiDung)).toBe(a.order.code);
+
+    const res = await call({
+      id: 90007,
+      gateway: "MB",
+      transferType: "in",
+      transferAmount: 3_000_000, // < 5.000.000 ⇒ decideSepayAction trả MANUAL "trả thiếu"
+      referenceCode: `REF${uniq()}`,
+      accountNumber: "0123456789",
+      content: a.noiDung,
+    });
+    expect(res.status).toBe(200);
+
+    // ⚠️ ĐÂY LÀ KHẲNG ĐỊNH CHÍNH. Trước bản vá: 0 dòng cả ba bảng.
+    const txn = await db.bankTransaction.findFirstOrThrow({ where: { provider: "SEPAY" } });
+    expect(txn.amount).toBe(3_000_000);
+    expect(await allocatedRequestIds()).toEqual([a.request.id]);
+
+    // Rót được một phần ⇒ phiếu PARTIAL, KHÔNG phải PAID: ghi tiền vào sổ không đồng nghĩa
+    // với "đã thu đủ". Đây là chỗ phân biệt bản vá đúng với bản vá nới `decideSepayAction`.
+    const req = await db.paymentRequest.findUniqueOrThrow({ where: { id: a.request.id } });
+    expect(req.status).toBe("PARTIAL");
+
+    // Và đơn KHÔNG được tự chốt: `CONFIRM` mới kéo theo chốt đơn + biên nhận + cấp tài khoản.
+    const don = await db.order.findUniqueOrThrow({ where: { id: a.order.id } });
+    expect(don.status).toBe("PENDING_PAYMENT");
+  });
+
+  test("[SEPAY-ROUTE-08] đợt 2 của đơn ĐÃ CONFIRMED → vẫn vào sổ, không biến mất", async () => {
+    // Lỗ thứ hai, cùng hình dạng: đường cũ chốt đơn sang CONFIRMED ngay ở đợt 1
+    // (`order.updateMany({ status: "CONFIRMED" })` chạy bất kể đợt mấy), nên đợt 2 về thì
+    // `decideSepayAction` trả SKIP "Đơn đang ở trạng thái CONFIRMED" — và SKIP cũng trượt
+    // cửa ghi sổ cũ. Tiền đợt 2 vào ngân hàng, ba sổ trống.
+    const a = await seedOrderCoKhoa({
+      studentName: "Phạm Thu Hà",
+      parentName: "Phạm Văn Tú",
+      parentPhone: "0905333444",
+      courseName: "Sata4 — Robot Nâng Cao",
+      amountDue: 4_000_000,
+      trangThaiDon: "CONFIRMED",
+    });
+
+    const res = await call({
+      id: 90008,
+      gateway: "MB",
+      transferType: "in",
+      transferAmount: 2_000_000,
+      referenceCode: `REF${uniq()}`,
+      accountNumber: "0123456789",
+      content: a.noiDung,
+    });
+    expect(res.status).toBe(200);
+
+    // Trước bản vá: 0 dòng. Tiền thật của đợt 2 không có chỗ nào ghi nhận.
+    const txn = await db.bankTransaction.findFirstOrThrow({ where: { provider: "SEPAY" } });
+    expect(txn.amount).toBe(2_000_000);
+  });
+
+  test("[SEPAY-ROUTE-09] tiền CHUYỂN RA (không phải tiền vào) → KHÔNG ghi sổ gì, chỉ SKIP", async () => {
+    // Cổng mới hỏi "có tiền thật VÀO không". Ca này canh chiều NỚI QUÁ TAY: nếu ai đó sửa
+    // `docTienVao` thành luôn trả `ok` thì hai ca trên vẫn xanh, chỉ ca này đỏ.
+    const a = await seedOrderCoKhoa({
+      studentName: "Đỗ Minh Khôi",
+      parentName: "Đỗ Văn Sơn",
+      parentPhone: "0905555666",
+      courseName: "Sata5 — Robot Thi Đấu",
+    });
+
+    const res = await call({
+      id: 90009,
+      gateway: "MB",
+      transferType: "out",
+      transferAmount: 1_000_000,
+      referenceCode: `REF${uniq()}`,
+      accountNumber: "0123456789",
+      content: a.noiDung,
+    });
+    expect(res.status).toBe(200);
+
+    expect(await db.bankTransaction.count()).toBe(0);
+    expect(await db.paymentAllocation.count()).toBe(0);
+
+    const log = await db.integrationLog.findFirstOrThrow({
+      where: { provider: "SEPAY", action: "SKIP_TXN" },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(log.status).toBe("SKIPPED");
+    expect(log.errorMessage ?? "").toContain("Không phải giao dịch tiền vào");
   });
 });

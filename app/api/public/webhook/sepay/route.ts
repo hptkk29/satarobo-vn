@@ -12,6 +12,7 @@ import { notifyOrderByZnsIfNoEmail } from "@/lib/notify/order";
 import {
   checkSepayAuth,
   decideSepayAction,
+  docTienVao,
   extractOrderCode,
   type SepayWebhookPayload,
 } from "@/lib/payments/sepay";
@@ -173,9 +174,26 @@ export async function POST(req: NextRequest) {
     // mục "nhật ký kỹ thuật" cuối trang, bảng chính vẫn trống trơn.
     // Cả 4 giao dịch thật của phụ huynh 06→08/08 đều rơi vào đúng nhánh này
     // (nội dung CK do khách tự gõ, không có mã đơn).
-    // CHỈ làm cho ca KHÔNG CÓ ĐƠN: các ca còn lại (trả thiếu, giảm giá chưa
-    // duyệt, đơn đã xử lý) đã có đơn rõ ràng và do người quyết định — giữ nguyên.
-    if (decision.action === "MANUAL" && !order) {
+    // ⚠️ ĐIỀU KIỆN ĐÃ ĐỔI [23/09/2026] — trước là `decision.action === "MANUAL" && !order`.
+    //
+    // Vế `!order` viết 12/08, khi memo KHÔNG mang mã đơn nên nó gần như luôn đúng; lập luận
+    // "ca có đơn đã rõ ràng và do người quyết định" đứng vững lúc ấy. Ngày 14/09 memo đổi sang
+    // mang `matchKey` (`ORD…D1`) mà `extractOrderCode` khớp đúng chuỗi đó ⇒ vế `!order` hoá SAI
+    // THƯỜNG XUYÊN. Không ai sửa dòng này, nhưng ý nghĩa của nó đã đổi — và ba lớp ca rơi ra
+    // ngoài sổ (trả thiếu/cọc · đợt 2 của đơn đã CONFIRMED · đợt theo CON, xem `sepay.ts`).
+    //
+    // Câu hỏi đúng cho CỬA GHI SỔ là câu về THỰC TẾ, không về phân loại của ta: **có tiền thật
+    // vào tài khoản không**. Có thì phải để lại dấu, bất kể quyết định là gì.
+    //
+    // ⛔ MỘT CỬA, KHÔNG THÊM CỬA THỨ HAI. Hai chỗ quyết định "giao dịch này có vào sổ không"
+    // chính là hình dạng đã đẻ ra lỗ này: dòng cũ nói "giữ nguyên ca có đơn" và không ai đọc
+    // lại nó khi memo đổi. Sửa ĐIỀU KIỆN tại chỗ để lần đảo luật sau chỉ phải sửa một nơi.
+    //
+    // ⛔ VÀ KHÔNG NỚI `decideSepayAction` CHO TRẢ THIẾU THÀNH `CONFIRM`: `CONFIRM` ở route này
+    // kéo theo `order.updateMany({ status: "CONFIRMED" })` (:~285) chạy bất kể đợt mấy, rồi gửi
+    // biên nhận + cấp tài khoản PH. Việc cần làm là GHI TIỀN VÀO SỔ, không phải chốt đơn —
+    // `ingestPayosWebhook` tách sẵn hai việc đó.
+    if (docTienVao(payload).ok) {
       // 20/08 — TRƯỚC BẢN VÁ NÀY kết quả `ingestPayosWebhook` bị VỨT ĐI, rồi
       // nhánh dưới LUÔN ghi MANUAL_REVIEW/FAILED kèm câu "không khớp mã đơn".
       // Từ 20/08 nội dung CK không còn nhúng mã đơn ⇒ `extractOrderCode` luôn
@@ -235,9 +253,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, handled: false, reason: ingested.reason });
     }
 
+    // Tới đây CHỈ còn ca KHÔNG PHẢI TIỀN VÀO (chuyển ra, hoặc số tiền không hợp lệ) — cửa
+    // trên đã nuốt mọi ca có tiền thật. Không có gì để ghi sổ, và cũng không có việc gì cho
+    // người đối soát ⇒ `SKIPPED`, không phải `FAILED`.
+    //
+    // ⚠️ Trước bản vá 23/09, nhánh này còn nhận cả ca MANUAL-có-đơn và ghi `MANUAL_REVIEW /
+    // FAILED` cho chúng. Đó là nơi tiền thật đi vào rồi biến mất khỏi ba sổ, chỉ để lại một
+    // dòng nhật ký kỹ thuật. Nhánh tam phân cũ (`SKIP ? … : "MANUAL_REVIEW"`) nay không còn
+    // ca nào rơi vào vế MANUAL, nên giữ nó lại là giữ một nhánh chết trông như đang canh.
     await logIntegration({
-      action: decision.action === "SKIP" ? "SKIP_TXN" : "MANUAL_REVIEW",
-      status: decision.action === "SKIP" ? "SKIPPED" : "FAILED",
+      action: "SKIP_TXN",
+      status: "SKIPPED",
       payload,
       error: decision.reason,
     });
