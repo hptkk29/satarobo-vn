@@ -7219,12 +7219,19 @@ model TrialClassSession {
   roomId       String?
   teacherId    String?
   status       TrialSessionStatus @default(SCHEDULED)
+  /// 23/09/2026 — AI TAO ra "case" nay. Trong mot lop trai nghiem (mot ngay x mot
+  /// khung gio) nhieu Sale cung xep case cua minh; cot nay la thu duy nhat tra loi
+  /// "case nay cua ai", va luat "Sale chi sua/xoa case cua chinh minh" tua vao no.
+  /// NULL = buoi tao truoc 23/09/2026 (KHONG backfill — khong co nguon nao dang tin
+  /// de doan). Duong doc phai chiu duoc NULL: xem `lib/trial/quyen-case.ts`.
+  createdById  String?
   createdAt    DateTime           @default(now()) @db.Timestamptz(6)
   updatedAt    DateTime           @updatedAt @db.Timestamptz(6)
 
   attendances TrialAttendance[]
 
   @@index([trialClassId, seq])
+  @@index([createdById])
 }
 
 /// R7-02 — ghi danh 1 LeadChild vào 1 lớp trải nghiệm. Partial-unique 1 lớp ACTIVE/con (migration).

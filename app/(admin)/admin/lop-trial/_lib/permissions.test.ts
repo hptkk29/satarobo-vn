@@ -52,7 +52,16 @@ const CONG_QUYEN: Record<string, Action> = {
   enrollLeadChildLopTrialAction: "trials:manage",
   searchLopTrialCandidatesAction: "trials:manage",
   unenrollLeadChildLopTrialAction: "trials:manage",
-  cancelLopTrialClassAction: "trials:manage",
+  // 23/09/2026 — MỚI. Chuyển một bé sang case khác trong cùng lớp. Cổng vào là
+  // `trials:manage` (ai cũng vào được), nhưng BÊN TRONG nó còn một cổng thứ hai:
+  // `quyenGoHocVien` — chuyển case là đổi giờ hẹn với phụ huynh, nên nó đòi đúng thứ
+  // mà cửa GỠ đòi (là chủ lead, hoặc là Quản lý). Bảng này chỉ khai cổng NGOÀI.
+  xepCaseHocVienAction: "trials:manage",
+  // ~~`trials:manage`~~ **[ĐẢO 23/09/2026]** — chủ dự án: "sale cũng không thể xoá
+  // hoặc huỷ lớp". `trials:manage` là khoá của MỌI Sale (seed-roles, CENTER_SALES_CSM)
+  // nên cổng cũ không chặn được ai — mà huỷ lớp đẩy TOÀN BỘ ghi danh của mọi Sale
+  // trong lớp sang CANCELLED. Dùng lại ĐÚNG khoá mở lớp: ai mở được thì đóng được.
+  cancelLopTrialClassAction: "trials:create-class",
   // GĐ4 — điểm danh là việc của SALE phụ trách khách, KHÁC phiếu đánh giá của giáo
   // viên (`trials:feedback`). Dùng chung một khoá là đảo ngược quy trình đã chốt.
   markLopTrialAttendanceAction: "trials:attendance",

@@ -20,6 +20,7 @@ import { vnAddDays, vnParts, vnStartOfDay, vnYmd } from "@/lib/time/vn";
 import { toVnInput } from "./schemas";
 import { buildClassListWhere, buildBookingListWhere, ngayVnSangUtc } from "./filters";
 import { suySaleCuaLop } from "./sale-cua-lop";
+import { quyenGoHocVien, quyenSuaCase, quyenXoaCase } from "@/lib/trial/quyen-case";
 import type {
   BookingRow,
   ClassRow,
@@ -150,9 +151,15 @@ export type ChiTietLop = {
   name: string;
   status: TrialClassStatusV2;
   centerId: string;
-  /** 28/08 — giờ/sĩ số ở CẤP LỚP đã thôi dùng; giờ thật nằm ở từng buổi. */
+  /**
+   * ~~28/08 — giờ/sĩ số ở CẤP LỚP đã thôi dùng.~~ **[ĐẢO 22/09/2026]** Lớp nay LÀ một
+   * ngày × một khung giờ, và khung đó là ràng buộc của mọi case bên trong. `null` với
+   * lớp tạo trước 22/09 — đường đọc phải chịu được null, đừng bịa một khung cho nó.
+   */
   startTime: string | null;
   endTime: string | null;
+  /** NGÀY lớp mở. `null` với lớp cũ. Case phải cùng ngày này (cổng ở `_actions.ts`). */
+  startDate: Date | null;
   /** `null` = không giới hạn sĩ số. */
   capacity: number | null;
   sessionCount: number;
@@ -355,10 +362,25 @@ export async function layPhongTheoCoSo(
   return rooms;
 }
 
-/** Chi tiết một lớp. Trả null nếu ngoài tầm nhìn của actor (chống IDOR). */
+/**
+ * Chi tiết một lớp. Trả null nếu ngoài tầm nhìn của actor (chống IDOR).
+ *
+ * ⚠️ `nguoiXem` KHÔNG có mặc định, và đó là chủ đích (luật 7): ba giá trị trong đó
+ * quyết định người dùng thấy nút nào sáng. Một mặc định kiểu `laQuanLy = false` sẽ
+ * khoá nhầm nút của Quản lý ở bất kỳ chỗ gọi nào quên truyền — im lặng, không lỗi.
+ * Bắt buộc ⇒ `tsc` liệt kê mọi chỗ gọi.
+ */
 export async function layChiTietLop(
   actor: Actor,
   id: string,
+  nguoiXem: {
+    userId: string;
+    /** Có `trials:create-class` — quyết định sửa/xoá được case của người khác. */
+    laQuanLyLop: boolean;
+    /** Có `leads:view-all` — quyết định gỡ được học viên của Sale khác. */
+    laQuanLyLead: boolean;
+  },
+  /** Được xem SĐT/tên phụ huynh đầy đủ (`canViewLeadPii()` — trang gọi hỏi sẵn). */
   canViewPii: boolean,
 ): Promise<ChiTietLop | null> {
   const sdb = scopedDb(actor);
@@ -381,7 +403,20 @@ export async function layChiTietLop(
             select: {
               id: true,
               fullName: true,
-              lead: { select: { id: true, parentName: true, phone: true } },
+              lead: {
+                select: {
+                  id: true,
+                  parentName: true,
+                  phone: true,
+                  // 23/09 — ba cột NÀY là đầu vào của `laLeadCuaToi`. Thiếu một cột
+                  // là phép hỏi quyền lặng lẽ trả sai; `tsc` bắt được vì `quyenGo`
+                  // là trường BẮT BUỘC của `EnrollmentRow`.
+                  assignedToId: true,
+                  createdById: true,
+                  isSharedWithTeam: true,
+                  assignedTo: { select: { name: true } },
+                },
+              },
             },
           },
         },
@@ -413,6 +448,45 @@ export async function layChiTietLop(
     phieuTheoBuoi.set(p.trialClassSessionId, m);
   }
 
+  // Tên người tạo CASE — tra riêng một lượt cho cả trang, vì `TrialClassSession.
+  // createdById` cố ý không ràng FK sang `User` (xem migration 20260923100000) nên
+  // không `include` được. `User` ∉ SCOPED_MODELS ⇒ `sdb.user` chỉ là đường đi qua,
+  // nhưng vẫn đi qua `sdb` để không phá luật cấm import `@/lib/db` trần ở `app/**`.
+  const idTaoCase = [
+    ...new Set(cls.sessions.map((x) => x.createdById).filter((x): x is string => !!x)),
+  ];
+  const tenTaoCase = new Map<string, string>();
+  if (idTaoCase.length > 0) {
+    const us = await sdb.user.findMany({
+      where: { id: { in: idTaoCase } },
+      select: { id: true, name: true },
+    });
+    for (const u of us) if (u.name) tenTaoCase.set(u.id, u.name);
+  }
+
+  // Quyền GỠ của từng ca — tính MỘT lần ở đây rồi dùng lại cho cổng xoá case bên dưới.
+  // Đếm "học viên của người khác" bằng CHÍNH kết quả này, không bằng một luật thứ hai:
+  // hai phép đếm khác nhau cho cùng một câu hỏi là chỗ mà cổng xoá sẽ lệch cổng gỡ.
+  const quyenGoTheoCa = new Map<string, ReturnType<typeof quyenGoHocVien>>();
+  for (const e of cls.enrollments) {
+    const ld = e.leadChild?.lead ?? null;
+    quyenGoTheoCa.set(
+      e.id,
+      quyenGoHocVien({
+        lead: ld
+          ? {
+              assignedToId: ld.assignedToId,
+              createdById: ld.createdById,
+              isSharedWithTeam: ld.isSharedWithTeam,
+            }
+          : null,
+        userId: nguoiXem.userId,
+        laQuanLy: nguoiXem.laQuanLyLead,
+        tenSale: ld?.assignedTo?.name ?? null,
+      }),
+    );
+  }
+
   return {
     id: cls.id,
     code: cls.code,
@@ -421,6 +495,7 @@ export async function layChiTietLop(
     centerId: cls.centerId,
     startTime: cls.startTime,
     endTime: cls.endTime,
+    startDate: cls.startDate,
     capacity: cls.capacity,
     sessionCount: cls.sessionCount,
     configName: cls.config?.name ?? null,
@@ -434,6 +509,24 @@ export async function layChiTietLop(
       status: s.status as SessionRow["status"],
       teacherId: s.teacherId,
       roomId: s.roomId,
+      createdById: s.createdById,
+      nguoiTao: s.createdById ? (tenTaoCase.get(s.createdById) ?? null) : null,
+      quyenSua: quyenSuaCase({
+        nguoiTaoId: s.createdById,
+        userId: nguoiXem.userId,
+        laQuanLy: nguoiXem.laQuanLyLop,
+      }),
+      quyenXoa: quyenXoaCase({
+        nguoiTaoId: s.createdById,
+        userId: nguoiXem.userId,
+        laQuanLy: nguoiXem.laQuanLyLop,
+        soHocVienNguoiKhac: cls.enrollments.filter(
+          (e) =>
+            e.status === "ACTIVE" &&
+            e.scheduledSessionId === s.id &&
+            quyenGoTheoCa.get(e.id)?.duoc === false,
+        ).length,
+      }),
       attendance: Object.fromEntries(
         s.attendances.map((a) => [
           a.trialEnrollmentId,
@@ -462,6 +555,12 @@ export async function layChiTietLop(
       gvDeXuatId: e.gvDeXuatId,
       gvPhanCongId: e.gvPhanCongId,
       rescheduleCount: e.rescheduleCount,
+      saleTen: e.leadChild?.lead?.assignedTo?.name ?? null,
+      // Không tính lại — dùng đúng bản đồ đã dựng ở trên, cùng bản mà cổng xoá case đọc.
+      quyenGo: quyenGoTheoCa.get(e.id) ?? {
+        duoc: false,
+        lyDo: "Không tra được quyền gỡ của ca này — tải lại trang.",
+      },
       };
     }),
   };

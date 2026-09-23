@@ -19,12 +19,24 @@ import { formatPhoneVN } from "@/lib/phone";
 
 export function EnrollPanel({
   trialClassId,
+  sessionId,
   canManage,
   canOverride,
   full,
   maxSessions,
+  nhan,
 }: {
   trialClassId: string;
+  /**
+   * Case mà bé được xếp thẳng vào. `null` = xếp vào lớp mà chưa gắn case nào.
+   *
+   * 23/09/2026 — khối này nay nằm TRONG một case, nên "thêm học viên" ở đây phải có
+   * nghĩa là thêm vào CHÍNH case đó. Không truyền thì bé rơi vào khối "Chưa xếp case"
+   * và người dùng phải làm thêm một thao tác cho một việc họ tưởng đã xong.
+   */
+  sessionId: string | null;
+  /** Chữ trên nút — ở trong case thì "Thêm vào case này" đọc đúng hơn. */
+  nhan?: string;
   canManage: boolean;
   canOverride: boolean;
   full: boolean;
@@ -78,9 +90,14 @@ export function EnrollPanel({
       }
       totalSessions = n;
     }
-    // 28/08 — KHÔNG gửi buổi nữa: thêm học viên vào lớp là em học TOÀN BỘ buổi, kể cả
-    // buổi tạo SAU. Đây chính là chỗ còn sót khi màn lead đã bỏ ô chọn buổi — hệ quả đã
-    // thấy trên test: em bị ghim vào buổi 1, còn buổi 2 báo "chưa có học viên để điểm danh".
+    // ~~28/08 — KHÔNG gửi buổi nữa: thêm học viên vào lớp là em học TOÀN BỘ buổi.~~
+    // **[ĐẢO 23/09/2026]** Câu đó đúng cho mô hình "lớp là slot tái sử dụng, bé học mọi
+    // buổi". Nay một lớp là MỘT ngày × MỘT khung giờ và trong đó có nhiều CASE của nhiều
+    // Sale, mỗi case một giờ riêng — "học toàn bộ buổi" nghĩa là bé dự cả case của người
+    // khác, điều không ai muốn và không ai xếp.
+    //
+    // Nỗi lo cũ ("bé bị ghim vào buổi 1, buổi 2 báo chưa có học viên") nay được khối
+    // "Chưa xếp case" và nút chuyển case lo — bé luôn nhìn thấy được và chuyển được.
 
     startTransition(async () => {
       const res = await enrollLeadChildLopTrialAction({
@@ -88,6 +105,7 @@ export function EnrollPanel({
         leadChildId,
         allowOverride,
         totalSessions,
+        sessionId,
       });
       if (res.ok) {
         toast.success("Đã xếp học viên vào lớp");
@@ -110,9 +128,9 @@ export function EnrollPanel({
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card p-4">
+    <div className={sessionId ? "" : "rounded-xl border border-border bg-card p-4"}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-foreground">Thêm học viên</h2>
+        <h2 className="text-sm font-semibold text-foreground">{nhan ?? "Thêm học viên"}</h2>
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}

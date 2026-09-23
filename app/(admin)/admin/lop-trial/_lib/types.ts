@@ -12,6 +12,15 @@ export type ActionResult<T = unknown> =
   | ({ ok: true } & T)
   | { ok: false; error: string; overCapacity?: boolean };
 
+/**
+ * Kết quả một phép hỏi quyền, ĐÃ QUY SẴN Ở SERVER và truyền xuống client.
+ *
+ * Mang theo LÝ DO chứ không phải boolean trần: một nút ẩn im lặng và một nút bấm vào
+ * mới báo lỗi đều bắt người dùng tự đoán. Nút bị khoá phải nói được vì sao nó khoá
+ * (luật 12 — affordance phải nói thật). Nguồn: `lib/trial/quyen-case.ts`.
+ */
+export type KetQuyenRow = { duoc: true } | { duoc: false; lyDo: string };
+
 // ─── Mặt phẳng V2: lớp trải nghiệm ───────────────────────────────────────────
 
 export type TrialClassStatusV2 = "OPEN" | "RUNNING" | "COMPLETED" | "CANCELLED";
@@ -80,6 +89,21 @@ export type SessionRow = {
   teacherId: string | null;
   /** Phòng của BUỔI NÀY. */
   roomId: string | null;
+
+  /**
+   * 23/09/2026 — AI TẠO case này. `null` = buổi tạo trước hôm đó (cột không backfill).
+   *
+   * Chỉ để HIỂN THỊ và để server quy ra quyền. Client KHÔNG tự so `createdById === me`
+   * để bật/tắt nút: luật sống ở `lib/trial/quyen-case.ts` và server đã quy sẵn thành
+   * `quyenSua`/`quyenXoa` dưới đây. Hai bản của một luật là bản sẽ trôi lệch.
+   */
+  createdById: string | null;
+  /** Tên người tạo case, đã tra từ `User`. `null` = case cũ hoặc tài khoản đã xoá. */
+  nguoiTao: string | null;
+  /** Server đã quy sẵn: người đang xem có sửa được giờ/phòng/GV của case này không. */
+  quyenSua: KetQuyenRow;
+  /** Server đã quy sẵn: có xoá được case này không (cổng thứ hai — xem `quyenXoaCase`). */
+  quyenXoa: KetQuyenRow;
   /** trialEnrollmentId → điểm danh đã lưu. Không có khoá = chưa điểm danh em đó. */
   attendance: Record<string, { status: TrialAttendanceMark; note: string | null }>;
   /**
@@ -110,6 +134,19 @@ export type EnrollmentRow = {
   gvPhanCongId: string | null;
   /** Số lần ca này đã bị dời lịch. */
   rescheduleCount: number;
+
+  // ─── 23/09/2026 — ai gỡ được bé này ────────────────────────────────────────
+  /**
+   * Tên Sale đang phụ trách lead của bé. `null` = lead chưa ai phụ trách hoặc đã xoá.
+   * Hiện trên dòng để người xếp lịch biết phải hỏi ai, và ghép vào câu từ chối.
+   */
+  saleTen: string | null;
+  /**
+   * Server đã quy sẵn bằng `quyenGoHocVien`. KHÔNG truyền `assignedToId` thô xuống
+   * client rồi để client tự so: `laLeadCuaToi` còn đọc cờ chia sẻ lead (`isLeadSharing
+   * Enabled`) vốn chỉ có ở server, nên bản client sẽ lệch đúng vào ca bật cờ.
+   */
+  quyenGo: KetQuyenRow;
 };
 
 /** Ứng viên trả về từ ô tìm học viên. */

@@ -331,6 +331,7 @@ export function AttendanceBoard({
   cheDoChonGv,
   locGvTheoCa,
   soGvMienLoc,
+  goiTat = false,
 }: {
   /** Cần cho khối "Sửa buổi": Server Action lọc giáo viên gác theo cơ sở CỦA LỚP. */
   trialClassId: string;
@@ -345,6 +346,15 @@ export function AttendanceBoard({
   cheDoChonGv: CheDoChonGv;
   locGvTheoCa: boolean;
   soGvMienLoc: number;
+  /**
+   * 23/09/2026 — bảng này nay nằm BÊN TRONG một case ở `bang-case.tsx`, và case đó
+   * đã có vỏ thẻ, tiêu đề và dòng giờ/GV của riêng nó. Bật cờ để bỏ ba thứ đó đi,
+   * thay vì vẽ thẻ lồng thẻ và in giờ hai lần cách nhau 40px.
+   *
+   * Dãy chip chọn buổi cũng tắt theo: khi mỗi case tự mở ra thì một dãy chip chọn
+   * buổi nằm trong một case là hai bộ điều khiển cho cùng một việc.
+   */
+  goiTat?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -364,14 +374,20 @@ export function AttendanceBoard({
   //
   // ⚠️ Không lọc theo buổi thì sau khi dời lịch, bé vẫn đứng ở buổi cũ — mà nút Lưu
   // bị chặn tới khi đủ sĩ số, nên Sale buộc phải đánh có mặt (thổi số buổi đã dự, tự
-  // đẩy trạng thái lead) hoặc đánh vắng khống. Ca chưa xếp buổi nào (dữ liệu cũ) vẫn
-  // hiện ở mọi buổi để không ai bị bỏ quên.
+  // đẩy trạng thái lead) hoặc đánh vắng khống.
+  //
+  // ~~Ca chưa xếp buổi nào (dữ liệu cũ) vẫn hiện ở mọi buổi để không ai bị bỏ quên.~~
+  // **[ĐẢO 23/09/2026]** Nay bé chưa xếp case có CHỖ RIÊNG trên màn (khối "Chưa xếp
+  // case" ở `bang-case.tsx`) nên không còn ai bị bỏ quên, và để bé hiện ở mọi case là
+  // TỆ HƠN: điểm danh bé đó ở hai case sinh hai dòng `TrialAttendance` (khoá là cặp
+  // buổi × ca, không chặn) ⇒ thổi số buổi đã dự lên gấp đôi, và chính con số đó tự
+  // đẩy trạng thái lead trên Kanban.
   const markable = useMemo(
     () =>
       enrollments.filter(
         (e) =>
           (e.status === "ACTIVE" || e.status === "COMPLETED") &&
-          (e.scheduledSessionId === null || e.scheduledSessionId === selectedSessionId),
+          e.scheduledSessionId === selectedSessionId,
       ),
     [enrollments, selectedSessionId],
   );
@@ -504,6 +520,7 @@ export function AttendanceBoard({
   }
 
   if (sessions.length === 0) {
+    if (goiTat) return null;
     return (
       <div className="rounded-xl border border-border bg-card p-4">
         <h2 className="mb-2 text-sm font-semibold text-foreground">Buổi học &amp; điểm danh</h2>
@@ -515,10 +532,12 @@ export function AttendanceBoard({
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card p-4">
-      <h2 className="mb-3 text-sm font-semibold text-foreground">Buổi học &amp; điểm danh</h2>
+    <div className={goiTat ? "" : "rounded-xl border border-border bg-card p-4"}>
+      {!goiTat && (
+        <h2 className="mb-3 text-sm font-semibold text-foreground">Buổi học &amp; điểm danh</h2>
+      )}
 
-      <div className="mb-4 flex flex-wrap gap-2">
+      <div className={goiTat ? "hidden" : "mb-4 flex flex-wrap gap-2"}>
         {sessions.map((s) => {
           const active = s.id === selectedSessionId;
           return (
@@ -576,14 +595,22 @@ export function AttendanceBoard({
       {selectedSession && (
         <div>
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
-            <span>
-              Buổi {selectedSession.seq} · {ngayVn(selectedSession.date)} ·{" "}
-              {selectedSession.startTime}–{selectedSession.endTime}
-              {" · "}
-              <span className="font-medium text-foreground">
-                GV: {tenGvBuoi(selectedSession.teacherId) ?? "chưa có"}
+            {/* Vỏ ngoài (`bang-case.tsx`) đã in giờ + phòng + GV ngay trên đầu case.
+                In lại ở đây là nói hai lần cùng một điều cách nhau 40px — và khi hai
+                bản trôi lệch thì không ai biết bản nào đúng. Giữ `<span/>` rỗng để
+                `justify-between` vẫn đẩy nhóm nút sang phải. */}
+            {goiTat ? (
+              <span />
+            ) : (
+              <span>
+                Buổi {selectedSession.seq} · {ngayVn(selectedSession.date)} ·{" "}
+                {selectedSession.startTime}–{selectedSession.endTime}
+                {" · "}
+                <span className="font-medium text-foreground">
+                  GV: {tenGvBuoi(selectedSession.teacherId) ?? "chưa có"}
+                </span>
               </span>
-            </span>
+            )}
             {/* Hai nút thao tác của buổi đứng CẠNH NHAU ở mép phải. `justify-between`
                 của hàng cha đẩy mỗi con ra một góc, nên phải bọc chúng lại — nếu không
                 "Sửa buổi học" bị hất vào giữa, đọc như một phần của dòng thông tin. */}

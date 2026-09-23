@@ -93,6 +93,14 @@ function buoi(over: Partial<SessionRow> & { id: string; seq: number }): SessionR
     status: "SCHEDULED",
     teacherId: GV_CHUNG,
     roomId: null,
+    // 23/09 — case CŨ (chưa biết ai mở). Giữ `null` ở fixture là CÓ CHỦ ĐÍCH: đây là
+    // hình dạng của phần lớn dữ liệu thật ngay sau khi lên, và là nhánh mà cổng quyền
+    // đẩy lên Quản lý. Fixture tròn trịa ("ai cũng có người tạo") sẽ không bao giờ
+    // chạm tới nhánh đó.
+    createdById: null,
+    nguoiTao: null,
+    quyenSua: { duoc: true },
+    quyenXoa: { duoc: true },
     attendance: {},
     danhGia: {},
     ...over,

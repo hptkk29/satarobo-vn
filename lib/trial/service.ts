@@ -300,6 +300,10 @@ export async function addTrialSession(params: {
           endTime: params.endTime,
           roomId,
           teacherId,
+          // 23/09/2026 — AI TAO case nay. Luat "Sale chi sua/xoa case cua chinh minh"
+          // tua vao cot nay; khong ghi thi moi case moi deu thanh "khong ro cua ai" va
+          // roi thang vao nhanh chi-Quan-ly cua `quyenSuaCase`.
+          createdById: params.actorId,
         },
         select: { id: true },
       });
