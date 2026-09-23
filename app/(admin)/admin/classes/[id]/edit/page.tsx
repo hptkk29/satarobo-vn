@@ -10,6 +10,11 @@ import { getAssignableTeachers } from "@/lib/teachers/assignable";
 import { ClassForm, type ClassFormValue } from "../../_components/class-form";
 import { ClassApprovalActions } from "../_components/class-approval-actions";
 import { ClassCancel } from "../_components/class-cancel";
+import { ClassComplete } from "../_components/class-complete";
+import {
+  CLASS_CLOSE_ENROLLMENT_STATUSES,
+  splitEnrollmentsForCompletion,
+} from "@/lib/classes/complete-class";
 import { ClassReschedule } from "../_components/class-reschedule";
 import { ClassCurriculum } from "../_components/class-curriculum";
 import type { PhaseFormValue } from "@/lib/classes/phase-form";
@@ -199,15 +204,22 @@ export default async function EditClassPage({ params }: Props) {
     .map((r) => ({ id: r.id, label: `${r.code} — ${r.name}` }));
 
   const canEdit = await checkPermission("classes:edit", { centerId: cls.centerId });
-  // QA 21/07 (B4) — số ghi danh còn học, hiện trong cảnh báo dialog Hủy lớp
-  // (cùng danh sách LIVE mà cancelClassAction sẽ rút về WITHDREW).
-  const liveEnrollmentCount = await sdb.enrollment.count({
+  // QA 21/07 (B4) — ghi danh còn thuộc lớp, dùng cho CẢ HAI hộp xác nhận:
+  //   · Hủy lớp  → tổng số em sẽ bị rút về WITHDREW;
+  //   · Hoàn thành lớp → chia em nào chuyển được / em nào bỏ qua và vì sao.
+  // Lấy status thay vì đếm trần để phép chia ở màn dùng ĐÚNG hàm mà Server Action
+  // dùng (`splitEnrollmentsForCompletion`) — hai nơi tự đếm lấy là đường ngắn nhất
+  // tới cảnh "hộp thoại hứa 12 em, DB đổi 9 em".
+  const liveEnrollments = await sdb.enrollment.findMany({
     where: {
       classId: cls.id,
       deletedAt: null,
-      status: { in: ["CONFIRMED", "STUDYING", "ACTIVE", "PAUSED"] },
+      status: { in: CLASS_CLOSE_ENROLLMENT_STATUSES },
     },
+    select: { status: true },
   });
+  const liveEnrollmentCount = liveEnrollments.length;
+  const completionSplit = splitEnrollmentsForCompletion(liveEnrollments);
   const canApproveClass =
     actor.isSuperAdmin ||
     (actor.orgRoles.some((r) => r.roleCode === "CENTER_MANAGER") &&
@@ -312,6 +324,17 @@ export default async function EditClassPage({ params }: Props) {
           rooms={roomOptions}
           canEdit={canEdit}
           lifecycleV2={isSessionLifecycleV2Enabled()}
+        />
+      </div>
+
+      <div className="mb-6">
+        <ClassComplete
+          classId={cls.id}
+          className={cls.name}
+          status={cls.status}
+          completableCount={completionSplit.eligible.length}
+          skipped={completionSplit.skipped}
+          canEdit={canEdit}
         />
       </div>
 
