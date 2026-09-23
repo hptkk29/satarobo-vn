@@ -145,8 +145,20 @@ ZALOCRM_API_KEYS         {"prod-cs1": "<public_api_key prod-cs1>", "prod-cs2": "
 ZALOCRM_WEBHOOK_SECRETS  {"prod-cs1": "<webhook_secret prod-cs1>", "prod-cs2": "<… prod-cs2>"}
 ZALOCRM_APP_URL          https://zalocrm.satarobo.vn
 ZALOCRM_BASE_URL         https://zalocrm.satarobo.vn
-ZALOCRM_SSO_SECRET       <bí mật SSO của prod — SINH RIÊNG, không chép từ test>
+ZALOCRM_SSO_SECRET       <ĐÚNG chuỗi `SATA_SSO_SECRET` của fork — GIỐNG HỆT test>
 ```
+
+🔴 **`ZALOCRM_SSO_SECRET` PHẢI GIỐNG HỆT TEST — đừng sinh chuỗi mới.** Bản nháp trước
+của mục này ghi *"sinh riêng, không chép từ test"*; **sai**, và làm theo là hỏng SSO trên
+prod. Fork có **đúng MỘT** `SATA_SSO_SECRET` (`backend/src/config/index.ts:174` —
+`envValue('SATA_SSO_SECRET') || ''`, không phải danh sách), và **một fork phục vụ cả hai
+môi trường**. Prod ký bằng chuỗi khác ⇒ `verifySsoTicket` ném `BAD_SIG` ⇒ khung nhúng 401.
+
+⚠️ **Hệ quả bảo mật phải biết, và nó là NỢ thật:** vì bí mật dùng chung và fork **không
+ràng bí mật với org**, ai đọc được `ZALOCRM_SSO_SECRET` của `test` thì **ký được vé vào
+`prod-cs2`** — tức vào hội thoại khách hàng thật. Cách ly hai môi trường hôm nay đứng ở
+**`claims.orgCode`**, KHÔNG đứng ở chữ ký. Muốn siết thì phải cho fork nhận bí mật theo
+org (đợt riêng, chưa làm).
 
 và `zalocrm.orgCodes` trên DB prod → `{"CS1": "prod-cs1", "CS2": "prod-cs2"}`.
 
