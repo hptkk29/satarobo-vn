@@ -105,7 +105,10 @@ curl -sS -o /dev/null -w "%{http_code}\n" https://zalocrm.satarobo.vn
 2. Sata env **`test`** — `ZALOCRM_APP_URL` + `ZALOCRM_BASE_URL` → `https://zalocrm.satarobo.vn`,
    rồi deploy lại nhánh `test`.
 3. Nghiệm thu trên `test.satarobo.vn/zalo-crm`: khung nhúng lên, nick còn `connected`.
-4. **PROD: CHƯA LÀM.** Chủ dự án chốt chưa khai env production, chưa bật cờ.
+4. **PROD: CHƯA KHAI `ZALOCRM_APP_URL` / `ZALOCRM_BASE_URL`.**
+   ⚠️ **ĐÍNH CHÍNH 23/09:** vế *"chưa bật cờ"* **sai** — `ZALOCRM_ENABLED` đã BẬT trên
+   production từ 7 ngày trước (một dòng env, bốn phạm vi). Thứ còn thiếu là 5 biến kia.
+   Xem `11-hoan-ma-org-cs2-va-dinh-chinh-co-prod.md` mục 1.
 
 ### Bước 2.6 — dọn 4 tiến trình `cloudflared.exe` cũ
 
