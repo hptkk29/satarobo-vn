@@ -46,18 +46,17 @@ describe("[CG-LUOI] tạo đơn để lại dấu vết giá", () => {
     const s = src();
     // Mã TRƯỚC bản vá: `grep writeAudit` trên file này ra 0 dòng.
     //
-    // ⚠️ TRẦN KÝ TỰ ĐÃ NỚI 1200 → 2400 [15/09/2026], và đây là bài học về chính lưới
-    // này. Đợt "giảm giá theo từng dòng" thêm `giamTungDong[]` vào thân `writeAudit`
-    // ⇒ thân dài 1521 ký tự ⇒ regex KHÔNG khớp nữa ⇒ ca đỏ với thông báo "không thấy
-    // lời gọi writeAudit", trong khi lời gọi vẫn còn nguyên và vẫn đúng. Một lưới báo
-    // SAI nguyên nhân còn tệ hơn lưới không có: người đọc đi tìm một lời gọi bị xoá mà
-    // không ai xoá cả.
+    // ⚠️ TRẦN KÝ TỰ ĐÃ NỚI 1200 → 2400 [15/09/2026] → 3000 [18/09/2026], và đây là bài
+    // học về chính lưới này. Đợt "giảm giá theo từng dòng" thêm `giamTungDong[]` vào thân
+    // `writeAudit` ⇒ thân dài 1521 ký tự ⇒ regex KHÔNG khớp nữa ⇒ ca đỏ với thông báo
+    // "không thấy lời gọi writeAudit", trong khi lời gọi vẫn còn nguyên và vẫn đúng. Một
+    // lưới báo SAI nguyên nhân còn tệ hơn lưới không có: người đọc đi tìm một lời gọi bị
+    // xoá mà không ai xoá cả. Lần nới thứ hai (18/09) là vì hợp nhất `main` cộng thêm
+    // `leadChildId` · `shippingFee` · `customerPhone` · `ip` · `userAgent` vào cùng thân.
     //
     // Thứ THẬT SỰ chặn phạm vi là NEO ĐÓNG (đúng bốn dấu cách) cộng dấu `?` không tham.
-    // Con số chỉ là lưới an toàn phòng khi ai đó xoá mất neo đóng. Phép tính: thân hiện
-    // tại 1521 ký tự, nhân đôi lấy tròn ⇒ 2400 — đủ chỗ cho vài trường nữa mà vẫn không
-    // nuốt sang lời gọi `writeAudit` kế tiếp trong tệp.
-    const goi = /await writeAudit\(\{[\s\S]{0,2400}?\n {4}\}\);/.exec(s);
+    // Con số chỉ là lưới an toàn phòng khi ai đó xoá mất neo đóng.
+    const goi = /await writeAudit\(\{[\s\S]{0,3000}?\n {4}\}\);/.exec(s);
     expect(goi, "không thấy lời gọi writeAudit trong _actions.ts").not.toBeNull();
     const than = goi![0];
     expect(than, 'phải là entityType "Order"').toMatch(/entityType:\s*"Order"/);

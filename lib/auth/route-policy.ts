@@ -59,7 +59,7 @@ export type RouteDecision =
   | { type: "redirectPath"; path: string; callbackUrl?: string; reason?: string }
   | {
       type: "redirectHost";
-      host: "admin" | "portal" | "public" | "teacher" | "elearning";
+      host: "admin" | "portal" | "public" | "sale" | "teacher" | "elearning";
       path: string;
       status: 307 | 308;
     };
@@ -136,6 +136,12 @@ export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
   "crm",
   "curriculums",
   "dashboard",
+  // A-02 (25/08/2026) — dashboard QLCS 4 tab (Tài chính · Kinh doanh · Chi phí
+  // Marketing · Tương tác KH). Segment RIÊNG, KHÔNG dùng lại "/dashboard": trang đó là
+  // màn tiếp đất chung sau đăng nhập, gộp panel của cả 9 vai (GV/Kế toán/HR/Marketing…)
+  // — thay nó bằng 4 tab QLCS là làm trắng màn đầu tiên của mọi vai còn lại.
+  // Thiếu dòng này thì admin host 308 sang public rồi 404, dù page tồn tại.
+  "dashboard-qlcs",
   // BGĐ 31/07 — màn duyệt đơn GV + hộp thư đề xuất sửa giáo án.
   "de-xuat-giao-an",
   "don-tu",
@@ -222,6 +228,10 @@ export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
   // /user-groups trên admin host bounce 308 về public → 404 dù page tồn tại.
   "user-groups",
   "users",
+  // S1 (tích hợp ZaloCRM 06/09/2026) — màn Zalo CRM nhúng bằng iframe + SSO.
+  // Thiếu dòng này thì admin host 308 sang public rồi 404, trong khi localhost chạy
+  // hoàn hảo — và 308 là permanent nên trình duyệt cache vĩnh viễn.
+  "zalo-crm",
 ]);
 
 /** First path segment, e.g. "/leads/123" → "leads". */
@@ -842,6 +852,23 @@ export function decideRoute(input: RouteInput): RouteDecision {
         path: isTeacherCleanUrl(pathname) ? pathname : "/",
         status: 307,
       };
+    }
+
+    // Đợt B — CHIỀU RA của site Sale, soi chiếu luật GV ngay trên.
+    //
+    // Thiếu nhánh này thì bật cờ xong site hẹp chỉ là TUỲ CHỌN: tư vấn viên thuần mở
+    // admin.satarobo.vn bằng dấu trang cũ vẫn ở nguyên đó với đủ menu admin, và cái
+    // "hẹp" của site Sale không còn là ràng buộc nào cả.
+    //
+    // Kiêm nhiệm KHÔNG bị đá (`isSaleOnly` đòi vai nhân sự DUY NHẤT là SALES_CSM) —
+    // nhốt một người vừa quản lý cơ sở vừa bán hàng vào site hẹp là lấy mất phần
+    // quản lý của họ.
+    //
+    // ⚠️ `AUTH_COOKIE_DOMAIN` đang để trống (cookie host-only) ⇒ người bị đá sang
+    // host sale phải ĐĂNG NHẬP THÊM MỘT LẦN. Đã chấp nhận ở `lib/flags.ts`, nhưng
+    // phải báo trước cho tổ Sale, không thì họ tưởng mất tài khoản.
+    if (saleSiteOn && isSaleOnly) {
+      return { type: "redirectHost", host: "sale", path: "/", status: 307 };
     }
 
     if (pathname === "/") {

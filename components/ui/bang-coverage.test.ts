@@ -39,6 +39,8 @@ const MIEN_TRU: Record<string, string> = {
     "bảng ĐOẠN CA bên trong form sửa một mã (tối đa 6 dòng, là ô nhập chứ không phải danh sách) — phân trang một form là vô nghĩa",
   "app/(admin)/admin/cham-cong/phan-ca/import/_components/mapping-table.tsx":
     "bảng ánh xạ tên = số người trên Sheet (19–20 dòng, nhóm theo khối CS1/CS2/HO) — phải nhìn HẾT một lượt để xác nhận từng người và thấy ai CHƯA ánh xạ; cắt trang là giấu mất đúng thứ người dùng đang phải soát trước khi bấm Áp",
+  "app/(admin)/admin/bao-cao/phan-hoi-hop-thu/page.tsx":
+    "hai bảng GỘP SẴN: một dòng cho mỗi người phụ trách, một dòng cho mỗi đơn vị — số dòng chặn bởi quy mô đội, không theo lượng hội thoại. Đây lại đúng là bảng phải nhìn HẾT một lượt: cắt trang là giấu mất người đang tồn nhiều khách chờ, tức giấu đúng thứ bảng sinh ra để phơi",
   "app/(admin)/admin/nhan-su/import/page.tsx":
     "bảng CHẠY THỬ của lượt nhập nhân sự — dựng sau sự cố 08/09/2026 (file 9 cột xoá trắng 3 cột ngày trên 9 hồ sơ PROD). Nó tồn tại ĐỂ người vận hành nhìn HẾT trước khi bấm Ghi thật, và mỗi dòng đỏ là một ô sắp mất dữ liệu; cắt trang là giấu đúng thứ nó sinh ra để phơi bày. Số dòng chặn bởi số hồ sơ THỰC SỰ ĐỔI, không phải số dòng file",
   "app/(admin)/admin/cham-cong/phan-ca/import/_components/result-diff-table.tsx":

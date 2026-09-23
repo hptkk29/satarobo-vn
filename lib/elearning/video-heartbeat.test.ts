@@ -96,7 +96,10 @@ beforeEach(() => {
     assignmentId: "a1",
     assignment: { allowLate: false, blockSeek: true, maxPlaybackRate: 1.5 },
   };
-  h.lesson = { id: LESSON, kind: "VIDEO", durationSec: 600 };
+  // ⚠️ `cues` phải có mặt: đường ghi `select` nó cùng câu truy vấn bài. Mock thiếu
+  // trường là mock NÓI DỐI về hình dạng thật — và cái giá là một `TypeError` chỉ
+  // hiện ra ở lượt chạy đầu tiên sau khi ai đó thêm trường.
+  h.lesson = { id: LESSON, kind: "VIDEO", durationSec: 600, cues: [] };
   h.course = {
     id: "c1",
     visibility: "INTERNAL",
@@ -421,7 +424,7 @@ describe("điểm kiểm tra tập trung", () => {
       tuSec: 100,
       denSec: 105,
       viTriSec: 105,
-      traLoiThachThuc: idThachThuc(hoiLuc),
+      traLoiThachThuc: { id: idThachThuc(hoiLuc) },
     });
     expect(r.ok).toBe(true);
     const arg = h.upsert.mock.calls[0]![0] as unknown as {
@@ -457,10 +460,291 @@ describe("bài video chưa có thời lượng", () => {
   it("không có mẫu số ⇒ TỪ CHỐI, không ghi bừa", async () => {
     // Ghi bừa là đẻ ra một tỉ lệ phần trăm không dựa trên gì, rồi báo cáo tuân thủ
     // đứng lên chính con số đó.
-    h.lesson = { id: LESSON, kind: "VIDEO", durationSec: null };
+    h.lesson = { id: LESSON, kind: "VIDEO", durationSec: null, cues: [] };
     const r = await nhip();
     if (r.ok) throw new Error("phải từ chối");
     expect(r.code).toBe("NOT_FOUND");
     expect(h.upsert).not.toHaveBeenCalled();
+  });
+});
+
+// ── 11. Câu hỏi chèn giữa video ────────────────────────────────────────────
+
+describe("câu hỏi chèn giữa video", () => {
+  const CAU = {
+    id: "q1",
+    type: "single" as const,
+    question: "Bước nào làm trước?",
+    options: ["A", "B", "C"],
+    correctIndex: 1,
+  };
+  const cue = (o: Record<string, unknown> = {}) => ({
+    id: "c1",
+    atSec: 30,
+    blocking: true,
+    inlineJson: CAU,
+    ...o,
+  });
+
+  const datCue = (cues: unknown[]) => {
+    h.lesson = { id: LESSON, kind: "VIDEO", durationSec: 600, cues };
+  };
+
+  const tienDo = (cueLogJson: unknown) => {
+    h.progress = {
+      segmentBitmap: null,
+      segmentSec: 5,
+      coveredSec: 100,
+      contentSec: 600,
+      maxPositionSec: 100,
+      seq: 1,
+      verifiedAt: null,
+      attnAskedCount: 0,
+      attnPendingAt: null,
+      cueLogJson,
+    };
+  };
+
+  /**
+   * Có lượt ghi nào chạm BITMAP không.
+   *
+   * ⚠️ Canh thứ này thay vì đếm số lượt `upsert`: sổ cue cũng đi qua `upsert` (nó
+   * phải tạo được dòng tiến độ khi bài chưa có dòng nào), nên đếm lượt gọi là canh
+   * nhầm thứ. Bất biến THẬT là: đang bị chặn thì KHÔNG được cộng phủ.
+   */
+  const coGhiBitmap = () =>
+    h.upsert.mock.calls.some((c) => JSON.stringify(c[0]).includes("segmentBitmap"));
+
+  const dangTreo = (soLanSai = 0, hoiLuc = NOW) => ({
+    v: 1,
+    treo: { cueId: "c1", hoiLuc: hoiLuc.toISOString(), soLanSai },
+    xong: [],
+  });
+
+  it("chạm mốc ⇒ trả câu hỏi, ghi nhận TỚI mốc rồi dừng", async () => {
+    // Ghi tới mốc là đúng: người học đã xem tới đó. Thoát sớm không ghi gì thì
+    // đoạn đó bay mất vĩnh viễn VÀ `maxPositionSec` đứng yên — làm nhịp mang câu
+    // trả lời bị chính cổng chặn-tua nuốt.
+    datCue([cue()]);
+    tienDo(null);
+    // Người học đang ở giây 25 và xem tiếp tới 35; cue nằm ở 30.
+    h.progress = { ...(h.progress as object), maxPositionSec: 25, coveredSec: 25 };
+    const r = await nhip({ seq: 2, tuSec: 25, denSec: 35, viTriSec: 35 });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.data.status).toBe("CHO_TRA_LOI");
+    expect(r.data.thachThuc?.loai).toBe("CUE");
+    expect(r.data.thachThuc?.atSec).toBe(30);
+    expect(coGhiBitmap()).toBe(true);
+
+    // Nhưng KHÔNG được ghi quá mốc: mốc đã xem phải kẹp ở giây 30, không phải 35.
+    const arg = h.upsert.mock.calls[0]![0] as unknown as {
+      update: { maxPositionSec: number };
+    };
+    expect(arg.update.maxPositionSec).toBe(30);
+  });
+
+  it("🔴 thân phản hồi KHÔNG mang đáp án đúng", async () => {
+    // Kiểm trên JSON đã serialize, không trên object: đây là thứ thật sự đi qua
+    // dây, và là thứ mở tab Network ra là thấy.
+    datCue([cue()]);
+    tienDo(null);
+    const r = await nhip({ seq: 2, tuSec: 25, denSec: 35, viTriSec: 35 });
+    const s = JSON.stringify(r);
+    expect(s).not.toContain("correctIndex");
+    expect(s).toContain("Bước nào làm trước");
+  });
+
+  it("🔴 câu ĐANG TREO mà nhịp không mang đáp án ⇒ gửi LẠI câu hỏi", async () => {
+    // Không gửi lại thì tải lại trang là mất câu hỏi, video vẫn bị chặn, và người
+    // học không còn gì để bấm — kẹt cứng, lối ra duy nhất là bỏ bài.
+    datCue([cue()]);
+    tienDo(dangTreo());
+    const r = await nhip({ seq: 2, tuSec: 30, denSec: 45, viTriSec: 45 });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.data.thachThuc?.id).toBe("cue-c1");
+    expect(coGhiBitmap()).toBe(false);
+  });
+
+  it("🔴 KHÔNG có đường bỏ qua bằng cách ngồi im", async () => {
+    // Ổ nguy hiểm nhất: chép nhánh hết-hạn của điểm kiểm tra tập trung sang cue
+    // thì "chờ 45 giây" trở thành đường qua MỌI câu hỏi — và mọi thứ vẫn trả 200
+    // nên không ai thấy gì bất thường.
+    datCue([cue()]);
+    tienDo(dangTreo(0, new Date(NOW.getTime() - 3_600_000)));
+    const r = await nhip({ seq: 2, tuSec: 30, denSec: 45, viTriSec: 45 });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.data.status).toBe("CHO_TRA_LOI");
+    expect(coGhiBitmap()).toBe(false);
+  });
+
+  it("trả lời SAI ⇒ 200 kèm chính câu đó, có cờ `saiRoi`", async () => {
+    datCue([cue()]);
+    tienDo(dangTreo());
+    const r = await nhip({
+      seq: 2,
+      tuSec: 30,
+      denSec: 45,
+      viTriSec: 45,
+      traLoiThachThuc: { id: "cue-c1", dapAn: "0" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.data.saiRoi).toBe(true);
+    expect(r.data.thachThuc?.id).toBe("cue-c1");
+  });
+
+  it("trả lời ĐÚNG ⇒ đi tiếp và ghi tiến độ bình thường", async () => {
+    datCue([cue()]);
+    tienDo(dangTreo());
+    const r = await nhip({
+      seq: 2,
+      tuSec: 30,
+      denSec: 45,
+      viTriSec: 45,
+      traLoiThachThuc: { id: "cue-c1", dapAn: "1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.data.status).toBe("GHI_NHAN");
+    expect(coGhiBitmap()).toBe(true);
+  });
+
+  it("🔴 trả lời bằng id của cơ chế TẬP TRUNG không mở được cue", async () => {
+    // Hai loại thách thức đi chung một đường trả lời; không kiểm tiền tố thì câu
+    // trả lời loại này được ghi nhận cho loại kia, và không cách nào phát hiện.
+    datCue([cue()]);
+    tienDo(dangTreo());
+    const r = await nhip({
+      seq: 2,
+      tuSec: 30,
+      denSec: 45,
+      viTriSec: 45,
+      traLoiThachThuc: { id: idThachThuc(NOW), dapAn: "1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.data.status).toBe("CHO_TRA_LOI");
+  });
+
+  it("cue ĐÃ XONG thì không hỏi lại — kể cả sau khi tải lại trang", async () => {
+    datCue([cue()]);
+    tienDo({ v: 1, treo: null, xong: [{ cueId: "c1", dung: true }] });
+    const r = await nhip({ seq: 2, tuSec: 25, denSec: 35, viTriSec: 35 });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.data.status).toBe("GHI_NHAN");
+  });
+
+  it("🔴 câu HỎNG KHUÔN không khoá cứng người học", async () => {
+    // Một bản ghi bẩn do người soạn để lại không được phép nhốt người học ra khỏi
+    // bài của họ — triệu chứng sẽ là video dừng câm, không câu hỏi, không lỗi.
+    datCue([cue({ inlineJson: { type: "essay", question: "x" } })]);
+    tienDo(null);
+    const r = await nhip({ seq: 2, tuSec: 25, denSec: 35, viTriSec: 35 });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.data.status).toBe("GHI_NHAN");
+  });
+
+  it("🔴 cue KHÔNG chạm sổ của cơ chế tập trung", async () => {
+    // `attnAskedCount` chính là đầu vào của `nenHoiTapTrung`. Cue tăng nó thì video
+    // nhiều cue sẽ gần như không bao giờ hỏi tập trung nữa — vô hiệu hoá im lặng
+    // một cơ chế giám sát, và ô báo cáo "tập trung 5/5" thành con số bịa.
+    datCue([cue()]);
+    tienDo(dangTreo());
+    await nhip({
+      seq: 2,
+      tuSec: 30,
+      denSec: 45,
+      viTriSec: 45,
+      traLoiThachThuc: { id: "cue-c1", dapAn: "1" },
+    });
+    const moiLanGhi = [...h.updateMany.mock.calls, ...h.upsert.mock.calls]
+      .map((c) => JSON.stringify(c[0]))
+      .join(" ");
+    expect(moiLanGhi).not.toContain("attnAskedCount");
+    expect(moiLanGhi).not.toContain("attnPassedCount");
+  });
+
+  it("🔴 nhịp MANG CÂU TRẢ LỜI không được bị cổng chặn-tua nuốt", async () => {
+    // Kịch bản thật, nhịp 15 giây, cue chặn ở giây 110:
+    //  · nhịp trước kết ở giây 100 ⇒ `maxPositionSec` = 100
+    //  · nhịp sau (100,115] chạm cue ⇒ bung câu hỏi
+    //  · người học trả lời ⇒ nhịp mang đáp án có `tuSec` = 115
+    // Nếu cổng chặn-tua so 115 với 100 thì câu trả lời KHÔNG BAO GIỜ tới được chỗ
+    // chấm: mọi cue chặn khoá cứng bài học, và thông báo hiện ra là "khoá này
+    // không cho tua tới" — không liên quan gì tới việc họ vừa làm.
+    datCue([cue({ atSec: 110 })]);
+    tienDo(dangTreo());
+    const r = await nhip({
+      seq: 3,
+      tuSec: 115,
+      denSec: 120,
+      viTriSec: 120,
+      traLoiThachThuc: { id: "cue-c1", dapAn: "1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.data.status).toBe("GHI_NHAN");
+  });
+
+  it("🔴 phủ TRƯỚC mốc cue phải được tính, và mốc đã xem phải nhích", async () => {
+    // Thoát sớm ở cổng cue mà không ghi gì nghĩa là đoạn từ nhịp trước tới mốc cue
+    // bay mất vĩnh viễn, và `maxPositionSec` đứng yên — chính là thứ làm nhịp trả
+    // lời bị coi là tua trộm.
+    datCue([cue({ atSec: 110 })]);
+    tienDo(null);
+    h.progress = {
+      segmentBitmap: null,
+      segmentSec: 5,
+      coveredSec: 100,
+      contentSec: 600,
+      maxPositionSec: 100,
+      seq: 1,
+      verifiedAt: null,
+      attnAskedCount: 0,
+      attnPendingAt: null,
+      cueLogJson: null,
+    };
+    const r = await nhip({ seq: 2, tuSec: 100, denSec: 115, viTriSec: 115 });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.data.thachThuc?.id).toBe("cue-c1");
+    // Có ghi bitmap cho phần TRƯỚC mốc.
+    expect(coGhiBitmap()).toBe(true);
+    // Và tỉ lệ phủ trả về là số THẬT, không phải 0 — trả 0 làm thanh tiến độ trên
+    // màn hình tụt về 0% mỗi lần câu hỏi bung ra.
+    expect(r.data.coveredSec).toBeGreaterThan(0);
+  });
+
+  it("🔴 bài CHƯA có dòng tiến độ: cue vẫn phải ghi sổ được", async () => {
+    // Người vừa mở bài đã chạm mốc cue ở nhịp đầu tiên. Không ghi được câu treo
+    // thì nhịp sau `so.treo` vẫn null ⇒ câu trả lời của họ rơi vào hư không:
+    // hoặc bị hỏi lại mãi (kẹt cứng), hoặc mốc trôi qua và cue bị BỎ QUA hẳn.
+    datCue([cue()]);
+    h.progress = null;
+    // Phát liên tục từ đầu bài — nhịp đầu bắt đầu ở giây 0, không phải giữa chừng
+    // (bắt đầu giữa chừng khi chưa xem gì CHÍNH LÀ một cú tua tới, và bị chặn ở
+    // cổng trước).
+    const r1 = await nhip({ seq: 1, tuSec: 0, denSec: 35, viTriSec: 35 });
+    expect(r1.ok).toBe(true);
+    if (!r1.ok) return;
+    expect(r1.data.thachThuc?.id).toBe("cue-c1");
+    // Phải có một lượt ghi câu treo — không thì trạng thái không sống qua nhịp.
+    const daGhi = [...h.upsert.mock.calls, ...h.updateMany.mock.calls]
+      .map((c) => JSON.stringify(c[0]))
+      .join(" ");
+    expect(daGhi).toContain("cueLogJson");
+  });
+
+  it("bài KHÔNG có cue ⇒ hành vi không đổi, không thêm lượt ghi nào", async () => {
+    datCue([]);
+    tienDo(null);
+    const r = await nhip({ seq: 2, tuSec: 25, denSec: 35, viTriSec: 35 });
+    expect(r.ok).toBe(true);
+    expect(h.updateMany).not.toHaveBeenCalled();
   });
 });

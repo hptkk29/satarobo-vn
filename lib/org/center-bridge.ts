@@ -43,16 +43,47 @@ export type BackfillSpec = {
  * 28 bảng còn lại đã có cột từ migration `20260615083728_pr_a_add_orgunitid` (15/06).
  */
 export const BACKFILL_SPECS: readonly BackfillSpec[] = [
-  // ── Thanh toán theo cơ sở (30/08): sinh ra đã có CẢ HAI cột, không backfill ─
+  // ── TRỤC GỌI ĐIỆN (27/08): sinh ra đã có CẢ HAI cột, không cần backfill ─────
   {
-    model: "PaymentMethod",
-    // NULL = phương thức DÙNG CHUNG mọi cơ sở (tiền mặt, VNPAY…), KHÔNG phải "chưa
-    // gán". Đối soát đêm PHẢI giữ nguyên null ở đây — "điền cho đủ" là biến một
-    // phương thức toàn hệ thống thành của riêng một cơ sở, tức các cơ sở còn lại mất
-    // luôn cách thu tiền đó.
-    nullMeaning: "NULL_TOAN_HE_THONG",
+    model: "CallLog",
+    // NULL = "chưa đối khớp được cơ sở" (máy nhánh chưa ánh xạ, số lạ gọi vào),
+    // KHÔNG phải "áp dụng toàn hệ thống". Đây là hàng đợi cuộc gọi mồ côi (OC-12):
+    // giữ NULL, đếm riêng để nhìn thấy tồn đọng, và gán tay khi có người xử lý.
+    nullMeaning: "NULL_CHUA_KHOP",
     scoped: true,
-    vi: "danh mục phương thức thanh toán — NULL = dùng chung mọi cơ sở",
+    vi: "cuộc gọi — suy từ CallExtension.centerId, hoặc từ cơ sở của Lead đối khớp",
+  },
+  {
+    model: "CallExtension",
+    nullMeaning: "BAT_BUOC",
+    // Bảng ÁNH XẠ hạ tầng ⇒ nằm ở SCOPE_EXEMPT, không ở SCOPED_MODELS (xem lý do
+    // dài ở lib/db-scope.ts). Nhưng vẫn phải khai ở đây vì nó mang cả hai cột.
+    scoped: false,
+    vi: "ánh xạ máy nhánh → nhân viên → cơ sở; một máy nhánh luôn thuộc một cơ sở",
+  },
+  // ── ZALOCRM (09/2026): sinh ra đã có CẢ HAI cột, bảng RỖNG ⇒ không cần backfill ──
+  {
+    model: "ZaloCrmNick",
+    // NULL = orgCode của ZaloCRM CHƯA ánh xạ được cơ sở (thiếu mục trong setting
+    // `zalocrm.orgCodes`). KHÔNG phải "áp dụng toàn hệ thống": chốt kiến trúc là một
+    // Organization ZaloCRM = một nick = ĐÚNG MỘT cơ sở, nên không tồn tại nick dùng
+    // chung. Cũng KHÔNG phải BAT_BUOC: lúc đồng bộ nick về, thiếu ánh xạ là chuyện
+    // thường và phải giữ dòng lại để người vận hành gán, chứ không được vứt.
+    nullMeaning: "NULL_CHUA_KHOP",
+    // Bảng ÁNH XẠ hạ tầng ⇒ nằm ở SCOPE_EXEMPT, không ở SCOPED_MODELS (lý do dài ở
+    // lib/db-scope.ts). Vẫn phải khai ở đây vì nó mang CẢ HAI cột.
+    scoped: false,
+    vi: "nick Zalo cá nhân do ZaloCRM cầm — suy từ orgCode qua setting zalocrm.orgCodes",
+  },
+  {
+    model: "ZaloCrmThread",
+    // NULL = chưa biết hội thoại thuộc cơ sở nào. Dòng "đặt trước" (tạo lúc Sale bấm
+    // "Nhắn Zalo", trước khi hội thoại tồn tại) ra đời đã có centerId của người bấm;
+    // dòng do webhook tạo thì chép từ nick, và nick chưa ánh xạ ⇒ NULL. Giữ NULL, đếm
+    // riêng để nhìn thấy tồn đọng.
+    nullMeaning: "NULL_CHUA_KHOP",
+    scoped: false,
+    vi: "ánh xạ hội thoại ZaloCRM ↔ phiếu lead — chép centerId từ ZaloCrmNick của org",
   },
   // ── Module chấm công v3 (L1 · 06/09): sinh ra đã có CẢ HAI cột, không backfill ─
   {
@@ -101,7 +132,17 @@ export const BACKFILL_SPECS: readonly BackfillSpec[] = [
     model: "ShiftBriefNote",
     nullMeaning: "BAT_BUOC",
     scoped: true,
-    vi: "việc cố định / ghi đè tin 19:00 — theo đơn vị, luôn có",
+    vi: "việc cố định / ghi đè tin 19:00 — theo đơn vị, luôn có",  },
+  // ── Thanh toán theo cơ sở (30/08): sinh ra đã có CẢ HAI cột, không backfill ─
+  {
+    model: "PaymentMethod",
+    // NULL = phương thức DÙNG CHUNG mọi cơ sở (tiền mặt, VNPAY…), KHÔNG phải "chưa
+    // gán". Đối soát đêm PHẢI giữ nguyên null ở đây — "điền cho đủ" là biến một
+    // phương thức toàn hệ thống thành của riêng một cơ sở, tức các cơ sở còn lại mất
+    // luôn cách thu tiền đó.
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: true,
+    vi: "danh mục phương thức thanh toán — NULL = dùng chung mọi cơ sở",
   },
   // ── MEDIA-REVIEW (26/08): sinh ra đã có CẢ HAI cột, không cần backfill ──────
   {
@@ -197,6 +238,15 @@ export const BACKFILL_SPECS: readonly BackfillSpec[] = [
 
   // ── Tiền: mọi dòng đều thuộc một cơ sở, và đây là nhóm sai một dòng là lệch sổ ─
   {
+    // 27/08 — sổ người hưởng hoa hồng theo cơ sở (QC 1% + Quản lý TT 2%). Sinh ra đã
+    // có CẢ HAI cột và bảng RỖNG lúc migration ⇒ không có bước backfill; `orgUnitId`
+    // do lib/org/dual-write.ts điền ở mọi đường ghi.
+    model: "CenterCommissionAssignee",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "phân công QC/Quản lý TT theo cơ sở — centerId NOT NULL ở schema",
+  },
+  {
     model: "Payment",
     nullMeaning: "BAT_BUOC",
     scoped: true,
@@ -261,6 +311,18 @@ export const BACKFILL_SPECS: readonly BackfillSpec[] = [
     nullMeaning: "NULL_TOAN_HE_THONG",
     scoped: false,
     vi: "mục tiêu doanh thu cấp HO/toàn hệ thống",
+  },
+  {
+    model: "LeadTarget",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: false,
+    vi: "C-01 — chỉ tiêu SỐ HỌC SINH theo tháng; NULL = chỉ tiêu toàn hệ thống, điền cơ sở vào là hỏng nghĩa",
+  },
+  {
+    model: "AdsBudgetTarget",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: false,
+    vi: "D-02 — chỉ tiêu NGÂN SÁCH QUẢNG CÁO theo tháng; NULL = chỉ tiêu toàn hệ thống (KHÁC nhóm CHƯA PHÂN BỔ của D-06 — đó là chi tiêu thật chưa quy được về cơ sở), điền cơ sở vào là hỏng nghĩa",
   },
   {
     model: "SataCoinRule",
@@ -409,6 +471,42 @@ export const BACKFILL_SPECS: readonly BackfillSpec[] = [
     nullMeaning: "BAT_BUOC",
     scoped: true,
     vi: "lượt ghi danh — cột NOT NULL trong schema; không có cơ sở thì không tạo được bản ghi",
+  },
+  {
+    model: "TrnQuestion",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: true,
+    vi: "câu hỏi ngân hàng đào tạo — NULL = câu dùng chung toàn công ty",
+  },
+  {
+    model: "TrnExam",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: true,
+    vi: "đề thi đào tạo — NULL = đề dùng chung toàn công ty",
+  },
+  {
+    model: "TrnExamAttempt",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "lượt thi — luôn thuộc cơ sở của người thi; NULL = chưa backfill",
+  },
+  {
+    model: "TrnRubric",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: true,
+    vi: "khung chấm bài tập — NULL = khung dùng chung toàn công ty",
+  },
+  {
+    model: "TrnSubmission",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "lượt nộp bài tập — luôn thuộc cơ sở của người nộp; NULL = chưa backfill",
+  },
+  {
+    model: "TrnWatchFlag",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "cờ nghi ngờ học đối phó — luôn thuộc cơ sở của người bị gắn cờ",
   },
   {
     model: "TrnDataSubjectRequest",

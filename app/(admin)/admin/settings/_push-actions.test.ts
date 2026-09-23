@@ -47,7 +47,10 @@ const h = vi.hoisted(() => {
 vi.mock("next/headers", () => ({
   headers: async () => ({ get: (k: string) => h.headerMap.get(k.toLowerCase()) ?? null }),
 }));
-vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("next/cache", () => ({
+  // 16/09/2026 — bản `main` của `actions.ts` dùng `unstable_cache`; mock thiếu nó là
+  // cả tệp test chết ngay lúc nạp, không phải một ca đỏ.
+  unstable_cache: <T,>(fn: T) => fn, revalidatePath: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ auth: h.auth }));
 vi.mock("@/lib/auth/actor", () => ({ resolveActor: vi.fn(async () => ({ userId: "usr_toi" })) }));
 vi.mock("@/lib/db-scope", () => ({ scopedDb: vi.fn(() => h.mockDb) }));

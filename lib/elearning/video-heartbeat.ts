@@ -11,7 +11,12 @@ import { cuonKhoaSauKhiXongBai } from "@/lib/elearning/rollup";
 import { checkContentAccess } from "@/lib/elearning/content-gate";
 import { kiemVeMedia } from "@/lib/elearning/media-ticket";
 import { effectiveAllowLate, isProgressWriteLocked } from "@/lib/elearning/due-lock";
-import { gopNhipXem, soDoanCua, DOAN_GIAY } from "@/lib/elearning/segment-bitmap";
+import {
+  gopNhipXem,
+  soDoanCua,
+  DOAN_GIAY,
+  TRAN_DELTA_GIAY,
+} from "@/lib/elearning/segment-bitmap";
 import {
   chanTuaToi,
   vuotTranTocDo,
@@ -20,7 +25,15 @@ import {
   THONG_BAO_LOI,
   type MaLoiNhip,
   type NhipXemKetQua,
+  type ThachThuc,
 } from "@/lib/elearning/video-heartbeat-contract";
+import {
+  docSoCue,
+  idCue,
+  locCauHoiChoNguoiHoc,
+  quyetDinhCue,
+  type CauHoiCue,
+} from "@/lib/elearning/lesson-cue";
 import {
   nenHoiTapTrung,
   tinhTrangThachThuc,
@@ -66,7 +79,8 @@ export type GhiNhipXemInput = {
   tocDo: number;
   tabHien: boolean;
   viTriSec: number;
-  traLoiThachThuc?: string | null;
+  /** Trả lời thách thức — xem `nhipXemSchema` trong hợp đồng. */
+  traLoiThachThuc?: { id: string; dapAn?: string | null } | null;
   now: Date;
   /**
    * Kết quả giành khoá phát, do Route Handler lấy — tầng này không chạm Redis.
@@ -146,7 +160,18 @@ export async function ghiNhipXem(input: GhiNhipXemInput): Promise<GhiNhipXemKetQ
       deletedAt: null,
       module: { courseId: enrollment.courseId },
     },
-    select: { id: true, kind: true, durationSec: true },
+    select: {
+      id: true,
+      kind: true,
+      durationSec: true,
+      // ⚠️ Nạp cue NGAY TRONG câu truy vấn bài, không thêm một lượt đọc riêng cho
+      // mỗi nhịp của mỗi người đang xem. Bài không có cue thì mảng rỗng và mọi
+      // nhánh dưới đây thoát ngay.
+      cues: {
+        select: { id: true, atSec: true, blocking: true, inlineJson: true },
+        orderBy: { atSec: "asc" },
+      },
+    },
   });
   if (!lesson) return { ok: false, code: "NOT_FOUND", message: "Không tìm thấy bài học" };
 
@@ -212,6 +237,7 @@ export async function ghiNhipXem(input: GhiNhipXemInput): Promise<GhiNhipXemKetQ
       verifiedAt: true,
       attnAskedCount: true,
       attnPendingAt: true,
+      cueLogJson: true,
     },
   });
 
@@ -240,6 +266,7 @@ export async function ghiNhipXem(input: GhiNhipXemInput): Promise<GhiNhipXemKetQ
 
   // ── 10. Chặn tua tới ──────────────────────────────────────────────────────
   const maxDaXem = cu?.maxPositionSec ?? 0;
+  const soCue = docSoCue(cu?.cueLogJson ?? null);
   if (
     chanTuaToi({
       // ⚠️ `tuSec`, KHÔNG phải `viTriSec` — lý do đầy đủ ở `chanTuaToi`. Truyền
@@ -247,6 +274,17 @@ export async function ghiNhipXem(input: GhiNhipXemInput): Promise<GhiNhipXemKetQ
       batDauSec: input.tuSec,
       maxDaXemSec: maxDaXem,
       chanTua: enrollment.assignment?.blockSeek ?? true,
+      // ⚠️ Nới dung sai đúng MỘT nhịp khi đang có câu hỏi treo.
+      //
+      // Video bị dừng GIỮA một nhịp, nên con trỏ của trình phát nằm trước mốc đã
+      // ghi tới một khoảng nhịp. Nhịp MANG CÂU TRẢ LỜI bắt đầu từ đó, và nếu đo
+      // bằng dung sai 2 giây thì chính câu trả lời bị cổng này nuốt — người học
+      // kẹt cứng với thông báo "khoá này không cho tua tới", không liên quan gì
+      // tới việc họ vừa làm.
+      //
+      // Nới ở đây KHÔNG mở đường gian lận: phần được ghi nhận vẫn bị trần delta
+      // cắt, và khoảng khai rộng hơn chỉ làm họ mất công xem lại.
+      dungSaiSec: soCue.treo ? TRAN_DELTA_GIAY : undefined,
     })
   ) {
     // Đếm lượt bị chặn NGAY CẢ KHI từ chối nhịp: đây chính là số liệu của báo cáo
@@ -262,11 +300,76 @@ export async function ghiNhipXem(input: GhiNhipXemInput): Promise<GhiNhipXemKetQ
     return loi("SEEK_BLOCKED");
   }
 
-  // ── 11. Câu hỏi tập trung đang treo ───────────────────────────────────────
+  // ── 11a. CÂU HỎI CHÈN GIỮA VIDEO ──────────────────────────────────────────
+  //
+  // ⚠️ Xét TRƯỚC điểm kiểm tra tập trung, và dùng SỔ RIÊNG (`cueLogJson`), không
+  // đụng `attnPendingAt`/`attnAskedCount`. Ba lý do, cả ba đều hỏng im lặng:
+  //
+  //  1. `attnAskedCount` CHÍNH LÀ đầu vào của `nenHoiTapTrung`. Cue tăng nó thì
+  //     video có 5 cue sẽ gần như không bao giờ hỏi tập trung nữa — vô hiệu hoá
+  //     một cơ chế giám sát mà không ai thấy. Và ô báo cáo "tập trung 5/5" thành
+  //     con số bịa.
+  //  2. `TrnLessonProgress` chỉ có MỘT ô treo, và id câu hỏi chính là mốc
+  //     `attnPendingAt`. Hai loại cùng đến hạn trong một nhịp sẽ ghi đè nhau, và
+  //     người học kẹt với một thông báo không liên quan tới việc họ vừa làm.
+  //  3. Ưu tiên CUE khi cả hai cùng đến: cue neo vào một giây cụ thể, bỏ là bỏ
+  //     luôn. Tập trung nhường một nhịp và vẫn nổ ở nhịp sau.
+  //
+  // ⚠️ Quyết định là hàm THUẦN (`quyetDinhCue`); tầng này chỉ THI HÀNH. Bản đầu
+  // trộn hai việc và thoát sớm ngay tại đây, nên đoạn xem tới mốc cue bay mất và
+  // `maxPositionSec` đứng yên — làm nhịp mang câu trả lời bị chính cổng chặn-tua
+  // nuốt, và MỌI cue chặn khoá cứng bài học.
+  const qdCue = quyetDinhCue({
+    cues: lesson.cues,
+    so: soCue,
+    tuSec: input.tuSec,
+    denSec: input.denSec,
+    traLoi: input.traLoiThachThuc ?? null,
+    now,
+  });
+
+  if (qdCue.loai === "CHO") {
+    // Đang treo: KHÔNG ghi nhận đoạn nào, nhưng vẫn gửi lại câu hỏi. Không gửi lại
+    // thì tải lại trang là mất câu hỏi, video vẫn bị chặn, và người học không còn
+    // gì để bấm.
+    if (qdCue.so) {
+      await db.trnLessonProgress.updateMany({
+        where: { enrollmentId: enrollment.id, lessonId: lesson.id },
+        data: { cueLogJson: qdCue.so as object, lastActivityAt: now },
+      });
+    }
+    const cueDo = lesson.cues.find((x) => x.id === qdCue.cueId);
+    return {
+      ok: true,
+      data: {
+        // Tỉ lệ phủ THẬT, không phải 0 — trả 0 làm thanh tiến độ trên màn hình
+        // tụt về 0% mỗi lần câu hỏi bung ra.
+        coveredSec: cu?.coveredSec ?? 0,
+        coveragePercent: Math.round(((cu?.coveredSec ?? 0) / contentSec) * 100),
+        status: "CHO_TRA_LOI",
+        meta: { seq: cu?.seq ?? 0 },
+        thachThuc: thachThucCue(qdCue.cau, qdCue.cueId, cueDo?.atSec),
+        ...(qdCue.saiRoi ? { saiRoi: true } : {}),
+      },
+    };
+  }
+
+  // `HOI` ⇒ ghi nhận tới ĐÚNG mốc cue rồi treo. Mọi nhánh còn lại ghi trọn khoảng.
+  const catDen = qdCue.loai === "HOI" ? qdCue.catDen : input.denSec;
+  const soCueMoi = qdCue.so;
+
+  // ── 11b. Câu hỏi tập trung đang treo ──────────────────────────────────────
   const treo = tinhTrangThachThuc({ attnPendingAt: cu?.attnPendingAt ?? null, now });
   let daTraLoi = false;
   if (treo !== "KHONG_CO") {
-    if (traLoiHopLe({ traLoi: input.traLoiThachThuc, attnPendingAt: cu!.attnPendingAt })) {
+    if (
+      traLoiHopLe({
+        // Điểm kiểm tra tập trung chỉ cần id — nó hỏi "còn ở đây không", không
+        // hỏi kiến thức. Lấy `id` ra khỏi object thay vì bắt hàm kia biết về cue.
+        traLoi: input.traLoiThachThuc?.id ?? null,
+        attnPendingAt: cu!.attnPendingAt,
+      })
+    ) {
       daTraLoi = true;
     } else if (treo === "QUA_HAN") {
       // Quá hạn mà chưa trả lời: ngưng ghi nhận nhịp này và gỡ câu treo để người
@@ -289,12 +392,17 @@ export async function ghiNhipXem(input: GhiNhipXemInput): Promise<GhiNhipXemKetQ
     bitmapCu: cu?.segmentBitmap ? new Uint8Array(cu.segmentBitmap) : null,
     soDoan,
     tuSec: input.tuSec,
-    denSec: input.denSec,
+    // `catDen`, không phải `input.denSec`: khi cue bung ra, video dừng Ở MỐC —
+    // đoạn sau mốc chưa được xem, và tính nó là cộng cho người học đoạn họ chưa đi qua.
+    denSec: catDen,
     doanGiay,
   });
 
   const themWatch = gop.doanMoi * doanGiay;
-  const maxMoi = Math.max(maxDaXem, Math.round(input.viTriSec));
+  // ⚠️ Mốc đã xem cũng kẹp ở `catDen`. Không kẹp thì mốc nhảy tới cuối khoảng
+  // trong khi bitmap chỉ tới mốc cue — hai con số lệch nhau, và cổng chặn-tua
+  // đứng trên con số rộng hơn.
+  const maxMoi = Math.max(maxDaXem, Math.round(Math.min(input.viTriSec, catDen)));
   const xong = gop.coveragePercent >= NGUONG_XONG_PCT;
 
   // Tới lúc hỏi chưa — tính trên con số VỪA GỘP, không phải con số cũ.
@@ -315,6 +423,7 @@ export async function ghiNhipXem(input: GhiNhipXemInput): Promise<GhiNhipXemKetQ
       seq: input.seq,
       lastActivityAt: now,
       status: xong ? "DONE" : "IN_PROGRESS",
+      ...(soCueMoi ? { cueLogJson: soCueMoi as object } : {}),
       ...(daTraLoi
         ? {
             attnPendingAt: null,
@@ -349,6 +458,7 @@ export async function ghiNhipXem(input: GhiNhipXemInput): Promise<GhiNhipXemKetQ
       firstStartedAt: now,
       lastActivityAt: now,
       status: xong ? "DONE" : "IN_PROGRESS",
+      ...(soCueMoi ? { cueLogJson: soCueMoi as object } : {}),
       ...(hoi
         ? {
             attnPendingAt: now,
@@ -381,18 +491,32 @@ export async function ghiNhipXem(input: GhiNhipXemInput): Promise<GhiNhipXemKetQ
     data: {
       coveredSec: gop.coveredSec,
       coveragePercent: gop.coveragePercent,
-      status: hoi ? "CHO_TRA_LOI" : "GHI_NHAN",
+      // Cue thắng khi cả hai cùng đến: nó neo vào một giây cụ thể, bỏ là bỏ luôn.
+      // Điểm kiểm tra tập trung nhường một nhịp và vẫn nổ ở nhịp sau, vì điều kiện
+      // của nó là `floor(covered/chuKy) > daHoi` — con số đó không mất đi.
+      status: qdCue.loai === "HOI" || hoi ? "CHO_TRA_LOI" : "GHI_NHAN",
       meta: { seq: input.seq },
-      ...(hoi
+      ...(qdCue.loai === "HOI"
         ? {
-            thachThuc: {
-              loai: "ATTENTION" as const,
-              id: idThachThuc(now),
-              cauHoi: CAU_HOI_TAP_TRUNG,
-              hanGiay: HAN_TRA_LOI_GIAY,
-            },
+            thachThuc: thachThucCue(
+              qdCue.cau,
+              qdCue.cueId,
+              qdCue.catDen,
+            ),
           }
-        : {}),
+        : hoi
+          ? {
+              thachThuc: {
+                loai: "ATTENTION" as const,
+                id: idThachThuc(now),
+                cauHoi: CAU_HOI_TAP_TRUNG,
+                hanGiay: HAN_TRA_LOI_GIAY,
+                // Không có lựa chọn: chỉ cần một nút xác nhận có mặt.
+                luaChon: [],
+                chan: true,
+              },
+            }
+          : {}),
       ...(gop.biCatTran ? { biCatTran: true } : {}),
     },
   };
@@ -475,4 +599,45 @@ async function congTruotPhien(i: {
     where: { id: phien.id },
     data: { checkpointMissed: { increment: 1 }, lastBeatAt: i.now },
   });
+}
+
+/**
+ * Cổng CÂU HỎI CHÈN GIỮA VIDEO.
+ *
+ * Trả `null` = không có gì chặn, nhịp đi tiếp. Trả kết quả = dừng ở đây.
+ *
+ * ⚠️ Cue chặn KHÔNG CÓ HẠN TRẢ LỜI, cố ý. Chép nhánh `QUA_HAN` của điểm kiểm tra
+ * tập trung sang đây là hỏng nặng nhất có thể: nhánh đó gỡ câu treo rồi CHO ĐI
+ * TIẾP, nên "ngồi im 45 giây" trở thành đường bỏ qua MỌI câu hỏi — và triệu chứng
+ * là mọi thứ vẫn trả 200, không lỗi, không cờ, không ai thấy gì.
+ *
+ * ⚠️ Trả lời SAI trả về 200 kèm CHÍNH câu hỏi đó, không phải mã lỗi. Hai lẽ: trình
+ * phát không bao giờ được mất câu đang treo (mất là người học kẹt với video dừng
+ * và không có gì để bấm), và sai-rồi-làm-lại là đường bình thường của việc học.
+ */
+
+/**
+ * Thân thách thức cho một cue — CHỈ nhãn và mã, KHÔNG BAO GIỜ đáp án.
+ *
+ * ⚠️ `chonNhieu` gửi tường minh, không để trình phát tự đoán. Bản đầu suy từ
+ * `luaChon.length > 2`, nên một câu MỘT-đáp-án có 3 lựa chọn trở lên biến thành ô
+ * tích nhiều: người học tích hai ý, client gửi `"0,2"`, và câu đúng bị chấm sai.
+ *
+ * ⚠️ Cue chặn KHÔNG có hạn trả lời (`hanGiay: null`), cố ý. Chép nhánh hết-hạn của
+ * điểm kiểm tra tập trung sang đây là hỏng nặng nhất có thể: nhánh đó gỡ câu treo
+ * rồi CHO ĐI TIẾP, nên "ngồi im 45 giây" thành đường bỏ qua MỌI câu hỏi — và mọi
+ * thứ vẫn trả 200, không ai thấy gì.
+ */
+function thachThucCue(cau: CauHoiCue, cueId: string, atSec?: number): ThachThuc {
+  const loc = locCauHoiChoNguoiHoc(cau);
+  return {
+    loai: "CUE",
+    id: idCue(cueId),
+    cauHoi: loc.cauHoi,
+    hanGiay: null,
+    luaChon: loc.luaChon,
+    chan: true,
+    chonNhieu: cau.type === "multiple",
+    atSec,
+  };
 }

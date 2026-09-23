@@ -5,9 +5,9 @@
  * Đa số spec R6 test service trực tiếp (DB) → đặt R6_SKIP_WEBSERVER=1 để bỏ dev server.
  */
 import { defineConfig, devices } from "@playwright/test";
-import dotenv from "dotenv";
+import { napEnvTest } from "./tests/e2e/_helpers/nap-env";
 
-dotenv.config({ path: ".env.test", override: true });
+napEnvTest("r6");
 
 export default defineConfig({
   testDir: "./tests/e2e/r6",

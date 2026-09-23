@@ -8,10 +8,10 @@
  *   pnpm db:test:up && pnpm test:e2e:a0
  */
 import { defineConfig, devices } from "@playwright/test";
-import dotenv from "dotenv";
+import { napEnvTest } from "./tests/e2e/_helpers/nap-env";
 
 // Nạp .env.test TRƯỚC mọi thứ — workers + webServer kế thừa process.env này.
-dotenv.config({ path: ".env.test", override: true });
+napEnvTest("a0");
 
 export default defineConfig({
   testDir: "./tests/e2e/a0",

@@ -6,6 +6,19 @@ import type { ModuleDecl } from "./types";
 export const systemModule: ModuleDecl = {
   module: "system",
   permissions: [
+    // --- Dashboard QLCS 4 tab (A-02) ---
+    {
+      key: "dashboard:view",
+      action: "view",
+      // `scopable: false` — đây là cổng VÀO màn hình, không phải quyền trên dữ liệu.
+      // Phạm vi cơ sở của số liệu do `resolveScopeFilters()` + `scopedDb` quyết định.
+      // Quan trọng hơn: action nằm trong PAGE_GATES phải là GLOBAL ở mọi RoleDef giữ nó
+      // (gate cấp trang gọi `checkAnyPermission` KHÔNG target ⇒ scope CENTER trả false
+      // trên prod mà local vẫn xanh) — bất biến này có test ở lib/auth/page-gates.test.ts.
+      scopable: false,
+      description: "Mở màn dashboard QLCS 4 tab (Tài chính · Kinh doanh · Chi phí Marketing · Tương tác KH).",
+    },
+
     // --- Settings (cấu hình toàn cục — không gắn đơn vị) ---
     { key: "settings:view", action: "view", scopable: false },
     { key: "settings:edit", action: "edit", scopable: false },

@@ -4,9 +4,20 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { approveStatementAction, reopenStatementAction } from "../actions";
+import { approveStatementAction, reopenStatementAction, chotKyHoaHongAction } from "../actions";
 
-export function StatementActions({ period, status }: { period: string; status: string }) {
+export function StatementActions({
+  period,
+  status,
+  // 27/08/2026 — quyền `commission_periods:manage`, tính ở Server Component cha.
+  // KHÔNG kiểm quyền tại đây: đây là client, mọi thứ ở đây chỉ là trang trí. Cổng
+  // thật nằm trong ba Server Action; prop này chỉ để không vẽ nút bấm không được.
+  canChotKy,
+}: {
+  period: string;
+  status: string;
+  canChotKy: boolean;
+}) {
   const router = useRouter();
   const [pending, start] = useTransition();
 
@@ -30,14 +41,30 @@ export function StatementActions({ period, status }: { period: string; status: s
       >
         Export Excel
       </a>
-      {status !== "APPROVED" ? (
-        <Button
-          size="sm"
-          disabled={pending}
-          onClick={() => run(() => approveStatementAction(period, "Duyệt qua UI"), "Đã duyệt")}
-        >
-          Duyệt
-        </Button>
+      {!canChotKy ? null : status !== "APPROVED" ? (
+        <>
+          {/* Tính lại kỳ chưa duyệt từ sổ tiền — ghi đè cả kỳ nên bấm nhiều lần vô hại. */}
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={pending}
+            onClick={() =>
+              run(
+                () => chotKyHoaHongAction(period, `Chốt lại kỳ ${period} qua UI`),
+                "Đã tính lại kỳ",
+              )
+            }
+          >
+            Tính lại
+          </Button>
+          <Button
+            size="sm"
+            disabled={pending}
+            onClick={() => run(() => approveStatementAction(period, "Duyệt qua UI"), "Đã duyệt")}
+          >
+            Duyệt
+          </Button>
+        </>
       ) : (
         <Button
           size="sm"

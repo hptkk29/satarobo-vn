@@ -92,7 +92,12 @@ export const PAGE_GATES = {
   /** Cảnh báo rủi ro HV. GV KHÔNG vào: trang không có lọc theo lớp, cho GV vào là
    *  mở toàn cơ sở — đúng thứ câu 19 cấm. */
   /** Quản lý chia lead (29/08) — Quản trị + Quản lý cơ sở; QLCS chỉ thấy cơ sở mình. */
-  "/quan-ly-chia-lead": ["lead_pool:manage"],
+  // `leads:rotation-view` thêm 16/09/2026 khi hợp nhất `main`: màn "Sổ lượt chia lead"
+  // (S-5, quyền CHỈ ĐỌC cho tổ Sale) đã nhập vào màn này từ 30/08, nên quyền đọc phải
+  // theo sang — không thì người giữ nó mất chỗ xem mà không có lỗi nào báo.
+  // An toàn vì mọi việc GHI ở đây tự gác riêng (`_actions.ts` gọi `checkPermission(perm)`),
+  // cổng trang chỉ quyết "mở được màn hay không".
+  "/quan-ly-chia-lead": ["lead_pool:manage", "leads:rotation-view"],
 
   "/canh-bao-rui-ro": ["parent-requests:manage"],
 
@@ -113,6 +118,30 @@ export const PAGE_GATES = {
 
   /** Tracking lead. Gác bằng leads:view-all từ đầu; sidebar khai nhầm site-content:view. */
   "/marketing": ["leads:view-all"],
+
+  /**
+   * S-5 — SỔ LƯỢT CHIA LEAD (chỉ đọc). Màn kiểm chứng dựng ra để dập tin đồn thiên
+   * vị khi chia lead; đặc tả gốc đòi "màn hình cho **cả tổ sale** nhìn thấy"
+   * (plan/15 §5). Nhưng nó gác bằng `leads:view-all` — quyền QUẢN LÝ mà Sale cố ý
+   * không có — nên người duy nhất không mở được là người mà bằng chứng viết cho.
+   *
+   * Vá bằng key ĐỌC riêng `leads:rotation-view` ĐỨNG CẠNH `leads:view-all`, không
+   * thay thế:
+   *  • không nới `leads:view-all` cho Sale — quyền đó gác ~8 màn quản lý khác;
+   *  • giữ `leads:view-all` trong ô này để Quản lý cơ sở/Marketing KHÔNG mất màn
+   *    trong khoảng giữa "merge vào main" và "bấm chạy seed-prod-roles.yml" (RBAC v2
+   *    enforce trên prod đọc quyền từ DB) — trắng màn không kèm lỗi, không tái hiện
+   *    được ở local vì local chạy v1 tĩnh.
+   *
+   * ⚠️ Key MỚI ⇒ sau khi merge `test` → `main` PHẢI chạy `seed-prod-roles.yml`, nếu
+   * không Sale trên prod vẫn bị đá ra đúng như trước khi vá.
+   * ⚠️ Vào được TRANG ≠ xem được mọi cơ sở: phạm vi do `rotationBoardScope`
+   * (lib/lead/rotation.ts) chặn — Sale chỉ thấy sổ cơ sở mình.
+   */
+  // "/leads/so-luot" — GỠ 16/09/2026 khi hợp nhất `main`. Màn "Sổ lượt chia lead" đã
+  // nhập vào `/quan-ly-chia-lead` (chốt 30/08), đường cũ nay chỉ còn một dòng
+  // `redirect`. Giữ mục ở đây là bảng đòi một trang có cổng mà trang đó không còn gác
+  // gì — và `page-gates.test.ts` bắt đúng chỗ đó.
 
   /** G-D (21/08/2026) — nhập nhanh khách hàng, bản CÓ ĐĂNG NHẬP thay cho biểu mẫu
    *  công khai `sale.satarobo.vn`. Ai nhập được lead thì vào được: marketing,
@@ -149,6 +178,41 @@ export const PAGE_GATES = {
    *  `trials:view` là quyền Sale vốn đã có; không mở thêm gì. */
   "/sale/trial": ["trials:view"],
 
+  /** Tra cứu danh mục — bảng giá khoá/học cụ + lớp còn chỗ. CHỈ ĐỌC.
+   *  Hai action đều là quyền Sale vốn đã có và đều GLOBAL. Vào được bằng MỘT
+   *  trong hai; trang tự quyết khối nào hiện, không đá ai ra vì thiếu một quyền. */
+  "/sale/tra-cuu": ["products:view", "classes:view-all"],
+
+  /** Chốt đơn — tạo đơn cho khách của mình. `orders:create` là action HẸP mở ở
+   *  Đợt 0 (G-A), KHÔNG phải `orders:manage` (mở/huỷ/hoàn toàn hệ thống).
+   *  Phạm vi "chỉ đơn gắn khách của mình" do `checkOrderCreateOwnership()` gác
+   *  trong chính action — gate trang chỉ chặn sớm cho đỡ phí một vòng gọi. */
+  "/sale/chot-don": ["orders:create"],
+
+  /** Khách của tôi — danh sách + chi tiết + ghi hoạt động + việc follow-up.
+   *  `leads:view-own` là quyền Sale vốn đã có. KHÔNG dùng `leads:view-all`: đó
+   *  là quyền của quản lý, và trang này cố ý chỉ trả lời "khách nào của tôi". */
+  "/sale/khach-cua-toi": ["leads:view-own"],
+
+  /**
+   * Hộp thư đa kênh — hội thoại của khách trên Zalo OA / Messenger.
+   *
+   * `inbox:view` là KEY MỚI, cố ý không mượn key sẵn có:
+   *  • `chat:read` seed non-GLOBAL (OWN cho Sale, ASSIGNED cho GV, CENTER cho QLCS)
+   *    nên cổng trang gọi trần sẽ luôn FALSE trên prod — đúng bẫy đã suýt khoá cửa
+   *    /tin-nhan. Và nó là chat NỘI BỘ, khác hẳn hội thoại với khách ngoài hệ.
+   *  • `leads:view-own` thì mở cửa cho đúng người nhưng nói sai việc: hộp thư có
+   *    hội thoại MỒ CÔI chưa gắn lead nào, tức có nội dung nằm ngoài phạm vi "lead
+   *    của tôi". Mượn key đó là để lộ một tập dữ liệu mà cái tên quyền không mô tả.
+   *
+   * ⚠️ Key MỚI ⇒ sau khi merge `test` → `main` PHẢI chạy `seed-prod-roles.yml`,
+   * nếu không người mở trang trên prod bị đá ra, KHÔNG kèm lỗi, và không tái hiện
+   * được ở local (local chạy RBAC v1 tĩnh).
+   * ⚠️ Vào được TRANG ≠ thấy mọi cơ sở: phạm vi do `inboxOrgScopeWhere`
+   * (`lib/inbox/scope.ts`) chặn — `scopedDb` KHÔNG che ba bảng này.
+   */
+  "/sale/hop-thu": ["inbox:view"],
+
   /** Biểu mẫu nhập khách hàng, bản đứng TRÊN site Sale.
    *  Cùng action với bản `/nhap-khach-hang` bên admin — cùng một việc, cùng một
    *  đường ghi (`ingestIntakeLead`), chỉ khác chỗ đứng. Trước 23/08 Sale gõ địa
@@ -158,16 +222,106 @@ export const PAGE_GATES = {
   /** Ba báo cáo đào tạo. BGĐ chốt 10/07: "báo cáo của chức năng nào thì role chức năng
    *  đó xem". Trước đây gác `classes:view-all` ∨ `training:manage` ⇒ HR/Kế toán/Marketing
    *  mở được bằng URL (menu thì khai `courses:create`, nên giấu). Nay: Đào tạo + QL cơ sở. */
+  /**
+   * B-01 — Doanh thu vs mục tiêu. Trước đây cả menu lẫn trang gác bằng `payments:manage`
+   * ⇒ Quản lý cơ sở, đúng người mà màn này viết cho, KHÔNG mở được: quyền đó là thao tác
+   * TIỀN (mở/huỷ/hoàn, phương thức thanh toán, hoa hồng) và cố ý không nằm ở vai đó.
+   *
+   * Thêm `revenue_targets:manage` (key riêng) thay vì nới `payments:manage`. Giữ luôn
+   * `payments:manage` trong ô này để kế toán không mất đường vào. Cả hai đều GLOBAL ở
+   * mọi RoleDef giữ chúng — bắt buộc, vì gate gọi `checkAnyPermission` KHÔNG có target.
+   */
+  "/bao-cao/doanh-thu": ["payments:manage", "revenue_targets:manage"],
+
+  /**
+   * C-01 — Chỉ tiêu lead theo tháng × cơ sở. Màn này CHỈ để đặt/sửa con số, nên gác
+   * bằng đúng quyền ghi: ai không đặt được thì vào cũng không có việc gì làm ở đây
+   * (số liệu thực-vs-chỉ-tiêu nằm ở tab Kinh doanh của dashboard, gác riêng).
+   *
+   * KHÔNG kèm `leads:view-all`: action đó seed GLOBAL nên gate sẽ nhận, nhưng như vậy
+   * là mở màn ĐẶT chỉ tiêu cho cả Sale/Marketing — người bị đo, không phải người đặt.
+   * `lead_targets:manage` GLOBAL ở mọi RoleDef giữ nó (bắt buộc: gate gọi
+   * `checkAnyPermission` KHÔNG có target).
+   */
+  "/bao-cao/muc-tieu-lead": ["lead_targets:manage"],
+
+  /**
+   * D-02 — Chỉ tiêu ngân sách quảng cáo theo tháng × cơ sở. Cùng luật với màn C-01 ở
+   * trên: màn CHỈ để đặt/sửa con số nên gác bằng đúng quyền ghi.
+   *
+   * KHÔNG kèm `leads:view-all`: action đó seed GLOBAL nên gate sẽ nhận, nhưng nó đang
+   * gác `/admin/marketing/funnel` cho cả QLCS lẫn Marketing ⇒ mượn là mở màn ĐẶT chỉ
+   * tiêu cho người mà chỉ tiêu đó dùng để đo. `ads_budget_targets:manage` GLOBAL ở mọi
+   * RoleDef giữ nó (bắt buộc: gate gọi `checkAnyPermission` KHÔNG có target).
+   */
+  "/bao-cao/ngan-sach-quang-cao": ["ads_budget_targets:manage"],
+
   "/bao-cao/dao-tao": ["reports:training"],
   "/bao-cao/hieu-suat-gv": ["reports:training"],
   "/bao-cao/cohort": ["reports:training"],
+
+  /**
+   * A-02 — Dashboard QLCS 4 tab (Tài chính · Kinh doanh · Chi phí Marketing · Tương tác
+   * KH). Gác bằng MỘT key riêng `dashboard:view` (chốt kỹ thuật 24/08/2026, E/OQ-4).
+   *
+   * Vì sao không mượn key sẵn có:
+   *  • `chat:read` — ứng viên đầu tiên cho tab E — seed scope CENTER (QLCS) / ASSIGNED
+   *    (GV). Gate cấp trang gọi `checkAnyPermission` KHÔNG có target, mà `scopeMatches`
+   *    đòi target với các scope đó ⇒ luôn false trên prod (v2), xanh ở local (v1). Đây
+   *    đúng cái bẫy đã suýt dính ở `/tin-nhan`.
+   *  • `payments:*` / `leads:view-all` gác được đúng MỘT tab. Đặt vào ô này là hoặc
+   *    khoá cửa của người chỉ cần tab kia, hoặc mở kèm năng lực không ai định trao.
+   *
+   * ⚠️ Vào được TRANG ≠ xem được mọi tab. Gate từng tab (B → `payments:view` ·
+   * C → `leads:view-all` · D/E → `dashboard:view`) đi kèm nội dung của tab đó; khung
+   * này chưa có số liệu nên chưa có gì để lọc.
+   * ⚠️ Key MỚI ⇒ sau khi merge `test` → `main` phải chạy `seed-prod-roles.yml`, nếu
+   * không prod hiện MÀN TRẮNG không kèm lỗi và không tái hiện được ở local (local v1).
+   */
+  "/dashboard-qlcs": ["dashboard:view"],
+
+  /**
+   * S1 (tích hợp ZaloCRM 06/09/2026) — màn Zalo CRM nhúng: giao diện chat của fork
+   * ZaloCRM chạy trong iframe, đăng nhập một lần bằng vé SSO 60 giây do Sata ký.
+   *
+   * Gác bằng MỘT key riêng `zalocrm:use` chứ không mượn key sẵn có:
+   *  • `inbox:view` — ứng viên gần nhất — là quyền đọc HỘP THƯ CỦA SATA. Hai thứ khác
+   *    nhau về bản chất trách nhiệm: mở màn này là mở một ỨNG DỤNG NGOÀI dưới danh nghĩa
+   *    tài khoản của mình, và ai được làm thế là câu hỏi BGĐ phải trả lời riêng.
+   *  • `chat:*` seed scope CENTER/ASSIGNED ⇒ gate cấp trang (gọi `checkAnyPermission`
+   *    KHÔNG target) luôn FALSE trên prod, xanh ở local — đúng bẫy đã suýt khoá /tin-nhan.
+   *
+   * `zalocrm:use` seed **GLOBAL** ở mọi RoleDef giữ nó (bắt buộc, ca "mọi action trong
+   * bảng phải là GLOBAL" ngay trên canh). Cách ly cơ sở KHÔNG đến từ `scopeType` mà từ
+   * chỗ khác: vé SSO chỉ ký cho org của cơ sở người dùng nhìn thấy được
+   * (`app/(admin)/admin/zalo-crm/_lib/co-so.ts`, giao với `actor.visibleCenterIds`).
+   *
+   * ⚠️ Key MỚI ⇒ sau khi merge `test` → `main` phải chạy `seed-prod-roles.yml`, nếu không
+   * người mở màn trên prod bị đá về /dashboard KHÔNG kèm lỗi và không tái hiện được ở
+   * local (local chạy RBAC v1 tĩnh).
+   */
+  "/zalo-crm": ["zalocrm:use"],
 } as const satisfies Record<string, readonly Action[]>;
 
 export type GatedHref = keyof typeof PAGE_GATES;
 
 /**
  * CHƯA đưa vào bảng — gate và menu vẫn lệch, có chủ đích. Rỗng từ L5 chấm công v3 (06/09/2026):
- * `/cham-cong/lich-ca-nhan-vien` (ngoại lệ duy nhất) đã bị gỡ cùng 4 màn ShiftRegistration cũ.
+ * `/cham-cong/lich-ca-nhan-vien` đã bị gỡ cùng 4 màn ShiftRegistration cũ;
+ * còn lại `/sale/ghi-danh` (lý do bên dưới).
  * Thêm route mới vào đây phải kèm lý do, không được im lặng.
  */
-export const GATE_MISMATCH_ALLOWLIST: readonly string[] = [];
+export const GATE_MISMATCH_ALLOWLIST: readonly string[] = [
+  // Ghi danh trên site Sale (`app/(sale)/sale/ghi-danh/[leadId]`).
+  //
+  // Bảng trên dùng phép HOẶC (`checkAnyPermission`), mà chốt lead đòi CẢ HAI
+  // quyền: `students:create` VÀ `enrollments:create`. Hai quyền đó tách nhau có
+  // chủ đích — Marketing giữ một mà không giữ cái kia — nên gộp vào bảng bằng
+  // phép HOẶC sẽ MỞ CỬA cho người chỉ có một nửa. `submitConvertV2` cũng kiểm
+  // đúng phép VÀ đó, nên trang và action nói cùng một câu; cái lệch duy nhất là
+  // với BẢNG, và đó là lệch có chủ đích.
+  //
+  // Không có mục menu nào cho route này (vào từ hồ sơ khách) nên cũng không có
+  // nguy cơ menu-và-cổng nói khác nhau — thứ mà bảng sinh ra để chặn.
+  "/sale/ghi-danh",
+];

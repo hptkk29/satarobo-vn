@@ -35,6 +35,65 @@ Direct connection `db.<ref>.supabase.co:5432` chỉ có **IPv6 AAAA record** —
   # dừng: & "$bin\bin\pg_ctl" -D "$bin\data" stop
   ```
   `trust` auth → password trong URL bị bỏ qua nhưng vẫn kết nối OK. Cùng port/DB nên `.env.test` không đổi.
+- ⚠️ **Hai bẫy làm tưởng scoop-Postgres hỏng — cả hai đều đã chặn người kiểm tại chỗ và đẩy
+  code đỏ lên nhánh:**
+  1. **`pg_ctl start` ở TIỀN CẢNH trông như treo.** Nó bám vào log và không trả prompt; hết
+     giờ, lệnh bị giết ⇒ postgres crash rồi tự khởi động lại, log đầy
+     `client backend was terminated by exception 0xC0000142`. **Chạy NỀN** (`run_in_background`)
+     là xong, exit 0 trong vài giây.
+  2. **`could not reserve shared memory region ... error code 487`** ⇒ mọi kết nối rớt
+     (`P1001: Can't reach database server`) **dù `pg_ctl status` báo đang chạy**. Server sống
+     nhưng không fork nổi tiến trình con. Vá bằng cách thu nhỏ vùng shared memory trong
+     `<bin>\data\postgresql.conf`:
+     ```
+     shared_buffers = 32MB     # từ 128MB
+     max_connections = 30      # từ 100
+     huge_pages = off
+     ```
+     (`dynamic_shared_memory_type = windows` vốn đã đúng — KHÔNG phải nguyên nhân, đừng đổi.)
+  `psql` cần `PGPASSWORD=postgres` **và cờ `-w`**; thiếu `-w` thì nó chờ nhập mật khẩu và
+  cũng trông như treo.
+- 🔴 **Bẫy thứ BA, đắt nhất: máy chủ chết mà `pg_ctl status` vẫn báo "server is running".**
+  File `postmaster.pid` nằm lại sau khi chết bẩn, và Windows cấp phát PID vòng lại rất nhanh
+  ⇒ trùng số là nó báo đang chạy. Hỏi đúng bằng **`pg_isready -h 127.0.0.1 -p 5432`**.
+  Đo 16/09/2026: 8 lần khởi động trong 25 ngày, **7 lần chết bẩn**. Nguyên nhân KHÔNG phải
+  thiếu RAM (32 GB, đỉnh dùng pagefile 59 MB) mà là **hết hạn mức commit theo từng cơn** —
+  pagefile tự quản nở không kịp. Siết `shared_buffers` thêm là đi sai đường.
+  ⇒ Chẩn đoán đầy đủ + cách phòng: [`docs/runbook-postgres-local-windows.md`](../../docs/runbook-postgres-local-windows.md).
+  ⇒ Đang chết thì chạy: `pwsh -File scripts\pg-local-hoi-phuc.ps1`
+- 🔴 **Bộ test chạm DB SKIP SẠCH khi không có Postgres — im lặng, không đỏ.**
+  `tests/{chat,nen,lead-intake,elearning}` dùng `describe.skipIf(!RUN)`, và `RUN` chỉ bật khi
+  `TEST_DATABASE_URL`/`DATABASE_URL` trỏ `localhost`/`127.0.0.1` (hoặc tên DB chứa
+  `satarobo_test`/`ci_test`). Hệ quả đã xảy ra **hai lần trong một tuần**: người viết chạy bộ
+  THUẦN, thấy xanh, báo PASS — CI có Postgres nên đỏ, và nhánh `test` mang đỏ đó đi.
+  ⇒ **Chạm `lib/lead/**`, `lib/chat/**`, hay bất cứ đường ghi DB nào thì phải dựng Postgres
+  cục bộ rồi chạy đúng ba bước của job CI trước khi báo xanh:**
+  ```bash
+  export TEST_DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:5432/satarobo_test'
+  npx prisma migrate deploy && npx tsx prisma/seed-roles.ts   # seed-roles: RBAC v2 đọc quyền từ DỮ LIỆU
+  pnpm test:chat-db && pnpm test:nen-db && pnpm test:lead-intake
+  ```
+  Thấy `SKIP` trong log là **chưa kiểm được gì**, không phải "xanh".
+- 🔴 **CHIỀU NGƯỢC LẠI, và nó tinh vi hơn: bộ THUẦN XANH Ở MÁY BẠN *VÌ* MÁY BẠN CÓ
+  POSTGRES.** Job `Unit tests` của CI **không dựng Postgres**. Một ca trong bộ thuần lỡ
+  chạm đường DB (thiếu một `vi.mock`) sẽ **xanh ở local và đỏ trên CI** — ngược hẳn với
+  bẫy ở trên, nên đọc log xong dễ kết luận nhầm là "CI hỏng hạ tầng".
+  **Sự cố 18/09/2026, và nó chỉ sinh ra Ở LƯỢT GỘP:** `order-create-audit.test.ts` do
+  nhánh `test` viết, mock đủ mọi thứ mà `_actions.ts` bên `test` chạm tới. Nhánh `main`
+  thêm `getSetting("orders.maxDiscountPercent")` vào cùng hàm ấy. **Không nhánh nào tự
+  bắt được** — mỗi bên đều xanh; chỉ bản gộp mới có "bộ ca cũ × lời gọi DB mới", và cả
+  NĂM ca đỏ với thông báo nói về Prisma chứ không nói gì về audit.
+  **Cách tái hiện đúng job CI ở local — trỏ vào cổng không có ai nghe:**
+  ```bash
+  DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:59999/khong_ton_tai'   DIRECT_URL="$DATABASE_URL" pnpm test:unit -- --run
+  ```
+  Rẻ hơn tắt Postgres thật, và **bắt buộc chạy sau mỗi lượt gộp nhánh** — đây đúng là
+  lớp lỗi mà luật 14 (`CLAUDE.md`) bảo phải đi tìm bằng cách cấy, không bằng đọc diff.
+- **Env riêng cho test:** `.env.test` (đã `.gitignore`, KHÔNG commit):
+  ```
+  DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/satarobo_test"
+  DIRECT_URL="postgresql://postgres:postgres@127.0.0.1:5432/satarobo_test"
+  ```
 - **Env riêng cho test:** `.env.test` (đã `.gitignore`, KHÔNG commit).
   ⚠️ **KHÔNG PHẢI chỉ hai dòng DB.** Chính câu đó ở đây đã làm bộ R7 đầy đủ đỏ giả 9 ca
   suốt một thời gian — xem bảng đầy đủ ngay dưới, mục "Biến môi trường cho test ở local".

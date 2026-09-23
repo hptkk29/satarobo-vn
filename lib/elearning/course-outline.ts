@@ -61,6 +61,8 @@ export type LoiDanBai =
   | "CHUONG_RONG"
   | "KHONG_CO_BAI_BAT_BUOC"
   | "BAI_DOC_TRONG"
+  | "BAI_THI_CHUA_CO_DE"
+  | "BAI_TAP_CHUA_CO_KHUNG"
   | "BAI_VIDEO_THIEU_PHU_DE"
   | "CHUA_BIET_KHOA_CO_BAT_BUOC";
 
@@ -72,6 +74,10 @@ export type BaiTrongDanBai = {
   required: boolean;
   /** EL-10 (C10) — phụ đề tiếng Việt. Xem `kiemPhuDe`. */
   captionKey?: string | null;
+  /** EL-14d — đề thi của bài `QUIZ`. */
+  examId?: string | null;
+  /** EL-15c — khung chấm của bài `TASK`. */
+  rubricId?: string | null;
 };
 
 export type ChuongTrongDanBai = {
@@ -99,6 +105,30 @@ export function kiemDanBai(chuong: ChuongTrongDanBai[]): {
       // đọc tính theo số chữ, họ không bao giờ "đủ điều kiện hoàn thành".
       if (b.kind === "READ" && !b.contentMd?.trim()) {
         loi.push({ code: "BAI_DOC_TRONG", chiTiet: `Bài "${b.title}" chưa có nội dung` });
+      }
+      // ⚠️ Cổng này thêm ĐÚNG ở PR mở loại bài `QUIZ`, không sớm hơn. Thêm cổng
+      // lúc chưa có đường tạo đề chỉ đổi chỗ người bị kẹt: từ người học sang người
+      // soạn, và họ cũng không có cách nào thoát (quy ước 20).
+      //
+      // Bài kiểm tra không đề thì người học mở ra là kẹt, và điều kiện hoàn thành
+      // khoá không bao giờ đạt được — im lặng.
+      if (b.kind === "QUIZ" && !b.examId) {
+        loi.push({
+          code: "BAI_THI_CHUA_CO_DE",
+          chiTiet: `Bài kiểm tra "${b.title}" chưa gắn đề thi`,
+        });
+      }
+      // ⚠️ Cổng này thêm ĐÚNG ở PR mở loại bài `TASK`, cùng lúc với đường nộp và
+      // đường chấm — không sớm hơn, không muộn hơn.
+      //
+      // Bài tập không khung chấm thì người chấm mở ra không có tiêu chí nào để cho
+      // điểm, lượt nộp nằm lại vĩnh viễn, và điều kiện hoàn thành khoá không bao
+      // giờ đạt được — im lặng.
+      if (b.kind === "TASK" && !b.rubricId) {
+        loi.push({
+          code: "BAI_TAP_CHUA_CO_KHUNG",
+          chiTiet: `Bài tập "${b.title}" chưa gắn khung chấm`,
+        });
       }
     }
   }

@@ -11,12 +11,13 @@
 // Hậu tố `LopTrial` trong tên hàm là có chủ đích: suốt giai đoạn chạy song song,
 // log và audit sẽ có hai bộ action làm việc giống nhau — trùng tên là nguồn nhầm lẫn.
 import { revalidatePath } from "next/cache";
-import { checkPermission } from "@/lib/auth/check-permission";
+import { checkPermission, canViewLeadPii } from "@/lib/auth/check-permission";
 import { laLeadCuaToi, leadCuaToiOrClause } from "@/lib/lead/sharing";
 import type { Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { leadStatusLabel } from "@/lib/leads/status";
 import { phoneSearchTerm } from "@/lib/phone";
+import { maskLeadPiiFields } from "@/lib/lead/pii";
 import { getAssignableTeachers } from "@/lib/teachers/assignable";
 import { locGiaoVienChoBuoi, type DongGv } from "@/lib/trial/gv-kha-dung";
 import { layCaCuaNhieuNguoi } from "@/lib/trial/gv-kha-dung-db";
@@ -699,6 +700,11 @@ export async function searchLopTrialCandidatesAction(input: {
   const q = (input.query ?? "").trim();
   // SĐT lưu 2 dạng trong DB (0… cũ / 84… mới) — tìm theo phần lõi để không sót.
   const qPhone = phoneSearchTerm(q) ?? q;
+  // S-1 — `trials:manage` KHÔNG kéo theo quyền đọc SĐT lead: Quản lý cơ sở có quyền này
+  // nhưng mất `leads:view-pii` từ Q9. Không gác thì ô tìm ứng viên là MÁY DÒ SỐ: gõ đủ
+  // 10 số, thấy ai hiện lên là biết số đó của khách nào.
+  // (Cấy lại khi hợp nhất `main` → `test` 16/09/2026 — nhánh `main` chưa có chốt S-1.)
+  const canViewPii = await canViewLeadPii();
   const sdb = scopedDb(ctx.actor);
   // Chỉ con CHƯA ở lớp ACTIVE nào (partial-unique cho phép đúng 1 lớp ACTIVE / con).
   const childFree = { trialEnrollments: { none: { status: "ACTIVE" as const } } };
@@ -725,7 +731,7 @@ export async function searchLopTrialCandidatesAction(input: {
         ? {
             OR: [
               { parentName: { contains: q, mode: "insensitive" as const } },
-              { phone: { contains: qPhone } },
+              ...(canViewPii ? [{ phone: { contains: qPhone } }] : []),
               {
                 children: {
                   some: { fullName: { contains: q, mode: "insensitive" as const } },
@@ -746,15 +752,16 @@ export async function searchLopTrialCandidatesAction(input: {
     take: 20,
   });
 
-  const candidates: Candidate[] = leads.flatMap((l) =>
-    l.children.map((c) => ({
+  const candidates: Candidate[] = leads.flatMap((l) => {
+    const che = maskLeadPiiFields({ parentName: l.parentName, phone: l.phone }, canViewPii);
+    return l.children.map((c) => ({
       leadChildId: c.id,
       childName: c.fullName,
-      parentName: l.parentName,
-      phone: l.phone,
+      parentName: che.parentName ?? "",
+      phone: che.phone ?? "",
       leadStatus: leadStatusLabel(l.status),
-    })),
-  );
+    }));
+  });
   return { ok: true, candidates };
 }
 

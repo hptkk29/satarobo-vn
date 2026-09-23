@@ -12,6 +12,8 @@ import {
   Wallet,
 } from "lucide-react";
 import { scopedDb } from "@/lib/db-scope";
+import { checkPermission, canViewLeadPii } from "@/lib/auth/check-permission";
+import { maskLeadPiiFields } from "@/lib/lead/pii";
 import type { Actor } from "@/lib/auth/actor";
 import { CACHE_TAGS } from "@/lib/cache/tags";
 import { actorScopeKey } from "@/lib/cache/scope-key";
@@ -32,7 +34,7 @@ import {
   computeAchievement,
 } from "@/lib/reports/revenue-target";
 import { getRevenueTargets } from "@/lib/reports/revenue-target-data";
-import { getDebtRows, KHOAN_DA_XAC_NHAN } from "@/lib/finance/debt";
+import { getDebtRows, KHOAN_DA_DONG } from "@/lib/finance/debt";
 import { giaoVienDuocQuyCong } from "@/lib/lms/session-ownership";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
@@ -138,7 +140,7 @@ async function getManagerStats(actor: Actor) {
     }),
     // Doanh thu THỰC = Σ Payment(accountantStatus=CONFIRMED) — 6 tháng gần nhất.
     sdb.payment.findMany({
-      where: { ...KHOAN_DA_XAC_NHAN, paidDate: { gte: sixMonthsAgo } },
+      where: { ...KHOAN_DA_DONG, paidDate: { gte: sixMonthsAgo } },
       select: { amount: true, centerId: true, paidDate: true },
       take: 50_000,
     }),
@@ -282,10 +284,30 @@ export async function ManagerDashboard({
     59,
   );
 
+  // S-1 (26/08/2026) — HAI cổng khác nhau, đừng gộp:
+  //
+  //  • `xemDuocLead` = có được nhìn DANH SÁCH phiếu không. Panel này là panel MẶC
+  //    ĐỊNH của `/admin/dashboard`: vai nào không khớp bảng panel (Đào tạo, và bất
+  //    kỳ vai mới nào) đều rơi vào đây. Đào tạo chưa từng có `leads:view-all` /
+  //    `leads:view-own`, nhưng vẫn đọc được tên phụ huynh + gần trọn SĐT của 8
+  //    phiếu mới nhất. Không có `where` nào chặn được chuyện đó — chỉ có việc
+  //    KHÔNG TRUY VẤN.
+  //  • `canViewPii` = có được nhìn SĐT/tên thật không (Q9 gỡ của Quản lý cơ sở).
+  //
+  // Quản lý cơ sở qua cổng 1 nhưng trượt cổng 2 ⇒ vẫn thấy bảng, số đã che.
+  const [xemDuocLead, canViewPii] = await Promise.all([
+    (async () =>
+      (await checkPermission("leads:view-all")) || (await checkPermission("leads:view-own")))(),
+    canViewLeadPii(),
+  ]);
+
   // Live (KHÔNG cache): leads mới nhất (hiển thị, có Date) + việc CỦA TÔI hôm nay
   // (theo userId — cache theo scope sẽ lẫn task người khác nên GIỮ live).
   const sdb = scopedDb(actor);
-  const [recentLeads, myTasksToday] = await Promise.all([
+  // ⚠️ Đặt tên `*Raw`: hai dòng ngay dưới CHE PII rồi mới đặt tên cuối cùng. Hợp nhất
+  // 16/09 từng làm mất cặp tên này (bản `main` không che ở đây) — mất là SĐT/tên phụ
+  // huynh đi thẳng ra bảng cho vai không có `leads:view-pii`.
+  const [recentLeadsRaw, myTasksTodayRaw] = await Promise.all([
     sdb.lead.findMany({
       where: ACTIVE_LEAD,
       take: 8,
@@ -311,6 +333,13 @@ export async function ManagerDashboard({
       take: 20,
     }),
   ]);
+
+  // Che ở SERVER, một lần, ngay sau khi đọc — mọi chỗ dùng bên dưới ăn theo.
+  const recentLeads = recentLeadsRaw.map((l) => maskLeadPiiFields(l, canViewPii));
+  const myTasksToday = myTasksTodayRaw.map((t) => ({
+    ...t,
+    lead: { ...t.lead, ...maskLeadPiiFields({ parentName: t.lead.parentName }, canViewPii) },
+  }));
 
   // REQ-04: cache số liệu tổng hợp theo scope (KPI + biểu đồ, đều primitive → serialize
   // an toàn). TTL 60s. actorScopeKey chống leak cross-cơ-sở. `now` tính trong hàm cache.
@@ -544,7 +573,10 @@ export async function ManagerDashboard({
         />
       </div>
 
-      {/* (3) Hoạt động gần đây */}
+      {/* (3) Hoạt động gần đây — CHỈ cho người có quyền xem lead. Vai không có
+          quyền (vd Đào tạo) rơi vào panel này thì khối dưới đây không tồn tại,
+          không phải "rỗng": dữ liệu cũng không được truy vấn ở trên. */}
+      {xemDuocLead && (
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-semibold text-foreground">Leads mới nhất</h2>
@@ -576,7 +608,11 @@ export async function ManagerDashboard({
                       {lead.parentName}
                     </td>
                     <td className="px-4 py-3 font-mono text-xs text-foreground">
-                      {lead.phone.replace(/(\d{4})(\d{3})(\d+)/, "$1xxx$3")}
+                      {/* Đã che ở SERVER bằng `maskLeadPiiFields` (xem chỗ dựng `recentLeads`).
+                          KHÔNG tự chế mặt nạ ở đây: bản cũ giữ 4 số ĐẦU nên lộ cả đầu số
+                          + 1 chữ số, nhiều hơn mặt nạ chuẩn — và hai mặt nạ khác nhau
+                          trong cùng hệ thống thì không ai biết cái nào là thật. */}
+                      {lead.phone}
                     </td>
                     <td className="px-4 py-3">
                       <StatusBadge
@@ -614,6 +650,7 @@ export async function ManagerDashboard({
           </PhanTrangBang>
         </DataTableShell>
       </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
         <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
