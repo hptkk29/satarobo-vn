@@ -11,10 +11,6 @@ import {
 } from "@/lib/elearning/policy-acceptance";
 import { isLessonDone } from "@/lib/elearning/reading";
 import {
-  cauHinhKhieuNaiCo,
-  cauHinhQuyetCo,
-} from "@/lib/elearning/watch-flag-appeal";
-import {
   effectiveAllowLate,
   isProgressWriteLocked,
   OVERDUE_LOCKED,
@@ -161,13 +157,3 @@ export const acceptPolicyAction = defineAction({
     };
   },
 });
-
-/**
- * EL-13 — khiếu nại cờ nghi ngờ, và quyết định của người xử.
- *
- * Hai action này ĐI QUA action factory (tức có audit), khác hẳn nhịp xem. Nhịp 15
- * giây sẽ nhấn chìm bảng audit; nhưng khiếu nại và quyết định là chứng từ về hành
- * vi người lao động, và chúng ĐÁNG được ghi lại.
- */
-export const khieuNaiCoAction = defineAction(cauHinhKhieuNaiCo);
-export const quyetCoAction = defineAction(cauHinhQuyetCo);

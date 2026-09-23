@@ -2,7 +2,6 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { loaiBaiChoTrinhSoan, NHAN_LOAI_BAI } from "@/lib/elearning/lesson-kind";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
@@ -31,19 +30,17 @@ type Bai = {
   kind: string;
   contentMd: string | null;
   required: boolean;
-  /** Cột nối của bài `QUIZ` / `TASK` — dùng để hiện nhãn "chưa gắn" tại chỗ. */
-  examId?: string | null;
-  rubricId?: string | null;
 };
 type Chuong = { id: string; title: string; lessons: Bai[] };
 
-/**
- * ⚠️ Đọc từ nguồn chung, KHÔNG chép tay danh sách ở đây.
- *
- * Bản chép tay cũ có đủ 6 loại, trong đó 3 loại không có đường đi nào — người soạn
- * tạo được, khoá xuất bản được, và người học mở ra thì nhận "chưa mở".
- */
-const LOAI_BAI = loaiBaiChoTrinhSoan();
+const LOAI_BAI = [
+  ["READ", "Bài đọc"],
+  ["VIDEO", "Video"],
+  ["SCORM", "SCORM"],
+  ["QUIZ", "Bài kiểm tra"],
+  ["TASK", "Bài tập"],
+  ["LIVE_SESSION", "Buổi trực tiếp"],
+] as const;
 
 const NHAN_TRANG_THAI: Record<string, string> = {
   DRAFT: "Nháp",
@@ -185,9 +182,7 @@ export function OutlineEditor(props: {
                 </span>
                 <span className="flex-1">{b.title}</span>
                 <span className="text-xs text-muted-foreground">
-                  {/* Bài loại đã ĐÓNG (tạo từ trước khi khoá lựa chọn) vẫn phải hiện nhãn
-                      đúng — hiện mã thô là để người soạn không nhận ra bài của mình. */}
-                  {NHAN_LOAI_BAI[b.kind] ?? b.kind}
+                  {LOAI_BAI.find(([v]) => v === b.kind)?.[1] ?? b.kind}
                 </span>
                 {b.kind === "READ" && !b.contentMd?.trim() && (
                   <span className="rounded bg-state-warning-soft px-1.5 py-0.5 text-xs">
@@ -211,29 +206,10 @@ export function OutlineEditor(props: {
                   />
                   bắt buộc
                 </label>
-                {/* ⚠️ Lối vào trình soạn phải mở cho MỌI loại bài có gì để soạn, không
-                    riêng bài đọc. Bài `QUIZ` cần gắn đề, bài `TASK` cần gắn khung
-                    chấm — và cổng xuất bản CHẶN khi thiếu. Chỉ mở cho `READ` nghĩa
-                    là người soạn thấy "chưa gắn khung" mà không có nút nào để bấm:
-                    đúng bẫy quy ước 20, chỉ đổi người bị kẹt. */}
-                {(b.kind === "READ" || b.kind === "QUIZ" || b.kind === "TASK") && (
+                {b.kind === "READ" && (
                   <Link href={`/elearning/soan/${b.id}`} className="text-xs underline">
-                    {b.kind === "QUIZ"
-                      ? "Gắn đề thi"
-                      : b.kind === "TASK"
-                        ? "Gắn khung chấm"
-                        : "Soạn nội dung"}
+                    Soạn nội dung
                   </Link>
-                )}
-                {b.kind === "TASK" && !b.rubricId && (
-                  <span className="rounded bg-state-warning-soft px-1.5 py-0.5 text-xs">
-                    chưa gắn khung
-                  </span>
-                )}
-                {b.kind === "QUIZ" && !b.examId && (
-                  <span className="rounded bg-state-warning-soft px-1.5 py-0.5 text-xs">
-                    chưa gắn đề
-                  </span>
                 )}
                 <NutNho
                   onClick={() => sap("BAI", c.id, b.id, iB - 1)}
@@ -383,7 +359,7 @@ function ThemBai(props: {
         onChange={(e) => setKind(e.target.value)}
         className="rounded border border-border px-2 py-1 text-sm"
       >
-        {LOAI_BAI.map(({ ma: v, nhan: n }) => (
+        {LOAI_BAI.map(([v, n]) => (
           <option key={v} value={v}>
             {n}
           </option>
