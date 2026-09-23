@@ -1142,7 +1142,7 @@ export function OrderCreateForm({
                 <CalendarClock className="h-4 w-4 shrink-0 text-primary" aria-hidden />
                 Kế hoạch thanh toán
                 <HelpHint>
-                  Đóng một lần hoặc chia theo học phần (48 buổi = 4 học phần × 12 buổi).
+                  Đóng một lần hoặc chia thành nhiều đợt theo học phần (48 buổi = 4 học phần × 12 buổi).
                   Công văn SR.QD.223 nêu mốc các đợt cách 30 ngày; SR.QD.219 Điều 2 cho
                   phép chia đều tối đa 12 kỳ theo tháng. Lưu cùng lúc với đơn — mở trang
                   đơn là đã có phiếu thu và mã QR cho từng đợt.

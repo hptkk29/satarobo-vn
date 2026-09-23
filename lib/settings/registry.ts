@@ -17,6 +17,10 @@ import { z } from "zod";
 // `chinh-sach-hoa-hong.ts` là file THUẦN (không Prisma, không DB) nên import được vào đây
 // mà không kéo theo gì.
 import { CHINH_SACH_MAC_DINH } from "@/lib/crm/chinh-sach-hoa-hong";
+// Hai TRẦN KỸ THUẬT — neo `max` của schema vào chính chúng, đừng gõ lại số. Cả hai tệp đều
+// THUẦN (không `server-only`, không Prisma) nên nhập vào đây không kéo theo gì.
+import { TRAN_SO_DOT } from "@/lib/payments/ke-hoach-dot";
+import { TRAN_KHOAN_GIAM_MOI_DONG } from "@/lib/orders/giam-gia-dong";
 import {
   CACH_HAP_THU,
   CHINH_SACH_MAC_DINH as UU_DAI_MAC_DINH,
@@ -265,6 +269,44 @@ export const SETTINGS = {
   // Chặn dưới 1%: trần 0 nghĩa là MỌI khoản % âm thầm thành 0đ, người bán gõ 10% mà
   // khách không được bớt gì. Muốn cấm hẳn giảm theo % thì đó là một quyết định khác,
   // cần một cái công tắc nói đúng tên nó, không phải hạ trần về 0.
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TRẦN SỐ ĐỢT + TRẦN SỐ ƯU ĐÃI — chủ dự án chốt 22/09/2026.
+  //
+  // Vượt trần thì đơn VẪN LƯU ĐƯỢC nhưng vào hàng chờ Quản lý cơ sở duyệt, và KHÔNG xuất
+  // được mã QR cho tới khi duyệt. Đó là lý do hai số này là THAM SỐ chứ không phải hằng:
+  // ngưỡng ở đây là CHÍNH SÁCH (người vận hành đổi), còn `TRAN_SO_DOT` /
+  // `TRAN_KHOAN_GIAM_MOI_DONG` là TRẦN KỸ THUẬT (mã không chịu nổi quá số đó).
+  //
+  // ⚠️ `max` của schema NEO VÀO CHÍNH HẰNG KỸ THUẬT, không gõ lại số. Ngưỡng chính sách
+  // phải nằm BÊN TRONG trần kỹ thuật; khai `max: 12` bằng tay là hai con số sống song song
+  // và sẽ lệch lần đầu ai đó đổi hằng.
+  //
+  // ⚠️ `centerOverridable: true` — KHÁC `orders.maxDiscountPercent` ngay dưới, và khác có
+  // lý do. Trần % là mức BỚT TIỀN tối đa, kế toán cần MỘT con số để đối. Hai số này không
+  // nói về mức bớt, chúng nói về ĐỘ PHỨC TẠP của một đơn mà cơ sở tự gánh hậu quả (đợt
+  // càng nhiều thì càng nhiều lần đối soát). Chủ dự án chốt 22/09 cho QLCS tự chỉnh.
+  //
+  // ⚠️ ÁP CHO MỌI ĐƠN, không chia "đơn cũ / đơn mới". Đề xuất ban đầu của tôi là chỉ áp đơn
+  // mới để khỏi làm kẹt đơn đang chạy — phép đo prod 23/09 bác nó: phân bố số đợt là
+  // 1×1 · 2×3 · 4×2, **0 đơn vượt trần 4**, và 1 đơn duy nhất vượt trần ưu đãi thì vẫn
+  // đang `PENDING_PAYMENT`. Không có đơn cũ nào để bảo vệ ⇒ giữ hai chế độ là giữ một
+  // nhánh mã không ai đi qua.
+  "orders.maxInstallments": def({
+    key: "orders.maxInstallments",
+    group: "finance",
+    label: "Số đợt tối đa mỗi con (không tính cọc)",
+    schema: z.number().int().min(1).max(TRAN_SO_DOT),
+    default: 4,
+    centerOverridable: true,
+  }),
+  "orders.maxDiscountItems": def({
+    key: "orders.maxDiscountItems",
+    group: "finance",
+    label: "Số ưu đãi tối đa trên một dòng đơn",
+    schema: z.number().int().min(1).max(TRAN_KHOAN_GIAM_MOI_DONG),
+    default: 1,
+    centerOverridable: true,
+  }),
   "orders.maxDiscountPercent": def({
     key: "orders.maxDiscountPercent",
     group: "finance",
