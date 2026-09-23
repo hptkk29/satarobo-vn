@@ -167,10 +167,32 @@ describe("[NTT-04] DÙNG LẠI luật `đơn nào được tính`, không chép 
 describe("[NTT-05] workflow — bốn lớp khoá còn nguyên", () => {
   const wf = docYaml(WORKFLOW);
 
-  it("chỉ `workflow_dispatch`, chỉ nhánh `main`", () => {
+  it("chỉ `workflow_dispatch` — không tự chạy theo push/PR/lịch", () => {
     expect(wf).toMatch(/on:\s*\n\s*workflow_dispatch:/);
     expect(wf).not.toMatch(/\n\s*(push|pull_request|schedule):/);
-    expect(wf).toMatch(/if: github\.ref == 'refs\/heads\/main'/);
+  });
+
+  it("chỉ chạy được từ `main` hoặc `test`, KHÔNG nhánh nào khác", () => {
+    // ⚠️ Nới cho `test` ngày 22/09/2026 sau một phép đo (15 migration `test` có mà prod chưa
+    // có, 0 cái chạm tập cột script gọi tên). Lý do đầy đủ nằm trong chính workflow.
+    //
+    // Vế thứ hai mới là vế cắn: đây là cổng QUYỀN, không chỉ cổng kỹ thuật. Bỏ điều kiện
+    // `if` đi thì nhánh feature nào cũng đọc được prod. Nên khẳng định CẢ TẬP nhánh được
+    // phép, không chỉ "có nhắc tới main".
+    const dieuKien = wf.match(/if:\s*(.+)/)?.[1] ?? "";
+    expect(dieuKien, "workflow mất điều kiện `if` — mọi nhánh chạy được").not.toBe("");
+    const nhanh = [...dieuKien.matchAll(/refs\/heads\/([\w-]+)/g)].map((m) => m[1]!);
+    expect([...new Set(nhanh)].sort()).toEqual(["main", "test"]);
+    // Nối bằng HOẶC, không phải VÀ — `&&` thì không nhánh nào chạy được và không ai hiểu vì sao.
+    expect(dieuKien).toContain("||");
+    expect(dieuKien).not.toContain("&&");
+  });
+
+  it("báo cáo tự in nhánh nó chạy", () => {
+    // Từ khi hai nhánh cùng chạy được, "số này đọc bằng luật của nhánh nào" là câu hỏi thật.
+    // Một con số không kèm nguồn là một con số sẽ bị trích lại sai.
+    expect(docMa(SCRIPT)).toMatch(/GITHUB_REF_NAME/);
+    expect(docMa(SCRIPT)).toMatch(/function nhanhChay/);
   });
 
   it("KHÔNG biết tới secret đầy quyền", () => {

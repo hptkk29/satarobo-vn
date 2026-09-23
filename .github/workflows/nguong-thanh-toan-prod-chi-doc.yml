@@ -46,10 +46,27 @@ jobs:
     name: Đo 4 con số (không ghi)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # Chỉ chạy trên `main` — báo cáo này để QUYẾT ĐỊNH, nên nó phải đọc prod bằng đúng
-    # `schema.prisma` đang chạy trên prod. Chạy từ nhánh feature có migration chưa lên là
-    # Prisma ném `P2022` giữa chừng (đã xảy ra 07/09 với `ClassSession.rosterSize`).
-    if: github.ref == 'refs/heads/main'
+    # Chỉ `main` HOẶC `test` — không nhánh feature nào.
+    #
+    # Vì sao có cổng này: báo cáo đọc prod bằng `schema.prisma` của nhánh đang chạy. Nhánh có
+    # migration CHƯA lên prod ⇒ Prisma ném `P2022` giữa chừng (đã xảy ra 07/09 với
+    # `ClassSession.rosterSize`). Và một nhánh feature bất kỳ chạy được nghĩa là ai mở nhánh
+    # cũng đọc được prod — cổng này là cổng QUYỀN chứ không chỉ cổng kỹ thuật.
+    #
+    # Vì sao NỚI cho `test` [22/09/2026] — đo, không đoán. `test` có **15 migration** mà prod
+    # chưa có (lượt revert `fcba089a` lùi MÃ khỏi `main` nhưng KHÔNG gỡ được migration đã
+    # apply, nên prod ⊇ main). Đã đối chiếu từng cái với ĐÚNG tập cột mà
+    # `bao-cao-nguong-thanh-toan.ts` gọi tên:
+    #   · thêm cột script gọi tên: **0** — khớp duy nhất là `RefundRequest.orderItemId`,
+    #     bảng báo cáo này không đọc;
+    #   · sửa enum script chạm (`OrderStatus` · `PaymentRequestStatus` ·
+    #     `PaymentAccountantStatus`): **0**.
+    # Script dùng `select` TƯỜNG MINH nên chỉ cột được gọi tên mới sinh `P2022`.
+    #
+    # ⚠️ PHÉP ĐO NÀY GẮN VỚI TẬP CỘT HIỆN TẠI, KHÔNG PHẢI VĨNH VIỄN. Thêm một cột vào `select`
+    # của script thì phải đo lại — hoặc chấp nhận chỉ chạy trên `main`. Báo cáo tự in nhánh
+    # nó chạy (xem `nhanhChay()` trong script) để không con số nào bị gán nhầm nguồn.
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test'
     steps:
       # Kiểm HÌNH DẠNG chuỗi trước khi tốn 40 giây cài đặt rồi mới chết ở Prisma.
       # KHÔNG in giá trị secret ra log — chỉ nói chỗ nào sai.
