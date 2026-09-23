@@ -11,6 +11,12 @@ import { getAuditActor } from '@/lib/audit/log'
 import { isConvertV2Enabled } from '@/lib/flags'
 import { convertLeadV2, type ConvertV2Student } from '@/lib/crm/convert-lead-v2'
 import { computeEnrollmentPrice } from '@/lib/finance/pricing'
+// HTL-09 — cổng "ưu đãi có ăn tiền thật không" phải đo trên CÙNG con số mà
+// `convertLeadV2` sắp ghi. Service nay lấy giá từ DÒNG ĐƠN; để chỗ này đo trên
+// `Course.price` là hai bên nói hai chuyện, và ca `listPrice = 0` (khoá chưa khai giá)
+// còn làm cổng BỎ QUA một suất học bổng có thật.
+import { listPriceChoGhiDanh } from '@/lib/finance/gia-tu-dong-don'
+import { dongDonCuaLead } from '@/lib/finance/dong-don-cua-lead'
 import {
   canGrantFullScholarship,
   scholarshipAuditReason,
@@ -213,6 +219,8 @@ export async function submitConvertV2(
   }
 
   const students: ConvertV2Student[] = []
+  // Đọc MỘT lần cho cả lượt — xem chú thích ở `convertLeadV2`.
+  const dongDon = await dongDonCuaLead(leadId)
   let totalDiscountAmount = 0
   for (const s of d.students) {
     const cls = classMap.get(s.classId)
@@ -226,7 +234,14 @@ export async function submitConvertV2(
       : null
     // Tính lại bằng ĐÚNG hàm mà convertLeadV2 dùng — chỉ để biết ưu đãi có ăn tiền thật
     // không (bắt lý do). Giá ghi vào DB vẫn do convertLeadV2 tự tính, không truyền sang.
-    totalDiscountAmount += computeEnrollmentPrice({ listPrice, discount }).discountAmount
+    totalDiscountAmount += computeEnrollmentPrice({
+      listPrice: listPriceChoGhiDanh(
+        dongDon,
+        { leadChildId: s.leadChildId || null, courseId: cls.courseId },
+        listPrice,
+      ),
+      discount,
+    }).discountAmount
     students.push({
       leadChildId: s.leadChildId || null,
       name: s.name,

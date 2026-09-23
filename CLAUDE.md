@@ -404,7 +404,17 @@ prisma/
   khai của báo cáo** (`scripts/_kiem-quyen.ts` in `[quyen] user=… · …`) — đừng ghi vào tài liệu
   theo trí nhớ của ai, kể cả của người tạo ra nó.
 
-- ⚠️ **NỢ ĐANG GHIM: `amountDue` của phiếu thu ĐÃ CÓ TIỀN vẫn bị ghi đè [đo 14/09/2026].**
+- ✅ **[ĐÃ VÁ 15/09/2026 — mục này giữ lại làm LỊCH SỬ, đừng đọc như nợ đang mở.]**
+  Cổng là `doiTienDotDaThu` (`lib/payments/plan-money-guard.ts`), cắm trong
+  `materializeInstallmentRequests` chứ không ở đường gọi — **một cổng che CẢ BA** đường
+  (`lib/orders/installments.ts:332`, `:500`, `lib/crm/backfill-order.ts:153`). Ghim
+  `[PR-02d]` **đã gỡ**; `git show origin/test:tests/e2e/r7/payment-request-lifecycle.spec.ts
+  | grep "test.fail()"` ra **0 dòng** (đo 23/09/2026).
+  ⚠️ **Vì sao để lại nguyên văn mô tả lỗ bên dưới:** nó ghi rõ ca hỏng và số đo, và đó là
+  thứ người vá sau cần khi đụng lại vùng này. Nhưng **dòng tiêu đề cũ đã làm tôi báo nhầm
+  "chưa xong" cho chủ dự án ngày 23/09** — tôi đọc mục NỢ thay vì đo. Đúng luật 12: tài
+  liệu cũ đi mà không ai biết nó đã cũ.
+  <details><summary>Mô tả lỗ (lịch sử — đo 14/09/2026)</summary>
   `materializeInstallmentRequests` THA VOID cho phiếu đang có phân bổ
   (`lib/payments/payment-request.ts:309` — `allocated > 0 → continue`) nhưng vòng UPSERT ở
   `:284` thì **không** kiểm điều đó: `if (cur.amountDue !== dot.amount) patch.amountDue = …`.
@@ -425,7 +435,27 @@ prisma/
     (`lib/orders/installments.ts:332`, `:500`, `lib/crm/backfill-order.ts:153`) — lỗ có sẵn
     từ trước đợt gỡ duyệt, không do nó sinh ra.
 
-- ⚠️ **NỢ ĐANG GHIM: bán Coach 1-1/1-2/1-4 thì TRỤC GHI DANH vẫn giữ GIÁ NHÓM [đo 14/09/2026].**
+  </details>
+
+- ✅ **[ĐÃ VÁ 23/09/2026] Coach 1-1/1-2/1-4 — giá ghi danh nay LẤY TỪ DÒNG ĐƠN.**
+  Chủ dự án chốt: *"giá ghi danh lấy từ DÒNG ĐƠN; không có dòng thì như cũ"*. Hiện thực ở
+  `lib/finance/gia-tu-dong-don.ts` (thuần) + `lib/finance/dong-don-cua-lead.ts` (đọc).
+  · **Thay ĐẦU VÀO `listPrice` của `computeEnrollmentPrice`, KHÔNG thay công thức** — nhờ
+    vậy giảm giá/học bổng khai lúc convert vẫn áp bình thường. Gán thẳng
+    `finalPrice = totalPrice` là nuốt im lặng một suất học bổng: lỗ MỚI thay lỗ cũ.
+  · **Cầu nối là `leadChildId`** (`OrderItem.metadata` ↔ `Enrollment.leadChildId`), không
+    khớp theo tên hay thứ tự. **Mơ hồ ⇒ rơi về `Course.price`**, không đoán.
+  · Ba đường convert đều đổ vào `convertLeadV2` ⇒ **một chỗ sửa**. Màn XEM TRƯỚC
+    (`leads/[id]/convert/actions.ts`) sửa theo để cổng "ưu đãi có ăn tiền thật không" đo
+    trên cùng con số; hai bên lệch là màn hình nói một đằng, sổ ghi một nẻo.
+  · Ghim `[HTL-09]` **đã gỡ**. Lưới: `lib/finance/gia-tu-dong-don.test.ts`
+    (`[GTD-01..13]`), trong đó `[GTD-12]`/`[GTD-13]` là **lưới ghim dây nối** — gỡ lời gọi
+    ở convert thì không ca hành vi nào đỏ (convert chạm DB).
+  ⚠️ **Phép cấy tìm ra một lỗ trong chính lưới này:** bản đầu của `[GTD-04]` cho phép cấy
+  ra **0 ĐỎ** — ba khẳng định của nó đều đi qua nhánh "không dòng nào khớp", không đụng tới
+  cổng `if (!conId) return null`. Ca thật cần đo là **cả hai vế cùng thiếu cầu nối**
+  (`null === null` sẽ khớp). Đã thêm.
+  <details><summary>Mô tả lỗ (lịch sử — đo 14/09/2026)</summary>
   Hình thức lớp (SR.QD.219 Điều 5) nay khai được trên dòng đơn
   (`OrderItem.metadata.coachFormat`, xem `lib/orders/hinh-thuc-lop.ts`), nhưng số tiền mà
   **công nợ · cổng phụ huynh · hoàn tiền · hoa hồng GV Trial** đọc là
@@ -447,6 +477,8 @@ prisma/
     `coachFormat`/`soBuoi` nằm trong `items[].metadata` tức PAYLOAD CLIENT — làm vậy là
     để client cầm **cả hai vế** của phép so, khai `soBuoi` nhỏ là mọi đơn bán rẻ thành
     "khớp". Lý do đầy đủ + 5 lỗ tiền khác ở đầu `lib/orders/hinh-thuc-lop.ts`.
+
+  </details>
 
 ## Mẫu test: LƯỚI GHIM MÃ NGUỒN [13/09/2026]
 

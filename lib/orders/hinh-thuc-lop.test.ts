@@ -31,6 +31,9 @@
 //   · SINH GỢI Ý GIÁ theo công văn cho người bán đọc — `goiYGiaCoach`.
 // ─────────────────────────────────────────────────────────────────────────────
 import { describe, it, expect } from "vitest";
+
+import { computeEnrollmentPrice } from "@/lib/finance/pricing";
+import { listPriceChoGhiDanh } from "@/lib/finance/gia-tu-dong-don";
 import { docHinhThucLop, goiYGiaCoach, veMetadataDongDon } from "./hinh-thuc-lop";
 
 describe("[HTL-01] docHinhThucLop — metadata là dữ liệu NGOÀI, phải fail-closed", () => {
@@ -292,23 +295,18 @@ describe("[HTL-08] KHÔNG đọc đồng hồ, KHÔNG chạm DB — thuần", ()
   });
 });
 
-describe("[HTL-09] GHIM: bán Coach xong thì trục GHI DANH vẫn giữ GIÁ NHÓM", () => {
-  // ⚠️ CA NÀY GHIM MỘT LỖ ĐO ĐƯỢC, CHƯA VÁ — `it.fails` nên hôm nay nó XANH.
-  // Vá xong thì nó ĐỎ và buộc người vá gỡ ghim (mẫu `it.fails` trong CLAUDE.md).
+describe("[HTL-09] ĐÃ VÁ 23/09/2026 — trục ghi danh nhận GIÁ ĐƠN", () => {
+  // ⚠️ GHIM CŨ ĐÃ GỠ. Ca này từng là `it.fails` (mẫu ghim bug của CLAUDE.md): nó mô tả
+  // hành vi ĐÚNG trong khi mã còn sai, nên hôm ấy nó XANH vì thân test ném.
   //
-  // Đo 14/09/2026: `Enrollment.finalPrice` là thứ /cong-no (lib/finance/debt.ts),
-  // /portal/hoc-phi (lib/portal/billing-student.ts) và hoàn tiền (lib/finance/refund.ts)
-  // đọc. Các đường convert ghi nó bằng `computeEnrollmentPrice({ listPrice: Course.price })`
-  // — tức GIÁ NHÓM, không biết hệ số Coach. Còn ZNS học phí (lib/notify/order.ts) gửi
-  // `order.totalAmount`.
+  // Chủ dự án chốt 23/09: *"giá ghi danh lấy từ DÒNG ĐƠN; không có dòng thì như cũ"*.
+  // Hiện thực ở `lib/finance/gia-tu-dong-don.ts` — thay ĐẦU VÀO `listPrice` của
+  // `computeEnrollmentPrice`, không thay công thức, nên giảm giá khai lúc convert vẫn áp.
   //
-  // Hệ quả với Coach 1-1 Sata3: Zalo báo phụ huynh ~10,4tr · portal in 5,2tr ·
-  // /cong-no ra −5,2tr ("đóng thừa") · hoàn tiền học 6/12 buổi chi dư ~2,6tr.
-  //
-  // VÌ SAO KHÔNG VÁ Ở ĐÂY: /orders/new KHÔNG tạo `Enrollment` (ghi danh sinh ở đường
-  // convert / bulk-convert / enrollments). Vá đúng phải chạm cả bốn đường tạo đơn + đường
-  // tạo ghi danh, và đó là đợt riêng — nhét vào đây là sửa nửa sổ đang giữ tiền.
-  it.fails("giá ghi danh phải bằng giá đơn khi bán Coach", () => {
+  // Bộ ca đầy đủ (mơ hồ · giá 0 · thiếu cầu nối · khoá khác · học bổng) nằm ở
+  // `lib/finance/gia-tu-dong-don.test.ts`. Ở ĐÂY chỉ giữ ĐÚNG phép so mà ghim cũ hứa —
+  // giá đơn và giá ghi danh là MỘT — để người đọc tệp này thấy lời hứa đã được trả.
+  it("giá ghi danh phải bằng giá đơn khi bán Coach", () => {
     const giaDon = goiYGiaCoach({
       giaNiemYet: 5_200_000,
       tongSoBuoi: 12,
@@ -316,8 +314,14 @@ describe("[HTL-09] GHIM: bán Coach xong thì trục GHI DANH vẫn giữ GIÁ N
       coachFormat: "ONE_ON_ONE",
       giamGia: null,
     }).thanhTien;
-    // Đây là số các đường convert ĐANG ghi vào `Enrollment.finalPrice` — giá nhóm.
-    const giaGhiDanhHienTai = 5_200_000;
-    expect(giaGhiDanhHienTai).toBe(giaDon);
+    const giaGhiDanh = computeEnrollmentPrice({
+      listPrice: listPriceChoGhiDanh(
+        [{ leadChildId: "lc1", courseId: "c1", totalPrice: giaDon }],
+        { leadChildId: "lc1", courseId: "c1" },
+        5_200_000,
+      ),
+      discount: null,
+    }).finalPrice;
+    expect(giaGhiDanh).toBe(giaDon);
   });
 });
