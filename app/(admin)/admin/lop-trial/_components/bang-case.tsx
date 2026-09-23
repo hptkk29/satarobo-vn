@@ -24,6 +24,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ChevronDown, Clock, Lock, Plus, UserMinus, Users } from "lucide-react";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
+import { laChuaXepCase, laHocCaLop, thuocCase } from "@/lib/trial/nghia-null";
 import { AttendanceBoard } from "./attendance-board";
 import { EnrollPanel } from "./enroll-panel";
 import { ThanhKhungGio } from "./thanh-khung-gio";
@@ -56,6 +57,7 @@ export function BangCase({
   cheDoChonGv,
   locGvTheoCa,
   soGvMienLoc,
+  lopDaKetThuc,
 }: {
   trialClassId: string;
   khungLop: { startTime: string; endTime: string } | null;
@@ -75,8 +77,17 @@ export function BangCase({
   cheDoChonGv: CheDoChonGv;
   locGvTheoCa: boolean;
   soGvMienLoc: number;
+  /**
+   * Lớp đã COMPLETED/CANCELLED. Bắt buộc (luật 7): thiếu nó thì ô thêm case / thêm học
+   * viên vẫn hiện trên lớp đã huỷ, và gắn vào là sinh lại ghi danh ACTIVE trong lớp
+   * đã huỷ (server nay từ chối — nút phải nói trước chứ không đợi bị từ chối).
+   */
+  lopDaKetThuc: boolean;
 }): JSX.Element {
   const router = useRouter();
+  // Nghĩa của `scheduledSessionId = NULL` theo loại lớp — `lib/trial/nghia-null.ts`.
+  // `khungLop` do trang dựng từ ĐÚNG hai cột `startTime`+`endTime` nên null ⇔ lớp cũ.
+  const lopTheoKhung = khungLop !== null;
   const [pending, startTransition] = useTransition();
   // Mở sẵn case đầu tiên còn SCHEDULED: người vào màn này gần như luôn để làm việc với
   // case sắp diễn ra, không phải để xem lại case đã đóng.
@@ -88,15 +99,44 @@ export function BangCase({
   const tenGv = useMemo(() => new Map(teachers.map((t) => [t.id, t.name])), [teachers]);
   const tenPhong = useMemo(() => new Map(rooms.map((r) => [r.id, r.name])), [rooms]);
 
-  /** Bé còn sống nhưng CHƯA thuộc case nào — dữ liệu trước 23/09 hoặc vừa bị huỷ case. */
+  /**
+   * Bé còn học nhưng không có case SỐNG nào để điểm danh: NULL ở lớp theo khung, hoặc
+   * trỏ vào một case ĐÃ HUỶ (ở mọi loại lớp). Luật ở `laChuaXepCase`.
+   *
+   * ~~chỉ `scheduledSessionId === null`~~ **[SỬA 23/09/2026]** thiếu vế "case đã huỷ":
+   * huỷ case không đụng ghi danh, nên bé kẹt trong thẻ case đã huỷ — không khối nào
+   * nhận, không ô nào để chuyển đi, trong khi chính chú thích này hứa bé về đây.
+   */
+  const idCaseDaHuy = useMemo(
+    () => new Set(sessions.filter((s) => s.status === "CANCELLED").map((s) => s.id)),
+    [sessions],
+  );
   const chuaXep = useMemo(
-    () => enrollments.filter((e) => e.status === "ACTIVE" && e.scheduledSessionId === null),
-    [enrollments],
+    () => enrollments.filter((e) => laChuaXepCase(e, lopTheoKhung, idCaseDaHuy)),
+    [enrollments, lopTheoKhung, idCaseDaHuy],
+  );
+  /**
+   * Bé HỌC CẢ LỚP — chỉ có ở lớp slot cũ (chốt 28/08). Liệt kê MỘT lần ở khối riêng, vì
+   * nhân bản vào bảng gỡ của từng buổi là N nút gỡ cho cùng một bé.
+   */
+  const hocCaLop = useMemo(
+    () =>
+      enrollments.filter(
+        (e) => (e.status === "ACTIVE" || e.status === "COMPLETED") && laHocCaLop(e, lopTheoKhung),
+      ),
+    [enrollments, lopTheoKhung],
   );
 
+  /**
+   * Số bé ĐI HỌC case này — theo `thuocCase`, cùng tập mà bảng điểm danh vẽ.
+   *
+   * Case ĐÃ HUỶ đếm 0: bé còn học đã sang khối "Chưa xếp case". Đếm cả ở đầu thẻ case
+   * huỷ là một bé hai chỗ, và tổng các ô lệch sĩ số của lớp (đo được 23/09: 9 vs 8).
+   */
   function demTrongCase(sessionId: string): number {
+    if (idCaseDaHuy.has(sessionId)) return 0;
     return enrollments.filter(
-      (e) => e.status === "ACTIVE" && e.scheduledSessionId === sessionId,
+      (e) => e.status === "ACTIVE" && thuocCase(e, sessionId, lopTheoKhung),
     ).length;
   }
 
@@ -158,7 +198,7 @@ export function BangCase({
       />
 
       {/* ── Thêm case ─────────────────────────────────────────────────────────────── */}
-      {canThemCase && (
+      {canThemCase && !lopDaKetThuc && (
         <div className="rounded-xl border border-border bg-card p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-semibold text-foreground">Case trải nghiệm</h2>
@@ -261,8 +301,14 @@ export function BangCase({
                       ) : (
                         <select
                           value=""
-                          disabled={pending || !e.quyenGo.duoc}
-                          title={e.quyenGo.duoc ? undefined : e.quyenGo.lyDo}
+                          disabled={pending || !e.quyenChuyen.duoc || lopDaKetThuc}
+                          title={
+                            lopDaKetThuc
+                              ? "Lớp đã kết thúc — không xếp case được nữa"
+                              : e.quyenChuyen.duoc
+                                ? undefined
+                                : e.quyenChuyen.lyDo
+                          }
                           onChange={(ev) => {
                             if (ev.target.value) xepVaoCase(e.id, ev.target.value);
                           }}
@@ -270,7 +316,9 @@ export function BangCase({
                           className="rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs text-foreground disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           <option value="">Chọn case…</option>
-                          {caseConSong.map((s) => (
+                          {caseConSong
+                            .filter((s) => s.status === "SCHEDULED")
+                            .map((s) => (
                             <option key={s.id} value={s.id}>
                               {s.startTime}–{s.endTime} ·{" "}
                               {tenHoac(tenGv.get(s.teacherId ?? "") ?? null, "chưa có GV")}
@@ -278,6 +326,60 @@ export function BangCase({
                           ))}
                         </select>
                       )}
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-3.5 text-right">
+                      <NutGo row={e} pending={pending} onGo={() => go(e)} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          </PhanTrangBang>
+        </section>
+      )}
+
+      {/* ── Học cả lớp (chỉ lớp slot cũ) ──────────────────────────────────────────────
+          Chốt 28/08: ở lớp slot cũ, bé xếp vào lớp mà không ghim buổi là học MỌI buổi.
+          Bé đó hiện trong bảng điểm danh của từng buổi (như trước), còn ở đây liệt kê
+          MỘT lần để gỡ — thay vì N nút gỡ cho cùng một bé ở N buổi. */}
+      {hocCaLop.length > 0 && (
+        <section className="overflow-hidden rounded-xl border border-border bg-card">
+          <div className="border-b border-border px-5 py-3.5">
+            <h2 className="text-sm font-semibold text-foreground">
+              Học cả lớp ({hocCaLop.length})
+            </h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Lớp này mở trước khi có khung giờ, nên các bé dưới đây học mọi buổi của lớp
+              và có mặt trong bảng điểm danh của từng buổi.
+            </p>
+          </div>
+          <PhanTrangBang khoaGhiNho="lop-trial-hoc-ca-lop" tenDonVi="học viên">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th className="whitespace-nowrap px-5 py-3.5 font-semibold">Học viên</th>
+                  <th className="whitespace-nowrap px-5 py-3.5 font-semibold">Phụ huynh</th>
+                  <th className="whitespace-nowrap px-5 py-3.5 font-semibold">Sale</th>
+                  <th className="whitespace-nowrap px-5 py-3.5 font-semibold">Trạng thái</th>
+                  <th className="whitespace-nowrap px-5 py-3.5 text-right font-semibold">Gỡ</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {hocCaLop.map((e) => (
+                  <tr key={e.id} className="transition-colors hover:bg-muted">
+                    <td className="whitespace-nowrap px-5 py-3.5 font-medium text-foreground">
+                      {e.childName}
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-3.5 text-muted-foreground">
+                      {tenHoac(e.parentName, "—")}
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-3.5 text-muted-foreground">
+                      {tenHoac(e.saleTen, "chưa ai phụ trách")}
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-3.5">
+                      <NhanTrangThaiGhiDanh status={e.status} />
                     </td>
                     <td className="whitespace-nowrap px-5 py-3.5 text-right">
                       <NutGo row={e} pending={pending} onGo={() => go(e)} />
@@ -328,11 +430,38 @@ export function BangCase({
               soGvMienLoc={soGvMienLoc}
               pending={pending}
               onGo={go}
+              lopTheoKhung={lopTheoKhung}
+              ngayLop={ngayLop}
+              khungLop={khungLop}
+              lopDaKetThuc={lopDaKetThuc}
             />
           ))}
         </div>
       )}
     </div>
+  );
+}
+
+/** Trạng thái ghi danh bằng CHỮ — không mã hoá trạng thái chỉ bằng màu. */
+function NhanTrangThaiGhiDanh({ status }: { status: EnrollmentRow["status"] }): JSX.Element {
+  if (status === "COMPLETED") {
+    return (
+      <span className="inline-flex whitespace-nowrap rounded-full bg-state-success-soft px-2 py-0.5 text-[11px] font-semibold text-state-success-ink">
+        Đã học xong
+      </span>
+    );
+  }
+  if (status === "WITHDRAWN") {
+    return (
+      <span className="inline-flex whitespace-nowrap rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+        Đã rút
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex whitespace-nowrap rounded-full bg-state-info-soft px-2 py-0.5 text-[11px] font-semibold text-state-info-ink">
+      Đang học thử
+    </span>
   );
 }
 
@@ -395,6 +524,10 @@ function TheCase({
   soGvMienLoc,
   pending,
   onGo,
+  lopTheoKhung,
+  ngayLop,
+  khungLop,
+  lopDaKetThuc,
 }: {
   s: SessionRow;
   mo: boolean;
@@ -417,10 +550,19 @@ function TheCase({
   soGvMienLoc: number;
   pending: boolean;
   onGo: (e: EnrollmentRow) => void;
+  lopTheoKhung: boolean;
+  ngayLop: string | null;
+  khungLop: { startTime: string; endTime: string } | null;
+  lopDaKetThuc: boolean;
 }): JSX.Element {
   const daHuy = s.status === "CANCELLED";
+  // Bảng gỡ của case: chỉ bé GHIM vào case này (bé "học cả lớp" ở lớp cũ có khối riêng).
+  // Case ĐÃ HUỶ: bé còn học đã sang khối "Chưa xếp case"; ở đây chỉ còn bé đã học xong,
+  // như một dòng lịch sử — liệt kê bé ACTIVE ở cả hai chỗ là hai nút gỡ cho một bé.
   const trongCase = enrollments.filter(
-    (e) => e.scheduledSessionId === s.id && (e.status === "ACTIVE" || e.status === "COMPLETED"),
+    (e) =>
+      e.scheduledSessionId === s.id &&
+      (daHuy ? e.status === "COMPLETED" : e.status === "ACTIVE" || e.status === "COMPLETED"),
   );
 
   return (
@@ -489,6 +631,9 @@ function TheCase({
             locGvTheoCa={locGvTheoCa}
             soGvMienLoc={soGvMienLoc}
             goiTat
+            lopTheoKhung={lopTheoKhung}
+            ngayLop={ngayLop}
+            khungLop={khungLop}
           />
 
           {/* Gỡ từng bé — đặt NGAY trong case, không phải ở một danh sách phẳng cách đó
@@ -502,6 +647,7 @@ function TheCase({
                       <th className="whitespace-nowrap px-4 py-2.5 font-semibold">Học viên</th>
                       <th className="whitespace-nowrap px-4 py-2.5 font-semibold">Phụ huynh</th>
                       <th className="whitespace-nowrap px-4 py-2.5 font-semibold">Sale</th>
+                      <th className="whitespace-nowrap px-4 py-2.5 font-semibold">Trạng thái</th>
                       <th className="whitespace-nowrap px-4 py-2.5 text-right font-semibold">
                         Gỡ khỏi lớp
                       </th>
@@ -519,6 +665,9 @@ function TheCase({
                         <td className="whitespace-nowrap px-4 py-2.5 text-muted-foreground">
                           {tenHoac(e.saleTen, "chưa ai phụ trách")}
                         </td>
+                        <td className="whitespace-nowrap px-4 py-2.5">
+                          <NhanTrangThaiGhiDanh status={e.status} />
+                        </td>
                         <td className="whitespace-nowrap px-4 py-2.5 text-right">
                           <NutGo row={e} pending={pending} onGo={() => onGo(e)} />
                         </td>
@@ -530,7 +679,10 @@ function TheCase({
             </div>
           )}
 
-          {!daHuy && canManage && (
+          {/* 23/09 — chỉ case SCHEDULED của lớp CHƯA kết thúc (khớp cổng server ở
+              `enrollLeadChild`). Bản cũ ẩn mỗi case đã huỷ: case đã xong vẫn nhận bé, lớp
+              đã huỷ vẫn nhận bé. */}
+          {s.status === "SCHEDULED" && !lopDaKetThuc && canManage && (
             <div className="rounded-lg border border-dashed border-border p-3">
               <EnrollPanel
                 trialClassId={trialClassId}

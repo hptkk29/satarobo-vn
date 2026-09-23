@@ -68,7 +68,11 @@ export function quyenSuaCase(input: {
 export function quyenGoHocVien(input: {
   lead: { assignedToId: string | null; createdById: string | null; isSharedWithTeam: boolean } | null;
   userId: string;
-  /** Có `leads:view-all` — Quản lý cơ sở · Đào tạo · Marketing Hội sở. */
+  /**
+   * Là "quản lý khách trong lớp": có `trials:create-class` HOẶC `leads:view-all`
+   * (Quản lý cơ sở · Đào tạo · Quản trị tối cao · Marketing Hội sở). Đường gọi quy sẵn
+   * — xem `laQuanLyLead` ở `app/(admin)/admin/lop-trial/_actions.ts`.
+   */
   laQuanLy: boolean;
   /** Tên Sale đang phụ trách lead, CHỈ để viết câu lỗi. Không tham gia phép quyết định. */
   tenSale?: string | null;
@@ -77,7 +81,7 @@ export function quyenGoHocVien(input: {
   if (!input.lead) {
     return {
       duoc: false,
-      lyDo: "Không tra được lead của bé này (lead đã xoá) — nhờ Quản lý cơ sở gỡ hộ.",
+      lyDo: "Không tra được lead của bé này (lead đã xoá) — nhờ Quản lý cơ sở hoặc Đào tạo gỡ hộ.",
     };
   }
   if (laLeadCuaToi(input.lead, input.userId)) return DUOC;
@@ -85,8 +89,8 @@ export function quyenGoHocVien(input: {
   return {
     duoc: false,
     lyDo: ten
-      ? `Bé này thuộc lead của ${ten}. Bạn gắn thêm bé vào case được, nhưng chỉ người phụ trách lead hoặc Quản lý cơ sở mới gỡ được.`
-      : "Bé này thuộc lead của Sale khác. Bạn gắn thêm bé vào case được, nhưng chỉ người phụ trách lead hoặc Quản lý cơ sở mới gỡ được.",
+      ? `Bé này thuộc lead của ${ten}. Bạn gắn thêm bé vào case được, nhưng chỉ người phụ trách lead, Quản lý cơ sở hoặc Đào tạo mới gỡ được.`
+      : "Bé này thuộc lead của Sale khác. Bạn gắn thêm bé vào case được, nhưng chỉ người phụ trách lead, Quản lý cơ sở hoặc Đào tạo mới gỡ được.",
   };
 }
 
@@ -118,4 +122,59 @@ export function quyenXoaCase(input: {
     };
   }
   return DUOC;
+}
+
+/**
+ * Dời GIỜ / NGÀY của một case (khác với chỉ đổi phòng / giáo viên).
+ *
+ * 23/09/2026 — dời giờ một case là dời giờ hẹn của MỌI phụ huynh có bé trong đó. Cửa
+ * chuyển case và cửa huỷ case đã chặn Sale làm việc đó với khách của Sale khác; để cửa
+ * sửa mở thì chủ case vẫn đổi được giờ hẹn của khách người khác, chỉ là qua cửa khác.
+ *
+ * Nhận `sua` là KẾT QUẢ của `quyenSuaCase` chứ không tự hỏi lại: không sửa được case thì
+ * lý do phải là lý do của `quyenSuaCase`, không phải một câu thứ hai.
+ *
+ * `soHocVienNguoiKhac` đếm bằng `quyenGoHocVien` ở đường gọi — với Quản lý nó luôn là 0.
+ */
+export function quyenDoiGioCase(input: { sua: KetQuyen; soHocVienNguoiKhac: number }): KetQuyen {
+  if (!input.sua.duoc) return input.sua;
+  if (input.soHocVienNguoiKhac > 0) {
+    return {
+      duoc: false,
+      lyDo:
+        `Case đang có ${input.soHocVienNguoiKhac} học viên của Sale khác — đổi giờ là đổi lịch hẹn của phụ huynh họ. ` +
+        "Chỉ đổi được phòng / giáo viên; muốn dời giờ thì nhờ họ chuyển bé sang case khác trước, hoặc nhờ Quản lý cơ sở.",
+    };
+  }
+  return DUOC;
+}
+
+/** Lý do khoá nút gỡ của bé đã HỌC XONG — server cũng từ chối (chỉ gỡ ghi danh ACTIVE). */
+export const LY_DO_DA_HOC_XONG =
+  "Bé đã học xong trải nghiệm — ghi danh này đã đóng, không còn gì để gỡ khỏi lớp.";
+
+/**
+ * CHUYỂN một bé sang case khác (hoặc xếp bé đang "chưa xếp case").
+ *
+ * Luật y hệt `quyenGoHocVien` (chuyển case là đổi giờ hẹn — hại ngang gỡ), nhưng câu
+ * chữ phải nói về việc CHUYỂN. Đo được 23/09: ô "Xếp vào case" bị khoá mượn câu của nút
+ * Gỡ — "Bạn gắn thêm bé vào case được, nhưng…" — đọc trên chính ô xếp case thì như bảo
+ * người dùng là họ xếp được.
+ */
+export function quyenChuyenCase(input: Parameters<typeof quyenGoHocVien>[0]): KetQuyen {
+  const go = quyenGoHocVien(input);
+  if (go.duoc) return go;
+  if (!input.lead) {
+    return {
+      duoc: false,
+      lyDo: "Không tra được lead của bé này (lead đã xoá) — nhờ Quản lý cơ sở hoặc Đào tạo chuyển hộ.",
+    };
+  }
+  const ten = (input.tenSale ?? "").trim();
+  return {
+    duoc: false,
+    lyDo:
+      `Bé này thuộc lead của ${ten || "Sale khác"}. Chuyển case là đổi giờ hẹn với phụ huynh — ` +
+      "chỉ người phụ trách lead, Quản lý cơ sở hoặc Đào tạo mới chuyển được.",
+  };
 }

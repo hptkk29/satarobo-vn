@@ -13,11 +13,19 @@
 import { revalidatePath } from "next/cache";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { laLeadCuaToi, leadCuaToiOrClause } from "@/lib/lead/sharing";
-import { quyenGoHocVien, quyenSuaCase, quyenXoaCase } from "@/lib/trial/quyen-case";
+import {
+  quyenChuyenCase,
+  quyenDoiGioCase,
+  quyenGoHocVien,
+  quyenSuaCase,
+  quyenXoaCase,
+} from "@/lib/trial/quyen-case";
+import { laLopTheoKhung, thuocCase } from "@/lib/trial/nghia-null";
 import type { Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { leadStatusLabel } from "@/lib/leads/status";
 import { phoneSearchTerm } from "@/lib/phone";
+import { maskPhone } from "@/lib/lead/pii";
 import { getAssignableTeachers } from "@/lib/teachers/assignable";
 import { locGiaoVienChoBuoi, type DongGv } from "@/lib/trial/gv-kha-dung";
 import { layCaCuaNhieuNguoi } from "@/lib/trial/gv-kha-dung-db";
@@ -37,7 +45,7 @@ import { layCauHinhKhung } from "@/lib/trial/khung-gio-db";
 import { vnWeekday, vnYmd } from "@/lib/time/vn";
 import {
   khungChoNgay,
-  kiemCaseTrongLop,
+  kiemCaseThuocLop,
   kiemKhungLop,
   sinhNgayTheoThu,
   TEN_THU,
@@ -50,6 +58,7 @@ import {
   ghiTuongTacTheoConLead,
   layConTheoGhiDanhTrial,
   layLeadTrongLopTrial,
+  layLeadTrongCaseTrial,
 } from "@/lib/lead/tuong-tac/ghi";
 import {
   actorCanUseCenter,
@@ -460,17 +469,33 @@ export async function layGvChoBuoiAction(input: {
 //   `trials:create-class` → Quản lý cơ sở · Đào tạo · Quản trị tối cao. Đây cũng là
 //       khoá mở lớp (22/09), nên "ai mở được lớp thì dọn được case trong lớp" —
 //       một câu, một khoá.
-//   `leads:view-all`      → thêm Marketing Hội sở. Đây là khoá mà cửa GẮN học viên
-//       đã dùng từ 17/09; cửa GỠ phải dùng ĐÚNG khoá đó, nếu không hai cửa của một
-//       việc sẽ nói hai kiểu.
+//   "Quản lý KHÁCH trong lớp" (gắn / gỡ / chuyển case bé của BẤT KỲ Sale nào) =
+//       `trials:create-class` HOẶC `leads:view-all`.
+//
+// ~~Chỉ `leads:view-all`, và "Đào tạo giữ khoá đó".~~ **[SỬA 23/09/2026]** Câu đó SAI
+// trên cả hai ma trận: `leads:view-all` là SUPER_ADMIN · CENTER_MANAGER · MARKETING
+// (v1, `lib/auth/permissions.ts`) và HO_MARKETING · CENTER_MANAGER (v2, seed-roles).
+// Đào tạo KHÔNG có. Đo trên app thật: Đào tạo huỷ được cả lớp và xoá được case đang
+// giữ khách của Sale khác, nhưng KHÔNG gỡ nổi một bé, ô tìm học viên luôn rỗng — trong
+// khi câu lỗi của cửa gắn còn bảo Sale "nhờ Đào tạo xếp hộ" (luật 12).
+//
+// Không vá bằng cách cấp `leads:view-all` cho Đào tạo: khoá đó còn mở toàn bộ màn
+// `/leads`. Nguồn chốt: chủ dự án 23/09 "qlcs/đào tạo hoặc admin gắn thì sale chủ lead
+// vẫn gỡ bth", và seed-roles 08/09 "Đào tạo được sử dụng FULL quyền trong màn Lớp
+// Trial". Vế `leads:view-all` giữ lại để Marketing Hội sở không mất cái đang có.
 
 /** Có quyền dọn case của người khác trong lớp này không. */
 async function laQuanLyLop(centerId: string): Promise<boolean> {
   return checkPermission("trials:create-class", { centerId });
 }
 
-/** Có quyền đụng vào khách của Sale khác trong lớp này không. */
+/**
+ * Có quyền đụng vào khách của Sale khác trong lớp này không — MỘT định nghĩa cho cả
+ * bốn cửa: gắn, tìm ứng viên, gỡ, chuyển case. Hai cửa của một việc mà dùng hai khoá
+ * khác nhau là chỗ lệch vừa đo được ở trên.
+ */
 async function laQuanLyLead(centerId: string): Promise<boolean> {
+  if (await checkPermission("trials:create-class", { centerId })) return true;
   return checkPermission("leads:view-all", { centerId });
 }
 
@@ -483,11 +508,28 @@ async function laQuanLyLead(centerId: string): Promise<boolean> {
  */
 async function demHocVienNguoiKhac(
   actor: Actor,
-  opts: { sessionId: string; userId: string; quanLyLead: boolean },
+  opts: {
+    sessionId: string;
+    trialClassId: string;
+    /** Bắt buộc — quyết định bé NULL có tính là "trong case" không (luật 7). */
+    lopTheoKhung: boolean;
+    userId: string;
+    quanLyLead: boolean;
+  },
 ): Promise<number> {
   if (opts.quanLyLead) return 0;
   const rows = await scopedDb(actor).trialEnrollment.findMany({
-    where: { scheduledSessionId: opts.sessionId, status: "ACTIVE" },
+    // Tập "bé trong case" theo `thuocCase` (lib/trial/nghia-null.ts): ở lớp CŨ bé NULL
+    // học cả lớp nên CŨNG ở trong case này — dời giờ case là dời giờ của cả những bé đó.
+    where: {
+      status: "ACTIVE",
+      OR: [
+        { scheduledSessionId: opts.sessionId },
+        ...(opts.lopTheoKhung
+          ? []
+          : [{ scheduledSessionId: null, trialClassId: opts.trialClassId }]),
+      ],
+    },
     select: {
       leadChild: {
         select: {
@@ -511,6 +553,10 @@ async function demHocVienNguoiKhac(
 // ═══════════════════════════════════════════════════════════════════════════
 // 3) Thêm case trial (buổi)
 // ═══════════════════════════════════════════════════════════════════════════
+
+// `kiemCaseThuocLop` — luật "case trong khung + đúng ngày lớp" — nằm ở
+// `lib/trial/khung-gio-mo-lop.ts` (hàm thuần, có test). KHÔNG định nghĩa lại ở đây: tệp
+// này mang "use server", và mọi hàm export ra từ đây là một endpoint.
 
 /**
  * Cổng GHI cho ô "Giáo viên": id gửi lên có phải một giáo viên THẬT không.
@@ -588,24 +634,9 @@ export async function addLopTrialSessionAction(
   // TRANG TRÍ").
   //
   // Lớp CŨ (`startTime` null) KHÔNG bị chặn: khoá hồi tố là khoá cứng mọi lớp đang chạy dở.
-  const khungLop =
-    cls.startTime && cls.endTime
-      ? { startTime: cls.startTime, endTime: cls.endTime }
-      : null;
-  const trongKhung = kiemCaseTrongLop({
-    lop: khungLop,
-    startTime: data.startTime,
-    endTime: data.endTime,
-  });
-  if (!trongKhung.ok) return { ok: false, error: trongKhung.loi };
-
-  // Lớp CÓ ngày thì case phải đúng ngày đó. Cho lệch ngày là để một "lớp trial ngày
-  // 22/09" chứa case ngày 30/09 — Sale chọn lớp theo ngày, nên cái tên lớp sẽ nói dối.
-  if (cls.startDate && vnYmd(cls.startDate) !== data.date) {
-    return {
-      ok: false,
-      error: `Lớp này mở ngày ${vnYmd(cls.startDate)} — chọn lớp của ngày ${data.date} hoặc nhờ Quản lý cơ sở mở lớp cho ngày đó`,
-    };
+  {
+    const k = kiemCaseThuocLop(cls, data);
+    if (!k.ok) return k;
   }
 
   const res = await addTrialSession({
@@ -664,9 +695,17 @@ export async function updateLopTrialSessionAction(
 
   const ses = await loadScopedTrialSession(ctx.actor, data.sessionId);
   if (!ses) return { ok: false, error: "Không tìm thấy buổi học" };
+  // 23/09 — chỉ case CHƯA diễn ra mới sửa được (khớp điều kiện vẽ nút trên màn). Bản
+  // cũ chỉ chặn CANCELLED, nên POST thẳng vẫn sửa được giờ của case ĐÃ XONG — tức
+  // viết lại lịch sử của một buổi đã điểm danh.
   if (ses.status === "CANCELLED") {
     return { ok: false, error: "Buổi đã huỷ — không sửa được nữa" };
   }
+  if (ses.status !== "SCHEDULED") {
+    return { ok: false, error: "Case đã xong — không sửa được nữa" };
+  }
+  const lopCuaBuoi = await loadScopedTrialClass(ctx.actor, ses.trialClassId);
+  if (!lopCuaBuoi) return { ok: false, error: KHONG_THAY_LOP };
 
   // ── CỔNG CHỦ CASE (23/09/2026) ────────────────────────────────────────────────────
   // Chủ dự án: Sale "sửa + xoá case của mình, xem case người khác". Trước hôm nay mọi
@@ -698,6 +737,34 @@ export async function updateLopTrialSessionAction(
     data.startTime !== ses.startTime ||
     data.endTime !== ses.endTime;
 
+
+  // ── CỔNG KHÁCH CỦA NGƯỜI KHÁC khi DỜI GIỜ (23/09/2026) ─────────────────────────
+  // Dời giờ một case là dời giờ hẹn của MỌI phụ huynh có bé trong đó. Cửa chuyển case
+  // (`xepCaseHocVienAction`) và cửa huỷ case đã chặn Sale làm việc đó với khách của
+  // Sale khác; để cửa SỬA mở thì chủ case vẫn đổi được giờ hẹn của khách người khác —
+  // chỉ là qua một cửa khác. Chỉ đổi phòng/giáo viên thì phụ huynh không phải đi đâu,
+  // nên cổng chỉ bật khi `doiLich`.
+  const lopTheoKhung = laLopTheoKhung(lopCuaBuoi);
+  if (doiLich) {
+    // ── CỔNG KHUNG + NGÀY — đúng hàm cửa THÊM dùng (23/09/2026) ───────────────────
+    // CHỈ khi ngày/giờ thật sự đổi. Lượt sửa chỉ đổi phòng / giáo viên thì giờ cũ vốn
+    // đã qua cổng lúc thêm; gác lại nó là khoá cứng việc đổi giáo viên của một buổi cũ
+    // nằm ngoài "khung" (đo được 23/09 với lớp tạo trước 28/08).
+    const k = kiemCaseThuocLop(lopCuaBuoi, data);
+    if (!k.ok) return k;
+
+    const soKhac = await demHocVienNguoiKhac(ctx.actor, {
+      sessionId: data.sessionId,
+      trialClassId: ses.trialClassId,
+      lopTheoKhung,
+      userId: ctx.session.user.id,
+      quanLyLead: await laQuanLyLead(ses.centerId),
+    });
+    // Câu chữ lấy từ `quyenDoiGioCase` — ĐÚNG câu mà ô giờ bị khoá trên form đang in.
+    const doiGio = quyenDoiGioCase({ sua: quyen, soHocVienNguoiKhac: soKhac });
+    if (!doiGio.duoc) return { ok: false, error: doiGio.lyDo };
+  }
+
   const sdb = scopedDb(ctx.actor);
   // ⚠️ update KHÔNG được scopedDb che — an toàn nhờ `loadScopedTrialSession` ở trên.
   await sdb.trialClassSession.update({
@@ -715,16 +782,20 @@ export async function updateLopTrialSessionAction(
   // được tính ở trên cho việc gửi thông báo giáo viên; dùng lại chính nó, vì lượt sửa chỉ
   // đổi phòng/giáo viên/ghi chú thì phụ huynh không phải đi đâu và không có gì để kể.
   if (doiLich) {
-    const lopCuaBuoi = await loadScopedTrialClass(ctx.actor, ses.trialClassId);
     await ghiTuongTacNhieuLead({
-      // Đọc SAU `update` là được: `update` đổi ngày/giờ của BUỔI, không đụng trạng thái
-      // ghi danh, nên danh sách lead trong lớp không thay đổi vì lượt này.
-      leadIds: await layLeadTrongLopTrial(ses.trialClassId),
+      // ~~Mọi lead trong LỚP~~ **[SỬA 23/09/2026]** chỉ lead có bé TRONG CASE NÀY. Một
+      // lớp nay chứa nhiều case của nhiều Sale; ghi "đổi lịch" vào hồ sơ của cả lớp là
+      // báo giờ mới cho phụ huynh ở case KHÁC — Sale đọc hồ sơ rồi gọi báo sai giờ.
+      leadIds: await layLeadTrongCaseTrial({
+        sessionId: data.sessionId,
+        trialClassId: ses.trialClassId,
+        lopTheoKhung,
+      }),
       ...getAuditActor(ctx.session),
       moc: new Date(),
       sk: {
         viec: "trial.doi-lich",
-        tenLop: lopCuaBuoi?.name ?? "(không rõ lớp)",
+        tenLop: lopCuaBuoi.name,
         ngayTruoc: ses.date,
         gioTruoc: `${ses.startTime}–${ses.endTime}`,
         ngaySau: date,
@@ -785,6 +856,9 @@ export async function cancelLopTrialSessionAction(
   const ses = await loadScopedTrialSession(ctx.actor, data.sessionId);
   if (!ses) return { ok: false, error: "Không tìm thấy buổi học" };
   if (ses.status === "CANCELLED") return { ok: true }; // idempotent
+  const lopCuaBuoi = await loadScopedTrialClass(ctx.actor, ses.trialClassId);
+  if (!lopCuaBuoi) return { ok: false, error: KHONG_THAY_LOP };
+  const lopTheoKhung = laLopTheoKhung(lopCuaBuoi);
 
   // ── CỔNG CHỦ CASE + CỔNG KHÁCH CỦA NGƯỜI KHÁC (23/09/2026) ────────────────────────
   // Huỷ case là một lượt GỠ HÀNG LOẠT trá hình: mọi bé trong case rơi khỏi lịch hẹn.
@@ -798,6 +872,8 @@ export async function cancelLopTrialSessionAction(
       laQuanLy: quanLyLop,
       soHocVienNguoiKhac: await demHocVienNguoiKhac(ctx.actor, {
         sessionId: data.sessionId,
+        trialClassId: ses.trialClassId,
+        lopTheoKhung,
         userId: ctx.session.user.id,
         quanLyLead: await laQuanLyLead(ses.centerId),
       }),
@@ -812,17 +888,24 @@ export async function cancelLopTrialSessionAction(
   });
 
   {
-    // Huỷ BUỔI không đụng trạng thái ghi danh (khác huỷ LỚP), nên đọc sau `update` vẫn ra
-    // đủ lead. Phụ huynh có con trong lớp là người trực tiếp bị ảnh hưởng — buổi biến
-    // khỏi lịch, nên hồ sơ lead phải kể lại việc đó.
-    const lopCuaBuoi = await loadScopedTrialClass(ctx.actor, ses.trialClassId);
+    // Huỷ case KHÔNG đụng ghi danh (khác huỷ LỚP) — cố ý: bé vẫn trỏ vào case đã huỷ để
+    // còn vết "từng ở case nào", và màn lớp đưa những bé đó vào khối "Chưa xếp case"
+    // (`laChuaXepCase`, lib/trial/nghia-null.ts) để xếp sang case khác. Đọc sau `update`
+    // vì thế vẫn ra đủ lead.
+    //
+    // ~~Mọi lead trong LỚP~~ **[SỬA 23/09/2026]** chỉ lead có bé TRONG CASE NÀY — huỷ
+    // case của Sale 2 không phải chuyện của phụ huynh ở case của Sale 1.
     await ghiTuongTacNhieuLead({
-      leadIds: await layLeadTrongLopTrial(ses.trialClassId),
+      leadIds: await layLeadTrongCaseTrial({
+        sessionId: data.sessionId,
+        trialClassId: ses.trialClassId,
+        lopTheoKhung,
+      }),
       ...getAuditActor(ctx.session),
       moc: new Date(),
       sk: {
         viec: "trial.huy-buoi",
-        tenLop: lopCuaBuoi?.name ?? "(không rõ lớp)",
+        tenLop: lopCuaBuoi.name,
         ngay: ses.date,
         lyDo: data.reason,
       },
@@ -894,7 +977,7 @@ export async function enrollLeadChildLopTrialAction(input: {
   // ⚠️ Lọc ở ô TÌM là lọc TRANG TRÍ — `searchLopTrialCandidatesAction` chỉ gợi ý, còn đây
   // là endpoint riêng và ai cũng POST thẳng một `leadChildId` bất kỳ vào được. Hai cửa
   // phải dùng CÙNG một định nghĩa "của tôi", nếu không thì cửa hẹp hơn là cửa không ai đi.
-  if (!(await checkPermission("leads:view-all", { centerId: cls.centerId }))) {
+  if (!(await laQuanLyLead(cls.centerId))) {
     const con = await scopedDb(ctx.actor).leadChild.findUnique({
       where: { id: input.leadChildId },
       select: { lead: { select: { assignedToId: true, createdById: true, isSharedWithTeam: true } } },
@@ -975,13 +1058,14 @@ export async function searchLopTrialCandidatesAction(input: {
 
   // Chốt 17/09/2026 — Sale chỉ thêm được học viên thuộc LEAD CỦA MÌNH.
   //
-  // Diễn đạt bằng QUYỀN, không so vai (luật cứng #1): `leads:view-all` đã tồn tại và đã
-  // đúng tập vai cần phân biệt — HO_MARKETING · TRAINING · CENTER_MANAGER giữ nó,
-  // CENTER_SALES_CSM thì không. Không cần thêm khoá mới.
+  // Diễn đạt bằng QUYỀN, không so vai (luật cứng #1). ~~`leads:view-all` … HO_MARKETING
+  // · TRAINING · CENTER_MANAGER giữ nó~~ **[SỬA 23/09/2026]** TRAINING không giữ khoá
+  // đó (xem `laQuanLyLead`); ô tìm của Đào tạo vì thế luôn rỗng. Nay dùng ĐÚNG hàm mà
+  // cửa gắn / gỡ / chuyển case dùng.
   //
   // `leadCuaToiOrClause` là định nghĩa DÙNG CHUNG với `/admin/leads` và `/admin/search`;
   // đừng chép ba vế của nó ra đây (xem chú thích tại hàm).
-  const xemMoiLead = await checkPermission("leads:view-all", { centerId: cls.centerId });
+  const xemMoiLead = await laQuanLyLead(cls.centerId);
 
   const leads = await sdb.lead.findMany({
     where: {
@@ -1016,12 +1100,17 @@ export async function searchLopTrialCandidatesAction(input: {
     take: 20,
   });
 
+  // 23/09 — CHE SỐ ĐIỆN THOẠI khi người tìm không có `leads:view-pii`. Ô tìm này nay mở
+  // cho "quản lý khách trong lớp" (gồm Đào tạo — vai KHÔNG có quyền xem PII lead), và
+  // trả thô SĐT của 20 lead một lượt là mở gần đúng thứ mà lý do không cấp
+  // `leads:view-all` cho Đào tạo muốn giữ kín. Tên giữ nguyên: người gắn hộ cần nhận ra bé.
+  const xemSdt = await checkPermission("leads:view-pii", { centerId: cls.centerId });
   const candidates: Candidate[] = leads.flatMap((l) =>
     l.children.map((c) => ({
       leadChildId: c.id,
       childName: c.fullName,
       parentName: l.parentName,
-      phone: l.phone,
+      phone: xemSdt || !l.phone ? l.phone : maskPhone(l.phone),
       leadStatus: leadStatusLabel(l.status),
     })),
   );
@@ -1137,8 +1226,11 @@ export async function xepCaseHocVienAction(input: {
     where: { id: input.trialEnrollmentId },
     select: {
       trialClassId: true,
+      // Case CŨ — để báo giáo viên cũ rằng bé đã rời ca của họ (xem cuối hàm).
+      scheduledSessionId: true,
       leadChild: {
         select: {
+          fullName: true,
           lead: {
             select: {
               assignedToId: true,
@@ -1162,20 +1254,15 @@ export async function xepCaseHocVienAction(input: {
   // ngang gỡ, mà không để lại dấu trên màn của Sale 2. Nên chuyển case đòi đúng thứ mà
   // gỡ đòi: là chủ lead, hoặc là Quản lý.
   {
-    const quyen = quyenGoHocVien({
+    // `quyenChuyenCase` = đúng luật của `quyenGoHocVien`, câu chữ nói về CHUYỂN — cùng
+    // câu mà ô "Xếp vào case" bị khoá trên màn đang in.
+    const quyen = quyenChuyenCase({
       lead: enr.leadChild?.lead ?? null,
       userId: ctx.session.user.id,
       laQuanLy: await laQuanLyLead(cls.centerId),
       tenSale: enr.leadChild?.lead?.assignedTo?.name ?? null,
     });
-    if (!quyen.duoc) {
-      return {
-        ok: false,
-        // Câu của cửa gỡ nói về "gỡ"; ở đây việc là "chuyển", nên nói lại cho đúng việc
-        // rồi mới dán lý do — người dùng phải đọc ra được mình vừa bị chặn vì cái gì.
-        error: `Không chuyển được case: ${quyen.lyDo}`,
-      };
-    }
+    if (!quyen.duoc) return { ok: false, error: quyen.lyDo };
   }
 
   const res = await rescheduleTrialEnrollment({
@@ -1185,6 +1272,62 @@ export async function xepCaseHocVienAction(input: {
     actorId: ctx.session.user.id,
   });
   if (!res?.ok) return { ok: false, error: res?.error ?? "Chuyển case thất bại" };
+
+  // ── BÁO GIÁO VIÊN (23/09/2026) ─────────────────────────────────────────────────────
+  // `rescheduleTrialEnrollment` KHÔNG tự gửi tin — nó chỉ trả `gvBiGoId`. Phần báo tin
+  // từng nằm ở `rescheduleLopTrialAction`, và biến mất cùng hàm đó khi bị gỡ ngày 28/08.
+  // Hệ quả đo được: gắn thẳng bé vào case (EnrollPanel) thì giáo viên của case được báo,
+  // còn xếp một bé "chưa xếp case" vào case — cùng một việc — thì không ai được báo.
+  //
+  // Gửi SAU khi ghi đã commit, và lỗi gửi không được biến lượt chuyển THÀNH CÔNG thành
+  // thất bại (người dùng sẽ bấm lại và lần đó mới sinh dữ liệu sai).
+  try {
+    const [den, di] = await Promise.all([
+      sdb.trialClassSession.findUnique({
+        where: { id: input.toSessionId },
+        select: { teacherId: true, date: true, startTime: true, endTime: true },
+      }),
+      enr.scheduledSessionId
+        ? sdb.trialClassSession.findUnique({
+            where: { id: enr.scheduledSessionId },
+            select: { teacherId: true, status: true },
+          })
+        : Promise.resolve(null),
+    ]);
+    const tenBe = enr.leadChild?.fullName ?? "Một học viên";
+    const me = ctx.session.user.id;
+    const moTaDen = den ? `${nhanNgayVn(den.date)} ${den.startTime}–${den.endTime}` : "";
+    // Mốc thời gian trong khoá: một bé có thể được chuyển qua lại nhiều lần giữa hai
+    // case — khử trùng theo cặp id thôi thì lần chuyển thứ hai bị nuốt.
+    const moc = Date.now();
+    if (den?.teacherId && den.teacherId !== me) {
+      await notifyTrialTeacherAssigned({
+        teacherId: den.teacherId,
+        title: "Có học viên mới trong ca trải nghiệm của bạn",
+        body: `${tenBe} vừa được xếp vào ca ${moTaDen} · lớp ${cls.name}.`,
+        dedupeKey: `trial-case.moved-in:${input.trialEnrollmentId}:${input.toSessionId}:${moc}`,
+        entityId: input.toSessionId,
+      });
+    }
+    // Giáo viên CŨ — chỉ khi case cũ còn sống (case đã huỷ thì giáo viên đã nhận tin
+    // huỷ rồi) và là một người khác người mới.
+    if (
+      di?.teacherId &&
+      di.status !== "CANCELLED" &&
+      di.teacherId !== den?.teacherId &&
+      di.teacherId !== me
+    ) {
+      await notifyTrialTeacherAssigned({
+        teacherId: di.teacherId,
+        title: "Một học viên đã chuyển khỏi ca của bạn",
+        body: `${tenBe} đã chuyển sang ca khác trong lớp ${cls.name}.`,
+        dedupeKey: `trial-case.moved-out:${input.trialEnrollmentId}:${input.toSessionId}:${moc}`,
+        entityId: enr.scheduledSessionId ?? undefined,
+      });
+    }
+  } catch (e) {
+    console.error("[lop-trial] bao giao vien khi chuyen case that bai", input.trialEnrollmentId, e);
+  }
 
   lamMoi(input.trialClassId);
   return { ok: true };
@@ -1283,9 +1426,41 @@ export async function markLopTrialAttendanceAction(
     return { ok: false, error: "Bạn chỉ được điểm danh lớp được phân công" };
   }
 
+  // ── KIỂM CẢ LÔ TRƯỚC KHI GHI BÉ NÀO (23/09/2026) ──────────────────────────────────
+  // Cổng "bé phải thuộc case này" ở `markAttendance` từ chối TỪNG bé — mà vòng lặp dưới
+  // ghi lần lượt, nên một bé vừa bị chuyển case giữa lúc Sale đang điểm danh sẽ làm lượt
+  // lưu dừng giữa chừng: bé trước đã ghi, bé sau không, người dùng chỉ thấy một lỗi. Kiểm
+  // cả lô bằng CÙNG luật (`thuocCase`) trước, để lô hoặc ghi đủ hoặc không ghi gì.
+  {
+    const lop = await loadScopedTrialClass(ctx.actor, ses.trialClassId);
+    if (!lop) return { ok: false, error: KHONG_THAY_LOP };
+    const ghiDanh = await scopedDb(ctx.actor).trialEnrollment.findMany({
+      where: { id: { in: parsed.data.records.map((r) => r.trialEnrollmentId) } },
+      select: { id: true, trialClassId: true, scheduledSessionId: true },
+    });
+    const theoId = new Map(ghiDanh.map((g) => [g.id, g]));
+    const lech = parsed.data.records.filter((r) => {
+      const g = theoId.get(r.trialEnrollmentId);
+      return (
+        !g ||
+        g.trialClassId !== ses.trialClassId ||
+        !thuocCase(g, parsed.data.trialSessionId, laLopTheoKhung(lop))
+      );
+    });
+    if (lech.length > 0) {
+      return {
+        ok: false,
+        error:
+          `${lech.length} học viên không còn thuộc case này (vừa được chuyển hoặc gỡ) — ` +
+          "chưa ghi điểm danh cho ai. Tải lại trang rồi điểm danh lại.",
+      };
+    }
+  }
+
   // ⚠️ KHÔNG atomic cả buổi: service ghi 1 bản ghi mỗi lần gọi nên vòng lặp này dừng ở
   // lỗi đầu tiên và để lại nửa lớp đã ghi. Đây là hành vi của màn cũ, chép nguyên có
-  // chủ đích — đổi sang transaction là thay đổi nghiệp vụ, không thuộc phạm vi GĐ2.
+  // chủ đích — đổi sang transaction là thay đổi nghiệp vụ, không thuộc phạm vi GĐ2. Khối
+  // kiểm cả lô ngay trên đóng đúng đường mà cổng mới 23/09 mở ra.
   for (const r of parsed.data.records) {
     const res = await markAttendance({
       trialSessionId: parsed.data.trialSessionId,

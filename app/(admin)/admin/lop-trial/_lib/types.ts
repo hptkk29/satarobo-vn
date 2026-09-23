@@ -104,6 +104,12 @@ export type SessionRow = {
   quyenSua: KetQuyenRow;
   /** Server đã quy sẵn: có xoá được case này không (cổng thứ hai — xem `quyenXoaCase`). */
   quyenXoa: KetQuyenRow;
+  /**
+   * Server đã quy sẵn: có DỜI GIỜ / NGÀY case này được không (`quyenDoiGioCase`). Khác
+   * `quyenSua`: chủ case giữ khách của Sale khác vẫn đổi được phòng / giáo viên, nhưng
+   * không dời được giờ hẹn của phụ huynh người khác.
+   */
+  quyenDoiGio: KetQuyenRow;
   /** trialEnrollmentId → điểm danh đã lưu. Không có khoá = chưa điểm danh em đó. */
   attendance: Record<string, { status: TrialAttendanceMark; note: string | null }>;
   /**
@@ -147,6 +153,8 @@ export type EnrollmentRow = {
    * Enabled`) vốn chỉ có ở server, nên bản client sẽ lệch đúng vào ca bật cờ.
    */
   quyenGo: KetQuyenRow;
+  /** Server đã quy sẵn bằng `quyenChuyenCase` — cùng luật với `quyenGo`, câu chữ nói về CHUYỂN. */
+  quyenChuyen: KetQuyenRow;
 };
 
 /** Ứng viên trả về từ ô tìm học viên. */

@@ -46,10 +46,14 @@ export default async function ChiTietLopTrialPage({
   // vòng sau (dưới) hỏi lại kèm cơ sở để gác đúng. Ở đây chỉ dùng cho HIỂN THỊ; cửa GHI
   // tự hỏi lại kèm `centerId` trong `_actions.ts`, nên một lượt hỏi rộng ở đây không nới
   // quyền thật của ai.
-  const [quanLyLopSoBo, quanLyLeadSoBo] = await Promise.all([
+  const [quanLyLopSoBo, xemMoiLeadSoBo] = await Promise.all([
     checkPermission("trials:create-class"),
     checkPermission("leads:view-all"),
   ]);
+  // "Quản lý khách trong lớp" = create-class HOẶC view-all — ĐÚNG công thức của
+  // `laQuanLyLead` ở `_actions.ts`. Lệch công thức là nút sáng mà cửa ghi chặn (hoặc
+  // ngược lại), và đó chính là lỗi vừa đo được với vai Đào tạo 23/09.
+  const quanLyLeadSoBo = quanLyLopSoBo || xemMoiLeadSoBo;
   const cls = await layChiTietLop(actor, id, {
     userId: session.user.id,
     laQuanLyLop: quanLyLopSoBo,
@@ -161,11 +165,15 @@ export default async function ChiTietLopTrialPage({
 
   // Khung giờ + ngày của LỚP — ràng buộc mà mọi case bên trong phải nằm trọn trong đó.
   // `null` với lớp tạo trước 22/09/2026; đường đọc phải chịu được null và KHÔNG bịa.
+  //
+  // ⚠️ Đọc cột `theoKhung`, KHÔNG suy từ `startTime`/`endTime`: lớp tạo trước 28/08 vẫn
+  // mang giờ ở cấp lớp (lib/trial/nghia-null.ts). Suy từ giờ là vẽ "khung" cho lớp
+  // slot cũ và đẩy bé "học cả lớp" của nó vào khối "Chưa xếp case" — đo được 23/09.
   const khungLop =
-    cls.startTime && cls.endTime
+    cls.theoKhung && cls.startTime && cls.endTime
       ? { startTime: cls.startTime, endTime: cls.endTime }
       : null;
-  const ngayLop = cls.startDate ? vnYmd(cls.startDate) : null;
+  const ngayLop = cls.theoKhung && cls.startDate ? vnYmd(cls.startDate) : null;
 
   // 27/08 — khối "Phiếu đánh giá buổi học" (hệ SESSION_EVAL) ĐÃ GỠ khỏi màn này.
   //
@@ -275,6 +283,7 @@ export default async function ChiTietLopTrialPage({
         cheDoChonGv={cheDoChonGv}
         locGvTheoCa={locGvTheoCa}
         soGvMienLoc={gvMienLoc.length}
+        lopDaKetThuc={daKetThuc}
       />
     </div>
   );

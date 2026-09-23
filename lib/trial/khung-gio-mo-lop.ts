@@ -181,6 +181,46 @@ export function kiemCaseTrongLop(input: {
 }
 
 /**
+ * Case có nằm trọn trong khung lớp VÀ đúng NGÀY của lớp không — MỘT hàm cho HAI cửa ghi
+ * (thêm case và sửa case, `app/(admin)/admin/lop-trial/_actions.ts`).
+ *
+ * Vì sao phải dùng chung (đo 23/09/2026): bản đầu chỉ gác ở cửa THÊM. Cửa SỬA ghi đè
+ * thẳng ngày/giờ, nên Sale mở case của mình rồi đổi sang ngày khác lúc 22:00 là server
+ * nhận — các bé trong case đi theo sang một ngày mà tên lớp không hề nói tới.
+ *
+ * Lớp CŨ KHÔNG bị chặn: khoá hồi tố là khoá cứng mọi lớp đang chạy. "Lớp cũ" đọc từ cột
+ * `theoKhung`, KHÔNG từ việc có giờ hay không — lớp tạo trước 28/08 VẪN mang giờ ở cấp
+ * lớp (xem `lib/trial/nghia-null.ts`), và gác chúng theo giờ đó là khoá cứng cả việc
+ * đổi giáo viên của một buổi cũ. `v.date` là "YYYY-MM-DD" theo lịch VN.
+ */
+export function kiemCaseThuocLop(
+  cls: {
+    /** BẮT BUỘC (luật 7) — thiếu nó thì hàm không phân biệt nổi lớp cũ mang giờ. */
+    theoKhung: boolean;
+    startDate: Date | null;
+    startTime: string | null;
+    endTime: string | null;
+  },
+  v: { date: string; startTime: string; endTime: string },
+): { ok: true } | { ok: false; error: string } {
+  if (!cls.theoKhung) return { ok: true };
+  const khungLop =
+    cls.startTime && cls.endTime ? { startTime: cls.startTime, endTime: cls.endTime } : null;
+  const trongKhung = kiemCaseTrongLop({ lop: khungLop, startTime: v.startTime, endTime: v.endTime });
+  if (!trongKhung.ok) return { ok: false, error: trongKhung.loi };
+  // Lớp CÓ ngày thì case phải đúng ngày đó. Cho lệch ngày là để một "lớp trial ngày
+  // 22/09" chứa case ngày 30/09 — Sale chọn lớp theo ngày, nên cái tên lớp sẽ nói dối.
+  // `startDate` là @db.Date (nửa đêm UTC của ngày VN) ⇒ `vnYmd` đọc ra đúng ngày đó.
+  if (cls.startDate && vnYmd(cls.startDate) !== v.date) {
+    return {
+      ok: false,
+      error: `Lớp này mở ngày ${vnYmd(cls.startDate)} — chọn lớp của ngày ${v.date} hoặc nhờ Quản lý cơ sở mở lớp cho ngày đó`,
+    };
+  }
+  return { ok: true };
+}
+
+/**
  * Sinh danh sách NGÀY theo thứ, dùng cho nút "mở lớp cho cả kỳ".
  *
  * Dùng `vnAddDays`/`vnYmd` chứ không cộng mili-giây: cộng tay qua mốc đổi ngày là chỗ đẻ

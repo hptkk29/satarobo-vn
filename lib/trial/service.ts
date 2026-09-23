@@ -6,6 +6,7 @@
 // con IN_PROGRESS + lead "Đang học thử"; đủ buổi (totalSessions per-lead) → con ATTENDED +
 // lead "Chờ quyết định" (AWAITING_DECISION) NGAY (TBD-2). TRIAL_ATTENDED để dành lead đã chốt.
 import { Prisma } from "@prisma/client";
+import { laLopTheoKhung, thuocCase } from "@/lib/trial/nghia-null";
 import { db } from "@/lib/db";
 import { notifyStaff } from "@/lib/notifications/notify";
 import { baoDaoTaoBuoiChuaCoGiaoVien } from "./notify-training";
@@ -176,6 +177,11 @@ export async function createTrialClass(params: {
           // giờ cụ thể của từng case vẫn nằm ở `TrialClassSession`. Hai thứ khác nhau.
           startTime: params.startTime ?? null,
           endTime: params.endTime ?? null,
+          // 23/09 — dấu phân loại lớp (xem lib/trial/nghia-null.ts). TRUE khi và chỉ khi
+          // được truyền ĐỦ ngày + khung: ba đường mở lớp mới (form một ngày, cả kỳ, Excel)
+          // đều truyền đủ, còn seed/test cũ thì không. Lớp tạo trước hôm nay giữ FALSE
+          // (mặc định của migration) dù có giờ cấp lớp.
+          theoKhung: Boolean(params.startDate && params.startTime && params.endTime),
           capacity: null,
           teacherId: null,
           roomId: null,
@@ -391,9 +397,19 @@ export async function enrollLeadChild(params: {
           centerId: true,
           sessionCount: true,
           teacherId: true,
+          status: true,
+          theoKhung: true,
         },
       });
       if (!cls) return { ok: false, error: "Lớp trải nghiệm không tồn tại" };
+      // 23/09 — lớp đã kết thúc thì không nhận thêm bé. Trước đây cửa này không đọc
+      // trạng thái lớp: sau khi Quản lý huỷ lớp, các case vẫn SCHEDULED (huỷ lớp không
+      // huỷ buổi) nên ô thêm học viên vẫn hiện, và gắn vào là sinh lại một ghi danh
+      // ACTIVE trong lớp đã huỷ — chiếm lại đúng chỗ partial-unique mà lượt huỷ lớp sinh
+      // ra để trả lại, và giáo viên còn nhận tin "có học viên mới".
+      if (cls.status === "CANCELLED" || cls.status === "COMPLETED") {
+        return { ok: false, error: "Lớp trải nghiệm đã kết thúc — không xếp thêm học viên" };
+      }
 
       const activeCount = await tx.trialEnrollment.count({
         where: { trialClassId: params.trialClassId, status: "ACTIVE" },
@@ -419,10 +435,19 @@ export async function enrollLeadChild(params: {
         // Buổi truyền vào phải thuộc đúng lớp đang xếp (chống chọn buổi lớp khác).
         const ses = await tx.trialClassSession.findUnique({
           where: { id: scheduledSessionId },
-          select: { trialClassId: true },
+          select: { trialClassId: true, status: true },
         });
         if (!ses || ses.trialClassId !== params.trialClassId) {
           return { ok: false, error: "Buổi học không thuộc lớp đã chọn" };
+        }
+        // 23/09 — CÙNG luật với cửa chuyển case (`danhGiaDoiLich` đòi SCHEDULED). Hai
+        // cửa đưa bé vào một case mà theo hai luật khác nhau là chỗ để lọt: gắn thẳng
+        // vào case ĐÃ HUỶ thì bé kẹt từ đầu (case đó đã biến khỏi lịch giáo viên).
+        if (ses.status !== "SCHEDULED") {
+          return {
+            ok: false,
+            error: "Case này không còn nhận học viên (đã huỷ hoặc đã xong) — chọn case khác",
+          };
         }
       }
 
@@ -461,7 +486,15 @@ export async function enrollLeadChild(params: {
       // Học toàn bộ buổi thì báo cho người dạy BUỔI SẮP TỚI — người gặp bé đầu tiên.
       // Các buổi sau có thể khác người, nhưng bắn tin cho mọi giáo viên của lớp là biến
       // một việc thành một đợt thông báo; ai dạy buổi sau vẫn thấy bé ở /teacher/trial.
-      const buoi = scheduledSessionId
+      // 23/09 — lớp THEO KHUNG mà bé chưa có case (NULL = "chưa xếp case", xem
+      // `lib/trial/nghia-null.ts`) thì CHƯA có giáo viên nào dạy bé. Bản cũ vẫn báo GV
+      // của buổi sắp tới "học toàn bộ buổi" — sai người, và khi bé được xếp vào case
+      // khác thì người đó không bao giờ được báo lại. Việc báo dời sang lúc XẾP CASE
+      // (`xepCaseHocVienAction`).
+      const chuaCoCase = !scheduledSessionId && laLopTheoKhung(cls);
+      const buoi = chuaCoCase
+        ? null
+        : scheduledSessionId
         ? await tx.trialClassSession.findUnique({
             where: { id: scheduledSessionId },
             select: { teacherId: true, date: true, startTime: true, endTime: true },
@@ -475,7 +508,7 @@ export async function enrollLeadChild(params: {
             orderBy: [{ date: "asc" }, { seq: "asc" }],
             select: { teacherId: true, date: true, startTime: true, endTime: true },
           });
-      const gvId = buoi?.teacherId ?? cls.teacherId ?? null;
+      const gvId = chuaCoCase ? null : (buoi?.teacherId ?? cls.teacherId ?? null);
       // Không tự báo mình: giáo viên vừa tự xếp con vào ca của chính mình thì biết rồi.
       // Lớp chưa có buổi nào sắp tới và cũng không có GV mặc định ⇒ không có ai để báo.
       const tin: TinBaoGvCaMoi | undefined =
@@ -769,11 +802,15 @@ export async function markAttendance(params: {
     const [ses, enr] = await Promise.all([
       db.trialClassSession.findUnique({
         where: { id: params.trialSessionId },
-        select: { trialClassId: true },
+        select: {
+          trialClassId: true,
+          status: true,
+          trialClass: { select: { theoKhung: true } },
+        },
       }),
       db.trialEnrollment.findUnique({
         where: { id: params.trialEnrollmentId },
-        select: { trialClassId: true },
+        select: { trialClassId: true, scheduledSessionId: true },
       }),
     ]);
     if (!ses || !enr) return { ok: false, error: "Không tìm thấy buổi hoặc ca trải nghiệm" };
@@ -781,6 +818,23 @@ export async function markAttendance(params: {
       // Gộp một thông điệp cho cả hai ca (không tồn tại / khác lớp) — nói rõ hơn là
       // biến thông báo lỗi thành kênh dò id.
       return { ok: false, error: "Học viên không thuộc lớp của buổi này" };
+    }
+    // 23/09 — buổi ĐÃ HUỶ đã biến khỏi lịch giáo viên (và giáo viên đã nhận tin huỷ).
+    // Điểm danh vào đó là ghi có mặt cho một buổi không diễn ra, và `syncTrialProgress`
+    // bên dưới sẽ đẩy lead theo con số giả đó.
+    if (ses.status === "CANCELLED") {
+      return { ok: false, error: "Buổi đã huỷ — không điểm danh được" };
+    }
+    // 23/09 — bé phải thuộc ĐÚNG case này. Trước đây chỉ kiểm cùng lớp, còn luật "bé
+    // chỉ hiện ở case của mình" chỉ nằm ở bộ lọc phía trình duyệt: POST tay là điểm
+    // danh được một bé ở hai case, sinh hai dòng có mặt, thổi số buổi đã dự và tự đẩy
+    // lead của Sale khác lên CHO_QUYET_DINH. Nghĩa của NULL theo loại lớp — xem
+    // `lib/trial/nghia-null.ts` (lớp cũ: NULL = học cả lớp, vẫn điểm danh được).
+    if (!thuocCase(enr, params.trialSessionId, laLopTheoKhung(ses.trialClass))) {
+      return {
+        ok: false,
+        error: "Học viên không thuộc case này — xếp hoặc chuyển bé vào case trước rồi mới điểm danh",
+      };
     }
 
     await db.$transaction(async (tx) => {
@@ -825,14 +879,27 @@ export async function completeTrialSession(params: {
     return await db.$transaction(async (tx) => {
       const session = await tx.trialClassSession.findUnique({
         where: { id: params.trialSessionId },
-        select: { id: true, trialClassId: true },
+        select: { id: true, trialClassId: true, status: true },
       });
       if (!session) return { ok: false, error: "Buổi học không tồn tại" };
+      // 23/09 — CHỈ buổi SCHEDULED mới hoàn tất được. Bản cũ ghi đè không đọc trạng
+      // thái, nên bấm "Hoàn tất" trên case ĐÃ HUỶ là hồi sinh nó thành COMPLETED: case
+      // hiện lại trên thanh khung giờ và trên lịch giáo viên — người vừa nhận tin huỷ.
+      if (session.status === "CANCELLED") {
+        return { ok: false, error: "Buổi đã huỷ — không hoàn tất được" };
+      }
+      if (session.status === "COMPLETED") return { ok: true }; // idempotent
 
-      await tx.trialClassSession.update({
-        where: { id: session.id },
+      // `updateMany` CÓ ĐIỀU KIỆN (mẫu chống-đua FIX-H9 của repo): nếu ai đó huỷ buổi
+      // giữa lúc đọc và lúc ghi thì phép ghi đổi 0 dòng — commit vô hại — thay vì đè
+      // CANCELLED thành COMPLETED.
+      const upd = await tx.trialClassSession.updateMany({
+        where: { id: session.id, status: "SCHEDULED" },
         data: { status: "COMPLETED" },
       });
+      if (upd.count === 0) {
+        return { ok: false, error: "Buổi vừa đổi trạng thái — tải lại trang rồi thử lại" };
+      }
       // FL-R2 (QĐ-R2-W3): tiến độ lead/Kanban do markAttendance lo per-lead (đủ buổi →
       // AWAITING_DECISION NGAY, không chờ buổi cuối). Hoàn tất buổi chỉ khoá lifecycle buổi.
       return { ok: true };

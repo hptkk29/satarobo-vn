@@ -14,7 +14,15 @@ import { vnAddDays, vnParts, vnStartOfDay, vnYmd } from "@/lib/time/vn";
 import { toVnInput } from "./schemas";
 import { buildClassListWhere, buildBookingListWhere, ngayVnSangUtc } from "./filters";
 import { suySaleCuaLop } from "./sale-cua-lop";
-import { quyenGoHocVien, quyenSuaCase, quyenXoaCase } from "@/lib/trial/quyen-case";
+import {
+  LY_DO_DA_HOC_XONG,
+  quyenDoiGioCase,
+  quyenChuyenCase,
+  quyenGoHocVien,
+  quyenSuaCase,
+  quyenXoaCase,
+} from "@/lib/trial/quyen-case";
+import { laLopTheoKhung, thuocCase } from "@/lib/trial/nghia-null";
 import type {
   BookingRow,
   ClassRow,
@@ -100,8 +108,11 @@ export async function layDanhSachLop(
       hocVien: r.enrollments.map((e) => e.leadChild?.fullName ?? "(không rõ tên)"),
       // `startDate` là `@db.Date` ⇒ đọc ra UTC 00:00 của ngày VN; `toISOString().slice(0,10)`
       // lấy đúng ngày đó. Đừng đổi sang `toLocaleDateString` — hàm đó đọc múi giờ tiến trình.
-      ngayMo: r.startDate ? r.startDate.toISOString().slice(0, 10) : null,
-      khungGio: r.startTime && r.endTime ? `${r.startTime}–${r.endTime}` : null,
+      // 23/09 — CHỈ lớp theo khung mới có "ngày mở" + "khung giờ" theo nghĩa mới. Lớp tạo
+      // trước 28/08 cũng mang ngày/giờ cấp lớp, nhưng đó là giờ của lịch slot cũ; in nó
+      // vào cột "Khung giờ" là bảo Sale đó là khung hẹn khách — sai.
+      ngayMo: r.theoKhung && r.startDate ? r.startDate.toISOString().slice(0, 10) : null,
+      khungGio: r.theoKhung && r.startTime && r.endTime ? `${r.startTime}–${r.endTime}` : null,
       sale: suySaleCuaLop({
         tenNguoiTao: r.createdById ? (tenTheoId.get(r.createdById) ?? null) : null,
         saleTheoCon: r.enrollments.map((e) => e.leadChild?.lead?.assignedTo?.name ?? null),
@@ -154,6 +165,11 @@ export type ChiTietLop = {
   endTime: string | null;
   /** NGÀY lớp mở. `null` với lớp cũ. Case phải cùng ngày này (cổng ở `_actions.ts`). */
   startDate: Date | null;
+  /**
+   * Lớp theo khung hay lớp cũ — đọc CỘT, đừng suy từ `startTime`/`endTime`: lớp tạo trước
+   * 28/08 vẫn mang giờ ở cấp lớp (xem `lib/trial/nghia-null.ts`).
+   */
+  theoKhung: boolean;
   /** `null` = không giới hạn sĩ số. */
   capacity: number | null;
   sessionCount: number;
@@ -462,6 +478,12 @@ export async function layChiTietLop(
   const quyenGoTheoCa = new Map<string, ReturnType<typeof quyenGoHocVien>>();
   for (const e of cls.enrollments) {
     const ld = e.leadChild?.lead ?? null;
+    // Chỉ ghi danh ACTIVE mới gỡ được (server tìm đúng `status: "ACTIVE"`). Bé đã học
+    // xong mà nút vẫn sáng thì bấm vào là nhận "không tìm thấy ghi danh" — nút hứa suông.
+    if (e.status !== "ACTIVE") {
+      quyenGoTheoCa.set(e.id, { duoc: false, lyDo: LY_DO_DA_HOC_XONG });
+      continue;
+    }
     quyenGoTheoCa.set(
       e.id,
       quyenGoHocVien({
@@ -479,6 +501,8 @@ export async function layChiTietLop(
     );
   }
 
+  const lopTheoKhung = laLopTheoKhung(cls);
+
   return {
     id: cls.id,
     code: cls.code,
@@ -488,6 +512,7 @@ export async function layChiTietLop(
     startTime: cls.startTime,
     endTime: cls.endTime,
     startDate: cls.startDate,
+    theoKhung: cls.theoKhung,
     capacity: cls.capacity,
     sessionCount: cls.sessionCount,
     configName: cls.config?.name ?? null,
@@ -503,22 +528,32 @@ export async function layChiTietLop(
       roomId: s.roomId,
       createdById: s.createdById,
       nguoiTao: s.createdById ? (tenTaoCase.get(s.createdById) ?? null) : null,
-      quyenSua: quyenSuaCase({
-        nguoiTaoId: s.createdById,
-        userId: nguoiXem.userId,
-        laQuanLy: nguoiXem.laQuanLyLop,
-      }),
-      quyenXoa: quyenXoaCase({
-        nguoiTaoId: s.createdById,
-        userId: nguoiXem.userId,
-        laQuanLy: nguoiXem.laQuanLyLop,
-        soHocVienNguoiKhac: cls.enrollments.filter(
+      ...(() => {
+        const sua = quyenSuaCase({
+          nguoiTaoId: s.createdById,
+          userId: nguoiXem.userId,
+          laQuanLy: nguoiXem.laQuanLyLop,
+        });
+        // "Bé trong case" theo `thuocCase` — ĐÚNG tập mà server đếm ở
+        // `demHocVienNguoiKhac`. Lệch tập là nút khoá ở đây mà server cho qua (hay
+        // ngược lại): ở lớp CŨ, bé NULL học cả lớp nên cũng thuộc case này.
+        const soKhac = cls.enrollments.filter(
           (e) =>
             e.status === "ACTIVE" &&
-            e.scheduledSessionId === s.id &&
+            thuocCase(e, s.id, lopTheoKhung) &&
             quyenGoTheoCa.get(e.id)?.duoc === false,
-        ).length,
-      }),
+        ).length;
+        return {
+          quyenSua: sua,
+          quyenXoa: quyenXoaCase({
+            nguoiTaoId: s.createdById,
+            userId: nguoiXem.userId,
+            laQuanLy: nguoiXem.laQuanLyLop,
+            soHocVienNguoiKhac: soKhac,
+          }),
+          quyenDoiGio: quyenDoiGioCase({ sua, soHocVienNguoiKhac: soKhac }),
+        };
+      })(),
       attendance: Object.fromEntries(
         s.attendances.map((a) => [
           a.trialEnrollmentId,
@@ -545,6 +580,18 @@ export async function layChiTietLop(
         duoc: false,
         lyDo: "Không tra được quyền gỡ của ca này — tải lại trang.",
       },
+      quyenChuyen: quyenChuyenCase({
+        lead: e.leadChild?.lead
+          ? {
+              assignedToId: e.leadChild.lead.assignedToId,
+              createdById: e.leadChild.lead.createdById,
+              isSharedWithTeam: e.leadChild.lead.isSharedWithTeam,
+            }
+          : null,
+        userId: nguoiXem.userId,
+        laQuanLy: nguoiXem.laQuanLyLead,
+        tenSale: e.leadChild?.lead?.assignedTo?.name ?? null,
+      }),
     })),
   };
 }
