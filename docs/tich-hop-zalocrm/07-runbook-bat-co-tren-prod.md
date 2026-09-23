@@ -7,16 +7,34 @@
 
 ## 🔴 ĐIỀU KIỆN CHẶN — đọc trước, bật sau
 
-> ## ✅ CẬP NHẬT 22/09/2026 — ĐIỀU KIỆN CHẶN ĐÃ XONG
+> ## 🔴 ĐÍNH CHÍNH 23/09/2026 — CỜ NÀY **ĐÃ BẬT** TRÊN PRODUCTION, VÀ ĐÃ BẬT 7 NGÀY
 >
-> `NỢ-6` + `NỢ-8` **đã thi công** (`09-tach-org-theo-moi-truong.md`). Ba org tách hoàn toàn,
-> mỗi org một khoá riêng:
+> Cả mục dưới đây được viết với giả định *"cờ đang tắt, ta chọn ngày bật"*. Giả định đó
+> **sai**. `ZALOCRM_ENABLED` là **MỘT dòng env mang BỐN phạm vi** (Production, Preview,
+> Development, test) ⇒ **một giá trị** cho cả bốn. Đo bằng hành vi:
+> `admin.satarobo.vn/zalo-crm` → `307` về login (trang CÓ THẬT), webhook → `503` chứ không
+> `404`. Đầy đủ ở **`11-hoan-ma-org-cs2-va-dinh-chinh-co-prod.md` mục 1**.
+>
+> ⚠️ Kéo theo: **tắt cờ là tắt luôn `test`** (chung một dòng). Muốn tắt riêng prod thì phải
+> **tách biến ra trước**.
+>
+> Phần còn thiếu trên production là **5 biến kia**, không phải cái cờ.
+>
+> ## ✅ CẬP NHẬT 22/09 · SỬA 23/09 — ĐIỀU KIỆN CHẶN ĐÃ XONG
+>
+> `NỢ-6` + `NỢ-8` **đã thi công** (`09-tach-org-theo-moi-truong.md`). Nay **NĂM** org tách
+> hoàn toàn, mỗi org một khoá riêng:
 >
 > | org | nick | dữ liệu thật |
 > |---|---|---|
-> | `prod-cs1` | 3 | toàn bộ (150 hội thoại · 3.567 tin · 572 contact) |
-> | `test-cs1` | 0 | rỗng |
+> | **`prod-cs2`** | **3** | **toàn bộ** (201 hội thoại · 629 contact) ← dữ liệu là của **CS2** |
+> | `prod-cs1` | 0 | rỗng, chờ nick của CS1 |
+> | `test-cs1` · `test-cs2` | 0 | rỗng |
 > | `local-cs1` | 0 | rỗng |
+>
+> 🔴 Mã org **đã hoán 23/09**: org giữ dữ liệu thật nay mang mã `prod-cs2`. Lý do + bằng
+> chứng ở `11-…md` mục 2. Mọi chỗ trong tệp này viết `prod-cs1` như "org của prod" đều
+> phải đọc là `prod-cs2`.
 >
 > Đã đo **cách ly bằng hành vi** (`10-no17-…md` mục 4): `test` và `local` **không đọc được**
 > hội thoại của prod (`404`), và **không ghi được** quyền lên nick của prod (`PUT …/access`
