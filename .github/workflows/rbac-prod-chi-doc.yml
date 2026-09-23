@@ -1,0 +1,125 @@
+# Chạy TAY (workflow_dispatch) — ĐỌC PROD, KHÔNG GHI GÌ.
+#
+# Trả lời hai câu mà một phép diff tệp KHÔNG trả lời được:
+#
+#   1. "Đã chạy `seed-prod-roles.yml` chưa" — câu hỏi thật là **DB prod có khớp `ROLE_SEED`
+#      trong mã không**. So hai commit chỉ nói hai TỆP giống nhau; nó không nói DB giữ gì.
+#      Lượt seed có thể chạy lỗi giữa chừng, hoặc có người chỉnh role qua UI.
+#   2. "Ai THẬT SỰ mở được Zalo CRM trên prod" — `can()` v2 trả `true` cho `SUPER_ADMIN` vô
+#      điều kiện, nên quản trị tối cao vào được **không chứng minh** người khác vào được.
+#      Đây đúng lớp lỗi đã làm mục "Zalo CRM" ẩn 11 ngày mà mọi ca nghiệm thu vẫn "đạt".
+#
+# ── NĂM LỚP KHOÁ, ĐỘC LẬP NHAU ──────────────────────────────────────────────────────
+# 1. KHÔNG CÓ CHẾ ĐỘ GHI. `scripts/bao-cao-rbac-prod.ts` không chứa một lời gọi ghi nào,
+#    không cờ `--apply`. Ca `[RBAC-CD-01]` (`lib/auth/bao-cao-rbac-chi-doc.test.ts`) quét
+#    chính tệp đó. Một cờ thì lật được; một tệp không chứa lệnh ghi thì không.
+# 2. TRANSACTION READ ONLY + ROLLBACK canh sẵn — Postgres tự từ chối, kể cả phép ghi do một
+#    `import` nào đó kéo theo.
+# 3. USER CHỈ-ĐỌC. File này CỐ Ý KHÔNG đọc `PROD_DATABASE_URL` / `PROD_DIRECT_URL` (hai
+#    secret đầy quyền). Nó chỉ biết `PROD_DATABASE_URL_RO`.
+#    Cách tạo user: `docs/cham-cong/USER-CHI-DOC-PROD.md`.
+# 4. SCRIPT TỰ KHAI. Dòng đầu in `user=… · ghi được: CÓ/KHÔNG` — GitHub không cho đọc lại
+#    secret để đối chiếu, nên đây là cách DUY NHẤT thấy secret bị đặt nhầm.
+# 5. ⚠️ CỔNG RIÊNG CHO BÁO CÁO NÀY. `_kiem-quyen.ts` hỏi quyền trên `ClassSession` (tên bảng
+#    đóng cứng từ đợt chấm công — nợ ghim ở CLAUDE.md), mà script này đọc `RoleDef` /
+#    `RolePermission` / `UserOrgRole` / `User` / `OrgUnit`. Thiếu SELECT trên đúng những bảng
+#    ấy thì mọi số là 0 và **số 0 đó không phải sự thật** ⇒ script hỏi thẳng từng bảng và
+#    DỪNG (exit 1) nếu thiếu. Thà không có báo cáo còn hơn một báo cáo nói "0 vai có quyền"
+#    vì lý do sai.
+#
+# ── CHE DỮ LIỆU CÁ NHÂN ─────────────────────────────────────────────────────────────
+# Báo cáo vào job summary + artifact ⇒ RỜI KHỎI vòng kiểm soát của DB. Script KHÔNG in họ
+# tên; email che còn 2 ký tự đầu + tên miền. Đếm theo vai × đơn vị là đủ để quyết.
+# Artifact giữ 3 ngày — đủ để đọc và quyết, không đủ để thành bản sao dữ liệu sống lâu.
+#
+# Dùng chuỗi SESSION POOLER (:5432), không phải transaction pooler (:6543) — pgbouncer không
+# giữ prepared statement giữa các câu lệnh (xem `scripts/_script-db.ts`).
+name: RBAC · PROD · ĐỌC (chỉ đọc — không ghi gì)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  doc:
+    name: Đọc RBAC prod (không ghi)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Chỉ chạy trên `main` — báo cáo này để QUYẾT ĐỊNH có chạy seed hay không, nên nó phải so
+    # DB prod với `ROLE_SEED` của đúng mã đang chạy trên prod. Chạy từ nhánh feature là so
+    # prod với một định nghĩa chưa merge ⇒ báo "lệch" cho một thứ không lệch.
+    if: github.ref == 'refs/heads/main'
+    steps:
+      # Kiểm HÌNH DẠNG chuỗi trước khi tốn thời gian cài đặt rồi mới chết ở Prisma.
+      # KHÔNG in giá trị secret — chỉ nói chỗ nào sai.
+      - name: Kiểm secret chỉ-đọc
+        env:
+          U: ${{ secrets.PROD_DATABASE_URL_RO }}
+        run: |
+          if [ -z "$U" ]; then
+            echo "::error::Thiếu secret PROD_DATABASE_URL_RO (chuỗi session pooler của user chỉ-đọc)."
+            echo "::error::Cách tạo user + lấy chuỗi: docs/cham-cong/USER-CHI-DOC-PROD.md"
+            echo "::error::KHÔNG đặt PROD_DATABASE_URL / PROD_DIRECT_URL vào đây — chúng đầy quyền."
+            exit 1
+          fi
+          rest="${U#*://}"
+          proto="${U%%://*}"
+          userinfo="${rest%@*}"
+          user="${userinfo%%:*}"
+          hostport="${rest##*@}"
+          port="${hostport##*:}"; port="${port%%/*}"
+          ok=1
+          case "$proto" in
+            postgresql|postgres) ;;
+            *) echo "::error::Chuỗi phải bắt đầu bằng postgresql:// — đang là '$proto://'"; ok=0 ;;
+          esac
+          case "$user" in
+            *.*) ;;
+            *) echo "::error::Tên user THIẾU hậu tố '.<mã dự án>' — Supavisor định tuyến theo mã dự án nằm TRONG tên user."; ok=0 ;;
+          esac
+          if [ "$port" != "5432" ]; then
+            echo "::error::Cổng đang là '$port' — phải là 5432 (tab 'Session pooler')."
+            ok=0
+          fi
+          [ $ok -eq 1 ] || { echo "::error::Sửa secret PROD_DATABASE_URL_RO rồi chạy lại. Không có bước nào chạm DB."; exit 1; }
+
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Prisma generate
+        run: pnpm exec prisma generate
+
+      - name: Đọc RBAC prod
+        env:
+          # CỐ Ý chỉ có chuỗi chỉ-đọc. Hai secret đầy quyền không được nhắc tới trong tệp này.
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+        run: pnpm exec tsx scripts/bao-cao-rbac-prod.ts
+
+      - name: Đưa báo cáo vào job summary
+        if: always()
+        run: |
+          if [ -f bao-cao-rbac-prod.md ]; then
+            cat bao-cao-rbac-prod.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Không sinh được báo cáo — đọc log bước trên." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bao-cao-rbac-prod
+          path: bao-cao-rbac-prod.md
+          retention-days: 3
+          if-no-files-found: warn
