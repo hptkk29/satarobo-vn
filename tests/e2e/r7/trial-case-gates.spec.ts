@@ -24,6 +24,7 @@ import {
   markAttendance,
   completeTrialSession,
   cancelTrialClass,
+  goHocVienKhoiCase,
   vnTodayUtc,
 } from "../../../lib/trial/service";
 import { getTeacherTrialTable, getTeacherTrialRubricContext } from "../../../lib/lms/teacher-schedule";
@@ -261,5 +262,63 @@ test.describe("[TCG] cổng ghi của case trial", () => {
     await ghiDanh(lopId, lan.id, null, sale.id);
     // Chưa có case ⇒ chưa có ai dạy bé. Bản cũ báo GV của buổi sắp tới "học toàn bộ buổi".
     expect(await db.staffNotification.count({ where: { userId: gv1.id } })).toBe(truocKhi);
+  });
+
+  test("[TCG-13] gỡ khỏi CASE ⇒ bé về \"Chưa xếp case\" (vẫn ở lớp), hết phân công GV theo ca", async () => {
+    // Chủ dự án 23/09: "học viên khi bị gỡ khỏi case thì phải về chưa xếp case".
+    const { center, gv1, sale } = await nen();
+    const lopId = await lop(center.id, sale.id, true);
+    const caseA = await caseCua(lopId, gv1.id, "17:30", "18:30", sale.id);
+    const mai = await be(center.id, "Bé Mai");
+    const enr = await ghiDanh(lopId, mai.id, caseA, sale.id);
+
+    const r = await goHocVienKhoiCase({ trialEnrollmentId: enr.id, actorId: sale.id });
+    expect(r.ok, r.error).toBe(true);
+    expect(r.caseCu?.id).toBe(caseA);
+    expect(r.caseCu?.teacherId).toBe(gv1.id);
+
+    const sau = await db.trialEnrollment.findUniqueOrThrow({ where: { id: enr.id } });
+    expect(sau.status).toBe("ACTIVE"); // vẫn trong LỚP
+    expect(sau.scheduledSessionId).toBeNull(); // nhưng không còn thuộc case nào
+    expect(sau.gvPhanCongId).toBeNull();
+
+    // Gỡ lần hai: bé đã ở "Chưa xếp case" ⇒ từ chối, không phải "thành công" câm.
+    const lan2 = await goHocVienKhoiCase({ trialEnrollmentId: enr.id, actorId: sale.id });
+    expect(lan2.ok).toBe(false);
+  });
+
+  test("[TCG-14] lớp THEO KHUNG: bé đã điểm danh ở case ⇒ KHÔNG gỡ khỏi case được", async () => {
+    // Gỡ rồi xếp sang case khác điểm danh lại là đếm trùng buổi đã dự.
+    const { center, gv1, sale } = await nen();
+    const lopId = await lop(center.id, sale.id, true);
+    const caseA = await caseCua(lopId, gv1.id, "17:30", "18:30", sale.id);
+    const nam = await be(center.id, "Bé Nam");
+    const enr = await ghiDanh(lopId, nam.id, caseA, sale.id);
+    const dd = await markAttendance({ trialSessionId: caseA, trialEnrollmentId: enr.id, status: "PRESENT", actorId: sale.id });
+    expect(dd.ok, dd.error).toBe(true);
+
+    const r = await goHocVienKhoiCase({ trialEnrollmentId: enr.id, actorId: sale.id });
+    expect(r.ok).toBe(false);
+    expect(r.error).toContain("đã được điểm danh");
+    const sau = await db.trialEnrollment.findUniqueOrThrow({ where: { id: enr.id } });
+    expect(sau.scheduledSessionId).toBe(caseA);
+  });
+
+  test("[TCG-15] lớp CŨ: gỡ khỏi buổi riêng ⇒ bé về học cả lớp, kể cả khi đã điểm danh", async () => {
+    // Lớp cũ: NULL = học toàn bộ buổi (chốt 28/08), nên điểm danh đã có vẫn thuộc về bé
+    // — cổng "đã điểm danh" chỉ dành cho lớp theo khung.
+    const { center, gv1, sale } = await nen();
+    const lopId = await lop(center.id, sale.id, false);
+    const b1 = await caseCua(lopId, gv1.id, "17:30", "18:30", sale.id);
+    const oanh = await be(center.id, "Bé Oanh");
+    const enr = await ghiDanh(lopId, oanh.id, b1, sale.id);
+    const dd = await markAttendance({ trialSessionId: b1, trialEnrollmentId: enr.id, status: "PRESENT", actorId: sale.id });
+    expect(dd.ok, dd.error).toBe(true);
+
+    const r = await goHocVienKhoiCase({ trialEnrollmentId: enr.id, actorId: sale.id });
+    expect(r.ok, r.error).toBe(true);
+    const sau = await db.trialEnrollment.findUniqueOrThrow({ where: { id: enr.id } });
+    expect(sau.status).toBe("ACTIVE");
+    expect(sau.scheduledSessionId).toBeNull();
   });
 });

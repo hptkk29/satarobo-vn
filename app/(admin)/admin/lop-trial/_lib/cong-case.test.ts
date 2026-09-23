@@ -128,3 +128,61 @@ describe("[CC-06] ô tìm học viên CHE SĐT khi không có quyền xem PII le
     expect(dem(than, "maskPhone(")).toBe(1);
   });
 });
+
+describe("[CC-07] gỡ khỏi CASE: cùng cổng chủ lead với gỡ khỏi lớp, đứng TRƯỚC phép ghi", () => {
+  // Chủ dự án 23/09: "học viên khi bị gỡ khỏi case thì phải về chưa xếp case". Cửa mới
+  // `goKhoiCaseAction` cũng là một cửa gỡ — quên cổng ở đây là mở lại đúng lỗ [CC-02c]
+  // ("mọi Sale gỡ được khách của mọi Sale", vì `trials:manage` là khoá của MỌI Sale).
+  it("goKhoiCaseAction gọi quyenGoHocVien, CHẶN bằng kết quả, trước goHocVienKhoiCase", () => {
+    const than = thanHam("goKhoiCaseAction");
+    expect(dem(than, "quyenGoHocVien(")).toBe(1);
+    expect(coChan(than, "quyen")).toBe(1);
+    expect(dem(than, "await goHocVienKhoiCase(")).toBe(1);
+    expect(than.indexOf("if (!quyen.duoc)")).toBeLessThan(than.indexOf("await goHocVienKhoiCase("));
+  });
+});
+
+describe("[CC-08] điểm danh + hoàn tất: Sale KHÔNG làm thay case của Sale khác", () => {
+  // Chủ dự án 23/09 — câu hỏi "Sale có được điểm danh và bấm Hoàn tất case của Sale
+  // khác không?" → "không". Trước bản vá hai cửa chỉ hỏi `duocThaoTacBuoi` (= có
+  // `trials:manage`), tức mọi Sale điểm danh + khoá được case của mọi Sale.
+  const CUA: Array<[string, string]> = [
+    ["markLopTrialAttendanceAction", "await markAttendance("],
+    ["completeLopTrialSessionAction", "await completeTrialSession("],
+  ];
+  for (const [ten, phepGhi] of CUA) {
+    it(`${ten}: quyenDiemDanhCuaBuoi, CHẶN bằng kết quả, trước phép ghi`, () => {
+      const than = thanHam(ten);
+      expect(dem(than, "quyenDiemDanhCuaBuoi(")).toBe(1);
+      expect(coChan(than, "quyen")).toBe(1);
+      expect(dem(than, phepGhi)).toBe(1);
+      expect(than.indexOf("if (!quyen.duoc)")).toBeLessThan(than.indexOf(phepGhi));
+    });
+  }
+});
+
+describe("[CC-09] gỡ khỏi LỚP chỉ từ \"Chưa xếp case\" (lớp theo khung)", () => {
+  // Chủ dự án 23/09: "gỡ khỏi case thì phải về chưa xếp case, rồi từ chưa xếp case mới
+  // gỡ khỏi lớp". Case ĐÃ HUỶ không tính (bé trỏ vào case huỷ = chưa xếp case).
+  it("unenrollLeadChildLopTrialAction từ chối bé đang ở case còn sống, trước phép ghi", () => {
+    const than = thanHam("unenrollLeadChildLopTrialAction");
+    expect(dem(than, "if (cls.theoKhung)")).toBe(1);
+    expect(dem(than, 'if (ca && ca.status !== "CANCELLED")')).toBe(1);
+    expect(dem(than, "await unenrollLeadChild(")).toBe(1);
+    expect(than.indexOf('if (ca && ca.status !== "CANCELLED")')).toBeLessThan(
+      than.indexOf("await unenrollLeadChild("),
+    );
+  });
+});
+
+describe("[CC-10] mở lớp cả kỳ cho NHIỀU cơ sở: kiểm quyền MỌI cơ sở trước lớp đầu tiên", () => {
+  // Chủ dự án 23/09: "áp dụng cho cơ sở nào" — một lượt mở cho nhiều cơ sở. Kiểm quyền
+  // trong vòng lặp (hoặc chỉ kiểm cơ sở đầu) là mở dở: vài cơ sở đã có lớp rồi mới báo
+  // lỗi, hoặc tệ hơn, lọt lớp vào cơ sở ngoài quyền.
+  it("taoLopTrialTheoThuAction lọc actorCanUseCenter trên CẢ danh sách, chặn trước createTrialClass", () => {
+    const than = thanHam("taoLopTrialTheoThuAction");
+    expect(dem(than, "coSos.filter((id) => !actorCanUseCenter(ctx.actor, id))")).toBe(1);
+    expect(dem(than, "if (ngoaiQuyen.length > 0)")).toBe(1);
+    expect(than.indexOf("if (ngoaiQuyen.length > 0)")).toBeLessThan(than.indexOf("await createTrialClass("));
+  });
+});

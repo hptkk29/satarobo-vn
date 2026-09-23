@@ -35,6 +35,8 @@ export function AddSessionForm({
   cheDoChonGv,
   locGvTheoCa,
   soGvMienLoc,
+  ngayCoDinh,
+  khung,
 }: {
   trialClassId: string;
   teachers: Option[];
@@ -47,11 +49,20 @@ export function AddSessionForm({
   locGvTheoCa: boolean;
   /** Số giáo viên khai ở `trial.gvMienLocTheoCa`. */
   soGvMienLoc: number;
+  /**
+   * Ngày của lớp THEO KHUNG ("YYYY-MM-DD"). Có giá trị ⇒ KHÔNG hiện ô ngày: lớp chỉ có
+   * một ngày nên case luôn thuộc ngày đó (chủ dự án 23/09: "bỏ ô chọn ngày"). `null` =
+   * lớp cũ, giữ ô ngày như trước. BẮT BUỘC, không mặc định (luật 7): mặc định sai về phía
+   * nào cũng là hiện ô ngày cho lớp một ngày, hoặc giấu nó ở lớp nhiều ngày.
+   */
+  ngayCoDinh: string | null;
+  /** Khung giờ của lớp — đặt min/max cho hai ô giờ. `null` với lớp cũ. */
+  khung: { startTime: string; endTime: string } | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
-  const [date, setDate] = useState("");
+  const [date, setDate] = useState(ngayCoDinh ?? "");
   const [startTime, setStartTime] = useState(defaultStartTime);
   const [endTime, setEndTime] = useState(defaultEndTime);
   /** "" = không chọn → buổi kế thừa GV phụ trách lớp (xem `onSubmit`). */
@@ -94,12 +105,15 @@ export function AddSessionForm({
         roomId: roomId || undefined,
       });
       if (res.ok) {
-        toast.success("Đã thêm buổi");
+        toast.success(ngayCoDinh ? "Đã thêm case" : "Đã thêm buổi");
         // Chỉ reset ngày: giờ và GV thường lặp lại cho buổi kế tiếp. Danh sách giáo viên
         // phải theo về trạng thái "chưa biết" cho khớp — giữ lại danh sách của ngày vừa
         // lưu là để một note đỏ của hôm qua nằm cạnh một ô ngày trống.
-        setDate("");
-        nguonGv.tai("", startTime, endTime);
+        // Lớp theo khung: ngày cố định — không xoá. Lớp cũ: xoá ngày như trước.
+        if (!ngayCoDinh) {
+          setDate("");
+          nguonGv.tai("", startTime, endTime);
+        }
         router.refresh();
         return;
       }
@@ -111,27 +125,34 @@ export function AddSessionForm({
     <div className="rounded-xl border border-border bg-card p-4">
       <div className="mb-3 flex items-center gap-2">
         <CalendarPlus className="h-4 w-4 text-primary" />
-        <h2 className="text-sm font-semibold text-foreground">Thêm buổi học</h2>
+        <h2 className="text-sm font-semibold text-foreground">
+          {ngayCoDinh ? "Thêm case" : "Thêm buổi học"}
+        </h2>
       </div>
 
       <div className="flex flex-wrap items-end gap-2">
-        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-          Ngày *
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => doiKhung(e.target.value, startTime, endTime)}
-            disabled={pending}
-            required
-            className="rounded-lg border border-border bg-card px-2 py-1.5 text-sm text-foreground disabled:opacity-50"
-          />
-        </label>
+        {/* Lớp theo khung: KHÔNG có ô ngày (ngày của lớp) — xem prop `ngayCoDinh`. */}
+        {!ngayCoDinh && (
+          <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+            Ngày *
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => doiKhung(e.target.value, startTime, endTime)}
+              disabled={pending}
+              required
+              className="rounded-lg border border-border bg-card px-2 py-1.5 text-sm text-foreground disabled:opacity-50"
+            />
+          </label>
+        )}
 
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           Giờ bắt đầu
           <input
             type="time"
             value={startTime}
+            min={khung?.startTime}
+            max={khung?.endTime}
             onChange={(e) => doiKhung(date, e.target.value, endTime)}
             disabled={pending}
             className="rounded-lg border border-border bg-card px-2 py-1.5 text-sm text-foreground disabled:opacity-50"
@@ -143,6 +164,8 @@ export function AddSessionForm({
           <input
             type="time"
             value={endTime}
+            min={khung?.startTime}
+            max={khung?.endTime}
             onChange={(e) => doiKhung(date, startTime, e.target.value)}
             disabled={pending}
             className="rounded-lg border border-border bg-card px-2 py-1.5 text-sm text-foreground disabled:opacity-50"
@@ -185,7 +208,7 @@ export function AddSessionForm({
           disabled={pending}
           className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark disabled:opacity-50"
         >
-          {pending ? "Đang thêm…" : "Thêm buổi"}
+          {pending ? "Đang thêm…" : ngayCoDinh ? "Thêm case" : "Thêm buổi"}
         </button>
       </div>
 

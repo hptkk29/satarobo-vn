@@ -4,14 +4,6 @@
 // import TYPE từ Prisma (bị xoá lúc biên dịch) nên vitest chạy được mà không cần
 // Postgres, đúng quy ước của lib/reports/lead.ts.
 import type { Prisma } from "@prisma/client";
-import type { TrialClassStatusV2 } from "./types";
-
-const CLASS_STATUSES: readonly TrialClassStatusV2[] = [
-  "OPEN",
-  "RUNNING",
-  "COMPLETED",
-  "CANCELLED",
-];
 
 export const BOOKING_STATUS_VALUES = [
   "SCHEDULED",
@@ -32,33 +24,64 @@ const BOOKING_TERMINAL = ["ENROLLED", "REJECTED"] as const;
  *  tạo nên không còn là một bậc phễu). Tập lead bị ẩn KHÔNG đổi, chỉ gọn tên lại. */
 const BOOKING_LEAD_EXCLUDED = ["DA_DANG_KY", "DA_MAT"] as const;
 
+/** Bộ lọc danh sách lớp — tham số `status` trên URL. */
+export type LocLop = "dang-mo" | "da-dong" | "da-huy" | "all";
+
 /**
- * `where` cho danh sách lớp trải nghiệm.
- * - `status` rỗng → "Đang mở": ẩn lớp đã xong và đã huỷ.
- * - `status === "all"` → không lọc trạng thái.
- * - `q` → tìm theo tên hoặc mã lớp.
+ * Đọc `status` trên URL thành bộ lọc. Giá trị cũ (`OPEN`/`RUNNING`/`COMPLETED`/
+ * `CANCELLED` — chip trước 23/09) vẫn hiểu được, để link đã lưu không gãy; rác ⇒ mặc định.
+ */
+export function docLocLop(status: string | undefined): LocLop {
+  switch (status) {
+    case "all":
+      return "all";
+    case "da-dong":
+    case "COMPLETED":
+      return "da-dong";
+    case "da-huy":
+    case "CANCELLED":
+      return "da-huy";
+    default:
+      return "dang-mo";
+  }
+}
+
+/**
+ * `where` cho danh sách lớp trải nghiệm — CÙNG luật với `trangThaiLop`
+ * (`lib/trial/trang-thai-lop.ts`): lớp theo khung có ngày đã QUA là "Đã đóng" dù cột
+ * `status` vẫn OPEN; lớp cũ chỉ đóng khi `COMPLETED`. Ca `[TTL-LOC]` canh hai bản khớp.
+ *
+ * @param homNay mốc UTC 00:00 của hôm nay theo lịch VN — BẮT BUỘC (luật 7/19): đọc đồng
+ *   hồ ở đây là hàm lọc không test được và lệch múi giờ tiến trình.
+ * `q` → tìm theo tên hoặc mã lớp, cộng dồn với bộ lọc (AND).
  */
 export function buildClassListWhere(
   status: string | undefined,
   q: string | undefined,
+  homNay: Date,
 ): Prisma.TrialClassV2WhereInput {
-  const where: Prisma.TrialClassV2WhereInput = {};
-  if (status === "all") {
-    // không lọc trạng thái
-  } else if (status && (CLASS_STATUSES as readonly string[]).includes(status)) {
-    where.status = status as TrialClassStatusV2;
-  } else {
-    where.status = { notIn: ["COMPLETED", "CANCELLED"] };
+  const and: Prisma.TrialClassV2WhereInput[] = [];
+  const loc = docLocLop(status);
+  if (loc === "dang-mo") {
+    and.push({ status: { notIn: ["COMPLETED", "CANCELLED"] } });
+    and.push({ OR: [{ theoKhung: false }, { startDate: null }, { startDate: { gte: homNay } }] });
+  } else if (loc === "da-dong") {
+    and.push({ status: { not: "CANCELLED" } });
+    and.push({ OR: [{ status: "COMPLETED" }, { theoKhung: true, startDate: { lt: homNay } }] });
+  } else if (loc === "da-huy") {
+    and.push({ status: "CANCELLED" });
   }
 
   const term = (q ?? "").trim();
   if (term) {
-    where.OR = [
-      { name: { contains: term, mode: "insensitive" } },
-      { code: { contains: term, mode: "insensitive" } },
-    ];
+    and.push({
+      OR: [
+        { name: { contains: term, mode: "insensitive" } },
+        { code: { contains: term, mode: "insensitive" } },
+      ],
+    });
   }
-  return where;
+  return and.length > 0 ? { AND: and } : {};
 }
 
 /**

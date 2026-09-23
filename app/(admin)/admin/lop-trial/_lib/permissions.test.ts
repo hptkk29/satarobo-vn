@@ -57,6 +57,9 @@ const CONG_QUYEN: Record<string, Action> = {
   // `quyenGoHocVien` — chuyển case là đổi giờ hẹn với phụ huynh, nên nó đòi đúng thứ
   // mà cửa GỠ đòi (là chủ lead, hoặc là Quản lý). Bảng này chỉ khai cổng NGOÀI.
   xepCaseHocVienAction: "trials:manage",
+  // 23/09/2026 — MỚI. Gỡ bé khỏi CASE (bé vẫn ở trong lớp, về "Chưa xếp case"). Cổng
+  // ngoài `trials:manage`; bên trong còn `quyenGoHocVien` (chủ lead / Quản lý).
+  goKhoiCaseAction: "trials:manage",
   // ~~`trials:manage`~~ **[ĐẢO 23/09/2026]** — chủ dự án: "sale cũng không thể xoá
   // hoặc huỷ lớp". `trials:manage` là khoá của MỌI Sale (seed-roles, CENTER_SALES_CSM)
   // nên cổng cũ không chặn được ai — mà huỷ lớp đẩy TOÀN BỘ ghi danh của mọi Sale

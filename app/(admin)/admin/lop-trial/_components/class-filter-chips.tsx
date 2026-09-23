@@ -6,6 +6,7 @@ import type { JSX } from "react";
 import Link from "next/link";
 
 import { cn } from "@/lib/utils";
+import { docLocLop } from "../_lib/filters";
 
 const CHIP_BASE = "rounded-full px-3 py-1.5 text-sm transition-colors";
 
@@ -52,13 +53,14 @@ export function ClassFilterChips({
   // Chuỗi rỗng và undefined đều là "chưa lọc" — searchParams trả "" khi URL có `?status=`.
   const active = current || "";
 
+  // 23/09 — chip theo trạng thái HIỂN THỊ (lib/trial/trang-thai-lop.ts), cùng bộ đọc
+  // với bộ lọc (`docLocLop`) nên link cũ `?status=COMPLETED` vẫn sáng đúng chip.
+  const loc = active ? docLocLop(active) : "dang-mo";
   const chips: { label: string; status?: string; isActive: boolean }[] = [
-    { label: "Đang mở", status: undefined, isActive: active === "" },
-    { label: "Tất cả", status: "all", isActive: active === "all" },
-    { label: "Đang mở lớp", status: "OPEN", isActive: active === "OPEN" },
-    { label: "Đang chạy", status: "RUNNING", isActive: active === "RUNNING" },
-    { label: "Đã xong", status: "COMPLETED", isActive: active === "COMPLETED" },
-    { label: "Đã huỷ", status: "CANCELLED", isActive: active === "CANCELLED" },
+    { label: "Đang mở", status: undefined, isActive: loc === "dang-mo" },
+    { label: "Đã đóng", status: "da-dong", isActive: loc === "da-dong" },
+    { label: "Đã huỷ", status: "da-huy", isActive: loc === "da-huy" },
+    { label: "Tất cả", status: "all", isActive: loc === "all" },
   ];
 
   return (

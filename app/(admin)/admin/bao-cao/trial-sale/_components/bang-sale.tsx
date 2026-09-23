@@ -217,13 +217,21 @@ function DongVaChiTiet({
             </p>
             {/* Bảng chi tiết CÓ phân trang: một Sale một tháng có thể vài trăm case, đổ hết
                 vào một dòng bung ra là đẩy bảng chính xuống ngoài màn hình. */}
-            {/* Bo góc ở vỏ NGOÀI, cuộn ở lớp TRONG: một thẻ vừa `overflow-x-auto` vừa
-                `rounded-*` sẽ vạt mất góc phải khi kéo ngang — cổng `bang-coverage` bắt
-                đúng lỗi này, và nó chỉ lộ ra trên màn hẹp. */}
-            <div className="overflow-hidden rounded-lg border border-border bg-card">
-              <div className="overflow-x-auto">
-              <PhanTrangBang khoaGhiNho="tk-case-trial-chi-tiet" tenDonVi="case">
-              <table className="w-full text-sm">
+            {/* 23/09 — thanh phân trang LUÔN hiện (kể cả vài case) và đứng NGOÀI vùng cuộn
+                ngang (`cuonNgang`): bản trước bọc cả bảng lẫn thanh trong `overflow-x-auto`
+                nên kéo ngang là thanh trôi mất, và ≤10 case thì thanh ẩn hẳn — chủ dự án
+                đọc thành "chưa có phân trang". Viền bằng `ring` trên chính bảng: không có
+                thẻ nào vừa cuộn vừa bo góc (cổng `bang-coverage`). */}
+            <PhanTrangBang
+              khoaGhiNho="tk-case-trial-chi-tiet"
+              tenDonVi="case"
+              cuonNgang
+              luonHienThanh
+              // 10 dòng/trang: bảng này nằm TRONG một dòng bung ra — dài quá là đẩy bảng
+              // chính ra khỏi màn hình. Người dùng vẫn đổi được (ghi nhớ theo `khoaGhiNho`).
+              soDongMacDinh={10}
+            >
+              <table className="w-full rounded-lg bg-card text-sm ring-1 ring-border">
                 <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
                     <th className="whitespace-nowrap px-4 py-2.5 font-semibold">Học viên</th>
@@ -262,9 +270,7 @@ function DongVaChiTiet({
                   ))}
                 </tbody>
               </table>
-              </PhanTrangBang>
-              </div>
-            </div>
+            </PhanTrangBang>
           </td>
         </tr>
       )}

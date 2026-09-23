@@ -18,7 +18,7 @@ import { vnParts } from "@/lib/time/vn";
 import { layCaseTrial, TRAN_CASE } from "./_lib/truy-van";
 import { BangSale } from "./_components/bang-sale";
 
-export const metadata = { title: "Thống kê case trải nghiệm theo Sale | Admin" };
+export const metadata = { title: "Báo cáo trải nghiệm | Admin" };
 export const dynamic = "force-dynamic";
 
 function ymd(d: Date): string {
@@ -97,11 +97,10 @@ export default async function ThongKeCaseTrialTheoSalePage({
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-lg font-semibold text-foreground">
-          Thống kê case trải nghiệm theo Sale
-        </h2>
+        {/* 23/09 — màn CHÍNH của báo cáo trải nghiệm (`/bao-cao/trial` đã gỡ). */}
+        <h2 className="text-lg font-semibold text-foreground">Báo cáo trải nghiệm</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Mỗi dòng là một Sale, đếm theo <strong>ngày tạo case</strong> trong khoảng đã chọn.
+          Thống kê case trải nghiệm theo Sale. Mỗi dòng là một Sale, đếm theo <strong>ngày tạo case</strong> trong khoảng đã chọn.
         </p>
       </div>
 

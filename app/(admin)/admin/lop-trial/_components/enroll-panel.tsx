@@ -25,6 +25,7 @@ export function EnrollPanel({
   full,
   maxSessions,
   nhan,
+  coOSoBuoi,
 }: {
   trialClassId: string;
   /**
@@ -46,6 +47,12 @@ export function EnrollPanel({
    * server từ chối: hai thông điệp mâu thuẫn trong cùng một thao tác.
    */
   maxSessions: number;
+  /**
+   * Có ô "Số buổi" riêng cho từng bé không. 23/09 — chủ dự án bỏ ô này ở khối "Chưa xếp
+   * case" (bé chưa thuộc case nào thì chưa có gì để thoả thuận số buổi); không gửi thì
+   * server lấy mặc định của lớp. BẮT BUỘC, không mặc định (luật 7).
+   */
+  coOSoBuoi: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -128,7 +135,9 @@ export function EnrollPanel({
   }
 
   return (
-    <div className={sessionId ? "" : "rounded-xl border border-border bg-card p-4"}>
+    // 23/09 — KHÔNG tự vẽ thẻ: khối này luôn nằm trong một khối đã có vỏ (thẻ case, khối
+    // "Chưa xếp case", khối "Học cả lớp"). Tự vẽ thêm là thẻ lồng thẻ.
+    <div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold text-foreground">{nhan ?? "Thêm học viên"}</h2>
         <button
@@ -192,6 +201,7 @@ export function EnrollPanel({
                     </span>
                   </div>
 
+                  {coOSoBuoi && (
                   <label
                     className="flex items-center gap-1 text-xs text-muted-foreground"
                     title={`Số buổi học thử: từ 1 đến ${maxSessions}`}
@@ -210,6 +220,7 @@ export function EnrollPanel({
                       className="w-20 rounded-md border border-border px-2 py-1 text-xs disabled:opacity-50"
                     />
                   </label>
+                  )}
 
                   <button
                     type="button"

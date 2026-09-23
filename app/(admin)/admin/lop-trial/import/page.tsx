@@ -80,22 +80,24 @@ export default function ImportLopTrialPage() {
         </Link>
         <h1 className="text-2xl font-bold">Mở lớp trải nghiệm hàng loạt từ Excel</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Mỗi dòng là <strong>một lớp cho một ngày</strong>. Khung giờ phải nằm trong khung
-          mở của thứ đó (sửa ở Cấu hình vận hành → tab &quot;Lớp &amp; giáo viên&quot;) —
+          Mỗi dòng là <strong>một lớp cho một ngày</strong>. Giờ gõ tuỳ ý nhưng phải nằm
+          trong giờ mở của thứ đó (sửa ở Cấu hình vận hành → tab &quot;Lớp &amp; giáo viên&quot;) —
           dòng nào lệch khung sẽ bị từ chối kèm lý do, các dòng còn lại vẫn vào.
         </p>
       </div>
 
       <ExcelImporter<DongLopTrial>
         title="Mở lớp trải nghiệm"
-        templateUrl="/templates/mau-lop-trial-v1.xlsx"
-        templateFilename="mau-lop-trial-v1.xlsx"
+        // 23/09 — mẫu v2 theo khuôn 3 sheet của bộ mẫu import (dữ liệu · hướng dẫn · ví dụ).
+        // Bản v1 để 3 dòng VÍ DỤ ngay trong sheet dữ liệu (dán vào là nhập luôn ví dụ), còn
+        // cột khoá đã bỏ từ 22/09 (QĐ-A7) và slug mẫu `cs1` không khớp cơ sở thật nào.
+        templateUrl="/templates/mau-lop-trial-v2.xlsx"
+        templateFilename="mau-lop-trial-v2.xlsx"
         columnHints={[
-          { key: "centerSlug", label: "Slug cơ sở", required: true },
-          { key: "date", label: "Ngày (YYYY-MM-DD)", required: true },
+          { key: "centerSlug", label: "Cơ sở (mã CS1 hoặc slug)", required: true },
+          { key: "date", label: "Ngày (dd/mm/yyyy)", required: true },
           { key: "startTime", label: "Giờ bắt đầu (HH:MM)", required: true },
           { key: "endTime", label: "Giờ kết thúc (HH:MM)", required: true },
-          { key: "courseSlug", label: "Slug khoá trải nghiệm" },
           { key: "name", label: "Tên lớp (bỏ trống để hệ thống tự đặt)" },
         ]}
         // Trùng = cùng cơ sở + cùng ngày + cùng khung giờ. Hai lớp y hệt trong một file
@@ -114,7 +116,7 @@ export default function ImportLopTrialPage() {
           const date = doiNgay(row.date);
           const startTime = doiGio(row.startTime);
           const endTime = doiGio(row.endTime);
-          if (!centerSlug) return { error: "Thiếu slug cơ sở" };
+          if (!centerSlug) return { error: "Thiếu cơ sở (mã CS1 hoặc slug)" };
           if (!date) return { error: "Thiếu ngày" };
           if (!startTime || !endTime) return { error: "Thiếu giờ bắt đầu hoặc giờ kết thúc" };
           if (endTime <= startTime) return { error: "Giờ kết thúc phải sau giờ bắt đầu" };
@@ -123,6 +125,7 @@ export default function ImportLopTrialPage() {
             date,
             startTime,
             endTime,
+            // Cột khoá đã bỏ khỏi mẫu (QĐ-A7) — vẫn đọc nếu file CŨ còn cột này.
             courseSlug: chuoi(row.courseSlug),
             name: chuoi(row.name),
           };

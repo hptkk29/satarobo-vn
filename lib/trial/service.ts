@@ -10,7 +10,7 @@ import { laLopTheoKhung, thuocCase } from "@/lib/trial/nghia-null";
 import { db } from "@/lib/db";
 import { notifyStaff } from "@/lib/notifications/notify";
 import { baoDaoTaoBuoiChuaCoGiaoVien } from "./notify-training";
-import { tenLopTrial } from "@/lib/trial/lop-moi";
+import { tenLopTrial, tenLopTrialTheoNgay } from "@/lib/trial/lop-moi";
 import { teacherCenterAssignmentError } from "@/lib/teachers/center-filter";
 import { nextSeq, yy } from "@/lib/codegen";
 import { publishEvent } from "@/lib/events/publish";
@@ -168,7 +168,14 @@ export async function createTrialClass(params: {
           // cho `code` — hai thứ đi cùng một bộ đếm nên không bao giờ lệch nhau.
           // Người gõ thì lấy tên họ gõ; bỏ trống thì về quy ước cũ (cùng bộ đếm với
           // `code` nên số thứ tự không bao giờ lệch).
-          name: params.name?.trim() || tenLopTrial(cc, khoa?.slug ?? null, seq),
+          // 23/09 — lớp CÓ NGÀY (mở theo khung) đặt tên theo NGÀY: "CS1-Lớp trial
+          // 23/09/2026" (chủ dự án). `startDate` là `@db.Date` = UTC 00:00 của ngày VN,
+          // nên `toISOString().slice(0, 10)` ra đúng ngày đó.
+          name:
+            params.name?.trim() ||
+            (params.startDate
+              ? tenLopTrialTheoNgay(cc, khoa?.slug ?? null, params.startDate.toISOString().slice(0, 10))
+              : tenLopTrial(cc, khoa?.slug ?? null, seq)),
           centerId: params.centerId,
           courseId: params.courseId ?? null,
           startDate: params.startDate ?? null,
@@ -906,6 +913,95 @@ export async function completeTrialSession(params: {
     });
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Lỗi hoàn tất buổi học" };
+  }
+}
+
+// ─── Gỡ học viên khỏi CASE (vẫn ở trong lớp) ─────────────────────────────────────
+
+/**
+ * Gỡ một bé khỏi case đang xếp — bé VẪN ở trong lớp.
+ *
+ * Chủ dự án 23/09/2026: "học viên khi bị gỡ khỏi case thì phải về chưa xếp case, rồi từ
+ * chưa xếp case mới gỡ khỏi lớp". Nên đây là việc KHÁC `unenrollLeadChild`: ghi danh giữ
+ * nguyên ACTIVE, chỉ `scheduledSessionId` về NULL. Nghĩa của NULL theo loại lớp
+ * (`lib/trial/nghia-null.ts`): lớp theo khung ⇒ "Chưa xếp case"; lớp cũ ⇒ "học cả lớp".
+ *
+ * ⚠️ CHẶN khi bé ĐÃ ĐƯỢC ĐIỂM DANH ở case này — CHỈ ở lớp theo khung. Gỡ ra thì bé về
+ * "Chưa xếp case", được xếp vào case khác và điểm danh lần nữa ⇒ hai dòng có mặt trong
+ * CÙNG MỘT buổi học thật, thổi số buổi đã dự và tự đẩy trạng thái lead. Ở lớp cũ không
+ * có rủi ro đó: NULL là học mọi buổi, điểm danh cũ vẫn đúng chỗ của nó.
+ *
+ * Mọi cổng đứng TRƯỚC phép ghi đầu tiên (luật rollback); phép ghi là `updateMany` CÓ
+ * ĐIỀU KIỆN (mẫu chống-đua FIX-H9): ai đó vừa chuyển bé sang case khác thì nó đổi 0 dòng.
+ */
+export async function goHocVienKhoiCase(params: {
+  trialEnrollmentId: string;
+  actorId: string;
+}): Promise<{
+  ok: boolean;
+  error?: string;
+  /** Case vừa rời — để nơi gọi báo giáo viên + ghi lịch sử. */
+  caseCu?: { id: string; teacherId: string | null; gio: string; daHuy: boolean };
+}> {
+  try {
+    return await db.$transaction(async (tx) => {
+      const enr = await tx.trialEnrollment.findUnique({
+        where: { id: params.trialEnrollmentId },
+        select: {
+          id: true,
+          status: true,
+          scheduledSessionId: true,
+          trialClass: { select: { theoKhung: true } },
+        },
+      });
+      if (!enr) return { ok: false, error: "Không tìm thấy ca trải nghiệm" };
+      if (enr.status !== "ACTIVE") {
+        return { ok: false, error: "Chỉ gỡ khỏi case được bé còn đang học thử" };
+      }
+      if (!enr.scheduledSessionId) {
+        return { ok: false, error: "Bé chưa ở case nào" };
+      }
+      const ses = await tx.trialClassSession.findUnique({
+        where: { id: enr.scheduledSessionId },
+        select: { id: true, teacherId: true, startTime: true, endTime: true, status: true },
+      });
+      if (enr.trialClass.theoKhung) {
+        const daDiemDanh = await tx.trialAttendance.count({
+          where: { trialSessionId: enr.scheduledSessionId, trialEnrollmentId: enr.id },
+        });
+        if (daDiemDanh > 0) {
+          return {
+            ok: false,
+            error:
+              "Bé đã được điểm danh ở case này — không gỡ khỏi case được " +
+              "(xếp sang case khác rồi điểm danh lại là tính trùng buổi đã dự).",
+          };
+        }
+      }
+
+      const upd = await tx.trialEnrollment.updateMany({
+        where: { id: enr.id, status: "ACTIVE", scheduledSessionId: enr.scheduledSessionId },
+        // Phân công GV theo ca (`gvPhanCongId`) đi theo CASE: rời case là rời phân công —
+        // cùng nếp với `rescheduleTrialEnrollment`.
+        data: { scheduledSessionId: null, gvPhanCongId: null },
+      });
+      if (upd.count === 0) {
+        return { ok: false, error: "Bé vừa được chuyển sang chỗ khác — tải lại trang rồi thử lại" };
+      }
+      return {
+        ok: true,
+        caseCu: ses
+          ? {
+              id: ses.id,
+              teacherId: ses.teacherId,
+              gio: `${ses.startTime}–${ses.endTime}`,
+              daHuy: ses.status === "CANCELLED",
+            }
+          : undefined,
+      };
+    });
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Lỗi gỡ khỏi case" };
   }
 }
 

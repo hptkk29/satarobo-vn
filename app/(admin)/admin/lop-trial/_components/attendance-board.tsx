@@ -736,7 +736,8 @@ export function AttendanceBoard({
               {/* 23/09 — CHỈ case SCHEDULED. Bản cũ vẽ nút cả trên case ĐÃ HUỶ (điều kiện
                   là `!== "COMPLETED"`), và bấm vào là hồi sinh case đó thành COMPLETED.
                   Server nay cũng từ chối (`completeTrialSession`). */}
-              {canMark && selectedSession.status === "SCHEDULED" && (
+              {/* 23/09 — chủ dự án: Sale KHÔNG hoàn tất case của Sale khác (`quyenDiemDanh`). */}
+              {canMark && selectedSession.status === "SCHEDULED" && selectedSession.quyenDiemDanh.duoc && (
                 <button
                   type="button"
                   onClick={onCompleteSession}
@@ -768,9 +769,18 @@ export function AttendanceBoard({
             />
           )}
 
+          {canMark && !selectedSession.quyenDiemDanh.duoc && markable.length > 0 && (
+            <p role="note" className="mb-2 flex items-start gap-1.5 text-xs text-muted-foreground">
+              <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>{selectedSession.quyenDiemDanh.lyDo}</span>
+            </p>
+          )}
           {markable.length === 0 ? (
             <p className="text-sm text-muted-foreground">Chưa có học viên để điểm danh.</p>
-          ) : !canMark || selectedSession.status === "CANCELLED" ? (
+          ) : !canMark ||
+            selectedSession.status === "CANCELLED" ||
+            // 23/09 — case của Sale khác: CHỈ ĐỌC (chủ dự án: Sale không điểm danh thay).
+            !selectedSession.quyenDiemDanh.duoc ? (
             // Case ĐÃ HUỶ: chỉ đọc. Điểm danh vào buổi không diễn ra là ghi có mặt khống,
             // và server cũng đã từ chối (`markAttendance`).
             <ul className="divide-y divide-border text-sm">

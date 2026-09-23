@@ -21,6 +21,9 @@ const ADMIN_DIR = path.join(ROOT, "app", "(admin)", "admin");
 
 /** Route được phép không có mục menu — mỗi dòng phải nêu lý do. */
 const ALLOWLIST: Record<string, string> = {
+  "/bao-cao/trial":
+    "23/09/2026 — stub chuyển hướng sang /bao-cao/trial-sale (chủ dự án: xoá màn báo cáo " +
+    "trial theo cơ sở, lấy màn theo Sale làm màn chính). Giữ đường cũ để link đã lưu không 404.",
   "/leads/new":
     "03/09 — stub chuyển hướng sang /nhap-khach-hang (chủ dự án chốt: nút \"+ Thêm lead\" " +
     "nay trỏ thẳng sang đó). Biểu mẫu cũ tạo lead bằng `db.lead.create` trần, không qua " +

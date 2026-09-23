@@ -107,7 +107,15 @@ export const createClassSchema = z.object({
  */
 export const taoTheoThuSchema = z
   .object({
-    centerId: z.string().trim().min(1, "Chọn cơ sở"),
+    /**
+     * Áp dụng cho NHỮNG cơ sở nào (chủ dự án 23/09: "thay vì chọn cơ sở thì nên để là áp
+     * dụng cho cơ sở nào") — một kỳ mở cho nhiều cơ sở trong một lượt. Mỗi cơ sở vẫn
+     * được kiểm quyền RIÊNG ở server.
+     */
+    centerIds: z
+      .array(z.string().trim().min(1))
+      .min(1, "Chọn ít nhất một cơ sở áp dụng")
+      .max(20, "Tối đa 20 cơ sở một lượt"),
     tu: z.string().regex(YMD, "Chọn ngày bắt đầu"),
     den: z.string().regex(YMD, "Chọn ngày kết thúc"),
     quyTac: z

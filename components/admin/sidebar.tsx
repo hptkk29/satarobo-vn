@@ -348,10 +348,10 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Báo cáo",
     items: [
       { label: "Báo cáo Lead", href: "/bao-cao/lead", icon: BarChart3, perm: ["leads:view-all", "leads:view-own"] },
-      { label: "Báo cáo trải nghiệm", href: "/bao-cao/trial", icon: FlaskConical, perm: ["trials:view"] },
-      // 22/09/2026 — thống kê case theo SALE (màn trên thống kê theo CƠ SỞ). `href` phải là
-      // chuỗi literal: bộ quét nav đọc văn bản, ghép chuỗi là màn thành mồ côi.
-      { label: "Case trải nghiệm theo Sale", href: "/bao-cao/trial-sale", icon: FlaskConical, perm: ["trials:view"] },
+      // 23/09/2026 — màn thống kê case theo SALE là màn CHÍNH của báo cáo trải nghiệm;
+      // `/bao-cao/trial` (theo cơ sở) đã gỡ, đường cũ chỉ còn chuyển tiếp về đây. `href`
+      // phải là chuỗi literal: bộ quét nav đọc văn bản, ghép chuỗi là màn thành mồ côi.
+      { label: "Báo cáo trải nghiệm", href: "/bao-cao/trial-sale", icon: FlaskConical, perm: ["trials:view"] },
       // FL W0-NAV-2 hygiene: 3 báo cáo đào tạo gate `courses:create` (Super/Training/CM) — ẩn khỏi Sale/KT
       // (trước đây lọt qua classes:view-all). BA #07 3.C.
       { label: "Báo cáo đào tạo", href: "/bao-cao/dao-tao", icon: BookOpen, perm: [...PAGE_GATES["/bao-cao/dao-tao"]] },

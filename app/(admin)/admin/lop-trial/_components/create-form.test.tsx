@@ -220,9 +220,11 @@ describe("[LT-T13] ⚠️ nhánh SERVER phải THẬT SỰ dùng tên người d
   });
 
   it("`createTrialClass` ưu tiên tên người dùng, rơi về quy ước khi trống", () => {
-    expect(doc("lib/trial/service.ts")).toContain(
-      "name: params.name?.trim() || tenLopTrial(cc, khoa?.slug ?? null, seq)",
-    );
+    const sv = doc("lib/trial/service.ts");
+    expect(sv).toContain("params.name?.trim() ||");
+    // 23/09 — lớp có ngày đặt tên theo ngày; lớp cũ giữ quy ước số thứ tự.
+    expect(sv).toContain("tenLopTrialTheoNgay(cc, khoa?.slug ?? null, params.startDate.toISOString().slice(0, 10))");
+    expect(sv).toContain(": tenLopTrial(cc, khoa?.slug ?? null, seq)),");
   });
 
   it("action TRUYỀN tên xuống service — không nhận rồi bỏ rơi", () => {

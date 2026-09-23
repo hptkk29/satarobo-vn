@@ -52,6 +52,31 @@ export function tenLopTrial(
   return kh ? `${cs}-${kh}-Lớp trial ${so}` : `${cs}-Lớp trial ${so}`;
 }
 
+/**
+ * Tên lớp THEO NGÀY — quy ước cho lớp theo khung (chủ dự án 23/09/2026: "tên lớp:
+ * CS-Lớp trial 23/09/2026"), vd `CS1-Lớp trial 23/09/2026`.
+ *
+ * Lớp theo khung là MỘT NGÀY, nên ngày mới là thứ người đọc cần — số thứ tự
+ * (`tenLopTrial`) không nói gì với Sale đang tìm lớp theo ngày hẹn khách. Mã lớp
+ * (`code`) vẫn mang số thứ tự và vẫn là định danh duy nhất.
+ *
+ * ⚠️ Hai lớp CÙNG NGÀY (T7 sáng + chiều) ra CÙNG tên — cố ý: `name` không `@unique`, và
+ * màn danh sách có cột "Khung giờ" đứng ngay cạnh để phân biệt.
+ *
+ * @param ymd ngày lớp theo lịch VN, "YYYY-MM-DD".
+ */
+export function tenLopTrialTheoNgay(
+  maCoSo: string,
+  maKhoa: string | null | undefined,
+  ymd: string,
+): string {
+  const cs = chuanHoaMaCoSo(maCoSo) || "CS";
+  const kh = chuanHoaMaKhoa(maKhoa);
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd);
+  const ngay = m ? `${m[3]}/${m[2]}/${m[1]}` : ymd;
+  return kh ? `${cs}-${kh}-Lớp trial ${ngay}` : `${cs}-Lớp trial ${ngay}`;
+}
+
 export type KhungGio = { startTime: string; endTime: string };
 
 /** "HH:MM" → phút. `null` nếu không đúng định dạng. */

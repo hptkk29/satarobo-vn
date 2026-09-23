@@ -10,44 +10,112 @@ import { describe, it, expect } from "vitest";
 import {
   buildClassListWhere,
   buildBookingListWhere,
+  docLocLop,
   ngayVnSangUtc,
 } from "./filters";
+import { trangThaiLop } from "@/lib/trial/trang-thai-lop";
 
-describe("[LT-U-02] where danh sách lớp trải nghiệm", () => {
-  it("không chọn gì → ẩn lớp đã xong và đã huỷ", () => {
-    expect(buildClassListWhere(undefined, undefined)).toEqual({
-      status: { notIn: ["COMPLETED", "CANCELLED"] },
+describe("[LT-U-02] where danh sách lớp trải nghiệm (23/09: lọc theo trạng thái HIỂN THỊ)", () => {
+  const HOM_NAY = new Date(Date.UTC(2026, 8, 23));
+
+  it("mặc định 'Đang mở' → chưa xong/huỷ VÀ (lớp cũ HOẶC ngày lớp chưa qua)", () => {
+    expect(buildClassListWhere(undefined, undefined, HOM_NAY)).toEqual({
+      AND: [
+        { status: { notIn: ["COMPLETED", "CANCELLED"] } },
+        { OR: [{ theoKhung: false }, { startDate: null }, { startDate: { gte: HOM_NAY } }] },
+      ],
+    });
+  });
+
+  it("'da-dong' → COMPLETED hoặc lớp theo khung ngày đã qua, trừ đã huỷ", () => {
+    expect(buildClassListWhere("da-dong", undefined, HOM_NAY)).toEqual({
+      AND: [
+        { status: { not: "CANCELLED" } },
+        { OR: [{ status: "COMPLETED" }, { theoKhung: true, startDate: { lt: HOM_NAY } }] },
+      ],
     });
   });
 
   it("'all' → không lọc trạng thái", () => {
-    expect(buildClassListWhere("all", undefined)).toEqual({});
+    expect(buildClassListWhere("all", undefined, HOM_NAY)).toEqual({});
   });
 
-  it("chọn một trạng thái cụ thể → lọc đúng trạng thái đó", () => {
-    expect(buildClassListWhere("OPEN", undefined)).toEqual({ status: "OPEN" });
-    expect(buildClassListWhere("CANCELLED", undefined)).toEqual({ status: "CANCELLED" });
+  it("link cũ (?status=CANCELLED / COMPLETED / OPEN) vẫn hiểu được", () => {
+    expect(docLocLop("CANCELLED")).toBe("da-huy");
+    expect(docLocLop("COMPLETED")).toBe("da-dong");
+    expect(docLocLop("OPEN")).toBe("dang-mo");
   });
 
-  it("trạng thái rác → rơi về chế độ mặc định, không ném lỗi", () => {
+  it("trạng thái rác → rơi về 'Đang mở', không ném lỗi", () => {
     // URL do người dùng gõ tay được, không tin được.
-    expect(buildClassListWhere("KHONG_CO_THAT", undefined)).toEqual({
-      status: { notIn: ["COMPLETED", "CANCELLED"] },
+    expect(docLocLop("KHONG_CO_THAT")).toBe("dang-mo");
+  });
+
+  it("ô tìm CỘNG DỒN với bộ lọc (AND), không ghi đè", () => {
+    expect(buildClassListWhere("da-huy", " robo ", HOM_NAY)).toEqual({
+      AND: [
+        { status: "CANCELLED" },
+        {
+          OR: [
+            { name: { contains: "robo", mode: "insensitive" } },
+            { code: { contains: "robo", mode: "insensitive" } },
+          ],
+        },
+      ],
     });
   });
 
-  it("ô tìm cộng dồn với chip lọc, không ghi đè", () => {
-    const w = buildClassListWhere("OPEN", " robo ");
-    expect(w.status).toBe("OPEN");
-    expect(w.OR).toEqual([
-      { name: { contains: "robo", mode: "insensitive" } },
-      { code: { contains: "robo", mode: "insensitive" } },
-    ]);
-  });
-
   it("ô tìm toàn khoảng trắng coi như bỏ trống", () => {
-    expect(buildClassListWhere("all", "   ")).toEqual({});
+    expect(buildClassListWhere("all", "   ", HOM_NAY)).toEqual({});
   });
+});
+
+describe("[TTL-LOC] bộ lọc và nhãn trạng thái nói CÙNG một luật", () => {
+  // Với mỗi hình dạng lớp: nhãn `trangThaiLop` in ra phải khớp ĐÚNG MỘT chip trả nó về.
+  // Lệch là lớp mang nhãn "Đã đóng" mà nằm trong chip "Đang mở" (hoặc biến mất khỏi cả hai).
+  const HOM_NAY = new Date(Date.UTC(2026, 8, 23));
+  const CA: Array<{ status: string; theoKhung: boolean; ngay: string | null }> = [
+    { status: "OPEN", theoKhung: true, ngay: "2026-09-27" },
+    { status: "OPEN", theoKhung: true, ngay: "2026-09-23" },
+    { status: "OPEN", theoKhung: true, ngay: "2026-09-22" },
+    { status: "RUNNING", theoKhung: true, ngay: "2026-09-01" },
+    { status: "CANCELLED", theoKhung: true, ngay: "2026-09-01" },
+    { status: "OPEN", theoKhung: false, ngay: "2026-08-11" },
+    { status: "COMPLETED", theoKhung: false, ngay: null },
+  ];
+  type Ban = { status: string; theoKhung: boolean; startDate: Date | null };
+  // Đánh giá `where` trên một bản ghi — đủ cho đúng các toán tử bộ lọc đang dùng.
+  function khop(w: unknown, r: Ban): boolean {
+    const o = w as Record<string, unknown>;
+    if (Array.isArray(o.AND)) return o.AND.every((x) => khop(x, r));
+    if (Array.isArray(o.OR)) return o.OR.some((x) => khop(x, r));
+    return Object.entries(o).every(([k, v]) => {
+      const gt = (r as unknown as Record<string, unknown>)[k];
+      if (v !== null && typeof v === "object" && !(v instanceof Date)) {
+        const op = v as Record<string, unknown>;
+        if ("notIn" in op) return !(op.notIn as unknown[]).includes(gt);
+        if ("not" in op) return gt !== op.not;
+        if ("gte" in op) return gt instanceof Date && gt.getTime() >= (op.gte as Date).getTime();
+        if ("lt" in op) return gt instanceof Date && gt.getTime() < (op.lt as Date).getTime();
+        throw new Error(`toán tử lạ: ${Object.keys(op).join(",")}`);
+      }
+      return gt === v;
+    });
+  }
+  for (const c of CA) {
+    it(`${c.status} · theoKhung=${c.theoKhung} · ${c.ngay ?? "không ngày"}`, () => {
+      const nhan = trangThaiLop({ status: c.status, theoKhung: c.theoKhung, ngayLop: c.ngay, homNay: "2026-09-23" });
+      const r: Ban = {
+        status: c.status,
+        theoKhung: c.theoKhung,
+        startDate: c.ngay ? new Date(`${c.ngay}T00:00:00.000Z`) : null,
+      };
+      const chip = { DANG_MO: "dang-mo", DA_DONG: "da-dong", DA_HUY: "da-huy" }[nhan];
+      for (const loc of ["dang-mo", "da-dong", "da-huy"]) {
+        expect(khop(buildClassListWhere(loc, undefined, HOM_NAY), r), `chip ${loc}`).toBe(loc === chip);
+      }
+    });
+  }
 });
 
 describe("[LT-U-03] where lịch hẹn học thử giữ đúng luật ẩn của màn cũ", () => {

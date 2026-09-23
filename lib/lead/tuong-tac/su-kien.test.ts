@@ -183,6 +183,8 @@ describe("[TT-U-03] lý do và danh sách trường — đuôi câu không treo 
 // ── mẫu cho MỌI mã việc — dùng cho ca phủ toàn bộ ─────────────────────────────────────
 const MAU: Record<MaViec, SuKienLead> = {
   "trial.xep-lop": { viec: "trial.xep-lop", tenCon: "Nguyễn An", tenLop: "TN-01" },
+  "trial.xep-case": { viec: "trial.xep-case", tenCon: "Nguyễn An", tenLop: "TN-01", gio: "18:00–19:00" },
+  "trial.go-case": { viec: "trial.go-case", tenCon: "Nguyễn An", tenLop: "TN-01", gio: "18:00–19:00" },
   "trial.go-lop": { viec: "trial.go-lop", tenCon: "Nguyễn An", tenLop: "TN-01", lyDo: "đổi buổi" },
   "trial.diem-danh": {
     viec: "trial.diem-danh",

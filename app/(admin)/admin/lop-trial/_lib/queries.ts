@@ -12,12 +12,14 @@ import { rowsToSlots } from "@/lib/lms/schedule-conflict";
 import type { BuoiBanCuaGv } from "@/lib/trial/gv-kha-dung";
 import { vnAddDays, vnParts, vnStartOfDay, vnYmd } from "@/lib/time/vn";
 import { toVnInput } from "./schemas";
-import { buildClassListWhere, buildBookingListWhere, ngayVnSangUtc } from "./filters";
+import { buildClassListWhere, buildBookingListWhere, docLocLop, ngayVnSangUtc } from "./filters";
+import { trangThaiLop } from "@/lib/trial/trang-thai-lop";
 import { suySaleCuaLop } from "./sale-cua-lop";
 import {
   LY_DO_DA_HOC_XONG,
   quyenDoiGioCase,
   quyenChuyenCase,
+  quyenDiemDanhCase,
   quyenGoHocVien,
   quyenSuaCase,
   quyenXoaCase,
@@ -49,8 +51,14 @@ export async function layDanhSachLop(
 ): Promise<ClassRow[]> {
   const sdb = scopedDb(actor);
   const rows = await sdb.trialClassV2.findMany({
-    where: buildClassListWhere(status, q),
-    orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+    where: buildClassListWhere(status, q, vnTodayUtc()),
+    // 23/09 — xếp theo NGÀY lớp (Sale tìm lớp theo ngày hẹn khách): "Đã đóng" mới nhất
+    // trước, các chế độ khác ngày gần nhất trước. Lớp cũ không ngày xuống cuối.
+    orderBy: [
+      { startDate: { sort: docLocLop(status) === "da-dong" ? "desc" : "asc", nulls: "last" } },
+      { startTime: "asc" },
+      { createdAt: "desc" },
+    ],
     take: 200,
     include: {
       config: { select: { name: true, sessionCount: true } },
@@ -72,8 +80,8 @@ export async function layDanhSachLop(
         },
       },
       sessions: {
-        select: { date: true, status: true },
-        orderBy: { date: "asc" },
+        select: { date: true, status: true, startTime: true, endTime: true, createdById: true },
+        orderBy: [{ date: "asc" }, { startTime: "asc" }],
       },
     },
   });
@@ -83,7 +91,14 @@ export async function layDanhSachLop(
   // `User` không thuộc SCOPED_MODELS ⇒ `sdb.user` chỉ là đường đi qua, không bị chèn
   // `where` — nhưng vẫn đi qua `sdb` để không phá luật cấm import `@/lib/db` trần ở
   // `app/(admin)/**`.
-  const idNguoiTao = [...new Set(rows.map((r) => r.createdById).filter((x): x is string => !!x))];
+  // 23/09 — kèm NGƯỜI MỞ CASE (cột "Sale có case trial"), cùng một lượt tra.
+  const idNguoiTao = [
+    ...new Set(
+      rows
+        .flatMap((r) => [r.createdById, ...r.sessions.map((s) => s.createdById)])
+        .filter((x): x is string => !!x),
+    ),
+  ];
   const tenTheoId = new Map<string, string>();
   if (idNguoiTao.length > 0) {
     const us = await sdb.user.findMany({
@@ -94,10 +109,20 @@ export async function layDanhSachLop(
   }
 
   const today = vnTodayUtc();
+  const homNay = vnYmd(today);
   return rows.map((r) => {
     const next = r.sessions.find(
       (s) => s.status === "SCHEDULED" && s.date.getTime() >= today.getTime(),
     );
+    const caseSong = r.sessions.filter((s) => s.status !== "CANCELLED");
+    const saleCase = [
+      ...new Set(
+        caseSong
+          .map((s) => (s.createdById ? tenTheoId.get(s.createdById) : undefined))
+          .filter((x): x is string => !!x),
+      ),
+    ];
+    const ngayLop = r.startDate ? r.startDate.toISOString().slice(0, 10) : null;
     return {
       id: r.id,
       code: r.code,
@@ -113,13 +138,19 @@ export async function layDanhSachLop(
       // vào cột "Khung giờ" là bảo Sale đó là khung hẹn khách — sai.
       ngayMo: r.theoKhung && r.startDate ? r.startDate.toISOString().slice(0, 10) : null,
       khungGio: r.theoKhung && r.startTime && r.endTime ? `${r.startTime}–${r.endTime}` : null,
-      sale: suySaleCuaLop({
+      // 23/09 — lớp THEO KHUNG do Quản lý mở: người tạo lớp KHÔNG phải Sale, nên không
+      // suy "Sale" từ đó. Cột "Sale có case trial" đọc `saleCase`; nhánh suy chỉ còn cho
+      // lớp cũ (case không lưu người mở).
+      sale: r.theoKhung ? null : suySaleCuaLop({
         tenNguoiTao: r.createdById ? (tenTheoId.get(r.createdById) ?? null) : null,
         saleTheoCon: r.enrollments.map((e) => e.leadChild?.lead?.assignedTo?.name ?? null),
       }),
-      sessionCount: r.sessionCount,
-      configName: r.config?.name ?? null,
-      nextSessionDate: next ? next.date.toISOString().slice(0, 10) : null,
+      saleCase,
+      soCase: caseSong.length,
+      caseKeTiep: next
+        ? { ngay: next.date.toISOString().slice(0, 10), gio: `${next.startTime}–${next.endTime}` }
+        : null,
+      trangThai: trangThaiLop({ status: r.status, theoKhung: r.theoKhung, ngayLop, homNay }),
     };
   });
 }
@@ -552,6 +583,12 @@ export async function layChiTietLop(
             soHocVienNguoiKhac: soKhac,
           }),
           quyenDoiGio: quyenDoiGioCase({ sua, soHocVienNguoiKhac: soKhac }),
+          quyenDiemDanh: quyenDiemDanhCase({
+            theoKhung: lopTheoKhung,
+            nguoiTaoId: s.createdById,
+            userId: nguoiXem.userId,
+            laQuanLy: nguoiXem.laQuanLyLop,
+          }),
         };
       })(),
       attendance: Object.fromEntries(
