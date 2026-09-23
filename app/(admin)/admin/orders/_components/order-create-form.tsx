@@ -753,6 +753,11 @@ export function OrderCreateForm({
               // chỉ là đừng gửi rác lên.
               dueDate: d.daThu ? null : d.dueDate || null,
               reminderDays: d.daThu ? null : d.reminderDays,
+              // Cọc nằm NGOÀI trần số đợt (chủ dự án chốt 22/09: "4 đợt và cọc"), nên
+              // server cần cờ này để đếm đúng. Không gửi thì kế hoạch hợp lệ "cọc + 4 đợt"
+              // bị đếm thành 5 đợt và rơi vào hàng chờ duyệt — cổng chặn đúng thứ nó được
+              // dựng ra để cho qua.
+              laCoc: d.laCoc,
             })),
     };
 

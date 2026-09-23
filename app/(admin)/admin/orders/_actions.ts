@@ -21,6 +21,8 @@ import { generateOrderCode, withUniqueRetry } from "@/lib/orders/code";
 import { checkOrderCreateOwnership } from "@/lib/orders/create-guard";
 import { conDonTuCacDong, resolveOrderLeadChildId } from "@/lib/orders/lead-child-link";
 import { canTransition } from "@/lib/orders/status";
+import { xetDuyetDon } from "@/lib/orders/nguong-duyet";
+import { orgUnitIdForCenter } from "@/lib/org/org-service";
 import { recordInstallmentPlan, markInstallmentPaid } from "@/lib/orders/installments";
 import { getSetting } from "@/lib/settings/service";
 import { expandPhoneVariants } from "@/lib/phone";
@@ -589,6 +591,23 @@ export async function createOrderManualAction(input: unknown) {
   // cũ thì không lỗi nào báo, chỉ có sale gọi điện hỏi vì sao không lưu được đơn.
   const tranPhanTram = await getSetting("orders.maxDiscountPercent");
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // NGƯỠNG DUYỆT — chủ dự án chốt 22/09/2026: quá 4 đợt hoặc quá 1 ưu đãi/dòng thì đơn
+  // VẪN LƯU ĐƯỢC nhưng vào hàng chờ Quản lý cơ sở duyệt, và KHÔNG xuất được mã QR.
+  //
+  // ⚠️ PHẢI truyền `orgUnitId` — khác dòng ngay trên. `orders.maxDiscountPercent` khai
+  // `centerOverridable: false` nên bỏ trống là vô hại; hai tham số này khai `true`, và
+  // `getSetting` bỏ trống `orgUnitId` thì CHỈ đọc mức toàn cục ⇒ cơ sở chỉnh trần ở màn
+  // Cấu hình vận hành mà đường ghi vẫn xét theo số chung, im lặng không báo gì.
+  //
+  // ⚠️ Áp cho MỌI đơn, không chia đơn cũ/đơn mới — đo prod 23/09: 0 đơn vượt trần 4 đợt,
+  // đúng 1 đơn vượt trần ưu đãi và nó còn PENDING_PAYMENT. Không có đơn cũ nào để bảo vệ.
+  const orgUnitIdDon = data.centerId ? await orgUnitIdForCenter(data.centerId) : null;
+  const [tranSoDot, tranUuDaiMoiDong] = await Promise.all([
+    getSetting("orders.maxInstallments", { orgUnitId: orgUnitIdDon }),
+    getSetting("orders.maxDiscountItems", { orgUnitId: orgUnitIdDon }),
+  ]);
+
   // Vượt trần ⇒ TỪ CHỐI, không kẹp im lặng. `gopGiamGia` có kẹp như lưới an toàn cho
   // con SỐ, nhưng người bán vừa hứa với phụ huynh một mức bớt khác — để đơn lưu được
   // với 50% trong khi sale gõ 80% là dựng sẵn một cuộc tranh cãi mà hệ thống có đủ dữ
@@ -605,6 +624,18 @@ export async function createOrderManualAction(input: unknown) {
 
   const tien = tienDon(khaiDong, { phiVanChuyen: data.shippingFee, tranPhanTram });
   const subtotal = tien.tamTinh;
+
+  // Kế hoạch đợt hôm nay ở cấp ĐƠN (form khai `keHoachDot`), nên danh sách có đúng 1 phần
+  // tử. Cọc KHÔNG tính vào số đợt — cùng phép đếm với `ke-hoach-dot-editor.tsx`.
+  const soDotHocPhi = (data.keHoachDot ?? []).filter((d) => !d.laCoc).length;
+  const xetDuyet = xetDuyetDon({
+    keHoach: soDotHocPhi > 0 ? [{ soDot: soDotHocPhi }] : [],
+    uuDaiTheoDong: khaiDong.map((d, i) => ({
+      soUuDai: d.giam.length,
+      nhan: data.items[i]?.itemName ?? undefined,
+    })),
+    nguong: { tranSoDot, tranUuDaiMoiDong },
+  });
   const totalAmount = tien.tongDon;
   // `tienDong` đã kẹp giảm ≤ tạm tính TỪNG DÒNG, nên tổng không thể âm trừ khi
   // `shippingFee` âm — mà validator đã chặn `min(0)`. Giữ cổng vì nó rẻ và vì mất nó
@@ -755,10 +786,27 @@ export async function createOrderManualAction(input: unknown) {
         discountAmount: tien.tongGiam,
         // Snapshot cách nhập giảm giá + giải trình.
         //
-        // ⚠️ 14/09/2026 — KHÔNG còn set `discountApprovalStatus`/`discountRequestedById`:
-        // đơn mới không đi vào hàng chờ duyệt nữa. Hai cột GIỮ trong schema (dữ liệu cũ
-        // đang mang giá trị thật, và drop cột trên bảng có dữ liệu prod là đợt riêng —
-        // luật cứng #4), chỉ không có đường GHI mới.
+        // ⚠️ 23/09/2026 — HAI CỘT DUYỆT SỐNG LẠI, NHƯNG MANG LUẬT MỚI.
+        //
+        // Chúng bị thôi ghi ngày 14/09 khi chủ dự án bỏ cơ chế duyệt. Nay duyệt quay lại
+        // ở dạng KHÁC HẲN: không phải "mọi đơn có giảm giá đều duyệt" (luật cũ, không
+        // ngưỡng) mà là "vượt ngưỡng cấu hình mới phải duyệt". Chủ dự án chốt 22/09 dùng
+        // LẠI hai cột này thay vì thêm cột thứ ba — prod đang có 0 dòng nên không có dữ
+        // liệu cũ để bảo vệ, và thêm một cột nữa cho cùng một câu hỏi là đúng cái bệnh
+        // `recordedById`/`createdById` mà đợt này đã gặp hai lần.
+        //
+        // ⚠️ Hai cột, hai lý do KHÁC NHAU — đừng gộp thành một. Quản lý cơ sở cần biết
+        // mình đang duyệt "chia nhiều đợt" hay "chồng nhiều ưu đãi"; gộp lại thì màn
+        // duyệt chỉ nói được "đơn này vượt gì đó".
+        installmentApprovalStatus: xetDuyet.canDuyet && soDotHocPhi > tranSoDot
+          ? "PENDING_APPROVAL"
+          : null,
+        discountApprovalStatus: xetDuyet.canDuyet
+          && khaiDong.some((d) => d.giam.length > tranUuDaiMoiDong)
+          ? "PENDING_APPROVAL"
+          : null,
+        installmentRequestedById: xetDuyet.canDuyet ? (session.user.id ?? null) : null,
+        discountRequestedById: xetDuyet.canDuyet ? (session.user.id ?? null) : null,
         // % nay là thuộc tính của DÒNG (mỗi dòng một mức), nên ở cấp đơn nó vô nghĩa.
         discountPercent: null,
         discountReason: giaiTrinhGop,

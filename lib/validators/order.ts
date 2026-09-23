@@ -238,6 +238,20 @@ export const orderCreateManualSchema = z.object({
           .optional()
           .nullable(),
         reminderDays: z.number().int().min(0).max(365).optional().nullable(),
+        /**
+         * Dòng này là phiếu CỌC, không phải một đợt học phí.
+         *
+         * ⚠️ CHỈ DÙNG ĐỂ ĐẾM, chưa lưu xuống DB — `OrderInstallment` không có cột cho nó
+         * (hạn chế đã biết, ghi ở `order-payment-section.tsx`). Nhưng ngưỡng duyệt cần
+         * phân biệt: chủ dự án chốt 22/09 là "4 đợt + cọc", tức cọc nằm NGOÀI trần. Không
+         * có cờ này thì kế hoạch hợp lệ "cọc + 4 đợt" bị đếm thành 5 và rơi vào hàng chờ
+         * duyệt — một cổng chặn đúng thứ nó được dựng ra để cho qua.
+         *
+         * `.optional()` vì đường gọi cũ (backfill, convert) không gửi; thiếu ⇒ coi như
+         * không phải cọc, tức đếm như một đợt — phía AN TOÀN (thà bắt duyệt nhầm còn hơn
+         * cho qua nhầm).
+         */
+        laCoc: z.boolean().optional(),
       }),
     )
     .max(TRAN_SO_DOT, `Kế hoạch tối đa ${TRAN_SO_DOT} đợt`)

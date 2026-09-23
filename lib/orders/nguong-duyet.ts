@@ -34,17 +34,36 @@ export type NguongDuyetDon = {
   tranUuDaiMoiDong: number;
 };
 
-/** Một dòng đơn (một con) — chỉ hai con SỐ, không cần biết gì thêm. */
-export type DongDeXet = {
+/**
+ * Một KẾ HOẠCH ĐỢT cần xét.
+ *
+ * ⚠️ HÔM NAY MỘT ĐƠN CÓ ĐÚNG MỘT KẾ HOẠCH, không phải mỗi con một kế hoạch — đo prod
+ * 23/09: luồng "đợt theo con" (`PaymentRequest.orderItemId NOT NULL`) có **0 dòng**. Form
+ * tạo đơn khai `keHoachDot` ở cấp ĐƠN. Nên danh sách này thường chỉ có một phần tử; nó là
+ * danh sách để khi yêu cầu #3 bật lên (mỗi con một kế hoạch) thì chỗ gọi truyền nhiều
+ * phần tử mà KHÔNG phải đổi hàm.
+ *
+ * ⚠️ VÌ SAO TÁCH KHỎI `uuDaiTheoDong` thay vì gộp vào một danh sách: hai thứ đếm theo HAI
+ * ĐƠN VỊ KHÁC NHAU (kế hoạch theo ĐƠN hôm nay / theo CON sau này · ưu đãi luôn theo DÒNG),
+ * và số phần tử của chúng KHÁC NHAU. Bản đầu của tệp này gộp làm một `DongDeXet` mang cả
+ * hai con số — nó chỉ lộ ra là sai lúc nối dây: đơn 2 con với một kế hoạch 5 đợt sẽ báo
+ * CÙNG MỘT vi phạm hai lần, một lần cho mỗi con.
+ */
+export type KeHoachDeXet = {
   /**
-   * Số ĐỢT HỌC PHÍ của con này. KHÔNG đếm phiếu cọc.
+   * Số ĐỢT HỌC PHÍ. KHÔNG đếm phiếu cọc.
    *
    * ⚠️ Cọc là dòng RIÊNG, ngoài 4 đợt (chủ dự án chốt 22/09: tối đa 5 dòng = cọc + 4 đợt).
    * Khuôn đếm đã có sẵn ở `ke-hoach-dot-editor.tsx`: `dots.filter((d) => !d.laCoc).length`.
    * Truyền vào đây con số ĐÃ TRỪ cọc — hàm này không đoán được dòng nào là cọc.
    */
   soDot: number;
-  /** Số KHOẢN ưu đãi chồng trên dòng này. */
+  /** Rỗng thì câu lỗi nói "Kế hoạch thanh toán"; có tên con thì nói tên con. */
+  nhan?: string;
+};
+
+/** Một DÒNG đơn (một con) và số ưu đãi chồng trên nó. */
+export type DongDeXet = {
   soUuDai: number;
   /** Nhãn để câu lỗi gọi đúng tên con, vd "Bé An". Rỗng thì câu lỗi nói theo số thứ tự. */
   nhan?: string;
@@ -67,20 +86,27 @@ export type KetQuaXetDuyet =
  * tiền — và họ sẽ lách bằng cách chia nhỏ đơn, tức mất luôn dấu vết.
  */
 export function xetDuyetDon(input: {
-  dong: readonly DongDeXet[];
+  /** Hôm nay: 1 phần tử (kế hoạch cấp đơn). Khi bật yêu cầu #3: mỗi con một phần tử. */
+  keHoach: readonly KeHoachDeXet[];
+  /** Mỗi con một phần tử. */
+  uuDaiTheoDong: readonly DongDeXet[];
   nguong: NguongDuyetDon;
 }): KetQuaXetDuyet {
-  const { dong, nguong } = input;
+  const { keHoach, uuDaiTheoDong, nguong } = input;
   const lyDo: string[] = [];
 
-  dong.forEach((d, i) => {
-    const ten = d.nhan?.trim() || `Dòng ${i + 1}`;
-    if (d.soDot > nguong.tranSoDot) {
+  for (const k of keHoach) {
+    if (k.soDot > nguong.tranSoDot) {
+      const ten = k.nhan?.trim() || "Kế hoạch thanh toán";
       lyDo.push(
-        `${ten}: chia ${d.soDot} đợt, vượt mức ${nguong.tranSoDot} đợt (cọc không tính).`,
+        `${ten}: chia ${k.soDot} đợt, vượt mức ${nguong.tranSoDot} đợt (cọc không tính).`,
       );
     }
+  }
+
+  uuDaiTheoDong.forEach((d, i) => {
     if (d.soUuDai > nguong.tranUuDaiMoiDong) {
+      const ten = d.nhan?.trim() || `Dòng ${i + 1}`;
       lyDo.push(
         `${ten}: áp ${d.soUuDai} ưu đãi, vượt mức ${nguong.tranUuDaiMoiDong} ưu đãi một dòng.`,
       );

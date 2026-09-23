@@ -15,7 +15,7 @@ const NGUONG: NguongDuyetDon = { tranSoDot: 4, tranUuDaiMoiDong: 1 };
 
 describe("[NGD-01] trong hạn mức → KHÔNG cần duyệt", () => {
   it("một con, 4 đợt, 1 ưu đãi — đúng mép trần, vẫn qua", () => {
-    const r = xetDuyetDon({ dong: [{ soDot: 4, soUuDai: 1 }], nguong: NGUONG });
+    const r = xetDuyetDon({ keHoach: [{ soDot: 4 }], uuDaiTheoDong: [{ soUuDai: 1 }], nguong: NGUONG });
     expect(r.canDuyet).toBe(false);
   });
 
@@ -24,10 +24,8 @@ describe("[NGD-01] trong hạn mức → KHÔNG cần duyệt", () => {
     // đợt của cả đơn thì ca này đỏ — và nó PHẢI đỏ, vì gộp hai câu hỏi thành một con số
     // chính là chỗ bug tiền nằm (cùng bài học `tongConNo` vs `conNoDon` trong CLAUDE.md).
     const r = xetDuyetDon({
-      dong: [
-        { soDot: 4, soUuDai: 1, nhan: "Bé An" },
-        { soDot: 4, soUuDai: 1, nhan: "Bé Bình" },
-      ],
+      keHoach: [{ soDot: 4, nhan: "Bé An" }, { soDot: 4, nhan: "Bé Bình" }],
+      uuDaiTheoDong: [{ soUuDai: 1, nhan: "Bé An" }, { soUuDai: 1, nhan: "Bé Bình" }],
       nguong: NGUONG,
     });
     expect(r.canDuyet).toBe(false);
@@ -35,23 +33,21 @@ describe("[NGD-01] trong hạn mức → KHÔNG cần duyệt", () => {
 
   it("HAI CON, mỗi con MỘT ưu đãi khác nhau — tổng 2 ưu đãi trên đơn nhưng vẫn qua", () => {
     const r = xetDuyetDon({
-      dong: [
-        { soDot: 1, soUuDai: 1, nhan: "Bé An" },
-        { soDot: 1, soUuDai: 1, nhan: "Bé Bình" },
-      ],
+      keHoach: [{ soDot: 1 }],
+      uuDaiTheoDong: [{ soUuDai: 1, nhan: "Bé An" }, { soUuDai: 1, nhan: "Bé Bình" }],
       nguong: NGUONG,
     });
     expect(r.canDuyet).toBe(false);
   });
 
   it("đơn rỗng (chưa thêm dòng nào) → không cần duyệt", () => {
-    expect(xetDuyetDon({ dong: [], nguong: NGUONG }).canDuyet).toBe(false);
+    expect(xetDuyetDon({ keHoach: [], uuDaiTheoDong: [], nguong: NGUONG }).canDuyet).toBe(false);
   });
 });
 
 describe("[NGD-02] vượt trần → cần duyệt, và LÝ DO gọi đúng tên con", () => {
   it("vượt số đợt", () => {
-    const r = xetDuyetDon({ dong: [{ soDot: 5, soUuDai: 1, nhan: "Bé An" }], nguong: NGUONG });
+    const r = xetDuyetDon({ keHoach: [{ soDot: 5, nhan: "Bé An" }], uuDaiTheoDong: [{ soUuDai: 1 }], nguong: NGUONG });
     expect(r.canDuyet).toBe(true);
     if (!r.canDuyet) throw new Error("không tới");
     expect(r.lyDo).toHaveLength(1);
@@ -62,7 +58,7 @@ describe("[NGD-02] vượt trần → cần duyệt, và LÝ DO gọi đúng tê
   });
 
   it("vượt số ưu đãi", () => {
-    const r = xetDuyetDon({ dong: [{ soDot: 1, soUuDai: 2, nhan: "Bé An" }], nguong: NGUONG });
+    const r = xetDuyetDon({ keHoach: [{ soDot: 1 }], uuDaiTheoDong: [{ soUuDai: 2, nhan: "Bé An" }], nguong: NGUONG });
     expect(r.canDuyet).toBe(true);
     if (!r.canDuyet) throw new Error("không tới");
     expect(r.lyDo).toHaveLength(1);
@@ -71,10 +67,8 @@ describe("[NGD-02] vượt trần → cần duyệt, và LÝ DO gọi đúng tê
 
   it("CHỈ MỘT con vượt trong đơn hai con → vẫn cần duyệt, và lý do chỉ nhắc con đó", () => {
     const r = xetDuyetDon({
-      dong: [
-        { soDot: 4, soUuDai: 1, nhan: "Bé An" },
-        { soDot: 6, soUuDai: 1, nhan: "Bé Bình" },
-      ],
+      keHoach: [{ soDot: 4, nhan: "Bé An" }, { soDot: 6, nhan: "Bé Bình" }],
+      uuDaiTheoDong: [{ soUuDai: 1, nhan: "Bé An" }, { soUuDai: 1, nhan: "Bé Bình" }],
       nguong: NGUONG,
     });
     expect(r.canDuyet).toBe(true);
@@ -85,14 +79,14 @@ describe("[NGD-02] vượt trần → cần duyệt, và LÝ DO gọi đúng tê
   });
 
   it("một dòng vượt CẢ HAI → hai dòng lý do, không gộp làm một", () => {
-    const r = xetDuyetDon({ dong: [{ soDot: 7, soUuDai: 3, nhan: "Bé An" }], nguong: NGUONG });
+    const r = xetDuyetDon({ keHoach: [{ soDot: 7, nhan: "Bé An" }], uuDaiTheoDong: [{ soUuDai: 3, nhan: "Bé An" }], nguong: NGUONG });
     expect(r.canDuyet).toBe(true);
     if (!r.canDuyet) throw new Error("không tới");
     expect(r.lyDo).toHaveLength(2);
   });
 
   it("không có nhãn → gọi theo số thứ tự dòng, không để trống", () => {
-    const r = xetDuyetDon({ dong: [{ soDot: 1, soUuDai: 1 }, { soDot: 9, soUuDai: 1 }], nguong: NGUONG });
+    const r = xetDuyetDon({ keHoach: [{ soDot: 1 }], uuDaiTheoDong: [{ soUuDai: 1 }, { soUuDai: 2 }], nguong: NGUONG });
     expect(r.canDuyet).toBe(true);
     if (!r.canDuyet) throw new Error("không tới");
     expect(r.lyDo[0]).toContain("Dòng 2");
@@ -101,30 +95,69 @@ describe("[NGD-02] vượt trần → cần duyệt, và LÝ DO gọi đúng tê
 
 describe("[NGD-03] ngưỡng là THAM SỐ — đổi số thì đổi kết quả", () => {
   it("nới trần đợt lên 6 thì đơn 5 đợt hết phải duyệt", () => {
-    const dong = [{ soDot: 5, soUuDai: 1 }];
-    expect(xetDuyetDon({ dong, nguong: NGUONG }).canDuyet).toBe(true);
+    const a = { keHoach: [{ soDot: 5 }], uuDaiTheoDong: [{ soUuDai: 1 }] };
+    expect(xetDuyetDon({ ...a, nguong: NGUONG }).canDuyet).toBe(true);
     expect(
-      xetDuyetDon({ dong, nguong: { tranSoDot: 6, tranUuDaiMoiDong: 1 } }).canDuyet,
+      xetDuyetDon({ ...a, nguong: { tranSoDot: 6, tranUuDaiMoiDong: 1 } }).canDuyet,
     ).toBe(false);
   });
 
   it("siết trần ưu đãi về 1 thì đơn 2 ưu đãi phải duyệt, nới lên 3 thì thôi", () => {
-    const dong = [{ soDot: 1, soUuDai: 2 }];
-    expect(xetDuyetDon({ dong, nguong: NGUONG }).canDuyet).toBe(true);
+    const a = { keHoach: [{ soDot: 1 }], uuDaiTheoDong: [{ soUuDai: 2 }] };
+    expect(xetDuyetDon({ ...a, nguong: NGUONG }).canDuyet).toBe(true);
     expect(
-      xetDuyetDon({ dong, nguong: { tranSoDot: 4, tranUuDaiMoiDong: 3 } }).canDuyet,
+      xetDuyetDon({ ...a, nguong: { tranSoDot: 4, tranUuDaiMoiDong: 3 } }).canDuyet,
     ).toBe(false);
   });
 });
 
 describe("[NGD-04] câu lỗi nói bằng ngôn ngữ của NGUYÊN NHÂN", () => {
   it("liệt kê từng lý do thành dòng riêng, không nuốt thành một câu cụt", () => {
-    const r = xetDuyetDon({ dong: [{ soDot: 7, soUuDai: 3, nhan: "Bé An" }], nguong: NGUONG });
+    const r = xetDuyetDon({
+      keHoach: [{ soDot: 7, nhan: "Bé An" }],
+      uuDaiTheoDong: [{ soUuDai: 3, nhan: "Bé An" }],
+      nguong: NGUONG,
+    });
     if (!r.canDuyet) throw new Error("không tới");
     const cau = loiChuaDuyet(r.lyDo);
     expect(cau).toContain("Quản lý cơ sở duyệt");
     expect(cau).toContain("xuất mã QR");
     // Mỗi lý do một gạch đầu dòng — sale đọc được "sửa gì thì khỏi phải chờ".
     expect(cau.split("\n").filter((d) => d.startsWith("•"))).toHaveLength(2);
+  });
+});
+
+describe("[NGD-05] MỘT kế hoạch cấp ĐƠN → MỘT lý do, không lặp theo số con", () => {
+  // ⚠️ CA NÀY SINH RA TỪ MỘT LỖI THẬT, phát hiện lúc nối dây chứ không lúc viết hàm.
+  //
+  // Bản đầu của `nguong-duyet.ts` gộp hai con số vào một `DongDeXet` mang cả `soDot` lẫn
+  // `soUuDai` — hình dạng ấy đọc rất hợp lý, và 12 ca đầu tiên đều xanh. Nó chỉ lộ ra là
+  // sai khi gặp chỗ gọi thật: hôm nay MỘT ĐƠN có ĐÚNG MỘT kế hoạch đợt (đo prod 23/09:
+  // luồng "đợt theo con" có 0 dòng), nên muốn dùng hình dạng cũ thì phải chép `soDot` sang
+  // mọi dòng ⇒ đơn 2 con với một kế hoạch 5 đợt báo CÙNG MỘT vi phạm HAI LẦN.
+  //
+  // Bài học: một hình dạng dữ liệu chỉ được kiểm bằng CHỖ GỌI THẬT. Test viết trước chỗ
+  // gọi thì nó kiểm hàm, không kiểm hệ thống (luật 9).
+  it("đơn HAI CON, một kế hoạch 5 đợt → đúng 1 lý do", () => {
+    const r = xetDuyetDon({
+      keHoach: [{ soDot: 5 }],
+      uuDaiTheoDong: [{ soUuDai: 1, nhan: "Bé An" }, { soUuDai: 1, nhan: "Bé Bình" }],
+      nguong: NGUONG,
+    });
+    expect(r.canDuyet).toBe(true);
+    if (!r.canDuyet) throw new Error("không tới");
+    expect(r.lyDo, `lặp lý do theo số con: ${r.lyDo.join(" | ")}`).toHaveLength(1);
+    // Không có tên con ⇒ gọi tên việc, không để trống cũng không bịa tên bé nào.
+    expect(r.lyDo[0]).toContain("Kế hoạch thanh toán");
+  });
+
+  it("khi yêu cầu #3 bật (mỗi con một kế hoạch) → hai kế hoạch vượt thì hai lý do", () => {
+    const r = xetDuyetDon({
+      keHoach: [{ soDot: 5, nhan: "Bé An" }, { soDot: 6, nhan: "Bé Bình" }],
+      uuDaiTheoDong: [{ soUuDai: 1 }, { soUuDai: 1 }],
+      nguong: NGUONG,
+    });
+    if (!r.canDuyet) throw new Error("không tới");
+    expect(r.lyDo).toHaveLength(2);
   });
 });
