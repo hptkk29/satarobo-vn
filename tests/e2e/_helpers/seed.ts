@@ -12,7 +12,7 @@
 import bcrypt from "bcryptjs";
 import type { Role } from "@prisma/client";
 import { db } from "../../../lib/db";
-import { seedOrgUnits } from "../../../prisma/seed-orgunit";
+import { CENTERS, seedOrgUnits } from "../../../prisma/seed-orgunit";
 import { seedRoles as seedRoleDefs } from "../../../prisma/seed-roles";
 import { TEST_PASSWORD } from "./fixtures";
 
@@ -166,12 +166,65 @@ export async function disconnectDb(): Promise<void> {
 }
 
 /**
- * Seed cây OrgUnit: ROOT(SATAROBO) + các code yêu cầu (HO/CS1/CS2), idempotent.
- * `seedOrg(["HO","CS1","CS2"])` → 4 OrgUnit (gồm ROOT). (A0-01)
+ * Seed cây OrgUnit: xương sống HO/DANANG + các cơ sở yêu cầu, idempotent.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────────────────
+ * ⚠️ DỰNG `Center` TRƯỚC — đây là bản vá một lỗi PHỤ THUỘC THỨ TỰ, không phải tiện tay
+ * [23/09/2026].
+ *
+ * `seedOrgUnits` **TRA** `Center` theo mã để gán `OrgUnit.centerId`; nó KHÔNG tạo dòng
+ * `Center` nào (và đúng là không nên — trên prod danh mục cơ sở do người vận hành giữ).
+ * Đường seed thật tôn trọng thứ tự đó: `prisma/seed.ts` dựng `Center` ở mục đầu rồi mới gọi
+ * `seedOrgUnits`. Nhưng helper này thì KHÔNG, nên trên một database TRẮNG:
+ *
+ *     seedOrg(["HO","CS1","CS2"])  →  OrgUnit CS1/CS2 có centerId = **null**
+ *     ⇒ `buildActor` ra `visibleCenterIds: []`
+ *     ⇒ `[AC2]` của TS-08 và 2 ca của TS-11 ĐỎ
+ *
+ * Và nó **xanh trên CI** vì `test:nen-db` chạy SAU `test:chat-db` trong cùng job, mà bộ chat
+ * có dựng `Center` — tức bộ này mượn trạng thái của bộ khác. Đúng lớp lỗi luật 18: một bộ
+ * chỉ xanh nhờ thứ tự hiện tại sẽ nổ vào ngày ai đó tách job, đổi thứ tự, hay chạy riêng nó
+ * để gỡ một lỗi khác — và lúc ấy triệu chứng (`visibleCenterIds` rỗng) chỉ thẳng vào mã
+ * phân quyền chứ không chỉ vào fixture.
+ *
+ * `code` là khoá duy nhất của `Center`, `slug` cũng `@unique` nên đặt theo `code` viết
+ * thường. Dữ liệu lấy từ CHÍNH `CENTERS` của `seed-orgunit` — không chép danh sách thứ hai.
  */
 export async function seedOrg(codes: string[]): Promise<void> {
   assertTestDb();
+
+  const muon = new Set(codes.map((c) => c.toUpperCase()));
+  const coSo = CENTERS.filter((u) => muon.has(u.code) && u.centerCode);
+  for (const u of coSo) {
+    const ma = u.centerCode!;
+    await db.center.upsert({
+      where: { code: ma },
+      update: {},
+      create: {
+        code: ma,
+        name: u.name,
+        slug: ma.toLowerCase(),
+        address: u.address ?? "—",
+        isActive: true,
+      },
+    });
+  }
+
   await seedOrgUnits(db, codes);
+
+  // Cổng FAIL-LOUD. Không có nó thì một lần lệch mã giữa `Center.code` và `UnitSpec.
+  // centerCode` lại cho ra fixture hỏng ÂM THẦM, và ta quay về đúng chỗ vừa thoát ra:
+  // triệu chứng hiện ở tầng phân quyền, nguyên nhân nằm ở tầng seed.
+  const thieu = await db.orgUnit.findMany({
+    where: { code: { in: coSo.map((u) => u.code) }, centerId: null },
+    select: { code: true },
+  });
+  if (thieu.length > 0) {
+    throw new Error(
+      `[seedOrg] OrgUnit ${thieu.map((u) => u.code).join(", ")} không gắn được Center — ` +
+        "fixture hỏng, `visibleCenterIds` sẽ rỗng. Kiểm `centerCode` trong prisma/seed-orgunit.ts.",
+    );
+  }
 }
 
 /** Seed 14 RoleDef + RolePermission mẫu (Doc 15 §2.3), idempotent + nguyên tử. (A0-02) */

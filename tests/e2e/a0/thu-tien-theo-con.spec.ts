@@ -39,7 +39,16 @@ const SA: RbacActor = { id: "seed-sa-ttc", name: "SA", role: "SUPER_ADMIN" };
 /** Một email cho MỖI ca — xem chú thích ở `beforeAll`. */
 const EMAIL = ["sa1@ttc.vn", "sa2@ttc.vn", "sa3@ttc.vn", "sa4@ttc.vn", "sa5@ttc.vn"] as const;
 
-const CENTER = "ttc-cs2";
+/**
+ * Cơ sở của đơn — LẤY TỪ CÂY do `seedOrg` dựng, không tạo bản thứ hai.
+ *
+ * ⚠️ Bản cũ tự `db.center.create({ code: "CS2" })`. Việc đó chạy được chỉ vì `seedOrg`
+ * khi ấy KHÔNG dựng `Center` nào — tức fixture có một `Center` mã CS2 trong khi
+ * `OrgUnit(CS2).centerId` là null, hai thứ lẽ ra phải là một. Từ 23/09 `seedOrg` dựng
+ * `Center` và nối cầu đàng hoàng, nên tạo thêm ở đây là đụng khoá duy nhất `code`.
+ * Dùng lại cái đã có vừa hết đụng, vừa cho ra fixture NÓI THẬT về quan hệ cơ sở ↔ đơn vị.
+ */
+let CENTER = "";
 const DON = "ttc-don";
 const BE_A = "ttc-item-a";
 const BE_B = "ttc-item-b";
@@ -66,6 +75,9 @@ test.beforeAll(async () => {
   await resetDb();
   await seedOrg(["HO", "CS1", "CS2"]);
   await seedRoles();
+  CENTER = (
+    await db.center.findUniqueOrThrow({ where: { code: "CS2" }, select: { id: true } })
+  ).id;
   // ⚠️ MỖI CA MỘT TÀI KHOẢN — không phải để cho đẹp.
   //
   // `lib/auth.ts:133` chặn **5 lượt đăng nhập/phút theo ĐỊNH DANH**, bộ đếm nằm trong bộ
@@ -87,9 +99,6 @@ test.beforeAll(async () => {
     update: { valueJson: true },
   });
 
-  await db.center.create({
-    data: { id: CENTER, name: "Cơ sở 2", slug: "cs2-ttc", address: "114 Hoàng Diệu", code: "CS2" },
-  });
   await db.order.create({
     data: {
       id: DON,
