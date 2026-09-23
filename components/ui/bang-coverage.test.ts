@@ -30,6 +30,8 @@ const MIEN_TRU: Record<string, string> = {
     "bảng trong tài liệu hướng dẫn",
   "app/(teacher)/teacher/huong-dan/_components/guide-markdown.tsx":
     "bảng trong tài liệu hướng dẫn",
+  "components/blog/markdown-renderer.tsx":
+    'bảng trong VĂN BẢN markdown (bài viết + 10 trang chính sách nộp Bộ Công Thương) — nội dung cố định do người soạn viết, không phải danh sách đọc từ DB. Thẻ <table> ở đây thêm 21/09/2026 CHỈ để bọc `overflow-x-auto`: `prose` không có wrapper cuộn ngang nên bảng "mức hoàn trả" 2 cột đẩy tràn cả trang ở 375px. Phân trang một bảng 4 dòng của văn bản pháp lý là giấu mất mức hoàn tiền',
   "app/(public)/khoa-hoc/page.tsx":
     "bảng SO SÁNH hai khoá học — nội dung cố định, không phải danh sách",
   "app/(public)/hoc-cu/page.tsx": "bảng so sánh gói học cụ — nội dung cố định",
@@ -39,6 +41,8 @@ const MIEN_TRU: Record<string, string> = {
     "bảng ĐOẠN CA bên trong form sửa một mã (tối đa 6 dòng, là ô nhập chứ không phải danh sách) — phân trang một form là vô nghĩa",
   "app/(admin)/admin/cham-cong/phan-ca/import/_components/mapping-table.tsx":
     "bảng ánh xạ tên = số người trên Sheet (19–20 dòng, nhóm theo khối CS1/CS2/HO) — phải nhìn HẾT một lượt để xác nhận từng người và thấy ai CHƯA ánh xạ; cắt trang là giấu mất đúng thứ người dùng đang phải soát trước khi bấm Áp",
+  "app/(admin)/admin/bao-cao/phan-hoi-hop-thu/page.tsx":
+    "hai bảng GỘP SẴN: một dòng cho mỗi người phụ trách, một dòng cho mỗi đơn vị — số dòng chặn bởi quy mô đội, không theo lượng hội thoại. Đây lại đúng là bảng phải nhìn HẾT một lượt: cắt trang là giấu mất người đang tồn nhiều khách chờ, tức giấu đúng thứ bảng sinh ra để phơi",
   "app/(admin)/admin/nhan-su/import/page.tsx":
     "bảng CHẠY THỬ của lượt nhập nhân sự — dựng sau sự cố 08/09/2026 (file 9 cột xoá trắng 3 cột ngày trên 9 hồ sơ PROD). Nó tồn tại ĐỂ người vận hành nhìn HẾT trước khi bấm Ghi thật, và mỗi dòng đỏ là một ô sắp mất dữ liệu; cắt trang là giấu đúng thứ nó sinh ra để phơi bày. Số dòng chặn bởi số hồ sơ THỰC SỰ ĐỔI, không phải số dòng file",
   "app/(admin)/admin/cham-cong/phan-ca/import/_components/result-diff-table.tsx":
@@ -49,8 +53,11 @@ const MIEN_TRU: Record<string, string> = {
     "ĐÃ có phân trang, nhưng PHÍA SERVER (skip/take + link Trước/Sau) chứ không bọc `PhanTrangBang` — sổ chia lead chỉ có thêm không bao giờ bớt, cắt trang trong trình duyệt là phải tải cả sổ về trước",
   "components/legacy-laptrinhrobot/InternalAwards.tsx":
     "bảng giải thưởng trên landing cũ — danh sách chốt cứng trong code, không đọc từ DB",
-  "app/(sale)/sale/trial/_components/trial-list.tsx":
-    "một bảng = MỘT khung giờ, số dòng chặn bởi sức chứa lớp trải nghiệm (6–8 bé). Phân trang trong một buổi 6 bé là thêm thanh điều khiển vô nghĩa; lượng dữ liệu cả trang đã chặn bằng cửa sổ 21 ngày + take:200 ở lib/trial/sale-roster.ts",
+  "app/(admin)/admin/orders/_components/them-con-dialog.tsx":
+    "bảng XEM TRƯỚC của lượt thêm con — một dòng cho MỖI CON của đơn, tức 2–4 dòng. Số dòng " +
+    "chặn bởi số con trong một gia đình, không theo lượng dữ liệu. Và đây đúng là bảng phải " +
+    "nhìn HẾT một lượt trước khi bấm: nó nói con nào được giảm, con nào bị sửa đợt thu — cắt " +
+    "trang là giấu đúng thứ màn này sinh ra để phơi.",
 };
 
 function walk(dir: string, out: string[] = []): string[] {

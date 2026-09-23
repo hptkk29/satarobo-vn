@@ -4,6 +4,8 @@ import { findRecentDuplicate, logDuplicateAttempt } from "../dedup";
 import { autoAssignNewLead } from "../auto-assign";
 import { LEAD_KHONG_NHAN_THEM_CON } from "@/lib/leads/status";
 import { autoAssignLead } from "../assign";
+import { recordLeadActivity } from "../activity-write";
+import { SYSTEM_ACTIVITY_META } from "../activity-clock";
 import { chiaChoLead, ghiNhanNhapLai } from "../assign-lead";
 import type { LeadEntryPoint } from "../assign-resolve";
 import { getNonEnrollableCenterIds } from "@/lib/enrollment-flow";
@@ -276,16 +278,21 @@ async function attachExtraChild(
         },
       });
     }
-    await tx.leadActivity.create({
-      data: {
-        leadId,
-        actorName,
-        type: "NOTE",
-        content:
-          `[Thêm con] Phụ huynh gửi thêm phiếu cho "${child.fullName}"` +
-          `${child.gradeLevel ? ` (${child.gradeLevel})` : ""}` +
-          ` — đã thêm vào hồ sơ này thay vì tạo lead mới.`,
-      },
+    // N-4 — mọi đường ghi hoạt động đi qua MỘT cửa: `recordLeadActivity` vừa tạo dòng
+    // vừa nhảy đồng hồ "chưa tiếp cận lại". Ghi thẳng `leadActivity.create` là dòng có
+    // mà đồng hồ đứng im — lead vừa có tín hiệu nóng lại nằm trong danh sách treo.
+    // S-3 — dấu `SYSTEM_ACTIVITY_META`: dòng này do MÁY ghi, không phải một lần chạm khách.
+    await recordLeadActivity({
+      tx,
+      leadId,
+      actorId: null,
+      actorName,
+      type: "NOTE",
+      content:
+        `[Thêm con] Phụ huynh gửi thêm phiếu cho "${child.fullName}"` +
+        `${child.gradeLevel ? ` (${child.gradeLevel})` : ""}` +
+        ` — đã thêm vào hồ sơ này thay vì tạo lead mới.`,
+      metadata: SYSTEM_ACTIVITY_META,
     });
   });
   return true;
@@ -303,13 +310,19 @@ async function recordIntakeNotes(
 ): Promise<void> {
   const body = buildNote(noteLines, warnings);
   if (!body) return;
-  await db.leadActivity.create({
-    data: {
+  // N-4 — chỗ này trước ghi thẳng `db.…`, ngoài mọi transaction. Bọc lại: dòng
+  // hoạt động và cú bump `lastActivityAt` phải cùng sống hoặc cùng chết, không
+  // để lead có ghi chú mới mà đồng hồ vẫn đứng ở lần chạm cũ.
+  await db.$transaction(async (tx) => {
+    await recordLeadActivity({
+      tx,
       leadId,
       actorName,
       type: "NOTE",
       content: `[Phiếu mới cùng SĐT]\n${body}`,
-    },
+      // S-3 — nội dung phiếu khách gửi, không phải một lượt Sale chạm khách.
+      metadata: SYSTEM_ACTIVITY_META,
+    });
   });
 }
 
@@ -540,13 +553,14 @@ export async function ingestIntakeLead(
       }
 
       if (assignedToId) {
-        await tx.leadActivity.create({
-          data: {
-            leadId: created.id,
-            actorName,
-            type: "NOTE",
-            content: `Gán theo mã nhân viên trên phiếu (${mapped.employeeCode}).`,
-          },
+        await recordLeadActivity({
+          tx,
+          leadId: created.id,
+          actorName,
+          type: "NOTE",
+          content: `Gán theo mã nhân viên trên phiếu (${mapped.employeeCode}).`,
+          // S-3 — điều phối, không phải một lượt chạm khách.
+          metadata: SYSTEM_ACTIVITY_META,
         });
       }
 

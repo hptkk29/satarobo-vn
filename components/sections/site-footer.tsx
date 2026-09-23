@@ -8,6 +8,8 @@ import {
   operationalLocations,
   upcomingLocations,
 } from "@/lib/locations";
+import { LEGAL_PAGES, LEGAL_INDEX_SLUG, legalHref } from "@/lib/legal-pages";
+import { CongTyBlock } from "@/components/public/cong-ty-block";
 
 // F-UI-4 — New footer. Real data từ SATA_ROBO_LOCATIONS (mỗi cơ sở SĐT + Zalo
 // riêng — không hard-code), 4-col desktop / 1-col accordion mobile.
@@ -21,7 +23,8 @@ const SECTIONS = [
         href: "/khoa-hoc/luyenthirobosim",
       },
       { label: "Tất cả khoá học", href: "/khoa-hoc" },
-      { label: "Học cụ STEM", href: "/hoc-cu" },
+      // Ẩn tạm theo hồ sơ BCT mục 4 — xem app/(public)/hoc-cu/layout.tsx.
+      // { label: "Học cụ STEM", href: "/hoc-cu" },
     ],
   },
   {
@@ -40,10 +43,16 @@ const SECTIONS = [
         label: `Chat Zalo ${c.code} (${c.hotline})`,
         href: c.zalo,
       })),
-      { label: "Chính sách hoàn trả", href: "/chinh-sach-hoan-tra" },
-      { label: "Chính sách bảo mật", href: "/chinh-sach-bao-mat" },
-      { label: "Điều khoản sử dụng", href: "/dieu-khoan-su-dung" },
+      { label: "Câu hỏi thường gặp", href: "/lien-he" },
     ],
+  },
+  {
+    // 10 chính sách bắt buộc của hồ sơ Bộ Công Thương, sinh từ nguồn dùng chung
+    // `lib/legal-pages.ts`. KHÔNG gõ tay nhãn ở đây: hướng dẫn BCT đòi "ghi đúng tên",
+    // và chính chân trang này từng gọi cùng một trang bằng hai tên khác nhau
+    // ("Chính sách bảo mật" ở cột, "Bảo mật" ở dải copyright bên dưới).
+    title: "Chính sách",
+    links: LEGAL_PAGES.map((p) => ({ label: p.label, href: legalHref(p.slug) })),
   },
 ];
 
@@ -116,7 +125,7 @@ export function SiteFooter() {
   return (
     <footer className="bg-zinc-950 text-gray-300">
       <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 gap-8 md:grid-cols-4 lg:gap-12">
+        <div className="grid grid-cols-1 gap-8 md:grid-cols-3 lg:grid-cols-5 lg:gap-12">
           {/* Brand column */}
           <div>
             <Link
@@ -239,9 +248,7 @@ export function SiteFooter() {
               </a>
             ))}
           </div>
-          <div className="text-xs text-gray-400">
-            {SATA_ROBO_CONTACT.companyName} · MST: {SATA_ROBO_CONTACT.taxCode}
-          </div>
+          <CongTyBlock className="max-w-md text-gray-400 sm:text-right" />
         </div>
       </div>
 
@@ -252,30 +259,28 @@ export function SiteFooter() {
             © {new Date().getFullYear()} {SATA_ROBO_CONTACT.shortName}. Bảo lưu
             mọi quyền.
           </p>
+          {/* Dải này TRƯỚC 21/09/2026 có 4 nhãn VIẾT TẮT ("Điều khoản", "Bảo mật", "Hoàn
+              trả") — không nhãn nào khớp tên bắt buộc của hồ sơ BCT, và cùng một trang lại
+              mang tên khác với cột "Chính sách" phía trên. Nay chỉ còn một lối vào mục lục,
+              nơi in đủ 10 tên đúng; hết chỗ cho tên trôi. */}
           <div className="flex flex-wrap justify-center gap-4">
+            <Link
+              href={legalHref(LEGAL_INDEX_SLUG)}
+              className="transition-colors hover:text-orange-400"
+            >
+              Chính sách của website
+            </Link>
             <Link
               href="/dieu-khoan-su-dung"
               className="transition-colors hover:text-orange-400"
             >
-              Điều khoản
+              Điều khoản sử dụng
             </Link>
             <Link
               href="/quyen-rieng-tu"
               className="transition-colors hover:text-orange-400"
             >
               Quyền riêng tư
-            </Link>
-            <Link
-              href="/chinh-sach-bao-mat"
-              className="transition-colors hover:text-orange-400"
-            >
-              Bảo mật
-            </Link>
-            <Link
-              href="/chinh-sach-hoan-tra"
-              className="transition-colors hover:text-orange-400"
-            >
-              Hoàn trả
             </Link>
           </div>
         </div>

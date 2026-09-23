@@ -1,6 +1,7 @@
 # Hướng dẫn quy trình thao tác theo từng role
 
-> Tài liệu vận hành + test tay trên **site test (DB dev đã seed full 23/07/2026)**.
+> Tài liệu vận hành + test tay trên **site test**.
+> 🔴 ĐÍNH CHÍNH 17/09/2026: ~~DB dev đã seed full 23/07/2026~~ — `test` dùng **project Supabase RIÊNG**, không phải DB dev. Bộ seed và dữ liệu trên đó **khác** máy dev; đừng suy trạng thái của `test` từ những gì thấy ở local.
 > Mọi account bên dưới dùng chung mật khẩu **`Test@1234`**.
 > Cập nhật: 23/07/2026 · Nguồn quyền: `lib/auth/permissions.ts` (matrix v1) + seed RBAC v2.
 
@@ -313,7 +314,7 @@ Role duy nhất (ngoài SUPER_ADMIN) được **tạo/sửa** giáo trình, câu
 | Đề thi Word | `/admin/exams/import-word` | `mau-de-thi-word-v2.docx` |
 | Cơ sở / Phòng / Lịch nghỉ / Học cụ | trang import tương ứng | `mau-co-so-v2` / `mau-phong-hoc-v2` / `mau-lich-nghi-v2` / `mau-hoc-cu-v2` |
 
-## Phụ lục B. Lưu ý riêng cho môi trường test (DB dev)
+## Phụ lục B. Lưu ý riêng cho môi trường test (project Supabase RIÊNG — không phải DB dev)
 
 - Data seed có **chủ đích chứa edge case**: voucher hết hạn/inactive, đề thi DRAFT/CLOSED/ARCHIVED, bài tập DRAFT, phòng MAINTENANCE, lịch nghỉ riêng từng cơ sở — gặp các bản ghi này là bình thường.
 - Dữ liệu seed nhận diện qua tiền tố `SEED-` / id `slms-*` / email `@seed.satarobo.test` — khi dọn dữ liệu test chỉ xóa theo các tiền tố này.

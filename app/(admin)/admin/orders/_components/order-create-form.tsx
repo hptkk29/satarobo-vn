@@ -49,6 +49,8 @@ import {
   tienDong,
   type KhaiGiam,
   type KieuGiam,
+  MA_LOAI_GIAM,
+  NHAN_LOAI_GIAM,
 } from "@/lib/orders/giam-gia-dong";
 import { HelpHint } from "@/components/admin/ui/help-hint";
 // KHỐI NHẬP KẾ HOẠCH — CÙNG component với trang chi tiết đơn (15/09/2026). Lý do không
@@ -190,6 +192,9 @@ const dongMoi = (): DongHang => ({
 type UiOrderType = Extract<OrderType, "COURSE" | "PRODUCT">;
 
 const NO_CENTER = "NONE";
+// N-2 — mốc "chưa quy được về con" trong ô chọn học sinh. Tách hằng riêng khỏi
+// NO_CENTER dù cùng giá trị: hai ô khác nhau, đổi một cái không được kéo cái kia.
+const NO_CHILD = "NONE";
 
 /**
  * Đơn CHƯA TỒN TẠI ⇒ không đợt nào có thể đã nhận tiền.
@@ -210,6 +215,7 @@ export function OrderCreateForm({
   conLeadBanDau,
   provinces,
   leadId = null,
+  leadChildren = [],
   defaultCustomer,
   defaultCenterId,
   lockCenter = false,
@@ -237,6 +243,8 @@ export function OrderCreateForm({
   // convert-v2 (R7-05/06): khi tạo đơn TỪ một lead, gắn leadId để convert sau tìm
   // được Payment RECORDED qua order.leadId. null = đơn walk-in thông thường.
   leadId?: string | null;
+  // N-2 · quyết định B4 — con của phiếu, để quy đơn về đúng một đứa.
+  leadChildren?: { id: string; fullName: string }[];
   defaultCustomer?: { name?: string; phone?: string; email?: string };
   defaultCenterId?: string | null;
   /**
@@ -284,6 +292,12 @@ export function OrderCreateForm({
   const [wardOptions, setWardOptions] = useState<ComboboxOption[]>([]);
   const [wardLoading, setWardLoading] = useState(false);
   const [centerId, setCenterId] = useState<string>(defaultCenterId ?? NO_CENTER);
+  // N-2 — phiếu ĐÚNG 1 con thì chọn sẵn (không có lựa chọn nào khác); phiếu nhiều con để
+  // trống, ép người tạo đơn chọn thay vì hệ thống đoán hộ. Server suy lại y hệt luật này
+  // (`resolveOrderLeadChildId`) nên bỏ qua form vẫn ra cùng kết quả.
+  const [leadChildId, setLeadChildId] = useState<string>(
+    leadChildren.length === 1 ? leadChildren[0]!.id : NO_CHILD,
+  );
 
   // NHIỀU dòng hàng — xem chú thích ở `DongHang`.
   //
@@ -676,7 +690,13 @@ export function OrderCreateForm({
       // gõ + lý do); server tính lại số tiền thật và kẹp theo tạm tính của dòng.
       discounts: d.giam
         .filter((k) => k.giaTri > 0)
-        .map((k) => ({ kieu: k.kieu, giaTri: k.giaTri, lyDo: k.lyDo?.trim() || null })),
+        .map((k) => ({
+          kieu: k.kieu,
+          giaTri: k.giaTri,
+          lyDo: k.lyDo?.trim() || null,
+          // PHIÊN E — NHÃN loại ưu đãi. Không chọn ⇒ `null`, và đó là hợp lệ.
+          loai: k.loai ?? null,
+        })),
       // Một khuôn duy nhất cho hình thức lớp, đọc lại bằng `docHinhThucLop` ở server.
       metadata:
         orderType === "COURSE"
@@ -711,6 +731,8 @@ export function OrderCreateForm({
       // này và không tin số gửi lên; gửi kèm chỉ để bản nháp/log khớp nhau.
       studentId: studentIdChoDon(dong, null),
       leadId: leadId ?? null,
+      // N-2 — null = chưa quy được về con; server kiểm con có thuộc phiếu này không.
+      leadChildId: leadChildId === NO_CHILD ? null : leadChildId,
       centerId: centerId === NO_CENTER ? null : centerId,
       paymentMethodId,
       items,
@@ -1940,6 +1962,42 @@ function DongHangCard({
                 {/* Giải trình theo TỪNG KHOẢN. Cơ chế duyệt đã gỡ 14/09 — dòng chữ này
                     chính là thứ thay thế nó, nên nó phải nói được vì sao có ĐÚNG khoản
                     này, không phải vì sao dòng được bớt nói chung. */}
+                {/* PHIÊN E [21/09/2026] — LOẠI ưu đãi, đặt NGAY TRÊN ô giải trình.
+                    Thứ tự có lý do: chọn loại trước thì câu giải trình viết ra tự bám vào
+                    loại đó; đặt dưới thì người ta gõ xong mới thấy có ô phải chọn.
+
+                    ⚠️ KHÔNG bắt buộc (`— Không ghi loại —` là lựa chọn thật, không phải
+                    placeholder): chủ dự án chốt chỉ áp cho ưu đãi tạo mới, và chặn sale
+                    lưu đơn vì một nhãn thống kê là cái giá lớn hơn cái lợi. */}
+                <div className="mt-2 space-y-1.5">
+                  <Label className="text-xs" htmlFor={`loai-giam-${idx}`}>
+                    Loại ưu đãi
+                    <HelpHint>
+                      Chỉ là NHÃN để tra cứu và nhắc việc — nó không đổi số tiền nào.
+                      Bỏ trống cũng được; khoản giảm cũ vốn không có nhãn này.
+                    </HelpHint>
+                  </Label>
+                  {/* `select` thuần, không shadcn `Select`: sáu lựa chọn tĩnh, không tìm
+                      kiếm, không đa chọn — và `Select` của repo là base-ui, `SelectValue`
+                      hiện GIÁ TRỊ THÔ chứ không tra nhãn (memory `shadcn-select-la-base-ui`).
+                      Một `<select>` gốc còn cho bàn phím + mobile picker miễn phí. */}
+                  <select
+                    id={`loai-giam-${idx}`}
+                    value={k.loai ?? ""}
+                    onChange={(e) =>
+                      suaKhoan(idx, { loai: (e.target.value || null) as KhaiGiam["loai"] })
+                    }
+                    className="min-h-11 w-full rounded-lg border border-border bg-background px-3 text-sm transition-colors duration-150 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <option value="">— Không ghi loại —</option>
+                    {MA_LOAI_GIAM.map((ma) => (
+                      <option key={ma} value={ma}>
+                        {NHAN_LOAI_GIAM[ma]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <div className="mt-2 space-y-1.5">
                   <Label className="text-xs">
                     Giải trình *

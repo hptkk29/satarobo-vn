@@ -45,17 +45,30 @@ const ROUTES = [
   "/khoa-hoc",
   "/khoa-hoc/laptrinhrobot",
   "/khoa-hoc/luyenthirobosim",
-  "/hoc-cu",
+  // "/hoc-cu" — ĐÃ GỠ 21/09/2026: trang đang bị ẩn (404) theo hồ sơ BCT mục 4.
+  // Thêm lại CÙNG LÚC với việc xoá app/(public)/hoc-cu/layout.tsx.
   "/tin-tuc",
   "/vinh-danh",
   "/vinh-danh/tat-ca",
   "/tuyen-dung",
   "/lien-he",
   "/ve-chung-toi",
+  // ─── 12 trang pháp lý của hồ sơ Bộ Công Thương ───────────────────────────
+  // Spec này cảnh báo TRAN NGANG khi scrollWidth > 376px ở mobile — đúng thứ bắt lỗi
+  // BẢNG 2 cột "mức hoàn trả" của /chinh-sach-cham-dut-dich-vu tràn ra khỏi màn hình.
+  "/chinh-sach",
   "/chinh-sach-bao-mat",
+  "/phuong-thuc-tiep-nhan-phan-anh",
+  "/chinh-sach-gia",
+  "/chinh-sach-thanh-toan",
+  "/cac-dieu-kien-va-han-che",
+  "/chinh-sach-giao-hang",
+  "/phuong-thuc-cung-cap-dich-vu",
+  "/chinh-sach-hoan-tra",
+  "/chinh-sach-cham-dut-dich-vu",
+  "/quyen-va-nghia-vu-cac-ben",
   "/dieu-khoan-su-dung",
   "/quyen-rieng-tu",
-  "/chinh-sach-hoan-tra",
 ];
 
 test(`site cong khai — ${MOBILE ? "375px" : "1280px"}`, async ({ page }) => {

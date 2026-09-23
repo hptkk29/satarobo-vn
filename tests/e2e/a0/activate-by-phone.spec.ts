@@ -45,7 +45,14 @@ async function seedPendingParentByPhone(phone: string) {
   });
 }
 
-async function submitIdentifier(page: import("@playwright/test").Page, value: string) {
+/**
+ * Nhãn ô tích đồng ý Chính sách bảo mật — NGUYÊN VĂN theo hướng dẫn Bộ Công Thương mục 3.
+ * Neo theo NHÃN chứ không theo `id`: nếu câu chữ trôi khỏi bản đã khai với BCT thì mọi ca
+ * dưới đây đỏ, và đó đúng là thứ cần biết.
+ */
+const NHAN_DONG_Y = /Tôi đã đọc và đồng ý với Chính sách bảo mật của website/;
+
+async function moFormVaDienDinhDanh(page: import("@playwright/test").Page, value: string) {
   await page.goto("/kich-hoat");
   const field = page.getByLabel("Số điện thoại hoặc Email");
   // toPass: form là client component, fill trước khi hydrate xong sẽ bị wipe
@@ -54,12 +61,43 @@ async function submitIdentifier(page: import("@playwright/test").Page, value: st
     await field.fill(value);
     await expect(field).toHaveValue(value, { timeout: 1_000 });
   }).toPass({ timeout: 20_000 });
+}
+
+async function submitIdentifier(page: import("@playwright/test").Page, value: string) {
+  await moFormVaDienDinhDanh(page, value);
+  // ⚠️ CỔNG MỚI 22/09/2026 (hồ sơ BCT mục 3): nút gửi khoá tới khi ô tích đồng ý Chính
+  // sách bảo mật được tích. Thiếu dòng này thì `click()` treo 30 giây rồi timeout — đúng
+  // thứ đã làm 4 ca của file này đỏ trên CI, và triệu chứng chỉ vào dòng `fill` ở trên
+  // chứ không nói gì về ô tích.
+  await page.getByLabel(NHAN_DONG_Y).check();
   await page.getByRole("button", { name: "Gửi mã kích hoạt" }).click();
 }
 
 test.describe("[P5] Kích hoạt tài khoản bằng SĐT", () => {
   test.beforeEach(async () => {
     await resetDb();
+  });
+
+  test("[P5-C0] chưa tích Chính sách bảo mật thì KHÔNG gửi được mã (hồ sơ BCT mục 3)", async ({
+    page,
+  }) => {
+    // Đối chứng DƯƠNG cho cổng mới: một ca chỉ khẳng định "không gửi được" sẽ ĐẠT cả khi
+    // form hỏng hoàn toàn, nên ca này đo CẢ HAI đầu — khoá khi chưa tích, MỞ khi đã tích.
+    await seedPendingParentByPhone(PHONE);
+    await moFormVaDienDinhDanh(page, PHONE_LOCAL);
+
+    const oTich = page.getByLabel(NHAN_DONG_Y);
+    const nut = page.getByRole("button", { name: "Gửi mã kích hoạt" });
+
+    // Ảnh minh hoạ trong hướng dẫn chốt: ô vuông RỖNG ⇒ mặc định CHƯA tích.
+    await expect(oTich).not.toBeChecked();
+    await expect(nut).toBeDisabled();
+
+    // Và chưa tích thì KHÔNG có yêu cầu OTP nào rời khỏi máy khách.
+    expect(await db.otpRequest.count({ where: { purpose: "ACTIVATION" } })).toBe(0);
+
+    await oTich.check();
+    await expect(nut).toBeEnabled();
   });
 
   test("[P5-C1] phụ huynh KHÔNG có email kích hoạt trọn vẹn bằng SĐT rồi đăng nhập được", async ({

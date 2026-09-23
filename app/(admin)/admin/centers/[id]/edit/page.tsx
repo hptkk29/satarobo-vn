@@ -123,6 +123,7 @@ export default async function EditCenterPage({ params }: Props) {
           googleMapUrl: center.googleMapUrl,
           workingHours: center.workingHours,
           managerName: center.managerName,
+          managerUserId: center.managerUserId,
           logoUrl: center.logoUrl,
           bannerUrl: center.bannerUrl,
           description: center.description,

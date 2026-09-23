@@ -39,11 +39,20 @@ describe("[PN-01] mặc định phải KHỚP hoá đơn thật", () => {
     // trọng mà là bỏ một câu trả lời đã có: trong lúc rỗng, phiếu RCP-CS2-26-0011 của một
     // đơn CS2 đã in ra pháp nhân Sata Robo với MST 0402301783.
     //
+    // ⚠️ ĐẢO LẦN THỨ HAI [22/09/2026] — Ban lãnh đạo, trong phiếu quyết định hồ sơ Bộ Công
+    // Thương: *"Xuất hoá đơn Sata Robo"* cho giao dịch phát sinh qua website. Lý do: hồ sơ
+    // đăng ký website đứng tên SATA ROBO, nên chứng từ của giao dịch trên website phải
+    // cùng pháp nhân đó; để CS2 đứng tên New Vision là phụ huynh mua ở một nơi, nhận
+    // chứng từ của một nơi khác.
+    //
+    // Pháp nhân NEW_VISION VẪN CÒN trong danh sách — hoá đơn cũ đã phát hành dưới tên đó,
+    // xoá đi là mất đường tra ngược. Chỉ gỡ ánh xạ MẶC ĐỊNH.
+    //
     // Luật còn lại: CHỈ khai cơ sở đã có người quyết. CS91/CS92/HO không nằm trong câu chốt
     // nên không được điền bừa — chúng rơi về `phapNhanMacDinh`, và đó là hành vi đúng.
     expect(CAU_HINH_HOA_DON_MAC_DINH.macDinhTheoCoSo).toEqual([
       { maCoSo: "CS1", maPhapNhan: "SATA_ROBO" },
-      { maCoSo: "CS2", maPhapNhan: "NEW_VISION" },
+      { maCoSo: "CS2", maPhapNhan: "SATA_ROBO" },
     ]);
   });
 });
@@ -165,12 +174,12 @@ describe("[PN-05] CẤU HÌNH MẶC ĐỊNH phải khai đủ CS1/CS2", () => {
     expect(p?.maSoThue).toBe("0402301783");
   });
 
-  it("CS2 → New Vision (MST 0402341070) — KHÔNG phải Sata Robo", () => {
+  it("CS2 → Sata Robo (MST 0402301783) — ĐẢO 22/09/2026 theo quyết định BLĐ", () => {
+    // Từ 15/09 đến 22/09 ô này là NEW_VISION (MST 0402341070). BLĐ đảo trong phiếu quyết
+    // định hồ sơ Bộ Công Thương: giao dịch qua website đứng tên pháp nhân đăng ký hồ sơ.
     const p = phapNhanChoDon("CS2", CAU_HINH_HOA_DON_MAC_DINH);
-    expect(p?.ma).toBe("NEW_VISION");
-    expect(p?.maSoThue).toBe("0402341070");
-    // Đúng con số đã in sai trên phiếu RCP-CS2-26-0011 lúc ô ánh xạ còn rỗng.
-    expect(p?.maSoThue).not.toBe("0402301783");
+    expect(p?.ma).toBe("SATA_ROBO");
+    expect(p?.maSoThue).toBe("0402301783");
   });
 
   it("ô ánh xạ KHÔNG được để rỗng — rỗng là im lặng chọn pháp nhân mặc định", () => {
@@ -182,8 +191,17 @@ describe("[PN-05] CẤU HÌNH MẶC ĐỊNH phải khai đủ CS1/CS2", () => {
   it("⚠️ khớp theo Center.CODE, không phải Center.id", () => {
     // `Order.centerId` giữ id dạng slug ("co-so-hoang-dieu"). Truyền id vào đây thì không
     // khớp dòng nào rồi ÂM THẦM rơi về mặc định — in sai mã số thuế mà không lỗi nào báo.
-    expect(phapNhanChoDon("co-so-hoang-dieu", CAU_HINH_HOA_DON_MAC_DINH)?.ma).toBe("SATA_ROBO");
-    expect(phapNhanChoDon("CS2", CAU_HINH_HOA_DON_MAC_DINH)?.ma).toBe("NEW_VISION");
+    //
+    // ⚠️ Ca này KHÔNG dùng bộ mặc định được nữa: từ 22/09/2026 cả CS1 lẫn CS2 đều trỏ
+    // SATA_ROBO, nên khoá đúng và khoá sai cho ra cùng một kết quả và lưới mất sức bắt.
+    // Dựng một cấu hình riêng có hai pháp nhân KHÁC NHAU để phép so còn phân biệt được.
+    const cauHinhHaiPhapNhan = {
+      ...CAU_HINH_HOA_DON_MAC_DINH,
+      macDinhTheoCoSo: [{ maCoSo: "CS2", maPhapNhan: "NEW_VISION" }],
+    };
+    expect(phapNhanChoDon("CS2", cauHinhHaiPhapNhan)?.ma).toBe("NEW_VISION");
+    // Truyền Center.id (slug) → không khớp dòng nào → rơi về mặc định.
+    expect(phapNhanChoDon("co-so-hoang-dieu", cauHinhHaiPhapNhan)?.ma).toBe("SATA_ROBO");
   });
 
   it("cơ sở KHÁC (HO, CS91…) rơi về mặc định — chưa ai khai thì không đoán", () => {

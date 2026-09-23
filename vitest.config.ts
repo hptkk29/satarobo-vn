@@ -42,6 +42,17 @@ export default defineConfig({
       // là bộ lọc CỨNG, nên `vitest run tests/elearning` sẽ báo "No test files found"
       // và job CI vẫn XANH dù test viết đúng — hỏng câm đúng loại nguy hiểm nhất.
       "tests/elearning/**/*.{test,spec}.ts",
+      // Hộp thư đa kênh — tầng DB thật. Cùng lý do phải khai ở đây như 4 dòng trên:
+      // `include` là bộ lọc CỨNG, nên `vitest run tests/inbox` sẽ báo "No test files
+      // found" và job CI vẫn XANH dù test viết đúng — hỏng câm đúng loại nguy hiểm nhất.
+      "tests/inbox/**/*.{test,spec}.ts",
+      // Trục gọi điện + ghi âm (OmiCall). Cùng lý do phải khai ở đây như 4 dòng
+      // trên: `include` là bộ lọc CỨNG, nên `vitest run tests/goi-dien` sẽ báo
+      // "No test files found" và job CI vẫn XANH dù test viết đúng.
+      "tests/goi-dien/**/*.{test,spec}.ts",
+      // Module chấm công v3 (06/09) — test tích hợp import/engine trên Postgres local, tự skip
+      // khi không có DB. Cùng lý do phải khai ở đây: `include` là bộ lọc CỨNG.
+      "tests/cham-cong/**/*.{test,spec}.ts",
       // Module chấm công v3 (06/09) — test tích hợp import/engine trên Postgres local, tự skip
       // khi không có DB. Cùng lý do phải khai ở đây: `include` là bộ lọc CỨNG.
       "tests/cham-cong/**/*.{test,spec}.ts",

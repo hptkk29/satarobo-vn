@@ -44,8 +44,14 @@ export async function GET(
     );
   }
 
+  // Kèm số buổi vào tên file: một ca nay có nhiều phiếu, cùng tên là đè lên nhau
+  // trong thư mục Tải xuống.
+  const seq =
+    ctx.sessions.find((s) => s.id === ctx.trialClassSessionId)?.seq ?? null;
+
   return trialEvalPdfResponse({
     studentName: ctx.studentName,
     existing: ctx.existing,
+    filenameSuffix: seq != null ? `-Buoi${seq}` : undefined,
   });
 }

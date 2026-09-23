@@ -78,7 +78,7 @@ const FAQS: FAQItem[] = [
       {
         type: "list",
         items: [
-          "Trụ sở chính: 211 Nguyễn Hữu Thọ.",
+          "Cơ sở Nguyễn Hữu Thọ: 211 Nguyễn Hữu Thọ.",
           "Cơ sở Hoàng Diệu: 114 Hoàng Diệu (Hải Châu).",
         ],
       },

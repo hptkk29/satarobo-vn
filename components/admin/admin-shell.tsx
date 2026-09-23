@@ -51,6 +51,7 @@ export function AdminShell({
   evalV2Enabled,
   scormEnabled,
   classGroupEnabled,
+  zalocrmEnabled,
   userId,
   userName,
   userRole,
@@ -66,6 +67,7 @@ export function AdminShell({
   evalV2Enabled: boolean;
   scormEnabled: boolean;
   classGroupEnabled: boolean;
+  zalocrmEnabled: boolean;
   userId: string;
   userName?: string | null;
   userRole?: string | null;
@@ -142,6 +144,7 @@ export function AdminShell({
     evalV2Enabled,
     scormEnabled,
     classGroupEnabled,
+    zalocrmEnabled,
   };
 
   return (

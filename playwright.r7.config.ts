@@ -5,9 +5,9 @@
  * Mọi spec R7 test service/action trực tiếp (DB) → đặt R7_SKIP_WEBSERVER=1 bỏ dev server.
  */
 import { defineConfig, devices } from "@playwright/test";
-import dotenv from "dotenv";
+import { napEnvTest } from "./tests/e2e/_helpers/nap-env";
 
-dotenv.config({ path: ".env.test", override: true });
+napEnvTest("r7");
 
 export default defineConfig({
   testDir: "./tests/e2e/r7",
@@ -54,7 +54,22 @@ export default defineConfig({
   webServer: process.env.R7_SKIP_WEBSERVER
     ? undefined
     : {
-        command: process.env.CI ? "pnpm start -p 3100" : "pnpm dev -p 3100",
+        // ⚠️ CI gọi THẲNG `next`, KHÔNG qua `pnpm` [21/09/2026].
+        //
+        // `pnpm start` đẻ ra chuỗi `sh → node(pnpm) → sh → next-server`. Playwright giết
+        // NHÓM tiến trình của lệnh nó spawn, nhưng pnpm tách nhóm cho tiến trình con, nên
+        // `next-server` SỐNG SÓT ⇒ lượt dọn webServer chờ cổng được nhả ⇒ **treo vĩnh
+        // viễn**, và `onEnd` của reporter không bao giờ chạy (không có dòng "N passed").
+        //
+        // Đo 21/09 trên run 35619508725: cả BỐN job đều đứng im ở ca CUỐI rồi bị giết, và
+        // GitHub phải tự dọn — `Terminate orphan process: … (next-server (v16.2.6))`,
+        // **5 tiến trình mồ côi mỗi job**. Gọi thẳng `next` là một tiến trình, cùng nhóm,
+        // chết chắc.
+        //
+        // ⚠️ Nhánh KHÔNG-CI giữ `pnpm dev`: trên Windows `node_modules/.bin/next` không
+        // chạy được qua shell của Playwright (đã thử, exit 1) — và máy dev không có con
+        // treo này vì người ta Ctrl-C.
+        command: process.env.CI ? "node_modules/.bin/next start -p 3100" : "pnpm dev -p 3100",
         url: "http://localhost:3100",
         reuseExistingServer: false,
         timeout: 120_000,

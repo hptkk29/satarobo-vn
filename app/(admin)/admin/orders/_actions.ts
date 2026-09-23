@@ -19,6 +19,7 @@ import {
 } from "@/lib/validators/order";
 import { generateOrderCode, withUniqueRetry } from "@/lib/orders/code";
 import { checkOrderCreateOwnership } from "@/lib/orders/create-guard";
+import { conDonTuCacDong, resolveOrderLeadChildId } from "@/lib/orders/lead-child-link";
 import { canTransition } from "@/lib/orders/status";
 import { recordInstallmentPlan, markInstallmentPaid } from "@/lib/orders/installments";
 import { getSetting } from "@/lib/settings/service";
@@ -31,6 +32,7 @@ import {
   loiVuotTran,
   tienDon,
   type KieuGiam,
+  docLoaiGiam,
 } from "@/lib/orders/giam-gia-dong";
 import { ensureParentAccountForOrder } from "@/lib/parents/provision";
 import { ensureOrderPaymentRecorded } from "@/lib/finance/payment";
@@ -46,7 +48,14 @@ import {
   ganKhoanDaThuChoCon,
   boGanKhoanKhoiCon,
   tachKhoanChoCon,
+  chuyenTienGiuaCon,
 } from "@/lib/finance/ghi-tien-don";
+import { taoPhieuGop, huyPhieuGop, dongPhieuGop } from "@/lib/finance/phieu-gop";
+import { dungHocMotCon, xemTruocDungHoc } from "@/lib/finance/dung-hoc-con";
+import { themConVaoDon, xemTruocThemCon } from "@/lib/finance/them-con-vao-don";
+import { doiKhoaChoCon, xemTruocDoiKhoa } from "@/lib/finance/doi-khoa-db";
+import { mienGiamNoChoCon } from "@/lib/finance/mien-giam-db";
+import { docChinhSachUuDai } from "@/lib/finance/uu-dai-setting";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { soatGiaDon } from "@/lib/orders/price-guard";
 import { congNoDon } from "@/lib/finance/cong-no-don";
@@ -258,6 +267,9 @@ export async function createOrderManualAction(input: unknown) {
   const { session, canManageAll } = await requireOrdersCreate();
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
+  // Đọc NGOÀI transaction: `getRequestMetadata` gọi `headers()`, không dùng được bên
+  // trong `$transaction` của Prisma.
+  const auditMeta = await getRequestMetadata();
   const parsed = orderCreateManualSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -290,6 +302,39 @@ export async function createOrderManualAction(input: unknown) {
     // Cơ sở của đơn lấy theo lead (guard trả về), không tin giá trị client gửi.
     data.centerId = guard.enforcedCenterId ?? null;
   }
+
+  // N-2 · quyết định B4 — quy đơn về ĐÚNG MỘT CON. Phiếu 1 con thì suy; phiếu nhiều con
+  // mà không chọn thì để `null` và báo cáo nói ra — KHÔNG đoán, vì đoán sai là gán doanh
+  // thu sang đứa khác mà TỔNG vẫn khớp nên không ai phát hiện.
+  //
+  // Cấy lại khi hợp nhất `main` → `test` 16/09/2026: bản `_actions.ts` bên `main` không
+  // có bước này, trong khi biểu mẫu vẫn gửi `leadChildId` lên và `Order.leadChildId` có
+  // thật trong schema ⇒ ô "Học sinh của đơn" rơi vào hư không, im lặng.
+  const leadIdChoCon = data.leadId?.trim() || null;
+  const leadChoCon = leadIdChoCon
+    ? await sdb.lead.findFirst({
+        where: { id: leadIdChoCon, deletedAt: null },
+        select: { id: true, children: { select: { id: true, leadId: true } } },
+      })
+    : null;
+  // NỢ-13 (chốt 18/09/2026) — NGUỒN LÀ CÁC DÒNG, không phải ô chọn cấp đơn.
+  //
+  // Ô "Học sinh của đơn" ở đầu biểu mẫu đã GỠ khi hợp nhất `main`: mỗi dòng hàng nay tự
+  // chọn con của nó. Nếu để `requestedLeadChildId: data.leadChildId` thì trường đó luôn
+  // rỗng ⇒ mọi đơn rơi về nhánh suy-từ-phiếu ⇒ phiếu có hai con là `null`, và doanh thu
+  // của cả hai em rơi vào ô "chưa quy được về con" của `lib/reports/revenue-by-child.ts`.
+  // Ca đó KHÔNG hiếm — chủ dự án: *"một phụ huynh đăng ký cho hai con trong cùng một đơn
+  // là chuyện thường ở đây"*.
+  //
+  // `conDonTuCacDong` chỉ trả về con khi MỌI dòng có khai đều trỏ cùng một đứa; đơn hai
+  // con vẫn ra `null` — thành thật, và báo cáo có ô riêng để nói ra.
+  const childLink = resolveOrderLeadChildId({
+    leadId: leadIdChoCon,
+    requestedLeadChildId: conDonTuCacDong(data.items),
+    children: leadChoCon?.children ?? [],
+  });
+  if (!childLink.ok) return { ok: false as const, error: childLink.message };
+  const leadChildId = childLink.leadChildId;
 
   // Cách ly cơ sở (ghi): nếu form chọn cơ sở, cơ sở đó phải thuộc tầm nhìn actor
   // (orders:manage hiện là GLOBAL — guard này chỉ chặn khi role bị thu hẹp sau này).
@@ -528,6 +573,9 @@ export async function createOrderManualAction(input: unknown) {
       kieu: k.kieu as KieuGiam,
       giaTri: k.giaTri,
       lyDo: k.lyDo ?? null,
+      // PHIÊN E — NHÃN loại ưu đãi, chở nguyên sang `discounts` JSON. `gopGiamGia` không
+      // đọc nó để quyết một đồng nào; validator đã kẹp vào `MA_LOAI_GIAM`.
+      loai: docLoaiGiam(k.loai),
     })),
   }));
 
@@ -691,6 +739,10 @@ export async function createOrderManualAction(input: unknown) {
         // Suy từ các dòng — xem `studentIdCuaDon` bên trên. KHÔNG dùng `data.studentId`.
         studentId: studentIdCuaDon,
         leadId: data.leadId || null,
+        // N-2 — MỘT ĐƠN quy về MỘT CON. Thiếu cột này thì doanh thu/tỷ lệ chốt/chi phí
+        // trên mỗi khách không bổ dọc được theo học sinh, mà tổng vẫn khớp nên báo cáo
+        // trông vẫn đúng.
+        leadChildId,
         centerId: data.centerId || null,
         // Người tạo đơn — cột danh sách /admin/orders. Lấy từ phiên, KHÔNG nhận từ
         // client: đây là thứ dùng để quy trách nhiệm, để client gửi lên là tự mở đường
@@ -845,6 +897,18 @@ export async function createOrderManualAction(input: unknown) {
         giaLech: soatGia.coLech,
         giaTongLechThap: soatGia.tongLechThap,
         giaDongLech: soatGia.dongLech,
+        // Khớp `PII_KEY_RE` của viewer ⇒ tự che với người không có quyền xem PII.
+        customerPhone: data.customerPhone.trim(),
+        shippingFee: data.shippingFee,
+        paymentMethodId: data.paymentMethodId,
+        leadId: data.leadId || null,
+        leadChildId,
+        // Cột `Order.studentId` lưu giá trị SUY RA (`studentIdChoDon`), không phải số
+        // client gửi — nên vết phải ghi CẢ HAI, khác tên. Một trường `studentId` mơ hồ
+        // ở đây là thứ không xử được tranh chấp: không ai biết nó là số nào.
+        studentId: studentIdCuaDon,
+        studentIdKhai: data.studentId || null,
+        itemCount: data.items.length,
         // Hình thức lớp đã KHAI trên từng dòng. Ghi ở đây để đơn bán Coach có lời giải
         // thích đi kèm ngay cạnh `giaLech` — bán 1-1 ×2,0 là HỢP LỆ theo công văn nhưng
         // vẫn rơi vào CAO_HON, và người soát sau cần biết vì sao mà không phải mở payload.
@@ -852,6 +916,12 @@ export async function createOrderManualAction(input: unknown) {
         soBuoiKhai: hinhThucDong.map((h) => h.soBuoi),
       },
       orgUnitId: data.centerId || null,
+      // S-6a — ĐƯỜNG NỐI MÁY GỌI. Đơn là chứng từ tiền; khi có tranh chấp "ai bấm tạo
+      // đơn này", tên người ghi chưa đủ (tài khoản dùng chung, phiên bị mượn). Bản trên
+      // `main` bỏ hai trường này; cấy lại khi hợp nhất 16/09/2026 — `writeAudit` vốn đã
+      // nhận sẵn, chỉ là không ai truyền.
+      ip: auditMeta.ip ?? null,
+      userAgent: auditMeta.userAgent ?? null,
       tx,
     });
 
@@ -1946,4 +2016,433 @@ export async function tachKhoanChoConAction(input: {
 
   revalidatePath(`/orders/${input.orderId}`);
   return { ok: true as const, soTien: kq.soTien, soPhan: kq.soPhan, tenCon: kq.tenCon };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PHIÊN C · PHIẾU GỘP — phát hành / huỷ / đóng  [20/09/2026]
+//
+// ⚠️ QUYỀN: **hai mức, không phải một**, và ranh giới là "phiếu đã nhận đồng nào chưa".
+//
+//   · phát hành + huỷ phiếu CHƯA nhận tiền  → `payments:record`  (việc thường ngày của sale)
+//   · đóng phiếu ĐÃ nhận một phần           → `payments:manage`  (kế toán)
+//
+// Phát một tờ QR và huỷ nó khi chưa ai chuyển gì là việc không đổi một đồng nào trong sổ —
+// bắt nó lên `payments:manage` nghĩa là mỗi lần sale tick nhầm một đợt phải chờ kế toán.
+// Còn ĐÓNG phiếu là nói "phần đã nhận cứ để đó, đừng thu tiếp bằng tờ này" — đó là một phán
+// quyết về tiền đã vào, và nó thuộc kế toán.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Phát MỘT phiếu gộp cho các đợt sale tick.
+ *
+ * ⚠️ Không kiểm "đơn đã có phiếu OPEN chưa" ở đây: `PaymentBill_orderId_open_key` (chỉ mục
+ * partial unique) gác việc đó, và nó là thứ duy nhất gác được khi hai người bấm cùng lúc.
+ * `taoPhieuGop` bắt lỗi unique rồi dịch sang tiếng Việt.
+ */
+export async function taoPhieuGopAction(input: {
+  orderId: string;
+  paymentRequestIds: string[];
+}) {
+  const cong = await congDuongB(input.orderId, "payments:record");
+  if (!cong.ok) return { ok: false as const, error: cong.error };
+
+  if (!Array.isArray(input.paymentRequestIds) || input.paymentRequestIds.length === 0) {
+    return { ok: false as const, error: "Chưa chọn đợt nào" };
+  }
+
+  const kq = await taoPhieuGop({
+    orderId: cong.order.id,
+    paymentRequestIds: input.paymentRequestIds.map((x) => String(x)),
+    actor: cong.actor,
+  });
+  if (!kq.ok) return kq;
+
+  // ⚠️ Cảnh báo cạn kho mã đi ra NHẬT KÝ MÁY CHỦ, không ra toast của sale: người bấm không
+  // làm gì được với nó, còn người vận hành thì không ngồi xem toast. Ngưỡng 50% là lời nhắc
+  // SỚM — kho còn hơn 200.000 mã, nên đây không phải việc gấp, chỉ là việc đừng để quên.
+  if (kq.canhBaoKho) console.warn(`[phieu-gop] CẠN KHO MÃ: ${kq.canhBaoKho}`);
+
+  revalidatePath(`/orders/${input.orderId}`);
+  return { ok: true as const, billId: kq.billId, ma: kq.ma, tongTien: kq.tongTien, soDong: kq.soDong };
+}
+
+/** HUỶ một phiếu CHƯA nhận đồng nào — `payments:record`. Mã của phiếu VOID hết khớp được. */
+export async function huyPhieuGopAction(input: {
+  orderId: string;
+  billId: string;
+  lyDo: string;
+}) {
+  const cong = await congDuongB(input.orderId, "payments:record");
+  if (!cong.ok) return { ok: false as const, error: cong.error };
+
+  const kq = await huyPhieuGop({
+    orderId: cong.order.id,
+    billId: input.billId,
+    lyDo: input.lyDo,
+    actor: cong.actor,
+  });
+  if (!kq.ok) return kq;
+
+  revalidatePath(`/orders/${input.orderId}`);
+  return { ok: true as const };
+}
+
+/** ĐÓNG một phiếu ĐÃ nhận một phần — CHỈ kế toán (`payments:manage`), bắt buộc ghi lý do. */
+export async function dongPhieuGopAction(input: {
+  orderId: string;
+  billId: string;
+  lyDo: string;
+}) {
+  const cong = await congDuongB(input.orderId, "payments:manage");
+  if (!cong.ok) return { ok: false as const, error: cong.error };
+
+  const kq = await dongPhieuGop({
+    orderId: cong.order.id,
+    billId: input.billId,
+    lyDo: input.lyDo,
+    actor: cong.actor,
+  });
+  if (!kq.ok) return kq;
+
+  revalidatePath(`/orders/${input.orderId}`);
+  return { ok: true as const, daNhan: kq.daNhan };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PHIÊN D · DỪNG HỌC MỘT CON  [21/09/2026]
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Cổng chung cho hai action dừng học.
+ *
+ * ⚠️ Quyền `orders:manage`, nhưng **KHÔNG** dùng `requireOrdersManage()` ngay trên: hàm đó
+ * `redirect("/dashboard")` khi thiếu quyền, mà hai action này được gọi từ một hộp thoại
+ * trong trang đơn đang mở — đá người dùng ra giữa lúc họ đang quyết toán tiền là mất cả
+ * ngữ cảnh lẫn thao tác dở. Cùng lý lẽ với `congDuongB`.
+ *
+ * Ba vế, thiếu vế nào cũng từ chối: quyền · đơn trong tầm nhìn cơ sở · **công tắc bật cho
+ * cơ sở GIỮ ĐƠN** (không phải cơ sở của người bấm).
+ */
+async function congDungHoc(orderId: string) {
+  const session = await auth();
+  if (!session?.user) return { ok: false as const, error: "Chưa đăng nhập" };
+  if (!(await checkPermission("orders:manage"))) {
+    return { ok: false as const, error: "Không có quyền" };
+  }
+
+  const actor = await resolveActor(session.user.id);
+  const order = await scopedDb(actor).order.findUnique({
+    where: { id: orderId },
+    select: { id: true, centerId: true, orgUnitId: true },
+  });
+  if (!order || !passesScope("Order", order, actor)) {
+    return { ok: false as const, error: "Không tìm thấy đơn hàng" };
+  }
+  if (!(await laThuTienLinhHoatBat(order.orgUnitId))) {
+    return {
+      ok: false as const,
+      error: "Tính năng thu học phí linh hoạt chưa bật cho cơ sở này",
+    };
+  }
+
+  const { actorId, actorName } = getAuditActor(session);
+  return { ok: true as const, order, actor: { id: actorId ?? "", name: actorName } };
+}
+
+/** Màn XEM TRƯỚC — chỉ đọc, không ghi một dòng nào. */
+export async function xemTruocDungHocAction(input: {
+  orderId: string;
+  orderItemId: string;
+  lyDo: "PH_CHU_DONG" | "TRUNG_TAM_HUY" | "KHAC";
+  buoiCuoiId?: string | null;
+}) {
+  const cong = await congDungHoc(input.orderId);
+  if (!cong.ok) return { ok: false as const, error: cong.error };
+
+  return xemTruocDungHoc({
+    orderId: input.orderId,
+    orderItemId: input.orderItemId,
+    lyDo: input.lyDo,
+    ...(input.buoiCuoiId !== undefined ? { buoiCuoiId: input.buoiCuoiId } : {}),
+  });
+}
+
+/** Xác nhận dừng học — ghi thật. Mọi cổng nằm trong `dungHocMotCon`. */
+export async function dungHocConAction(input: {
+  orderId: string;
+  orderItemId: string;
+  lyDo: "PH_CHU_DONG" | "TRUNG_TAM_HUY" | "KHAC";
+  buoiCuoiId: string | null;
+  ghiChu: string | null;
+  phanDu: { kieu: "CHUYEN"; orderItemId: string; soTien: number }[] | { kieu: "HOAN"; soTien: number }[];
+}) {
+  const cong = await congDungHoc(input.orderId);
+  if (!cong.ok) return { ok: false as const, error: cong.error };
+
+  const kq = await dungHocMotCon({
+    orderId: cong.order.id,
+    orderItemId: input.orderItemId,
+    lyDo: input.lyDo,
+    buoiCuoiId: input.buoiCuoiId,
+    ghiChu: input.ghiChu,
+    phanDu: input.phanDu ?? [],
+    actor: cong.actor,
+  });
+  if (!kq.ok) return kq;
+
+  revalidatePath(`/orders/${input.orderId}`);
+  // Bé vừa rời lớp ⇒ roster của lớp đó đổi. Không revalidate thì màn lớp còn in tên bé và
+  // giáo viên vẫn điểm danh — affordance nói dối bằng dữ liệu cũ.
+  revalidatePath("/classes");
+  revalidatePath("/hoan-tien");
+  return kq;
+}
+
+/**
+ * F1 — CHUYỂN TIỀN GIỮA HAI CON của cùng một đơn.
+ *
+ * ⚠️ Quyền `payments:manage` (kế toán), KHÔNG phải `payments:record` của sale.
+ *
+ * Chọn theo TIỀN LỆ ĐÃ CÓ, không theo cảm tính: `boGanKhoanChoConAction` — đường "sửa một
+ * quyết định đã ghi về chủ của tiền" — cũng gác bằng `payments:manage` và cũng bắt buộc
+ * ghi lý do. Chuyển tiền giữa hai bé LÀ đúng việc ấy, chỉ gọn hơn một bước.
+ *
+ * Còn `ganKhoanChoConAction` để ở `payments:record` vì nó chỉ ĐIỀN một cột đang trống —
+ * không đổi quyết định của ai.
+ */
+export async function chuyenTienGiuaConAction(input: {
+  orderId: string;
+  tuOrderItemId: string;
+  denOrderItemId: string;
+  soTien: number;
+  lyDo: string;
+}) {
+  const cong = await congDuongB(input.orderId, "payments:manage");
+  if (!cong.ok) return { ok: false as const, error: cong.error };
+
+  const kq = await chuyenTienGiuaCon({
+    orderId: cong.order.id,
+    tuOrderItemId: input.tuOrderItemId,
+    denOrderItemId: input.denOrderItemId,
+    soTien: input.soTien,
+    lyDo: input.lyDo,
+    centerId: cong.order.centerId,
+    actor: cong.actor,
+  });
+  if (!kq.ok) return kq;
+
+  revalidatePath(`/orders/${input.orderId}`);
+  return kq;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// F3 · US-19 — THÊM CON VÀO ĐƠN ĐANG HỌC
+//
+// ⚠️ Dùng LẠI `congDungHoc` làm cổng, không viết cổng thứ hai. Luật gác y hệt nhau
+// (`orders:manage` + cách ly cơ sở + cờ `billing.flexV1Enabled` của CƠ SỞ ĐƠN), và một bản
+// chép tay thứ hai của cùng một luật thì vá được một bản là chuyện thường — đúng bài học
+// `lib/payments/don-nhan-tien.ts` đã ghi sau khi ba nhánh tra đơn lệch nhau.
+//
+// ⚠️ Chính sách ưu đãi + trần % đọc từ THAM SỐ VẬN HÀNH của cơ sở đơn, rồi TRUYỀN VÀO. Đây
+// là chỗ luật `crm.commissionMaxTotalRate` áp: hàm thuần không có mặc định, nên quên truyền
+// là lỗi biên dịch chứ không phải một lượt tính theo số cũ.
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function chinhSachChoDon(orgUnitId: string | null) {
+  const [chinhSach, tranPhanTram] = await Promise.all([
+    docChinhSachUuDai(orgUnitId),
+    getSetting("orders.maxDiscountPercent", { orgUnitId }),
+  ]);
+  return { chinhSach, tranPhanTram };
+}
+
+/** Màn XEM TRƯỚC — chỉ đọc, không ghi một dòng nào (US-19 AC5). */
+export async function xemTruocThemConAction(input: {
+  orderId: string;
+  conMoi: {
+    itemName: string;
+    courseId: string;
+    quantity: number;
+    unitPrice: number;
+    giam?: { kieu: "SO_TIEN" | "PHAN_TRAM"; giaTri: number; lyDo?: string | null; loai?: string | null }[];
+  };
+}) {
+  const cong = await congDungHoc(input.orderId);
+  if (!cong.ok) return { ok: false as const, error: cong.error };
+
+  const cs = await chinhSachChoDon(cong.order.orgUnitId);
+  return xemTruocThemCon({
+    orderId: cong.order.id,
+    conMoi: {
+      ...input.conMoi,
+      giam: (input.conMoi.giam ?? []).map((k) => ({
+        kieu: k.kieu,
+        giaTri: k.giaTri,
+        lyDo: k.lyDo ?? null,
+        loai: docLoaiGiam(k.loai),
+      })),
+    },
+    ...cs,
+  });
+}
+
+export async function themConVaoDonAction(input: {
+  orderId: string;
+  conMoi: {
+    itemName: string;
+    courseId: string;
+    quantity: number;
+    unitPrice: number;
+    giam?: { kieu: "SO_TIEN" | "PHAN_TRAM"; giaTri: number; lyDo?: string | null; loai?: string | null }[];
+    studentId?: string | null;
+    enrollmentId?: string | null;
+  };
+  lyDo: string;
+}) {
+  const cong = await congDungHoc(input.orderId);
+  if (!cong.ok) return { ok: false as const, error: cong.error };
+
+  const cs = await chinhSachChoDon(cong.order.orgUnitId);
+  const kq = await themConVaoDon({
+    orderId: cong.order.id,
+    conMoi: {
+      ...input.conMoi,
+      giam: (input.conMoi.giam ?? []).map((k) => ({
+        kieu: k.kieu,
+        giaTri: k.giaTri,
+        lyDo: k.lyDo ?? null,
+        loai: docLoaiGiam(k.loai),
+      })),
+    },
+    lyDo: input.lyDo,
+    actor: cong.actor,
+    ...cs,
+  });
+  if (!kq.ok) return kq;
+
+  revalidatePath(`/orders/${input.orderId}`);
+  revalidatePath("/cong-no");
+  return kq;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// F4 · US-20 — ĐỔI KHOÁ / ĐỔI LỚP CHO MỘT CON
+//
+// ⚠️ Dùng LẠI `congDungHoc` làm cổng (orders:manage + cách ly cơ sở + cờ thu linh hoạt của
+// CƠ SỞ ĐƠN), như đường dừng học và đường thêm con. Đây đúng là họ thao tác ấy: nó dừng một
+// dòng, tạo một dòng, và chuyển tiền giữa hai dòng.
+//
+// ⚠️ Nhưng gác THÊM một quyền nữa: `enrollments:transfer`. Thao tác này CHUYỂN GHI DANH sang
+// lớp khác — đúng việc mà `transferEnrollment` gác bằng quyền ấy. Bỏ vế này là mở một cửa
+// sau: ai có `orders:manage` mà KHÔNG có `enrollments:transfer` vẫn chuyển được lớp, chỉ cần
+// đi vòng qua màn đơn hàng.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function xemTruocDoiKhoaAction(input: {
+  orderId: string;
+  orderItemId: string;
+  targetClassId: string;
+  buoiCuoiId?: string | null;
+  unitPriceMoi: number;
+}) {
+  const cong = await congDungHoc(input.orderId);
+  if (!cong.ok) return { ok: false as const, error: cong.error };
+  if (!(await checkPermission("enrollments:transfer"))) {
+    return { ok: false as const, error: "Không có quyền chuyển lớp" };
+  }
+
+  const tranPhanTram = await getSetting("orders.maxDiscountPercent", {
+    orgUnitId: cong.order.orgUnitId,
+  });
+  return xemTruocDoiKhoa({
+    orderId: cong.order.id,
+    orderItemId: input.orderItemId,
+    targetClassId: input.targetClassId,
+    buoiCuoiId: input.buoiCuoiId ?? null,
+    unitPriceMoi: input.unitPriceMoi,
+    tranPhanTram,
+  });
+}
+
+export async function doiKhoaChoConAction(input: {
+  orderId: string;
+  orderItemId: string;
+  targetClassId: string;
+  buoiCuoiId?: string | null;
+  unitPriceMoi: number;
+  hanDotConThieu?: string | null;
+  lyDo: string;
+  ghiChu?: string | null;
+}) {
+  const cong = await congDungHoc(input.orderId);
+  if (!cong.ok) return { ok: false as const, error: cong.error };
+  if (!(await checkPermission("enrollments:transfer"))) {
+    return { ok: false as const, error: "Không có quyền chuyển lớp" };
+  }
+
+  const tranPhanTram = await getSetting("orders.maxDiscountPercent", {
+    orgUnitId: cong.order.orgUnitId,
+  });
+  const kq = await doiKhoaChoCon({
+    orderId: cong.order.id,
+    orderItemId: input.orderItemId,
+    targetClassId: input.targetClassId,
+    buoiCuoiId: input.buoiCuoiId ?? null,
+    unitPriceMoi: input.unitPriceMoi,
+    hanDotConThieu: input.hanDotConThieu ? new Date(input.hanDotConThieu) : null,
+    lyDo: input.lyDo,
+    ghiChu: input.ghiChu ?? null,
+    tranPhanTram,
+    actor: cong.actor,
+  });
+  if (!kq.ok) return kq;
+
+  revalidatePath(`/orders/${input.orderId}`);
+  revalidatePath("/cong-no");
+  revalidatePath("/hoan-tien");
+  revalidatePath("/enrollments");
+  return kq;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// G1 · US-22 — MIỄN GIẢM NỢ CỦA MỘT CON
+//
+// ⚠️ Cổng `congDungHoc` = `orders:manage` + cách ly cơ sở + cờ thu linh hoạt. Đo
+// `prisma/seed-roles.ts` 22/09/2026: CENTER_MANAGER (QLCS) và HO_ACCOUNTANT CÓ key này;
+// CENTER_SALES_CSM thì KHÔNG — đúng AC3 ("sale gọi trực tiếp action → từ chối"), và từ chối
+// ở ACTION chứ không chỉ ẩn nút.
+//
+// ⚠️ BA khai quyền `billing:waive`. Key đó KHÔNG TỒN TẠI trong repo; tự chế một key mới là
+// dựng một màn hình không vai nào mở được (bài học `audit-logs:view`). Lý lẽ đầy đủ ở đầu
+// `lib/finance/mien-giam.ts`.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function mienGiamNoAction(input: {
+  orderId: string;
+  orderItemId: string;
+  soTien: number;
+  lyDo: string;
+}) {
+  const cong = await congDungHoc(input.orderId);
+  if (!cong.ok) return { ok: false as const, error: cong.error };
+
+  const [hapThu, tranPhanTram] = await Promise.all([
+    docChinhSachUuDai(cong.order.orgUnitId).then((cs) => cs.hapThu),
+    getSetting("orders.maxDiscountPercent", { orgUnitId: cong.order.orgUnitId }),
+  ]);
+
+  const kq = await mienGiamNoChoCon({
+    orderId: cong.order.id,
+    orderItemId: input.orderItemId,
+    soTien: input.soTien,
+    lyDo: input.lyDo,
+    hapThu,
+    tranPhanTram,
+    actor: cong.actor,
+  });
+  if (!kq.ok) return kq;
+
+  revalidatePath(`/orders/${input.orderId}`);
+  revalidatePath("/cong-no");
+  return kq;
 }

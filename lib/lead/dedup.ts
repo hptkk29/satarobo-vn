@@ -1,5 +1,7 @@
 import { db } from "@/lib/db";
 import { getSetting } from "@/lib/settings/service";
+import { recordLeadActivity } from "@/lib/lead/activity-write";
+import { SYSTEM_ACTIVITY_META } from "@/lib/lead/activity-clock";
 import { formatPhoneVN, phoneVariants } from "@/lib/phone";
 
 // =============================================================================
@@ -37,15 +39,21 @@ export async function logDuplicateAttempt(
     await tx.leadDuplicate.create({
       data: { primaryLeadId, duplicatePhone: phone, source },
     });
-    await tx.leadActivity.create({
-      data: {
-        leadId: primaryLeadId,
-        actorName: "Hệ thống (web)",
-        type: "NOTE",
-        content: `[Trùng SĐT] Có submit mới cùng SĐT ${formatPhoneVN(phone)}${
-          source ? ` từ nguồn "${source}"` : ""
-        } — đã chặn tạo lead trùng.`,
-      },
+    // N-4 — khách gửi lại phiếu LÀ một hoạt động trên lead gốc: đồng hồ
+    // "chưa tiếp cận lại" phải nhảy, không thì lead vừa có tín hiệu nóng lại
+    // nằm im trong danh sách treo.
+    await recordLeadActivity({
+      tx,
+      leadId: primaryLeadId,
+      actorName: "Hệ thống (web)",
+      type: "NOTE",
+      content: `[Trùng SĐT] Có submit mới cùng SĐT ${phone}${
+        source ? ` từ nguồn "${source}"` : ""
+      } — đã chặn tạo lead trùng.`,
+      // S-3 — khách gửi lại phiếu là TÍN HIỆU từ khách, không phải Sale đã gọi
+      // khách. Đồng hồ "chưa tiếp cận lại" vẫn nhảy (cú bump ở trên), nhưng mốc
+      // "đã liên hệ lần đầu" thì KHÔNG — chưa ai nhấc máy cả.
+      metadata: SYSTEM_ACTIVITY_META,
     });
   });
 }

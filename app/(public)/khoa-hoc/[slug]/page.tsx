@@ -5,6 +5,7 @@ import { ChevronLeft, Check, GraduationCap, Clock, Tag } from "lucide-react";
 import {
   getCourseBundle,
   getCoursePackageFromDb,
+  getCourseListPriceFromDb,
 } from "@/components/legacy-laptrinhrobot/_data/courses-helpers";
 import { resolveCoursePrice } from "@/lib/courses/pricing";
 import {
@@ -15,6 +16,7 @@ import { ConsultCtaButton } from "@/components/khoa-hoc/consult-cta-button";
 import { ExamDetailSections } from "@/components/khoa-hoc/exam-detail-sections";
 import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
 import { LongtermDetailSections } from "@/components/khoa-hoc/longterm-detail-sections";
+import { dinhDangTien } from "@/lib/gia-cong-khai";
 
 const BASE_URL = "https://satarobo.vn";
 
@@ -84,8 +86,12 @@ export default async function CoursePage({
 
   // R6-B4 — giá hiển thị ưu tiên DB (CoursePackage), fallback hardcode courses-data.
   // priceOriginal=listPrice, priceEarlyBird=earlyBirdPrice. Đổi giá ở admin không cần deploy.
+  // Bậc hai: `Course.price` do `/admin/courses` quản lý. Thiếu bậc này thì khi
+  // `CoursePackage` chưa có dòng, trang rơi thẳng về hằng trong `courses-pricing.ts` —
+  // hằng đang LỆCH DB, và trang danh sách với trang chi tiết in hai con số khác nhau.
+  const giaNiemYetDb = await getCourseListPriceFromDb(slugLower);
   const resolvedPrice = resolveCoursePrice(dbPkg, {
-    listPrice: hardcodedCourse.listPrice,
+    listPrice: giaNiemYetDb ?? hardcodedCourse.listPrice,
     earlyBirdPrice: hardcodedCourse.earlyBirdPrice,
   });
   const course = { ...hardcodedCourse, ...resolvedPrice };
@@ -155,13 +161,18 @@ export default async function CoursePage({
               {detail.audienceDescription}
             </p>
 
-            {/* Price block → "Liên hệ" (học phí hiển thị qua tư vấn) */}
+            {/* Khối GIÁ — công khai học phí niêm yết.
+                BLĐ chốt 22/09/2026: "có khoá nào thì công khai giá khoá đó". Trước đó ô
+                này in chuỗi cứng "Liên hệ" dù `resolveCoursePrice` ở trên đã tính ra giá
+                thật — đúng lý do hướng dẫn BCT yêu cầu ẩn trang (không công khai giá +
+                không đặt hàng được). Nay công khai giá nên trang được hiển thị lại. */}
             <div className="mb-6 rounded-2xl border border-orange-200 bg-white p-6 shadow-sm">
               <div className="mb-1 text-4xl font-extrabold text-orange-600">
-                Liên hệ
+                {dinhDangTien(course.listPrice)}
               </div>
               <div className="text-sm text-gray-600">
-                Đăng ký tư vấn để nhận học phí và ưu đãi mới nhất cho khóa này
+                Học phí niêm yết, đã bao gồm thuế GTGT. Liên hệ để nhận ưu đãi mới nhất
+                cho khóa này.
               </div>
             </div>
 

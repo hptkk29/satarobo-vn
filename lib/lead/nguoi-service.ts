@@ -9,6 +9,8 @@ import { logLeadAudit } from "@/lib/audit/log";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
 import { mocCatNguoi, soNgayIm, type LeadDeDoNguoi } from "@/lib/lead/lead-nguoi";
 import type { VisibleCenterIds } from "@/lib/lead-handover/service";
+import { recordLeadActivity } from "@/lib/lead/activity-write";
+import { SYSTEM_ACTIVITY_META } from "@/lib/lead/activity-clock";
 
 /**
  * TÌM VÀ PHÂN BỔ LẠI LEAD NGUỘI.
@@ -323,15 +325,15 @@ export async function phanBoLaiLeadNguoi(params: {
             reason: params.lyDo,
           },
         });
-        await tx.leadActivity.create({
-          data: {
-            leadId: lead.id,
-            actorId: params.actorId,
-            actorName: params.actorName,
-            type: "NOTE",
-            content: `Phân bổ lại lead nguội (${params.nguongNgay}+ ngày không ai chăm) — ${params.lyDo}`,
-            metadata: { system: true, nguoi: true, orgUnitId },
-          },
+        // N-4 — đi qua cửa chung (dòng + đồng hồ trong một lượt), S-3 — đóng dấu máy.
+        await recordLeadActivity({
+          tx,
+          leadId: lead.id,
+          actorId: params.actorId,
+          actorName: params.actorName,
+          type: "NOTE",
+          content: `Phân bổ lại lead nguội (${params.nguongNgay}+ ngày không ai chăm) — ${params.lyDo}`,
+          metadata: { ...SYSTEM_ACTIVITY_META, nguoi: true, orgUnitId },
         });
         await logLeadAudit({
           leadId: lead.id,

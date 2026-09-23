@@ -6,6 +6,10 @@ import { db } from "@/lib/db";
 import { thuHoiKhiAuthSignOut } from "@/lib/push/thu-hoi";
 import { loginSchema } from "@/lib/validators/auth";
 import { rateLimit } from "@/lib/rate-limit";
+import {
+  duocTatChanTanSuatDangNhap,
+  ipChoRateLimit,
+} from "@/lib/security/client-ip";
 import { canonicalPhone } from "@/lib/phone";
 // Phase T0.1 — map role cũ sang tên mới. Nguồn dùng chung với mọi chỗ đọc role từ DB.
 import { migrateLegacyRole } from "@/lib/auth/legacy-role";
@@ -47,11 +51,13 @@ const authCookieDomain = envSlug
   ? process.env.AUTH_COOKIE_DOMAIN?.trim() || undefined
   : undefined;
 
-// SEC-H01 — IP client cho rate-limit login (Vercel để IP thật ở x-forwarded-for).
+// SEC-H01 — IP client cho rate-limit login.
+//
+// ⚠️ Bản cũ lấy phần tử ĐẦU của `x-forwarded-for`, tức đầu do CLIENT viết — kẻ dò mật khẩu
+// tự chèn một IP khác mỗi request là trần 10 lượt/phút không bao giờ chạm tới. Luật chọn
+// header + lý do đầy đủ nay ở `lib/security/client-ip.ts`; đừng đọc header thẳng ở đây nữa.
 function getClientIp(request: Request | undefined): string {
-  const xff = request?.headers?.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0]!.trim();
-  return request?.headers?.get("x-real-ip") ?? "unknown";
+  return ipChoRateLimit(request?.headers);
 }
 
 declare module "next-auth" {
@@ -125,7 +131,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // là 2 key khác nhau = bypass. rateLimit() fail-soft (Upstash → memory khi
         // lỗi) nên KHÔNG khóa login hàng loạt khi Redis sự cố. Break-glass: đặt env
         // LOGIN_RATELIMIT_DISABLED=1 để tắt tạm.
-        if (process.env.LOGIN_RATELIMIT_DISABLED !== "1") {
+        // ⚠️ KHÔNG đọc biến env của cửa tắt thẳng ở đây. Nó bị CHỐT CỨNG trên production
+        // (bỏ qua + kêu to) — luật nằm ở `duocTatChanTanSuatDangNhap`, một chỗ, có test.
+        //
+        // ⚠️ Và đừng viết tên biến ấy ra trong chú thích: lưới `[CIP-14]` soi VĂN BẢN của
+        // tệp này, nên một câu giải thích chứa đúng chuỗi đang cấm sẽ làm lưới đỏ. Đã dính
+        // một lần lúc viết bản vá này.
+        if (!duocTatChanTanSuatDangNhap()) {
           const ip = getClientIp(request);
           const idKey = canonical ?? identifier.toLowerCase();
           const [byIp, byId] = await Promise.all([

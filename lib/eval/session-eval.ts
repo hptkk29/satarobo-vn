@@ -19,6 +19,7 @@ import {
   type QuestionDef,
   type SubmittedAnswer,
 } from "@/lib/eval/schema";
+import { collectEvalPhotoUrls } from "@/lib/eval/session-eval-photo-gate";
 
 // ─── PURE — áp đợt SESSION_EVAL cho 1 buổi ───────────────────────────────────
 export type SessionEvalRoundScope = {
@@ -205,6 +206,73 @@ export type SaveSessionEvalResult =
 type SessionRefData = { classSessionId: string } | { trialClassSessionId: string };
 
 /**
+ * F-04 — ngữ cảnh ghi ẢNH CỦA PHIẾU vào hàng duyệt ảnh lớp (xem session-eval-photo-gate.ts).
+ * Chỉ có ở đường LỚP CHÍNH: phiếu lớp trải nghiệm không tới cổng phụ huynh
+ * (getStudentSessionEvals lọc `classSessionId != null`) và cũng không có Class để neo.
+ */
+export type EvalPhotoMirrorContext = {
+  classId: string;
+  takenAt: Date | null;
+  uploadedById: string | null;
+  uploadedByName: string | null;
+  /** Người điền có quyền media:approve → duyệt luôn, khớp hành vi uploadClassMedia. */
+  autoApprove: boolean;
+};
+
+/**
+ * F-04 — ghi bản sao mỗi ảnh của phiếu thành 1 bản ghi ClassSessionMedia để nó nằm
+ * trong ĐÚNG hàng duyệt mà QLCS đang dùng (/admin/media).
+ *
+ * Chạy TRONG transaction lưu phiếu: mirror hỏng thì phiếu cũng không lưu. Đây là điều
+ * kiện để suy luận ở cổng đọc đứng vững — "ảnh không có bản ghi nào" chỉ có thể là ảnh
+ * lưu TRƯỚC bản vá, không bao giờ là ảnh mới lọt qua.
+ *
+ * KHÔNG gắn thẻ học viên và KHÔNG isClassWide: bản ghi này chỉ để mở khoá đúng cái ảnh
+ * trong đúng cái phiếu đã gắn nó, không được rơi sang album /portal/hinh-anh (bất biến
+ * C6.2 trong lib/lms/media-consent.ts). Quyền riêng tư của ảnh phiếu vẫn do consent
+ * CLASS_MEDIA gác như cũ ở session-eval-portal.ts.
+ *
+ * Khử trùng theo fileUrl: lưu lại phiếu lần 2 KHÔNG tạo thêm bản ghi và KHÔNG đẩy ảnh
+ * đã APPROVED về lại PENDING (nếu không, mỗi lần GV sửa chữ trong phiếu là ảnh biến mất
+ * khỏi cổng phụ huynh cho tới khi ai đó duyệt lại).
+ */
+async function mirrorEvalPhotosToReviewQueue(
+  tx: Prisma.TransactionClient,
+  ctx: EvalPhotoMirrorContext,
+  classSessionId: string,
+  urls: string[],
+): Promise<number> {
+  if (urls.length === 0) return 0;
+
+  const existing = await tx.classSessionMedia.findMany({
+    where: { fileUrl: { in: urls } },
+    select: { fileUrl: true },
+  });
+  const known = new Set(existing.map((r) => r.fileUrl));
+  const missing = urls.filter((u) => !known.has(u));
+  if (missing.length === 0) return 0;
+
+  const now = new Date();
+  await tx.classSessionMedia.createMany({
+    data: missing.map((fileUrl) => ({
+      classId: ctx.classId,
+      fileUrl,
+      status: ctx.autoApprove ? ("APPROVED" as const) : ("PENDING" as const),
+      isClassWide: false,
+      classSessionId,
+      takenAt: ctx.takenAt,
+      uploadedById: ctx.uploadedById,
+      uploadedByName: ctx.uploadedByName,
+      approvedById: ctx.autoApprove ? ctx.uploadedById : null,
+      approvedByName: ctx.autoApprove ? ctx.uploadedByName : null,
+      approvedAt: ctx.autoApprove ? now : null,
+    })),
+    skipDuplicates: true,
+  });
+  return missing.length;
+}
+
+/**
  * Lưu phiếu SESSION_EVAL cho nhiều HS của 1 buổi (lớp chính HOẶC lớp trải nghiệm).
  * find-or-replace EvalResponse(round×buổi×HS) trong 1 transaction → idempotent.
  */
@@ -213,6 +281,7 @@ async function saveResponsesCore(
   ref: SessionRefData,
   questions: QuestionDef[],
   submissions: StudentEvalSubmission[],
+  photoMirror?: EvalPhotoMirrorContext,
 ): Promise<SaveSessionEvalResult> {
   const normalizedByStudent = new Map<string, ReturnType<typeof validateAnswers>>();
   for (const sub of submissions) {
@@ -253,9 +322,33 @@ async function saveResponsesCore(
       }
       saved += 1;
     }
+
+    // F-04 — ảnh của phiếu vào hàng duyệt NGAY TRONG transaction lưu phiếu. Đặt sau
+    // vòng lưu để chỉ ghi ảnh của phiếu thật sự đã lưu.
+    if (photoMirror && classSessionId) {
+      await mirrorEvalPhotosToReviewQueue(
+        tx,
+        photoMirror,
+        classSessionId,
+        photoUrlsOfSubmissions(questions, normalizedByStudent),
+      );
+    }
   });
 
   return { ok: true, saved };
+}
+
+/** Gom URL ảnh của cả lượt lưu (mọi học viên) — dùng đáp án ĐÃ chuẩn hoá. */
+function photoUrlsOfSubmissions(
+  questions: QuestionDef[],
+  normalizedByStudent: Map<string, ReturnType<typeof validateAnswers>>,
+): string[] {
+  const all: { questionId: string; valueOptions?: string[] | null }[] = [];
+  for (const v of normalizedByStudent.values()) {
+    if (!v.ok) continue;
+    for (const a of v.normalized) all.push({ questionId: a.questionId, valueOptions: a.valueOptions });
+  }
+  return collectEvalPhotoUrls(questions, all);
 }
 
 /** Lưu phiếu SESSION_EVAL cho buổi LỚP CHÍNH. KHÔNG gate — caller phải gate trước. */
@@ -264,8 +357,12 @@ export async function saveSessionEvalResponses(
   classSessionId: string,
   questions: QuestionDef[],
   submissions: StudentEvalSubmission[],
+  /** F-04 — bỏ trống thì ảnh của phiếu KHÔNG vào hàng duyệt ⇒ cổng phụ huynh coi
+   *  chúng là ảnh cũ và cho hiện. Caller trên đường thật (session-eval-actions) LUÔN
+   *  truyền; chỉ test/seed mới được bỏ. */
+  photoMirror?: EvalPhotoMirrorContext,
 ): Promise<SaveSessionEvalResult> {
-  return saveResponsesCore(roundId, { classSessionId }, questions, submissions);
+  return saveResponsesCore(roundId, { classSessionId }, questions, submissions, photoMirror);
 }
 
 /** FL4 (R4) — lưu phiếu SESSION_EVAL cho buổi LỚP TRẢI NGHIỆM. KHÔNG gate. */

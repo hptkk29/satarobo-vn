@@ -119,6 +119,18 @@ export interface NhanVanHanh {
   donVi?: string;
   /** true = đổi sai gây hậu quả rộng hoặc tốn tiền ⇒ giao diện gắn dấu nhắc. */
   canThan?: boolean;
+  /**
+   * Tham số chỉ nhận MỘT TRONG VÀI giá trị định trước ⇒ màn cấu hình vẽ danh sách chọn.
+   *
+   * ⚠️ Vì sao cần: trình sửa suy kiểu ô nhập từ GIÁ TRỊ (`kieuCuaGiaTri`), nên một tham số
+   * dạng chữ ra ô chữ TRẮNG. Với `billing.siblingTarget` thì đó là mời quản lý gõ tay một
+   * mã như `HOC_PHI_THAP_HON` rồi đọc một câu lỗi kỹ thuật khi gõ sai — affordance nói dối
+   * (luật 12). Có danh sách thì không gõ sai được, và mỗi lựa chọn nói luôn hệ quả của nó.
+   *
+   * `giaTri` phải KHỚP KHÍT với `z.enum` của khoá trong registry. Lưới `[CFG-T05]` canh
+   * việc đó — khai lệch một chữ là quản lý chọn xong rồi bị máy chủ từ chối.
+   */
+  chon?: readonly { giaTri: string; nhan: string; hauQua?: string }[];
 }
 
 const N: Readonly<Record<SettingKey, NhanVanHanh>> = {
@@ -741,6 +753,100 @@ const N: Readonly<Record<SettingKey, NhanVanHanh>> = {
       "tiền không được ghi nhận và kế toán hoàn lại. Có thể bật riêng cho từng cơ sở.",
     canThan: true,
   },
+
+  // ── Ưu đãi anh chị em: quản lý tự cài [F3 · 22/09/2026] ────────────────────────────
+  "billing.siblingAutoEnabled": {
+    tab: "tien",
+    ten: "Tự tính ưu đãi anh chị em học cùng",
+    giaiThich:
+      "Bật thì khi một nhà có từ hai con học, hệ thống tự trừ học phí cho con thứ hai trở " +
+      "đi theo các mức bên dưới. Tắt thì người bán vẫn gõ tay từng khoản giảm như trước — " +
+      "tắt KHÔNG xoá những khoản đã giảm cho các đơn cũ.",
+    canThan: true,
+  },
+  "billing.siblingPercentSecond": {
+    tab: "tien",
+    ten: "Mức giảm cho con thứ hai",
+    giaiThich:
+      "Trừ bao nhiêu phần trăm học phí của con được xếp là con thứ hai trong nhà. Đặt 0 là " +
+      "con thứ hai không được giảm gì.",
+    donVi: "%",
+    canThan: true,
+  },
+  "billing.siblingPercentThird": {
+    tab: "tien",
+    ten: "Mức giảm cho con thứ ba trở lên",
+    giaiThich:
+      "Trừ bao nhiêu phần trăm học phí của con thứ ba và các con sau nữa. Nhà có hai con thì " +
+      "mức này không dùng tới.",
+    donVi: "%",
+    canThan: true,
+  },
+  "billing.siblingTarget": {
+    tab: "tien",
+    ten: "Ưu đãi anh chị em áp cho con nào",
+    giaiThich:
+      "Trong một nhà, ai được xếp là con thứ hai. Đổi mục này là đổi xem NHÀ NÀO được giảm " +
+      "bao nhiêu, nên hãy xem lại vài đơn đang chạy sau khi đổi.",
+    canThan: true,
+    chon: [
+      {
+        giaTri: "HOC_PHI_THAP_HON",
+        nhan: "Con có học phí thấp hơn",
+        hauQua:
+          "Nhà giảm ít tiền hơn. Thêm một con học khoá đắt hơn thì ưu đãi CHUYỂN sang con " +
+          "đang học, tức con cũ bỗng được giảm thêm.",
+      },
+      {
+        giaTri: "GHI_DANH_SAU",
+        nhan: "Con đăng ký sau",
+        hauQua:
+          "Con vào sau luôn là con được giảm; các con đang học không bao giờ bị tính lại. " +
+          "Nhà giảm nhiều tiền hơn khi con vào sau học khoá đắt.",
+      },
+    ],
+  },
+  "billing.siblingStacksFullPay": {
+    tab: "tien",
+    ten: "Cho cộng dồn với ưu đãi đóng trọn khoá",
+    giaiThich:
+      "Bật thì một con vừa được giảm vì có anh chị em, vừa được giảm vì đóng trọn khoá. Tắt " +
+      "thì con đã có ưu đãi đóng trọn khoá sẽ không nhận thêm ưu đãi anh chị em.",
+    canThan: true,
+  },
+  "billing.lateDiscountAbsorb": {
+    tab: "tien",
+    ten: "Giảm giá phát sinh muộn thì trừ vào đợt thu nào",
+    giaiThich:
+      "Khi thêm một con làm con đang học được giảm thêm, phần giảm đó phải trừ vào các đợt " +
+      "chưa thu. Đợt nào ĐÃ nhận tiền thì không bao giờ bị sửa. Lưu ý đợt gần nhất thường " +
+      "đã phát mã QR và đã nhắn cho phụ huynh — sửa số của nó là phải nói lại với họ.",
+    canThan: true,
+    chon: [
+      {
+        giaTri: "DOT_XA_NHAT",
+        nhan: "Đợt có hạn muộn nhất, trừ dần về trước",
+        hauQua:
+          "Đợt gần nhất giữ nguyên số phụ huynh đã nhận, nên không phải giải thích lại. " +
+          "Phụ huynh hưởng ưu đãi ở lần đóng sau.",
+      },
+      {
+        giaTri: "CHIA_DEU",
+        nhan: "Chia đều theo tỷ lệ các đợt chưa thu",
+        hauQua:
+          "Mọi đợt chưa thu đều giảm một phần. Đổi lại, đợt gần nhất cũng đổi số nên phải " +
+          "nhắn lại cho phụ huynh.",
+      },
+      {
+        giaTri: "DOT_GAN_NHAT",
+        nhan: "Đợt có hạn sớm nhất, trừ dần về sau",
+        hauQua:
+          "Phụ huynh hưởng ngay lần đóng tới. Đổi lại, đúng cái đợt vừa phát mã QR bị sửa " +
+          "số, nên chắc chắn phải nhắn lại.",
+      },
+    ],
+  },
+
   "orgScope.cutoverEnabled": {
     tab: "nang-cao",
     ten: "Chuyển cách phân chia dữ liệu sang sơ đồ tổ chức mới",
@@ -749,6 +855,180 @@ const N: Readonly<Record<SettingKey, NhanVanHanh>> = {
       "nhận đã đối soát xong, và bật ngoài giờ làm việc.",
     canThan: true,
   },
+
+  // ── Tham số của các trục CHỈ CÓ trên nhánh `test`, bổ sung khi hợp nhất 16/09/2026 ──
+  // Gọi điện (OmiCall) · hộp thư đa kênh · ngân sách gửi ra · ZaloCRM · ngưỡng lead treo.
+  // Thiếu một dòng ở đây thì tham số rơi khỏi giao diện mà KHÔNG báo lỗi — luật 1 đầu file.
+
+  // ── Gọi điện ──
+  "calls.live": {
+    tab: "khach-hang",
+    ten: "Gọi điện thật qua tổng đài",
+    giaiThich:
+      "Tắt thì bấm gọi vẫn ghi sổ cuộc gọi nhưng máy không đổ chuông và không tốn cước — " +
+      "dùng khi chạy thử. Bật là cuộc gọi đi ra thật, nhà cung cấp tính tiền.",
+    canThan: true,
+  },
+  "calls.minTalkSecondsForContacted": {
+    donVi: "giây",
+    tab: "khach-hang",
+    ten: "Nói bao nhiêu giây thì tính là đã liên hệ",
+    giaiThich:
+      "Cuộc gọi ngắn hơn số này bị coi là chưa gặp được khách, nên phiếu vẫn nằm trong danh " +
+      "sách cần gọi lại. Đặt quá thấp thì bấm gọi rồi tắt máy cũng thành “đã chăm sóc”.",
+  },
+  "calls.recordingAnnouncement": {
+    tab: "khach-hang",
+    ten: "Câu báo ghi âm đầu cuộc gọi",
+    giaiThich:
+      "Khách nghe câu này trước khi tư vấn viên nói. Để trống là KHÔNG báo — hãy hỏi bộ phận " +
+      "pháp chế trước khi bỏ, vì ghi âm mà không báo là chuyện của luật chứ không phải của phần mềm.",
+    canThan: true,
+  },
+  "calls.recordingRetentionMonths": {
+    donVi: "tháng",
+    tab: "khach-hang",
+    ten: "Giữ file ghi âm bao nhiêu tháng",
+    giaiThich:
+      "Quá hạn này file ghi âm bị xoá và không lấy lại được. Đặt 0 là giữ mãi — tốn dung lượng " +
+      "và giữ giọng nói của khách lâu hơn mức cần.",
+    canThan: true,
+  },
+  "calls.listenUrlTtlSeconds": {
+    donVi: "giây",
+    tab: "nang-cao",
+    ten: "Liên kết nghe ghi âm sống bao lâu (giây)",
+    giaiThich:
+      "Người mở bản ghi nhận một đường dẫn tạm; hết số giây này đường dẫn chết. Đặt dài là ai " +
+      "chép được đường dẫn thì còn nghe được lâu, kể cả sau khi đã bị gỡ quyền.",
+  },
+
+  // ── Lead treo ──
+  "crm.staleLeadWarnDays": {
+    donVi: "ngày",
+    tab: "khach-hang",
+    ten: "Bao nhiêu ngày không liên hệ thì cảnh báo vàng",
+    giaiThich:
+      "Phiếu chưa được gọi/nhắn quá số ngày này hiện dấu vàng trong danh sách. Đặt quá ngắn thì " +
+      "gần như phiếu nào cũng vàng và người dùng thôi nhìn cảnh báo.",
+  },
+  "crm.staleLeadDangerDays": {
+    donVi: "ngày",
+    tab: "khach-hang",
+    ten: "Bao nhiêu ngày không liên hệ thì cảnh báo đỏ",
+    giaiThich:
+      "Như trên nhưng mức nặng hơn. Phải lớn hơn mốc vàng, không thì không còn hai mức để phân biệt.",
+  },
+
+  // ── Hộp thư đa kênh ──
+  "inbox.messengerLive": {
+    tab: "khach-hang",
+    ten: "Trả lời Messenger thật",
+    giaiThich:
+      "Tắt thì tin soạn trong hộp thư chỉ lưu lại, khách KHÔNG nhận được gì. Bật là tin tới " +
+      "Messenger của khách thật.",
+    canThan: true,
+  },
+  "inbox.zaloOaLive": {
+    tab: "khach-hang",
+    ten: "Trả lời Zalo OA thật",
+    giaiThich:
+      "Tắt thì tin chỉ lưu sổ, khách không nhận. Bật là tin đi ra qua tài khoản Zalo OA của công ty.",
+    canThan: true,
+  },
+  "inbox.zaloCaNhanLive": {
+    tab: "khach-hang",
+    ten: "Trả lời Zalo cá nhân (ZaloCRM) thật",
+    giaiThich:
+      "Tắt thì tin chỉ lưu sổ. Bật là tin gửi đi từ chính nick Zalo cá nhân của cơ sở — khách " +
+      "thấy tin đến từ số nhân viên, không phải từ trang công ty.",
+    canThan: true,
+  },
+  "messenger.sendLive": {
+    tab: "khach-hang",
+    ten: "Gửi Messenger thật ra khách",
+    giaiThich:
+      "Công tắc chung cho mọi đường gửi Messenger. Tắt là mô phỏng: có sổ, không có tin.",
+    canThan: true,
+  },
+
+  // ── Duyệt ảnh/video buổi học ──
+  "media.reviewDeadlineOffsetDays": {
+    donVi: "ngày",
+    tab: "lop-gv",
+    ten: "Hạn duyệt ảnh sau buổi dạy (ngày)",
+    giaiThich:
+      "Đếm từ ngày dạy. Đặt 0 là phải duyệt ngay trong ngày; đặt dài thì ảnh nằm chờ lâu và " +
+      "phụ huynh thấy muộn.",
+  },
+  "media.reviewDeadlineHour": {
+    donVi: "giờ",
+    tab: "lop-gv",
+    ten: "Giờ hết hạn duyệt ảnh trong ngày",
+    giaiThich:
+      "Quá giờ này (giờ Việt Nam) của ngày hạn thì thư mục ảnh bị tính là trễ và người quản lý " +
+      "cơ sở nhận cảnh báo.",
+  },
+
+  // ── Ngân sách gửi ra ──
+  "outbound.callMonthlyCapVnd": {
+    donVi: "đ",
+    tab: "tien",
+    ten: "Trần cước gọi điện mỗi tháng (đ)",
+    giaiThich:
+      "Chạm trần là hệ thống NGỪNG cho gọi ra tới hết tháng. Đặt 0 là tắt hẳn gọi ra.",
+    canThan: true,
+  },
+  "outbound.zaloMonthlyCapVnd": {
+    donVi: "đ",
+    tab: "tien",
+    ten: "Trần chi phí tin Zalo mỗi tháng (đ)",
+    giaiThich:
+      "Chạm trần là ngừng gửi tin Zalo tới hết tháng — kể cả tin nhắc học phí. Đặt 0 là tắt hẳn.",
+    canThan: true,
+  },
+  "outbound.aiGradingMonthlyCapVnd": {
+    donVi: "đ",
+    tab: "tien",
+    ten: "Trần chi phí chấm điểm AI mỗi tháng (đ)",
+    giaiThich:
+      "Chạm trần là bài nộp chuyển về chấm tay tới hết tháng. Đặt 0 là tắt hẳn chấm AI.",
+    canThan: true,
+  },
+  "outbound.znsUnitCostVnd": {
+    donVi: "đ",
+    tab: "tien",
+    ten: "Giá ước tính một tin ZNS (đ)",
+    giaiThich:
+      "Chỉ dùng để TRỪ DẦN vào trần ở trên, không phải giá nhà mạng thu. Đặt sai thì trần chạm " +
+      "sớm hoặc muộn hơn thực tế.",
+  },
+  "outbound.warnAtPercent": {
+    donVi: "%",
+    tab: "tien",
+    ten: "Dùng tới bao nhiêu phần trăm trần thì cảnh báo",
+    giaiThich:
+      "Tới mức này thì màn Tích hợp hiện cảnh báo để còn kịp xử lý trước khi bị chặn.",
+  },
+
+  // ── ZaloCRM ──
+  "zalocrm.idleAlertHours": {
+    donVi: "giờ",
+    tab: "khach-hang",
+    ten: "Khách chờ trả lời bao nhiêu giờ thì báo động",
+    giaiThich:
+      "Hội thoại Zalo chưa ai trả lời quá số giờ này sẽ kêu. Đặt quá ngắn thì chuông kêu suốt " +
+      "ngoài giờ làm và người trực thôi để ý.",
+  },
+  "zalocrm.orgCodes": {
+    tab: "nang-cao",
+    ten: "Ánh xạ cơ sở sang mã tổ chức ZaloCRM",
+    giaiThich:
+      "Khoá là mã cơ sở bên này, giá trị là mã tổ chức bên máy chủ ZaloCRM. Khai sai hoặc đảo " +
+      "chiều là tin của cơ sở này chạy vào cơ sở kia, và không có dòng lỗi nào báo.",
+    canThan: true,
+  },
+
 };
 
 export const NHAN_VAN_HANH = N;

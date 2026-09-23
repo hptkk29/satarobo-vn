@@ -57,7 +57,11 @@ export function ReserveModal({
         expectedEndAt: expectedEndAt || null,
       });
       if (result.ok) {
-        toast.success("Đã bảo lưu học viên");
+        // F2 — phần TIỀN (dời hạn đợt thu) chạy sau khi bảo lưu commit và có thể hỏng
+        // riêng. Hỏng thì PHẢI nói ra: "đã bảo lưu" mà im về việc hạn chưa dời là để
+        // người bấm tin rằng không còn việc gì (luật 12 — affordance phải nói thật).
+        if (result.canhBaoTien) toast.warning(result.canhBaoTien);
+        else toast.success("Đã bảo lưu học viên");
         onClose();
         router.refresh();
       } else {

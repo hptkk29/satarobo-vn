@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { Sun, Moon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { DaiLinkPhapLy } from "@/components/public/dai-link-phap-ly";
+import { CookieConsent } from "@/components/public/cookie-consent";
 import "./auth.css";
 
 // Cổng đăng nhập "Waves" (port từ AuthenUI). Sáng/Tối TỰ QUẢN qua class .dark trên
@@ -45,6 +47,21 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       </button>
 
       {children}
+
+      {/* Dải link pháp lý — bắt buộc cho hồ sơ BCT: `/kich-hoat` là màn thu số điện thoại /
+          email của phụ huynh và là màn được chụp ảnh trong file hướng dẫn, nhưng nhóm route
+          này trước đây không có chân trang nào.
+          ⚠️ `position: fixed` là CỐ Ý: `.auth-root` (app/(auth)/auth.css) là
+          `display:flex; align-items:center; justify-content:center`, nên một phần tử thường
+          đặt ở đây sẽ nằm NGANG cạnh thẻ đăng nhập chứ không nằm dưới. Cách này không phải
+          sửa layout của cả 5 trang auth. */}
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-10 px-4 pb-3">
+        <DaiLinkPhapLy className="pointer-events-auto" />
+      </div>
+
+      {/* Xem chú thích ở app/(legacy)/layout.tsx: banner trước đây vắng mặt ở nhóm này,
+          trong đó có /kich-hoat — màn thu số điện thoại/email của phụ huynh. */}
+      <CookieConsent />
     </div>
   );
 }

@@ -6,6 +6,7 @@ import {
   injectSoftDelete,
   passesScope,
   SCOPED_MODELS,
+  getModelPrefixes,
   SCOPE_EXEMPT,
   SOFT_DELETE_MODELS,
   isMakeupExceptionModel,
@@ -255,4 +256,55 @@ describe("[R7-08-AC6] makeup exception KHÔNG rò sang query khác", () => {
     const leaked = sensitive.filter((m) => MAKEUP_EXCEPTION_MODELS.has(m));
     expect(leaked).toEqual([]);
   });
+});
+
+/**
+ * ⚠️ GUARD NÀY LẤP MỘT LỖ ĐÃ BIẾT.
+ *
+ * `getModelPrefixes()` quyết định đọc quyền nào để tính phạm vi cơ sở cho một
+ * model. Quên khai một model `Trn*` ở đó thì nó rơi vào `default: return []` —
+ * và hàm gọi hiểu là "không ràng buộc theo quyền nào", tức NỚI ra, không siết
+ * lại. Bất kỳ ai có một vai neo tại Hội sở, kể cả vai chẳng liên quan đào tạo,
+ * đọc được dữ liệu của mọi cơ sở.
+ *
+ * Trước guard này KHÔNG có test nào canh nhánh đó — và đây đúng là lỗi #04 từng
+ * mắc với `Attendance`, chỉ khác tên bảng.
+ */
+describe("[EL-14] mọi model Trn* được scope đều khai tiền tố quyền", () => {
+  it("không model `Trn*` nào rơi vào nhánh mặc định", () => {
+    const thieu = [...SCOPED_MODELS]
+      .filter((m) => m.startsWith("Trn"))
+      .filter((m) => getModelPrefixes(m).length === 0);
+    expect(thieu).toEqual([]);
+  });
+
+  it("và tiền tố ấy là `elearning:`", () => {
+    for (const m of [...SCOPED_MODELS].filter((x) => x.startsWith("Trn"))) {
+      expect(getModelPrefixes(m), m).toContain("elearning:");
+    }
+  });
+});
+
+// ── ZaloCRM (L1) — hai bảng ánh xạ hạ tầng ────────────────────────────────────
+// Bộ [A0-04-T12-01] ở trên đã bắt "model có centerId mà chưa phân loại", nhưng nó
+// chỉ nói "thiếu ai đó", không nói "xếp NHẦM chỗ". Xếp `ZaloCrmNick` vào
+// SCOPED_MODELS mà quên `getModelPrefixes` là NỚI quyền diện rộng (lỗi #04 đã mắc
+// thật với `Attendance`), nên chỗ nó thuộc về phải được ghim tường minh.
+describe("[ZC-DB-01] hai bảng ZaloCrm* nằm ở SCOPE_EXEMPT, KHÔNG ở SCOPED_MODELS", () => {
+  for (const model of ["ZaloCrmNick", "ZaloCrmThread"]) {
+    it(`${model} — SCOPE_EXEMPT có, SCOPED_MODELS không`, () => {
+      expect(SCOPE_EXEMPT.has(model), `${model} phải nằm trong SCOPE_EXEMPT`).toBe(true);
+      expect(SCOPED_MODELS.has(model), `${model} KHÔNG được nằm trong SCOPED_MODELS`).toBe(
+        false,
+      );
+    });
+
+    // Hệ quả PHẢI NHỚ của việc ở SCOPE_EXEMPT: `injectScope` thoát ngay ở dòng đầu,
+    // tức scopedDb KHÔNG lọc gì cho hai bảng này — cả đọc lẫn ghi phải tự gác theo
+    // `actor.visibleCenterIds` (`lib/integrations/zalocrm/nick-admin.ts`). Ghim lại ở
+    // đây để không ai đọc "đã khai vào db-scope" thành "đã được cách ly".
+    it(`${model} — scopedDb KHÔNG chèn điều kiện centerId nào`, () => {
+      expect(injectScope(model, {}, center)).toEqual({});
+    });
+  }
 });

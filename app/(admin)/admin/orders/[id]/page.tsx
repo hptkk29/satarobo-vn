@@ -24,7 +24,13 @@ import { loadActiveQrSessions } from "../_qr-core";
 import { maskPhone, maskEmail } from "@/lib/utils";
 import { laThuTienLinhHoatBat } from "@/lib/finance/feature";
 import { noTheoCon } from "@/lib/finance/debt";
-import { CongNoTheoCon } from "../_components/cong-no-theo-con";
+import { docTrangThaiDungHoc } from "@/lib/finance/dung-hoc-con";
+import { docBaoLuuCuaDon } from "@/lib/finance/bao-luu-tien";
+import { NutThemCon } from "../_components/them-con-dialog";
+import type { LopChon } from "../_components/doi-khoa-dialog";
+import { CongNoTheoCon, type PhieuGopView } from "../_components/cong-no-theo-con";
+import { docPhieuGopDangMo } from "@/lib/finance/phieu-gop";
+import { memoPhatHanh } from "@/lib/payments/memo-phat-hanh";
 
 export const metadata = { title: "Chi tiết đơn hàng | Admin" };
 export const dynamic = "force-dynamic";
@@ -185,7 +191,8 @@ export default async function OrderDetailPage({ params }: Props) {
   });
   // Bộ số in ra khối "Công nợ đơn hàng" — TÁI DÙNG `paidSoFar` (trục B) đã tính ở
   // trên cho mã QR, nên số trên màn và số trong QR không thể lệch nhau. Trục A lấy
-  // đúng bộ lọc mà công nợ + cổng phụ huynh dùng (`laKhoanDaXacNhan`).
+  // Trục A ở đây CỐ Ý dùng bộ lọc GỘP (`laKhoanDaXacNhan`), KHÁC cổng phụ huynh —
+  // xem ghi chú dài ở khối `accounting` bên dưới.
   //
   // Trước bản này `paidSoFar` chỉ dùng cho QR rồi bị bỏ: trang tính được "còn thiếu"
   // mà không in ra đâu cả.
@@ -213,6 +220,78 @@ export default async function OrderDetailPage({ params }: Props) {
   // `scopedDb` đã cho phép đọc chính cái đơn này.
   const batThuTheoCon = await laThuTienLinhHoatBat(order.orgUnitId);
   const soTheoCon = batThuTheoCon ? await noTheoCon(order.id) : null;
+  // PHIÊN D — trạng thái dừng học của từng dòng. Cùng công tắc: tắt thì không thêm một
+  // truy vấn nào.
+  const trangThaiDungHoc = batThuTheoCon ? await docTrangThaiDungHoc(order.id) : undefined;
+  // F2 — con nào đang bảo lưu + hạn đợt đã dời bao nhiêu ngày. Hỏi RIÊNG ở trang, cố ý
+  // KHÔNG nhồi vào `noTheoCon`: hàm đó chạy trong transaction của mọi phép ghi tiền nên mỗi
+  // câu tra thêm ở đó là thêm thời gian nằm dưới khoá đơn cho một thông tin chỉ để hiển thị.
+  // F3 — khoá học chọn được khi thêm con. Chỉ khoá ĐANG BÁN và ĐÃ CÓ GIÁ: khoá chưa khai
+  // giá thì cổng soát giá ở máy chủ từ chối, nên mời chọn nó là một lời hứa suông (luật 12).
+  // F4 — lớp chọn được khi đổi khoá. Chỉ lớp CÒN NHẬN học sinh và khoá ĐÃ CÓ GIÁ: lớp đã
+  // huỷ/kết thúc thì `chuyenLopTrongTx` từ chối, khoá chưa khai giá thì cổng soát giá từ
+  // chối — mời chọn chúng là lời hứa suông (luật 12).
+  const lopChonDuoc: LopChon[] = batThuTheoCon
+    ? (
+        await sdb.class.findMany({
+          where: {
+            deletedAt: null,
+            status: { notIn: ["CANCELLED", "COMPLETED"] },
+            course: { isActive: true, price: { gt: 0 } },
+          },
+          select: {
+            id: true,
+            name: true,
+            course: { select: { name: true, price: true } },
+          },
+          orderBy: { name: "asc" },
+          take: 200,
+        })
+      ).map((l) => ({
+        id: l.id,
+        name: l.name,
+        courseName: l.course?.name ?? "",
+        coursePrice: l.course?.price ?? null,
+      }))
+    : [];
+
+  const khoaChonDuoc = batThuTheoCon
+    ? await sdb.course.findMany({
+        where: { isActive: true, price: { gt: 0 } },
+        select: { id: true, name: true, price: true },
+        orderBy: { name: "asc" },
+      })
+    : [];
+
+  const baoLuuTheoCon = batThuTheoCon
+    ? Object.fromEntries(await docBaoLuuCuaDon(order.id))
+    : undefined;
+
+  // ── PHIÊN C · phiếu gộp đang mở [20/09/2026] ────────────────────────────────
+  //
+  // Cùng công tắc với khối "Công nợ theo con": tắt thì KHÔNG thêm một truy vấn nào.
+  const phieuMo = batThuTheoCon ? await docPhieuGopDangMo(order.id) : null;
+  let phieuGop: PhieuGopView | null = null;
+  if (phieuMo) {
+    // Nội dung CK lấy từ `memoPhatHanh` — CHỖ DUY NHẤT quyết định khuôn mới hay cũ. Dựng
+    // chuỗi tại đây bằng tay là đẻ ra một khuôn thứ hai, và khuôn thứ hai thì có ngày lệch.
+    const memo = await memoPhatHanh({
+      orgUnitId: order.orgUnitId,
+      hoTen: order.student?.name ?? order.customerName,
+      sdt: order.customerPhone,
+      maMoi: phieuMo.ma,
+      tran: VIETQR_ADDINFO_MAX,
+    });
+    phieuGop = {
+      ...phieuMo,
+      // ⚠️ QR nhận bản ĐẦY ĐỦ, phần HIỂN THỊ mới che — y hệt khối QR mức đơn ở dưới. Nhúng
+      // bản che vào ảnh QR là mã hỏng, tiền không về được.
+      qrUrl: canViewPii ? buildVietQrImageUrl(payCfg, phieuMo.tongTien, memo.noiDung) : null,
+      noiDungCk: canViewPii
+        ? memo.noiDung
+        : maskPhoneInTransferContent(memo.noiDung, order.customerPhone),
+    };
+  }
 
   const congNo = congNoDon({
     totalAmount: order.totalAmount,
@@ -316,6 +395,11 @@ export default async function OrderDetailPage({ params }: Props) {
             duocSua={canManage}
             duocGan={canRecordPayments}
             duocBoGan={canManagePayments}
+            dungHoc={trangThaiDungHoc}
+            baoLuu={baoLuuTheoCon}
+            themCon={khoaChonDuoc.length > 0 ? <NutThemCon orderId={order.id} khoa={khoaChonDuoc} /> : null}
+            lopDoiKhoa={lopChonDuoc}
+            phieu={phieuGop}
           />
         </div>
       )}
@@ -365,8 +449,18 @@ export default async function OrderDetailPage({ params }: Props) {
         congNo={congNo}
         donNhiem={donNhiem}
         accounting={{
-          // Trục A — dùng chung định nghĩa "khoản đã xác nhận" với công nợ và cổng
-          // phụ huynh (lib/finance/debt.ts). Bút toán ADJUSTMENT nằm trong đó.
+          // TRỤC A (GỘP) — KHÔNG phải con số "phụ huynh đã đóng" của cổng PH.
+          //
+          // ⚠️ 17/09/2026 — đã thử đổi sang bộ lọc RÒNG (`laKhoanDaDong`, trừ bút toán
+          // hoàn) rồi TRẢ LẠI: `congNoDon` tính `choXacNhan = trục B − trục A`, mà trục B
+          // (`KHOAN_DA_GHI_NHAN`, phân bổ PaymentRequest) KHÔNG trừ hoàn. Để A ròng còn B
+          // gộp thì sau mỗi lần hoàn, màn báo "chờ xác nhận" một khoản KHÔNG TỒN TẠI —
+          // biến tín hiệu đối soát webhook thành báo động giả. Trang này hỏi "hai trục
+          // lệch nhau bao nhiêu", KHÔNG hỏi "phụ huynh đã đóng bao nhiêu"; câu sau là
+          // việc của `lib/portal/billing.ts`. Hai câu hỏi — xem `lib/finance/debt.ts`.
+          //
+          // Hệ quả còn lại, ghi ra để không ai tưởng đã xong: khối này KHÔNG hiện bút
+          // toán hoàn. Muốn hiện thì thêm MỘT DÒNG RIÊNG, đừng đổi trục A.
           confirmed: tongDaXacNhan(order.payments.filter(laKhoanDaXacNhan)),
           pending: order.payments
             .filter((p) => p.accountantStatus === "PENDING")

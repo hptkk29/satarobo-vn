@@ -1,8 +1,8 @@
 // Smoke UI cho các flow fix LMS (messaging admin+portal, compliance). DB test local.
 import { defineConfig, devices } from "@playwright/test";
-import dotenv from "dotenv";
+import { napEnvTest } from "./tests/e2e/_helpers/nap-env";
 
-dotenv.config({ path: ".env.test", override: true });
+napEnvTest("smoke");
 
 export default defineConfig({
   testDir: "./tests/e2e/smoke-lms",

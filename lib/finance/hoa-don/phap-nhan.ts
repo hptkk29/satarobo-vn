@@ -34,6 +34,8 @@ export type PhapNhan = {
   maSoThue: string;
   diaChi: string;
   dienThoai?: string;
+  /** Hộp thư nhận yêu cầu xuất hoá đơn (BLĐ 22/09/2026 khai cho Sata Robo). */
+  email?: string;
   website?: string;
   /** "1C26TSR" — ký hiệu hoá đơn năm nay của pháp nhân đó. */
   kyHieu?: string;
@@ -78,10 +80,19 @@ export const CAU_HINH_HOA_DON_MAC_DINH: CauHinhHoaDon = {
       ma: "SATA_ROBO",
       ten: "CÔNG TY CỔ PHẦN CÔNG NGHỆ GIÁO DỤC SATA ROBO",
       maSoThue: "0402301783",
-      diaChi: "258 Lê Thanh Nghị, Phường Hòa Cường, Thành phố Đà Nẵng, Việt Nam",
+      // ⚠️ ĐỊA CHỈ ĐỔI THEO QUYẾT ĐỊNH BLĐ 22/09/2026 (hồ sơ Bộ Công Thương).
+      // Trước đó ô này là "258 Lê Thanh Nghị…" — ĐO TỪ HOÁ ĐƠN THẬT (1C26TSR-86,
+      // 1C26TSR-127), tức đó là địa chỉ đang in trên tờ do MISA phát hành.
+      // BLĐ chốt dùng 211 Nguyễn Hữu Thọ cho chứng từ, khớp địa chỉ khai trong hồ sơ BCT.
+      // ⇒ KẾ TOÁN PHẢI ĐỔI ĐỊA CHỈ TRONG MISA meInvoice cho khớp; nếu không, phiếu thu
+      //   của hệ thống và hoá đơn của MISA sẽ in hai địa chỉ khác nhau cho cùng một đơn.
+      diaChi: "211 Nguyễn Hữu Thọ, Phường Hòa Cường, Thành phố Đà Nẵng, Việt Nam",
+      dienThoai: "0837.312.860",
+      email: "ketoan@satarobo.vn",
       kyHieu: "1C26TSR",
       phanMem: "MISA meInvoice",
-      ghiChu: "Đo từ hoá đơn 1C26TSR-86 và 1C26TSR-127 (16/07 và 04/09/2026).",
+      ghiChu:
+        "Địa chỉ/điện thoại/email theo quyết định BLĐ 22/09/2026. Ký hiệu + phần mềm đo từ hoá đơn 1C26TSR-86 và 1C26TSR-127 (16/07 và 04/09/2026).",
       bat: true,
     },
     {
@@ -120,7 +131,11 @@ export const CAU_HINH_HOA_DON_MAC_DINH: CauHinhHoaDon = {
    */
   macDinhTheoCoSo: [
     { maCoSo: "CS1", maPhapNhan: "SATA_ROBO" },
-    { maCoSo: "CS2", maPhapNhan: "NEW_VISION" },
+    // ⚠️ ĐỔI THEO QUYẾT ĐỊNH BLĐ 22/09/2026: CS2 trước đây ánh xạ sang NEW_VISION (chốt
+    // 15/09), nay mọi chứng từ phát sinh qua website đều đứng tên SATA ROBO — pháp nhân
+    // đăng ký hồ sơ Bộ Công Thương. Pháp nhân NEW_VISION GIỮ NGUYÊN trong danh sách vì
+    // hoá đơn cũ đã phát hành dưới tên đó; chỉ gỡ ánh xạ mặc định.
+    { maCoSo: "CS2", maPhapNhan: "SATA_ROBO" },
   ],
   phapNhanMacDinh: "SATA_ROBO",
   thue: [

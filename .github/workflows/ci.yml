@@ -191,6 +191,18 @@ jobs:
       - name: Run lead-intake DB tests
         run: pnpm test:lead-intake
 
+      # S9-B5 (06/09/2026) — LẦN ĐẦU 14 ca HT-01…HT-14 (tests/inbox/hop-thu.spec.ts)
+      # thật sự chạy trong CI. Script `test:inbox-db` có trong package.json từ đợt hộp
+      # thư nhưng KHÔNG job nào gọi ⇒ ở job `unit-tests` (không Postgres) cổng
+      # `describe.skipIf(!RUN)` cho chúng SKIP SẠCH và CI vẫn xanh 100% dù logic hộp
+      # thư bị phá hoàn toàn — đúng kiểu "xanh giả" nguy hiểm hơn đỏ.
+      # Không cần job mới: job này đã có Postgres 16, `prisma migrate deploy` (dựng cả
+      # migration 20260827120000_hop_thu_da_kenh ⇒ cổng `CO_BANG` mở) và seed RoleDef.
+      # ⚠️ Bộ này KHÔNG gọi `resetDb()` — nó dọn theo tiền tố `HTDK_`. Giữ nguyên thói
+      # quen đó cho mọi spec thêm vào `tests/inbox`: 4 bộ trên dùng CHUNG một DB
+      # `ci_test` chạy tuần tự, một `resetDb()` lọt vào là xoá dữ liệu của bộ chạy sau.
+      - name: Run inbox DB tests
+        run: pnpm test:inbox-db
       # CHẤM CÔNG — thêm 07/09/2026. Cùng lý do ba bước trên, nhưng ca này đã ĐỎ THẬT MÀ KHÔNG AI
       # THẤY: `tests/cham-cong/timelog.spec.ts` kỳ vọng 3 lượt ACCEPTED trong khi luật chặn định vị
       # (06/09) chỉ cho qua 1. Bộ này nằm trong `include` của Vitest nên `pnpm test:unit` có GOM
@@ -306,19 +318,110 @@ jobs:
           NEXTAUTH_SECRET: "ci-build-only-secret-do-not-use-in-prod-32chars"
           NEXTAUTH_URL: "http://localhost:3000"
           NEXT_PUBLIC_APP_URL: "http://localhost:3000"
+          # ── CỔNG CHẶN BRUTE-FORCE ĐĂNG NHẬP, TẮT TRONG MÔI TRƯỜNG TEST [21/09/2026] ──
+          #
+          # `lib/auth.ts:132` chặn 10 lượt/phút theo IP và **5 lượt/phút theo ĐỊNH DANH**;
+          # bộ đếm nằm trong BỘ NHỚ TIẾN TRÌNH server nên `resetDb()` không xoá được. Bộ
+          # E2E qua trình duyệt đăng nhập lại nhiều lần bằng vài tài khoản ⇒ vượt trần ⇒
+          # `authorize()` trả `null`, trang Ở LẠI `/login` **không ném lỗi nào**, và mỗi ca
+          # hết 30 giây mới chịu thua. Với hàng chục ca × retry, job chạm `timeout-minutes`
+          # và bị GIẾT. Đó là lý do bốn job cần trình duyệt treo suốt từ 21/09.
+          #
+          # ⚠️ Đây KHÔNG phải nâng trần thời gian — nguyên nhân đã đo được, và đây là cửa
+          # thoát mà chính `lib/auth.ts:128` khai ra cho đúng tình huống này. Prod KHÔNG đổi
+          # một dòng nào.
+          #
+          # ⚠️ Vế IP đã được chữa ĐÚNG CÁCH ở `tests/e2e/_helpers/auth.ts` (mỗi lượt đăng
+          # nhập một IP riêng — cùng tiền lệ `forgot-password.spec.ts`). Thứ CÒN LẠI buộc
+          # phải tắt là vế ĐỊNH DANH: nó chỉ chữa được bằng cách cho mỗi ca một email, mà
+          # làm vậy cho ~20 spec đang có là một đợt riêng.
+          #
+          # ⚠️ Mẫu KHÔNG cần cửa thoát này đã có: `tests/e2e/a0/thu-tien-theo-con.spec.ts`
+          # cho mỗi ca một email và chạy 3 lượt liên tiếp 5/5 xanh **với cổng chặn BẬT**.
+          # Spec mới nên theo mẫu đó; ngày nào ~20 spec cũ theo hết thì gỡ dòng dưới đây.
+          LOGIN_RATELIMIT_DISABLED: "1"
 
       - name: Run Playwright smoke tests
-        run: pnpm test:e2e
+        # ── NỢ-16: CHỤP CÂY TIẾN TRÌNH ĐÚNG LÚC ĐANG TREO ──────────────────────
+        # Bốn job dựng `webServer` treo SAU khi chạy xong ca cuối rồi bị `timeout-minutes`
+        # (20 phút) giết — và runner giết sạch luôn mọi chứng cứ. Reporter `line` cho
+        # biết ca cuối là ca nào, nhưng KHÔNG nói được vì sao tiến trình không thoát.
+        #
+        # Chó canh dưới đây in cây tiến trình ở phút 12 — lúc đó đã biết chắc là treo,
+        # mà job còn sống nên log vẫn ra được. Nó CHỈ ĐỌC: không gửi tín hiệu nào cho bộ
+        # test, nên không làm sai lệch chính thứ đang đo.
+        #
+        # Dấu vết đã có: runner phải "Terminate orphan process: (sh)" và
+        # "(next-server (v16.2.6))" ở bước dọn dẹp ⇒ chuỗi
+        # `pnpm start` → sh → next start → next-server để lọt tiến trình cháu.
+        # Cây tiến trình sẽ cho thấy CHÍNH XÁC cái nào còn sống và cha nó là ai.
+        #
+        # `DEBUG=pw:webserver` để Playwright tự kể nó gửi tín hiệu gì, lúc nào.
+        # ⛔ KHÔNG nâng `timeout-minutes` — trần không phải chỗ hỏng.
+        run: |
+          (
+            # NGỦ THÀNH TỪNG GIÂY, không `sleep 12m` một phát. `trap` chỉ giết được
+            # SUBSHELL, còn `sleep` là CON của nó nên sống sót và GIỮ STDOUT đã thừa kế
+            # => runner ngồi chờ hết ngần ấy phút dù bộ test xong từ lâu. Đo thật: bản
+            # `sleep 5` làm một lệnh 1 giây mất 5 giây. Ngủ từng giây thì mất mát tối đa
+            # là MỘT giây.
+            for _ in $(seq 1 720); do sleep 1; done
+            echo "::warning title=NỢ-16::Đã 12 phút — bộ test chưa thoát. Chụp cây tiến trình."
+            echo "──────── ps -ef --forest ────────"
+            ps -ef --forest 2>/dev/null | tail -60 || ps -ef | tail -60
+            echo "──────── cổng đang nghe ────────"
+            (ss -ltnp 2>/dev/null || netstat -ltnp 2>/dev/null) | head -20
+            echo "────────────────────────────────"
+          ) &
+          CHO_CANH=$!
+          # BẮT BUỘC dùng `trap`, không phải một dòng `kill` ở cuối: GitHub chạy khối này
+          # bằng `bash -e`, nên lệnh test ĐỎ là kịch bản thoát NGAY và dòng `kill` phía dưới
+          # không bao giờ chạy. Khi đó `sleep` còn sống sẽ GIỮ STDOUT MỞ và runner ngồi chờ
+          # hết 12/16 phút — biến một job 5 phút thành job chạm trần. Tức cái đèn tự gây ra
+          # đúng thứ nó sinh ra để soi.
+          trap 'kill "$CHO_CANH" 2>/dev/null || true' EXIT
+          pnpm test:e2e
+          MA=$?
+          kill "$CHO_CANH" 2>/dev/null || true
+          exit $MA
         env:
+          DEBUG: pw:webserver
           BASE_URL: "http://localhost:3000"
           DATABASE_URL: ${{ env.CI_DATABASE_URL }}
           DIRECT_URL: ${{ env.CI_DATABASE_URL }}
           NEXTAUTH_SECRET: "ci-build-only-secret-do-not-use-in-prod-32chars"
           NEXTAUTH_URL: "http://localhost:3000"
           NEXT_PUBLIC_APP_URL: "http://localhost:3000"
+          # ── CỔNG CHẶN BRUTE-FORCE ĐĂNG NHẬP, TẮT TRONG MÔI TRƯỜNG TEST [21/09/2026] ──
+          #
+          # `lib/auth.ts:132` chặn 10 lượt/phút theo IP và **5 lượt/phút theo ĐỊNH DANH**;
+          # bộ đếm nằm trong BỘ NHỚ TIẾN TRÌNH server nên `resetDb()` không xoá được. Bộ
+          # E2E qua trình duyệt đăng nhập lại nhiều lần bằng vài tài khoản ⇒ vượt trần ⇒
+          # `authorize()` trả `null`, trang Ở LẠI `/login` **không ném lỗi nào**, và mỗi ca
+          # hết 30 giây mới chịu thua. Với hàng chục ca × retry, job chạm `timeout-minutes`
+          # và bị GIẾT. Đó là lý do bốn job cần trình duyệt treo suốt từ 21/09.
+          #
+          # ⚠️ Đây KHÔNG phải nâng trần thời gian — nguyên nhân đã đo được, và đây là cửa
+          # thoát mà chính `lib/auth.ts:128` khai ra cho đúng tình huống này. Prod KHÔNG đổi
+          # một dòng nào.
+          #
+          # ⚠️ Vế IP đã được chữa ĐÚNG CÁCH ở `tests/e2e/_helpers/auth.ts` (mỗi lượt đăng
+          # nhập một IP riêng — cùng tiền lệ `forgot-password.spec.ts`). Thứ CÒN LẠI buộc
+          # phải tắt là vế ĐỊNH DANH: nó chỉ chữa được bằng cách cho mỗi ca một email, mà
+          # làm vậy cho ~20 spec đang có là một đợt riêng.
+          #
+          # ⚠️ Mẫu KHÔNG cần cửa thoát này đã có: `tests/e2e/a0/thu-tien-theo-con.spec.ts`
+          # cho mỗi ca một email và chạy 3 lượt liên tiếp 5/5 xanh **với cổng chặn BẬT**.
+          # Spec mới nên theo mẫu đó; ngày nào ~20 spec cũ theo hết thì gỡ dòng dưới đây.
+          LOGIN_RATELIMIT_DISABLED: "1"
 
       - name: Upload Playwright report
-        if: failure()
+        # ⚠️ `always()`, KHÔNG `failure()` [21/09/2026]. Một job bị GIẾT vì chạm
+        # `timeout-minutes` kết thúc với trạng thái **cancelled**, mà `failure()` KHÔNG
+        # đúng với cancelled ⇒ bước này bị bỏ qua ⇒ **không artifact nào được để lại**.
+        # Hệ quả đo được: bốn job cần trình duyệt treo suốt từ 21/09 và bước điều tra số
+        # một ("đọc report của Playwright") không thực hiện được — không có gì để đọc.
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
@@ -357,6 +460,28 @@ jobs:
       # A0 webServer chạy cổng 3100 (xem playwright.a0.config.ts).
       NEXTAUTH_URL: "http://localhost:3100"
       NEXT_PUBLIC_APP_URL: "http://localhost:3100"
+      # ── CỔNG CHẶN BRUTE-FORCE ĐĂNG NHẬP, TẮT TRONG MÔI TRƯỜNG TEST [21/09/2026] ──
+      #
+      # `lib/auth.ts:132` chặn 10 lượt/phút theo IP và **5 lượt/phút theo ĐỊNH DANH**;
+      # bộ đếm nằm trong BỘ NHỚ TIẾN TRÌNH server nên `resetDb()` không xoá được. Bộ
+      # E2E qua trình duyệt đăng nhập lại nhiều lần bằng vài tài khoản ⇒ vượt trần ⇒
+      # `authorize()` trả `null`, trang Ở LẠI `/login` **không ném lỗi nào**, và mỗi ca
+      # hết 30 giây mới chịu thua. Với hàng chục ca × retry, job chạm `timeout-minutes`
+      # và bị GIẾT. Đó là lý do bốn job cần trình duyệt treo suốt từ 21/09.
+      #
+      # ⚠️ Đây KHÔNG phải nâng trần thời gian — nguyên nhân đã đo được, và đây là cửa
+      # thoát mà chính `lib/auth.ts:128` khai ra cho đúng tình huống này. Prod KHÔNG đổi
+      # một dòng nào.
+      #
+      # ⚠️ Vế IP đã được chữa ĐÚNG CÁCH ở `tests/e2e/_helpers/auth.ts` (mỗi lượt đăng
+      # nhập một IP riêng — cùng tiền lệ `forgot-password.spec.ts`). Thứ CÒN LẠI buộc
+      # phải tắt là vế ĐỊNH DANH: nó chỉ chữa được bằng cách cho mỗi ca một email, mà
+      # làm vậy cho ~20 spec đang có là một đợt riêng.
+      #
+      # ⚠️ Mẫu KHÔNG cần cửa thoát này đã có: `tests/e2e/a0/thu-tien-theo-con.spec.ts`
+      # cho mỗi ca một email và chạy 3 lượt liên tiếp 5/5 xanh **với cổng chặn BẬT**.
+      # Spec mới nên theo mẫu đó; ngày nào ~20 spec cũ theo hết thì gỡ dòng dưới đây.
+      LOGIN_RATELIMIT_DISABLED: "1"
       BASE_URL: "http://localhost:3100"
 
     steps:
@@ -415,10 +540,58 @@ jobs:
 
       - name: Run Phase A0 e2e
         # playwright.a0.config.ts: .env.test vắng ở CI → giữ env CI ở trên (localhost).
-        run: pnpm test:e2e:a0
+        # ── NỢ-16: CHỤP CÂY TIẾN TRÌNH ĐÚNG LÚC ĐANG TREO ──────────────────────
+        # Bốn job dựng `webServer` treo SAU khi chạy xong ca cuối rồi bị `timeout-minutes`
+        # (20 phút) giết — và runner giết sạch luôn mọi chứng cứ. Reporter `line` cho
+        # biết ca cuối là ca nào, nhưng KHÔNG nói được vì sao tiến trình không thoát.
+        #
+        # Chó canh dưới đây in cây tiến trình ở phút 12 — lúc đó đã biết chắc là treo,
+        # mà job còn sống nên log vẫn ra được. Nó CHỈ ĐỌC: không gửi tín hiệu nào cho bộ
+        # test, nên không làm sai lệch chính thứ đang đo.
+        #
+        # Dấu vết đã có: runner phải "Terminate orphan process: (sh)" và
+        # "(next-server (v16.2.6))" ở bước dọn dẹp ⇒ chuỗi
+        # `pnpm start` → sh → next start → next-server để lọt tiến trình cháu.
+        # Cây tiến trình sẽ cho thấy CHÍNH XÁC cái nào còn sống và cha nó là ai.
+        #
+        # `DEBUG=pw:webserver` để Playwright tự kể nó gửi tín hiệu gì, lúc nào.
+        # ⛔ KHÔNG nâng `timeout-minutes` — trần không phải chỗ hỏng.
+        run: |
+          (
+            # NGỦ THÀNH TỪNG GIÂY, không `sleep 12m` một phát. `trap` chỉ giết được
+            # SUBSHELL, còn `sleep` là CON của nó nên sống sót và GIỮ STDOUT đã thừa kế
+            # => runner ngồi chờ hết ngần ấy phút dù bộ test xong từ lâu. Đo thật: bản
+            # `sleep 5` làm một lệnh 1 giây mất 5 giây. Ngủ từng giây thì mất mát tối đa
+            # là MỘT giây.
+            for _ in $(seq 1 720); do sleep 1; done
+            echo "::warning title=NỢ-16::Đã 12 phút — bộ test chưa thoát. Chụp cây tiến trình."
+            echo "──────── ps -ef --forest ────────"
+            ps -ef --forest 2>/dev/null | tail -60 || ps -ef | tail -60
+            echo "──────── cổng đang nghe ────────"
+            (ss -ltnp 2>/dev/null || netstat -ltnp 2>/dev/null) | head -20
+            echo "────────────────────────────────"
+          ) &
+          CHO_CANH=$!
+          # BẮT BUỘC dùng `trap`, không phải một dòng `kill` ở cuối: GitHub chạy khối này
+          # bằng `bash -e`, nên lệnh test ĐỎ là kịch bản thoát NGAY và dòng `kill` phía dưới
+          # không bao giờ chạy. Khi đó `sleep` còn sống sẽ GIỮ STDOUT MỞ và runner ngồi chờ
+          # hết 12/16 phút — biến một job 5 phút thành job chạm trần. Tức cái đèn tự gây ra
+          # đúng thứ nó sinh ra để soi.
+          trap 'kill "$CHO_CANH" 2>/dev/null || true' EXIT
+          pnpm test:e2e:a0
+          MA=$?
+          kill "$CHO_CANH" 2>/dev/null || true
+          exit $MA
+        env:
+          DEBUG: pw:webserver
 
       - name: Upload A0 Playwright report
-        if: failure()
+        # ⚠️ `always()`, KHÔNG `failure()` [21/09/2026]. Một job bị GIẾT vì chạm
+        # `timeout-minutes` kết thúc với trạng thái **cancelled**, mà `failure()` KHÔNG
+        # đúng với cancelled ⇒ bước này bị bỏ qua ⇒ **không artifact nào được để lại**.
+        # Hệ quả đo được: bốn job cần trình duyệt treo suốt từ 21/09 và bước điều tra số
+        # một ("đọc report của Playwright") không thực hiện được — không có gì để đọc.
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-a0
@@ -596,6 +769,75 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
+
+  e2e-r1:
+    name: E2E Phase R1 (Playwright service-level + Postgres local)
+    runs-on: ubuntu-latest
+    # Bộ r1 giữ test tầng-DB của HOA HỒNG và MESSENGER. Trước 27/08 nó KHÔNG có job
+    # nào gọi — script `test:e2e:r1` tồn tại từ lâu mà CI chưa bao giờ chạy, nên mọi
+    # test tầng-DB của hai mảng đó xanh giả suốt. Đây là job bù chỗ đó.
+    timeout-minutes: 20
+    needs: quality
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci_test
+      DIRECT_URL: postgresql://ci:ci@localhost:5432/ci_test
+      NEXTAUTH_SECRET: "ci-build-only-secret-do-not-use-in-prod-32chars"
+      NEXTAUTH_URL: "http://localhost:3100"
+      NEXT_PUBLIC_APP_URL: "http://localhost:3100"
+      BASE_URL: "http://localhost:3100"
+      # Cả 3 spec CRM đều service-level (gọi thẳng hàm trong lib/) → bỏ webServer.
+      CRM_SKIP_WEBSERVER: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      # KHÔNG cài trình duyệt, theo đúng nếp job crm/r7 (bước cài apt từng treo 19 phút
+      # và giết cả job).
+      # ⚠️ ĐÁNH ĐỔI NÓI RÕ: bộ r1 có ĐÚNG MỘT spec cần trình duyệt — `crm-ui.spec.ts`
+      # (describe "CRM UI"). Job này CỐ Ý bỏ nó qua bằng `--grep-invert`, nên spec đó
+      # VẪN chưa có cổng gác. Muốn phủ nốt thì phải cài chromium + dựng webServer.
+      # Thêm spec dùng trình duyệt vào r1 mà không sửa job này = nó cũng bị bỏ qua.
+
+      - name: Run Phase R1 e2e (bỏ qua spec cần trình duyệt)
+        run: R1_SKIP_WEBSERVER=1 pnpm exec playwright test -c playwright.r1.config.ts --grep-invert "CRM UI"
+
+      - name: Upload R1 Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-r1
+          path: playwright-report/
+          retention-days: 7
+
   e2e-fl:
     name: E2E Phase FL (Playwright service-level + Postgres local)
     runs-on: ubuntu-latest
@@ -682,7 +924,12 @@ jobs:
         run: pnpm test:e2e:fl
 
       - name: Upload FL Playwright report
-        if: failure()
+        # ⚠️ `always()`, KHÔNG `failure()` [21/09/2026]. Một job bị GIẾT vì chạm
+        # `timeout-minutes` kết thúc với trạng thái **cancelled**, mà `failure()` KHÔNG
+        # đúng với cancelled ⇒ bước này bị bỏ qua ⇒ **không artifact nào được để lại**.
+        # Hệ quả đo được: bốn job cần trình duyệt treo suốt từ 21/09 và bước điều tra số
+        # một ("đọc report của Playwright") không thực hiện được — không có gì để đọc.
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-fl
@@ -716,6 +963,28 @@ jobs:
       NEXTAUTH_SECRET: "ci-build-only-secret-do-not-use-in-prod-32chars"
       NEXTAUTH_URL: "http://localhost:3131"
       NEXT_PUBLIC_APP_URL: "http://localhost:3131"
+      # ── CỔNG CHẶN BRUTE-FORCE ĐĂNG NHẬP, TẮT TRONG MÔI TRƯỜNG TEST [21/09/2026] ──
+      #
+      # `lib/auth.ts:132` chặn 10 lượt/phút theo IP và **5 lượt/phút theo ĐỊNH DANH**;
+      # bộ đếm nằm trong BỘ NHỚ TIẾN TRÌNH server nên `resetDb()` không xoá được. Bộ
+      # E2E qua trình duyệt đăng nhập lại nhiều lần bằng vài tài khoản ⇒ vượt trần ⇒
+      # `authorize()` trả `null`, trang Ở LẠI `/login` **không ném lỗi nào**, và mỗi ca
+      # hết 30 giây mới chịu thua. Với hàng chục ca × retry, job chạm `timeout-minutes`
+      # và bị GIẾT. Đó là lý do bốn job cần trình duyệt treo suốt từ 21/09.
+      #
+      # ⚠️ Đây KHÔNG phải nâng trần thời gian — nguyên nhân đã đo được, và đây là cửa
+      # thoát mà chính `lib/auth.ts:128` khai ra cho đúng tình huống này. Prod KHÔNG đổi
+      # một dòng nào.
+      #
+      # ⚠️ Vế IP đã được chữa ĐÚNG CÁCH ở `tests/e2e/_helpers/auth.ts` (mỗi lượt đăng
+      # nhập một IP riêng — cùng tiền lệ `forgot-password.spec.ts`). Thứ CÒN LẠI buộc
+      # phải tắt là vế ĐỊNH DANH: nó chỉ chữa được bằng cách cho mỗi ca một email, mà
+      # làm vậy cho ~20 spec đang có là một đợt riêng.
+      #
+      # ⚠️ Mẫu KHÔNG cần cửa thoát này đã có: `tests/e2e/a0/thu-tien-theo-con.spec.ts`
+      # cho mỗi ca một email và chạy 3 lượt liên tiếp 5/5 xanh **với cổng chặn BẬT**.
+      # Spec mới nên theo mẫu đó; ngày nào ~20 spec cũ theo hết thì gỡ dòng dưới đây.
+      LOGIN_RATELIMIT_DISABLED: "1"
       BASE_URL: "http://localhost:3131"
 
     steps:
@@ -777,10 +1046,58 @@ jobs:
           exit 1
 
       - name: Run teacher-site browser e2e
-        run: pnpm test:e2e:teacher
+        # ── NỢ-16: CHỤP CÂY TIẾN TRÌNH ĐÚNG LÚC ĐANG TREO ──────────────────────
+        # Bốn job dựng `webServer` treo SAU khi chạy xong ca cuối rồi bị `timeout-minutes`
+        # (25 phút) giết — và runner giết sạch luôn mọi chứng cứ. Reporter `line` cho
+        # biết ca cuối là ca nào, nhưng KHÔNG nói được vì sao tiến trình không thoát.
+        #
+        # Chó canh dưới đây in cây tiến trình ở phút 16 — lúc đó đã biết chắc là treo,
+        # mà job còn sống nên log vẫn ra được. Nó CHỈ ĐỌC: không gửi tín hiệu nào cho bộ
+        # test, nên không làm sai lệch chính thứ đang đo.
+        #
+        # Dấu vết đã có: runner phải "Terminate orphan process: (sh)" và
+        # "(next-server (v16.2.6))" ở bước dọn dẹp ⇒ chuỗi
+        # `pnpm start` → sh → next start → next-server để lọt tiến trình cháu.
+        # Cây tiến trình sẽ cho thấy CHÍNH XÁC cái nào còn sống và cha nó là ai.
+        #
+        # `DEBUG=pw:webserver` để Playwright tự kể nó gửi tín hiệu gì, lúc nào.
+        # ⛔ KHÔNG nâng `timeout-minutes` — trần không phải chỗ hỏng.
+        run: |
+          (
+            # NGỦ THÀNH TỪNG GIÂY, không `sleep 16m` một phát. `trap` chỉ giết được
+            # SUBSHELL, còn `sleep` là CON của nó nên sống sót và GIỮ STDOUT đã thừa kế
+            # => runner ngồi chờ hết ngần ấy phút dù bộ test xong từ lâu. Đo thật: bản
+            # `sleep 5` làm một lệnh 1 giây mất 5 giây. Ngủ từng giây thì mất mát tối đa
+            # là MỘT giây.
+            for _ in $(seq 1 960); do sleep 1; done
+            echo "::warning title=NỢ-16::Đã 16 phút — bộ test chưa thoát. Chụp cây tiến trình."
+            echo "──────── ps -ef --forest ────────"
+            ps -ef --forest 2>/dev/null | tail -60 || ps -ef | tail -60
+            echo "──────── cổng đang nghe ────────"
+            (ss -ltnp 2>/dev/null || netstat -ltnp 2>/dev/null) | head -20
+            echo "────────────────────────────────"
+          ) &
+          CHO_CANH=$!
+          # BẮT BUỘC dùng `trap`, không phải một dòng `kill` ở cuối: GitHub chạy khối này
+          # bằng `bash -e`, nên lệnh test ĐỎ là kịch bản thoát NGAY và dòng `kill` phía dưới
+          # không bao giờ chạy. Khi đó `sleep` còn sống sẽ GIỮ STDOUT MỞ và runner ngồi chờ
+          # hết 12/16 phút — biến một job 5 phút thành job chạm trần. Tức cái đèn tự gây ra
+          # đúng thứ nó sinh ra để soi.
+          trap 'kill "$CHO_CANH" 2>/dev/null || true' EXIT
+          pnpm test:e2e:teacher
+          MA=$?
+          kill "$CHO_CANH" 2>/dev/null || true
+          exit $MA
+        env:
+          DEBUG: pw:webserver
 
       - name: Upload teacher Playwright report
-        if: failure()
+        # ⚠️ `always()`, KHÔNG `failure()` [21/09/2026]. Một job bị GIẾT vì chạm
+        # `timeout-minutes` kết thúc với trạng thái **cancelled**, mà `failure()` KHÔNG
+        # đúng với cancelled ⇒ bước này bị bỏ qua ⇒ **không artifact nào được để lại**.
+        # Hệ quả đo được: bốn job cần trình duyệt treo suốt từ 21/09 và bước điều tra số
+        # một ("đọc report của Playwright") không thực hiện được — không có gì để đọc.
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-teacher
@@ -814,6 +1131,28 @@ jobs:
       NEXTAUTH_SECRET: "ci-build-only-secret-do-not-use-in-prod-32chars"
       NEXTAUTH_URL: "http://localhost:3141"
       NEXT_PUBLIC_APP_URL: "http://localhost:3141"
+      # ── CỔNG CHẶN BRUTE-FORCE ĐĂNG NHẬP, TẮT TRONG MÔI TRƯỜNG TEST [21/09/2026] ──
+      #
+      # `lib/auth.ts:132` chặn 10 lượt/phút theo IP và **5 lượt/phút theo ĐỊNH DANH**;
+      # bộ đếm nằm trong BỘ NHỚ TIẾN TRÌNH server nên `resetDb()` không xoá được. Bộ
+      # E2E qua trình duyệt đăng nhập lại nhiều lần bằng vài tài khoản ⇒ vượt trần ⇒
+      # `authorize()` trả `null`, trang Ở LẠI `/login` **không ném lỗi nào**, và mỗi ca
+      # hết 30 giây mới chịu thua. Với hàng chục ca × retry, job chạm `timeout-minutes`
+      # và bị GIẾT. Đó là lý do bốn job cần trình duyệt treo suốt từ 21/09.
+      #
+      # ⚠️ Đây KHÔNG phải nâng trần thời gian — nguyên nhân đã đo được, và đây là cửa
+      # thoát mà chính `lib/auth.ts:128` khai ra cho đúng tình huống này. Prod KHÔNG đổi
+      # một dòng nào.
+      #
+      # ⚠️ Vế IP đã được chữa ĐÚNG CÁCH ở `tests/e2e/_helpers/auth.ts` (mỗi lượt đăng
+      # nhập một IP riêng — cùng tiền lệ `forgot-password.spec.ts`). Thứ CÒN LẠI buộc
+      # phải tắt là vế ĐỊNH DANH: nó chỉ chữa được bằng cách cho mỗi ca một email, mà
+      # làm vậy cho ~20 spec đang có là một đợt riêng.
+      #
+      # ⚠️ Mẫu KHÔNG cần cửa thoát này đã có: `tests/e2e/a0/thu-tien-theo-con.spec.ts`
+      # cho mỗi ca một email và chạy 3 lượt liên tiếp 5/5 xanh **với cổng chặn BẬT**.
+      # Spec mới nên theo mẫu đó; ngày nào ~20 spec cũ theo hết thì gỡ dòng dưới đây.
+      LOGIN_RATELIMIT_DISABLED: "1"
       BASE_URL: "http://localhost:3141"
 
     steps:
@@ -875,10 +1214,58 @@ jobs:
           exit 1
 
       - name: Run e-learning browser e2e
-        run: pnpm test:e2e:elearning
+        # ── NỢ-16: CHỤP CÂY TIẾN TRÌNH ĐÚNG LÚC ĐANG TREO ──────────────────────
+        # Bốn job dựng `webServer` treo SAU khi chạy xong ca cuối rồi bị `timeout-minutes`
+        # (25 phút) giết — và runner giết sạch luôn mọi chứng cứ. Reporter `line` cho
+        # biết ca cuối là ca nào, nhưng KHÔNG nói được vì sao tiến trình không thoát.
+        #
+        # Chó canh dưới đây in cây tiến trình ở phút 16 — lúc đó đã biết chắc là treo,
+        # mà job còn sống nên log vẫn ra được. Nó CHỈ ĐỌC: không gửi tín hiệu nào cho bộ
+        # test, nên không làm sai lệch chính thứ đang đo.
+        #
+        # Dấu vết đã có: runner phải "Terminate orphan process: (sh)" và
+        # "(next-server (v16.2.6))" ở bước dọn dẹp ⇒ chuỗi
+        # `pnpm start` → sh → next start → next-server để lọt tiến trình cháu.
+        # Cây tiến trình sẽ cho thấy CHÍNH XÁC cái nào còn sống và cha nó là ai.
+        #
+        # `DEBUG=pw:webserver` để Playwright tự kể nó gửi tín hiệu gì, lúc nào.
+        # ⛔ KHÔNG nâng `timeout-minutes` — trần không phải chỗ hỏng.
+        run: |
+          (
+            # NGỦ THÀNH TỪNG GIÂY, không `sleep 16m` một phát. `trap` chỉ giết được
+            # SUBSHELL, còn `sleep` là CON của nó nên sống sót và GIỮ STDOUT đã thừa kế
+            # => runner ngồi chờ hết ngần ấy phút dù bộ test xong từ lâu. Đo thật: bản
+            # `sleep 5` làm một lệnh 1 giây mất 5 giây. Ngủ từng giây thì mất mát tối đa
+            # là MỘT giây.
+            for _ in $(seq 1 960); do sleep 1; done
+            echo "::warning title=NỢ-16::Đã 16 phút — bộ test chưa thoát. Chụp cây tiến trình."
+            echo "──────── ps -ef --forest ────────"
+            ps -ef --forest 2>/dev/null | tail -60 || ps -ef | tail -60
+            echo "──────── cổng đang nghe ────────"
+            (ss -ltnp 2>/dev/null || netstat -ltnp 2>/dev/null) | head -20
+            echo "────────────────────────────────"
+          ) &
+          CHO_CANH=$!
+          # BẮT BUỘC dùng `trap`, không phải một dòng `kill` ở cuối: GitHub chạy khối này
+          # bằng `bash -e`, nên lệnh test ĐỎ là kịch bản thoát NGAY và dòng `kill` phía dưới
+          # không bao giờ chạy. Khi đó `sleep` còn sống sẽ GIỮ STDOUT MỞ và runner ngồi chờ
+          # hết 12/16 phút — biến một job 5 phút thành job chạm trần. Tức cái đèn tự gây ra
+          # đúng thứ nó sinh ra để soi.
+          trap 'kill "$CHO_CANH" 2>/dev/null || true' EXIT
+          pnpm test:e2e:elearning
+          MA=$?
+          kill "$CHO_CANH" 2>/dev/null || true
+          exit $MA
+        env:
+          DEBUG: pw:webserver
 
       - name: Upload e-learning Playwright report
-        if: failure()
+        # ⚠️ `always()`, KHÔNG `failure()` [21/09/2026]. Một job bị GIẾT vì chạm
+        # `timeout-minutes` kết thúc với trạng thái **cancelled**, mà `failure()` KHÔNG
+        # đúng với cancelled ⇒ bước này bị bỏ qua ⇒ **không artifact nào được để lại**.
+        # Hệ quả đo được: bốn job cần trình duyệt treo suốt từ 21/09 và bước điều tra số
+        # một ("đọc report của Playwright") không thực hiện được — không có gì để đọc.
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-elearning

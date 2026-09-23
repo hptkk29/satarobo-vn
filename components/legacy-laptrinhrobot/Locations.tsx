@@ -4,7 +4,7 @@
 // chỉ cần add vào _data/locations.ts; grid sẽ tự rộng ra.
 
 import { locations } from "./_data/locations";
-import { ArrowRight, MapPin, MessageCircle, Star } from "lucide-react";
+import { ArrowRight, MapPin, MessageCircle } from "lucide-react";
 
 export default function Locations() {
   const operational = locations.filter((l) => !l.isUpcoming);
@@ -47,12 +47,7 @@ export default function Locations() {
                 >
                   <MapPin className="w-5 h-5 sm:w-6 sm:h-6" />
                 </div>
-                {loc.isHQ && (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary-orange text-white text-xs font-bold rounded-full">
-                    <Star className="w-3 h-3 fill-current" />
-                    Trụ sở
-                  </span>
-                )}
+                {/* Badge "Trụ sở" đã gỡ theo hướng dẫn BCT. Cờ isHQ giữ nguyên. */}
               </div>
 
               <h3 className="font-extrabold text-base sm:text-lg text-text-dark leading-snug mb-2 flex-1">

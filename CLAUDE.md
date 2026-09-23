@@ -16,8 +16,8 @@ Brand hub + admin CMS + portal phụ huynh + site giáo viên cho Sata Robo (Đ�
 
 1. **Server-first** — default Server Component. `'use client'` chỉ khi cần state/effect/handler. Data fetch trong RSC (`async`), mutations qua Server Actions (`'use server'`).
 2. **Strict TS** — không `any` (dùng `unknown` + narrow). Zod schema là source of truth → suy ra type qua `z.infer`.
-3. **Route groups** — public: `app/(public)/...`, legacy: `app/(legacy)/...`, admin: `app/(admin)/admin/...`, portal: `app/(portal)/portal/...`, teacher: `app/(teacher)/teacher/...` (L5 — site GV **ĐÃ LIVE**: flag `TEACHER_SITE_ENABLED` mặc định **ON** từ 10/07/2026 (`lib/flags.ts:86`), host `giaovien.satarobo.vn` **đã wire** trong `proxy.ts:18`; rollback = set env `TEACHER_SITE_ENABLED="false"`), auth: `app/(auth)/login/...`, **nhập khách: `app/(admin)/admin/nhap-khach-hang/`** (23/08/2026 — DỜI VÀO ADMIN, đảo chốt 22/08 vốn để nó ở host public: mục sidebar bấm vào là văng khỏi khung admin. Địa chỉ `admin.satarobo.vn/nhap-khach-hang`; đường public cũ đá 307 về đây. Giao diện + action + loader dùng chung ở `components/lead-intake/` + `lib/lead/intake/` để site Sale sau này mount lại). Không tạo `/admin/*` ngoài route group. Host-based routing qua `proxy.ts` + `lib/auth/route-policy.ts` (sửa rule host×role CHỈ ở `decideRoute()` + test, không sửa proxy.ts).
-4. **Imports** — `@/lib/auth` (Auth.js), `@/lib/utils` (cn helper), `@/components/blog/markdown-renderer` (NOT `<Markdown>`). ⚠️ **Cổng DB ĐÃ ĐÓNG** (không còn là "target"): import `@/lib/db` trần trong `app/(admin|portal|teacher|sale)/** + components/lead-intake/**` = ESLint **error**. Đi qua `scopedDb(actor)` (admin/teacher) hoặc `portalDb` (portal). Allowlist exception ở `lib/eslint/db-import-allowlist.mjs` — mở file để biết còn những file nào; code mới KHÔNG xin thêm vào.
+3. **Route groups** — public: `app/(public)/...`, legacy: `app/(legacy)/...`, admin: `app/(admin)/admin/...`, portal: `app/(portal)/portal/...`, teacher: `app/(teacher)/teacher/...` (L5 — site GV **ĐÃ LIVE**: flag `TEACHER_SITE_ENABLED` mặc định **ON** từ 10/07/2026 (`lib/flags.ts:86`), host `giaovien.satarobo.vn` **đã wire** trong `proxy.ts:18`; rollback = set env `TEACHER_SITE_ENABLED="false"`), auth: `app/(auth)/login/...`, **nhập khách: `app/(admin)/admin/nhap-khach-hang/`** (23/08/2026 — DỜI VÀO ADMIN, đảo chốt 22/08 vốn để nó ở host public: mục sidebar bấm vào là văng khỏi khung admin. Địa chỉ `admin.satarobo.vn/nhap-khach-hang`; đường public cũ đá 307 về đây. Giao diện + action + loader dùng chung ở `components/lead-intake/` + `lib/lead/intake/`). Không tạo `/admin/*` ngoài route group. Host-based routing qua `proxy.ts` + `lib/auth/route-policy.ts` (sửa rule host×role CHỈ ở `decideRoute()` + test, không sửa proxy.ts). ⚠️ **Site Sale ĐÃ GỠ 22/09/2026** — không còn route group `app/(sale)`, không còn `components/sale/`, không còn cờ `SALE_SITE_ENABLED`. Host `sale.satarobo.vn` GIỮ trong `HostKind` và LUÔN 307 về `admin.satarobo.vn/nhap-khach-hang` (quảng cáo cũ, QR đã in, `RedirectURL` của MISA còn trỏ vào). Việc của Sale nay ở admin: "Việc hôm nay" trong `/dashboard`, `/tra-cuu`, nút nhắn Zalo ở màn chi tiết lead. Động cơ hộp thư (`lib/inbox/*` + webhook ZaloCRM) GIỮ NGUYÊN — chỉ màn hình mất.
+4. **Imports** — `@/lib/auth` (Auth.js), `@/lib/utils` (cn helper), `@/components/blog/markdown-renderer` (NOT `<Markdown>`). ⚠️ **Cổng DB ĐÃ ĐÓNG** (không còn là "target"): import `@/lib/db` trần trong `app/(admin|portal|teacher)/** + components/lead-intake/**` = ESLint **error**. Đi qua `scopedDb(actor)` (admin/teacher) hoặc `portalDb` (portal). Allowlist exception ở `lib/eslint/db-import-allowlist.mjs` — mở file để biết còn những file nào; code mới KHÔNG xin thêm vào.
 5. **Auth gate** — admin/portal layout đã redirect `/login`. Server Actions/API route VẪN phải `auth()` + `assertCan(...)` ngay đầu function (layout gate là chưa đủ). Portal actions thêm ownership check `assertOwnsStudent`. **RBAC 2 tầng:** quyền action = `can()` v2 động từ DB (`@/lib/auth/can`) — **đang enforce trên prod** vì `RBAC_V2_ENABLED="true"` trên Vercel Production (xác minh 29/07/2026); v1 matrix tĩnh (`@/lib/auth/permissions`) chỉ còn chạy song song để so lệch, và là thứ chạy ở local/dev (mặc định trong code vẫn OFF — `lib/flags.ts:8`).
    ⚠️ **`scopedDb` KHÔNG che write** — chỉ auto-scope các method ĐỌC (danh sách ở `lib/db-scope.ts`). Mọi `update/delete` phải tự `passesScope()`; mọi `create` trên model thuộc `SCOPED_MODELS` phải set `centerId` (quên = record vô hình với actor cấp cơ sở).
 6. **Prisma migrations** — ⛔ **CẤM `prisma migrate dev` (= `pnpm db:migrate`) trên repo này cho tới khi drift được đóng [08/09/2026].** Viết SQL tay vào `prisma/migrations/<yyyyMMddHHmmss>_<ten_snake_case>/migration.sql` + sửa `schema.prisma` cho khớp + `prisma migrate deploy`. Sau migration: `prisma generate` và restart dev server (Prisma Client cache stale trong memory).
@@ -75,6 +75,102 @@ Brand hub + admin CMS + portal phụ huynh + site giáo viên cho Sata Robo (Đ�
      thoát được, nhưng thói quen gõ nó là thói quen đi vòng qua cổng — bỏ hẳn.
    - File nghi ngờ nhạy cảm → ASK user, don't commit.
 9. **Verify trước khi báo PASS** — `pnpm typecheck && pnpm lint && pnpm build` PASS. UI changes: smoke test localhost + mobile viewport 375px.
+10. ⚠️ **PR có BẤT KỲ tệp `.ts`/`.tsx` nào ⇒ chạy ĐỦ BỐN CỔNG** (`typecheck` · `lint` ·
+    `test:unit` · bộ e2e liên quan). **KHÔNG xét PR "thuộc loại gì".** Nhãn "chỉ tài liệu"
+    chỉ đúng khi `git diff --name-only` ra **toàn `.md`** — kiểm bằng lệnh đó, đừng kiểm
+    bằng trí nhớ về việc mình vừa làm gì.
+    **Vì sao (17/09/2026):** PR #282 mở ra với nhãn "chỉ tài liệu" nhưng kèm một script
+    `.ts` chỉ-đọc; tôi bỏ `test:unit`. Lưới `lib/finance/truc-a.test.ts` quét **toàn cây
+    mã nguồn** nên bắt ngay, và CI đỏ — phát hiện muộn hơn nửa tiếng. Các lưới quét cây
+    (`truc-a`, `nav-coverage`, `affordance-coverage`, `bang-coverage`, `dang-ky-cron`)
+    **không quan tâm bạn sửa file nào**; chúng đỏ vì một tệp MỚI xuất hiện.
+11. ⚠️ **Prop cờ tính năng có mặc định `false` mà KHÔNG AI TRUYỀN = lỗi CÂM.** Không lỗi
+    biên dịch (prop tuỳ chọn), không ca test nào đỏ, và triệu chứng là "mục menu biến mất"
+    — trông y hệt lỗi phân quyền vì cổng `perm` nằm ngay cạnh trong cùng khai báo mục.
+    **Thêm một mục sidebar gắn `flag:` thì PHẢI kèm ĐỦ DÂY NỐI**
+    `app/(admin)/admin/layout.tsx` → `components/admin/admin-shell.tsx` →
+    `components/admin/sidebar.tsx`, **và một lưới ghim cho chính dây nối đó**.
+    Lưới đang có: `components/admin/sidebar-flag-wiring.test.ts` (`[SB-FLAG]`) — nó soi
+    **mọi** cờ, nên thêm cờ mới mà quên nối là đỏ ngay; đừng gỡ nó.
+    **Vì sao (17/09/2026):** mục "Zalo CRM" khai `flag: "zalocrm"` từ 06/09 và **chưa từng
+    hiện được với bất kỳ ai** — `layout.tsx` truyền ba cờ, bỏ sót cờ thứ tư. Nó còn làm ca
+    nghiệm thu "Giáo vụ KHÔNG thấy mục Zalo CRM" **ĐẠT vì lý do sai**.
+    ⇒ Hệ quả rộng hơn: **ca nghiệm thu chỉ khẳng định SỰ VẮNG MẶT luôn ĐẠT khi tính năng
+    hỏng hoàn toàn.** Mọi ca "KHÔNG thấy X" phải kèm **đối chứng dương** ("vai kia THẤY X").
+
+12. ⚠️ **GIẢ ĐỊNH VỀ MÔI TRƯỜNG PHẢI KIỂM BẰNG LỆNH, TẠI THỜI ĐIỂM DÙNG — KHÔNG đọc từ
+    tài liệu.** DB nào · env nào · chạy ở đâu · cờ bật hay tắt: hỏi hệ thống, đừng hỏi
+    trang wiki. Tài liệu hạ tầng cũ đi mà **không ai biết nó đã cũ**, và một câu sai ở đó
+    không chỉ vô ích — nó **lái cuộc điều tra sang hướng sai và giữ ở đó**.
+    **Sự cố 17/09/2026:** câu "DB của env `test` CHÍNH LÀ DB dev" (chốt 01/08, nằm ngay
+    trong file này) làm tôi đo `getZaloScope` ba lượt trên **sai database**, rồi đi tìm
+    "`User.id` bị đổi" trong khi thứ thật sự xảy ra là **ba database khác nhau**. Mất
+    nhiều lượt mới quay lại được.
+    **Cách kiểm rẻ, dùng ngay:**
+    · DB nào đang được đọc → in ra chính nó: `select current_database()`, hoặc một
+      giá trị đặc trưng (`User.id` của một tài khoản seed) rồi so hai bên.
+    · Cờ tính năng trên một môi trường → gọi một đường có thật và đọc **mã trạng thái**
+      (bảng đo ở `docs/tich-hop-zalocrm/04-danh-sach-cho-nick-zalo.md`: `401`+JSON = route
+      có + cờ BẬT · `404`+JSON = cờ TẮT · `200`+HTML = sai đường dẫn).
+    · Commit nào đang chạy → đọc **bản ghi deploy thật** (`gh api …/deployments`), đừng
+      suy từ "vừa merge xong".
+    · Cron nào thật sự chạy → `gh run list` + đọc **nhánh** của lượt chạy (`schedule` luôn
+      dùng bản ở nhánh MẶC ĐỊNH — xem `NỢ-5`).
+    Đo xong mà lệch với tài liệu thì **sửa tài liệu ngay trong lượt đó**, đừng để lại cho
+    người sau vấp đúng chỗ mình vừa vấp.
+
+13. ⚠️ **VÁ GẤP CŨNG ĐI QUA `test` — rồi CHERRY-PICK lên `main`. KHÔNG vá thẳng `main`.**
+    (Chủ dự án chốt 17/09/2026, phương án A.)
+    Luồng: `hotfix → PR vào test → CI xanh → merge test → cherry-pick commit ấy lên main`.
+    Chậm hơn ~20 phút CI, và đổi lại `test` **luôn là tập cha** của `main`, nên PR
+    `test → main` không bao giờ phải gộp hai chiều.
+    **Vì sao — giá đo được, và nó KHÔNG tuyến tính:**
+    · 16/09/2026 — để phân kỳ tích lại **463 commit / 215 file xung đột**. Lượt hợp nhất
+      suýt làm mất **BẢY tính năng**, ba trong số đó là bảo mật (S-9 đồng hồ SLA, S-1 che
+      PII ở 6 màn, `canSearchPhone`). Không cái nào bị phát hiện bằng mắt — **chỉ test bắt
+      được**, và chỉ vì có test.
+    · 17/09/2026 — bốn PR vá thẳng `main` trong MỘT ngày ⇒ lại **94 commit** phân kỳ,
+      phần lớn đụng đúng vùng vừa gỡ xung đột (Lớp trial, lead).
+    Hai lượt cách nhau một ngày. Mỗi lần vá thẳng `main` là mua thêm một lượt hợp nhất
+    hai chiều, và chi phí của nó tăng theo độ lệch chứ không theo số lần vá.
+    **Nếu buộc phải vá thẳng `main`** (prod đang hỏng, không chờ được CI): mở PR
+    `main → test` **ngay trong ngày**, đừng để sang hôm sau.
+
+14. ⚠️ **LƯỚI PHẢI ĐƯỢC CẤY LẠI ĐỊNH KỲ, KHÔNG CHỈ LÚC VIẾT RA. Một lưới chưa bao
+    giờ đỏ là một lưới CHƯA ĐƯỢC CHỨNG MINH.** (Chốt 18/09/2026.)
+    Lưới xanh có hai nghĩa — "mã đúng" và "lưới không chạm tới mã" — và chúng trông
+    **y hệt nhau** trong log CI. Khác biệt chỉ lộ ra khi cấy lỗi vào.
+    **Sự cố sinh ra luật này** — lượt rà sau hợp nhất 18/09 cấy 8 phép, tìm ra **HAI
+    lưới đã chết mà vẫn xanh, cả hai là cổng PII**:
+    · **S-1** (`lib/lead/lead-pii-callsites.test.ts`) hỏi
+      `toContain("maskLeadPiiFields")` — chuỗi đó có mặt trong **dòng `import`**, nên
+      gỡ HẲN lời gọi mà quên gỡ import thì lưới VẪN XANH. Đo được: cấy
+      `const piiLead = lead;` ⇒ **42/42 ca xanh** trên mã đã hỏng. Vá: neo theo **lời
+      gọi** `maskLeadPiiFields(`.
+    · **`canSearchPhone`** (`app/(admin)/admin/lop-trial/_lib/filters.test.ts`) chỉ
+      thử nhánh `true`. Cổng `opts.canSearchPhone === true ? … : []` có trong mã nhưng
+      **không có khoá**: cấy `true ?` (ai cũng tìm được theo SĐT) không làm ca nào đỏ.
+      Vá: thêm `[LOC-PII]` đo CẢ hai đầu vào (không khai, và `false`).
+    Cả hai đã sống nhiều tuần trong một repo có kỷ luật "cấy thử trước khi tin", vì
+    kỷ luật ấy chỉ áp **lúc viết lưới**. Lưới không mục theo thời gian — **mã quanh nó
+    đổi**, và lượt đổi làm lưới mất răng thường không đụng vào tệp lưới.
+    **Cách làm định kỳ — chọn một, đừng bỏ trống cả hai:**
+    · **Mỗi lượt GỘP NHÁNH** (`main` ↔ `test`) chạy một lượt cấy cho các cổng bảo
+      mật/tiền: S-1 · S-9 · `canSearchPhone` · cổng PII khác · đường tiền ra. Đây là
+      lúc rẻ nhất, vì đang phải rà rồi — và cũng là lúc mã quanh lưới vừa đổi nhiều
+      nhất. Khuôn kịch bản: đọc tệp → cấy → chạy → **khôi phục byte-exact** → so TẬP
+      MÃ CA đỏ với tập mong đợi.
+    · **Hoặc một job riêng chạy hằng tuần** trên `test`, đỏ thì mở issue. Đắt hơn để
+      dựng, nhưng không phụ thuộc vào việc có ai nhớ hay không.
+    ⚠️ **Ba điều kiện để phép cấy nói thật** (cả ba đều đã trả giá):
+    (a) **khôi phục byte-exact** — đọc/ghi `newline=""`, rồi `assert` nội dung bằng
+        bản gốc; python mặc định dịch CRLF và "khôi phục" thành SỬA TỆP;
+    (b) **đòi ≥1 dòng đỏ THẬT**, đừng tin mã thoát — chạy sai cwd cũng exit 1 và
+        trông y hệt đỏ thật;
+    (c) **so ĐÚNG TẬP MÃ CA** đỏ với tập mong đợi. "Đỏ cả bộ" không chứng minh lưới
+        nào đang làm việc. Và nếu bộ so khớp của bạn sai thì nó báo "lưới đã chết"
+        cho một lưới đang khoẻ — đã xảy ra hai lần trong ngày 18/09, nên **đọc kỹ
+        danh sách ca đỏ in ra trước khi kết luận**.
 
 ## Project structure (FROZEN)
 
@@ -162,8 +258,23 @@ prisma/
    component, hay query. Vi phạm lint `no-inline-authz` = build fail.
 2. Trước P4, `can()` fallback về logic centerId hiện hành. Không được xoá
    đường cũ, không được đổi hành vi đường cũ.
-3. Mọi bảng mới có dữ liệu theo đơn vị BẮT BUỘC có cột `orgUnitId`
-   (không thêm `centerId` mới). Bảng cũ: ghi kép cả hai cột cho tới P4.
+3. Mọi bảng mới có dữ liệu theo đơn vị BẮT BUỘC có cột `orgUnitId`.
+   **ĐÍNH CHÍNH 27/08/2026 — bỏ vế "không thêm `centerId` mới":** vế đó nói ngược
+   với hệ thống đang chạy. Cách ly cơ sở (`scopedDb` + `SCOPED_MODELS`) **vẫn đo
+   bằng `centerId`** cho tới P4, nên bảng chỉ có `orgUnitId` **không được cách ly
+   tự động** — người viết phải tự bịt bằng tay ở từng nơi gọi, và quên một chỗ là
+   rò dữ liệu giữa các cơ sở. Ba đợt trong ba ngày đã vấp đúng chỗ này và mỗi đợt
+   gỡ một kiểu (bảng kho ảnh 26/08 giữ cả hai cột; trục gọi điện 27/08 dùng cột
+   cho phép trống + hàng đợi chờ gán; hộp thư đa kênh 27/08 bịt ba lớp bằng tay).
+   **Luật nay:** bảng mới mang dữ liệu theo cơ sở thì **giữ CẢ HAI cột** —
+   `centerId` là cột cơ chế cách ly đang thật sự đọc, `orgUnitId` là hướng đích —
+   và phải khai đủ **ba** chỗ: `SCOPED_MODELS`, `getModelPrefixes()`
+   (`lib/db-scope.ts`), và `BACKFILL_SPECS` (`lib/org/center-bridge.ts`). Khai
+   thiếu `getModelPrefixes()` là tầm nhìn rơi về diện rộng — đúng lỗi từng mắc với
+   bảng điểm danh. Bảng KHÔNG mang dữ liệu theo cơ sở thì chỉ `orgUnitId`, không
+   cần gì thêm.
+   Chuyển cơ chế cách ly sang đọc `orgUnitId` là **một đợt riêng**, chưa lên lịch.
+   Chừng nào chưa làm xong đợt đó thì luật này giữ nguyên.
 4. Không tự ý sinh migration đổi/bỏ cột trên bảng đang có dữ liệu PROD.
    Migration chỉ nằm trong story được giao, có dry-run, và Dev chạy tay trên PROD.
 5. Test AUTO-CI của story (xem 04-TestScenarios) viết TRƯỚC phần hiện thực.
@@ -196,6 +307,11 @@ prisma/
 - ❌ KHÔNG đưa lại scope đã LOẠI (Doc 15 §0): AI camera/sinh trắc/định vị học sinh · Web3/NFT/blockchain · marketplace · student login riêng · online video LMS · AI learning path/prediction. Nhu cầu "dự báo/khuyến nghị" làm **rule-based**. (Riêng "teacher domain riêng": **ĐÃ ĐẢO 04/07/2026** — phiếu BGĐ câu 7 duyệt site GV riêng `giaovien.satarobo.vn` → route group `app/(teacher)/teacher/`, 2-phase flag `TEACHER_SITE_ENABLED`.)
 - ❌ KHÔNG lưu giấy tờ tùy thân học viên; media phải tag + tôn trọng `StudentConsent`; KHÔNG lộ `studentId` trên URL portal.
 - ⚠️ **`COMMISSION_TIERS` — trần nay là CẤU HÌNH, không phải hằng số [CẬP NHẬT 27/08/2026].** ~~KHÔNG thêm tier nào vào `COMMISSION_TIERS`; `MAX_TOTAL_RATE = 0.08` đã bão hoà~~ **[ĐẢO]** chủ dự án chốt **nới 8% → 9%** và đưa trần vào tham số vận hành `crm.commissionMaxTotalRate` (quản trị hệ thống sửa ở màn Cấu hình vận hành). Hằng `MAX_TOTAL_RATE = 0.09` trong `lib/crm/commission.ts` chỉ còn là mặc định cho code THUẦN; **đường nào chạm DB được thì phải `getSetting("crm.commissionMaxTotalRate")` rồi truyền vào `validateRates`/`computeCommission`** — không thì người vận hành sửa trần mà đường ghi vẫn chặn theo số cũ. Tầng `TRIAL_TEACHER` (+1% GV dạy Trial) **vẫn tính riêng** (`lib/crm/trial-teacher-commission.ts`: tính trên từng ghi danh, không phải doanh thu kỳ) nhưng **nay ĐƯỢC CỘNG vào khi kiểm trần** ở `setCommissionRate` — 8% Sale + 1% GV = đúng 9%. Thêm tier vào pool vẫn phải cân lại trần trước, và hạ trần KHÔNG xoá dòng hoa hồng đã sinh.
+- ⚠️ **"Kế hoạch trả góp còn hiệu lực không" hỏi ở MỘT chỗ: `lib/payments/installment-plan.ts` [ĐẢO 13/09/2026].** ~~Chỉ `null`/`APPROVED` mới có hiệu lực; `PENDING_APPROVAL` bị loại vì "chưa duyệt mà cho quét QR đợt 1 là lách duyệt trả góp"~~ **[ĐẢO]** luật đó là tàn dư của QĐ-1 bản đầu, mà QĐ-1 **đã bị đảo từ 03/08/2026** (`lib/payments/payment-request.ts:184-192` gỡ hẳn cái chặn "chưa APPROVED thì ném lỗi": lưu kế hoạch là có phiếu thu + QR theo đợt NGAY, duyệt chỉ còn nghĩa **KHOÁ**). Hai chỗ gọi không đảo theo nên sinh bug tiền thật: `PaymentRequest` đã có phiếu đợt 1 3.000.000đ mà `computeDueNow` in QR **cả 5.000.000đ học phí**. Nay **chỉ `REJECTED`** làm kế hoạch mất hiệu lực — và đó không phải ngoại lệ tuỳ ý: `rejectInstallmentPlan` → `revertInstallmentRequests` VOID phiếu theo đợt + dựng lại phiếu "thu toàn đơn", nên số phải thu cũng phải quay về cả đơn.
+  · **Hai chỗ gọi phải SỬA CÙNG NHAU** — `computeDueNow` (số tiền in QR + ngưỡng đối khớp SePay) và `markInstallmentPaid` (có ghi Ledger-A `Payment` không). Sửa một bên là **nhận tiền một đằng, ghi sổ một nẻo**: vá QR mà giữ cổng cũ ở `markInstallmentPaid` thì khách quét QR đóng đợt 1 → Ledger-B PAID, Ledger-A bỏ qua → **công nợ hiển thị KHÔNG GIẢM dù tiền đã vào tài khoản**. Đó là lý do hàm dùng chung tồn tại; đừng viết lại điều kiện tại chỗ.
+  · Cổng chống lách duyệt **vẫn còn**, nằm ở đường TỰ CHỐT đơn chứ không ở đường nhận tiền: `confirmSettledOrder` + `lib/payments/payos-ingest.ts:1169-1181` vẫn từ chối đẩy đơn sang `CONFIRMED` khi **giảm giá** chưa duyệt. Phần "ghi bù Payment khi APPROVED" ở `approveInstallmentPlan` **giữ lại** (phục vụ ca REJECTED→APPROVED + dữ liệu cũ; idempotent theo marker nên không cộng đôi).
+- ⚠️ **Cờ `PAYMENT_LEDGER_V2` là cờ CHẾT — đừng lấy nó làm cổng quyết định [đo 13/09/2026].** `isPaymentLedgerV2Enabled()` có **0 đường gọi** trong mã chạy thật (`lib/flags.ts:168` là định nghĩa duy nhất, còn lại chỉ `lib/flags.test.ts`), và biến env **không tồn tại** trong 40 biến Production. Bật nó KHÔNG đổi hành vi gì — muốn cutover thì phải viết phần "nối cờ" (chuyển `lib/finance/debt.ts` + `lib/portal/billing-student.ts` + `lib/portal/dashboard.ts` + màn `/orders/[id]`, `/cong-no` sang đọc `PaymentRequest`) trước, đó là dự án riêng. Đo prod bằng workflow chỉ-đọc `shadow-compare-cong-no.yml` (`payments:shadow-compare` chạy ở máy dev là đo DB DEV, **không nói gì về prod**).
+- ❌ KHÔNG gõ tay tên bài vào `Lesson` để "sửa tên dự án". Nguồn tên buổi/dự án là 2 file marketing (`components/legacy-laptrinhrobot/_data/roadmap-5-years.ts` + `exam-roadmap.ts`) → `lib/lms/curriculum-sata.ts` → `prisma/seed-curriculum-sata.ts`; lần seed sau ghi đè. Nhãn buổi/tên gửi PH đi qua `deriveSessionLabel`/`deriveSessionProjectName`, đừng tự ghép chuỗi.
 - ⚠️ **`PaymentMethod` KHÔNG còn là danh mục toàn cục [30/08/2026].** Model có `centerId` (+`orgUnitId` ghi kép) và nằm trong **CẢ HAI** `SCOPED_MODELS` và `NULL_IS_GLOBAL_MODELS`, và có prefix `["payments:"]` ở `getModelPrefixes` (`lib/db-scope.ts`): `centerId = NULL` nghĩa là **DÙNG CHUNG mọi cơ sở**, KHÔNG phải "chưa gán" — quên khai ở `NULL_IS_GLOBAL_MODELS` là tiền mặt/cổng online tàng hình với người cấp cơ sở và form tạo đơn hiện danh sách RỖNG. Luật "phương thức nào dùng được" ở **một chỗ**: `lib/payments/method-scope.ts` (thuần, test không cần DB) — đừng chép lại switch `canBuy*` như 4 bản cũ. Mọi đường GHI phải tự gác (`scopedDb` không che write): `createOrderManualAction`, `updateOrderPaymentMethodAction`, `recordPaymentAction`, và 3 action của `/payment-methods`.
   · **`code` VẪN `@unique` TOÀN CỤC** (cố ý không hạ thành `@@unique([code, centerId])`: ALTER trên bảng có dữ liệu prod + Postgres coi NULL là khác nhau nên khoá ghép không chặn được đúng ca cần chặn). Phương thức riêng của cơ sở đặt mã có hậu tố: `BANK_CS1`, `BANK_CS2`.
   · **`centerScope: "ALL"` đến từ NƠI NEO VAI (HO/ROOT), KHÔNG phải từ `scopeType: GLOBAL`** (`lib/auth/actor.ts:50-56`) — đo thật: CENTER_MANAGER/CENTER_ACCOUNTANT/CENTER_SALES_CSM neo tại CS1 đều ra `centerScope: [CS1]` dù `payments:*` seed GLOBAL. Đừng bỏ prefix vì sợ nới quyền; bỏ prefix mới là nới (rơi về `isHoLevel ? ALL : …`, `lib/db-scope-function.test.ts` chặn sẵn).
@@ -486,7 +602,23 @@ feature → PR → merge `test`  → test.satarobo.vn tự deploy → nghiệm t
 
 - **`test`** = nhánh tiền-prod thường trực. Vercel environment `test` bám nhánh này **vĩnh viễn** — KHÔNG trỏ tay sang nhánh feature nữa.
 - **`main`** = prod. Push/merge vào `main` là **prod đổi ngay** (Vercel Git integration) + `deploy.yml` chạy `prisma migrate deploy` lên Supabase prod. Chỉ merge từ `test` sau khi nghiệm thu xong.
-- **Migration**: `migrate-test.yml` chạy khi push `test` (secrets `TEST_DATABASE_URL`/`TEST_DIRECT_URL`, có bước chặn trỏ nhầm vào DB prod). ⚠️ **DB của env `test` CHÍNH LÀ DB dev** — chủ dự án xác nhận 01/08 là **cố ý** (dựng vậy từ đầu). Bằng chứng khớp: lần `migrate-test` xanh đầu tiên báo *"176 migrations found — No pending migrations to apply"*, tức migration vừa sinh ở máy local đã có sẵn ở đó. **Hệ quả phải nhớ: `test.satarobo.vn` và máy local DÙNG CHUNG một DB** — data nghịch ở local hiện trên test và ngược lại, và **migration DROP/RENAME sẽ xoá thẳng dữ liệu đang làm việc ở local**. Muốn tách thì tạo Supabase project riêng rồi đổi 2 secret; workflow không phải sửa. (Chỉ chắc chắn 1 điều: test ≠ prod — bước "Chặn trỏ nhầm vào DB PROD" trong workflow đã xanh.)
+- **Migration**: `migrate-test.yml` chạy khi push `test` (secrets `TEST_DATABASE_URL`/`TEST_DIRECT_URL`, có bước chặn trỏ nhầm vào DB prod). 🔴 **ĐÍNH CHÍNH 17/09/2026 — DB của env `test` là MỘT PROJECT RIÊNG, KHÔNG phải DB dev.**
+~~DB của env `test` CHÍNH LÀ DB dev — chủ dự án xác nhận 01/08 là cố ý~~ **[SAI]**. Đo
+17/09: vé SSO do `test.satarobo.vn` ký mang `User.id` thế hệ `cmtcd2…d755…`, trong khi
+Supabase DEV (`mqvojw…`) giữ thế hệ `cmtaew…x6d5…` và máy dev (`satarobo_local`) giữ
+`cmtorab…10l4…` — **ba database khác nhau**, xác nhận thêm bằng project-ref trên Vercel.
+Câu cũ đã làm lệch hướng một cuộc điều tra cả buổi (xem `NỢ-8`,
+`docs/hop-nhat-main-test-1609.md`).
+
+**Hệ quả phải nhớ — ĐẢO so với bản cũ:**
+· Data nghịch ở máy local **KHÔNG** hiện trên `test.satarobo.vn`, và ngược lại.
+· Migration DROP/RENAME chạy ở local **KHÔNG** đụng dữ liệu của `test` — nhưng vẫn đụng
+  `satarobo_local`, nơi dev server đang phục vụ.
+· Muốn xem dữ liệu mà `test.satarobo.vn` thật sự đọc thì phải nối bằng
+  `TEST_DATABASE_URL` (Vercel env `test`), **không** phải `.env` của máy.
+· Ba database, ba tập `User.id` khác nhau cho cùng một email — đó là gốc của `NỢ-8`.
+
+(Chỉ chắc chắn 1 điều: test ≠ prod — bước "Chặn trỏ nhầm vào DB PROD" trong workflow đã xanh.)
 - **Cron trên test**: Vercel Cron không chạy trên custom environment → `cron-pump-test.yml` bơm `dispatch-events` + `email-queue` mỗi 5 phút. Đỏ 401 = lệch `TEST_CRON_SECRET` với `CRON_SECRET` của env `test`.
 - ⚠️ **Điểm mù cố hữu: ZNS thật KHÔNG test được trên `test`.** Creds Zalo chỉ ở scope Production và **cấm nhân bản `ZALO_OA_REFRESH_TOKEN`** sang môi trường 2 (token xoay vòng mỗi lần refresh → hai môi trường giết token của nhau, OA chết phải OAuth lại tay). Trên test ZNS luôn `SIMULATED`; khâu gửi tin thật chỉ smoke được trên prod sau merge.
 - Preview `*.vercel.app` vô dụng: `proxy.ts:113` canonical-hoá về domain thật bằng 308.

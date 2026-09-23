@@ -25,6 +25,7 @@ import { readStoredCourseSelection } from "./_utils/courseSelection";
 import { locations } from "./_data/locations";
 import { VN_PROVINCES, VN_PROVINCE_DEFAULT } from "@/lib/vn-provinces";
 import { TRIAL_TEST_MINUTES, TRIAL_SESSION_MINUTES } from "@/lib/uu-dai";
+import { OTichChinhSach } from "@/components/public/o-tich-chinh-sach";
 import {
   handleLeadSubmission,
   validateVietnamPhone,
@@ -83,6 +84,11 @@ const INITIAL_FORM: FormData = {
 export default function RegistrationForm() {
   const [formData, setFormData] = useState<FormData>(INITIAL_FORM);
   const [errors, setErrors] = useState<FormErrors>({});
+  // Hồ sơ BCT mục 3 — ô tích đồng ý Chính sách bảo mật. Để RIÊNG, không đưa vào
+  // `FormData`: mọi trường ở đó là `string` và vòng lặp kiểm trường tuỳ chọn gọi
+  // `.trim()` trên `formData[field]`, thêm một boolean vào là vỡ kiểu ở chỗ khác.
+  const [dongYCsbm, setDongYCsbm] = useState(false);
+  const [loiDongY, setLoiDongY] = useState<string | null>(null);
   const [extraOpen, setExtraOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
@@ -134,8 +140,11 @@ export default function RegistrationForm() {
     if (formData.email.trim() && !validateEmail(formData.email.trim()))
       e.email = "Email không hợp lệ.";
 
+    const loiCsbm = dongYCsbm ? null : "Vui lòng đọc và đồng ý với Chính sách bảo mật.";
+    setLoiDongY(loiCsbm);
+
     setErrors(e);
-    if (Object.keys(e).length === 0) return true;
+    if (Object.keys(e).length === 0 && !loiCsbm) return true;
 
     // Lỗi nằm trong panel đang đóng thì phải mở ra, không thì khách thấy nút
     // submit không ăn mà chẳng hiểu vì sao.
@@ -178,6 +187,7 @@ export default function RegistrationForm() {
         province: formData.tinh.trim(),
         website: formData.website,
         timeOnPage: Math.floor((Date.now() - startTimeRef.current) / 1000),
+        dongYChinhSachBaoMat: dongYCsbm,
       });
       setIsSuccess(true);
     } catch (err) {
@@ -513,6 +523,20 @@ export default function RegistrationForm() {
                 Xong
               </button>
             </div>
+
+            {/* Hồ sơ BCT mục 3. Đoạn <p> ngay dưới nút chỉ là DÒNG CHỮ ("Gửi thông tin
+                đồng nghĩa bố mẹ đồng ý…"), không phải ô tích — hồ sơ đòi ô tích.
+                `input-error` khi có lỗi để dùng lại cơ chế cuộn tới ô sai của validate(). */}
+            <OTichChinhSach
+              checked={dongYCsbm}
+              onChange={(e) => {
+                setDongYCsbm(e.target.checked);
+                if (e.target.checked) setLoiDongY(null);
+              }}
+              loi={loiDongY}
+              disabled={isSubmitting}
+              wrapperClassName={loiDongY ? "input-error text-text-muted" : "text-text-muted"}
+            />
 
             <button
               type="submit"

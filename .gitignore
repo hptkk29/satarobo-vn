@@ -102,6 +102,8 @@ full.txt
 # impeccable-ignore-end
 shots-teacher/
 
+# ghi chép làm việc của agent (không commit)
+.zalocrm-work/
 # docs/merge-lead — dữ liệu lead cũ nhập tay: 795 SĐT + tên phụ huynh/học viên THẬT.
 # Repo này PUBLIC (github.com/hptkk29/satarobo-vn) ⇒ commit file là công khai PII.
 # Script `import:legacy-leads` đọc bản gốc tại chỗ; không nhân bản CSV ra nơi khác.
@@ -124,3 +126,6 @@ var/
 # — nó vẫn là ảnh chụp dữ liệu sống, không vào repo. Bản chính thức sống ở artifact của
 # workflow, giữ 3 ngày.
 bao-cao-doi-soat-tien.md
+# Cùng lý do — báo cáo ngưỡng thanh toán (22/09/2026). Không có cột cá nhân nào, nhưng mã đơn
+# + số tiền vẫn là ảnh chụp dữ liệu sống.
+bao-cao-nguong-thanh-toan.md

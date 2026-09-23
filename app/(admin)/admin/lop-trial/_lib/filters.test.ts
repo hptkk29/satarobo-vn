@@ -89,8 +89,35 @@ describe("[LT-U-03] where lịch hẹn học thử giữ đúng luật ẩn củ
     expect(buildBookingListWhere(undefined, { ownTeacherId: null }).teacherId).toBeUndefined();
   });
 
+  it("[LOC-PII] thiếu quyền xem SĐT ⇒ nhánh tìm theo SĐT BIẾN MẤT (fail-closed)", () => {
+    // 🔴 LỖ HỔNG PHỦ TEST, tìm thấy 18/09/2026 trong lượt rà sau hợp nhất.
+    //
+    // Cổng S-1 ở đây là `opts.canSearchPhone === true ? [...] : []`. Trước ca này, bộ
+    // test CHỈ thử nhánh `true` — nên cấy `true ?` (bỏ hẳn cổng, ai cũng tìm được theo
+    // SĐT) KHÔNG làm ca nào đỏ. Cổng có mặt trong mã nhưng KHÔNG có khoá; mất nó trong
+    // một lượt hợp nhất sau là mất im lặng, đúng lớp lỗi của 16/09.
+    //
+    // Rò ở đây là rò GIÁN TIẾP: màn không IN số nào, nhưng gõ đủ số vào ô tìm rồi xem
+    // dòng nào hiện ra là đọc được SĐT bằng phép thử nhị phân.
+    for (const opts of [
+      { q: "0905123456" }, // không khai ⇒ fail-closed
+      { q: "0905123456", canSearchPhone: false },
+    ]) {
+      const w = buildBookingListWhere(undefined, opts);
+      const lead = w.lead as { OR?: { phone?: unknown }[] };
+      expect(lead.OR, JSON.stringify(opts)).toHaveLength(2);
+      expect(
+        (lead.OR ?? []).some((v) => "phone" in v),
+        `${JSON.stringify(opts)}: KHÔNG được có nhánh \`phone\` khi thiếu quyền xem SĐT`,
+      ).toBe(false);
+    }
+  });
+
   it("ô tìm phủ 3 nhánh mà KHÔNG làm mất điều kiện lead của chế độ mặc định", () => {
-    const w = buildBookingListWhere(undefined, { q: "Hương" });
+    // `canSearchPhone: true` — chốt S-1 (26/08) gác nhánh SĐT sau quyền xem PII, mặc
+    // định fail-closed. Ca này đo "ô tìm phủ đủ ba nhánh", nên phải mở cổng ra mới đo
+    // được; ca gác quyền nằm ở `lib/lead/lead-pii-callsites.test.ts`.
+    const w = buildBookingListWhere(undefined, { q: "Hương", canSearchPhone: true });
     const lead = w.lead as {
       deletedAt: null;
       status?: unknown;
