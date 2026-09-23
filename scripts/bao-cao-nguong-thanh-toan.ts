@@ -103,6 +103,21 @@ function ngay(d: Date | null): string {
   return d ? d.toISOString().slice(0, 10) : "—";
 }
 
+/**
+ * Nhánh đang chạy báo cáo — in ra để không con số nào bị gán nhầm nguồn.
+ *
+ * ⚠️ Cần từ 22/09/2026, khi cổng nhánh của workflow nới cho CẢ `test` lẫn `main`. Hai nhánh
+ * có `schema.prisma` KHÁC NHAU (đo cùng ngày: `test` có 15 migration prod chưa có), nên
+ * "báo cáo nói gì" và "báo cáo đọc bằng luật của nhánh nào" là hai câu hỏi khác nhau. Một
+ * con số không kèm nguồn là một con số sẽ bị trích lại sai — đúng lớp lỗi mà luật đọc số
+ * sinh ra để chặn.
+ *
+ * Chạy tay ở máy thì không có biến này ⇒ nói "chạy tay", đừng đoán.
+ */
+function nhanhChay(): string {
+  return process.env.GITHUB_REF_NAME?.trim() || "(chạy tay, ngoài workflow)";
+}
+
 /** Gom một mảng khoá thành "khoá → số lần". */
 function dem<T>(xs: readonly T[]): Map<T, number> {
   const m = new Map<T, number>();
@@ -604,6 +619,11 @@ async function main() {
   in_(
     `**Kết nối:** \`${currentDbHost()}\` · user \`${quyen.nguoiDung}\` · ` +
       `ghi được: **${quyen.ghiDuoc === null ? "không kiểm được" : quyen.ghiDuoc ? "CÓ QUYỀN GHI ⚠️" : "KHÔNG (chỉ đọc)"}**`,
+  );
+  in_();
+  in_(
+    `**Đọc bằng luật của nhánh:** \`${nhanhChay()}\` — số dưới đây là dữ liệu PROD, nhưng ` +
+      `\`schema.prisma\` và các hàm dùng chung là của nhánh này. Trích lại số thì trích kèm dòng này.`,
   );
   if (quyen.ghiDuoc === true) {
     in_();
