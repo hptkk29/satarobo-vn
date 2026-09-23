@@ -116,26 +116,59 @@ Kiểm sau khi đổi: `test` vẫn đủ **6** biến `ZALOCRM_*`, **production
 `test.satarobo.vn/admin/cau-hinh-van-hanh` → tab **Nâng cao** → ô
 **"Ánh xạ cơ sở sang mã tổ chức ZaloCRM"** → `{"CS1": "test-cs1"}`.
 
+> 🔴 **SỬA 23/09:** có thêm org `test-cs2` ⇒ giá trị đúng nay là
+> `{"CS1": "test-cs1", "CS2": "test-cs2"}`. Thiếu khoá `CS2` thì người chỉ thuộc CS2
+> mở `/zalo-crm` sẽ thấy **"Bạn chưa được gán cơ sở nào có Zalo CRM."**
+> (`app/(admin)/admin/zalo-crm/page.tsx:146`) — có báo, không câm.
+>
+> ⚠️ Nhưng **nút "Nhắn Zalo" trên phiếu lead thì câm theo THIẾT KẾ**:
+> `orgCodeCuaCoSo` trả `null` và lối lùi có chủ đích là *"mở cơ sở đầu tiên y như
+> trước"* (`lib/integrations/zalocrm/compose-url.ts:52-55`) — bảng ánh xạ thiếu một
+> dòng KHÔNG được làm biến mất cái nút Sale dùng hằng ngày. Từ 23/09 lối lùi ấy đắt
+> hơn trước: hai org prod có dữ liệu **rất lệch nhau**, nên "cơ sở đầu tiên" có thể
+> là org RỖNG. Khai đủ cả hai khoá.
+
 Ô này nằm **trong DB của từng môi trường**, không phải biến env — nên mỗi môi trường phải
 đặt riêng, và không ai đặt hộ môi trường khác được. Xác minh bằng hành vi ở mục dưới.
 
 ### Ngày bật cờ trên prod — soạn sẵn, CHƯA khai
 
-Khi tới ngày go-live, khai trên **Vercel env Production**:
+> 🔴 **SỬA 23/09/2026 — HAI cơ sở, và cờ thì đã bật sẵn.** Chủ dự án chốt CS2 có org
+> riêng; mã org đã hoán để org giữ dữ liệu thật mang mã `prod-cs2`
+> (`11-hoan-ma-org-cs2-va-dinh-chinh-co-prod.md`). Và `ZALOCRM_ENABLED` **vốn đã BẬT** trên
+> production — thứ còn thiếu là 5 biến dưới đây.
+
+Khai trên **Vercel env Production** (đủ **cả hai** org, kẻo cơ sở kia câm mà không báo lỗi):
 
 ```
-ZALOCRM_API_KEYS         {"prod-cs1": "<public_api_key của prod-cs1 trong fork>"}
-ZALOCRM_WEBHOOK_SECRETS  {"prod-cs1": "<webhook_secret của prod-cs1 trong fork>"}
+ZALOCRM_API_KEYS         {"prod-cs1": "<public_api_key prod-cs1>", "prod-cs2": "<… prod-cs2>"}
+ZALOCRM_WEBHOOK_SECRETS  {"prod-cs1": "<webhook_secret prod-cs1>", "prod-cs2": "<… prod-cs2>"}
+ZALOCRM_APP_URL          https://zalocrm.satarobo.vn
+ZALOCRM_BASE_URL         https://zalocrm.satarobo.vn
+ZALOCRM_SSO_SECRET       <ĐÚNG chuỗi `SATA_SSO_SECRET` của fork — GIỐNG HỆT test>
 ```
 
-và `zalocrm.orgCodes` trên DB prod → `{"CS1": "prod-cs1"}`.
+🔴 **`ZALOCRM_SSO_SECRET` PHẢI GIỐNG HỆT TEST — đừng sinh chuỗi mới.** Bản nháp trước
+của mục này ghi *"sinh riêng, không chép từ test"*; **sai**, và làm theo là hỏng SSO trên
+prod. Fork có **đúng MỘT** `SATA_SSO_SECRET` (`backend/src/config/index.ts:174` —
+`envValue('SATA_SSO_SECRET') || ''`, không phải danh sách), và **một fork phục vụ cả hai
+môi trường**. Prod ký bằng chuỗi khác ⇒ `verifySsoTicket` ném `BAD_SIG` ⇒ khung nhúng 401.
 
-Lấy hai giá trị đó từ fork, **không chép từ test**:
+⚠️ **Hệ quả bảo mật phải biết, và nó là NỢ thật:** vì bí mật dùng chung và fork **không
+ràng bí mật với org**, ai đọc được `ZALOCRM_SSO_SECRET` của `test` thì **ký được vé vào
+`prod-cs2`** — tức vào hội thoại khách hàng thật. Cách ly hai môi trường hôm nay đứng ở
+**`claims.orgCode`**, KHÔNG đứng ở chữ ký. Muốn siết thì phải cho fork nhận bí mật theo
+org (đợt riêng, chưa làm).
+
+và `zalocrm.orgCodes` trên DB prod → `{"CS1": "prod-cs1", "CS2": "prod-cs2"}`.
+
+Lấy các giá trị đó từ fork, **không chép từ test**:
 
 ```sql
-select s.setting_key, s.value_plain
+select o.code, s.setting_key, s.value_plain
   from app_settings s join organizations o on o.id = s.org_id
- where o.code = 'prod-cs1' and s.setting_key in ('public_api_key','webhook_secret');
+ where o.code in ('prod-cs1','prod-cs2') and s.setting_key in ('public_api_key','webhook_secret')
+ order by o.code, s.setting_key;
 ```
 
 ## ✅ Đã xác minh bằng HÀNH VI — 22/09/2026
