@@ -7,6 +7,8 @@
 // Quy ước xuyên suốt màn: mọi `Date` đã được server đổi sang chuỗi trước khi truyền
 // xuống client (ISO cho mốc thời gian, "YYYY-MM-DD" cho cột chỉ mang nghĩa NGÀY).
 
+import type { TrangThaiLop } from "@/lib/trial/trang-thai-lop";
+
 /** Kết quả chuẩn của mọi server action trong màn này. */
 export type ActionResult<T = unknown> =
   | ({ ok: true } & T)
@@ -66,14 +68,20 @@ export type ClassRow = {
    * từ lead). Hiện một tên và im về những người còn lại là nói dối bằng cách bỏ bớt.
    */
   sale: { ten: string; suyTuLead: boolean; soSaleKhac: number } | null;
-  sessionCount: number;
-  configName: string | null;
   /**
-   * Buổi SCHEDULED sớm nhất từ hôm nay trở đi, dạng "YYYY-MM-DD".
-   * null = lớp chưa có buổi nào sắp tới. Cột này THAY cột "Ngày BĐ" của màn cũ —
-   * lớp là slot tái sử dụng nên `startDate` luôn null, cột cũ luôn trống.
+   * 23/09 — "Sale có case trial": tên những người đã MỞ case còn sống trong lớp, theo
+   * thứ tự case. Rỗng ⇒ màn rơi về `sale` (suy từ lead) cho lớp cũ không lưu người mở.
    */
-  nextSessionDate: string | null;
+  saleCase: string[];
+  /** Số case còn sống (không tính case đã huỷ). */
+  soCase: number;
+  /**
+   * Case SCHEDULED sớm nhất từ hôm nay trở đi — ngày "YYYY-MM-DD" + giờ. `null` = không
+   * còn case nào sắp tới.
+   */
+  caseKeTiep: { ngay: string; gio: string } | null;
+  /** Trạng thái HIỂN THỊ (`lib/trial/trang-thai-lop.ts`) — ngày lớp đã qua là "Đã đóng". */
+  trangThai: TrangThaiLop;
 };
 
 /** Một buổi của lớp, kèm bản đồ điểm danh đã lưu. */
@@ -110,6 +118,11 @@ export type SessionRow = {
    * không dời được giờ hẹn của phụ huynh người khác.
    */
   quyenDoiGio: KetQuyenRow;
+  /**
+   * Server đã quy sẵn (`quyenDiemDanhCase`): người đang xem có ĐIỂM DANH + HOÀN TẤT
+   * case này được không. Chủ dự án 23/09: Sale không làm thay Sale khác (lớp theo khung).
+   */
+  quyenDiemDanh: KetQuyenRow;
   /** trialEnrollmentId → điểm danh đã lưu. Không có khoá = chưa điểm danh em đó. */
   attendance: Record<string, { status: TrialAttendanceMark; note: string | null }>;
   /**

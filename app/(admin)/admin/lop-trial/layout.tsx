@@ -14,7 +14,9 @@ export const metadata = { title: "Lớp Trial | Admin" };
 
 export default function LopTrialLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="max-w-6xl p-6">
+    // 23/09 — CĂN GIỮA; điện thoại không thêm lề ngang (khung admin đã có lề 16px). Trước đó khung neo trái: ở màn siêu
+    // rộng mọi thứ dồn về mép trái, bên phải là một vùng trống rộng gấp nhiều lần nội dung.
+    <div className="mx-auto w-full max-w-6xl py-4 sm:p-6 2xl:max-w-7xl">
       <h1 className="mb-1 text-2xl font-bold text-foreground">Lớp Trial</h1>
       <p className="mb-4 text-sm text-muted-foreground">
         Quản lý cơ sở mở lớp theo ngày + khung giờ → mỗi Sale thêm case của mình → xếp học

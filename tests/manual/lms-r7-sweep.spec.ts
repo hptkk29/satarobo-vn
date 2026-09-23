@@ -54,7 +54,7 @@ const ROUTES: string[] = [
   // Phase H — Báo cáo
   "/admin/bao-cao/lms",
   "/admin/bao-cao/lead",
-  "/admin/bao-cao/trial",
+  "/admin/bao-cao/trial-sale",
   "/admin/bao-cao/dao-tao",
   "/admin/bao-cao/trung-tam",
   "/admin/canh-bao-rui-ro",

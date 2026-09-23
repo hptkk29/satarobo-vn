@@ -149,9 +149,12 @@ export function quyenDoiGioCase(input: { sua: KetQuyen; soHocVienNguoiKhac: numb
   return DUOC;
 }
 
-/** Lý do khoá nút gỡ của bé đã HỌC XONG — server cũng từ chối (chỉ gỡ ghi danh ACTIVE). */
+/**
+ * Lý do khoá nút gỡ của bé đã HỌC XONG — server cũng từ chối (chỉ gỡ ghi danh ACTIVE).
+ * Câu KHÔNG nói "khỏi lớp" hay "khỏi case": nó đứng trên cả hai nút (23/09).
+ */
 export const LY_DO_DA_HOC_XONG =
-  "Bé đã học xong trải nghiệm — ghi danh này đã đóng, không còn gì để gỡ khỏi lớp.";
+  "Bé đã học xong trải nghiệm — ghi danh này đã đóng, không còn gì để gỡ.";
 
 /**
  * CHUYỂN một bé sang case khác (hoặc xếp bé đang "chưa xếp case").
@@ -176,5 +179,38 @@ export function quyenChuyenCase(input: Parameters<typeof quyenGoHocVien>[0]): Ke
     lyDo:
       `Bé này thuộc lead của ${ten || "Sale khác"}. Chuyển case là đổi giờ hẹn với phụ huynh — ` +
       "chỉ người phụ trách lead, Quản lý cơ sở hoặc Đào tạo mới chuyển được.",
+  };
+}
+
+/**
+ * ĐIỂM DANH và HOÀN TẤT một case.
+ *
+ * Chủ dự án 23/09/2026 (hỏi: "Sale có được điểm danh và bấm Hoàn tất case của Sale khác
+ * không?") — trả lời: "không". Case là đơn vị công việc của người mở nó; người khác
+ * điểm danh thay là ghi có mặt cho khách không phải của mình, và "Hoàn tất" thì khoá case
+ * vĩnh viễn (không có đường mở lại).
+ *
+ * ⚠️ CHỈ áp cho lớp THEO KHUNG. Lớp CŨ giữ nguyên hành vi trước đó (ai có
+ * `trials:attendance` cũng điểm danh được): mọi buổi của lớp cũ có `createdById = NULL`
+ * (cột mới, không backfill), nên áp luật "chỉ người tạo" ở đó là khoá điểm danh của MỌI
+ * Sale trên toàn bộ lớp đang chạy trên prod.
+ */
+export function quyenDiemDanhCase(input: {
+  /** BẮT BUỘC (luật 7) — thiếu nó thì không phân biệt nổi lớp cũ. */
+  theoKhung: boolean;
+  nguoiTaoId: string | null;
+  userId: string;
+  /** Có `trials:create-class` — Quản lý cơ sở · Đào tạo · Quản trị tối cao. */
+  laQuanLy: boolean;
+}): KetQuyen {
+  if (!input.theoKhung) return DUOC;
+  if (input.laQuanLy) return DUOC;
+  if (input.nguoiTaoId !== null && input.nguoiTaoId === input.userId) return DUOC;
+  return {
+    duoc: false,
+    lyDo:
+      input.nguoiTaoId === null
+        ? "Case này tạo trước 23/09/2026 nên không rõ của ai — nhờ Quản lý cơ sở hoặc Đào tạo điểm danh."
+        : "Case này do Sale khác mở — chỉ người mở case, Quản lý cơ sở hoặc Đào tạo mới điểm danh và hoàn tất được.",
   };
 }

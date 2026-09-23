@@ -15,6 +15,7 @@ import { checkPermission, canViewLeadPii } from "@/lib/auth/check-permission";
 import { laLeadCuaToi, leadCuaToiOrClause } from "@/lib/lead/sharing";
 import {
   quyenChuyenCase,
+  quyenDiemDanhCase,
   quyenDoiGioCase,
   quyenGoHocVien,
   quyenSuaCase,
@@ -38,6 +39,7 @@ import {
   completeTrialSession,
   cancelTrialClass,
   rescheduleTrialEnrollment,
+  goHocVienKhoiCase,
   notifyTrialTeacherAssigned,
 } from "@/lib/trial/service";
 import { getSetting } from "@/lib/settings/service";
@@ -228,8 +230,21 @@ export async function taoLopTrialTheoThuAction(
   }
   const data = parsed.data;
 
-  if (!actorCanUseCenter(ctx.actor, data.centerId)) {
-    return { ok: false, error: "Bạn không có quyền tạo lớp tại cơ sở này" };
+  // Khử trùng + kiểm quyền TỪNG cơ sở TRƯỚC khi tạo lớp nào: một cơ sở ngoài quyền thì
+  // từ chối cả lượt, không mở dở cho các cơ sở còn lại rồi mới báo lỗi.
+  const coSos = [...new Set(data.centerIds)];
+  const ngoaiQuyen = coSos.filter((id) => !actorCanUseCenter(ctx.actor, id));
+  if (ngoaiQuyen.length > 0) {
+    return { ok: false, error: "Bạn không có quyền tạo lớp tại một trong các cơ sở đã chọn" };
+  }
+  // Tên cơ sở cho dòng "bỏ qua" — chỉ cần khi áp dụng cho nhiều cơ sở.
+  const tenCoSo = new Map<string, string>();
+  if (coSos.length > 1) {
+    const rows = await scopedDb(ctx.actor).center.findMany({
+      where: { id: { in: coSos } },
+      select: { id: true, name: true },
+    });
+    for (const r of rows) tenCoSo.set(r.id, r.name);
   }
 
   const tu = ngayVnSangUtc(data.tu);
@@ -244,45 +259,48 @@ export async function taoLopTrialTheoThuAction(
   // một ngày — Sale nhìn vào không biết chọn cái nào.
   const daMo = new Set<string>();
 
-  for (const qt of data.quyTac) {
-    const ngays = sinhNgayTheoThu({ tu, den, thu: qt.thu });
-    if (!ngays.ok) {
-      boQua.push(`${qt.startTime}–${qt.endTime}: ${ngays.loi}`);
-      continue;
-    }
-    for (const ngay of ngays.ngay) {
-      const khoa = `${vnYmd(ngay)}|${qt.startTime}|${qt.endTime}`;
-      if (daMo.has(khoa)) continue;
-
-      // Cổng khung giờ chạy cho TỪNG NGÀY, không phải một lần cho cả tuỳ chọn: cùng một
-      // khung có thể hợp lệ ở thứ 3 mà không hợp lệ ở thứ 7.
-      const kiem = await kiemKhungLopTheoCauHinh({
-        ngay,
-        startTime: qt.startTime,
-        endTime: qt.endTime,
-      });
-      if (!kiem.ok) {
-        boQua.push(`${vnYmd(ngay)} ${qt.startTime}–${qt.endTime}: ${kiem.loi}`);
+  for (const centerId of coSos) {
+    const tienTo = coSos.length > 1 ? `${tenCoSo.get(centerId) ?? centerId} · ` : "";
+    for (const qt of data.quyTac) {
+      const ngays = sinhNgayTheoThu({ tu, den, thu: qt.thu });
+      if (!ngays.ok) {
+        boQua.push(`${tienTo}${qt.startTime}–${qt.endTime}: ${ngays.loi}`);
         continue;
       }
+      for (const ngay of ngays.ngay) {
+        const khoa = `${centerId}|${vnYmd(ngay)}|${qt.startTime}|${qt.endTime}`;
+        if (daMo.has(khoa)) continue;
 
-      const res = await createTrialClass({
-        centerId: data.centerId,
-        // KHÔNG nhận khoá trải nghiệm (chủ dự án 22/09 vòng 2): "qlcs không biết khung giờ
-        // đó sẽ có học viên trải nghiệm nào nên cũng không biết khoá trải nghiệm nào".
-        courseId: null,
-        name: null, // mở hàng loạt thì tên tay không có nghĩa — để server đặt theo quy ước
-        configId: null,
-        startDate: ngay,
-        startTime: qt.startTime,
-        endTime: qt.endTime,
-        actorId: ctx.session.user.id,
-      });
-      if (res?.ok) {
-        daTao += 1;
-        daMo.add(khoa);
-      } else {
-        boQua.push(`${vnYmd(ngay)} ${qt.startTime}–${qt.endTime}: ${res?.error ?? "tạo thất bại"}`);
+        // Cổng khung giờ chạy cho TỪNG NGÀY, không phải một lần cho cả tuỳ chọn: cùng một
+        // khung có thể hợp lệ ở thứ 3 mà không hợp lệ ở thứ 7.
+        const kiem = await kiemKhungLopTheoCauHinh({
+          ngay,
+          startTime: qt.startTime,
+          endTime: qt.endTime,
+        });
+        if (!kiem.ok) {
+          boQua.push(`${tienTo}${vnYmd(ngay)} ${qt.startTime}–${qt.endTime}: ${kiem.loi}`);
+          continue;
+        }
+
+        const res = await createTrialClass({
+          centerId,
+          // KHÔNG nhận khoá trải nghiệm (chủ dự án 22/09 vòng 2): "qlcs không biết khung giờ
+          // đó sẽ có học viên trải nghiệm nào nên cũng không biết khoá trải nghiệm nào".
+          courseId: null,
+          name: null, // mở hàng loạt thì tên tay không có nghĩa — để server đặt theo quy ước
+          configId: null,
+          startDate: ngay,
+          startTime: qt.startTime,
+          endTime: qt.endTime,
+          actorId: ctx.session.user.id,
+        });
+        if (res?.ok) {
+          daTao += 1;
+          daMo.add(khoa);
+        } else {
+          boQua.push(`${tienTo}${vnYmd(ngay)} ${qt.startTime}–${qt.endTime}: ${res?.error ?? "tạo thất bại"}`);
+        }
       }
     }
   }
@@ -553,6 +571,26 @@ async function demHocVienNguoiKhac(
 // ═══════════════════════════════════════════════════════════════════════════
 // 3) Thêm case trial (buổi)
 // ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Cổng "người mở case" cho điểm danh + hoàn tất (chủ dự án 23/09: Sale KHÔNG làm thay
+ * Sale khác). Luật ở `quyenDiemDanhCase`; hàm này chỉ gom đầu vào để hai cửa ghi hỏi
+ * đúng một câu. Lớp cũ: luôn cho qua (xem lý do tại hàm luật).
+ */
+async function quyenDiemDanhCuaBuoi(
+  actor: Actor,
+  ses: { trialClassId: string; centerId: string; createdById: string | null },
+  userId: string,
+): Promise<{ duoc: true } | { duoc: false; lyDo: string }> {
+  const lop = await loadScopedTrialClass(actor, ses.trialClassId);
+  if (!lop) return { duoc: false, lyDo: KHONG_THAY_LOP };
+  return quyenDiemDanhCase({
+    theoKhung: lop.theoKhung,
+    nguoiTaoId: ses.createdById,
+    userId,
+    laQuanLy: await laQuanLyLop(ses.centerId),
+  });
+}
 
 // `kiemCaseThuocLop` — luật "case trong khung + đúng ngày lớp" — nằm ở
 // `lib/trial/khung-gio-mo-lop.ts` (hàm thuần, có test). KHÔNG định nghĩa lại ở đây: tệp
@@ -1172,6 +1210,34 @@ export async function unenrollLeadChildLopTrialAction(input: {
     if (!quyen.duoc) return { ok: false, error: quyen.lyDo };
   }
 
+  // ── PHẢI GỠ KHỎI CASE TRƯỚC (lớp theo khung, 23/09/2026) ─────────────────────────
+  // Chủ dự án: "học viên khi bị gỡ khỏi case thì phải về chưa xếp case, rồi từ chưa xếp
+  // case mới gỡ khỏi lớp". Bé đang ở một case CÒN SỐNG thì từ chối, và nói bước kế tiếp.
+  // Bé trỏ vào case ĐÃ HUỶ thì coi như đã "chưa xếp case" (lib/trial/nghia-null.ts).
+  if (cls.theoKhung) {
+    const dangO = await scopedDb(ctx.actor).trialEnrollment.findFirst({
+      where: {
+        trialClassId: input.trialClassId,
+        leadChildId: input.leadChildId,
+        status: "ACTIVE",
+        scheduledSessionId: { not: null },
+      },
+      select: { scheduledSessionId: true },
+    });
+    if (dangO?.scheduledSessionId) {
+      const ca = await scopedDb(ctx.actor).trialClassSession.findUnique({
+        where: { id: dangO.scheduledSessionId },
+        select: { startTime: true, endTime: true, status: true },
+      });
+      if (ca && ca.status !== "CANCELLED") {
+        return {
+          ok: false,
+          error: `Bé đang ở case ${ca.startTime}–${ca.endTime} — gỡ bé khỏi case trước (bé về "Chưa xếp case"), rồi mới gỡ khỏi lớp.`,
+        };
+      }
+    }
+  }
+
   const res = await unenrollLeadChild({
     trialClassId: input.trialClassId,
     leadChildId: input.leadChildId,
@@ -1330,6 +1396,126 @@ export async function xepCaseHocVienAction(input: {
     console.error("[lop-trial] bao giao vien khi chuyen case that bai", input.trialEnrollmentId, e);
   }
 
+  // Lịch sử tương tác — chủ dự án: mọi thao tác của Sale với lead đều phải vào lịch sử.
+  {
+    const den = await sdb.trialClassSession.findUnique({
+      where: { id: input.toSessionId },
+      select: { startTime: true, endTime: true },
+    });
+    const leadChildId = await sdb.trialEnrollment.findUnique({
+      where: { id: input.trialEnrollmentId },
+      select: { leadChildId: true },
+    });
+    if (den && leadChildId) {
+      await ghiTuongTacTheoConLead({
+        leadChildId: leadChildId.leadChildId,
+        ...getAuditActor(ctx.session),
+        moc: new Date(),
+        sk: (tenCon) => ({
+          viec: "trial.xep-case",
+          tenCon,
+          tenLop: cls.name,
+          gio: `${den.startTime}–${den.endTime}`,
+        }),
+      });
+    }
+  }
+
+  lamMoi(input.trialClassId);
+  return { ok: true };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 6c) Gỡ một học viên khỏi CASE — bé vẫn ở trong lớp
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Chủ dự án 23/09/2026: "học viên khi bị gỡ khỏi case thì phải về chưa xếp case, rồi từ
+// chưa xếp case mới gỡ khỏi lớp". Nút "Gỡ" trong một case gọi hàm NÀY, không gọi
+// `unenrollLeadChildLopTrialAction` — gỡ khỏi lớp chỉ còn ở khối "Chưa xếp case".
+
+export async function goKhoiCaseAction(input: {
+  trialClassId: string;
+  trialEnrollmentId: string;
+}): Promise<ActionResult> {
+  const ctx = await requireActor();
+  if (!ctx) return { ok: false, error: CHUA_DANG_NHAP };
+  if (!(await checkPermission("trials:manage"))) {
+    return { ok: false, error: "Không có quyền gỡ học viên khỏi case" };
+  }
+  if (!input.trialClassId || !input.trialEnrollmentId) {
+    return { ok: false, error: "Thiếu lớp hoặc học viên" };
+  }
+  const cls = await loadScopedTrialClass(ctx.actor, input.trialClassId);
+  if (!cls) return { ok: false, error: KHONG_THAY_LOP };
+
+  const sdb = scopedDb(ctx.actor);
+  const enr = await sdb.trialEnrollment.findUnique({
+    where: { id: input.trialEnrollmentId },
+    select: {
+      trialClassId: true,
+      leadChildId: true,
+      leadChild: {
+        select: {
+          lead: {
+            select: {
+              assignedToId: true,
+              createdById: true,
+              isSharedWithTeam: true,
+              assignedTo: { select: { name: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!enr || enr.trialClassId !== input.trialClassId) {
+    return { ok: false, error: "Học viên không thuộc lớp này" };
+  }
+
+  // Cùng luật với gỡ khỏi lớp: chủ lead, hoặc Quản lý / Đào tạo. Gỡ khỏi case là huỷ lịch
+  // hẹn giờ đó với phụ huynh — việc của người phụ trách khách.
+  {
+    const quyen = quyenGoHocVien({
+      lead: enr.leadChild?.lead ?? null,
+      userId: ctx.session.user.id,
+      laQuanLy: await laQuanLyLead(cls.centerId),
+      tenSale: enr.leadChild?.lead?.assignedTo?.name ?? null,
+    });
+    if (!quyen.duoc) return { ok: false, error: quyen.lyDo };
+  }
+
+  const res = await goHocVienKhoiCase({
+    trialEnrollmentId: input.trialEnrollmentId,
+    actorId: ctx.session.user.id,
+  });
+  if (!res.ok) return { ok: false, error: res.error ?? "Gỡ khỏi case thất bại" };
+
+  // Báo giáo viên của case vừa rời (case còn sống, không phải chính người bấm). Gửi SAU
+  // khi ghi đã commit; lỗi gửi không được biến lượt gỡ THÀNH CÔNG thành thất bại.
+  const caseCu = res.caseCu;
+  if (caseCu?.teacherId && !caseCu.daHuy && caseCu.teacherId !== ctx.session.user.id) {
+    try {
+      await notifyTrialTeacherAssigned({
+        teacherId: caseCu.teacherId,
+        title: "Một học viên đã rời ca của bạn",
+        body: `Một học viên đã được gỡ khỏi ca ${caseCu.gio} · lớp ${cls.name}.`,
+        dedupeKey: `trial-case.go:${input.trialEnrollmentId}:${caseCu.id}:${Date.now()}`,
+        entityId: caseCu.id,
+      });
+    } catch (e) {
+      console.error("[lop-trial] bao giao vien khi go khoi case that bai", input.trialEnrollmentId, e);
+    }
+  }
+
+  if (caseCu) {
+    await ghiTuongTacTheoConLead({
+      leadChildId: enr.leadChildId,
+      ...getAuditActor(ctx.session),
+      moc: new Date(),
+      sk: (tenCon) => ({ viec: "trial.go-case", tenCon, tenLop: cls.name, gio: caseCu.gio }),
+    });
+  }
+
   lamMoi(input.trialClassId);
   return { ok: true };
 }
@@ -1425,6 +1611,11 @@ export async function markLopTrialAttendanceAction(
 
   if (!(await duocThaoTacBuoi(ses))) {
     return { ok: false, error: "Bạn chỉ được điểm danh lớp được phân công" };
+  }
+  // 23/09 — chủ dự án: Sale KHÔNG điểm danh case của Sale khác (lớp theo khung).
+  {
+    const quyen = await quyenDiemDanhCuaBuoi(ctx.actor, ses, ctx.session.user.id);
+    if (!quyen.duoc) return { ok: false, error: quyen.lyDo };
   }
 
   // ── KIỂM CẢ LÔ TRƯỚC KHI GHI BÉ NÀO (23/09/2026) ──────────────────────────────────
@@ -1524,6 +1715,11 @@ export async function completeLopTrialSessionAction(
 
   if (!(await duocThaoTacBuoi(ses))) {
     return { ok: false, error: "Bạn chỉ được thao tác lớp được phân công" };
+  }
+  // 23/09 — "Hoàn tất" khoá case vĩnh viễn: chỉ người mở case (hoặc Quản lý) được bấm.
+  {
+    const quyen = await quyenDiemDanhCuaBuoi(ctx.actor, ses, ctx.session.user.id);
+    if (!quyen.duoc) return { ok: false, error: quyen.lyDo };
   }
 
   const res = await completeTrialSession({

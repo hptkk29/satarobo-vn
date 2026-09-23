@@ -69,6 +69,7 @@ export function PhanTrangBang({
   soDongMacDinh = SO_DONG_MAC_DINH,
   className,
   cuonNgang = false,
+  luonHienThanh = false,
 }: {
   /** ĐÚNG MỘT phần tử `<table>`. */
   children: ReactNode;
@@ -86,6 +87,15 @@ export function PhanTrangBang({
    * bảng cuộn được, thanh phân trang đứng yên.
    */
   cuonNgang?: boolean;
+  /**
+   * Hiện thanh phân trang CẢ KHI bảng ngắn hơn mức nhỏ nhất (vẫn ẩn khi 0 dòng).
+   *
+   * 23/09 — bảng bung chi tiết của báo cáo trải nghiệm: chủ dự án thấy 8 case mà không
+   * có thanh phân trang nên tưởng bảng chưa phân trang. Bảng mà NGƯỜI DÙNG KỲ VỌNG dài
+   * thì thanh "1–8 / 8 case" là lời xác nhận, không phải nhiễu. Mặc định TẮT để ~140
+   * bảng khác không đổi.
+   */
+  luonHienThanh?: boolean;
 }) {
   const [soDong, setSoDong] = useState(soDongMacDinh);
   const [trang, setTrang] = useState(1);
@@ -181,7 +191,7 @@ export function PhanTrangBang({
   const tu = tong === 0 ? 0 : (trangHt - 1) * soDong + 1;
   const den = Math.min(tong, trangHt * soDong);
   // Bảng ngắn hơn mức nhỏ nhất, hoặc hình dạng lạ (viTriTbody < 0) → không bày gì thêm.
-  const hienThanh = viTriTbody >= 0 && tong > MUC_SO_DONG[0];
+  const hienThanh = viTriTbody >= 0 && (luonHienThanh ? tong > 0 : tong > MUC_SO_DONG[0]);
 
   return (
     <div className={cn("space-y-3", className)}>

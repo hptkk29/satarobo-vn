@@ -103,11 +103,22 @@ export async function POST(req: NextRequest) {
         });
   });
 
+  // 23/09 — cột cơ sở nhận SLUG hoặc MÃ (CS1): người vận hành nhớ "CS1", không ai nhớ
+  // `co-so-nguyen-huu-tho`. Mã so KHÔNG phân biệt hoa thường; slug khớp trước nếu trùng.
   const slugs = [...new Set(buoc1.flatMap((r) => (r.ok ? [r.data.centerSlug] : [])))];
   const centers = slugs.length
-    ? await sdb.center.findMany({ where: { slug: { in: slugs } }, select: { id: true, slug: true } })
+    ? await sdb.center.findMany({
+        where: {
+          OR: [{ slug: { in: slugs } }, { code: { in: slugs.map((s) => s.toUpperCase()) } }],
+        },
+        select: { id: true, slug: true, code: true },
+      })
     : [];
-  const idTheoSlug = new Map(centers.map((c) => [c.slug, c.id]));
+  const idTheoSlug = new Map<string, string>();
+  for (const c of centers) if (c.code) idTheoSlug.set(`ma:${c.code.toUpperCase()}`, c.id);
+  for (const c of centers) idTheoSlug.set(`slug:${c.slug}`, c.id);
+  const timCoSo = (v: string) =>
+    idTheoSlug.get(`slug:${v}`) ?? idTheoSlug.get(`ma:${v.toUpperCase()}`);
 
   const khoaSlugs = [...new Set(buoc1.flatMap((r) => (r.ok && r.data.courseSlug ? [r.data.courseSlug] : [])))];
   const khoas = khoaSlugs.length
@@ -123,9 +134,9 @@ export async function POST(req: NextRequest) {
       errors.push({ row: r.row, error: r.error });
       continue;
     }
-    const centerId = idTheoSlug.get(r.data.centerSlug);
+    const centerId = timCoSo(r.data.centerSlug);
     if (!centerId) {
-      errors.push({ row: r.row, error: `Không có cơ sở với slug "${r.data.centerSlug}"` });
+      errors.push({ row: r.row, error: `Không có cơ sở với mã hoặc slug "${r.data.centerSlug}"` });
       continue;
     }
     // Cách ly cơ sở ở ĐƯỜNG GHI: `scopedDb` chỉ tự lọc phép ĐỌC. Thiếu vế này thì Quản

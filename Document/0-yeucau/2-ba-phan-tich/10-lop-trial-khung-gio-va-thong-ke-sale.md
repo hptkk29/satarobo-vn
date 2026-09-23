@@ -1,6 +1,7 @@
 # Lớp trải nghiệm mở theo khung giờ + Thống kê case trải nghiệm theo Sale
 
 > **Trạng thái:** ✅ **ĐÃ CHỐT 22/09/2026** — chủ dự án quyết trực tiếp trong phiên làm việc, gồm cả 3 câu hỏi làm rõ ở §0.3 và 3 câu ở §0.4. **Đã hiện thực xong**, nhánh `hptkk29/lop-trial-theo-khung-gio` (3 commit: `55ad9540` · `72b0857d` · `d61791ec`) — tài liệu này ghi lại yêu cầu + quyết định, không phải đề xuất đang chờ.
+> **Bổ sung 23/09/2026:** hạng mục **C** — màn lớp chứa các case của từng Sale — ở **§9** (đã chốt, đã hiện thực).
 > **Phạm vi:** màn Lớp trải nghiệm (`app/(admin)/admin/lop-trial/**`) và một màn báo cáo MỚI `app/(admin)/admin/bao-cao/trial-sale/`.
 > **Dựa trên:** yêu cầu chủ dự án 22/09/2026 (trích nguyên văn ở §1.1 và §3.1); cơ chế lọc giáo viên theo ca làm đã chốt 17/09/2026; DESIGN.md admin (chốt 11/08/2026).
 > **Nguyên tắc bất biến:** mọi kiểm quyền qua `can()`; mọi đọc/ghi qua `scopedDb(actor)`; không thêm bảng khi thực thể đã có; migration additive, không drop cột.
@@ -21,6 +22,7 @@ Song song, không có chỗ nào trả lời được câu **"Sale nào chốt t
 |---|---|---|
 | **A** | Lớp trải nghiệm mở theo **ngày + khung giờ**, tách quyền **mở lớp** khỏi quyền **xếp học viên** | Khoá mới `trials:create-class`; 7 khoá cấu hình khung giờ theo thứ; 3 đường mở lớp qua 1 cổng |
 | **B** | Màn **Thống kê case trải nghiệm theo Sale** | `/bao-cao/trial-sale` — 9 cột, hàng TỔNG, xuất Excel, bấm số xem được danh sách case |
+| **C** | *(bổ sung 23/09/2026 — §9)* Màn lớp = **khung giờ chứa các CASE** của từng Sale | Case chồng giờ trong một khung; gắn chéo được, chỉ chủ lead gỡ; gỡ hai bậc (case → "Chưa xếp case" → lớp); Sale không điểm danh case người khác |
 
 ### 0.3 ✅ Quyết định ĐÃ CHỐT — hạng mục A (22/09/2026)
 
@@ -28,6 +30,8 @@ Song song, không có chỗ nào trả lời được câu **"Sale nào chốt t
 |---|---|---|---|
 | **QĐ-A1** | Cách tạo lớp | **Cả hai**: form tạo từng ngày **và** nút "mở lớp cho cả kỳ theo thứ", cộng import Excel (mỗi dòng 1 ngày) | Chủ dự án chọn khi được hỏi. Xếp lịch đầu tháng cần sinh hàng loạt; ngoại lệ một ngày vẫn phải làm được mà không dựng file. |
 | **QĐ-A6** | Hình dạng của "mở cho cả kỳ" | **Một khoảng ngày (từ → đến) + N tuỳ chọn**, mỗi tuỳ chọn = *một nhóm thứ + MỘT khung giờ*. Tối đa 10 tuỳ chọn một lượt | Chủ dự án 22/09 (vòng 2), nguyên văn: *"chọn từ ngày đến ngày rồi phải chọn thêm giờ của kỳ đó, và có thể + thêm tuỳ chọn khác, ví dụ: tạo kỳ 22/09-30/09 lịch t3-t6 và lịch t7-cn riêng biệt"*. ĐẢO bản đầu (chỉ tick thứ, không nhận giờ — tự sinh **mọi** khung của thứ đó). |
+| **QĐ-A8** | Cơ sở khi mở lớp cả kỳ | **"Áp dụng cho cơ sở"** — chọn NHIỀU cơ sở, một kỳ mở cho tất cả trong một lượt. Server kiểm quyền **từng** cơ sở TRƯỚC khi tạo lớp nào (một cơ sở ngoài quyền ⇒ từ chối cả lượt); dòng "bỏ qua" ghi tên cơ sở khi áp nhiều cơ sở | Chủ dự án 23/09/2026: *"thay vì chọn cơ sở thì nên để là áp dụng cho cơ sở nào"*. Form mở lớp MỘT ngày giữ ô chọn một cơ sở. Lưới ghim `[CC-10]` |
+| **QĐ-A9** | Nhập khung giờ khi mở lớp | **Gõ tự do "Từ … Đến …"**, các khung cấu hình chỉ còn là nút **chọn nhanh**. Cổng QĐ-A4 GIỮ NGUYÊN: lớp phải nằm trọn trong giờ mở của thứ đó; lệch thì màn báo ngay những thứ nào sẽ bị bỏ qua, form một ngày khoá nút tạo | Chủ dự án 23/09/2026: *"khung giờ làm tuỳ chọn linh hoạt chứ không cứng ngắt như này"*. Bản trước chỉ cho chọn đúng các khung cấu hình (không mở được 18:00–20:00), và form một ngày còn lặng lẽ thay giờ lệch bằng khung đầu tiên |
 | **QĐ-A7** | Ô "Khoá trải nghiệm" khi mở lớp | **GỠ khỏi cả hai form** (một ngày và cả kỳ); lớp sinh ra mang `courseId = null` | Chủ dự án 22/09 (vòng 2): *"qlcs không biết khung giờ đó sẽ có học viên trải nghiệm nào nên cũng không biết khoá trải nghiệm nào"*. Khách đến sau khi lớp đã mở, nên bắt chọn khoá lúc mở lớp là bắt đoán. **Cột `courseId` GIỮ nguyên trên DB** — đường import Excel vẫn nhận `courseSlug` tuỳ chọn, và lớp cũ đã gắn khoá không bị động tới. |
 | **QĐ-A2** | Nguồn khung giờ | **Cấu hình sửa được** (không đóng cứng, không suy từ ca làm GV): T3–T6 `17:30-21:00`; T7 & CN `08:00-11:30, 14:00-17:30`; T2 để trống = không mở | Chủ dự án chọn. Suy từ ca làm GV thì ngày nào chưa xếp ca là không mở được lớp — chặn nghiệp vụ vì một dữ liệu thuộc module khác. |
 | **QĐ-A3** | Ai được mở lớp | **Quản lý cơ sở + Đào tạo + Quản trị tối cao**. Sale **KHÔNG**. | Chủ dự án chọn. Đào tạo vốn đã giữ `trials:manage` và quản toàn bộ LMS. |
@@ -253,3 +257,102 @@ Thêm mốc thời gian: chỉ tính ghi danh sinh ra **sau** khi case được 
 | **Q1** | Cột **"Vắng (không đến)"** hiện sẽ **luôn bằng 0** cho tới khi bắt đầu điểm danh buổi trải nghiệm thật (đo 22/09: `TrialAttendance` = 0 dòng trên DB local). Chủ dự án đã được báo trước và vẫn chọn làm cột này. | Giữ cột, định nghĩa "có điểm danh và **mọi** lượt đều vắng" | Chủ dự án | khi bắt đầu điểm danh thật |
 | **Q2** | Hai màn báo cáo trải nghiệm cùng tồn tại (`/bao-cao/trial` theo **cơ sở**, `/bao-cao/trial-sale` theo **Sale**) và **định nghĩa "chốt" khác nhau** — màn cũ suy từ `LeadChild.trialStatus` / `Lead.status`, màn mới từ `Enrollment.leadChildId`. Hai con số có thể lệch. | Màn mới in rõ định nghĩa ngay dưới bảng | Chủ dự án | trước khi dùng số để tính thưởng |
 | **Q3** | Có cần **"thời gian trung bình từ case → chốt"** không? BA đã đề xuất, chủ dự án chưa chọn. | Chưa làm | Chủ dự án | — |
+
+---
+
+## §9. Hạng mục C — Màn lớp = khung giờ chứa các CASE của từng Sale (23/09/2026)
+
+> **Trạng thái:** ✅ **ĐÃ CHỐT 23/09/2026** — chủ dự án quyết trực tiếp trong phiên làm việc (hai lượt cùng ngày). Đã hiện thực trên nhánh `hptkk29/lop-trial-theo-khung-gio`: lượt 1 ở commit `f4d146ac` + `af579d75`; lượt 2 (QĐ-C7 → QĐ-C11) ở commit kế tiếp.
+> Hạng mục A (§1) mở lớp = một ngày × một khung giờ. Hạng mục này trả lời câu tiếp theo: **trong một khung, nhiều Sale xếp khách thế nào mà không giẫm lên nhau.**
+
+### 9.1 Nguồn (trích nguyên văn)
+
+**Lượt 1 — 23/09/2026:**
+
+> "chỗ thêm buổi học chuyển thành thêm case trial, các mục trong đó gồm: giờ bắt đầu, giờ kết thúc (giờ bắt đầu và kết thúc chỉ được lấy trong khung giờ mà qlcs set dành cho lớp đó), phòng, giáo viên, học viên (lấy từ con của ph từ lead của chính sale đó (không được lấy con của lead của sale khác)) … ví dụ: ngày 23/09 có lớp với khung giờ 17h30-21h thì sale 1 có 1 case trial 1 bạn sata 3 lúc 18h-19h, sale 2 có 2 case trial (1 case 3 bạn sata4 17h30-18h30, 1 case 1 bạn sata 6 19h-20h) … sale 1 cũng được gắn vào case của sale 2 được, nhưng sale 1 không thể gỡ học viên của sale 2 được, và sale cũng không thể xoá hoặc huỷ lớp"
+
+**Lượt 2 — 23/09/2026 (sau khi xem màn trên dữ liệu nghiệm thu):**
+
+> "chỗ thêm case trial: bỏ ô chọn ngày, chỗ chưa xếp case không có nút thêm học viên vào lớp trial, học viên khi bị gỡ khỏi case thì phải về chưa xếp case, rồi từ chưa xếp case mới gỡ khỏi lớp"
+
+kèm hai câu trả lời cho câu hỏi làm rõ (QĐ-C7 và QĐ-C8 bên dưới).
+
+### 9.2 Hiện trạng trước lượt 1 (có dẫn code)
+
+| Điều | Bằng chứng |
+|---|---|
+| Màn lớp là **ba khối rời**: "Thêm buổi học" · "Học viên" (danh sách PHẲNG cấp lớp) · "Buổi học & điểm danh" — không nhìn ra *case nào có ai* | `app/(admin)/admin/lop-trial/[id]/page.tsx` bản trước `f4d146ac` |
+| **Mọi Sale huỷ được cả lớp**: `cancelLopTrialClassAction` chỉ gác `trials:manage`, mà mọi Sale giữ khoá đó | `prisma/seed-roles.ts`, vai `CENTER_SALES_CSM` |
+| **Mọi Sale gỡ được khách của mọi Sale**: `unenrollLeadChildLopTrialAction` không có cổng nào ngoài `trials:manage` | `app/(admin)/admin/lop-trial/_actions.ts` bản trước `f4d146ac` |
+| Cửa GẮN thì đã đúng — ô tìm chỉ ra con của lead của chính mình | `leadCuaToiOrClause` (có từ 17/09/2026) |
+| `TrialEnrollment.scheduledSessionId = NULL` nghĩa là **"học cả lớp"** (chốt 28/08/2026) | `lib/trial/service.ts` — `enrollLeadChild` |
+
+### 9.3 ✅ Quyết định ĐÃ CHỐT
+
+| # | Quyết định | ✅ Đã chốt | Căn cứ / lý do |
+|---|---|---|---|
+| **QĐ-C1** | "Case trial" là gì | Chính là **buổi** (`TrialClassSession`) — không thêm bảng. Case có giờ riêng **trong** khung lớp, phòng, GV, nhóm học viên; nhiều case **được chồng giờ** trong cùng khung | Lượt 1. Ví dụ của chủ dự án có ba case chồng lấn trong 17:30–21:00 |
+| **QĐ-C2** | "Của tôi" đo bằng gì | Bằng **CHỦ LEAD**, không bằng người gắn | Lượt 1, câu hỏi làm rõ — nguyên văn: *"chủ của lead thì gắn gỡ, ngoài ra qlcs/đào tạo hoặc admin gắn thì sale chủ lead vẫn gỡ bth"*. Đo bằng người gắn thì Quản lý gắn hộ một lần là Sale mất quyền gỡ khách của chính mình |
+| **QĐ-C3** | Gắn / gỡ | Sale gắn khách **của mình** vào case của **bất kỳ ai**; chỉ **chủ lead** (hoặc QL cơ sở / Đào tạo / Quản trị) gỡ được. Nút gỡ của khách người khác **vẫn hiện**, khoá, nói lý do kèm tên Sale phụ trách | Lượt 1. Luật 12: ẩn nút thì Sale tưởng chức năng không có; bấm rồi mới báo lỗi là bắt trả một cú bấm để biết điều màn hình đã biết |
+| **QĐ-C4** | Bé đã ở lớp nhưng chưa thuộc case nào | **Một khu "Chưa xếp case" riêng** | Lượt 1, chủ dự án chọn phương án khuyến nghị |
+| **QĐ-C5** | Sale với case của người khác | **Sửa + xoá case của mình; case người khác chỉ xem.** Chủ case vẫn **không** huỷ được case đang giữ khách của Sale khác (huỷ case = gỡ hàng loạt trá hình) | Lượt 1, chủ dự án chọn phương án khuyến nghị |
+| **QĐ-C6** | Huỷ lớp | Chỉ QL cơ sở / Đào tạo / Quản trị — cùng khoá mở lớp `trials:create-class`. Sale **không thấy** nút | Lượt 1: *"sale cũng không thể xoá hoặc huỷ lớp"* |
+| **QĐ-C7** | Sale điểm danh / bấm "Hoàn tất" case của Sale khác | **KHÔNG** | Lượt 2 — chủ dự án trả lời "không". "Hoàn tất" khoá case vĩnh viễn |
+| **QĐ-C8** | Ô xếp lớp ở **hồ sơ lead** | **Chỉ xếp vào LỚP**, không chọn case; muốn xếp case phải vào màn lớp | Lượt 2 — nguyên văn: *"phần ở trang chi tiết lead chi thêm vào lớp, chưa thêm vào case, phải vào trong lớp để thêm vào case"*. **ĐẢO** một bản trong cùng ngày từng bắt chọn case ngay ở hồ sơ lead |
+| **QĐ-C9** | Gỡ bé | **Hai bậc:** gỡ khỏi case ⇒ bé về **"Chưa xếp case"** (vẫn trong lớp); **gỡ khỏi lớp chỉ làm được từ "Chưa xếp case"** | Lượt 2 — nguyên văn ở §9.1. Nút trong bảng case là "Gỡ khỏi case"; "Gỡ khỏi lớp" chỉ còn ở khối "Chưa xếp case" (và khối "Học cả lớp" của lớp cũ) |
+| **QĐ-C10** | Form thêm case | **Không có ô ngày** — case luôn thuộc ngày của lớp; hai ô giờ mang sẵn giới hạn của khung | Lượt 2: *"bỏ ô chọn ngày"*. Server vẫn giữ cổng ngày + khung (`kiemCaseThuocLop`) — bỏ ô là bỏ ở giao diện, không bỏ luật |
+| **QĐ-C11** | Cửa vào lớp | Khối "Chưa xếp case" **luôn hiện** ở lớp theo khung và mang ô **"Thêm học viên vào lớp"** — kể cả khi chưa có bé nào. Đây là **cửa vào DUY NHẤT**: ô "Thêm học viên vào case" trong từng case **đã gỡ**; bé vào lớp rồi chọn case ở cột "Xếp vào case" | Lượt 2: *"chỗ chưa xếp case không có nút thêm học viên vào lớp trial"*; gỡ ô trong case theo ảnh chủ dự án khoanh đỏ cùng tối |
+| **QĐ-C12** | Ô "Số buổi" khi thêm vào lớp | **Không có** ở khối "Chưa xếp case" — bé nhận số buổi mặc định của lớp. Khối "Học cả lớp" của lớp cũ **giữ** ô này | Lượt 2, chủ dự án khoanh đỏ trên ảnh: *"bỏ thêm số buổi khỏi khung chưa xếp case"* |
+
+> **Lớp CŨ không đổi nghĩa.** Mọi quyết định trên áp cho lớp **theo khung** (`TrialClassV2.theoKhung = true` — chỉ ba đường mở lớp từ 22/09 mới ghi `true`). Ở lớp cũ, bé `NULL` vẫn là **học cả lớp** như chốt 28/08; điểm danh như trước; gỡ khỏi lớp làm ngay được. Nghĩa của `NULL` sống ở **một chỗ**: `lib/trial/nghia-null.ts`.
+
+### 9.4 User story
+
+**US-TRIAL-20** · Là **Sale**, tôi muốn **mở case trial của mình trong khung lớp và xếp khách vào đó** để **hẹn khách đúng giờ mà không phải hỏi Quản lý**.
+- Ưu tiên: P0 · Loại: FR · Truy vết quyết định: QĐ-C1, QĐ-C10
+- AC1: Given lớp theo khung ngày 23/09 `17:30–21:00`, When Sale mở form "Thêm case", Then **không có ô ngày**; hai ô giờ giới hạn trong `17:30–21:00`.
+- AC2: Given Sale 1 có case `18:00–19:00` và Sale 2 có case `17:30–18:30`, Then **cả hai** hiện trên thanh khung giờ, mỗi case một làn, không đè nhau.
+- AC3: Given ô "Thêm học viên vào lớp" ở khối "Chưa xếp case", When Sale tìm, Then **chỉ** ra con của lead do chính Sale đó phụ trách; thêm xong bé nằm ở "Chưa xếp case" và được chọn case ở cột "Xếp vào case". Trong từng case **không có** ô thêm học viên.
+- Truy vết: `add-session-form.test.tsx` `[ASF-CASE]` · `lib/trial/thanh-khung-gio.test.ts` · `lib/trial/khung-gio-mo-lop.test.ts` · **có job CI** (`Unit tests`).
+
+**US-TRIAL-21** · Là **Sale**, tôi muốn **gỡ khách của mình khỏi một case mà khách vẫn còn trong lớp** để **dời khách sang case khác mà không phải xếp lại từ đầu**.
+- Ưu tiên: P0 · Loại: FR · Truy vết quyết định: QĐ-C9
+- AC1: Given bé ở case `18:00–19:00` của lớp theo khung, When chủ lead bấm "Gỡ khỏi case", Then bé hiện ở khối **"Chưa xếp case"**, vẫn trong lớp; giáo viên case cũ nhận thông báo; hồ sơ lead có dòng lịch sử "Gỡ khỏi case trải nghiệm".
+- AC2: Given bé đang ở một case **còn sống**, When gọi thẳng "gỡ khỏi lớp", Then **bị từ chối**, câu lỗi chỉ bước kế tiếp (*"gỡ bé khỏi case trước (bé về "Chưa xếp case"), rồi mới gỡ khỏi lớp"*).
+- AC3: Given bé ở khối "Chưa xếp case", When chủ lead bấm "Gỡ khỏi lớp", Then bé rời lớp.
+- AC4: Given bé của **Sale khác**, Then nút "Gỡ khỏi case" **hiện, khoá, nói lý do** kèm tên Sale phụ trách; gọi thẳng server cũng bị từ chối với cùng câu đó.
+- AC5: Given lớp **cũ**, When gỡ bé khỏi buổi riêng, Then bé về **học cả lớp** (nghĩa 28/08).
+- Truy vết: R7 `tests/e2e/r7/trial-case-gates.spec.ts` `[TCG-13]` `[TCG-15]` · lưới ghim `app/(admin)/admin/lop-trial/_lib/cong-case.test.ts` `[CC-07]` `[CC-09]` · **có job CI** (`E2E Phase R7`, `Unit tests`).
+
+**US-TRIAL-22** · Là **Quản lý cơ sở**, tôi muốn **Sale không điểm danh, không bấm "Hoàn tất" case của Sale khác** để **mỗi case có đúng một người chịu trách nhiệm về số buổi đã dự**.
+- Ưu tiên: P0 · Loại: BR · Truy vết quyết định: QĐ-C7
+- AC1: Given Sale 1 mở case của Sale 2, Then lưới điểm danh **chỉ đọc**, không có nút "Hoàn tất", và có dòng lý do.
+- AC2: Given Sale 1 gọi thẳng server điểm danh / hoàn tất case của Sale 2, Then bị từ chối với cùng lý do.
+- AC3: Given Quản lý cơ sở / Đào tạo, Then điểm danh + hoàn tất được **mọi** case.
+- AC4: Given lớp **cũ**, Then hành vi điểm danh **không đổi** (mọi người có `trials:manage` vẫn điểm danh được).
+- Truy vết: `lib/trial/quyen-case.test.ts` `[QC-07]` `[QC-07c]` · lưới ghim `[CC-08]` · **có job CI**.
+
+**US-TRIAL-23** · Là **Sale**, tôi muốn **ô xếp lớp ở hồ sơ lead chỉ đưa khách vào lớp** để **việc chọn case làm ở màn lớp, nơi thấy được mọi case trong khung**.
+- Ưu tiên: P1 · Loại: FR · Truy vết quyết định: QĐ-C8
+- AC1: Given lớp theo khung, When Sale xếp con vào lớp từ hồ sơ lead, Then **không có ô chọn case**; màn nói trước bé sẽ vào "Chưa xếp case"; sau khi xếp, hồ sơ in *"chưa xếp case · mở màn lớp để xếp"* kèm link.
+- AC2: Given bé **đã** ở chính lớp đó, Then nút xếp khoá, thay bằng link "Mở màn lớp để xếp / đổi case".
+- Truy vết: `app/(admin)/admin/leads/[id]/_components/trial-enroll-widget.tsx` — **chưa có test tự động** cho widget này; nghiệm thu tay trên seed UAT.
+
+### 9.5 Tác động dữ liệu
+
+Hai migration ở lượt 1, **cả hai chỉ `ADD COLUMN`**, không backfill:
+
+| Migration | Cột | Vì sao |
+|---|---|---|
+| `20260923100000_trial_session_created_by` | `TrialClassSession.createdById` (nullable) | Biết **ai mở case** — nền của QĐ-C5 và QĐ-C7. Case tạo trước 23/09 mang `NULL` ⇒ không rõ chủ ⇒ chỉ Quản lý sửa / xoá / điểm danh |
+| `20260923110000_trial_class_theo_khung` | `TrialClassV2.theoKhung` (mặc định `FALSE`) | Phân loại lớp **tường minh**. Suy từ "có giờ" là sai: `startTime`/`endTime` NOT NULL từ 15/06 tới 28/08, nên lớp cũ vẫn mang giờ cấp lớp — bản vá đầu từng đổi nghĩa bé `NULL` của 5 bé đang học cả lớp trên lớp UAT dựng giống prod |
+
+Lượt 2 **không thêm migration**.
+
+### 9.6 Chưa chốt / để ngỏ (mặc định do dev đặt — chờ chủ dự án xác nhận)
+
+| # | Điểm | Mặc định đang chạy | Owner | Hạn |
+|---|---|---|---|---|
+| **Q-C1** | Bé **đã được điểm danh** ở một case (lớp theo khung) thì có gỡ khỏi case được không? | **Không** — nút khoá kèm lý do. Gỡ rồi xếp sang case khác điểm danh lại là **đếm trùng** buổi đã dự | Chủ dự án | trước khi nghiệm thu |
+| **Q-C2** | Case tạo **trước 23/09** (không rõ người mở) — ai điểm danh? | Chỉ QL cơ sở / Đào tạo / Quản trị | Chủ dự án | trước khi nghiệm thu |
+| **Q-C3** | Gỡ khỏi case có cần báo **phụ huynh** không? | **Không** báo PH; chỉ báo GV case cũ + ghi lịch sử lead | Chủ dự án | — |

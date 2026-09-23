@@ -129,7 +129,7 @@ function phang(o: Record<string, unknown>): Record<string, unknown> {
 //                                     ấy có MỘT ghi danh cũ mang `leadChildId`.
 //
 // ⚠️ TUYỆT ĐỐI KHÔNG "vá" khoảng trống trên bằng cách set `leadChildId` cho ghi danh MỚI.
-// Cột đó là đầu vào của báo cáo trial (`/bao-cao/trial`) và của hoa hồng giáo viên dạy
+// Cột đó là đầu vào của báo cáo trial cũ (`/bao-cao/trial`, gỡ 23/09/2026) và của hoa hồng giáo viên dạy
 // Trial (`lib/crm/trial-teacher-commission.ts` tính trên TỪNG ghi danh). Gán thêm là thổi
 // phồng báo cáo và trả hoa hồng cho một ghi danh thứ hai. Ở đây chỉ ĐỌC.
 

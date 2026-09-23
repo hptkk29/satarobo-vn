@@ -32,16 +32,18 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createLopTrialClassAction } from "../_actions";
-import { tenLopTrial } from "@/lib/trial/lop-moi";
+import { tenLopTrialTheoNgay } from "@/lib/trial/lop-moi";
 import {
-  keKhung,
   khungChoNgay,
+  kiemKhungLop,
   TEN_THU,
   THU_KHOA,
   type CauHinhKhung,
 } from "@/lib/trial/khung-gio-mo-lop";
 import { vnWeekday } from "@/lib/time/vn";
+import { CalendarDays } from "lucide-react";
 import type { Option } from "../_lib/types";
+import { MucForm, OKhungGio, O_NHAP, ngayVn } from "./khung-form-mo-lop";
 
 export function CreateForm({
   centers,
@@ -95,19 +97,40 @@ export function CreateForm({
   const khungHopLe = docKhung?.ok ? docKhung.giaTri : [];
   const tenThu = mocNgay ? (TEN_THU[THU_KHOA[vnWeekday(mocNgay)]!] ?? "") : "";
 
-  // Khung đang chọn — mặc định khung ĐẦU TIÊN của ngày đó. `null` = ngày không mở.
+  // Khung đang chọn — mặc định khung cấu hình ĐẦU TIÊN của ngày đó, gõ tự do được
+  // (chủ dự án 23/09: "khung giờ làm tuỳ chọn linh hoạt"). `gio = null` = chưa sửa.
+  //
+  // ⚠️ Bản trước lặng lẽ THAY giờ không hợp lệ bằng khung đầu tiên: người dùng gõ một đằng,
+  // lớp tạo ra một nẻo. Nay giữ nguyên giờ đã gõ và NÓI lý do (`loiGio`), nút tạo khoá.
   const [gio, setGio] = useState<{ startTime: string; endTime: string } | null>(null);
-  const khungDung =
-    gio && khungHopLe.some((k) => k.startTime <= gio.startTime && gio.endTime <= k.endTime)
-      ? gio
-      : (khungHopLe[0] ?? null);
+  const gioChon = gio ?? khungHopLe[0] ?? { startTime: "", endTime: "" };
+  const kiemGio =
+    khungHopLe.length > 0 && gioChon.startTime && gioChon.endTime
+      ? kiemKhungLop({
+          khungHopLe,
+          startTime: gioChon.startTime,
+          endTime: gioChon.endTime,
+          tenThu: tenThu || "Ngày này",
+        })
+      : null;
+  const khungDung = kiemGio?.ok ? gioChon : null;
+  const loiGio =
+    khungHopLe.length === 0
+      ? null
+      : !gioChon.startTime || !gioChon.endTime
+        ? "Nhập đủ giờ bắt đầu và giờ kết thúc."
+        : kiemGio && !kiemGio.ok
+          ? kiemGio.loi
+          : null;
 
   const center = centers.find((c) => c.id === centerId);
   // Chỉ XEM TRƯỚC phần mã cơ sở: số thứ tự do server cấp trong transaction
   // (cùng bộ đếm với mã lớp), client đoán số là chắc chắn có lúc đoán sai.
   // Tên xem trước KHÔNG còn mang mã khoá (`CS1-Lớp trial …` thay vì `CS1-sata4-Lớp trial …`):
   // ô chọn khoá đã gỡ theo chốt 22/09 vòng 2 — xem lý do ở khối chú thích đầu tệp.
-  const xemTruocTen = center ? tenLopTrial(center.code ?? center.name, null, 0) : "";
+  // 23/09 — tên theo NGÀY ("CS1-Lớp trial 23/09/2026"), đúng chuỗi server sẽ sinh
+  // (`createTrialClass` → `tenLopTrialTheoNgay`). Chưa chọn ngày thì chưa có tên.
+  const xemTruocTen = center && ngay ? tenLopTrialTheoNgay(center.code ?? center.name, null, ngay) : "";
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -121,9 +144,10 @@ export function CreateForm({
     }
     if (!khungDung) {
       toast.error(
-        docKhung && !docKhung.ok
-          ? docKhung.loi
-          : `${tenThu} không mở lớp trải nghiệm — chọn ngày khác hoặc sửa ở Cấu hình vận hành`,
+        loiGio ??
+          (docKhung && !docKhung.ok
+            ? docKhung.loi
+            : `${tenThu} không mở lớp trải nghiệm — chọn ngày khác hoặc sửa ở Cấu hình vận hành`),
       );
       return;
     }
@@ -147,133 +171,163 @@ export function CreateForm({
     });
   }
 
+  const coSoDangChon = centers.find((c) => c.id === centerId);
+
   return (
     <form
       onSubmit={onSubmit}
-      className="max-w-xl space-y-4 rounded-xl border border-border bg-card p-4"
+      className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start 2xl:grid-cols-[minmax(0,1fr)_24rem]"
     >
-      <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-        Tên lớp
-        <input
-          type="text"
-          value={tenTuGo ?? (xemTruocTen ? xemTruocTen.replace(/ 0$/, " …") : "")}
-          onChange={(e) => setTenTuGo(e.target.value)}
-          maxLength={120}
-          disabled={pending}
-          placeholder="Để trống để hệ thống tự đặt theo quy ước"
-          aria-label="Tên lớp"
-          className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground disabled:opacity-50"
-        />
-        <span className="text-[11px]">
-          {tenTuGo === null ? (
-            <>
-              Đang theo quy ước <strong>Cơ sở-Lớp trial số</strong>; số thứ tự do hệ
-              thống cấp khi lưu. Gõ vào ô trên để tự đặt tên khác.
-            </>
-          ) : (
-            <>
-              Bạn đang tự đặt tên.{" "}
-              <button
-                type="button"
-                onClick={() => setTenTuGo(null)}
-                className="underline underline-offset-2 hover:no-underline"
-              >
-                Dùng lại tên theo quy ước
-              </button>
-            </>
-          )}
-        </span>
-      </label>
-
-      {/* ── NGÀY + KHUNG GIỜ (22/09/2026) ──────────────────────────────────────────────
-          Chủ dự án: "Tạo lớp Trial theo ngày, thứ, và khung thời gian có GV đi làm".
-          Ô chọn khung dựng từ CHÍNH cấu hình mà server sẽ kiểm, nên không bao giờ bày
-          ra một khung rồi bị server từ chối. */}
-      <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-        Ngày mở lớp *
-        <input
-          type="date"
-          value={ngay}
-          onChange={(e) => {
-            setNgay(e.target.value);
-            // Đổi ngày ⇒ bỏ khung đã chọn: khung của thứ 3 không có nghĩa gì ở thứ 7, và
-            // giữ lại là để người dùng lưu một khung mà server sẽ từ chối.
-            setGio(null);
-          }}
-          disabled={pending}
-          required
-          aria-label="Ngày mở lớp"
-          className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground disabled:opacity-50"
-        />
-        {tenThu ? <span className="text-[11px]">{tenThu}</span> : null}
-      </label>
-
-      <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-        Khung giờ *
-        {khungHopLe.length > 0 ? (
+      <div className="min-w-0 divide-y divide-border rounded-xl border border-border bg-card">
+        <MucForm tieuDe="Cơ sở" moTa="Lớp thuộc cơ sở nào — Sale của cơ sở đó sẽ thấy lớp.">
           <select
-            value={khungDung ? `${khungDung.startTime}-${khungDung.endTime}` : ""}
-            onChange={(e) => {
-              const [bd, kt] = e.target.value.split("-");
-              setGio(bd && kt ? { startTime: bd, endTime: kt } : null);
-            }}
+            value={centerId}
+            onChange={(e) => setCenterId(e.target.value)}
             disabled={pending}
-            aria-label="Khung giờ"
-            className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground disabled:opacity-50"
+            required
+            aria-label="Cơ sở"
+            className={`${O_NHAP} w-full max-w-sm`}
           >
-            {khungHopLe.map((k) => (
-              <option key={`${k.startTime}-${k.endTime}`} value={`${k.startTime}-${k.endTime}`}>
-                {k.startTime}–{k.endTime}
+            {centers.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
               </option>
             ))}
           </select>
-        ) : (
-          <span
-            role="alert"
-            className="rounded-lg border border-state-warning-soft bg-state-warning-soft px-3 py-2 text-xs text-state-warning-ink"
-          >
-            {docKhung && !docKhung.ok
-              ? docKhung.loi
-              : `${tenThu || "Ngày này"} không mở lớp trải nghiệm. Chọn ngày khác, hoặc sửa khung giờ của thứ này ở Cấu hình vận hành → tab "Lớp & giáo viên".`}
-          </span>
-        )}
-        {khungHopLe.length > 0 ? (
-          <span className="text-[11px]">
-            {tenThu} mở {keKhung(khungHopLe)}. Sale thêm case trong lớp này chỉ chọn được
-            giờ nằm trong khung đã chọn.
-          </span>
-        ) : null}
-      </label>
+        </MucForm>
 
-      <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-        Cơ sở *
-        <select
-          value={centerId}
-          onChange={(e) => setCenterId(e.target.value)}
-          disabled={pending}
-          required
-          className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground disabled:opacity-50"
+        {/* ── NGÀY + KHUNG GIỜ (22/09/2026) ────────────────────────────────────────────
+            Chủ dự án: "Tạo lớp Trial theo ngày, thứ, và khung thời gian có GV đi làm".
+            Các khung dựng từ CHÍNH cấu hình mà server sẽ kiểm, nên không bao giờ bày ra
+            một khung rồi bị server từ chối. */}
+        <MucForm
+          tieuDe="Ngày & khung giờ"
+          moTa="Gõ giờ tuỳ ý trong giờ mở của thứ đó, hoặc bấm một khung gợi ý. Sale thêm case chỉ chọn được giờ nằm trong khung lớp."
         >
-          {centers.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-      </label>
+          <label className="flex max-w-xs flex-col gap-1 text-xs text-muted-foreground">
+            <span>
+              Ngày mở lớp{tenThu ? <span className="text-foreground"> · {tenThu}</span> : null}
+            </span>
+            <input
+              type="date"
+              value={ngay}
+              onChange={(e) => {
+                setNgay(e.target.value);
+                // Đổi ngày ⇒ bỏ khung đã chọn: khung của thứ 3 không có nghĩa gì ở thứ 7, và
+                // giữ lại là để người dùng lưu một khung mà server sẽ từ chối.
+                setGio(null);
+              }}
+              disabled={pending}
+              required
+              aria-label="Ngày mở lớp"
+              className={O_NHAP}
+            />
+          </label>
 
-      <button
-        type="submit"
-        disabled={pending}
-        className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark disabled:opacity-50"
-      >
-        {pending ? "Đang tạo…" : "Tạo lớp"}
-      </button>
+          {khungHopLe.length > 0 ? (
+            <OKhungGio
+              startTime={gioChon.startTime}
+              endTime={gioChon.endTime}
+              goiY={khungHopLe}
+              onDoi={setGio}
+              disabled={pending}
+              loi={loiGio}
+              nhan="của lớp"
+            />
+          ) : (
+            <p
+              role="alert"
+              className="rounded-lg bg-state-warning-soft px-3 py-2 text-xs text-state-warning-ink"
+            >
+              {docKhung && !docKhung.ok
+                ? docKhung.loi
+                : `${tenThu || "Ngày này"} không mở lớp trải nghiệm. Chọn ngày khác, hoặc sửa khung giờ của thứ này ở Cấu hình vận hành → tab "Lớp & giáo viên".`}
+            </p>
+          )}
+        </MucForm>
 
-      <p className="text-xs text-muted-foreground">
-        Tạo xong nhớ <strong>thêm buổi</strong> (ngày, giờ, phòng, giáo viên) ở trang chi
-        tiết lớp — lớp chưa có buổi thì giáo viên không thấy gì trên lịch dạy.
-      </p>
+        <MucForm
+          tieuDe="Tên lớp"
+          moTa="Không bắt buộc. Để nguyên là hệ thống đặt theo cơ sở + ngày lớp."
+        >
+          <input
+            type="text"
+            value={tenTuGo ?? xemTruocTen}
+            onChange={(e) => setTenTuGo(e.target.value)}
+            maxLength={120}
+            disabled={pending}
+            placeholder="Để trống để hệ thống tự đặt theo quy ước"
+            aria-label="Tên lớp"
+            className={`${O_NHAP} w-full max-w-md`}
+          />
+          <p className="text-xs text-muted-foreground">
+            {tenTuGo === null ? (
+              <>
+                Đang theo quy ước <strong className="font-semibold">Cơ sở-Lớp trial ngày</strong>.
+              </>
+            ) : (
+              <>
+                Bạn đang tự đặt tên.{" "}
+                <button
+                  type="button"
+                  onClick={() => setTenTuGo(null)}
+                  className="font-medium text-primary underline underline-offset-2 hover:no-underline"
+                >
+                  Dùng lại tên theo quy ước
+                </button>
+              </>
+            )}
+          </p>
+        </MucForm>
+      </div>
+
+      {/* ── Xem trước + nút tạo. Đứng yên khi cuộn ở màn rộng: đây là chỗ quyết định. */}
+      <aside className="space-y-4 rounded-xl border border-border bg-card p-5 lg:sticky lg:top-4">
+        <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          <CalendarDays className="h-4 w-4 text-muted-foreground" aria-hidden />
+          Sẽ tạo
+        </div>
+        <dl aria-live="polite" className="space-y-2.5 text-sm">
+          <div>
+            <dt className="text-xs text-muted-foreground">Lớp</dt>
+            <dd className="break-words font-medium text-foreground">
+              {tenTuGo?.trim() || (xemTruocTen || "—")}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Ngày</dt>
+            <dd className="font-medium text-foreground tabular-nums">
+              {ngay ? `${tenThu ? `${tenThu}, ` : ""}${ngayVn(ngay)}` : "—"}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Khung giờ</dt>
+            <dd className="font-medium text-foreground tabular-nums">
+              {khungDung
+                ? `${khungDung.startTime}–${khungDung.endTime}`
+                : khungHopLe.length === 0
+                  ? "Ngày này không mở lớp"
+                  : "Giờ chưa hợp lệ"}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Cơ sở</dt>
+            <dd className="break-words font-medium text-foreground">{coSoDangChon?.name ?? "—"}</dd>
+          </div>
+        </dl>
+
+        <button
+          type="submit"
+          disabled={pending || !khungDung}
+          className="h-10 w-full rounded-lg bg-primary px-4 text-sm font-semibold text-white transition-colors duration-150 hover:bg-primary-dark pointer-coarse:h-11 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {pending ? "Đang tạo…" : "Tạo lớp"}
+        </button>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Tạo xong, Sale vào lớp để thêm <strong className="font-semibold">case</strong> (giờ,
+          phòng, giáo viên) trong khung giờ này.
+        </p>
+      </aside>
     </form>
   );
 }

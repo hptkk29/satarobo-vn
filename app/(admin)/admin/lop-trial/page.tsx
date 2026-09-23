@@ -22,7 +22,6 @@ export default async function LopTrialPage({
   if (!(await checkPermission("trials:view"))) redirect("/dashboard");
 
   const { status, q } = await searchParams;
-  const canManage = await checkPermission("trials:manage");
   // 22/09/2026 — MỞ LỚP là khoá RIÊNG: Sale có `trials:manage` (thêm case, xếp học viên)
   // nhưng KHÔNG được mở lớp. Giấu nút theo đúng khoá mà trang `/lop-trial/moi` đang gác
   // — giấu theo khoá khác là nút biến mất với người được phép, hoặc còn đó với người
@@ -69,7 +68,10 @@ export default async function LopTrialPage({
         hidden={{ status }}
       />
 
-      <ClassTable rows={rows} canManage={canManage} />
+      {/* 23/09 — nút "Huỷ lớp" gác bằng khoá MỞ lớp, đúng khoá `cancelLopTrialClassAction`
+          hỏi. Bản trước truyền `trials:manage` — khoá của MỌI Sale — nên Sale thấy nút mà
+          bấm thì bị server từ chối (luật 12). */}
+      <ClassTable rows={rows} canHuyLop={canCreate} />
     </div>
   );
 }

@@ -49,8 +49,9 @@ type TrialClass = {
   /** Lớp theo khung (mô hình case, từ 22/09/2026) hay lớp slot cũ. */
   theoKhung: boolean;
   /**
-   * Các buổi SCHEDULED. Lớp cũ: chỉ để hiển thị (xếp con là học CẢ LỚP, chốt 28/08).
-   * Lớp theo khung: đây là các CASE — BẮT BUỘC chọn một khi xếp (23/09/2026).
+   * Các buổi SCHEDULED — chỉ để hiển thị. Ô này KHÔNG gán buổi/case: lớp cũ = học CẢ
+   * LỚP (chốt 28/08); lớp theo khung = vào "Chưa xếp case", xếp case ở màn lớp (chủ dự
+   * án 23/09/2026).
    */
   sessions: TrialSession[];
 };
@@ -88,8 +89,6 @@ export function TrialEnrollWidget({
       children.filter((c) => c.currentTrial).map((c) => [c.id, c.currentTrial!.classId]),
     ),
   );
-  // Case đã chọn theo từng con — chỉ dùng khi lớp đã chọn là lớp THEO KHUNG.
-  const [pickedCase, setPickedCase] = useState<Record<string, string>>({});
   const lopTheoId = new Map(openClasses.map((cl) => [cl.id, cl]));
 
   function enroll(childId: string, allowOverride: boolean) {
@@ -98,24 +97,18 @@ export function TrialEnrollWidget({
       toast.error("Chọn lớp trải nghiệm trước");
       return;
     }
-    // ~~KHÔNG gửi `sessionId`: xếp con vào lớp là con học TOÀN BỘ buổi của lớp đó (chốt
-    // 28/08).~~ **[ĐẢO 23/09/2026 cho lớp THEO KHUNG]** Một lớp theo khung chứa nhiều
-    // case song song của nhiều Sale; "học toàn bộ buổi" ở đó nghĩa là dự cả case của
-    // người khác. Không gửi case thì bé rơi vào khối "Chưa xếp case" — đo được 23/09:
-    // ô này là nguồn sinh bé "chưa xếp" MỚI mỗi ngày, trong khi banner của chính nó
-    // vẫn in "học toàn bộ buổi của lớp". Lớp CŨ giữ nguyên hành vi 28/08.
-    const lop = lopTheoId.get(trialClassId);
-    const sessionId = lop?.theoKhung ? (pickedCase[childId] ?? "") : "";
-    if (lop?.theoKhung && !sessionId) {
-      toast.error("Lớp này chia theo case — chọn case (giờ) cho bé trước");
-      return;
-    }
+    // KHÔNG gửi `sessionId` — ô này CHỈ xếp con vào LỚP.
+    //
+    // Chủ dự án 23/09/2026: "phần ở trang chi tiết lead chỉ thêm vào lớp, chưa thêm vào
+    // case, phải vào trong lớp để thêm vào case". Nghĩa theo loại lớp
+    // (lib/trial/nghia-null.ts): lớp theo khung ⇒ bé vào khối "Chưa xếp case" và được
+    // xếp case ở màn lớp; lớp cũ ⇒ bé học toàn bộ buổi (chốt 28/08). Một bản trước trong
+    // cùng ngày bắt chọn case ngay tại đây — đã gỡ theo câu chốt này.
     startTransition(async () => {
       const res = await enrollLeadChildLopTrialAction({
         trialClassId,
         leadChildId: childId,
         allowOverride,
-        ...(sessionId ? { sessionId } : {}),
       });
       if (res.ok) {
         toast.success("Đã xếp con vào lớp trải nghiệm");
@@ -249,33 +242,12 @@ export function TrialEnrollWidget({
                         </a>
                       );
                     }
-                    if (lop.sessions.length === 0) {
-                      return (
-                        <span role="note" className="text-xs text-state-warning-ink">
-                          Lớp chưa có case nào —{" "}
-                          <a href={`/lop-trial/${lop.id}`} className="font-semibold underline">
-                            mở lớp để thêm case
-                          </a>
-                        </span>
-                      );
-                    }
+                    // Lớp theo khung, bé chưa ở lớp này: nói trước bé sẽ vào đâu — xếp vào lớp
+                    // ở đây KHÔNG gán case (chủ dự án 23/09).
                     return (
-                      <select
-                        value={pickedCase[c.id] ?? ""}
-                        onChange={(e) =>
-                          setPickedCase((p) => ({ ...p, [c.id]: e.target.value }))
-                        }
-                        disabled={pending}
-                        aria-label={`Chọn case cho ${c.fullName}`}
-                        className="min-w-[9rem] rounded-md border border-border px-2 py-1.5 text-sm disabled:opacity-50"
-                      >
-                        <option value="">— chọn case —</option>
-                        {lop.sessions.map((se) => (
-                          <option key={se.id} value={se.id}>
-                            {se.startTime}–{se.endTime}
-                          </option>
-                        ))}
-                      </select>
+                      <span className="text-xs text-muted-foreground">
+                        Bé vào khối &quot;Chưa xếp case&quot; — xếp case ở màn lớp.
+                      </span>
                     );
                   })()}
                   <button
@@ -284,7 +256,6 @@ export function TrialEnrollWidget({
                     disabled={
                       pending ||
                       !picked[c.id] ||
-                      Boolean(lopTheoId.get(picked[c.id] ?? "")?.theoKhung && !pickedCase[c.id]) ||
                       // Cùng lớp theo khung ⇒ đổi case ở màn lớp (link bên cạnh), không ở đây.
                       Boolean(
                         lopTheoId.get(picked[c.id] ?? "")?.theoKhung &&

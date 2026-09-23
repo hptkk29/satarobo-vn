@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { quyenSuaCase, quyenGoHocVien, quyenXoaCase, quyenDoiGioCase, quyenChuyenCase } from "./quyen-case";
+import { quyenSuaCase, quyenGoHocVien, quyenXoaCase, quyenDoiGioCase, quyenChuyenCase, quyenDiemDanhCase } from "./quyen-case";
 
 const SALE_1 = "user-sale-1";
 const SALE_2 = "user-sale-2";
@@ -182,5 +182,27 @@ describe("[QC-06] chuyển case — cùng luật với gỡ, KHÁC câu chữ", 
     expect(r.lyDo).toContain("Chuyển case");
     expect(r.lyDo).toContain("Trần Thị B");
     expect(r.lyDo).not.toContain("gắn thêm");
+  });
+});
+
+describe("[QC-07] điểm danh / hoàn tất case — chủ dự án chốt 23/09: Sale KHÔNG làm thay Sale khác", () => {
+  it("lớp theo khung: người mở case được, Sale khác KHÔNG", () => {
+    expect(quyenDiemDanhCase({ theoKhung: true, nguoiTaoId: SALE_1, userId: SALE_1, laQuanLy: false }).duoc).toBe(true);
+    const r = quyenDiemDanhCase({ theoKhung: true, nguoiTaoId: SALE_2, userId: SALE_1, laQuanLy: false });
+    expect(r.duoc).toBe(false);
+    if (r.duoc) throw new Error("phải từ chối");
+    expect(r.lyDo).toContain("Sale khác mở");
+  });
+  it("Quản lý điểm danh được mọi case", () => {
+    expect(quyenDiemDanhCase({ theoKhung: true, nguoiTaoId: SALE_2, userId: SALE_1, laQuanLy: true }).duoc).toBe(true);
+  });
+  it("[QC-07c] lớp CŨ giữ nguyên: mọi người có quyền điểm danh vẫn điểm danh được", () => {
+    // Buổi của lớp cũ đều createdById = NULL. Áp luật "chỉ người tạo" ở đây là khoá
+    // điểm danh của MỌI Sale trên toàn bộ lớp đang chạy trên prod.
+    expect(quyenDiemDanhCase({ theoKhung: false, nguoiTaoId: null, userId: SALE_1, laQuanLy: false }).duoc).toBe(true);
+    expect(quyenDiemDanhCase({ theoKhung: false, nguoiTaoId: SALE_2, userId: SALE_1, laQuanLy: false }).duoc).toBe(true);
+  });
+  it("case CŨ không rõ người mở ở lớp theo khung ⇒ chỉ Quản lý", () => {
+    expect(quyenDiemDanhCase({ theoKhung: true, nguoiTaoId: null, userId: SALE_1, laQuanLy: false }).duoc).toBe(false);
   });
 });

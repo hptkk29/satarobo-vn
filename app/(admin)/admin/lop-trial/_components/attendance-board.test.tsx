@@ -102,6 +102,7 @@ function buoi(over: Partial<SessionRow> & { id: string; seq: number }): SessionR
     quyenSua: { duoc: true },
     quyenXoa: { duoc: true },
     quyenDoiGio: { duoc: true },
+    quyenDiemDanh: { duoc: true },
     attendance: {},
     danhGia: {},
     ...over,

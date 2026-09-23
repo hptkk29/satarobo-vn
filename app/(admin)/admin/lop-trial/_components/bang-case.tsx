@@ -29,7 +29,11 @@ import { AttendanceBoard } from "./attendance-board";
 import { EnrollPanel } from "./enroll-panel";
 import { ThanhKhungGio } from "./thanh-khung-gio";
 import { AddSessionForm } from "./add-session-form";
-import { unenrollLeadChildLopTrialAction, xepCaseHocVienAction } from "../_actions";
+import {
+  goKhoiCaseAction,
+  unenrollLeadChildLopTrialAction,
+  xepCaseHocVienAction,
+} from "../_actions";
 import type { CheDoChonGv } from "../_lib/che-do-gv";
 import type { EnrollmentRow, Option, RoomOption, SessionRow } from "../_lib/types";
 
@@ -178,6 +182,31 @@ export function BangCase({
     });
   }
 
+  /**
+   * Gỡ bé khỏi CASE — bé vẫn ở trong lớp (chủ dự án 23/09: "gỡ khỏi case thì phải về chưa
+   * xếp case, rồi từ chưa xếp case mới gỡ khỏi lớp"). Gỡ khỏi LỚP chỉ còn ở khối "Chưa xếp
+   * case" / "Học cả lớp".
+   */
+  function goCase(e: EnrollmentRow) {
+    if (!e.quyenGo.duoc) {
+      toast.error(e.quyenGo.lyDo);
+      return;
+    }
+    startTransition(async () => {
+      const res = await goKhoiCaseAction({ trialClassId, trialEnrollmentId: e.id });
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success(
+        lopTheoKhung
+          ? `Đã gỡ ${e.childName} khỏi case — bé về "Chưa xếp case"`
+          : `Đã gỡ ${e.childName} khỏi buổi — bé học cả lớp`,
+      );
+      router.refresh();
+    });
+  }
+
   const caseConSong = sessions.filter((s) => s.status !== "CANCELLED");
 
   return (
@@ -239,6 +268,9 @@ export function BangCase({
                 cheDoChonGv={cheDoChonGv}
                 locGvTheoCa={locGvTheoCa}
                 soGvMienLoc={soGvMienLoc}
+                // Lớp theo khung chỉ có MỘT ngày ⇒ không có ô ngày (chủ dự án 23/09).
+                ngayCoDinh={lopTheoKhung ? ngayLop : null}
+                khung={khungLop}
               />
             </div>
           )}
@@ -246,15 +278,18 @@ export function BangCase({
       )}
 
       {/* ── Chưa xếp case ─────────────────────────────────────────────────────────── */}
-      {chuaXep.length > 0 && (
-        <section className="rounded-xl border border-state-warning ring-1 ring-state-warning-soft">
+      {/* Lớp theo khung: khối này LUÔN hiện — nó là cửa vào lớp ("Thêm học viên vào lớp")
+          và là bước bắt buộc trước khi gỡ khỏi lớp. Lớp cũ: chỉ hiện khi có bé trỏ vào buổi
+          đã huỷ. */}
+      {(lopTheoKhung || chuaXep.length > 0) && (
+        <section className="overflow-hidden rounded-xl border border-state-warning ring-1 ring-state-warning-soft">
           <div className="border-b border-border px-5 py-3.5">
             <h2 className="text-sm font-semibold text-foreground">
               Chưa xếp case ({chuaXep.length})
             </h2>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Các bé đã ở trong lớp nhưng chưa thuộc case nào, nên chưa ai điểm danh được.
-              Chọn case để xếp vào.
+              Bé thêm vào lớp nằm ở đây cho tới khi được xếp vào case — chưa thuộc case nào
+              thì chưa ai điểm danh được. Muốn gỡ bé khỏi lớp thì gỡ ở đây.
             </p>
           </div>
           {/* Bo góc ở vỏ NGOÀI, cuộn ở lớp TRONG: một thẻ vừa `overflow-x-auto` vừa
@@ -269,6 +304,9 @@ export function BangCase({
               ⚠️ Cổng `bang-coverage` đếm theo TỆP chứ không theo từng `<table>`, nên
               một thẻ `<PhanTrangBang>` ở đây làm cả tệp qua cửa. Nói ra để người sau
               biết bảng kia KHÔNG được cổng nào canh, chứ không phải nó đã qua. */}
+          {chuaXep.length === 0 ? (
+            <p className="px-5 py-4 text-sm text-muted-foreground">Chưa có bé nào chờ xếp case.</p>
+          ) : (
           <PhanTrangBang khoaGhiNho="lop-trial-chua-xep-case" tenDonVi="học viên">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -336,6 +374,26 @@ export function BangCase({
             </table>
           </div>
           </PhanTrangBang>
+          )}
+          {lopTheoKhung && (
+            <>
+          {canManage && !lopDaKetThuc && (
+              <div className="border-t border-border p-4">
+                <EnrollPanel
+                  trialClassId={trialClassId}
+                  sessionId={null}
+                  canManage={canManage}
+                  canOverride={canOverride}
+                  full={full}
+                  maxSessions={maxSessions}
+                  nhan="Thêm học viên vào lớp"
+                  // Khối "Chưa xếp case": KHÔNG hỏi số buổi (chủ dự án 23/09).
+                  coOSoBuoi={false}
+                />
+              </div>
+            )}
+            </>
+          )}
         </section>
       )}
 
@@ -343,7 +401,7 @@ export function BangCase({
           Chốt 28/08: ở lớp slot cũ, bé xếp vào lớp mà không ghim buổi là học MỌI buổi.
           Bé đó hiện trong bảng điểm danh của từng buổi (như trước), còn ở đây liệt kê
           MỘT lần để gỡ — thay vì N nút gỡ cho cùng một bé ở N buổi. */}
-      {hocCaLop.length > 0 && (
+      {!lopTheoKhung && (
         <section className="overflow-hidden rounded-xl border border-border bg-card">
           <div className="border-b border-border px-5 py-3.5">
             <h2 className="text-sm font-semibold text-foreground">
@@ -354,6 +412,9 @@ export function BangCase({
               và có mặt trong bảng điểm danh của từng buổi.
             </p>
           </div>
+          {hocCaLop.length === 0 ? (
+            <p className="px-5 py-4 text-sm text-muted-foreground">Chưa có bé nào học cả lớp.</p>
+          ) : (
           <PhanTrangBang khoaGhiNho="lop-trial-hoc-ca-lop" tenDonVi="học viên">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -390,6 +451,21 @@ export function BangCase({
             </table>
           </div>
           </PhanTrangBang>
+          )}
+          {canManage && !lopDaKetThuc && (
+            <div className="border-t border-border p-4">
+              <EnrollPanel
+                trialClassId={trialClassId}
+                sessionId={null}
+                canManage={canManage}
+                canOverride={canOverride}
+                full={full}
+                maxSessions={maxSessions}
+                nhan="Thêm học viên vào lớp"
+                coOSoBuoi
+              />
+            </div>
+          )}
         </section>
       )}
 
@@ -422,14 +498,11 @@ export function BangCase({
               rooms={rooms}
               canMark={canMark}
               canManage={canManage}
-              canOverride={canOverride}
-              full={full}
-              maxSessions={maxSessions}
               cheDoChonGv={cheDoChonGv}
               locGvTheoCa={locGvTheoCa}
               soGvMienLoc={soGvMienLoc}
               pending={pending}
-              onGo={go}
+              onGoCase={goCase}
               lopTheoKhung={lopTheoKhung}
               ngayLop={ngayLop}
               khungLop={khungLop}
@@ -476,19 +549,26 @@ function NutGo({
   row,
   pending,
   onGo,
+  nhan = "Gỡ khỏi lớp",
+  khoaThem = null,
 }: {
   row: EnrollmentRow;
   pending: boolean;
   onGo: () => void;
+  /** Việc nút làm — "Gỡ khỏi lớp" (khối chưa xếp / học cả lớp) hay "Gỡ khỏi case". */
+  nhan?: string;
+  /** Một lý do khoá THÊM ngoài quyền (vd bé đã điểm danh ở case này). */
+  khoaThem?: string | null;
 }): JSX.Element {
-  const duoc = row.quyenGo.duoc;
+  const duoc = row.quyenGo.duoc && !khoaThem;
+  const lyDo = khoaThem ?? (row.quyenGo.duoc ? "" : row.quyenGo.lyDo);
   return (
     <button
       type="button"
       onClick={onGo}
       disabled={pending || !duoc}
-      title={duoc ? `Gỡ ${row.childName} khỏi lớp` : row.quyenGo.lyDo}
-      aria-label={duoc ? `Gỡ ${row.childName} khỏi lớp` : `Không gỡ được: ${row.quyenGo.lyDo}`}
+      title={duoc ? `${nhan}: ${row.childName}` : lyDo}
+      aria-label={duoc ? `${nhan}: ${row.childName}` : `Không gỡ được: ${lyDo}`}
       className={[
         "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold ring-1 transition-colors",
         duoc
@@ -497,7 +577,7 @@ function NutGo({
       ].join(" ")}
     >
       {duoc ? <UserMinus className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
-      Gỡ
+      {nhan}
     </button>
   );
 }
@@ -516,14 +596,11 @@ function TheCase({
   rooms,
   canMark,
   canManage,
-  canOverride,
-  full,
-  maxSessions,
   cheDoChonGv,
   locGvTheoCa,
   soGvMienLoc,
   pending,
-  onGo,
+  onGoCase,
   lopTheoKhung,
   ngayLop,
   khungLop,
@@ -542,14 +619,12 @@ function TheCase({
   rooms: RoomOption[];
   canMark: boolean;
   canManage: boolean;
-  canOverride: boolean;
-  full: boolean;
-  maxSessions: number;
   cheDoChonGv: CheDoChonGv;
   locGvTheoCa: boolean;
   soGvMienLoc: number;
   pending: boolean;
-  onGo: (e: EnrollmentRow) => void;
+  /** Gỡ bé khỏi CASE này (bé về "Chưa xếp case"), KHÔNG gỡ khỏi lớp. */
+  onGoCase: (e: EnrollmentRow) => void;
   lopTheoKhung: boolean;
   ngayLop: string | null;
   khungLop: { startTime: string; endTime: string } | null;
@@ -649,7 +724,7 @@ function TheCase({
                       <th className="whitespace-nowrap px-4 py-2.5 font-semibold">Sale</th>
                       <th className="whitespace-nowrap px-4 py-2.5 font-semibold">Trạng thái</th>
                       <th className="whitespace-nowrap px-4 py-2.5 text-right font-semibold">
-                        Gỡ khỏi lớp
+                        Gỡ khỏi case
                       </th>
                     </tr>
                   </thead>
@@ -669,7 +744,19 @@ function TheCase({
                           <NhanTrangThaiGhiDanh status={e.status} />
                         </td>
                         <td className="whitespace-nowrap px-4 py-2.5 text-right">
-                          <NutGo row={e} pending={pending} onGo={() => onGo(e)} />
+                          <NutGo
+                            row={e}
+                            pending={pending}
+                            onGo={() => onGoCase(e)}
+                            nhan="Gỡ khỏi case"
+                            // Lớp theo khung: bé đã điểm danh ở case này thì KHÔNG gỡ khỏi case
+                            // (server cũng chặn — `goHocVienKhoiCase`). Nói trước trên nút.
+                            khoaThem={
+                              lopTheoKhung && s.attendance[e.id]
+                                ? "Bé đã được điểm danh ở case này — không gỡ khỏi case được (xếp sang case khác rồi điểm danh lại là tính trùng buổi đã dự)."
+                                : null
+                            }
+                          />
                         </td>
                       </tr>
                     ))}
@@ -679,27 +766,15 @@ function TheCase({
             </div>
           )}
 
-          {/* 23/09 — chỉ case SCHEDULED của lớp CHƯA kết thúc (khớp cổng server ở
-              `enrollLeadChild`). Bản cũ ẩn mỗi case đã huỷ: case đã xong vẫn nhận bé, lớp
-              đã huỷ vẫn nhận bé. */}
-          {s.status === "SCHEDULED" && !lopDaKetThuc && canManage && (
-            <div className="rounded-lg border border-dashed border-border p-3">
-              <EnrollPanel
-                trialClassId={trialClassId}
-                sessionId={s.id}
-                canManage={canManage}
-                canOverride={canOverride}
-                full={full}
-                maxSessions={maxSessions}
-                nhan={`Thêm học viên vào case ${s.startTime}–${s.endTime}`}
-              />
-              {trongCase.length === 0 && (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Case này chưa có học viên nào. Chỉ tìm được con thuộc lead bạn phụ trách —
-                  khách của Sale khác thì chính họ xếp vào đây.
-                </p>
-              )}
-            </div>
+          {/* 23/09 (tối) — chủ dự án bỏ ô "Thêm học viên vào case" trong từng case. Bé vào
+              lớp qua khối "Chưa xếp case" rồi CHỌN case ở đó — một cửa vào duy nhất. Case
+              trống thì chỉ đường, không để một khung rỗng không có gì để bấm. */}
+          {s.status === "SCHEDULED" && !lopDaKetThuc && trongCase.length === 0 && (
+            <p className="text-xs text-muted-foreground">
+              {lopTheoKhung
+                ? 'Case này chưa có học viên nào — thêm bé vào lớp ở khối "Chưa xếp case" rồi chọn case này.'
+                : 'Buổi này chưa có học viên xếp riêng — bé "Học cả lớp" vẫn học mọi buổi.'}
+            </p>
           )}
         </div>
       )}
