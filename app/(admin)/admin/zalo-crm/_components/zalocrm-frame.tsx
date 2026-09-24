@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { xuLyThongDiep } from "../_lib/thong-diep";
 
@@ -19,6 +19,17 @@ import { xuLyThongDiep } from "../_lib/thong-diep";
  * ⚠️ Ở GĐ0 khung sẽ TRẮNG vì fork chưa nới `frame-ancestors` (việc F3, repo khác). Đó là
  * kết quả đúng — đừng "sửa" bằng cách bỏ iframe hay tắt CSP của Sata.
  */
+/**
+ * Trần số lần dựng lại trang theo yêu cầu của khung, TÍNH TRÊN MỘT LƯỢT MOUNT.
+ *
+ * 🔴 BẮT BUỘC có, không phải phòng xa: nếu vì lý do nào đó vé mới vẫn bị bên kia từ
+ * chối, hai bên sẽ đá qua đá lại — khung xin vé, Sata ký vé, khung lại xin — và trang
+ * quay vòng vô tận, ký vé liên tục. Một lần là đủ cho ca thật (phiên cũ đã bị dọn, vé
+ * mới chắc chắn mở được phiên mới); lần thứ hai nghĩa là giả định sai, và lúc đó ĐỨNG
+ * YÊN với màn lỗi của khung vẫn tốt hơn một vòng lặp.
+ */
+const TRAN_XIN_VE = 1;
+
 export function ZaloCrmFrame({
   src,
   nguonGoc,
@@ -31,11 +42,23 @@ export function ZaloCrmFrame({
   tenCoSo: string;
 }) {
   const router = useRouter();
+  const soLanXinVe = useRef(0);
 
   useEffect(() => {
     function nghe(event: MessageEvent) {
       const kq = xuLyThongDiep(event, nguonGoc);
       if (!kq) return; // sai origin / tin lạ / thiếu trường — im lặng bỏ qua
+
+      if (kq.loai === "xin-ve-moi") {
+        if (soLanXinVe.current >= TRAN_XIN_VE) return;
+        soLanXinVe.current += 1;
+        // `refresh()` chứ không `push()`: trang là `force-dynamic` nên lượt dựng lại ký
+        // một vé MỚI và đổi `src`, mà `key={src}` thì ép iframe dựng lại. `push` cùng
+        // đường dẫn có thể không dựng lại gì cả.
+        router.refresh();
+        return;
+      }
+
       router.push(kq.duongDan);
     }
     window.addEventListener("message", nghe);

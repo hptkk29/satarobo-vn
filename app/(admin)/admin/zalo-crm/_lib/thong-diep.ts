@@ -14,7 +14,21 @@
 
 export type ThongDiepZaloCrm =
   | { loai: "tao-lead"; duongDan: string }
-  | { loai: "mo-lead"; duongDan: string };
+  | { loai: "mo-lead"; duongDan: string }
+  /**
+   * Khung xin một VÉ MỚI: phiên đang mở bên kia thuộc tổ chức KHÁC với vé vừa gửi.
+   *
+   * 🔴 VÌ SAO CẦN — sự cố prod 24/09/2026. Vé SSO nằm trong `src` của iframe. Trình
+   * duyệt tải lại khung bằng `src` CŨ (bfcache, khôi phục tab, F5 trong khung) ⇒ vé bị
+   * phát lại. Bên kia trước đây cứ thế đi tiếp bằng phiên đang có, KHÔNG kiểm tổ chức —
+   * nên ai từng mở cơ sở A rồi đổi sang B sẽ KẸT Ở A: hộp thư trống, tìm SĐT không ra,
+   * nick của chính mình không thấy. Không một dòng lỗi nào.
+   *
+   * Bên kia nay phát hiện được lệch, nhưng nó KHÔNG tự ký được vé — chỉ Sata ký. Nên nó
+   * dọn phiên cũ rồi gửi tin này; Sata dựng lại trang ⇒ vé mới ⇒ `src` mới ⇒ khung dựng
+   * lại và vào đúng tổ chức. Không cần ai đăng xuất tay.
+   */
+  | { loai: "xin-ve-moi" };
 
 /** SĐT chấp nhận được từ fork: 8–15 chữ số, cho phép một dấu `+` đầu. */
 const KHUON_SDT = /^\+?\d{8,15}$/;
@@ -86,6 +100,10 @@ export function xuLyThongDiep(
     // khác), nên gửi kèm bây giờ chỉ là tham số bị bỏ qua trong im lặng.
     return { loai: "tao-lead", duongDan: `/nhap-khach-hang?${q.toString()}` };
   }
+
+  // Không mang dữ liệu nào: nó chỉ nói "vé vừa rồi không dùng được, ký cho tôi cái
+  // mới". Mọi quyết định vẫn ở phía Sata — tin này KHÔNG chọn cơ sở, KHÔNG đổi tham số.
+  if (tin.type === "sata:xin-ve-moi") return { loai: "xin-ve-moi" };
 
   if (tin.type === "sata:open-lead") {
     const leadId = chuoiSach(tin.leadId, 64);
