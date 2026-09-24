@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { getSettingDef } from "./registry";
+import type { PhamViCoSo } from "./quyen-co-so";
 
 /**
  * NẠP DỮ LIỆU CHO KHỐI "CÀI RIÊNG THEO CƠ SỞ" — PHIÊN H · 22/09/2026.
@@ -79,13 +80,29 @@ export function ghepCaiRieng(
  */
 export async function docCaiRiengTheoCoSo(
   keys: readonly string[],
+  /**
+   * Chỉ bày những cơ sở người xem SỬA ĐƯỢC. BẮT BUỘC, cố ý không mặc định (luật 7).
+   *
+   * ⚠️ Mặc định ở đây nguy hiểm theo chiều NỚI: bỏ quên thì màn bày mọi cơ sở, ô của cơ sở
+   * người ta không quản lý hiện ra MỞ, và lần bấm Lưu nhận "Không có quyền sửa cấu hình cơ
+   * sở này" — một lời hứa suông, đúng luật 12. Trước 24/09 hàm này không có tham số ấy vì
+   * chỉ Quản trị tối cao mở được màn, và họ quản lý mọi cơ sở nên không ai thấy lỗ.
+   */
+  phamVi: PhamViCoSo,
 ): Promise<Record<string, CoSoCauHinhRow[]>> {
   const khoaCoThe = keys.filter((k) => getSettingDef(k)?.centerOverridable);
   if (khoaCoThe.length === 0) return {};
+  // Phạm vi RỖNG là "không cơ sở nào", không phải "không lọc" — fail-closed.
+  if (phamVi !== "TAT_CA" && phamVi.length === 0) return {};
 
   const [coSo, dongRieng] = await Promise.all([
     db.orgUnit.findMany({
-      where: { type: "CENTER", status: "ACTIVE", deletedAt: null },
+      where: {
+        type: "CENTER",
+        status: "ACTIVE",
+        deletedAt: null,
+        ...(phamVi === "TAT_CA" ? {} : { id: { in: [...phamVi] } }),
+      },
       orderBy: [{ code: "asc" }],
       select: { id: true, code: true, name: true },
     }),

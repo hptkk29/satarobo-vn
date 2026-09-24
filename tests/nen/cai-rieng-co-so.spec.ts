@@ -122,7 +122,7 @@ async function demDong(orgUnitId: string): Promise<number> {
 
 /** Hàng của một cơ sở trong map mà giao diện nhận. */
 async function hangCuaCoSo(orgUnitId: string) {
-  const map = await docCaiRiengTheoCoSo([KHOA]);
+  const map = await docCaiRiengTheoCoSo([KHOA], "TAT_CA");
   return (map[KHOA] ?? []).find((c) => c.orgUnitId === orgUnitId);
 }
 
@@ -259,7 +259,7 @@ describe.skipIf(!RUN)("PHIÊN H · ba trạng thái cài riêng theo cơ sở (P
     async () => {
       await datHienTruong({ toanHe: true, rieng: { cs1: false, cs2: true } });
 
-      const map = await docCaiRiengTheoCoSo([KHOA]);
+      const map = await docCaiRiengTheoCoSo([KHOA], "TAT_CA");
       const hang = map[KHOA] ?? [];
       expect(hang.find((c) => c.orgUnitId === W.cs1)?.giaTriRieng).toBe(false);
       expect(hang.find((c) => c.orgUnitId === W.cs2)?.giaTriRieng).toBe(true);
@@ -420,6 +420,55 @@ describe.skipIf(!RUN)("PHIÊN H · ba trạng thái cài riêng theo cơ sở (P
         where: { entityType: "CenterSetting", entityId: `${W.cs1}:${KHOA}` },
       });
       expect(sau).toBe(0);
+    },
+    CASE_TIMEOUT,
+  );
+
+  // ── PHIÊN I · PHẠM VI CƠ SỞ (24/09/2026) ───────────────────────────────────────────
+  //
+  // ⚠️ ĐẶT TRONG CÙNG `describe` CHỨ KHÔNG TÁCH KHỐI MỚI, và đó không phải để gọn: khối
+  // riêng sẽ mượn `W` do `beforeAll` của khối này nạp, tức mỗi ca chỉ xanh khi chạy SAU
+  // khối trên. Đúng lớp lỗi luật 18 — "chạy 1 ca ĐỎ, cả bộ XANH".
+  //
+  // Lỗ ba ca dưới canh: trước 24/09 `docCaiRiengTheoCoSo` trả MỌI cơ sở, vì chỉ Quản trị
+  // tối cao mở được màn và họ quản lý mọi cơ sở nên không ai thấy. Từ lúc Quản lý cơ sở
+  // vào được, bày đủ danh sách là hiện ô của CS khác dưới dạng MỞ, rồi lần bấm Lưu nhận
+  // "Không có quyền sửa cấu hình cơ sở này" — lời hứa suông, luật 12.
+  //
+  // Ở tầng DB chứ không test thuần: phép lọc nằm trong `where` của câu Prisma, và một
+  // `where` sai vẫn trả về mảng hợp lệ. Chỉ Postgres thật nói được "đúng cơ sở nào đi ra".
+
+  it(
+    "[CRC-11] phạm vi HẸP chỉ trả đúng cơ sở trong phạm vi",
+    async () => {
+      await datHienTruong({ toanHe: true, rieng: { cs1: false, cs2: true } });
+
+      const map = await docCaiRiengTheoCoSo([KHOA], [W.cs1]);
+      const hang = map[KHOA] ?? [];
+      expect(hang.map((c) => c.orgUnitId)).toEqual([W.cs1]);
+      // Giá trị riêng của cơ sở TRONG phạm vi vẫn phải đọc đúng — lọc không được làm mất dữ liệu.
+      expect(hang[0]?.giaTriRieng).toBe(false);
+    },
+    CASE_TIMEOUT,
+  );
+
+  it(
+    "[CRC-12] phạm vi RỖNG trả RỖNG — fail-closed, không rơi về 'không lọc'",
+    async () => {
+      // Đây là nhánh nguy hiểm nhất: `[]` và "không truyền gì" trông giống nhau ở chỗ gọi,
+      // nhưng một cái phải là "không cơ sở nào" còn cái kia trước đây là "mọi cơ sở".
+      const map = await docCaiRiengTheoCoSo([KHOA], []);
+      expect(map).toEqual({});
+    },
+    CASE_TIMEOUT,
+  );
+
+  it(
+    '[CRC-13] "TAT_CA" vẫn trả đủ — đối chứng, không thì một bản vá "lọc hết cho chắc" vẫn xanh',
+    async () => {
+      await datHienTruong({ toanHe: true, rieng: { cs1: false, cs2: true } });
+      const hang = (await docCaiRiengTheoCoSo([KHOA], "TAT_CA"))[KHOA] ?? [];
+      expect(hang.map((c) => c.orgUnitId)).toEqual(expect.arrayContaining([W.cs1, W.cs2]));
     },
     CASE_TIMEOUT,
   );

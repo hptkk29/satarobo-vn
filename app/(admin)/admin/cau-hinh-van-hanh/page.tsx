@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
+import { resolveActor } from "@/lib/auth/actor";
+import { coSoSuaDuoc } from "@/lib/settings/quyen-co-so";
 import { SETTINGS } from "@/lib/settings/registry";
 import { getResolvedSettings } from "@/lib/settings/service";
 import { docCaiRiengTheoCoSo } from "@/lib/settings/co-so-cau-hinh";
@@ -144,7 +146,13 @@ export default async function OperationalSettingsPage({
   // không mang `coSo` ⇒ không vẽ khối. Đừng "vá" bằng cách truyền mảng rỗng: mảng rỗng và
   // vắng mặt trông giống nhau ở đây, nhưng vắng mặt là điều MAP nói, còn mảng rỗng là điều
   // ta tự bịa ra.
-  const caiRieng = await docCaiRiengTheoCoSo(moiKey);
+  //
+  // ⚠️ PHẠM VI: chỉ bày cơ sở người xem SỬA ĐƯỢC. Quản trị tối cao quản lý mọi cơ sở nên
+  // trước 24/09 không ai thấy lỗ — nhưng từ lúc Quản lý cơ sở vào được màn này, bày đủ
+  // danh sách là hiện ô của CS khác dưới dạng MỞ, rồi lần bấm Lưu nhận "Không có quyền sửa
+  // cấu hình cơ sở này". `coSoSuaDuoc` và cổng ghi `setCenterSetting` nay dùng CHUNG một
+  // phép kiểm (`lib/settings/quyen-co-so.ts`), nên chúng không lệch được.
+  const caiRieng = await docCaiRiengTheoCoSo(moiKey, coSoSuaDuoc(await resolveActor(session.user.id)));
 
   // Vai có thật, kèm TÊN TIẾNG VIỆT — ô chọn vai nhận hoa hồng không được in mã máy.
   const vai = await layVaiNhanHoaHong();

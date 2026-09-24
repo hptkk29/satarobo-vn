@@ -92,11 +92,23 @@ describe("[QCS-02] seed v2 khai KHỚP v1 — prod đọc v2, local đọc v1", 
 describe("[QCS-03] cách ly cơ sở nằm ở ĐƯỜNG GHI, không ở cổng trang", () => {
   const service = doc("lib/settings/service.ts");
 
-  it("`setCenterSetting` đòi vai quản lý tại ĐÚNG `orgUnitId` đang sửa", () => {
+  it("CẢ HAI đường ghi theo cơ sở đều đi qua `laQuanLyCoSo`", () => {
     // Cổng này mới là thứ chặn QLCS cơ sở 1 sửa cấu hình cơ sở 2. Gỡ nó thì cổng trang
     // (`settings:view-center`, scope GLOBAL) KHÔNG đỡ được — nó chỉ mở cửa, không phân vùng.
-    expect(service).toMatch(/r\.orgUnitId === params\.orgUnitId/);
-    expect(service).toContain("MANAGER_ROLE_CODES");
+    //
+    // ⚠️ Đếm SỐ LẦN, không chỉ "có xuất hiện": hai hàm `setCenterSetting` và
+    // `clearCenterSetting` cùng cần cổng, và trước 24/09 chúng chép tay hai bản. Một bản vá
+    // chỉ sửa một hàm là hở đúng đường GỠ — gỡ mức riêng của cơ sở khác vẫn là sửa cấu hình
+    // của họ, chỉ khác chiều. Ca `[CRC-08]` đo hành vi ấy trên Postgres thật.
+    expect(service.match(/laQuanLyCoSo\(actor, params\.orgUnitId\)/g) ?? []).toHaveLength(2);
+  });
+
+  it("phép kiểm ấy KHÔNG còn bản chép tay nào trong `service.ts`", () => {
+    // Nếu ai đó "tiện tay" viết lại điều kiện tại chỗ thì màn Cấu hình vận hành (dùng
+    // `coSoSuaDuoc` cùng tệp) và cổng ghi bắt đầu lệch — và lệch theo chiều màn bày THỪA
+    // thì không ai thấy cho tới lúc bấm Lưu.
+    expect(service).not.toContain("MANAGER_ROLE_CODES");
+    expect(service).not.toMatch(/r\.orgUnitId === params\.orgUnitId/);
   });
 
   it("`setCenterSetting` từ chối khoá KHÔNG `centerOverridable`", () => {
