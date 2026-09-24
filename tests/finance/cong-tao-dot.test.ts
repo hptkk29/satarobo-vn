@@ -535,13 +535,14 @@ describe.skipIf(!RUN_DB_TESTS)("[CTD-Đ] vế ĐƠN đếm RỘNG — dựng đ�
   // Chúng ra CÙNG MỘT SỐ ở ca thường — `[CTD-11]` khoá điều đó. Chúng LỆCH ở đúng ba ca, và
   // cả ba đều có tên:
   //
-  //   (a) khoản `REJECTED` — trục B ĐẾM nó, vế đơn thì KHÔNG. `[CTD-12]`.
-  //       Đây là nợ `[HT-05]` đã đo và đã ghim (`lib/finance/hai-truc-theo-don.ts`):
-  //       `PaymentSaleStatus` chỉ có `RECORDED` + `COLLECT_CONFIRMED`, nên trục B thực chất là
-  //       `deletedAt IS NULL` và một khoản kế toán TỪ CHỐI vẫn được cộng như tiền đã về.
-  //       ⚠️ Bên SAI là trục B, không phải cổng: chủ dự án chốt *"khoản REJECTED không tính
-  //       (đã bị từ chối ⇒ là nợ thật)"*. Sửa trục B là việc RIÊNG — nó nuôi 4 đường tiền
-  //       (QR · ngưỡng đối khớp SePay · ZNS · cổng chốt lead), đổi ở đây là đổi cả bốn.
+  //   (a) ~~khoản `REJECTED` — trục B ĐẾM nó, vế đơn thì KHÔNG~~ **[HẾT LỆCH 24/09/2026]**.
+  //       Đây từng là nợ `[HT-05]`: `PaymentSaleStatus` chỉ có `RECORDED` +
+  //       `COLLECT_CONFIRMED` nên vế `saleStatus` của trục B là phép so LUÔN ĐÚNG, và
+  //       `rejectPayment` không đụng cột đó ⇒ khoản kế toán TỪ CHỐI vẫn được cộng như tiền
+  //       đã về. Vá bằng `accountantStatus: { not: "REJECTED" }` trong
+  //       `lib/finance/ghi-nhan.ts` — đúng bên SAI mà chủ dự án đã chỉ ("khoản REJECTED
+  //       không tính, đã bị từ chối ⇒ là nợ thật"), chứ không nới cổng cho giống trục B.
+  //       `[CTD-12]` nay khoá chiều NGƯỢC LẠI: hai chỗ ra CÙNG một số.
   //
   //   (b) `Order.totalAmount` ≠ Σ dòng hàng — khối kia lấy `totalAmount`, vế đơn cộng
   //       `totalPrice − discountAmount` của từng dòng. `[CTD-13]`.
@@ -578,26 +579,34 @@ describe.skipIf(!RUN_DB_TESTS)("[CTD-Đ] vế ĐƠN đếm RỘNG — dựng đ�
     ).toBe(khoi.conThieu);
   });
 
-  it("[CTD-12] khoản REJECTED: hai chỗ LỆCH đúng số bị từ chối — lỗi nằm ở trục B (`[HT-05]`)", async () => {
+  it("[CTD-12] khoản REJECTED: hai chỗ ra CÙNG số — `[HT-05]` đã vá 24/09/2026", async () => {
+    // ⚠️ CA NÀY TỪNG KHOÁ CHIỀU NGƯỢC LẠI. Bản cũ khẳng định hai chỗ **LỆCH** đúng số bị
+    // từ chối, và ghi rõ đó là nợ `[HT-05]` chưa vá. Nay trục B đã loại khoản `REJECTED`
+    // (`accountantStatus: { not: "REJECTED" }` trong `lib/finance/ghi-nhan.ts`), nên lệch
+    // (a) ở khối chú thích đầu mục KHÔNG còn.
+    //
+    // Giữ ca lại thay vì xoá: nó là chỗ duy nhất trong repo đo BẰNG DB THẬT rằng hai đường
+    // đọc — khối "Công nợ đơn hàng" và vế ĐƠN của cổng tạo đợt — nói cùng một câu về một
+    // khoản đã bị kế toán từ chối. Xoá đi là mất phép đo, và lần ai đó "tối ưu" trục B thì
+    // không còn gì kêu.
     await dung("REJECTED");
 
     const khoi = await soCuaKhoiCongNo();
     const so = await noTheoCon(D);
 
-    // Trục B vẫn đếm khoản đã bị TỪ CHỐI. Đó là `[HT-05]`, ghim sẵn, chưa vá.
-    expect(khoi.daThu, "trục B đếm cả khoản REJECTED — nợ đã đo").toBe(DA_CHUYEN);
-    expect(khoi.conThieu).toBe(15_228_000);
+    // Trục B KHÔNG còn đếm khoản bị từ chối.
+    expect(khoi.daThu, "khoản REJECTED không phải tiền đã về").toBe(0);
+    expect(khoi.conThieu, "còn thiếu = trọn học phí").toBe(TONG_DON);
 
-    // Cổng thì KHÔNG đếm — khoản bị từ chối là nợ thật.
+    // Cổng vẫn như cũ — nó vốn đã đúng.
     expect(so.tongDaVe, "vế đơn loại REJECTED").toBe(0);
     expect(so.conNoDon, "còn nợ đơn = trọn học phí").toBe(TONG_DON);
 
-    // Độ lệch bằng ĐÚNG số tiền bị từ chối. Ghi thành phép trừ để người đọc thấy nguyên nhân,
-    // chứ không phải hai hằng số rời nhau.
-    expect(so.conNoDon - khoi.conThieu).toBe(DA_CHUYEN);
+    // VÀ ĐÂY LÀ ĐIỀU BẢN VÁ HỨA: hết lệch. Ghi thành phép trừ ra 0 chứ không phải hai
+    // khẳng định rời nhau — để người đọc thấy chính cái lệch cũ nay bằng không.
+    expect(so.conNoDon - khoi.conThieu, "hai chỗ nay ra CÙNG một số").toBe(0);
 
-    // Và ở hướng an toàn: cổng cho tạo NHIỀU hơn, vì nó biết tiền ấy chưa về.
-    // (`conNoDon − tongDotDangMoDon` = 20.064.000 − 15.228.000.)
+    // Cổng tạo đợt vẫn cho tạo đúng phần chưa có đợt nào đang mở.
     expect(so.conNoDon - so.tongDotDangMoDon).toBe(4_836_000);
   });
 

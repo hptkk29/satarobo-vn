@@ -116,15 +116,25 @@ describe("[BUOC-4b] hằng của trục B", () => {
     });
   });
 
-  it("KHÔNG lọc theo accountantStatus — khoản chờ kế toán vẫn là tiền đã về", () => {
-    // Hình dạng `saleStatus` do ca ngay trên khoá; ở đây chỉ khẳng định BỘ KHOÁ của
-    // điều kiện, để hai ca không cùng đỏ vì một thay đổi.
+  it("lọc accountantStatus bằng `not: REJECTED` — KHÔNG phải `= CONFIRMED` [HT-05]", () => {
+    // ⚠️ CA NÀY TỪNG GHIM ĐÚNG LUẬT CŨ, và luật cũ SAI. Bản trước khẳng định
+    // `"accountantStatus" in KHOAN_DA_GHI_NHAN === false` với lý lẽ "khoản chờ kế toán
+    // vẫn là tiền đã về" — vế lý lẽ ấy ĐÚNG và giữ nguyên, nhưng nó bị hiện thực bằng
+    // cách KHÔNG lọc gì cả, nên khoản kế toán đã TỪ CHỐI cũng lọt (`[HT-05]`, vá
+    // 24/09/2026).
+    //
+    // Nay khoá đúng HAI vế, và phải khoá cả hai:
+    //  · CÓ vế `accountantStatus`            → khoản REJECTED bị loại;
+    //  · vế ấy là `not: "REJECTED"`, KHÔNG phải `"CONFIRMED"` → khoản CHỜ kế toán vẫn vào.
+    // Thiếu vế sau thì một bản "siết cho chặt" sẽ làm mọi khoản chưa ai duyệt biến mất
+    // khỏi công nợ — lỗ lớn hơn lỗ vừa vá, và ca này là thứ duy nhất chặn.
     expect(Object.keys(KHOAN_DA_GHI_NHAN).sort()).toEqual([
+      "accountantStatus",
       "deletedAt",
       "saleStatus",
     ]);
     expect(KHOAN_DA_GHI_NHAN.deletedAt).toBeNull();
-    expect("accountantStatus" in KHOAN_DA_GHI_NHAN).toBe(false);
+    expect(KHOAN_DA_GHI_NHAN.accountantStatus).toEqual({ not: "REJECTED" });
   });
 
   it("KHÔNG lọc theo paymentType — bút toán ADJUSTMENT mang delta nên phải được cộng", () => {
@@ -160,23 +170,52 @@ describe("[GN-01] cả hai trạng thái đều là 'đã ghi nhận'", () => {
 });
 
 describe("[GN-02] laKhoanDaGhiNhan — bản JS của cùng điều kiện", () => {
+  /** Khoản bình thường: sale đã ghi nhận, kế toán chưa xử. */
+  const k = (over: Partial<Parameters<typeof laKhoanDaGhiNhan>[0]> = {}) => ({
+    saleStatus: "RECORDED",
+    accountantStatus: "PENDING",
+    ...over,
+  });
+
   it("nhận RECORDED và COLLECT_CONFIRMED", () => {
-    expect(laKhoanDaGhiNhan({ saleStatus: "RECORDED" })).toBe(true);
-    expect(laKhoanDaGhiNhan({ saleStatus: "COLLECT_CONFIRMED" })).toBe(true);
+    expect(laKhoanDaGhiNhan(k())).toBe(true);
+    expect(laKhoanDaGhiNhan(k({ saleStatus: "COLLECT_CONFIRMED" }))).toBe(true);
   });
 
   it("loại khoản đã xoá mềm", () => {
+    expect(laKhoanDaGhiNhan(k({ deletedAt: new Date() }))).toBe(false);
     expect(
-      laKhoanDaGhiNhan({ saleStatus: "RECORDED", deletedAt: new Date() }),
-    ).toBe(false);
-    expect(
-      laKhoanDaGhiNhan({ saleStatus: "COLLECT_CONFIRMED", deletedAt: new Date() }),
+      laKhoanDaGhiNhan(k({ saleStatus: "COLLECT_CONFIRMED", deletedAt: new Date() })),
     ).toBe(false);
   });
 
   it("trạng thái lạ ⇒ false, không lọt", () => {
-    expect(laKhoanDaGhiNhan({ saleStatus: "REJECTED" })).toBe(false);
-    expect(laKhoanDaGhiNhan({ saleStatus: "" })).toBe(false);
+    expect(laKhoanDaGhiNhan(k({ saleStatus: "REJECTED" }))).toBe(false);
+    expect(laKhoanDaGhiNhan(k({ saleStatus: "" }))).toBe(false);
+  });
+
+  // ── [HT-05] vá 24/09/2026 ────────────────────────────────────────────────────
+  it("[GN-02b] kế toán TỪ CHỐI ⇒ KHÔNG còn là 'đã thu'", () => {
+    // Trước bản vá đây là `true`: `rejectPayment` chỉ đổi `accountantStatus`, không đụng
+    // `saleStatus`, mà vế `saleStatus` của trục B là phép so LUÔN ĐÚNG (enum chỉ có hai
+    // giá trị và cả hai đều nằm trong danh sách). Khoản bị từ chối vẫn được cộng vào
+    // "đã thu" ở 35 chỗ gọi — trong đó có số in trên mã QR và tin ZNS gửi phụ huynh.
+    expect(laKhoanDaGhiNhan(k({ accountantStatus: "REJECTED" }))).toBe(false);
+  });
+
+  it("[GN-02c] CHỜ kế toán thì VẪN tính — đừng 'sửa cho giống' trục A", () => {
+    // Đối chứng dương. Không có ca này thì siết nhầm thành `=== "CONFIRMED"` vẫn xanh,
+    // và mọi khoản chưa ai duyệt biến mất khỏi công nợ — một lỗ lớn hơn lỗ đang vá.
+    expect(laKhoanDaGhiNhan(k({ accountantStatus: "PENDING" }))).toBe(true);
+    // ⚠️ Cố ý KHÔNG khẳng định thêm trạng thái "kế toán đã duyệt" ở đây: gõ chuỗi ấy ra
+    // là vi phạm lưới `truc-a.test.ts` ("trục A chỉ có MỘT nhà"), và nó KHÔNG thêm gì —
+    // luật đang canh là `not REJECTED`, mà cặp PENDING/REJECTED đã phủ cả hai đầu.
+  });
+
+  it("[GN-02d] HOÀN TIỀN vẫn tính — dòng âm tự trừ ra, loại nó là trừ HAI lần", () => {
+    // `refundPayment` tạo một dòng `amount` ÂM. Loại `REFUNDED` khỏi tổng là bỏ mất phép
+    // trừ ấy, và công nợ sẽ cao hơn thực tế đúng bằng số đã hoàn.
+    expect(laKhoanDaGhiNhan(k({ accountantStatus: "REFUNDED" }))).toBe(true);
   });
 });
 
