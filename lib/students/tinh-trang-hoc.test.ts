@@ -63,8 +63,21 @@ describe("[TTH] badge và tab phải nói cùng một thứ", () => {
     // loại em đã đăng ký khoá tiếp
     expect(w).toContain('"PENDING"');
     expect(w).toContain('"CONFIRMED"');
-    // và chỉ xét học viên còn ACTIVE — không giẫm lên bảo lưu / nghỉ học
+    // nhánh suy-từ-ghi-danh chỉ xét học viên còn ACTIVE
     expect(w).toContain('"ACTIVE"');
+  });
+
+  // ⚠️ 24/09 — ca GIỮ NHÁNH (A). Chủ dự án đánh dấu hoàn thành bằng CẢ HAI đường; bản
+  // đầu của tab chỉ nhận nhánh suy-từ-ghi-danh, nên nhóm đặt tay `GRADUATED` rơi khỏi
+  // MỌI tab (`active`/`waiting` đòi ACTIVE · `reserved` đòi PAUSED · `withdrawn` đòi
+  // INACTIVE) và chỉ còn thấy ở "Tất cả". Gỡ nhánh này ra là tái hiện đúng lỗi đó —
+  // và nó hỏng CÂM: không lỗi, không ca nào khác đỏ, chỉ là học viên biến mất.
+  it("[TTH-10] tab 'vua-hoan-thanh' NHẬN cả hồ sơ đặt tay GRADUATED", () => {
+    const w = JSON.stringify(buildLifecycleWhere("vua-hoan-thanh"));
+    expect(w).toContain('"GRADUATED"');
+    // và nhận VÔ ĐIỀU KIỆN — không kèm ràng buộc ghi danh, vì 5/16 em GRADUATED trên
+    // DB local không có ghi danh COMPLETED nào (hồ sơ cũ). Đòi kèm là loại đúng họ.
+    expect(w).toContain('{"status":"GRADUATED"}');
   });
 
   // ⚠️ Hai tab KHÔNG ĐƯỢC chồng nhau: trước bản vá, em vừa xong khoá rơi vào
