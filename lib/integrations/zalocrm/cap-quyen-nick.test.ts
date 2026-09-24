@@ -158,9 +158,10 @@ describe("cấp quyền", () => {
       expect(state.goi).toHaveLength(1);
       expect(state.goi[0]).toMatchObject({ orgCode: "cs1", nick: "acc-1" });
       expect(ids(state.goi[0])).toEqual(["u-qlcs", "u-sale-1", "u-sale-2"]);
-      // Chưa giao ai ⇒ mức mặc định `chat`, RIÊNG quản lý cơ sở được `admin` tự động.
+      // Chưa giao ai ⇒ mức mặc định `chat` cho MỌI người, KỂ CẢ quản lý cơ sở.
+      // (Nhánh "quản lý `admin` tự động" đã bị chủ dự án gỡ — xem `[PVN-02]`.)
       expect(mucCua(state.goi[0], "u-sale-1")).toBe("chat");
-      expect(mucCua(state.goi[0], "u-qlcs")).toBe("admin");
+      expect(mucCua(state.goi[0], "u-qlcs")).toBe("chat");
       expect(kq.tong.capMoi).toBe(3);
     });
   });
@@ -172,7 +173,7 @@ describe("cấp quyền", () => {
     expect(state.goi[0]!.quyen).toEqual(state.goi[1]!.quyen);
   });
 
-  it("[ZC-CQ-11] nick ĐÃ GIAO ⇒ chỉ người được giao + quản lý cơ sở", async () => {
+  it("[ZC-CQ-11] nick ĐÃ GIAO ⇒ CHỈ người được giao, kể cả quản lý cũng phải có tên", async () => {
     // Hai nick: một đã giao cho `u-sale-2`, một chưa giao. MỘT lượt chạy phải sinh HAI
     // danh sách KHÁC NHAU — trước 24/09 vòng lặp gửi cùng một mảng cho mọi nick.
     state.nicks.cs1 = [
@@ -184,11 +185,42 @@ describe("cấp quyền", () => {
     const giao = state.goi.find((g) => g.nick === "acc-giao")!;
     const chuaGiao = state.goi.find((g) => g.nick === "acc-chua-giao")!;
 
-    expect(ids(giao)).toEqual(["u-qlcs", "u-sale-2"]);
+    expect(ids(giao)).toEqual(["u-sale-2"]);
     // ĐỐI CHỨNG ÂM — vế mà tính năng này sinh ra để làm.
     expect(ids(giao), "người KHÔNG được giao phải biến mất").not.toContain("u-sale-1");
+    // 🔴 Và quản lý cơ sở cũng vậy (đảo 24/09): muốn họ thấy nick đã giao thì phải
+    // thêm họ vào danh sách. Migration `20260924160000` làm việc đó một lần cho dữ
+    // liệu đang có, để lượt triển khai không âm thầm cắt quyền của ai.
+    expect(ids(giao), "nhánh 'quản lý admin tự động' đã quay lại").not.toContain("u-qlcs");
     // ĐỐI CHỨNG DƯƠNG — nick chưa giao KHÔNG được siết theo.
     expect(ids(chuaGiao)).toEqual(["u-qlcs", "u-sale-1", "u-sale-2"]);
+  });
+
+  it("[ZC-CQ-11e] giao TƯỜNG MINH cho quản lý ⇒ họ có mặt, đúng mức đã giao", async () => {
+    // ĐỐI CHỨNG DƯƠNG của ca trên. Thiếu nó thì một bản "gỡ hẳn quản lý khỏi mọi nick"
+    // cũng xanh, và không ai phát hiện tới lúc sếp hỏi vì sao không thấy chat.
+    state.nicks.cs1 = [
+      {
+        zcrmAccountId: "acc-giao",
+        giao: [
+          { sataUserId: "u-sale-2", mucQuyen: "chat" },
+          { sataUserId: "u-qlcs", mucQuyen: "admin" },
+        ],
+      },
+    ];
+    await capQuyenNickZalocrm();
+    expect(ids(state.goi[0])).toEqual(["u-qlcs", "u-sale-2"]);
+    expect(mucCua(state.goi[0], "u-qlcs")).toBe("admin");
+  });
+
+  it("[ZC-CQ-11f] HẠ mức quản lý xuống `read` ⇒ đúng `read`, không bị nâng lại", async () => {
+    // Nhánh cũ dùng `rongHon(admin, read)` nên mọi mức của quản lý đều bị kéo về
+    // `admin` — tức ô chọn trên màn là một lời hứa suông.
+    state.nicks.cs1 = [
+      { zcrmAccountId: "acc-1", giao: [{ sataUserId: "u-qlcs", mucQuyen: "read" }] },
+    ];
+    await capQuyenNickZalocrm();
+    expect(mucCua(state.goi[0], "u-qlcs")).toBe("read");
   });
 
   it("[ZC-CQ-11c] MỖI NGƯỜI MỘT MỨC — mức của dòng giao đi tới nơi", async () => {
@@ -206,8 +238,8 @@ describe("cấp quyền", () => {
     await capQuyenNickZalocrm();
     expect(mucCua(state.goi[0], "u-sale-1")).toBe("read");
     expect(mucCua(state.goi[0], "u-sale-2")).toBe("admin");
-    // Quản lý cơ sở vẫn `admin` tự động dù không có dòng giao nào.
-    expect(mucCua(state.goi[0], "u-qlcs")).toBe("admin");
+    // Quản lý cơ sở KHÔNG có dòng giao ⇒ KHÔNG có mặt (đảo 24/09).
+    expect(mucCua(state.goi[0], "u-qlcs")).toBeUndefined();
   });
 
   it("[ZC-CQ-11d] mức LẠ trong DB ⇒ rơi về `read`, KHÔNG đi thẳng sang ZaloCRM", async () => {

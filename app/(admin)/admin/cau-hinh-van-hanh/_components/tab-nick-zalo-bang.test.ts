@@ -187,3 +187,32 @@ describe("[NZ-06] lỗi lưu KHÔNG được đóng hộp thoại", () => {
     expect(sau, "nhánh lỗi KHÔNG được đóng hộp thoại").not.toMatch(/\bdong\(\)/);
   });
 });
+
+describe("[NZ-08] quản lý cơ sở là một DÒNG như mọi người (đảo 24/09)", () => {
+  const src = docMa();
+
+  it("KHÔNG còn danh sách tách riêng cho quản lý", () => {
+    // Bản trước lọc `nguoi.filter((n) => !n.laQuanLy)` để dựng danh sách thêm được, và
+    // hiện quản lý ở một khối ghi chú xám "không gỡ ở đây được". Chủ dự án đảo: phân
+    // quyền của quản lý cũng sửa ngay trên màn. Lọc lại là khoá nút gỡ một cách âm thầm.
+    const loc = [...src.matchAll(/filter\(\([a-z]+\) => !\s*[a-z]+\.laQuanLy\)/g)].map(
+      (m) => m[0],
+    );
+    expect(loc, `còn lọc quản lý ra khỏi danh sách: ${loc.join(", ")}`).toEqual([]);
+  });
+
+  it("CẢNH BÁO khi quản lý không có trong danh sách — không im lặng", () => {
+    // Đây là chỗ affordance phải nói thật (luật 12): danh sách có người mà quản lý
+    // không có tên nghĩa là họ MẤT tầm nhìn nick, và điều đó phải hiện ra NGAY lúc sắp
+    // xảy ra — không phải để người ta phát hiện lúc sếp hỏi.
+    expect(src, "thiếu phép tính 'quản lý chưa được thêm'").toMatch(/quanLyChuaThem/);
+    expect(src, "thiếu câu cảnh báo").toMatch(/sẽ không đọc được/);
+  });
+
+  it("nhãn 'quản lý cơ sở' vẫn hiện — để người bấm biết mình đang gỡ ai", () => {
+    // Gỡ nhãn đi thì hai người trùng tên là một câu đố, và người bấm không biết dòng
+    // nào là sếp mình.
+    expect(src).toMatch(/laQuanLy \? \(/);
+    expect(src).toMatch(/quản lý cơ sở/);
+  });
+});

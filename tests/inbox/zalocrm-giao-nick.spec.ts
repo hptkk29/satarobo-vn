@@ -471,3 +471,89 @@ describe.skipIf(!CO_BANG)("nguoiNhanDuocNick — ô chọn nhìn CÙNG sự th�
     });
   });
 });
+
+describe.skipIf(!CO_BANG)("quản lý cơ sở — KHÔNG còn quyền tự động (đảo 24/09)", () => {
+  it("[ZCG-15] nick ĐÃ giao mà quản lý không có tên ⇒ quản lý KHÔNG có quyền", async () => {
+    // Chủ dự án chốt: *"quản lý phân quyền của QLCS ở đây luôn"*. Hệ quả có thật và đã
+    // được cân nhắc — gỡ quản lý khỏi một nick là họ mất tầm nhìn nick đó.
+    const { datGiaoNick } = await import("@/lib/integrations/zalocrm/giao-nick");
+    const { nguoiDuocDungMotNick } = await import("@/lib/integrations/zalocrm/pham-vi-nick");
+    const { nguoiDuocDungNick } = await import("@/lib/integrations/zalocrm/cap-quyen-nick");
+
+    await datGiaoNick({
+      actor: actorThay(idCoSo),
+      zcrmAccountId: NICK,
+      giao: [{ sataUserId: nguoi.loc, mucQuyen: "chat" }],
+    });
+
+    const { tatCa, macDinh } = await nguoiDuocDungNick(MA_CS);
+    const ra = nguoiDuocDungMotNick({
+      giaoTay: (await dangLuu()).map((g) => ({
+        sataUserId: g.sataUserId,
+        mucQuyen: g.mucQuyen as "read" | "chat" | "admin",
+      })),
+      nguoiCuaCoSo: tatCa,
+      macDinhDungDuoc: macDinh,
+    });
+    expect(ra.map((x) => x.sataUserId)).toEqual([nguoi.loc]);
+    expect(ra.map((x) => x.sataUserId), "nhánh admin-tự-động quay lại").not.toContain(
+      nguoi.trang,
+    );
+  });
+
+  it("[ZCG-16] migration cutover thêm đúng quản lý cho nick ĐÃ giao — và KHÔNG chạm nick chưa giao", async () => {
+    // 🔴 Chạy CHÍNH TỆP migration, không phải một bản chép. Thứ dễ sai nhất trong đó là
+    // chuỗi join `Center.code = OrgUnit.code`: sai một mắt thì câu INSERT chạy êm, thêm
+    // 0 dòng, và lượt triển khai vẫn âm thầm cắt quyền của quản lý cơ sở — đúng thứ
+    // migration ấy sinh ra để chặn. Không ca nào khác chạm tới nó.
+    //
+    // `$executeRawUnsafe` ở đây là cố ý và an toàn: đầu vào là một TỆP TĨNH trong repo,
+    // không có dữ liệu người dùng. Lệnh cấm trong CLAUDE.md nhắm đường app nhận đầu vào
+    // từ ngoài; `tests/e2e/_helpers/seed.ts` và `lib/finance/*.test.ts` đã dùng lối này.
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const sql = readFileSync(
+      resolve(
+        process.cwd(),
+        "prisma/migrations/20260924160000_zalocrm_giao_nick_quan_ly_tuong_minh/migration.sql",
+      ),
+      "utf8",
+    );
+
+    const { datGiaoNick } = await import("@/lib/integrations/zalocrm/giao-nick");
+    // Nick A: ĐÃ giao cho Lộc. Nick B: chưa giao ai.
+    await datGiaoNick({
+      actor: actorThay(idCoSo),
+      zcrmAccountId: NICK,
+      giao: [{ sataUserId: nguoi.loc, mucQuyen: "chat" }],
+    });
+    const nickB = `${P}acc-chua-giao`;
+    await db.zaloCrmNick.deleteMany({ where: { zcrmAccountId: nickB } });
+    await db.zaloCrmNick.create({
+      data: { zcrmAccountId: nickB, orgCode: ORG, centerId: idCoSo, displayName: `${P} B` },
+    });
+
+    await db.$executeRawUnsafe(sql);
+
+    const a = await dangLuu();
+    expect(
+      a.map((g) => g.sataUserId).sort(),
+      "migration KHÔNG thêm được quản lý — chuỗi join hỏng",
+    ).toEqual([nguoi.loc, nguoi.trang].sort());
+    expect(a.find((g) => g.sataUserId === nguoi.trang)?.mucQuyen).toBe("admin");
+
+    // ĐỐI CHỨNG ÂM — nick CHƯA giao ai phải còn nguyên rỗng. Thêm dòng vào đó là biến
+    // "cả cơ sở dùng chung" thành "chỉ quản lý", tức CẮT quyền của tư vấn viên.
+    const b = await db.zaloCrmNick.findUniqueOrThrow({ where: { zcrmAccountId: nickB } });
+    expect(
+      await db.zaloCrmNickGiao.count({ where: { nickId: b.id } }),
+      "migration chạm cả nick chưa giao",
+    ).toBe(0);
+
+    // Chạy LẠI không đẻ dòng trùng — migration phải lặp lại được (ON CONFLICT DO NOTHING).
+    await db.$executeRawUnsafe(sql);
+    expect((await dangLuu()).length).toBe(2);
+
+    await db.zaloCrmNick.deleteMany({ where: { zcrmAccountId: nickB } });
+  });
+});

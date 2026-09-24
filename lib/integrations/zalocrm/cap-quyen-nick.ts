@@ -32,7 +32,7 @@ import {
 import {
   docMucQuyen,
   nguoiDuocDungMotNick,
-  VAI_THAY_MOI_NICK,
+  VAI_QUAN_LY_CO_SO,
 } from "@/lib/integrations/zalocrm/pham-vi-nick";
 import { rateLimit, getRateLimitBackend } from "@/lib/rate-limit";
 
@@ -219,7 +219,7 @@ async function capQuyenMotOrg(input: {
   // mọi cơ sở cho tới khi có SIM thật (việc 9.16), tức là trạng thái BÌNH THƯỜNG hôm nay.
   if (nicks.length === 0) return { ...rong, ok: true, ma: "CHUA_CO_NICK" };
 
-  const { tatCa, macDinh, quanLy } = await nguoiDuocDungNick(centerCode);
+  const { tatCa, macDinh } = await nguoiDuocDungNick(centerCode);
 
   const kq: KetQuaCapQuyenOrg = {
     ...rong,
@@ -239,7 +239,6 @@ async function capQuyenMotOrg(input: {
       })),
       nguoiCuaCoSo: tatCa,
       macDinhDungDuoc: macDinh,
-      quanLyCoSo: quanLy,
     });
     const res = await datQuyenNickZalocrm(orgCode, n.zcrmAccountId, nguoi);
     if (!res.ok) {
@@ -297,7 +296,13 @@ export type NguoiCuaCoSo = {
    * một lượt nới quyền im lặng, không ai bấm nút nào.
    */
   macDinh: string[];
-  /** Tập CON của `tatCa` đang giữ vai thấy-mọi-nick (`VAI_THAY_MOI_NICK`). */
+  /**
+   * Tập CON của `tatCa` đang giữ vai quản lý cơ sở (`VAI_QUAN_LY_CO_SO`).
+   *
+   * ⚠️ Đây là NHÃN cho màn, KHÔNG phải quyền: từ lượt đảo 24/09, quản lý cơ sở không
+   * còn `admin` tự động. Màn dùng nó để gắn chữ "quản lý cơ sở" dưới tên và chọn mức
+   * mặc định lúc mới thêm. Đừng đưa nó trở lại `nguoiDuocDungMotNick`.
+   */
   quanLy: string[];
   /**
    * Mã vai của từng người trong `tatCa`.
@@ -379,7 +384,7 @@ export async function nguoiDuocDungNick(centerCode: string): Promise<NguoiCuaCoS
   return {
     tatCa,
     macDinh: locTheoVai(VAI_DUOC_CAP_NICK),
-    quanLy: locTheoVai(VAI_THAY_MOI_NICK),
+    quanLy: locTheoVai(VAI_QUAN_LY_CO_SO),
     vaiTheoNguoi,
   };
 }
