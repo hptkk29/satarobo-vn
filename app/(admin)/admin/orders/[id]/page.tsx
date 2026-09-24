@@ -328,8 +328,10 @@ export default async function OrderDetailPage({ params }: Props) {
   const qrSessions = await loadActiveQrSessions(
     actor,
     paymentRequests.map((r) => ({ id: r.id, matchKey: r.matchKey })),
-    // `QrSessionView.transferContent` chỉ để IN RA (ảnh QR đã dựng sẵn từ trước và
-    // nằm ở `qrContent`), nên truyền bản che.
+    // Đây là PHẦN NGƯỜI ĐỌC (`TenCon_84SĐT_MaKhoa`), KHÔNG phải chuỗi in ra: khoá đối
+    // khớp do `noiDungCkChoPhieu` ghép thêm theo TỪNG PHIẾU ở trong core, vì mỗi đợt một
+    // khoá. Truyền bản che được vì thiếu `orders:view-pii` thì core trả RỖNG (không phiên
+    // nào xuống client), nên chuỗi tới đây luôn là bản đầy đủ.
     transferContentShown,
     // Cùng một câu trả lời quyền cho cả trang: thiếu `orders:view-pii` → core trả
     // RỖNG, không phiên QR nào xuống client (ảnh QR của từng đợt cũng mang SĐT đầy

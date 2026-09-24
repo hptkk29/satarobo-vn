@@ -177,18 +177,59 @@ describe("[NDC-07] addInfoFor PHẢI truyền matchKey của chính phiếu đó
     "utf8",
   );
 
-  it("có gọi noiDungCkCoKhoa với req.matchKey", () => {
-    // Mã TRƯỚC bản vá: `return transferContentForOrder({...}, VIETQR_ADDINFO_MAX);`
+  /** Cắt đúng thân MỘT hàm — luật 11: đừng quét cả tệp, chú thích giải thích bản vá
+   *  chứa đúng những chuỗi bộ so khớp đang tìm. */
+  function than(tu: string, den: string): string {
+    const a = src.indexOf(tu);
+    const b = src.indexOf(den, a + 1);
+    expect(a, `không thấy \`${tu}\``).toBeGreaterThanOrEqual(0);
+    expect(b, `không thấy mốc kết \`${den}\``).toBeGreaterThan(a);
+    return src.slice(a, b);
+  }
+
+  it("addInfoFor đưa matchKey CỦA CHÍNH PHIẾU vào chuỗi", () => {
+    // Mã TRƯỚC bản vá 14/09: `return transferContentForOrder({...}, VIETQR_ADDINFO_MAX);`
     // — không có khoá nào đi vào chuỗi.
-    const than = src.slice(
-      src.indexOf("function addInfoFor("),
-      src.indexOf("const PAYOS_DESCRIPTION_MAX"),
-    );
-    expect(than, "không thấy thân addInfoFor").not.toHaveLength(0);
-    expect(than).toContain("noiDungCkCoKhoa(req.matchKey");
-    // Và vẫn cắt theo trần QR chứ không phải trần 80 (bản vá 20/08 — để mặc định 80
-    // thì mã QR bị cắt đuôi im lặng).
-    expect(than).toContain("VIETQR_ADDINFO_MAX");
+    //
+    // ⚠️ 24/09 — lưới này TỪNG ghim văn bản `noiDungCkCoKhoa(req.matchKey`, và nó đỏ khi
+    // phép ghép được tách ra thành `noiDungCkChoPhieu`. Lý lẽ của nó ("khoá phải là khoá
+    // của chính phiếu, không phải null, không phải của đơn") thì ĐÚNG và giữ nguyên —
+    // chỉ cách viết là bị ghim nhầm. Nay ghim LUẬT: khoá `req.matchKey` phải đi vào.
+    const t = than("function addInfoFor(", "export function noiDungCkChoPhieu");
+    expect(t).toContain("noiDungCkChoPhieu(req.matchKey");
+  });
+
+  it("trần ký tự nằm ĐÚNG MỘT CHỖ, và là trần QR chứ không phải 80", () => {
+    // Bản vá 20/08: để mặc định 80 thì mã QR bị cắt đuôi IM LẶNG đúng chỗ chứa SĐT.
+    const t = than("export function noiDungCkChoPhieu", "const PAYOS_DESCRIPTION_MAX");
+    expect(t).toContain("noiDungCkCoKhoa(");
+    expect(t).toContain("VIETQR_ADDINFO_MAX");
+    // Phép ghép khoá chỉ được có ĐÚNG MỘT chỗ gọi trong tệp — hai chỗ là hai trần, và
+    // hai trần thì chỉ cần một người sửa lệch là sale đọc một đằng, QR mã một nẻo.
+    //
+    // ⚠️ Đếm `noiDungCkCoKhoa(` (CÓ ngoặc) chứ không đếm `VIETQR_ADDINFO_MAX`: hằng đó
+    // xuất hiện trong CẢ CHÚ THÍCH giải thích bản vá, nên phép đếm nó vừa đỏ oan vừa sẽ
+    // đỏ lại mỗi lần ai đó viết thêm một dòng giải thích (luật 11).
+    expect(src.match(/noiDungCkCoKhoa\(/g)?.length ?? 0).toBe(1);
+  });
+
+  it("[NDC-07b] ĐƯỜNG RENDER TRANG cũng phải ghép khoá của TỪNG PHIẾU", () => {
+    // ⚠️ ĐÂY LÀ LỖ ĐÃ NỔ 24/09. `loadActiveQrSessions` nhận MỘT chuỗi mức ĐƠN rồi truyền
+    // thẳng xuống `toView`, tức bỏ hẳn bước ghép khoá mà `addInfoFor` có. Hệ quả: trang
+    // tải lần đầu in `Anh_0905123456_Sata4` còn nút "Xuất QR" trả
+    // `ORD260924000001D1 Anh_090` — cùng một phiếu, hai chuỗi, đổi tuỳ lúc.
+    // Ca hành vi: `[QR-12]` (tests/e2e/r7/qr-session.spec.ts).
+    const t = than("export async function loadActiveQrSessions(", "/**");
+    expect(t).toContain("noiDungCkChoPhieu(mk,");
+  });
+
+  it("[NDC-07c] chuỗi in ra ĐỌC TỪ ẢNH, không nhận từ chỗ gọi", () => {
+    // Ảnh QR là ảnh chụp lúc phát hành; chuỗi in ra mà được TÍNH LẠI thì có ngày lệch
+    // với ảnh, và màn hình nói dối. Ca hành vi: `[QR-10]`, `[QR-11]`.
+    const t = than("async function toView(", "const QR_SESSION_SELECT");
+    expect(t).toContain("noiDungTrongAnhQr(row.qrContent)");
+    expect(t).toContain("transferContent: trongAnh ??");
+    expect(t).toContain("anhDaCu: anhQrDaCu(row.qrContent");
   });
 
   it("bộ tách của payos-ingest có VÒNG RỘNG cắt cả dấu gạch dưới", () => {
