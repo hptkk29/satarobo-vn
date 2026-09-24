@@ -236,10 +236,6 @@ const NAV_GROUPS: NavGroup[] = [
       // ZaloCRM nhúng iframe. Đặt cạnh "Tin nhắn" vì cùng một việc dưới mắt Sale: trả lời
       // khách. Cờ `zalocrm` mặc định TẮT ⇒ mục ẩn cho tới khi máy chủ ZaloCRM chạy thật.
       { label: "Zalo CRM", href: "/zalo-crm", icon: MessageSquareText, perm: [...PAGE_GATES["/zalo-crm"]], flag: "zalocrm" },
-      // Cổng HẸP HƠN mục ngay trên: `zalocrm:manage-nick` chỉ Quản trị tối cao + Quản lý
-      // cơ sở. Tư vấn viên DÙNG nick thì được, tự giao nick cho mình thì không — nên mục
-      // này ẩn với họ trong khi mục "Zalo CRM" vẫn hiện.
-      { label: "Giao nick Zalo", href: "/zalo-crm/nick", icon: UserCog, perm: [...PAGE_GATES["/zalo-crm/nick"]], flag: "zalocrm" },
       // US-15 — tra cứu có lý do + khoá hội thoại. `chat:admin` CHỈ SUPER_ADMIN có
       // (AC5: QLCS không vào được), và nó seed scope GLOBAL nên dùng làm gate cấp trang
       // được — khác chat:read/chat:send (CENTER/ASSIGNED), xem lib/auth/page-gates.ts.
