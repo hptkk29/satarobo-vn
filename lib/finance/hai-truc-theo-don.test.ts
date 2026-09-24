@@ -164,14 +164,27 @@ describe("[HT-04] lượt tra — một lần, khử trùng, rỗng thì KHÔNG 
 // Siết nó là đổi cả bốn ⇒ phải là đợt riêng có chủ dự án duyệt. `it.fails` theo nếp repo:
 // hôm nay thân ca ném nên CI không đỏ; vá xong ca chuyển XANH và vitest báo "expected to
 // fail" ⇒ buộc gỡ ghim.
-describe("[HT-05] nợ đang ghim — khoản bị TỪ CHỐI", () => {
-  it.fails("khoản accountantStatus=REJECTED KHÔNG được tính là 'đã thu'", () => {
+describe("[HT-05] ĐÃ VÁ 24/09/2026 — khoản bị TỪ CHỐI không còn là 'đã thu'", () => {
+  it("khoản accountantStatus=REJECTED KHÔNG được tính là 'đã thu'", () => {
     const m = gopHaiTruc([k({ accountantStatus: "REJECTED" })]);
-    expect(m.get("don1")?.daGhiNhan).toBe(0);
+    expect(m.get("don1")).toEqual({ daGhiNhan: 0, daXacNhan: 0 });
   });
 
-  it("hôm nay nó ĐANG được tính — ghim hành vi thật để bản vá thấy rõ mình đổi gì", () => {
-    const m = gopHaiTruc([k({ accountantStatus: "REJECTED" })]);
+  it("CHỜ kế toán thì VẪN là 'đã thu' — đối chứng dương", () => {
+    // Không có ca này thì siết nhầm thành "chỉ CONFIRMED" vẫn xanh, và mọi khoản chưa ai
+    // duyệt biến mất khỏi công nợ — lỗ lớn hơn lỗ vừa vá.
+    const m = gopHaiTruc([k({ accountantStatus: "PENDING" })]);
     expect(m.get("don1")).toEqual({ daGhiNhan: 1_000_000, daXacNhan: 0 });
+  });
+
+  it("HOÀN TIỀN vẫn cộng — dòng âm tự trừ ra", () => {
+    // `refundPayment` ghi `amount` ÂM. Loại `REFUNDED` là trừ hai lần.
+    // Dùng PENDING chứ không gõ trạng thái "đã duyệt": ca này đo TRỤC B, và gõ điều kiện
+    // trục A ra đây là vi phạm lưới `truc-a.test.ts` mà không thêm gì cho phép đo.
+    const m = gopHaiTruc([
+      k({ accountantStatus: "PENDING" }),
+      k({ accountantStatus: "REFUNDED", amount: -400_000 }),
+    ]);
+    expect(m.get("don1")?.daGhiNhan).toBe(600_000);
   });
 });

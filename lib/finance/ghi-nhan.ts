@@ -68,11 +68,26 @@ export const SALE_STATUS_DA_GHI_NHAN: PaymentSaleStatus[] = [
 /**
  * Điều kiện `where` cho MỌI truy vấn cộng tiền đã ghi nhận.
  *
- * ⚠️ KHÔNG đụng `accountantStatus`: khoản chờ kế toán vẫn là tiền đã về. Đó chính là
- * điểm khác biệt với trục A, đừng "sửa cho giống".
+ * ⚠️ **CHỜ kế toán thì VẪN TÍNH; kế toán TỪ CHỐI thì KHÔNG.** Hai chuyện khác nhau, và
+ * chúng từng bị gộp làm một — đó là nợ `[HT-05]`, vá 24/09/2026.
+ *
+ * ── Vì sao vế `accountantStatus` phải có ──────────────────────────────────────────────
+ * `PaymentSaleStatus` có ĐÚNG HAI giá trị (`RECORDED`, `COLLECT_CONFIRMED`) và
+ * `SALE_STATUS_DA_GHI_NHAN` liệt kê CẢ HAI ⇒ vế `saleStatus` là một phép so **luôn đúng**
+ * (đo: khớp 416/416 dòng `Payment` trên `satarobo_local`). Còn `rejectPayment`
+ * (`lib/finance/payment.ts`) chỉ đổi `accountantStatus` thành `REJECTED`, **không đụng**
+ * `saleStatus`. Nên trước bản vá, một khoản kế toán đã TỪ CHỐI vẫn được cộng là "đã thu".
+ *
+ * ── Vì sao chỉ loại `REJECTED`, không loại `REFUNDED` ─────────────────────────────────
+ * `refundPayment` tạo một dòng `amount` ÂM. Cộng nó vào là ĐÚNG — nó tự trừ ra. Loại
+ * `REFUNDED` là trừ hai lần.
+ *
+ * ⚠️ Vẫn KHÔNG đòi `CONFIRMED`: khoản chờ kế toán vẫn là tiền đã về, và đó là điểm khác
+ * biệt với trục A (`KHOAN_DA_XAC_NHAN`). Đừng "sửa cho giống".
  */
 export const KHOAN_DA_GHI_NHAN = {
   saleStatus: { in: SALE_STATUS_DA_GHI_NHAN },
+  accountantStatus: { not: "REJECTED" as const },
   deletedAt: null,
 };
 
@@ -87,10 +102,17 @@ export const KHOAN_DA_GHI_NHAN = {
  */
 export function laKhoanDaGhiNhan(p: {
   saleStatus: string;
+  /**
+   * BẮT BUỘC từ 24/09/2026 (`[HT-05]`). Cố ý KHÔNG để tuỳ chọn: chỗ gọi nào quên `select`
+   * cột này sẽ là **lỗi biên dịch**, chứ không phải âm thầm đếm lại khoản đã bị từ chối —
+   * đúng điểm cộng của luật 7 mà `docs/luat-doc-so-va-ket-luan.md` ghi lại.
+   */
+  accountantStatus: string;
   deletedAt?: Date | null;
 }): boolean {
   return (
     (SALE_STATUS_DA_GHI_NHAN as readonly string[]).includes(p.saleStatus) &&
+    p.accountantStatus !== "REJECTED" &&
     !p.deletedAt
   );
 }
