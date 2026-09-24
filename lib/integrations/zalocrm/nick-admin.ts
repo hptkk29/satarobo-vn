@@ -492,6 +492,32 @@ export type KetQuaDongBoOrg = {
  *
  * Không ném: một org hỏng thì ghi nhật ký FAILED rồi đi tiếp org sau.
  */
+/**
+ * 🔴 SỰ CỐ PROD 24/09/2026 — VÌ SAO HÀM NÀY KHÔNG CÒN GHI `sataUserId`.
+ *
+ * `ZaloAccount.ownerUserId` bên ZaloCRM là **chủ nick do máy bên kia ghi nhận**, không
+ * phải một quyết định phân công của ai ở Sata. Hàm này từng ánh xạ nó sang
+ * `ZaloCrmNick.sataUserId` — hồi cột ấy chỉ để HIỂN THỊ ("Sale sở hữu") thì vô hại.
+ *
+ * Rồi cột ấy được đọc như **"nick đã giao cho ai"**, và migration `20260924120000` chép
+ * nó sang `ZaloCrmNickGiao`. Một giá trị MÁY ĐOÁN bỗng thành một lượt phân quyền độc
+ * quyền — và vì "đã giao ai đó" nghĩa là "những người còn lại KHÔNG được dùng", mỗi nick
+ * cắt còn đúng một người.
+ *
+ * Đo trên prod ngay sau lượt triển khai: nick Cô Liên chỉ còn Cô Liên, nick Cô Vân chỉ
+ * còn Cô Vân, nick CS1 chỉ còn Ms Lộc — và **Cô Diệu (CS1) còn 0 nick**, tức mở hộp thư
+ * ra TRỐNG. Không lỗi nào báo: đó là một lượt gỡ quyền "thành công".
+ *
+ * ── BÀI HỌC, và nó rộng hơn ZaloCRM ────────────────────────────────────────────────
+ * Một cột do ĐỒNG BỘ ghi và một cột do NGƯỜI quyết định là HAI THỨ KHÁC NHAU, kể cả khi
+ * chúng cùng kiểu và cùng tên. Đọc cột thứ nhất như cột thứ hai là mượn một con số máy
+ * đoán để cắt quyền của người thật.
+ *
+ * ⇒ Phân công (ai được dùng nick nào, mức nào) CHỈ ở `ZaloCrmNickGiao`, và chỉ
+ *   `datGiaoNick` ghi. Đường đồng bộ KHÔNG chạm vào nó, và từ nay không chạm cả cột cũ.
+ *
+ * ⚠️ Đừng "khôi phục" dòng ghi ấy vì thấy cột `sataUserId` trống. Trống là ĐÚNG.
+ */
 export async function dongBoNick(
   actor: ActorTamNhinNick,
   opts?: { orgCode?: string | null },
@@ -579,7 +605,10 @@ async function dongBoMotOrg(
         const data: Prisma.ZaloCrmNickUpdateInput = {};
         if (n.displayName && n.displayName !== cu.displayName) data.displayName = n.displayName;
         if (n.status !== "UNKNOWN" && n.status !== cu.status) data.status = n.status;
-        if (chu && chu !== cu.sataUserId) data.sataUserId = chu;
+        // 🔴 KHÔNG GHI `sataUserId` NỮA (sự cố prod 24/09/2026 — xem khối dưới).
+        // `chu` vẫn tính ở trên vì nhánh `create` còn dùng, và vì bỏ hẳn phép tính là
+        // mất luôn `locChuNickCoThat` — thứ duy nhất kiểm `ownerUserId` có phải `User`
+        // thật của Sata không.
         if (!cu.centerId && org.centerId) data.centerId = org.centerId;
         if (!cu.orgUnitId && orgUnitId) data.orgUnitId = orgUnitId;
         if (Object.keys(data).length === 0) continue; // không có gì đổi ⇒ không ghi
@@ -594,8 +623,10 @@ async function dongBoMotOrg(
             zcrmAccountId: n.zcrmAccountId,
             orgCode: org.orgCode,
             displayName: n.displayName,
-            status: n.status,
-            sataUserId: chu,
+            // `null`, KHÔNG phải `chu` — xem khối 🔴 ở đầu hàm. Nick mới quét QR ra
+            // đời ở trạng thái CHƯA GIAO AI, tức cả cơ sở dùng chung; đó là mặc định
+            // đúng và cũng là mặc định an toàn.
+            sataUserId: null,
             centerId: org.centerId,
             orgUnitId,
             // `lastEventAt` để NULL — xem khối chú thích của `dongBoNick`.
