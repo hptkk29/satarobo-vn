@@ -94,7 +94,15 @@ function kieuCuaGiaTri(v: unknown): KieuO {
   return "phucTap";
 }
 
-function HangCauHinh({ row, choSua }: { row: SettingRowView; choSua: boolean }) {
+function HangCauHinh({
+  row,
+  choSua,
+  choSuaCoSo,
+}: {
+  row: SettingRowView;
+  choSua: boolean;
+  choSuaCoSo: boolean;
+}) {
   const kieu = kieuCuaDong(row);
   const [thoNhap, setThoNhap] = useState(() =>
     kieu === "phucTap" ? JSON.stringify(row.value, null, 2) : String(row.value ?? ""),
@@ -320,7 +328,11 @@ function HangCauHinh({ row, choSua }: { row: SettingRowView; choSua: boolean }) 
           nhan={row.nhan}
           giaTriToanHe={row.value}
           coSo={row.coSo}
-          choSua={choSua}
+          // ⚠️ `choSuaCoSo`, KHÔNG phải `choSua`. Khối này ghi qua `setCenterSetting`, vốn
+          // chỉ đòi vai quản lý tại ĐÚNG `orgUnitId` đang sửa — nó KHÔNG đòi `settings:edit`.
+          // Nối nhầm vào `choSua` là khoá Quản lý cơ sở khỏi đúng thứ quyền mới sinh ra để
+          // mở, trong khi server vẫn cho họ ghi.
+          choSua={choSuaCoSo}
         />
       )}
 
@@ -340,15 +352,19 @@ function HangCauHinh({ row, choSua }: { row: SettingRowView; choSua: boolean }) 
 export function BangCauHinhTab({
   rows,
   choSua,
+  choSuaCoSo,
 }: {
   rows: readonly SettingRowView[];
+  /** Sửa được giá trị toàn hệ thống. */
   choSua: boolean;
+  /** Sửa được phần của cơ sở mình. Không mặc định — xem chú thích ở `KhungCauHinh`. */
+  choSuaCoSo: boolean;
 }) {
   if (rows.length === 0) return null;
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card">
       {rows.map((r) => (
-        <HangCauHinh key={r.key} row={r} choSua={choSua} />
+        <HangCauHinh key={r.key} row={r} choSua={choSua} choSuaCoSo={choSuaCoSo} />
       ))}
     </div>
   );

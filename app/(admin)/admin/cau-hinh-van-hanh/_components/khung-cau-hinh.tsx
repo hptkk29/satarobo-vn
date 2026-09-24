@@ -26,6 +26,7 @@ export interface TabView {
 export function KhungCauHinh({
   tabs,
   choSua,
+  choSuaCoSo,
   tabThongBao,
   danhMucThongBao,
   loaiDangBat,
@@ -35,7 +36,17 @@ export function KhungCauHinh({
   tabBanDau,
 }: {
   tabs: readonly TabView[];
+  /** Sửa được giá trị TOÀN HỆ THỐNG (`settings:edit`, thực tế là Quản trị tối cao). */
   choSua: boolean;
+  /**
+   * Sửa được phần CỦA CƠ SỞ MÌNH — khối "Cài riêng theo cơ sở" ở từng dòng.
+   *
+   * ⚠️ KHÔNG có mặc định, và đó là chủ đích (luật 7): mặc định ở đây nguy hiểm theo CẢ HAI
+   * chiều. `true` mặc định là bày nút ghi cho người không có quyền ghi; `false` mặc định là
+   * đúng lỗi vừa vá — Quản lý cơ sở vào được màn mà mọi ô đều khoá, và không lỗi nào báo.
+   * Bỏ mặc định thì `tsc` liệt kê đủ chỗ gọi.
+   */
+  choSuaCoSo: boolean;
   /** Id của tab mang bảng chọn loại thông báo. */
   tabThongBao: string;
   danhMucThongBao: readonly NotiCatalogEntry[];
@@ -177,7 +188,7 @@ export function KhungCauHinh({
       <div role="tabpanel" aria-label={tab.ten} className="space-y-4">
         {/* Tab có nội dung riêng thì KHÔNG dựng bảng ô cấu hình — không phải để gọn, mà
             vì bảng đó sẽ rỗng và một bảng rỗng nằm trên đầu trang trông y hệt lỗi tải. */}
-        {noiDungRieng?.[tab.id] ?? <BangCauHinhTab rows={tab.rows} choSua={choSua} />}
+        {noiDungRieng?.[tab.id] ?? <BangCauHinhTab rows={tab.rows} choSua={choSua} choSuaCoSo={choSuaCoSo} />}
 
         {/* THÊM, không thay — xem khối chú thích của prop `khoiThem`. Đứng sau bảng ô cấu
             hình vì nó là phần phụ của tab, không phải thứ đầu tiên người ta tới đây để tìm. */}

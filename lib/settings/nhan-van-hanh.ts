@@ -99,6 +99,13 @@ export const TAB_CAU_HINH = [
       "hệ thống. Tài khoản ngân hàng dựng mã QR nằm ngay trong từng phương thức.",
   },
   {
+    id: "nick-zalo",
+    ten: "Nick Zalo CRM",
+    moTa:
+      "Giao từng nick Zalo cho một người. Nick đã giao thì chỉ người đó và quản lý cơ sở " +
+      "đọc được; nick chưa giao thì cả cơ sở đều thấy.",
+  },
+  {
     id: "hoa-hong",
     ten: "Hoa hồng",
     moTa:
@@ -108,6 +115,45 @@ export const TAB_CAU_HINH = [
 ] as const;
 
 export type TabId = (typeof TAB_CAU_HINH)[number]["id"];
+
+/**
+ * Quyền mở từng tab.
+ *
+ * ⚠️ KHÔNG có giá trị mặc định, và đó là chủ đích (luật 7): khai `Record` ĐỦ khiến `tsc`
+ * bắt người thêm tab mới phải NÓI RÕ ai mở được nó. Một mặc định ở đây nghĩa là tab mới
+ * lặng lẽ thừa hưởng quyền của tab khác — với một màn cấu hình toàn hệ thống thì đó là
+ * cách mở quyền mà không ai nhận ra.
+ *
+ * Phần lớn tab là cấu hình TOÀN HỆ THỐNG ⇒ `settings:view`, thực tế là Quản trị tối cao.
+ * Tab nào thuộc việc của CƠ SỞ thì khai quyền riêng của module đó, để quản lý cơ sở vào
+ * được đúng phần của mình mà không thấy các tab còn lại.
+ */
+export const QUYEN_TAB: Record<TabId, string> = {
+  "thong-bao-day": "settings:view",
+  zalo: "settings:view",
+  "dang-nhap": "settings:view",
+  "hoc-vien": "settings:view",
+  "lop-gv": "settings:view",
+  "cham-cong": "settings:view",
+  "khach-hang": "settings:view",
+  // ⚠️ 24/09/2026 — QUYỀN RIÊNG cho tab này, và đó là CẢ ĐIỂM của cơ chế quyền-theo-tab:
+  // nới MỘT tab không kéo theo 13 tab kia.
+  //
+  // Chủ dự án chốt 22/09: trần số đợt / số ưu đãi thì Quản lý cơ sở chỉnh được. Tab này
+  // chứa 13 khoá chính sách TIỀN (trần đợt, trần ưu đãi, nhắc nợ, làm tròn, hạn QR, ưu đãi
+  // anh em) — KHÔNG khoá bí mật nào (OTP / mẫu tin ZNS / khoá VAPID nằm ở tab khác).
+  //
+  // Vào được tab KHÔNG có nghĩa sửa được giá trị TOÀN CỤC: canEditGlobal vẫn đòi
+  // settings:edit (chỉ Quản trị tối cao). QLCS chỉ ghi được phần CỦA CƠ SỞ MÌNH, và cổng
+  // thật nằm ở setCenterSetting — đòi vai quản lý tại ĐÚNG orgUnitId đang sửa (ca [QCS-03]).
+  tien: "settings:view-center",
+  "nhac-tu-dong": "settings:view",
+  "cong-ty": "settings:view",
+  "nang-cao": "settings:view",
+  "phuong-thuc-tt": "settings:view",
+  "hoa-hong": "settings:view",
+  "nick-zalo": "zalocrm:manage-nick",
+};
 
 export interface NhanVanHanh {
   tab: TabId;

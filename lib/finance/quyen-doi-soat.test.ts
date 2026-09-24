@@ -363,8 +363,14 @@ describe("[QDB-*] ĐƯỜNG B — gắn khoản đã thu vào con, trên màn Đ
 
   it("màn đơn truyền HAI cờ quyền riêng, không tái dùng `canManage`", () => {
     const page = docMa("app/(admin)/admin/orders/[id]/page.tsx");
-    expect(page).toMatch(/const canRecordPayments = await checkPermission\("payments:record"\)/);
-    expect(page).toMatch(/const canManagePayments = await checkPermission\("payments:manage"\)/);
+    // ⚠️ 24/09/2026 — khoá LUẬT ("hỏi riêng hai quyền này"), không khoá chỗ đặt chữ `await`.
+    // Bản đầu ghim `const canRecordPayments = await checkPermission(...)` nên nó ĐỎ khi bốn
+    // câu hỏi quyền được gom vào một `Promise.all` — một thay đổi không đụng gì tới luật.
+    // Đếm SỐ LẦN để "hỏi riêng" không bị thay bằng một hàm gộp đoán scope chung.
+    expect(page.match(/checkPermission\("payments:record"\)/g)?.length ?? 0).toBe(1);
+    expect(page.match(/checkPermission\("payments:manage"\)/g)?.length ?? 0).toBe(1);
+    expect(page).toMatch(/canRecordPayments/);
+    expect(page).toMatch(/canManagePayments/);
     expect(page).toMatch(/duocGan=\{canRecordPayments\}/);
     expect(page).toMatch(/duocBoGan=\{canManagePayments\}/);
     // `duocSua` (tạo/huỷ đợt) VẪN là `canManage` — ba quyền, ba việc.
@@ -595,7 +601,11 @@ describe("[QDH-*] PHIÊN D — dừng học một con: quyền · công tắc ·
     // Cả khối công nợ theo con chỉ dựng khi `batThuTheoCon` — tức cờ tắt thì không có nút
     // nào để mà ẩn, và trang không tốn thêm một truy vấn nào.
     const trang = docMa("app/(admin)/admin/orders/[id]/page.tsx");
-    expect(trang).toMatch(/batThuTheoCon \? await docTrangThaiDungHoc\(order\.id\) : undefined/);
+    // ⚠️ 24/09/2026 — nhận cả dạng nằm trong `Promise.all`; xem ghi chú cùng ngày ở
+    // `no-theo-con.test.ts` `[NTC-06]`. Luật cần khoá là "cờ tắt thì KHÔNG tra gì".
+    expect(trang).toMatch(
+      /batThuTheoCon\s*\?\s*(?:await\s+)?docTrangThaiDungHoc\(order\.id\)\s*:\s*(?:undefined|Promise\.resolve\(undefined\))/,
+    );
   });
 
   it("CỔNG ĐỨNG TRƯỚC PHÉP GHI: 7 cổng của `dungHocMotCon` nằm trên phép ghi đầu tiên", () => {

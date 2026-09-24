@@ -119,3 +119,31 @@ describe("[QCS-04] hai trần của đợt này PHẢI cài riêng được theo
     });
   }
 });
+
+describe("[QCS-05] nối dây ở `page.tsx` — quyền mới phải TỚI được khối cài riêng", () => {
+  // ⚠️ ĐÂY LÀ LƯỚI GHIM MÃ NGUỒN, loại mong manh nhất (luật 11) — dùng vì `page.tsx` là một
+  // Server Component gọi `auth()` + `checkPermission()` + 5 câu đọc DB: test hành vi cho nó
+  // là dựng một rừng mock, và rừng mock ấy chính là thứ đã làm đỏ giả 5 ca hôm 18/09.
+  //
+  // Phần HÀNH VI — prop nào điều khiển ô nào — đo thật ở
+  // `app/(admin)/admin/cau-hinh-van-hanh/_components/hai-cua-sua.test.tsx` ([HCS-*]).
+  // Lưới này chỉ canh MỘT điều còn lại: trang truyền ĐÚNG cờ xuống.
+  const trang = dongKhai("app/(admin)/admin/cau-hinh-van-hanh/page.tsx");
+
+  it("truyền `choSuaCoSo={suaDuocCoSo}`, KHÔNG phải `{canEditGlobal}`", () => {
+    // Nối vào `canEditGlobal` là tái lập đúng lỗi vừa vá: Quản lý cơ sở vào được màn mà mọi
+    // ô đều khoá. Nó không ném lỗi và không làm ca nào khác đỏ.
+    expect(trang.filter((d) => d.includes("choSuaCoSo={suaDuocCoSo}"))).toHaveLength(1);
+    expect(trang.filter((d) => d.includes("choSuaCoSo={canEditGlobal}"))).toEqual([]);
+  });
+
+  it("`suaDuocCoSo` mở bằng CHÍNH quyền hẹp của đợt này", () => {
+    // Đổi sang một quyền khác (hoặc bỏ vế `cheDoCoSo`) thì cửa vẫn mở được bằng
+    // `settings:view-center` — người dùng vào được màn — nhưng khối cài riêng đóng lại, và
+    // triệu chứng lại là "không lỗi nào báo".
+    const dinhNghia = trang.filter((d) => d.includes("const cheDoCoSo"));
+    expect(dinhNghia, "không thấy `cheDoCoSo` — lưới đang soi nhầm chỗ").toHaveLength(1);
+    expect(dinhNghia[0]).toContain('checkPermission("settings:view-center")');
+    expect(trang.filter((d) => d.includes("const suaDuocCoSo"))).toHaveLength(1);
+  });
+});

@@ -94,12 +94,18 @@ const TABS: TabView[] = [
 ];
 
 function dung(
-  x: { choSua?: boolean; loaiDangBat?: string[]; tabBanDau?: string } = {},
+  x: {
+    choSua?: boolean;
+    choSuaCoSo?: boolean;
+    loaiDangBat?: string[];
+    tabBanDau?: string;
+  } = {},
 ) {
   return render(
     <KhungCauHinh
       tabs={TABS}
       choSua={x.choSua ?? true}
+      choSuaCoSo={x.choSuaCoSo ?? x.choSua ?? true}
       tabThongBao="thong-bao-day"
       danhMucThongBao={DANH_MUC}
       loaiDangBat={x.loaiDangBat ?? ["lead.moi:"]}
@@ -399,6 +405,7 @@ describe("[CFG-T20] `khoiThem` THÊM khối, `noiDungRieng` THAY bảng — hai 
       <KhungCauHinh
         tabs={TABS}
         choSua
+        choSuaCoSo
         tabThongBao="thong-bao-day"
         danhMucThongBao={DANH_MUC}
         loaiDangBat={[]}
@@ -416,6 +423,7 @@ describe("[CFG-T20] `khoiThem` THÊM khối, `noiDungRieng` THAY bảng — hai 
       <KhungCauHinh
         tabs={TABS}
         choSua
+        choSuaCoSo
         tabThongBao="thong-bao-day"
         danhMucThongBao={DANH_MUC}
         loaiDangBat={[]}
@@ -434,6 +442,7 @@ describe("[CFG-T20] `khoiThem` THÊM khối, `noiDungRieng` THAY bảng — hai 
       <KhungCauHinh
         tabs={TABS}
         choSua
+        choSuaCoSo
         tabThongBao="thong-bao-day"
         danhMucThongBao={DANH_MUC}
         loaiDangBat={[]}

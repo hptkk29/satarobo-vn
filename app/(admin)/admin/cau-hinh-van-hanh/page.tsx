@@ -4,7 +4,13 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { SETTINGS } from "@/lib/settings/registry";
 import { getResolvedSettings } from "@/lib/settings/service";
 import { docCaiRiengTheoCoSo } from "@/lib/settings/co-so-cau-hinh";
-import { TAB_CAU_HINH, keyCuaTab, nhanCuaKey, type TabId } from "@/lib/settings/nhan-van-hanh";
+import {
+  TAB_CAU_HINH,
+  QUYEN_TAB,
+  keyCuaTab,
+  nhanCuaKey,
+  type TabId,
+} from "@/lib/settings/nhan-van-hanh";
 import { getAssignableTeachers } from "@/lib/teachers/assignable";
 import { catalogEntries } from "@/lib/notifications/catalog";
 import { kiemVapid, MO_TA_LOI_VAPID } from "@/lib/push/cau-hinh-vapid";
@@ -13,6 +19,7 @@ import { layVaiNhanHoaHong } from "@/lib/crm/vai-nhan-hoa-hong";
 import type { ChinhSachHoaHong } from "@/lib/crm/chinh-sach-hoa-hong";
 import { BangChinhSachHoaHong } from "./_components/bang-chinh-sach-hoa-hong";
 import { TabPhuongThucThanhToan } from "./_components/tab-phuong-thuc-tt";
+import { TabNickZalo } from "./_components/tab-nick-zalo";
 import { KhungCauHinh, type TabView } from "./_components/khung-cau-hinh";
 import { ChonGvMienTru } from "./_components/chon-gv-mien-tru";
 import type { CanhBaoKenh } from "./_components/chon-loai-thong-bao";
@@ -62,41 +69,65 @@ export default async function OperationalSettingsPage({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  // ── HAI CỬA VÀO, HAI CHẾ ĐỘ [23/09/2026] ──────────────────────────────────────────────
-  //
-  // `settings:view`        → chế độ ĐẦY ĐỦ (Quản trị tối cao): mọi tab, mọi khoá.
-  // `settings:view-center` → chế độ HẸP (Quản lý cơ sở): CHỈ khoá cài riêng được theo cơ sở,
-  //                          và chỉ sửa được phần CỦA CƠ SỞ MÌNH.
-  //
-  // Chủ dự án chốt 22/09: trần số đợt / số ưu đãi thì QLCS chỉnh được ở đây. Nhưng KHÔNG nới
-  // `settings:view` — màn này có 100+ khoá gồm OTP, mẫu tin ZNS, khoá VAPID, trần hoa hồng.
-  // Nới nó là chữa một vấn đề bằng cách mở một vấn đề lớn hơn (bài học `audit-logs:view`).
-  //
-  // ⚠️ Chế độ hẹp KHÔNG phải lớp bảo vệ duy nhất, và cố ý không phải: nó chỉ quyết định BÀY
-  // RA cái gì. Cổng thật nằm ở đường GHI — `setCenterSetting` đòi actor có vai quản lý tại
-  // ĐÚNG `orgUnitId` đang sửa, và từ chối mọi khoá không `centerOverridable`
-  // (`lib/settings/service.ts:144-156`). Gọi thẳng server action cũng không đi vòng được.
-  const xemDayDu = await checkPermission("settings:view");
-  const xemTheoCoSo = xemDayDu || (await checkPermission("settings:view-center"));
-  if (!xemTheoCoSo) redirect("/admin/dashboard");
 
-  // Chế độ hẹp KHÔNG bao giờ sửa được giá trị TOÀN CỤC — đó là thứ phân biệt hai chế độ.
-  const canEditGlobal = xemDayDu && (await checkPermission("settings:edit"));
+  // ── CỔNG VÀO: theo TỪNG TAB, không phải một quyền cho cả màn ──────────────────────────
+  // Trước 24/09 màn này gác bằng đúng `settings:view`, mà quyền đó thực tế chỉ Quản trị
+  // tối cao có (ma trận v1 khai `["SUPER_ADMIN"]`, và trong `seed-roles.ts` KHÔNG có dòng
+  // nào cấp nó — nên trên prod, nơi RBAC v2 đọc quyền từ DB, không vai nào khác mở được).
+  //
+  // Chủ dự án chốt 24/09: quản lý cơ sở phải vào được NHỮNG PHẦN THUỘC CƠ SỞ. Cách làm là
+  // cho mỗi tab một quyền riêng (`QUYEN_TAB`) rồi:
+  //   · vào được màn nếu giữ quyền của ÍT NHẤT MỘT tab;
+  //   · và chỉ THẤY những tab mình giữ quyền.
+  // Nhờ vậy nới một tab không kéo theo 13 tab kia — thứ sẽ xảy ra nếu chỉ nới
+  // `settings:view`.
+  const quyenTab = await Promise.all(
+    TAB_CAU_HINH.map(async (t) => ({ id: t.id, duoc: await checkPermission(QUYEN_TAB[t.id]) })),
+  );
+  const tabDuocXem = new Set(quyenTab.filter((q) => q.duoc).map((q) => q.id));
+  if (tabDuocXem.size === 0) redirect("/admin/dashboard");
+
+  // ── HAI THỨ KHÁC NHAU, TRƯỚC 24/09 LÀ MỘT BIẾN ───────────────────────────────────────
+  //
+  //   · `canEditGlobal`  — sửa được giá trị TOÀN HỆ THỐNG. Chỉ Quản trị tối cao.
+  //   · `suaDuocCoSo`    — sửa được phần CỦA CƠ SỞ MÌNH (khối "Cài riêng theo cơ sở").
+  //
+  // ⚠️ Gộp hai cái này làm một là điều màn này vừa làm, và nó biến quyền mới thành quyền
+  // CHẾT: `choSua` chảy thẳng xuống `CaiRiengTheoCoSo`, nên một Quản lý cơ sở vào được tab
+  // "Tiền & thanh toán" sẽ thấy MỌI ô — kể cả khối cài riêng — bị `disabled`, cộng một
+  // dòng chữ vàng nói "Bạn chỉ có quyền xem". Trong khi ĐƯỜNG GHI cho họ qua:
+  // `saveCenterSettingAction` không gác gì ở đầu hàm, nó giao hết cho `setCenterSetting`,
+  // và hàm đó chỉ đòi vai quản lý tại ĐÚNG `orgUnitId` đang sửa.
+  //
+  // Tức giao diện nói KHÔNG trong khi server nói CÓ. Người dùng tin giao diện và đi báo
+  // "chưa được cấp quyền" — đúng lớp lỗi luật 12: affordance không ném lỗi, không làm test
+  // đỏ, console vẫn sạch; chỉ người bấm mới biết.
+  const canEditGlobal = await checkPermission("settings:edit"); // settings:edit = SUPER_ADMIN
+  // Chế độ CƠ SỞ: vào màn bằng quyền cấp cơ sở, không phải quyền quản trị toàn hệ.
+  const cheDoCoSo = !canEditGlobal && (await checkPermission("settings:view-center"));
+  const suaDuocCoSo = canEditGlobal || cheDoCoSo;
   const sp = await searchParams;
 
   // Chỉ đọc những key THẬT SỰ bày ra. Dựng danh sách từ bảng tab chứ không từ `SETTING_KEYS`:
   // như vậy một key mới mà quên khai nhãn vận hành sẽ KHÔNG lặng lẽ hiện ra dưới dạng tên
   // biến — nó vắng mặt, và `nhan-van-hanh.test.ts` làm đỏ ngay ở CI.
-  // ⚠️ Chế độ HẸP lọc xuống còn khoá `centerOverridable`. Không lọc thì QLCS vẫn ĐỌC được
-  // trần hoa hồng, mẫu tin ZNS, cấu hình OTP… — chúng chỉ không sửa được, nhưng "không sửa
-  // được" khác "không được thấy", và đây là màn có dữ liệu nhạy cảm.
+  //
+  // ⚠️ Chế độ CƠ SỞ lọc xuống còn khoá `centerOverridable`. Đo 24/09: tab "Tiền & thanh
+  // toán" có 18 khoá, trong đó 5 khoá là TRẦN NGÂN SÁCH GỬI RA của cả công ty
+  // (`outbound.callMonthlyCapVnd`, `zaloMonthlyCapVnd`, `aiGradingMonthlyCapVnd`,
+  // `znsUnitCostVnd`, `warnAtPercent`) — không cài riêng theo cơ sở được. Với Quản lý cơ
+  // sở, một dòng không sửa toàn hệ được VÀ không cài riêng được là dòng họ không làm gì
+  // được: bày ra chỉ là nhiễu, và là con số ngân sách của cả công ty. "Không sửa được"
+  // khác "không được thấy".
   //
   // Lọc bằng `SETTINGS[k].centerOverridable` chứ không bằng danh sách gõ tay: danh sách gõ
   // tay là bản thứ hai của một sự thật đã có chủ, và nó lệch ngay lần đầu ai đó thêm khoá.
   const keyTheoTab = TAB_CAU_HINH.map((t) => ({
     tab: t,
-    keys: keyCuaTab(t.id).filter((k) => xemDayDu || SETTINGS[k]?.centerOverridable === true),
-  })).filter((x) => x.keys.length > 0);
+    keys: cheDoCoSo
+      ? keyCuaTab(t.id).filter((k) => SETTINGS[k]?.centerOverridable === true)
+      : keyCuaTab(t.id),
+  }));
   const moiKey = keyTheoTab.flatMap((x) => x.keys);
   // Hai key của hai tab có bảng riêng KHÔNG nằm trong `moiKey` (đã lọc khỏi danh sách ô
   // nhập) nên phải nạp thêm — quên là bảng hoa hồng mở ra rỗng và người dùng tưởng mất
@@ -127,7 +158,7 @@ export default async function OperationalSettingsPage({
   // trị viên mở cùng màn sẽ thấy hai danh sách khác nhau cho cùng một giá trị.
   const giaoVien = (await getAssignableTeachers({})).map((g) => ({ id: g.id, ten: g.name }));
 
-  const tabs: TabView[] = keyTheoTab.map(({ tab, keys }) => ({
+  const tabs: TabView[] = keyTheoTab.filter(({ tab }) => tabDuocXem.has(tab.id)).map(({ tab, keys }) => ({
     id: tab.id,
     ten: tab.ten,
     moTa: tab.moTa,
@@ -230,7 +261,17 @@ export default async function OperationalSettingsPage({
         </p>
       </PageHelp>
 
-      {!canEditGlobal && (
+      {/* ⚠️ Câu này PHẢI rẽ theo chế độ. Nói "bạn chỉ có quyền xem" với một Quản lý cơ sở là
+          nói sai: họ sửa được phần của cơ sở mình, và server cho họ ghi. Người tin câu đó
+          sẽ không mở khối "Cài riêng theo cơ sở" ra, và tính năng coi như không tồn tại. */}
+      {cheDoCoSo && (
+        <div className="rounded-lg border border-state-info-soft bg-state-info-soft px-4 py-3 text-sm text-state-info-ink">
+          Bạn sửa được phần <strong>của cơ sở mình</strong>: mở khối{" "}
+          <strong>Cài riêng theo cơ sở</strong> ở từng dòng. Mức <strong>toàn hệ thống</strong>{" "}
+          do quản trị cấp cao nhất đặt, bạn chỉ xem.
+        </div>
+      )}
+      {!canEditGlobal && !cheDoCoSo && (
         <div className="rounded-lg border border-state-warning-soft bg-state-warning-soft px-4 py-3 text-sm text-state-warning-ink">
           Bạn chỉ có quyền <strong>xem</strong>. Việc thay đổi dành cho quản trị cấp cao nhất.
         </div>
@@ -239,6 +280,7 @@ export default async function OperationalSettingsPage({
       <KhungCauHinh
         tabs={tabs}
         choSua={canEditGlobal}
+        choSuaCoSo={suaDuocCoSo}
         tabThongBao={TAB_THONG_BAO}
         danhMucThongBao={danhMucThongBao}
         loaiDangBat={loaiDangBat}
@@ -261,6 +303,7 @@ export default async function OperationalSettingsPage({
           "phuong-thuc-tt": (
             <TabPhuongThucThanhToan centerIdFilter={sp.centerId?.trim() || null} />
           ),
+          "nick-zalo": <TabNickZalo />,
           "hoa-hong": (
             <BangChinhSachHoaHong
               banDau={(resolved[KHOA_DO_BANG_HOA_HONG] ??
