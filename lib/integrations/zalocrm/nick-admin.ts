@@ -360,6 +360,9 @@ async function docAnhXa(): Promise<AnhXaOrg[]> {
 
 // ── Bảng nick trên màn ───────────────────────────────────────────────────────
 
+/** Một người đang được giao nick, kèm mức — đủ để hiển thị, không cần tra thêm. */
+export type NguoiDuocGiao = { sataUserId: string; ten: string; mucQuyen: string };
+
 export type DongNick = {
   zcrmAccountId: string;
   orgCode: string;
@@ -368,9 +371,17 @@ export type DongNick = {
   lastEventAt: Date | null;
   centerId: string | null;
   centerName: string | null;
-  sataUserId: string | null;
-  /** Tên Sale sở hữu. `null` = chưa gán chủ — trạng thái BÌNH THƯỜNG, không phải lỗi. */
-  sataUserName: string | null;
+  /**
+   * Những người ĐƯỢC GIAO nick này (`ZaloCrmNickGiao`).
+   *
+   * Mảng RỖNG = chưa giao ai ⇒ cả cơ sở dùng được ở mức `chat` — trạng thái BÌNH
+   * THƯỜNG của nick mới, KHÔNG phải lỗi. Đừng vẽ nó thành cảnh báo đỏ.
+   *
+   * ⚠️ KHÔNG chứa quản lý cơ sở: họ có `admin` TỰ ĐỘNG mà không cần dòng giao nào
+   * (`pham-vi-nick.ts`). Bảng này in ra thứ người dùng SỬA ĐƯỢC; trộn người không sửa
+   * được vào là hứa một nút không tồn tại.
+   */
+  giao: NguoiDuocGiao[];
 };
 
 export type TongQuanNick = {
@@ -406,25 +417,36 @@ export async function docTongQuanNick(actor: ActorTamNhinNick): Promise<TongQuan
       status: true,
       lastEventAt: true,
       centerId: true,
-      sataUserId: true,
+      giao: { select: { sataUserId: true, mucQuyen: true }, orderBy: { createdAt: "asc" } },
     },
   });
 
-  const userIds = [...new Set(rows.map((r) => r.sataUserId).filter((v): v is string => !!v))];
+  // Tên người được giao: MỘT câu tra cho cả bảng, không một câu mỗi nick. Gộp id của
+  // mọi dòng giao rồi tra một lượt — bảng có trần `TRAN_DONG_BANG` dòng, mỗi dòng vài
+  // người, nên tập id vẫn nhỏ.
+  const userIds = [...new Set(rows.flatMap((r) => r.giao.map((g) => g.sataUserId)))];
   const users = userIds.length
     ? await db.user.findMany({
         where: { id: { in: userIds }, deletedAt: null },
-        select: { id: true, name: true },
+        select: { id: true, name: true, email: true },
       })
     : [];
-  const tenTheoId = new Map(users.map((u) => [u.id, u.name]));
+  const tenTheoId = new Map(users.map((u) => [u.id, u.name ?? u.email ?? u.id]));
   const tenCoSo = new Map(anhXa.filter((a) => a.centerId).map((a) => [a.centerId!, a.centerName]));
 
   return {
     rows: rows.map((r) => ({
       ...r,
       centerName: r.centerId ? (tenCoSo.get(r.centerId) ?? null) : null,
-      sataUserName: r.sataUserId ? (tenTheoId.get(r.sataUserId) ?? null) : null,
+      // Người đã bị xoá mềm rụng khỏi `tenTheoId` ⇒ hiện `(đã nghỉ)` thay vì một ô
+      // trống. Dòng giao của họ vẫn còn trong DB nhưng KHÔNG còn hiệu lực: lượt đối
+      // soát lọc theo `nguoiCuaCoSo`, nên họ đã mất quyền rồi — màn phải nói đúng điều
+      // đó, đừng in tên như người đang dùng được.
+      giao: r.giao.map((g) => ({
+        sataUserId: g.sataUserId,
+        ten: tenTheoId.get(g.sataUserId) ?? "(đã nghỉ)",
+        mucQuyen: g.mucQuyen,
+      })),
     })),
     canhBao: locNickImLang(rows, nguongGio, new Date()),
     nguongGio,

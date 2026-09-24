@@ -251,9 +251,10 @@ export function datKhoaPhieuZalocrm(
 }
 
 /**
- * `PUT /api/public/zalo-accounts/:id/access` — ĐẶT danh sách người được dùng một nick.
+ * `PUT /api/public/zalo-accounts/:id/access` — ĐẶT danh sách người được dùng một nick,
+ * KÈM MỨC của từng người.
  *
- * 🔴 THAY CẢ TẬP, không phải "thêm một người": ai không có trong `externalIds` sẽ BỊ GỠ
+ * 🔴 THAY CẢ TẬP, không phải "thêm một người": ai không có trong danh sách sẽ BỊ GỠ
  * quyền. Đó là chủ đích — vế gỡ (nghỉ việc, chuyển cơ sở, đổi vai) là vế không ai nhớ
  * làm tay và hỏng thì không có triệu chứng.
  *
@@ -261,16 +262,38 @@ export function datKhoaPhieuZalocrm(
  * ZaloCRM không bị hệ ngoài thu quyền.
  *
  * Mảng RỖNG là hợp lệ và có nghĩa: "không ai bên Sata được dùng nick này nữa".
+ *
+ * ── 🔴 GỬI CẢ HAI DẠNG THÂN, CÓ CHỦ ĐÍCH (24/09/2026) ──────────────────────
+ * Trước đó gửi `{ externalIds: [...] }` và bên kia đóng cứng mọi người ở mức `chat`.
+ * Nay mỗi người một mức (`read`/`chat`/`admin`) qua `access[]`.
+ *
+ * Thân mang ĐỒNG THỜI `access[]` (bản mới đọc) và `externalIds[]` (bản cũ đọc). Trông
+ * thừa, nhưng nó xoá hẳn một rủi ro THỨ TỰ TRIỂN KHAI trên hệ thống đang có người dùng:
+ * ZaloCRM chạy trong container riêng, Sata chạy trên Vercel, hai bên lên KHÔNG cùng lúc.
+ *   · chỉ gửi `access[]` + ZaloCRM còn bản cũ ⇒ nó trả **400** và KHÔNG cấp/gỡ cho ai;
+ *     mọi lượt đối soát (288 lượt/ngày) hỏng cho tới khi container được khởi động lại.
+ *   · gửi cả hai ⇒ bản cũ vẫn chạy đúng như trước (mọi người mức `chat`), bản mới đọc
+ *     `access[]` và dùng mức thật. Xấu nhất là "mức chưa có hiệu lực", không phải "mất
+ *     cả đường cấp quyền".
+ * Bỏ `externalIds` đi được — SAU khi chắc mọi bản ZaloCRM đang chạy đều đọc `access[]`.
+ *
+ * 🔴 `sataUserId` CHÍNH LÀ `externalId` bên kia — tài khoản ZaloCRM sinh ra từ vé SSO
+ * mang `User.id` của Sata. Đừng ánh xạ qua email: email đổi được, `id` thì không.
  */
 export function datQuyenNickZalocrm(
   orgCode: string,
   zcrmAccountId: string,
-  externalIds: readonly string[],
+  quyen: readonly { sataUserId: string; mucQuyen: string }[],
 ): Promise<KetQuaGoi<{ granted?: number; revoked?: number; unknown?: number }>> {
   return goiZalocrm({
     orgCode,
     duongDan: `/api/public/zalo-accounts/${encodeURIComponent(zcrmAccountId)}/access`,
     method: "PUT",
-    than: { externalIds: [...externalIds] },
+    than: {
+      access: quyen.map((q) => ({ externalId: q.sataUserId, permission: q.mucQuyen })),
+      // Dự phòng cho ZaloCRM bản cũ — xem khối trên. Hai mảng PHẢI cùng tập người, nên
+      // suy ra từ cùng một nguồn chứ không nhận thêm tham số.
+      externalIds: quyen.map((q) => q.sataUserId),
+    },
   });
 }

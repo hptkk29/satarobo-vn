@@ -332,7 +332,7 @@ model Center {
   commissionAssignees CenterCommissionAssignee[] @relation("CenterCommissionAssignees")
   // 30/08/2026 — phương thức thanh toán RIÊNG của cơ sở (dòng centerId = null là
   // phương thức dùng chung, không thuộc cơ sở nào).
-  paymentMethods PaymentMethod[]
+  paymentMethods      PaymentMethod[]
 
   // Module chấm công v3 (L1 · 06/09/2026) — điểm chấm công của cơ sở vận hành.
   workLocations WorkLocation[]
@@ -1284,6 +1284,8 @@ model User {
   /// 27/08 — hoa hồng theo cơ sở: cơ sở đang trỏ người này làm quản lý + sổ phân công.
   managedCenters              Center[]                   @relation("CenterManagerUser")
   centerCommissionAssignments CenterCommissionAssignee[] @relation("CenterCommissionAssignments")
+  /// Nick Zalo CRM được giao cho người này (kèm mức quyền) — chốt 24/09/2026.
+  zaloCrmNickGiao             ZaloCrmNickGiao[]
 
   @@index([email])
   @@index([phone])
@@ -1704,7 +1706,6 @@ model Lead {
   // G-06 — "hôm nay phải gọi lại những ai": lọc theo khoảng ngày, quét thường xuyên.
   @@index([nextFollowUpAt])
 }
-
 
 /// GĐ1 — SỔ ĐỔI TRẠNG THÁI LEAD. Một dòng cho MỖI lần trạng thái đổi thật.
 ///
@@ -4524,18 +4525,18 @@ model OrderItem {
   // "Rốt cuộc bé này phải trả bao nhiêu" là một sự kiện KHÁC xảy ra sau, nên nó có chỗ
   // riêng — và giữ cả hai con số là giữ được câu trả lời cho "đã bớt cho bé bao nhiêu vì
   // nghỉ giữa chừng".
-  status          OrderItemStatus @default(ACTIVE)
-  stoppedAt       DateTime?       @db.Timestamptz(6)
+  status            OrderItemStatus      @default(ACTIVE)
+  stoppedAt         DateTime?            @db.Timestamptz(6)
   /// Ai bấm dừng. Cột TRẦN, không quan hệ — theo nếp `Order.createdById`: nhân sự nghỉ
   /// việc không được kéo theo hay chặn sổ tiền.
-  stoppedById     String?
+  stoppedById       String?
   /// Ngày BUỔI CUỐI mà sale xác nhận bé có học. Mốc đếm buổi đã dùng, và là ngày hiệu
   /// lực của `Enrollment.endedAt`.
-  lastSessionDate DateTime?       @db.Timestamptz(6)
+  lastSessionDate   DateTime?            @db.Timestamptz(6)
   /// Số buổi đã dùng — đếm `ClassSession` của lớp có `date ≤ lastSessionDate`, KHÔNG đếm
   /// theo `status` (đo prod: buổi quá khứ phần lớn còn `SCHEDULED`; xem
   /// `lib/finance/lop-chua-chot-buoi.ts`). Sale xác nhận con số này bằng mắt.
-  usedSessions    Int?
+  usedSessions      Int?
   /// SNAPSHOT `Course.totalSessions` lúc dừng — số buổi CAM KẾT của khoá.
   ///
   /// ⚠️ Chụp lại, cố ý KHÔNG đọc lại `Course` về sau (chủ dự án chốt 21/09): admin sửa số
@@ -6571,13 +6572,13 @@ model PaymentRequest {
   // từng bảng: xem BACKFILL_SPECS trong lib/org/center-bridge.ts.
   orgUnitId   String?
 
-  installmentNo Int // 0 = toàn đơn; 1,2,… = số thứ tự đợt
-  amountDue     Int
-  dueDate       DateTime?            @db.Timestamptz(6)
+  installmentNo       Int // 0 = toàn đơn; 1,2,… = số thứ tự đợt
+  amountDue           Int
+  dueDate             DateTime?            @db.Timestamptz(6)
   /// Định danh đối khớp bền theo ĐỜI của phiếu thu (VA payOS hoặc mã tham chiếu
   /// tĩnh). Sale tạo lại QR bao nhiêu lần thì khoá này vẫn nguyên → tiền luôn
   /// rơi đúng đợt (bất biến #3).
-  matchKey      String?              @unique
+  matchKey            String?              @unique
   /// TÍNH LẠI từ PaymentAllocation, không set tay.
   /// F2 · US-18 AC2 — lượt `StudentReserve` ĐÃ dời hạn đợt này. Khoá chống dời HAI LẦN.
   ///
@@ -6588,18 +6589,17 @@ model PaymentRequest {
   /// Tổng số ngày đợt này đã bị dời vì bảo lưu — CỘNG DỒN qua nhiều lượt. Để màn hình nói
   /// thật ("hạn 22/11, đã dời 30 ngày do bảo lưu") chứ không chỉ in một cái hạn lạ.
   pauseShiftDays      Int?
-  status        PaymentRequestStatus @default(PENDING)
+  status              PaymentRequestStatus @default(PENDING)
   /// Thứ tự rót waterfall (mặc định = installmentNo).
-  sortOrder     Int                  @default(0)
-  createdAt     DateTime             @default(now()) @db.Timestamptz(6)
-  updatedAt     DateTime             @updatedAt @db.Timestamptz(6)
-
-  @@index([pauseShiftReserveId])
+  sortOrder           Int                  @default(0)
+  createdAt           DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime             @updatedAt @db.Timestamptz(6)
 
   qrSessions  QrSession[]
   allocations PaymentAllocation[]
   billLines   PaymentBillLine[]
 
+  @@index([pauseShiftReserveId])
   // ⛔ KHÔNG khai lại `@@unique([orderId, installmentNo])` ở đây.
   //
   // [16/09/2026] Khoá đó nay CHIA ĐÔI theo luồng và là hai chỉ mục TỪNG PHẦN (partial
@@ -9874,10 +9874,6 @@ enum MediaType {
   VIDEO
 }
 
-
-
-
-
 // ───────────────────────────────────────────────────────────────────────────
 // TRẦN CHI PHÍ THÁNG cho lời gọi ra ngoài (chốt 27/08/2026).
 // Zalo 2tr · cước gọi 3tr · chấm điểm AI 1tr. Luật + câu lệnh: lib/ngan-sach-goi-ra/.
@@ -10237,13 +10233,39 @@ enum ZaloCrmNickStatus {
 ///
 /// Đây là bảng CẤU HÌNH, không phải dữ liệu khách: không SĐT, không email, không tên
 /// phụ huynh. `displayName` là tên hồ sơ Zalo của chính NHÂN VIÊN.
+/// Giao nick Zalo cho NGƯỜI, kèm MỨC QUYỀN (chốt 24/09/2026).
+///
+/// Khớp đúng mô hình mà ZaloCRM vốn đã có: `zalo_account_access.permission` nhận
+/// `read` (xem tin) / `chat` (gửi tin) / `admin` (quản lý nick).
+///
+/// ⚠️ Bảng này chỉ giữ phần GIAO TAY. Quản lý cơ sở KHÔNG có dòng ở đây — họ được
+/// `admin` tự động trên mọi nick của cơ sở mình (`pham-vi-nick.ts`). Ghi họ vào đây là
+/// tạo bản thứ hai của cùng một luật, và bản ghi tay sẽ mục đi khi người ta đổi cơ sở.
+model ZaloCrmNickGiao {
+  id         String   @id @default(cuid())
+  nickId     String
+  sataUserId String
+  /// `read` | `chat` | `admin` — ràng bằng CHECK ở DB, KHÔNG phải enum Postgres: thêm
+  /// mức thứ tư sau này chỉ là sửa CHECK, không phải ALTER TYPE trên bảng có dữ liệu.
+  mucQuyen   String   @default("chat")
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  nick ZaloCrmNick @relation(fields: [nickId], references: [id], onDelete: Cascade)
+  user User        @relation(fields: [sataUserId], references: [id], onDelete: Cascade)
+
+  @@unique([nickId, sataUserId])
+  @@index([nickId])
+  @@index([sataUserId])
+}
+
 model ZaloCrmNick {
   id String @id @default(cuid())
 
   /// Định danh nick phía ZaloCRM (`ZaloAccount.id`). Khoá đối chiếu DUY NHẤT giữa
   /// hai hệ, và chính là `InboxIdentity.accountId` / `InboxConversation.accountId`
   /// của kênh `ZALO_CA_NHAN`.
-  zcrmAccountId String @unique
+  zcrmAccountId String  @unique
   /// Mã Organization bên ZaloCRM. Một org = một nick = một cơ sở (chốt kiến trúc),
   /// và cũng là đoạn `[org]` trên đường webhook `/api/webhooks/zalocrm/[org]`.
   orgCode       String
@@ -10252,11 +10274,11 @@ model ZaloCrmNick {
   sataUserId    String?
   displayName   String?
 
-  status ZaloCrmNickStatus @default(UNKNOWN)
+  status      ZaloCrmNickStatus @default(UNKNOWN)
   /// Mốc sự kiện gần nhất nhận được từ nick này. NULL = chưa có sự kiện nào.
   /// Cặp (`status`, `lastEventAt`) là đầu vào cảnh báo "báo connected nhưng im
   /// > `zalocrm.idleAlertHours` giờ" — nick chết mà không ai biết là ca hỏng câm.
-  lastEventAt DateTime? @db.Timestamptz(6)
+  lastEventAt DateTime?         @db.Timestamptz(6)
 
   /// NULL = orgCode CHƯA ánh xạ được cơ sở (thiếu mục trong setting
   /// `zalocrm.orgCodes`). Giữ NULL thay vì đoán: gán nhầm cơ sở kéo theo gán nhầm
@@ -10269,6 +10291,8 @@ model ZaloCrmNick {
   updatedAt DateTime  @updatedAt @db.Timestamptz(6)
   /// Xoá MỀM. ⚠️ Không có lưới tự động — xem khối ghi chú đầu cụm.
   deletedAt DateTime? @db.Timestamptz(6)
+
+  giao ZaloCrmNickGiao[]
 
   @@index([orgCode])
   @@index([sataUserId])
@@ -10347,7 +10371,8 @@ model ZaloCrmThread {
   @@index([zcrmContactId])
   @@index([centerId])
   @@index([orgUnitId])
-}// ═══════════════════════════════════════════════════════════════════════════
+}
+// ═══════════════════════════════════════════════════════════════════════════
 // TRỤC GỌI ĐIỆN + GHI ÂM (OmiCall) — spec `plan/20-SPEC-TICH-HOP-...` §5.3
 //
 // Mô hình KẾ THỪA NGUYÊN 9 nhóm trường của `docs/ba-crm-hien-trang-va-misa.md:798-810`
@@ -10579,38 +10604,6 @@ model CallDoNotCall {
 // lib/org/dual-write.ts, khai ở BACKFILL_SPECS). Số công dùng Float: giá trị chỉ là bội
 // của 0,5 và hệ số lễ 1–3, không phải tiền.
 // ═══════════════════════════════════════════════════════════════════════════
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 /// KHÁC `MediaStatus` (của `ClassSessionMedia` cũ) — cố ý đặt tên riêng để hai hệ không
 /// lẫn vào nhau trong lúc còn sống song song. `PURGED` = đã xoá file khỏi R2, giữ dòng

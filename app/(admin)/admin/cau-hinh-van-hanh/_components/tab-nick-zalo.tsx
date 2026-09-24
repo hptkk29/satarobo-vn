@@ -79,8 +79,7 @@ export async function TabNickZalo() {
         status: r.status,
         centerId: r.centerId,
         centerName: r.centerName,
-        sataUserId: r.sataUserId,
-        sataUserName: r.sataUserName,
+        giao: r.giao,
       }))}
       nguoiTheoCoSo={nguoiTheoCoSo}
     />
