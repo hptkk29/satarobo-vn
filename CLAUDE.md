@@ -394,6 +394,18 @@ prisma/
   · ⚠️ Bẫy luật 11 gặp ngay khi viết lưới này: bản đầu đếm thẳng trên văn bản tệp và ra
     **13 thay vì 11**, vì chính khối chú thích giải thích bản vá có câu *"thêm một `await`
     mới thì gom vào một lô"*. Bỏ chú thích TRƯỚC khi đếm.
+  · ⚠️ **BỐN lưới có sẵn đỏ vì bản vá này, và cả bốn đều ghim CÁCH VIẾT chứ không ghim
+    LUẬT** — `[NDC-07]` · `[NTC-06]` · hai lưới trong `quyen-doi-soat.test.ts`. Chúng đòi
+    đúng văn bản `? await noTheoCon(order.id) : null` / `const canRecordPayments = await
+    checkPermission(…)`, nên gom câu tra vào `Promise.all` là đỏ — trong khi luật chúng canh
+    ("tắt thì không tra gì", "hỏi riêng hai quyền") **không đổi một chữ**. Đã viết lại để
+    nhận cả hai dạng và cấy thử lại (3/3 đỏ đúng ca).
+    ⇒ **Viết lưới ghim mã nguồn thì đừng neo vào chỗ đặt chữ `await`** — nó là chi tiết
+    thi huống, không phải luật. Neo vào **biểu thức điều kiện** + **nhánh else** + **số
+    lần khớp**.
+  · ⚠️ **Tôi đã bỏ cổng `test:unit` ở nhánh này và CI bắt đúng bốn lưới đó** — luật 10 nói
+    rõ: PR có BẤT KỲ tệp `.ts` nào là chạy ĐỦ BỐN CỔNG. "Chỉ đổi thứ tự chạy câu tra"
+    không phải lý do để bỏ cổng.
 
 - ⚠️ **MỤC "chuẩn hoá SĐT `84…`/`+84…`" — ĐÃ HUỶ khỏi kế hoạch [chốt 18/09/2026].**
   Làm lại **khi nào đo được dòng `84…` THẬT**, không làm trước.

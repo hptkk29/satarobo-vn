@@ -646,7 +646,16 @@ describe("[NTC-06] CÔNG TẮC — tắt thì luồng cũ y nguyên", () => {
   it("tắt ⇒ khối công nợ theo con KHÔNG dựng (trang không thêm truy vấn nào)", () => {
     const src = docMa("app/(admin)/admin/orders/[id]/page.tsx");
     // Ghim đúng hình dạng "tắt thì không tính": biểu thức điều kiện, không phải tính rồi ẩn.
-    expect(src).toMatch(/batThuTheoCon \? await noTheoCon\(order\.id\) : null/);
+    //
+    // ⚠️ 24/09/2026 — nhận CẢ `await noTheoCon(...)` lẫn `noTheoCon(...)` nằm trong một
+    // `Promise.all`. Bản đầu của lưới này ghim đúng chữ `? await noTheoCon(order.id) : null`
+    // nên nó ĐỎ khi trang gom các câu tra độc lập lại chạy song song — một thay đổi KHÔNG
+    // đụng gì tới luật nó canh. Thứ phải khoá là **biểu thức điều kiện + nhánh else không
+    // tra gì**, không phải chỗ đặt chữ `await`. (Cùng lớp với `[NDC-07]` — đọc LÝ LẼ của
+    // lưới trước, rồi hỏi lý lẽ ấy có bắt buộc cách viết đó không.)
+    expect(src).toMatch(
+      /batThuTheoCon\s*\?\s*(?:await\s+)?noTheoCon\(order\.id\)\s*:\s*(?:null|Promise\.resolve\(null\))/,
+    );
     expect(src).toMatch(/\{soTheoCon && \(/);
   });
 
