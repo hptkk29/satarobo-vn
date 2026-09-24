@@ -407,6 +407,20 @@ prisma/
     rõ: PR có BẤT KỲ tệp `.ts` nào là chạy ĐỦ BỐN CỔNG. "Chỉ đổi thứ tự chạy câu tra"
     không phải lý do để bỏ cổng.
 
+- ⚠️ **"CI KHÔNG CHẠY" GẦN NHƯ LUÔN LÀ PR ĐANG **DIRTY** — đừng đi soi workflow
+  [đo 24/09/2026, hai lần trong một ngày].**
+  Triệu chứng: `gh api ".../actions/runs?head_sha=<sha>"` trả **`total_count: 0`**. Không
+  phải "đang chờ runner", không phải cấu hình trigger sai — **GitHub không TẠO lượt chạy
+  `pull_request` nào cho một PR có xung đột với nhánh đích.**
+  · **Cách hỏi đúng, một lệnh:** `gh pr view <n> --json mergeStateStatus` → `DIRTY` là ra
+    ngay. Đừng bắt đầu bằng việc đọc `.github/workflows/` — tôi đã làm thế, rồi đóng/mở
+    lại PR, rồi đẩy một commit rỗng; cả ba đều vô ích.
+  · **Vá:** `git rebase origin/<base>` → gỡ xung đột → `push --force-with-lease`. Lượt chạy
+    xuất hiện trong vài chục giây.
+  · **Chỗ xung đột thường là `CLAUDE.md`** — mọi phiên đều ghi vào cùng một khu vực của
+    mục "Don'ts". Không phải lỗi của ai; chỉ là hệ quả của 8 worktree song song.
+
+
 - ⚠️ **MỤC "chuẩn hoá SĐT `84…`/`+84…`" — ĐÃ HUỶ khỏi kế hoạch [chốt 18/09/2026].**
   Làm lại **khi nào đo được dòng `84…` THẬT**, không làm trước.
   · **Vì sao huỷ:** đo prod 17/09 — trong 22 giao dịch UNMATCHED, số nội dung CK chứa SĐT dạng
