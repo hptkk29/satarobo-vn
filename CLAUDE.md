@@ -593,6 +593,40 @@ prisma/
   khoá **cả hai vế**. Bài học: một lưới có thể ghim đúng một câu đúng và vẫn khoá một hành
   vi sai — đọc LÝ LẼ của lưới trước khi kết luận nó đang bảo vệ cái gì.
 
+- ⚠️ **CHO MỘT VAI MỚI VÀO MỘT MÀN CŨ ⇒ ĐO LẠI MỌI GIẢ ĐỊNH "NGƯỜI XEM THẤY ĐƯỢC MỌI
+  THỨ" [sự cố 24/09/2026 — HAI lỗ trong MỘT lượt, cùng một gốc].**
+  Màn Cấu hình vận hành viết cho **một** vai (Quản trị tối cao). Cấp `settings:view-center`
+  cho Quản lý cơ sở là cho vai thứ hai vào, và **hai** giả định lặng lẽ sai theo:
+  | giả định cũ | đúng khi chỉ có QTTC | sai khi có QLCS |
+  |---|---|---|
+  | "sửa được" = `settings:edit` | họ có `settings:edit` | QLCS KHÔNG có, nhưng ghi được phần cơ sở mình |
+  | "bày mọi cơ sở" | họ quản lý mọi cơ sở | QLCS chỉ quản lý cơ sở mình |
+  · **Triệu chứng của CẢ HAI là im lặng**, và cả hai đều là luật 12 (affordance nói dối):
+    lỗ 1 khoá cứng khối "Cài riêng theo cơ sở" bằng `canEditGlobal` ⇒ QLCS vào được màn mà
+    **mọi ô `disabled`** kèm dòng chữ "Bạn chỉ có quyền xem" — **trong khi
+    `saveCenterSettingAction` không gác gì ở đầu hàm**, server sẵn sàng cho ghi. Lỗ 2 bày
+    hàng của cơ sở khác với ô **MỞ**, bấm Lưu mới nhận "Không có quyền sửa cơ sở này".
+  · **Cách tìm, rẻ, làm TRƯỚC khi cấp quyền:** đi ngược từ **đường GHI** lên. Với mỗi nút
+    trên màn, hỏi *server action này gác bằng gì?* — rồi so với cờ mà giao diện dùng để
+    bật/tắt chính nút đó. Lệch một bên là một lỗ. Ở đây `setCenterSetting` đòi **vai quản
+    lý tại đúng `orgUnitId`** còn giao diện hỏi `settings:edit`: hai câu hỏi khác nhau,
+    nối vào cùng một biến.
+  · **Vá đúng = một phép kiểm, mọi nơi gọi.** `lib/settings/quyen-co-so.ts`
+    (`laQuanLyCoSo` · `coSoSuaDuoc` · `PhamViCoSo`) — trước đó điều kiện chép tay **hai
+    bản** trong `service.ts` và màn hình **không có bản nào**, nên nó bày tất.
+  · `PhamViCoSo = "TAT_CA" | readonly string[]`, KHÔNG phải `string[] | undefined`: `[]` và
+    `undefined` trông giống nhau ở chỗ gọi nhưng đọc **ngược** nhau. Và `coSoSuaDuoc` trả
+    `[]` khi không quản lý cơ sở nào — **fail-closed**, không bao giờ rơi về `"TAT_CA"`.
+  · Cổng: `[HCS-01..03]` (hành vi `disabled` trên phần tử thật) · `[QCoSo-01..05]` (thuần) ·
+    `[CRC-11..13]` (Postgres thật — phép lọc nằm trong `where`, mà `where` sai vẫn trả mảng
+    hợp lệ nên test thuần không nói được gì) · `[QCS-03]` / `[QCS-05]` (lưới ghim dây nối).
+  · ⚠️ **Lưới `[QCS-03]` cũ ĐỎ OAN vì bản vá này** — nó hỏi `toMatch(/r\.orgUnitId === params\.orgUnitId/)`,
+    tức ghim **cách viết** chứ không ghim luật, nên dời phép kiểm sang tệp dùng chung là đỏ.
+    Lại một lần nữa (cùng họ `[NDC-07]`, `[NTC-06]`): **đọc LÝ LẼ của lưới rồi hỏi lý lẽ ấy
+    có bắt buộc cách hiện thực đó không.** Bản mới đếm **SỐ LẦN** (phải là 2 — `set` và
+    `clear`) + khẳng định không còn bản chép tay; vá một hàm quên hàm kia là hở đúng đường
+    **GỠ**, mà gỡ mức riêng của cơ sở khác cũng là sửa cấu hình của họ, chỉ khác chiều.
+
 ## Mẫu test: LƯỚI GHIM MÃ NGUỒN [13/09/2026]
 
 Dùng khi luật cần khoá có dạng **"lời gọi này phải truyền tham số kia"** — loại luật mà
