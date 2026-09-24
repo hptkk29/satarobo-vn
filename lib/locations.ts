@@ -1,20 +1,37 @@
 export type LocationStatus = "operational" | "upcoming";
 
+/**
+ * SĐT CÔNG TY — MỘT SỐ DUY NHẤT cho toàn site [chủ dự án chốt 24/09/2026].
+ *
+ * Trước hôm nay mỗi cơ sở mang một số riêng (CS1 `0818.823.720` · CS2 `0702.193.933`), và
+ * khoảng ba mươi màn **lặp qua danh sách cơ sở** để in ra HAI nút gọi + HAI nút Zalo.
+ *
+ * ⚠️ Vì sao bốn trường `hotline*`/`zalo` bị **GỠ KHỎI** `SataRoboLocation` chứ không phải
+ * gán cùng một giá trị: giữ trường lại là giữ nguyên từng vòng lặp ấy, và một số duy nhất
+ * in ra hai lần cạnh nhau là lỗi NHÌN THẤY ĐƯỢC mà không cổng nào bắt. Gỡ trường ⇒ `tsc`
+ * liệt kê đủ chỗ phải sửa (luật 7: bỏ mặc định nguy hiểm để trình biên dịch đếm hộ).
+ *
+ * Cơ sở **vẫn là hai** — địa chỉ, phường, giờ mở cửa, bản đồ vẫn theo từng cơ sở. Chỉ số
+ * điện thoại và Zalo là chung.
+ */
+export const SATA_ROBO_PHONE = {
+  /** Dạng người đọc — dùng ở MỌI chỗ hiển thị. */
+  hien: "0837.812.860",
+  /** Số thuần cho `tel:` và `zalo.me`. */
+  tho: "0837812860",
+  /** Chuẩn E.164 cho JSON-LD. */
+  e164: "+84837812860",
+  /** Link Zalo của công ty. */
+  zalo: "https://zalo.me/0837812860",
+} as const;
+
 export interface SataRoboLocation {
   id: string;
-  /** Mã cơ sở ngắn dùng cho nhãn nút (Zalo CS1/CS2…). */
+  /** Mã cơ sở ngắn dùng cho nhãn ("Cơ sở 1"/"CS1"). KHÔNG còn gắn với SĐT riêng. */
   code: "CS1" | "CS2";
   name: string;
   address: string;
   district: string;
-  /** SĐT hiển thị (định dạng có chấm). */
-  hotline: string;
-  /** SĐT thuần số cho tel: và zalo.me. */
-  hotlineRaw: string;
-  /** SĐT chuẩn E.164 cho JSON-LD. */
-  hotlineE164: string;
-  /** Link Zalo riêng của cơ sở. */
-  zalo: string;
   workingHours: string;
   status: LocationStatus;
   isHQ: boolean;
@@ -22,7 +39,8 @@ export interface SataRoboLocation {
   note?: string;
 }
 
-// 2 cơ sở — MỖI cơ sở có SĐT + Zalo RIÊNG. Không dùng 1 số chung cho toàn site.
+// 2 cơ sở — CHUNG một số điện thoại (xem `SATA_ROBO_PHONE`). Khác nhau ở địa chỉ,
+// phường và ghi chú; đừng thêm lại trường SĐT riêng cho từng cơ sở.
 export const SATA_ROBO_LOCATIONS: SataRoboLocation[] = [
   {
     id: "tru-so-nguyen-huu-tho",
@@ -34,10 +52,6 @@ export const SATA_ROBO_LOCATIONS: SataRoboLocation[] = [
     // sai đó đi thẳng vào JSON-LD `addressLocality` (lib/seo/jsonld.ts:56).
     // ⚠️ KHÔNG sửa CS2 theo: bản BCT chỉ cho địa chỉ CS1, và 114 Hoàng Diệu đúng là Hải Châu.
     district: "Hòa Cường",
-    hotline: "0818.823.720",
-    hotlineRaw: "0818823720",
-    hotlineE164: "+84818823720",
-    zalo: "https://zalo.me/0818823720",
     workingHours: "T2 - T7: 8:00 - 20:00",
     status: "operational",
     isHQ: true,
@@ -52,10 +66,6 @@ export const SATA_ROBO_LOCATIONS: SataRoboLocation[] = [
     name: "Cơ sở 2 - Hoàng Diệu",
     address: "114 Hoàng Diệu, Đà Nẵng",
     district: "Hải Châu",
-    hotline: "0702.193.933",
-    hotlineRaw: "0702193933",
-    hotlineE164: "+84702193933",
-    zalo: "https://zalo.me/0702193933",
     workingHours: "T2 - T7: 8:00 - 20:00",
     status: "operational",
     isHQ: false,
@@ -127,18 +137,7 @@ export function upcomingLocations(): SataRoboLocation[] {
 /** Danh sách cơ sở dùng cho nút liên hệ / hotline (đang hoạt động). */
 export const SATA_ROBO_CONTACT_CENTERS = operationalLocations();
 
-/** Chuỗi gộp 2 số cho help text inline, vd: "CS1: 0818.823.720 · CS2: 0702.193.933". */
-export function hotlinesInline(): string {
-  return SATA_ROBO_CONTACT_CENTERS.map((c) => `${c.code}: ${c.hotline}`).join(" · ");
-}
-
-/**
- * Hai số của CÔNG TY, KHÔNG gắn nhãn cơ sở: "0818.823.720 – 0702.193.933".
- *
- * Khác `hotlinesInline()` ở chỗ bỏ tiền tố "CS1:"/"CS2:" — hồ sơ BCT in số điện thoại như
- * số liên hệ của pháp nhân, không phải của từng cơ sở. Dấu nối là gạch ngang dài "–",
- * đúng nguyên văn tài liệu.
- */
-export function hotlinesCompany(): string {
-  return SATA_ROBO_CONTACT_CENTERS.map((c) => c.hotline).join(" – ");
-}
+// ⚠️ ĐÃ GỠ `hotlinesInline()` và `hotlinesCompany()` [24/09/2026]. Cả hai ghép chuỗi từ
+// SĐT của từng cơ sở; nay chỉ còn một số nên hàm nào cũng chỉ trả về đúng
+// `SATA_ROBO_PHONE.hien`, và giữ lại một hàm tên "hotlines" (số nhiều, có tiền tố "CS1:")
+// là để tên nói sai về thứ nó trả về. Chỗ nào cần in số thì đọc thẳng hằng.

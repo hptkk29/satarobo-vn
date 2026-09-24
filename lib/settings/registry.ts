@@ -277,15 +277,20 @@ export const SETTINGS = {
     default: { fromDay: 25, toDay: 28 },
     centerOverridable: true,
   }),
+  // ⚠️ MỘT số cho cả công ty từ 24/09/2026 — trước đó mặc định là hai dòng, mỗi cơ sở
+  // một số. Giữ nguyên hình dạng MẢNG (đổi khoá là phải migrate dòng đã lưu trên prod),
+  // chỉ hạ xuống một phần tử.
+  //
+  // ⚠️ Khoá này HIỆN KHÔNG CÓ AI ĐỌC: `grep "contact.hotlines"` chỉ ra chính chỗ khai
+  // này, nhãn ở `nhan-van-hanh.ts`, và một fixture test. Website đọc thẳng
+  // `SATA_ROBO_PHONE` (`lib/locations.ts`). Sửa ô này trên màn Cấu hình vận hành KHÔNG
+  // đổi số hiện trên web — nối dây là việc riêng, đừng để người vận hành tưởng đã đổi.
   "contact.hotlines": def({
     key: "contact.hotlines",
     group: "contact",
-    label: "Hotline hiển thị theo cơ sở",
+    label: "Hotline hiển thị",
     schema: hotlineSchema,
-    default: [
-      { code: "CS1", label: "Cơ sở 1 - Nguyễn Hữu Thọ", phone: "0818.823.720" },
-      { code: "CS2", label: "Cơ sở 2 - Hoàng Diệu", phone: "0702.193.933" },
-    ],
+    default: [{ code: "CTY", label: "Sata Robo", phone: "0837.812.860" }],
     centerOverridable: false,
   }),
   "contact.emails": def({

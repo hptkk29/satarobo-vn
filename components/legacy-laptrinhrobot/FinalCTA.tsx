@@ -3,7 +3,7 @@
 // Phase 4.UI.RESET.1 — HQ = 258 Lê Thanh Nghị, Hòa Cường; email = thongtin@satarobo.vn.
 
 import { Rocket, Phone, Mail, MapPin, Clock, MessageCircle } from "lucide-react";
-import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
+import { SATA_ROBO_PHONE } from "@/lib/locations";
 
 export default function FinalCTA() {
   return (
@@ -52,20 +52,17 @@ export default function FinalCTA() {
           >
             🎯 ĐẶT BUỔI HỌC THỬ 1-1 MIỄN PHÍ →
           </a>
-          {SATA_ROBO_CONTACT_CENTERS.map((c) => (
-            <a
-              key={c.code}
-              href={c.zalo}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-1 px-6 py-4 bg-white text-primary-purple border-2 border-primary-purple font-black text-base sm:text-lg rounded-xl
-                shadow-md hover:shadow-lg hover:bg-primary-purple hover:text-white hover:scale-[1.03] active:scale-95 transition text-center
-                inline-flex items-center justify-center gap-2"
-            >
-              <MessageCircle className="w-5 h-5" />
-              CHAT ZALO {c.code}
-            </a>
-          ))}
+          <a
+            href={SATA_ROBO_PHONE.zalo}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 px-6 py-4 bg-white text-primary-purple border-2 border-primary-purple font-black text-base sm:text-lg rounded-xl
+              shadow-md hover:shadow-lg hover:bg-primary-purple hover:text-white hover:scale-[1.03] active:scale-95 transition text-center
+              inline-flex items-center justify-center gap-2"
+          >
+            <MessageCircle className="w-5 h-5" />
+            CHAT ZALO
+          </a>
         </div>
 
         <div className="max-w-5xl mx-auto bg-text-dark text-white rounded-3xl p-6 sm:p-8 shadow-xl">
@@ -75,17 +72,15 @@ export default function FinalCTA() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
-            {SATA_ROBO_CONTACT_CENTERS.map((c) => (
-              <a key={c.code} href={`tel:${c.hotlineRaw}`} className="flex items-start gap-3 p-4 rounded-xl bg-white/10 hover:bg-white/15 transition group">
-                <div className="w-10 h-10 rounded-lg bg-primary-orange text-white flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition">
-                  <Phone className="w-5 h-5" />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-xs font-bold text-white/60 uppercase">Hotline {c.code}</div>
-                  <div className="text-sm sm:text-base font-bold text-white whitespace-nowrap">{c.hotline}</div>
-                </div>
-              </a>
-            ))}
+            <a href={`tel:${SATA_ROBO_PHONE.tho}`} className="flex items-start gap-3 p-4 rounded-xl bg-white/10 hover:bg-white/15 transition group">
+              <div className="w-10 h-10 rounded-lg bg-primary-orange text-white flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition">
+                <Phone className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-xs font-bold text-white/60 uppercase">Hotline</div>
+                <div className="text-sm sm:text-base font-bold text-white whitespace-nowrap">{SATA_ROBO_PHONE.hien}</div>
+              </div>
+            </a>
 
             <a href="mailto:thongtin@satarobo.vn" className="flex items-start gap-3 p-4 rounded-xl bg-white/10 hover:bg-white/15 transition group">
               <div className="w-10 h-10 rounded-lg bg-primary-purple text-white flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition">

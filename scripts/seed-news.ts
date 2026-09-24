@@ -65,7 +65,7 @@ Từ **Sata1 — Robosim Master** (luyện thi vòng loại) đến **Sata7 — 
 
 Trong tháng 5/2026, Sata Robo triển khai **Early Bird khai trương** với ưu đãi lên đến 30% cho học viên mới với các chương trình cam kết đầu ra chất lượng đào tạo.
 
-> 📞 Đặt buổi học thử 1-1 miễn phí: **0818.823.720**`,
+> 📞 Đặt buổi học thử 1-1 miễn phí: **0837.812.860**`,
     category: "Tin công ty",
     tags: ["Khai trương", "Robotics", "Đà Nẵng"],
     publishedAt: new Date("2026-05-15"),
@@ -108,7 +108,7 @@ Nếu học viên hoàn thành đầy đủ cam kết chuyên cần nhưng vẫn
 **Chung kết Khu vực Miền Trung dự kiến:** 13/09/2026 tại Nghệ An
 **Số lượng:** Tối đa 12 học viên/lớp — đăng ký sớm để chọn khung giờ phù hợp
 
-> 📞 Tư vấn ngay: **0818.823.720** | 📍 258 Lê Thanh Nghị, Hòa Cường, Đà Nẵng`,
+> 📞 Tư vấn ngay: **0837.812.860** | 📍 258 Lê Thanh Nghị, Hòa Cường, Đà Nẵng`,
     category: "Khoá học mới",
     tags: ["Sata8", "Vé Vàng", "Cam kết", "Cuộc thi 2026"],
     publishedAt: new Date("2026-05-12"),
@@ -149,7 +149,7 @@ Năm 2026, **Robosim** là phần mềm mô phỏng robot **bắt buộc** trong
 
 > ⚠️ **Early Bird khai trương chỉ đến 31/05/2026** — Ưu đãi lên đến 30%.
 
-> 📞 Tư vấn miễn phí: **0818.823.720**`,
+> 📞 Tư vấn miễn phí: **0837.812.860**`,
     category: "Sự kiện",
     tags: ["Cuộc thi 2026", "Robosim", "Robotics"],
     publishedAt: new Date("2026-05-10"),
@@ -188,7 +188,7 @@ Từ 01/05 đến hết 31/05/2026, Sata Robo triển khai **Early Bird Khai Tr�
 
 > ⚠️ **Đây là ưu đãi mở cửa DUY NHẤT** — Sau 31/05/2026, tất cả các khoá trở về giá niêm yết.
 
-> 📞 **0818.823.720** | 📍 258 Lê Thanh Nghị, Hòa Cường, Đà Nẵng`,
+> 📞 **0837.812.860** | 📍 258 Lê Thanh Nghị, Hòa Cường, Đà Nẵng`,
     category: "Ưu đãi",
     tags: ["Early Bird", "Ưu đãi", "Khai trương"],
     publishedAt: new Date("2026-05-01"),

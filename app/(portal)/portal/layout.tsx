@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { hasStaffRole } from "@/lib/auth/permissions";
 import { checkSessionLiveness } from "@/lib/auth/live-session";
 import { getPortalContext } from "@/lib/portal/session";
-import { hotlinesInline } from "@/lib/locations";
+import { SATA_ROBO_PHONE } from "@/lib/locations";
 import { getParentNotificationCount } from "@/lib/portal/notifications";
 import { getParentNotificationBadge } from "@/lib/portal/notification-feed";
 import { getSwitcherChildren } from "@/lib/portal/child-switcher-data";
@@ -80,7 +80,7 @@ export default async function PortalLayout({
           <div className="rounded-xl border border-dashed border-border bg-card p-10 text-center">
             <p className="text-sm text-muted-foreground">
               Tài khoản chưa được liên kết với học viên nào. Vui lòng liên hệ
-              trung tâm Sata Robo ({hotlinesInline()}) để được hỗ trợ.
+              trung tâm Sata Robo ({SATA_ROBO_PHONE.hien}) để được hỗ trợ.
             </p>
           </div>
         ) : (
@@ -126,7 +126,7 @@ export default async function PortalLayout({
           <div className="rounded-xl border border-dashed border-neutral-300 bg-white p-10 text-center">
             <p className="text-sm text-neutral-500">
               Tài khoản chưa được liên kết với học viên nào. Vui lòng liên hệ
-              trung tâm Sata Robo ({hotlinesInline()}) để được hỗ trợ.
+              trung tâm Sata Robo ({SATA_ROBO_PHONE.hien}) để được hỗ trợ.
             </p>
           </div>
         </main>

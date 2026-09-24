@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { faqs, type FAQAnswerItem } from "./_data/faqs";
 import { HelpCircle, Plus, Minus, MessageCircle, CheckCircle2 } from "lucide-react";
-import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
+import { SATA_ROBO_PHONE } from "@/lib/locations";
 
 function AnswerBlock({ answer }: { answer: FAQAnswerItem[] | string }) {
   const blocks: FAQAnswerItem[] = Array.isArray(answer)
@@ -100,18 +100,15 @@ export default function FAQ() {
             <strong className="text-primary-orange">ít phút</strong>.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3">
-            {SATA_ROBO_CONTACT_CENTERS.map((c) => (
-              <a
-                key={c.code}
-                href={c.zalo}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 rounded-xl bg-primary-purple px-6 py-3 text-sm font-bold text-white shadow-md transition hover:scale-105 hover:bg-primary-purple-dark sm:text-base"
-              >
-                <MessageCircle className="h-5 w-5" />
-                Chat Zalo {c.code} →
-              </a>
-            ))}
+            <a
+              href={SATA_ROBO_PHONE.zalo}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-xl bg-primary-purple px-6 py-3 text-sm font-bold text-white shadow-md transition hover:scale-105 hover:bg-primary-purple-dark sm:text-base"
+            >
+              <MessageCircle className="h-5 w-5" />
+              Chat Zalo →
+            </a>
           </div>
         </div>
       </div>

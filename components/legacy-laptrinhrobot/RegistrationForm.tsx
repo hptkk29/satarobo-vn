@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { readStoredCourseSelection } from "./_utils/courseSelection";
 import { locations } from "./_data/locations";
+import { SATA_ROBO_PHONE } from "@/lib/locations";
 import { VN_PROVINCES, VN_PROVINCE_DEFAULT } from "@/lib/vn-provinces";
 import { TRIAL_TEST_MINUTES, TRIAL_SESSION_MINUTES } from "@/lib/uu-dai";
 import { OTichChinhSach } from "@/components/public/o-tich-chinh-sach";
@@ -193,7 +194,7 @@ export default function RegistrationForm() {
     } catch (err) {
       console.error("Submit error:", err);
       alert(
-        `Có lỗi xảy ra, bố mẹ thử lại hoặc liên hệ Zalo ${CONTACT_CENTERS.map((c) => `${c.code}: ${c.hotline}`).join(" / ")} nhé!`,
+        `Có lỗi xảy ra, bố mẹ thử lại hoặc liên hệ Zalo ${SATA_ROBO_PHONE.hien} nhé!`,
       );
     } finally {
       setIsSubmitting(false);
@@ -242,17 +243,14 @@ export default function RegistrationForm() {
               <a href={ZALO_GROUP_LINK} className="btn-primary">
                 Tham gia nhóm Zalo ngay
               </a>
-              {CONTACT_CENTERS.map((c) => (
-                <a
-                  key={c.code}
-                  href={c.zalo}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn-outline"
-                >
-                  Zalo {c.code}: {c.hotline}
-                </a>
-              ))}
+              <a
+                href={SATA_ROBO_PHONE.zalo}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-outline"
+              >
+                Zalo {SATA_ROBO_PHONE.hien}
+              </a>
               {shouldRedirectToZalo && (
                 <button
                   type="button"

@@ -21,7 +21,7 @@ import {
   SectionHeading,
   SectionLead,
 } from "@/components/design-system/sections/section-primitives";
-import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
+import { SATA_ROBO_PHONE } from "@/lib/locations";
 import { giaHienThi } from "@/lib/gia-cong-khai";
 
 const BASE_URL = "https://satarobo.vn";
@@ -384,17 +384,13 @@ export default async function CoursesPage() {
                 Đặt buổi học thử 1-1 miễn phí
                 <ArrowRight className="w-5 h-5" />
               </Link>
-              {SATA_ROBO_CONTACT_CENTERS.map((c) => (
-                <a
-                  key={c.code}
-                  href={`tel:${c.hotlineRaw}`}
-                  className="inline-flex items-center justify-center gap-2 bg-white/10 backdrop-blur text-white border-2 border-white/50 font-bold px-6 py-4 rounded-xl hover:bg-white/20 text-lg transition-all duration-200 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none"
-                >
-                  <Phone className="w-6 h-6" />
-                  <span className="text-white/70 text-sm">{c.code}</span>
-                  {c.hotline}
-                </a>
-              ))}
+              <a
+                href={`tel:${SATA_ROBO_PHONE.tho}`}
+                className="inline-flex items-center justify-center gap-2 bg-white/10 backdrop-blur text-white border-2 border-white/50 font-bold px-6 py-4 rounded-xl hover:bg-white/20 text-lg transition-all duration-200 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none"
+              >
+                <Phone className="w-6 h-6" />
+                {SATA_ROBO_PHONE.hien}
+              </a>
             </div>
           </FadeIn>
         </div>

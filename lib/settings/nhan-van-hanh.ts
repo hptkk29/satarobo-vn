@@ -815,7 +815,9 @@ const N: Readonly<Record<SettingKey, NhanVanHanh>> = {
     tab: "cong-ty",
     ten: "Số điện thoại hiện trên website",
     giaiThich:
-      "Khai theo từng cơ sở. Sai một chữ số là khách gọi vào số lạ — kiểm lại trước khi lưu.",
+      "Một số duy nhất cho cả công ty (không còn khai theo từng cơ sở). Sai một chữ số là " +
+      "khách gọi vào số lạ — kiểm lại trước khi lưu. Lưu ý: ô này CHƯA được nối vào " +
+      "website; số đang hiện lấy từ mã nguồn.",
     canThan: true,
   },
   "contact.emails": {

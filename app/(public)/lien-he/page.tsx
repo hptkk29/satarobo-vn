@@ -12,10 +12,9 @@ import { getPageImage, pageImages } from "@/lib/page-images";
 import { tokens } from "@/lib/design-tokens";
 import {
   SATA_ROBO_CONTACT,
-  SATA_ROBO_CONTACT_CENTERS,
   operationalLocations,
   upcomingLocations,
-  hotlinesInline,
+  SATA_ROBO_PHONE,
 } from "@/lib/locations";
 
 const BASE_URL = "https://satarobo.vn";
@@ -24,11 +23,11 @@ export const revalidate = 60;
 
 export const metadata: Metadata = {
   title: "Liên hệ — Sata Robo Đà Nẵng",
-  description: `Liên hệ Sata Robo — Hotline ${hotlinesInline()}, email ${SATA_ROBO_CONTACT.emails.general}. 2 cơ sở tại Đà Nẵng.`,
+  description: `Liên hệ Sata Robo — Hotline ${SATA_ROBO_PHONE.hien}, email ${SATA_ROBO_CONTACT.emails.general}. 2 cơ sở tại Đà Nẵng.`,
   alternates: { canonical: `${BASE_URL}/lien-he` },
   openGraph: {
     title: "Liên hệ — Sata Robo",
-    description: `Hotline ${hotlinesInline()} — phản hồi 30 phút giờ hành chính.`,
+    description: `Hotline ${SATA_ROBO_PHONE.hien} — phản hồi 30 phút giờ hành chính.`,
     url: `${BASE_URL}/lien-he`,
     siteName: "Sata Robo",
     images: [{ url: pageImages.contact.src, width: 1600, height: 900 }],
@@ -39,12 +38,12 @@ const hqLocation =
   operationalLocations().find((l) => l.isHQ) ?? operationalLocations()[0];
 
 const QUICK_INFO = [
-  ...SATA_ROBO_CONTACT_CENTERS.map((c) => ({
+  {
     icon: Phone,
-    label: `Hotline ${c.code}`,
-    value: c.hotline,
-    href: `tel:${c.hotlineRaw}`,
-  })),
+    label: "Hotline",
+    value: SATA_ROBO_PHONE.hien,
+    href: `tel:${SATA_ROBO_PHONE.tho}`,
+  },
   { icon: Mail, label: "Email", value: SATA_ROBO_CONTACT.emails.general, href: `mailto:${SATA_ROBO_CONTACT.emails.general}` },
   {
     icon: MapPin,
@@ -63,7 +62,7 @@ export default async function ContactPage() {
     id: loc.id,
     name: loc.name,
     address: loc.address,
-    phone: loc.hotlineE164,
+    phone: SATA_ROBO_PHONE.e164,
     email: SATA_ROBO_CONTACT.emails.general,
   }));
 
@@ -116,12 +115,10 @@ export default async function ContactPage() {
               Chúng tôi tư vấn 1-1 miễn phí và xếp buổi học thử 1-1 cho con — phản hồi trong 30 phút giờ hành chính
             </p>
             <div className="flex flex-col sm:flex-row gap-3">
-              {SATA_ROBO_CONTACT_CENTERS.map((c) => (
-                <CTAPrimary key={c.code} href={`tel:${c.hotlineRaw}`} magnetic>
-                  <Phone className="w-4 h-4" />
-                  <span>Gọi {c.code}: {c.hotline}</span>
-                </CTAPrimary>
-              ))}
+              <CTAPrimary href={`tel:${SATA_ROBO_PHONE.tho}`} magnetic>
+                <Phone className="w-4 h-4" />
+                <span>Gọi {SATA_ROBO_PHONE.hien}</span>
+              </CTAPrimary>
             </div>
           </div>
           <div className="relative aspect-video rounded-2xl overflow-hidden shadow-xl">
@@ -202,13 +199,14 @@ export default async function ContactPage() {
                 </div>
               </div>
               <div className="space-y-2 text-sm pt-4 border-t border-neutral-100">
+                {/* Số CHUNG của công ty — cố ý KHÔNG còn tiền tố "{loc.code}", vì nhãn đó
+                    nói số này là của riêng cơ sở đang xem. */}
                 <a
-                  href={`tel:${loc.hotlineRaw}`}
+                  href={`tel:${SATA_ROBO_PHONE.tho}`}
                   className="flex items-center gap-2 text-neutral-700 hover:text-orange-600"
                 >
                   <Phone className="w-4 h-4" />
-                  <span className="text-neutral-500">{loc.code}</span>
-                  {loc.hotline}
+                  {SATA_ROBO_PHONE.hien}
                 </a>
                 <div className="flex items-center gap-2 text-neutral-600">
                   <Clock className="w-4 h-4" />

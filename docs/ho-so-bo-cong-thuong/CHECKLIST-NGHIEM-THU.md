@@ -75,7 +75,7 @@ không tự lan sang hai chỗ kia:
 | [ ] | Tên công ty | CÔNG TY CỔ PHẦN CÔNG NGHỆ GIÁO DỤC SATA ROBO (viết hoa) |
 | [ ] | Mã số doanh nghiệp | `0402301783 do Sở Tài chính Thành phố Đà Nẵng cấp ngày 02/10/2025` — phải có **cả** cơ quan cấp và ngày cấp |
 | [ ] | Địa chỉ | `211 Nguyễn Hữu Thọ, Phường Hòa Cường, Thành phố Đà Nẵng, Việt Nam` |
-| [ ] | Số điện thoại | `0818.823.720 – 0702.193.933` |
+| [ ] | Số điện thoại | `0837.812.860` — MỘT số duy nhất; không còn số riêng của từng cơ sở |
 | [ ] | Email | `thongtin@satarobo.vn` |
 
 | ✔ | Việc | Phải thấy | Ghi chú |

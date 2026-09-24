@@ -4,6 +4,7 @@
 // chỉ cần add vào _data/locations.ts; grid sẽ tự rộng ra.
 
 import { locations } from "./_data/locations";
+import { SATA_ROBO_PHONE } from "@/lib/locations";
 import { ArrowRight, MapPin, MessageCircle } from "lucide-react";
 
 export default function Locations() {
@@ -117,21 +118,16 @@ export default function Locations() {
             Inbox Zalo — Sata Robo gợi ý trung tâm gần nhà nhất theo địa chỉ bố mẹ cho.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3">
-            {locations
-              .filter((l) => !l.isUpcoming)
-              .map((c) => (
-                <a
-                  key={c.code}
-                  href={c.zalo}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary-purple text-white font-bold text-sm rounded-lg
-                    hover:bg-primary-purple-dark transition"
-                >
-                  <MessageCircle className="w-4 h-4" />
-                  Chat Zalo {c.code}
-                </a>
-              ))}
+            <a
+              href={SATA_ROBO_PHONE.zalo}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary-purple text-white font-bold text-sm rounded-lg
+                hover:bg-primary-purple-dark transition"
+            >
+              <MessageCircle className="w-4 h-4" />
+              Chat Zalo
+            </a>
           </div>
         </div>
       </div>

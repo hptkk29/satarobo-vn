@@ -1,5 +1,5 @@
 import { Music2, MessageCircle } from 'lucide-react'
-import { SATA_ROBO_CONTACT_CENTERS } from '@/lib/locations'
+import { SATA_ROBO_PHONE } from '@/lib/locations'
 
 // Facebook và YouTube không có trong phiên bản lucide-react hiện tại — dùng inline SVG
 function FacebookIcon({ className }: { className?: string }) {
@@ -40,13 +40,13 @@ const SOCIALS = [
     color: '#FF0000',
     bg: '#FFF0F0',
   },
-  ...SATA_ROBO_CONTACT_CENTERS.map((c) => ({
-    label: `Zalo ${c.code}`,
+  {
+    label: 'Zalo',
     Icon: MessageCircle,
-    href: c.zalo,
+    href: SATA_ROBO_PHONE.zalo,
     color: '#0068FF',
     bg: '#EBF4FF',
-  })),
+  },
 ]
 
 export function SocialLinks() {

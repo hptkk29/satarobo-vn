@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { commitments as staticCommitments, type Commitment as CommitmentType } from "./_data/commitments";
-import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
+import { SATA_ROBO_PHONE } from "@/lib/locations";
 import {
   BadgeDollarSign,
   ChevronLeft,
@@ -194,11 +194,9 @@ export default function Commitment({
             >
               Đặt buổi học thử 1-1 miễn phí
             </a>
-            {SATA_ROBO_CONTACT_CENTERS.map((c) => (
-              <a key={c.code} href={c.zalo} target="_blank" rel="noopener noreferrer" className="btn-outline">
-                Hỏi qua Zalo {c.code}
-              </a>
-            ))}
+            <a href={SATA_ROBO_PHONE.zalo} target="_blank" rel="noopener noreferrer" className="btn-outline">
+              Hỏi qua Zalo
+            </a>
           </div>
         </div>
       </div>

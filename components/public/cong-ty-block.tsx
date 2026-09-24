@@ -1,4 +1,4 @@
-import { SATA_ROBO_CONTACT, SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
+import { SATA_ROBO_CONTACT, SATA_ROBO_PHONE } from "@/lib/locations";
 import { cn } from "@/lib/utils";
 
 // components/public/cong-ty-block.tsx — KHỐI THÔNG TIN PHÁP NHÂN dùng chung cho 3 chân trang.
@@ -31,14 +31,9 @@ export function CongTyBlock({ className }: { className?: string }) {
       <p className="opacity-80">Địa chỉ: {c.address}</p>
       <p className="opacity-80">
         Số điện thoại:{" "}
-        {SATA_ROBO_CONTACT_CENTERS.map((center, i) => (
-          <span key={center.code}>
-            {i > 0 && " – "}
-            <a href={`tel:${center.hotlineRaw}`} className="hover:underline">
-              {center.hotline}
-            </a>
-          </span>
-        ))}
+        <a href={`tel:${SATA_ROBO_PHONE.tho}`} className="hover:underline">
+          {SATA_ROBO_PHONE.hien}
+        </a>
       </p>
       <p className="opacity-80">
         Email:{" "}

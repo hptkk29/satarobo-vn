@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getParentBilling, getPaymentMethodLabels } from "@/lib/portal/billing";
 import { soTienCoDau, tongPhieuThuHienThi } from "@/lib/portal/phieu-thu";
-import { hotlinesInline } from "@/lib/locations";
+import { SATA_ROBO_PHONE } from "@/lib/locations";
 import { isPortalV2Enabled } from "@/lib/flags";
 import { requireActiveStudent } from "@/lib/portal/session";
 import { getStudentBilling } from "@/lib/portal/billing-student";
@@ -113,7 +113,7 @@ export default async function HocPhiPage() {
 
       {totals.outstanding > 0 && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-          Vui lòng liên hệ trung tâm ({hotlinesInline()}) để được hướng dẫn
+          Vui lòng liên hệ trung tâm ({SATA_ROBO_PHONE.hien}) để được hướng dẫn
           thanh toán khoản còn lại.
         </div>
       )}
@@ -131,7 +131,7 @@ export default async function HocPhiPage() {
           {flags.rejectedCount > 0 && (
             <p className="mt-1">
               Có <b>{flags.rejectedCount}</b> khoản bị từ chối — vui lòng liên
-              hệ trung tâm ({hotlinesInline()}) để được hỗ trợ.
+              hệ trung tâm ({SATA_ROBO_PHONE.hien}) để được hỗ trợ.
             </p>
           )}
         </div>

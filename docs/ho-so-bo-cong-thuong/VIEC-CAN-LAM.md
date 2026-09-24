@@ -314,6 +314,18 @@ cắm vào cả 3 chân trang.
 **C6. Số điện thoại** — cả 2 số đều có nhưng **luôn** bị gắn nhãn cơ sở (`hotlinesInline()`
 sinh `"CS1: … · CS2: …"`); không nơi nào in dạng công ty `0818.823.720 – 0702.193.933`.
 
+> 🔴 **C6 ĐÃ HẾT HIỆU LỰC — chủ dự án chốt 24/09/2026: MỘT số duy nhất `0837.812.860`,
+> không còn hotline riêng theo cơ sở.** Nguồn duy nhất: `SATA_ROBO_PHONE` (`lib/locations.ts`).
+> Bốn trường `hotline`/`hotlineRaw`/`hotlineE164`/`zalo` đã bị **gỡ khỏi** `SataRoboLocation`
+> (và khỏi `components/legacy-laptrinhrobot/_data/locations.ts`) chứ không gán cùng một giá
+> trị — giữ trường là giữ nguyên ~30 vòng lặp in ra HAI nút cạnh nhau. `hotlinesInline()` và
+> `hotlinesCompany()` đã xoá. Lưới canh: `lib/sdt-mot-so.test.ts` `[SDT-01..04]`.
+>
+> ⚠️ **Còn một số KHÁC chưa ai quyết:** `lib/finance/hoa-don/phap-nhan.ts:90` in
+> `0837.312.860` cho pháp nhân SATA ROBO trên **hoá đơn** (theo quyết định BLĐ 22/09 mục 5),
+> lệch với `0837.812.860` của website đúng một nhóm chữ số. Một trong hai là lỗi gõ — cần
+> người xác nhận, KHÔNG tự sửa.
+
 **C7. JSON-LD trang chủ phát chuỗi "Trụ sở chính" ở dạng MÁY ĐỌC ĐƯỢC** —
 `lib/seo/jsonld.ts:59` nối thêm `" - Trụ sở chính"` khi `loc.isHQ`, bơm vào DOM ở
 `app/(public)/page.tsx:82`. Soi bằng mắt không thấy; kiểm bằng `view-source` + grep "Trụ sở".

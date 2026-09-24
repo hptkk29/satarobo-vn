@@ -14,7 +14,7 @@ import {
 } from "@/components/legacy-laptrinhrobot/_data/courses-details";
 import { ConsultCtaButton } from "@/components/khoa-hoc/consult-cta-button";
 import { ExamDetailSections } from "@/components/khoa-hoc/exam-detail-sections";
-import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
+import { SATA_ROBO_PHONE } from "@/lib/locations";
 import { LongtermDetailSections } from "@/components/khoa-hoc/longterm-detail-sections";
 import { dinhDangTien } from "@/lib/gia-cong-khai";
 
@@ -327,15 +327,12 @@ export default async function CoursePage({
               size="lg"
             />
 
-            {SATA_ROBO_CONTACT_CENTERS.map((c) => (
-              <a
-                key={c.code}
-                href={`tel:${c.hotlineRaw}`}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border-2 border-white px-6 py-4 text-lg font-bold text-white transition hover:bg-white/10"
-              >
-                {c.code}: {c.hotline}
-              </a>
-            ))}
+            <a
+              href={`tel:${SATA_ROBO_PHONE.tho}`}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border-2 border-white px-6 py-4 text-lg font-bold text-white transition hover:bg-white/10"
+            >
+              {SATA_ROBO_PHONE.hien}
+            </a>
           </div>
           <div className="mt-6">
             <Link

@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useEffect, useState } from "react";
 import { Phone, ArrowRight, LogIn } from "lucide-react";
 import { usePathname } from "next/navigation";
-import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
+import { SATA_ROBO_PHONE } from "@/lib/locations";
 import { MobileNavDrawer } from "@/components/sections/mobile-nav-drawer";
 
 const NAV_LINKS = [
@@ -92,20 +92,16 @@ export function Header() {
           })}
         </nav>
 
-        {/* Desktop CTA — hiển thị SĐT của CẢ 2 cơ sở */}
+        {/* Desktop CTA — MỘT số cho cả công ty (trước 24/09/2026 là 2 số, 2 cơ sở) */}
         <div className="hidden lg:flex items-center gap-3">
           <div className="hidden xl:flex flex-col gap-0.5">
-            {SATA_ROBO_CONTACT_CENTERS.map((c) => (
-              <a
-                key={c.code}
-                href={`tel:${c.hotlineRaw}`}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-neutral-600 hover:text-orange-600 transition-colors"
-              >
-                <Phone className="h-3.5 w-3.5" />
-                <span className="text-neutral-500">{c.code}</span>
-                {c.hotline}
-              </a>
-            ))}
+            <a
+              href={`tel:${SATA_ROBO_PHONE.tho}`}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-neutral-600 hover:text-orange-600 transition-colors"
+            >
+              <Phone className="h-3.5 w-3.5" />
+              {SATA_ROBO_PHONE.hien}
+            </a>
           </div>
           <Link
             href="/lien-he?free-trial=true"

@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { trackAndRedirect } from "./_utils/tracking";
-import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
+import { SATA_ROBO_PHONE } from "@/lib/locations";
 
 export default function FinalCTA() {
   return (
@@ -52,18 +52,15 @@ export default function FinalCTA() {
           <div className="lp-courses__support">
             <p>💡 Bố mẹ cần tư vấn riêng?</p>
             <p>Inbox mình ngay — Để được tư vấn.</p>
-            {SATA_ROBO_CONTACT_CENTERS.map((c) => (
-              <a
-                key={c.code}
-                href={c.zalo}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn btn-zalo"
-                aria-label={`Chat Zalo ${c.code} để được tư vấn miễn phí`}
-              >
-                💬 Chat Zalo {c.code} →
-              </a>
-            ))}
+            <a
+              href={SATA_ROBO_PHONE.zalo}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-zalo"
+              aria-label="Chat Zalo để được tư vấn miễn phí"
+            >
+              💬 Chat Zalo →
+            </a>
           </div>
           <p className="lp-final-cta__response-time">
             Sata Robo phản hồi trong 30 phút (giờ hành chính).

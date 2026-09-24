@@ -17,7 +17,7 @@ import {
   CalendarClock,
   type LucideIcon,
 } from "lucide-react";
-import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
+import { SATA_ROBO_PHONE } from "@/lib/locations";
 import { TRIAL_SESSION_MINUTES, TRIAL_TEST_MINUTES } from "@/lib/uu-dai";
 import { NumberTicker } from "@/components/magic/number-ticker";
 import { BorderBeam } from "@/components/magic/border-beam";
@@ -636,17 +636,13 @@ function FinalCTA() {
                 <ArrowRight className="w-5 h-5 ml-2" />
               </ShimmerButton>
             </Link>
-            {SATA_ROBO_CONTACT_CENTERS.map((c) => (
-              <a
-                key={c.code}
-                href={`tel:${c.hotlineRaw}`}
-                className="inline-flex h-14 w-full items-center justify-center gap-2 rounded-xl border-2 border-white/50 bg-white/10 px-6 text-lg font-bold text-white backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white sm:h-auto sm:w-auto sm:py-4"
-              >
-                <Phone className="w-6 h-6" />
-                <span className="text-white/70 text-sm">{c.code}</span>
-                {c.hotline}
-              </a>
-            ))}
+            <a
+              href={`tel:${SATA_ROBO_PHONE.tho}`}
+              className="inline-flex h-14 w-full items-center justify-center gap-2 rounded-xl border-2 border-white/50 bg-white/10 px-6 text-lg font-bold text-white backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white sm:h-auto sm:w-auto sm:py-4"
+            >
+              <Phone className="w-6 h-6" />
+              {SATA_ROBO_PHONE.hien}
+            </a>
           </div>
         </FadeIn>
       </div>

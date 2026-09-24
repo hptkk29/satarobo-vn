@@ -3,7 +3,7 @@
 import useScrollPosition from "./_hooks/useScrollPosition";
 import { MessageCircle, Target } from "lucide-react";
 import { trackPixelEvent, trackGA4Event } from "./_utils/tracking";
-import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
+import { SATA_ROBO_PHONE } from "@/lib/locations";
 
 export default function FloatingCTA() {
   const scrollY = useScrollPosition();
@@ -39,21 +39,18 @@ export default function FloatingCTA() {
         <span className="sm:hidden">Học thử</span>
       </button>
 
-      {SATA_ROBO_CONTACT_CENTERS.map((c) => (
-        <a
-          key={c.code}
-          href={c.zalo}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={handleZaloClick}
-          className="group flex items-center gap-2 px-3.5 sm:px-5 py-2.5 sm:py-3 bg-[#0068FF] text-white font-bold text-xs sm:text-sm rounded-full
-            shadow-xl hover:scale-105 hover:shadow-2xl active:scale-95 transition-all relative"
-          aria-label={`Chat Zalo ${c.code}`}
-        >
-          <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5" />
-          <span>Zalo {c.code}</span>
-        </a>
-      ))}
+      <a
+        href={SATA_ROBO_PHONE.zalo}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={handleZaloClick}
+        className="group flex items-center gap-2 px-3.5 sm:px-5 py-2.5 sm:py-3 bg-[#0068FF] text-white font-bold text-xs sm:text-sm rounded-full
+          shadow-xl hover:scale-105 hover:shadow-2xl active:scale-95 transition-all relative"
+        aria-label="Chat Zalo Sata Robo"
+      >
+        <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5" />
+        <span>Zalo</span>
+      </a>
     </div>
   );
 }

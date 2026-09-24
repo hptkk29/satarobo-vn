@@ -12,7 +12,7 @@ Trong trường hợp xảy ra sự cố do lỗi của Satarobo.vn, chúng tôi
 
 Khách hàng có thể gửi khiếu nại để yêu cầu Satarobo.vn giải quyết bằng cách thức sau:
 
-- **Cách 1:** Gọi điện đến số điện thoại: 0818.823.720 – 0702.193.933 hoặc gửi email đến địa chỉ: info@satarobo.vn
+- **Cách 1:** Gọi điện đến số điện thoại: 0837.812.860 hoặc gửi email đến địa chỉ: info@satarobo.vn
 - **Cách 2:** Gửi trực tiếp tới địa chỉ sau đây: 211 Nguyễn Hữu Thọ, Phường Hòa Cường, Thành phố Đà Nẵng, Việt Nam
 
 ## 3. Trình tự, thủ tục tiếp nhận và xử lý phản ánh, yêu cầu, khiếu nại
@@ -65,7 +65,7 @@ Trường hợp các bên không đồng ý với kết quả giải quyết c�
 - 🏢 CÔNG TY CỔ PHẦN CÔNG NGHỆ GIÁO DỤC SATA ROBO
 - 🏢 Mã số doanh nghiệp: 0402301783 do Sở Tài chính Thành phố Đà Nẵng cấp ngày 02/10/2025
 - 📍 Địa chỉ: 211 Nguyễn Hữu Thọ, Phường Hòa Cường, Thành phố Đà Nẵng, Việt Nam
-- 📞 Số điện thoại: 0818.823.720 – 0702.193.933
+- 📞 Số điện thoại: 0837.812.860
 - 📧 Email tiếp nhận phản ánh, khiếu nại: info@satarobo.vn
 
 ---

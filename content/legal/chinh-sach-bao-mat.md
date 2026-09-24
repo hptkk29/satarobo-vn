@@ -13,7 +13,7 @@ Mọi thông tin giao dịch sẽ được bảo mật ngoại trừ trong trư�
 - CÔNG TY CỔ PHẦN CÔNG NGHỆ GIÁO DỤC SATA ROBO
 - Mã số doanh nghiệp: 0402301783 do Sở Tài chính Thành phố Đà Nẵng cấp ngày 02/10/2025
 - Địa chỉ: 211 Nguyễn Hữu Thọ, Phường Hòa Cường, Thành phố Đà Nẵng, Việt Nam
-- Số điện thoại: 0818.823.720 – 0702.193.933
+- Số điện thoại: 0837.812.860
 - Email: thongtin@satarobo.vn
 
 ## 2. Mục đích và phạm vi thu thập thông tin
@@ -137,7 +137,7 @@ Khách hàng có quyền kiểm tra, xem, cập nhật, chỉnh sửa hoặc yê
 
 Người dùng có thể thực hiện theo một trong các phương thức sau:
 
-Liên hệ với bộ phận chăm sóc khách hàng của website qua Email: thongtin@satarobo.vn, số điện thoại 0818.823.720 – 0702.193.933 hoặc các kênh liên hệ được công bố trên website để yêu cầu hỗ trợ xem, chỉnh sửa dữ liệu cá nhân.
+Liên hệ với bộ phận chăm sóc khách hàng của website qua Email: thongtin@satarobo.vn, số điện thoại 0837.812.860 hoặc các kênh liên hệ được công bố trên website để yêu cầu hỗ trợ xem, chỉnh sửa dữ liệu cá nhân.
 
 Yêu cầu của khách hàng cần nêu rõ nội dung đề nghị, bao gồm thông tin cần xem, chỉnh sửa hoặc lý do yêu cầu nếu có và thông tin liên hệ để website phản hồi.
 
@@ -151,7 +151,7 @@ Người dùng có quyền yêu cầu xóa, hủy hoặc hạn chế xử lý d�
 
 Người dùng gửi yêu cầu thông qua một trong các phương thức sau:
 
-Liên hệ với bộ phận chăm sóc khách hàng của website qua Email: thongtin@satarobo.vn, số điện thoại 0818.823.720 – 0702.193.933 hoặc các kênh liên hệ được công bố trên website để yêu cầu hỗ trợ xóa, hủy hoặc hạn chế xử lý dữ liệu cá nhân.
+Liên hệ với bộ phận chăm sóc khách hàng của website qua Email: thongtin@satarobo.vn, số điện thoại 0837.812.860 hoặc các kênh liên hệ được công bố trên website để yêu cầu hỗ trợ xóa, hủy hoặc hạn chế xử lý dữ liệu cá nhân.
 
 Yêu cầu của khách hàng cần nêu rõ nội dung đề nghị, bao gồm thông tin liên hệ để website phản hồi; Nội dung yêu cầu cụ thể: xóa, hủy, hạn chế xử lý hoặc phạm vi dữ liệu cần xử lý; Tài liệu/thông tin xác minh danh tính nếu được yêu cầu; Lý do yêu cầu, nếu có.
 
@@ -172,7 +172,7 @@ Khi có khiếu nại, phản ánh hoặc yêu cầu liên quan đến việc th
 
 - CÔNG TY CỔ PHẦN CÔNG NGHỆ GIÁO DỤC SATA ROBO
 - Địa chỉ: 211 Nguyễn Hữu Thọ, Phường Hòa Cường, Thành phố Đà Nẵng, Việt Nam
-- Số điện thoại: 0818.823.720 – 0702.193.933
+- Số điện thoại: 0837.812.860
 - Email: thongtin@satarobo.vn
 
 **Thời gian tiếp nhận:** 08h00 – 17h30, từ thứ Hai đến thứ Sáu
@@ -237,7 +237,7 @@ Mọi yêu cầu, thắc mắc, phản ánh hoặc khiếu nại liên quan đ�
 - 🏢 CÔNG TY CỔ PHẦN CÔNG NGHỆ GIÁO DỤC SATA ROBO
 - 🏢 Mã số doanh nghiệp: 0402301783 do Sở Tài chính Thành phố Đà Nẵng cấp ngày 02/10/2025
 - 📍 Địa chỉ: 211 Nguyễn Hữu Thọ, Phường Hòa Cường, Thành phố Đà Nẵng, Việt Nam
-- 📞 Số điện thoại: 0818.823.720 – 0702.193.933
+- 📞 Số điện thoại: 0837.812.860
 - 📧 Email: thongtin@satarobo.vn
 
 ---

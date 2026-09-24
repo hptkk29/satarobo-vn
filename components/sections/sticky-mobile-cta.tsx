@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { Calendar, Phone } from "lucide-react";
-import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
+import { SATA_ROBO_PHONE } from "@/lib/locations";
 
 // F-UI-4 — Bottom-pinned bar (mobile only). Đối trọng với
 // <FloatingCta /> (bubble bottom-right, đã scope desktop only).
@@ -36,17 +36,13 @@ export function StickyMobileCta() {
           className="fixed bottom-0 left-0 right-0 z-40 border-t border-gray-200 bg-white pb-[env(safe-area-inset-bottom)] shadow-2xl lg:hidden"
         >
           <div className="flex items-center gap-2 p-3">
-            {SATA_ROBO_CONTACT_CENTERS.map((c) => (
-              <a
-                key={c.code}
-                href={`tel:${c.hotlineRaw}`}
-                aria-label={`Gọi ${c.code} ${c.hotline}`}
-                className="flex h-12 w-12 flex-shrink-0 flex-col items-center justify-center rounded-full bg-orange-100 text-orange-700 transition-colors hover:bg-orange-200"
-              >
-                <Phone className="h-4 w-4" />
-                <span className="text-[9px] font-bold leading-none">{c.code}</span>
-              </a>
-            ))}
+            <a
+              href={`tel:${SATA_ROBO_PHONE.tho}`}
+              aria-label={`Gọi Sata Robo ${SATA_ROBO_PHONE.hien}`}
+              className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-orange-100 text-orange-700 transition-colors hover:bg-orange-200"
+            >
+              <Phone className="h-5 w-5" />
+            </a>
             <Link
               href="/lien-he?free-trial=true"
               className="cta-pulse cta-shine flex h-12 flex-1 items-center justify-center gap-2 rounded-full bg-gradient-sata-warm text-sm font-semibold text-white transition-opacity hover:opacity-90"

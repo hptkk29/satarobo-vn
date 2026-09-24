@@ -73,7 +73,7 @@ Trường hợp phát sinh sự cố trong quá trình giao hàng, đơn vị v�
 
 ## 6. Hỗ trợ khách hàng
 
-Nếu khách hàng có bất kỳ câu hỏi hoặc thắc mắc nào về chính sách giao hàng hoặc đơn hàng của khách hàng, vui lòng liên hệ với chúng tôi qua số điện thoại: 0818.823.720 – 0702.193.933 hoặc email: thongtin@satarobo.vn. Chúng tôi sẽ rất vui lòng hỗ trợ giải đáp.
+Nếu khách hàng có bất kỳ câu hỏi hoặc thắc mắc nào về chính sách giao hàng hoặc đơn hàng của khách hàng, vui lòng liên hệ với chúng tôi qua số điện thoại: 0837.812.860 hoặc email: thongtin@satarobo.vn. Chúng tôi sẽ rất vui lòng hỗ trợ giải đáp.
 
 Sata Robo luôn nỗ lực mang đến trải nghiệm giao hàng an toàn, nhanh chóng và đáng tin cậy cho tất cả khách hàng.
 
@@ -82,7 +82,7 @@ Sata Robo luôn nỗ lực mang đến trải nghiệm giao hàng an toàn, nhan
 - 🏢 CÔNG TY CỔ PHẦN CÔNG NGHỆ GIÁO DỤC SATA ROBO
 - 🏢 Mã số doanh nghiệp: 0402301783 do Sở Tài chính Thành phố Đà Nẵng cấp ngày 02/10/2025
 - 📍 Địa chỉ: 211 Nguyễn Hữu Thọ, Phường Hòa Cường, Thành phố Đà Nẵng, Việt Nam
-- 📞 Số điện thoại: 0818.823.720 – 0702.193.933
+- 📞 Số điện thoại: 0837.812.860
 - 📧 Email: thongtin@satarobo.vn
 
 ---

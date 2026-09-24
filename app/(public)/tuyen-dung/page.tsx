@@ -21,7 +21,7 @@ import { CTAPrimary } from "@/components/design-system/ctas/cta-primary";
 import { GlowOrb } from "@/components/design-system/effects/glow-orb";
 import { getPageImage, pageImages } from "@/lib/page-images";
 import { tokens } from "@/lib/design-tokens";
-import { SATA_ROBO_CONTACT, SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
+import { SATA_ROBO_CONTACT, SATA_ROBO_PHONE } from "@/lib/locations";
 import { AutoCarousel } from "@/components/public/auto-carousel";
 
 export const revalidate = 60;
@@ -256,17 +256,13 @@ export default async function TuyenDungPage() {
             <Mail className="h-4 w-4 text-orange-500" />
             {HR_EMAIL}
           </a>
-          {SATA_ROBO_CONTACT_CENTERS.map((c) => (
-            <a
-              key={c.code}
-              href={`tel:${c.hotlineRaw}`}
-              className="inline-flex items-center gap-2 text-neutral-700 hover:text-orange-600 transition-colors"
-            >
-              <Phone className="h-4 w-4 text-orange-500" />
-              <span className="text-neutral-400">{c.code}</span>
-              {c.hotline}
-            </a>
-          ))}
+          <a
+            href={`tel:${SATA_ROBO_PHONE.tho}`}
+            className="inline-flex items-center gap-2 text-neutral-700 hover:text-orange-600 transition-colors"
+          >
+            <Phone className="h-4 w-4 text-orange-500" />
+            {SATA_ROBO_PHONE.hien}
+          </a>
         </div>
       </SectionBase>
     </>

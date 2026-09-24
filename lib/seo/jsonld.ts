@@ -1,6 +1,11 @@
 import { marked } from 'marked'
 import { HR_CONTACT } from '@/lib/data/job-options'
-import { SATA_ROBO_CONTACT, SATA_ROBO_LOCATIONS, OPENING_HOURS_SCHEMA } from '@/lib/locations'
+import {
+  SATA_ROBO_CONTACT,
+  SATA_ROBO_LOCATIONS,
+  SATA_ROBO_PHONE,
+  OPENING_HOURS_SCHEMA,
+} from '@/lib/locations'
 
 const BASE_URL = 'https://satarobo.vn'
 
@@ -35,16 +40,17 @@ export function organizationJsonLd() {
     description: 'Trung tâm đào tạo STEM – Lập trình Robotics & AI – Sata Robo',
     taxID: SATA_ROBO_CONTACT.taxCode,
     contactPoint: [
-      // 1 contactPoint cho MỖI cơ sở (mỗi cơ sở 1 số riêng).
-      ...SATA_ROBO_LOCATIONS.filter((loc) => loc.status === 'operational').map((loc) => ({
+      // MỘT contactPoint cho cả công ty [24/09/2026]. Trước đó là một điểm liên hệ cho MỖI
+      // cơ sở, mỗi cơ sở một số riêng; nay chỉ còn một số nên hai điểm sẽ mang cùng
+      // `telephone` — schema.org đọc ra hai kênh chăm sóc khách hàng trùng nhau.
+      {
         '@type': 'ContactPoint',
-        telephone: loc.hotlineE164,
+        telephone: SATA_ROBO_PHONE.e164,
         contactType: 'customer service',
         email: SATA_ROBO_CONTACT.emails.general,
         areaServed: 'VN',
         availableLanguage: 'Vietnamese',
-        name: `${loc.code} - ${loc.name}`,
-      })),
+      },
       {
         '@type': 'ContactPoint',
         telephone: '+84' + HR_CONTACT.phoneRaw.substring(1),
@@ -69,7 +75,7 @@ export function organizationJsonLd() {
       SATA_ROBO_CONTACT.facebook,
       SATA_ROBO_CONTACT.tiktok,
       SATA_ROBO_CONTACT.youtube,
-      ...SATA_ROBO_LOCATIONS.filter((loc) => loc.status === 'operational').map((loc) => loc.zalo),
+      SATA_ROBO_PHONE.zalo,
     ],
   }
 }

@@ -5,7 +5,7 @@ import { readAttribution } from "@/lib/marketing/attribution";
 
 import { useState, useEffect, useRef } from "react";
 import { X, Phone, Loader2 } from "lucide-react";
-import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
+import { SATA_ROBO_PHONE } from "@/lib/locations";
 import { toast } from "sonner";
 import { OTichChinhSach } from "@/components/public/o-tich-chinh-sach";
 
@@ -326,17 +326,12 @@ export function ConsultModal({
 
           <p className="pt-1 text-center text-xs text-gray-500">
             Hoặc gọi ngay{" "}
-            {SATA_ROBO_CONTACT_CENTERS.map((c, i) => (
-              <span key={c.code}>
-                {i > 0 ? " · " : ""}
-                <a
-                  href={`tel:${c.hotlineRaw}`}
-                  className="font-bold text-orange-600 hover:underline"
-                >
-                  {c.code}: {c.hotline}
-                </a>
-              </span>
-            ))}
+            <a
+              href={`tel:${SATA_ROBO_PHONE.tho}`}
+              className="font-bold text-orange-600 hover:underline"
+            >
+              {SATA_ROBO_PHONE.hien}
+            </a>
           </p>
         </form>
       </div>

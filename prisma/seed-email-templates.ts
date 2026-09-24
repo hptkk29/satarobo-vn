@@ -25,7 +25,7 @@ Chi tiết đơn hàng:
 
 Trân trọng,
 Sata Robo
-Hotline: 0818823720`,
+Hotline: 0837812860`,
     bodyHtml: `<!DOCTYPE html>
 <html><body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
 <div style="text-align: center; padding: 20px; background: linear-gradient(135deg, #f97316, #7e22ce); color: white; border-radius: 8px 8px 0 0;">
@@ -48,7 +48,7 @@ Hotline: 0818823720`,
 
   <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;" />
   <p style="text-align: center; color: #666; font-size: 13px;">
-    Mọi thắc mắc liên hệ <strong>0818823720</strong> hoặc <strong>satarobo@gmail.com</strong>
+    Mọi thắc mắc liên hệ <strong>0837812860</strong> hoặc <strong>satarobo@gmail.com</strong>
   </p>
 </div>
 </body></html>`,
@@ -169,7 +169,7 @@ Thông tin:
 - Lý do: {{reason}}
 
 Sata Robo cảm ơn anh/chị và {{student_name}} đã đồng hành cùng chúng tôi.
-Mọi câu hỏi về học phí, hoàn trả hoặc thủ tục, vui lòng liên hệ 0818823720.
+Mọi câu hỏi về học phí, hoàn trả hoặc thủ tục, vui lòng liên hệ 0837812860.
 
 Hẹn gặp lại trong tương lai!
 
@@ -194,7 +194,7 @@ Sata Robo`,
 
   <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;" />
   <p style="text-align: center; color: #666; font-size: 13px;">
-    Mọi câu hỏi liên hệ <strong>0818823720</strong> hoặc <strong>satarobo@gmail.com</strong>
+    Mọi câu hỏi liên hệ <strong>0837812860</strong> hoặc <strong>satarobo@gmail.com</strong>
   </p>
 </div>
 </body></html>`,
@@ -278,7 +278,7 @@ Thời gian: {{session_date:datetime}}
 Chủ đề: {{session_topic}}
 
 Vui lòng cho con đi học đúng giờ. Nếu có thay đổi đột xuất, vui lòng liên hệ ngay
-0818.823.720 để Sata Robo sắp xếp.
+0837.812.860 để Sata Robo sắp xếp.
 
 Trân trọng,
 Sata Robo`,
@@ -301,12 +301,12 @@ Sata Robo`,
 
   <p>Vui lòng cho con đi học đúng giờ. Nếu có thay đổi đột xuất, liên hệ ngay:</p>
   <p style="text-align: center; margin: 20px 0;">
-    <a href="tel:0818823720" style="display: inline-block; padding: 12px 24px; background: #f97316; color: white; text-decoration: none; border-radius: 8px; font-weight: bold;">0818.823.720</a>
+    <a href="tel:0837812860" style="display: inline-block; padding: 12px 24px; background: #f97316; color: white; text-decoration: none; border-radius: 8px; font-weight: bold;">0837.812.860</a>
   </p>
 
   <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;" />
   <p style="text-align: center; color: #666; font-size: 13px;">
-    Mọi câu hỏi liên hệ <strong>0818.823.720</strong> hoặc <strong>satarobo@gmail.com</strong>
+    Mọi câu hỏi liên hệ <strong>0837.812.860</strong> hoặc <strong>satarobo@gmail.com</strong>
   </p>
 </div>
 </body></html>`,
@@ -340,7 +340,7 @@ Thông tin:
 Để con tiếp tục lộ trình Robotics liền mạch, Sata Robo trân trọng mời anh/chị
 đăng ký khóa tiếp theo trước ngày {{end_date:date}}.
 
-Liên hệ ngay 0818.823.720 để được tư vấn lộ trình phù hợp với độ tuổi và mục
+Liên hệ ngay 0837.812.860 để được tư vấn lộ trình phù hợp với độ tuổi và mục
 tiêu của con.
 
 Trân trọng,
@@ -363,7 +363,7 @@ Sata Robo`,
   <p>Để con tiếp tục lộ trình Robotics <strong>liền mạch</strong>, không bị gián đoạn tư duy đã xây dựng, anh/chị nên đăng ký khóa tiếp theo trong 14 ngày tới.</p>
 
   <p style="text-align: center; margin: 24px 0;">
-    <a href="tel:0818823720" style="display: inline-block; padding: 14px 28px; background: #f97316; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">Liên hệ tư vấn ngay</a>
+    <a href="tel:0837812860" style="display: inline-block; padding: 14px 28px; background: #f97316; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">Liên hệ tư vấn ngay</a>
   </p>
 
   <p style="text-align: center; color: #666; font-size: 14px;">
@@ -372,7 +372,7 @@ Sata Robo`,
 
   <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;" />
   <p style="text-align: center; color: #666; font-size: 13px;">
-    Sata Robo · 0818.823.720 · satarobo@gmail.com
+    Sata Robo · 0837.812.860 · satarobo@gmail.com
   </p>
 </div>
 </body></html>`,
@@ -407,7 +407,7 @@ Sata Robo gửi anh/chị báo cáo tiến độ học tập của {{student_nam
 
 Báo cáo lập ngày {{report_date:date}}.
 
-Mọi thắc mắc về tiến độ của con, anh/chị vui lòng liên hệ 0818823720.
+Mọi thắc mắc về tiến độ của con, anh/chị vui lòng liên hệ 0837812860.
 
 Trân trọng,
 Sata Robo`,
@@ -430,7 +430,7 @@ Sata Robo`,
   <p style="color: #666; font-size: 13px;">Báo cáo lập ngày {{report_date:date}}.</p>
   <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;" />
   <p style="text-align: center; color: #666; font-size: 13px;">
-    Mọi thắc mắc liên hệ <strong>0818823720</strong> hoặc <strong>satarobo@gmail.com</strong>
+    Mọi thắc mắc liên hệ <strong>0837812860</strong> hoặc <strong>satarobo@gmail.com</strong>
   </p>
 </div>
 </body></html>`,

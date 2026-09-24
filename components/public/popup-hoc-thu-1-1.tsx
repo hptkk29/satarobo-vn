@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { X, Calendar, Clock, MapPin, Phone, Star } from "lucide-react";
-import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
+import { SATA_ROBO_PHONE } from "@/lib/locations";
 import { PROGRAM_START, PROGRAM_END } from "@/lib/uu-dai";
 import {
   getNextOpeningDate,
@@ -236,27 +236,25 @@ export function PopupHocThu11() {
           </div>
 
           <div className="space-y-2 pt-2">
-            {SATA_ROBO_CONTACT_CENTERS.map((c) => (
-              <div key={c.code} className="flex flex-col gap-2 sm:flex-row">
-                <a
-                  href={c.zalo}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={handleDismiss}
-                  className="cta-shine flex-1 inline-flex items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-600 sm:py-3 sm:text-base"
-                >
-                  💬 Đặt buổi học thử qua Zalo {c.code}
-                </a>
-                <a
-                  href={`tel:${c.hotlineRaw}`}
-                  onClick={handleDismiss}
-                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg border-2 border-orange-500 px-4 py-2.5 text-sm font-semibold text-orange-500 transition-colors hover:bg-orange-50 sm:py-3 sm:text-base"
-                >
-                  <Phone className="h-4 w-4" />
-                  {c.code} {c.hotline}
-                </a>
-              </div>
-            ))}
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <a
+                href={SATA_ROBO_PHONE.zalo}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={handleDismiss}
+                className="cta-shine flex-1 inline-flex items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-600 sm:py-3 sm:text-base"
+              >
+                💬 Đặt buổi học thử qua Zalo
+              </a>
+              <a
+                href={`tel:${SATA_ROBO_PHONE.tho}`}
+                onClick={handleDismiss}
+                className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg border-2 border-orange-500 px-4 py-2.5 text-sm font-semibold text-orange-500 transition-colors hover:bg-orange-50 sm:py-3 sm:text-base"
+              >
+                <Phone className="h-4 w-4" />
+                {SATA_ROBO_PHONE.hien}
+              </a>
+            </div>
           </div>
 
           <p className="pt-1 text-center text-[11px] text-gray-500 sm:text-xs">

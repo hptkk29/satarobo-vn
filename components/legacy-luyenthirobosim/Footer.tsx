@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
+import { SATA_ROBO_PHONE } from "@/lib/locations";
 import { LEGAL_PAGES, LEGAL_INDEX_SLUG, legalHref } from "@/lib/legal-pages";
 import { CongTyBlock } from "@/components/public/cong-ty-block";
 
@@ -67,25 +67,21 @@ export default function Footer() {
           <address>
             <h4>Liên hệ</h4>
             <ul className="footer-links">
-              {SATA_ROBO_CONTACT_CENTERS.map((c) => (
-                <li key={`tel-${c.code}`}>
-                  <a href={`tel:${c.hotlineRaw}`} aria-label={`Gọi ${c.code} Sata Robo`}>
-                    <span className="fi">📞</span> {c.code}: {c.hotline}
-                  </a>
-                </li>
-              ))}
-              {SATA_ROBO_CONTACT_CENTERS.map((c) => (
-                <li key={`zalo-${c.code}`}>
-                  <a
-                    href={c.zalo}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label={`Chat Zalo ${c.code}`}
-                  >
-                    <span className="fi">💬</span> Zalo {c.code}: {c.hotline}
-                  </a>
-                </li>
-              ))}
+              <li>
+                <a href={`tel:${SATA_ROBO_PHONE.tho}`} aria-label="Gọi Sata Robo">
+                  <span className="fi">📞</span> {SATA_ROBO_PHONE.hien}
+                </a>
+              </li>
+              <li>
+                <a
+                  href={SATA_ROBO_PHONE.zalo}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Chat Zalo Sata Robo"
+                >
+                  <span className="fi">💬</span> Zalo {SATA_ROBO_PHONE.hien}
+                </a>
+              </li>
               <li>
                 <a href="mailto:thongtin@satarobo.vn" aria-label="Gửi email cho Sata Robo">
                   <span className="fi">✉️</span> thongtin@satarobo.vn

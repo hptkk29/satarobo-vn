@@ -11,7 +11,7 @@ import { soTienCoDau, tongPhieuThuHienThi } from "@/lib/portal/phieu-thu";
 
 import { PageHero, HeroMetric } from "@/components/portal/page-header";
 import { ChildSwitcher } from "@/components/portal/child-switcher";
-import { hotlinesInline } from "@/lib/locations";
+import { SATA_ROBO_PHONE } from "@/lib/locations";
 
 // RSC render trên server (Vercel = UTC) → mọi ngày tháng phải quy về giờ VN,
 // nếu không "hôm nay"/"hạn đóng" lệch 1 ngày trong khung 00:00–07:00 giờ VN.
@@ -173,7 +173,7 @@ export function HocPhiPageV2({
               <div className="flex items-start gap-2 rounded-xl border border-border bg-muted/50 p-3 text-xs font-medium text-muted-foreground">
                 <Phone className="mt-0.5 size-4 shrink-0 text-primary" />
                 <p>
-                  Vui lòng liên hệ trung tâm ({hotlinesInline()}) để được hướng
+                  Vui lòng liên hệ trung tâm ({SATA_ROBO_PHONE.hien}) để được hướng
                   dẫn thanh toán khoản còn lại.
                 </p>
               </div>
@@ -201,7 +201,7 @@ export function HocPhiPageV2({
                   <p>
                     Có <b className="text-foreground">{data.rejectedCount}</b>{" "}
                     khoản bị từ chối — vui lòng liên hệ trung tâm (
-                    {hotlinesInline()}) để được hỗ trợ.
+                    {SATA_ROBO_PHONE.hien}) để được hỗ trợ.
                   </p>
                 )}
               </div>

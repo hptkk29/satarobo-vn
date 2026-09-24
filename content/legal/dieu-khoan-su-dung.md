@@ -101,6 +101,6 @@ Sata Robo có quyền thay đổi Điều khoản này bất kỳ lúc nào. Phi
 Mọi câu hỏi về Điều khoản:
 
 - 📧 Email: thongtin@satarobo.vn
-- 📞 Hotline CS1 (Nguyễn Hữu Thọ): 0818.823.720 · CS2 (Hoàng Diệu): 0702.193.933
+- 📞 Số điện thoại: 0837.812.860
 - 📍 Địa chỉ: 211 Nguyễn Hữu Thọ, Phường Hòa Cường, Thành phố Đà Nẵng, Việt Nam
 - 🏢 Mã số doanh nghiệp: 0402301783 do Sở Tài chính Thành phố Đà Nẵng cấp ngày 02/10/2025

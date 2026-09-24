@@ -40,11 +40,15 @@ export function formatSalaryRange(
   return `Đến ${(max! / 1_000_000).toFixed(0)} triệu`
 }
 
+// Số ở đây là SỐ CHUNG của công ty (`SATA_ROBO_PHONE`), chép ra chuỗi thay vì import để
+// `lib/data/` không phụ thuộc `lib/locations` — nếu đổi số thì đổi CẢ HAI chỗ.
+// Phường đã sửa "Hải Châu" → "Hòa Cường": 211 Nguyễn Hữu Thọ thuộc Hòa Cường, đúng như
+// hồ sơ BCT và `lib/locations.ts`; chữ cũ là lỗi sao chép.
 export const HR_CONTACT = {
   email: 'tuyendung@satarobo.vn',
-  phone: '0818.823.720',
-  phoneRaw: '0818823720',
-  zaloUrl: 'https://zalo.me/0818823720',
+  phone: '0837.812.860',
+  phoneRaw: '0837812860',
+  zaloUrl: 'https://zalo.me/0837812860',
   name: 'Ms. Trang',
-  address: '211 Nguyễn Hữu Thọ, Hải Châu, Đà Nẵng',
+  address: '211 Nguyễn Hữu Thọ, Hòa Cường, Đà Nẵng',
 } as const

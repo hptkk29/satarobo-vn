@@ -5,14 +5,16 @@ import Image from "next/image";
 import { Phone, Mail, MapPin, Plus } from "lucide-react";
 import {
   SATA_ROBO_CONTACT,
+  SATA_ROBO_PHONE,
   operationalLocations,
   upcomingLocations,
 } from "@/lib/locations";
 import { LEGAL_PAGES, LEGAL_INDEX_SLUG, legalHref } from "@/lib/legal-pages";
 import { CongTyBlock } from "@/components/public/cong-ty-block";
 
-// F-UI-4 — New footer. Real data từ SATA_ROBO_LOCATIONS (mỗi cơ sở SĐT + Zalo
-// riêng — không hard-code), 4-col desktop / 1-col accordion mobile.
+// F-UI-4 — New footer. 4-col desktop / 1-col accordion mobile.
+// Địa chỉ lấy từ SATA_ROBO_LOCATIONS (vẫn 2 cơ sở); SĐT và Zalo là MỘT số chung của công
+// ty, `SATA_ROBO_PHONE`, từ 24/09/2026 — trước đó mỗi cơ sở một số riêng.
 const SECTIONS = [
   {
     title: "Khoá học",
@@ -39,10 +41,7 @@ const SECTIONS = [
   {
     title: "Hỗ trợ",
     links: [
-      ...operationalLocations().map((c) => ({
-        label: `Chat Zalo ${c.code} (${c.hotline})`,
-        href: c.zalo,
-      })),
+      { label: `Chat Zalo (${SATA_ROBO_PHONE.hien})`, href: SATA_ROBO_PHONE.zalo },
       { label: "Câu hỏi thường gặp", href: "/lien-he" },
     ],
   },
@@ -99,19 +98,19 @@ const SOCIAL_LINKS = [
       </svg>
     ),
   },
-  ...operationalLocations().map((c) => ({
-    label: `Zalo ${c.code}`,
-    href: c.zalo,
+  {
+    label: "Zalo",
+    href: SATA_ROBO_PHONE.zalo,
     bg: "bg-[#0068FF] hover:bg-[#0050cc]",
     icon: (
       <span
         className="text-[10px] font-black leading-none text-white"
         aria-hidden="true"
       >
-        {c.code}
+        Zalo
       </span>
     ),
-  })),
+  },
 ];
 
 function isExternal(href: string) {
@@ -147,18 +146,20 @@ export function SiteFooter() {
               {upcoming > 0 ? ` · ${upcoming} sắp khai trương` : ""}.
             </p>
             <div className="space-y-3 text-sm">
+              {/* Số điện thoại nằm NGOÀI vòng lặp cơ sở [24/09/2026] — một số cho cả công
+                  ty. Để bên trong là in ra hai lần, mỗi cơ sở một lần. */}
+              <a
+                href={`tel:${SATA_ROBO_PHONE.tho}`}
+                className="flex items-center gap-2 transition-colors hover:text-orange-400"
+              >
+                <Phone className="h-4 w-4 text-orange-400" />
+                {SATA_ROBO_PHONE.hien}
+              </a>
               {operationalLocations().map((c) => (
                 <div key={c.code} className="space-y-1">
                   <p className="text-xs font-bold uppercase tracking-wide text-gray-400">
                     {c.code} — {c.name}
                   </p>
-                  <a
-                    href={`tel:${c.hotlineRaw}`}
-                    className="flex items-center gap-2 transition-colors hover:text-orange-400"
-                  >
-                    <Phone className="h-4 w-4 text-orange-400" />
-                    {c.hotline}
-                  </a>
                   <div className="flex items-start gap-2 text-gray-400">
                     <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0 text-orange-400" />
                     <span>{c.address}</span>
