@@ -52,6 +52,11 @@ export const ROLE_SEED: RoleSeed[] = [
       // dòng này KHÔNG đổi hành vi; khai để ma trận nói được ai mở được màn ZaloCRM,
       // và để v1 (local/dev) khớp v2. GLOBAL — xem lý do ở CENTER_SALES_CSM.
       { action: "zalocrm:use", scopeType: "GLOBAL" },
+      // Giao nick cho người (màn `/zalo-crm/nick`). CỐ Ý KHÔNG cấp cho
+      // `CENTER_SALES_CSM`: dùng nick là việc của họ, quyết ai được dùng nick nào thì
+      // không. GLOBAL cùng lý do với `zalocrm:use` ngay trên — cổng trang gọi trần,
+      // không truyền target, nên CENTER sẽ trả false và khoá trang.
+      { action: "zalocrm:manage-nick", scopeType: "GLOBAL" },
       { action: "leads:change-status", scopeType: "GLOBAL" },
       // C-01 — chỉ tiêu lead theo tháng × cơ sở. SUPER_ADMIN đã bypass toàn bộ quyền
       // trong can() v2 nên dòng này KHÔNG đổi hành vi; khai cho khớp v1 + rõ ý, và để
@@ -703,6 +708,11 @@ export const ROLE_SEED: RoleSeed[] = [
       // cơ sở của module này KHÔNG do scope quyền lo — nó do chính ứng dụng ZaloCRM
       // (mỗi cơ sở một `orgCode` riêng, quyết bởi claim trong token SSO).
       { action: "zalocrm:use", scopeType: "GLOBAL" },
+      // Giao nick cho người (màn `/zalo-crm/nick`). CỐ Ý KHÔNG cấp cho
+      // `CENTER_SALES_CSM`: dùng nick là việc của họ, quyết ai được dùng nick nào thì
+      // không. GLOBAL cùng lý do với `zalocrm:use` ngay trên — cổng trang gọi trần,
+      // không truyền target, nên CENTER sẽ trả false và khoá trang.
+      { action: "zalocrm:manage-nick", scopeType: "GLOBAL" },
       { action: "parent-requests:manage", scopeType: "GLOBAL" },
       { action: "parent-feedback:view", scopeType: "GLOBAL" },
       { action: "media:view", scopeType: "GLOBAL" },

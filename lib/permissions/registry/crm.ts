@@ -95,6 +95,15 @@ export const crmModule: ModuleDecl = {
       description:
         "Mở màn Zalo CRM nhúng (SSO iframe) và nhắn khách qua nick Zalo cá nhân.",
     },
+    // `scopable: false` cùng lý do với `zalocrm:use`: cách ly theo cơ sở nằm ở chỗ khác
+    // (màn chỉ liệt kê nick của cơ sở mà người dùng nhìn thấy được), không ở tầng này.
+    {
+      key: "zalocrm:manage-nick",
+      action: "manage-nick",
+      scopable: false,
+      description:
+        "Giao nick Zalo cho một người. Nick đã giao thì chỉ người đó và quản lý cơ sở đọc được.",
+    },
     { key: "leads:assign", action: "assign" },
     {
       key: "leads:assign-config",
