@@ -56,6 +56,9 @@ describe("[CFG-T01] mọi tham số đều có chỗ đứng trên giao diện",
     // dung cho chúng qua `noiDungRieng`, và `khung-cau-hinh.tsx` dựng nội dung đó thay
     // cho bảng ô. Mỗi dòng dưới đây phải nêu bày cái gì.
     const CO_NOI_DUNG_RIENG: Record<string, string> = {
+      "nick-zalo":
+        "bảng giao nick Zalo cho người (dời từ màn riêng /zalo-crm/nick ngày 24/09) — " +
+        "dữ liệu nằm ở bảng `ZaloCrmNick`, không phải SystemSetting",
       "phuong-thuc-tt":
         "bảng danh mục phương thức thanh toán (gộp từ /payment-methods 14/09/2026) — " +
         "dữ liệu nằm ở bảng `PaymentMethod`, không phải SystemSetting",
