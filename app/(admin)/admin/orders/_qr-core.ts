@@ -45,6 +45,7 @@ import {
   VIETQR_ADDINFO_MAX,
 } from "@/lib/payments/vietqr";
 import { noiDungCkCoKhoa } from "@/lib/payments/noi-dung-ck";
+import { anhQrDaCu, noiDungTrongAnhQr } from "@/lib/payments/noi-dung-trong-anh";
 import { getSetting } from "@/lib/settings/service";
 
 /** Một phiên QR đã "phẳng hoá" cho client component (Date → ISO). */
@@ -68,8 +69,25 @@ export type QrSessionView = {
    * giữ lại vì webhook vẫn khớp qua nó với mọi QR phát trước 20/08.
    */
   matchKey: string | null;
-  /** Nội dung CK dạng người đọc (`NguyenVanA_84987654321_Sata4`) — thứ IN RA cho sale. */
+  /**
+   * Nội dung CK IN RA cho sale — **ĐỌC TỪ CHÍNH `qrContent`**, không dựng lại.
+   *
+   * Xem `lib/payments/noi-dung-trong-anh.ts`: trước 24/09/2026 trường này do chỗ gọi
+   * truyền vào và được TÍNH LẠI mỗi lượt render, nên nó in một chuỗi mà ảnh bên cạnh
+   * không hề mang (đo được: màn `Anh_0905123456_Sata4` / ảnh `ORD260924000001D1 Anh_090`).
+   * Chỉ lùi về chuỗi của chỗ gọi khi ảnh là chuỗi EMVCo của cổng (không đọc ngược được).
+   */
   transferContent: string;
+  /**
+   * Chuỗi hệ thống SẼ PHÁT nếu xuất lại mã ngay bây giờ. Khác `transferContent` nghĩa là
+   * dữ liệu đơn đã đổi sau lúc phát mã (sale sửa tên con / SĐT / khoá).
+   */
+  noiDungHomNay: string;
+  /**
+   * Ảnh đang cầm nội dung CŨ. UI phải NÓI RA — xem `anhQrDaCu`: sau khi `transferContent`
+   * thôi tự tính lại, đây là tín hiệu DUY NHẤT còn lại cho biết mã đã lỗi thời.
+   */
+  anhDaCu: boolean;
 };
 
 export type QrIssueResult =
@@ -230,11 +248,18 @@ type QrSessionRow = {
   createdAt: Date;
 };
 
+/**
+ * @param noiDungHomNay chuỗi hệ thống sẽ phát NẾU xuất lại mã lúc này. KHÔNG phải thứ in
+ *   ra — thứ in ra đọc từ `row.qrContent`. Hai vai khác nhau, đừng gộp lại.
+ */
 async function toView(
   row: QrSessionRow,
   matchKey: string | null,
-  transferContent: string,
+  noiDungHomNay: string,
 ): Promise<QrSessionView> {
+  // ẢNH LÀ NGUỒN. Chữ đi theo ảnh, không bao giờ ngược lại — đó là điều duy nhất khiến
+  // hai thứ không thể lệch nhau (`lib/payments/noi-dung-trong-anh.ts`).
+  const trongAnh = noiDungTrongAnhQr(row.qrContent);
   return {
     id: row.id,
     paymentRequestId: row.paymentRequestId,
@@ -247,7 +272,9 @@ async function toView(
     status: row.status as QrSessionView["status"],
     imageSrc: await qrImageSrc(row.qrContent),
     matchKey,
-    transferContent,
+    transferContent: trongAnh ?? noiDungHomNay,
+    noiDungHomNay,
+    anhDaCu: anhQrDaCu(row.qrContent, noiDungHomNay),
   };
 }
 
@@ -268,9 +295,11 @@ const QR_SESSION_SELECT = {
  * Phiên ACTIVE CÒN HẠN mới nhất của từng phiếu (cho lần render đầu của trang đơn).
  * Đọc qua scopedDb → phiếu/phiên cơ sở khác không lọt sang.
  *
- * `transferContent` nhận từ caller (mức ĐƠN) chứ không tự dựng lại: trang đơn đã
- * tính sẵn một lần cho khối QR mức đơn, truyền xuống thì cả 3 chỗ in ra chắc chắn
- * là CÙNG một chuỗi.
+ * `phanNguoiDoc` nhận từ caller (mức ĐƠN) chứ không tự dựng lại: trang đơn đã tính
+ * sẵn một lần bằng `transferContentForOrder(..., VIETQR_ADDINFO_MAX)`. Khoá đối khớp
+ * thì GHÉP TẠI ĐÂY theo TỪNG PHIẾU (`noiDungCkChoPhieu`) — trước 24/09/2026 bước ghép
+ * này bị bỏ ở đường render, nên trang tải lần đầu in chuỗi KHÔNG khoá còn nút "Xuất QR"
+ * trả chuỗi CÓ khoá, và cùng một phiếu đổi chữ tuỳ lúc ("F5 thì ra đúng").
  *
  * ⚠️ Thiếu `orders:view-pii` → trả RỖNG. `QrSessionView.imageSrc` là URL
  * `img.vietqr.io/...?addInfo=NguyenVanA_84987654321_Sata4` (hoặc data-URL của chuỗi
@@ -280,7 +309,7 @@ const QR_SESSION_SELECT = {
 export async function loadActiveQrSessions(
   actor: Actor,
   requests: { id: string; matchKey: string | null }[],
-  transferContent: string,
+  phanNguoiDoc: string,
   opts?: QrPiiOption,
 ): Promise<Record<string, QrSessionView>> {
   if (requests.length === 0) return {};
@@ -299,11 +328,8 @@ export async function loadActiveQrSessions(
   for (const row of rows) {
     // orderBy desc → bản ghi đầu tiên gặp là mới nhất; bỏ qua bản sau.
     if (out[row.paymentRequestId]) continue;
-    out[row.paymentRequestId] = await toView(
-      row,
-      matchKeyById.get(row.paymentRequestId) ?? null,
-      transferContent,
-    );
+    const mk = matchKeyById.get(row.paymentRequestId) ?? null;
+    out[row.paymentRequestId] = await toView(row, mk, noiDungCkChoPhieu(mk, phanNguoiDoc));
   }
   return out;
 }
@@ -345,7 +371,20 @@ function addInfoFor(req: LoadedRequest): string {
   // lời cho "làm sao xác nhận thật nhanh".
   //
   // `matchKey` null (phiếu cũ chưa sinh khoá) ⇒ trả đúng chuỗi cũ, không đổi gì.
-  return noiDungCkCoKhoa(req.matchKey, nguoiDoc, VIETQR_ADDINFO_MAX);
+  return noiDungCkChoPhieu(req.matchKey, nguoiDoc);
+}
+
+/**
+ * CÔNG THỨC DUY NHẤT dựng nội dung CK của MỘT phiếu thu. Hai chỗ cho ăn:
+ * `addInfoFor` (đường phát hành, phần người đọc dựng từ `LoadedRequest`) và
+ * `loadActiveQrSessions` (đường render, phần người đọc do trang đơn truyền xuống).
+ *
+ * ⚠️ Tách ra vì hai chỗ đó ĐÃ TỪNG dùng hai công thức: đường render quên bước ghép khoá,
+ * nên trang in `Anh_0905123456_Sata4` trong khi ảnh mang `ORD260924000001D1 Anh_090`.
+ * Trần ký tự nằm Ở ĐÂY, không khai lại ở chỗ gọi.
+ */
+export function noiDungCkChoPhieu(matchKey: string | null, phanNguoiDoc: string): string {
+  return noiDungCkCoKhoa(matchKey, phanNguoiDoc, VIETQR_ADDINFO_MAX);
 }
 
 /**

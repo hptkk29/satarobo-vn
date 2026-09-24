@@ -12,6 +12,12 @@
 // (`HoTenCon_SdtPH_TenKhoa`). Không phải lỗi hiển thị: định dạng chủ dự án chọn
 // không mang thông tin đợt. Cái phân biệt đợt là SỐ TIỀN in trên QR, còn tiền về
 // thì rót vào đợt chưa đóng đủ sớm nhất rồi tràn sang đợt sau (waterfall).
+//   ⤷ ĐÍNH CHÍNH 14/09: khoá đối khớp `ORD…D1` nay ĐỨNG TRƯỚC phần người đọc, nên
+//     mỗi đợt LẠI khác nhau. Câu trên chỉ còn đúng với mã phát trước 14/09.
+//
+// ⚠️ 24/09 — `session.transferContent` là chuỗi ĐỌC RA TỪ ẢNH, không phải chuỗi tính
+// lại (`lib/payments/noi-dung-trong-anh.ts`). Đừng thay nó bằng một giá trị tính ở
+// client: cả lớp lỗi "màn in một đằng, mã mang một nẻo" sinh ra đúng từ việc đó.
 
 import { useCallback, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -167,6 +173,19 @@ function QrPanel({
               <span className="font-mono font-semibold text-foreground">
                 {session.transferContent}
               </span>
+            </p>
+          )}
+          {/* ⚠️ LUẬT 12 (affordance nói thật). Chuỗi in ra nay ĐỌC TỪ ẢNH, nên nó không
+              còn tự đổi theo dữ liệu đơn — mà chính cái "tự đổi" ấy trước đây là tín
+              hiệu (vô tình) báo mã đã lỗi thời. Không có khối này thì bản vá đổi một
+              lỗi NÓI DỐI lấy một lỗi CÂM. */}
+          {session.anhDaCu && (
+            <p className="break-all rounded-md border border-state-warning-soft bg-state-warning-soft/60 px-3 py-2 text-xs text-state-warning-ink">
+              <b>Mã này mang nội dung cũ.</b> Dữ liệu đơn đã đổi sau lúc xuất mã. Xuất lại
+              bây giờ sẽ ra{" "}
+              <span className="font-mono font-semibold">{session.noiDungHomNay}</span>.
+              Tiền của mã cũ vẫn về đúng phiếu — bấm <b>Tạo lại QR</b> nếu phụ huynh chưa
+              chuyển.
             </p>
           )}
           {session.checkoutUrl && (

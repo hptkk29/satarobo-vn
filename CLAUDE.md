@@ -329,6 +329,51 @@ prisma/
 - ⚠️ **Cờ `PAYMENT_LEDGER_V2` là cờ CHẾT — đừng lấy nó làm cổng quyết định [đo 13/09/2026].** `isPaymentLedgerV2Enabled()` có **0 đường gọi** trong mã chạy thật (`lib/flags.ts:168` là định nghĩa duy nhất, còn lại chỉ `lib/flags.test.ts`), và biến env **không tồn tại** trong 40 biến Production. Bật nó KHÔNG đổi hành vi gì — muốn cutover thì phải viết phần "nối cờ" (chuyển `lib/finance/debt.ts` + `lib/portal/billing-student.ts` + `lib/portal/dashboard.ts` + màn `/orders/[id]`, `/cong-no` sang đọc `PaymentRequest`) trước, đó là dự án riêng. Đo prod bằng workflow chỉ-đọc `shadow-compare-cong-no.yml` (`payments:shadow-compare` chạy ở máy dev là đo DB DEV, **không nói gì về prod**).
 - ❌ KHÔNG gõ tay tên bài vào `Lesson` để "sửa tên dự án". Nguồn tên buổi/dự án là 2 file marketing (`components/legacy-laptrinhrobot/_data/roadmap-5-years.ts` + `exam-roadmap.ts`) → `lib/lms/curriculum-sata.ts` → `prisma/seed-curriculum-sata.ts`; lần seed sau ghi đè. Nhãn buổi/tên gửi PH đi qua `deriveSessionLabel`/`deriveSessionProjectName`, đừng tự ghép chuỗi.
 
+- ⚠️ **NỘI DUNG CK CỦA MỘT MÃ QR CHỈ ĐƯỢC CÓ **MỘT** NGUỒN — VÀ NGUỒN ĐÓ LÀ CHÍNH CÁI ẢNH
+  [sự cố 24/09/2026].**
+  Chủ dự án: *"mã QR khi in ra bị sai nội dung CK, đợi một chút F5 thì ra đúng chỗ Nội dung
+  CK, nhưng khi KH quét QR thì vẫn là nội dung cũ mặc dù ở web là nội dung đúng."*
+  · **Đo được — BA chuỗi cho CÙNG một phiếu** (học viên "Nguyễn Phương Quỳnh Anh",
+    SĐT 0905123456, khoá Sata 4, `matchKey = ORD260924000001D1`):
+    | | chuỗi | ai thấy |
+    |---|---|---|
+    | A | `Anh_0905123456_Sata4` | trang đơn in ra sau F5 |
+    | B | `ORD260924000001D1 Anh_090` | **nằm trong ảnh QR** — thứ khách quét ra |
+    | C | `ANH 0905123456 K7M2N` | khuôn đời mới của phiếu gộp (`dungMemo`) |
+  · **Gốc cấu trúc:** `QrSessionView` lấy **ẢNH** từ `QrSession.qrContent` (ảnh chụp lúc phát
+    hành, bất biến) còn **CHỮ** từ một tham số được TÍNH LẠI mỗi lượt render. Hai nguồn thì có
+    ngày lệch — và khi lệch, màn hình **nói dối**: in một chuỗi mà mã bên cạnh không hề mang.
+  · **Lệch còn theo ĐƯỜNG ĐI**, đó là vế "F5 thì ra đúng": trang tải lần đầu
+    (`loadActiveQrSessions`) truyền chuỗi mức ĐƠN **không khoá**, còn nút "Xuất QR"
+    (`issueQrForRequestCore`) trả `addInfoFor(req)` **có khoá**. Không phải dữ liệu chậm —
+    **hai công thức**.
+  · **Luật nay:** chữ in ra **ĐỌC RA TỪ ẢNH** (`lib/payments/noi-dung-trong-anh.ts`), và phép
+    ghép khoá nằm ở **một** hàm `noiDungCkChoPhieu` mà CẢ HAI đường cùng gọi. Đừng thay
+    `session.transferContent` bằng một giá trị tính ở client hay ở chỗ gọi — cả lớp lỗi này
+    sinh ra đúng từ việc đó.
+  · ⚠️ **Sửa chữ mà quên cảnh báo là đổi lỗi NÓI DỐI lấy lỗi CÂM.** Trước bản vá, việc chữ tự
+    tính lại là tín hiệu (vô tình) duy nhất báo mã đã lỗi thời. Nên `QrSessionView.anhDaCu` +
+    `noiDungHomNay` là **phần bắt buộc** của bản vá, không phải trang trí.
+  · **Phát hiện kèm, phải biết:** khuôn đời CŨ chỉ có 25 ký tự; khoá `ORD…D1` chiếm 17 + 1 dấu
+    cách ⇒ phần người đọc còn **đúng 7 ký tự**, tức chỉ mấy chữ đầu của tên. **SĐT bị cắt sạch
+    khỏi mọi mã QR đời cũ kể từ 14/09** ⇒ nhánh đối khớp theo SĐT (nhánh (d) của
+    `payos-ingest`) KHÔNG dùng được với các mã này; tiền về đúng phiếu hoàn toàn nhờ khoá. Đây
+    cũng là lý do chuỗi trên màn trông "cụt" với sale. Đường thoát đã có sẵn: **phiếu gộp**
+    (khuôn C, mã 5 ký tự có checksum) chở đủ tên + SĐT + mã trong 20 ký tự.
+  · ⚠️ **`_qr-core.ts` KHÔNG đi qua `memoPhatHanh`** — tức nó là khuôn thứ hai, đúng thứ mà
+    header của `lib/payments/memo-phat-hanh.ts` tự nhận là "CHỖ DUY NHẤT quyết định khuôn mới
+    hay cũ". Chưa nối vì `PaymentRequest` không có mã 5 ký tự (mã đó thuộc `PaymentBill`), và
+    nối nghĩa là đổi **nhánh đối khớp** của khoản tiền đó (waterfall → "ăn cả hoặc không ăn
+    gì"). **Đó là quyết định nghiệp vụ, phải hỏi — đừng tự nối.**
+  · Cổng: `[QR-10]` · `[QR-11]` · `[QR-12]` (`tests/e2e/r7/qr-session.spec.ts`) ·
+    `[NTA-01..07]` (`lib/payments/noi-dung-trong-anh.test.ts`) · `[NDC-07b]`/`[NDC-07c]`
+    (lưới ghim mã nguồn, `lib/payments/noi-dung-ck.test.ts`). Đã cấy lại 6 lỗi, cả 6 đỏ đúng
+    tập ca.
+  · ⚠️ **Lưới `[NDC-07]` cũ đã ghim CÁCH VIẾT chứ không ghim LUẬT** — nó đòi văn bản
+    `noiDungCkCoKhoa(req.matchKey` nên đỏ ngay khi phép ghép được tách thành một hàm dùng
+    chung. Lý lẽ của nó thì đúng. Lại một lần nữa: **đọc LÝ LẼ của lưới, rồi hỏi lý lẽ ấy có
+    BẮT BUỘC cách hiện thực đó không.**
+
 - ⚠️ **MỤC "chuẩn hoá SĐT `84…`/`+84…`" — ĐÃ HUỶ khỏi kế hoạch [chốt 18/09/2026].**
   Làm lại **khi nào đo được dòng `84…` THẬT**, không làm trước.
   · **Vì sao huỷ:** đo prod 17/09 — trong 22 giao dịch UNMATCHED, số nội dung CK chứa SĐT dạng
