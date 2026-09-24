@@ -5,7 +5,14 @@
 // org) hay `member` (chỉ nick mình). Sai một dòng ở đây thì Sata KHÔNG báo lỗi gì —
 // cửa mở ra bên kia mới rộng ra, và bên kia không có lưới nào của repo này canh.
 import { describe, it, expect } from "vitest";
-import { maVaiCuaNguoiDung, vaiZaloCrm, VAI_ZALOCRM } from "./vai-tro";
+import {
+  maVaiCuaNguoiDung,
+  vaiZaloCrm,
+  VAI_ZALOCRM,
+  VAI_DUOC_CAP_NICK,
+  VAI_KHONG_THEM_DUOC_VAO_NICK,
+} from "./vai-tro";
+import { RELATIONSHIP_ROLE_CODES } from "@/lib/auth/actor";
 
 describe("[ZC-SSO-07] ánh xạ vai Sata → vai ZaloCRM", () => {
   it("[ZC-SSO-07a] CHỈ SUPER_ADMIN ⇒ 'admin' — không ai khác", () => {
@@ -122,5 +129,32 @@ describe("[ZC-SSO-08] maVaiCuaNguoiDung — gom mã vai từ CẢ HAI hệ (v1 s
       orgRoles: [{ roleCode: "CENTER_CLASS_MANAGER" }],
     });
     expect(vaiZaloCrm(maGiaoVu)).toBeNull();
+  });
+});
+
+describe("[VT-04] hai danh sách vai — KHÔNG được gộp, KHÔNG được lệch nguồn", () => {
+  it("`VAI_KHONG_THEM_DUOC_VAO_NICK` khớp `RELATIONSHIP_ROLE_CODES`", () => {
+    // 🔴 Hai nơi khai cùng một khái niệm "vai không phải nhân sự". `vai-tro.ts` là module
+    // THUẦN nên không `import` được từ `lib/auth/actor` (tệp đó chạm DB) — nên bản sao
+    // là bắt buộc, và ca này là thứ duy nhất giữ hai bản khớp nhau.
+    //
+    // Thêm một vai quan hệ mới (vd `GUARDIAN`) mà quên khai ở đây ⇒ người thuộc vai ấy
+    // thêm được vào nick Zalo, tức đọc được chat của khách.
+    expect([...VAI_KHONG_THEM_DUOC_VAO_NICK].sort()).toEqual([...RELATIONSHIP_ROLE_CODES].sort());
+  });
+
+  it("tập MẶC ĐỊNH và tập KHÔNG-THÊM-ĐƯỢC là hai khái niệm rời nhau", () => {
+    // Đối chứng cho ca trên: nếu ai đó "dọn" bằng cách cho `VAI_DUOC_CAP_NICK` gánh cả
+    // hai việc thì giao dịch này đỏ.
+    for (const v of VAI_KHONG_THEM_DUOC_VAO_NICK) {
+      expect(VAI_DUOC_CAP_NICK, `${v} không bao giờ được dùng nick`).not.toContain(v);
+    }
+    // Và tập mặc định phải còn HẸP — đây là danh sách quyết định "ai đọc được nick CHƯA
+    // giao". Nới nó là nới quyền mà không ai bấm nút nào.
+    expect([...VAI_DUOC_CAP_NICK].sort()).toEqual([
+      "CENTER_MANAGER",
+      "CENTER_SALES_CSM",
+      "SALES_CSM",
+    ]);
   });
 });
