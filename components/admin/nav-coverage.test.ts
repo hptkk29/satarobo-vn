@@ -51,6 +51,10 @@ const ALLOWLIST: Record<string, string> = {
   "/cham-cong/man-hinh":
     "màn hình QR để MỞ TRÊN TV tại quầy — vào từ nút \"Màn hình QR\" trên Bảng công ngày, href kèm " +
     "centerId động nên máy quét không thấy; không đặt mục sidebar vì đây không phải màn làm việc hằng ngày.",
+  "/classes/kiem-tra-lich":
+    "24/09/2026 — chủ dự án GỠ nút \"Kiểm tra lịch buổi\" khỏi màn /classes. Màn soát buổi " +
+    "lệch ngày khai giảng GIỮ LẠI (nút \"Xếp lại\" dùng chung đường có audit với script " +
+    "`scripts/audit-class-sessions.ts`, script in đường dẫn này ra) — vào bằng URL khi cần soát tay.",
   "/charts-test": "màn thử wrapper Recharts, chỉ dev dùng",
   "/design-system-preview": "bảng màu/typography, chỉ dev dùng",
   "/design-system-preview-v2": "bảng màu/typography bản 2, chỉ dev dùng",

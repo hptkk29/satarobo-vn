@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import { resolveActor } from "@/lib/auth/actor";
@@ -425,6 +426,15 @@ export default async function ClassDetailPage({ params }: Props) {
 
   return (
     <div className="space-y-6">
+      {/* 24/09 — lối quay lại danh sách. Trỏ `/classes` TRẦN là cố ý: màn danh sách tự
+          khôi phục bộ lọc + trang đang xem đã nhớ (class-filters.tsx), nên không mất lọc. */}
+      <Link
+        href="/classes"
+        className="-mb-3 inline-flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground"
+      >
+        <ChevronLeft className="h-4 w-4" />
+        Danh sách lớp
+      </Link>
       {/* R2-CLASS-4 — header gọn 1 card */}
       <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
