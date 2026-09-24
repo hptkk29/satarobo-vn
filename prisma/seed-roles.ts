@@ -612,6 +612,18 @@ export const ROLE_SEED: RoleSeed[] = [
       // Hai bộ quyền v1/v2 phải khai giống nhau — xem ghi chú dài ở lib/auth/permissions.ts.
       // ⚠️ Đổi ở đây CHƯA có hiệu lực trên prod: phải chạy workflow seed-prod-roles.yml
       // sau khi merge vào main, nếu không prod vẫn giữ quyền cũ trong DB.
+      // 23/09/2026 - CUA HEP vao Cau hinh van hanh. Chu du an chot 22/09: tran so dot /
+      // so uu dai thi Quan ly co so chinh duoc.
+      //
+      // KHONG nhan `settings:view` (100+ khoa: OTP, mau tin ZNS, khoa VAPID, tran hoa hong).
+      // Viec go `settings:view` khoi vai nay la QUYET DINH CO CHU KY 03/08/2026
+      // (`lib/auth/rbac-intentional.ts`) - quyen nay khong dao no, no mo mot cua hep ben canh.
+      //
+      // scopeType GLOBAL, va do la CO Y: quyen nay chi mo CUA VAO TRANG. Cach ly co so nam o
+      // duong GHI (`setCenterSetting` doi vai quan ly tai dung orgUnitId dang sua). Seed
+      // CENTER thi `checkPermission` khong kem target tra false tren prod (v2) va khoa nham
+      // cua chinh - bay da ghi trong memory. Luoi [QCS-02] canh dung dieu do.
+      { action: "settings:view-center", scopeType: "GLOBAL" },
       { action: "leads:view-pii", scopeType: "GLOBAL" },
       { action: "leads:create", scopeType: "GLOBAL" },
       { action: "leads:edit", scopeType: "GLOBAL" },

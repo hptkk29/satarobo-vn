@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
+import { resolveActor } from "@/lib/auth/actor";
+import { coSoSuaDuoc } from "@/lib/settings/quyen-co-so";
 import { SETTINGS } from "@/lib/settings/registry";
 import { getResolvedSettings } from "@/lib/settings/service";
 import { docCaiRiengTheoCoSo } from "@/lib/settings/co-so-cau-hinh";
@@ -87,13 +89,47 @@ export default async function OperationalSettingsPage({
   const tabDuocXem = new Set(quyenTab.filter((q) => q.duoc).map((q) => q.id));
   if (tabDuocXem.size === 0) redirect("/admin/dashboard");
 
+  // ── HAI THỨ KHÁC NHAU, TRƯỚC 24/09 LÀ MỘT BIẾN ───────────────────────────────────────
+  //
+  //   · `canEditGlobal`  — sửa được giá trị TOÀN HỆ THỐNG. Chỉ Quản trị tối cao.
+  //   · `suaDuocCoSo`    — sửa được phần CỦA CƠ SỞ MÌNH (khối "Cài riêng theo cơ sở").
+  //
+  // ⚠️ Gộp hai cái này làm một là điều màn này vừa làm, và nó biến quyền mới thành quyền
+  // CHẾT: `choSua` chảy thẳng xuống `CaiRiengTheoCoSo`, nên một Quản lý cơ sở vào được tab
+  // "Tiền & thanh toán" sẽ thấy MỌI ô — kể cả khối cài riêng — bị `disabled`, cộng một
+  // dòng chữ vàng nói "Bạn chỉ có quyền xem". Trong khi ĐƯỜNG GHI cho họ qua:
+  // `saveCenterSettingAction` không gác gì ở đầu hàm, nó giao hết cho `setCenterSetting`,
+  // và hàm đó chỉ đòi vai quản lý tại ĐÚNG `orgUnitId` đang sửa.
+  //
+  // Tức giao diện nói KHÔNG trong khi server nói CÓ. Người dùng tin giao diện và đi báo
+  // "chưa được cấp quyền" — đúng lớp lỗi luật 12: affordance không ném lỗi, không làm test
+  // đỏ, console vẫn sạch; chỉ người bấm mới biết.
   const canEditGlobal = await checkPermission("settings:edit"); // settings:edit = SUPER_ADMIN
+  // Chế độ CƠ SỞ: vào màn bằng quyền cấp cơ sở, không phải quyền quản trị toàn hệ.
+  const cheDoCoSo = !canEditGlobal && (await checkPermission("settings:view-center"));
+  const suaDuocCoSo = canEditGlobal || cheDoCoSo;
   const sp = await searchParams;
 
   // Chỉ đọc những key THẬT SỰ bày ra. Dựng danh sách từ bảng tab chứ không từ `SETTING_KEYS`:
   // như vậy một key mới mà quên khai nhãn vận hành sẽ KHÔNG lặng lẽ hiện ra dưới dạng tên
   // biến — nó vắng mặt, và `nhan-van-hanh.test.ts` làm đỏ ngay ở CI.
-  const keyTheoTab = TAB_CAU_HINH.map((t) => ({ tab: t, keys: keyCuaTab(t.id) }));
+  //
+  // ⚠️ Chế độ CƠ SỞ lọc xuống còn khoá `centerOverridable`. Đo 24/09: tab "Tiền & thanh
+  // toán" có 18 khoá, trong đó 5 khoá là TRẦN NGÂN SÁCH GỬI RA của cả công ty
+  // (`outbound.callMonthlyCapVnd`, `zaloMonthlyCapVnd`, `aiGradingMonthlyCapVnd`,
+  // `znsUnitCostVnd`, `warnAtPercent`) — không cài riêng theo cơ sở được. Với Quản lý cơ
+  // sở, một dòng không sửa toàn hệ được VÀ không cài riêng được là dòng họ không làm gì
+  // được: bày ra chỉ là nhiễu, và là con số ngân sách của cả công ty. "Không sửa được"
+  // khác "không được thấy".
+  //
+  // Lọc bằng `SETTINGS[k].centerOverridable` chứ không bằng danh sách gõ tay: danh sách gõ
+  // tay là bản thứ hai của một sự thật đã có chủ, và nó lệch ngay lần đầu ai đó thêm khoá.
+  const keyTheoTab = TAB_CAU_HINH.map((t) => ({
+    tab: t,
+    keys: cheDoCoSo
+      ? keyCuaTab(t.id).filter((k) => SETTINGS[k]?.centerOverridable === true)
+      : keyCuaTab(t.id),
+  }));
   const moiKey = keyTheoTab.flatMap((x) => x.keys);
   // Hai key của hai tab có bảng riêng KHÔNG nằm trong `moiKey` (đã lọc khỏi danh sách ô
   // nhập) nên phải nạp thêm — quên là bảng hoa hồng mở ra rỗng và người dùng tưởng mất
@@ -110,7 +146,13 @@ export default async function OperationalSettingsPage({
   // không mang `coSo` ⇒ không vẽ khối. Đừng "vá" bằng cách truyền mảng rỗng: mảng rỗng và
   // vắng mặt trông giống nhau ở đây, nhưng vắng mặt là điều MAP nói, còn mảng rỗng là điều
   // ta tự bịa ra.
-  const caiRieng = await docCaiRiengTheoCoSo(moiKey);
+  //
+  // ⚠️ PHẠM VI: chỉ bày cơ sở người xem SỬA ĐƯỢC. Quản trị tối cao quản lý mọi cơ sở nên
+  // trước 24/09 không ai thấy lỗ — nhưng từ lúc Quản lý cơ sở vào được màn này, bày đủ
+  // danh sách là hiện ô của CS khác dưới dạng MỞ, rồi lần bấm Lưu nhận "Không có quyền sửa
+  // cấu hình cơ sở này". `coSoSuaDuoc` và cổng ghi `setCenterSetting` nay dùng CHUNG một
+  // phép kiểm (`lib/settings/quyen-co-so.ts`), nên chúng không lệch được.
+  const caiRieng = await docCaiRiengTheoCoSo(moiKey, coSoSuaDuoc(await resolveActor(session.user.id)));
 
   // Vai có thật, kèm TÊN TIẾNG VIỆT — ô chọn vai nhận hoa hồng không được in mã máy.
   const vai = await layVaiNhanHoaHong();
@@ -227,7 +269,17 @@ export default async function OperationalSettingsPage({
         </p>
       </PageHelp>
 
-      {!canEditGlobal && (
+      {/* ⚠️ Câu này PHẢI rẽ theo chế độ. Nói "bạn chỉ có quyền xem" với một Quản lý cơ sở là
+          nói sai: họ sửa được phần của cơ sở mình, và server cho họ ghi. Người tin câu đó
+          sẽ không mở khối "Cài riêng theo cơ sở" ra, và tính năng coi như không tồn tại. */}
+      {cheDoCoSo && (
+        <div className="rounded-lg border border-state-info-soft bg-state-info-soft px-4 py-3 text-sm text-state-info-ink">
+          Bạn sửa được phần <strong>của cơ sở mình</strong>: mở khối{" "}
+          <strong>Cài riêng theo cơ sở</strong> ở từng dòng. Mức <strong>toàn hệ thống</strong>{" "}
+          do quản trị cấp cao nhất đặt, bạn chỉ xem.
+        </div>
+      )}
+      {!canEditGlobal && !cheDoCoSo && (
         <div className="rounded-lg border border-state-warning-soft bg-state-warning-soft px-4 py-3 text-sm text-state-warning-ink">
           Bạn chỉ có quyền <strong>xem</strong>. Việc thay đổi dành cho quản trị cấp cao nhất.
         </div>
@@ -236,6 +288,7 @@ export default async function OperationalSettingsPage({
       <KhungCauHinh
         tabs={tabs}
         choSua={canEditGlobal}
+        choSuaCoSo={suaDuocCoSo}
         tabThongBao={TAB_THONG_BAO}
         danhMucThongBao={danhMucThongBao}
         loaiDangBat={loaiDangBat}

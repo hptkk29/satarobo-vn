@@ -27,7 +27,11 @@ const NHAN = nhanCuaKey(KHOA);
 
 function dung(value: unknown = "DOT_XA_NHAT", choSua = true) {
   return render(
-    <BangCauHinhTab rows={[{ key: KHOA, value, nhan: NHAN }]} choSua={choSua} />,
+    <BangCauHinhTab
+      rows={[{ key: KHOA, value, nhan: NHAN }]}
+      choSua={choSua}
+      choSuaCoSo={choSua}
+    />,
   );
 }
 

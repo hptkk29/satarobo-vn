@@ -22,6 +22,29 @@ export const systemModule: ModuleDecl = {
     // --- Settings (cấu hình toàn cục — không gắn đơn vị) ---
     { key: "settings:view", action: "view", scopable: false },
     { key: "settings:edit", action: "edit", scopable: false },
+    // 23/09/2026 — QUYỀN HẸP cho Quản lý cơ sở tự chỉnh tham số CỦA CƠ SỞ MÌNH.
+    //
+    // Chủ dự án chốt 22/09: "trần số đợt / số ưu đãi thì QLCS chỉnh được ở Cấu hình vận
+    // hành". Nhưng KHÔNG nới `settings:view` — màn đó có 100+ khoá gồm OTP, mẫu tin ZNS,
+    // khoá VAPID, trần hoa hồng; nới nó là chữa một vấn đề bằng cách mở một vấn đề lớn hơn
+    // (đúng bài học `audit-logs:view` trong CLAUDE.md).
+    //
+    // ⚠️ Việc gỡ `settings:view` khỏi Quản lý cơ sở là QUYẾT ĐỊNH CÓ CHỮ KÝ ngày 03/08/2026
+    // (`lib/auth/rbac-intentional.ts`) — quyền mới này KHÔNG đảo quyết định đó, nó mở một
+    // cửa hẹp hơn bên cạnh.
+    //
+    // ⚠️ `scopable: false` là CỐ Ý và không phải lỗ hổng: quyền này chỉ mở CỬA VÀO TRANG.
+    // Cách ly cơ sở nằm ở đường GHI — `setCenterSetting` đòi actor có vai quản lý tại ĐÚNG
+    // `orgUnitId` đang sửa (`lib/settings/service.ts:144-151`). Khai `scopable: true` ở đây
+    // thì `checkPermission` không kèm target sẽ trả false trên prod (v2) và khoá nhầm cửa
+    // chính — đúng bẫy đã ghi trong memory "quyền cổng trang PHẢI seed GLOBAL không CENTER".
+    {
+      key: "settings:view-center",
+      // Phai khop phan verb cua key — luoi [TS-01] chong troi hai nguon canh viec do.
+      action: "view-center",
+      scopable: false,
+      description: "Mở Cấu hình vận hành ở chế độ HẸP: chỉ xem/sửa tham số cài riêng theo cơ sở mình.",
+    },
 
     // --- Roles ---
     {

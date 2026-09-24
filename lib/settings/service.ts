@@ -19,6 +19,7 @@ import {
   type SettingKey,
   type SettingDef,
 } from "./registry";
+import { laQuanLyCoSo } from "./quyen-co-so";
 import { resolveSettingValue } from "./resolve";
 
 /** Kiểu giá trị resolve được cho mỗi key (suy từ default trong registry). */
@@ -91,7 +92,6 @@ function fail(code: string, message: string, field?: string): SetResult {
   return { ok: false, error: { code, message, field } };
 }
 
-const MANAGER_ROLE_CODES = new Set(["CENTER_MANAGER", "SUPER_ADMIN"]);
 
 /** SUPER_ADMIN sửa GLOBAL. */
 export async function setGlobalSetting(
@@ -141,12 +141,10 @@ export async function setCenterSetting(
   actor: Actor,
   params: { orgUnitId: string; key: string; value: unknown; reason: string; actorName: string },
 ): Promise<SetResult> {
-  const allowed =
-    actor.isSuperAdmin ||
-    actor.orgRoles.some(
-      (r) => r.orgUnitId === params.orgUnitId && MANAGER_ROLE_CODES.has(r.roleCode),
-    );
-  if (!allowed) {
+  // Phép kiểm ở `lib/settings/quyen-co-so.ts` — MỘT bản, dùng chung với màn Cấu hình vận
+  // hành (nó phải bày đúng những cơ sở người ta sửa được). Trước 24/09 điều kiện này chép
+  // tay ở hai hàm dưới đây, và màn hình thì không có bản nào ⇒ nó bày MỌI cơ sở.
+  if (!laQuanLyCoSo(actor, params.orgUnitId)) {
     return fail("FORBIDDEN", "Không có quyền sửa cấu hình cơ sở này");
   }
   const def = getSettingDef(params.key);
@@ -213,12 +211,10 @@ export async function clearCenterSetting(
   actor: Actor,
   params: { orgUnitId: string; key: string; reason: string; actorName: string },
 ): Promise<SetResult> {
-  const allowed =
-    actor.isSuperAdmin ||
-    actor.orgRoles.some(
-      (r) => r.orgUnitId === params.orgUnitId && MANAGER_ROLE_CODES.has(r.roleCode),
-    );
-  if (!allowed) {
+  // Phép kiểm ở `lib/settings/quyen-co-so.ts` — MỘT bản, dùng chung với màn Cấu hình vận
+  // hành (nó phải bày đúng những cơ sở người ta sửa được). Trước 24/09 điều kiện này chép
+  // tay ở hai hàm dưới đây, và màn hình thì không có bản nào ⇒ nó bày MỌI cơ sở.
+  if (!laQuanLyCoSo(actor, params.orgUnitId)) {
     return fail("FORBIDDEN", "Không có quyền sửa cấu hình cơ sở này");
   }
   if (!params.reason?.trim()) {

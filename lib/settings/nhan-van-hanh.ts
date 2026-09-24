@@ -136,7 +136,17 @@ export const QUYEN_TAB: Record<TabId, string> = {
   "lop-gv": "settings:view",
   "cham-cong": "settings:view",
   "khach-hang": "settings:view",
-  tien: "settings:view",
+  // ⚠️ 24/09/2026 — QUYỀN RIÊNG cho tab này, và đó là CẢ ĐIỂM của cơ chế quyền-theo-tab:
+  // nới MỘT tab không kéo theo 13 tab kia.
+  //
+  // Chủ dự án chốt 22/09: trần số đợt / số ưu đãi thì Quản lý cơ sở chỉnh được. Tab này
+  // chứa 13 khoá chính sách TIỀN (trần đợt, trần ưu đãi, nhắc nợ, làm tròn, hạn QR, ưu đãi
+  // anh em) — KHÔNG khoá bí mật nào (OTP / mẫu tin ZNS / khoá VAPID nằm ở tab khác).
+  //
+  // Vào được tab KHÔNG có nghĩa sửa được giá trị TOÀN CỤC: canEditGlobal vẫn đòi
+  // settings:edit (chỉ Quản trị tối cao). QLCS chỉ ghi được phần CỦA CƠ SỞ MÌNH, và cổng
+  // thật nằm ở setCenterSetting — đòi vai quản lý tại ĐÚNG orgUnitId đang sửa (ca [QCS-03]).
+  tien: "settings:view-center",
   "nhac-tu-dong": "settings:view",
   "cong-ty": "settings:view",
   "nang-cao": "settings:view",
