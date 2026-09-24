@@ -14,6 +14,7 @@ import { docTinhHinhNganSach } from "@/lib/ngan-sach-goi-ra/so-chi";
 import { dinhDangVnd, kyThangDeDoc } from "@/lib/ngan-sach-goi-ra/chinh-sach";
 import { isZalocrmEnabled } from "@/lib/flags";
 import { docTongQuanNick, whereNhatKyZalocrm } from "@/lib/integrations/zalocrm/nick-admin";
+import { tomTatGiao } from "@/lib/integrations/zalocrm/pham-vi-nick";
 
 export const metadata = { title: "Tích hợp | Admin" };
 export const dynamic = "force-dynamic";
@@ -268,7 +269,7 @@ export default async function IntegrationsPage() {
           orgCode: n.orgCode,
           centerName: n.centerName,
           displayName: n.displayName,
-          sataUserName: n.sataUserName,
+          daGiaoCho: tomTatGiao(n.giao),
           status: n.status,
           lastEventAt: n.lastEventAt ? dinhDangLuc(n.lastEventAt) : null,
         }))}

@@ -1,8 +1,20 @@
 import "server-only";
-// lib/integrations/zalocrm/giao-nick.ts — GIAO NICK CHO NGƯỜI (màn `/zalo-crm/nick`).
+// lib/integrations/zalocrm/giao-nick.ts — GIAO NICK CHO NGƯỜI (tab "Nick Zalo CRM").
 //
-// Ghi `ZaloCrmNick.sataUserId`. Luật "ai đọc được nick đã giao" thì ở `pham-vi-nick.ts`
-// và được lượt đối soát đẩy sang ZaloCRM ≤5 phút sau — file này chỉ lo phần GHI và cổng.
+// Ghi bảng `ZaloCrmNickGiao`. Luật "ai đọc được nick đã giao, ở mức nào" thì ở
+// `pham-vi-nick.ts` và được lượt đối soát đẩy sang ZaloCRM ≤5 phút sau — file này chỉ lo
+// phần GHI và cổng.
+//
+// ── NHIỀU NGƯỜI MỘT NICK, MỖI NGƯỜI MỘT MỨC (chủ dự án chốt 24/09/2026) ────
+// Trước đó một nick giao được cho ĐÚNG MỘT người (`ZaloCrmNick.sataUserId`). Mô hình ấy
+// không diễn tả nổi trực thật: một nick CS1 có hai sale luân phiên, và quản lý kiêm hai
+// cơ sở thì phải với tới nick của cả hai. Nay là một BẢNG, và mức lấy đúng ba giá trị
+// ZaloCRM hiểu (`read`/`chat`/`admin`).
+//
+// ── 🔴 THAY CẢ TẬP, KHÔNG PHẢI "THÊM MỘT NGƯỜI" ───────────────────────────
+// `datGiaoNick` nhận danh sách ĐẦY ĐỦ và tự gỡ phần thừa. Làm kiểu "thêm/bớt từng dòng"
+// thì vế GỠ nằm ở một nút riêng mà không ai bấm, và danh sách chỉ có phình — đúng lớp
+// hỏng câm mà cả module này sinh ra để tránh.
 //
 // ── 🔴 CỔNG: NGƯỜI NHẬN PHẢI THUỘC ĐÚNG CƠ SỞ CỦA NICK ────────────────────
 // Thiếu cổng này thì một quản lý CS1 giao được nick của CS1 cho người CS2 — tức mở một
@@ -16,19 +28,30 @@ import "server-only";
 import { db } from "@/lib/db";
 import { nguoiDuocDungNick } from "@/lib/integrations/zalocrm/cap-quyen-nick";
 import { whereNickTheoActor, type ActorTamNhinNick } from "@/lib/integrations/zalocrm/nick-admin";
+import type { MucQuyen } from "@/lib/integrations/zalocrm/pham-vi-nick";
 
 export type MaLoiGiaoNick =
   | "KHONG_THAY_NICK"
   | "NICK_NGOAI_TAM_NHIN"
   | "NICK_CHUA_CO_CO_SO"
-  | "NGUOI_NGOAI_CO_SO";
+  | "NGUOI_NGOAI_CO_SO"
+  | "TRUNG_NGUOI";
 
 export type KetQuaGiaoNick =
-  | { ok: true; daGiaoCho: string | null }
+  | { ok: true; soDong: number }
   | { ok: false; ma: MaLoiGiaoNick };
 
+/** Một dòng giao: ai, ở mức nào. */
+export type DongGiao = { sataUserId: string; mucQuyen: MucQuyen };
+
 /** Người có thể nhận nick, kèm tên để dựng ô chọn. */
-export type NguoiNhanDuoc = { id: string; ten: string; email: string | null };
+export type NguoiNhanDuoc = {
+  id: string;
+  ten: string;
+  email: string | null;
+  /** Đang giữ vai quản lý cơ sở ⇒ `admin` TỰ ĐỘNG, không cần dòng giao nào. */
+  laQuanLy: boolean;
+};
 
 /**
  * Danh sách người có thể nhận nick của MỘT cơ sở.
@@ -36,29 +59,41 @@ export type NguoiNhanDuoc = { id: string; ten: string; email: string | null };
  * Dùng chung `nguoiDuocDungNick` với lượt đối soát — ô chọn trên màn và cổng khi ghi
  * nhìn cùng một sự thật. Trả rỗng khi cơ sở không có ai hợp lệ; đó là trạng thái bình
  * thường (cơ sở mới), không phải lỗi.
+ *
+ * `laQuanLy` đi kèm để màn NÓI THẬT: quản lý cơ sở luôn có `admin` trên mọi nick của cơ
+ * sở mình, nên hiện họ như một dòng giao bình thường (gỡ được, đổi mức được) là hứa một
+ * điều màn không giữ được — bấm gỡ xong họ vẫn thấy nick. Luật 12 (affordance).
  */
 export async function nguoiNhanDuocNick(centerCode: string): Promise<NguoiNhanDuoc[]> {
-  const { tatCa } = await nguoiDuocDungNick(centerCode);
+  const { tatCa, quanLy } = await nguoiDuocDungNick(centerCode);
   if (tatCa.length === 0) return [];
+  const laQL = new Set(quanLy);
   const ds = await db.user.findMany({
     where: { id: { in: tatCa } },
     select: { id: true, name: true, email: true },
     orderBy: { name: "asc" },
   });
-  return ds.map((u) => ({ id: u.id, ten: u.name ?? u.email ?? u.id, email: u.email }));
+  return ds.map((u) => ({
+    id: u.id,
+    ten: u.name ?? u.email ?? u.id,
+    email: u.email,
+    laQuanLy: laQL.has(u.id),
+  }));
 }
 
 /**
- * Giao nick cho một người, hoặc GỠ giao (`sataUserId = null`).
+ * ĐẶT danh sách người được giao một nick (thay cả tập).
+ *
+ * `giao: []` = gỡ hết, nick về lại "cả cơ sở đều thấy ở mức `chat`" — xem
+ * `pham-vi-nick.ts` về vì sao nhánh "chưa giao" phải tồn tại.
  *
  * KHÔNG revalidate, KHÔNG audit ở đây — đó là việc của Server Action gọi nó. Hàm này chỉ
  * lo luật + phép ghi, để test được mà không dựng Next.
  */
-export async function giaoNick(input: {
+export async function datGiaoNick(input: {
   actor: ActorTamNhinNick;
   zcrmAccountId: string;
-  /** `null` = gỡ giao, nick về lại "cả cơ sở đều thấy". */
-  sataUserId: string | null;
+  giao: readonly DongGiao[];
 }): Promise<KetQuaGiaoNick> {
   const nick = await db.zaloCrmNick.findFirst({
     where: { zcrmAccountId: input.zcrmAccountId, deletedAt: null },
@@ -75,7 +110,13 @@ export async function giaoNick(input: {
   });
   if (!trongTam) return { ok: false, ma: "NICK_NGOAI_TAM_NHIN" };
 
-  if (input.sataUserId !== null) {
+  // Trùng người trong cùng một lượt gửi: từ chối thay vì lấy dòng cuối. Khoá duy nhất
+  // `[nickId, sataUserId]` sẽ ném `P2002` ở giữa phép ghi, và một lỗi 500 không nói được
+  // cho người dùng biết họ vừa chọn một người hai lần.
+  const idGui = input.giao.map((g) => g.sataUserId);
+  if (new Set(idGui).size !== idGui.length) return { ok: false, ma: "TRUNG_NGUOI" };
+
+  if (idGui.length > 0) {
     if (!nick.centerId) return { ok: false, ma: "NICK_CHUA_CO_CO_SO" };
     const coSo = await db.center.findUnique({
       where: { id: nick.centerId },
@@ -88,12 +129,49 @@ export async function giaoNick(input: {
     if (!coSo?.code) return { ok: false, ma: "NICK_CHUA_CO_CO_SO" };
 
     const { tatCa } = await nguoiDuocDungNick(coSo.code);
-    if (!tatCa.includes(input.sataUserId)) return { ok: false, ma: "NGUOI_NGOAI_CO_SO" };
+    const hopLe = new Set(tatCa);
+    // MỌI người phải hợp lệ. Lọc bớt người sai rồi ghi phần còn lại là im lặng làm một
+    // việc KHÁC việc người dùng bấm — họ đọc "đã lưu" và tin rằng cả danh sách đã vào.
+    if (idGui.some((id) => !hopLe.has(id))) return { ok: false, ma: "NGUOI_NGOAI_CO_SO" };
   }
 
-  await db.zaloCrmNick.update({
-    where: { id: nick.id },
-    data: { sataUserId: input.sataUserId },
+  await db.$transaction(async (tx) => {
+    // Gỡ TRƯỚC, theo `notIn` — không `deleteMany` sạch rồi tạo lại: xoá-rồi-tạo làm mất
+    // `createdAt` của những dòng không đổi, và để một khoảng trong giao dịch mà nick
+    // không có ai (lượt đối soát đọc trúng khoảng đó sẽ gỡ sạch bên ZaloCRM).
+    // Nhánh rỗng bỏ hẳn `notIn`. ⚠️ Đo 24/09/2026 bằng phép cấy: Prisma 5.22 dịch
+    // `notIn: []` thành một điều kiện LUÔN ĐÚNG, nên bỏ nhánh `if` đi thì "gỡ hết" VẪN
+    // chạy đúng và KHÔNG ca nào đỏ. Nhánh này là phòng xa, không phải thứ đang gánh —
+    // nói thẳng ra để người sau đừng tưởng có lưới canh nó.
+    //
+    // Giữ vì hướng hỏng của nó là hướng CÂM: một bản Prisma sau đổi `notIn: []` thành
+    // "không khớp gì" là "gỡ hết" lặng lẽ không gỡ ai, người bị gỡ vẫn đọc chat khách,
+    // và triệu chứng duy nhất là một con số trên màn. `[ZCG-03]` sẽ bắt được NGÀY ĐÓ —
+    // đã đo: cấy `{ sataUserId: { in: [] } }` cho nhánh rỗng ⇒ đúng `[ZCG-03]` đỏ.
+    await tx.zaloCrmNickGiao.deleteMany({
+      where: {
+        nickId: nick.id,
+        ...(idGui.length ? { sataUserId: { notIn: idGui } } : {}),
+      },
+    });
+    for (const g of input.giao) {
+      await tx.zaloCrmNickGiao.upsert({
+        where: { nickId_sataUserId: { nickId: nick.id, sataUserId: g.sataUserId } },
+        update: { mucQuyen: g.mucQuyen },
+        create: { nickId: nick.id, sataUserId: g.sataUserId, mucQuyen: g.mucQuyen },
+      });
+    }
+    // Cột CŨ `ZaloCrmNick.sataUserId` — giữ đồng bộ ở mức thô suốt pha A (2 pha: bảng
+    // mới đã thay, cột cũ còn đó để lùi mã được). KHÔNG đường nào đang ĐỌC nó nữa, nên
+    // giá trị này chỉ có nghĩa nếu ai đó lùi mã về bản trước 24/09 — và lúc ấy "một
+    // người duy nhất" là cách diễn giải gần đúng nhất còn lại. Nhiều hơn một ⇒ `null`,
+    // tức "chưa giao", tức cả cơ sở thấy: nới hơn thực tế nhưng KHÔNG bỏ sót ai, còn
+    // giữ lại một cái tên cũ thì cắt mất những người kia.
+    await tx.zaloCrmNick.update({
+      where: { id: nick.id },
+      data: { sataUserId: idGui.length === 1 ? idGui[0]! : null },
+    });
   });
-  return { ok: true, daGiaoCho: input.sataUserId };
+
+  return { ok: true, soDong: idGui.length };
 }

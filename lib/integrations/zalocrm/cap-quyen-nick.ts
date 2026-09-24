@@ -27,6 +27,7 @@ import { docKhoaApi, datQuyenNickZalocrm } from "@/lib/integrations/zalocrm/clie
 import { ghiNhatKyZalocrm } from "@/lib/integrations/zalocrm/log";
 import { VAI_DUOC_CAP_NICK } from "@/lib/integrations/zalocrm/vai-tro";
 import {
+  docMucQuyen,
   nguoiDuocDungMotNick,
   VAI_THAY_MOI_NICK,
 } from "@/lib/integrations/zalocrm/pham-vi-nick";
@@ -198,10 +199,18 @@ async function capQuyenMotOrg(input: {
   // phải viết tay (bảng không ở `SOFT_DELETE_MODELS` — nợ #4 của bản bàn giao).
   const nicks = await db.zaloCrmNick.findMany({
     where: { orgCode, deletedAt: null },
-    // `sataUserId` = nick ĐÃ GIAO cho ai (màn `/zalo-crm/nick`). Thiếu nó ở đây thì mọi
-    // nick thành "chưa giao" và cả cơ sở lại thấy hết — hỏng CÂM, không lỗi nào báo.
-    // Khoá bằng ca `[ZC-CQ-11]`.
-    select: { zcrmAccountId: true, sataUserId: true },
+    // `giao` = các dòng ĐÃ GIAO của nick (bảng `ZaloCrmNickGiao`). Thiếu nó ở đây thì
+    // mọi nick thành "chưa giao" và cả cơ sở lại thấy hết — hỏng CÂM, không lỗi nào
+    // báo. Khoá bằng ca `[ZC-CQ-11]`.
+    //
+    // ⚠️ Cột cũ `ZaloCrmNick.sataUserId` CỐ Ý không đọc nữa (2 pha — migration
+    // `20260924120000` đã chép nó sang bảng giao ở mức `chat`, và cột còn đó để lùi
+    // được). Đọc CẢ HAI là hai nguồn sự thật cho cùng một luật, và bản cũ sẽ âm thầm
+    // thắng ở những nick mà người ta vừa gỡ giao.
+    select: {
+      zcrmAccountId: true,
+      giao: { select: { sataUserId: true, mucQuyen: true } },
+    },
   });
   // ⛔ Chưa có nick ⇒ RA NGAY. Không gọi mạng, không ghi nhật ký. Đây là hiện trạng của
   // mọi cơ sở cho tới khi có SIM thật (việc 9.16), tức là trạng thái BÌNH THƯỜNG hôm nay.
@@ -218,9 +227,13 @@ async function capQuyenMotOrg(input: {
 
   for (const n of nicks) {
     // MỖI NICK MỘT DANH SÁCH RIÊNG. Trước 24/09 vòng này gửi CÙNG một mảng cho mọi
-    // nick; nay nick đã giao chỉ còn người được giao + quản lý cơ sở.
+    // nick; nay nick đã giao chỉ còn người được giao + quản lý cơ sở, và mỗi người
+    // mang MỨC của riêng mình.
     const nguoi = nguoiDuocDungMotNick({
-      daGiaoCho: n.sataUserId ?? null,
+      giaoTay: n.giao.map((g) => ({
+        sataUserId: g.sataUserId,
+        mucQuyen: docMucQuyen(g.mucQuyen),
+      })),
       nguoiCuaCoSo: tatCa,
       quanLyCoSo: quanLy,
     });

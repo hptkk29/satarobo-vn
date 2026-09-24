@@ -30,8 +30,11 @@ export type ZalocrmNickRow = {
   /** `null` = orgCode chưa ánh xạ cơ sở nào (thiếu mục trong `zalocrm.orgCodes`). */
   centerName: string | null;
   displayName: string | null;
-  /** `null` = chưa gán chủ. BÌNH THƯỜNG, không phải lỗi. */
-  sataUserName: string | null;
+  /**
+   * Câu tóm tắt "đang giao cho ai" — dựng ở máy chủ bằng `tomTatGiao`.
+   * "Cả cơ sở dùng chung" là trạng thái BÌNH THƯỜNG, không phải lỗi.
+   */
+  daGiaoCho: string;
   status: string;
   lastEventAt: string | null;
 };
@@ -192,7 +195,7 @@ export function ZalocrmSection({
                     <th className="px-3 py-2">orgCode</th>
                     <th className="px-3 py-2">Cơ sở</th>
                     <th className="px-3 py-2">Nick (tên hiển thị)</th>
-                    <th className="px-3 py-2">Sale sở hữu</th>
+                    <th className="px-3 py-2">Đang giao cho</th>
                     <th className="px-3 py-2">Trạng thái</th>
                     <th className="px-3 py-2">Sự kiện gần nhất</th>
                   </tr>
@@ -216,9 +219,10 @@ export function ZalocrmSection({
                         </td>
                         <td className="px-3 py-2">{n.displayName ?? "—"}</td>
                         <td className="px-3 py-2 text-muted-foreground">
-                          {/* Chưa gán chủ là trạng thái BÌNH THƯỜNG (nick mới, hoặc chủ
-                              cũ đã nghỉ) — đừng vẽ nó thành lỗi màu đỏ. */}
-                          {n.sataUserName ?? "chưa gán"}
+                          {/* Chưa giao ai là trạng thái BÌNH THƯỜNG (nick mới) và có
+                              nghĩa "cả cơ sở dùng chung" — đừng vẽ nó thành lỗi đỏ.
+                              Sửa danh sách ở Cấu hình vận hành → tab Nick Zalo CRM. */}
+                          {n.daGiaoCho}
                         </td>
                         <td className="px-3 py-2">
                           <span

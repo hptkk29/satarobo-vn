@@ -1,63 +1,131 @@
-// lib/integrations/zalocrm/pham-vi-nick.ts — AI ĐƯỢC DÙNG MỘT NICK CỤ THỂ.
+// lib/integrations/zalocrm/pham-vi-nick.ts — AI ĐƯỢC DÙNG MỘT NICK, VÀ Ở MỨC NÀO.
 //
 // ── CHÍNH SÁCH (chủ dự án chốt 24/09/2026) ─────────────────────────────────
-// Nick ĐÃ GIAO cho một người  → chỉ người đó + QUẢN LÝ CƠ SỞ.
-// Nick CHƯA GIAO              → cả cơ sở, y như trước.
+//   Quản lý cơ sở  → `admin` TỰ ĐỘNG trên mọi nick của cơ sở mình. Không ai phải nhớ
+//                    giao; thêm nick mới hay đổi người quản lý đều tự khớp.
+//   Tư vấn viên    → GIAO TAY, chọn mức `read` / `chat` / `admin`.
+//   Nick CHƯA giao ai → cả cơ sở thấy ở mức `chat` (giữ nguyên hành vi trước 24/09).
 //
-// Vế "quản lý cơ sở luôn thấy" là lựa chọn có chủ đích, không phải nới quyền cho tiện:
-// người giữ nick nghỉ ốm thì khách của họ vẫn có người trả lời, mà KHÔNG ai phải vào
-// sửa cấu hình giữa lúc gấp. Phương án "tuyệt đối — chỉ đúng người đó" đã được cân và
-// bị loại vì đúng ca đó: 92 hội thoại thật nằm im cho tới khi có người nhớ ra.
+// Ba mức là mô hình CÓ SẴN của ZaloCRM, không phải ta bịa:
+//   `read` xem tin · `chat` gửi tin · `admin` quản lý nick
+//   (`backend/src/modules/zalo/zalo-access-routes.ts` — `VALID_PERMISSIONS`).
+//
+// ── 🔴 VÌ SAO NHÁNH "CHƯA GIAO" PHẢI GIỮ ───────────────────────────────────
+// Bỏ nó đi thì một nick mới quét QR xong là KHÔNG AI đọc được cho tới khi có người nhớ
+// vào giao — hộp thư khách nằm im, không lỗi nào báo. Đó đúng là kiểu hỏng câm mà cả
+// đợt này sinh ra để tránh. "Chưa giao" là trạng thái BÌNH THƯỜNG của mọi nick mới.
 //
 // ── VÌ SAO TÁCH RA FILE THUẦN ──────────────────────────────────────────────
-// `capQuyenMotOrg` chạm DB + gọi mạng, nên test nó phải dựng cả hạ tầng. Luật "ai thấy
-// nick nào" thì KHÔNG cần gì cả — nó là một phép trên ba danh sách. Tách ra là cấy lỗi
-// được: sửa một dòng ở đây phải làm ca test ĐỎ, và ca ấy chạy trong `test:unit`.
-//
-// ── 🔴 GIAO NHAU VỚI "CÒN THUỘC CƠ SỞ", KHÔNG PHẢI HỢP ─────────────────────
-// `sataUserId` là một con trỏ ĐƯỢC LƯU LẠI — nó không tự đúng mãi. Người được giao nick
-// có thể đã nghỉ việc, đổi cơ sở, hoặc bị khoá tài khoản; dòng `ZaloCrmNick` thì vẫn
-// nguyên (đường đồng bộ CỐ Ý không bao giờ xoá `sataUserId` — `nick-admin.ts`).
-// Nên kết quả phải GIAO với danh sách người còn hợp lệ của cơ sở, không phải cộng vào.
-// Cộng vào là biến vế GỠ của hệ thống thành vô hiệu: người nghỉ việc vẫn đọc được chat
-// khách, và KHÔNG có triệu chứng nào báo.
+// `capQuyenMotOrg` chạm DB + gọi mạng. Luật "ai thấy nick nào, mức nào" thì không cần
+// gì cả — nó là một phép trên bốn danh sách. Tách ra là cấy lỗi được.
 
-/** Vai được thấy MỌI nick của cơ sở, kể cả nick đã giao cho người khác. */
+/** Ba mức ZaloCRM hiểu. Thứ tự từ HẸP đến RỘNG — `xepHang` dựa vào chính thứ tự này. */
+export const MUC_QUYEN = ["read", "chat", "admin"] as const;
+export type MucQuyen = (typeof MUC_QUYEN)[number];
+
+/** Vai được `admin` TỰ ĐỘNG trên mọi nick của cơ sở mình. */
 export const VAI_THAY_MOI_NICK: readonly string[] = ["CENTER_MANAGER"];
 
+/** Mức cho người của cơ sở khi nick CHƯA giao cho ai. */
+export const MUC_MAC_DINH_CHUA_GIAO: MucQuyen = "chat";
+
+export type GiaoTay = { sataUserId: string; mucQuyen: MucQuyen };
+export type QuyenTrenNick = { sataUserId: string; mucQuyen: MucQuyen };
+
+/**
+ * Nhãn tiếng Việt của từng mức — NÓI BẰNG VIỆC LÀM ĐƯỢC, không bằng từ kỹ thuật.
+ *
+ * Người vận hành không biết `read`/`chat`/`admin` nghĩa là gì, và đoán sai thì hậu quả
+ * là phân quyền sai trên chat khách thật. `Record` ĐỦ nên thêm mức thứ tư mà quên đặt
+ * nhãn là lỗi biên dịch, không phải một ô trống trên màn.
+ */
+export const NHAN_MUC: Record<MucQuyen, string> = {
+  read: "Chỉ xem",
+  chat: "Xem và nhắn tin",
+  admin: "Quản lý nick",
+};
+
+/**
+ * Câu tóm tắt "nick này đang giao cho ai" để in trên bảng.
+ *
+ * 🔴 Rỗng ra "Cả cơ sở dùng chung", KHÔNG phải "chưa gán" hay một ô trống. Đó là SỰ
+ * THẬT về hành vi (xem nhánh ③ của `nguoiDuocDungMotNick`), và hai cách nói kia đọc như
+ * một việc còn bỏ dở — người vận hành sẽ đi "sửa" một thứ đang đúng.
+ */
+export function tomTatGiao(
+  giao: readonly { ten: string; mucQuyen: string }[],
+): string {
+  if (giao.length === 0) return "Cả cơ sở dùng chung";
+  return giao.map((g) => `${g.ten} (${NHAN_MUC[docMucQuyen(g.mucQuyen)]})`).join(", ");
+}
+
 export type ThamSoPhamViNick = {
-  /** Người được giao nick này (`ZaloCrmNick.sataUserId`). `null` = chưa giao. */
-  daGiaoCho: string | null;
+  /** Các dòng GIAO TAY của nick này (`ZaloCrmNickGiao`). Rỗng = chưa giao ai. */
+  giaoTay: readonly GiaoTay[];
   /** MỌI người còn hợp lệ của cơ sở (đã lọc vai + tài khoản còn hiệu lực). */
   nguoiCuaCoSo: readonly string[];
   /** Tập con của `nguoiCuaCoSo` đang giữ vai quản lý cơ sở. */
   quanLyCoSo: readonly string[];
 };
 
+/** Mức rộng hơn thắng. Dùng khi một người vừa là quản lý vừa được giao tay. */
+function rongHon(a: MucQuyen, b: MucQuyen): MucQuyen {
+  return MUC_QUYEN.indexOf(a) >= MUC_QUYEN.indexOf(b) ? a : b;
+}
+
 /**
- * Danh sách người được dùng MỘT nick, để đẩy sang ZaloCRM.
+ * Đọc mức từ một chuỗi (cột `ZaloCrmNickGiao.mucQuyen`, hoặc giá trị từ trình duyệt).
+ *
+ * 🔴 KHÔNG DÙNG `as MucQuyen`. Cột là `String` (ràng bằng CHECK ở DB, không phải enum),
+ * và giá trị trên form đến từ trình duyệt — cả hai đường đều có thể mang chuỗi lạ.
+ * Ép kiểu là nói với `tsc` một điều không kiểm được, rồi chuỗi lạ ấy đi thẳng sang
+ * ZaloCRM.
+ *
+ * Mức lạ rơi về `read` (HẸP NHẤT), không phải mặc định `chat`: một lỗi gõ hay một cột
+ * hỏng phải làm người ta thấy ÍT đi, không phải nhiều hơn. Cùng luật với endpoint bên
+ * ZaloCRM — hai đầu lệch nhau ở điểm này là mỗi lượt đối soát đặt một mức khác nhau.
+ */
+export function docMucQuyen(raw: string | null | undefined): MucQuyen {
+  return (MUC_QUYEN as readonly string[]).includes(raw ?? "") ? (raw as MucQuyen) : "read";
+}
+
+/**
+ * Ai được dùng MỘT nick, và ở mức nào — để đẩy sang ZaloCRM.
  *
  * THUẦN: không DB, không mạng, không đồng hồ. Thứ tự trả về ỔN ĐỊNH (theo
- * `nguoiCuaCoSo`) để hai lượt chạy liên tiếp sinh ra cùng một payload — lượt đối soát
- * so danh sách chứ không so tập hợp, và một payload xáo thứ tự làm nhật ký đầy tiếng ồn.
+ * `nguoiCuaCoSo`) để hai lượt liên tiếp sinh cùng một payload — lượt đối soát so danh
+ * sách chứ không so tập hợp, và payload xáo thứ tự làm nhật ký đầy tiếng ồn.
+ *
+ * 🔴 GIAO NHAU với `nguoiCuaCoSo`, KHÔNG phải hợp. Dòng giao tay là con trỏ ĐƯỢC LƯU —
+ * người được giao có thể đã nghỉ việc hoặc đổi cơ sở. Cộng vào là vô hiệu hoá vế GỠ của
+ * hệ thống: người không còn phận sự vẫn đọc chat khách, và không triệu chứng nào báo.
  */
-export function nguoiDuocDungMotNick(t: ThamSoPhamViNick): string[] {
+export function nguoiDuocDungMotNick(t: ThamSoPhamViNick): QuyenTrenNick[] {
   const hopLe = new Set(t.nguoiCuaCoSo);
+  const muc = new Map<string, MucQuyen>();
 
-  // CHƯA GIAO → giữ nguyên hành vi cũ. Đây là nhánh của MỌI nick cho tới khi có người
-  // vào giao, nên nó phải là nhánh an toàn nhất: không ai mất quyền vì một tính năng mới.
-  if (!t.daGiaoCho) return [...t.nguoiCuaCoSo];
+  // ① Quản lý cơ sở — `admin`, TỰ ĐỘNG, không cần dòng giao nào.
+  for (const ql of t.quanLyCoSo) {
+    if (hopLe.has(ql)) muc.set(ql, "admin");
+  }
 
-  // ĐÃ GIAO nhưng người ấy KHÔNG còn thuộc cơ sở (nghỉ việc / chuyển / khoá tài khoản):
-  // rơi về cả cơ sở, KHÔNG phải về rỗng. Rỗng là hộp thư của khách không ai đọc được, và
-  // không một dòng lỗi nào báo — đúng kiểu hỏng câm mà repo này đã trả giá nhiều lần.
-  if (!hopLe.has(t.daGiaoCho)) return [...t.nguoiCuaCoSo];
+  // ② Giao tay. Lọc theo `hopLe` nên dòng giao cho người đã rời cơ sở tự rụng.
+  const giaoConHieuLuc = t.giaoTay.filter((g) => hopLe.has(g.sataUserId));
+  for (const g of giaoConHieuLuc) {
+    const cu = muc.get(g.sataUserId);
+    muc.set(g.sataUserId, cu ? rongHon(cu, g.mucQuyen) : g.mucQuyen);
+  }
 
-  const duoc = new Set<string>([t.daGiaoCho, ...t.quanLyCoSo]);
+  // ③ CHƯA GIAO AI (sau khi lọc) ⇒ cả cơ sở, mức mặc định. Quản lý vẫn giữ `admin` của
+  //    họ nhờ `rongHon`. Xem khối chú thích đầu file về vì sao nhánh này phải tồn tại.
+  if (giaoConHieuLuc.length === 0) {
+    for (const id of t.nguoiCuaCoSo) {
+      const cu = muc.get(id);
+      muc.set(id, cu ? rongHon(cu, MUC_MAC_DINH_CHUA_GIAO) : MUC_MAC_DINH_CHUA_GIAO);
+    }
+  }
 
-  // Lọc theo `nguoiCuaCoSo` là chỗ DUY NHẤT ép "còn thuộc cơ sở" — cho cả người được
-  // giao lẫn quản lý. Bản đầu còn một vế `if (hopLe.has(ql))` ở vòng trên; phép cấy lỗi
-  // chứng minh nó là MÃ CHẾT (gỡ đi, 0 ca đỏ) vì dòng này đã làm đúng việc ấy rồi. Đã gỡ:
-  // một cổng không có tác dụng nhưng trông như có là thứ người sau sẽ tin nhầm.
-  return t.nguoiCuaCoSo.filter((id) => duoc.has(id));
+  return t.nguoiCuaCoSo
+    .filter((id) => muc.has(id))
+    .map((id) => ({ sataUserId: id, mucQuyen: muc.get(id)! }));
 }
