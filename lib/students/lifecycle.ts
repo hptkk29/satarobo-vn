@@ -59,7 +59,7 @@ export const LIFECYCLE_VIEW_DESCRIPTION: Record<LifecycleView, string> = {
   all: "Tất cả học viên (active)",
   active: "Có ít nhất 1 lớp đang học",
   "vua-hoan-thanh":
-    "Đã học xong khoá, chưa đăng ký khoá tiếp — nhóm cần gọi tư vấn tái đăng ký",
+    "Đã học xong khoá, chưa đăng ký khoá tiếp — gồm cả hồ sơ được đánh dấu “Hoàn thành” tay",
   waiting: "Chưa ngồi lớp nào: mới tạo hồ sơ, đã đăng ký chờ xếp lớp, hoặc vừa bị gỡ khỏi lớp",
   reserved: "Đang bảo lưu (tạm dừng học)",
   "frequent-absent": `Vắng ≥${FREQUENT_ABSENT_THRESHOLD} buổi trong ${FREQUENT_ABSENT_WINDOW} buổi gần nhất`,
@@ -136,7 +136,31 @@ export function buildLifecycleWhere(
       // có một nhóm học viên "đã học xong, chưa có lớp mới". Trước đó nhóm này không
       // tồn tại (hoàn thành lớp chưa bao giờ đụng tới ghi danh), nên tab "Chờ xếp lớp"
       // không được thiết kế cho họ và cái tên của nó không mô tả đúng họ.
-      return { AND: [base, { status: "ACTIVE" }, VUA_HOAN_THANH_WHERE] };
+      //
+      // 24/09 — NHẬN THÊM NHÁNH (A). Chủ dự án xác nhận đã đánh dấu hoàn thành bằng CẢ
+      // HAI đường: đặt tay `Student.status = GRADUATED` ở hồ sơ học viên, VÀ đổi ghi
+      // danh sang COMPLETED ở /admin/enrollments. Bản đầu chỉ nhận nhánh sau ⇒ nhóm
+      // GRADUATED rơi khỏi MỌI tab vận hành: `active`/`waiting` đòi `ACTIVE`,
+      // `reserved` đòi `PAUSED`, `withdrawn` đòi `INACTIVE`. Họ chỉ còn thấy ở "Tất cả"
+      // — tức người vận hành làm đúng thao tác mà kết quả là học viên biến mất.
+      //
+      // Nhánh (A) KHÔNG đòi thêm điều kiện nào: `GRADUATED` là quyết định tường minh
+      // của người vận hành, không phải thứ để suy diễn lại. Đòi kèm "phải có ghi danh
+      // COMPLETED" là loại đúng những hồ sơ cũ chưa từng có lịch sử ghi danh tử tế —
+      // đo trên DB local: 5/16 em GRADUATED không có ghi danh COMPLETED nào.
+      return {
+        AND: [
+          base,
+          {
+            OR: [
+              // (A) đặt tay ở hồ sơ học viên.
+              { status: "GRADUATED" },
+              // (B) suy từ ghi danh — chỉ xét học viên còn ACTIVE.
+              { AND: [{ status: "ACTIVE" }, VUA_HOAN_THANH_WHERE] },
+            ],
+          },
+        ],
+      };
 
     case "waiting":
       // "Chờ xếp lớp" = còn đang học ở trung tâm nhưng KHÔNG ngồi trong lớp nào.
