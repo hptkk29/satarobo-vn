@@ -70,6 +70,8 @@ export function PhanTrangBang({
   className,
   cuonNgang = false,
   luonHienThanh = false,
+  khoaTrang,
+  classThanh,
 }: {
   /** ĐÚNG MỘT phần tử `<table>`. */
   children: ReactNode;
@@ -96,9 +98,44 @@ export function PhanTrangBang({
    * bảng khác không đổi.
    */
   luonHienThanh?: boolean;
+  /**
+   * Ghi nhớ TRANG đang xem (sessionStorage, theo tab) dưới khoá này.
+   *
+   * 24/09 — `/classes`: lọc xong, sang trang 3, bấm vào một lớp rồi quay lại là về trang 1
+   * vì `trang` chỉ là state trong bộ nhớ. Truyền khoá GẮN VỚI BỘ LỌC (vd chuỗi query) để
+   * đổi bộ lọc là về trang 1 của bộ lọc mới, còn quay lại đúng bộ lọc cũ thì về đúng trang
+   * cũ. Không truyền = hành vi cũ.
+   */
+  khoaTrang?: string;
+  /**
+   * Class thêm cho THANH phân trang. Bảng nằm trong thẻ có viền mà không có lề trong
+   * (vd `/classes`) thì thanh dính sát mép thẻ — truyền `px-4 pb-3` ở đó.
+   */
+  classThanh?: string;
 }) {
   const [soDong, setSoDong] = useState(soDongMacDinh);
-  const [trang, setTrang] = useState(1);
+  const [trang, setTrangState] = useState(1);
+  const khoaTrangDay = khoaTrang != null ? `satarobo:bang:trang:${khoaTrang}` : null;
+  useEffect(() => {
+    if (!khoaTrangDay) return;
+    let luu = 1;
+    try {
+      const n = Number(window.sessionStorage?.getItem(khoaTrangDay));
+      if (Number.isInteger(n) && n > 0) luu = n;
+    } catch {
+      /* sessionStorage có thể ném — mất chỗ ghi nhớ thôi */
+    }
+    setTrangState(luu);
+  }, [khoaTrangDay]);
+  function setTrang(n: number) {
+    setTrangState(n);
+    if (!khoaTrangDay) return;
+    try {
+      window.sessionStorage?.setItem(khoaTrangDay, String(n));
+    } catch {
+      /* bỏ qua */
+    }
+  }
 
   // ── AFFORDANCE CUỘN NGANG (09/09/2026, luật 12) ────────────────────────────
   //
@@ -227,7 +264,12 @@ export function PhanTrangBang({
         bangDaCat
       )}
       {hienThanh && (
-        <div className="flex flex-col gap-2 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+        <div
+          className={cn(
+            "flex flex-col gap-2 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between",
+            classThanh,
+          )}
+        >
           <div className="flex items-center gap-2">
             <label htmlFor={idSelect} className="whitespace-nowrap">
               Hiển thị
