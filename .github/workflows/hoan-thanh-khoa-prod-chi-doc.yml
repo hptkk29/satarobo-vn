@@ -1,0 +1,119 @@
+# Chạy TAY (workflow_dispatch) — ĐỌC PROD, KHÔNG GHI GÌ.
+#
+# Trả lời câu của chủ dự án 23/09/2026: "các học viên tôi đã chuyển hoàn thành, giờ muốn
+# chúng nằm ở tab 'Hoàn thành khoá' thì làm sao?"
+#
+# Không trả lời được bằng suy luận: "đã chuyển hoàn thành" có BA đường, và chỉ MỘT đường
+# làm em hiện ở tab mới.
+#   (A) hồ sơ HV → "Hoàn thành"        ⇒ Student.status = GRADUATED   → KHÔNG hiện
+#   (B) /admin/enrollments → "Hoàn thành khoá" ⇒ Enrollment.status = COMPLETED → HIỆN
+#   (C) /hoan-thanh-khoa (cấp chứng chỉ)       ⇒ chỉ CourseCompletion  → KHÔNG hiện
+# Phải ĐẾM mới biết nhóm nào lớn, rồi mới chọn được cách vá.
+#
+# ── KHOÁ AN TOÀN (cùng khuôn `rbac-prod-chi-doc.yml`) ───────────────────────────────
+# 1. Script KHÔNG chứa lời gọi ghi nào, không cờ `--apply`.
+# 2. `SET TRANSACTION READ ONLY` + NÉM để rollback — Postgres tự từ chối mọi phép ghi,
+#    kể cả phép ghi do một `import` nào đó kéo theo.
+# 3. USER CHỈ-ĐỌC: file này CỐ Ý KHÔNG nhắc `PROD_DATABASE_URL` / `PROD_DIRECT_URL`
+#    (hai secret đầy quyền). Nó chỉ biết `PROD_DATABASE_URL_RO`.
+#    Cách tạo user: `docs/cham-cong/USER-CHI-DOC-PROD.md`.
+# 4. SCRIPT TỰ KHAI: dòng đầu in `user=… · ghi được: CÓ/KHÔNG`. GitHub không cho đọc lại
+#    secret, nên đây là cách DUY NHẤT thấy secret bị đặt nhầm sang chuỗi đầy quyền.
+#
+# ⚠️ GIỚI HẠN ĐÃ BIẾT của cổng (4): `scripts/_kiem-quyen.ts` hỏi quyền trên `ClassSession`
+# — tên bảng đóng cứng từ đợt chấm công, KHÔNG phải bảng mà báo cáo này đọc
+# (`Student` · `Enrollment` · `CourseCompletion`). Nợ đã ghim ở CLAUDE.md. Nó vẫn bắt được
+# ĐÚNG ca cần bắt (secret đặt nhầm sang vai đầy quyền — vai ấy có UPDATE trên MỌI bảng),
+# nên giữ nguyên ở đây thay vì sửa một file dùng chung trong lượt này.
+#
+# ── CHE DỮ LIỆU CÁ NHÂN ─────────────────────────────────────────────────────────────
+# Báo cáo vào job summary + artifact ⇒ RỜI KHỎI vòng kiểm soát của DB. Script KHÔNG in họ
+# tên học viên, chỉ in ĐẾM theo nhóm — đủ để quyết. Artifact giữ 3 ngày.
+#
+# Dùng chuỗi SESSION POOLER (:5432), không phải transaction pooler (:6543) — pgbouncer
+# không giữ prepared statement giữa các câu lệnh (xem `scripts/_script-db.ts`).
+name: Hoàn thành khoá · PROD · ĐỌC (chỉ đọc — không ghi gì)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  doc:
+    name: Đọc hiện trạng hoàn thành khoá trên prod (không ghi)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # Kiểm HÌNH DẠNG chuỗi trước khi tốn thời gian cài đặt rồi mới chết ở Prisma.
+      # KHÔNG in giá trị secret — chỉ nói chỗ nào sai.
+      - name: Kiểm secret chỉ-đọc
+        env:
+          U: ${{ secrets.PROD_DATABASE_URL_RO }}
+        run: |
+          if [ -z "$U" ]; then
+            echo "::error::Thiếu secret PROD_DATABASE_URL_RO (chuỗi session pooler của user chỉ-đọc)."
+            echo "::error::Cách tạo user + lấy chuỗi: docs/cham-cong/USER-CHI-DOC-PROD.md"
+            echo "::error::KHÔNG đặt PROD_DATABASE_URL / PROD_DIRECT_URL vào đây — chúng đầy quyền."
+            exit 1
+          fi
+          rest="${U#*://}"
+          proto="${U%%://*}"
+          userinfo="${rest%@*}"
+          user="${userinfo%%:*}"
+          hostport="${rest##*@}"
+          port="${hostport##*:}"; port="${port%%/*}"
+          ok=1
+          case "$proto" in
+            postgresql|postgres) ;;
+            *) echo "::error::Chuỗi phải bắt đầu bằng postgresql:// — đang là '$proto://'"; ok=0 ;;
+          esac
+          case "$user" in
+            *.*) ;;
+            *) echo "::error::Tên user THIẾU hậu tố '.<mã dự án>' — Supavisor định tuyến theo mã dự án nằm TRONG tên user."; ok=0 ;;
+          esac
+          if [ "$port" != "5432" ]; then
+            echo "::error::Cổng đang là '$port' — phải là 5432 (tab 'Session pooler')."
+            ok=0
+          fi
+          [ $ok -eq 1 ] || { echo "::error::Sửa secret PROD_DATABASE_URL_RO rồi chạy lại. Không có bước nào chạm DB."; exit 1; }
+
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Prisma generate
+        run: pnpm exec prisma generate
+
+      - name: Đọc hiện trạng hoàn thành khoá
+        env:
+          # CỐ Ý chỉ có chuỗi chỉ-đọc. Hai secret đầy quyền không được nhắc tới trong tệp này.
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+        run: pnpm exec tsx scripts/bao-cao-hoan-thanh-khoa-prod.ts
+
+      - name: Đưa báo cáo vào job summary
+        if: always()
+        run: |
+          if [ -f bao-cao-hoan-thanh-khoa-prod.md ]; then
+            cat bao-cao-hoan-thanh-khoa-prod.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Không sinh được báo cáo — đọc log bước trên." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bao-cao-hoan-thanh-khoa-prod
+          path: bao-cao-hoan-thanh-khoa-prod.md
+          retention-days: 3
+          if-no-files-found: warn
