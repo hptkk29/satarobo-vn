@@ -6,8 +6,24 @@
 // một tab bất kỳ (quảng cáo, tiện ích mở rộng) cũng gọi `postMessage` vào trang admin
 // được, nên kiểm `origin` là hàng rào duy nhất.
 import { describe, it, expect } from "vitest";
-import { chuanHoaNguonGoc, xuLyThongDiep } from "./thong-diep";
+import { chuanHoaNguonGoc, xuLyThongDiep, type ThongDiepZaloCrm } from "./thong-diep";
+
 
+/**
+ * Đường dẫn của một tin, KHI tin ấy mang đường dẫn.
+ *
+ * Từ 24/09 `ThongDiepZaloCrm` có thêm nhánh `xin-ve-moi` — tin KHÔNG mang đường dẫn
+ * (khung chỉ xin Sata ký vé mới). Nên `duongDanCua(kq)` không còn hợp kiểu, và đó là điều
+ * ĐÚNG: nó buộc mỗi ca phải nói rõ mình đang chờ loại tin nào.
+ *
+ * Ném (chứ không `expect` rồi trả bừa) để ca gọi nhầm loại tin đỏ ngay tại dòng gọi,
+ * thay vì đỏ ở một khẳng định xa phía dưới.
+ */
+function duongDanCua(kq: ThongDiepZaloCrm | null): string {
+  if (!kq) throw new Error("tin bị từ chối (null) — ca này mong một tin hợp lệ");
+  if (kq.loai === "xin-ve-moi") throw new Error("tin `xin-ve-moi` không mang đường dẫn");
+  return kq.duongDan;
+}
 const GOC = "https://zalo.satarobo.vn";
 const su = (data: unknown, origin: unknown = GOC) => ({ origin, data });
 
@@ -39,7 +55,7 @@ describe("xuLyThongDiep — chỉ tin đúng một origin", () => {
     expect(kq).not.toBeNull();
     expect(kq!.loai).toBe("tao-lead");
     // Trang nhập khách ĐÃ nhận `?phone=&name=` (đợt 1, `lib/lead/intake/prefill.ts`).
-    const u = new URL(kq!.duongDan, "https://admin.satarobo.vn");
+    const u = new URL(duongDanCua(kq), "https://admin.satarobo.vn");
     expect(u.pathname).toBe("/nhap-khach-hang");
     expect(u.searchParams.get("phone")).toBe("84912345678");
     expect(u.searchParams.get("name")).toBe("Chị Lan");
@@ -58,7 +74,7 @@ describe("xuLyThongDiep — chỉ tin đúng một origin", () => {
     // Khách Zalo hay để tên hiển thị là biệt danh; thiếu tên KHÔNG phải lý do chặn Sale
     // tạo phiếu — đó là ô người ta gõ tay ngay sau đó.
     const kq = xuLyThongDiep(su({ type: "sata:create-lead", phone: "0912345678" }), GOC);
-    const u = new URL(kq!.duongDan, "https://admin.satarobo.vn");
+    const u = new URL(duongDanCua(kq), "https://admin.satarobo.vn");
     expect(u.searchParams.get("phone")).toBe("0912345678");
     expect(u.searchParams.has("name")).toBe(false);
   });
@@ -66,7 +82,7 @@ describe("xuLyThongDiep — chỉ tin đúng một origin", () => {
   it("[ZC-PM-06] sata:open-lead ⇒ /leads/<id>", () => {
     const kq = xuLyThongDiep(su({ type: "sata:open-lead", leadId: "clzzlead0001abcdefghij" }), GOC);
     expect(kq!.loai).toBe("mo-lead");
-    expect(kq!.duongDan).toBe("/leads/clzzlead0001abcdefghij");
+    expect(duongDanCua(kq)).toBe("/leads/clzzlead0001abcdefghij");
   });
 
   it("[ZC-PM-07] leadId sai khuôn ⇒ null (chặn nhét đường dẫn)", () => {
@@ -107,7 +123,7 @@ describe("xuLyThongDiep — chỉ tin đúng một origin", () => {
       su({ type: "sata:create-lead", phone: "84912345678", name: "A&B #1 ?x=2" }),
       GOC,
     );
-    const u = new URL(kq!.duongDan, "https://admin.satarobo.vn");
+    const u = new URL(duongDanCua(kq), "https://admin.satarobo.vn");
     expect(u.searchParams.get("name")).toBe("A&B #1 ?x=2");
     expect(u.searchParams.get("phone")).toBe("84912345678");
   });
@@ -117,7 +133,7 @@ describe("xuLyThongDiep — chỉ tin đúng một origin", () => {
       su({ type: "sata:create-lead", phone: "84912345678", name: "x".repeat(500) }),
       GOC,
     );
-    const u = new URL(kq!.duongDan, "https://admin.satarobo.vn");
+    const u = new URL(duongDanCua(kq), "https://admin.satarobo.vn");
     expect(u.searchParams.get("name")!.length).toBeLessThanOrEqual(120);
   });
 });
@@ -134,5 +150,39 @@ describe("chuanHoaNguonGoc — từ ZALOCRM_APP_URL ra origin so sánh được"
     expect(chuanHoaNguonGoc(null)).toBeNull();
     expect(chuanHoaNguonGoc(undefined)).toBeNull();
     expect(chuanHoaNguonGoc("zalo.satarobo.vn")).toBeNull(); // thiếu scheme
+  });
+});
+
+describe("[ZC-PM-08] khung xin VÉ MỚI khi phiên bên kia thuộc tổ chức khác", () => {
+  // 🔴 Sự cố prod 24/09/2026: vé SSO nằm trong `src` của iframe. Trình duyệt tải lại
+  // khung bằng `src` CŨ (bfcache, khôi phục tab, F5 trong khung) ⇒ vé bị phát lại, và
+  // bên kia trước đây cứ đi tiếp bằng phiên đang có mà KHÔNG kiểm tổ chức. Ai từng mở
+  // cơ sở A rồi đổi sang B thì KẸT Ở A — hộp thư trống, tìm SĐT không ra, nick của
+  // chính mình không thấy, và không một dòng lỗi nào.
+  //
+  // Bên kia nay phát hiện được lệch nhưng KHÔNG ký được vé (chỉ Sata ký), nên nó gửi
+  // tin này. Sata dựng lại trang ⇒ vé mới ⇒ khung vào đúng tổ chức, không ai phải
+  // đăng xuất tay.
+
+  it("nhận đúng loại `xin-ve-moi`, và KHÔNG mang đường dẫn nào", () => {
+    const kq = xuLyThongDiep(su({ type: "sata:xin-ve-moi" }), GOC);
+    expect(kq).toEqual({ loai: "xin-ve-moi" });
+  });
+
+  it("SAI ORIGIN ⇒ null — tin này ép Sata ký một vé, không ai ngoài fork được xin", () => {
+    // Vé SSO là đường vào không cần mật khẩu. Một iframe quảng cáo hay tiện ích mở rộng
+    // mà xin được vé là xin được một lượt đăng nhập.
+    expect(xuLyThongDiep({ origin: "https://ke-xau.example", data: { type: "sata:xin-ve-moi" } }, GOC)).toBeNull();
+    expect(xuLyThongDiep(su({ type: "sata:xin-ve-moi" }), null)).toBeNull();
+  });
+
+  it("tin thừa trường vẫn CHỈ ra `xin-ve-moi` — không nhận tham số nào từ khung", () => {
+    // Fail-closed: khung KHÔNG được chọn cơ sở hay đổi tham số hộ Sata. Nếu ngày nào đó
+    // ai thêm `orgCode` vào tin này thì ca đây đỏ, và đó là điểm của nó.
+    const kq = xuLyThongDiep(
+      su({ type: "sata:xin-ve-moi", org: "prod-cs2", duongDan: "/leads" }),
+      GOC,
+    );
+    expect(kq).toEqual({ loai: "xin-ve-moi" });
   });
 });
