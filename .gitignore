@@ -126,6 +126,7 @@ var/
 # — nó vẫn là ảnh chụp dữ liệu sống, không vào repo. Bản chính thức sống ở artifact của
 # workflow, giữ 3 ngày.
 bao-cao-doi-soat-tien.md
+dev-3007.log
 # Cùng lý do — báo cáo ngưỡng thanh toán (22/09/2026). Không có cột cá nhân nào, nhưng mã đơn
 # + số tiền vẫn là ảnh chụp dữ liệu sống.
 bao-cao-nguong-thanh-toan.md

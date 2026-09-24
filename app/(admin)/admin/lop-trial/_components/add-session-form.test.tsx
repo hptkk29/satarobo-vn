@@ -94,6 +94,9 @@ function dung(over: { cheDoChonGv?: CheDoChonGv; locGvTheoCa?: boolean } = {}) {
       cheDoChonGv={over.cheDoChonGv ?? "LOC_THEO_CA"}
       locGvTheoCa={over.locGvTheoCa ?? true}
       soGvMienLoc={2}
+      // Các ca trong tệp này là form của lớp CŨ (có ô ngày) — đúng hành vi họ ghim.
+      ngayCoDinh={null}
+      khung={null}
     />,
   );
 }
@@ -475,6 +478,8 @@ describe("Công tắc 'Hiện tất cả giáo viên'", () => {
         cheDoChonGv="TAT_CA"
         locGvTheoCa
         soGvMienLoc={0}
+        ngayCoDinh={null}
+        khung={null}
       />,
     );
     expect(congTac()).toBeNull();
@@ -677,5 +682,29 @@ describe("dòng người đang chọn mà không có trong danh sách vừa lọ
     expect(hauToNguoiNgoaiDs({ coTrongDsDay: false, hienTatCa: true })).toBe(
       " · KHÔNG CÒN TRONG DANH SÁCH CHỌN",
     );
+  });
+});
+
+describe("[ASF-CASE] lớp THEO KHUNG — form thêm case KHÔNG có ô ngày (chủ dự án 23/09)", () => {
+  it("không vẽ ô ngày, tiêu đề + nút là \"Thêm case\", ô giờ mang min/max của khung lớp", () => {
+    render(
+      <AddSessionForm
+        trialClassId="lop-1"
+        teachers={GIAO_VIEN}
+        rooms={[]}
+        defaultStartTime="17:30"
+        defaultEndTime="21:00"
+        cheDoChonGv="TAT_CA"
+        locGvTheoCa={false}
+        soGvMienLoc={0}
+        ngayCoDinh="2026-09-23"
+        khung={{ startTime: "17:30", endTime: "21:00" }}
+      />,
+    );
+    expect(screen.queryByLabelText("Ngày *")).toBeNull();
+    expect(screen.getAllByText("Thêm case").length).toBe(2); // tiêu đề + nút
+    const gio = screen.getByLabelText("Giờ bắt đầu") as HTMLInputElement;
+    expect(gio.min).toBe("17:30");
+    expect(gio.max).toBe("21:00");
   });
 });

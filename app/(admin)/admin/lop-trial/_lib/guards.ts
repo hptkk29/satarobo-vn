@@ -32,6 +32,16 @@ export type ScopedClass = {
   teacherId: string | null;
   status: string;
   name: string;
+  /**
+   * NGÀY + KHUNG GIỜ lớp mở (22/09/2026). `null` với lớp tạo TRƯỚC ngày đó — chốt 28/08
+   * để ba cột này trống có chủ đích, nên `null` ở đây là "lớp cũ", không phải dữ liệu
+   * hỏng, và cổng khung giờ cố ý KHÔNG chặn lớp cũ.
+   */
+  startDate: Date | null;
+  startTime: string | null;
+  endTime: string | null;
+  /** 23/09 — lớp theo khung hay lớp cũ (lib/trial/nghia-null.ts). KHÔNG đoán từ giờ. */
+  theoKhung: boolean;
 };
 
 /** Lấy lớp trải nghiệm trong tầm nhìn của actor. null = ngoài phạm vi hoặc không có. */
@@ -42,7 +52,19 @@ export async function loadScopedTrialClass(
   const sdb = scopedDb(actor);
   const row = await sdb.trialClassV2.findUnique({
     where: { id: trialClassId },
-    select: { id: true, centerId: true, teacherId: true, status: true, name: true },
+    // 22/09/2026 — thêm NGÀY + KHUNG GIỜ của lớp: cổng "case phải nằm trong khung lớp"
+    // đọc từ đây. Thiếu ba cột này thì cổng không có gì để so và im lặng cho qua.
+    select: {
+      id: true,
+      centerId: true,
+      teacherId: true,
+      status: true,
+      name: true,
+      startDate: true,
+      startTime: true,
+      endTime: true,
+      theoKhung: true,
+    },
   });
   if (!row || !passesScope("TrialClassV2", row, actor)) return null;
   return row;
@@ -66,6 +88,8 @@ export type ScopedSession = {
   roomId: string | null;
   teacherId: string | null;
   status: "SCHEDULED" | "COMPLETED" | "CANCELLED";
+  /** 23/09 — ai TAO case nay. `null` = buoi truoc 23/09/2026 (cot khong backfill). */
+  createdById: string | null;
 };
 
 /**
@@ -89,6 +113,9 @@ export async function loadScopedTrialSession(
       roomId: true,
       teacherId: true,
       status: true,
+      // 23/09 — dau vao cua `quyenSuaCase`. Thieu cot nay thi cong sua/xoa case khong
+      // co gi de tua vao va se cho qua tat ca.
+      createdById: true,
       trialClass: { select: { centerId: true, teacherId: true } },
     },
   });
@@ -106,6 +133,7 @@ export async function loadScopedTrialSession(
     roomId: ses.roomId,
     teacherId: ses.teacherId,
     status: ses.status,
+    createdById: ses.createdById,
   };
 }
 

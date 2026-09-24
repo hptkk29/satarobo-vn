@@ -29,6 +29,13 @@ export type SuKienLead =
   // ── nhóm LỚP TRẢI NGHIỆM ────────────────────────────────────────────────────────────
   | { viec: "trial.xep-lop"; tenCon: string; tenLop: string }
   | { viec: "trial.go-lop"; tenCon: string; tenLop: string; lyDo?: string | null }
+  /**
+   * 23/09/2026 — mô hình case: một lớp (một ngày × một khung) chứa nhiều case. Bé vào/ra
+   * MỘT case mà vẫn ở trong lớp là hai việc riêng với xếp/gỡ LỚP. `gio` là chuỗi
+   * "HH:MM–HH:MM" của case (cùng lý do với `trial.doi-lich`: không ghép thành `Date`).
+   */
+  | { viec: "trial.xep-case"; tenCon: string; tenLop: string; gio: string }
+  | { viec: "trial.go-case"; tenCon: string; tenLop: string; gio: string }
   | { viec: "trial.diem-danh"; tenCon: string; tenLop: string; coMat: boolean; ngay: Date }
   /**
    * Dời lịch một buổi. Giờ đi RIÊNG dưới dạng chuỗi, không nhét vào `Date`:
@@ -95,6 +102,8 @@ export type SuKienLead =
 export const NHAN_VIEC: Record<MaViec, string> = {
   "trial.xep-lop": "Xếp lớp trải nghiệm",
   "trial.go-lop": "Gỡ khỏi lớp trải nghiệm",
+  "trial.xep-case": "Xếp vào case trải nghiệm",
+  "trial.go-case": "Gỡ khỏi case trải nghiệm",
   "trial.diem-danh": "Điểm danh trải nghiệm",
   "trial.doi-lich": "Đổi lịch trải nghiệm",
   "trial.huy-buoi": "Huỷ buổi trải nghiệm",
@@ -197,6 +206,12 @@ export function moTaTuongTac(sk: SuKienLead): string {
       return `Xếp ${sk.tenCon} vào lớp trải nghiệm ${sk.tenLop}.`;
     case "trial.go-lop":
       return `Gỡ ${sk.tenCon} khỏi lớp trải nghiệm ${sk.tenLop}.${duoiLyDo(sk.lyDo)}`;
+    case "trial.xep-case":
+      return `Xếp ${sk.tenCon} vào case ${sk.gio} của lớp trải nghiệm ${sk.tenLop}.`;
+    case "trial.go-case":
+      // Bé VẪN ở trong lớp — câu phải nói rõ điều đó, kẻo người đọc lịch sử tưởng bé đã
+      // rời lớp (việc đó có dòng riêng, "trial.go-lop").
+      return `Gỡ ${sk.tenCon} khỏi case ${sk.gio} của lớp trải nghiệm ${sk.tenLop} — bé vẫn trong lớp, chờ xếp case khác.`;
     case "trial.diem-danh":
       return `${sk.tenCon} ${sk.coMat ? "có mặt" : "vắng"} buổi trải nghiệm ngày ${ngay(
         sk.ngay,

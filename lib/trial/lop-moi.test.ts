@@ -4,7 +4,7 @@
 // rải assert trong action (action cần auth + Postgres, không chạy được ở lane unit).
 import { describe, it, expect } from "vitest";
 import { isOverCapacity } from "./service";
-import { tenLopTrial, trungKhungGio } from "./lop-moi";
+import { tenLopTrial, tenLopTrialTheoNgay, trungKhungGio } from "./lop-moi";
 
 describe("[28/08] sĩ số null = KHÔNG giới hạn", () => {
   it("capacity null → không bao giờ vượt, kể cả lớp đã đông", () => {
@@ -75,5 +75,18 @@ describe("[28/08] đánh dấu giáo viên bận theo khung giờ", () => {
     // đúng của dữ liệu hỏng chỉ là "không đánh dấu được", không phải "không dùng được".
     expect(trungKhungGio(b("", "19:30"), b("18:00", "19:30"))).toBe(false);
     expect(trungKhungGio(b("18:00", "19:30"), b("xx:yy", "19:30"))).toBe(false);
+  });
+});
+
+describe("[LM-NGAY] tên lớp theo NGÀY — lớp theo khung (chủ dự án 23/09/2026)", () => {
+  it("CS1 + ngày ⇒ 'CS1-Lớp trial 23/09/2026'", () => {
+    expect(tenLopTrialTheoNgay("CS1", null, "2026-09-23")).toBe("CS1-Lớp trial 23/09/2026");
+  });
+  it("chuẩn hoá mã cơ sở y như tên theo số thứ tự", () => {
+    expect(tenLopTrialTheoNgay("cs-2", null, "2026-10-01")).toBe("CS2-Lớp trial 01/10/2026");
+    expect(tenLopTrialTheoNgay("", null, "2026-10-01")).toBe("CS-Lớp trial 01/10/2026");
+  });
+  it("lớp có khoá (dữ liệu import cũ) giữ đoạn mã khoá", () => {
+    expect(tenLopTrialTheoNgay("CS1", "sata-4", "2026-09-23")).toBe("CS1-sata4-Lớp trial 23/09/2026");
   });
 });

@@ -186,6 +186,14 @@ export const crmModule: ModuleDecl = {
         "Xếp giáo viên cho buổi trải nghiệm của CƠ SỞ MÌNH. Khác trials:assign-teacher (Đào tạo, toàn hệ thống).",
     },
     {
+      key: "trials:create-class",
+      action: "create-class",
+      // 22/09/2026 — tách khỏi `trials:manage`: Sale phải giữ `trials:manage` để xếp
+      // học viên, nên chặn Sale tạo lớp chỉ làm được bằng một khoá riêng.
+      description:
+        "Mở lớp trải nghiệm (chọn ngày + khung giờ). Sale KHÔNG có khoá này — họ chỉ thêm case và xếp học viên vào lớp đã mở.",
+    },
+    {
       key: "trials:override-capacity",
       action: "override-capacity",
       description: "Xếp lớp trải nghiệm vượt sĩ số tối đa.",

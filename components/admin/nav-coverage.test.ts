@@ -21,6 +21,9 @@ const ADMIN_DIR = path.join(ROOT, "app", "(admin)", "admin");
 
 /** Route được phép không có mục menu — mỗi dòng phải nêu lý do. */
 const ALLOWLIST: Record<string, string> = {
+  "/bao-cao/trial":
+    "23/09/2026 — stub chuyển hướng sang /bao-cao/trial-sale (chủ dự án: xoá màn báo cáo " +
+    "trial theo cơ sở, lấy màn theo Sale làm màn chính). Giữ đường cũ để link đã lưu không 404.",
   "/dashboard-qlcs":
     "27/08/2026 — chủ dự án chốt GỠ mục menu: bốn khối của màn này nay hiện THẲNG trong " +
     "/dashboard cho Quản lý cơ sở + Quản trị hệ thống (không phân tab), nên hai vai cần " +

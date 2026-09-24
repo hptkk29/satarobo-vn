@@ -128,7 +128,8 @@ describe("[SCL-05] ⚠️ đường GHI `createdById` — bộ trên không ch�
     // Neo vào ô tiêu đề, không phải chữ "Sĩ số" ở bất kỳ đâu — chú thích trong tệp có
     // thể nhắc lại tên cột cũ mà không phải là cột đang hiển thị.
     expect(t).not.toContain('font-semibold">Sĩ số<');
-    expect(t).toContain('font-semibold">Sale<');
+    // 23/09 — cột Sale đổi thành "Sale có case trial" (chủ dự án).
+    expect(t).toContain('font-semibold">Sale có case trial<');
     expect(t).toContain('font-semibold">Học viên<');
     // Số `<th>` phải khớp `colSpan` của dòng "chưa có lớp nào", kẻo dòng đó lệch ô.
     const soTh = (t.match(/<th className/g) ?? []).length;

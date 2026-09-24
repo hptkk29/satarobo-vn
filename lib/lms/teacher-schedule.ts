@@ -23,6 +23,7 @@ import type {
 } from "@prisma/client";
 import { db } from "@/lib/db";
 import { chonBuoiDaiDien } from "@/lib/lms/trial-representative-session";
+import { LOP_CU_WHERE, laLopTheoKhung, thuocCase } from "@/lib/trial/nghia-null";
 import { getModelVisibleCenterIds } from "@/lib/db-scope";
 import {
   isSettledTrialRow,
@@ -224,6 +225,12 @@ export async function getTeacherTrialRoster(
   const unassignedRows = await db.trialEnrollment.findMany({
     where: {
       scheduledSessionId: null,
+      // 23/09/2026 — CHỈ lớp slot CŨ. Ở lớp theo khung (mô hình case), NULL là "chưa xếp
+      // case" chứ không phải "học cả lớp" (`lib/trial/nghia-null.ts`): màn admin in bé đó
+      // ở khối "Chưa xếp case", nên rải bé vào ca của mọi giáo viên là hai màn nói hai
+      // nghĩa (luật 12b — site GV đọc theo admin). Đo được trước bản vá: hai giáo viên
+      // cùng thấy một bé "chưa xếp" trong ca của mình và cùng nhập phiếu được.
+      trialClass: LOP_CU_WHERE,
       status: { in: ["ACTIVE", "COMPLETED"] },
       // GĐ3 — thêm nhánh "được phân công theo ca", cùng lý do như ở truy vấn buổi.
       //
@@ -487,6 +494,8 @@ export async function getTeacherTrialRubricContext(
           name: true,
           teacherId: true,
           assistantId: true,
+          // 23/09 — loại lớp, để biết NULL có nghĩa "học cả lớp" hay "chưa xếp case".
+          theoKhung: true,
           sessions: {
             orderBy: { seq: "asc" },
             select: {
@@ -525,12 +534,28 @@ export async function getTeacherTrialRubricContext(
   //
   // Giữ CẢ giáo viên của buổi đang xếp lẫn của buổi đang chấm: bỏ nhánh "buổi đang xếp"
   // đi là siết hẹp hơn bản trước GĐ4 — người đang chấm được hôm nay sẽ mất quyền.
+  // 23/09/2026 — hai nhánh cuối ("GV của buổi đang xếp", "GV của buổi đang chấm") phải
+  // nói ĐÚNG về bé này:
+  //   · Lớp THEO KHUNG: nhiều case chạy SONG SONG. Buổi đang chấm (`target`, lấy từ URL)
+  //     phải là case CỦA CHÍNH bé (`thuocCase`) — thiếu vế này thì GV có case trong lớp
+  //     mở và lưu được phiếu cho bé ở case của GV khác chỉ bằng cách sửa URL (đo được
+  //     23/09). Bé NULL ở lớp theo khung thì `thuocCase` là false với mọi case.
+  //   · Case ĐÃ HUỶ không có buổi học nào: GV của nó không phải người chấm, và form
+  //     không được mặc định chấm đúng buổi đã huỷ.
+  // Lớp CŨ giữ nguyên hành vi cũ (trừ case đã huỷ): NULL = học cả lớp.
+  // Phân công đích danh (`gvPhanCongId`) và GV/trợ giảng cấp lớp vẫn đủ như trước.
+  const theoKhung = laLopTheoKhung(enr.trialClass);
+  const caseCuaBeDaHuy = scheduled?.status === "CANCELLED";
+  const targetHopLe =
+    !!target &&
+    target.status !== "CANCELLED" &&
+    (!theoKhung || thuocCase(enr, target.id, true));
   const owned =
     enr.gvPhanCongId === userId ||
     enr.trialClass.teacherId === userId ||
     enr.trialClass.assistantId === userId ||
-    scheduled?.teacherId === userId ||
-    target?.teacherId === userId;
+    (!caseCuaBeDaHuy && scheduled?.teacherId === userId) ||
+    (targetHopLe && target?.teacherId === userId);
   if (!owned) return null;
 
   const courseName = enr.leadChild.interestedCourseId
@@ -766,9 +791,18 @@ export async function getTeacherTrialTable(
           OR: [
             // (a) xếp riêng một buổi, và buổi đó là buổi của GV.
             { scheduledSessionId: { in: idBuoiThuocGv } },
-            // (b) học CẢ LỚP trong lớp của GV — ca THƯỜNG GẶP NHẤT: cả hai màn xếp chỗ
-            //     bên admin đều không truyền sessionId.
-            { scheduledSessionId: null, trialClassId: { in: lopThuocGv } },
+            // (b) học CẢ LỚP trong lớp của GV — ca THƯỜNG GẶP NHẤT ở lớp slot cũ: màn
+            //     xếp chỗ bên admin không truyền sessionId.
+              // 23/09/2026 — CHỈ lớp slot CŨ. Ở lớp theo khung (mô hình case), NULL là "chưa xếp
+              // case" chứ không phải "học cả lớp" (`lib/trial/nghia-null.ts`): màn admin in bé đó
+              // ở khối "Chưa xếp case", nên rải bé vào ca của mọi giáo viên là hai màn nói hai
+              // nghĩa (luật 12b — site GV đọc theo admin). Đo được trước bản vá: hai giáo viên
+              // cùng thấy một bé "chưa xếp" trong ca của mình và cùng nhập phiếu được.
+            {
+              scheduledSessionId: null,
+              trialClassId: { in: lopThuocGv },
+              trialClass: LOP_CU_WHERE,
+            },
             // (c) Đào tạo phân công đích danh GV cho ca này (GĐ3) — lọc THEO CA.
             { gvPhanCongId: teacherId, trialClassId: { in: moiLop } },
           ],

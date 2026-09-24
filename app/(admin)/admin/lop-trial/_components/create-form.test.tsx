@@ -21,7 +21,14 @@ import path from "node:path";
 
 // Kiểu tham số khai TƯỜNG MINH: `vi.fn(async () => …)` suy ra tuple rỗng nên
 // `mock.calls[0]![0]` là lỗi biên dịch (TS2493).
-const goiTao = vi.fn(async (_input: { centerId: string; courseId?: string; name?: string }) => ({
+const goiTao = vi.fn(async (_input: {
+  centerId: string;
+  courseId?: string;
+  name?: string;
+  date?: string;
+  startTime?: string;
+  endTime?: string;
+}) => ({
   ok: true as const,
   id: "tc1",
 }));
@@ -45,10 +52,29 @@ const CO_SO = [
   { id: "cs1", name: "CS1 — 211 Nguyễn Hữu Thọ", code: "CS1" },
   { id: "cs2", name: "CS2 — 114 Hoàng Diệu", code: "CS2" },
 ];
-const KHOA = [{ id: "kh1", name: "Sata 4", slug: "sata4" }];
+
+// 22/09/2026 — lớp nay có NGÀY + KHUNG GIỜ. Dùng ngày TUYỆT ĐỐI (luật 19):
+// 22/09/2026 là THỨ 3 ⇒ khung tối 17:30–21:00.
+const KHUNG = {
+  cn: "08:00-11:30, 14:00-17:30",
+  t2: "",
+  t3: "17:30-21:00",
+  t4: "17:30-21:00",
+  t5: "17:30-21:00",
+  t6: "17:30-21:00",
+  t7: "08:00-11:30, 14:00-17:30",
+};
+const HOM_NAY = "2026-09-22";
 
 function dung(coSoCuaToi: string | null = null) {
-  return render(<CreateForm centers={CO_SO} courses={KHOA} coSoCuaToi={coSoCuaToi} />);
+  return render(
+    <CreateForm
+      centers={CO_SO}
+      coSoCuaToi={coSoCuaToi}
+      cauHinhKhung={KHUNG}
+      homNay={HOM_NAY}
+    />,
+  );
 }
 
 const oTen = () => screen.getByLabelText("Tên lớp") as HTMLInputElement;
@@ -194,9 +220,11 @@ describe("[LT-T13] ⚠️ nhánh SERVER phải THẬT SỰ dùng tên người d
   });
 
   it("`createTrialClass` ưu tiên tên người dùng, rơi về quy ước khi trống", () => {
-    expect(doc("lib/trial/service.ts")).toContain(
-      "name: params.name?.trim() || tenLopTrial(cc, khoa?.slug ?? null, seq)",
-    );
+    const sv = doc("lib/trial/service.ts");
+    expect(sv).toContain("params.name?.trim() ||");
+    // 23/09 — lớp có ngày đặt tên theo ngày; lớp cũ giữ quy ước số thứ tự.
+    expect(sv).toContain("tenLopTrialTheoNgay(cc, khoa?.slug ?? null, params.startDate.toISOString().slice(0, 10))");
+    expect(sv).toContain(": tenLopTrial(cc, khoa?.slug ?? null, seq)),");
   });
 
   it("action TRUYỀN tên xuống service — không nhận rồi bỏ rơi", () => {

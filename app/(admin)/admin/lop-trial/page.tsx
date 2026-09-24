@@ -1,7 +1,7 @@
 // app/(admin)/admin/lop-trial/page.tsx — GĐ2. Danh sách lớp trải nghiệm.
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Plus } from "lucide-react";
+import { Plus, Upload } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
@@ -22,7 +22,11 @@ export default async function LopTrialPage({
   if (!(await checkPermission("trials:view"))) redirect("/dashboard");
 
   const { status, q } = await searchParams;
-  const canManage = await checkPermission("trials:manage");
+  // 22/09/2026 — MỞ LỚP là khoá RIÊNG: Sale có `trials:manage` (thêm case, xếp học viên)
+  // nhưng KHÔNG được mở lớp. Giấu nút theo đúng khoá mà trang `/lop-trial/moi` đang gác
+  // — giấu theo khoá khác là nút biến mất với người được phép, hoặc còn đó với người
+  // bấm vào sẽ bị đá ra (luật 12 — nút là một lời hứa).
+  const canCreate = await checkPermission("trials:create-class");
 
   const actor = await resolveActor(session.user.id);
   const rows = await layDanhSachLop(actor, status, q);
@@ -36,13 +40,24 @@ export default async function LopTrialPage({
           bỏ cột trên bảng có dữ liệu prod là việc của đợt drop riêng, luật cứng #4). */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <ClassFilterChips current={status} q={q} />
-        {canManage && (
-          <Link
-            href="/lop-trial/moi"
-            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-dark"
-          >
-            <Plus className="h-4 w-4" /> Tạo lớp
-          </Link>
+        {canCreate && (
+          <div className="flex items-center gap-2">
+            {/* Lối vào import giấu theo CÙNG khoá với nút "Tạo lớp" — cổng thật nằm ở
+                `/api/admin/import/trial-classes`, đây chỉ là chuyện đừng bày một lối đi
+                mà người bấm sẽ bị từ chối. */}
+            <Link
+              href="/lop-trial/import"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted"
+            >
+              <Upload className="h-4 w-4" /> Nhập Excel
+            </Link>
+            <Link
+              href="/lop-trial/moi"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-dark"
+            >
+              <Plus className="h-4 w-4" /> Tạo lớp
+            </Link>
+          </div>
         )}
       </div>
 
@@ -53,7 +68,10 @@ export default async function LopTrialPage({
         hidden={{ status }}
       />
 
-      <ClassTable rows={rows} canManage={canManage} />
+      {/* 23/09 — nút "Huỷ lớp" gác bằng khoá MỞ lớp, đúng khoá `cancelLopTrialClassAction`
+          hỏi. Bản trước truyền `trials:manage` — khoá của MỌI Sale — nên Sale thấy nút mà
+          bấm thì bị server từ chối (luật 12). */}
+      <ClassTable rows={rows} canHuyLop={canCreate} />
     </div>
   );
 }

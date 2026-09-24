@@ -60,12 +60,21 @@ const h = vi.hoisted(() => {
     id: string,
     ten: string,
     saleId: string,
-    ghim: { scheduledSessionId?: string | null; trialClassId?: string } = {},
+    ghim: {
+      scheduledSessionId?: string | null;
+      trialClassId?: string;
+      /** Lớp chứa ca là lớp THEO KHUNG? Mặc định lớp slot CŨ — hình dạng thật trên prod. */
+      theoKhung?: boolean;
+    } = {},
   ) {
     return {
       id,
       scheduledSessionId: ghim.scheduledSessionId ?? null,
       trialClassId: ghim.trialClassId ?? "tc1",
+      // 23/09 — câu truy vấn thật lọc nhánh "học cả lớp" theo LOẠI LỚP
+      // (`trialClass: LOP_CU_WHERE`), nên fixture phải mang khung của lớp. Thiếu cột này
+      // thì mock không khớp được gì và cả bộ đỏ vì fixture, không vì mã.
+      trialClass: { theoKhung: ghim.theoKhung ?? false },
       leadChild: {
         fullName: ten,
         lead: {
@@ -131,6 +140,14 @@ const h = vi.hoisted(() => {
       if (khoa === "OR") {
         const nhanh = dieu as Record<string, unknown>[];
         if (!nhanh.some((n) => khopWhere(row, n))) return false;
+        continue;
+      }
+      // Bộ lọc LỒNG của một quan hệ (`trialClass: { OR: [...] }`) — đệ quy vào đúng
+      // object con của dòng. Chỉ nhận object thường; mọi thứ khác vẫn là phép so bằng.
+      if (dieu !== null && typeof dieu === "object" && !Array.isArray(dieu)) {
+        const con = row[khoa];
+        if (con === null || typeof con !== "object") return false;
+        if (!khopWhere(con as Record<string, unknown>, dieu as Record<string, unknown>)) return false;
         continue;
       }
       if (row[khoa] !== dieu) return false;
@@ -336,6 +353,37 @@ describe("[TRIAL-T51] hai nhánh KHÔNG rò sang nhau", () => {
     expect(khoa().some((k) => k.startsWith("trial.cho-phan-cong-gap:"))).toBe(false);
     expect(kq.leoThang).toBe(0);
     expect(kq.daNhac).toBe(3);
+  });
+});
+
+describe("[TRIAL-T55] lớp THEO KHUNG — bé NULL là \"chưa xếp case\", KHÔNG nhắc theo case", () => {
+  // 23/09/2026. Ở lớp theo khung (mô hình case), NULL không còn là "học cả lớp"
+  // (`lib/trial/nghia-null.ts`). Bản trước đếm bé NULL vào MỌI case của lớp: Sale nhận
+  // N chuông với N giờ khác nhau cho cùng một bé mà màn admin nói là chưa có case, và
+  // case không có bé nào của nó vẫn nhắc giáo viên (hoặc leo thang Đào tạo).
+
+
+  it("mốc 2 tiếng: bé NULL ở lớp theo khung KHÔNG sinh chuông Sale nào", async () => {
+    h.trangThai.cas = [
+      h.caHocThu("te1", "Bé An", "u_sale_1", { theoKhung: true }),
+      h.caHocThu("te2", "Bé Bình", "u_sale_2", { theoKhung: true }),
+    ];
+    await chayNhacTrial({ now: NOW_MOC_SALE });
+    expect(soTin()).toBe(0);
+  });
+
+  it("mốc 1 tiếng: case chỉ có bé NULL (lớp theo khung) ⇒ KHÔNG nhắc giáo viên", async () => {
+    h.trangThai.cas = [h.caHocThu("te1", "Bé An", "u_sale_1", { theoKhung: true })];
+    await chayNhacTrial({ now: NOW_MOC_GV });
+    expect(soTin()).toBe(0);
+  });
+
+  it("bé GHIM đúng case ở lớp theo khung thì VẪN được nhắc — cổng không nuốt ca thật", async () => {
+    h.trangThai.cas = [
+      h.caHocThu("te1", "Bé An", "u_sale_1", { theoKhung: true, scheduledSessionId: "ts1" }),
+    ];
+    await chayNhacTrial({ now: NOW_MOC_SALE });
+    expect(soTin()).toBe(1);
   });
 });
 

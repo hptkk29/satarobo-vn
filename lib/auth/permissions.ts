@@ -122,6 +122,14 @@ export type Action =
   // KHÔNG mở rộng `trials:assign-teacher` cho CENTER_MANAGER: khoá đó là tầng Đào tạo
   // (FULL, mọi cơ sở) — GĐ3 đã cố ý GỠ nó khỏi Quản lý cơ sở, trả lại là đảo quyết định.
   | "trials:assign-teacher-center"
+  // 22/09/2026 — TẠO LỚP trải nghiệm tách khỏi `trials:manage`.
+  //
+  // Chủ dự án: "chỉ cho QL tạo và sale chỉ vào chọn lớp trial theo ngày đặt lịch và add
+  // học viên". Trước khoá này `trials:manage` gộp CẢ HAI việc (tạo lớp + xếp học viên),
+  // mà Sale bắt buộc phải có `trials:manage` để xếp học viên — nên không có cách nào
+  // chặn Sale tạo lớp nếu không tách khoá. Chính seed-roles.ts đã ghi nhận bế tắc đó:
+  // "không tách nổi QL cơ sở khỏi Sale — hai vai đang mang bộ `trials:*` giống hệt".
+  | "trials:create-class"
   | "trials:override-capacity"
   | "training:manage"
   | "reports:training"
@@ -569,6 +577,10 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // `buildActor()` lọc mọi grant theo đúng tập đó — khai ở union mà thiếu ở đây thì
   // khoá VÔ HÌNH với cả `PermissionGrant` lẫn `UserPermissionGrant`.
   "trials:assign-teacher-center": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  // 22/09/2026 — chủ dự án chốt: Quản lý cơ sở + Đào tạo được mở lớp trải nghiệm.
+  // SALES_CSM CỐ Ý không có: họ giữ `trials:manage` (thêm case, xếp học viên, điểm danh)
+  // nhưng mất nút tạo lớp. Thêm SALES_CSM vào đây là xoá đúng ranh giới vừa dựng.
+  "trials:create-class": ["SUPER_ADMIN", "CENTER_MANAGER", "TRAINING"],
   "trials:override-capacity": ["SUPER_ADMIN", "CENTER_MANAGER", "TRAINING"],
   // FL W0 (QĐ-T1): cấu hình đào tạo/LMS = TRAINING (Đào tạo). CENTER_MANAGER chỉ xem nội dung LMS.
   "training:manage": ["SUPER_ADMIN", "TRAINING"],

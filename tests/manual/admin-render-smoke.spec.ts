@@ -20,7 +20,7 @@ const EMPLOYEE = "cmpjsrm5z00018ke0f0v6z6xd";
 
 const ROUTES = [
   "/admin/assignments", "/admin/assignments/new",
-  "/admin/bao-cao/dao-tao", "/admin/bao-cao/lead", "/admin/bao-cao/trial", "/admin/bao-cao/trung-tam",
+  "/admin/bao-cao/dao-tao", "/admin/bao-cao/lead", "/admin/bao-cao/trial-sale", "/admin/bao-cao/trung-tam",
   "/admin/canh-bao-rui-ro", "/admin/cham-cong/lich-ca", "/admin/class-groups",
   "/admin/classes/new", "/admin/crm", "/admin/enrollments/new", "/admin/exams", "/admin/exams/new",
   "/admin/hoan-thanh-khoa", "/admin/hoc-ba", "/admin/holidays", "/admin/leads/bao-cao-chuyen",

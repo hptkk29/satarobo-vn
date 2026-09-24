@@ -29,7 +29,14 @@ const SRC = readFileSync(
  * luôn xanh dù cổng bị đổi sai, tức là không kiểm gì cả.
  */
 const CONG_QUYEN: Record<string, Action> = {
-  createLopTrialClassAction: "trials:manage",
+  // ~~`trials:manage`~~ **[ĐẢO 22/09/2026]** — chủ dự án: "chỉ cho QL tạo và sale chỉ
+  // vào chọn lớp trial theo ngày đặt lịch và add học viên". Sale VẪN phải có
+  // `trials:manage` (để thêm case + xếp học viên), nên giữ cổng cũ ở đây là KHÔNG
+  // chặn được ai — phải là khoá riêng. Xem `trials:create-class` trong seed-roles.
+  createLopTrialClassAction: "trials:create-class",
+  // Mở lớp cho CẢ KỲ theo thứ — cùng khoá với mở một lớp. Cho nó khoá rộng hơn là
+  // mỞ một cửa sau: không bấm được "Tạo lớp" nhưng mở được 60 lớp một lượt.
+  taoLopTrialTheoThuAction: "trials:create-class",
   addLopTrialSessionAction: "trials:manage",
   // 28/08 — sửa / huỷ MỘT buổi. Cùng cổng `trials:manage` với thêm buổi: ba thao tác
   // này là một việc (xếp lịch lớp), tách cổng chỉ đẻ ra ma trận không ai nhớ nổi.
@@ -45,7 +52,19 @@ const CONG_QUYEN: Record<string, Action> = {
   enrollLeadChildLopTrialAction: "trials:manage",
   searchLopTrialCandidatesAction: "trials:manage",
   unenrollLeadChildLopTrialAction: "trials:manage",
-  cancelLopTrialClassAction: "trials:manage",
+  // 23/09/2026 — MỚI. Chuyển một bé sang case khác trong cùng lớp. Cổng vào là
+  // `trials:manage` (ai cũng vào được), nhưng BÊN TRONG nó còn một cổng thứ hai:
+  // `quyenGoHocVien` — chuyển case là đổi giờ hẹn với phụ huynh, nên nó đòi đúng thứ
+  // mà cửa GỠ đòi (là chủ lead, hoặc là Quản lý). Bảng này chỉ khai cổng NGOÀI.
+  xepCaseHocVienAction: "trials:manage",
+  // 23/09/2026 — MỚI. Gỡ bé khỏi CASE (bé vẫn ở trong lớp, về "Chưa xếp case"). Cổng
+  // ngoài `trials:manage`; bên trong còn `quyenGoHocVien` (chủ lead / Quản lý).
+  goKhoiCaseAction: "trials:manage",
+  // ~~`trials:manage`~~ **[ĐẢO 23/09/2026]** — chủ dự án: "sale cũng không thể xoá
+  // hoặc huỷ lớp". `trials:manage` là khoá của MỌI Sale (seed-roles, CENTER_SALES_CSM)
+  // nên cổng cũ không chặn được ai — mà huỷ lớp đẩy TOÀN BỘ ghi danh của mọi Sale
+  // trong lớp sang CANCELLED. Dùng lại ĐÚNG khoá mở lớp: ai mở được thì đóng được.
+  cancelLopTrialClassAction: "trials:create-class",
   // GĐ4 — điểm danh là việc của SALE phụ trách khách, KHÁC phiếu đánh giá của giáo
   // viên (`trials:feedback`). Dùng chung một khoá là đảo ngược quy trình đã chốt.
   markLopTrialAttendanceAction: "trials:attendance",

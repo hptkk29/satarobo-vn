@@ -2,31 +2,23 @@
 //
 // Bảng danh sách lớp trải nghiệm. SERVER Component: không state, không handler —
 // phần tương tác duy nhất (huỷ lớp) nằm trong client component con.
+//
+// 23/09/2026 — cột theo chủ dự án: Lớp (tên "CS1-Lớp trial 23/09/2026" — ngày nằm SẴN
+// trong tên nên không còn cột ngày riêng) · Khung giờ · Sale có case trial · Học viên ·
+// Buổi kế tiếp · Số case · Trạng thái (hết ngày lớp ⇒ "Đã đóng", xem
+// `lib/trial/trang-thai-lop.ts`).
 
 import Link from "next/link";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
-import type { ClassRow, TrialClassStatusV2 } from "../_lib/types";
+import { NHAN_TRANG_THAI_LOP, type TrangThaiLop } from "@/lib/trial/trang-thai-lop";
+import type { ClassRow } from "../_lib/types";
 import { CancelClassButton } from "./cancel-class-button";
 
-const STATUS_LABEL: Record<TrialClassStatusV2, string> = {
-  OPEN: "Đang mở",
-  RUNNING: "Đang chạy",
-  COMPLETED: "Đã xong",
-  CANCELLED: "Đã huỷ",
+const BADGE: Record<TrangThaiLop, string> = {
+  DANG_MO: "bg-state-success-soft text-state-success-ink",
+  DA_DONG: "bg-muted text-muted-foreground",
+  DA_HUY: "bg-state-danger-soft text-state-danger-ink",
 };
-
-const STATUS_BADGE: Record<TrialClassStatusV2, string> = {
-  OPEN: "bg-state-success-soft text-state-success-ink",
-  RUNNING: "bg-state-info-soft text-state-info-ink",
-  COMPLETED: "bg-muted text-muted-foreground",
-  CANCELLED: "bg-state-danger-soft text-state-danger-ink",
-};
-
-/** Lớp đã chốt sổ — không còn thao tác nào áp lên nó nữa. */
-const TRANG_THAI_DA_DONG: ReadonlySet<TrialClassStatusV2> = new Set([
-  "COMPLETED",
-  "CANCELLED",
-]);
 
 /**
  * "YYYY-MM-DD" → "dd/MM/yyyy".
@@ -40,49 +32,68 @@ function ngayVN(s: string): string {
   return y && m && d ? `${d}/${m}/${y}` : s;
 }
 
+/** Hai tên đầu + "và N người nữa"; `title` giữ đủ danh sách. */
+function DanhSachTen({ ten, donVi }: { ten: string[]; donVi: string }): React.JSX.Element {
+  return (
+    <>
+      <span className="text-foreground" title={ten.join(", ")}>
+        {ten.slice(0, 2).join(", ")}
+      </span>
+      {ten.length > 2 && (
+        <span className="text-muted-foreground" title={ten.join(", ")}>
+          {" "}
+          và {ten.length - 2} {donVi} nữa
+        </span>
+      )}
+    </>
+  );
+}
+
 export function ClassTable({
   rows,
-  canManage,
+  canHuyLop,
 }: {
   rows: ClassRow[];
-  canManage: boolean;
+  /** Có `trials:create-class` — cùng khoá cửa huỷ lớp hỏi. Sale KHÔNG có (QĐ-C6). */
+  canHuyLop: boolean;
   // React 19 đã bỏ namespace JSX toàn cục khỏi @types/react ⇒ `JSX.Element` trần
   // không còn phân giải được, phải đi qua `React.JSX`.
 }): React.JSX.Element {
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card">
       {/*
-        `overflow-x-auto` phải nằm NGOÀI PhanTrangBang: component đó đòi children là
-        ĐÚNG MỘT `<table>` để tìm `<tbody>` mà cắt trang. Chèn một `<div>` vào giữa là
-        rơi vào nhánh fail-safe — bảng vẫn hiện nhưng mất phân trang mà không báo gì.
+        23/09 — cuộn ngang do CHÍNH PhanTrangBang lo (`cuonNgang`): vùng cuộn của nó có
+        `relative`, nên `<span className="sr-only">` ở cột thao tác không thoát ra kéo cả
+        trang trượt ngang ở 375px (đo được: 753px), và thanh phân trang đứng ngoài vùng cuộn.
       */}
-      <div className="overflow-x-auto">
-        <PhanTrangBang khoaGhiNho="lop-trial-danh-sach" tenDonVi="lớp">
+      <PhanTrangBang khoaGhiNho="lop-trial-danh-sach" tenDonVi="lớp" cuonNgang>
           <table className="w-full text-sm">
             <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-4 py-3 font-semibold">Lớp</th>
-                <th className="px-4 py-3 font-semibold">Sale</th>
-                <th className="px-4 py-3 font-semibold">Học viên</th>
-                <th className="px-4 py-3 font-semibold">Buổi kế tiếp</th>
-                <th className="px-4 py-3 font-semibold">Số buổi</th>
-                <th className="px-4 py-3 font-semibold">Trạng thái</th>
-                <th className="px-4 py-3 font-semibold">Thao tác</th>
+                <th className="whitespace-nowrap px-4 py-3 font-semibold">Lớp</th>
+                <th className="whitespace-nowrap px-4 py-3 font-semibold">Khung giờ</th>
+                <th className="whitespace-nowrap px-4 py-3 font-semibold">Sale có case trial</th>
+                <th className="whitespace-nowrap px-4 py-3 font-semibold">Học viên</th>
+                <th className="whitespace-nowrap px-4 py-3 font-semibold">Buổi kế tiếp</th>
+                <th className="whitespace-nowrap px-4 py-3 text-right font-semibold">Số case</th>
+                <th className="whitespace-nowrap px-4 py-3 font-semibold">Trạng thái</th>
+                <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                  <span className="sr-only">Thao tác</span>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {rows.length === 0 && (
                 <tr>
-                  <td
-                    colSpan={7}
-                    className="px-4 py-8 text-center text-muted-foreground"
-                  >
-                    Chưa có lớp trải nghiệm nào.
+                  <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">
+                    Không có lớp trải nghiệm nào trong bộ lọc này.
                   </td>
                 </tr>
               )}
               {rows.map((r) => {
-                const dongRoi = TRANG_THAI_DA_DONG.has(r.status);
+                // Huỷ lớp chỉ bày khi lớp CÒN MỞ — lớp đã qua ngày hay đã huỷ thì không còn
+                // gì để huỷ (cổng thật vẫn ở server: `cancelLopTrialClassAction`).
+                const conMo = r.trangThai === "DANG_MO";
                 return (
                   <tr key={r.id} className="hover:bg-muted">
                     <td className="whitespace-nowrap px-4 py-3">
@@ -92,95 +103,77 @@ export function ClassTable({
                       >
                         {r.name}
                       </Link>
-                      <div className="text-xs text-muted-foreground">
-                        {r.code}
-                      </div>
+                      <div className="text-xs text-muted-foreground">{r.code}</div>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 tabular-nums">
+                      {r.khungGio ? (
+                        <span className="text-foreground">{r.khungGio}</span>
+                      ) : (
+                        <span
+                          className="text-muted-foreground"
+                          title="Lớp tạo trước 22/09/2026 — khi đó lớp là slot dùng lại nhiều lần, không gắn ngày và khung giờ. Vẫn xếp học viên bình thường."
+                        >
+                          — lớp cũ
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
-                      {r.sale ? (
+                      {r.saleCase.length > 0 ? (
+                        <DanhSachTen ten={r.saleCase} donVi="Sale" />
+                      ) : r.sale ? (
                         <>
+                          {/* Lớp cũ: case không lưu người mở — tên suy từ Sale phụ trách lead
+                              của các con trong lớp. Nói ra, đừng để người đọc tưởng đó là
+                              người mở case (luật 12). */}
                           <span className="text-foreground">{r.sale.ten}</span>
                           {r.sale.soSaleKhac > 0 && (
-                            <span className="text-muted-foreground">
-                              {" "}
-                              +{r.sale.soSaleKhac}
-                            </span>
+                            <span className="text-muted-foreground"> +{r.sale.soSaleKhac}</span>
                           )}
-                          {/*
-                            Lớp tạo trước 18/09/2026 không có người tạo, tên ở đây là SUY
-                            từ Sale phụ trách lead của các con trong lớp. Nói ra chứ không
-                            để người đọc tưởng đó là người tạo lớp (luật 12).
-                          */}
                           {r.sale.suyTuLead && (
                             <div
                               className="text-xs text-muted-foreground"
-                              title="Lớp tạo trước 18/09/2026 nên không lưu người tạo — tên này suy từ Sale phụ trách lead của các con trong lớp."
+                              title="Case của lớp này không lưu người mở — tên suy từ Sale phụ trách lead của các con trong lớp."
                             >
                               theo lead
                             </div>
                           )}
                         </>
                       ) : (
-                        <span className="text-muted-foreground">—</span>
+                        <span className="text-muted-foreground">Chưa có case</span>
                       )}
                     </td>
                     <td className="px-4 py-3">
                       {r.hocVien.length === 0 ? (
                         <span className="text-muted-foreground">Chưa có</span>
                       ) : (
+                        <DanhSachTen ten={r.hocVien} donVi="con" />
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 tabular-nums">
+                      {r.caseKeTiep ? (
                         <>
-                          {/*
-                            Hiện 2 tên + "và N con nữa": cột này THAY cột "Sĩ số" nên phải
-                            còn đọc ra được SỐ, mà không để một lớp 12 con đẩy bảng giãn
-                            ngang trên điện thoại. `title` giữ đủ tên cho người cần tra.
-                          */}
-                          <span className="text-foreground" title={r.hocVien.join(", ")}>
-                            {r.hocVien.slice(0, 2).join(", ")}
-                          </span>
-                          {r.hocVien.length > 2 && (
-                            <span
-                              className="text-muted-foreground"
-                              title={r.hocVien.join(", ")}
-                            >
-                              {" "}
-                              và {r.hocVien.length - 2} con nữa
-                            </span>
-                          )}
+                          <div className="text-foreground">{r.caseKeTiep.gio}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {ngayVN(r.caseKeTiep.ngay)}
+                          </div>
                         </>
-                      )}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3">
-                      {r.nextSessionDate ? (
-                        <span className="text-foreground">
-                          {ngayVN(r.nextSessionDate)}
-                        </span>
                       ) : (
-                        <span className="text-muted-foreground">
-                          Chưa xếp buổi
-                        </span>
+                        <span className="text-muted-foreground">Không còn case</span>
                       )}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-foreground">
-                      {r.sessionCount}
-                      {r.configName ? (
-                        <span className="ml-1 text-xs text-muted-foreground">
-                          ({r.configName})
-                        </span>
-                      ) : null}
+                    <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-foreground">
+                      {r.soCase}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3">
                       <span
-                        className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_BADGE[r.status]}`}
+                        className={`inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold ${BADGE[r.trangThai]}`}
                       >
-                        {STATUS_LABEL[r.status]}
+                        {NHAN_TRANG_THAI_LOP[r.trangThai]}
                       </span>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3">
-                      {canManage && !dongRoi ? (
-                        <CancelClassButton
-                          trialClassId={r.id}
-                          className="text-xs"
-                        />
+                      {canHuyLop && conMo ? (
+                        <CancelClassButton trialClassId={r.id} className="text-xs" />
                       ) : null}
                     </td>
                   </tr>
@@ -188,8 +181,7 @@ export function ClassTable({
               })}
             </tbody>
           </table>
-        </PhanTrangBang>
-      </div>
+      </PhanTrangBang>
     </div>
   );
 }
