@@ -349,7 +349,11 @@ describe.skipIf(!CO_BANG)("[ZC-CQ] cấp quyền khi mở màn ZaloCRM", () => {
     // 24/09/2026: `nguoiDuocDungNick` nay trả `{ tatCa, quanLy }`. Ca này đo nhánh
     // nick CHƯA GIAO (fixture không đặt `sataUserId`), nên đúng danh sách `tatCa` —
     // nhánh nick ĐÃ GIAO có lưới riêng `[PVN-02]` + `[ZC-CQ-11]`.
-    const chinhSach = (await nguoiDuocDungNick(MA_CS)).tatCa;
+    // 24/09 (lượt sau): `nguoiDuocDungNick` trả BA tập. Nick này CHƯA giao ai, nên tập
+    // đi sang fork là `macDinh` (vai được dùng nick mặc định), KHÔNG phải `tatCa` (mọi
+    // nhân sự của cơ sở — tập GIAO TAY, rộng hơn). Lấy nhầm `tatCa` ở đây là ca này
+    // XANH trong khi hệ thống vừa cấp quyền cho cả giáo viên — xem [ZC-CQ-02d].
+    const chinhSach = (await nguoiDuocDungNick(MA_CS)).macDinh;
     for (const [i, t] of than.entries()) {
       expect(Array.isArray(t.access), `lượt ${i}: thân phải có mảng access`).toBe(true);
       const g = idTrongThan(t);
@@ -379,6 +383,29 @@ describe.skipIf(!CO_BANG)("[ZC-CQ] cấp quyền khi mở màn ZaloCRM", () => {
     for (const n of khongDuDieuKien) {
       expect(chinhSach, `"${n.nhan}" KHÔNG được có quyền dùng nick`).not.toContain(n.id);
     }
+  });
+
+  it("[ZC-CQ-02d] GIAO TAY ĐƯỢC ≠ MẶC ĐỊNH DÙNG ĐƯỢC — giáo viên nằm đúng một bên", () => {
+    // 🔴 Cả điểm của lượt 24/09 (sau), đo trên Postgres thật.
+    // Chủ dự án chốt: thêm tay được MỌI nhân sự của cơ sở, nhưng quyền MẶC ĐỊNH trên
+    // nick chưa giao thì giữ nguyên tập hẹp. Hai tập lẫn vào nhau là một lượt nới quyền
+    // im lặng — mọi giáo viên, kế toán của cơ sở đọc được mọi nick chưa giao.
+    const gvien = khongDuDieuKien.find((n) => n.nhan === "giao-vien")!;
+    return import("@/lib/integrations/zalocrm/cap-quyen-nick").then(
+      async ({ nguoiDuocDungNick }) => {
+        const { tatCa, macDinh } = await nguoiDuocDungNick(MA_CS);
+        expect(tatCa, "giáo viên của cơ sở phải THÊM TAY được").toContain(gvien.id);
+        expect(macDinh, "nhưng KHÔNG tự có quyền trên nick chưa giao").not.toContain(gvien.id);
+
+        // ĐỐI CHỨNG DƯƠNG — ba lý do loại kia vẫn loại khỏi CẢ HAI tập, không phải chỉ
+        // rơi khỏi tập hẹp. Thiếu vế này thì "nới tatCa ra mọi người" cũng xanh.
+        for (const nhan of ["nghi-viec", "het-nhiem-ky", "co-so-khac"]) {
+          const n = khongDuDieuKien.find((x) => x.nhan === nhan)!;
+          expect(tatCa, `"${nhan}" lọt vào tập giao tay`).not.toContain(n.id);
+          expect(macDinh, `"${nhan}" lọt vào tập mặc định`).not.toContain(n.id);
+        }
+      },
+    );
   });
 
   it("[ZC-CQ-02b] gọi ĐÚNG endpoint thay-cả-tập, theo đúng nick của org", async () => {

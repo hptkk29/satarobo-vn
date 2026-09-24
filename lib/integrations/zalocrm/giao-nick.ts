@@ -29,6 +29,7 @@ import { db } from "@/lib/db";
 import { nguoiDuocDungNick } from "@/lib/integrations/zalocrm/cap-quyen-nick";
 import { whereNickTheoActor, type ActorTamNhinNick } from "@/lib/integrations/zalocrm/nick-admin";
 import type { MucQuyen } from "@/lib/integrations/zalocrm/pham-vi-nick";
+import { maVaiCuaNguoiDung, vaiZaloCrm } from "@/lib/integrations/zalocrm/vai-tro";
 
 export type MaLoiGiaoNick =
   | "KHONG_THAY_NICK"
@@ -51,6 +52,20 @@ export type NguoiNhanDuoc = {
   email: string | null;
   /** Đang giữ vai quản lý cơ sở ⇒ `admin` TỰ ĐỘNG, không cần dòng giao nào. */
   laQuanLy: boolean;
+  /**
+   * 🔴 Vai của họ có mở được ZaloCRM không.
+   *
+   * `false` = thêm vào nick được, nhưng dòng giao ấy CHƯA có tác dụng gì: không có vé
+   * SSO ⇒ bên ZaloCRM chưa có tài khoản nào mang `externalId` này ⇒ lượt đối soát đếm
+   * họ vào `chuaCoTaiKhoan` rồi bỏ qua. Màn PHẢI nói ra, không thì đây là một nút bấm
+   * xong không có gì xảy ra (luật 12).
+   *
+   * Đo bằng `vaiZaloCrm()` — ánh xạ vé SSO, cổng CỨNG nhất trong ba cổng. Hai cổng kia
+   * là quyền `zalocrm:use` (mở được màn) và `ZaloAccountAccess` (thấy nick nào).
+   */
+  dungDuocZalocrm: boolean;
+  /** Mã vai, để phân biệt hai người trùng tên và để câu giải thích nói đúng vai nào. */
+  maVai: string[];
 };
 
 /**
@@ -60,25 +75,38 @@ export type NguoiNhanDuoc = {
  * nhìn cùng một sự thật. Trả rỗng khi cơ sở không có ai hợp lệ; đó là trạng thái bình
  * thường (cơ sở mới), không phải lỗi.
  *
+ * 24/09/2026 — danh sách nay là MỌI NHÂN SỰ của cơ sở (chủ dự án chốt), không chỉ tư vấn
+ * viên và quản lý. Ranh giới cơ sở GIỮ NGUYÊN.
+ *
  * `laQuanLy` đi kèm để màn NÓI THẬT: quản lý cơ sở luôn có `admin` trên mọi nick của cơ
  * sở mình, nên hiện họ như một dòng giao bình thường (gỡ được, đổi mức được) là hứa một
  * điều màn không giữ được — bấm gỡ xong họ vẫn thấy nick. Luật 12 (affordance).
  */
 export async function nguoiNhanDuocNick(centerCode: string): Promise<NguoiNhanDuoc[]> {
-  const { tatCa, quanLy } = await nguoiDuocDungNick(centerCode);
+  const { tatCa, quanLy, vaiTheoNguoi } = await nguoiDuocDungNick(centerCode);
   if (tatCa.length === 0) return [];
   const laQL = new Set(quanLy);
   const ds = await db.user.findMany({
     where: { id: { in: tatCa } },
-    select: { id: true, name: true, email: true },
+    // `role` (enum v1) đi kèm vì `vaiZaloCrm` khớp CẢ HAI hệ tên vai: local/dev chạy v1,
+    // prod chạy v2 (`UserOrgRole.role.code`). Đọc một hệ là câu trả lời đổi theo môi
+    // trường — đúng lớp lỗi `vai-tro.ts` cảnh báo.
+    select: { id: true, name: true, email: true, role: true },
     orderBy: { name: "asc" },
   });
-  return ds.map((u) => ({
-    id: u.id,
-    ten: u.name ?? u.email ?? u.id,
-    email: u.email,
-    laQuanLy: laQL.has(u.id),
-  }));
+  return ds.map((u) => {
+    const maVai = maVaiCuaNguoiDung({ role: u.role, orgRoles: null }).concat(
+      vaiTheoNguoi[u.id] ?? [],
+    );
+    return {
+      id: u.id,
+      ten: u.name ?? u.email ?? u.id,
+      email: u.email,
+      laQuanLy: laQL.has(u.id),
+      dungDuocZalocrm: vaiZaloCrm(maVai) !== null,
+      maVai: [...new Set(maVai)],
+    };
+  });
 }
 
 /**

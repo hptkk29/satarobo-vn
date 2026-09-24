@@ -15,8 +15,38 @@ Chủ dự án chốt mô hình thật:
 | | |
 |---|---|
 | **Quản lý cơ sở** | `admin` **TỰ ĐỘNG** trên mọi nick của cơ sở mình. Không ai phải nhớ giao. Kiêm hai cơ sở thì với tới nick của cả hai. |
-| **Tư vấn viên** | **giao tay**, chọn mức `read` / `chat` / `admin`. Một nick giao được cho nhiều người. |
-| **Nick chưa giao ai** | cả cơ sở dùng chung ở mức `chat` — trạng thái BÌNH THƯỜNG của nick mới, không phải việc còn bỏ dở. |
+| **Ai cũng giao tay được** | **MỌI nhân sự** của cơ sở nick đó — tư vấn viên, giáo vụ, giáo viên, kế toán… Chọn mức `read` / `chat` / `admin`. Một nick giao được cho nhiều người. |
+| **Nick chưa giao ai** | chỉ **tư vấn viên + quản lý** của cơ sở dùng chung ở mức `chat` — trạng thái BÌNH THƯỜNG của nick mới, không phải việc còn bỏ dở. |
+
+### 🔴 HAI TẬP NGƯỜI, ĐỪNG GỘP
+
+|  | tập | dùng ở đâu |
+|---|---|---|
+| **Giao tay được** | mọi nhân sự của cơ sở, trừ `VAI_KHONG_THEM_DUOC_VAO_NICK` (phụ huynh) | ô "Thêm người" + cổng khi ghi |
+| **Mặc định dùng được** | `VAI_DUOC_CAP_NICK` = Quản lý cơ sở · Tư vấn viên | chỉ khi nick **chưa giao ai** |
+
+Gộp hai tập lại là **một lượt nới quyền im lặng**: mọi giáo viên, kế toán của cơ sở đọc
+được **mọi nick chưa giao**, không ai bấm nút nào, không triệu chứng nào.
+`[PVN-07]` · `[ZC-CQ-02d]` · `[ZC-CQ-03d]` canh đúng chỗ này, ở cả ba tầng.
+
+### Ranh giới cơ sở GIỮ NGUYÊN, vế GỠ cũng vậy
+
+Chủ dự án chốt (24/09): thêm được người **ngoài vai** nhưng **không** ngoài cơ sở, và
+người rời cơ sở vẫn **tự rụng** ở lượt đối soát như trước.
+
+### ⚠️ Thêm được ≠ dùng được ngay
+
+Chỉ **3 vai** giữ quyền `zalocrm:use` + ánh xạ vé SSO: Quản trị tối cao · Quản lý cơ sở ·
+Tư vấn viên (Giáo vụ đã bị gỡ có chủ đích 13/09 — lý do ghi trong `seed-roles.ts`).
+
+Thêm một giáo viên vào nick thì dòng giao **lưu được nhưng chưa có tác dụng**: không có
+vé SSO ⇒ bên ZaloCRM chưa có tài khoản mang `externalId` ấy ⇒ lượt đối soát đếm vào
+`chuaCoTaiKhoan` rồi bỏ qua. Màn **nói thẳng điều đó** ngay dưới tên người
+(`dungDuocZalocrm`, ca `[ZCG-12]` + `[NZ-07]`) thay vì để người dùng bấm xong rồi tự hỏi.
+
+Muốn dòng giao ấy có tác dụng thì phải cấp `zalocrm:use` cho vai đó trong
+`prisma/seed-roles.ts` + chạy `seed-prod-roles.yml` — **một quyết định phân quyền riêng**,
+không nằm trong đợt này.
 
 Ba mức là mô hình **có sẵn của ZaloCRM**, không phải ta bịa:
 `read` xem tin · `chat` gửi tin · `admin` quản lý nick
@@ -111,6 +141,26 @@ Mức chỉ có nghĩa khi người ta đã có vai ở đúng cơ sở:
 | `SelectTrigger` mất `aria-label` | `NZ-03` |
 | lỗi lưu vẫn đóng hộp thoại | `NZ-06` |
 | nhãn mức gõ tay | `NZ-04` |
+
+Và 9 phép nữa cho lượt MỞ RỘNG (24/09, sau), **cả 9 đều đỏ đúng tập — không lưới nào chết**:
+
+| cấy | ca đỏ |
+|---|---|
+| nhánh "chưa giao" lặp trên CẢ cơ sở | `PVN-01` `PVN-04` `PVN-07` `ZC-CQ-03d` |
+| `macDinh` = `tatCa` (tầng DB-mock) | `ZC-CQ-03d` |
+| `macDinh` = `tatCa` (DB thật) | `ZC-CQ-02` `ZC-CQ-02d` |
+| bỏ hàng rào `PARENT` khỏi câu tra | `ZC-CQ-03` |
+| bỏ hàng rào `PARENT` (DB thật) | `ZCG-11` `ZCG-14` |
+| `VAI_KHONG_THEM_DUOC_VAO_NICK` rỗng | `VT-04` `ZC-CQ-03` |
+| cờ `dungDuocZalocrm` luôn true | `ZCG-12` |
+| gỡ khối cảnh báo khỏi màn | `NZ-07` |
+| quay lại lối sentinel trong ô chọn | `NZ-01` |
+
+**Một lỗi FIXTURE bị bắt trong lượt này:** `taoNguoi` của bộ DB cho MỌI người
+`role: "SALES_CSM"` (vai v1), nên giáo viên hoá ra "mở được ZaloCRM" và `[ZCG-12]` đỏ vì
+lý do đúng — fixture sai, không phải mã sai. `vaiZaloCrm` gộp CẢ HAI hệ tên vai (v1 ở
+local, v2 trên prod), nên fixture phải mang hình dạng dữ liệu THẬT ở cả hai. Nay `vaiV1`
+là tham số BẮT BUỘC (luật 7).
 
 **Hai lưới CHẾT đã bị bắt và vá trong chính lượt này:**
 

@@ -25,7 +25,10 @@ import { db } from "@/lib/db";
 import { getSetting } from "@/lib/settings/service";
 import { docKhoaApi, datQuyenNickZalocrm } from "@/lib/integrations/zalocrm/client";
 import { ghiNhatKyZalocrm } from "@/lib/integrations/zalocrm/log";
-import { VAI_DUOC_CAP_NICK } from "@/lib/integrations/zalocrm/vai-tro";
+import {
+  VAI_DUOC_CAP_NICK,
+  VAI_KHONG_THEM_DUOC_VAO_NICK,
+} from "@/lib/integrations/zalocrm/vai-tro";
 import {
   docMucQuyen,
   nguoiDuocDungMotNick,
@@ -216,7 +219,7 @@ async function capQuyenMotOrg(input: {
   // mọi cơ sở cho tới khi có SIM thật (việc 9.16), tức là trạng thái BÌNH THƯỜNG hôm nay.
   if (nicks.length === 0) return { ...rong, ok: true, ma: "CHUA_CO_NICK" };
 
-  const { tatCa, quanLy } = await nguoiDuocDungNick(centerCode);
+  const { tatCa, macDinh, quanLy } = await nguoiDuocDungNick(centerCode);
 
   const kq: KetQuaCapQuyenOrg = {
     ...rong,
@@ -235,6 +238,7 @@ async function capQuyenMotOrg(input: {
         mucQuyen: docMucQuyen(g.mucQuyen),
       })),
       nguoiCuaCoSo: tatCa,
+      macDinhDungDuoc: macDinh,
       quanLyCoSo: quanLy,
     });
     const res = await datQuyenNickZalocrm(orgCode, n.zcrmAccountId, nguoi);
@@ -277,10 +281,32 @@ async function capQuyenMotOrg(input: {
  * khỏi danh sách, và chính việc rơi ra đó là thứ sinh ra lệnh GỠ ở bên kia.
  */
 export type NguoiCuaCoSo = {
-  /** MỌI người còn hợp lệ của cơ sở (đã lọc vai + tài khoản còn hiệu lực). */
+  /**
+   * MỌI NHÂN SỰ còn hiệu lực neo tại cơ sở — tập GIAO TAY hợp lệ (24/09/2026).
+   *
+   * Rộng hơn trước: không lọc theo `VAI_DUOC_CAP_NICK` nữa, nên Giáo vụ / Giáo viên /
+   * Kế toán của cơ sở đều thêm tay được. Vẫn KHÔNG vượt ra khỏi cơ sở, và vẫn loại
+   * `VAI_KHONG_THEM_DUOC_VAO_NICK` (phụ huynh).
+   */
   tatCa: string[];
+  /**
+   * Tập CON dùng nick MẶC ĐỊNH khi nick CHƯA giao ai (`VAI_DUOC_CAP_NICK`).
+   *
+   * 🔴 KHÁC `tatCa`, và sự khác nhau đó là cả điểm của đợt 24/09: mở rộng tập GIAO TAY
+   * mà nhỡ mở luôn tập MẶC ĐỊNH thì mọi nhân sự của cơ sở đọc được mọi nick chưa giao —
+   * một lượt nới quyền im lặng, không ai bấm nút nào.
+   */
+  macDinh: string[];
   /** Tập CON của `tatCa` đang giữ vai thấy-mọi-nick (`VAI_THAY_MOI_NICK`). */
   quanLy: string[];
+  /**
+   * Mã vai của từng người trong `tatCa`.
+   *
+   * Màn cần nó để NÓI THẬT: một Giáo viên thêm được vào nick, nhưng vai của họ chưa mở
+   * được ZaloCRM (`VAI_ZALOCRM` + quyền `zalocrm:use`), nên dòng giao ấy chưa có tác
+   * dụng gì. Giấu chuyện đó đi là dựng một nút không làm gì — luật 12.
+   */
+  vaiTheoNguoi: Record<string, string[]>;
 };
 
 export async function nguoiDuocDungNick(centerCode: string): Promise<NguoiCuaCoSo> {
@@ -289,31 +315,37 @@ export async function nguoiDuocDungNick(centerCode: string): Promise<NguoiCuaCoS
   // ⚠️ `UserOrgRole` KHÔNG có quan hệ Prisma tới `OrgUnit` lẫn `User` (chỉ có `role`),
   // nên không lồng `where` được — phải tra ba bước. Viết `orgUnit: {...}` ở đây là lỗi
   // biên dịch, không phải lỗi chạy; ghi ra để người sau khỏi thử lại.
+  const rong: NguoiCuaCoSo = { tatCa: [], macDinh: [], quanLy: [], vaiTheoNguoi: {} };
+
   const donVi = await db.orgUnit.findFirst({
     // `OrgUnit.code` khớp `Center.code` — cầu nối chuẩn của repo
     // (`lib/org/center-bridge.ts`), KHÔNG suy từ tên.
     where: { code: centerCode },
     select: { id: true },
   });
-  if (!donVi) return { tatCa: [], quanLy: [] };
+  if (!donVi) return rong;
 
   const dong = await db.userOrgRole.findMany({
     where: {
       status: "ACTIVE",
       orgUnitId: donVi.id,
-      role: { code: { in: [...VAI_DUOC_CAP_NICK] } },
+      // 24/09/2026 — KHÔNG còn lọc `code: { in: VAI_DUOC_CAP_NICK }`. Tập này nay là
+      // "mọi nhân sự của cơ sở" (tập GIAO TAY); ba tập con tính ở dưới theo `role.code`.
+      // Loại vai quan hệ: phụ huynh vốn không có dòng `UserOrgRole` nào nên điều kiện
+      // này là hàng rào thứ hai — xem `VAI_KHONG_THEM_DUOC_VAO_NICK`.
+      role: { code: { notIn: [...VAI_KHONG_THEM_DUOC_VAO_NICK] } },
       // `effectiveTo` nullable (null = vô thời hạn); `effectiveFrom` NOT NULL nên chỉ
       // so một chiều.
       OR: [{ effectiveTo: null }, { effectiveTo: { gte: luc } }],
       effectiveFrom: { lte: luc },
     },
-    // `role.code` cần cho vế "quản lý cơ sở thấy MỌI nick" (`pham-vi-nick.ts`). Lấy
+    // `role.code` cần cho CẢ BA tập con (mặc định · quản lý · nhãn vai trên màn). Lấy
     // trong CÙNG câu này thay vì tra thêm một lượt: hai câu tra hai thời điểm là hai
     // sự thật khác nhau, và ở đây chúng quyết định cùng một payload.
     select: { userId: true, role: { select: { code: true } } },
   });
   const ids = [...new Set(dong.map((d) => d.userId))];
-  if (ids.length === 0) return { tatCa: [], quanLy: [] };
+  if (ids.length === 0) return rong;
 
   // Lọc tài khoản còn hiệu lực ở bước riêng. Nghỉ việc / bị khoá là ca CHÍNH của vế GỠ:
   // dòng `UserOrgRole` của họ thường vẫn còn, nên chỉ lọc ở bảng vai là chưa đủ.
@@ -323,21 +355,31 @@ export async function nguoiDuocDungNick(centerCode: string): Promise<NguoiCuaCoS
   });
   const tatCa = conHieuLuc.map((u) => u.id);
 
-  // Quản lý = tập CON của `tatCa`. Lọc lại theo `conHieuLuc` chứ không lấy thẳng từ
-  // `dong`: một quản lý đã nghỉ việc vẫn còn dòng `UserOrgRole`, và nếu lọt vào đây thì
-  // `pham-vi-nick.ts` sẽ giữ họ trong mọi nick đã giao — đúng cái vế GỠ mà hệ thống
-  // sinh ra để làm.
+  // Ba tập con đều lọc lại theo `conHieuLuc`, KHÔNG lấy thẳng từ `dong`: một người đã
+  // nghỉ việc vẫn còn dòng `UserOrgRole`, và nếu lọt vào đây thì `pham-vi-nick.ts` giữ
+  // họ trong nick — đúng cái vế GỠ mà hệ thống sinh ra để làm.
   const conSong = new Set(tatCa);
-  const quanLy = [
+  // `role` được `select` ở trên nên trên đường thật nó luôn có. `?.` là để bộ test
+  // mock được dòng vai mà không phải dựng cả quan hệ Prisma.
+  const locTheoVai = (vai: readonly string[]) => [
     ...new Set(
       dong
-        // `role` được `select` ở trên nên trên đường thật nó luôn có. `?.` là để bộ test
-        // mock được dòng vai mà không phải dựng cả quan hệ Prisma.
-        .filter((d) => d.role?.code && VAI_THAY_MOI_NICK.includes(d.role.code))
+        .filter((d) => d.role?.code && vai.includes(d.role.code))
         .map((d) => d.userId)
         .filter((id) => conSong.has(id)),
     ),
   ];
 
-  return { tatCa, quanLy };
+  const vaiTheoNguoi: Record<string, string[]> = {};
+  for (const d of dong) {
+    if (!d.role?.code || !conSong.has(d.userId)) continue;
+    (vaiTheoNguoi[d.userId] ??= []).push(d.role.code);
+  }
+
+  return {
+    tatCa,
+    macDinh: locTheoVai(VAI_DUOC_CAP_NICK),
+    quanLy: locTheoVai(VAI_THAY_MOI_NICK),
+    vaiTheoNguoi,
+  };
 }

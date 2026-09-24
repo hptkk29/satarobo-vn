@@ -230,23 +230,48 @@ describe("cấp quyền", () => {
     expect(ids(state.goi[0])).toEqual(["u-qlcs", "u-sale-1"]);
   });
 
-  it("[ZC-CQ-03] chỉ lấy vai TRONG chính sách, và đúng đơn vị của cơ sở", async () => {
+  it("[ZC-CQ-03] lấy MỌI nhân sự của đúng đơn vị, trừ vai quan hệ", async () => {
+    // 🔴 24/09/2026 — câu tra KHÔNG còn `code: { in: VAI_DUOC_CAP_NICK }`. Tập này nay
+    // là "ai giao tay được" (mọi nhân sự của cơ sở); tập "ai dùng được MẶC ĐỊNH" tính
+    // ở tầng trên theo `role.code`. Lọc lại ở đây là thu hẹp tập giao tay về như cũ.
     await capQuyenNickZalocrm();
     const w = state.whereVai[0] as {
       status?: string;
-      role?: { code?: { in?: string[] } };
+      role?: { code?: { in?: string[]; notIn?: string[] } };
       orgUnitId?: string;
     };
     expect(w.status).toBe("ACTIVE");
-    expect([...(w.role?.code?.in ?? [])].sort()).toEqual([
-      "CENTER_MANAGER",
-      "CENTER_SALES_CSM",
-      "SALES_CSM",
-    ]);
+    expect(w.role?.code?.in, "lọc theo danh sách vai = thu hẹp lại tập giao tay").toBeUndefined();
+    // Phụ huynh là KHÁCH HÀNG. Hôm nay họ không có dòng `UserOrgRole` nào nên câu tra
+    // không thể trả về họ — điều kiện này là hàng rào THỨ HAI, và nó phải còn đó.
+    expect([...(w.role?.code?.notIn ?? [])]).toEqual(["PARENT"]);
     expect(w.orgUnitId).toBe("ou-CS1");
     // Nghỉ việc / khoá tài khoản là ca CHÍNH của vế gỡ — lọc ở bước tra `User`, vì dòng
     // `UserOrgRole` của người nghỉ thường VẪN CÒN.
     expect(state.whereNguoi[0]).toMatchObject({ isActive: true, deletedAt: null });
+  });
+
+  it("[ZC-CQ-03d] vai NGOÀI chính sách: giao tay được, nhưng KHÔNG mặc định", async () => {
+    // Cả điểm của đợt 24/09, đo ở tầng DB-mock. Hai vế phải đi cùng nhau.
+    state.vaiTheoDonVi.CS1 = [
+      { userId: "u-sale-1", role: { code: "CENTER_SALES_CSM" } },
+      { userId: "u-gv", role: { code: "TEACHER" } },
+    ];
+
+    // ① nick CHƯA giao ⇒ giáo viên KHÔNG có mặt (không thuộc tập mặc định).
+    state.nicks.cs1 = [{ zcrmAccountId: "acc-1", giao: [] }];
+    await capQuyenNickZalocrm();
+    expect(ids(state.goi[0])).toEqual(["u-sale-1"]);
+    expect(ids(state.goi[0]), "giáo viên đọc được nick chưa giao").not.toContain("u-gv");
+
+    // ② nick GIAO TAY cho chính giáo viên đó ⇒ dòng giao CÓ hiệu lực.
+    state.goi = [];
+    state.nicks.cs1 = [
+      { zcrmAccountId: "acc-1", giao: [{ sataUserId: "u-gv", mucQuyen: "read" }] },
+    ];
+    await capQuyenNickZalocrm();
+    expect(ids(state.goi[0])).toEqual(["u-gv"]);
+    expect(mucCua(state.goi[0], "u-gv")).toBe("read");
   });
 
   it("[ZC-CQ-03b] tài khoản đã khoá/nghỉ việc bị LOẠI dù vẫn còn dòng phân vai", async () => {
@@ -272,7 +297,10 @@ describe("GỠ quyền — vế không có triệu chứng, chỉ test bắt đ�
     expect(ids(state.goi[0])).toContain("u-sale-2");
 
     state.goi = [];
-    state.vaiTheoDonVi.CS1 = [{ userId: "u-sale-1" }, { userId: "u-qlcs" }];
+    state.vaiTheoDonVi.CS1 = [
+      { userId: "u-sale-1", role: { code: "CENTER_SALES_CSM" } },
+      { userId: "u-qlcs", role: { code: "CENTER_MANAGER" } },
+    ];
     state.traLoi = { ok: true, data: { granted: 2, revoked: 1, unknown: 0 } };
     const kq = await capQuyenNickZalocrm();
 
@@ -340,7 +368,10 @@ describe("hỏng hóc", () => {
     state.anhXa = { CS1: "cs1", CS2: "cs2" };
     state.coKhoa = new Set(["cs1", "cs2"]);
     state.nicks = { cs1: [{ zcrmAccountId: "acc-1" }], cs2: [{ zcrmAccountId: "acc-2" }] };
-    state.vaiTheoDonVi = { CS1: [{ userId: "u-1" }], CS2: [{ userId: "u-2" }] };
+    state.vaiTheoDonVi = {
+      CS1: [{ userId: "u-1", role: { code: "CENTER_SALES_CSM" } }],
+      CS2: [{ userId: "u-2", role: { code: "CENTER_SALES_CSM" } }],
+    };
     await capQuyenNickZalocrm();
     expect(state.goi.map((g) => g.orgCode)).toEqual(["cs1", "cs2"]);
     // Mỗi cơ sở gửi ĐÚNG người của mình — trộn danh sách là mở chéo cơ sở.

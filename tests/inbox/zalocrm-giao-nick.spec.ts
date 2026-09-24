@@ -58,6 +58,8 @@ const nguoi = {
   dieu: "",
   trang: "", // quản lý cơ sở
   ngoai: "", // sale của CƠ SỞ KHÁC
+  ha: "", // GIÁO VIÊN của cơ sở — thêm tay được, không mặc định
+  ph: "", // PHỤ HUYNH neo nhầm vào đơn vị — không bao giờ thêm được
 };
 let idCoSo = "";
 let idCoSoKhac = "";
@@ -111,7 +113,12 @@ beforeAll(async () => {
   // một dòng vai bịa ra sẽ bị loại và mọi ca dưới xanh vì lý do sai.
   const vaiSale = await db.roleDef.findFirst({ where: { code: "CENTER_SALES_CSM" } });
   const vaiQL = await db.roleDef.findFirst({ where: { code: "CENTER_MANAGER" } });
-  if (!vaiSale || !vaiQL) throw new Error("Chưa seed RoleDef — chạy `tsx prisma/seed-roles.ts`");
+  // Giáo viên: nhân sự của cơ sở, vai NGOÀI `VAI_DUOC_CAP_NICK`. Từ 24/09 thêm tay được.
+  const vaiGV = await db.roleDef.findFirst({ where: { code: "TEACHER" } });
+  const vaiPH = await db.roleDef.findFirst({ where: { code: "PARENT" } });
+  if (!vaiSale || !vaiQL || !vaiGV || !vaiPH) {
+    throw new Error("Chưa seed RoleDef — chạy `tsx prisma/seed-roles.ts`");
+  }
 
   // `UserOrgRole.grantedById` là NOT NULL — mọi lượt cấp vai phải chỉ ra AI cấp. Dựng
   // một tài khoản "người cấp" thay vì nhặt bừa một `User` có sẵn: bộ này chỉ được sở hữu
@@ -120,12 +127,21 @@ beforeAll(async () => {
     data: { name: `${P}capvai`, email: `${P}capvai@vd.test`.toLowerCase(), role: "SUPER_ADMIN" },
   });
 
-  async function taoNguoi(nhan: string, roleId: string, orgUnitId: string) {
+  // 🔴 `vaiV1` BẮT BUỘC, không mặc định. `vaiZaloCrm` gộp CẢ HAI hệ tên vai (v1
+  // `User.role` ở local/dev, v2 `UserOrgRole.role.code` trên prod), nên một fixture cho
+  // mọi người `role: "SALES_CSM"` biến giáo viên thành người "mở được ZaloCRM" và ca
+  // `[ZCG-12]` xanh vì lý do sai. Fixture phải mang hình dạng dữ liệu THẬT.
+  async function taoNguoi(
+    nhan: string,
+    roleId: string,
+    orgUnitId: string,
+    vaiV1: "SALES_CSM" | "CENTER_MANAGER" | "TEACHER" | "PARENT",
+  ) {
     const u = await db.user.create({
       data: {
         name: `${P}${nhan}`,
         email: `${P}${nhan}@vd.test`.toLowerCase(),
-        role: "SALES_CSM",
+        role: vaiV1,
         isActive: true,
       },
     });
@@ -142,10 +158,15 @@ beforeAll(async () => {
     return u.id;
   }
 
-  nguoi.loc = await taoNguoi("loc", vaiSale.id, dv.id);
-  nguoi.dieu = await taoNguoi("dieu", vaiSale.id, dv.id);
-  nguoi.trang = await taoNguoi("trang", vaiQL.id, dv.id);
-  nguoi.ngoai = await taoNguoi("ngoai", vaiSale.id, dvKhac.id);
+  nguoi.loc = await taoNguoi("loc", vaiSale.id, dv.id, "SALES_CSM");
+  nguoi.dieu = await taoNguoi("dieu", vaiSale.id, dv.id, "SALES_CSM");
+  nguoi.trang = await taoNguoi("trang", vaiQL.id, dv.id, "CENTER_MANAGER");
+  nguoi.ngoai = await taoNguoi("ngoai", vaiSale.id, dvKhac.id, "SALES_CSM");
+  nguoi.ha = await taoNguoi("ha", vaiGV.id, dv.id, "TEACHER");
+  // 🔴 Phụ huynh neo NHẦM vào đơn vị. Trên prod chuyện này không xảy ra (phụ huynh không
+  // có dòng `UserOrgRole` nào), nên đây là ca dựng RIÊNG để đo hàng rào thứ hai
+  // `VAI_KHONG_THEM_DUOC_VAO_NICK` — thứ mà dữ liệu thật không bao giờ chạm tới.
+  nguoi.ph = await taoNguoi("ph", vaiPH.id, dv.id, "PARENT");
 });
 
 beforeEach(async () => {
@@ -397,10 +418,56 @@ describe.skipIf(!CO_BANG)("nguoiNhanDuocNick — ô chọn nhìn CÙNG sự th�
     const ds = await nguoiNhanDuocNick(MA_CS);
     const theoId = new Map(ds.map((n) => [n.id, n]));
 
-    expect([...theoId.keys()].sort()).toEqual([nguoi.loc, nguoi.dieu, nguoi.trang].sort());
+    // 24/09 (lượt sau): ô chọn nay là MỌI NHÂN SỰ của cơ sở — giáo viên CÓ mặt.
+    expect([...theoId.keys()].sort()).toEqual(
+      [nguoi.loc, nguoi.dieu, nguoi.trang, nguoi.ha].sort(),
+    );
     expect(theoId.get(nguoi.trang)?.laQuanLy, "Trang giữ CENTER_MANAGER").toBe(true);
     // ĐỐI CHỨNG ÂM — sale KHÔNG được đánh dấu quản lý, nếu không màn khoá nhầm mọi dòng.
     expect(theoId.get(nguoi.loc)?.laQuanLy).toBe(false);
     expect(theoId.has(nguoi.ngoai), "người cơ sở khác lọt vào ô chọn").toBe(false);
+    // 🔴 Phụ huynh là KHÁCH HÀNG. Neo nhầm vào đơn vị vẫn KHÔNG được lọt.
+    expect(theoId.has(nguoi.ph), "phụ huynh lọt vào ô chọn nick Zalo").toBe(false);
+  });
+
+  it("[ZCG-12] màn NÓI THẬT ai chưa mở được ZaloCRM", () => {
+    // Giáo viên thêm tay được, nhưng vai của họ không có vé SSO sang ZaloCRM ⇒ dòng giao
+    // chưa có tác dụng. Cờ này là thứ màn dùng để nói ra, thay vì để người dùng bấm xong
+    // rồi tự hỏi vì sao không có gì xảy ra (luật 12).
+    return import("@/lib/integrations/zalocrm/giao-nick").then(async ({ nguoiNhanDuocNick }) => {
+      const theoId = new Map((await nguoiNhanDuocNick(MA_CS)).map((n) => [n.id, n]));
+      expect(theoId.get(nguoi.ha)?.dungDuocZalocrm, "giáo viên KHÔNG mở được ZaloCRM").toBe(
+        false,
+      );
+      // ĐỐI CHỨNG DƯƠNG — thiếu vế này thì một hàm luôn trả `false` vẫn xanh.
+      expect(theoId.get(nguoi.loc)?.dungDuocZalocrm, "tư vấn viên PHẢI mở được").toBe(true);
+      expect(theoId.get(nguoi.trang)?.dungDuocZalocrm, "quản lý cơ sở PHẢI mở được").toBe(true);
+    });
+  });
+
+  it("[ZCG-13] giáo viên GIAO TAY được — cổng KHÔNG từ chối", () => {
+    // Trước 24/09 (lượt sau) ca này trả `NGUOI_NGOAI_CO_SO`: cổng hỏi `tatCa` mà `tatCa`
+    // lúc ấy chỉ gồm tư vấn viên + quản lý.
+    return import("@/lib/integrations/zalocrm/giao-nick").then(async ({ datGiaoNick }) => {
+      const kq = await datGiaoNick({
+        actor: actorThay(idCoSo),
+        zcrmAccountId: NICK,
+        giao: [{ sataUserId: nguoi.ha, mucQuyen: "read" }],
+      });
+      expect(kq).toEqual({ ok: true, soDong: 1 });
+      expect(await dangLuu()).toEqual([{ sataUserId: nguoi.ha, mucQuyen: "read" }]);
+    });
+  });
+
+  it("[ZCG-14] phụ huynh KHÔNG giao tay được, dù neo đúng đơn vị", () => {
+    return import("@/lib/integrations/zalocrm/giao-nick").then(async ({ datGiaoNick }) => {
+      const kq = await datGiaoNick({
+        actor: actorThay(idCoSo),
+        zcrmAccountId: NICK,
+        giao: [{ sataUserId: nguoi.ph, mucQuyen: "read" }],
+      });
+      expect(kq).toEqual({ ok: false, ma: "NGUOI_NGOAI_CO_SO" });
+      expect(await dangLuu(), "phụ huynh đọc được chat của khách khác").toEqual([]);
+    });
   });
 });

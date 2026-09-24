@@ -42,15 +42,19 @@ describe("[NZ-01] mã nội bộ KHÔNG rò ra ô chọn", () => {
     expect(coCon, `${moThe} thẻ SelectValue nhưng chỉ ${coCon} thẻ có con`).toBe(moThe);
   });
 
-  it("mục sentinel mang nhãn tiếng Việt, không phải mã", () => {
-    expect(src).toMatch(/<SelectItem value=\{KHONG_GIAO\}>Không giao<\/SelectItem>/);
-  });
+  it("KHÔNG còn giá trị nội bộ nào trong ô chọn — gỡ bằng NÚT, không bằng sentinel", () => {
+    // 24/09 (lượt sau): luồng đổi sang "thêm người rồi mới phân quyền", nên ô chọn chỉ
+    // còn ba mức thật và việc gỡ là một nút riêng. Không còn chuỗi `__…__` nào để rò.
+    //
+    // Đây KHÔNG phải nới lỏng ca cũ: nó chặt hơn. Ca cũ canh "sentinel có nhãn đẹp";
+    // ca này canh "không có sentinel". Quay lại lối cũ (thêm một mục `__khong-giao__`
+    // vào `MUC_QUYEN.map`) sẽ làm ca này đỏ.
+    const noiBo = [...src.matchAll(/"__[a-z0-9-]+__"/g)].map((m) => m[0]);
+    expect(noiBo, `còn mã nội bộ trong tệp: ${noiBo.join(", ")}`).toEqual([]);
 
-  it("sentinel KHÔNG BAO GIỜ là thứ được in ra", () => {
-    // Đường rò đã xảy ra: một nhánh nào đó in thẳng biến sentinel. Cấm mọi `{KHONG_GIAO}`
-    // đứng ở vị trí NỘI DUNG (giữa `>` và `<`), trong khi `value={KHONG_GIAO}` thì hợp lệ.
-    const inRa = [...src.matchAll(/>\s*\{KHONG_GIAO\}\s*</g)].map((m) => m[0]);
-    expect(inRa, `sentinel bị in ra màn: ${inRa.join(", ")}`).toEqual([]);
+    // Và mục của ô chọn phải dựng TỪ `MUC_QUYEN`, không liệt kê tay (xem [NZ-04]).
+    const mucItem = [...src.matchAll(/<SelectItem\b/g)].length;
+    expect(mucItem, "đúng một `SelectItem`, sinh trong `MUC_QUYEN.map`").toBe(1);
   });
 });
 
@@ -127,6 +131,27 @@ describe("[NZ-04] nhãn mức lấy từ `NHAN_MUC`, không gõ tay", () => {
     // Thêm mức thứ tư mà quên thêm `SelectItem` là hỏng CÂM: ô chọn thiếu một mức, không
     // lỗi nào báo, và người dùng chỉ thấy "không có cách chọn mức đó".
     expect(src).toMatch(/MUC_QUYEN\.map\(/);
+  });
+});
+
+describe("[NZ-07] người thêm được nhưng vai CHƯA mở được ZaloCRM phải được NÓI RA", () => {
+  const src = docMa();
+
+  it("có nhánh cảnh báo dựa trên `dungDuocZalocrm`", () => {
+    // 🔴 Từ 24/09 thêm được MỌI nhân sự của cơ sở — kể cả người mà vai của họ không có
+    // vé SSO sang ZaloCRM. Dòng giao ấy lưu được nhưng KHÔNG có tác dụng gì: bên kia
+    // chưa có tài khoản mang `externalId` đó, lượt đối soát đếm vào `chuaCoTaiKhoan`
+    // rồi bỏ qua. Giấu chuyện đó là dựng một nút bấm xong không có gì xảy ra (luật 12).
+    expect(src, "màn phải đọc cờ `dungDuocZalocrm`").toMatch(/dungDuocZalocrm/);
+    expect(src, "phải có câu giải thích cho người dùng").toMatch(
+      /chưa mở được Zalo CRM/,
+    );
+  });
+
+  it("cảnh báo dùng token trạng thái, không phải màu thương hiệu", () => {
+    // DESIGN.md §1: thang ngữ nghĩa riêng cho cảnh báo. `text-primary` ở đây là CAM
+    // thương hiệu — đọc như một nhãn quảng cáo, không như một cảnh báo.
+    expect(src).toMatch(/text-state-warning-ink/);
   });
 });
 
