@@ -46,7 +46,17 @@ describe(RULE, () => {
    */
   beforeAll(async () => {
     await eslint.lintText("", { filePath: TRONG_PHAM_VI });
-  });
+  }, 60_000);
+  // ⬆ Ngân sách RIÊNG cho hook — hoàn nốt ý đồ đã ghi ngay trên ("Hook có ngân sách
+  // riêng"), thứ trước nay vẫn dùng mặc định 10s của vitest.
+  //
+  // Đo 24/09/2026: chạy MỘT MÌNH hook mất ~2,2s; trong bộ đầy đủ (675 tệp song song) mất
+  // **12,7s** ⇒ vượt mặc định ⇒ `Hook timed out in 10000ms` và CẢ TỆP đỏ với
+  // "9 tests | 9 skipped" — không ca nào chạy, nên đọc log rất dễ tưởng rule hỏng.
+  //
+  // Đây KHÔNG phải nới trần của ca: trần từng ca giữ nguyên, nên một rule thật sự chạy
+  // lâu vẫn lộ ra. Thứ được nới là chi phí NẠP CẤU HÌNH một lần, vốn không nói gì về
+  // rule và chỉ phụ thuộc máy đang bận đến đâu.
 
   it("[CAY-LAI] bắt ĐÚNG lời gọi đã gây đỏ 13/09/2026", async () => {
     // Nguyên văn hình dạng cũ của `requests.spec.ts > LEAVE 2 ngày duyệt`.

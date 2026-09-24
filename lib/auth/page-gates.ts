@@ -261,7 +261,6 @@ export const PAGE_GATES = {
    * local (local chạy RBAC v1 tĩnh).
    */
   "/zalo-crm": ["zalocrm:use"],
-  "/zalo-crm/nick": ["zalocrm:manage-nick"],
 } as const satisfies Record<string, readonly Action[]>;
 
 export type GatedHref = keyof typeof PAGE_GATES;
