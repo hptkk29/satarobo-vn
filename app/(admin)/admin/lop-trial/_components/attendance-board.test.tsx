@@ -93,6 +93,16 @@ function buoi(over: Partial<SessionRow> & { id: string; seq: number }): SessionR
     status: "SCHEDULED",
     teacherId: GV_CHUNG,
     roomId: null,
+    // 23/09 — case CŨ (chưa biết ai mở). Giữ `null` ở fixture là CÓ CHỦ ĐÍCH: đây là
+    // hình dạng của phần lớn dữ liệu thật ngay sau khi lên, và là nhánh mà cổng quyền
+    // đẩy lên Quản lý. Fixture tròn trịa ("ai cũng có người tạo") sẽ không bao giờ
+    // chạm tới nhánh đó.
+    createdById: null,
+    nguoiTao: null,
+    quyenSua: { duoc: true },
+    quyenXoa: { duoc: true },
+    quyenDoiGio: { duoc: true },
+    quyenDiemDanh: { duoc: true },
     attendance: {},
     danhGia: {},
     ...over,
@@ -123,6 +133,10 @@ const DS_TRUNG_LICH: KetQua = {
 function dung(over: { sessions?: SessionRow[]; teachers?: { id: string; name: string }[] } = {}) {
   return render(
     <AttendanceBoard
+      // Fixture là lớp slot CŨ (không khung) — đúng hình dạng dữ liệu đang chạy trên prod.
+      lopTheoKhung={false}
+      ngayLop={null}
+      khungLop={null}
       trialClassId="lop-1"
       sessions={over.sessions ?? [BUOI_1, BUOI_2]}
       enrollments={[] as EnrollmentRow[]}

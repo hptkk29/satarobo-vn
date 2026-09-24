@@ -13,6 +13,7 @@ import { AssignSelect } from "./_components/assign-select";
 import { TransferDialog } from "./_components/transfer-dialog";
 import { LeadChildrenManager } from "../_components/lead-children";
 import { TrialEnrollWidget } from "./_components/trial-enroll-widget";
+import { laLopTheoKhung } from "@/lib/trial/nghia-null";
 import { LeadPaymentCard } from "../_components/lead-payment-card";
 import { getLeadPaymentSummary } from "@/lib/payments/summary";
 // 30/08 — SĐT HIỂN THỊ dạng `0987654321`, không phải `84987654321`. Dạng `84…` là
@@ -81,7 +82,11 @@ export default async function LeadDetailPage({ params }: Props) {
             where: { status: "ACTIVE" },
             orderBy: { createdAt: "desc" },
             take: 1,
-            include: { trialClass: { select: { id: true, name: true } } },
+            // 23/09 — thêm khung giờ: biết lớp THEO KHUNG hay lớp cũ thì banner mới nói
+            // đúng nghĩa của `scheduledSessionId = NULL` (lib/trial/nghia-null.ts).
+            include: {
+              trialClass: { select: { id: true, name: true, theoKhung: true } },
+            },
           },
         },
       },
@@ -257,6 +262,8 @@ export default async function LeadDetailPage({ params }: Props) {
           name: true,
           code: true,
           capacity: true,
+          // 23/09 — lớp theo khung thì phải chọn CASE khi xếp (xem widget).
+          theoKhung: true,
           enrollments: { where: { status: "ACTIVE" }, select: { id: true } },
           // LD3(b) — buổi chưa diễn ra để chọn ngày/giờ khi xếp con.
           sessions: {
@@ -277,7 +284,8 @@ export default async function LeadDetailPage({ params }: Props) {
   const scheduledSessions = scheduledSessionIds.length
     ? await sdb.trialClassSession.findMany({
         where: { id: { in: scheduledSessionIds } },
-        select: { id: true, seq: true, date: true, startTime: true, endTime: true },
+        // 23/09 — cần `status`: case ĐÃ HUỶ không được in như một lịch hẹn còn hiệu lực.
+        select: { id: true, seq: true, date: true, startTime: true, endTime: true, status: true },
       })
     : [];
   const sessionById = new Map(scheduledSessions.map((s) => [s.id, s]));
@@ -595,12 +603,14 @@ export default async function LeadDetailPage({ params }: Props) {
                       // đang học, thay vì "— chọn lớp —" như thể chưa xếp gì.
                       classId: enr.trialClass.id,
                       className: enr.trialClass.name,
+                      theoKhung: laLopTheoKhung(enr.trialClass),
                       session: sess
                         ? {
                             seq: sess.seq,
                             date: sess.date.toISOString(),
                             startTime: sess.startTime,
                             endTime: sess.endTime,
+                            daHuy: sess.status === "CANCELLED",
                           }
                         : null,
                     }
@@ -613,6 +623,7 @@ export default async function LeadDetailPage({ params }: Props) {
               code: cl.code,
               capacity: cl.capacity,
               used: cl.enrollments.length,
+              theoKhung: laLopTheoKhung(cl),
               sessions: cl.sessions.map((s) => ({
                 id: s.id,
                 seq: s.seq,

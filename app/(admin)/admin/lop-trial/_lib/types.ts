@@ -7,10 +7,21 @@
 // Quy ước xuyên suốt màn: mọi `Date` đã được server đổi sang chuỗi trước khi truyền
 // xuống client (ISO cho mốc thời gian, "YYYY-MM-DD" cho cột chỉ mang nghĩa NGÀY).
 
+import type { TrangThaiLop } from "@/lib/trial/trang-thai-lop";
+
 /** Kết quả chuẩn của mọi server action trong màn này. */
 export type ActionResult<T = unknown> =
   | ({ ok: true } & T)
   | { ok: false; error: string; overCapacity?: boolean };
+
+/**
+ * Kết quả một phép hỏi quyền, ĐÃ QUY SẴN Ở SERVER và truyền xuống client.
+ *
+ * Mang theo LÝ DO chứ không phải boolean trần: một nút ẩn im lặng và một nút bấm vào
+ * mới báo lỗi đều bắt người dùng tự đoán. Nút bị khoá phải nói được vì sao nó khoá
+ * (luật 12 — affordance phải nói thật). Nguồn: `lib/trial/quyen-case.ts`.
+ */
+export type KetQuyenRow = { duoc: true } | { duoc: false; lyDo: string };
 
 // ─── Mặt phẳng V2: lớp trải nghiệm ───────────────────────────────────────────
 
@@ -38,6 +49,15 @@ export type ClassRow = {
    */
   hocVien: string[];
   /**
+   * NGÀY mở lớp, dạng "YYYY-MM-DD" — `null` với lớp tạo TRƯỚC 22/09/2026.
+   *
+   * Sale chọn lớp THEO NGÀY hẹn khách, nên đây là cột họ đọc đầu tiên. Lớp cũ hiện
+   * gạch chứ không ẩn đi: chúng vẫn đang chạy và vẫn xếp học viên được.
+   */
+  ngayMo: string | null;
+  /** Khung giờ lớp mở, ví dụ "17:30–21:00". `null` với lớp cũ. */
+  khungGio: string | null;
+  /**
    * Sale phụ trách lớp. `null` = không suy ra được (lớp cũ, chưa có con nào xếp vào).
    *
    * `suyTuLead = true` nghĩa là tên này KHÔNG phải người tạo lớp (lớp tạo trước
@@ -48,14 +68,20 @@ export type ClassRow = {
    * từ lead). Hiện một tên và im về những người còn lại là nói dối bằng cách bỏ bớt.
    */
   sale: { ten: string; suyTuLead: boolean; soSaleKhac: number } | null;
-  sessionCount: number;
-  configName: string | null;
   /**
-   * Buổi SCHEDULED sớm nhất từ hôm nay trở đi, dạng "YYYY-MM-DD".
-   * null = lớp chưa có buổi nào sắp tới. Cột này THAY cột "Ngày BĐ" của màn cũ —
-   * lớp là slot tái sử dụng nên `startDate` luôn null, cột cũ luôn trống.
+   * 23/09 — "Sale có case trial": tên những người đã MỞ case còn sống trong lớp, theo
+   * thứ tự case. Rỗng ⇒ màn rơi về `sale` (suy từ lead) cho lớp cũ không lưu người mở.
    */
-  nextSessionDate: string | null;
+  saleCase: string[];
+  /** Số case còn sống (không tính case đã huỷ). */
+  soCase: number;
+  /**
+   * Case SCHEDULED sớm nhất từ hôm nay trở đi — ngày "YYYY-MM-DD" + giờ. `null` = không
+   * còn case nào sắp tới.
+   */
+  caseKeTiep: { ngay: string; gio: string } | null;
+  /** Trạng thái HIỂN THỊ (`lib/trial/trang-thai-lop.ts`) — ngày lớp đã qua là "Đã đóng". */
+  trangThai: TrangThaiLop;
 };
 
 /** Một buổi của lớp, kèm bản đồ điểm danh đã lưu. */
@@ -71,6 +97,32 @@ export type SessionRow = {
   teacherId: string | null;
   /** Phòng của BUỔI NÀY. */
   roomId: string | null;
+
+  /**
+   * 23/09/2026 — AI TẠO case này. `null` = buổi tạo trước hôm đó (cột không backfill).
+   *
+   * Chỉ để HIỂN THỊ và để server quy ra quyền. Client KHÔNG tự so `createdById === me`
+   * để bật/tắt nút: luật sống ở `lib/trial/quyen-case.ts` và server đã quy sẵn thành
+   * `quyenSua`/`quyenXoa` dưới đây. Hai bản của một luật là bản sẽ trôi lệch.
+   */
+  createdById: string | null;
+  /** Tên người tạo case, đã tra từ `User`. `null` = case cũ hoặc tài khoản đã xoá. */
+  nguoiTao: string | null;
+  /** Server đã quy sẵn: người đang xem có sửa được giờ/phòng/GV của case này không. */
+  quyenSua: KetQuyenRow;
+  /** Server đã quy sẵn: có xoá được case này không (cổng thứ hai — xem `quyenXoaCase`). */
+  quyenXoa: KetQuyenRow;
+  /**
+   * Server đã quy sẵn: có DỜI GIỜ / NGÀY case này được không (`quyenDoiGioCase`). Khác
+   * `quyenSua`: chủ case giữ khách của Sale khác vẫn đổi được phòng / giáo viên, nhưng
+   * không dời được giờ hẹn của phụ huynh người khác.
+   */
+  quyenDoiGio: KetQuyenRow;
+  /**
+   * Server đã quy sẵn (`quyenDiemDanhCase`): người đang xem có ĐIỂM DANH + HOÀN TẤT
+   * case này được không. Chủ dự án 23/09: Sale không làm thay Sale khác (lớp theo khung).
+   */
+  quyenDiemDanh: KetQuyenRow;
   /** trialEnrollmentId → điểm danh đã lưu. Không có khoá = chưa điểm danh em đó. */
   attendance: Record<string, { status: TrialAttendanceMark; note: string | null }>;
   /**
@@ -101,6 +153,21 @@ export type EnrollmentRow = {
   gvPhanCongId: string | null;
   /** Số lần ca này đã bị dời lịch. */
   rescheduleCount: number;
+
+  // ─── 23/09/2026 — ai gỡ được bé này ────────────────────────────────────────
+  /**
+   * Tên Sale đang phụ trách lead của bé. `null` = lead chưa ai phụ trách hoặc đã xoá.
+   * Hiện trên dòng để người xếp lịch biết phải hỏi ai, và ghép vào câu từ chối.
+   */
+  saleTen: string | null;
+  /**
+   * Server đã quy sẵn bằng `quyenGoHocVien`. KHÔNG truyền `assignedToId` thô xuống
+   * client rồi để client tự so: `laLeadCuaToi` còn đọc cờ chia sẻ lead (`isLeadSharing
+   * Enabled`) vốn chỉ có ở server, nên bản client sẽ lệch đúng vào ca bật cờ.
+   */
+  quyenGo: KetQuyenRow;
+  /** Server đã quy sẵn bằng `quyenChuyenCase` — cùng luật với `quyenGo`, câu chữ nói về CHUYỂN. */
+  quyenChuyen: KetQuyenRow;
 };
 
 /** Ứng viên trả về từ ô tìm học viên. */

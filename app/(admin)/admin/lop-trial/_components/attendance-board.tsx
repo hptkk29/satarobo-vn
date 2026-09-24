@@ -8,7 +8,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CheckCircle2, Pencil } from "lucide-react";
+import { CheckCircle2, Lock, Pencil } from "lucide-react";
 import {
   markLopTrialAttendanceAction,
   completeLopTrialSessionAction,
@@ -40,6 +40,7 @@ type DraftRow = { status: TrialAttendanceMark | null; note: string };
 // Hàm đếm nằm ở ../_lib/attendance để test được mà không phải nạp cả cây next-auth
 // (component này kéo theo ../_actions → @/lib/auth, vitest không nạp nổi).
 import { demSoEmChuaDanhDau } from "../_lib/attendance";
+import { thuocCase } from "@/lib/trial/nghia-null";
 import {
   duongDanPdfPhieu,
   nhanNutPhieu,
@@ -109,6 +110,8 @@ function NutPhieu({
  */
 function SuaBuoiForm({
   session,
+  ngayLop,
+  khungLop,
   teachers,
   rooms,
   nguonGv,
@@ -118,6 +121,10 @@ function SuaBuoiForm({
   onXong,
 }: {
   session: SessionRow;
+  /** Ngày của lớp ("YYYY-MM-DD") — `null` với lớp cũ, khi đó ô ngày để tự do. */
+  ngayLop: string | null;
+  /** Khung giờ của lớp — `null` với lớp cũ. Dùng để đặt min/max cho ô giờ. */
+  khungLop: { startTime: string; endTime: string } | null;
   teachers: Option[];
   rooms: RoomOption[];
   /**
@@ -203,11 +210,15 @@ function SuaBuoiForm({
       <div className="flex flex-wrap items-end gap-2">
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           Ngày
+          {/* 23/09 — lớp theo khung mang MỘT ngày; case phải đúng ngày đó (server gác ở
+              `kiemCaseThuocLop`). Để ô ngày mở là mời người dùng gõ ngày khác rồi mới bị
+              từ chối. Muốn dời bé sang ngày khác thì chuyển bé sang case của lớp ngày đó. */}
           <input
             type="date"
             value={date}
             onChange={(e) => doiKhung(e.target.value, startTime, endTime)}
-            disabled={pending}
+            disabled={pending || Boolean(ngayLop) || !session.quyenDoiGio.duoc}
+            title={ngayLop ? `Lớp này mở ngày ${ngayLop} — case phải cùng ngày` : undefined}
             className="rounded-md border border-border bg-card px-2 py-1.5 text-sm text-foreground disabled:opacity-50"
           />
         </label>
@@ -216,8 +227,10 @@ function SuaBuoiForm({
           <input
             type="time"
             value={startTime}
+            min={khungLop?.startTime}
+            max={khungLop?.endTime}
             onChange={(e) => doiKhung(date, e.target.value, endTime)}
-            disabled={pending}
+            disabled={pending || !session.quyenDoiGio.duoc}
             className="rounded-md border border-border bg-card px-2 py-1.5 text-sm text-foreground disabled:opacity-50"
           />
         </label>
@@ -226,8 +239,10 @@ function SuaBuoiForm({
           <input
             type="time"
             value={endTime}
+            min={khungLop?.startTime}
+            max={khungLop?.endTime}
             onChange={(e) => doiKhung(date, startTime, e.target.value)}
-            disabled={pending}
+            disabled={pending || !session.quyenDoiGio.duoc}
             className="rounded-md border border-border bg-card px-2 py-1.5 text-sm text-foreground disabled:opacity-50"
           />
         </label>
@@ -260,6 +275,21 @@ function SuaBuoiForm({
           nho
         />
       </div>
+      {!session.quyenDoiGio.duoc && (
+        <p role="note" className="mt-2 flex items-start gap-1.5 text-xs text-muted-foreground">
+          <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>{session.quyenDoiGio.lyDo}</span>
+        </p>
+      )}
+      {khungLop && session.quyenDoiGio.duoc && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Giờ phải nằm trong khung lớp{" "}
+          <strong className="tabular-nums text-foreground">
+            {khungLop.startTime}–{khungLop.endTime}
+          </strong>
+          .
+        </p>
+      )}
 
       <CanhBaoGiaoVien nguon={nguonGv} value={teacherId} />
       <GiaiThichLuatGv
@@ -294,19 +324,36 @@ function SuaBuoiForm({
         >
           {pending ? "Đang lưu…" : "Lưu & báo giáo viên"}
         </button>
-        {/* Huỷ đi hai nhịp: một cú bấm nhầm là buổi biến khỏi lịch giáo viên. */}
-        <button
-          type="button"
-          onClick={() => (choHuy ? huy() : setChoHuy(true))}
-          disabled={pending}
-          className={`rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50 ${
-            choHuy
-              ? "border-state-danger bg-state-danger-soft text-state-danger-ink"
-              : "border-border text-muted-foreground hover:bg-muted"
-          }`}
-        >
-          {choHuy ? "Bấm lần nữa để huỷ buổi" : "Huỷ buổi"}
-        </button>
+        {/* Huỷ đi hai nhịp: một cú bấm nhầm là buổi biến khỏi lịch giáo viên.
+
+            23/09 — nút đọc `quyenXoa` server đã quy sẵn. Cổng này CHẶT HƠN cổng sửa:
+            chủ case sửa được giờ, nhưng không huỷ được case đang giữ khách của Sale
+            khác (`quyenXoaCase`). Khi bị chặn thì nút VẪN HIỆN, khoá lại, và `title`
+            là đúng câu server sẽ trả — không để người dùng bấm hai nhịp rồi mới biết
+            (luật 12). */}
+        {session.quyenXoa.duoc ? (
+          <button
+            type="button"
+            onClick={() => (choHuy ? huy() : setChoHuy(true))}
+            disabled={pending}
+            className={`rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50 ${
+              choHuy
+                ? "border-state-danger bg-state-danger-soft text-state-danger-ink"
+                : "border-border text-muted-foreground hover:bg-muted"
+            }`}
+          >
+            {choHuy ? "Bấm lần nữa để huỷ buổi" : "Huỷ buổi"}
+          </button>
+        ) : (
+          <span
+            role="note"
+            title={session.quyenXoa.lyDo}
+            className="inline-flex max-w-full items-start gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground"
+          >
+            <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>Không huỷ được case: {session.quyenXoa.lyDo}</span>
+          </span>
+        )}
         <button
           type="button"
           onClick={onXong}
@@ -331,6 +378,10 @@ export function AttendanceBoard({
   cheDoChonGv,
   locGvTheoCa,
   soGvMienLoc,
+  goiTat = false,
+  lopTheoKhung,
+  ngayLop,
+  khungLop,
 }: {
   /** Cần cho khối "Sửa buổi": Server Action lọc giáo viên gác theo cơ sở CỦA LỚP. */
   trialClassId: string;
@@ -345,6 +396,23 @@ export function AttendanceBoard({
   cheDoChonGv: CheDoChonGv;
   locGvTheoCa: boolean;
   soGvMienLoc: number;
+  /**
+   * 23/09/2026 — bảng này nay nằm BÊN TRONG một case ở `bang-case.tsx`, và case đó
+   * đã có vỏ thẻ, tiêu đề và dòng giờ/GV của riêng nó. Bật cờ để bỏ ba thứ đó đi,
+   * thay vì vẽ thẻ lồng thẻ và in giờ hai lần cách nhau 40px.
+   *
+   * Dãy chip chọn buổi cũng tắt theo: khi mỗi case tự mở ra thì một dãy chip chọn
+   * buổi nằm trong một case là hai bộ điều khiển cho cùng một việc.
+   */
+  goiTat?: boolean;
+  /**
+   * Lớp theo khung (mô hình case) hay lớp slot cũ — quyết định bé `scheduledSessionId =
+   * NULL` có hiện ở buổi này không (`lib/trial/nghia-null.ts`). BẮT BUỘC, không mặc
+   * định (luật 7): mặc định sai về phía nào cũng là giấu bé hoặc điểm danh bé hai lần.
+   */
+  lopTheoKhung: boolean;
+  ngayLop: string | null;
+  khungLop: { startTime: string; endTime: string } | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -364,16 +432,30 @@ export function AttendanceBoard({
   //
   // ⚠️ Không lọc theo buổi thì sau khi dời lịch, bé vẫn đứng ở buổi cũ — mà nút Lưu
   // bị chặn tới khi đủ sĩ số, nên Sale buộc phải đánh có mặt (thổi số buổi đã dự, tự
-  // đẩy trạng thái lead) hoặc đánh vắng khống. Ca chưa xếp buổi nào (dữ liệu cũ) vẫn
-  // hiện ở mọi buổi để không ai bị bỏ quên.
+  // đẩy trạng thái lead) hoặc đánh vắng khống.
+  //
+  // ~~Ca chưa xếp buổi nào (dữ liệu cũ) vẫn hiện ở mọi buổi để không ai bị bỏ quên.~~
+  // **[ĐẢO 23/09/2026]** Nay bé chưa xếp case có CHỖ RIÊNG trên màn (khối "Chưa xếp
+  // case" ở `bang-case.tsx`) nên không còn ai bị bỏ quên, và để bé hiện ở mọi case là
+  // TỆ HƠN: điểm danh bé đó ở hai case sinh hai dòng `TrialAttendance` (khoá là cặp
+  // buổi × ca, không chặn) ⇒ thổi số buổi đã dự lên gấp đôi, và chính con số đó tự
+  // đẩy trạng thái lead trên Kanban.
+  //
+  // **[SỬA 23/09/2026, cùng ngày]** Đảo ở trên áp cho MỌI lớp là quá tay: ở lớp slot CŨ,
+  // NULL vẫn là "học cả lớp" (chốt 28/08) và là gần như MỌI ghi danh trên prod. Luật
+  // nay theo loại lớp, ở MỘT chỗ: `thuocCase` (lib/trial/nghia-null.ts) — cùng hàm mà
+  // server dùng để từ chối điểm danh bé không thuộc case.
   const markable = useMemo(
     () =>
       enrollments.filter(
         (e) =>
-          (e.status === "ACTIVE" || e.status === "COMPLETED") &&
-          (e.scheduledSessionId === null || e.scheduledSessionId === selectedSessionId),
+          // Case ĐÃ HUỶ: bé còn học đã sang khối "Chưa xếp case" — chỉ còn bé đã học xong
+          // làm lịch sử. Liệt kê bé ACTIVE ở đây là một bé hai chỗ (đo được 23/09).
+          (e.status === "COMPLETED" ||
+            (e.status === "ACTIVE" && selectedSession?.status !== "CANCELLED")) &&
+          thuocCase(e, selectedSessionId, lopTheoKhung),
       ),
-    [enrollments, selectedSessionId],
+    [enrollments, selectedSessionId, lopTheoKhung, selectedSession?.status],
   );
 
   // Nháp lưu theo khoá "sessionId:enrollmentId" để đổi chip qua lại không mất thao tác
@@ -504,6 +586,7 @@ export function AttendanceBoard({
   }
 
   if (sessions.length === 0) {
+    if (goiTat) return null;
     return (
       <div className="rounded-xl border border-border bg-card p-4">
         <h2 className="mb-2 text-sm font-semibold text-foreground">Buổi học &amp; điểm danh</h2>
@@ -515,10 +598,12 @@ export function AttendanceBoard({
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card p-4">
-      <h2 className="mb-3 text-sm font-semibold text-foreground">Buổi học &amp; điểm danh</h2>
+    <div className={goiTat ? "" : "rounded-xl border border-border bg-card p-4"}>
+      {!goiTat && (
+        <h2 className="mb-3 text-sm font-semibold text-foreground">Buổi học &amp; điểm danh</h2>
+      )}
 
-      <div className="mb-4 flex flex-wrap gap-2">
+      <div className={goiTat ? "hidden" : "mb-4 flex flex-wrap gap-2"}>
         {sessions.map((s) => {
           const active = s.id === selectedSessionId;
           return (
@@ -576,19 +661,40 @@ export function AttendanceBoard({
       {selectedSession && (
         <div>
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
-            <span>
-              Buổi {selectedSession.seq} · {ngayVn(selectedSession.date)} ·{" "}
-              {selectedSession.startTime}–{selectedSession.endTime}
-              {" · "}
-              <span className="font-medium text-foreground">
-                GV: {tenGvBuoi(selectedSession.teacherId) ?? "chưa có"}
+            {/* Vỏ ngoài (`bang-case.tsx`) đã in giờ + phòng + GV ngay trên đầu case.
+                In lại ở đây là nói hai lần cùng một điều cách nhau 40px — và khi hai
+                bản trôi lệch thì không ai biết bản nào đúng. Giữ `<span/>` rỗng để
+                `justify-between` vẫn đẩy nhóm nút sang phải. */}
+            {goiTat ? (
+              <span />
+            ) : (
+              <span>
+                Buổi {selectedSession.seq} · {ngayVn(selectedSession.date)} ·{" "}
+                {selectedSession.startTime}–{selectedSession.endTime}
+                {" · "}
+                <span className="font-medium text-foreground">
+                  GV: {tenGvBuoi(selectedSession.teacherId) ?? "chưa có"}
+                </span>
               </span>
-            </span>
+            )}
             {/* Hai nút thao tác của buổi đứng CẠNH NHAU ở mép phải. `justify-between`
                 của hàng cha đẩy mỗi con ra một góc, nên phải bọc chúng lại — nếu không
                 "Sửa buổi học" bị hất vào giữa, đọc như một phần của dòng thông tin. */}
             <div className="flex flex-wrap items-center gap-2">
-              {canManage && selectedSession.status === "SCHEDULED" && (
+              {/* 23/09 — `canManage` (mọi Sale) chỉ quyết định CÓ VẼ khu vực này không;
+                  còn SỬA ĐƯỢC case này không là `quyenSua` server đã quy sẵn từ người
+                  tạo case. Trước bản vá nút sáng với mọi Sale trên mọi case, bấm vào
+                  mới bị server từ chối — cửa ghi đúng mà nút nói dối. */}
+              {canManage && selectedSession.status === "SCHEDULED" && !selectedSession.quyenSua.duoc && (
+                <span
+                  role="note"
+                  title={selectedSession.quyenSua.lyDo}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground"
+                >
+                  <Lock className="h-3.5 w-3.5" /> Không sửa giờ / phòng / GV
+                </span>
+              )}
+              {canManage && selectedSession.status === "SCHEDULED" && selectedSession.quyenSua.duoc && (
                 <button
                   type="button"
                   onClick={() => {
@@ -627,7 +733,11 @@ export function AttendanceBoard({
                   {moSuaBuoi ? "Đóng" : "Sửa buổi học"}
                 </button>
               )}
-              {canMark && selectedSession.status !== "COMPLETED" && (
+              {/* 23/09 — CHỈ case SCHEDULED. Bản cũ vẽ nút cả trên case ĐÃ HUỶ (điều kiện
+                  là `!== "COMPLETED"`), và bấm vào là hồi sinh case đó thành COMPLETED.
+                  Server nay cũng từ chối (`completeTrialSession`). */}
+              {/* 23/09 — chủ dự án: Sale KHÔNG hoàn tất case của Sale khác (`quyenDiemDanh`). */}
+              {canMark && selectedSession.status === "SCHEDULED" && selectedSession.quyenDiemDanh.duoc && (
                 <button
                   type="button"
                   onClick={onCompleteSession}
@@ -644,6 +754,8 @@ export function AttendanceBoard({
             <SuaBuoiForm
               key={selectedSession.id}
               session={selectedSession}
+              ngayLop={ngayLop}
+              khungLop={khungLop}
               teachers={teachers}
               rooms={rooms}
               nguonGv={nguonGv}
@@ -657,9 +769,20 @@ export function AttendanceBoard({
             />
           )}
 
+          {canMark && !selectedSession.quyenDiemDanh.duoc && markable.length > 0 && (
+            <p role="note" className="mb-2 flex items-start gap-1.5 text-xs text-muted-foreground">
+              <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>{selectedSession.quyenDiemDanh.lyDo}</span>
+            </p>
+          )}
           {markable.length === 0 ? (
             <p className="text-sm text-muted-foreground">Chưa có học viên để điểm danh.</p>
-          ) : !canMark ? (
+          ) : !canMark ||
+            selectedSession.status === "CANCELLED" ||
+            // 23/09 — case của Sale khác: CHỈ ĐỌC (chủ dự án: Sale không điểm danh thay).
+            !selectedSession.quyenDiemDanh.duoc ? (
+            // Case ĐÃ HUỶ: chỉ đọc. Điểm danh vào buổi không diễn ra là ghi có mặt khống,
+            // và server cũng đã từ chối (`markAttendance`).
             <ul className="divide-y divide-border text-sm">
               {markable.map((e) => {
                 const a = selectedSession.attendance[e.id];
