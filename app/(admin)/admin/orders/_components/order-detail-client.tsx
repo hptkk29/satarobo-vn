@@ -38,6 +38,7 @@ import {
   type PaymentRequestRow,
 } from "./payment-requests-section";
 import type { QrSessionView } from "../_qr-core";
+import type { PhieuGopView } from "./cong-no-theo-con";
 import {
   ORDER_STATUS_LABEL,
   ORDER_TYPE_LABEL,
@@ -230,6 +231,9 @@ export function OrderDetailClient({
   installments,
   paymentRequests,
   qrSessions,
+  duocPhatPhieu,
+  batThuTheoCon,
+  phieuGop,
   paymentMethods,
   accounting,
   congNo,
@@ -250,6 +254,18 @@ export function OrderDetailClient({
   paymentRequests: PaymentRequestRow[];
   /** Phiên QR ACTIVE còn hạn của từng phiếu (key = paymentRequestId). */
   qrSessions: Record<string, QrSessionView>;
+  /**
+   * Công tắc `billing.flexV1Enabled` của CƠ SỞ GIỮ ĐƠN, đã giải ở server.
+   *
+   * ⚠️ BẮT BUỘC, không `?`: `phieuGop === null` KHÔNG phân biệt được "cờ tắt" với "cờ bật
+   * nhưng chưa phát phiếu", mà hai tình trạng đó cần hai cái nút khác nhau. Một prop cờ
+   * tuỳ chọn mặc định `false` ở đây là đúng hình dạng lỗi CÂM của luật 11.
+   */
+  batThuTheoCon: boolean;
+  /** `payments:record` — quyền mà `taoPhieuGopAction` thật sự hỏi. KHÔNG phải `canManage`. */
+  duocPhatPhieu: boolean;
+  /** Phiếu gộp ĐANG MỞ của đơn (mã 5 ký tự), hoặc `null`. */
+  phieuGop: PhieuGopView | null;
   paymentMethods: PaymentMethodOption[];
   // (b) PA-A — tổng theo sổ kế toán (Payment) của đơn: CONFIRMED vs PENDING (chờ ✓).
   accounting: { confirmed: number; pending: number };
@@ -731,9 +747,19 @@ export function OrderDetailClient({
               khả năng thu tiền. */}
           {paymentRequests.length > 0 ? (
             <PaymentRequestsSection
+              orderId={order.id}
               requests={paymentRequests}
               initialSessions={qrSessions}
               canManage={canManage}
+              duocPhatPhieu={duocPhatPhieu}
+              // ── 24/09/2026 · QR THEO ĐỢT DÙNG MÃ 5 KÝ TỰ ───────────────────
+              // Hai prop này quyết định mỗi dòng vẽ gì (`trangThaiQrDot`). Thiếu
+              // `batThuTheoCon` thì `phieuGop === null` không phân biệt được "cờ tắt"
+              // với "cờ bật, chưa phát phiếu" — hai tình trạng cần hai cái nút khác
+              // nhau. Đây đúng là hình dạng lỗi CÂM của luật 11 (prop cờ mặc định
+              // `false` không ai truyền), nên cả hai khai BẮT BUỘC ở phía nhận.
+              batThuTheoCon={batThuTheoCon}
+              phieuGop={phieuGop}
               // Cột kế hoạch — sổ DUY NHẤT biết tới tiền mặt. Không truyền thì bảng in
               // "Chờ thu · còn thiếu X" cho đợt sale đã thu xong và vẫn mở nút Xuất QR.
               daThuTay={Object.fromEntries(

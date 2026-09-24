@@ -790,7 +790,13 @@ export type PhieuGopView = {
   tongTien: number;
   /** Σ đã rót vào các đợt của phiếu. > 0 ⇒ chỉ ĐÓNG được, không huỷ được. */
   daNhan: number;
-  dong: { ten: string; soTien: number }[];
+  dong: {
+    /** ĐỊNH DANH đợt — bảng phiếu thu cần nó để biết dòng nào đang giữ mã này. */
+    paymentRequestId: string;
+    installmentNo: number;
+    ten: string;
+    soTien: number;
+  }[];
   /** `null` khi cơ sở chưa khai tài khoản, hoặc người xem thiếu `orders:view-pii`. */
   qrUrl: string | null;
   /** Nội dung chuyển khoản — bản HIỂN THỊ (có thể đã che SĐT). */

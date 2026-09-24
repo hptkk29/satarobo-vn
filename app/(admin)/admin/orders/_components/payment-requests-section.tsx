@@ -27,6 +27,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { QrZoom } from "./qr-zoom";
 import { issueQrForRequest, regenerateQr } from "../_qr-actions";
+import { taoPhieuGopAction } from "../_actions";
+import type { PhieuGopView } from "./cong-no-theo-con";
+import { trangThaiQrDot, loiDotKhacDangGiu } from "@/lib/payments/qr-theo-dot";
 import type { QrIssueResult, QrSessionView } from "../_qr-core";
 import { formatDateVN } from "@/lib/format/date";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
@@ -229,15 +232,38 @@ function QrPanel({
 }
 
 export function PaymentRequestsSection({
+  orderId,
   requests,
   initialSessions,
   canManage,
+  duocPhatPhieu,
+  batThuTheoCon,
+  phieuGop,
   daThuTay = {},
 }: {
+  orderId: string;
   requests: PaymentRequestRow[];
   /** Phiên QR ACTIVE còn hạn của từng phiếu (server đọc sẵn lúc render). */
   initialSessions: Record<string, QrSessionView>;
   canManage: boolean;
+  /**
+   * `payments:record` — quyền mà `taoPhieuGopAction` THẬT SỰ hỏi (`congDuongB`).
+   *
+   * ⚠️ KHÔNG dùng lại `canManage` (`orders:manage`) cho nút phát phiếu: hai quyền khác
+   * nhau, và vẽ nút bằng quyền A rồi để action hỏi quyền B là một lời hứa suông (luật
+   * 12) — người dùng bấm và ăn "Không có quyền" mà không hiểu vì sao.
+   */
+  duocPhatPhieu: boolean;
+  /**
+   * Công tắc `billing.flexV1Enabled` của cơ sở giữ đơn.
+   *
+   * ⚠️ BẮT BUỘC, cố ý KHÔNG có `?` và KHÔNG có mặc định — luật 11. Prop cờ mặc định
+   * `false` mà không ai truyền là lỗi CÂM: không lỗi biên dịch, không ca test nào đỏ, và
+   * triệu chứng là "tính năng không bao giờ hiện" — trông y hệt lỗi phân quyền.
+   */
+  batThuTheoCon: boolean;
+  /** Phiếu gộp ĐANG MỞ (mã 5 ký tự) — `null` khi chưa phát, hoặc khi cờ tắt. */
+  phieuGop: PhieuGopView | null;
   /** `soDot` → sale đã thu tay. Xem `DotDaThuTay`. */
   daThuTay?: DotDaThuTay;
 }) {
@@ -255,6 +281,37 @@ export function PaymentRequestsSection({
   }, []);
 
   const totalDots = requests.filter((r) => r.installmentNo > 0).length;
+
+  // ── 24/09/2026 · QR THEO ĐỢT DÙNG MÃ 5 KÝ TỰ ────────────────────────────────
+  //
+  // Dòng của phiếu gộp đang mở, kèm NHÃN NGƯỜI ĐỌC dựng bằng đúng `requestLabel` mà bảng
+  // này đang in — để câu từ chối nói "Đợt 1/3" giống hệt thứ sale đang nhìn, chứ không
+  // phải "installmentNo 1".
+  const dongPhieuMo =
+    phieuGop?.dong.map((d) => {
+      const r = requests.find((x) => x.id === d.paymentRequestId);
+      return {
+        paymentRequestId: d.paymentRequestId,
+        nhan: r ? requestLabel(r, totalDots) : `Đợt ${d.installmentNo}`,
+      };
+    }) ?? null;
+
+  /** Phát phiếu gộp MỘT DÒNG cho đúng đợt này — đường lấy mã 5 ký tự. */
+  function phatPhieuChoDot(r: PaymentRequestRow) {
+    setBusyId(r.id);
+    start(async () => {
+      const res = await taoPhieuGopAction({ orderId, paymentRequestIds: [r.id] });
+      setBusyId(null);
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success(`Đã phát mã ${res.ma} — ${vnd(res.tongTien)}`);
+      // KHÔNG tự dựng mã QR ở client: ảnh cần tài khoản nhận tiền của cơ sở VÀ cần biết
+      // người xem có `orders:view-pii` không. Cả hai chỉ server biết (xem `PhieuGopView`).
+      router.refresh();
+    });
+  }
 
   function run(id: string, fn: () => Promise<QrIssueResult>) {
     setBusyId(id);
@@ -298,6 +355,12 @@ export function PaymentRequestsSection({
               const s = sessions[r.id];
               const isOpen = openId === r.id && !!s;
               const canIssue = canManage && r.status !== "PAID" && r.status !== "VOID";
+              // Dòng này vẽ gì — xem `lib/payments/qr-theo-dot.ts`.
+              const tt = trangThaiQrDot({
+                bat: batThuTheoCon,
+                dongPhieuMo,
+                paymentRequestId: r.id,
+              });
               return (
                 <tr key={r.id} className="border-b border-border align-top">
                   <td className="p-2 font-semibold text-foreground">{label}</td>
@@ -334,7 +397,43 @@ export function PaymentRequestsSection({
                     })()}
                   </td>
                   <td className="p-2 text-right">
-                    {canIssue ? (
+                    {!canIssue ? (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    ) : tt.kieu === "MOI_CUA_DOT_KHAC" ? (
+                      // ⚠️ LUẬT 12 — KHÔNG vẽ nút ở đây. `PaymentBill_orderId_open_key` là
+                      // chỉ mục từng phần do DB gác: bấm là chắc chắn ăn từ chối. Một cái
+                      // nút chắc chắn hỏng là một lời hứa suông; nói thẳng ai đang giữ mã.
+                      <span
+                        className="text-xs text-state-warning-ink"
+                        title={loiDotKhacDangGiu(tt.nhanDotDangGiu)}
+                      >
+                        Mã đang mở cho {tt.nhanDotDangGiu}
+                      </span>
+                    ) : tt.kieu === "MOI_CHUA_PHAT" ? (
+                      !duocPhatPhieu ? (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      ) : (
+                      <Button
+                        size="sm"
+                        disabled={pending && busyId === r.id}
+                        onClick={() => phatPhieuChoDot(r)}
+                      >
+                        {pending && busyId === r.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <QrCode className="h-3.5 w-3.5" />
+                        )}
+                        Xuất QR
+                      </Button>
+                      )
+                    ) : tt.kieu === "MOI_CUA_DOT_NAY" ? (
+                      // Mã của phiếu gộp KHÔNG có hạn (không phải `QrSession`), nên ở đây
+                      // KHÔNG có đồng hồ đếm ngược — vẽ một cái đồng hồ cho thứ không hết
+                      // hạn là nói dối. Mã sống tới khi phiếu bị đóng/huỷ.
+                      <span className="font-mono text-xs font-bold text-state-success-ink">
+                        Mã {phieuGop?.ma}
+                      </span>
+                    ) : (
                       <Button
                         size="sm"
                         variant={isOpen ? "outline" : "default"}
@@ -354,8 +453,6 @@ export function PaymentRequestsSection({
                         )}
                         {s && !expired[r.id] ? (isOpen ? "Ẩn QR" : "Xem QR") : "Xuất QR"}
                       </Button>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
                     )}
                   </td>
                 </tr>
