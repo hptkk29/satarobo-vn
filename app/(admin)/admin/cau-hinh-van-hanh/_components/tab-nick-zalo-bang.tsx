@@ -88,8 +88,10 @@ export type NguoiNhan = {
   id: string;
   ten: string;
   email: string | null;
-  /** Quản lý cơ sở ⇒ luôn có `admin`, KHÔNG sửa được ở đây. */
+  /** Quản lý cơ sở — NHÃN, không phải quyền. */
   laQuanLy: boolean;
+  /** Neo ở đơn vị cấp trên (Hội sở) — không phải người của cơ sở này. */
+  laHoiSo: boolean;
   /** Vai của họ có mở được ZaloCRM không — xem `NguoiNhanDuoc.dungDuocZalocrm`. */
   dungDuocZalocrm: boolean;
 };
@@ -319,6 +321,11 @@ function HopThoaiGiao({
                           quản lý cơ sở
                         </span>
                       ) : null}
+                      {n.laHoiSo ? (
+                        <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                          hội sở
+                        </span>
+                      ) : null}
                     </div>
                     {/* Nói THẬT: thêm được, nhưng chưa có tác dụng. Giấu đi là dựng một
                         nút bấm xong không có gì xảy ra (luật 12). */}
@@ -377,7 +384,15 @@ function HopThoaiGiao({
         <Combobox
           options={conLai.map((n) => ({
             value: n.id,
-            label: n.dungDuocZalocrm ? n.ten : `${n.ten} — vai chưa mở được Zalo CRM`,
+            // Nhãn nói ĐỦ hai chuyện: người này ở đâu, và vai của họ đã mở được chưa.
+            // Thiếu vế đầu thì thêm nhầm một người hội sở vào nick cơ sở mà không biết.
+            label: [
+              n.ten,
+              n.laHoiSo ? "hội sở" : null,
+              n.dungDuocZalocrm ? null : "vai chưa mở được Zalo CRM",
+            ]
+              .filter(Boolean)
+              .join(" — "),
           }))}
           value={null}
           onValueChange={them}

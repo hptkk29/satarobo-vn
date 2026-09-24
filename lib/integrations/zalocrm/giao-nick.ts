@@ -50,8 +50,15 @@ export type NguoiNhanDuoc = {
   id: string;
   ten: string;
   email: string | null;
-  /** Đang giữ vai quản lý cơ sở ⇒ `admin` TỰ ĐỘNG, không cần dòng giao nào. */
+  /** Đang giữ vai quản lý cơ sở — NHÃN, không phải quyền (đảo 24/09). */
   laQuanLy: boolean;
+  /**
+   * Neo ở đơn vị CẤP TRÊN cơ sở (Hội sở, khối vùng), không phải người của cơ sở này.
+   *
+   * Màn PHẢI nói ra: thêm một người hội sở vào nick của một cơ sở là một quyết định
+   * khác hẳn thêm người của chính cơ sở đó, mà hai cái tên trông y hệt nhau.
+   */
+  laHoiSo: boolean;
   /**
    * 🔴 Vai của họ có mở được ZaloCRM không.
    *
@@ -83,9 +90,10 @@ export type NguoiNhanDuoc = {
  * điều màn không giữ được — bấm gỡ xong họ vẫn thấy nick. Luật 12 (affordance).
  */
 export async function nguoiNhanDuocNick(centerCode: string): Promise<NguoiNhanDuoc[]> {
-  const { tatCa, quanLy, vaiTheoNguoi } = await nguoiDuocDungNick(centerCode);
+  const { tatCa, hoiSo, quanLy, vaiTheoNguoi } = await nguoiDuocDungNick(centerCode);
   if (tatCa.length === 0) return [];
   const laQL = new Set(quanLy);
+  const laHO = new Set(hoiSo);
   const ds = await db.user.findMany({
     where: { id: { in: tatCa } },
     // `role` (enum v1) đi kèm vì `vaiZaloCrm` khớp CẢ HAI hệ tên vai: local/dev chạy v1,
@@ -103,6 +111,7 @@ export async function nguoiNhanDuocNick(centerCode: string): Promise<NguoiNhanDu
       ten: u.name ?? u.email ?? u.id,
       email: u.email,
       laQuanLy: laQL.has(u.id),
+      laHoiSo: laHO.has(u.id),
       dungDuocZalocrm: vaiZaloCrm(maVai) !== null,
       maVai: [...new Set(maVai)],
     };
