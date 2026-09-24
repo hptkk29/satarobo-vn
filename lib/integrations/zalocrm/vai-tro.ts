@@ -48,19 +48,45 @@ export const VAI_ZALOCRM: Readonly<Record<string, VaiZaloCrm>> = {
 };
 
 /**
- * Vai ĐƯỢC CẤP QUYỀN TRUY CẬP NICK theo chính sách (chốt 13/09/2026):
+ * Vai dùng được nick MẶC ĐỊNH — tức khi nick CHƯA GIAO cho ai (chốt 13/09/2026):
  * *mọi tư vấn viên và quản lý của một cơ sở đọc/gửi được trên mọi nick thuộc cơ sở đó*.
  *
  * Tách khỏi `VAI_ZALOCRM` vì hai câu hỏi khác nhau: bảng trên trả lời "vào bên kia với
  * tư cách gì", danh sách này trả lời "được cấp quyền trên nick nào". `SUPER_ADMIN` cố ý
  * KHÔNG có mặt — họ là `admin` nên `getZaloScope` đã cho thấy toàn org, cấp thêm dòng
  * `ZaloAccountAccess` chỉ là rác.
+ *
+ * ⚠️ 24/09/2026 — danh sách này KHÔNG còn là "ai giao tay được". Tập giao tay rộng hơn
+ * (mọi nhân sự của cơ sở, xem {@link VAI_KHONG_THEM_DUOC_VAO_NICK}). Nới danh sách NÀY
+ * là nới quyền MẶC ĐỊNH trên mọi nick chưa giao — việc khác hẳn, và không ai bấm nút
+ * nào cả. Đừng gộp hai danh sách lại.
  */
 export const VAI_DUOC_CAP_NICK: readonly string[] = [
   "CENTER_MANAGER",
   "CENTER_SALES_CSM",
   "SALES_CSM",
 ];
+
+/**
+ * Vai KHÔNG BAO GIỜ thêm tay vào nick được (24/09/2026).
+ *
+ * Tập "giao tay được" = MỌI nhân sự neo tại cơ sở của nick, TRỪ danh sách này. Chủ dự án
+ * chốt mở rộng theo VAI (Giáo vụ, Giáo viên, Kế toán… của cơ sở đều thêm được) nhưng
+ * GIỮ ranh giới cơ sở.
+ *
+ * 🔴 `PARENT` là KHÁCH HÀNG, không phải nhân sự. Thêm một phụ huynh vào nick là họ đọc
+ * được chat của những khách khác — và không triệu chứng nào báo.
+ *
+ * Hôm nay tầng dữ liệu đã chặn sẵn: phụ huynh **không có dòng `UserOrgRole` nào**
+ * (CLAUDE.md — "vai quan hệ", quyền nạp thẳng từ `RoleDef`), nên câu tra theo đơn vị
+ * không thể trả về họ. Danh sách này vì thế là hàng rào THỨ HAI, không phải hàng rào
+ * đang gánh — nói thẳng ra để người sau đừng tưởng gỡ nó là vô hại.
+ *
+ * Giữ khớp với `RELATIONSHIP_ROLE_CODES` (`lib/auth/actor.ts`). Không `import` được vì
+ * tệp này là module THUẦN (không `db`, không `server-only`) — ca `[VT-04]` canh hai bên
+ * không lệch nhau.
+ */
+export const VAI_KHONG_THEM_DUOC_VAO_NICK: readonly string[] = ["PARENT"];
 
 /** Thứ tự ưu tiên khi một người giữ nhiều vai — vai rộng hơn đứng trước. */
 const UU_TIEN: readonly VaiZaloCrm[] = ["admin", "member"];

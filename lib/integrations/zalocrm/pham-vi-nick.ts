@@ -62,8 +62,21 @@ export function tomTatGiao(
 export type ThamSoPhamViNick = {
   /** Các dòng GIAO TAY của nick này (`ZaloCrmNickGiao`). Rỗng = chưa giao ai. */
   giaoTay: readonly GiaoTay[];
-  /** MỌI người còn hợp lệ của cơ sở (đã lọc vai + tài khoản còn hiệu lực). */
+  /**
+   * MỌI NHÂN SỰ còn hiệu lực của cơ sở — tập GIAO TAY hợp lệ (24/09/2026).
+   *
+   * Dòng giao cho người NGOÀI tập này sẽ rụng (xem `nguoiDuocDungMotNick`). Đó là vế
+   * GỠ: nghỉ việc, chuyển cơ sở, hết nhiệm kỳ.
+   */
   nguoiCuaCoSo: readonly string[];
+  /**
+   * Tập CON của `nguoiCuaCoSo` dùng nick MẶC ĐỊNH khi nick CHƯA giao ai.
+   *
+   * 🔴 BẮT BUỘC, KHÔNG có mặc định (luật 7). Để nó rơi về `nguoiCuaCoSo` là cấp quyền
+   * mặc định cho MỌI nhân sự của cơ sở trên MỌI nick chưa giao — một lượt nới quyền
+   * không ai bấm nút nào, và không triệu chứng nào báo.
+   */
+  macDinhDungDuoc: readonly string[];
   /** Tập con của `nguoiCuaCoSo` đang giữ vai quản lý cơ sở. */
   quanLyCoSo: readonly string[];
 };
@@ -116,10 +129,17 @@ export function nguoiDuocDungMotNick(t: ThamSoPhamViNick): QuyenTrenNick[] {
     muc.set(g.sataUserId, cu ? rongHon(cu, g.mucQuyen) : g.mucQuyen);
   }
 
-  // ③ CHƯA GIAO AI (sau khi lọc) ⇒ cả cơ sở, mức mặc định. Quản lý vẫn giữ `admin` của
-  //    họ nhờ `rongHon`. Xem khối chú thích đầu file về vì sao nhánh này phải tồn tại.
+  // ③ CHƯA GIAO AI (sau khi lọc) ⇒ mức mặc định cho `macDinhDungDuoc`. Quản lý vẫn giữ
+  //    `admin` của họ nhờ `rongHon`. Xem khối chú thích đầu file về vì sao nhánh này
+  //    phải tồn tại.
+  //
+  //    🔴 Lặp trên `macDinhDungDuoc`, KHÔNG phải `nguoiCuaCoSo`. Từ 24/09 hai tập đã
+  //    KHÁC NHAU: tập sau gồm mọi nhân sự của cơ sở (để giao tay được), tập trước chỉ
+  //    gồm vai được dùng nick mặc định. Đổi sang `nguoiCuaCoSo` là cho cả Giáo viên,
+  //    Kế toán… đọc mọi nick chưa giao — `[PVN-07]` canh đúng chỗ này.
   if (giaoConHieuLuc.length === 0) {
-    for (const id of t.nguoiCuaCoSo) {
+    for (const id of t.macDinhDungDuoc) {
+      if (!hopLe.has(id)) continue;
       const cu = muc.get(id);
       muc.set(id, cu ? rongHon(cu, MUC_MAC_DINH_CHUA_GIAO) : MUC_MAC_DINH_CHUA_GIAO);
     }

@@ -10,16 +10,21 @@
 // Nên bảng in CÂU TÓM TẮT (đọc lướt được, đúng thứ người ta cần khi mở màn: "nick này ai
 // đang giữ"), và nút Sửa mở hộp thoại có đủ chỗ cho danh sách đầy đủ + ba mức.
 //
+// ── THÊM NGƯỜI RỒI MỚI PHÂN QUYỀN (chủ dự án chốt 24/09) ─────────────────────────────
+// Hộp thoại KHÔNG liệt kê sẵn mọi nhân sự của cơ sở với ô "Không giao": một cơ sở có vài
+// chục người, và 90% dòng sẽ mãi mãi là "Không giao" — người dùng phải cuộn qua chúng
+// mỗi lần. Thay vào đó: danh sách NGƯỜI ĐANG GIỮ ở trên (đổi mức, gỡ), và một ô TÌM
+// KIẾM ở dưới để thêm người. Thêm xong mới chọn mức.
+//
 // ── 🔴 HỘP THOẠI ĐẶT CẢ TẬP, KHÔNG PHẢI THÊM/BỚT TỪNG DÒNG ──────────────────────────
-// Lưu = gửi TOÀN BỘ danh sách; ai để "Không giao" thì bị gỡ. Đó là vì vế GỠ (người nghỉ
-// việc, đổi ca) là vế không ai nhớ bấm, và hỏng thì không có triệu chứng — người không
-// còn phận sự vẫn đọc chat khách. Hộp thoại hiện MỌI người hợp lệ của cơ sở, nên trạng
-// thái đúng luôn nhìn thấy được, không phải nhớ.
+// Bấm Lưu là gửi TOÀN BỘ danh sách; ai không còn trong đó thì bị gỡ. Đó là vì vế GỠ
+// (người nghỉ việc, đổi ca) là vế không ai nhớ bấm, và hỏng thì không có triệu chứng —
+// người không còn phận sự vẫn đọc chat khách.
 //
 // ── 🔴 LỖI ĐÃ SỬA: giá trị nội bộ rò ra ô chọn ───────────────────────────────────────
 // Bản 24/09 dùng `<Select value={CHUA_GIAO}>` với `CHUA_GIAO = "__chua-giao__"`, và ô
 // hiện đúng chuỗi ấy cho người dùng đọc. Nguyên nhân: `SelectValue` render GIÁ TRỊ khi
-// không khớp được nhãn của một `SelectItem`.
+// không khớp được nhãn của một `SelectItem` nào.
 //
 // Cách sửa KHÔNG phải là đổi chuỗi sentinel cho đẹp hơn — chuỗi nào cũng sai, vì đó là
 // mã nội bộ. Ở đây dùng `<SelectValue>` có CON để tự render nhãn: nhãn luôn do ta quyết,
@@ -31,7 +36,9 @@
 // Trạng thái đi qua `StatusPill` (thang ngữ nghĩa riêng, KHÔNG mượn màu thương hiệu).
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
+import { TriangleAlertIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Combobox } from "@/components/ui/combobox";
 import {
   Dialog,
   DialogContent,
@@ -46,13 +53,11 @@ import { adminTd, adminTh, adminTr } from "@/components/admin/ui/table";
 import {
   MUC_QUYEN,
   NHAN_MUC,
+  MUC_MAC_DINH_CHUA_GIAO,
   docMucQuyen,
   type MucQuyen,
 } from "@/lib/integrations/zalocrm/pham-vi-nick";
 import { giaoNickAction } from "../actions";
-
-/** Mã nội bộ cho "không giao". KHÔNG BAO GIỜ được hiện ra màn hình — xem khối trên. */
-const KHONG_GIAO = "__khong-giao__";
 
 const NHAN_TRANG_THAI: Record<string, { chu: string; tone: PillTone }> = {
   CONNECTED: { chu: "Đang kết nối", tone: "success" },
@@ -76,6 +81,8 @@ export type NguoiNhan = {
   email: string | null;
   /** Quản lý cơ sở ⇒ luôn có `admin`, KHÔNG sửa được ở đây. */
   laQuanLy: boolean;
+  /** Vai của họ có mở được ZaloCRM không — xem `NguoiNhanDuoc.dungDuocZalocrm`. */
+  dungDuocZalocrm: boolean;
 };
 
 export function BangNickZalo({
@@ -152,7 +159,7 @@ export function BangNickZalo({
                         !r.centerId
                           ? "Nick chưa gắn cơ sở nên chưa giao được."
                           : khoa
-                            ? "Cơ sở này chưa có ai giữ vai được dùng nick."
+                            ? "Cơ sở này chưa có nhân sự nào ngoài quản lý cơ sở."
                             : undefined
                       }
                     >
@@ -216,24 +223,29 @@ function HopThoaiGiao({
 }) {
   const [dangCho, batDau] = useTransition();
   const quanLy = nguoi.filter((n) => n.laQuanLy);
-  const thuong = nguoi.filter((n) => !n.laQuanLy);
+  const themDuoc = nguoi.filter((n) => !n.laQuanLy);
+  const theoId = new Map(themDuoc.map((n) => [n.id, n]));
 
-  // Trạng thái ban đầu = đúng thứ đang lưu. Người không có dòng giao ⇒ `KHONG_GIAO`.
-  const [chon, datChon] = useState<Record<string, string>>(() => {
-    const m: Record<string, string> = {};
-    for (const n of thuong) m[n.id] = KHONG_GIAO;
-    for (const g of nick.giao) {
-      if (g.sataUserId in m) m[g.sataUserId] = docMucQuyen(g.mucQuyen);
-    }
-    return m;
-  });
+  // Trạng thái = danh sách ĐANG GIỮ, theo đúng thứ tự người dùng nhìn thấy. Dòng giao
+  // cho người không còn trong danh sách hợp lệ (đã rời cơ sở) bị bỏ ngay khi mở: giữ nó
+  // là in một cái tên rồi lặng lẽ gỡ lúc Lưu.
+  const [danhSach, datDanhSach] = useState<{ id: string; muc: MucQuyen }[]>(() =>
+    nick.giao
+      .filter((g) => theoId.has(g.sataUserId))
+      .map((g) => ({ id: g.sataUserId, muc: docMucQuyen(g.mucQuyen) })),
+  );
 
-  const soChon = thuong.filter((n) => chon[n.id] !== KHONG_GIAO).length;
+  const daCo = new Set(danhSach.map((d) => d.id));
+  const conLai = themDuoc.filter((n) => !daCo.has(n.id));
+
+  function them(id: string | null) {
+    if (!id || daCo.has(id)) return;
+    // Mặc định `chat` — mức thường dùng nhất. Người dùng đổi ngay tại dòng vừa thêm.
+    datDanhSach((d) => [...d, { id, muc: MUC_MAC_DINH_CHUA_GIAO }]);
+  }
 
   function luu() {
-    const giao = thuong
-      .filter((n) => chon[n.id] !== KHONG_GIAO)
-      .map((n) => ({ sataUserId: n.id, mucQuyen: chon[n.id] as MucQuyen }));
+    const giao = danhSach.map((d) => ({ sataUserId: d.id, mucQuyen: d.muc }));
     batDau(async () => {
       const kq = await giaoNickAction({ zcrmAccountId: nick.zcrmAccountId, giao });
       if (kq.ok) {
@@ -263,50 +275,96 @@ function HopThoaiGiao({
           <DialogTitle>Giao nick {nick.displayName ?? nick.zcrmAccountId}</DialogTitle>
           <DialogDescription>
             {nick.centerName ? `Cơ sở ${nick.centerName}. ` : ""}
-            Chọn mức cho từng người. Ai để <strong>Không giao</strong> sẽ bị gỡ khỏi nick
-            này.
+            Thêm người vào nick rồi chọn mức cho từng người. Ai bị gỡ khỏi danh sách sẽ
+            mất quyền trên nick này.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="max-h-[50vh] space-y-1 overflow-y-auto">
-          {thuong.map((n) => (
-            <div
-              key={n.id}
-              className="flex items-center justify-between gap-3 rounded-lg px-1 py-1.5"
-            >
-              <div className="min-w-0">
-                <div className="truncate text-sm font-medium">{n.ten}</div>
-                {n.email ? (
-                  <div className="truncate text-xs text-muted-foreground">{n.email}</div>
-                ) : null}
-              </div>
-              <Select
-                value={chon[n.id] ?? KHONG_GIAO}
-                disabled={dangCho}
-                onValueChange={(v) =>
-                  datChon((c) => ({ ...c, [n.id]: (v as string) ?? KHONG_GIAO }))
-                }
-              >
-                <SelectTrigger className="w-[190px] shrink-0" aria-label={`Mức của ${n.ten}`}>
-                  {/* CON của `SelectValue` — chặn đường rơi về giá trị thô. */}
-                  <SelectValue>
-                    {chon[n.id] && chon[n.id] !== KHONG_GIAO
-                      ? NHAN_MUC[docMucQuyen(chon[n.id])]
-                      : "Không giao"}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={KHONG_GIAO}>Không giao</SelectItem>
-                  {MUC_QUYEN.map((m) => (
-                    <SelectItem key={m} value={m}>
-                      {NHAN_MUC[m]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ))}
+        <div className="max-h-[45vh] space-y-1 overflow-y-auto">
+          {danhSach.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-sm text-muted-foreground">
+              Chưa giao cho ai — cả cơ sở đang dùng chung nick này.
+            </p>
+          ) : (
+            danhSach.map((d) => {
+              const n = theoId.get(d.id);
+              if (!n) return null;
+              return (
+                <div
+                  key={d.id}
+                  className="flex items-center justify-between gap-2 rounded-lg px-1 py-1.5"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium">{n.ten}</div>
+                    {/* Nói THẬT: thêm được, nhưng chưa có tác dụng. Giấu đi là dựng một
+                        nút bấm xong không có gì xảy ra (luật 12). */}
+                    {n.dungDuocZalocrm ? (
+                      n.email ? (
+                        <div className="truncate text-xs text-muted-foreground">{n.email}</div>
+                      ) : null
+                    ) : (
+                      <div className="flex items-center gap-1 text-xs text-state-warning-ink">
+                        <TriangleAlertIcon className="size-3 shrink-0" aria-hidden />
+                        <span>Vai của người này chưa mở được Zalo CRM</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Select
+                      value={d.muc}
+                      disabled={dangCho}
+                      onValueChange={(v) =>
+                        datDanhSach((ds) =>
+                          ds.map((x) => (x.id === d.id ? { ...x, muc: docMucQuyen(v) } : x)),
+                        )
+                      }
+                    >
+                      <SelectTrigger className="w-[180px]" aria-label={`Mức của ${n.ten}`}>
+                        {/* CON của `SelectValue` — chặn đường rơi về giá trị thô. */}
+                        <SelectValue>{NHAN_MUC[d.muc]}</SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {MUC_QUYEN.map((m) => (
+                          <SelectItem key={m} value={m}>
+                            {NHAN_MUC[m]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      disabled={dangCho}
+                      aria-label={`Gỡ ${n.ten} khỏi nick`}
+                      onClick={() => datDanhSach((ds) => ds.filter((x) => x.id !== d.id))}
+                    >
+                      <XIcon className="size-4" aria-hidden />
+                    </Button>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
+
+        {/* Ô THÊM NGƯỜI — `Combobox` tìm kiếm KHÔNG DẤU: một cơ sở có vài chục nhân sự,
+            và gõ "loc" phải ra "Ms Lộc". */}
+        <Combobox
+          options={conLai.map((n) => ({
+            value: n.id,
+            label: n.dungDuocZalocrm ? n.ten : `${n.ten} — vai chưa mở được Zalo CRM`,
+          }))}
+          value={null}
+          onValueChange={them}
+          disabled={dangCho || conLai.length === 0}
+          placeholder={
+            conLai.length === 0
+              ? "Đã thêm hết nhân sự của cơ sở"
+              : "Thêm người — gõ tên để tìm…"
+          }
+          emptyText="Không có ai khớp"
+        />
 
         {/* Quản lý cơ sở: HIỆN nhưng KHÔNG cho sửa. Giấu hẳn thì người dùng tưởng họ
             không có quyền; cho một ô chọn thì hứa một việc không làm được — bấm gỡ xong
@@ -322,9 +380,9 @@ function HopThoaiGiao({
         ) : null}
 
         <p className="text-xs text-muted-foreground">
-          {soChon === 0
+          {danhSach.length === 0
             ? "Chưa giao cho ai ⇒ cả cơ sở dùng chung nick này."
-            : `Giao cho ${soChon} người ⇒ chỉ họ (và quản lý cơ sở) thấy nick này.`}
+            : `Giao cho ${danhSach.length} người ⇒ chỉ họ (và quản lý cơ sở) thấy nick này.`}
         </p>
 
         <DialogFooter>
