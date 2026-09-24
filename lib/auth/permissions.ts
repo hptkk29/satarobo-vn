@@ -323,6 +323,7 @@ export type Action =
 
   // --- Settings / system (NEW) ---
   | "settings:view"
+  | "settings:view-center"
   | "settings:edit"
   | "users:manage" // CRUD User accounts (different from Employee records)
   | "roles:assign"
@@ -842,6 +843,9 @@ export const PERMISSIONS: Record<Action, Role[]> = {
 
   // --- Settings / system ---
   "settings:view": ["SUPER_ADMIN"],
+  // Cua HEP: chi mo trang o che do cai-rieng-theo-co-so. Cach ly nam o duong ghi
+  // (`setCenterSetting` doi vai quan ly tai dung orgUnitId).
+  "settings:view-center": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "settings:edit": ["SUPER_ADMIN"],
   "users:manage": ["SUPER_ADMIN"], // create/disable User accounts
   "roles:assign": ["SUPER_ADMIN"],

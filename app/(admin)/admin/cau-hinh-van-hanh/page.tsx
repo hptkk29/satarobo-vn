@@ -62,15 +62,41 @@ export default async function OperationalSettingsPage({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!(await checkPermission("settings:view"))) redirect("/admin/dashboard");
+  // ── HAI CỬA VÀO, HAI CHẾ ĐỘ [23/09/2026] ──────────────────────────────────────────────
+  //
+  // `settings:view`        → chế độ ĐẦY ĐỦ (Quản trị tối cao): mọi tab, mọi khoá.
+  // `settings:view-center` → chế độ HẸP (Quản lý cơ sở): CHỈ khoá cài riêng được theo cơ sở,
+  //                          và chỉ sửa được phần CỦA CƠ SỞ MÌNH.
+  //
+  // Chủ dự án chốt 22/09: trần số đợt / số ưu đãi thì QLCS chỉnh được ở đây. Nhưng KHÔNG nới
+  // `settings:view` — màn này có 100+ khoá gồm OTP, mẫu tin ZNS, khoá VAPID, trần hoa hồng.
+  // Nới nó là chữa một vấn đề bằng cách mở một vấn đề lớn hơn (bài học `audit-logs:view`).
+  //
+  // ⚠️ Chế độ hẹp KHÔNG phải lớp bảo vệ duy nhất, và cố ý không phải: nó chỉ quyết định BÀY
+  // RA cái gì. Cổng thật nằm ở đường GHI — `setCenterSetting` đòi actor có vai quản lý tại
+  // ĐÚNG `orgUnitId` đang sửa, và từ chối mọi khoá không `centerOverridable`
+  // (`lib/settings/service.ts:144-156`). Gọi thẳng server action cũng không đi vòng được.
+  const xemDayDu = await checkPermission("settings:view");
+  const xemTheoCoSo = xemDayDu || (await checkPermission("settings:view-center"));
+  if (!xemTheoCoSo) redirect("/admin/dashboard");
 
-  const canEditGlobal = await checkPermission("settings:edit"); // settings:edit = SUPER_ADMIN
+  // Chế độ hẹp KHÔNG bao giờ sửa được giá trị TOÀN CỤC — đó là thứ phân biệt hai chế độ.
+  const canEditGlobal = xemDayDu && (await checkPermission("settings:edit"));
   const sp = await searchParams;
 
   // Chỉ đọc những key THẬT SỰ bày ra. Dựng danh sách từ bảng tab chứ không từ `SETTING_KEYS`:
   // như vậy một key mới mà quên khai nhãn vận hành sẽ KHÔNG lặng lẽ hiện ra dưới dạng tên
   // biến — nó vắng mặt, và `nhan-van-hanh.test.ts` làm đỏ ngay ở CI.
-  const keyTheoTab = TAB_CAU_HINH.map((t) => ({ tab: t, keys: keyCuaTab(t.id) }));
+  // ⚠️ Chế độ HẸP lọc xuống còn khoá `centerOverridable`. Không lọc thì QLCS vẫn ĐỌC được
+  // trần hoa hồng, mẫu tin ZNS, cấu hình OTP… — chúng chỉ không sửa được, nhưng "không sửa
+  // được" khác "không được thấy", và đây là màn có dữ liệu nhạy cảm.
+  //
+  // Lọc bằng `SETTINGS[k].centerOverridable` chứ không bằng danh sách gõ tay: danh sách gõ
+  // tay là bản thứ hai của một sự thật đã có chủ, và nó lệch ngay lần đầu ai đó thêm khoá.
+  const keyTheoTab = TAB_CAU_HINH.map((t) => ({
+    tab: t,
+    keys: keyCuaTab(t.id).filter((k) => xemDayDu || SETTINGS[k]?.centerOverridable === true),
+  })).filter((x) => x.keys.length > 0);
   const moiKey = keyTheoTab.flatMap((x) => x.keys);
   // Hai key của hai tab có bảng riêng KHÔNG nằm trong `moiKey` (đã lọc khỏi danh sách ô
   // nhập) nên phải nạp thêm — quên là bảng hoa hồng mở ra rỗng và người dùng tưởng mất
