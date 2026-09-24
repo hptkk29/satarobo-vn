@@ -396,15 +396,23 @@ describe("dongBoNick", () => {
     expect(state.tao[0]).toMatchObject({ sataUserId: null });
   });
 
-  it("[ZC-NA-09b] `owner.externalId` khớp một User có thật ⇒ gán chủ nick", async () => {
-    // Hình dạng thật của fork: id Sata nằm ở `owner.externalId`, còn `ownerUserId` ở
-    // gốc là id NỘI BỘ của fork. Ca này trộn cả hai để khoá đúng chỗ hay nhầm.
+  it("[ZC-NA-09b] 🔴 ĐẢO 24/09: chủ nick bên ZaloCRM KHÔNG còn thành lượt phân công", async () => {
+    // ── CA NÀY TỪNG KHẲNG ĐỊNH ĐIỀU NGƯỢC LẠI, và chính nó là bằng chứng của sự cố ──
+    // Nguyên văn cũ: "`owner.externalId` khớp một User có thật ⇒ GÁN CHỦ NICK", và nó
+    // xanh suốt — vì hồi đó `sataUserId` chỉ để HIỂN THỊ cột "Sale sở hữu".
+    //
+    // Rồi cột ấy được đọc như "nick đã giao cho ai" (migration 20260924120000), và một
+    // giá trị MÁY ĐOÁN thành một lượt phân quyền ĐỘC QUYỀN. Đo trên prod ngay sau lượt
+    // triển khai: mỗi nick cắt còn đúng một người, Cô Diệu (CS1) mở hộp thư ra TRỐNG.
+    //
+    // Nay đường đồng bộ KHÔNG chạm cột phân công nữa. `owner.externalId` vẫn được đọc
+    // và vẫn được kiểm (`locChuNickCoThat`) — chỉ là không ghi vào đâu cả.
     state.users = [{ id: "u-1", name: "Chị Sale" }];
     state.traLoi = {
       cs1: { data: [{ id: "acc-1", ownerUserId: "fork-99", owner: { externalId: "u-1" } }] },
     };
     await dongBoNick(QLCS1, { orgCode: "cs1" });
-    expect(state.tao[0]).toMatchObject({ sataUserId: "u-1" });
+    expect(state.tao[0]).toMatchObject({ sataUserId: null });
   });
 
   it("[ZC-NA-09c] chỉ có `ownerUserId` của fork ⇒ nick KHÔNG có chủ, không gán bừa", async () => {

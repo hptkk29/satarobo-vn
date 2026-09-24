@@ -557,3 +557,145 @@ describe.skipIf(!CO_BANG)("quản lý cơ sở — KHÔNG còn quyền tự đ�
     await db.zaloCrmNick.deleteMany({ where: { zcrmAccountId: nickB } });
   });
 });
+
+describe.skipIf(!CO_BANG)("🔴 sự cố prod 24/09 — cột do ĐỒNG BỘ ghi KHÔNG phải một lượt phân công", () => {
+  // `dongBoNick` tự ghi `ZaloCrmNick.sataUserId` = chủ nick do ZaloCRM ghi nhận. Đọc nó
+  // như "nick đã giao cho ai" là mượn một giá trị MÁY ĐOÁN để cắt quyền người thật:
+  // trên prod mỗi nick cắt còn một người, và Cô Diệu (CS1) mở hộp thư ra TRỐNG.
+
+  it("[ZCG-17] `dongBoNick` KHÔNG được ghi `sataUserId`", async () => {
+    // Lưới ghim mã nguồn: thứ cần khẳng định là "đường đồng bộ không chạm cột phân
+    // công". Không đầu vào nào chứng minh được — `dongBoNick` gọi mạng, và ca hành vi
+    // của nó sẽ xanh dù cột bị ghi hay không.
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const src = readFileSync(
+      resolve(process.cwd(), "lib/integrations/zalocrm/nick-admin.ts"),
+      "utf8",
+    );
+    const dau = src.indexOf("export async function dongBoNick(");
+    expect(dau, "không thấy `dongBoNick` — lưới mất neo").toBeGreaterThan(-1);
+    // Bóc chú thích: khối 🔴 ngay trên hàm CÓ nhắc `sataUserId` để kể lại sự cố, và
+    // không bóc thì lưới đỏ vì lời kể chứ không vì mã (luật 11).
+    const than = src
+      .slice(dau)
+      .split(/\r?\n/)
+      .map((d) => d.replace(/\/\/.*$/, ""))
+      .join("\n");
+
+    // Hai đường ghi, hai phép đo RIÊNG — neo hẹp vào đúng dạng của từng đường.
+    //
+    // ⚠️ Bản đầu của ca này dùng `sataUserId:\s*(?!null)[A-Za-z_$]` và ĐỎ NGAY vì bắt
+    // trúng dòng `select: { sataUserId: true }` — một phép ĐỌC, hoàn toàn hợp lệ. Lưới
+    // grep rộng là lưới báo động giả; luật 11 bảo neo chuỗi HẸP NHẤT.
+    const ganUpdate = [...than.matchAll(/data\.sataUserId\s*=/g)].map((m) => m[0]);
+    expect(
+      ganUpdate,
+      `nhánh cập nhật đang ghi cột phân công: ${ganUpdate.join(", ")}`,
+    ).toEqual([]);
+
+    // Nhánh tạo mới: phải đặt thẳng `null`, không phải một biến.
+    const ganCreate = [...than.matchAll(/sataUserId:\s*(?!null\b|true\b|false\b)\S/g)].map(
+      (m) => m[0],
+    );
+    expect(ganCreate, `nhánh tạo mới đang ghi cột phân công: ${ganCreate.join(", ")}`).toEqual(
+      [],
+    );
+    expect(than, "nhánh tạo mới phải đặt `sataUserId: null` tường minh").toMatch(
+      /sataUserId:\s*null/,
+    );
+    // Đối chứng: lưới còn neo đúng chỗ (bóc chú thích không làm rỗng thân hàm).
+    expect(than).toContain("zaloCrmNick.update");
+  });
+
+  it("[ZCG-18] migration gỡ ĐÚNG dòng do backfill, KHÔNG đụng dòng người đã sửa", async () => {
+    // 🔴 Chạy CHÍNH TỆP migration. Điều kiện quan trọng nhất là "nick chỉ có MỘT dòng
+    // giao": gỡ bừa là xoá một quyết định của con người để chữa một lỗi của máy — đúng
+    // cái sai mà sự cố này là ví dụ.
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const sql = readFileSync(
+      resolve(
+        process.cwd(),
+        "prisma/migrations/20260924180000_zalocrm_go_dong_giao_do_dong_bo/migration.sql",
+      ),
+      "utf8",
+    );
+    /**
+     * Chạy từng câu lệnh một.
+     *
+     * ⚠️ `$executeRawUnsafe` KHÔNG nhận nhiều câu trong một lượt ("cannot insert multiple
+     * commands into a prepared statement") — còn `prisma migrate deploy` thì nhận. Đây là
+     * chi tiết của BỘ TEST, không phải của migration: tệp vẫn chạy nguyên khối trên thật.
+     */
+    const chayMigration = async () => {
+      const cau = sql
+        .split(/\r?\n/)
+        .map((d) => d.replace(/^\s*--.*$/, ""))
+        .join("\n")
+        .split(";")
+        .map((c) => c.trim())
+        .filter((c) => c.length > 0);
+      expect(cau.length, "migration phải có đúng hai câu lệnh").toBe(2);
+      for (const c of cau) await db.$executeRawUnsafe(c);
+    };
+
+    const nickA = await db.zaloCrmNick.findUniqueOrThrow({ where: { zcrmAccountId: NICK } });
+    // ── Nick A: đúng dấu vân tay của backfill (1 dòng, mức `chat`, trùng cột cũ).
+    await db.zaloCrmNickGiao.deleteMany({ where: { nickId: nickA.id } });
+    await db.zaloCrmNick.update({
+      where: { id: nickA.id },
+      data: { sataUserId: nguoi.loc },
+    });
+    await db.zaloCrmNickGiao.create({
+      data: { nickId: nickA.id, sataUserId: nguoi.loc, mucQuyen: "chat" },
+    });
+
+    // ── Nick B: người vận hành ĐÃ sửa (hai dòng) ⇒ phải còn nguyên.
+    const nickB = `${P}acc-da-sua`;
+    await db.zaloCrmNick.deleteMany({ where: { zcrmAccountId: nickB } });
+    const b = await db.zaloCrmNick.create({
+      data: {
+        zcrmAccountId: nickB,
+        orgCode: ORG,
+        centerId: idCoSo,
+        displayName: `${P} B`,
+        sataUserId: nguoi.loc,
+      },
+    });
+    await db.zaloCrmNickGiao.createMany({
+      data: [
+        { nickId: b.id, sataUserId: nguoi.loc, mucQuyen: "chat" },
+        { nickId: b.id, sataUserId: nguoi.dieu, mucQuyen: "read" },
+      ],
+    });
+
+    await chayMigration();
+
+    expect(
+      await db.zaloCrmNickGiao.count({ where: { nickId: nickA.id } }),
+      "dòng do backfill sinh ra vẫn còn ⇒ cả cơ sở vẫn bị cắt",
+    ).toBe(0);
+    // Và cột cũ được dọn theo — để người sau không đọc nhầm nó lần nữa.
+    expect(
+      (await db.zaloCrmNick.findUniqueOrThrow({ where: { id: nickA.id } })).sataUserId,
+    ).toBeNull();
+
+    // ĐỐI CHỨNG DƯƠNG — thiếu vế này thì một câu `DELETE` trần cũng xanh.
+    const conLai = await db.zaloCrmNickGiao.findMany({
+      where: { nickId: b.id },
+      select: { sataUserId: true, mucQuyen: true },
+    });
+    expect(
+      conLai.map((g) => g.sataUserId).sort(),
+      "migration xoá mất quyết định của người vận hành",
+    ).toEqual([nguoi.loc, nguoi.dieu].sort());
+
+    // Chạy LẠI không đổi gì thêm.
+    await chayMigration();
+    expect(await db.zaloCrmNickGiao.count({ where: { nickId: b.id } })).toBe(2);
+
+    await db.zaloCrmNickGiao.deleteMany({ where: { nickId: b.id } });
+    await db.zaloCrmNick.deleteMany({ where: { zcrmAccountId: nickB } });
+  });
+});

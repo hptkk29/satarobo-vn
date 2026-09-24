@@ -289,6 +289,15 @@ export type NguoiCuaCoSo = {
    */
   tatCa: string[];
   /**
+   * Tập CON của `tatCa` neo ở đơn vị CẤP TRÊN cơ sở (Hội sở, khối vùng) — KHÔNG phải
+   * người của chính cơ sở.
+   *
+   * Màn dùng nó để gắn nhãn "hội sở": người bấm phải biết mình đang thêm một người
+   * ngoài cơ sở vào nick của cơ sở này. Không gắn nhãn thì hai cái tên trông như nhau
+   * mà nghĩa khác hẳn.
+   */
+  hoiSo: string[];
+  /**
    * Tập CON dùng nick MẶC ĐỊNH khi nick CHƯA giao ai (`VAI_DUOC_CAP_NICK`).
    *
    * 🔴 KHÁC `tatCa`, và sự khác nhau đó là cả điểm của đợt 24/09: mở rộng tập GIAO TAY
@@ -314,26 +323,72 @@ export type NguoiCuaCoSo = {
   vaiTheoNguoi: Record<string, string[]>;
 };
 
+/**
+ * Các `path` TỔ TIÊN của một đường dẫn đơn vị, KHÔNG gồm chính nó.
+ *
+ * `/ho/danang/cs1/` ⇒ `["/ho/", "/ho/danang/"]`.
+ *
+ * Thuần để cấy lỗi được: đây là chỗ quyết định "ai ở cấp trên được thêm vào nick", và
+ * một phép cắt chuỗi sai thì hoặc bỏ sót Hội sở (không ai thấy), hoặc quét cả cây
+ * (thêm được người của cơ sở khác — rò chéo cơ sở).
+ *
+ * ⚠️ Dấu `/` cuối là BẮT BUỘC theo quy ước `path` của repo (xem `schema.prisma`): nó
+ * cắt đúng biên node nên `/cs1` không dính `/cs10`. Đường không đúng khuôn ⇒ trả rỗng,
+ * KHÔNG đoán.
+ */
+export function layDuongToTien(path: string | null | undefined): string[] {
+  if (typeof path !== "string" || !path.startsWith("/") || !path.endsWith("/")) return [];
+  const doan = path.slice(1, -1).split("/").filter(Boolean);
+  // Bỏ chính nó (đoạn cuối) ⇒ chỉ còn tổ tiên. Gốc một đoạn thì không có tổ tiên nào.
+  const ra: string[] = [];
+  for (let i = 1; i < doan.length; i++) ra.push(`/${doan.slice(0, i).join("/")}/`);
+  return ra;
+}
+
 export async function nguoiDuocDungNick(centerCode: string): Promise<NguoiCuaCoSo> {
   const luc = new Date();
 
   // ⚠️ `UserOrgRole` KHÔNG có quan hệ Prisma tới `OrgUnit` lẫn `User` (chỉ có `role`),
   // nên không lồng `where` được — phải tra ba bước. Viết `orgUnit: {...}` ở đây là lỗi
   // biên dịch, không phải lỗi chạy; ghi ra để người sau khỏi thử lại.
-  const rong: NguoiCuaCoSo = { tatCa: [], macDinh: [], quanLy: [], vaiTheoNguoi: {} };
+  const rong: NguoiCuaCoSo = {
+    tatCa: [],
+    hoiSo: [],
+    macDinh: [],
+    quanLy: [],
+    vaiTheoNguoi: {},
+  };
 
   const donVi = await db.orgUnit.findFirst({
     // `OrgUnit.code` khớp `Center.code` — cầu nối chuẩn của repo
     // (`lib/org/center-bridge.ts`), KHÔNG suy từ tên.
     where: { code: centerCode },
-    select: { id: true },
+    select: { id: true, path: true },
   });
   if (!donVi) return rong;
+
+  // ── NGƯỜI Ở ĐƠN VỊ CẤP TRÊN CŨNG THÊM TAY ĐƯỢC (chủ dự án chốt 24/09/2026) ──────
+  // Nhân sự Hội sở KHÔNG neo ở cơ sở nào, nên câu tra chỉ nhìn đúng một đơn vị sẽ bỏ
+  // sót họ — và triệu chứng là "không có tên chị ấy trong màn giao nick", không phải
+  // một lỗi. Đo thật: quản lý kiêm nhiệm ở HO biến mất khỏi mọi danh sách.
+  //
+  // Dùng `path` (materialized path, dạng `/ho/danang/cs1/`) thay vì leo `parentId`
+  // từng bậc: cây chỉ sâu 3 tầng nhưng leo bậc là N câu tra, còn đây là MỘT.
+  // `path` NULLABLE (P1 additive) ⇒ không có thì chỉ lấy chính cơ sở, KHÔNG đoán.
+  const duongToTien = layDuongToTien(donVi.path);
+  const toTien = duongToTien.length
+    ? await db.orgUnit.findMany({
+        where: { path: { in: duongToTien } },
+        select: { id: true },
+      })
+    : [];
+  const idToTien = new Set(toTien.map((o) => o.id));
+  const moiDonVi = [donVi.id, ...idToTien];
 
   const dong = await db.userOrgRole.findMany({
     where: {
       status: "ACTIVE",
-      orgUnitId: donVi.id,
+      orgUnitId: { in: moiDonVi },
       // 24/09/2026 — KHÔNG còn lọc `code: { in: VAI_DUOC_CAP_NICK }`. Tập này nay là
       // "mọi nhân sự của cơ sở" (tập GIAO TAY); ba tập con tính ở dưới theo `role.code`.
       // Loại vai quan hệ: phụ huynh vốn không có dòng `UserOrgRole` nào nên điều kiện
@@ -347,7 +402,9 @@ export async function nguoiDuocDungNick(centerCode: string): Promise<NguoiCuaCoS
     // `role.code` cần cho CẢ BA tập con (mặc định · quản lý · nhãn vai trên màn). Lấy
     // trong CÙNG câu này thay vì tra thêm một lượt: hai câu tra hai thời điểm là hai
     // sự thật khác nhau, và ở đây chúng quyết định cùng một payload.
-    select: { userId: true, role: { select: { code: true } } },
+    // `orgUnitId` cần cho việc tách "người của cơ sở" khỏi "người hội sở": hai tập có
+    // nghĩa khác nhau (xem `hoiSo`), và chỉ tập ĐẦU mới được dùng nick mặc định.
+    select: { userId: true, orgUnitId: true, role: { select: { code: true } } },
   });
   const ids = [...new Set(dong.map((d) => d.userId))];
   if (ids.length === 0) return rong;
@@ -366,14 +423,24 @@ export async function nguoiDuocDungNick(centerCode: string): Promise<NguoiCuaCoS
   const conSong = new Set(tatCa);
   // `role` được `select` ở trên nên trên đường thật nó luôn có. `?.` là để bộ test
   // mock được dòng vai mà không phải dựng cả quan hệ Prisma.
+  // 🔴 `macDinh` và `quanLy` CHỈ tính trên dòng neo ĐÚNG TẠI CƠ SỞ. Người hội sở thêm
+  // tay được, nhưng KHÔNG tự động dùng được mọi nick chưa giao của mọi cơ sở — đó sẽ là
+  // một lượt nới quyền im lặng trên toàn hệ thống, không ai bấm nút nào.
   const locTheoVai = (vai: readonly string[]) => [
     ...new Set(
       dong
+        .filter((d) => d.orgUnitId === donVi.id)
         .filter((d) => d.role?.code && vai.includes(d.role.code))
         .map((d) => d.userId)
         .filter((id) => conSong.has(id)),
     ),
   ];
+
+  // Ai CHỈ neo ở cấp trên (không có dòng nào tại chính cơ sở) ⇒ nhãn "hội sở".
+  const coDongTaiCoSo = new Set(
+    dong.filter((d) => d.orgUnitId === donVi.id).map((d) => d.userId),
+  );
+  const hoiSo = tatCa.filter((id) => !coDongTaiCoSo.has(id));
 
   const vaiTheoNguoi: Record<string, string[]> = {};
   for (const d of dong) {
@@ -383,6 +450,7 @@ export async function nguoiDuocDungNick(centerCode: string): Promise<NguoiCuaCoS
 
   return {
     tatCa,
+    hoiSo,
     macDinh: locTheoVai(VAI_DUOC_CAP_NICK),
     quanLy: locTheoVai(VAI_QUAN_LY_CO_SO),
     vaiTheoNguoi,
