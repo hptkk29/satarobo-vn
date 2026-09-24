@@ -15,6 +15,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 type DongVai = { userId: string; role?: { code: string } };
 
+/**
+ * `path` của từng đơn vị, theo quy ước repo (`/ho/danang/cs1/`).
+ *
+ * Fixture phải mang hình dạng THẬT: từ 24/09 `nguoiDuocDungNick` leo lên đơn vị cấp
+ * trên qua `path` để lấy nhân sự Hội sở. Một fixture không có `path` thì nhánh ấy
+ * không bao giờ chạy, và mọi ca về Hội sở xanh vì lý do sai.
+ */
+const DUONG_DON_VI: Record<string, string> = {
+  HO: "/ho/",
+  CS1: "/ho/danang/cs1/",
+  CS2: "/ho/danang/cs2/",
+};
+
 const state = {
   anhXa: {} as Record<string, string>,
   coKhoa: new Set<string>(),
@@ -69,15 +82,34 @@ vi.mock("@/lib/db", () => ({
     orgUnit: {
       findFirst: vi.fn(async (args: { where?: { code?: string } }) => {
         const code = args?.where?.code ?? "";
-        return state.donViCo.has(code) ? { id: `ou-${code}` } : null;
+        // `path` là thứ nhánh "lấy người Hội sở" dựa vào — trả thiếu là nhánh ấy chết
+        // im lặng và ca [ZC-CQ-12] xanh vì lý do sai.
+        return state.donViCo.has(code)
+          ? { id: `ou-${code}`, path: DUONG_DON_VI[code] ?? null }
+          : null;
+      }),
+      // Tra đơn vị TỔ TIÊN theo `path`. Chỉ trả đơn vị CÓ THẬT trong fixture.
+      findMany: vi.fn(async (args: { where?: { path?: { in?: string[] } } }) => {
+        const duong = new Set(args?.where?.path?.in ?? []);
+        return Object.entries(DUONG_DON_VI)
+          .filter(([ma, p]) => duong.has(p) && state.donViCo.has(ma))
+          .map(([ma]) => ({ id: `ou-${ma}` }));
       }),
     },
     userOrgRole: {
+      // 🔴 `orgUnitId` nay là `{ in: [...] }` (cơ sở + tổ tiên), và mỗi dòng trả về
+      // PHẢI mang `orgUnitId`: tầng trên dùng nó để tách "người của cơ sở" khỏi "người
+      // hội sở". Thiếu nó thì người Hội sở lọt vào tập MẶC ĐỊNH — nới quyền im lặng
+      // trên mọi nick chưa giao của mọi cơ sở.
       findMany: vi.fn(async (args: { where?: unknown }) => {
         state.whereVai.push(args?.where);
-        const w = args?.where as { orgUnitId?: string };
-        const code = (w?.orgUnitId ?? "").replace(/^ou-/, "");
-        return state.vaiTheoDonVi[code] ?? [];
+        const w = args?.where as { orgUnitId?: { in?: string[] } };
+        const ra: (DongVai & { orgUnitId: string })[] = [];
+        for (const id of w?.orgUnitId?.in ?? []) {
+          const code = id.replace(/^ou-/, "");
+          for (const d of state.vaiTheoDonVi[code] ?? []) ra.push({ ...d, orgUnitId: id });
+        }
+        return ra;
       }),
     },
     user: {
@@ -118,7 +150,10 @@ vi.mock("@/lib/integrations/zalocrm/log", () => ({
   }),
 }));
 
-import { capQuyenNickZalocrm } from "@/lib/integrations/zalocrm/cap-quyen-nick";
+import {
+  capQuyenNickZalocrm,
+  layDuongToTien,
+} from "@/lib/integrations/zalocrm/cap-quyen-nick";
 
 /** `User.id` của một lượt gửi, đã sắp — phần lớn ca chỉ quan tâm AI, không quan tâm mức. */
 function ids(g: { quyen: { sataUserId: string }[] } | undefined): string[] {
@@ -142,7 +177,7 @@ beforeEach(() => {
       { userId: "u-qlcs", role: { code: "CENTER_MANAGER" } },
     ],
   };
-  state.donViCo = new Set(["CS1", "CS2"]);
+  state.donViCo = new Set(["CS1", "CS2", "HO"]);
   state.daNghi = new Set();
   state.whereVai = [];
   state.whereNguoi = [];
@@ -270,17 +305,42 @@ describe("cấp quyền", () => {
     const w = state.whereVai[0] as {
       status?: string;
       role?: { code?: { in?: string[]; notIn?: string[] } };
-      orgUnitId?: string;
+      orgUnitId?: { in?: string[] };
     };
     expect(w.status).toBe("ACTIVE");
     expect(w.role?.code?.in, "lọc theo danh sách vai = thu hẹp lại tập giao tay").toBeUndefined();
     // Phụ huynh là KHÁCH HÀNG. Hôm nay họ không có dòng `UserOrgRole` nào nên câu tra
     // không thể trả về họ — điều kiện này là hàng rào THỨ HAI, và nó phải còn đó.
     expect([...(w.role?.code?.notIn ?? [])]).toEqual(["PARENT"]);
-    expect(w.orgUnitId).toBe("ou-CS1");
+    // Cơ sở + tổ tiên của nó. Mất vế tổ tiên là nhân sự Hội sở biến mất khỏi màn giao
+    // nick — đúng triệu chứng 24/09 ("không có ms Trang trong màn giao nick").
+    expect([...(w.orgUnitId?.in ?? [])].sort()).toEqual(["ou-CS1", "ou-HO"]);
     // Nghỉ việc / khoá tài khoản là ca CHÍNH của vế gỡ — lọc ở bước tra `User`, vì dòng
     // `UserOrgRole` của người nghỉ thường VẪN CÒN.
     expect(state.whereNguoi[0]).toMatchObject({ isActive: true, deletedAt: null });
+  });
+
+  it("[ZC-CQ-12] người HỘI SỞ: THÊM TAY được, nhưng KHÔNG dùng nick mặc định", async () => {
+    // 🔴 Chủ dự án báo 24/09: *"không có ms Trang trong màn giao nick zalo vì ms Trang
+    // là HO"*. Nhân sự Hội sở không neo ở cơ sở nào, nên câu tra chỉ nhìn một đơn vị đã
+    // bỏ sót họ — và triệu chứng là một cái tên VẮNG MẶT, không phải một lỗi.
+    state.vaiTheoDonVi.HO = [{ userId: "u-trang", role: { code: "CENTER_MANAGER" } }];
+
+    // ① nick CHƯA giao ai ⇒ Hội sở KHÔNG tự có quyền. Cho họ quyền mặc định là mở mọi
+    //    nick chưa giao của MỌI cơ sở cho một người — nới quyền toàn hệ thống, im lặng.
+    state.nicks.cs1 = [{ zcrmAccountId: "acc-1", giao: [] }];
+    await capQuyenNickZalocrm();
+    expect(ids(state.goi[0]), "Hội sở lọt vào tập mặc định").not.toContain("u-trang");
+    expect(ids(state.goi[0])).toEqual(["u-qlcs", "u-sale-1", "u-sale-2"]);
+
+    // ② GIAO TAY cho người Hội sở ⇒ dòng giao CÓ hiệu lực.
+    state.goi = [];
+    state.nicks.cs1 = [
+      { zcrmAccountId: "acc-1", giao: [{ sataUserId: "u-trang", mucQuyen: "admin" }] },
+    ];
+    await capQuyenNickZalocrm();
+    expect(ids(state.goi[0]), "dòng giao cho Hội sở bị rụng").toEqual(["u-trang"]);
+    expect(mucCua(state.goi[0], "u-trang")).toBe("admin");
   });
 
   it("[ZC-CQ-03d] vai NGOÀI chính sách: giao tay được, nhưng KHÔNG mặc định", async () => {
@@ -415,5 +475,35 @@ describe("hỏng hóc", () => {
     state.anhXa = { CS1: "cs1", CS2: "cs1" };
     await capQuyenNickZalocrm();
     expect(state.goi).toHaveLength(1);
+  });
+});
+
+// ── [ZC-TT-*] — đường tổ tiên, hàm THUẦN ────────────────────────────────────────────
+//
+// Đây là chỗ quyết định "ai ở cấp trên được thêm vào nick". Cắt chuỗi sai thì hoặc bỏ
+// sót Hội sở (không ai thấy — đúng triệu chứng chủ dự án báo 24/09: "không có ms Trang
+// trong màn giao nick"), hoặc quét rộng ra cả cây và thêm được người của CƠ SỞ KHÁC.
+describe("[ZC-TT] đường tổ tiên của một đơn vị", () => {
+  it("[ZC-TT-01] trả tổ tiên, KHÔNG gồm chính nó", () => {
+    expect(layDuongToTien("/ho/danang/cs1/")).toEqual(["/ho/", "/ho/danang/"]);
+  });
+
+  it("[ZC-TT-02] gốc một đoạn ⇒ không có tổ tiên nào", () => {
+    expect(layDuongToTien("/ho/")).toEqual([]);
+  });
+
+  it("[ZC-TT-03] đường KHÔNG đúng khuôn ⇒ rỗng, không đoán", () => {
+    // `path` nullable (P1 additive). Đoán ở đây là quét sai nhánh cây.
+    for (const xau of [null, undefined, "", "ho/danang/cs1/", "/ho/danang/cs1", "   "]) {
+      expect(layDuongToTien(xau), `đoán bừa với: ${String(xau)}`).toEqual([]);
+    }
+  });
+
+  it("[ZC-TT-04] dấu `/` cuối cắt đúng biên node — `/cs1` KHÔNG dính `/cs10`", () => {
+    // Quy ước `path` của repo (schema.prisma). Mất dấu `/` là `LIKE` quét nhầm node.
+    for (const p of layDuongToTien("/ho/danang/cs1/")) {
+      expect(p.endsWith("/"), `đoạn thiếu dấu chéo cuối: ${p}`).toBe(true);
+      expect(p.startsWith("/"), `đoạn thiếu dấu chéo đầu: ${p}`).toBe(true);
+    }
   });
 });
