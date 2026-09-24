@@ -26,6 +26,10 @@ import { getSetting } from "@/lib/settings/service";
 import { docKhoaApi, datQuyenNickZalocrm } from "@/lib/integrations/zalocrm/client";
 import { ghiNhatKyZalocrm } from "@/lib/integrations/zalocrm/log";
 import { VAI_DUOC_CAP_NICK } from "@/lib/integrations/zalocrm/vai-tro";
+import {
+  nguoiDuocDungMotNick,
+  VAI_THAY_MOI_NICK,
+} from "@/lib/integrations/zalocrm/pham-vi-nick";
 import { rateLimit, getRateLimitBackend } from "@/lib/rate-limit";
 
 export type KetQuaCapQuyenOrg = {
@@ -194,22 +198,32 @@ async function capQuyenMotOrg(input: {
   // phải viết tay (bảng không ở `SOFT_DELETE_MODELS` — nợ #4 của bản bàn giao).
   const nicks = await db.zaloCrmNick.findMany({
     where: { orgCode, deletedAt: null },
-    select: { zcrmAccountId: true },
+    // `sataUserId` = nick ĐÃ GIAO cho ai (màn `/zalo-crm/nick`). Thiếu nó ở đây thì mọi
+    // nick thành "chưa giao" và cả cơ sở lại thấy hết — hỏng CÂM, không lỗi nào báo.
+    // Khoá bằng ca `[ZC-CQ-11]`.
+    select: { zcrmAccountId: true, sataUserId: true },
   });
   // ⛔ Chưa có nick ⇒ RA NGAY. Không gọi mạng, không ghi nhật ký. Đây là hiện trạng của
   // mọi cơ sở cho tới khi có SIM thật (việc 9.16), tức là trạng thái BÌNH THƯỜNG hôm nay.
   if (nicks.length === 0) return { ...rong, ok: true, ma: "CHUA_CO_NICK" };
 
-  const nguoi = await nguoiDuocDungNick(centerCode);
+  const { tatCa, quanLy } = await nguoiDuocDungNick(centerCode);
 
   const kq: KetQuaCapQuyenOrg = {
     ...rong,
     ok: true,
     soNick: nicks.length,
-    soNguoi: nguoi.length,
+    soNguoi: tatCa.length,
   };
 
   for (const n of nicks) {
+    // MỖI NICK MỘT DANH SÁCH RIÊNG. Trước 24/09 vòng này gửi CÙNG một mảng cho mọi
+    // nick; nay nick đã giao chỉ còn người được giao + quản lý cơ sở.
+    const nguoi = nguoiDuocDungMotNick({
+      daGiaoCho: n.sataUserId ?? null,
+      nguoiCuaCoSo: tatCa,
+      quanLyCoSo: quanLy,
+    });
     const res = await datQuyenNickZalocrm(orgCode, n.zcrmAccountId, nguoi);
     if (!res.ok) {
       kq.loi += 1;
@@ -249,7 +263,14 @@ async function capQuyenMotOrg(input: {
  * Lọc `status: "ACTIVE"` + hiệu lực theo ngày: người đã hết nhiệm kỳ ở cơ sở phải rơi
  * khỏi danh sách, và chính việc rơi ra đó là thứ sinh ra lệnh GỠ ở bên kia.
  */
-export async function nguoiDuocDungNick(centerCode: string): Promise<string[]> {
+export type NguoiCuaCoSo = {
+  /** MỌI người còn hợp lệ của cơ sở (đã lọc vai + tài khoản còn hiệu lực). */
+  tatCa: string[];
+  /** Tập CON của `tatCa` đang giữ vai thấy-mọi-nick (`VAI_THAY_MOI_NICK`). */
+  quanLy: string[];
+};
+
+export async function nguoiDuocDungNick(centerCode: string): Promise<NguoiCuaCoSo> {
   const luc = new Date();
 
   // ⚠️ `UserOrgRole` KHÔNG có quan hệ Prisma tới `OrgUnit` lẫn `User` (chỉ có `role`),
@@ -261,7 +282,7 @@ export async function nguoiDuocDungNick(centerCode: string): Promise<string[]> {
     where: { code: centerCode },
     select: { id: true },
   });
-  if (!donVi) return [];
+  if (!donVi) return { tatCa: [], quanLy: [] };
 
   const dong = await db.userOrgRole.findMany({
     where: {
@@ -273,10 +294,13 @@ export async function nguoiDuocDungNick(centerCode: string): Promise<string[]> {
       OR: [{ effectiveTo: null }, { effectiveTo: { gte: luc } }],
       effectiveFrom: { lte: luc },
     },
-    select: { userId: true },
+    // `role.code` cần cho vế "quản lý cơ sở thấy MỌI nick" (`pham-vi-nick.ts`). Lấy
+    // trong CÙNG câu này thay vì tra thêm một lượt: hai câu tra hai thời điểm là hai
+    // sự thật khác nhau, và ở đây chúng quyết định cùng một payload.
+    select: { userId: true, role: { select: { code: true } } },
   });
   const ids = [...new Set(dong.map((d) => d.userId))];
-  if (ids.length === 0) return [];
+  if (ids.length === 0) return { tatCa: [], quanLy: [] };
 
   // Lọc tài khoản còn hiệu lực ở bước riêng. Nghỉ việc / bị khoá là ca CHÍNH của vế GỠ:
   // dòng `UserOrgRole` của họ thường vẫn còn, nên chỉ lọc ở bảng vai là chưa đủ.
@@ -284,5 +308,23 @@ export async function nguoiDuocDungNick(centerCode: string): Promise<string[]> {
     where: { id: { in: ids }, isActive: true, deletedAt: null },
     select: { id: true },
   });
-  return conHieuLuc.map((u) => u.id);
+  const tatCa = conHieuLuc.map((u) => u.id);
+
+  // Quản lý = tập CON của `tatCa`. Lọc lại theo `conHieuLuc` chứ không lấy thẳng từ
+  // `dong`: một quản lý đã nghỉ việc vẫn còn dòng `UserOrgRole`, và nếu lọt vào đây thì
+  // `pham-vi-nick.ts` sẽ giữ họ trong mọi nick đã giao — đúng cái vế GỠ mà hệ thống
+  // sinh ra để làm.
+  const conSong = new Set(tatCa);
+  const quanLy = [
+    ...new Set(
+      dong
+        // `role` được `select` ở trên nên trên đường thật nó luôn có. `?.` là để bộ test
+        // mock được dòng vai mà không phải dựng cả quan hệ Prisma.
+        .filter((d) => d.role?.code && VAI_THAY_MOI_NICK.includes(d.role.code))
+        .map((d) => d.userId)
+        .filter((id) => conSong.has(id)),
+    ),
+  ];
+
+  return { tatCa, quanLy };
 }
