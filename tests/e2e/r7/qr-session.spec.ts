@@ -15,6 +15,9 @@
  *  [QR-04] phiếu PAID → từ chối.
  *  [QR-05] phiếu cơ sở khác → "không tìm thấy" (không lộ tồn tại), không tạo phiên.
  *  [QR-06] phiên ACTIVE ĐÃ QUÁ HẠN không được tái sử dụng → mở phiên mới.
+ *  [QR-10] chữ IN RA = chuỗi NẰM TRONG ẢNH (không phải chuỗi tính lại).
+ *  [QR-11] đổi dữ liệu đơn sau khi xuất mã → chữ GIỮ NGUYÊN theo ảnh, và `anhDaCu` bật.
+ *  [QR-12] đường RENDER TRANG và đường BẤM NÚT trả CÙNG một chuỗi cho cùng phiếu.
  */
 import { test, expect } from "@playwright/test";
 import { db } from "../../../lib/db";
@@ -24,8 +27,14 @@ import { assignUserOrgRole, type RbacActor } from "../../../lib/auth/rbac-servic
 import { resolveActorUncached, type Actor } from "../../../lib/auth/actor";
 import { paymentMatchKey } from "../../../lib/payments/payment-request";
 import { coKhoaDoiKhop } from "../../../lib/payments/noi-dung-ck";
+import { noiDungTrongAnhQr } from "../../../lib/payments/noi-dung-trong-anh";
+import {
+  transferContentForOrder,
+  VIETQR_ADDINFO_MAX,
+} from "../../../lib/payments/vietqr";
 import {
   issueQrForRequestCore,
+  loadActiveQrSessions,
   regenerateQrCore,
 } from "../../../app/(admin)/admin/orders/_qr-core";
 
@@ -269,6 +278,120 @@ test.describe("[QR] Xuất QR theo từng phiếu thu", () => {
     const again = await regenerateQrCore(actorCs1, AUDIT, { paymentRequestId: req.id });
     expect(again.ok).toBe(false);
     expect(await db.qrSession.count()).toBe(0);
+  });
+
+  // ── 24/09/2026 · ẢNH VÀ CHỮ PHẢI LÀ MỘT ────────────────────────────────────
+  //
+  // Chủ dự án: *"mã QR khi in ra bị sai nội dung CK, đợi một chút F5 thì ra đúng chỗ Nội
+  // dung CK, nhưng khi KH quét QR thì vẫn là nội dung cũ mặc dù ở web là nội dung đúng."*
+  //
+  // Gốc: `QrSessionView` lấy ẢNH từ `QrSession.qrContent` (ảnh chụp, bất biến) còn CHỮ từ
+  // một tham số được TÍNH LẠI mỗi lượt render — hai nguồn, nên có ngày lệch. Ba ca dưới
+  // khoá cả ba mặt của nó.
+
+  /** Chuỗi người-đọc mức ĐƠN, dựng y như `[id]/page.tsx` dựng trước khi truyền xuống core. */
+  async function phanNguoiDocCuaDon(orderId: string): Promise<string> {
+    const o = (await db.order.findUniqueOrThrow({
+      where: { id: orderId },
+      select: {
+        customerName: true,
+        customerPhone: true,
+        student: { select: { name: true } },
+        items: { orderBy: { createdAt: "asc" }, take: 1, select: { itemName: true } },
+      },
+    }))!;
+    return transferContentForOrder(
+      {
+        studentName: o.student?.name,
+        customerName: o.customerName,
+        customerPhone: o.customerPhone,
+        courseName: o.items[0]?.itemName,
+      },
+      VIETQR_ADDINFO_MAX,
+    );
+  }
+
+  test("[QR-10] chữ in ra ĐỌC TỪ ẢNH — không phải chuỗi dựng lại", async () => {
+    const order = await seedOrder(cs1, 5_000_000);
+    const req = await seedRequest(order, 1, 3_000_000);
+
+    const res = await issueQrForRequestCore(actorCs1, AUDIT, { paymentRequestId: req.id });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+
+    // Ảnh phải là URL VietQR (payOS không cấu hình trong .env.test) — nếu một ngày nó
+    // thành chuỗi EMVCo thì ca này phải ĐỎ chứ không được lặng lẽ bỏ qua, vì khi đó
+    // `noiDungTrongAnhQr` trả null và phép so dưới hoá vô nghĩa.
+    expect(res.session.qrContent).toMatch(/^https:\/\/img\.vietqr\.io\//);
+    const trongAnh = noiDungTrongAnhQr(res.session.qrContent);
+    expect(trongAnh, "đọc được nội dung CK ra khỏi ảnh").not.toBeNull();
+    expect(res.session.transferContent).toBe(trongAnh);
+    // Và nó vẫn mang khoá đối khớp — bản vá KHÔNG được làm mất khoá (nhánh (a) sống nhờ nó).
+    expect(coKhoaDoiKhop(res.session.transferContent, paymentMatchKey(order.code, 1))).toBe(true);
+    expect(res.session.anhDaCu).toBe(false);
+  });
+
+  test("[QR-11] đổi dữ liệu đơn sau khi xuất mã → chữ THEO ẢNH, và màn báo mã đã cũ", async () => {
+    const order = await seedOrder(cs1, 5_000_000);
+    const req = await seedRequest(order, 1, 3_000_000);
+
+    const res = await issueQrForRequestCore(actorCs1, AUDIT, { paymentRequestId: req.id });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const chuoiTrongAnh = res.session.transferContent;
+
+    // Sale sửa TÊN trên đơn SAU khi đã phát mã. Ảnh QR trong DB không đổi theo.
+    //
+    // ⚠️ Sửa SĐT thì ca này KHÔNG đỏ, và đó là một PHÁT HIỆN chứ không phải giới hạn của
+    // ca test: khuôn đời CŨ chỉ có 25 ký tự, khoá `ORD…D1` chiếm 17 + 1 dấu cách, nên phần
+    // người đọc còn đúng 7 ký tự — tức CHỈ mấy chữ đầu của tên. SĐT bị cắt sạch khỏi mọi
+    // mã QR đời cũ kể từ 14/09. Hệ quả phải biết: nhánh đối khớp theo SĐT (nhánh (d) của
+    // `payos-ingest`) KHÔNG dùng được với các mã này — tiền về đúng phiếu hoàn toàn nhờ
+    // khoá. Đây cũng là lý do chuỗi trên màn trông "cụt" với sale.
+    await db.order.update({
+      where: { id: order.id },
+      data: { customerName: "Tran Minh Khoa" },
+    });
+
+    const map = await loadActiveQrSessions(
+      actorCs1,
+      [{ id: req.id, matchKey: req.matchKey }],
+      await phanNguoiDocCuaDon(order.id),
+      { canViewPii: true },
+    );
+    const s = map[req.id]!;
+    expect(s, "phiên ACTIVE vẫn phải xuống trang").toBeTruthy();
+    // Chữ KHÔNG được chạy theo dữ liệu mới — nó phải nói đúng thứ khách sẽ quét ra.
+    expect(s.transferContent).toBe(chuoiTrongAnh);
+    // …nhưng màn PHẢI nói ra là mã đã lỗi thời, kèm chuỗi sẽ phát nếu xuất lại.
+    expect(s.anhDaCu).toBe(true);
+    expect(s.noiDungHomNay).not.toBe(chuoiTrongAnh);
+    // Khoá giữ nguyên (bất biến #3) — chỉ phần người đọc đổi.
+    expect(coKhoaDoiKhop(s.noiDungHomNay, paymentMatchKey(order.code, 1))).toBe(true);
+  });
+
+  test("[QR-12] đường RENDER TRANG và đường BẤM NÚT trả CÙNG một chuỗi", async () => {
+    const order = await seedOrder(cs1, 5_000_000);
+    const req = await seedRequest(order, 1, 3_000_000);
+
+    // (1) Sale bấm "Xuất QR".
+    const bam = await issueQrForRequestCore(actorCs1, AUDIT, { paymentRequestId: req.id });
+    expect(bam.ok).toBe(true);
+    if (!bam.ok) return;
+
+    // (2) F5 — trang tự đọc lại phiên ACTIVE.
+    const map = await loadActiveQrSessions(
+      actorCs1,
+      [{ id: req.id, matchKey: req.matchKey }],
+      await phanNguoiDocCuaDon(order.id),
+      { canViewPii: true },
+    );
+
+    // Trước bản vá: (1) trả chuỗi CÓ khoá còn (2) trả chuỗi KHÔNG khoá ⇒ cùng một phiếu
+    // đổi chữ tuỳ lúc, đúng cái mà chủ dự án tả là "F5 thì ra đúng".
+    expect(map[req.id]!.transferContent).toBe(bam.session.transferContent);
+    expect(map[req.id]!.noiDungHomNay).toBe(bam.session.noiDungHomNay);
+    expect(map[req.id]!.anhDaCu).toBe(false);
   });
 
   test("[QR-05] phiếu của cơ sở khác → không xuất được, báo 'không tìm thấy' (không lộ tồn tại)", async () => {
