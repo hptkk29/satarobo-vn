@@ -324,7 +324,8 @@ export async function luuChinhSachHoaHongAction(input: {
 // ==========================================================================
 //  TAB "Nick Zalo CRM" — giao nick cho người.
 import { isZalocrmEnabled } from "@/lib/flags";
-import { giaoNick, type MaLoiGiaoNick } from "@/lib/integrations/zalocrm/giao-nick";
+import { datGiaoNick, type MaLoiGiaoNick } from "@/lib/integrations/zalocrm/giao-nick";
+import { MUC_QUYEN } from "@/lib/integrations/zalocrm/pham-vi-nick";
 import { writeAudit } from "@/lib/audit/audit-log";
 //  Dời từ `app/(admin)/admin/zalo-crm/nick/_actions.ts` ngày 24/09 khi màn riêng được
 //  gộp vào đây thành một tab.
@@ -337,10 +338,21 @@ import { writeAudit } from "@/lib/audit/audit-log";
 // Luật "ai được nhận nick" nằm trong `giaoNick` (`lib/integrations/zalocrm/giao-nick.ts`),
 // KHÔNG viết lại ở đây — hai bản của cùng một luật là hai bản sẽ lệch nhau.
 
+// 🔴 `mucQuyen` là ENUM ở cổng vào, KHÔNG phải `z.string()`. Giá trị này đi thẳng sang
+// ZaloCRM; nhận chuỗi tự do ở đây là để trình duyệt đặt mức cho chính nó. `MUC_QUYEN` là
+// nguồn duy nhất — thêm mức thứ tư thì cổng này tự nhận, không phải nhớ sửa hai nơi.
 const schema = z.object({
   zcrmAccountId: z.string().min(1).max(128),
-  // Chuỗi rỗng từ ô chọn = GỠ GIAO. Dùng `null` ở tầng dưới cho rõ nghĩa.
-  sataUserId: z.string().max(128).nullable(),
+  // Mảng RỖNG = GỠ HẾT, nick về lại "cả cơ sở đều thấy". Đó là trạng thái hợp lệ.
+  // Trần 50: một cơ sở có vài chục người; số lớn hơn là dấu hiệu thân yêu cầu bị dựng.
+  giao: z
+    .array(
+      z.object({
+        sataUserId: z.string().min(1).max(128),
+        mucQuyen: z.enum(MUC_QUYEN),
+      }),
+    )
+    .max(50),
 });
 
 const THONG_DIEP: Record<MaLoiGiaoNick, string> = {
@@ -348,6 +360,7 @@ const THONG_DIEP: Record<MaLoiGiaoNick, string> = {
   NICK_NGOAI_TAM_NHIN: "Nick không thuộc cơ sở bạn quản lý.",
   NICK_CHUA_CO_CO_SO: "Nick chưa gắn cơ sở (hoặc cơ sở chưa đặt mã) nên chưa giao được.",
   NGUOI_NGOAI_CO_SO: "Người này không thuộc cơ sở của nick, hoặc không giữ vai được dùng nick.",
+  TRUNG_NGUOI: "Một người được chọn hai lần — mỗi người chỉ một dòng.",
 };
 
 export async function giaoNickAction(
@@ -363,19 +376,21 @@ export async function giaoNickAction(
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu sai" };
 
   const actor = await resolveActor(session.user.id);
-  const kq = await giaoNick({
+  const kq = await datGiaoNick({
     actor: {
       isSuperAdmin: actor.isSuperAdmin,
       isHoLevel: actor.isHoLevel,
       visibleCenterIds: actor.visibleCenterIds,
     },
     zcrmAccountId: parsed.data.zcrmAccountId,
-    sataUserId: parsed.data.sataUserId || null,
+    giao: parsed.data.giao,
   });
   if (!kq.ok) return { ok: false, error: THONG_DIEP[kq.ma] };
 
-  // Đây là thay đổi PHÂN QUYỀN trên dữ liệu khách hàng thật — phải có vết. Ghi cả giá trị
-  // mới lẫn nick, để đọc `AuditLog` là dựng lại được ai giao nick nào cho ai, lúc nào.
+  // Đây là thay đổi PHÂN QUYỀN trên dữ liệu khách hàng thật — phải có vết. Ghi CẢ danh
+  // sách lẫn mức, để đọc `AuditLog` là dựng lại được ai giao nick nào cho ai, mức nào,
+  // lúc nào. Ghi mỗi số lượng thì vết ấy trả lời được "có đổi không" mà không trả lời
+  // được "đổi thành gì" — tức vô dụng đúng lúc cần nó.
   await writeAudit({
     actor: {
       id: session.user.id,
@@ -385,10 +400,13 @@ export async function giaoNickAction(
     entityType: "ZaloCrmNick",
     entityId: parsed.data.zcrmAccountId,
     action: "GIAO_NICK",
-    newValues: { sataUserId: kq.daGiaoCho },
-    changedFields: ["sataUserId"],
+    newValues: { giao: parsed.data.giao },
+    changedFields: ["giao"],
   });
 
-  revalidatePath("/admin/zalo-crm/nick");
+  // Tab nằm trong màn Cấu hình vận hành từ 24/09. Đường cũ `/admin/zalo-crm/nick` KHÔNG
+  // còn tồn tại, nên revalidate nó là không làm gì cả — bảng giữ dữ liệu cũ cho tới khi
+  // người dùng tự tải lại trang, và triệu chứng đọc như "bấm lưu không ăn".
+  revalidatePath("/admin/cau-hinh-van-hanh");
   return { ok: true };
 }

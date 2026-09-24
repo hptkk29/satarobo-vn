@@ -18,14 +18,21 @@ type DongVai = { userId: string; role?: { code: string } };
 const state = {
   anhXa: {} as Record<string, string>,
   coKhoa: new Set<string>(),
-  nicks: {} as Record<string, { zcrmAccountId: string; sataUserId?: string | null }[]>,
+  nicks: {} as Record<
+    string,
+    { zcrmAccountId: string; giao?: { sataUserId: string; mucQuyen: string }[] }[]
+  >,
   vaiTheoDonVi: {} as Record<string, DongVai[]>,
   donViCo: new Set<string>(),
   /** Tài khoản đã nghỉ/khoá — vẫn còn dòng `UserOrgRole` nhưng phải bị loại. */
   daNghi: new Set<string>(),
   whereVai: [] as unknown[],
   whereNguoi: [] as unknown[],
-  goi: [] as Array<{ orgCode: string; nick: string; externalIds: string[] }>,
+  goi: [] as Array<{
+    orgCode: string;
+    nick: string;
+    quyen: { sataUserId: string; mucQuyen: string }[];
+  }>,
   traLoi: { ok: true, data: { granted: 0, revoked: 0, unknown: 0 } } as Record<string, unknown>,
   nhatKy: [] as Array<{ orgCode: string; status: string }>,
 };
@@ -38,14 +45,23 @@ vi.mock("@/lib/db", () => ({
       // Đó là lỗi CÂM tệ nhất của đường này: mọi nick hoá "chưa giao" và cả cơ sở lại
       // thấy hết, không lỗi nào báo. Mock nào cũng phải cho cổng ăn đúng thứ Prisma cho
       // nó ăn, nếu không nó chỉ kiểm chính cái mock.
+      //
+      // `giao` là QUAN HỆ nên `select` của nó là một object lồng, không phải `true`.
+      // Prisma trả `[]` khi quan hệ được chọn mà không có dòng nào — mô phỏng đúng thế,
+      // để "quên chọn `giao`" vẫn ra `undefined` và vẫn nổ (đó là phép cấy ta cần giữ).
       findMany: vi.fn(
-        async (args: { where?: { orgCode?: string }; select?: Record<string, boolean> }) => {
+        async (args: { where?: { orgCode?: string }; select?: Record<string, unknown> }) => {
           const dong = state.nicks[args?.where?.orgCode ?? ""] ?? [];
           const sel = args?.select;
           if (!sel) return dong;
           const cot = Object.keys(sel).filter((k) => sel[k]);
           return dong.map((d) =>
-            Object.fromEntries(cot.map((k) => [k, (d as Record<string, unknown>)[k]])),
+            Object.fromEntries(
+              cot.map((k) => [
+                k,
+                k === "giao" ? (d.giao ?? []) : (d as unknown as Record<string, unknown>)[k],
+              ]),
+            ),
           );
         },
       ),
@@ -83,10 +99,16 @@ vi.mock("@/lib/settings/service", () => ({
 
 vi.mock("@/lib/integrations/zalocrm/client", () => ({
   docKhoaApi: vi.fn((orgCode: string) => (state.coKhoa.has(orgCode) ? "k" : null)),
-  datQuyenNickZalocrm: vi.fn(async (orgCode: string, nick: string, ids: readonly string[]) => {
-    state.goi.push({ orgCode, nick, externalIds: [...ids] });
-    return state.traLoi;
-  }),
+  datQuyenNickZalocrm: vi.fn(
+    async (
+      orgCode: string,
+      nick: string,
+      quyen: readonly { sataUserId: string; mucQuyen: string }[],
+    ) => {
+      state.goi.push({ orgCode, nick, quyen: quyen.map((q) => ({ ...q })) });
+      return state.traLoi;
+    },
+  ),
 }));
 
 vi.mock("@/lib/integrations/zalocrm/log", () => ({
@@ -97,6 +119,15 @@ vi.mock("@/lib/integrations/zalocrm/log", () => ({
 }));
 
 import { capQuyenNickZalocrm } from "@/lib/integrations/zalocrm/cap-quyen-nick";
+
+/** `User.id` của một lượt gửi, đã sắp — phần lớn ca chỉ quan tâm AI, không quan tâm mức. */
+function ids(g: { quyen: { sataUserId: string }[] } | undefined): string[] {
+  return [...(g?.quyen ?? []).map((q) => q.sataUserId)].sort();
+}
+/** Mức của một người trong một lượt gửi. `undefined` = không có trong danh sách. */
+function mucCua(g: { quyen: { sataUserId: string; mucQuyen: string }[] } | undefined, id: string) {
+  return g?.quyen.find((q) => q.sataUserId === id)?.mucQuyen;
+}
 
 beforeEach(() => {
   state.anhXa = { CS1: "cs1" };
@@ -126,7 +157,11 @@ describe("cấp quyền", () => {
     return capQuyenNickZalocrm().then((kq) => {
       expect(state.goi).toHaveLength(1);
       expect(state.goi[0]).toMatchObject({ orgCode: "cs1", nick: "acc-1" });
-      expect([...state.goi[0]!.externalIds].sort()).toEqual(["u-qlcs", "u-sale-1", "u-sale-2"]);
+      expect(ids(state.goi[0])).toEqual(["u-qlcs", "u-sale-1", "u-sale-2"]);
+      // Chưa giao ai ⇒ mức mặc định `chat` cho MỌI người, KỂ CẢ quản lý cơ sở.
+      // (Nhánh "quản lý `admin` tự động" đã bị chủ dự án gỡ — xem `[PVN-02]`.)
+      expect(mucCua(state.goi[0], "u-sale-1")).toBe("chat");
+      expect(mucCua(state.goi[0], "u-qlcs")).toBe("chat");
       expect(kq.tong.capMoi).toBe(3);
     });
   });
@@ -135,69 +170,154 @@ describe("cấp quyền", () => {
     state.nicks.cs1 = [{ zcrmAccountId: "acc-1" }, { zcrmAccountId: "acc-2" }];
     await capQuyenNickZalocrm();
     expect(state.goi.map((g) => g.nick)).toEqual(["acc-1", "acc-2"]);
-    expect(state.goi[0]!.externalIds).toEqual(state.goi[1]!.externalIds);
+    expect(state.goi[0]!.quyen).toEqual(state.goi[1]!.quyen);
   });
 
-  it("[ZC-CQ-11] nick ĐÃ GIAO ⇒ chỉ người được giao + quản lý cơ sở", async () => {
+  it("[ZC-CQ-11] nick ĐÃ GIAO ⇒ CHỈ người được giao, kể cả quản lý cũng phải có tên", async () => {
     // Hai nick: một đã giao cho `u-sale-2`, một chưa giao. MỘT lượt chạy phải sinh HAI
     // danh sách KHÁC NHAU — trước 24/09 vòng lặp gửi cùng một mảng cho mọi nick.
     state.nicks.cs1 = [
-      { zcrmAccountId: "acc-giao", sataUserId: "u-sale-2" },
-      { zcrmAccountId: "acc-chua-giao", sataUserId: null },
+      { zcrmAccountId: "acc-giao", giao: [{ sataUserId: "u-sale-2", mucQuyen: "chat" }] },
+      { zcrmAccountId: "acc-chua-giao", giao: [] },
     ];
     await capQuyenNickZalocrm();
 
     const giao = state.goi.find((g) => g.nick === "acc-giao")!;
     const chuaGiao = state.goi.find((g) => g.nick === "acc-chua-giao")!;
 
-    expect([...giao.externalIds].sort()).toEqual(["u-qlcs", "u-sale-2"]);
+    expect(ids(giao)).toEqual(["u-sale-2"]);
     // ĐỐI CHỨNG ÂM — vế mà tính năng này sinh ra để làm.
-    expect(giao.externalIds, "người KHÔNG được giao phải biến mất").not.toContain("u-sale-1");
+    expect(ids(giao), "người KHÔNG được giao phải biến mất").not.toContain("u-sale-1");
+    // 🔴 Và quản lý cơ sở cũng vậy (đảo 24/09): muốn họ thấy nick đã giao thì phải
+    // thêm họ vào danh sách. Migration `20260924160000` làm việc đó một lần cho dữ
+    // liệu đang có, để lượt triển khai không âm thầm cắt quyền của ai.
+    expect(ids(giao), "nhánh 'quản lý admin tự động' đã quay lại").not.toContain("u-qlcs");
     // ĐỐI CHỨNG DƯƠNG — nick chưa giao KHÔNG được siết theo.
-    expect([...chuaGiao.externalIds].sort()).toEqual(["u-qlcs", "u-sale-1", "u-sale-2"]);
+    expect(ids(chuaGiao)).toEqual(["u-qlcs", "u-sale-1", "u-sale-2"]);
+  });
+
+  it("[ZC-CQ-11e] giao TƯỜNG MINH cho quản lý ⇒ họ có mặt, đúng mức đã giao", async () => {
+    // ĐỐI CHỨNG DƯƠNG của ca trên. Thiếu nó thì một bản "gỡ hẳn quản lý khỏi mọi nick"
+    // cũng xanh, và không ai phát hiện tới lúc sếp hỏi vì sao không thấy chat.
+    state.nicks.cs1 = [
+      {
+        zcrmAccountId: "acc-giao",
+        giao: [
+          { sataUserId: "u-sale-2", mucQuyen: "chat" },
+          { sataUserId: "u-qlcs", mucQuyen: "admin" },
+        ],
+      },
+    ];
+    await capQuyenNickZalocrm();
+    expect(ids(state.goi[0])).toEqual(["u-qlcs", "u-sale-2"]);
+    expect(mucCua(state.goi[0], "u-qlcs")).toBe("admin");
+  });
+
+  it("[ZC-CQ-11f] HẠ mức quản lý xuống `read` ⇒ đúng `read`, không bị nâng lại", async () => {
+    // Nhánh cũ dùng `rongHon(admin, read)` nên mọi mức của quản lý đều bị kéo về
+    // `admin` — tức ô chọn trên màn là một lời hứa suông.
+    state.nicks.cs1 = [
+      { zcrmAccountId: "acc-1", giao: [{ sataUserId: "u-qlcs", mucQuyen: "read" }] },
+    ];
+    await capQuyenNickZalocrm();
+    expect(mucCua(state.goi[0], "u-qlcs")).toBe("read");
+  });
+
+  it("[ZC-CQ-11c] MỖI NGƯỜI MỘT MỨC — mức của dòng giao đi tới nơi", async () => {
+    // Đây là cả lý do đợt 24/09 tồn tại. Trước đó bên kia đóng cứng mọi người ở `chat`,
+    // nên "giao cho Lộc quyền chỉ xem" là một câu nói dối trên màn.
+    state.nicks.cs1 = [
+      {
+        zcrmAccountId: "acc-1",
+        giao: [
+          { sataUserId: "u-sale-1", mucQuyen: "read" },
+          { sataUserId: "u-sale-2", mucQuyen: "admin" },
+        ],
+      },
+    ];
+    await capQuyenNickZalocrm();
+    expect(mucCua(state.goi[0], "u-sale-1")).toBe("read");
+    expect(mucCua(state.goi[0], "u-sale-2")).toBe("admin");
+    // Quản lý cơ sở KHÔNG có dòng giao ⇒ KHÔNG có mặt (đảo 24/09).
+    expect(mucCua(state.goi[0], "u-qlcs")).toBeUndefined();
+  });
+
+  it("[ZC-CQ-11d] mức LẠ trong DB ⇒ rơi về `read`, KHÔNG đi thẳng sang ZaloCRM", async () => {
+    // Cột là `String` (ràng bằng CHECK), nên một lượt ghi tay hay một bản migration hỏng
+    // vẫn nhét được chuỗi lạ. Nó phải làm người ta thấy ÍT đi, không phải nhiều hơn.
+    state.nicks.cs1 = [
+      { zcrmAccountId: "acc-1", giao: [{ sataUserId: "u-sale-1", mucQuyen: "owner" }] },
+    ];
+    await capQuyenNickZalocrm();
+    expect(mucCua(state.goi[0], "u-sale-1")).toBe("read");
   });
 
   it("[ZC-CQ-11b] người được giao đã NGHỈ ⇒ rơi về cả cơ sở, không về rỗng", async () => {
     // Rỗng = hộp thư khách không ai đọc được, và không một dòng lỗi nào báo.
-    state.nicks.cs1 = [{ zcrmAccountId: "acc-giao", sataUserId: "u-sale-2" }];
+    state.nicks.cs1 = [
+      { zcrmAccountId: "acc-giao", giao: [{ sataUserId: "u-sale-2", mucQuyen: "chat" }] },
+    ];
     state.daNghi = new Set(["u-sale-2"]);
     await capQuyenNickZalocrm();
-    expect([...state.goi[0]!.externalIds].sort()).toEqual(["u-qlcs", "u-sale-1"]);
+    expect(ids(state.goi[0])).toEqual(["u-qlcs", "u-sale-1"]);
   });
 
-  it("[ZC-CQ-03] chỉ lấy vai TRONG chính sách, và đúng đơn vị của cơ sở", async () => {
+  it("[ZC-CQ-03] lấy MỌI nhân sự của đúng đơn vị, trừ vai quan hệ", async () => {
+    // 🔴 24/09/2026 — câu tra KHÔNG còn `code: { in: VAI_DUOC_CAP_NICK }`. Tập này nay
+    // là "ai giao tay được" (mọi nhân sự của cơ sở); tập "ai dùng được MẶC ĐỊNH" tính
+    // ở tầng trên theo `role.code`. Lọc lại ở đây là thu hẹp tập giao tay về như cũ.
     await capQuyenNickZalocrm();
     const w = state.whereVai[0] as {
       status?: string;
-      role?: { code?: { in?: string[] } };
+      role?: { code?: { in?: string[]; notIn?: string[] } };
       orgUnitId?: string;
     };
     expect(w.status).toBe("ACTIVE");
-    expect([...(w.role?.code?.in ?? [])].sort()).toEqual([
-      "CENTER_MANAGER",
-      "CENTER_SALES_CSM",
-      "SALES_CSM",
-    ]);
+    expect(w.role?.code?.in, "lọc theo danh sách vai = thu hẹp lại tập giao tay").toBeUndefined();
+    // Phụ huynh là KHÁCH HÀNG. Hôm nay họ không có dòng `UserOrgRole` nào nên câu tra
+    // không thể trả về họ — điều kiện này là hàng rào THỨ HAI, và nó phải còn đó.
+    expect([...(w.role?.code?.notIn ?? [])]).toEqual(["PARENT"]);
     expect(w.orgUnitId).toBe("ou-CS1");
     // Nghỉ việc / khoá tài khoản là ca CHÍNH của vế gỡ — lọc ở bước tra `User`, vì dòng
     // `UserOrgRole` của người nghỉ thường VẪN CÒN.
     expect(state.whereNguoi[0]).toMatchObject({ isActive: true, deletedAt: null });
   });
 
+  it("[ZC-CQ-03d] vai NGOÀI chính sách: giao tay được, nhưng KHÔNG mặc định", async () => {
+    // Cả điểm của đợt 24/09, đo ở tầng DB-mock. Hai vế phải đi cùng nhau.
+    state.vaiTheoDonVi.CS1 = [
+      { userId: "u-sale-1", role: { code: "CENTER_SALES_CSM" } },
+      { userId: "u-gv", role: { code: "TEACHER" } },
+    ];
+
+    // ① nick CHƯA giao ⇒ giáo viên KHÔNG có mặt (không thuộc tập mặc định).
+    state.nicks.cs1 = [{ zcrmAccountId: "acc-1", giao: [] }];
+    await capQuyenNickZalocrm();
+    expect(ids(state.goi[0])).toEqual(["u-sale-1"]);
+    expect(ids(state.goi[0]), "giáo viên đọc được nick chưa giao").not.toContain("u-gv");
+
+    // ② nick GIAO TAY cho chính giáo viên đó ⇒ dòng giao CÓ hiệu lực.
+    state.goi = [];
+    state.nicks.cs1 = [
+      { zcrmAccountId: "acc-1", giao: [{ sataUserId: "u-gv", mucQuyen: "read" }] },
+    ];
+    await capQuyenNickZalocrm();
+    expect(ids(state.goi[0])).toEqual(["u-gv"]);
+    expect(mucCua(state.goi[0], "u-gv")).toBe("read");
+  });
+
   it("[ZC-CQ-03b] tài khoản đã khoá/nghỉ việc bị LOẠI dù vẫn còn dòng phân vai", async () => {
     state.daNghi = new Set(["u-sale-2"]);
     const kq = await capQuyenNickZalocrm();
-    expect(state.goi[0]!.externalIds, "người đã nghỉ vẫn đọc được chat khách").not.toContain(
-      "u-sale-2",
-    );
-    expect([...state.goi[0]!.externalIds].sort()).toEqual(["u-qlcs", "u-sale-1"]);
+    expect(ids(state.goi[0]), "người đã nghỉ vẫn đọc được chat khách").not.toContain("u-sale-2");
+    expect(ids(state.goi[0])).toEqual(["u-qlcs", "u-sale-1"]);
     expect(kq.theoOrg[0]?.soNguoi).toBe(2);
   });
 
   it("[ZC-CQ-03c] cơ sở chưa có đơn vị trong cây ⇒ danh sách RỖNG, không đoán", async () => {
     state.donViCo = new Set();
     await capQuyenNickZalocrm();
-    expect(state.goi[0]!.externalIds).toEqual([]);
+    expect(state.goi[0]!.quyen).toEqual([]);
   });
 });
 
@@ -206,17 +326,20 @@ describe("GỠ quyền — vế không có triệu chứng, chỉ test bắt đ�
     // Lượt 1: ba người. Lượt 2: `u-sale-2` đã chuyển cơ sở / nghỉ việc ⇒ truy vấn không
     // trả họ nữa ⇒ danh sách gửi sang fork thiếu họ ⇒ fork gỡ bản ghi quyền.
     await capQuyenNickZalocrm();
-    expect(state.goi[0]!.externalIds).toContain("u-sale-2");
+    expect(ids(state.goi[0])).toContain("u-sale-2");
 
     state.goi = [];
-    state.vaiTheoDonVi.CS1 = [{ userId: "u-sale-1" }, { userId: "u-qlcs" }];
+    state.vaiTheoDonVi.CS1 = [
+      { userId: "u-sale-1", role: { code: "CENTER_SALES_CSM" } },
+      { userId: "u-qlcs", role: { code: "CENTER_MANAGER" } },
+    ];
     state.traLoi = { ok: true, data: { granted: 2, revoked: 1, unknown: 0 } };
     const kq = await capQuyenNickZalocrm();
 
-    expect(state.goi[0]!.externalIds, "người đã rời phải BIẾN MẤT khỏi danh sách").not.toContain(
+    expect(ids(state.goi[0]), "người đã rời phải BIẾN MẤT khỏi danh sách").not.toContain(
       "u-sale-2",
     );
-    expect([...state.goi[0]!.externalIds].sort()).toEqual(["u-qlcs", "u-sale-1"]);
+    expect(ids(state.goi[0])).toEqual(["u-qlcs", "u-sale-1"]);
     expect(kq.tong.daGo).toBe(1);
   });
 
@@ -227,7 +350,7 @@ describe("GỠ quyền — vế không có triệu chứng, chỉ test bắt đ�
     state.traLoi = { ok: true, data: { granted: 0, revoked: 3, unknown: 0 } };
     const kq = await capQuyenNickZalocrm();
     expect(state.goi).toHaveLength(1);
-    expect(state.goi[0]!.externalIds).toEqual([]);
+    expect(state.goi[0]!.quyen).toEqual([]);
     expect(kq.tong.daGo).toBe(3);
   });
 
@@ -277,12 +400,15 @@ describe("hỏng hóc", () => {
     state.anhXa = { CS1: "cs1", CS2: "cs2" };
     state.coKhoa = new Set(["cs1", "cs2"]);
     state.nicks = { cs1: [{ zcrmAccountId: "acc-1" }], cs2: [{ zcrmAccountId: "acc-2" }] };
-    state.vaiTheoDonVi = { CS1: [{ userId: "u-1" }], CS2: [{ userId: "u-2" }] };
+    state.vaiTheoDonVi = {
+      CS1: [{ userId: "u-1", role: { code: "CENTER_SALES_CSM" } }],
+      CS2: [{ userId: "u-2", role: { code: "CENTER_SALES_CSM" } }],
+    };
     await capQuyenNickZalocrm();
     expect(state.goi.map((g) => g.orgCode)).toEqual(["cs1", "cs2"]);
     // Mỗi cơ sở gửi ĐÚNG người của mình — trộn danh sách là mở chéo cơ sở.
-    expect(state.goi[0]!.externalIds).toEqual(["u-1"]);
-    expect(state.goi[1]!.externalIds).toEqual(["u-2"]);
+    expect(ids(state.goi[0])).toEqual(["u-1"]);
+    expect(ids(state.goi[1])).toEqual(["u-2"]);
   });
 
   it("[ZC-CQ-10] hai cơ sở khai TRÙNG orgCode ⇒ chỉ chạy một lượt", async () => {

@@ -117,10 +117,23 @@ function gaFetch(xuLy: (url: string, init: RequestInit) => Promise<Response>) {
 }
 
 /** Thân `PUT …/access` của một lượt — nơi tập người được cấp quyền thật sự đi qua. */
-function thanAccess(): { externalIds?: unknown }[] {
+function thanAccess(): { access?: unknown }[] {
   return luot
     .filter((l) => l.method === "PUT" && l.url.includes("/access"))
-    .map((l) => l.than as { externalIds?: unknown });
+    .map((l) => l.than as { access?: unknown });
+}
+
+/**
+ * `externalId` trong một thân yêu cầu.
+ *
+ * 24/09/2026 thân đổi từ `{ externalIds: string[] }` sang
+ * `{ access: [{ externalId, permission }] }` (mỗi người một mức). Bóc ở MỘT chỗ để đổi
+ * dạng lần sau chỉ sửa một hàm — và để ca dưới còn đọc được.
+ */
+function idTrongThan(t: { access?: unknown }): string[] {
+  const a = t.access;
+  if (!Array.isArray(a)) return [];
+  return a.map((x) => (x as { externalId?: unknown }).externalId as string);
 }
 
 // ── Dựng dữ liệu ─────────────────────────────────────────────────────────────────────
@@ -336,17 +349,30 @@ describe.skipIf(!CO_BANG)("[ZC-CQ] cấp quyền khi mở màn ZaloCRM", () => {
     // 24/09/2026: `nguoiDuocDungNick` nay trả `{ tatCa, quanLy }`. Ca này đo nhánh
     // nick CHƯA GIAO (fixture không đặt `sataUserId`), nên đúng danh sách `tatCa` —
     // nhánh nick ĐÃ GIAO có lưới riêng `[PVN-02]` + `[ZC-CQ-11]`.
-    const chinhSach = (await nguoiDuocDungNick(MA_CS)).tatCa;
+    // 24/09 (lượt sau): `nguoiDuocDungNick` trả BA tập. Nick này CHƯA giao ai, nên tập
+    // đi sang fork là `macDinh` (vai được dùng nick mặc định), KHÔNG phải `tatCa` (mọi
+    // nhân sự của cơ sở — tập GIAO TAY, rộng hơn). Lấy nhầm `tatCa` ở đây là ca này
+    // XANH trong khi hệ thống vừa cấp quyền cho cả giáo viên — xem [ZC-CQ-02d].
+    const chinhSach = (await nguoiDuocDungNick(MA_CS)).macDinh;
     for (const [i, t] of than.entries()) {
-      const gui = t.externalIds;
-      expect(Array.isArray(gui), `lượt ${i}: thân phải có mảng externalIds`).toBe(true);
-      const g = gui as string[];
+      expect(Array.isArray(t.access), `lượt ${i}: thân phải có mảng access`).toBe(true);
+      const g = idTrongThan(t);
       expect(
         g.length,
         `lượt ${i}: gửi ${g.length} người, chính sách tính ${chinhSach.length} — ` +
           "có một đường thứ hai đang lọc/nối thêm",
       ).toBe(chinhSach.length);
       expect([...g].sort()).toEqual([...chinhSach].sort());
+
+      // Mức phải là MỘT TRONG BA giá trị ZaloCRM hiểu. Gửi chuỗi lạ thì bên kia rơi về
+      // `read` và người ta MẤT quyền gửi tin — hỏng câm, triệu chứng là "gõ xong không
+      // gửi được" chứ không phải một dòng lỗi.
+      for (const x of t.access as { externalId: string; permission: unknown }[]) {
+        expect(
+          ["read", "chat", "admin"],
+          `lượt ${i}: mức lạ cho ${x.externalId}: ${String(x.permission)}`,
+        ).toContain(x.permission);
+      }
     }
 
     // ── VẾ 2: NEO CHÍNH SÁCH. Thiếu vế này thì vế 1 là tautology: làm hỏng
@@ -357,6 +383,29 @@ describe.skipIf(!CO_BANG)("[ZC-CQ] cấp quyền khi mở màn ZaloCRM", () => {
     for (const n of khongDuDieuKien) {
       expect(chinhSach, `"${n.nhan}" KHÔNG được có quyền dùng nick`).not.toContain(n.id);
     }
+  });
+
+  it("[ZC-CQ-02d] GIAO TAY ĐƯỢC ≠ MẶC ĐỊNH DÙNG ĐƯỢC — giáo viên nằm đúng một bên", () => {
+    // 🔴 Cả điểm của lượt 24/09 (sau), đo trên Postgres thật.
+    // Chủ dự án chốt: thêm tay được MỌI nhân sự của cơ sở, nhưng quyền MẶC ĐỊNH trên
+    // nick chưa giao thì giữ nguyên tập hẹp. Hai tập lẫn vào nhau là một lượt nới quyền
+    // im lặng — mọi giáo viên, kế toán của cơ sở đọc được mọi nick chưa giao.
+    const gvien = khongDuDieuKien.find((n) => n.nhan === "giao-vien")!;
+    return import("@/lib/integrations/zalocrm/cap-quyen-nick").then(
+      async ({ nguoiDuocDungNick }) => {
+        const { tatCa, macDinh } = await nguoiDuocDungNick(MA_CS);
+        expect(tatCa, "giáo viên của cơ sở phải THÊM TAY được").toContain(gvien.id);
+        expect(macDinh, "nhưng KHÔNG tự có quyền trên nick chưa giao").not.toContain(gvien.id);
+
+        // ĐỐI CHỨNG DƯƠNG — ba lý do loại kia vẫn loại khỏi CẢ HAI tập, không phải chỉ
+        // rơi khỏi tập hẹp. Thiếu vế này thì "nới tatCa ra mọi người" cũng xanh.
+        for (const nhan of ["nghi-viec", "het-nhiem-ky", "co-so-khac"]) {
+          const n = khongDuDieuKien.find((x) => x.nhan === nhan)!;
+          expect(tatCa, `"${nhan}" lọt vào tập giao tay`).not.toContain(n.id);
+          expect(macDinh, `"${nhan}" lọt vào tập mặc định`).not.toContain(n.id);
+        }
+      },
+    );
   });
 
   it("[ZC-CQ-02b] gọi ĐÚNG endpoint thay-cả-tập, theo đúng nick của org", async () => {
@@ -373,6 +422,33 @@ describe.skipIf(!CO_BANG)("[ZC-CQ] cấp quyền khi mở màn ZaloCRM", () => {
       `PUT /api/public/zalo-accounts/${P}acc-1/access`,
       `PUT /api/public/zalo-accounts/${P}acc-2/access`,
     ]);
+  });
+
+  it("[ZC-CQ-02c] thân mang CẢ HAI dạng, và hai dạng cùng một tập người", async () => {
+    // 🔴 VÌ SAO: ZaloCRM chạy trong container riêng, Sata trên Vercel — hai bên KHÔNG
+    // lên cùng lúc. Bản ZaloCRM cũ chỉ đọc `externalIds`, gặp thân chỉ có `access[]`
+    // thì trả 400 và KHÔNG cấp/gỡ cho AI, 288 lượt/ngày, cho tới khi ai đó nhớ khởi
+    // động lại container. Gửi cả hai là mua lấy quyền triển khai theo thứ tự bất kỳ.
+    //
+    // Vế thứ hai mới là vế cắn: hai mảng LỆCH NHAU nghĩa là hai bản ZaloCRM cấp cho hai
+    // tập người khác nhau — và không ai biết bản nào đang chạy ở đầu kia.
+    const { capQuyenKhiMoMan } = await import("@/lib/integrations/zalocrm/cap-quyen-nick");
+    gaFetch(async () => traOk({ granted: 1, revoked: 0, unknown: 0 }));
+
+    await capQuyenKhiMoMan({ userId: nguoiMoi(), centerCode: MA_CS, orgCode: ORG });
+
+    const than = thanAccess() as { access?: unknown; externalIds?: unknown }[];
+    expect(than.length).toBeGreaterThan(0);
+    for (const [i, t] of than.entries()) {
+      expect(Array.isArray(t.access), `lượt ${i}: thiếu access[] (bản ZaloCRM mới)`).toBe(true);
+      expect(
+        Array.isArray(t.externalIds),
+        `lượt ${i}: thiếu externalIds[] — bản ZaloCRM cũ sẽ trả 400`,
+      ).toBe(true);
+      expect([...idTrongThan(t)].sort(), `lượt ${i}: hai dạng lệch tập người`).toEqual(
+        [...(t.externalIds as string[])].sort(),
+      );
+    }
   });
 
   // ══════════════════════════════════════════════════════════════════════════════════
