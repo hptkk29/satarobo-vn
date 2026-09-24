@@ -232,6 +232,7 @@ export function OrderDetailClient({
   paymentRequests,
   qrSessions,
   duocPhatPhieu,
+  duocDongPhieu,
   batThuTheoCon,
   phieuGop,
   paymentMethods,
@@ -264,6 +265,8 @@ export function OrderDetailClient({
   batThuTheoCon: boolean;
   /** `payments:record` — quyền mà `taoPhieuGopAction` thật sự hỏi. KHÔNG phải `canManage`. */
   duocPhatPhieu: boolean;
+  /** `payments:manage` — quyền ĐÓNG phiếu đã nhận tiền. */
+  duocDongPhieu: boolean;
   /** Phiếu gộp ĐANG MỞ của đơn (mã 5 ký tự), hoặc `null`. */
   phieuGop: PhieuGopView | null;
   paymentMethods: PaymentMethodOption[];
@@ -752,6 +755,7 @@ export function OrderDetailClient({
               initialSessions={qrSessions}
               canManage={canManage}
               duocPhatPhieu={duocPhatPhieu}
+              duocDongPhieu={duocDongPhieu}
               // ── 24/09/2026 · QR THEO ĐỢT DÙNG MÃ 5 KÝ TỰ ───────────────────
               // Hai prop này quyết định mỗi dòng vẽ gì (`trangThaiQrDot`). Thiếu
               // `batThuTheoCon` thì `phieuGop === null` không phân biệt được "cờ tắt"
