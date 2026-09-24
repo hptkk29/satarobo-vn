@@ -79,7 +79,7 @@ export function useKeHoachDot({
   const [coCoc, setCoCoc] = useState(false);
   const [tienCoc, setTienCoc] = useState(0);
 
-  // Số ĐỢT HỌC PHÍ — KHÔNG đếm phiếu cọc. Chip "2 học phần" phải sáng khi khách chia
+  // Số ĐỢT HỌC PHÍ — KHÔNG đếm phiếu cọc. Chip "2 đợt" phải sáng khi khách chia
   // 2 đợt, dù bảng đang có 3 dòng vì có thêm phiếu cọc đứng đầu.
   const soDotHocPhi = dots.filter((d) => !d.laCoc).length;
   const tongCacDot = dots.reduce((s, d) => s + d.amount, 0);
@@ -325,7 +325,7 @@ export function KeHoachDotEditor({
                   : "border-border bg-background text-foreground hover:bg-muted"
               }`}
             >
-              {n === 1 ? "1 lần" : `${n} học phần`}
+              {n === 1 ? "1 lần" : `${n} đợt`}
             </button>
           ))}
           <label className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">

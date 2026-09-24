@@ -126,6 +126,13 @@ type LoadedRequest = {
     customerName: string;
     customerPhone: string | null;
     courseName: string | null;
+    /**
+     * Hai cột DUYỆT THEO NGƯỠNG (sống lại 23/09/2026 với luật mới: vượt trần cấu hình mới
+     * phải duyệt, KHÁC luật cũ "mọi đơn có giảm giá"). `PENDING_APPROVAL` ⇒ chưa được
+     * phát mã QR.
+     */
+    installmentApprovalStatus: string | null;
+    discountApprovalStatus: string | null;
   };
 };
 
@@ -152,6 +159,8 @@ async function loadScopedRequest(
           // 31/08/2026 — tài khoản nhận tiền nay gắn vào PHƯƠNG THỨC của đơn, không còn
           // theo cơ sở. Thiếu cột này là mã QR rơi về đường lùi và trỏ sai tài khoản.
           paymentMethodId: true,
+          installmentApprovalStatus: true,
+          discountApprovalStatus: true,
           customerName: true,
           customerPhone: true,
           student: { select: { name: true } },
@@ -181,6 +190,8 @@ async function loadScopedRequest(
       customerName: row.order.customerName,
       customerPhone: row.order.customerPhone,
       courseName: row.order.items[0]?.itemName ?? null,
+      installmentApprovalStatus: row.order.installmentApprovalStatus,
+      discountApprovalStatus: row.order.discountApprovalStatus,
     },
   };
 }
@@ -405,6 +416,24 @@ async function buildQrPayload(
 }
 
 function guardIssuable(req: LoadedRequest): string | null {
+  // ⚠️ CỔNG DUYỆT THEO NGƯỠNG [23/09/2026] — chủ dự án chốt 22/09: vượt 4 đợt hoặc vượt
+  // 1 ưu đãi/dòng thì "cần quản lý duyệt thì mới được xuất mã QR".
+  //
+  // Đặt Ở ĐÂY chứ không ở đường NHẬN TIỀN, và đó là điểm mấu chốt: cổng duyệt CŨ nằm ở
+  // `decideSepayAction` và nó LÀM MẤT TIỀN (webhook trả MANUAL ⇒ ba sổ trống). Chặn ở khâu
+  // PHÁT RA thì an toàn — chưa có tiền để mất. Tiền khách đã chuyển thì LUÔN phải vào sổ,
+  // bất kể đơn đã duyệt hay chưa.
+  //
+  // ⚠️ KHÔNG đụng `isInstallmentPlanActive`: hàm đó trả TRUE cho `PENDING_APPROVAL` và đó
+  // là bản vá 13/09 sửa bug "khách phải đóng 2.500.000đ mà QR hiện 5.000.000đ". Nó còn
+  // được `installments.ts` dùng để quyết định có ghi Ledger-A hay không — sửa một bên là
+  // "nhận tiền một đằng, ghi sổ một nẻo".
+  if (req.order.installmentApprovalStatus === "PENDING_APPROVAL") {
+    return "Kế hoạch chia đợt vượt mức cho phép — chờ Quản lý cơ sở duyệt mới xuất được mã QR";
+  }
+  if (req.order.discountApprovalStatus === "PENDING_APPROVAL") {
+    return "Ưu đãi trên đơn vượt mức cho phép — chờ Quản lý cơ sở duyệt mới xuất được mã QR";
+  }
   if (req.status === "PAID") return "Phiếu thu đã đóng đủ — không xuất QR nữa";
   if (req.status === "VOID") return "Phiếu thu đã huỷ — không xuất QR";
   if (outstandingOfRequest(req) <= 0) return "Phiếu thu không còn khoản phải thu";

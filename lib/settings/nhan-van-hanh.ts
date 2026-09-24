@@ -676,6 +676,26 @@ const N: Readonly<Record<SettingKey, NhanVanHanh>> = {
   },
 
   // ── Tiền & thanh toán ──────────────────────────────────────────────────────────────────
+  "orders.maxInstallments": {
+    tab: "tien",
+    ten: "Số đợt tối đa mỗi con",
+    giaiThich:
+      "Chia quá số này thì đơn VẪN LƯU ĐƯỢC nhưng vào hàng chờ Quản lý cơ sở duyệt, và " +
+      "KHÔNG xuất được mã QR cho tới khi có người duyệt. Phiếu CỌC không tính vào đây — " +
+      "cọc + 4 đợt là hợp lệ khi để số này là 4. Đếm theo TỪNG CON: đơn hai con, mỗi con " +
+      "4 đợt thì vẫn trong hạn mức.",
+    donVi: "đợt",
+  },
+  "orders.maxDiscountItems": {
+    tab: "tien",
+    ten: "Số ưu đãi tối đa trên một dòng đơn",
+    giaiThich:
+      "Đếm số KHOẢN ưu đãi chồng lên MỘT dòng (một con), không phải tổng mức bớt — muốn " +
+      "siết số tiền thì dùng ô ngay dưới. Chồng quá số này thì đơn vào hàng chờ duyệt và " +
+      "chưa xuất được mã QR. Đơn hai con, mỗi con một ưu đãi khác nhau, vẫn hợp lệ khi để " +
+      "số này là 1.",
+    donVi: "ưu đãi",
+  },
   "orders.maxDiscountPercent": {
     tab: "tien",
     ten: "Giảm giá theo % tối đa cho một ưu đãi",

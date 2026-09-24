@@ -143,6 +143,16 @@ export default async function OrderDetailPage({ params }: Props) {
   // vẫn dùng `order` GỐC ở server (chức năng), chỉ bản `displayOrder` xuống client bị che
   // → không leak qua RSC payload.
   const canViewPii = await checkPermission("orders:view-pii");
+
+  // ⚠️ CỔNG DUYỆT THEO NGƯỠNG — CỬA THỨ HAI. Xem chú thích tại `_qr-core.ts:guardIssuable`.
+  // Trang này dựng URL ảnh VietQR THẲNG (không qua `_qr-core`, không ghi `QrSession`), nên
+  // gác một cửa là thủng: mở trang đơn là thấy mã QR dùng được.
+  const lyDoChuaDuyet: string | null =
+    order.installmentApprovalStatus === "PENDING_APPROVAL"
+      ? "Kế hoạch chia đợt vượt mức cho phép — chờ Quản lý cơ sở duyệt"
+      : order.discountApprovalStatus === "PENDING_APPROVAL"
+        ? "Ưu đãi trên đơn vượt mức cho phép — chờ Quản lý cơ sở duyệt"
+        : null;
   // OD1b — duyệt kế hoạch trả góp 2 đợt tách khỏi orders:manage (ACCOUNTANT không có quyền duyệt).
   // order đã fetch có centerId → truyền target để scope-aware (CENTER nếu có role seed sau này).
   // BGĐ 31/07 — duyệt giảm giá nhập tay (Quản lý cơ sở).
@@ -286,7 +296,10 @@ export default async function OrderDetailPage({ params }: Props) {
       ...phieuMo,
       // ⚠️ QR nhận bản ĐẦY ĐỦ, phần HIỂN THỊ mới che — y hệt khối QR mức đơn ở dưới. Nhúng
       // bản che vào ảnh QR là mã hỏng, tiền không về được.
-      qrUrl: canViewPii ? buildVietQrImageUrl(payCfg, phieuMo.tongTien, memo.noiDung) : null,
+      qrUrl:
+        canViewPii && !lyDoChuaDuyet
+          ? buildVietQrImageUrl(payCfg, phieuMo.tongTien, memo.noiDung)
+          : null,
       noiDungCk: canViewPii
         ? memo.noiDung
         : maskPhoneInTransferContent(memo.noiDung, order.customerPhone),
@@ -312,7 +325,10 @@ export default async function OrderDetailPage({ params }: Props) {
   // mọi vai có `orders:view` trong seed-roles đều có kèm `orders:view-pii`. Ẩn là
   // hành vi trung thực và đúng bản chất: không được xem SĐT thì cũng không được cầm
   // mã QR, vì mã QR CHÍNH LÀ SĐT đó ở dạng khác.
-  const qrUrl = canViewPii ? buildVietQrImageUrl(payCfg, dueNow.amount, transferContent) : null;
+  const qrUrl =
+    canViewPii && !lyDoChuaDuyet
+      ? buildVietQrImageUrl(payCfg, dueNow.amount, transferContent)
+      : null;
   // Bản HIỂN THỊ — mọi chỗ in nội dung CK ra màn hình (khối QR mức đơn, bảng phiếu
   // thu theo đợt, hộp phóng to QR) đều nhận chuỗi này. Che số nhưng GIỮ tên con +
   // tên khoá để người không có quyền PII vẫn đối chiếu đơn/sao kê bằng mắt được.

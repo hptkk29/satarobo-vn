@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import {
+  BadgeCheck,
   // Trophy,
   // tạm ẩn cùng mục "Vinh danh" trong NAV_GROUPS (bật lại: bỏ comment)
   AlertTriangle,
@@ -298,6 +299,21 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Tài chính",
     items: [
       { label: "Đơn hàng", href: "/orders", icon: ShoppingBag, perm: ["orders:view"] },
+      // 23/09/2026 — hàng chờ DUYỆT ĐƠN của quản lý cơ sở sống lại, NHƯNG với luật MỚI:
+      // chỉ đơn VƯỢT NGƯỠNG cấu hình (`orders.maxInstallments` / `orders.maxDiscountItems`)
+      // mới vào đây, khác hẳn luật cũ "mọi đơn có giảm giá đều phải duyệt" (gỡ 13/09).
+      // Đo prod 23/09: 0 đơn vượt trần đợt, đúng 1 đơn vượt trần ưu đãi ⇒ hàng chờ mở ra
+      // gần như rỗng, không phải một cửa ải mới cho quầy.
+      //
+      // Thiếu mục này thì trang chỉ tới được từ TRONG chi tiết một đơn đang chờ — tức phải
+      // tìm ra đơn rồi mới biết hàng chờ tồn tại.
+      // perm dùng OR: ai có MỘT trong hai quyền duyệt là thấy link.
+      {
+        label: "Duyệt đơn hàng",
+        href: "/orders/duyet",
+        icon: BadgeCheck,
+        perm: ["discounts:approve", "installments:approve"],
+      },
       // Ghi nhận khoản thu là việc của quầy (payments:record) — xem ghi chú trong
       // app/(admin)/admin/payments/page.tsx. Đừng thu lại còn mỗi payments:manage.
       { label: "Thanh toán", href: "/payments", icon: CreditCard, perm: ["payments:manage", "payments:record"] },

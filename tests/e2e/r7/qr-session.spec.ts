@@ -271,6 +271,71 @@ test.describe("[QR] Xuất QR theo từng phiếu thu", () => {
     expect(await db.qrSession.count()).toBe(0);
   });
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // [QR-07..09] — CỔNG DUYỆT THEO NGƯỠNG [23/09/2026]
+  //
+  // Chủ dự án chốt 22/09: vượt 4 đợt hoặc vượt 1 ưu đãi/dòng thì "cần quản lý duyệt thì
+  // mới được xuất mã QR".
+  //
+  // ⚠️ Cổng đặt ở khâu PHÁT RA, KHÔNG ở khâu NHẬN TIỀN — và đó là cả bài học. Cổng duyệt
+  // CŨ nằm ở `decideSepayAction` và nó LÀM MẤT TIỀN: webhook trả MANUAL ⇒ ba sổ trống
+  // (xem `lib/orders/bo-duyet.test.ts`). Chặn lúc phát thì chưa có tiền để mất.
+  // Ca [QR-09] khoá lại chính ranh giới đó.
+
+  test("[QR-07] đơn chờ duyệt KẾ HOẠCH → từ chối xuất QR, và tạo lại cũng bị chặn", async () => {
+    const order = await seedOrder(cs1, 5_000_000);
+    const req = await seedRequest(order, 1, 1_000_000);
+    await db.order.update({
+      where: { id: order.id },
+      data: { installmentApprovalStatus: "PENDING_APPROVAL" },
+    });
+
+    const res = await issueQrForRequestCore(actorCs1, AUDIT, { paymentRequestId: req.id });
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    // Câu lỗi nói bằng ngôn ngữ của NGUYÊN NHÂN, không phải "không có quyền" — sale phải
+    // đọc được mình đang chờ ai và vì sao (luật 12).
+    expect(res.error).toContain("chia đợt");
+    expect(res.error).toContain("Quản lý cơ sở duyệt");
+    expect(await db.qrSession.count()).toBe(0);
+
+    // Nút "Tạo lại" là cửa sau kinh điển — `guardIssuable` dùng chung nên nó cũng chặn.
+    const again = await regenerateQrCore(actorCs1, AUDIT, { paymentRequestId: req.id });
+    expect(again.ok).toBe(false);
+    expect(await db.qrSession.count()).toBe(0);
+  });
+
+  test("[QR-08] đơn chờ duyệt ƯU ĐÃI → từ chối, lý do nói đúng về ưu đãi", async () => {
+    const order = await seedOrder(cs1, 5_000_000);
+    const req = await seedRequest(order, 1, 1_000_000);
+    await db.order.update({
+      where: { id: order.id },
+      data: { discountApprovalStatus: "PENDING_APPROVAL" },
+    });
+
+    const res = await issueQrForRequestCore(actorCs1, AUDIT, { paymentRequestId: req.id });
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    // Hai cột, hai lý do KHÁC NHAU — Quản lý cơ sở cần biết mình đang duyệt cái gì.
+    expect(res.error).toContain("Ưu đãi");
+    expect(res.error).not.toContain("chia đợt");
+    expect(await db.qrSession.count()).toBe(0);
+  });
+
+  test("[QR-09] đơn ĐÃ DUYỆT (hoặc chưa từng phải duyệt) → xuất QR bình thường", async () => {
+    // Ca ngược, và nó cần thiết: không có nó thì "chặn mọi thứ" cũng xanh.
+    const order = await seedOrder(cs1, 5_000_000);
+    const req = await seedRequest(order, 1, 1_000_000);
+    await db.order.update({
+      where: { id: order.id },
+      data: { installmentApprovalStatus: "APPROVED", discountApprovalStatus: "APPROVED" },
+    });
+
+    const res = await issueQrForRequestCore(actorCs1, AUDIT, { paymentRequestId: req.id });
+    expect(res.ok).toBe(true);
+    expect(await db.qrSession.count()).toBe(1);
+  });
+
   test("[QR-05] phiếu của cơ sở khác → không xuất được, báo 'không tìm thấy' (không lộ tồn tại)", async () => {
     const orderCs2 = await seedOrder(cs2, 7_000_000);
     const reqCs2 = await seedRequest(orderCs2, 1, 7_000_000);
