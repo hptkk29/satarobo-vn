@@ -26,7 +26,12 @@
 import { describe, it, expect, beforeEach, afterAll } from "vitest";
 import { db } from "@/lib/db";
 import { RUN_DB_TESTS, LY_DO_BO_QUA } from "@/tests/_helpers/db-gate";
-import { taoPhieuGop, huyPhieuGop, dongPhieuGop } from "@/lib/finance/phieu-gop";
+import {
+  taoPhieuGop,
+  huyPhieuGop,
+  dongPhieuGop,
+  docPhieuGopDangMo,
+} from "@/lib/finance/phieu-gop";
 import { ingestPayosWebhook } from "@/lib/payments/payos-ingest";
 import { dungMemo } from "@/lib/payments/memo-ck";
 import { capPhatSoThuTu, hoanViSoThuTu } from "@/lib/payments/cap-phat-ma";
@@ -330,6 +335,75 @@ describe.skipIf(!RUN_DB_TESTS)("[PG] phiếu gộp + webhook tự khớp — DB 
     expect(hai.ok).toBe(false);
     expect(!hai.ok && hai.error).toContain("đã có một phiếu gộp đang mở");
     expect(await db.paymentBill.count({ where: { orderId: DON } })).toBe(1);
+  });
+
+  // ── 24/09/2026 · QR THEO ĐỢT DÙNG MÃ 5 KÝ TỰ ────────────────────────────────
+  //
+  // Chủ dự án chốt: nút "Xuất QR" trên MỘT dòng đợt phát một phiếu gộp MỘT DÒNG. Toàn bộ
+  // mục đích là để nội dung CK thôi bị cắt cụt — xem `lib/payments/qr-theo-dot.ts`.
+  it("[PG-17] phiếu MỘT DÒNG: memo chở đủ SĐT 10 số, và webhook khớp đúng đợt ấy", async () => {
+    const r = await taoPhieuGop({ orderId: DON, paymentRequestIds: [DOT_A], actor: ACTOR });
+    expect(r.ok && r.soDong).toBe(1);
+    expect(r.ok && r.tongTien).toBe(DOT_TIEN_A);
+    const ma = (r as { ma: string }).ma;
+
+    // ⭐ ĐIỂM CỦA CẢ ĐỢT NÀY. Khuôn đời CŨ (`noiDungCkCoKhoa`) ở trần 25 ký tự thì khoá
+    // `ORD…D1` chiếm 18, phần người đọc còn 7 ⇒ SĐT bị cắt SẠCH. Khuôn mới chở đủ.
+    const memo = dungMemo({ hoTen: "Nguyễn Phương Quỳnh Anh", sdt: SDT, ma });
+    expect(memo.length).toBeLessThanOrEqual(25);
+    expect(memo, "SĐT 10 số phải còn nguyên trong nội dung CK").toContain(SDT);
+    expect(memo).toContain(ma);
+    // Và nó KHÔNG mang khoá đời cũ — nếu một ngày ai đó ghép cả hai vào thì trần 25 vỡ.
+    expect(memo).not.toMatch(/ORD\d/);
+
+    // Tiền về ĐÚNG SỐ của phiếu một dòng ⇒ rót đúng đợt A, đợt B không đụng tới.
+    const kq = await ban({ noiDung: memo, soTien: DOT_TIEN_A });
+    expect(kq.status).toBe("MATCHED");
+    const dot = await db.paymentRequest.findMany({
+      where: { orderId: DON },
+      orderBy: { sortOrder: "asc" },
+    });
+    expect(dot.map((d) => d.status)).toEqual(["PAID", "PENDING"]);
+  });
+
+  it("[PG-18] phiếu một dòng đang mở ⇒ đợt KHÁC không phát được (B7 chặn ở DB)", async () => {
+    // Đây là hệ quả mà màn hình phải NÓI RA thay vì vẽ nút rồi ăn lỗi unique — ca
+    // `[QTD-04]` khoá phần hiển thị, ca này khoá phần dữ liệu.
+    const r1 = await taoPhieuGop({ orderId: DON, paymentRequestIds: [DOT_A], actor: ACTOR });
+    expect(r1.ok).toBe(true);
+    const r2 = await taoPhieuGop({ orderId: DON, paymentRequestIds: [DOT_B], actor: ACTOR });
+    expect(r2.ok).toBe(false);
+    expect(!r2.ok && r2.error).toContain("đã có một phiếu gộp đang mở");
+    expect(await db.paymentBill.count({ where: { orderId: DON, status: "OPEN" } })).toBe(1);
+  });
+
+  it("[PG-19] mỗi dòng phiếu mang ĐỊNH DANH đợt — cầu nối cho màn hình", async () => {
+    // ⚠️ Lưới này sinh ra TỪ MỘT PHÉP CẤY (24/09): đặt `paymentRequestId: ""` ở
+    // `docPhieuGopDangMo` thì **18/18 ca vẫn xanh**. Tức cầu nối quan trọng nhất của đợt
+    // này không có ai canh.
+    //
+    // Mất nó là lỗi CÂM đúng hình dạng luật 11: `trangThaiQrDot` không khớp được dòng nào
+    // ⇒ MỌI dòng rơi vào nhánh "đợt khác đang giữ mã" ⇒ **không ai xuất được QR nữa**, mà
+    // không lỗi nào báo và không ca nào đỏ.
+    const r = await taoPhieuGop({ orderId: DON, paymentRequestIds: [DOT_A, DOT_B], actor: ACTOR });
+    expect(r.ok).toBe(true);
+
+    const mo = await docPhieuGopDangMo(DON);
+    expect(mo, "phiếu vừa phát phải đọc lại được").not.toBeNull();
+    expect(mo!.dong).toHaveLength(2);
+    // Đúng tập đợt, không phải chuỗi rỗng, không phải id của đơn/phiếu.
+    expect(new Set(mo!.dong.map((d) => d.paymentRequestId))).toEqual(new Set([DOT_A, DOT_B]));
+    expect(mo!.dong.every((d) => d.paymentRequestId.length > 0)).toBe(true);
+    // ⚠️ `installmentNo` đánh số THEO TỪNG CON, không theo đơn — khoá từng phần của DB là
+    // `(orderItemId, installmentNo)`. Nên đợt 1 của bé A và đợt 1 của bé B ĐỀU là số 1, và
+    // bản đầu của ca này khẳng định `[1, 2]` là SAI GIẢ ĐỊNH chứ không phải mã sai. So với
+    // chính bản ghi thay vì đoán con số.
+    const dotThat = await db.paymentRequest.findMany({
+      where: { id: { in: [DOT_A, DOT_B] } },
+      select: { id: true, installmentNo: true },
+    });
+    const soTheoId = new Map(dotThat.map((d) => [d.id, d.installmentNo]));
+    expect(mo!.dong.every((d) => d.installmentNo === soTheoId.get(d.paymentRequestId))).toBe(true);
   });
 
   it("[PG-11] HUỶ khi chưa nhận đồng nào; đã nhận rồi thì chỉ ĐÓNG được", async () => {
