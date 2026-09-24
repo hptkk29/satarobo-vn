@@ -4,7 +4,13 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { SETTINGS } from "@/lib/settings/registry";
 import { getResolvedSettings } from "@/lib/settings/service";
 import { docCaiRiengTheoCoSo } from "@/lib/settings/co-so-cau-hinh";
-import { TAB_CAU_HINH, keyCuaTab, nhanCuaKey, type TabId } from "@/lib/settings/nhan-van-hanh";
+import {
+  TAB_CAU_HINH,
+  QUYEN_TAB,
+  keyCuaTab,
+  nhanCuaKey,
+  type TabId,
+} from "@/lib/settings/nhan-van-hanh";
 import { getAssignableTeachers } from "@/lib/teachers/assignable";
 import { catalogEntries } from "@/lib/notifications/catalog";
 import { kiemVapid, MO_TA_LOI_VAPID } from "@/lib/push/cau-hinh-vapid";
@@ -13,6 +19,7 @@ import { layVaiNhanHoaHong } from "@/lib/crm/vai-nhan-hoa-hong";
 import type { ChinhSachHoaHong } from "@/lib/crm/chinh-sach-hoa-hong";
 import { BangChinhSachHoaHong } from "./_components/bang-chinh-sach-hoa-hong";
 import { TabPhuongThucThanhToan } from "./_components/tab-phuong-thuc-tt";
+import { TabNickZalo } from "./_components/tab-nick-zalo";
 import { KhungCauHinh, type TabView } from "./_components/khung-cau-hinh";
 import { ChonGvMienTru } from "./_components/chon-gv-mien-tru";
 import type { CanhBaoKenh } from "./_components/chon-loai-thong-bao";
@@ -62,7 +69,23 @@ export default async function OperationalSettingsPage({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!(await checkPermission("settings:view"))) redirect("/admin/dashboard");
+
+  // ── CỔNG VÀO: theo TỪNG TAB, không phải một quyền cho cả màn ──────────────────────────
+  // Trước 24/09 màn này gác bằng đúng `settings:view`, mà quyền đó thực tế chỉ Quản trị
+  // tối cao có (ma trận v1 khai `["SUPER_ADMIN"]`, và trong `seed-roles.ts` KHÔNG có dòng
+  // nào cấp nó — nên trên prod, nơi RBAC v2 đọc quyền từ DB, không vai nào khác mở được).
+  //
+  // Chủ dự án chốt 24/09: quản lý cơ sở phải vào được NHỮNG PHẦN THUỘC CƠ SỞ. Cách làm là
+  // cho mỗi tab một quyền riêng (`QUYEN_TAB`) rồi:
+  //   · vào được màn nếu giữ quyền của ÍT NHẤT MỘT tab;
+  //   · và chỉ THẤY những tab mình giữ quyền.
+  // Nhờ vậy nới một tab không kéo theo 13 tab kia — thứ sẽ xảy ra nếu chỉ nới
+  // `settings:view`.
+  const quyenTab = await Promise.all(
+    TAB_CAU_HINH.map(async (t) => ({ id: t.id, duoc: await checkPermission(QUYEN_TAB[t.id]) })),
+  );
+  const tabDuocXem = new Set(quyenTab.filter((q) => q.duoc).map((q) => q.id));
+  if (tabDuocXem.size === 0) redirect("/admin/dashboard");
 
   const canEditGlobal = await checkPermission("settings:edit"); // settings:edit = SUPER_ADMIN
   const sp = await searchParams;
@@ -101,7 +124,7 @@ export default async function OperationalSettingsPage({
   // trị viên mở cùng màn sẽ thấy hai danh sách khác nhau cho cùng một giá trị.
   const giaoVien = (await getAssignableTeachers({})).map((g) => ({ id: g.id, ten: g.name }));
 
-  const tabs: TabView[] = keyTheoTab.map(({ tab, keys }) => ({
+  const tabs: TabView[] = keyTheoTab.filter(({ tab }) => tabDuocXem.has(tab.id)).map(({ tab, keys }) => ({
     id: tab.id,
     ten: tab.ten,
     moTa: tab.moTa,
@@ -235,6 +258,7 @@ export default async function OperationalSettingsPage({
           "phuong-thuc-tt": (
             <TabPhuongThucThanhToan centerIdFilter={sp.centerId?.trim() || null} />
           ),
+          "nick-zalo": <TabNickZalo />,
           "hoa-hong": (
             <BangChinhSachHoaHong
               banDau={(resolved[KHOA_DO_BANG_HOA_HONG] ??

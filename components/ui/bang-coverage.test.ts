@@ -20,7 +20,7 @@ const GOC = ["app", "components"];
 
 /** File có `<table>` mà CỐ Ý không phân trang — mỗi dòng phải nêu lý do. */
 const MIEN_TRU: Record<string, string> = {
-  "app/(admin)/admin/zalo-crm/nick/_bang.tsx":
+  "app/(admin)/admin/cau-hinh-van-hanh/_components/tab-nick-zalo-bang.tsx":
     "một dòng một nick Zalo của cơ sở — nick là SIM thật nên số dòng bị chặn bởi số SIM công ty mua, hôm nay 3; phân trang ở đây là hai thanh điều khiển cho ba dòng",
   "components/ui/table.tsx":
     "primitive shadcn — mọi nơi GỌI nó đã bọc rồi, bọc thêm ở đây là hai thanh điều khiển chồng nhau",
