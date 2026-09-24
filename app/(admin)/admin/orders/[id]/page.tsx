@@ -68,6 +68,35 @@ interface Props {
   params: Promise<{ id: string }>;
 }
 
+/**
+ * ── ĐỘ SÂU TUẦN TỰ — ĐỌC TRƯỚC KHI THÊM MỘT `await` [24/09/2026] ─────────────
+ *
+ * Chủ dự án: *"khi sale thao tác tạo đơn xong thì đến trang chi tiết đơn hàng thì phải
+ * đợi một chút mới có nút xuất QR."*
+ *
+ * Không phải nút hỏng, cũng không phải phiếu thu về muộn (`ensureFullOrderRequest` chạy
+ * TRONG chính transaction tạo đơn). Đo được, và nó là hai thứ cộng lại:
+ *
+ *  1. `app/(admin)/admin/loading.tsx` vẽ khung chờ **ngay lập tức** — sidebar + topbar
+ *     giữ nguyên, nên người dùng thấy mình ĐÃ TỚI trang;
+ *  2. trang này `force-dynamic` và **không có `Suspense` nào**, nên KHÔNG có gì thật hiện
+ *     ra cho tới khi câu tra CUỐI CÙNG trả về. Nút "Xuất QR" nằm ở khối gần cuối ⇒ nó là
+ *     thứ người bán ngồi chờ.
+ *
+ * Trước bản này: **21 lượt đi-về DB/quyền NỐI ĐUÔI NHAU**. Đo trên Postgres LOCAL (RTT
+ * dưới 1 ms) thì chỉ riêng 10 trong số đó đã là 15 lượt đi-về / 72 ms; trên Supabase mỗi
+ * lượt đắt hơn hàng chục lần và chúng CỘNG DỒN vì không lượt nào chạy song song.
+ *
+ * Sau bản này: **9**. Không câu tra nào bị bỏ, không câu nào đổi điều kiện — chỉ những
+ * câu KHÔNG cần kết quả của nhau được gom vào cùng một `Promise.all`.
+ *
+ * ⚠️ **THÊM MỘT `await` MỚI THÌ GOM VÀO MỘT LÔ CÓ SẴN**, đừng nối thêm vào chuỗi. Lưới
+ * `[DST-01]` (`do-sau-tuan-tu.test.ts`) đếm và sẽ đỏ — nó cố ý phiền, vì một lượt đi-về
+ * thêm vào đây thì KHÔNG ai thấy trong diff, chỉ người bán thấy.
+ *
+ * ⚠️ Thứ tự các lô là THỨ TỰ PHỤ THUỘC, không phải thứ tự tuỳ ý: quyền → (sau khi có
+ * `order`) → (sau khi biết công tắc `batThuTheoCon`). Đảo lô là đọc biến chưa gán.
+ */
 export default async function OrderDetailPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
@@ -129,20 +158,31 @@ export default async function OrderDetailPage({ params }: Props) {
   });
   if (!order) notFound();
 
-  // orders:manage chỉ HO_ACCOUNTANT (GLOBAL) — không cần target.
-  const canManage = await checkPermission("orders:manage");
-  // ĐƯỜNG B — quyền RIÊNG, không dùng lại `orders:manage`. Chủ dự án chốt 18/09/2026:
-  // `payments:record` để gắn khoản đã thu cho một bé, `payments:manage` để bỏ gắn.
+  // ── LÔ QUYỀN — hỏi MỘT LƯỢT [24/09/2026] ────────────────────────────────────
   //
-  // ⚠️ Hai cờ này chỉ quyết định VẼ NÚT hay không. Cổng thật nằm trong action
-  // (`congDuongB`), và nó hỏi lại cả ba vế: quyền · phạm vi cơ sở · công tắc của ĐƠN.
-  // Ẩn nút không phải là kiểm quyền.
-  const canRecordPayments = await checkPermission("payments:record");
-  const canManagePayments = await checkPermission("payments:manage");
-  // Che liên hệ khách trên PHẦN HIỂN THỊ nếu thiếu quyền. QR (nội dung CK) + gửi email
-  // vẫn dùng `order` GỐC ở server (chức năng), chỉ bản `displayOrder` xuống client bị che
-  // → không leak qua RSC payload.
-  const canViewPii = await checkPermission("orders:view-pii");
+  // Bốn câu hỏi này không câu nào cần câu trước, nhưng trước bản này chúng là bốn lượt
+  // đi-về **nối đuôi nhau**. Xem khối "ĐỘ SÂU TUẦN TỰ" ở đầu hàm: đó là lý do trang đơn
+  // hiện khung chờ rồi mới có nội dung.
+  //
+  // ⚠️ Giữ nguyên `checkPermission` cho TỪNG quyền, đừng gộp thành một lời gọi "hỏi cả
+  // bó": mỗi quyền có `target`/scope riêng, và một hàm gộp sẽ phải đoán scope chung —
+  // đúng kiểu nới quyền không ai thấy.
+  const [canManage, canRecordPayments, canManagePayments, canViewPii] = await Promise.all([
+    // orders:manage chỉ HO_ACCOUNTANT (GLOBAL) — không cần target.
+    checkPermission("orders:manage"),
+    // ĐƯỜNG B — quyền RIÊNG, không dùng lại `orders:manage`. Chủ dự án chốt 18/09/2026:
+    // `payments:record` để gắn khoản đã thu cho một bé, `payments:manage` để bỏ gắn.
+    //
+    // ⚠️ Hai cờ này chỉ quyết định VẼ NÚT hay không. Cổng thật nằm trong action
+    // (`congDuongB`), và nó hỏi lại cả ba vế: quyền · phạm vi cơ sở · công tắc của ĐƠN.
+    // Ẩn nút không phải là kiểm quyền.
+    checkPermission("payments:record"),
+    checkPermission("payments:manage"),
+    // Che liên hệ khách trên PHẦN HIỂN THỊ nếu thiếu quyền. QR (nội dung CK) + gửi email
+    // vẫn dùng `order` GỐC ở server (chức năng), chỉ bản `displayOrder` xuống client bị che
+    // → không leak qua RSC payload.
+    checkPermission("orders:view-pii"),
+  ]);
   // OD1b — duyệt kế hoạch trả góp 2 đợt tách khỏi orders:manage (ACCOUNTANT không có quyền duyệt).
   // order đã fetch có centerId → truyền target để scope-aware (CENTER nếu có role seed sau này).
   // BGĐ 31/07 — duyệt giảm giá nhập tay (Quản lý cơ sở).
@@ -155,10 +195,35 @@ export default async function OrderDetailPage({ params }: Props) {
   // 20/08 — nội dung CK là `HoTenCon_SdtPH_TenKhoa` (không còn mã đơn). Tính MỘT LẦN
   // ở đây rồi truyền xuống cả khối QR mức đơn lẫn bảng phiếu thu theo đợt: ba chỗ in
   // ra phải là cùng một chuỗi, lệch nhau là sale đọc một đằng QR mã một nẻo.
-  const payCfg = await resolveOrderPaymentConfig({
-    centerId: order.centerId,
-    paymentMethodId: order.paymentMethodId,
-  });
+  // ── LÔ "SAU KHI CÓ ĐƠN" — năm câu tra, MỘT LƯỢT [24/09/2026] ────────────────
+  //
+  // Cả năm chỉ cần `order` (đã có ở trên); không câu nào cần kết quả của câu khác. Trước
+  // bản này chúng là năm lượt đi-về **nối đuôi nhau** — xem khối "ĐỘ SÂU TUẦN TỰ" ở đầu
+  // hàm.
+  //
+  // ⚠️ `paymentRequests` kéo lên đây chứ không nằm ở chỗ dùng: nó là nguồn của bảng
+  // "Phiếu thu & QR theo đợt", tức của chính NÚT "Xuất QR" — thứ người bán chờ. Nằm cuối
+  // chuỗi thì nó là lượt đi-về THỨ 21 của trang.
+  const [payCfg, paidSoFar, nhiemMap, batThuTheoCon, paymentRequests] = await Promise.all([
+    // BGĐ 31/07 — QR lấy tài khoản NHẬN TIỀN theo đơn. 31/08/2026: nguồn đổi từ "theo cơ
+    // sở" sang "theo PHƯƠNG THỨC đã chọn trên đơn" (lùi dần về phương thức chuyển khoản
+    // của cơ sở → dùng chung → kho VietQR cũ). Xem resolveOrderPaymentConfig.
+    resolveOrderPaymentConfig({
+      centerId: order.centerId,
+      paymentMethodId: order.paymentMethodId,
+    }),
+    // Trục B — tổng đã ghi nhận, dùng cho SỐ IN TRÊN QR và cho khối "Công nợ đơn hàng".
+    sdb.payment.aggregate({
+      where: { orderId: order.id, ...KHOAN_DA_GHI_NHAN },
+      _sum: { amount: true },
+    }),
+    // ⚠️ `bypass: true` — cổng AN TOÀN, không phải cổng hiển thị. Xem khối A3 bên dưới.
+    donNhiemTheoDon(scopedDb(actor, { bypass: true }), [order.id]),
+    // PHIÊN A — công tắc "thu theo con" của cơ sở giữ đơn.
+    laThuTienLinhHoatBat(order.orgUnitId),
+    // 03/08 — SỔ PHIẾU THU theo đợt (PaymentRequest).
+    getOrderPaymentRequests(order.id),
+  ]);
   // Bản ĐẦY ĐỦ — thứ duy nhất được nhúng vào ảnh QR.
   //
   // ⚠️ Trần ký tự lấy TỪ `VIETQR_ADDINFO_MAX` (lib/payments/vietqr.ts), KHÔNG khai
@@ -179,10 +244,6 @@ export default async function OrderDetailPage({ params }: Props) {
   // đợt 1. Dùng chung `computeDueNow` với webhook SePay — hai bên phải cùng một
   // con số, lệch là QR in một đằng máy đối khớp một nẻo (khách trả đúng vẫn bị
   // xếp vào "trả thiếu → xử lý tay").
-  const paidSoFar = await sdb.payment.aggregate({
-    where: { orderId: order.id, ...KHOAN_DA_GHI_NHAN },
-    _sum: { amount: true },
-  });
   const dueNow = computeDueNow({
     totalAmount: order.totalAmount,
     paidAmount: paidSoFar._sum.amount ?? 0,
@@ -206,10 +267,6 @@ export default async function OrderDetailPage({ params }: Props) {
    * đã qua scope ở trên rồi; nếu phép phán xét lại bị lọc theo tầm nhìn thì một đơn nhiễm
    * nằm ngoài tầm nhìn sẽ hiện ra là SẠCH.
    */
-  const nhiemMap = await donNhiemTheoDon(
-    scopedDb(actor, { bypass: true }),
-    [order.id],
-  );
   const donNhiem = nhiemMap.get(order.id) ?? DON_SACH;
 
   // PHIÊN A — công nợ theo từng con. Chỉ tính khi CÔNG TẮC BẬT cho cơ sở giữ đơn: tắt thì
@@ -218,59 +275,62 @@ export default async function OrderDetailPage({ params }: Props) {
   // ⚠️ `noTheoCon` cố ý đọc bằng `db` TRẦN (không `scopedDb`) — chốt của chủ dự án: *"cùng một
   // đơn, ai mở cũng ra cùng con số"*. Cách ly cơ sở đã ép ở cửa vào: tới được dòng này nghĩa là
   // `scopedDb` đã cho phép đọc chính cái đơn này.
-  const batThuTheoCon = await laThuTienLinhHoatBat(order.orgUnitId);
-  const soTheoCon = batThuTheoCon ? await noTheoCon(order.id) : null;
-  // PHIÊN D — trạng thái dừng học của từng dòng. Cùng công tắc: tắt thì không thêm một
-  // truy vấn nào.
-  const trangThaiDungHoc = batThuTheoCon ? await docTrangThaiDungHoc(order.id) : undefined;
-  // F2 — con nào đang bảo lưu + hạn đợt đã dời bao nhiêu ngày. Hỏi RIÊNG ở trang, cố ý
-  // KHÔNG nhồi vào `noTheoCon`: hàm đó chạy trong transaction của mọi phép ghi tiền nên mỗi
-  // câu tra thêm ở đó là thêm thời gian nằm dưới khoá đơn cho một thông tin chỉ để hiển thị.
-  // F3 — khoá học chọn được khi thêm con. Chỉ khoá ĐANG BÁN và ĐÃ CÓ GIÁ: khoá chưa khai
-  // giá thì cổng soát giá ở máy chủ từ chối, nên mời chọn nó là một lời hứa suông (luật 12).
-  // F4 — lớp chọn được khi đổi khoá. Chỉ lớp CÒN NHẬN học sinh và khoá ĐÃ CÓ GIÁ: lớp đã
-  // huỷ/kết thúc thì `chuyenLopTrongTx` từ chối, khoá chưa khai giá thì cổng soát giá từ
-  // chối — mời chọn chúng là lời hứa suông (luật 12).
-  const lopChonDuoc: LopChon[] = batThuTheoCon
-    ? (
-        await sdb.class.findMany({
-          where: {
-            deletedAt: null,
-            status: { notIn: ["CANCELLED", "COMPLETED"] },
-            course: { isActive: true, price: { gt: 0 } },
-          },
-          select: {
-            id: true,
-            name: true,
-            course: { select: { name: true, price: true } },
-          },
-          orderBy: { name: "asc" },
-          take: 200,
-        })
-      ).map((l) => ({
-        id: l.id,
-        name: l.name,
-        courseName: l.course?.name ?? "",
-        coursePrice: l.course?.price ?? null,
-      }))
-    : [];
-
-  const khoaChonDuoc = batThuTheoCon
-    ? await sdb.course.findMany({
-        where: { isActive: true, price: { gt: 0 } },
-        select: { id: true, name: true, price: true },
-        orderBy: { name: "asc" },
-      })
-    : [];
-
-  const baoLuuTheoCon = batThuTheoCon
-    ? Object.fromEntries(await docBaoLuuCuaDon(order.id))
-    : undefined;
-
-  // ── PHIÊN C · phiếu gộp đang mở [20/09/2026] ────────────────────────────────
+  // ── LÔ "THU THEO CON" — sáu câu tra, MỘT LƯỢT [24/09/2026] ──────────────────
   //
-  // Cùng công tắc với khối "Công nợ theo con": tắt thì KHÔNG thêm một truy vấn nào.
-  const phieuMo = batThuTheoCon ? await docPhieuGopDangMo(order.id) : null;
+  // Cả sáu chỉ phụ thuộc vào `batThuTheoCon` + `order.id`, không câu nào cần câu trước.
+  // Trước bản này chúng nối đuôi nhau — sáu lượt đi-về **chỉ có ở đơn đã bật công tắc**,
+  // tức đúng những đơn của luồng mới.
+  //
+  // ⚠️ Công tắc TẮT thì cả sáu vẫn KHÔNG chạy câu nào (`Promise.resolve` của nhánh else),
+  // đúng như lời hứa "tắt thì không thêm một truy vấn nào" trong các chú thích dưới.
+  const [soTheoCon, trangThaiDungHoc, lopThoRaw, khoaChonDuoc, baoLuuRaw, phieuMo] =
+    await Promise.all([
+      batThuTheoCon ? noTheoCon(order.id) : Promise.resolve(null),
+      // PHIÊN D — trạng thái dừng học của từng dòng.
+      batThuTheoCon ? docTrangThaiDungHoc(order.id) : Promise.resolve(undefined),
+      // F4 — lớp chọn được khi đổi khoá. Chỉ lớp CÒN NHẬN học sinh và khoá ĐÃ CÓ GIÁ: lớp đã
+      // huỷ/kết thúc thì `chuyenLopTrongTx` từ chối, khoá chưa khai giá thì cổng soát giá từ
+      // chối — mời chọn chúng là lời hứa suông (luật 12).
+      batThuTheoCon
+        ? sdb.class.findMany({
+            where: {
+              deletedAt: null,
+              status: { notIn: ["CANCELLED", "COMPLETED"] },
+              course: { isActive: true, price: { gt: 0 } },
+            },
+            select: {
+              id: true,
+              name: true,
+              course: { select: { name: true, price: true } },
+            },
+            orderBy: { name: "asc" },
+            take: 200,
+          })
+        : Promise.resolve([]),
+      // F3 — khoá học chọn được khi thêm con. Chỉ khoá ĐANG BÁN và ĐÃ CÓ GIÁ: khoá chưa khai
+      // giá thì cổng soát giá ở máy chủ từ chối, nên mời chọn nó là một lời hứa suông (luật 12).
+      batThuTheoCon
+        ? sdb.course.findMany({
+            where: { isActive: true, price: { gt: 0 } },
+            select: { id: true, name: true, price: true },
+            orderBy: { name: "asc" },
+          })
+        : Promise.resolve([]),
+      // F2 — con nào đang bảo lưu + hạn đợt đã dời bao nhiêu ngày. Hỏi RIÊNG ở trang, cố ý
+      // KHÔNG nhồi vào `noTheoCon`: hàm đó chạy trong transaction của mọi phép ghi tiền nên mỗi
+      // câu tra thêm ở đó là thêm thời gian nằm dưới khoá đơn cho một thông tin chỉ để hiển thị.
+      batThuTheoCon ? docBaoLuuCuaDon(order.id) : Promise.resolve(null),
+      // ── PHIÊN C · phiếu gộp đang mở [20/09/2026] ──
+      batThuTheoCon ? docPhieuGopDangMo(order.id) : Promise.resolve(null),
+    ]);
+
+  const lopChonDuoc: LopChon[] = lopThoRaw.map((l) => ({
+    id: l.id,
+    name: l.name,
+    courseName: l.course?.name ?? "",
+    coursePrice: l.course?.price ?? null,
+  }));
+  const baoLuuTheoCon = baoLuuRaw ? Object.fromEntries(baoLuuRaw) : undefined;
   let phieuGop: PhieuGopView | null = null;
   if (phieuMo) {
     // Nội dung CK lấy từ `memoPhatHanh` — CHỖ DUY NHẤT quyết định khuôn mới hay cũ. Dựng
@@ -320,11 +380,10 @@ export default async function OrderDetailPage({ params }: Props) {
     ? transferContent
     : maskPhoneInTransferContent(transferContent, order.customerPhone);
 
-  // 03/08 — SỔ PHIẾU THU theo đợt (PaymentRequest) + phiên QR ACTIVE còn hạn của
-  // từng phiếu. Đây là nguồn của bảng "Phiếu thu & QR theo đợt"; `OrderQrSection`
-  // (QR mức ĐƠN, hành vi cũ) chỉ còn là lối lùi cho đơn CHƯA có phiếu thu nào —
-  // đơn cũ tạo trước khi có sổ này. Xoá hẳn sẽ làm những đơn đó mất luôn QR.
-  const paymentRequests = await getOrderPaymentRequests(order.id);
+  // Phiên QR ACTIVE còn hạn của từng phiếu (`paymentRequests` đã tra ở LÔ trên). Đây là
+  // nguồn của bảng "Phiếu thu & QR theo đợt"; `OrderQrSection` (QR mức ĐƠN, hành vi cũ)
+  // chỉ còn là lối lùi cho đơn CHƯA có phiếu thu nào — đơn cũ tạo trước khi có sổ này.
+  // Xoá hẳn sẽ làm những đơn đó mất luôn QR.
   const qrSessions = await loadActiveQrSessions(
     actor,
     paymentRequests.map((r) => ({ id: r.id, matchKey: r.matchKey })),
@@ -340,39 +399,41 @@ export default async function OrderDetailPage({ params }: Props) {
     { canViewPii },
   );
 
-  const emailTemplates = canManage
-    ? await sdb.emailTemplate.findMany({
-        where: {
-          isActive: true,
-          trigger: { in: ["ORDER_CONFIRMATION", "PAYMENT_RECEIPT", "MANUAL"] },
-        },
-        select: { id: true, name: true, trigger: true },
-        orderBy: { name: "asc" },
-      })
-    : [];
-
-  // G4 (3c) — danh sách phương thức để đổi PTTT (chỉ cần khi có quyền sửa).
-  // 30/08/2026 — lọc theo CƠ SỞ CỦA ĐƠN ngay tại nguồn: ở đây đã có `order.centerId`
-  // nên không cần đẩy cả danh mục xuống client rồi lọc lại. Phương thức dùng chung
-  // (centerId null) luôn nằm trong danh sách — bỏ chúng đi là đơn nào cũng mất tiền mặt.
-  const paymentMethods = canManage
-    ? await sdb.paymentMethod.findMany({
-        where: {
-          isActive: true,
-          OR: [{ centerId: null }, { centerId: order.centerId }],
-        },
-        orderBy: { displayOrder: "asc" },
-        select: {
-          id: true,
-          name: true,
-          centerId: true,
-          canBuyCourse: true,
-          canBuyPackage: true,
-          canBuyExam: true,
-          canBuyProduct: true,
-        },
-      })
-    : [];
+  // ── LÔ "CHỈ KHI CÓ QUYỀN SỬA" — hai câu tra, MỘT LƯỢT [24/09/2026] ──────────
+  const [emailTemplates, paymentMethods] = await Promise.all([
+    canManage
+      ? sdb.emailTemplate.findMany({
+          where: {
+            isActive: true,
+            trigger: { in: ["ORDER_CONFIRMATION", "PAYMENT_RECEIPT", "MANUAL"] },
+          },
+          select: { id: true, name: true, trigger: true },
+          orderBy: { name: "asc" },
+        })
+      : Promise.resolve([]),
+    // G4 (3c) — danh sách phương thức để đổi PTTT (chỉ cần khi có quyền sửa).
+    // 30/08/2026 — lọc theo CƠ SỞ CỦA ĐƠN ngay tại nguồn: ở đây đã có `order.centerId`
+    // nên không cần đẩy cả danh mục xuống client rồi lọc lại. Phương thức dùng chung
+    // (centerId null) luôn nằm trong danh sách — bỏ chúng đi là đơn nào cũng mất tiền mặt.
+    canManage
+      ? sdb.paymentMethod.findMany({
+          where: {
+            isActive: true,
+            OR: [{ centerId: null }, { centerId: order.centerId }],
+          },
+          orderBy: { displayOrder: "asc" },
+          select: {
+            id: true,
+            name: true,
+            centerId: true,
+            canBuyCourse: true,
+            canBuyPackage: true,
+            canBuyExam: true,
+            canBuyProduct: true,
+          },
+        })
+      : Promise.resolve([]),
+  ]);
 
   return (
     /* Trần bề ngang 104rem (1664px) thay cho `max-w-5xl` (1024px) cũ.
