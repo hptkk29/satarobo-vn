@@ -479,6 +479,21 @@ export default async function OrderDetailPage({ params }: Props) {
             themCon={khoaChonDuoc.length > 0 ? <NutThemCon orderId={order.id} khoa={khoaChonDuoc} /> : null}
             lopDoiKhoa={lopChonDuoc}
             phieu={phieuGop}
+            // PHIÊN J — đợt CẤP ĐƠN đang sống, nguồn của bảng "chia đợt theo con".
+            //
+            // ⚠️ Lọc `orderItemId === null`: bảng chia học phí các con vào các đợt CỦA ĐƠN,
+            // nên đợt theo con (nếu đơn có) KHÔNG được lẫn vào — lẫn vào là đếm hai lần.
+            // `status !== "VOID"` vì đợt đã huỷ không còn là lịch thu; `installmentNo > 0`
+            // loại phiếu "thu toàn đơn" (số 0), vốn không phải một đợt.
+            //
+            // Dùng lại `paymentRequests` đã tra ở lô trên — KHÔNG thêm lượt đi-về nào.
+            dotDon={paymentRequests
+              .filter((r) => r.orderItemId === null && r.installmentNo > 0 && r.status !== "VOID")
+              .map((r) => ({
+                installmentNo: r.installmentNo,
+                amountDue: r.amountDue,
+                dueDate: r.dueDate,
+              }))}
           />
         </div>
       )}

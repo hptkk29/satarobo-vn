@@ -7,6 +7,11 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { NoTheoConKetQua } from "@/lib/finance/no-theo-con";
+import {
+  chiaDotChoCon,
+  type ChiaDotKetQua,
+  type DotDonDeChia,
+} from "@/lib/finance/chia-dot-cho-con";
 import type { TrangThaiDungHocCuaCon } from "@/lib/finance/dung-hoc-con";
 import { QrZoom } from "./qr-zoom";
 import { NutDungHoc } from "./dung-hoc-dialog";
@@ -1016,6 +1021,7 @@ export function CongNoTheoCon({
   themCon = null,
   lopDoiKhoa = [],
   phieu = null,
+  dotDon = [],
 }: {
   orderId: string;
   so: NoTheoConKetQua;
@@ -1058,6 +1064,17 @@ export function CongNoTheoCon({
   lopDoiKhoa?: LopChon[];
   /** Phiếu gộp ĐANG MỞ của đơn, `null` khi chưa phát. Dựng ở server — xem `PhieuGopView`. */
   phieu?: PhieuGopView | null;
+  /**
+   * PHIÊN J — các đợt CẤP ĐƠN đang sống (`PaymentRequest.orderItemId IS NULL`, chưa VOID),
+   * nguồn của bảng "học phí từng con theo các đợt của đơn".
+   *
+   * ⚠️ Rỗng ⇒ KHÔNG vẽ bảng. Đơn chưa chia đợt thì một cái bảng một cột không nói thêm gì
+   * so với con số "còn nợ" đã có ngay trên (luật 12: đừng vẽ thứ không mang thông tin).
+   *
+   * ⚠️ Chỉ HIỂN THỊ. Mọi phép thu/đối khớp vẫn đi qua chính các đợt cấp đơn này — bảng
+   * không sinh phiếu, không sinh QR. Lý do đầy đủ ở đầu `lib/finance/chia-dot-cho-con.ts`.
+   */
+  dotDon?: readonly DotDonDeChia[];
 }) {
   const [dangMoForm, datDangMoForm] = useState<string | null>(null);
   /** F1 — bé nào đang mở form chuyển tiền. Một lúc chỉ một. */
@@ -1080,6 +1097,26 @@ export function CongNoTheoCon({
     .flatMap((c) => c.dotDangMo)
     .filter((d) => chon.includes(d.id))
     .reduce((s, d) => s + Math.max(0, d.amountDue - d.daRot), 0);
+
+  // PHIÊN J — bảng chia đợt. Tính Ở ĐÂY chứ không trong JSX: đây là phép tính trên tiền,
+  // và một phép tính inline trong JSX không có chỗ cấy lỗi (luật 12b). Hàm thuần, có bộ ca
+  // `[CDC-*]`; chỗ này chỉ nạp đầu vào.
+  //
+  // ⚠️ `phaiThu` + `daThu` lấy thẳng từ `so.con` — KHÔNG tính lại. Dựng lại hai con số ấy ở
+  // đây là đẻ định nghĩa "đã thu" thứ sáu, đúng thứ `lib/finance/no-theo-con.ts` sinh ra để
+  // chấm dứt.
+  const ketChiaDot =
+    dotDon.length > 0
+      ? chiaDotChoCon({
+          dot: dotDon,
+          con: so.con.map((c) => ({
+            orderItemId: c.orderItemId,
+            ten: c.ten,
+            phaiThu: c.phaiThu,
+            daThu: c.daThu,
+          })),
+        })
+      : null;
 
   if (so.con.length === 0) {
     return (
@@ -1133,6 +1170,11 @@ export function CongNoTheoCon({
           cũ: `chuaGanCon` chỉ cộng trục A, nên với 4 khoản `PENDING` của
           `ORD-260917-000001` nó ra 0 và cả khối này BIẾN MẤT — tiền có thật mà màn hình câm.
           Đo được 18/09, không phải phòng xa. */}
+      {/* PHIÊN J — bảng chia đợt. Đặt NGAY SAU tiêu đề, TRƯỚC mọi khối thao tác: nó là câu
+          trả lời cho "đơn này thu làm mấy lần, mỗi lần bé nào gánh bao nhiêu" — thứ người ta
+          đọc TRƯỚC khi làm gì. Các khối theo con bên dưới vẫn là nơi thao tác. */}
+      {ketChiaDot && <BangChiaDot ket={ketChiaDot} />}
+
       {/* PHIÊN C — phiếu gộp. Đặt TRÊN khối "khoản chờ gắn" có chủ đích: phiếu là việc SẮP
           làm (đang chờ tiền), còn khoản chờ gắn là việc ĐÃ RỒI cần dọn. Thứ tự đọc của màn
           hình nên theo thứ tự đó. */}
@@ -1440,5 +1482,130 @@ export function CongNoTheoCon({
         })}
       </ul>
     </section>
+  );
+}
+
+/**
+ * BẢNG "HỌC PHÍ TỪNG CON THEO CÁC ĐỢT CỦA ĐƠN" — PHIÊN J · 24/09/2026.
+ *
+ * Chủ dự án: *"Làm công nợ theo con được chia đợt theo số đợt thu tiền của tổng đơn."*
+ * Chốt kèm: **giữ đợt cấp đơn, đây CHỈ LÀ BẢNG ĐỂ ĐỌC** — không phiếu thu, không QR riêng.
+ *
+ * ⚠️ VÌ SAO ĐÂY LÀ BẢNG, TRONG KHI PHẦN CÒN LẠI CỦA KHỐI CỐ Ý KHÔNG PHẢI BẢNG
+ * (xem chú thích đầu tệp: *"Bảng buộc mọi con vào cùng một tập cột"*).
+ * Vì câu hỏi ở đây khác hẳn: không phải *"làm gì cho bé này"* mà *"đợt 1 gồm những ai, cộng
+ * lại có bằng số trên phiếu thu không"*. Đó đúng là câu hỏi hai chiều — và một câu hỏi hai
+ * chiều đọc bằng bảng. Các khối theo con bên dưới vẫn là nơi thao tác.
+ *
+ * ⚠️ CỘT PHẢI CỘNG ĐÚNG BẰNG SỐ TIỀN ĐỢT, vì người đọc đối chiếu thẳng với khối "PHIẾU THU &
+ * QR THEO ĐỢT" ngay dưới trên cùng màn hình. Bất biến đó do `chiaDotChoCon` giữ; ở đây chỉ
+ * việc in ra — và in cả hàng tổng để người đọc TỰ kiểm được, không phải tin lời.
+ */
+function BangChiaDot({ ket }: { ket: ChiaDotKetQua }) {
+  if (!ket.co) {
+    return (
+      <p className="mb-4 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+        Chưa chia được theo đợt: {ket.lyDo}
+      </p>
+    );
+  }
+
+  return (
+    <div className="mb-4 rounded-lg border border-border bg-muted/20 p-3">
+      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Học phí từng con theo {ket.dot.length} đợt của đơn
+        </h3>
+        <p className="text-[11px] text-muted-foreground">
+          Chia theo tỷ lệ số tiền từng đợt · chỉ để đối chiếu, mã QR vẫn theo đợt của đơn
+        </p>
+      </div>
+
+      {/* Kế hoạch không phủ đúng học phí ⇒ CỘT sẽ lệch. Nói ra, vì người đọc đang đối chiếu
+          cột với khối phiếu thu bên dưới và sẽ tưởng hệ thống tính sai. */}
+      {!ket.khopKeHoach && (
+        <p className="mb-2 rounded border border-state-warning-soft bg-state-warning-soft px-2 py-1.5 text-[11px] text-state-warning-ink">
+          Kế hoạch đợt đang là <b className="tabular-nums">{vnd(ket.tongKeHoach)}</b> trong khi
+          học phí các con cộng lại là <b className="tabular-nums">{vnd(ket.tongPhaiThu)}</b>. Số
+          của từng con vẫn đúng, nhưng cộng theo cột sẽ không khớp số trên phiếu thu.
+        </p>
+      )}
+
+      {/* `overflow-x-auto` chứ không thu nhỏ chữ: đơn 12 đợt thì bảng phải cuộn được, và ở
+          320px cuộn ngang đọc được còn chữ 10px thì không. */}
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-max border-collapse text-sm">
+          <thead>
+            <tr className="border-b border-border text-left">
+              <th scope="col" className="py-1.5 pr-3 font-medium text-muted-foreground">
+                Con
+              </th>
+              {ket.dot.map((d) => (
+                <th
+                  key={d.installmentNo}
+                  scope="col"
+                  className="px-3 py-1.5 text-right font-medium text-muted-foreground"
+                >
+                  <span className="block">Đợt {d.installmentNo}</span>
+                  <span className="block text-[11px] font-normal">hạn {ngay(d.dueDate)}</span>
+                </th>
+              ))}
+              <th scope="col" className="py-1.5 pl-3 text-right font-medium text-muted-foreground">
+                Tổng
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {ket.hang.map((h) => (
+              <tr key={h.orderItemId} className="border-b border-border/60">
+                {/* Tên tiếng Việt dài là mặc định — `max-w` + `truncate`, kèm `title` để
+                    vẫn đọc được đầy đủ khi trỏ vào. */}
+                <th
+                  scope="row"
+                  className="max-w-[14rem] truncate py-2 pr-3 text-left font-medium"
+                  title={h.ten}
+                >
+                  {h.ten}
+                </th>
+                {h.o.map((o, k) => (
+                  <td key={k} className="px-3 py-2 text-right tabular-nums">
+                    {vnd(o.soTien)}
+                    {/* Ba trạng thái, ba câu khác nhau. Im lặng ở ô đã đóng là bỏ mất đúng
+                        thứ sale cần biết ("bé này đóng tới đâu rồi"). */}
+                    {o.daPhu >= o.soTien && o.soTien > 0 ? (
+                      <span className="block text-[11px] font-medium text-state-success-ink">
+                        đã đóng
+                      </span>
+                    ) : o.daPhu > 0 ? (
+                      <span className="block text-[11px] text-muted-foreground">
+                        còn {vnd(o.soTien - o.daPhu)}
+                      </span>
+                    ) : null}
+                  </td>
+                ))}
+                <td className="py-2 pl-3 text-right font-semibold tabular-nums">{vnd(h.tong)}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            {/* Hàng tổng KHÔNG phải trang trí: nó là thứ cho người đọc tự đối chiếu với khối
+                phiếu thu bên dưới. Bỏ nó đi là bắt người ta cộng tay 4 cột. */}
+            <tr>
+              <th scope="row" className="py-1.5 pr-3 text-left text-xs text-muted-foreground">
+                Tổng đợt
+              </th>
+              {ket.tongTheoDot.map((t, k) => (
+                <td key={k} className="px-3 py-1.5 text-right text-xs tabular-nums">
+                  {vnd(t)}
+                </td>
+              ))}
+              <td className="py-1.5 pl-3 text-right text-xs font-semibold tabular-nums">
+                {vnd(ket.tongPhaiThu)}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
   );
 }
