@@ -4,18 +4,42 @@
 // người trong không đọc được chat của chính mình. Nên nó đo CẢ HAI ĐẦU của mỗi nhánh,
 // không chỉ đầu "đúng" (bài học `canSearchPhone` — luật 14).
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   nguoiDuocDungMotNick,
   MUC_QUYEN,
-  VAI_THAY_MOI_NICK,
+  VAI_QUAN_LY_CO_SO,
   MUC_MAC_DINH_CHUA_GIAO,
   type GiaoTay,
 } from "./pham-vi-nick";
 
-const TRANG = "u-trang"; // QLCS kiêm CS1 + CS2
+/**
+ * Thân hàm `nguoiDuocDungMotNick`, đã BÓC CHÚ THÍCH.
+ *
+ * Bóc là bắt buộc (luật 11): chính chú thích trong hàm nhắc `VAI_QUAN_LY_CO_SO` để giải
+ * thích vì sao nhánh cũ bị gỡ — không bóc thì lưới đỏ vì lời kể, không phải vì mã.
+ * `process.cwd()` chứ không `import.meta.url`: cấu hình vitest của repo này không cho
+ * `fileURLToPath` (xem mẫu LƯỚI GHIM MÃ NGUỒN trong CLAUDE.md).
+ */
+function thanHamChinhSach(): string {
+  const src = readFileSync(
+    resolve(process.cwd(), "lib/integrations/zalocrm/pham-vi-nick.ts"),
+    "utf8",
+  );
+  const dau = src.indexOf("export function nguoiDuocDungMotNick(");
+  if (dau < 0) throw new Error("không thấy `nguoiDuocDungMotNick` — lưới mất neo");
+  return src
+    .slice(dau)
+    .split(/\r?\n/)
+    .map((d) => d.replace(/\/\/.*$/, ""))
+    .join("\n");
+}
+
+const TRANG = "u-trang"; // quản lý cơ sở CS1 (+CS2)
 const LOC = "u-loc"; // sale CS1
 const DIEU = "u-dieu"; // sale CS1
-const HA = "u-ha"; // 🔴 GIÁO VIÊN CS1 — nhân sự của cơ sở, nhưng KHÔNG thuộc tập mặc định
+const HA = "u-ha"; // 🔴 GIÁO VIÊN CS1 — nhân sự của cơ sở, KHÔNG thuộc tập mặc định
 
 /** MỌI nhân sự của cơ sở — tập GIAO TAY hợp lệ (rộng, từ 24/09). */
 const CA_CO_SO = [TRANG, LOC, DIEU, HA] as const;
@@ -29,7 +53,6 @@ describe("[PVN-01] nick CHƯA GIAO AI → tập MẶC ĐỊNH, mức mặc đị
       giaoTay: KHONG_GIAO,
       nguoiCuaCoSo: CA_CO_SO,
       macDinhDungDuoc: MAC_DINH,
-      quanLyCoSo: [],
     });
     expect(ra.map((x) => x.sataUserId)).toEqual([TRANG, LOC, DIEU]);
     expect(new Set(ra.map((x) => x.mucQuyen))).toEqual(new Set([MUC_MAC_DINH_CHUA_GIAO]));
@@ -39,53 +62,60 @@ describe("[PVN-01] nick CHƯA GIAO AI → tập MẶC ĐỊNH, mức mặc đị
 
   it("cơ sở rỗng → rỗng, không ném", () => {
     expect(
-      nguoiDuocDungMotNick({
-        giaoTay: KHONG_GIAO,
-        nguoiCuaCoSo: [],
-        macDinhDungDuoc: [],
-        quanLyCoSo: [],
-      }),
+      nguoiDuocDungMotNick({ giaoTay: KHONG_GIAO, nguoiCuaCoSo: [], macDinhDungDuoc: [] }),
     ).toEqual([]);
   });
 });
 
-describe("[PVN-02] quản lý cơ sở được `admin` TỰ ĐỘNG", () => {
-  it("không cần dòng giao nào", () => {
-    const ra = nguoiDuocDungMotNick({
-      giaoTay: KHONG_GIAO,
-      nguoiCuaCoSo: CA_CO_SO,
-      macDinhDungDuoc: MAC_DINH,
-      quanLyCoSo: [TRANG],
-    });
-    expect(ra.find((x) => x.sataUserId === TRANG)?.mucQuyen).toBe("admin");
-    // ĐỐI CHỨNG: người thường KHÔNG được nâng lên admin theo.
-    expect(ra.find((x) => x.sataUserId === LOC)?.mucQuyen).toBe(MUC_MAC_DINH_CHUA_GIAO);
-  });
+describe("[PVN-02] 🔴 QUẢN LÝ CƠ SỞ KHÔNG còn là ngoại lệ (đảo 24/09)", () => {
+  // Chủ dự án: *"quản lý phân quyền của QLCS ở đây luôn chứ"* — tức thêm/gỡ/đổi mức cho
+  // quản lý cơ sở ngay trên màn. Hệ quả ĐÃ ĐƯỢC CÂN NHẮC: gỡ họ khỏi một nick thì họ
+  // mất tầm nhìn nick đó. Bản giữa ngày 24/09 cho họ `admin` tự động; nhánh ấy đã gỡ.
 
-  it("nick ĐÃ giao cho người khác, quản lý VẪN thấy ở mức admin", () => {
+  it("nick ĐÃ giao cho người khác ⇒ quản lý KHÔNG tự động có mặt", () => {
     const ra = nguoiDuocDungMotNick({
       giaoTay: [{ sataUserId: LOC, mucQuyen: "chat" }],
       nguoiCuaCoSo: CA_CO_SO,
       macDinhDungDuoc: MAC_DINH,
-      quanLyCoSo: [TRANG],
+    });
+    expect(ra).toEqual([{ sataUserId: LOC, mucQuyen: "chat" }]);
+    expect(ra.map((x) => x.sataUserId), "nhánh admin-tự-động quay lại").not.toContain(TRANG);
+  });
+
+  it("muốn quản lý có quyền thì GIAO TAY — và mức đúng thứ được giao", () => {
+    // ĐỐI CHỨNG DƯƠNG của ca trên. Thiếu vế này thì một hàm luôn trả rỗng cũng xanh.
+    const ra = nguoiDuocDungMotNick({
+      giaoTay: [
+        { sataUserId: TRANG, mucQuyen: "admin" },
+        { sataUserId: LOC, mucQuyen: "chat" },
+      ],
+      nguoiCuaCoSo: CA_CO_SO,
+      macDinhDungDuoc: MAC_DINH,
     });
     expect(ra).toEqual([
       { sataUserId: TRANG, mucQuyen: "admin" },
       { sataUserId: LOC, mucQuyen: "chat" },
     ]);
-    // ĐỐI CHỨNG ÂM — người không được giao phải biến mất.
-    expect(ra.map((x) => x.sataUserId)).not.toContain(DIEU);
   });
 
-  it("quản lý được giao tay mức HẸP hơn → vẫn giữ admin (mức rộng thắng)", () => {
-    // Chủ dự án chọn phương án "tự động admin", KHÔNG chọn phương án cho đè riêng.
+  it("giao quản lý ở mức HẸP ⇒ đúng mức hẹp, KHÔNG bị nâng lên admin", () => {
+    // Đây là ca mà nhánh cũ làm sai: `rongHon(admin, read)` kéo mọi mức về `admin`, nên
+    // "hạ quyền quản lý xuống chỉ-xem" là một câu nói dối trên màn.
     const ra = nguoiDuocDungMotNick({
       giaoTay: [{ sataUserId: TRANG, mucQuyen: "read" }],
       nguoiCuaCoSo: CA_CO_SO,
       macDinhDungDuoc: MAC_DINH,
-      quanLyCoSo: [TRANG],
     });
-    expect(ra).toEqual([{ sataUserId: TRANG, mucQuyen: "admin" }]);
+    expect(ra).toEqual([{ sataUserId: TRANG, mucQuyen: "read" }]);
+  });
+
+  it("nick CHƯA giao ai ⇒ quản lý vẫn thấy, nhưng ở mức MẶC ĐỊNH chứ không admin", () => {
+    const ra = nguoiDuocDungMotNick({
+      giaoTay: KHONG_GIAO,
+      nguoiCuaCoSo: CA_CO_SO,
+      macDinhDungDuoc: MAC_DINH,
+    });
+    expect(ra.find((x) => x.sataUserId === TRANG)?.mucQuyen).toBe(MUC_MAC_DINH_CHUA_GIAO);
   });
 });
 
@@ -98,7 +128,6 @@ describe("[PVN-03] giao tay NHIỀU người, mỗi người một mức", () =>
       ],
       nguoiCuaCoSo: CA_CO_SO,
       macDinhDungDuoc: MAC_DINH,
-      quanLyCoSo: [],
     });
     expect(ra).toEqual([
       { sataUserId: LOC, mucQuyen: "chat" },
@@ -111,9 +140,22 @@ describe("[PVN-03] giao tay NHIỀU người, mỗi người một mức", () =>
       giaoTay: [{ sataUserId: DIEU, mucQuyen: "admin" }],
       nguoiCuaCoSo: CA_CO_SO,
       macDinhDungDuoc: MAC_DINH,
-      quanLyCoSo: [],
     });
     expect(ra).toEqual([{ sataUserId: DIEU, mucQuyen: "admin" }]);
+  });
+
+  it("một người xuất hiện hai lần ⇒ mức RỘNG thắng, không phải dòng cuối", () => {
+    // Đường ghi đã chặn trùng (`TRUNG_NGUOI`), nhưng dữ liệu cũ / ghi tay vẫn có thể
+    // sinh ra. Lấy "dòng cuối" là kết quả đổi theo thứ tự trả về của Postgres.
+    const ra = nguoiDuocDungMotNick({
+      giaoTay: [
+        { sataUserId: LOC, mucQuyen: "read" },
+        { sataUserId: LOC, mucQuyen: "admin" },
+      ],
+      nguoiCuaCoSo: CA_CO_SO,
+      macDinhDungDuoc: MAC_DINH,
+    });
+    expect(ra).toEqual([{ sataUserId: LOC, mucQuyen: "admin" }]);
   });
 });
 
@@ -125,18 +167,19 @@ describe("[PVN-04] dòng giao CŨ không được nới quyền", () => {
       giaoTay: [{ sataUserId: "u-da-nghi-viec", mucQuyen: "admin" }],
       nguoiCuaCoSo: CA_CO_SO,
       macDinhDungDuoc: MAC_DINH,
-      quanLyCoSo: [],
     });
     expect(ra.map((x) => x.sataUserId)).toEqual([TRANG, LOC, DIEU]);
     expect(ra.map((x) => x.sataUserId)).not.toContain("u-da-nghi-viec");
   });
 
-  it("quản lý đã rời cơ sở → KHÔNG còn được kèm vào", () => {
+  it("quản lý đã rời cơ sở → dòng giao của họ rụng như mọi người", () => {
     const ra = nguoiDuocDungMotNick({
-      giaoTay: [{ sataUserId: LOC, mucQuyen: "chat" }],
+      giaoTay: [
+        { sataUserId: LOC, mucQuyen: "chat" },
+        { sataUserId: "u-quanly-cu", mucQuyen: "admin" },
+      ],
       nguoiCuaCoSo: [LOC, DIEU],
       macDinhDungDuoc: [LOC, DIEU],
-      quanLyCoSo: ["u-quanly-cu"],
     });
     expect(ra).toEqual([{ sataUserId: LOC, mucQuyen: "chat" }]);
   });
@@ -148,8 +191,30 @@ describe("[PVN-05] hằng số — đổi ở đây là đổi CHÍNH SÁCH, ph�
     expect([...MUC_QUYEN]).toEqual(["read", "chat", "admin"]);
   });
 
-  it("chỉ `CENTER_MANAGER` được admin tự động", () => {
-    expect([...VAI_THAY_MOI_NICK]).toEqual(["CENTER_MANAGER"]);
+  it("`VAI_QUAN_LY_CO_SO` là NHÃN — không được xuất hiện trong luật quyền", () => {
+    expect([...VAI_QUAN_LY_CO_SO]).toEqual(["CENTER_MANAGER"]);
+
+    // 🔴 LƯỚI GHIM MÃ NGUỒN. Thứ cần khẳng định là "hàm chính sách KHÔNG đụng tới hằng
+    // nhãn" — không đầu vào nào chứng minh được điều đó, vì hàm không nhận tham số
+    // `quanLyCoSo` nữa; một nhánh mới đọc hằng trực tiếp sẽ không ca nào thấy.
+    //
+    // Nhánh "quản lý cơ sở admin tự động" đã bị chủ dự án gỡ 24/09. Thêm lại là đảo một
+    // quyết định đã ký, VÀ làm nút "gỡ" trên màn thành lời hứa suông: bấm gỡ xong quản
+    // lý vẫn thấy nick.
+    const than = thanHamChinhSach();
+    expect(than, "hàm chính sách đọc hằng NHÃN ⇒ nhánh tự-động đã quay lại").not.toContain(
+      "VAI_QUAN_LY_CO_SO",
+    );
+    expect(than, "tham số `quanLyCoSo` đã bị gỡ khỏi hợp đồng hàm").not.toContain(
+      "quanLyCoSo",
+    );
+    // Đối chứng: lưới còn NEO ĐÚNG CHỖ (bóc chú thích không làm rỗng thân hàm).
+    expect(than).toContain("macDinhDungDuoc");
+
+    // ⚠️ GIỚI HẠN ĐÃ ĐO, đừng tin quá: ca này chỉ bắt dạng "đọc thẳng hằng nhãn". Cấy
+    // 24/09 cho thấy một bản tái tạo nhánh bằng `t.macDinhDungDuoc` (không nhắc hằng)
+    // đi lọt qua đây — và bị 13 ca HÀNH VI ở trên bắt, trong đó có `[PVN-02]`. Lưới
+    // hành vi là lưới gánh; ca này chỉ là chốt phụ cho một lối viết cụ thể.
   });
 
   it("nick chưa giao → mức `chat`, không phải `admin`", () => {
@@ -160,10 +225,12 @@ describe("[PVN-05] hằng số — đổi ở đây là đổi CHÍNH SÁCH, ph�
 describe("[PVN-06] thứ tự ỔN ĐỊNH — hai lượt liên tiếp ra cùng payload", () => {
   it("theo thứ tự `nguoiCuaCoSo`", () => {
     const t = {
-      giaoTay: [{ sataUserId: DIEU, mucQuyen: "read" as const }],
+      giaoTay: [
+        { sataUserId: DIEU, mucQuyen: "read" as const },
+        { sataUserId: TRANG, mucQuyen: "admin" as const },
+      ],
       nguoiCuaCoSo: [DIEU, LOC, TRANG],
       macDinhDungDuoc: [DIEU, LOC, TRANG],
-      quanLyCoSo: [TRANG],
     };
     expect(nguoiDuocDungMotNick(t).map((x) => x.sataUserId)).toEqual([DIEU, TRANG]);
     expect(nguoiDuocDungMotNick(t)).toEqual(nguoiDuocDungMotNick(t));
@@ -171,16 +238,15 @@ describe("[PVN-06] thứ tự ỔN ĐỊNH — hai lượt liên tiếp ra cùng
 });
 
 describe("[PVN-07] GIAO TAY ĐƯỢC ≠ MẶC ĐỊNH DÙNG ĐƯỢC — hai tập, hai nghĩa", () => {
-  // 🔴 Cả điểm của đợt 24/09: chủ dự án chốt mở rộng tập GIAO TAY ra mọi nhân sự của cơ
-  // sở. Nhỡ mở luôn tập MẶC ĐỊNH thì mọi giáo viên, kế toán… của cơ sở đọc được MỌI nick
-  // chưa giao — một lượt nới quyền im lặng, không ai bấm nút nào, không triệu chứng nào.
+  // 🔴 Chủ dự án chốt mở rộng tập GIAO TAY ra mọi nhân sự của cơ sở. Nhỡ mở luôn tập
+  // MẶC ĐỊNH thì mọi giáo viên, kế toán… của cơ sở đọc được MỌI nick chưa giao — một
+  // lượt nới quyền im lặng, không ai bấm nút nào, không triệu chứng nào.
 
   it("giáo viên GIAO TAY ĐƯỢC — dòng giao của họ có hiệu lực", () => {
     const ra = nguoiDuocDungMotNick({
       giaoTay: [{ sataUserId: HA, mucQuyen: "chat" }],
       nguoiCuaCoSo: CA_CO_SO,
       macDinhDungDuoc: MAC_DINH,
-      quanLyCoSo: [],
     });
     expect(ra).toEqual([{ sataUserId: HA, mucQuyen: "chat" }]);
   });
@@ -192,7 +258,6 @@ describe("[PVN-07] GIAO TAY ĐƯỢC ≠ MẶC ĐỊNH DÙNG ĐƯỢC — hai t�
       giaoTay: KHONG_GIAO,
       nguoiCuaCoSo: CA_CO_SO,
       macDinhDungDuoc: MAC_DINH,
-      quanLyCoSo: [],
     });
     expect(ra.map((x) => x.sataUserId)).not.toContain(HA);
   });
@@ -204,7 +269,6 @@ describe("[PVN-07] GIAO TAY ĐƯỢC ≠ MẶC ĐỊNH DÙNG ĐƯỢC — hai t�
       giaoTay: KHONG_GIAO,
       nguoiCuaCoSo: [LOC],
       macDinhDungDuoc: [LOC, "u-da-chuyen-co-so"],
-      quanLyCoSo: [],
     });
     expect(ra).toEqual([{ sataUserId: LOC, mucQuyen: "chat" }]);
   });

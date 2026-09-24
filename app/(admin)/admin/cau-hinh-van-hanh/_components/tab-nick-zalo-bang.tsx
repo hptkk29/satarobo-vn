@@ -21,6 +21,15 @@
 // (người nghỉ việc, đổi ca) là vế không ai nhớ bấm, và hỏng thì không có triệu chứng —
 // người không còn phận sự vẫn đọc chat khách.
 //
+// ── 🔴 QUẢN LÝ CƠ SỞ CŨNG LÀ MỘT DÒNG NHƯ MỌI NGƯỜI (chủ dự án ĐẢO 24/09) ────────────
+// Bản trước hiện họ ở một khối ghi chú xám "không gỡ ở đây được", vì họ có `admin` tự
+// động. Chủ dự án chốt lại: *"quản lý phân quyền của QLCS ở đây luôn chứ"* — nên nhánh
+// tự động đã bị gỡ khỏi `pham-vi-nick.ts` và họ thêm/gỡ/đổi mức như mọi người.
+//
+// Hệ quả ĐÃ ĐƯỢC CÂN NHẮC và phải NÓI RA trên màn: gỡ quản lý khỏi một nick thì họ
+// không còn đọc được chat của nick đó. Nick CHƯA giao ai thì họ vẫn thấy (nằm trong
+// `VAI_DUOC_CAP_NICK`), nhưng nick đã giao cho tư vấn viên thì mất hẳn.
+//
 // ── 🔴 LỖI ĐÃ SỬA: giá trị nội bộ rò ra ô chọn ───────────────────────────────────────
 // Bản 24/09 dùng `<Select value={CHUA_GIAO}>` với `CHUA_GIAO = "__chua-giao__"`, và ô
 // hiện đúng chuỗi ấy cho người dùng đọc. Nguyên nhân: `SelectValue` render GIÁ TRỊ khi
@@ -120,7 +129,9 @@ export function BangNickZalo({
           <tbody>
             {rows.map((r) => {
               const nguoi = r.centerId ? (nguoiTheoCoSo[r.centerId] ?? []) : [];
-              const khoa = !r.centerId || nguoi.filter((n) => !n.laQuanLy).length === 0;
+              // Quản lý cơ sở nay cũng giao tay được, nên KHÔNG trừ họ ra khi đếm.
+              // Trừ ra là một cơ sở chỉ có quản lý sẽ thấy nút xám mà không hiểu vì sao.
+              const khoa = !r.centerId || nguoi.length === 0;
               const tt = NHAN_TRANG_THAI[r.status] ?? NHAN_TRANG_THAI.UNKNOWN!;
 
               return (
@@ -159,7 +170,7 @@ export function BangNickZalo({
                         !r.centerId
                           ? "Nick chưa gắn cơ sở nên chưa giao được."
                           : khoa
-                            ? "Cơ sở này chưa có nhân sự nào ngoài quản lý cơ sở."
+                            ? "Cơ sở này chưa có nhân sự nào."
                             : undefined
                       }
                     >
@@ -222,9 +233,8 @@ function HopThoaiGiao({
   dong: () => void;
 }) {
   const [dangCho, batDau] = useTransition();
-  const quanLy = nguoi.filter((n) => n.laQuanLy);
-  const themDuoc = nguoi.filter((n) => !n.laQuanLy);
-  const theoId = new Map(themDuoc.map((n) => [n.id, n]));
+  // MỌI người của cơ sở vào chung một danh sách — kể cả quản lý cơ sở (đảo 24/09).
+  const theoId = new Map(nguoi.map((n) => [n.id, n]));
 
   // Trạng thái = danh sách ĐANG GIỮ, theo đúng thứ tự người dùng nhìn thấy. Dòng giao
   // cho người không còn trong danh sách hợp lệ (đã rời cơ sở) bị bỏ ngay khi mở: giữ nó
@@ -236,12 +246,16 @@ function HopThoaiGiao({
   );
 
   const daCo = new Set(danhSach.map((d) => d.id));
-  const conLai = themDuoc.filter((n) => !daCo.has(n.id));
+  const conLai = nguoi.filter((n) => !daCo.has(n.id));
+  const quanLyChuaThem = conLai.filter((n) => n.laQuanLy);
 
   function them(id: string | null) {
     if (!id || daCo.has(id)) return;
-    // Mặc định `chat` — mức thường dùng nhất. Người dùng đổi ngay tại dòng vừa thêm.
-    datDanhSach((d) => [...d, { id, muc: MUC_MAC_DINH_CHUA_GIAO }]);
+    // Mức mở sẵn: quản lý cơ sở ⇒ `admin` (việc của họ là quản lý nick), người khác ⇒
+    // `chat`. Chỉ là giá trị MỞ SẴN, hiện ngay trên màn và đổi được — không phải một
+    // luật ngầm: luật ngầm là thứ vừa bị gỡ khỏi `pham-vi-nick.ts`.
+    const n = theoId.get(id);
+    datDanhSach((d) => [...d, { id, muc: n?.laQuanLy ? "admin" : MUC_MAC_DINH_CHUA_GIAO }]);
   }
 
   function luu() {
@@ -295,7 +309,17 @@ function HopThoaiGiao({
                   className="flex items-center justify-between gap-2 rounded-lg px-1 py-1.5"
                 >
                   <div className="min-w-0">
-                    <div className="truncate text-sm font-medium">{n.ten}</div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="truncate text-sm font-medium">{n.ten}</span>
+                      {/* Nhãn, KHÔNG phải quyền — quản lý cơ sở nay cũng phải được giao
+                          thì mới có quyền trên nick đã giao. Hiện ra để người bấm biết
+                          mình đang gỡ ai. */}
+                      {n.laQuanLy ? (
+                        <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                          quản lý cơ sở
+                        </span>
+                      ) : null}
+                    </div>
                     {/* Nói THẬT: thêm được, nhưng chưa có tác dụng. Giấu đi là dựng một
                         nút bấm xong không có gì xảy ra (luật 12). */}
                     {n.dungDuocZalocrm ? (
@@ -366,16 +390,20 @@ function HopThoaiGiao({
           emptyText="Không có ai khớp"
         />
 
-        {/* Quản lý cơ sở: HIỆN nhưng KHÔNG cho sửa. Giấu hẳn thì người dùng tưởng họ
-            không có quyền; cho một ô chọn thì hứa một việc không làm được — bấm gỡ xong
-            họ vẫn thấy nick, vì `admin` của quản lý là tự động (`pham-vi-nick.ts`). */}
-        {quanLy.length > 0 ? (
-          <p className="rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
-            <strong className="font-medium text-foreground">
-              {quanLy.map((n) => n.ten).join(", ")}
-            </strong>{" "}
-            đang quản lý cơ sở này nên luôn có quyền {NHAN_MUC.admin.toLowerCase()} —
-            không gỡ ở đây được.
+        {/* 🔴 Quản lý cơ sở KHÔNG còn quyền tự động (đảo 24/09). Danh sách có người mà
+            quản lý lại không có tên trong đó nghĩa là họ MẤT tầm nhìn nick này — một
+            hệ quả thật, nên màn phải nói ra ngay lúc nó sắp xảy ra, không phải để người
+            ta phát hiện lúc sếp hỏi "sao tôi không thấy chat của khách". */}
+        {danhSach.length > 0 && quanLyChuaThem.length > 0 ? (
+          <p className="flex items-start gap-1.5 rounded-lg bg-state-warning-bg px-3 py-2 text-xs text-state-warning-ink">
+            <TriangleAlertIcon className="mt-px size-3.5 shrink-0" aria-hidden />
+            <span>
+              <strong className="font-medium">
+                {quanLyChuaThem.map((n) => n.ten).join(", ")}
+              </strong>{" "}
+              đang quản lý cơ sở này nhưng KHÔNG có trong danh sách — sẽ không đọc được
+              chat của nick này. Thêm vào nếu muốn họ theo dõi.
+            </span>
           </p>
         ) : null}
 

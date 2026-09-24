@@ -1,10 +1,15 @@
 // lib/integrations/zalocrm/pham-vi-nick.ts — AI ĐƯỢC DÙNG MỘT NICK, VÀ Ở MỨC NÀO.
 //
-// ── CHÍNH SÁCH (chủ dự án chốt 24/09/2026) ─────────────────────────────────
-//   Quản lý cơ sở  → `admin` TỰ ĐỘNG trên mọi nick của cơ sở mình. Không ai phải nhớ
-//                    giao; thêm nick mới hay đổi người quản lý đều tự khớp.
-//   Tư vấn viên    → GIAO TAY, chọn mức `read` / `chat` / `admin`.
-//   Nick CHƯA giao ai → cả cơ sở thấy ở mức `chat` (giữ nguyên hành vi trước 24/09).
+// ── CHÍNH SÁCH (chủ dự án chốt 24/09/2026, gồm cả lượt ĐẢO cuối ngày) ──────
+//   MỌI nhân sự của cơ sở → GIAO TAY, chọn mức `read` / `chat` / `admin`. Quản lý cơ sở
+//                    KHÔNG còn ngoại lệ: thêm/gỡ/đổi mức như mọi người.
+//   Nick CHƯA giao ai → chỉ vai trong `VAI_DUOC_CAP_NICK` (quản lý + tư vấn viên) dùng
+//                    được, ở mức `chat` — đúng hành vi trước 24/09.
+//
+// ⚠️ Bản giữa ngày 24/09 có nhánh "quản lý cơ sở `admin` TỰ ĐỘNG"; chủ dự án đã ĐẢO để
+// phân quyền của quản lý cơ sở cũng sửa được ngay trên màn. Nhánh ấy KHÔNG còn — đừng
+// thêm lại vì thấy "quản lý mà không thấy nick thì lạ": đó là lựa chọn có chủ đích, và
+// hệ quả (gỡ quản lý khỏi nick ⇒ họ mất tầm nhìn nick đó) đã được cân nhắc.
 //
 // Ba mức là mô hình CÓ SẴN của ZaloCRM, không phải ta bịa:
 //   `read` xem tin · `chat` gửi tin · `admin` quản lý nick
@@ -23,8 +28,20 @@
 export const MUC_QUYEN = ["read", "chat", "admin"] as const;
 export type MucQuyen = (typeof MUC_QUYEN)[number];
 
-/** Vai được `admin` TỰ ĐỘNG trên mọi nick của cơ sở mình. */
-export const VAI_THAY_MOI_NICK: readonly string[] = ["CENTER_MANAGER"];
+/**
+ * Vai quản lý cơ sở — **NHÃN**, KHÔNG phải quyền.
+ *
+ * ⚠️ 24/09/2026 (lượt sau) — chủ dự án ĐẢO quyết định "QLCS `admin` tự động". Nay quản lý
+ * cơ sở là một dòng giao như mọi người khác: thêm được, gỡ được, đổi mức được. Hằng này
+ * chỉ còn hai việc, cả hai đều ở tầng HIỂN THỊ:
+ *   · gắn nhãn "quản lý cơ sở" dưới tên trên màn;
+ *   · chọn mức mặc định `admin` khi mới thêm họ (người dùng đổi ngay được).
+ *
+ * 🔴 ĐỪNG cho nó quay lại làm cổng quyền. Tên cũ `VAI_THAY_MOI_NICK` đã bị đổi vì nó NÓI
+ * DỐI sau lượt đảo — một hằng tên "thấy mọi nick" mà không cấp gì là thứ người sau sẽ
+ * đọc rồi kết luận sai.
+ */
+export const VAI_QUAN_LY_CO_SO: readonly string[] = ["CENTER_MANAGER"];
 
 /** Mức cho người của cơ sở khi nick CHƯA giao cho ai. */
 export const MUC_MAC_DINH_CHUA_GIAO: MucQuyen = "chat";
@@ -77,8 +94,6 @@ export type ThamSoPhamViNick = {
    * không ai bấm nút nào, và không triệu chứng nào báo.
    */
   macDinhDungDuoc: readonly string[];
-  /** Tập con của `nguoiCuaCoSo` đang giữ vai quản lý cơ sở. */
-  quanLyCoSo: readonly string[];
 };
 
 /** Mức rộng hơn thắng. Dùng khi một người vừa là quản lý vừa được giao tay. */
@@ -117,21 +132,19 @@ export function nguoiDuocDungMotNick(t: ThamSoPhamViNick): QuyenTrenNick[] {
   const hopLe = new Set(t.nguoiCuaCoSo);
   const muc = new Map<string, MucQuyen>();
 
-  // ① Quản lý cơ sở — `admin`, TỰ ĐỘNG, không cần dòng giao nào.
-  for (const ql of t.quanLyCoSo) {
-    if (hopLe.has(ql)) muc.set(ql, "admin");
-  }
-
-  // ② Giao tay. Lọc theo `hopLe` nên dòng giao cho người đã rời cơ sở tự rụng.
+  // ① Giao tay. Lọc theo `hopLe` nên dòng giao cho người đã rời cơ sở tự rụng.
+  //
+  //    ⚠️ KHÔNG còn nhánh "quản lý cơ sở `admin` tự động" (chủ dự án đảo 24/09, lượt
+  //    sau). Quản lý cơ sở nay là một dòng giao như mọi người: muốn họ có quyền trên
+  //    một nick ĐÃ GIAO thì phải thêm họ vào — xem `VAI_QUAN_LY_CO_SO`.
   const giaoConHieuLuc = t.giaoTay.filter((g) => hopLe.has(g.sataUserId));
   for (const g of giaoConHieuLuc) {
     const cu = muc.get(g.sataUserId);
     muc.set(g.sataUserId, cu ? rongHon(cu, g.mucQuyen) : g.mucQuyen);
   }
 
-  // ③ CHƯA GIAO AI (sau khi lọc) ⇒ mức mặc định cho `macDinhDungDuoc`. Quản lý vẫn giữ
-  //    `admin` của họ nhờ `rongHon`. Xem khối chú thích đầu file về vì sao nhánh này
-  //    phải tồn tại.
+  // ② CHƯA GIAO AI (sau khi lọc) ⇒ mức mặc định cho `macDinhDungDuoc`. Xem khối chú
+  //    thích đầu file về vì sao nhánh này phải tồn tại.
   //
   //    🔴 Lặp trên `macDinhDungDuoc`, KHÔNG phải `nguoiCuaCoSo`. Từ 24/09 hai tập đã
   //    KHÁC NHAU: tập sau gồm mọi nhân sự của cơ sở (để giao tay được), tập trước chỉ

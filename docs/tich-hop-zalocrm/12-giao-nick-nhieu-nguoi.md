@@ -14,7 +14,7 @@ Chủ dự án chốt mô hình thật:
 
 | | |
 |---|---|
-| **Quản lý cơ sở** | `admin` **TỰ ĐỘNG** trên mọi nick của cơ sở mình. Không ai phải nhớ giao. Kiêm hai cơ sở thì với tới nick của cả hai. |
+| **Quản lý cơ sở** | ~~`admin` TỰ ĐỘNG~~ **[ĐẢO cuối ngày 24/09]** — nay là một dòng giao **như mọi người**: thêm/gỡ/đổi mức ngay trên màn. Xem mục dưới. |
 | **Ai cũng giao tay được** | **MỌI nhân sự** của cơ sở nick đó — tư vấn viên, giáo vụ, giáo viên, kế toán… Chọn mức `read` / `chat` / `admin`. Một nick giao được cho nhiều người. |
 | **Nick chưa giao ai** | chỉ **tư vấn viên + quản lý** của cơ sở dùng chung ở mức `chat` — trạng thái BÌNH THƯỜNG của nick mới, không phải việc còn bỏ dở. |
 
@@ -33,6 +33,33 @@ Gộp hai tập lại là **một lượt nới quyền im lặng**: mọi giáo
 
 Chủ dự án chốt (24/09): thêm được người **ngoài vai** nhưng **không** ngoài cơ sở, và
 người rời cơ sở vẫn **tự rụng** ở lượt đối soát như trước.
+
+### 🔴 QUẢN LÝ CƠ SỞ KHÔNG CÒN QUYỀN TỰ ĐỘNG — và hệ quả đã được cân nhắc
+
+Chủ dự án: *"quản lý phân quyền của QLCS ở đây luôn chứ"*. Nhánh "`admin` tự động" trong
+`pham-vi-nick.ts` **đã gỡ**. Nay:
+
+- nick **CHƯA giao ai** → quản lý vẫn thấy (họ nằm trong `VAI_DUOC_CAP_NICK`), mức `chat`;
+- nick **ĐÃ giao** → quản lý chỉ có quyền nếu **có tên trong danh sách**.
+
+Hệ quả thật, đã nêu trước khi làm và chủ dự án chọn phương án này: **gỡ quản lý khỏi một
+nick là họ không còn đọc được chat của nick đó.** Màn **cảnh báo ngay** khi danh sách có
+người mà quản lý không có tên (`quanLyChuaThem`, ca `[NZ-08]`) — không để phát hiện lúc
+sếp hỏi "sao tôi không thấy chat của khách".
+
+#### Migration cutover `20260924160000` — chặn một lượt MẤT QUYỀN IM LẶNG
+
+Gỡ nhánh mã mà không làm gì thêm thì **ngay lúc triển khai**, mọi nick đang có người được
+giao sẽ rơi mất quản lý cơ sở — không ai bấm nút nào, không dòng nhật ký nào.
+
+Chủ dự án chọn *"gỡ được quản lý khỏi nick"*, tức một **hành động có chủ ý trên màn**,
+KHÔNG phải một lượt mất quyền do triển khai. Nên migration thêm dòng giao `admin` tường
+minh cho quản lý của **những nick đã có người được giao** — giữ nguyên quyền tại thời
+điểm cutover; từ đó việc thêm/gỡ là của người vận hành.
+
+Nó **cố ý KHÔNG chạm** nick chưa giao ai: thêm dòng vào đó là biến "cả cơ sở dùng chung"
+thành "chỉ quản lý", tức **cắt** quyền của tư vấn viên — đúng chiều ngược lại.
+Ca `[ZCG-16]` chạy **chính tệp migration** trên Postgres thật, đo cả hai vế + tính lặp lại.
 
 ### ⚠️ Thêm được ≠ dùng được ngay
 
@@ -155,6 +182,22 @@ Và 9 phép nữa cho lượt MỞ RỘNG (24/09, sau), **cả 9 đều đỏ đ
 | cờ `dungDuocZalocrm` luôn true | `ZCG-12` |
 | gỡ khối cảnh báo khỏi màn | `NZ-07` |
 | quay lại lối sentinel trong ô chọn | `NZ-01` |
+
+Và 6 phép nữa cho lượt ĐẢO (quản lý cơ sở), **cả 6 đều đỏ**:
+
+| cấy | ca đỏ |
+|---|---|
+| nhánh "quản lý admin tự động" quay lại | 13 ca, gồm `PVN-02` `ZC-CQ-11` |
+| nhánh tự động quay lại (DB thật) | `ZCG-15` |
+| màn lọc quản lý ra khỏi danh sách | `NZ-08` |
+| gỡ lời cảnh báo "quản lý sẽ không đọc được" | `NZ-08` |
+| migration: sai mắt join `Center`↔`OrgUnit` | `ZCG-16` |
+| migration: chạm cả nick chưa giao | `ZCG-16` |
+
+**Một giới hạn đo được, ghi vào chính ca test:** lưới ghim mã nguồn `[PVN-05]` chỉ bắt
+dạng "đọc thẳng hằng `VAI_QUAN_LY_CO_SO`". Bản tái tạo nhánh bằng `t.macDinhDungDuoc`
+(không nhắc hằng) **đi lọt qua nó** — và bị 13 ca HÀNH VI bắt. Kiểm riêng cho thấy
+`[PVN-05]` vẫn bắt đúng dạng nó khai. Lưới hành vi là lưới gánh; lưới grep là chốt phụ.
 
 **Một lỗi FIXTURE bị bắt trong lượt này:** `taoNguoi` của bộ DB cho MỌI người
 `role: "SALES_CSM"` (vai v1), nên giáo viên hoá ra "mở được ZaloCRM" và `[ZCG-12]` đỏ vì
