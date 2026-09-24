@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import {
+  BadgeCheck,
   // Trophy,
   // tạm ẩn cùng mục "Vinh danh" trong NAV_GROUPS (bật lại: bỏ comment)
   AlertTriangle,
@@ -235,6 +236,10 @@ const NAV_GROUPS: NavGroup[] = [
       // ZaloCRM nhúng iframe. Đặt cạnh "Tin nhắn" vì cùng một việc dưới mắt Sale: trả lời
       // khách. Cờ `zalocrm` mặc định TẮT ⇒ mục ẩn cho tới khi máy chủ ZaloCRM chạy thật.
       { label: "Zalo CRM", href: "/zalo-crm", icon: MessageSquareText, perm: [...PAGE_GATES["/zalo-crm"]], flag: "zalocrm" },
+      // Cổng HẸP HƠN mục ngay trên: `zalocrm:manage-nick` chỉ Quản trị tối cao + Quản lý
+      // cơ sở. Tư vấn viên DÙNG nick thì được, tự giao nick cho mình thì không — nên mục
+      // này ẩn với họ trong khi mục "Zalo CRM" vẫn hiện.
+      { label: "Giao nick Zalo", href: "/zalo-crm/nick", icon: UserCog, perm: [...PAGE_GATES["/zalo-crm/nick"]], flag: "zalocrm" },
       // US-15 — tra cứu có lý do + khoá hội thoại. `chat:admin` CHỈ SUPER_ADMIN có
       // (AC5: QLCS không vào được), và nó seed scope GLOBAL nên dùng làm gate cấp trang
       // được — khác chat:read/chat:send (CENTER/ASSIGNED), xem lib/auth/page-gates.ts.
@@ -298,6 +303,21 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Tài chính",
     items: [
       { label: "Đơn hàng", href: "/orders", icon: ShoppingBag, perm: ["orders:view"] },
+      // 23/09/2026 — hàng chờ DUYỆT ĐƠN của quản lý cơ sở sống lại, NHƯNG với luật MỚI:
+      // chỉ đơn VƯỢT NGƯỠNG cấu hình (`orders.maxInstallments` / `orders.maxDiscountItems`)
+      // mới vào đây, khác hẳn luật cũ "mọi đơn có giảm giá đều phải duyệt" (gỡ 13/09).
+      // Đo prod 23/09: 0 đơn vượt trần đợt, đúng 1 đơn vượt trần ưu đãi ⇒ hàng chờ mở ra
+      // gần như rỗng, không phải một cửa ải mới cho quầy.
+      //
+      // Thiếu mục này thì trang chỉ tới được từ TRONG chi tiết một đơn đang chờ — tức phải
+      // tìm ra đơn rồi mới biết hàng chờ tồn tại.
+      // perm dùng OR: ai có MỘT trong hai quyền duyệt là thấy link.
+      {
+        label: "Duyệt đơn hàng",
+        href: "/orders/duyet",
+        icon: BadgeCheck,
+        perm: ["discounts:approve", "installments:approve"],
+      },
       // Ghi nhận khoản thu là việc của quầy (payments:record) — xem ghi chú trong
       // app/(admin)/admin/payments/page.tsx. Đừng thu lại còn mỗi payments:manage.
       { label: "Thanh toán", href: "/payments", icon: CreditCard, perm: ["payments:manage", "payments:record"] },
@@ -382,7 +402,10 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Báo cáo",
     items: [
       { label: "Báo cáo Lead", href: "/bao-cao/lead", icon: BarChart3, perm: ["leads:view-all", "leads:view-own"] },
-      { label: "Báo cáo trải nghiệm", href: "/bao-cao/trial", icon: FlaskConical, perm: ["trials:view"] },
+      // 23/09/2026 — màn thống kê case theo SALE là màn CHÍNH của báo cáo trải nghiệm;
+      // `/bao-cao/trial` (theo cơ sở) đã gỡ, đường cũ chỉ còn chuyển tiếp về đây. `href`
+      // phải là chuỗi literal: bộ quét nav đọc văn bản, ghép chuỗi là màn thành mồ côi.
+      { label: "Báo cáo trải nghiệm", href: "/bao-cao/trial-sale", icon: FlaskConical, perm: ["trials:view"] },
       // FL W0-NAV-2 hygiene: 3 báo cáo đào tạo gate `courses:create` (Super/Training/CM) — ẩn khỏi Sale/KT
       // (trước đây lọt qua classes:view-all). BA #07 3.C.
       { label: "Báo cáo đào tạo", href: "/bao-cao/dao-tao", icon: BookOpen, perm: [...PAGE_GATES["/bao-cao/dao-tao"]] },

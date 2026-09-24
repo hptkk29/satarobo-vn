@@ -52,6 +52,11 @@ export const ROLE_SEED: RoleSeed[] = [
       // dòng này KHÔNG đổi hành vi; khai để ma trận nói được ai mở được màn ZaloCRM,
       // và để v1 (local/dev) khớp v2. GLOBAL — xem lý do ở CENTER_SALES_CSM.
       { action: "zalocrm:use", scopeType: "GLOBAL" },
+      // Giao nick cho người (màn `/zalo-crm/nick`). CỐ Ý KHÔNG cấp cho
+      // `CENTER_SALES_CSM`: dùng nick là việc của họ, quyết ai được dùng nick nào thì
+      // không. GLOBAL cùng lý do với `zalocrm:use` ngay trên — cổng trang gọi trần,
+      // không truyền target, nên CENTER sẽ trả false và khoá trang.
+      { action: "zalocrm:manage-nick", scopeType: "GLOBAL" },
       { action: "leads:change-status", scopeType: "GLOBAL" },
       // C-01 — chỉ tiêu lead theo tháng × cơ sở. SUPER_ADMIN đã bypass toàn bộ quyền
       // trong can() v2 nên dòng này KHÔNG đổi hành vi; khai cho khớp v1 + rõ ý, và để
@@ -465,6 +470,10 @@ export const ROLE_SEED: RoleSeed[] = [
       // KHÔNG kèm `trials:config` (cấu hình số buổi — màn khác, QLCS giữ theo QĐ-T3b)
       // và KHÔNG kèm `trials:feedback` (chấm phiếu nằm trọn ở site giáo viên).
       { action: "trials:manage", scopeType: "GLOBAL" },
+      // 22/09/2026 — MỞ LỚP trải nghiệm (chọn ngày + khung giờ). Tách khỏi
+      // `trials:manage` vì Sale bắt buộc phải giữ `trials:manage` để xếp học viên,
+      // nên không có cách nào chặn Sale tạo lớp nếu không tách khoá riêng.
+      { action: "trials:create-class", scopeType: "GLOBAL" },
       { action: "trials:attendance", scopeType: "GLOBAL" },
       { action: "trials:override-capacity", scopeType: "GLOBAL" },
       // 03/08 — checkin là self-action của mọi nhân viên; sót từ khi thêm TRAINING
@@ -666,6 +675,10 @@ export const ROLE_SEED: RoleSeed[] = [
       // ── Trải nghiệm · phụ huynh · media ──
       { action: "trials:view", scopeType: "GLOBAL" },
       { action: "trials:manage", scopeType: "GLOBAL" },
+      // 22/09/2026 — MỞ LỚP trải nghiệm (chọn ngày + khung giờ). Tách khỏi
+      // `trials:manage` vì Sale bắt buộc phải giữ `trials:manage` để xếp học viên,
+      // nên không có cách nào chặn Sale tạo lớp nếu không tách khoá riêng.
+      { action: "trials:create-class", scopeType: "GLOBAL" },
       // GĐ3 (25/08/2026) — `trials:assign-teacher` ĐÃ GỠ khỏi vai này, chuyển sang
       // Đào tạo theo chốt câu 2. Quản lý cơ sở vẫn giữ trials:manage/feedback/config
       // và vẫn override được sĩ số; chỉ riêng việc CHỐT giáo viên là của Đào tạo.
@@ -695,6 +708,11 @@ export const ROLE_SEED: RoleSeed[] = [
       // cơ sở của module này KHÔNG do scope quyền lo — nó do chính ứng dụng ZaloCRM
       // (mỗi cơ sở một `orgCode` riêng, quyết bởi claim trong token SSO).
       { action: "zalocrm:use", scopeType: "GLOBAL" },
+      // Giao nick cho người (màn `/zalo-crm/nick`). CỐ Ý KHÔNG cấp cho
+      // `CENTER_SALES_CSM`: dùng nick là việc của họ, quyết ai được dùng nick nào thì
+      // không. GLOBAL cùng lý do với `zalocrm:use` ngay trên — cổng trang gọi trần,
+      // không truyền target, nên CENTER sẽ trả false và khoá trang.
+      { action: "zalocrm:manage-nick", scopeType: "GLOBAL" },
       { action: "parent-requests:manage", scopeType: "GLOBAL" },
       { action: "parent-feedback:view", scopeType: "GLOBAL" },
       { action: "media:view", scopeType: "GLOBAL" },

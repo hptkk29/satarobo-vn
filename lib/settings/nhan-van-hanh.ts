@@ -386,6 +386,55 @@ const N: Readonly<Record<SettingKey, NhanVanHanh>> = {
       "thì hiện mọi giáo viên như trước. Đổi xong có thể chờ tới 5 phút mới ăn ở mọi máy.",
     canThan: true,
   },
+  // ── Khung giờ mở lớp trải nghiệm, theo thứ (chủ dự án 22/09/2026) ─────────────────────
+  //
+  // Bảy ô, mỗi thứ một ô. Viết nhãn bằng vòng lặp thì ngắn hơn, nhưng ở TỆP NHÃN thì
+  // ngược lại là đúng: đây là chỗ người vận hành đọc, và một nhãn sinh tự động không bao
+  // giờ nói được "thứ 2 trung tâm nghỉ" — thứ duy nhất họ cần biết khi thấy ô trống.
+  "trial.khungGio.t2": {
+    tab: "lop-gv",
+    ten: "Khung giờ mở lớp trải nghiệm — Thứ 2",
+    giaiThich:
+      'Gõ dạng "17:30-21:00". Nhiều khung trong ngày thì ngăn bằng dấu phẩy: ' +
+      '"08:00-11:30, 14:00-17:30". Để TRỐNG nghĩa là thứ 2 không mở lớp trải nghiệm — ' +
+      "mặc định đang để trống. Quản lý chỉ mở được lớp nằm gọn trong một khung ở đây.",
+  },
+  "trial.khungGio.t3": {
+    tab: "lop-gv",
+    ten: "Khung giờ mở lớp trải nghiệm — Thứ 3",
+    giaiThich:
+      'Mặc định "17:30-21:00" theo giờ giáo viên đi làm buổi tối. Để trống là thứ 3 không ' +
+      "mở lớp trải nghiệm.",
+  },
+  "trial.khungGio.t4": {
+    tab: "lop-gv",
+    ten: "Khung giờ mở lớp trải nghiệm — Thứ 4",
+    giaiThich: 'Mặc định "17:30-21:00". Để trống là thứ 4 không mở lớp trải nghiệm.',
+  },
+  "trial.khungGio.t5": {
+    tab: "lop-gv",
+    ten: "Khung giờ mở lớp trải nghiệm — Thứ 5",
+    giaiThich: 'Mặc định "17:30-21:00". Để trống là thứ 5 không mở lớp trải nghiệm.',
+  },
+  "trial.khungGio.t6": {
+    tab: "lop-gv",
+    ten: "Khung giờ mở lớp trải nghiệm — Thứ 6",
+    giaiThich: 'Mặc định "17:30-21:00". Để trống là thứ 6 không mở lớp trải nghiệm.',
+  },
+  "trial.khungGio.t7": {
+    tab: "lop-gv",
+    ten: "Khung giờ mở lớp trải nghiệm — Thứ 7",
+    giaiThich:
+      'Mặc định "08:00-11:30, 14:00-17:30" — sáng và chiều, nghỉ trưa ở giữa. Lớp mở vắt ' +
+      "qua giờ nghỉ trưa sẽ bị từ chối, phải mở hai lớp riêng.",
+  },
+  "trial.khungGio.cn": {
+    tab: "lop-gv",
+    ten: "Khung giờ mở lớp trải nghiệm — Chủ nhật",
+    giaiThich:
+      'Mặc định "08:00-11:30, 14:00-17:30" — sáng và chiều, nghỉ trưa ở giữa. Lớp mở vắt ' +
+      "qua giờ nghỉ trưa sẽ bị từ chối, phải mở hai lớp riêng.",
+  },
   "trial.gvMienLocTheoCa": {
     tab: "lop-gv",
     ten: "Giáo viên luôn hiện dù hôm đó không có ca",
@@ -627,6 +676,26 @@ const N: Readonly<Record<SettingKey, NhanVanHanh>> = {
   },
 
   // ── Tiền & thanh toán ──────────────────────────────────────────────────────────────────
+  "orders.maxInstallments": {
+    tab: "tien",
+    ten: "Số đợt tối đa mỗi con",
+    giaiThich:
+      "Chia quá số này thì đơn VẪN LƯU ĐƯỢC nhưng vào hàng chờ Quản lý cơ sở duyệt, và " +
+      "KHÔNG xuất được mã QR cho tới khi có người duyệt. Phiếu CỌC không tính vào đây — " +
+      "cọc + 4 đợt là hợp lệ khi để số này là 4. Đếm theo TỪNG CON: đơn hai con, mỗi con " +
+      "4 đợt thì vẫn trong hạn mức.",
+    donVi: "đợt",
+  },
+  "orders.maxDiscountItems": {
+    tab: "tien",
+    ten: "Số ưu đãi tối đa trên một dòng đơn",
+    giaiThich:
+      "Đếm số KHOẢN ưu đãi chồng lên MỘT dòng (một con), không phải tổng mức bớt — muốn " +
+      "siết số tiền thì dùng ô ngay dưới. Chồng quá số này thì đơn vào hàng chờ duyệt và " +
+      "chưa xuất được mã QR. Đơn hai con, mỗi con một ưu đãi khác nhau, vẫn hợp lệ khi để " +
+      "số này là 1.",
+    donVi: "ưu đãi",
+  },
   "orders.maxDiscountPercent": {
     tab: "tien",
     ten: "Giảm giá theo % tối đa cho một ưu đãi",

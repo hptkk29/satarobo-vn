@@ -333,7 +333,10 @@ describe.skipIf(!CO_BANG)("[ZC-CQ] cấp quyền khi mở màn ZaloCRM", () => {
     // Đây là vế bắt được kiểu "giữ nguyên lời gọi nhưng lọc lại kết quả": một
     // `.filter(...)` chen vào giữa làm số lượng tụt và ca này đỏ, trong khi mọi lưới
     // ghim mã nguồn vẫn xanh vì lời gọi còn nguyên đó.
-    const chinhSach = await nguoiDuocDungNick(MA_CS);
+    // 24/09/2026: `nguoiDuocDungNick` nay trả `{ tatCa, quanLy }`. Ca này đo nhánh
+    // nick CHƯA GIAO (fixture không đặt `sataUserId`), nên đúng danh sách `tatCa` —
+    // nhánh nick ĐÃ GIAO có lưới riêng `[PVN-02]` + `[ZC-CQ-11]`.
+    const chinhSach = (await nguoiDuocDungNick(MA_CS)).tatCa;
     for (const [i, t] of than.entries()) {
       const gui = t.externalIds;
       expect(Array.isArray(gui), `lượt ${i}: thân phải có mảng externalIds`).toBe(true);

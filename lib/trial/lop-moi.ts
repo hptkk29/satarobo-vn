@@ -52,10 +52,35 @@ export function tenLopTrial(
   return kh ? `${cs}-${kh}-Lớp trial ${so}` : `${cs}-Lớp trial ${so}`;
 }
 
+/**
+ * Tên lớp THEO NGÀY — quy ước cho lớp theo khung (chủ dự án 23/09/2026: "tên lớp:
+ * CS-Lớp trial 23/09/2026"), vd `CS1-Lớp trial 23/09/2026`.
+ *
+ * Lớp theo khung là MỘT NGÀY, nên ngày mới là thứ người đọc cần — số thứ tự
+ * (`tenLopTrial`) không nói gì với Sale đang tìm lớp theo ngày hẹn khách. Mã lớp
+ * (`code`) vẫn mang số thứ tự và vẫn là định danh duy nhất.
+ *
+ * ⚠️ Hai lớp CÙNG NGÀY (T7 sáng + chiều) ra CÙNG tên — cố ý: `name` không `@unique`, và
+ * màn danh sách có cột "Khung giờ" đứng ngay cạnh để phân biệt.
+ *
+ * @param ymd ngày lớp theo lịch VN, "YYYY-MM-DD".
+ */
+export function tenLopTrialTheoNgay(
+  maCoSo: string,
+  maKhoa: string | null | undefined,
+  ymd: string,
+): string {
+  const cs = chuanHoaMaCoSo(maCoSo) || "CS";
+  const kh = chuanHoaMaKhoa(maKhoa);
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd);
+  const ngay = m ? `${m[3]}/${m[2]}/${m[1]}` : ymd;
+  return kh ? `${cs}-${kh}-Lớp trial ${ngay}` : `${cs}-Lớp trial ${ngay}`;
+}
+
 export type KhungGio = { startTime: string; endTime: string };
 
 /** "HH:MM" → phút. `null` nếu không đúng định dạng. */
-function phut(hhmm: string): number | null {
+export function phutTuHhmm(hhmm: string): number | null {
   const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm ?? "");
   if (!m) return null;
   const h = Number(m[1]);
@@ -75,10 +100,10 @@ function phut(hhmm: string): number | null {
  * quả đúng của dữ liệu hỏng là "không đánh dấu được", không phải "cả form chết".
  */
 export function trungKhungGio(a: KhungGio, b: KhungGio): boolean {
-  const a1 = phut(a.startTime);
-  const a2 = phut(a.endTime);
-  const b1 = phut(b.startTime);
-  const b2 = phut(b.endTime);
+  const a1 = phutTuHhmm(a.startTime);
+  const a2 = phutTuHhmm(a.endTime);
+  const b1 = phutTuHhmm(b.startTime);
+  const b2 = phutTuHhmm(b.endTime);
   if (a1 === null || a2 === null || b1 === null || b2 === null) return false;
   return a1 < b2 && b1 < a2;
 }

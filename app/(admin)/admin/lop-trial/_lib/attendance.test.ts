@@ -22,6 +22,11 @@ function hocVien(id: string): EnrollmentRow {
     gvDeXuatId: null,
     gvPhanCongId: null,
     rescheduleCount: 0,
+    // 23/09 — hai field của luật "ai gỡ được bé này". Hàm đếm không dùng tới nhưng
+    // type đòi đủ, và đòi đủ là cố ý: quên khai ở đường THẬT thì `tsc` chỉ ra ngay.
+    saleTen: null,
+    quyenGo: { duoc: true },
+    quyenChuyen: { duoc: true },
   };
 }
 

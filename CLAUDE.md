@@ -480,6 +480,27 @@ prisma/
 
   </details>
 
+- ✅ **[ĐÃ VÁ 24/09/2026] `[HT-05]` — trục B từng đếm cả khoản kế toán ĐÃ TỪ CHỐI.**
+  `rejectPayment` chỉ đổi `accountantStatus = REJECTED`, **không đụng** `saleStatus`; mà vế
+  `saleStatus` của trục B là phép so **luôn đúng** (enum chỉ có hai giá trị, cả hai đều nằm
+  trong `SALE_STATUS_DA_GHI_NHAN` — đo: 416/416 dòng trên `satarobo_local`). ⇒ khoản bị TỪ
+  CHỐI vẫn được cộng là "đã thu", ở **35 chỗ gọi**, trong đó có **số in trên mã QR** và
+  **tin ZNS gửi phụ huynh**.
+  · Vá: thêm `accountantStatus: { not: "REJECTED" }` vào `KHOAN_DA_GHI_NHAN` +
+    `laKhoanDaGhiNhan` (`lib/finance/ghi-nhan.ts`).
+  · **GIỮ NGUYÊN hai vế khác, và cả hai đều có ca canh:** khoản **CHỜ** kế toán **vẫn tính**
+    (siết thành `= CONFIRMED` là làm mọi khoản chưa ai duyệt biến mất khỏi công nợ — lỗ lớn
+    hơn lỗ vừa vá); khoản **REFUNDED vẫn cộng** (`refundPayment` ghi dòng ÂM, nó tự trừ ra —
+    loại nó là trừ hai lần).
+  · Luật 7: `accountantStatus` khai **BẮT BUỘC** ⇒ `tsc` liệt kê chỗ gọi. Kết quả: **chỉ một
+    tệp test** phải sửa, mọi đường thật đã sẵn `select` cột đó — đó là bằng chứng bản vá
+    không bỏ sót đường nào.
+  ⚠️ **Một lưới có sẵn ghim ĐÚNG luật cũ, mà luật cũ SAI.** `ghi-nhan.test.ts` khẳng định
+  `"accountantStatus" in KHOAN_DA_GHI_NHAN === false`. Lý lẽ của nó ("khoản chờ kế toán vẫn
+  là tiền đã về") **đúng**, nhưng nó được hiện thực bằng cách KHÔNG lọc gì cả. Đã sửa thành
+  khoá **cả hai vế**. Bài học: một lưới có thể ghim đúng một câu đúng và vẫn khoá một hành
+  vi sai — đọc LÝ LẼ của lưới trước khi kết luận nó đang bảo vệ cái gì.
+
 ## Mẫu test: LƯỚI GHIM MÃ NGUỒN [13/09/2026]
 
 Dùng khi luật cần khoá có dạng **"lời gọi này phải truyền tham số kia"** — loại luật mà

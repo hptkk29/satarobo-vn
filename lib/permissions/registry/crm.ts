@@ -95,6 +95,15 @@ export const crmModule: ModuleDecl = {
       description:
         "Mở màn Zalo CRM nhúng (SSO iframe) và nhắn khách qua nick Zalo cá nhân.",
     },
+    // `scopable: false` cùng lý do với `zalocrm:use`: cách ly theo cơ sở nằm ở chỗ khác
+    // (màn chỉ liệt kê nick của cơ sở mà người dùng nhìn thấy được), không ở tầng này.
+    {
+      key: "zalocrm:manage-nick",
+      action: "manage-nick",
+      scopable: false,
+      description:
+        "Giao nick Zalo cho một người. Nick đã giao thì chỉ người đó và quản lý cơ sở đọc được.",
+    },
     { key: "leads:assign", action: "assign" },
     {
       key: "leads:assign-config",
@@ -175,6 +184,14 @@ export const crmModule: ModuleDecl = {
       // do `visibleCenterIds` + `scopedDb` quyết, nên seed để GLOBAL (xem seed-roles.ts).
       description:
         "Xếp giáo viên cho buổi trải nghiệm của CƠ SỞ MÌNH. Khác trials:assign-teacher (Đào tạo, toàn hệ thống).",
+    },
+    {
+      key: "trials:create-class",
+      action: "create-class",
+      // 22/09/2026 — tách khỏi `trials:manage`: Sale phải giữ `trials:manage` để xếp
+      // học viên, nên chặn Sale tạo lớp chỉ làm được bằng một khoá riêng.
+      description:
+        "Mở lớp trải nghiệm (chọn ngày + khung giờ). Sale KHÔNG có khoá này — họ chỉ thêm case và xếp học viên vào lớp đã mở.",
     },
     {
       key: "trials:override-capacity",

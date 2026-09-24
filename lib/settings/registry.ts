@@ -17,11 +17,22 @@ import { z } from "zod";
 // `chinh-sach-hoa-hong.ts` là file THUẦN (không Prisma, không DB) nên import được vào đây
 // mà không kéo theo gì.
 import { CHINH_SACH_MAC_DINH } from "@/lib/crm/chinh-sach-hoa-hong";
+// Hai TRẦN KỸ THUẬT — neo `max` của schema vào chính chúng, đừng gõ lại số. Cả hai tệp đều
+// THUẦN (không `server-only`, không Prisma) nên nhập vào đây không kéo theo gì.
+import { TRAN_SO_DOT } from "@/lib/payments/ke-hoach-dot";
+import { TRAN_KHOAN_GIAM_MOI_DONG } from "@/lib/orders/giam-gia-dong";
 import {
   CACH_HAP_THU,
   CHINH_SACH_MAC_DINH as UU_DAI_MAC_DINH,
   DOI_TUONG_UU_DAI,
 } from "@/lib/orders/chinh-sach-uu-dai";
+import {
+  docKhungGio,
+  KHUNG_MAC_DINH,
+  TEN_THU,
+  THU_KHOA,
+  type ThuKhoa,
+} from "@/lib/trial/khung-gio-mo-lop";
 import { internalAwards } from "@/components/legacy-laptrinhrobot/_data/awards";
 import { gifts } from "@/components/legacy-laptrinhrobot/_data/gifts";
 import { commitments } from "@/components/legacy-laptrinhrobot/_data/commitments";
@@ -65,6 +76,48 @@ export interface SettingDef<T = unknown> {
 
 function def<T>(d: SettingDef<T>): SettingDef<T> {
   return d;
+}
+
+/**
+ * Bảy khoá `trial.khungGio.<thu>` — khung giờ mở lớp trải nghiệm của từng thứ.
+ *
+ * Sinh bằng vòng lặp chứ không gõ tay bảy khối: bảy khối gần giống nhau là bảy chỗ để
+ * lệch, và `TEN_THU`/`KHUNG_MAC_DINH` đã là nguồn duy nhất của tên thứ lẫn giá trị mặc
+ * định. Khoá khai TƯỜNG MINH ở kiểu trả về để `tsc` vẫn biết đủ bảy khoá.
+ */
+function khungGioTheoThu(): {
+  [K in ThuKhoa as `trial.khungGio.${K}`]: SettingDef<string>;
+} {
+  const ra = {} as Record<string, SettingDef<string>>;
+  for (const thu of THU_KHOA) {
+    ra[`trial.khungGio.${thu}`] = def<string>({
+      key: `trial.khungGio.${thu}`,
+      group: "teacher",
+      label:
+        `Khung giờ mở lớp trải nghiệm — ${TEN_THU[thu]} ` +
+        `(dạng "17:30-21:00", nhiều khung ngăn bằng dấu phẩy; để TRỐNG là ngày đó không mở)`,
+      schema: z
+        .string()
+        .trim()
+        .max(120)
+        .superRefine((chuoi, ctx) => {
+          const doc = docKhungGio(chuoi);
+          if (!doc.ok) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: doc.loi });
+          }
+        }),
+      default: KHUNG_MAC_DINH[thu],
+      // KHÔNG cho ghi đè theo cơ sở — cùng lý do đã ghi ở `trial.locGvTheoCaLamViec`:
+      // đây là LUẬT mở lớp, một cơ sở tự đặt khung riêng thì cùng một thao tác ra hai kết
+      // quả tuỳ người đang đứng ở đâu.
+      //
+      // Còn một lý do KỸ THUẬT quan trọng không kém: form tạo lớp dựng ô chọn khung ở
+      // CLIENT từ chính bảy khoá này. Cho ghi đè theo cơ sở là client bày một khung mà
+      // server sẽ từ chối ngay sau đó — ô chọn hứa một việc không làm được (luật 12).
+      centerOverridable: false,
+    });
+  }
+  return ra as { [K in ThuKhoa as `trial.khungGio.${K}`]: SettingDef<string> };
 }
 
 const hotlineSchema = z.array(
@@ -265,6 +318,44 @@ export const SETTINGS = {
   // Chặn dưới 1%: trần 0 nghĩa là MỌI khoản % âm thầm thành 0đ, người bán gõ 10% mà
   // khách không được bớt gì. Muốn cấm hẳn giảm theo % thì đó là một quyết định khác,
   // cần một cái công tắc nói đúng tên nó, không phải hạ trần về 0.
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TRẦN SỐ ĐỢT + TRẦN SỐ ƯU ĐÃI — chủ dự án chốt 22/09/2026.
+  //
+  // Vượt trần thì đơn VẪN LƯU ĐƯỢC nhưng vào hàng chờ Quản lý cơ sở duyệt, và KHÔNG xuất
+  // được mã QR cho tới khi duyệt. Đó là lý do hai số này là THAM SỐ chứ không phải hằng:
+  // ngưỡng ở đây là CHÍNH SÁCH (người vận hành đổi), còn `TRAN_SO_DOT` /
+  // `TRAN_KHOAN_GIAM_MOI_DONG` là TRẦN KỸ THUẬT (mã không chịu nổi quá số đó).
+  //
+  // ⚠️ `max` của schema NEO VÀO CHÍNH HẰNG KỸ THUẬT, không gõ lại số. Ngưỡng chính sách
+  // phải nằm BÊN TRONG trần kỹ thuật; khai `max: 12` bằng tay là hai con số sống song song
+  // và sẽ lệch lần đầu ai đó đổi hằng.
+  //
+  // ⚠️ `centerOverridable: true` — KHÁC `orders.maxDiscountPercent` ngay dưới, và khác có
+  // lý do. Trần % là mức BỚT TIỀN tối đa, kế toán cần MỘT con số để đối. Hai số này không
+  // nói về mức bớt, chúng nói về ĐỘ PHỨC TẠP của một đơn mà cơ sở tự gánh hậu quả (đợt
+  // càng nhiều thì càng nhiều lần đối soát). Chủ dự án chốt 22/09 cho QLCS tự chỉnh.
+  //
+  // ⚠️ ÁP CHO MỌI ĐƠN, không chia "đơn cũ / đơn mới". Đề xuất ban đầu của tôi là chỉ áp đơn
+  // mới để khỏi làm kẹt đơn đang chạy — phép đo prod 23/09 bác nó: phân bố số đợt là
+  // 1×1 · 2×3 · 4×2, **0 đơn vượt trần 4**, và 1 đơn duy nhất vượt trần ưu đãi thì vẫn
+  // đang `PENDING_PAYMENT`. Không có đơn cũ nào để bảo vệ ⇒ giữ hai chế độ là giữ một
+  // nhánh mã không ai đi qua.
+  "orders.maxInstallments": def({
+    key: "orders.maxInstallments",
+    group: "finance",
+    label: "Số đợt tối đa mỗi con (không tính cọc)",
+    schema: z.number().int().min(1).max(TRAN_SO_DOT),
+    default: 4,
+    centerOverridable: true,
+  }),
+  "orders.maxDiscountItems": def({
+    key: "orders.maxDiscountItems",
+    group: "finance",
+    label: "Số ưu đãi tối đa trên một dòng đơn",
+    schema: z.number().int().min(1).max(TRAN_KHOAN_GIAM_MOI_DONG),
+    default: 1,
+    centerOverridable: true,
+  }),
   "orders.maxDiscountPercent": def({
     key: "orders.maxDiscountPercent",
     group: "finance",
@@ -1239,6 +1330,21 @@ export const SETTINGS = {
     // ở đây mà không chọn được ở kia, không ai giải thích nổi.
     centerOverridable: false,
   }),
+  // ── KHUNG GIỜ MỞ LỚP TRẢI NGHIỆM, theo THỨ (chủ dự án 22/09/2026) ──────────────────────
+  //
+  // "Tạo lớp Trial theo ngày, thứ, và khung thời gian có GV đi làm (từ 17h30 - 21h từ t3-t6
+  // & sáng chiều ngày thứ 7, cn)" — và chủ dự án chọn để nó SỬA ĐƯỢC, không đóng cứng.
+  //
+  // ⚠️ BẢY KHOÁ CHUỖI, KHÔNG PHẢI MỘT KHOÁ JSON — có lý do, đừng "dọn" lại thành một:
+  // màn Cấu hình vận hành dựng ô nhập theo KIỂU GIÁ TRỊ (`settings-editor.tsx`: chuỗi ⇒ ô
+  // chữ), nên bảy khoá này hiện ra thành bảy ô gõ được ngay, không phải viết thêm editor.
+  // Gộp thành một khoá JSON là rơi vào đúng thứ repo đã ba lần từ chối ("bắt người vận hành
+  // gõ tay… gõ sai thì trông như đã khai mà không khớp ai").
+  //
+  // Bộ kiểm gọi THẲNG `docKhungGio` của `lib/trial/khung-gio-mo-lop` — một luật, một chỗ.
+  // An toàn về vòng import: `khung-gio-mo-lop` chỉ kéo `lib/time/vn` + `lib/trial/lop-moi`,
+  // và cả hai tệp đó KHÔNG import gì (đã đo), nên không chạm `lib/db` như cảnh báo ở trên.
+  ...khungGioTheoThu(),
   "lms.mediaSignedUrlTtl": def({
     key: "lms.mediaSignedUrlTtl",
     group: "lms",
