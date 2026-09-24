@@ -482,6 +482,15 @@ export async function recomputeRequestStatuses(
 
 export type PaymentRequestView = {
   id: string;
+  /**
+   * Phiếu này thu cho DÒNG nào. `null` = phiếu CẤP ĐƠN (luồng cũ / "thu toàn đơn").
+   *
+   * ⚠️ Thêm 24/09/2026 cho bảng "chia đợt theo con". Cần thật, không phải cho đủ bộ: bảng
+   * đó chia học phí các con vào các đợt CẤP ĐƠN, nên nó phải LỌC ĐƯỢC đúng tập ấy. Suy
+   * bằng "hôm nay đơn không thể có cả hai loại đợt" thì đúng — nhưng đúng vì một CỔNG
+   * (`kiemTaoDot` vế ĐƠN), và một ngày nào đó cổng ấy đổi thì chỗ này sai im lặng.
+   */
+  orderItemId: string | null;
   installmentNo: number;
   amountDue: number;
   allocated: number;
@@ -504,6 +513,7 @@ export async function getOrderPaymentRequests(orderId: string): Promise<PaymentR
     orderBy: [{ sortOrder: "asc" }, { installmentNo: "asc" }],
     select: {
       id: true,
+      orderItemId: true,
       installmentNo: true,
       amountDue: true,
       dueDate: true,

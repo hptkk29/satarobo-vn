@@ -20,6 +20,8 @@ const GOC = ["app", "components"];
 
 /** File có `<table>` mà CỐ Ý không phân trang — mỗi dòng phải nêu lý do. */
 const MIEN_TRU: Record<string, string> = {
+  "app/(admin)/admin/orders/_components/cong-no-theo-con.tsx":
+    'bảng "học phí từng con theo các đợt của đơn" — số dòng = số CON trên đơn (thực tế 1–3, trần là số dòng hàng người bán gõ tay), số cột = số đợt của kế hoạch. Đây lại đúng là bảng phải nhìn HẾT một lượt: hàng "Tổng đợt" ở cuối là thứ người đọc đối chiếu với khối "Phiếu thu & QR theo đợt" ngay dưới, nên cắt trang là giấu mất chính phép kiểm mà bảng sinh ra để phơi. Bảng RỘNG chứ không dài — đã bọc `overflow-x-auto` cho đơn 12 đợt ở 320px',
   "app/(admin)/admin/cau-hinh-van-hanh/_components/tab-nick-zalo-bang.tsx":
     "một dòng một nick Zalo của cơ sở — nick là SIM thật nên số dòng bị chặn bởi số SIM công ty mua, hôm nay 3; phân trang ở đây là hai thanh điều khiển cho ba dòng",
   "components/ui/table.tsx":

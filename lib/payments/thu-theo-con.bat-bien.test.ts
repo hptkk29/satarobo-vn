@@ -323,6 +323,20 @@ describe("[BTC-07] LƯỚI CANH LƯỚI — phép bóc chú thích phải THẬT
   });
 });
 
+/**
+ * Thân của một hàm, cắt từ dòng khai tới hàm kế tiếp cùng cấp.
+ *
+ * ⚠️ Cắt bằng "tới khai báo `export async function` kế tiếp" chứ không đếm ngoặc: đếm ngoặc trên văn bản thô là
+ * đếm cả ngoặc trong chuỗi và trong chú thích. Ở đây chỉ cần một khoanh vùng ĐỦ HẸP để
+ * `indexOf` sau đó không vớ sang hàm khác.
+ */
+function thanHam(src: string, khai: string): string {
+  const i = src.indexOf(khai);
+  if (i < 0) throw new Error(`không thấy hàm: ${khai} — lưới đang soi nhầm chỗ`);
+  const j = src.indexOf("export async function", i + khai.length);
+  return src.slice(i, j < 0 ? undefined : j);
+}
+
 describe("[BTC-06] luồng MỚI không được gọi bộ chia theo TỶ LỆ", () => {
   it("bộ chia waterfall đã có sẵn — KHÔNG viết bộ thứ hai", () => {
     // Chủ dự án: *"Không chia theo tỷ lệ, không gọi allocateByWeight / chia-khoan-theo-don
@@ -333,13 +347,56 @@ describe("[BTC-06] luồng MỚI không được gọi bộ chia theo TỶ LỆ"
     expect(r.lines).toEqual([{ paymentRequestId: "x", amount: 1, roundingWaived: 0 }]);
   });
 
-  it.fails("đường ghi phiếu theo CON không được import `chia-khoan-theo-don`", () => {
-    // Sẽ xanh khi `materializeInstallmentRequests` sinh đợt theo từng dòng; hôm nay chưa
-    // có đường đó nên ca này còn là HẸN.
+  it.fails("`materializeInstallmentRequests` sinh đợt theo từng DÒNG", () => {
+    // HẸN: xanh khi đường ghi cấp đơn biết sinh đợt cho từng con.
+    //
+    // ⚠️ BẢN CŨ CỦA CA NÀY XANH VÌ LÝ DO SAI, và đó là bài học đắt hơn chính cái hẹn.
+    // Nó hỏi `/orderItemId/.test(src)` — tức "chuỗi `orderItemId` có xuất hiện đâu đó
+    // trong tệp không". Ngày 24/09/2026 tôi thêm `orderItemId` vào KIỂU ĐỌC
+    // `PaymentRequestView` (cho một cái bảng chỉ để hiển thị, không ghi gì) và ca này lập
+    // tức chuyển xanh — trong khi đường ghi KHÔNG đổi một dòng nào.
+    //
+    // Đúng luật 11: lưới ghim VĂN BẢN chứ không ghim LUẬT thì nó bắn vì chuyện khác. Bản
+    // này neo vào đúng thứ cái hẹn nói tới: lời gọi `create` BÊN TRONG hàm ấy có khai
+    // `orderItemId` không.
     const src = readFileSync(
       resolve(process.cwd(), "lib/payments/payment-request.ts"),
       "utf8",
     );
-    expect(/orderItemId/.test(src)).toBe(true);
+    const than = thanHam(src, "export async function materializeInstallmentRequests");
+    const create = than.slice(than.indexOf("paymentRequest.create"));
+    expect(create.slice(0, create.indexOf("});")).includes("orderItemId")).toBe(true);
+  });
+
+  it.fails("`materializeInstallmentRequests` chỉ soi phiếu CẤP ĐƠN", () => {
+    // GHIM MỘT LỖ ĐÃ ĐO (24/09/2026), chưa tới lượt vá — `it.fails` là HẸN, không phải
+    // quên (luật: đừng dùng `it.skip`).
+    //
+    // Hàm đọc `tx.paymentRequest.findMany({ where: { orderId } })` — KHÔNG lọc
+    // `orderItemId`. Rồi nó khoá map theo `installmentNo`:
+    //
+    //     const byNo = new Map(existing.map((r) => [r.installmentNo, r]));
+    //
+    // Đợt theo CON cũng đánh số 1,2,3… (khoá duy nhất từng phần là
+    // `[orderItemId, installmentNo]`), nên trên một đơn có CẢ HAI loại đợt:
+    //   · `byNo.get(1)` có thể trả phiếu CỦA MỘT BÉ ⇒ hàm UPDATE `amountDue` / `dueDate` /
+    //     `matchKey` của bé đó theo số của đợt cấp đơn;
+    //   · vòng "VOID phiếu dư" bên dưới duyệt `existing` và VOID mọi phiếu có
+    //     `installmentNo` ngoài kế hoạch ⇒ đợt thứ 5 của một bé bị huỷ im lặng.
+    //
+    // Cả hai đều là sai lệch SỐ TIỀN nhìn thấy được, và không lỗi nào báo.
+    //
+    // Đường tới: tạo đợt theo con trên đơn CHƯA có kế hoạch (lúc đó `tongDotDangMoDon = 0`
+    // nên cổng `kiemTaoDot` cho qua), rồi lưu kế hoạch trả góp cho đơn.
+    //
+    // Vá là đợt RIÊNG — nó chạm đường GHI tiền, khác hẳn lượt 24/09 vốn chỉ thêm một bảng
+    // để đọc.
+    const src = readFileSync(
+      resolve(process.cwd(), "lib/payments/payment-request.ts"),
+      "utf8",
+    );
+    const than = thanHam(src, "export async function materializeInstallmentRequests");
+    const doc = than.slice(than.indexOf("const existing = await tx.paymentRequest.findMany"));
+    expect(doc.slice(0, doc.indexOf("});")).includes("orderItemId: null")).toBe(true);
   });
 });
