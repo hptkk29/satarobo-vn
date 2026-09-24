@@ -406,6 +406,44 @@ describe.skipIf(!RUN_DB_TESTS)("[PG] phiếu gộp + webhook tự khớp — DB 
     expect(mo!.dong.every((d) => d.installmentNo === soTheoId.get(d.paymentRequestId))).toBe(true);
   });
 
+  it("[PG-20] HUỶ không đòi lý do; ĐÓNG thì vẫn đòi", async () => {
+    // Chủ dự án 24/09: *"huỷ phiếu kh cần lý do, chỉ cần xác nhận 1 lần nữa là được"*.
+    //
+    // ⚠️ Ranh giới KHÔNG tuỳ tiện — nó trùng đúng ranh giới nghiệp vụ đã có: `VOID` chỉ
+    // xảy ra khi phiếu CHƯA nhận đồng nào, `CLOSED` chỉ khi ĐÃ nhận. Bỏ lý do ở nhánh có
+    // tiền thật là xoá dấu vết đối soát; bắt ghi lý do ở nhánh không có gì để đối soát chỉ
+    // tạo thói quen gõ "x" cho xong.
+    const r1 = await taoPhieuGop({ orderId: DON, paymentRequestIds: [DOT_A], actor: ACTOR });
+    expect(r1.ok).toBe(true);
+    const huy = await huyPhieuGop({
+      orderId: DON,
+      billId: (r1 as { billId: string }).billId,
+      lyDo: "",
+      actor: ACTOR,
+    });
+    expect(huy.ok, "huỷ KHÔNG cần lý do").toBe(true);
+    expect(
+      (await db.paymentBill.findUniqueOrThrow({ where: { id: (r1 as { billId: string }).billId } }))
+        .status,
+    ).toBe("VOID");
+
+    // …nhưng sổ kiểm toán VẪN có `reason` nói rõ, không để trống (ô rỗng đọc như dữ liệu hỏng).
+    const log = await db.auditLog.findFirst({
+      where: { entityId: DON, action: "PHIEU_GOP_VOID" },
+      orderBy: { createdAt: "desc" },
+      select: { reason: true },
+    });
+    expect(log?.reason ?? "").not.toBe("");
+
+    // ĐÓNG: phiếu phải đã nhận tiền, và lý do VẪN bắt buộc.
+    const r2 = await taoPhieuGop({ orderId: DON, paymentRequestIds: [DOT_A], actor: ACTOR });
+    expect(r2.ok).toBe(true);
+    const bill2 = (r2 as { billId: string }).billId;
+    const dong = await dongPhieuGop({ orderId: DON, billId: bill2, lyDo: "  ", actor: ACTOR });
+    expect(dong.ok, "đóng THIẾU lý do phải bị từ chối").toBe(false);
+    expect(!dong.ok && dong.error).toContain("lý do");
+  });
+
   it("[PG-11] HUỶ khi chưa nhận đồng nào; đã nhận rồi thì chỉ ĐÓNG được", async () => {
     const { billId } = (await phatPhieu()) as { billId: string };
 

@@ -104,6 +104,36 @@ describe("[QTD-W] dây nối ba tầng — prop cờ phải tới được nơi 
     expect(s).toContain("duocPhatPhieu={duocPhatPhieu}");
   });
 
+  it("[QTD-W4] CẢ phiếu gộp nằm ở ĐÚNG MỘT khối — mã, ảnh, và nút thu hồi", () => {
+    // Chủ dự án 24/09, hai lượt:
+    //   "đưa qr về đúng session phiếu thu & qr theo đợt chứ"
+    //   "chỗ thu hồi phiếu cũng bỏ xuống dưới phần QR luôn chứ"
+    //
+    // ⚠️ Không chỉ là chuyện bố cục. Bản giữa chừng để mã + nút huỷ ở khối "Công nợ theo
+    // con" còn ảnh ở khối dưới — người dùng phải nhìn HAI CHỖ cho MỘT tờ phiếu, và hai chỗ
+    // cùng nói về một thứ là đúng lớp lỗi đã vá sáng cùng ngày (chữ dựng lại một nơi, ảnh
+    // chụp một nơi, rồi lệch mà không ai biết).
+    //
+    // Nay: "Phiếu thu & QR theo đợt" giữ TRỌN tờ phiếu; "Công nợ theo con" quay về đúng
+    // việc của nó.
+    const con = doc("app/(admin)/admin/orders/_components/cong-no-theo-con.tsx");
+    const bang = doc(BANG);
+
+    // Khối công nợ theo con: KHÔNG ảnh, KHÔNG nút thu hồi, KHÔNG gọi action thu hồi.
+    expect(con, "không được vẽ ảnh QR").not.toContain("<QrZoom");
+    expect(con, "không nhúng thẳng `qrUrl` vào thẻ ảnh").not.toContain("phieu.qrUrl}");
+    expect(con, "không còn cửa thu hồi phiếu").not.toContain("huyPhieuGopAction(");
+    expect(con, "…kể cả cửa ĐÓNG phiếu").not.toContain("dongPhieuGopAction(");
+
+    // Khối phiếu thu theo đợt: có ĐỦ ba thứ.
+    expect(bang, "PHẢI vẽ ảnh").toContain("<QrZoom");
+    expect(bang).toContain("src={phieu.qrUrl}");
+    expect(bang, "PHẢI có cửa huỷ").toContain("huyPhieuGopAction(");
+    expect(bang, "PHẢI có cửa đóng").toContain("dongPhieuGopAction(");
+    // Lý do BẮT BUỘC — huỷ/đóng tờ phiếu đã đưa khách phải giải trình được khi đối soát.
+    expect(bang).toContain("Ghi lý do");
+  });
+
   it("[QTD-W3] bảng phiếu thu khai ba prop là BẮT BUỘC và thật sự dùng", () => {
     const s = doc(BANG);
     // Khai bắt buộc: `tsc` liệt kê chỗ gọi thay vì để mặc định câm.

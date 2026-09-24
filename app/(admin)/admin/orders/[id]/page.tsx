@@ -544,6 +544,7 @@ export default async function OrderDetailPage({ params }: Props) {
         // "cờ bật, chưa phát phiếu" là hai tình trạng khác nhau và cần hai cái nút khác
         // nhau. Xem `lib/payments/qr-theo-dot.ts`.
         duocPhatPhieu={canRecordPayments}
+        duocDongPhieu={canManagePayments}
         batThuTheoCon={batThuTheoCon}
         phieuGop={phieuGop}
         paymentMethods={paymentMethods}

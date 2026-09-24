@@ -484,7 +484,24 @@ export async function doiTrangThaiPhieuTrongTx(
   dich: "VOID" | "CLOSED",
 ): Promise<KetQuaGhi<{ daNhan: number }>> {
   {
-    if (!input.lyDo.trim()) return { ok: false as const, error: "Phải ghi lý do" };
+    // ── LÝ DO: BẮT BUỘC CHO "ĐÓNG", KHÔNG BẮT BUỘC CHO "HUỶ" [chủ dự án chốt 24/09/2026]
+    //
+    // *"huỷ phiếu kh cần lý do, chỉ cần xác nhận 1 lần nữa là được"*.
+    //
+    // ⚠️ Ranh giới KHÔNG tuỳ tiện, nó trùng đúng ranh giới nghiệp vụ đã có ở ngay dưới:
+    //   · `VOID`   chỉ xảy ra khi phiếu **chưa nhận đồng nào** (gác ở `daNhan > 0` bên
+    //              dưới) ⇒ huỷ là bỏ một tờ giấy chưa ai trả tiền vào. Không có gì để đối
+    //              soát, nên bắt ghi lý do chỉ tạo thói quen gõ "x" cho xong — một trường
+    //              bắt buộc mà ai cũng gõ bừa thì tệ hơn không có trường.
+    //   · `CLOSED` chỉ xảy ra khi phiếu **ĐÃ nhận tiền** ⇒ có tiền thật dừng giữa chừng,
+    //              và ba tháng sau kế toán sẽ hỏi vì sao. Lý do GIỮ NGUYÊN bắt buộc.
+    //
+    // ⚠️ Vẫn ghi `reason` vào `AuditLog` cho cả hai — chỉ là với `VOID` thì nó tự khai
+    // "không ghi lý do" thay vì để trống. Một ô `reason` rỗng trong sổ kiểm toán đọc như
+    // dữ liệu hỏng; một câu nói rõ "người dùng không phải ghi" thì đọc được.
+    if (dich === "CLOSED" && !input.lyDo.trim()) {
+      return { ok: false as const, error: "Phải ghi lý do" };
+    }
 
     const phieu = await docPhieu(tx, input.billId);
     if (!phieu || phieu.orderId !== input.orderId) {
@@ -527,7 +544,7 @@ export async function doiTrangThaiPhieuTrongTx(
       action: dich === "VOID" ? "PHIEU_GOP_VOID" : "PHIEU_GOP_CLOSED",
       oldValues: { billId: phieu.id, ma: phieu.matchKey, status: "OPEN" },
       newValues: { billId: phieu.id, status: dich, daNhan },
-      reason: input.lyDo.trim(),
+      reason: input.lyDo.trim() || "Huỷ phiếu chưa nhận tiền — màn hình không đòi lý do",
       orgUnitId: phieu.centerId,
     });
 

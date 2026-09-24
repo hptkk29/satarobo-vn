@@ -49,8 +49,6 @@ import {
   tienDong,
   type KhaiGiam,
   type KieuGiam,
-  MA_LOAI_GIAM,
-  NHAN_LOAI_GIAM,
 } from "@/lib/orders/giam-gia-dong";
 import { HelpHint } from "@/components/admin/ui/help-hint";
 // KHỐI NHẬP KẾ HOẠCH — CÙNG component với trang chi tiết đơn (15/09/2026). Lý do không
@@ -1967,42 +1965,20 @@ function DongHangCard({
                 {/* Giải trình theo TỪNG KHOẢN. Cơ chế duyệt đã gỡ 14/09 — dòng chữ này
                     chính là thứ thay thế nó, nên nó phải nói được vì sao có ĐÚNG khoản
                     này, không phải vì sao dòng được bớt nói chung. */}
-                {/* PHIÊN E [21/09/2026] — LOẠI ưu đãi, đặt NGAY TRÊN ô giải trình.
-                    Thứ tự có lý do: chọn loại trước thì câu giải trình viết ra tự bám vào
-                    loại đó; đặt dưới thì người ta gõ xong mới thấy có ô phải chọn.
+                {/* ⚠️ Ô "LOẠI ƯU ĐÃI" ĐÃ GỠ [chủ dự án chốt 24/09/2026].
+                    *"bỏ ô loại ưu đãi đi vì nó chả có tác dụng gì, vì phải giải trình ở dưới rồi"*.
 
-                    ⚠️ KHÔNG bắt buộc (`— Không ghi loại —` là lựa chọn thật, không phải
-                    placeholder): chủ dự án chốt chỉ áp cho ưu đãi tạo mới, và chặn sale
-                    lưu đơn vì một nhãn thống kê là cái giá lớn hơn cái lợi. */}
-                <div className="mt-2 space-y-1.5">
-                  <Label className="text-xs" htmlFor={`loai-giam-${idx}`}>
-                    Loại ưu đãi
-                    <HelpHint>
-                      Chỉ là NHÃN để tra cứu và nhắc việc — nó không đổi số tiền nào.
-                      Bỏ trống cũng được; khoản giảm cũ vốn không có nhãn này.
-                    </HelpHint>
-                  </Label>
-                  {/* `select` thuần, không shadcn `Select`: sáu lựa chọn tĩnh, không tìm
-                      kiếm, không đa chọn — và `Select` của repo là base-ui, `SelectValue`
-                      hiện GIÁ TRỊ THÔ chứ không tra nhãn (memory `shadcn-select-la-base-ui`).
-                      Một `<select>` gốc còn cho bàn phím + mobile picker miễn phí. */}
-                  <select
-                    id={`loai-giam-${idx}`}
-                    value={k.loai ?? ""}
-                    onChange={(e) =>
-                      suaKhoan(idx, { loai: (e.target.value || null) as KhaiGiam["loai"] })
-                    }
-                    className="min-h-11 w-full rounded-lg border border-border bg-background px-3 text-sm transition-colors duration-150 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <option value="">— Không ghi loại —</option>
-                    {MA_LOAI_GIAM.map((ma) => (
-                      <option key={ma} value={ma}>
-                        {NHAN_LOAI_GIAM[ma]}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                    Đo trước khi gỡ, và số đo ủng hộ: `NHAN_LOAI_GIAM` chỉ được dùng ở ĐÚNG
+                    form này — không màn nào, không báo cáo nào đọc lại nhãn đó. Chính chú
+                    thích của trường cũng tự khai "NHÃN, không tham gia phép tính nào" và
+                    "_actions.ts` không đọc nó để quyết một đồng nào". Tức nó được GHI XUỐNG
+                    mà chưa từng được ĐỌC LẠI — một trường bắt người dùng chọn cho một mục
+                    đích không tồn tại.
 
+                    ⚠️ CHỈ gỡ Ô NHẬP. Cột `loai` trong `OrderItem.discounts` GIỮ NGUYÊN, và
+                    `docLoaiGiam` ở server vẫn nhận: khoản giảm cũ đã có nhãn thì đừng làm
+                    mất, và hai đường ghi khác (`_actions.ts:2330`, `:2362`) vẫn truyền nó.
+                    Ngày nào cần thống kê theo loại thì dựng lại ô này, dữ liệu cũ còn đó. */}
                 <div className="mt-2 space-y-1.5">
                   <Label className="text-xs">
                     Giải trình *

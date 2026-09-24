@@ -13,7 +13,6 @@ import {
   type DotDonDeChia,
 } from "@/lib/finance/chia-dot-cho-con";
 import type { TrangThaiDungHocCuaCon } from "@/lib/finance/dung-hoc-con";
-import { QrZoom } from "./qr-zoom";
 import { NutDungHoc } from "./dung-hoc-dialog";
 import { NutDoiKhoa, type LopChon } from "./doi-khoa-dialog";
 
@@ -21,10 +20,8 @@ import {
   boGanKhoanChoConAction,
   chuyenTienGiuaConAction,
   mienGiamNoAction,
-  dongPhieuGopAction,
   ganKhoanChoConAction,
   huyDotChoConAction,
-  huyPhieuGopAction,
   tachKhoanChoConAction,
   taoDotChoConAction,
   taoPhieuGopAction,
@@ -808,162 +805,6 @@ export type PhieuGopView = {
   noiDungCk: string;
 };
 
-/**
- * KHỐI PHIẾU GỘP ĐANG MỞ — mã, tổng, từng dòng, QR, và hai nút kết thúc.
- *
- * ── Vì sao MÃ in to và tách ký tự ──
- * Sale đọc mã này cho phụ huynh QUA ĐIỆN THOẠI. Bảng chữ đã loại 9 ký tự nhìn giống nhau
- * (`O0I1LB8S5`), nhưng một chuỗi 5 ký tự dính liền vẫn khó đọc từng tiếng. `tracking-[0.3em]`
- * + `font-mono` làm mỗi ký tự đứng riêng — đọc được mà không phải đánh vần.
- *
- * ── Vì sao in CẢ nội dung chuyển khoản ──
- * Không phải phụ huynh nào cũng quét được QR (điện thoại cũ, app ngân hàng không có camera).
- * Khi đó họ gõ tay, và thứ họ cần là ĐÚNG chuỗi mà máy đối khớp sẽ đọc — không phải một câu
- * mô tả. Đây cũng là lý do chuỗi này lấy từ cùng một nguồn với ảnh QR.
- */
-function KhoiPhieuGop({
-  orderId,
-  phieu,
-  duocHuy,
-  duocDong,
-}: {
-  orderId: string;
-  phieu: PhieuGopView;
-  duocHuy: boolean;
-  duocDong: boolean;
-}) {
-  const [lyDo, datLyDo] = useState("");
-  const [dangMo, datDangMo] = useState<"HUY" | "DONG" | null>(null);
-  const [dangChay, batDau] = useTransition();
-
-  const ketThuc = (kieu: "HUY" | "DONG") => {
-    if (!lyDo.trim()) {
-      toast.error("Ghi lý do");
-      return;
-    }
-    batDau(async () => {
-      const r =
-        kieu === "HUY"
-          ? await huyPhieuGopAction({ orderId, billId: phieu.billId, lyDo })
-          : await dongPhieuGopAction({ orderId, billId: phieu.billId, lyDo });
-      if (!r.ok) {
-        toast.error(r.error);
-        return;
-      }
-      toast.success(kieu === "HUY" ? "Đã huỷ phiếu" : "Đã đóng phiếu");
-      datDangMo(null);
-      datLyDo("");
-    });
-  };
-
-  return (
-    <div className="mb-4 rounded-lg border border-primary/25 bg-primary/5 p-3">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Phiếu thu gộp · đang chờ tiền
-          </p>
-          <p className="mt-1 font-mono text-2xl font-bold tracking-[0.3em] text-foreground">
-            {phieu.ma}
-          </p>
-          <p className="mt-1 text-sm">
-            Tổng <b className="tabular-nums">{vnd(phieu.tongTien)}</b>
-            {phieu.daNhan > 0 && (
-              <span className="ml-2 text-state-warning-ink">
-                · đã nhận {vnd(phieu.daNhan)} từ đường khác
-              </span>
-            )}
-          </p>
-          <ul className="mt-2 space-y-0.5 text-xs text-muted-foreground">
-            {phieu.dong.map((d, i) => (
-              <li key={`${d.ten}-${i}`} className="min-w-0 truncate">
-                {d.ten} · <span className="tabular-nums">{vnd(d.soTien)}</span>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-2 break-all text-xs text-muted-foreground">
-            Nội dung CK: <code className="text-foreground">{phieu.noiDungCk}</code>
-          </p>
-        </div>
-
-        {phieu.qrUrl ? (
-          // Dùng lại `QrZoom` của màn đơn — bấm để phóng to + chép nội dung CK. Viết một thẻ
-          // `img` riêng ở đây là đẻ ra cái QR thứ hai mà người dùng không phóng to được, cho
-          // đúng cùng một việc.
-          <QrZoom
-            src={phieu.qrUrl}
-            alt={`Mã QR phiếu gộp ${phieu.ma}`}
-            title={`Phiếu ${phieu.ma}: ${vnd(phieu.tongTien)}`}
-            transferContent={phieu.noiDungCk}
-            className="h-40 w-40 shrink-0"
-          />
-        ) : (
-          // Trạng thái rỗng NÓI VÌ SAO. Một ô trống không lý do là affordance nói dối theo
-          // chiều ngược lại — người dùng tưởng QR đang tải.
-          <p className="shrink-0 text-xs text-muted-foreground sm:w-40">
-            Chưa dựng được QR — cơ sở chưa khai tài khoản nhận tiền, hoặc bạn không có quyền xem
-            thông tin liên hệ.
-          </p>
-        )}
-      </div>
-
-      {(duocHuy || duocDong) && (
-        <div className="mt-3 border-t border-primary/20 pt-3">
-          {dangMo === null ? (
-            <div className="flex flex-wrap gap-2">
-              {/* Hai nút, và chỉ MỘT trong hai dùng được tuỳ phiếu đã nhận tiền chưa. Hiện cả
-                  hai rồi để cổng từ chối là bắt người dùng đoán; ẩn đúng cái không dùng được
-                  thì màn hình tự nói luật. */}
-              {duocHuy && phieu.daNhan === 0 && (
-                <Button size="sm" variant="outline" onClick={() => datDangMo("HUY")}>
-                  Huỷ phiếu
-                </Button>
-              )}
-              {duocDong && phieu.daNhan > 0 && (
-                <Button size="sm" variant="outline" onClick={() => datDangMo("DONG")}>
-                  Đóng phiếu
-                </Button>
-              )}
-              {phieu.daNhan > 0 && !duocDong && (
-                <p className="text-xs text-muted-foreground">
-                  Phiếu đã nhận tiền — chỉ kế toán đóng được.
-                </p>
-              )}
-            </div>
-          ) : (
-            <div className="flex flex-wrap items-center gap-2">
-              <Input
-                className="h-8 min-w-0 flex-1 text-xs"
-                placeholder={dangMo === "HUY" ? "Lý do huỷ (bắt buộc)" : "Lý do đóng (bắt buộc)"}
-                value={lyDo}
-                onChange={(e) => datLyDo(e.target.value)}
-              />
-              <Button
-                size="sm"
-                variant="destructive"
-                disabled={dangChay}
-                onClick={() => ketThuc(dangMo)}
-              >
-                {dangMo === "HUY" ? "Huỷ phiếu" : "Đóng phiếu"}
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={dangChay}
-                onClick={() => {
-                  datDangMo(null);
-                  datLyDo("");
-                }}
-              >
-                Thôi
-              </Button>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
 
 /**
  * THANH "IN QR" — hiện khi sale đã tick ít nhất một đợt.
@@ -1184,14 +1025,14 @@ export function CongNoTheoCon({
       {/* PHIÊN C — phiếu gộp. Đặt TRÊN khối "khoản chờ gắn" có chủ đích: phiếu là việc SẮP
           làm (đang chờ tiền), còn khoản chờ gắn là việc ĐÃ RỒI cần dọn. Thứ tự đọc của màn
           hình nên theo thứ tự đó. */}
-      {phieu && (
-        <KhoiPhieuGop
-          orderId={orderId}
-          phieu={phieu}
-          duocHuy={duocGan}
-          duocDong={duocBoGan}
-        />
-      )}
+      {/* ⚠️ PHIẾU GỘP ĐÃ DỜI HẲN XUỐNG KHỐI "PHIẾU THU & QR THEO ĐỢT" [24/09/2026].
+          Chủ dự án: *"chỗ thu hồi phiếu cũng bỏ xuống dưới phần QR luôn chứ"*.
+
+          Bản trước để MỘT NỬA ở đây (mã · tổng · huỷ/đóng) và một nửa ở dưới (ảnh QR) —
+          người dùng phải nhìn hai chỗ cho một tờ phiếu. Nay cả phiếu ở một chỗ: xem mã,
+          đưa khách, và huỷ/đóng đều tại khối QR.
+
+          Khối này quay về đúng việc của nó: CÔNG NỢ THEO CON. */}
       {choPhepChon && (
         <ThanhInQr
           orderId={orderId}

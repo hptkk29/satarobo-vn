@@ -27,7 +27,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { QrZoom } from "./qr-zoom";
 import { issueQrForRequest, regenerateQr } from "../_qr-actions";
-import { taoPhieuGopAction } from "../_actions";
+import { taoPhieuGopAction, huyPhieuGopAction, dongPhieuGopAction } from "../_actions";
+import { Input } from "@/components/ui/input";
 import type { PhieuGopView } from "./cong-no-theo-con";
 import { trangThaiQrDot, loiDotKhacDangGiu } from "@/lib/payments/qr-theo-dot";
 import type { QrIssueResult, QrSessionView } from "../_qr-core";
@@ -231,12 +232,211 @@ function QrPanel({
   );
 }
 
+/**
+ * Mã QR của PHIẾU GỘP đang mở — thứ đưa cho phụ huynh quét.
+ *
+ * Tách riêng khỏi `QrPanel` (đời `QrSession`) vì hai thứ khác nhau ở đúng một điểm quan
+ * trọng: phiếu gộp **không hết hạn**. `QrPanel` có đồng hồ đếm ngược; ở đây mà vẽ đồng hồ
+ * thì nó đếm về 0 rồi người dùng tưởng mã hỏng và đi phát lại — một lời hứa suông theo
+ * chiều ngược (luật 12).
+ */
+function PhieuGopQr({
+  orderId,
+  phieu,
+  nhanDot,
+  duocHuy,
+  duocDong,
+}: {
+  orderId: string;
+  phieu: PhieuGopView;
+  nhanDot: string;
+  duocHuy: boolean;
+  duocDong: boolean;
+}) {
+  const router = useRouter();
+  const [lyDo, datLyDo] = useState("");
+  // CHỈ còn "DONG": huỷ nay là 2 lần bấm, không qua ô lý do nữa.
+  const [dangMo, datDangMo] = useState<"DONG" | null>(null);
+  /** Đã bấm "Huỷ phiếu" lần một, đang chờ lần hai. Xem khối chú thích ở nút. */
+  const [choHuy, datChoHuy] = useState(false);
+  const [dangChay, batDau] = useTransition();
+
+  const ketThuc = (kieu: "HUY" | "DONG") => {
+    // ── LÝ DO: CHỈ "ĐÓNG" MỚI BẮT BUỘC [chủ dự án chốt 24/09/2026] ──────────────
+    // *"huỷ phiếu kh cần lý do, chỉ cần xác nhận 1 lần nữa là được"*.
+    //
+    // Ranh giới trùng đúng ranh giới nghiệp vụ: HUỶ chỉ xảy ra khi phiếu CHƯA nhận đồng
+    // nào (server gác), tức bỏ một tờ giấy chưa ai trả tiền vào — không có gì để đối
+    // soát. ĐÓNG thì có tiền thật dừng giữa chừng, và ba tháng sau kế toán sẽ hỏi.
+    //
+    // ⚠️ Cổng THẬT nằm ở server (`doiTrangThaiPhieuTrongTx`), không phải ở đây. Chỗ này
+    // chỉ để người dùng khỏi bấm rồi ăn một câu từ chối.
+    if (kieu === "DONG" && !lyDo.trim()) {
+      toast.error("Ghi lý do");
+      return;
+    }
+    batDau(async () => {
+      const r =
+        kieu === "HUY"
+          ? await huyPhieuGopAction({ orderId, billId: phieu.billId, lyDo })
+          : await dongPhieuGopAction({ orderId, billId: phieu.billId, lyDo });
+      if (!r.ok) {
+        toast.error(r.error);
+        return;
+      }
+      toast.success(kieu === "HUY" ? "Đã huỷ phiếu" : "Đã đóng phiếu");
+      datDangMo(null);
+      datChoHuy(false);
+      datLyDo("");
+      router.refresh();
+    });
+  };
+
+  return (
+    <div className="mt-4 rounded-lg border border-primary-soft bg-primary-soft/40 p-4">
+      <div className="flex flex-col gap-4 sm:flex-row">
+        <div className="shrink-0">
+          {phieu.qrUrl ? (
+            <QrZoom
+              src={phieu.qrUrl}
+              alt={`Mã QR phiếu ${phieu.ma}`}
+              title={`Phiếu ${phieu.ma}: ${vnd(phieu.tongTien)}`}
+              transferContent={phieu.noiDungCk}
+            />
+          ) : (
+            // Trạng thái rỗng NÓI VÌ SAO — một ô trống không lý do làm người dùng tưởng
+            // QR đang tải và ngồi đợi mãi.
+            <div className="flex h-52 w-52 items-center justify-center rounded-lg border border-dashed border-border bg-card p-3 text-center text-xs text-muted-foreground">
+              Chưa dựng được QR — cơ sở chưa khai tài khoản nhận tiền, hoặc bạn không có
+              quyền xem thông tin liên hệ.
+            </div>
+          )}
+        </div>
+
+        <div className="min-w-0 flex-1 space-y-2 text-sm">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Phiếu thu gộp · đang chờ tiền
+          </p>
+          <p className="font-mono text-2xl font-bold tracking-[0.3em] text-foreground">
+            {phieu.ma}
+          </p>
+          <p className="text-base font-bold text-foreground">
+            {vnd(phieu.tongTien)}
+            {/* Nói RÕ mã này thu đợt nào. Một mã 5 ký tự trần trụi buộc sale tự tra, và
+                tra nhầm thì đưa khách mã của đợt khác. */}
+            {nhanDot && <span className="ml-2 text-sm font-normal text-muted-foreground">· {nhanDot}</span>}
+          </p>
+          {phieu.daNhan > 0 && (
+            <p className="text-xs text-state-warning-ink">
+              Đã nhận {vnd(phieu.daNhan)} từ đường khác — số trên mã là phần CÒN LẠI.
+            </p>
+          )}
+          <p className="break-all text-xs text-muted-foreground">
+            Nội dung CK:{" "}
+            <span className="font-mono font-semibold text-foreground">{phieu.noiDungCk}</span>
+          </p>
+          {/* BẤT BIẾN THIẾT KẾ — đừng gỡ. Tiền về phải khớp ĐÚNG SỐ (chốt PHIÊN C:
+              "ăn cả hoặc không ăn gì"), nên sale PHẢI biết điều đó trước khi đưa mã. */}
+          <p className="rounded-md bg-white/80 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+            Phụ huynh phải chuyển <b>đúng {vnd(phieu.tongTien)}</b> và <b>giữ nguyên nội
+            dung</b> thì hệ thống mới tự ghi nhận. Lệch số hoặc sửa nội dung ⇒ khoản tiền
+            nằm chờ đối soát tay. Mã <b>không hết hạn</b> — nó sống tới khi phiếu bị đóng
+            hoặc huỷ bằng nút bên dưới.
+          </p>
+        </div>
+      </div>
+
+      {/* ── THU HỒI PHIẾU — ĐỨNG CÙNG CHỖ VỚI MÃ [24/09/2026] ────────────────────
+          Chủ dự án: *"chỗ thu hồi phiếu cũng bỏ xuống dưới phần QR luôn chứ"*.
+
+          Bản trước để mã + ảnh ở đây còn nút huỷ/đóng ở khối "Công nợ theo con" — người
+          dùng phải nhìn hai chỗ cho một tờ phiếu. Nay cả phiếu ở một chỗ. */}
+      {(duocHuy || duocDong) && (
+        <div className="mt-4 border-t border-primary-soft pt-3">
+          {dangMo === null ? (
+            <div className="flex flex-wrap gap-2">
+              {/* Hai nút, và chỉ MỘT trong hai dùng được tuỳ phiếu đã nhận tiền chưa. Hiện
+                  cả hai rồi để cổng từ chối là bắt người dùng đoán; ẩn đúng cái không dùng
+                  được thì màn hình tự nói luật (luật 12). */}
+              {/* HUỶ — XÁC NHẬN 2 LẦN, KHÔNG HỎI LÝ DO (chủ dự án chốt 24/09/2026).
+                  Dùng đúng nếp "confirm-delete 2 lần bấm" của repo. Lần bấm thứ hai đổi
+                  hẳn màu sang `destructive` và đổi chữ — người dùng phải THẤY mình đang
+                  ở bước khác, chứ không phải bấm hai lần vào cùng một cái nút. */}
+              {duocHuy && phieu.daNhan === 0 && (
+                <>
+                  <Button
+                    size="sm"
+                    variant={choHuy ? "destructive" : "outline"}
+                    disabled={dangChay}
+                    onClick={() => (choHuy ? ketThuc("HUY") : datChoHuy(true))}
+                  >
+                    {choHuy ? `Xác nhận huỷ mã ${phieu.ma}` : "Huỷ phiếu"}
+                  </Button>
+                  {choHuy && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={dangChay}
+                      onClick={() => datChoHuy(false)}
+                    >
+                      Thôi
+                    </Button>
+                  )}
+                </>
+              )}
+              {duocDong && phieu.daNhan > 0 && (
+                <Button size="sm" variant="outline" onClick={() => datDangMo("DONG")}>
+                  Đóng phiếu
+                </Button>
+              )}
+              {phieu.daNhan > 0 && !duocDong && (
+                <p className="text-xs text-muted-foreground">
+                  Phiếu đã nhận tiền — chỉ kế toán đóng được.
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                className="h-8 min-w-0 flex-1 text-xs"
+                placeholder="Lý do đóng (bắt buộc)"
+                value={lyDo}
+                onChange={(e) => datLyDo(e.target.value)}
+              />
+              <Button
+                size="sm"
+                variant="destructive"
+                disabled={dangChay}
+                onClick={() => ketThuc(dangMo)}
+              >
+                Đóng phiếu
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={dangChay}
+                onClick={() => {
+                  datDangMo(null);
+                  datLyDo("");
+                }}
+              >
+                Thôi
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function PaymentRequestsSection({
   orderId,
   requests,
   initialSessions,
   canManage,
   duocPhatPhieu,
+  duocDongPhieu,
   batThuTheoCon,
   phieuGop,
   daThuTay = {},
@@ -254,6 +454,8 @@ export function PaymentRequestsSection({
    * 12) — người dùng bấm và ăn "Không có quyền" mà không hiểu vì sao.
    */
   duocPhatPhieu: boolean;
+  /** `payments:manage` — quyền ĐÓNG phiếu đã nhận tiền. Khác `duocPhatPhieu`, ba quyền ba việc. */
+  duocDongPhieu: boolean;
   /**
    * Công tắc `billing.flexV1Enabled` của cơ sở giữ đơn.
    *
@@ -468,6 +670,26 @@ export function PaymentRequestsSection({
           </tbody>
         </table>
       </PhanTrangBang>
+
+      {/* ── MÃ QR CỦA PHIẾU GỘP — ĐỨNG Ở ĐÂY, KHÔNG Ở KHỐI "CÔNG NỢ THEO CON" ──────
+          Chủ dự án 24/09: *"đưa qr về đúng session phiếu thu & qr theo đợt chứ"*.
+
+          ⚠️ DỜI, KHÔNG NHÂN ĐÔI. Vẽ ảnh ở cả hai khối là hai chỗ cùng nói về một mã —
+          đúng lớp lỗi vừa vá sáng nay. Khối "Công nợ theo con" giữ vai QUẢN LÝ phiếu
+          (mã · tổng · các đợt · huỷ/đóng); khối này giữ vai ĐƯA MÃ CHO KHÁCH.
+
+          ⚠️ KHÔNG có đồng hồ đếm ngược, và đó là cố ý: mã phiếu gộp KHÔNG phải
+          `QrSession`, nó không hết hạn — sống tới khi phiếu bị đóng hoặc huỷ. Vẽ một cái
+          đồng hồ cho thứ không hết hạn là nói dối (luật 12). */}
+      {phieuGop && (
+        <PhieuGopQr
+          orderId={orderId}
+          phieu={phieuGop}
+          nhanDot={dongPhieuMo?.map((d) => d.nhan).join(" + ") ?? ""}
+          duocHuy={duocPhatPhieu}
+          duocDong={duocDongPhieu}
+        />
+      )}
 
       {/* Panel QR của phiếu đang mở — nhãn nói RÕ đang thu đợt nào, bao nhiêu. */}
       {(() => {

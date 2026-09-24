@@ -188,5 +188,19 @@ describe("[S-7] canh gác: đường sinh hoa hồng Sale phải có ĐÚNG MỘ
         "hai nghĩa là hai đường cùng ghi một kỳ — `setStatementLines` XOÁ rồi GHI cả " +
         "kỳ, nên cửa sau sẽ xoá mất dòng của cửa trước (hoặc ngược lại) tuỳ thứ tự chạy.",
     ).toEqual(["lib/crm/commission-run.ts"]);
-  });
+    // ⚠️ TRẦN THỜI GIAN TƯỜNG MINH — 24/09/2026, và nó KHÔNG phải "vá triệu chứng".
+    //
+    // Ca này đọc THẬT **2168 tệp** `.ts/.tsx` trong `app` + `lib` + `scripts`. Đo lúc máy
+    // rảnh: **174 ms**. Nhưng chạy trong cả bộ `test:unit` (nhiều worker tranh I/O trên
+    // Windows) nó vọt qua **5000 ms** mặc định và ĐỎ vì `Test timed out` — không phải vì
+    // khẳng định sai. Chữ ký luật 18: xanh khi chạy một mình, đỏ khi chạy cả bộ.
+    //
+    // Trần mặc định 5 giây không phải một ngân sách có nghĩa cho một lượt quét đĩa 2168
+    // tệp; con số dưới đây mới là. ĐỪNG hạ nó xuống, và cũng đừng nâng trần TOÀN CỤC —
+    // trần toàn cục che luôn những ca chậm vì lý do THẬT.
+    //
+    // Nếu một ngày ca này lại đỏ vì timeout: cây mã đã lớn hơn nhiều, và lúc đó việc đúng
+    // là làm lưới rẻ đi (quét một lượt, chia cho nhiều lưới dùng chung) chứ không phải
+    // nâng tiếp con số này.
+  }, 30_000);
 });
