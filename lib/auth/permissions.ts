@@ -417,7 +417,8 @@ export type Action =
   // MỘT quyền cho cả "mở màn" lẫn "nhắn khách": bên trong iframe là app ngoài, repo
   // này không chặn được từng thao tác, nên tách `view`/`reply` sẽ là quyền GIẢ —
   // hứa một lớp gác không tồn tại.
-  | "zalocrm:use";
+  | "zalocrm:use"
+  | "zalocrm:manage-nick";
 
 // =============================================================================
 // MATRIX — Mỗi action liệt kê rõ những role được phép.
@@ -973,6 +974,10 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // deny — không ai test được tính năng; và `buildActor()` LỌC grant theo đúng tập
   // đó nên mọi `UserPermissionGrant` mang key này bị vứt IM LẶNG, không lỗi.
   "zalocrm:use": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
+  // GIAO nick cho người — CỐ Ý hẹp hơn `zalocrm:use`. Tư vấn viên dùng nick thì có,
+  // nhưng tự giao nick cho mình thì không: đó là cổng phân quyền, không phải việc
+  // hằng ngày của họ.
+  "zalocrm:manage-nick": ["SUPER_ADMIN", "CENTER_MANAGER"],
 
   // --- Trục gọi điện + ghi âm (OmiCall) ---
   // Ma trận nguồn: `docs/ba-crm-hien-trang-va-misa.md:1380`. Vai v1 tương ứng:
