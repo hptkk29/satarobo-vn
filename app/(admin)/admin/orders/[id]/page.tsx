@@ -508,6 +508,13 @@ export default async function OrderDetailPage({ params }: Props) {
           matchKey: r.matchKey,
         }))}
         qrSessions={qrSessions}
+        // ── 24/09/2026 · QR theo đợt dùng mã 5 ký tự ──
+        // `batThuTheoCon` truyền RIÊNG chứ không suy từ `phieuGop != null`: "cờ tắt" và
+        // "cờ bật, chưa phát phiếu" là hai tình trạng khác nhau và cần hai cái nút khác
+        // nhau. Xem `lib/payments/qr-theo-dot.ts`.
+        duocPhatPhieu={canRecordPayments}
+        batThuTheoCon={batThuTheoCon}
+        phieuGop={phieuGop}
         paymentMethods={paymentMethods}
         congNo={congNo}
         donNhiem={donNhiem}

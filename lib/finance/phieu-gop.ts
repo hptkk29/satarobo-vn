@@ -315,7 +315,13 @@ export async function docPhieuGopDangMo(orderId: string): Promise<{
   ma: string;
   tongTien: number;
   daNhan: number;
-  dong: { ten: string; soTien: number }[];
+  dong: {
+    /** Đợt nào — trang đơn cần nó để biết DÒNG NÀO của bảng phiếu thu đang giữ mã này. */
+    paymentRequestId: string;
+    installmentNo: number;
+    ten: string;
+    soTien: number;
+  }[];
 } | null> {
   const phieu = await db.paymentBill.findFirst({
     where: { orderId, status: "OPEN" },
@@ -360,6 +366,11 @@ export async function docPhieuGopDangMo(orderId: string): Promise<{
     tongTien: conPhaiThuCuaPhieu(dongChia),
     daNhan: dongChia.reduce((s, d) => s + d.daRot, 0),
     dong: phieu.lines.map((l) => ({
+      // 24/09/2026 — thêm hai trường ĐỊNH DANH. Trước đó `dong` chỉ có tên + số tiền, đủ để
+      // VẼ phiếu nhưng KHÔNG đủ để trả lời "dòng nào của bảng phiếu thu đang giữ mã này" —
+      // câu hỏi mà `trangThaiQrDot` cần để không vẽ một cái nút chắc chắn bị DB từ chối.
+      paymentRequestId: l.paymentRequestId,
+      installmentNo: l.paymentRequest.installmentNo,
       ten: l.paymentRequest.orderItem?.itemName ?? `Đợt ${l.paymentRequest.installmentNo}`,
       soTien: l.amount,
     })),

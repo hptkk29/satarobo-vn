@@ -407,6 +407,39 @@ prisma/
     rõ: PR có BẤT KỲ tệp `.ts` nào là chạy ĐỦ BỐN CỔNG. "Chỉ đổi thứ tự chạy câu tra"
     không phải lý do để bỏ cổng.
 
+- ⚠️ **QR THEO ĐỢT NAY ĐI QUA PHIẾU GỘP ĐỂ LẤY MÃ 5 KÝ TỰ [chủ dự án chốt 24/09/2026].**
+  Nút "Xuất QR" trên một dòng đợt **phát một phiếu gộp MỘT DÒNG** cho đúng đợt ấy
+  (`taoPhieuGopAction`), thay vì mở `QrSession` đời cũ.
+  · **Vì sao buộc phải đi vòng qua phiếu gộp:** mã 5 ký tự **chỉ tồn tại trên
+    `PaymentBill`**, và tầng đối khớp tra đúng một chỗ —
+    `thuTheoPhieuGop`: `paymentBill.findFirst({ where: { matchKey: { in: memo.ungVien } } })`.
+    Không có đường nào khác để một QR theo đợt mang khuôn mới.
+  · **Vì sao đổi:** khuôn đời CŨ ở trần EMVCo 25 ký tự thì khoá `ORD…D1` + dấu cách chiếm
+    **18**, phần người đọc còn **7** ⇒ `ORD260924000001D1 Nguyen_`. **SĐT bị cắt sạch khỏi
+    mọi mã QR đời cũ kể từ 14/09.** Khuôn mới chở đủ trong 20: `ANH 0905123456 K7M2N`.
+  · **HAI hệ quả người dùng THẤY, phải nói ra trên màn:**
+    (a) `PaymentBill_orderId_open_key` (chỉ mục TỪNG PHẦN) ⇒ **mỗi đơn tối đa MỘT mã sống**.
+        Dòng đợt khác KHÔNG vẽ nút (luật 12 — nút chắc chắn ăn từ chối là lời hứa suông),
+        mà in "Mã đang mở cho Đợt X";
+    (b) tiền về phải **khớp ĐÚNG SỐ** ("ăn cả hoặc không ăn gì") — lệch một đồng là
+        UNMATCHED, không còn waterfall. Đó là chốt của PHIÊN C, không phải hệ quả phụ.
+  · **Cờ TẮT ⇒ đường `QrSession` đời cũ GIỮ NGUYÊN.** Đừng gỡ nhánh đó: cơ sở chưa bật cờ,
+    và phiếu chưa có mã 5 ký tự, vẫn phải xuất được QR. `memoPhatHanh` vẫn là chỗ DUY NHẤT
+    quyết định khuôn.
+  · Quyết định "dòng này vẽ gì" ở MỘT chỗ thuần: `lib/payments/qr-theo-dot.ts`
+    (`trangThaiQrDot`). Đừng viết lại điều kiện tại chỗ trong component.
+  · ⚠️ **Nút phát phiếu gác bằng `payments:record`, KHÔNG phải `orders:manage`** —
+    `taoPhieuGopAction` đi qua `congDuongB(orderId, "payments:record")`. Vẽ nút bằng quyền A
+    rồi để action hỏi quyền B là lời hứa suông; `[QTD-W1]` ghim đúng chỗ đó.
+  · Cổng: `[QTD-01..06]` + `[QTD-W1..W3]` (`lib/payments/qr-theo-dot.test.ts`) ·
+    `[PG-17]` `[PG-18]` `[PG-19]` (`tests/finance/phieu-gop.test.ts`, bộ `test:finance-db`).
+    Đã cấy 7 lỗi, 7 đỏ đúng ca.
+  · ⚠️ **Phép cấy tìm ra một lỗ mà mắt không thấy:** đặt `paymentRequestId: ""` ở
+    `docPhieuGopDangMo` thì **18/18 ca vẫn xanh** — cầu nối quan trọng nhất của đợt này
+    không ai canh. Mất nó là MỌI dòng rơi vào nhánh "đợt khác đang giữ mã" ⇒ **không ai xuất
+    được QR nữa**, không lỗi nào báo. Đã bịt bằng `[PG-19]`.
+
+
 - ⚠️ **"CI KHÔNG CHẠY" GẦN NHƯ LUÔN LÀ PR ĐANG **DIRTY** — đừng đi soi workflow
   [đo 24/09/2026, hai lần trong một ngày].**
   Triệu chứng: `gh api ".../actions/runs?head_sha=<sha>"` trả **`total_count: 0`**. Không
