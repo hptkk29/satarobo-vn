@@ -1,25 +1,34 @@
 import Link from 'next/link'
-import { CalendarCheck2, FileSpreadsheet, Plus } from 'lucide-react'
+import { FileSpreadsheet, Plus } from 'lucide-react'
 import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { scopedDb } from '@/lib/db-scope'
 import { resolveActor } from '@/lib/auth/actor'
 import { checkPermission } from '@/lib/auth/check-permission'
-import { ClassStatus, type Prisma } from '@prisma/client'
+import type { ClassStatus } from '@prisma/client'
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from '@/lib/enrollment-status'
 import { getAssignableTeachers } from '@/lib/teachers/assignable'
 import { getCenterOptions, type CenterOption } from '@/lib/org/center-options'
 import { ClassDeleteButton } from './_components/class-delete-button'
 import { ClassFilters } from './_components/class-filters'
+import { ClassExportDialog } from './_components/class-export-dialog'
+import {
+  CLASS_STATUS_LABEL,
+  buildClassOrderBy,
+  buildClassWhere,
+  matchesFill,
+  parseClassListFilters,
+  toClassListQuery,
+} from '@/lib/classes/list-filter'
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
-const STATUS_INFO: Record<ClassStatus, { label: string; color: string }> = {
-  PLANNED: { label: 'Đang lên KH', color: 'bg-muted text-foreground' },
-  RECRUITING: { label: 'Tuyển sinh', color: 'bg-state-warning-soft text-state-warning-ink' },
-  PENDING_APPROVAL: { label: 'Chờ duyệt', color: 'bg-primary-soft text-primary' },
-  ACTIVE: { label: 'Đang dạy', color: 'bg-state-success-soft text-state-success-ink' },
-  COMPLETED: { label: 'Hoàn thành', color: 'bg-state-info-soft text-state-info-ink' },
-  CANCELLED: { label: 'Huỷ', color: 'bg-state-danger-soft text-state-danger-ink' },
+const STATUS_COLOR: Record<ClassStatus, string> = {
+  PLANNED: 'bg-muted text-foreground',
+  RECRUITING: 'bg-state-warning-soft text-state-warning-ink',
+  PENDING_APPROVAL: 'bg-primary-soft text-primary',
+  ACTIVE: 'bg-state-success-soft text-state-success-ink',
+  COMPLETED: 'bg-state-info-soft text-state-info-ink',
+  CANCELLED: 'bg-state-danger-soft text-state-danger-ink',
 }
 
 const DAY_LABELS = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7']
@@ -50,23 +59,15 @@ function ScheduleBadge({
     .join(' · ')
   const time = startTime && endTime ? `${startTime}–${endTime}` : ''
   return (
-    <span className="text-xs">
+    <span className="whitespace-nowrap text-xs">
       <span className="font-medium">{daysText}</span>
       {time && <span className="ml-1 text-muted-foreground">{time}</span>}
     </span>
   )
 }
 
-const VALID_STATUSES = Object.values(ClassStatus)
-
 interface SearchParams {
-  searchParams: Promise<{
-    q?: string
-    status?: string
-    centerId?: string
-    courseId?: string
-    teacherId?: string
-  }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }
 
 export default async function ClassesPage({ searchParams }: SearchParams) {
@@ -96,48 +97,29 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
   // Trước 04/09 cả cột Hành động treo sau canUpdate || canDelete, nên Sale và Quản
   // lý lớp học không thấy nút nào — phải dán tay URL mới vào xem lớp được.
 
-  const params = await searchParams
-  const q = params.q?.trim() || undefined
-  const statusFilter =
-    params.status && VALID_STATUSES.includes(params.status as ClassStatus)
-      ? (params.status as ClassStatus)
-      : undefined
-  const centerFilter = params.centerId?.trim() || undefined
-  const courseFilter = params.courseId?.trim() || undefined
-  const teacherFilter = params.teacherId?.trim() || undefined
+  // 24/09 — điều kiện lọc đi qua `lib/classes/list-filter.ts`, DÙNG CHUNG với route
+  // xuất Excel: màn và file không bao giờ lệch nhau về "những lớp nào".
+  const filters = parseClassListFilters(await searchParams)
+  const filterQuery = toClassListQuery(filters)
 
   const hasViewAll = await checkPermission('classes:view-all')
   const hasViewOwn = await checkPermission('classes:view-own')
-  const effectiveTeacherFilter = (!hasViewAll && hasViewOwn) ? session.user.id : teacherFilter
+  const viewOwnOnly = !hasViewAll && hasViewOwn
+  // Kèm liên hệ phụ huynh khi xuất — cùng cổng với màn danh sách học viên.
+  const canParentContact = await checkPermission('students:view-all')
 
-  const baseWhere: Prisma.ClassWhereInput = {
-    deletedAt: null,
-    ...(statusFilter ? { status: statusFilter } : {}),
-    ...(centerFilter ? { centerId: centerFilter } : {}),
-    ...(courseFilter ? { courseId: courseFilter } : {}),
-  }
-  const andClauses: Prisma.ClassWhereInput[] = []
-  if (effectiveTeacherFilter) {
-    andClauses.push({
-      OR: [{ teacherId: effectiveTeacherFilter }, { assistantId: effectiveTeacherFilter }],
-    })
-  }
-  if (q) {
-    andClauses.push({
-      OR: [
-        { name: { contains: q, mode: 'insensitive' } },
-        { classCode: { contains: q, mode: 'insensitive' } },
-      ],
-    })
-  }
-  const where: Prisma.ClassWhereInput =
-    andClauses.length > 0 ? { ...baseWhere, AND: andClauses } : baseWhere
+  // Truy vấn BỎ điều kiện trạng thái để đếm số lớp cho từng chip trạng thái; lọc trạng
+  // thái làm trong bộ nhớ ngay dưới (danh sách vốn tải trọn, phân trang ở tầng hiển thị).
+  const where = buildClassWhere(
+    { ...filters, statuses: [] },
+    { forceTeacherId: viewOwnOnly ? session.user.id : null },
+  )
 
-  const [classes, centers, courses, teachers] = await Promise.all([
+  const [allClasses, centers, courses, teachers] = await Promise.all([
     scopedDb(actor).class
       .findMany({
         where,
-        orderBy: [{ status: 'asc' }, { startDate: 'desc' }, { createdAt: 'desc' }],
+        orderBy: buildClassOrderBy(filters.sort),
         select: {
           id: true,
           classCode: true,
@@ -181,56 +163,60 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
     ),
   ])
 
+  const statusCounts: Record<string, number> = {}
+  const fillMatched = allClasses.filter((c) =>
+    matchesFill(c._count.enrollments, c.maxStudents, filters.fill),
+  )
+  for (const c of fillMatched) statusCounts[c.status] = (statusCounts[c.status] ?? 0) + 1
+  const classes =
+    filters.statuses.length > 0
+      ? fillMatched.filter((c) => filters.statuses.includes(c.status))
+      : fillMatched
+
   return (
     <div>
-      <div className="mb-6 flex items-start justify-between gap-4">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Lớp học</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {classes.length > 0 ? `${classes.length} lớp` : 'Chưa có lớp nào'}
           </p>
         </div>
-        {canCreate && (
-          <div className="flex gap-2">
-            <Link
-              href="/classes/new"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
-            >
-              <Plus className="h-4 w-4" />
-              Thêm lớp
-            </Link>
-            <Link
-              href="/classes/import"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted"
-            >
-              <FileSpreadsheet className="h-4 w-4" />
-              Import Excel
-            </Link>
-            {/* 08/08 — rà soát buổi lệch ngày khai giảng (lỗi im lặng, phải chủ động soi). */}
-            <Link
-              href="/classes/kiem-tra-lich"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted"
-            >
-              <CalendarCheck2 className="h-4 w-4" />
-              Kiểm tra lịch buổi
-            </Link>
-          </div>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {canCreate && (
+            <>
+              <Link
+                href="/classes/new"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
+              >
+                <Plus className="h-4 w-4" />
+                Thêm lớp
+              </Link>
+              <Link
+                href="/classes/import"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted"
+              >
+                <FileSpreadsheet className="h-4 w-4" />
+                Import Excel
+              </Link>
+            </>
+          )}
+          {/* 24/09 — nút "Kiểm tra lịch buổi" GỠ theo yêu cầu chủ dự án (màn vẫn còn, xem
+              ALLOWLIST của nav-coverage). Xuất Excel hiện cho MỌI người xem được danh sách:
+              route gác cùng cổng và chỉ xuất đúng những lớp người đó đang thấy. */}
+          <ClassExportDialog
+            filterQuery={filterQuery}
+            classCount={classes.length}
+            canParentContact={canParentContact}
+          />
+        </div>
       </div>
 
       {/* Filters — client-side nav + pending indicator (Lỗi 1 QA 20/07) */}
       <ClassFilters
-        initial={{
-          q,
-          status: statusFilter,
-          centerId: centerFilter,
-          courseId: courseFilter,
-          teacherId: teacherFilter,
-        }}
-        statuses={Object.entries(STATUS_INFO).map(([v, { label }]) => ({
-          value: v,
-          label,
-        }))}
+        initial={filters}
+        statusCounts={statusCounts}
+        showTeacher={!viewOwnOnly}
         centers={centers.map((c) => ({ value: c.id, label: c.name }))}
         courses={courses.map((c) => ({ value: c.id, label: c.name }))}
         teachers={teachers.map((t) => ({
@@ -240,35 +226,43 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
       />
 
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        <PhanTrangBang cuonNgang>
-          <table className="min-w-full divide-y divide-border">
+        {/* khoaTrang gắn với bộ lọc: quay lại từ trang chi tiết là về đúng trang đang xem. */}
+        <PhanTrangBang
+          cuonNgang
+          tenDonVi="lớp"
+          khoaTrang={`classes?${filterQuery}`}
+          classThanh="flex-wrap px-4 pb-3"
+        >
+          {/* min-w: khung hẹp thì bảng CUỘN NGANG (PhanTrangBang cuonNgang) thay vì ép cột —
+              24/09 ép cột làm tên lớp gãy 5 dòng và cột Trạng thái bị cắt. */}
+          <table className="w-full min-w-[1100px] divide-y divide-border">
             <thead className="bg-muted">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Tên lớp
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Khoá học
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Cơ sở / Phòng
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Lịch
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   GV chính
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Sức chứa
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Khai giảng
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Trạng thái
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <th className="whitespace-nowrap px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Hành động
                 </th>
               </tr>
@@ -280,20 +274,21 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
                     colSpan={9}
                     className="px-4 py-12 text-center text-sm text-muted-foreground"
                   >
-                    Chưa có lớp nào
+                    {allClasses.length === 0 && !filterQuery
+                      ? 'Chưa có lớp nào'
+                      : 'Không có lớp nào khớp bộ lọc'}
                   </td>
                 </tr>
               ) : (
                 classes.map((cls) => {
-                  const statusInfo =
-                    STATUS_INFO[cls.status] ?? {
-                      label: cls.status,
-                      color: 'bg-muted text-muted-foreground',
-                    }
+                  const statusInfo = {
+                    label: CLASS_STATUS_LABEL[cls.status] ?? cls.status,
+                    color: STATUS_COLOR[cls.status] ?? 'bg-muted text-muted-foreground',
+                  }
                   return (
                     <tr key={cls.id} className="hover:bg-muted/60">
                       <td className="px-4 py-3">
-                        <div className="font-medium text-foreground">{cls.name}</div>
+                        <div className="min-w-[240px] font-medium text-foreground">{cls.name}</div>
                         {cls.classCode && (
                           <div className="text-xs text-muted-foreground tabular-nums">
                             {cls.classCode}
@@ -322,12 +317,12 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
                       <td className="px-4 py-3 text-sm tabular-nums text-foreground font-semibold">
                         {cls._count.enrollments}/{cls.maxStudents}
                       </td>
-                      <td className="px-4 py-3 text-sm tabular-nums text-muted-foreground">
+                      <td className="whitespace-nowrap px-4 py-3 text-sm tabular-nums text-muted-foreground">
                         {formatDate(cls.startDate)}
                       </td>
                       <td className="px-4 py-3">
                         <span
-                          className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusInfo.color}`}
+                          className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusInfo.color}`}
                         >
                           {statusInfo.label}
                         </span>
