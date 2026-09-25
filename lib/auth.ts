@@ -164,6 +164,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             isActive: true,
             deletedAt: true,
             accountStatus: true,
+            isServiceAccount: true,
           },
         });
 
@@ -176,6 +177,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // đăng nhập nào không dựa vào mật khẩu, hoặc khi ai đó đặt mật khẩu cho
         // một tài khoản chưa kích hoạt.
         if (user.accountStatus !== "ACTIVE") return null;
+        // Cổng dữ liệu agent (25/09/2026) — user DỊCH VỤ của agent KHÔNG BAO GIỜ đăng nhập
+        // bằng giao diện, kể cả khi ai đó lỡ gán mật khẩu/SĐT cho nó qua màn nhân sự. Nó chỉ
+        // tồn tại để mang quyền RBAC cho agent đi qua `can()` + `scopedDb`.
+        if (user.isServiceAccount) return null;
 
         const valid = await bcrypt.compare(parsed.data.password, user.password);
         if (!valid) return null;

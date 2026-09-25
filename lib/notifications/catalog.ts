@@ -494,6 +494,14 @@ const BY_PREFIX: Readonly<Record<string, NotiDef>> = {
     group: "new_task", priority: 2, entity: "trial",
     recipients: "Giáo viên được phân buổi học thử", target: "/lop-trial/lich-hen",
   },
+  // ── Cổng dữ liệu agent (25/09/2026) ─────────────────────────────────────────
+  // Agent bị TỰ KHOÁ vì dấu hiệu bất thường (sai mật khẩu dồn dập, gọi từ IP lạ, đọc quá
+  // hạn mức dữ liệu nhạy cảm) — spec §12 "báo CEO ngay". P1: có thể là khoá đang bị lộ.
+  "agent-gateway.tu-khoa:": {
+    label: "Agent bị tự khoá vì bất thường",
+    group: "action_required", priority: 1, entity: "integration",
+    recipients: "Người giữ quyền duyệt Cổng dữ liệu agent", target: "/cong-du-lieu-agent",
+  },
 };
 
 /** Danh sách tiền tố đã sắp DÀI TRƯỚC — khớp tiền tố dài nhất, tính sẵn một lần. */

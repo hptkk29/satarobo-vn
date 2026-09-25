@@ -71,9 +71,18 @@ function permsOf(code: string): string[] {
 }
 
 describe("EL-02 · AC2. Danh mục vai sau seed", () => {
-  it("ROLE_SEED có đúng 15 vai và không trùng code", () => {
-    expect(ROLE_SEED).toHaveLength(15);
-    expect(new Set(ROLE_SEED.map((r) => r.code)).size).toBe(15);
+  it("ROLE_SEED có đúng 18 vai và không trùng code", () => {
+    // 15 → 18 (25/09/2026): Cổng dữ liệu agent thêm GIAM_DOC · KY_THUAT · AGENT_CHI_DOC.
+    // Ma trận EL-02 bên dưới vẫn chỉ duyệt 15 vai của bảng §3 — ba vai mới được khoá riêng
+    // ở ca kế tiếp: chúng KHÔNG được mang quyền e-learning nào.
+    expect(ROLE_SEED).toHaveLength(18);
+    expect(new Set(ROLE_SEED.map((r) => r.code)).size).toBe(18);
+  });
+
+  it("ba vai của Cổng dữ liệu agent KHÔNG mang quyền e-learning nào", () => {
+    for (const code of ["GIAM_DOC", "KY_THUAT", "AGENT_CHI_DOC"]) {
+      expect(permsOf(code).filter((a) => a.startsWith("elearning:")), code).toEqual([]);
+    }
   });
 
   it("15 vai của bảng §3 đều tồn tại trong ROLE_SEED", () => {

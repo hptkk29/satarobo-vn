@@ -972,6 +972,50 @@ const N: Readonly<Record<SettingKey, NhanVanHanh>> = {
       "nhận đã đối soát xong, và bật ngoài giờ làm việc.",
     canThan: true,
   },
+  "agentGateway.tokenTtlSec": {
+    tab: "nang-cao",
+    ten: "Token của agent sống bao lâu",
+    donVi: "giây",
+    giaiThich:
+      "Hết thời gian này agent phải xin token mới bằng mật khẩu. Ngắn hơn thì khoá bị lộ ít " +
+      "giá trị hơn; tài liệu CEO đề xuất 900 giây (15 phút).",
+    canThan: true,
+  },
+  "agentGateway.rateLimitPerMin": {
+    tab: "nang-cao",
+    ten: "Số lượt gọi tối đa mỗi phút của một agent",
+    donVi: "lượt",
+    giaiThich: "Vượt thì agent nhận lỗi “vượt hạn mức” và phải chờ. Không ảnh hưởng người dùng thật.",
+  },
+  "agentGateway.maxRowsPerCall": {
+    tab: "nang-cao",
+    ten: "Số bản ghi tối đa trong một lượt gọi của agent",
+    donVi: "bản ghi",
+    giaiThich: "Agent muốn lấy nhiều hơn thì phải lật trang. Trần cứng là 500.",
+  },
+  "agentGateway.maxRowsPerDay.cao": {
+    tab: "nang-cao",
+    ten: "Số bản ghi nhạy cảm một agent được đọc mỗi ngày",
+    donVi: "bản ghi",
+    giaiThich:
+      "Áp cho dữ liệu nhạy cảm CAO (lead, hội thoại, cuộc gọi). Vượt thì agent bị TỰ KHOÁ và " +
+      "người duyệt nhận thông báo — đây là dấu hiệu agent đang bị dùng để rút dữ liệu hàng loạt.",
+    canThan: true,
+  },
+  "agentGateway.maxRangeDays": {
+    tab: "nang-cao",
+    ten: "Khoảng ngày tối đa trong một lượt gọi của agent",
+    donVi: "ngày",
+    giaiThich: "Agent hỏi khoảng dài hơn thì bị từ chối, phải chia nhỏ. Đề xuất 93 ngày (một quý).",
+  },
+  "agentGateway.lockAfterAuthFailures": {
+    tab: "nang-cao",
+    ten: "Sai mật khẩu bao nhiêu lần trong 5 phút thì tự khoá agent",
+    donVi: "lần",
+    giaiThich:
+      "Chặn dò mật khẩu. Agent bị khoá phải được người duyệt mở lại trên màn Cổng dữ liệu agent.",
+    canThan: true,
+  },
 
   // ── Tham số của các trục CHỈ CÓ trên nhánh `test`, bổ sung khi hợp nhất 16/09/2026 ──
   // Gọi điện (OmiCall) · hộp thư đa kênh · ngân sách gửi ra · ZaloCRM · ngưỡng lead treo.

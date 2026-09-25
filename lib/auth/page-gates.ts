@@ -85,6 +85,11 @@ export const PAGE_GATES = {
    */
   "/to-chuc": ["centers:edit"],
 
+  /** 25/09/2026 — Cổng dữ liệu agent (tài liệu CEO §5.5). Hai vai MỚI giữ quyền xem:
+   *  GIAM_DOC (duyệt) + KY_THUAT (tạo). Thao tác trong màn gác bằng `:manage`/`:approve`
+   *  ở từng Server Action, không ở cổng trang. */
+  "/cong-du-lieu-agent": ["agent_gateway:view"],
+
   /** P2 · US-08 — vị trí công việc mang bộ vai trò ⇒ cùng hạng nguy hiểm với sửa
    *  RoleDef, cùng một cổng `roles:manage` (chỉ SUPER_ADMIN). */
   "/nhan-su/vi-tri": ["roles:manage"],
