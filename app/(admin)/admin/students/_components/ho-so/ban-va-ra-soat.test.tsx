@@ -207,6 +207,11 @@ describe("[RSX-04] form TẠO: ảnh đang tải ⇒ không tạo được", () 
     fireEvent.submit(container.querySelector("form")!);
     await screen.findByText(/Ảnh đại diện đang tải lên/);
     expect(m.createStudent).not.toHaveBeenCalled();
+    // Chờ khung hình của `baoLoi` chạy TRONG ca này (không để nó nổ sau khi ca đã xong):
+    // khung lỗi phải nhận focus — kể cả ở môi trường không có `scrollIntoView` (jsdom).
+    // CI 26/09 đỏ vì callback đó gọi `scrollIntoView` trần và ném SAU khi ca kết thúc.
+    await act(() => new Promise<void>((xong) => requestAnimationFrame(() => xong())));
+    expect(document.activeElement).toBe(screen.getByRole("alert"));
   });
 });
 

@@ -162,7 +162,10 @@ export function StudentForm({
     setLoi(msg);
     // Đợi khung lỗi vẽ ra rồi mới cuộn + chuyển focus (trình đọc màn hình đọc ngay).
     requestAnimationFrame(() => {
-      loiRef.current?.scrollIntoView({ block: "center" });
+      // `?.()` cả ở HÀM: môi trường không có `scrollIntoView` (jsdom của bộ test, vài
+      // webview cũ) thì bỏ qua cuộn nhưng VẪN chuyển focus — ném ở đây là mất luôn focus,
+      // và trong test nó thành lỗi không bắt làm đỏ cả job (CI 26/09).
+      loiRef.current?.scrollIntoView?.({ block: "center" });
       loiRef.current?.focus({ preventScroll: true });
     });
   }
