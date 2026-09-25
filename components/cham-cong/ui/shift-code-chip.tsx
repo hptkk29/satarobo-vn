@@ -49,9 +49,20 @@ export function ShiftCodeChip({
   foreignUnit,
   size = "md",
   className,
+  gio,
 }: {
   code: string | null;
   source?: ShiftSource;
+  /**
+   * Định nghĩa ca dạng một dòng — `motDongGioCa()` trong `lib/cham-cong/gio-ca.ts`.
+   *
+   * Chốt 25/09/2026: QLCS đứng trước lưới toàn `CG` `CS` `HC` phải mở màn Cấu hình mới biết
+   * mã nào mấy giờ. Chip là component DUY NHẤT vẽ mã ca (10 màn, cả site GV), nên cắm ở đây
+   * là mọi màn cùng được — rê chuột một ô là ra giờ vào/ra.
+   *
+   * Tuỳ chọn: màn chưa nạp danh mục thì chip vẫn chạy như cũ, chỉ không có phần giờ.
+   */
+  gio?: string | null;
   /** Ô thuộc khối khác (người CS2 mượn sang lịch CS1): chỉ đọc, không sửa được ở màn này. */
   foreignUnit?: string;
   size?: "sm" | "md";
@@ -66,6 +77,10 @@ export function ShiftCodeChip({
     (code && src ? `, ${src.label}` : "") +
     (foreignUnit ? `, thuộc khối ${foreignUnit} — chỉ xem` : "");
 
+  // Giờ ca xuống DÒNG RIÊNG trong tooltip: `title` ngắt dòng bằng ký tự xuống dòng, và gộp
+  // một dòng dài thì phần "sửa tay / đơn đổi ca" bị đẩy ra xa, đúng chỗ hay đọc hụt.
+  const tip = code && gio ? [label, gio].join(String.fromCharCode(10)) : label;
+
   return (
     <span
       className={cn(
@@ -74,8 +89,8 @@ export function ShiftCodeChip({
         tone,
         className,
       )}
-      aria-label={label}
-      title={label}
+      aria-label={code && gio ? `${label}. ${gio}` : label}
+      title={tip}
     >
       <span>{code ?? "—"}</span>
       {code && src?.mark && !foreignUnit && (
