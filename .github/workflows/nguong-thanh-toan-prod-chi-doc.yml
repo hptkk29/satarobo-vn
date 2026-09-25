@@ -33,10 +33,31 @@
 #
 # Dùng chuỗi SESSION POOLER (:5432), không phải transaction pooler (:6543): pgbouncer không giữ
 # prepared statement giữa các câu lệnh — xem `scripts/_script-db.ts`.
+#
+# ── Ô CHỌN `bao_cao` — MƯỢN NÚT NÀY CHO BÁO CÁO GĐ 0 HOÁ ĐƠN [25/09/2026] ──────────────
+# GitHub chỉ nhận lệnh chạy tay cho workflow ĐÃ TỪNG có mặt trên nhánh mặc định `main`.
+# `hoa-don-prod-chi-doc.yml` mới chỉ nằm trên `test` nên chưa gọi được (HTTP 404 "not found on
+# the default branch"). Chủ dự án chọn MƯỢN nút đã đăng ký này thay vì đẩy tệp thẳng lên `main`.
+#   · Mặc định vẫn là `nguong-thanh-toan` ⇒ bấm "Run workflow" như cũ ra đúng báo cáo cũ.
+#   · `hoa-don-gd0` chạy `scripts/bao-cao-hoa-don-gd0.ts` — CÙNG bốn lớp khoá (script không lệnh
+#     ghi · READ ONLY + throw · user chỉ-đọc · tự khai quyền), canh bởi `[HDG0-*]`
+#     (`lib/finance/bao-cao-hoa-don-gd0.test.ts`).
+#   · Tập cột script hoá đơn gọi tên đã đối chiếu có trên `origin/main` (xem đầu
+#     `hoa-don-prod-chi-doc.yml`) ⇒ chạy từ `test` không dính `P2022`.
+# Khi `hoa-don-prod-chi-doc.yml` lên `main` (lượt test → main), gỡ lựa chọn `hoa-don-gd0` ở đây.
 name: Ngưỡng thanh toán · PROD · ĐỌC (chỉ đọc — không ghi gì)
 
 on:
   workflow_dispatch:
+    inputs:
+      bao_cao:
+        description: "Báo cáo nào (mặc định: ngưỡng thanh toán)"
+        required: true
+        type: choice
+        default: nguong-thanh-toan
+        options:
+          - nguong-thanh-toan
+          - hoa-don-gd0
 
 permissions:
   contents: read
@@ -118,17 +139,28 @@ jobs:
       - name: Generate Prisma client
         run: pnpm exec prisma generate
 
+      # Tên tệp báo cáo = `bao-cao-<lựa chọn>.md` — mỗi script tự ghi đúng tên đó. Giá trị lựa
+      # chọn đi qua `env`, không nội suy thẳng vào `run` (khuôn chống chèn lệnh của Actions).
+      # Nhánh `*)` KHÔNG rơi về báo cáo mặc định: lựa chọn lạ là lỗi cấu hình, phải đỏ.
       - name: Dựng báo cáo (chỉ đọc)
         env:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
           DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
-        run: pnpm exec tsx scripts/bao-cao-nguong-thanh-toan.ts
+          BAO_CAO: ${{ inputs.bao_cao }}
+        run: |
+          case "$BAO_CAO" in
+            nguong-thanh-toan) pnpm exec tsx scripts/bao-cao-nguong-thanh-toan.ts ;;
+            hoa-don-gd0) pnpm exec tsx scripts/bao-cao-hoa-don-gd0.ts ;;
+            *) echo "::error::Lựa chọn báo cáo lạ: '$BAO_CAO'"; exit 1 ;;
+          esac
 
       - name: Đưa báo cáo lên job summary
         if: always()
+        env:
+          BAO_CAO: ${{ inputs.bao_cao }}
         run: |
-          if [ -f bao-cao-nguong-thanh-toan.md ]; then
-            cat bao-cao-nguong-thanh-toan.md >> "$GITHUB_STEP_SUMMARY"
+          if [ -f "bao-cao-$BAO_CAO.md" ]; then
+            cat "bao-cao-$BAO_CAO.md" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "::error::Script không sinh được báo cáo — xem log bước trên."
           fi
@@ -137,7 +169,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: bao-cao-nguong-thanh-toan
-          path: bao-cao-nguong-thanh-toan.md
+          name: bao-cao-${{ inputs.bao_cao }}
+          path: bao-cao-${{ inputs.bao_cao }}.md
           retention-days: 3
           if-no-files-found: warn

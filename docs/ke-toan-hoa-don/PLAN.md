@@ -562,9 +562,11 @@ chốt**). Cả hai phải khai nhãn vận hành, có lưới `[CFG-T01]` canh.
 
 ### Số đo GĐ 0 (workflow chỉ-đọc, điền sau)
 
-**Cách chạy:** Actions → **"Hoá đơn · PROD · ĐỌC (GĐ 0 — chỉ đọc, không ghi gì)"** → *Run workflow*
-trên nhánh **`test`** (cổng nhánh chỉ nhận `main`/`test`). Báo cáo nằm ở job summary + artifact
-`bao-cao-hoa-don-gd0` (3 ngày). Script: `scripts/bao-cao-hoa-don-gd0.ts` — định nghĩa "khoản thu
+**Cách chạy (HÔM NAY):** Actions → **"Ngưỡng thanh toán · PROD · ĐỌC"** → *Run workflow* trên
+nhánh **`test`**, ô **`bao_cao` = `hoa-don-gd0`**. Vì sao mượn nút: GitHub chỉ nhận lệnh chạy tay
+cho workflow đã từng lên `main`, mà `hoa-don-prod-chi-doc.yml` mới nằm trên `test` (HTTP 404,
+25/09) — chủ dự án chọn mượn thay vì đẩy thẳng `main`. Khi tệp riêng lên `main` thì chạy nút
+riêng và gỡ lựa chọn mượn. Báo cáo ở job summary + artifact `bao-cao-hoa-don-gd0` (3 ngày). Script: `scripts/bao-cao-hoa-don-gd0.ts` — định nghĩa "khoản thu
 thật", nguồn giao dịch và số ròng đi qua `lib/finance/hoa-don/nguon-khoan.ts` (dùng chung với màn).
 Lưới: `[NK-*]` + `[HDG0-*]`.
 
