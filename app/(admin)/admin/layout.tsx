@@ -23,7 +23,6 @@ import {
   isZalocrmEnabled,
 } from "@/lib/flags";
 import { AdminShell } from "@/components/admin/admin-shell";
-import { Toaster } from "@/components/ui/sonner";
 import { ServiceWorkerRegister } from "@/components/push/service-worker-register";
 
 // Default title cho MỌI trang admin chưa tự khai metadata (86/199 trang) → không rơi về
@@ -154,7 +153,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         {children}
       </AdminShell>
 
-      <Toaster richColors position="top-right" />
+      {/* KHÔNG gắn <Toaster> ở đây — layout gốc (app/layout.tsx) đã có MỘT bản cho mọi site.
+          Gắn thêm là mỗi toast hiện ĐÔI (26/09/2026). */}
       {/* Web Push Đợt 2 — cài service worker, KHÔNG xin quyền (đó là Đợt 3, chỉ trong user gesture). */}
       <ServiceWorkerRegister nguoiDung={session.user.id} />
     </>

@@ -55,7 +55,12 @@ export default function RootLayout({
         {children}
         <MetaPixel />
         <GA4 />
-        <Toaster position="top-right" richColors />
+        {/* MỘT Toaster DUY NHẤT cho cả 4 site. Sonner vẽ MỌI toast (không mang `toasterId`)
+            ở MỌI <Toaster> đang gắn — admin + site GV từng gắn thêm bản riêng ⇒ mỗi toast
+            hiện ĐÔI (26/09/2026). Portal / public / auth / e-learning dựa vào bản này nên nó
+            phải ở đây. `closeButton` kế thừa từ bản của site GV (giáo viên tắt toast trên
+            điện thoại). Lưới: components/ui/toaster-duy-nhat.test.ts. */}
+        <Toaster position="top-right" richColors closeButton />
         <BfcacheReloadFix />
       </body>
     </html>
