@@ -37,6 +37,8 @@ const MIEN_TRU: Record<string, string> = {
   "app/(public)/khoa-hoc/page.tsx":
     "bảng SO SÁNH hai khoá học — nội dung cố định, không phải danh sách",
   "app/(public)/hoc-cu/page.tsx": "bảng so sánh gói học cụ — nội dung cố định",
+  "components/cham-cong/ui/bang-gio-ca.tsx":
+    "bảng tra GIỜ CÁC CA — danh mục chốt cứng (21 mã), nằm trong <details> đóng sẵn; phân trang một bảng tra cứu là bắt người ta bấm sang trang để tìm nghĩa của một mã",
   "app/(admin)/admin/quan-ly-chia-lead/lich-su/page.tsx":
     "ĐÃ có phân trang, nhưng PHÍA SERVER (skip/take + link Trước/Sau) — nhật ký pool chỉ có thêm không bao giờ bớt, cắt trang trong trình duyệt là phải tải cả sổ về trước",
   "app/(admin)/admin/cham-cong/danh-muc-ca/_components/template-editor.tsx":

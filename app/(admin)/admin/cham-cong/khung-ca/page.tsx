@@ -130,7 +130,7 @@ export default async function KhungCaPage({ searchParams }: Props) {
     }),
     sdb.shiftTemplate.findMany({
       where: { isActive: true },
-      select: { code: true, name: true, segments: true, isLeave: true },
+      select: { code: true, name: true, segments: true, isLeave: true, dayCredit: true, soCapQuetKyVong: true },
       orderBy: { displayOrder: "asc" },
     }),
   ]);

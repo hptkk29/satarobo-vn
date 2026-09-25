@@ -18,7 +18,16 @@ import { scopeHref, type ScopeCtx } from "@/lib/cham-cong/scope-href";
 import type { ModuleAction, ModuleScope } from "@/lib/cham-cong/module-scope";
 import { TAB, TAB_ACTIVE, TAB_IDLE } from "./classes";
 
-export type ModuleNavKey = "ngay" | "luoi" | "ky" | "thongke" | "congday" | "don" | "doisoat" | "cauhinh";
+export type ModuleNavKey =
+  | "ngay"
+  | "luoi"
+  | "bangthang"
+  | "ky"
+  | "thongke"
+  | "congday"
+  | "don"
+  | "doisoat"
+  | "cauhinh";
 
 /** Màn Cấu hình khi người dùng KHÔNG có `hr_attendance:config`: rơi về Loại nghỉ (chỉ cần view). */
 const CAU_HINH_KHONG_CONFIG = "/cham-cong/loai-nghi";
@@ -52,6 +61,16 @@ const TABS: Tab[] = [
     href: "/cham-cong/phan-ca",
     show: (s) => s.any(ASSIGN) || s.any(VIEW),
     ok: (s, c) => s.has(ASSIGN, c) || s.has(VIEW, c),
+  },
+  {
+    // Ngay sau "Lưới phân ca": cùng một lưới người × ngày, chỉ khác chỗ lưới kia là KẾ HOẠCH
+    // (xếp ai vào ca nào) còn màn này là KẾT QUẢ (hôm đó họ chấm ra sao). Đặt cạnh nhau để
+    // người xếp ca đổi qua lại mà không phải nhớ đường.
+    key: "bangthang",
+    label: "Bảng công tháng",
+    href: "/cham-cong/bang-cong-thang",
+    show: (s) => s.any(VIEW),
+    ok: (s, c) => s.has(VIEW, c),
   },
   {
     key: "ky",
