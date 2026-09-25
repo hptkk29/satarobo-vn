@@ -32,6 +32,8 @@ import { ScopeBar } from "@/components/admin/cham-cong/scope-bar";
 import { KpiStrip } from "@/components/admin/cham-cong/kpi-strip";
 import type { ShiftCellCode } from "@/components/admin/cham-cong/shift-cell-picker";
 import { SourceLegend } from "@/components/cham-cong/ui/shift-code-chip";
+import { BangGioCa } from "@/components/cham-cong/ui/bang-gio-ca";
+import { dongGioCa, locMaCaDaDung } from "@/lib/cham-cong/gio-ca";
 import type { ShiftSource } from "@/components/cham-cong/ui/shift-code-chip";
 import { GenerateDialog } from "./_components/generate-dialog";
 import { MonthGrid, type GridDay, type GridRow } from "./_components/month-grid";
@@ -149,7 +151,7 @@ export default async function PhanCaPage({ searchParams }: Props) {
       : Promise.resolve([]),
     sdb.shiftTemplate.findMany({
       where: { isActive: true },
-      select: { code: true, name: true, segments: true, defaultPlace: true, isLeave: true },
+      select: { code: true, name: true, segments: true, defaultPlace: true, isLeave: true, dayCredit: true, soCapQuetKyVong: true },
       orderBy: { displayOrder: "asc" },
     }),
     // KHÔNG qua `sdb`: `Holiday` bị `scopedDb` cắt mất dòng `centerId = null`, tức mọi ngày lễ
@@ -240,6 +242,11 @@ export default async function PhanCaPage({ searchParams }: Props) {
     }
     if (maxRun >= 7) restRisk += 1;
   }
+
+  const gioCaThangNay = locMaCaDaDung(
+    dongGioCa(templates),
+    allAssign.map((a) => a.templateCode),
+  );
 
   const monthHref = (delta: number) => hrefWith(BASE, { ky: shiftKy(ky, delta), coSo });
 
@@ -351,7 +358,17 @@ export default async function PhanCaPage({ searchParams }: Props) {
         />
       ) : (
         <>
-          <MonthGrid rows={rows} days={days} codes={codes} canEdit={canAssign} blockLabel={block.label} />
+          {/* CHỈ mã ca có mặt trong tháng đang xem — danh mục 21 mã mà khối này chỉ dùng
+              4–6; đổ hết ra là bắt người rà tự lọc bằng mắt. */}
+          <BangGioCa maCa={gioCaThangNay} className="mb-4" />
+          <MonthGrid
+            rows={rows}
+            days={days}
+            codes={codes}
+            canEdit={canAssign}
+            blockLabel={block.label}
+            gioCa={gioCaThangNay}
+          />
           <SourceLegend className="mt-3" />
         </>
       )}

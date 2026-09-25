@@ -20,6 +20,7 @@ import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 import { adminTd, adminTh, adminTr } from "@/components/admin/ui/table";
 import { ShiftCellPicker, type ShiftCellCode } from "@/components/admin/cham-cong/shift-cell-picker";
 import { ShiftCodeChip, type ShiftSource } from "@/components/cham-cong/ui/shift-code-chip";
+import { motDongGioCa, type MaCaGio } from "@/lib/cham-cong/gio-ca";
 import { setCellAction } from "../_actions";
 
 export type GridCell = {
@@ -74,13 +75,19 @@ export function MonthGrid({
   codes,
   canEdit,
   blockLabel,
+  gioCa,
 }: {
   rows: GridRow[];
   days: GridDay[];
   codes: ShiftCellCode[];
   canEdit: boolean;
   blockLabel: string;
+  /** Giờ vào/ra từng mã — để rê chuột một ô là biết, không phải mở màn Cấu hình. */
+  gioCa?: MaCaGio[];
 }) {
+  const gioTheoMa = new Map<string, string | null>(
+    (gioCa ?? []).map((m) => [m.code, motDongGioCa(m)] as const),
+  );
   const router = useRouter();
   const [pending, start] = useTransition();
   const [busy, setBusy] = useState<string | null>(null);
@@ -178,7 +185,12 @@ export function MonthGrid({
                             className={CELL_BOX}
                             title={`${nhan}: ca chịu công tại ${c.foreignUnit} — đổi khối để sửa`}
                           >
-                            <ShiftCodeChip code={c.code} foreignUnit={c.foreignUnit} size="sm" />
+                            <ShiftCodeChip
+                              code={c.code}
+                              foreignUnit={c.foreignUnit}
+                              size="sm"
+                              gio={c.code ? gioTheoMa.get(c.code) : null}
+                            />
                           </span>
                         ) : canEdit ? (
                           <ShiftCellPicker
@@ -192,7 +204,12 @@ export function MonthGrid({
                           />
                         ) : (
                           <span className={CELL_BOX} title={`${nhan}: chỉ xem`}>
-                            <ShiftCodeChip code={c?.code ?? null} source={c?.source} size="sm" />
+                            <ShiftCodeChip
+                              code={c?.code ?? null}
+                              source={c?.source}
+                              size="sm"
+                              gio={c?.code ? gioTheoMa.get(c.code) : null}
+                            />
                           </span>
                         )}
                       </td>

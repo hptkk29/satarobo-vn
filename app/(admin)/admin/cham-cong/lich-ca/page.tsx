@@ -42,6 +42,8 @@ import { MeNav } from "@/components/admin/cham-cong/me-nav";
 import { BTN_PRIMARY, PILL } from "@/components/admin/cham-cong/classes";
 import { FlagList } from "@/components/cham-cong/ui/flag-chip";
 import { ShiftCodeChip, type ShiftSource } from "@/components/cham-cong/ui/shift-code-chip";
+import { BangGioCa } from "@/components/cham-cong/ui/bang-gio-ca";
+import { MA_CA_SELECT, dongGioCa, locMaCaDaDung } from "@/lib/cham-cong/gio-ca";
 import { TongHopCongThang } from "@/components/cham-cong/ui/tong-hop-cong-thang";
 
 export const metadata = { title: "Lịch ca của tôi | Admin", robots: { index: false } };
@@ -82,7 +84,7 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
   // nên `scopedDb` cố ý KHÔNG chèn `centerId IN` cho bảng này.
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
-  const [shifts, dayRows, kyCong, myRequests, buoiDay, loaiCongDay] = await Promise.all([
+  const [shifts, dayRows, kyCong, myRequests, buoiDay, loaiCongDay, mauCa] = await Promise.all([
     getMyAssignments(session.user.id, from, toExclusive),
     getMyAttendanceDays(session.user.id, from, toExclusive),
     getMyPeriod(session.user.id, ky),
@@ -95,6 +97,12 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
     // có người VỪA quản lý VỪA đứng lớp — họ xem công ở màn này chứ không mở site GV.
     loadBuoiDay([session.user.id], from, toExclusive),
     loadLoaiCongDay(),
+    // Giờ các ca — để người xem lịch của mình không phải mở màn Cấu hình mới biết `CG` mấy giờ.
+    sdb.shiftTemplate.findMany({
+      where: { isActive: true },
+      select: MA_CA_SELECT,
+      orderBy: { displayOrder: "asc" },
+    }),
   ]);
 
   const shiftOf = new Map(shifts.map((s) => [s.date.toISOString().slice(0, 10), s]));
@@ -254,6 +262,12 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
           )}
         </span>
       </div>
+
+      {/* CHỈ mã ca có trong tháng của CHÍNH người này — lịch cá nhân thường chỉ 2–3 mã. */}
+      <BangGioCa
+        maCa={locMaCaDaDung(dongGioCa(mauCa), shifts.map((x) => x.code))}
+        className="mb-4"
+      />
 
       <div className="mb-4">
         <TongHopCongThang
