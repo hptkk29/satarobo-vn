@@ -53,6 +53,12 @@ Brand hub + admin CMS + portal phụ huynh + site giáo viên cho Sata Robo (Đ�
    | `block-destructive.sh` | mẫu lệnh phá dữ liệu (liệt kê dưới; nguồn: mảng `patterns` trong chính file) | **vừa cứu 09/09/2026** |
    | `chan-commit-khi-do.sh` | `git commit` khi `typecheck` hoặc `vitest related` ĐỎ | mới, sống từ 09/09/2026 |
 
+   **CodeGraph — MỌI worktree phải có chỉ mục (chốt 25/09/2026).** Hook `SessionStart`
+   `codegraph-tu-dung.sh` tự `codegraph init -y` (chưa có `.codegraph/` ở GỐC worktree) hoặc
+   `sync` (đã có), chạy nền, không chặn phiên; MCP server khai ở `.mcp.json`. Máy mới chỉ cần
+   cài chương trình MỘT lần: `npm i -g @colbymchenry/codegraph` — thiếu thì hook chỉ nhắc, thoát 0.
+   Chỉ mục (~134 MB/worktree) KHÔNG đi theo git. Cổng: `[CG-01..06]` trong `hooks.test.ts`.
+
    **`block-destructive.sh` chặn** (nguồn: mảng `patterns` + ba khối `prisma` trong chính file): `rm -rf` vào `/` · `rm -rf` vào `~` ·
    `git push --force` nhắm `main` · nhắm `master` · `git reset --hard` · `git clean -fd` · `DROP TABLE` ·
    `DROP DATABASE` · `TRUNCATE TABLE` · `prisma migrate diff --shadow-database-url` trỏ DB **không**
