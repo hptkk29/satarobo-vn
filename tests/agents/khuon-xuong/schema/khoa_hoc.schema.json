@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "khoa_hoc",
+  "description": "Khuôn trường 'du_lieu' của công cụ danh_muc.lay_khoa_hoc.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": [
+      "ma",
+      "ten",
+      "lop",
+      "so_buoi",
+      "hoc_phi_niem_yet",
+      "trang_thai"
+    ],
+    "properties": {
+      "ma": {
+        "type": "string"
+      },
+      "ten": {
+        "type": "string"
+      },
+      "lop": {
+        "type": "array"
+      },
+      "so_buoi": {
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "hoc_phi_niem_yet": {
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "trang_thai": {
+        "enum": [
+          "dang_ban",
+          "tam_dung"
+        ]
+      }
+    }
+  }
+}

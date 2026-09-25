@@ -1,0 +1,80 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "lead",
+  "description": "Khuôn trường 'du_lieu' của công cụ kinh_doanh.lay_leads.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": [
+      "id",
+      "ten_ph",
+      "sdt",
+      "ten_be",
+      "lop_be",
+      "kenh",
+      "nguon",
+      "co_so",
+      "khoa_quan_tam",
+      "tvv_id",
+      "giai_doan_hien_tai",
+      "tao_luc",
+      "gioi_thieu_boi"
+    ],
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "ten_ph": {
+        "type": "string"
+      },
+      "sdt": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "ten_be": {
+        "type": "string"
+      },
+      "lop_be": {
+        "type": "integer"
+      },
+      "kenh": {
+        "type": "string"
+      },
+      "nguon": {
+        "type": "string"
+      },
+      "co_so": {
+        "type": "string"
+      },
+      "khoa_quan_tam": {
+        "type": "string"
+      },
+      "tvv_id": {
+        "type": "string"
+      },
+      "giai_doan_hien_tai": {
+        "enum": [
+          "G1",
+          "G2",
+          "G3",
+          "G4",
+          "G5",
+          "G6",
+          "G7",
+          "G8"
+        ]
+      },
+      "tao_luc": {
+        "type": "string"
+      },
+      "gioi_thieu_boi": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    }
+  }
+}

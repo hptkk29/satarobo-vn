@@ -1,0 +1,35 @@
+{
+  "du_lieu": [
+    {
+      "ma_van_ban": "SR.QD.227",
+      "ten": "Chương trình khuyến mãi HÈ 2026 – Làm chủ công nghệ, lập trình tương lai",
+      "hieu_luc_tu": "2026-06-01",
+      "hieu_luc_den": "2026-08-31",
+      "trang_thai": "het_hieu_luc",
+      "noi_dung_uu_dai": "[CẦN BỔ SUNG]"
+    },
+    {
+      "ma_van_ban": "SR.QD.233",
+      "ten": "Chương trình Back To School",
+      "hieu_luc_tu": "2026-09-01",
+      "hieu_luc_den": "2026-12-31",
+      "trang_thai": "dang_hieu_luc",
+      "noi_dung_uu_dai": "[CẦN BỔ SUNG]"
+    }
+  ],
+  "meta": {
+    "cong_cu": "van_ban.lay_khuyen_mai_hieu_luc",
+    "phien_ban_khuon": "1.0",
+    "sinh_luc": "2026-09-25T09:00:00+07:00",
+    "so_ban_ghi": 2,
+    "tiep_theo": null,
+    "da_che_du_lieu": false,
+    "pham_vi_co_so": [
+      "HO",
+      "CS1",
+      "CS2"
+    ],
+    "ma_yeu_cau": "req_mau_khuyen_mai",
+    "gia_lap": true
+  }
+}

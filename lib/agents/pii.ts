@@ -49,12 +49,15 @@ export function maHoaSdt(sdt: string | null | undefined, pepper: string): string
 // ── Văn bản tự do ────────────────────────────────────────────────────────────────
 // Rộng hơn `lib/lead/pii.ts` có chủ đích: màn admin chỉ che di động liền mạch (che rộng thì
 // "học phí 2500000" bị đục), còn ở đây thà che thừa — agent không cần con số liên lạc nào.
-//   · SĐT: 0/84/+84 rồi 9–10 chữ số, CHO PHÉP cách/chấm/gạch giữa các nhóm
-//     ("0905 123 456", "+84 905.123.456"). Gồm cả số cố định 11 số.
+//   · SĐT: 0/84/+84 rồi 9–10 chữ số, CHO PHÉP cách/chấm/gạch/ngoặc giữa các nhóm
+//     ("0905 123 456", "+84 905.123.456", "(0905) 123 456"). Gồm cả số cố định 11 số.
 //   · CCCD: dãy đúng 12 chữ số. Chạy TRƯỚC SĐT.
+//   · CMND cũ 9 số: CHỈ khi đi sau từ khoá (CMND/CMT/chứng minh). Che mọi dãy 9 số là đục
+//     luôn số tiền ("115200000"), mà hội thoại tư vấn nói về học phí suốt.
 const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 const CCCD_RE = /(?<![0-9])[0-9]{12}(?![0-9])/g;
-const SDT_RE = /(?<![0-9])(?:\+?84|0)(?:[\s.-]?[0-9]){9,10}(?![0-9])/g;
+const CMND_RE = /((?:CMND|CMT|chứng minh(?: nhân dân| thư)?)\s*(?:số\s*)?[:.]?\s*)[0-9]{9}(?![0-9])/giu;
+const SDT_RE = /(?<![0-9])\(?(?:\+?84|0)(?:[\s.()-]{0,2}[0-9]){9,10}(?![0-9])/g;
 
 function thoatRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -96,7 +99,11 @@ export function cheVanBan(
   vanBan: string,
   tenDaBiet: { phuHuynh?: readonly (string | null | undefined)[]; con?: readonly (string | null | undefined)[] } = {},
 ): string {
-  let s = vanBan.replace(EMAIL_RE, NHAN.EMAIL).replace(CCCD_RE, NHAN.CCCD).replace(SDT_RE, NHAN.SDT);
+  let s = vanBan
+    .replace(EMAIL_RE, NHAN.EMAIL)
+    .replace(CCCD_RE, NHAN.CCCD)
+    .replace(CMND_RE, `$1${NHAN.CCCD}`)
+    .replace(SDT_RE, NHAN.SDT);
   const cap: { ten: string; nhan: string }[] = [
     ...(tenDaBiet.phuHuynh ?? []).filter((t): t is string => !!t?.trim()).map((ten) => ({ ten, nhan: NHAN.TEN_PH })),
     ...(tenDaBiet.con ?? []).filter((t): t is string => !!t?.trim()).map((ten) => ({ ten, nhan: NHAN.TEN_CON })),

@@ -1,0 +1,58 @@
+{
+  "du_lieu": [
+    {
+      "ngay": "2026-07-31",
+      "nen_tang": "meta",
+      "chien_dich_id": "META-01",
+      "ten_chien_dich": "Sata3-4 | Học thử 1-1 | CS1",
+      "khoa": "SATA4",
+      "co_so": "CS1",
+      "chi_phi": 219359,
+      "hien_thi": 3862,
+      "click": 51,
+      "lead": 3,
+      "tan_suat": 2.5
+    },
+    {
+      "ngay": "2026-07-31",
+      "nen_tang": "meta",
+      "chien_dich_id": "META-02",
+      "ten_chien_dich": "Sata3-4 | Học thử 1-1 | CS2",
+      "khoa": "SATA4",
+      "co_so": "CS2",
+      "chi_phi": 146634,
+      "hien_thi": 2925,
+      "click": 34,
+      "lead": 2,
+      "tan_suat": 2.3
+    },
+    {
+      "ngay": "2026-07-31",
+      "nen_tang": "meta",
+      "chien_dich_id": "META-03",
+      "ten_chien_dich": "Sata5-6 | Mùa thi | Cả 2 CS",
+      "khoa": "SATA5",
+      "co_so": "CS1",
+      "chi_phi": 147250,
+      "hien_thi": 2439,
+      "click": 29,
+      "lead": 1,
+      "tan_suat": 1.7
+    }
+  ],
+  "meta": {
+    "cong_cu": "marketing.lay_chi_phi_ads",
+    "phien_ban_khuon": "1.0",
+    "sinh_luc": "2026-09-25T09:00:00+07:00",
+    "so_ban_ghi": 3,
+    "tiep_theo": null,
+    "da_che_du_lieu": false,
+    "pham_vi_co_so": [
+      "HO",
+      "CS1",
+      "CS2"
+    ],
+    "ma_yeu_cau": "req_mau_chi_phi_ads",
+    "gia_lap": true
+  }
+}

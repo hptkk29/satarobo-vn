@@ -1,0 +1,118 @@
+{
+  "phien_ban_khuon": "1.0",
+  "ghi_chu": "Sinh bởi scripts/sinh-bo-ket-noi.mjs — không sửa tay.",
+  "cong_cu": [
+    {
+      "ten": "danh_muc.lay_co_so",
+      "ten_mcp": "danh_muc__lay_co_so",
+      "schema": "co_so.schema.json",
+      "nhay_cam": "thap",
+      "bat_buoc_che": false,
+      "dang_du_lieu": "array"
+    },
+    {
+      "ten": "danh_muc.lay_khoa_hoc",
+      "ten_mcp": "danh_muc__lay_khoa_hoc",
+      "schema": "khoa_hoc.schema.json",
+      "nhay_cam": "thap",
+      "bat_buoc_che": false,
+      "dang_du_lieu": "array"
+    },
+    {
+      "ten": "danh_muc.lay_nhan_su",
+      "ten_mcp": "danh_muc__lay_nhan_su",
+      "schema": "nhan_su.schema.json",
+      "nhay_cam": "tb",
+      "bat_buoc_che": false,
+      "dang_du_lieu": "array"
+    },
+    {
+      "ten": "danh_muc.lay_kenh",
+      "ten_mcp": "danh_muc__lay_kenh",
+      "schema": "kenh.schema.json",
+      "nhay_cam": "thap",
+      "bat_buoc_che": false,
+      "dang_du_lieu": "array"
+    },
+    {
+      "ten": "danh_muc.lay_chuc_danh",
+      "ten_mcp": "danh_muc__lay_chuc_danh",
+      "schema": "chuc_danh.schema.json",
+      "nhay_cam": "thap",
+      "bat_buoc_che": false,
+      "dang_du_lieu": "array"
+    },
+    {
+      "ten": "kinh_doanh.lay_leads",
+      "ten_mcp": "kinh_doanh__lay_leads",
+      "schema": "lead.schema.json",
+      "nhay_cam": "cao",
+      "bat_buoc_che": true,
+      "dang_du_lieu": "array"
+    },
+    {
+      "ten": "kinh_doanh.lay_hoi_thoai",
+      "ten_mcp": "kinh_doanh__lay_hoi_thoai",
+      "schema": "hoi_thoai.schema.json",
+      "nhay_cam": "cao",
+      "bat_buoc_che": true,
+      "dang_du_lieu": "mang_doi_tuong"
+    },
+    {
+      "ten": "kinh_doanh.lay_cuoc_goi",
+      "ten_mcp": "kinh_doanh__lay_cuoc_goi",
+      "schema": "cuoc_goi.schema.json",
+      "nhay_cam": "cao",
+      "bat_buoc_che": true,
+      "dang_du_lieu": "array"
+    },
+    {
+      "ten": "kinh_doanh.lay_dang_ky",
+      "ten_mcp": "kinh_doanh__lay_dang_ky",
+      "schema": "dang_ky.schema.json",
+      "nhay_cam": "tb",
+      "bat_buoc_che": false,
+      "dang_du_lieu": "array"
+    },
+    {
+      "ten": "kinh_doanh.lay_chi_tieu",
+      "ten_mcp": "kinh_doanh__lay_chi_tieu",
+      "schema": "chi_tieu.schema.json",
+      "nhay_cam": "thap",
+      "bat_buoc_che": false,
+      "dang_du_lieu": "array"
+    },
+    {
+      "ten": "marketing.lay_chi_phi_ads",
+      "ten_mcp": "marketing__lay_chi_phi_ads",
+      "schema": "chi_phi_ads.schema.json",
+      "nhay_cam": "thap",
+      "bat_buoc_che": false,
+      "dang_du_lieu": "array"
+    },
+    {
+      "ten": "marketing.lay_tran_ngan_sach",
+      "ten_mcp": "marketing__lay_tran_ngan_sach",
+      "schema": "tran_ngan_sach.schema.json",
+      "nhay_cam": "tb",
+      "bat_buoc_che": false,
+      "dang_du_lieu": "object"
+    },
+    {
+      "ten": "marketing.lay_bai_cho_duyet",
+      "ten_mcp": "marketing__lay_bai_cho_duyet",
+      "schema": "noi_dung.schema.json",
+      "nhay_cam": "thap",
+      "bat_buoc_che": false,
+      "dang_du_lieu": "array"
+    },
+    {
+      "ten": "van_ban.lay_khuyen_mai_hieu_luc",
+      "ten_mcp": "van_ban__lay_khuyen_mai_hieu_luc",
+      "schema": "khuyen_mai.schema.json",
+      "nhay_cam": "thap",
+      "bat_buoc_che": false,
+      "dang_du_lieu": "array"
+    }
+  ]
+}

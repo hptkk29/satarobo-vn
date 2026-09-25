@@ -1,0 +1,68 @@
+{
+  "du_lieu": [
+    {
+      "ma": "SATA3",
+      "ten": "Sata3 – Ươm Mầm Tài Năng",
+      "lop": [
+        1,
+        2
+      ],
+      "so_buoi": 48,
+      "hoc_phi_niem_yet": 10560000,
+      "trang_thai": "dang_ban",
+      "diem_nhan": "Học bằng tay, thẻ lệnh vật lý, chưa cần màn hình",
+      "noi_lo_ph": [
+        "con còn nhỏ có theo kịp không",
+        "con dùng điện tử chỉ để giải trí",
+        "con khó ngồi yên"
+      ]
+    },
+    {
+      "ma": "SATA4",
+      "ten": "Sata4 – Bứt Phá Giới Hạn",
+      "lop": [
+        3,
+        4
+      ],
+      "so_buoi": 48,
+      "hoc_phi_niem_yet": 11520000,
+      "trang_thai": "dang_ban",
+      "diem_nhan": "Lập trình RoboSim rồi nạp vào robot thật",
+      "noi_lo_ph": [
+        "con dùng máy tính nhưng chưa tạo ra sản phẩm",
+        "con dễ nản, bỏ dở giữa chừng",
+        "muốn bằng chứng con học thật"
+      ]
+    },
+    {
+      "ma": "SATA5",
+      "ten": "Sata5 – Khơi Nguồn Sáng Tạo",
+      "lop": [
+        5
+      ],
+      "so_buoi": 48,
+      "hoc_phi_niem_yet": 12480000,
+      "trang_thai": "dang_ban",
+      "diem_nhan": "Tự thiết kế giải pháp, portfolio dự án, đủ điều kiện thi cấp thành phố",
+      "noi_lo_ph": [
+        "con chưa tự nghĩ ra giải pháp",
+        "chưa có gì chứng minh năng lực"
+      ]
+    }
+  ],
+  "meta": {
+    "cong_cu": "danh_muc.lay_khoa_hoc",
+    "phien_ban_khuon": "1.0",
+    "sinh_luc": "2026-09-25T09:00:00+07:00",
+    "so_ban_ghi": 3,
+    "tiep_theo": null,
+    "da_che_du_lieu": false,
+    "pham_vi_co_so": [
+      "HO",
+      "CS1",
+      "CS2"
+    ],
+    "ma_yeu_cau": "req_mau_khoa_hoc",
+    "gia_lap": true
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "tran_ngan_sach",
+  "description": "Khuôn trường 'du_lieu' của công cụ marketing.lay_tran_ngan_sach.",
+  "type": "object",
+  "required": [
+    "thang",
+    "tong_tran_thang",
+    "nguong_canh_bao",
+    "chien_dich"
+  ],
+  "properties": {
+    "thang": {
+      "type": "string"
+    },
+    "tong_tran_thang": {
+      "type": "integer"
+    },
+    "nguong_canh_bao": {
+      "type": "object",
+      "required": [
+        "cpl_toi_da",
+        "chi_dot_bien_he_so",
+        "tan_suat_toi_da",
+        "ngay_khong_lead_toi_da"
+      ],
+      "properties": {
+        "cpl_toi_da": {
+          "type": "integer"
+        },
+        "chi_dot_bien_he_so": {
+          "type": "number"
+        },
+        "tan_suat_toi_da": {
+          "type": "number"
+        },
+        "ngay_khong_lead_toi_da": {
+          "type": "integer"
+        }
+      }
+    },
+    "chien_dich": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "chien_dich_id",
+          "khoa",
+          "co_so",
+          "tran_thang",
+          "tran_ngay"
+        ],
+        "properties": {
+          "chien_dich_id": {
+            "type": "string"
+          },
+          "khoa": {
+            "type": "string"
+          },
+          "co_so": {
+            "type": "string"
+          },
+          "tran_thang": {
+            "type": "integer"
+          },
+          "tran_ngay": {
+            "type": "integer"
+          }
+        }
+      }
+    }
+  }
+}

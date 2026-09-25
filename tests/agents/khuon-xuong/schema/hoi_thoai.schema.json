@@ -1,0 +1,60 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "hoi_thoai",
+  "description": "Khuôn trường 'du_lieu' của công cụ kinh_doanh.lay_hoi_thoai — API trả MẢNG các đối tượng theo khuôn này.",
+  "type": "object",
+  "required": [
+    "id",
+    "lead_id",
+    "kenh",
+    "tvv_id",
+    "co_so",
+    "bat_dau",
+    "tin_nhan"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "lead_id": {
+      "type": "string"
+    },
+    "kenh": {
+      "type": "string"
+    },
+    "tvv_id": {
+      "type": "string"
+    },
+    "co_so": {
+      "type": "string"
+    },
+    "bat_dau": {
+      "type": "string"
+    },
+    "tin_nhan": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "luc",
+          "nguoi",
+          "noi_dung"
+        ],
+        "properties": {
+          "luc": {
+            "type": "string"
+          },
+          "nguoi": {
+            "enum": [
+              "PH",
+              "TVV"
+            ]
+          },
+          "noi_dung": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

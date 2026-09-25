@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "dang_ky",
+  "description": "Khuôn trường 'du_lieu' của công cụ kinh_doanh.lay_dang_ky.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": [
+      "lead_id",
+      "khoa",
+      "trang_thai",
+      "ngay_hoc_thu",
+      "ngay_dang_ky",
+      "hoc_phi_niem_yet",
+      "van_ban_khuyen_mai",
+      "co_so"
+    ],
+    "properties": {
+      "lead_id": {
+        "type": "string"
+      },
+      "khoa": {
+        "type": "string"
+      },
+      "trang_thai": {
+        "enum": [
+          "da_hen_hoc_thu",
+          "da_dang_ky",
+          "hoan_tien"
+        ]
+      },
+      "ngay_hoc_thu": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "ngay_dang_ky": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "hoc_phi_niem_yet": {
+        "type": "integer"
+      },
+      "van_ban_khuyen_mai": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "co_so": {
+        "type": "string"
+      }
+    }
+  }
+}

@@ -66,6 +66,10 @@ export default defineConfig({
       // `include` là bộ lọc CỨNG, không khai thì `vitest run tests/finance` báo
       // "No test files found" và CI vẫn XANH dù test viết đúng.
       "tests/finance/**/*.{test,spec}.ts",
+      // Cổng dữ liệu agent (25/09/2026) — bộ kiểm thử bảo mật B1–B17 trên Postgres local.
+      // Cùng lý do như các dòng trên: `include` là bộ lọc CỨNG, không khai thì
+      // `vitest run tests/agents` báo "No test files found" và CI vẫn XANH.
+      "tests/agents/**/*.{test,spec}.ts",
       // Script chạy tay có phần THUẦN quyết định hình dạng sổ tiền (vd `planRequests`
       // của backfill phiếu thu). Cùng lý do phải khai ở đây như các dòng trên: `include`
       // là bộ lọc CỨNG — không khai thì `vitest run scripts` báo "No test files found"

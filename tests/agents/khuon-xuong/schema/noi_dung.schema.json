@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "noi_dung",
+  "description": "Khuôn trường 'du_lieu' của công cụ marketing.lay_bai_cho_duyet.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": [
+      "id",
+      "kenh",
+      "caption",
+      "co_anh"
+    ],
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "kenh": {
+        "type": "string"
+      },
+      "caption": {
+        "type": "string"
+      },
+      "co_anh": {
+        "type": "boolean"
+      }
+    }
+  }
+}

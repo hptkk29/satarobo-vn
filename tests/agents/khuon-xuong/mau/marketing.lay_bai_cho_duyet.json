@@ -1,0 +1,37 @@
+{
+  "du_lieu": [
+    {
+      "id": "ND-001",
+      "kenh": "facebook",
+      "caption": "Bé lớp 3 tự lập trình robot dò line sau 12 buổi 🤖 Xem video bé thuyết trình trước ba mẹ! HỌC THỬ MIỄN PHÍ 1-1 tại Sata Robo — quét QR đăng ký.",
+      "co_anh": false
+    },
+    {
+      "id": "ND-002",
+      "kenh": "facebook",
+      "caption": "Cam kết con học xong sẽ ĐOẠT GIẢI cuộc thi Robotics thành phố! Đăng ký ngay!",
+      "co_anh": false
+    },
+    {
+      "id": "ND-003",
+      "kenh": "tiktok",
+      "caption": "Học viện Sata Robo khai giảng lớp mới tháng 10.",
+      "co_anh": false
+    }
+  ],
+  "meta": {
+    "cong_cu": "marketing.lay_bai_cho_duyet",
+    "phien_ban_khuon": "1.0",
+    "sinh_luc": "2026-09-25T09:00:00+07:00",
+    "so_ban_ghi": 3,
+    "tiep_theo": null,
+    "da_che_du_lieu": false,
+    "pham_vi_co_so": [
+      "HO",
+      "CS1",
+      "CS2"
+    ],
+    "ma_yeu_cau": "req_mau_noi_dung",
+    "gia_lap": true
+  }
+}

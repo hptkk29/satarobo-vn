@@ -40,12 +40,25 @@ describe("[AG-PII-02] cheVanBan — liên hệ trong văn bản tự do", () => 
     expect(cheVanBan("mail me a.b+c@gmail.com")).toBe(`mail me ${NHAN.EMAIL}`);
     expect(cheVanBan("CCCD 048090001234 ạ")).toBe(`CCCD ${NHAN.CCCD} ạ`);
   });
+  it("[AG-PII-02c] số trong ngoặc và CMND 9 số có từ khoá (rà bảo mật 25/09)", () => {
+    expect(cheVanBan("gọi (0905) 123 456 nhé")).toBe(`gọi ${NHAN.SDT} nhé`);
+    expect(cheVanBan("CMND số 048090001 ạ")).toBe(`CMND số ${NHAN.CCCD} ạ`);
+    expect(cheVanBan("chứng minh nhân dân: 048090001")).toBe(`chứng minh nhân dân: ${NHAN.CCCD}`);
+  });
+  it("dãy 9 số KHÔNG có từ khoá (vd số tiền) thì không bị che thành CMND", () => {
+    expect(cheVanBan("tổng 115200000 đồng")).toBe("tổng 115200000 đồng");
+  });
   it("KHÔNG đục số tiền và ngày giờ thường gặp", () => {
     expect(cheVanBan("học phí 11520000 đồng")).toBe("học phí 11520000 đồng");
     expect(cheVanBan("ngày 11/09/2026 lúc 9h")).toBe("ngày 11/09/2026 lúc 9h");
   });
   it("[AG-PII-02b] kết quả che qua được đúng phép dò của máy kiểm kiem-khuon.mjs", () => {
-    const tho = "Chị Lan 0905123456, mail lan@x.vn, CCCD 048090001234, số khác +84905123457";
+    // Có cả dạng liền mạch LẪN dạng tách cụm — ca này phải tự đứng, không dựa ca bên trên
+    // (cấy lỗi 25/09, phép M17: siết regex bỏ dạng tách cụm mà ca này vẫn xanh).
+    // Máy kiểm của xưởng không bắt dạng tách cụm, nên ngoài `conLotLienHe` còn khẳng định
+    // trực tiếp là không còn chữ số nào của các số đó.
+    const tho = "Chị Lan 0905123456, mail lan@x.vn, CCCD 048090001234, số khác +84905123457, zalo 0905 777 888";
+    expect(cheVanBan(tho)).not.toMatch(/0905 777 888|777/);
     expect(conLotLienHe(tho)).toBe(true);
     expect(conLotLienHe(cheVanBan(tho))).toBe(false);
   });
