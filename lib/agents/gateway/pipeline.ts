@@ -9,16 +9,17 @@
 //   · quyền công cụ (6) đứng trước kiểm tham số (8) — agent không được cấp thì không biết
 //     công cụ đó nhận tham số gì (404 như công cụ không tồn tại, ca B4);
 //   · nhật ký (13) ghi TRƯỚC khi trả dữ liệu — ghi hỏng thì không trả (spec §12).
-import type { AgentAccessMode, AgentEnvironment } from "@prisma/client";
+import type { AgentAccessMode } from "@prisma/client";
 import { resolveActorUncached } from "@/lib/auth/actor";
 import { can } from "@/lib/auth/can";
 import { scopedDb } from "@/lib/db-scope";
 import { rateLimit } from "@/lib/rate-limit";
-import { bamBiMat, docPepperCong, moiTruongHienTai, tachBearer, type MoiTruongCong } from "../khoa";
+import { bamBiMat, docPepperCong, moiTruongHienTai, tachBearer } from "../khoa";
 import { khoCong } from "../kho";
 import { timCongCu, tatCaCongCu, tenCongCuCao } from "../tools/so";
 import type { NguCanhCongCu } from "../tools/kieu";
 import { congDangBat, docHanMuc, type HanMucCong } from "./cau-hinh";
+import { moiTruongDb, tatCaMaCoSo } from "./co-so";
 import { ipDuocPhep, ipNguonTinCay } from "./ip";
 import { quyetDinhGoi, type CheDo, type GrantVao } from "./kiem-grant";
 import { LoiCong, veLoiCong, voLoi } from "./loi";
@@ -42,9 +43,8 @@ const CHE_DO_TU_DB: Record<AgentAccessMode, CheDo> = {
   WRITE_DIRECT: "ghi_that",
 };
 
-export function moiTruongDb(mt: MoiTruongCong): AgentEnvironment {
-  return mt === "live" ? "LIVE" : "TEST";
-}
+// Giữ đường import cũ cho nơi gọi đang dùng `./pipeline`.
+export { moiTruongDb, tatCaMaCoSo };
 
 // ─── Phản hồi ────────────────────────────────────────────────────────────────────────
 export function traJson(body: unknown, status: number, them: Record<string, string> = {}): Response {
@@ -233,14 +233,6 @@ export async function docGrant(clientId: string): Promise<GrantVao[]> {
   }));
 }
 
-/** Mã mọi đơn vị HO + CENTER còn hoạt động — để nở "HO" thành toàn hệ thống. */
-export async function tatCaMaCoSo(): Promise<string[]> {
-  const rows = await khoCong.orgUnit.findMany({
-    where: { deletedAt: null, isActive: true, type: { in: ["HO", "CENTER"] } },
-    select: { code: true },
-  });
-  return rows.map((r) => r.code);
-}
 
 /** Bước 12 phụ — trường nội bộ `_…` không bao giờ được lọt ra (máy kiểm của xưởng soi đúng thứ này). */
 export function coTruongNoiBo(v: unknown): boolean {

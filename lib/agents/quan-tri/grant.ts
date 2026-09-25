@@ -4,7 +4,7 @@
 // trình duyệt — không có đường SỬA grant đang hoạt động (spec §5.3).
 import { khoCong } from "../kho";
 import { MA_HOI_SO } from "../gateway/kiem-grant";
-import { tatCaMaCoSo } from "../gateway/pipeline";
+import { tatCaMaCoSo } from "../gateway/co-so";
 import { timCongCu } from "../tools/so";
 import { chanTuDuyet, ghiAudit, HAN_TOI_DA, kiemHan, LoiQuanTri, type NguoiThaoTac } from "./chung";
 

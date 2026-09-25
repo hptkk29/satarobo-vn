@@ -8,7 +8,7 @@
 import { khoCong } from "../kho";
 import { bamBiMat, docPepperCong, moiTruongHienTai, sinhMaClient, sinhMatKhauClient } from "../khoa";
 import { chuanHoaIp } from "../gateway/ip";
-import { moiTruongDb } from "../gateway/pipeline";
+import { moiTruongDb } from "../gateway/co-so";
 import {
   chanTuDuyet,
   ghiAudit,

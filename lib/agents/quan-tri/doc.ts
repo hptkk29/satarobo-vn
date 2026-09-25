@@ -7,7 +7,7 @@ import { trangThaiHaiLop, type TrangThaiHaiLop } from "@/lib/auth/hai-lop";
 import { khoCong } from "../kho";
 import { moiTruongHienTai } from "../khoa";
 import { congDangBat } from "../gateway/cau-hinh";
-import { moiTruongDb, tatCaMaCoSo } from "../gateway/pipeline";
+import { moiTruongDb, tatCaMaCoSo } from "../gateway/co-so";
 import { tatCaCongCu } from "../tools/so";
 
 export type HangGrant = {
