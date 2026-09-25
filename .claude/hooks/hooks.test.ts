@@ -329,3 +329,128 @@ describe("settings.json cắm đủ ba hook", () => {
     }
   });
 });
+
+/**
+ * `codegraph-tu-dung.sh` — mọi worktree phải có chỉ mục CodeGraph (chốt 25/09/2026).
+ *
+ * Chạy HOOK THẬT với một `codegraph` GIẢ (cắm qua `CODEGRAPH_BIN`) chỉ ghi lại tham số nó
+ * nhận, rồi đọc tham số đó. Không chạy codegraph thật: `init` tốn vài phút và 134 MB.
+ *
+ * Ca đáng giữ nhất là `[CG-03]`: worktree LỒNG trong một thư mục đã có `.codegraph/` phải
+ * được `init` riêng. CodeGraph tra chỉ mục TỪ DƯỚI LÊN, nên hook mà kiểm lỏng (vd leo lên
+ * thư mục cha) sẽ thấy "đã có" và bỏ qua ⇒ worktree âm thầm dùng chỉ mục của NHÁNH KHÁC.
+ */
+describe("codegraph-tu-dung.sh — tự dựng chỉ mục cho mọi worktree", { timeout: TRAN_SPAWN_MS }, () => {
+  const fs = require("node:fs") as typeof import("node:fs");
+  const { tmpdir } = require("node:os") as typeof import("node:os");
+
+  /** Một `codegraph` giả: ghi tham số vào `ra.txt` cạnh nó. */
+  function cgGia(): { bin: string; ra: string } {
+    const thu = fs.mkdtempSync(join(tmpdir(), "cg-gia-"));
+    const ra = join(thu, "ra.txt");
+    const bin = join(thu, "codegraph");
+    const raPosix = ra.split(String.fromCharCode(92)).join("/");
+    fs.writeFileSync(
+      bin,
+      ["#!/usr/bin/env bash", `printf '%s\\n' "$*" > "${raPosix}"`, ""].join("\n"),
+    );
+    fs.chmodSync(bin, 0o755);
+    return { bin, ra };
+  }
+
+  function gitInit(thu: string) {
+    execFileSync("git", ["init", "-q"], { cwd: thu, stdio: ["pipe", "pipe", "pipe"] });
+  }
+
+  function chayHook(duAn: string, bin: string): { ma: number; out: string } {
+    try {
+      const out = execFileSync("bash", [join(HOOKS, "codegraph-tu-dung.sh")], {
+        input: "{}",
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "pipe"],
+        env: { ...process.env, CLAUDE_PROJECT_DIR: duAn, CODEGRAPH_BIN: bin },
+      });
+      return { ma: 0, out };
+    } catch (e) {
+      const err = e as { status?: number; stdout?: string };
+      return { ma: err.status ?? -1, out: String(err.stdout ?? "") };
+    }
+  }
+
+  /** Lệnh chạy NỀN ⇒ chờ file ra xuất hiện (tối đa 10s). */
+  function docRa(ra: string): string | null {
+    const het = Date.now() + 10_000;
+    while (Date.now() < het) {
+      if (fs.existsSync(ra)) {
+        const s = fs.readFileSync(ra, "utf8").trim();
+        if (s) return s;
+      }
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
+    }
+    return null;
+  }
+
+  it("[CG-01] worktree CHƯA có `.codegraph/` ⇒ `init -y <gốc worktree>`, không chặn phiên", () => {
+    const { bin, ra } = cgGia();
+    const repo = fs.mkdtempSync(join(tmpdir(), "cg-repo-"));
+    gitInit(repo);
+    const kq = chayHook(repo, bin);
+    expect(kq.ma).toBe(0);
+    const thamSo = docRa(ra);
+    expect(thamSo, "hook phải gọi codegraph").not.toBeNull();
+    expect(thamSo).toMatch(/^init -y /);
+  });
+
+  it("[CG-02] đã có `.codegraph/` ⇒ `sync`, KHÔNG init lại", () => {
+    const { bin, ra } = cgGia();
+    const repo = fs.mkdtempSync(join(tmpdir(), "cg-repo-"));
+    gitInit(repo);
+    fs.mkdirSync(join(repo, ".codegraph"));
+    expect(chayHook(repo, bin).ma).toBe(0);
+    expect(docRa(ra)).toMatch(/^sync /);
+  });
+
+  it("[CG-03] worktree LỒNG trong thư mục cha đã có chỉ mục ⇒ vẫn `init` riêng", () => {
+    const { bin, ra } = cgGia();
+    const cha = fs.mkdtempSync(join(tmpdir(), "cg-cha-"));
+    gitInit(cha);
+    fs.mkdirSync(join(cha, ".codegraph"));
+    const con = join(cha, "worktree-con");
+    fs.mkdirSync(con);
+    gitInit(con);
+    expect(chayHook(con, bin).ma).toBe(0);
+    const thamSo = docRa(ra);
+    expect(thamSo, "chỉ mục của thư mục cha là của NHÁNH KHÁC — không được coi là đã có").toMatch(
+      /^init -y .*worktree-con$/,
+    );
+  });
+
+  it("[CG-04] máy CHƯA cài codegraph ⇒ thoát 0 + nhắc cách cài", () => {
+    const repo = fs.mkdtempSync(join(tmpdir(), "cg-repo-"));
+    gitInit(repo);
+    const kq = chayHook(repo, join(repo, "khong-ton-tai-codegraph"));
+    expect(kq.ma).toBe(0);
+    expect(kq.out).toContain("npm i -g @colbymchenry/codegraph");
+  });
+
+  it("[CG-05] không phải repo git ⇒ thoát 0, không gọi codegraph", () => {
+    const { bin, ra } = cgGia();
+    const thu = fs.mkdtempSync(join(tmpdir(), "cg-khong-git-"));
+    expect(chayHook(thu, bin).ma).toBe(0);
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1_000);
+    expect(fs.existsSync(ra)).toBe(false);
+  });
+
+  it("[CG-06] settings.json cắm hook vào SessionStart + .mcp.json khai server codegraph", () => {
+    const st = JSON.parse(fs.readFileSync(join(GOC, ".claude", "settings.json"), "utf8")) as {
+      hooks: Record<string, { hooks: { command: string }[] }[]>;
+    };
+    const lenh = (su: string) => (st.hooks[su] ?? []).flatMap((m) => m.hooks.map((h) => h.command));
+    expect(lenh("SessionStart")).toContain("bash .claude/hooks/codegraph-tu-dung.sh");
+    expect(lenh("UserPromptSubmit")).toContain("bash .claude/hooks/codegraph-goi-y.sh");
+    const mcp = JSON.parse(fs.readFileSync(join(GOC, ".mcp.json"), "utf8")) as {
+      mcpServers: Record<string, { command: string; args: string[] }>;
+    };
+    expect(mcp.mcpServers.codegraph?.args).toEqual(["serve", "--mcp"]);
+  });
+});
