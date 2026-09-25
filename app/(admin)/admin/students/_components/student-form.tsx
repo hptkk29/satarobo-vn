@@ -1,46 +1,85 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { useFormStatus } from "react-dom";
-import { ImageUploader } from "@/components/admin/ImageUploader";
+// Form "Hồ sơ học viên" — tạo mới (`/students/new`) và sửa (`/students/<id>/edit`).
+// Thiết kế lại 25/09/2026 (chủ dự án chốt D2 + D3):
+//
+//   · MỘT tờ trắng, các nhóm ngăn bằng đường kẻ mảnh — không phải mỗi nhóm một thẻ.
+//   · Ô xếp theo bề ngang CHÍNH TỜ (`@container`): 1 cột → 2 cột (≥512px) → 3 cột (≥896px).
+//   · "Tách theo chủ dữ liệu": thông tin CON + PHỤ HUYNH sửa ở đây; thông tin PHỄU (nguồn,
+//     sale, AFF…) chỉ đọc ở khung "Lead nguồn" bên cạnh.
+//   · GỠ khỏi form (dữ liệu cũ GIỮ NGUYÊN trong DB): nhóm máu, Quận/Huyện, "Đơn vị mong
+//     muốn", "Ngày đăng ký lần đầu", SĐT/Email riêng của học viên.
+//
+// ⚠️ HỢP ĐỒNG VỚI `docFormHocVien` (`../_lib/doc-form.ts`) — đọc kỹ trước khi thêm/bớt ô:
+//   · khoá VẮNG MẶT  ⇒ không đụng cột;   · khoá CÓ MẶT mà RỖNG ⇒ XOÁ cột.
+//   Nên: ô nào HIỆN thì gửi, ô nào ĐÃ GỠ thì TUYỆT ĐỐI không để lại `name=` (một ô ẩn
+//   `district` rỗng sẽ xoá sạch quận/huyện cũ của mọi hồ sơ được lưu). `avatarUrl` chỉ gửi
+//   ở chế độ TẠO (ở hồ sơ, ảnh đổi bằng nút riêng). `allergies` luôn gửi (mảng JSON).
+//   Lưới ghim: `ho-so/hop-dong-form.test.ts`.
+//
+// ⚠️ Gửi bằng `onSubmit` + `startTransition`, KHÔNG bằng `<form action={fn}>`: React 19 tự
+// RESET mọi ô không kiểm soát sau khi action của form chạy xong — server trả lỗi validate
+// là toàn bộ chữ người dùng vừa gõ quay về giá trị cũ (form tạo mới thì trắng trơn).
+
+import { useEffect, useRef, useState, useTransition, type FormEvent } from "react";
+import Link from "next/link";
+import { unstable_rethrow } from "next/navigation";
+import { ExternalLink, Loader2 } from "lucide-react";
 import { StringArrayEditor } from "@/app/(admin)/admin/kits/_components/string-array-editor";
-import { FieldLabel } from "@/components/admin/ui/help-hint";
+import type { ComboboxOption } from "@/components/ui/combobox";
+import { GIOI_TINH_OPTIONS, type GioiTinh } from "@/lib/students/gioi-tinh";
+import { cn } from "@/lib/utils";
 import { createStudent, updateStudent } from "../_actions";
+import { ChonAnhKhiTao } from "./ho-so/anh-dai-dien";
+import { anhChupForm, chiGiuODaDoi } from "./ho-so/gui-o-da-doi";
+import { DiaChiPicker } from "./ho-so/dia-chi-picker";
+import { laLinkMoDuoc, type TrangThaiHocVien } from "./ho-so/nhan-ho-so";
+import { NUT_CHINH, NUT_VIEN, O_NHAP, O_VAN_BAN, TieuDeNhom, Truong } from "./ho-so/o-nhap";
 
 export type StudentFormValue = {
   id: string;
   name: string;
   studentCode: string | null;
-  dateOfBirth: Date | null;
-  gender: "MALE" | "FEMALE" | "OTHER" | null;
-  phone: string | null;
-  email: string | null;
-  avatarUrl: string | null;
+  /** "yyyy-mm-dd" theo lịch VN, hoặc "". */
+  dateOfBirth: string;
+  gender: GioiTinh | null;
   currentGrade: number | null;
   school: string | null;
+  status: TrangThaiHocVien;
+
   parentName: string | null;
+  /** Đã che ở SERVER khi người xem bị DENY cấp trường (xem `parentPhoneMasked`). */
   parentPhone: string | null;
-  parentEmail: string | null;
+  parentPhoneMasked: boolean;
   parentRelation: string | null;
+  parentGender: GioiTinh | null;
+  /** "yyyy-mm-dd" hoặc "". */
+  parentDob: string;
+  parentEmail: string | null;
+  parentFacebookUrl: string | null;
+  /** `null` khi người xem không có quyền xem CCCD (không gửi bản thô xuống client). */
   parentNationalId: string | null;
   parent2Name: string | null;
   parent2Phone: string | null;
   parent2Relation: string | null;
-  address: string | null;
-  ward: string | null;
-  district: string | null;
+
   city: string | null;
-  bloodType: string | null;
+  ward: string | null;
+  address: string | null;
+  /** Cột cũ 3 cấp — chỉ hiển thị. */
+  district: string | null;
+
   allergies: string[];
   healthNotes: string | null;
-  enrollmentDate: Date | null;
-  preferredCenterId: string | null;
-  preferredOrgUnitId: string | null;
   notes: string | null;
-  status: "ACTIVE" | "PAUSED" | "GRADUATED" | "INACTIVE";
-  centerId: string | null;
   orgUnitId: string | null;
+};
+
+/** Các dòng CHỈ ĐỌC trong nhóm "Trung tâm" (chỉ ở trang hồ sơ). */
+export type ThongTinTrungTam = {
+  lopDangHoc: { id: string; ten: string }[];
+  /** Đã định dạng dd/MM/yyyy, hoặc null khi chưa ghi danh lớp nào. */
+  ngayNhapHoc: string | null;
 };
 
 interface OrgUnitOption {
@@ -58,7 +97,7 @@ const STATUS_OPTIONS = [
 /**
  * BUG 21/08 — ô này từng cho chọn thẳng "Nghỉ học": `updateStudent` chỉ ghi
  * `Student.status` mà không gỡ ghi danh, nên em đó vẫn nằm nguyên trong lớp ở mọi màn
- * roster. Đường đúng là nút "❌ Nghỉ học hẳn" (bắt lý do + gỡ lớp + hoàn tiền + email).
+ * roster. Đường đúng là nút "Nghỉ học hẳn" (bắt lý do + gỡ lớp + hoàn tiền + email).
  * Học viên ĐÃ nghỉ vẫn giữ option để form không tự nhảy sang giá trị khác khi sửa hồ sơ.
  */
 function statusOptionsFor(current: string | undefined) {
@@ -66,462 +105,565 @@ function statusOptionsFor(current: string | undefined) {
   return STATUS_OPTIONS.filter((o) => o.value !== "INACTIVE");
 }
 
-const GENDER_OPTIONS = [
-  { value: "MALE", label: "Nam" },
-  { value: "FEMALE", label: "Nữ" },
-  { value: "OTHER", label: "Khác" },
-] as const;
+const LOP_TRUONG = Array.from({ length: 12 }, (_, i) => i + 1);
+const QUAN_HE_GOI_Y = ["Mẹ", "Bố", "Ông", "Bà", "Anh", "Chị", "Người giám hộ"];
 
-const BLOOD_OPTIONS = [
-  { value: "A_POS", label: "A+" },
-  { value: "A_NEG", label: "A−" },
-  { value: "B_POS", label: "B+" },
-  { value: "B_NEG", label: "B−" },
-  { value: "O_POS", label: "O+" },
-  { value: "O_NEG", label: "O−" },
-  { value: "AB_POS", label: "AB+" },
-  { value: "AB_NEG", label: "AB−" },
-  { value: "UNKNOWN", label: "Chưa biết" },
-] as const;
-
-function toDateInput(d: Date | null): string {
-  if (!d) return "";
-  return new Date(d).toISOString().slice(0, 10);
-}
+/** Nhóm đầu tờ: không kẻ trên (viền thẻ đã là mép trên). */
+const NHOM_DAU = "space-y-4 px-4 py-5 sm:px-6";
+const NHOM = "space-y-4 border-t border-border px-4 py-5 sm:px-6";
+const LUOI = "grid gap-4 @lg:grid-cols-2 @4xl:grid-cols-3";
+const CA_HANG = "@lg:col-span-2 @4xl:col-span-3";
 
 export function StudentForm({
   student,
   orgUnits,
   canViewParentCccd = false,
+  provinces,
+  initialWards,
+  homNay,
+  thongTinTrungTam,
 }: {
   student?: StudentFormValue;
   orgUnits: OrgUnitOption[];
   // #15 — CCCD PH là PII (mask + break-glass ở màn thanh toán). Chỉ actor có
   // payments:view-pii mới THẤY + nhập ô này; vai khác (Sale/CM) ẩn hoàn toàn.
   canViewParentCccd?: boolean;
+  /** Danh mục tỉnh/thành (mô hình 2 cấp), nạp ở server. */
+  provinces: ComboboxOption[];
+  /** Phường/xã của tỉnh đang lưu, nạp sẵn ở server. */
+  initialWards: ComboboxOption[];
+  /** "yyyy-mm-dd" hôm nay theo giờ VN (server tính) — trần cho ô ngày sinh. */
+  homNay: string;
+  thongTinTrungTam?: ThongTinTrungTam;
 }) {
-  const router = useRouter();
   const isEdit = Boolean(student);
-  const [error, setError] = useState<string | null>(null);
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(student?.avatarUrl ?? null);
+  const [loi, setLoi] = useState<string | null>(null);
+  const [dangLuu, startLuu] = useTransition();
   const [allergies, setAllergies] = useState<string[]>(student?.allergies ?? []);
+  const [tenNhap, setTenNhap] = useState(student?.name ?? "");
+  const [dangTaiAnh, setDangTaiAnh] = useState(false);
+  const loiRef = useRef<HTMLDivElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  // Ảnh chụp giá trị lúc MỞ form (chế độ sửa) — lúc lưu chỉ gửi ô đã đổi so với nó
+  // (`gui-o-da-doi.ts`): form nạp lại sau "Gắn lead"/nút vòng đời mà vẫn giữ chữ đang gõ
+  // thì KHÔNG được ghi ngược các ô người dùng không chạm.
+  const banDauRef = useRef<Map<string, string> | null>(null);
+  useEffect(() => {
+    if (isEdit && formRef.current) banDauRef.current = anhChupForm(new FormData(formRef.current));
+  }, [isEdit]);
   const statusOptions = statusOptionsFor(student?.status);
+  const coPh2 = !!(student?.parent2Name || student?.parent2Phone || student?.parent2Relation);
+  const coSucKhoe = allergies.length > 0 || !!student?.healthNotes;
+  const lopHienTai = student?.currentGrade ?? null;
+  const lopNgoaiKhoang = lopHienTai !== null && !LOP_TRUONG.includes(lopHienTai);
+  const linkFb = student?.parentFacebookUrl ?? null;
 
-  async function action(formData: FormData) {
-    setError(null);
-    formData.set("avatarUrl", avatarUrl ?? "");
-    formData.set("allergies", JSON.stringify(allergies));
-    const res = isEdit
-      ? await updateStudent(student!.id, formData)
-      : await createStudent(formData);
-    if (res?.error) setError(res.error);
+  function baoLoi(msg: string) {
+    setLoi(msg);
+    // Đợi khung lỗi vẽ ra rồi mới cuộn + chuyển focus (trình đọc màn hình đọc ngay).
+    requestAnimationFrame(() => {
+      loiRef.current?.scrollIntoView({ block: "center" });
+      loiRef.current?.focus({ preventScroll: true });
+    });
+  }
+
+  function guiForm(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    // Nút "Tạo" đã khoá khi ảnh đang tải; chặn thêm ở đây vì Enter trong một ô chữ vẫn gửi form.
+    if (dangTaiAnh) {
+      baoLoi("Ảnh đại diện đang tải lên — đợi xong rồi bấm tạo lại.");
+      return;
+    }
+    const fd = new FormData(e.currentTarget);
+    if (isEdit && banDauRef.current) chiGiuODaDoi(fd, banDauRef.current);
+    setLoi(null);
+    startLuu(async () => {
+      try {
+        const res = isEdit ? await updateStudent(student!.id, fd) : await createStudent(fd);
+        // Thành công ⇒ action `redirect("/students")`, không tới được dòng dưới.
+        if (res?.error) baoLoi(res.error);
+      } catch (err) {
+        unstable_rethrow(err);
+        baoLoi("Mất kết nối tới máy chủ — hồ sơ CHƯA được lưu. Kiểm tra mạng rồi bấm lưu lại.");
+      }
+    });
   }
 
   return (
-    <form action={action} className="max-w-4xl space-y-6">
-      {error && (
-        <div className="rounded-lg border border-state-danger-soft bg-state-danger-soft px-4 py-3 text-sm text-state-danger-ink">
-          {error}
+    <form
+      ref={formRef}
+      onSubmit={guiForm}
+      aria-busy={dangLuu}
+      aria-label={isEdit ? "Sửa hồ sơ học viên" : "Tạo học viên mới"}
+      className="@container rounded-xl border border-border bg-card shadow-sm"
+    >
+      {loi && (
+        <div
+          ref={loiRef}
+          role="alert"
+          tabIndex={-1}
+          className="mx-4 mt-4 rounded-lg border border-state-danger-soft bg-state-danger-soft px-4 py-3 text-sm text-state-danger-ink focus:outline-none sm:mx-6"
+        >
+          <p className="font-semibold">Chưa lưu được hồ sơ</p>
+          <p className="mt-0.5 break-words">{loi}</p>
         </div>
       )}
 
-      {/* 1. Identity */}
-      <Section title="Thông tin học viên">
-        <div>
-          <ImageUploader
-            label="Ảnh đại diện"
-            value={avatarUrl}
-            onChange={setAvatarUrl}
-            prefix="uploads/students"
-            aspect="square"
-            helperText="Ảnh chân dung 200×200px hoặc lớn hơn"
-          />
-        </div>
+      {/* Ô ẩn LUÔN có mặt: dị ứng gửi dạng mảng JSON (có thể `[]` = xoá hết). */}
+      <input type="hidden" name="allergies" value={JSON.stringify(allergies)} />
 
-        <Grid cols={2}>
-          <Field label="Họ và tên" name="name" defaultValue={student?.name} required />
-          <Field
-            label="Mã học viên"
-            name="studentCode"
-            defaultValue={student?.studentCode ?? undefined}
-            placeholder="VD: SR.HV.001"
-            helper="Tuỳ chọn — nếu điền, phải duy nhất toàn hệ thống"
-          />
-        </Grid>
-
-        <Grid cols={3}>
-          <Field
-            label="Ngày sinh"
-            name="dateOfBirth"
-            type="date"
-            defaultValue={toDateInput(student?.dateOfBirth ?? null)}
-          />
-          <SelectField
-            label="Giới tính"
-            name="gender"
-            defaultValue={student?.gender ?? ""}
-            options={[
-              { value: "", label: "— Không chọn —" },
-              ...GENDER_OPTIONS,
-            ]}
-          />
-          <SelectField
-            label="Trạng thái"
-            name="status"
-            defaultValue={student?.status ?? "ACTIVE"}
-            options={statusOptions}
-            required
-            helper={
-              student?.status === "INACTIVE"
-                ? undefined
-                : 'Cho nghỉ học phải dùng nút "❌ Nghỉ học hẳn" ở khối Lifecycle bên dưới — nút đó mới gỡ học viên khỏi lớp.'
+      {/* 1 — HỌC SINH */}
+      <section aria-labelledby="nhom-hoc-sinh" className={NHOM_DAU}>
+        <TieuDeNhom id="nhom-hoc-sinh">Học sinh</TieuDeNhom>
+        {!isEdit && <ChonAnhKhiTao ten={tenNhap} onDangTai={setDangTaiAnh} />}
+        <div className={LUOI}>
+          <Truong id="hv-name" nhan="Họ và tên học sinh" batBuoc>
+            <input
+              id="hv-name"
+              name="name"
+              defaultValue={student?.name ?? ""}
+              onChange={(e) => setTenNhap(e.target.value)}
+              required
+              maxLength={120}
+              autoComplete="off"
+              className={O_NHAP}
+            />
+          </Truong>
+          <Truong
+            id="hv-code"
+            nhan="Mã học viên"
+            goiY={
+              isEdit
+                ? "Để trống KHÔNG xoá mã hiện có. Nếu đổi, mã mới phải duy nhất toàn hệ thống."
+                : "Để trống thì hệ thống tự sinh theo mã cơ sở. Nếu điền, phải duy nhất toàn hệ thống."
             }
-          />
-        </Grid>
+          >
+            <input
+              id="hv-code"
+              name="studentCode"
+              defaultValue={student?.studentCode ?? ""}
+              placeholder={isEdit ? undefined : "Tự sinh nếu để trống"}
+              autoComplete="off"
+              className={O_NHAP}
+            />
+          </Truong>
+          {isEdit && (
+            <Truong
+              id="hv-status"
+              nhan="Trạng thái hồ sơ"
+              batBuoc
+              goiY={
+                student?.status === "INACTIVE"
+                  ? undefined
+                  : 'Cho nghỉ học phải dùng nút "Nghỉ học hẳn" ở đầu trang — nút đó mới gỡ học viên khỏi lớp, tạo yêu cầu hoàn tiền và báo phụ huynh.'
+              }
+            >
+              <select
+                id="hv-status"
+                name="status"
+                defaultValue={student?.status ?? "ACTIVE"}
+                required
+                className={O_NHAP}
+              >
+                {statusOptions.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </Truong>
+          )}
+          <Truong id="hv-gender" nhan="Giới tính">
+            <select id="hv-gender" name="gender" defaultValue={student?.gender ?? ""} className={O_NHAP}>
+              <option value="">— Chưa chọn —</option>
+              {GIOI_TINH_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </Truong>
+          <Truong id="hv-dob" nhan="Ngày sinh">
+            <input
+              id="hv-dob"
+              name="dateOfBirth"
+              type="date"
+              max={homNay}
+              defaultValue={student?.dateOfBirth ?? ""}
+              className={O_NHAP}
+            />
+          </Truong>
+          <Truong id="hv-grade" nhan="Lớp đang học ở trường">
+            <select
+              id="hv-grade"
+              name="currentGrade"
+              defaultValue={lopHienTai !== null ? String(lopHienTai) : ""}
+              className={O_NHAP}
+            >
+              <option value="">— Chưa rõ —</option>
+              {/* Giá trị cũ ngoài 1–12 vẫn hiện để form không lặng lẽ đổi nó thành trống. */}
+              {lopNgoaiKhoang && (
+                <option value={String(lopHienTai)}>Lớp {lopHienTai} (ngoài 1–12)</option>
+              )}
+              {LOP_TRUONG.map((n) => (
+                <option key={n} value={String(n)}>
+                  Lớp {n}
+                </option>
+              ))}
+            </select>
+          </Truong>
+          <Truong id="hv-school" nhan="Trường đang học" className="@lg:col-span-2 @4xl:col-span-3">
+            <input
+              id="hv-school"
+              name="school"
+              defaultValue={student?.school ?? ""}
+              placeholder="VD: Tiểu học Trần Văn Ơn"
+              className={O_NHAP}
+            />
+          </Truong>
+        </div>
+      </section>
 
-        <Grid cols={2}>
-          <Field
-            label="SĐT học viên (nếu có)"
-            name="phone"
-            defaultValue={student?.phone ?? undefined}
-          />
-          <Field
-            label="Email học viên (nếu có)"
-            name="email"
-            type="email"
-            defaultValue={student?.email ?? undefined}
-          />
-        </Grid>
-      </Section>
-
-      {/* 2. School */}
-      <Section title="Học vấn">
-        <Grid cols={2}>
-          <Field
-            label="Lớp hiện tại"
-            name="currentGrade"
-            type="number"
-            min={1}
-            max={12}
-            defaultValue={student?.currentGrade ?? undefined}
-            placeholder="VD: 5"
-          />
-          <Field
-            label="Trường đang học"
-            name="school"
-            defaultValue={student?.school ?? undefined}
-            placeholder="VD: Tiểu học Trần Văn Ơn"
-          />
-        </Grid>
-      </Section>
-
-      {/* 3. Parent */}
-      <Section title="Phụ huynh">
-        <Grid cols={3}>
-          <Field
-            label="Họ tên PH chính"
-            name="parentName"
-            defaultValue={student?.parentName ?? undefined}
-            required
-          />
-          <Field
-            label="SĐT PH chính"
-            name="parentPhone"
-            defaultValue={student?.parentPhone ?? undefined}
-            placeholder="0901234567"
-            required
-          />
-          <Field
-            label="Quan hệ"
-            name="parentRelation"
-            defaultValue={student?.parentRelation ?? undefined}
-            placeholder="Mẹ / Bố / Ông / Bà"
-          />
-        </Grid>
-
-        <Grid cols={2}>
-          <Field
-            label="Email PH chính"
-            name="parentEmail"
-            type="email"
-            defaultValue={student?.parentEmail ?? undefined}
-          />
+      {/* 2 — PHỤ HUYNH */}
+      <section aria-labelledby="nhom-phu-huynh" className={NHOM}>
+        <TieuDeNhom
+          id="nhom-phu-huynh"
+          moTa={
+            isEdit
+              ? "Sửa ở đây là sửa hồ sơ học viên — không đồng bộ ngược về phiếu lead."
+              : undefined
+          }
+        >
+          Phụ huynh
+        </TieuDeNhom>
+        <div className={LUOI}>
+          <Truong id="ph-name" nhan="Họ tên phụ huynh" batBuoc>
+            <input
+              id="ph-name"
+              name="parentName"
+              defaultValue={student?.parentName ?? ""}
+              required
+              autoComplete="off"
+              className={O_NHAP}
+            />
+          </Truong>
+          <Truong
+            id="ph-phone"
+            nhan="SĐT phụ huynh"
+            batBuoc
+            phu={
+              student?.parentPhoneMasked
+                ? "Số đang được che theo quyền của bạn — lưu hồ sơ không đổi số này."
+                : undefined
+            }
+          >
+            <input
+              id="ph-phone"
+              name="parentPhone"
+              type="tel"
+              inputMode="tel"
+              defaultValue={student?.parentPhone ?? ""}
+              readOnly={student?.parentPhoneMasked}
+              // Nền xám "chỉ đọc" gắn vào thuộc tính này, không vào `read-only:` — `<select>`
+              // luôn khớp `:read-only` nên biến thể đó tô xám MỌI ô chọn (xem o-nhap.tsx).
+              data-chi-doc={student?.parentPhoneMasked ? "" : undefined}
+              required={!student?.parentPhoneMasked}
+              placeholder="0901234567"
+              autoComplete="off"
+              className={O_NHAP}
+            />
+          </Truong>
+          <Truong id="ph-relation" nhan="Quan hệ với học sinh">
+            <input
+              id="ph-relation"
+              name="parentRelation"
+              list="goi-y-quan-he"
+              defaultValue={student?.parentRelation ?? ""}
+              placeholder="Mẹ / Bố / Ông / Bà"
+              className={O_NHAP}
+            />
+          </Truong>
+          <Truong id="ph-gender" nhan="Giới tính phụ huynh">
+            <select
+              id="ph-gender"
+              name="parentGender"
+              defaultValue={student?.parentGender ?? ""}
+              className={O_NHAP}
+            >
+              <option value="">— Chưa chọn —</option>
+              {GIOI_TINH_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </Truong>
+          <Truong id="ph-dob" nhan="Ngày sinh phụ huynh">
+            <input
+              id="ph-dob"
+              name="parentDob"
+              type="date"
+              max={homNay}
+              defaultValue={student?.parentDob ?? ""}
+              className={O_NHAP}
+            />
+          </Truong>
+          <Truong id="ph-email" nhan="Email phụ huynh">
+            <input
+              id="ph-email"
+              name="parentEmail"
+              type="email"
+              defaultValue={student?.parentEmail ?? ""}
+              autoComplete="off"
+              className={O_NHAP}
+            />
+          </Truong>
+          <Truong
+            id="ph-fb"
+            nhan="Link Facebook"
+            goiY="Dán link trang cá nhân hoặc gõ tên tài khoản (vd minh.nguyen.549) — hệ thống tự chuẩn hoá thành link facebook.com."
+            className="@lg:col-span-2"
+            keBenNhan={
+              laLinkMoDuoc(linkFb) && (
+                <a
+                  href={linkFb}
+                  target="_blank"
+                  rel="noopener noreferrer nofollow"
+                  className="mb-1 inline-flex items-center gap-1 rounded-sm text-xs font-semibold text-primary-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  Mở <ExternalLink className="size-3" aria-hidden />
+                  <span className="sr-only">trang Facebook phụ huynh (tab mới)</span>
+                </a>
+              )
+            }
+          >
+            {/* `type="text"` + `inputMode="url"`, KHÔNG `type="url"`: trình duyệt chặn gửi form
+                với "facebook.com/abc" (thiếu https://) trong khi đó đúng là thứ người ta gõ. */}
+            <input
+              id="ph-fb"
+              name="parentFacebookUrl"
+              type="text"
+              inputMode="url"
+              defaultValue={student?.parentFacebookUrl ?? ""}
+              placeholder="facebook.com/…"
+              autoComplete="off"
+              className={O_NHAP}
+            />
+          </Truong>
           {/* #15 — chỉ kế toán/admin (payments:view-pii) mới thấy + nhập CCCD PH.
               Vai khác: KHÔNG render ô (không prefill raw); giá trị cũ được server giữ. */}
           {canViewParentCccd && (
-            <Field
-              label="CCCD phụ huynh"
-              name="parentNationalId"
-              defaultValue={student?.parentNationalId ?? undefined}
-              placeholder="Số CCCD/CMND phụ huynh"
-              helper="Dùng cho phiếu thu/hóa đơn. Thông tin nhạy cảm — che mặc định, chỉ kế toán mở xem đầy đủ."
-            />
+            <Truong
+              id="ph-cccd"
+              nhan="CCCD phụ huynh"
+              goiY="Dùng cho phiếu thu/hóa đơn. Thông tin nhạy cảm — che mặc định, chỉ kế toán mở xem đầy đủ."
+            >
+              <input
+                id="ph-cccd"
+                name="parentNationalId"
+                defaultValue={student?.parentNationalId ?? ""}
+                placeholder="Số CCCD/CMND phụ huynh"
+                autoComplete="off"
+                className={O_NHAP}
+              />
+            </Truong>
           )}
-        </Grid>
+        </div>
+        <datalist id="goi-y-quan-he">
+          {QUAN_HE_GOI_Y.map((q) => (
+            <option key={q} value={q} />
+          ))}
+        </datalist>
 
-        <details className="border-t border-border pt-3">
-          <summary className="cursor-pointer text-sm font-medium text-muted-foreground hover:text-foreground">
-            Thêm phụ huynh thứ hai (tuỳ chọn)
+        <details className="group rounded-lg bg-muted/40 px-3 py-2" open={coPh2}>
+          <summary className="flex min-h-9 cursor-pointer list-none items-center text-sm font-medium text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">
+            <span className="group-open:hidden">+ Thêm phụ huynh thứ hai (tuỳ chọn)</span>
+            <span className="hidden group-open:inline">Phụ huynh thứ hai</span>
           </summary>
-          <div className="mt-3">
-            <Grid cols={3}>
-              <Field
-                label="Họ tên PH 2"
+          <div className={cn(LUOI, "pb-2 pt-3")}>
+            <Truong id="ph2-name" nhan="Họ tên">
+              <input
+                id="ph2-name"
                 name="parent2Name"
-                defaultValue={student?.parent2Name ?? undefined}
+                defaultValue={student?.parent2Name ?? ""}
+                autoComplete="off"
+                className={O_NHAP}
               />
-              <Field
-                label="SĐT PH 2"
+            </Truong>
+            <Truong id="ph2-phone" nhan="SĐT">
+              <input
+                id="ph2-phone"
                 name="parent2Phone"
-                defaultValue={student?.parent2Phone ?? undefined}
+                type="tel"
+                inputMode="tel"
+                defaultValue={student?.parent2Phone ?? ""}
+                autoComplete="off"
+                className={O_NHAP}
               />
-              <Field
-                label="Quan hệ"
+            </Truong>
+            <Truong id="ph2-relation" nhan="Quan hệ">
+              <input
+                id="ph2-relation"
                 name="parent2Relation"
-                defaultValue={student?.parent2Relation ?? undefined}
+                list="goi-y-quan-he"
+                defaultValue={student?.parent2Relation ?? ""}
+                className={O_NHAP}
               />
-            </Grid>
+            </Truong>
           </div>
         </details>
-      </Section>
+      </section>
 
-      {/* 4. Address */}
-      <Section title="Địa chỉ">
-        <Field
-          label="Số nhà, đường"
-          name="address"
-          defaultValue={student?.address ?? undefined}
+      {/* 3 — ĐỊA CHỈ (2 cấp, lưu TÊN) */}
+      <section aria-labelledby="nhom-dia-chi" className={NHOM}>
+        <TieuDeNhom id="nhom-dia-chi">Địa chỉ</TieuDeNhom>
+        <DiaChiPicker
+          provinces={provinces}
+          initialWards={initialWards}
+          city={student?.city ?? null}
+          ward={student?.ward ?? null}
+          address={student?.address ?? null}
+          district={student?.district ?? null}
         />
-        <Grid cols={3}>
-          <Field
-            label="Phường"
-            name="ward"
-            defaultValue={student?.ward ?? undefined}
-          />
-          <Field
-            label="Quận / Huyện"
-            name="district"
-            defaultValue={student?.district ?? undefined}
-          />
-          <Field
-            label="Tỉnh / TP"
-            name="city"
-            defaultValue={student?.city ?? undefined}
-          />
-        </Grid>
-      </Section>
+      </section>
 
-      {/* 5. Sata Robo */}
-      <Section title="Thông tin Sata Robo">
-        <Grid cols={2}>
-          <Field
-            label="Ngày đăng ký lần đầu"
-            name="enrollmentDate"
-            type="date"
-            defaultValue={toDateInput(student?.enrollmentDate ?? null)}
-          />
-          <SelectField
-            label="Đơn vị mong muốn"
-            name="preferredOrgUnitId"
-            defaultValue={student?.preferredOrgUnitId ?? ""}
-            options={[
-              { value: "", label: "— Chưa chọn —" },
-              ...orgUnits.map((o) => ({ value: o.id, label: o.name })),
-            ]}
-            helper="Đơn vị gần nhà — gợi ý xếp lớp khi enrollment"
-          />
-        </Grid>
-        <SelectField
-          label="Cơ sở"
-          name="orgUnitId"
-          defaultValue={student?.orgUnitId ?? ""}
-          required
-          options={[
-            { value: "", label: "— Chọn cơ sở —" },
-            ...orgUnits.map((o) => ({ value: o.id, label: o.name })),
-          ]}
-          helper="Bắt buộc. Học viên phải thuộc một cơ sở dạy học — quyết định lớp học viên được xếp vào và ai quản lý hồ sơ này."
-        />
-        <Field
-          label="Ghi chú nội bộ"
-          name="notes"
-          type="textarea"
-          rows={3}
-          defaultValue={student?.notes ?? undefined}
-          placeholder="Note cho admin, không hiển thị public"
-        />
-      </Section>
+      {/* 4 — TRUNG TÂM */}
+      <section aria-labelledby="nhom-trung-tam" className={NHOM}>
+        <TieuDeNhom id="nhom-trung-tam">Tại trung tâm</TieuDeNhom>
+        <div className={LUOI}>
+          <Truong
+            id="hv-orgunit"
+            nhan="Cơ sở"
+            batBuoc
+            goiY="Học viên phải thuộc một cơ sở dạy học — quyết định lớp được xếp vào và ai quản lý hồ sơ này."
+          >
+            <select
+              id="hv-orgunit"
+              name="orgUnitId"
+              defaultValue={student?.orgUnitId ?? ""}
+              required
+              className={O_NHAP}
+            >
+              <option value="">— Chọn cơ sở —</option>
+              {orgUnits.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name}
+                </option>
+              ))}
+            </select>
+          </Truong>
 
-      {/* 6. Health (collapsed by default — sensitive) */}
-      <details className="rounded-xl border border-border bg-card">
-        <summary className="cursor-pointer px-6 py-4 text-sm font-bold uppercase tracking-wider text-foreground">
-          Sức khoẻ (tuỳ chọn)
-        </summary>
-        <div className="space-y-4 px-6 pb-6 pt-2">
-          <SelectField
-            label="Nhóm máu"
-            name="bloodType"
-            defaultValue={student?.bloodType ?? ""}
-            options={[
-              { value: "", label: "— Không khai —" },
-              ...BLOOD_OPTIONS,
-            ]}
-          />
+          {thongTinTrungTam && (
+            <>
+              <dl className="min-w-0">
+                <dt className="mb-1 text-sm font-semibold text-foreground">Ngày nhập học</dt>
+                <dd className="flex min-h-10 items-center text-sm tabular-nums text-foreground sm:min-h-9">
+                  {thongTinTrungTam.ngayNhapHoc ?? (
+                    <span className="text-muted-foreground">Chưa ghi danh lớp nào</span>
+                  )}
+                </dd>
+              </dl>
+              <dl className="min-w-0 @lg:col-span-2 @4xl:col-span-1">
+                <dt className="mb-1 text-sm font-semibold text-foreground">
+                  Lớp đang học tại trung tâm
+                </dt>
+                <dd className="flex min-h-10 flex-wrap items-center gap-1.5 sm:min-h-9">
+                  {thongTinTrungTam.lopDangHoc.length > 0 ? (
+                    thongTinTrungTam.lopDangHoc.map((l) => (
+                      <Link
+                        key={l.id}
+                        href={`/classes/${l.id}/progress`}
+                        className="inline-flex max-w-full items-center truncate whitespace-nowrap rounded-full border border-border bg-card px-2.5 py-1 text-xs font-semibold text-foreground transition-colors hover:border-primary hover:text-primary-ink"
+                      >
+                        {l.ten}
+                      </Link>
+                    ))
+                  ) : (
+                    <span className="text-sm text-muted-foreground">Không học lớp nào</span>
+                  )}
+                </dd>
+              </dl>
+            </>
+          )}
 
-          <div>
-            <label className="mb-1 block text-sm font-semibold text-foreground">
-              Dị ứng
-            </label>
-            <StringArrayEditor
-              value={allergies}
-              onChange={setAllergies}
-              placeholder="VD: Tôm, sữa, phấn hoa..."
+          <Truong
+            id="hv-notes"
+            nhan="Ghi chú nội bộ"
+            goiY="Chỉ nhân viên thấy — không hiện cho phụ huynh."
+            className={CA_HANG}
+          >
+            <textarea
+              id="hv-notes"
+              name="notes"
+              rows={3}
+              defaultValue={student?.notes ?? ""}
+              className={O_VAN_BAN}
             />
-          </div>
-
-          <Field
-            label="Ghi chú sức khoẻ"
-            name="healthNotes"
-            type="textarea"
-            rows={3}
-            defaultValue={student?.healthNotes ?? undefined}
-            placeholder="Bệnh nền, lưu ý đặc biệt để GV chăm sóc đúng cách"
-          />
+          </Truong>
         </div>
-      </details>
+      </section>
 
-      <div className="flex gap-3 border-t border-border pt-6">
-        <SubmitButton isEdit={isEdit} />
-        <button
-          type="button"
-          onClick={() => router.push("/students")}
-          className="rounded-xl border-2 border-border bg-card px-6 py-3 font-bold text-foreground hover:bg-muted"
-        >
+      {/* 5 — SỨC KHOẺ (gấp sẵn — thông tin nhạy cảm, ít khi sửa) */}
+      <section aria-labelledby="nhom-suc-khoe" className="border-t border-border px-4 py-2 sm:px-6">
+        <details className="group">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 [&::-webkit-details-marker]:hidden">
+            <span id="nhom-suc-khoe" className="text-sm font-semibold text-foreground">
+              Sức khoẻ
+              <span className="ml-1 font-normal text-muted-foreground">
+                {coSucKhoe
+                  ? `· ${allergies.length > 0 ? `${allergies.length} dị ứng` : "có ghi chú"}`
+                  : "· tuỳ chọn"}
+              </span>
+            </span>
+            <span className="text-xs text-muted-foreground group-open:hidden">Mở</span>
+            <span className="hidden text-xs text-muted-foreground group-open:inline">Thu gọn</span>
+          </summary>
+          <div className="space-y-4 pb-4 pt-2">
+            <div className="min-w-0">
+              <p className="mb-1 text-sm font-semibold text-foreground">Dị ứng</p>
+              <StringArrayEditor
+                value={allergies}
+                onChange={setAllergies}
+                placeholder="VD: Tôm, sữa, phấn hoa…"
+              />
+            </div>
+            <Truong id="hv-health" nhan="Ghi chú sức khoẻ">
+              <textarea
+                id="hv-health"
+                name="healthNotes"
+                rows={3}
+                defaultValue={student?.healthNotes ?? ""}
+                placeholder="Bệnh nền, lưu ý đặc biệt để giáo viên chăm sóc đúng cách"
+                className={O_VAN_BAN}
+              />
+            </Truong>
+          </div>
+        </details>
+      </section>
+
+      {/* THANH LƯU — dính đáy khung cuộn khi tờ dài hơn màn hình; hết tờ thì nằm đúng chỗ. */}
+      <div className="sticky bottom-0 z-20 flex flex-wrap items-center justify-end gap-2 rounded-b-xl border-t border-border bg-card/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-card/85 sm:px-6">
+        <p aria-live="polite" className="mr-auto text-xs text-muted-foreground">
+          {dangLuu ? "Đang lưu hồ sơ…" : ""}
+        </p>
+        <Link href="/students" className={cn(NUT_VIEN, "flex-1 sm:flex-none")}>
           Huỷ
+        </Link>
+        <button
+          type="submit"
+          disabled={dangLuu || dangTaiAnh}
+          className={cn(NUT_CHINH, "flex-1 sm:flex-none")}
+        >
+          {(dangLuu || dangTaiAnh) && <Loader2 className="size-4 animate-spin" aria-hidden />}
+          {dangLuu
+            ? "Đang lưu…"
+            : dangTaiAnh
+              ? "Đang tải ảnh…"
+              : isEdit
+                ? "Lưu thay đổi"
+                : "Tạo học viên"}
         </button>
       </div>
     </form>
-  );
-}
-
-function SubmitButton({ isEdit }: { isEdit: boolean }) {
-  const { pending } = useFormStatus();
-  return (
-    <button
-      type="submit"
-      disabled={pending}
-      className="rounded-xl bg-primary px-6 py-3 font-bold text-white shadow-md hover:opacity-90 disabled:opacity-60"
-    >
-      {pending ? "Đang lưu..." : isEdit ? "Cập nhật" : "Tạo học viên"}
-    </button>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="rounded-xl border border-border bg-card p-6">
-      <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-foreground">
-        {title}
-      </h2>
-      <div className="space-y-4">{children}</div>
-    </section>
-  );
-}
-
-function Grid({ children, cols = 2 }: { children: React.ReactNode; cols?: 2 | 3 }) {
-  const grid = cols === 3 ? "md:grid-cols-3" : "md:grid-cols-2";
-  return <div className={`grid grid-cols-1 ${grid} gap-4`}>{children}</div>;
-}
-
-type FieldProps = {
-  label: string;
-  name: string;
-  type?: "text" | "number" | "email" | "textarea" | "date";
-  rows?: number;
-  min?: number;
-  max?: number;
-  defaultValue?: string | number | null;
-  placeholder?: string;
-  required?: boolean;
-  helper?: string;
-};
-
-function Field({
-  label,
-  name,
-  type = "text",
-  rows = 3,
-  min,
-  max,
-  defaultValue,
-  placeholder,
-  required,
-  helper,
-}: FieldProps) {
-  const value = defaultValue ?? "";
-  const baseClass =
-    "w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
-  return (
-    // `helper` nay ra icon "?" CẠNH NHÃN thay vì dòng chữ mờ dưới ô — sửa một chỗ, cả form
-    // đổi theo. Nút "?" nằm trong <label> vẫn an toàn: <button> là interactive content nên
-    // trình duyệt KHÔNG chuyển tiếp cú bấm xuống ô nhập.
-    <label className="block">
-      <FieldLabel label={label} required={required} hint={helper} />
-      {type === "textarea" ? (
-        <textarea
-          name={name}
-          rows={rows}
-          defaultValue={value}
-          placeholder={placeholder}
-          required={required}
-          className={`${baseClass} resize-y`}
-        />
-      ) : (
-        <input
-          type={type}
-          name={name}
-          min={min}
-          max={max}
-          defaultValue={value}
-          placeholder={placeholder}
-          required={required}
-          className={baseClass}
-        />
-      )}
-    </label>
-  );
-}
-
-function SelectField({
-  label,
-  name,
-  options,
-  defaultValue,
-  required,
-  helper,
-}: {
-  label: string;
-  name: string;
-  options: readonly { value: string; label: string }[];
-  defaultValue?: string | null;
-  required?: boolean;
-  helper?: string;
-}) {
-  return (
-    <label className="block">
-      <FieldLabel label={label} required={required} hint={helper} />
-      <select
-        name={name}
-        defaultValue={defaultValue ?? ""}
-        required={required}
-        className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-      >
-        {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
-    </label>
   );
 }

@@ -60,7 +60,8 @@ export function GeneratePdfButton({
         type="button"
         onClick={handleGenerate}
         disabled={loading}
-        className="inline-flex items-center gap-1 rounded-md border border-primary bg-card px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary-soft disabled:opacity-50"
+        className="inline-flex h-8 items-center gap-1 whitespace-nowrap rounded-md border border-border bg-card px-2.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+        aria-label={`Tạo PDF tiến độ lớp ${className}`}
       >
         {loading ? (
           <>
@@ -74,7 +75,11 @@ export function GeneratePdfButton({
           </>
         )}
       </button>
-      {error && <span className="text-[10px] text-state-danger-ink">{error}</span>}
+      {error && (
+        <span role="alert" className="max-w-[14rem] text-right text-xs text-state-danger-ink">
+          {error}
+        </span>
+      )}
     </div>
   );
 }

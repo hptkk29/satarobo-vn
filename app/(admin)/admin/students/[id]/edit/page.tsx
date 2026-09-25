@@ -1,7 +1,24 @@
+// /students/<id>/edit — "Hồ sơ học viên" (thiết kế lại 25/09/2026).
+//
+// Bố cục (khung nở theo BẬC, chỉ dùng `min-[..]` — trộn `2xl:max-w` với `min-[..]` thì bậc
+// 2xl đứng sau trong CSS sinh ra và thắng, màn 8K kẹt ở 1440px; xem `man-nhap-lead.tsx`):
+//   · dải đầu: ảnh · tên · trạng thái · LEAD NGUỒN · nút vòng đời;
+//   · < 1280px: một cột — form → cột phải (lead nguồn, tài khoản PH, anh chị em) → lớp & tiến độ;
+//   · ≥ 1280px: [form | cột phải 380px dính trên] rồi "Lớp & tiến độ" dưới form;
+//   · ≥ 2200px: [form | lớp & tiến độ | cột phải 400px].
+//
+// Quyền + che PII giữ NGUYÊN như bản cũ: cổng `students:edit`, CCCD chỉ `payments:view-pii`,
+// SĐT PH che ở SERVER khi DENY cấp trường, năng lực robotics theo `canAssessSkills`.
+// Lead nguồn đọc DUY NHẤT qua `docLeadNguon` (cách ly cơ sở + canSeeLead + che PII) —
+// trang này KHÔNG tự truy vấn lead (include lồng không được scopedDb cách ly).
+
+import { createHash } from "node:crypto";
 import Link from "next/link";
-import { LineChart } from "lucide-react";
-import { auth } from "@/lib/auth";
+import { ChevronLeft } from "lucide-react";
 import { redirect, notFound } from "next/navigation";
+import { getWardsByProvince, provinces } from "vietnam-address-data";
+import type { RoboticsSkill, SkillLevel } from "@prisma/client";
+import { auth } from "@/lib/auth";
 import { scopedDb } from "@/lib/db-scope";
 import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission, checkPermissionDetail } from "@/lib/auth/check-permission";
@@ -10,21 +27,36 @@ import { resolveActor } from "@/lib/auth/actor";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { getStudentProgressForClasses } from "@/lib/progress";
 import { getStudentClassProgress, getStudentAbsences } from "@/lib/students/progress";
+import { docLeadNguon } from "@/lib/students/lead-nguon";
+import { nhanGioiTinh } from "@/lib/students/gioi-tinh";
+import { provinceIdByName, toAddressOptions, toNameOptions } from "@/lib/address/vn-address";
+import { ngayVN } from "@/lib/format/date";
+import { vnYmd } from "@/lib/time/vn";
 import { StudentForm, type StudentFormValue } from "../../_components/student-form";
-import { GeneratePdfButton } from "./_pdf-button";
-import { LifecycleActions } from "../../_components/lifecycle-actions";
 import { ReserveHistorySection } from "../../_components/reserve-history-section";
 import { ParentAccountSection } from "../../_components/parent-account-section";
 import { ParentChildrenManager } from "../../_components/parent-children-manager";
+import { DaiDangBaoLuu, DaiDanhTinh } from "../../_components/ho-so/dai-danh-tinh";
+import { KhungLeadNguon } from "../../_components/ho-so/khung-lead-nguon";
+import { GiuFormKhiDangSua } from "../../_components/ho-so/giu-form-khi-dang-sua";
+import {
+  LopVaTienDo,
+  type DongLichSu,
+  type DongLopDangHoc,
+} from "../../_components/ho-so/lop-va-tien-do";
+import {
+  laGhiDanhDangHoc,
+  ngayChoONhap,
+  ngayNhapHoc,
+  tinhTuoi,
+} from "../../_components/ho-so/nhan-ho-so";
 import { SkillEditor } from "../_components/skill-editor";
-import type { RoboticsSkill, SkillLevel } from "@prisma/client";
-import { formatDateVN } from "@/lib/format/date";
-import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 interface Props {
   params: Promise<{ id: string }>;
 }
 
+export const metadata = { title: "Hồ sơ học viên | Admin" };
 export const dynamic = "force-dynamic";
 
 export default async function EditStudentPage({ params }: Props) {
@@ -34,19 +66,22 @@ export default async function EditStudentPage({ params }: Props) {
     redirect("/dashboard?error=unauthorized");
   }
 
-  // #15 — CCCD PH là PII: chỉ actor có payments:view-pii (kế toán/admin) mới thấy +
-  // sửa. Sale/CM có students:edit nhưng KHÔNG có view-pii → ẩn ô + không prefill raw.
-  const canViewParentCccd = await checkPermission("payments:view-pii");
-
-  // US-03 (TS-02): DENY cấp trường từ grant nhóm — che parentPhone kể cả khi actor
-  // có students:edit (mask độc lập với quyết định action — đồng nhất trang list).
-  const { fieldMask } = await checkPermissionDetail("students:view-all");
-  const phoneMasked = fieldMask.includes("parentPhone");
-
   const { id } = await params;
 
-  const actor = await resolveActor(session.user.id);
+  const [canViewParentCccd, chiTietXem, coTheGhiDanh, actor] = await Promise.all([
+    // #15 — CCCD PH là PII: chỉ actor có payments:view-pii (kế toán/admin) mới thấy +
+    // sửa. Sale/CM có students:edit nhưng KHÔNG có view-pii → ẩn ô + không prefill raw.
+    checkPermission("payments:view-pii"),
+    // US-03 (TS-02): DENY cấp trường từ grant nhóm — che parentPhone kể cả khi actor
+    // có students:edit (mask độc lập với quyết định action — đồng nhất trang list).
+    checkPermissionDetail("students:view-all"),
+    // Nút "Ghi danh vào lớp" ở khối trống chỉ hiện khi bấm vào là làm được (luật 12).
+    checkPermission("enrollments:create"),
+    resolveActor(session.user.id),
+  ]);
+  const phoneMasked = chiTietXem.fieldMask.includes("parentPhone");
   const sdb = scopedDb(actor);
+
   const [student, orgUnits] = await Promise.all([
     sdb.student.findFirst({
       where: { id, deletedAt: null },
@@ -56,8 +91,6 @@ export default async function EditStudentPage({ params }: Props) {
         studentCode: true,
         dateOfBirth: true,
         gender: true,
-        phone: true,
-        email: true,
         avatarUrl: true,
         currentGrade: true,
         school: true,
@@ -66,6 +99,9 @@ export default async function EditStudentPage({ params }: Props) {
         parentEmail: true,
         parentRelation: true,
         parentNationalId: true,
+        parentGender: true,
+        parentDob: true,
+        parentFacebookUrl: true,
         parent2Name: true,
         parent2Phone: true,
         parent2Relation: true,
@@ -73,440 +109,320 @@ export default async function EditStudentPage({ params }: Props) {
         ward: true,
         district: true,
         city: true,
-        bloodType: true,
         allergies: true,
         healthNotes: true,
-        enrollmentDate: true,
-        preferredCenterId: true,
-        preferredOrgUnitId: true,
         notes: true,
         status: true,
         centerId: true,
         orgUnitId: true,
+        leadId: true,
+        leadChildId: true,
         parentUserId: true,
+        center: { select: { name: true } },
         parentUser: { select: { email: true, phone: true, name: true, accountStatus: true } },
       },
     }),
-      // Hội sở KHÔNG nhận học viên (chốt 04/08) — picker chỉ liệt kê cơ sở dạy học.
+    // Hội sở KHÔNG nhận học viên (chốt 04/08) — picker chỉ liệt kê cơ sở dạy học.
     getSelectableOrgUnits(actor, { types: ["CENTER"] }),
   ]);
 
   if (!student) notFound();
 
-  // Commit 3 — đa con: các con đang gắn cùng phụ huynh này.
-  const parentChildren = student.parentUserId
-    ? await sdb.student.findMany({
-        where: { parentUserId: student.parentUserId, deletedAt: null },
-        orderBy: { name: "asc" },
-        select: { id: true, name: true, studentCode: true },
-      })
-    : [];
-
-  // LMS-5 — năng lực: lấy bản đánh giá mới nhất mỗi kỹ năng.
-  const skillRows = await sdb.studentSkillAssessment.findMany({
-    where: { studentId: id },
-    orderBy: { assessedAt: "desc" },
-    select: { skill: true, level: true, note: true, assessedAt: true },
-  });
-  const latestSkills: Partial<Record<RoboticsSkill, { level: SkillLevel; note: string }>> = {};
-  for (const r of skillRows) {
-    if (!latestSkills[r.skill]) latestSkills[r.skill] = { level: r.level, note: r.note ?? "" };
-  }
   // LMS-17 (W4-b) — mở editor năng lực cho GV PHỤ TRÁCH lớp HS.
   // Mirror đúng logic backend canAssessStudent() trong ../_actions.ts (SUPER_ADMIN |
   // CENTER_MANAGER cùng cơ sở | TEACHER dạy lớp HS đang học) để UI gate khớp server gate.
   const isSuperOrManager =
     hasRole(session.user, "SUPER_ADMIN") ||
     (hasRole(session.user, "CENTER_MANAGER") && student.centerId === session.user.centerId);
-  const teachesStudent =
-    !isSuperOrManager &&
-    hasRole(session.user, "TEACHER") &&
-    !!(await sdb.enrollment.findFirst({
-      where: {
-        studentId: id,
-        class: { OR: [{ teacherId: session.user.id }, { assistantId: session.user.id }] },
-      },
-      select: { id: true },
-    }));
+
+  const [parentChildren, skillRows, teachesStudent, enrollments, activeReserve, absences, leadNguon] =
+    await Promise.all([
+      // Commit 3 — đa con: các con đang gắn cùng phụ huynh này.
+      student.parentUserId
+        ? sdb.student.findMany({
+            where: { parentUserId: student.parentUserId, deletedAt: null },
+            orderBy: { name: "asc" },
+            select: { id: true, name: true, studentCode: true },
+          })
+        : Promise.resolve([]),
+      // LMS-5 — năng lực: lấy bản đánh giá mới nhất mỗi kỹ năng.
+      sdb.studentSkillAssessment.findMany({
+        where: { studentId: id },
+        orderBy: { assessedAt: "desc" },
+        select: { skill: true, level: true, note: true, assessedAt: true },
+      }),
+      !isSuperOrManager && hasRole(session.user, "TEACHER")
+        ? sdb.enrollment
+            .findFirst({
+              where: {
+                studentId: id,
+                class: { OR: [{ teacherId: session.user.id }, { assistantId: session.user.id }] },
+              },
+              select: { id: true },
+            })
+            .then((e) => !!e)
+        : Promise.resolve(false),
+      // MỘT truy vấn ghi danh cho cả trang (bản cũ đọc ba lần: lớp đang học, nút vòng đời,
+      // lịch sử học tập). Ghi danh là model soft-delete ⇒ đã tự lọc `deletedAt: null`.
+      sdb.enrollment.findMany({
+        where: { studentId: id },
+        select: {
+          id: true,
+          status: true,
+          classId: true,
+          enrolledAt: true,
+          endedAt: true,
+          class: {
+            select: {
+              id: true,
+              name: true,
+              classCode: true,
+              course: { select: { name: true } },
+              center: { select: { name: true } },
+            },
+          },
+        },
+        orderBy: { enrolledAt: "desc" },
+      }),
+      sdb.studentReserve.findFirst({
+        where: { studentId: id, isActive: true },
+        orderBy: { startedAt: "desc" },
+        select: { id: true, startedAt: true, expectedEndAt: true, reason: true },
+      }),
+      getStudentAbsences(id),
+      docLeadNguon({
+        actor,
+        userId: session.user.id,
+        student: {
+          id: student.id,
+          leadId: student.leadId,
+          leadChildId: student.leadChildId,
+          parentPhone: student.parentPhone,
+        },
+        // SĐT PH đang che cho người xem ⇒ khối lead không được in/so SĐT (cùng số).
+        parentPhoneMasked: phoneMasked,
+      }),
+    ]);
+
+  const latestSkills: Partial<Record<RoboticsSkill, { level: SkillLevel; note: string }>> = {};
+  for (const r of skillRows) {
+    if (!latestSkills[r.skill]) latestSkills[r.skill] = { level: r.level, note: r.note ?? "" };
+  }
   const canAssessSkills = isSuperOrManager || teachesStudent;
 
+  // ─── Lớp & tiến độ: mỗi LỚP tính tiến độ buổi MỘT lần (bản cũ gọi hai lần/lớp) ───
+  const dangHocRaw = enrollments.filter((e) => laGhiDanhDangHoc(e.status));
+  const lopDangHocIds = [...new Set(dangHocRaw.map((e) => e.classId))];
+  const moiLop = [...new Set(enrollments.map((e) => e.classId))];
+  const [chiSoTheoLop, buoiTheoLop] = await Promise.all([
+    // QRY-07: chỉ số mọi lớp đang học batch 1 lượt.
+    getStudentProgressForClasses(id, lopDangHocIds),
+    Promise.all(
+      moiLop.map(async (cid) => [cid, await getStudentClassProgress(id, cid)] as const),
+    ).then((cap) => new Map(cap)),
+  ]);
+
+  const lopCua = (e: (typeof enrollments)[number]) => ({
+    id: e.class.id,
+    ten: e.class.name,
+    ma: e.class.classCode,
+    khoa: e.class.course.name,
+    coSo: e.class.center?.name ?? null,
+  });
+  const buoiRong = { total: 0, attended: 0, remaining: 0, absentNoMakeup: 0, currentSession: 0 };
+
+  const dangHoc: DongLopDangHoc[] = dangHocRaw.map((e) => {
+    const p = chiSoTheoLop.get(e.classId);
+    return {
+      enrollmentId: e.id,
+      lop: lopCua(e),
+      buoi: buoiTheoLop.get(e.classId) ?? buoiRong,
+      chiSo: p
+        ? {
+            diemDanh: `${p.attendedSessions}/${p.totalSessions}`,
+            tyLeDiemDanh: p.attendanceRate,
+            baiHoc: `${p.coveredLessons}/${p.totalLessons}`,
+            baiTap: `${p.submittedAssignments}/${p.totalAssignments}`,
+            diemTB: p.averageScore,
+          }
+        : null,
+    };
+  });
+  const lichSu: DongLichSu[] = enrollments
+    .filter((e) => !laGhiDanhDangHoc(e.status))
+    .map((e) => ({
+      enrollmentId: e.id,
+      lop: lopCua(e),
+      status: e.status,
+      batDau: e.enrolledAt,
+      ketThuc: e.endedAt,
+      buoi: buoiTheoLop.get(e.classId) ?? buoiRong,
+    }));
+
+  // "Ngày nhập học" (D3) = ghi danh SỚM NHẤT, trừ ghi danh đã HUỶ (huỷ = chưa từng vào học).
+  const nhapHoc = ngayNhapHoc(enrollments.filter((e) => e.status !== "CANCELLED"));
+
+  // ─── Form ────────────────────────────────────────────────────────────────────
   const formValue: StudentFormValue = {
     id: student.id,
     name: student.name,
     studentCode: student.studentCode,
-    dateOfBirth: student.dateOfBirth,
+    dateOfBirth: ngayChoONhap(student.dateOfBirth),
     gender: student.gender,
-    phone: student.phone,
-    email: student.email,
-    avatarUrl: student.avatarUrl,
     currentGrade: student.currentGrade,
     school: student.school,
+    status: student.status,
     parentName: student.parentName,
     // Che SĐT PH ở SERVER khi bị DENY cấp trường (chống leak qua RSC payload).
     parentPhone:
-      phoneMasked && student.parentPhone
-        ? maskPhone(student.parentPhone)
-        : student.parentPhone,
-    parentEmail: student.parentEmail,
+      phoneMasked && student.parentPhone ? maskPhone(student.parentPhone) : student.parentPhone,
+    parentPhoneMasked: phoneMasked && !!student.parentPhone,
     parentRelation: student.parentRelation,
+    parentGender: student.parentGender,
+    parentDob: ngayChoONhap(student.parentDob),
+    parentEmail: student.parentEmail,
+    parentFacebookUrl: student.parentFacebookUrl,
     // Không gửi raw CCCD xuống client khi actor không có quyền xem đầy đủ.
     parentNationalId: canViewParentCccd ? student.parentNationalId : null,
     parent2Name: student.parent2Name,
     parent2Phone: student.parent2Phone,
     parent2Relation: student.parent2Relation,
-    address: student.address,
-    ward: student.ward,
-    district: student.district,
     city: student.city,
-    bloodType: student.bloodType,
+    ward: student.ward,
+    address: student.address,
+    district: student.district,
     allergies: student.allergies ?? [],
     healthNotes: student.healthNotes,
-    enrollmentDate: student.enrollmentDate,
-    preferredCenterId: student.preferredCenterId,
-    preferredOrgUnitId: student.preferredOrgUnitId,
     notes: student.notes,
-    status: student.status,
-    centerId: student.centerId,
     orgUnitId: student.orgUnitId,
   };
 
-  const activeEnrollments = await sdb.enrollment.findMany({
-    where: {
-      studentId: id,
-      status: { in: ["CONFIRMED", "STUDYING", "ACTIVE"] },
-    },
-    select: {
-      id: true,
-      class: {
-        select: {
-          id: true,
-          name: true,
-          classCode: true,
-          course: { select: { name: true } },
-          center: { select: { name: true } },
-        },
-      },
-    },
-  });
+  // ⚠️ KHOÁ của form = dấu vân tay GIÁ TRỊ hồ sơ. Ô nhập không kiểm soát chỉ đọc
+  // `defaultValue` lúc MOUNT — `router.refresh()` sau "Gắn lead" (điền ô trống), sau nút
+  // vòng đời (đổi trạng thái) mang giá trị mới về nhưng ô vẫn hiện giá trị CŨ. Đổi khoá ⇒
+  // form dựng lại với giá trị mới — TRỪ khi người dùng đang sửa dở: `GiuFormKhiDangSua` giữ
+  // form + báo có bản mới (dựng lại là mất chữ đang gõ), và form chỉ gửi ô đã đổi nên lưu
+  // lúc đó không ghi ngược. Đổi ẢNH không nằm trong form nên không đổi khoá.
+  const formKey = createHash("sha1").update(JSON.stringify(formValue)).digest("hex").slice(0, 16);
 
-  const [activeReserve, lifecycleEnrollments] = await Promise.all([
-    sdb.studentReserve.findFirst({
-      where: { studentId: id, isActive: true },
-      orderBy: { startedAt: "desc" },
-      select: {
-        id: true,
-        startedAt: true,
-        expectedEndAt: true,
-        reason: true,
-      },
-    }),
-    sdb.enrollment.findMany({
-      where: { studentId: id },
-      select: {
-        id: true,
-        status: true,
-        class: { select: { name: true } },
-      },
-      orderBy: { enrolledAt: "desc" },
-    }),
-  ]);
+  const maTinhDangLuu = provinceIdByName(provinces, student.city);
+  const phuongCuaTinh = maTinhDangLuu ? toNameOptions(getWardsByProvince(maTinhDangLuu)) : [];
 
-  // QRY-07: tiến độ mọi lớp active batch 1 lượt (thay getStudentProgress N+1 trong map).
-  const activeProgress = await getStudentProgressForClasses(
-    id,
-    activeEnrollments.map((e) => e.class.id),
-  );
-  const progressByClass = await Promise.all(
-    activeEnrollments.map(async (e) => ({
-      enrollment: e,
-      progress: activeProgress.get(e.class.id)!,
-      sessions: await getStudentClassProgress(id, e.class.id),
-    })),
-  );
+  const tenCoSo =
+    orgUnits.find((o) => o.orgUnitId === student.orgUnitId)?.name ?? student.center?.name ?? null;
+  const tuoi = tinhTuoi(student.dateOfBirth, new Date());
 
-  const absences = await getStudentAbsences(id);
-
-  // #14 — Lịch sử học tập: TẤT CẢ lớp/khoá đã & đang học + tiến độ buổi.
-  const historyRaw = await sdb.enrollment.findMany({
-    where: { studentId: id },
-    select: {
-      id: true,
-      status: true,
-      classId: true,
-      enrolledAt: true,
-      endedAt: true,
-      class: { select: { name: true, classCode: true, course: { select: { name: true } } } },
-    },
-    orderBy: { enrolledAt: "desc" },
-  });
-  const learningHistory = await Promise.all(
-    historyRaw.map(async (e) => ({
-      ...e,
-      sessions: await getStudentClassProgress(id, e.classId),
-    })),
-  );
-
-  // SĐT prefill khối "Tài khoản phụ huynh" — cùng luật che như form phía trên.
+  // SĐT prefill khối "Tài khoản phụ huynh" — cùng luật che như form.
   const rawAccountPhone = student.parentUser?.phone ?? student.parentPhone;
   const displayAccountPhone =
     phoneMasked && rawAccountPhone ? maskPhone(rawAccountPhone) : rawAccountPhone;
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="mb-6 text-3xl font-black text-foreground">
-          Sửa học viên:{" "}
-          <span className="font-bold text-primary">{student.name}</span>
-        </h1>
-        <StudentForm
-          student={formValue}
-          orgUnits={orgUnits.map((o) => ({ id: o.orgUnitId, name: o.name }))}
-          canViewParentCccd={canViewParentCccd}
-        />
-      </div>
+    <div className="mx-auto w-full max-w-[1180px] space-y-5 min-[1536px]:max-w-[1440px] min-[2200px]:max-w-[2200px] min-[3200px]:max-w-[2880px]">
+      <Link
+        href="/students"
+        className="inline-flex min-h-9 items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ChevronLeft className="size-4" aria-hidden /> Danh sách học viên
+      </Link>
 
-      <LifecycleActions
-        studentId={student.id}
-        studentName={student.name}
-        studentStatus={student.status}
+      <DaiDanhTinh
+        student={{
+          id: student.id,
+          name: student.name,
+          avatarUrl: student.avatarUrl,
+          status: student.status,
+        }}
+        meta={[
+          student.studentCode,
+          tuoi !== null ? `${tuoi} tuổi` : null,
+          nhanGioiTinh(student.gender),
+          tenCoSo,
+        ]}
+        ketQua={leadNguon}
         activeReserve={activeReserve}
-        enrollments={lifecycleEnrollments}
+        lifecycleEnrollments={enrollments.map((e) => ({
+          id: e.id,
+          status: e.status,
+          class: { name: e.class.name },
+        }))}
       />
 
-      <ParentAccountSection
-        studentId={student.id}
-        linked={!!student.parentUserId}
-        parentEmail={student.parentUser?.email ?? null}
-        parentName={student.parentUser?.name ?? student.parentName}
-        defaultEmail={student.parentEmail}
-        defaultPhone={displayAccountPhone}
-        pendingActivation={student.parentUser?.accountStatus === "PENDING_ACTIVATION"}
-      />
+      {activeReserve && <DaiDangBaoLuu baoLuu={activeReserve} />}
 
-      {student.parentUserId && (
-        <ParentChildrenManager
-          parentUserId={student.parentUserId}
-          currentStudentId={student.id}
-          children={parentChildren}
-        />
-      )}
-
-      <ReserveHistorySection studentId={student.id} />
-
-      {progressByClass.length > 0 && (
-        <section>
-          <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-foreground">
-            <LineChart className="h-5 w-5 text-primary" />
-            Tiến độ học tập
-          </h2>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {progressByClass.map(({ enrollment, progress, sessions }) => (
-              <div
-                key={enrollment.id}
-                className="rounded-xl border border-border bg-card p-4"
-              >
-                <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg bg-primary-soft px-3 py-2 text-sm">
-                  <span className="font-bold text-primary">
-                    Buổi {sessions.currentSession}/{sessions.total || "—"}
-                  </span>
-                  <span className="text-muted-foreground">
-                    Đã học <b className="text-foreground">{sessions.attended}</b>
-                  </span>
-                  <span className="text-muted-foreground">
-                    Còn lại <b className="text-foreground">{sessions.remaining}</b>
-                  </span>
-                </div>
-                <div className="mb-3 flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <h3 className="font-bold text-foreground">
-                      {enrollment.class.name}
-                    </h3>
-                    <p className="text-xs text-muted-foreground">
-                      {enrollment.class.classCode &&
-                        `${enrollment.class.classCode} · `}
-                      {enrollment.class.course.name}
-                      {enrollment.class.center?.name &&
-                        ` · ${enrollment.class.center.name}`}
-                    </p>
-                    <Link
-                      href={`/classes/${enrollment.class.id}/progress`}
-                      className="mt-0.5 inline-block text-xs font-semibold text-primary hover:underline"
-                    >
-                      Xem lớp →
-                    </Link>
-                  </div>
-                  <GeneratePdfButton
-                    studentId={id}
-                    classId={enrollment.class.id}
-                    studentName={student.name}
-                    className={enrollment.class.name}
-                  />
-                </div>
-                <div className="grid grid-cols-4 gap-2 text-center text-sm">
-                  <MiniStat
-                    label="Điểm danh"
-                    value={`${progress.attendedSessions}/${progress.totalSessions}`}
-                    sub={`${progress.attendanceRate}%`}
-                  />
-                  <MiniStat
-                    label="Bài học"
-                    value={`${progress.coveredLessons}/${progress.totalLessons}`}
-                  />
-                  <MiniStat
-                    label="Bài tập"
-                    value={`${progress.submittedAssignments}/${progress.totalAssignments}`}
-                  />
-                  <MiniStat
-                    label="Điểm TB"
-                    value={
-                      progress.averageScore !== null
-                        ? `${progress.averageScore}/10`
-                        : "—"
-                    }
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {absences.length > 0 && (
-        <section>
-          <h2 className="mb-3 text-lg font-bold text-foreground">
-            Chi tiết buổi vắng ({absences.length})
-          </h2>
-          <div className="overflow-hidden rounded-xl border border-border bg-card">
-            <PhanTrangBang cuonNgang>
-              <table className="w-full text-sm">
-                <thead className="border-b border-border bg-muted text-left text-xs uppercase tracking-wider text-muted-foreground">
-                  <tr>
-                    <th className="px-4 py-2">Ngày</th>
-                    <th className="px-4 py-2">Lớp</th>
-                    <th className="px-4 py-2">Lý do</th>
-                    <th className="px-4 py-2">Học bù</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {absences.map((a, i) => (
-                    <tr key={i} className="border-b border-border last:border-0">
-                      <td className="px-4 py-2 tabular-nums text-foreground">
-                        {formatDateVN(a.date)}
-                      </td>
-                      <td className="px-4 py-2 text-foreground">{a.className}</td>
-                      <td className="px-4 py-2 text-muted-foreground">{a.absenceReason ?? "—"}</td>
-                      <td className="px-4 py-2">
-                        {a.makeupStatus === "MADE_UP" ? (
-                          <span className="rounded bg-state-success-soft px-2 py-0.5 text-xs font-semibold text-state-success-ink">
-                            Đã bù
-                          </span>
-                        ) : a.makeupStatus === "NEEDS_MAKEUP" ? (
-                          <span className="rounded bg-state-warning-soft px-2 py-0.5 text-xs font-semibold text-state-warning-ink">
-                            Cần bù
-                          </span>
-                        ) : (
-                          <span className="rounded bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
-                            Không bù
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </PhanTrangBang>
-          </div>
-        </section>
-      )}
-
-      {/* #14 — Lịch sử học tập */}
-      {learningHistory.length > 0 && (
-        <section>
-          <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-foreground">
-            <LineChart className="h-5 w-5 text-primary" /> Lịch sử học tập
-          </h2>
-          <div className="overflow-hidden rounded-xl border border-border bg-card">
-            <PhanTrangBang cuonNgang>
-              <table className="w-full text-sm">
-                <thead className="border-b border-border bg-muted text-left text-xs uppercase tracking-wider text-muted-foreground">
-                  <tr>
-                    <th className="px-4 py-2">Lớp / Khoá</th>
-                    <th className="px-4 py-2 text-center">Buổi (đã học/tổng)</th>
-                    <th className="px-4 py-2 text-center">Trạng thái</th>
-                    <th className="px-4 py-2">Bắt đầu</th>
-                    <th className="px-4 py-2">Kết thúc</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {learningHistory.map((h) => (
-                    <tr key={h.id} className="border-b border-border last:border-0">
-                      <td className="px-4 py-2">
-                        <Link href={`/classes/${h.classId}/progress`} className="font-medium text-primary hover:underline">
-                          {h.class.classCode ? `${h.class.classCode} · ` : ""}{h.class.name}
-                        </Link>
-                        <span className="block text-xs text-muted-foreground">{h.class.course.name}</span>
-                      </td>
-                      <td className="px-4 py-2 text-center tabular-nums text-foreground">
-                        {h.sessions.attended}/{h.sessions.total || "—"}
-                        {h.sessions.absentNoMakeup > 0 && (
-                          <span className="ml-1 text-xs text-state-danger-ink">(vắng {h.sessions.absentNoMakeup})</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-2 text-center">
-                        <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
-                          {h.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2 tabular-nums text-muted-foreground">
-                        {h.enrolledAt ? formatDateVN(h.enrolledAt) : "—"}
-                      </td>
-                      <td className="px-4 py-2 tabular-nums text-muted-foreground">
-                        {h.endedAt ? formatDateVN(h.endedAt) : "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </PhanTrangBang>
-          </div>
-        </section>
-      )}
-
-      {/* LMS-5 — hồ sơ năng lực robotics */}
-      <section>
-        <h2 className="mb-3 text-lg font-bold text-foreground">
-          Hồ sơ năng lực robotics
-        </h2>
-        <div className="rounded-xl border border-border bg-card p-4">
-          <SkillEditor
-            studentId={student.id}
-            canEdit={canAssessSkills}
-            initial={latestSkills}
+      <div className="grid items-start gap-5 min-[1280px]:grid-cols-[minmax(0,1fr)_380px] min-[2200px]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_400px]">
+        <div className="min-w-0 min-[1280px]:col-start-1 min-[1280px]:row-start-1">
+          <GiuFormKhiDangSua khoa={formKey}>
+          <StudentForm
+            student={formValue}
+            orgUnits={orgUnits.map((o) => ({ id: o.orgUnitId, name: o.name }))}
+            canViewParentCccd={canViewParentCccd}
+            provinces={toAddressOptions(provinces)}
+            initialWards={phuongCuaTinh}
+            homNay={vnYmd(new Date())}
+            thongTinTrungTam={{
+              lopDangHoc: dangHoc.map((d) => ({ id: d.lop.id, ten: d.lop.ten })),
+              ngayNhapHoc: nhapHoc ? ngayVN(nhapHoc) : null,
+            }}
           />
+          </GiuFormKhiDangSua>
         </div>
-      </section>
-    </div>
-  );
-}
 
-function MiniStat({
-  label,
-  value,
-  sub,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-}) {
-  return (
-    <div>
-      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-        {label}
-      </p>
-      <p className="text-sm font-bold text-foreground tabular-nums">{value}</p>
-      {sub && (
-        <p className="text-[10px] text-muted-foreground tabular-nums">{sub}</p>
-      )}
+        {/* Cột phải DÍNH từ 1280px. Cao hơn màn hình thì tự cuộn bên trong — không thì phần
+            dưới (tài khoản PH, anh chị em) bị che cho tới khi cuộn hết trang. `p-1 -m-1` để
+            vùng cuộn không xén bóng/viền focus của các khung. */}
+        <aside
+          aria-label="Nguồn khách hàng và tài khoản phụ huynh"
+          className="min-w-0 space-y-4 min-[1280px]:sticky min-[1280px]:top-4 min-[1280px]:col-start-2 min-[1280px]:row-span-2 min-[1280px]:row-start-1 min-[1280px]:-m-1 min-[1280px]:max-h-[calc(100dvh-6rem)] min-[1280px]:overflow-y-auto min-[1280px]:p-1 min-[2200px]:col-start-3 min-[2200px]:row-span-1"
+        >
+          <KhungLeadNguon ketQua={leadNguon} studentId={student.id} tenHocVien={student.name} />
+          <ParentAccountSection
+            studentId={student.id}
+            linked={!!student.parentUserId}
+            parentEmail={student.parentUser?.email ?? null}
+            parentName={student.parentUser?.name ?? student.parentName}
+            defaultEmail={student.parentEmail}
+            defaultPhone={displayAccountPhone}
+            pendingActivation={student.parentUser?.accountStatus === "PENDING_ACTIVATION"}
+          />
+          {student.parentUserId && (
+            <ParentChildrenManager
+              parentUserId={student.parentUserId}
+              currentStudentId={student.id}
+              children={parentChildren}
+            />
+          )}
+        </aside>
+
+        <div className="min-w-0 space-y-5 min-[1280px]:col-start-1 min-[1280px]:row-start-2 min-[2200px]:col-start-2 min-[2200px]:row-start-1">
+          <LopVaTienDo
+            studentId={student.id}
+            tenHocVien={student.name}
+            dangHoc={dangHoc}
+            lichSu={lichSu}
+            buoiVang={absences}
+            coTheGhiDanh={coTheGhiDanh}
+            trangThaiHocVien={student.status}
+          />
+
+          <ReserveHistorySection studentId={student.id} />
+
+          {/* LMS-5 — hồ sơ năng lực robotics */}
+          <section
+            aria-labelledby="nang-luc-robotics"
+            className="rounded-xl border border-border bg-card shadow-sm"
+          >
+            <div className="border-b border-border px-4 py-3">
+              <h2 id="nang-luc-robotics" className="text-sm font-semibold text-foreground">
+                Hồ sơ năng lực robotics
+              </h2>
+            </div>
+            <div className="p-4">
+              <SkillEditor studentId={student.id} canEdit={canAssessSkills} initial={latestSkills} />
+            </div>
+          </section>
+        </div>
+      </div>
     </div>
   );
 }
