@@ -1686,6 +1686,9 @@ model Lead {
 
   statusHistory LeadStatusHistory[]
 
+  /// 25/09/2026 — học viên có lead GỐC là phiếu này (`Student.leadId`).
+  sourceStudents Student[] @relation("StudentSourceLead")
+
   @@index([phone])
   @@index([status])
   @@index([assignedToId])
@@ -1852,6 +1855,8 @@ model LeadChild {
   enrollments      Enrollment[] // R7-06 — enrollment chính thức convert từ con này
   trialHistory     LeadTrialHistory[] // FL-R2 — lịch sử đã từng học thử
   orders           Order[]            @relation("LeadChildOrders") // N-2 — doanh thu quy về con
+  /// 25/09/2026 — học viên đã nối về đúng đứa trẻ này (`Student.leadChildId`).
+  sourceStudents   Student[]          @relation("StudentSourceLeadChild")
 
   @@index([leadId])
   @@index([classId]) // G-01 — "lớp này có bao nhiêu con của lead đang theo?"
@@ -1918,7 +1923,20 @@ model Student {
   parent2Phone     String?
   parent2Relation  String?
 
-  // Address
+  // 25/09/2026 — thuộc tính của NGƯỜI LỚN, cùng nghĩa với `Lead.parentGender` /
+  // `Lead.parentDob` / `Lead.facebookUrl`. Có cột riêng trên Student vì học viên
+  // nhập tay hoặc import Excel KHÔNG có lead nào để đọc sang, mà màn hồ sơ vẫn
+  // phải khai được (chủ dự án chốt "tách theo chủ dữ liệu" 25/09).
+  // ⚠️ `parentDob` + `parentFacebookUrl` là PII — có trong luồng xoá NĐ13
+  // (lib/compliance/erasure.ts). Lúc chốt lead, convert chép sang một lần; sau đó
+  // hai bản đi riêng, KHÔNG đồng bộ ngược (lead là sổ phễu, Student là hồ sơ học).
+  parentGender      Gender?
+  parentDob         DateTime? @db.Date
+  parentFacebookUrl String?
+
+  // Address — từ 25/09 form sửa theo mô hình 2 CẤP (Tỉnh → Phường/Xã, hiệu lực
+  // 01/07/2025) giống Lead: `city` + `ward` lưu TÊN, `address` là số nhà/đường.
+  // `district` là cột CŨ của mô hình 3 cấp — form không ghi nữa, dữ liệu cũ giữ nguyên.
   address  String?
   ward     String?
   district String?
@@ -1946,6 +1964,29 @@ model Student {
   // 1 PARENT User ↔ nhiều Student (các con). Học sinh KHÔNG có account riêng.
   parentUserId String?
   parentUser   User?   @relation("ParentChildren", fields: [parentUserId], references: [id], onDelete: SetNull)
+
+  // ─── 25/09/2026 — LEAD NGUỒN của học viên (liên kết HV ↔ CRM) ───────────────
+  //
+  // Trước ngày này KHÔNG có cột nào nối Student về Lead: vết duy nhất là
+  // `Enrollment.leadChildId`, chỉ đường chốt lead v2 ghi và chỉ trên ghi danh GỐC
+  // (đo DEV 18/09: 9/531 ghi danh). Người dùng phải chép tên con sang màn lead để tìm.
+  //
+  // ⛔ ĐỪNG "nối" bằng cách ghi bù `Enrollment.leadChildId` — cột đó là tín hiệu
+  // "đã chốt" của báo cáo trial-sale / dashboard QLCS, ghi thêm là thổi phồng số
+  // chuyển đổi (lib/lead/tuong-tac/ghi.ts:130-134). Liên kết sống ở ĐÂY.
+  //
+  // Một HV có thể dính NHIỀU lead (gia đình quay lại tạo lead mới, convert dùng lại
+  // HV cũ). Cột này giữ lead GỐC — lượt convert sau KHÔNG đè (xem convert-lead-v2).
+  // Ai ghi: convert (tự động) · script backfill (người vận hành chạy tay) · nút
+  // "Gắn lead" trên màn học viên (có audit). NULL = chưa nối, KHÔNG phải "không có lead".
+  //
+  // SetNull: xoá lead/con không được kéo theo hồ sơ học viên. `leadChildId` là đứa
+  // trẻ CỤ THỂ trong phiếu; `deleteLeadChild` xoá cứng ⇒ cột này về NULL nhưng
+  // `leadId` vẫn còn, nên liên kết cấp phụ huynh không mất.
+  leadId      String?
+  lead        Lead?      @relation("StudentSourceLead", fields: [leadId], references: [id], onDelete: SetNull)
+  leadChildId String?
+  leadChild   LeadChild? @relation("StudentSourceLeadChild", fields: [leadChildId], references: [id], onDelete: SetNull)
 
   deletedAt DateTime? @db.Timestamptz(6)
   createdAt DateTime  @default(now()) @db.Timestamptz(6)
@@ -1997,6 +2038,9 @@ model Student {
   @@index([orgUnitId])
   // IDX-3: trang students count+findMany order createdAt DESC paginated dưới scope centerId.
   @@index([centerId, createdAt])
+  // 25/09 — trang lead tra "phiếu này đã thành những học viên nào".
+  @@index([leadId])
+  @@index([leadChildId])
 }
 
 enum ClassStatus {
@@ -10372,6 +10416,7 @@ model ZaloCrmThread {
   @@index([centerId])
   @@index([orgUnitId])
 }
+
 // ═══════════════════════════════════════════════════════════════════════════
 // TRỤC GỌI ĐIỆN + GHI ÂM (OmiCall) — spec `plan/20-SPEC-TICH-HOP-...` §5.3
 //

@@ -5,11 +5,14 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { UserPlus, X, Search, Users } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { searchLinkableStudents, addChildToParent, unlinkChildFromParent } from "../_actions";
+import { NUT_CHU, NUT_VIEN, O_NHAP } from "./ho-so/o-nhap";
 
 type Child = { id: string; name: string; studentCode: string | null };
 
 // Commit 3 — quản lý ĐA CON: hiển thị các con đang gắn với phụ huynh + thêm/bỏ con.
+// 25/09/2026 — chỉ ĐỔI VỎ thành khung "Anh chị em" ở cột phải hồ sơ; logic + action giữ nguyên.
 export function ParentChildrenManager({
   parentUserId,
   currentStudentId,
@@ -63,77 +66,109 @@ export function ParentChildrenManager({
   }
 
   return (
-    <div className="mt-3 rounded-xl border border-border bg-card p-4">
-      <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground">
-        <Users className="h-4 w-4 text-primary" />
-        Con của phụ huynh ({children.length})
-      </div>
-      <ul className="mb-3 space-y-1.5">
-        {children.map((c) => (
-          <li key={c.id} className="flex items-center justify-between rounded-lg bg-muted px-3 py-2 text-sm">
-            <span>
-              <Link href={`/students/${c.id}/edit`} className="font-medium text-foreground hover:underline">
-                {c.name}
-              </Link>
-              {c.studentCode ? <span className="ml-1 text-xs text-muted-foreground">({c.studentCode})</span> : null}
-              {c.id === currentStudentId ? <span className="ml-2 text-[10px] font-bold text-primary">đang xem</span> : null}
-            </span>
-            {c.id !== currentStudentId && (
-              <button
-                type="button"
-                onClick={() => unlink(c.id)}
-                disabled={pending}
-                className="inline-flex items-center gap-1 text-xs text-state-danger-ink hover:underline disabled:opacity-50"
-              >
-                <X className="h-3.5 w-3.5" /> Gỡ
-              </button>
-            )}
-          </li>
-        ))}
-      </ul>
-
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), search())}
-            placeholder="Tìm HV chưa có phụ huynh (tên/mã/SĐT)…"
-            className="w-full rounded-lg border border-border py-2 pl-8 pr-3 text-sm focus:border-primary focus:outline-none"
-          />
-        </div>
-        <button
-          type="button"
-          onClick={search}
-          disabled={pending}
-          className="rounded-lg bg-neutral-800 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
-        >
-          Tìm
-        </button>
+    <section
+      aria-labelledby="anh-chi-em"
+      className="rounded-xl border border-border bg-card shadow-sm"
+    >
+      <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+        <Users className="size-4 text-primary" aria-hidden />
+        <h2 id="anh-chi-em" className="text-sm font-semibold text-foreground">
+          Anh chị em
+        </h2>
+        <span className="text-xs text-muted-foreground">
+          · {children.length} con cùng tài khoản phụ huynh
+        </span>
       </div>
 
-      {searching && <p className="mt-2 text-xs text-muted-foreground">Đang tìm…</p>}
-      {results.length > 0 && (
-        <ul className="mt-2 space-y-1">
-          {results.map((r) => (
-            <li key={r.id} className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm">
-              <span>
-                {r.name}
-                {r.studentCode ? <span className="ml-1 text-xs text-muted-foreground">({r.studentCode})</span> : null}
+      <div className="space-y-3 p-4">
+        <ul className="divide-y divide-border">
+          {children.map((c) => (
+            <li key={c.id} className="flex items-center justify-between gap-2 py-2 first:pt-0">
+              <span className="min-w-0 text-sm">
+                <Link
+                  href={`/students/${c.id}/edit`}
+                  className="break-words font-medium text-foreground hover:text-primary-ink hover:underline"
+                >
+                  {c.name}
+                </Link>
+                {c.studentCode ? (
+                  <span className="ml-1 text-xs text-muted-foreground">({c.studentCode})</span>
+                ) : null}
+                {c.id === currentStudentId ? (
+                  <span className="ml-2 inline-flex whitespace-nowrap rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-semibold text-primary-ink">
+                    đang xem
+                  </span>
+                ) : null}
               </span>
-              <button
-                type="button"
-                onClick={() => add(r.id)}
-                disabled={pending}
-                className="inline-flex items-center gap-1 rounded-md bg-state-success-ink px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
-              >
-                <UserPlus className="h-3.5 w-3.5" /> Thêm con
-              </button>
+              {c.id !== currentStudentId && (
+                <button
+                  type="button"
+                  onClick={() => unlink(c.id)}
+                  disabled={pending}
+                  aria-label={`Gỡ ${c.name} khỏi phụ huynh này`}
+                  className={cn(
+                    NUT_CHU,
+                    "text-state-danger-ink hover:bg-state-danger-soft",
+                  )}
+                >
+                  <X className="size-3.5" aria-hidden /> Gỡ
+                </button>
+              )}
             </li>
           ))}
         </ul>
-      )}
-    </div>
+
+        <div className="flex gap-2">
+          <div className="relative min-w-0 flex-1">
+            <label htmlFor="tim-con-lien-ket" className="sr-only">
+              Tìm học viên chưa có phụ huynh
+            </label>
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden
+            />
+            <input
+              id="tim-con-lien-ket"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), search())}
+              placeholder="Tìm HV chưa có phụ huynh (tên/mã/SĐT)…"
+              className={cn(O_NHAP, "pl-9")}
+            />
+          </div>
+          <button type="button" onClick={search} disabled={pending} className={NUT_VIEN}>
+            Tìm
+          </button>
+        </div>
+
+        {searching && (
+          <p aria-live="polite" className="text-xs text-muted-foreground">
+            Đang tìm…
+          </p>
+        )}
+        {results.length > 0 && (
+          <ul className="divide-y divide-border rounded-lg border border-border">
+            {results.map((r) => (
+              <li key={r.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
+                <span className="min-w-0 break-words">
+                  {r.name}
+                  {r.studentCode ? (
+                    <span className="ml-1 text-xs text-muted-foreground">({r.studentCode})</span>
+                  ) : null}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => add(r.id)}
+                  disabled={pending}
+                  className={cn(NUT_CHU, "bg-primary-soft text-primary-ink hover:bg-primary-soft-hover")}
+                >
+                  <UserPlus className="size-3.5" aria-hidden /> Thêm con
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
   );
 }

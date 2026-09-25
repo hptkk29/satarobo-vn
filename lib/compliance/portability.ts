@@ -22,6 +22,10 @@ export async function exportStudentData(studentId: string): Promise<Record<strin
       parentName: true,
       parentPhone: true,
       parentEmail: true,
+      // 25/09/2026 — 3 ô người lớn mới trên hồ sơ HV: là dữ liệu cá nhân ⇒ có trong bản xuất.
+      parentGender: true,
+      parentDob: true,
+      parentFacebookUrl: true,
       address: true,
       status: true,
       createdAt: true,

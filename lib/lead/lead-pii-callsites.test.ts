@@ -138,6 +138,14 @@ const MAN_ADMIN: { ten: string; file: string }[] = [
     ten: "Tạo đơn hàng gắn lead",
     file: "app/(admin)/admin/orders/new/page.tsx",
   },
+  {
+    // 25/09/2026 — khối "Lead nguồn" trên hồ sơ học viên (`/students/[id]/edit`) in tên +
+    // SĐT + ghi chú của phiếu. Vai sửa hồ sơ học viên KHÔNG trùng khít vai xem PII lead,
+    // và dữ liệu lead tới đây bằng đường vòng (học viên → lead) nên dễ quên che. Tầng che
+    // là hàm dựng THUẦN — trang và action chỉ nhận chuỗi đã che.
+    ten: "Hồ sơ học viên — khối Lead nguồn",
+    file: "lib/students/lead-nguon-view.ts",
+  },
 ];
 
 describe("[S-1] màn admin in SĐT lead phải đi qua tầng che duy nhất", () => {

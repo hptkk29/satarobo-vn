@@ -1,4 +1,8 @@
 import { z } from "zod";
+// Hàm THUẦN (chỉ import kiểu) — an toàn cho cả client lẫn server. Cùng một phép chuẩn
+// hoá với ô "Link Facebook" của lead: gõ "minh.nguyen.549" ở hai màn phải ra CÙNG một
+// giá trị, và nó chặn `javascript:`/`data:` (giá trị render thành `<a href>`).
+import { normalizeFacebookUrl } from "@/lib/lead/intake/normalize";
 
 export const StudentStatusEnum = z.enum([
   "ACTIVE",
@@ -65,6 +69,37 @@ const nullableDate = z
   .optional()
   .transform((v) => (v === "" || v === undefined || v === null ? null : v));
 
+// 25/09/2026 — ngày sinh PHỤ HUYNH: cùng luật với `Lead.parentDob`
+// (app/(admin)/admin/leads/actions.ts): chặn tương lai, và `.refine` (không phải
+// `.max(new Date())`) để mốc "bây giờ" tính lúc PHÂN TÍCH chứ không phải lúc nạp module.
+const nullablePastDate = nullableDate.refine(
+  (v) => v === null || v <= new Date(),
+  "Ngày sinh phụ huynh không được ở tương lai",
+);
+
+// 25/09/2026 — link Facebook phụ huynh. Rỗng ⇒ null (xoá). Có chữ ⇒ phải chuẩn hoá được
+// thành URL http(s); KHÔNG chuẩn hoá được thì BÁO LỖI chứ không nuốt im (ô lead giữ chữ
+// lạ lại trong ghi chú, còn hồ sơ học viên không có chỗ nào như thế để giữ).
+const nullableFacebookUrl = z
+  .union([z.string(), z.null()])
+  .optional()
+  .transform((v, ctx) => {
+    if (v === null || v === undefined) return null;
+    const s = v.trim();
+    if (s === "") return null;
+    const r = normalizeFacebookUrl(s);
+    if (!r.url) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Link Facebook không hợp lệ" });
+      return z.NEVER;
+    }
+    return r.url;
+  });
+
+const nullableGender = z
+  .union([GenderEnum, z.literal(""), z.null()])
+  .optional()
+  .transform((v) => (v === "" || v === undefined || v === null ? null : v));
+
 const nullableGrade = z
   .union([z.null(), z.literal(""), z.coerce.number().int().min(1).max(12)])
   .optional()
@@ -74,10 +109,7 @@ export const studentCreateSchema = z.object({
   name: z.string().trim().min(1, "Họ tên học viên bắt buộc").max(120),
   studentCode: nullableStr,
   dateOfBirth: nullableDate,
-  gender: z
-    .union([GenderEnum, z.literal(""), z.null()])
-    .optional()
-    .transform((v) => (v === "" || v === undefined || v === null ? null : v)),
+  gender: nullableGender,
   phone: nullablePhoneStr,
   email: nullableEmail,
   avatarUrl: nullableStr,
@@ -96,6 +128,11 @@ export const studentCreateSchema = z.object({
     .refine((v) => !PHONE_MASK_RE.test(v), PHONE_MASK_MSG),
   parentEmail: nullableEmail,
   parentRelation: nullableStr,
+  // 25/09/2026 — thuộc tính NGƯỜI LỚN trên hồ sơ học viên (cùng nghĩa Lead.parentGender /
+  // parentDob / facebookUrl). `parentDob` + `parentFacebookUrl` là PII (luồng xoá NĐ13).
+  parentGender: nullableGender,
+  parentDob: nullablePastDate,
+  parentFacebookUrl: nullableFacebookUrl,
   // #15 (câu 32) — CCCD phụ huynh (CHỈ phụ huynh, KHÔNG lưu CCCD học viên). PII nhạy
   // cảm: hiển thị mask + break-glass ở màn thanh toán. Nhập tại form học viên.
   parentNationalId: nullableStr,

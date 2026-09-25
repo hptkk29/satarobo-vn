@@ -49,6 +49,11 @@ import { formatDateVN } from "@/lib/format/date";
 import { canonicalPhone, phoneVariants } from "@/lib/phone";
 import { phoneSearchTerm } from "@/lib/phone";
 import { syncStudentNameToCrm } from "@/lib/students/sync-name";
+// 25/09/2026 — đọc form tách ra file thuần (file này là 'use server', không test được).
+// Luật "vắng ⇒ không đụng · rỗng ⇒ xoá" + lọc khoá sau parse: xem đầu doc-form.ts.
+import { docFormHocVien, chiGiuKhoaCoMat, uuTienTheoCoSoMoi } from "./_lib/doc-form";
+import { laUrlAnhHocVien } from "@/lib/students/anh-dai-dien-url";
+import { getR2PublicUrl } from "@/lib/storage/r2-client";
 
 type ActionResult = { error?: string };
 
@@ -112,6 +117,14 @@ const STUDENT_SNAPSHOT_SELECT = {
   gender: true,
   parentName: true,
   parentPhone: true,
+  // 25/09/2026 — 3 ô người lớn mới trên hồ sơ + liên kết lead nguồn: vào nhật ký như mọi
+  // ô định danh khác (cùng cách trang lead ghi `parentDob` ở đường SỬA). `detectChangedFields`
+  // so Date theo mốc thời gian nên lưu lại cùng ngày không đẻ dòng "đã đổi" giả.
+  parentGender: true,
+  parentDob: true,
+  parentFacebookUrl: true,
+  leadId: true,
+  leadChildId: true,
   centerId: true,
   status: true,
 } as const;
@@ -170,7 +183,7 @@ async function rejectHeadOfficeOrgUnit(
 export async function createStudent(formData: FormData): Promise<ActionResult> {
   const session = await requireStudentWrite("create");
 
-  const raw = readForm(formData);
+  const raw = docFormHocVien(formData, "create");
   const parsed = studentCreateSchema.safeParse(raw);
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
@@ -178,6 +191,21 @@ export async function createStudent(formData: FormData): Promise<ActionResult> {
 
   const { actorId, actorName } = getAuditActor(session);
   const data = parsed.data;
+
+  // Ảnh đại diện đến từ ô ẩn của form — client sửa được. Chỉ nhận URL do route upload của
+  // hệ thống sinh ra (luật chung với action đổi ảnh — lib/students/anh-dai-dien-url.ts).
+  if (data.avatarUrl) {
+    let goc: string | null;
+    try {
+      goc = getR2PublicUrl();
+    } catch {
+      goc = null;
+    }
+    if (!goc || !laUrlAnhHocVien(data.avatarUrl, goc)) {
+      return { error: "Ảnh đại diện không hợp lệ — hãy tải ảnh lên bằng nút chọn ảnh." };
+    }
+  }
+
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
 
@@ -243,7 +271,10 @@ export async function createStudent(formData: FormData): Promise<ActionResult> {
 export async function updateStudent(id: string, formData: FormData): Promise<ActionResult> {
   const session = await requireStudentWrite("update");
 
-  const raw: Partial<ReturnType<typeof readForm>> = readForm(formData);
+  const raw = docFormHocVien(formData, "update");
+  // Ảnh đại diện KHÔNG đi đường này: form sửa không gửi nó, đổi ảnh có action riêng có cổng
+  // URL (`datAnhDaiDienHocVien`). Nhận khoá này ở đây là để một POST tay đi vòng qua cổng đó.
+  delete raw.avatarUrl;
   // NỢ-2 — actor bị DENY cấp trường parentPhone: form prefill là chuỗi MASK, bấm
   // lưu sẽ ghi chuỗi mask đè số thật. BỎ field khỏi payload TRƯỚC validate (validator
   // giờ từ chối chuỗi mask) → giữ nguyên giá trị DB hiện có, các field khác vẫn lưu.
@@ -271,7 +302,10 @@ export async function updateStudent(id: string, formData: FormData): Promise<Act
   }
 
   const { actorId, actorName } = getAuditActor(session);
-  const data = parsed.data;
+  // 25/09/2026 — CHỈ những khoá form thật sự gửi. zod 4 áp `.default()` kể cả qua
+  // `.partial()` (status → ACTIVE, allergies → []), nên dùng thẳng `parsed.data` là mỗi
+  // lượt sửa không gửi hai ô đó lặng lẽ mở lại HV bảo lưu và xoá sạch dị ứng.
+  const data = chiGiuKhoaCoMat(parsed.data, raw);
 
   // BUG 21/08 (nguyên nhân 2) — ô "Trạng thái" của form cho chọn thẳng "Nghỉ học".
   // Đường này chỉ ghi `Student.status` và KHÔNG đụng `Enrollment` ⇒ học viên hiện
@@ -282,9 +316,8 @@ export async function updateStudent(id: string, formData: FormData): Promise<Act
   if (data.status === "INACTIVE" && before.status !== "INACTIVE") {
     return {
       error:
-        'Không đặt "Nghỉ học" từ ô Trạng thái. Dùng nút "❌ Nghỉ học hẳn" ở khối ' +
-        '"Lifecycle học viên" ngay dưới form — nút đó mới gỡ học viên khỏi lớp, ' +
-        "ghi lý do và tạo yêu cầu hoàn tiền.",
+        'Không đặt "Nghỉ học" từ ô Trạng thái. Dùng nút "Nghỉ học hẳn" ở đầu trang hồ ' +
+        "sơ — nút đó mới gỡ học viên khỏi lớp, ghi lý do và tạo yêu cầu hoàn tiền.",
     };
   }
 
@@ -300,6 +333,24 @@ export async function updateStudent(id: string, formData: FormData): Promise<Act
   }
   if (data.preferredOrgUnitId !== undefined) {
     data.preferredCenterId = await centerIdForOrgUnit(data.preferredOrgUnitId ?? null);
+  }
+  // Đổi cơ sở mà "cơ sở ưu tiên" chỉ là bản sao của cơ sở cũ ⇒ dời theo (form đã bỏ ô ưu
+  // tiên — D3 — nên không còn chỗ nào khác sửa được cột này; xem `uuTienTheoCoSoMoi`).
+  if (data.orgUnitId !== undefined && raw.preferredOrgUnitId === undefined) {
+    const uuTienCu = await sdb.student.findUnique({
+      where: { id },
+      select: { preferredCenterId: true },
+    });
+    const doi = uuTienTheoCoSoMoi({
+      truoc: { centerId: before.centerId, preferredCenterId: uuTienCu?.preferredCenterId ?? null },
+      centerIdMoi: data.centerId,
+      orgUnitIdMoi: data.orgUnitId,
+      formGuiUuTien: false,
+    });
+    if (doi) {
+      data.preferredCenterId = doi.preferredCenterId;
+      data.preferredOrgUnitId = doi.preferredOrgUnitId;
+    }
   }
   // Đổi cơ sở → cơ sở đích cũng phải trong tầm nhìn actor.
   if (data.centerId !== undefined) {
@@ -472,71 +523,6 @@ export async function deleteStudent(id: string): Promise<ActionResult> {
   revalidatePath("/classes");
   revalidatePath("/enrollments");
   return {};
-}
-
-// ─── helpers ────────────────────────────────────────────────────────────
-
-function emptyToUndefined(value: FormDataEntryValue | null): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-}
-
-function parseAllergies(value: FormDataEntryValue | null): string[] {
-  if (typeof value !== "string" || value.trim() === "") return [];
-  try {
-    const parsed = JSON.parse(value);
-    if (Array.isArray(parsed)) {
-      return parsed
-        .map((s) => (typeof s === "string" ? s.trim() : String(s).trim()))
-        .filter((s) => s.length > 0);
-    }
-  } catch {
-    // fall through
-  }
-  return [];
-}
-
-function readForm(formData: FormData) {
-  return {
-    name: emptyToUndefined(formData.get("name")) ?? "",
-    studentCode: emptyToUndefined(formData.get("studentCode")),
-    dateOfBirth: emptyToUndefined(formData.get("dateOfBirth")),
-    gender: emptyToUndefined(formData.get("gender")),
-    phone: emptyToUndefined(formData.get("phone")),
-    email: emptyToUndefined(formData.get("email")),
-    avatarUrl: emptyToUndefined(formData.get("avatarUrl")),
-
-    currentGrade: emptyToUndefined(formData.get("currentGrade")),
-    school: emptyToUndefined(formData.get("school")),
-
-    parentName: emptyToUndefined(formData.get("parentName")) ?? "",
-    parentPhone: emptyToUndefined(formData.get("parentPhone")) ?? "",
-    parentEmail: emptyToUndefined(formData.get("parentEmail")),
-    parentRelation: emptyToUndefined(formData.get("parentRelation")),
-    // #15 — CCCD phụ huynh (PII; mask + break-glass ở màn thanh toán).
-    parentNationalId: emptyToUndefined(formData.get("parentNationalId")),
-    parent2Name: emptyToUndefined(formData.get("parent2Name")),
-    parent2Phone: emptyToUndefined(formData.get("parent2Phone")),
-    parent2Relation: emptyToUndefined(formData.get("parent2Relation")),
-
-    address: emptyToUndefined(formData.get("address")),
-    ward: emptyToUndefined(formData.get("ward")),
-    district: emptyToUndefined(formData.get("district")),
-    city: emptyToUndefined(formData.get("city")),
-
-    bloodType: emptyToUndefined(formData.get("bloodType")),
-    allergies: parseAllergies(formData.get("allergies")),
-    healthNotes: emptyToUndefined(formData.get("healthNotes")),
-
-    enrollmentDate: emptyToUndefined(formData.get("enrollmentDate")),
-    // PR-C: picker gửi OrgUnit.id; centerId/preferredCenterId suy ra trong action (dual-write).
-    preferredOrgUnitId: emptyToUndefined(formData.get("preferredOrgUnitId")),
-    notes: emptyToUndefined(formData.get("notes")),
-    status: emptyToUndefined(formData.get("status")) ?? "ACTIVE",
-
-    orgUnitId: emptyToUndefined(formData.get("orgUnitId")),
-  };
 }
 
 // ═══════════════════════════════════════════════════════════════════

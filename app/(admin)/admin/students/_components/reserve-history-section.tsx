@@ -1,15 +1,21 @@
 import { auth } from "@/lib/auth";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
+import { StatusPill } from "@/components/admin/ui/status-pill";
+// 25/09/2026 — ngày GHIM giờ VN: trang render ở server, Vercel chạy UTC — bản cũ
+// `toLocaleDateString` không ghim múi in lùi một ngày cho mốc 00:00–07:00 giờ VN.
+import { ngayVN } from "@/lib/format/date";
 
-function formatDate(date: Date): string {
-  return date.toLocaleDateString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
-}
-
+/**
+ * Lịch sử bảo lưu của học viên.
+ *
+ * 25/09/2026 — chỉ ĐỔI VỎ (khối trong cột "Lớp & tiến độ" của hồ sơ):
+ *   · KHÔNG vẽ gì khi chưa có lần bảo lưu nào — hồ sơ đã có dải "đang bảo lưu" khi cần,
+ *     một thẻ "Chưa có lần bảo lưu nào" thường trực chỉ là nhiễu cho 95% học viên;
+ *   · bỏ viền trái 4px (dải màu cạnh trái là mẫu trang trí, DESIGN.md) — trạng thái đã có
+ *     nhãn chữ.
+ * Truy vấn (scopedDb + take 50) giữ nguyên.
+ */
 export async function ReserveHistorySection({
   studentId,
 }: {
@@ -29,70 +35,49 @@ export async function ReserveHistorySection({
     take: 50,
   });
 
-  if (reserves.length === 0) {
-    return (
-      <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
-        <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
-          Lịch sử bảo lưu
-        </h3>
-        <p className="mt-3 text-sm text-muted-foreground">
-          Chưa có lần bảo lưu nào.
-        </p>
-      </section>
-    );
-  }
+  if (reserves.length === 0) return null;
 
   return (
-    <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
-      <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">
-        Lịch sử bảo lưu ({reserves.length})
-      </h3>
-      <div className="space-y-2">
+    <section
+      aria-labelledby="lich-su-bao-luu"
+      className="rounded-xl border border-border bg-card shadow-sm"
+    >
+      <div className="border-b border-border px-4 py-3">
+        <h2 id="lich-su-bao-luu" className="text-sm font-semibold text-foreground">
+          Lịch sử bảo lưu <span className="font-normal text-muted-foreground">({reserves.length})</span>
+        </h2>
+      </div>
+      <ul className="divide-y divide-border">
         {reserves.map((r) => (
-          <div
-            key={r.id}
-            className="rounded-r-lg border-l-4 border-state-warning bg-state-warning-soft/40 px-3 py-2 text-sm"
-          >
+          <li key={r.id} className="space-y-1 px-4 py-3 text-sm">
             <div className="flex flex-wrap items-center gap-2">
               {r.isActive ? (
-                <span className="rounded-full bg-state-warning-soft px-2 py-0.5 text-xs font-semibold text-state-warning-ink">
-                  Đang bảo lưu
-                </span>
+                <StatusPill tone="warning">Đang bảo lưu</StatusPill>
               ) : (
-                <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
-                  Đã kết thúc
-                </span>
+                <StatusPill tone="muted">Đã kết thúc</StatusPill>
               )}
-              <span className="text-xs text-foreground">
-                {r.enrollment
-                  ? `Lớp ${r.enrollment.class.name}`
-                  : "Toàn bộ lớp đang học"}
+              <span className="min-w-0 break-words text-foreground">
+                {r.enrollment ? `Lớp ${r.enrollment.class.name}` : "Toàn bộ lớp đang học"}
               </span>
             </div>
-            <div className="mt-1 text-xs text-foreground">
-              Từ <strong>{formatDate(r.startedAt)}</strong>
-              {r.expectedEndAt && (
-                <> → dự kiến {formatDate(r.expectedEndAt)}</>
-              )}
-              {r.endedAt && (
-                <> → kết thúc thực tế {formatDate(r.endedAt)}</>
-              )}
-            </div>
-            <div className="mt-1 text-xs italic text-foreground">
-              Lý do: {r.reason}
-            </div>
+            <p className="text-xs tabular-nums text-foreground">
+              Từ <strong className="font-semibold">{ngayVN(r.startedAt)}</strong>
+              {r.expectedEndAt && <> → dự kiến {ngayVN(r.expectedEndAt)}</>}
+              {r.endedAt && <> → kết thúc thực tế {ngayVN(r.endedAt)}</>}
+            </p>
+            <p className="break-words text-xs text-foreground">Lý do: {r.reason}</p>
             {r.endReason && (
-              <div className="mt-0.5 text-xs italic text-muted-foreground">
+              <p className="break-words text-xs text-muted-foreground">
                 Ghi chú kết thúc: {r.endReason}
-              </div>
+              </p>
             )}
-            <div className="mt-1 text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Bởi {r.createdByName}
               {r.endedByName && ` · Kết thúc bởi ${r.endedByName}`}
-            </div>
-          </div>
+            </p>
+          </li>
         ))}
-      </div>
+      </ul>
     </section>
   );
 }
