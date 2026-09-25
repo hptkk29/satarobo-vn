@@ -17,7 +17,7 @@
 > chính sách: chỗ nào chưa chốt thì là câu hỏi có mặc định đề xuất và có người chịu trách nhiệm.
 > Sửa BE thì sửa kèm FE + DB trong cùng PR.
 >
-> **Trạng thái:** 🟡 chờ trả lời câu hỏi — CHƯA CODE.
+> **Trạng thái:** 🟡 chờ trả lời câu hỏi. **Đợt 0 ĐÃ CODE 25/09/2026** theo chỉ đạo "bắt đầu thực hiện luôn" của chủ dự án, dùng các MẶC ĐỊNH ĐỀ XUẤT trong §7 — xem "Ghi chú thực thi" cuối tài liệu.
 >
 > Nơi lưu: `Document/0-yeucau/2-ba-phan-tich/11-gap-analysis-cong-du-lieu-agent.md` (chuẩn BA của repo). Bản gốc CEO: `E:\WebSataRobo\KET_NOI\KET_NOI\` (ngoài repo).
 
@@ -670,3 +670,27 @@ Khung chung cho mọi story: **Flag** — cổng đi sau `agentGateway.enabled` 
 | Soát cuối (bản viết) | "Phễu G1–G8 không có trong hệ thống" | Đúng về dữ liệu, nhưng thiếu: G1–G8 là 8 giai đoạn của thẻ điểm tư vấn **giả định** 21/08 (ngoài repo). Đã thêm vào §0, §3.1, Q-D6 |
 | Soát cuối (bản viết) | — (bỏ sót) | W1 lệch ràng buộc "chờ phúc tra" của phiếu G-B 21/08. Thêm X15 |
 | Soát cuối (bản viết) | `setGlobalSetting` xoá cache ngay ⇒ công tắc có hiệu lực ngay | Không đảm bảo: đọc có đệm 300 giây, xoá đệm chỉ tác dụng trong tiến trình đang chạy (`lib/settings/read-global.ts:32-34`). Công tắc phải đọc thẳng DB |
+
+---
+
+## Ghi chú thực thi (25/09/2026) — viết ngược sau khi code Đợt 0
+
+Chủ dự án chỉ đạo "bắt đầu thực hiện luôn" ⇒ làm **Đợt 0** (nền cổng + 2FA + công cụ `danh_muc.lay_co_so`),
+đúng thứ tự §11.2, với các mặc định đề xuất ở §7. Runbook + danh sách mặc định: `docs/cong-du-lieu-agent/README.md`.
+
+| Hạng mục | Đã làm | Cố ý CHƯA làm (vì sao) |
+|---|---|---|
+| E0 2FA | TOTP RFC 6238 tự viết (không thêm thư viện), bí mật mã hoá AES-256-GCM, chống phát lại, khoá 15 phút sau 5 lần sai — làm **bước nâng** cho thao tác nhạy cảm | Không đổi luồng đăng nhập chung (dự án riêng; chỉ người giữ quyền cổng cần) |
+| E0 vai | `GIAM_DOC`, `KY_THUAT`, `AGENT_CHI_DOC` (Q-N4 mặc định) | Chưa gán cho ai — việc tay sau `seed` |
+| E1 nền cổng | 5 bảng + `UserTotp` + `User.isServiceAccount` (additive, RLS); sổ công cụ; pipeline 13 bước; token `client_credentials`; tự khoá + báo người duyệt; công tắc đọc thẳng DB; nhật ký | `AgentDraft` + ký yêu cầu (Đợt 6 — X2 chưa chốt) |
+| E1 màn quản trị | 5 thẻ: ứng dụng, quyền cấp, chờ duyệt, nhật ký, cài đặt | Sửa IP của client (thu hồi + tạo mới) |
+| E2 PII | `lib/agents/pii.ts` (nhãn toàn phần, băm SĐT, che tên đã biết, tệp đính kèm) | Chưa công cụ CAO nào dùng (Đợt 3) |
+| E3 công cụ 1 | `danh_muc.lay_co_so` — pháp nhân lấy từ dữ liệu hệ thống (Q-D1) | `gio_lam`, `nguoi_nhan_canh_bao` (tuỳ chọn trong spec) |
+| E10 | Lưới ESLint cho `lib/agents/**` + `app/api/agent/**` (X7) | gitleaks, lọc Sentry theo tiền tố, báo cáo tuần |
+
+**Kiểm thử:** bộ DB `tests/agents/cong-du-lieu.spec.ts` phủ B1–B4, B6, B7, B9–B13, B17 (mã ca giữ nguyên spec §14.2) + ca
+khoá chéo, xoay khoá, 2FA; thêm bước `pnpm test:agent-db` vào job CI `Unit tests`. Máy kiểm `kiem-khuon.mjs` của xưởng chạy
+trên phản hồi THẬT trong ca `[AG-OK-01]`. B5 phủ ở tầng hàm thuần (công cụ Đợt 0 không nhận `co_so`).
+
+**Đính chính một chỗ của bản BA:** §2 ghi "`setGlobalSetting` xoá cache ngay ⇒ công tắc có hiệu lực ngay" — không đủ; đã sửa ở
+bản này (§2, B13, Q-N11) và cổng đọc công tắc thẳng DB.
