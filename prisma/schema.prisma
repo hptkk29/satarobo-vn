@@ -1287,6 +1287,14 @@ model User {
   /// Nick Zalo CRM được giao cho người này (kèm mức quyền) — chốt 24/09/2026.
   zaloCrmNickGiao             ZaloCrmNickGiao[]
 
+  /// Cổng dữ liệu agent (Đợt 0) — true = "user dịch vụ" của một agent, KHÔNG phải người.
+  /// Không bao giờ đăng nhập được (`lib/auth.ts` authorize chặn cứng), kể cả khi ai đó lỡ
+  /// gán mật khẩu/SĐT cho nó qua màn nhân sự.
+  isServiceAccount Boolean      @default(false)
+  agentClient      AgentClient? @relation("AgentClientServiceUser")
+  /// Xác thực 2 lớp TOTP (người giữ quyền cổng agent).
+  totp             UserTotp?
+
   @@index([email])
   @@index([phone])
   @@index([centerId])
@@ -10372,6 +10380,7 @@ model ZaloCrmThread {
   @@index([centerId])
   @@index([orgUnitId])
 }
+
 // ═══════════════════════════════════════════════════════════════════════════
 // TRỤC GỌI ĐIỆN + GHI ÂM (OmiCall) — spec `plan/20-SPEC-TICH-HOP-...` §5.3
 //
@@ -11466,4 +11475,183 @@ model WebPushOutbox {
   @@index([status, createdAt])
   /// Màn quản trị: sổ gửi của một người, mới nhất trước.
   @@index([userId, createdAt(sort: Desc)])
+}
+
+// ═════════════════════════════════════════════════════════════════════════════════
+// CỔNG DỮ LIỆU AGENT — Đợt 0 (tài liệu CEO 25/09/2026 §11; BA
+// `Document/0-yeucau/2-ba-phan-tich/11-gap-analysis-cong-du-lieu-agent.md`).
+//
+// Tên cột tiếng Anh theo quy ước repo (280/281 model); khoá JSON của API vẫn tiếng Việt
+// đúng khuôn của xưởng skill (BA Q-N12).
+//
+// ⚠️ KHÔNG bảng nào ở đây mang `centerId`/`orgUnitId`: đây là bảng CẤU HÌNH + NHẬT KÝ của
+// cổng, không phải dữ liệu nghiệp vụ thuộc một cơ sở. Phạm vi cơ sở của một quyền cấp là
+// MẢNG MÃ (`centerCodes`), kiểm tay ở ĐÚNG MỘT hàm `lib/agents/gateway/kiem-grant.ts`
+// (BA §5 X5). Dữ liệu nghiệp vụ agent đọc vẫn đi qua `scopedDb` của user dịch vụ.
+//
+// ⚠️ "Hết hạn" KHÔNG phải một trạng thái được ghi: nó là `expiresAt <= now()` tính lúc đọc
+// (luật cứng Nền Hệ thống #8 — không cron nào ghi thay đổi quyền).
+// ═════════════════════════════════════════════════════════════════════════════════
+
+enum AgentStatus {
+  PENDING // chờ người duyệt (khác người tạo)
+  ACTIVE
+  SUSPENDED // tạm khoá — tay hoặc tự khoá do bất thường; mở lại cần người duyệt
+  REVOKED // thu hồi — trạng thái cuối
+  REJECTED // bị từ chối lúc duyệt — trạng thái cuối
+}
+
+enum AgentClientKind {
+  EXTERNAL // agent chạy ngoài satarobo, gọi REST — BẮT BUỘC khai IP
+  INTERNAL // runtime agent bên trong satarobo (chưa dùng ở Đợt 0)
+  MCP_WORKSHOP // Claude Code / app Claude qua MCP (Đợt 2)
+}
+
+enum AgentEnvironment {
+  TEST // khoá srk_test_ — chỉ chạy ngoài production
+  LIVE // khoá srk_live_ — chỉ chạy trên production
+}
+
+enum AgentAccessMode {
+  READ // "doc"
+  WRITE_DRAFT // "ghi_nhap" — Đợt 6
+  WRITE_DIRECT // "ghi_that" — Đợt 6
+}
+
+/// Một "ứng dụng kết nối" = một agent. Mỗi client gắn đúng MỘT user dịch vụ; quyền đọc
+/// dữ liệu nghiệp vụ của agent là quyền RBAC của user đó (`UserOrgRole`), giao với grant.
+model AgentClient {
+  id            String           @id // "agc_…" — không bí mật
+  name          String
+  kind          AgentClientKind  @default(EXTERNAL)
+  environment   AgentEnvironment
+  serviceUserId String           @unique
+  serviceUser   User             @relation("AgentClientServiceUser", fields: [serviceUserId], references: [id], onDelete: Restrict)
+  /// IP nguồn được phép, so KHỚP ĐÚNG sau khi chuẩn hoá. Rỗng với EXTERNAL = từ chối mọi lượt.
+  allowedIps    String[]         @default([])
+  status        AgentStatus      @default(PENDING)
+  reason        String
+  expiresAt     DateTime         @db.Timestamptz(6)
+  createdById   String
+  decidedById   String? // người duyệt/từ chối — PHẢI khác createdById
+  decidedAt     DateTime?        @db.Timestamptz(6)
+  decisionNote  String?
+  suspendedAt   DateTime?        @db.Timestamptz(6)
+  suspendReason String?
+  revokedAt     DateTime?        @db.Timestamptz(6)
+  revokedById   String?
+  lastUsedAt    DateTime?        @db.Timestamptz(6)
+  createdAt     DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime         @updatedAt @db.Timestamptz(6)
+
+  secrets AgentClientSecret[]
+  grants  AgentGrant[]
+  tokens  AgentAccessToken[]
+
+  @@index([status])
+}
+
+/// Mật khẩu client — CHỈ bản băm HMAC-SHA256(pepper, secret). Bản rõ hiện đúng một lần.
+/// Xoay khoá = thêm dòng mới; dòng cũ được hạ `expiresAt` về tối đa 24 giờ sau (spec §4.5).
+model AgentClientSecret {
+  id          String      @id @default(cuid())
+  clientId    String
+  client      AgentClient @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  secretHash  String      @unique
+  expiresAt   DateTime    @db.Timestamptz(6)
+  revokedAt   DateTime?   @db.Timestamptz(6)
+  createdById String
+  lastUsedAt  DateTime?   @db.Timestamptz(6)
+  createdAt   DateTime    @default(now()) @db.Timestamptz(6)
+
+  @@index([clientId])
+}
+
+/// Một quyền cấp: công cụ × chế độ × cơ sở × hạn (spec §5.2). Mở rộng quyền = grant MỚI,
+/// không sửa grant đang hoạt động (spec §5.3).
+model AgentGrant {
+  id            String          @id @default(cuid())
+  clientId      String
+  client        AgentClient     @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  /// Tên sổ, vd "danh_muc.lay_co_so". Không có ký tự đại diện.
+  tool          String
+  mode          AgentAccessMode @default(READ)
+  /// Mã cơ sở (OrgUnit.code). "HO" = nhìn toàn hệ thống — chỉ cấp khi CEO duyệt riêng.
+  centerCodes   String[]
+  viewRawData   Boolean         @default(false)
+  dailyRowLimit Int?
+  reason        String
+  status        AgentStatus     @default(PENDING)
+  expiresAt     DateTime        @db.Timestamptz(6)
+  createdById   String
+  decidedById   String?
+  decidedAt     DateTime?       @db.Timestamptz(6)
+  decisionNote  String?
+  revokedAt     DateTime?       @db.Timestamptz(6)
+  revokedById   String?
+  createdAt     DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime        @updatedAt @db.Timestamptz(6)
+
+  @@index([clientId, status])
+}
+
+/// Token truy cập — CHỈ bản băm. `scopes` là TRẦN TRÊN lúc cấp; mỗi lượt gọi vẫn tra lại
+/// grant còn hiệu lực (luật cứng #6), nên thu hồi grant có hiệu lực ngay dù token còn sống.
+model AgentAccessToken {
+  tokenHash   String           @id
+  clientId    String
+  client      AgentClient      @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  scopes      String[]
+  environment AgentEnvironment
+  expiresAt   DateTime         @db.Timestamptz(6)
+  revokedAt   DateTime?        @db.Timestamptz(6)
+  ip          String?
+  createdAt   DateTime         @default(now()) @db.Timestamptz(6)
+
+  @@index([clientId])
+  @@index([expiresAt])
+}
+
+/// Nhật ký MỌI lượt gọi cổng, kể cả lượt bị từ chối (spec §12). KHÔNG lưu dữ liệu trả về,
+/// KHÔNG lưu tham số dạng rõ. Cố ý không có khoá ngoại: nhật ký phải sống sau client, và
+/// lượt gọi bằng mã client không tồn tại cũng phải ghi được.
+model AgentToolCall {
+  id          String           @id // = ma_yeu_cau "req_…"
+  clientId    String?
+  agentRunId  String?
+  /// Tên công cụ, hoặc "oauth.token" / "oauth.revoke" / "tools.list".
+  tool        String
+  mode        AgentAccessMode?
+  paramsHash  String?
+  centerCodes String[]         @default([])
+  rowCount    Int              @default(0)
+  masked      Boolean          @default(false)
+  viewedRaw   Boolean          @default(false)
+  resultCode  String // "OK" hoặc mã lỗi spec §7.3
+  httpStatus  Int
+  ip          String?
+  /// Lượt bất thường (IP lạ, sai mật khẩu…) — hiện nổi ở màn nhật ký + báo cáo tuần.
+  flagged     Boolean          @default(false)
+  durationMs  Int
+  createdAt   DateTime         @default(now()) @db.Timestamptz(6)
+
+  @@index([clientId, createdAt])
+  @@index([createdAt])
+  @@index([resultCode, createdAt])
+}
+
+/// Xác thực 2 lớp TOTP của một người. Bí mật MÃ HOÁ AES-256-GCM (khoá ở env
+/// `TOTP_ENCRYPTION_KEY`) vì phải đọc lại để tính mã — không băm được.
+model UserTotp {
+  userId       String    @id
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  secretEnc    String
+  /// null = đang cài (đã sinh bí mật, chưa nhập đúng mã đầu tiên) — CHƯA có hiệu lực.
+  enabledAt    DateTime? @db.Timestamptz(6)
+  /// Bước TOTP đã dùng gần nhất — mã của bước ≤ số này không được nhận lại (chống phát lại).
+  lastUsedStep Int?
+  failedCount  Int       @default(0)
+  lockedUntil  DateTime? @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @db.Timestamptz(6)
 }
