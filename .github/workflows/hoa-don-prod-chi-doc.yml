@@ -1,0 +1,126 @@
+# Chạy TAY (workflow_dispatch) — ĐỌC PROD, KHÔNG GHI GÌ.
+#
+# Đo trước khi code màn kế toán hoá đơn điện tử (kế hoạch: `docs/ke-toan-hoa-don/PLAN.md`,
+# mục 11 "GĐ 0 — Đo prod" và bảng "Số đo GĐ 0" ở mục 12):
+#   ① khoản thu thật theo LOẠI ĐƠN        → đơn kit/thi có tiền không (Q-mở 2)
+#   ② khoản CHỜ thiếu ghi danh            → quy mô dòng "Cần gắn ghi danh"
+#   ③ ai giữ payments:confirm, có kiêm   → cổng GHI theo tập cơ sở + rủi ro AC5
+#   ④ khoản thu thật theo THÁNG           → chọn mốc `billing.hoaDonTuNgay`
+#   ⑤ đơn có cả lời khai lẫn tiền NH      → quy mô NGHI_TRUNG
+#   ⑥ giao dịch giả BACKFILL · ⑦ đơn không cơ sở · ⑧ tiền thừa · ⑨ dòng gốc đã bị đảo
+#
+# ── BỐN LỚP KHOÁ, ĐỘC LẬP NHAU (chép khuôn `nguong-thanh-toan-prod-chi-doc.yml`) ────────
+# 1. KHÔNG CÓ CHẾ ĐỘ GHI. `scripts/bao-cao-hoa-don-gd0.ts` KHÔNG chứa một lời gọi ghi nào —
+#    không đọc tham số dòng lệnh, không cờ bật ghi. Ca `[HDG0-01]`
+#    (`lib/finance/bao-cao-hoa-don-gd0.test.ts`) quét chính tệp đó.
+# 2. TRANSACTION READ ONLY + ROLLBACK. Mọi truy vấn trong `SET TRANSACTION READ ONLY`, rồi ném
+#    một lỗi canh sẵn để không lượt nào commit được. (`return` KHÔNG rollback, chỉ `throw`.)
+# 3. USER CHỈ-ĐỌC. File này CỐ Ý KHÔNG đọc `PROD_DATABASE_URL` / `PROD_DIRECT_URL` (hai secret
+#    đầy quyền). Nó chỉ biết `PROD_DATABASE_URL_RO`. Cách tạo user: `docs/cham-cong/USER-CHI-DOC-PROD.md`.
+# 4. SCRIPT TỰ KHAI. Dòng đầu báo cáo in `user=… · ghi được: CÓ/KHÔNG`, và tự kiểm quyền SELECT
+#    trên ĐÚNG 9 bảng nó đọc. GitHub không cho đọc lại secret để đối chiếu, nên dòng tự khai là
+#    cách DUY NHẤT thấy được secret bị đặt nhầm.
+#
+# ── CHE DỮ LIỆU CÁ NHÂN ───────────────────────────────────────────────────────────────
+# Báo cáo đi vào job summary + artifact. Script KHÔNG đọc cột cá nhân nào của khách. `Payment.note`
+# được đọc (chỗ duy nhất chứa marker nối khoản với giao dịch) nhưng chỉ đưa vào hàm phân loại,
+# không in. Ra báo cáo: mã đơn + loại + trạng thái + số tiền + mã vai/đơn vị. Artifact giữ 3 ngày.
+#
+# ── VÌ SAO CHẠY ĐƯỢC TỪ `test` ───────────────────────────────────────────────────────────
+# Script đọc prod bằng `schema.prisma` của nhánh đang chạy; cột chưa có trên prod ⇒ `P2022`.
+# Đã đối chiếu 25/09/2026: MỌI cột script gọi tên trong `select`/`where` (Payment · Order ·
+# Receipt · BankTransaction · CreditBalance · UserOrgRole · RoleDef · RolePermission · OrgUnit)
+# đều có trong `schema.prisma` của `origin/main`, mà prod ⊇ main. Thêm cột vào `select` thì
+# phải đối chiếu lại.
+#
+# Dùng chuỗi SESSION POOLER (:5432), không phải transaction pooler (:6543) — xem `scripts/_script-db.ts`.
+name: Hoá đơn · PROD · ĐỌC (GĐ 0 — chỉ đọc, không ghi gì)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  doc:
+    name: Đo GĐ 0 hoá đơn (không ghi)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Chỉ `main` HOẶC `test` — không nhánh feature nào. Đây là cổng QUYỀN (nhánh feature bất kỳ
+    # chạy được nghĩa là ai mở nhánh cũng đọc được prod), không chỉ cổng kỹ thuật.
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test'
+    steps:
+      # Kiểm HÌNH DẠNG chuỗi trước khi tốn 40 giây cài đặt rồi mới chết ở Prisma.
+      # KHÔNG in giá trị secret ra log — chỉ nói chỗ nào sai.
+      - name: Kiểm secret chỉ-đọc
+        env:
+          U: ${{ secrets.PROD_DATABASE_URL_RO }}
+        run: |
+          if [ -z "$U" ]; then
+            echo "::error::Thiếu secret PROD_DATABASE_URL_RO (chuỗi session pooler của user chỉ-đọc)."
+            echo "::error::Cách tạo user + lấy chuỗi: docs/cham-cong/USER-CHI-DOC-PROD.md"
+            echo "::error::KHÔNG đặt PROD_DATABASE_URL / PROD_DIRECT_URL vào đây — chúng đầy quyền."
+            exit 1
+          fi
+          rest="${U#*://}"
+          proto="${U%%://*}"
+          userinfo="${rest%@*}"
+          user="${userinfo%%:*}"
+          hostport="${rest##*@}"
+          port="${hostport##*:}"; port="${port%%/*}"
+          ok=1
+          case "$proto" in
+            postgresql|postgres) ;;
+            *) echo "::error::Chuỗi phải bắt đầu bằng postgresql:// — đang là '$proto://'"; ok=0 ;;
+          esac
+          case "$user" in
+            *.*) ;;
+            *) echo "::error::Tên user THIẾU hậu tố '.<mã dự án>' — Supavisor định tuyến theo mã dự án nằm TRONG tên user."; ok=0 ;;
+          esac
+          if [ "$port" != "5432" ]; then
+            echo "::error::Cổng đang là '$port' — phải là 5432 (tab 'Session pooler'). Cổng 6543 là Transaction pooler: nó không giữ prepared statement nên script chạy nhiều truy vấn liên tiếp sẽ chết giữa chừng."
+            ok=0
+          fi
+          [ $ok -eq 1 ] || { echo "::error::Sửa secret rồi chạy lại. Không có bước nào chạm DB."; exit 1; }
+          echo "Chuỗi đúng hình dạng."
+
+      - uses: actions/checkout@v4
+      # `version` PHẢI pin: `package.json` của repo KHÔNG có khoá `packageManager`, nên thiếu dòng
+      # này là action chết ngay với "No pnpm version is specified". Lưỡi canh toàn repo ở
+      # `lib/finance/bao-cao-chi-doc.test.ts` ca `[BCD-04]`.
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # `prisma generate` chỉ sinh mã client vào node_modules của runner — không chạm DB.
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      - name: Dựng báo cáo (chỉ đọc)
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+        run: pnpm exec tsx scripts/bao-cao-hoa-don-gd0.ts
+
+      - name: Đưa báo cáo lên job summary
+        if: always()
+        run: |
+          if [ -f bao-cao-hoa-don-gd0.md ]; then
+            cat bao-cao-hoa-don-gd0.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error::Script không sinh được báo cáo — xem log bước trên."
+          fi
+
+      - name: Lưu artifact (3 ngày)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bao-cao-hoa-don-gd0
+          path: bao-cao-hoa-don-gd0.md
+          retention-days: 3
+          if-no-files-found: warn
