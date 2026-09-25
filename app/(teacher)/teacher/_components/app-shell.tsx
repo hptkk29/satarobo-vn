@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { X } from "lucide-react";
-import { Toaster } from "@/components/ui/sonner";
 import { useChatUnread } from "@/components/chat/use-chat-unread";
 import { cn } from "@/lib/utils";
 import { Sidebar, SidebarContent } from "./sidebar";
@@ -104,7 +103,8 @@ export function AppShell({
         </main>
       </div>
 
-      <Toaster richColors position="top-right" closeButton />
+      {/* KHÔNG gắn <Toaster> ở đây — layout gốc (app/layout.tsx) đã có MỘT bản cho mọi site
+          (đã mang `closeButton` của site GV). Gắn thêm là mỗi toast hiện ĐÔI (26/09/2026). */}
     </TeacherThemeRoot>
   );
 }
