@@ -194,6 +194,38 @@ describe("[HDG0-05] workflow — bốn lớp khoá còn nguyên", () => {
   });
 });
 
+describe("[HDG0-06] đường chạy THẬT hôm nay — mượn nút 'Ngưỡng thanh toán · PROD · ĐỌC'", () => {
+  // GitHub chỉ nhận lệnh chạy tay cho workflow đã từng có mặt trên `main`; tệp riêng của báo
+  // cáo này chưa lên `main` (HTTP 404, 25/09/2026) ⇒ chủ dự án chọn mượn nút đã đăng ký.
+  // Bộ `[HDG0-05]` canh tệp riêng (dùng về sau); bộ này canh đường đang dùng thật.
+  const MUON = ".github/workflows/nguong-thanh-toan-prod-chi-doc.yml";
+  const wf = docYaml(MUON);
+
+  it("có lựa chọn `hoa-don-gd0`, và MẶC ĐỊNH vẫn là báo cáo ngưỡng cũ", () => {
+    expect(wf).toMatch(/type:\s*choice/);
+    expect(wf).toMatch(/default:\s*nguong-thanh-toan\s*\n/);
+    const luaChon = [...wf.matchAll(/^\s*-\s*(nguong-thanh-toan|hoa-don-gd0)\s*$/gm)].map((m) => m[1]);
+    expect(luaChon).toEqual(["nguong-thanh-toan", "hoa-don-gd0"]);
+  });
+
+  it("`hoa-don-gd0` chạy ĐÚNG script này, qua biến env — không nội suy input vào `run`", () => {
+    expect(wf).toContain(`hoa-don-gd0) pnpm exec tsx ${SCRIPT} ;;`);
+    expect(wf).toMatch(/BAO_CAO:\s*\$\{\{\s*inputs\.bao_cao\s*\}\}/);
+    // Không một dòng `run` nào nội suy thẳng `${{ inputs.… }}`.
+    const runNoiSuy = wf.split(/\r?\n/).filter((d) => /\brun:.*\$\{\{\s*inputs\./.test(d));
+    expect(runNoiSuy).toEqual([]);
+  });
+
+  it("lựa chọn lạ thì ĐỎ, không rơi về báo cáo mặc định", () => {
+    expect(wf).toMatch(/\*\)\s*echo "::error::[^"]*";\s*exit 1\s*;;/);
+  });
+
+  it("vẫn chỉ biết secret CHỈ-ĐỌC — mượn nút không mở thêm đường ghi", () => {
+    const thamChieu = [...wf.matchAll(/secrets\.(\w+)/g)].map((m) => m[1]!);
+    expect([...new Set(thamChieu)]).toEqual(["PROD_DATABASE_URL_RO"]);
+  });
+});
+
 // ═══════════════════════════════════════════════════════════════════════════
 // BƯỚC CẤY — luật 14: lưới chỉ được tin sau khi CẤY LẠI lỗi và thấy nó ĐỎ.
 // Kết quả cấy ghi ở commit message của tệp này (xem `git log -- lib/finance/bao-cao-hoa-don-gd0.test.ts`).
