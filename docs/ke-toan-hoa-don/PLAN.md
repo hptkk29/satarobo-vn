@@ -128,7 +128,6 @@ ngayThu(k) = BT.transferredAt (hiểu là giờ VN) nếu k có marker họ ngâ
   · paymentType = PAYMENT · k.amount > 0 · rong(k) > 0 · deletedAt IS NULL
   · accountantStatus ≠ REJECTED · method ≠ 'chuyen-noi-bo'
   · KHÔNG mang [backfill-import] / [sheet:…]           (lịch sử, đã xuất ngoài hệ thống)
-  · ngayThu(k) ≥ billing.hoaDonTuNgay
   · đơn có centerId (đơn NULL ⇒ dòng "Gán cơ sở cho đơn trước", không vào hàng chờ)
 KHÔNG dùng `daBiDao` (debt.ts:616) làm tập loại — nó gom cả điều chỉnh MỘT PHẦN.
 ```
@@ -164,10 +163,13 @@ model HoaDonDienTu {
 }
 model HoaDonKhoan { hoaDonId String  paymentId String  soTien Int  hieuLuc Boolean @default(true)
                     @@id([hoaDonId, paymentId]) }
-model HoaDonGuiEmail { id  hoaDonId  phienBan Int  lanGui Int  toi String
+model HoaDonGuiEmail { id  hoaDonId  lanGui Int  toi String
                        trangThai String  // CHO · DANG_GUI · DA_GUI · LOI
                        emailQueueId String?  loi String?  guiBoiId String?  createdAt …
-                       @@unique([hoaDonId, phienBan, lanGui]) }
+                       @@unique([hoaDonId, lanGui]) }
+// (GĐ 1: bỏ `phienBan` — thay hoá đơn là tạo DÒNG MỚI, bản cũ THAY_THE; tệp của một hoá đơn
+//  đã DA_XAC_NHAN là bất biến ⇒ không có "phiên bản" nào trong cùng một dòng để mà đánh số.)
+// (GĐ 1: thêm `guiEmailKhach Boolean @default(true)` — xem §7.)
 ```
 
 **Chỉ mục viết tay:**
@@ -222,7 +224,7 @@ Drift: công thức `--from-url` (CLAUDE.md mục 6). Cổng đạt khi: **0 dò
    · đợt đích là phiếu "thu toàn đơn" (đơn cũ, không có kế hoạch đợt) ⇒ mỗi giao dịch một lần thu
 3. phaiThu(đợt X) = amountDue(X) − roundingWaived(X)
                   − Σ phân bổ vào X từ giao dịch KHÔNG thuộc nhóm (phần tràn của nhóm khác)
-                  − Σ phần của X đã nằm trong hoá đơn hiệu lực hoặc có ngày trước mốc
+                  − Σ phần của X đã nằm trong hoá đơn hiệu lực
 4. Trạng thái (so bằng TIỀN, không bằng status của đợt — vì tiền mặt không bao giờ vào sổ đợt):
      DU        Σ rong(nhóm) ≥ phaiThu(X)
      THIEU     Σ rong(nhóm) < phaiThu(X)  ⇒ "Thiếu 1.000.000đ so với Đợt 2"
@@ -244,7 +246,6 @@ Drift: công thức `--from-url` (CLAUDE.md mục 6). Cổng đạt khi: **0 dò
 - **Điều chỉnh một phần** ⇒ khoản vẫn ở hàng chờ với số ròng.
 - **Đợt bị VOID** ⇒ DOT_HUY.
 - **Chuyển khoản lúc 23:30 ngày 30/09** ⇒ lần thu thuộc tháng 9.
-- **Chuyển khoản trước mốc + chuyển khoản sau mốc cho cùng đợt** ⇒ lần thu sau mốc DU độc lập.
 
 ### 3.3 Lời khai và nghi trùng
 
@@ -294,7 +295,7 @@ vi**. GĐ 0 đo tổng. Xem Q-mở 5.
                            · khoản PENDING: AC5 (recordedById ≠ actor) · có enrollmentId
                          phép ghi ĐẦU TIÊN = updateMany NHAP→DA_XAC_NHAN có điều kiện (chống bấm đôi)
                          rồi xacNhanKhoanTrongTx(tx, …) cho khoản còn PENDING (cấp RCP)
-                         rồi tạo HoaDonGuiEmail(toi = emailNhan) + publishEvent (dedupeKey theo phienBan)
+                         rồi (nếu `guiEmailKhach`) tạo HoaDonGuiEmail(toi = emailNhan, lanGui = 1) + publishEvent
 ⑥ Sau commit         ─► có email ⇒ gửi ĐÍNH KÈM · không có ⇒ báo sale + hiện trên trang đơn
 ```
 
@@ -310,8 +311,9 @@ khác là lưới đỏ. `confirmPayment` và action hoá đơn cùng gọi hàm
 Action hoá đơn revalidate đủ tập đường của `confirmPaymentAction`, cộng `/orders/<id>` và `/payments/hoa-don`.
 
 **Không xuất:** chọn lý do (*Đã xuất ngoài hệ thống · Khách không lấy hoá đơn · Khác…*) ⇒
-`KHONG_XUAT`, không có file. Khoản trước mốc **không bao giờ vào hàng chờ**, nên **không có** thao tác
-đánh dấu hàng loạt. Bỏ ý ở v1: nó mâu thuẫn với việc lọc theo mốc, và dễ chạm trần 5 giây (P2028).
+`KHONG_XUAT`, không có file. **Không có mốc ngày và không có thao tác đánh dấu hàng loạt** (chốt
+26/09): chủ dự án xác nhận mọi khoản thu thật đã có hoá đơn xuất ở MISA — hệ thống chỉ thiếu chỗ
+tải lên. Đo prod: 32 khoản, toàn tháng 8–9/2026 ⇒ kế toán tải từng tệp lên là đủ, không cần công cụ lô.
 
 **Thay hoá đơn sai:** tải bản mới ⇒ bản cũ `THAY_THE`, `hieuLuc = false`, bản mới trỏ `thayTheChoId`.
 Hỏi trước khi gửi lại.
@@ -376,7 +378,7 @@ dispatch-events ─► handler, MỘT transaction:
                      giành chỗ updateMany CHO→DANG_GUI  +  enqueueEmail(…, { tx })   (thêm tham số tx)
                      + lưu emailQueueId. Enqueue lỗi ⇒ cả hai rollback ⇒ lượt thử lại vẫn gửi được
 email-queue     ─► với dòng loại hoá đơn: ĐỌC LẠI hoá đơn — chỉ gửi khi trangThai = DA_XAC_NHAN
-                   và phienBan khớp; lệch ⇒ FAILED "đã bị thay" (chặn gửi bản cũ mang PII người khác)
+                   (bản THAY_THE thì không gửi); lệch ⇒ FAILED "đã bị thay" (chặn gửi bản cũ mang PII người khác)
                 ─► attachments[].path = URL ký GET 300s (bucket từ getter, key phải có tiền tố hoa-don/)
                    ⇒ không tải byte trong hàm; idempotencyKey `hoa-don:${guiId}`
 ```
@@ -517,9 +519,9 @@ Test **thuần** đặt ở `lib/finance/hoa-don/*.test.ts`. Test **chạm DB** 
 | **8 · Nghiệm thu** | Bốn cổng + R7 + `test:unit` với DB giả cổng 59999 + smoke upload THẬT trên test.satarobo.vn | Báo cáo kèm output |
 
 **Cờ: setting DB `billing.hoaDonEnabled`, không dùng env.** Registry đã ghi lý do: cờ env tiền như
-`PAYMENT_LEDGER_V2` có trong mã mà không ai thấy, không có audit. Tham số đi kèm:
-`billing.hoaDonTuNgay` (`YYYY-MM-DD`, nhóm finance, `canThan`, default = **một ngày cố định chủ dự án
-chốt**). Cả hai phải khai nhãn vận hành, có lưới `[CFG-T01]` canh.
+`PAYMENT_LEDGER_V2` có trong mã mà không ai thấy, không có audit. `centerOverridable: false` (chỉ
+một kế toán, không có ca pilot theo cơ sở). Đọc ở MỘT hàm `laHoaDonBat()` —
+`lib/finance/hoa-don/feature.ts`, lưới `[HDF-02]`. ~~Tham số mốc `billing.hoaDonTuNgay`~~ **[BỎ 26/09]**.
 
 | Cờ TẮT thì | |
 |---|---|
@@ -533,7 +535,6 @@ chốt**). Cả hai phải khai nhãn vận hành, có lưới `[CFG-T01]` canh.
 - tạo bucket `satarobo-hoa-don` và `-test`;
 - khai `R2_INVOICE_BUCKET_NAME` trên Vercel (prod + test);
 - chạy `apply-r2-cors.ts hoa-don` cho cả hai;
-- đặt `billing.hoaDonTuNgay`;
 - bật `billing.hoaDonEnabled`.
 
 ---
@@ -542,13 +543,13 @@ chốt**). Cả hai phải khai nhãn vận hành, có lưới `[CFG-T01]` canh.
 
 | # | Câu | Mặc định | Chặn |
 |---|---|---|---|
-| **0.1** | **Nút Xác nhận: (a) hay (b)?** (§0.1) | **(b)** | ⛔ GĐ 5 |
+| **0.1** | **Nút Xác nhận: (a) hay (b)?** (§0.1) | ✅ **(b) — CHỦ DỰ ÁN CHỐT 25/09** ("làm như đề xuất") | — |
 | 1 | Lần thu THIẾU mà PH không bao giờ trả nốt: cho "xuất theo số đã thu", bắt buộc lý do? | Cho, ghi audit | GĐ 5 |
 | 2 | Đơn **kit/thi** (không có ghi danh ⇒ không có RCP). ~~(b) xác nhận không cần RCP~~ và ~~(c) cho `Receipt.enrollmentId` nullable~~ **bị loại**: cả hai sinh khoản CONFIRMED thiếu ghi danh, làm hai hàm gắn ghi danh THROW, vỡ convert lead và lưu kế hoạch | Chỉ còn (a): xuất hoá đơn không có RCP, khoản vẫn chờ kế toán xác nhận ở chỗ khác. Đo ở GĐ 0 | GĐ 5 |
 | 3 | **Thiếu thông tin người mua:** (1) mở ô sửa 4 cột ngay trong ngăn, gác `payments:confirm` + audit (đây là đường GHI mới lên `Order`); hay (2) dòng hiện *"Nhờ QLCS/sale bổ sung"* kèm link sang đơn | (2) — không mở đường ghi mới | GĐ 4 |
 | 4 | Hoá đơn ghi **số thu thật** hay **số của đợt** (khi có dung sai được tha)? | Số thu thật, tha hiện riêng | GĐ 2 |
 | 5 | Tiền thừa (`CreditBalance`) có phải xuất hoá đơn không? Hiện chưa có đường rót | Ngoài phạm vi | — |
-| 6 | Ngày cụ thể cho `billing.hoaDonTuNgay` | — | GĐ 1 |
+| 6 | ~~Ngày cụ thể cho mốc hàng chờ~~ | ✅ **BỎ MỐC — chốt 26/09**: mọi khoản thu thật đã có hoá đơn ở MISA, chỉ thiếu chỗ tải lên | — |
 | 7 | Một hoá đơn phủ hai đơn · báo chuông kế toán mỗi ngày (dùng lại cron `payment-reconcile`) · PH tự tải trên cổng | Chưa · có · để sau | — |
 | 8 | Khoản đơn khoá học chưa gắn ghi danh | Nút gọi `ganGhiDanhChoKhoanCuaDon`, khớp qua lead/SĐT (có R7). **Không** dùng `ganGhiDanhChoKhoanAction`, vì hàm đó từ chối đúng tập đơn lập từ lead | — |
 
@@ -570,13 +571,33 @@ riêng và gỡ lựa chọn mượn. Báo cáo ở job summary + artifact `bao-
 thật", nguồn giao dịch và số ròng đi qua `lib/finance/hoa-don/nguon-khoan.ts` (dùng chung với màn).
 Lưới: `[NK-*]` + `[HDG0-*]`.
 
-| Số | Giá trị |
-|---|---|
-| Đơn PRODUCT/EXAM có ≥ 1 Payment thật | — |
-| Payment PENDING thiếu `enrollmentId` (trong đó: đơn có `leadId` mà `studentId` NULL) | — |
-| Người giữ `payments:confirm` (theo `UserOrgRole`) · trong đó kiêm vai `payments:*` ở cơ sở khác | — |
-| Payment thật từ ngày dự kiến bật | — |
-| Đơn có CẢ marker lời khai LẪN marker ngân hàng (nghi trùng) | — |
-| `BankTransaction` provider `BACKFILL`, chia theo trạng thái | — |
-| Payment / Order thật có `centerId` NULL | — |
-| Tổng `CreditBalance` | — |
+**Đo 25/09/2026** — run `36149509909` (nhánh `test`, user `satarobo_readonly`, ghi được: KHÔNG).
+Tập nền: 154 dòng `Payment` còn sống · **32 khoản thu thật** (23 đơn, Σ ròng 212.016.000đ) · 59
+`BankTransaction` (toàn SEPAY). 122 dòng còn lại bị `laKhoanThuThat` loại — **chưa tách lý do loại**
+(báo cáo không in phân bố đó; đừng đoán là "toàn nhập lịch sử").
+
+| Số | Giá trị | Hệ quả cho thiết kế |
+|---|---|---|
+| Đơn PRODUCT/EXAM có ≥ 1 Payment thật | **0** (32/32 khoản thuộc đơn COURSE) | Q-mở 2 **hoãn** — không có ca thật |
+| Payment PENDING thiếu `enrollmentId` | **22/31 khoản CHỜ** (Σ 160.714.000đ) · trong đó đơn từ lead chưa có học viên: **2** | 🔴 **Đa số**, không phải ca biên. Bấm "Xác nhận" (phương án b) KHÔNG được phụ thuộc vào việc xác nhận khoản thành công — xem §12 "Điều chỉnh sau GĐ 0" |
+| Người giữ `payments:confirm` | **1 người** (HO_ACCOUNTANT @ HO) · kiêm vai tiền ở đơn vị khác: **0** · khoản CHỜ do chính người đó ghi: **0** | Không có kế toán cơ sở trên prod. Cổng kiêm nhiệm (§9) vẫn làm (dữ liệu mở cơ sở mới là thêm data) nhưng không chặn ai hôm nay |
+| Khoản thu thật theo tháng | **2026-08: 14** (89.222.000đ) · **2026-09: 18** (122.794.000đ) · trước 08/2026: 0 | Toàn bộ tiền thật nằm trong 2 tháng ⇒ mốc đề xuất **01/08/2026** |
+| Đã xác nhận / tổng khoản thu thật | **1/32** | Kế toán gần như chưa dùng nút ✓ ở `/payments` — hàng chờ mới sẽ mở ra với gần như toàn bộ 32 khoản |
+| Đơn có CẢ lời khai LẪN ngân hàng (nghi trùng) | **2 đơn**: `ORD-260910-000002` (lời khai 8.976.000đ + CK 8.976.000đ — **cùng số**) · `ORD-260910-000007` (lời khai 2.000.000đ + 2 CK Σ 11.424.000đ) | 🔴 `…000002` nhiều khả năng là **CÙNG một khoản tiền ghi hai lần** trên trục B (đã ghi nhận). Cần người xem đơn — ngoài phạm vi màn hoá đơn |
+| `BankTransaction` provider `BACKFILL` | **0** | Bỏ nhánh ánh xạ ngược BACKFILL ở `lan-thu.ts` (giữ lưới loại provider này khỏi danh sách gắn) |
+| Khoản thu thật trên đơn `centerId` NULL | **0** | `centerId` NOT NULL không kẹt ai |
+| `CreditBalance` chưa rót | **0 dòng · 0đ** | Q-mở 5 đóng — không có tiền thừa |
+| Dòng gốc bị đảo trọn (phát hiện kèm) | **0** | Lỗ `confirmPayment` có thật trong mã nhưng chưa sinh dữ liệu sai; vá ở GĐ 5 như kế hoạch |
+
+### Điều chỉnh sau GĐ 0
+
+1. **Nút "Xác nhận" (phương án b) tách hẳn khỏi việc xác nhận khoản.** 22/31 khoản chờ thiếu ghi
+   danh ⇒ `xacNhanKhoanTrongTx` sẽ từ chối đa số. Luật: chốt hoá đơn LUÔN làm được khi đủ file +
+   lần thu DU; trong cùng transaction, khoản nào ĐỦ điều kiện (có ghi danh, qua AC5, `rong > 0`) thì
+   xác nhận + cấp RCP, khoản nào không thì GIỮ PENDING và dòng hiện *"Khoản chưa xác nhận — cần gắn
+   ghi danh"* kèm nút gọi `ganGhiDanhChoKhoanCuaDon`. Không một khoản thiếu ghi danh nào được chặn
+   việc trả hoá đơn cho khách (đúng câu chốt của chủ dự án).
+2. ~~Mốc `billing.hoaDonTuNgay`~~ **BỎ (26/09)** — danh sách = mọi khoản thu thật CHƯA có hoá đơn trên
+   hệ thống. Kế toán tải tệp đã xuất ở MISA lên. Ô **"Gửi email hoá đơn cho khách"** (mặc định bật,
+   cột `guiEmailKhach`) để bỏ tick với hoá đơn cũ MISA đã gửi khách rồi.
+3. **Q-mở 2 và Q-mở 5 hoãn** (0 ca thật). Lưới vẫn giữ: đơn kit/thi vào hàng chờ phải hiện đúng, không sập.

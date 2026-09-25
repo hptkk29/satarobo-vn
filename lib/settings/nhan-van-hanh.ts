@@ -870,6 +870,16 @@ const N: Readonly<Record<SettingKey, NhanVanHanh>> = {
       "tiền không được ghi nhận và kế toán hoàn lại. Có thể bật riêng cho từng cơ sở.",
     canThan: true,
   },
+  "billing.hoaDonEnabled": {
+    tab: "tien",
+    ten: "Màn Hoá đơn điện tử cho kế toán",
+    giaiThich:
+      "Bật thì kế toán thấy màn Hoá đơn điện tử: tải phiếu thu, tải tệp hoá đơn đã xuất ở MISA " +
+      "lên, bấm xác nhận để hệ thống gửi hoá đơn cho khách qua email. Sale tải được hoá đơn ở " +
+      "trang đơn. Tắt thì màn ẩn đi, nhưng những khoản đã có hoá đơn vẫn bị khoá (không từ chối, " +
+      "không tách được) — tắt KHÔNG xoá hoá đơn nào.",
+    canThan: true,
+  },
 
   // ── Ưu đãi anh chị em: quản lý tự cài [F3 · 22/09/2026] ────────────────────────────
   "billing.siblingAutoEnabled": {
