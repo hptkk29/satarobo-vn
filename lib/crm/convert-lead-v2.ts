@@ -16,6 +16,7 @@ import { listPriceChoGhiDanh } from "@/lib/finance/gia-tu-dong-don";
 import { dongDonCuaLead } from "@/lib/finance/dong-don-cua-lead";
 import { linkRecordedPaymentsToEnrollments } from "@/lib/finance/payment";
 import { findParentMatch, findExistingStudent } from "@/lib/crm/dedupe";
+import { hocVienDaAnDanhTheoNhatKy, tenLaDaAnDanh } from "@/lib/students/da-an-danh";
 import { canonicalPhone } from "@/lib/phone";
 // ⚠️ TRÙNG TÊN với `recordLeadStatusChange` của `@/lib/lead/status-trail-write` ngay
 // trên — hai hàm KHÁC NHAU, hợp nhất 16/09/2026 kéo cả hai vào file này. Bản dưới đây
@@ -38,6 +39,15 @@ import {
   type CommissionStatementRef,
 } from "@/lib/crm/trial-teacher-commission";
 import type { CourseDiscountType } from "@prisma/client";
+// 25/09/2026 — liên kết Học viên ↔ Lead nguồn: chốt lead là đường nối TỰ ĐỘNG, và điền
+// ô trống của hồ sơ HV từ lead/con theo MỘT luật dùng chung với script nối HV cũ + nút
+// "Gắn lead" (chỉ điền ô null, không bao giờ ghi đè).
+import {
+  dienTuLead,
+  type LeadChildDeDien,
+  type LeadDeDien,
+  type StudentDeDien,
+} from "@/lib/students/dien-tu-lead";
 
 export type ConvertV2Result =
   | { ok: true; studentIds: string[]; enrollmentIds: string[]; deduped: boolean }
@@ -146,6 +156,14 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
       parentName: true,
       phone: true,
       assignedToId: true,
+      // 25/09 — nguồn điền ô trống hồ sơ học viên (dienTuLead). Chỉ ĐỌC ở đây.
+      email: true,
+      facebookUrl: true,
+      parentGender: true,
+      parentDob: true,
+      city: true,
+      ward: true,
+      addressLine: true,
     },
   });
   if (!lead) return { ok: false, error: { code: "LEAD_NOT_FOUND", message: "Không tìm thấy lead" } };
@@ -275,6 +293,44 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
   if (needsCommission) {
     commissionStatement = await ensureCommissionStatement(now);
   }
+
+  // ── 25/09/2026 — dữ liệu để NỐI học viên về lead nguồn + điền ô trống ─────────────
+  //
+  // MỘT câu cho mọi con trong lượt (không N+1), và lọc `leadId: lead.id`: bulk-convert
+  // nhận `leadChildId` từ file, con của phiếu KHÁC thì không được dùng để điền hồ sơ
+  // (và không được thành `Student.leadChildId` — cột đó nghĩa là "đứa trẻ trong CHÍNH
+  // phiếu `Student.leadId`").
+  const conIds = [
+    ...new Set(input.students.map((s) => s.leadChildId).filter((x): x is string => !!x)),
+  ];
+  const conTheoId = new Map<string, LeadChildDeDien & { id: string }>(
+    conIds.length > 0
+      ? (
+          await db.leadChild.findMany({
+            where: { id: { in: conIds }, leadId: lead.id },
+            select: { id: true, dob: true, gender: true, schoolName: true, gradeLevel: true },
+          })
+        ).map((c) => [c.id, c])
+      : [],
+  );
+  // Địa chỉ: cụm Sale gõ ở form chốt (C5) MỚI HƠN cụm trên lead ⇒ thắng. Vẫn CẢ CỤM hoặc
+  // không (luật 3 của dienTuLead) — không ghép tỉnh của cụm này với số nhà của cụm kia.
+  const goDiaChiLucChot = [input.parentCity, input.parentWard, input.parentAddress].some(
+    (v) => !!v?.trim(),
+  );
+  const leadDeDien: LeadDeDien = {
+    email: lead.email,
+    facebookUrl: lead.facebookUrl,
+    parentGender: lead.parentGender,
+    parentDob: lead.parentDob,
+    ...(goDiaChiLucChot
+      ? {
+          city: input.parentCity ?? null,
+          ward: input.parentWard ?? null,
+          addressLine: input.parentAddress ?? null,
+        }
+      : { city: lead.city, ward: lead.ward, addressLine: lead.addressLine }),
+  };
 
   const result = await db.$transaction(async (tx) => {
 
@@ -412,6 +468,66 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
         { parentUserId: parent.id, name: s.name, dob: s.dob ?? null },
         tx,
       );
+      const con = s.leadChildId ? (conTheoId.get(s.leadChildId) ?? null) : null;
+      if (existingId) {
+        // 25/09 — HV DÙNG LẠI: `Student.leadId` là lead GỐC. Chỉ nối khi HV CHƯA nối lead
+        // nào — gia đình quay lại tạo phiếu mới rồi chốt thì lead gốc vẫn là phiếu cũ.
+        // `updateMany` có `leadId: null` trong where ⇒ hai lượt đua không đè nhau.
+        // Điền ô trống đi CÙNG lượt nối (một sự kiện "HV được nối lead"), không phải mỗi
+        // lần chốt: HV đã có lead gốc thì hồ sơ đã được điền từ phiếu gốc rồi.
+        const cu = await tx.student.findUnique({
+          where: { id: existingId },
+          select: {
+            leadId: true,
+            name: true,
+            dateOfBirth: true,
+            gender: true,
+            school: true,
+            currentGrade: true,
+            parentEmail: true,
+            parentGender: true,
+            parentDob: true,
+            parentFacebookUrl: true,
+            city: true,
+            ward: true,
+            address: true,
+            district: true,
+          },
+        });
+        // NĐ13: hồ sơ đã ẩn danh KHÔNG được nối + điền lại — `dienTuLead` coi ô vừa xoá là
+        // ô trống (lib/students/da-an-danh.ts). Dedupe theo tên + ngày sinh gần như không
+        // khớp được hồ sơ tên "[Đã xoá…]", nhưng chặn ở đây thì không phải tin vào điều đó.
+        const daAnDanh =
+          !!cu &&
+          (tenLaDaAnDanh(cu.name) ||
+            (await hocVienDaAnDanhTheoNhatKy(tx, [existingId])).has(existingId));
+        if (cu && cu.leadId === null && !daAnDanh) {
+          await tx.student.updateMany({
+            where: { id: existingId, leadId: null },
+            data: {
+              ...dienTuLead(cu, leadDeDien, con),
+              leadId: lead.id,
+              leadChildId: con?.id ?? null,
+            },
+          });
+        }
+      }
+      // HV MỚI: hồ sơ trắng trừ các ô convert vốn ghi — dienTuLead chỉ trả ô đang trống
+      // nên trải nó SAU các ô tường minh không bao giờ đè giá trị convert đã chọn.
+      const hoSoMoi: StudentDeDien = {
+        dateOfBirth: s.dob ?? null,
+        gender: null,
+        school: null,
+        currentGrade: null,
+        parentEmail,
+        parentGender: null,
+        parentDob: null,
+        parentFacebookUrl: null,
+        city: null,
+        ward: null,
+        address: null,
+        district: null,
+      };
       const studentId =
         existingId ??
         (
@@ -429,6 +545,10 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
               // chuẩn hoá được (số cố định gọi thẳng từ lib) — không đổi hành vi ca đó.
               parentPhone: canonicalPhone(input.parentPhone) ?? input.parentPhone.replace(/\D/g, ""),
               parentEmail,
+              ...dienTuLead(hoSoMoi, leadDeDien, con),
+              // 25/09 — lead NGUỒN (D1): HV sinh ra từ chính lượt chốt này.
+              leadId: lead.id,
+              leadChildId: con?.id ?? null,
             },
             select: { id: true },
           })

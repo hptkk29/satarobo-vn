@@ -13,6 +13,7 @@ import { AssignSelect } from "./_components/assign-select";
 import { TransferDialog } from "./_components/transfer-dialog";
 import { LeadChildrenManager } from "../_components/lead-children";
 import { TrialEnrollWidget } from "./_components/trial-enroll-widget";
+import { DaThanhHocVien } from "./_components/hoc-vien-tu-lead";
 import { laLopTheoKhung } from "@/lib/trial/nghia-null";
 import { LeadPaymentCard } from "../_components/lead-payment-card";
 import { getLeadPaymentSummary } from "@/lib/payments/summary";
@@ -439,6 +440,9 @@ export default async function LeadDetailPage({ params }: Props) {
             ngang cửa sổ. Bắt buộc ở admin — thanh bên chiếm ~300px nên `sm:`/`lg:`
             (vốn hỏi cửa sổ) luôn nói dối về chỗ thật sự còn lại. */}
         <div className="@container space-y-5 xl:col-span-7">
+      {/* 25/09 — "Đã thành học viên" đứng ĐẦU cột: câu người dùng hỏi nhiều nhất khi mở một
+          phiếu đã chốt là "em này giờ là học viên nào". Khối tự ẩn khi chưa có học viên. */}
+      <DaThanhHocVien leadId={lead.id} childIds={lead.children.map((c) => c.id)} />
       {/* Khối THÔNG TIN KHÁCH HÀNG.
           · Có `h2` như mọi khối anh em ("Con của phụ huynh", "Thanh toán", "Ghi nhanh
             hoạt động"). Trước đợt này nó là khối DUY NHẤT không tên — mở trang ra là

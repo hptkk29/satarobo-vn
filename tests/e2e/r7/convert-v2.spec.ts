@@ -576,4 +576,231 @@ test.describe("[R7-05] Convert v2", () => {
     expect((audit?.oldValues as { studentCode?: string } | null)?.studentCode).toBe("CS1-26-AAAAAA");
     expect((audit?.newValues as { studentCode?: string } | null)?.studentCode).toBe("CS1-26-BBBBBB");
   });
+
+  // ── 25/09/2026 — LIÊN KẾT HỌC VIÊN ↔ LEAD NGUỒN (`Student.leadId/leadChildId`) ──────
+  //
+  // Chủ dự án chốt (D1/D2): chốt lead TỰ nối HV về lead gốc, và điền ô TRỐNG của hồ sơ HV
+  // từ lead/con qua `dienTuLead` (chỉ ô null, không ghi đè). HV DÙNG LẠI (dedupe) chỉ được
+  // nối khi CHƯA nối lead nào — `Student.leadId` là lead GỐC, lượt chốt sau không đè.
+  // ⛔ Cột `Enrollment.leadChildId` KHÔNG đổi hành vi (tín hiệu "đã chốt" của báo cáo).
+
+  async function seedLeadDayDu(centerId: string, phone: string) {
+    const lead = await db.lead.create({
+      data: {
+        parentName: "PH LK",
+        phone,
+        status: "DA_DANG_KY",
+        centerId,
+        email: "lead-lk@test.com",
+        facebookUrl: "https://www.facebook.com/ph.lk",
+        parentGender: "FEMALE",
+        parentDob: new Date("1987-04-05T00:00:00Z"),
+        city: "Thành phố Đà Nẵng",
+        ward: "Phường Hải Châu",
+        addressLine: "12 Lê Lợi",
+      },
+    });
+    const child = await db.leadChild.create({
+      data: {
+        leadId: lead.id,
+        fullName: "Bé LK",
+        dob: new Date("2016-06-07T00:00:00Z"),
+        gender: "Nam",
+        schoolName: "TH Lê Văn Tám",
+        gradeLevel: "Lớp 5",
+      },
+      select: { id: true },
+    });
+    return { lead, child };
+  }
+
+  test("[CV2-LK-01] HV MỚI: nối lead + con nguồn, điền ô trống từ lead/con", async () => {
+    const center = await seedCenter();
+    const { course, cls } = await seedCourseClass(center.id);
+    const { lead, child } = await seedLeadDayDu(center.id, "0900000041");
+    await seedRecordedPayment(lead.id, center.id);
+    const actorUser = await seedUser({ email: `sale-lk1-${uniq()}@test.com`, role: "SALES_CSM", name: "Sale LK1" });
+
+    const res = await convertLeadV2(
+      { id: actorUser.id, name: "Sale LK1" },
+      {
+        leadId: lead.id,
+        parentEmail: "ph-lk1@test.com",
+        parentName: "PH LK",
+        parentPhone: "0905444001",
+        idempotencyKey: `lk1-${uniq()}`,
+        students: [
+          { leadChildId: child.id, name: "Bé LK", courseId: course.id, listPrice: 5_000_000, classId: cls.id, consentMedia: false },
+        ],
+      },
+    );
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+
+    const stu = await db.student.findUniqueOrThrow({ where: { id: res.studentIds[0]! } });
+    expect(stu.leadId, "HV mới phải nối về lead vừa chốt").toBe(lead.id);
+    expect(stu.leadChildId).toBe(child.id);
+    // Ô của CON
+    expect(stu.dateOfBirth?.toISOString().slice(0, 10)).toBe("2016-06-07");
+    expect(stu.gender).toBe("MALE");
+    expect(stu.school).toBe("TH Lê Văn Tám");
+    expect(stu.currentGrade).toBe(5);
+    // Ô của PHỤ HUYNH — email gõ ở form chốt THẮNG email trên lead (không phải ô trống).
+    expect(stu.parentEmail).toBe("ph-lk1@test.com");
+    expect(stu.parentGender).toBe("FEMALE");
+    expect(stu.parentDob?.toISOString().slice(0, 10)).toBe("1987-04-05");
+    expect(stu.parentFacebookUrl).toBe("https://www.facebook.com/ph.lk");
+    // Địa chỉ: form chốt KHÔNG gõ ⇒ lấy CẢ CỤM từ lead.
+    expect([stu.city, stu.ward, stu.address]).toEqual(["Thành phố Đà Nẵng", "Phường Hải Châu", "12 Lê Lợi"]);
+    // Hành vi cũ giữ nguyên: ghi danh vẫn mang leadChildId của con.
+    const enr = await db.enrollment.findFirstOrThrow({ where: { studentId: stu.id } });
+    expect(enr.leadChildId).toBe(child.id);
+  });
+
+  test("[CV2-LK-01b] địa chỉ GÕ ở form chốt thắng CẢ CỤM của lead (không ghép lẻ)", async () => {
+    const center = await seedCenter();
+    const { course, cls } = await seedCourseClass(center.id);
+    const { lead, child } = await seedLeadDayDu(center.id, "0900000042");
+    await seedRecordedPayment(lead.id, center.id);
+    const actorUser = await seedUser({ email: `sale-lk1b-${uniq()}@test.com`, role: "SALES_CSM", name: "Sale LK1b" });
+
+    const res = await convertLeadV2(
+      { id: actorUser.id, name: "Sale LK1b" },
+      {
+        leadId: lead.id,
+        parentEmail: null,
+        parentName: "PH LK",
+        parentPhone: "0905444002",
+        parentCity: "Thành phố Huế",
+        idempotencyKey: `lk1b-${uniq()}`,
+        students: [
+          { leadChildId: child.id, name: "Bé LK", courseId: course.id, listPrice: 5_000_000, classId: cls.id, consentMedia: false },
+        ],
+      },
+    );
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const stu = await db.student.findUniqueOrThrow({ where: { id: res.studentIds[0]! } });
+    // Chỉ gõ Tỉnh ⇒ Phường/Số nhà KHÔNG được mượn từ lead (đó là nhà khác).
+    expect([stu.city, stu.ward, stu.address]).toEqual(["Thành phố Huế", null, null]);
+    // Form chốt bỏ trống email ⇒ ô trống ⇒ điền từ lead.
+    expect(stu.parentEmail).toBe("lead-lk@test.com");
+  });
+
+  test("[CV2-LK-02] HV DÙNG LẠI đã có lead gốc ⇒ lượt chốt sau KHÔNG đè leadId", async () => {
+    const center = await seedCenter();
+    const { course, cls } = await seedCourseClass(center.id);
+    const leadGoc = await seedRegisteredLead(center.id, "0900000043");
+    const { lead, child } = await seedLeadDayDu(center.id, "0900000044");
+    await seedRecordedPayment(lead.id, center.id);
+    const parent = await db.user.create({
+      data: { phone: "84905444003", name: "PH cũ", role: "PARENT", roles: ["PARENT"] },
+    });
+    const cu = await db.student.create({
+      data: { name: "Bé LK", parentUserId: parent.id, centerId: center.id, leadId: leadGoc.id },
+    });
+    const actorUser = await seedUser({ email: `sale-lk2-${uniq()}@test.com`, role: "SALES_CSM", name: "Sale LK2" });
+
+    const res = await convertLeadV2(
+      { id: actorUser.id, name: "Sale LK2" },
+      {
+        leadId: lead.id,
+        parentEmail: null,
+        parentName: "PH LK",
+        parentPhone: "0905444003",
+        idempotencyKey: `lk2-${uniq()}`,
+        students: [
+          { leadChildId: child.id, name: "Bé LK", courseId: course.id, listPrice: 5_000_000, classId: cls.id, consentMedia: false },
+        ],
+      },
+    );
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.studentIds, "phải DÙNG LẠI hồ sơ cũ (dedupe)").toEqual([cu.id]);
+    const stu = await db.student.findUniqueOrThrow({ where: { id: cu.id } });
+    expect(stu.leadId, "lead GỐC không được đè").toBe(leadGoc.id);
+    expect(stu.leadChildId).toBeNull();
+    // HV đã có lead gốc ⇒ lượt chốt sau không điền gì vào hồ sơ.
+    expect(stu.school).toBeNull();
+    expect(stu.parentFacebookUrl).toBeNull();
+  });
+
+  test("[CV2-LK-03] HV DÙNG LẠI chưa nối ⇒ nối + CHỈ điền ô trống, ô đã có giữ nguyên", async () => {
+    const center = await seedCenter();
+    const { course, cls } = await seedCourseClass(center.id);
+    const { lead, child } = await seedLeadDayDu(center.id, "0900000045");
+    await seedRecordedPayment(lead.id, center.id);
+    const parent = await db.user.create({
+      data: { phone: "84905444004", name: "PH cũ", role: "PARENT", roles: ["PARENT"] },
+    });
+    const cu = await db.student.create({
+      data: {
+        name: "Bé LK",
+        parentUserId: parent.id,
+        centerId: center.id,
+        school: "Trường cũ",
+        gender: "FEMALE",
+        district: "Hải Châu (cũ)",
+      },
+    });
+    const actorUser = await seedUser({ email: `sale-lk3-${uniq()}@test.com`, role: "SALES_CSM", name: "Sale LK3" });
+
+    const res = await convertLeadV2(
+      { id: actorUser.id, name: "Sale LK3" },
+      {
+        leadId: lead.id,
+        parentEmail: null,
+        parentName: "PH LK",
+        parentPhone: "0905444004",
+        idempotencyKey: `lk3-${uniq()}`,
+        students: [
+          { leadChildId: child.id, name: "Bé LK", courseId: course.id, listPrice: 5_000_000, classId: cls.id, consentMedia: false },
+        ],
+      },
+    );
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.studentIds).toEqual([cu.id]);
+    const stu = await db.student.findUniqueOrThrow({ where: { id: cu.id } });
+    expect(stu.leadId).toBe(lead.id);
+    expect(stu.leadChildId).toBe(child.id);
+    // Ô ĐÃ CÓ — giữ nguyên.
+    expect(stu.school).toBe("Trường cũ");
+    expect(stu.gender).toBe("FEMALE");
+    // Ô TRỐNG — điền.
+    expect(stu.currentGrade).toBe(5);
+    expect(stu.parentFacebookUrl).toBe("https://www.facebook.com/ph.lk");
+    // HV đã có một ô địa chỉ (district cũ) ⇒ KHÔNG điền cụm địa chỉ của lead.
+    expect([stu.city, stu.ward, stu.address]).toEqual([null, null, null]);
+  });
+
+  test("[CV2-LK-04] con của phiếu KHÁC ⇒ không thành Student.leadChildId, không dùng để điền", async () => {
+    const center = await seedCenter();
+    const { course, cls } = await seedCourseClass(center.id);
+    const lead = await seedRegisteredLead(center.id, "0900000046");
+    await seedRecordedPayment(lead.id, center.id);
+    const { child: conLa } = await seedLeadDayDu(center.id, "0900000047");
+    const actorUser = await seedUser({ email: `sale-lk4-${uniq()}@test.com`, role: "SALES_CSM", name: "Sale LK4" });
+
+    const res = await convertLeadV2(
+      { id: actorUser.id, name: "Sale LK4" },
+      {
+        leadId: lead.id,
+        parentEmail: null,
+        parentName: "PH LK",
+        parentPhone: "0905444005",
+        idempotencyKey: `lk4-${uniq()}`,
+        students: [
+          { leadChildId: conLa.id, name: "Bé Lạ", courseId: course.id, listPrice: 5_000_000, classId: cls.id, consentMedia: false },
+        ],
+      },
+    );
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const stu = await db.student.findUniqueOrThrow({ where: { id: res.studentIds[0]! } });
+    expect(stu.leadId).toBe(lead.id);
+    expect(stu.leadChildId).toBeNull();
+    expect(stu.school).toBeNull();
+    expect(stu.gender).toBeNull();
+  });
 });
