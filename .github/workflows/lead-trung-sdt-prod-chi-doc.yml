@@ -1,0 +1,98 @@
+# Chạy TAY (workflow_dispatch) — ĐỌC PROD, KHÔNG GHI GÌ.
+#
+# Liệt kê mọi SĐT đang nằm ở TỪ HAI LEAD trở lên (sự cố 26/09/2026: 0368829724 ·
+# 0985779965 — một gia đình, hai hồ sơ, có cặp còn hai đơn). Bản vá chống trùng chặn cặp
+# MỚI; báo cáo này tìm cặp ĐÃ có để người vận hành gộp TAY từng cặp. Không gộp tự động.
+#
+# Khuôn chép nguyên từ `rbac-prod-chi-doc.yml` (xem đầu tệp đó cho lý do từng lớp khoá):
+# không có chế độ ghi · READ ONLY + rollback · user chỉ-đọc · script tự khai quyền + hỏi
+# thẳng quyền SELECT trên đúng bảng nó đọc. SĐT che còn 4 số đầu + 3 số cuối, không in tên.
+# Artifact giữ 3 ngày.
+
+name: Lead trùng SĐT · PROD · ĐỌC (chỉ đọc — không ghi gì)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  doc:
+    name: Đọc lead trùng SĐT prod (không ghi)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Chỉ chạy trên `main` — cùng mã đang chạy trên prod.
+    if: github.ref == 'refs/heads/main'
+    steps:
+      # Kiểm HÌNH DẠNG chuỗi trước khi tốn thời gian cài đặt rồi mới chết ở Prisma.
+      # KHÔNG in giá trị secret — chỉ nói chỗ nào sai.
+      - name: Kiểm secret chỉ-đọc
+        env:
+          U: ${{ secrets.PROD_DATABASE_URL_RO }}
+        run: |
+          if [ -z "$U" ]; then
+            echo "::error::Thiếu secret PROD_DATABASE_URL_RO (chuỗi session pooler của user chỉ-đọc)."
+            echo "::error::Cách tạo user + lấy chuỗi: docs/cham-cong/USER-CHI-DOC-PROD.md"
+            echo "::error::KHÔNG đặt PROD_DATABASE_URL / PROD_DIRECT_URL vào đây — chúng đầy quyền."
+            exit 1
+          fi
+          rest="${U#*://}"
+          proto="${U%%://*}"
+          userinfo="${rest%@*}"
+          user="${userinfo%%:*}"
+          hostport="${rest##*@}"
+          port="${hostport##*:}"; port="${port%%/*}"
+          ok=1
+          case "$proto" in
+            postgresql|postgres) ;;
+            *) echo "::error::Chuỗi phải bắt đầu bằng postgresql:// — đang là '$proto://'"; ok=0 ;;
+          esac
+          case "$user" in
+            *.*) ;;
+            *) echo "::error::Tên user THIẾU hậu tố '.<mã dự án>' — Supavisor định tuyến theo mã dự án nằm TRONG tên user."; ok=0 ;;
+          esac
+          if [ "$port" != "5432" ]; then
+            echo "::error::Cổng đang là '$port' — phải là 5432 (tab 'Session pooler')."
+            ok=0
+          fi
+          [ $ok -eq 1 ] || { echo "::error::Sửa secret PROD_DATABASE_URL_RO rồi chạy lại. Không có bước nào chạm DB."; exit 1; }
+
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Prisma generate
+        run: pnpm exec prisma generate
+
+      - name: Đọc lead trùng SĐT prod
+        env:
+          # CỐ Ý chỉ có chuỗi chỉ-đọc. Hai secret đầy quyền không được nhắc tới trong tệp này.
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+        run: pnpm exec tsx scripts/bao-cao-lead-trung-sdt.ts
+
+      - name: Đưa báo cáo vào job summary
+        if: always()
+        run: |
+          if [ -f bao-cao-lead-trung-sdt.md ]; then
+            cat bao-cao-lead-trung-sdt.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Không sinh được báo cáo — đọc log bước trên." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bao-cao-lead-trung-sdt
+          path: bao-cao-lead-trung-sdt.md
+          retention-days: 3
+          if-no-files-found: warn
