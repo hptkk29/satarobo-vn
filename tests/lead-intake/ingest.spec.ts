@@ -62,6 +62,10 @@ const PHONE = {
   closedLead: "0900000112",
   quatang: "0900000113",
   webhookCuGiuChu: "0900000114",
+  dangKyCungCon: "0900000115",
+  daMat: "0900000116",
+  moCu: "0900000117",
+  matCu: "0900000118",
 } as const;
 const ALL_PHONES = Object.values(PHONE);
 /** Cùng SĐT nhưng ghi dạng canonical — dùng cho ca "nhận ra trùng dù khác dạng". */
@@ -633,44 +637,120 @@ describe.skipIf(!RUN)("Lead intake · tầng DB thật", () => {
     expect(all).toContain("Tỉnh/TP: Đà Nẵng");
   }, 60_000);
 
-  // ⚠️ GĐ5 — CẦN NGƯỜI QUYẾT (ánh xạ tên enum làm ca này ĐỎ khi chạy thật):
-  //   ENROLLED ánh xạ sang DA_DANG_KY theo bảng, NHƯNG `TERMINAL_LEAD_STATUSES`
-  //   (= LEAD_CLOSED_STATUSES) nay CHỈ còn DA_MAT — status.ts cố ý loại DA_DANG_KY
-  //   vì lead đã ghi nhận tiền vẫn là việc đang mở của sale. Nên hồ sơ DA_DANG_KY
-  //   KHÔNG còn là "đã đóng", và con thứ hai sẽ được gắn vào chính hồ sơ cũ.
-  //   Hai lối ra: (a) đổi ca này sang DA_MAT nếu ý định là "hồ sơ đã đóng" nói chung;
-  //   (b) giữ DA_DANG_KY và đổi kỳ vọng nếu nghiệp vụ chấp nhận gộp con vào hồ sơ
-  //   đã đăng ký. Chọn hộ — người đổi tên enum không đủ căn cứ để quyết.
-  it("hồ sơ cũ ĐÃ ĐÓNG (DA_DANG_KY) ⇒ tạo lead MỚI, không chôn con thứ hai vào hồ sơ đóng", async () => {
+  // ── CHỐNG TRÙNG SĐT — luật chốt 26/09/2026 ──────────────────────────────────
+  // Sự cố prod 26/09: 0368829724 (hồ sơ ĐÃ ĐĂNG KÝ ⇒ phiếu con thứ hai đẻ lead MỚI, rồi
+  // đẻ đơn thứ hai) và 0985779965 (lead nhập từ sheet lùi `createdAt` về 21/05 ⇒ quá cửa
+  // sổ 90 ngày ⇒ lead mới dù lead cũ VẪN ĐANG MỞ). Chủ dự án chốt:
+  //   · lead còn mở (mọi trạng thái trừ DA_MAT) ⇒ LUÔN gộp, không xét tuổi hồ sơ;
+  //   · lead ĐÃ ĐĂNG KÝ ⇒ gộp, gắn con mới vào + ghi rõ "có con mới cần tư vấn";
+  //   · chỉ DA_MAT mới tạo lead mới (và chỉ khi còn trong cửa sổ mới ghi truy vết);
+  //   · dòng lịch sử trên lead cũ phải nói ĐÚNG việc đã làm (không "đã chặn" khi đã tạo).
+  async function lichSu(leadId: string): Promise<string> {
+    const acts = await db.leadActivity.findMany({ where: { leadId }, select: { content: true } });
+    return acts.map((a) => a.content).join("\n");
+  }
+
+  it("[TRUNG-01] hồ sơ ĐÃ ĐĂNG KÝ + phiếu con MỚI ⇒ gắn con vào CHÍNH hồ sơ đó, không đẻ lead", async () => {
     const first = await ingestIntakeLead(
       lead({ phone: PHONE.closedLead, children: [{ fullName: "Bé Anh Cả" }] }),
       { source: "sale-form" },
     );
-    await db.lead.update({
-      where: { id: first.leadId! },
-      data: { status: "DA_DANG_KY" },
-    });
+    await db.lead.update({ where: { id: first.leadId! }, data: { status: "DA_DANG_KY" } });
 
     const second = await ingestIntakeLead(
       lead({ phone: PHONE.closedLead, children: [{ fullName: "Bé Em Út" }] }),
       { source: "sale-form" },
     );
 
+    expect(second.leadId).toBe(first.leadId);
+    expect(second.duplicate).toBe(true);
+    expect(second.childAdded).toBe(true);
+    expect(await db.lead.count({ where: { phone: "84900000112" } })).toBe(1);
+    const con = await db.leadChild.findMany({
+      where: { leadId: first.leadId! },
+      select: { fullName: true },
+      orderBy: { createdAt: "asc" },
+    });
+    expect(con.map((c) => c.fullName)).toEqual(["Bé Anh Cả", "Bé Em Út"]);
+    // Việc của con mới không được chôn: hồ sơ đã chốt phải NÓI RA là có con mới cần tư vấn.
+    expect(await lichSu(first.leadId!)).toContain("có con mới cần tư vấn");
+  }, 60_000);
+
+  it("[TRUNG-02] hồ sơ ĐÃ ĐĂNG KÝ + phiếu CÙNG bé ⇒ không thêm bé, không đẻ lead", async () => {
+    const first = await ingestIntakeLead(
+      lead({ phone: PHONE.dangKyCungCon, children: [{ fullName: "Nguyễn Hồ Tuấn Khang" }] }),
+      { source: "sale-form" },
+    );
+    await db.lead.update({ where: { id: first.leadId! }, data: { status: "DA_DANG_KY" } });
+
+    const second = await ingestIntakeLead(
+      lead({ phone: PHONE.dangKyCungCon, children: [{ fullName: "nguyễn hồ tuấn khang" }] }),
+      { source: "sale-form-app" },
+    );
+
+    expect(second.leadId).toBe(first.leadId);
+    expect(second.childAdded).toBe(false);
+    expect(await db.lead.count({ where: { phone: "84900000115" } })).toBe(1);
+    expect(await db.leadChild.count({ where: { leadId: first.leadId! } })).toBe(1);
+  }, 60_000);
+
+  it("[TRUNG-03] hồ sơ ĐÃ MẤT ⇒ tạo lead MỚI, và lịch sử lead cũ nói đúng là ĐÃ TẠO (kèm mã lead mới)", async () => {
+    const first = await ingestIntakeLead(
+      lead({ phone: PHONE.daMat, children: [{ fullName: "Bé Cũ" }] }),
+      { source: "sale-form" },
+    );
+    await db.lead.update({ where: { id: first.leadId! }, data: { status: "DA_MAT" } });
+
+    const second = await ingestIntakeLead(
+      lead({ phone: PHONE.daMat, children: [{ fullName: "Bé Cũ" }] }),
+      { source: "sale-form" },
+    );
+
     expect(second.leadId).not.toBe(first.leadId);
     expect(second.duplicate).toBeFalsy();
-
-    const fresh = await db.lead.findUnique({
-      where: { id: second.leadId! },
-      select: { status: true, note: true, children: { select: { fullName: true } } },
-    });
-    expect(fresh?.children.map((c) => c.fullName)).toEqual(["Bé Em Út"]);
-    expect(fresh?.note).toContain("đã đóng");
-    // Hồ sơ cũ vẫn nguyên trạng, không bị gắn thêm con.
-    expect(await db.leadChild.count({ where: { leadId: first.leadId! } })).toBe(1);
+    const cu = await lichSu(first.leadId!);
+    expect(cu, "câu cũ 'đã chặn tạo lead trùng' nói dối khi lead MỚI đã được tạo").not.toContain(
+      "đã chặn tạo lead trùng",
+    );
+    expect(cu).toContain(second.leadId!);
     // Vẫn truy vết được mối liên hệ giữa hai hồ sơ.
-    expect(
-      await db.leadDuplicate.count({ where: { primaryLeadId: first.leadId! } }),
-    ).toBeGreaterThan(0);
+    expect(await db.leadDuplicate.count({ where: { primaryLeadId: first.leadId! } })).toBeGreaterThan(0);
+  }, 60_000);
+
+  it("[TRUNG-04] lead CÒN MỞ nhưng tạo từ 120 ngày trước (nhập sheet lùi ngày) ⇒ VẪN gộp", async () => {
+    const first = await ingestIntakeLead(
+      lead({ phone: PHONE.moCu, children: [{ fullName: "Bé Ngân" }] }),
+      { source: "legacy-sheet" },
+    );
+    await db.lead.update({
+      where: { id: first.leadId! },
+      data: { status: "DANG_NUOI_DUONG", createdAt: new Date(Date.now() - 120 * 86400_000) },
+    });
+
+    const second = await ingestIntakeLead(
+      lead({ phone: PHONE.moCu, children: [{ fullName: "Bé Ngân" }] }),
+      { source: "sale-form-app" },
+    );
+
+    expect(second.leadId).toBe(first.leadId);
+    expect(second.duplicate).toBe(true);
+    expect(await db.lead.count({ where: { phone: "84900000117" } })).toBe(1);
+    const cu = await lichSu(first.leadId!);
+    expect(cu).toContain("đã gộp vào lead này");
+    expect(cu).not.toContain("đã chặn tạo lead trùng");
+  }, 60_000);
+
+  it("[TRUNG-05] lead ĐÃ MẤT từ 120 ngày trước (ngoài cửa sổ) ⇒ tạo lead mới như cũ", async () => {
+    const first = await ingestIntakeLead(lead({ phone: PHONE.matCu }), { source: "sale-form" });
+    await db.lead.update({
+      where: { id: first.leadId! },
+      data: { status: "DA_MAT", createdAt: new Date(Date.now() - 120 * 86400_000) },
+    });
+
+    const second = await ingestIntakeLead(lead({ phone: PHONE.matCu }), { source: "sale-form" });
+
+    expect(second.leadId).not.toBe(first.leadId);
+    expect(second.duplicate).toBeFalsy();
   }, 60_000);
 
   it("đi trọn đường quatang: JSON thô của doPost → Lead trong DB", async () => {

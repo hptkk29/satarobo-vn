@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
     // Nếu trùng → KHÔNG tạo lead mới, log vào lead gốc + trả về lead cũ.
     const duplicate = await findRecentDuplicate(data.phone)
     if (duplicate) {
-      await logDuplicateAttempt(duplicate.id, data.phone, data.source ?? null)
+      await logDuplicateAttempt(duplicate.id, data.phone, data.source ?? null, { kieu: 'gop' })
       return NextResponse.json({ ok: true, leadId: duplicate.id, duplicate: true })
     }
 
