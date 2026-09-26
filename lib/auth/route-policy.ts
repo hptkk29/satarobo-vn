@@ -102,6 +102,8 @@ export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
   "affiliates",
   // 25/09/2026 — Cổng dữ liệu agent (tài liệu CEO §5.5).
   "cong-du-lieu-agent",
+  // 26/09/2026 — Chính sách khuyến mãi.
+  "khuyen-mai",
   "assignments",
   "attendance",
   "audit-log",

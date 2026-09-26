@@ -39,7 +39,12 @@ export async function POST(req: NextRequest) {
   const isDraftUploaderImageOnly =
     !isRoleAllowed && !isSalesImageOnly && (await checkPermission("media:upload-draft"));
   const imageOnly = isSalesImageOnly || isDraftUploaderImageOnly;
-  if (!isRoleAllowed && !imageOnly) {
+  // 26/09/2026 — BLĐ đính kèm VĂN BẢN GỐC của chính sách khuyến mãi (PDF bản ký/ảnh chụp).
+  // Vai Giám đốc (`GIAM_DOC`) chỉ có ở RBAC v2 nên không bao giờ khớp `allowedRoles` v1 — cùng
+  // bẫy 11/08 ở trên, cùng cách vá: mở theo QUYỀN, và chỉ cho tài liệu + ảnh, không video/âm thanh.
+  const isPolicyDocUploader =
+    !isRoleAllowed && !imageOnly && (await checkPermission("promotions:manage"));
+  if (!isRoleAllowed && !imageOnly && !isPolicyDocUploader) {
     return NextResponse.json(
       { error: "Forbidden: insufficient permissions" },
       { status: 403 },
@@ -81,6 +86,12 @@ export async function POST(req: NextRequest) {
 
   // B4: Sale phụ trách lớp chỉ upload ẢNH lớp — các category khác (học liệu…) giữ nguyên 403.
   // 11/08: vai góp ảnh vào kho (Marketing/Giáo vụ qua media:upload-draft) cùng giới hạn.
+  if (isPolicyDocUploader && category !== "document" && category !== "image") {
+    return NextResponse.json(
+      { error: "Forbidden: chỉ được tải văn bản (PDF/Word) hoặc ảnh chụp văn bản" },
+      { status: 403 },
+    );
+  }
   if (imageOnly && category !== "image") {
     return NextResponse.json(
       { error: "Forbidden: vai này chỉ được upload ảnh (category image)" },

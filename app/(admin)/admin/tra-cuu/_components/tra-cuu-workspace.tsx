@@ -22,6 +22,7 @@
 // Component cố ý "ngu": chỉ nhận CHUỖI ĐÃ ĐỊNH DẠNG từ server (tiền, ngày, nhãn
 // trạng thái). Định dạng ở đây là mở đường cho ba khối hiển thị lệch nhau.
 import { useMemo, useState, useId } from "react";
+import Link from "next/link";
 import { Search, X } from "lucide-react";
 import { StatusPill, type PillTone } from "@/components/admin/ui/status-pill";
 import { adminTd, adminTh, adminTr } from "@/components/admin/ui/table";
@@ -45,10 +46,23 @@ export type CotTraCuu = {
    * tới được.
    */
   anMobile?: boolean;
+  /**
+   * Cắt chữ ở 13rem (khối Khuyến mãi 26/09): cột mô tả phụ dài (phạm vi "Toàn hệ thống · Sata 3 —
+   * Cảm biến…") `nowrap` đẩy cột Hiệu lực + Trạng thái ra ngoài màn 1280px.
+   */
+  cat?: boolean;
 };
 
-/** Ô: chuỗi thường, hoặc một nhãn trạng thái có màu ngữ nghĩa. */
-export type OTraCuu = string | { t: string; pill: PillTone };
+/**
+ * Ô: chuỗi thường · nhãn trạng thái có màu ngữ nghĩa · hoặc ô HAI DÒNG: dòng chính (tự xuống tối
+ * đa 2 dòng) + dòng phụ — `phuMo` = dòng phụ chữ mờ (vd "còn 36 ngày"), không thì chữ đậm (mã).
+ * `nhanMobile`: nhãn trạng thái hiện TRONG ô này dưới 640px — dùng khi cột Trạng thái ẩn trên điện
+ * thoại (rà thiết kế 26/09: để cột trạng thái riêng ở 375px là nó bị đẩy ra ngoài card).
+ */
+export type OTraCuu =
+  | string
+  | { t: string; pill: PillTone }
+  | { t: string; phu?: string | null; phuMo?: boolean; nhanMobile?: { t: string; pill: PillTone } };
 
 export type DongTraCuu = {
   key: string;
@@ -57,6 +71,11 @@ export type DongTraCuu = {
   tim: string;
   /** Làm nhạt cả dòng (vd lớp đã hết chỗ) — vẫn hiện, chỉ lùi về sau mắt. */
   mo?: boolean;
+  /**
+   * Cả HÀNG bấm được, mở trang chi tiết (luật 12: `<tr relative cursor-pointer>` + link ở ô đầu
+   * phủ `after:inset-0`). Không khai thì hàng chỉ để đọc như trước.
+   */
+  href?: string;
 };
 
 export type KhoiTraCuu = {
@@ -240,20 +259,63 @@ export function TraCuuWorkspace({ khoi }: { khoi: KhoiTraCuu[] }) {
               </thead>
               <tbody>
                 {dong.map((d) => (
-                  <tr key={d.key} className={cn(adminTr, d.mo && "opacity-60")}>
-                    {d.o.map((o, i) => (
-                      <td
-                        key={dangMo.cot[i]?.ten ?? i}
-                        className={cn(
-                          adminTd,
-                          dangMo.cot[i]?.phai && "text-right tabular-nums",
-                          dangMo.cot[i]?.anMobile && "hidden sm:table-cell",
-                          i === 0 && "max-w-[148px] truncate font-medium sm:max-w-[320px]",
-                        )}
-                      >
-                        {typeof o === "string" ? o : <StatusPill tone={o.pill}>{o.t}</StatusPill>}
-                      </td>
-                    ))}
+                  <tr key={d.key} className={cn(adminTr, d.mo && "opacity-60", d.href && "relative cursor-pointer")}>
+                    {d.o.map((o, i) => {
+                      const haiDong = typeof o !== "string" && !("pill" in o);
+                      const noiDung =
+                        typeof o === "string" ? (
+                          o
+                        ) : "pill" in o ? (
+                          <StatusPill tone={o.pill}>{o.t}</StatusPill>
+                        ) : (
+                          <>
+                            {o.nhanMobile && (
+                              <span className="mb-1 block sm:hidden">
+                                <StatusPill tone={o.nhanMobile.pill}>{o.nhanMobile.t}</StatusPill>
+                              </span>
+                            )}
+                            {/* Chỉ ô ĐẦU được xuống dòng (câu ưu đãi); ô sau (vd khoảng ngày) giữ một dòng —
+                                "01/09 →" / "31/12/2026" bẻ đôi một khoảng ngày là đọc sai. */}
+                            <span className={i === 0 ? "line-clamp-2 whitespace-normal" : "block whitespace-nowrap"}>{o.t}</span>
+                            {o.phu && (
+                              <span
+                                className={cn(
+                                  "mt-0.5 block truncate text-xs",
+                                  o.phuMo ? "font-normal text-muted-foreground" : "font-semibold tracking-wide",
+                                )}
+                              >
+                                {o.phu}
+                              </span>
+                            )}
+                          </>
+                        );
+                      return (
+                        <td
+                          key={dangMo.cot[i]?.ten ?? i}
+                          className={cn(
+                            adminTd,
+                            dangMo.cot[i]?.phai && "text-right tabular-nums",
+                            dangMo.cot[i]?.anMobile && "hidden sm:table-cell",
+                            dangMo.cot[i]?.cat && "max-w-[13rem] truncate",
+                            i === 0 &&
+                              (haiDong
+                                ? "min-w-[9rem] font-medium sm:min-w-[16rem]"
+                                : "max-w-[148px] truncate font-medium sm:max-w-[320px]"),
+                          )}
+                        >
+                          {i === 0 && d.href ? (
+                            <Link
+                              href={d.href}
+                              className="block after:absolute after:inset-0 after:content-[''] hover:underline focus-visible:outline-none focus-visible:underline"
+                            >
+                              {noiDung}
+                            </Link>
+                          ) : (
+                            noiDung
+                          )}
+                        </td>
+                      );
+                    })}
                   </tr>
                 ))}
               </tbody>

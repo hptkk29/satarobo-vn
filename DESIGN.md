@@ -60,6 +60,7 @@ Người dùng ngồi 6–8 tiếng và cần thấy nhiều dòng cùng lúc.
 | Padding ô | `px-5 py-3.5` | |
 | Header bảng | `text-xs font-semibold uppercase tracking-wide` màu muted | |
 | **`whitespace-nowrap` trên `th` VÀ `td`** | bắt buộc | Đây là thứ duy nhất chặn chiều cao dòng nhảy loạn |
+| Ngoại lệ: bảng mà mỗi dòng là một VĂN BẢN (vd `/khuyen-mai`, 26/09/2026) | dòng xếp 2–4 dòng chữ trong ô chính | Mỗi dòng chữ vẫn `truncate`/`line-clamp` — chiều cao đều nhau theo SỐ dòng chữ cố định, không do trình duyệt tự xuống dòng |
 | Bo góc thẻ | `rounded-xl` (0.75rem) | |
 | Khoảng cách khối | 20–24px (`gap-5`/`gap-6`) | |
 

@@ -435,7 +435,21 @@ export type Action =
   // User dịch vụ của agent KHÔNG BAO GIỜ giữ ba quyền này (spec §5.4).
   | "agent_gateway:view"
   | "agent_gateway:manage"
-  | "agent_gateway:approve";
+  | "agent_gateway:approve"
+  // --- Cổng agent Đợt 1 (26/09/2026): quyền ĐỌC tách khỏi quyền GHI đang có ---
+  // Bốn danh mục/bảng dưới đây trước nay chỉ có quyền ghi (`roles:manage`,
+  // `lead_targets:manage`, `payments:manage`) hoặc không có quyền nào (danh mục kênh).
+  // Vai chỉ đọc của agent KHÔNG được mượn quyền ghi để đọc (luật `AGENT_CHI_DOC`,
+  // `prisma/seed-roles.ts`), nên mỗi bảng cần một quyền `:view` riêng.
+  | "roles:view" // xem danh mục vai (mã + tên) — không xem ai giữ vai nào
+  | "lead_targets:view" // xem chỉ tiêu số học sinh theo tháng × cơ sở
+  | "inbox_channels:view" // xem danh mục kênh liên lạc (Zalo OA, Zalo cá nhân, Messenger…)
+  | "refunds:view" // xem yêu cầu hoàn tiền (không duyệt, không chi)
+  // --- Chính sách khuyến mãi (26/09/2026) — BLĐ ban hành, Sale tra cứu ---
+  // view = xem chính sách + mã voucher đang/đã áp dụng · manage = ban hành/sửa/thu hồi
+  // chính sách và mã voucher của nó. Chưa gắn vào thanh toán (xem lib/khuyen-mai).
+  | "promotions:view"
+  | "promotions:manage";
 
 // =============================================================================
 // MATRIX — Mỗi action liệt kê rõ những role được phép.
@@ -1011,6 +1025,18 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "agent_gateway:view": ["SUPER_ADMIN"],
   "agent_gateway:manage": ["SUPER_ADMIN"],
   "agent_gateway:approve": ["SUPER_ADMIN"],
+  // Cổng agent Đợt 1 — quyền đọc riêng. Ở v1 chỉ SUPER_ADMIN: người cần thật là vai
+  // DỊCH VỤ `AGENT_CHI_DOC` (chỉ có ở v2, `prisma/seed-roles.ts`). Không nới cho vai
+  // người ở đây — ai cần xem thì đã có màn của họ, gác bằng quyền cũ.
+  "roles:view": ["SUPER_ADMIN"],
+  "lead_targets:view": ["SUPER_ADMIN"],
+  "inbox_channels:view": ["SUPER_ADMIN"],
+  "refunds:view": ["SUPER_ADMIN"],
+  // Chính sách khuyến mãi — Sale tra cứu, QLCS + Kế toán đối chiếu giảm giá trên đơn,
+  // Marketing biết chương trình nào đang chạy. Ban hành CHỈ BLĐ: ở v1 là SUPER_ADMIN, ở
+  // v2 thêm `GIAM_DOC` (không có vai v1 tương ứng).
+  "promotions:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING", "ACCOUNTANT"],
+  "promotions:manage": ["SUPER_ADMIN"],
 
   // --- Trục gọi điện + ghi âm (OmiCall) ---
   // Ma trận nguồn: `docs/ba-crm-hien-trang-va-misa.md:1380`. Vai v1 tương ứng:

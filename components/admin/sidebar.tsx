@@ -72,6 +72,7 @@ import {
   UserCog,
   UserPlus,
   UserRound,
+  TicketPercent,
   Users,
   UsersRound,
   Wallet,
@@ -165,6 +166,9 @@ const NAV_GROUPS: NavGroup[] = [
       // giá trị của nó là tra được ngay, không phải mở ba màn quản trị.
       // `perm` lấy thẳng từ PAGE_GATES — mục menu và cổng trang không được lệch nhau.
       { label: "Tra cứu", href: "/tra-cuu", icon: BookMarked, perm: [...PAGE_GATES["/tra-cuu"]] },
+      // 26/09/2026 — văn bản khuyến mãi BLĐ ban hành. Ở nhóm tuyển sinh vì người đọc chính là
+      // Sale khi tư vấn; BLĐ ban hành cũng từ đây (nút trong trang gác `promotions:manage`).
+      { label: "Khuyến mãi", href: "/khuyen-mai", icon: TicketPercent, perm: [...PAGE_GATES["/khuyen-mai"]] },
     ],
   },
   {

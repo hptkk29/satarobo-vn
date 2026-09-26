@@ -90,6 +90,10 @@ export const PAGE_GATES = {
    *  ở từng Server Action, không ở cổng trang. */
   "/cong-du-lieu-agent": ["agent_gateway:view"],
 
+  /** 26/09/2026 — Chính sách khuyến mãi (BLĐ ban hành, Sale tra cứu). Ban hành/sửa/thu hồi
+   *  gác `promotions:manage` ở trang con + từng Server Action, không ở cổng này. */
+  "/khuyen-mai": ["promotions:view"],
+
   /** P2 · US-08 — vị trí công việc mang bộ vai trò ⇒ cùng hạng nguy hiểm với sửa
    *  RoleDef, cùng một cổng `roles:manage` (chỉ SUPER_ADMIN). */
   "/nhan-su/vi-tri": ["roles:manage"],
@@ -181,7 +185,7 @@ export const PAGE_GATES = {
   /** Tra cứu — bảng giá khoá/học cụ + lớp còn chỗ. CHỈ ĐỌC. Vào được bằng MỘT
    *  trong hai quyền; trang tự quyết khối nào hiện, không đá ai ra vì thiếu một
    *  quyền. Đừng khai quyền mới cho màn chỉ-đọc này. */
-  "/tra-cuu": ["products:view", "classes:view-all"],
+  "/tra-cuu": ["products:view", "classes:view-all", "promotions:view"],
 
 
   /** Ba báo cáo đào tạo. BGĐ chốt 10/07: "báo cáo của chức năng nào thì role chức năng

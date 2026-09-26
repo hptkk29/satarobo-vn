@@ -828,6 +828,32 @@ export const SETTINGS = {
     default: 0.09,
     centerOverridable: false,
   }),
+  // ── Tỷ lệ chuyển đổi MỤC TIÊU (26/09/2026, cổng agent `kinh_doanh.lay_chi_tieu`) ──
+  // Chủ dự án chốt: MỘT cặp tỷ lệ chung cho mọi cơ sở, không lưu theo từng dòng chỉ tiêu
+  // tháng. Đây là con số KẾ HOẠCH để đo phễu thật so với, không phải số đo được.
+  //
+  // ⚠️ `centerOverridable: false` là theo chốt đó. Mở ra cho từng cơ sở sau này chỉ là sửa
+  // một trường — nhưng khi đó mọi nơi đọc PHẢI truyền `orgUnitId`, nếu không bản đè của cơ
+  // sở không bao giờ được đọc (bẫy ghi ở `zalocrm.idleAlertHours` phía dưới).
+  //
+  // Chặn (0, 1]: 0 nghĩa là "không ai qua được bước này" — phép chia ngược từ chỉ tiêu học
+  // sinh ra số lead cần có sẽ chia cho 0. 1 = 100% là trần tự nhiên.
+  "crm.targetLeadToTrialRate": def({
+    key: "crm.targetLeadToTrialRate",
+    group: "crm",
+    label: "Tỷ lệ mục tiêu: lead → học thử",
+    schema: z.number().gt(0).max(1),
+    default: 0.35,
+    centerOverridable: false,
+  }),
+  "crm.targetTrialToEnrollRate": def({
+    key: "crm.targetTrialToEnrollRate",
+    group: "crm",
+    label: "Tỷ lệ mục tiêu: học thử → đăng ký",
+    schema: z.number().gt(0).max(1),
+    default: 0.45,
+    centerOverridable: false,
+  }),
   /**
    * TOÀN BỘ chính sách hoa hồng — người vận hành tự thêm/bớt, dev không phải code.
    *

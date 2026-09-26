@@ -502,6 +502,23 @@ const BY_PREFIX: Readonly<Record<string, NotiDef>> = {
     group: "action_required", priority: 1, entity: "integration",
     recipients: "Người giữ quyền duyệt Cổng dữ liệu agent", target: "/cong-du-lieu-agent",
   },
+
+  // ── Chính sách khuyến mãi (26/09/2026) ─────────────────────────────────────────────
+  // BLĐ ban hành ⇒ báo ngay người tra cứu trong phạm vi áp dụng ("up lên là nhận luôn và gửi
+  // về cho Sale tra cứu"). P2: nên đọc trước ca tư vấn kế, chưa phải việc chặn ai.
+  "khuyen-mai.ban-hanh:": {
+    label: "Chính sách khuyến mãi mới ban hành",
+    group: "system", priority: 2, entity: "marketing",
+    recipients: "Người giữ quyền xem khuyến mãi (Sale, QLCS, kế toán, marketing) trong phạm vi áp dụng",
+    target: "/khuyen-mai/[id]",
+  },
+  // Thu hồi sớm — P1: Sale đang có thể hứa với khách một ưu đãi vừa bị rút.
+  "khuyen-mai.thu-hoi:": {
+    label: "Chính sách khuyến mãi bị thu hồi",
+    group: "action_required", priority: 1, entity: "marketing",
+    recipients: "Người giữ quyền xem khuyến mãi trong phạm vi áp dụng",
+    target: "/khuyen-mai/[id]",
+  },
 };
 
 /** Danh sách tiền tố đã sắp DÀI TRƯỚC — khớp tiền tố dài nhất, tính sẵn một lần. */

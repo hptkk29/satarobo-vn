@@ -4710,11 +4710,72 @@ model Voucher {
   updatedAt       DateTime @updatedAt @db.Timestamptz(6)
   createdByUserId String?
 
+  // 26/09/2026 — chính sách khuyến mãi (văn bản BLĐ) mà mã này thuộc về. Cho phép trống vì
+  // bảng có từ 24/05 (hệ mã khuyến mãi cũ, đã gỡ khỏi đơn 03/08); mã tạo mới LUÔN có cha
+  // — xem `lib/khuyen-mai`. Hiệu lực của mã = hiệu lực của chính sách (đồng bộ khi sửa).
+  policyId String?
+  policy   PromotionPolicy? @relation(fields: [policyId], references: [id], onDelete: Restrict)
+
   redemptions VoucherRedemption[]
   auditLogs   VoucherAuditLog[]
 
   @@index([code])
   @@index([type, isActive, validFrom, validUntil])
+  @@index([createdAt])
+  @@index([policyId])
+}
+
+/// Chính sách khuyến mãi (26/09/2026) — một VĂN BẢN do BLĐ ban hành (mã SR.QD.xxx).
+///
+/// Chủ dự án: "chính sách mới thì BLĐ up lên là nhận luôn và gửi về cho sale tra cứu, sau
+/// này sẽ add voucher vào quy trình thanh toán". Nên: ban hành = có hiệu lực theo ngày ngay,
+/// báo Sale trong phạm vi, và mã voucher (bảng `Voucher`) là CON của văn bản.
+///
+/// ⚠️ Hôm nay CHƯA nối vào đơn hàng: giảm giá trên đơn vẫn nhập tay kèm giải trình
+/// (`lib/orders/price-guard.ts`). Sale tra văn bản để biết được hứa gì với khách.
+///
+/// Không mang centerId/orgUnitId — phạm vi áp dụng là NỘI DUNG (`orgUnitIds`, rỗng = toàn
+/// hệ thống), không phải dữ liệu thuộc một cơ sở. Không nằm trong SCOPED_MODELS.
+///
+/// "Còn hiệu lực" tính LÚC ĐỌC (không cron): `validFrom ≤ ngày ≤ validUntil` và chưa thu
+/// hồi — một hàm duy nhất ở `lib/khuyen-mai/hieu-luc.ts`.
+model PromotionPolicy {
+  id            String  @id @default(cuid())
+  /// Mã văn bản, vd "SR.QD.233". Khoá tra cứu của Sale và của agent (`ma_van_ban`).
+  documentCode  String  @unique
+  name          String
+  /// Ưu đãi khách nhận được — Sale đọc câu này để tư vấn. Bắt buộc.
+  benefitText   String  @db.Text
+  /// Điều kiện áp dụng (đối tượng, số buổi tối thiểu, không cộng dồn…). Tuỳ chọn.
+  conditionText String? @db.Text
+
+  /// Ngày lịch VN, TÍNH CẢ HAI ĐẦU. `@db.Date` — nửa đêm UTC là đúng, không mang giờ.
+  validFrom  DateTime @db.Date
+  validUntil DateTime @db.Date
+
+  /// OrgUnit.id các cơ sở được áp. Rỗng = toàn hệ thống.
+  orgUnitIds String[] @default([])
+  /// Course.id các khoá được áp. Rỗng = mọi khoá.
+  courseIds  String[] @default([])
+
+  /// Tệp văn bản gốc trên R2 (thư mục documents). Tuỳ chọn — văn bản chưa scan vẫn ban hành được.
+  fileKey  String?
+  fileName String?
+  fileUrl  String?
+
+  /// Thu hồi sớm: hết hiệu lực từ NGÀY thu hồi (ngày VN), dù `validUntil` còn xa.
+  revokedAt    DateTime? @db.Timestamptz(6)
+  revokedById  String?
+  revokeReason String?   @db.Text
+
+  createdById String?
+  updatedById String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  vouchers Voucher[]
+
+  @@index([validFrom, validUntil])
   @@index([createdAt])
 }
 
