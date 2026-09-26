@@ -1,0 +1,71 @@
+# Gộp hai lead của cùng một gia đình trên PROD — chạy TAY.
+#
+# Sinh ra từ sự cố 26/09/2026 (0368829724): luật chống trùng cũ đẻ lead thứ hai cho bé thứ
+# hai. Chủ dự án chốt: gộp hai lead, GIỮ NGUYÊN các đơn (không đụng tiền / phiếu thu / QR).
+# Luật gộp ở `lib/lead/gop-lead.ts` (test `[GOP-01..05]`).
+#
+# Bước 1 luôn là CHẠY THỬ (ghi rồi lùi toàn bộ) và in kế hoạch. Bước 2 chỉ chạy khi gõ đúng
+# chuỗi xác nhận — đọc kế hoạch ở bước 1 của một lượt trước rồi mới gõ.
+#
+# Mã lead đi vào script qua BIẾN MÔI TRƯỜNG, không nội suy thẳng `${{ inputs.* }}` vào lệnh
+# shell (chống chèn lệnh); script còn tự chặn mọi chuỗi không phải cuid.
+name: Gộp lead · PROD · GHI
+
+on:
+  workflow_dispatch:
+    inputs:
+      phu:
+        description: "Mã lead PHỤ (sẽ bị xoá mềm)"
+        required: true
+        type: string
+      chinh:
+        description: "Mã lead CHÍNH (giữ lại)"
+        required: true
+        type: string
+      confirm:
+        description: 'Gõ đúng "GOP THAT VAO PROD" để ghi. Để trống = chỉ chạy thử.'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  gop:
+    name: Gộp lead (PROD)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: github.ref == 'refs/heads/main'
+    env:
+      DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+      DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+      PHU: ${{ inputs.phu }}
+      CHINH: ${{ inputs.chinh }}
+    steps:
+      - name: Kiểm secret có mặt
+        run: |
+          [ -n "$DIRECT_URL" ] || { echo "::error::Thiếu secret PROD_DIRECT_URL."; exit 1; }
+
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prisma generate
+
+      - name: 1) Chạy thử — ghi rồi LÙI, không đổi gì
+        run: pnpm exec tsx scripts/gop-lead-prod.ts --phu="$PHU" --chinh="$CHINH"
+
+      - name: 2) Gộp THẬT
+        if: inputs.confirm == 'GOP THAT VAO PROD'
+        run: pnpm exec tsx scripts/gop-lead-prod.ts --phu="$PHU" --chinh="$CHINH" --apply
+
+      - name: 2b) Bỏ qua bước ghi
+        if: inputs.confirm != 'GOP THAT VAO PROD'
+        run: echo "::notice::Chỉ chạy thử. Muốn ghi thật thì chạy lại và gõ đúng GOP THAT VAO PROD"
