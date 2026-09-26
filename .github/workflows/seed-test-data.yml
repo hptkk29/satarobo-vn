@@ -73,14 +73,89 @@ on:
         type: boolean
         required: false
         default: false
+      # ── MƯỢN NÚT NÀY để nối học viên cũ ↔ lead trên DB test [26/09/2026] ──────────
+      # GitHub chỉ nhận lệnh chạy tay cho workflow ĐÃ TỪNG có mặt trên `main`; một workflow
+      # mới cho script này sẽ 404 cho tới lượt test → main. Cùng cách đợt hoá đơn mượn nút
+      # "Ngưỡng thanh toán" (8f964d48). Chọn khác `khong` ⇒ job `seed` BỎ QUA hoàn toàn, chỉ
+      # job `noi-hoc-vien-lead` chạy — không đụng một bước seed nào.
+      noi_hoc_vien_lead:
+        description: 'CHỈ nối học viên cũ ↔ lead (scripts/noi-hoc-vien-voi-lead.ts), BỎ QUA mọi bước seed. chay-thu = dry-run; ghi = ghi thật (cần ô bên dưới).'
+        type: choice
+        required: false
+        default: khong
+        options:
+          - khong
+          - chay-thu
+          - ghi
+      noi_hoc_vien_expect:
+        description: 'Chỉ dùng với "ghi": số "SẼ NỐI" của lượt chay-thu vừa xem. Lệch ⇒ script không ghi gì.'
+        required: false
+        default: ''
 
 concurrency:
   group: seed-test-data
   cancel-in-progress: false
 
 jobs:
+  # Nối học viên cũ về lead nguồn (Student.leadId) — runbook: docs/hoc-vien-lien-ket-lead.md §4.
+  # Hai cổng của chính script vẫn nguyên: ghi phải kèm --expect=N khớp kế hoạch lúc chạy, và
+  # dòng tự khai quyền. Input đi qua `env`, không nội suy thẳng vào `run` (khuôn chống chèn lệnh).
+  noi-hoc-vien-lead:
+    name: Nối học viên cũ ↔ lead (DB test)
+    if: ${{ inputs.noi_hoc_vien_lead == 'chay-thu' || inputs.noi_hoc_vien_lead == 'ghi' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Xác nhận chủ ý
+        env:
+          XAC_NHAN: ${{ inputs.xac_nhan }}
+        run: |
+          if [ "$XAC_NHAN" != "SEED-TEST" ]; then
+            echo "::error::Chưa xác nhận. Gõ đúng SEED-TEST vào ô xác nhận rồi chạy lại."
+            exit 1
+          fi
+
+      - name: Chặn trỏ nhầm vào DB PROD
+        run: |
+          [ -n "${{ secrets.TEST_DIRECT_URL }}" ] || { echo "::error::Thiếu secret TEST_DIRECT_URL"; exit 1; }
+          if [ -n "${{ secrets.PROD_DIRECT_URL }}" ] && [ "${{ secrets.TEST_DIRECT_URL }}" = "${{ secrets.PROD_DIRECT_URL }}" ]; then
+            echo "::error::TEST_DIRECT_URL trùng PROD_DIRECT_URL — đây là DB PRODUCTION. Dừng."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      # Nhánh `*)` KHÔNG rơi về dry-run: lựa chọn lạ là lỗi cấu hình, phải đỏ.
+      - name: Nối học viên ↔ lead
+        env:
+          DATABASE_URL: ${{ secrets.TEST_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.TEST_DIRECT_URL }}
+          CHE_DO: ${{ inputs.noi_hoc_vien_lead }}
+          SO_DUYET: ${{ inputs.noi_hoc_vien_expect }}
+        run: |
+          case "$CHE_DO" in
+            chay-thu) pnpm exec tsx scripts/noi-hoc-vien-voi-lead.ts ;;
+            ghi)
+              if ! printf '%s' "$SO_DUYET" | grep -Eq '^[0-9]+$'; then
+                echo "::error::Chế độ ghi cần ô noi_hoc_vien_expect là số nguyên (số SẼ NỐI của lượt chay-thu)."
+                exit 1
+              fi
+              pnpm exec tsx scripts/noi-hoc-vien-voi-lead.ts --ghi "--expect=$SO_DUYET" ;;
+            *) echo "::error::Lựa chọn lạ: $CHE_DO"; exit 1 ;;
+          esac
+
   seed:
     name: Seed dữ liệu vào DB test
+    if: ${{ inputs.noi_hoc_vien_lead == '' || inputs.noi_hoc_vien_lead == 'khong' }}
     runs-on: ubuntu-latest
     # 50 chứ không 30: seed chấm công nói chuyện với Supabase, mỗi phép tính công là vài lượt
     # đi–về (~2 giây/ngày-người) nên nó bị cắt giữa chừng ở lượt 06/09. Đây là workflow bấm tay
