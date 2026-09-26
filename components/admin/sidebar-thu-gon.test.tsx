@@ -98,6 +98,7 @@ function dung() {
       scormEnabled={false}
       classGroupEnabled={false}
       zalocrmEnabled={false}
+      hoaDonEnabled={false}
     >
       <p>noi dung</p>
     </AdminShell>,

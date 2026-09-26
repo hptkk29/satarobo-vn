@@ -23,6 +23,7 @@ import {
   isZalocrmEnabled,
 } from "@/lib/flags";
 import { AdminShell } from "@/components/admin/admin-shell";
+import { laHoaDonBat } from "@/lib/finance/hoa-don/feature";
 import { ServiceWorkerRegister } from "@/components/push/service-worker-register";
 
 // Default title cho MỌI trang admin chưa tự khai metadata (86/199 trang) → không rơi về
@@ -124,6 +125,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   // mở kết nối Realtime và không gọi `/api/chat/realtime-token` trên mọi trang admin —
   // toàn bộ chi phí đó chỉ để nuôi một badge không bao giờ hiện.
   const chatUserId = canSeeChat ? session.user.id : "";
+  // Cờ màn Hoá đơn điện tử nằm trong DB (setting, cache 300s) chứ không phải env. Đọc hỏng thì
+  // coi như TẮT — một mục menu thiếu tốt hơn cả khung admin sập.
+  const hoaDonEnabled = await laHoaDonBat().catch(() => false);
 
   return (
     <>
@@ -143,6 +147,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         scormEnabled={isScormEnabled()}
         classGroupEnabled={isClassGroupEnabled()}
         zalocrmEnabled={isZalocrmEnabled()}
+        hoaDonEnabled={hoaDonEnabled}
         userId={session.user.id}
         userName={session.user.name}
         userRole={activeRole ?? session.user.role}

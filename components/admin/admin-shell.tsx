@@ -52,6 +52,7 @@ export function AdminShell({
   scormEnabled,
   classGroupEnabled,
   zalocrmEnabled,
+  hoaDonEnabled,
   userId,
   userName,
   userRole,
@@ -68,6 +69,7 @@ export function AdminShell({
   scormEnabled: boolean;
   classGroupEnabled: boolean;
   zalocrmEnabled: boolean;
+  hoaDonEnabled: boolean;
   userId: string;
   userName?: string | null;
   userRole?: string | null;
@@ -145,6 +147,7 @@ export function AdminShell({
     scormEnabled,
     classGroupEnabled,
     zalocrmEnabled,
+    hoaDonEnabled,
   };
 
   return (

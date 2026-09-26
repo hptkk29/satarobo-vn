@@ -601,3 +601,29 @@ Tập nền: 154 dòng `Payment` còn sống · **32 khoản thu thật** (23 đ
    hệ thống. Kế toán tải tệp đã xuất ở MISA lên. Ô **"Gửi email hoá đơn cho khách"** (mặc định bật,
    cột `guiEmailKhach`) để bỏ tick với hoá đơn cũ MISA đã gửi khách rồi.
 3. **Q-mở 2 và Q-mở 5 hoãn** (0 ca thật). Lưới vẫn giữ: đơn kit/thi vào hàng chờ phải hiện đúng, không sập.
+
+### Điều chỉnh khi thi công GĐ 4 (26/09)
+
+1. **Ghi BẢNG HOÁ ĐƠN dời lên GĐ 4** — lưu nháp (④), không xuất, sửa nháp, gỡ nháp / gỡ "không
+   xuất" (`lib/finance/hoa-don/ghi-hoa-don.ts` + action ở `payments/hoa-don/_actions.ts`). Không có
+   chúng thì nút tải lên của GĐ 4 để lại tệp mồ côi trong kho — lời hứa suông (luật 12). Cả bốn
+   **không chạm sổ tiền** (Payment · PaymentRequest · Receipt). GĐ 5 còn: xác nhận (⑤ — cấp RCP),
+   thay bản đã xác nhận, gửi lại, và cổng §5. Cờ mặc định TẮT nên chưa ai tạo được `HoaDonKhoan`
+   trước khi cổng §5 có mặt.
+2. **Bước ③ "Xác nhận" CHƯA vẽ nút ở GĐ 4.** Ngăn chỉ in một dòng trạng thái: *"Đủ thông tin để kế
+   toán xác nhận"* hoặc lý do còn thiếu (đọc từ `hanhDongChoDong`). Nút ra đời cùng action ở GĐ 5.
+3. **Ngưỡng hai cột là `xl` (1280px), không phải `md`.** Sidebar cố định 256px ⇒ ở `md` vùng nội dung
+   ~500px, không chứa nổi bảng + ngăn 400px. Dưới `xl` ngăn mở bằng Sheet; dưới `md` danh sách
+   thành thẻ. Cột **"Nguồn" chỉ hiện từ `2xl`**: chụp 1440px thấy cột thứ năm đẩy "Trạng thái" xuống
+   dưới ngăn. Nguồn vẫn in đầy đủ trong ngăn.
+4. **Sheet phải mang class `admin-scope`** — nó render qua portal ra ngoài khung admin, thiếu class là
+   token rơi về `:root` (primary thành cam). Chụp được ở 375px.
+5. **`nguoiMuaHashLucIn` lấy từ nhật ký lượt tải phiếu chờ.** Route phiếu chờ ghi `AuditLog`
+   (`TAI_PHIEU_CHO`, `lanThuKey`, dấu người mua) TRƯỚC khi dựng PDF; lưu nháp đọc lại dấu của lượt tải
+   gần nhất cho đúng lần thu, chưa tải lần nào thì lấy dấu hiện tại. Bảng hoá đơn không có dòng nào
+   lúc tải phiếu, nên không có chỗ khác để giữ.
+6. **Sidebar: mục đang mở = href DÀI NHẤT khớp** (`[SB-MO]`). Trước đây "Thanh toán" và "Hoá đơn điện
+   tử" cùng sáng ở `/payments/hoa-don`.
+7. **Chưa làm, ghi lại cho GĐ sau:** lọc theo cơ sở / tháng trên màn (hàng chờ thật hôm nay 32 khoản);
+   "Gắn thêm cho đủ" (§3.4) cho dòng THIẾU; ngăn "Đã xuất" hiện có đọc MỌI hoá đơn đã xác nhận — cần
+   giới hạn theo thời gian khi số hoá đơn lớn.

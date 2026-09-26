@@ -45,6 +45,7 @@ function dung(ghiDe: Record<string, unknown> = {}) {
       evalV2Enabled={false}
       scormEnabled={false}
       zalocrmEnabled={false}
+      hoaDonEnabled={false}
       classGroupEnabled={false}
       userId="usr_1"
       userName="Kiệt"
