@@ -92,6 +92,19 @@ on:
         description: 'Chỉ dùng với "ghi": số "SẼ NỐI" của lượt chay-thu vừa xem. Lệch ⇒ script không ghi gì.'
         required: false
         default: ''
+      # ── Nhận xét buổi + học bạ "lấy từ giáo viên nhập" [26/09/2026] ──────────────────
+      # Chạy scripts/seed-thu-nhan-xet-giao-vien.ts + seed-thu-hoc-ba-giao-vien.ts: đi qua ĐÚNG
+      # hàm lõi màn giáo viên / quản lý gọi (người thao tác = GV đứng lớp / QL cơ sở), thay dữ
+      # liệu bộ seed UAT chèn thẳng bảng. Email phụ huynh TẮT ở đường seed (guiEmailPhuHuynh=false).
+      nhan_xet_hoc_ba:
+        description: 'CHỈ seed lại nhận xét buổi + học bạ qua đường giáo viên, BỎ QUA mọi bước seed khác. chay-thu = chỉ đếm; ghi = xoá dữ liệu seed chèn thẳng bảng rồi nhập lại qua đường thật.'
+        type: choice
+        required: false
+        default: khong
+        options:
+          - khong
+          - chay-thu
+          - ghi
 
 concurrency:
   group: seed-test-data
@@ -157,9 +170,61 @@ jobs:
             *) echo "::error::Lựa chọn lạ: $CHE_DO"; exit 1 ;;
           esac
 
+  # Nhận xét buổi + học bạ qua đường giáo viên — xem ô chọn `nhan_xet_hoc_ba`. Hai script tự chặn
+  # DB không-local trừ khi có SEED_THU_DB_TEST=1 (chỉ job này đặt, sau bước chặn secret trùng PROD).
+  nhan-xet-hoc-ba:
+    name: Nhận xét buổi + học bạ qua đường giáo viên (DB test)
+    if: ${{ inputs.nhan_xet_hoc_ba == 'chay-thu' || inputs.nhan_xet_hoc_ba == 'ghi' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Xác nhận chủ ý
+        env:
+          XAC_NHAN: ${{ inputs.xac_nhan }}
+        run: |
+          if [ "$XAC_NHAN" != "SEED-TEST" ]; then
+            echo "::error::Chưa xác nhận. Gõ đúng SEED-TEST vào ô xác nhận rồi chạy lại."
+            exit 1
+          fi
+
+      - name: Chặn trỏ nhầm vào DB PROD
+        run: |
+          [ -n "${{ secrets.TEST_DIRECT_URL }}" ] || { echo "::error::Thiếu secret TEST_DIRECT_URL"; exit 1; }
+          if [ -n "${{ secrets.PROD_DIRECT_URL }}" ] && [ "${{ secrets.TEST_DIRECT_URL }}" = "${{ secrets.PROD_DIRECT_URL }}" ]; then
+            echo "::error::TEST_DIRECT_URL trùng PROD_DIRECT_URL — đây là DB PRODUCTION. Dừng."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      # Nhận xét TRƯỚC học bạ: phát hành học bạ đóng băng số liệu (gồm nhận xét) vào snapshot.
+      - name: Nhận xét buổi + học bạ
+        env:
+          DATABASE_URL: ${{ secrets.TEST_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.TEST_DIRECT_URL }}
+          SEED_THU_DB_TEST: "1"
+          CHE_DO: ${{ inputs.nhan_xet_hoc_ba }}
+        run: |
+          case "$CHE_DO" in
+            chay-thu) GHI="" ;;
+            ghi) GHI="--ghi" ;;
+            *) echo "::error::Lựa chọn lạ: $CHE_DO"; exit 1 ;;
+          esac
+          pnpm exec tsx scripts/seed-thu-nhan-xet-giao-vien.ts --thay-seed-cu --xoa-toan-bo-seed-cu $GHI
+          pnpm exec tsx scripts/seed-thu-hoc-ba-giao-vien.ts --thay-seed-cu --xoa-toan-bo-seed-cu $GHI
+
   seed:
     name: Seed dữ liệu vào DB test
-    if: ${{ inputs.noi_hoc_vien_lead == '' || inputs.noi_hoc_vien_lead == 'khong' }}
+    if: ${{ (inputs.noi_hoc_vien_lead == '' || inputs.noi_hoc_vien_lead == 'khong') && (inputs.nhan_xet_hoc_ba == '' || inputs.nhan_xet_hoc_ba == 'khong') }}
     runs-on: ubuntu-latest
     # 50 chứ không 30: seed chấm công nói chuyện với Supabase, mỗi phép tính công là vài lượt
     # đi–về (~2 giây/ngày-người) nên nó bị cắt giữa chừng ở lượt 06/09. Đây là workflow bấm tay
@@ -288,6 +353,19 @@ jobs:
         # test là Supabase chứ không phải localhost nên lượt NÀY phải khai chủ đích. An toàn
         # vì bước "Kiểm secret" ở trên đã từ chối khi TEST_DIRECT_URL trùng PROD_DIRECT_URL.
         env: { DATABASE_URL: "${{ secrets.TEST_DIRECT_URL }}", DIRECT_URL: "${{ secrets.TEST_DIRECT_URL }}", SEED_ALLOW_REMOTE: "1" }
+
+      # 26/09 — bộ UAT (03-hoc-vu, 05-lms) còn CHÈN THẲNG BẢNG nhận xét buổi + học bạ. Thay bằng
+      # dữ liệu đi qua đường giáo viên để lượt seed đầy đủ không quay lại dữ liệu "không phải
+      # giáo viên nhập" (chủ dự án 26/09). PHẢI sau bộ UAT: cần lớp, buổi, điểm danh đã có.
+      - name: Nhận xét buổi + học bạ qua đường giáo viên
+        if: ${{ inputs.bo_du_lieu_uat && !inputs.chi_lich_hen && !inputs.chi_cham_cong }}
+        env:
+          DATABASE_URL: ${{ secrets.TEST_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.TEST_DIRECT_URL }}
+          SEED_THU_DB_TEST: "1"
+        run: |
+          pnpm exec tsx scripts/seed-thu-nhan-xet-giao-vien.ts --thay-seed-cu --xoa-toan-bo-seed-cu --ghi
+          pnpm exec tsx scripts/seed-thu-hoc-ba-giao-vien.ts --thay-seed-cu --xoa-toan-bo-seed-cu --ghi
 
       - name: Tóm tắt
         run: |
