@@ -52,6 +52,7 @@ import { db } from "../lib/db";
 import { kiemQuyen } from "./_kiem-quyen";
 import { laKhoanDaXacNhan } from "../lib/finance/debt";
 import { nguonGiaoDich, soTienRong, type NguonGiaoDich } from "../lib/finance/hoa-don/nguon-khoan";
+import { phanLoaiKhoan, LY_DO_LOAI, type PhanLoaiKhoan } from "../lib/finance/hoa-don/du-dieu-kien";
 
 /** Trần liệt kê mã đơn. Vượt trần thì NÓI RÕ đã bỏ bao nhiêu — không cắt im lặng. */
 const TRAN_LIET_KE = 40;
@@ -162,29 +163,47 @@ type Ngu = {
   khoan: Khoan[];
   rong: Map<string, number>;
   nguon: Map<string, NguonGiaoDich>;
-  /** Khoản THU THẬT còn sống — tập nền của mọi phần dưới (định nghĩa ở `laKhoanThuThat`). */
+  /** Kết quả `phanLoaiKhoan` của từng khoản — ĐỊNH NGHĨA DÙNG CHUNG với màn hoá đơn. */
+  phanLoai: Map<string, PhanLoaiKhoan>;
+  /** Khoản THU THẬT — mọi khoản `phanLoaiKhoan` KHÔNG loại (gồm cả đơn đã huỷ / thiếu cơ sở). */
   thuThat: Khoan[];
   giaoDich: GiaoDich[];
   gdTheoKhoa: Map<string, GiaoDich>;
   gdTheoId: Map<string, GiaoDich>;
 };
 
-/**
- * "Khoản thu thật" — tập ứng viên của hàng chờ hoá đơn (PLAN §2.1), TRỪ hai vế chưa đo được ở
- * GĐ 0: mốc ngày (chưa chốt — phần ④ đo để chọn) và trạng thái đơn (in riêng ở từng phần).
- */
-function laKhoanThuThat(k: Khoan, rong: Map<string, number>, nguon: NguonGiaoDich): boolean {
-  return (
-    k.deletedAt == null &&
-    k.order.deletedAt == null &&
-    k.paymentType === "PAYMENT" &&
-    k.amount > 0 &&
-    (rong.get(k.id) ?? 0) > 0 &&
-    k.accountantStatus !== "REJECTED" &&
-    k.method !== "chuyen-noi-bo" &&
-    nguon.loai !== "LICH_SU" &&
-    nguon.loai !== "CHUYEN_NOI_BO"
+// "Khoản thu thật" KHÔNG định nghĩa ở đây — đi qua `phanLoaiKhoan` (lib/finance/hoa-don/
+// du-dieu-kien.ts), đúng hàm mà màn hoá đơn gọi. Bản đầu của tệp này có một hàm lọc riêng; hai
+// định nghĩa là hai câu trả lời, nên đã gỡ (GĐ 2, 26/09).
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ⓪ VÌ SAO KHOẢN BỊ LOẠI — lượt đo đầu (25/09) báo 154 dòng, 32 khoản thu thật, và KHÔNG nói
+// được 122 dòng kia là gì. Phần này đếm theo đúng lý do của `phanLoaiKhoan`.
+// ═══════════════════════════════════════════════════════════════════════════
+function phan0(ngu: Ngu): void {
+  in_(`## ⓪ Phân bố MỌI dòng \`Payment\` còn sống theo \`phanLoaiKhoan\``);
+  in_();
+  in_(
+    `**Phép tính:** mỗi dòng đi qua \`phanLoaiKhoan(khoản, đơn, số ròng)\` — cùng hàm màn hoá đơn ` +
+      `dùng. Ngăn: HANG_CHO · DON_DA_HUY · THIEU_CO_SO · LOAI (kèm lý do).`,
   );
+  in_();
+  const dem = new Map<string, { n: number; tong: number }>();
+  for (const k of ngu.khoan) {
+    const p = ngu.phanLoai.get(k.id)!;
+    const nhan = p.vao === "LOAI" ? `LOAI — ${LY_DO_LOAI[p.lyDo]}` : p.vao;
+    const cu = dem.get(nhan) ?? { n: 0, tong: 0 };
+    cu.n += 1;
+    cu.tong += k.amount;
+    dem.set(nhan, cu);
+  }
+  bang(
+    [...dem.entries()].sort((a, b) => b[1].n - a[1].n).map(([nhan, v]) => [nhan, String(v.n), tien(v.tong)]),
+    ["ngăn / lý do", "số dòng", "Σ amount (chưa ròng)"],
+  );
+  in_();
+  in_(`**Tổng ${ngu.khoan.length} dòng** · cộng kiểm: ${[...dem.values()].reduce((s, v) => s + v.n, 0)}.`);
+  in_();
 }
 
 function khoaGiaoDich(provider: string, providerTxnId: string): string {
@@ -218,7 +237,7 @@ function phan1(ngu: Ngu): void {
   in_(`## ① Khoản thu thật theo LOẠI ĐƠN`);
   in_();
   in_(
-    `**Phép tính:** khoản thu thật = \`laKhoanThuThat\` (PAYMENT · \`amount > 0\` · ròng > 0 · ` +
+    `**Phép tính:** khoản thu thật = \`phanLoaiKhoan\` KHÔNG loại (PAYMENT · \`amount > 0\` · ròng > 0 · ` +
       `không REJECTED · không chuyển nội bộ · không nhập lịch sử · đơn và khoản chưa xoá). ` +
       `Ròng = \`soTienRong\` (lib/finance/hoa-don/nguon-khoan.ts). "Có RCP" = có \`Receipt\` ` +
       `ACTIVE chưa xoá. "Đã xác nhận" = \`laKhoanDaXacNhan\` (lib/finance/debt).`,
@@ -613,11 +632,13 @@ async function main() {
         const [khoan, giaoDich] = await Promise.all([docKhoan(tx), docGiaoDich(tx)]);
         const rong = soTienRong(khoan);
         const nguon = new Map(khoan.map((k) => [k.id, nguonGiaoDich(k.note)]));
+        const phanLoai = new Map(khoan.map((k) => [k.id, phanLoaiKhoan(k, k.order, rong.get(k.id) ?? 0)]));
         const ngu: Ngu = {
           khoan,
           rong,
           nguon,
-          thuThat: khoan.filter((k) => laKhoanThuThat(k, rong, nguon.get(k.id)!)),
+          phanLoai,
+          thuThat: khoan.filter((k) => phanLoai.get(k.id)!.vao !== "LOAI"),
           giaoDich,
           gdTheoKhoa: new Map(giaoDich.map((g) => [khoaGiaoDich(g.provider, g.providerTxnId), g])),
           gdTheoId: new Map(giaoDich.map((g) => [g.id, g])),
@@ -630,6 +651,9 @@ async function main() {
         in_(`---`);
         in_();
 
+        phan0(ngu);
+        in_(`---`);
+        in_();
         phan1(ngu);
         in_(`---`);
         in_();

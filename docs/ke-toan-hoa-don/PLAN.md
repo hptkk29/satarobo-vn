@@ -546,7 +546,7 @@ một kế toán, không có ca pilot theo cơ sở). Đọc ở MỘT hàm `laH
 | **0.1** | **Nút Xác nhận: (a) hay (b)?** (§0.1) | ✅ **(b) — CHỦ DỰ ÁN CHỐT 25/09** ("làm như đề xuất") | — |
 | 1 | Lần thu THIẾU mà PH không bao giờ trả nốt: cho "xuất theo số đã thu", bắt buộc lý do? | Cho, ghi audit | GĐ 5 |
 | 2 | Đơn **kit/thi** (không có ghi danh ⇒ không có RCP). ~~(b) xác nhận không cần RCP~~ và ~~(c) cho `Receipt.enrollmentId` nullable~~ **bị loại**: cả hai sinh khoản CONFIRMED thiếu ghi danh, làm hai hàm gắn ghi danh THROW, vỡ convert lead và lưu kế hoạch | Chỉ còn (a): xuất hoá đơn không có RCP, khoản vẫn chờ kế toán xác nhận ở chỗ khác. Đo ở GĐ 0 | GĐ 5 |
-| 3 | **Thiếu thông tin người mua:** (1) mở ô sửa 4 cột ngay trong ngăn, gác `payments:confirm` + audit (đây là đường GHI mới lên `Order`); hay (2) dòng hiện *"Nhờ QLCS/sale bổ sung"* kèm link sang đơn | (2) — không mở đường ghi mới | GĐ 4 |
+| 3 | **Thiếu thông tin người mua:** (1) mở ô sửa 4 cột ngay trong ngăn, gác `payments:confirm` + audit (đây là đường GHI mới lên `Order`); hay (2) dòng hiện *"Nhờ QLCS/sale bổ sung"* kèm link sang đơn | ✅ **(2), và CHỈ CẢNH BÁO — không chặn Xác nhận** (GĐ 2, 26/09): tờ hoá đơn đã xuất ở MISA rồi, hồ sơ trên hệ thống thiếu không làm tờ đó sai. Không mở đường ghi mới | — |
 | 4 | Hoá đơn ghi **số thu thật** hay **số của đợt** (khi có dung sai được tha)? | Số thu thật, tha hiện riêng | GĐ 2 |
 | 5 | Tiền thừa (`CreditBalance`) có phải xuất hoá đơn không? Hiện chưa có đường rót | Ngoài phạm vi | — |
 | 6 | ~~Ngày cụ thể cho mốc hàng chờ~~ | ✅ **BỎ MỐC — chốt 26/09**: mọi khoản thu thật đã có hoá đơn ở MISA, chỉ thiếu chỗ tải lên | — |
