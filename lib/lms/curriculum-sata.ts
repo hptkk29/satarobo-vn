@@ -87,8 +87,19 @@ function longTermCurricula(): SataCurriculumBlueprint[] {
 }
 
 /**
- * Sata1 / Sata2 / Sata8 — khoá luyện thi, KHÔNG chia học phần ⇒ `moduleCode = null`
- * để nhãn buổi tự rút gọn còn "Buổi 1 - <tên bài>".
+ * Sata1 / Sata2 / Sata8 — MỘT học phần trọn khoá.
+ *
+ * ⚠️ ĐẢO CHỐT CŨ [chủ dự án ký 26/09/2026]: *"sata1, sata2 gồm 1 học phần 16 bài … sata8:
+ * 1 học phần 5 buổi"*. Luật cũ để `moduleCode = null` (khoá luyện thi KHÔNG chia học
+ * phần) để nhãn buổi rút gọn còn `"Buổi 1 - <tên bài>"`.
+ *
+ * Hệ quả người dùng THẤY, đã đo trước khi đổi (`lib/lms/session-project-name.ts`):
+ *   · NHÃN BUỔI đổi `"Buổi 3 - Tên bài"` → `"Buổi 3 - HP1 - Tên bài"` (màn GV/admin);
+ *   · PHIẾU GỬI PHỤ HUYNH KHÔNG đổi — `deriveSessionProjectName` cắt tiền tố học phần,
+ *     phụ huynh vẫn đọc tên trần. Đây là chốt 25/08 và bản đổi này không đụng tới.
+ *
+ * Ca ghim luật cũ (`"khoá luyện thi Sata1/2/8 KHÔNG chia học phần"`) đã được ĐẢO kèm đối
+ * chứng dương, không xoá lặng — xem `curriculum-sata.test.ts`.
  *
  * Combo (32 buổi) không có mảng `lessons` riêng vì bản chất nó là Sata1 + Sata2 ghép
  * lại — nên ở đây ghép đúng như vậy và ĐẶT học phần theo tên khoá con, để phiếu buổi
@@ -110,8 +121,10 @@ function examCurricula(): SataCurriculumBlueprint[] {
       lessons: titles.map((title, i) => ({
         order: i + 1,
         title,
-        moduleCode: null,
-        moduleName: null,
+        // MỘT học phần trọn khoá (chủ dự án ký 26/09/2026). Tên đặt `"Học phần 1"` cho
+        // khớp Sata3–7 — với khoá một học phần thì nhắc lại tên khoá không thêm gì.
+        moduleCode: "HP1",
+        moduleName: "Học phần 1",
         kind: null,
         description: c.goal ?? null,
         objectives: c.outcomes ?? [],
