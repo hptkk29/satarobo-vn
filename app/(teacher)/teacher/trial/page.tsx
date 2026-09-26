@@ -180,6 +180,7 @@ export default async function TeacherTrialPage({
       studentLabel: r.birthYear ? `${r.studentName} - ${r.birthYear}` : r.studentName,
       parentName: r.parentName,
       courseName: r.courseName,
+      saleName: r.saleName,
       status: r.status,
       evaluated: r.evaluated,
     };
