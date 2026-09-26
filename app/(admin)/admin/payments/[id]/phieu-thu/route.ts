@@ -10,15 +10,9 @@ import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { withFreshFonts } from "@/lib/pdf/brand";
 import { lookupMethodNameByCode } from "@/lib/payments/method-lookup";
-import { PhieuThuPdf, type PhieuThuPdfData } from "@/lib/pdf/phieu-thu";
-import {
-  CAU_HINH_HOA_DON_MAC_DINH,
-  phapNhanChoDon,
-  thueChoLoaiDon,
-} from "@/lib/finance/hoa-don/phap-nhan";
-import { nguoiMuaChoDon } from "@/lib/finance/hoa-don/nguoi-mua";
-import { soTienBangChu } from "@/lib/finance/hoa-don/so-tien-bang-chu";
-import { tinhDongHoaDon, tongHoaDon } from "@/lib/finance/hoa-don/tinh-hoa-don";
+import { PhieuThuPdf } from "@/lib/pdf/phieu-thu";
+import { CAU_HINH_HOA_DON_MAC_DINH, phapNhanChoDon } from "@/lib/finance/hoa-don/phap-nhan";
+import { dungPhieuThuData, tenHocVienChoKhoan } from "@/lib/finance/hoa-don/phieu-thu-data";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -81,8 +75,10 @@ export async function GET(
       enrollment: {
         select: {
           class: { select: { name: true, course: { select: { name: true } } } },
+          student: { select: { name: true } },
         },
       },
+      orderItem: { select: { student: { select: { name: true } } } },
       receipts: {
         where: { status: "ACTIVE" },
         select: { code: true, issuedAt: true },
@@ -149,31 +145,17 @@ export async function GET(
     );
   }
 
-  const { thueSuat, kieuGia } = thueChoLoaiDon(payment.order?.type ?? "TAT_CA", cauHinh);
-  const tenHocVien = payment.order?.student?.name ?? null;
-  const tenKhoa = payment.enrollment?.class?.course?.name ?? null;
-  const tenLop = payment.enrollment?.class?.name ?? null;
-  const dong = [
-    tinhDongHoaDon({
-      // Nội dung thu viết như mẫu VIN: "Khoá học <khoá> — HV <tên bé>".
-      ten:
-        [tenKhoa ? `Khoá học ${tenKhoa}` : "Học phí", tenHocVien ? `HV ${tenHocVien}` : null]
-          .filter(Boolean)
-          .join(" — ") + (tenLop ? ` (lớp ${tenLop})` : ""),
-      donViTinh: tenKhoa ? "Khoá" : "Lần",
-      soLuong: 1,
-      soTien: payment.amount,
-      thueSuat,
-      kieuGia,
-    }),
-  ];
-  const tong = tongHoaDon(dong);
-
-  const data: PhieuThuPdfData = {
+  // Dữ liệu tờ phiếu đi qua MỘT công thức dùng chung với bản CHỜ XÁC NHẬN
+  // (`lib/finance/hoa-don/phieu-thu-data.ts`) — kế toán làm hoá đơn MISA theo bản chờ, nên tờ
+  // chính thức in sau phải ra đúng cùng dòng thu / thuế / người mua.
+  const data = dungPhieuThuData({
     maPhieu: receipt.code,
     ngayLap: fmtDate(receipt.issuedAt),
     phapNhan,
-    nguoiMua: nguoiMuaChoDon({
+    cauHinh,
+    don: {
+      code: payment.order?.code ?? null,
+      type: payment.order?.type ?? null,
       customerName: payment.order?.customerName ?? null,
       customerPhone: payment.order?.customerPhone ?? null,
       customerEmail: payment.order?.customerEmail ?? null,
@@ -185,16 +167,16 @@ export async function GET(
       invoiceCompanyName: payment.order?.invoiceCompanyName ?? null,
       invoiceTaxCode: payment.order?.invoiceTaxCode ?? null,
       invoiceEmail: payment.order?.invoiceEmail ?? null,
-    }),
+    },
+    soTien: payment.amount,
     // Tra nhãn từ DANH MỤC (không lọc isActive: phương thức đã tắt vẫn phải in đúng tên
     // trên phiếu thu CŨ).
     hinhThucThanhToan: methodLabel?.trim() || payment.method,
-    dong,
-    tong,
-    soTienBangChu: soTienBangChu(tong.congTienThanhToan),
-    maDon: payment.order?.code ?? null,
+    tenKhoa: payment.enrollment?.class?.course?.name ?? null,
+    tenHocVien: tenHocVienChoKhoan(payment, payment.order?.student),
+    tenLop: payment.enrollment?.class?.name ?? null,
     nguoiThu: collector?.name ?? null,
-  };
+  });
 
   let pdf: Buffer;
   try {

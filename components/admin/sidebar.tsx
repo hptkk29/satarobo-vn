@@ -57,6 +57,7 @@ import {
   Package2,
   Plug,
   Presentation,
+  ReceiptText,
   RefreshCw,
   ScrollText,
   Send,
@@ -99,7 +100,7 @@ type NavItem = {
    * chạy thật. Cùng cờ đó cũng làm trang `/zalo-crm` trả 404, nên menu và trang bật/tắt
    * đồng bộ — không có cảnh bấm menu ra 404.
    */
-  flag?: "eval" | "scorm" | "classGroup" | "zalocrm";
+  flag?: "eval" | "scorm" | "classGroup" | "zalocrm" | "hoaDon";
   /**
    * R3: nhãn cụm con (sub-section) trong 1 NavGroup. Các item liền kề cùng `cluster`
    * được gom dưới 1 nhãn nhỏ — render trước item ĐẦU TIÊN hiển thị của cụm (robust với
@@ -318,6 +319,9 @@ const NAV_GROUPS: NavGroup[] = [
       // Ghi nhận khoản thu là việc của quầy (payments:record) — xem ghi chú trong
       // app/(admin)/admin/payments/page.tsx. Đừng thu lại còn mỗi payments:manage.
       { label: "Thanh toán", href: "/payments", icon: CreditCard, perm: ["payments:manage", "payments:record"] },
+      // Màn của KẾ TOÁN: tải phiếu thu chờ → tải tệp hoá đơn MISA lên (docs/ke-toan-hoa-don/PLAN.md).
+      // Cờ `billing.hoaDonEnabled` (setting DB) — TẮT thì mục ẩn và trang 404.
+      { label: "Hoá đơn điện tử", href: "/payments/hoa-don", icon: ReceiptText, perm: [...PAGE_GATES["/payments/hoa-don"]], flag: "hoaDon" },
       { label: "Công nợ", href: "/cong-no", icon: Wallet, perm: ["payments:manage", "payments:view"] },
       // Nhóm HV chốt hàng loạt mà chưa nhập tiền: có ghi danh nhưng KHÔNG có đơn/khoản thu
       // (nhánh allowNoPayment của bulk-convert). Không màn nào khác nhìn thấy nhóm này.
@@ -450,6 +454,7 @@ export function Sidebar({
   scormEnabled = false,
   classGroupEnabled = false,
   zalocrmEnabled = false,
+  hoaDonEnabled = false,
   onNavigate,
   thuGon = false,
   onDoiThuGon,
@@ -465,6 +470,8 @@ export function Sidebar({
   classGroupEnabled?: boolean;
   /** S1 — mặc định false ⇒ mục "Zalo CRM" ẩn (cùng cờ với trang, xem lib/flags.ts). */
   zalocrmEnabled?: boolean;
+  /** Mặc định false ⇒ mục "Hoá đơn điện tử" ẩn (cờ `billing.hoaDonEnabled`, `laHoaDonBat()`). */
+  hoaDonEnabled?: boolean;
   /**
    * Thu gọn thành DẢI CHỈ-BIỂU-TƯỢNG (rộng 64px). Trạng thái do `AdminShell` giữ.
    *
@@ -509,11 +516,12 @@ export function Sidebar({
             (it.flag === "eval" && evalV2Enabled) ||
             (it.flag === "scorm" && scormEnabled) ||
             (it.flag === "classGroup" && classGroupEnabled) ||
-            (it.flag === "zalocrm" && zalocrmEnabled)) &&
+            (it.flag === "zalocrm" && zalocrmEnabled) ||
+            (it.flag === "hoaDon" && hoaDonEnabled)) &&
           (!it.perm || it.perm.some((p) => grantedSet.has(p))),
       ),
     })).filter((g) => g.items.length > 0);
-  }, [grantedSet, evalV2Enabled, scormEnabled, classGroupEnabled, zalocrmEnabled]);
+  }, [grantedSet, evalV2Enabled, scormEnabled, classGroupEnabled, zalocrmEnabled, hoaDonEnabled]);
 
   // Nhóm đang chứa trang hiện tại (deterministic SSR + client → không hydration mismatch).
   const activeGroupLabel = useMemo(() => {
@@ -521,6 +529,19 @@ export function Sidebar({
       if (g.items.some((it) => pathname.startsWith(it.href))) return g.label;
     }
     return visibleGroups[0]?.label ?? null;
+  }, [visibleGroups, pathname]);
+
+  // Mục đang mở = href DÀI NHẤT khớp đầu pathname. So `startsWith` riêng từng mục thì "/payments"
+  // sáng cùng lúc với "/payments/hoa-don" (chụp 26/09/2026) — hai mục cùng tô là người dùng không
+  // biết mình đang ở màn nào.
+  const activeHref = useMemo(() => {
+    let dai: string | null = null;
+    for (const g of visibleGroups) {
+      for (const it of g.items) {
+        if (pathname.startsWith(it.href) && (dai === null || it.href.length > dai.length)) dai = it.href;
+      }
+    }
+    return dai;
   }, [visibleGroups, pathname]);
 
   // Collapsed = set tên nhóm đang thu gọn. Mặc định thu gọn mọi nhóm trừ nhóm active.
@@ -665,7 +686,7 @@ export function Sidebar({
               {!isCollapsed &&
                 group.items.map((item, idx) => {
                   const Icon = item.icon;
-                  const active = pathname.startsWith(item.href);
+                  const active = item.href === activeHref;
                   // R3: nhãn cụm con — chỉ render trước item ĐẦU TIÊN hiển thị của cụm.
                   const showCluster =
                     !!item.cluster && item.cluster !== group.items[idx - 1]?.cluster;
@@ -691,6 +712,7 @@ export function Sidebar({
                       <Link
                         href={item.href}
                         onClick={onNavigate}
+                        aria-current={active ? "page" : undefined}
                         // ⚠️ `title` + `aria-label` CHỈ khi thu gọn, và chúng không phải
                         // trang trí: ở dải thì nhãn bị ẩn, nên một biểu tượng không tên là
                         // lời hứa không đọc được (luật 12). `aria-label` lo trình đọc màn

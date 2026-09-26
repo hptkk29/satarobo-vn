@@ -41,9 +41,18 @@ Font.register({
 });
 
 export type PhieuThuPdfData = {
-  /** Mã phiếu thu NỘI BỘ (RCP-…). KHÔNG phải số hoá đơn. */
-  maPhieu: string;
-  ngayLap: string; // dd/mm/yyyy
+  /**
+   * Mã phiếu thu NỘI BỘ (RCP-…). KHÔNG phải số hoá đơn.
+   *
+   * `null` ⇒ BẢN CHỜ XÁC NHẬN (docs/ke-toan-hoa-don/PLAN.md §4 bước ②): kế toán tải ngay khi tiền
+   * về, trước khi có số RCP. Bản chờ in dấu nền "CHỜ XÁC NHẬN · CHƯA CÓ SỐ" và để trống ô số.
+   * Cố ý là `null` chứ không phải một cờ `banCho?: boolean`: quên truyền cờ là in ra một tờ không
+   * dấu nền, không số — còn thiếu số thì TỰ có dấu nền (hỏng về phía an toàn), và không thể có
+   * trạng thái mâu thuẫn "bản chờ mà có RCP".
+   */
+  maPhieu: string | null;
+  /** dd/mm/yyyy — bản chính thức: ngày lập phiếu; bản chờ: ngày THU (lịch VN). */
+  ngayLap: string;
   phapNhan: PhapNhan;
   nguoiMua: NguoiMuaHoaDon;
   /** Nhãn hình thức thanh toán đã tra từ danh mục (không in mã nội bộ). */
@@ -136,6 +145,20 @@ const s = StyleSheet.create({
   kyCho: { marginTop: 42, fontSize: 8.5, color: "#333" },
 
   chan: { marginTop: 14, fontSize: 7.5, color: "#7c2d12", textAlign: "center", lineHeight: 1.4 },
+
+  // Dấu nền bản chờ — nằm TRÊN khung, xoay chéo, mờ; không che số liệu.
+  dauNen: {
+    position: "absolute",
+    top: 360,
+    left: 0,
+    right: 0,
+    textAlign: "center",
+    fontSize: 30,
+    fontWeight: "bold",
+    color: "#b91c1c",
+    opacity: 0.16,
+    transform: "rotate(-28deg)",
+  },
 });
 
 function Khai({ nhan, giaTri }: { nhan: string; giaTri: string }) {
@@ -147,121 +170,144 @@ function Khai({ nhan, giaTri }: { nhan: string; giaTri: string }) {
   );
 }
 
-export function PhieuThuPdf({ data }: { data: PhieuThuPdfData }) {
+/** MỘT tờ phiếu thu (một `<Page>`). Bản chính thức và bản chờ dùng CHUNG bố cục này. */
+export function PhieuThuTrang({ data }: { data: PhieuThuPdfData }) {
   const { phapNhan: pn, nguoiMua: nm, tong } = data;
+  const banCho = data.maPhieu == null;
   // Số hàng trống để bảng cao bằng mẫu — mẫu MISA luôn chừa 5 dòng.
   const hangTrong = Math.max(0, 4 - data.dong.length);
 
   return (
-    <Document>
-      <Page size="A4" style={s.page}>
-        <View style={s.khung}>
-          <Text style={s.tieuDe}>PHIẾU THU</Text>
-          {/* Dòng này KHÔNG được bỏ — xem chú thích đầu tệp. */}
-          <Text style={s.phuDe}>
-            Phiếu thu nội bộ — KHÔNG phải hoá đơn giá trị gia tăng
-          </Text>
-          <Text style={s.ngay}>Ngày lập: {data.ngayLap}</Text>
-          <Text style={s.soPhieu}>
-            Số phiếu: {data.maPhieu}
-            {data.maDon ? `   ·   Đơn hàng: ${data.maDon}` : ""}
-          </Text>
+    <Page size="A4" style={s.page}>
+      {banCho ? <Text style={s.dauNen}>CHỜ XÁC NHẬN · CHƯA CÓ SỐ</Text> : null}
+      <View style={s.khung}>
+        <Text style={s.tieuDe}>PHIẾU THU</Text>
+        {/* Dòng này KHÔNG được bỏ — xem chú thích đầu tệp. */}
+        <Text style={s.phuDe}>
+          Phiếu thu nội bộ — KHÔNG phải hoá đơn giá trị gia tăng
+        </Text>
+        <Text style={s.ngay}>
+          {banCho ? "Ngày thu" : "Ngày lập"}: {data.ngayLap}
+        </Text>
+        <Text style={s.soPhieu}>
+          Số phiếu: {data.maPhieu ?? "(cấp khi kế toán xác nhận)"}
+          {data.maDon ? `   ·   Đơn hàng: ${data.maDon}` : ""}
+        </Text>
 
-          <View style={s.vach} />
+        <View style={s.vach} />
 
-          <Text style={s.tenBan}>Đơn vị thu: {pn.ten}</Text>
-          <Khai nhan="Mã số thuế" giaTri={pn.maSoThue} />
-          <Khai nhan="Địa chỉ" giaTri={pn.diaChi} />
-          {pn.dienThoai ? <Khai nhan="Điện thoại" giaTri={pn.dienThoai} /> : null}
-          {pn.website ? <Khai nhan="Website" giaTri={pn.website} /> : null}
+        <Text style={s.tenBan}>Đơn vị thu: {pn.ten}</Text>
+        <Khai nhan="Mã số thuế" giaTri={pn.maSoThue} />
+        <Khai nhan="Địa chỉ" giaTri={pn.diaChi} />
+        {pn.dienThoai ? <Khai nhan="Điện thoại" giaTri={pn.dienThoai} /> : null}
+        {pn.website ? <Khai nhan="Website" giaTri={pn.website} /> : null}
 
-          <View style={s.vach} />
+        <View style={s.vach} />
 
-          <Khai nhan="Họ tên người nộp tiền" giaTri={nm.hoTen} />
-          {nm.tenDonVi ? <Khai nhan="Tên đơn vị" giaTri={nm.tenDonVi} /> : null}
-          {nm.maSoThue ? <Khai nhan="Mã số thuế" giaTri={nm.maSoThue} /> : null}
-          <Khai nhan="Địa chỉ" giaTri={nm.diaChi || "—"} />
-          {nm.cccd ? <Khai nhan="CCCD / Hộ chiếu" giaTri={nm.cccd} /> : null}
-          <Khai nhan="Hình thức thanh toán" giaTri={nhanHinhThuc(data.hinhThucThanhToan)} />
+        <Khai nhan="Họ tên người nộp tiền" giaTri={nm.hoTen} />
+        {nm.tenDonVi ? <Khai nhan="Tên đơn vị" giaTri={nm.tenDonVi} /> : null}
+        {nm.maSoThue ? <Khai nhan="Mã số thuế" giaTri={nm.maSoThue} /> : null}
+        <Khai nhan="Địa chỉ" giaTri={nm.diaChi || "—"} />
+        {nm.cccd ? <Khai nhan="CCCD / Hộ chiếu" giaTri={nm.cccd} /> : null}
+        <Khai nhan="Hình thức thanh toán" giaTri={nhanHinhThuc(data.hinhThucThanhToan)} />
 
-          {/* ── BẢNG NỘI DUNG THU ───────────────────────────────────────── */}
-          <View style={s.bang}>
-            <View style={s.hang}>
-              <Text style={[s.o, s.cStt, s.dauBang]}>STT</Text>
-              <Text style={[s.o, s.cTen, s.dauBang]}>Nội dung thu</Text>
-              <Text style={[s.o, s.cDvi, s.dauBang]}>Đơn vị tính</Text>
-              <Text style={[s.o, s.cSl, s.dauBang]}>Số lượng</Text>
-              <Text style={[s.o, s.cDonGia, s.dauBang]}>Đơn giá</Text>
-              <Text style={[s.oCuoi, s.cThanhTien, s.dauBang]}>Thành tiền</Text>
-            </View>
-            {data.dong.map((d, i) => (
-              <View key={i} style={s.hang}>
-                <Text style={[s.o, s.cStt, s.giua]}>{i + 1}</Text>
-                <Text style={[s.o, s.cTen]}>{d.ten}</Text>
-                <Text style={[s.o, s.cDvi, s.giua]}>{d.donViTinh}</Text>
-                <Text style={[s.o, s.cSl, s.giua]}>{d.soLuong}</Text>
-                <Text style={[s.o, s.cDonGia, s.phai]}>{donGia(d.donGia)}</Text>
-                <Text style={[s.oCuoi, s.cThanhTien, s.phai]}>{vnd(d.thanhTien)}</Text>
-              </View>
-            ))}
-            {Array.from({ length: hangTrong }, (_, i) => (
-              <View key={`trong-${i}`} style={s.hang}>
-                <Text style={[s.o, s.cStt]}> </Text>
-                <Text style={[s.o, s.cTen]}> </Text>
-                <Text style={[s.o, s.cDvi]}> </Text>
-                <Text style={[s.o, s.cSl]}> </Text>
-                <Text style={[s.o, s.cDonGia]}> </Text>
-                <Text style={[s.oCuoi, s.cThanhTien]}> </Text>
-              </View>
-            ))}
-
-            <View style={s.tongHang}>
-              <Text style={s.tongNhan}>Cộng tiền hàng</Text>
-              <Text style={s.tongGiaTri}>{vnd(tong.thanhTienTruocThue)}</Text>
-            </View>
-            {/* Tách theo TỪNG mức thuế suất — đúng khối "Tổng hợp" của mẫu MISA. */}
-            {tong.theoThueSuat.map((n) => (
-              <View key={n.thueSuat} style={s.tongHang}>
-                <Text style={s.tongNhan}>Tiền thuế GTGT (thuế suất {n.thueSuat}%)</Text>
-                <Text style={s.tongGiaTri}>{vnd(n.tienThue)}</Text>
-              </View>
-            ))}
-            <View style={s.tongHang}>
-              <Text style={[s.tongNhan, s.tongDam]}>Tổng cộng tiền thanh toán</Text>
-              <Text style={[s.tongGiaTri, s.tongDam]}>{vnd(tong.congTienThanhToan)}</Text>
-            </View>
+        {/* ── BẢNG NỘI DUNG THU ───────────────────────────────────────── */}
+        <View style={s.bang}>
+          <View style={s.hang}>
+            <Text style={[s.o, s.cStt, s.dauBang]}>STT</Text>
+            <Text style={[s.o, s.cTen, s.dauBang]}>Nội dung thu</Text>
+            <Text style={[s.o, s.cDvi, s.dauBang]}>Đơn vị tính</Text>
+            <Text style={[s.o, s.cSl, s.dauBang]}>Số lượng</Text>
+            <Text style={[s.o, s.cDonGia, s.dauBang]}>Đơn giá</Text>
+            <Text style={[s.oCuoi, s.cThanhTien, s.dauBang]}>Thành tiền</Text>
           </View>
-
-          <View style={s.bangChu}>
-            <Text>
-              Số tiền viết bằng chữ: <Text style={{ fontWeight: "bold" }}>{data.soTienBangChu}</Text>
-            </Text>
-          </View>
-
-          <View style={s.kyTen}>
-            <View style={s.cotKy}>
-              <Text style={s.kyNhan}>Người nộp tiền</Text>
-              <Text style={s.kyPhu}>(Ký, ghi rõ họ tên)</Text>
-              <Text style={s.kyCho}>{nm.hoTen}</Text>
+          {data.dong.map((d, i) => (
+            <View key={i} style={s.hang}>
+              <Text style={[s.o, s.cStt, s.giua]}>{i + 1}</Text>
+              <Text style={[s.o, s.cTen]}>{d.ten}</Text>
+              <Text style={[s.o, s.cDvi, s.giua]}>{d.donViTinh}</Text>
+              <Text style={[s.o, s.cSl, s.giua]}>{d.soLuong}</Text>
+              <Text style={[s.o, s.cDonGia, s.phai]}>{donGia(d.donGia)}</Text>
+              <Text style={[s.oCuoi, s.cThanhTien, s.phai]}>{vnd(d.thanhTien)}</Text>
             </View>
-            <View style={s.cotKy}>
-              <Text style={s.kyNhan}>Người thu tiền</Text>
-              <Text style={s.kyPhu}>(Ký, ghi rõ họ tên)</Text>
-              <Text style={s.kyCho}>{data.nguoiThu ?? " "}</Text>
+          ))}
+          {Array.from({ length: hangTrong }, (_, i) => (
+            <View key={`trong-${i}`} style={s.hang}>
+              <Text style={[s.o, s.cStt]}> </Text>
+              <Text style={[s.o, s.cTen]}> </Text>
+              <Text style={[s.o, s.cDvi]}> </Text>
+              <Text style={[s.o, s.cSl]}> </Text>
+              <Text style={[s.o, s.cDonGia]}> </Text>
+              <Text style={[s.oCuoi, s.cThanhTien]}> </Text>
             </View>
-          </View>
+          ))}
 
-          {/* Chân trang NÓI THẬT về thứ tờ giấy này là. Mẫu thật có Mã CQT + chữ ký số +
-              mã tra cứu ở đúng vị trí này; ta không có chúng nên phải nói ra, chứ không
-              được để trống cho người đọc tự suy là hoá đơn. */}
-          <Text style={s.chan}>
-            Phiếu thu này do hệ thống Sata Robo lập để xác nhận đã nhận tiền. Đây KHÔNG phải
-            hoá đơn giá trị gia tăng và không thay thế hoá đơn: hoá đơn GTGT do
-            {pn.phanMem ? ` ${pn.phanMem}` : " nhà cung cấp hoá đơn điện tử"} phát hành
-            riêng, có Mã cơ quan thuế và chữ ký số của pháp nhân.
+          <View style={s.tongHang}>
+            <Text style={s.tongNhan}>Cộng tiền hàng</Text>
+            <Text style={s.tongGiaTri}>{vnd(tong.thanhTienTruocThue)}</Text>
+          </View>
+          {/* Tách theo TỪNG mức thuế suất — đúng khối "Tổng hợp" của mẫu MISA. */}
+          {tong.theoThueSuat.map((n) => (
+            <View key={n.thueSuat} style={s.tongHang}>
+              <Text style={s.tongNhan}>Tiền thuế GTGT (thuế suất {n.thueSuat}%)</Text>
+              <Text style={s.tongGiaTri}>{vnd(n.tienThue)}</Text>
+            </View>
+          ))}
+          <View style={s.tongHang}>
+            <Text style={[s.tongNhan, s.tongDam]}>Tổng cộng tiền thanh toán</Text>
+            <Text style={[s.tongGiaTri, s.tongDam]}>{vnd(tong.congTienThanhToan)}</Text>
+          </View>
+        </View>
+
+        <View style={s.bangChu}>
+          <Text>
+            Số tiền viết bằng chữ: <Text style={{ fontWeight: "bold" }}>{data.soTienBangChu}</Text>
           </Text>
         </View>
-      </Page>
+
+        <View style={s.kyTen}>
+          <View style={s.cotKy}>
+            <Text style={s.kyNhan}>Người nộp tiền</Text>
+            <Text style={s.kyPhu}>(Ký, ghi rõ họ tên)</Text>
+            <Text style={s.kyCho}>{nm.hoTen}</Text>
+          </View>
+          <View style={s.cotKy}>
+            <Text style={s.kyNhan}>Người thu tiền</Text>
+            <Text style={s.kyPhu}>(Ký, ghi rõ họ tên)</Text>
+            <Text style={s.kyCho}>{data.nguoiThu ?? " "}</Text>
+          </View>
+        </View>
+
+        {/* Chân trang NÓI THẬT về thứ tờ giấy này là. Mẫu thật có Mã CQT + chữ ký số +
+            mã tra cứu ở đúng vị trí này; ta không có chúng nên phải nói ra, chứ không
+            được để trống cho người đọc tự suy là hoá đơn. */}
+        <Text style={s.chan}>
+          Phiếu thu này do hệ thống Sata Robo lập để xác nhận đã nhận tiền. Đây KHÔNG phải
+          hoá đơn giá trị gia tăng và không thay thế hoá đơn: hoá đơn GTGT do
+          {pn.phanMem ? ` ${pn.phanMem}` : " nhà cung cấp hoá đơn điện tử"} phát hành
+          riêng, có Mã cơ quan thuế và chữ ký số của pháp nhân.
+        </Text>
+      </View>
+    </Page>
+  );
+}
+
+/** Phiếu thu MỘT trang — chữ ký giữ nguyên cho route bản chính thức. */
+export function PhieuThuPdf({ data }: { data: PhieuThuPdfData }) {
+  return (
+    <Document>
+      <PhieuThuTrang data={data} />
+    </Document>
+  );
+}
+
+/** Nhiều tờ trong MỘT tệp — một lần thu phủ nhiều khoản (vd hai con) ⇒ mỗi khoản một trang. */
+export function PhieuThuNhieuTrangPdf({ trang }: { trang: readonly PhieuThuPdfData[] }) {
+  return (
+    <Document>
+      {trang.map((d, i) => (
+        <PhieuThuTrang key={i} data={d} />
+      ))}
     </Document>
   );
 }

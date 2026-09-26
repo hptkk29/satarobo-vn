@@ -266,6 +266,17 @@ export const PAGE_GATES = {
    * local (local chạy RBAC v1 tĩnh).
    */
   "/zalo-crm": ["zalocrm:use"],
+
+  /**
+   * Hoá đơn điện tử — màn của KẾ TOÁN (docs/ke-toan-hoa-don/PLAN.md §9). Không tạo quyền mới:
+   * `payments:confirm` là đúng quyền "xác nhận khoản thu" mà bước chốt hoá đơn sẽ dùng, seed
+   * GLOBAL ở HO_ACCOUNTANT + CENTER_ACCOUNTANT ⇒ không phải chạy seed-prod-roles.
+   *
+   * ⚠️ Vào được TRANG ≠ thao tác được trên MỌI dòng: cổng trang hỏi trần; từng dòng hỏi thêm
+   * "là kế toán của ĐÚNG cơ sở giữ đơn" (`coQuyenKeToanTaiCoSo` — người kiêm kế toán CS2 + sale
+   * CS1 thấy dòng CS1 nhưng nút tắt kèm lý do). Cờ `billing.hoaDonEnabled` TẮT ⇒ trang 404.
+   */
+  "/payments/hoa-don": ["payments:confirm"],
 } as const satisfies Record<string, readonly Action[]>;
 
 export type GatedHref = keyof typeof PAGE_GATES;

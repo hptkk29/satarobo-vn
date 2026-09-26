@@ -29,6 +29,11 @@ export function kyHieuTheoNam(kyHieuMau: string, ngayPhatHanh: Date): string {
   return `${m[1]}${nam2(ngayPhatHanh)}${m[3]}${m[4]}`;
 }
 
+/** Đúng HÌNH DẠNG ký hiệu (chưa so năm) — dùng khi kế toán lưu nháp chưa chọn ngày phát hành. */
+export function dungHinhDangKyHieu(kyHieu: string): boolean {
+  return HINH_DANG.test(chuan(kyHieu));
+}
+
 /** `null` = hợp lệ; ngược lại là câu lỗi tiếng Việt cho người dùng. */
 export function kiemKyHieu(kyHieu: string, ngayPhatHanh: Date): string | null {
   const m = HINH_DANG.exec(chuan(kyHieu));
