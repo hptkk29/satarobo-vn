@@ -24,6 +24,7 @@ import { z } from "zod";
 import { can } from "@/lib/auth/can";
 import { LoiCong } from "../../gateway/loi";
 import { dinhNghiaCongCu } from "../kieu";
+import { catTrang, kiemConTro, thamSoTrang } from "../trang";
 
 const coSo = z.object({
   id: z.string(),
@@ -71,11 +72,13 @@ export const layCoSo = dinhNghiaCongCu({
   cheDo: "doc",
   nhayCam: "thap",
   quyenCan: ["centers:view"],
-  thamSo: z.object({}).strict(),
+  // Spec §9: mọi công cụ trả danh sách nhận `gioi_han?` + `con_tro?` (Đợt 1 bổ sung).
+  thamSo: z.object({ ...thamSoTrang }).strict(),
   ketQua: z.array(coSo),
   dangDuLieu: "array",
   phienBanKhuon: "1.0",
-  async thucThi(ctx) {
+  kiemThem: (i) => kiemConTro(i),
+  async thucThi(ctx, i) {
     const phamVi = new Set(ctx.phamViCoSo);
     // Đọc CẢ cây còn sống (bảng rất nhỏ) để đi ngược tìm pháp nhân; lọc phạm vi SAU.
     const tatCa: DongDonVi[] = await ctx.sdb.orgUnit.findMany({
@@ -121,6 +124,6 @@ export const layCoSo = dinhNghiaCongCu({
       dia_chi: u.address ?? (u.centerId ? diaChiCenter.get(u.centerId) : null) ?? "",
       la_trung_tam: u.type === "CENTER",
     }));
-    return { duLieu, tiepTheo: null };
+    return catTrang(duLieu, i, ctx.hanMuc);
   },
 });

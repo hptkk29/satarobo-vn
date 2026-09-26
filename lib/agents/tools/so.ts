@@ -8,8 +8,27 @@
 // thiếu lớp bảo vệ.
 import type { CongCuDaDangKy } from "./kieu";
 import { layCoSo } from "./danh-muc/lay-co-so";
+import { layKhoaHoc } from "./danh-muc/lay-khoa-hoc";
+import { layNhanSu } from "./danh-muc/lay-nhan-su";
+import { layKenh } from "./danh-muc/lay-kenh";
+import { layChucDanh } from "./danh-muc/lay-chuc-danh";
+import { layDangKy } from "./kinh-doanh/lay-dang-ky";
+import { layChiTieu } from "./kinh-doanh/lay-chi-tieu";
+import { layKhuyenMaiHieuLuc } from "./van-ban/lay-khuyen-mai-hieu-luc";
 
-const DANH_SACH: readonly CongCuDaDangKy[] = [layCoSo];
+// Thứ tự = thứ tự bảng §9 của spec (danh sách công cụ trả cho agent theo đúng thứ tự này).
+// Đợt 1 (26/09/2026): công cụ 2, 3, 4, 5, 9, 10, 14. Còn lại: 6–8 (Đợt 3, dữ liệu CAO),
+// 11–13 (marketing — chưa có nguồn).
+const DANH_SACH: readonly CongCuDaDangKy[] = [
+  layCoSo,
+  layKhoaHoc,
+  layNhanSu,
+  layKenh,
+  layChucDanh,
+  layDangKy,
+  layChiTieu,
+  layKhuyenMaiHieuLuc,
+];
 
 export function kiemSo(ds: readonly CongCuDaDangKy[]): ReadonlyMap<string, CongCuDaDangKy> {
   const m = new Map<string, CongCuDaDangKy>();
