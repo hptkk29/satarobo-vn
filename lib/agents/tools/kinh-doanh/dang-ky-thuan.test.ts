@@ -6,7 +6,9 @@ import {
   TRANG_THAI_DA_DANG_KY,
   TRANG_THAI_DA_HOAN,
   chonHocThu,
+  danhDauDaDangKy,
   dongGhiDanh,
+  ngayHocThuChoKhoa,
   ngayHocThuCua,
   ngaySomNhat,
   sapDong,
@@ -78,17 +80,41 @@ describe("[AG-DK-02] dòng ghi danh", () => {
 });
 
 describe("[AG-DK-03] chọn dòng học thử", () => {
-  const x = (id: string, be: string, moc: string) => ({ id, leadChildId: be, moc });
+  const x = (id: string, be: string, moc: string, courseId: string | null = null) => ({ id, leadChildId: be, courseId, moc });
   it("ngoài khoảng ⇒ bỏ; hai đầu khoảng TÍNH", () => {
     const r = chonHocThu([x("a", "b1", "2026-09-01"), x("b", "b2", "2026-09-30"), x("c", "b3", "2026-10-01")], "2026-09-01", "2026-09-30", new Set());
     expect(r.map((v) => v.id).sort()).toEqual(["a", "b"]);
   });
-  it("bé đã có dòng ghi danh ⇒ không ra thêm dòng học thử", () => {
-    expect(chonHocThu([x("a", "b1", "2026-09-05")], "2026-09-01", "2026-09-30", new Set(["b1"]))).toEqual([]);
+  it("lớp trải nghiệm CHUNG + bé đã có dòng ghi danh bất kỳ ⇒ không ra thêm dòng học thử", () => {
+    const da = danhDauDaDangKy([{ leadChildId: "b1", courseId: "sata4" }]);
+    expect(chonHocThu([x("a", "b1", "2026-09-05")], "2026-09-01", "2026-09-30", da)).toEqual([]);
   });
-  it("một bé hai lượt xếp lớp ⇒ MỘT dòng, lượt sớm nhất", () => {
+  it("một bé hai lượt xếp lớp CÙNG khoá ⇒ MỘT dòng, lượt sớm nhất", () => {
     const r = chonHocThu([x("b", "b1", "2026-09-09"), x("a", "b1", "2026-09-05")], "2026-09-01", "2026-09-30", new Set());
     expect(r.map((v) => v.id)).toEqual(["a"]);
+  });
+  it("[AG-DK-03b] lớp gắn khoá: ghi danh KHOÁ KHÁC không xoá cuộc hẹn học thử khoá này (rà 26/09, AGT-02)", () => {
+    const da = danhDauDaDangKy([{ leadChildId: "b1", courseId: "sata4" }]);
+    expect(chonHocThu([x("a", "b1", "2026-09-05", "robosim")], "2026-09-01", "2026-09-30", da).map((v) => v.id)).toEqual(["a"]);
+    // Đối chứng: ghi danh ĐÚNG khoá của lớp trải nghiệm thì dòng học thử được bỏ.
+    expect(chonHocThu([x("a", "b1", "2026-09-05", "sata4")], "2026-09-01", "2026-09-30", da)).toEqual([]);
+  });
+  it("[AG-DK-03c] một bé học thử HAI KHOÁ khác nhau ⇒ HAI dòng (rà 26/09, AGT-03)", () => {
+    const r = chonHocThu([x("a", "b1", "2026-09-05", "sata4"), x("b", "b1", "2026-09-06", "robosim")], "2026-09-01", "2026-09-30", new Set());
+    expect(r.map((v) => v.id).sort()).toEqual(["a", "b"]);
+  });
+});
+
+describe("[AG-DK-05] ngày học thử của một dòng ghi danh — theo ĐÚNG khoá (rà 26/09, AGT-01)", () => {
+  it("chỉ lấy lượt học thử của đúng khoá hoặc lớp chung; bỏ học thử khoá khác", () => {
+    const luot = [
+      { courseId: "robosim", ngay: "2026-08-01" }, // khoá KHÁC — không được gán sang
+      { courseId: "sata4", ngay: "2026-09-10" },
+      { courseId: null, ngay: "2026-09-12" },
+    ];
+    expect(ngayHocThuChoKhoa(luot, "sata4")).toBe("2026-09-10");
+    expect(ngayHocThuChoKhoa([{ courseId: "robosim", ngay: "2026-08-01" }], "sata4")).toBeNull();
+    expect(ngayHocThuChoKhoa([{ courseId: null, ngay: "2026-09-12" }], "sata4")).toBe("2026-09-12");
   });
 });
 

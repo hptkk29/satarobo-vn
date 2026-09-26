@@ -14,6 +14,7 @@
 import { useId, useMemo, useState } from "react";
 import Link from "next/link";
 import { Search, X } from "lucide-react";
+import { EmptyState } from "@/components/admin/ui/states";
 import { StatusPill } from "@/components/admin/ui/status-pill";
 import { adminTd, adminTh, adminTr } from "@/components/admin/ui/table";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
@@ -68,22 +69,24 @@ export function BangChinhSach({ dong, coQuanLy }: { dong: DongChinhSach[]; coQua
 
   if (dong.length === 0) {
     return (
-      <div className="rounded-xl border border-border bg-card px-6 py-12 text-center">
-        <p className="text-sm font-semibold text-foreground">Chưa có chính sách khuyến mãi nào trên hệ thống.</p>
-        <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
-          {coQuanLy
+      <EmptyState
+        title="Chưa có chính sách khuyến mãi nào trên hệ thống."
+        description={
+          coQuanLy
             ? "Ban hành văn bản đầu tiên — Sale trong phạm vi áp dụng nhận thông báo ngay khi bạn bấm Ban hành."
-            : "Khi Ban lãnh đạo ban hành chính sách, bạn sẽ nhận thông báo và thấy nó ở đây."}
-        </p>
-        {coQuanLy && (
-          <Link
-            href="/khuyen-mai/moi"
-            className="mt-4 inline-flex h-9 items-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary-dark"
-          >
-            Ban hành chính sách
-          </Link>
-        )}
-      </div>
+            : "Khi Ban lãnh đạo ban hành chính sách, bạn sẽ nhận thông báo và thấy nó ở đây."
+        }
+        action={
+          coQuanLy ? (
+            <Link
+              href="/khuyen-mai/moi"
+              className="inline-flex h-9 items-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary-dark"
+            >
+              Ban hành chính sách
+            </Link>
+          ) : undefined
+        }
+      />
     );
   }
 
@@ -102,7 +105,7 @@ export function BangChinhSach({ dong, coQuanLy }: { dong: DongChinhSach[]; coQua
             type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Mã văn bản, tên chương trình, mã voucher…"
+            placeholder="Tìm văn bản hoặc mã voucher…"
             className="h-10 w-full rounded-xl border border-border bg-card pl-9 pr-9 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
           {q && (
@@ -117,7 +120,7 @@ export function BangChinhSach({ dong, coQuanLy }: { dong: DongChinhSach[]; coQua
           )}
         </div>
 
-        <div role="tablist" aria-label="Lọc theo trạng thái" className="flex flex-wrap gap-2 xl:flex-nowrap">
+        <div role="group" aria-label="Lọc theo trạng thái" className="flex flex-wrap gap-2 xl:flex-nowrap">
           {THU_TU_CHIP.map((c) => {
             const n = dem.get(c.id) ?? 0;
             const chon = c.id === loc;
@@ -125,13 +128,12 @@ export function BangChinhSach({ dong, coQuanLy }: { dong: DongChinhSach[]; coQua
               <button
                 key={c.id}
                 type="button"
-                role="tab"
-                aria-selected={chon}
+                aria-pressed={chon}
                 onClick={() => setLoc(c.id)}
                 className={cn(CHIP, chon ? CHIP_ACTIVE : CHIP_IDLE)}
               >
                 {c.nhan}
-                <span className={cn("tabular-nums", n === 0 && "opacity-60")}>{n}</span>
+                <span className="tabular-nums">{n}</span>
               </button>
             );
           })}
@@ -166,13 +168,13 @@ export function BangChinhSach({ dong, coQuanLy }: { dong: DongChinhSach[]; coQua
             <table className="w-full border-collapse text-left">
               <thead>
                 <tr className="border-b border-border bg-muted/40">
-                  <th scope="col" className={adminTh}>
+                  <th scope="col" className={cn(adminTh, "hidden sm:table-cell")}>
                     Văn bản
                   </th>
                   <th scope="col" className={cn(adminTh, "w-full")}>
                     {/* Tiêu đề `nowrap` quyết độ rộng TỐI THIỂU của cột: bản dài ép bảng rộng hơn 375px
                         (smoke 26/09) dù ô dữ liệu đã cắt chữ. Điện thoại dùng bản ngắn. */}
-                    <span className="sm:hidden">Chương trình</span>
+                    <span className="sm:hidden">Chính sách</span>
                     <span className="hidden sm:inline">Chương trình · ưu đãi</span>
                   </th>
                   <th scope="col" className={cn(adminTh, "hidden md:table-cell")}>
@@ -189,7 +191,7 @@ export function BangChinhSach({ dong, coQuanLy }: { dong: DongChinhSach[]; coQua
                     Mã voucher cũng dời vào ô chương trình vì cùng lý do. */}
                 {hien.map((d) => (
                   <tr key={d.id} className={cn(adminTr, "relative cursor-pointer", d.trangThai === "het_han" && "text-muted-foreground")}>
-                    <td className={cn(adminTd, "align-top")}>
+                    <td className={cn(adminTd, "hidden align-top sm:table-cell")}>
                       <Link
                         href={`/khuyen-mai/${d.id}`}
                         className="font-semibold tabular-nums text-primary-ink after:absolute after:inset-0 after:content-[''] hover:underline focus-visible:outline-none focus-visible:underline"
@@ -200,9 +202,25 @@ export function BangChinhSach({ dong, coQuanLy }: { dong: DongChinhSach[]; coQua
                         <StatusPill tone={TONE_TRANG_THAI[d.trangThai]}>{NHAN_TRANG_THAI[d.trangThai]}</StatusPill>
                       </div>
                     </td>
+                    {/* Dưới 640px bảng còn MỘT cột: mã + nhãn cùng dòng đầu, tên và ưu đãi được xuống
+                        tối đa 2 dòng. Bản hai cột cắt mọi dòng còn ~14 ký tự (rà thiết kế 26/09). Mỗi độ
+                        rộng có ĐÚNG MỘT link phủ hàng — link nằm trong phần tử ẩn không vẽ lớp phủ. */}
                     <td className={cn(adminTd, "max-w-0 align-top")}>
-                      <p className="truncate font-medium text-foreground">{d.ten}</p>
-                      <p className="truncate text-xs text-muted-foreground">{d.uuDai}</p>
+                      <div className="mb-1 flex items-center gap-2 sm:hidden">
+                        <Link
+                          href={`/khuyen-mai/${d.id}`}
+                          className="font-semibold tabular-nums text-primary-ink after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:underline"
+                        >
+                          {d.maVanBan}
+                        </Link>
+                        <StatusPill tone={TONE_TRANG_THAI[d.trangThai]}>{NHAN_TRANG_THAI[d.trangThai]}</StatusPill>
+                      </div>
+                      <p className="line-clamp-2 whitespace-normal font-medium text-foreground sm:line-clamp-none sm:truncate sm:whitespace-nowrap">
+                        {d.ten}
+                      </p>
+                      <p className="line-clamp-2 whitespace-normal text-xs text-muted-foreground sm:line-clamp-none sm:truncate sm:whitespace-nowrap">
+                        {d.uuDai}
+                      </p>
                       {/* Dưới 768px cột Hiệu lực ẩn — đưa khoảng ngày vào đây để điện thoại không mất nó. */}
                       <p className="truncate text-xs text-muted-foreground md:hidden">
                         {d.hieuLuc}

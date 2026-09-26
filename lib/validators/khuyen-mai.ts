@@ -16,11 +16,24 @@ export const maVanBan = z
   .toUpperCase()
   .regex(/^[A-Z0-9][A-Z0-9._/-]{1,39}$/, "Mã văn bản gồm chữ, số, dấu chấm hoặc gạch (vd SR.QD.233).");
 
+/**
+ * Tệp văn bản gốc: CHỈ nhận KHOÁ đối tượng R2 trong đúng hai thư mục mà route tải lên cấp cho người
+ * ban hành (`uploads/documents/…`, `uploads/images/…`). URL hiển thị do SERVER dựng lại từ khoá
+ * (`getPublicUrl`) — không bao giờ lấy URL client gửi lên.
+ *
+ * Vì sao (rà bảo mật 26/09, KM-01): bản đầu nhận `url: z.string().url()` — zod coi
+ * `javascript:alert(1)`/`data:text/html,…` là URL hợp lệ, giá trị đó được lưu rồi render thành
+ * `<a href>` trước mặt Sale ⇒ XSS lưu trữ. Không có trường `url` ở đây là cố ý.
+ */
 const tepVanBan = z
   .object({
-    key: z.string().trim().min(1).max(500),
+    key: z
+      .string()
+      .trim()
+      .regex(/^uploads\/(documents|images)\/[A-Za-z0-9._/-]{1,400}$/, "Tệp văn bản không hợp lệ — tải lại tệp.")
+      // Không cho ".." — không để khoá trỏ lùi ra ngoài thư mục tải lên trên CDN.
+      .refine((k) => !k.includes(".."), "Tệp văn bản không hợp lệ — tải lại tệp."),
     ten: z.string().trim().min(1).max(200),
-    url: z.string().trim().url().max(1000),
   })
   .nullable();
 

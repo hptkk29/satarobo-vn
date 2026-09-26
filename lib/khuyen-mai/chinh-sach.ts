@@ -20,6 +20,7 @@ import { db } from "@/lib/db";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { notifyStaff } from "@/lib/notifications/notify";
 import { dauNgayTuChuoi, ngayVN } from "@/lib/agents/gateway/thoi-gian";
+import { getPublicUrl } from "@/lib/storage/r2-client";
 import type { ChinhSachInput, VoucherInput } from "@/lib/validators/khuyen-mai";
 import { daTungHieuLuc, ngayBatDau, ngayKetThuc, trangThaiTai } from "./hieu-luc";
 import { moTaUuDaiMa } from "./mo-ta";
@@ -61,6 +62,12 @@ async function kiemPhamVi(coSo: readonly string[], khoaHoc: readonly string[]): 
   ]);
   if (donVi !== new Set(coSo).size) throw new LoiKhuyenMai("DU_LIEU_SAI", "Có cơ sở không tồn tại hoặc đã ngừng.");
   if (khoa !== new Set(khoaHoc).size) throw new LoiKhuyenMai("DU_LIEU_SAI", "Có khoá học không tồn tại.");
+}
+
+/** Ba cột tệp — URL dựng từ KHOÁ ở server, không lấy URL client gửi (KM-01). */
+function cotTep(tep: ChinhSachInput["tep"]): { fileKey: string | null; fileName: string | null; fileUrl: string | null } {
+  if (!tep) return { fileKey: null, fileName: null, fileUrl: null };
+  return { fileKey: tep.key, fileName: tep.ten, fileUrl: getPublicUrl(tep.key) };
 }
 
 function laTrungMa(e: unknown): boolean {
@@ -174,9 +181,7 @@ export async function banHanhChinhSach(
           validUntil: cotNgay(input.denNgay),
           orgUnitIds: [...new Set(input.coSo)],
           courseIds: [...new Set(input.khoaHoc)],
-          fileKey: input.tep?.key ?? null,
-          fileName: input.tep?.ten ?? null,
-          fileUrl: input.tep?.url ?? null,
+          ...cotTep(input.tep),
           createdById: nguoi.userId,
           updatedById: nguoi.userId,
         },
@@ -208,16 +213,33 @@ export async function banHanhChinhSach(
   return { id: cs.id, soNguoiDuocBao };
 }
 
-export async function suaChinhSach(nguoi: NguoiThaoTac, input: ChinhSachInput & { id: string }): Promise<void> {
+export async function suaChinhSach(
+  nguoi: NguoiThaoTac,
+  input: ChinhSachInput & { id: string },
+  now: Date,
+): Promise<void> {
   const cu = await db.promotionPolicy.findUnique({ where: { id: input.id } });
   if (!cu) throw new LoiKhuyenMai("KHONG_TIM_THAY", "Không tìm thấy chính sách.");
   if (cu.revokedAt) throw new LoiKhuyenMai("SAI_TRANG_THAI", "Chính sách đã thu hồi — không sửa được. Ban hành văn bản mới.");
+  // Rà 26/09 (AGT-05, KM-R3): lùi ngày kết thúc về TRƯỚC hôm nay là dừng chính sách giữa chừng —
+  // đúng việc của "Thu hồi" (bắt lý do, báo Sale, tắt mã). Cho sửa ở đây là một đường thu hồi
+  // câm: Sale không được báo, mã vẫn "Đang bật". Giữ nguyên ngày cũ (sửa lỗi chính tả) thì được.
+  const homNay = ngayVN(now);
+  const denNgayCu = ngayKetThuc({ ...cu, revokedAt: null });
+  if (input.denNgay !== denNgayCu && input.denNgay < homNay) {
+    throw new LoiKhuyenMai(
+      "DU_LIEU_SAI",
+      "Không lùi ngày kết thúc về trước hôm nay — muốn dừng chính sách sớm hãy dùng Thu hồi (có lý do, báo Sale).",
+    );
+  }
   await kiemPhamVi(input.coSo, input.khoaHoc);
   const ma = hieuLucMa(input.tuNgay, input.denNgay);
   try {
     await db.$transaction(async (tx) => {
-      const moi = await tx.promotionPolicy.update({
-        where: { id: cu.id },
+      // Ghi CÓ ĐIỀU KIỆN `revokedAt: null` (rà 26/09, KM-R1): kiểm ở trên là đọc rời — một lượt
+      // thu hồi commit giữa lúc đó thì `update` trần sẽ ghi đè lên chính sách vừa bị thu hồi.
+      const up = await tx.promotionPolicy.updateMany({
+        where: { id: cu.id, revokedAt: null },
         data: {
           documentCode: input.maVanBan,
           name: input.ten,
@@ -227,12 +249,13 @@ export async function suaChinhSach(nguoi: NguoiThaoTac, input: ChinhSachInput & 
           validUntil: cotNgay(input.denNgay),
           orgUnitIds: [...new Set(input.coSo)],
           courseIds: [...new Set(input.khoaHoc)],
-          fileKey: input.tep?.key ?? null,
-          fileName: input.tep?.ten ?? null,
-          fileUrl: input.tep?.url ?? null,
+          ...cotTep(input.tep),
           updatedById: nguoi.userId,
         },
       });
+      // THROW (không return) — luật rollback: phép ghi phía dưới không được chạy.
+      if (up.count !== 1) throw new LoiKhuyenMai("SAI_TRANG_THAI", "Chính sách vừa bị thu hồi — không sửa được.");
+      const moi = await tx.promotionPolicy.findUniqueOrThrow({ where: { id: cu.id } });
       // Hiệu lực của mã = hiệu lực chính sách — đồng bộ trong CÙNG transaction.
       await tx.voucher.updateMany({ where: { policyId: cu.id }, data: ma });
       await writeAudit({
@@ -378,7 +401,13 @@ export async function batTatVoucher(
   }
   if (v.isActive === input.bat) return;
   await db.$transaction(async (tx) => {
-    await tx.voucher.update({ where: { id: v.id }, data: { isActive: input.bat } });
+    // Bật lại: ghi CÓ ĐIỀU KIỆN chính sách chưa thu hồi (rà 26/09, KM-R2) — kiểm ở trên là đọc
+    // rời, một lượt thu hồi chen vào sẽ bị lượt bật này làm mã SỐNG LẠI. Tắt thì không cần điều kiện.
+    const up = await tx.voucher.updateMany({
+      where: input.bat ? { id: v.id, policy: { is: { revokedAt: null } } } : { id: v.id },
+      data: { isActive: input.bat },
+    });
+    if (up.count !== 1) throw new LoiKhuyenMai("SAI_TRANG_THAI", "Chính sách vừa bị thu hồi — không bật lại mã được.");
     await writeAudit({
       tx,
       actor: { id: nguoi.userId, name: nguoi.ten },
@@ -400,7 +429,6 @@ export type VoucherView = {
   uuDai: string;
   donToiThieu: number;
   soLuong: number | null;
-  daDung: number;
   dangBat: boolean;
   ghiChu: string | null;
 };
@@ -465,7 +493,6 @@ const CHON = {
       maxDiscount: true,
       minOrderValue: true,
       quantity: true,
-      usedCount: true,
       isActive: true,
       description: true,
     },
@@ -516,7 +543,6 @@ async function dungView(rows: DongDb[]): Promise<ChinhSachView[]> {
       uuDai: moTaUuDaiMa(v),
       donToiThieu: v.minOrderValue,
       soLuong: v.quantity,
-      daDung: v.usedCount,
       dangBat: v.isActive,
       ghiChu: v.description,
     })),

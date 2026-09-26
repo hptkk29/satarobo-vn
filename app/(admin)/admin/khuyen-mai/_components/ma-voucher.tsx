@@ -25,10 +25,19 @@ export type VoucherDong = {
   uuDai: string;
   donToiThieu: number;
   soLuong: number | null;
-  daDung: number;
   dangBat: boolean;
   ghiChu: string | null;
 };
+
+/**
+ * Nhãn một mã: "Đang bật" CHỈ khi mã bật VÀ văn bản còn hiệu lực. Mã của văn bản đã hết hạn/thu hồi mà
+ * vẫn in "Đang bật" cạnh nhãn "Hết hạn" của chính văn bản là hai lời nói ngược nhau (rà 26/09, KM-R3).
+ */
+function NhanMa({ dangBat, conHieuLuc }: { dangBat: boolean; conHieuLuc: boolean }) {
+  if (!dangBat) return <StatusPill tone="muted">Đã tắt</StatusPill>;
+  if (!conHieuLuc) return <StatusPill tone="muted">Hết hiệu lực</StatusPill>;
+  return <StatusPill tone="success">Đang bật</StatusPill>;
+}
 
 function NutChep({ ma }: { ma: string }) {
   const [da, setDa] = useState(false);
@@ -45,7 +54,7 @@ function NutChep({ ma }: { ma: string }) {
         }
       }}
       aria-label={`Chép mã ${ma}`}
-      className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2 font-semibold tracking-wide text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="inline-flex h-9 items-center gap-1.5 rounded-md sm:h-7 border border-border bg-card px-2 font-semibold tracking-wide text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       {ma}
       {da ? (
@@ -75,7 +84,7 @@ function NutBatTat({ v, chinhSachId, khoaBat }: { v: VoucherDong; chinhSachId: s
           } else toast.error(kq.error);
         })
       }
-      className="inline-flex items-center gap-1 text-sm font-medium text-primary-ink transition-colors hover:underline disabled:opacity-50"
+      className="-mx-2 inline-flex min-h-10 items-center gap-1 px-2 text-sm font-medium text-primary-ink transition-colors hover:underline disabled:opacity-50"
     >
       {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
       {v.dangBat ? "Tắt" : "Bật lại"}
@@ -208,7 +217,7 @@ function FormThemMa({ chinhSachId, xong }: { chinhSachId: string; xong: () => vo
           <MoneyInput name="donToiThieu" value={donToiThieu} onValueChange={setDonToiThieu} placeholder="0" disabled={pending} />
         </label>
         <label className="block">
-          <span className="mb-1 block text-sm font-semibold text-foreground">Số lượng mã</span>
+          <span className="mb-1 block text-sm font-semibold text-foreground">Số suất theo văn bản</span>
           <Input
             inputMode="numeric"
             value={soLuong}
@@ -217,6 +226,7 @@ function FormThemMa({ chinhSachId, xong }: { chinhSachId: string; xong: () => vo
             disabled={pending}
             className={cn(LOP_O, "tabular-nums")}
           />
+          <span className="mt-1 block text-xs text-muted-foreground">Hệ thống chưa tự đếm lượt dùng — hết suất thì tắt mã.</span>
         </label>
         <label className="block sm:col-span-2">
           <span className="mb-1 block text-sm font-semibold text-foreground">Ghi chú cho Sale</span>
@@ -298,7 +308,7 @@ export function MaVoucher({
                     Đơn tối thiểu
                   </th>
                   <th scope="col" className={cn(adminTh, "hidden text-right sm:table-cell")}>
-                    Đã dùng
+                    Số lượng
                   </th>
                   <th scope="col" className={cn(adminTh, "hidden sm:table-cell")}>
                     Trạng thái
@@ -317,7 +327,7 @@ export function MaVoucher({
                       <NutChep ma={v.ma} />
                       {/* Dưới 640px cột Trạng thái + Ưu đãi ẩn — xếp chồng ngay dưới mã. */}
                       <div className="mt-1 sm:hidden">
-                        <StatusPill tone={v.dangBat ? "success" : "muted"}>{v.dangBat ? "Đang bật" : "Đã tắt"}</StatusPill>
+                        <NhanMa dangBat={v.dangBat} conHieuLuc={conThemDuoc} />
                         <p className="mt-1 truncate">{v.uuDai}</p>
                         {v.ghiChu && <p className="truncate text-xs text-muted-foreground">{v.ghiChu}</p>}
                       </div>
@@ -330,10 +340,13 @@ export function MaVoucher({
                       {v.donToiThieu > 0 ? formatVndPlain(v.donToiThieu) : "—"}
                     </td>
                     <td className={cn(adminTd, "hidden text-right tabular-nums sm:table-cell")}>
-                      {v.soLuong == null ? `${v.daDung} / không giới hạn` : `${v.daDung} / ${v.soLuong}`}
+                      {/* KHÔNG in "đã dùng": `usedCount` chưa có đường ghi nào (chưa nối đơn hàng) ⇒ con số
+                          sẽ đứng ở 0 mãi và Sale hứa suất thứ 31 (rà thiết kế 26/09, luật 12). In đúng
+                          số lượng văn bản ghi, đếm tay. */}
+                      {v.soLuong == null ? "Không giới hạn" : `${v.soLuong.toLocaleString("vi-VN")} suất`}
                     </td>
                     <td className={cn(adminTd, "hidden sm:table-cell")}>
-                      <StatusPill tone={v.dangBat ? "success" : "muted"}>{v.dangBat ? "Đang bật" : "Đã tắt"}</StatusPill>
+                      <NhanMa dangBat={v.dangBat} conHieuLuc={conThemDuoc} />
                     </td>
                     {coQuanLy && (
                       <td className={cn(adminTd, "text-right")}>

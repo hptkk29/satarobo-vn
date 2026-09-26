@@ -83,7 +83,7 @@ export async function suaAction(input: unknown): Promise<KetQua> {
   const p = suaChinhSachSchema.safeParse(input);
   if (!p.success) return loiZod(p.error.issues);
   try {
-    await suaChinhSach(nguoiTu(session.user), p.data);
+    await suaChinhSach(nguoiTu(session.user), p.data, new Date());
     lamMoi(p.data.id);
     return { ok: true, data: undefined };
   } catch (e) {

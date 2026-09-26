@@ -107,26 +107,62 @@ export function dongGhiDanh(p: {
   };
 }
 
+/** Khoá "bé × khoá" — một bé học thử/ghi danh hai khoá khác nhau là HAI việc, không phải một. */
+export function khoaBeKhoa(leadChildId: string, courseId: string | null): string {
+  return `${leadChildId}|${courseId ?? ""}`;
+}
+
 /**
- * Chọn lượt học thử đại diện cho mỗi bé: mốc SỚM nhất trong khoảng (mốc = ngày học thử, không
- * có thì ngày xếp lớp). Bé đã có dòng ghi danh trong kết quả ⇒ bỏ (bé đã đi tiếp khỏi bước
- * học thử; ngày học thử nằm sẵn trên dòng ghi danh). Một bé = tối đa MỘT dòng học thử: hai
- * lượt xếp lớp của cùng một bé (đổi lớp) không phải hai khách hẹn học thử.
+ * Tập đánh dấu những gì đã có dòng ghi danh trong kết quả: cả khoá "bé" (mọi khoá) lẫn khoá
+ * "bé × khoá". Dùng cho `chonHocThu`.
  */
-export function chonHocThu<T extends { leadChildId: string; id: string; moc: string }>(
+export function danhDauDaDangKy(ghiDanh: readonly { leadChildId: string; courseId: string }[]): Set<string> {
+  const s = new Set<string>();
+  for (const g of ghiDanh) {
+    s.add(g.leadChildId);
+    s.add(khoaBeKhoa(g.leadChildId, g.courseId));
+  }
+  return s;
+}
+
+/**
+ * Chọn lượt học thử đại diện: mỗi (bé × khoá của lớp trải nghiệm) một dòng, mốc SỚM nhất trong
+ * khoảng (mốc = ngày học thử, không có thì ngày xếp lớp). Hai lượt xếp lớp của cùng bé cho CÙNG
+ * khoá (đổi lớp) không phải hai khách hẹn học thử.
+ *
+ * Bỏ dòng học thử khi bé đã đi tiếp khỏi bước học thử — đo theo KHOÁ (rà 26/09, AGT-02/03):
+ *   · lớp trải nghiệm GẮN khoá ⇒ chỉ bỏ khi bé có dòng ghi danh ĐÚNG khoá đó (ghi danh khoá khác
+ *     không xoá cuộc hẹn học thử khoá này);
+ *   · lớp trải nghiệm CHUNG (không gắn khoá) ⇒ bỏ khi bé có ghi danh bất kỳ.
+ */
+export function chonHocThu<T extends { leadChildId: string; courseId: string | null; id: string; moc: string }>(
   ds: readonly T[],
   tu: string,
   den: string,
-  beDaDangKy: ReadonlySet<string>,
+  daDangKy: ReadonlySet<string>,
 ): T[] {
-  const theoBe = new Map<string, T>();
+  const theoNhom = new Map<string, T>();
   for (const x of ds) {
     if (x.moc < tu || x.moc > den) continue;
-    if (beDaDangKy.has(x.leadChildId)) continue;
-    const cu = theoBe.get(x.leadChildId);
-    if (!cu || x.moc < cu.moc || (x.moc === cu.moc && x.id < cu.id)) theoBe.set(x.leadChildId, x);
+    const daDi = x.courseId === null ? daDangKy.has(x.leadChildId) : daDangKy.has(khoaBeKhoa(x.leadChildId, x.courseId));
+    if (daDi) continue;
+    const nhom = khoaBeKhoa(x.leadChildId, x.courseId);
+    const cu = theoNhom.get(nhom);
+    if (!cu || x.moc < cu.moc || (x.moc === cu.moc && x.id < cu.id)) theoNhom.set(nhom, x);
   }
-  return [...theoBe.values()];
+  return [...theoNhom.values()];
+}
+
+/**
+ * Ngày học thử cho MỘT dòng ghi danh khoá `courseId`: sớm nhất trong các lượt học thử của bé mà
+ * lớp trải nghiệm gắn ĐÚNG khoá đó hoặc là lớp chung (không gắn khoá). Học thử khoá KHÁC không
+ * được gán sang (rà 26/09, AGT-01 — bản đầu lấy sớm nhất trên mọi lượt của bé).
+ */
+export function ngayHocThuChoKhoa(
+  luot: readonly { courseId: string | null; ngay: string | null }[],
+  courseId: string,
+): string | null {
+  return ngaySomNhat(luot.filter((l) => l.courseId === null || l.courseId === courseId).map((l) => l.ngay));
 }
 
 /** Thứ tự ổn định cho phân trang: mốc ngày, rồi lead, rồi khoá nội bộ phá hoà. */

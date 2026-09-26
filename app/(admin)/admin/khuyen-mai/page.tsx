@@ -15,7 +15,8 @@
 //   không" trong một lần nhìn; KHÔNG dựng "voucher" thành danh mục mã rời không có văn bản.
 // OWN-WORLD: thế giới admin có sẵn (DESIGN.md): tím #610B8A cho hành động chính, thang trạng
 //   thái ngữ nghĩa riêng (xanh = đang áp dụng, lam = sắp, xám = hết hạn, đỏ = thu hồi), bảng
-//   dày 44px, chip bộ lọc mang số, CSS transition duy nhất.
+//   dày — mỗi dòng là MỘT văn bản xếp 2–4 dòng chữ (ngoại lệ ghi ở DESIGN.md §2), chip bộ lọc
+//   mang số, CSS transition duy nhất.
 // STORY: Sale gõ tên/mã ⇒ thấy ngay ưu đãi + mã voucher + còn bao nhiêu ngày ⇒ mở văn bản đọc
 //   điều kiện; BLĐ ban hành ⇒ Sale nhận thông báo; thu hồi ⇒ dải đỏ trên văn bản.
 // FIRST VIEWPORT: tiêu đề + nút "Ban hành chính sách" (chỉ BLĐ) · ô tìm + 5 chip trạng thái

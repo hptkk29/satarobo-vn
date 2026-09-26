@@ -138,15 +138,17 @@ export default async function TraCuuPage() {
       nhan: "Khuyến mãi",
       donVi: "chính sách",
       khiRong: "Hôm nay không có chính sách khuyến mãi nào đang hoặc sắp áp dụng.",
-      luuY: "Điều kiện đầy đủ, mã voucher và văn bản gốc: mở mục Khuyến mãi ở thanh bên.",
-      // "Ưu đãi" đứng ĐẦU: workspace chỉ cắt chữ ở cột đầu (148px ở 375px) — đặt nó ở giữa là
-      // câu dài đẩy cột Trạng thái ra ngoài màn điện thoại (chụp được ở smoke 26/09).
+      luuY: "Bấm vào dòng để xem điều kiện đầy đủ, mã voucher và văn bản gốc.",
+      // Theo hai lượt rà thiết kế 26/09: ưu đãi (tự xuống 2 dòng; dòng phụ = mã văn bản + mã voucher)
+      // rồi NGAY SAU là Trạng thái — cột cuối là cột bị đẩy ra ngoài trước tiên, mà trạng thái là
+      // thứ Sale không được bỏ lỡ. Không còn cột "Văn bản" riêng (mã nằm ở dòng phụ) và Hiệu lực tách
+      // hai dòng: đo ở 1280px bảng vẫn tràn trong card khi còn 5 cột một dòng. Dưới 640px cột Trạng
+      // thái ẩn và nhãn nằm TRONG ô ưu đãi.
       cot: [
         { ten: "Ưu đãi", rong: true },
-        { ten: "Văn bản", anMobile: true },
-        { ten: "Áp dụng", anMobile: true },
+        { ten: "Trạng thái", anMobile: true },
         { ten: "Hiệu lực", anMobile: true },
-        { ten: "Trạng thái", phai: true },
+        { ten: "Áp dụng", anMobile: true, cat: true },
       ],
       dong: conHieuLuc.map(({ c, tt }) => {
         const apDung = [
@@ -155,15 +157,20 @@ export default async function TraCuuPage() {
         ].join(" · ");
         const maDangBat = c.vouchers.filter((v) => v.dangBat).map((v) => v.ma);
         const nhac = nhacThoiGian(tt, c.tuNgay, c.ketThuc, homNay);
+        const nhan = { t: NHAN_TRANG_THAI[tt], pill: tt === "dang_ap_dung" ? ("success" as const) : ("info" as const) };
         return {
           key: c.id,
           tim: boDau(`${c.maVanBan} ${c.ten} ${c.noiDungUuDai} ${maDangBat.join(" ")} ${apDung}`),
+          href: `/khuyen-mai/${c.id}`,
           o: [
-            `${c.noiDungUuDai.split(/\r?\n/)[0] ?? ""}${maDangBat.length ? ` — mã ${maDangBat.join(", ")}` : ""}`,
-            c.maVanBan,
+            {
+              t: c.noiDungUuDai.split(/\r?\n/)[0] ?? "",
+              phu: `${c.maVanBan}${maDangBat.length ? ` · Mã ${maDangBat.join(", ")}` : ""}`,
+              nhanMobile: nhan,
+            },
+            nhan,
+            { t: khoangVi(c.tuNgay, c.ketThuc), phu: nhac, phuMo: true },
             apDung,
-            `${khoangVi(c.tuNgay, c.ketThuc)}${nhac ? ` · ${nhac}` : ""}`,
-            { t: NHAN_TRANG_THAI[tt], pill: tt === "dang_ap_dung" ? ("success" as const) : ("info" as const) },
           ],
         };
       }),

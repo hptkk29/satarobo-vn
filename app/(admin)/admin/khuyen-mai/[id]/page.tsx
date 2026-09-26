@@ -27,7 +27,7 @@ export const metadata = { title: "Chính sách khuyến mãi | Admin Sata Robo" 
 function Muc({ tieuDe, children }: { tieuDe: string; children: React.ReactNode }) {
   return (
     <div>
-      <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{tieuDe}</dt>
+      <dt className="text-sm font-semibold text-foreground">{tieuDe}</dt>
       <dd className="mt-1 text-sm text-foreground">{children}</dd>
     </div>
   );
@@ -91,13 +91,13 @@ export default async function ChiTietKhuyenMaiPage({ params }: { params: Promise
         </div>
       )}
 
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid gap-5 lg:grid-cols-3 lg:items-start">
         <article className="rounded-xl border border-border bg-card px-5 py-5 lg:col-span-2 sm:px-6">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ưu đãi khách nhận được</h2>
-          <p className="mt-2 max-w-prose whitespace-pre-line text-base font-medium leading-relaxed text-foreground">
+          <h2 className="text-sm font-semibold text-foreground">Ưu đãi khách nhận được</h2>
+          <p className="mt-2 max-w-prose whitespace-pre-line text-lg font-medium leading-relaxed text-foreground">
             {cs.noiDungUuDai}
           </p>
-          <h2 className="mt-6 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Điều kiện áp dụng</h2>
+          <h2 className="mt-6 text-sm font-semibold text-foreground">Điều kiện áp dụng</h2>
           {cs.dieuKien ? (
             <p className="mt-2 max-w-prose whitespace-pre-line text-sm leading-relaxed text-foreground">{cs.dieuKien}</p>
           ) : (

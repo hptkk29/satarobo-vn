@@ -213,6 +213,9 @@ describe.skipIf(!RUN)("Cổng dữ liệu agent · Đợt 1 — 7 công cụ + c
       data: { slug: "ci-d1-landing", code: "CID1LANDING", name: "CI D1 Landing", price: 1, isTeachable: false, isActive: true },
     });
     ID.sata4 = sata4.id;
+    const rbs = await db.course.create({
+      data: { slug: "ci-d1-rbs", code: "CID1RBS", name: "CI D1 RoboSim", price: 3_600_000, totalSessions: 9, isTeachable: true, isActive: true },
+    });
 
     // ── Nhân sự: CS1 (GV + vai marketing HO chồng thêm), CS2, Hội sở, người đã nghỉ, người không tài khoản
     const nv = async (code: string, centerId: string | null, status: "ACTIVE" | "RESIGNED" = "ACTIVE") =>
@@ -226,10 +229,13 @@ describe.skipIf(!RUN)("Cổng dữ liệu agent · Đợt 1 — 7 công cụ + c
     const nvHo = await nv("HO1", null);
     await nv("NGHI", c1, "RESIGNED");
     await nv("KHONGTK", c1);
+    // Nhân sự CS1 mà vai DUY NHẤT neo ở CS2 (kiêm nhiệm/điều chuyển) — rà 26/09, AGT-D1-01.
+    const nvLech = await nv("LECH", c1);
     const uGv1 = await nguoiCoVai("gv1", "TEACHER", "CS1", gv1);
     await db.userOrgRole.create({ data: { userId: uGv1, orgUnitId: ID.HO!, roleId: await vai("HO_MARKETING"), grantedById: KT.userId } });
     await nguoiCoVai("nv2", "CENTER_SALES_CSM", "CS2", nv2);
     await nguoiCoVai("nvho", "GIAM_DOC", "HO", nvHo);
+    await nguoiCoVai("lech", "CENTER_MANAGER", "CS2", nvLech);
 
     // ── Người tra cứu khuyến mãi (nhận thông báo)
     ID.saleCs1 = await nguoiCoVai("sale-cs1", "CENTER_SALES_CSM", "CS1");
@@ -256,8 +262,9 @@ describe.skipIf(!RUN)("Cổng dữ liệu agent · Đợt 1 — 7 công cụ + c
     const beB = await lead("B", c1);
     const beC = await lead("C", c1);
     const beD = await lead("D", c2);
-    const lopTrial = async (code: string, centerId: string, ngay: string) => {
-      const t = await db.trialClassV2.create({ data: { code: `${P}${code}`, name: `${P}${code}`, centerId, sessionCount: 1 } });
+    const beF = await lead("F", c1);
+    const lopTrial = async (code: string, centerId: string, ngay: string, courseId: string | null = null) => {
+      const t = await db.trialClassV2.create({ data: { code: `${P}${code}`, name: `${P}${code}`, centerId, sessionCount: 1, courseId } });
       await db.trialClassSession.create({
         data: { trialClassId: t.id, seq: 1, date: new Date(`${ngay}T00:00:00Z`), startTime: "18:00", endTime: "19:30" },
       });
@@ -266,10 +273,15 @@ describe.skipIf(!RUN)("Cổng dữ liệu agent · Đợt 1 — 7 công cụ + c
     const t1 = await lopTrial("T1", c1, "2099-01-10");
     const t0 = await lopTrial("T0", c1, "2098-12-20");
     await db.trialEnrollment.create({ data: { trialClassId: t1, leadChildId: beA } });
-    await db.trialEnrollment.create({ data: { trialClassId: t0, leadChildId: beB } });
+    // Lượt học thử ĐÃ XONG ⇒ COMPLETED (DB chỉ cho MỘT lượt ACTIVE mỗi bé — `TrialEnrollment_leadChildId_active_key`).
+    await db.trialEnrollment.create({ data: { trialClassId: t0, leadChildId: beB, status: "COMPLETED" } });
     await db.leadTrialHistory.create({
       data: { leadChildId: beB, trialClassId: t0, centerId: c1, totalSessions: 1, attendedCount: 1, firstAttendedAt: new Date("2098-12-20T11:00:00Z") },
     });
+    // Bé B còn học thử một KHOÁ KHÁC (RoboSim) sớm hơn — không được gán sang dòng ghi danh Sata 4 (AGT-01).
+    await db.trialEnrollment.create({ data: { trialClassId: await lopTrial("TR", c1, "2098-12-01", rbs.id), leadChildId: beB, status: "COMPLETED" } });
+    // Bé F: ghi danh Sata 4 TRONG khoảng + hẹn học thử RoboSim trong khoảng ⇒ HAI dòng (AGT-02).
+    await db.trialEnrollment.create({ data: { trialClassId: await lopTrial("TF", c1, "2099-01-12", rbs.id), leadChildId: beF } });
 
     const lop = async (ten: string, centerId: string) =>
       (await db.class.create({ data: { name: `${P}${ten}`, courseId: sata4.id, centerId } })).id;
@@ -293,6 +305,9 @@ describe.skipIf(!RUN)("Cổng dữ liệu agent · Đợt 1 — 7 công cụ + c
     });
     await db.enrollment.create({
       data: { studentId: await hv("D"), classId: lop2, courseId: sata4.id, centerId: c2, leadChildId: beD, enrolledAt: new Date("2099-01-16T02:00:00Z") },
+    });
+    await db.enrollment.create({
+      data: { studentId: await hv("F"), classId: lop1, courseId: sata4.id, centerId: c1, leadChildId: beF, listPrice: 11_520_000, enrolledAt: new Date("2099-01-18T02:00:00Z") },
     });
     // Ghi danh tạo tay KHÔNG đi từ lead — phải bị bỏ.
     await db.enrollment.create({
@@ -354,11 +369,13 @@ describe.skipIf(!RUN)("Cổng dữ liệu agent · Đợt 1 — 7 công cụ + c
     kiemKhuonXuong("danh_muc.lay_nhan_su", r.body);
     const ds = (r.body.du_lieu as Record<string, unknown>[]).filter((x) => String(x.id).startsWith(P));
     // Chỉ CS1; không CS2, không Hội sở; không người đã nghỉ.
-    expect(ds.map((x) => x.id).sort()).toEqual([`${P}GV1`, `${P}KHONGTK`]);
+    expect(ds.map((x) => x.id).sort()).toEqual([`${P}GV1`, `${P}KHONGTK`, `${P}LECH`]);
     // CHỈ bốn trường, với MỌI dòng (kể cả nhân sự của bộ test khác) — không SĐT/email/lương.
     for (const x of r.body.du_lieu as Record<string, unknown>[]) expect(Object.keys(x).sort()).toEqual(["chuc_danh", "co_so", "id", "ten"]);
     expect(ds.find((x) => x.id === `${P}GV1`)).toMatchObject({ chuc_danh: "TEACHER", co_so: "CS1" }); // TEACHER@CS1 thắng HO_MARKETING@HO
     expect(ds.find((x) => x.id === `${P}KHONGTK`)).toMatchObject({ chuc_danh: "" });
+    // [AGT-D1-01] vai duy nhất neo ở CS2 ⇒ grant CS1 không được biết vai đó.
+    expect(ds.find((x) => x.id === `${P}LECH`)).toMatchObject({ chuc_danh: "", co_so: "CS1" });
     const coNghi = await goi(tk, "danh_muc.lay_nhan_su", { bao_gom_da_nghi: true });
     expect((coNghi.body.du_lieu as { id: string }[]).map((x) => x.id)).toContain(`${P}NGHI`);
   });
@@ -436,6 +453,24 @@ describe.skipIf(!RUN)("Cổng dữ liệu agent · Đợt 1 — 7 công cụ + c
     const tk = await dungClient("dk-ho", ["kinh_doanh.lay_dang_ky"], ["HO"]);
     const r = await goi(tk, "kinh_doanh.lay_dang_ky", { tu_ngay: "2099-01-01", den_ngay: "2099-01-31" });
     expect((r.body.du_lieu as { lead_id: string; co_so: string }[]).find((x) => x.lead_id === ID.lead_D)).toMatchObject({ co_so: "CS2" });
+    // [AGT-04] xin `co_so: "HO"` = toàn hệ thống (Hội sở không có ghi danh riêng) — bản đầu trả RỖNG.
+    const ho = await goi(tk, "kinh_doanh.lay_dang_ky", { tu_ngay: "2099-01-01", den_ngay: "2099-01-31", co_so: "HO" });
+    const coSo = new Set((ho.body.du_lieu as { lead_id: string; co_so: string }[]).filter((x) => x.lead_id === ID.lead_D || x.lead_id === ID.lead_B).map((x) => x.co_so));
+    expect([...coSo].sort()).toEqual(["CS1", "CS2"]);
+  });
+
+  it("[D1-DK-KHOA] học thử theo ĐÚNG khoá: không gán ngày học thử khoá khác; ghi danh khoá này không xoá hẹn học thử khoá kia", { timeout: CA }, async () => {
+    const tk = await dungClient("dk-khoa", ["kinh_doanh.lay_dang_ky"], ["CS1"]);
+    const r = await goi(tk, "kinh_doanh.lay_dang_ky", { tu_ngay: "2099-01-01", den_ngay: "2099-01-31" });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    const ds = r.body.du_lieu as Record<string, unknown>[];
+    // [AGT-01] Bé B: học thử RoboSim 01/12 sớm hơn, nhưng dòng Sata 4 chỉ mang học thử lớp CHUNG 20/12.
+    expect(ds.find((x) => x.lead_id === ID.lead_B && x.khoa === "CID1SATA4")).toMatchObject({ ngay_hoc_thu: "2098-12-20" });
+    // [AGT-02] Bé F: ghi danh Sata 4 + hẹn học thử RoboSim trong cùng khoảng ⇒ HAI dòng.
+    const cuaF = ds.filter((x) => x.lead_id === ID.lead_F);
+    expect(cuaF.map((x) => x.trang_thai).sort()).toEqual(["da_dang_ky", "da_hen_hoc_thu"]);
+    expect(cuaF.find((x) => x.trang_thai === "da_hen_hoc_thu")).toMatchObject({ khoa: "TRIAL_1_1", khoa_quan_tam: "CID1RBS", ngay_hoc_thu: "2099-01-12" });
+    expect(cuaF.find((x) => x.trang_thai === "da_dang_ky")).toMatchObject({ khoa: "CID1SATA4", ngay_hoc_thu: null });
   });
 
   it("[D1-QUYEN] gỡ `refunds:view` khỏi vai dịch vụ ⇒ lay_dang_ky 403 NGAY, dù grant còn (bước 10)", { timeout: CA }, async () => {
@@ -512,7 +547,7 @@ describe.skipIf(!RUN)("Cổng dữ liệu agent · Đợt 1 — 7 công cụ + c
       await expect(suaChinhSach(GD, {
         id: r.id, maVanBan: "CI.D1.QD.6", ten: "x x x", noiDungUuDai: "Ưu đãi đã sửa lại.", dieuKien: null,
         tuNgay: "2099-01-01", denNgay: "2099-12-31", coSo: [], khoaHoc: [], tep: null,
-      })).rejects.toMatchObject({ ma: "SAI_TRANG_THAI" });
+      }, new Date("2099-02-11T00:00:00Z"))).rejects.toMatchObject({ ma: "SAI_TRANG_THAI" });
     });
 
     it("[D1-SV-04] sửa ngày hiệu lực ⇒ hiệu lực của MÃ đi theo (cùng transaction)", { timeout: CA }, async () => {
@@ -525,7 +560,7 @@ describe.skipIf(!RUN)("Cổng dữ liệu agent · Đợt 1 — 7 công cụ + c
       await suaChinhSach(GD, {
         id: r.id, maVanBan: "CI.D1.QD.SUA", ten: "CI sửa", noiDungUuDai: "Ưu đãi đã sửa lại.", dieuKien: null,
         tuNgay: "2099-02-01", denNgay: "2099-09-30", coSo: [], khoaHoc: [], tep: null,
-      });
+      }, new Date("2099-01-10T00:00:00Z"));
       const sau = await db.voucher.findUniqueOrThrow({ where: { id: v.id } });
       expect(sau.validFrom.toISOString()).toBe("2099-01-31T17:00:00.000Z");
       expect(sau.validUntil.toISOString()).toBe("2099-09-30T16:59:59.999Z");
@@ -536,6 +571,48 @@ describe.skipIf(!RUN)("Cổng dữ liệu agent · Đợt 1 — 7 công cụ + c
           new Date("2099-02-05T01:00:00Z"),
         ),
       ).rejects.toMatchObject({ ma: "TRUNG_MA" });
+    });
+
+    it("[D1-SV-05] sửa LÙI ngày kết thúc về trước hôm nay ⇒ từ chối (phải dùng Thu hồi); giữ nguyên ngày cũ thì được", { timeout: CA }, async () => {
+      const r = await tao("CI.D1.QD.LUI", "2099-01-01", "2099-06-30");
+      const sua = (denNgay: string, now: string) =>
+        suaChinhSach(GD, {
+          id: r.id, maVanBan: "CI.D1.QD.LUI", ten: "CI lùi ngày", noiDungUuDai: "Ưu đãi của văn bản lùi ngày.", dieuKien: null,
+          tuNgay: "2099-01-01", denNgay, coSo: [], khoaHoc: [], tep: null,
+        }, new Date(now));
+      // Hôm nay 10/03: đặt kết thúc 01/03 = dừng giữa chừng không lý do, không báo Sale.
+      await expect(sua("2099-03-01", "2099-03-10T03:00:00Z")).rejects.toMatchObject({ ma: "DU_LIEU_SAI" });
+      // Sửa chính tả sau khi văn bản đã hết hạn (ngày cũ giữ nguyên, đã qua) vẫn phải được.
+      await expect(sua("2099-06-30", "2099-08-01T03:00:00Z")).resolves.toBeUndefined();
+    });
+
+    it("[D1-SV-07] tệp văn bản: URL do SERVER dựng từ khoá — URL client gửi (javascript:) bị bỏ", { timeout: CA }, async () => {
+      const cu = { a: process.env.R2_ACCOUNT_ID, k: process.env.R2_ACCESS_KEY_ID, s: process.env.R2_SECRET_ACCESS_KEY, b: process.env.R2_BUCKET_NAME, u: process.env.R2_PUBLIC_URL };
+      Object.assign(process.env, { R2_ACCOUNT_ID: "ci", R2_ACCESS_KEY_ID: "ci", R2_SECRET_ACCESS_KEY: "ci", R2_BUCKET_NAME: "ci", R2_PUBLIC_URL: "https://cdn.ci.test" });
+      try {
+        const { chinhSachSchema } = await import("../../lib/validators/khuyen-mai");
+        // Đầu vào THÔ như form gửi lên (không phải bản đã parse — bản đã parse mang `dieuKien: null`
+        // và parse lại sẽ hỏng vì lý do KHÁC, làm ca phủ định bên dưới xanh sai; lượt cấy lại 26/09 bắt được).
+        const tho = {
+          maVanBan: "CI.D1.QD.TEP", ten: "CI có tệp", noiDungUuDai: "Ưu đãi của văn bản có tệp.",
+          tuNgay: "2099-01-01", denNgay: "2099-12-31",
+          tep: { key: "uploads/documents/2099-01/sr-qd-tep-abc12345.pdf", ten: "SR.QD.TEP.pdf", url: "javascript:alert(1)" },
+        };
+        const r = await banHanhChinhSach(GD, chinhSachSchema.parse(tho), new Date("2099-01-01T01:00:00Z"));
+        const dong = await db.promotionPolicy.findUniqueOrThrow({ where: { id: r.id } });
+        expect(dong.fileUrl).toBe("https://cdn.ci.test/uploads/documents/2099-01/sr-qd-tep-abc12345.pdf");
+        // Đối chứng dương: cùng đầu vào thô, chỉ đổi mã văn bản ⇒ HỢP LỆ (ca phủ định dưới không đỏ vì lý do khác).
+        expect(chinhSachSchema.safeParse({ ...tho, maVanBan: "CI.D1.QD.TEP3" }).success).toBe(true);
+        // Khoá ngoài thư mục tải lên ⇒ từ chối ngay ở khuôn.
+        for (const key of ["javascript:alert(1)", "https://ke-xau.example/x.pdf", "uploads/videos/x.mp4", "../uploads/documents/x.pdf", "uploads/documents/../../x.pdf"]) {
+          expect(chinhSachSchema.safeParse({ ...tho, maVanBan: "CI.D1.QD.TEP2", tep: { key, ten: "x" } }).success, key).toBe(false);
+        }
+      } finally {
+        for (const [k, v] of Object.entries({ R2_ACCOUNT_ID: cu.a, R2_ACCESS_KEY_ID: cu.k, R2_SECRET_ACCESS_KEY: cu.s, R2_BUCKET_NAME: cu.b, R2_PUBLIC_URL: cu.u })) {
+          if (v === undefined) delete process.env[k];
+          else process.env[k] = v;
+        }
+      }
     });
 
     it("[D1-KM] lay_khuyen_mai_hieu_luc: đang hiệu lực + hết trong 180 ngày; bỏ tương lai, hết lâu, chưa từng hiệu lực, cơ sở ngoài phạm vi", { timeout: CA }, async () => {

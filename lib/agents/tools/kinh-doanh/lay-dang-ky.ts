@@ -37,9 +37,10 @@ import {
   TRANG_THAI_DA_DANG_KY,
   TRANG_THAI_DA_HOAN,
   chonHocThu,
+  danhDauDaDangKy,
   dongGhiDanh,
+  ngayHocThuChoKhoa,
   ngayHocThuCua,
-  ngaySomNhat,
   sapDong,
   type DongCoMoc,
   type GhiDanhHocThu,
@@ -82,7 +83,9 @@ export const layDangKy = dinhNghiaCongCu({
     "Kết quả tuyển sinh theo khoảng ngày: lead nào đã hẹn học thử (khoa = TRIAL_1_1), đã đăng ký khoá " +
     "nào, hay đã được hoàn tiền — trạng thái tính đến hết den_ngay. Mỗi dòng là một bé × một khoá (lead " +
     "nhiều con có thể ra nhiều dòng cùng lead_id). Ghi danh tạo tay không đi từ lead thì KHÔNG có ở " +
-    "đây. hoc_phi_niem_yet là giá niêm yết lúc chốt (học thử = 0). Không có thông tin cá nhân.",
+    "đây. hoc_phi_niem_yet là giá niêm yết lúc chốt (ghi danh cũ thiếu số đó thì là giá niêm yết hiện " +
+    "tại của khoá; học thử = 0). co_so = Hội sở nghĩa là toàn hệ thống (Hội sở không có ghi danh riêng). " +
+    "Không có thông tin cá nhân.",
   cheDo: "doc",
   nhayCam: "tb",
   quyenCan: ["trials:view", "enrollments:view-all", "refunds:view"],
@@ -107,7 +110,11 @@ export const layDangKy = dinhNghiaCongCu({
   phienBanKhuon: "1.0",
   async thucThi(ctx, i) {
     const ban = await docBanDoCoSo(ctx.sdb);
-    const centerIds = centerIdTrongPhamVi(ban, ctx.phamViCoSo);
+    // Hội sở không có ghi danh/học thử riêng; mã HO chỉ có mặt trong phạm vi khi grant là HO (= toàn
+    // hệ thống, Q-N9) ⇒ xin `co_so: "HO"` nghĩa là mọi cơ sở. Bản đầu trả mảng rỗng — nói dối agent
+    // "không có ai đăng ký" (rà 26/09, AGT-04).
+    const toanHeThong = ban.maHoiSo !== null && ctx.phamViCoSo.includes(ban.maHoiSo);
+    const centerIds = toanHeThong ? [...ban.centerTheoMa.values()] : centerIdTrongPhamVi(ban, ctx.phamViCoSo);
     if (centerIds.length === 0) return { duLieu: [], tiepTheo: null };
 
     const tuTs = dauNgayTuChuoi(i.tu_ngay);
@@ -133,6 +140,7 @@ export const layDangKy = dinhNghiaCongCu({
         select: {
           id: true,
           leadChildId: true,
+          courseId: true,
           centerId: true,
           listPrice: true,
           confirmedAt: true,
@@ -216,11 +224,11 @@ export const layDangKy = dinhNghiaCongCu({
       };
       return ngayHocThuCua(te, daHocLuc.get(`${t.leadChildId}|${t.trialClass.id}`) ?? null);
     };
-    const ngayHocThuTheoBe = new Map<string, (string | null)[]>();
+    const hocThuTheoBe = new Map<string, { courseId: string | null; ngay: string | null }[]>();
     for (const t of moiHocThu) {
-      const ds = ngayHocThuTheoBe.get(t.leadChildId) ?? [];
-      ds.push(ngayCua(t));
-      ngayHocThuTheoBe.set(t.leadChildId, ds);
+      const ds = hocThuTheoBe.get(t.leadChildId) ?? [];
+      ds.push({ courseId: t.trialClass.courseId, ngay: ngayCua(t) });
+      hocThuTheoBe.set(t.leadChildId, ds);
     }
     const vanBanTheoDon = new Map(
       voucher
@@ -230,7 +238,7 @@ export const layDangKy = dinhNghiaCongCu({
     const maKhoaTheoId = new Map(khoaCuaLop.map((c) => [c.id, maKhoa(c)]));
 
     const dong: DongCoMoc[] = [];
-    const beCoDongGhiDanh = new Set<string>();
+    const coDongGhiDanh: { leadChildId: string; courseId: string }[] = [];
     for (const e of ghiDanh) {
       const coSo = maCoSoCua(ban, e.centerId, "khong_xac_dinh");
       if (!coSo || !e.leadChild || !e.leadChildId) continue;
@@ -245,7 +253,7 @@ export const layDangKy = dinhNghiaCongCu({
         (ngayDangKy >= i.tu_ngay && ngayDangKy <= i.den_ngay) ||
         (ngayHoan !== null && ngayHoan >= i.tu_ngay && ngayHoan <= i.den_ngay);
       if (!coSuKien) continue;
-      beCoDongGhiDanh.add(e.leadChildId);
+      coDongGhiDanh.push({ leadChildId: e.leadChildId, courseId: e.courseId });
       dong.push(
         dongGhiDanh({
           leadId: e.leadChild.leadId,
@@ -253,7 +261,7 @@ export const layDangKy = dinhNghiaCongCu({
           coSo,
           ngayDangKy,
           ngayHoan,
-          ngayHocThu: ngaySomNhat(ngayHocThuTheoBe.get(e.leadChildId) ?? []),
+          ngayHocThu: ngayHocThuChoKhoa(hocThuTheoBe.get(e.leadChildId) ?? [], e.courseId),
           giaNiemYet: e.listPrice ?? e.course.price,
           vanBan: e.orderItems.map((o) => vanBanTheoDon.get(o.orderId)).find((x) => !!x) ?? null,
           enrollmentId: e.id,
@@ -265,10 +273,11 @@ export const layDangKy = dinhNghiaCongCu({
       t,
       id: t.id,
       leadChildId: t.leadChildId,
+      courseId: t.trialClass.courseId,
       ngay: ngayCua(t),
       moc: ngayCua(t) ?? ngayVN(t.createdAt),
     }));
-    for (const x of chonHocThu(ungVien, i.tu_ngay, i.den_ngay, beCoDongGhiDanh)) {
+    for (const x of chonHocThu(ungVien, i.tu_ngay, i.den_ngay, danhDauDaDangKy(coDongGhiDanh))) {
       const coSo = maCoSoCua(ban, x.t.trialClass.centerId, "khong_xac_dinh");
       if (!coSo) continue;
       dong.push({

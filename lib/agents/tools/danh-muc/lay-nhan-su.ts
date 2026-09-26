@@ -93,8 +93,13 @@ export const layNhanSu = dinhNghiaCongCu({
             },
             select: { userId: true, orgUnitId: true, role: { select: { code: true } } },
           });
+    // Chức danh chỉ suy từ vai neo ở đơn vị TRONG phạm vi grant (rà 26/09, AGT-D1-01): nhân sự
+    // CS1 mà vai duy nhất neo ở CS2 thì grant CS1 KHÔNG được biết vai đó — trả "" (không có vai
+    // hiệu lực trong phạm vi), không rơi về vai ngoài phạm vi.
+    const phamViOrgUnit = new Set([...ban.maTheoOrgUnit].filter(([, ma]) => phamVi.has(ma)).map(([id]) => id));
     const vaiTheoUser = new Map<string, { code: string; orgUnitId: string }[]>();
     for (const v of vai) {
+      if (!phamViOrgUnit.has(v.orgUnitId)) continue;
       const ds = vaiTheoUser.get(v.userId) ?? [];
       ds.push({ code: v.role.code, orgUnitId: v.orgUnitId });
       vaiTheoUser.set(v.userId, ds);

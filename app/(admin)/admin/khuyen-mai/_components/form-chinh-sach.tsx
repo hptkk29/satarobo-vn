@@ -67,7 +67,7 @@ function ChonNhieu({
         onClick={() => doi([])}
         className={cn(
           "inline-flex h-9 items-center whitespace-nowrap rounded-lg border px-3 text-sm font-medium transition-colors",
-          tatCa ? "border-primary bg-primary-soft text-primary-ink" : "border-border bg-card text-muted-foreground hover:bg-muted",
+          tatCa ? "border-primary bg-primary-soft text-primary-ink" : "border-border bg-card text-foreground hover:bg-muted",
         )}
       >
         {khiRong}
@@ -178,11 +178,11 @@ export function FormChinhSach({
             <Input
               value={v.maVanBan}
               onChange={(e) => dat("maVanBan", e.target.value.toUpperCase())}
-              placeholder="SR.QD.233"
+              placeholder="SR.QD.xxx"
               maxLength={40}
               disabled={pending}
               aria-invalid={coLoi("maVanBan")}
-              className="h-10 font-semibold tabular-nums"
+              className="h-10 font-semibold tabular-nums placeholder:font-normal"
             />
             {hienLoi("maVanBan") && <span className="mt-1 block text-xs text-state-danger-ink">{hienLoi("maVanBan")}</span>}
           </label>
