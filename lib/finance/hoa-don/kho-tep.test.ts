@@ -21,7 +21,13 @@ const h = vi.hoisted(() => ({
     ) => `https://${cmd.input.Bucket}.r2-signed.test/${cmd.input.Key}?X-Amz-Expires=${opts.expiresIn}`,
   ),
 }));
-vi.mock("@/lib/storage/r2-client", () => ({ getR2Client: () => ({ send: h.send }), getR2Bucket: h.getR2Bucket }));
+// `r2DaCauHinh` giữ bản THẬT: nó đọc env, và `khoHoaDonDaCauHinh` phải hỏi đúng danh sách biến của
+// client chung — mock nó thành hằng là test không còn đo gì ([KT-01b]).
+vi.mock("@/lib/storage/r2-client", async (goc) => ({
+  ...(await goc<typeof import("@/lib/storage/r2-client")>()),
+  getR2Client: () => ({ send: h.send }),
+  getR2Bucket: h.getR2Bucket,
+}));
 vi.mock("@aws-sdk/s3-request-presigner", () => ({ getSignedUrl: h.getSignedUrl }));
 
 import {
@@ -47,6 +53,7 @@ beforeEach(() => {
   process.env.R2_ACCOUNT_ID = "acc";
   process.env.R2_ACCESS_KEY_ID = "key";
   process.env.R2_SECRET_ACCESS_KEY = "secret";
+  process.env.R2_PUBLIC_URL = "https://cdn.example.test";
   h.send.mockReset();
   h.getSignedUrl.mockClear();
   h.getR2Bucket.mockClear();
@@ -103,6 +110,17 @@ describe("[KT-01] getter bucket — FAIL-CLOSED, so trùng đủ bốn bucket", 
     expect(khoHoaDonDaCauHinh()).toBe(false);
     process.env.R2_SECRET_ACCESS_KEY = "secret";
     process.env.R2_INVOICE_BUCKET_NAME = "satarobo-uploads";
+    expect(khoHoaDonDaCauHinh()).toBe(false);
+  });
+
+  it("[KT-01b] thiếu biến mà client R2 CHUNG đòi (R2_PUBLIC_URL / R2_BUCKET_NAME) ⇒ false", () => {
+    // Bản cũ chỉ hỏi ba khoá truy cập ⇒ true ⇒ màn vẽ nút tải, route ký URL qua `getR2Client()`
+    // thì ném "R2 env vars missing" ⇒ 503 (smoke GĐ 7, 26/09/2026).
+    expect(khoHoaDonDaCauHinh()).toBe(true);
+    delete process.env.R2_PUBLIC_URL;
+    expect(khoHoaDonDaCauHinh()).toBe(false);
+    process.env.R2_PUBLIC_URL = "https://cdn.example.test";
+    delete process.env.R2_BUCKET_NAME;
     expect(khoHoaDonDaCauHinh()).toBe(false);
   });
 });

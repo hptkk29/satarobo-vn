@@ -31,6 +31,8 @@ import type { LopChon } from "../_components/doi-khoa-dialog";
 import { CongNoTheoCon, type PhieuGopView } from "../_components/cong-no-theo-con";
 import { docPhieuGopDangMo } from "@/lib/finance/phieu-gop";
 import { memoPhatHanh } from "@/lib/payments/memo-phat-hanh";
+import { laHoaDonBat } from "@/lib/finance/hoa-don/feature";
+import { napKhoiHoaDonDon } from "@/lib/finance/hoa-don/nap-khoi-hoa-don-don";
 
 export const metadata = { title: "Chi tiết đơn hàng | Admin" };
 export const dynamic = "force-dynamic";
@@ -167,7 +169,7 @@ export default async function OrderDetailPage({ params }: Props) {
   // ⚠️ Giữ nguyên `checkPermission` cho TỪNG quyền, đừng gộp thành một lời gọi "hỏi cả
   // bó": mỗi quyền có `target`/scope riêng, và một hàm gộp sẽ phải đoán scope chung —
   // đúng kiểu nới quyền không ai thấy.
-  const [canManage, canRecordPayments, canManagePayments, canViewPii] = await Promise.all([
+  const [canManage, canRecordPayments, canManagePayments, canViewPii, laKeToan, hoaDonBat] = await Promise.all([
     // orders:manage chỉ HO_ACCOUNTANT (GLOBAL) — không cần target.
     checkPermission("orders:manage"),
     // ĐƯỜNG B — quyền RIÊNG, không dùng lại `orders:manage`. Chủ dự án chốt 18/09/2026:
@@ -182,6 +184,10 @@ export default async function OrderDetailPage({ params }: Props) {
     // vẫn dùng `order` GỐC ở server (chức năng), chỉ bản `displayOrder` xuống client bị che
     // → không leak qua RSC payload.
     checkPermission("orders:view-pii"),
+    // GĐ 7 hoá đơn — nhánh "kế toán cơ sở" của route tải hoá đơn (nút tải phải CÙNG luật route).
+    checkPermission("payments:confirm"),
+    // Cờ `billing.hoaDonEnabled` — TẮT thì không nạp, không vẽ khối "Hoá đơn điện tử".
+    laHoaDonBat(),
   ]);
 
   // ⚠️ CỔNG DUYỆT THEO NGƯỠNG — CỬA THỨ HAI. Xem chú thích tại `_qr-core.ts:guardIssuable`.
@@ -214,7 +220,7 @@ export default async function OrderDetailPage({ params }: Props) {
   // ⚠️ `paymentRequests` kéo lên đây chứ không nằm ở chỗ dùng: nó là nguồn của bảng
   // "Phiếu thu & QR theo đợt", tức của chính NÚT "Xuất QR" — thứ người bán chờ. Nằm cuối
   // chuỗi thì nó là lượt đi-về THỨ 21 của trang.
-  const [payCfg, paidSoFar, nhiemMap, batThuTheoCon, paymentRequests] = await Promise.all([
+  const [payCfg, paidSoFar, nhiemMap, batThuTheoCon, paymentRequests, khoiHoaDon] = await Promise.all([
     // BGĐ 31/07 — QR lấy tài khoản NHẬN TIỀN theo đơn. 31/08/2026: nguồn đổi từ "theo cơ
     // sở" sang "theo PHƯƠNG THỨC đã chọn trên đơn" (lùi dần về phương thức chuyển khoản
     // của cơ sở → dùng chung → kho VietQR cũ). Xem resolveOrderPaymentConfig.
@@ -233,6 +239,11 @@ export default async function OrderDetailPage({ params }: Props) {
     laThuTienLinhHoatBat(order.orgUnitId),
     // 03/08 — SỔ PHIẾU THU theo đợt (PaymentRequest).
     getOrderPaymentRequests(order.id),
+    // GĐ 7 hoá đơn — khối "Hoá đơn điện tử" cho sale. Nằm TRONG lô (không `await` riêng — `[DST-01]`);
+    // loader tự có nhịp 2 bên trong nhưng chạy song song với bốn câu còn lại của lô.
+    hoaDonBat
+      ? napKhoiHoaDonDon(actor, { orderId: order.id, xemPii: canViewPii, keToan: laKeToan })
+      : null,
   ]);
   // Bản ĐẦY ĐỦ — thứ duy nhất được nhúng vào ảnh QR.
   //
@@ -550,6 +561,7 @@ export default async function OrderDetailPage({ params }: Props) {
         paymentMethods={paymentMethods}
         congNo={congNo}
         donNhiem={donNhiem}
+        khoiHoaDon={khoiHoaDon}
         accounting={{
           // TRỤC A (GỘP) — KHÔNG phải con số "phụ huynh đã đóng" của cổng PH.
           //

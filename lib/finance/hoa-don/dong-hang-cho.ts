@@ -308,5 +308,29 @@ export function dungDongHangCho(input: {
     dong.push(dung(nhom[0]!, ngan, hd));
   }
 
+  khoaDuyNhat(dong);
   return { dong, thieuCoSo };
+}
+
+/**
+ * Khoá dòng phải DUY NHẤT trong đơn — `?chon=`, route phiếu chờ và `dongCuaLanThu` đều `find` theo nó.
+ *
+ * Khoá lần thu KHÔNG tự duy nhất: đợt đã xuất hoá đơn theo số đã thu (`xuatTheoSoDaThu`) rồi có thêm
+ * tiền về cho ĐÚNG đợt ấy ⇒ dòng hoá đơn cũ và dòng tiền mới cùng `dot:<id>` (review GĐ 7, ca
+ * `[DHC-KEY]`). `find` trả dòng hoá đơn cũ ⇒ kế toán bấm dòng mới mà màn mở dòng cũ, lưu hoá đơn thì
+ * nhận "Lần thu này đã có hoá đơn" ⇒ khoản mới kẹt trong hàng chờ vĩnh viễn.
+ *
+ * Chỉ gắn đuôi khi TRÙNG, nên ca thường (không trùng) giữ nguyên khoá cũ. Ai giữ khoá gốc: dòng ĐANG
+ * xử lý (chờ/lệch → nháp) trước dòng đã chốt — khoá gốc là thứ nối lượt tải phiếu chờ (audit
+ * `TAI_PHIEU_CHO.lanThuKey`) với lúc tạo hoá đơn, và thứ giữ `?chon=` qua bước tải lên; cùng mức thì
+ * lần thu MỚI hơn giữ (vừa chốt xong vẫn mở đúng dòng). Đuôi là id hoá đơn / id khoản — ổn định.
+ */
+function khoaDuyNhat(dong: DongHangCho[]): void {
+  const muc = (d: DongHangCho) => (d.ngan === "cho" || d.ngan === "lech" ? 0 : d.ngan === "nhap" ? 1 : 2);
+  const thuTu = [...dong].sort((a, b) => muc(a) - muc(b) || b.ngayThu.localeCompare(a.ngayThu));
+  const daDung = new Set<string>();
+  for (const d of thuTu) {
+    if (daDung.has(d.key)) d.key = `${d.key}~${d.hoaDon?.id ?? d.khoanIds[0] ?? ""}`;
+    daDung.add(d.key);
+  }
 }

@@ -20,6 +20,7 @@ import { StatusPill } from "@/components/admin/ui/status-pill";
 import { cn } from "@/lib/utils";
 import { kyHieuTheoNam } from "@/lib/finance/hoa-don/ky-hieu";
 import type { DongHangCho } from "@/lib/finance/hoa-don/dong-hang-cho";
+import { LY_DO_DA_XUAT_NGOAI, LY_DO_KHONG_XUAT_CO_DINH } from "@/lib/finance/hoa-don/ly-do-khong-xuat";
 import { goHoaDonAction, khongXuatHoaDonAction, luuHoaDonNhapAction, xacNhanHoaDonAction } from "../_actions";
 import { taiTepHoaDon } from "./tai-tep-hoa-don";
 
@@ -580,14 +581,14 @@ function DaDanhDauKhongXuat({ dong, hoaDonId }: { dong: DongHangCho; hoaDonId: s
   );
 }
 
-const LY_DO = ["Đã xuất ngoài hệ thống", "Khách không lấy hoá đơn", "Khác"] as const;
+const LY_DO = [...LY_DO_KHONG_XUAT_CO_DINH, "Khác"] as const;
 
 function KhongXuat({ dong }: { dong: DongHangCho }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const id = useId();
   const [mo, setMo] = useState(false);
-  const [lyDo, setLyDo] = useState<(typeof LY_DO)[number]>("Đã xuất ngoài hệ thống");
+  const [lyDo, setLyDo] = useState<(typeof LY_DO)[number]>(LY_DO_DA_XUAT_NGOAI);
   const [ghiChu, setGhiChu] = useState("");
   const [loi, setLoi] = useState<string | null>(null);
   const [dangGui, setDangGui] = useState(false);

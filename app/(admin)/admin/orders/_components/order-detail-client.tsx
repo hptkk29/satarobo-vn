@@ -52,6 +52,8 @@ import type { DonNhiem } from "@/lib/orders/don-nhiem";
 import { BannerDonNhiem } from "./banner-don-nhiem";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 import { ThongTinHoaDon } from "./thong-tin-hoa-don";
+import { KhoiHoaDon } from "./khoi-hoa-don";
+import type { KhoiHoaDonDon } from "@/lib/finance/hoa-don/khoi-hoa-don-don";
 import {
   methodAllowsOrderType,
   methodServesCenter,
@@ -239,6 +241,7 @@ export function OrderDetailClient({
   accounting,
   congNo,
   donNhiem,
+  khoiHoaDon,
   hanhDongPhu,
 }: {
   order: OrderWithIncludes;
@@ -275,6 +278,12 @@ export function OrderDetailClient({
   congNo: CongNoDon;
   /** Bước A3 — đơn có dữ liệu hỏng thì nói ra ngay đầu trang. */
   donNhiem: DonNhiem;
+  /**
+   * GĐ 7 hoá đơn — khối "Hoá đơn điện tử" (đã dựng + che ở server), hoặc `null` khi cờ
+   * `billing.hoaDonEnabled` TẮT. ⚠️ BẮT BUỘC, không `?`: prop tuỳ chọn mà quên truyền là khối
+   * biến mất im lặng — đúng hình dạng lỗi CÂM của luật 11.
+   */
+  khoiHoaDon: KhoiHoaDonDon | null;
   /**
    * Nút phụ của thanh tiêu đề (hiện là "Gửi email") — RSC truyền vào vì nó cần dữ liệu
    * mẫu email lấy từ DB. Để đây thay vì dựng một thanh tiêu đề thứ hai ở RSC: hai thanh
@@ -861,6 +870,9 @@ export function OrderDetailClient({
             updatedAt={seenUpdatedAt}
             canManage={canManage}
           />
+
+          {/* GĐ 7 — hoá đơn đã xuất theo từng lần thu: sale tải về gửi Zalo khi email không tới. */}
+          {khoiHoaDon ? <KhoiHoaDon khoi={khoiHoaDon} /> : null}
 
           {/* Phương thức thanh toán (G4 — nút "Sửa" khi đơn chưa xác nhận) */}
           <Khoi

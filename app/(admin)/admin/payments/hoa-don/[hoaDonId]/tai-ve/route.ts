@@ -20,7 +20,7 @@ import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { laHoaDonBat } from "@/lib/finance/hoa-don/feature";
-import { coQuyenKeToanTaiCoSo } from "@/lib/finance/hoa-don/quyen";
+import { coQuyenKeToanTaiCoSo, duocTaiBanHoaDon } from "@/lib/finance/hoa-don/quyen";
 import { khoHoaDonDaCauHinh, kyUrlTaiVeHoaDon } from "@/lib/finance/hoa-don/kho-tep";
 
 export const dynamic = "force-dynamic";
@@ -69,8 +69,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ hoaDonId
   });
   if (!hd) return loi(404, "Không tìm thấy hoá đơn");
 
-  const laKeToanCoSo = keToan && coQuyenKeToanTaiCoSo(actor, hd.centerId);
-  if (!laKeToanCoSo && !(xemPii && hd.trangThai === "DA_XAC_NHAN")) {
+  // Luật dùng chung với nút tải trên trang chi tiết đơn (GĐ 7) — đừng viết lại điều kiện tại đây.
+  const keToanCoSo = keToan && coQuyenKeToanTaiCoSo(actor, hd.centerId);
+  if (!duocTaiBanHoaDon({ keToanCoSo, xemPii, trangThai: hd.trangThai })) {
     return loi(404, "Không tìm thấy hoá đơn");
   }
 
