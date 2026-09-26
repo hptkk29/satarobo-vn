@@ -58,6 +58,8 @@ import { adminTd, adminTh, adminTr } from "@/components/admin/ui/table";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 import { ModuleNav } from "@/components/admin/cham-cong/module-nav";
 import { ScopeBar } from "@/components/admin/cham-cong/scope-bar";
+import { BangGioCa } from "@/components/cham-cong/ui/bang-gio-ca";
+import { dongGioCa } from "@/lib/cham-cong/gio-ca";
 import {
   DayStrip,
   type DayStripDay,
@@ -333,6 +335,7 @@ export default async function ChamCongPage({ searchParams }: Props) {
             pmBreakStart: true,
             pmBreakEnd: true,
             dayCredit: true,
+            soCapQuetKyVong: true,
           },
         })
       : Promise.resolve([]),
@@ -648,6 +651,10 @@ export default async function ChamCongPage({ searchParams }: Props) {
           ghi đè đều được lưu vết).
         </p>
       </PageHelp>
+
+      {/* Chỉ những mã ca CÓ TRONG NGÀY đang xem — đúng thứ đang hiện trên bảng, không phải
+          cả danh mục 21 mã. Người rà không phải lọc bằng mắt. */}
+      <BangGioCa maCa={dongGioCa(mauCa)} className="mt-4 mb-5" />
 
       <DayStrip days={stripDays} selected={dateStr} today={today} />
 

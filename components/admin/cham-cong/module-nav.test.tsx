@@ -62,16 +62,16 @@ describe("ModuleNav — lọc tab theo quyền", () => {
     expect(screen.getByRole("link", { name: "Đơn từ" })).toBeInTheDocument();
   });
 
-  it("không có approve ⇒ ẩn Đơn từ; view ở một khối vẫn đủ cho 7 tab còn lại", () => {
+  it("không có approve ⇒ ẩn Đơn từ; view ở một khối vẫn đủ cho 8 tab còn lại", () => {
     render(
       <ModuleNav active="ngay" scope={fakeScope({ cs1: ["hr_attendance:view"] })} ctx={CTX} />,
     );
     expect(screen.queryByRole("link", { name: "Đơn từ" })).toBeNull();
-    // Bảng công ngày · Lưới phân ca · Kỳ công & chốt · Nội quy & thống kê · Công dạy · Đối soát ·
-    // Cấu hình.
+    // Bảng công ngày · Lưới phân ca · Bảng công tháng · Kỳ công & chốt · Nội quy & thống kê ·
+    // Công dạy · Đối soát · Cấu hình.
     // Đếm bằng SỐ chứ không bằng tên để test không phải sửa mỗi lần đổi nhãn — nhưng khi con số
     // này đổi thì phải đổi có chủ đích, đúng như lần thêm tab thống kê 07/09.
-    expect(screen.getAllByRole("link")).toHaveLength(7);
+    expect(screen.getAllByRole("link")).toHaveLength(8);
   });
 
   it("không quyền nào ⇒ không render gì (nav rỗng là nhiễu, không phải điều hướng)", () => {
