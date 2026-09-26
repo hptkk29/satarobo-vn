@@ -100,7 +100,7 @@ export default async function ThongKeCaseTrialTheoSalePage({
         {/* 23/09 — màn CHÍNH của báo cáo trải nghiệm (`/bao-cao/trial` đã gỡ). */}
         <h2 className="text-lg font-semibold text-foreground">Báo cáo trải nghiệm</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Thống kê case trải nghiệm theo Sale. Mỗi dòng là một Sale, đếm theo <strong>ngày tạo case</strong> trong khoảng đã chọn.
+          Thống kê case trải nghiệm theo Sale. Mỗi dòng là <strong>Sale phụ trách lead</strong> của bé (không phải người bấm thêm case), đếm theo <strong>ngày tạo case</strong> trong khoảng đã chọn.
         </p>
       </div>
 

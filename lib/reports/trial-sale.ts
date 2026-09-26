@@ -23,7 +23,10 @@ export type TrangThaiCase = "ACTIVE" | "COMPLETED" | "WITHDRAWN";
 
 export type CaseTrial = {
   id: string;
-  /** Người THÊM case = Sale. `null` với case cũ không ghi người thêm. */
+  /**
+   * Sale PHỤ TRÁCH LEAD của bé (`Lead.assignedToId`) — KHÔNG phải người bấm thêm case.
+   * `null` = lead chưa ai phụ trách. Luật ở `saleCuaCase`.
+   */
   saleId: string | null;
   saleName: string | null;
   status: TrangThaiCase;
@@ -105,6 +108,28 @@ export type DongSale = {
   tyLe: number | null;
 };
 
+/** Nhãn dòng gom các case mà lead chưa ai phụ trách. */
+export const SALE_CHUA_CO = "(Lead chưa có Sale phụ trách)";
+
+/**
+ * Case này tính cho Sale nào — Sale PHỤ TRÁCH LEAD của bé.
+ *
+ * ~~Người THÊM case (`TrialEnrollment.addedById`)~~ **[ĐẢO 26/09/2026]** chủ dự án thấy
+ * "Hoàng Phan Tuấn Kiệt" (không phải Sale) thành một dòng Sale chỉ vì tài khoản đó bấm
+ * thêm hộ một bé. Người xếp hộ (Quản lý, Đào tạo, quản trị) KHÔNG phải người chăm khách;
+ * tính theo họ là lấy case khỏi Sale thật và dựng ra "Sale" giả.
+ *
+ * ⚠️ Là Sale HIỆN TẠI của lead — hệ thống không lưu "ai phụ trách lúc tạo case", nên lead
+ * đã chuyển Sale thì mọi case cũ của nó đi theo Sale mới.
+ */
+export function saleCuaCase(
+  lead: { assignedToId: string | null; assignedTo: { name: string | null } | null } | null,
+): { saleId: string | null; saleName: string | null } {
+  const id = lead?.assignedToId ?? null;
+  if (!id) return { saleId: null, saleName: null };
+  return { saleId: id, saleName: lead?.assignedTo?.name?.trim() || null };
+}
+
 /** Gom case theo Sale. Thứ tự: nhiều case nhất lên trước, rồi theo tên cho ổn định. */
 export function gomTheoSale(cases: readonly CaseTrial[]): DongSale[] {
   const theoSale = new Map<string, CaseTrial[]>();
@@ -119,9 +144,9 @@ export function gomTheoSale(cases: readonly CaseTrial[]): DongSale[] {
   for (const [khoa, ds] of theoSale) {
     ra.push({
       saleId: khoa || null,
-      // Case cũ không ghi người thêm vẫn phải hiện thành MỘT dòng, không bị nuốt: tổng
+      // Case của lead chưa ai phụ trách vẫn phải hiện thành MỘT dòng, không bị nuốt: tổng
       // của bảng phải bằng tổng số case, nếu không người đọc sẽ đi tìm mấy case thiếu.
-      saleName: ds.find((c) => c.saleName)?.saleName ?? "(không rõ người thêm)",
+      saleName: ds.find((c) => c.saleName)?.saleName ?? SALE_CHUA_CO,
       so: demTheoNhom(ds),
       tyLe: tinhTyLe(ds),
     });

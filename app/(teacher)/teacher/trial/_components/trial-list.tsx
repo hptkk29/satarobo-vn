@@ -46,6 +46,8 @@ export type TrialRowView = {
   studentLabel: string;
   parentName: string | null;
   courseName: string | null;
+  /** Sale phụ trách lead — giáo viên cần trao đổi về bé thì biết hỏi ai. */
+  saleName: string | null;
   status: TrialRowStatus;
   evaluated: boolean;
 };
@@ -89,7 +91,7 @@ function TrialTable({ rows }: { rows: TrialRowView[] }) {
           nút chuyển trang trôi mất khỏi màn. */}
       <PhanTrangBang cuonNgang tenDonVi="suất Trial"
           khoaGhiNho="gv-trial">
-        <table className="w-full min-w-[820px] border-collapse text-left text-sm">
+        <table className="w-full min-w-[940px] border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
               <th scope="col" className="px-5 py-3">
@@ -103,6 +105,9 @@ function TrialTable({ rows }: { rows: TrialRowView[] }) {
               </th>
               <th scope="col" className="px-5 py-3">
                 Khoá học
+              </th>
+              <th scope="col" className="px-5 py-3">
+                Sale
               </th>
               <th scope="col" className="px-5 py-3">
                 Đánh giá
@@ -146,6 +151,12 @@ function TrialTable({ rows }: { rows: TrialRowView[] }) {
                 </td>
                 <td className="px-5 py-3.5 text-foreground">
                   {r.courseName ?? "—"}
+                </td>
+                {/* Nói THẬT khi lead chưa ai phụ trách — "—" đọc như "không cần hỏi ai". */}
+                <td className="min-w-[8rem] px-5 py-3.5 text-foreground">
+                  {r.saleName ?? (
+                    <span className="text-xs text-muted-foreground">Chưa có Sale</span>
+                  )}
                 </td>
                 <td className="px-5 py-3.5">
                   <Link
@@ -202,7 +213,7 @@ export function TrialList({
         if (status !== ALL && r.status !== status) return false;
         // Bỏ dấu khi so (lib/ui/tim-kiem) — gõ "hoang gia bao" phải ra "Hoàng Gia Bảo".
         return khopBatKy(
-          [r.studentLabel, r.parentName, r.courseName, r.trialClassName, r.dateLabel],
+          [r.studentLabel, r.parentName, r.courseName, r.saleName, r.trialClassName, r.dateLabel],
           query,
         );
       });
