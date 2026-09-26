@@ -45,6 +45,8 @@ const MARKER_CU = `[auto:${PROVIDER.toLowerCase()}:${TXN}]`;
 const HOC_PHI = 6_000_000;
 
 async function don() {
+  // Hoá đơn giữ khoản bằng khoá ngoại RESTRICT — dọn TRƯỚC khoản (dòng nối xoá theo Cascade).
+  await db.hoaDonDienTu.deleteMany({ where: { orderId: DON } });
   await db.receipt.deleteMany({ where: { paymentId: { startsWith: T } } });
   await db.paymentAllocation.deleteMany({ where: { bankTransactionId: { startsWith: T } } });
   await db.payment.deleteMany({ where: { orderId: DON } });
@@ -352,6 +354,35 @@ describe.skipIf(!RUN_DB_TESTS)("[GDC] gỡ gắn trên phân bổ ĐỜI CŨ", (
     expect(txn.status).toBe("MATCHED");
     expect(await db.payment.count({ where: { orderId: DON, paymentType: "ADJUSTMENT" } })).toBe(0);
     expect(await tongTheoGhiDanh()).toBe(HOC_PHI);
+  });
+
+  it("[GDC-hd] khoản đang nằm trong HOÁ ĐƠN → CHẶN gỡ, nói đúng hoá đơn, KHÔNG gỡ nửa vời", async () => {
+    // docs/ke-toan-hoa-don/PLAN.md §5 — gỡ gắn đảo tiền dòng gốc; tờ hoá đơn đã chụp số đó.
+    // Đối chứng dương: [GDC-a] (cùng hình dạng, KHÔNG có hoá đơn) gỡ được.
+    await dungDot(PR1, 1, HOC_PHI);
+    const khoan = await dungKhoanCu({ id: `${T}pay-hd`, amount: HOC_PHI, accountantStatus: "PENDING", enrollmentId: null });
+    await phanBo(PR1, HOC_PHI);
+    await db.hoaDonDienTu.create({
+      data: {
+        id: `${T}hd`,
+        orderId: DON,
+        centerId: CENTER,
+        trangThai: "DA_XAC_NHAN",
+        kyHieu: "1C26TSR",
+        soHoaDon: "4321",
+        tongTien: HOC_PHI,
+        taoBoiId: ACTOR.id,
+        khoan: { create: [{ paymentId: khoan.id, soTien: HOC_PHI }] },
+      },
+    });
+
+    const r = await goGanTheoCon({ bankTransactionId: TXN, orderId: DON, lyDo: "Gắn nhầm đơn", actor: ACTOR });
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.error).toContain("1C26TSR-4321");
+
+    expect(await db.paymentAllocation.count({ where: { bankTransactionId: TXN } })).toBe(1);
+    expect((await db.bankTransaction.findUniqueOrThrow({ where: { id: TXN } })).status).toBe("MATCHED");
+    expect(await db.payment.count({ where: { orderId: DON, paymentType: "ADJUSTMENT" } })).toBe(0);
   });
 
   it("[GDC-c3] phiếu thu đã THU HỒI (VOID) thì không chặn nữa", async () => {

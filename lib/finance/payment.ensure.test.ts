@@ -105,6 +105,11 @@ function fakeTx(state: State): Prisma.TransactionClient {
     student: {
       findMany: async () => state.studentsCuaPhuHuynh.map((id) => ({ id })),
     },
+    // Cổng hoá đơn (docs/ke-toan-hoa-don/PLAN.md §5): gắn ghi danh hỏi "khoản nào đang nằm trong
+    // hoá đơn". Các ca ở đây chưa có hoá đơn nào ⇒ rỗng. Ca có hoá đơn: tests/finance/hoa-don-khoa.test.ts.
+    hoaDonKhoan: {
+      findMany: async () => [],
+    },
     enrollment: {
       findMany: async () =>
         state.ghiDanh.map((g) => ({

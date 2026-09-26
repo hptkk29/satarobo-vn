@@ -9,7 +9,7 @@
 
 import Link from "next/link";
 import { useId, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { AlertTriangle, CheckCircle2, Download, FileText, Loader2, Upload } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -20,7 +20,7 @@ import { StatusPill } from "@/components/admin/ui/status-pill";
 import { cn } from "@/lib/utils";
 import { kyHieuTheoNam } from "@/lib/finance/hoa-don/ky-hieu";
 import type { DongHangCho } from "@/lib/finance/hoa-don/dong-hang-cho";
-import { goHoaDonAction, khongXuatHoaDonAction, luuHoaDonNhapAction } from "../_actions";
+import { goHoaDonAction, khongXuatHoaDonAction, luuHoaDonNhapAction, xacNhanHoaDonAction } from "../_actions";
 import { taiTepHoaDon } from "./tai-tep-hoa-don";
 
 const tien = (n: number) => `${n.toLocaleString("vi-VN")}đ`;
@@ -122,6 +122,12 @@ export function NganLanThu({ dong }: { dong: DongHangCho }) {
               <FormHoaDon key={dong.hoaDonNhap?.id ?? "moi"} dong={dong} />
             )}
           </Buoc>
+
+          {dong.ngan === "nhap" && dong.hoaDonNhap ? (
+            <Buoc so={3} ten="Xác nhận">
+              <NutXacNhan key={dong.hoaDonNhap.id} dong={dong} hoaDonId={dong.hoaDonNhap.id} />
+            </Buoc>
+          ) : null}
         </ol>
       )}
 
@@ -423,21 +429,65 @@ function FormHoaDon({ dong }: { dong: DongHangCho }) {
         ) : null}
       </div>
       {khongDuocTai ? <p className="text-sm text-state-warning-ink">{taiLen.lyDo}</p> : null}
+    </form>
+  );
+}
 
-      {nhap ? (
-        <p
-          className={cn(
-            "flex items-start gap-2 text-sm",
-            dong.hanhDong.xacNhan.bat ? "text-state-success-ink" : "text-muted-foreground",
-          )}
-        >
-          {dong.hanhDong.xacNhan.bat ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden /> : null}
-          {dong.hanhDong.xacNhan.bat
-            ? "Đủ thông tin để kế toán xác nhận."
-            : `Chưa xác nhận được: ${dong.hanhDong.xacNhan.lyDo ?? "còn thiếu thông tin"}`}
+/**
+ * ③ Xác nhận — CHỐT hoá đơn (phương án (b), PLAN §0.1): khoản còn chờ mà đủ điều kiện thì cấp RCP
+ * trong cùng lượt; không đủ thì giữ chờ và báo lại. Xong ⇒ sang dòng KẾ TIẾP do server tính.
+ * Nhãn nút + lý do tắt đọc từ `hanhDongChoDong` — không tự suy ở đây.
+ */
+function NutXacNhan({ dong, hoaDonId }: { dong: DongHangCho; hoaDonId: string }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const [, startTransition] = useTransition();
+  const [dangGui, setDangGui] = useState(false);
+  const [loi, setLoi] = useState<string | null>(null);
+  const xn = dong.hanhDong.xacNhan;
+
+  async function bam() {
+    setDangGui(true);
+    setLoi(null);
+    const r = await xacNhanHoaDonAction({ orderId: dong.orderId, hoaDonId });
+    setDangGui(false);
+    if (!r.ok) return setLoi(r.error);
+    const phieu = r.data.daXacNhan > 0 ? ` · cấp ${r.data.daXacNhan} phiếu thu` : "";
+    toast.success(`Đã xác nhận hoá đơn${phieu}`);
+    if (r.data.conCho.length > 0) {
+      toast.warning(`${r.data.conCho.length} khoản vẫn chờ kế toán xác nhận: ${r.data.conCho[0]}`);
+    }
+    const q = new URLSearchParams({ ngan: dong.ngan });
+    if (r.data.keKe) q.set("chon", r.data.keKe);
+    startTransition(() => router.replace(`${pathname}?${q.toString()}`, { scroll: false }));
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      {xn.bat ? (
+        <p className="flex items-start gap-2 text-sm text-state-success-ink">
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          Đủ tệp và số hoá đơn.
         </p>
       ) : null}
-    </form>
+      <div>
+        <Button type="button" size="sm" disabled={!xn.bat || dangGui} onClick={() => void bam()}>
+          {dangGui ? (
+            <>
+              <Loader2 className="animate-spin" aria-hidden /> Đang xác nhận…
+            </>
+          ) : (
+            (xn.nhan ?? "Xác nhận")
+          )}
+        </Button>
+      </div>
+      {!xn.bat && xn.lyDo ? <p className="text-sm text-muted-foreground">{xn.lyDo}</p> : null}
+      {loi ? (
+        <p role="alert" className="text-sm text-state-danger-ink">
+          {loi}
+        </p>
+      ) : null}
+    </div>
   );
 }
 

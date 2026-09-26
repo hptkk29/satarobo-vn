@@ -33,6 +33,7 @@ import { kiemChuyenTien } from "@/lib/finance/chuyen-tien-con";
 import { locDonNhanTien } from "@/lib/payments/don-nhan-tien";
 import { recomputeRequestStatuses } from "@/lib/payments/payment-request";
 import { thuTuRot } from "@/lib/payments/thu-tu-rot";
+import { khoanDaKhoaHoaDon, thongDiepKhoaHoaDon } from "@/lib/finance/hoa-don/khoa-khoan";
 
 type Tx = Prisma.TransactionClient;
 
@@ -747,6 +748,11 @@ export async function goGanTheoCon(input: {
       };
     }
 
+    // CHẶN khi khoản đã nằm trong hoá đơn (docs/ke-toan-hoa-don/PLAN.md §5) — luôn chạy, không
+    // hỏi cờ. Gỡ gắn là đảo tiền của dòng gốc; tờ hoá đơn đã chụp đúng số đó.
+    const khoaHd = await khoanDaKhoaHoaDon(tx, goc.map((g) => g.id));
+    if (khoaHd.length > 0) return { ok: false as const, error: thongDiepKhoaHoaDon(khoaHd) };
+
     // ⚠️⚠️ MỌI CỔNG TỪ CHỐI PHẢI NẰM TRÊN DÒNG NÀY.
     //
     // Trong Prisma, `return` từ callback của `$transaction` **KHÔNG rollback** — chỉ `throw`
@@ -984,6 +990,10 @@ export async function tachKhoanChoCon(input: {
     // CỔNG 1 — câu tra khoá cả `orderId` lẫn `deletedAt`; `null` gộp "không có" với "của đơn
     // khác", cố ý không phân biệt (biết một khoản tồn tại ở đơn khác đã là một mẩu rò rỉ).
     if (!khoan) return { ok: false as const, error: "Không tìm thấy khoản thu của đơn này" };
+
+    // CỔNG HOÁ ĐƠN (PLAN §5) — tách là đảo dòng gốc + đẻ n dòng mới; tờ hoá đơn đã chụp dòng gốc.
+    const khoaHd = await khoanDaKhoaHoaDon(tx, [khoan.id]);
+    if (khoaHd.length > 0) return { ok: false as const, error: thongDiepKhoaHoaDon(khoaHd) };
 
     // CỔNG 2
     if (khoan.orderItemId !== null) {

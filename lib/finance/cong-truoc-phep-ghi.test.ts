@@ -43,7 +43,7 @@ const THU_MUC = [
 
 /** Phép GHI vào DB bên trong transaction. */
 const GHI =
-  /\btx\.\w+\.(?:create|createMany|update|updateMany|upsert|delete|deleteMany)\(|\btx\.\$executeRaw|\b(?:recomputeRequestStatuses|materializeInstallmentRequests|revertInstallmentRequests|ensureOrderPaymentRecorded|issueReceipt|maybeAdvanceLeadToRegistered)\s*\(/;
+  /\btx\.\w+\.(?:create|createMany|update|updateMany|upsert|delete|deleteMany)\(|\btx\.\$executeRaw|\b(?:recomputeRequestStatuses|materializeInstallmentRequests|revertInstallmentRequests|ensureOrderPaymentRecorded|issueReceipt|maybeAdvanceLeadToRegistered|xacNhanKhoanTrongTx)\s*\(/;
 
 /** Hình dạng TỪ CHỐI mà repo dùng. Hẹp có chủ đích — xem chú thích đầu tệp. */
 const TU_CHOI = /\breturn\s*(?:\{\s*(?:ok:\s*false|loi:)|fail\()/;

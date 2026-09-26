@@ -627,3 +627,31 @@ Tập nền: 154 dòng `Payment` còn sống · **32 khoản thu thật** (23 đ
 7. **Chưa làm, ghi lại cho GĐ sau:** lọc theo cơ sở / tháng trên màn (hàng chờ thật hôm nay 32 khoản);
    "Gắn thêm cho đủ" (§3.4) cho dòng THIẾU; ngăn "Đã xuất" hiện có đọc MỌI hoá đơn đã xác nhận — cần
    giới hạn theo thời gian khi số hoá đơn lớn.
+
+### Điều chỉnh khi thi công GĐ 5 (26/09)
+
+1. **Lõi `xacNhanKhoanTrongTx`** nằm trong `lib/finance/payment.ts`; `confirmPayment` và bước chốt
+   hoá đơn cùng gọi nó ⇒ một chỗ cấp RCP, một chỗ phát `payment.confirmed`. Lõi mang thêm hai cổng
+   mới cho **mọi** đường xác nhận (cả màn /payments):
+   - AC5 (trước chỉ có ở `confirmPaymentAction`);
+   - tiền ròng > 0: dòng gốc đã bị đảo trọn thì không còn cấp được phiếu thu.
+   Sau `updateMany` hụt thì đọc lại; không phải CONFIRMED ⇒ ném.
+2. **Bước chốt (`chotHoaDon`)** theo phương án (b) + "Điều chỉnh sau GĐ 0" mục 1:
+   - hoá đơn LUÔN chốt được khi đủ tệp + số;
+   - khoản thiếu ghi danh / do chính kế toán ghi ⇒ GIỮ CHỜ, trả lý do (không chặn);
+   - lượt email đầu tiên (`HoaDonGuiEmail` lanGui 1, CHO) giành chỗ **trong cùng transaction**. Việc
+     GỬI là GĐ 6.
+3. ⚠️ **Lệch có chủ đích so với §5 ở hai hàm gắn ghi danh** (`linkRecordedPaymentsToEnrollments`,
+   `ganGhiDanhChoKhoanCuaDon`). PLAN ghi "bỏ qua mọi khoản đang khoá"; nay chỉ bỏ qua khi phép chia
+   phải **TÁCH tiền**. Gắn ghi danh mà giữ nguyên số (một con) thì vẫn cho gắn.
+   - **Vì sao:** 22/31 khoản chờ thật thiếu ghi danh. Bỏ qua cả ca một con thì khoản đã có hoá đơn
+     không bao giờ gắn được ghi danh ⇒ không bao giờ xác nhận được ⇒ cổng phụ huynh báo "còn nợ" mãi.
+   - Mục đích của §5 là không đổi tiền dưới tờ hoá đơn, và mục đích đó vẫn giữ nguyên.
+4. `updatePendingPayment`: chỉ chặn khi đổi **số tiền / phương thức / ngày**; sửa ghi chú vẫn được
+   (không đổi gì trên tờ hoá đơn).
+5. ⚠️ **Cờ `billing.hoaDonEnabled` phải TẮT cho tới khi GĐ 6 xong.** Nút Xác nhận nói "gửi tới email
+   khách" và đã giành lượt gửi, nhưng người gửi thật là GĐ 6. Bật cờ trước thì nhãn nói một việc
+   chưa ai làm.
+6. **"Thay" hoá đơn đã xác nhận: dời sang GĐ sau.** Bản thay cần hạ `hieuLuc` của bản cũ và mở bản
+   mới trong cùng lượt, và nên thiết kế cùng luồng gửi lại email của GĐ 6. Hiện hoá đơn đã xác nhận
+   chỉ xem / tải được.

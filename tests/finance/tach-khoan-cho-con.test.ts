@@ -102,6 +102,8 @@ const TXN_ID = "FT269918";
 const MARKER_NH = markerWebhook(PROVIDER, TXN_ID);
 
 async function don() {
+  // Hoá đơn giữ khoản bằng khoá ngoại RESTRICT — dọn TRƯỚC khoản (dòng nối xoá theo Cascade).
+  await db.hoaDonDienTu.deleteMany({ where: { orderId: DON } });
   await db.paymentAllocation.deleteMany({ where: { bankTransaction: { id: TXN } } });
   await db.payment.deleteMany({ where: { orderId: DON } });
   await db.paymentRequest.deleteMany({ where: { orderId: DON } });
@@ -393,6 +395,28 @@ describe.skipIf(!RUN_DB_TESTS)("[TKD] tách khoản cho nhiều con — DB thậ
     const r = await chia();
     expect(r.ok).toBe(false);
     expect(!r.ok && r.error).toContain("bỏ gắn trước");
+  });
+
+  it("[TKD-HD] khoản đang nằm trong HOÁ ĐƠN nháp ⇒ KHÔNG tách được, KHÔNG ghi một dòng nào", async () => {
+    // docs/ke-toan-hoa-don/PLAN.md §5 — tách là đảo dòng gốc + đẻ n dòng mới, tờ hoá đơn đã
+    // chụp dòng gốc. Đối chứng dương: [TKD-02] tách được đúng khoản này khi CHƯA có hoá đơn.
+    await db.hoaDonDienTu.create({
+      data: {
+        id: `${T}hd`,
+        orderId: DON,
+        centerId: CENTER,
+        trangThai: "NHAP",
+        tongTien: KHOAN,
+        taoBoiId: ACTOR.id,
+        khoan: { create: [{ paymentId: GOC, soTien: KHOAN }] },
+      },
+    });
+    const truoc = await db.payment.count({ where: { orderId: DON } });
+
+    const r = await chia();
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.error).toContain("hoá đơn nháp");
+    expect(await db.payment.count({ where: { orderId: DON } })).toBe(truoc);
   });
 
   it("[TKD-07] tách HAI LẦN ⇒ lần thứ hai bị CHẶN (tách hai lần là đẻ tiền)", async () => {

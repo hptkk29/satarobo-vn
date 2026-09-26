@@ -175,6 +175,20 @@ export type KetQuaXacMinh =
  * vân tay → sha256. Từ chối vì QUA_LON / SAI_LOAI thì DỌN tệp khỏi kho (không để rác mang PII nằm
  * lại). KHONG_THAY thì không xoá gì. Người gọi PHẢI đã kiểm `khoaThuocDon` trước.
  */
+/**
+ * Tệp còn nằm trong kho không — HEAD, không tải thân. Bước chốt hoá đơn hỏi TRƯỚC transaction
+ * (PLAN §4 ⑤): chốt một hoá đơn mà tệp đã mất là hứa với khách một tờ không tải được.
+ * Lỗi mạng / quyền cũng trả `false` — fail-closed, người dùng thử lại.
+ */
+export async function coTepTrongKho(khoa: string): Promise<boolean> {
+  try {
+    await getR2Client().send(new HeadObjectCommand({ Bucket: getHoaDonBucket(), Key: khoa }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function xacMinhTepHoaDon(input: { khoa: string; loai: LoaiTep }): Promise<KetQuaXacMinh> {
   const s3 = getR2Client();
   const Bucket = getHoaDonBucket();

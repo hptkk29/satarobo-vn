@@ -23,6 +23,7 @@ import {
   installmentMarker,
 } from "@/lib/finance/payment-markers";
 import { KHOAN_DA_DONG } from "@/lib/finance/debt";
+import { khoanDaKhoaHoaDon, thongDiepKhoaHoaDon } from "@/lib/finance/hoa-don/khoa-khoan";
 
 type Tx = Prisma.TransactionClient;
 
@@ -45,18 +46,6 @@ async function auditActor(userId: string | null | undefined): Promise<AuditActor
   if (!userId) return { id: null, name: "Hệ thống" };
   const u = await db.user.findUnique({ where: { id: userId }, select: { name: true } });
   return { id: userId, name: u?.name ?? userId };
-}
-
-/**
- * Tra mã cơ sở (OrgUnit.code) cho mã phiếu thu.
- * LƯU Ý: `centerId` ở đây là `Center.id` cũ (Payment.centerId ← Order.centerId, model Center).
- * Phase A map Center↔OrgUnit qua field `OrgUnit.centerId` (@unique) — KHÔNG phải OrgUnit.id.
- * → phải tra theo `where: { centerId }`, không phải `where: { id: centerId }` (id cuid không khớp).
- */
-async function centerCodeOf(centerId: string | null | undefined): Promise<string> {
-  if (!centerId) return "SR";
-  const ou = await db.orgUnit.findUnique({ where: { centerId }, select: { code: true } });
-  return ou?.code ?? "SR";
 }
 
 // ─── S1 — Hợp nhất sổ thanh toán (Ledger-B → Payment) ─────────────────────────
@@ -292,6 +281,11 @@ export async function linkRecordedPaymentsToEnrollments(
     }
   }
 
+  // Khoản đang nằm trong hoá đơn (PLAN §5): gắn ghi danh mà GIỮ NGUYÊN số tiền thì được — tờ
+  // hoá đơn không đổi, và không gắn thì khoản không bao giờ xác nhận được. Phải TÁCH tiền (sửa
+  // `amount`) thì bỏ qua: tờ hoá đơn đã chụp số của dòng này.
+  const daKhoa = new Set((await khoanDaKhoaHoaDon(tx, recorded.map((p) => p.id))).map((k) => k.paymentId));
+
   let splitCreated = 0;
   let duongLui = 0;
   for (const p of recorded) {
@@ -302,6 +296,7 @@ export async function linkRecordedPaymentsToEnrollments(
     );
     if (lui) duongLui++;
     if (phan.length === 0) continue;
+    if (daKhoa.has(p.id) && !giuNguyenTien(phan, p.amount)) continue;
 
     const soPhan = phan.length;
     let reusedOriginal = false;
@@ -343,6 +338,11 @@ export async function linkRecordedPaymentsToEnrollments(
     }
   }
   return { linked: recorded.length, splitCreated, duongLui };
+}
+
+/** Phép chia chỉ GẮN ghi danh, không đổi số tiền của dòng (một mảnh, đúng số cũ). */
+function giuNguyenTien(phan: readonly { amount: number }[], soCu: number): boolean {
+  return phan.length === 1 && phan[0]!.amount === soCu;
 }
 
 /**
@@ -442,13 +442,16 @@ export async function ganGhiDanhChoKhoanCuaDon(
   }));
   if (ghiDanh.length === 0) return { linked: 0, splitCreated: 0, boQua: chuaGan.length };
 
+  // Cùng luật với hàm convert: khoản đang khoá hoá đơn chỉ được gắn khi KHÔNG phải tách tiền.
+  const daKhoa = new Set((await khoanDaKhoaHoaDon(tx, chuaGan.map((p) => p.id))).map((k) => k.paymentId));
+
   let linked = 0;
   let splitCreated = 0;
   let boQua = 0;
   for (const p of chuaGan) {
     const { phan, duongLui } = chiaKhoanTheoDon(p.amount, dongDon, ghiDanh);
     // Xem chú thích đầu hàm: đường lui KHÔNG được dùng ngoài lúc convert.
-    if (duongLui || phan.length === 0) {
+    if (duongLui || phan.length === 0 || (daKhoa.has(p.id) && !giuNguyenTien(phan, p.amount))) {
       boQua++;
       continue;
     }
@@ -603,67 +606,159 @@ export async function confirmPayment(params: {
   }
 
   const actor = await auditActor(params.confirmedById);
-  const centerCode = await centerCodeOf(existing.centerId);
-  const now = new Date();
 
-  const result = await db.$transaction(async (tx) => {
-    // AC8 — guard chống đua: chỉ chuyển CONFIRMED khi đang PENDING (atomic).
-    const upd = await tx.payment.updateMany({
-      where: { id: existing.id, accountantStatus: "PENDING" },
-      data: { accountantStatus: "CONFIRMED", confirmedById: params.confirmedById, confirmedAt: now },
-    });
-    if (upd.count === 0) {
-      // Một request khác đã xác nhận đồng thời → trả receipt hiện có, KHÔNG sinh thêm.
-      const r = await tx.receipt.findFirst({ where: { paymentId: existing.id } });
-      // FIX-H8 — vẫn ghi key (nếu có) để request lặp sau trả đúng kết quả này.
+  let result: { receiptId: string | undefined; raced: boolean };
+  try {
+    result = await db.$transaction(async (tx) => {
+      const r = await xacNhanKhoanTrongTx(tx, {
+        paymentId: existing.id,
+        confirmedById: params.confirmedById,
+        actor,
+        now: new Date(),
+      });
+      // FIX-H8 — ghi key trong CÙNG tx → double-submit sau trả kết quả này (không sinh Receipt
+      // thứ 2). Ghi cả khi lượt này THUA đua (raced) để request lặp sau trả đúng kết quả.
       if (params.idempotencyKey) {
         await tx.idempotencyKey.create({
-          data: { key: params.idempotencyKey, scope: "payment.confirm", result: { receiptId: r?.id ?? null } },
+          data: { key: params.idempotencyKey, scope: "payment.confirm", result: { receiptId: r.receiptId ?? null } },
         });
       }
-      return { receiptId: r?.id, raced: true };
-    }
-    const receipt = await issueReceipt({
-      enrollmentId: existing.enrollmentId as string,
-      paymentId: existing.id,
-      issuedById: params.confirmedById,
-      centerCode,
-      tx,
-      now,
+      return r;
     });
-    await writeAudit({
-      actor,
-      module: "finance",
-      entityType: "Payment",
-      entityId: existing.id,
-      action: "STATUS_CHANGE",
-      oldValues: { accountantStatus: existing.accountantStatus },
-      newValues: { accountantStatus: "CONFIRMED", receiptCode: receipt.code },
-      orgUnitId: existing.centerId,
-      tx,
-    });
-    await publishEvent(
-      "payment.confirmed",
-      {
-        paymentId: existing.id,
-        enrollmentId: existing.enrollmentId,
-        orderId: existing.orderId,
-        amount: existing.amount,
-        receiptId: receipt.id,
-        receiptCode: receipt.code,
-      },
-      { tx, dedupeKey: `payment.confirmed:${existing.id}` },
-    );
-    // FIX-H8 — ghi key trong CÙNG tx → double-submit sau trả kết quả này (không sinh Receipt thứ 2).
-    if (params.idempotencyKey) {
-      await tx.idempotencyKey.create({
-        data: { key: params.idempotencyKey, scope: "payment.confirm", result: { receiptId: receipt.id } },
-      });
-    }
-    return { receiptId: receipt.id, raced: false };
-  });
+  } catch (e) {
+    if (e instanceof LoiXacNhanKhoan) return fail(e.message);
+    throw e;
+  }
 
   return { ok: true, alreadyConfirmed: result.raced, receiptId: result.receiptId };
+}
+
+// ─── LÕI XÁC NHẬN MỘT KHOẢN — trong transaction của người gọi ─────────────────
+//
+// docs/ke-toan-hoa-don/PLAN.md §4 "Tách lõi xác nhận". `confirmPayment` (màn /payments) và bước
+// chốt hoá đơn (màn Hoá đơn điện tử) cùng gọi hàm này ⇒ MỘT chỗ cấp phiếu RCP + MỘT chỗ phát
+// `payment.confirmed`. Viết ở ĐÂY (không tệp khác) vì tệp này đã nằm trong ngoại lệ của lưới
+// `truc-a`: chép lõi sang tệp khác là lưới đỏ, và đúng ra là thêm một nhà thứ hai cho trục A.
+//
+// Lõi mang theo các cổng trước đây chỉ nằm ở tầng action / không nằm đâu cả:
+//   · AC5 — người ghi nhận không tự xác nhận khoản của mình (trước chỉ ở `confirmPaymentAction`);
+//   · tiền RÒNG > 0 — dòng gốc đã bị đảo trọn (gỡ gắn / tách) KHÔNG được cấp phiếu thu. Trước
+//     bản này /payments xác nhận được cả dòng gốc đã đảo và cấp RCP cho tiền đã gỡ;
+//   · sau `updateMany` hụt thì ĐỌC LẠI: người khác vừa xác nhận ⇒ trả phiếu có sẵn (idempotent);
+//     trạng thái khác (vd vừa bị TỪ CHỐI) ⇒ NÉM — không "coi như xong".
+// Từ chối = NÉM `LoiXacNhanKhoan` (luật rollback: `return` không rollback). Người gọi dịch câu.
+
+export type MaLoiXacNhanKhoan =
+  | "KHONG_TIM_THAY"
+  | "KHONG_CHO_DUYET"
+  | "CHUA_GHI_DANH"
+  | "TU_XAC_NHAN"
+  | "TIEN_RONG_KHONG_DUONG"
+  | "DOI_TRANG_THAI";
+
+const CAU_LOI_XAC_NHAN: Record<MaLoiXacNhanKhoan, string> = {
+  KHONG_TIM_THAY: "Không tìm thấy khoản thanh toán",
+  KHONG_CHO_DUYET: "Khoản này không ở trạng thái chờ duyệt",
+  CHUA_GHI_DANH: "Khoản chưa gắn ghi danh, không thể sinh phiếu thu",
+  TU_XAC_NHAN: "Người ghi nhận không được tự xác nhận khoản của mình",
+  TIEN_RONG_KHONG_DUONG: "Khoản này đã bị gỡ / tách hết tiền — không còn gì để xác nhận",
+  DOI_TRANG_THAI: "Khoản vừa bị người khác đổi trạng thái — tải lại rồi thử lại",
+};
+
+export class LoiXacNhanKhoan extends Error {
+  constructor(readonly ma: MaLoiXacNhanKhoan) {
+    super(CAU_LOI_XAC_NHAN[ma]);
+    this.name = "LoiXacNhanKhoan";
+  }
+}
+
+export async function xacNhanKhoanTrongTx(
+  tx: Tx,
+  params: { paymentId: string; confirmedById: string; actor: AuditActor; now: Date },
+): Promise<{ receiptId: string | undefined; receiptCode: string | undefined; raced: boolean }> {
+  const p = await tx.payment.findUnique({
+    where: { id: params.paymentId },
+    select: {
+      id: true,
+      amount: true,
+      orderId: true,
+      centerId: true,
+      enrollmentId: true,
+      recordedById: true,
+      accountantStatus: true,
+      deletedAt: true,
+    },
+  });
+  if (!p || p.deletedAt) throw new LoiXacNhanKhoan("KHONG_TIM_THAY");
+
+  const phieuCo = async () =>
+    tx.receipt.findFirst({ where: { paymentId: p.id }, select: { id: true, code: true } });
+  // Idempotent: đã xác nhận → trả phiếu có sẵn, không sinh thêm.
+  if (p.accountantStatus === "CONFIRMED") {
+    const r = await phieuCo();
+    return { receiptId: r?.id, receiptCode: r?.code, raced: true };
+  }
+  if (p.accountantStatus !== "PENDING") throw new LoiXacNhanKhoan("KHONG_CHO_DUYET");
+  if (!p.enrollmentId) throw new LoiXacNhanKhoan("CHUA_GHI_DANH");
+  // AC5 — tách nhiệm vụ.
+  if (p.recordedById && p.recordedById === params.confirmedById) throw new LoiXacNhanKhoan("TU_XAC_NHAN");
+  // Tiền RÒNG = dòng gốc + mọi bút toán còn sống trỏ `adjustmentOfId` về nó (đảo gỡ gắn, tách…).
+  const dao = await tx.payment.aggregate({
+    where: { adjustmentOfId: p.id, deletedAt: null },
+    _sum: { amount: true },
+  });
+  if (p.amount + (dao._sum.amount ?? 0) <= 0) throw new LoiXacNhanKhoan("TIEN_RONG_KHONG_DUONG");
+
+  // AC8 — chỉ chuyển CONFIRMED khi đang PENDING (atomic).
+  const upd = await tx.payment.updateMany({
+    where: { id: p.id, accountantStatus: "PENDING" },
+    data: { accountantStatus: "CONFIRMED", confirmedById: params.confirmedById, confirmedAt: params.now },
+  });
+  if (upd.count === 0) {
+    const lai = await tx.payment.findUnique({ where: { id: p.id }, select: { accountantStatus: true } });
+    if (lai?.accountantStatus !== "CONFIRMED") throw new LoiXacNhanKhoan("DOI_TRANG_THAI");
+    // Một request khác đã xác nhận đồng thời → trả phiếu hiện có, KHÔNG sinh thêm.
+    const r = await phieuCo();
+    return { receiptId: r?.id, receiptCode: r?.code, raced: true };
+  }
+
+  // Mã cơ sở cho mã phiếu thu. `Payment.centerId` là `Center.id` cũ; ánh xạ sang OrgUnit qua cột
+  // `OrgUnit.centerId` (@unique) — tra `where: { centerId }`, KHÔNG `where: { id }` (cuid không khớp).
+  const ou = p.centerId
+    ? await tx.orgUnit.findUnique({ where: { centerId: p.centerId }, select: { code: true } })
+    : null;
+  const receipt = await issueReceipt({
+    enrollmentId: p.enrollmentId,
+    paymentId: p.id,
+    issuedById: params.confirmedById,
+    centerCode: ou?.code ?? "SR",
+    tx,
+    now: params.now,
+  });
+  await writeAudit({
+    actor: params.actor,
+    module: "finance",
+    entityType: "Payment",
+    entityId: p.id,
+    action: "STATUS_CHANGE",
+    oldValues: { accountantStatus: p.accountantStatus },
+    newValues: { accountantStatus: "CONFIRMED", receiptCode: receipt.code },
+    orgUnitId: p.centerId,
+    tx,
+  });
+  await publishEvent(
+    "payment.confirmed",
+    {
+      paymentId: p.id,
+      enrollmentId: p.enrollmentId,
+      orderId: p.orderId,
+      amount: p.amount,
+      receiptId: receipt.id,
+      receiptCode: receipt.code,
+    },
+    { tx, dedupeKey: `payment.confirmed:${p.id}` },
+  );
+  return { receiptId: receipt.id, receiptCode: receipt.code, raced: false };
 }
 
 // ─── AC3 — Kế toán từ chối (reason bắt buộc) ──────────────────────────────────
@@ -693,6 +788,14 @@ export async function rejectPayment(params: {
   const expectedAt = params.expectedUpdatedAt ? new Date(params.expectedUpdatedAt) : null;
 
   const result = await db.$transaction(async (tx) => {
+    // CỔNG HOÁ ĐƠN (docs/ke-toan-hoa-don/PLAN.md §5) — đứng TRƯỚC phép ghi đầu tiên, LUÔN chạy
+    // (không hỏi cờ). Từ chối một khoản đã nằm trong hoá đơn là để tờ hoá đơn nói một số tiền
+    // mà sổ đã gỡ. Trả về khi CHƯA ghi gì ⇒ không cần rollback.
+    const khoa = await khoanDaKhoaHoaDon(tx, [existing.id]);
+    if (khoa.length > 0) {
+      return { stale: false as const, voided: [] as string[], khoaHoaDon: thongDiepKhoaHoaDon(khoa) };
+    }
+
     // FIX-H9 — ghi có điều kiện updatedAt; 0 row ⇒ người khác vừa sửa → STALE_WRITE.
     const upd = await tx.payment.updateMany({
       where: { id: existing.id, ...(expectedAt ? { updatedAt: expectedAt } : {}) },
@@ -736,10 +839,11 @@ export async function rejectPayment(params: {
       },
       { tx, dedupeKey: `payment.rejected:${existing.id}` },
     );
-    return { stale: false as const, voided };
+    return { stale: false as const, voided, khoaHoaDon: null };
   });
 
   if (result.stale) return fail(STALE_WRITE);
+  if (result.khoaHoaDon) return fail(result.khoaHoaDon);
   return { ok: true, voidedReceiptIds: result.voided };
 }
 
@@ -975,7 +1079,15 @@ export async function updatePendingPayment(params: {
   if (params.note !== undefined) data.note = params.note;
   if (Object.keys(data).length === 0) return fail("Không có gì để sửa.");
 
+  // Sửa ghi chú không đổi gì trên tờ hoá đơn; sửa số tiền / phương thức / ngày thì có.
+  const doiNoiDungHoaDon = data.amount !== undefined || data.method !== undefined || data.paidDate !== undefined;
+
   const result = await db.$transaction(async (tx) => {
+    // CỔNG HOÁ ĐƠN (PLAN §5) — TRƯỚC phép ghi đầu tiên, luôn chạy. Trả về khi chưa ghi gì.
+    if (doiNoiDungHoaDon) {
+      const khoa = await khoanDaKhoaHoaDon(tx, [original.id]);
+      if (khoa.length > 0) return { stale: false, khoaHoaDon: thongDiepKhoaHoaDon(khoa) };
+    }
     // Khoản PENDING thì sửa đè là hợp lệ, nên vẫn dùng khoá lạc quan cũ: ghi có điều
     // kiện `updatedAt` + `accountantStatus`, 0 dòng ⇒ người khác vừa động vào (sửa hoặc
     // xác nhận) kể từ lúc client đọc.
@@ -1010,6 +1122,7 @@ export async function updatePendingPayment(params: {
   });
 
   if (result.stale) return fail(STALE_WRITE);
+  if ("khoaHoaDon" in result && result.khoaHoaDon) return fail(result.khoaHoaDon);
   return { ok: true, paymentId: original.id };
 }
 
