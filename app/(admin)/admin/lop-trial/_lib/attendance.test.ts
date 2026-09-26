@@ -27,6 +27,10 @@ function hocVien(id: string): EnrollmentRow {
     saleTen: null,
     quyenGo: { duoc: true },
     quyenChuyen: { duoc: true },
+    // 26/09 — khoá học của bé; hàm đếm không dùng tới.
+    khoaHocId: null,
+    khoaTuLead: false,
+    khoaHocTen: null,
   };
 }
 

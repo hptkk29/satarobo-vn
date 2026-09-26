@@ -88,3 +88,73 @@ export function dongBoKhoaTuCon(dv: DauVaoDongBoKhoa): KetQuaDongBoKhoa {
   // Khác mọi con ⇒ không thể do con sinh ra ⇒ của người dùng. KHÔNG ĐỤNG.
   return { doiKhoa: false, khoaMoi: khoaLead, vi: "nguoi-dung-dat-tay" };
 }
+
+// ════════════════════════════════════════════════════════════════════════════════════
+// ĐỒNG BỘ HAI CHIỀU — chốt 26/09/2026 (chủ dự án): "tất cả dữ liệu phải đồng bộ với
+// nhau, 1 cái đổi thì đổi hết cùng nhau".
+//
+// Khoá quan tâm sống ở HAI chỗ: `LeadChild.interestedCourseId` (theo từng bé — cũng là
+// khoá trial mà lớp trial và site giáo viên đọc) và `Lead.courseId` (bản sao cấp phụ
+// huynh). Hai hàm dưới là luật cho hai chiều ĐỔI THẬT SỰ. Chúng thay luật 17/09 ở trên
+// cho đường SỬA; `dongBoKhoaTuCon` vẫn là luật của đường THÊM/GỠ con.
+//
+// ⚠️ Chỉ khi GIÁ TRỊ ĐỔI. Biểu mẫu con gửi lại toàn bộ ô mỗi lần Lưu: dội theo "có gửi
+// khoá" (thay vì "khoá đã đổi") là sửa tên bé cũng đè mất khoá của lead.
+// ════════════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Khoá của MỘT bé vừa đổi ⇒ lead ghi gì. Bé được chọn một khoá (khác cũ, không trống)
+ * là lựa chọn tường minh ⇒ lead nhận đúng khoá đó. Gỡ trắng khoá của bé ⇒ trả `null` ở
+ * đây: bên gọi tính lại bằng `dongBoKhoaTuCon` như cũ (không bịa khoá cho lead).
+ */
+export function leadTheoConDoi(o: {
+  khoaConCu: string | null | undefined;
+  khoaConMoi: string | null | undefined;
+}): { ghi: true; khoa: string } | { ghi: false } {
+  const cu = sach(o.khoaConCu);
+  const moi = sach(o.khoaConMoi);
+  if (moi === null || moi === cu) return { ghi: false };
+  return { ghi: true, khoa: moi };
+}
+
+/**
+ * Khoá của LEAD vừa đổi ⇒ bé nào đổi theo. Bé CHƯA có khoá, hoặc đang mang ĐÚNG khoá cũ
+ * của lead (tức khoá lead vốn lấy từ bé đó) ⇒ đổi theo. Bé đã được chọn một khoá KHÁC là
+ * lựa chọn riêng cho bé ấy (nhà hai con học hai khoá) ⇒ giữ nguyên.
+ *
+ * Lead bị gỡ trắng khoá ⇒ KHÔNG bé nào đổi: xoá khoá của bé đang ở lớp trial là để giáo
+ * viên lại thấy "—".
+ */
+export function conTheoLeadDoi(o: {
+  khoaLeadCu: string | null | undefined;
+  khoaLeadMoi: string | null | undefined;
+  con: readonly { id: string; khoa: string | null | undefined }[];
+}): string[] {
+  const cu = sach(o.khoaLeadCu);
+  const moi = sach(o.khoaLeadMoi);
+  if (moi === null || moi === cu) return [];
+  return o.con
+    .filter((c) => {
+      const k = sach(c.khoa);
+      return k !== moi && (k === null || k === cu);
+    })
+    .map((c) => c.id);
+}
+
+/**
+ * KHOÁ HIỆU LỰC của một bé — MỘT định nghĩa cho mọi nơi đọc "bé học khoá gì": ô Khoá học
+ * ở lớp trial, cổng "phải có khoá trước khi vào case", và cột Khoá học trên site giáo viên.
+ *
+ * = khoá riêng của bé; trống thì khoá quan tâm của lead (chủ dự án 26/09: "case nào có khoá
+ * quan tâm rồi thì lấy mặc định khoá học trial là khoá quan tâm đó"). Đọc lùi thay vì chép
+ * sẵn xuống bé: lead đổi khoá thì mọi nơi đổi theo ngay, không cần đường ghi nào nhớ dội.
+ *
+ * `lead` BẮT BUỘC trong kiểu (luật 7): quên `select: { lead: { select: { courseId } } }` ở
+ * câu tra là lỗi biên dịch, không phải một ô "—" im lặng.
+ */
+export function khoaHieuLucCuaBe(be: {
+  interestedCourseId: string | null;
+  lead: { courseId: string | null } | null;
+}): string | null {
+  return sach(be.interestedCourseId) ?? sach(be.lead?.courseId);
+}

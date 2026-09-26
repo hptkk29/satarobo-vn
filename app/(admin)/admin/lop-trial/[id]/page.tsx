@@ -291,6 +291,7 @@ export default async function ChiTietLopTrialPage({
         locGvTheoCa={locGvTheoCa}
         soGvMienLoc={gvMienLoc.length}
         lopDaKetThuc={daKetThuc}
+        khoaHocOptions={cls.khoaHocOptions}
       />
     </div>
   );
