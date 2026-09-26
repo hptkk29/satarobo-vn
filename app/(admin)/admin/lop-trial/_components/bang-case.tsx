@@ -25,6 +25,8 @@ import { toast } from "sonner";
 import { ChevronDown, Clock, Lock, Plus, UserMinus, Users } from "lucide-react";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 import { laChuaXepCase, laHocCaLop, thuocCase } from "@/lib/trial/nghia-null";
+import { kiemKhoaTruocKhiVaoCase } from "@/lib/trial/khoa-truoc-case";
+import { OKhoaHoc } from "./o-khoa-hoc";
 import { AttendanceBoard } from "./attendance-board";
 import { EnrollPanel } from "./enroll-panel";
 import { ThanhKhungGio } from "./thanh-khung-gio";
@@ -35,7 +37,13 @@ import {
   xepCaseHocVienAction,
 } from "../_actions";
 import type { CheDoChonGv } from "../_lib/che-do-gv";
-import type { EnrollmentRow, Option, RoomOption, SessionRow } from "../_lib/types";
+import type {
+  EnrollmentRow,
+  KhoaHocOption,
+  Option,
+  RoomOption,
+  SessionRow,
+} from "../_lib/types";
 
 /** Tên người, hoặc một câu tự khai là không tra được — KHÔNG để ô trống. */
 function tenHoac(x: string | null, thay: string): string {
@@ -62,6 +70,7 @@ export function BangCase({
   locGvTheoCa,
   soGvMienLoc,
   lopDaKetThuc,
+  khoaHocOptions,
 }: {
   trialClassId: string;
   khungLop: { startTime: string; endTime: string } | null;
@@ -87,6 +96,8 @@ export function BangCase({
    * đã huỷ (server nay từ chối — nút phải nói trước chứ không đợi bị từ chối).
    */
   lopDaKetThuc: boolean;
+  /** 26/09 — lựa chọn cho ô "Khoá học" của từng bé (`lib/trial/khoa-truoc-case.ts`). */
+  khoaHocOptions: KhoaHocOption[];
 }): JSX.Element {
   const router = useRouter();
   // Nghĩa của `scheduledSessionId = NULL` theo loại lớp — `lib/trial/nghia-null.ts`.
@@ -315,12 +326,20 @@ export function BangCase({
                   <th className="whitespace-nowrap px-5 py-3.5 font-semibold">Học viên</th>
                   <th className="whitespace-nowrap px-5 py-3.5 font-semibold">Phụ huynh</th>
                   <th className="whitespace-nowrap px-5 py-3.5 font-semibold">Sale</th>
+                  <th className="whitespace-nowrap px-5 py-3.5 font-semibold">Khoá học</th>
                   <th className="whitespace-nowrap px-5 py-3.5 font-semibold">Xếp vào case</th>
                   <th className="whitespace-nowrap px-5 py-3.5 text-right font-semibold">Gỡ</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {chuaXep.map((e) => (
+                {chuaXep.map((e) => {
+                  // 26/09 — lớp theo khung: bé phải có khoá trước khi vào case. Ô "Xếp vào
+                  // case" khoá kèm lý do; server chặn cùng luật (`xepCaseHocVienAction`).
+                  const khoa = kiemKhoaTruocKhiVaoCase({
+                    lopTheoKhung,
+                    khoaCuaBe: e.khoaHocId,
+                  });
+                  return (
                   <tr key={e.id} className="transition-colors hover:bg-muted">
                     <td className="whitespace-nowrap px-5 py-3.5 font-medium text-foreground">
                       {e.childName}
@@ -332,9 +351,21 @@ export function BangCase({
                       {tenHoac(e.saleTen, "chưa ai phụ trách")}
                     </td>
                     <td className="whitespace-nowrap px-5 py-3.5">
+                      <OKhoaHoc
+                        trialClassId={trialClassId}
+                        row={e}
+                        options={khoaHocOptions}
+                        sua={e.quyenChuyen.duoc && e.status === "ACTIVE" && !lopDaKetThuc}
+                      />
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-3.5">
                       {caseConSong.length === 0 ? (
                         <span className="text-xs text-muted-foreground">
                           Lớp chưa có case nào
+                        </span>
+                      ) : !khoa.duoc ? (
+                        <span className="text-xs font-medium text-state-warning-ink" title={khoa.lyDo}>
+                          Chọn khoá học trước
                         </span>
                       ) : (
                         <select
@@ -369,7 +400,8 @@ export function BangCase({
                       <NutGo row={e} pending={pending} onGo={() => go(e)} />
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -507,6 +539,7 @@ export function BangCase({
               ngayLop={ngayLop}
               khungLop={khungLop}
               lopDaKetThuc={lopDaKetThuc}
+              khoaHocOptions={khoaHocOptions}
             />
           ))}
         </div>
@@ -605,6 +638,7 @@ function TheCase({
   ngayLop,
   khungLop,
   lopDaKetThuc,
+  khoaHocOptions,
 }: {
   s: SessionRow;
   mo: boolean;
@@ -629,6 +663,7 @@ function TheCase({
   ngayLop: string | null;
   khungLop: { startTime: string; endTime: string } | null;
   lopDaKetThuc: boolean;
+  khoaHocOptions: KhoaHocOption[];
 }): JSX.Element {
   const daHuy = s.status === "CANCELLED";
   // Bảng gỡ của case: chỉ bé GHIM vào case này (bé "học cả lớp" ở lớp cũ có khối riêng).
@@ -722,6 +757,7 @@ function TheCase({
                       <th className="whitespace-nowrap px-4 py-2.5 font-semibold">Học viên</th>
                       <th className="whitespace-nowrap px-4 py-2.5 font-semibold">Phụ huynh</th>
                       <th className="whitespace-nowrap px-4 py-2.5 font-semibold">Sale</th>
+                      <th className="whitespace-nowrap px-4 py-2.5 font-semibold">Khoá học</th>
                       <th className="whitespace-nowrap px-4 py-2.5 font-semibold">Trạng thái</th>
                       <th className="whitespace-nowrap px-4 py-2.5 text-right font-semibold">
                         Gỡ khỏi case
@@ -739,6 +775,21 @@ function TheCase({
                         </td>
                         <td className="whitespace-nowrap px-4 py-2.5 text-muted-foreground">
                           {tenHoac(e.saleTen, "chưa ai phụ trách")}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-2.5">
+                          {/* 26/09 — khoá bé học thử trong case này (= khoá quan tâm). Sửa
+                              được ngay tại đây cho bé đã vào case từ trước luật này. */}
+                          <OKhoaHoc
+                            trialClassId={trialClassId}
+                            row={e}
+                            options={khoaHocOptions}
+                            sua={
+                              e.quyenChuyen.duoc &&
+                              e.status === "ACTIVE" &&
+                              !lopDaKetThuc &&
+                              !daHuy
+                            }
+                          />
                         </td>
                         <td className="whitespace-nowrap px-4 py-2.5">
                           <NhanTrangThaiGhiDanh status={e.status} />

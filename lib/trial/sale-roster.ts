@@ -19,6 +19,7 @@ import type { TrialEnrollmentStatus, TrialSessionStatus } from "@prisma/client";
 import type { Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { maskPhone, maskPersonName } from "@/lib/lead/pii";
+import { khoaHieuLucCuaBe } from "@/lib/lead/khoa-quan-tam";
 
 export type SaleTrialStudent = {
   enrollmentId: string;
@@ -110,7 +111,8 @@ export async function getSaleTrialRoster(
               dob: true,
               ageYears: true,
               interestedCourseId: true,
-              lead: { select: { parentName: true, phone: true } },
+              // `courseId` — nguồn lùi của `khoaHieuLucCuaBe` (26/09).
+              lead: { select: { parentName: true, phone: true, courseId: true } },
             },
           },
         },
@@ -132,7 +134,7 @@ export async function getSaleTrialRoster(
   const courseIds = [
     ...new Set(
       allEnrollments
-        .map((e) => e.leadChild.interestedCourseId)
+        .map((e) => khoaHieuLucCuaBe(e.leadChild))
         .filter((id): id is string => Boolean(id)),
     ),
   ];
@@ -171,9 +173,7 @@ export async function getSaleTrialRoster(
         birthYear:
           e.leadChild.dob?.getUTCFullYear() ??
           (e.leadChild.ageYears != null ? nowYear - e.leadChild.ageYears : null),
-        courseName: e.leadChild.interestedCourseId
-          ? (courseName.get(e.leadChild.interestedCourseId) ?? null)
-          : null,
+        courseName: courseName.get(khoaHieuLucCuaBe(e.leadChild) ?? "") ?? null,
         parentName: e.leadChild.lead?.parentName ?? null,
         parentPhone: e.leadChild.lead?.phone ?? null,
         status: e.status,
@@ -275,7 +275,9 @@ export async function getSaleTrialRubricContext(
       enrollments: {
         where: { id: enrollmentId },
         select: {
-          leadChild: { select: { fullName: true, interestedCourseId: true } },
+          leadChild: {
+            select: { fullName: true, interestedCourseId: true, lead: { select: { courseId: true } } },
+          },
         },
       },
     },
@@ -283,10 +285,11 @@ export async function getSaleTrialRubricContext(
   const enr = cls?.enrollments[0];
   if (!cls || !enr) return null;
 
-  const courseName = enr.leadChild.interestedCourseId
+  const khoaId = khoaHieuLucCuaBe(enr.leadChild);
+  const courseName = khoaId
     ? ((
         await sdb.course.findUnique({
-          where: { id: enr.leadChild.interestedCourseId },
+          where: { id: khoaId },
           select: { name: true },
         })
       )?.name ?? null)

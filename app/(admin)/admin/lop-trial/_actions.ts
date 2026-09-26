@@ -22,6 +22,9 @@ import {
   quyenXoaCase,
 } from "@/lib/trial/quyen-case";
 import { laLopTheoKhung, thuocCase } from "@/lib/trial/nghia-null";
+import { kiemKhoaTruocKhiVaoCase } from "@/lib/trial/khoa-truoc-case";
+import { khoaHieuLucCuaBe } from "@/lib/lead/khoa-quan-tam";
+import { datKhoaHocChoBeTrial } from "@/lib/trial/khoa-hoc-db";
 import type { Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { leadStatusLabel } from "@/lib/leads/status";
@@ -1028,6 +1031,21 @@ export async function enrollLeadChildLopTrialAction(input: {
     }
   }
 
+  // 26/09 — gắn THẲNG vào một case của lớp theo khung thì bé phải có khoá học trước
+  // (`lib/trial/khoa-truoc-case.ts`). Cùng cổng với `xepCaseHocVienAction` — hai cửa đưa bé
+  // vào case mà theo hai luật là chỗ để lọt.
+  if (input.sessionId) {
+    const be = await scopedDb(ctx.actor).leadChild.findUnique({
+      where: { id: input.leadChildId },
+      select: { interestedCourseId: true, lead: { select: { courseId: true } } },
+    });
+    const khoa = kiemKhoaTruocKhiVaoCase({
+      lopTheoKhung: laLopTheoKhung(cls),
+      khoaCuaBe: be ? khoaHieuLucCuaBe(be) : null,
+    });
+    if (!khoa.duoc) return { ok: false, error: khoa.lyDo };
+  }
+
   // Buổi được chọn phải thuộc ĐÚNG lớp đang xếp — chống POST thẳng buổi của lớp khác.
   if (input.sessionId) {
     const ses = await scopedDb(ctx.actor).trialClassSession.findUnique({
@@ -1298,12 +1316,14 @@ export async function xepCaseHocVienAction(input: {
       leadChild: {
         select: {
           fullName: true,
+          interestedCourseId: true,
           lead: {
             select: {
               assignedToId: true,
               createdById: true,
               isSharedWithTeam: true,
               assignedTo: { select: { name: true } },
+              courseId: true,
             },
           },
         },
@@ -1330,6 +1350,17 @@ export async function xepCaseHocVienAction(input: {
       tenSale: enr.leadChild?.lead?.assignedTo?.name ?? null,
     });
     if (!quyen.duoc) return { ok: false, error: quyen.lyDo };
+  }
+
+  // 26/09 — lớp theo khung không có khoá của lớp ⇒ bé vào case phải mang khoá của mình
+  // (khoá quan tâm), để giáo viên biết bé học thử khoá gì. Chọn ở ô "Khoá học" ngay trên
+  // dòng của bé. Ô "Xếp vào case" trên màn khoá sẵn với đúng câu này; đây là cửa thật.
+  {
+    const khoa = kiemKhoaTruocKhiVaoCase({
+      lopTheoKhung: laLopTheoKhung(cls),
+      khoaCuaBe: enr.leadChild ? khoaHieuLucCuaBe(enr.leadChild) : null,
+    });
+    if (!khoa.duoc) return { ok: false, error: khoa.lyDo };
   }
 
   const res = await rescheduleTrialEnrollment({
@@ -1750,3 +1781,93 @@ export async function completeLopTrialSessionAction(
 // Cột `gvDeXuatId` / `gvPhanCongId` và bảng `TrialReschedule` GIỮ NGUYÊN trong DB (nếp
 // 2 pha): dữ liệu cũ còn đọc được, và `gvPhanCongId` vẫn là một trong ba đường nối học
 // viên ↔ giáo viên ở roster site GV.
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Khoá học của bé trong lớp trial (26/09/2026)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Chủ dự án: "thêm ô chọn khoá học ở chỗ chưa xếp case, để chọn khoá học trước khi thêm vào
+// case". Khoá của bé = KHOÁ QUAN TÂM của bé (`LeadChild.interestedCourseId`) — ghi thẳng vào
+// đó chứ không mở cột mới, vì site giáo viên và màn lead vốn đã đọc đúng cột này. Luật +
+// lý do đầy đủ: `lib/trial/khoa-truoc-case.ts`.
+//
+// Cổng: CÙNG luật với "Xếp vào case" (`quyenChuyenCase` — chủ lead hoặc Quản lý). Chọn
+// khoá là việc chuẩn bị để xếp case; ai không xếp được thì đổi khoá của bé cũng không phải
+// việc của họ (đổi khoá quan tâm còn đổi luôn khoá trên hồ sơ lead của Sale khác).
+
+export async function datKhoaHocTrialAction(input: {
+  trialClassId: string;
+  trialEnrollmentId: string;
+  courseId: string;
+}): Promise<ActionResult> {
+  const ctx = await requireActor();
+  if (!ctx) return { ok: false, error: CHUA_DANG_NHAP };
+  if (!(await checkPermission("trials:manage"))) {
+    return { ok: false, error: "Không có quyền chọn khoá học cho học viên" };
+  }
+  if (!input.trialClassId || !input.trialEnrollmentId || !input.courseId) {
+    return { ok: false, error: "Thiếu lớp, học viên hoặc khoá học" };
+  }
+
+  const cls = await loadScopedTrialClass(ctx.actor, input.trialClassId);
+  if (!cls) return { ok: false, error: KHONG_THAY_LOP };
+  if (cls.status === "CANCELLED" || cls.status === "COMPLETED") {
+    return { ok: false, error: "Lớp trải nghiệm đã kết thúc — không đổi khoá học được nữa" };
+  }
+
+  const sdb = scopedDb(ctx.actor);
+  const [enr, khoa] = await Promise.all([
+    sdb.trialEnrollment.findUnique({
+      where: { id: input.trialEnrollmentId },
+      select: {
+        trialClassId: true,
+        status: true,
+        leadChildId: true,
+        leadChild: {
+          select: {
+            lead: {
+              select: {
+                assignedToId: true,
+                createdById: true,
+                isSharedWithTeam: true,
+                assignedTo: { select: { name: true } },
+              },
+            },
+          },
+        },
+      },
+    }),
+    sdb.course.findUnique({
+      where: { id: input.courseId },
+      select: { id: true, isActive: true },
+    }),
+  ]);
+  if (!enr || enr.trialClassId !== input.trialClassId || !enr.leadChildId) {
+    return { ok: false, error: "Học viên không thuộc lớp này" };
+  }
+  if (enr.status !== "ACTIVE") {
+    return { ok: false, error: "Bé đã học xong lớp này — không đổi khoá học ở đây nữa" };
+  }
+  if (!khoa || !khoa.isActive) {
+    return { ok: false, error: "Khoá học không tồn tại hoặc đã ngừng" };
+  }
+
+  const quyen = quyenChuyenCase({
+    lead: enr.leadChild?.lead ?? null,
+    userId: ctx.session.user.id,
+    laQuanLy: await laQuanLyLead(cls.centerId),
+    tenSale: enr.leadChild?.lead?.assignedTo?.name ?? null,
+  });
+  if (!quyen.duoc) return { ok: false, error: quyen.lyDo };
+
+  const { actorId, actorName } = getAuditActor(ctx.session);
+  await datKhoaHocChoBeTrial({
+    leadChildId: enr.leadChildId,
+    courseId: khoa.id,
+    actorId,
+    actorName,
+  });
+
+  lamMoi(input.trialClassId);
+  return { ok: true };
+}
