@@ -10,6 +10,9 @@ import {
 } from "@/lib/db-scope";
 import { revalidatePath } from "next/cache";
 import { getAuditActor, logLeadAudit } from "@/lib/audit/log";
+import type { Prisma } from "@prisma/client";
+import { dongBoTuLead } from "@/lib/students/dong-bo-lead-db";
+import { chiOPhLead, type PhLead } from "@/lib/students/dong-bo-lead";
 import {
   conMoDeChiaLai,
   dungBanCapNhatLeadTrung,
@@ -613,6 +616,16 @@ export async function POST(req: NextRequest) {
             // `app/api/admin/import/employees/route.ts` — giữ audit NẰM TRONG transaction,
             // vì một dòng sổ ghi ngoài là dòng sổ có thể sống sót khi lượt ghi bị huỷ.
             tx: tx as unknown as Parameters<typeof logLeadAudit>[0]["tx"],
+          });
+          // 26/09/2026 — ô phụ huynh của phiếu đổi (tên, email…) ⇒ dội sang học viên đang
+          // nối phiếu này ("đổi 1 nơi thì đổi hết" — `lib/students/dong-bo-lead.ts`). Giới hạn
+          // đã biết: `sdb.$transaction` ⇒ học viên ở cơ sở NGOÀI tầm nhìn người nhập không đổi.
+          await dongBoTuLead({
+            tx: tx as unknown as Prisma.TransactionClient,
+            leadId: m.leadId,
+            truoc: m.cu as unknown as PhLead,
+            sau: chiOPhLead(banCapNhat.data as Record<string, unknown>),
+            actor: { id: actorId, name: actorName },
           });
         }
 

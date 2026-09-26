@@ -106,7 +106,7 @@ export function KhungLeadNguon({
           <BangLead lead={lead} />
           <p className="text-xs leading-relaxed text-muted-foreground">
             Các ô trên thuộc phiếu lead — muốn sửa thì mở lead. Thông tin con và phụ huynh sửa
-            ở hồ sơ bên cạnh.
+            ở hồ sơ bên cạnh hay ở phiếu lead đều được: hai bên tự đồng bộ.
           </p>
         </div>
         {coTheSua && (

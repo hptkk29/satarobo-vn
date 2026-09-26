@@ -13,6 +13,8 @@ import {
 import { checkPermission } from "@/lib/auth/check-permission";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
 import { syncStudentNameToCrm } from "@/lib/students/sync-name";
+import { dongBoTuHocVien } from "@/lib/students/dong-bo-lead-db";
+import { CHON_CON_HOC_VIEN, CHON_PH_HOC_VIEN } from "@/lib/students/dong-bo-lead";
 import { removeStudentFromClasses } from "@/lib/students/remove-from-classes";
 
 // Excel date parser — reused pattern from B3 / C2.
@@ -318,16 +320,35 @@ export async function POST(req: NextRequest) {
               select: {
                 id: true,
                 name: true,
-                parentPhone: true,
                 status: true,
                 centerId: true,
+                leadId: true,
+                leadChildId: true,
+                ...CHON_PH_HOC_VIEN,
+                ...CHON_CON_HOC_VIEN,
               },
             });
-            await tx.student.upsert({
+            const sau = await tx.student.upsert({
               where: { studentCode: r.data.studentCode },
               create: { ...base, studentCode: r.data.studentCode },
               update: base,
+              select: { leadId: true, leadChildId: true, ...CHON_PH_HOC_VIEN, ...CHON_CON_HOC_VIEN },
             });
+            // 26/09/2026 — dòng Excel sửa hồ sơ đang có ⇒ dội sang phiếu lead nguồn + anh chị
+            // em, như màn sửa học viên ("đổi 1 nơi thì đổi hết"). Giới hạn đã biết: import
+            // chạy trong `scopedDb` nên phiếu/anh chị em ở cơ sở NGOÀI tầm nhìn người import
+            // không đổi theo (màn sửa HV chạy client không scope — `lib/students/ghi-ho-so.ts`).
+            if (prev) {
+              await dongBoTuHocVien({
+                tx: tx as unknown as Prisma.TransactionClient,
+                studentId: prev.id,
+                leadId: sau.leadId,
+                leadChildId: sau.leadChildId,
+                truoc: prev,
+                sau,
+                actor: { id: session.user.id ?? null, name: session.user.name ?? "Import Excel" },
+              });
+            }
             // 21/08 — cột "Trạng thái" của file Excel đặt được INACTIVE. Trước đây import
             // chỉ ghi `Student.status` mà không đụng `Enrollment` ⇒ học viên hiện "Nghỉ
             // học" ở /students nhưng VẪN nằm trong lớp ở mọi màn roster (roster đọc từ
@@ -356,6 +377,7 @@ export async function POST(req: NextRequest) {
                 oldName: prev.name,
                 newName: base.name,
                 parentPhone: base.parentPhone ?? prev.parentPhone,
+                leadChildId: prev.leadChildId,
                 actor: {
                   id: session.user.id,
                   name: session.user.name ?? "Import Excel",

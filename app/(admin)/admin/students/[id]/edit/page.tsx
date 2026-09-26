@@ -8,7 +8,9 @@
 //   · ≥ 2200px: [form | lớp & tiến độ | cột phải 400px].
 //
 // Quyền + che PII giữ NGUYÊN như bản cũ: cổng `students:edit`, CCCD chỉ `payments:view-pii`,
-// SĐT PH che ở SERVER khi DENY cấp trường, năng lực robotics theo `canAssessSkills`.
+// SĐT PH che ở SERVER khi DENY cấp trường.
+// 26/09/2026 — khối "Hồ sơ năng lực robotics" THAY bằng "Nhận xét buổi học & học bạ" (mỗi phần
+// gác đúng quyền màn gốc); mã học viên chỉ Quản trị tối cao sửa (`students:change-code`).
 // Lead nguồn đọc DUY NHẤT qua `docLeadNguon` (cách ly cơ sở + canSeeLead + che PII) —
 // trang này KHÔNG tự truy vấn lead (include lồng không được scopedDb cách ly).
 
@@ -17,11 +19,15 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { redirect, notFound } from "next/navigation";
 import { getWardsByProvince, provinces } from "vietnam-address-data";
-import type { RoboticsSkill, SkillLevel } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { scopedDb } from "@/lib/db-scope";
-import { hasRole } from "@/lib/auth/permissions";
-import { checkPermission, checkPermissionDetail } from "@/lib/auth/check-permission";
+import {
+  checkAnyPermission,
+  checkPermission,
+  checkPermissionDetail,
+} from "@/lib/auth/check-permission";
+import { PAGE_GATES } from "@/lib/auth/page-gates";
+import { getStudentFeedback } from "@/lib/portal/feedback";
 import { maskPhone } from "@/lib/utils";
 import { resolveActor } from "@/lib/auth/actor";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
@@ -29,7 +35,7 @@ import { getStudentProgressForClasses } from "@/lib/progress";
 import { getStudentClassProgress, getStudentAbsences } from "@/lib/students/progress";
 import { docLeadNguon } from "@/lib/students/lead-nguon";
 import { nhanGioiTinh } from "@/lib/students/gioi-tinh";
-import { provinceIdByName, toAddressOptions, toNameOptions } from "@/lib/address/vn-address";
+import { maTinhMoi, toAddressOptions, toNameOptions } from "@/lib/address/vn-address";
 import { ngayVN } from "@/lib/format/date";
 import { vnYmd } from "@/lib/time/vn";
 import { StudentForm, type StudentFormValue } from "../../_components/student-form";
@@ -50,7 +56,11 @@ import {
   ngayNhapHoc,
   tinhTuoi,
 } from "../../_components/ho-so/nhan-ho-so";
-import { SkillEditor } from "../_components/skill-editor";
+import {
+  NhanXetVaHocBa,
+  type DongHocBa,
+  type DongNhanXet,
+} from "../../_components/ho-so/nhan-xet-va-hoc-ba";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -68,7 +78,16 @@ export default async function EditStudentPage({ params }: Props) {
 
   const { id } = await params;
 
-  const [canViewParentCccd, chiTietXem, coTheGhiDanh, actor] = await Promise.all([
+  const [
+    canViewParentCccd,
+    chiTietXem,
+    coTheGhiDanh,
+    actor,
+    coTheDoiMa,
+    xemNhanXet,
+    xemHocBaNangLuc,
+    xemHocBaTongHop,
+  ] = await Promise.all([
     // #15 — CCCD PH là PII: chỉ actor có payments:view-pii (kế toán/admin) mới thấy +
     // sửa. Sale/CM có students:edit nhưng KHÔNG có view-pii → ẩn ô + không prefill raw.
     checkPermission("payments:view-pii"),
@@ -78,6 +97,14 @@ export default async function EditStudentPage({ params }: Props) {
     // Nút "Ghi danh vào lớp" ở khối trống chỉ hiện khi bấm vào là làm được (luật 12).
     checkPermission("enrollments:create"),
     resolveActor(session.user.id),
+    // 26/09 — mã học viên: chỉ Quản trị tối cao (R7-05 C10). Server gác lại ở action.
+    checkPermission("students:change-code"),
+    // Nhận xét buổi: đúng cặp quyền mà màn điểm danh dùng để mở trang nhận xét buổi.
+    checkAnyPermission(["sessions:edit", "session-feedback:view-all"]),
+    // Học bạ năng lực: đúng cổng của /report-cards/<enrollmentId>.
+    checkAnyPermission(["report-cards:manage", "report-cards:review"]),
+    // Học bạ tổng hợp: đúng cổng của /hoc-ba.
+    checkAnyPermission(PAGE_GATES["/hoc-ba"]),
   ]);
   const phoneMasked = chiTietXem.fieldMask.includes("parentPhone");
   const sdb = scopedDb(actor);
@@ -107,7 +134,6 @@ export default async function EditStudentPage({ params }: Props) {
         parent2Relation: true,
         address: true,
         ward: true,
-        district: true,
         city: true,
         allergies: true,
         healthNotes: true,
@@ -128,14 +154,7 @@ export default async function EditStudentPage({ params }: Props) {
 
   if (!student) notFound();
 
-  // LMS-17 (W4-b) — mở editor năng lực cho GV PHỤ TRÁCH lớp HS.
-  // Mirror đúng logic backend canAssessStudent() trong ../_actions.ts (SUPER_ADMIN |
-  // CENTER_MANAGER cùng cơ sở | TEACHER dạy lớp HS đang học) để UI gate khớp server gate.
-  const isSuperOrManager =
-    hasRole(session.user, "SUPER_ADMIN") ||
-    (hasRole(session.user, "CENTER_MANAGER") && student.centerId === session.user.centerId);
-
-  const [parentChildren, skillRows, teachesStudent, enrollments, activeReserve, absences, leadNguon] =
+  const [parentChildren, phieuNhanXet, enrollments, activeReserve, absences, leadNguon] =
     await Promise.all([
       // Commit 3 — đa con: các con đang gắn cùng phụ huynh này.
       student.parentUserId
@@ -145,23 +164,10 @@ export default async function EditStudentPage({ params }: Props) {
             select: { id: true, name: true, studentCode: true },
           })
         : Promise.resolve([]),
-      // LMS-5 — năng lực: lấy bản đánh giá mới nhất mỗi kỹ năng.
-      sdb.studentSkillAssessment.findMany({
-        where: { studentId: id },
-        orderBy: { assessedAt: "desc" },
-        select: { skill: true, level: true, note: true, assessedAt: true },
-      }),
-      !isSuperOrManager && hasRole(session.user, "TEACHER")
-        ? sdb.enrollment
-            .findFirst({
-              where: {
-                studentId: id,
-                class: { OR: [{ teacherId: session.user.id }, { assistantId: session.user.id }] },
-              },
-              select: { id: true },
-            })
-            .then((e) => !!e)
-        : Promise.resolve(false),
+      // 26/09 — nhận xét buổi: CÙNG hàm cổng phụ huynh dùng (số buổi / tiêu đề khớp site GV).
+      // Hàm đọc `db` trần theo studentId; HV đã qua `sdb.student.findFirst` ở trên (cách ly
+      // cơ sở) nên không lộ phiếu của học viên ngoài tầm nhìn.
+      xemNhanXet ? getStudentFeedback(id, 20) : Promise.resolve(null),
       // MỘT truy vấn ghi danh cho cả trang (bản cũ đọc ba lần: lớp đang học, nút vòng đời,
       // lịch sử học tập). Ghi danh là model soft-delete ⇒ đã tự lọc `deletedAt: null`.
       sdb.enrollment.findMany({
@@ -204,23 +210,50 @@ export default async function EditStudentPage({ params }: Props) {
       }),
     ]);
 
-  const latestSkills: Partial<Record<RoboticsSkill, { level: SkillLevel; note: string }>> = {};
-  for (const r of skillRows) {
-    if (!latestSkills[r.skill]) latestSkills[r.skill] = { level: r.level, note: r.note ?? "" };
-  }
-  const canAssessSkills = isSuperOrManager || teachesStudent;
-
+  // ─── Nhận xét buổi + học bạ (26/09) ───────────────────────────────────────────────
+  const nhanXet: DongNhanXet[] | null =
+    phieuNhanXet === null
+      ? null
+      : phieuNhanXet.map((f) => ({
+          id: f.id,
+          buoi: f.order,
+          tieuDe: f.title,
+          ngay: ngayVN(new Date(f.dateISO)),
+          lop: f.className,
+          giaoVien: f.teacher,
+          duAn: f.projectName,
+          noiDung: (f.notes?.overall || f.comment || "").trim(),
+        }));
   // ─── Lớp & tiến độ: mỗi LỚP tính tiến độ buổi MỘT lần (bản cũ gọi hai lần/lớp) ───
   const dangHocRaw = enrollments.filter((e) => laGhiDanhDangHoc(e.status));
   const lopDangHocIds = [...new Set(dangHocRaw.map((e) => e.classId))];
   const moiLop = [...new Set(enrollments.map((e) => e.classId))];
-  const [chiSoTheoLop, buoiTheoLop] = await Promise.all([
+  const [chiSoTheoLop, buoiTheoLop, phieuHocBa] = await Promise.all([
     // QRY-07: chỉ số mọi lớp đang học batch 1 lượt.
     getStudentProgressForClasses(id, lopDangHocIds),
     Promise.all(
       moiLop.map(async (cid) => [cid, await getStudentClassProgress(id, cid)] as const),
     ).then((cap) => new Map(cap)),
+    // Học bạ năng lực: 1–1 với ghi danh (cột phẳng, không quan hệ) ⇒ cần id ghi danh, nên đi
+    // chung lô này chứ không thêm một nhịp chờ. `ReportCard` ∈ SCOPED_MODELS ⇒ qua `sdb`.
+    xemHocBaNangLuc
+      ? sdb.reportCard.findMany({
+          where: { enrollmentId: { in: enrollments.map((e) => e.id) } },
+          select: { enrollmentId: true, status: true, publishedAt: true, finalComment: true },
+        })
+      : Promise.resolve(null),
   ]);
+  const tenLopTheoGhiDanh = new Map(enrollments.map((e) => [e.id, e.class.name]));
+  const hocBa: DongHocBa[] | null =
+    phieuHocBa === null
+      ? null
+      : phieuHocBa.map((r) => ({
+          enrollmentId: r.enrollmentId,
+          lop: tenLopTheoGhiDanh.get(r.enrollmentId) ?? "Lớp",
+          trangThai: r.status,
+          ngayPhatHanh: r.status === "PUBLISHED" && r.publishedAt ? ngayVN(r.publishedAt) : null,
+          nhanXetCuoi: r.finalComment?.trim() || null,
+        }));
 
   const lopCua = (e: (typeof enrollments)[number]) => ({
     id: e.class.id,
@@ -290,7 +323,6 @@ export default async function EditStudentPage({ params }: Props) {
     city: student.city,
     ward: student.ward,
     address: student.address,
-    district: student.district,
     allergies: student.allergies ?? [],
     healthNotes: student.healthNotes,
     notes: student.notes,
@@ -305,7 +337,9 @@ export default async function EditStudentPage({ params }: Props) {
   // lúc đó không ghi ngược. Đổi ẢNH không nằm trong form nên không đổi khoá.
   const formKey = createHash("sha1").update(JSON.stringify(formValue)).digest("hex").slice(0, 16);
 
-  const maTinhDangLuu = provinceIdByName(provinces, student.city);
+  // 26/09 — tên tỉnh đang lưu dịch sang danh mục MỚI (bỏ tiền tố "TP", tỉnh đã sáp nhập →
+  // tỉnh nhận) — cùng phép dịch với ô tỉnh trong form (`ho-so/dia-chi.ts`).
+  const maTinhDangLuu = maTinhMoi(provinces, student.city);
   const phuongCuaTinh = maTinhDangLuu ? toNameOptions(getWardsByProvince(maTinhDangLuu)) : [];
 
   const tenCoSo =
@@ -360,6 +394,7 @@ export default async function EditStudentPage({ params }: Props) {
             provinces={toAddressOptions(provinces)}
             initialWards={phuongCuaTinh}
             homNay={vnYmd(new Date())}
+            coTheDoiMa={coTheDoiMa}
             thongTinTrungTam={{
               lopDangHoc: dangHoc.map((d) => ({ id: d.lop.id, ten: d.lop.ten })),
               ngayNhapHoc: nhapHoc ? ngayVN(nhapHoc) : null,
@@ -407,20 +442,15 @@ export default async function EditStudentPage({ params }: Props) {
 
           <ReserveHistorySection studentId={student.id} />
 
-          {/* LMS-5 — hồ sơ năng lực robotics */}
-          <section
-            aria-labelledby="nang-luc-robotics"
-            className="rounded-xl border border-border bg-card shadow-sm"
-          >
-            <div className="border-b border-border px-4 py-3">
-              <h2 id="nang-luc-robotics" className="text-sm font-semibold text-foreground">
-                Hồ sơ năng lực robotics
-              </h2>
-            </div>
-            <div className="p-4">
-              <SkillEditor studentId={student.id} canEdit={canAssessSkills} initial={latestSkills} />
-            </div>
-          </section>
+          {/* 26/09 — THAY khối "Hồ sơ năng lực robotics" (chủ dự án chốt). Dữ liệu năng lực
+              cũ vẫn nằm nguyên trong DB — chỉ màn này thôi hiện. */}
+          <NhanXetVaHocBa
+            studentId={student.id}
+            nhanXet={nhanXet}
+            hocBa={hocBa}
+            moHocBaNangLuc={xemHocBaNangLuc}
+            xemHocBaTongHop={xemHocBaTongHop}
+          />
         </div>
       </div>
     </div>

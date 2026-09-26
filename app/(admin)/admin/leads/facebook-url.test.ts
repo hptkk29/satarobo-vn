@@ -85,6 +85,12 @@ vi.mock("@/lib/lead/sharing", () => ({ leadSharingEnabled: vi.fn(async () => fal
 vi.mock("@/lib/crm/transfer-validate", () => ({ validateTransferTarget: vi.fn() }));
 vi.mock("@/lib/payments/summary", () => ({ getLeadPaymentSummary: vi.fn() }));
 vi.mock("@/lib/students/sync-name", () => ({ syncLeadChildNameToStudents: vi.fn() }));
+// 26/09 — updateLeadFields/updateLeadChild dội ô chung sang học viên (lib/students/dong-bo-lead-db.ts);
+// bộ này canh chuyện khác nên giả lập phần đó — dây nối có lưới riêng [DBL-W*].
+vi.mock("@/lib/students/dong-bo-lead-db", () => ({
+  dongBoTuLead: vi.fn(async () => ({ leadIds: [], studentIds: [] })),
+  dongBoTuCon: vi.fn(async () => ({ leadIds: [], studentIds: [] })),
+}));
 vi.mock("@/lib/students/prior-history", () => ({
   getPriorHistoryByPhone: vi.fn(async () => []),
   summarizePriorHistory: vi.fn(() => ""),

@@ -5,8 +5,11 @@
 //
 //   · MỘT tờ trắng, các nhóm ngăn bằng đường kẻ mảnh — không phải mỗi nhóm một thẻ.
 //   · Ô xếp theo bề ngang CHÍNH TỜ (`@container`): 1 cột → 2 cột (≥512px) → 3 cột (≥896px).
-//   · "Tách theo chủ dữ liệu": thông tin CON + PHỤ HUYNH sửa ở đây; thông tin PHỄU (nguồn,
-//     sale, AFF…) chỉ đọc ở khung "Lead nguồn" bên cạnh.
+//   · Thông tin CON + PHỤ HUYNH sửa ở đây; thông tin PHỄU (nguồn, sale, AFF…) chỉ đọc ở khung
+//     "Lead nguồn" bên cạnh. ĐẢO 26/09: các ô chung với phiếu lead nay ĐỒNG BỘ HAI CHIỀU
+//     (lib/students/dong-bo-lead.ts) — lưu ở đây là đổi luôn phiếu lead + anh/chị/em cùng phiếu.
+//   · 26/09: "Mã học viên" chỉ Quản trị tối cao sửa (`coTheDoiMa`); "Quan hệ" là ô chọn;
+//     địa chỉ chỉ dùng danh mục MỚI (ho-so/dia-chi.ts).
 //   · GỠ khỏi form (dữ liệu cũ GIỮ NGUYÊN trong DB): nhóm máu, Quận/Huyện, "Đơn vị mong
 //     muốn", "Ngày đăng ký lần đầu", SĐT/Email riêng của học viên.
 //
@@ -28,6 +31,7 @@ import { ExternalLink, Loader2 } from "lucide-react";
 import { StringArrayEditor } from "@/app/(admin)/admin/kits/_components/string-array-editor";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import { GIOI_TINH_OPTIONS, type GioiTinh } from "@/lib/students/gioi-tinh";
+import { QUAN_HE, quanHeTuChuoi } from "@/lib/students/quan-he";
 import { cn } from "@/lib/utils";
 import { createStudent, updateStudent } from "../_actions";
 import { ChonAnhKhiTao } from "./ho-so/anh-dai-dien";
@@ -66,8 +70,6 @@ export type StudentFormValue = {
   city: string | null;
   ward: string | null;
   address: string | null;
-  /** Cột cũ 3 cấp — chỉ hiển thị. */
-  district: string | null;
 
   allergies: string[];
   healthNotes: string | null;
@@ -106,7 +108,28 @@ function statusOptionsFor(current: string | undefined) {
 }
 
 const LOP_TRUONG = Array.from({ length: 12 }, (_, i) => i + 1);
-const QUAN_HE_GOI_Y = ["Mẹ", "Bố", "Ông", "Bà", "Anh", "Chị", "Người giám hộ"];
+
+/**
+ * Ô chọn "Quan hệ với học sinh" (26/09 — chủ dự án: dropdown, không gõ tự do). Giá trị cũ
+ * nhận ra được ⇒ chọn đúng mục; không nhận ra (vd "Ba", "mẹ bé") ⇒ giữ thành một mục riêng để
+ * lượt lưu không đổi nó lặng lẽ — người dùng tự chọn lại.
+ */
+function OQuanHe({ id, name, giaTri }: { id: string; name: string; giaTri: string | null }) {
+  const cu = (giaTri ?? "").trim();
+  const nhanRa = quanHeTuChuoi(cu);
+  const giuCu = cu !== "" && nhanRa === null;
+  return (
+    <select id={id} name={name} defaultValue={nhanRa ?? cu} className={O_NHAP}>
+      <option value="">— Chưa chọn —</option>
+      {giuCu && <option value={cu}>{cu} (đang lưu — chọn lại)</option>}
+      {QUAN_HE.map((q) => (
+        <option key={q} value={q}>
+          {q}
+        </option>
+      ))}
+    </select>
+  );
+}
 
 /** Nhóm đầu tờ: không kẻ trên (viền thẻ đã là mép trên). */
 const NHOM_DAU = "space-y-4 px-4 py-5 sm:px-6";
@@ -122,8 +145,15 @@ export function StudentForm({
   initialWards,
   homNay,
   thongTinTrungTam,
+  coTheDoiMa,
 }: {
   student?: StudentFormValue;
+  /**
+   * Người đang xem có `students:change-code` (chỉ Quản trị tối cao — chốt 26/09). BẮT BUỘC
+   * truyền: mặc định `true` là mở lại đúng ô vừa khoá, mặc định `false` là giấu ô khỏi admin.
+   * Server vẫn tự gác (`_lib/ma-hoc-vien.ts`) — ô này chỉ là lời hứa phải khớp với server.
+   */
+  coTheDoiMa: boolean;
   orgUnits: OrgUnitOption[];
   // #15 — CCCD PH là PII (mask + break-glass ở màn thanh toán). Chỉ actor có
   // payments:view-pii mới THẤY + nhập ô này; vai khác (Sale/CM) ẩn hoàn toàn.
@@ -148,8 +178,17 @@ export function StudentForm({
   // (`gui-o-da-doi.ts`): form nạp lại sau "Gắn lead"/nút vòng đời mà vẫn giữ chữ đang gõ
   // thì KHÔNG được ghi ngược các ô người dùng không chạm.
   const banDauRef = useRef<Map<string, string> | null>(null);
+  // Địa chỉ ĐANG LƯU lúc mở form (ref: chụp đúng một lần như phần còn lại của ảnh chụp).
+  const diaChiDangLuu = useRef({ city: student?.city ?? "", ward: student?.ward ?? "" });
   useEffect(() => {
-    if (isEdit && formRef.current) banDauRef.current = anhChupForm(new FormData(formRef.current));
+    if (!isEdit || !formRef.current) return;
+    const anh = anhChupForm(new FormData(formRef.current));
+    // Địa chỉ so với giá trị ĐANG LƯU, không với giá trị ô hiện (đã dịch sang danh mục mới —
+    // `ho-so/dia-chi.ts`). Nhờ vậy "Đà Nẵng" hiện thành "Tp Đà Nẵng" thì lượt lưu ghi đúng
+    // thứ màn hình đang cho thấy, DB không giữ lại chữ cũ mà màn hình giấu đi.
+    anh.set("city", diaChiDangLuu.current.city.trim());
+    anh.set("ward", diaChiDangLuu.current.ward.trim());
+    banDauRef.current = anh;
   }, [isEdit]);
   const statusOptions = statusOptionsFor(student?.status);
   const coPh2 = !!(student?.parent2Name || student?.parent2Phone || student?.parent2Relation);
@@ -232,24 +271,48 @@ export function StudentForm({
               className={O_NHAP}
             />
           </Truong>
-          <Truong
-            id="hv-code"
-            nhan="Mã học viên"
-            goiY={
-              isEdit
-                ? "Để trống KHÔNG xoá mã hiện có. Nếu đổi, mã mới phải duy nhất toàn hệ thống."
-                : "Để trống thì hệ thống tự sinh theo mã cơ sở. Nếu điền, phải duy nhất toàn hệ thống."
-            }
-          >
-            <input
+          {coTheDoiMa ? (
+            <Truong
               id="hv-code"
-              name="studentCode"
-              defaultValue={student?.studentCode ?? ""}
-              placeholder={isEdit ? undefined : "Tự sinh nếu để trống"}
-              autoComplete="off"
-              className={O_NHAP}
-            />
-          </Truong>
+              nhan="Mã học viên"
+              goiY={
+                isEdit
+                  ? "Để trống KHÔNG xoá mã hiện có. Nếu đổi, mã mới phải duy nhất toàn hệ thống."
+                  : "Để trống thì hệ thống tự sinh theo mã cơ sở. Nếu điền, phải duy nhất toàn hệ thống."
+              }
+            >
+              <input
+                id="hv-code"
+                name="studentCode"
+                defaultValue={student?.studentCode ?? ""}
+                placeholder={isEdit ? undefined : "Tự sinh nếu để trống"}
+                autoComplete="off"
+                className={O_NHAP}
+              />
+            </Truong>
+          ) : (
+            // 26/09 — chỉ Quản trị tối cao sửa mã (`students:change-code`). KHÔNG `name=`: ô chỉ
+            // đọc không được gửi đi, nên không có đường nào để một lượt lưu chạm vào mã.
+            <Truong
+              id="hv-code"
+              nhan="Mã học viên"
+              goiY={
+                isEdit
+                  ? "Chỉ Quản trị tối cao sửa được mã học viên."
+                  : "Hệ thống tự sinh theo mã cơ sở khi lưu."
+              }
+            >
+              <input
+                id="hv-code"
+                value={student?.studentCode ?? ""}
+                placeholder={isEdit ? "Chưa có mã" : "Tự sinh khi lưu"}
+                readOnly
+                data-chi-doc=""
+                aria-readonly="true"
+                className={O_NHAP}
+              />
+            </Truong>
+          )}
           {isEdit && (
             <Truong
               id="hv-status"
@@ -333,7 +396,7 @@ export function StudentForm({
           id="nhom-phu-huynh"
           moTa={
             isEdit
-              ? "Sửa ở đây là sửa hồ sơ học viên — không đồng bộ ngược về phiếu lead."
+              ? "Lưu ở đây là đổi luôn phiếu lead nguồn và hồ sơ anh/chị/em cùng phiếu — và ngược lại."
               : undefined
           }
         >
@@ -377,14 +440,7 @@ export function StudentForm({
             />
           </Truong>
           <Truong id="ph-relation" nhan="Quan hệ với học sinh">
-            <input
-              id="ph-relation"
-              name="parentRelation"
-              list="goi-y-quan-he"
-              defaultValue={student?.parentRelation ?? ""}
-              placeholder="Mẹ / Bố / Ông / Bà"
-              className={O_NHAP}
-            />
+            <OQuanHe id="ph-relation" name="parentRelation" giaTri={student?.parentRelation ?? null} />
           </Truong>
           <Truong id="ph-gender" nhan="Giới tính phụ huynh">
             <select
@@ -472,11 +528,6 @@ export function StudentForm({
             </Truong>
           )}
         </div>
-        <datalist id="goi-y-quan-he">
-          {QUAN_HE_GOI_Y.map((q) => (
-            <option key={q} value={q} />
-          ))}
-        </datalist>
 
         <details className="group rounded-lg bg-muted/40 px-3 py-2" open={coPh2}>
           <summary className="flex min-h-9 cursor-pointer list-none items-center text-sm font-medium text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">
@@ -505,12 +556,10 @@ export function StudentForm({
               />
             </Truong>
             <Truong id="ph2-relation" nhan="Quan hệ">
-              <input
+              <OQuanHe
                 id="ph2-relation"
                 name="parent2Relation"
-                list="goi-y-quan-he"
-                defaultValue={student?.parent2Relation ?? ""}
-                className={O_NHAP}
+                giaTri={student?.parent2Relation ?? null}
               />
             </Truong>
           </div>
@@ -526,7 +575,6 @@ export function StudentForm({
           city={student?.city ?? null}
           ward={student?.ward ?? null}
           address={student?.address ?? null}
-          district={student?.district ?? null}
         />
       </section>
 

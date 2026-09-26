@@ -40,7 +40,7 @@ import { StudentForm, type StudentFormValue } from "../student-form";
 
 const TINH = [{ value: "48", label: "Thành phố Đà Nẵng" }];
 
-/** Hồ sơ CŨ điển hình: tỉnh gõ tay ngoài danh mục + còn cột quận/huyện 3 cấp. */
+/** Hồ sơ CŨ điển hình: tỉnh gõ tay kiểu cũ ("TP …") + phường không còn trong danh mục mới. */
 const HV: StudentFormValue = {
   id: "hv_1",
   name: "Nguyễn Minh An",
@@ -65,17 +65,17 @@ const HV: StudentFormValue = {
   city: "TP Đà Nẵng",
   ward: "Phường Phước Ninh",
   address: "12 Lê Lợi",
-  district: "Hải Châu",
   allergies: ["Tôm"],
   healthNotes: "Hen nhẹ",
   notes: "Đón muộn thứ 5",
   orgUnitId: "ou_cs1",
 };
 
-function dung(student?: StudentFormValue) {
+function dung(student?: StudentFormValue, coTheDoiMa = true) {
   render(
     <StudentForm
       student={student}
+      coTheDoiMa={coTheDoiMa}
       orgUnits={[{ id: "ou_cs1", name: "CS1 — Nguyễn Hữu Thọ" }]}
       provinces={TINH}
       initialWards={[]}
@@ -154,10 +154,15 @@ describe("Form hồ sơ học viên — tập khoá gửi đi", () => {
     }
   });
 
-  it("[HSF-03] mở hồ sơ cũ rồi bấm Lưu KHÔNG ĐỔI GÌ — kể cả tỉnh/phường gõ tay ngoài danh mục", () => {
+  // ĐẢO 26/09 (chủ dự án: "không lấy thông tin cũ nữa"): địa chỉ chỉ còn danh mục MỚI. Tỉnh
+  // "TP Đà Nẵng" dịch sang đúng mục danh mục; phường không có trong danh mục mới ⇒ ô trống.
+  // Mọi ô KHÁC vẫn đi nguyên xuống như cũ.
+  it("[HSF-03] mở hồ sơ cũ: địa chỉ ra danh mục MỚI, mọi ô khác giữ nguyên", () => {
     const fd = new FormData(dung(HV));
-    expect(fd.get("city")).toBe("TP Đà Nẵng");
-    expect(fd.get("ward")).toBe("Phường Phước Ninh");
+    expect(fd.get("city")).toBe("Thành phố Đà Nẵng");
+    expect(fd.get("ward")).toBe("");
+    // Không còn option "(dữ liệu cũ)" nào trên màn.
+    expect(document.body.textContent ?? "").not.toMatch(/dữ liệu cũ/);
 
     const tho = docFormHocVien(fd, "update");
     const parsed = studentUpdateSchema.safeParse(tho);
@@ -182,8 +187,8 @@ describe("Form hồ sơ học viên — tập khoá gửi đi", () => {
       parent2Name: HV.parent2Name,
       parent2Phone: HV.parent2Phone,
       parent2Relation: "Bố",
-      city: "TP Đà Nẵng",
-      ward: "Phường Phước Ninh",
+      city: "Thành phố Đà Nẵng",
+      ward: null,
       address: HV.address,
       orgUnitId: HV.orgUnitId,
       notes: HV.notes,
@@ -208,6 +213,41 @@ describe("Form hồ sơ học viên — tập khoá gửi đi", () => {
   it("[HSF-05b] đối chứng: SĐT không bị che ⇒ ô sửa được", () => {
     dung(HV);
     expect(screen.getByLabelText("SĐT phụ huynh")).not.toHaveAttribute("readonly");
+  });
+
+  // 26/09 — chủ dự án: "mã học viên không được chỉnh sửa, chỉ admin được chỉnh".
+  it("[HSF-07] không có quyền đổi mã ⇒ ô mã CHỈ ĐỌC và KHÔNG gửi khoá studentCode (sửa lẫn tạo)", () => {
+    const fd = new FormData(dung(HV, false));
+    expect(fd.has("studentCode")).toBe(false);
+    const o = screen.getByLabelText("Mã học viên") as HTMLInputElement;
+    expect(o).toHaveAttribute("readonly");
+    expect(o.value).toBe(HV.studentCode);
+  });
+
+  it("[HSF-07b] đối chứng dương: CÓ quyền ⇒ ô sửa được và gửi studentCode", () => {
+    const fd = new FormData(dung(HV, true));
+    expect(fd.get("studentCode")).toBe(HV.studentCode);
+    expect(screen.getByLabelText("Mã học viên")).not.toHaveAttribute("readonly");
+  });
+
+  it("[HSF-07c] tạo mới không có quyền ⇒ không có khoá studentCode (hệ thống tự sinh)", () => {
+    const fd = new FormData(dung(undefined, false));
+    expect(fd.has("studentCode")).toBe(false);
+  });
+
+  // 26/09 — "Quan hệ với học sinh thì dropdown".
+  it("[HSF-08] ô Quan hệ là Ô CHỌN; giá trị cũ không nhận ra được giữ thành một mục riêng", () => {
+    dung({ ...HV, parentRelation: "Ba", parent2Relation: "bố" });
+    const o = screen.getByLabelText("Quan hệ với học sinh") as HTMLSelectElement;
+    expect(o.tagName).toBe("SELECT");
+    // "Ba" (bố — tiếng miền Nam) ≠ "Bà": KHÔNG đoán, giữ nguyên để lượt lưu không đổi lặng lẽ.
+    expect(o.value).toBe("Ba");
+    const ph2 = screen.getByLabelText("Quan hệ") as HTMLSelectElement;
+    expect(ph2.tagName).toBe("SELECT");
+    // "bố" nhận ra được ⇒ chọn đúng mục "Bố".
+    expect(ph2.value).toBe("Bố");
+    const nhan = [...o.options].map((x) => x.value);
+    for (const q of ["Mẹ", "Bố", "Ông", "Bà", "Người giám hộ"]) expect(nhan).toContain(q);
   });
 });
 

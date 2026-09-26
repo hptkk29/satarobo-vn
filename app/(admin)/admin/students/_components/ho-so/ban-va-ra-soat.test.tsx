@@ -77,10 +77,11 @@ const HV: StudentFormValue = {
   parent2Name: null,
   parent2Phone: null,
   parent2Relation: null,
-  city: "TP Đà Nẵng",
-  ward: "Phường Phước Ninh",
+  // Địa chỉ ĐÃ theo danh mục mới — để [RSX-02] chỉ đo đúng một chuyện (ô nào đổi thì gửi ô
+  // đó). Hồ sơ mang địa chỉ kiểu cũ có ca riêng [RSX-10].
+  city: "Thành phố Đà Nẵng",
+  ward: null,
   address: "12 Lê Lợi",
-  district: null,
   allergies: ["Tôm"],
   healthNotes: "Hen nhẹ",
   notes: "Đón muộn thứ 5",
@@ -91,6 +92,7 @@ function dungForm(student?: StudentFormValue) {
   return render(
     <StudentForm
       student={student}
+      coTheDoiMa
       orgUnits={[{ id: "ou_cs1", name: "CS1 — Nguyễn Hữu Thọ" }]}
       provinces={[{ value: "48", label: "Thành phố Đà Nẵng" }]}
       initialWards={[]}
@@ -145,6 +147,29 @@ describe("[RSX-02] form SỬA chỉ gửi ô đã đổi (+3 ô bắt buộc)", 
       ["name", "parentName", "parentPhone", "school"].sort(),
     );
     expect(fd.get("school")).toBe("TH Lê Văn Tám");
+  });
+
+  // 26/09 — địa chỉ kiểu cũ ("TP Đà Nẵng", phường đã sáp nhập) hiện ra theo danh mục MỚI; lượt
+  // lưu phải ghi ĐÚNG thứ màn hình đang cho thấy, không để DB giữ chữ cũ mà màn hình giấu đi.
+  it("[RSX-10] hồ sơ địa chỉ kiểu cũ ⇒ lượt lưu gửi địa chỉ đã chuẩn hoá (và chỉ thế)", async () => {
+    const { container } = dungForm({ ...HV, city: "TP Đà Nẵng", ward: "Phường Phước Ninh" });
+    fireEvent.submit(container.querySelector("form")!);
+    await waitFor(() => expect(m.updateStudent).toHaveBeenCalledTimes(1));
+    const fd = m.updateStudent.mock.calls[0]![1] as FormData;
+    expect([...new Set(fd.keys())].sort()).toEqual(
+      ["name", "parentName", "parentPhone", "city", "ward"].sort(),
+    );
+    expect(fd.get("city")).toBe("Thành phố Đà Nẵng");
+    expect(fd.get("ward")).toBe("");
+  });
+
+  it("[RSX-10b] đối chứng: địa chỉ đã đúng danh mục ⇒ lưu suông KHÔNG gửi địa chỉ", async () => {
+    const { container } = dungForm(HV);
+    fireEvent.submit(container.querySelector("form")!);
+    await waitFor(() => expect(m.updateStudent).toHaveBeenCalledTimes(1));
+    const fd = m.updateStudent.mock.calls[0]![1] as FormData;
+    expect(fd.has("city")).toBe(false);
+    expect(fd.has("ward")).toBe(false);
   });
 
   it("form TẠO vẫn gửi đủ tờ (không có ảnh chụp để so)", async () => {

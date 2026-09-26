@@ -1,5 +1,8 @@
+import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { canonicalPhone } from "@/lib/phone";
+import { dongBoTuLead } from "@/lib/students/dong-bo-lead-db";
+import type { PhLead } from "@/lib/students/dong-bo-lead";
 import { findRecentDuplicate, logDuplicateAttempt } from "../dedup";
 import { autoAssignNewLead } from "../auto-assign";
 import { LEAD_KHONG_NHAN_THEM_CON } from "@/lib/leads/status";
@@ -457,9 +460,21 @@ export async function ingestIntakeLead(
           select: { facebookUrl: true },
         });
         if (!cur?.facebookUrl) {
-          await db.lead.update({
-            where: { id: dup.id },
-            data: { facebookUrl: mapped.facebookUrl },
+          // 26/09/2026 — điền link vào phiếu ⇒ học viên đang nối phiếu này nhận theo ("đổi 1
+          // nơi thì đổi hết" — lib/students/dong-bo-lead.ts). Cùng giao dịch với lượt ghi.
+          await db.$transaction(async (txRaw) => {
+            const tx = txRaw as unknown as Prisma.TransactionClient;
+            await tx.lead.update({
+              where: { id: dup.id },
+              data: { facebookUrl: mapped.facebookUrl },
+            });
+            await dongBoTuLead({
+              tx,
+              leadId: dup.id,
+              truoc: { facebookUrl: cur?.facebookUrl ?? null } as PhLead,
+              sau: { facebookUrl: mapped.facebookUrl },
+              actor: { id: null, name: actorName },
+            });
           });
           dupNoteLines.push(`Link Facebook (điền từ phiếu mới): ${mapped.facebookUrl}`);
         } else if (cur.facebookUrl !== mapped.facebookUrl) {
