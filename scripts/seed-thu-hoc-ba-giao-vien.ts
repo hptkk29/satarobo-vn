@@ -20,12 +20,17 @@
  * Mỗi lớp: 2 em đầu → ĐÃ PHÁT HÀNH, em thứ 3 → CHỜ DUYỆT, em thứ 4 → NHÁP (xem trạng thái nào
  * cũng có). Đường học bạ không gửi email; phát hành chỉ tạo thông báo trong cổng phụ huynh.
  *
+ * Các em trong một lớp chạy SONG SONG (mỗi em một học bạ riêng) — xem scripts/_chay-gioi-han.ts.
+ * CHẠY LẠI ĐƯỢC: bị cắt giữa "lưu" và "nộp/phát hành" thì lượt sau đi tiếp bước còn thiếu của học
+ * bạ do CHÍNH script này lập (nhận ra theo câu tổng kết); học bạ giáo viên thật nhập thì không đụng.
+ *
  * Chạy trên DB không-local phải có `SEED_THU_DB_TEST=1` (workflow "Seed dữ liệu TEST" đặt; nó đã
  * chặn secret TEST trùng PROD).
  */
 import "./_cho-phep-server-only";
 import { db } from "../lib/db";
 import { rosterWhere } from "../lib/enrollment-scope";
+import { chayGioiHan } from "./_chay-gioi-han";
 
 const GHI = process.argv.includes("--ghi");
 const THAY_SEED_CU = process.argv.includes("--thay-seed-cu");
@@ -115,8 +120,9 @@ async function main() {
     orderBy: { name: "asc" },
   });
   const ctxGvCache = new Map<string, Awaited<ReturnType<typeof nguoiThaoTac>>>();
+  const batDau = Date.now();
 
-  for (const lop of lopDs) {
+  for (const [thuTuLop, lop] of lopDs.entries()) {
     if (!lop.teacherId) continue;
     const criteria = await getCourseCriteria(lop.courseId);
     if (criteria.length === 0) continue;
@@ -132,7 +138,7 @@ async function main() {
       (
         await db.reportCard.findMany({
           where: { enrollmentId: { in: ghiDanh.map((g) => g.id) } },
-          select: { id: true, enrollmentId: true },
+          select: { id: true, enrollmentId: true, status: true, finalComment: true },
         })
       ).map((r) => [r.enrollmentId, r]),
     );
@@ -140,57 +146,74 @@ async function main() {
     const daXong = await countCompletedClassSessions(lop.id);
     const ctxGv = ctxGvCache.get(lop.teacherId) ?? (await nguoiThaoTac(lop.teacherId));
     ctxGvCache.set(lop.teacherId, ctxGv);
+    const truocLop = { ...tong };
 
+    const viec: Array<() => Promise<void>> = [];
     for (const [i, g] of ghiDanh.entries()) {
-      const coSan = hocBaCo.get(g.id);
-      if (coSan) {
-        if (!(THAY_SEED_CU && coSan.id.startsWith("uat-hocba-"))) {
-          tong.boQuaCo++;
-          continue;
-        }
-        if (GHI) await db.reportCard.delete({ where: { id: coSan.id } });
-        tong.xoaSeedCu++;
-      }
       const dich = i < 2 ? "PUBLISHED" : i === 2 ? "PENDING_REVIEW" : "DRAFT";
+      const coSan = hocBaCo.get(g.id);
+      // Bắt đầu từ bước nào. Học bạ do CHÍNH script lập (câu tổng kết thuộc bộ mẫu) mà lượt trước bị
+      // cắt giữa chừng thì đi tiếp bước còn thiếu; học bạ giáo viên thật nhập thì không đụng.
+      const doScriptLap = NX_TONG_KET.includes(coSan?.finalComment ?? "");
+      let tuBuoc: "luu" | "nop" | "phatHanh";
+      let xoaId: string | null = null;
+      if (!coSan) tuBuoc = "luu";
+      else if (THAY_SEED_CU && coSan.id.startsWith("uat-hocba-")) {
+        tuBuoc = "luu";
+        xoaId = coSan.id;
+        tong.xoaSeedCu++;
+      } else if (doScriptLap && coSan.status === "DRAFT" && dich !== "DRAFT") tuBuoc = "nop";
+      else if (doScriptLap && coSan.status === "PENDING_REVIEW" && dich === "PUBLISHED") tuBuoc = "phatHanh";
+      else {
+        tong.boQuaCo++;
+        continue;
+      }
+      if (!GHI) {
+        if (tuBuoc === "luu") tong.luu++;
+        if (tuBuoc !== "phatHanh" && dich !== "DRAFT") tong.nop++;
+        if (dich === "PUBLISHED") tong.phatHanh++;
+        continue;
+      }
       const h = bam(g.id);
       const periodComments = ensureMilestonePeriods(daXong, []).map((p, k) => ({
         period: p.period,
         comment: NX_GIAI_DOAN[(h + k) % NX_GIAI_DOAN.length]!,
       }));
       const scores = criteria.map((c, k) => ({ criterionId: c.id, level: 2 + ((h + k) % 3), note: "" }));
-      if (!GHI) {
-        tong.luu++;
-        if (dich !== "DRAFT") tong.nop++;
-        if (dich === "PUBLISHED") tong.phatHanh++;
-        continue;
-      }
-      const luu = await luuHocBaCore(ctxGv, {
-        enrollmentId: g.id,
-        finalComment: NX_TONG_KET[h % NX_TONG_KET.length],
-        completionStatus: h % 2 === 0 ? "Hoàn thành tốt" : "Đạt yêu cầu",
-        periodComments,
-        scores,
+
+      // Mỗi em một học bạ riêng ⇒ các em trong lớp chạy song song; các bước của MỘT em vẫn tuần tự.
+      viec.push(async () => {
+        if (xoaId) await db.reportCard.delete({ where: { id: xoaId } });
+        if (tuBuoc === "luu") {
+          const luu = await luuHocBaCore(ctxGv, {
+            enrollmentId: g.id,
+            finalComment: NX_TONG_KET[h % NX_TONG_KET.length],
+            completionStatus: h % 2 === 0 ? "Hoàn thành tốt" : "Đạt yêu cầu",
+            periodComments,
+            scores,
+          });
+          if (!luu.ok) return baoLoi(`lưu: ${luu.error}`);
+          tong.luu++;
+          if (dich === "DRAFT") return;
+        }
+        if (tuBuoc !== "phatHanh") {
+          const nop = await chuyenTrangThaiHocBaCore(ctxGv, { enrollmentId: g.id, to: "PENDING_REVIEW" });
+          if (!nop.ok) return baoLoi(`nộp: ${nop.error}`);
+          tong.nop++;
+          if (dich !== "PUBLISHED") return;
+        }
+        const ph = await chuyenTrangThaiHocBaCore(ctxDuyet, { enrollmentId: g.id, to: "PUBLISHED" });
+        if (!ph.ok) return baoLoi(`phát hành: ${ph.error}`);
+        tong.phatHanh++;
       });
-      if (!luu.ok) {
-        baoLoi(`lưu: ${luu.error}`);
-        continue;
-      }
-      tong.luu++;
-      if (dich === "DRAFT") continue;
-      const nop = await chuyenTrangThaiHocBaCore(ctxGv, { enrollmentId: g.id, to: "PENDING_REVIEW" });
-      if (!nop.ok) {
-        baoLoi(`nộp: ${nop.error}`);
-        continue;
-      }
-      tong.nop++;
-      if (dich !== "PUBLISHED") continue;
-      const ph = await chuyenTrangThaiHocBaCore(ctxDuyet, { enrollmentId: g.id, to: "PUBLISHED" });
-      if (!ph.ok) {
-        baoLoi(`phát hành: ${ph.error}`);
-        continue;
-      }
-      tong.phatHanh++;
     }
+    await chayGioiHan(viec, MOI_LOP);
+    console.log(
+      `[${thuTuLop + 1}/${lopDs.length}] lưu ${tong.luu - truocLop.luu} · nộp ${tong.nop - truocLop.nop}` +
+        ` · phát hành ${tong.phatHanh - truocLop.phatHanh} · bỏ qua ${tong.boQuaCo - truocLop.boQuaCo}` +
+        (tong.tuChoi > truocLop.tuChoi ? ` · TỪ CHỐI ${tong.tuChoi - truocLop.tuChoi}` : "") +
+        ` · ${Math.round((Date.now() - batDau) / 1000)} giây`,
+    );
   }
 
   let xoaNgoai = 0;
