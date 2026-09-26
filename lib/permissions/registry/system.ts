@@ -41,6 +41,19 @@ export const systemModule: ModuleDecl = {
       scopable: false,
       description: "Duyệt/từ chối ứng dụng + quyền cấp của agent, mở khoá, bật cổng. Người duyệt ≠ người tạo.",
     },
+    // Cổng agent Đợt 1 — danh mục vai là thứ toàn hệ thống, không thuộc cơ sở nào.
+    {
+      key: "roles:view",
+      action: "view",
+      scopable: false,
+      description: "Xem danh mục vai (mã + tên). Không xem ai giữ vai nào, không sửa được gì.",
+    },
+    {
+      key: "inbox_channels:view",
+      action: "view",
+      scopable: false,
+      description: "Xem danh mục kênh liên lạc (Zalo OA, Zalo cá nhân, Messenger, website, nhập tay).",
+    },
 
     // --- Settings (cấu hình toàn cục — không gắn đơn vị) ---
     { key: "settings:view", action: "view", scopable: false },

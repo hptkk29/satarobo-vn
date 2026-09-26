@@ -1091,6 +1091,25 @@ const N: Readonly<Record<SettingKey, NhanVanHanh>> = {
       "Như trên nhưng mức nặng hơn. Phải lớn hơn mốc vàng, không thì không còn hai mức để phân biệt.",
   },
 
+  // ── Tỷ lệ chuyển đổi mục tiêu ──
+  "crm.targetLeadToTrialRate": {
+    tab: "khach-hang",
+    ten: "Tỷ lệ mục tiêu: khách mới → học thử",
+    giaiThich:
+      "Kế hoạch: trong 100 khách mới thì bao nhiêu khách đi học thử. Viết dạng thập phân: 0.35 " +
+      "nghĩa là 35%. Dùng chung cho mọi cơ sở; agent đọc số này cùng chỉ tiêu học sinh từng tháng.",
+    // Không ghi "%" — ô nhận 0.35 chứ không nhận 35 (cùng lý do với trần hoa hồng ở trên).
+    donVi: "phần đơn vị (0.35 = 35%)",
+  },
+  "crm.targetTrialToEnrollRate": {
+    tab: "khach-hang",
+    ten: "Tỷ lệ mục tiêu: học thử → đăng ký",
+    giaiThich:
+      "Kế hoạch: trong 100 khách đã học thử thì bao nhiêu khách đăng ký khoá học. Viết dạng " +
+      "thập phân: 0.45 nghĩa là 45%. Dùng chung cho mọi cơ sở.",
+    donVi: "phần đơn vị (0.45 = 45%)",
+  },
+
   // ── Hộp thư đa kênh ──
   "inbox.messengerLive": {
     tab: "khach-hang",

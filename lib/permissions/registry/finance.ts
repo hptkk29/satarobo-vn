@@ -23,6 +23,13 @@ export const financeModule: ModuleDecl = {
       description: "Kế toán xác nhận khoản thu (tách nhiệm vụ với record).",
     },
     {
+      key: "refunds:view",
+      action: "view",
+      // Cổng agent Đợt 1 (26/09/2026) — màn /hoan-tien gác bằng `payments:manage` (quyền GHI);
+      // vai chỉ đọc không được mượn quyền ghi để đọc. `RefundRequest` ∈ SCOPE_EXEMPT.
+      description: "Xem yêu cầu hoàn tiền và trạng thái. Không duyệt, không chi.",
+    },
+    {
       key: "payments:adjust",
       action: "adjust",
       description:

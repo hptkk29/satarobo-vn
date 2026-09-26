@@ -27,3 +27,41 @@ export function ngayVN(d: Date): string {
 export function dauNgayVN(d: Date): Date {
   return new Date(`${ngayVN(d)}T00:00:00+07:00`);
 }
+
+/**
+ * Cột `@db.Date` → "YYYY-MM-DD". Prisma trả cột Date ở NỬA ĐÊM UTC, nên đọc thẳng phần UTC —
+ * KHÔNG cộng 7 giờ như `ngayVN` (cột Date không mang giờ; cộng thì vẫn ra đúng ngày, nhưng chỉ
+ * là may, và sai ngay khi ai đó đổi `ngayVN` sang tính theo múi giờ khác).
+ */
+export function ngayCuaCotDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+/** "YYYY-MM-DD" có thật trên lịch (chặn 2026-02-30, 2026-13-01). */
+export function laNgayHopLe(s: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const d = new Date(`${s}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+}
+
+/** "YYYY-MM" có thật (tháng 01–12). */
+export function laThangHopLe(s: string): boolean {
+  return /^\d{4}-(0[1-9]|1[0-2])$/.test(s);
+}
+
+/** 00:00 giờ VN của ngày "YYYY-MM-DD" — mốc DƯỚI (gồm) khi lọc cột Timestamptz theo ngày VN. */
+export function dauNgayTuChuoi(s: string): Date {
+  return new Date(`${s}T00:00:00+07:00`);
+}
+
+/** "YYYY-MM-DD" cộng `n` ngày lịch (n âm = lùi). Làm trên UTC nên không lệch vì múi giờ. */
+export function congNgay(s: string, n: number): string {
+  const d = new Date(`${s}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Số ngày từ `tu` tới `den` (cùng ngày = 0; `den` trước `tu` ⇒ âm). */
+export function soNgayGiua(tu: string, den: string): number {
+  return Math.round((Date.parse(`${den}T00:00:00Z`) - Date.parse(`${tu}T00:00:00Z`)) / 86_400_000);
+}

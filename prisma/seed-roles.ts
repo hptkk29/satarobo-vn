@@ -129,6 +129,8 @@ export const ROLE_SEED: RoleSeed[] = [
     // oversight toàn hệ thống.
     code: "HO_ACCOUNTANT", name: "Kế toán Hội sở",
     perms: [
+      // Chính sách khuyến mãi (26/09/2026) — tra cứu chương trình đang áp dụng.
+      { action: "promotions:view", scopeType: "GLOBAL" },
       // A-02 — cổng vào dashboard QLCS 4 tab. GLOBAL là BẮT BUỘC, không phải nới tay:
       // gate cấp trang gọi `checkAnyPermission` KHÔNG target, mà `scopeMatches` đòi
       // target với scope CENTER ⇒ seed CENTER là khoá cửa chính của chính vai này trên
@@ -304,6 +306,8 @@ export const ROLE_SEED: RoleSeed[] = [
     // hiệu lực khi re-seed + flip cờ; v1 đã áp runtime.) Cách ly cơ sở vẫn do scopedDb.
     code: "HO_MARKETING", name: "Marketing Hội sở",
     perms: [
+      // Chính sách khuyến mãi (26/09/2026) — tra cứu chương trình đang áp dụng.
+      { action: "promotions:view", scopeType: "GLOBAL" },
       // A-02 — cổng vào dashboard QLCS 4 tab. GLOBAL là BẮT BUỘC, không phải nới tay:
       // gate cấp trang gọi `checkAnyPermission` KHÔNG target, mà `scopeMatches` đòi
       // target với scope CENTER ⇒ seed CENTER là khoá cửa chính của chính vai này trên
@@ -547,6 +551,8 @@ export const ROLE_SEED: RoleSeed[] = [
     // giao việc, chuyển cơ sở, thêm con…). Đó là lý do có key hẹp riêng.
     code: "HO_SALE", name: "Sale Hội sở (phiếu mình nhập)",
     perms: [
+      // Chính sách khuyến mãi (26/09/2026) — tra cứu chương trình đang áp dụng.
+      { action: "promotions:view", scopeType: "GLOBAL" },
       { action: "hr_attendance:checkin", scopeType: "GLOBAL" }, // L0 0.2 (05/09/2026) — Q-12: self-action chấm công cho mọi nhân sự
       { action: "leads:create", scopeType: "GLOBAL" },
       // GLOBAL chứ KHÔNG "OWN" — luật R1 đầu file: action bị gọi TRẦN (không kèm
@@ -585,6 +591,8 @@ export const ROLE_SEED: RoleSeed[] = [
     // SUPER_ADMIN (QL dùng enrollments:cancel; CLAUDE.md cấm hard-delete).
     code: "CENTER_MANAGER", name: "Quản lý cơ sở",
     perms: [
+      // Chính sách khuyến mãi (26/09/2026) — tra cứu chương trình đang áp dụng.
+      { action: "promotions:view", scopeType: "GLOBAL" },
       // A-02 — cổng vào dashboard QLCS 4 tab. GLOBAL là BẮT BUỘC, không phải nới tay:
       // gate cấp trang gọi `checkAnyPermission` KHÔNG target, mà `scopeMatches` đòi
       // target với scope CENTER ⇒ seed CENTER là khoá cửa chính của chính vai này trên
@@ -912,6 +920,8 @@ export const ROLE_SEED: RoleSeed[] = [
     // dùng chung trong team — xem mapping-proposal.md §3, không khớp 6 scopeType.
     code: "CENTER_SALES_CSM", name: "Tư vấn & CSKH cơ sở",
     perms: [
+      // Chính sách khuyến mãi (26/09/2026) — tra cứu chương trình đang áp dụng.
+      { action: "promotions:view", scopeType: "GLOBAL" },
       // ── Trục gọi điện (OmiCall) ── ĐÚNG HAI key.
       // 🔴 KHÔNG có `calls:listen-recording` (BM-2 · ma trận BA `:1380` ghi ❌ cho
       // Sale). Nghe lại ghi âm là quyền của người quản lý, không phải quyền mặc định
@@ -1148,6 +1158,8 @@ export const ROLE_SEED: RoleSeed[] = [
     // HO_ACCOUNTANT — đây là chức năng quản lý tập trung, không phải thu tiền quầy.
     code: "CENTER_ACCOUNTANT", name: "Kế toán cơ sở",
     perms: [
+      // Chính sách khuyến mãi (26/09/2026) — tra cứu chương trình đang áp dụng.
+      { action: "promotions:view", scopeType: "GLOBAL" },
       { action: "hr_attendance:checkin", scopeType: "GLOBAL" }, // L0 0.2 (05/09/2026) — Q-12: self-action chấm công cho mọi nhân sự
       { action: "payments:manage", scopeType: "GLOBAL" },
       // B-01 — giữ nguyên năng lực cũ (trước đây đi nhờ `payments:manage`).
@@ -1209,6 +1221,10 @@ export const ROLE_SEED: RoleSeed[] = [
     perms: [
       { action: "agent_gateway:view", scopeType: "GLOBAL" },
       { action: "agent_gateway:approve", scopeType: "GLOBAL" },
+      // Chính sách khuyến mãi (26/09/2026): BLĐ ban hành — "up lên là có hiệu lực" (chủ
+      // dự án). Không qua người duyệt thứ hai: văn bản đã ký giấy trước khi lên hệ thống.
+      { action: "promotions:view", scopeType: "GLOBAL" },
+      { action: "promotions:manage", scopeType: "GLOBAL" },
     ],
   },
   {
@@ -1220,14 +1236,24 @@ export const ROLE_SEED: RoleSeed[] = [
     ],
   },
   {
-    code: "AGENT_CHI_DOC", name: "Agent — chỉ đọc danh mục (tài khoản dịch vụ)",
+    code: "AGENT_CHI_DOC", name: "Agent — chỉ đọc (tài khoản dịch vụ)",
     // Vai của USER DỊCH VỤ, không gán cho người. Chỉ quyền ĐỌC. Ba điều phải giữ:
     //  1. KHÔNG bao giờ có `agent_gateway:*`, `*:approve`, quyền ký/chi/khoá kỳ (spec §5.4).
     //  2. KHÔNG có quyền `*:manage` chỉ để đọc được — đó là trao năng lực ghi (BA §0 điểm 6).
     //  3. Thêm quyền đọc cho công cụ mới = thêm dòng ở ĐÂY, kèm lý do; đừng gán vai người.
-    // Đợt 0: `danh_muc.lay_co_so` cần `centers:view`.
+    // Mỗi dòng ghi công cụ nào cần nó. Vai này chỉ là TRẦN: agent đọc được gì còn do grant
+    // (công cụ × cơ sở × hạn) ở màn Cổng dữ liệu agent quyết định.
     perms: [
-      { action: "centers:view", scopeType: "GLOBAL" },
+      { action: "centers:view", scopeType: "GLOBAL" }, // danh_muc.lay_co_so (Đợt 0)
+      { action: "courses:view", scopeType: "GLOBAL" }, // danh_muc.lay_khoa_hoc
+      { action: "employees:view-public", scopeType: "GLOBAL" }, // danh_muc.lay_nhan_su (không SĐT/lương)
+      { action: "inbox_channels:view", scopeType: "GLOBAL" }, // danh_muc.lay_kenh
+      { action: "roles:view", scopeType: "GLOBAL" }, // danh_muc.lay_chuc_danh + lay_nhan_su
+      { action: "trials:view", scopeType: "GLOBAL" }, // kinh_doanh.lay_dang_ky
+      { action: "enrollments:view-all", scopeType: "GLOBAL" }, // kinh_doanh.lay_dang_ky
+      { action: "refunds:view", scopeType: "GLOBAL" }, // kinh_doanh.lay_dang_ky
+      { action: "lead_targets:view", scopeType: "GLOBAL" }, // kinh_doanh.lay_chi_tieu
+      { action: "promotions:view", scopeType: "GLOBAL" }, // van_ban.lay_khuyen_mai_hieu_luc
     ],
   },
   {

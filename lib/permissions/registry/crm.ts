@@ -147,6 +147,31 @@ export const crmModule: ModuleDecl = {
       description:
         "Đặt/sửa chỉ tiêu lead (số học sinh) theo tháng × cơ sở. Không bao gồm cấu hình chia lead.",
     },
+    {
+      key: "lead_targets:view",
+      action: "view",
+      // Cổng agent Đợt 1 (26/09/2026) — quyền ĐỌC tách khỏi `manage` để cấp được cho vai
+      // chỉ đọc. `LeadTarget` ∈ SCOPE_EXEMPT: người đọc phải tự lọc theo cơ sở được phép.
+      description: "Xem chỉ tiêu số học sinh theo tháng × cơ sở. Không đặt/sửa được.",
+    },
+
+    // --- Chính sách khuyến mãi (26/09/2026) ---
+    // `scopable: false`: chính sách do Hội sở ban hành; phạm vi cơ sở của MỘT chính sách là
+    // NỘI DUNG của nó (áp ở đâu), không phải dữ liệu thuộc riêng một cơ sở. Sale cơ sở nào
+    // cũng phải thấy được chính sách áp toàn hệ thống. `promotions:view` còn là cổng TRANG
+    // (PAGE_GATES) nên phải GLOBAL ở mọi vai giữ nó.
+    {
+      key: "promotions:view",
+      action: "view",
+      scopable: false,
+      description: "Xem chính sách khuyến mãi đang/đã áp dụng và mã voucher của nó (tra cứu khi tư vấn).",
+    },
+    {
+      key: "promotions:manage",
+      action: "manage",
+      scopable: false,
+      description: "Ban hành, sửa, thu hồi chính sách khuyến mãi và mã voucher. Ban hành là có hiệu lực ngay + báo Sale.",
+    },
 
     // --- Chỉ tiêu ngân sách quảng cáo (D-02) ---
     // Ở module `crm` chứ không `finance`: toàn bộ mã quảng cáo của repo đang sống dưới
