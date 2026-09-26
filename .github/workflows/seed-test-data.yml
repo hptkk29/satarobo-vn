@@ -79,7 +79,7 @@ on:
       # "Ngưỡng thanh toán" (8f964d48). Chọn khác `khong` ⇒ job `seed` BỎ QUA hoàn toàn, chỉ
       # job `noi-hoc-vien-lead` chạy — không đụng một bước seed nào.
       noi_hoc_vien_lead:
-        description: 'CHỈ nối học viên cũ ↔ lead (scripts/noi-hoc-vien-voi-lead.ts), BỎ QUA mọi bước seed. chay-thu = dry-run; ghi = ghi thật (cần ô bên dưới).'
+        description: 'CHỈ nối học viên ↔ lead, BỎ QUA mọi bước seed. chay-thu/ghi = script nối HV cũ theo bằng chứng (ghi cần ô bên dưới); seed-uat = dựng phiếu lead nguồn cho học viên UAT (prisma/seed-uat/chay-noi-lead.ts).'
         type: choice
         required: false
         default: khong
@@ -87,6 +87,7 @@ on:
           - khong
           - chay-thu
           - ghi
+          - seed-uat
       noi_hoc_vien_expect:
         description: 'Chỉ dùng với "ghi": số "SẼ NỐI" của lượt chay-thu vừa xem. Lệch ⇒ script không ghi gì.'
         required: false
@@ -102,7 +103,7 @@ jobs:
   # dòng tự khai quyền. Input đi qua `env`, không nội suy thẳng vào `run` (khuôn chống chèn lệnh).
   noi-hoc-vien-lead:
     name: Nối học viên cũ ↔ lead (DB test)
-    if: ${{ inputs.noi_hoc_vien_lead == 'chay-thu' || inputs.noi_hoc_vien_lead == 'ghi' }}
+    if: ${{ inputs.noi_hoc_vien_lead == 'chay-thu' || inputs.noi_hoc_vien_lead == 'ghi' || inputs.noi_hoc_vien_lead == 'seed-uat' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -150,6 +151,9 @@ jobs:
                 exit 1
               fi
               pnpm exec tsx scripts/noi-hoc-vien-voi-lead.ts --ghi "--expect=$SO_DUYET" ;;
+            # Dữ liệu UAT: dựng phiếu lead nguồn đã chốt cho từng học viên seed + nối + vết chốt.
+            # Lối riêng, KHÔNG qua index.ts (bước nền ở đó đặt lại mật khẩu uat.* và giá khoá học).
+            seed-uat) UAT_SEED=1 pnpm exec tsx prisma/seed-uat/chay-noi-lead.ts ;;
             *) echo "::error::Lựa chọn lạ: $CHE_DO"; exit 1 ;;
           esac
 
