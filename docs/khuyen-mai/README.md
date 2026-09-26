@@ -75,5 +75,10 @@ Hôm nay mã voucher **chưa tự trừ vào đơn**: giảm giá trên đơn v�
 
 - Thuần: `lib/khuyen-mai/hieu-luc.test.ts` · `lib/validators/khuyen-mai.test.ts` ·
   `app/(admin)/admin/khuyen-mai/quyen-action.test.ts` (lưới ghim: 5 action gác `promotions:manage`) ·
-  `app/api/admin/upload-url/route.test.ts`.
+  `app/api/admin/upload-url/route.test.ts` ·
+  `app/(admin)/admin/khuyen-mai/_components/tep-van-ban.test.tsx` (`[KM-TEP]`).
+- ⚠️ **Ô `<input type="file">` ẩn bằng `hidden`, KHÔNG `sr-only`** (lỗi trên test 26/09 — "cuộn hai lần"):
+  `sr-only` là `position:absolute`, khung admin không có tổ tiên `relative` trong `<main>` nên ô thoát
+  vùng cuộn và kéo dài cả trang (đo: +289px ở 1280, +797px ở 375). Đo lỗi này phải đo CHIỀU DỌC của
+  document (`scrollingElement.scrollHeight − innerHeight`), smoke tràn ngang không thấy.
 - DB: `tests/agents/cong-cu-dot1.spec.ts` nhóm "khuyến mãi" ([D1-SV-*], [D1-KM*]).
