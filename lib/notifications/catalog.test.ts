@@ -41,6 +41,8 @@ const KHOA_DANG_CHAY: ReadonlyArray<[key: string, file: string]> = [
   // 14/09 — báo Đào tạo khi thêm buổi mà KHÔNG chọn giáo viên (đường mặc định của form).
   ["trial.cho-phan-cong:ts1", "lib/trial/notify-training.ts"],
   ["conversation.message_posted:m1", "lib/_handlers/conversation-notif.ts"],
+  // 26/09 — hoá đơn điện tử: khách không có email ⇒ báo sale gửi Zalo.
+  ["hoa-don.khong-email:hd1", "lib/finance/hoa-don/gui-email.ts"],
   ["reserve.expired:r1:2026-08-19", "app/api/cron/reserve-expiry/route.ts"],
   ["reserve-expiry:r1", "lib/students/reserve-expiry.ts"],
   ["payment-reconcile:unmatched:2026-08-19", "app/api/cron/payment-reconcile/route.ts"],

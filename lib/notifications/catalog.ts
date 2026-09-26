@@ -405,6 +405,13 @@ const BY_PREFIX: Readonly<Record<string, NotiDef>> = {
     group: "action_required", priority: 1, entity: "payment",
     recipients: "Kế toán", target: "/cong-no",
   },
+  // Hoá đơn điện tử (docs/ke-toan-hoa-don/PLAN.md §7): kế toán đã chốt hoá đơn mà khách không có
+  // email ⇒ sale tải tệp trên trang đơn gửi qua Zalo. Sinh ở `lib/finance/hoa-don/gui-email.ts`.
+  "hoa-don.khong-email:": {
+    label: "Hoá đơn điện tử chưa gửi được cho khách (không có email)",
+    group: "action_required", priority: 2, entity: "payment",
+    recipients: "Sale phụ trách lead → người lập đơn → Quản lý cơ sở", target: "/orders/<orderId>",
+  },
 
   // ── Sinh từ sự kiện: marketing & tích hợp ──
   "cost-unconfirmed:": {
