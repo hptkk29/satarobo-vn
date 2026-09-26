@@ -4423,6 +4423,8 @@ model Order {
   paymentRequests PaymentRequest[]
   /// 16/09 — phiếu gộp: MỘT mã QR cho cả gia đình, chia về từng con theo thứ tự dòng.
   paymentBills    PaymentBill[]
+  /// 26/09 — hoá đơn GTGT kế toán phát hành ở MISA rồi tải lên (docs/ke-toan-hoa-don/PLAN.md).
+  hoaDonDienTu    HoaDonDienTu[]
 
   @@index([code])
   @@index([status])
@@ -6560,6 +6562,9 @@ model Payment {
   orgUnitId String?
 
   receipts  Receipt[]
+  /// 26/09 — khoản này nằm trong hoá đơn nào (bảng nối; MỘT hoá đơn còn hiệu lực tối đa — chỉ
+  /// mục từng phần viết tay trong migration `*_hoa_don_dien_tu`).
+  hoaDonKhoan HoaDonKhoan[]
   createdAt DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @db.Timestamptz(6)
   deletedAt DateTime? @db.Timestamptz(6) // FIX-C3 — soft-delete tài chính (read filter deletedAt: null)
@@ -6899,6 +6904,137 @@ model Receipt {
 
   @@index([enrollmentId])
   @@index([paymentId])
+}
+
+// ─── HOÁ ĐƠN ĐIỆN TỬ (26/09/2026) — docs/ke-toan-hoa-don/PLAN.md §2.2 ─────────────────────
+//
+// Hệ thống KHÔNG phát hành hoá đơn: kế toán phát hành ở MISA rồi TẢI TỆP LÊN đây. Bảng này giữ
+// tệp + số hoá đơn + BẢN CHỤP pháp nhân và người mua lúc chốt (pháp nhân đã đảo hai lần trong 7
+// ngày — 15/09, 22/09 — nên không được tính lại khi đọc).
+//
+// ⚠️ KHÔNG đặt tên `Invoice`: `lib/finance/invoice-code.ts` + Counter `invoice:` đã là mã ĐƠN INV-….
+// ⚠️ KHÔNG xoá mềm: hoá đơn sai thì THAY (bản cũ → THAY_THE, bản mới trỏ `thayTheChoId`).
+// ⚠️ Hai chỉ mục TỪNG PHẦN chỉ có trong SQL (Prisma không biểu diễn được `WHERE`):
+//    · `HoaDonKhoan_paymentId_hieuLuc_key`  — UNIQUE(paymentId) WHERE hieuLuc
+//    · `HoaDonDienTu_soHoaDon_conSong_key`  — UNIQUE(phapNhanMst, kyHieu, soHoaDon)
+//                                              WHERE trangThai IN ('NHAP','DA_XAC_NHAN')
+//    Kiểm drift sẽ hiện hai dòng đó — đã biết, không phải lệch.
+enum HoaDonTrangThai {
+  /// đã tải tệp, CHƯA bấm xác nhận — khoản đã bị khoá vào hoá đơn này
+  NHAP
+  /// kế toán đã chốt ⇒ bất biến; gửi email nếu `guiEmailKhach`
+  DA_XAC_NHAN
+  /// bị một hoá đơn mới thay (giữ lại, không xoá) — `hieuLuc` của các dòng nối về false
+  THAY_THE
+  /// "không xuất / đã xuất ngoài hệ thống" — BẮT BUỘC `lyDo`, không có tệp
+  KHONG_XUAT
+}
+
+enum HoaDonGuiTrangThai {
+  CHO
+  DANG_GUI
+  DA_GUI
+  LOI
+}
+
+model HoaDonDienTu {
+  id        String          @id @default(cuid())
+  orderId   String
+  order     Order           @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  /// cột cách ly ĐANG ĐỌC (SCOPED_MODELS). NOT NULL: một hoá đơn luôn thuộc đúng một cơ sở.
+  centerId  String
+  /// hướng đích; ghi kép tự động qua lib/org/dual-write.ts
+  orgUnitId String?
+  trangThai HoaDonTrangThai
+
+  // Số trên tờ hoá đơn — kế toán gõ; ký hiệu điền sẵn theo mẫu của pháp nhân (1C{YY}TSR)
+  kyHieu       String?
+  soHoaDon     String?
+  ngayPhatHanh DateTime? @db.Date
+  maTraCuu     String?
+
+  // BẢN CHỤP lúc chốt
+  phapNhanMa        String?
+  phapNhanTen       String?
+  phapNhanMst       String?
+  nguoiMuaTen       String?
+  nguoiMuaDonVi     String?
+  nguoiMuaMst       String?
+  nguoiMuaDiaChi    String?
+  /// NGUỒN DUY NHẤT của người nhận email — không đọc lại Order lúc gửi
+  emailNhan         String?
+  /// hash người mua lúc kế toán tải phiếu thu chờ — bước chốt so để cảnh báo đã đổi giữa chừng
+  nguoiMuaHashLucIn String?
+
+  /// Σ HoaDonKhoan.soTien (số RÒNG, lib/finance/hoa-don/nguon-khoan.ts) — đồng
+  tongTien        Int
+  /// phần dung sai làm tròn được tha của các đợt nó phủ — hiện riêng, không cộng vào tổng
+  tienThaLamTron  Int     @default(0)
+  /// lần thu còn THIẾU mà vẫn xuất (PH không trả nốt) — BẮT BUỘC `lyDo`
+  xuatTheoSoDaThu Boolean @default(false)
+  /// kế toán bỏ tick khi MISA đã gửi khách rồi (hoá đơn cũ) — tránh khách nhận hai lần
+  guiEmailKhach   Boolean @default(true)
+
+  // Tệp — CHỈ lưu KHOÁ trong bucket riêng (R2_INVOICE_BUCKET_NAME), không lưu URL
+  tepPdfKey    String?
+  tepPdfTen    String?
+  tepPdfCo     Int?
+  tepPdfSha256 String?
+  tepXmlKey    String?
+  tepXmlTen    String?
+  tepXmlCo     Int?
+
+  lyDo         String?
+  thayTheChoId String?
+  taoBoiId     String
+  xacNhanBoiId String?
+  xacNhanLuc   DateTime? @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @db.Timestamptz(6)
+
+  khoan    HoaDonKhoan[]
+  guiEmail HoaDonGuiEmail[]
+
+  @@index([orderId])
+  @@index([centerId, trangThai])
+  @@index([orgUnitId])
+  @@index([thayTheChoId])
+}
+
+/// Nối hoá đơn ↔ Payment (một hoá đơn phủ 1..n khoản CÙNG đơn). Bảng con: KHÔNG có centerId —
+/// luôn đọc qua `HoaDonDienTu` đã scope, không truy vấn thẳng ở tầng app.
+model HoaDonKhoan {
+  hoaDonId  String
+  hoaDon    HoaDonDienTu @relation(fields: [hoaDonId], references: [id], onDelete: Cascade)
+  paymentId String
+  payment   Payment      @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  /// số RÒNG của khoản lúc gắn — bước chốt tính lại và so
+  soTien    Int
+  /// false khi hoá đơn bị THAY_THE — nhả khoản cho hoá đơn thay thế
+  hieuLuc   Boolean      @default(true)
+  createdAt DateTime     @default(now()) @db.Timestamptz(6)
+
+  @@id([hoaDonId, paymentId])
+  @@index([paymentId])
+}
+
+/// Mỗi lượt gửi email hoá đơn một dòng — "giành chỗ" CHO→DANG_GUI chống gửi đôi. Trạng thái
+/// hiển thị đọc từ EmailQueue qua `emailQueueId`. Bảng con: đọc qua `HoaDonDienTu`.
+model HoaDonGuiEmail {
+  id           String             @id @default(cuid())
+  hoaDonId     String
+  hoaDon       HoaDonDienTu       @relation(fields: [hoaDonId], references: [id], onDelete: Cascade)
+  /// lượt gửi thứ mấy của CÙNG hoá đơn (gửi lại = lanGui + 1, idempotencyKey mới)
+  lanGui       Int
+  toi          String
+  trangThai    HoaDonGuiTrangThai @default(CHO)
+  emailQueueId String?
+  loi          String?
+  guiBoiId     String?
+  createdAt    DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime           @updatedAt @db.Timestamptz(6)
+
+  @@unique([hoaDonId, lanGui])
 }
 
 // W3-1 — Yêu cầu hoàn tiền theo lifecycle (rút/chuyển/hủy lớp). Đề xuất → duyệt → ghi sổ.

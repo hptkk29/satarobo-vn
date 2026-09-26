@@ -422,6 +422,25 @@ export const SETTINGS = {
     default: false,
     centerOverridable: true,
   }),
+  // ── CÔNG TẮC màn kế toán Hoá đơn điện tử [26/09/2026] ──────────────────────────────────
+  //
+  // Đọc ở MỘT chỗ: `lib/finance/hoa-don/feature.ts` (lưới `[HDF-02]`). Trong DB chứ không env —
+  // cùng lý do `billing.flexV1Enabled` ngay trên.
+  //
+  // ⚠️ `centerOverridable: false`, KHÁC công tắc trên, có chủ đích: đo prod 25/09 chỉ có MỘT
+  // người giữ `payments:confirm` (Kế toán Hội sở), không có ca "pilot một cơ sở". Công tắc theo
+  // cơ sở còn buộc mục sidebar phải biết cơ sở nào bật — thêm một lời hứa phải canh.
+  //
+  // ⚠️ TẮT KHÔNG gỡ các cổng chặn trong sổ tiền (PLAN §5): khoản đã có hoá đơn vẫn không bị từ
+  // chối / tách được khi cờ tắt. Cờ chỉ gác màn hình, route tải tệp và việc gửi email.
+  "billing.hoaDonEnabled": def({
+    key: "billing.hoaDonEnabled",
+    group: "finance",
+    label: "Màn kế toán Hoá đơn điện tử: tải hoá đơn lên, xác nhận, tự gửi email cho khách",
+    schema: z.boolean(),
+    default: false,
+    centerOverridable: false,
+  }),
   // ── ƯU ĐÃI ANH EM — QUẢN LÝ TỰ CÀI [PHIÊN F3 · 22/09/2026] ─────────────────────────
   //
   // Chủ dự án chốt khi tôi hỏi "phần giảm muộn trừ vào đợt nào": *"làm cho quản lý tự cài

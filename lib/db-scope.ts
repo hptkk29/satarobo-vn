@@ -137,6 +137,13 @@ export const SCOPED_MODELS = new Set<string>([
   // không tiền mặt/cổng online tàng hình với người cấp cơ sở và form tạo đơn hiện
   // danh sách rỗng. Prefix action khai ở `getModelPrefixes` (["payments:"]).
   "PaymentMethod",
+  // 26/09/2026 — HOÁ ĐƠN ĐIỆN TỬ (docs/ke-toan-hoa-don/PLAN.md §2.2). `centerId` NOT NULL: một
+  // hoá đơn luôn thuộc đúng một cơ sở ⇒ KHÔNG vào NULL_IS_GLOBAL_MODELS. Bảng chứa MST, địa
+  // chỉ, email khách — lọt cơ sở là rò PII. Prefix `payments:` ở `getModelPrefixes`.
+  // Hai bảng con (`HoaDonKhoan`, `HoaDonGuiEmail`) KHÔNG có centerId ⇒ không nằm ở đây: luôn
+  // đọc qua `HoaDonDienTu` đã scope rồi `include`, không truy vấn thẳng ở tầng app.
+  // ⚠️ scopedDb KHÔNG che WRITE: mọi `create` phải tự set `centerId` = cơ sở của ĐƠN.
+  "HoaDonDienTu",
   // ── Module chấm công v3 (L1 · 06/09/2026) — kế hoạch §3.5 ─────────────────
   // `ShiftTemplate` NULL = mã ca dùng chung (khai kèm NULL_IS_GLOBAL). Các bảng còn lại
   // centerId BẮT BUỘC: NULL = lỗi đường ghi, không phải "ai cũng thấy". `AttendanceTicket`
@@ -349,6 +356,7 @@ export function getModelPrefixes(model: string): string[] {
     case "BankTransaction":
     case "CreditBalance":
     case "PaymentMethod":
+    case "HoaDonDienTu": // 26/09 — cùng họ tiền; bỏ trống ⇒ vai neo HO bất kỳ đọc hoá đơn mọi cơ sở
       return ["payments:"];
     case "Student":
     case "StudentCareTask":

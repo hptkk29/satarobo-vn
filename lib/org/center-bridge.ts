@@ -144,6 +144,14 @@ export const BACKFILL_SPECS: readonly BackfillSpec[] = [
     scoped: true,
     vi: "danh mục phương thức thanh toán — NULL = dùng chung mọi cơ sở",
   },
+  // ── Hoá đơn điện tử (26/09): sinh ra đã có CẢ HAI cột, không cần backfill ───
+  {
+    model: "HoaDonDienTu",
+    // `centerId` NOT NULL ở DB — NULL không thể xảy ra; lệch orgUnitId = lỗi đường ghi thật.
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "hoá đơn GTGT kế toán tải lên — centerId = cơ sở của ĐƠN, luôn có",
+  },
   // ── MEDIA-REVIEW (26/08): sinh ra đã có CẢ HAI cột, không cần backfill ──────
   {
     model: "MediaAsset",
