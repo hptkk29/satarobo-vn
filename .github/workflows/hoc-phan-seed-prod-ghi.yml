@@ -1,0 +1,128 @@
+# Chạy TAY — GÁN HỌC PHẦN cho giáo trình trên PROD. ĐÂY LÀ NÚT GHI.
+#
+# 🔴 Chủ dự án 26/09/2026 chốt cách chia: *"sata1, sata2 gồm 1 học phần 16 bài; sata
+# 3,4,5,6,7 gồm 4 học phần mỗi học phần 12 bài; Combo Luyện thi gồm 2 học phần mỗi học phần
+# 16 bài (16 bài đầu của sata1, 16 bài sau của sata2); sata8: 1 học phần 5 buổi"*.
+#
+# ⚠️ ĐỌC `scripts/dry-run-hoc-phan.ts` VÀ CHẠY WORKFLOW DRY-RUN TRƯỚC KHI BẤM.
+#
+# ── VÌ SAO NÚT NÀY ĐẮT HƠN VẺ NGOÀI ──────────────────────────────────────────────────
+# Nhánh `update` của seed ghi đè NĂM cột: `title` · `moduleCode` · `moduleName` ·
+# `description` · `objectives`. Tức nó không chỉ gán học phần — nó **viết lại TÊN của mọi
+# bài**. Đo prod 26/09: 69 bài chỉ gán học phần, **240 bài đổi tên**.
+#
+# Và `Lesson.title` KHÔNG có bản sao nào khác trong hệ thống (chú thích của chính seed,
+# `:58-62`). Nên bước dump đứng TRƯỚC mọi thứ, và nó là đường lùi DUY NHẤT.
+#
+# ── VÌ SAO PHẢI `--force` ─────────────────────────────────────────────────────────────
+# Seed có cổng `isPlaceholderTitle` (`:71`): chỉ ghi khi giáo trình TOÀN ô trống dạng
+# `"Buổi N"`. Tên prod là `"HP1 - Bàn tay ma thuật"` ⇒ seed THƯỜNG **bỏ qua cả 9 khoá,
+# không ghi một dòng nào**. `--force` là cờ ghi đè đúng cổng ấy — nên nó phải đi kèm
+# chuỗi xác nhận gõ tay, không phải mặc định.
+#
+# ⚠️ CỐ Ý KHÔNG dùng `--relink`. Cờ đó ghi đè `ClassSessionPlan.customTitle` và
+# `ClassSession.lessonId` của các lớp ĐANG CHẠY — một bán kính nổ khác hẳn, và không ai
+# yêu cầu. Muốn relink thì mở một lượt riêng, có dry-run riêng.
+#
+# ── BỐN CỔNG AN TOÀN ─────────────────────────────────────────────────────────────────
+#   1. DUMP trước tiên; dump rỗng ⇒ script NÉM ⇒ lượt chạy dừng trước khi ghi;
+#   2. dry-run chỉ-đọc chạy TRƯỚC, in ra đúng những gì sắp đổi;
+#   3. bước ghi CHỈ chạy khi gõ đúng chuỗi xác nhận (để trống = chỉ xem trước);
+#   4. nghiệm thu SAU khi ghi: chạy lại dry-run, phải ra `TONG THAY DOI: 0 bai`.
+#
+# Lưới `lib/lms/seed-hoc-phan-ghi.test.ts` (`[SGP-*]`) ghim cả bốn.
+name: Học phần · PROD · GHI (gán học phần cho giáo trình)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Gõ đúng "GAN HOC PHAN THAT VAO PROD" để chạy bước ghi. Để trống = chỉ xem trước.'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  ghi:
+    name: Gán học phần (PROD)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Chỉ chạy trên `main` — nút này ghi bằng NGUỒN giáo trình trong mã, nên nó phải là
+    # nguồn đang chạy trên prod. Chạy từ nhánh feature là ghi một giáo trình chưa ai duyệt.
+    if: github.ref == 'refs/heads/main'
+
+    env:
+      # ⚠️ Chuỗi ĐẦY QUYỀN — nút này GHI. Cố ý KHÔNG đặt vào biến tên "readonly": gán chuỗi
+      # đầy quyền vào một cái tên nói dối là cách nhanh nhất để người sau đọc nhầm.
+      DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+      DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+
+    steps:
+      - name: Kiểm secret có mặt
+        run: |
+          [ -n "${{ secrets.PROD_DIRECT_URL }}" ] || { echo "::error::Thiếu secret PROD_DIRECT_URL."; exit 1; }
+
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prisma generate
+
+      # ── 1) DUMP ĐỨNG TRƯỚC MỌI THỨ ────────────────────────────────────────────
+      # Kể cả lượt chỉ-xem-trước cũng dump: nó rẻ, và nó chứng minh đường lùi có thật
+      # TRƯỚC khi ai đó quyết bấm ghi ở lượt sau.
+      - name: 1) Dump trạng thái giáo trình (đường lùi)
+        run: pnpm exec tsx scripts/dump-giao-trinh-truoc-seed.ts
+
+      - name: Giữ dump để quay lui (30 ngày)
+        uses: actions/upload-artifact@v4
+        with:
+          name: dump-truoc-seed-${{ github.run_id }}
+          path: var/hoc-phan/dump-truoc-seed.json
+          if-no-files-found: error
+          retention-days: 30
+
+      # ── 2) XEM TRƯỚC — không ghi gì ───────────────────────────────────────────
+      - name: 2) Dry-run — KHÔNG ghi gì
+        run: pnpm exec tsx scripts/dry-run-hoc-phan.ts
+
+      - name: Đưa dry-run lên job summary
+        if: always()
+        run: |
+          if [ -f dry-run-hoc-phan.md ]; then cat dry-run-hoc-phan.md >> "$GITHUB_STEP_SUMMARY"; fi
+
+      # ── 3) GHI THẬT ───────────────────────────────────────────────────────────
+      - name: 3) Gán học phần THẬT (--force)
+        if: inputs.confirm == 'GAN HOC PHAN THAT VAO PROD'
+        run: pnpm exec tsx prisma/seed-curriculum-sata.ts --force
+
+      - name: 3b) Bỏ qua bước ghi (không gõ chuỗi xác nhận)
+        if: inputs.confirm != 'GAN HOC PHAN THAT VAO PROD'
+        run: |
+          echo "::notice::Chỉ chạy XEM TRƯỚC. Muốn ghi thật thì chạy lại và gõ: GAN HOC PHAN THAT VAO PROD"
+
+      # ── 4) NGHIỆM THU ─────────────────────────────────────────────────────────
+      # Chạy lại chính báo cáo dry-run. Ghi đủ thì nó phải ra 0 — còn sót một bài nghĩa là
+      # lượt ghi hụt, và một lượt ghi hụt trông y hệt một lượt ghi đủ nếu không kiểm lại.
+      - name: 4) Nghiệm thu — chạy lại dry-run, phải ra 0
+        if: inputs.confirm == 'GAN HOC PHAN THAT VAO PROD'
+        run: |
+          pnpm exec tsx scripts/dry-run-hoc-phan.ts | tee /tmp/sau.txt
+          grep -q "TONG THAY DOI: 0 bai" /tmp/sau.txt \
+            || { echo "::error::Vẫn còn bài chưa khớp nguồn sau khi ghi — xem log."; exit 1; }
+          echo "✔ Giáo trình đã khớp nguồn: không còn bài nào phải đổi."
+
+      - name: Giữ dry-run SAU khi ghi
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dry-run-sau-ghi-${{ github.run_id }}
+          path: dry-run-hoc-phan.md
+          if-no-files-found: warn
+          retention-days: 30
