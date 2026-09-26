@@ -58,6 +58,7 @@ on:
         options:
           - nguong-thanh-toan
           - hoa-don-gd0
+          - noi-hoc-vien-lead
 
 permissions:
   contents: read
@@ -151,6 +152,13 @@ jobs:
           case "$BAO_CAO" in
             nguong-thanh-toan) pnpm exec tsx scripts/bao-cao-nguong-thanh-toan.ts ;;
             hoa-don-gd0) pnpm exec tsx scripts/bao-cao-hoa-don-gd0.ts ;;
+            # 26/09 — lên prod có phải gắn lead tay từng học viên không? Script nối HV cũ ở chế
+            # độ ĐO TRƯỚC MIGRATION (không đọc cột mới; đi với --ghi là tự dừng). `pipefail` để
+            # mã thoát là của script chứ không phải của `tee` (luật 6).
+            noi-hoc-vien-lead)
+              set -o pipefail
+              pnpm exec tsx scripts/noi-hoc-vien-voi-lead.ts --truoc-migration | tee bao-cao.txt
+              { echo '```text'; cat bao-cao.txt; echo '```'; } > "bao-cao-$BAO_CAO.md" ;;
             *) echo "::error::Lựa chọn báo cáo lạ: '$BAO_CAO'"; exit 1 ;;
           esac
 

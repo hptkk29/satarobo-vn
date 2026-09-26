@@ -18,6 +18,7 @@ import { seedTaiChinh } from "./04-tai-chinh";
 import { seedLms } from "./05-lms";
 import { seedCskhNhanSu } from "./06-cskh-nhansu";
 import { seedKhoWebHeThong } from "./07-kho-web-hethong";
+import { seedNoiLead } from "./08-noi-lead";
 
 const ONLY = (process.env.UAT_ONLY ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 const chay = (ten: string) => ONLY.length === 0 || ONLY.includes(ten);
@@ -40,6 +41,9 @@ async function main() {
   const nen = await seedNen(coSo);
   if (chay("crm")) await seedCrm(coSo, uat, nen.courses);
   if (chay("hocvu")) await seedHocVu(coSo, uat, nen);
+  // 26/09 — mỗi học viên đến từ một phiếu lead đã chốt (Student.leadId + vết chốt ghi danh).
+  // PHẢI sau hocvu. Chạy riêng trên DB đang nghiệm thu: prisma/seed-uat/chay-noi-lead.ts.
+  if (chay("noilead")) await seedNoiLead(coSo, uat);
   if (chay("taichinh")) await seedTaiChinh(coSo, uat);
   if (chay("lms")) await seedLms(coSo, uat);
   if (chay("cskh")) await seedCskhNhanSu(coSo, uat);

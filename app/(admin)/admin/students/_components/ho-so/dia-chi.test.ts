@@ -1,80 +1,97 @@
 /**
- * Ca [DC-*] — ô địa chỉ 2 cấp của hồ sơ học viên GIỮ tên đang lưu khi nó không có trong
- * danh mục [25/09/2026].
+ * Ca [DC-*] — ô địa chỉ 2 cấp của hồ sơ học viên CHỈ dùng danh mục MỚI [ĐẢO 26/09/2026].
  *
- * Vì sao: form mới gửi `city`/`ward` qua ô ẩn, và `docFormHocVien` coi "có mặt mà rỗng" là
- * XOÁ. Học viên cũ mang chữ gõ tay ("TP Đà Nẵng", phường đã sáp nhập…) — nếu picker chỉ
- * nhận option trong danh mục thì ô hiện trống và lượt "Lưu thay đổi" kế tiếp xoá thật địa
- * chỉ, dù người dùng chẳng chạm vào ô đó.
+ * Chủ dự án 26/09: "phải lấy danh sách địa chỉ tỉnh/tp, phường/xã mới, không lấy thông tin cũ
+ * nữa". Bản 25/09 giữ tên đang lưu thành option tạm "(dữ liệu cũ)"; nay tên cũ được DỊCH sang
+ * danh mục mới khi dịch được tất định, không thì ô TRỐNG.
  */
 import { describe, expect, it } from "vitest";
-import {
-  TIEN_TO_TINH_CU,
-  laTinhCu,
-  luaChonPhuong,
-  luaChonTinh,
-  tenTinhTuGiaTri,
-} from "./dia-chi";
+import { diaChiCanChonLai, phuongBanDau, tenTinhTuGiaTri, tinhBanDau } from "./dia-chi";
 
+// Nhãn giống hệt gói `vietnam-address-data` (tiền tố "Tp" viết thường chữ p).
 const TINH = [
-  { value: "48", label: "Thành phố Đà Nẵng" },
-  { value: "01", label: "Thành phố Hà Nội" },
+  { value: "48", label: "Tp Đà Nẵng" },
+  { value: "01", label: "Hà Nội" },
+  { value: "79", label: "Tp Hồ Chí Minh" },
+  { value: "46", label: "Huế" },
 ];
 
-describe("luaChonTinh — tỉnh đang lưu", () => {
-  it("[DC-01] tên khớp y hệt ⇒ chọn đúng mã, KHÔNG thêm option tạm", () => {
-    const r = luaChonTinh(TINH, "Thành phố Đà Nẵng");
-    expect(r.chon).toBe("48");
-    expect(r.options).toEqual(TINH);
+describe("tinhBanDau — tên tỉnh đang lưu → mã trong danh mục MỚI", () => {
+  it("[DC-01] khớp y hệt ⇒ đúng mã", () => {
+    expect(tinhBanDau(TINH, "Tp Đà Nẵng")).toBe("48");
+    expect(tinhBanDau(TINH, "Hà Nội")).toBe("01");
   });
 
-  it("[DC-02] tên khớp khi bỏ dấu ⇒ vẫn chọn đúng mã (không đẻ option trùng)", () => {
-    const r = luaChonTinh(TINH, "thanh pho da nang");
-    expect(r.chon).toBe("48");
-    expect(r.options).toHaveLength(TINH.length);
+  it("[DC-02] tên kiểu cũ ('TP', 'Thành phố', không tiền tố, không dấu) ⇒ vẫn đúng mã", () => {
+    for (const ten of ["Đà Nẵng", "TP Đà Nẵng", "TP. Đà Nẵng", "Thành phố Đà Nẵng", "da nang"]) {
+      expect(tinhBanDau(TINH, ten), ten).toBe("48");
+    }
+    expect(tinhBanDau(TINH, "TP.HCM")).toBe("79");
+    expect(tinhBanDau(TINH, "Hồ Chí Minh")).toBe("79");
   });
 
-  it("[DC-03] tên KHÔNG có trong danh mục ⇒ option tạm đứng đầu, được chọn, và lưu ra ĐÚNG chuỗi cũ", () => {
-    const r = luaChonTinh(TINH, "TP Đà Nẵng");
-    expect(r.options).toHaveLength(TINH.length + 1);
-    expect(r.chon).not.toBeNull();
-    expect(laTinhCu(r.chon)).toBe(true);
-    expect(r.options[0].value).toBe(r.chon);
-    // Thứ đi xuống DB khi người dùng không chạm vào ô: chuỗi cũ nguyên vẹn.
-    expect(tenTinhTuGiaTri(r.options, r.chon)).toBe("TP Đà Nẵng");
-    // Đối chứng dương: chọn tỉnh thật thì lưu TÊN tỉnh thật, không lẫn tiền tố.
-    expect(tenTinhTuGiaTri(r.options, "01")).toBe("Thành phố Hà Nội");
-    expect(tenTinhTuGiaTri(r.options, "01").startsWith(TIEN_TO_TINH_CU)).toBe(false);
+  it("[DC-03] tỉnh đã SÁP NHẬP ⇒ tỉnh nhận sáp nhập", () => {
+    expect(tinhBanDau(TINH, "Quảng Nam")).toBe("48");
+    expect(tinhBanDau(TINH, "Tỉnh Bình Dương")).toBe("79");
+    expect(tinhBanDau(TINH, "Thừa Thiên Huế")).toBe("46");
   });
 
-  it("[DC-04] trống ⇒ không chọn gì, không thêm option", () => {
-    for (const v of [null, undefined, "", "   "]) {
-      const r = luaChonTinh(TINH, v);
-      expect(r.chon).toBeNull();
-      expect(r.options).toEqual(TINH);
+  it("[DC-04] không nhận ra ⇒ null (không đoán), trống ⇒ null", () => {
+    for (const v of [null, undefined, "", "   ", "Đà Lạt", "Hải Châu"]) {
+      expect(tinhBanDau(TINH, v), String(v)).toBeNull();
     }
     expect(tenTinhTuGiaTri(TINH, null)).toBe("");
+    // Lưu xuống đúng TÊN danh mục, không phải chuỗi cũ.
+    expect(tenTinhTuGiaTri(TINH, tinhBanDau(TINH, "Đà Nẵng"))).toBe("Tp Đà Nẵng");
   });
 });
 
-describe("luaChonPhuong — phường đang lưu", () => {
+describe("phuongBanDau — phường đang lưu → tên trong danh mục MỚI của tỉnh", () => {
   const PHUONG = [
     { value: "Phường Hải Châu", label: "Phường Hải Châu" },
     { value: "Phường Thanh Khê", label: "Phường Thanh Khê" },
+    { value: "Xã Hòa Vang", label: "Xã Hòa Vang" },
   ];
 
-  it("[DC-05] phường ngoài danh mục ⇒ option tạm mang ĐÚNG tên đó; trong danh mục / trống ⇒ không thêm", () => {
-    const tam = luaChonPhuong(PHUONG, "Phường Phước Ninh");
-    expect(tam).toHaveLength(PHUONG.length + 1);
-    expect(tam[0].value).toBe("Phường Phước Ninh");
+  it("[DC-05] y hệt / viết tắt tiền tố ⇒ đúng tên danh mục", () => {
+    expect(phuongBanDau(PHUONG, "Phường Hải Châu")).toBe("Phường Hải Châu");
+    expect(phuongBanDau(PHUONG, "P. Hải Châu")).toBe("Phường Hải Châu");
+    expect(phuongBanDau(PHUONG, "hai chau")).toBe("Phường Hải Châu");
+    expect(phuongBanDau(PHUONG, "X. Hòa Vang")).toBe("Xã Hòa Vang");
+  });
 
-    // Chưa nạp được danh mục (tỉnh cũ không khớp) mà hồ sơ có phường ⇒ vẫn giữ.
-    expect(luaChonPhuong([], "Phường Phước Ninh").map((o) => o.value)).toEqual([
-      "Phường Phước Ninh",
-    ]);
+  it("[DC-06] phường KHÔNG còn trong danh mục mới (đã sáp nhập) ⇒ '' — không in tên cũ", () => {
+    expect(phuongBanDau(PHUONG, "Phường Phước Ninh")).toBe("");
+    expect(phuongBanDau([], "Phường Hải Châu")).toBe("");
+    expect(phuongBanDau(PHUONG, null)).toBe("");
+  });
 
-    expect(luaChonPhuong(PHUONG, "Phường Hải Châu")).toEqual(PHUONG);
-    expect(luaChonPhuong(PHUONG, "")).toEqual(PHUONG);
-    expect(luaChonPhuong(PHUONG, null)).toEqual(PHUONG);
+  it("[DC-07] hai mục cùng khoá sau khi bỏ tiền tố ⇒ KHÔNG đoán", () => {
+    const TRUNG = [
+      { value: "Phường Hòa Khánh", label: "Phường Hòa Khánh" },
+      { value: "Xã Hòa Khánh", label: "Xã Hòa Khánh" },
+    ];
+    expect(phuongBanDau(TRUNG, "Hòa Khánh")).toBe("");
+    // Đối chứng dương: gõ đủ tiền tố thì vẫn khớp y hệt.
+    expect(phuongBanDau(TRUNG, "Xã Hòa Khánh")).toBe("Xã Hòa Khánh");
+  });
+});
+
+describe("diaChiCanChonLai — dòng nhắc chọn lại", () => {
+  it("[DC-08] nhắc đúng phần không dịch được; không nhắc khi trống hoặc dịch được", () => {
+    expect(
+      diaChiCanChonLai({ cityDangLuu: "Đà Lạt", wardDangLuu: "P1", maTinh: null, phuong: "" }),
+    ).toEqual({ tinh: true, phuong: true });
+    expect(
+      diaChiCanChonLai({
+        cityDangLuu: "Đà Nẵng",
+        wardDangLuu: "Phường Phước Ninh",
+        maTinh: "48",
+        phuong: "",
+      }),
+    ).toEqual({ tinh: false, phuong: true });
+    expect(
+      diaChiCanChonLai({ cityDangLuu: "", wardDangLuu: null, maTinh: null, phuong: "" }),
+    ).toEqual({ tinh: false, phuong: false });
   });
 });

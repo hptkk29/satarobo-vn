@@ -23,7 +23,6 @@ import {
 } from "@/lib/validators/student";
 import {
   logStudentAudit,
-  detectChangedFields,
   getAuditActor,
   logUserAudit,
 } from "@/lib/audit/log";
@@ -48,7 +47,8 @@ import { scopedDb, passesScope } from "@/lib/db-scope";
 import { formatDateVN } from "@/lib/format/date";
 import { canonicalPhone, phoneVariants } from "@/lib/phone";
 import { phoneSearchTerm } from "@/lib/phone";
-import { syncStudentNameToCrm } from "@/lib/students/sync-name";
+import { ghiHoSoHocVien, SNAPSHOT_HO_SO } from "@/lib/students/ghi-ho-so";
+import { quyetDinhMaHocVien } from "./_lib/ma-hoc-vien";
 // 25/09/2026 — đọc form tách ra file thuần (file này là 'use server', không test được).
 // Luật "vắng ⇒ không đụng · rỗng ⇒ xoá" + lọc khoá sau parse: xem đầu doc-form.ts.
 import { docFormHocVien, chiGiuKhoaCoMat, uuTienTheoCoSoMoi } from "./_lib/doc-form";
@@ -110,24 +110,9 @@ async function requireStudentWrite(action: "create" | "update" | "delete") {
   return session;
 }
 
-const STUDENT_SNAPSHOT_SELECT = {
-  name: true,
-  studentCode: true,
-  dateOfBirth: true,
-  gender: true,
-  parentName: true,
-  parentPhone: true,
-  // 25/09/2026 — 3 ô người lớn mới trên hồ sơ + liên kết lead nguồn: vào nhật ký như mọi
-  // ô định danh khác (cùng cách trang lead ghi `parentDob` ở đường SỬA). `detectChangedFields`
-  // so Date theo mốc thời gian nên lưu lại cùng ngày không đẻ dòng "đã đổi" giả.
-  parentGender: true,
-  parentDob: true,
-  parentFacebookUrl: true,
-  leadId: true,
-  leadChildId: true,
-  centerId: true,
-  status: true,
-} as const;
+// 26/09/2026 — ảnh chụp dời sang `lib/students/ghi-ho-so.ts` (thêm đủ ô chung với lead để
+// đồng bộ hai chiều đọc được "trước khi sửa").
+const STUDENT_SNAPSHOT_SELECT = SNAPSHOT_HO_SO;
 
 function toData(parsed: ReturnType<typeof studentCreateSchema.parse>): Prisma.StudentCreateInput {
   const {
@@ -191,6 +176,17 @@ export async function createStudent(formData: FormData): Promise<ActionResult> {
 
   const { actorId, actorName } = getAuditActor(session);
   const data = parsed.data;
+
+  // 26/09/2026 — mã học viên chỉ Quản trị tối cao đặt tay (`students:change-code`); vai khác
+  // để hệ thống tự sinh theo mã cơ sở. Luật: `_lib/ma-hoc-vien.ts`.
+  const ma = quyetDinhMaHocVien({
+    cheDo: "tao",
+    maGui: data.studentCode,
+    maHienTai: null,
+    duocDoiMa: await checkPermission("students:change-code"),
+  });
+  if (!ma.ok) return { error: ma.loi };
+  data.studentCode = ma.ma ?? null;
 
   // Ảnh đại diện đến từ ô ẩn của form — client sửa được. Chỉ nhận URL do route upload của
   // hệ thống sinh ra (luật chung với action đổi ảnh — lib/students/anh-dai-dien-url.ts).
@@ -307,6 +303,19 @@ export async function updateStudent(id: string, formData: FormData): Promise<Act
   // lượt sửa không gửi hai ô đó lặng lẽ mở lại HV bảo lưu và xoá sạch dị ứng.
   const data = chiGiuKhoaCoMat(parsed.data, raw);
 
+  // 26/09/2026 — mã học viên chỉ Quản trị tối cao sửa được (`students:change-code`).
+  if (data.studentCode !== undefined) {
+    const ma = quyetDinhMaHocVien({
+      cheDo: "sua",
+      maGui: data.studentCode,
+      maHienTai: before.studentCode,
+      duocDoiMa: await checkPermission("students:change-code"),
+    });
+    if (!ma.ok) return { error: ma.loi };
+    if (ma.ma === undefined) delete data.studentCode;
+    else data.studentCode = ma.ma;
+  }
+
   // BUG 21/08 (nguyên nhân 2) — ô "Trạng thái" của form cho chọn thẳng "Nghỉ học".
   // Đường này chỉ ghi `Student.status` và KHÔNG đụng `Enrollment` ⇒ học viên hiện
   // "Nghỉ học" ở /students nhưng VẪN nằm trong lớp ở mọi màn roster (roster đọc từ
@@ -359,44 +368,23 @@ export async function updateStudent(id: string, formData: FormData): Promise<Act
     }
   }
 
-  // Lead bị đổi tên theo — gom lại để revalidate SAU transaction.
-  let syncedLeadIds: string[] = [];
+  // Lead / anh chị em bị đổi theo — gom lại để revalidate SAU transaction.
+  let syncedLeadIds: string[];
+  let syncedStudentIds: string[];
   try {
-    await sdb.$transaction(async (txRaw) => {
-      const tx = txRaw as unknown as Prisma.TransactionClient;
-      const updated = await tx.student.update({
-        where: { id },
-        data: toUpdateData(data),
-        select: STUDENT_SNAPSHOT_SELECT,
-      });
-
-      await logStudentAudit({
-        studentId: id,
-        action: "UPDATE",
-        actorId,
-        actorName,
-        oldValues: before,
-        newValues: updated,
-        changedFields: detectChangedFields(before, updated),
-        tx,
-      });
-
-      // 08/08 — ĐỔI TÊN HV PHẢI DỘI SANG CRM trong CÙNG transaction. Trước đây chỉ ghi
-      // `Student.name` ⇒ trang lead / chi tiết lead / học thử vẫn hiện tên cũ
-      // (`LeadChild.fullName`, `Lead.childName`, `ParentFeedback.studentName` là các
-      // bản sao rời), admin phải đi sửa tay từng màn.
-      if (before.name !== updated.name) {
-        const res = await syncStudentNameToCrm({
-          tx,
-          studentId: id,
-          oldName: before.name,
-          newName: updated.name,
-          parentPhone: updated.parentPhone ?? before.parentPhone,
-          actor: { id: actorId, name: actorName },
-        });
-        syncedLeadIds = res.leadIds;
-      }
+    // 26/09/2026 — lượt ghi + nhật ký + mọi bản sao đổi theo (tên con ở CRM 08/08; phụ huynh,
+    // địa chỉ, ngày sinh/giới tính/trường/lớp của con ở phiếu lead nguồn + anh chị em — chủ
+    // dự án 26/09: "đổi 1 nơi thì các nơi khác phải đổi hết") đi CHUNG một transaction.
+    // Chạy ở lib trên client KHÔNG scope: phiếu lead / anh chị em ở cơ sở khác vẫn phải đổi
+    // theo — xem đầu `lib/students/ghi-ho-so.ts`. Quyền + cơ sở đã kiểm ở trên.
+    const res = await ghiHoSoHocVien({
+      studentId: id,
+      data: toUpdateData(data),
+      truoc: before,
+      actor: { id: actorId, name: actorName },
     });
+    syncedLeadIds = res.leadIds;
+    syncedStudentIds = res.studentIds;
   } catch (err) {
     if (err instanceof Error && err.message.includes("Unique constraint")) {
       return { error: "Mã học viên đã tồn tại" };
@@ -406,6 +394,7 @@ export async function updateStudent(id: string, formData: FormData): Promise<Act
 
   revalidatePath("/students");
   revalidatePath(`/students/${id}/edit`);
+  for (const sid of syncedStudentIds) revalidatePath(`/students/${sid}/edit`);
   if (syncedLeadIds.length > 0) {
     revalidatePath("/leads");
     for (const leadId of syncedLeadIds) revalidatePath(`/leads/${leadId}`);

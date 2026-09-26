@@ -10,7 +10,7 @@
 | Mã | Nội dung | Nơi thi công |
 |---|---|---|
 | **D1** | Liên kết là **cột mới** `Student.leadId` + `Student.leadChildId`. Chốt lead tự nối; script dry-run nối HV cũ; nút "Gắn lead" nối phần còn lại. `Student.leadId` = lead **GỐC** — lượt chốt sau dùng lại HV thì **không đè**. ⛔ Không bao giờ ghi/backfill `Enrollment.leadChildId` (tín hiệu "đã chốt" của báo cáo chuyển đổi — `lib/lead/tuong-tac/ghi.ts:130-134`). | migration, `lib/crm/convert-lead-v2.ts`, `scripts/noi-hoc-vien-voi-lead.ts` |
-| **D2** | "Tách theo chủ dữ liệu": thuộc tính **con + phụ huynh** sửa trên hồ sơ HV; thuộc tính **phễu** (nguồn, người nhập, khoá quan tâm, ngày nhận lead, tương tác gần nhất, sale, AFF, cơ sở của lead, lớp tại trung tâm của LeadChild) **chỉ đọc** từ lead + link mở lead. Khi HV được nối, ô **TRỐNG** của hồ sơ được điền từ lead bằng **một** hàm dùng chung `dienTuLead` (chỉ điền ô null, không bao giờ ghi đè). | `lib/students/dien-tu-lead.ts` |
+| **D2** | ⚠️ **[ĐẢO một phần 26/09 — xem §8.1]** các ô chung HV ↔ lead nay ĐỒNG BỘ HAI CHIỀU. Bản gốc: "Tách theo chủ dữ liệu": thuộc tính **con + phụ huynh** sửa trên hồ sơ HV; thuộc tính **phễu** (nguồn, người nhập, khoá quan tâm, ngày nhận lead, tương tác gần nhất, sale, AFF, cơ sở của lead, lớp tại trung tâm của LeadChild) **chỉ đọc** từ lead + link mở lead. Khi HV được nối, ô **TRỐNG** của hồ sơ được điền từ lead bằng **một** hàm dùng chung `dienTuLead` (chỉ điền ô null, không bao giờ ghi đè). | `lib/students/dien-tu-lead.ts` |
 | **D3** | Gỡ khỏi form (DỮ LIỆU + CỘT GIỮ NGUYÊN): nhóm máu, Quận/Huyện (địa chỉ còn 2 cấp Tỉnh → Phường/Xã, lưu TÊN), "Đơn vị mong muốn", "Ngày đăng ký lần đầu" (thay bằng "ngày nhập học" suy từ ghi danh sớm nhất), SĐT/Email riêng của HV; gộp "Lịch sử học tập" vào "Lớp & tiến độ". | form (phần giao diện) — đường ghi chỉ cần "khoá vắng ⇒ không đụng" (§3) |
 | **D4** | "Ngày tương tác mới nhất" = lần chạm khách do **NGƯỜI** làm: `lastLeadOutreachAt(activities, LEAD_OUTREACH_TYPES)` (`lib/lead/activity-clock.ts`). "Người nhập lead" in `nhanNguoiNhapLead(mã, tên)` = `MÃ_Tên`, **chỉ** cho người có `leads:view-all`. | phần đọc |
 
@@ -169,3 +169,86 @@ nghi độc lập tìm cách bác bỏ; 12 phát hiện được cả hai xác n
 Không sửa (ngoài phạm vi, báo lại): `<Toaster>` gắn HAI lần (`app/layout.tsx:58` +
 `app/(admin)/admin/layout.tsx:157`) ⇒ mọi toast admin hiện đôi — lỗi có sẵn; trang lead in người
 nhập dạng "Tên · MÃ" còn hồ sơ HV in "MÃ_Tên" theo yêu cầu đợt này.
+
+(Ghi chú 26/09: `<Toaster>` hiện đôi đã vá ở PR #397.)
+
+## 8. Đợt 2 — 26/09/2026 (chủ dự án nghiệm thu trên test.satarobo.vn)
+
+Năm yêu cầu: (1) mọi học viên phải thấy lead nguồn; (2) mã học viên chỉ admin sửa; (3) ô quan hệ
+là ô chọn + thông tin lead ↔ học viên "đổi 1 nơi thì các nơi khác phải đổi hết"; (4) địa chỉ chỉ
+dùng danh mục tỉnh/phường MỚI; (5) thay khối năng lực robotics bằng nhận xét buổi + học bạ.
+
+### 8.1 Đồng bộ hai chiều HV ↔ lead (đảo một phần D2)
+
+Bảng ô chung + luật: `lib/students/dong-bo-lead.ts` (thuần, `[DBL-*]`). Phần ghi:
+`lib/students/dong-bo-lead-db.ts` (`[DBD-*]`, tx giả trong bộ nhớ).
+
+| Học viên (`Student`) | Lead / LeadChild | Ghi chú |
+|---|---|---|
+| parentName · parentPhone · parentEmail · parentFacebookUrl · parentGender · parentDob · city · ward · address | Lead.parentName · phone · email · facebookUrl · parentGender · parentDob · city · ward · addressLine | SĐT: lead lưu `84…`, HV lưu `0…`, so theo dạng chuẩn |
+| dateOfBirth · gender · school · currentGrade | LeadChild.dob · gender ("Nam/Nữ/Khác") · schoolName · gradeLevel ("Lớp N") | "Mầm non" không dịch ra số lớp ⇒ không ghi ô đó |
+| name | LeadChild.fullName (+ Lead.childName, ParentFeedback) | đường riêng từ 08/08: `sync-name.ts`, nay biết cả `Student.leadChildId` |
+
+Luật: chỉ dội ô ĐÃ ĐỔI trong lượt ghi gốc; chỉ ghi ô bên đích đang KHÁC (không đẻ nhật ký rỗng);
+xoá trắng cũng dội (trừ tên + SĐT của Lead — NOT NULL); cùng transaction với lượt ghi gốc; mỗi bản
+ghi kéo theo có một dòng AuditLog nêu lý do. Phụ huynh đổi ở một em ⇒ phiếu lead + **anh/chị/em
+cùng phiếu** đổi theo. `User.phone` (đăng nhập cổng PH) **không** nằm trong bảng — đổi số đăng
+nhập phải qua OTP. `parentRelation` không đồng bộ (lead không có ô này; quan hệ là của từng em).
+
+Đường ghi đã nối (lưới ghim `[DBL-W1..W6]`, `lib/students/dong-bo-lead-wiring.test.ts`):
+`updateStudent` (qua `lib/students/ghi-ho-so.ts` — `db.$transaction` KHÔNG scope, để thấy phiếu
+và anh chị em ở cơ sở khác) · `updateLeadFields` · `updateLeadChild` · nhập Excel học viên ·
+nhập Excel lead · phiếu nhập trùng điền link Facebook (`lib/lead/intake/ingest.ts`). Nhập Excel
+"đã đăng ký" có đồng bộ HV riêng từ trước (`planStudentSync`).
+
+⚠️ Giới hạn đã biết: hai đường nhập Excel chạy trong `scopedDb` ⇒ học viên/phiếu ở cơ sở NGOÀI
+tầm nhìn người nhập không đổi theo. Màn sửa học viên và màn sửa lead không có giới hạn này.
+
+### 8.2 Mã học viên — chỉ Quản trị tối cao
+
+Quyền `students:change-code` có từ R7-05 C10 nhưng chưa từng được nối. Nay: form chỉ đọc + không
+gửi khoá `studentCode` khi thiếu quyền (`coTheDoiMa`, bắt buộc truyền); `createStudent` bỏ mã gửi
+lên (tự sinh), `updateStudent` TỪ CHỐI mã khác mã đang lưu — `_lib/ma-hoc-vien.ts` (`[MHV-*]`,
+`[HSF-07*]`, `[MHV-W*]`). Không có quyền mới ⇒ **không** cần seed-prod-roles.
+
+### 8.3 Ô "Quan hệ" là ô chọn
+
+`lib/students/quan-he.ts` (`[QH-*]`, `[HSF-08]`): Mẹ · Bố · Ông · Bà · Anh · Chị · Cô · Dì · Chú ·
+Bác · Người giám hộ · Khác. Giá trị cũ nhận ra được thì chọn đúng mục; không nhận ra (vd "Ba" —
+bố tiếng miền Nam, KHÔNG đoán thành "Bà") thì giữ thành một mục riêng "(đang lưu — chọn lại)".
+
+### 8.4 Địa chỉ — chỉ danh mục MỚI (đảo bản 25/09)
+
+Bỏ option tạm "(dữ liệu cũ)" và dòng "Quận/Huyện (dữ liệu cũ)". Tên cũ dịch tất định sang danh mục
+34 tỉnh (`maTinhMoi`: bỏ tiền tố "TP/Thành phố/Tỉnh" + bảng 63 tỉnh cũ → tỉnh nhận sáp nhập) và
+phường/xã (`tenPhuongMoi`: bỏ tiền tố "P./Phường/Xã", chỉ khi khớp DUY NHẤT). Không dịch được ⇒ ô
+trống + dòng nhắc chọn lại. Form so địa chỉ với giá trị ĐANG LƯU nên lượt lưu kế tiếp ghi đúng thứ
+màn hình cho thấy (`[RSX-10]`). Lưới trên dữ liệu thật của gói: `[VNA-TM]` (đủ 63 tỉnh cũ).
+Cột `district` giữ nguyên trong DB, không hiện, không ghi.
+
+### 8.5 Nhận xét buổi + học bạ thay "Hồ sơ năng lực robotics"
+
+`_components/ho-so/nhan-xet-va-hoc-ba.tsx`. Đọc bằng đúng hàm của màn gốc (luật 12b):
+`getStudentFeedback` (cổng PH dùng) · `ReportCard` theo ghi danh · link `/hoc-ba?studentId=`.
+Gác quyền theo màn gốc: nhận xét = `sessions:edit | session-feedback:view-all`; học bạ năng lực =
+`report-cards:manage | review`; học bạ tổng hợp = `PAGE_GATES["/hoc-ba"]`. Dữ liệu năng lực cũ
+(`StudentSkillAssessment`) giữ nguyên trong DB.
+
+### 8.6 "Chưa nối lead" trên test — dữ liệu seed, không phải lỗi
+
+Đo 26/09 bằng script nối (dry-run trên DB test): **250/250** học viên UAT không có bằng chứng nào —
+bộ seed dựng lead và học viên rời nhau. Vá dữ liệu: `prisma/seed-uat/08-noi-lead.ts` dựng phiếu
+lead ĐÃ CHỐT cho từng gia đình (anh chị em chung phiếu), mỗi em một `LeadChild`, nối
+`Student.leadId/leadChildId`, ghi vết chốt ghi danh, đổi địa chỉ seed cũ sang danh mục mới. Đo
+local: 220 phiếu · 250 bé · 247 HV nối · 202 vết chốt; chạy lại ra 0 (idempotent).
+
+Chạy trên test (không đụng bước seed nào khác — `index.ts` luôn đặt lại mật khẩu `uat.*` và giá
+khoá học): nút **"Seed dữ liệu TEST"**, ô xác nhận `SEED-TEST`, `noi_hoc_vien_lead = seed-uat`.
+Hai lựa chọn còn lại của cùng ô (`chay-thu` / `ghi`) chạy script nối HV cũ trên DB test.
+
+### 8.7 Lên prod có phải gắn tay từng học viên không? — ĐO trước khi trả lời
+
+Nút **"Ngưỡng thanh toán · PROD · ĐỌC"** (chỉ-đọc, chạy từ `test`) lựa chọn
+`noi-hoc-vien-lead` chạy script ở chế độ `--truoc-migration`: không đọc cột mới, coi mọi HV là
+chưa nối, in số SẼ NỐI theo 4 chuỗi đã chốt + phép đo THÊM chuỗi ⑤ "cùng SĐT phụ huynh + đúng tên
+con" (chưa áp dụng — nới luật là quyết định của chủ dự án). Đi với `--ghi` là tự dừng.

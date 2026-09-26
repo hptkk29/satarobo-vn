@@ -682,6 +682,19 @@ prisma/
     (`kiemKhoaTruocKhiVaoCase`, `lib/trial/khoa-truoc-case.ts`) — hai cửa server đều hỏi, ô "Xếp vào
     case" in "Chọn khoá học trước". Lớp CŨ không bị cổng này (lớp cũ có khoá của lớp).
 
+- ⚠️ **HỌC VIÊN ↔ PHIẾU LEAD: "ĐỔI 1 NƠI THÌ ĐỔI HẾT" [chủ dự án chốt 26/09/2026].**
+  Ô chung (phụ huynh · SĐT · email · link FB · địa chỉ · ngày sinh/giới tính/trường/lớp của bé)
+  đồng bộ HAI CHIỀU giữa `Student` ↔ `Lead`/`LeadChild` và sang anh/chị/em cùng phiếu. Bảng ô +
+  luật dịch ("Lớp 4" ↔ 4, "Nữ" ↔ FEMALE, `0…` ↔ `84…`) ở MỘT chỗ: `lib/students/dong-bo-lead.ts`.
+  · Thêm một đường GHI mới vào các ô đó ⇒ PHẢI gọi `dongBoTuHocVien` / `dongBoTuLead` /
+    `dongBoTuCon` (`lib/students/dong-bo-lead-db.ts`) TRONG CÙNG transaction, và thêm một dòng
+    vào lưới `[DBL-W*]` (`lib/students/dong-bo-lead-wiring.test.ts`). Test hành vi của action
+    đều giả lập module này, nên quên gọi là KHÔNG ca nào đỏ.
+  · `tx` phải KHÔNG scope (`db.$transaction`) — qua `scopedDb` là bỏ sót im lặng phiếu / anh chị
+    em ở cơ sở khác. Màn sửa HV vì vậy ghi qua `lib/students/ghi-ho-so.ts`, không qua `sdb`.
+  · `User.phone` (đăng nhập cổng PH) KHÔNG đồng bộ — đổi số đăng nhập phải qua OTP.
+  · Chi tiết + giới hạn đã biết (hai màn nhập Excel chạy trong scope): `docs/hoc-vien-lien-ket-lead.md` §8.
+
 ## Mẫu test: LƯỚI GHIM MÃ NGUỒN [13/09/2026]
 
 Dùng khi luật cần khoá có dạng **"lời gọi này phải truyền tham số kia"** — loại luật mà

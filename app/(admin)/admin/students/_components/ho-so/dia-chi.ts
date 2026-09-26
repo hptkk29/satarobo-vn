@@ -1,67 +1,68 @@
 // app/(admin)/admin/students/_components/ho-so/dia-chi.ts — phần THUẦN của ô địa chỉ 2 cấp
-// trên hồ sơ học viên (25/09/2026). Tách khỏi `dia-chi-picker.tsx` để test không cần React.
+// trên hồ sơ học viên. Tách khỏi `dia-chi-picker.tsx` để test không cần React.
 //
-// Hồ sơ học viên LƯU TÊN (`Student.city` / `Student.ward`), picker chạy bằng MÃ tỉnh (phải
-// có mã mới tra được danh sách phường). Mở hồ sơ cũ = một lượt dịch ngược tên → mã, và dữ
-// liệu học viên CŨ là chữ gõ tay thời form còn ô tự do ("TP Đà Nẵng", "Q. Hải Châu", phường
-// đã sáp nhập…) — không khớp danh mục 2 cấp nào.
-//
-// Nếu picker chỉ nhận option trong danh mục thì ô hiện TRỐNG cho các hồ sơ đó, và lượt bấm
-// "Lưu thay đổi" kế tiếp gửi `city=""` ⇒ form mới XOÁ THẬT (doc-form: có mặt + rỗng = xoá).
-// Hai hàm dưới giữ tên đang lưu thành một option tạm để giá trị cũ đi nguyên xuống DB cho
-// tới khi người dùng CHỦ ĐỘNG chọn lại. Lưới: `dia-chi.test.ts` ([DC-01..05]).
+// ĐẢO 26/09/2026 — chủ dự án: "phải lấy danh sách địa chỉ tỉnh/tp, phường/xã MỚI, không lấy
+// thông tin cũ nữa". Bản 25/09 giữ tên đang lưu thành option tạm "… (dữ liệu cũ)" để một lượt
+// lưu không xoá mất địa chỉ; hệ quả là hồ sơ nào lưu "Đà Nẵng" (danh mục ghi "Tp Đà Nẵng") cũng
+// hiện một tỉnh cũ. Nay:
+//   · ô chỉ có danh mục MỚI (34 tỉnh/thành, phường/xã sau 01/07/2025) — không option tạm;
+//   · tên cũ được DỊCH sang danh mục mới khi dịch được tất định (`maTinhMoi` / `tenPhuongMoi`
+//     ở lib/address/vn-address.ts: bỏ tiền tố "TP", tỉnh đã sáp nhập → tỉnh nhận sáp nhập);
+//   · không dịch được thì ô TRỐNG + một dòng nhắc chọn lại — không in tên cũ ra.
+// Lượt lưu kế tiếp ghi đúng thứ đang hiện (form so với giá trị ĐANG LƯU, không so với giá trị
+// đã dịch — xem `student-form.tsx`), nên DB không còn giữ chữ mà màn hình không cho thấy.
+// Lưới: `dia-chi.test.ts` ([DC-*]).
 
 import type { ComboboxOption } from "@/components/ui/combobox";
-import { provinceIdByName } from "@/lib/address/vn-address";
+import { maTinhMoi, tenPhuongMoi } from "@/lib/address/vn-address";
 
-/** Tiền tố value của option "tên tỉnh đang lưu nhưng không có trong danh mục". */
-export const TIEN_TO_TINH_CU = "__tinh-cu__:";
-
-export function laTinhCu(value: string | null | undefined): value is string {
-  return !!value && value.startsWith(TIEN_TO_TINH_CU);
-}
-
-/**
- * Option cho ô Tỉnh/Thành + giá trị đang chọn lúc mở form.
- *  · tên khớp danh mục (y hệt hoặc bỏ dấu) ⇒ chọn đúng mã tỉnh, KHÔNG thêm option;
- *  · tên không khớp ⇒ thêm option tạm mang đúng tên đó lên đầu và chọn nó;
- *  · trống ⇒ không chọn gì.
- */
-export function luaChonTinh(
+/** Mã tỉnh MỚI ứng với tên tỉnh đang lưu (đã dịch nếu là tên cũ), hoặc null. */
+export function tinhBanDau(
   provinces: readonly ComboboxOption[],
   cityDangLuu: string | null | undefined,
-): { options: ComboboxOption[]; chon: string | null } {
-  const ten = (cityDangLuu ?? "").trim();
-  if (!ten) return { options: [...provinces], chon: null };
-  const ma = provinceIdByName(
+): string | null {
+  return maTinhMoi(
     provinces.map((p) => ({ id: p.value, name: p.label })),
-    ten,
+    cityDangLuu,
   );
-  if (ma) return { options: [...provinces], chon: ma };
-  const tam: ComboboxOption = { value: TIEN_TO_TINH_CU + ten, label: `${ten} (dữ liệu cũ)` };
-  return { options: [tam, ...provinces], chon: tam.value };
 }
 
-/** Tên tỉnh THẬT cần lưu ứng với một value của ô tỉnh. */
+/** Tên tỉnh cần lưu ứng với một mã trong danh mục. */
 export function tenTinhTuGiaTri(
   provinces: readonly ComboboxOption[],
   value: string | null,
 ): string {
   if (!value) return "";
-  if (laTinhCu(value)) return value.slice(TIEN_TO_TINH_CU.length);
   return provinces.find((p) => p.value === value)?.label ?? "";
 }
 
 /**
- * Option cho ô Phường/Xã: danh mục của tỉnh đang chọn, CỘNG tên phường đang lưu nếu nó
- * không có trong danh mục (phường đã sáp nhập, chữ gõ tay thời 3 cấp). Value = CHÍNH TÊN
- * (xem `toNameOptions`) nên option tạm lưu xuống đúng chuỗi cũ.
+ * Tên phường/xã MỚI ứng với tên đang lưu, trong danh mục phường của tỉnh đang chọn (value =
+ * CHÍNH TÊN, xem `toNameOptions`). Không có trong danh mục mới ⇒ "" (ô trống, chọn lại).
  */
-export function luaChonPhuong(
+export function phuongBanDau(
   wards: readonly ComboboxOption[],
-  wardDangChon: string | null | undefined,
-): ComboboxOption[] {
-  const ten = (wardDangChon ?? "").trim();
-  if (!ten || wards.some((w) => w.value === ten)) return [...wards];
-  return [{ value: ten, label: `${ten} (dữ liệu cũ)` }, ...wards];
+  wardDangLuu: string | null | undefined,
+): string {
+  return (
+    tenPhuongMoi(
+      wards.map((w) => ({ id: w.value, name: w.value })),
+      wardDangLuu,
+    ) ?? ""
+  );
+}
+
+/** Địa chỉ đang lưu có phần nào KHÔNG còn trong danh mục mới (để hiện dòng nhắc). */
+export function diaChiCanChonLai(input: {
+  cityDangLuu: string | null | undefined;
+  wardDangLuu: string | null | undefined;
+  maTinh: string | null;
+  phuong: string;
+}): { tinh: boolean; phuong: boolean } {
+  const coTinh = !!(input.cityDangLuu ?? "").trim();
+  const coPhuong = !!(input.wardDangLuu ?? "").trim();
+  return {
+    tinh: coTinh && input.maTinh === null,
+    phuong: coPhuong && input.phuong === "",
+  };
 }

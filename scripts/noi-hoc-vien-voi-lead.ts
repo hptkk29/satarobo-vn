@@ -56,9 +56,18 @@ import {
 } from "../lib/students/dien-tu-lead";
 import { writeAudit } from "../lib/audit/audit-log";
 import { hocVienDaAnDanhTheoNhatKy, tenLaDaAnDanh } from "../lib/students/da-an-danh";
+import { canonicalPhone, expandPhoneVariants, phoneKey } from "../lib/phone";
+import { isSameChildName } from "../lib/lead/intake/normalize";
 
 const db = scriptDb();
 const GHI = process.argv.includes("--ghi");
+/**
+ * 26/09/2026 — ĐO trên một DB CHƯA có migration `20260925120000_student_lead_nguon_va_thong_tin_ph`
+ * (prod, trước lượt test → main): không đọc cột mới nào, coi MỌI học viên là chưa nối, và in
+ * thêm phép đo chuỗi ⑤ "cùng SĐT + đúng tên" (chưa áp dụng). Chỉ đo — đi với `--ghi` là dừng.
+ * Chạy bằng nút "Ngưỡng thanh toán · PROD · ĐỌC", lựa chọn `noi-hoc-vien-lead`.
+ */
+const TRUOC_MIGRATION = process.argv.includes("--truoc-migration");
 /** Số HV mỗi câu đọc bằng chứng (danh sách IN). */
 const LO_DOC = 500;
 /** Số HV mỗi transaction ghi — nhỏ để không chạm trần thời gian qua WAN. */
@@ -98,6 +107,26 @@ const HV_SELECT = {
   ward: true,
   address: true,
   district: true,
+  // Chỉ để ĐO chuỗi ⑤ (--truoc-migration) — không in ra.
+  parentPhone: true,
+} as const;
+
+/** `HV_SELECT` bỏ 3 cột mà migration 25/09 mới thêm — đọc được trên DB chưa migrate. */
+const HV_SELECT_CU = {
+  id: true,
+  name: true,
+  studentCode: true,
+  centerId: true,
+  dateOfBirth: true,
+  gender: true,
+  school: true,
+  currentGrade: true,
+  parentEmail: true,
+  city: true,
+  ward: true,
+  address: true,
+  district: true,
+  parentPhone: true,
 } as const;
 
 /** Đọc `newValues` của dòng AuditLog chốt lead: v2 ghi `studentIds[]`, v1 ghi `studentId`. */
@@ -110,6 +139,58 @@ function hocVienTrongNhatKy(newValues: unknown): string[] {
   }
   if (typeof v.studentId === "string") out.push(v.studentId);
   return out;
+}
+
+/**
+ * ĐO (chưa áp dụng) chuỗi ⑤ "cùng SĐT phụ huynh + đúng tên con" cho nhóm KHÔNG có bằng chứng.
+ * Luật nối 25/09 (chủ dự án chốt "đừng nới") KHÔNG gồm chuỗi này; con số dưới là để chủ dự án
+ * quyết có nới hay không — trả lời câu "lên prod có phải gắn tay từng em không". Một câu đọc lead
+ * cho mỗi lô SĐT (không N+1). Chỉ in SỐ, không tên / SĐT.
+ */
+async function doChuoiSdtTen(ds: { name: string; parentPhone: string | null }[]): Promise<void> {
+  const kq = { noiDuoc: 0, tenKhongKhop: 0, phieuChuaCoBe: 0, nhieuPhieu: 0, khongPhieu: 0, khongSdt: 0 };
+  const theoSdt = new Map<string, { childName: string | null; children: { fullName: string }[] }[]>();
+  const bienThe = expandPhoneVariants(ds.map((s) => s.parentPhone));
+  for (const lo of chiaLo(bienThe, LO_DOC)) {
+    const leads = await db.lead.findMany({
+      where: { deletedAt: null, phone: { in: lo } },
+      select: { phone: true, childName: true, children: { select: { fullName: true } } },
+    });
+    for (const l of leads) {
+      const k = phoneKey(l.phone);
+      const a = theoSdt.get(k) ?? [];
+      a.push({ childName: l.childName, children: l.children });
+      theoSdt.set(k, a);
+    }
+  }
+  for (const s of ds) {
+    const k = canonicalPhone(s.parentPhone);
+    if (!k) {
+      kq.khongSdt++;
+      continue;
+    }
+    const phieu = theoSdt.get(k) ?? [];
+    if (phieu.length === 0) kq.khongPhieu++;
+    else if (phieu.length > 1) kq.nhieuPhieu++;
+    else {
+      const p = phieu[0]!;
+      const khop =
+        p.children.filter((c) => isSameChildName(c.fullName, s.name)).length +
+        (p.children.length === 0 && isSameChildName(p.childName, s.name) ? 1 : 0);
+      if (khop === 1) kq.noiDuoc++;
+      else if (p.children.length === 0 && !p.childName) kq.phieuChuaCoBe++;
+      else kq.tenKhongKhop++;
+    }
+  }
+  console.log('=== ĐO THÊM (CHƯA áp dụng) — chuỗi ⑤ "cùng SĐT phụ huynh + đúng tên con" ===');
+  console.log(`Trên ${ds.length} học viên KHÔNG có bằng chứng ①–④:`);
+  console.log(`  nối được (đúng 1 phiếu sống, đúng 1 bé trùng tên): ${kq.noiDuoc}`);
+  console.log(`  1 phiếu nhưng không bé nào trùng tên            : ${kq.tenKhongKhop}`);
+  console.log(`  1 phiếu chưa khai bé nào                         : ${kq.phieuChuaCoBe}`);
+  console.log(`  ≥2 phiếu cùng SĐT (mập mờ — không bao giờ tự nối): ${kq.nhieuPhieu}`);
+  console.log(`  không phiếu nào cùng SĐT                         : ${kq.khongPhieu}`);
+  console.log(`  SĐT phụ huynh trống / không hợp lệ               : ${kq.khongSdt}`);
+  console.log("");
 }
 
 type KeHoach = {
@@ -127,14 +208,30 @@ async function main() {
   const quyen = await kiemQuyen(db);
   console.log(`Đích: ${currentDbHost()}`);
   inQuyen(quyen, GHI);
+  if (TRUOC_MIGRATION && GHI) {
+    console.log("::error::`--truoc-migration` chỉ để ĐO — không đi cùng `--ghi`. KHÔNG ghi gì.");
+    process.exitCode = 1;
+    return;
+  }
   console.log(GHI ? "CHẾ ĐỘ GHI (--ghi)\n" : "DRY-RUN — chưa ghi gì.\n");
+  if (TRUOC_MIGRATION) {
+    console.log("CHẾ ĐỘ ĐO TRƯỚC MIGRATION — DB chưa có cột Student.leadId: coi MỌI học viên là chưa nối.\n");
+  }
 
   // ── 1. Tập học viên cần xét ─────────────────────────────────────────────────────────
-  const hocVienTatCa = await db.student.findMany({
-    where: { leadId: null, deletedAt: null },
-    select: HV_SELECT,
-    orderBy: { createdAt: "asc" },
-  });
+  const hocVienTatCa = TRUOC_MIGRATION
+    ? (
+        await db.student.findMany({
+          where: { deletedAt: null },
+          select: HV_SELECT_CU,
+          orderBy: { createdAt: "asc" },
+        })
+      ).map((s) => ({ ...s, parentGender: null, parentDob: null, parentFacebookUrl: null }))
+    : await db.student.findMany({
+        where: { leadId: null, deletedAt: null },
+        select: HV_SELECT,
+        orderBy: { createdAt: "asc" },
+      });
   console.log(`Học viên chưa nối lead (chưa xoá): ${hocVienTatCa.length}`);
 
   // ── 1b. LOẠI hồ sơ đã ẩn danh theo NĐ13 ─────────────────────────────────────────────
@@ -262,6 +359,7 @@ async function main() {
   const keHoach: KeHoach[] = [];
   const mapHo: { studentId: string; studentCode: string | null; leadIds: string[] }[] = [];
   let khongBangChung = 0;
+  const dsKhongBangChung: typeof hocVien = [];
   for (const s of hocVien) {
     const bc: BangChungNoiLead = {
       tuGhiDanh: (ghiDanhTheoHv.get(s.id) ?? []).flatMap((g) => {
@@ -277,6 +375,7 @@ async function main() {
     const kq = quyetDinhNoiLead(bc);
     if (kq === null) {
       khongBangChung++;
+      dsKhongBangChung.push(s);
       continue;
     }
     if ("mapHo" in kq) {
@@ -353,6 +452,16 @@ async function main() {
     }
   }
   console.log("");
+
+  if (TRUOC_MIGRATION) await doChuoiSdtTen(dsKhongBangChung);
+
+  if (TRUOC_MIGRATION) {
+    console.log(
+      "ĐO TRƯỚC MIGRATION — không ghi được ở chế độ này. Sau lượt test → main (migration đã chạy), " +
+        "chạy DRY-RUN thường để có số duyệt thật rồi mới `--ghi --expect=<N>`.",
+    );
+    return;
+  }
 
   if (!GHI) {
     console.log(

@@ -45,6 +45,12 @@ export async function syncStudentNameToCrm(input: {
   newName: string;
   /** SĐT phụ huynh trên hồ sơ HV — chìa khoá cho tầng suy-từ-gia-đình. */
   parentPhone?: string | null;
+  /**
+   * 26/09/2026 — liên kết lead nguồn trên chính hồ sơ (`Student.leadChildId`). BẮT BUỘC truyền
+   * (kể cả `null`): thiếu nó thì HV nối lead bằng nút "Gắn lead" / script nối HV cũ — không có
+   * vết ghi danh — đổi tên mà đứa con trong phiếu vẫn giữ tên cũ.
+   */
+  leadChildId: string | null;
   actor: SyncActor;
 }): Promise<{ leadIds: string[] }> {
   const { tx, studentId } = input;
@@ -58,9 +64,11 @@ export async function syncStudentNameToCrm(input: {
     where: { studentId, leadChildId: { not: null } },
     select: { leadChildId: true },
   });
-  const linkedIds = trace
-    .map((t) => t.leadChildId)
-    .filter((x): x is string => Boolean(x));
+  const linkedIds = [
+    ...trace.map((t) => t.leadChildId),
+    // Tầng 1b — liên kết trực tiếp trên hồ sơ (26/09): cùng độ chắc với vết chuyển đổi.
+    input.leadChildId,
+  ].filter((x): x is string => Boolean(x));
 
   // Tầng 2 — cùng SĐT phụ huynh + đúng tên cũ (lead sống; lead đã xoá mềm để yên).
   const phones = phoneVariants(input.parentPhone);
@@ -156,16 +164,24 @@ export async function syncLeadChildNameToStudents(input: {
     return { studentIds: [], leadIds: [] };
   }
 
-  const trace = await input.tx.enrollment.findMany({
-    where: { leadChildId: input.leadChildId },
-    select: { studentId: true },
-  });
-  const ids = [...new Set(trace.map((t) => t.studentId))];
+  const [trace, noiTrucTiep] = await Promise.all([
+    input.tx.enrollment.findMany({
+      where: { leadChildId: input.leadChildId },
+      select: { studentId: true },
+    }),
+    // 26/09/2026 — HV nối đứa con này qua `Student.leadChildId` (nút "Gắn lead", script nối
+    // HV cũ, convert v2) — nhiều em KHÔNG có vết ghi danh mang `leadChildId`.
+    input.tx.student.findMany({
+      where: { leadChildId: input.leadChildId },
+      select: { id: true },
+    }),
+  ]);
+  const ids = [...new Set([...trace.map((t) => t.studentId), ...noiTrucTiep.map((s) => s.id)])];
   const students =
     ids.length > 0
       ? await input.tx.student.findMany({
           where: { id: { in: ids }, deletedAt: null },
-          select: { id: true, name: true, parentPhone: true },
+          select: { id: true, name: true, parentPhone: true, leadChildId: true },
         })
       : [];
 
@@ -194,6 +210,7 @@ export async function syncLeadChildNameToStudents(input: {
       oldName: s.name,
       newName,
       parentPhone: s.parentPhone,
+      leadChildId: s.leadChildId,
       actor: input.actor,
     });
     res.leadIds.forEach((l) => leadIds.add(l));

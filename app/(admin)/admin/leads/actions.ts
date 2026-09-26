@@ -60,6 +60,14 @@ import {
   unmarkChildLostSchema,
 } from '@/lib/lead/lost-status'
 import { syncLeadChildNameToStudents } from '@/lib/students/sync-name'
+import { dongBoTuCon, dongBoTuLead } from '@/lib/students/dong-bo-lead-db'
+import {
+  chiOConLead,
+  chiOPhLead,
+  conCuaLead,
+  phCuaLead,
+  type PhLead,
+} from '@/lib/students/dong-bo-lead'
 import { checkCampaignNameForLead } from '@/lib/ads/campaign-code'
 import { loadKnownCenterCodes } from '@/lib/ads/center-codes'
 import {
@@ -1199,6 +1207,7 @@ export async function updateLeadFields(
   // ngược lại: 3 ô định danh (Tên PH · SĐT PH · Tên HS) sửa được NHƯNG "bắt buộc
   // ghi audit log" — bắt buộc thì vết hỏng phải kéo cả lượt sửa đổ theo.
   // `updateLeadChild` cùng file đã làm đúng vậy từ 08/08; đây là chỗ bị bỏ sót.
+  let hocVienDongBo: string[] = []
   try {
     await db.$transaction(async (txRaw) => {
       const tx = txRaw as unknown as Prisma.TransactionClient
@@ -1220,6 +1229,18 @@ export async function updateLeadFields(
           khoaLeadMoi: updateData.courseId ?? null,
         })
       }
+      // 26/09/2026 — ô phụ huynh / địa chỉ của phiếu đổi ⇒ dội sang MỌI học viên đang nối
+      // phiếu này (chủ dự án: "đổi 1 nơi thì các nơi khác phải đổi hết"). Cùng giao dịch:
+      // phiếu đổi mà hồ sơ học viên giữ số cũ là đúng kiểu lệch bị cấm. Luật + bảng ô chung:
+      // `lib/students/dong-bo-lead.ts`. Client ở đây là `db` trần ⇒ thấy cả HV ở cơ sở khác.
+      const dongBo = await dongBoTuLead({
+        tx,
+        leadId,
+        truoc: phCuaLead(before as PhLead),
+        sau: chiOPhLead(updateData as Record<string, unknown>),
+        actor: { id: actorId, name: actorName },
+      })
+      hocVienDongBo = dongBo.studentIds
       if (changedFields.length > 0) {
         await logLeadAudit({
           leadId,
@@ -1242,6 +1263,10 @@ export async function updateLeadFields(
 
   revalidatePath(`/leads/${leadId}`)
   revalidatePath('/leads')
+  if (hocVienDongBo.length > 0) {
+    revalidatePath('/students')
+    for (const sid of hocVienDongBo) revalidatePath(`/students/${sid}/edit`)
+  }
   return { ok: true }
 }
 
@@ -1806,6 +1831,17 @@ export async function updateLeadChild(
       })
       syncedStudentIds = res.studentIds
     }
+    // 26/09/2026 — ngày sinh / giới tính / trường / lớp của bé đổi ⇒ dội sang học viên đang
+    // nối đúng bé này (chủ dự án: "đổi 1 nơi thì các nơi khác phải đổi hết"). Tên đi đường
+    // riêng ngay trên. Luật dịch "Lớp 4" ↔ 4, "Nữ" ↔ FEMALE: `lib/students/dong-bo-lead.ts`.
+    const dongBoCon = await dongBoTuCon({
+      tx,
+      leadChildId: childId,
+      truoc: conCuaLead(child),
+      sau: chiOConLead(data as Record<string, unknown>),
+      actor: { id: actorId, name: actorName },
+    })
+    syncedStudentIds = [...new Set([...syncedStudentIds, ...dongBoCon.studentIds])]
 
     // Dòng lịch sử — chỉ ghi khi CÓ ô thật sự đổi. Form gửi lên toàn bộ ô mỗi lần lưu,
     // nên bấm Lưu suông cũng đi vào đây; ghi vô điều kiện là đẻ dòng "đã sửa" giả.

@@ -90,6 +90,113 @@ export function provinceIdByName(
   return list.find((p) => chuanHoaTen(p.name) === khongDau)?.id ?? null;
 }
 
+// ─── Tên CŨ → danh mục MỚI (26/09/2026) ─────────────────────────────────────────────────
+//
+// Chủ dự án 26/09: địa chỉ "phải lấy danh sách tỉnh/tp, phường/xã MỚI, không lấy thông tin cũ
+// nữa". Hồ sơ cũ lưu "Đà Nẵng" / "TP. Đà Nẵng" / "Quảng Nam" trong khi danh mục ghi
+// "Tp Đà Nẵng" — `provinceIdByName` (khớp y hệt / bỏ dấu) trả null cho cả ba, nên ô tỉnh hiện
+// "(dữ liệu cũ)". Hai hàm dưới dịch sang danh mục mới bằng luật XÁC ĐỊNH, không đoán mờ:
+//   · bỏ tiền tố hành chính ("TP", "Thành phố", "Tỉnh") ở cả hai phía rồi so;
+//   · tỉnh đã SÁP NHẬP (Nghị quyết 202/2025/QH15, hiệu lực 01/07/2025) ⇒ tỉnh nhận sáp nhập —
+//     mỗi tỉnh cũ thuộc đúng MỘT tỉnh mới nên phép dịch này không có ca mập mờ.
+// Phường/xã thì KHÔNG có phép dịch tất định (một phường cũ có thể tách vào nhiều phường mới) ⇒
+// chỉ nhận khi tên còn nguyên trong danh mục mới của đúng tỉnh đó, không thì trả null.
+
+/** Khoá so tỉnh: bỏ dấu, bỏ dấu câu, bỏ tiền tố hành chính. */
+function khoaTinh(s: string): string {
+  return chuanHoaTen(s)
+    .replace(/[^a-z0-9 ]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^(?:thanh pho|tinh|tp|t p)\s+/, "")
+    .trim();
+}
+
+/** Khoá so phường/xã: bỏ dấu, bỏ dấu câu, bỏ tiền tố cấp xã. */
+function khoaPhuong(s: string): string {
+  return chuanHoaTen(s)
+    .replace(/[^a-z0-9 ]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^(?:phuong|xa|thi tran|dac khu|p|x|tt)\s+/, "")
+    .trim();
+}
+
+/** Tỉnh cũ (khoá đã chuẩn hoá) → tỉnh mới nhận sáp nhập (khoá đã chuẩn hoá). */
+const TINH_SAP_NHAP: Readonly<Record<string, string>> = {
+  "ha giang": "tuyen quang",
+  "yen bai": "lao cai",
+  "bac kan": "thai nguyen",
+  "bac can": "thai nguyen",
+  "vinh phuc": "phu tho",
+  "hoa binh": "phu tho",
+  "bac giang": "bac ninh",
+  "thai binh": "hung yen",
+  "hai duong": "hai phong",
+  "ha nam": "ninh binh",
+  "nam dinh": "ninh binh",
+  "quang binh": "quang tri",
+  "thua thien hue": "hue",
+  "quang nam": "da nang",
+  "kon tum": "quang ngai",
+  "binh dinh": "gia lai",
+  "ninh thuan": "khanh hoa",
+  "dak nong": "lam dong",
+  "dac nong": "lam dong",
+  "binh thuan": "lam dong",
+  "phu yen": "dak lak",
+  "dac lac": "dak lak",
+  "binh duong": "ho chi minh",
+  "ba ria vung tau": "ho chi minh",
+  "vung tau": "ho chi minh",
+  hcm: "ho chi minh",
+  tphcm: "ho chi minh",
+  "sai gon": "ho chi minh",
+  "binh phuoc": "dong nai",
+  "long an": "tay ninh",
+  "soc trang": "can tho",
+  "hau giang": "can tho",
+  "ben tre": "vinh long",
+  "tra vinh": "vinh long",
+  "tien giang": "dong thap",
+  "bac lieu": "ca mau",
+  "kien giang": "an giang",
+};
+
+/**
+ * Tên tỉnh đang lưu (có thể là tên CŨ) → mã tỉnh trong danh mục MỚI, hoặc null.
+ * Thứ tự: khớp y hệt/bỏ dấu (`provinceIdByName`) → bỏ tiền tố → tỉnh đã sáp nhập.
+ */
+export function maTinhMoi(
+  list: readonly CatalogItem[],
+  name: string | null | undefined,
+): string | null {
+  const thang = provinceIdByName(list, name);
+  if (thang) return thang;
+  const k = khoaTinh(name ?? "");
+  if (!k) return null;
+  const dich = TINH_SAP_NHAP[k] ?? k;
+  return list.find((p) => khoaTinh(p.name) === dich)?.id ?? null;
+}
+
+/**
+ * Tên phường/xã đang lưu → TÊN trong danh mục MỚI của tỉnh đó, hoặc null. Chỉ nhận khi khớp
+ * đúng MỘT mục sau khi bỏ tiền tố ("P. Hải Châu" → "Phường Hải Châu"); không bao giờ đoán.
+ */
+export function tenPhuongMoi(
+  wards: readonly CatalogItem[],
+  name: string | null | undefined,
+): string | null {
+  const ten = (name ?? "").trim();
+  if (!ten) return null;
+  const yHet = wards.find((w) => w.name === ten);
+  if (yHet) return yHet.name;
+  const k = khoaPhuong(ten);
+  if (!k) return null;
+  const khop = wards.filter((w) => khoaPhuong(w.name) === k);
+  return khop.length === 1 ? khop[0]!.name : null;
+}
+
 /**
  * Ghép 3 mẩu địa chỉ thành một dòng đọc được (hẹp → rộng).
  *

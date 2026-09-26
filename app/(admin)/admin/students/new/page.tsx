@@ -20,10 +20,12 @@ export default async function NewStudentPage() {
     redirect("/dashboard?error=unauthorized");
   }
 
-  const [canViewParentCccd, actor] = await Promise.all([
+  const [canViewParentCccd, actor, coTheDoiMa] = await Promise.all([
     // #15 — chỉ kế toán/admin (payments:view-pii) mới thấy + nhập CCCD PH (PII).
     checkPermission("payments:view-pii"),
     resolveActor(session.user.id),
+    // 26/09 — chỉ Quản trị tối cao đặt tay mã học viên; vai khác để hệ thống tự sinh.
+    checkPermission("students:change-code"),
   ]);
   // Hội sở KHÔNG nhận học viên (chốt 04/08) — picker chỉ liệt kê cơ sở dạy học.
   const orgUnits = await getSelectableOrgUnits(actor, { types: ["CENTER"] });
@@ -52,6 +54,7 @@ export default async function NewStudentPage() {
         provinces={toAddressOptions(provinces)}
         initialWards={[]}
         homNay={vnYmd(new Date())}
+        coTheDoiMa={coTheDoiMa}
       />
     </div>
   );
