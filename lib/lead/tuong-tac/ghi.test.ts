@@ -228,6 +228,8 @@ const DIEM_CAM: { tep: string; viec: string[] }[] = [
     viec: ["don.tao", "don.doi-trang-thai", "don.sua-ghi-chu"],
   },
   { tep: "app/(admin)/admin/leads/[id]/convert/actions.ts", viec: ["chuyen-doi"] },
+  // 26/09/2026 — ô "Khoá học" của bé ở màn lớp trial ghi khoá quan tâm qua đây.
+  { tep: "lib/lead/khoa-quan-tam-con.ts", viec: ["con.sua"] },
   { tep: "app/(admin)/admin/leads/bulk-convert/_actions.ts", viec: ["chuyen-doi"] },
   {
     tep: "app/(admin)/admin/enrollments/_actions.ts",

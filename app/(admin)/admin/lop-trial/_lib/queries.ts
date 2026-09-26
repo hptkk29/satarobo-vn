@@ -31,10 +31,12 @@ import {
   quyenXoaCase,
 } from "@/lib/trial/quyen-case";
 import { laLopTheoKhung, thuocCase } from "@/lib/trial/nghia-null";
+import { khoaHieuLucCuaBe } from "@/lib/lead/khoa-quan-tam";
 import type {
   BookingRow,
   ClassRow,
   EnrollmentRow,
+  KhoaHocOption,
   Option,
   RoomOption,
   SessionRow,
@@ -212,6 +214,8 @@ export type ChiTietLop = {
   sessionCount: number;
   configName: string | null;
   teacherId: string | null;
+  /** Khoá cho ô chọn khoá của bé (khoá đang mở, cộng khoá bé đang mang dù đã ngừng). */
+  khoaHocOptions: KhoaHocOption[];
   sessions: SessionRow[];
   enrollments: EnrollmentRow[];
 };
@@ -450,6 +454,8 @@ export async function layChiTietLop(
             select: {
               id: true,
               fullName: true,
+              // 26/09 — khoá của bé trong lớp theo khung (`lib/trial/khoa-truoc-case.ts`).
+              interestedCourseId: true,
               lead: {
                 select: {
                   id: true,
@@ -462,6 +468,8 @@ export async function layChiTietLop(
                   createdById: true,
                   isSharedWithTeam: true,
                   assignedTo: { select: { name: true } },
+                  // 26/09 — khoá quan tâm cấp lead: nguồn lùi của `khoaHieuLucCuaBe`.
+                  courseId: true,
                 },
               },
             },
@@ -542,6 +550,27 @@ export async function layChiTietLop(
 
   const lopTheoKhung = laLopTheoKhung(cls);
 
+  // Khoá học: danh sách cho ô chọn + tên để hiển thị. Gồm khoá đang MỞ và mọi khoá mà
+  // bé/lớp đang mang (kể cả đã ngừng) — thiếu vế sau thì bé mang khoá đã ngừng hiện ô chọn
+  // TRỐNG, trông như "chưa chọn" trong khi dữ liệu có. `Course` ∉ SCOPED_MODELS nên `sdb`
+  // chỉ là đường đi qua.
+  const idKhoaDangMang = [
+    ...new Set(
+      [
+        cls.courseId,
+        ...cls.enrollments.map((e) => (e.leadChild ? khoaHieuLucCuaBe(e.leadChild) : null)),
+      ].filter(
+        (x): x is string => !!x,
+      ),
+    ),
+  ];
+  const cacKhoa = await sdb.course.findMany({
+    where: { OR: [{ isActive: true }, { id: { in: idKhoaDangMang } }] },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
+  });
+  const tenKhoa = new Map(cacKhoa.map((k) => [k.id, k.name]));
+
   return {
     id: cls.id,
     code: cls.code,
@@ -556,6 +585,7 @@ export async function layChiTietLop(
     sessionCount: cls.sessionCount,
     configName: cls.config?.name ?? null,
     teacherId: cls.teacherId,
+    khoaHocOptions: cacKhoa,
     sessions: cls.sessions.map((s) => ({
       id: s.id,
       seq: s.seq,
@@ -645,6 +675,19 @@ export async function layChiTietLop(
         laQuanLy: nguoiXem.laQuanLyLead,
         tenSale: e.leadChild?.lead?.assignedTo?.name ?? null,
       }),
+      ...(() => {
+        // Khoá HIỆU LỰC (khoá của bé, trống thì khoá của lead) — cùng định nghĩa với site
+        // giáo viên và với cổng xếp case, nên ba nơi không thể lệch nhau.
+        const id = e.leadChild ? khoaHieuLucCuaBe(e.leadChild) : null;
+        return {
+          khoaHocId: id,
+          khoaTuLead: !!id && !e.leadChild?.interestedCourseId,
+          khoaHocTen:
+            (id ? tenKhoa.get(id) : null) ??
+            (cls.courseId ? tenKhoa.get(cls.courseId) : null) ??
+            null,
+        };
+      })(),
       };
     }),
   };

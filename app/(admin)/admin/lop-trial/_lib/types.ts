@@ -168,7 +168,24 @@ export type EnrollmentRow = {
   quyenGo: KetQuyenRow;
   /** Server đã quy sẵn bằng `quyenChuyenCase` — cùng luật với `quyenGo`, câu chữ nói về CHUYỂN. */
   quyenChuyen: KetQuyenRow;
+
+  // ─── 26/09/2026 — khoá học của bé (`lib/trial/khoa-truoc-case.ts`) ─────────────
+  /**
+   * Khoá HIỆU LỰC của bé (`khoaHieuLucCuaBe`: khoá của bé, trống thì khoá quan tâm của
+   * lead) — giá trị của ô chọn khoá, và là thứ giáo viên thấy.
+   */
+  khoaHocId: string | null;
+  /** `khoaHocId` đang lấy từ khoá quan tâm của LEAD (bé chưa có khoá riêng). */
+  khoaTuLead: boolean;
+  /**
+   * Tên khoá để HIỂN THỊ: khoá của bé; bé chưa có thì khoá của LỚP (chỉ lớp cũ còn cột
+   * này). `null` = không biết khoá gì — màn in "Chưa chọn khoá".
+   */
+  khoaHocTen: string | null;
 };
+
+/** Một lựa chọn trong ô "Khoá học" của bé. */
+export type KhoaHocOption = { id: string; name: string };
 
 /** Ứng viên trả về từ ô tìm học viên. */
 export type Candidate = {

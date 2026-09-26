@@ -31,6 +31,7 @@ import {
   type TrialRowStatus,
 } from "@/lib/lms/trial-row-status";
 import type { Actor } from "@/lib/auth/actor";
+import { khoaHieuLucCuaBe } from "@/lib/lead/khoa-quan-tam";
 
 /** Buổi Trial GV phụ trách trong [from, to) — bỏ buổi đã hủy. */
 export type TeacherTrialSessionRow = {
@@ -213,7 +214,15 @@ export async function getTeacherTrialRoster(
           status: true,
           trialClass: { select: { name: true } },
           leadChild: {
-            select: { fullName: true, dob: true, ageYears: true, interestedCourseId: true },
+            select: {
+            fullName: true,
+            dob: true,
+            ageYears: true,
+            // 26/09 — khoá hiệu lực = khoá của bé, trống thì khoá của lead
+            // (`khoaHieuLucCuaBe`). Thiếu `lead.courseId` ở đây là lỗi biên dịch.
+            interestedCourseId: true,
+            lead: { select: { courseId: true } },
+          },
           },
         },
         orderBy: { leadChild: { fullName: "asc" } },
@@ -257,7 +266,15 @@ export async function getTeacherTrialRoster(
       trialClassId: true,
       trialClass: { select: { name: true } },
       leadChild: {
-        select: { fullName: true, dob: true, ageYears: true, interestedCourseId: true },
+        select: {
+            fullName: true,
+            dob: true,
+            ageYears: true,
+            // 26/09 — khoá hiệu lực = khoá của bé, trống thì khoá của lead
+            // (`khoaHieuLucCuaBe`). Thiếu `lead.courseId` ở đây là lỗi biên dịch.
+            interestedCourseId: true,
+            lead: { select: { courseId: true } },
+          },
       },
     },
     orderBy: { leadChild: { fullName: "asc" } },
@@ -272,7 +289,7 @@ export async function getTeacherTrialRoster(
   const courseIds = [
     ...new Set(
       allEnrollments
-        .map((e) => e.leadChild.interestedCourseId)
+        .map((e) => khoaHieuLucCuaBe(e.leadChild))
         .filter((id): id is string => Boolean(id)),
     ),
   ];
@@ -306,9 +323,7 @@ export async function getTeacherTrialRoster(
     birthYear:
       e.leadChild.dob?.getUTCFullYear() ??
       (e.leadChild.ageYears != null ? nowYear - e.leadChild.ageYears : null),
-    courseName: e.leadChild.interestedCourseId
-      ? (courseName.get(e.leadChild.interestedCourseId) ?? null)
-      : null,
+    courseName: courseName.get(khoaHieuLucCuaBe(e.leadChild) ?? "") ?? null,
     status: e.status,
     evaluated: evaluatedPairs.has(evalPairKey(e.id, sessionId)),
   });
@@ -488,7 +503,9 @@ export async function getTeacherTrialRubricContext(
       id: true,
       scheduledSessionId: true,
       gvPhanCongId: true, // GĐ3 — nhánh sở hữu chính, xem `owned` bên dưới
-      leadChild: { select: { fullName: true, interestedCourseId: true } },
+      leadChild: {
+        select: { fullName: true, interestedCourseId: true, lead: { select: { courseId: true } } },
+      },
       trialClass: {
         select: {
           name: true,
@@ -558,10 +575,11 @@ export async function getTeacherTrialRubricContext(
     (targetHopLe && target?.teacherId === userId);
   if (!owned) return null;
 
-  const courseName = enr.leadChild.interestedCourseId
+  const khoaId = khoaHieuLucCuaBe(enr.leadChild);
+  const courseName = khoaId
     ? (
         await db.course.findUnique({
-          where: { id: enr.leadChild.interestedCourseId },
+          where: { id: khoaId },
           select: { name: true },
         })
       )?.name ?? null
@@ -768,7 +786,8 @@ export async function getTeacherTrialTable(
         ageYears: true,
         interestedCourseId: true,
         // ĐẢO câu 46 — CHỈ tên phụ huynh, không SĐT/email (xem ghi chú đầu khối).
-        lead: { select: { parentName: true } },
+        // `courseId`: khoá quan tâm cấp lead — nguồn lùi của `khoaHieuLucCuaBe`.
+        lead: { select: { parentName: true, courseId: true } },
       },
     },
   } as const;
@@ -815,7 +834,7 @@ export async function getTeacherTrialTable(
 
   const courseIds = [
     ...new Set(
-      all.map((e) => e.leadChild.interestedCourseId).filter((id): id is string => Boolean(id)),
+      all.map((e) => khoaHieuLucCuaBe(e.leadChild)).filter((id): id is string => Boolean(id)),
     ),
   ];
   const [courses, evals, histories] = await Promise.all([
@@ -877,9 +896,7 @@ export async function getTeacherTrialTable(
         e.leadChild.dob?.getUTCFullYear() ??
         (e.leadChild.ageYears != null ? nowYear - e.leadChild.ageYears : null),
       parentName: e.leadChild.lead?.parentName?.trim() || null,
-      courseName: e.leadChild.interestedCourseId
-        ? (courseName.get(e.leadChild.interestedCourseId) ?? null)
-        : null,
+      courseName: courseName.get(khoaHieuLucCuaBe(e.leadChild) ?? "") ?? null,
       trialClassName: ses.trialClass.name,
       date: ses.date,
       startTime: ses.startTime,

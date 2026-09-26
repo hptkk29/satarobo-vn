@@ -666,6 +666,22 @@ prisma/
     `clear`) + khẳng định không còn bản chép tay; vá một hàm quên hàm kia là hở đúng đường
     **GỠ**, mà gỡ mức riêng của cơ sở khác cũng là sửa cấu hình của họ, chỉ khác chiều.
 
+- ⚠️ **KHOÁ HỌC CỦA BÉ TRIAL = KHOÁ QUAN TÂM, ĐỒNG BỘ HAI CHIỀU [chốt 26/09/2026].**
+  Lớp trial MỚI (theo khung giờ) không có khoá của lớp ⇒ khoá bé học thử = khoá quan tâm.
+  Chủ dự án: *"1 cái đổi thì đổi hết cùng nhau"*.
+  · **Đọc** "bé học khoá gì" CHỈ qua `khoaHieuLucCuaBe()` (`lib/lead/khoa-quan-tam.ts`) =
+    `LeadChild.interestedCourseId`, trống thì `Lead.courseId`. Site GV (`lib/lms/teacher-schedule.ts`),
+    màn trial phía Sale (`lib/trial/sale-roster.ts`) và màn lớp trial đều dùng nó. Đọc thẳng cột là
+    đỏ `[KHOA-2C-W2]`.
+  · **Ghi** — bé đổi khoá (ô "Khoá học" ở lớp trial, hoặc khối Con trên màn lead) ⇒ `Lead.courseId`
+    = khoá đó (`khoaConDaDoi`); lead đổi khoá ⇒ bé chưa có khoá + bé đang mang khoá CŨ của lead đổi
+    theo, bé có khoá riêng khác GIỮ (`khoaLeadDaDoi`). Cả hai ở `lib/lead/khoa-quan-tam-con.ts`, cùng
+    giao dịch với phép ghi gốc. Chỉ dội khi GIÁ TRỊ ĐỔI — biểu mẫu con gửi lại mọi ô mỗi lần Lưu.
+    Đường THÊM/GỠ con vẫn theo luật 17/09 (`dongBoKhoaTuCon`).
+  · **Cổng**: lớp theo khung, bé chưa có khoá hiệu lực thì KHÔNG xếp vào case được
+    (`kiemKhoaTruocKhiVaoCase`, `lib/trial/khoa-truoc-case.ts`) — hai cửa server đều hỏi, ô "Xếp vào
+    case" in "Chọn khoá học trước". Lớp CŨ không bị cổng này (lớp cũ có khoá của lớp).
+
 ## Mẫu test: LƯỚI GHIM MÃ NGUỒN [13/09/2026]
 
 Dùng khi luật cần khoá có dạng **"lời gọi này phải truyền tham số kia"** — loại luật mà

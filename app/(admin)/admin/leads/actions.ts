@@ -35,7 +35,11 @@ import { rejectHeadOffice } from '@/lib/enrollment-flow'
 import { normalizeFacebookUrl } from '@/lib/lead/intake/normalize'
 import { mergeLeadNote, splitLeadNote } from '@/lib/lead/note-view'
 import { loiOKhoa, noiThemGhiChu, oKhoaBiDung } from '@/lib/lead/quyen-sua-lead'
-import { dongBoKhoaTuCon } from '@/lib/lead/khoa-quan-tam'
+import {
+  khoaConDaDoi,
+  khoaLeadDaDoi,
+  syncLeadCourseFromChildren,
+} from '@/lib/lead/khoa-quan-tam-con'
 import { ghiTuongTacLead, ghiTuongTacLeadBoQuaLoi } from '@/lib/lead/tuong-tac/ghi'
 import {
   NHAN_TRUONG_CON,
@@ -1205,6 +1209,17 @@ export async function updateLeadFields(
         // nếu không lỗ chỉ chuyển chỗ chứ không mất.
         data: noteDoi ? { ...updateData, lastActivityAt: new Date() } : updateData,
       })
+      // 26/09/2026 — khoá quan tâm của LEAD đổi ⇒ dội xuống các bé (bé chưa có khoá + bé
+      // đang mang đúng khoá cũ của lead), để khoá trial ở lớp trial và cột Khoá học trên
+      // site giáo viên đổi theo. Luật: `conTheoLeadDoi`. Cùng giao dịch với lượt ghi lead:
+      // lead đổi mà bé không đổi là đúng kiểu lệch mà chủ dự án cấm.
+      if (d.courseId !== undefined) {
+        await khoaLeadDaDoi(tx, {
+          leadId,
+          khoaLeadCu: before.courseId,
+          khoaLeadMoi: updateData.courseId ?? null,
+        })
+      }
       if (changedFields.length > 0) {
         await logLeadAudit({
           leadId,
@@ -1643,60 +1658,8 @@ function leadChildData(parsed: unknown) {
   }
 }
 
-/**
- * Đồng bộ "Khoá quan tâm" của LEAD theo lựa chọn của Sale ở khối CON (24/08/2026).
- *
- * Chủ dự án chốt: khoá quan tâm của một phiếu là khoá mà Sale chọn lúc nhập con —
- * không phải một ô rời để ai gõ gì cũng được, và tuyệt đối không suy từ `source`.
- * `Lead.courseId` vì vậy là BẢN SAO có chủ đích của `LeadChild.interestedCourseId`,
- * để mọi màn đang đọc `lead.course` (chi tiết, bảng, kanban, convert, bulk-convert)
- * đổi theo mà không phải sửa từng nơi.
- *
- * Con mới sửa/mới thêm thắng (sắp theo `updatedAt` giảm dần) — đó là lựa chọn
- * người dùng vừa bấm. Không con nào chọn khoá ⇒ trả về trống, đúng luật "để trống
- * cho tới khi Sale chọn".
- *
- * ⚠️ Gọi hàm này CÓ ĐIỀU KIỆN, đừng gọi vô tư. Biểu mẫu TẠO lead có ô "Khoá
- * quan tâm" ở cấp lead RỒI mới đến khối con, và tạo xong nó gọi `addLeadChild` cho
- * từng con. Nếu con không chọn khoá mà vẫn đồng bộ, ta sẽ XOÁ TRẮNG thứ người
- * dùng vừa chọn cách đó hai giây — mất dữ liệu im lặng. Luật: chỉ đồng bộ khi con
- * THỰC SỰ chọn khoá, hoặc khi đang gỡ đúng cái khoá do chính con đó đặt.
- */
-/**
- * Đồng bộ khoá quan tâm của lead theo con — NHƯNG KHÔNG ĐÈ giá trị người dùng đặt tay.
- *
- * ⚠️ 17/09/2026 — bản trước ghi đè VÔ ĐIỀU KIỆN. Điều đó đúng khi ô "Khoá quan tâm" trên
- * màn sửa lead còn bị khoá (lead có con ⇒ `disabled`), vì khi ấy chỉ có MỘT nơi ghi. Chủ dự
- * án chốt mở ô đó ra ("làm hướng sửa được đi"), nên nay có HAI nơi ghi — và ghi đè vô điều
- * kiện biến ô vừa mở thành lời hứa suông: Sale gõ đúng, lưu, thấy đã lưu, rồi lần sau ai đó
- * đụng vào một đứa con là giá trị biến mất, không thông báo, không dấu vết.
- *
- * Luật "khi nào con được ghi đè" nằm ở `lib/lead/khoa-quan-tam.ts` (hàm thuần, có test).
- *
- * `khoaConTruocKhiSua` = khoá của đứa con vừa sửa, GIÁ TRỊ TRƯỚC LƯỢT SỬA. Thiếu nó thì
- * luồng thường gãy — xem chú thích của `DauVaoDongBoKhoa`.
- */
-async function syncLeadCourseFromChildren(
-  tx: Prisma.TransactionClient,
-  leadId: string,
-  khoaConTruocKhiSua?: string | null,
-): Promise<void> {
-  const [kids, lead] = await Promise.all([
-    tx.leadChild.findMany({
-      where: { leadId },
-      select: { interestedCourseId: true },
-      orderBy: { updatedAt: 'desc' },
-    }),
-    tx.lead.findUnique({ where: { id: leadId }, select: { courseId: true } }),
-  ])
-  const quyet = dongBoKhoaTuCon({
-    khoaLead: lead?.courseId,
-    khoaCacCon: kids.map((k) => k.interestedCourseId),
-    khoaConTruocKhiSua,
-  })
-  if (!quyet.doiKhoa) return
-  await tx.lead.update({ where: { id: leadId }, data: { courseId: quyet.khoaMoi } })
-}
+// `syncLeadCourseFromChildren` dời sang `lib/lead/khoa-quan-tam-con.ts` (26/09/2026): màn
+// lớp trial cũng ghi khoá quan tâm của con, và hai nơi ghi phải dùng CÙNG một luật đồng bộ.
 
 /** Thêm 1 con vào lead. `input` gồm `leadId` + các field con (leadChildSchema). */
 export async function addLeadChild(
@@ -1811,16 +1774,14 @@ export async function updateLeadChild(
   await db.$transaction(async (txRaw) => {
     const tx = txRaw as unknown as Prisma.TransactionClient
     await tx.leadChild.update({ where: { id: childId }, data })
-    // Khoá quan tâm: chọn khoá mới thì lead nhận ngay. Gỡ trắng thì chỉ tính lại khi
-    // khoá đang hiển thị trên lead ĐÚNG là do con này đặt — nếu không, đó là khoá
-    // nhập tay/import của phiếu, không phải của ta để mà xoá.
-    const clearingCourseSetByThisChild =
-      !data.interestedCourseId &&
-      !!child.interestedCourseId &&
-      child.lead?.courseId === child.interestedCourseId
-    if (data.interestedCourseId || clearingCourseSetByThisChild) {
-      await syncLeadCourseFromChildren(tx, child.leadId, child.interestedCourseId)
-    }
+    // Khoá quan tâm — ĐỒNG BỘ HAI CHIỀU (chủ dự án 26/09/2026: "1 cái đổi thì đổi hết").
+    // Khoá của bé ĐỔI sang khoá mới ⇒ lead nhận đúng khoá đó; gỡ trắng ⇒ tính lại theo luật
+    // cũ; KHÔNG đổi (bấm Lưu để sửa tên…) ⇒ không đụng lead. Luật: `leadTheoConDoi`.
+    await khoaConDaDoi(tx, {
+      leadId: child.leadId,
+      khoaConCu: child.interestedCourseId,
+      khoaConMoi: data.interestedCourseId ?? null,
+    })
 
     // KHÔNG .catch() nuốt lỗi ở đây nữa: query hỏng giữa transaction là tx đã toang,
     // nuốt đi chỉ đổi được thông báo lỗi khó hiểu hơn ở query kế tiếp.
