@@ -1,0 +1,110 @@
+# Chạy TAY (workflow_dispatch) — ĐỌC PROD, KHÔNG GHI GÌ.
+#
+# 🔴 Chủ dự án 26/09/2026: *"để đúng thì tôi cần chia các khoá học hiện tại thành các học
+# phần luôn, nhưng các khoá học hiện tại trên prod đã up các file scorm rồi không xoá được,
+# hay tạo lại được. làm sao di chuyển các buổi đó vào đúng học phần"* — và sau đó: *"đo
+# thông qua workflow chỉ đọc kia đi, tôi cho phép chỉ đọc"*.
+#
+# Báo cáo trả lời ba câu quyết định được việc (chi tiết ở đầu `scripts/bao-cao-hoc-phan.ts`):
+#   A · mỗi giáo trình có bao nhiêu buổi · bao nhiêu buổi ĐÃ có học phần · bao nhiêu gói SCORM;
+#   B · `order` có LIÊN TỤC không — tức seed lại là DÁN NHÃN hay là REMAP nội dung;
+#   C · bao nhiêu buổi ĐÃ DẠY đang trỏ vào các bài ấy (gán nhãn là đổi nhãn HỒI TỐ);
+#   D · prod so với NGUỒN `lib/lms/curriculum-sata.ts`, kèm đối chiếu SLUG.
+#
+# ── BỐN LỚP KHOÁ (lưới `lib/lms/bao-cao-hoc-phan.test.ts` ghim cả bốn) ────────────────
+#   1. Script KHÔNG chứa một lệnh ghi nào (`create`/`update`/`delete`/`upsert`).
+#   2. Mọi truy vấn chạy trong `SET TRANSACTION READ ONLY` rồi ROLLBACK — Postgres tự từ
+#      chối phép ghi, không phụ thuộc vào việc người viết có nhớ hay không.
+#   3. File này CHỈ biết tới `PROD_DATABASE_URL_RO`. Một tham chiếu `secrets.PROD_DATABASE_URL`
+#      (không hậu tố `_RO`) nghĩa là ai đó vừa mở một đường ghi vào prod.
+#   4. Chỉ chạy trên `main` — báo cáo này để QUYẾT ĐỊNH, nên nó phải đọc prod bằng đúng mã
+#      đang chạy trên prod. Chạy từ một nhánh feature là đối chiếu prod với một `curriculum-sata.ts`
+#      chưa merge, và phần D sẽ nói dối về độ lệch.
+name: Học phần giáo trình · PROD · ĐỌC (chỉ đọc — không ghi gì)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  doc:
+    name: Đọc hiện trạng học phần (không ghi)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: github.ref == 'refs/heads/main'
+    steps:
+      # Kiểm HÌNH DẠNG chuỗi trước khi tốn 40 giây cài đặt rồi mới chết ở Prisma.
+      # KHÔNG in giá trị secret ra log — chỉ nói chỗ nào sai.
+      - name: Kiểm secret chỉ-đọc
+        env:
+          U: ${{ secrets.PROD_DATABASE_URL_RO }}
+        run: |
+          if [ -z "$U" ]; then
+            echo "::error::Thiếu secret PROD_DATABASE_URL_RO (chuỗi session pooler của user chỉ-đọc)."
+            echo "::error::Cách tạo user + lấy chuỗi: docs/cham-cong/USER-CHI-DOC-PROD.md"
+            echo "::error::KHÔNG đặt chuỗi đầy quyền vào đây."
+            exit 1
+          fi
+          rest="${U#*://}"
+          proto="${U%%://*}"
+          userinfo="${rest%@*}"
+          user="${userinfo%%:*}"
+          hostport="${rest##*@}"
+          port="${hostport##*:}"; port="${port%%/*}"
+          ok=1
+          case "$proto" in
+            postgresql|postgres) ;;
+            *) echo "::error::Chuỗi phải bắt đầu bằng postgresql:// — đang là '$proto://'"; ok=0 ;;
+          esac
+          case "$user" in
+            *.*) ;;
+            *) echo "::error::Tên user THIẾU hậu tố '.<mã dự án>' — Supavisor định tuyến theo mã dự án nằm TRONG tên user."; ok=0 ;;
+          esac
+          if [ "$port" != "5432" ]; then
+            echo "::error::Cổng đang là '$port' — phải là 5432 (tab 'Session pooler')."
+            ok=0
+          fi
+          [ $ok -eq 1 ] || { echo "::error::Sửa secret rồi chạy lại. Không có bước nào chạm DB."; exit 1; }
+          echo "Chuỗi đúng hình dạng."
+
+      - uses: actions/checkout@v4
+      # `version` PHẢI pin: `package.json` của repo KHÔNG có khoá `packageManager`, nên thiếu
+      # dòng này là action chết ngay với "No pnpm version is specified". Lưỡi canh quét MỌI
+      # workflow: `lib/finance/bao-cao-chi-doc.test.ts` `[BCD-04]`.
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # `prisma generate` chỉ sinh mã client vào node_modules của runner — không chạm DB.
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      - name: Dựng báo cáo (chỉ đọc)
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+        run: pnpm exec tsx scripts/bao-cao-hoc-phan.ts
+
+      - name: Đưa báo cáo lên job summary
+        if: always()
+        run: |
+          if [ -f bao-cao-hoc-phan.md ]; then
+            cat bao-cao-hoc-phan.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error::Script không sinh được báo cáo — xem log bước trên."
+          fi
+
+      - name: Lưu artifact (3 ngày)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bao-cao-hoc-phan
+          path: bao-cao-hoc-phan.md
+          retention-days: 3
+          if-no-files-found: warn
