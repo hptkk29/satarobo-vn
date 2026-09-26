@@ -22,6 +22,11 @@ import {
   getPublishedReportCards,
   getPublishedReportCardForStudent,
 } from "../../../lib/lms/report-card";
+import {
+  chuyenTrangThaiHocBaCore,
+  luuHocBaCore,
+  type NguoiThaoTacHocBa,
+} from "../../../lib/lms/report-card-ghi";
 
 const CENTER = "CS1";
 
@@ -265,5 +270,128 @@ test.describe("[#17] Học bạ — siết quyền sửa sau phát hành (câu 5
     await db.reportCard.update({ where: { enrollmentId: enr.id }, data: { status: "RECALLED" } });
     expect(await getPublishedReportCards(student.id)).toHaveLength(0);
     expect(await getPublishedReportCardForStudent(rc.id, student.id)).toBeNull();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// [RC-CORE] Đường GHI học bạ qua hàm lõi (26/09/2026). Trước đó luật nằm inline trong server
+// action (cần auth()) nên không spec nào phủ được — xem TODO ở khối [R7-15]. Nay action chỉ là vỏ
+// auth()+revalidatePath; ca dưới chạy ĐÚNG luật của nó với actor thật từ DB (OrgUnit + RoleDef +
+// UserOrgRole), gồm cả giáo viên đứng lớp (Class.teacherId ⇒ assignedClassIds).
+// ═══════════════════════════════════════════════════════════════════════════
+test.describe("[RC-CORE] Học bạ — lưu / nộp / phát hành qua hàm lõi", () => {
+  const SA: RbacActor = { id: "seed-sa-rccore", name: "SA", role: "SUPER_ADMIN" };
+
+  async function nguoi(slug: string, orgCode: string, roleCode: string, userRole: "TEACHER" | "CENTER_MANAGER") {
+    const u = await seedUser({ email: testEmail(slug), role: userRole });
+    const org = (await db.orgUnit.findUnique({ where: { code: orgCode }, select: { id: true } }))!.id;
+    const role = (await db.roleDef.findUnique({ where: { code: roleCode }, select: { id: true } }))!.id;
+    await assignUserOrgRole(SA, { userId: u.id, orgUnitId: org, roleId: role, reason: "seed rc-core" });
+    return u.id;
+  }
+  async function ctxCua(userId: string): Promise<NguoiThaoTacHocBa> {
+    const actor = await resolveActorUncached(userId);
+    return {
+      userId,
+      auditActor: { id: userId, name: userId },
+      actor,
+      capabilities: actorCapabilities({
+        manage: canV2(actor, "report-cards:manage"),
+        review: canV2(actor, "report-cards:review"),
+      }),
+    };
+  }
+  async function lopCo(gvId: string, maCoSo: string) {
+    const centerId = (await db.orgUnit.findUnique({ where: { code: maCoSo }, select: { centerId: true } }))!.centerId!;
+    const course = await db.course.create({ data: { name: `Khoá ${gvId}`, slug: `rc-core-${gvId}` } });
+    const tc = await Promise.all(
+      ["Lắp ráp", "Lập trình"].map((name, order) =>
+        db.reportCardCriterion.create({ data: { courseId: course.id, name, order, active: true }, select: { id: true } }),
+      ),
+    );
+    const cls = await db.class.create({
+      data: { name: `Lớp ${gvId}`, courseId: course.id, centerId, status: "ACTIVE", teacherId: gvId },
+      select: { id: true },
+    });
+    const st = await db.student.create({ data: { name: "HV rc-core", centerId }, select: { id: true } });
+    const enr = await db.enrollment.create({
+      data: { studentId: st.id, classId: cls.id, courseId: course.id, status: "STUDYING" },
+      select: { id: true },
+    });
+    return { enrollmentId: enr.id, studentId: st.id, tieuChi: tc.map((t) => t.id) };
+  }
+
+  test.beforeEach(async () => {
+    await resetDb();
+    await db.center.create({ data: { code: "CS1", name: "CS1", slug: "cs1-rccore", address: "a", city: "" } });
+    await db.center.create({ data: { code: "CS2", name: "CS2", slug: "cs2-rccore", address: "b", city: "" } });
+    await seedOrg(["HO", "CS1", "CS2"]);
+    await seedRoles();
+  });
+
+  test("[RC-CORE-01] GV đứng lớp lưu → DRAFT (teacherId = GV); nộp khi chưa chấm đủ bị chặn; chấm đủ → CHỜ DUYỆT", async () => {
+    const gv = await nguoi("gv-rccore1", "CS1", "TEACHER", "TEACHER");
+    const { enrollmentId, tieuChi } = await lopCo(gv, "CS1");
+    const ctx = await ctxCua(gv);
+
+    const luu1 = await luuHocBaCore(ctx, {
+      enrollmentId,
+      finalComment: "Con tiến bộ rõ.",
+      scores: [{ criterionId: tieuChi[0]!, level: 3 }],
+    });
+    expect(luu1).toEqual({ ok: true, data: { enrollmentId } });
+    const rc = await db.reportCard.findUniqueOrThrow({ where: { enrollmentId } });
+    expect(rc.status).toBe("DRAFT");
+    expect(rc.teacherId).toBe(gv);
+    expect(await db.auditLog.count({ where: { entityType: "ReportCard", entityId: rc.id, action: "CREATE" } })).toBe(1);
+
+    const nopThieu = await chuyenTrangThaiHocBaCore(ctx, { enrollmentId, to: "PENDING_REVIEW" });
+    expect(nopThieu).toEqual({ ok: false, error: "Còn 1 tiêu chí chưa chấm — cần chấm đủ trước khi nộp duyệt." });
+
+    expect(
+      (await luuHocBaCore(ctx, { enrollmentId, scores: tieuChi.map((criterionId) => ({ criterionId, level: 4 })) })).ok,
+    ).toBe(true);
+    expect((await chuyenTrangThaiHocBaCore(ctx, { enrollmentId, to: "PENDING_REVIEW" })).ok).toBe(true);
+    expect((await db.reportCard.findUniqueOrThrow({ where: { enrollmentId } })).status).toBe("PENDING_REVIEW");
+  });
+
+  test("[RC-CORE-02] GV KHÔNG phát hành được; QL cơ sở phát hành → snapshot + người phát hành + sự kiện", async () => {
+    const gv = await nguoi("gv-rccore2", "CS1", "TEACHER", "TEACHER");
+    const ql = await nguoi("ql-rccore2", "CS1", "CENTER_MANAGER", "CENTER_MANAGER");
+    const { enrollmentId, studentId, tieuChi } = await lopCo(gv, "CS1");
+    const ctxGv = await ctxCua(gv);
+    await luuHocBaCore(ctxGv, { enrollmentId, scores: tieuChi.map((criterionId) => ({ criterionId, level: 3 })) });
+    await chuyenTrangThaiHocBaCore(ctxGv, { enrollmentId, to: "PENDING_REVIEW" });
+
+    const gvPhatHanh = await chuyenTrangThaiHocBaCore(ctxGv, { enrollmentId, to: "PUBLISHED" });
+    expect(gvPhatHanh.ok).toBe(false);
+    expect((await db.reportCard.findUniqueOrThrow({ where: { enrollmentId } })).status).toBe("PENDING_REVIEW");
+
+    expect((await chuyenTrangThaiHocBaCore(await ctxCua(ql), { enrollmentId, to: "PUBLISHED" })).ok).toBe(true);
+    const rc = await db.reportCard.findUniqueOrThrow({ where: { enrollmentId } });
+    expect(rc.status).toBe("PUBLISHED");
+    expect(rc.publishedById).toBe(ql);
+    expect(rc.teacherId).toBe(gv); // người LẬP vẫn là GV
+    expect(rc.publishedSnapshot).not.toBeNull();
+    expect(await db.domainEvent.count({ where: { type: "reportcard.published" } })).toBe(1);
+    expect(await getPublishedReportCards(studentId)).toHaveLength(1);
+  });
+
+  test("[RC-CORE-03] ngoài phạm vi: GV KHÔNG dạy lớp không lưu được; QL cơ sở KHÁC không phát hành được", async () => {
+    const gv = await nguoi("gv-rccore3", "CS1", "TEACHER", "TEACHER");
+    const gvKhac = await nguoi("gvk-rccore3", "CS1", "TEACHER", "TEACHER");
+    const qlCs2 = await nguoi("ql2-rccore3", "CS2", "CENTER_MANAGER", "CENTER_MANAGER");
+    const { enrollmentId, tieuChi } = await lopCo(gv, "CS1");
+    const diem = tieuChi.map((criterionId) => ({ criterionId, level: 2 }));
+
+    expect((await luuHocBaCore(await ctxCua(gvKhac), { enrollmentId, scores: diem })).ok).toBe(false);
+    expect(await db.reportCard.count({ where: { enrollmentId } })).toBe(0);
+
+    // Đối chứng dương: đúng GV đứng lớp thì lưu được.
+    const ctxGv = await ctxCua(gv);
+    expect((await luuHocBaCore(ctxGv, { enrollmentId, scores: diem })).ok).toBe(true);
+    await chuyenTrangThaiHocBaCore(ctxGv, { enrollmentId, to: "PENDING_REVIEW" });
+    expect((await chuyenTrangThaiHocBaCore(await ctxCua(qlCs2), { enrollmentId, to: "PUBLISHED" })).ok).toBe(false);
+    expect((await db.reportCard.findUniqueOrThrow({ where: { enrollmentId } })).status).toBe("PENDING_REVIEW");
   });
 });

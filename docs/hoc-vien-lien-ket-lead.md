@@ -252,3 +252,25 @@ Nút **"Ngưỡng thanh toán · PROD · ĐỌC"** (chỉ-đọc, chạy từ `t
 `noi-hoc-vien-lead` chạy script ở chế độ `--truoc-migration`: không đọc cột mới, coi mọi HV là
 chưa nối, in số SẼ NỐI theo 4 chuỗi đã chốt + phép đo THÊM chuỗi ⑤ "cùng SĐT phụ huynh + đúng tên
 con" (chưa áp dụng — nới luật là quyết định của chủ dự án). Đi với `--ghi` là tự dừng.
+
+## 9. Nhận xét buổi + học bạ "lấy từ giáo viên nhập" (26/09/2026)
+
+Chủ dự án 26/09: "seed thử nhận xét buổi, học bạ … nhận xét phải lấy từ giáo viên nhập, học bạ
+cũng tương tự". Đo trước: bộ seed UAT (`03-hoc-vu.ts`, `05-lms.ts`) **chèn thẳng bảng** — 2.129
+phiếu chỉ một câu + số sao (hub giáo viên coi là CHƯA nhận xét), người tạo cố định; 224 học bạ
+không đi máy trạng thái, 78 bản "đã phát hành" **không có snapshot** nên phụ huynh không thấy.
+
+| Việc | Đường đi | Tệp |
+|---|---|---|
+| Nhận xét buổi | `saveSessionEvalCore` — đúng hàm hộp thoại "Nhận xét buổi học" gọi; người thao tác = GV đứng lớp (`giaoVienDuocQuyCong`); lọc như màn GV (buổi không huỷ, đã diễn ra, đã điểm danh, em có mặt/đi muộn) | `scripts/seed-thu-nhan-xet-giao-vien.ts` |
+| Học bạ | luật tách từ server action sang `lib/lms/report-card-ghi.ts` (`luuHocBaCore` · `chuyenTrangThaiHocBaCore`, giữ nguyên hành vi); GV lưu + nộp, QL cơ sở phát hành; quyền hỏi bằng `decidePermissionWithGrant` như `checkPermission` | `scripts/seed-thu-hoc-ba-giao-vien.ts` |
+
+- `saveSessionEvalCore` có tham số **bắt buộc** `{ guiEmailPhuHuynh }` (luật 7): màn GV `true`, seed
+  `false` — hàng đợi email không có trạng thái huỷ, còn env `test` có cron gửi thật mỗi 5 phút.
+  Thông báo trong cổng phụ huynh vẫn phát như GV nhập thật.
+- Chạy: local thì gọi thẳng (dry-run mặc định, `--ghi` để ghi); test thì nút "Seed dữ liệu TEST"
+  ô `nhan_xet_hoc_ba` (chay-thu/ghi). Lượt seed đầy đủ cũng tự chạy hai script sau bộ UAT.
+- Giới hạn đúng luật, không phải lỗi: lớp đã hoàn thành (ghi danh COMPLETED ra khỏi danh sách buổi)
+  và lớp không có giáo viên (CS2 trong seed) KHÔNG có nhận xét — đường giáo viên không ghi được.
+- Lưới: `[RC-CORE-01..03]` + `[SFB-07]` (R7, Postgres thật) · `[RCG-W1..W3]` (dây nối) ·
+  `[NLW-03]` (workflow). Cấy lại 6 phép, cả 6 đỏ đúng ca.
