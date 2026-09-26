@@ -176,7 +176,10 @@ jobs:
     name: Nhận xét buổi + học bạ qua đường giáo viên (DB test)
     if: ${{ inputs.nhan_xet_hoc_ba == 'chay-thu' || inputs.nhan_xet_hoc_ba == 'ghi' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 90: lượt ghi đầu tiên 26/09 bị cắt ở trần 30 phút — runner ở Mỹ, DB ở Tokyo, mỗi phiếu đi
+    # qua hàm lõi giáo viên là ~10 lượt đi–về nối đuôi. Script nay ghi song song các em trong một
+    # buổi và CHẠY LẠI ĐƯỢC, nhưng trần vẫn nới để một lượt ghi đủ không cần bấm lại.
+    timeout-minutes: 90
     steps:
       - name: Xác nhận chủ ý
         env:
@@ -230,7 +233,9 @@ jobs:
     # đi–về (~2 giây/ngày-người) nên nó bị cắt giữa chừng ở lượt 06/09. Đây là workflow bấm tay
     # để nạp dữ liệu, kéo dài ngân sách không hại ai; bị CẮT giữa chừng mới hại — dữ liệu vào
     # một nửa và người bấm phải tự đoán nửa nào.
-    timeout-minutes: 50
+    # 26/09: 50 → 110 — thêm bước nhận xét buổi + học bạ qua đường giáo viên (~700 phiếu, mỗi phiếu
+    # ~10 lượt đi–về). Bị cắt ở bước đó thì bấm ô `nhan_xet_hoc_ba=ghi` để chạy tiếp phần còn lại.
+    timeout-minutes: 110
     steps:
       - name: Xác nhận chủ ý
         run: |

@@ -274,3 +274,10 @@ không đi máy trạng thái, 78 bản "đã phát hành" **không có snapshot
   và lớp không có giáo viên (CS2 trong seed) KHÔNG có nhận xét — đường giáo viên không ghi được.
 - Lưới: `[RC-CORE-01..03]` + `[SFB-07]` (R7, Postgres thật) · `[RCG-W1..W3]` (dây nối) ·
   `[NLW-03]` (workflow). Cấy lại 6 phép, cả 6 đỏ đúng ca.
+- **Tốc độ + chạy lại (đo 26/09):** lượt ghi đầu tiên trên DB test bị cắt ở trần 30 phút. Runner
+  GitHub ở Mỹ, DB ở Tokyo ⇒ ~0,8 giây mỗi lượt đi–về; một phiếu qua hàm lõi là ~10 lượt nối đuôi.
+  Vá: các em CÙNG một buổi ghi song song (`--song-song=N`, mặc định 5 — buổi vẫn tuần tự theo
+  ngày), 4 em một lớp của học bạ song song, in tiến độ theo lớp, trần job 90 phút (job seed đầy đủ
+  110). Cả hai script **chạy lại được**: nhận xét bỏ qua phiếu đã ghi qua đường GV; học bạ do chính
+  script lập mà bị cắt giữa "lưu" và "nộp/phát hành" thì lượt sau đi tiếp bước còn thiếu (nhận ra
+  theo câu tổng kết — học bạ GV thật nhập không bị đụng). Bị cắt thì bấm lại ô `ghi`.

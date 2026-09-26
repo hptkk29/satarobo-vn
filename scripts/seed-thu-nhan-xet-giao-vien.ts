@@ -10,6 +10,11 @@
  *                         đầu) — dùng khi sửa bộ câu mẫu
  *     --xoa-toan-bo-seed-cu  xoá MỌI phiếu seed chèn thẳng bảng (kể cả ngoài phạm vi: lớp đã xong,
  *                         lớp không có giáo viên) — để màn chỉ còn phiếu giáo viên nhập
+ *     --song-song=<N>     số em CÙNG MỘT BUỔI ghi song song (mặc định 5). Buổi vẫn đi tuần tự theo
+ *                         ngày. Xem scripts/_chay-gioi-han.ts vì sao cần.
+ *
+ * CHẠY LẠI ĐƯỢC: bị cắt giữa chừng (job quá giờ) thì lượt sau bỏ qua phiếu đã ghi qua đường giáo
+ * viên và làm tiếp phần còn lại — không sinh trùng.
  *
  * Chủ dự án 26/09: "nhận xét phải lấy từ giáo viên nhập". Bộ seed UAT cũ (03-hoc-vu.ts) chèn
  * thẳng `StudentSessionFeedback` — chỉ một câu + số sao, không rubric (hub của giáo viên coi là
@@ -39,6 +44,7 @@ import { deriveSessionProjectName } from "../lib/lms/session-project-name";
 import { EVAL_CRITERIA } from "../lib/lms/session-eval-rubric";
 import { FEEDBACK_ATTENDED_STATUSES } from "../lib/lms/session-feedback-roster";
 import { vnEndOfDay } from "../lib/time/vn";
+import { chayGioiHan } from "./_chay-gioi-han";
 
 const GHI = process.argv.includes("--ghi");
 const THAY_SEED_CU = process.argv.includes("--thay-seed-cu");
@@ -48,6 +54,7 @@ const LOP = (process.argv.find((a) => a.startsWith("--lop="))?.slice(6) ?? "")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
+const SONG_SONG = Math.max(1, Number(process.argv.find((a) => a.startsWith("--song-song="))?.slice(12) ?? 5) || 5);
 
 // ─── Cổng DB: local, hoặc DB test khi workflow bật cờ ────────────────────────────────────
 function kiemDbLocal(): string {
@@ -192,8 +199,12 @@ async function main() {
 
   const tong = { lop: 0, buoi: 0, ghi: 0, boQuaCo: 0, xoaSeedCu: 0, tuChoi: 0, khongGv: 0, chuaDiemDanh: 0 };
   const loi = new Map<string, number>();
+  type GiaoVien = { id: string; role: string; roles: string[]; centerId: string | null };
+  const gvCache = new Map<string, GiaoVien | null>();
+  const batDau = Date.now();
 
-  for (const lop of lopDs) {
+  for (const [thuTuLop, lop] of lopDs.entries()) {
+    const truocLop = { ghi: tong.ghi, boQuaCo: tong.boQuaCo, tuChoi: tong.tuChoi };
     const [tatCaBuoi, buoiDs, roster] = await Promise.all([
       db.classSession.findMany({ where: { classId: lop.id }, select: { id: true, date: true, classId: true } }),
       db.classSession.findMany({
@@ -222,7 +233,13 @@ async function main() {
         tong.khongGv++;
         continue;
       }
-      const gv = await db.user.findUnique({ where: { id: gvId }, select: { id: true, role: true, roles: true, centerId: true } });
+      if (!gvCache.has(gvId)) {
+        gvCache.set(
+          gvId,
+          await db.user.findUnique({ where: { id: gvId }, select: { id: true, role: true, roles: true, centerId: true } }),
+        );
+      }
+      const gv = gvCache.get(gvId);
       if (!gv || !(gv.role === "TEACHER" || gv.roles.includes("TEACHER"))) {
         tong.khongGv++;
         continue;
@@ -254,6 +271,9 @@ async function main() {
       });
       tong.buoi++;
 
+      // Các em của CÙNG một buổi độc lập nhau (mỗi em một dòng phiếu, một event riêng) ⇒ ghi song
+      // song. Buổi thì vẫn tuần tự theo ngày, để phiếu buổi mới nhất vẫn là phiếu tạo sau cùng.
+      const viec: Array<() => Promise<void>> = [];
       for (const hv of hocVien) {
         if (daDiemDanh && !DI_HOC.has(ttTheoHv.get(hv) ?? "ABSENT")) continue;
         const co = phieuTheoHv.get(hv);
@@ -266,7 +286,6 @@ async function main() {
             tong.boQuaCo++;
             continue;
           }
-          if (GHI) await db.studentSessionFeedback.delete({ where: { id: co.id } });
           tong.xoaSeedCu++;
         }
         const { rubric, overall } = noiDungGiaoVien(b.id, hv, duAn, soBuoi.get(b.id) ?? 0);
@@ -274,18 +293,29 @@ async function main() {
           tong.ghi++;
           continue;
         }
-        const kq = await saveSessionEvalCore(
-          { id: gv.id, role: "TEACHER", centerId: gv.centerId },
-          { sessionId: b.id, studentId: hv, projectName: duAn, notes: { overall }, rubric },
-          { guiEmailPhuHuynh: false },
-        );
-        if (kq.ok) tong.ghi++;
-        else {
-          tong.tuChoi++;
-          loi.set(kq.error, (loi.get(kq.error) ?? 0) + 1);
-        }
+        viec.push(async () => {
+          if (co) await db.studentSessionFeedback.delete({ where: { id: co.id } });
+          const kq = await saveSessionEvalCore(
+            { id: gv.id, role: "TEACHER", centerId: gv.centerId },
+            { sessionId: b.id, studentId: hv, projectName: duAn, notes: { overall }, rubric },
+            { guiEmailPhuHuynh: false },
+          );
+          if (kq.ok) tong.ghi++;
+          else {
+            tong.tuChoi++;
+            loi.set(kq.error, (loi.get(kq.error) ?? 0) + 1);
+          }
+        });
       }
+      await chayGioiHan(viec, SONG_SONG);
     }
+    // Tiến độ theo lớp — job bị cắt giữa chừng thì log vẫn cho biết đã tới đâu.
+    console.log(
+      `[${thuTuLop + 1}/${lopDs.length}] ${lop.name}: ${GHI ? "ghi" : "sẽ ghi"} ${tong.ghi - truocLop.ghi}` +
+        ` · bỏ qua ${tong.boQuaCo - truocLop.boQuaCo}` +
+        (tong.tuChoi > truocLop.tuChoi ? ` · TỪ CHỐI ${tong.tuChoi - truocLop.tuChoi}` : "") +
+        ` · ${Math.round((Date.now() - batDau) / 1000)} giây`,
+    );
   }
 
   let xoaNgoai = 0;
