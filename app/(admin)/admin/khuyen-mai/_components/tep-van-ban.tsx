@@ -104,11 +104,16 @@ export function TepVanBan({
 
   return (
     <div>
+      {/* `hidden`, KHÔNG `sr-only` (lỗi test.satarobo.vn 26/09): `sr-only` là position:absolute,
+          mà khung admin không có tổ tiên `relative` nào trong <main> ⇒ ô này thoát khỏi vùng cuộn,
+          đứng ở cuối form và kéo dài CẢ TRANG — cuộn hai lần (đo: trang dài thêm 289px ở 1280,
+          797px ở 375). Nút bên dưới là điều khiển thật (ô có tabIndex -1), nên ẩn hẳn không mất gì;
+          cùng mẫu với `components/admin/file-uploader.tsx`. */}
       <input
         ref={inputRef}
         type="file"
         accept={NHAN}
-        className="sr-only"
+        className="hidden"
         tabIndex={-1}
         onChange={(e) => {
           const f = e.target.files?.[0];
