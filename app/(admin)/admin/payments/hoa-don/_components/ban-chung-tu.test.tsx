@@ -168,6 +168,51 @@ describe("[BCT-03] ngăn xử lý nói thật", () => {
     expect((screen.getByRole("button", { name: "Lưu hoá đơn" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it("bước ③ Xác nhận: sáng ⇒ nhãn nói đúng việc (gửi tới đâu); tắt ⇒ disabled + câu lý do", () => {
+    const nhapDong = (bat: boolean) =>
+      dong("dot:n", "Phạm Nhật", {
+        ngan: "nhap",
+        nhan: "Đã tải tệp",
+        tone: "info",
+        hoaDonNhap: {
+          id: "hd1",
+          kyHieu: "1C26TSR",
+          soHoaDon: bat ? "127" : null,
+          ngayPhatHanh: "2026-09-20",
+          tepPdfTen: "hd.pdf",
+          tepXmlTen: null,
+          guiEmailKhach: true,
+        },
+        hoaDon: {
+          id: "hd1",
+          trangThai: "NHAP",
+          kyHieu: "1C26TSR",
+          soHoaDon: bat ? "127" : null,
+          ngayPhatHanh: "2026-09-20",
+          coPdf: true,
+          coXml: false,
+        },
+        hanhDong: {
+          taiPhieu: true,
+          taiLen: { bat: true },
+          xacNhan: bat
+            ? { bat: true, nhan: "Xác nhận & gửi tới ph***@gmail.com" }
+            : { bat: false, lyDo: "Còn thiếu số hoá đơn" },
+          khongXuat: true,
+          ganThem: false,
+          canhBao: [],
+        },
+      });
+    const { unmount } = render(dung(nhapDong(true), { ngan: "nhap", dongTrongNgan: [nhapDong(true)] }));
+    const nut = screen.getByRole("button", { name: "Xác nhận & gửi tới ph***@gmail.com" }) as HTMLButtonElement;
+    expect(nut.disabled).toBe(false);
+    unmount();
+
+    render(dung(nhapDong(false), { ngan: "nhap", dongTrongNgan: [nhapDong(false)] }));
+    expect((screen.getByRole("button", { name: "Xác nhận" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("Còn thiếu số hoá đơn")).toBeTruthy();
+  });
+
   it("ngăn rỗng ⇒ nói vì sao rỗng + đường về Chờ xuất", () => {
     render(dung(null, { ngan: "lech", dongTrongNgan: [] }));
     expect(screen.getByText("Không có lần thu nào lệch số tiền hay nghi trùng.")).toBeTruthy();

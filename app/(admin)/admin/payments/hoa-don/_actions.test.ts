@@ -27,6 +27,9 @@ const h = vi.hoisted(() => ({
   capNhat: vi.fn(async () => ({ tepCanXoa: [] as string[] })),
   go: vi.fn(async () => ({ tepCanXoa: [] as string[] })),
   xoaTep: vi.fn(async () => undefined),
+  hdFind: vi.fn(),
+  coTep: vi.fn(async () => true),
+  chot: vi.fn(),
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/finance/hoa-don/hang-cho", () => ({ napHangChoHoaDon: h.nap }));
@@ -40,7 +43,13 @@ vi.mock("@/lib/finance/hoa-don/feature", () => ({ laHoaDonBat: h.bat }));
 vi.mock("@/lib/auth", () => ({ auth: h.auth }));
 vi.mock("@/lib/auth/check-permission", () => ({ checkPermission: h.checkPermission }));
 vi.mock("@/lib/auth/actor", () => ({ resolveActor: h.resolveActor }));
-vi.mock("@/lib/db-scope", () => ({ scopedDb: () => ({ order: { findUnique: h.findUnique } }) }));
+vi.mock("@/lib/db-scope", () => ({
+  scopedDb: () => ({ order: { findUnique: h.findUnique }, hoaDonDienTu: { findUnique: h.hdFind } }),
+}));
+vi.mock("@/lib/finance/hoa-don/chot-hoa-don", async (goc) => ({
+  ...(await goc<typeof import("@/lib/finance/hoa-don/chot-hoa-don")>()),
+  chotHoaDon: h.chot,
+}));
 vi.mock("@/lib/rate-limit", () => ({ rateLimit: h.rateLimit }));
 vi.mock("@/lib/finance/hoa-don/kho-tep", async (goc) => ({
   ...(await goc<typeof import("@/lib/finance/hoa-don/kho-tep")>()),
@@ -48,6 +57,7 @@ vi.mock("@/lib/finance/hoa-don/kho-tep", async (goc) => ({
   kyUrlTaiLenHoaDon: h.kyPut,
   xacMinhTepHoaDon: h.xacMinh,
   xoaTepHoaDon: h.xoaTep,
+  coTepTrongKho: h.coTep,
 }));
 
 import {
@@ -56,7 +66,9 @@ import {
   kyTaiLenHoaDonAction,
   luuHoaDonNhapAction,
   xacMinhTepHoaDonAction,
+  xacNhanHoaDonAction,
 } from "./_actions";
+import { LoiChotHoaDon } from "@/lib/finance/hoa-don/chot-hoa-don";
 import { khoaThuocDon } from "@/lib/finance/hoa-don/kho-tep";
 import { LoiGhiHoaDon } from "@/lib/finance/hoa-don/ghi-hoa-don";
 
@@ -397,5 +409,73 @@ describe("[HDA-06] không xuất + gỡ", () => {
     h.resolveActor.mockResolvedValue(KIEM);
     expect(await goHoaDonAction({ orderId: "don1", hoaDonId: "hd1" })).toMatchObject({ ok: false });
     expect(h.go).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ─── GĐ 5 — xác nhận hoá đơn ──────────────────────────────────────────────────────────────────
+
+describe("[HDA-07] xác nhận hoá đơn — nút phải SÁNG trên dòng dựng lại, tệp phải CÒN trong kho", () => {
+  const nhapDong = (o: Partial<DongGia> & { xacNhan?: { bat: boolean; lyDo?: string } } = {}) => {
+    const { xacNhan, ...rest } = o;
+    return {
+      ...dong({ ngan: "nhap", hoaDonNhap: { id: "hd1" }, ...rest }),
+      hanhDong: { taiLen: { bat: true }, khongXuat: true, xacNhan: xacNhan ?? { bat: true } },
+    } as DongGia;
+  };
+  const XN = { orderId: "don1", hoaDonId: "hd1" };
+
+  beforeEach(() => {
+    coDong(nhapDong(), nhapDong({ key: "dot:dot2", hoaDonNhap: { id: "hd2" } }));
+    h.hdFind.mockResolvedValue({ tepPdfKey: KHOA_PDF, orderId: "don1" });
+    h.coTep.mockResolvedValue(true);
+    h.chot.mockResolvedValue({
+      coGuiEmail: true,
+      daXacNhan: [{ paymentId: "p1", receiptCode: "RCP-CS1-26-0001" }],
+      conCho: [{ paymentId: "p2", lyDo: "Khoản chưa gắn ghi danh" }],
+    });
+  });
+
+  it("đường vui: chốt với đúng người + hoá đơn; trả số khoản xác nhận, lý do còn chờ, dòng KẾ TIẾP cùng ngăn", async () => {
+    const r = await xacNhanHoaDonAction(XN);
+    expect(r).toEqual({
+      ok: true,
+      data: { daXacNhan: 1, conCho: ["Khoản chưa gắn ghi danh"], keKe: "dot:dot2" },
+    });
+    expect(arg0(h.chot)).toMatchObject({ nguoiChot: { id: "u1" }, orderId: "don1", hoaDonId: "hd1" });
+    expect(h.coTep).toHaveBeenCalledWith(KHOA_PDF);
+  });
+
+  it("nút TẮT trên dòng dựng lại ⇒ trả đúng lý do, KHÔNG chốt", async () => {
+    coDong(nhapDong({ xacNhan: { bat: false, lyDo: "Còn thiếu số hoá đơn" } }));
+    expect(await xacNhanHoaDonAction(XN)).toEqual({ ok: false, error: "Còn thiếu số hoá đơn" });
+    expect(h.chot).not.toHaveBeenCalled();
+  });
+
+  it("hoá đơn không còn là nháp của đơn này ⇒ từ chối, KHÔNG chốt", async () => {
+    coDong(dong());
+    expect(await xacNhanHoaDonAction(XN)).toMatchObject({ ok: false });
+    h.hdFind.mockResolvedValue({ tepPdfKey: KHOA_PDF, orderId: "don-khac" });
+    coDong(nhapDong());
+    expect(await xacNhanHoaDonAction(XN)).toMatchObject({ ok: false });
+    expect(h.chot).not.toHaveBeenCalled();
+  });
+
+  it("tệp PDF KHÔNG còn trong kho ⇒ từ chối trước transaction", async () => {
+    h.coTep.mockResolvedValue(false);
+    expect(await xacNhanHoaDonAction(XN)).toMatchObject({ ok: false, error: expect.stringMatching(/Không thấy tệp PDF/) });
+    expect(h.chot).not.toHaveBeenCalled();
+  });
+
+  it("lỗi nghiệp vụ của lõi chốt ⇒ câu người đọc được; lỗi lạ ⇒ ném", async () => {
+    h.chot.mockRejectedValueOnce(new LoiChotHoaDon("TIEN_DA_DOI"));
+    expect(await xacNhanHoaDonAction(XN)).toMatchObject({ ok: false, error: expect.stringMatching(/Số tiền/) });
+    h.chot.mockRejectedValueOnce(new Error("mất kết nối"));
+    await expect(xacNhanHoaDonAction(XN)).rejects.toThrow("mất kết nối");
+  });
+
+  it("KIÊM NHIỆM kế toán CS2 + sale CS1 ⇒ không xác nhận được hoá đơn đơn CS1", async () => {
+    h.resolveActor.mockResolvedValue(KIEM);
+    expect(await xacNhanHoaDonAction(XN)).toMatchObject({ ok: false, error: "Không tìm thấy đơn hàng" });
+    expect(h.chot).not.toHaveBeenCalled();
   });
 });

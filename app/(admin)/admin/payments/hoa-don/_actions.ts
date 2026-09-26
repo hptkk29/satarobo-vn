@@ -7,6 +7,8 @@
 // GĐ 4: ghi BẢNG HOÁ ĐƠN — lưu nháp (④) · không xuất · sửa nháp · gỡ. KHÔNG chạm sổ tiền; xác nhận
 // (⑤ — cấp RCP) là GĐ 5. Lưu nháp xác minh LẠI tệp (khoá đến từ trình duyệt, không tin lượt trước),
 // và dựng lại lần thu bằng CHÍNH loader của màn — tập khoản + số ròng không đến từ client.
+// GĐ 5: xác nhận (⑤) — chốt hoá đơn + xác nhận khoản còn chờ đủ điều kiện (cấp RCP) trong MỘT
+// transaction (`lib/finance/hoa-don/chot-hoa-don.ts`); giành lượt email đầu tiên cùng transaction.
 //
 // ⚠️ Tệp 'use server' CHỈ export async function (export const/type làm hỏng Server Action lúc chạy
 // mà `pnpm build` vẫn xanh — memory 'use server' export rule).
@@ -28,6 +30,7 @@ import {
   kyUrlTaiLenHoaDon,
   xacMinhTepHoaDon,
   xoaTepHoaDon,
+  coTepTrongKho,
   MIME_TEP,
   TRAN_CO_TEP,
   type LoaiTep,
@@ -43,6 +46,8 @@ import {
   thongDiepLoiGhiHoaDon,
   type TepMoi,
 } from "@/lib/finance/hoa-don/ghi-hoa-don";
+import { chotHoaDon, thongDiepLoiChot, type KetQuaChot } from "@/lib/finance/hoa-don/chot-hoa-don";
+import { sapXepTrongNgan } from "@/lib/finance/hoa-don/ngan-hang-cho";
 
 /** URL PUT sống 5 phút — đủ để trình duyệt tải một tệp ≤ 10 MB lên. */
 const TTL_PUT_GIAY = 300;
@@ -334,6 +339,74 @@ export async function khongXuatHoaDonAction(input: unknown): Promise<KetQua<{ ho
   if (!kq.ok) return kq;
   lamMoi(v.orderId);
   return { ok: true, data: { hoaDonId: kq.data.id } };
+}
+
+const xacNhanSchema = z.object({ orderId: z.string().min(1).max(64), hoaDonId: z.string().min(1).max(64) });
+
+/**
+ * ⑤ — XÁC NHẬN hoá đơn (PLAN §4 ⑤, phương án (b)): chốt hoá đơn NHÁP → ĐÃ XÁC NHẬN; khoản còn chờ
+ * mà đủ điều kiện thì xác nhận + cấp RCP trong cùng transaction (lõi `chotHoaDon`).
+ * Trả `keKe` = khoá dòng kế tiếp trong CÙNG ngăn, tính trên danh sách MỚI sau khi ghi.
+ */
+export async function xacNhanHoaDonAction(input: unknown): Promise<
+  KetQua<{
+    daXacNhan: number;
+    conCho: string[];
+    keKe: string | null;
+  }>
+> {
+  const p = xacNhanSchema.safeParse(input);
+  if (!p.success) return { ok: false, error: "Yêu cầu không hợp lệ" };
+  const v = p.data;
+
+  const cong = await congKeToanDon(v.orderId);
+  if (!cong.ok) return cong;
+  if (!khoHoaDonDaCauHinh()) return { ok: false, error: "Kho lưu hoá đơn chưa cấu hình — báo người vận hành" };
+
+  // Nút phải SÁNG trên chính dòng loader dựng lại lúc này — cùng luật `hanhDongChoDong` mà màn vẽ.
+  const truoc = await napHangChoHoaDon(cong.actor, { canViewPii: true, orderId: v.orderId });
+  const row = truoc.dong.find((d) => d.hoaDonNhap?.id === v.hoaDonId);
+  if (!row) return { ok: false, error: "Hoá đơn vừa được người khác xác nhận, sửa hoặc gỡ — tải lại màn" };
+  if (!row.hanhDong.xacNhan.bat) return { ok: false, error: row.hanhDong.xacNhan.lyDo ?? "Chưa xác nhận được" };
+
+  // HEAD kho TRƯỚC transaction: chốt một hoá đơn mà tệp đã mất là hứa với khách một tờ không tải được.
+  const hd = await scopedDb(cong.actor).hoaDonDienTu.findUnique({
+    where: { id: v.hoaDonId },
+    select: { tepPdfKey: true, orderId: true },
+  });
+  if (!hd || hd.orderId !== v.orderId || !hd.tepPdfKey) {
+    return { ok: false, error: "Hoá đơn vừa được người khác xác nhận, sửa hoặc gỡ — tải lại màn" };
+  }
+  if (!(await coTepTrongKho(hd.tepPdfKey))) {
+    return { ok: false, error: "Không thấy tệp PDF hoá đơn trong kho — tải lại tệp rồi xác nhận" };
+  }
+
+  let kq: KetQuaChot;
+  try {
+    kq = await chotHoaDon({
+      nguoiChot: { id: cong.userId, name: cong.userName },
+      orderId: v.orderId,
+      hoaDonId: v.hoaDonId,
+      now: new Date(),
+    });
+  } catch (e) {
+    const tb = thongDiepLoiChot(e);
+    if (tb) return { ok: false, error: tb };
+    throw e;
+  }
+
+  // Dòng kế tiếp: cùng ngăn với dòng vừa chốt, trên danh sách SAU khi ghi.
+  const sau = await napHangChoHoaDon(cong.actor, { canViewPii: true });
+  const keKe = sapXepTrongNgan(row.ngan, sau.dong).find((d) => d.key !== row.key)?.key ?? null;
+
+  lamMoi(v.orderId);
+  // Khoản vừa xác nhận ⇒ màn Thanh toán + công nợ đổi (cùng tập đường của `confirmPaymentAction`).
+  revalidatePath("/payments");
+  revalidatePath("/cong-no");
+  return {
+    ok: true,
+    data: { daXacNhan: kq.daXacNhan.length, conCho: kq.conCho.map((c) => c.lyDo), keKe },
+  };
 }
 
 const goSchema = z.object({ orderId: z.string().min(1).max(64), hoaDonId: z.string().min(1).max(64) });

@@ -127,6 +127,7 @@ async function recomputeOrder(orderId: string, actorId: string | null): Promise<
 // đưa tên vào phạm vi cục bộ, mà tệp này còn `throw new InstallmentMoneyBlocked(...)`
 // ở bốn chỗ (tsc báo đúng bốn lỗi khi thử).
 import { InstallmentMoneyBlocked } from "@/lib/payments/plan-money-guard";
+import { KHOAN_CHUA_KHOA_HOA_DON } from "@/lib/finance/hoa-don/khoa-khoan";
 export { InstallmentMoneyBlocked };
 
 export type DotGhi = {
@@ -271,6 +272,9 @@ export async function recordInstallmentPlan(params: {
         enrollmentId: null,
         accountantStatus: "PENDING",
         receipts: { none: {} },
+        // Khoản đang nằm trong hoá đơn (PLAN §5): BỎ QUA, không xoá mềm — tờ hoá đơn đã chụp
+        // nó. Không ném: ném là làm vỡ cả lượt lưu kế hoạch vì một khoản.
+        ...KHOAN_CHUA_KHOA_HOA_DON,
       },
       data: { deletedAt: now },
     });
