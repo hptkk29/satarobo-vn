@@ -117,6 +117,12 @@ describe("A. admin host × role", () => {
     expect(isAdminRoute("/cong-du-lieu-agent/bat-ky")).toBe(true);
   });
 
+  it("khuyen-mai là admin route (26/09/2026) — cả trang con /moi, /[id], /[id]/sua", () => {
+    expect(isAdminRoute("/khuyen-mai")).toBe(true);
+    expect(isAdminRoute("/khuyen-mai/moi")).toBe(true);
+    expect(isAdminRoute("/khuyen-mai/abc/sua")).toBe(true);
+  });
+
   it("user-groups là admin route — kể cả path chi tiết /user-groups/[id]", () => {
     expect(isAdminRoute("/user-groups")).toBe(true);
     expect(isAdminRoute("/user-groups/abc123")).toBe(true);

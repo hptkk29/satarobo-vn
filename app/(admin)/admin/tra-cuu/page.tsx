@@ -26,6 +26,10 @@ import { formatDateVN } from "@/lib/format/date";
 import { PageHeader } from "@/components/admin/ui/page-header";
 import { NoPermission } from "@/components/admin/ui/states";
 import { boDau } from "@/lib/ui/bo-dau";
+import { ngayVN } from "@/lib/agents/gateway/thoi-gian";
+import { docDanhSachChinhSach } from "@/lib/khuyen-mai/chinh-sach";
+import { NHAN_TRANG_THAI, trangThaiTai } from "@/lib/khuyen-mai/hieu-luc";
+import { khoangVi, nhacThoiGian } from "../khuyen-mai/_components/dinh-dang";
 import { TraCuuWorkspace, type KhoiTraCuu } from "./_components/tra-cuu-workspace";
 
 export const dynamic = "force-dynamic";
@@ -49,9 +53,10 @@ export default async function TraCuuPage() {
 
   // Hỏi từng quyền để nạp đúng khối được xem. Cổng trang ở trên dùng phép HOẶC:
   // vào được rồi thì phần nào thấy phần đó, không đá ai ra vì thiếu một quyền.
-  const [xemHocCu, xemLop] = await Promise.all([
+  const [xemHocCu, xemLop, xemKhuyenMai] = await Promise.all([
     checkPermission("products:view"),
     checkPermission("classes:view-all"),
+    checkPermission("promotions:view"),
   ]);
   // Giá khoá học: Sale KHÔNG có `courses:view` (quyền đó của Đào tạo/GV), nhưng
   // vẫn thấy giá khoá trong form tạo đơn — bảng giá là thứ nghề của họ. Nên gác
@@ -60,7 +65,10 @@ export default async function TraCuuPage() {
     (await checkPermission("orders:create")) || (await checkPermission("courses:view"));
 
   const actor = await resolveActor(session.user.id);
-  const dm = await getSaleCatalog(actor, { xemHocCu, xemLop, xemKhoaHoc });
+  const [dm, chinhSach] = await Promise.all([
+    getSaleCatalog(actor, { xemHocCu, xemLop, xemKhoaHoc }),
+    xemKhuyenMai ? docDanhSachChinhSach() : Promise.resolve([]),
+  ]);
 
   // Thứ tự khối = thứ tự hỏi của phụ huynh: giá khoá trước, rồi lớp nào học được,
   // học cụ sau cùng (câu hỏi phát sinh chứ ít khi mở đầu).
@@ -117,6 +125,51 @@ export default async function TraCuuPage() {
     });
   }
 
+  if (xemKhuyenMai) {
+    // Chỉ văn bản ĐANG hoặc SẮP áp dụng — màn này dùng trước mặt khách, văn bản đã hết/thu hồi
+    // ở đây chỉ là cám dỗ trích nhầm. Trạng thái hỏi đúng MỘT hàm với màn Khuyến mãi và agent.
+    const homNay = ngayVN(new Date());
+    const conHieuLuc = chinhSach
+      .map((c) => ({ c, tt: trangThaiTai(c, homNay) }))
+      .filter((x) => x.tt === "dang_ap_dung" || x.tt === "sap_ap_dung")
+      .sort((a, b) => (a.tt === b.tt ? a.c.tuNgay.localeCompare(b.c.tuNgay) : a.tt === "dang_ap_dung" ? -1 : 1));
+    khoi.push({
+      ma: "khuyen-mai",
+      nhan: "Khuyến mãi",
+      donVi: "chính sách",
+      khiRong: "Hôm nay không có chính sách khuyến mãi nào đang hoặc sắp áp dụng.",
+      luuY: "Điều kiện đầy đủ, mã voucher và văn bản gốc: mở mục Khuyến mãi ở thanh bên.",
+      // "Ưu đãi" đứng ĐẦU: workspace chỉ cắt chữ ở cột đầu (148px ở 375px) — đặt nó ở giữa là
+      // câu dài đẩy cột Trạng thái ra ngoài màn điện thoại (chụp được ở smoke 26/09).
+      cot: [
+        { ten: "Ưu đãi", rong: true },
+        { ten: "Văn bản", anMobile: true },
+        { ten: "Áp dụng", anMobile: true },
+        { ten: "Hiệu lực", anMobile: true },
+        { ten: "Trạng thái", phai: true },
+      ],
+      dong: conHieuLuc.map(({ c, tt }) => {
+        const apDung = [
+          c.toanHeThong ? "Toàn hệ thống" : c.coSo.map((x) => x.ma).join(", "),
+          c.moiKhoa ? "mọi khoá" : c.khoaHoc.map((k) => k.ten).join(", "),
+        ].join(" · ");
+        const maDangBat = c.vouchers.filter((v) => v.dangBat).map((v) => v.ma);
+        const nhac = nhacThoiGian(tt, c.tuNgay, c.ketThuc, homNay);
+        return {
+          key: c.id,
+          tim: boDau(`${c.maVanBan} ${c.ten} ${c.noiDungUuDai} ${maDangBat.join(" ")} ${apDung}`),
+          o: [
+            `${c.noiDungUuDai.split(/\r?\n/)[0] ?? ""}${maDangBat.length ? ` — mã ${maDangBat.join(", ")}` : ""}`,
+            c.maVanBan,
+            apDung,
+            `${khoangVi(c.tuNgay, c.ketThuc)}${nhac ? ` · ${nhac}` : ""}`,
+            { t: NHAN_TRANG_THAI[tt], pill: tt === "dang_ap_dung" ? ("success" as const) : ("info" as const) },
+          ],
+        };
+      }),
+    });
+  }
+
   if (xemHocCu) {
     khoi.push({
       ma: "hoc-cu",
@@ -150,7 +203,7 @@ export default async function TraCuuPage() {
     <div>
       <PageHeader
         title="Tra cứu"
-        subtitle="Bảng giá và lớp đang mở. Trang chỉ để xem — sửa giá hay mở lớp là việc của Đào tạo và Quản lý cơ sở."
+        subtitle="Bảng giá, lớp đang mở và khuyến mãi đang áp dụng. Trang chỉ để xem — sửa giá hay mở lớp là việc của Đào tạo và Quản lý cơ sở."
       />
 
       {khoi.length === 0 ? (
@@ -159,7 +212,7 @@ export default async function TraCuuPage() {
         // có thật khi ai đó được cấp đúng một quyền rồi quyền đó bị gỡ.
         <NoPermission
           what="danh mục nào"
-          permission="products:view · classes:view-all · orders:create"
+          permission="products:view · classes:view-all · orders:create · promotions:view"
         />
       ) : (
         <TraCuuWorkspace khoi={khoi} />
