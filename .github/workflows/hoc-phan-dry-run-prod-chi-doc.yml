@@ -28,7 +28,7 @@ permissions:
 
 jobs:
   doc:
-    name: Dry-run: seed sẽ đổi gì (không ghi)
+    name: "Dry-run: seed sẽ đổi gì (không ghi)"
     runs-on: ubuntu-latest
     timeout-minutes: 15
     if: github.ref == 'refs/heads/main'
