@@ -112,6 +112,11 @@ describe("A. admin host × role", () => {
   // US-03 (Nền Hệ thống P0) — /user-groups từng THIẾU trong ADMIN_ROUTE_SEGMENTS dù
   // page tồn tại → link sidebar trên admin.satarobo.vn bounce 308 về public = 404.
   // Pin thêm path chi tiết (nested [id]) để không tái phát.
+  it("cong-du-lieu-agent là admin route (25/09/2026) — thiếu segment là 308 sang public rồi 404", () => {
+    expect(isAdminRoute("/cong-du-lieu-agent")).toBe(true);
+    expect(isAdminRoute("/cong-du-lieu-agent/bat-ky")).toBe(true);
+  });
+
   it("user-groups là admin route — kể cả path chi tiết /user-groups/[id]", () => {
     expect(isAdminRoute("/user-groups")).toBe(true);
     expect(isAdminRoute("/user-groups/abc123")).toBe(true);

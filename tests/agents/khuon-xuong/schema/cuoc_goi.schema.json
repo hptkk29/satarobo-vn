@@ -1,0 +1,63 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "cuoc_goi",
+  "description": "Khuôn trường 'du_lieu' của công cụ kinh_doanh.lay_cuoc_goi.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": [
+      "call_id",
+      "nha_cung_cap",
+      "lead_id",
+      "tvv_id",
+      "huong",
+      "bat_dau",
+      "thoi_luong_giay",
+      "ket_qua",
+      "co_ghi_am",
+      "da_thong_bao_ghi_am",
+      "ban_ghi"
+    ],
+    "properties": {
+      "call_id": {
+        "type": "string"
+      },
+      "nha_cung_cap": {
+        "type": "string"
+      },
+      "lead_id": {
+        "type": "string"
+      },
+      "tvv_id": {
+        "type": "string"
+      },
+      "huong": {
+        "enum": [
+          "goi_di",
+          "goi_den"
+        ]
+      },
+      "bat_dau": {
+        "type": "string"
+      },
+      "thoi_luong_giay": {
+        "type": "integer"
+      },
+      "ket_qua": {
+        "type": "string"
+      },
+      "co_ghi_am": {
+        "type": "boolean"
+      },
+      "da_thong_bao_ghi_am": {
+        "type": "boolean"
+      },
+      "ban_ghi": {
+        "type": [
+          "array",
+          "null"
+        ]
+      }
+    }
+  }
+}

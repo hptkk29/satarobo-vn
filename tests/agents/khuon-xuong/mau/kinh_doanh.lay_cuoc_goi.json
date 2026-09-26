@@ -1,0 +1,79 @@
+{
+  "du_lieu": [
+    {
+      "call_id": "OMI-G0001",
+      "nha_cung_cap": "omicall",
+      "lead_id": "L-0001",
+      "tvv_id": "NV-G04",
+      "huong": "goi_di",
+      "bat_dau": "2026-09-09T11:46:00+07:00",
+      "thoi_luong_giay": 312,
+      "ket_qua": "may_ban",
+      "co_ghi_am": true,
+      "da_thong_bao_ghi_am": true,
+      "ban_ghi": [
+        {
+          "giay": 0,
+          "nguoi": "TVV",
+          "noi_dung": "Dạ em chào chị, em là TVV Giả 01 bên Sata Robo. Cuộc gọi được ghi âm để nâng cao chất lượng tư vấn ạ. Em gọi về việc chị nhắn cho bé [TÊN_CON] học robot ạ."
+        },
+        {
+          "giay": 12,
+          "nguoi": "PH",
+          "noi_dung": "À ừ em, chị đang nghe."
+        },
+        {
+          "giay": 15,
+          "nguoi": "TVV",
+          "noi_dung": "Dạ bé lớp mấy rồi chị, bé thích làm gì nhất ạ?"
+        },
+        {
+          "giay": 30,
+          "nguoi": "PH",
+          "noi_dung": "Bé lớp 3, thích lắp ráp lắm em."
+        }
+      ]
+    },
+    {
+      "call_id": "OMI-G0006",
+      "nha_cung_cap": "omicall",
+      "lead_id": "L-0006",
+      "tvv_id": "NV-G05",
+      "huong": "goi_di",
+      "bat_dau": "2026-09-10T12:20:00+07:00",
+      "thoi_luong_giay": 153,
+      "ket_qua": "khong_nghe",
+      "co_ghi_am": false,
+      "da_thong_bao_ghi_am": false,
+      "ban_ghi": null
+    },
+    {
+      "call_id": "OMI-G0007",
+      "nha_cung_cap": "omicall",
+      "lead_id": "L-0007",
+      "tvv_id": "NV-G06",
+      "huong": "goi_di",
+      "bat_dau": "2026-09-11T11:48:00+07:00",
+      "thoi_luong_giay": 295,
+      "ket_qua": "nghe_may",
+      "co_ghi_am": false,
+      "da_thong_bao_ghi_am": false,
+      "ban_ghi": null
+    }
+  ],
+  "meta": {
+    "cong_cu": "kinh_doanh.lay_cuoc_goi",
+    "phien_ban_khuon": "1.0",
+    "sinh_luc": "2026-09-25T09:00:00+07:00",
+    "so_ban_ghi": 3,
+    "tiep_theo": null,
+    "da_che_du_lieu": true,
+    "pham_vi_co_so": [
+      "HO",
+      "CS1",
+      "CS2"
+    ],
+    "ma_yeu_cau": "req_mau_cuoc_goi",
+    "gia_lap": true
+  }
+}

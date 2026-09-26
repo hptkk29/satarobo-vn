@@ -223,6 +223,13 @@ jobs:
       - name: Run finance (điều chỉnh khoản thu) DB tests
         run: pnpm test:finance-db
 
+      # Cổng dữ liệu agent (25/09/2026) — bộ kiểm thử bảo mật spec CEO §14.2 (B1–B17):
+      # thu hồi có hiệu lực ngay, tự duyệt bị chặn, IP lạ tự khoá, công tắc 503 ngay, lệch
+      # khuôn không trả dữ liệu. Cổng mở dữ liệu ra NGOÀI satarobo — không có lưới này thì
+      # một lượt sửa pipeline làm hở một bước kiểm mà không ai biết.
+      - name: Run agent gateway DB tests
+        run: pnpm test:agent-db
+
   e2e:
     name: E2E smoke (Playwright)
     runs-on: ubuntu-latest

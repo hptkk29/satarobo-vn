@@ -24,6 +24,32 @@ const dbBlockedImports = {
   ],
 }
 
+// Cổng dữ liệu agent (25/09/2026) — xem hai khối dùng nó ở dưới.
+const agentGatewayBlockedImports = {
+  coBan: [
+    {
+      group: ['@/lib/db'],
+      message:
+        '❌ Cổng agent: KHÔNG import @/lib/db trần. Bảng của cổng → `@/lib/agents/kho`; ' +
+        'dữ liệu nghiệp vụ → `ctx.sdb` (scopedDb của user dịch vụ).',
+    },
+    {
+      group: ['@/lib/auth/system-actor', '**/system-actor'],
+      message:
+        '❌ Cổng agent: KHÔNG dùng SYSTEM_ACTOR — nó bỏ qua TOÀN BỘ phân quyền (isSuperAdmin), ' +
+        'tức agent lộ ra internet mang quyền cao nhất. Agent đi bằng actor của user dịch vụ.',
+    },
+  ],
+  congCu: [
+    {
+      group: ['@/lib/agents/kho', '**/kho'],
+      message:
+        '❌ Công cụ agent / route agent KHÔNG chạm kho DB của cổng. Công cụ đọc dữ liệu qua ' +
+        '`ctx.sdb`; route chỉ gọi hàm trong `lib/agents/gateway`.',
+    },
+  ],
+}
+
 // Patterns chặn import sai giữa Admin và Client sites (Phase 4.X.1).
 const adminBlockedImports = {
   patterns: [
@@ -371,6 +397,33 @@ export default tseslint.config(
             ...dbBlockedImports.patterns,
           ],
         },
+      ],
+    },
+  },
+
+  // Cổng dữ liệu agent (25/09/2026) — hai khối, khối SAU đè khối TRƯỚC theo tên rule nên
+  // khối hẹp (công cụ + route) phải đứng sau và nhắc lại mọi pattern của khối rộng.
+  //
+  // ⚠️ Cùng bẫy với app/(elearning): luật "cổng DB đã đóng" gắn theo GLOB khai tay —
+  // `lib/**` và `app/api/**` KHÔNG có khối nào chặn `@/lib/db` trần. Thiếu hai khối này
+  // thì code cổng agent (thứ mở dữ liệu ra NGOÀI satarobo) là khu duy nhất không có lưới.
+  //   (1) lib/agents/** + app/api/agent/**: cấm `@/lib/db` trần + cấm SYSTEM_ACTOR. Bảng
+  //       CỦA CỔNG đi qua `lib/agents/kho.ts` — ngoại lệ duy nhất, đọc được bằng một grep.
+  //   (2) lib/agents/tools/** + app/api/agent/**: cấm thêm cả `kho` — công cụ đọc dữ liệu
+  //       nghiệp vụ CHỈ qua `ctx.sdb` (scopedDb của user dịch vụ), route không có logic riêng.
+  {
+    files: ['lib/agents/**/*.{ts,tsx}', 'app/api/agent/**/*.{ts,tsx}'],
+    ignores: ['lib/agents/kho.ts'],
+    rules: {
+      'no-restricted-imports': ['error', { patterns: [...agentGatewayBlockedImports.coBan] }],
+    },
+  },
+  {
+    files: ['lib/agents/tools/**/*.{ts,tsx}', 'app/api/agent/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        { patterns: [...agentGatewayBlockedImports.coBan, ...agentGatewayBlockedImports.congCu] },
       ],
     },
   },

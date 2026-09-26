@@ -1,0 +1,31 @@
+{
+  "du_lieu": [
+    {
+      "ma": "zalo_ca_nhan",
+      "ten": "Zalo cá nhân (qua Zalo CRM)"
+    },
+    {
+      "ma": "messenger",
+      "ten": "Messenger fanpage Sata Robo"
+    },
+    {
+      "ma": "zalo_oa",
+      "ten": "Zalo OA"
+    }
+  ],
+  "meta": {
+    "cong_cu": "danh_muc.lay_kenh",
+    "phien_ban_khuon": "1.0",
+    "sinh_luc": "2026-09-25T09:00:00+07:00",
+    "so_ban_ghi": 3,
+    "tiep_theo": null,
+    "da_che_du_lieu": false,
+    "pham_vi_co_so": [
+      "HO",
+      "CS1",
+      "CS2"
+    ],
+    "ma_yeu_cau": "req_mau_kenh",
+    "gia_lap": true
+  }
+}

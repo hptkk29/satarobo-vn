@@ -581,6 +581,63 @@ export const SETTINGS = {
     default: false,
     centerOverridable: false, // quyền không được lệch nhau giữa các cơ sở
   }),
+  // ── Cổng dữ liệu agent (tài liệu CEO 25/09/2026 §7.4) ────────────────────────────────
+  // Hạn mức đặt ở đây chứ không hardcode (spec §7.4). Tất cả GLOBAL: một agent gọi qua cổng
+  // chung, hạn mức lệch nhau theo cơ sở là không có nghĩa.
+  //
+  // ⚠️ CÔNG TẮC `agentGateway.enabled` CỐ Ý KHÔNG NẰM Ở ĐÂY (rà bảo mật 25/09, AG-01). Khoá
+  // nào có trong registry thì `saveGlobalSettingAction` (màn Cấu hình vận hành) ghi được — tức
+  // BẬT cổng mà không qua người duyệt + mã 2FA như spec đòi. Công tắc do
+  // `lib/agents/gateway/cau-hinh.ts` sở hữu (đọc) và `lib/agents/quan-tri/cong-tac.ts` (ghi);
+  // đường chung gặp khoá đó sẽ báo "khoá không hợp lệ".
+  "agentGateway.tokenTtlSec": def({
+    key: "agentGateway.tokenTtlSec",
+    group: "system",
+    label: "Thời gian sống của token truy cập agent (giây)",
+    schema: z.number().int().min(60).max(3600),
+    default: 900,
+    centerOverridable: false,
+  }),
+  "agentGateway.rateLimitPerMin": def({
+    key: "agentGateway.rateLimitPerMin",
+    group: "system",
+    label: "Số lượt gọi tối đa mỗi phút của một agent",
+    schema: z.number().int().min(1).max(1000),
+    default: 60,
+    centerOverridable: false,
+  }),
+  "agentGateway.maxRowsPerCall": def({
+    key: "agentGateway.maxRowsPerCall",
+    group: "system",
+    label: "Số bản ghi tối đa trả về trong một lượt gọi của agent",
+    schema: z.number().int().min(1).max(500),
+    default: 500,
+    centerOverridable: false,
+  }),
+  "agentGateway.maxRowsPerDay.cao": def({
+    key: "agentGateway.maxRowsPerDay.cao",
+    group: "system",
+    label: "Số bản ghi nhạy cảm CAO tối đa một agent được đọc mỗi ngày",
+    schema: z.number().int().min(1).max(100_000),
+    default: 5000,
+    centerOverridable: false,
+  }),
+  "agentGateway.maxRangeDays": def({
+    key: "agentGateway.maxRangeDays",
+    group: "system",
+    label: "Khoảng ngày tối đa trong một lượt gọi của agent",
+    schema: z.number().int().min(1).max(366),
+    default: 93,
+    centerOverridable: false,
+  }),
+  "agentGateway.lockAfterAuthFailures": def({
+    key: "agentGateway.lockAfterAuthFailures",
+    group: "system",
+    label: "Số lần sai mật khẩu trong 5 phút thì tự khoá agent",
+    schema: z.number().int().min(3).max(1000),
+    default: 20,
+    centerOverridable: false,
+  }),
   // Web Push (08/09/2026) — CÔNG TẮC của kênh thông báo đẩy cho NHÂN VIÊN.
   //
   // Ở SystemSetting chứ không phải env, đúng nếp của MỌI kênh gửi ra ngoài trong repo này

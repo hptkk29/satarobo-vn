@@ -1,0 +1,33 @@
+{
+  "du_lieu": [
+    {
+      "co_so": "CS1",
+      "thang": "2026-09",
+      "hoc_vien_muc_tieu": 18,
+      "ty_le_lead_len_hoc_thu": 0.35,
+      "ty_le_hoc_thu_len_dang_ky": 0.45
+    },
+    {
+      "co_so": "CS2",
+      "thang": "2026-09",
+      "hoc_vien_muc_tieu": 14,
+      "ty_le_lead_len_hoc_thu": 0.35,
+      "ty_le_hoc_thu_len_dang_ky": 0.45
+    }
+  ],
+  "meta": {
+    "cong_cu": "kinh_doanh.lay_chi_tieu",
+    "phien_ban_khuon": "1.0",
+    "sinh_luc": "2026-09-25T09:00:00+07:00",
+    "so_ban_ghi": 2,
+    "tiep_theo": null,
+    "da_che_du_lieu": false,
+    "pham_vi_co_so": [
+      "HO",
+      "CS1",
+      "CS2"
+    ],
+    "ma_yeu_cau": "req_mau_chi_tieu",
+    "gia_lap": true
+  }
+}

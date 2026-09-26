@@ -1,0 +1,63 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "chi_phi_ads",
+  "description": "Khuôn trường 'du_lieu' của công cụ marketing.lay_chi_phi_ads.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": [
+      "ngay",
+      "nen_tang",
+      "chien_dich_id",
+      "ten_chien_dich",
+      "khoa",
+      "co_so",
+      "chi_phi",
+      "hien_thi",
+      "click",
+      "lead",
+      "tan_suat"
+    ],
+    "properties": {
+      "ngay": {
+        "type": "string"
+      },
+      "nen_tang": {
+        "enum": [
+          "meta",
+          "google"
+        ]
+      },
+      "chien_dich_id": {
+        "type": "string"
+      },
+      "ten_chien_dich": {
+        "type": "string"
+      },
+      "khoa": {
+        "type": "string"
+      },
+      "co_so": {
+        "type": "string"
+      },
+      "chi_phi": {
+        "type": "integer"
+      },
+      "hien_thi": {
+        "type": "integer"
+      },
+      "click": {
+        "type": "integer"
+      },
+      "lead": {
+        "type": "integer"
+      },
+      "tan_suat": {
+        "type": [
+          "number",
+          "null"
+        ]
+      }
+    }
+  }
+}

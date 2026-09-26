@@ -1,0 +1,50 @@
+{
+  "du_lieu": {
+    "thang": "2026-09",
+    "tong_tran_thang": 36000000,
+    "nguong_canh_bao": {
+      "cpl_toi_da": 200000,
+      "chi_dot_bien_he_so": 2,
+      "tan_suat_toi_da": 4,
+      "ngay_khong_lead_toi_da": 3
+    },
+    "chien_dich": [
+      {
+        "chien_dich_id": "META-01",
+        "khoa": "SATA4",
+        "co_so": "CS1",
+        "tran_thang": 7000000,
+        "tran_ngay": 233333
+      },
+      {
+        "chien_dich_id": "META-02",
+        "khoa": "SATA4",
+        "co_so": "CS2",
+        "tran_thang": 5500000,
+        "tran_ngay": 183333
+      },
+      {
+        "chien_dich_id": "META-03",
+        "khoa": "SATA5",
+        "co_so": "CS1",
+        "tran_thang": 4500000,
+        "tran_ngay": 150000
+      }
+    ]
+  },
+  "meta": {
+    "cong_cu": "marketing.lay_tran_ngan_sach",
+    "phien_ban_khuon": "1.0",
+    "sinh_luc": "2026-09-25T09:00:00+07:00",
+    "so_ban_ghi": 1,
+    "tiep_theo": null,
+    "da_che_du_lieu": false,
+    "pham_vi_co_so": [
+      "HO",
+      "CS1",
+      "CS2"
+    ],
+    "ma_yeu_cau": "req_mau_tran_ngan_sach",
+    "gia_lap": true
+  }
+}

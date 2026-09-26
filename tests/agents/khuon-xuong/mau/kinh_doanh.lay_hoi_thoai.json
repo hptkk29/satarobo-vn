@@ -1,0 +1,119 @@
+{
+  "du_lieu": [
+    {
+      "id": "HT-001",
+      "lead_id": "L-0001",
+      "kenh": "zalo_ca_nhan",
+      "tvv_id": "NV-G04",
+      "co_so": "CS1",
+      "bat_dau": "2026-09-09T11:37:00+07:00",
+      "tin_nhan": [
+        {
+          "luc": "2026-09-09T11:37:00+07:00",
+          "nguoi": "PH",
+          "noi_dung": "Học robot bên em học phí bao nhiêu, học xong được gì? Con lớp 3."
+        },
+        {
+          "luc": "2026-09-09T12:46:00+07:00",
+          "nguoi": "TVV",
+          "noi_dung": "Dạ em chào chị, em là TVV Giả 01 bên Sata Robo ạ. Bé lớp 3 thì hợp với khoá Sata4 – Bứt Phá Giới Hạn: Lập trình RoboSim rồi nạp vào robot thật. Bé nhà mình đã từng học lập trình hay robot chưa ạ?"
+        },
+        {
+          "luc": "2026-09-09T12:49:00+07:00",
+          "nguoi": "PH",
+          "noi_dung": "Chưa em ơi, con mới tìm hiểu thôi."
+        },
+        {
+          "luc": "2026-09-09T12:53:00+07:00",
+          "nguoi": "PH",
+          "noi_dung": "Robot với game thì cũng là chơi thôi mà em."
+        },
+        {
+          "luc": "2026-09-09T13:00:00+07:00",
+          "nguoi": "TVV",
+          "noi_dung": "Dạ không phải đâu chị, khác hoàn toàn mà."
+        },
+        {
+          "luc": "2026-09-09T13:01:00+07:00",
+          "nguoi": "PH",
+          "noi_dung": "Ok em, số chị [SĐT] nha."
+        },
+        {
+          "luc": "2026-09-09T13:06:00+07:00",
+          "nguoi": "TVV",
+          "noi_dung": "Dạ ok chị."
+        }
+      ]
+    },
+    {
+      "id": "HT-002",
+      "lead_id": "L-0002",
+      "kenh": "zalo_ca_nhan",
+      "tvv_id": "NV-G05",
+      "co_so": "CS1",
+      "bat_dau": "2026-09-09T16:29:00+07:00",
+      "tin_nhan": [
+        {
+          "luc": "2026-09-09T16:29:00+07:00",
+          "nguoi": "PH",
+          "noi_dung": "Chào em ơi, chị thấy bạn con khoe học robot vui lắm, con chị lớp 5 học được không em 😄"
+        },
+        {
+          "luc": "2026-09-09T16:32:00+07:00",
+          "nguoi": "TVV",
+          "noi_dung": "Dạ em chào chị, em là TVV Giả 02 bên Sata Robo ạ. Bé lớp 5 thì hợp với khoá Sata5 – Khơi Nguồn Sáng Tạo: Tự thiết kế giải pháp, portfolio dự án, đủ điều kiện thi cấp thành phố. Bé nhà mình đã từng học lập trình hay robot chưa ạ?"
+        },
+        {
+          "luc": "2026-09-09T16:34:00+07:00",
+          "nguoi": "PH",
+          "noi_dung": "Chưa, con chỉ hay chơi điện thoại thôi."
+        },
+        {
+          "luc": "2026-09-09T16:36:00+07:00",
+          "nguoi": "PH",
+          "noi_dung": "Nhà chị hơi xa, đưa đón bất tiện lắm."
+        },
+        {
+          "luc": "2026-09-09T16:39:00+07:00",
+          "nguoi": "TVV",
+          "noi_dung": "Dạ em hiểu ạ. Sata Robo có 2 cơ sở ở Hòa Cường và Hải Châu, nhiều khung giờ trong tuần. Nhà mình gần cơ sở nào hơn để em xếp giờ tiện nhất cho chị ạ?"
+        },
+        {
+          "luc": "2026-09-09T16:40:00+07:00",
+          "nguoi": "PH",
+          "noi_dung": "Ok em, số chị [SĐT] nha."
+        },
+        {
+          "luc": "2026-09-09T16:42:00+07:00",
+          "nguoi": "TVV",
+          "noi_dung": "Dạ em cảm ơn chị. Em ghi nhận bé lớp 5, em gọi chị trong ít phút nữa để xếp lịch Test Trial 1-1 cho bé nhé ạ."
+        },
+        {
+          "luc": "2026-09-09T17:40:00+07:00",
+          "nguoi": "PH",
+          "noi_dung": "Vậy cho con học thử ngày 11/09/2026 lúc 9h nha em."
+        },
+        {
+          "luc": "2026-09-09T17:41:00+07:00",
+          "nguoi": "TVV",
+          "noi_dung": "Dạ em chốt lịch Test Trial 1-1 cho bé ngày 11/09/2026 lúc 9h tại CS1 – 211 Nguyễn Hữu Thọ. Trước buổi học em nhắn nhắc chị ạ."
+        }
+      ]
+    }
+  ],
+  "meta": {
+    "cong_cu": "kinh_doanh.lay_hoi_thoai",
+    "phien_ban_khuon": "1.0",
+    "sinh_luc": "2026-09-25T09:00:00+07:00",
+    "so_ban_ghi": 2,
+    "tiep_theo": null,
+    "da_che_du_lieu": true,
+    "pham_vi_co_so": [
+      "HO",
+      "CS1",
+      "CS2"
+    ],
+    "ma_yeu_cau": "req_mau_hoi_thoai",
+    "gia_lap": true
+  }
+}

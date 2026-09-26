@@ -100,6 +100,8 @@ export interface RouteInput {
 export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
   // BGĐ 31/07 — nguồn giới thiệu (affiliate).
   "affiliates",
+  // 25/09/2026 — Cổng dữ liệu agent (tài liệu CEO §5.5).
+  "cong-du-lieu-agent",
   "assignments",
   "attendance",
   "audit-log",

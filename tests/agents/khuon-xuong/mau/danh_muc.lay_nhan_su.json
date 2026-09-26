@@ -1,0 +1,37 @@
+{
+  "du_lieu": [
+    {
+      "id": "NV-G01",
+      "ten": "TGĐ Giả",
+      "chuc_danh": "TGD",
+      "co_so": "HO"
+    },
+    {
+      "id": "NV-G02",
+      "ten": "GĐTT Giả CS1",
+      "chuc_danh": "GDTT",
+      "co_so": "CS1"
+    },
+    {
+      "id": "NV-G03",
+      "ten": "GĐTT Giả CS2",
+      "chuc_danh": "GDTT",
+      "co_so": "CS2"
+    }
+  ],
+  "meta": {
+    "cong_cu": "danh_muc.lay_nhan_su",
+    "phien_ban_khuon": "1.0",
+    "sinh_luc": "2026-09-25T09:00:00+07:00",
+    "so_ban_ghi": 3,
+    "tiep_theo": null,
+    "da_che_du_lieu": false,
+    "pham_vi_co_so": [
+      "HO",
+      "CS1",
+      "CS2"
+    ],
+    "ma_yeu_cau": "req_mau_nhan_su",
+    "gia_lap": true
+  }
+}

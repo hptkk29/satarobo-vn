@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import {
+  Bot,
   BadgeCheck,
   // Trophy,
   // tạm ẩn cùng mục "Vinh danh" trong NAV_GROUPS (bật lại: bỏ comment)
@@ -365,6 +366,15 @@ const NAV_GROUPS: NavGroup[] = [
       // AUTH-SĐT P4 dựng /otp-logs nhưng quên link — màn trả lời "phụ huynh báo
       // không nhận được mã" mà nhân viên trực phải gõ tay URL thì coi như không có.
       { label: "OTP Logs", href: "/otp-logs", icon: MessageCircle, perm: ["emails:view"] },
+    ],
+  },
+  {
+    // 25/09/2026 — Cổng dữ liệu agent. Nhóm RIÊNG, cố ý không nằm trong "Hệ thống & Cấu
+    // hình" bên dưới: nhóm đó chốt CHỈ SUPER_ADMIN, còn màn này dành cho hai vai MỚI
+    // GIAM_DOC + KY_THUAT (`agent_gateway:view`, GLOBAL).
+    label: "Kết nối agent",
+    items: [
+      { label: "Cổng dữ liệu agent", href: "/cong-du-lieu-agent", icon: Bot, perm: [...PAGE_GATES["/cong-du-lieu-agent"]] },
     ],
   },
   {

@@ -68,6 +68,7 @@ const KHOA_DANG_CHAY: ReadonlyArray<[key: string, file: string]> = [
   // không được trùng `trial.cho-phan-cong:` (trùng là ĐÈ mất tin gốc lúc tạo buổi).
   ["trial.reminder-gv:1-gio:s1", "lib/trial/nhac-buoi.ts"],
   ["trial.cho-phan-cong-gap:s1", "lib/trial/nhac-buoi.ts"],
+  ["agent-gateway.tu-khoa:agc_x:2026-09-25", "lib/agents/gateway/tu-khoa.ts"],
 ];
 
 describe("catalog — phủ hết nguồn sinh đang chạy", () => {

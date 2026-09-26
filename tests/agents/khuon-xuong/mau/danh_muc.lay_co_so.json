@@ -1,0 +1,72 @@
+{
+  "du_lieu": [
+    {
+      "id": "HO",
+      "ten": "Hội sở Sata Robo",
+      "phap_nhan": "Công ty CP Công nghệ Giáo dục Sata Robo",
+      "dia_chi": "Nguyễn Hữu Thọ, Hòa Cường, Đà Nẵng",
+      "la_trung_tam": false
+    },
+    {
+      "id": "CS1",
+      "ten": "Trung tâm CS1",
+      "phap_nhan": "Công ty CP CNGD STEM Robotics & AI",
+      "dia_chi": "211 Nguyễn Hữu Thọ, Hòa Cường, Đà Nẵng",
+      "la_trung_tam": true,
+      "gio_lam": {
+        "tu": "08:00",
+        "den": "20:00",
+        "ngay": [
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8
+        ]
+      },
+      "nguoi_nhan_canh_bao": [
+        "NV-G02"
+      ]
+    },
+    {
+      "id": "CS2",
+      "ten": "Trung tâm CS2",
+      "phap_nhan": "Công ty CP CNGD New Vision",
+      "dia_chi": "114 Hoàng Diệu, Hải Châu, Đà Nẵng",
+      "la_trung_tam": true,
+      "gio_lam": {
+        "tu": "08:00",
+        "den": "20:00",
+        "ngay": [
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8
+        ]
+      },
+      "nguoi_nhan_canh_bao": [
+        "NV-G03"
+      ]
+    }
+  ],
+  "meta": {
+    "cong_cu": "danh_muc.lay_co_so",
+    "phien_ban_khuon": "1.0",
+    "sinh_luc": "2026-09-25T09:00:00+07:00",
+    "so_ban_ghi": 3,
+    "tiep_theo": null,
+    "da_che_du_lieu": false,
+    "pham_vi_co_so": [
+      "HO",
+      "CS1",
+      "CS2"
+    ],
+    "ma_yeu_cau": "req_mau_co_so",
+    "gia_lap": true
+  }
+}

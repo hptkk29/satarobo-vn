@@ -1,0 +1,67 @@
+{
+  "du_lieu": [
+    {
+      "id": "L-0001",
+      "ten_ph": "[TÊN_PH]",
+      "sdt": "[SĐT]",
+      "ten_be": "[TÊN_CON]",
+      "lop_be": 3,
+      "kenh": "zalo_ca_nhan",
+      "nguon": "GG-01",
+      "co_so": "CS1",
+      "khoa_quan_tam": "SATA4",
+      "tvv_id": "NV-G04",
+      "giai_doan_hien_tai": "G1",
+      "tao_luc": "2026-09-09T11:37:00+07:00",
+      "gioi_thieu_boi": null,
+      "sdt_ma_hoa": "2c229d60f0fc10e1"
+    },
+    {
+      "id": "L-0002",
+      "ten_ph": "[TÊN_PH]",
+      "sdt": "[SĐT]",
+      "ten_be": "[TÊN_CON]",
+      "lop_be": 5,
+      "kenh": "zalo_ca_nhan",
+      "nguon": "organic",
+      "co_so": "CS1",
+      "khoa_quan_tam": "SATA5",
+      "tvv_id": "NV-G05",
+      "giai_doan_hien_tai": "G2",
+      "tao_luc": "2026-09-09T16:29:00+07:00",
+      "gioi_thieu_boi": null,
+      "sdt_ma_hoa": "77958b60a4df0fc3"
+    },
+    {
+      "id": "L-0003",
+      "ten_ph": "[TÊN_PH]",
+      "sdt": "[SĐT]",
+      "ten_be": "[TÊN_CON]",
+      "lop_be": 3,
+      "kenh": "messenger",
+      "nguon": "META-02",
+      "co_so": "CS2",
+      "khoa_quan_tam": "SATA4",
+      "tvv_id": "NV-G06",
+      "giai_doan_hien_tai": "G3",
+      "tao_luc": "2026-09-09T16:22:00+07:00",
+      "gioi_thieu_boi": null,
+      "sdt_ma_hoa": "a437c8557a1beff5"
+    }
+  ],
+  "meta": {
+    "cong_cu": "kinh_doanh.lay_leads",
+    "phien_ban_khuon": "1.0",
+    "sinh_luc": "2026-09-25T09:00:00+07:00",
+    "so_ban_ghi": 3,
+    "tiep_theo": null,
+    "da_che_du_lieu": true,
+    "pham_vi_co_so": [
+      "HO",
+      "CS1",
+      "CS2"
+    ],
+    "ma_yeu_cau": "req_mau_lead",
+    "gia_lap": true
+  }
+}

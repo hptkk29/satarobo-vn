@@ -19,6 +19,29 @@ export const systemModule: ModuleDecl = {
       description: "Mở màn dashboard QLCS 4 tab (Tài chính · Kinh doanh · Chi phí Marketing · Tương tác KH).",
     },
 
+    // --- Cổng dữ liệu agent (25/09/2026, tài liệu CEO §5.4) ---
+    // `scopable: false`: cổng không thuộc cơ sở nào, và `agent_gateway:view` là cổng TRANG
+    // (PAGE_GATES gọi không target ⇒ phải GLOBAL). Phạm vi cơ sở của AGENT nằm ở grant, không
+    // ở quyền của người quản trị.
+    {
+      key: "agent_gateway:view",
+      action: "view",
+      scopable: false,
+      description: "Mở màn Cổng dữ liệu agent: xem ứng dụng kết nối, quyền cấp, nhật ký gọi.",
+    },
+    {
+      key: "agent_gateway:manage",
+      action: "manage",
+      scopable: false,
+      description: "Tạo ứng dụng kết nối/quyền cấp (chờ duyệt), sinh/xoay khoá, khoá, thu hồi.",
+    },
+    {
+      key: "agent_gateway:approve",
+      action: "approve",
+      scopable: false,
+      description: "Duyệt/từ chối ứng dụng + quyền cấp của agent, mở khoá, bật cổng. Người duyệt ≠ người tạo.",
+    },
+
     // --- Settings (cấu hình toàn cục — không gắn đơn vị) ---
     { key: "settings:view", action: "view", scopable: false },
     { key: "settings:edit", action: "edit", scopable: false },

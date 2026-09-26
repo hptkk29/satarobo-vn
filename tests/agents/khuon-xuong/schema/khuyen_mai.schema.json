@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "khuyen_mai",
+  "description": "Khuôn trường 'du_lieu' của công cụ van_ban.lay_khuyen_mai_hieu_luc.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": [
+      "ma_van_ban",
+      "ten",
+      "hieu_luc_tu",
+      "hieu_luc_den",
+      "trang_thai",
+      "noi_dung_uu_dai"
+    ],
+    "properties": {
+      "ma_van_ban": {
+        "type": "string"
+      },
+      "ten": {
+        "type": "string"
+      },
+      "hieu_luc_tu": {
+        "type": "string"
+      },
+      "hieu_luc_den": {
+        "type": "string"
+      },
+      "trang_thai": {
+        "enum": [
+          "dang_hieu_luc",
+          "het_hieu_luc"
+        ]
+      },
+      "noi_dung_uu_dai": {
+        "type": "string"
+      }
+    }
+  }
+}

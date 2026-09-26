@@ -427,7 +427,15 @@ export type Action =
   // này không chặn được từng thao tác, nên tách `view`/`reply` sẽ là quyền GIẢ —
   // hứa một lớp gác không tồn tại.
   | "zalocrm:use"
-  | "zalocrm:manage-nick";
+  | "zalocrm:manage-nick"
+  // --- Cổng dữ liệu agent (tài liệu CEO 25/09/2026 §5.4) ---
+  // view = xem client/grant/nhật ký · manage = tạo client/grant (chờ duyệt), sinh/xoay
+  // khoá, khoá, thu hồi · approve = duyệt/từ chối/mở khoá — người duyệt PHẢI khác người
+  // tạo (chặn ở tầng nghiệp vụ `lib/agents/quan-tri`, không ở đây).
+  // User dịch vụ của agent KHÔNG BAO GIỜ giữ ba quyền này (spec §5.4).
+  | "agent_gateway:view"
+  | "agent_gateway:manage"
+  | "agent_gateway:approve";
 
 // =============================================================================
 // MATRIX — Mỗi action liệt kê rõ những role được phép.
@@ -994,6 +1002,15 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // nhưng tự giao nick cho mình thì không: đó là cổng phân quyền, không phải việc
   // hằng ngày của họ.
   "zalocrm:manage-nick": ["SUPER_ADMIN", "CENTER_MANAGER"],
+
+  // --- Cổng dữ liệu agent ---
+  // CHỈ SUPER_ADMIN ở v1: người giữ thật là hai vai v2 MỚI `GIAM_DOC` (duyệt) + `KY_THUAT`
+  // (tạo) — không có vai v1 tương ứng, quyền của họ sống ở DB (`prisma/seed-roles.ts`).
+  // Vẫn phải khai key ở đây: sidebar + PAGE_GATES chỉ lặp key của bảng này (bẫy
+  // `zalocrm:use` ở trên), và SUPER_ADMIN v1 không bypass vô điều kiện.
+  "agent_gateway:view": ["SUPER_ADMIN"],
+  "agent_gateway:manage": ["SUPER_ADMIN"],
+  "agent_gateway:approve": ["SUPER_ADMIN"],
 
   // --- Trục gọi điện + ghi âm (OmiCall) ---
   // Ma trận nguồn: `docs/ba-crm-hien-trang-va-misa.md:1380`. Vai v1 tương ứng:

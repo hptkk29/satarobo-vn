@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "chi_tieu",
+  "description": "Khuôn trường 'du_lieu' của công cụ kinh_doanh.lay_chi_tieu.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": [
+      "co_so",
+      "thang",
+      "hoc_vien_muc_tieu",
+      "ty_le_lead_len_hoc_thu",
+      "ty_le_hoc_thu_len_dang_ky"
+    ],
+    "properties": {
+      "co_so": {
+        "type": "string"
+      },
+      "thang": {
+        "type": "string"
+      },
+      "hoc_vien_muc_tieu": {
+        "type": "integer"
+      },
+      "ty_le_lead_len_hoc_thu": {
+        "type": "number"
+      },
+      "ty_le_hoc_thu_len_dang_ky": {
+        "type": "number"
+      }
+    }
+  }
+}

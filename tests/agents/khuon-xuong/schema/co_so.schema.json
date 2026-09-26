@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "co_so",
+  "description": "Khuôn trường 'du_lieu' của công cụ danh_muc.lay_co_so.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": [
+      "id",
+      "ten",
+      "phap_nhan",
+      "dia_chi",
+      "la_trung_tam"
+    ],
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "ten": {
+        "type": "string"
+      },
+      "phap_nhan": {
+        "type": "string"
+      },
+      "dia_chi": {
+        "type": "string"
+      },
+      "la_trung_tam": {
+        "type": "boolean"
+      }
+    }
+  }
+}

@@ -1,5 +1,5 @@
 // prisma/seed-roles.ts — A0-02: seed danh mục RoleDef + RolePermission mẫu (Doc 15 §2.3).
-// 15 role (EL-02 thêm AUDITOR); KHÔNG có HO_MANAGER. SUPER_ADMIN/PARENT = isSystem (không xóa/đổi code).
+// 18 role (EL-02 thêm AUDITOR; Cổng agent thêm GIAM_DOC, KY_THUAT, AGENT_CHI_DOC); KHÔNG có HO_MANAGER. SUPER_ADMIN/PARENT = isSystem (không xóa/đổi code).
 // Idempotent: upsert RoleDef theo code + reset permission của role mỗi lần chạy.
 // ⚠️ NGUYÊN TỬ: cả vòng lặp nằm trong một `$transaction` — đọc chú thích ở `seedRoles()`
 // trước khi sửa. Tách ra = mất quyền toàn hệ thống giữa lúc seed (cờ v2 đang BẬT trên prod).
@@ -1196,6 +1196,38 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "elearning:progress:view-all", scopeType: "GLOBAL" },
       { action: "elearning:video-analytics:view", scopeType: "GLOBAL" },
       { action: "elearning:report:export", scopeType: "GLOBAL" },
+    ],
+  },
+  // ── Cổng dữ liệu agent (tài liệu CEO 25/09/2026 §5.4) ──────────────────────────────
+  // Ba vai MỚI, không có vai v1 tương ứng (như AUDITOR). Tên/mã là MẶC ĐỊNH ĐỀ XUẤT của
+  // BA (Q-N4 — chờ CEO + tech lead xác nhận), đổi được mà không đụng mã.
+  // Mọi quyền GLOBAL: `PAGE_GATES` gọi không target (`page-gates.test.ts` khoá).
+  {
+    code: "GIAM_DOC", name: "Giám đốc — duyệt Cổng dữ liệu agent",
+    // Người DUYỆT. Cố ý không có `manage`: spec đòi người tạo ≠ người duyệt, và tách hai
+    // quyền ra hai vai là để việc đó đúng ngay từ cách gán vai, không chỉ ở cổng nghiệp vụ.
+    perms: [
+      { action: "agent_gateway:view", scopeType: "GLOBAL" },
+      { action: "agent_gateway:approve", scopeType: "GLOBAL" },
+    ],
+  },
+  {
+    code: "KY_THUAT", name: "Kỹ thuật — quản trị Cổng dữ liệu agent",
+    // Người TẠO client/grant (chờ duyệt), sinh/xoay khoá, khoá khẩn cấp, thu hồi.
+    perms: [
+      { action: "agent_gateway:view", scopeType: "GLOBAL" },
+      { action: "agent_gateway:manage", scopeType: "GLOBAL" },
+    ],
+  },
+  {
+    code: "AGENT_CHI_DOC", name: "Agent — chỉ đọc danh mục (tài khoản dịch vụ)",
+    // Vai của USER DỊCH VỤ, không gán cho người. Chỉ quyền ĐỌC. Ba điều phải giữ:
+    //  1. KHÔNG bao giờ có `agent_gateway:*`, `*:approve`, quyền ký/chi/khoá kỳ (spec §5.4).
+    //  2. KHÔNG có quyền `*:manage` chỉ để đọc được — đó là trao năng lực ghi (BA §0 điểm 6).
+    //  3. Thêm quyền đọc cho công cụ mới = thêm dòng ở ĐÂY, kèm lý do; đừng gán vai người.
+    // Đợt 0: `danh_muc.lay_co_so` cần `centers:view`.
+    perms: [
+      { action: "centers:view", scopeType: "GLOBAL" },
     ],
   },
   {

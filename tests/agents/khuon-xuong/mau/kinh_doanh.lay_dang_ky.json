@@ -1,0 +1,49 @@
+{
+  "du_lieu": [
+    {
+      "lead_id": "L-0002",
+      "khoa": "TRIAL_1_1",
+      "trang_thai": "da_hen_hoc_thu",
+      "ngay_hoc_thu": "2026-09-11",
+      "ngay_dang_ky": null,
+      "hoc_phi_niem_yet": 0,
+      "van_ban_khuyen_mai": null,
+      "co_so": "CS1"
+    },
+    {
+      "lead_id": "L-0004",
+      "khoa": "SATA4",
+      "trang_thai": "da_dang_ky",
+      "ngay_hoc_thu": "2026-09-12",
+      "ngay_dang_ky": "2026-09-14",
+      "hoc_phi_niem_yet": 11520000,
+      "van_ban_khuyen_mai": "SR.QD.233",
+      "co_so": "CS2"
+    },
+    {
+      "lead_id": "L-0007",
+      "khoa": "TRIAL_1_1",
+      "trang_thai": "da_hen_hoc_thu",
+      "ngay_hoc_thu": "2026-09-13",
+      "ngay_dang_ky": null,
+      "hoc_phi_niem_yet": 0,
+      "van_ban_khuyen_mai": null,
+      "co_so": "CS2"
+    }
+  ],
+  "meta": {
+    "cong_cu": "kinh_doanh.lay_dang_ky",
+    "phien_ban_khuon": "1.0",
+    "sinh_luc": "2026-09-25T09:00:00+07:00",
+    "so_ban_ghi": 3,
+    "tiep_theo": null,
+    "da_che_du_lieu": false,
+    "pham_vi_co_so": [
+      "HO",
+      "CS1",
+      "CS2"
+    ],
+    "ma_yeu_cau": "req_mau_dang_ky",
+    "gia_lap": true
+  }
+}
