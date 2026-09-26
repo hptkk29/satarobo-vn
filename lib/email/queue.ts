@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { sendEmail } from "./send";
 import { renderTemplate } from "./render";
 import type { Prisma } from "@prisma/client";
+import { chuanBiGuiHoaDon, ghiKetQuaGuiHoaDon, NGU_CANH_EMAIL_HOA_DON } from "@/lib/finance/hoa-don/dinh-kem-email";
 
 // =============================================================================
 // Cụm A2 — Email queue.
@@ -23,13 +24,19 @@ export interface EnqueueEmailInput {
   vars?: Vars;
   scheduledAt?: Date;
   context?: { type: string; id: string };
+  /**
+   * Transaction của người gọi — dòng hàng đợi commit / rollback CÙNG nghiệp vụ. Hoá đơn điện tử
+   * cần điều này: giành lượt gửi + xếp hàng phải nguyên tử (PLAN §7), không thì lỗi xếp hàng để
+   * lại một lượt kẹt "đang gửi" mãi.
+   */
+  tx?: Prisma.TransactionClient;
 }
 
 /** Đẩy 1 email vào hàng đợi (status PENDING). Không gửi. */
 export async function enqueueEmail(input: EnqueueEmailInput): Promise<{ ok: boolean; id?: string }> {
   const to = input.to?.trim();
   if (!to) return { ok: false };
-  const row = await db.emailQueue.create({
+  const row = await (input.tx ?? db).emailQueue.create({
     data: {
       toEmail: to,
       toName: input.toName ?? null,
@@ -95,6 +102,33 @@ export async function processEmailQueue(limit = 25): Promise<ProcessResult> {
     bodyText = renderTemplate(bodyText, vars);
     bodyHtml = renderTemplate(bodyHtml || `<pre>${bodyText}</pre>`, vars);
 
+    // Dòng HOÁ ĐƠN ĐIỆN TỬ: đọc LẠI hoá đơn (chỉ gửi bản còn hiệu lực) + ký URL tệp đính kèm.
+    // Không tin payload hàng đợi — khoá tệp lấy từ chính hoá đơn (lib/finance/hoa-don/dinh-kem-email.ts).
+    const laHoaDon = row.contextType === NGU_CANH_EMAIL_HOA_DON && Boolean(row.contextId);
+    let dinhKem: { filename: string; path: string }[] | undefined;
+    let idempotencyKey: string | undefined;
+    if (laHoaDon) {
+      const cb = await chuanBiGuiHoaDon(row.contextId as string);
+      if (!cb.ok) {
+        const attempts = row.attempts + 1;
+        const cuoiCung = cb.chan || attempts >= row.maxAttempts;
+        await db.emailQueue.update({
+          where: { id: row.id },
+          data: {
+            attempts,
+            error: cb.loi,
+            status: cuoiCung ? "FAILED" : "PENDING",
+            scheduledAt: cuoiCung ? row.scheduledAt : new Date(Date.now() + 5 * 60_000),
+          },
+        });
+        await ghiKetQuaGuiHoaDon(row.contextId as string, { daGui: false, loi: cb.loi, cuoiCung });
+        failed++;
+        continue;
+      }
+      dinhKem = cb.attachments;
+      idempotencyKey = cb.idempotencyKey;
+    }
+
     if (!subject || !bodyText) {
       // Thiếu nội dung (không template, không inline) → FAILED, không retry.
       await db.emailQueue.update({
@@ -117,7 +151,17 @@ export async function processEmailQueue(limit = 25): Promise<ProcessResult> {
       contextType: row.contextType,
       contextId: row.contextId,
       triggerType: "SYSTEM",
+      attachments: dinhKem,
+      idempotencyKey,
     });
+
+    if (laHoaDon) {
+      const attempts = row.attempts + 1;
+      await ghiKetQuaGuiHoaDon(
+        row.contextId as string,
+        result.ok ? { daGui: true } : { daGui: false, loi: result.error, cuoiCung: attempts >= row.maxAttempts },
+      );
+    }
 
     if (result.ok) {
       await db.emailQueue.update({

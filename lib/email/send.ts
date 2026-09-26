@@ -22,6 +22,11 @@ export type SendEmailParams = {
   // để mật khẩu không nằm plaintext trong DB / màn /admin/email-logs.
   logBodyText?: string;
   logBodyHtml?: string;
+
+  /** Tệp đính kèm dạng URL (Resend tự tải) — hoá đơn điện tử dùng URL ký 300 giây. */
+  attachments?: { filename: string; path: string }[];
+  /** Khoá chống gửi đôi phía Resend (header `Idempotency-Key`). */
+  idempotencyKey?: string;
 };
 
 export type SendEmailResult =
@@ -74,14 +79,18 @@ export async function sendEmail(
   const replyTo = params.replyTo ?? getReplyTo();
 
   try {
-    const response = await client.emails.send({
-      from,
-      to: params.toName ? `${params.toName} <${params.to}>` : params.to,
-      subject: params.subject,
-      text: params.bodyText,
-      html: params.bodyHtml,
-      replyTo,
-    });
+    const response = await client.emails.send(
+      {
+        from,
+        to: params.toName ? `${params.toName} <${params.to}>` : params.to,
+        subject: params.subject,
+        text: params.bodyText,
+        html: params.bodyHtml,
+        replyTo,
+        ...(params.attachments?.length ? { attachments: params.attachments } : {}),
+      },
+      params.idempotencyKey ? { idempotencyKey: params.idempotencyKey } : undefined,
+    );
 
     if (response.error) {
       const reason = `${response.error.name}: ${response.error.message}`;

@@ -20,6 +20,7 @@ import { registerConversationNotifHandlers } from "@/lib/_handlers/conversation-
 import { registerParentRequestHandlers } from "@/lib/events/handlers/parent-request";
 import { registerChatParticipantRemovedHandlers } from "@/lib/chat/_handlers/participant-removed";
 import { registerAttendanceDayHandlers } from "@/lib/cham-cong/_handlers/attendance-day";
+import { registerHoaDonHandlers } from "@/lib/finance/hoa-don/gui-email";
 
 let registered = false;
 
@@ -46,4 +47,5 @@ export function ensureHandlersRegistered(): void {
   registerChatParticipantRemovedHandlers(); // US-07/F-KICK — chat.participant_removed → đá client ra khỏi kênh realtime
   registerElearningNotifyHandlers(); // EL-06 — giao bài / quá hạn / hoàn thành → in-app + email (KHÔNG ZNS)
   registerAttendanceDayHandlers(); // Chấm công v3 L2 — hr.attendance_day_dirty → recomputeAttendanceDay (không xin khe cron)
+  registerHoaDonHandlers(); // Hoá đơn điện tử GĐ 6 — hoa-don.gui → xếp email · hoa-don.khong-email → báo sale gửi Zalo
 }

@@ -655,3 +655,25 @@ Tập nền: 154 dòng `Payment` còn sống · **32 khoản thu thật** (23 đ
 6. **"Thay" hoá đơn đã xác nhận: dời sang GĐ sau.** Bản thay cần hạ `hieuLuc` của bản cũ và mở bản
    mới trong cùng lượt, và nên thiết kế cùng luồng gửi lại email của GĐ 6. Hiện hoá đơn đã xác nhận
    chỉ xem / tải được.
+
+### Điều chỉnh khi thi công GĐ 6 (26/09)
+
+1. **Dòng hàng đợi nhận diện hoá đơn bằng `EmailQueue.contextType = "HoaDonGuiEmail"` +
+   `contextId = guiId`.** PLAN ghi khoá `payload.__hoaDon`, nhưng `payload` là `vars` của
+   `renderTemplate` (chỉ nhận chuỗi/số); hai cột ngữ cảnh đã có sẵn và có kiểu, nên dùng chúng.
+   Worker vẫn không tin payload: khoá tệp đọc từ HOÁ ĐƠN (`dinh-kem-email.ts`).
+2. **`enqueueEmail({ tx })`** là tham số mới, tuỳ chọn. Có nó thì bước giành lượt gửi và bước xếp
+   hàng nằm cùng một transaction: xếp lỗi thì cả hai lùi, lượt sau gửi được và không bao giờ có hai
+   dòng hàng đợi.
+3. **`sendEmail` nhận `attachments` (URL) + `idempotencyKey`** và chuyển thẳng sang Resend 6.12
+   (`emails.send(payload, { idempotencyKey })`). Đường gửi cũ không truyền thì không đổi gì.
+4. **Đối soát** chạy trong cron `email-queue` TRƯỚC worker: lượt còn CHO quá 10 phút ⇒ xếp lại
+   bằng chính handler (idempotent).
+5. **Tên sự kiện viết literal** ở cả chỗ phát lẫn chỗ nghe, vì lưới `khop-phat-nghe` chỉ đọc chuỗi
+   literal. Lưới đó KHÔNG phát hiện được việc quên gọi `registerHoaDonHandlers()`, nên thêm ca
+   `[HDR-01]` đo registry thật (cấy thử: xoá lời gọi ⇒ ca đỏ, lưới cũ vẫn xanh).
+6. Trạng thái hiển thị của lượt gửi (DA_GUI / LOI) được worker ghi thẳng lên `HoaDonGuiEmail`. Khối
+   trên trang đơn (GĐ 7) đọc trạng thái từ đó.
+7. **Sau GĐ 6 mới được bật cờ `billing.hoaDonEnabled` trên `test`** để nghiệm thu. Test env không có
+   `RESEND_API_KEY`: nghiệm thu bằng dòng `EmailQueue` + `HoaDonGuiEmail`. Gửi thật chỉ smoke được
+   trên prod.

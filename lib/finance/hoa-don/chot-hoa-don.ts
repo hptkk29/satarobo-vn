@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
 import { khoaDonTrongTx } from "@/lib/finance/ghi-tien-don";
 import { LoiXacNhanKhoan, xacNhanKhoanTrongTx } from "@/lib/finance/payment";
+import { publishEvent } from "@/lib/events/publish";
 import { soTienRong } from "./nguon-khoan";
 import { TRANG_THAI_DON_DA_HUY } from "./du-dieu-kien";
 
@@ -123,9 +124,16 @@ export async function chotHoaDon(input: {
     const toi = hd.guiEmailKhach ? hd.emailNhan : null;
     const coGuiEmail = Boolean(toi);
     if (toi) {
-      await tx.hoaDonGuiEmail.create({
+      const gui = await tx.hoaDonGuiEmail.create({
         data: { hoaDonId, lanGui: 1, toi, trangThai: "CHO", guiBoiId: nguoiChot.id },
+        select: { id: true },
       });
+      // Tên sự kiện viết LITERAL — lưới `lib/events/khop-phat-nghe.test.ts` chỉ đọc được chuỗi literal.
+      await publishEvent("hoa-don.gui", { guiId: gui.id }, { tx, dedupeKey: `hoa-don.gui:${gui.id}` });
+    } else if (hd.guiEmailKhach) {
+      // Muốn gửi mà khách KHÔNG có email ⇒ báo sale tải hoá đơn trên trang đơn để gửi Zalo.
+      // Bỏ tick (MISA đã gửi rồi) thì không báo ai — không có việc gì phải làm.
+      await publishEvent("hoa-don.khong-email", { hoaDonId }, { tx, dedupeKey: `hoa-don.khong-email:${hoaDonId}` });
     }
 
     const theoId = new Map(cacDong.map((p) => [p.id, p]));
