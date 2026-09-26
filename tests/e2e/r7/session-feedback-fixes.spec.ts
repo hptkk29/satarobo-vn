@@ -14,6 +14,8 @@
  *  [SFB-05] update không ghi đè createdById (giữ tác giả phiếu gốc).
  *  [SFB-06] saveSessionEvalCore: rubric-only không email; re-save không đổi văn xuôi
  *           không email trùng; người sửa sau không cướp tác giả.
+ *  [SFB-07] guiEmailPhuHuynh=false (seed thử, 26/09): phiếu VẪN lưu đúng tác giả + VẪN phát
+ *           comment.added, nhưng KHÔNG xếp email — đối chứng dương: cùng phiếu, true ⇒ có email.
  */
 import { test, expect } from "@playwright/test";
 import { db } from "../../../lib/db";
@@ -325,7 +327,7 @@ test.describe("[SFB] Nhận xét theo buổi — 6 fix 08/2026", () => {
           projectName: "Dự án 2: Cánh tay robot",
           notes: emptyNotes,
           rubric: { "kt-cu": 1 },
-        })
+        }, { guiEmailPhuHuynh: true })
       ).ok,
     ).toBe(true);
     expect(await emailCount()).toBe(0);
@@ -341,11 +343,11 @@ test.describe("[SFB] Nhận xét theo buổi — 6 fix 08/2026", () => {
       notes: { ...emptyNotes, knowledge: "Nắm vững vòng lặp" },
       rubric: { "kt-cu": 1 },
     };
-    expect((await saveSessionEvalCore(gvUser(gv1.id), withProse)).ok).toBe(true);
+    expect((await saveSessionEvalCore(gvUser(gv1.id), withProse, { guiEmailPhuHuynh: true })).ok).toBe(true);
     expect(await emailCount()).toBe(1);
 
     // 3) Re-save Y NGUYÊN → comment không đổi → không email trùng.
-    expect((await saveSessionEvalCore(gvUser(gv1.id), withProse)).ok).toBe(true);
+    expect((await saveSessionEvalCore(gvUser(gv1.id), withProse, { guiEmailPhuHuynh: true })).ok).toBe(true);
     expect(await emailCount()).toBe(1);
 
     // 4) GV dạy thay sửa văn xuôi (fix #3 phủ luôn saveSessionEval) → +1 email,
@@ -356,12 +358,46 @@ test.describe("[SFB] Nhận xét theo buổi — 6 fix 08/2026", () => {
           ...withProse,
           notes: { ...emptyNotes, knowledge: "Nắm vững vòng lặp, tự mở rộng điều kiện" },
           rubric: { "kt-cu": 2 },
-        })
+        }, { guiEmailPhuHuynh: true })
       ).ok,
     ).toBe(true);
     expect(await emailCount()).toBe(2);
     row = await db.studentSessionFeedback.findUnique({ where: fbWhere(s.sessionId, st.id) });
     expect(row?.createdById).toBe(gv1.id);
     expect(row?.rubric).toEqual({ "kt-cu": 2 });
+  });
+  test("[SFB-07] guiEmailPhuHuynh=false: lưu + phát sự kiện như thường, KHÔNG xếp email", async () => {
+    const gv = await makeTeacher("gv-sfb7");
+    const s = await seedClassSession({ teacherId: gv.id });
+    const st = await seedStudent(s, { withParent: true });
+    const input = {
+      sessionId: s.sessionId,
+      studentId: st.id,
+      projectName: "Dự án 3: Xe dò vạch",
+      notes: { overall: "Con lắp ráp gọn, cần luyện thêm phần căn chỉnh." },
+      rubric: { "kt-cu": 3 },
+    };
+
+    expect((await saveSessionEvalCore(gvUser(gv.id), input, { guiEmailPhuHuynh: false })).ok).toBe(true);
+    const row = await db.studentSessionFeedback.findUnique({ where: fbWhere(s.sessionId, st.id) });
+    expect(row?.comment).toBe("Con lắp ráp gọn, cần luyện thêm phần căn chỉnh.");
+    expect(row?.createdById).toBe(gv.id);
+    expect(await emailCount()).toBe(0);
+    expect(
+      await db.domainEvent.count({ where: { type: "comment.added", dedupeKey: `comment.added:${row!.id}` } }),
+    ).toBe(1);
+
+    // Đối chứng dương: cùng học viên, văn xuôi ĐỔI, cờ true ⇒ có email — chứng minh ca trên
+    // ra 0 vì cờ chứ không phải vì phụ huynh không có email.
+    expect(
+      (
+        await saveSessionEvalCore(
+          gvUser(gv.id),
+          { ...input, notes: { overall: "Con tiến bộ rõ ở phần lập trình." } },
+          { guiEmailPhuHuynh: true },
+        )
+      ).ok,
+    ).toBe(true);
+    expect(await emailCount()).toBe(1);
   });
 });

@@ -52,6 +52,7 @@ export async function saveSessionEval(input: unknown): Promise<Result> {
   const res = await saveSessionEvalCore(
     { id: session.user.id, role: session.user.role, centerId: session.user.centerId },
     input,
+    { guiEmailPhuHuynh: true },
   );
   if (res.ok) {
     revalidatePath("/teacher/nhan-xet");

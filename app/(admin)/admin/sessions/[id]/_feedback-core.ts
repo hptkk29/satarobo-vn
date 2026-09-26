@@ -363,6 +363,14 @@ export async function saveSessionFeedbackCore(
 export async function saveSessionEvalCore(
   user: SessionGateUser,
   input: unknown,
+  /**
+   * 26/09/2026 — BẮT BUỘC truyền (luật 7: không mặc định cho tham số "gửi tin"). Màn giáo viên
+   * truyền `true` (hành vi như cũ). Seed thử (`scripts/seed-thu-nhan-xet-giao-vien.ts`) truyền
+   * `false`: đi đúng đường giáo viên nhập nhưng KHÔNG xếp email NEW_FEEDBACK — hàng đợi email
+   * không có trạng thái huỷ, và trên env `test` cron gửi thật mỗi 5 phút. Chỉ tắt EMAIL; thông
+   * báo trong cổng phụ huynh (DomainEvent `comment.added`) vẫn phát như giáo viên nhập thật.
+   */
+  tuyChon: { guiEmailPhuHuynh: boolean },
 ): Promise<FeedbackResult> {
   const parsed = sessionEvalSchema.safeParse(input);
   if (!parsed.success) {
@@ -497,7 +505,7 @@ export async function saveSessionEvalCore(
   } catch (err) {
     console.error("[saveSessionEval] publish comment.added error:", err);
   }
-  if (comment && commentChanged) {
+  if (tuyChon.guiEmailPhuHuynh && comment && commentChanged) {
     try {
       const [student, cls] = await Promise.all([
         sdb.student.findFirst({
