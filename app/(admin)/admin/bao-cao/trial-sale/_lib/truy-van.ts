@@ -7,7 +7,12 @@
 import type { Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { getSubtreeCenterIds } from "@/lib/org/org-service";
-import { phamViCoSo, type CaseTrial, type TrangThaiCase } from "@/lib/reports/trial-sale";
+import {
+  phamViCoSo,
+  saleCuaCase,
+  type CaseTrial,
+  type TrangThaiCase,
+} from "@/lib/reports/trial-sale";
 
 /** Trần số case đọc một lượt. Vượt trần thì màn hình PHẢI nói ra, không cắt im lặng. */
 export const TRAN_CASE = 5000;
@@ -67,10 +72,22 @@ export async function layCaseTrial(actor: Actor, loc: BoLoc): Promise<KetQua> {
       id: true,
       status: true,
       createdAt: true,
-      addedById: true,
       leadChildId: true,
       gvPhanCongId: true,
-      leadChild: { select: { fullName: true, lead: { select: { parentName: true } } } },
+      leadChild: {
+        select: {
+          fullName: true,
+          lead: {
+            select: {
+              parentName: true,
+              // 26/09 — case tính cho Sale PHỤ TRÁCH LEAD, không cho người bấm thêm
+              // (`saleCuaCase`). Tên tra kèm luôn ở đây, không cần lượt tra người riêng.
+              assignedToId: true,
+              assignedTo: { select: { name: true } },
+            },
+          },
+        },
+      },
       trialClass: { select: { id: true, name: true, startDate: true } },
       attendances: { select: { status: true } },
       // `scheduledSessionId` là CỘT TRẦN, không có quan hệ khai trong schema ⇒ không
@@ -83,7 +100,6 @@ export async function layCaseTrial(actor: Actor, loc: BoLoc): Promise<KetQua> {
   const cat = batTran ? rows.slice(0, TRAN_CASE) : rows;
 
   // ── Tra thêm HAI thứ, mỗi thứ MỘT lượt cho cả trang (không N+1) ─────────────────────
-  const idNguoiThem = [...new Set(cat.map((r) => r.addedById).filter((x): x is string => !!x))];
   const idCon = [...new Set(cat.map((r) => r.leadChildId))];
 
   // Giáo viên của buổi đã xếp — chỉ cần khi case chưa có GV phân công.
@@ -114,9 +130,9 @@ export async function layCaseTrial(actor: Actor, loc: BoLoc): Promise<KetQua> {
   ];
 
   const [nguoi, ghiDanh] = await Promise.all([
-    idNguoiThem.length + idGv.length > 0
+    idGv.length > 0
       ? sdb.user.findMany({
-          where: { id: { in: [...new Set([...idNguoiThem, ...idGv])] } },
+          where: { id: { in: idGv } },
           select: { id: true, name: true },
         })
       : Promise.resolve([] as { id: string; name: string | null }[]),
@@ -151,8 +167,7 @@ export async function layCaseTrial(actor: Actor, loc: BoLoc): Promise<KetQua> {
     const diemDanh = r.attendances;
     return {
       id: r.id,
-      saleId: r.addedById,
-      saleName: r.addedById ? (tenTheoId.get(r.addedById) ?? null) : null,
+      ...saleCuaCase(r.leadChild?.lead ?? null),
       status: r.status as TrangThaiCase,
       daChot: (chotTheoCon.get(r.leadChildId) ?? []).some(
         (d) => d.getTime() >= r.createdAt.getTime(),

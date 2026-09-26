@@ -15,6 +15,8 @@ import {
   nhanTyLe,
   NHAN_CHI_TIEU,
   phamViCoSo,
+  SALE_CHUA_CO,
+  saleCuaCase,
   THUOC_NHOM,
   type CaseTrial,
   type MaChiTieu,
@@ -99,13 +101,13 @@ describe("[TKS-02] gom theo Sale", () => {
     expect(gomTheoSale(ds)[0]!.saleId).toBe("s1");
   });
 
-  it("⚠️ case KHÔNG rõ người thêm vẫn thành một dòng, không bị nuốt", () => {
+  it("⚠️ case của lead CHƯA CÓ Sale phụ trách vẫn thành một dòng, không bị nuốt", () => {
     // Nuốt đi là tổng của bảng nhỏ hơn tổng số case, và người đọc sẽ đi tìm mấy case
     // thiếu — hoặc tệ hơn, tin vào con số thiếu đó.
     const r = gomTheoSale([...ds, ca({ saleId: null, saleName: null })]);
     const vo = r.find((x) => x.saleId === null)!;
-    expect(vo, "case không rõ người thêm bị bỏ khỏi bảng").toBeTruthy();
-    expect(vo.saleName).toContain("không rõ");
+    expect(vo, "case của lead chưa có Sale bị bỏ khỏi bảng").toBeTruthy();
+    expect(vo.saleName).toBe(SALE_CHUA_CO);
     expect(r.reduce((s, x) => s + x.so.tong, 0)).toBe(5);
   });
 
@@ -303,5 +305,45 @@ describe("[TKS-07] ⚠️ phạm vi cơ sở = giao giữa KHU VỰC và CƠ S�
     // Người Hội sở chọn khu vực Đà Nẵng rồi chọn một cơ sở ở khu vực khác: phải ra rỗng,
     // không phải ra cơ sở đó.
     expect(phamViCoSo({ coSoCuaKhuVuc: ["cs1"], centerId: "cs9" })).toEqual([]);
+  });
+});
+
+describe("[TSL-SALE] case tính cho Sale PHỤ TRÁCH LEAD (26/09/2026)", () => {
+  it("[TSL-SALE-01] lead có Sale phụ trách ⇒ đúng Sale đó", () => {
+    expect(
+      saleCuaCase({ assignedToId: "sale-lien", assignedTo: { name: "Lê Thị Phương Liên" } }),
+    ).toEqual({ saleId: "sale-lien", saleName: "Lê Thị Phương Liên" });
+  });
+
+  it("[TSL-SALE-02] lead chưa ai phụ trách ⇒ null (gom vào dòng \"chưa có Sale\")", () => {
+    expect(saleCuaCase({ assignedToId: null, assignedTo: null })).toEqual({
+      saleId: null,
+      saleName: null,
+    });
+    expect(saleCuaCase(null)).toEqual({ saleId: null, saleName: null });
+  });
+
+  const doc = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8");
+  const boChuThich = (s: string) =>
+    s
+      .split(/\r?\n/)
+      .filter((d) => {
+        const t = d.trim();
+        return !(t.startsWith("//") || t.startsWith("/*") || t.startsWith("*"));
+      })
+      .join("\n");
+
+  it("[TSL-SALE-W1] ⚠️ báo cáo KHÔNG còn tính theo người bấm thêm case (addedById)", () => {
+    // Trước 26/09: `saleId: r.addedById` ⇒ tài khoản quản trị xếp hộ một bé cũng thành
+    // một dòng "Sale", còn Sale thật của lead thì mất case đó.
+    const tv = boChuThich(doc("app/(admin)/admin/bao-cao/trial-sale/_lib/truy-van.ts"));
+    expect(tv).not.toContain("addedById");
+    expect((tv.match(/saleCuaCase\(/g) ?? []).length).toBe(1);
+    expect(tv).toContain("assignedToId: true");
+  });
+
+  it("[TSL-SALE-W2] site GV in cột Sale theo CÙNG định nghĩa", () => {
+    const ts = boChuThich(doc("lib/lms/teacher-schedule.ts"));
+    expect(ts).toContain("saleName: saleCuaCase(");
   });
 });

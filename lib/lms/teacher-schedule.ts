@@ -32,6 +32,7 @@ import {
 } from "@/lib/lms/trial-row-status";
 import type { Actor } from "@/lib/auth/actor";
 import { khoaHieuLucCuaBe } from "@/lib/lead/khoa-quan-tam";
+import { saleCuaCase } from "@/lib/reports/trial-sale";
 
 /** Buổi Trial GV phụ trách trong [from, to) — bỏ buổi đã hủy. */
 export type TeacherTrialSessionRow = {
@@ -665,6 +666,11 @@ export type TrialTableRow = {
   /** Tên phụ huynh — xem ghi chú "ĐẢO câu 46" ở trên. KHÔNG kèm SĐT/email. */
   parentName: string | null;
   courseName: string | null;
+  /**
+   * 26/09 — Sale PHỤ TRÁCH LEAD của bé (`saleCuaCase`), để giáo viên biết trao đổi với
+   * ai. `null` = lead chưa ai phụ trách. Cùng định nghĩa với báo cáo trải nghiệm theo Sale.
+   */
+  saleName: string | null;
   trialClassName: string;
   /** @db.Date → UTC 00:00 của ngày VN. LUÔN có: dòng không suy được buổi thì bị bỏ. */
   date: Date;
@@ -787,7 +793,16 @@ export async function getTeacherTrialTable(
         interestedCourseId: true,
         // ĐẢO câu 46 — CHỈ tên phụ huynh, không SĐT/email (xem ghi chú đầu khối).
         // `courseId`: khoá quan tâm cấp lead — nguồn lùi của `khoaHieuLucCuaBe`.
-        lead: { select: { parentName: true, courseId: true } },
+        // 26/09 — `assignedTo`: Sale phụ trách lead, để giáo viên biết trao đổi với ai
+        // (`saleCuaCase` — cùng định nghĩa với báo cáo trải nghiệm). Chỉ TÊN nhân viên.
+        lead: {
+          select: {
+            parentName: true,
+            courseId: true,
+            assignedToId: true,
+            assignedTo: { select: { name: true } },
+          },
+        },
       },
     },
   } as const;
@@ -897,6 +912,7 @@ export async function getTeacherTrialTable(
         (e.leadChild.ageYears != null ? nowYear - e.leadChild.ageYears : null),
       parentName: e.leadChild.lead?.parentName?.trim() || null,
       courseName: courseName.get(khoaHieuLucCuaBe(e.leadChild) ?? "") ?? null,
+      saleName: saleCuaCase(e.leadChild.lead ?? null).saleName,
       trialClassName: ses.trialClass.name,
       date: ses.date,
       startTime: ses.startTime,
