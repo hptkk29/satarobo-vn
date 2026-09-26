@@ -1,0 +1,108 @@
+# Chạy TAY (workflow_dispatch) — ĐỌC PROD, KHÔNG GHI GÌ.
+#
+# 🔴 Chủ dự án 26/09/2026 chốt cách chia học phần: *"sata1, sata2 gồm 1 học phần 16 bài;
+# sata 3,4,5,6,7 gồm 4 học phần mỗi học phần 12 bài; Combo Luyện thi gồm 2 học phần mỗi học
+# phần 16 bài (16 bài đầu của sata1, 16 bài sau của sata2); sata8: 1 học phần 5 buổi"*.
+#
+# Báo cáo này trả lời: **bấm `seed-curriculum-sata.ts` thì nó đổi ĐÚNG NHỮNG GÌ trên prod.**
+#
+# ⚠️ VÌ SAO KHÔNG CHỈ NÓI VỀ HỌC PHẦN. Nhánh `update` của seed ghi đè NĂM cột —
+# `title` · `moduleCode` · `moduleName` · `description` · `objectives` — nên một lượt seed
+# cũng **viết lại TÊN của mọi bài**. Tên bài đi tới nhãn buổi và (sau khi cắt tiền tố học
+# phần) tới phiếu gửi PHỤ HUYNH. Báo cáo tách riêng nhóm ② "đổi cả tên bài" vì đó là nhóm
+# phải đọc từng dòng, khác hẳn nhóm ① "chỉ gán học phần".
+#
+# ⚠️ ĐÂY VẪN CHỈ LÀ DRY-RUN. Nó KHÔNG chạy seed. Lượt GHI thật là một workflow riêng, chưa
+# dựng — và theo khuôn `sap-lai-bai-prod.yml` thì nó phải có: dump trạng thái cũ ra artifact
+# TRƯỚC khi ghi, chuỗi xác nhận gõ tay, và bỏ qua mọi giáo trình hình dạng lạ.
+#
+# Bốn lớp khoá giống hệt `hoc-phan-prod-chi-doc.yml`; lưới `lib/lms/dry-run-hoc-phan.test.ts`
+# (`[DRH-*]`) ghim cả bốn.
+name: Dry-run học phần · PROD · ĐỌC (chỉ đọc — không ghi gì)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  doc:
+    name: Dry-run: seed sẽ đổi gì (không ghi)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: github.ref == 'refs/heads/main'
+    steps:
+      # Kiểm HÌNH DẠNG chuỗi trước khi tốn 40 giây cài đặt rồi mới chết ở Prisma.
+      # KHÔNG in giá trị secret ra log — chỉ nói chỗ nào sai.
+      - name: Kiểm secret chỉ-đọc
+        env:
+          U: ${{ secrets.PROD_DATABASE_URL_RO }}
+        run: |
+          if [ -z "$U" ]; then
+            echo "::error::Thiếu secret PROD_DATABASE_URL_RO (chuỗi session pooler của user chỉ-đọc)."
+            echo "::error::Cách tạo user + lấy chuỗi: docs/cham-cong/USER-CHI-DOC-PROD.md"
+            echo "::error::KHÔNG đặt chuỗi đầy quyền vào đây."
+            exit 1
+          fi
+          rest="${U#*://}"
+          proto="${U%%://*}"
+          userinfo="${rest%@*}"
+          user="${userinfo%%:*}"
+          hostport="${rest##*@}"
+          port="${hostport##*:}"; port="${port%%/*}"
+          ok=1
+          case "$proto" in
+            postgresql|postgres) ;;
+            *) echo "::error::Chuỗi phải bắt đầu bằng postgresql:// — đang là '$proto://'"; ok=0 ;;
+          esac
+          case "$user" in
+            *.*) ;;
+            *) echo "::error::Tên user THIẾU hậu tố '.<mã dự án>' — Supavisor định tuyến theo mã dự án nằm TRONG tên user."; ok=0 ;;
+          esac
+          if [ "$port" != "5432" ]; then
+            echo "::error::Cổng đang là '$port' — phải là 5432 (tab 'Session pooler')."
+            ok=0
+          fi
+          [ $ok -eq 1 ] || { echo "::error::Sửa secret rồi chạy lại. Không có bước nào chạm DB."; exit 1; }
+          echo "Chuỗi đúng hình dạng."
+
+      - uses: actions/checkout@v4
+      # `version` PHẢI pin: `package.json` của repo KHÔNG có khoá `packageManager`, nên thiếu
+      # dòng này là action chết ngay với "No pnpm version is specified". Lưỡi canh quét MỌI
+      # workflow: `lib/finance/bao-cao-chi-doc.test.ts` `[BCD-04]`.
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # `prisma generate` chỉ sinh mã client vào node_modules của runner — không chạm DB.
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      - name: Dựng báo cáo (chỉ đọc)
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+          DIRECT_URL: ${{ secrets.PROD_DATABASE_URL_RO }}
+        run: pnpm exec tsx scripts/dry-run-hoc-phan.ts
+
+      - name: Đưa báo cáo lên job summary
+        if: always()
+        run: |
+          if [ -f dry-run-hoc-phan.md ]; then
+            cat dry-run-hoc-phan.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error::Script không sinh được báo cáo — xem log bước trên."
+          fi
+
+      - name: Lưu artifact (3 ngày)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dry-run-hoc-phan
+          path: dry-run-hoc-phan.md
+          retention-days: 3
+          if-no-files-found: warn

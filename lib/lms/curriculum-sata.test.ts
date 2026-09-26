@@ -62,10 +62,42 @@ describe("buildSataCurricula", () => {
     }
   });
 
-  it("khoá luyện thi Sata1/2/8 KHÔNG chia học phần", () => {
-    for (const slug of ["sata1", "sata2", "sata8"]) {
+  // ⚠️ AC ĐÃ ĐẢO — bảng ký, đừng đọc ca dưới như thể nó luôn đúng như vậy.
+  //
+  //   | AC cũ                                   | thay bằng                      | ai        | ngày       |
+  //   |-----------------------------------------|--------------------------------|-----------|------------|
+  //   | Sata1/2/8 KHÔNG chia học phần (`null`)  | MỖI khoá đúng 1 học phần `HP1` | chủ dự án | 26/09/2026 |
+  //
+  // Nguyên văn: *"sata1, sata2 gồm 1 học phần 16 bài … sata8: 1 học phần 5 buổi"*.
+  // Thi công ở `examCurricula()` (`lib/lms/curriculum-sata.ts`).
+  //
+  // Ca cũ được ĐẢO chứ không xoá: xoá lặng thì người sau đọc `git log` không biết luật đã
+  // đổi hay ai đó lỡ tay gỡ lưới.
+  it("khoá luyện thi Sata1/2/8 gom ĐÚNG MỘT học phần trọn khoá [đảo 26/09/2026]", () => {
+    for (const [slug, soBai] of [
+      ["sata1", 16],
+      ["sata2", 16],
+      ["sata8", 5],
+    ] as const) {
       const cur = bySlug.get(slug)!;
-      expect(cur.lessons.every((l) => l.moduleCode === null), slug).toBe(true);
+      // Mọi bài CÙNG một học phần — và nó phải là `HP1`, không phải một mã tuỳ ý.
+      expect(new Set(cur.lessons.map((l) => l.moduleCode)), slug).toEqual(new Set(["HP1"]));
+      expect(cur.lessons, slug).toHaveLength(soBai);
+      // ⚠️ ĐỐI CHỨNG DƯƠNG: `moduleName` cũng phải có. Thiếu nó thì nhãn buổi in ra mã
+      // trần "HP1" mà không ai biết HP1 là gì — và ca trên vẫn xanh.
+      expect(new Set(cur.lessons.map((l) => l.moduleName)), slug).toEqual(
+        new Set(["Học phần 1"]),
+      );
+    }
+  });
+
+  it("KHÔNG giáo trình nào còn bài không có học phần [đảo 26/09/2026]", () => {
+    // Đối chứng cho toàn bộ chốt 26/09: 9/9 giáo trình đều chia học phần. Ca này là thứ
+    // sẽ đỏ nếu ai đó thêm một khoá mới mà quên gán — lỗi vốn CÂM (nhãn buổi rút gọn,
+    // không lỗi nào báo).
+    for (const cur of buildSataCurricula()) {
+      const thieu = cur.lessons.filter((l) => !l.moduleCode || !l.moduleName);
+      expect(thieu.map((l) => l.order), `${cur.courseSlug} có bài thiếu học phần`).toEqual([]);
     }
   });
 
