@@ -7,7 +7,7 @@
 // được `checkPermission("payments:confirm")` trần. PLAN §9: mọi đường GHI + tải bản NHÁP phải hỏi
 // tập cơ sở của ĐÚNG quyền `payments:confirm`.
 import { describe, it, expect } from "vitest";
-import { coQuyenKeToanTaiCoSo, QUYEN_KE_TOAN_HOA_DON } from "./quyen";
+import { coQuyenKeToanTaiCoSo, duocTaiBanHoaDon, QUYEN_KE_TOAN_HOA_DON } from "./quyen";
 
 type Actor = Parameters<typeof coQuyenKeToanTaiCoSo>[0];
 const quyen = (action: string, centerScope: "ALL" | string[] | null) => ({
@@ -54,5 +54,24 @@ describe("[HDQ-01] tập cơ sở theo ĐÚNG quyền payments:confirm", () => {
   it("không giữ quyền nào / vai quan hệ (centerScope null) ⇒ false", () => {
     expect(coQuyenKeToanTaiCoSo(actor(), "cs1")).toBe(false);
     expect(coQuyenKeToanTaiCoSo(actor({ permissions: [quyen("payments:confirm", null)] }), "cs1")).toBe(false);
+  });
+});
+
+describe("[HDQ-02] duocTaiBanHoaDon — MỘT luật cho route tải về và nút tải trên trang đơn", () => {
+  it("kế toán của cơ sở giữ hoá đơn ⇒ tải MỌI bản (nháp, đã xác nhận, bị thay)", () => {
+    for (const trangThai of ["NHAP", "DA_XAC_NHAN", "THAY_THE", "KHONG_XUAT"]) {
+      expect(duocTaiBanHoaDon({ keToanCoSo: true, xemPii: false, trangThai }), trangThai).toBe(true);
+    }
+  });
+
+  it("người có orders:view-pii ⇒ CHỈ bản ĐÃ XÁC NHẬN", () => {
+    expect(duocTaiBanHoaDon({ keToanCoSo: false, xemPii: true, trangThai: "DA_XAC_NHAN" })).toBe(true);
+    for (const trangThai of ["NHAP", "THAY_THE", "KHONG_XUAT"]) {
+      expect(duocTaiBanHoaDon({ keToanCoSo: false, xemPii: true, trangThai }), trangThai).toBe(false);
+    }
+  });
+
+  it("không giữ quyền nào ⇒ không bản nào, kể cả bản đã xác nhận", () => {
+    expect(duocTaiBanHoaDon({ keToanCoSo: false, xemPii: false, trangThai: "DA_XAC_NHAN" })).toBe(false);
   });
 });

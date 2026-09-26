@@ -57,4 +57,17 @@ describe("client R2", () => {
     expect(config.region).toBe("auto");
     expect(config.endpoint).toBe("https://acct.r2.cloudflarestorage.com");
   });
+
+  it("[R2-CFG] r2DaCauHinh trả lời ĐÚNG câu mà getR2Client hỏi — đủ năm biến mới true, không ném", async () => {
+    const { r2DaCauHinh, getR2Client } = await import("./r2-client");
+    expect(r2DaCauHinh()).toBe(true);
+    for (const bien of ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET_NAME", "R2_PUBLIC_URL"]) {
+      const giu = process.env[bien];
+      delete process.env[bien];
+      expect(r2DaCauHinh(), bien).toBe(false);
+      // Đối chứng: đúng lúc hàm báo false thì client chung THẬT SỰ không dựng được.
+      expect(() => getR2Client(), bien).toThrow(/R2 env vars missing/);
+      process.env[bien] = giu;
+    }
+  });
 });

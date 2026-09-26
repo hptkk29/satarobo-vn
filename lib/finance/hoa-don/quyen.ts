@@ -22,3 +22,18 @@ export function coQuyenKeToanTaiCoSo(actor: ActionScopeActor, centerId: string |
   const tap = actionCenterScope(actor, QUYEN_KE_TOAN_HOA_DON);
   return tap === "ALL" || tap.includes(centerId);
 }
+
+/**
+ * Tải được tệp của MỘT bản hoá đơn không — luật DUY NHẤT, dùng chung cho route
+ * `payments/hoa-don/[hoaDonId]/tai-ve` VÀ nút tải trên trang chi tiết đơn (GĐ 7). Hai bên giữ
+ * hai bản điều kiện thì có ngày nút hiện ra mà route trả 404 — lời hứa suông (luật 12).
+ *   · kế toán của ĐÚNG cơ sở giữ hoá đơn — mọi bản (nháp để soát, bản bị thay để đối chiếu);
+ *   · người có `orders:view-pii` — CHỈ bản ĐÃ XÁC NHẬN (nháp có thể sai; sale gửi qua Zalo thì
+ *     không thu về được).
+ * Người gọi đã giải sẵn `keToanCoSo` = `payments:confirm` (trần) VÀ `coQuyenKeToanTaiCoSo`.
+ * ⚠️ Chưa gồm phạm vi `scopedDb`: route đọc bản ghi qua `scopedDb` (ngoài phạm vi ⇒ 404 trước khi
+ * tới đây) — nơi vẽ nút phải tự hỏi `passesScope("HoaDonDienTu", …)`.
+ */
+export function duocTaiBanHoaDon(input: { keToanCoSo: boolean; xemPii: boolean; trangThai: string }): boolean {
+  return input.keToanCoSo || (input.xemPii && input.trangThai === "DA_XAC_NHAN");
+}

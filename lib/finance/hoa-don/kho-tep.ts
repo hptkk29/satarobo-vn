@@ -7,7 +7,7 @@ import {
   PutObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { getR2Client } from "@/lib/storage/r2-client";
+import { getR2Client, r2DaCauHinh } from "@/lib/storage/r2-client";
 
 // =============================================================================
 // KHO TỆP HOÁ ĐƠN ĐIỆN TỬ — bucket R2 RIÊNG (docs/ke-toan-hoa-don/PLAN.md §6).
@@ -55,16 +55,20 @@ export function getHoaDonBucket(): string {
   return bucket;
 }
 
-/** Hỏi trước khi làm gì — KHÔNG ném. Đủ bucket hợp lệ + đủ khoá truy cập R2. */
+/**
+ * Hỏi trước khi làm gì — KHÔNG ném. Đủ bucket hợp lệ + client R2 CHUNG dựng được.
+ *
+ * ⚠️ Vế thứ hai hỏi `r2DaCauHinh()` chứ không tự liệt kê biến: mọi phép ký URL ở đây đi qua
+ * `getR2Client()`, mà client đó đòi cả `R2_BUCKET_NAME` + `R2_PUBLIC_URL`. Bản cũ chỉ hỏi ba khoá
+ * truy cập ⇒ trả `true`, màn vẽ nút tải, route ký URL thì ném ⇒ 503 (smoke GĐ 7, 26/09/2026).
+ */
 export function khoHoaDonDaCauHinh(): boolean {
   try {
     getHoaDonBucket();
   } catch {
     return false;
   }
-  return Boolean(
-    process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY,
-  );
+  return r2DaCauHinh();
 }
 
 export type LoaiTep = "pdf" | "xml";

@@ -127,7 +127,9 @@ export async function baoKhongEmail(hoaDonId: string): Promise<number> {
     dedupeKey: `hoa-don.khong-email:${hoaDonId}`,
     title: `Hoá đơn ${so} chưa gửi được cho khách`,
     body: `Khách ${hd.order.customerName ?? ""} (đơn ${hd.order.code}) không có email — tải hoá đơn trên trang đơn để gửi qua Zalo.`,
-    href: `/orders/${hd.orderId}`,
+    // `#hoa-don` — neo của khối "Hoá đơn điện tử" trên trang đơn (GĐ 7): trên điện thoại cột phải
+    // nằm dưới cùng trang, không neo thì sale phải cuộn đi tìm nút tải.
+    href: `/orders/${hd.orderId}#hoa-don`,
     entityId: hoaDonId,
   });
 }

@@ -432,7 +432,7 @@ email-queue     ─► với dòng loại hoá đơn: ĐỌC LẠI hoá đơn �
 
 | Việc | Quyền | Vai có sẵn |
 |---|---|---|
-| Vào màn, tải phiếu chờ, tải lên, xác nhận, không xuất, thay, gửi lại | `payments:confirm` + tập cơ sở kế toán | HO_ACCOUNTANT (`seed-roles.ts:153`), CENTER_ACCOUNTANT (`:1157`) |
+| Vào màn, tải phiếu chờ, tải lên, xác nhận, không xuất, thay, gửi lại | `payments:confirm` + tập cơ sở kế toán | HO_ACCOUNTANT (`seed-roles.ts:155`), CENTER_ACCOUNTANT (`:1169`) — đo lại 26/09 |
 | Gắn giao dịch chưa khớp | quyền của đường có sẵn (`xu-ly-giao-dich.tsx`) | — |
 | Xem khối Hoá đơn / tải bản DA_XAC_NHAN | `orders:view` / `orders:view-pii` | sale, QLCS, kế toán theo cơ sở |
 
@@ -677,3 +677,47 @@ Tập nền: 154 dòng `Payment` còn sống · **32 khoản thu thật** (23 đ
 7. **Sau GĐ 6 mới được bật cờ `billing.hoaDonEnabled` trên `test`** để nghiệm thu. Test env không có
    `RESEND_API_KEY`: nghiệm thu bằng dòng `EmailQueue` + `HoaDonGuiEmail`. Gửi thật chỉ smoke được
    trên prod.
+
+### Điều chỉnh khi thi công GĐ 7 (26/09)
+
+1. **Khối là DANH SÁCH, không phải bảng.** Cột phải rộng 20rem, một bảng 5 cột ở đó là cuộn ngang
+   ⇒ không cần khai `MIEN_TRU` cho `bang-coverage` (§8 dự kiến khai).
+2. **View-model thuần ở `lib/finance/hoa-don/khoi-hoa-don-don.ts`, loader ở
+   `nap-khoi-hoa-don-don.ts`.** Dòng dựng bằng CHÍNH `dungDongHangCho` của màn kế toán. DTO không
+   mang khoá tệp, MST, địa chỉ, tên đơn vị, CCCD, SĐT, id khoản, lỗi nhà cung cấp email (khi thiếu
+   PII). Trang gọi loader trong lô 2 có sẵn: `[DST-01]` giữ 11 `await` / 4 lô.
+3. **Nút tải hỏi ĐÚNG luật route.** Luật "ai tải bản nào" tách thành `duocTaiBanHoaDon`
+   (`quyen.ts`), route và khối cùng gọi. Loader hỏi thêm `passesScope("HoaDonDienTu")` vì route đọc
+   hoá đơn qua `scopedDb` (tiền tố `payments:`), còn khối đọc LỒNG dưới Order. Trang hỏi thêm
+   `payments:confirm` (nhánh kế toán cơ sở của route), trong cùng lô quyền.
+4. **`khoHoaDonDaCauHinh()` nay hỏi `r2DaCauHinh()`** (`lib/storage/r2-client.ts`), tức ĐÚNG danh
+   sách biến mà `getR2Client()` đòi. Bản GĐ 3 thiếu `R2_BUCKET_NAME` + `R2_PUBLIC_URL`: màn vẽ nút
+   tải, route ký URL thì ném, trả 503 (smoke GĐ 7 bắt được). Trên test/prod hai biến có sẵn nên chưa
+   ai dính.
+5. **"Không xuất" vì "Đã xuất ngoài hệ thống" hiện là *Đã xuất hoá đơn ngoài hệ thống*** và được
+   đếm là đã có hoá đơn. Đây là lý do MẶC ĐỊNH của kế toán; đọc nó thành "Không xuất" là nói với
+   sale điều ngược lại. Hai lý do cố định hiện cho mọi người xem; lý do tự do ("Khác: …") chỉ hiện
+   khi có `orders:view-pii`. Chuỗi lý do gom về `ly-do-khong-xuat.ts` (action, form kế toán và khối
+   cùng đọc).
+6. **Đơn chỉ có tiền thu trước khi lên hệ thống** (`[backfill-import]` / `[sheet:…]`) không còn
+   hiện "Chưa có khoản thu nào". Khối đếm các khoản đó (`lichSu`) và nói ra.
+7. **Khoá dòng DUY NHẤT — sửa ở NGUỒN (`dungDongHangCho` → `khoaDuyNhat`).** Đợt đã xuất "theo số
+   đã thu" rồi có thêm tiền về cho đúng đợt ấy ⇒ hai dòng trùng khoá lần thu ⇒ màn kế toán
+   (`?chon=`, `dongCuaLanThu`, route phiếu chờ) `find` ra dòng hoá đơn cũ. Hệ quả: khoản mới **kẹt
+   trong hàng chờ vĩnh viễn**. Nay chỉ gắn đuôi khi TRÙNG, nên ca thường giữ nguyên khoá cũ. Dòng
+   ĐANG xử lý (chờ/lệch → nháp) giữ khoá gốc, để audit `TAI_PHIEU_CHO.lanThuKey` và `?chon=` không
+   đứt; cùng mức thì lần thu MỚI hơn giữ khoá gốc. Khối trên trang đơn khoá riêng theo `hd:<id>`.
+   Ca `[DHC-KEY]`.
+8. Câu dặn "tải về gửi qua Zalo" chỉ in khi dòng CÓ nút tải; không có nút thì in "nhờ kế toán gửi
+   bản" (luật 12). Tham số `coNutTai` bắt buộc, không đặt mặc định.
+9. Thông báo "hoá đơn chưa gửi được" trỏ `/orders/<id>#hoa-don`. Điều hướng trong app đi qua
+   `loading.tsx` nên trình duyệt nhận neo lúc khối chưa có ⇒ khối tự cuộn khi gắn.
+10. **Loader chia nhịp 1 thành hai câu song song** (tiền · hoá đơn), cùng cổng phạm vi `Order`: một
+    câu lồng ba tầng là ~9 lượt đi-về nối đuôi, thành nhánh dài nhất của lô 2.
+11. **Cấy 26 phép, 25 đỏ đúng ca.** Phép còn lại là phép TƯƠNG ĐƯƠNG: bỏ lọc `trangThai` hoá đơn
+    trong loader thì bản `THAY_THE` vẫn không lộ, vì dòng nối của nó luôn `hieuLuc=false` và lọc
+    `hieuLuc` chặn thay. Hai lớp che nhau; bỏ cả hai thì mới lộ.
+12. **Lỗ CÓ SẴN, KHÔNG vá ở GĐ 7:** khối "Người mua trên hoá đơn" (`thong-tin-hoa-don.tsx`) nhận MST,
+    địa chỉ, tên đơn vị KHÔNG che cho người thiếu `orders:view-pii`. Che ở đó thì form sửa sẽ ghi
+    bản đã che đè lên dữ liệu thật ⇒ phải tách phần HIỂN THỊ khỏi giá trị khởi tạo của form. Đó là
+    ticket riêng. Mức rủi ro thấp: mọi vai có `orders:view` hiện đều có `orders:view-pii`.

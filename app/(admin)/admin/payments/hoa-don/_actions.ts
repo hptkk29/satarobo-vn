@@ -48,6 +48,7 @@ import {
 } from "@/lib/finance/hoa-don/ghi-hoa-don";
 import { chotHoaDon, thongDiepLoiChot, type KetQuaChot } from "@/lib/finance/hoa-don/chot-hoa-don";
 import { sapXepTrongNgan } from "@/lib/finance/hoa-don/ngan-hang-cho";
+import { laLyDoCoDinh, TIEN_TO_LY_DO_KHAC } from "@/lib/finance/hoa-don/ly-do-khong-xuat";
 
 /** URL PUT sống 5 phút — đủ để trình duyệt tải một tệp ≤ 10 MB lên. */
 const TTL_PUT_GIAY = 300;
@@ -297,7 +298,6 @@ export async function luuHoaDonNhapAction(input: unknown): Promise<KetQua<{ hoaD
   return { ok: true, data: { hoaDonId: kq.data.id } };
 }
 
-const LY_DO_KHONG_XUAT = ["Đã xuất ngoài hệ thống", "Khách không lấy hoá đơn"];
 const khongXuatSchema = z.object({
   orderId: z.string().min(1).max(64),
   lanThuKey: z.string().min(1).max(512),
@@ -311,10 +311,10 @@ export async function khongXuatHoaDonAction(input: unknown): Promise<KetQua<{ ho
   const p = khongXuatSchema.safeParse(input);
   if (!p.success) return { ok: false, error: "Yêu cầu không hợp lệ" };
   const v = p.data;
-  const lyDo = LY_DO_KHONG_XUAT.includes(v.lyDo)
+  const lyDo = laLyDoCoDinh(v.lyDo)
     ? v.lyDo
     : v.ghiChu && v.ghiChu.length >= 5
-      ? `Khác: ${v.ghiChu}`
+      ? `${TIEN_TO_LY_DO_KHAC}${v.ghiChu}`
       : null;
   if (!lyDo) return { ok: false, error: "Ghi rõ lý do không xuất (ít nhất 5 ký tự)" };
 

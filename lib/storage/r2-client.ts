@@ -47,6 +47,23 @@ function readEnv() {
   };
 }
 
+/**
+ * Đủ biến để `getR2Client()` dựng được client chưa — hỏi ĐÚNG `readEnv()`, KHÔNG ném.
+ *
+ * Vì sao cần: các kho riêng (hoá đơn…) từng tự kiểm một danh sách biến NGẮN hơn danh sách này
+ * (thiếu `R2_BUCKET_NAME` + `R2_PUBLIC_URL`), nên màn hình báo "kho đã cấu hình", vẽ nút tải, rồi
+ * route ký URL qua client chung và ném ⇒ 503 (đo 26/09/2026, smoke GĐ 7 hoá đơn). Kho nào ký URL
+ * qua client chung thì hỏi hàm này, đừng chép lại danh sách biến.
+ */
+export function r2DaCauHinh(): boolean {
+  try {
+    readEnv();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 let _client: S3Client | null = null;
 
 // Lazy R2 client — chỉ khởi tạo khi gọi.

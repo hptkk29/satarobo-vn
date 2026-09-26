@@ -263,3 +263,92 @@ describe("[DHC-05] PII và quyền", () => {
     expect(dong[0]!.coTtHoaDon).toBe(true);
   });
 });
+
+describe("[DHC-KEY] khoá dòng DUY NHẤT trong đơn — `?chon=` / phiếu chờ / action đều `find` theo nó", () => {
+  // Đợt 1 = 3.000.000đ. p1 2.000.000đ đã lên hoá đơn "theo số đã thu"; p2 1.000.000đ về SAU cho đúng
+  // đợt ấy. Khoá lần thu của hai dòng đều là khoá của đợt 1 ⇒ trước bản vá `find` trả dòng hoá đơn cũ,
+  // kế toán không mở được dòng tiền mới và lưu hoá đơn thì bị từ chối ⇒ p2 kẹt hàng chờ vĩnh viễn.
+  type HoaDonVao = DonVaoHangCho["hoaDonDienTu"][number];
+  const hdCua = (id: string, trangThai: HoaDonVao["trangThai"], paymentId: string, soTien: number): HoaDonVao => ({
+    id,
+    trangThai,
+    kyHieu: "1C26TSR",
+    soHoaDon: id === "hdA" ? "101" : "102",
+    ngayPhatHanh: new Date("2026-09-12T00:00:00Z"),
+    tepPdfKey: `hoa-don/CS1/2026/don1/${id}.pdf`,
+    tepPdfTen: `${id}.pdf`,
+    tepXmlTen: null,
+    emailNhan: null,
+    guiEmailKhach: true,
+    xuatTheoSoDaThu: true,
+    lyDo: "Phụ huynh trả nốt sau",
+    khoan: [{ paymentId, soTien }],
+  });
+  const dVoi = (hoaDonDienTu: HoaDonVao[]) =>
+    don({
+      payments: [
+        khoan({ id: "p1", amount: 2_000_000, accountantStatus: DA_XAC_NHAN }),
+        khoan({ id: "p2", amount: 1_000_000, note: gatewayMarker("SEPAY", "FT2"), paidDate: new Date("2026-09-15T03:00:00Z") }),
+      ],
+      paymentRequests: [
+        {
+          id: "dot1",
+          orderItemId: null,
+          installmentNo: 1,
+          amountDue: 3_000_000,
+          status: "PAID",
+          allocations: [
+            { bankTransactionId: "bt1", paymentRequestId: "dot1", amount: 2_000_000, roundingWaived: 0 },
+            { bankTransactionId: "bt2", paymentRequestId: "dot1", amount: 1_000_000, roundingWaived: 0 },
+          ],
+        },
+      ],
+      hoaDonDienTu,
+    });
+  const gd = [
+    { ...GD[0]!, amount: 2_000_000 },
+    { id: "bt2", provider: "SEPAY", providerTxnId: "FT2", transferredAt: new Date("2026-09-15T10:00:00Z"), amount: 1_000_000 },
+  ];
+  const khoaTheoKhoan = (dong: { key: string; khoanIds: string[] }[]) =>
+    Object.fromEntries(dong.map((d) => [d.khoanIds[0], d.key]));
+
+  it("tiền mới (chờ) + hoá đơn cũ (đã xuất) ⇒ HAI khoá; dòng ĐANG xử lý giữ khoá gốc", () => {
+    const { dong } = dungDongHangCho(vao({ don: dVoi([hdCua("hdA", "DA_XAC_NHAN", "p1", 2_000_000)]), giaoDich: gd }));
+    expect(dong).toHaveLength(2);
+    const k = khoaTheoKhoan(dong);
+    expect(k.p1).not.toBe(k.p2);
+    expect(k.p2).not.toContain("~");
+    expect(k.p1).toBe(`${k.p2}~hdA`);
+    // Chính phép tra của màn / action: bấm dòng tiền mới thì ra ĐÚNG dòng tiền mới.
+    expect(dong.find((d) => d.key === k.p2)!.khoanIds).toEqual(["p2"]);
+  });
+
+  it("tải tệp cho tiền mới (nháp) ⇒ dòng ấy VẪN giữ khoá gốc (`?chon=` + audit phiếu chờ không đứt)", () => {
+    const truoc = khoaTheoKhoan(dungDongHangCho(vao({ don: dVoi([hdCua("hdA", "DA_XAC_NHAN", "p1", 2_000_000)]), giaoDich: gd })).dong);
+    const sau = khoaTheoKhoan(
+      dungDongHangCho(
+        vao({ don: dVoi([hdCua("hdA", "DA_XAC_NHAN", "p1", 2_000_000), hdCua("hdB", "NHAP", "p2", 1_000_000)]), giaoDich: gd }),
+      ).dong,
+    );
+    expect(sau.p2).toBe(truoc.p2);
+    expect(new Set(Object.values(sau)).size).toBe(2);
+  });
+
+  it("chốt xong cả hai ⇒ lần thu MỚI hơn giữ khoá gốc; khoá vẫn duy nhất", () => {
+    const k = khoaTheoKhoan(
+      dungDongHangCho(
+        vao({
+          don: dVoi([hdCua("hdA", "DA_XAC_NHAN", "p1", 2_000_000), hdCua("hdB", "DA_XAC_NHAN", "p2", 1_000_000)]),
+          giaoDich: gd,
+        }),
+      ).dong,
+    );
+    expect(k.p2).not.toContain("~");
+    expect(k.p1).toBe(`${k.p2}~hdA`);
+  });
+
+  it("đối chứng: KHÔNG trùng thì không gắn đuôi — khoá cũ đứng yên", () => {
+    const { dong } = dungDongHangCho(vao());
+    expect(dong.map((d) => d.key)).toEqual(["dot:dot1"]);
+  });
+});
