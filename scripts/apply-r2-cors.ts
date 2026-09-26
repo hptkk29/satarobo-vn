@@ -3,7 +3,12 @@
 //
 //   pnpm exec tsx scripts/apply-r2-cors.ts              # bucket upload chung (SCORM…)
 //   pnpm exec tsx scripts/apply-r2-cors.ts chat         # bucket ẢNH CHAT (R2_CHAT_BUCKET_NAME)
+//   pnpm exec tsx scripts/apply-r2-cors.ts hoa-don      # bucket HOÁ ĐƠN (R2_INVOICE_BUCKET_NAME)
 //   pnpm exec tsx scripts/apply-r2-cors.ts --bucket=X   # chỉ đích danh
+//
+// `hoa-don` dùng bộ luật RIÊNG, HẸP (`scripts/r2-cors-hoa-don.json`): hoá đơn chỉ được tải lên từ
+// màn admin, nên chỉ mở admin + test + localhost — không mở site phụ huynh / giáo viên / public
+// như tệp chung. Bucket hoá đơn giữ MST, địa chỉ, email khách (docs/ke-toan-hoa-don/PLAN.md §6).
 //
 // ⚠️ NGHIỆM THU 10/08/2026 — VÌ SAO CÓ CHẾ ĐỘ `chat`: bucket ảnh chat được tách riêng
 // (US-11/Q2) nhưng KHÔNG ai apply CORS cho nó, nên trình duyệt bị chặn ở bước PUT:
@@ -26,7 +31,9 @@ config({ path: ".env.local" });
 
 const arg = process.argv[2] ?? "";
 const explicit = arg.startsWith("--bucket=") ? arg.slice("--bucket=".length) : null;
-const bucketEnvName = arg === "chat" ? "R2_CHAT_BUCKET_NAME" : "R2_BUCKET_NAME";
+const bucketEnvName =
+  arg === "chat" ? "R2_CHAT_BUCKET_NAME" : arg === "hoa-don" ? "R2_INVOICE_BUCKET_NAME" : "R2_BUCKET_NAME";
+const tepLuat = arg === "hoa-don" ? "scripts/r2-cors-hoa-don.json" : "scripts/r2-cors.json";
 
 const accountId = process.env.R2_ACCOUNT_ID;
 const accessKeyId = process.env.R2_ACCESS_KEY_ID;
@@ -46,9 +53,7 @@ if (missing.length) {
   process.exit(1);
 }
 
-const { CORSRules } = JSON.parse(
-  readFileSync("scripts/r2-cors.json", "utf8"),
-) as { CORSRules: CORSRule[] };
+const { CORSRules } = JSON.parse(readFileSync(tepLuat, "utf8")) as { CORSRules: CORSRule[] };
 
 const client = new S3Client({
   region: "auto",
