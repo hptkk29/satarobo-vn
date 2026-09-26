@@ -5,7 +5,7 @@ import { dongBoTuLead } from "@/lib/students/dong-bo-lead-db";
 import type { PhLead } from "@/lib/students/dong-bo-lead";
 import { findRecentDuplicate, logDuplicateAttempt } from "../dedup";
 import { autoAssignNewLead } from "../auto-assign";
-import { LEAD_KHONG_NHAN_THEM_CON } from "@/lib/leads/status";
+import { LEAD_CLOSED_STATUSES } from "@/lib/leads/status";
 import { autoAssignLead } from "../assign";
 import { recordLeadActivity } from "../activity-write";
 import { SYSTEM_ACTIVITY_META } from "../activity-clock";
@@ -430,24 +430,25 @@ export async function ingestIntakeLead(
       select: { status: true },
     });
 
-    // Hồ sơ cũ ĐÃ ĐÓNG (đã đăng ký / đã mất) thì gắn con thứ hai vào đó là chôn việc:
-    // lead đóng không nằm trong hàng đợi của Sale nào, không đổi trạng thái, không
-    // sinh nhắc việc. Mà đây là ca RẤT THƯỜNG — nhà cho con thứ nhất nhập học rồi hỏi
-    // tiếp cho con thứ hai trong cùng cửa sổ 90 ngày.
-    // ⇒ coi là nhu cầu MỚI: rơi xuống tạo lead mới, vẫn ghi `LeadDuplicate` để truy
-    // vết liên hệ giữa hai hồ sơ.
+    // 🔴 ĐẢO 26/09/2026 (chủ dự án chốt) — chỉ hồ sơ ĐÃ MẤT mới đẻ lead mới.
+    // ~~Hồ sơ ĐÃ ĐĂNG KÝ cũng coi là "đã đóng" ⇒ tạo lead mới cho con thứ hai~~ — luật đó
+    // sinh sự cố prod 0368829724: phiếu thứ hai (lại chính bé đã có trong hồ sơ) đẻ lead
+    // thứ hai, rồi đẻ ĐƠN thứ hai, cùng một gia đình nằm ở hai hồ sơ. Nay hồ sơ đã đăng ký
+    // NHẬN con mới; nỗi lo cũ "con thứ hai bị chôn" được giải bằng dòng cảnh báo "có con mới
+    // cần tư vấn" + cú nâng mốc nhập lại + thông báo cho Sale đang giữ (`ghiNhanNhapLai`).
     //
-    // ⚠️ GĐ5 — PHẢI dùng `LEAD_KHONG_NHAN_THEM_CON`, KHÔNG dùng `TERMINAL_LEAD_STATUSES`.
-    // Trước GĐ5 hai tập trùng nhau (đều chứa ENROLLED) nên dùng cái nào cũng đúng. Sau
-    // khi gộp ENROLLED vào DA_DANG_KY, tập "đã đóng" cố ý BỎ trạng thái đó ra (lead đã
-    // đăng ký vẫn còn việc xếp lớp, vẫn tính tải cho Sale) — dùng nhầm ở đây là nhu cầu
-    // của con thứ hai bị chôn im lặng vào hồ sơ đã chốt.
-    const closed =
-      dupLead != null && LEAD_KHONG_NHAN_THEM_CON.includes(dupLead.status);
+    // ⚠️ Dùng `LEAD_CLOSED_STATUSES` (= DA_MAT), KHÔNG dùng `LEAD_KHONG_NHAN_THEM_CON` —
+    // hằng đó vẫn chứa DA_DANG_KY và còn phục vụ `lib/lead/sale-leads.ts`.
+    const closed = dupLead != null && LEAD_CLOSED_STATUSES.includes(dupLead.status);
 
     if (!closed) {
       const childAdded = await attachExtraChild(dup.id, mapped, centerId, actorName);
-      await logDuplicateAttempt(dup.id, phone, ctx.source);
+      await logDuplicateAttempt(dup.id, phone, ctx.source, { kieu: "gop" });
+      if (childAdded && dupLead?.status === "DA_DANG_KY") {
+        warnings.push(
+          "Hồ sơ này ĐÃ ĐĂNG KÝ nhưng phiếu mới có con mới cần tư vấn — xem mục Con của phụ huynh.",
+        );
+      }
 
       // ⚠️ Nhánh này KHÔNG tạo Lead ⇒ mọi thứ chỉ sống ở CỘT của bản ghi mới sẽ
       // bốc hơi. Link Facebook là ca đó: điền vào lead cũ nếu nó còn trống, còn
@@ -499,10 +500,11 @@ export async function ingestIntakeLead(
     }
 
     warnings.push(
-      `SĐT này đã có hồ sơ cũ ở trạng thái ${dupLead?.status} (đã đóng) — tạo hồ sơ mới cho lần liên hệ này.`,
+      `SĐT này đã có hồ sơ cũ ở trạng thái ${dupLead?.status} (đã mất) — tạo hồ sơ mới cho lần liên hệ này.`,
     );
-    await logDuplicateAttempt(dup.id, phone, ctx.source);
   }
+  // Ghi truy vết SAU khi có lead mới để dòng lịch sử trên hồ sơ cũ trỏ được sang nó.
+  const trungDaMatId = dup ? dup.id : null;
 
   const note = buildNote(mapped.noteLines, warnings);
 
@@ -581,6 +583,13 @@ export async function ingestIntakeLead(
 
       return created;
     });
+
+    if (trungDaMatId && phone) {
+      await logDuplicateAttempt(trungDaMatId, phone, ctx.source, {
+        kieu: "tao-moi",
+        leadMoiId: lead.id,
+      }).catch((err) => console.error(`[intake:${ctx.source}] ghi truy vết trùng:`, err));
+    }
 
     // ── CHIA CHỦ ────────────────────────────────────────────────────────────
     //
