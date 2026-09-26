@@ -694,3 +694,20 @@ trên phản hồi THẬT trong ca `[AG-OK-01]`. B5 phủ ở tầng hàm thuầ
 
 **Đính chính một chỗ của bản BA:** §2 ghi "`setGlobalSetting` xoá cache ngay ⇒ công tắc có hiệu lực ngay" — không đủ; đã sửa ở
 bản này (§2, B13, Q-N11) và cổng đọc công tắc thẳng DB.
+
+## Ghi chú thực thi Đợt 1 (26/09/2026)
+
+Chủ dự án chốt 4 câu còn mở cho Đợt 1 (26/09/2026) — thay mặc định BA ở các dòng tương ứng:
+
+| Mã BA | Quyết định đã ký | Đã code ở |
+|---|---|---|
+| Q-D5 (kênh) | Kênh = kênh LIÊN LẠC (`InboxChannel`), không phải nguồn lead | `lib/agents/tools/danh-muc/lay-kenh.ts` |
+| Q-D4 (chức danh) | Chức danh = MÃ VAI RBAC (`RoleDef.code`) — không dùng `Position`/`jobTitle` | `lay-chuc-danh.ts`, `lay-nhan-su.ts` + `vai-nguoi.ts` |
+| (chỉ tiêu) | Tỷ lệ chuyển đổi = MỘT cặp tham số chung ở Cấu hình vận hành | `lay-chi-tieu.ts`, `lib/settings/registry.ts` |
+| Q-D13 (khuyến mãi) | **Đảo mặc định BA** ("dùng `Voucher` cho bản đầu"): thiết kế lại thành **văn bản chính sách** BLĐ ban hành, mã voucher là con; ban hành là hiệu lực ngay + báo Sale; nối thanh toán làm sau | `PromotionPolicy`, `lib/khuyen-mai/`, `/khuyen-mai`, `docs/khuyen-mai/README.md` |
+
+**Lệch Q-D12 theo SỐ ĐO, không theo ý muốn:** `da_dang_ky` gồm cả `ACTIVE` (đường convert chính không đặt
+`status`), "hoàn tiền" = `APPROVED` (không có đường ghi `PAID`). Chi tiết: `docs/cong-du-lieu-agent/README.md` §7.
+
+Còn mở, cần xưởng xác nhận: khuôn `dang_ky` thiếu mã bé + ngày hoàn tiền; bộ mã chức danh TGD/GDTT/TVV trong
+mẫu không tồn tại ở hệ thống.

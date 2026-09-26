@@ -1,4 +1,4 @@
-# Cổng dữ liệu agent — Đợt 0 (runbook)
+# Cổng dữ liệu agent — Đợt 0 + Đợt 1 (runbook)
 
 > Nguồn yêu cầu: tài liệu CEO "Hướng dẫn tích hợp: Cổng dữ liệu cho Agent Sata Robo (API + MCP)"
 > v1.0 · 25/09/2026 (bản gốc ngoài repo: `E:\WebSataRobo\KET_NOI\KET_NOI\`).
@@ -22,7 +22,10 @@
 | REST | `app/api/agent/v1/{oauth/token,oauth/revoke,tools,tools/[ten]}` |
 | Lưới ESLint (cấm `@/lib/db` trần, cấm `SYSTEM_ACTOR`, công cụ không chạm kho) | `eslint.config.mjs` + `lib/eslint/agent-gateway-lint.test.ts` |
 
-**Chưa làm (các đợt sau):** MCP + OAuth 2.1 (Đợt 2) · 13 công cụ còn lại · ký từng yêu cầu +
+**Đợt 1 (26/09/2026) đã thêm 7 công cụ đọc — xem §7.** Còn: 2, 3, 4, 5, 9, 10, 14 ✅ · 6–8 (dữ liệu CAO,
+Đợt 3) · 11–13 (marketing, chưa có nguồn).
+
+**Chưa làm (các đợt sau):** MCP + OAuth 2.1 (Đợt 2) · 6 công cụ còn lại · ký từng yêu cầu +
 Idempotency-Key + bản nháp (Đợt 6) · báo cáo tuần · luật gitleaks · lọc Sentry theo tiền tố khoá ·
 dọn bảng token hết hạn.
 
@@ -125,3 +128,60 @@ bản ghi") dù mã không đổi. Chạy trên DB riêng của worktree (tên P
 
 Bộ DB phủ ca B1–B4, B6, B7, B9–B13, B17 của spec §14.2 (mã ca giữ nguyên). B5 phủ ở tầng hàm thuần
 (`kiem-grant.test.ts`) vì công cụ Đợt 0 không nhận tham số `co_so`. B14/B15/B18 thuộc đợt sau.
+
+## 7. Đợt 1 — 7 công cụ đọc (26/09/2026)
+
+| # | Công cụ | Nguồn | Quyền (vai `AGENT_CHI_DOC`) | Nhạy cảm |
+|---|---|---|---|---|
+| 2 | `danh_muc.lay_khoa_hoc` | `Course` có `isTeachable` (CÙNG bộ lọc form tạo đơn + màn Tra cứu); giá = `Course.price` | `courses:view` | thấp |
+| 3 | `danh_muc.lay_nhan_su` | `Employee` (chỉ `id`=mã NV, tên, chức danh, cơ sở) + vai hiệu lực | `employees:view-public`, `roles:view` | TB |
+| 4 | `danh_muc.lay_kenh` | `enum InboxChannel` + nhãn `NHAN_KENH` | `inbox_channels:view` (mới) | thấp |
+| 5 | `danh_muc.lay_chuc_danh` | `RoleDef` đang bật, bỏ vai quan hệ (Phụ huynh) + vai `AGENT_*` | `roles:view` (mới) | thấp |
+| 9 | `kinh_doanh.lay_dang_ky` | `TrialClassV2`/`TrialEnrollment`/`LeadTrialHistory` + `Enrollment` + `RefundRequest` + `VoucherRedemption` | `trials:view`, `enrollments:view-all`, `refunds:view` (mới) | TB |
+| 10 | `kinh_doanh.lay_chi_tieu` | `LeadTarget` (NULL = Hội sở) + 2 tham số `crm.targetLeadToTrialRate` / `crm.targetTrialToEnrollRate` | `lead_targets:view` (mới) | thấp |
+| 14 | `van_ban.lay_khuyen_mai_hieu_luc` | `PromotionPolicy` (module Khuyến mãi mới — `docs/khuyen-mai/README.md`) | `promotions:view` (mới) | thấp |
+
+Mọi công cụ danh sách nhận `gioi_han?` (mặc định 200, trần = `agentGateway.maxRowsPerCall`) và
+`con_tro?` (spec §9) — kể cả `lay_co_so` của Đợt 0. Con trỏ là VỊ TRÍ trên danh sách đã sắp ổn
+định (`lib/agents/tools/trang.ts`): dữ liệu đổi giữa hai lượt thì có thể lặp/lỡ một dòng.
+
+**Quyết định chủ dự án 26/09** (đã chốt, không còn là mặc định BA): kênh = kênh LIÊN LẠC (`InboxChannel`) ·
+chức danh = MÃ VAI (`RoleDef.code`) · tỷ lệ mục tiêu = MỘT cặp chung ở Cấu hình vận hành · khuyến mãi =
+chính sách BLĐ ban hành trên hệ thống · giá niêm yết = `Course.price` ("DB THẮNG").
+
+**ĐO ĐƯỢC — lệch mặc định BA, đã code theo số đo:**
+- `lay_dang_ky`: "đã đăng ký" GỒM `ACTIVE` (+`PAUSED`). Đường convert lead chính (`convert-lead-v2.ts`)
+  không đặt `status` ⇒ ghi danh rơi về `@default(ACTIVE)`. Theo BA Q-D12 (chỉ CONFIRMED/STUDYING/COMPLETED)
+  là đánh rơi phần lớn ghi danh thật.
+- "Hoàn tiền" = `RefundRequest.status APPROVED`, mốc `approvedAt`: `PAID` KHÔNG có đường ghi nào trong mã.
+- Học thử đọc hệ v2; hệ v1 (`TrialClass`) đã gỡ đường ghi 28/08 và gộp dữ liệu (`scripts/gop-trial-v1-sang-v2.ts`).
+- `khoa` của mọi dòng học thử = `"TRIAL_1_1"` (spec); khoá của lớp trải nghiệm (nếu có) ở trường THÊM `khoa_quan_tam`.
+- Một dòng = một (bé × khoá), trạng thái tính đến hết `den_ngay`. Học thử đo theo KHOÁ của lớp trải nghiệm: ngày
+  học thử của dòng ghi danh chỉ lấy lượt học thử đúng khoá đó (hoặc lớp chung); ghi danh khoá A không xoá cuộc hẹn
+  học thử khoá B (rà 26/09, AGT-01..03). DB chỉ cho MỘT lượt học thử `ACTIVE` mỗi bé (`TrialEnrollment_leadChildId_active_key`).
+- `co_so: "HO"` ở `lay_dang_ky` = toàn hệ thống (Hội sở không có ghi danh riêng); ở `lay_nhan_su` = nhân sự Hội sở;
+  ở `lay_chi_tieu` = dòng chỉ tiêu toàn hệ thống. Ba nghĩa ghi trong `moTa` từng công cụ.
+- `lay_nhan_su`: chức danh chỉ suy từ vai neo TRONG phạm vi grant — vai neo cơ sở khác không lộ ra (AGT-D1-01).
+
+**Giới hạn còn lại (nói với xưởng):**
+- Khuôn `dang_ky` không có mã bé ⇒ lead hai con ra hai dòng cùng `lead_id`; không có ngày hoàn tiền.
+- Trạng thái ghi danh là trạng thái HIỆN TẠI (không có lịch sử trạng thái): ghi danh chốt trong khoảng rồi
+  huỷ KHÔNG hoàn tiền thì không còn hiện.
+- Mẫu `chuc_danh` của xưởng dùng TGD/GDTT/TVV — hệ thống trả mã vai thật; xưởng ánh xạ phía họ.
+- `lay_khoa_hoc` chưa có `diem_nhan`/`noi_lo_ph` (BA Q-D3: Marketing soạn — việc riêng).
+
+**Việc TAY sau khi lên `test`/`main`:** seed vai lại (thêm quyền đọc mới cho `AGENT_CHI_DOC`, `promotions:*`
+cho các vai) — lên `main` bấm `seed-prod-roles.yml`. Cấp grant từng công cụ ở thẻ **Quyền cấp** như §3.
+
+**Kiểm thử Đợt 1:** thuần `lib/agents/tools/**/*.test.ts`, `lib/khuyen-mai/*.test.ts`,
+`lib/validators/khuyen-mai.test.ts`; DB `tests/agents/cong-cu-dot1.spec.ts` (20 ca, qua pipeline thật,
+đầu ra qua `kiem-khuon.mjs` của xưởng) — chạy chung `pnpm test:agent-db`.
+
+**Rà 26/09 (4 góc, mỗi phát hiện 2 người phản biện):** 14 phát hiện, 12 sống sót, đã vá cả 12 — XSS lưu trữ
+qua URL tệp văn bản (nay chỉ nhận khoá R2, URL do server dựng) · hai đua thu hồi (ghi có điều kiện
+`revokedAt: null`) · sửa lùi ngày kết thúc thành "thu hồi câm" (nay từ chối) · 4 lỗi học thử/phạm vi của
+`lay_dang_ky` · chức danh ngoài phạm vi ở `lay_nhan_su` · mô tả giá niêm yết. **Cấy lỗi:** 24 phép trên
+lõi + 8 phép trên chính các bản vá — tất cả ĐỎ đúng ca (một lưới chết trong ca của tôi lộ ra khi cấy và
+đã vá, xem `[D1-SV-07]`). Hai bản vá đua (ghi có điều kiện) KHÔNG cấy được một cách tất định — chỉ có
+lưới đọc mã.
+
